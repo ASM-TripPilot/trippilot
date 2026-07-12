@@ -1,0 +1,618 @@
+openapi: 3.1.0
+info:
+  title: TripPilot U1 API (소셜 로그인 전용 MVP)
+  version: 0.1.0-draft
+  description: >
+    U1 기반·계정·온보딩 (M1 Auth · M2 Profile · C3 Moderation).
+    소셜 로그인 전용 — 이메일/비밀번호 로그인은 후속 이연.
+    정본 대조: docs/design/U1-API-설계.md, U1-DB스키마-설계.md, U1-내부아키텍처-설계.md
+servers:
+  - url: https://api.trippilot.app/api/v1
+    description: prod (가칭)
+  - url: http://localhost:8080/api/v1
+    description: local
+
+security:
+  - bearerAuth: []          # 전역 기본 = 인증 필요. 공개 엔드포인트는 security:[] 로 개별 해제.
+
+tags:
+  - name: auth
+  - name: onboarding
+  - name: location
+  - name: profile
+  - name: preferences
+  - name: account
+  - name: bootstrap
+
+paths:
+  /auth/social/{provider}:
+    post:
+      tags: [auth]
+      summary: 소셜 로그인/가입 (서버 code 교환)
+      description: 신규 (provider, sub)=가입(즉시 ACTIVE, 연령확인 필수)·기존=로그인.
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [google, apple, kakao, naver] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SocialLoginRequest' }
+      responses:
+        '200':
+          description: 로그인/가입 성공
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/SocialAuthFailed' }
+        '409': { $ref: '#/components/responses/SocialEmailConflict' }
+        '422': { $ref: '#/components/responses/AgeNotMet' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/token/refresh:
+    post:
+      tags: [auth]
+      summary: 리프레시 토큰 회전
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: 새 TokenPair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401':
+          description: 무효·만료 또는 회전 토큰 재사용(체인 무효화)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: 현재 기기 체인 revoke
+      responses:
+        '204': { description: 로그아웃 완료 }
+
+  /terms:
+    get:
+      tags: [onboarding]
+      summary: 현행 약관/문서 목록
+      security: []
+      responses:
+        '200':
+          description: 현행 약관 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TermsVersion' }
+
+  /terms/{termsType}:
+    get:
+      tags: [onboarding]
+      summary: 특정 약관 현행 버전
+      security: []
+      parameters:
+        - name: termsType
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/TermsType' }
+      responses:
+        '200':
+          description: 약관 현행 버전
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TermsVersion' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /bootstrap:
+    get:
+      tags: [bootstrap]
+      summary: 앱 기동 분기 (강제 업데이트 > 재동의 > 세션)
+      description: Bearer 선택 — 무토큰이면 session.state=GUEST.
+      security:
+        - bearerAuth: []
+        - {}
+      responses:
+        '200':
+          description: 기동 분기 정보
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BootstrapResponse' }
+
+  /me:
+    get:
+      tags: [account]
+      summary: 계정 요약
+      responses:
+        '200':
+          description: 계정 요약
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountSummary' }
+
+  /me/consents:
+    get:
+      tags: [onboarding]
+      summary: 항목별 현재 동의 상태(증적 폴드)
+      responses:
+        '200':
+          description: 동의 상태
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ConsentState' }
+    post:
+      tags: [onboarding]
+      summary: 온보딩 일괄 동의 제출(필수 3종 + 선택)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConsentSubmission' }
+      responses:
+        '200': { description: 반영 완료 }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /me/consents/{termsType}:
+    patch:
+      tags: [onboarding]
+      summary: 개별 동의 GRANT/REVOKE (설정·재동의)
+      parameters:
+        - name: termsType
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/TermsType' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, termsVersion]
+              properties:
+                action: { type: string, enum: [GRANT, REVOKE] }
+                termsVersion: { type: string }
+      responses:
+        '200': { description: 반영 완료 }
+
+  /me/marketing-consent:
+    put:
+      tags: [onboarding]
+      summary: 마케팅 수신 동의 토글(수집만)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [optIn]
+              properties:
+                optIn: { type: boolean }
+      responses:
+        '200': { description: 반영 완료 }
+
+  /me/location-consent:
+    get:
+      tags: [location]
+      summary: 위치 동의 3층 상태 + 유효 능력
+      responses:
+        '200':
+          description: 위치 동의 상태
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LocationConsent' }
+    put:
+      tags: [location]
+      summary: L2(법정)·L3(GPS 옵트인) 변경
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                legalConsent: { type: boolean }
+                gpsRecordingOptIn: { type: boolean }
+      responses:
+        '200':
+          description: 반영 완료(철회 시 파기 트리거)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LocationConsent' }
+
+  /me/location-consent/os-permission:
+    patch:
+      tags: [location]
+      summary: L1 OS 권한 미러 보고(단말→서버)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [osPermission]
+              properties:
+                osPermission: { type: string, enum: [GRANTED, DENIED, NOT_DETERMINED] }
+      responses:
+        '200': { description: 반영 완료 }
+
+  /me/profile:
+    get:
+      tags: [profile]
+      summary: 프로필 조회
+      responses:
+        '200':
+          description: 프로필
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+
+  /me/profile/nickname:
+    patch:
+      tags: [profile]
+      summary: 닉네임 변경(길이·금칙어·유니크 검증)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nickname]
+              properties:
+                nickname: { type: string, minLength: 2, maxLength: 20 }
+      responses:
+        '200':
+          description: 변경 완료
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '409': { $ref: '#/components/responses/NicknameTaken' }
+        '503': { $ref: '#/components/responses/ModerationUnavailable' }
+
+  /nickname/suggestions:
+    post:
+      tags: [profile]
+      summary: 자동 생성 닉네임 후보(사전 검증 통과값)
+      responses:
+        '200':
+          description: 후보 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items: { type: string }
+
+  /nickname/check:
+    post:
+      tags: [profile]
+      summary: 닉네임 유효성 검사(매칭 원문 미노출)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nickname]
+              properties:
+                nickname: { type: string }
+      responses:
+        '200':
+          description: 검사 결과
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  available: { type: boolean }
+                  reason:
+                    type: string
+                    enum: [OK, TOO_SHORT, TOO_LONG, BANNED_WORD, TAKEN]
+        '503': { $ref: '#/components/responses/ModerationUnavailable' }
+
+  /onboarding/complete:
+    post:
+      tags: [onboarding]
+      summary: 온보딩 완료 처리(멱등 — 약관+닉네임 판정)
+      responses:
+        '200':
+          description: 완료 상태
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  onboardingCompletedAt: { type: string, format: date-time, nullable: true }
+
+  /me/preferences:
+    get:
+      tags: [preferences]
+      summary: 취향 7축 조회(항상 완전 — 미설정은 중립 기본값 파생)
+      responses:
+        '200':
+          description: 취향 7축
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreferenceView' }
+    put:
+      tags: [preferences]
+      summary: 취향 7축 저장(부분 허용, 즉시 반영)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PreferenceInput' }
+      responses:
+        '200': { description: 저장 완료 }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /me/deletion:
+    post:
+      tags: [account]
+      summary: 계정 삭제 요청(→ DELETION_PENDING, GPS 즉시 파기)
+      responses:
+        '200':
+          description: 유예 시작
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionResponse' }
+    delete:
+      tags: [account]
+      summary: 유예 내 삭제 철회(→ ACTIVE)
+      responses:
+        '200': { description: 철회 완료 }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /health/liveness:
+    get:
+      tags: [bootstrap]
+      summary: LB shallow 헬스체크
+      security: []
+      responses:
+        '200': { description: alive }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    TermsType:
+      type: string
+      enum: [TERMS_OF_SERVICE, PRIVACY_POLICY, LOCATION_TERMS, MARKETING, GPS_RECORDING, PERSONALIZATION]
+
+    AgeConfirmation:
+      type: object
+      required: [method]
+      properties:
+        method: { type: string, enum: [BIRTH_DATE, SELF_DECLARED] }
+        birthDate: { type: string, format: date, nullable: true }
+
+    SocialLoginRequest:
+      type: object
+      required: [authorizationCode, codeVerifier, redirectUri]
+      properties:
+        authorizationCode: { type: string }
+        codeVerifier: { type: string }
+        redirectUri: { type: string }
+        ageConfirmation:
+          allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
+          description: 신규 가입 시 필수, 기존 로그인 시 무시
+
+    TokenPair:
+      type: object
+      properties:
+        accessToken: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresIn: { type: integer, example: 3600 }
+        refreshToken: { type: string }
+        refreshExpiresIn: { type: integer, example: 7776000 }
+        isNewUser: { type: boolean }
+        account: { $ref: '#/components/schemas/AccountSummary' }
+
+    AccountSummary:
+      type: object
+      properties:
+        accountId: { type: string, format: uuid }
+        status: { type: string, enum: [ACTIVE, DELETION_PENDING] }
+        email: { type: string, nullable: true }
+        socialProviders:
+          type: array
+          items: { type: string, enum: [GOOGLE, APPLE, KAKAO, NAVER] }
+        onboardingCompleted: { type: boolean }
+
+    TermsVersion:
+      type: object
+      properties:
+        termsType: { $ref: '#/components/schemas/TermsType' }
+        version: { type: string }
+        body: { type: string }
+        effectiveAt: { type: string, format: date-time }
+        reconsentRequired: { type: boolean }
+
+    ConsentState:
+      type: object
+      properties:
+        termsType: { $ref: '#/components/schemas/TermsType' }
+        granted: { type: boolean }
+        termsVersion: { type: string }
+
+    ConsentSubmission:
+      type: object
+      required: [consents]
+      properties:
+        consents:
+          type: array
+          items:
+            type: object
+            required: [termsType, termsVersion, action]
+            properties:
+              termsType: { $ref: '#/components/schemas/TermsType' }
+              termsVersion: { type: string }
+              action: { type: string, enum: [GRANT, REVOKE] }
+
+    LocationConsent:
+      type: object
+      properties:
+        osPermissionMirror: { type: string, enum: [GRANTED, DENIED, NOT_DETERMINED] }
+        legalConsent: { type: boolean }
+        gpsRecordingOptIn: { type: boolean }
+        capabilities:
+          type: object
+          properties:
+            localLocationUse: { type: boolean }
+            serverLocationService: { type: boolean }
+            gpsTrackRetention: { type: boolean }
+
+    Profile:
+      type: object
+      properties:
+        nickname: { type: string }
+        nicknameUpdatedAt: { type: string, format: date-time }
+        onboardingCompletedAt: { type: string, format: date-time, nullable: true }
+
+    PreferenceView:
+      description: 각 축은 value + isNeutralDefault(중립 기본값 파생 여부)
+      type: object
+      properties:
+        styles: { $ref: '#/components/schemas/PrefArrayAxis' }
+        activities: { $ref: '#/components/schemas/PrefArrayAxis' }
+        transportModes: { $ref: '#/components/schemas/PrefArrayAxis' }
+        foodTastes: { $ref: '#/components/schemas/PrefArrayAxis' }
+        pace: { $ref: '#/components/schemas/PrefScalarAxis' }
+        companion:
+          type: object
+          properties:
+            companionTypes: { type: array, items: { type: string } }
+            petFlag: { type: boolean }
+            isNeutralDefault: { type: boolean }
+        budget:
+          type: object
+          properties:
+            tier: { type: string, nullable: true }
+            rawAmount: { type: integer, nullable: true }
+            isNeutralDefault: { type: boolean }
+
+    PrefArrayAxis:
+      type: object
+      properties:
+        value: { type: array, items: { type: string } }
+        isNeutralDefault: { type: boolean }
+
+    PrefScalarAxis:
+      type: object
+      properties:
+        value: { type: string, nullable: true }
+        isNeutralDefault: { type: boolean }
+
+    PreferenceInput:
+      description: 축별 생략 = 미변경, null 전송 = 미설정으로 초기화. 배열 축은 다중 선택.
+      type: object
+      properties:
+        styles: { type: array, items: { type: string, enum: [휴양, 관광, 액티비티, 미식, 쇼핑, 자연, 문화예술] }, nullable: true }
+        activities: { type: array, items: { type: string, enum: [자연, 역사문화, 테마파크, 맛집투어, 카페, 전시, 야경, 쇼핑] }, nullable: true }
+        transportModes: { type: array, items: { type: string, enum: [도보, 대중교통, 렌터카, 택시, 자전거] }, nullable: true }
+        foodTastes: { type: array, items: { type: string, enum: [한식, 양식, 일식, 중식, 아시안] }, nullable: true }
+        companionTypes: { type: array, items: { type: string, enum: [혼자, 커플, 친구, 가족, 부모님] }, nullable: true }
+        petFlag: { type: boolean }
+        pace: { type: string, enum: [느긋하게, 균형있게, 알차게], nullable: true }
+        budgetTier: { type: string, enum: [저가, 중간, 고급, 럭셔리], nullable: true }
+        budgetRawAmount: { type: integer, nullable: true }
+
+    BootstrapResponse:
+      type: object
+      properties:
+        appUpdate:
+          type: object
+          properties:
+            status: { type: string, enum: [FORCED, RECOMMENDED, NONE] }
+            minSupportedVersion: { type: string }
+        reconsent:
+          type: object
+          properties:
+            required: { type: boolean }
+            termsTypes:
+              type: array
+              items: { $ref: '#/components/schemas/TermsType' }
+        session:
+          type: object
+          properties:
+            state: { type: string, enum: [AUTHENTICATED, GUEST, ONBOARDING_INCOMPLETE] }
+            onboardingCompleted: { type: boolean }
+
+    DeletionResponse:
+      type: object
+      properties:
+        purgeAt: { type: string, format: date-time }
+        cascadeSummary:
+          type: object
+          additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            traceId: { type: string }
+            fields:
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string }
+                  reason: { type: string }
+
+  responses:
+    ValidationError:
+      description: 입력 검증 실패
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: 대상 없음
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NicknameTaken:
+      description: 닉네임 유니크 충돌
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    SocialAuthFailed:
+      description: 소셜 code 교환·토큰 검증 실패
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    SocialEmailConflict:
+      description: 소셜 이메일이 타 계정과 충돌
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    AgeNotMet:
+      description: 만 14세 미만(생성 차단)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }

@@ -1,0 +1,295 @@
+// TripPilot 전체 사이클 최소 스키마 (밴드 a~j)
+// dbdiagram.io 에 붙여넣기 → ERD 자동 렌더.
+// 원칙: 개념당 1테이블 · 최소 컬럼(PK·FK·핵심 필드·상태·시각). 제약·인덱스·전체 필드는 유닛 심화에서.
+// 제외: 어시스턴트(b·타 담당), 숙소 위시리스트(후속), U1 세부 인프라(refresh_session·terms_version·location_legal_log·banned_word 등 → U1 상세 문서), 외부 캐시성(forecast·weather·stay_static_cache), 전송/전이성(generation_session·share_card_spec).
+
+// ── 계정·프로필 (c) ──
+Table account {
+  id uuid [pk]
+  email varchar
+  status varchar [note: 'ACTIVE/DELETION_PENDING/DELETED']
+  age_method varchar [note: 'BIRTH_DATE/SELF_DECLARED']
+  birth_date date
+  created_at timestamptz
+}
+Table social_identity {
+  id uuid [pk]
+  account_id uuid [ref: > account.id]
+  provider varchar [note: 'GOOGLE/APPLE/KAKAO/NAVER']
+  provider_sub varchar
+  indexes { (provider, provider_sub) [unique] }
+  created_at timestamptz
+}
+Table consent_record {
+  id bigint [pk, note: 'append-only']
+  account_id uuid [ref: > account.id]
+  terms_type varchar
+  terms_version varchar
+  action varchar [note: 'GRANT/REVOKE']
+  occurred_at timestamptz
+}
+Table profile {
+  account_id uuid [pk, ref: - account.id]
+  nickname varchar [unique]
+  onboarding_completed_at timestamptz
+  created_at timestamptz
+}
+Table preference_set {
+  account_id uuid [pk, ref: - account.id]
+  styles "varchar[]"
+  budget_tier varchar
+  budget_raw_amount bigint
+  companion_types "varchar[]"
+  pet_flag bool
+  activities "varchar[]"
+  transport_modes "varchar[]"
+  food_tastes "varchar[]"
+  pace varchar
+  created_at timestamptz
+}
+Table deletion_schedule {
+  account_id uuid [pk, ref: - account.id]
+  purge_at timestamptz
+  cancelled_at timestamptz
+}
+
+// ── 앱셸 (a) ──
+Table app_config {
+  id int [pk]
+  min_supported_version varchar
+}
+
+// ── 장소·숙소 (d,e) ──
+Table poi {
+  id uuid [pk, note: 'canonical POI']
+  name_ko varchar
+  coord point
+  category varchar
+  opening_hours varchar
+  data_status varchar [note: 'ACTIVE/UNVERIFIED/LOST/CLOSED']
+}
+Table poi_snapshot {
+  id uuid [pk, note: '확정 시점 불변 사본']
+  source_poi_id uuid [note: '원본 참조(값 보존·FK 미강제)']
+  name varchar
+  coord point
+  category varchar
+  snapshot_at timestamptz
+}
+Table saved_place {
+  id uuid [pk]
+  account_id uuid [ref: > account.id]
+  poi_id uuid [ref: > poi.id]
+  saved_at timestamptz
+}
+Table saved_stay {
+  id uuid [pk, note: '등록 숙소=거점. StayIdentity 매핑 흡수']
+  account_id uuid [ref: > account.id]
+  name varchar
+  coord point
+  check_in date
+  check_out date
+  external_source varchar
+  external_id varchar
+  coord_confirmed bool
+  created_at timestamptz
+}
+Table ota_partner {
+  id uuid [pk]
+  code varchar
+  deeplink_template varchar
+}
+Table outbound_click {
+  id uuid [pk]
+  account_id uuid [ref: > account.id]
+  saved_stay_id uuid [ref: > saved_stay.id]
+  ota_partner_id uuid [ref: > ota_partner.id]
+  clicked_at timestamptz
+}
+
+// ── 여행·필수방문지 (g) ──
+Table trip {
+  id uuid [pk]
+  account_id uuid [ref: > account.id]
+  title varchar
+  destination varchar
+  start_date date
+  end_date date
+  party int
+  budget_total bigint
+  status varchar [note: 'PLANNED/CONFIRMED/ACTIVE/ENDED']
+  deleted_at timestamptz
+  created_at timestamptz
+}
+Table base_assignment {
+  id uuid [pk, note: '등록 거점 + 자연 체류 구간']
+  trip_id uuid [ref: > trip.id]
+  saved_stay_id uuid [ref: > saved_stay.id]
+  date_from date
+  date_to date
+  created_at timestamptz
+}
+Table trip_base_day {
+  trip_id uuid [ref: > trip.id]
+  day_date date
+  saved_stay_id uuid [ref: > saved_stay.id, null]
+  resolution varchar [note: 'auto/prev_stay/destination_center/user_pick — 공백·겹침 해소']
+  indexes { (trip_id, day_date) [pk] }
+}
+Table must_visit {
+  id uuid [pk]
+  trip_id uuid [ref: > trip.id]
+  poi_snapshot_id uuid [ref: > poi_snapshot.id]
+  type varchar [note: 'ANYTIME/FIXED']
+  fixed_date date
+  fixed_start time
+  dwell_min int
+  created_at timestamptz
+}
+
+// ── 일정 4계층 (h) ──
+Table itinerary {
+  id uuid [pk]
+  trip_id uuid [ref: - trip.id]
+  mode varchar [note: 'fully_ai/co_plan/manual']
+  status varchar [note: 'DRAFT/EDITING/CONFIRMED/INTRIP']
+  created_at timestamptz
+}
+Table day_schedule {
+  id uuid [pk, note: 'current']
+  itinerary_id uuid [ref: > itinerary.id]
+  day_date date
+  created_at timestamptz
+}
+Table slot {
+  id uuid [pk, note: 'current']
+  day_schedule_id uuid [ref: > day_schedule.id]
+  poi_snapshot_id uuid [ref: > poi_snapshot.id, null]
+  saved_stay_id uuid [ref: > saved_stay.id, null]
+  // CHECK: poi_snapshot_id / saved_stay_id 중 정확히 하나 (source_type 대응)
+  start_time time
+  end_time time
+  source_type varchar [note: 'ai/user/must_visit/stay']
+  locked bool
+  created_at timestamptz
+}
+Table plan_snapshot {
+  id uuid [pk, note: 'plan · 불변 JSONB 동결']
+  itinerary_id uuid [ref: > itinerary.id]
+  snapshot jsonb
+  frozen_at timestamptz
+}
+Table generation_session {
+  id uuid [pk]
+  itinerary_id uuid [ref: > itinerary.id]
+  mode varchar
+  status varchar [note: 'preprocess/candidates/hours/route/done/canceled']
+  partial jsonb
+  created_at timestamptz
+}
+
+// ── 실행·Plan-B (i) ──
+Table execution_state {
+  trip_id uuid [pk, ref: - trip.id]
+  current_slot_id uuid [ref: > slot.id]
+  mode varchar [note: 'NORMAL/REST']
+}
+Table trigger_event {
+  id uuid [pk]
+  trip_id uuid [ref: > trip.id]
+  target_slot_id uuid [ref: > slot.id]
+  type varchar [note: 'weather/delay/hours/traffic']
+  value varchar
+  status varchar [note: 'active/normal/dismissed']
+  created_at timestamptz
+}
+Table replan_session {
+  id uuid [pk]
+  trip_id uuid [ref: > trip.id]
+  trigger_event_id uuid [ref: > trigger_event.id]
+  reason varchar [note: 'weather/closed/delay/canceled/fatigue/none']
+  mode varchar [note: 'ai/manual']
+  status varchar [note: 'loading/proposed/committed/canceled/undone']
+  created_at timestamptz
+}
+Table alternative {
+  id uuid [pk]
+  replan_session_id uuid [ref: > replan_session.id]
+  source varchar
+  items jsonb
+  deltas jsonb
+  created_at timestamptz
+}
+
+// ── 기록·회고 (j) ──
+Table visit_record {
+  id uuid [pk, note: 'actual']
+  trip_id uuid [ref: > trip.id]
+  slot_id uuid [ref: > slot.id, note: 'null=즉석 방문']
+  poi_snapshot_id uuid [ref: > poi_snapshot.id]
+  free_text varchar
+  status varchar [note: 'upcoming/arrival_pending/in_progress/completed/skipped']
+  arrived_at timestamptz
+  departed_at timestamptz
+  checkin_type varchar [note: 'auto/manual']
+  sync_state varchar [note: 'local/pending/synced/conflict']
+  created_at timestamptz
+}
+Table photo {
+  id uuid [pk]
+  visit_record_id uuid [ref: > visit_record.id]
+  storage_key varchar
+  created_at timestamptz
+}
+Table memo {
+  id uuid [pk]
+  visit_record_id uuid [ref: > visit_record.id]
+  text varchar
+  created_at timestamptz
+}
+Table change_log_entry {
+  id bigint [pk, note: 'changelog · append-only']
+  trip_id uuid [ref: > trip.id]
+  actor varchar
+  source_type varchar [note: 'planB/manual/coedit/assistant']
+  reason varchar
+  before jsonb
+  after jsonb
+  at timestamptz
+}
+Table gps_track {
+  id uuid [pk]
+  trip_id uuid [ref: > trip.id]
+  track_date date
+  polyline text
+  distance_m int
+  steps int
+  created_at timestamptz
+}
+Table reflection {
+  id uuid [pk]
+  trip_id uuid [ref: > trip.id]
+  day_date date
+  content text
+  stats jsonb
+  created_at timestamptz
+}
+Table trip_summary {
+  trip_id uuid [pk, ref: - trip.id]
+  stats jsonb
+}
+Table style_analysis {
+  account_id uuid [pk, ref: - account.id]
+  data jsonb
+  sample_trip_count int
+  updated_at timestamptz
+}
+
+// ── 공통 인프라 ──
+Table outbox_event {
+  id bigint [pk]
+  event_id uuid [unique]
+  event_type varchar
+  payload jsonb
+  published_at timestamptz
+}
