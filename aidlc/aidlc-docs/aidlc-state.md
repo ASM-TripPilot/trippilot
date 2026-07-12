@@ -45,7 +45,7 @@
 - [x] Requirements Analysis (Comprehensive) — 승인 완료 (2026-07-12)
 - [x] User Stories — 승인 완료 (2026-07-12) · 산출물: docs/PRD/PRD-lean.md · user-stories/stories.md(94 상세 + J·K·L 헤더) · personas.md(4종) · 사진 저장 모델 결정 반영
 - [x] Workflow Planning — 승인 완료 (2026-07-12) · execution-plan.md
-- [ ] Application Design — **EXECUTE** · IN PROGRESS
+- [ ] Application Design — 산출물 5종 생성 완료, 승인 대기 (GATE) · AI/솔버 계약 심화
 - [ ] Units Generation — **EXECUTE** (계획 확정)
 - [ ] **STOP** (Inception 종료 — 사용자 지시 대기)
 

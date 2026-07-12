@@ -21,7 +21,7 @@ C) **마이크로서비스** — 모듈별 독립 배포. 초기 규모엔 과�
 
 X) 기타
 
-[Answer]:
+[Answer]: A
 
 ### Question 2 — 컴포넌트 식별 기준
 컴포넌트를 어떻게 도출할까요?
@@ -32,7 +32,7 @@ B) 재그룹핑 — 기능 흐름 기준으로 통합/분할.
 
 X) 기타
 
-[Answer]:
+[Answer]: A
 
 ### Question 3 — 모듈 간 통신 패턴
 컴포넌트 간 통신을 어떻게?
@@ -45,7 +45,7 @@ C) 이벤트 위주 — 유연하나 초기 복잡도↑.
 
 X) 기타
 
-[Answer]:
+[Answer]: A
 
 ### Question 4 — 솔버 / AI 계층 배치 (FR-SOLVER 반영)
 결정론적 솔버와 AI(어시스턴트·향후 Bedrock 에이전트)를 어떻게 배치할까요?
@@ -56,7 +56,7 @@ B) 솔버를 Itinerary Generation/Recalculation 내부 로직으로 직접 구�
 
 X) 기타
 
-[Answer]:
+[Answer]: A
 
 ### Question 5 — 외부 연동 격리
 외부 API(카카오/네이버/TMap 지도·날씨·OTA 딥링크·LLM/Bedrock·FCM·S3)를 어떻게 다룰까요?
@@ -67,7 +67,7 @@ B) 공용 통합 계층 하나로 묶기 — 단순하나 벤더 교체·약관 
 
 X) 기타
 
-[Answer]:
+[Answer]: A
 
 ### Question 6 — 기술 스택 베이스라인
 이번 설계에 팀 스택을 어디까지 반영할까요? (상세 확정은 CONSTRUCTION의 NFR Requirements)
@@ -78,26 +78,26 @@ B) 기술 중립 — 언어·프레임워크 무관하게 논리 컴포넌트만
 
 X) 기타
 
-[Answer]:
+[Answer]: A
 
 > **추가 메모**(선택):
 >
-> [추가 메모]:
+> [추가 메모]: (채팅 지시) AI/솔버 계약을 최대한 구체적으로 — 포트·메서드 시그니처·DTO·불변식·폴백·score까지. 프롬프트·모델 ID·알고리즘 상세는 CONSTRUCTION 이연.
 
 ---
 
 ## B. 실행 체크리스트 (승인 후 산출물 생성)
 
-- [ ] 확정 답변(Q1~Q6)에 따라 설계 방침 고정
-- [ ] `application-design/components.md` — 17 컴포넌트: 이름·목적·책임·인터페이스(후속 3게이트는 인터페이스만)
-- [ ] `application-design/component-methods.md` — 컴포넌트별 메서드 시그니처·입출력 타입·고수준 목적 (상세 규칙은 Functional Design 이연)
-- [ ] `application-design/services.md` — 서비스(오케스트레이션) 정의: 여행자 척추(온보딩→탐색→등록→AI 일정→Plan-B→기록)·솔버 오케스트레이션·알림·커뮤니티/공동편집(후속) 상호작용
-- [ ] `application-design/component-dependency.md` — 의존성 매트릭스·통신 패턴(동기 facade/비동기 이벤트)·데이터 흐름(등록 숙소=앵커·plan/actual/change-log·사진 로컬↔S3)
-- [ ] `application-design/application-design.md` — 위 문서 통합본
-- [ ] 솔버 Port/Adapter 계약·실현가능성 소유 경계 명시(FR-SOLVER)
-- [ ] 외부 연동 Port/Adapter 목록·약관·폴백(ADR-0009·0011·0012)
-- [ ] 보안·복원력·PBT 접점 표기(SECURITY-*·RESILIENCY-*·PBT-*)
-- [ ] content-validation 후 저장 + 완료 메시지·승인 게이트
+- [x] 확정 답변(Q1~Q6=모두 A)에 따라 설계 방침 고정 + AI/솔버 심화 지시 반영
+- [x] `application-design/components.md` — 17 컴포넌트 + AI/솔버 포트 심화(§3)
+- [x] `application-design/component-methods.md` — 메서드 시그니처·DTO + SolverPort·검증기·LLM·RAG·거리 포트
+- [x] `application-design/services.md` — S1~S6 오케스트레이션(솔버 파이프라인 포함)
+- [x] `application-design/component-dependency.md` — 의존성 매트릭스·이벤트 카탈로그·솔버/사진 데이터 흐름·외부 포트
+- [x] `application-design/application-design.md` — 통합본
+- [x] 솔버 Port/Adapter 계약·실현가능성 소유 경계 명시(FR-SOLVER·INV-1~4)
+- [x] 외부 연동 Port/Adapter 목록·약관·폴백(ADR-0009·0011·0012)
+- [x] 보안·복원력·PBT 접점 표기(SECURITY-*·RESILIENCY-*·PBT-*)
+- [x] content-validation(Mermaid·표·특수문자) 후 저장 + 완료 메시지·승인 게이트
 
 ---
 

@@ -213,3 +213,19 @@
 **Context**: Application Design Step 4~7. GATE — 설계 결정 답변 대기.
 
 ---
+
+## Application Design — Answers Received (Q1~6=A) + AI/Solver Deep-Dive Directive
+**Timestamp**: 2026-07-12T03:00:00Z
+**User Input**: (application-design-plan.md 답변) Q1=A · Q2=A · Q3=A · Q4=A · Q5=A · Q6=A / (채팅) "AI/솔버 계약 최대한 구체적으로 뽑아줘"
+**AI Response (Step 8 분석)**: 6개 답변 모두 권장(A) — 모호·모순 없음. 설계 방침 확정: 모듈러 모놀리스 + 결정론적 솔버 별도 서비스, PRD 17모듈 1:1 컴포넌트(후속 3게이트 인터페이스만), 동기 facade+비동기 이벤트, SolverPort/Adapter 격리(Bedrock 교체 대비), 1 API=1 포트/어댑터, 팀 스택 가정. **특별 지시 반영**: AI/솔버 계약을 Application Design 최대 깊이(포트 인터페이스·메서드 시그니처·DTO·불변식 INV-1~4·폴백 체인·품질 score)로 구체화, 프롬프트·모델 ID·알고리즘 상세·score 임계는 CONSTRUCTION 이연(O-SOLVER). 산출물 5종 생성 진행(Step 10).
+**Context**: Application Design Step 8~10. 모호성 없음 → 설계 산출물 생성.
+
+---
+
+## Application Design — Artifacts Generated + Approval Prompt (GATE)
+**Timestamp**: 2026-07-12T03:30:00Z
+**AI Response**: 설계 산출물 5종 생성(`inception/application-design/`): components.md(17 컴포넌트 C1~C17 + AI/솔버 포트 심화 §3: SolverPort·FeasibilityValidator·PreferenceScoringPort·CandidatePoolPort·TravelEstimatePort, INV-1~4, 폴백 체인, QualityScore/교체 트리거) · component-methods.md(도메인 DTO + SolverPort/검증기/LLM/RAG/거리 포트 시그니처 + 1차 facade 메서드) · services.md(S1 Spine·S2 솔버 파이프라인·S3 Plan-B·S4 알림·S5 핸드오프·S6 후속) · component-dependency.md(의존성 매트릭스·이벤트 카탈로그·솔버/사진 데이터 흐름 Mermaid·외부 어댑터 포트 12종·순환 방지) · application-design.md(통합본). **사용자 지시대로 AI/솔버 계약 최대 구체화**(포트·시그니처·DTO·불변식·폴백·score), 프롬프트·모델·알고리즘·score 임계는 CONSTRUCTION 이연(O-SOLVER). 후속 게이트 3(C15·C16·C17)=인터페이스만. content-validation(Mermaid 2개·표·특수문자) 통과. 플랜 체크박스 전 항목 [x].
+**AI Response (Approval Prompt)**: "Application Design Complete. application-design/ 검토 요청. 옵션: 🔧 Request Changes / ✅ Approve & Continue → Units Generation(인셉션 마지막)." DO NOT PROCEED until user confirms.
+**Context**: Application Design Step 11~14. 승인 시 stage [x] 처리 후 Units Generation(인셉션 마지막 단계) 진입.
+
+---
