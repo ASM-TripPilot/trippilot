@@ -8,8 +8,8 @@
 - **PR 제목: Conventional Commits 형식 + Jira 이슈 키** — squash merge 시 PR 제목이 그대로 커밋 메시지가 되기 때문입니다.
 
   ```
-  feat: add login API endpoint (PROJ-123)
-  fix: handle expired refresh token (PROJ-456)
+  feat: add login API endpoint (TRIP-123)
+  fix: handle expired refresh token (TRIP-456)
   ```
 
 - PR 본문은 한국어로 작성합니다. [.github/PULL_REQUEST_TEMPLATE.md](../../.github/PULL_REQUEST_TEMPLATE.md) 템플릿이 자동으로 채워집니다.
@@ -33,7 +33,7 @@
 
 ## PR 작성자 체크리스트
 
-- [ ] 제목이 `type: description (PROJ-123)` 형식
+- [ ] 제목이 `type: description (TRIP-123)` 형식
 - [ ] 셀프 리뷰 완료 (Files changed 탭을 본인이 한 번 훑기)
 - [ ] CI 통과
 - [ ] 필요한 테스트·문서 포함 (해당 없으면 체크)

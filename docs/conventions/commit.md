@@ -57,10 +57,10 @@ git commit -m "fix(auth): handle expired refresh token"
 ```
 feat: add login API endpoint
 
-Refs: PROJ-123
+Refs: TRIP-123
 ```
 
-간단히 subject 끝에 붙이는 것도 허용합니다: `feat: add login API endpoint (PROJ-123)`
+간단히 subject 끝에 붙이는 것도 허용합니다: `feat: add login API endpoint (TRIP-123)`
 
 ## 커밋 템플릿 설정
 
