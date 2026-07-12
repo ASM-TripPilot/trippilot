@@ -173,3 +173,43 @@
 **Context**: User Stories Part 2 Steps 19~22. 승인 시 stage [x] 처리 후 Workflow Planning 진입.
 
 ---
+
+## User Stories — 사용자 결정: 사진 저장 모델 (Request Changes)
+**Timestamp**: 2026-07-12T02:00:00Z
+**User Input**: "우리가 사용자의 모든 사진을 s3로 저장할까 이야기 하다가 그냥 로컬에 있는거 가져다가 우리서비스에서 보여주는 식으로 생각을 했어 메타데이터 같은 것만 뽑아서" → (후속 확인) "커뮤니티는 s3로 하고 멀티 디바이스는 지원안하는걸로"
+**AI Response**: 사진 저장 모델 결정 확정·반영. (1) **회고/기록 사진 = 로컬 자산 참조 + 서버는 메타데이터만**(자산 식별자·촬영 시각·EXIF 위치·연결 장소), S3 일괄 저장 안 함. (2) **커뮤니티 공개 사진만 EXIF 제거 후 S3 업로드**(타 사용자 열람 위해). (3) **멀티 디바이스 미지원** — 기기 변경 시 로컬 사진 유실(메타데이터만 잔존), 수용된 트레이드오프. 반영 위치: stories.md(US-REC-02 재작성·에픽 H 저장모델 註·에픽 K 계약 S3 명시) / PRD-lean.md(Further Notes '데이터 결정' 신설·Out of Scope 멀티디바이스) / requirements.md(NFR-DATA-03 신설·§9 Out of Scope). 아키텍처/데이터 결정이므로 상세 구현(로컬 자산 접근·공개 사진 S3 라이프사이클)은 Application Design에서 확정.
+**Context**: User Stories 승인 대기 중 결정 반영. 스토리·PRD-lean·requirements 정합 갱신. 승인 게이트 유지.
+
+---
+
+## User Stories — Approved (Stage Complete)
+**Timestamp**: 2026-07-12T02:10:00Z
+**User Input**: "승인하고 이어서 ㄱㄱ"
+**AI Response**: User Stories 승인 수신(사진 저장 모델 결정 반영분 포함). 단계 완료 처리(aidlc-state.md `[x]`). 산출물 확정 = docs/PRD/PRD-lean.md · user-stories/stories.md(94 상세 + J·K·L 헤더) · personas.md(4종). 다음 단계 = **Workflow Planning**(ALWAYS). SCOPE.md 남은 인셉션 경로(Workflow Planning → Application Design → Units Generation → STOP) 확정용 산출물 작성 진입.
+**Context**: User Stories Step 22~23 승인 완료 → INCEPTION Workflow Planning 진입.
+
+---
+
+## Workflow Planning — Execution Plan Generated + Approval Prompt (GATE)
+**Timestamp**: 2026-07-12T02:20:00Z
+**AI Response**: 전 컨텍스트(requirements·stories·personas·PRD-lean) 로드 후 `inception/plans/execution-plan.md` 생성. 그린필드 → Reverse Engineering N/A. Change Impact = 전 영역 Yes. Risk = Low(이번 실행 문서 산출물, 제품 자체 복잡도는 High 별도 표기). Mermaid 워크플로우 시각화(content-validation 통과). **단계 결정**: Application Design=EXECUTE(17 신규 모듈·컴포넌트·솔버 계약 정의 필요), Units Generation=EXECUTE(다수 유닛 분해·복잡). **SCOPE.md 경계**: Units Generation 승인 후 STOP. CONSTRUCTION 전체(Functional/NFR/Infra Design·Code Gen·Build&Test)+Operations = 범위 밖·자동 진입 안 함(템플릿 기본 'Code Gen ALWAYS'보다 SCOPE.md 우선). RESILIENCY-04·14 질의는 CONSTRUCTION NFR 단계로 이연. aidlc-state.md Stage Progress·Execution Plan Summary 갱신.
+**AI Response (Approval Prompt)**: "Workflow Planning Complete. execution-plan.md 검토 요청. 남은 실행 = Application Design → Units Generation → STOP. 옵션: 🔧 Request Changes / ✅ Approve & Continue → Application Design." DO NOT PROCEED until user confirms.
+**Context**: Workflow Planning Step 9~11. 승인 시 Application Design 진입.
+
+---
+
+## Workflow Planning — Approved (Stage Complete)
+**Timestamp**: 2026-07-12T02:35:00Z
+**User Input**: "진행ㄱㄱ"
+**AI Response**: execution-plan.md 승인 수신. Workflow Planning 단계 완료 처리(aidlc-state.md `[x]`). 다음 단계 = **Application Design**(EXECUTE). 17개 모듈 컴포넌트·비즈니스 규칙·의존성·솔버 계약·데이터 흐름 설계 진입.
+**Context**: Workflow Planning 승인 완료 → INCEPTION Application Design 진입.
+
+---
+
+## Application Design — Design Plan + Questions Presented (GATE)
+**Timestamp**: 2026-07-12T02:45:00Z
+**AI Response**: `inception/plans/application-design-plan.md` 생성(Solution Architect 역할). 필수 산출물 5종(components·component-methods·services·component-dependency·application-design 통합) + 실행 체크리스트 + 설계 결정 질문 6종 임베드: Q1(아키텍처 스타일=모듈러 모놀리스+분리 솔버 서비스 하이브리드 권장) Q2(컴포넌트=PRD 17모듈 1:1 권장) Q3(통신=동기 facade+비동기 이벤트 혼합 권장) Q4(솔버=Port/Adapter 격리로 Bedrock 교체 대비 권장) Q5(외부연동=1 API=1 포트/어댑터 권장) Q6(스택=팀 스택 가정 채택 권장). 후속 게이트 3모듈은 인터페이스만 1차.
+**AI Response (Approval Prompt)**: "application-design-plan.md의 Q1~Q6 [Answer] 작성 요청. 완료 시 모호성 점검 후 설계 산출물 5종 생성." DO NOT PROCEED until answers received.
+**Context**: Application Design Step 4~7. GATE — 설계 결정 답변 대기.
+
+---

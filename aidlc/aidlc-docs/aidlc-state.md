@@ -5,7 +5,7 @@
 - **Project Type**: Greenfield
 - **Start Date**: 2026-07-11T07:45:03Z
 - **Current Phase**: INCEPTION
-- **Current Stage**: User Stories (Part 2 — Generated, 승인 대기)
+- **Current Stage**: Application Design
 - **Execution Scope**: INCEPTION 단계까지만 (docs/SCOPE.md). Units Generation 승인 후 STOP — CONSTRUCTION 자동 진입 금지.
 
 ## Workspace State
@@ -43,11 +43,15 @@
 ### INCEPTION Phase
 - [x] Workspace Detection — Greenfield 확정 (2026-07-11)
 - [x] Requirements Analysis (Comprehensive) — 승인 완료 (2026-07-12)
-- [ ] User Stories — Part 2 생성 완료, 승인 대기 (GATE) · 산출물: docs/PRD/PRD-lean.md · user-stories/stories.md(94 상세 + J·K·L 헤더) · personas.md(4종)
-- [ ] Workflow Planning
-- [ ] Application Design
-- [ ] Units Generation
+- [x] User Stories — 승인 완료 (2026-07-12) · 산출물: docs/PRD/PRD-lean.md · user-stories/stories.md(94 상세 + J·K·L 헤더) · personas.md(4종) · 사진 저장 모델 결정 반영
+- [x] Workflow Planning — 승인 완료 (2026-07-12) · execution-plan.md
+- [ ] Application Design — **EXECUTE** · IN PROGRESS
+- [ ] Units Generation — **EXECUTE** (계획 확정)
 - [ ] **STOP** (Inception 종료 — 사용자 지시 대기)
+
+### Execution Plan Summary (Workflow Planning)
+- **이번 실행 남은 단계**: Application Design(EXECUTE) → Units Generation(EXECUTE) → STOP.
+- **범위 밖(자동 진입 안 함)**: CONSTRUCTION 전체(Functional/NFR/Infra Design·Code Gen·Build&Test) + Operations. RESILIENCY-04·14 질의는 CONSTRUCTION NFR 단계로 이연.
 
 ### CONSTRUCTION Phase
 - (범위 밖 — SCOPE.md에 따라 자동 진입하지 않음)
