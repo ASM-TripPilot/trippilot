@@ -23,7 +23,7 @@ C) **일정 지능 영역 전체를 백지에서 재정의** — 관련 유저�
 
 X) 기타 (아래 [Answer]: 뒤에 직접 서술)
 
-[Answer]:
+[Answer]: AI solver개념은 그대로 두고 최종 산출물의 score가 낮을경우 bedrock agent를 활용하여 재설계. 여기서 재설계는 선택사항 B를 따른다.
 
 ## Question 2
 새 Bedrock AgentCore 에이전트가 일정의 **실현가능성(영업시간·이동시간·숙소 앵커·시각 충돌 없음)을 어떻게 보장**하길 원하시나요? (테스트 기준·사용자 신뢰와 직결)
@@ -36,7 +36,7 @@ C) 아직 미정 — 요구엔 "실현가능성은 보장되어야 한다"만 �
 
 X) 기타 (아래 [Answer]: 뒤에 직접 서술)
 
-[Answer]:
+[Answer]: A
 
 ---
 
@@ -57,7 +57,7 @@ E) **단일 리전 + 다중 AZ로 충분** — 리전 간 DR 불필요, 한 리�
 
 X) 기타 (아래 [Answer]: 뒤에 직접 서술)
 
-[Answer]:
+[Answer]: E
 
 ## Question 4
 **리전 토폴로지**를 선택해 주세요. (RESILIENCY-08 — 위 RTO/RPO와 정합해야 함. 프로덕션은 다중 AZ가 기본 필수이며, 리전 간 확장 여부만 결정)
@@ -70,7 +70,7 @@ C) 다중 리전 액티브-액티브 — 리전 장애에도 무중단. 최고 �
 
 X) 기타 (아래 [Answer]: 뒤에 직접 서술)
 
-[Answer]:
+[Answer]: A
 
 ## Question 5
 프로덕션 **변경 관리(change management)** 프로세스를 어떻게 할까요? (RESILIENCY-03)
@@ -83,7 +83,7 @@ C) 해당 없음 — 이 워크로드는 공식 변경관리 면제(사유 기�
 
 X) 기타 (아래 [Answer]: 뒤에 직접 서술)
 
-[Answer]:
+[Answer]: A jira slack git 프로젝트에서 사용
 
 ## Question 6
 프로덕션 **장애 대응(incident response)** 프로세스를 어떻게 할까요? (RESILIENCY-15)
@@ -94,7 +94,7 @@ B) 아직 없음 — **경량 장애대응 + 오류교정(COE/포스트모템) �
 
 X) 기타 (아래 [Answer]: 뒤에 직접 서술)
 
-[Answer]:
+[Answer]: B
 
 ---
 
