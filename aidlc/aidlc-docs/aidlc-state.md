@@ -4,8 +4,8 @@
 - **Project Name**: TripPilot (B2C 여행 슈퍼앱, 외부 OTA 예약 연동)
 - **Project Type**: Greenfield
 - **Start Date**: 2026-07-11T07:45:03Z
-- **Current Phase**: INCEPTION
-- **Current Stage**: Application Design
+- **Current Phase**: INCEPTION — **완료(STOP)**
+- **Current Stage**: ✋ STOP — 인셉션 종료 (2026-07-13). CONSTRUCTION 자동 진입 금지, 별도 지시 대기.
 - **Execution Scope**: INCEPTION 단계까지만 (docs/SCOPE.md). Units Generation 승인 후 STOP — CONSTRUCTION 자동 진입 금지.
 
 ## Workspace State
@@ -45,9 +45,9 @@
 - [x] Requirements Analysis (Comprehensive) — 승인 완료 (2026-07-12)
 - [x] User Stories — 승인 완료 (2026-07-12) · 산출물: docs/PRD/PRD-lean.md · user-stories/stories.md(94 상세 + J·K·L 헤더) · personas.md(4종) · 사진 저장 모델 결정 반영
 - [x] Workflow Planning — 승인 완료 (2026-07-12) · execution-plan.md
-- [ ] Application Design — 산출물 5종 생성 완료, 승인 대기 (GATE) · AI/솔버 계약 심화
-- [ ] Units Generation — **EXECUTE** (계획 확정)
-- [ ] **STOP** (Inception 종료 — 사용자 지시 대기)
+- [x] Application Design — 승인 완료 (2026-07-12) · application-design/ 5종 · AI/솔버 계약 심화
+- [x] Units Generation — 승인 완료 (2026-07-13) · unit-of-work(.md/-dependency/-story-map) · U0~U9
+- [x] **STOP** — ✋ Inception 종료 (2026-07-13). 전체 요약 제시 완료. CONSTRUCTION 자동 진입 금지 — 별도 사용자 지시 필요.
 
 ### Execution Plan Summary (Workflow Planning)
 - **이번 실행 남은 단계**: Application Design(EXECUTE) → Units Generation(EXECUTE) → STOP.
