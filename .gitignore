@@ -10,3 +10,9 @@
 .idea/
 .vscode/
 *.iml
+
+# Obsidian (개인 vault 설정)
+.obsidian/
+
+# Claude Code (로컬 전용 설정)
+.claude/settings.local.json

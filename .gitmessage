@@ -1,0 +1,14 @@
+
+# ── Conventional Commits ─────────────────────────────────────
+# <type>(<scope>): <제목>          ← 50자 이내, 끝에 마침표 없이
+#
+# 타입: feat fix refactor docs test chore style perf ci
+#   feat 새 기능 · fix 버그수정 · refactor 구조개선(동작불변) · docs 문서
+#   test 테스트 · chore 잡무·설정 · style 포맷 · perf 성능 · ci CI설정
+#
+# 본문(선택): 무엇을·왜 바꿨는지. 72자에서 줄바꿈.
+#
+# Footer(선택): 이 커밋을 Jira 이슈에 개별 연결할 때
+#   Refs: TRIP-123
+#
+# 규칙 상세 → docs/conventions/commit.md
