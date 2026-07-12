@@ -6,5 +6,5 @@
 
 | 문서 | 내용 | 언제 읽나 |
 |---|---|---|
-| _(작성 예정)_ jira.md | 지라 이슈·스프린트·Smart Commit·개발 패널 사용법 | 지라 쓸 때 |
-| _(작성 예정)_ slack.md | Jira Cloud for Slack 슬래시 커맨드·알림·인라인 액션 | 슬랙에서 지라 다룰 때 |
+| [jira.md](jira.md) | 지라 이슈·Smart Commit·개발 패널·상태 흐름 | 지라 쓸 때 |
+| [slack.md](slack.md) | GitHub/Jira for Slack 슬래시 커맨드·알림·인라인 액션 | 슬랙 쓸 때 |
