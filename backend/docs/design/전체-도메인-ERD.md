@@ -79,6 +79,7 @@ erDiagram
 ```
 
 > 표기: `||--||`1:1, `||--o{`1:N, `}o--||`N:1, `}o--o|`N:0..1. 앱셸(AppConfig·BootstrapInfo·HomeDashboard·TabNav)은 집계/DTO/클라 상태라 ERD 생략. LocationLegalLog·ConsentRecord append-only.
+> **VisitState는 별도 물리 테이블 아님** — 실행상태를 `visit_record.status`에 흡수(CurrentItinerary=day_schedule/slot과 동일한 논리≠물리 처리). ERD 노드는 논리 관계 표기용.
 
 ### 2.1 일정 4계층 물리 모델 (🔴 결정 2026-07-06)
 
@@ -172,7 +173,7 @@ Account, SocialIdentity, TermsVersion, ConsentRecord, MarketingConsent, Location
 | Alternative | source(ai/manual), items[](tag: swapped/kept/added/removed/moved/locked), deltas(이동·방문수·복귀시각), empty(제약불충족) |
 | ForecastCache / WeatherAlert | 기상청 예보·특보 |
 | ExecutionState | current/next 포인터, sub(NORMAL/REST{resumeAt}) |
-| VisitState | slotRef, arrivedAt?, promptSuppressed, 상태(upcoming/arrivalPending/inProgress/completed/skipped) |
+| VisitState | slotRef, arrivedAt?, promptSuppressed, 상태(upcoming/arrivalPending/inProgress/completed/skipped). **물리: visit_record.status에 흡수(별도 테이블 아님)** |
 | ArrivalPromptLog | slotRef, shownAt, outcome(재프롬프트 억제) |
 | SuppressionState | 트리거 억제 수명(재알림 방지) |
 | UnplacedList | 재계획 미배치 항목(i16 '대안 없음' 근거) |

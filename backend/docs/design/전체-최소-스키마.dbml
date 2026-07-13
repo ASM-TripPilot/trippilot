@@ -48,7 +48,7 @@ Table preference_set {
   created_at timestamptz
 }
 Table deletion_schedule {
-  account_id uuid [pk, ref: - account.id]
+  account_id uuid [pk, ref: - account.id, note: '계정당 1건(활성 유예 1:1). 재신청=행 갱신·이력 비보존 → 재신청 이력 보존 필요 시 유닛 심화에서 1:N(별도 PK+활성 부분유니크)로 전환']
   purge_at timestamptz
   cancelled_at timestamptz
 }
@@ -71,7 +71,7 @@ Table poi {
 Table poi_snapshot {
   id uuid [pk, note: '확정 시점 불변 사본']
   source_poi_id uuid [note: '원본 참조(값 보존·FK 미강제)']
-  name varchar
+  name_ko varchar [note: '원본 poi.name_ko 값 동결']
   coord point
   category varchar
   snapshot_at timestamptz
@@ -228,7 +228,7 @@ Table visit_record {
   slot_id uuid [ref: > slot.id, note: 'null=즉석 방문']
   poi_snapshot_id uuid [ref: > poi_snapshot.id]
   free_text varchar
-  status varchar [note: 'upcoming/arrival_pending/in_progress/completed/skipped']
+  status varchar [note: '실행상태(ERD의 VisitState 흡수·별도 테이블 아님)·upcoming/arrival_pending/in_progress/completed/skipped']
   arrived_at timestamptz
   departed_at timestamptz
   checkin_type varchar [note: 'auto/manual']
