@@ -446,7 +446,7 @@ U1 스캐폴드가 생성하는 **프로젝트 공통 파이프라인 정본**�
 
 PR이 열리면 서버·모바일·인프라 잡이 병렬 실행되고, 전부 성공 + 리뷰 승인이 머지 조건이다.
 
-- **[server]** 빌드(Gradle, JDK21) → ktlint/detekt → 단위·통합 테스트(Testcontainers PostgreSQL) →
+- **[server]** 빌드(Gradle 9.x, JDK 25) → ktlint/detekt → 단위·통합 테스트(Testcontainers PostgreSQL) →
   - **하드 제약 게이트**: 태그 `hard-constraint` 테스트 100% 통과 = 머지 차단(D37/G114)
   - **PBT 실행**: Kotest property — 시드 로깅 활성·실패 시 시드 아티팩트 업로드(PBT-08)
   - **마이그레이션·append-only 권한 검증**(실 PostgreSQL — NFR-U1-MT-02)
@@ -478,7 +478,7 @@ flowchart LR
 
 **흐름**: main 머지 시 멀티스테이지 Docker 빌드(ARM64) → Trivy 이미지 스캔 게이트 → ECR에 git SHA 불변 태그로 푸시 → OIDC로 배포 역할 수임 → Flyway 마이그레이션 일회성 태스크 실행·종료 코드 0 확인 → 신규 태스크 정의로 ECS 롤링 업데이트 → 안정화 대기·스모크 체크(`/actuator/health/liveness` + 로그인 무해 시나리오 1건) → 배포 기록·SNS 알림 순서로 진행된다.
 
-- **이미지(SECURITY-10)**: 멀티스테이지 Dockerfile — 빌드 스테이지(temurin-jdk21 digest 고정) / 런타임(temurin-jre21 또는 distroless-java21 digest 고정, non-root, `latest` 태그 금지). 태그 = `{git-sha}`(불변 — ECR immutability ON). Trivy 이미지 스캔 Critical = 배포 차단.
+- **이미지(SECURITY-10)**: 멀티스테이지 Dockerfile — 빌드 스테이지(temurin-jdk25 digest 고정) / 런타임(temurin-jre25 또는 distroless-java25 digest 고정, non-root, `latest` 태그 금지). 태그 = `{git-sha}`(불변 — ECR immutability ON). Trivy 이미지 스캔 Critical = 배포 차단.
 - **롤링 배포(전역 결정)**: `minimumHealthyPercent=100 / maximumPercent=200` — 신 태스크 2개 기동·헬시 후 구 태스크 드레인(무중단 — NFR-U1-AV-05는 토큰 무상태 검증으로 세션 무손실). **Deployment Circuit Breaker + 자동 롤백 ON** — 헬스 실패 시 직전 태스크 정의로 자동 복귀.
 - **배포 기록(경량 변경 관리 — RESILIENCY-03)**: 배포 잡이 태그·수행자·마이그레이션 버전을 릴리스 노트(GitHub Release/Deployments API)에 자동 기록 — 롤백 노트의 입력.
 

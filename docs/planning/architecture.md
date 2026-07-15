@@ -13,7 +13,7 @@ TripPilot은 B2C 여행자 슈퍼앱이다. 클라이언트는 React Native(Expo
 | 계층 | 구성 | 원칙 |
 |---|---|---|
 | 클라이언트 | React Native + Expo(development build + prebuild), TypeScript strict | 서버 모듈의 공개 REST API만 소비. 비즈니스 규칙 정본은 항상 서버(클라이언트 경량 검증은 UX용 사본, D28) |
-| 서버 | Spring Boot 3.4(Kotlin 2.1, JDK 21). 모듈러 모놀리스 — 기능 모듈 15개(1차)+공통 3개를 단일 애플리케이션으로 조립 | 각 모듈은 자기 소유 테이블에만 쓰기. 타 모듈 데이터는 공개 퍼사드(동기) 또는 도메인 이벤트(비동기)로만 접근(D04) |
+| 서버 | Spring Boot 4.0(Kotlin 2.2, JDK 25). 모듈러 모놀리스 — 기능 모듈 15개(1차)+공통 3개를 단일 애플리케이션으로 조립 | 각 모듈은 자기 소유 테이블에만 쓰기. 타 모듈 데이터는 공개 퍼사드(동기) 또는 도메인 이벤트(비동기)로만 접근(D04) |
 | 저장소 | PostgreSQL 단일. 오브젝트 스토리지(S3 호환)+CDN은 사진 미디어 | 법정 로그·동의 증적은 append-only + DB 권한 분리(N2, SECURITY-14) |
 | 외부 API | 카카오·카카오모빌리티·기상청·TourAPI·LLM(단일 벤더)·FCM 6종 | 소유 모듈 내부 포트 인터페이스 뒤에 격리(AD-2). 벤더 교체가 모듈 경계에 무영향 |
 
@@ -1037,9 +1037,9 @@ stateDiagram-v2
 
 | 영역 | 결정 | 근거·비고 |
 |---|---|---|
-| 언어·런타임 | Kotlin 2.1.x + JDK 21 LTS | K2 컴파일러 안정 라인, 가상 스레드, Spring Boot 3.x 공식 지원(D02) |
-| 프레임워크 | Spring Boot 3.4.x (Spring Framework 6.2, Jakarta EE 10) | 멀티모듈 부트 조립(`app` 모듈 소유)·오토컨피그 생태계 |
-| 인증 프레임워크 | Spring Security 6.4.x — 커스텀 JWT 필터 체인, deny-by-default | 필터 체인: 상관 ID → 요청 가드 → JWT 인증(STATELESS) → 브루트포스/rate-limit → `anyRequest().authenticated()`+공개 화이트리스트 → 보안 헤더 → 전역 예외 변환(SECURITY-08·12) |
+| 언어·런타임 | Kotlin 2.2.x + JDK 25 LTS | 그린필드 — 최신 LTS로 지원 런웨이 최대화. 가상 스레드·구조적 동시성 GA(2026-07 스택 확정, 원 D02의 21→25 개정) |
+| 프레임워크 | Spring Boot 4.0.x (Spring Framework 7, Jakarta EE 10+) | JDK 25 지원 라인. 멀티모듈 부트 조립(`app` 모듈 소유)·오토컨피그 생태계 |
+| 인증 프레임워크 | Spring Security 7.x — 커스텀 JWT 필터 체인, deny-by-default | 필터 체인: 상관 ID → 요청 가드 → JWT 인증(STATELESS) → 브루트포스/rate-limit → `anyRequest().authenticated()`+공개 화이트리스트 → 보안 헤더 → 전역 예외 변환(SECURITY-08·12) |
 | 소셜 OAuth | Spring Security OAuth2 Client, `SocialOAuthPort` 어댑터 4종 | Google/Apple=OIDC, 카카오=OIDC 커스텀, 네이버=순수 OAuth 2.0. 토큰 교환·검증은 전부 서버. Apple은 p8 키 ES256 client_secret |
 | JWT | Nimbus JOSE+JWT (spring-security-oauth2-jose) | 키 교체 가능한 JWK 셋 구조(D36) |
 | 비밀번호 해시 | **argon2id 권고**(`Argon2PasswordEncoder`+`DelegatingPasswordEncoder`) | 메모리 하드·OWASP 1순위, 초기 파라미터 m=19MiB/t=2/p=1, 로그인 시 투명 재해시 업그레이드. bcrypt는 72바이트 절단·GPU 내성 열위로 비채택(SECURITY-12, G22) |
@@ -1048,7 +1048,7 @@ stateDiagram-v2
 | 마이그레이션 | Flyway (SQL-first, versioned) | 마이그레이션에 DB 역할·권한 분리 DDL 포함(법정 로그 테이블 앱 역할 DELETE/UPDATE 회수, N2·SECURITY-14) |
 | 서버 PBT | Kotest Property Testing 5.9.x | 커스텀 Arb·자동 수축·시드 재현·JUnit Platform 통합(PBT-08·09). jqwik은 스택 일관성 이유로 비채택 |
 | 테스트 보조 | Kotest(러너)+MockK+Testcontainers(PostgreSQL)+Konsist/ArchUnit(모듈 경계) | H2 비채택(권한·DDL 방언 차이로 법정 로그 검증 불가). 모듈 경계·인증 가드 누락 검출(D37) |
-| 빌드 | Gradle 8.x Kotlin DSL 멀티모듈 + version catalog + 의존성 잠금 | 멀티모듈 = 컴포넌트 경계(D04·SECURITY-10) |
+| 빌드 | Gradle 9.x(≥9.1, JDK 25 지원) Kotlin DSL 멀티모듈 + version catalog + 의존성 잠금 | 멀티모듈 = 컴포넌트 경계(D04·SECURITY-10). 게이트 도구(ArchUnit·Konsist) 호환 필요 시 바이트코드 target 21 핀 |
 | 로깅 | SLF4J + Logback + logstash-logback-encoder(stdout JSON)·MDC 상관 ID | 마스킹 컨버터로 PII·토큰 구조적 차단. 중앙 수집은 클라우드 결정 대기 |
 
 ### 9.2 클라이언트 (React Native + Expo)
