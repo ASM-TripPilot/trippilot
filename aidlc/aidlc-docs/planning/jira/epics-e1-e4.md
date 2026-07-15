@@ -2,7 +2,7 @@
 
 > 대상 Fix Version: **MVP-2026.11** · 문서 범위: E1~E4, Story 46개.
 > 이 문서의 `E#`, `US-*`, `ST-*`는 요구사항 추적용 **Requirement/Subtask 외부 ID**이며 실제 Jira Issue Key가 아니다. Jira 생성 후 실제 Key는 별도 매핑한다.
-> Story의 **원문 수용 기준**은 `docs/planning/user-stories.md` 정본을 체크박스 형식으로만 바꿔 전수 수록했다. 문구 의미는 변경하지 않는다.
+> Story의 **원문 수용 기준**은 `aidlc/aidlc-docs/planning/user-stories.md` 정본을 체크박스 형식으로만 바꿔 전수 수록했다. 문구 의미는 변경하지 않는다.
 
 ## 일정·게이트
 
@@ -48,7 +48,7 @@
 - **Fix Version**: MVP-2026.11
 - **목표 Sprint**: S0~S2 (2026-07-13 ~ 2026-08-21)
 - **의존**: 최초 유닛. PR7 약관 문안, PR8 금칙어 사전, 소셜 콘솔 키·메일 설정을 병렬 확보. U2~U8이 세션·동의·취향 계약을 소비.
-- **Source**: `docs/planning/epics.md §E1; docs/planning/user-stories.md:40-189`
+- **Source**: `aidlc/aidlc-docs/planning/epics.md §E1; aidlc/aidlc-docs/planning/user-stories.md:40-189`
 
 ### US-E1-01 — 소셜·이메일 회원가입 및 로그인
 
@@ -59,7 +59,7 @@
 - **목표 Sprint**: S0
 - **초기 SP**: 13
 - **의존**: 없음(U1 스캐폴드 선행); 소셜 콘솔 키·SES 병렬 준비
-- **Source**: `docs/planning/user-stories.md:44-53`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:44-53`
 
 **요지**
 
@@ -91,7 +91,7 @@
 - **목표 Sprint**: S0
 - **초기 SP**: 5
 - **의존**: US-E1-01; PR7 약관 3종 법무 문안
-- **Source**: `docs/planning/user-stories.md:55-61`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:55-61`
 
 **요지**
 
@@ -120,7 +120,7 @@
 - **목표 Sprint**: S0
 - **초기 SP**: 5
 - **의존**: US-E1-01; PR8 금칙어 사전
-- **Source**: `docs/planning/user-stories.md:63-69`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:63-69`
 
 **요지**
 
@@ -149,7 +149,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 5
 - **의존**: US-E1-17; 실제 OS 권한 발화는 U3 '내 주변'·U6 여행 중 진입
-- **Source**: `docs/planning/user-stories.md:71-77`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:71-77`
 
 **요지**
 
@@ -178,7 +178,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 3
 - **의존**: US-E1-02, US-E1-03
-- **Source**: `docs/planning/user-stories.md:79-84`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:79-84`
 
 **요지**
 
@@ -206,7 +206,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 5
 - **의존**: US-E1-02, US-E1-03; Δ2
-- **Source**: `docs/planning/user-stories.md:86-93`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:86-93`
 
 **요지**
 
@@ -236,7 +236,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 3
 - **의존**: US-E1-02, US-E1-03
-- **Source**: `docs/planning/user-stories.md:95-100`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:95-100`
 
 **요지**
 
@@ -264,7 +264,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 3
 - **의존**: US-E1-02, US-E1-03
-- **Source**: `docs/planning/user-stories.md:102-107`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:102-107`
 
 **요지**
 
@@ -292,7 +292,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 3
 - **의존**: US-E1-02, US-E1-03; Δ1
-- **Source**: `docs/planning/user-stories.md:109-115`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:109-115`
 
 **요지**
 
@@ -321,7 +321,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 3
 - **의존**: US-E1-02, US-E1-03
-- **Source**: `docs/planning/user-stories.md:117-122`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:117-122`
 
 **요지**
 
@@ -349,7 +349,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 8
 - **의존**: US-E1-05~10, US-E1-15; 필수 단계 US-E1-02/03
-- **Source**: `docs/planning/user-stories.md:124-132`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:124-132`
 
 **요지**
 
@@ -380,7 +380,7 @@
 - **목표 Sprint**: S2
 - **초기 SP**: 5
 - **의존**: US-E1-03, US-E1-05~10, US-E1-15; 설정 UI 통합은 US-E09-10
-- **Source**: `docs/planning/user-stories.md:134-140`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:134-140`
 
 **요지**
 
@@ -409,7 +409,7 @@
 - **목표 Sprint**: S2
 - **초기 SP**: 5
 - **의존**: US-E1-05~10, US-E1-15; U3·U5 소비 계약
-- **Source**: `docs/planning/user-stories.md:142-147`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:142-147`
 
 **요지**
 
@@ -437,7 +437,7 @@
 - **목표 Sprint**: S2
 - **초기 SP**: 5
 - **의존**: US-E1-05~10, US-E1-15; U5 일정 생성
-- **Source**: `docs/planning/user-stories.md:149-156`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:149-156`
 
 **요지**
 
@@ -467,7 +467,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 3
 - **의존**: US-E1-02, US-E1-03
-- **Source**: `docs/planning/user-stories.md:158-163`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:158-163`
 
 **요지**
 
@@ -495,7 +495,7 @@
 - **목표 Sprint**: S0
 - **초기 SP**: 3
 - **의존**: US-E1-01; N1
-- **Source**: `docs/planning/user-stories.md:165-171`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:165-171`
 
 **요지**
 
@@ -524,7 +524,7 @@
 - **목표 Sprint**: S0
 - **초기 SP**: 8
 - **의존**: US-E1-02; PR1 위치기반서비스 신고, PR7 약관
-- **Source**: `docs/planning/user-stories.md:173-180`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:173-180`
 
 **요지**
 
@@ -554,7 +554,7 @@
 - **목표 Sprint**: S0
 - **초기 SP**: 5
 - **의존**: US-E1-02; US-E2-01 스플래시 분기
-- **Source**: `docs/planning/user-stories.md:182-188`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:182-188`
 
 **요지**
 
@@ -583,7 +583,7 @@
 - **Fix Version**: MVP-2026.11
 - **목표 Sprint**: S1~S3 (2026-07-27 ~ 2026-09-04)
 - **의존**: U1 완료가 착수 조건. U3·U4·U6·U7이 홈 카드 데이터를 공급하고 U8에서 최종 통합.
-- **Source**: `docs/planning/epics.md §E2; docs/planning/user-stories.md:190-249`
+- **Source**: `aidlc/aidlc-docs/planning/epics.md §E2; aidlc/aidlc-docs/planning/user-stories.md:190-249`
 
 ### US-E2-01 — 스플래시 진입 분기
 
@@ -594,7 +594,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 8
 - **의존**: U1 세션·온보딩·재동의 API; US-E2-06
-- **Source**: `docs/planning/user-stories.md:194-201`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:194-201`
 
 **요지**
 
@@ -624,7 +624,7 @@
 - **목표 Sprint**: S3
 - **초기 SP**: 8
 - **의존**: US-E2-03; 카드 데이터는 U3·U4·U6·U7, 최종 통합은 U8
-- **Source**: `docs/planning/user-stories.md:203-212`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:203-212`
 
 **요지**
 
@@ -656,7 +656,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 8
 - **의존**: U1 인증 라우팅; 탭 콘텐츠는 U3·U5·U7·U8
-- **Source**: `docs/planning/user-stories.md:214-223`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:214-223`
 
 **요지**
 
@@ -688,7 +688,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 3
 - **의존**: US-E2-03; 화면 분류 레지스트리
-- **Source**: `docs/planning/user-stories.md:225-230`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:225-230`
 
 **요지**
 
@@ -716,7 +716,7 @@
 - **목표 Sprint**: S2
 - **초기 SP**: 8
 - **의존**: US-E2-03; U3 M7 저장 POI; U4 필수 방문지; U5 US-E5-11
-- **Source**: `docs/planning/user-stories.md:232-240`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:232-240`
 
 **요지**
 
@@ -747,7 +747,7 @@
 - **목표 Sprint**: S1
 - **초기 SP**: 5
 - **의존**: U1 부트스트랩; US-E2-01
-- **Source**: `docs/planning/user-stories.md:242-248`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:242-248`
 
 **요지**
 
@@ -776,7 +776,7 @@
 - **Fix Version**: MVP-2026.11
 - **목표 Sprint**: S2~S4 (2026-08-10 ~ 2026-09-18)
 - **의존**: U1 완료. PR2 지도 약관·계약과 PR4 TourAPI 캐싱 조건은 설계 차단, PR5 OTA 제휴는 출시 전 차단. CP1을 U4에 공급.
-- **Source**: `docs/planning/epics.md §E3; docs/planning/user-stories.md:250-348`
+- **Source**: `aidlc/aidlc-docs/planning/epics.md §E3; aidlc/aidlc-docs/planning/user-stories.md:250-348`
 
 ### US-E3-01 — 여행지 기반 숙소 탐색
 
@@ -787,7 +787,7 @@
 - **목표 Sprint**: S2
 - **초기 SP**: 13
 - **의존**: U1 계정·취향·위치 상태; PR2 지도 API, PR4 TourAPI
-- **Source**: `docs/planning/user-stories.md:254-262`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:254-262`
 
 **요지**
 
@@ -818,7 +818,7 @@
 - **목표 Sprint**: S2
 - **초기 SP**: 8
 - **의존**: US-E3-01; US-E1-06/13
-- **Source**: `docs/planning/user-stories.md:264-271`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:264-271`
 
 **요지**
 
@@ -848,7 +848,7 @@
 - **목표 Sprint**: S2
 - **초기 SP**: 8
 - **의존**: US-E3-01; PR2 지도 SDK
-- **Source**: `docs/planning/user-stories.md:273-279`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:273-279`
 
 **요지**
 
@@ -877,7 +877,7 @@
 - **목표 Sprint**: S3
 - **초기 SP**: 5
 - **의존**: US-E3-01/03; U1 계정
-- **Source**: `docs/planning/user-stories.md:281-287`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:281-287`
 
 **요지**
 
@@ -907,7 +907,7 @@
 - **목표 Sprint**: S3
 - **초기 SP**: 8
 - **의존**: US-E3-03/04; PR5 OTA 제휴 정책
-- **Source**: `docs/planning/user-stories.md:289-297`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:289-297`
 
 **요지**
 
@@ -938,7 +938,7 @@
 - **목표 Sprint**: S4
 - **초기 SP**: 13
 - **의존**: US-E3-05 또는 US-E3-08; U4 거점 연결
-- **Source**: `docs/planning/user-stories.md:299-307`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:299-307`
 
 **요지**
 
@@ -970,7 +970,7 @@
 - **목표 Sprint**: S4
 - **초기 SP**: 8
 - **의존**: US-E3-06; 여행 내 거점 검증은 US-E4-06
-- **Source**: `docs/planning/user-stories.md:309-315`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:309-315`
 
 **요지**
 
@@ -999,7 +999,7 @@
 - **목표 Sprint**: S3
 - **초기 SP**: 13
 - **의존**: U1 인증; PR2 지도 API; 지원 OTA 도메인 목록
-- **Source**: `docs/planning/user-stories.md:317-325`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:317-325`
 
 **요지**
 
@@ -1030,7 +1030,7 @@
 - **목표 Sprint**: S4
 - **초기 SP**: 5
 - **의존**: US-E3-04, US-E3-06/07
-- **Source**: `docs/planning/user-stories.md:327-333`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:327-333`
 
 **요지**
 
@@ -1059,7 +1059,7 @@
 - **목표 Sprint**: S3
 - **초기 SP**: 3
 - **의존**: US-E3-01/02; US-E3-08 직접 등록 우회
-- **Source**: `docs/planning/user-stories.md:335-340`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:335-340`
 
 **요지**
 
@@ -1087,7 +1087,7 @@
 - **목표 Sprint**: S3
 - **초기 SP**: 5
 - **의존**: US-E3-01; TourAPI·지도 어댑터
-- **Source**: `docs/planning/user-stories.md:342-347`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:342-347`
 
 **요지**
 
@@ -1115,7 +1115,7 @@
 - **Fix Version**: MVP-2026.11
 - **목표 Sprint**: S4~S5 (2026-09-07 ~ 2026-10-02)
 - **의존**: U3 CP1 소비. CP2 여행 컨텍스트를 U5 솔버에 공급하므로 스키마 정밀도가 후속 착수 게이트.
-- **Source**: `docs/planning/epics.md §E4; docs/planning/user-stories.md:349-444`
+- **Source**: `aidlc/aidlc-docs/planning/epics.md §E4; aidlc/aidlc-docs/planning/user-stories.md:349-444`
 
 ### US-E4-01 — 새 여행 생성
 
@@ -1126,7 +1126,7 @@
 - **목표 Sprint**: S4
 - **초기 SP**: 8
 - **의존**: U1 취향; U3 등록 숙소; Δ2·Δ3
-- **Source**: `docs/planning/user-stories.md:353-362`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:353-362`
 
 **요지**
 
@@ -1158,7 +1158,7 @@
 - **목표 Sprint**: S4
 - **초기 SP**: 5
 - **의존**: US-E4-01; US-E2-05; U5 US-E5-01/11
-- **Source**: `docs/planning/user-stories.md:364-370`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:364-370`
 
 **요지**
 
@@ -1187,7 +1187,7 @@
 - **목표 Sprint**: S4
 - **초기 SP**: 8
 - **의존**: US-E3-06/08; CP1
-- **Source**: `docs/planning/user-stories.md:372-380`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:372-380`
 
 **요지**
 
@@ -1219,7 +1219,7 @@
 - **목표 Sprint**: S4
 - **초기 SP**: 5
 - **의존**: US-E3-04; US-E4-03
-- **Source**: `docs/planning/user-stories.md:382-387`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:382-387`
 
 **요지**
 
@@ -1247,7 +1247,7 @@
 - **목표 Sprint**: S4
 - **초기 SP**: 5
 - **의존**: US-E4-01/03
-- **Source**: `docs/planning/user-stories.md:389-395`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:389-395`
 
 **요지**
 
@@ -1276,7 +1276,7 @@
 - **목표 Sprint**: S5
 - **초기 SP**: 8
 - **의존**: US-E3-07; US-E4-03/05
-- **Source**: `docs/planning/user-stories.md:397-403`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:397-403`
 
 **요지**
 
@@ -1305,7 +1305,7 @@
 - **목표 Sprint**: S5
 - **초기 SP**: 3
 - **의존**: US-E4-03
-- **Source**: `docs/planning/user-stories.md:405-410`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:405-410`
 
 **요지**
 
@@ -1333,7 +1333,7 @@
 - **목표 Sprint**: S5
 - **초기 SP**: 13
 - **의존**: US-E2-05; U3 SavedPlace/M7; US-E4-01
-- **Source**: `docs/planning/user-stories.md:412-421`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:412-421`
 
 **요지**
 
@@ -1365,7 +1365,7 @@
 - **목표 Sprint**: S5
 - **초기 SP**: 5
 - **의존**: US-E4-03/08; U5 솔버
-- **Source**: `docs/planning/user-stories.md:423-428`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:423-428`
 
 **요지**
 
@@ -1393,7 +1393,7 @@
 - **목표 Sprint**: S5
 - **초기 SP**: 3
 - **의존**: US-E3-05; US-E4-03
-- **Source**: `docs/planning/user-stories.md:430-435`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:430-435`
 
 **요지**
 
@@ -1421,7 +1421,7 @@
 - **목표 Sprint**: S4
 - **초기 SP**: 3
 - **의존**: US-E4-01; PR8 금칙어 사전
-- **Source**: `docs/planning/user-stories.md:437-443`
+- **Source**: `aidlc/aidlc-docs/planning/user-stories.md:437-443`
 
 **요지**
 

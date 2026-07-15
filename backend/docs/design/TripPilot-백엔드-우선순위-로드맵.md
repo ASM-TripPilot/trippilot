@@ -1,7 +1,7 @@
 # TripPilot 백엔드 착수 우선순위 로드맵
 
 > 대상: 백엔드 담당(Spring Boot + Kotlin) · 기준일 2026-07-06
-> 근거 문서: `docs/planning/overview.md`, `aidlc/aidlc-docs/aidlc-state.md`, `aidlc/aidlc-docs/construction/shared-infrastructure.md`, `construction/plans/u1-foundation-*`
+> 근거 문서: `aidlc/aidlc-docs/planning/overview.md`, `aidlc/aidlc-docs/aidlc-state.md`, `aidlc/aidlc-docs/construction/shared-infrastructure.md`, `construction/plans/u1-foundation-*`
 
 ## 지금 상태 한 줄 요약
 
@@ -55,7 +55,7 @@ Terraform(HCL, S3 원격 상태). 적용 순서: **network → security → data
 
 ## 이후
 
-U1 완료 후 `docs/planning/units.md`의 U1~U11 의존과 `unit-of-work-dependency.md`의 **CP1~CP5 계약(필드 수준)**을 확인하며 U2(앱셸 부트스트랩)·U3(숙소·장소, 외부 어댑터 Resilience4j)로 진행. 차별화 축인 **U6 Plan-B 재계획 로직은 담당자(본인) 직접 설계** 영역이며, 나는 검증·PBT·엣지케이스 위주로 보조.
+U1 완료 후 `aidlc/aidlc-docs/planning/units.md`의 U1~U11 의존과 `unit-of-work-dependency.md`의 **CP1~CP5 계약(필드 수준)**을 확인하며 U2(앱셸 부트스트랩)·U3(숙소·장소, 외부 어댑터 Resilience4j)로 진행. 차별화 축인 **U6 Plan-B 재계획 로직은 담당자(본인) 직접 설계** 영역이며, 나는 검증·PBT·엣지케이스 위주로 보조.
 
 ---
 

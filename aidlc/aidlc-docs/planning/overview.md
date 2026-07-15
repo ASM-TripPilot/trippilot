@@ -199,4 +199,4 @@ TripPilot은 **'등록된 숙소를 출발점으로 AI가 실행 가능한 일�
 | [user-stories.md](./user-stories.md) | 유저스토리 128개와 수용 기준 |
 | [scope.md](./scope.md) | 1차 범위·후속 단계·범위 제외의 상세 경계 |
 
-기술 스택·모듈 구조·비기능 기준·개발 순서 등 설계 문서는 기획을 읽는 데 필요하지 않다. 필요할 때 `docs/planning/`의 설계 문서군(architecture · domain · flows · decisions · nfr · infrastructure · units)을 참조한다.
+기술 스택·모듈 구조·비기능 기준·개발 순서 등 설계 문서는 기획을 읽는 데 필요하지 않다. 필요할 때 `aidlc/aidlc-docs/planning/`의 설계 문서군(architecture · domain · flows · decisions · nfr · infrastructure · units)을 참조한다.

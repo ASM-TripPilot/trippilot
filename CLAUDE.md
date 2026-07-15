@@ -14,31 +14,31 @@ This is a **monorepo** (`ASM-TripPilot/trippilot`). Everything lives in one git 
 
 | Directory | Role |
 |---|---|
-| `docs/` | **Canonical planning docs** in `docs/planning/` — the single source of truth ("정본") for product, architecture, domain, and units. Team conventions in `docs/conventions/`. |
+| `docs/` | Team process docs — `docs/conventions/` (branch·commit·PR) and `docs/guides/` (Jira/Slack). **Product/design canon ("정본") lives in `aidlc/aidlc-docs/planning/`** (product, architecture, domain, units). |
 | `backend/` | Backend (Spring Boot + Kotlin modular monolith). Design docs in `backend/docs/design/`; code not yet scaffolded. |
 | `frontend/` | Frontend (React Native + Expo). Design/IO docs in `frontend/docs/`; code not yet scaffolded. |
 | `ai/` | AI-layer design (itinerary/Plan-B/reflection AI architecture, prompts, solver, testing). Docs only. |
-| `aidlc/` | **Teammate-owned AWS AI-DLC (Amazon Q) workspace.** A parallel document-generation flow; `aidlc/docs/PRD/` is the upstream inception artifact that `docs/planning/` was refined from. Don't edit this without coordinating — it's another dev's active run. |
+| `aidlc/` | **AWS AI-DLC (Amazon Q) workspace + product-planning canon home.** `aidlc-docs/planning/` holds our canonical planning docs (ours to edit). The AI-DLC **tool-state is teammate-owned — don't edit without coordinating**: `aidlc-docs/{aidlc-state.md, audit.md, inception/}` and `aidlc/docs/PRD/` (the upstream inception artifact that `planning/` was refined from). |
 
 The Figma wireframe exports (164 PNGs, 89 screens across bands a–h) are **kept outside the repo**. The per-screen UI Input/Output catalog for those screens is tracked at `frontend/docs/와이어프레임-화면-IO정리.md`.
 
-**When docs conflict, `docs/planning/` wins** — it is the refined superset of `aidlc/docs/PRD/` (adds M18, cross-cutting C1–C3, ADR-0018–0021, and the D/Δ/N traceability registers).
+**When docs conflict, `aidlc/aidlc-docs/planning/` wins** — it is the refined superset of `aidlc/docs/PRD/` (adds M18, cross-cutting C1–C3, ADR-0018–0021, and the D/Δ/N traceability registers).
 
 ## Where the authority lives
 
 Design docs explicitly mark one file as "정본" (canonical) for each topic. Read the canonical doc before changing behavior it owns:
 
-- Product/scope/personas/scenarios: `docs/planning/{overview,scope,personas,scenarios,epics,user-stories}.md`
-- Architecture, module boundaries, dependency matrix: `docs/planning/architecture.md`
-- Domain model & state machines: `docs/planning/domain.md` (Trip / Itinerary / Visit state machines)
-- Decisions/ADRs (referenced everywhere as `ADR-####`, `D##`, `AD-#`): `docs/planning/decisions.md`
-- Non-functional requirements (perf, security, PBT gates): `docs/planning/nfr.md`
-- Unit breakdown & build order U1–U11: `docs/planning/units.md` + `docs/planning/units/`
-- Glossary (domain terms + traceability code prefixes M/C/D/Δ/N/P/BR/G/US/E/U/S): `docs/planning/glossary.md`
+- Product/scope/personas/scenarios: `aidlc/aidlc-docs/planning/{overview,scope,personas,scenarios,epics,user-stories}.md`
+- Architecture, module boundaries, dependency matrix: `aidlc/aidlc-docs/planning/architecture.md`
+- Domain model & state machines: `aidlc/aidlc-docs/planning/domain.md` (Trip / Itinerary / Visit state machines)
+- Decisions/ADRs (referenced everywhere as `ADR-####`, `D##`, `AD-#`): `aidlc/aidlc-docs/planning/decisions.md`
+- Non-functional requirements (perf, security, PBT gates): `aidlc/aidlc-docs/planning/nfr.md`
+- Unit breakdown & build order U1–U11: `aidlc/aidlc-docs/planning/units.md` + `aidlc/aidlc-docs/planning/units/`
+- Glossary (domain terms + traceability code prefixes M/C/D/Δ/N/P/BR/G/US/E/U/S): `aidlc/aidlc-docs/planning/glossary.md`
 - Backend build order: `backend/docs/design/TripPilot-백엔드-우선순위-로드맵.md`; DB/API/schema under `backend/docs/design/` (`openapi.yaml`, `sql/V1.*.sql`, `*-스키마-설계.md`)
 - AI architecture & rules: `ai/README.md` (3-minute onboarding) → `ai-architecture.md` (WHY) → `ai-implementation-design.md` (HOW) → `ai-prompt-design.md`, `ai-testing-guide.md`, `ai-adr.md`
 
-Per-unit design docs (`docs/planning/units/u1..u8`, backend `U1-*`) own the detailed business rules and REST specs; the architecture doc only owns boundaries. Follow the pointer chain rather than guessing.
+Per-unit design docs (`aidlc/aidlc-docs/planning/units/u1..u8`, backend `U1-*`) own the detailed business rules and REST specs; the architecture doc only owns boundaries. Follow the pointer chain rather than guessing.
 
 ## Architecture in one screen
 

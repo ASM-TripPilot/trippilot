@@ -447,9 +447,9 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 
 | 문서 | AI 관련 내용 |
 |---|---|
-| `../TripPilot/docs/planning/decisions.md` | ADR-0008~0015, D11·D25·D27·D31·D37·D38 근거 전문 |
-| `../TripPilot/docs/planning/architecture.md` | 모듈 경계·의존 매트릭스·포트 격리 |
-| `../TripPilot/docs/planning/nfr.md` | 성능(§1.1)·LLM 경계(§3.5)·PBT(§7) 기준 |
+| `../TripPilot/aidlc/aidlc-docs/planning/decisions.md` | ADR-0008~0015, D11·D25·D27·D31·D37·D38 근거 전문 |
+| `../TripPilot/aidlc/aidlc-docs/planning/architecture.md` | 모듈 경계·의존 매트릭스·포트 격리 |
+| `../TripPilot/aidlc/aidlc-docs/planning/nfr.md` | 성능(§1.1)·LLM 경계(§3.5)·PBT(§7) 기준 |
 
 ---
 

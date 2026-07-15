@@ -1,6 +1,6 @@
 # TripPilot AI 아키텍처·전략
 
-> 출처: TripPilot 기획 정본(../TripPilot/docs/planning/) — decisions.md(ADR-0008·0009·0011·0015, D11·D25·D27·D28·D29·D31·D37·D38, G106·G115·G181)·architecture.md(§1~§4)·nfr.md(§1.1·§3.5·§7)·aidlc(components.md, u5-itinerary/functional-design)에서 2026-07-07 종합.
+> 출처: TripPilot 기획 정본(../TripPilot/aidlc/aidlc-docs/planning/) — decisions.md(ADR-0008·0009·0011·0015, D11·D25·D27·D28·D29·D31·D37·D38, G106·G115·G181)·architecture.md(§1~§4)·nfr.md(§1.1·§3.5·§7)·aidlc(components.md, u5-itinerary/functional-design)에서 2026-07-07 종합.
 
 이 문서는 TripPilot의 AI를 **하나의 관점으로 꿰는 전략 정본**이다. 제품 전반에 흩어진 AI 관련 결정(ADR·D)과 모듈(C1·C2·M7~M13·M16)을 모아 "TripPilot의 AI가 **무엇을 왜 그렇게** 하는가"를 규정한다.
 
@@ -441,9 +441,9 @@ C1을 별도 파이썬 서비스로 분리하는 시점은 다음 중 하나가 
 
 | 문서 | 내용 |
 |---|---|
-| ../TripPilot/docs/planning/architecture.md | 모듈 경계·의존 매트릭스·포트 격리·서킷 브레이커 지점(§3·§4) |
-| ../TripPilot/docs/planning/decisions.md | ADR-0008·0009·0011·0015, D11·D25·D27·D28·D29·D31·D37·D38 근거 전문 |
-| ../TripPilot/docs/planning/nfr.md | 성능(§1.1)·LLM 경계(§3.5)·테스트/PBT(§7) 기준 |
-| ../TripPilot/docs/planning/overview.md | '예약 다음' 다섯 축·AI의 제품상 위치(§2·§5) |
-| ../TripPilot/docs/planning/epics.md | E5·E7·E8·E10 스토리·수용 기준 |
+| ../TripPilot/aidlc/aidlc-docs/planning/architecture.md | 모듈 경계·의존 매트릭스·포트 격리·서킷 브레이커 지점(§3·§4) |
+| ../TripPilot/aidlc/aidlc-docs/planning/decisions.md | ADR-0008·0009·0011·0015, D11·D25·D27·D28·D29·D31·D37·D38 근거 전문 |
+| ../TripPilot/aidlc/aidlc-docs/planning/nfr.md | 성능(§1.1)·LLM 경계(§3.5)·테스트/PBT(§7) 기준 |
+| ../TripPilot/aidlc/aidlc-docs/planning/overview.md | '예약 다음' 다섯 축·AI의 제품상 위치(§2·§5) |
+| ../TripPilot/aidlc/aidlc-docs/planning/epics.md | E5·E7·E8·E10 스토리·수용 기준 |
 | ../TripPilot/aidlc/.../u5-itinerary/functional-design/business-logic-model.md | 일정 생성 FLOW-1~5·PBT 속성 상세 |
