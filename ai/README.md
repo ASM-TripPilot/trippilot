@@ -1,141 +1,445 @@
-# TripPilot — AI 설계 저장소
+# TripPilot AI — 설계 저장소
 
-TripPilot의 **AI 담당 설계 저장소**다. 일정 생성·Plan-B·회고 기능의 AI 아키텍처, 구현 설계, 프롬프트, 테스트 전략을 소유한다.
-
-> 제품 기획 정본은 `../TripPilot/docs/planning/`에 있다. 본 저장소는 그 중 AI 관련 결정을 **AI 개발 관점으로 재구성**하며, 정본을 중복 정의하지 않는다.
+TripPilot의 **AI 담당 설계 저장소**. 일정 생성·여행 중 변수 대응·회고 기능의 AI 아키텍처를 소유한다.
 
 ---
 
-## 문서 지도
+## 3대 핵심 기능
 
-| 문서 | 성격 | 읽어야 할 때 |
+| 기능 | 설명 | 담당 에이전트 |
 |---|---|---|
-| [ai-architecture.md](./ai-architecture.md) | 전략·아키텍처 (WHAT/WHY) | AI가 왜 이렇게 설계됐는지 이해할 때 |
-| [ai-implementation-design.md](./ai-implementation-design.md) | 구현 설계 (HOW) | 실제 코드 구조·인터페이스·알고리즘 설계할 때 |
-| [ai-data-design.md](./ai-data-design.md) | 데이터 설계 (M7) | POI 스키마·closed-set 후보 풀·소싱·캐싱 설계할 때 |
-| [ai-prompt-design.md](./ai-prompt-design.md) | 프롬프트 설계 | feature별 프롬프트·OutputSchema·검증 규칙 작성할 때 |
-| [ai-testing-guide.md](./ai-testing-guide.md) | 테스트 가이드 | PBT 속성 구현·CI 설정·oracle 테스트 작성할 때 |
-| [ai-adr.md](./ai-adr.md) | 결정 기록 (ADR) | 아키텍처 결정 근거·이력(AI-D01~03 등)을 볼 때 |
+| **일정 생성** | 숙소 기반으로 최적 여행 일정 자동 생성 | ScheduleAgent |
+| **여행 중 변수 대응 (Plan-B)** | 날씨·휴무·지연 발생 시 대안 일정 제안 (RAG 기반) | PlanBAgent |
+| **회고 생성** | 여행 기록 기반 당일 회고·전체 요약·스타일 분석 | ReflectAgent |
 
 ---
 
-## 핵심 요약 (3분 온보딩)
-
-### TripPilot AI = 멀티 에이전트 + 솔버 하이브리드
+## 멀티에이전트 아키텍처 (업무 기준)
 
 ```
-자연어 입력                    버튼 직행
-      |                           |
-      v                           |
-+------------------+              |
-|  INTENT 라우터   |              |
-|  (의도 분류)     |              |
-+------------------+              |
-      |                           |
-      | 의도별 워커 디스패치       |
-      v                           |
-+----------+  +--------+  +-------+-------+
-| SCHEDULE |  | PLAN_B |  | REFLECT| EDIT |
-|  워커    |  |  워커  |  |  워커  | 워커 |
-+----------+  +--------+  +--------+------+
-      |              |          |       |
-      | LLM 선호 점수 |          |       |
-      v              v          v       v
-+----------------------------------------------------------+
-|              C1 LLM Gateway  (판단·해석)                 |
-|         closed-set 후보 풀 안에서만 선택                 |
-+----------------------------------------------------------+
-      |                                    ^
-      | LLM 선호 점수 (소프트 신호)          | M7 후보 풀
-      v                                    |
-+----------------------------------------------------------+
-|              C2 Solver Engine                            |
-|  +--------------------+  +---------------------------+  |
-|  | ML 선호 점수 (LTR)  |  | ML 체류시간 예측 (회귀) |  |
-|  | 폴백: 규칙 점수    |  | 폴백: 정적 테이블  |  |
-|  +--------------------+  +---------------------------+  |
-|              |                        |                  |
-|              v                        v                  |
-|  +--------------------------------------------------+   |
-|  |   OPTW/TOPTW 최적화 + HC1~HC4 하드 제약 검증   |   |
-|  +--------------------------------------------------+   |
-+----------------------------------------------------------+
-      |                                    ^
-      | 검증된 시각·순서·거리              | 후보 부족 시 백그라운드 보강
-      v                                    |
-사용자에게 보이는 일정        +------------------------+
-                              |  M7 Place Data         |
-                              |  Places API            |
-                              |  -> 자유 웹 워커       |
-                              |  -> 수집 게이트        |
-                              |  -> M7 등록(BG)        |
-                              +------------------------+
-```
-
-**C1 LLM Gateway** — 취향 해석·선호 점수·설명 생성. 판단 담당. 자연어 진입(AI 도우미)에선 **의도 라우터(INTENT) + 특화 워커** 2단 구조로 동작(AI-D02). 후속에 Python 서비스로 분리 가능(D11).
-
-**C2 Solver Engine** — OPTW/TOPTW 최적화·하드 제약 검증·이동 추정. 사실 담당. **Python** (C1과 함께 독립 AI 서비스). ※ D11 원안은 C2=Kotlin, AI 전면 Python 결정으로 분기(ai-adr.md AI-D01).
-
-**M7 후보 소싱** — DB 부족 시 Places API 우선→자유 웹 워커로 보강, 수집 게이트(강한 검증) 통과 후 M7 등록(백그라운드). 웹 원본 직접 후보화 금지(AI-D03).
-
-### 4대 불변식 (어기면 재설계)
-
-| # | 불변식 | 위반 예시 |
-|---|---|---|
-| INV-1 | LLM은 closed-set 후보 안에서만 선택 (웹 소싱도 게이트 경유 M7 등록 후) | LLM이 후보 밖 POI ID 반환 / 웹 원본 직접 후보화 |
-| INV-2 | 사용자가 보는 시각·순서는 솔버 검증값만 (라우터·워커는 제안만) | 라우터가 시각을 직접 확정 |
-| INV-3 | 소요시간 미표시 — 거리만 | DTO에 `duration` 필드 추가 |
-| INV-4 | AI 실패 시 결정론 폴백 (라우터·워커 실패 포함) | LLM 타임아웃 시 빈 응답 반환 |
-
-### 1차 범위
-
-| 기능 | 유닛 | 모듈 | 상태 |
-|---|---|---|---|
-| 일정 생성 | U5 | M8 | 1차 출시 |
-| Plan-B 재계획 | U6 | M9·M10·M11 | 1차 출시 |
-| 회고·스타일 분석 | U7 | M13 | 1차 출시 |
-| AI 도우미(자연어 라우터+워커) | — | M16 | 1차 출시 (AI-D02) |
-
----
-
-## 파일 간 관계
-
-```
-ai-architecture.md          <- 전략 정본. 여기서 WHY를 결정
+사용자 입력 (자연어 또는 이벤트)
         |
-        | 구현 방향 제공
         v
-ai-implementation-design.md <- HOW 정의. 인터페이스·알고리즘·폴백 계단
++--------------------+
+|   Orchestrator     |  의도 파악 + 복잡도 판단
++--------------------+
         |
-        +--------> ai-prompt-design.md   <- C1 feature별 프롬프트·스키마
+        | 간단? → 직접 처리 (Fast Path)
+        |           "다음 일정 뭐야" → DB 조회 → 즉시 응답
         |
-        +--------> ai-testing-guide.md   <- PBT 속성 구현·CI 설정
+        | 복잡? → 에이전트에 위임 (병렬 가능)
+        v
++--------------------------------------------------------------+
+| ScheduleAgent | PlanBAgent  | ReflectAgent | EditAgent        |
+| 일정 생성     | 변수 대응   | 회고 생성    | 일정 편집        |
+| (Generation)  | (RAG 기반)  | (LLM 생성)  | (해석+검증)      |
++--------------------------------------------------------------+
+        |
+        | 각 에이전트가 필요한 도구만 조합
+        v
++--------------------------------------------------------------+
+| [도구풀 — 에이전트별 제한 할당]                                |
+| LLM 호출 (Bedrock) | M7 후보 조회 | Solver 배치/검증          |
+| 벡터 검색 (RAG)    | 엔티티 해소  | 외부 API (날씨, 지도)    |
++--------------------------------------------------------------+
+        |
+        v
++--------------------------------------------------------------+
+|  C2 Solver — 하이브리드                                       |
+|  OR-Tools (1차 결정론) → Bedrock (2차) → 규칙 폴백 (최후)    |
+|  모든 출력은 HC1~HC4 검증 통과 필수                           |
++--------------------------------------------------------------+
+        |
+        v
+  사용자에게 보이는 일정 (솔버 검증값만)
 ```
 
 ---
 
-## 개발 시작 전 확인사항
+## 시스템 아키텍처
 
-### 착수 시 확정 필요한 항목
+```mermaid
+flowchart TD
+    subgraph Client["클라이언트"]
+        UI["일정 UI (버튼/드래그)"]
+        CHAT["AI 도우미 (자연어)"]
+        LOC["위치/시간 Tick"]
+    end
 
-| # | 항목 | 담당 문서 |
+    subgraph PythonAI["Python AI 서비스"]
+        subgraph Orch["Orchestrator"]
+            INTENT["의도 파악 + 복잡도 판단"]
+            FAST["Fast Path (직접 처리)"]
+            PLAN["Execution Plan (병렬 디스패치)"]
+        end
+
+        subgraph Agents["업무 에이전트"]
+            SA["ScheduleAgent\n일정 생성"]
+            PBA["PlanBAgent\n변수 대응 (RAG)"]
+            RA["ReflectAgent\n회고 생성"]
+            EA["EditAgent\n일정 편집"]
+        end
+
+        subgraph Core["AI 코어 (도구풀)"]
+            C1["C1 LLM Gateway\nclosed-set 게이트\n티어 라우팅"]
+            C2["C2 Solver\nOR-Tools → Bedrock → 규칙폴백\nHC1~HC4 검증"]
+            M7["M7 Place Data\nclosed-set 후보 풀\n엔티티 해소"]
+        end
+
+        subgraph RAG["RAG 파이프라인 (PlanBAgent 전용)"]
+            KB1["KB-1: 기존 일정"]
+            KB2["KB-2: 사용자 페르소나"]
+            KB3["KB-3: 상황 데이터"]
+            VEC["벡터 스토어\n(pgvector)"]
+            EMB["임베딩\n(Titan v2)"]
+        end
+    end
+
+    subgraph External["외부 서비스"]
+        LLM["AWS Bedrock\n(Claude)"]
+        KAKAO["카카오모빌리티\n(도로 거리)"]
+        NAVER["네이버 지도\n(폴백)"]
+        PLACES["Places API\n(POI 소싱)"]
+        WEATHER["기상청 API\n(날씨 트리거)"]
+    end
+
+    subgraph DataStore["데이터 저장소"]
+        DB["PostgreSQL\n(POI 정본 + 일정)"]
+        CACHE["Redis\n(TTL 캐시)"]
+    end
+
+    %% 클라이언트 → Orchestrator
+    UI --> INTENT
+    CHAT --> INTENT
+    LOC --> INTENT
+
+    %% Orchestrator 분기
+    INTENT --> FAST
+    INTENT --> PLAN
+
+    %% Orchestrator → 에이전트
+    PLAN --> SA
+    PLAN --> PBA
+    PLAN --> RA
+    PLAN --> EA
+
+    %% 에이전트 → 코어 도구
+    SA --> C1
+    SA --> C2
+    SA --> M7
+    PBA --> C1
+    PBA --> C2
+    PBA --> M7
+    PBA --> VEC
+    RA --> C1
+    EA --> C1
+    EA --> C2
+    EA --> M7
+
+    %% RAG 내부
+    PBA --> KB1
+    PBA --> KB2
+    PBA --> KB3
+    KB2 --> VEC
+    VEC --> EMB
+    EMB --> LLM
+
+    %% 코어 → 외부
+    C1 --> LLM
+    C2 --> KAKAO
+    C2 --> NAVER
+    C2 --> LLM
+    M7 --> PLACES
+    KB3 --> WEATHER
+
+    %% 코어 → 데이터
+    M7 --> DB
+    M7 --> CACHE
+    KB1 --> DB
+    KB2 --> DB
+```
+
+---
+
+## Orchestrator
+
+| 모드 | 조건 | 처리 방식 |
 |---|---|---|
-| 1 | LLM 벤더·모델 (경량/상위 실체) | ai-implementation-design.md §3.1 |
-| 2 | 솔버 알고리즘 라이브러리 선정 | ai-implementation-design.md §4.3 |
-| 3 | ItineraryProblem/Solution 내부 스키마 | ai-implementation-design.md §4.1 |
-| 4 | feature별 프롬프트·OutputSchema 실체 | ai-prompt-design.md §2 |
-| 5 | 이동·트리거 파라미터 초기값 캘리브레이션 | ai-architecture.md §5.3 |
-| 6 | 라우터 의도·편집 op 목록 + 파괴적 편집 분류 기준 | ai-implementation-design.md §3.4 |
-| 7 | Places API 벤더 + 자유 웹 추출 검증 규칙 | ai-implementation-design.md §2.1 |
-| 8 | 엔티티 해소 fuzzy match 임계(자동확정·확인 컷) | ai-implementation-design.md §3.4 |
-| 9 | ML 학습 데이터 로깅 스키마(선호 피드백·실제 체류) | ai-adr.md AI-D05 |
+| **Fast Path** | 도구 1~2개로 끝나는 간단한 task | 직접 처리 (위임 오버헤드 제거) |
+| **Delegate** | 다단계 판단이 필요한 복잡한 업무 | 에이전트에 위임 (병렬 가능) |
+| **Fallback** | 의도 파악 실패 | 기본 응답 + 수동 편집 경로 안내 |
 
-### PR 머지 전 필수 통과
+Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소/되돌리기
 
-- [ ] C2 하드 제약 4종 PBT 100% (G114)
-- [ ] closed-set 게이트 PBT 100%
-- [ ] LLM·거리 API fake 사용 확인 (실 API 호출 0)
-- 전체 체크리스트 → [ai-testing-guide.md §7](./ai-testing-guide.md)
+---
+
+## 에이전트 4종
+
+### ScheduleAgent — 일정 생성 비서
+
+- **패턴**: Generation (백지에서 새로 만들기)
+- **흐름**: 후보 풀 조회 → LLM 선호 점수 → 솔버 배치 → 설명 생성
+- **할당 Tool**: `m7.get_candidates`, `m7.source_web`, `llm.score_preferences`, `llm.explain_slot`, `solver.solve`, `solver.validate`
+
+### PlanBAgent — 변수 대응 비서 (RAG 기반)
+
+- **패턴**: RAG (기존 정보를 꺼내서 + 상황에 맞게 재구성)
+- **흐름**: KB에서 Retrieve(기존 일정 + 페르소나 + 상황) → Augment(프롬프트 조립) → Generate(LLM 대안 선택) → Validate(솔버 검증)
+- **할당 Tool**: `kb.retrieve_schedule`, `kb.retrieve_persona`, `kb.retrieve_situation`, `m7.get_candidates`, `llm.select_alternatives`, `solver.solve`, `solver.validate`
+- **벡터 스토어**: pgvector (저장 장소 메모, 방문 리뷰, POI 설명)
+- **상세 설계**: `aidlc-docs/inception/application-design/planb-rag-design.md`
+
+### ReflectAgent — 회고 비서
+
+- **패턴**: 1차 — 단순 LLM Generation (DB 조회 → Bedrock 1회). 추후 C 확장(Multi-step)
+- **흐름 (1차)**: 방문 기록 DB 조회 → 충분성 판단(0건→스킵) → LLM 회고 생성 → 결과 반환
+- **할당 Tool (1차)**: `db.get_visit_history`, `llm.generate_reflection` **(2개만)**
+- **추후 추가**: `llm.analyze_style` (7축 스타일 분류, 누적 10곳 이상 시)
+- **폴백**: LLM 실패 → FallbackCard (통계 카드: 방문 N곳·이동 Nkm·사진 N장)
+- **상세 설계**: `aidlc-docs/inception/application-design/reflect-agent-design.md`
+
+### EditAgent — 편집 비서
+
+- **패턴**: 의도 해석 → 검증 → 반영
+- **흐름**: 편집 의도 해석 → 엔티티 해소 → 솔버 검증 → 반영 모드 결정
+- **할당 Tool**: `llm.parse_intent`, `m7.resolve_entity`, `m7.get_candidates`, `solver.validate`, `solver.repair`
+
+---
+
+## C2 Solver — 하이브리드 전략
+
+"에이전트가 구해온 정보를 실현 가능하도록 최종 배치하는 결정론 엔진"
+
+```
+OR-Tools (1차) → Bedrock LLM (2차) → 규칙 폴백 (최후)
+```
+
+| 계층 | 역할 | 특성 |
+|---|---|---|
+| OR-Tools | VRPTW 결정론 최적화 (3초 제한) | 빠름, 결정론, HC 네이티브 |
+| Bedrock | 복잡한 제약에서 창의적 배치 제안 | 유연하지만 비결정론 |
+| 규칙 폴백 | 전부 실패 시 최소 일정 보장 | INV-4 보장 |
+
+Bedrock 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
+
+---
+
+## 4대 불변식 (어기면 재설계)
+
+| # | 불변식 | 검증 방법 |
+|---|---|---|
+| INV-1 | LLM은 closed-set 후보 안에서만 선택 (환각 0) | C1 출구 게이트 + PBT |
+| INV-2 | 사용자에게 보이는 시각·순서는 솔버 검증값만 | 에이전트 공통 규칙 + PBT |
+| INV-3 | 소요시간 미표시 — 거리만 | VisitSlotDisplay 타입 정적 보장 |
+| INV-4 | AI 실패 시 결정론 폴백 (침묵 실패 금지) | 에이전트별 폴백 계단 + PBT |
+
+---
+
+## 기술 스택
+
+| 영역 | 기술 | 비고 |
+|---|---|---|
+| 언어 | Python 3.11+ | AI 서비스 전체 |
+| LLM | AWS Bedrock (Claude) | 벤더 미확정, Port 격리 |
+| 솔버 | OR-Tools (1차) + Bedrock (2차 폴백) | 하이브리드 |
+| RAG 프레임워크 | LangChain (부분 도입) | PlanBAgent + Bedrock 호출에만 |
+| 벡터 스토어 | pgvector (PostgreSQL) | 1차, 추후 OpenSearch 이전 가능 |
+| 임베딩 | Amazon Titan Embeddings v2 | 1024차원 |
+| 테스트 | pytest + Hypothesis (PBT) | 속성 19개 |
+| 패키지 관리 | uv/poetry (미확정) | — |
+
+### LangChain 적용 범위 (부분 도입)
+
+| 적용 O | 적용 X (직접 구현) |
+|---|---|
+| PlanBAgent RAG 파이프라인 | Orchestrator |
+| Bedrock LLM 호출 | Solver (OR-Tools) |
+| pgvector 벡터 스토어 연동 | M7 후보 풀 생성 |
+| 임베딩 생성 | ScheduleAgent, EditAgent 로직 |
+| | HC1~HC4 검증, 에이전트 병렬 실행 |
+
+적용 이유: RAG 보일러플레이트 제거 + Bedrock 파싱·재시도 내장. 상세 → `aidlc-docs/inception/application-design/langchain-adoption.md`
+
+---
+
+## 에이전트별 Tool 제한 (토큰 절감)
+
+각 에이전트에는 업무에 필요한 tool만 할당. 전체 17개 중 3~7개만 사용 → 호출당 토큰 50~60% 절감.
+
+| Tool | Schedule | PlanB | Reflect | Edit | Orchestrator |
+|---|---|---|---|---|---|
+| `m7.get_candidates` | O | O | - | O | - |
+| `m7.source_web` | O | - | - | - | - |
+| `m7.resolve_entity` | - | - | - | O | - |
+| `llm.score_preferences` | O | - | - | - | - |
+| `llm.select_alternatives` | - | O | - | - | - |
+| `llm.generate_reflection` | - | - | O | - | - |
+| `llm.analyze_style` | - | - | (추후) | - | - |
+| `llm.parse_intent` | - | - | - | O | - |
+| `kb.retrieve_*` | - | O | - | - | - |
+| `solver.solve` | O | O | - | - | - |
+| `solver.validate` | O | O | - | O | O |
+| `solver.repair` | - | - | - | O | - |
+
+---
+
+## 디렉토리 구조
+
+```
+TripPilot_AI/
+├── README.md                ← 본 파일
+├── claude.md                ← 프로젝트 루트 컨텍스트
+├── .kiro/                   ← Kiro steering + AI-DLC 규칙
+├── aidlc-docs/              ← AI-DLC 워크플로우 산출물
+│   ├── aidlc-state.md       ← 현재 진행 상태
+│   ├── inception/
+│   │   ├── design-artifacts/  ← ai-*.md 설계 정본 6개 + 비용 추정
+│   │   ├── reverse-engineering/
+│   │   ├── requirements/
+│   │   ├── plans/
+│   │   ├── application-design/
+│   │   │   ├── agent-redesign.md      ← 에이전트 구조 (최신)
+│   │   │   ├── planb-rag-design.md    ← PlanB RAG 설계
+│   │   │   ├── langchain-adoption.md  ← LangChain 부분 도입
+│   │   │   └── ...
+│   │   └── units/
+│   └── construction/        ← (미착수)
+```
+
+---
+
+## 핵심 컴포넌트 (C1 · C2 · M7)
+
+### C1 LLM Gateway — 판단·해석 계층
+
+에이전트들이 도구로 사용하는 LLM 호출 인프라.
+
+- 티어 라우팅: feature에 따라 경량/상위 모델 분기
+- closed-set 출구 게이트: OutputSchema 파싱 + poi_id ∈ 화이트리스트 교차 (INV-1)
+- 서버 재조회 컨텍스트 주입: 요청자 권한으로 ResourceRef 재조회 (D31)
+- 폴백: 타임아웃(2.5s)/파싱 실패 → FallbackSignal 발행
+
+### C2 Solver Engine — 선택·순서·시각 보장
+
+에이전트가 구해온 정보를 실현 가능하도록 배치하는 결정론 엔진.
+
+- OPTW/TOPTW 최적화 + HC1~HC4 하드 제약 검증
+- 이동시간 추정: 어댑터 체인 (카카오 → 네이버 → 직선거리×1.3)
+- warm-start 재생성: 고정 블록 보존, 나머지만 재배치
+- 하이브리드: OR-Tools(1차) → Bedrock(2차) → 규칙 폴백(최후)
+
+### M7 Place Data — closed-set 후보 풀
+
+AI 파이프라인의 그라운딩 토대.
+
+- 6단계 필터 파이프라인: 반경 → 예산 → 영업일 → 품질 → 인기 → 상한(5천)
+- 웹 후보 소싱: Places API(1단계) → 자유 웹(2단계) + 수집 게이트(5단 검증)
+- 엔티티 해소: 결정론 fuzzy match (edit-distance), LLM 아님
+- 캐싱: POI 24h, 영업시간 6h, 가격 캐싱 금지
+
+---
+
+## 일정 생성 시퀀스 (핵심 플로우)
+
+```
+사용자 → M8(Kotlin) → M7: 후보 풀 생성 (closed-set)
+                     → C1: 선호 점수 (경량, 2.5s 타임아웃, 전 일자 1회)
+                            실패 → 규칙 점수 폴백
+                     → C2: day별 배치 (LLM 재호출 없음)
+                            day1 → 5초 내 우선 반환 (독립 TX)
+                            나머지 → 백그라운드
+                     → 전체 완료 (20초 한계)
+```
+
+---
+
+## Plan-B 변수 대응 시퀀스 (RAG 기반)
+
+```
+트리거 발생 (날씨 80%↑ / 휴무 / 이동지연 30분+ / 체류초과)
+        |
+        v
+[1. Retrieve — 상황 파악]
+        +→ KB-1: 기존 일정에서 영향받는 슬롯 추출
+        +→ KB-3: 트리거 사유 + 현재 위치 + 시각 + 날씨
+        |
+        v
+[2. Retrieve — 대안 후보 소싱]
+        +→ KB-2: 저장 장소 (사용자 찜 목록, 1순위)
+        +→ M7: 현재 위치 반경 내 POI
+        |       (실내 필터 / 체류 짧은 것 우선 / 이미 간 곳 제외)
+        +→ KB-2: 사용자 선호 패턴 (벡터 유사도 검색)
+        |
+        v
+[3. Augment — 프롬프트 조립]
+        트리거 사유 + 영향 슬롯 + 대안 후보(closed-set)
+        + 사용자 선호 + 제약(남은 시간, 고정 블록)
+        |
+        v
+[4. Generate — LLM 대안 선택]
+        "이 후보 중 상황에 맞는 대안 A/B/C 선택" (closed-set, INV-1)
+        |
+        v
+[5. Validate — 솔버 검증 (병렬)]
+        +→ solver.solve(대안 A)
+        +→ solver.solve(대안 B)  ← 동시 실행
+        +→ solver.solve(대안 C)
+        |
+        HC1~HC4 통과한 것만 생존
+        |
+        v
+[6. Return — 제안]
+        대안 2~3개 + 전/후 비교 → 사용자에게 제안 (자동 변경 없음)
+        |
+        사용자 선택 → solver.validate(재검증) → 확정 반영
+```
+
+### Plan-B 3가지 Knowledge Base
+
+| KB | 내용 | 저장 방식 |
+|---|---|---|
+| **KB-1: 기존 일정** | 현재 슬롯·고정 블록·방문이력·변경이력 | DB (구조화) |
+| **KB-2: 사용자 페르소나** | 저장 장소·선호 패턴·거절 이력 | DB + 벡터 스토어 (pgvector) |
+| **KB-3: 상황 데이터** | 트리거 사유·위치·시각·날씨·POI 상태 | 실시간 API |
+
+### Plan-B 폴백 계단
+
+```
+저장 장소 0개 → M7 일반 후보로 진행
+벡터 검색 실패 → M7 카테고리 필터만
+LLM 타임아웃 → 규칙 점수 (카테고리+거리+평점)
+솔버 전멸 → 건너뛰기 / 휴식 모드 제안
+전체 실패 → "수동으로 수정하세요" + 수동 편집 화면
+```
+
+---
+
+## ML 도입 전략 (AI-D05)
+
+ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검증은 솔버 결정론 유지.
+
+| 후보 | 역할 | 현재 상태 | 폴백 |
+|---|---|---|---|
+| **선호 점수 — 추천/LTR** | 유저 피드백 기반 개인화 랭킹 | 1차는 LLM/규칙 부트스트랩 + 로깅 | `build_rule_score` (규칙 점수) |
+| **체류 시간 예측 — 회귀** | POI+유저+시간대 → 실제 체류 분 | 1차는 정적 테이블(G51) | 카테고리 기본값 테이블 |
+| **이동시간 보정 — 회귀** | 고정 안전계수 → 시간·지역별 보정 | 후순위 | G106 고정값 |
+
+- 도입 시점: 유저 피드백 충분히 쌓인 후 (DAU 1천, 과설계 금지)
+- 호스팅: SageMaker 엔드포인트 → C1/솔버 어댑터 뒤에 스왑
+- closed-set 게이트(INV-1)는 ML 선호점수에도 그대로 적용
+- 규칙 폴백 유지 (INV-4): ML 실패 → 기존 규칙 버전으로
+
+---
+
+## 임베딩 · 벡터 검색
+
+| 항목 | 선택 | 용도 |
+|---|---|---|
+| 임베딩 모델 | Amazon Titan Embeddings v2 (1024차원) | 사용자 페르소나·POI 설명 벡터화 |
+| 벡터 스토어 | pgvector (PostgreSQL) — 1차 | 유사도 검색 (PlanBAgent RAG) |
+| 확장 | OpenSearch Serverless — 추후 스케일 시 | — |
+
+인덱싱 대상: 저장 장소 메모, 과거 방문 리뷰, POI 설명, 과거 Plan-B 결과
 
 ---
 
@@ -143,9 +447,17 @@ ai-implementation-design.md <- HOW 정의. 인터페이스·알고리즘·폴백
 
 | 문서 | AI 관련 내용 |
 |---|---|
-| `decisions.md` | ADR-0008·0009·0011·0015, D11·D25·D27·D31·D37·D38 근거 전문 |
-| `architecture.md` | 모듈 경계·의존 매트릭스·포트 격리 |
-| `nfr.md` | 성능(§1.1)·LLM 경계(§3.5)·PBT(§7) 기준 |
+| `../TripPilot/docs/planning/decisions.md` | ADR-0008~0015, D11·D25·D27·D31·D37·D38 근거 전문 |
+| `../TripPilot/docs/planning/architecture.md` | 모듈 경계·의존 매트릭스·포트 격리 |
+| `../TripPilot/docs/planning/nfr.md` | 성능(§1.1)·LLM 경계(§3.5)·PBT(§7) 기준 |
+
+---
+
+## 현재 상태
+
+- **INCEPTION 완료** — 설계·요구사항·계획 수립 끝
+- **멘토 피드백 반영 중** — 에이전트 업무 기준 재설계, RAG, LangChain 부분 도입, Solver 하이브리드
+- **다음**: CONSTRUCTION Phase (U1 Domain & Ports부터)
 
 ---
 
@@ -154,9 +466,11 @@ ai-implementation-design.md <- HOW 정의. 인터페이스·알고리즘·폴백
 | 날짜 | 내용 |
 |---|---|
 | 2026-07-07 | 초기 작성 (ai-architecture.md, ai-implementation-design.md) |
-| 2026-07-07 | G106 이동 지연 트리거 오류 정정 (15분→30분, 6개 문서) |
-| 2026-07-08 | ai-prompt-design.md, ai-testing-guide.md 추가. ai-implementation-design.md §4.1·§4.3 구체화. ai-architecture.md §10 M16 설계 여지 추가. README 재편 |
-| 2026-07-07 | **멀티 에이전트 오케스트레이션 도입(AI-D02)** — 자연어 진입 라우터(INTENT)+특화 워커, AI 도우미(M16) 1차 승격, 하이브리드 반영(경미=자동/파괴적=확인). INV-2·INV-4 강화. 6개 문서 반영 |
-| 2026-07-08 | **웹서치 후보 소싱(AI-D03)** — 계층형(Places API→자유 웹 워커 PlaceExtraction)+수집 게이트(강한 검증)+백그라운드 보강. INV-1에 소싱 게이트 명문화. 7개 문서 반영 |
-| 2026-07-08 | **입력 정규화·엔티티 해소(AI-D04)** — 별도 교정 agent 없이 라우터 LLM이 오타 흡수 + 지역·POI명 결정론 fuzzy match(애매하면 확인, 미해소는 웹 소싱). 7개 문서 반영 |
-| 2026-07-08 | **ML 도입 전략(AI-D05)** — soft 신호만 ML(하드 제약은 솔버 결정론). 후보 ①선호점수(추천/LTR) ②체류시간(회귀). 규칙 폴백 유지(INV-4), 1차는 로깅 부트스트랩. 5개 문서 반영 |
+| 2026-07-08 | AI-D02(멀티에이전트), AI-D03(웹소싱), AI-D04(엔티티해소), AI-D05(ML전략) |
+| 2026-07-12 | AI-DLC INCEPTION 전체 완료 (Workspace Detection ~ Units Generation) |
+| 2026-07-12 | 멘토 피드백 반영 — 에이전트 업무 기준 재설계 (tool 기준 → 업무 기준) |
+| 2026-07-12 | Orchestrator Fast Path + 에이전트 병렬 실행 |
+| 2026-07-12 | PlanBAgent RAG 설계 구체화 (KB 3종, 벡터 스토어, retrieve 전략) |
+| 2026-07-12 | Solver 하이브리드 확정 (OR-Tools → Bedrock → 규칙 폴백) |
+| 2026-07-12 | 에이전트별 Tool 제한 (토큰 절감) |
+| 2026-07-12 | LangChain 부분 도입 (Bedrock + RAG만) |
