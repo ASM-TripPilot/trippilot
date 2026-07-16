@@ -7,6 +7,14 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/trippilot?currentSchema=app}
     username: ${DB_USER:app_user}
     password: ${DB_PASSWORD:app_user}
+  # Flyway 는 마이그레이션 전용 롤(app_migrate=스키마 소유자)로 접속 — 런타임 app_user 와 분리.
+  # url 미지정 → 위 datasource url 을 app_migrate 자격으로 재사용.
+  flyway:
+    user: ${DB_MIGRATE_USER:app_migrate}
+    password: ${DB_MIGRATE_PASSWORD:app_migrate}
+    schemas: app
+    default-schema: app
+    create-schemas: false   # 스키마는 인프라가 app_migrate 소유로 선생성 (app_migrate 는 DB CREATE 권한 없음)
 
 # 통합 테스트용 — AI 서비스 위치(compose 에서 AI_URL 주입). 미설정이면 integration 이 degrade.
 ai:

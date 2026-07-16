@@ -1,0 +1,6 @@
+# 테스트 프로파일 — Spring Boot 자동 Flyway 비활성화.
+# 이유: @SpringBootTest(@ServiceConnection)의 순정 컨테이너엔 app_migrate 롤이 없다.
+# Flyway 마이그레이션 + 롤 권한 검증은 SchemaMigrationIT 가 컨테이너에 롤을 만들고 직접 수행한다.
+spring:
+  flyway:
+    enabled: false
