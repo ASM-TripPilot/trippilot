@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TripPilot 컨테이너 통합 테스트</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #222; }
+    h1 { font-size: 1.4rem; }
+    .card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    .ok { color: #0a7d29; font-weight: 600; }
+    .fail { color: #c62828; font-weight: 600; }
+    pre { background: #f6f6f6; padding: 12px; border-radius: 6px; overflow: auto; margin: 8px 0 0; }
+    small { color: #888; }
+  </style>
+</head>
+<body>
+  <h1>🧭 TripPilot 컨테이너 통합 테스트</h1>
+  <p>이 페이지(<b>FE 컨테이너</b>) → <b>BE 컨테이너</b> → <b>AI 컨테이너</b> 체인을 확인합니다.
+     <br /><small>FE(nginx)가 <code>/api</code> 를 BE 로 리버스 프록시 → 같은 오리진, CORS 없음.</small></p>
+
+  <div class="card">
+    <h3>① FE → BE <code>/api/health</code></h3>
+    <div id="be-status">확인 중…</div>
+    <pre id="be-body"></pre>
+  </div>
+
+  <div class="card">
+    <h3>② FE → BE → AI <code>/api/integration</code></h3>
+    <div id="ai-status">확인 중…</div>
+    <pre id="ai-body"></pre>
+  </div>
+
+  <script>
+    async function check(url, statusId, bodyId) {
+      const s = document.getElementById(statusId);
+      const b = document.getElementById(bodyId);
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        s.innerHTML = res.ok ? '<span class="ok">✔ 연결됨</span>' : '<span class="fail">✗ HTTP ' + res.status + '</span>';
+        b.textContent = JSON.stringify(json, null, 2);
+      } catch (e) {
+        s.innerHTML = '<span class="fail">✗ 실패</span>';
+        b.textContent = String(e);
+      }
+    }
+    check('/api/health', 'be-status', 'be-body');
+    check('/api/integration', 'ai-status', 'ai-body');
+  </script>
+</body>
+</html>

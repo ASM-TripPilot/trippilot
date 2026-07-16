@@ -1,0 +1,60 @@
+name: backend-ci
+
+# backend/ 변경 시에만 실행 (모노레포 경로 트리거)
+on:
+  push:
+    branches: [develop]
+    paths: ['backend/**', '.github/workflows/backend-ci.yml']
+  pull_request:
+    branches: [develop]
+    paths: ['backend/**', '.github/workflows/backend-ci.yml']
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/trippilot-backend
+
+jobs:
+  # 1) 빌드·테스트 게이트 (Testcontainers IT 포함 — GitHub 러너엔 Docker 있음)
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: gradle build (test 포함)
+        working-directory: backend
+        run: ./gradlew build --no-daemon
+
+  # 2) 이미지 빌드 → GHCR push (develop push 에서만 publish)
+  image:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3   # gha 캐시 export 위해 docker-container 드라이버 필요
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=develop
+            type=sha,format=short
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
