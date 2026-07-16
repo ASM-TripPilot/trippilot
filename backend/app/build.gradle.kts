@@ -18,6 +18,9 @@ dependencies {
     implementation(libs.spring.boot.starter.jdbc)
     implementation(libs.jackson.module.kotlin)
     implementation(libs.kotlin.reflect)
+    implementation(libs.spring.boot.flyway)
+    implementation(libs.flyway.core)
+    runtimeOnly(libs.flyway.database.postgresql)
     runtimeOnly(libs.postgresql)
 
     testImplementation(libs.spring.boot.starter.test)
