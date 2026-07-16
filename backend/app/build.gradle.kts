@@ -15,10 +15,18 @@ dependencies {
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.actuator)
+    implementation(libs.spring.boot.starter.jdbc)
     implementation(libs.jackson.module.kotlin)
     implementation(libs.kotlin.reflect)
+    runtimeOnly(libs.postgresql)
 
     testImplementation(libs.spring.boot.starter.test)
+    testImplementation(libs.spring.boot.testcontainers)
+    testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
 }
+
+// 실행은 bootJar(실행 가능 jar)만 사용 — plain jar 비활성화(Docker COPY 시 jar 하나로 고정)
+tasks.named<Jar>("jar") { enabled = false }

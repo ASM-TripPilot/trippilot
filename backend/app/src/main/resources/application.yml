@@ -1,6 +1,16 @@
 spring:
   application:
     name: trippilot-backend
+  # 로컬 개발 DB(docker-compose). 런타임은 app_user 롤. Flyway 마이그레이션은 후속(TRIP-147, app_migrate).
+  # 통합테스트는 Testcontainers 가 @ServiceConnection 으로 이 값을 대체한다.
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/trippilot?currentSchema=app}
+    username: ${DB_USER:app_user}
+    password: ${DB_PASSWORD:app_user}
+
+# 통합 테스트용 — AI 서비스 위치(compose 에서 AI_URL 주입). 미설정이면 integration 이 degrade.
+ai:
+  url: ${AI_URL:}
 
 management:
   endpoints:
@@ -11,3 +21,6 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    db:
+      enabled: true
