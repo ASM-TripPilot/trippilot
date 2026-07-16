@@ -18,6 +18,7 @@ dependencies {
     implementation(libs.spring.boot.starter.jdbc)
     implementation(libs.jackson.module.kotlin)
     implementation(libs.kotlin.reflect)
+    implementation(libs.logstash.logback.encoder)
     implementation(libs.spring.boot.flyway)
     implementation(libs.flyway.core)
     runtimeOnly(libs.flyway.database.postgresql)
