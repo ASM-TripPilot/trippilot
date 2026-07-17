@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(../aidlc/**)",
+      "Write(../aidlc/**)",
+      "Edit(//Users/taehyeonpark/Desktop/dev/trippilot/aidlc/**)",
+      "Write(//Users/taehyeonpark/Desktop/dev/trippilot/aidlc/**)"
+    ]
+  }
+}
