@@ -261,3 +261,63 @@
 **Context**: INCEPTION 단계 완료. 워크플로우 정지(STOP). CONSTRUCTION 진입 금지.
 
 ---
+
+## Post-Inception Sync — 워크스페이스 상태·프로젝트 문서 최신화
+**Timestamp**: 2026-07-17T06:50:29Z
+**User Input**: "../aidlc에서 CLAUDE.md 읽고 aidlc-docs planning 빼고 업데이트 부분 업데이트ㄱㄱ" → "아니 여기 프론트엔드 아키텍처랑 백엔드 아키텍처 상황보고 aidlc CLAUDE 읽고 rules에 맞처 문서들 최신화 진행하라고"
+**AI Response**: (1) `aidlc/CLAUDE.md` 현행화 — 헤더에 INCEPTION 완료·✋STOP(2026-07-13) 상태와 완료 산출물(`aidlc-docs/inception/`) 포인터 명시, Directory Structure에 TripPilot 모노레포 배치 예외(애플리케이션 코드는 모노레포 루트 `backend/`·`frontend/`·`ai/`, 패키지별 아키텍처 정본은 패키지 소유) 추가. (2) `aidlc-state.md` Workspace State 동기화 — Existing Code=Yes(backend: Gradle 멀티모듈 골격+Flyway V1.0~V1.6+docker-compose/GHCR CI = TRIP-145~147 main 머지 / frontend: 아키텍처 정본 README 확정 = TRIP-160), Workspace Root 모노레포 이관 반영(`~/Desktop/dev/aidlc` → `trippilot/aidlc`), Post-Inception Progress 섹션 신설. `planning/`은 사용자 지시로 참조·수정 대상에서 제외. CONSTRUCTION 미진입 — 워크플로 스테이지 상태 변화 없음(STOP 유지).
+**Context**: INCEPTION 완료(STOP) 이후 상태 동기화. AI-DLC 밖 팀 개발 현황의 기록 반영이며 스테이지 진행 아님.
+
+---
+
+## Scope Change — planning 제거 · CONSTRUCTION 설계 문서 단계 진입 (U0)
+**Timestamp**: 2026-07-17T07:05:00Z
+**User Input**: "그리고 planning 제거하고 construction u1 진행 문서 작성만 하고 개발은 각자의 디렉토리에서 개발 할 예정" · 후속 확인 답변: 대상 유닛 = "U0 Foundation"(inception 체계 — 사용자 호칭 U1), 작성 주체 = "지금 나랑 진행"
+**AI Response**: (1) `aidlc-docs/planning/` 저장소에서 제거(git rm — 이력은 git에 보존). (2) `docs/SCOPE.md` 범위 개정 — CONSTRUCTION 진입하되 **유닛별 설계 문서(Functional/NFR Requirements/NFR Design/Infrastructure Design)까지만**, Code Generation·Build and Test 제외(코드는 팀이 모노레포 각 패키지 디렉토리에서 직접 개발), 첫 유닛 U0 Foundation, 이후 유닛은 유닛별 사용자 지시. (3) `aidlc-state.md` — Current Phase=CONSTRUCTION(설계 문서 단계만)·Current Stage=U0 Functional Design 진행·CONSTRUCTION 체크리스트 신설. (4) 리포 루트 `CLAUDE.md` — planning 참조 전면 교체(기획 정본=inception, 패키지 정본=각 패키지), 실코드 현황 반영. (5) U0 Functional Design 착수 — `.aidlc-rule-details/construction/functional-design.md` 규칙 적용.
+**Context**: 사용자 명시 지시에 의한 SCOPE 개정(처리 규칙 3 충족). CONSTRUCTION Per-Unit Loop 진입 — U0 Functional Design 시작.
+
+---
+
+## U0 Functional Design — Approved (Stage Complete)
+**Timestamp**: 2026-07-17T08:05:00Z
+**User Input**: "ㄱㄱ"
+**AI Response**: U0 Functional Design 승인 수신 → 단계 완료 처리(aidlc-state.md `[x]`). 산출물 4종 확정: `construction/u0-foundation/functional-design/{business-logic-model, domain-entities, business-rules(BR-U0-01~30), frontend-components}.md` + 정합 검증(갭 G-1~G-4, 핵심 G-1=openapi SocialLoginRequest SDK 토큰 개정 필요). 사전 질문 Q1~Q9+보충 4건 확정 내역은 플랜 파일 기록. 다음 = **U0 NFR Requirements** 진입.
+**Context**: CONSTRUCTION Per-Unit Loop — U0 Functional Design 승인 완료 → NFR Requirements 진입. Code Generation은 범위 외(SCOPE.md).
+
+---
+## U0 NFR Requirements — Plan + Generation Complete → Approval Prompt
+**Timestamp**: 2026-07-17T09:10:00Z
+**User Input**: "지금 u0 작업 이어서 하자" (선행 세션 캘리브레이션 지시: "적당한 규모 서비스 + 쾌적한 사용자 경험")
+**AI Response**: U0 NFR Requirements 단계 재개 — 선행 세션에서 산출물 2종은 생성되었으나 플랜 체크박스·audit 기록이 누락된 상태 확인. (1) `construction/plans/u0-foundation-nfr-requirements-plan.md` 체크박스 1~4 `[x]` 처리 + Q1~Q6 확정 답변 기록(캘리브레이션 지시로 전 항목 권장안 채택 + 파생 조정: PERF 체감 성능 상향·SEC-03 레이트리미터 PostgreSQL 카운터[Redis 미도입, 과설계 회피]·NFR-U0-UX 절 신설). (2) 산출물 확정 = `u0-foundation/nfr-requirements/nfr-requirements.md`(SCALE 3·PERF 4·UX 5·AVAIL 3·SEC 10·RES 4·OBS 3·LEGAL 3 = 35개 요구 + PBT 게이트 매핑 6종) · `tech-stack-decisions.md`(기존 확정 기록 + U0 델타 6종 + Infra Design 이연 5종). 익스텐션 준수: security-baseline Full → SEC-01~10으로 전 rule 커버 / resiliency-baseline Full → RES-01~04(RESILIENCY-04·14는 기지시대로 NFR Design 이연 = 계획된 이연, 미준수 아님) / PBT 부분(02·03·07·08·09) → §9 매핑 6종으로 blocking rule 충족.
+**AI Response (Approval Prompt)**: "U0 NFR Requirements Complete. 옵션: 🔧 Request Changes / ✅ Continue to Next Stage → NFR Design." DO NOT PROCEED until user confirms.
+**Context**: CONSTRUCTION Per-Unit Loop — U0 NFR Requirements 완료, 승인 게이트. 승인 시 aidlc-state.md `[x]` 처리 후 NFR Design 진입.
+
+---
+## U0 NFR Requirements — Approved (Stage Complete)
+**Timestamp**: 2026-07-17T09:15:00Z
+**User Input**: "이어서 ㄱㄱ"
+**AI Response**: U0 NFR Requirements 승인 수신 → 단계 완료 처리(aidlc-state.md `[x]`). 산출물 확정 = `u0-foundation/nfr-requirements/{nfr-requirements, tech-stack-decisions}.md`. 다음 = **U0 NFR Design** 진입 (`.aidlc-rule-details/construction/nfr-design.md` 규칙 적용). 이 단계에서 기지시 이연분 RESILIENCY-04(CI/CD·배포·롤백)·RESILIENCY-14(복원력 테스트) 확정 예정.
+**Context**: CONSTRUCTION Per-Unit Loop — U0 NFR Requirements 승인 완료 → NFR Design 진입.
+
+---
+## U0 NFR Design — Plan Created (Questions Pending)
+**Timestamp**: 2026-07-17T09:20:00Z
+**AI Response**: `construction/plans/u0-foundation-nfr-design-plan.md` 생성 — 실행 계획 6단계 + 질문 Q1~Q9. nfr-design.md Step 3 필수 카테고리 5종 전부 커버: 복원력 패턴(Q1 재시도 전략) · 확장성 패턴(Q2 오토스케일·DB 복제본 미도입) · 성능 패턴(Q3 인메모리 캐시만, Redis 미도입) · 보안 패턴(Q4 JWK 2키 중첩 롤오버 절차) · 논리 컴포넌트(Q5 U0 신규 7종 + TRIP-148~150 기존 자산 수용). 추가로 **기지시 이연분 확정 질문**: RESILIENCY-04(Q6 CI/CD 툴링·Q7 롤백 메커니즘·Q8 배포 스타일) · RESILIENCY-14(Q9 복원력 테스트) — 두 규칙 모두 "모델 추론 금지·사용자 명시 선택" 요구이므로 답변 필수(blocking)로 표기. 특기 분석: Q7에서 Flyway forward-only 제약상 'DB 인지 롤백(역실행)'은 구조적 불가 → 스키마 전방호환(확장-후-수축) 규약을 롤백 가능성의 전제로 제시.
+**Context**: CONSTRUCTION Per-Unit Loop — U0 NFR Design Steps 1~4 완료. Step 5(답변 수집) 대기 중.
+
+---
+## U0 NFR Design — Answers Collected + Artifacts Generated → Approval Prompt
+**Timestamp**: 2026-07-17T09:35:00Z
+**User Input**: "했으니 확인ㄱㄱ" (플랜 파일 직접 편집으로 답변 기입: Q1~Q5="추천으로" · Q6="A" · Q7~Q9="추천으로")
+**AI Response**: Step 5(답변 수집·분석) — Q1~Q9 전항 확정, 모호·모순 없음. **RESILIENCY-04·14의 "사용자 명시 선택" 요구 충족**(Q6=A GitHub Actions · Q7=A 버전 핀+DB 규약 · Q8=B 롤링 · Q9=B 경량 제안). Step 6 산출물 2종 생성: (1) `nfr-design-patterns.md` — 패턴 24종(P-RES-1~4 재시도 경계 분리·IdP별 서킷 벌크헤드·stale-if-error·fail-closed/fail-open 구분 / P-SCALE-1~3 / P-PERF-1~4 / P-SEC-1~7 / **P-DEP-1~3 배포·롤백** / P-OBS-1~3) + NFR 35요구 → 패턴 커버리지 표 + **미도입 결정·재평가 트리거 5종**(Redis·읽기 복제본·블루그린/카나리·상시 카오스·메시지 브로커 — 과설계 회피 명시 기록). §6 복원력 테스트 RT-1~10(CI 7 + 배포 2[롤백 리허설 포함] + 게임데이 1). (2) `logical-components.md` — U0 신규 논리 컴포넌트 C-1~C-7(SocialOAuthPort+어댑터4·TokenService·RateLimiter·CircuitBreaker×4·OutboxRelay골격·ConsentLedger·BootstrapAssembler) + 횡단 캐시 C-8 + 기존 자산 수용 5종(TRIP-147~150·CI — **델타는 PII 마스킹 컨버터·공개 핸들러 ArchUnit 규칙·호환 테스트 잡 3건뿐**) + 프론트 논리 요소 5 + 컴포넌트→NFR 추적 + Infra Design 이연 7종. **핵심 설계 판단**: Flyway forward-only 제약 → 롤백은 앱 버전 핀 + **스키마 전방호환(확장-후-수축) 규약**에 의존, 불변식 "스키마 N에서 앱 N-1 동작" + CI 구버전앱↔신스키마 호환 테스트(RT-7)로 강제. 익스텐션 준수: security-baseline Full → P-SEC-1~7 ✅ / resiliency-baseline Full → **RESILIENCY-04·14 이연분 본 단계에서 해소 완료** ✅ / PBT blocking → C-6·C-7 명세에 속성 게이트 명시 ✅. 플랜 체크박스 2~5 `[x]`.
+**AI Response (Approval Prompt)**: "🎨 NFR Design Complete - u0-foundation. 옵션: 🔧 Request Changes / ✅ Continue to Next Stage → Infrastructure Design." DO NOT PROCEED until user confirms.
+**Context**: CONSTRUCTION Per-Unit Loop — U0 NFR Design Steps 5~7 완료, 승인 게이트(Step 8). 승인 시 aidlc-state.md `[x]` 후 Infrastructure Design(U0 마지막 설계 단계) 진입.
+
+---
+## U0 NFR Design — Approved · Infrastructure Design — SKIPPED (Scope Decision) · ✅ U0 설계 종료
+**Timestamp**: 2026-07-17T09:45:00Z
+**User Input**: "근데 지금 개발에서는 서버에 안올리가 로컬 작업만 할거임" → (AskUserQuestion 선택) "Infrastructure Design 건너뛰기"
+**AI Response**: (1) 로컬 스택 확인 — 리포 루트 `docker-compose.yml` 실재(postgres:16-alpine + backend/ai/frontend GHCR 이미지, TRIP-146). (2) NFR Design 영향 분석 제시 — 패턴·논리 컴포넌트는 로컬에서도 동일 구현이라 영향 없음, 배포 의존 항목 RT-8·9·10만 자동 이연. (3) Infrastructure Design 범위 3안 제시(로컬 범위 재정의 / SKIP / 원안 클라우드 토폴로지) + 로컬 전용이어도 남는 실제 결정(소셜 IdP 콘솔 설정·로컬 시크릿 주입) 고지. (4) 사용자 선택 = **SKIP**. 선택 옵션 미리보기에 NFR Design `[x]`가 명시되어 NFR Design 승인으로 처리(사용자에게 정정 가능함을 고지). (5) aidlc-state.md 반영 — NFR Design `[x]` 승인 완료 / Infrastructure Design `[~] SKIPPED`(사유: 배포 계획 부재 → 클라우드 리소스 결정의 근거·검증 수단 없음, 규칙상 CONDITIONAL "no infrastructure changes" 해당. 재개 조건: 배포/클라우드 진입 시 별도 지시) / **U0 설계 단계 종료** — 총 산출물 8종(functional-design 4 + nfr-requirements 2 + nfr-design 2). (6) **Open Items 섹션 신설** — 설계 문서 없이 개발 중 처리될 항목 명시 기록: 소셜 IdP 4종 콘솔 설정(U0 인증 개발 선결 블로커) · 로컬 시크릿 주입 규약 · 배포 의존 이연 항목(RT-8/9/10·클라우드 토폴로지) · G-1 openapi grantType 개정(백엔드 협의).
+**Context**: CONSTRUCTION Per-Unit Loop — U0 NFR Design 승인 완료 → Infrastructure Design 사용자 지시로 SKIP → **U0 설계 종료**. Code Generation은 SCOPE.md 범위 외(팀이 각 패키지에서 직접 개발). 다음 = 사용자 지시 대기(U1 설계 착수 또는 U0 개발 착수).
+
+---
