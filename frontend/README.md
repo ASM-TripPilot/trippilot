@@ -103,7 +103,7 @@ feature 내부 관례: `screens/ components/ hooks/ store/ model/` — 화면·�
 | UI E2E | 핵심 해피패스 **1~2개만** | 미정 (Maestro/Detox — 여행 중 실행 기능 개발 시점에 결정) | 시나리오 검증 본체는 백엔드 API 레벨 E2E가 담당 |
 
 - 테스트 파일은 소스 옆에 배치 (`foo.ts` ↔ `foo.test.ts`).
-- CI(`mobile-ci.yml`, 경로 필터 `frontend/**`): `tsc` · ESLint · Jest+fast-check — 머지 게이트.
+- CI(`.github/workflows/frontend-ci.yml`, 경로 필터 `frontend/**`): `tsc` · ESLint · Jest+fast-check — 머지 게이트.
 
 ## 린트·포맷
 
