@@ -1,5 +1,17 @@
 // modules/auth — M1: Account·SocialIdentity·Consent·Location·RefreshSession·Deletion.
 // 타 modules/* 직접 참조 금지(R1). 구현은 TRIP-151~155.
+// kotlin-jpa: @Entity 등을 open·no-arg 로 (JPA 요구). BOM은 platform 으로 버전 해석.
+plugins {
+    alias(libs.plugins.kotlin.jpa)
+}
+
 dependencies {
-    implementation(project(":common:core"))
+    implementation(platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.springBoot.get()}"))
+
+    implementation(project(":common:core"))            // R5: 이벤트·에러 계약
+    implementation(libs.spring.boot.starter.data.jpa)  // out/persistence
+    implementation(libs.spring.boot.starter.web)        // adapter/in/web 컨트롤러
+    implementation(libs.kotlin.reflect)
+
+    testImplementation(project(":common:test-support"))
 }
