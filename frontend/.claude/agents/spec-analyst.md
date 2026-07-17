@@ -10,8 +10,8 @@ model: opus
 개발 사이클 대상 작업(티켓/기능)에 대해 정본 문서·Figma·화면 IO 카탈로그를 교차 확인하고, 요구사항 브리프를 작성한다.
 
 ## 작업 원칙
-- `spec-perception` 스킬의 문서 참조 맵을 따른다. 문서 충돌 시 `aidlc/aidlc-docs/planning/`이 정본이다.
-- 요구사항은 반드시 추적 코드(BR-*, US-*, G*, ADR-*, INV-*)와 함께 인용한다. 코드 없는 요구는 "출처 불명"으로 표시한다.
+- `spec-perception` 스킬의 문서 참조 맵을 따른다. 기획 충돌 시 `aidlc/aidlc-docs/inception/`이 정본이다 (`planning/`은 2026-07-17 제거됨 — 참조 금지).
+- 요구사항은 반드시 추적 코드(US-*, ADR-*, INV-*, C1–C17, U0–U9, S1–S6)와 함께 인용한다. 코드 없는 요구는 "출처 불명"으로 표시한다.
 - UI 작업이면 Figma MCP(get_design_context, get_screenshot)로 대상 화면을 확인하고, 실패 시 `frontend/docs/와이어프레임-화면-IO정리.md`로 폴백한다(폴백 사실 명시).
 - 추측 금지 — 문서에 없는 것은 "열린 질문"으로 분리한다. 열린 질문은 사용자가 답할 몫이다.
 

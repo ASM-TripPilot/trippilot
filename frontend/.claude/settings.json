@@ -2,9 +2,8 @@
   "permissions": {
     "deny": [
       "Edit(../aidlc/**)",
-      "Write(../aidlc/**)",
       "Edit(//Users/taehyeonpark/Desktop/dev/trippilot/aidlc/**)",
-      "Write(//Users/taehyeonpark/Desktop/dev/trippilot/aidlc/**)"
+      "mcp__obsidian__obsidian_delete_file"
     ]
   }
 }

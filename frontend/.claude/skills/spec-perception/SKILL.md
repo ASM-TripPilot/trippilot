@@ -9,23 +9,22 @@ description: "TripPilot 정본 문서·Figma 인지 규칙. 요구사항 확인,
 
 | 주제 | 정본 위치 |
 |---|---|
-| 제품/범위/페르소나/시나리오 | `aidlc/aidlc-docs/planning/{overview,scope,personas,scenarios,epics,user-stories}.md` |
-| 아키텍처·모듈 경계·의존 매트릭스 | `aidlc/aidlc-docs/planning/architecture.md` |
-| 도메인 모델·상태 머신 | `aidlc/aidlc-docs/planning/domain.md` |
-| 결정(ADR-####/D##/AD-#) | `aidlc/aidlc-docs/planning/decisions.md` |
-| NFR·PBT 게이트 | `aidlc/aidlc-docs/planning/nfr.md` |
-| 유닛 분해 U1~U11·빌드 순서 | `aidlc/aidlc-docs/planning/units.md` + `units/` |
-| 용어·추적 코드 해독 | `aidlc/aidlc-docs/planning/glossary.md` |
+| 제품 요구사항 | `aidlc/aidlc-docs/inception/requirements/requirements.md` |
+| 유저 스토리(119)·페르소나 | `aidlc/aidlc-docs/inception/user-stories/{stories,personas}.md` |
+| 컴포넌트 C1–C17·메서드·서비스 S1–S6·의존 | `aidlc/aidlc-docs/inception/application-design/{components,component-methods,services,component-dependency,application-design}.md` |
+| 유닛 분해 U0–U9·빌드 순서·스토리 맵 | `aidlc/aidlc-docs/inception/application-design/unit-of-work{,-dependency,-story-map}.md` |
+| 유닛별 construction 설계(해당 유닛 작업 시 최신 정본) | `aidlc/aidlc-docs/construction/{unit}/` (예: `u0-foundation/` — functional-design·nfr-requirements 등) |
+| 프론트 아키텍처(스택·구조·경계·테스트) | `frontend/README.md` |
 | 화면 IO 카탈로그 | `frontend/docs/와이어프레임-화면-IO정리.md` |
 | 서버 API 계약 | `backend/docs/design/openapi.yaml` |
 | AI 레이어 규칙 | `ai/README.md`(온보딩) → 상세: `ai/aidlc-docs/inception/design-artifacts/{ai-architecture, ai-implementation-design, ai-prompt-design, ai-testing-guide, ai-adr}.md` |
 
 ## 접근 규칙
 
-- `aidlc/aidlc-docs`는 전체 읽기 참고 가능. 문서 충돌 시 `planning/`이 정본이다.
+- `aidlc/aidlc-docs`는 전체 읽기 참고 가능. 기획(요구사항·스토리·유닛) 충돌 시 `inception/`이 정본, 패키지 아키텍처·구현 결정은 해당 패키지 정본(`frontend/README.md` 등)이 우선한다. **`planning/`은 2026-07-17 제거됨 — 참조 금지.**
 - `aidlc/` 이하 **쓰기 금지**(팀원 소유 도구 상태 포함). 읽기만 한다.
 - atlassian MCP는 사용하지 않는다 — 티켓 정보는 사용자가 제공한다.
-- 요구사항 인용 시 추적 코드(BR/US/G/ADR/INV/M/C/D/Δ/N/P/E/U/S)를 반드시 병기한다 — 코드가 문서 간 링크 그래프이며, 코드 없는 인용은 검증 불가능하다.
+- 요구사항 인용 시 추적 코드(US-* / ADR-#### / INV-* / C1–C17 / U0–U9 / S1–S6)를 반드시 병기한다 — 코드가 문서 간 링크 그래프이며, 코드 없는 인용은 검증 불가능하다. 패키지 문서에 남은 레거시 코드(M##·D##·Δ#·N#·G### 등)는 제거된 planning 체계라 해독 불가 — 역사적 참고로만 취급한다.
 
 ## Figma
 
