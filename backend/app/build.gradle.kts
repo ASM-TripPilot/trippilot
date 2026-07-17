@@ -31,6 +31,8 @@ dependencies {
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
+    testImplementation(libs.archunit.junit5)   // 아키텍처 경계 게이트(R1·R4·R5)
+    testImplementation(libs.konsist)            // 소스 레벨 규칙(R2 domain 순수성)
 }
 
 // 실행은 bootJar(실행 가능 jar)만 사용 — plain jar 비활성화(Docker COPY 시 jar 하나로 고정)
