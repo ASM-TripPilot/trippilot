@@ -23,8 +23,9 @@ class SecurityConfig {
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests {
                 it.requestMatchers(
-                    "/api/v1/auth/social/**",      // 소셜 로그인(공개)
-                    "/api/v1/auth/token/refresh",  // 리프레시(공개 — 리프레시 토큰 자체 검증, TRIP-153 3단계)
+                    "/api/v1/auth/social/**",  // 소셜 로그인(공개)
+                    "/api/v1/auth/token/**",   // 리프레시(공개 — 리프레시 토큰 자체 검증)
+                    "/api/v1/auth/logout",     // 로그아웃(공개 — 제시한 리프레시 세션 폐기, 멱등)
                 ).permitAll()
                 it.requestMatchers("/actuator/health", "/actuator/health/**").permitAll() // compose·k8s 헬스체크
                 it.requestMatchers(HttpMethod.GET, "/api/health", "/api/integration").permitAll() // 통합 프로브
