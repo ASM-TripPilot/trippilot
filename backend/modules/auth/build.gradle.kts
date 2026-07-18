@@ -11,6 +11,7 @@ dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.springBoot.get()}"))
 
     implementation(project(":common:core"))            // R5: 이벤트·에러 계약
+    implementation(project(":common:security"))        // R5: 액세스 토큰 발급(AccessTokenIssuer)
     implementation(libs.spring.boot.starter.data.jpa)  // out/persistence
     implementation(libs.spring.boot.starter.web)        // adapter/in/web 컨트롤러
     implementation(libs.spring.boot.starter.validation) // 요청 @Valid
