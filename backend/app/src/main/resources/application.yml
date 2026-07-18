@@ -15,6 +15,13 @@ spring:
     schemas: app
     default-schema: app
     create-schemas: false   # 스키마는 인프라가 app_migrate 소유로 선생성 (app_migrate 는 DB CREATE 권한 없음)
+  # JPA — 스키마는 Flyway 소유. Hibernate 는 엔티티↔스키마 검증만(생성 금지).
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate.default_schema: app
 
 # 통합 테스트용 — AI 서비스 위치(compose 에서 AI_URL 주입). 미설정이면 integration 이 degrade.
 ai:

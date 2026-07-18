@@ -15,8 +15,9 @@ dependencies {
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.actuator)
-    implementation(libs.spring.boot.starter.jdbc)
+    implementation(libs.spring.boot.starter.data.jpa)   // @EnableJpaRepositories·JPA autoconfig (jdbc 포함)
     implementation(libs.jackson.module.kotlin)
+    implementation(libs.jackson.datatype.jsr310)
     implementation(libs.kotlin.reflect)
     implementation(libs.logstash.logback.encoder)
     implementation(libs.spring.boot.flyway)

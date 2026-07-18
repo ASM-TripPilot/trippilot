@@ -13,4 +13,8 @@ enum class ErrorCode {
     UPSTREAM_UNAVAILABLE,
     RATE_LIMITED,
     INTERNAL,
+
+    // 도메인별 코드(전역 카탈로그) — 상태는 대응 DomainException 타입이 결정
+    SOCIAL_AUTH_FAILED,
+    SOCIAL_EMAIL_CONFLICT,
 }

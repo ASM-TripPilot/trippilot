@@ -10,10 +10,15 @@ sealed class DomainException(
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
 
-/** 인증되지 않은 호출. 원인은 클라이언트에 비노출(SECURITY-15). */
+/**
+ * 인증되지 않은 호출(401). 원인은 클라이언트에 비노출(SECURITY-15).
+ * 소셜 인증 실패 등 401 계열의 특화 코드는 [errorCode] 로 지정(예: SOCIAL_AUTH_FAILED).
+ */
 class AuthenticationRequired(
     message: String = "인증이 필요합니다.",
-) : DomainException(ErrorCode.AUTHENTICATION_REQUIRED, message)
+    errorCode: ErrorCode = ErrorCode.AUTHENTICATION_REQUIRED,
+    cause: Throwable? = null,
+) : DomainException(errorCode, message, cause)
 
 /** 소유권·참여 권한 위반(IDOR 방지, 서버 측 검증). */
 class PermissionDenied(
@@ -42,7 +47,8 @@ class UpstreamUnavailable(
     val source: String,
     val fallbackApplied: Boolean,
     message: String = "일시적으로 서비스를 이용할 수 없습니다.",
-) : DomainException(ErrorCode.UPSTREAM_UNAVAILABLE, message)
+    cause: Throwable? = null,
+) : DomainException(ErrorCode.UPSTREAM_UNAVAILABLE, message, cause)
 
 /** 호출 상한 초과. */
 class RateLimited(
