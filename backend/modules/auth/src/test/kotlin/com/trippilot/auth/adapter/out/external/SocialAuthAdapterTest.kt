@@ -4,9 +4,13 @@ import com.trippilot.auth.domain.Provider
 import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.ErrorCode
+import com.trippilot.core.error.UpstreamUnavailable
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import org.springframework.http.HttpStatus
+import org.springframework.web.client.HttpServerErrorException
+import org.springframework.web.client.ResourceAccessException
 
 private class FakeClient(
     override val provider: Provider,
@@ -34,12 +38,28 @@ class SocialAuthAdapterTest : StringSpec({
         ex.errorCode shouldBe ErrorCode.SOCIAL_AUTH_FAILED
     }
 
-    "클라이언트 실패는 원인 비노출로 SOCIAL_AUTH_FAILED 로 일반화한다" {
-        val adapter = SocialAuthAdapter(listOf(FakeClient(Provider.NAVER) { throw RuntimeException("provider 5xx") }))
+    "클라이언트의 일반 실패(4xx·파싱 등)는 SOCIAL_AUTH_FAILED(401)로 일반화한다" {
+        val adapter = SocialAuthAdapter(listOf(FakeClient(Provider.NAVER) { throw RuntimeException("파싱 실패") }))
 
         val ex = shouldThrow<AuthenticationRequired> {
             adapter.exchange(Provider.NAVER, "code", "verifier", "redirect")
         }
         ex.errorCode shouldBe ErrorCode.SOCIAL_AUTH_FAILED
+    }
+
+    "제공자 5xx 는 UpstreamUnavailable(503)로 구분한다 (자격 문제 아님)" {
+        val adapter = SocialAuthAdapter(
+            listOf(FakeClient(Provider.KAKAO) { throw HttpServerErrorException(HttpStatus.BAD_GATEWAY) }),
+        )
+
+        shouldThrow<UpstreamUnavailable> { adapter.exchange(Provider.KAKAO, "code", "verifier", "redirect") }
+    }
+
+    "연결 실패·타임아웃도 UpstreamUnavailable(503)" {
+        val adapter = SocialAuthAdapter(
+            listOf(FakeClient(Provider.GOOGLE) { throw ResourceAccessException("connect timed out") }),
+        )
+
+        shouldThrow<UpstreamUnavailable> { adapter.exchange(Provider.GOOGLE, "code", "verifier", "redirect") }
     }
 })

@@ -2,6 +2,7 @@ package com.trippilot.auth.application
 
 import com.trippilot.auth.api.event.AccountCreated
 import com.trippilot.auth.domain.Account
+import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.SocialIdentity
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.auth.domain.port.SocialAuthPort
@@ -48,6 +49,10 @@ class AuthenticateWithSocialUseCase(
         } else {
             val ageMethod = command.ageMethod
                 ?: throw ValidationFailed(listOf(FieldError("ageConfirmation", "신규 가입 시 연령확인이 필요합니다")))
+            // BIRTH_DATE 는 생년월일 필수(INV-A2) — 클라 입력 오류이므로 400(도메인 require 로 500 나기 전에 차단)
+            if (ageMethod == AgeMethod.BIRTH_DATE && command.birthDate == null) {
+                throw ValidationFailed(listOf(FieldError("ageConfirmation.birthDate", "생년월일 연령확인은 생년월일이 필요합니다")))
+            }
             val now = clock.instant()
             account = accountRepository.save(
                 Account.registerViaSocial(
