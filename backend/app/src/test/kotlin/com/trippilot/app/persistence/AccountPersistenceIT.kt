@@ -4,6 +4,7 @@ import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AccountStatus
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.Provider
+import com.trippilot.auth.domain.SanctionStatus
 import com.trippilot.auth.domain.SocialIdentity
 import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.auth.domain.port.AccountRepository
@@ -58,6 +59,18 @@ class AccountPersistenceIT : AbstractPostgresIntegrationTest() {
         found.shouldNotBeNull()
         found.accountId shouldBe account.id
         found.providerEmail shouldBe "user@example.com"
+    }
+
+    @Test
+    fun `상태 전이(삭제요청)와 제재가 저장·조회에 반영된다`() {
+        val account = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, now))
+
+        accounts.save(account.requestDeletion().applySanction(SanctionStatus.WARNED))
+
+        val found = accounts.findById(account.id)
+        found.shouldNotBeNull()
+        found.status shouldBe AccountStatus.DELETION_PENDING
+        found.sanctionStatus shouldBe SanctionStatus.WARNED
     }
 
     @Test

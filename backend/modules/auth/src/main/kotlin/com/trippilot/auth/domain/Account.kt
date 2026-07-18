@@ -1,7 +1,11 @@
 package com.trippilot.auth.domain
 
+import com.trippilot.core.error.AgeRequirementNotMet
+import com.trippilot.core.error.ConflictDetected
 import java.time.Instant
 import java.time.LocalDate
+import java.time.Period
+import java.time.ZoneOffset
 import java.util.UUID
 
 @JvmInline
@@ -25,9 +29,18 @@ enum class AgeMethod {
     SELF_DECLARED,
 }
 
+/** 제재 단계 — 생명주기 상태와 독립. FULLY_SUSPENDED 는 로그인 자체를 막는다. */
+enum class SanctionStatus {
+    NONE,
+    WARNED,
+    COMMUNITY_SUSPENDED,
+    FULLY_SUSPENDED,
+}
+
 /**
  * 계정 애그리거트(도메인 — 프레임워크 의존 0).
- * 상태 전이·제재·삭제 심화는 TRIP-152. 여기선 소셜 신규 가입 생성만 소유.
+ * 소셜 신규 가입 생성 + 연령확인 게이트 + 생명주기/제재 상태 전이를 소유(TRIP-152).
+ * 불변 — 전이는 새 인스턴스를 반환한다.
  */
 class Account private constructor(
     val id: AccountId,
@@ -38,11 +51,61 @@ class Account private constructor(
     val status: AccountStatus,
     val createdAt: Instant,
     val verifiedAt: Instant?,
+    val sanctionStatus: SanctionStatus,
+    val deletedAt: Instant?,
 ) {
+    /** 로그인 허용 여부 — 파기됐거나 전면 정지된 계정은 인증 불가(SECURITY-15: 사유 비노출). */
+    fun canAuthenticate(): Boolean =
+        status != AccountStatus.DELETED && sanctionStatus != SanctionStatus.FULLY_SUSPENDED
+
+    /** 삭제 요청 — ACTIVE 만 가능. 유예기간 스케줄은 별도(TRIP-158). */
+    fun requestDeletion(): Account {
+        requireStatus(AccountStatus.ACTIVE, "삭제 요청은 활성 계정만 가능합니다.")
+        return copy(status = AccountStatus.DELETION_PENDING)
+    }
+
+    /** 삭제 철회(복구) — 삭제 대기 중만 가능. */
+    fun cancelDeletion(): Account {
+        requireStatus(AccountStatus.DELETION_PENDING, "복구는 삭제 대기 상태만 가능합니다.")
+        return copy(status = AccountStatus.ACTIVE)
+    }
+
+    /** 파기 확정 — 삭제 대기 중만 가능. 실제 데이터 파기 오케스트레이션은 TRIP-158. */
+    fun completeDeletion(now: Instant): Account {
+        requireStatus(AccountStatus.DELETION_PENDING, "파기는 삭제 대기 상태만 가능합니다.")
+        return copy(status = AccountStatus.DELETED, deletedAt = now)
+    }
+
+    /** 제재 단계 변경 — 파기된 계정은 제재 대상이 아니다. */
+    fun applySanction(target: SanctionStatus): Account {
+        if (status == AccountStatus.DELETED) {
+            throw ConflictDetected(current = status, message = "파기된 계정은 제재할 수 없습니다.")
+        }
+        return copy(sanctionStatus = target)
+    }
+
+    private fun requireStatus(expected: AccountStatus, message: String) {
+        if (status != expected) throw ConflictDetected(current = status, message = message)
+    }
+
+    private fun copy(
+        status: AccountStatus = this.status,
+        sanctionStatus: SanctionStatus = this.sanctionStatus,
+        deletedAt: Instant? = this.deletedAt,
+    ): Account = Account(
+        id, email, ageMethod, birthDate, ageConfirmedAt, status, createdAt, verifiedAt, sanctionStatus, deletedAt,
+    )
+
     companion object {
+        /** 가입 최소 연령(만 나이). 미만은 가입 불가(INV-A). */
+        const val MIN_AGE_YEARS: Int = 14
+
         /**
          * 소셜 신규 가입 — 제공자가 신원을 보증하므로 즉시 [AccountStatus.ACTIVE],
          * `verifiedAt = createdAt`. 최초 연령확인을 동반한다(N1/D33).
+         *
+         * BIRTH_DATE 는 생년월일로 만 나이를 계산해 [MIN_AGE_YEARS] 미만이면 거부([AgeRequirementNotMet]).
+         * SELF_DECLARED 는 클라이언트의 '만 14세 이상' 자기신고를 신뢰한다(생년월일 없음).
          */
         fun registerViaSocial(
             email: String?,
@@ -54,6 +117,9 @@ class Account private constructor(
             require(ageMethod != AgeMethod.BIRTH_DATE || birthDate != null) {
                 "BIRTH_DATE 연령확인은 birthDate 가 필요하다 (INV-A2)"
             }
+            if (ageMethod == AgeMethod.BIRTH_DATE && ageInYears(birthDate!!, now) < MIN_AGE_YEARS) {
+                throw AgeRequirementNotMet("만 $MIN_AGE_YEARS 세 미만은 가입할 수 없습니다.")
+            }
             return Account(
                 id = id,
                 email = email,
@@ -63,8 +129,14 @@ class Account private constructor(
                 status = AccountStatus.ACTIVE,
                 createdAt = now,
                 verifiedAt = now,
+                sanctionStatus = SanctionStatus.NONE,
+                deletedAt = null,
             )
         }
+
+        /** 기준 시각(UTC) 기준 만 나이. 미래 생년월일은 음수 → 자연히 미달 처리된다. */
+        private fun ageInYears(birthDate: LocalDate, now: Instant): Int =
+            Period.between(birthDate, now.atZone(ZoneOffset.UTC).toLocalDate()).years
 
         /** 영속 계층에서 이미 유효한 저장 데이터로 재구성(생성 불변식 미적용). */
         fun reconstitute(
@@ -76,6 +148,10 @@ class Account private constructor(
             status: AccountStatus,
             createdAt: Instant,
             verifiedAt: Instant?,
-        ): Account = Account(id, email, ageMethod, birthDate, ageConfirmedAt, status, createdAt, verifiedAt)
+            sanctionStatus: SanctionStatus,
+            deletedAt: Instant?,
+        ): Account = Account(
+            id, email, ageMethod, birthDate, ageConfirmedAt, status, createdAt, verifiedAt, sanctionStatus, deletedAt,
+        )
     }
 }

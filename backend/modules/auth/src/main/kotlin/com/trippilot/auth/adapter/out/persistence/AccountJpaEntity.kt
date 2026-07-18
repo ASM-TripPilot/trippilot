@@ -10,7 +10,7 @@ import java.util.UUID
 
 /**
  * account 테이블 매핑(도메인 Account 와 분리 — 도메인 순수성 R2).
- * 스키마는 Flyway 소유(V1.1). sanction_status·deleted_at 은 미매핑(152 확장) — DB 기본값/NULL.
+ * 스키마는 Flyway 소유(V1.1). sanction_status·deleted_at 은 TRIP-152 에서 매핑.
  */
 @Entity
 @Table(name = "account")
@@ -34,9 +34,15 @@ class AccountJpaEntity(
     @Column(name = "status")
     var status: String,
 
+    @Column(name = "sanction_status")
+    var sanctionStatus: String,
+
     @Column(name = "created_at")
     var createdAt: Instant,
 
     @Column(name = "verified_at")
     var verifiedAt: Instant?,
+
+    @Column(name = "deleted_at")
+    var deletedAt: Instant?,
 )
