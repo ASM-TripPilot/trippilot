@@ -12,6 +12,6 @@ data class SocialLoginCommand(
     val authorizationCode: String,
     val codeVerifier: String,
     val redirectUri: String,
-    val ageMethod: AgeMethod,
+    val ageMethod: AgeMethod?,
     val birthDate: LocalDate?,
 )
