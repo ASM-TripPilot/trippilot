@@ -35,13 +35,14 @@ class AccountPersistenceIT : AbstractPostgresIntegrationTest() {
 
     @Test
     fun `account 저장·조회 왕복`() {
-        val account = Account.registerViaSocial("user@example.com", AgeMethod.SELF_DECLARED, null, now)
+        val email = "acct-${UUID.randomUUID()}@example.com" // 공유 컨테이너의 이메일 유니크 인덱스 회피
+        val account = Account.registerViaSocial(email, AgeMethod.SELF_DECLARED, null, now)
         accounts.save(account)
 
         val found = accounts.findById(account.id)
 
         found.shouldNotBeNull()
-        found.email shouldBe "user@example.com"
+        found.email shouldBe email
         found.status shouldBe AccountStatus.ACTIVE
         found.verifiedAt shouldBe account.createdAt
     }
