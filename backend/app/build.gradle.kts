@@ -24,6 +24,7 @@ dependencies {
     runtimeOnly(libs.flyway.database.postgresql)
     runtimeOnly(libs.postgresql)
 
+    testImplementation(project(":common:test-support"))
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.spring.boot.testcontainers)
     testImplementation(libs.testcontainers.postgresql)
