@@ -65,5 +65,17 @@ class Account private constructor(
                 verifiedAt = now,
             )
         }
+
+        /** 영속 계층에서 이미 유효한 저장 데이터로 재구성(생성 불변식 미적용). */
+        fun reconstitute(
+            id: AccountId,
+            email: String?,
+            ageMethod: AgeMethod,
+            birthDate: LocalDate?,
+            ageConfirmedAt: Instant,
+            status: AccountStatus,
+            createdAt: Instant,
+            verifiedAt: Instant?,
+        ): Account = Account(id, email, ageMethod, birthDate, ageConfirmedAt, status, createdAt, verifiedAt)
     }
 }

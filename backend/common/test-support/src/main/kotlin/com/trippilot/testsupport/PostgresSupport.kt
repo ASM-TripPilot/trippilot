@@ -19,13 +19,18 @@ object PostgresSupport {
             }
     }
 
-    /** app_migrate(스키마 소유·마이그레이션) / app_user(런타임) 롤 + app 스키마 생성. */
+    /**
+     * app_migrate(스키마 소유·마이그레이션) / app_user(런타임) 롤 + app 스키마 생성.
+     * search_path 를 app 으로 고정(compose init 대역) — 미한정 SQL/JPA 가 app 스키마를 본다.
+     */
     private fun bootstrapRoles(c: PostgreSQLContainer<*>) {
         DriverManager.getConnection(c.jdbcUrl, c.username, c.password).use { conn ->
             conn.createStatement().use { s ->
                 s.execute("CREATE ROLE app_migrate LOGIN PASSWORD 'app_migrate'")
                 s.execute("CREATE ROLE app_user LOGIN PASSWORD 'app_user'")
                 s.execute("CREATE SCHEMA IF NOT EXISTS app AUTHORIZATION app_migrate")
+                s.execute("ALTER ROLE app_migrate IN DATABASE ${c.databaseName} SET search_path = app")
+                s.execute("ALTER ROLE app_user IN DATABASE ${c.databaseName} SET search_path = app")
             }
         }
     }

@@ -35,5 +35,15 @@ class SocialIdentity private constructor(
             providerEmail = profile.email,
             linkedAt = now,
         )
+
+        /** 영속 계층에서 저장 데이터로 재구성. */
+        fun reconstitute(
+            id: SocialIdentityId,
+            accountId: AccountId,
+            provider: Provider,
+            providerSub: String,
+            providerEmail: String?,
+            linkedAt: Instant,
+        ): SocialIdentity = SocialIdentity(id, accountId, provider, providerSub, providerEmail, linkedAt)
     }
 }
