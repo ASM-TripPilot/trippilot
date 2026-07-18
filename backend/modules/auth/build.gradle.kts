@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":common:core"))            // R5: 이벤트·에러 계약
     implementation(libs.spring.boot.starter.data.jpa)  // out/persistence
     implementation(libs.spring.boot.starter.web)        // adapter/in/web 컨트롤러
+    implementation(libs.jackson.module.kotlin)          // 외부 응답 JsonNode 파싱
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))
