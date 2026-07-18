@@ -11,8 +11,10 @@ import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.auth.domain.port.SocialIdentityRepository
 import com.trippilot.auth.domain.port.TokenIssuer
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.event.DomainEvent
 import com.trippilot.core.event.DomainEventPublisher
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
@@ -83,5 +85,12 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
         result.isNewUser shouldBe false
         identities.stored shouldHaveSize 1 // 추가 연결 없음
         events.events.shouldBeEmpty()
+    }
+
+    "신규 가입인데 BIRTH_DATE 연령확인에 생년월일이 없으면 ValidationFailed(400)" {
+        val (useCase, _, _) = fixture()
+        val birthDateMissing = command.copy(ageMethod = AgeMethod.BIRTH_DATE, birthDate = null)
+
+        shouldThrow<ValidationFailed> { useCase.authenticate(birthDateMissing) }
     }
 })

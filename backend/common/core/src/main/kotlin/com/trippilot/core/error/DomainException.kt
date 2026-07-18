@@ -17,7 +17,8 @@ sealed class DomainException(
 class AuthenticationRequired(
     message: String = "인증이 필요합니다.",
     errorCode: ErrorCode = ErrorCode.AUTHENTICATION_REQUIRED,
-) : DomainException(errorCode, message)
+    cause: Throwable? = null,
+) : DomainException(errorCode, message, cause)
 
 /** 소유권·참여 권한 위반(IDOR 방지, 서버 측 검증). */
 class PermissionDenied(
@@ -46,7 +47,8 @@ class UpstreamUnavailable(
     val source: String,
     val fallbackApplied: Boolean,
     message: String = "일시적으로 서비스를 이용할 수 없습니다.",
-) : DomainException(ErrorCode.UPSTREAM_UNAVAILABLE, message)
+    cause: Throwable? = null,
+) : DomainException(ErrorCode.UPSTREAM_UNAVAILABLE, message, cause)
 
 /** 호출 상한 초과. */
 class RateLimited(
