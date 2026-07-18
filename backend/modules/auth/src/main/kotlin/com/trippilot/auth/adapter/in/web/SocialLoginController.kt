@@ -27,8 +27,8 @@ class SocialLoginController(
     ): SocialLoginResponse {
         val result = authenticate.authenticate(request.toCommand(parseProvider(provider)))
         return SocialLoginResponse(
-            accessToken = result.tokens.accessToken,
-            refreshToken = result.tokens.refreshToken,
+            accessToken = result.accessToken,
+            refreshToken = result.refreshToken,
             isNewUser = result.isNewUser,
         )
     }

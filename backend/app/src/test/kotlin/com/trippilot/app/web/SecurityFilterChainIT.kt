@@ -3,6 +3,7 @@ package com.trippilot.app.web
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -46,7 +47,7 @@ class SecurityFilterChainIT : AbstractPostgresIntegrationTest() {
     fun `유효한 JWT 는 인증 필터를 통과한다 (401 아님)`() {
         val token = accessTokenIssuer.issue(UUID.randomUUID().toString()).value
 
-        // 매핑 없는 경로라 404 — 그러나 401 이 아니라는 점이 '인증 통과'를 증명한다.
-        getStatus("/api/v1/protected-probe", token) shouldBe 404
+        // 유효 토큰이면 리소스 서버 필터를 통과 — 이후 상태(미매핑 경로)가 무엇이든 401 은 아니어야 한다.
+        getStatus("/api/v1/protected-probe", token) shouldNotBe 401
     }
 }

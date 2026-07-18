@@ -5,6 +5,8 @@ import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.AccountStatus
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.Provider
+import com.trippilot.auth.domain.RefreshSession
+import com.trippilot.auth.domain.RefreshSessionId
 import com.trippilot.auth.domain.SocialIdentity
 import com.trippilot.auth.domain.SocialIdentityId
 
@@ -46,4 +48,28 @@ fun SocialIdentity.toEntity(): SocialIdentityJpaEntity = SocialIdentityJpaEntity
     providerSub = providerSub,
     providerEmail = providerEmail,
     linkedAt = linkedAt,
+)
+
+fun RefreshSessionJpaEntity.toDomain(): RefreshSession = RefreshSession.reconstitute(
+    id = RefreshSessionId(sessionId),
+    accountId = AccountId(accountId),
+    deviceId = deviceId,
+    tokenHash = tokenHash,
+    chainId = chainId,
+    issuedAt = issuedAt,
+    expiresAt = expiresAt,
+    rotatedAt = rotatedAt,
+    revokedAt = revokedAt,
+)
+
+fun RefreshSession.toEntity(): RefreshSessionJpaEntity = RefreshSessionJpaEntity(
+    sessionId = id.value,
+    accountId = accountId.value,
+    deviceId = deviceId,
+    tokenHash = tokenHash,
+    chainId = chainId,
+    issuedAt = issuedAt,
+    expiresAt = expiresAt,
+    rotatedAt = rotatedAt,
+    revokedAt = revokedAt,
 )
