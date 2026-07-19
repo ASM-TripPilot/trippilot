@@ -28,7 +28,9 @@ class SecurityConfig {
                     "/api/v1/auth/logout",     // 로그아웃(공개 — 제시한 리프레시 세션 폐기, 멱등)
                 ).permitAll()
                 it.requestMatchers(HttpMethod.GET, "/api/v1/terms", "/api/v1/terms/**").permitAll() // 약관 열람(공개, 온보딩 표시)
-                it.requestMatchers(HttpMethod.GET, "/api/v1/bootstrap").permitAll() // 앱 기동 분기(인증 선택 — GUEST 허용)
+                // 앱 기동 분기(인증 선택 — 무토큰=GUEST, 유효토큰=AUTHENTICATED). 단, 만료·무효 토큰을 보내면
+                // 리소스서버가 401(GUEST 폴백 아님) — 클라는 부트스트랩 전 토큰 갱신/제거 권장(관대한 처리는 후속).
+                it.requestMatchers(HttpMethod.GET, "/api/v1/bootstrap").permitAll()
                 it.requestMatchers("/actuator/health", "/actuator/health/**").permitAll() // compose·k8s 헬스체크
                 it.requestMatchers(HttpMethod.GET, "/api/health", "/api/integration").permitAll() // 통합 프로브
                 it.anyRequest().authenticated()
