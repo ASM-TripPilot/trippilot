@@ -73,14 +73,21 @@ class BootstrapOnboardingServiceTest : StringSpec({
         profiles.find(account)!!.onboardingCompleted shouldBe true
     }
 
-    "온보딩 완료는 멱등 — 두 번째도 최초 시각 반환" {
+    "온보딩 완료는 멱등 — 재호출은 재설정하지 않고 최초 시각을 반환(진행 clock)" {
+        // 매 instant() 호출마다 1초 진행 — 재설정(now2)과 저장값 반환(now1)을 구분
+        val ticking = object : Clock() {
+            private var t = now
+            override fun instant(): Instant = t.also { t = t.plusSeconds(1) }
+            override fun getZone() = ZoneOffset.UTC
+            override fun withZone(zone: java.time.ZoneId) = this
+        }
         val profiles = FakeProfiles()
         profiles.save(Profile.create(account, "여행자", now))
-        val svc = OnboardingService(FakeConsentFacade(hasConsents = true), profiles, clock)
+        val svc = OnboardingService(FakeConsentFacade(hasConsents = true), profiles, ticking)
 
         val first = svc.complete(account)
         val second = svc.complete(account)
-        second shouldBe first
+        second shouldBe first // 재설정됐다면 1초 뒤 시각이라 불일치
     }
 
     "필수 약관 미충족은 400" {
