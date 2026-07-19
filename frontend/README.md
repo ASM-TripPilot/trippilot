@@ -51,7 +51,7 @@ frontend/
   docs/                            # 화면 IO 카탈로그
 ```
 
-feature 내부 관례: `screens/ components/ hooks/ store/ model/` — 화면·상태·도메인 로직을 feature 안에 응집.
+feature 내부 관례: `screens/ components/ containers/ hooks/ store/ model/ lib/` — 화면·상태·도메인 로직을 feature 안에 응집. (`containers/`=훅↔화면을 잇는 접착 컨테이너 — `screens/`는 props만 받는 프레젠테이션으로 유지. `lib/`=순수함수가 아닌 팩토리·유틸(예: env 토글로 fake/real을 고르는 `makeAuthorize`). 모든 폴더가 필수는 아니며 넣을 것이 생길 때 만든다.)
 
 ### import 경계 규칙 (ESLint로 강제)
 
