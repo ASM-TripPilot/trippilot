@@ -2,7 +2,11 @@ package com.trippilot.auth.application
 
 import com.trippilot.auth.FakeRefreshSessionRepository
 import com.trippilot.auth.FakeRefreshTokenGenerator
+import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AccountId
+import com.trippilot.auth.domain.AgeMethod
+import com.trippilot.auth.domain.SanctionStatus
+import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.ErrorCode
 import io.kotest.assertions.throwables.shouldThrow
@@ -20,9 +24,15 @@ class RefreshTokenServiceTest : StringSpec({
 
     val accountId = AccountId(UUID.randomUUID())
     val start = Instant.parse("2026-07-19T00:00:00Z")
+    val activeAccount = Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, start, accountId)
 
-    fun serviceAt(instant: Instant, repo: FakeRefreshSessionRepository) =
-        RefreshTokenService(repo, FakeRefreshTokenGenerator(), RefreshTokenProperties(), Clock.fixed(instant, ZoneOffset.UTC))
+    fun accountsOf(account: Account = activeAccount): AccountRepository = object : AccountRepository {
+        override fun findById(id: AccountId): Account? = account.takeIf { it.id == id }
+        override fun save(account: Account): Account = account
+    }
+
+    fun serviceAt(instant: Instant, repo: FakeRefreshSessionRepository, accounts: AccountRepository = accountsOf()) =
+        RefreshTokenService(repo, accounts, FakeRefreshTokenGenerator(), RefreshTokenProperties(), Clock.fixed(instant, ZoneOffset.UTC))
 
     "issueFor 는 현행 세션을 저장하고 원문 토큰을 반환한다" {
         val repo = FakeRefreshSessionRepository()
@@ -55,6 +65,31 @@ class RefreshTokenServiceTest : StringSpec({
 
         ex.errorCode shouldBe ErrorCode.REFRESH_REUSE_DETECTED
         repo.sessions.values.all { it.isRevoked() } shouldBe true // 후속 현행 세션까지 폐기
+    }
+
+    "소진된 토큰은 자체 만료 이후에도 재사용으로 판정된다(만료보다 재사용 우선)" {
+        val repo = FakeRefreshSessionRepository()
+        val svc = serviceAt(start, repo)
+        val first = svc.issueFor(accountId, "device-1")
+        svc.rotate(first.rawToken) // first 소진(회전됨)
+
+        // first 의 90일 만료 이후 재제시 — 만료 체크가 앞서면 INVALID 로 새어나가 체인폐기가 안 됨
+        val ex = shouldThrow<AuthenticationRequired> {
+            serviceAt(start.plus(Duration.ofDays(91)), repo).rotate(first.rawToken)
+        }
+
+        ex.errorCode shouldBe ErrorCode.REFRESH_REUSE_DETECTED
+        repo.sessions.values.all { it.isRevoked() } shouldBe true
+    }
+
+    "정지·파기된 계정은 회전이 차단된다(canAuthenticate=false)" {
+        val repo = FakeRefreshSessionRepository()
+        val first = serviceAt(start, repo).issueFor(accountId, "device-1")
+        val suspended = accountsOf(activeAccount.applySanction(SanctionStatus.FULLY_SUSPENDED))
+
+        shouldThrow<AuthenticationRequired> {
+            serviceAt(start, repo, suspended).rotate(first.rawToken)
+        }
     }
 
     "미존재 토큰은 REFRESH_TOKEN_INVALID" {

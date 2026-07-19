@@ -5,7 +5,7 @@ import com.trippilot.core.error.ConflictDetected
 import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
-import java.time.ZoneOffset
+import java.time.ZoneId
 import java.util.UUID
 
 @JvmInline
@@ -134,9 +134,12 @@ class Account private constructor(
             )
         }
 
-        /** 기준 시각(UTC) 기준 만 나이. 미래 생년월일은 음수 → 자연히 미달 처리된다. */
+        /** 만 나이 산정 기준 시간대 — 서비스 기준 KST(민법상 연령은 한국 달력일 기준). */
+        private val AGE_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
+
+        /** 기준 시각(KST) 기준 만 나이. 미래 생년월일은 음수 → 자연히 미달 처리된다. */
         private fun ageInYears(birthDate: LocalDate, now: Instant): Int =
-            Period.between(birthDate, now.atZone(ZoneOffset.UTC).toLocalDate()).years
+            Period.between(birthDate, now.atZone(AGE_ZONE).toLocalDate()).years
 
         /** 영속 계층에서 이미 유효한 저장 데이터로 재구성(생성 불변식 미적용). */
         fun reconstitute(

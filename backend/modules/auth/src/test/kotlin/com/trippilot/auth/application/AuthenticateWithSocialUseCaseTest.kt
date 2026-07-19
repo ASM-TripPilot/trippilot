@@ -63,7 +63,7 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
         val identities = FakeSocialIdentityRepository()
         val events = CapturingEventPublisher()
         val refreshTokenService = RefreshTokenService(
-            FakeRefreshSessionRepository(), FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock,
+            FakeRefreshSessionRepository(), accounts, FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock,
         )
         val useCase = AuthenticateWithSocialUseCase(
             FakeSocialAuthPort(profile), accounts, identities, FakeTokenIssuer(), refreshTokenService, events, clock,
@@ -104,7 +104,7 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
         val accounts = FakeAccountRepository()
         val useCase = AuthenticateWithSocialUseCase(
             FakeSocialAuthPort(profile), accounts, FakeSocialIdentityRepository(), FakeTokenIssuer(),
-            RefreshTokenService(FakeRefreshSessionRepository(), FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock),
+            RefreshTokenService(FakeRefreshSessionRepository(), accounts, FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock),
             CapturingEventPublisher(), clock,
         )
         useCase.authenticate(command) // 최초 가입 → ACTIVE
