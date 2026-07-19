@@ -2,6 +2,7 @@ package com.trippilot.auth.application
 
 import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.RefreshSession
+import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.auth.domain.port.RefreshSessionRepository
 import com.trippilot.auth.domain.port.RefreshTokenGenerator
 import com.trippilot.core.error.AuthenticationRequired
@@ -29,6 +30,7 @@ data class RotatedRefreshToken(val accountId: AccountId, val rawToken: String, v
 @Service
 class RefreshTokenService(
     private val repository: RefreshSessionRepository,
+    private val accountRepository: AccountRepository,
     private val generator: RefreshTokenGenerator,
     private val properties: RefreshTokenProperties,
     private val clock: Clock,
@@ -46,11 +48,18 @@ class RefreshTokenService(
         val now = clock.instant()
         val session = repository.findByTokenHash(generator.hash(rawToken)) ?: throw invalid()
 
-        if (session.isRevoked() || session.isExpired(now)) throw invalid()
+        if (session.isRevoked()) throw invalid()
+        // 재사용 판정은 만료보다 우선 — 소진된 토큰의 재제시는 만료 여부와 무관하게 탈취 신호다(INV-R2).
         if (session.isRotated()) {
             repository.revokeChain(session.chainId, now) // 재사용 → 체인 전체 폐기(INV-R2)
             throw AuthenticationRequired("리프레시 토큰 재사용이 감지되었습니다.", ErrorCode.REFRESH_REUSE_DETECTED)
         }
+        if (session.isExpired(now)) throw invalid()
+
+        // 정지·파기 계정은 갱신 차단 — canAuthenticate 게이트를 refresh 경로에도 적용(SECURITY-15, 사유 비노출).
+        // 삭제 유예 만료 시 세션 캐스케이드 폐기는 TRIP-158 몫; 여기서는 최소 게이트만.
+        val account = accountRepository.findById(session.accountId) ?: throw invalid()
+        if (!account.canAuthenticate()) throw AuthenticationRequired()
 
         repository.save(session.rotate(now)) // 소진 처리 — UPDATE 를 먼저 flush 해 부분 유니크 인덱스 위반 방지
         val token = generator.generate()

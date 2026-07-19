@@ -8,6 +8,7 @@ import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.auth.domain.port.SocialIdentityRepository
 import com.trippilot.auth.domain.port.TokenIssuer
+import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.event.DomainEventPublisher
@@ -46,6 +47,8 @@ class AuthenticateWithSocialUseCase(
         if (existing != null) {
             account = accountRepository.findById(existing.accountId)
                 ?: error("social_identity(${existing.provider}/${existing.providerSub})에 대응하는 계정이 없다")
+            // 파기·전면정지 계정은 로그인 차단(사유 비노출, SECURITY-15)
+            if (!account.canAuthenticate()) throw AuthenticationRequired()
             isNewUser = false
         } else {
             val ageMethod = command.ageMethod

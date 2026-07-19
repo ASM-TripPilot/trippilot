@@ -1,6 +1,7 @@
 package com.trippilot.app.web.error
 
 import com.trippilot.app.web.CorrelationIdFilter
+import com.trippilot.core.error.AgeRequirementNotMet
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.DomainException
@@ -33,6 +34,7 @@ class GlobalExceptionHandler {
     fun handleDomain(ex: DomainException): ResponseEntity<ErrorResponse> {
         val status = when (ex) {
             is AuthenticationRequired -> HttpStatus.UNAUTHORIZED
+            is AgeRequirementNotMet -> HttpStatus.FORBIDDEN
             is PermissionDenied -> HttpStatus.FORBIDDEN
             is ResourceNotFound -> HttpStatus.NOT_FOUND
             is ValidationFailed -> HttpStatus.BAD_REQUEST

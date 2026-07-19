@@ -5,6 +5,7 @@ import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.AccountStatus
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.Provider
+import com.trippilot.auth.domain.SanctionStatus
 import com.trippilot.auth.domain.RefreshSession
 import com.trippilot.auth.domain.RefreshSessionId
 import com.trippilot.auth.domain.SocialIdentity
@@ -19,6 +20,8 @@ fun AccountJpaEntity.toDomain(): Account = Account.reconstitute(
     status = AccountStatus.valueOf(status),
     createdAt = createdAt,
     verifiedAt = verifiedAt,
+    sanctionStatus = SanctionStatus.valueOf(sanctionStatus),
+    deletedAt = deletedAt,
 )
 
 fun Account.toEntity(): AccountJpaEntity = AccountJpaEntity(
@@ -28,8 +31,10 @@ fun Account.toEntity(): AccountJpaEntity = AccountJpaEntity(
     birthDate = birthDate,
     ageConfirmedAt = ageConfirmedAt,
     status = status.name,
+    sanctionStatus = sanctionStatus.name,
     createdAt = createdAt,
     verifiedAt = verifiedAt,
+    deletedAt = deletedAt,
 )
 
 fun SocialIdentityJpaEntity.toDomain(): SocialIdentity = SocialIdentity.reconstitute(

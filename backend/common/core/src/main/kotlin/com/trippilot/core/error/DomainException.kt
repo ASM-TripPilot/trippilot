@@ -20,6 +20,11 @@ class AuthenticationRequired(
     cause: Throwable? = null,
 ) : DomainException(errorCode, message, cause)
 
+/** 만 14세 미만 등 연령 요건 미충족으로 가입·이용 거부(403, INV-A). */
+class AgeRequirementNotMet(
+    message: String = "연령 요건을 충족하지 않습니다.",
+) : DomainException(ErrorCode.AGE_REQUIREMENT_NOT_MET, message)
+
 /** 소유권·참여 권한 위반(IDOR 방지, 서버 측 검증). */
 class PermissionDenied(
     message: String = "권한이 없습니다.",

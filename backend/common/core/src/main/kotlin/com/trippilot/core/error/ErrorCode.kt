@@ -19,4 +19,5 @@ enum class ErrorCode {
     SOCIAL_EMAIL_CONFLICT,
     REFRESH_TOKEN_INVALID,   // 리프레시 토큰 미존재·만료·폐기(401)
     REFRESH_REUSE_DETECTED,  // 소진된 리프레시 토큰 재제시 → 체인 폐기(401, INV-R2)
+    AGE_REQUIREMENT_NOT_MET, // 만 14세 미만 가입 차단(403, INV-A)
 }

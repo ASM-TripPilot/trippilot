@@ -6,12 +6,14 @@ import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.Provider
+import com.trippilot.auth.domain.SanctionStatus
 import com.trippilot.auth.domain.SocialIdentity
 import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.auth.domain.port.SocialIdentityRepository
 import com.trippilot.auth.domain.port.TokenIssuer
+import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.event.DomainEvent
 import com.trippilot.core.event.DomainEventPublisher
@@ -61,7 +63,7 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
         val identities = FakeSocialIdentityRepository()
         val events = CapturingEventPublisher()
         val refreshTokenService = RefreshTokenService(
-            FakeRefreshSessionRepository(), FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock,
+            FakeRefreshSessionRepository(), accounts, FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock,
         )
         val useCase = AuthenticateWithSocialUseCase(
             FakeSocialAuthPort(profile), accounts, identities, FakeTokenIssuer(), refreshTokenService, events, clock,
@@ -96,5 +98,19 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
         val birthDateMissing = command.copy(ageMethod = AgeMethod.BIRTH_DATE, birthDate = null)
 
         shouldThrow<ValidationFailed> { useCase.authenticate(birthDateMissing) }
+    }
+
+    "전면 정지된 기존 계정은 재로그인이 차단된다 (canAuthenticate=false → 401)" {
+        val accounts = FakeAccountRepository()
+        val useCase = AuthenticateWithSocialUseCase(
+            FakeSocialAuthPort(profile), accounts, FakeSocialIdentityRepository(), FakeTokenIssuer(),
+            RefreshTokenService(FakeRefreshSessionRepository(), accounts, FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock),
+            CapturingEventPublisher(), clock,
+        )
+        useCase.authenticate(command) // 최초 가입 → ACTIVE
+        val stored = accounts.stored.values.first()
+        accounts.save(stored.applySanction(SanctionStatus.FULLY_SUSPENDED)) // 전면 정지
+
+        shouldThrow<AuthenticationRequired> { useCase.authenticate(command) }
     }
 })
