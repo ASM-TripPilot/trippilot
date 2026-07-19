@@ -14,8 +14,11 @@ class JpaProfileRepository(
 ) : ProfileRepository {
     override fun find(accountId: UUID): Profile? = jpa.findById(accountId).orElse(null)?.toDomain()
 
+    override fun existsByNickname(nickname: String): Boolean = jpa.existsByNicknameIgnoreCase(nickname)
+
     override fun save(profile: Profile): Profile {
-        jpa.save(profile.toEntity())
+        // saveAndFlush — 닉네임 유니크 위반(경합)을 커밋 전에 표면화해 서비스가 409 로 변환할 수 있게 한다.
+        jpa.saveAndFlush(profile.toEntity())
         return profile
     }
 }

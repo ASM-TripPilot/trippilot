@@ -6,6 +6,7 @@ import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.DomainException
 import com.trippilot.core.error.ErrorCode
+import com.trippilot.core.error.ModerationUnavailable
 import com.trippilot.core.error.PermissionDenied
 import com.trippilot.core.error.RateLimited
 import com.trippilot.core.error.ResourceNotFound
@@ -41,6 +42,7 @@ class GlobalExceptionHandler {
             is ValidationFailed -> HttpStatus.BAD_REQUEST
             is ConflictDetected -> HttpStatus.CONFLICT
             is UpstreamUnavailable -> HttpStatus.SERVICE_UNAVAILABLE
+            is ModerationUnavailable -> HttpStatus.SERVICE_UNAVAILABLE
             is RateLimited -> HttpStatus.TOO_MANY_REQUESTS
         }
         if (status.is5xxServerError) {
