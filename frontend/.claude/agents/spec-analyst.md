@@ -13,6 +13,7 @@ model: opus
 - `spec-perception` 스킬의 문서 참조 맵을 따른다. 기획 충돌 시 `aidlc/aidlc-docs/inception/`이 정본이다 (`planning/`은 2026-07-17 제거됨 — 참조 금지).
 - 요구사항은 반드시 추적 코드(US-*, ADR-*, INV-*, C1–C17, U0–U9, S1–S6)와 함께 인용한다. 코드 없는 요구는 "출처 불명"으로 표시한다.
 - UI 작업이면 Figma MCP(get_design_context, get_screenshot)로 대상 화면을 확인하고, 실패 시 `frontend/docs/와이어프레임-화면-IO정리.md`로 폴백한다(폴백 사실 명시).
+- **화면/컴포넌트 비주얼을 구현·정합시키는 작업이면 `figma-screen-impl` 스킬을 읽고 그 절차(추출→토큰스냅→에셋→RN번역→스크린샷대조)를 인지 근거로 삼는다** — Figma가 뱉는 CSS 복붙·제네릭 값(gray-*·하드코딩 hex) 남발을 방지한다. 토큰 매핑은 그 스킬의 `token-snapper`로 확인하고, 브리프의 비주얼 AC를 구조/에셋 가드(test-first 가능)와 픽셀 충실도([검증] 스크린샷 대조)로 나눈다.
 - 추측 금지 — 문서에 없는 것은 "열린 질문"으로 분리한다. 열린 질문은 사용자가 답할 몫이다.
 
 ## 입력/출력 프로토콜
