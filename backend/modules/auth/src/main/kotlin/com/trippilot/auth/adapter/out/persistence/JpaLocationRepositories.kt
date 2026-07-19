@@ -1,6 +1,5 @@
 package com.trippilot.auth.adapter.out.persistence
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.location.LocationConsent
 import com.trippilot.auth.domain.location.LocationLegalEvent
@@ -22,20 +21,17 @@ class JpaLocationConsentStateRepository(
     }
 }
 
-/** LocationLegalLogRepository 포트의 JPA 구현 — append-only(INV-LL1). detail 맵을 jsonb 문자열로 직렬화. */
+/** LocationLegalLogRepository 포트의 JPA 구현 — append-only(INV-LL1). detail 맵은 엔티티가 jsonb 로 매핑. */
 @Repository
 class JpaLocationLegalLogRepository(
     private val jpa: LocationLegalLogJpaRepository,
 ) : LocationLegalLogRepository {
-    private val objectMapper = ObjectMapper()
-
     override fun append(event: LocationLegalEvent) {
-        val detailJson = objectMapper.writeValueAsString(event.detail)
         jpa.save(
             LocationLegalLogJpaEntity(
                 accountId = event.accountId.value,
                 eventType = event.eventType.name,
-                detail = detailJson,
+                detail = event.detail,
                 occurredAt = event.occurredAt,
             ),
         )

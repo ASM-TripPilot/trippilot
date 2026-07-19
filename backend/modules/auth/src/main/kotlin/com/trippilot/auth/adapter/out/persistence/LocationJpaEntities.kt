@@ -45,9 +45,11 @@ class LocationLegalLogJpaEntity(
     @Column(name = "event_type")
     var eventType: String,
 
+    // Map 을 직접 jsonb 로 매핑 — Hibernate FormatMapper 가 직렬화한다.
+    // (문자열을 미리 직렬화해 넘기면 이중 인코딩되어 jsonb 에 이스케이프된 스칼라가 저장됨)
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "detail")
-    var detail: String,
+    var detail: Map<String, String>,
 
     @Column(name = "occurred_at")
     var occurredAt: Instant,

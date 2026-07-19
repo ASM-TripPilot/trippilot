@@ -50,7 +50,7 @@ class LocationConsentPersistenceIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
-    fun `법정 로그 append — jsonb detail 저장(INV-LL1)`() {
+    fun `법정 로그 append — jsonb detail 이 객체로 저장·왕복(이중인코딩 아님, INV-LL1)`() {
         val account = newAccount()
         val before = legalLogJpa.count()
 
@@ -62,5 +62,9 @@ class LocationConsentPersistenceIT : AbstractPostgresIntegrationTest() {
         )
 
         legalLogJpa.count() shouldBe before + 1
+        // detail 을 Map 으로 되읽어 키가 살아있으면 jsonb 객체로 저장된 것(이스케이프 스칼라면 역직렬화 실패/불일치)
+        val saved = legalLogJpa.findAll().first { it.accountId == account.id.value }
+        saved.detail["termsType"] shouldBe "LOCATION_TERMS"
+        saved.detail["channel"] shouldBe "SETTINGS"
     }
 }
