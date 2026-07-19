@@ -10,3 +10,10 @@ import java.util.UUID
  */
 fun Principal.accountId(): UUID =
     runCatching { UUID.fromString(name) }.getOrElse { throw AuthenticationRequired() }
+
+/**
+ * 선택적 인증(부트스트랩) — 토큰 없음/익명(anonymousUser)이면 null, 유효 계정이면 UUID.
+ * 비인증 접근을 허용하는 엔드포인트에서 GUEST 구분에 사용.
+ */
+fun Principal?.accountIdOrNull(): UUID? =
+    this?.let { runCatching { UUID.fromString(it.name) }.getOrNull() }

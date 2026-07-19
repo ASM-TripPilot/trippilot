@@ -10,6 +10,7 @@ dependencies {
 
     implementation(project(":common:core"))            // R5: 에러 계약
     implementation(project(":modules:moderation"))     // R1: 닉네임 금칙어 — moderation.api 퍼사드만 사용
+    implementation(project(":modules:auth"))           // R1: 부트스트랩·온보딩 — auth.api 동의 퍼사드만 사용
     implementation(libs.spring.boot.starter.data.jpa)  // out/persistence
     implementation(libs.spring.boot.starter.web)        // adapter/in/web 컨트롤러
     implementation(libs.spring.boot.starter.validation) // 요청 @Valid
