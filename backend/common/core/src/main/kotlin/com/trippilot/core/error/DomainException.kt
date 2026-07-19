@@ -41,11 +41,17 @@ class ValidationFailed(
     message: String = "입력값이 유효하지 않습니다.",
 ) : DomainException(ErrorCode.VALIDATION_ERROR, message)
 
-/** 버전·거점 비중첩 등 충돌 — 현재 상태 동봉. */
+/** 버전·거점 비중첩·닉네임 중복 등 충돌 — 현재 상태 동봉. 특화 코드는 [errorCode] 로(예: NICKNAME_TAKEN). */
 class ConflictDetected(
     val current: Any? = null,
     message: String = "요청이 현재 상태와 충돌합니다.",
-) : DomainException(ErrorCode.CONFLICT, message)
+    errorCode: ErrorCode = ErrorCode.CONFLICT,
+) : DomainException(errorCode, message)
+
+/** 활성 금칙어 사전 미로드로 텍스트 검증 불가(503, fail-closed INV-B2). */
+class ModerationUnavailable(
+    message: String = "검증 서비스를 일시적으로 이용할 수 없습니다.",
+) : DomainException(ErrorCode.MODERATION_UNAVAILABLE, message)
 
 /** 외부 의존 실패 + 폴백 적용 여부(RESILIENCY-10). */
 class UpstreamUnavailable(
