@@ -11,9 +11,11 @@ import java.util.UUID
 /** Spring Data JPA — account 테이블 CRUD. */
 interface AccountJpaRepository : JpaRepository<AccountJpaEntity, UUID>
 
-/** Spring Data JPA — social_identity 테이블 CRUD + (provider, sub) 조회. */
+/** Spring Data JPA — social_identity 테이블 CRUD + (provider, sub) 조회 + 계정별 연결 조회. */
 interface SocialIdentityJpaRepository : JpaRepository<SocialIdentityJpaEntity, UUID> {
     fun findByProviderAndProviderSub(provider: String, providerSub: String): SocialIdentityJpaEntity?
+
+    fun findByAccountId(accountId: UUID): List<SocialIdentityJpaEntity>
 }
 
 /** Spring Data JPA — refresh_session 테이블 CRUD + 해시 조회 + 체인 폐기. */
@@ -28,4 +30,10 @@ interface RefreshSessionJpaRepository : JpaRepository<RefreshSessionJpaEntity, U
     @Modifying
     @Query("update RefreshSessionJpaEntity s set s.revokedAt = :now where s.chainId = :chainId and s.revokedAt is null")
     fun revokeChain(@Param("chainId") chainId: UUID, @Param("now") now: Instant): Int
+
+    /** 계정의 미폐기 세션 전부 폐기(삭제 요청 시 전 기기 로그아웃). */
+    @Transactional
+    @Modifying
+    @Query("update RefreshSessionJpaEntity s set s.revokedAt = :now where s.accountId = :accountId and s.revokedAt is null")
+    fun revokeByAccount(@Param("accountId") accountId: UUID, @Param("now") now: Instant): Int
 }

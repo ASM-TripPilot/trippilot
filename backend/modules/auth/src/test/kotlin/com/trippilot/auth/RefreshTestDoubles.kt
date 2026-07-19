@@ -22,6 +22,12 @@ internal class FakeRefreshSessionRepository : RefreshSessionRepository {
         targets.forEach { sessions[it.id] = it.revoke(now) }
         return targets.size
     }
+
+    override fun revokeByAccount(accountId: com.trippilot.auth.domain.AccountId, now: Instant): Int {
+        val targets = sessions.values.filter { it.accountId == accountId && it.revokedAt == null }
+        targets.forEach { sessions[it.id] = it.revoke(now) }
+        return targets.size
+    }
 }
 
 /** 결정적 리프레시 토큰 생성기(테스트용) — 원문 raw-N, 해시 h:raw-N. */

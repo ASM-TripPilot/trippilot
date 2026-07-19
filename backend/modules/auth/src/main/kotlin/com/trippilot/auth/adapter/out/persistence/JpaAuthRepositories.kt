@@ -33,6 +33,9 @@ class JpaSocialIdentityRepository(
     override fun findByProviderAndProviderSub(provider: Provider, providerSub: String): SocialIdentity? =
         jpa.findByProviderAndProviderSub(provider.name, providerSub)?.toDomain()
 
+    override fun findByAccountId(accountId: AccountId): List<SocialIdentity> =
+        jpa.findByAccountId(accountId.value).map { it.toDomain() }
+
     override fun save(identity: SocialIdentity): SocialIdentity {
         jpa.save(identity.toEntity())
         return identity
@@ -57,4 +60,6 @@ class JpaRefreshSessionRepository(
         jpa.findByTokenHash(tokenHash)?.toDomain()
 
     override fun revokeChain(chainId: UUID, now: Instant): Int = jpa.revokeChain(chainId, now)
+
+    override fun revokeByAccount(accountId: AccountId, now: Instant): Int = jpa.revokeByAccount(accountId.value, now)
 }

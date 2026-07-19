@@ -68,6 +68,23 @@ class LocationConsentService(
         return stateRepository.save(state)
     }
 
+    /**
+     * 계정 삭제 요청 시 GPS 발자취 즉시 파기(FD-U1-07). L3 를 끄고 PURGE 를 법정 로그에 남긴다.
+     * 발자취 데이터 저장소는 후속 유닛이라 U1 에선 상태 해제 + 사실 기록이 최소 보장.
+     */
+    @Transactional
+    fun purgeForAccountDeletion(accountId: AccountId) {
+        val now = clock.instant()
+        stateRepository.find(accountId)?.takeIf { it.gpsRecordingOptIn }
+            ?.let { stateRepository.save(it.withGpsRecordingOptIn(false, now)) }
+        legalLog.append(
+            LocationLegalEvent.of(
+                accountId, LocationLegalEventType.PURGE,
+                mapOf("scope" to "gps_track", "reason" to "account_deletion"), now,
+            ),
+        )
+    }
+
     /** L1 OS 권한 미러 보고(단말→서버). 순수 반영 — 증적·로그·파기 없음(INV-L3). L2/L3 은 보존된다. */
     @Transactional
     fun mirrorOsPermission(accountId: AccountId, osPermission: OsPermission) {
