@@ -90,6 +90,16 @@ class ProfileApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `배열 축을 문자열로 보내면 400 (조용한 강제 방지)`() {
+        call(HttpMethod.PUT, "/api/v1/me/preferences", newToken(), """{"styles":"휴양"}""").first shouldBe 400
+    }
+
+    @Test
+    fun `숫자 축을 문자열로 보내면 400`() {
+        call(HttpMethod.PUT, "/api/v1/me/preferences", newToken(), """{"budgetTier":"고급","budgetRawAmount":"많이"}""").first shouldBe 400
+    }
+
+    @Test
     fun `프로필 미생성 계정의 GET me profile 은 404`() {
         call(HttpMethod.GET, "/api/v1/me/profile", newToken()).first shouldBe 404
     }

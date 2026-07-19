@@ -74,6 +74,39 @@ class ProfilePreferencePersistenceIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `빈 배열은 NULL 과 구별되어 왕복된다(INV-PR2, 설정함 vs 미설정)`() {
+        val id = newAccountId()
+        // styles=빈 목록(설정함), activities=NULL(미설정)
+        preferences.save(PreferenceSet.of(id, emptyList(), null, null, null, false, null, null, null, null, now))
+
+        val found = preferences.find(id)
+        found.shouldNotBeNull()
+        found.styles shouldBe emptyList()   // '{}' → null 로 퇴화하지 않아야(INV-PR2)
+        found.activities.shouldBeNull()
+    }
+
+    @Test
+    fun `앱 허용값 전체가 DB CHECK 를 통과한다(vocab 드리프트 방지)`() {
+        val id = newAccountId()
+        // 각 축의 모든 허용값을 한 번에 저장 — 앱 vocab ⊆ DB CHECK 임을 실증
+        preferences.save(
+            PreferenceSet.of(
+                accountId = id,
+                styles = PreferenceSet.STYLES.toList(),
+                budgetTier = "럭셔리", budgetRawAmount = 9_999_999,
+                companionTypes = PreferenceSet.COMPANION_TYPES.toList(),
+                petFlag = true,
+                activities = PreferenceSet.ACTIVITIES.toList(),
+                transportModes = PreferenceSet.TRANSPORT_MODES.toList(),
+                foodTastes = PreferenceSet.FOOD_TASTES.toList(),
+                pace = "균형있게",
+                now = now,
+            ),
+        )
+        preferences.find(id).shouldNotBeNull().styles shouldBe PreferenceSet.STYLES.toList()
+    }
+
+    @Test
     fun `취향 upsert — 같은 계정 재저장`() {
         val id = newAccountId()
         preferences.save(PreferenceSet.of(id, listOf("휴양"), null, null, null, false, null, null, null, null, now))
