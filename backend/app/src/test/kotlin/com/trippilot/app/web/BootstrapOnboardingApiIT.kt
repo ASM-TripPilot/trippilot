@@ -17,6 +17,8 @@ import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.web.client.RestClient
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
@@ -108,15 +110,16 @@ class BootstrapOnboardingApiIT : AbstractPostgresIntegrationTest() {
         // 이제 완료 가능
         val (completeStatus, completeBody) = call(HttpMethod.POST, "/api/v1/onboarding/complete", token)
         completeStatus shouldBe 200
-        val completedAt = completeBody["onboardingCompletedAt"].asText()
+        val completedAt = Instant.parse(completeBody["onboardingCompletedAt"].asText())
 
         // 부트스트랩에 반영
         call(HttpMethod.GET, "/api/v1/bootstrap", token).second["session"]["onboardingCompleted"].asBoolean() shouldBe true
 
-        // 멱등 — 재호출도 200, 동일 시각
+        // 멱등 — 재호출도 200, 동일 시각(첫 응답은 갓 계산값=나노초, 재호출은 DB 왕복=마이크로초라 μs 절삭 비교)
         val (againStatus, againBody) = call(HttpMethod.POST, "/api/v1/onboarding/complete", token)
         againStatus shouldBe 200
-        againBody["onboardingCompletedAt"].asText() shouldBe completedAt
+        Instant.parse(againBody["onboardingCompletedAt"].asText()).truncatedTo(ChronoUnit.MICROS) shouldBe
+            completedAt.truncatedTo(ChronoUnit.MICROS)
     }
 
     @TestConfiguration
