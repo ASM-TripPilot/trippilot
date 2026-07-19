@@ -36,6 +36,7 @@ private class FakeSocialIdentityRepository : SocialIdentityRepository {
     val stored = mutableListOf<SocialIdentity>()
     override fun findByProviderAndProviderSub(provider: Provider, providerSub: String) =
         stored.firstOrNull { it.provider == provider && it.providerSub == providerSub }
+    override fun findByAccountId(accountId: AccountId) = stored.filter { it.accountId == accountId }
     override fun save(identity: SocialIdentity) = identity.also { stored.add(it) }
 }
 
