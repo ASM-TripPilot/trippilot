@@ -61,6 +61,14 @@ module.exports = {
         caption: ['12px', { lineHeight: '16px' }],
         micro: ['11px', { lineHeight: '14px' }],
       },
+      // fontFamily 는 Figma 변수 컬렉션이 아니라 D2 폰트 번들(@expo-google-fonts)의 코드측
+      // 매핑이다. 값은 useFonts 가 등록하는 폰트명과 정확히 일치해야 한다. (design-tokens.test 동기화 대상)
+      fontFamily: {
+        'inter-bold': ['Inter_700Bold'],
+        noto: ['NotoSansKR_400Regular'],
+        'noto-medium': ['NotoSansKR_500Medium'],
+        'noto-bold': ['NotoSansKR_700Bold'],
+      },
     },
   },
   plugins: [],
