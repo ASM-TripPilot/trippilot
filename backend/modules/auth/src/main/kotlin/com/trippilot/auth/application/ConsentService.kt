@@ -105,7 +105,10 @@ class ConsentService(
     private fun inferChannel(accountId: AccountId, term: TermsVersion, action: ConsentAction): ConsentChannel {
         if (action == ConsentAction.GRANT && term.reconsentRequired) {
             val consent = ConsentFold.latestPerType(records.findByAccount(accountId))[term.termsType]
-            if (consent == null || consent.termsVersion != term.version) return ConsentChannel.RECONSENT
+            // 재동의 필요 상태(미동의·철회됨·구버전)에서의 GRANT = 재동의 — requiredReconsents 판정과 동일 조건.
+            if (consent == null || !consent.isGrant || consent.termsVersion != term.version) {
+                return ConsentChannel.RECONSENT
+            }
         }
         return ConsentChannel.SETTINGS
     }

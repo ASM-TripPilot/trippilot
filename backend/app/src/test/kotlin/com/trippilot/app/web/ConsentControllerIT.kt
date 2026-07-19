@@ -101,4 +101,13 @@ class ConsentControllerIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         call(HttpMethod.PUT, "/api/v1/me/marketing-consent", token, """{"optIn":true}""").first shouldBe 200
     }
+
+    @Test
+    fun `본문의 잘못된 enum 값은 400(500 아님)`() {
+        val token = newToken()
+        call(
+            HttpMethod.PATCH, "/api/v1/me/consents/PRIVACY_POLICY", token,
+            """{"action":"YES","termsVersion":"1.0"}""",
+        ).first shouldBe 400
+    }
 }

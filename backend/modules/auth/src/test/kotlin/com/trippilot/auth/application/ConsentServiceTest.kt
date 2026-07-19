@@ -128,6 +128,26 @@ class ConsentServiceTest : StringSpec({
         records.appended.single().channel shouldBe ConsentChannel.SETTINGS
     }
 
+    "changeConsent — reconsent 약관을 REVOKE 후 같은 버전 재GRANT 는 RECONSENT(철회상태=재동의 필요)" {
+        // 각 동의는 별도 요청 = 서로 다른 시각(폴드가 최신을 고르도록 시계 진행)
+        val ticking = object : Clock() {
+            private var t = now
+            override fun instant(): Instant = t.also { t = t.plusSeconds(1) }
+            override fun getZone() = ZoneOffset.UTC
+            override fun withZone(zone: java.time.ZoneId) = this
+        }
+        val records = FakeConsentRecordRepository()
+        val svc = ConsentService(
+            FakeTermsVersionRepository(mutableListOf(term(TermsType.PRIVACY_POLICY, "2.0", reconsent = true))),
+            records, FakeMarketingConsentRepository(), ticking,
+        )
+        svc.changeConsent(account, TermsType.PRIVACY_POLICY, ConsentAction.GRANT, "2.0")   // 최초 동의
+        svc.changeConsent(account, TermsType.PRIVACY_POLICY, ConsentAction.REVOKE, "2.0")  // 철회
+        svc.changeConsent(account, TermsType.PRIVACY_POLICY, ConsentAction.GRANT, "2.0")   // 재동의
+
+        records.appended.last().channel shouldBe ConsentChannel.RECONSENT
+    }
+
     "toggleMarketing — opt_in 갱신과 증적 추가가 함께 일어난다(INV-M1)" {
         val (svc, records, marketing) = fixture(baseTerms)
 
