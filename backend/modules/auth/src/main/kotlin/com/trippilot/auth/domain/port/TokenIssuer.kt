@@ -1,11 +1,12 @@
 package com.trippilot.auth.domain.port
 
 import com.trippilot.auth.domain.AccountId
-import com.trippilot.auth.domain.TokenPair
 
 /**
- * 토큰 발급 포트. 151 은 최소 구현, 완전한 RS256 JWT + 리프레시 회전·탈취감지는 TRIP-153 이 채운다.
+ * 액세스 토큰(RS256 JWT) 발급 포트. 구현은 common/security 에 위임(adapter/out/token).
+ * 리프레시 토큰·세션 회전·탈취감지는 RefreshTokenService 가 소유한다(TRIP-153 2단계).
  */
 interface TokenIssuer {
-    fun issue(accountId: AccountId): TokenPair
+    /** 계정에 대한 서명된 액세스 토큰 문자열을 발급한다. */
+    fun issue(accountId: AccountId): String
 }

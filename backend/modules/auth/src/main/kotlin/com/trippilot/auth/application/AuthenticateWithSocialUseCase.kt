@@ -26,6 +26,7 @@ class AuthenticateWithSocialUseCase(
     private val accountRepository: AccountRepository,
     private val socialIdentityRepository: SocialIdentityRepository,
     private val tokenIssuer: TokenIssuer,
+    private val refreshTokenService: RefreshTokenService,
     private val eventPublisher: DomainEventPublisher,
     private val clock: Clock,
 ) {
@@ -67,6 +68,11 @@ class AuthenticateWithSocialUseCase(
             isNewUser = true
         }
 
-        return SocialLoginResult(tokens = tokenIssuer.issue(account.id), isNewUser = isNewUser)
+        val refresh = refreshTokenService.issueFor(account.id, command.deviceId)
+        return SocialLoginResult(
+            accessToken = tokenIssuer.issue(account.id),
+            refreshToken = refresh.rawToken,
+            isNewUser = isNewUser,
+        )
     }
 }

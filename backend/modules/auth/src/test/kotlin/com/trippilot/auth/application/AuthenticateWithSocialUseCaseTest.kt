@@ -1,12 +1,13 @@
 package com.trippilot.auth.application
 
+import com.trippilot.auth.FakeRefreshSessionRepository
+import com.trippilot.auth.FakeRefreshTokenGenerator
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.Provider
 import com.trippilot.auth.domain.SocialIdentity
 import com.trippilot.auth.domain.SocialProfile
-import com.trippilot.auth.domain.TokenPair
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.auth.domain.port.SocialIdentityRepository
@@ -41,7 +42,7 @@ private class FakeSocialAuthPort(private val profile: SocialProfile) : SocialAut
 }
 
 private class FakeTokenIssuer : TokenIssuer {
-    override fun issue(accountId: AccountId) = TokenPair("access-${accountId.value}", "refresh-${accountId.value}")
+    override fun issue(accountId: AccountId) = "access-${accountId.value}"
 }
 
 private class CapturingEventPublisher : DomainEventPublisher {
@@ -53,14 +54,17 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
 
     val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     val profile = SocialProfile(Provider.KAKAO, "kakao-sub-1", "user@example.com")
-    val command = SocialLoginCommand(Provider.KAKAO, "auth-code", "verifier", "trippilot://auth", AgeMethod.SELF_DECLARED, null)
+    val command = SocialLoginCommand(Provider.KAKAO, "auth-code", "verifier", "trippilot://auth", AgeMethod.SELF_DECLARED, null, "device-1")
 
     fun fixture(): Triple<AuthenticateWithSocialUseCase, FakeSocialIdentityRepository, CapturingEventPublisher> {
         val accounts = FakeAccountRepository()
         val identities = FakeSocialIdentityRepository()
         val events = CapturingEventPublisher()
+        val refreshTokenService = RefreshTokenService(
+            FakeRefreshSessionRepository(), FakeRefreshTokenGenerator(), RefreshTokenProperties(), clock,
+        )
         val useCase = AuthenticateWithSocialUseCase(
-            FakeSocialAuthPort(profile), accounts, identities, FakeTokenIssuer(), events, clock,
+            FakeSocialAuthPort(profile), accounts, identities, FakeTokenIssuer(), refreshTokenService, events, clock,
         )
         return Triple(useCase, identities, events)
     }

@@ -17,4 +17,6 @@ enum class ErrorCode {
     // 도메인별 코드(전역 카탈로그) — 상태는 대응 DomainException 타입이 결정
     SOCIAL_AUTH_FAILED,
     SOCIAL_EMAIL_CONFLICT,
+    REFRESH_TOKEN_INVALID,   // 리프레시 토큰 미존재·만료·폐기(401)
+    REFRESH_REUSE_DETECTED,  // 소진된 리프레시 토큰 재제시 → 체인 폐기(401, INV-R2)
 }
