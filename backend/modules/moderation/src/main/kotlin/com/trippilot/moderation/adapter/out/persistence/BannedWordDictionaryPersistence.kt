@@ -15,7 +15,8 @@ import java.time.Instant
 
 /**
  * banned_word_dictionary 매핑(V1.6). entries 는 jsonb [{word,category}].
- * Map 리스트로 매핑(도메인 타입 직접 역직렬화 회피 — Hibernate 기본 FormatMapper 는 kotlin 모듈 미탑재).
+ * Map 리스트로 매핑 — Hibernate FormatMapper 로 도메인 타입 직접 역직렬화는 설정 의존이라 회피
+ * (location_legal_log 와 동일 방식). 도메인 [BannedWord] 변환은 포트 구현에서 방어적으로 수행.
  */
 @Entity
 @Table(name = "banned_word_dictionary")
@@ -48,7 +49,12 @@ class JpaBannedWordDictionaryRepository(
         jpa.findFirstByActiveTrue()?.let { entity ->
             BannedWordDictionary(
                 version = entity.dictVersion,
-                entries = entity.entries.map { BannedWord(it.getValue("word"), it.getValue("category")) },
+                // 방어적 매핑 — word 누락/공백 항목은 스킵(매칭 불가), category 누락은 UNKNOWN.
+                // 손상 항목이 500(NoSuchElementException) 나지 않게 한다.
+                entries = entity.entries.mapNotNull { row ->
+                    val word = row["word"]?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    BannedWord(word, row["category"] ?: "UNKNOWN")
+                },
                 active = entity.active,
             )
         }
