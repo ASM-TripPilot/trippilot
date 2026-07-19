@@ -44,7 +44,10 @@ data class CascadeSummary(
     val legallyRetained: List<String>,
 ) {
     companion object {
-        /** U1 고정 범위 — 실데이터(여행·아카이브 등)는 후속 유닛이라 계정 부속 데이터만. */
+        /**
+         * U1 고정 범위 — 실데이터(여행·아카이브 등)는 후속 유닛이라 계정 부속 데이터만.
+         * ⚠️ 개인정보 담는 테이블을 새 유닛에서 추가하면 반드시 purgeScheduled 에 반영할 것(파기 고지 누락=법적 리스크).
+         */
         fun forAccount(): CascadeSummary = CascadeSummary(
             purgeScheduled = listOf("PROFILE", "PREFERENCE_SET", "LOCATION_CONSENT_STATE", "MARKETING_CONSENT", "SOCIAL_IDENTITY"),
             legallyRetained = listOf("CONSENT_RECORD", "LOCATION_LEGAL_LOG"),

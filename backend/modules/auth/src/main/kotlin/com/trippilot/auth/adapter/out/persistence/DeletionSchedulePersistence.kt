@@ -53,7 +53,8 @@ class JpaDeletionScheduleRepository(
         jpa.findFirstByAccountIdAndCancelledAtIsNull(accountId.value)?.toDomain()
 
     override fun save(schedule: DeletionSchedule): DeletionSchedule {
-        jpa.save(schedule.toEntity())
+        // saveAndFlush — 동시 삭제요청 경합 시 ux_deletion_active 위반을 커밋 전 표면화(서비스가 409 로 변환).
+        jpa.saveAndFlush(schedule.toEntity())
         return schedule
     }
 }

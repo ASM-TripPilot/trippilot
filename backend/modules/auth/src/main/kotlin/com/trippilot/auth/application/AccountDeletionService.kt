@@ -12,6 +12,7 @@ import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.event.DomainEventPublisher
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -47,10 +48,16 @@ class AccountDeletionService(
         val now = clock.instant()
         val purgeAt = now.plus(GRACE_PERIOD)
         val summary = CascadeSummary.forAccount()
-        val schedule = deletionSchedules.save(DeletionSchedule.create(accountId, now, purgeAt, summary))
+        val schedule = try {
+            deletionSchedules.save(DeletionSchedule.create(accountId, now, purgeAt, summary))
+        } catch (e: DataIntegrityViolationException) {
+            // 선검사와 INSERT 사이 동시 요청 경합 — ux_deletion_active 위반(INV-D1) → 409(전체 롤백)
+            throw ConflictDetected(current = account.status, message = "이미 삭제가 진행 중입니다.")
+        }
 
         refreshSessions.revokeByAccount(accountId, now)           // 전 기기 로그아웃(BR-U0-23)
         locationConsent.purgeForAccountDeletion(accountId)        // GPS 발자취 즉시 파기(FD-U1-07)
+        // 이 이벤트는 감사·후속 훅 신호일 뿐, 파기 트리거가 아니다(파기는 위에서 인라인 수행) — 이중 파기 리스너 주의.
         eventPublisher.publish(AccountDeletionRequested(accountId.value.toString(), schedule.deletionId.toString(), purgeAt))
 
         return DeletionRequestResult(purgeAt, summary)
