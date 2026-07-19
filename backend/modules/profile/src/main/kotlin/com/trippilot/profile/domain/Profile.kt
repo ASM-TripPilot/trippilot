@@ -20,6 +20,10 @@ class Profile private constructor(
     fun withNickname(nickname: String, now: Instant): Profile =
         Profile(accountId, nickname, now, onboardingCompletedAt)
 
+    /** 온보딩 완료 확정(멱등, INV-P2) — 이미 완료면 그대로, 아니면 완료 시각 설정. */
+    fun completeOnboarding(now: Instant): Profile =
+        if (onboardingCompleted) this else Profile(accountId, nickname, nicknameUpdatedAt, onboardingCompletedAt = now)
+
     companion object {
         /** 최초 닉네임 설정(온보딩 중 프로필 생성). onboarding 미완료. */
         fun create(accountId: UUID, nickname: String, now: Instant): Profile =
