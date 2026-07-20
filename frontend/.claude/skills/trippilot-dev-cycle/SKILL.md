@@ -31,6 +31,9 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 
 ## 경로 규약 (모든 단계 공통)
 
+- **하네스 파일을 가리킬 때는 `<리포 루트>/frontend/.claude/...`로 쓴다.** `<리포 루트>`는 읽는 쪽이 `git rev-parse --show-toplevel`로 푼다.
+  - **서브 에이전트의 cwd는 호출마다 다르다**(`frontend/`일 때도, `frontend/.claude/`일 때도 있다 — 실측 확인). 따라서 `.claude/...`도 `frontend/.claude/...`도 안전하지 않다. 기준점을 문자열에 박아야 어디서 읽어도 열린다.
+  - 예외: SKILL.md가 **자기 스킬의** `reference/x.md`를 가리킬 때는 스킬 루트 기준 상대경로가 맞다(Claude Code가 스킬 디렉토리 기준으로 해석한다).
 - **리포 루트**는 `git rev-parse --show-toplevel`로 확정한다 (예: `~/Desktop/dev/trippilot`).
 - 사이클 작업 공간: `<리포 루트>/_workspace/{cycle-id}/` — **항상 리포 루트 기준**. cwd 기준 상대경로 금지.
 - 서브 에이전트 프롬프트에는 작업 공간과 산출물 경로를 **절대 경로로** 전달한다 — 서브 에이전트의 cwd(frontend)에서 상대경로를 해석하면 생산자와 소비자가 서로 다른 디렉토리를 보게 된다.

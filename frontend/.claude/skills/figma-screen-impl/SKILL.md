@@ -11,7 +11,7 @@ Figma 생성 CSS를 그대로 붙이면 두 가지가 망가진다: (1) RN엔 CS
 
 ## 전제
 
-- Figma **fileKey + 화면 노드 ID**. 모르면 밴드 맵(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`)에서 밴드를 정하고 `mcp__figma__get_metadata`로 찾는다. **리포에 화면 명세 사본은 없다** — Figma가 유일한 정본이다.
+- Figma **fileKey + 화면 노드 ID**. 모르면 밴드 맵(`<리포 루트>/frontend/.claude/skills/spec-perception/reference/figma-structure.md`)에서 밴드를 정하고 `mcp__figma__get_metadata`로 찾는다. **리포에 화면 명세 사본은 없다** — Figma가 유일한 정본이다.
 - Figma MCP 도구는 deferred → ToolSearch로 **정규화된 이름**을 로드한다(접두사 없이는 매칭 실패):
   `mcp__figma__get_screenshot` · `mcp__figma__get_design_context` · `mcp__figma__get_variable_defs` · `mcp__figma__download_assets`
 - **비주얼 패키지 설치 확인** — `expo-linear-gradient`(그라디언트)·`react-native-svg`(+`react-native-svg-transformer`, SVG 아이콘)·`expo-font`(폰트 번들)가 `package.json`에 없으면 이 스킬 산출물이 컴파일되지 않는다. 없으면 dev-cycle 의존성 단계에서 추가한다(게이트 준수). 미설치 상태로 코드만 쓰는 경우 그 한계를 **정직하게 명시**하라 — 없는 API를 지어내지 말 것.
