@@ -12,7 +12,8 @@ model: opus
 ## 작업 원칙
 - `spec-perception` 스킬의 문서 참조 맵을 따른다. 정본은 둘이다 — 기획(요구사항·스토리·유닛) 충돌 시 `aidlc/aidlc-docs/inception/`, 유닛별 설계는 `aidlc/aidlc-docs/construction/{unit}/`. **`aidlc-state.md`·`audit.md`는 도구 상태이므로 요구사항 근거로 인용하지 않는다.**
 - 요구사항은 반드시 추적 코드(US-*, ADR-*, INV-*, C1–C17, U0–U9, S1–S6)와 함께 인용한다. 코드 없는 요구는 "출처 불명"으로 표시한다.
-- UI 작업이면 **Figma가 화면의 유일한 정본이다** — 밴드 맵(`spec-perception` 스킬의 `reference/figma-structure.md`)으로 대상 밴드를 정하고, Figma MCP(get_design_context, get_screenshot)로 화면을 읽는다. 리포에 화면 명세 사본은 없다.
+- UI 작업이면 **Figma가 화면의 유일한 정본이다** — 밴드 맵(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`)으로 대상 밴드를 정하고, Figma MCP(`mcp__figma__get_design_context`, `mcp__figma__get_screenshot`)로 화면을 읽는다. 리포에 화면 명세 사본은 없다.
+  - **드리프트 보고 의무**: 라이브 밴드 구성이 밴드 맵과 다르면 브리프에 `문서-라이브 드리프트: {요지}`를 **반드시 적는다**. 밴드 맵 파일 자체는 고치지 않는다 — 수정은 [기록]의 scribe 몫이고, 이 보고가 그 트리거다(보고가 없으면 아무도 안 고친다).
 - **화면/컴포넌트 비주얼을 구현·정합시키는 작업이면 `figma-screen-impl` 스킬을 읽고 그 절차(추출→토큰스냅→에셋→RN번역→스크린샷대조)를 인지 근거로 삼는다** — Figma가 뱉는 CSS 복붙·제네릭 값(gray-*·하드코딩 hex) 남발을 방지한다. 토큰 매핑은 그 스킬의 `token-snapper`로 확인하고, 브리프의 비주얼 AC를 구조/에셋 가드(test-first 가능)와 픽셀 충실도([검증] 스크린샷 대조)로 나눈다.
 - 추측 금지 — 문서에 없는 것은 "열린 질문"으로 분리한다. 열린 질문은 사용자가 답할 몫이다.
 

@@ -19,9 +19,21 @@ description: "TripPilot frontend 검증 게이트 실행 순서와 명령. '검�
 
 ## 순서 (고정 — 코드를 바꾸는 것 먼저, 그다음 싼 것부터)
 
-`frontend/package.json`에 스크립트가 정의되면 그것이 정본(`pnpm format` / `pnpm lint` / `pnpm typecheck` / `pnpm test` — 패키지 매니저는 pnpm이 정본, npm 혼용 금지). 없으면:
+**`frontend/package.json`의 스크립트가 정본이다.** 패키지 매니저는 pnpm(npm 혼용 금지). 현재 정의된 것:
 
-1. 포매터: `npx prettier --write <소스 디렉토리>` — **존재하는 소스 디렉토리(src/, app/, components/ 등)만 지정**. `.prettierignore`가 정비되기 전까지 `--write .` 금지 — docs/ 정본 문서·web/·`.claude/` 하네스 파일까지 재포맷해 게이트② 승인 diff를 오염시킨다.
+```
+1. pnpm format   # prettier --write .   (.prettierignore가 web/·.claude/·*.md 제외)
+2. pnpm lint     # eslint .
+3. pnpm tsc      # tsc --noEmit
+4. pnpm test     # test:node + test:integration 순차 — 반드시 둘 다
+```
+
+- **`pnpm test`를 쪼개 부르지 마라.** 이 리포는 jest 설정이 둘이다(`jest.config.js` node 버킷 + `jest.integration.config.js` MSW 버킷). `pnpm test:node`만 돌리면 통합 테스트가 **0건 실행되고도 green으로 보인다.**
+- 스크립트 이름을 추측하지 말고 `package.json`을 실제로 확인한다 — 위 목록도 스냅샷이다.
+
+스크립트가 없는 패키지에서의 폴백:
+
+1. 포매터: `npx prettier --write <소스 디렉토리>` — 존재하는 소스 디렉토리만 지정(`.prettierignore` 부재 시 정본 문서·하네스 파일까지 재포맷해 게이트② 승인 diff를 오염시킨다)
 2. 린트: `npx eslint . --max-warnings 0`
 3. 타입체크: `npx -p typescript tsc --noEmit` — `npx tsc` 단독 금지(타입스크립트가 아닌 동명의 스쿼팅 패키지로 해석될 수 있다)
 4. 테스트: `npx jest` — Expo 프로젝트는 `jest-expo` preset 필수(없으면 사전 점검에서 실행 불가 판정)
@@ -33,7 +45,7 @@ description: "TripPilot frontend 검증 게이트 실행 순서와 명령. '검�
 - 리포트는 `04_qa-verifier_report_{n}_{PASS|FAIL}.md`로 차수+판정을 파일명에 붙여 **누적 저장**(덮어쓰기 금지). 채번은 파일 개수가 아니라 **기존 최대 n + 1** (번호 구멍이 있어도 충돌하지 않는다).
 - 검증을 마칠 때마다 **판정·차수·시각을 00_gates.md에 append**한다 — 카운터의 정본은 원장이다. 리포트 파일 수 < 원장 검증 항목 수면 리포트 삭제로 간주하고 에스컬레이션한다.
 - 에스컬레이션: **같은 게이트 3회 연속 FAIL 또는 사이클 누적 FAIL 리포트 5개**(원장 기준 — PASS 리포트는 세지 않는다) → 사용자 에스컬레이션 + 에러로그 기록. 실패 게이트가 번갈아 나와도 누적 상한에 걸린다.
-- 에스컬레이션 보고는 게이트 제시 규칙의 축소판을 따른다(`trippilot-dev-cycle/reference/gate-protocol.md` "게이트 노트 §1"): 본문은 **서술형 실패 요약**(무엇이 몇 회 실패 → 원인 가설 → 사용자가 고를 선택지 2~3개), 로그 원문은 첨부/에러로그로. 학습 중인 사용자에게 로그 덤프는 판단 지원이 아니다.
+- 에스컬레이션 보고는 게이트 제시 규칙의 축소판을 따른다(`frontend/.claude/skills/trippilot-dev-cycle/reference/gate-protocol.md`의 `## 게이트 노트` → `### 3계층 구조`): 본문은 **서술형 실패 요약**(무엇이 몇 회 실패 → 원인 가설 → 사용자가 고를 선택지 2~3개), 로그 원문은 첨부/에러로그로. 학습 중인 사용자에게 로그 덤프는 판단 지원이 아니다.
 
 ## 심판 보호 + 경계면 QA (게이트 4 통과 후)
 
