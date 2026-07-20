@@ -20,7 +20,7 @@ description: "TripPilot 제2의 뇌(옵시디언) 기록·조회 규칙. 대화 
 | `TripPilot/에러로그/` | **검증 게이트·도구 실행 실패 전용**(에러+원인+수정 — 그 외 막힘은 문제로그) | `YYYY-MM-DD 에러요약.md` |
 | `TripPilot/이해부채/` | 승인했지만 이해 못 한 것 + 상환 추적 (장부) | `YYYY-MM-DD 주제.md` |
 | `TripPilot/개념/` | 이해부채가 가리키는 **영구 개념 설명**(evergreen, 학습 자료 본문) | `개념명.md` (날짜 접두 없음) |
-| `TripPilot/게이트/` | 게이트 제시 전문(서술형+줄단위 주해) — 열람·학습용 스냅샷 | `YYYY-MM-DD {cycle-id} 게이트{①\|②}-{n}.md` |
+| `TripPilot/게이트/` | 게이트 제시 전문(서술형+전줄 주해) — 열람·학습용 스냅샷 | `YYYY-MM-DD {cycle-id} 게이트{①\|②}-{n}.md` |
 | `TripPilot/_templates/` | 각 로그 템플릿 | `{로그종류} 템플릿.md` |
 
 ## 기록 규칙
