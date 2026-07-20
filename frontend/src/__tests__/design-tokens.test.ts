@@ -61,6 +61,15 @@ const FIGMA_FONT_SIZE = {
   micro: ['11px', { lineHeight: '14px' }], // 11 × 130%
 };
 
+// fontFamily 는 Figma 변수가 아니라 D2 폰트 번들(@expo-google-fonts)의 코드측 매핑이다 —
+// 값은 useFonts 가 등록하는 폰트명과 정확히 일치해야 한다(font-inter-bold → Inter_700Bold 등).
+const FONT_FAMILY = {
+  'inter-bold': ['Inter_700Bold'],
+  noto: ['NotoSansKR_400Regular'],
+  'noto-medium': ['NotoSansKR_500Medium'],
+  'noto-bold': ['NotoSansKR_700Bold'],
+};
+
 describe('디자인 토큰 미러 (Figma TripPilot ↔ tailwind.config.js)', () => {
   // Config 타입상 theme/extend 는 optional — 부재 자체가 미러 실패이므로 가드가 곧 검증이다.
   if (!tailwindConfig.theme?.extend) {
@@ -84,10 +93,15 @@ describe('디자인 토큰 미러 (Figma TripPilot ↔ tailwind.config.js)', () 
     expect(extend.fontSize).toEqual(FIGMA_FONT_SIZE);
   });
 
-  it('미러 무결성 — extend 에 선언한 4개 그룹 외 잉여 그룹이 없다', () => {
+  it('폰트 패밀리 토큰(D2 번들)이 로드 폰트명과 정확히 일치한다', () => {
+    expect(extend.fontFamily).toEqual(FONT_FAMILY);
+  });
+
+  it('미러 무결성 — extend 에 선언한 5개 그룹 외 잉여 그룹이 없다', () => {
     expect(Object.keys(extend).sort()).toEqual([
       'borderRadius',
       'colors',
+      'fontFamily',
       'fontSize',
       'spacing',
     ]);

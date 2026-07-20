@@ -24,7 +24,7 @@ This is a **monorepo** (`ASM-TripPilot/trippilot`). Everything lives in one git 
 
 `aidlc/aidlc-docs/planning/` **was removed on 2026-07-17 (team decision) — never reference it**; use `aidlc-docs/inception/` instead (git history retains the old files).
 
-The Figma wireframe exports (164 PNGs, 89 screens across bands a–h) are **kept outside the repo**. The per-screen UI Input/Output catalog for those screens is tracked at `frontend/docs/와이어프레임-화면-IO정리.md`.
+Figma is the **single source of truth for screens** — the repo keeps no copy of screen specs (the per-screen IO catalog was retired 2026-07-20; a stale copy silently diverges from live). Wireframe PNG exports are kept outside the repo. Band map and file key: `frontend/.claude/skills/spec-perception/reference/figma-structure.md` (bands a–m, no `f`; `b`/`k`/`m` are outside first-cut).
 
 **When docs conflict**: product requirements/stories/units → `aidlc/aidlc-docs/inception/` (it supersedes the upstream `aidlc/docs/PRD/`); package architecture & implementation decisions → the owning package's canon (`frontend/README.md`, `backend/docs/design/`, `ai/`).
 

@@ -4,7 +4,7 @@ React Native + Expo (TypeScript strict) 클라이언트.
 
 서버 공개 REST API만 소비하며, 비즈니스 규칙 권위는 항상 서버에 있다 — 클라이언트 검증은 UX용 사본이며 저장을 차단하지 않는다(`aidlc/aidlc-docs/inception/application-design/application-design.md`).
 
-> **기획 참조 기준**: `aidlc/aidlc-docs/inception/` (requirements·user-stories·application-design). 화면 명세는 `docs/와이어프레임-화면-IO정리.md`(89화면), API 스키마는 `backend/docs/design/openapi.yaml`, AI 계층 계약은 `ai/README.md`. 그 외 라이브러리·구조 결정은 이 문서가 정본이다.
+> **기획 참조 기준**: `aidlc/aidlc-docs/inception/` (requirements·user-stories·application-design). 화면 명세는 Figma(라이브 정본 — 밴드 맵은 `.claude/skills/spec-perception/reference/figma-structure.md`), API 스키마는 `backend/docs/design/openapi.yaml`, AI 계층 계약은 `ai/README.md`. 그 외 라이브러리·구조 결정은 이 문서가 정본이다.
 
 ## 기술 스택 (프론트 결정)
 
@@ -51,7 +51,7 @@ frontend/
   docs/                            # 화면 IO 카탈로그
 ```
 
-feature 내부 관례: `screens/ components/ hooks/ store/ model/` — 화면·상태·도메인 로직을 feature 안에 응집.
+feature 내부 관례: `screens/ components/ containers/ hooks/ store/ model/ lib/` — 화면·상태·도메인 로직을 feature 안에 응집. (`containers/`=훅↔화면을 잇는 접착 컨테이너 — `screens/`는 props만 받는 프레젠테이션으로 유지. `lib/`=순수함수가 아닌 팩토리·유틸(예: env 토글로 fake/real을 고르는 `makeAuthorize`). 모든 폴더가 필수는 아니며 넣을 것이 생길 때 만든다.)
 
 ### import 경계 규칙 (ESLint로 강제)
 
@@ -131,7 +131,7 @@ pnpm lint && pnpm tsc --noEmit
 
 ## 문서
 
-- 화면 IO 카탈로그: `docs/와이어프레임-화면-IO정리.md` (89화면, Figma 원본은 리포 밖)
+- 화면 명세: **Figma가 유일한 정본** (리포에 사본 없음). 밴드 맵·파일 키: `.claude/skills/spec-perception/reference/figma-structure.md`
 - 기획 참조: 리포 루트 `aidlc/aidlc-docs/inception/` — requirements(요구사항)·user-stories(스토리 119개)·application-design(컴포넌트·유닛 설계)
 - API 스키마: `backend/docs/design/openapi.yaml` (orval 입력)
 - AI 계층 계약: `ai/README.md`
