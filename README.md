@@ -15,5 +15,5 @@ B2C 여행 슈퍼앱("여행자 슈퍼앱"). 사용자가 숙소·장소를 탐�
 | `aidlc/` | 팀원 소유 AWS AI-DLC(Amazon Q) 워크스페이스. **기획 정본** = `aidlc-docs/inception/` (요구사항·스토리·유닛 U0–U9), **유닛별 설계** = `aidlc-docs/construction/`. 조율 없이 수정 금지 |
 
 - 온보딩: `CLAUDE.md` → `aidlc/aidlc-docs/inception/`
-- Figma 와이어프레임 PNG는 리포 외부 보관 (화면 IO 카탈로그만 `frontend/docs/와이어프레임-화면-IO정리.md`에 추적)
+- 화면 명세는 **Figma가 유일한 정본** — 리포에 사본을 두지 않는다(와이어프레임 PNG도 리포 외부). 밴드 맵·파일 키는 `frontend/.claude/skills/spec-perception/reference/figma-structure.md`
 - 문서 충돌 시: 제품 요구사항·스토리·유닛은 `aidlc/aidlc-docs/inception/`, 패키지 아키텍처·구현 결정은 해당 패키지 정본(`frontend/README.md` · `backend/docs/design/` · `ai/`)이 우선

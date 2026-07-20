@@ -15,7 +15,7 @@ description: "TripPilot 정본 문서·Figma 인지 규칙. 요구사항 확인,
 | 유닛 분해 U0–U9·빌드 순서·스토리 맵 | `aidlc/aidlc-docs/inception/application-design/unit-of-work{,-dependency,-story-map}.md` |
 | 유닛별 construction 설계(해당 유닛 작업 시 최신 정본) | `aidlc/aidlc-docs/construction/{unit}/` (예: `u0-foundation/` — functional-design·nfr-requirements 등) |
 | 프론트 아키텍처(스택·구조·경계·테스트) | `frontend/README.md` |
-| 화면 IO 카탈로그 | `frontend/docs/와이어프레임-화면-IO정리.md` |
+| 화면 (레이아웃·IO·컴포넌트) | **라이브 Figma가 유일한 정본** — 밴드 맵은 [reference/figma-structure.md](reference/figma-structure.md) |
 | 서버 API 계약 | `backend/docs/design/openapi.yaml` |
 | AI 레이어 규칙 | `ai/README.md`(온보딩) → 상세: `ai/aidlc-docs/inception/design-artifacts/{ai-architecture, ai-implementation-design, ai-prompt-design, ai-testing-guide, ai-adr}.md` |
 
@@ -28,14 +28,10 @@ description: "TripPilot 정본 문서·Figma 인지 규칙. 요구사항 확인,
 
 ## Figma (화면의 라이브 정본)
 
-- **Figma가 화면의 살아있는 정본이다.** IO 카탈로그(`frontend/docs/와이어프레임-화면-IO정리.md`)·CLAUDE.md의 화면 수는 **특정 시점 스냅샷**일 뿐 — 낡을 수 있으니 신뢰 기준은 항상 라이브다.
-- 파일 키: **`1MTF3dtptIrbg8gld5IdO2`** (단일 페이지 "화면" = 노드 `1228:1045`). URL 없이 이 키로 바로 읽는다 — 사용자에게 URL을 매번 묻지 않는다.
-- UI 작업 시 [인지]에서 **대상 밴드·화면을 라이브로 읽는다**: `get_metadata(fileKey[, nodeId])`로 밴드/프레임 목록 → `get_design_context`/`get_screenshot`으로 대상 화면 디자인·스크린샷. 화면은 밴드 코드로 명명 — **a**홈 **b**AI어시스턴트 **c**온보딩·인증(U0) **d**탐색 **e**숙소 **g**여행생성 **h**일정생성 **i**여행중·PlanB **j**기록 **k**커뮤니티(M15) **l**알림·마이·설정 **m**공동편집(M17). **k·m은 first-cut 범위 밖.**
-- **드리프트 감지**: 라이브 화면 수·밴드가 문서(카탈로그·CLAUDE.md)와 어긋나면 브리프에 "문서-라이브 드리프트: {요지}"를 명시한다. (2026-07-18 기준 라이브 115 코드/169 변형·a–m — CLAUDE.md "89화면"은 낡음.)
-- **카탈로그 밴드 글자 ≠ 라이브 글자 (재배치됨)**: 카탈로그는 구 라벨(A온보딩·B숙소·C여행생성·D일정·E여행중·F기록·G설정·H홈), 라이브는 위 a–m. **글자로 Figma를 찾지 말고 도메인으로 매칭**하라(오도 방지). b(어시스턴트)·k(커뮤니티)·m(공동편집)은 카탈로그에 없음. (매핑표는 카탈로그 상단 헤더에 있음.)
-- **점진 최신화**: 어떤 밴드를 작업하면 그 도메인 화면을 라이브로 읽어 IO를 새로 뽑고, [기록]에서 카탈로그의 **해당 도메인 절만** 그 최신 IO로 갱신한다(작업한 밴드만 — 전면 재작성 금지, 헤더 스냅샷 갱신일도 함께). 카탈로그는 그렇게 점진적으로 라이브에 수렴한다.
-- get_metadata로 페이지 전체를 뜨면 토큰 초과(1MB)할 수 있다 — 대상 노드로 좁히거나 목록은 최상위 프레임(2칸 들여쓰기)만 추출한다.
-- 접근 실패 시 IO 카탈로그로 폴백하고 폴백 사실을 산출물에 명시한다. 와이어프레임 PNG는 리포 외부 — Figma가 유일한 시각 소스다.
+- **Figma가 화면의 유일한 정본이다.** 리포에는 화면 명세 사본을 두지 않는다 — 사본은 반드시 낡고, 낡은 사본은 라이브와 조용히 갈라진다.
+- **파일 키·밴드 맵·읽는 절차는 [reference/figma-structure.md](reference/figma-structure.md)에 있다.** UI 작업 시 [인지]에서 그 파일로 대상 밴드를 정하고, 화면 상세는 라이브로 읽는다.
+- **드리프트 감지**: 라이브 밴드 구성이 밴드 맵과 어긋나면 브리프에 "문서-라이브 드리프트: {요지}"를 명시하고 밴드 맵을 실제 구성으로 고친다(밴드 수준만).
+- **접근 실패 시 폴백 없음**: 화면 명세의 리포 사본이 없으므로 Figma MCP 실패는 곧 근거 부재다. 추측으로 메우지 말고 브리프에 "Figma 접근 실패 — 화면 근거 없음"을 명시하고 **열린 질문으로 올린다**. 와이어프레임 PNG도 리포 외부라 대체 시각 소스는 없다.
 
 ## AI 불변식 (위반 = 재설계)
 
