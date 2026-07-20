@@ -13,20 +13,6 @@ import * as SplashScreen from 'expo-splash-screen';
 
 import { SplashGate } from '@/features/auth/containers/SplashGate';
 
-// dev mock 마스터 토글. msw/native 는 RN 런타임에 없는 전역(MessageEvent 등)을 참조해
-// import 시점에 크래시하므로, 목이 꺼진 일반 부팅에서 앱이 죽지 않도록 실제 켤 때만 동적
-// import 한다. (목 ON 시 msw/native 의 RN 인터셉트·기동 순서는 R1 미검증 — 겹2 상환.)
-if (process.env.EXPO_PUBLIC_API_MOCK === '1') {
-  import('@/mocks/native')
-    .then(({ startMockServer }) => startMockServer())
-    .catch((error) => {
-      console.warn(
-        '[mock] startMockServer 로드 실패 (R1: msw/native RN 미검증, 겹2 상환):',
-        error
-      );
-    });
-}
-
 // 네이티브 스플래시(OS 부팅 화면)를 폰트 로드가 끝날 때까지 자동으로 숨기지 않게 붙잡는다.
 // 이것은 인앱 SplashScreen 컴포넌트(SplashGate 가 부트스트랩 중 그리는 화면)와는 별개 레이어 —
 // OS 가 앱 프로세스 시작 직후 그리는 최초 화면이다.

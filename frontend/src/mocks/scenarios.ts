@@ -132,12 +132,6 @@ export function getScenario(): MockScenario {
   return SCENARIOS[activeKey];
 }
 
-export function getActiveScenarioKey(): ScenarioKey {
-  return activeKey;
-}
-
 export function resetScenario(): void {
   activeKey = DEFAULT_KEY;
 }
-
-export const SCENARIO_LIST: MockScenario[] = Object.values(SCENARIOS);
