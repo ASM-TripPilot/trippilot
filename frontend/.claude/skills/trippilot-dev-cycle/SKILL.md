@@ -114,6 +114,6 @@ FAIL·실행 불가·PASS(해시 불일치)의 분기 처리는 reference/troubl
 
 ## 금지 사항
 
-- 어떤 단계에서도 `aidlc/` 이하 쓰기 금지 — Edit/Write 도구는 settings deny로 기계 강제, **Bash 경유 쓰기는 규칙 준수 + qa-verifier의 `git status ../aidlc` 검사로 탐지**. atlassian MCP 사용 금지.
+- 어떤 단계에서도 `aidlc/` 이하 쓰기 금지 — Edit/Write 도구는 settings deny로 기계 강제, **Bash 경유 쓰기는 규칙 준수 + qa-verifier의 `git status <리포 루트>/aidlc` 검사로 탐지**. atlassian MCP 사용 금지.
 - 원장(`00_gates.md`) 기록 없는 게이트를 통과로 취급하지 않는다 — 산출물 파일 존재는 "작성됨"이지 "승인됨"이 아니다.
 - 에이전트 실패 시 침묵 진행 금지(reference/troubleshooting.md).

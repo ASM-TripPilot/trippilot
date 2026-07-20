@@ -8,7 +8,7 @@ Figma 생성 코드(웹 React + Tailwind)를 우리 스택(React Native + Native
 |---|---|---|
 | `flex flex-col/row items-* justify-*` | 동일 className | RN은 기본이 flex고 **기본 방향이 column** — `flex-row`를 명시해야 가로 |
 | `gap-[Npx]` | `gap-<토큰>` 또는 `gap-[Npx]` | 토큰 있으면 토큰, 일회성이면 임의값 |
-| `position:absolute; left/top` | `absolute` + 부모 `relative`, **또는 flex 재구성** | 좌표 복붙 금지(아래 "절대좌표" 절) |
+| `position:absolute; left/top` | **flex 재구성이 기본.** 배지·오버레이 같은 장식 요소만 `absolute` + 부모 `relative` | 좌표 복붙 금지(아래 "절대좌표" 절) |
 | `bg-gradient-to-b from-x to-y` | `<LinearGradient colors={[x,y]}>` (expo-linear-gradient) | RN엔 CSS 그라디언트 없음 |
 | `shadow-[0px_2px_6px_rgba(..)]` | `shadow-*`(NativeWind) 또는 style `shadowColor/Offset/Opacity/Radius`(iOS) + `elevation`(Android) | 플랫폼별 그림자 모델 상이 |
 | `border-[1.5px] border-[#ddd]` | `border-[1.5px] border-hairline-strong` | 색은 토큰으로 |
@@ -41,7 +41,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 ## react-native-svg (아이콘/로고)
 
-- SVG 파일을 `src/assets/<feature>/`에 두고 `react-native-svg`(+ `react-native-svg-transformer` metro 설정)로 컴포넌트 import, 또는 `<SvgXml>`로 인라인.
+- **기본은 `<SvgXml>` 인라인** — `react-native-svg`만 있으면 되고 추가 설정이 없다.
+- SVG 파일을 컴포넌트로 import하는 방식은 `react-native-svg-transformer` + metro 설정이 필요한데 **현재 `package.json`에 없다.** 그 방식을 쓰려면 dev-cycle 의존성 단계에서 설치가 선행돼야 한다(미설치 상태로 import 코드를 쓰면 컴파일되지 않는다).
 - 브랜드 아이콘은 SVG 안에 브랜드색이 있으므로 색 토큰 불필요.
 
 ## 폰트 번들 (expo-font)
