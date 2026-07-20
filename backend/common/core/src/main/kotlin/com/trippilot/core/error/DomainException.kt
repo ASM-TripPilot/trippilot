@@ -10,10 +10,20 @@ sealed class DomainException(
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
 
-/** 인증되지 않은 호출. 원인은 클라이언트에 비노출(SECURITY-15). */
+/**
+ * 인증되지 않은 호출(401). 원인은 클라이언트에 비노출(SECURITY-15).
+ * 소셜 인증 실패 등 401 계열의 특화 코드는 [errorCode] 로 지정(예: SOCIAL_AUTH_FAILED).
+ */
 class AuthenticationRequired(
     message: String = "인증이 필요합니다.",
-) : DomainException(ErrorCode.AUTHENTICATION_REQUIRED, message)
+    errorCode: ErrorCode = ErrorCode.AUTHENTICATION_REQUIRED,
+    cause: Throwable? = null,
+) : DomainException(errorCode, message, cause)
+
+/** 만 14세 미만 등 연령 요건 미충족으로 가입·이용 거부(403, INV-A). */
+class AgeRequirementNotMet(
+    message: String = "연령 요건을 충족하지 않습니다.",
+) : DomainException(ErrorCode.AGE_REQUIREMENT_NOT_MET, message)
 
 /** 소유권·참여 권한 위반(IDOR 방지, 서버 측 검증). */
 class PermissionDenied(
@@ -31,18 +41,25 @@ class ValidationFailed(
     message: String = "입력값이 유효하지 않습니다.",
 ) : DomainException(ErrorCode.VALIDATION_ERROR, message)
 
-/** 버전·거점 비중첩 등 충돌 — 현재 상태 동봉. */
+/** 버전·거점 비중첩·닉네임 중복 등 충돌 — 현재 상태 동봉. 특화 코드는 [errorCode] 로(예: NICKNAME_TAKEN). */
 class ConflictDetected(
     val current: Any? = null,
     message: String = "요청이 현재 상태와 충돌합니다.",
-) : DomainException(ErrorCode.CONFLICT, message)
+    errorCode: ErrorCode = ErrorCode.CONFLICT,
+) : DomainException(errorCode, message)
+
+/** 활성 금칙어 사전 미로드로 텍스트 검증 불가(503, fail-closed INV-B2). */
+class ModerationUnavailable(
+    message: String = "검증 서비스를 일시적으로 이용할 수 없습니다.",
+) : DomainException(ErrorCode.MODERATION_UNAVAILABLE, message)
 
 /** 외부 의존 실패 + 폴백 적용 여부(RESILIENCY-10). */
 class UpstreamUnavailable(
     val source: String,
     val fallbackApplied: Boolean,
     message: String = "일시적으로 서비스를 이용할 수 없습니다.",
-) : DomainException(ErrorCode.UPSTREAM_UNAVAILABLE, message)
+    cause: Throwable? = null,
+) : DomainException(ErrorCode.UPSTREAM_UNAVAILABLE, message, cause)
 
 /** 호출 상한 초과. */
 class RateLimited(

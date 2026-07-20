@@ -1,10 +1,12 @@
 package com.trippilot.app.web.error
 
 import com.trippilot.app.web.CorrelationIdFilter
+import com.trippilot.core.error.AgeRequirementNotMet
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.DomainException
 import com.trippilot.core.error.ErrorCode
+import com.trippilot.core.error.ModerationUnavailable
 import com.trippilot.core.error.PermissionDenied
 import com.trippilot.core.error.RateLimited
 import com.trippilot.core.error.ResourceNotFound
@@ -15,6 +17,7 @@ import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -33,11 +36,13 @@ class GlobalExceptionHandler {
     fun handleDomain(ex: DomainException): ResponseEntity<ErrorResponse> {
         val status = when (ex) {
             is AuthenticationRequired -> HttpStatus.UNAUTHORIZED
+            is AgeRequirementNotMet -> HttpStatus.FORBIDDEN
             is PermissionDenied -> HttpStatus.FORBIDDEN
             is ResourceNotFound -> HttpStatus.NOT_FOUND
             is ValidationFailed -> HttpStatus.BAD_REQUEST
             is ConflictDetected -> HttpStatus.CONFLICT
             is UpstreamUnavailable -> HttpStatus.SERVICE_UNAVAILABLE
+            is ModerationUnavailable -> HttpStatus.SERVICE_UNAVAILABLE
             is RateLimited -> HttpStatus.TOO_MANY_REQUESTS
         }
         if (status.is5xxServerError) {
@@ -63,6 +68,16 @@ class GlobalExceptionHandler {
         log.warn("검증 실패: {} 필드", fields.size)
         val body = ErrorResponse(
             ErrorResponse.Body(ErrorCode.VALIDATION_ERROR.name, "입력값이 유효하지 않습니다.", traceId(), fields),
+        )
+        return ResponseEntity.badRequest().body(body)
+    }
+
+    /** 본문 파싱 실패(잘못된 JSON·enum·타입 등) → 400. 침묵 500 대신 클라이언트 오류로 표면화. */
+    @ExceptionHandler(HttpMessageNotReadableException::class)
+    fun handleUnreadable(ex: HttpMessageNotReadableException): ResponseEntity<ErrorResponse> {
+        log.warn("요청 본문 파싱 실패: {}", ex.mostSpecificCause.message)
+        val body = ErrorResponse(
+            ErrorResponse.Body(ErrorCode.VALIDATION_ERROR.name, "요청 본문을 해석할 수 없습니다.", traceId(), null),
         )
         return ResponseEntity.badRequest().body(body)
     }
