@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -233,20 +233,35 @@ export default function DevPreviewScreen() {
   return (
     <View testID="dev-preview-root" className="flex-1 bg-white">
       {/*
-       * 이 앱에는 SafeAreaProvider 가 없다(_layout.tsx 는 GestureHandlerRootView + SplashGate 뿐).
-       * 그래서 컨텍스트를 읽는 useSafeAreaInsets() 는 0 을 돌려줄 수 있다 — 대신 인셋을
-       * 네이티브 쪽에서 직접 재어 패딩으로 넣는 SafeAreaView 를 쓴다(프로바이더 불필요).
-       * edges 를 top 으로 좁혀, 아래쪽 여백은 화면 컴포넌트 자신의 몫으로 남긴다.
+       * 화면을 루트 전체 높이로 먼저 그린다 — 토글 바가 세로로 밀지 않도록.
+       * 그려지는 화면은 실기와 같은 "원래 위치"(전체 높이)를 갖는다.
        */}
-      <SafeAreaView edges={['top']}>
+      <View className="flex-1">
+        {active.render ? (
+          active.render()
+        ) : active.login ? (
+          <SocialLoginScreen {...active.login} {...VIEW_ONLY_HANDLERS} />
+        ) : (
+          <SplashScreen />
+        )}
+      </View>
+
+      {/*
+       * 토글 바는 화면 위에 뜨는 오버레이(absolute)다 — 화면을 아래로 밀지 않는다.
+       * SafeAreaView(top)로 상태바/노치를 피한다(이제 앱에 SafeAreaProvider 가 있다).
+       * pointerEvents='box-none' 이라 바 밖(투명 영역)의 탭은 아래 화면으로 통과한다.
+       */}
+      <SafeAreaView
+        edges={['top']}
+        pointerEvents="box-none"
+        style={StyleSheet.absoluteFill}
+        className="justify-start"
+      >
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          // ScrollView 의 기본 스타일은 flexGrow:1 이라, 세로 부모 안에서 아래 화면 영역과
-          // 남은 높이를 나눠 갖는다(토글 줄이 화면 40% 를 먹은 원인). 0 으로 눌러
-          // 높이를 내용물 크기로 되돌린다.
+          // flexGrow:0 으로 바 높이를 내용물 크기로 고정(세로로 늘어나지 않게).
           style={{ flexGrow: 0 }}
-          // 교차축(세로) 기본값이 stretch 라 알약이 줄 높이만큼 늘어난다 → 가운데 정렬로 고정.
           contentContainerStyle={{ gap: 8, padding: 12, alignItems: 'center' }}
         >
           {PREVIEW_STATES.map((state) => {
@@ -266,16 +281,6 @@ export default function DevPreviewScreen() {
           })}
         </ScrollView>
       </SafeAreaView>
-
-      <View className="flex-1">
-        {active.render ? (
-          active.render()
-        ) : active.login ? (
-          <SocialLoginScreen {...active.login} {...VIEW_ONLY_HANDLERS} />
-        ) : (
-          <SplashScreen />
-        )}
-      </View>
     </View>
   );
 }
