@@ -7,7 +7,24 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 
 루프 엔지니어링 개발 사이클: 인지 → 메모리 → 설계 → 테스트(게이트①) → 구현(게이트②) → 검증 → 리팩토링 → 재검증 → 기록.
 
-**실행 모드: 하이브리드** — 오케스트레이터(메인 세션)가 사용자 게이트와 MCP 호출(Ouroboros/Obsidian/Figma)을 직접 관리하고, 단계별 전문 작업은 서브 에이전트(`Agent` 도구, 반드시 `model: "opus"`)에 위임한다. 사용자 검토 게이트가 2개 있어 실시간 팀 통신보다 순차 파이프라인이 적합하다.
+**실행 모드: 하이브리드** — 오케스트레이터(메인 세션)가 사용자 게이트와 MCP 호출(Ouroboros/Obsidian/Figma)을 직접 관리하고, 단계별 전문 작업은 서브 에이전트(`Agent` 도구)에 위임한다. 사용자 검토 게이트가 2개 있어 실시간 팀 통신보다 순차 파이프라인이 적합하다.
+
+## 자리별 모델 배치 (2026-07-21)
+
+| 자리 | 모델 | 왜 |
+|---|---|---|
+| **오케스트레이터** | `fable` (`/model`) | **상류다** — 서브 프롬프트를 오케가 쓴다. 최고 판단(맹점 훑기·이해 체크 출제)이 여기 있다 |
+| **test-designer** | `fable` | 인터페이스를 정하고 게이트①로 **동결**한다 — 되돌리기 비용 최고, 검사는 학습자 게이트뿐 |
+| spec-analyst · code-critic | `opus` | 요구 누락은 조용히 전파된다 / 적대적 리뷰는 순수 추론이다 |
+| implementer · qa-verifier · scribe | `sonnet` | 실패가 시끄럽거나(삼중 검사 위) 절차 준수가 대부분이다 |
+
+원칙: **올리는 건 되돌리기 비싼 자리부터, 내리는 건 실패가 시끄러운 자리부터.**
+
+**호출 시 `model` 파라미터를 반드시 명시한다** — 명시 파라미터가 에이전트 frontmatter보다 우선이므로, 둘이 어긋나면 파라미터가 이긴다.
+
+> ⚠️ **메타 스킬 `harness:harness`의 "모든 에이전트는 `model: "opus"`" 지침보다 이 표가 우선한다.** 그 스킬이 로드돼도 일괄 opus로 되돌리지 마라 — 이 배치는 12사이클 실측(자리별 실패 가시성·되돌리기 비용·호출 빈도) 위에 있다.
+>
+> **3사이클 관찰 대상이다.** scribe가 개발로그에 이 사이클의 모델 배치를 한 줄 남기고, 지표(맹점 훑기 적중 / 04 로그 원문 유무·미신고 변경 탐지 / 전줄 주해 품질·수정 루프 횟수)를 보고 되돌릴지 판정한다.
 
 ## 참조 파일 — 해당 시점에 반드시 읽는다
 
@@ -21,7 +38,7 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 
 ## 서브 에이전트 호출 공통 (1단계부터 적용)
 
-**모든 서브 에이전트(spec-analyst·test-designer·implementer·scribe) 프롬프트에 "학습자 톤" 지시를 명시 주입한다.** 이 사용자는 코드 초심자다:
+**모든 서브 에이전트(spec-analyst·test-designer·implementer·code-critic·scribe) 프롬프트에 "학습자 톤" 지시를 명시 주입한다.** 이 사용자는 코드 초심자다:
 
 1. 새 문법·API·패턴은 이름만 쓰지 말고 한 줄 개념 설명 병기
 2. 테스트는 "준비(Arrange)→실행(Act)→단언(Assert)" 3동작 뼈대로 서술
@@ -112,14 +129,14 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 4. 01b 요약을 사용자에게 제시한다(설계 방향 확인).
 
 ### 4. [테스트 작성] — test-designer (서브) → 🧑 게이트 ①
-`Agent(test-designer, model: "opus")`, 입력: 01 + 01b (절대 경로).
+`Agent(test-designer, model: "fable")`, 입력: 01 + 01b (절대 경로).
 산출: 실패 테스트 + `02_test-designer_map.md`.
 **제시 전 reference/gate-protocol.md를 읽는다.** 전문(02의 "테스트 설계 설명" + 매핑 표 + 주해 달린 테스트 코드)은 게이트 노트에 수록하고, 채팅은 요약 형식(생략 불가 항목 포함) + 이해 체크 2개 → 승인 → 00_gates.md에 게이트① 기록(승인 발화 인용 + 포맷 후 파일 해시 + red 로그). **승인 전 구현 금지.**
 
 ### 5. [구현] — implementer → code-critic → 🧑 게이트 ②
 
 #### 5-a. 구현
-`Agent(implementer, model: "opus")`. 승인된 테스트를 green으로. 산출: `03_implementer_notes.md`.
+`Agent(implementer, model: "sonnet")`. 승인된 테스트를 green으로. 산출: `03_implementer_notes.md`.
 
 #### 5-b. 적대적 리뷰 (2026-07-21 신설)
 `Agent(code-critic, model: "opus")`. 산출: `03b_code-critic_findings.md`.
@@ -137,7 +154,7 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 ### 6. [검증] — qa-verifier (서브) → 실기 스모크 (오케, 조건부)
 
 #### 6-a. jest 층
-`Agent(qa-verifier, model: "opus")`, 입력: 변경 파일 목록 + 00_gates.md **절대 경로**.
+`Agent(qa-verifier, model: "sonnet")`, 입력: 변경 파일 목록 + 00_gates.md **절대 경로**.
 산출: `04_qa-verifier_report_{n}_{PASS|FAIL}.md` — n은 사이클 내 검증 차수(채번 = 기존 최대 n+1), **덮어쓰기·삭제 금지**. 판정·차수·시각을 00_gates.md에도 append한다(카운터의 정본은 원장).
 FAIL·실행 불가·PASS(해시 불일치)의 분기 처리는 reference/troubleshooting.md "검증 단계의 분기"를 따른다.
 
@@ -152,7 +169,7 @@ FAIL·실행 불가·PASS(해시 불일치)의 분기 처리는 reference/troubl
 동작 변경 없는 구조 개선. **완료 후 qa-verifier 재실행 필수(re-green) + 게이트② 재제시 규칙 적용.** 개선 여지가 없으면 건너뛴다.
 
 ### 8. [기록] — scribe (서브)
-`Agent(scribe, model: "opus")`, 입력: `_workspace/{cycle-id}/` 절대 경로 + 문제/에러 발생 내역 + **게이트에서 수집한 이해부채 목록(상환된 항목 포함)** + **게이트 노트 경로·차수 목록**(개발로그가 링크 허브가 되기 위한 입력). 최신 04 리포트는 경로로 전달하지 않는다 — scribe가 `04_qa-verifier_report_*`를 직접 나열해 최대 n을 스스로 확정한다(선별 전달 오염 방지).
+`Agent(scribe, model: "sonnet")`, 입력: `_workspace/{cycle-id}/` 절대 경로 + 문제/에러 발생 내역 + **게이트에서 수집한 이해부채 목록(상환된 항목 포함)** + **게이트 노트 경로·차수 목록**(개발로그가 링크 허브가 되기 위한 입력). 최신 04 리포트는 경로로 전달하지 않는다 — scribe가 `04_qa-verifier_report_*`를 직접 나열해 최대 n을 스스로 확정한다(선별 전달 오염 방지).
 게이트 통과 현황은 scribe가 **04 리포트의 표를 원문 복사**한다 — 오케스트레이터의 요약 재서술로 대체 금지(심판받는 루프의 자기서술이 기록을 오염시킨다). 이해부채는 `TripPilot/이해부채/`에 건별 기록하고, 상환된 항목은 status를 갱신한다.
 
 ### 9. 사이클 종료
