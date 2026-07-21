@@ -65,11 +65,15 @@ beforeAll(() => {
 beforeEach(() => {
   socialRequests.length = 0;
   mockReplace.mockClear();
+  // 가짜 인가 결과의 출처는 env 다(게이트①-2 계약 — makeAuthorize 는 @/mocks 를 참조하지 않는다).
+  // 미지정 = success 이므로 매 테스트 전에 지워 기본값으로 되돌린다.
+  delete process.env.EXPO_PUBLIC_AUTH_FAKE_OUTCOME;
 });
 
 afterEach(() => {
   server.resetHandlers();
   resetScenario();
+  delete process.env.EXPO_PUBLIC_AUTH_FAKE_OUTCOME;
 });
 
 afterAll(() => {
@@ -134,7 +138,9 @@ describe('SocialLoginContainer — fake×MSW 결합 전이 (AC-W-09)', () => {
   });
 
   it('사용자 취소(cancel) → 취소 안내를 보여주고 서버를 호출하지 않는다', async () => {
-    setScenario('login-cancel');
+    // 인가 결과(cancel)는 env 로, 서버 거동은 시나리오로 — 출처가 분리됐다(게이트①-2 계약).
+    process.env.EXPO_PUBLIC_AUTH_FAKE_OUTCOME = 'cancel';
+    setScenario('login-success-existing');
     render(<SocialLoginContainer />);
 
     fireEvent.press(screen.getByTestId('auth-login-google'));

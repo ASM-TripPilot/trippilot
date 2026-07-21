@@ -17,10 +17,13 @@ const FEATURES = [
   'settings',
 ];
 
+// `except` 의 경로는 **`from` 기준 상대경로**다(eslint-plugin-import 규약).
+// `./src/features/${feature}` 로 쓰면 from 아래에서 다시 해석돼 예외가 하나도 잡히지 않고,
+// 같은 feature 안의 형제 파일 import(`./TermsScreen`)까지 위반으로 잡힌다.
 const featureIsolationZones = FEATURES.map((feature) => ({
   target: `./src/features/${feature}`,
   from: './src/features',
-  except: [`./src/features/${feature}`],
+  except: [`./${feature}`],
   message:
     'features 간 직접 import 금지 — 데이터 공유는 shared/api, 화면 이동은 라우팅으로.',
 }));
