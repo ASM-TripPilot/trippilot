@@ -59,6 +59,67 @@ description: "TripPilot frontend 검증 게이트 실행 순서와 명령. '검�
 - INV-3 점검: duration 단일 키워드가 아니라 시간 표시 계열을 grep한다 — `duration|minutes?|\bmin\b|eta|소요` (DTO·타입) + 화면 코드의 시간 단위 표시 문자열(`"분"`, `"min"`). 명칭 변경·파생 계산 표시를 잡기 위함이다.
 - 불일치는 FAIL로 취급하고 리포트에 양쪽 정의를 병기한다(권위는 서버 계약).
 
+## 실기 스모크 (조건부 · 2026-07-21 신설)
+
+**왜 있나**: jest는 픽셀·레이아웃·Metro/Hermes·딥링크를 **원리적으로 못 본다.** 그리고 12사이클에서 발견된 **유일한 실제 동작 결함**이 정확히 그 층에서 나왔다 — `20260720-trip161-mock-seam`은 jest 121 green · 해시 12/12 일치 · 타입 0 · 린트 0을 **전부 통과한 뒤** 시뮬레이터에서 레드박스가 떴고(`Property 'MessageEvent' doesn't exist`), 목이 안 걸려 `localhost:8080` 커넥션이 20회 나갔다. 위 검사 4개는 그걸 볼 방법이 없다.
+
+### 발동 조건 — diff로 기계 판정
+
+**하나라도 걸리면 실행한다.** 실제 사고가 난 지점만 골랐다.
+
+| 조건 | 실제 사고 |
+|---|---|
+| `package.json` 의존성 변경 | `expo-auth-session` 3종 추가 (real-oauth) |
+| `src/app/**` 변경 | 라우팅·진입 분기 (온보딩 가드·SplashGate) |
+| `metro.config.js` · `babel.config.js` · `app.config.ts` | 번들러 설정 |
+| `src/mocks/**` · `__mocks__/**` · `src/test-support/**` | 목 경계 (mock-seam) |
+| diff에 `import(` 추가·변경 | 동적 import — Metro가 원형을 남기지만 jest는 그 원형을 못 돌린다 |
+
+걸리는 게 없으면 건너뛰고 04에 "스모크 미해당"을 적는다.
+
+### 0. 사전 점검 — 없으면 "실행 불가"(FAIL 아님)
+
+```bash
+xcrun simctl list devices booted | grep -q Booted        # 시뮬레이터 부팅 상태
+xcrun simctl listapps booted | grep -q com.trippilot.app # dev build 설치 상태
+```
+
+§0 사전 점검과 같은 정신이다 — **환경 부재는 실행 불가이지 FAIL이 아니다.** 사용자에게 보고하고, 이 상태로 [기록]에 가면 **"실기 미검증"을 강제 명기**한다.
+
+### 절차
+
+```bash
+# 1. 깨끗한 재기동 (launch가 PID를 반환하면 프로세스는 떴다)
+xcrun simctl terminate booted com.trippilot.app 2>/dev/null
+xcrun simctl launch booted com.trippilot.app
+
+# 2. 이번 사이클이 만진 화면으로 진입 (프리뷰 딥링크는 동작 확인됨)
+xcrun simctl openurl booted trippilot://_dev/preview
+
+# 3. 캡처 → Read 도구로 실제로 눈으로 본다 (레드박스는 로그보다 화면이 확실하다)
+xcrun simctl io booted screenshot <스크래치패드>/smoke-{n}.png
+
+# 4. 예상 밖 네트워크 — mock-seam을 잡은 바로 그 검사
+xcrun simctl spawn booted log show --last 2m --style compact \
+  --predicate 'subsystem == "com.apple.network"' | grep -i "localhost:8080\|CFNetwork"
+```
+
+### 판정 4항목 — 하나라도 실패면 FAIL → implementer 수정 루프
+
+1. 프로세스 부팅 (`launch`가 PID 반환)
+2. **레드박스 없음** — 스크린샷을 Read로 열어 확인. "로그에 없으니 없겠지"로 넘기지 마라
+3. 예상 밖 네트워크 0건 (목 ON인데 실서버로 나가는 등)
+4. 대상 화면 도달
+
+### 한계 — 넘겨짚지 마라
+
+- **탭·스와이프 자동화는 이 환경에서 불가**(접근성 권한 부재). 스모크는 **진입까지**만 본다. 상호작용 확인은 사용자 몫이고, 그 사실을 04b에 적는다.
+- 스모크 PASS ≠ 비주얼 정합. 픽셀 충실도는 `figma-screen-impl` 5단계(스크린샷 대조)의 몫이다.
+
+### 산출
+
+`_workspace/{cycle-id}/04b_smoke_{n}_{PASS|FAIL|SKIP|실행불가}.md` — 04와 같은 채번 규칙(기존 최대 n+1), 덮어쓰기 금지. 판정을 00_gates.md에 append한다.
+
 ## 사이클 밖 단독 호출 시
 
 사이클 워크스페이스(`_workspace/{cycle-id}/`)가 없는 호출("커밋 전 확인" 등)에서는 04 리포트 파일을 만들지 않는다 — 결과는 채팅 보고로 대신하고, 심판 보호 항목 중 원장 의존 검사(해시 대조·red 소급)는 해당 없음으로 건너뛴다.

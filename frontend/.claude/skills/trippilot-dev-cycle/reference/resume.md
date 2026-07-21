@@ -21,7 +21,7 @@ Phase 0(컨텍스트 확인) 진입 시 읽는다. 사이클 ID 결정, 재개 �
 
 ## 데이터 전달 프로토콜
 
-- 파일 기반, 모두 `<리포 루트>/_workspace/{cycle-id}/`: `00_gates.md`(게이트 원장) / `01_spec-analyst_brief.md` / `01b_ouroboros_seed.md` / `02_test-designer_map.md` / `03_implementer_notes.md` / `03b_code-critic_findings.md`(적대적 리뷰 — 차단 0건이어야 게이트② 제시) / `04_qa-verifier_report_{n}_{PASS|FAIL}.md` / `RESUME.md`(이어하기 인덱스)
+- 파일 기반, 모두 `<리포 루트>/_workspace/{cycle-id}/`: `00_gates.md`(게이트 원장) / `01_spec-analyst_brief.md` / `01b_ouroboros_seed.md` / `02_test-designer_map.md` / `03_implementer_notes.md` / `03b_code-critic_findings.md`(적대적 리뷰 — 차단 0건이어야 게이트② 제시) / `04_qa-verifier_report_{n}_{PASS|FAIL}.md` / `04b_smoke_{n}_{PASS|FAIL|SKIP|실행불가}.md`(실기 스모크 — 조건부) / `RESUME.md`(이어하기 인덱스)
 - **RESUME.md — `/clear` 후 무맥락 재개용 지시서**. **매 단계 종료 시 오케스트레이터가 갱신**한다(append 아닌 덮어쓰기 — 항상 "현재 상태" 1장). 고정 형식:
   ```
   cycle-id: {id}   작업: {한 줄}   갱신: {YYYY-MM-DD 단계명}

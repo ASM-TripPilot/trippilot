@@ -50,7 +50,7 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 - [ ] 3. [설계] 🧑 맹점 훑기 제시 → Ouroboros 인터뷰 → 01b_seed (폴백 포함 항상 생성)
 - [ ] 4. [테스트] test-designer → 02 → 🧑 게이트① 승인·원장 기록
 - [ ] 5. [구현] implementer → 03 → code-critic → 03b(차단 0건) → 🧑 게이트② 승인·원장 기록
-- [ ] 6. [검증] qa-verifier → 04_report_{n}
+- [ ] 6. [검증] 6-a qa-verifier → 04_report_{n} · 6-b 실기 스모크(조건부) → 04b_smoke_{n}
 - [ ] 7. [리팩토링] (선택) → re-green + 게이트② 재제시 판정
 - [ ] 8. [기록] scribe → 옵시디언·devlog
 - [ ] 9. 종료 — RESUME.md "완료" 마킹
@@ -134,10 +134,19 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 #### 5-c. 게이트② 제시
 **제시 전 reference/gate-protocol.md를 읽는다.** 전문(03의 "변경 설명" + 전줄 주해 + §0 자리 지도)은 게이트 노트에 수록하고, 채팅은 요약 형식(생략 불가 ①~⑤) + 이해 체크 2개 → 승인 → 00_gates.md에 게이트② 기록(승인 발화 인용 + 포맷 후 파일 해시 — 테스트 인프라 파일 포함 변경 전체).
 
-### 6. [검증] — qa-verifier (서브)
+### 6. [검증] — qa-verifier (서브) → 실기 스모크 (오케, 조건부)
+
+#### 6-a. jest 층
 `Agent(qa-verifier, model: "opus")`, 입력: 변경 파일 목록 + 00_gates.md **절대 경로**.
 산출: `04_qa-verifier_report_{n}_{PASS|FAIL}.md` — n은 사이클 내 검증 차수(채번 = 기존 최대 n+1), **덮어쓰기·삭제 금지**. 판정·차수·시각을 00_gates.md에도 append한다(카운터의 정본은 원장).
 FAIL·실행 불가·PASS(해시 불일치)의 분기 처리는 reference/troubleshooting.md "검증 단계의 분기"를 따른다.
+
+#### 6-b. 실기 스모크 🎯 (2026-07-21 신설)
+**절차 정본은 `<리포 루트>/frontend/.claude/skills/verify-gates/SKILL.md`의 `## 실기 스모크`** — 발동 조건(diff 판정 5종)·명령·판정 4항목을 그대로 따른다. 산출: `04b_smoke_{n}_{PASS|FAIL|SKIP|실행불가}.md`.
+
+**오케 직영인 이유**: 시뮬레이터·dev build·Metro 기동 여부에 따라 실패 원인이 "코드가 틀림"인지 "환경이 안 됨"인지 갈리는데, 그 구분에는 사용자와의 대화가 필요하다("시뮬레이터 띄워줄래?"). `20260720-trip161-mock-seam`에서 사용자가 **"qa-verifier는 jest만 돌린다"**로 확정한 바 있고, 이 배치는 그 결정을 따른다.
+
+**이 단계가 없던 12사이클 동안, 발견된 유일한 실제 동작 결함이 여기서 나왔다** — jest 전부 통과 후 시뮬레이터 레드박스. 발동 조건에 걸리면 건너뛰지 마라.
 
 ### 7. [리팩토링] — implementer (서브, 선택)
 동작 변경 없는 구조 개선. **완료 후 qa-verifier 재실행 필수(re-green) + 게이트② 재제시 규칙 적용.** 개선 여지가 없으면 건너뛴다.
