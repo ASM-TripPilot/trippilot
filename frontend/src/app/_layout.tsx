@@ -2,6 +2,10 @@ import '../../global.css';
 
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  initialWindowMetrics,
+  SafeAreaProvider,
+} from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import { Inter_700Bold } from '@expo-google-fonts/inter';
 import {
@@ -42,7 +46,19 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SplashGate />
+      {/* D4 — SafeAreaProvider 를 제스처 루트 안쪽에 둔다. initialMetrics 에 null 대비 기본값을
+          함께 주지 않으면 jest(레이아웃 패스 없음)·initialWindowMetrics=null 환경에서 자식이
+          렌더되지 않아 부팅 골격 테스트가 깨진다(AC E3 실측). */}
+      <SafeAreaProvider
+        initialMetrics={
+          initialWindowMetrics ?? {
+            frame: { x: 0, y: 0, width: 0, height: 0 },
+            insets: { top: 0, left: 0, right: 0, bottom: 0 },
+          }
+        }
+      >
+        <SplashGate />
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
