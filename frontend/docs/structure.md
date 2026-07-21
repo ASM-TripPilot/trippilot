@@ -23,7 +23,7 @@
 - **경로 별칭**: `@/*` → `./src/*`
 - **구현 범위**: `auth` + `onboarding` **두 feature만 실구현.** 나머지 9개 feature는 `export {}` 한 줄짜리 빈 스텁이다.
 - **앱 런타임 목 0건.** msw는 테스트 오라클(`msw/node`)에만 있고, `src/__tests__/noMswInStaticGraph.test.ts`가 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제한다.
-- **문서 대상 파일 74개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함)
+- **문서 대상 파일 78개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함)
 
 ## 디렉토리
 
@@ -48,7 +48,7 @@ frontend/
 | `src/app/_layout.tsx` | 루트 레이아웃. 폰트 로드 게이팅 + 네이티브 스플래시 제어 + `GestureHandlerRootView` + `SafeAreaProvider`(null 대비 initialMetrics) + `SplashGate` |
 | `src/app/force-update.tsx` | 강제 업데이트 분기 화면 |
 | `src/app/reconsent.tsx` | 재동의 분기 화면 |
-| `src/app/_dev/preview.tsx` | **개발 전용 정적 프리뷰** — 네트워크 없이 시각 상태 전환. 진입은 딥링크 `trippilot://_dev/preview` 하나뿐 |
+| `src/app/_dev/preview.tsx` | **개발 전용 정적 프리뷰** — 네트워크 없이 시각 상태 전환. 진입은 딥링크 `trippilot://_dev/preview?state=<키>` 하나뿐(9개 상태 키 조준. 부재·오타·배열 값은 splash 결정론 폴백 — `useLocalSearchParams`는 지연 초기화자로 최초 마운트 1회만 읽음) |
 | `src/app/(auth)/_layout.tsx` | 미인증 스택 |
 | `src/app/(auth)/login.tsx` | 소셜 로그인 화면 진입점 |
 | `src/app/(onboarding)/_layout.tsx` | 온보딩 스택 + **완료자만 홈으로 방어** |
@@ -97,6 +97,7 @@ frontend/
 | `src/features/onboarding/hooks/useOnboardingProgress.ts` | 온보딩 진행 상태 훅 seam. ⚠️ **현재 `{false,false}` 하드코딩**(FW1) — 아래 경고 |
 | `src/features/onboarding/model/resolveOnboardingStep.ts` | **순수 함수** — 진행 상태 → 잔여 단계(`terms`/`nickname`/`done`) |
 | `src/features/onboarding/model/validateNicknameFormat.ts` | **순수 함수** — 닉네임 길이(코드포인트 2~20)만. 내용 판정은 서버 권한 |
+| `src/features/onboarding/components/OnboardingGlyphs.tsx` | 인라인 SVG — 약관·닉네임 화면 글리프(체크·재생성 아이콘 등). raw hex 색 직박(`screens/` 스코프 밖이라 F2 raw-hex 가드 미대상 — 03b 참고-2: 향후 `screens/`로 이동 시 red) |
 | `src/features/onboarding/index.ts` | 배럴 스텁(`export {}`) — 아무도 안 씀 |
 
 ## `src/features/` 빈 스텁 (`export {}` 한 줄)
@@ -113,7 +114,9 @@ frontend/
 | `src/shared/api/tokenManager.ts` | **구현됨** — 동기 in-memory 액세스토큰 홀더. SecureStore(비동기)와 공존, 인터셉터가 동기로 읽는다 |
 | `src/shared/storage/index.ts` | **구현됨** — expo-secure-store 토큰 저장소 |
 | `src/shared/version/compareVersion.ts` | **구현됨** — 버전 비교(강제 업데이트 판정) |
-| `src/shared/location/LocationPreprompt.tsx` | **프레임만** — `default`/`permission-denied` 2상태. `expo-location`을 import조차 안 함(구조적으로 OS 다이얼로그 못 부름). **라우트 미등록** |
+| `src/shared/location/LocationPreprompt.tsx` | **전체화면**(레이더 히어로·denied 전용 레이아웃 — 카드형은 폐기됐고 내부 마크업만 전면 교체, props/testID 시그니처 무변경). `default`/`permission-denied` 2상태. `expo-location`을 import조차 안 함(구조적으로 OS 다이얼로그 못 부름). **라우트 미등록**(실사용처 0, 프리뷰 전용) |
+| `src/shared/location/LocationGlyphs.tsx` | 인라인 SVG — 위치 화면 글리프(레이더 히어로·오프 타일). stroke/fill 색은 `locationColors.ts` 상수 경유(`shared/location/**` 는 F2 raw-hex 가드 대상) |
+| `src/shared/location/lib/locationColors.ts` | 위치 글리프 색 상수(raw hex 분리 — `gradients.ts` 패턴 재사용). 토큰 색과 수동 동기화 필요(03b 참고-2) |
 | `src/shared/location/index.ts` | 배럴 스텁(`export {}`) |
 | `src/shared/ui/index.ts` | **빈 스텁** |
 | `src/shared/validation/index.ts` | **빈 스텁** |
@@ -139,6 +142,7 @@ frontend/
 | `src/__tests__/rootLayout.test.tsx` | 루트 부팅 골격 |
 | `src/__tests__/rootLayoutSafeArea.test.tsx` | `SafeAreaProvider` 도입 후에도 자식이 렌더되는지 |
 | `src/__tests__/devPreview.test.tsx` | 프리뷰 상태 렌더. 런타임 지뢰 목으로 네트워크 격리 |
+| `src/__tests__/devPreviewDeepLink.test.tsx` | 프리뷰 딥링크 `?state=` 파라미터 → 초기 화면 결정론 가드(부재·오타·대소문자·빈 문자열·배열 값 → 전부 splash 폴백) |
 | `src/__tests__/design-tokens.test.ts` | 디자인 토큰 가드 |
 
 ## 명령

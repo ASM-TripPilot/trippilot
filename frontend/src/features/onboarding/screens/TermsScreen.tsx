@@ -1,10 +1,16 @@
 /**
- * c06-terms 프레젠테이션 (US-ONB-02 · AC A1~A8 · C6).
+ * c06-terms 프레젠테이션 (US-ONB-02 · AC A1~A8 · C6 · Figma 1293:1208 정합 TRIP-162).
  * props 만 받고 네트워크를 모른다 — 서버 호출은 컨테이너/훅 몫이다.
  */
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import {
+  BackChevronGlyph,
+  CheckGlyph,
+  ViewChevronGlyph,
+} from '../components/OnboardingGlyphs';
 
 export interface TermsItemView {
   termsType: string;
@@ -26,6 +32,8 @@ export interface TermsScreenProps {
   onToggleAll: () => void;
   onNext: () => void;
   onRetry: () => void;
+  /** seam — 행의 "보기"를 누르면 어느 약관인지 상위로 알린다(Q2-a). 실 동작(모달 등)은 후속 유닛. */
+  onViewTerms?: (termsType: string) => void;
 }
 
 export function TermsScreen({
@@ -38,58 +46,94 @@ export function TermsScreen({
   onToggleAll,
   onNext,
   onRetry,
+  onViewTerms,
 }: TermsScreenProps): ReactElement {
-  // Figma 의 pt-44px(상태바 구워넣기) 대신 SafeAreaView 로 기기 인셋을 잡는다(D4 · E2).
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
-      <View testID="onboarding-terms-root" className="flex-1 bg-canvas px-2xl">
-        <Text className="font-noto-bold pb-xl pt-3xl text-hero font-bold text-ink">
-          약관에 동의해 주세요
-        </Text>
+      <View testID="onboarding-terms-root" className="flex-1 bg-canvas">
+        <View className="h-[56px] flex-row items-center gap-sm border-b border-hairline px-lg">
+          <BackChevronGlyph />
+          <Text className="font-noto-bold text-[16px] font-bold text-ink">
+            약관 동의
+          </Text>
+        </View>
 
-        <ScrollView className="flex-1">
+        <ScrollView className="flex-1 px-2xl">
+          <Text className="font-noto-bold pb-xl pt-2xl text-[24px] font-bold text-ink">
+            {'서비스 이용을 위해\n약관에 동의해 주세요'}
+          </Text>
+
           <Pressable
             testID="onboarding-terms-agreeall"
             accessibilityRole="checkbox"
             accessibilityState={{ checked: allChecked }}
             onPress={onToggleAll}
-            className="flex-row items-center gap-md rounded-input bg-surface-soft px-lg py-lg"
+            className="flex-row items-center gap-md rounded-input bg-surface-soft p-lg"
           >
             <View
-              className={`h-5 w-5 rounded-pill border-[1.5px] ${
+              className={`h-[22px] w-[22px] items-center justify-center rounded-[6px] ${
                 allChecked
-                  ? 'border-primary bg-primary'
-                  : 'border-hairline-strong bg-canvas'
+                  ? 'bg-primary'
+                  : 'border-[1.5px] border-hairline-strong bg-canvas'
               }`}
-            />
-            <Text className="font-noto-medium text-card-title font-medium text-ink">
-              전체 동의
+            >
+              {allChecked ? <CheckGlyph /> : null}
+            </View>
+            <Text className="font-noto-bold text-card-title font-bold text-ink">
+              약관 전체 동의
             </Text>
           </Pressable>
 
-          <View className="gap-md pt-lg">
-            {items.map((item) => (
+          <View className="pt-xl">
+            {items.map((item, index) => (
               <Pressable
                 key={item.termsType}
                 testID={`onboarding-terms-${item.termsType}`}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: item.checked }}
                 onPress={() => onToggle(item.termsType)}
-                className="flex-row items-center gap-md px-lg py-sm"
+                className={`flex-row items-center justify-between py-[15px] ${
+                  index > 0 ? 'border-t border-hairline' : ''
+                }`}
               >
-                <View
-                  className={`h-5 w-5 rounded-pill border-[1.5px] ${
-                    item.checked
-                      ? 'border-primary bg-primary'
-                      : 'border-hairline-strong bg-canvas'
-                  }`}
-                />
-                <Text className="font-noto text-body text-muted">
-                  {item.required ? '필수' : '선택'}
-                </Text>
-                <Text className="font-noto text-body text-ink">
-                  {item.label}
-                </Text>
+                <View className="flex-row items-center gap-[10px]">
+                  <View
+                    className={`h-[22px] w-[22px] items-center justify-center rounded-[6px] ${
+                      item.checked
+                        ? 'bg-primary'
+                        : 'border-[1.5px] border-hairline-strong bg-canvas'
+                    }`}
+                  >
+                    {item.checked ? <CheckGlyph /> : null}
+                  </View>
+                  <View
+                    testID={`onboarding-terms-badge-${item.termsType}`}
+                    className={`rounded-[6px] px-sm py-[3px] ${
+                      item.required ? 'bg-primary-pale' : 'bg-surface-strong'
+                    }`}
+                  >
+                    <Text
+                      className={`font-noto-bold text-micro font-bold ${
+                        item.required ? 'text-primary-text' : 'text-muted'
+                      }`}
+                    >
+                      {item.required ? '필수' : '선택'}
+                    </Text>
+                  </View>
+                  <Text className="font-noto text-body text-ink">
+                    {item.label}
+                  </Text>
+                </View>
+                <Pressable
+                  testID={`onboarding-terms-view-${item.termsType}`}
+                  onPress={() => onViewTerms?.(item.termsType)}
+                  className="flex-row items-center gap-[2px]"
+                >
+                  <Text className="font-noto text-label text-muted-soft">
+                    보기
+                  </Text>
+                  <ViewChevronGlyph />
+                </Pressable>
               </Pressable>
             ))}
           </View>
@@ -130,18 +174,20 @@ export function TermsScreen({
           ) : null}
         </ScrollView>
 
-        <Pressable
-          testID="onboarding-terms-next"
-          disabled={!canProceed}
-          onPress={onNext}
-          className={`items-center justify-center rounded-button bg-primary py-lg ${
-            canProceed ? '' : 'opacity-40'
-          }`}
-        >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            다음
-          </Text>
-        </Pressable>
+        <View className="border-t border-hairline px-2xl pb-[30px] pt-md">
+          <Pressable
+            testID="onboarding-terms-next"
+            disabled={!canProceed}
+            onPress={onNext}
+            className={`h-[52px] items-center justify-center rounded-button bg-primary ${
+              canProceed ? '' : 'opacity-40'
+            }`}
+          >
+            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+              다음
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </SafeAreaView>
   );
