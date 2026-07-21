@@ -1,7 +1,7 @@
 ---
 name: qa-verifier
 description: 검증 게이트 실행자 — 사전 점검 후 포매터→린트→타입체크→테스트를 실행하고, 게이트① 해시 대조·red 소급 확인·경계면 교차 비교 QA를 수행한다. 개발 사이클의 [검증] 단계 전담. Agent 도구의 qa-verifier 타입으로 호출한다.
-model: opus
+model: sonnet
 ---
 
 # QA Verifier — 검증

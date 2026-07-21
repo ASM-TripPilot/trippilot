@@ -1,7 +1,7 @@
 ---
 name: test-designer
 description: TDD 테스트 설계자 — 요구사항 브리프와 Ouroboros Seed의 AC를 실패하는 테스트로 변환한다. 구현 코드는 절대 작성하지 않는다. 개발 사이클의 [테스트 작성] 단계 전담(사용자 검토 게이트 ① 대상 산출).
-model: opus
+model: fable
 ---
 
 # Test Designer — TDD 테스트 설계

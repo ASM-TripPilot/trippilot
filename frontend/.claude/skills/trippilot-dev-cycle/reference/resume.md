@@ -21,7 +21,7 @@ Phase 0(컨텍스트 확인) 진입 시 읽는다. 사이클 ID 결정, 재개 �
 
 ## 데이터 전달 프로토콜
 
-- 파일 기반, 모두 `<리포 루트>/_workspace/{cycle-id}/`: `00_gates.md`(게이트 원장) / `01_spec-analyst_brief.md` / `01b_ouroboros_seed.md` / `02_test-designer_map.md` / `03_implementer_notes.md` / `04_qa-verifier_report_{n}_{PASS|FAIL}.md` / `RESUME.md`(이어하기 인덱스)
+- 파일 기반, 모두 `<리포 루트>/_workspace/{cycle-id}/`: `00_gates.md`(게이트 원장) / `01_spec-analyst_brief.md` / `01b_ouroboros_seed.md` / `02_test-designer_map.md` / `03_implementer_notes.md` / `03b_code-critic_findings.md`(적대적 리뷰 — 차단 0건이어야 게이트② 제시) / `04_qa-verifier_report_{n}_{PASS|FAIL}.md` / `04b_smoke_{n}_{PASS|FAIL|SKIP|실행불가}.md`(실기 스모크 — 조건부) / `RESUME.md`(이어하기 인덱스)
 - **RESUME.md — `/clear` 후 무맥락 재개용 지시서**. **매 단계 종료 시 오케스트레이터가 갱신**한다(append 아닌 덮어쓰기 — 항상 "현재 상태" 1장). 고정 형식:
   ```
   cycle-id: {id}   작업: {한 줄}   갱신: {YYYY-MM-DD 단계명}
@@ -29,6 +29,10 @@ Phase 0(컨텍스트 확인) 진입 시 읽는다. 사이클 ID 결정, 재개 �
   게이트: ①{승인|대기|반려}(해시 {…}) / ②{…}   검증: 최신 n={n} {PASS|FAIL}
   종료: {미완료 | 완료 YYYY-MM-DD}   블로킹: {사용자 승인 대기 | 없음}
   ```
-  종료 필드가 "미완료"인 폴더만 Phase 0 자동 탐지 대상이다. 사이클 종료([기록] 후) 시 "완료"로 마킹한다.
+  종료 필드가 "미완료"인 폴더만 Phase 0 자동 탐지 대상이다. 사이클 종료([기록] 후) 시 `완료 YYYY-MM-DD`로 마킹한다.
+
+  **⚠️ 판정은 "값이 `미완료`와 정확히 같은가"로 한다 — `완료`가 포함되는지로 판정하지 마라.** `미완료`는 문자열 `완료`를 **포함한다**(미+완료). 포함 검사로 구현하면 **미완료 사이클이 통째로 자동 탐지에서 빠져** 재개가 조용히 실패한다.
+
+  값에 볼드·수식어를 붙이지 마라 — 실제로 `**완료`처럼 마크다운이 섞여 기록된 사례가 12건 중 4건이다. 정확 비교를 깨뜨리는 형태다.
 - 서브 에이전트 반환값: 경로 + 판정만(대용량 내용은 파일로)
 - 최종 산출물(코드·테스트)만 리포 정위치에 두고, 중간 산출물은 `_workspace/`에 보존한다(감사 추적용, git 미추적)

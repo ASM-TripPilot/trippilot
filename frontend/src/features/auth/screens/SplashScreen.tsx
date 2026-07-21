@@ -22,7 +22,13 @@ const logoShadow = {
   elevation: 8,
 } as const;
 
-export function SplashScreen() {
+export interface SplashScreenProps {
+  /** 부트스트랩 진행 중 표시 — true 면 진행점 첫 점을 강조한다(정적 강조만, 애니메이션 비목표).
+   * 기본 false = 현재 렌더와 완전 동일(동결 테스트 전제, c01 · 1283:1208). */
+  loading?: boolean;
+}
+
+export function SplashScreen({ loading = false }: SplashScreenProps = {}) {
   return (
     <LinearGradient
       testID="shell-splash-gradient"
@@ -73,10 +79,17 @@ export function SplashScreen() {
           testID="shell-splash-progress"
           className="flex-row items-center justify-center gap-[8px] pb-[61px]"
         >
-          <View
-            testID="shell-splash-progress-dot"
-            className="h-[7px] w-[7px] rounded-full bg-primary opacity-[0.45]"
-          />
+          {loading ? (
+            <View
+              testID="shell-splash-progress-dot-active"
+              className="h-[7px] w-[7px] rounded-full bg-primary opacity-100"
+            />
+          ) : (
+            <View
+              testID="shell-splash-progress-dot"
+              className="h-[7px] w-[7px] rounded-full bg-primary opacity-[0.45]"
+            />
+          )}
           <View
             testID="shell-splash-progress-dot"
             className="h-[7px] w-[7px] rounded-full bg-primary opacity-[0.45]"

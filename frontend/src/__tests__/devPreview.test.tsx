@@ -2,14 +2,14 @@ import type { ComponentType } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 /**
- * dev 정적 프리뷰(`src/app/_dev/preview.tsx`) — 눈으로 확인해야 하는 7개 시각 상태를
- * 네트워크·훅·컨테이너를 거치지 않고 그린다.
+ * dev 정적 프리뷰(`src/app/_dev/preview.tsx`) — 눈으로 확인해야 하는 13개 시각 상태를
+ * 네트워크·훅·컨테이너를 거치지 않고 그린다(로그인·스플래시 7 + 온보딩 6, TRIP-162).
  *
  * 무엇을 보장하나:
- *  (1) 7개 상태 토글이 모두 있고, 각 토글이 해당 화면 상태를 실제로 그린다,
+ *  (1) 13개 상태 토글이 모두 있고, 각 토글이 해당 화면 상태를 실제로 그린다,
  *  (2) 그리는 대상이 **실물 화면 컴포넌트**다 — 단언하는 testID 가 전부
- *      SocialLoginScreen·SplashScreen 자신의 것이라, 프리뷰가 화면을 흉내 낸 별도 마크업을
- *      세우면 통과하지 못한다,
+ *      SocialLoginScreen·SplashScreen·TermsScreen·NicknameScreen·LocationPreprompt
+ *      자신의 것이라, 프리뷰가 화면을 흉내 낸 별도 마크업을 세우면 통과하지 못한다,
  *  (3) 그 과정에서 네트워크 계층·컨테이너·훅을 **런타임에 한 번도 로드하지 않는다**.
  *
  * (3)을 어떻게 보장하나 — 아래 지뢰(landmine) 목: 해당 모듈이 실제로 require 되는 순간
@@ -48,6 +48,7 @@ jest.mock('@/features/auth/hooks/useSocialLogin', () => {
 const DevPreview = require('@/app/_dev/preview').default as ComponentType;
 
 // 토글 키 ↔ 그 상태에서 나타나야 하는 실물 화면의 testID.
+// 온보딩 마커는 각 "상태에만" 나타나는 요소를 골랐다 — 화면이 그 상태로 실제로 그려짐을 증명한다.
 const CASES = [
   { key: 'splash', marker: 'shell-splash-root' },
   { key: 'login-idle', marker: 'auth-login-root' },
@@ -56,6 +57,16 @@ const CASES = [
   { key: 'login-conflict-sheet', marker: 'auth-login-conflict-sheet' },
   { key: 'login-age-sheet', marker: 'auth-age-sheet' },
   { key: 'login-age-restriction', marker: 'auth-age-restriction' },
+  // 온보딩 (TRIP-162)
+  { key: 'onboarding-terms-default', marker: 'onboarding-terms-missing' },
+  { key: 'onboarding-terms-agreed', marker: 'onboarding-terms-root' },
+  { key: 'onboarding-nickname-default', marker: 'onboarding-nickname-helper' },
+  { key: 'onboarding-nickname-taken', marker: 'onboarding-nickname-error' },
+  { key: 'onboarding-location-default', marker: 'onboarding-location-purpose' },
+  {
+    key: 'onboarding-location-denied',
+    marker: 'onboarding-location-denied-notice',
+  },
 ] as const;
 
 // idle 은 "조건부 UI 가 하나도 없는 상태"라는 뜻이라, 나머지 6개의 부재로 정의된다.
@@ -71,8 +82,8 @@ function selectState(key: string) {
   fireEvent.press(screen.getByTestId(`dev-preview-state-${key}`));
 }
 
-describe('dev 정적 프리뷰 — 7개 시각 상태', () => {
-  it('마운트 즉시 프리뷰 루트와 7개 상태 토글을 그린다', () => {
+describe('dev 정적 프리뷰 — 13개 시각 상태', () => {
+  it('마운트 즉시 프리뷰 루트와 13개 상태 토글을 그린다', () => {
     render(<DevPreview />);
 
     expect(screen.getByTestId('dev-preview-root')).toBeOnTheScreen();

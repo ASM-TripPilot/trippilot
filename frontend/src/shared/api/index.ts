@@ -7,6 +7,14 @@ import {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
+import { clearTokens, getTokens, saveTokens } from '@/shared/storage';
+
+import {
+  clearAccessToken,
+  getAccessToken,
+  setAccessToken,
+} from './tokenManager';
+
 export type SocialProvider = 'google' | 'apple' | 'kakao' | 'naver';
 
 export interface BootstrapResponse {
@@ -170,4 +178,105 @@ export async function postSocialLogin(
   } catch (error) {
     throw normalizeSocialError(error);
   }
+}
+
+/**
+ * 리프레시 토큰으로 토큰을 재발급받는 래퍼. refresh 토큰은 secure-store 에만 있으므로 거기서 읽어
+ * POST /api/v1/auth/token/refresh(security:[] — 무인증) 로 회전하고, 회전된 access/refresh 를 저장·
+ * 홀더 반영한 뒤 새 access 를 반환한다. authed 클라이언트가 401 single-flight 에서 인자 없이 호출한다.
+ * baseClient(무인증)로 보낸다 — authed 클라이언트로 보내면 401 인터셉터가 자기 자신을 재귀 호출한다.
+ */
+export async function refreshTokens(): Promise<string> {
+  const stored = await getTokens();
+  const response = await baseClient.post<TokenPair>(
+    '/api/v1/auth/token/refresh',
+    { refreshToken: stored?.refreshToken }
+  );
+  const { accessToken, refreshToken } = response.data;
+  await saveTokens({ accessToken, refreshToken });
+  setAccessToken(accessToken);
+  return accessToken;
+}
+
+/**
+ * 세션 만료(리프레시 실패) 처리 — 죽은 토큰을 홀더·저장소 양쪽에서 파기한다. 라우팅은 하지 않는다:
+ * 이 모듈은 router 를 몰라야(D3) authWiring 통합테스트가 node 에서 로드된다. 토큰을 지우면 다음
+ * 부트스트랩이 목적지를 LOGIN 으로 재판정하므로 로그인 복귀는 그 흐름이 담당한다.
+ */
+function onSessionExpired(): void {
+  clearAccessToken();
+  void clearTokens();
+}
+
+/**
+ * 인증 필요 API 전용 클라이언트 인스턴스. 요청 인터셉터가 홀더 토큰을 Bearer 로 싣고, 401 에는
+ * refreshTokens 를 single-flight 로 돌린 뒤 재시도한다(createAuthedApiClient 재사용 — 재구현 아님).
+ */
+const authedClient = createAuthedApiClient({
+  baseURL: API_BASE_URL,
+  getAccessToken,
+  refreshTokens,
+  onSessionExpired,
+});
+
+// ── TRIP-162 온보딩(약관·닉네임) API (openapi.yaml 계약 shape) ─────────────
+// 판정 권위는 서버에 있다 — 이 함수들은 서버 계약을 그대로 실어 나르는 얇은 래퍼다.
+
+export interface TermsVersion {
+  termsType: string;
+  version: string;
+  body: string;
+  effectiveAt: string;
+  reconsentRequired: boolean;
+}
+
+export type ConsentAction = 'GRANT' | 'REVOKE';
+
+/** BR-U0-12 — 증적에는 **서버가 준 약관 버전 그대로** 되돌린다. 채널은 서버가 기록한다. */
+export interface ConsentInput {
+  termsType: string;
+  termsVersion: string;
+  action: ConsentAction;
+}
+
+export type NicknameCheckReason = 'OK' | 'TAKEN' | 'BANNED_WORD';
+
+export interface NicknameCheckResult {
+  available: boolean;
+  reason: NicknameCheckReason;
+}
+
+export async function fetchTerms(): Promise<TermsVersion[]> {
+  const response = await baseClient.get<TermsVersion[]>('/api/v1/terms');
+  return response.data;
+}
+
+export async function submitConsents(consents: ConsentInput[]): Promise<void> {
+  await authedClient.post('/api/v1/me/consents', { consents });
+}
+
+export async function fetchNicknameSuggestions(): Promise<string[]> {
+  const response = await authedClient.post<{ suggestions: string[] }>(
+    '/api/v1/nickname/suggestions'
+  );
+  return response.data.suggestions;
+}
+
+/** 중복·금칙어 판정은 서버 권한이다 — 클라는 이 결과를 받아 표시만 한다(루트 CLAUDE.md). */
+export async function checkNickname(
+  nickname: string
+): Promise<NicknameCheckResult> {
+  const response = await authedClient.post<NicknameCheckResult>(
+    '/api/v1/nickname/check',
+    { nickname }
+  );
+  return response.data;
+}
+
+export async function updateNickname(nickname: string): Promise<void> {
+  await authedClient.patch('/api/v1/me/profile/nickname', { nickname });
+}
+
+export async function completeOnboarding(): Promise<void> {
+  await authedClient.post('/api/v1/onboarding/complete');
 }
