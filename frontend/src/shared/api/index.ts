@@ -171,3 +171,65 @@ export async function postSocialLogin(
     throw normalizeSocialError(error);
   }
 }
+
+// ── TRIP-162 온보딩(약관·닉네임) API (openapi.yaml 계약 shape) ─────────────
+// 판정 권위는 서버에 있다 — 이 함수들은 서버 계약을 그대로 실어 나르는 얇은 래퍼다.
+
+export interface TermsVersion {
+  termsType: string;
+  version: string;
+  body: string;
+  effectiveAt: string;
+  reconsentRequired: boolean;
+}
+
+export type ConsentAction = 'GRANT' | 'REVOKE';
+
+/** BR-U0-12 — 증적에는 **서버가 준 약관 버전 그대로** 되돌린다. 채널은 서버가 기록한다. */
+export interface ConsentInput {
+  termsType: string;
+  termsVersion: string;
+  action: ConsentAction;
+}
+
+export type NicknameCheckReason = 'OK' | 'TAKEN' | 'BANNED_WORD';
+
+export interface NicknameCheckResult {
+  available: boolean;
+  reason: NicknameCheckReason;
+}
+
+export async function fetchTerms(): Promise<TermsVersion[]> {
+  const response = await baseClient.get<TermsVersion[]>('/api/v1/terms');
+  return response.data;
+}
+
+export async function submitConsents(consents: ConsentInput[]): Promise<void> {
+  await baseClient.post('/api/v1/me/consents', { consents });
+}
+
+export async function fetchNicknameSuggestions(): Promise<string[]> {
+  const response = await baseClient.post<{ suggestions: string[] }>(
+    '/api/v1/nickname/suggestions'
+  );
+  return response.data.suggestions;
+}
+
+/** 중복·금칙어 판정은 서버 권한이다 — 클라는 이 결과를 받아 표시만 한다(루트 CLAUDE.md). */
+export async function checkNickname(
+  nickname: string
+): Promise<NicknameCheckResult> {
+  const response = await baseClient.post<NicknameCheckResult>(
+    '/api/v1/nickname/check',
+    { nickname }
+  );
+  return response.data;
+}
+
+export async function updateNickname(nickname: string): Promise<void> {
+  await baseClient.patch('/api/v1/me/profile/nickname', { nickname });
+}
+
+export async function completeOnboarding(): Promise<void> {
+  await baseClient.post('/api/v1/onboarding/complete');
+}
