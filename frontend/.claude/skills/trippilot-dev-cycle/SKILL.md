@@ -91,6 +91,8 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 `Agent(spec-analyst, model: "opus")` 호출, 대상 작업 설명 + 작업 공간 **절대 경로** 전달.
 산출: `01_spec-analyst_brief.md`. 열린 질문이 있으면 다음 단계 전에 사용자에게 제시한다.
 
+**화면·컴포넌트 비주얼이 이번 범위에 있으면 프롬프트에 `figma-screen-impl` 스킬 사용을 명시 지시한다** — 1~2단계(추출·토큰 스냅)로 화면 요구·토큰·에셋 목록이 브리프에 들어온다. 이 분기 판단은 오케 몫이다(에이전트 정의에도 규칙이 있지만, **태울지 말지를 정하는 건 여기다**). Figma 접근 실패는 폴백이 없다 — 리포에 화면 사본이 없으므로 열린 질문으로 올라온다.
+
 ### 2. [메모리] — 오케스트레이터 직접
 `obsidian-second-brain` 조회 규칙대로. **최근 N건을 훑는 게 아니라 그래프를 탄다**:
 1. **`<리포 루트>/frontend/docs/structure.md`** — 파일별 역할·무엇이 빈 스텁인지·"지금 작업하려면" 경고. 코드를 뒤지기 전에 이 지도를 먼저 본다. **리포 추적 파일이라 옵시디언 조회가 아니라 Read다.** (볼트 `구조/`는 2026-07-21 폐지 — 과거 4건은 이력으로만 남는다.)
@@ -137,6 +139,8 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 
 #### 5-a. 구현
 `Agent(implementer, model: "sonnet")`. 승인된 테스트를 green으로. 산출: `03_implementer_notes.md`.
+
+**화면 비주얼 구현이면 프롬프트에 `figma-screen-impl` 스킬을 명시 지시한다** — 3~5단계(에셋·RN 번역·스크린샷 대조). **testID 보존이 게이트① 테스트를 green으로 유지하는 계약**이라, 이 지시를 빠뜨리면 프레젠테이션만 바꾸려다 승인된 테스트를 깨뜨린다(= 게이트① 재제시).
 
 #### 5-b. 적대적 리뷰 (2026-07-21 신설)
 `Agent(code-critic, model: "opus")`. 산출: `03b_code-critic_findings.md`.
