@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +8,9 @@ import {
   type SocialLoginScreenProps,
 } from '@/features/auth/screens/SocialLoginScreen';
 import { SplashScreen } from '@/features/auth/screens/SplashScreen';
+import { NicknameScreen } from '@/features/onboarding/screens/NicknameScreen';
+import { TermsScreen } from '@/features/onboarding/screens/TermsScreen';
+import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 
 /**
  * dev 전용 정적 프리뷰 — 눈으로 확인해야 하는 7개 시각 상태를 한 화면에서 전환해 본다.
@@ -43,7 +47,34 @@ interface PreviewState {
   label: string;
   // null 이면 로그인 화면이 아니라 스플래시를 그린다.
   login: LoginState | null;
+  // 로그인/스플래시가 아닌 화면(온보딩 등)은 여기서 직접 그린다.
+  render?: () => ReactElement;
 }
+
+// 온보딩 약관 3행 — 필수 2종(D1) + 마케팅 선택. 버전은 서버가 주는 값을 흉내낸 대표값.
+const TERMS_ITEMS = [
+  {
+    termsType: 'TERMS_OF_SERVICE',
+    version: '1.4',
+    label: '서비스 이용약관',
+    required: true,
+    checked: false,
+  },
+  {
+    termsType: 'PRIVACY_POLICY',
+    version: '2.1',
+    label: '개인정보 처리방침',
+    required: true,
+    checked: false,
+  },
+  {
+    termsType: 'MARKETING',
+    version: '1.2',
+    label: '마케팅 정보 수신',
+    required: false,
+    checked: false,
+  },
+];
 
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
@@ -85,10 +116,116 @@ const PREVIEW_STATES: PreviewState[] = [
     label: '연령 미달 안내',
     login: { phase: 'error', errorCode: 'AGE_NOT_MET', conflictProvider: null },
   },
+  // ── 온보딩 (TRIP-162) — 순수 프레젠테이션 화면을 값으로 그린다 ──
+  {
+    key: 'onboarding-terms-default',
+    label: '약관 · 기본',
+    login: null,
+    render: () => (
+      <TermsScreen
+        items={TERMS_ITEMS}
+        allChecked={false}
+        canProceed={false}
+        missingRequiredLabels={['서비스 이용약관', '개인정보 처리방침']}
+        errorMessage={null}
+        onToggle={noop}
+        onToggleAll={noop}
+        onNext={noop}
+        onRetry={noop}
+      />
+    ),
+  },
+  {
+    key: 'onboarding-terms-agreed',
+    label: '약관 · 동의완료',
+    login: null,
+    render: () => (
+      <TermsScreen
+        items={TERMS_ITEMS.map((item) => ({ ...item, checked: true }))}
+        allChecked
+        canProceed
+        missingRequiredLabels={[]}
+        errorMessage={null}
+        onToggle={noop}
+        onToggleAll={noop}
+        onNext={noop}
+        onRetry={noop}
+      />
+    ),
+  },
+  {
+    key: 'onboarding-nickname-default',
+    label: '닉네임 · 기본',
+    login: null,
+    render: () => (
+      <NicknameScreen
+        value="여행하는너구리"
+        canProceed
+        errorReason={null}
+        suggestions={[]}
+        onChange={noop}
+        onRegenerate={noop}
+        onSelectSuggestion={noop}
+        onNext={noop}
+      />
+    ),
+  },
+  {
+    key: 'onboarding-nickname-taken',
+    label: '닉네임 · 중복오류',
+    login: null,
+    render: () => (
+      <NicknameScreen
+        value="길동"
+        canProceed={false}
+        errorReason="TAKEN"
+        suggestions={['길동123', '여행하는길동', '길동_2']}
+        onChange={noop}
+        onRegenerate={noop}
+        onSelectSuggestion={noop}
+        onNext={noop}
+      />
+    ),
+  },
+  {
+    key: 'onboarding-location-default',
+    label: '위치 · 프리프롬프트',
+    login: null,
+    render: () => (
+      <LocationPreprompt
+        purposeContext="내 주변 숙소 탐색"
+        state="default"
+        onProceed={noop}
+        onDefer={noop}
+        onOpenSettings={noop}
+      />
+    ),
+  },
+  {
+    key: 'onboarding-location-denied',
+    label: '위치 · 거부',
+    login: null,
+    render: () => (
+      <LocationPreprompt
+        purposeContext="내 주변 숙소 탐색"
+        state="permission-denied"
+        onProceed={noop}
+        onDefer={noop}
+        onOpenSettings={noop}
+      />
+    ),
+  },
 ];
 
+// 탭 자동화가 불가한 환경에서 특정 상태를 스크린샷하려면 이 값을 바꿔 저장한 뒤
+// 딥링크로 프리뷰를 다시 열어 리마운트한다(초기 상태로 이 키가 뜬다). 평소값은 'splash'.
+const INITIAL_STATE_KEY = 'splash';
+
 export default function DevPreviewScreen() {
-  const [activeKey, setActiveKey] = useState(PREVIEW_STATES[0].key);
+  const initialKey =
+    PREVIEW_STATES.find((state) => state.key === INITIAL_STATE_KEY)?.key ??
+    PREVIEW_STATES[0].key;
+  const [activeKey, setActiveKey] = useState(initialKey);
   const active =
     PREVIEW_STATES.find((state) => state.key === activeKey) ??
     PREVIEW_STATES[0];
@@ -131,7 +268,9 @@ export default function DevPreviewScreen() {
       </SafeAreaView>
 
       <View className="flex-1">
-        {active.login ? (
+        {active.render ? (
+          active.render()
+        ) : active.login ? (
           <SocialLoginScreen {...active.login} {...VIEW_ONLY_HANDLERS} />
         ) : (
           <SplashScreen />
