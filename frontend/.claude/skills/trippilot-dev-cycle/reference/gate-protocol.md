@@ -55,11 +55,14 @@
 - **환경 지문**(게이트①만) — 제시 시점에 존재한 검증 설정의 목록. verify-gates §0 사전 점검을 돌면서 확인한 것을 그대로 적는다:
 
   ```bash
-  ls package.json jest.config.js jest.integration.config.js eslint.config.js tsconfig.json 2>/dev/null
+  ls package.json jest.config.js jest.integration.config.js eslint.config.js tsconfig.json \
+     .prettierrc .prettierignore 2>/dev/null
   node -v; pnpm -v
   ```
 
   **이 필드가 없으면 "도구를 부숴 FAIL을 판정 불능으로 세탁하는 경로"가 열린다** — qa-verifier가 검증 시점에 이 목록과 대조해, 게이트① 때 있던 설정이 사라졌으면 실행 불가가 아니라 **FAIL + 변조 에스컬레이션**으로 판정한다(verify-gates "0. 사전 점검").
+
+  **prettier 설정 2개가 목록에 있는 이유**(2026-07-21 추가): verify-gates §0이 prettier 설정을 실행 전제로 요구하는데 지문에는 빠져 있어, 게이트① 이후 지워도 대조에 안 걸리는 구멍이 있었다. 특히 `.prettierignore` 소실은 `pnpm format`이 `.claude/`·정본 md까지 재포맷해 **승인 해시를 무더기로 흔든다**.
 
 ### 해시 규약
 
