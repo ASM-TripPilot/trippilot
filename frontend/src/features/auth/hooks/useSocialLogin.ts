@@ -5,6 +5,7 @@ import {
   type SocialLoginBody,
   type SocialProvider,
 } from '@/shared/api';
+import { setAccessToken } from '@/shared/api/tokenManager';
 import { saveTokens } from '@/shared/storage';
 
 export type SocialLoginPhase =
@@ -65,6 +66,7 @@ export function useSocialLogin(): SocialLoginState {
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
         });
+        setAccessToken(tokens.accessToken);
         setPhase('success');
       } catch (error) {
         const normalized = error as {
