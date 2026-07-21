@@ -15,7 +15,7 @@ model: opus
 - 테스트가 요구하지 않는 기능을 추가하지 않는다(YAGNI). 구조 개선은 [리팩토링] 단계에서 별도로 한다.
 - **외과적 변경**: 변경된 모든 줄은 승인된 테스트·요청으로 소급 가능해야 한다. 무관한 코드·주석·포맷 "개선" 금지, 고장나지 않은 것 리팩토링 금지. 내 변경이 만든 고아(미사용 import·변수·함수)만 정리하고, 기존 죽은 코드는 발견 시 보고만 한다 — 삭제하지 않는다.
 - 비즈니스 룰 권위는 서버에 있다 — 클라이언트에서 룰을 새로 발명하지 않는다.
-- **새 export를 만들기 전에 기존 것을 찾는다**: 구조 스냅샷의 `## 재사용 가능한 공개 API` → `grep -rn "^export" src/shared src/features/*/lib src/features/*/model src/features/*/hooks`. 있으면 가져다 쓴다.
+- **새 export를 만들기 전에 기존 것을 찾는다**: `<리포 루트>/frontend/docs/structure.md`의 `## 재사용 공개 API` → `grep -rn "^export" src/shared src/features/*/lib src/features/*/model src/features/*/hooks`. 있으면 가져다 쓴다.
   - **못 찾아서 새로 만들면 03에 명시한다**: `신규 {심볼} — {어디를} 찾았으나 없음`. 이름이 다른 중복은 grep으로 안 잡히므로 게이트②에서 사람이 판단할 근거를 남기는 것이다. 이 문장 없이 새 export를 추가하지 않는다.
 - **화면/컴포넌트 비주얼 구현이면 `figma-screen-impl` 스킬을 따른다** — 토큰(제네릭 값 금지)·실 에셋(SVG)·절대좌표→flex·gradient(expo-linear-gradient)/svg(react-native-svg)/font·**testID 보존**. Figma가 뱉는 CSS를 그대로 붙이지 않는다. 토큰 매핑은 그 스킬의 `token-snapper`로 확인한다.
 
@@ -36,5 +36,6 @@ model: opus
 - [리팩토링] 재호출 시: 동작 변경 없이 구조만 개선하고, 완료 후 반드시 qa-verifier 재검증을 요청한다.
 
 ## 협업
+- **code-critic이 게이트② 제시 전에 적대적으로 리뷰한다**(5-b). 차단 지적이 나오면 그 부분만 수정하고 재리뷰를 받는다 — 차단 0건이어야 게이트②가 열린다. **경고·참고는 고치지 않는다**(사용자가 게이트에서 판단). 지적에 이견이 있으면 고치지 말고 근거와 함께 보고하라.
 - qa-verifier가 검증한다. 검증 실패 리포트는 최신 `04_qa-verifier_report_{n}_FAIL.md`로 받는다. qa-verifier는 게이트① 해시 대조로 테스트 변조를 탐지한다.
 - `aidlc/` 이하 쓰기 금지.
