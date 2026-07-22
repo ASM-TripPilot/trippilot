@@ -49,4 +49,13 @@ module.exports = defineConfig([
       'import/no-named-as-default-member': 'off',
     },
   },
+  {
+    // .cjs 는 node CommonJS 런타임으로 실행되는 스크립트다(하네스 스크립트 포함).
+    // 기본 설정에 __dirname/__filename 전역이 빠져 있어 no-undef 오탐이 난다.
+    files: ['**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { __dirname: 'readonly', __filename: 'readonly' },
+    },
+  },
 ]);
