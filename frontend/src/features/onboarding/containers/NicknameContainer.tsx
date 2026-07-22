@@ -21,12 +21,13 @@ export function NicknameContainer(): ReactElement {
     submit,
   } = useNickname();
 
-  // 저장·완료가 모두 성공하면 게이트('/')로 복귀한다(D3). 실패면 오류만 남고 머문다(INV-4).
+  // 저장·완료가 모두 성공하면 취향 1/2로 넘어간다(TRIP-163 인터뷰1 — '/'였던 목적지를
+  // 취향 온보딩으로 교체). 실패면 오류만 남고 머문다(INV-4).
   const handleNext = () => {
     void (async () => {
       const done = await submit();
       if (done) {
-        router.replace('/');
+        router.replace('/(onboarding)/pref1');
       }
     })();
   };

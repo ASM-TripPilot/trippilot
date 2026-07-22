@@ -126,12 +126,14 @@ describe('NicknameContainer — 수정 없이 통과 (AC B2 · B8)', () => {
     expect(completeIndex).toBeGreaterThan(patchIndex);
   });
 
-  it('완료되면 게이트("/")로 복귀해 부트스트랩이 다음 목적지를 재판정한다', async () => {
+  it('완료되면 취향 1/2로 이동한다(서버는 이미 완료 상태)', async () => {
     await renderPrefilled();
 
     fireEvent.press(screen.getByTestId('onboarding-nickname-next'));
 
-    await waitFor(() => expect(routerMock.replace).toHaveBeenCalledWith('/'));
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith('/(onboarding)/pref1')
+    );
   });
 });
 
@@ -201,6 +203,6 @@ describe('NicknameContainer — 저장 실패 (AC B9 · INV-4)', () => {
     );
     // 저장이 안 됐는데 온보딩을 완료로 찍으면 닉네임 없는 계정이 홈으로 나간다.
     expect(requestLog).not.toContain('POST /api/v1/onboarding/complete');
-    expect(routerMock.replace).not.toHaveBeenCalledWith('/');
+    expect(routerMock.replace).not.toHaveBeenCalled();
   });
 });
