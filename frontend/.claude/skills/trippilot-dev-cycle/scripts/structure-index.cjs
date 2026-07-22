@@ -6,10 +6,10 @@
  * 이틀 만에 델타 메모로 퇴화). 기계가 만들 수 있는 것(파일 목록·export 심볼)은
  * 기계가 만들고, 사람/AI는 기계가 못 주는 것(용도 한 줄·스텁 여부·경고)만 쓴다.
  *
- * 사용 (cwd = frontend/):
- *   node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs
+ * 사용 (cwd 무관 — 어디서 실행해도 된다):
+ *   node <리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs
  *       → 현재 소스 인벤토리 출력 (문서에 옮겨 적을 재료)
- *   node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --check
+ *   node <같은 경로> --check
  *       → docs/structure.md ↔ 실제 파일 대조. 어긋나면 exit 1
  *
  * 대조가 잡는 것:
@@ -20,7 +20,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = process.cwd();
+// 스크립트 위치에서 역산한다 — cwd에 기대면 안 된다.
+// 서브 에이전트의 cwd는 호출마다 다르고(frontend/ · frontend/.claude/ 실측),
+// cwd가 어긋나면 "docs/structure.md 이(가) 없다"는 **틀린 진단**이 나온다.
+// scripts → trippilot-dev-cycle → skills → .claude → frontend
+const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const DOC = path.join(ROOT, 'docs', 'structure.md');
 const SCAN_DIRS = ['src', '__mocks__'];
 
