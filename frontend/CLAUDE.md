@@ -12,4 +12,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working in `fro
 
 **장치 판정 규칙(졸업 조건):** 하네스에 검사·장치를 **추가할 때는 유지 판정 조건을 함께 적는다** — 무엇을 몇 사이클 세고, 어떤 결과면 떼어내거나 조건부로 격하하는지. 조건 없이 추가한 장치는 단조증가하고, 아무도 그 효용을 세지 않는다. 실제로 해시 대조와 red 소급이 **12사이클 0건**인 것을 세고 있던 사람이 없었다. 판정에 쓸 실적은 scribe가 개발로그에 남긴다.
 
+**모델 배치:** 자리별 모델의 정본은 **각 에이전트 frontmatter**다(`frontend/.claude/agents/*.md`). 사이클 SKILL은 예외 한 자리(4-b)만 명시하고 나머지는 frontmatter에 맡긴다 — 배치를 두 군데 적으면 갈라진다. ⚠️ **메타 스킬 `harness:harness`의 "모든 에이전트는 `model: "opus"`" 지침보다 현재 frontmatter가 우선한다.** 하네스 정비 중 그 스킬이 로드돼도 일괄 opus로 되돌리지 마라 — 현 배치는 12사이클 실측(자리별 실패 가시성·되돌리기 비용·호출 빈도) 위에 있고, 근거·원칙·관찰 상태는 변경이력에 있다.
+
 **변경 이력:** 원장은 옵시디언 `TripPilot/하네스 변경이력.md`다 — 하네스(에이전트·스킬·settings·이 파일)를 변경하면 반드시 그 표에 행을 추가하라(append-only, 날짜·변경 내용·대상·사유). 리포 쪽 diff는 git 히스토리(`frontend/.claude/`)로 추적한다.

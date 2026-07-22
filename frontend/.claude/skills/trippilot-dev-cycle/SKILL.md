@@ -9,26 +9,6 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 
 **실행 모드: 하이브리드** — 오케스트레이터(메인 세션)가 사용자 게이트와 MCP 호출(Ouroboros/Obsidian/Figma)을 직접 관리하고, 단계별 전문 작업은 서브 에이전트(`Agent` 도구)에 위임한다. 사용자 검토 게이트가 2개 있어 실시간 팀 통신보다 순차 파이프라인이 적합하다.
 
-## 자리별 모델 배치 (2026-07-21)
-
-| 자리 | 모델 | 왜 |
-|---|---|---|
-| **오케스트레이터** | `fable` (`/model`) | **상류다** — 서브 프롬프트를 오케가 쓴다. 최고 판단(맹점 훑기·이해 체크 출제)이 여기 있다 |
-| **test-designer 4-a 설계** | `fable` | 인터페이스·단언·장치를 정하고 게이트①로 **동결**될 판단 전부 — 되돌리기 비용 최고, 검사는 학습자 게이트뿐 |
-| test-designer 4-b 작성 | `sonnet` | 4-a 명세를 코드·주해로 표현 — 명세가 단언 수준이라 판단 잔량이 적고, red 재확인(오케)+red 소급(qa)이 삼중 검사다 |
-| spec-analyst · code-critic | `opus` | 요구 누락은 조용히 전파된다 / 적대적 리뷰는 순수 추론이다 |
-| implementer · qa-verifier · scribe | `sonnet` | 실패가 시끄럽거나(삼중 검사 위) 절차 준수가 대부분이다 |
-
-원칙: **올리는 건 되돌리기 비싼 자리부터, 내리는 건 실패가 시끄러운 자리부터.**
-
-**호출 시 `model` 파라미터를 반드시 명시한다** — 명시 파라미터가 에이전트 frontmatter보다 우선이므로, 둘이 어긋나면 파라미터가 이긴다.
-
-> ⚠️ **메타 스킬 `harness:harness`의 "모든 에이전트는 `model: "opus"`" 지침보다 이 표가 우선한다.** 그 스킬이 로드돼도 일괄 opus로 되돌리지 마라 — 이 배치는 12사이클 실측(자리별 실패 가시성·되돌리기 비용·호출 빈도) 위에 있다.
->
-> **3사이클 관찰 대상이다.** scribe가 개발로그에 이 사이클의 모델 배치를 한 줄 남기고, 지표(맹점 훑기 적중 / 04 로그 원문 유무·미신고 변경 탐지 / 전줄 주해 품질·수정 루프 횟수)를 보고 되돌릴지 판정한다.
->
-> **test-designer 자리는 관찰을 조기 종결하고 4-a/4-b로 분할했다(2026-07-22, 사용자 결정 — 비용).** 1사이클 실측(163k, 반려 0)에 기반하며, 트립와이어(게이트① 반려 1회 → 통합 복귀)가 품질 안전망이다. 나머지 자리의 관찰은 계속된다.
-
 ## 참조 파일 — 해당 시점에 반드시 읽는다
 
 | 파일 | 읽는 시점 |
@@ -40,6 +20,8 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 요약으로 대신하지 마라. 게이트 제시와 재개 판별은 형식이 곧 규칙이라, 원문을 읽지 않으면 원장이 오염된다.
 
 ## 서브 에이전트 호출 공통 (1단계부터 적용)
+
+**자리별 모델은 각 에이전트 frontmatter가 정본이다** — 호출에 `model`을 쓰지 않으면 그 값이 적용된다. 명시하는 유일한 자리는 **4-b(`sonnet`)**로, test-designer frontmatter가 `fable`(=4-a)이라 덮어써야 하기 때문이다. 배치 근거·원칙·관찰 상태는 옵시디언 `TripPilot/하네스 변경이력.md`에 있다.
 
 **모든 서브 에이전트(spec-analyst·test-designer·implementer·code-critic·scribe) 프롬프트에 "학습자 톤" 지시를 명시 주입한다.** 이 사용자는 코드 초심자다:
 
@@ -68,7 +50,7 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 - [ ] 1. [인지] spec-analyst → 01_brief
 - [ ] 2. [메모리] 옵시디언·devlog 조회 + 미상환 이해부채 재노출
 - [ ] 3. [설계] 🧑 맹점 훑기 제시 → Ouroboros 인터뷰 → 01b_seed (폴백 포함 항상 생성)
-- [ ] 4. [테스트] 4-a 설계(fable)→02a · 4-b 작성(sonnet)→02+red → 🧑 게이트① 승인·원장 기록
+- [ ] 4. [테스트] 4-a 설계→02a · 4-b 작성(sonnet)→02+red → 🧑 게이트① 승인·원장 기록
 - [ ] 5. [구현] implementer → 03 → code-critic → 03b(차단 0건) → 🧑 게이트② 승인·원장 기록
 - [ ] 6. [검증] 6-a qa-verifier → 04_report_{n} · 6-b 실기 스모크(조건부) → 04b_smoke_{n}
 - [ ] 7. [리팩토링] (선택) → re-green + 게이트② 재제시 판정
@@ -93,7 +75,7 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 ## 사이클 단계
 
 ### 1. [인지] — spec-analyst (서브)
-`Agent(spec-analyst, model: "opus")` 호출, 대상 작업 설명 + 작업 공간 **절대 경로** 전달.
+`Agent(spec-analyst)` 호출, 대상 작업 설명 + 작업 공간 **절대 경로** 전달.
 산출: `01_spec-analyst_brief.md`. 열린 질문이 있으면 다음 단계 전에 사용자에게 제시한다.
 
 **화면·컴포넌트 비주얼이 이번 범위에 있으면 프롬프트에 `figma-screen-impl` 스킬 사용을 명시 지시한다** — 1~2단계(추출·토큰 스냅)로 화면 요구·토큰·에셋 목록이 브리프에 들어온다. 이 분기 판단은 오케 몫이다(에이전트 정의에도 규칙이 있지만, **태울지 말지를 정하는 건 여기다**). Figma 접근 실패는 폴백이 없다 — 리포에 화면 사본이 없으므로 열린 질문으로 올라온다.
@@ -140,11 +122,11 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 **분할 근거**: 사이클 실측(trip162-screens)에서 test-designer 집필의 절반이 전줄 주해였고, 코드 수준 판단은 명세로 옮길 수 있었다. 분할선은 에이전트가 아니라 **산출물 경계**를 지난다(2026-07-21 "모델 분할 기각"의 기각 사유가 가리킨 방향).
 
 #### 4-a. 테스트 설계
-`Agent(test-designer, model: "fable")`, 입력: 01 + 01b (절대 경로). **코드 작성 금지 — 명세만.**
+`Agent(test-designer)`, 입력: 01 + 01b (절대 경로). **코드 작성 금지 — 명세만.**
 산출: `02a_test-design_spec.md` — 파일 목록 · 케이스별 AAA 뼈대 · **단언 목록**(무엇을 어떤 매처로) · 신규 testID/prop 계약 · red/선제 green 판정+사유 · **★장치·함정 목록(강제 항목)** — 확장 타입 재대입·목 호이스팅 규칙·press 버블링·queryBy+루트존재 짝처럼 코드 수준에서 갈리는 판단 전부를 여기 박는다. ★가 비면 4-b가 판단을 떠안게 되므로 반려 사유다.
 
 #### 4-b. 테스트 작성
-`Agent(test-designer, model: "sonnet")`, 입력: 01 + 01b + **02a** (절대 경로).
+`Agent(test-designer, model: "sonnet")`, 입력: 01 + 01b + **02a** (절대 경로). ← frontmatter(`fable`)를 덮어쓰는 유일한 자리다.
 산출: 실패 테스트(02a 명세의 번역 — 임의 판단 금지, 명세 공백 발견 시 임의로 메우지 말고 반환에 명시) + red 실행 확인 + `02_test-designer_map.md`(매핑 표 + 전줄 주해 — 02a의 "왜"가 주해 입력이다).
 
 #### 게이트① 제시
@@ -156,12 +138,12 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 ### 5. [구현] — implementer → code-critic → 🧑 게이트 ②
 
 #### 5-a. 구현
-`Agent(implementer, model: "sonnet")`. 승인된 테스트를 green으로. 산출: `03_implementer_notes.md`.
+`Agent(implementer)`. 승인된 테스트를 green으로. 산출: `03_implementer_notes.md`.
 
 **화면 비주얼 구현이면 프롬프트에 `figma-screen-impl` 스킬을 명시 지시한다** — 3~5단계(에셋·RN 번역·스크린샷 대조). **testID 보존이 게이트① 테스트를 green으로 유지하는 계약**이라, 이 지시를 빠뜨리면 프레젠테이션만 바꾸려다 승인된 테스트를 깨뜨린다(= 게이트① 재제시).
 
 #### 5-b. 적대적 리뷰 (2026-07-21 신설)
-`Agent(code-critic, model: "opus")`. 산출: `03b_code-critic_findings.md`.
+`Agent(code-critic)`. 산출: `03b_code-critic_findings.md`.
 
 **게이트② 제시 전인 것이 요점이다** — 해시 동결 전이라 리뷰 지적으로 코드를 고쳐도 재제시를 유발하지 않는다. [검증]에 두면 리뷰가 붙는 순간 `PASS(재제시 필요)`가 상시화된다.
 
@@ -176,7 +158,7 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 ### 6. [검증] — qa-verifier (서브) → 실기 스모크 (오케, 조건부)
 
 #### 6-a. jest 층
-`Agent(qa-verifier, model: "sonnet")`, 입력: 변경 파일 목록 + 00_gates.md **절대 경로**.
+`Agent(qa-verifier)`, 입력: 변경 파일 목록 + 00_gates.md **절대 경로**.
 산출: `04_qa-verifier_report_{n}_{PASS|FAIL}.md` — n은 사이클 내 검증 차수(채번 = 기존 최대 n+1), **덮어쓰기·삭제 금지**. 판정·차수·시각을 00_gates.md에도 append한다(카운터의 정본은 원장).
 FAIL·실행 불가·PASS(해시 불일치)의 분기 처리는 reference/troubleshooting.md "검증 단계의 분기"를 따른다.
 
@@ -191,7 +173,7 @@ FAIL·실행 불가·PASS(해시 불일치)의 분기 처리는 reference/troubl
 동작 변경 없는 구조 개선. **완료 후 qa-verifier 재실행 필수(re-green) + 게이트② 재제시 규칙 적용.** 개선 여지가 없으면 건너뛴다.
 
 ### 8. [기록] — scribe (서브)
-`Agent(scribe, model: "sonnet")`, 입력: `_workspace/{cycle-id}/` 절대 경로 + 문제/에러 발생 내역 + **게이트에서 수집한 이해부채 목록(상환된 항목 포함)** + **게이트 노트 경로·차수 목록**(개발로그가 링크 허브가 되기 위한 입력). 최신 04 리포트는 경로로 전달하지 않는다 — scribe가 `04_qa-verifier_report_*`를 직접 나열해 최대 n을 스스로 확정한다(선별 전달 오염 방지).
+`Agent(scribe)`, 입력: `_workspace/{cycle-id}/` 절대 경로 + 문제/에러 발생 내역 + **게이트에서 수집한 이해부채 목록(상환된 항목 포함)** + **게이트 노트 경로·차수 목록**(개발로그가 링크 허브가 되기 위한 입력). 최신 04 리포트는 경로로 전달하지 않는다 — scribe가 `04_qa-verifier_report_*`를 직접 나열해 최대 n을 스스로 확정한다(선별 전달 오염 방지).
 게이트 통과 현황은 scribe가 **04 리포트의 표를 원문 복사**한다 — 오케스트레이터의 요약 재서술로 대체 금지(심판받는 루프의 자기서술이 기록을 오염시킨다). 이해부채는 `TripPilot/이해부채/`에 건별 기록하고, 상환된 항목은 status를 갱신한다.
 
 ### 9. 사이클 종료
