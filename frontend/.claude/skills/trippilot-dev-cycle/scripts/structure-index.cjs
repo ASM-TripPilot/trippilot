@@ -6,23 +6,40 @@
  * 이틀 만에 델타 메모로 퇴화). 기계가 만들 수 있는 것(파일 목록·export 심볼)은
  * 기계가 만들고, 사람/AI는 기계가 못 주는 것(용도 한 줄·스텁 여부·경고)만 쓴다.
  *
- * 사용 (cwd = frontend/):
- *   node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs
+ * 사용 (cwd 무관 — 어디서 실행해도 된다):
+ *   node <리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs
  *       → 현재 소스 인벤토리 출력 (문서에 옮겨 적을 재료)
- *   node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --check
+ *   node <같은 경로> --check
  *       → docs/structure.md ↔ 실제 파일 대조. 어긋나면 exit 1
  *
  * 대조가 잡는 것:
  *   - 파일은 있는데 문서에 행이 없다  → 새 파일 누락
- *   - 문서에 행은 있는데 파일이 없다  → 삭제·이동 미반영(스냅샷의 가장 흔한 실패)
+ *   - 문서에 행은 있는데 파일이 없다  → 삭제·이동 미반영(이 문서의 가장 흔한 실패)
+ *   - 개념 노트의 `설명하는코드`가 없는 파일을 가리킨다 → 볼트 쪽 같은 실패.
+ *     [메모리]의 코드→개념 조인이 여기 걸려 있어, 썩으면 조회가 조용히 빈손이 된다.
+ *     볼트가 없는 환경에서는 이 검사만 건너뛴다(TRIPPILOT_VAULT로 경로 지정 가능).
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
-const ROOT = process.cwd();
+// 스크립트 위치에서 역산한다 — cwd에 기대면 안 된다.
+// 서브 에이전트의 cwd는 호출마다 다르고(frontend/ · frontend/.claude/ 실측),
+// cwd가 어긋나면 "docs/structure.md 이(가) 없다"는 **틀린 진단**이 나온다.
+// scripts → trippilot-dev-cycle → skills → .claude → frontend
+const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const DOC = path.join(ROOT, 'docs', 'structure.md');
 const SCAN_DIRS = ['src', '__mocks__'];
+
+// 옵시디언 볼트 — 개념 노트의 `설명하는코드` 유령 검사용.
+// 없으면 그 검사만 건너뛴다(다른 기기·CI에서 실패시키지 않는다).
+const VAULT =
+  process.env.TRIPPILOT_VAULT ||
+  path.join(
+    os.homedir(),
+    'Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian/TripPilot'
+  );
 
 /** 문서에 행을 둘 대상인가 — 소스와 전역 가드는 싣고, 병렬 배치된 단위 테스트는 뺀다. */
 function isDocumented(rel) {
@@ -83,6 +100,29 @@ function documentedPaths() {
   return set;
 }
 
+/**
+ * 개념 노트의 `설명하는코드: ["src/a.ts", ...]`를 (경로 → 개념명[]) 으로 모은다.
+ * 볼트가 없으면 null — 호출부가 검사를 건너뛴다.
+ */
+function conceptCodePaths() {
+  const dir = path.join(VAULT, '개념');
+  if (!fs.existsSync(dir)) return null;
+  const map = new Map();
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith('.md')) continue;
+    const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(fs.readFileSync(path.join(dir, name), 'utf8'));
+    if (!fm) continue;
+    const decl = /^설명하는코드:\s*(.*)$/m.exec(fm[1]);
+    if (!decl) continue;
+    for (const m of decl[1].matchAll(/"([^"]+)"/g)) {
+      const p = m[1].trim();
+      if (!map.has(p)) map.set(p, []);
+      map.get(p).push(name.slice(0, -3));
+    }
+  }
+  return map;
+}
+
 function printInventory() {
   const files = actualFiles();
   let dir = null;
@@ -117,11 +157,28 @@ function check() {
     for (const f of ghost) console.log(`  - ${f}`);
   }
 
-  const total = missing.length + ghost.length;
+  // 개념 노트의 `설명하는코드` 유령 — 구조 지도와 같은 실패(삭제·이동 미반영)가
+  // 볼트 쪽에서 일어난 것이다. 여기가 썩으면 [메모리]의 코드→개념 조인이 빈손이 된다.
+  const concepts = conceptCodePaths();
+  let conceptGhost = [];
+  if (concepts === null) {
+    console.log(`\n(볼트 없음 — 개념 \`설명하는코드\` 검사 건너뜀: ${VAULT})`);
+  } else {
+    conceptGhost = [...concepts.entries()]
+      .filter(([p]) => !fs.existsSync(path.join(ROOT, p)))
+      .sort();
+    if (conceptGhost.length) {
+      console.log(`\n개념 유령 — \`설명하는코드\`가 없는 파일을 가리킨다 (${conceptGhost.length}):`);
+      for (const [p, names] of conceptGhost) console.log(`  - ${p}  ←  ${names.join(' · ')}`);
+    }
+  }
+
+  const total = missing.length + ghost.length + conceptGhost.length;
   console.log(
     total === 0
-      ? `\nOK — 문서 ${documented.size}행 ↔ 실제 ${actual.length}파일 일치`
-      : `\nFAIL — 불일치 ${total}건 (누락 ${missing.length} · 유령 ${ghost.length})`
+      ? `\nOK — 문서 ${documented.size}행 ↔ 실제 ${actual.length}파일 일치` +
+          (concepts ? ` · 개념 경로 ${concepts.size}개 전부 실존` : '')
+      : `\nFAIL — 불일치 ${total}건 (누락 ${missing.length} · 유령 ${ghost.length} · 개념 유령 ${conceptGhost.length})`
   );
   process.exit(total === 0 ? 0 : 1);
 }

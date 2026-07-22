@@ -9,6 +9,8 @@ import {
 } from '@/features/auth/screens/SocialLoginScreen';
 import { SplashScreen } from '@/features/auth/screens/SplashScreen';
 import { NicknameScreen } from '@/features/onboarding/screens/NicknameScreen';
+import { PrefStep1Screen } from '@/features/onboarding/screens/PrefStep1Screen';
+import { PrefStep2Screen } from '@/features/onboarding/screens/PrefStep2Screen';
 import { TermsScreen } from '@/features/onboarding/screens/TermsScreen';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 
@@ -219,6 +221,43 @@ const PREVIEW_STATES: PreviewState[] = [
         onRegenerate={noop}
         onSelectSuggestion={noop}
         onNext={noop}
+      />
+    ),
+  },
+  // 취향 1/2·2/2(TRIP-163) — 컨테이너 없이 화면 컴포넌트를 직접, 빈 선택 상태로 그린다
+  // (인터뷰5 — 가드 우회가 아니라 기존 9키와 같은 "정적 프레젠테이션" 패턴 그대로).
+  {
+    key: 'pref1',
+    label: '취향 1/2 · 기본',
+    login: null,
+    render: () => (
+      <PrefStep1Screen
+        selectedStyles={null}
+        selectedPace={null}
+        onToggleStyle={noop}
+        onTogglePace={noop}
+        onNext={noop}
+        onSkipAll={noop}
+      />
+    ),
+  },
+  {
+    key: 'pref2',
+    label: '취향 2/2 · 기본',
+    login: null,
+    render: () => (
+      <PrefStep2Screen
+        selectedBudget={null}
+        selectedCompanions={null}
+        selectedFoods={null}
+        selectedTransports={null}
+        onToggleBudget={noop}
+        onToggleCompanion={noop}
+        onToggleFood={noop}
+        onToggleTransport={noop}
+        onBack={noop}
+        onDone={noop}
+        onSkipAll={noop}
       />
     ),
   },
