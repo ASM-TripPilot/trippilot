@@ -21,7 +21,7 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 
 ## 서브 에이전트 호출 공통 (1단계부터 적용)
 
-**자리별 모델은 각 에이전트 frontmatter가 정본이다** — 호출에 `model`을 쓰지 않으면 그 값이 적용된다. 명시하는 유일한 자리는 **4-b(`sonnet`)**로, test-designer frontmatter가 `opus`(=4-a)라 덮어써야 하기 때문이다(2026-07-23: 메인 세션만 fable, 서브 에이전트에 fable 자리 없음 — 4-a fable→opus 교체). 배치 근거·원칙·관찰 상태는 옵시디언 `TripPilot/하네스 변경이력.md`에 있다.
+**호출에 `model`을 쓰지 마라 — 자리별 모델의 정본은 각 에이전트 frontmatter다.** 예외는 4-b 한 자리뿐이고, 그 값은 이 문서 안에서 **4-b 항목에만** 적혀 있다(여기에 옮겨 적지 마라 — 사본을 만들면 갈라진다).
 
 **모든 서브 에이전트(spec-analyst·test-designer·implementer·code-critic·scribe) 프롬프트에 "학습자 톤" 지시를 명시 주입한다.** 이 사용자는 코드 초심자다:
 
@@ -50,7 +50,7 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 - [ ] 1. [인지] spec-analyst → 01_brief
 - [ ] 2. [메모리] 옵시디언·devlog 조회 + 미상환 이해부채 재노출
 - [ ] 3. [설계] 🧑 맹점 훑기 제시 → Ouroboros 인터뷰 → 01b_seed (폴백 포함 항상 생성)
-- [ ] 4. [테스트] 4-a 설계(opus)→02a · 4-b 작성(sonnet)→02+red → 🧑 게이트① 승인·원장 기록
+- [ ] 4. [테스트] 4-a 설계→02a · 4-b 작성→02+red → 🧑 게이트① 승인·원장 기록
 - [ ] 5. [구현] implementer → 03 → code-critic → 03b(차단 0건) → 🧑 게이트② 승인·원장 기록
 - [ ] 6. [검증] 6-a qa-verifier → 04_report_{n} · 6-b 실기 스모크(조건부) → 04b_smoke_{n}
 - [ ] 7. [리팩토링] (선택) → re-green + 게이트② 재제시 판정
@@ -127,12 +127,12 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 **분할 근거**: test-designer 집필의 절반이 전줄 주해였고, 코드 수준 판단은 명세로 옮길 수 있었다. 분할선은 에이전트가 아니라 **산출물 경계**를 지난다. (트립와이어 1차 발동 이력: trip170 게이트① 재제시 — 원인은 분할 기제가 아니라 4-a 매처 의미 오기로 귀속, 사용자 결정으로 분할 유지 + 4-a 모델 교체(fable→opus) + 아래 매처 실검증 의무 신설. 상세는 하네스 변경이력.)
 
 #### 4-a. 테스트 설계
-`Agent(test-designer)`, 입력: 01 + 01b (절대 경로). **코드 작성 금지 — 명세만.** (모델은 frontmatter `opus`)
+`Agent(test-designer)`, 입력: 01 + 01b (절대 경로). **코드 작성 금지 — 명세만.** (`model` 미지정 = frontmatter 값)
 산출: `02a_test-design_spec.md` — 파일 목록 · 케이스별 AAA 뼈대 · **단언 목록**(무엇을 어떤 매처로) · 신규 testID/prop 계약 · red/선제 green 판정+사유 · **★장치·함정 목록(강제 항목)** — 확장 타입 재대입·목 호이스팅 규칙·press 버블링·queryBy+루트존재 짝처럼 코드 수준에서 갈리는 판단 전부를 여기 박는다. ★가 비면 4-b가 판단을 떠안게 되므로 반려 사유다.
 **매처 실검증 의무(trip170 교훈)**: 처음 쓰는 매처·쿼리의 의미(완전 일치/부분 포함/기본값)는 문서 기억으로 추정하지 말고 node_modules 구현 확인 또는 1회 실행으로 검증해 02a 단언 목록에 근거를 남긴다 — `toHaveTextContent(문자열)`=완전 일치 오기가 승인 테스트 3건을 구현 불가로 만들어 게이트① 재제시를 유발했다. *유지 판정: 6사이클 관찰 — 매처·쿼리 의미 오기로 인한 게이트① 재제시 0건 유지면 존치, 02a 분량 부담 지적 2회면 "신규 매처만"으로 축소.*
 
 #### 4-b. 테스트 작성
-`Agent(test-designer, model: "sonnet")`, 입력: 01 + 01b + **02a** (절대 경로). ← frontmatter(`opus`=4-a)를 덮어쓰는 유일한 자리다.
+`Agent(test-designer, model: "sonnet")`, 입력: 01 + 01b + **02a** (절대 경로). ← **하네스 전체에서 `model`을 명시하는 유일한 자리다.** `test-designer.md` 한 파일이 4-a·4-b 두 자리를 겸하는데 frontmatter는 자리를 하나만 표현할 수 있어서, 이 한 줄만 frontmatter로 환원되지 않는다. 다른 곳에 이 값을 복사하지 마라.
 산출: 실패 테스트(02a 명세의 번역 — 임의 판단 금지, 명세 공백 발견 시 임의로 메우지 말고 반환에 명시) + red 실행 확인 + `02_test-designer_map.md`(매핑 표 + 전줄 주해 — 02a의 "왜"가 주해 입력이다).
 
 #### 게이트① 제시
