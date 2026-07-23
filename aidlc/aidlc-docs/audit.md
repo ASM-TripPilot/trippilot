@@ -321,3 +321,114 @@
 **Context**: CONSTRUCTION Per-Unit Loop — U0 NFR Design 승인 완료 → Infrastructure Design 사용자 지시로 SKIP → **U0 설계 종료**. Code Generation은 SCOPE.md 범위 외(팀이 각 패키지에서 직접 개발). 다음 = 사용자 지시 대기(U1 설계 착수 또는 U0 개발 착수).
 
 ---
+## U0 구현 현황 점검 → U1 진입 지시
+**Timestamp**: 2026-07-22T07:34:55Z
+**User Input**: "지금 frontend backend 폴더 확인해보고 u0 잔행상황 파악해봐 다 되었다 판단되면 u1 설계 드자가" → (AskUserQuestion 선택) "지금 진입 (권장)"
+**AI Response**: (1) `backend/`·`frontend/` 실물을 U0 설계문서(BR-U0-01~30 · frontend-components.md)와 대조. **backend = U0 범위 사실상 완료** — auth(소셜4·AUTH_CODE/SDK_TOKEN·연령확인·리프레시 회전/재사용감지·로그아웃·동의 append-only·위치동의·삭제 30일 유예+철회) · profile(부트스트랩·온보딩완료·닉네임·취향 7축 NULL/중립기본값) · moderation · 횡단(ArchUnit·Konsist·CorrelationId·마스킹로깅·도메인이벤트·PBT), openapi 20경로 전부 컨트롤러 매핑 존재(Kotlin 170파일). 단 `./gradlew test`는 Docker/Testcontainers 필요로 **미실행 — 녹색 여부 미검증**. **frontend ≈ 85%** — 완료(스플래시/부트스트랩 분기·소셜로그인 실OAuth·약관·닉네임·취향2페이지·위치프리프롬프트·force-update·reconsent·5탭셸·tokenManager/secure-store, 46스위트 256테스트 통과) / 진행중(TRIP-170 홈+BottomTabBar 미커밋, HomeScreen.test.tsx **3 red** — `toHaveTextContent` 단정문 문제로 보이며 설계 결손 아님) / **미착수 4건**: `(auth)/deletion-pending` 복구화면(BR-U0-24) · 로그아웃 클라 흐름(BR-U0-09) · 마이탭 닉네임·취향 수정(BR-U0-18) · `age.tsx` 별도화면이 로그인화면 `onAgeConfirm`으로 흡수(설계 이탈). (2) 판정 = "다 되었다"는 아님, 다만 **U1 설계 문서는 U0 코드 완료를 전제하지 않음**(U0 설계는 2026-07-17 승인 종료, 잔여 4건은 백엔드 계약이 이미 있는 프론트 슬라이스라 U1 설계 입력 불변) — 3안 제시(지금 진입 / TRIP-170만 마감 후 / U0 잔여 전부 마감 후). (3) 사용자 선택 = **지금 진입**, U0 잔여는 프론트 티켓으로 병렬.
+**Context**: CONSTRUCTION Per-Unit Loop — U0 설계 종료 상태에서 **U1 Accommodation & Trip Setup 진입 지시 수신**. 다음 = U1 Functional Design (`.aidlc-rule-details/construction/functional-design.md`).
+
+---
+## U1 Functional Design — Plan Created (Questions Pending)
+**Timestamp**: 2026-07-22T07:34:55Z
+**AI Response**: `construction/plans/u1-accommodation-trip-functional-design-plan.md` 생성 — 실행 계획 8단계 + 질문 Q1~Q10. Step 1(유닛 컨텍스트 분석) 완료: unit-of-work.md(U1=C3 Accommodation Search·C4 Saved Accommodation·C5 Affiliate Link·C6 Trip Creation) · story-map 21스토리(US-SHELL-05 + US-STAY-01~11 + US-TRIP-01~09) · components.md C3~C6 · component-methods §4 facade 4종 · unit-of-work-dependency(U1은 U0에 동기 api 의존만, 순환 없음). **기존 자산 조사 결과**(U0 Q2와 동형의 기준선 문제): backend에 U1 관련 코드는 0(Flyway V1.0~V1.7 = auth/profile/moderation만, 컨트롤러도 U0 범위만)이나 **설계 문서는 선재** — `backend/docs/design/전체-최소-스키마.dbml`(poi·poi_snapshot·saved_place·saved_stay·ota_partner·outbound_click·trip·base_assignment·trip_base_day·must_visit) · `전체-API-서피스.md`(밴드 e·g·h) · `전체-도메인-ERD.md`. **번호 충돌 주의 기록**: backend 문서의 `U1-API-설계.md`·`U1-DB스키마-설계.md`는 제거된 planning/units.md 체계의 U1(기반·계정·온보딩)로 **AI-DLC U0에 해당** — AI-DLC U1(숙소·여행)과 다름. **선재 문서와 인셉션 스토리 간 상충 4건 식별**하여 질문화: 위시리스트(스토리 U1 포함 vs 서피스 "1차 제외") · 숙소 등록 경로(2경로 vs 3경로) · 다중거점 겹침 기본값(체크인 우선 vs 날짜별 primary) · 홈 집계 API 소유 유닛. 그 외 질문: 기준선 지위 · OTA 실연동 가능 여부(제휴 계약 상태) · POI 검색 소유 경계(U1 얇은 어댑터 vs C7 Place Data는 U3) · 지도 SDK 도입 시점 · 여행 상태머신/소프트삭제 범위 · 국내 한정 강제.
+**Context**: CONSTRUCTION Per-Unit Loop — U1 Functional Design Steps 1~4 완료. Step 5(답변 수집) 대기 중.
+
+---
+## U1 Functional Design — 라이브 Figma 밴드 d·e 대조 → 계획·질문 개정
+**Timestamp**: 2026-07-22T08:11:00Z
+**User Input**: "피그마 mcp 연결되어있지? 여기서 TripPilot 와이어프레임에서 d e 화면들 보고 다시 문서 대조해서 생각해봐 바뀐 부분들이 존재할거야"
+**AI Response**: Figma MCP로 라이브 정본(fileKey `1MTF3dtptIrbg8gld5IdO2`, 페이지 `1228:1045`) 밴드 d(탐색)·e(숙소) 전 프레임 관측 — d01·d02(default/empty)·d03·d04·d05·d1b · e00·e02(default+5상태)·e03(default/affiliate-sheet)·e04(default/empty)·e05(default/multi-candidate/conflict/error-mapapi). **드리프트 13건(D-1~D-13) 식별해 계획 파일에 표로 기록**: D-1 탐색 탭(밴드 d) 전체가 어느 유닛 스토리에도 미배정(U0은 빈 셸) · **D-2 위시리스트 부활 + 저장·등록 통합**(e04 "저장한 숙소 ♥로 담아둔 곳" 목록에 `거점` 배지 + "다른 숙소를 거점으로 지정" → API 서피스의 "위시리스트 1차 제외"와 정면 충돌) · **D-3 가격 표기**(목록·상세·지역카드 전부 구체 시작가 `₩145,000~ · 1박` vs 스토리의 "대표 가격대(정적 구간)"·캐싱 금지) · D-4 OTA 다중선택 시트·제휴 고지는 정합 ✅ · D-5 e01 결번·e00 신설·지역선택 화면 2벌(d1b vs e00) · D-6 등록 경로 신구 불일치(신=검색+핀, 구=3탭 지도/링크/핀) · **D-7 같은 화면코드에 신·구 두 벌**(default는 노드 169x·183x 재디자인, 상태 변형은 134x·135x 구 디자인 잔존) · D-8 여행 생성 주 진입이 "담은 곳 N곳 → 여행 만들기"로 역전 · **D-9 커뮤니티(여행자 일정)가 탐색 탭 1차에 노출**(밴드 k=M15=U7 후속 게이트인데 d01·d03·d05에 이미 존재) · D-10 지도 상시 전제(e03·e05, `error-mapapi` 폴백 존재) · D-11 e03 CTA "일정에 추가" 신설(거점 등록과 동일 여부 불명) · D-12 숙소 필터 축 축소(가격대·지역·필터 3개) · D-13 "날짜 미정" 탐색은 정합 ✅. **밴드 맵 자체는 라이브와 일치**(a~m, f 결번) — `figma-structure.md` 수정 불필요. 계획 파일 개정: 실행계획에 1b(Figma 대조) 추가·완료 표시, 질문을 **Q1~Q10 → Q1~Q14로 확대**(Q1에 "Figma 우선" 선택지 추가, Q2·Q5·Q6을 라이브 기준으로 재작성, **Q11 가격 표기 모델 · Q12 탐색 탭 소유 유닛 · Q13 커뮤니티 1차 노출 범위 · Q14 신·구 두 벌 정본 판별** 신설), Step 6 산출물 범위를 "밴드 e·g·h" → **"밴드 d·e·g"**로 정정(h=일정 생성은 U3 소관).
+**Context**: CONSTRUCTION Per-Unit Loop — U1 Functional Design Step 1b(라이브 정본 대조) 추가 수행. 여전히 Step 5(답변 수집) 대기 중.
+
+---
+## U1 Functional Design — 인셉션 영향 판정 (사용자 질의)
+**Timestamp**: 2026-07-22T08:40:00Z
+**User Input**: "그러면 이것 때문에 inception도 수정해야하는게 있나?"
+**AI Response**: 인셉션 원문 대조 후 **직전 보고의 오진 2건 정정**: (1) D-1 "탐색 랜딩이 문서에 없다"는 오독 — `US-SHELL-03`에 "각 탭 루트(홈/**탐색 랜딩[숙소·장소·여행자 일정 3진입]**/일정/기록/마이)", `US-SHELL-05`에 "탐색 랜딩 '장소' 진입"·"이 장소들로 여행 만들기"가 이미 명시됨. 진짜 문제는 US-SHELL-03이 story-map상 **U0** 배정인데 U0 `frontend-components.md`가 explore를 "빈 상태 셸만"으로 축소한 **인셉션 배정 ↔ U0 construction 문서 불일치**. (2) D-2 위시리스트 — `FR-STAY-01`이 "검색·필터·상세·**위시리스트**"를 명시하므로 인셉션이 옳고, `backend/docs/design/전체-API-서피스.md`의 "위시리스트 1차 제외"가 요구사항을 임의 축소한 것. 인셉션 수정 후보 3건+조건부 1건 제시(I-1 US-STAY-01·02 가격 문구 / I-2 US-SHELL-03↔unit-of-work 커뮤니티 내부 모순 / I-3 스토리 없는 화면 d03·d1b·e00 / I-4 FR-STAY-03 등록 2경로 — Q6=A일 때만). 수정 불필요 확인: D-8(FR-CORE-01이 Case A/B 1급 지원 명시 ✅)·D-4·D-13·화면 수준 항목. 절차는 `common/workflow-changes.md` §4(완료 스테이지 수정 = 영향평가+명시 승인, Low impact면 modify 허용) 적용 고지. 권고 = Q6·Q11·Q13 답변 후 일괄 수정.
+**Context**: CONSTRUCTION Per-Unit Loop — U1 Functional Design Step 5 진행 중(답변 대기). 인셉션 수정은 답변 확정 후 별도 승인 게이트.
+
+---
+## U1 Functional Design — Q1~Q14 답변 수령 → 모순 검출 → 명확화 질문 생성
+**Timestamp**: 2026-07-23T00:00:00Z
+**User Input**: "답변 작성했어" (플랜 파일 직접 편집으로 기입: **Q1=D · Q2=A · Q3=A · Q4=B · Q5=A · Q6=A · Q7=A · Q8=B · Q9=A · Q10=A · Q11=A · Q12=A · Q13=A · Q14=A**)
+**AI Response**: Step 5(답변 수집·분석) — 14문항 전항 응답, **모호(vague) 답변 0건**. 그러나 `question-format-guide.md`의 모순 검출 절차에 따라 **충돌 3건 + 승인 필요 1건** 검출하여 `construction/plans/u1-accommodation-trip-functional-design-clarification-questions.md` 생성: **모순1** Q2=A의 `isBase` 단일 플래그로는 일자별 다중 거점(US-STAY-07·US-TRIP-06·07 "체크인~체크아웃 모든 숙박일 동일 거점")을 표현 불가 — 거점은 (숙소×날짜구간) 관계이며 선재 dbml도 `saved_stay`/`base_assignment`/`trip_base_day` 3테이블 분리 → CQ1(관계형 유지 vs 거점 1개로 축소+스토리 3건 이연). **모순2** Q8=B(차단형)가 US-TRIP-06 수용기준("스마트 기본 거점으로 **미리 채우고** **비차단** 안내로 사후 수정")과 정면 충돌 + Q8은 겹침만 물어 **공백일 처리 미답** → CQ2(전면 차단 vs 겹침만 차단 vs 차단 지점을 AI 일정 생성 직전으로 이동). **모순3** Q4=B가 컴포넌트-유닛 경계 위반 — C7 Place Data는 `components.md`상 U3 소속·RAG 게이트·INV-1 집행 소유자인데 U1이 `poi`·`poi_snapshot` 정규화를 가져감 → CQ3(스키마만 선행 정의 vs C7 자체 U1 이동). **CQ4** = 인셉션 수정 승인 요청 — 답변으로 확정된 수정 목록 I-1(US-STAY-01·02 가격 문구→최저가 스냅숏·최저가순 정렬, Q11=A) · I-2(US-SHELL-03 여행자 일정 "1차 자리만" 주해, Q13=A) · I-3(US-EXPL-* 신규 스토리 3종 추가 → 119 스토리 수 갱신, Q12=A) · I-4(FR-STAY-03 등록 2경로→3경로, Q6=A) · I-5(C7 경계, CQ3 종속) · I-6(US-TRIP-06 비차단→차단, CQ2 종속) + I-7(인셉션 아님 — backend `전체-API-서피스.md`의 위시리스트 제외가 FR-STAY-01 위반이므로 철회 협의) / 처리 방식 3안(지금 일괄 수정 · 갭 기록만 · 인셉션 스테이지 정식 재개).
+**Context**: CONSTRUCTION Per-Unit Loop — U1 Functional Design Step 5 미완(모순 미해소). `functional-design.md` Step 5 "Do not proceed until ALL ambiguities are resolved"에 따라 CQ1~CQ4 답변 대기. 해소 후 Step 6(산출물 4종) 진행.
+
+---
+## U1 Functional Design — 명확화 답변 수령 → 산출물 4종 생성 → 승인 게이트
+**Timestamp**: 2026-07-23T00:30:00Z
+**User Input**: "함 ㄱㄱ" (명확화 파일 직접 편집: **CQ1=A · CQ2=A · CQ3=B**, **CQ4 미기입**)
+**AI Response**: (1) 모순 3건 해소 확인 — CQ1=A(저장은 `saved_stay`, 거점은 `base_assignment`+`trip_base_day` 관계 / 통합 UI 유지) · CQ2=A(겹침·공백 **모두 차단형**) · CQ3=B(**C7 Place Data를 U3→U1 이동**, U3는 C8만 보유 · INV-1 집행과 closed-set PBT 게이트도 U1로 이동). **CQ4(인셉션 수정 승인) 미응답 → `workflow-changes.md` §4 "명시 승인 없이 완료 스테이지 수정 금지"에 따라 인셉션 파일 무수정**, 대신 전량 갭(G-U1-*)으로 기록. (2) 산출물 생성 전 **밴드 g 추가 대조**(g01 여행 생성 · g02 거점 숙소 · e02 partial-failure · e05 conflict) — 신규 드리프트 5건: **G-U1-08 다중 목적지 여행**("부산 2박 + 경주 1박 + 도시 추가" vs `trip.destination` 단수) · **G-U1-09 예산 입력 UI 부재**(g01 1/2·g02 2/2 어디에도 없음 vs US-TRIP-01 예산 총액) · G-U1-10 동반 유형 값 도메인 불일치(g01 `연인` vs 온보딩 `커플`, `부모님` 미노출) · G-U1-11 여행별 취향 오버라이드("당신 취향으로 맞췄어요·바꾸기") · 기간 프리셋. **정합 확인**: g02의 구간별 거점 UI("1~2박 부산 / 3박 경주")가 CQ1=A 관계 모델과 정확히 일치, "숙소 없이 시작하기"는 US-TRIP-02 정합, e02 partial-failure("일부 숙소 정보를 불러오지 못했어요" + "가격 미확인")는 US-STAY-11 정합, e05 conflict(좌표 미확정 시 등록 비활성)는 US-STAY-06 예외 정합. (3) **Step 6 산출물 4종 생성**: `business-logic-model.md`(확정 결정 DEC-1~13 · 컴포넌트 경계 5종 · 플로우 F-1~F-6 · 외부 포트 6종 전부 스텁 · 유닛 간 계약 · **갭 G-U1-01~13** · US-EXPL-01~04 신설 제안) · `domain-entities.md`(Poi·PoiSnapshot·SavedPlace·Stay·SavedStay·OtaPartner·OutboundClick·Trip·**TripDestination 신설**·BaseAssignment·TripBaseDay·MustVisit + **INV-U1-01~19** + 이벤트 6종[`TripBaseResolved` 신설] + INV-3 duration 금지 재확인) · `business-rules.md`(**BR-U1-01~56**: 장소·탐색 9 / 숙소·가격 9 / 저장·등록·거점 10 / 제휴 4 / 여행 생성 10 / 커버리지 5 / 필수방문지 4 / 홈집계 2 / 횡단 3) · `frontend-components.md`(라우트 골격 + features/explore·stay·trip 컴포넌트 30여종 + 폼검증 UX사본 + testID + **클라 PBT 4종**). 플랜 체크박스 2~7 `[x]`.
+**AI Response (Approval Prompt)**: "🔧 Functional Design Complete - u1-accommodation-trip. 옵션: 🔧 Request Changes / ✅ Continue to Next Stage → NFR Requirements." DO NOT PROCEED until user confirms. 승인과 별개로 **CQ4(인셉션 수정 I-1~I-6) 결정은 여전히 미결**로 남아 재질의 예정.
+**Context**: CONSTRUCTION Per-Unit Loop — U1 Functional Design Steps 5~7 완료, 승인 게이트(Step 8). 승인 시 aidlc-state.md `[x]` 후 NFR Requirements 진입.
+
+---
+## Change Request — INCEPTION 산출물 사후 개정 (완료 스테이지 수정)
+**Timestamp**: 2026-07-23T01:00:00Z
+**Request**: 인셉션 수정 I-1~I-6을 지금 일괄 반영 (= 명확화 CQ4=A)
+**User Input**: "인셉션도 지금 일괄 수정 ㄱㄱ"
+**Current State**: CONSTRUCTION / U1 Functional Design 승인 게이트 대기 중. INCEPTION은 2026-07-13 승인 완료 상태.
+**Impact Assessment**: `workflow-changes.md` §4 "Restarting Previous Stage"의 **Low impact → Modify and update dependents** 경로 적용(전면 재실행 아님). 영향 = 인셉션 4파일 + application-design 4파일 → U1 설계 입력. **U0 설계 산출물(8종)은 무영향**(가격·탐색·커버리지·C7 모두 U0 범위 밖). 백업은 git 히스토리로 대체(수정 전 인셉션은 전부 커밋된 상태였음 — 작업 트리 clean 확인).
+**User Confirmation**: 명시 승인 수령("인셉션도 지금 일괄 수정 ㄱㄱ").
+**Action Taken**:
+- **I-1 (Q11=A 가격)** `stories.md` — 에픽 C 헤더 주석에 "목록용 최저가 스냅숏은 정적 저장 허용 / 정확 1박가만 캐싱 금지"로 ADR-0012 적용 대상 정밀화 · US-STAY-01 "대표 가격대(정적 구간)"→**"최저가 스냅숏('부터 가격')"** + 스냅숏 부재 시 "가격 미확인" 규칙 추가 · US-STAY-02 필터·정렬 축 "대표 가격대순"→**"최저가순"**.
+- **I-2 (Q13=A 커뮤니티)** `stories.md` US-SHELL-03 — 탐색 랜딩 3진입 표기에 **"여행자 일정은 1차에서 자리만, 실데이터는 U7"** 명시.
+- **I-3 (Q12=A 탐색)** `stories.md` — 에픽 A에 **US-EXPL-01~04 신설**(통합 탐색 랜딩 d01 · 지역 선택 d1b/e00 · 목적지 상세 d03 · 장소 탐색/담기 d04·d02), 출처를 PRD가 아닌 **라이브 Figma**로 명기 + 신설 경위 주석. 커버리지 표 A 에픽 5→**9**, 핵심 소계 94→**98**, 합계 119→**123**.
+- **I-4 (Q6=A 등록 경로)** `requirements.md` FR-STAY-03 — "등록 **2경로**"→**"3경로"**(지도·장소 검색 / OTA 링크 붙여넣기 / 지도 핀 지정) + 좌표 미확정 시 등록 차단 명문화. "예약번호·메일 자동 인식 없음"은 유지.
+- **I-5 (CQ3=B C7 이관)** `components.md` C7 헤더에 **유닛 배정 변경 주석**(U3→U1, INV-1 집행·closed-set PBT 동반 이동, U3는 C8만 보유하고 `CandidatePoolPort` 소비) · `unit-of-work.md` U1 컴포넌트에 C7 추가·U3에서 제거·에픽에 A(탐색) 추가·빌드 순서 Phase 1 문구 갱신 · `unit-of-work-dependency.md` U3 선행 근거 문구 + **PBT 배치를 U3(Place 표준화)→U1**로 이동 · `unit-of-work-story-map.md` U1 행에 C7 이관 표기.
+- **I-6 (Q8=B·CQ2=A 커버리지)** `stories.md` US-TRIP-06 — 비차단 스마트 기본값 → **차단형**(후보 1개인 날만 자동 확정, 겹침·공백은 미해결로 일정 생성 차단, 해소 시트 선택지 명시) + **등록 숙소 0개 여행은 차단 대상 아님**(US-TRIP-02 보존) 비고 추가.
+- 파생 정합: `unit-of-work.md` §4 검증 문구 94/119→98/123 · `unit-of-work-story-map.md` 헤더·에픽 매핑·유닛별 수(U1 21→**25**)·검증 결과 갱신 · **리포 루트 `CLAUDE.md`의 "(119 stories)"→"(123 stories)"** 정정 · U1 `business-logic-model.md` 갭 표 G-U1-01~06을 "✅ 인셉션 반영"으로 갱신하고 §7 제목을 "신설 제안"→"신설(반영 완료)"로 변경 · `aidlc-state.md` INCEPTION 섹션에 **개정 이력** 블록 신설.
+- 미수정(의도적): `inception/plans/*.md`(당시 실행 기록이므로 역사 보존) · `component-dependency.md`(컴포넌트 간 관계는 불변, 유닛 배정만 바뀜) · `backend/docs/design/전체-API-서피스.md`(팀 소유 문서 — I-7 위시리스트 철회는 협의 대상으로 잔존).
+**Artifacts Affected**: `inception/user-stories/stories.md` · `inception/requirements/requirements.md` · `inception/application-design/{components,unit-of-work,unit-of-work-dependency,unit-of-work-story-map}.md` · `aidlc-docs/aidlc-state.md` · `construction/u1-accommodation-trip/functional-design/business-logic-model.md` · (리포 루트) `CLAUDE.md`
+**Context**: INCEPTION 스테이지 승인 상태는 **유지**(재실행 아님, 국소 수정). U1 Functional Design 승인 게이트는 여전히 열려 있음.
+
+---
+## U1 Functional Design — Approved (Stage Complete) → NFR Requirements 진입
+**Timestamp**: 2026-07-23T01:20:00Z
+**User Input**: "ㄱㄱ"
+**AI Response**: U1 Functional Design 승인 수신 → 단계 완료 처리(aidlc-state.md `[x]`). 확정 산출물 = `u1-accommodation-trip/functional-design/{business-logic-model, domain-entities, business-rules, frontend-components}.md` (DEC-1~13 · INV-U1-01~19 · **BR-U1-01~56** · 갭 G-U1-01~13). 다음 = **U1 NFR Requirements** 진입(`.aidlc-rule-details/construction/nfr-requirements.md` 규칙 적용). Step 1(기능 설계 분석) 완료 후 Step 2~4로 계획·질문 파일 생성 예정.
+**Context**: CONSTRUCTION Per-Unit Loop — U1 Functional Design 승인 완료 → NFR Requirements 진입.
+
+---
+## U1 NFR Requirements — Plan Created (Questions Pending)
+**Timestamp**: 2026-07-23T01:25:00Z
+**AI Response**: `construction/plans/u1-accommodation-trip-nfr-requirements-plan.md` 생성 — 실행 계획 5단계 + 질문 Q1~Q9. Step 1 분석: U0와 달리 U1의 NFR 표면은 **외부 의존·데이터 신선도·비용**에 몰려 있음(외부 포트 6종·최저가 스냅숏 갱신 주기·POI 수집 게이트·지도 SDK 쿼터·딥링크 포스트백). U0에서 확정된 기준선(SCALE-01~03 DAU 1만·피크 500세션·50RPS / AVAIL 99.9% / SEC 레이트리밋 PostgreSQL 카운터 / OBS 구조화 JSON+Sentry / 단일 리전·다중 AZ / 익스텐션 3종 설정)은 **상속**하고 U1 델타만 질문화. 질문 구성: Q1 스냅숏 갱신 주기·신선도 표기 · Q2 목록/상세 성능 목표(외부 호출 포함) · Q3 외부 포트 타임아웃·서킷·부분 실패 정책 · Q4 POI 데이터 규모·수집 게이트 처리량 · Q5 지도 SDK 쿼터·비용 상한 · Q6 딥링크 포스트백 멱등·보안(서명 검증) · Q7 위치정보 취급(내 주변 탐색 — 위치정보법 접점) · Q8 캐싱 계층(스냅숏·POI·지역 집계) 저장소 선택 · Q9 U1 PBT 게이트 범위(closed-set 게이트가 CQ3=B로 U1 편입됨).
+**Context**: CONSTRUCTION Per-Unit Loop — U1 NFR Requirements Steps 1~4 완료. Step 5(답변 수집) 대기 중.
+
+---
+## U1 NFR Requirements — 답변 수령 → 산출물 2종 생성 → 승인 게이트
+**Timestamp**: 2026-07-23T01:45:00Z
+**User Input**: "다했다ㄱㄱ" (플랜 파일 직접 편집: **Q1=A · Q2=A · Q3=B · Q4=A · Q5=B · Q6=A · Q7=A · Q8=B · Q9=A**)
+**AI Response**: Step 5(답변 수집·분석) — 9문항 전항 응답, 모호 답변 0건. 모순 검사 결과 **blocking 모순 없음**. 단 **Q8=B(Redis 도입)는 U0의 "Redis 미도입(과설계 회피)" 기준선을 뒤집는 기준선 변경**으로 판정 → 되묻지 않고 진행하되 산출물에 파급 명시(tech-stack §4). 추천과 갈린 3항(Q3=B 재시도 없음 · Q5=B 쿼터 상한 없이 모니터링만 · Q8=B Redis 선제 도입)은 각각 "파급 주의" 블록으로 리스크 기록(RES-U1-02 재시도 제거→부분실패 표면화, UX 배너가 유일 완충 / COST-U1-01 상한 부재→버그성 폭주=비용, OBS 소진율 경보로 보완 / 재평가 트리거 3종). Step 6 산출물 2종 생성: (1) `nfr-requirements.md` — SCALE-U1-01~03 · PERF-U1-01~04(자체 p95<300ms / 외부 p95<1.5s) · UX-U1-01~05 · **DATA-U1-01~04(스냅숏 일1회·48h 초과 숨김·정확가 캐싱금지)** · AVAIL/RES-U1-01~05(포트별 타임아웃·재시도 없음·벤더별 서킷 분리·stale-if-error) · SEC-U1-01~05(객체인가·포스트백 서명검증+멱등·지표 노출차단·URL 화이트리스트·키 서버프록시) · LEGAL-U1-01~03(내 주변 좌표 미저장·법정로그·거부 무차단) · **COST-U1-01~03(쿼터 상한 없이 모니터링)** · OBS-U1-01~04 · **PBT 3종 blocking(closed-set 게이트·커버리지 전수성·정규화 왕복)** · 재평가 트리거 3종. (2) `tech-stack-decisions.md` — 상속 6영역 + U1 신규 모듈 5종(place-data 이관 포함, 마이그레이션 V2.x) + U1 델타 6종(카카오 지도/검색·포트+스텁+Resilience4j·스냅숏 배치 ShedLock 재사용·Redis 도입·PG 영속+Redis 캐시·쿼터 무상한) + **Q8=B 파급 정리**(Redis 용도=조회 캐시 / U0 레이트리밋 카운터는 PostgreSQL 유지·재작업 안 함 / U0 재평가 트리거를 당긴 형태라 규칙 위반 아님 / 로컬 docker-compose에 Redis 컨테이너 추가 / 역방향 재평가) + Infra 이연 5종. 플랜 체크박스 2~4 `[x]`.
+**AI Response (Approval Prompt)**: "📊 NFR Requirements Complete - u1-accommodation-trip. 옵션: 🔧 Request Changes / ✅ Continue to Next Stage → NFR Design." DO NOT PROCEED until user confirms.
+**Context**: CONSTRUCTION Per-Unit Loop — U1 NFR Requirements Steps 5~7 완료, 승인 게이트(Step 8). 승인 시 aidlc-state.md `[x]` 후 NFR Design 진입.
+
+---
+## U1 NFR Requirements — Approved (Stage Complete) → NFR Design 진입
+**Timestamp**: 2026-07-23T02:00:00Z
+**User Input**: "NFR Design ㄱㄱ"
+**AI Response**: U1 NFR Requirements 승인 수신 → 단계 완료 처리(aidlc-state.md `[x]`). 확정 산출물 = `u1-accommodation-trip/nfr-requirements/{nfr-requirements, tech-stack-decisions}.md`. 다음 = **U1 NFR Design** 진입(`.aidlc-rule-details/construction/nfr-design.md` 규칙). **U0와의 차이**: U0 NFR Design은 RESILIENCY-04·14 이연분(배포·복원력 테스트) 해소가 blocking 필수였으나, 그 둘은 U0에서 이미 확정됨 → U1 NFR Design은 **이연 blocking 질문 없이 U1 델타 패턴·논리 컴포넌트에만 집중**. Step 1(NFR 요구 분석) 완료 후 계획·질문 파일 생성.
+**Context**: CONSTRUCTION Per-Unit Loop — U1 NFR Requirements 승인 완료 → NFR Design 진입.
+
+---
+## U1 NFR Design — Plan Created (Questions Pending)
+**Timestamp**: 2026-07-23T02:05:00Z
+**AI Response**: `construction/plans/u1-accommodation-trip-nfr-design-plan.md` 생성 — 실행 계획 5단계 + 질문 Q1~Q6(전부 추천안 제시, blocking 필수 없음). nfr-design.md Step 3 필수 카테고리 5종 커버: **복원력**(Q1 서킷 임계·반열림 정책 상세 — RES-U1-02 재시도 없음 확정분 위에) · **확장성**(Q2 POI 검색·목록 인덱스·페이지네이션, 읽기 복제본 미도입 유지) · **성능/캐시**(Q3 Redis 캐시 대상·TTL·무효화 — Q8=B 파급을 설계로 구체화) · **보안**(Q4 포스트백 서명 방식·URL 화이트리스트 관리) · **논리 컴포넌트**(Q5 U1 신규 LC-U1-* 경계 · Q6 스냅숏 배치+closed-set 게이트 배치 위치). U0 명명 체계 계승(`P-{RES/SCALE/PERF/SEC/OBS}-#` 패턴, `C-#`/`LC-U1-#` 컴포넌트). 산출물 예정 = nfr-design-patterns.md + logical-components.md.
+**Context**: CONSTRUCTION Per-Unit Loop — U1 NFR Design Steps 1~4 완료. Step 5(답변 수집) 대기 중.
+
+---
+## U1 NFR Design — 답변 수령 → 산출물 2종 생성 → 승인 게이트
+**Timestamp**: 2026-07-23T02:20:00Z
+**User Input**: "추천대로 진행" (Q1~Q6 전항 추천 채택)
+**AI Response**: Step 5 — 6문항 전항 추천 확정, 모호·모순 없음. Step 6 산출물 2종 생성: (1) `nfr-design-patterns.md` — **복원력** P-RES-U1-1(다벤더 서킷 격리, 실패율 50%/20호출 open·30s half-open)·2(재시도 없음+부분결과)·3(stale-if-error)·4(폴백 사슬) / **확장성** P-SCALE-U1-1(단일 프라이머리 유지·읽기복제본 미도입)·2(복합인덱스·커서페이지네이션·PostGIS GiST)·3(스파이크 계승) / **성능·캐시** P-PERF-U1-1(응답예산 2계층)·2(**Redis 조회캐시** — 검색10분·집계1h·POI10분·검색어5분, 스냅숏/POI원본/정확가는 캐시 안 함, 캐시=가속층·정합성은 PG)·3(디바운스·클라계산) / **보안·비용** P-SEC-U1-1(객체인가)·2(딥링크 HMAC-SHA256·skew±5m·멱등·지표차단)·3(URL 화이트리스트·키 서버프록시)·P-COST-U1-1(쿼터 상한 없이 소진율 관측) / **데이터·관측** P-DATA-U1-1(배치 스냅숏+48h 신선도 게이트)·P-OBS-U1-1(U1 지표 델타) + NFR 커버리지표 + 미도입·재평가 5종. (2) `logical-components.md` — **LC-U1-1~8**(AccommodationContentPort+스텁 / PriceSnapshotBatch[ShedLock] / LivePriceGateway[캐시금지] / OtaDeeplinkService[서명·멱등] / PlaceSearchPort+MapRenderPort[카카오·서버프록시·쿼터모니터] / **PoiCollectionGate[INV-1 소유·PBT-U1-1·쓰기경로 동기게이트]** / **CoverageResolver[PBT-U1-2·순수함수]** / CandidatePoolProvider[U3 계약]) + 기존 자산 수용 6종(**Redis만 신규**, 나머지 U0 자산 재사용) + 프론트 논리 요소 5 + 컴포넌트→NFR 추적 + Infra 이연. 익스텐션 준수: security Full → P-SEC-U1-1~3 ✅ / resiliency Full → P-RES-U1-1~4 ✅(RESILIENCY-04·14는 U0에서 기해소, U1 이연분 없음) / PBT blocking → LC-U1-6·7 + 프론트 요소에 게이트 배치 ✅. 플랜 체크박스 2~4 `[x]`.
+**AI Response (Approval Prompt)**: "🎨 NFR Design Complete - u1-accommodation-trip. 옵션: 🔧 Request Changes / ✅ Continue to Next Stage → Infrastructure Design." DO NOT PROCEED until user confirms. Infrastructure Design은 U0 선례(로컬 전용 SKIP)와 동형이라 승인 시 SKIP 여부 재확인 예정.
+**Context**: CONSTRUCTION Per-Unit Loop — U1 NFR Design Steps 5~7 완료, 승인 게이트(Step 8). 승인 시 aidlc-state.md `[x]` 후 Infrastructure Design(SKIP 예상) → U1 설계 종료.
+
+---
+## U1 NFR Design — Approved · Infrastructure Design — SKIPPED · ✅ U1 설계 종료
+**Timestamp**: 2026-07-23T02:40:00Z
+**User Input**: "승인, Infrastructure Design은 U0처럼 스킵"
+**AI Response**: (1) U1 NFR Design 승인 수신 → 단계 완료(aidlc-state.md `[x]`). 확정 산출물 = `u1-accommodation-trip/nfr-design/{nfr-design-patterns, logical-components}.md`. (2) Infrastructure Design = **SKIPPED**(사용자 명시 지시, U0 선례와 동형) · 사유 = 배포/클라우드 계획 부재로 클라우드 리소스 결정의 근거·검증 수단 없음, 규칙상 CONDITIONAL "no infrastructure changes" 해당. 재개 조건 = 배포/클라우드 진입 결정 시 별도 지시. **특기**: U1은 Redis 도입(Q8=B)이라는 신규 인프라 요소가 있으나, 이는 로컬 docker-compose 스택 확장이지 배포 인프라 설계가 아니므로 SKIP 사유 유지 — 대신 Open Items에 "로컬 Redis 컨테이너 추가"로 명시. (3) **U1 설계 단계 종료** — 총 산출물 8종(functional-design 4 + nfr-requirements 2 + nfr-design 2). (4) **Open Items에 U1 섹션 신설**: 로컬 Redis 컨테이너 추가 · 카카오 콘솔 설정(개발 선결 블로커) · 선재 backend 설계 문서 정합(I-7 위시리스트 철회·가격 스냅숏 컬럼·trip_destination·등록 3경로) · G-U1-09 예산 UI 부재 · G-U1-10 동반유형 매핑 · 배포 의존(실어댑터 벤더 계약·POI 적재·쿼터 상한). Code Generation은 SCOPE.md 범위 외(팀이 각 패키지에서 직접 개발).
+**Context**: CONSTRUCTION Per-Unit Loop — U1 NFR Design 승인 → Infrastructure Design SKIP → **U1 설계 종료**. 다음 = 사용자 지시 대기(U2 설계 착수 또는 U1 팀 개발 핸드오프). U0에 이어 U1도 설계 문서 8종으로 종료.
+
+---

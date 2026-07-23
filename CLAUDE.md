@@ -32,7 +32,7 @@ Figma is the **single source of truth for screens** — the repo keeps no copy o
 
 Read the canonical doc before changing behavior it owns:
 
-- Product requirements & stories: `aidlc/aidlc-docs/inception/requirements/requirements.md`, `inception/user-stories/{stories,personas}.md` (119 stories)
+- Product requirements & stories: `aidlc/aidlc-docs/inception/requirements/requirements.md`, `inception/user-stories/{stories,personas}.md` (123 stories)
 - Components, methods, services, dependencies: `aidlc/aidlc-docs/inception/application-design/` (components C1–C17 · component-methods · services S1–S6 · component-dependency)
 - Unit breakdown & build order U0–U9: `aidlc/aidlc-docs/inception/application-design/unit-of-work{,-dependency,-story-map}.md`
 - Frontend architecture (stack·structure·boundaries·testing): `frontend/README.md`

@@ -23,7 +23,7 @@
 - **경로 별칭**: `@/*` → `./src/*`
 - **구현 범위**: `auth` + `onboarding` **두 feature만 실구현.** 나머지 9개 feature는 `export {}` 한 줄짜리 빈 스텁이다.
 - **앱 런타임 목 0건.** msw는 테스트 오라클(`msw/node`)에만 있고, `src/__tests__/noMswInStaticGraph.test.ts`가 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제한다.
-- **문서 대상 파일 89개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함)
+- **문서 대상 파일 98개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함)
 
 ## 디렉토리
 
@@ -48,7 +48,7 @@ frontend/
 | `src/app/_layout.tsx` | 루트 레이아웃. 폰트 로드 게이팅 + 네이티브 스플래시 제어 + `GestureHandlerRootView` + `SafeAreaProvider`(null 대비 initialMetrics) + `SplashGate` |
 | `src/app/force-update.tsx` | 강제 업데이트 분기 화면 |
 | `src/app/reconsent.tsx` | 재동의 분기 화면 |
-| `src/app/_dev/preview.tsx` | **개발 전용 정적 프리뷰** — 네트워크 없이 시각 상태 전환. 진입은 딥링크 `trippilot://_dev/preview?state=<키>` 하나뿐(**11개** 상태 키 조준 — TRIP-163에서 `pref1`·`pref2` 2키 추가. 부재·오타·배열 값은 splash 결정론 폴백 — `useLocalSearchParams`는 지연 초기화자로 최초 마운트 1회만 읽음). 같은 세션에서 연속 openurl 시 상태 미전환(1회만 읽는 계약 한계 — 실기 확인은 키마다 fresh 재기동) |
+| `src/app/_dev/preview.tsx` | **개발 전용 정적 프리뷰** — 네트워크 없이 시각 상태 전환. 진입은 딥링크 `trippilot://_dev/preview?state=<키>` 하나뿐(**15개** 상태 키 조준 — TRIP-170에서 홈 4상태(`home-default`·`home-no-trip`·`home-empty`·`home-loading`) 끝에 append. 부재·오타·배열 값은 splash 결정론 폴백 — `useLocalSearchParams`는 지연 초기화자로 최초 마운트 1회만 읽음). 같은 세션에서 연속 openurl 시 상태 미전환(1회만 읽는 계약 한계 — 실기 확인은 키마다 fresh 재기동) |
 | `src/app/(auth)/_layout.tsx` | 미인증 스택 |
 | `src/app/(auth)/login.tsx` | 소셜 로그인 화면 진입점 |
 | `src/app/(onboarding)/_layout.tsx` | 온보딩 스택 + **완료자만 홈으로 방어** |
@@ -57,8 +57,8 @@ frontend/
 | `src/app/(onboarding)/nickname.tsx` | 닉네임 라우트 — 얇은 래퍼 |
 | `src/app/(onboarding)/pref1.tsx` | 취향 1/2 라우트(c09) — `PrefStep1Container`를 꽂는 얇은 래퍼 |
 | `src/app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Container`를 꽂는 얇은 래퍼 |
-| `src/app/(tabs)/_layout.tsx` | 탭 네비게이터 |
-| `src/app/(tabs)/index.tsx` | 홈 탭 — **껍데기** |
+| `src/app/(tabs)/_layout.tsx` | 탭 네비게이터 — `Tabs`에 `tabBar` 렌더프롭(Q4 전면 커스텀) + `BottomTabBar` 어댑터(라우트↔탭key 양방향 번역: `routeNameToTabKey`(index→home, 활성 표시) · `handlePressTab`(home→index, 누름 이동 — **홈 탭 press 미검증**, code-critic 경고1)) |
+| `src/app/(tabs)/index.tsx` | 홈 탭 라우트 — `HomeScreen`(no-trip 픽스처, 게이트① G-1)을 그리는 얇은 래퍼. **더 이상 껍데기 아님**(TRIP-170) |
 | `src/app/(tabs)/explore.tsx` | 탐색 탭 — **껍데기** |
 | `src/app/(tabs)/itinerary.tsx` | 일정 탭 — **껍데기** |
 | `src/app/(tabs)/records.tsx` | 기록 탭 — **껍데기** |
@@ -108,11 +108,23 @@ frontend/
 | `src/features/onboarding/components/OnboardingGlyphs.tsx` | 인라인 SVG — 약관·닉네임·취향 화면 글리프. 기존 5종(체크·재생성 등)+**신규 19종**(스타일7·페이스3·동행4·이동3·info·skip chevron 등, TRIP-163). raw hex 색 직박(`screens/` 스코프 밖이라 F2 raw-hex 가드 미대상 — 03b 참고-2: 향후 `screens/`로 이동 시 red) |
 | `src/features/onboarding/index.ts` | 배럴 스텁(`export {}`) — 아무도 안 씀 |
 
+## `src/features/home/` — 실구현 ③ (TRIP-170)
+
+계층: `model`(순수 타입·상수) → `components`(전용 글리프) → `screens`(프레젠테이션). **컨테이너·훅 없음** — 서버 API 부재로 프레젠테이션 전용 슬라이스(props/상수 구동, 네트워크·라우팅 0).
+
+| 파일 | 역할 |
+|---|---|
+| `src/features/home/model/homeTypes.ts` | prop 계약 타입 — 판별 유니온 `HomeSections`(`ready`/`empty`/`loading`) 포함 |
+| `src/features/home/model/homeFixtures.ts` | 4상태 고정 목업(Q2 — Figma 표시값 그대로 상수화). `HOME_DEFAULT_PROPS`·`HOME_NO_TRIP_PROPS`·`HOME_EMPTY_PROPS`·`HOME_LOADING_PROPS` |
+| `src/features/home/components/HomeGlyphs.tsx` | 홈 전용 인라인 SVG 10종(AuthGlyphs/OnboardingGlyphs 패턴). raw hex 직박(`screens/` 밖이라 D-3 가드 미대상) |
+| `src/features/home/screens/HomeScreen.tsx` | 4상태 프레젠테이션 화면. props만 받음 — `expo-router`·`@/shared/api`·타 feature import 0(homeStructure D-1이 기계 강제) |
+| `src/features/home/index.ts` | 배럴 스텁(`export {}`) — 아무도 안 씀 |
+
 ## `src/features/` 빈 스텁 (`export {}` 한 줄)
 
-**디렉토리가 있다고 구현된 게 아니다.** 아래 9개는 전부 껍데기이며, 해당 도메인 작업 = 이 파일부터 채우는 일이다.
+**디렉토리가 있다고 구현된 게 아니다.** 아래 8개는 전부 껍데기이며, 해당 도메인 작업 = 이 파일부터 채우는 일이다(`home`은 TRIP-170으로 위 실구현 ③절로 이동).
 
-`src/features/archive/index.ts` · `src/features/execution/index.ts` · `src/features/home/index.ts` · `src/features/itinerary/index.ts` · `src/features/notification/index.ts` · `src/features/planb/index.ts` · `src/features/settings/index.ts` · `src/features/stay/index.ts` · `src/features/trip/index.ts`
+`src/features/archive/index.ts` · `src/features/execution/index.ts` · `src/features/itinerary/index.ts` · `src/features/notification/index.ts` · `src/features/planb/index.ts` · `src/features/settings/index.ts` · `src/features/stay/index.ts` · `src/features/trip/index.ts`
 
 ## `src/shared/`
 
@@ -126,7 +138,8 @@ frontend/
 | `src/shared/location/LocationGlyphs.tsx` | 인라인 SVG — 위치 화면 글리프(레이더 히어로·오프 타일). stroke/fill 색은 `locationColors.ts` 상수 경유(`shared/location/**` 는 F2 raw-hex 가드 대상) |
 | `src/shared/location/lib/locationColors.ts` | 위치 글리프 색 상수(raw hex 분리 — `gradients.ts` 패턴 재사용). 토큰 색과 수동 동기화 필요(03b 참고-2) |
 | `src/shared/location/index.ts` | 배럴 스텁(`export {}`) |
-| `src/shared/ui/index.ts` | **빈 스텁** |
+| `src/shared/ui/BottomTabBar.tsx` | 순수 뷰 탭바(TRIP-170) — 5탭 아이콘 자체 보유(인라인 SVG), 네비게이션을 모른다(`activeKey`·`onPressTab` 두 prop뿐). testID `shell-tabbar-*` |
+| `src/shared/ui/index.ts` | 배럴 스텁(`export {}`) — `BottomTabBar`는 이 배럴을 거치지 않고 직접 import됨 |
 | `src/shared/validation/index.ts` | **빈 스텁** |
 | `src/shared/map/index.ts` | **빈 스텁** |
 
@@ -141,14 +154,18 @@ frontend/
 | `src/test-support/expoAuthSessionMock.ts` | `expo-auth-session`·`web-browser`·`crypto` 가상 목 + 스파이 |
 | `src/test-support/expoRouterStackMock.tsx` | expo-router `Stack` 목(관찰 마커) |
 | `src/test-support/expoRouterRedirectMock.tsx` | expo-router `Redirect`·`Stack` 목 — 진입 가드 테스트용 |
+| `src/test-support/expoRouterTabsMock.tsx` | expo-router `Tabs`/`Tabs.Screen` 관찰 목(TRIP-170) — `capturedTabsProps` 홀더 + `tabs-route-*` 마커 |
 | `src/test-support/splashGateMock.tsx` | `SplashGate` 목 |
 | `__mocks__/@gorhom/bottom-sheet.tsx` | 네이티브 모듈 자동 목 |
 | `src/__tests__/noMswInStaticGraph.test.ts` | 정적 import 그래프를 fs로 훑어 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제 |
 | `src/__tests__/importBoundary.test.ts` | import 경계 가드 — 계층·feature 격리 위반 차단 |
 | `src/__tests__/onboardingStructure.test.ts` | 온보딩 계층·경계 구조 가드(서버 권한 경계 등) |
 | `src/__tests__/onboardingPrefStructure.test.ts` | 취향 스토어·모델 구조 가드(TRIP-163) — persist 금지·`@/shared/api` 미참조·`create(` 표기(구조 가드 6-2, 개념 [[구조 가드와 긍정 앵커]]) |
+| `src/__tests__/homeStructure.test.ts` | 홈 소스 스캔 가드(TRIP-170, `@jest-environment node`) — 픽스처 상수화(D-1)·INV-3 `duration` 식별자 0(D-2)·토큰 raw-hex 0(D-3)·SafeArea 규약(D-4)·탭바 격리(D-5) |
 | `src/__tests__/onboardingPrefRoutes.test.tsx` | 취향 1/2·2/2 라우트 존재·내비게이션 계약 가드(TRIP-163) — push/replace/back 분기 |
+| `src/__tests__/tabsShell.test.tsx` | `(tabs)/_layout.tsx` 배선 가드(TRIP-170) — 5탭 등록 순서·`tabBar` 렌더프롭·어댑터 활성 매핑/press→navigate·홈 라우트 래퍼·4탭 껍데기 유지 |
 | `src/__tests__/devPreviewPref.test.tsx` | 프리뷰 `pref1`·`pref2` 상태 렌더 가드(TRIP-163) — 빈 선택 상태로 직접 렌더, 가드 우회 아님 |
+| `src/__tests__/devPreviewHome.test.tsx` | 프리뷰 홈 4키 가드(TRIP-170) — 딥링크 4키·토글 진입·미존재 키 splash 폴백 결정론 |
 | `src/__tests__/onboardingEntryGuard.test.tsx` | 온보딩 진입 리다이렉트·완료자 방어 가드 |
 | `src/__tests__/rootLayout.test.tsx` | 루트 부팅 골격 |
 | `src/__tests__/rootLayoutSafeArea.test.tsx` | `SafeAreaProvider` 도입 후에도 자식이 렌더되는지 |
@@ -196,6 +213,9 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 | `resolveOnboardingStep` · `validateNicknameFormat` | `features/onboarding/model` | 잔여 온보딩 단계 · 닉네임 길이 검증(순수) |
 | `toggleMulti` · `toggleSingle` | `features/onboarding/model/preferenceSelection` | 취향 축 토글 순수 규칙(복수/단일 공용). `null`=미설정, 빈 배열로 안 떨어짐(US-ONB-14) |
 | `usePreferenceStore` | `features/onboarding/store/preferenceStore` | 취향 6축 세션 메모리 Zustand 스토어(persist 없음) |
+| `BottomTabBar` · `ShellTabKey` · `BottomTabBarProps` | `shared/ui` | 순수 뷰 탭바(TRIP-170) — `activeKey`·`onPressTab` 두 prop만, 네비게이션 모름 |
+| `HOME_DEFAULT_PROPS` · `HOME_NO_TRIP_PROPS` · `HOME_EMPTY_PROPS` · `HOME_LOADING_PROPS` | `features/home/model/homeFixtures` | 홈 4상태 Figma 고정 목업(Q2 — 서버 없어 유일한 데이터 소스) |
+| `HomeScreenProps` · `HomeSections`(외 조각 타입) | `features/home/model/homeTypes` | 홈 화면 prop 계약 — 판별 유니온 `HomeSections`(ready/empty/loading) |
 | `useBootstrapGate` · `useSocialLogin` | `features/auth/hooks` | 부트스트랩 · 소셜 로그인 훅 |
 | `useTermsConsent` · `useNickname` · `useOnboardingProgress` | `features/onboarding/hooks` | 약관 · 닉네임 · 진행 상태 훅 |
 | `SPLASH_BACKGROUND_COLORS` · `SPLASH_BACKGROUND_LOCATIONS` · `APP_ICON_COLORS` | `features/auth/lib/gradients` | 그라디언트 상수 |
@@ -215,6 +235,8 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 - **`shared/api`에 `expo-router`를 import하지 마라** → node 테스트가 깨진다. 라우팅은 콜백/상위로.
 - **프로덕션에 `@/mocks/*`·`msw`를 import하지 마라** → `noMswInStaticGraph.test.ts`가 잡는다.
 - **엣지 케이스 화면을 눈으로 보려면** → 목을 만들지 말고 `src/app/_dev/preview.tsx`에 상태를 추가한다.
+- **홈에 실 데이터를 배선하려면** → 서버 API가 아직 없다(TRIP-170 범위 밖). `homeFixtures.ts`를 API 훅으로 교체하는 자리이며, `HomeScreen.tsx`에 `msw`·`@/mocks/*`를 직접 넣지 마라(`noMswInStaticGraph.test.ts`가 잡는다).
+- **탭바 하단 인셋을 만지려면** → 전면 커스텀 탭바(74h)가 홈 인디케이터 기기의 bottom inset을 아직 합산하지 않는다(code-critic 경고2, 실기 이연 — 백엔드 부재로 실 홈 도달 불가해 미검증).
 - **실 OAuth 실행·검증** → Google 등록 + env 주입 + **네이티브 리빌드**가 필요하다. 패키지(`expo-auth-session`·`expo-web-browser`·`expo-crypto`)는 설치돼 있으나 리빌드 전이라 앱에서 아직 못 쓴다. jest는 가상 목이 우선이라 green.
 - **kakao/naver/apple** → `oauthConfig`에 빈 슬롯만 있다. 비표준 OAuth라 각각 별도 배선 필요.
 - **화면 비주얼** → `figma-screen-impl` 스킬 절차를 따른다. 밴드 맵은 `.claude/skills/spec-perception/reference/figma-structure.md`.
