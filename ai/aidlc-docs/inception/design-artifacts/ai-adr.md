@@ -1,7 +1,7 @@
 # TripPilot AI — 아키텍처 결정 기록 (ADR)
 
 > 본 문서는 TripPilot AI 설계에서 내려진 **핵심 아키텍처 결정**을 AI 개발 관점으로 재구성한다.
-> 결정 근거 전문은 `../TripPilot/docs/planning/decisions.md`가 소유한다. 본 문서는 AI 축으로 요약·참조한다.
+> 결정 근거 전문은 `../TripPilot/aidlc/aidlc-docs/planning/decisions.md`가 소유한다. 본 문서는 AI 축으로 요약·참조한다.
 
 ---
 

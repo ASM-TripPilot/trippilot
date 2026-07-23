@@ -1,6 +1,6 @@
 # 도구 사용 가이드
 
-해당 폴더는 팀이 쓰는 도구(지라·슬랙 등)의 **사용법·기능 설명** 문서 모음입니다. "우리 팀은 이렇게 한다"는 강제 규칙은 [../conventions/](../conventions/README.md)에, 제품·설계 정본은 [../planning/](../planning/README.md)에 있습니다.
+해당 폴더는 팀이 쓰는 도구(지라·슬랙 등)의 **사용법·기능 설명** 문서 모음입니다. "우리 팀은 이렇게 한다"는 강제 규칙은 [../conventions/](../conventions/README.md)에, 제품·설계 정본은 [../planning/](../../aidlc/aidlc-docs/planning/README.md)에 있습니다.
 
 ## 문서 목록
 

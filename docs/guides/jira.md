@@ -8,7 +8,7 @@
 ## 이슈 계층
 
 ```
-Epic (E0~E13 · docs/planning/jira 참고)
+Epic (E0~E13 · aidlc/aidlc-docs/planning/jira 참고)
 └─ Story / Task     ← 실제 작업 단위, 브랜치 하나에 대응
    └─ Sub-task      ← 더 쪼갤 때
 ```
