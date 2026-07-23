@@ -8,6 +8,13 @@ import {
   type SocialLoginScreenProps,
 } from '@/features/auth/screens/SocialLoginScreen';
 import { SplashScreen } from '@/features/auth/screens/SplashScreen';
+import {
+  HOME_DEFAULT_PROPS,
+  HOME_EMPTY_PROPS,
+  HOME_LOADING_PROPS,
+  HOME_NO_TRIP_PROPS,
+} from '@/features/home/model/homeFixtures';
+import { HomeScreen } from '@/features/home/screens/HomeScreen';
 import { NicknameScreen } from '@/features/onboarding/screens/NicknameScreen';
 import { PrefStep1Screen } from '@/features/onboarding/screens/PrefStep1Screen';
 import { PrefStep2Screen } from '@/features/onboarding/screens/PrefStep2Screen';
@@ -288,6 +295,31 @@ const PREVIEW_STATES: PreviewState[] = [
         onOpenSettings={noop}
       />
     ),
+  },
+  // ── 홈 대시보드 4상태(TRIP-170) — 프레젠테이션 전용, 고정 픽스처로 그린다 ──
+  {
+    key: 'home-default',
+    label: '홈 · 기본',
+    login: null,
+    render: () => <HomeScreen {...HOME_DEFAULT_PROPS} />,
+  },
+  {
+    key: 'home-no-trip',
+    label: '홈 · 첫 사용자',
+    login: null,
+    render: () => <HomeScreen {...HOME_NO_TRIP_PROPS} />,
+  },
+  {
+    key: 'home-empty',
+    label: '홈 · 취향 부족',
+    login: null,
+    render: () => <HomeScreen {...HOME_EMPTY_PROPS} />,
+  },
+  {
+    key: 'home-loading',
+    label: '홈 · 로딩',
+    login: null,
+    render: () => <HomeScreen {...HOME_LOADING_PROPS} />,
   },
 ];
 
