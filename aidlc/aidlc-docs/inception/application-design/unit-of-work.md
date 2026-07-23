@@ -11,9 +11,9 @@
 | 유닛 | 이름 | 포함 컴포넌트 | 에픽 | 상태 |
 |---|---|---|---|---|
 | **U0** | Foundation & Walking Skeleton | Auth(C1)·User Profile(C2)·앱셸/내비(client)·**크로스커팅 스캐폴딩** | A·B | 1차 |
-| **U1** | Accommodation & Trip Setup (앵커) | Accommodation Search(C3)·Saved Accommodation(C4)·Affiliate Link(C5)·Trip Creation(C6) | C·D | 1차 |
+| **U1** | Accommodation & Trip Setup (앵커) | Accommodation Search(C3)·Saved Accommodation(C4)·Affiliate Link(C5)·Trip Creation(C6)·**Place Data/RAG(C7)** | **A(탐색)**·C·D | 1차 |
 | **U2** | Itinerary Intelligence / Solver ★ | SolverPort+어댑터·FeasibilityValidator·PreferenceScoring/LlmGateway·TravelEstimate (+별도 솔버 서비스) | E·F | 1차 |
-| **U3** | AI Itinerary Generation | Place Data/RAG(C7)·Itinerary Generation(C8) | E | 1차 |
+| **U3** | AI Itinerary Generation | Itinerary Generation(C8) — Place Data는 U1의 `CandidatePoolPort` 소비 | E | 1차 |
 | **U4** | In-trip & Plan-B | Plan-B Detection(C9)·Itinerary Recalculation(C10)·Weather&Context(C11)·여행 중 현장(G) | F·G | 1차 |
 | **U5** | Records & Reflection | Travel Archive(C12)·AI Reflection(C13) | G·H | 1차 |
 | **U6** | Notification & Settings | Notification(C14)·설정/마이페이지 리드 | I | 1차 |
@@ -30,7 +30,7 @@
 ```
 Phase 0  U0 Foundation & Walking Skeleton
          → 인증·프로필·앱셸 + 보안(SECURITY-*)·복원력(단일리전·다중AZ·아웃박스)·PBT·관측성 스캐폴딩을 "처음부터"
-Phase 1  U1 Accommodation & Trip Setup      (앵커 = 등록 숙소 확보)
+Phase 1  U1 Accommodation & Trip Setup      (앵커 = 등록 숙소 확보 + 탐색·장소 데이터[C7])
 Phase 2  U2 Itinerary Intelligence/Solver   (결정론적 솔버 + 포트 · 차별점 엔진)
 Phase 3  U3 AI Itinerary Generation         (U2 소비 · 일정 생성 = 첫 핵심 가치)
 Phase 4  U4 In-trip & Plan-B                (여행 중 차별점 조기 검증)
@@ -72,6 +72,6 @@ trippilot/ (monorepo)
 ---
 
 ## 4. 검증
-- **모든 스토리 배정**: 94 핵심 + 25 후속 = 119 → `unit-of-work-story-map.md`에서 유닛 매핑(누락 없음).
+- **모든 스토리 배정**: 98 핵심 + 25 후속 = 123 → `unit-of-work-story-map.md`에서 유닛 매핑(누락 없음). *(2026-07-23: US-EXPL-01~04 신설로 94→98)*
 - **순환 없음**: 빌드 순서 U0→U6는 단방향 의존, 후속 U7~U9는 1차에 인터페이스 의존만(역방향 없음) → `unit-of-work-dependency.md`.
 - **일정 지능 격리**: U2가 U3·U4·U8에 포트로만 노출, Bedrock 교체·PBT가 U2에 국한.
