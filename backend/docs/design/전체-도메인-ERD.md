@@ -1,8 +1,9 @@
 # TripPilot 전체 도메인 · 통합 ERD (밴드 a~j · 개요)
 
 > 기준일 2026-07-06 · 스코프: 와이어프레임 밴드 a,b,c,d,e,g,h,i,j (k 커뮤니티·l 알림/마이/설정·m 공동편집 제외)
-> 근거: `aidlc/aidlc-docs/planning/domain.md`(전역 도메인 정본) + 와이어프레임 전수 전사(a·b·c·d·e·g·h01–h23·i·j)
+> 근거: `aidlc/aidlc-docs/inception/application-design/`(도메인 정본; 구 `planning/domain.md`는 2026-07-17 제거) + 와이어프레임 전수 전사(a·b·c·d·e·g·h01–h23·i·j)
 > 깊이: **개요** — 엔티티·관계·핵심 속성. 전체 필드·불변식·DDL은 유닛별 후속(U1은 완료).
+> [동기화 2026-07-24] 밴드 c(계정·프로필)+인프라는 구현(마이그레이션 V1.0~V1.7)과 대조 완료 — 엔티티·관계 일치. **AppConfig는 DB 테이블 아닌 설정(BootstrapProperties)으로 구현.** 컬럼·PK 상세는 `전체-최소-스키마.dbml`(동기화됨)·마이그레이션 참조.
 
 ## 0. 도메인 중심선
 
@@ -105,7 +106,7 @@ Account, SocialIdentity, TermsVersion, ConsentRecord, MarketingConsent, Location
 ### a — 앱셸·홈
 | 엔티티 | 성격 | 핵심 |
 |---|---|---|
-| AppConfig | 서버 영속(유일) | minSupportedVersion(강제 업데이트 게이트) |
+| AppConfig | 설정(BootstrapProperties · DB 테이블 아님) | minSupportedVersion/recommendedVersion(강제·권장 업데이트 게이트) |
 | BootstrapInfo | DTO(M1 공급) | sessionState·onboardingComplete·reconsentRequired·forceUpdate (우선순위 분기) |
 | HomeDashboardModel | 읽기 BFF | 슬롯: activeTrip·upcomingTrip·trending·memory·preferencePrompt·알림배지. 부분 응답 |
 | TabNavigationState | 클라 세션 | 5탭 스택(세션 한정) |
