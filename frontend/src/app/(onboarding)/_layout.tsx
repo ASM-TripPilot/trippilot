@@ -1,6 +1,6 @@
 import { Redirect, Stack } from 'expo-router';
 
-import { useOnboardingProgress } from '@/features/onboarding/hooks/useOnboardingProgress';
+import { useOnboardingProgress } from '@/features/onboarding/model/useOnboardingProgress';
 import { resolveOnboardingStep } from '@/features/onboarding/model/resolveOnboardingStep';
 
 /**

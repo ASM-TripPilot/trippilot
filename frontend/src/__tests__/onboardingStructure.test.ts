@@ -23,6 +23,33 @@ const ONBOARDING_ROUTE_DIR = path.join(ROOT, 'app', '(onboarding)');
 const TABS_ROUTE_DIR = path.join(ROOT, 'app', '(tabs)');
 const FEATURE_DIR = path.join(ROOT, 'features', 'onboarding');
 const LOCATION_DIR = path.join(ROOT, 'shared', 'location');
+const PAGES_DIR = path.join(ROOT, 'pages');
+/**
+ * 온보딩 전용 페이지 슬라이스만 나열한다(`login`은 제외 — 이 가드는 온보딩 전용이다).
+ * TRIP-173 사이클1에서 컨테이너 4개가 여기로 옮겨오면서 사정거리에 다시 넣어야 했다
+ * (onboardingPrefStructure.test.ts:75-84와 같은 성격의 보정).
+ */
+const ONBOARDING_PAGE_SLICES = [
+  'onboarding-nickname',
+  'onboarding-pref1',
+  'onboarding-pref2',
+  'onboarding-terms',
+];
+
+/**
+ * 화면 표면 스캔이 실제로 이 6개를 찾았는지 단언하는 모집단 목록(순서 고정) — 이동 전에는
+ * `sources.length`만 봤지만, `ui/` 합류로 OnboardingGlyphs.tsx(raw-hex 12곳)가 같은 폴더에
+ * 섞이면서 `*Screen.tsx` 필터만으로는 "몇 개를 찾았나"까지는 보장하지 못한다. 파일 목록을
+ * 통째로 단언해야 필터가 조용히 축소되는 회귀를 잡는다(02a §3-C-4).
+ */
+const SCREEN_SOURCE_FILES = [
+  'features/onboarding/ui/NicknameScreen.tsx',
+  'features/onboarding/ui/PrefStep1Screen.tsx',
+  'features/onboarding/ui/PrefStep2Screen.tsx',
+  'features/onboarding/ui/TermsScreen.tsx',
+  'shared/location/LocationGlyphs.tsx',
+  'shared/location/LocationPreprompt.tsx',
+];
 
 /** Figma 토큰으로 이미 존재하는 13색 (브리프 §4-5) — 소스에 raw hex 로 나타나면 안 된다. */
 const TOKENIZED_HEX = [
@@ -62,19 +89,24 @@ function readAll(files: string[]): { file: string; source: string }[] {
   }));
 }
 
-/** 온보딩 표면 전체(화면·컨테이너·컴포넌트·라우트·위치 프레임). */
+/** 온보딩 표면 전체(화면·컨테이너·컴포넌트·라우트·위치 프레임·페이지 배선). */
 function onboardingSources() {
   return readAll([
     ...listSourceFiles(FEATURE_DIR),
     ...listSourceFiles(LOCATION_DIR),
     ...listSourceFiles(ONBOARDING_ROUTE_DIR),
+    ...ONBOARDING_PAGE_SLICES.flatMap((slice) =>
+      listSourceFiles(path.join(PAGES_DIR, slice))
+    ),
   ]);
 }
 
 /** 화면 표면만 — 스타일·인셋 가드 대상. */
 function screenSources() {
   return readAll([
-    ...listSourceFiles(path.join(FEATURE_DIR, 'screens')),
+    ...listSourceFiles(path.join(FEATURE_DIR, 'ui')).filter((f) =>
+      f.endsWith('Screen.tsx')
+    ),
     ...listSourceFiles(LOCATION_DIR).filter((f) => f.endsWith('.tsx')),
   ]);
 }
@@ -115,7 +147,7 @@ describe('온보딩 라우트 배치 (AC C5 · D4)', () => {
 describe('색 토큰 사용 (AC F2)', () => {
   it('온보딩 화면이 실제로 스타일을 입고 있고, 그 어디에도 토큰화된 hex 를 직접 박지 않았다', () => {
     const sources = screenSources();
-    expect(sources.length).toBeGreaterThan(0);
+    expect(sources.map(({ file }) => file)).toEqual(SCREEN_SOURCE_FILES);
 
     // 긍정 — 화면이 NativeWind 클래스로 스타일링돼 있어야 한다(미구현 스텁이면 여기서 빨개진다).
     sources.forEach(({ file, source }) => {
@@ -138,7 +170,7 @@ describe('색 토큰 사용 (AC F2)', () => {
 describe('상태바 여백 (AC E2 · D4 결정)', () => {
   it('온보딩 화면이 safe-area inset 을 사용하고, Figma 의 44px 을 그대로 굽지 않았다', () => {
     const sources = screenSources();
-    expect(sources.length).toBeGreaterThan(0);
+    expect(sources.map(({ file }) => file)).toEqual(SCREEN_SOURCE_FILES);
 
     // 긍정 — 어느 화면이든 inset 을 실제로 읽어야 한다.
     // Figma 의 pt-44px 은 상태바 영역을 프레임에 구워 넣은 값이라 기기마다 어긋난다.

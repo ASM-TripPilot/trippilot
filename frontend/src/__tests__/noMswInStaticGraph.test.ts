@@ -246,9 +246,7 @@ describe('정적 그래프 가드 — 프로덕션 코드의 목 의존 금지',
 
     // 순회기 자가검사 — 그래프를 실제로 따라갔는지. 여기가 비면 "위반 0" 은 의미가 없다.
     expect(reachedRelative).toContain('app/_layout.tsx');
-    expect(reachedRelative).toContain(
-      'features/auth/containers/SocialLoginContainer.tsx'
-    );
+    expect(reachedRelative).toContain('pages/login/ui/LoginPage.tsx');
     expect(reachedRelative).toContain('features/auth/lib/makeAuthorize.ts');
     expect(reached.length).toBeGreaterThan(20);
 

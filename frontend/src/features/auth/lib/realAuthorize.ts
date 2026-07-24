@@ -2,8 +2,8 @@ import { AuthRequest, ResponseType, makeRedirectUri } from 'expo-auth-session';
 
 import type { SocialProvider } from '@/shared/api';
 
-import type { AuthorizeResult } from '../hooks/useSocialLogin';
-import type { OAuthProviderConfig } from './oauthConfig';
+import type { AuthorizeResult } from '../model/useSocialLogin';
+import type { OAuthProviderConfig } from '../config/oauthConfig';
 
 /**
  * 실 소셜 OAuth 인가(명령형 PKCE). makeAuthorize 가 토글 off + clientId 존재일 때 `await import` 로만

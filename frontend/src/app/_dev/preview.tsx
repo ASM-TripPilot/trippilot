@@ -6,8 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   SocialLoginScreen,
   type SocialLoginScreenProps,
-} from '@/features/auth/screens/SocialLoginScreen';
-import { SplashScreen } from '@/features/auth/screens/SplashScreen';
+} from '@/features/auth/ui/SocialLoginScreen';
+import { SplashScreen } from '@/features/auth/ui/SplashScreen';
 import {
   HOME_DEFAULT_PROPS,
   HOME_EMPTY_PROPS,
@@ -15,10 +15,10 @@ import {
   HOME_NO_TRIP_PROPS,
 } from '@/features/home/model/homeFixtures';
 import { HomeScreen } from '@/features/home/screens/HomeScreen';
-import { NicknameScreen } from '@/features/onboarding/screens/NicknameScreen';
-import { PrefStep1Screen } from '@/features/onboarding/screens/PrefStep1Screen';
-import { PrefStep2Screen } from '@/features/onboarding/screens/PrefStep2Screen';
-import { TermsScreen } from '@/features/onboarding/screens/TermsScreen';
+import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
+import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
+import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
+import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 
 /**

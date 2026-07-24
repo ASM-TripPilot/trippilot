@@ -79,7 +79,7 @@ describe('AC-OA-1 · expo-auth-session lazy 경계 (소스 스캔)', () => {
     // 오염 경로 차단, 7-3). makeAuthorize.ts 만 보는 위 스캔은 provider 분기 데이터를
     // oauthConfig.ts 에 두다가 네이티브 모듈을 딸려 오는 우회를 못 잡는다.
     const oauthConfigSource = readFileSync(
-      join(LIB_DIR, 'oauthConfig.ts'),
+      join(LIB_DIR, '..', 'config', 'oauthConfig.ts'),
       'utf8'
     );
     expect(hasStaticExpoAuthSessionImport(oauthConfigSource)).toBe(false);
