@@ -7,6 +7,7 @@ import {
 import {
   checkNickname,
   completeOnboarding,
+  fetchBootstrap,
   fetchNicknameSuggestions,
   refreshTokens,
   submitConsents,
@@ -15,6 +16,7 @@ import {
 import {
   clearAccessToken,
   getAccessToken,
+  hydrate,
   setAccessToken,
 } from './tokenManager';
 
@@ -139,5 +141,40 @@ describe('리프레시 래퍼 계약 (T1-5)', () => {
     expect(getAccessToken()).toBe('mock-access-refresh');
     // 실제로 리프레시 엔드포인트를 때렸다(키 존재 = 호출됨).
     expect(authByPath).toHaveProperty('/api/v1/auth/token/refresh');
+  });
+});
+
+describe('부트스트랩 인증 헤더 (AC-S1 · 결함 A-2 · 케이스 31)', () => {
+  it('토큰이 있으면 Bearer 를 싣고, 없으면 헤더 자체를 붙이지 않는다', async () => {
+    // 준비 + 실행(긍정) — 홀더에 access 토큰이 있는 상태에서 부트스트랩을 부른다.
+    setAccessToken('valid-access');
+    await fetchBootstrap();
+
+    // 단언(긍정) — 지금은 fetchBootstrap 이 무인증 baseClient 를 써서 헤더가 없어 실패한다.
+    expect(authByPath['/api/v1/bootstrap']).toBe('Bearer valid-access');
+
+    // 실행(부정) — 홀더를 비우고 다시 부른다(대조 · 공허한 통과 방지).
+    clearAccessToken();
+    delete authByPath['/api/v1/bootstrap'];
+    await fetchBootstrap();
+
+    // 단언(부정) — 토큰이 없으면 헤더 자체가 없어야 한다(빈 'Bearer ' 도 금지).
+    expect(authByPath['/api/v1/bootstrap']).toBeNull();
+  });
+});
+
+describe('복원 직후 첫 부트스트랩 (AC-S3 · 결함 D · 케이스 32)', () => {
+  it('hydrate 로 복원한 토큰이 첫 부트스트랩부터 Bearer 로 실리고 리프레시를 타지 않는다', async () => {
+    // 준비 — 콜드 재시작을 흉내낸다: 홀더를 비운 뒤 저장소 복원 값을 hydrate 로 싣는다.
+    clearAccessToken();
+    hydrate('stored-access');
+
+    // 실행 — 복원 직후 첫 요청.
+    await fetchBootstrap();
+
+    // 단언 — 재시작 후 첫 요청부터 인증 상태다(401→리프레시 왕복이 매 부팅마다 없다).
+    expect(authByPath['/api/v1/bootstrap']).toBe('Bearer stored-access');
+    // 리프레시 엔드포인트는 아예 때리지 않았다(키 자체가 없다).
+    expect(authByPath).not.toHaveProperty('/api/v1/auth/token/refresh');
   });
 });

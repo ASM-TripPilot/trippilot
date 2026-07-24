@@ -132,6 +132,57 @@ describe('resolveBootstrapDestination — 예제 분기 (AC-SHELL-01-1~5)', () =
   });
 });
 
+describe('resolveBootstrapDestination — AUTHENTICATED 온보딩 분기 (AC-S1 · 결함 A-1 · D7)', () => {
+  it('AUTHENTICATED 는 onboardingCompleted 로 갈린다 — 미완료는 ONBOARDING, 완료는 HOME (케이스 1)', () => {
+    const destFalse = resolveBootstrapDestination(
+      makeBootstrap({
+        appUpdate: 'NONE',
+        reconsent: false,
+        session: 'AUTHENTICATED',
+        onboardingCompleted: false,
+      }),
+      true
+    );
+    const destTrue = resolveBootstrapDestination(
+      makeBootstrap({
+        appUpdate: 'NONE',
+        reconsent: false,
+        session: 'AUTHENTICATED',
+        onboardingCompleted: true,
+      }),
+      true
+    );
+
+    // 신규 가입자가 약관 동의(온보딩)를 건너뛰고 홈으로 가는 일이 없어야 한다(US-ONB-02).
+    expect(destFalse).toBe('ONBOARDING');
+    // 대조(짝) — "둘 다 ONBOARDING" 같은 엉뚱한 구현을 막는다.
+    expect(destTrue).toBe('HOME');
+  });
+
+  it('PBT: AUTHENTICATED 구간에서 목적지는 onboardingCompleted 와 1:1 이고 로컬 토큰과 무관하다 (케이스 2)', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom<AppUpdateStatus>('RECOMMENDED', 'NONE'),
+        fc.boolean(),
+        fc.boolean(),
+        (appUpdate, onboardingCompleted, hasLocalToken) => {
+          const dest = resolveBootstrapDestination(
+            makeBootstrap({
+              appUpdate,
+              reconsent: false,
+              session: 'AUTHENTICATED',
+              onboardingCompleted,
+            }),
+            hasLocalToken
+          );
+          expect(dest).toBe(onboardingCompleted ? 'HOME' : 'ONBOARDING');
+        }
+      ),
+      { numRuns: 500 }
+    );
+  });
+});
+
 describe('resolveBootstrapDestination — 성질/PBT (AC-SHELL-01-6)', () => {
   it('임의 입력에 대해 항상 5개 목적지 중 하나를 반환하고, 동일 입력 → 동일 출력(결정적·부수효과 없음)', () => {
     fc.assert(
