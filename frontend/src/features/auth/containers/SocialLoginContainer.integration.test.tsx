@@ -4,6 +4,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
+import { http, HttpResponse } from 'msw';
 
 import { server } from '@/mocks/server';
 import { resetScenario, setScenario } from '@/mocks/scenarios';
@@ -183,5 +184,35 @@ describe('SocialLoginContainer — 409 이메일 충돌·재로그인 (AC-W-09 �
     await waitFor(() =>
       expect(socialRequests).toContain('/api/v1/auth/social/kakao')
     );
+  });
+});
+
+describe('SocialLoginContainer — 네트워크 실패(백엔드 미기동) 관통 (AC-S6 · 결함 F · 케이스 33)', () => {
+  it('응답 자체가 없으면(HttpResponse.error()) 화면에 실패 배너가 뜨고 게이트로 보내지 않는다', async () => {
+    // 준비 — 인가는 fake success 로 통과시키고, 소셜 로그인 엔드포인트만 "응답 자체 없음"으로
+    // 덮어쓴다. HttpResponse.error() 는 네트워크 실패를 흉내낸다(상태코드 500과 다르다 — axios
+    // 의 error.response 가 undefined 가 되어 normalizeSocialError 가 NETWORK_ERROR 로 정규화한다).
+    // 이 덮어쓰기는 afterEach 의 server.resetHandlers() 가 자동으로 되돌린다.
+    setScenario('login-success-existing');
+    server.use(
+      http.post('http://localhost:8080/api/v1/auth/social/:provider', () =>
+        HttpResponse.error()
+      )
+    );
+    render(<SocialLoginContainer />);
+
+    // 실행
+    fireEvent.press(screen.getByTestId('auth-login-google'));
+
+    // 단언 — 지금은 NETWORK_ERROR 가 SocialLoginScreen 의 어느 분기에도 안 걸려 화면이
+    // 침묵한다. waitFor 가 타임아웃으로 실패한다(도커 미기동 상황의 실제 재현).
+    await waitFor(() =>
+      expect(screen.getByTestId('auth-login-error-banner')).toBeOnTheScreen()
+    );
+    expect(screen.getByTestId('auth-login-error-banner')).toHaveTextContent(
+      '로그인에 실패했어요. 잠시 후 다시 시도해 주세요'
+    );
+    // 실패했는데 게이트('/')로 보내면 안 된다.
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

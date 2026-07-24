@@ -71,15 +71,15 @@ frontend/
 | 파일 | 역할 |
 |---|---|
 | `src/features/auth/screens/SplashScreen.tsx` | 스플래시 비주얼 (프레젠테이션 전용) |
-| `src/features/auth/screens/SocialLoginScreen.tsx` | 소셜 로그인 비주얼 (props 8개 순수 컴포넌트) |
+| `src/features/auth/screens/SocialLoginScreen.tsx` | 소셜 로그인 비주얼 (props 8개 순수 컴포넌트). 에러 배너 조건이 **블랙리스트**(연령제한·이메일충돌 전용화면 2종만 제외, 나머지는 phase가 `'error'`면 전부 배너 — TRIP-172 결함 F, INV-4). ⚠️ 하단 고지 문구는 여전히 기존 약관 문구뿐 — 결함 B(연령 고지 문구) 반영 안 됨 |
 | `src/features/auth/containers/SplashGate.tsx` | 부트스트랩 결과에 따라 라우팅 결정 |
 | `src/features/auth/containers/SocialLoginContainer.tsx` | 로그인 훅 ↔ 화면 배선 |
-| `src/features/auth/hooks/useBootstrapGate.ts` | 앱 시작 시 토큰 복원 · 잠정/확정 분기. `BOOTSTRAP_TIMEOUT_MS` 포함 |
-| `src/features/auth/hooks/useSocialLogin.ts` | 소셜 로그인 흐름(PKCE · single-flight). 성공 시 `saveTokens` + `setAccessToken` 둘 다 |
-| `src/features/auth/model/resolveBootstrapDestination.ts` | **순수 함수** — 부트스트랩 상태 → 목적지 |
+| `src/features/auth/hooks/useBootstrapGate.ts` | 앱 시작 시 토큰 복원(`hydrate`가 첫 조회보다 선행) · 잠정/확정 분기. `BOOTSTRAP_TIMEOUT_MS` 포함. 로그인 성공(토큰 변경)을 `subscribeAccessToken`으로 구독해 재조회한다(TRIP-172 결함 A) — 구독은 첫 왕복이 끝난 뒤에만 건다 |
+| `src/features/auth/hooks/useSocialLogin.ts` | 소셜 로그인 흐름(PKCE · single-flight, `phaseRef` 잠금). `'exchanging'` phase 신설, `authorize()` reject는 `phase='error'`(INV-4)로 표면화(TRIP-172 결함 E). 성공 시 `saveTokens` + `setAccessToken` 둘 다. ⚠️ **결함 B 미해결** — `confirmAge()`가 여전히 같은 `authorizationCode`를 재전송한다(:154, OAuth 인가코드는 1회용이라 실서버에서 항상 거부됨). 다음 사이클 1순위 |
+| `src/features/auth/model/resolveBootstrapDestination.ts` | **순수 함수** — 부트스트랩 상태 → 목적지. `AUTHENTICATED`는 `onboardingCompleted`로 `HOME`/`ONBOARDING` 분기(TRIP-172 — 서버에 `ONBOARDING_INCOMPLETE` 상태 자체가 없다, D7) |
 | `src/features/auth/lib/makeAuthorize.ts` | authorize 팩토리(DI 주입점). **3갈래** — fake 토글 on→fake / off+clientId→`realAuthorize` **동적 import** / off+설정없음→throw(INV-4) |
-| `src/features/auth/lib/realAuthorize.ts` | **`expo-auth-session`을 참조하는 유일한 프로덕션 파일.** `AuthRequest(usePKCE:true)` + `promptAsync` → 3필드 정규화 |
-| `src/features/auth/lib/oauthConfig.ts` | provider별 OAuth config를 **env에서** 읽음(`EXPO_PUBLIC_GOOGLE_*`). discovery 정적 하드코딩. **Google만 채움**, kakao/naver/apple 빈 슬롯. 네이티브 의존 0 |
+| `src/features/auth/lib/realAuthorize.ts` | **`expo-auth-session`을 참조하는 유일한 프로덕션 파일.** `AuthRequest`가 이제 `config.usePKCE`를 그대로 쓴다(naver만 false). PKCE 미사용 시 `codeVerifier`가 빈 문자열 대신 `generateOpaqueToken()` 대체값(백엔드 `@NotBlank` 회피, TRIP-172 결함 C). naver는 `state`도 직접 생성 — 둘 다 암호학적으로 안전한 난수는 아님(참고 #2, 실기 전 `expo-crypto` 교체 검토) |
+| `src/features/auth/lib/oauthConfig.ts` | provider별 OAuth config를 **env에서** 읽음(`EXPO_PUBLIC_{GOOGLE,KAKAO,NAVER}_*`). discovery 정적 하드코딩. **google·kakao·naver 채움**(TRIP-172), **apple만 빈 슬롯**(백엔드 fail-closed). naver는 `usePKCE:false` + `requiresState:true`(PKCE 미지원). 네이티브 의존 0 |
 | `src/features/auth/lib/gradients.ts` | 그라디언트·앱아이콘 색 상수 |
 | `src/features/auth/components/AuthGlyphs.tsx` | 인라인 SVG — 앱아이콘 · 소셜 4종 로고 |
 | `src/features/auth/components/SplashIllustration.tsx` | 인라인 SVG — 스플래시 일러스트 |
@@ -130,8 +130,8 @@ frontend/
 
 | 파일 | 역할 |
 |---|---|
-| `src/shared/api/index.ts` | **구현됨** — axios 인스턴스 · 인터셉터 · 토큰 갱신 · 서버 호출 전체. `authedClient` 인스턴스가 온보딩 5종을 인증 경로로 보낸다 |
-| `src/shared/api/tokenManager.ts` | **구현됨** — 동기 in-memory 액세스토큰 홀더. SecureStore(비동기)와 공존, 인터셉터가 동기로 읽는다 |
+| `src/shared/api/index.ts` | **구현됨** — axios 인스턴스 · 인터셉터 · 토큰 갱신 · 서버 호출 전체. `authedClient` 인스턴스가 온보딩 5종 + `fetchBootstrap`(TRIP-172 결함 A-2, 이전엔 무인증 `baseClient`였음)을 인증 경로로 보낸다. `SERVER_ERROR_CODE_TRANSLATIONS`가 서버 실코드→프론트 계약 코드 번역표(현재 `AGE_REQUIREMENT_NOT_MET`→`AGE_NOT_MET` 1건, `normalizeSocialError`의 `??` 결과값에 적용 — 승인 테스트가 이 표를 겨냥하지 않아 미검증) |
+| `src/shared/api/tokenManager.ts` | **구현됨** — 동기 in-memory 액세스토큰 홀더. SecureStore(비동기)와 공존, 인터셉터가 동기로 읽는다. `subscribeAccessToken`으로 토큰 변화를 구독 가능(TRIP-172, 값이 실제로 바뀔 때만 통지 — 동등비교 가드) |
 | `src/shared/storage/index.ts` | **구현됨** — expo-secure-store 토큰 저장소 |
 | `src/shared/version/compareVersion.ts` | **구현됨** — 버전 비교(강제 업데이트 판정) |
 | `src/shared/location/LocationPreprompt.tsx` | **전체화면**(레이더 히어로·denied 전용 레이아웃 — 카드형은 폐기됐고 내부 마크업만 전면 교체, props/testID 시그니처 무변경). `default`/`permission-denied` 2상태. `expo-location`을 import조차 안 함(구조적으로 OS 다이얼로그 못 부름). **라우트 미등록**(실사용처 0, 프리뷰 전용) |
@@ -203,7 +203,7 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 | `fetchBootstrap` · `postSocialLogin` · `refreshTokens` | `shared/api` | 부트스트랩 조회 · 소셜 로그인 · 토큰 갱신 |
 | `fetchTerms` · `submitConsents` | `shared/api` | 약관 목록 · 동의 1회 제출(체크된 것만 GRANT) |
 | `fetchNicknameSuggestions` · `checkNickname` · `updateNickname` · `completeOnboarding` | `shared/api` | 후보 조회 · 서버 판정 · 저장 · 온보딩 완료 |
-| `setAccessToken` · `getAccessToken` · `clearAccessToken` · `hydrate` | `shared/api/tokenManager` | 동기 in-memory 토큰 홀더. `getAccessToken`은 **동기** 반환(인터셉터용) |
+| `setAccessToken` · `getAccessToken` · `clearAccessToken` · `hydrate` · `subscribeAccessToken` | `shared/api/tokenManager` | 동기 in-memory 토큰 홀더. `getAccessToken`은 **동기** 반환(인터셉터용). `subscribeAccessToken(listener)`은 토큰이 실제로 바뀔 때만 통지하고 구독 해제 함수를 반환한다(TRIP-172 신규 — 로그인 성공 후 부트스트랩 재조회의 유일한 신호) |
 | `saveTokens` · `getTokens` · `clearTokens` · `hasStoredToken` | `shared/storage` | 토큰 저장소 CRUD. **로그인 여부 판정도 `hasStoredToken`** |
 | `compareVersion` | `shared/version` | 버전 문자열 비교(`-1\|0\|1`) |
 | `makeAuthorize` | `features/auth/lib` | provider별 authorize 팩토리(DI 주입점) |
@@ -237,6 +237,7 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 - **엣지 케이스 화면을 눈으로 보려면** → 목을 만들지 말고 `src/app/_dev/preview.tsx`에 상태를 추가한다.
 - **홈에 실 데이터를 배선하려면** → 서버 API가 아직 없다(TRIP-170 범위 밖). `homeFixtures.ts`를 API 훅으로 교체하는 자리이며, `HomeScreen.tsx`에 `msw`·`@/mocks/*`를 직접 넣지 마라(`noMswInStaticGraph.test.ts`가 잡는다).
 - **탭바 하단 인셋을 만지려면** → 전면 커스텀 탭바(74h)가 홈 인디케이터 기기의 bottom inset을 아직 합산하지 않는다(code-critic 경고2, 실기 이연 — 백엔드 부재로 실 홈 도달 불가해 미검증).
-- **실 OAuth 실행·검증** → Google 등록 + env 주입 + **네이티브 리빌드**가 필요하다. 패키지(`expo-auth-session`·`expo-web-browser`·`expo-crypto`)는 설치돼 있으나 리빌드 전이라 앱에서 아직 못 쓴다. jest는 가상 목이 우선이라 green.
-- **kakao/naver/apple** → `oauthConfig`에 빈 슬롯만 있다. 비표준 OAuth라 각각 별도 배선 필요.
+- **실 OAuth 실행·검증(AC-S7)** → 아직 **실행 불가**(TRIP-172 04b, FAIL 아님·환경 전제 부재). `ios/Podfile.lock`에 `ExpoAuthSession`·`ExpoWebBrowser`·`ExpoCrypto` 0건(설치된 dev build가 2026-07-20, 이 3종 추가 이전) + `.env.local`의 `EXPO_PUBLIC_AUTH_FAKE=1` 아직 켜짐 + google clientId 빈 값(`GOCSPX-` = 웹/데스크톱 유형이라 `trippilot://` 커스텀 스킴 등록 불가, iOS 유형 재발급 필요) + kakao/naver clientId 키 자체가 `.env.local`에 없음. 재개 순서는 리포 devlog `2026-07-24-20260723-trip172-social-real-wiring.md` 참조. jest 343건 green은 이 전제와 무관.
+- **apple** → `oauthConfig`에 여전히 빈 슬롯(백엔드 fail-closed로 막아둠, 이번 범위 밖). **kakao/naver는 TRIP-172로 채워졌다** — naver는 `usePKCE:false`+`state` 필수인 비표준 갈래라 다시 만질 땐 `realAuthorize.ts`의 조건부 분기부터 확인.
+- **연령확인(결함 B)을 만지려면** → `useSocialLogin.ts:154`의 `confirmAge()`가 **여전히 같은 `authorizationCode`로 재교환**한다 — OAuth 인가코드는 1회용이라 실서버에서 반드시 거부된다. 인터뷰에서 확정된 목표(로그인 버튼 하단 고지 문구, 모달 없음)가 AC로 전환되지 않아 이번 사이클에서 손대지 못했다(TRIP-172 04b §4). 다음 사이클 1순위 — 게이트①부터 새로 열어야 한다(화면 계약 + 기존 테스트 9건 변경 필요).
 - **화면 비주얼** → `figma-screen-impl` 스킬 절차를 따른다. 밴드 맵은 `.claude/skills/spec-perception/reference/figma-structure.md`.

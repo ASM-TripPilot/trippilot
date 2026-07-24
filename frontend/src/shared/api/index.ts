@@ -137,6 +137,8 @@ function statusToSocialErrorCode(status: number): string {
       return 'SOCIAL_AUTH_FAILED';
     case 409:
       return 'SOCIAL_EMAIL_CONFLICT';
+    case 403:
+      return 'AGE_NOT_MET';
     case 422:
       return 'AGE_NOT_MET';
     case 429:
@@ -146,13 +148,25 @@ function statusToSocialErrorCode(status: number): string {
   }
 }
 
+// 서버 실코드 → 프론트 계약 코드 번역표(TRIP-172 경고#1). 서버·openapi 드리프트가
+// 여기로 하나씩 흡수된다 — 화면은 이 매핑을 몰라도 된다.
+const SERVER_ERROR_CODE_TRANSLATIONS: Record<string, string> = {
+  AGE_REQUIREMENT_NOT_MET: 'AGE_NOT_MET',
+};
+
+function translateServerErrorCode(code: string): string {
+  return SERVER_ERROR_CODE_TRANSLATIONS[code] ?? code;
+}
+
 function normalizeSocialError(error: unknown): NormalizedApiError {
   if (isAxiosError(error) && error.response) {
     const status = error.response.status;
     const data = error.response.data as
       { error?: { code?: string; existingProvider?: string } } | undefined;
     return {
-      code: data?.error?.code ?? statusToSocialErrorCode(status),
+      code: translateServerErrorCode(
+        data?.error?.code ?? statusToSocialErrorCode(status)
+      ),
       status,
       existingProvider: data?.error?.existingProvider ?? null,
     };
@@ -161,7 +175,11 @@ function normalizeSocialError(error: unknown): NormalizedApiError {
 }
 
 export async function fetchBootstrap(): Promise<BootstrapResponse> {
-  const response = await baseClient.get<BootstrapResponse>('/api/v1/bootstrap');
+  // TRIP-172(결함 A-2) — baseClient(무인증)로 보내면 로그인 직후에도 서버가 계속 GUEST 를
+  // 돌려준다. authedClient 는 아래에서 선언되지만(모듈 스코프 const), 이 함수는 호출 시점에만
+  // 실행되므로 모듈 로드가 끝난 뒤에는 항상 초기화돼 있다(순환 참조 아님).
+  const response =
+    await authedClient.get<BootstrapResponse>('/api/v1/bootstrap');
   return response.data;
 }
 

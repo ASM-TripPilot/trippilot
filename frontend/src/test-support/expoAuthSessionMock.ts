@@ -44,13 +44,20 @@ export const makeRedirectUriSpy = jest.fn(
  * expo-auth-session 의 명령형 AuthRequest 흉내.
  * - 생성자: PKCE 옵션을 받고 codeVerifier 를 노출한다(setCodeVerifier 로 주입).
  * - promptAsync(discovery): 주입된 결과를 돌려준다.
+ *
+ * codeVerifier 는 usePKCE:false 일 때 undefined 다(02 §3-6 실측: 실 라이브러리
+ * `node_modules/expo-auth-session/build/AuthRequest.js` 는 usePKCE 기본값이 true 이고,
+ * PKCE 가 꺼지면 codeVerifier 를 만드는 ensureCodeIsSetupAsync 자체를 건너뛴다). 이전 목은
+ * usePKCE 값과 무관하게 항상 문자열을 돌려줘서, naver 경로(PKCE 미지원)의 진짜 위험 —
+ * 빈 codeVerifier 가 백엔드 @NotBlank 를 건드려 400 이 나는 상황 — 을 재현하지 못했다.
  */
 class MockAuthRequest {
-  readonly codeVerifier: string;
+  readonly codeVerifier: string | undefined;
 
   constructor(config: Record<string, unknown>) {
     authRequestConstructorSpy(config);
-    this.codeVerifier = currentCodeVerifier;
+    this.codeVerifier =
+      config.usePKCE === false ? undefined : currentCodeVerifier;
   }
 
   async promptAsync(discovery?: unknown): Promise<MockPromptResult> {

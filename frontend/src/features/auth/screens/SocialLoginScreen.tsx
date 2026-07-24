@@ -61,13 +61,16 @@ export function SocialLoginScreen({
   onAgeCancel,
 }: SocialLoginScreenProps) {
   const showCancelNotice = phase === 'cancelled';
-  const showErrorBanner =
-    phase === 'error' &&
-    (errorCode === 'SOCIAL_AUTH_FAILED' || errorCode === 'RATE_LIMITED');
   const showConflictSheet =
     phase === 'error' && errorCode === 'SOCIAL_EMAIL_CONFLICT';
   const showAgeSheet = phase === 'needs-age';
   const showAgeRestriction = phase === 'error' && errorCode === 'AGE_NOT_MET';
+  // TRIP-172(결함 F) — 서버 에러코드는 7종+미지의 값까지 계속 늘어난다(INV-4, 침묵 금지).
+  // 전용 화면(연령 제한·이메일 충돌)이 따로 있는 두 코드만 제외하고, 'error' phase 의 그 밖
+  // 모든 errorCode(널 포함)는 이 배너로 덮는다 — 화이트리스트가 아니라 블랙리스트로 짠 이유가
+  // 그것이다: 새 서버 코드가 생겨도 화면이 자동으로 안내를 띄운다.
+  const showErrorBanner =
+    phase === 'error' && !showConflictSheet && !showAgeRestriction;
 
   return (
     <View
