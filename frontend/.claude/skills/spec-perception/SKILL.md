@@ -10,7 +10,7 @@ description: "TripPilot 정본 문서·Figma 인지 규칙. 요구사항 확인,
 | 주제 | 정본 위치 |
 |---|---|
 | 제품 요구사항 | `aidlc/aidlc-docs/inception/requirements/requirements.md` |
-| 유저 스토리(119)·페르소나 | `aidlc/aidlc-docs/inception/user-stories/{stories,personas}.md` |
+| 유저 스토리·페르소나 | `aidlc/aidlc-docs/inception/user-stories/{stories,personas}.md` |
 | 컴포넌트 C1–C17·메서드·서비스 S1–S6·의존 | `aidlc/aidlc-docs/inception/application-design/{components,component-methods,services,component-dependency,application-design}.md` |
 | 유닛 분해 U0–U9·빌드 순서·스토리 맵 | `aidlc/aidlc-docs/inception/application-design/unit-of-work{,-dependency,-story-map}.md` |
 | 유닛별 construction 설계(해당 유닛 작업 시 최신 정본) | `aidlc/aidlc-docs/construction/{unit}/` (예: `u0-foundation/` — functional-design·nfr-requirements 등) |
