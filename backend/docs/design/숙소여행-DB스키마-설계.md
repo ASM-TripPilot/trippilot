@@ -2,7 +2,7 @@
 
 > 대상 유닛: 숙소·여행 (C7 Place Data · C3 Accommodation Search · C4 Saved Accommodation · C5 Affiliate Link · C6 Trip) · 밴드 d·e·g
 > 근거 정본: `construction/u1-accommodation-trip/functional-design/domain-entities.md`(엔티티·불변식 INV-U1-##), `business-rules.md`(BR-U1-##), `nfr-design/logical-components.md`(LC-U1-#), `nfr-requirements/tech-stack-decisions.md`(U1-TS-#) · 기준선 `전체-최소-스키마.dbml`(밴드 d·e·g)
-> 상태: **설계 초안** — 아직 레포 미배치·미실행. `U1-DB스키마-설계.md` 형식 계승. **⚠ = 리뷰 결정 필요**(§6).
+> 상태: **설계 확정**(결정 2026-07-25, 6절) — 아직 레포 미배치·미실행. `U1-DB스키마-설계.md` 형식 계승. TRIP-174에서 V2.x 마이그레이션으로 구현.
 
 ## 0. 범위
 
@@ -15,7 +15,7 @@
 | **POI**(장소 정본) | 앱 소유 | **PostgreSQL 영속**(`poi`) | `data_status`로 관리 · 확정 시 `poi_snapshot` 동결 |
 | **SavedPlace·SavedStay·Trip 계열** | 앱 소유 | PostgreSQL 영속 | 등록/확정 시점 값 보존(동결) |
 | **숙소 정적 콘텐츠**(이름·좌표·편의시설) | 외부 비소유 | **Redis 조회 캐시**(TTL) — PG 테이블 없음 | 캐싱 허용 · stale-if-error |
-| **최저가 스냅숏**("부터 가격") | 준정적 | `stay_price_snapshot` 배치 영속 ⚠ | `PriceSnapshotBatch` 일 1회(ShedLock) |
+| **최저가 스냅숏**("부터 가격") | 준정적 | `stay_price_snapshot` 배치 영속 | `PriceSnapshotBatch` 일 1회(ShedLock) |
 | **정확 1박가** | 휘발 | **저장·캐싱 절대 금지**(LivePriceGateway) | 표시 시점 조회 후 즉시 폐기 |
 
 ## 1. 설계 컨벤션 (U0 상속 + 델타)
@@ -24,7 +24,7 @@ U0 컨벤션(`app` 단일 스키마 · snake_case · PK `<entity>_id` uuid v4 ·
 
 | 항목 | 결정 | 근거 |
 |---|---|---|
-| 좌표 | ⚠ **`lat`·`lng double precision`**(초안) vs PostGIS `geography` — 반경 후보·'내 주변' 거리 질의 영향(§6-1) | domain `coord Point` |
+| 좌표 | **`lat`·`lng double precision`**(확정 6절) — 반경은 bounding-box 프리필터+하버사인. PostGIS 미도입 | domain `coord Point` |
 | 조회 캐시 | **Redis 신규 도입**(U1-TS-4·Q8=B) — 원본은 PG, Redis는 그 위 짧은 TTL 캐시. 로컬 `docker-compose`에 컨테이너 추가 전제 | U1-TS-4 |
 | 외부 참조 | 스냅숏·법정성 참조는 **FK 미강제**(값 보존 — 원본 폐업/삭제해도 유지) | INV-U1-03 |
 | append-only | 이 유닛은 신규 append-only 테이블 없음 → U1.7 `ALTER DEFAULT PRIVILEGES`가 신규 테이블 DML 자동 부여(신규 grants 마이그레이션 불필요) | — |
@@ -46,7 +46,7 @@ CREATE TABLE poi (
   data_status   varchar(12)  NOT NULL DEFAULT 'UNVERIFIED'
                 CHECK (data_status IN ('ACTIVE','UNVERIFIED','LOST','CLOSED')),  -- INV-U1-01 게이트
   source        varchar(12)  NOT NULL CHECK (source IN ('KAKAO_LOCAL','TOURAPI','MANUAL')),
-  saved_count   bigint       NOT NULL DEFAULT 0,      -- d01·d04 '저장 수' 반정규화 집계 ⚠(§6-3)
+  saved_count   bigint       NOT NULL DEFAULT 0,      -- d01·d04 '저장 수' 반정규화 카운터(이벤트/배치 갱신)
   created_at    timestamptz  NOT NULL DEFAULT now(),
   updated_at    timestamptz  NOT NULL DEFAULT now()
 );
@@ -84,7 +84,7 @@ CREATE INDEX ix_saved_place_account ON saved_place (account_id, saved_at DESC);
 > 외부 숙소 **정적 콘텐츠는 Redis 캐시**(PG 테이블 없음). **정확 1박가는 미저장**(LivePriceGateway). PG에는 배치 최저가 스냅숏만 둔다.
 
 ```sql
--- V2.1 stay_price_snapshot  (최저가 '부터 가격' — 배치 일1회 갱신) ⚠(§6-2)
+-- V2.1 stay_price_snapshot  (최저가 '부터 가격' — 배치 일1회 갱신)
 CREATE TABLE stay_price_snapshot (
   external_source varchar(40)  NOT NULL,              -- 공급자
   external_id     varchar(120) NOT NULL,             -- 공급자 내 숙소 ID
@@ -278,24 +278,24 @@ V2.5__affiliate.sql        ota_partner · outbound_click           (saved_stay �
 - 신규 append-only 없음 → `V1.7` `ALTER DEFAULT PRIVILEGES`가 신규 테이블 `app_user` DML 자동 부여. **별도 grants 마이그레이션 불필요.**
 - 시드(`ota_partner` 초기 제휴사)는 `R__` repeatable 또는 `V2.6__seed_ota.sql`로 분리.
 
-## 6. 리뷰 결정 필요 (⚠)
+## 6. 설계 결정 (확정 2026-07-25)
 
-1. **좌표 저장 방식** — 초안은 `lat/lng double precision`. 그러나 **반경 후보 검색·'내 주변'·거리 정렬**이 필요(밴드 e·h). 옵션: (a) lat/lng + 하버사인(확장 불필요, 인덱스 약함) (b) **PostGIS `geography` + GiST 인덱스**(공간질의 강력, 확장 도입). → 거리 질의 빈도 고려해 **리뷰에서 결정**. INV-3(거리만) 상 거리 계산은 필수라 (b) 유력.
-2. **`stay_price_snapshot` 존재/키** — 배치 최저가를 PG에 둘지, Redis에만 둘지. 초안은 PG(배치 결과 감사·무효화 용이). 키 = `(external_source, external_id)`. → 확인.
-3. **`poi.saved_count` 반정규화** — 실시간 정확성 vs 집계 뷰. 초안은 반정규화 카운터(배치/이벤트 갱신). BR-U1-06 "집계 실패 시 배지 생략"이라 강일관성 불필요. → 확인.
-4. **마이그레이션 버전대** — U0=V1.x 이어 **V2.x**(tech-stack U1-TS 명시). 확인.
-5. **Redis 로컬 스택** — `docker-compose.yml`에 Redis 컨테이너 추가 전제(U1-TS-4). 인프라 티켓 별도.
-6. **모듈↔파일 순서 불일치** — `base_assignment`/`trip_base_day`는 saved-accommodation 모듈 소유지만 `trip` 의존이라 V2.4(trip 뒤). 파일 순서는 의존, 코드 소유는 모듈. 확인.
+1. **좌표 저장** — ✅ **`lat/lng double precision`** 확정. 반경 검색은 bounding-box 프리필터(lat·lng btree 인덱스) + 하버사인 정렬. PostGIS는 **미도입** — DAU 소규모·바운디드 데이터셋이라 불필요, geo 쿼리 병목 실측 시 `geography` 컬럼 추가(forward)로 승격.
+2. **최저가 스냅숏** — ✅ **PG 영속** 확정(`stay_price_snapshot`, 키 `(external_source, external_id)`). 배치 결과 감사·캐시 무효화 용이. 정확 1박가는 여전히 미저장(캐싱 금지).
+3. **`poi.saved_count`** — ✅ **반정규화 카운터** 확정(이벤트/배치 갱신). BR-U1-06(집계 실패 시 배지 생략)이라 강일관성 불필요.
+4. **마이그레이션 버전대** — ✅ U0=V1.x 이어 **V2.x**(tech-stack U1-TS 명시).
+5. **Redis 로컬 스택** — ✅ `docker-compose.yml`에 Redis 컨테이너 추가(U1-TS-4). TRIP-174에 포함.
+6. **모듈↔파일 순서** — ✅ `base_assignment`/`trip_base_day`는 saved-accommodation 소유지만 `trip` 의존이라 V2.4(trip 뒤). 파일 순서=의존, 코드 소유=모듈.
 
 ## 7. 기준선(dbml) 대비 델타 요약
 
 | 테이블 | dbml 대비 |
 |---|---|
-| `poi` | +`region`·`source`·`saved_count`, `coord`→`lat/lng`(⚠) |
+| `poi` | +`region`·`source`·`saved_count`, `coord`→`lat/lng` |
 | `saved_stay` | +`register_route`·`memo`, 날짜 nullable 명시 |
 | `outbound_click` | +`tracking_id`(유니크)·`postback_status`·`stay_external_id` |
 | `ota_partner` | +`secret_ref`·`active` |
 | `trip` | +`companion_type`·`preference_snapshot`, `destination`(단일)→`trip_destination`(다도시) |
 | `trip_destination` | **신설** |
-| `stay_price_snapshot` | **신설**(dbml 제외였던 가격 스냅숏 영속화 ⚠) |
+| `stay_price_snapshot` | **신설**(dbml 제외였던 가격 스냅숏 영속화) |
 | `poi_snapshot`·`saved_place`·`base_assignment`·`trip_base_day`·`must_visit` | dbml과 대체로 일치 |
