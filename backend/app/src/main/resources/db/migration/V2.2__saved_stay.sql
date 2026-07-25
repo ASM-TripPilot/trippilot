@@ -15,6 +15,7 @@ CREATE TABLE saved_stay (
   memo            varchar(500),
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT chk_savedstay_dates CHECK (check_out IS NULL OR check_in IS NULL OR check_out > check_in)  -- INV-U1-09
+  CONSTRAINT chk_savedstay_dates CHECK (check_out IS NULL OR check_in IS NULL OR check_out > check_in),  -- INV-U1-09
+  CONSTRAINT chk_savedstay_coord CHECK ((lat IS NULL) = (lng IS NULL) AND (NOT coord_confirmed OR lat IS NOT NULL))  -- 좌표 쌍 + INV-U1-08 확정=좌표 존재
 );
 CREATE INDEX ix_saved_stay_account ON saved_stay (account_id, created_at DESC);
