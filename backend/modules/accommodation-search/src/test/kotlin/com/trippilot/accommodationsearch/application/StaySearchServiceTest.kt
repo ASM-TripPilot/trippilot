@@ -48,6 +48,14 @@ class StaySearchServiceTest : StringSpec({
         r.filterZeroReasons shouldBe listOf("amenity:수영장")
     }
 
+    "조합 필터로 0건이면 활성 필터 전부를 완화 후보로(BR-U1-16 조합)" {
+        // 호텔 AND 와이파이 → a(호텔·와이파이 없음)·b(와이파이·게스트하우스) 각각 실패지만 개별론 매칭됨
+        val svc = StaySearchService(FakeContent(listOf(a, b, c)), FakePrices(emptyMap()))
+        val r = svc.search(StaySearchQuery(stayTypes = setOf("호텔"), amenities = setOf("와이파이")))
+        r.items shouldBe emptyList()
+        r.filterZeroReasons shouldBe listOf("stayType", "amenity:와이파이")
+    }
+
     "필터 없이 0건이면 filter-zero 사유 없음" {
         val svc = StaySearchService(FakeContent(emptyList()), FakePrices(emptyMap()))
         svc.search(StaySearchQuery()).filterZeroReasons shouldBe emptyList()

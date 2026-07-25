@@ -42,11 +42,20 @@ class StaySearchService(
         (q.amenities.isEmpty() || q.amenities.all { it in stay.amenities }) &&
             (q.stayTypes.isEmpty() || stay.stayType in q.stayTypes)
 
-    /** 각 필터를 단독으로 걸었을 때도 0건이면 그 필터가 원인. */
+    /**
+     * filter-zero 원인. 단독으로도 0건인 필터가 있으면 그게 확정 원인.
+     * 없으면(각 필터는 개별 매칭되나 조합 AND로 0건) 활성 필터 전부를 완화 후보로 반환 —
+     * 조합 케이스에서도 "완화 제안"이 비지 않도록(BR-U1-16).
+     */
     private fun filterZeroReasons(all: List<Stay>, q: StaySearchQuery): List<String> {
-        val reasons = mutableListOf<String>()
-        if (q.stayTypes.isNotEmpty() && all.none { it.stayType in q.stayTypes }) reasons += "stayType"
-        q.amenities.forEach { a -> if (all.none { a in it.amenities }) reasons += "amenity:$a" }
-        return reasons
+        val individual = mutableListOf<String>()
+        if (q.stayTypes.isNotEmpty() && all.none { it.stayType in q.stayTypes }) individual += "stayType"
+        q.amenities.forEach { a -> if (all.none { a in it.amenities }) individual += "amenity:$a" }
+        if (individual.isNotEmpty()) return individual
+
+        val combo = mutableListOf<String>()
+        if (q.stayTypes.isNotEmpty()) combo += "stayType"
+        q.amenities.forEach { combo += "amenity:$it" }
+        return combo
     }
 }
