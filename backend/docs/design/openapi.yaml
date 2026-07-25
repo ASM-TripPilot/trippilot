@@ -387,6 +387,24 @@ paths:
       responses:
         '200': { description: alive }
 
+  /stays/search:
+    get:
+      tags: [stays]
+      summary: 숙소 탐색(날짜·인원 없이 · 최저가순)
+      description: >
+        지역·편의시설·유형으로 탐색. 필터는 AND, 정렬은 최저가순 고정(BR-U1-15).
+        가격은 최저가 스냅숏뿐(미확인은 null · BR-U1-14). 소요시간 미표시·거리만(INV-3).
+      parameters:
+        - { name: region, in: query, required: false, schema: { type: string }, description: '여행지(예: 제주)' }
+        - { name: amenity, in: query, required: false, schema: { type: array, items: { type: string } }, description: 편의시설 AND 필터 }
+        - { name: stayType, in: query, required: false, schema: { type: array, items: { type: string } }, description: 숙소 유형 필터 }
+      responses:
+        '200':
+          description: 탐색 결과(최저가순)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaySearchResponse' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -395,6 +413,38 @@ components:
       bearerFormat: JWT
 
   schemas:
+    StaySearchResponse:
+      type: object
+      required: [items, degraded, filterZeroReasons]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/StayItem' } }
+        degraded: { type: boolean, description: 일부 공급자 실패 시 true(부분 결과·재시도 안내) }
+        filterZeroReasons: { type: array, items: { type: string }, description: '필터로 0건일 때 완화 후보(예: stayType, amenity:오션뷰)' }
+
+    StayItem:
+      type: object
+      required: [externalSource, externalId, name, lat, lng, region, amenities, stayType]
+      properties:
+        externalSource: { type: string }
+        externalId: { type: string }
+        name: { type: string }
+        lat: { type: number, format: double }
+        lng: { type: number, format: double }
+        region: { type: string }
+        amenities: { type: array, items: { type: string } }
+        stayType: { type: string }
+        price:
+          allOf: [{ $ref: '#/components/schemas/StayPrice' }]
+          nullable: true
+          description: 최저가 스냅숏('부터 가격'). null=가격 미확인(BR-U1-14)
+
+    StayPrice:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, format: int64 }
+        currency: { type: string, example: KRW }
+
     TermsType:
       type: string
       enum: [TERMS_OF_SERVICE, PRIVACY_POLICY, LOCATION_TERMS, MARKETING, GPS_RECORDING, PERSONALIZATION]
