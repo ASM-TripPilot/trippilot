@@ -12,12 +12,10 @@ interface AccommodationContentPort {
 /** 콘텐츠 조회 결과 — 부분 실패 표현(BR-U1-17). */
 data class ContentResult(val stays: List<Stay>, val degraded: Boolean)
 
-/** 최저가 스냅숏 조회 포트. 배치가 채운 값을 읽기만(INV-U1-05 — 정확가는 여기 없음). */
+/**
+ * 최저가 스냅숏 조회 포트. 배치가 채운 값을 읽기만(INV-U1-05 — 정확가는 여기 없음).
+ * 스텁 단계엔 R__seed_stub_stay_prices.sql 이 채운다. 실 벤더 단계에 가격 배치(LC-U1-2, 쓰기측)가 붙는다.
+ */
 interface StayPriceQueryPort {
     fun lowestPrices(keys: List<StayKey>): Map<StayKey, Money>
-}
-
-/** 최저가 스냅숏 기록 포트(PriceSnapshotBatch 가 사용). */
-interface StayPriceWriterPort {
-    fun upsert(key: StayKey, price: Money)
 }
