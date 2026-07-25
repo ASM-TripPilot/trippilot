@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":modules:auth"))
     implementation(project(":modules:profile"))
     implementation(project(":modules:moderation"))
+    implementation(project(":modules:accommodation-search"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.actuator)

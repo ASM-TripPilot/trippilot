@@ -25,3 +25,4 @@ include(":common:test-support")   // 테스트 하네스(TRIP-149) — 각 모�
 include(":modules:auth")
 include(":modules:profile")
 include(":modules:moderation")
+include(":modules:accommodation-search")   // C3 숙소 탐색 (TRIP-175)
