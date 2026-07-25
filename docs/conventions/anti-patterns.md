@@ -24,12 +24,14 @@
 
 ## 아키텍처 · 구현
 
+- **`ApplicationRunner`/`@PostConstruct`로 기동 시 DB write를 하지 말 것.** 모든 `@SpringBootTest` 전체-컨텍스트 테스트가 그 write에 의존하게 돼, 스키마·컨테이너 설정이 다른 최소 테스트까지 컨텍스트 로드 실패로 깨진다. 시드는 `@Profile` 가드·테스트 픽스처·명시적 호출·`@Scheduled`로. (TRIP-175, PR #30 CI — DatabaseConnectivityIT)
 - **스텁/인메모리 어댑터에 캐시(Redis)·서킷브레이커(Resilience4j)를 붙이지 말 것 → 실 외부 어댑터 단계로 이연.** 스텁은 외부 지연·실패가 없어 캐싱·보호할 대상이 없다. 포트 경계만 잡아두고 실 벤더 붙일 때 감싼다("측정된 필요까지 이연" 원칙). (TRIP-175)
 - **포트 인터페이스에 메서드를 추가하면 모든 Fake/TestDouble 구현도 즉시 갱신할 것.** 안 하면 컴파일은 통과해도 다른 모듈 테스트의 fake가 깨진다. (TRIP-158 — RefreshTestDoubles)
 - **새 기능 모듈은 아키텍처 게이트에 등록할 것.** `ArchitectureRulesTest`의 R1 슬라이스·R5 패키지 목록에 모듈 패키지를 추가하지 않으면 경계 위반이 감지되지 않는다(vacuous pass). (TRIP-175)
 
 ## 테스트
 
+- **통합테스트(IT)가 있는 변경은 모듈 단위·일부 IT만 돌리고 푸시하지 말 것 → `:app:test` 전체를 돌린다.** 기동 부작용은 안 돌린 다른 IT에서만 터져 CI에서 처음 드러난다(로컬 초록·CI 빨강). (TRIP-175, PR #30)
 - **fresh 계산값과 DB 왕복값의 타임스탬프를 정확 비교하지 말 것.** 방금 만든 `Instant`는 나노초, Postgres `timestamptz` 왕복은 마이크로초 → 로컬 통과·CI 실패로 flaky. 멱등성은 진행 clock(tick +1s) 단위테스트로 검증, E2E는 존재/비교만. (TRIP-159 — BootstrapOnboardingApiIT)
 - **PBT/제약 검증 시 조합 케이스를 빠뜨리지 말 것.** 예: filter-zero 원인 계산이 개별 필터만 보고 조합(각 필터는 개별 매칭이나 AND로 0건) 케이스를 놓쳤다 → 활성 필터 전부를 완화 후보로. (TRIP-175 검수)
 
