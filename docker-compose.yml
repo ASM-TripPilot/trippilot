@@ -31,6 +31,21 @@ services:
       retries: 10
       start_period: 10s
 
+  # ── Redis (숙소·여행 조회 캐시 · U1-TS-4) ───────────────────────
+  # 숙소 목록·지역 집계·POI 검색결과의 짧은 TTL 조회 캐시. 원본은 PostgreSQL.
+  redis:
+    image: redis:7-alpine
+    container_name: trippilot-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]   # 캐시 전용(영속 비활성)
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
   # ── Backend (Spring Boot / Kotlin) ─────────────────────────────
   backend:
     profiles: ["backend", "full"]
@@ -42,10 +57,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DB_URL: jdbc:postgresql://db:5432/trippilot?currentSchema=app
       DB_USER: ${DB_USER:-app_user}
       DB_PASSWORD: ${DB_PASSWORD:-app_user}
+      REDIS_HOST: ${REDIS_HOST:-redis}      # 숙소·여행 조회 캐시
+      REDIS_PORT: ${REDIS_PORT:-6379}
       AI_URL: ${AI_URL:-http://ai:8000}     # full 프로파일에서 ai 컨테이너로 해석. backend-only 면 unreachable(degrade)
       # 소셜 로그인 시크릿 — .env 에서 주입(컨테이너는 기본 프로파일이라 application-local.yml 안 읽음).
       # 미설정이면 빈 값 → 소셜 로그인 시도 시에만 실패(기동 무영향). 값은 .env.example 참고.
