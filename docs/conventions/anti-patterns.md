@@ -40,4 +40,5 @@
 ## Git · 프로세스
 
 - **스택형 브랜치를 squash 머지 후 rebase하지 말 것.** squash가 patch-id를 바꿔 add/add 충돌 발생 → `git rebase --onto origin/develop <oldBaseTip> <branch>`로 중복 커밋을 건너뛴다. (TRIP-152/153)
+- **작업 착수 시 가장 먼저 `git checkout -b feature/...` 로 브랜치를 만들 것.** 안 만들고 코딩하면 커밋이 develop에 직접 쌓인다(push는 보호로 막히지만 로컬 develop이 오염 → 커밋을 브랜치로 옮기고 `git branch -f develop origin/develop` 으로 되돌려야 함). (TRIP-177)
 - **develop에 직접 푸시하지 말 것 → 항상 feature 브랜치 + PR.** develop은 PR로만 받는다.
