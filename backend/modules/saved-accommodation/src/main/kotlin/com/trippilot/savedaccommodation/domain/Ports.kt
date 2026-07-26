@@ -16,6 +16,9 @@ interface BaseAssignmentRepository {
     fun findByTrip(tripId: UUID): List<BaseAssignment>
     fun findById(baseAssignmentId: UUID): BaseAssignment?
     fun delete(base: BaseAssignment)
+
+    /** 숙소가 거점으로 사용 중인지 — 숙소 삭제·좌표 해제 차단(INV-U1-08). */
+    fun existsByStayId(savedStayId: UUID): Boolean
 }
 
 /**

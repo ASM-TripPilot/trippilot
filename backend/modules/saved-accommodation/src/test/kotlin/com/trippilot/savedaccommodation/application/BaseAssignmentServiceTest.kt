@@ -25,6 +25,7 @@ private class FakeBases : BaseAssignmentRepository {
     override fun findByTrip(tripId: UUID) = store.values.filter { it.tripId == tripId }
     override fun findById(baseAssignmentId: UUID) = store[baseAssignmentId]
     override fun delete(base: BaseAssignment) { store.remove(base.baseAssignmentId) }
+    override fun existsByStayId(savedStayId: UUID) = store.values.any { it.savedStayId == savedStayId }
 }
 
 private class FakeStays : SavedStayRepository {
@@ -83,6 +84,14 @@ class BaseAssignmentServiceTest : StringSpec({
         val (svc, stays, t) = fixture()
         val s = stay(stays, other)
         shouldThrow<ResourceNotFound> { svc.assign(acc, t.second, cmd(s)) }
+    }
+
+    "좌표 미확정 숙소는 거점 배정 불가 400(INV-U1-08)" {
+        val (svc, stays, t) = fixture()
+        val unconfirmed = stays.save(
+            SavedStay.register(acc, "미확정", null, null, false, null, null, null, null, RegisterRoute.LINK_PASTE, null, clock.instant()),
+        ).savedStayId
+        shouldThrow<ValidationFailed> { svc.assign(acc, t.second, cmd(unconfirmed)) }
     }
 
     "여행 기간 밖 구간은 400(INV-U1-15)" {

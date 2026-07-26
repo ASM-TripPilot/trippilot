@@ -26,6 +26,7 @@ class BaseAssignmentEntity(
 
 interface BaseAssignmentJpaRepository : JpaRepository<BaseAssignmentEntity, UUID> {
     fun findByTripId(tripId: UUID): List<BaseAssignmentEntity>
+    fun existsBySavedStayId(savedStayId: UUID): Boolean
 }
 
 @Component
@@ -42,6 +43,8 @@ class BaseAssignmentRepositoryAdapter(
         jpa.findById(baseAssignmentId).orElse(null)?.toDomain()
 
     override fun delete(base: BaseAssignment) = jpa.deleteById(base.baseAssignmentId)
+
+    override fun existsByStayId(savedStayId: UUID): Boolean = jpa.existsBySavedStayId(savedStayId)
 
     private fun BaseAssignment.toEntity() = BaseAssignmentEntity(
         baseAssignmentId = baseAssignmentId, tripId = tripId, savedStayId = savedStayId,

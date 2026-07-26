@@ -1,6 +1,8 @@
 package com.trippilot.savedaccommodation.application
 
+import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.savedaccommodation.domain.BaseAssignment
 import com.trippilot.savedaccommodation.domain.BaseAssignmentRepository
 import com.trippilot.savedaccommodation.domain.BaseSpan
@@ -39,6 +41,10 @@ class BaseAssignmentService(
         val period = ownedTripPeriod(accountId, tripId)
         // 거점 숙소도 소유자 것이어야(타 계정 숙소로 거점 불가).
         val stay = stays.findById(cmd.savedStayId)?.takeIf { it.accountId == accountId } ?: throw ResourceNotFound()
+        // INV-U1-08: 좌표 미확정 숙소는 거점 배정 불가(일정 생성이 거점 좌표를 요구).
+        if (!stay.coordConfirmed) {
+            throw ValidationFailed(listOf(FieldError("savedStayId", "좌표가 확정되지 않은 숙소는 거점으로 배정할 수 없습니다(INV-U1-08).")))
+        }
         return bases.save(
             BaseAssignment.assign(
                 tripId, stay.savedStayId, cmd.dateFrom, cmd.dateTo,

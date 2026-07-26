@@ -66,6 +66,11 @@ class BaseAssignmentApiIT : AbstractPostgresIntegrationTest() {
         return call(HttpMethod.POST, "/api/v1/saved-stays", token, body).second["savedStayId"].asText()
     }
 
+    private fun newUnconfirmedStay(token: String): String {
+        val body = """{"name":"미확정숙소","registerRoute":"LINK_PASTE","coordConfirmed":false}"""
+        return call(HttpMethod.POST, "/api/v1/saved-stays", token, body).second["savedStayId"].asText()
+    }
+
     private fun assignBody(stayId: String, from: String, to: String) =
         """{"savedStayId":"$stayId","dateFrom":"$from","dateTo":"$to"}"""
 
@@ -112,6 +117,23 @@ class BaseAssignmentApiIT : AbstractPostgresIntegrationTest() {
         val cov = call(HttpMethod.GET, "/api/v1/trips/$trip/coverage", token).second
         cov["blocked"].asBoolean() shouldBe true
         cov["days"][1]["status"].asText() shouldBe "OVERLAP"
+    }
+
+    @Test
+    fun `좌표 미확정 숙소는 거점 배정 400(INV-U1-08)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        val stay = newUnconfirmedStay(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/bases", token, assignBody(stay, "2026-08-01", "2026-08-04")).first shouldBe 400
+    }
+
+    @Test
+    fun `거점으로 사용 중인 숙소 삭제는 409(500 아님)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        val stay = newStay(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/bases", token, assignBody(stay, "2026-08-01", "2026-08-04")).first shouldBe 201
+        call(HttpMethod.DELETE, "/api/v1/saved-stays/$stay", token).first shouldBe 409
     }
 
     @Test
