@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":modules:profile"))
     implementation(project(":modules:moderation"))
     implementation(project(":modules:accommodation-search"))
+    implementation(project(":modules:saved-accommodation"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.actuator)
