@@ -16,4 +16,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working in `fro
 
 **모델 배치:** 자리별 모델의 정본은 **각 에이전트 frontmatter**다(`frontend/.claude/agents/*.md`). 사이클 SKILL은 예외 한 자리(4-b)만 명시하고 나머지는 frontmatter에 맡긴다 — 배치를 두 군데 적으면 갈라진다. ⚠️ **메타 스킬 `harness:harness`의 "모든 에이전트는 `model: "opus"`" 지침보다 현재 frontmatter가 우선한다.** 하네스 정비 중 그 스킬이 로드돼도 일괄 opus로 되돌리지 마라 — 현 배치는 12사이클 실측(자리별 실패 가시성·되돌리기 비용·호출 빈도) 위에 있고, 근거·원칙·관찰 상태는 변경이력에 있다.
 
+**Ponytail(게으른 구현 사다리):** 플러그인이 정본이다 — **사다리 7단·하드룰 본문을 하네스에 옮겨 적지 마라**(사본은 갈라진다). 하네스가 정하는 것은 배선뿐이고, 그 정본은 `frontend/.claude/settings.json`의 `env` 두 줄이다.
+
+- **모드 `lite`**(`PONYTAIL_DEFAULT_MODE`) — full의 *"가장 짧은 설명"*은 전줄 주해·학습자 모드와, ultra의 *"요구사항에 도전"*은 게이트①의 AC 동결과 충돌한다. lite의 *"더 게으른 대안을 한 줄로 제시하고 고르는 것은 사용자"*만 3-a 맹점 훑기와 결이 같다.
+- **거는 자리는 implementer뿐**(`PONYTAIL_SUBAGENT_MATCHER=^implementer$`) — spec-analyst·test-designer에 사다리를 걸면 AC가 흔들린다. 오케스트레이터는 SessionStart로 항상 받는다(플러그인 구조상 분리 불가 — 코드를 쓰지 않는 자리라 무해).
+- **"부채"가 두 장부다** — `/ponytail-debt`(미룬 코드 단축)과 이해부채(사용자가 이해하지 못한 개념)는 다르다. 섞어 세지 마라.
+- *유지 판정: 재작성 8슬라이스 종료 시 — lite가 제시한 더 게으른 대안의 **채택 건수가 0이면 배선을 뗀다**(제안이 안 나온 것도 0으로 센다). scribe가 개발로그에 건수를 남긴다.*
+
 **변경 이력:** 하네스(에이전트·스킬·settings·이 파일)를 변경하면 **반드시** 옵시디언 `TripPilot/하네스 변경이력.md` 표에 행을 추가하라(append-only). 기록 서식과 압축 전 원장 확인 순서는 `harness-rule-edit` 스킬.
