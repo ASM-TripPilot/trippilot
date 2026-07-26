@@ -12,6 +12,7 @@
 
 ## DB · 스키마 · 마이그레이션
 
+- **JPA에서 같은 트랜잭션 내 "삭제 후 재삽입"(자식 컬렉션 교체)을 파생 `deleteByX`로 하지 말 것 → bulk `@Modifying @Query` delete.** 파생 `deleteByX`는 `em.remove`로 큐잉되고, Hibernate는 flush에서 **INSERT를 DELETE보다 먼저** 실행해 같은 키 재삽입 시 unique 제약 위반(`ux_trip_destination_seq` 등). bulk delete는 즉시 실행돼 옛 행이 먼저 사라진다. (TRIP-177, PR #35)
 - **다중 경로로 cascade되는 FK에 `ON DELETE RESTRICT`/`NO ACTION`을 쓰지 말 것 → `DEFERRABLE INITIALLY DEFERRED`.** `account → saved_stay` 와 `account → trip → base_assignment → saved_stay` 처럼 다이아몬드로 cascade되면, 즉시 검사되는 RESTRICT/NO ACTION이 cascade 도중 참조를 발견해 **계정 하드삭제(퍼지)를 깨뜨린다.** DEFERRABLE는 커밋 시점에 검사해 참조가 이미 사라져 통과하되, 직접 삭제 가드는 유지된다. (TRIP-174, PR #29 · 로컬 PostgreSQL 재현·검증)
 - **jsonb 컬럼을 수동 `ObjectMapper`로 직렬화하지 말 것 → 도메인 타입에 `@JdbcTypeCode(SqlTypes.JSON)`.** 수동 직렬화는 이중 인코딩(JSON 안에 escape된 JSON 문자열)을 만든다. `Map<String,String>`·`List<...>` 같은 도메인 타입에 직접 매핑하면 Hibernate가 처리. (TRIP-155)
 - **불변식을 앱에서만 지키지 말고 DB CHECK로도 강제할 것.** 예: `coord_confirmed=true`인데 좌표 null, lat/lng 한쪽만 있는 상태가 DB에서 허용됐음 → `CHECK ((lat IS NULL)=(lng IS NULL) AND (NOT coord_confirmed OR lat IS NOT NULL))`. (TRIP-174 검수)
