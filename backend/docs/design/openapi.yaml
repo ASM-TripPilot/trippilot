@@ -514,6 +514,45 @@ paths:
         '204': { description: 삭제됨 }
         '404': { description: 없음/타 계정 }
 
+  /trips/{tripId}/bases:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 구간 거점 배정(등록 숙소를 [dateFrom, dateTo) 거점으로 · 여행 기간 내 INV-U1-15)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AssignBaseRequest' } } }
+      responses:
+        '201': { description: 배정됨, content: { application/json: { schema: { $ref: '#/components/schemas/BaseAssignment' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없음/타 계정(여행 또는 숙소) }
+    get:
+      tags: [trips]
+      summary: 여행 거점 목록
+      responses:
+        '200': { description: 거점 목록, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/BaseAssignment' } } } } }
+        '404': { description: 없음/타 계정 }
+  /trips/{tripId}/bases/{baseAssignmentId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: baseAssignmentId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [trips]
+      summary: 거점 배정 삭제
+      responses:
+        '204': { description: 삭제됨 }
+        '404': { description: 없음/타 계정 }
+  /trips/{tripId}/coverage:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 커버리지 상태(숙박일별 auto/gap/overlap · blocked면 일정 생성 진입 차단 INV-U1-16)
+      responses:
+        '200': { description: 커버리지, content: { application/json: { schema: { $ref: '#/components/schemas/Coverage' } } } }
+        '404': { description: 없음/타 계정 }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -669,6 +708,38 @@ components:
         companionType: { allOf: [{ $ref: '#/components/schemas/CompanionType' }], nullable: true }
         budgetTotal: { type: integer, format: int64, nullable: true }
         destinations: { type: array, items: { $ref: '#/components/schemas/TripDestination' } }
+
+    AssignBaseRequest:
+      type: object
+      required: [savedStayId, dateFrom, dateTo]
+      properties:
+        savedStayId: { type: string, format: uuid, description: 소유 등록 숙소 }
+        dateFrom: { type: string, format: date }
+        dateTo: { type: string, format: date, description: dateTo > dateFrom · 여행 기간 내(INV-U1-15) }
+
+    BaseAssignment:
+      type: object
+      required: [baseAssignmentId, savedStayId, dateFrom, dateTo]
+      properties:
+        baseAssignmentId: { type: string, format: uuid }
+        savedStayId: { type: string, format: uuid }
+        dateFrom: { type: string, format: date }
+        dateTo: { type: string, format: date }
+
+    Coverage:
+      type: object
+      required: [blocked, days]
+      properties:
+        blocked: { type: boolean, description: 미해결(gap/overlap)이 하나라도 있으면 true — 일정 생성 진입 차단(INV-U1-16) }
+        days: { type: array, items: { $ref: '#/components/schemas/DayCoverage' } }
+
+    DayCoverage:
+      type: object
+      required: [date, status]
+      properties:
+        date: { type: string, format: date }
+        status: { type: string, enum: [AUTO, GAP, OVERLAP], description: AUTO=후보1(확정) · GAP=후보0(공백) · OVERLAP=후보≥2(겹침) }
+        savedStayId: { type: string, format: uuid, nullable: true, description: AUTO일 때만 확정 거점 }
 
     TermsType:
       type: string

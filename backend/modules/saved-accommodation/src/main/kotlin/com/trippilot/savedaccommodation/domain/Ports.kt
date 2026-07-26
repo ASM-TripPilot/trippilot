@@ -10,6 +10,14 @@ interface SavedStayRepository {
     fun delete(stay: SavedStay)
 }
 
+/** 구간 거점 배정 영속 포트. 여행 소유 스코프 인가는 서비스가 TripFacade 로 판정. */
+interface BaseAssignmentRepository {
+    fun save(base: BaseAssignment): BaseAssignment
+    fun findByTrip(tripId: UUID): List<BaseAssignment>
+    fun findById(baseAssignmentId: UUID): BaseAssignment?
+    fun delete(base: BaseAssignment)
+}
+
 /**
  * 등록용 장소 검색·좌표 해석 포트(지도검색 경로). 벤더(카카오 로컬) 어댑터가 구현(1차 스텁).
  * 실 연동 시 키는 서버 프록시(SEC-U1-05). 실패 시 핀 지정 폴백(BR-U1-23)은 클라이언트 UX.
