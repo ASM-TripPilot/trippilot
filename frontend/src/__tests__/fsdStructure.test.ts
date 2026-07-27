@@ -6,6 +6,7 @@ import path from 'path';
 
 /**
  * AC-1 · AC-2 · AC-3 (01b Seed) — FSD 구조 가드: features 세그먼트 개명 + pages/app-shell 층 신설.
+ * AC-4 (20260728 배럴 정리 사이클 — 경량 진행이라 01/01b 미생성, 근거는 워크스페이스 RESUME.md).
  *
  * 무엇을 보장하나: 렌더로는 관찰할 수 없는 **폴더 배치** 수준의 제약을 잠근다.
  *  - auth·onboarding·home 슬라이스가 FSD 5세그먼트(ui/model/lib/config)로만 구성된다
@@ -14,6 +15,9 @@ import path from 'path';
  *  - 신설 pages 층 5슬라이스가 각각 `ui/*Page.tsx` + 재수출 `index.ts` 배럴을 갖고,
  *    대응 라우트가 옛 컨테이너 경로가 아니라 그 배럴을 참조한다
  *  - 신설 app-shell 층이 src/app **밖**에 있어 Expo Router가 라우트로 등록하지 않는다
+ *  - features/*·shared/* 슬라이스 배럴(index.ts)이 `export {};` 빈 스텁으로 남아 있지 않다
+ *    — 단, 배럴이 아예 **없는** 슬라이스는 정상이다(features/auth·shared/version이 그렇게 돈다)
+ *  - 그 빈 배럴 스캔이 **실제로 두 층을 훑었다**(스캔 범위가 비면 "위반 0개"는 공허하다)
  *
  * **가짜 통과 방지 규약(리포 확립 관례)**: 모든 "없어야 한다" 단언은 "있어야 한다" 단언과
  * **같은 it 안에서** 짝을 이룬다 — 부정 단언만 두면 대상 디렉토리가 통째로 비어도(=미이동)
@@ -34,12 +38,19 @@ import path from 'path';
  *   - screens·components·containers·hooks·store 부활 금지 (it 1-1 · 1-2 · 1-3의 집합 단언)
  *   - app-shell이 src/app 밖에 있을 것 (it 3-1의 부정 단언)
  *   - pages 슬라이스가 배럴을 가질 것 (it 2-1의 배럴 단언)
+ *   - features·shared 배럴이 빈 스텁이 아닐 것 (it 4-1의 집합 단언) — 빈 배럴은 import도
+ *     export도 하나 없어서 import 그래프를 보는 린트 규칙에는 아예 안 걸린다. 게다가 모집단이
+ *     "그때 존재하는 슬라이스 전수"라 새 슬라이스가 늘어도 이 단언은 갱신할 필요가 없다.
+ *   - 그 스캔이 두 층을 실제로 훑을 것 (it 4-1의 scannedLayers 앵커) — 잠그는 대상이 FSD
+ *     층 이름이라 새 슬라이스·새 파일로는 red가 나지 않는다(= A의 판정 기준 충족). 갱신이
+ *     필요한 순간은 층을 개명·증설할 때뿐이고, 그때는 어차피 BARREL_LAYERS를 손대야 한다.
  *
  * **B. 이행 체크포인트 — 한시적이다.** 이번 이동이 끝났는지 확인하는 스냅샷이라,
  * 정당한 신규 작업에도 red를 낸다(예: 화면을 하나 추가하면 pages 슬라이스가 6개가 된다).
  *   - auth/lib 파일이 정확히 2개 (it 1-4)
  *   - pages 슬라이스가 정확히 5개 (it 2-1 말미의 집합 단언)
  *   - 대표 파일 존재 단언 (it 1-1 · 1-2 · 1-3의 짝 단언)
+ *   - 유지 배럴 대표 심볼 단언 (it 4-1의 짝 단언 — shared/api·shared/storage)
  *
  * B의 완화·삭제 시점: **사이클 4 종료 시 재판정**한다. 단, 그 전에도
  * **정당한 신규 작업이 B 때문에 red를 낸 것이 2회 누적되면 즉시 부분집합 검사로 완화**한다
@@ -53,6 +64,11 @@ import path from 'path';
  * 파일 1개(B 범주 전체에 하나) — home 대표 파일 3건이 늘어도 쪼개지거나 리셋되지 않고
  * B의 표면만 넓어진다. 이번 사이클(20260727-trip173-fsd-home-rename) 종료 시 현재값 =
  * **0**(출생 red 3건은 제외구에 걸려 세지 않는다).
+ *
+ * 갱신(20260728-trip173-fsd-barrel-cleanup): it 4-1의 짝 단언이 B 표면을 1건 넓혔다. 이번
+ * 사이클의 출생 red는 A 단언(빈 배럴 집합)에서만 나오므로 **카운터는 그대로 0**이다.
+ * 같은 사이클 [리팩토링/보강]에서 더한 scannedLayers 앵커는 **A**라 B 표면·카운터 모두
+ * 변동 없다(카운터 = 0 유지).
  */
 
 const ROOT = path.resolve('src');
@@ -89,6 +105,33 @@ const PAGE_SLICES = [
     slice: 'onboarding-pref2',
     symbol: 'PrefStep2Page',
     route: path.join(APP_DIR, '(onboarding)', 'pref2.tsx'),
+  },
+];
+
+/**
+ * "빈 배럴" 판정 정규식 — 재수출을 하나도 하지 않는 스텁 형태.
+ * 근거(실측): 이 리포 prettier 3.9.5 설정으로 `export {}` · `export{};` · `export {  };` ·
+ * 앞 빈 줄은 모두 `export {};` 한 형태로 정규화되지만 `export type {};`는 그대로 보존된다.
+ * 그래서 완전 일치 비교(=== 'export {};') 대신 두 변형을 함께 잡는다 — 포맷을 돌리지 않고
+ * 커밋된 파일도 걸리고, 비용은 똑같이 한 줄이다.
+ */
+const EMPTY_BARREL = /^export\s+(?:type\s+)?\{\s*\}\s*;?$/;
+
+/** 이 가드의 모집단 — features·shared 두 층 전수. pages 층은 AC-2 소관이라 넣지 않는다. */
+const BARREL_LAYERS = ['features', 'shared'];
+
+/**
+ * 가짜 통과 방지 짝 — 모집단 안에서 "내용 있는 배럴"로 반드시 살아남아야 하는 파일과 대표 심볼.
+ * 이것이 없으면 features·shared의 index.ts를 전부 지워도 "빈 배럴 0개"가 초록으로 통과한다.
+ */
+const KEPT_BARRELS = [
+  {
+    file: path.join(ROOT, 'shared', 'api', 'index.ts'),
+    symbol: 'createAuthedApiClient',
+  },
+  {
+    file: path.join(ROOT, 'shared', 'storage', 'index.ts'),
+    symbol: 'saveTokens',
   },
 ];
 
@@ -309,5 +352,47 @@ describe('AC-3 · app-shell 층 — Expo Router 밖', () => {
 
     // 부정 — 옛 컨테이너 경로를 더는 참조하지 않는다.
     expect(source).not.toMatch(/features\/auth\/containers/);
+  });
+});
+
+describe('AC-4 · 빈 배럴 금지 — features·shared 층 전수', () => {
+  it('features·shared 슬라이스에 빈 배럴이 하나도 없고, 내용 있는 배럴(api·storage)은 그대로 남아 있다', () => {
+    // 준비 — 두 층의 슬라이스를 훑어 "실재하는 index.ts"만 모은다. 배럴이 아예 없는
+    // 슬라이스(features/auth·shared/version)는 정상이므로 existsSync 필터에서 조용히 빠진다.
+    // 슬라이스 이름을 화이트리스트로 박지 않기 때문에, 앞으로 생길 슬라이스도 자동으로 모집단이다.
+    const barrels = BARREL_LAYERS.flatMap((layer) =>
+      listDirNames(path.join(ROOT, layer))
+        .map((slice) => path.join(ROOT, layer, slice, 'index.ts'))
+        .filter((file) => fs.existsSync(file))
+    );
+
+    // 긍정(앵커) — **스캔이 실제로 돌았는가**를 먼저 잠근다. listDirNames는 없는
+    // 디렉토리에 조용히 []를 주므로(:134), BARREL_LAYERS를 []·오타·한 층 누락으로
+    // 바꾸면 모집단이 0이 되고 아래 "빈 배럴 0개"가 **아무 데도 안 보면서** 통과한다.
+    // filter로 "슬라이스가 하나라도 잡힌 층"만 남겨 목록 전체를 고정한다 — 개수(>0)가
+    // 아니라 목록을 잠가야 한 층이 조용히 빠지는 것도 잡힌다(동결 파일목록 단언).
+    const scannedLayers = BARREL_LAYERS.filter(
+      (layer) => listDirNames(path.join(ROOT, layer)).length > 0
+    );
+    expect(scannedLayers).toEqual(['features', 'shared']);
+
+    // 실행 — 각 배럴의 내용을 읽어 빈 스텁인 것만 src 기준 상대경로로 추린다.
+    const emptyBarrels = barrels
+      .filter((file) => EMPTY_BARREL.test(read(file).trim()))
+      .map((file) => path.relative(ROOT, file));
+
+    // 부정 — 빈 배럴은 0개여야 한다. 실패하면 위반 파일이 diff에 목록으로 찍힌다.
+    expect(emptyBarrels).toEqual([]);
+
+    // 긍정(짝) — 위 부정 단언만 두면 features·shared의 index.ts를 몽땅 지워도 초록이다.
+    // 참조가 있는 진짜 배럴 2개가 실재하고, 실제로 그 심볼을 내보내는지까지 본다.
+    KEPT_BARRELS.forEach(({ file, symbol }) => {
+      expect(existsPair(file)).toEqual({ file, exists: true });
+
+      // 파일이 없으면 위 단언이 먼저 throw하므로 아래 read()는 도달하지 않는다.
+      // `export ...<심볼>` 이 한 줄에 있어야 한다(. 은 개행을 넘지 않는다) — 파일만
+      // 남기고 내용을 스텁으로 바꾸는 것을 막는다.
+      expect(read(file)).toMatch(new RegExp(`export .*\\b${symbol}\\b`));
+    });
   });
 });

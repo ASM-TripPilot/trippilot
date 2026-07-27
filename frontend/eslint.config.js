@@ -4,18 +4,11 @@ const expoConfig = require('eslint-config-expo/flat');
 
 // import 경계: features/* 는 다른 feature 를 직접 import 할 수 없고 shared/ 만 참조한다.
 // 각 feature 를 target 으로, 자기 자신을 예외로 두어 "형제 feature import" 만 금지한다.
-const FEATURES = [
-  'onboarding',
-  'home',
-  'stay',
-  'trip',
-  'itinerary',
-  'execution',
-  'planb',
-  'archive',
-  'notification',
-  'settings',
-];
+const FEATURES = ['onboarding', 'home'];
+
+// auth 는 실재하지만 이 배열에 없다(선재 결함, 이 목록이 정리되기 전부터 빠져 있었다) — 넣으면
+// auth → 다른 feature 방향 import 를 새로 막는 동작 변경이라 전용 테스트가 필요한 별건이다.
+// 지금은 auth → onboarding 등 그 방향의 위반이 안 잡힌다는 사실만 여기 남겨둔다.
 
 // `except` 의 경로는 **`from` 기준 상대경로**다(eslint-plugin-import 규약).
 // `./src/features/${feature}` 로 쓰면 from 아래에서 다시 해석돼 예외가 하나도 잡히지 않고,
