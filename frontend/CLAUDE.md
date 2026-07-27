@@ -21,6 +21,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working in `fro
 - **모드 `lite`**(`PONYTAIL_DEFAULT_MODE`) — full의 *"가장 짧은 설명"*은 전줄 주해·학습자 모드와, ultra의 *"요구사항에 도전"*은 게이트①의 AC 동결과 충돌한다. lite의 *"더 게으른 대안을 한 줄로 제시하고 고르는 것은 사용자"*만 3-a 맹점 훑기와 결이 같다.
 - **거는 자리는 implementer뿐**(`PONYTAIL_SUBAGENT_MATCHER=^implementer$`) — spec-analyst·test-designer에 사다리를 걸면 AC가 흔들린다. 오케스트레이터는 SessionStart로 항상 받는다(플러그인 구조상 분리 불가 — 코드를 쓰지 않는 자리라 무해).
 - **"부채"가 두 장부다** — `/ponytail-debt`(미룬 코드 단축)과 이해부채(사용자가 이해하지 못한 개념)는 다르다. 섞어 세지 마라.
-- *유지 판정: 재작성 8슬라이스 종료 시 — lite가 제시한 더 게으른 대안의 **채택 건수가 0이면 배선을 뗀다**(제안이 안 나온 것도 0으로 센다). scribe가 개발로그에 건수를 남긴다.*
+- *유지 판정: 재작성 8슬라이스 종료 시 — **제안 건수와 채택 건수를 갈라 센다**(scribe가 개발로그에 남긴다). **제안 0은 배선 문제가 아니라 자리 문제다** — 재작성 슬라이스는 사다리 1·2번 칸이 티켓·구조 가드로 이미 고정돼 자유도가 없다. 그 경우 여기서 떼지 말고 **신규 코드를 쓰는 티켓에서 다시 재라.** 제안이 나왔는데 **채택 0이면 그때 뗀다.***
 
 **변경 이력:** 하네스(에이전트·스킬·settings·이 파일)를 변경하면 **반드시** 옵시디언 `TripPilot/하네스 변경이력.md` 표에 행을 추가하라(append-only). 기록 서식과 압축 전 원장 확인 순서는 `harness-rule-edit` 스킬.
