@@ -160,7 +160,7 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 |---|---|
 | `src/shared/api/index.ts` | **구현됨** — axios 인스턴스 · 인터셉터 · 토큰 갱신 · 서버 호출 전체. `authedClient` 인스턴스가 온보딩 5종 + `fetchBootstrap`(TRIP-172 결함 A-2, 이전엔 무인증 `baseClient`였음)을 인증 경로로 보낸다. `SERVER_ERROR_CODE_TRANSLATIONS`가 서버 실코드→프론트 계약 코드 번역표(현재 `AGE_REQUIREMENT_NOT_MET`→`AGE_NOT_MET` 1건, `normalizeSocialError`의 `??` 결과값에 적용 — 승인 테스트가 이 표를 겨냥하지 않아 미검증) |
 | `src/shared/api/tokenManager.ts` | **구현됨** — 동기 in-memory 액세스토큰 홀더. SecureStore(비동기)와 공존, 인터셉터가 동기로 읽는다. `subscribeAccessToken`으로 토큰 변화를 구독 가능(TRIP-172, 값이 실제로 바뀔 때만 통지 — 동등비교 가드) |
-| `src/shared/storage/index.ts` | **구현됨** — expo-secure-store 토큰 저장소 |
+| `src/shared/storage/index.ts` | **구현됨** — expo-secure-store 토큰 저장소. `hasStoredToken`은 **accessToken 존재만 판정**한다(`getItemAsync(ACCESS_TOKEN_KEY) != null` — refreshToken만 없는 부분 저장도 true). TRIP-173 재작성 3/8에서 실수로 "두 토큰 다 있어야 true"로 좁혀졌다가(콜드스타트 폴백이 HOME→LOGIN으로 뒤집힘) code-critic이 잡아 원복됨 — 이 함수를 실제로 도는 테스트가 리포에 없어 재발해도 362건이 그대로 green이니 다음에 손댈 때 주의 |
 | `src/shared/version/compareVersion.ts` | **구현됨** — 버전 비교(강제 업데이트 판정) |
 | `src/shared/location/LocationPreprompt.tsx` | **전체화면**(레이더 히어로·denied 전용 레이아웃 — 카드형은 폐기됐고 내부 마크업만 전면 교체, props/testID 시그니처 무변경). `default`/`permission-denied` 2상태. `expo-location`을 import조차 안 함(구조적으로 OS 다이얼로그 못 부름). **라우트 미등록**(실사용처 0, 프리뷰 전용) |
 | `src/shared/location/LocationGlyphs.tsx` | 인라인 SVG — 위치 화면 글리프(레이더 히어로·오프 타일). stroke/fill 색은 `locationColors.ts` 상수 경유(`shared/location/**` 는 F2 raw-hex 가드 대상) |
@@ -233,7 +233,7 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 | `fetchTerms` · `submitConsents` | `shared/api` | 약관 목록 · 동의 1회 제출(체크된 것만 GRANT) |
 | `fetchNicknameSuggestions` · `checkNickname` · `updateNickname` · `completeOnboarding` | `shared/api` | 후보 조회 · 서버 판정 · 저장 · 온보딩 완료 |
 | `setAccessToken` · `getAccessToken` · `clearAccessToken` · `hydrate` · `subscribeAccessToken` | `shared/api/tokenManager` | 동기 in-memory 토큰 홀더. `getAccessToken`은 **동기** 반환(인터셉터용). `subscribeAccessToken(listener)`은 토큰이 실제로 바뀔 때만 통지하고 구독 해제 함수를 반환한다(TRIP-172 신규 — 로그인 성공 후 부트스트랩 재조회의 유일한 신호) |
-| `saveTokens` · `getTokens` · `clearTokens` · `hasStoredToken` | `shared/storage` | 토큰 저장소 CRUD. **로그인 여부 판정도 `hasStoredToken`** |
+| `saveTokens` · `getTokens` · `clearTokens` · `hasStoredToken` | `shared/storage` | 토큰 저장소 CRUD. **로그인 여부 판정도 `hasStoredToken`**(accessToken 단독 판정 — 위 파일별 역할 표 참고, 심판 0이라 조용히 재발할 수 있다) |
 | `compareVersion` | `shared/version` | 버전 문자열 비교(`-1\|0\|1`) |
 | `makeAuthorize` | `features/auth/lib` | provider별 authorize 팩토리(DI 주입점) |
 | `getOAuthConfig` | `features/auth/config/oauthConfig` | provider별 OAuth config(env). 네이티브 의존 0 |
