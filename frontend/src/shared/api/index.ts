@@ -1,4 +1,5 @@
-import axios, {
+import {
+  create as createAxiosInstance,
   isAxiosError,
   type AxiosAdapter,
   type AxiosInstance,
@@ -117,7 +118,7 @@ interface RetriableRequestConfig extends InternalAxiosRequestConfig {
 export function createAuthedApiClient(
   options: AuthedApiClientOptions
 ): AxiosInstance {
-  const client = axios.create({
+  const client = createAxiosInstance({
     baseURL: options.baseURL,
     adapter: options.adapter,
   });
@@ -167,7 +168,7 @@ const API_BASE_URL = `${
 }/api/v1`;
 
 /** 무인증 클라이언트 — SEC-04 화이트리스트(소셜 로그인·토큰 갱신·약관 조회)가 여기로 나간다. */
-const baseClient = axios.create({ baseURL: API_BASE_URL });
+const baseClient = createAxiosInstance({ baseURL: API_BASE_URL });
 
 /** 서버 실코드 → 프론트 계약 코드 번역표. TRIP-172 — AGE_REQUIREMENT_NOT_MET 1건, 테스트 없이 이관. */
 const SERVER_ERROR_CODE_TRANSLATIONS: Record<string, string> = {
