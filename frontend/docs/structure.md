@@ -103,15 +103,15 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 | 파일 | 역할 |
 |---|---|
 | `src/features/auth/ui/SplashScreen.tsx` | 스플래시 비주얼 (프레젠테이션 전용) |
-| `src/features/auth/ui/SocialLoginScreen.tsx` | 소셜 로그인 비주얼 (props 8개 순수 컴포넌트). 에러 배너 조건이 **블랙리스트**(연령제한·이메일충돌 전용화면 2종만 제외, 나머지는 phase가 `'error'`면 전부 배너 — TRIP-172 결함 F, INV-4). ⚠️ 하단 고지 문구는 여전히 기존 약관 문구뿐 — 결함 B(연령 고지 문구) 반영 안 됨 |
+| `src/features/auth/ui/SocialLoginScreen.tsx` | 소셜 로그인 비주얼 (props 8개 순수 컴포넌트). 에러 배너 조건이 **블랙리스트**(연령제한·이메일충돌 전용화면 2종만 제외, 나머지는 phase가 `'error'`면 전부 배너 — TRIP-172 결함 F, INV-4). ⚠️ 하단 고지 문구는 여전히 기존 약관 문구뿐 — 결함 B(연령 고지 문구) 반영 안 됨. **TRIP-173 FSD 완결 4/4**(Figma `c02-social-login` `1284:1208` 정합) — 카카오 라벨 한글화(`카카오로 계속하기`) · 소셜 버튼 라벨 Bold화 · 에러 배너 재구성(배경 `bg-primary-pale`+모서리+`WarningTriangleGlyph`, 구 회색 텍스트 한 줄에서 교체). `SocialLoginScreen.visual.test.tsx`가 AC-V1~V3을 **렌더 층**(`within` 스코프)에서 잠금 — 소스 스캔은 위치를 못 봐서 안 씀(개념 [[가드의 사정거리]] 실측 6). ⚠️ 카카오 라벨 한글화로 충돌 시트(`이미 kakao 로그인으로`)와 표기가 갈라짐 — [[2026-07-28 카카오·kakao 표시명 불일치]] |
 | `src/features/auth/model/useBootstrapGate.ts` | 앱 시작 시 토큰 복원(`hydrate`가 첫 조회보다 선행) · 잠정/확정 분기. `BOOTSTRAP_TIMEOUT_MS` 포함. 로그인 성공(토큰 변경)을 `subscribeAccessToken`으로 구독해 재조회한다(TRIP-172 결함 A) — 구독은 첫 왕복이 끝난 뒤에만 건다 |
 | `src/features/auth/model/useSocialLogin.ts` | 소셜 로그인 흐름(PKCE · single-flight, `phaseRef` 잠금). `'exchanging'` phase 신설, `authorize()` reject는 `phase='error'`(INV-4)로 표면화(TRIP-172 결함 E). 성공 시 `saveTokens` + `setAccessToken` 둘 다. ⚠️ **결함 B 미해결** — `confirmAge()`가 여전히 같은 `authorizationCode`를 재전송한다(:154, OAuth 인가코드는 1회용이라 실서버에서 항상 거부됨). 다음 사이클 1순위 |
 | `src/features/auth/model/resolveBootstrapDestination.ts` | **순수 함수** — 부트스트랩 상태 → 목적지. `AUTHENTICATED`는 `onboardingCompleted`로 `HOME`/`ONBOARDING` 분기(TRIP-172 — 서버에 `ONBOARDING_INCOMPLETE` 상태 자체가 없다, D7) |
 | `src/features/auth/lib/makeAuthorize.ts` | authorize 팩토리(DI 주입점). **제자리**(TRIP-173에서 안 옮김). **3갈래** — fake 토글 on→fake / off+clientId→`realAuthorize` **동적 import** / off+설정없음→throw(INV-4) |
 | `src/features/auth/lib/realAuthorize.ts` | **`expo-auth-session`을 참조하는 유일한 프로덕션 파일.** **제자리**(TRIP-173에서 안 옮김). `AuthRequest`가 이제 `config.usePKCE`를 그대로 쓴다(naver만 false). PKCE 미사용 시 `codeVerifier`가 빈 문자열 대신 `generateOpaqueToken()` 대체값(백엔드 `@NotBlank` 회피, TRIP-172 결함 C). naver는 `state`도 직접 생성 — 둘 다 암호학적으로 안전한 난수는 아님(참고 #2, 실기 전 `expo-crypto` 교체 검토) |
 | `src/features/auth/config/oauthConfig.ts` | provider별 OAuth config를 **env에서** 읽음(`EXPO_PUBLIC_{GOOGLE,KAKAO,NAVER}_*`). discovery 정적 하드코딩. **google·kakao·naver 채움**(TRIP-172), **apple만 빈 슬롯**(백엔드 fail-closed). naver는 `usePKCE:false` + `requiresState:true`(PKCE 미지원). 네이티브 의존 0 |
-| `src/features/auth/config/gradients.ts` | 그라디언트·앱아이콘 색 상수 |
-| `src/features/auth/ui/AuthGlyphs.tsx` | 인라인 SVG — 앱아이콘 · 소셜 4종 로고 |
+| `src/features/auth/config/gradients.ts` | 그라디언트·앱아이콘 색 상수. **TRIP-173 FSD 4/4** `AUTH_ICON_COLORS`(경고 글리프 색, `warning: '#C13515'` = tailwind `primary-text`) 추가 — `fsdStructure.test.ts:252`가 `auth/config/` 파일 목록을 완전일치 앵커해 새 파일 대신 이 모듈에 얹음(재사용 공개 API 표에도 등재) |
+| `src/features/auth/ui/AuthGlyphs.tsx` | 인라인 SVG — 앱아이콘 · 소셜 4종 로고 · **TRIP-173 FSD 4/4 신설** `WarningTriangleGlyph`(18×18 경고 삼각형 — `LocationInfoGlyph` 형태 선례 그대로, 색은 `AUTH_ICON_COLORS.warning` 경유, Figma 원본과 `d=`·색·굵기 글자 그대로 일치). `strokeWidth`·렌더 크기(`size`) 부분 회귀는 `loginVisual.test.ts`가 잠금(개념 [[가드의 사정거리]] 실측 6) |
 | `src/features/auth/ui/SplashIllustration.tsx` | 인라인 SVG — 스플래시 일러스트 |
 
 > `src/features/auth/` 아래 `index.ts`는 여전히 **존재하지 않는다** — 이제 이게 표준이다. 배럴 신설 계획("사이클 3")은 폐기됐다(그 유예가 가리키던 사이클 3은 폐기된 FSD 이주 11사이클 계획의 것). TRIP-173 FSD 완결 2/4에서 home·onboarding의 빈 배럴 14개를 전부 삭제하며 방향이 뒤집혔다 — **구현 슬라이스는 배럴 없이 간다.**
@@ -188,6 +188,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `src/__tests__/onboardingPrefRoutes.test.tsx` | 취향 1/2·2/2 라우트 존재·내비게이션 계약 가드(TRIP-163) — push/replace/back 분기 |
 | `src/__tests__/tabsShell.test.tsx` | `(tabs)/_layout.tsx` 배선 가드(TRIP-170) — 5탭 등록 순서·`tabBar` 렌더프롭·어댑터 활성 매핑/press→navigate·홈 라우트 래퍼·4탭 껍데기 유지 |
 | `src/__tests__/tabbarVisual.test.ts` | **TRIP-173 FSD 완결 3/4 신설** — `BottomTabBar.tsx` 비주얼 소스 스캔 가드(AC-V1 밴드 84+알약 반경 · AC-V2 아이콘 좌표계 27 전량 · AC-V3 옛 풀폭 직각 바 흔적 0 · AC-V4 색 토큰 경유). **모든 `it`이 `stripComments()`로 주석을 제거한 뒤 스캔** — 게이트①-1에서 헤더 주석의 `rounded-pill` 문구가 부정 단언을 실제 코드 없이 만족시키는 거짓 GREEN이 나온 것을 게이트①-2에서 근본 수정. 렌더 크기(`size=27`, 호출부+기본값 12곳)·스크린샷이 잡은 수정값 6종(`h-[64px]`·`leading-[13px]`·`bg-surface-soft`·`w-[62px]`·`px-[28px]`·`style={PILL_SURFACE_STYLE}`)도 함께 잠근다. `active=1~4` 변형은 탭을 누를 수 없어(접근성 권한 부재) 코드 대조로만 담보 — 스크린샷은 홈 활성 1상태만 검증 |
+| `src/__tests__/loginVisual.test.ts` | **TRIP-173 FSD 완결 4/4 신설** — `AuthGlyphs.tsx`의 `WarningTriangleGlyph` 비주얼 **소스 스캔** 가드(AC-V4: `viewBox="0 0 18 18"` · `strokeWidth={1.575}` 배열 비교(개수·값·순서) · 렌더 크기 3곳 잠금(기본값·`size`→`width`/`height` 배선·호출부) · 색 상수 경유 · 스캔 대상 경로 존재 앵커). `stripComments` + 함수 블록/JSX 태그 슬라이스로 이 모듈의 다른 글리프 5개가 개수를 채워주는 우회를 차단(게이트①-2 보강, W-1·W-3 — `tabbarVisual.test.ts`와 같은 구멍이 두 사이클 연속 재현). AC-V1~V3(라벨 웨이트·에러 배너)은 이 파일이 아니라 `SocialLoginScreen.visual.test.tsx`의 **렌더 층**이 잠근다 — `className`이 jest 렌더 트리에 평문 prop으로 남는다는 4-a 실측으로 Seed를 뒤집은 결과(개념 [[가드의 사정거리]] 실측 6, "렌더 층과 소스 층은 사정거리가 다르다") |
 | `src/__tests__/devPreviewPref.test.tsx` | 프리뷰 `pref1`·`pref2` 상태 렌더 가드(TRIP-163) — 빈 선택 상태로 직접 렌더, 가드 우회 아님 |
 | `src/__tests__/devPreviewHome.test.tsx` | 프리뷰 홈 4키 가드(TRIP-170) — 딥링크 4키·토글 진입·미존재 키 splash 폴백 결정론 |
 | `src/__tests__/onboardingEntryGuard.test.tsx` | 온보딩 진입 리다이렉트·완료자 방어 가드 |
@@ -242,7 +243,7 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 | `HomeScreenProps` · `HomeSections`(외 조각 타입) | `features/home/model/homeTypes` | 홈 화면 prop 계약 — 판별 유니온 `HomeSections`(ready/empty/loading) |
 | `useBootstrapGate` · `useSocialLogin` | `features/auth/model` | 부트스트랩 · 소셜 로그인 훅. **TRIP-173에서 `hooks/`→`model/` 개명** |
 | `useTermsConsent` · `useNickname` · `useOnboardingProgress` | `features/onboarding/model` | 약관 · 닉네임 · 진행 상태 훅. **TRIP-173에서 `hooks/`→`model/` 개명** |
-| `SPLASH_BACKGROUND_COLORS` · `SPLASH_BACKGROUND_LOCATIONS` · `APP_ICON_COLORS` | `features/auth/config/gradients` | 그라디언트 상수. **TRIP-173에서 `lib/`→`config/` 개명** |
+| `SPLASH_BACKGROUND_COLORS` · `SPLASH_BACKGROUND_LOCATIONS` · `APP_ICON_COLORS` · `AUTH_ICON_COLORS` | `features/auth/config/gradients` | 그라디언트 상수. **TRIP-173에서 `lib/`→`config/` 개명**, `AUTH_ICON_COLORS`(경고 글리프 색)는 **FSD 완결 4/4 신설**(code-critic 03b 참고-1: 이 행 갱신 누락이 "이름 다른 재구현" 경로를 여는 사례로 실측됨 — 다음에 경고 아이콘 색이 또 필요하면 여기부터 본다) |
 | `BOOTSTRAP_TIMEOUT_MS` | `features/auth/model` | 부트스트랩 타임아웃 |
 | `LoginPage` | `pages/login` | 로그인 훅↔화면 배선(구 `features/auth/containers/SocialLoginContainer`, TRIP-173 신설) |
 | `TermsPage` · `NicknamePage` · `PrefStep1Page` · `PrefStep2Page` | `pages/onboarding-{terms,nickname,pref1,pref2}` | 온보딩 각 단계 배선(구 `features/onboarding/containers/*Container`, TRIP-173 신설) |
@@ -267,4 +268,5 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 - **실 OAuth 실행·검증(AC-S7)** → 아직 **실행 불가**(TRIP-172 04b, FAIL 아님·환경 전제 부재). `ios/Podfile.lock`에 `ExpoAuthSession`·`ExpoWebBrowser`·`ExpoCrypto` 0건(설치된 dev build가 2026-07-20, 이 3종 추가 이전) + `.env.local`의 `EXPO_PUBLIC_AUTH_FAKE=1` 아직 켜짐 + google clientId 빈 값(`GOCSPX-` = 웹/데스크톱 유형이라 `trippilot://` 커스텀 스킴 등록 불가, iOS 유형 재발급 필요) + kakao/naver clientId 키 자체가 `.env.local`에 없음. 재개 순서는 리포 devlog `2026-07-24-20260723-trip172-social-real-wiring.md` 참조. jest 343건 green은 이 전제와 무관.
 - **apple** → `oauthConfig`에 여전히 빈 슬롯(백엔드 fail-closed로 막아둠, 이번 범위 밖). **kakao/naver는 TRIP-172로 채워졌다** — naver는 `usePKCE:false`+`state` 필수인 비표준 갈래라 다시 만질 땐 `realAuthorize.ts`의 조건부 분기부터 확인.
 - **연령확인(결함 B)을 만지려면** → `useSocialLogin.ts:154`의 `confirmAge()`가 **여전히 같은 `authorizationCode`로 재교환**한다 — OAuth 인가코드는 1회용이라 실서버에서 반드시 거부된다. 인터뷰에서 확정된 목표(로그인 버튼 하단 고지 문구, 모달 없음)가 AC로 전환되지 않아 이번 사이클에서 손대지 못했다(TRIP-172 04b §4). 다음 사이클 1순위 — 게이트①부터 새로 열어야 한다(화면 계약 + 기존 테스트 9건 변경 필요).
+- **로그인 화면 문구를 만지려면** → 카카오 버튼 라벨은 `카카오로 계속하기`(한글, TRIP-173 FSD 4/4). `getByText`류 매칭은 **2개 이상이면 throw**한다 — 충돌 시트 메시지도 같은 provider 문자열을 담을 수 있어 화면 전체 유일성을 가정한 단언은 깨진다(`SocialLoginScreen.test.tsx:134`는 이미 `getByTestId('auth-login-conflict-message')` 스코프로 회피됨). 표시명(`카카오`)과 provider 코드(`kakao`)가 화면 안에서 갈라져 있다 — [[2026-07-28 카카오·kakao 표시명 불일치]].
 - **화면 비주얼** → `figma-screen-impl` 스킬 절차를 따른다. 밴드 맵은 `.claude/skills/spec-perception/reference/figma-structure.md`.
