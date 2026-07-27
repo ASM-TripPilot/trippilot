@@ -3,8 +3,8 @@ import Svg, { Circle, Path } from 'react-native-svg';
 // 홈 대시보드 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs 패턴 계승 · TRIP-170).
 // features 간 직접 import 금지(importBoundary)라 화면끼리 글리프를 공유하지 않는다 — 이 파일은
 // features/home 전용이며 shared/ui/BottomTabBar(탭 아이콘)와는 별개다.
-// 색은 화면(screens/) 밖인 이 파일 안에서만 raw hex로 고정한다(OnboardingGlyphs 선례 —
-// screens/ 스코프만 raw-hex 가드 대상이라 components/는 예외).
+// 색은 이 파일 안에서만 raw hex로 고정한다(OnboardingGlyphs 선례 — `ui/` 안이지만
+// `*Screen.tsx` 파일명 필터 밖이라 D-3(raw-hex 가드) 대상이 아니다).
 
 const INK = '#222222';
 const MUTED = '#6A6A6A';
@@ -147,8 +147,8 @@ export function HeartOutlineGlyph({ size = 22, testID }: GlyphProps) {
 }
 
 // 새 여행 만들기 버튼 · 첫 사용자 대시 카드 공용 plus. tone으로 두 색 변형만 노출한다 —
-// 화면(screens/) 쪽에서 raw hex를 직접 넘기면 D-3(raw-hex 가드)가 red가 되므로, 색 선택은
-// 이 파일 안의 의미 있는 이름(tone)으로만 받는다.
+// 화면(`*Screen.tsx` 파일)이 raw hex를 직접 넘기면 D-3(raw-hex 가드)가 red가 되므로, 색
+// 선택은 이 파일 안의 의미 있는 이름(tone)으로만 받는다.
 export function PlusGlyph({
   size = 20,
   tone = 'ink',

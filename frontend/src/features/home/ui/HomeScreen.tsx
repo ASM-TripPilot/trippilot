@@ -19,7 +19,7 @@ import {
   PencilGlyph,
   PlusGlyph,
   RouteDotsGlyph,
-} from '../components/HomeGlyphs';
+} from './HomeGlyphs';
 import type {
   HomeNextPlan,
   HomePopularPlace,

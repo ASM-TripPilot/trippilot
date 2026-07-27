@@ -42,6 +42,15 @@ const TOKENIZED_HEX = [
   '#dddddd',
 ];
 
+/**
+ * 화면 표면 스캔이 실제로 이 1개를 찾았는지 단언하는 모집단 목록(순서 고정) — 이동 전에는
+ * `sources.length`만 봤지만, `ui/` 합류로 HomeGlyphs.tsx가 같은 폴더에 섞이면서
+ * `*Screen.tsx` 필터만으로는 "몇 개를 찾았나"까지는 보장하지 못한다. 파일 목록을
+ * 통째로 단언해야 필터가 조용히 축소되는 회귀를 잡는다(선례: onboardingStructure.test.ts의
+ * SCREEN_SOURCE_FILES).
+ */
+const HOME_SCREEN_SOURCE_FILES = ['features/home/ui/HomeScreen.tsx'];
+
 function listSourceFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs
@@ -68,9 +77,18 @@ function homeSources() {
   return readAll(listSourceFiles(HOME_DIR));
 }
 
-/** 화면 표면만 — 토큰·인셋 가드 대상. */
+/**
+ * 화면 표면만 — 토큰·인셋 가드 대상. `ui/` 합류로 글리프(HomeGlyphs.tsx)가 같은 폴더에
+ * 들어오므로 폴더 이름은 더는 스코프가 아니다 — `*Screen.tsx` 파일명 규칙이 그 역할을
+ * 물려받는다. 토큰(D-3)·SafeArea(D-4) 두 도메인의 규칙 주체가 똑같이 "화면"이라
+ * 모집단을 하나로 공유한다.
+ */
 function homeScreenSources() {
-  return readAll(listSourceFiles(path.join(HOME_DIR, 'screens')));
+  return readAll(
+    listSourceFiles(path.join(HOME_DIR, 'ui')).filter((f) =>
+      f.endsWith('Screen.tsx')
+    )
+  );
 }
 
 /** 홈 + (tabs) 라우트 — INV-3 grep 모집단(§0 확정: duration은 DTO/식별자 수준 금지). */
@@ -129,8 +147,8 @@ describe('INV-3 grep — duration 식별자 금지 (SC-3 · D-2)', () => {
 describe('토큰 사용 — 홈 화면 (AC-V1 기계 절반 · D-3)', () => {
   it('홈 화면이 className으로 스타일링돼 있고, 토큰화된 13색 raw hex는 어디에도 없다', () => {
     const sources = homeScreenSources();
-    // 긍정 — 미구현 스텁이면 여기서 빨개진다.
-    expect(sources.length).toBeGreaterThan(0);
+    // 필터 자기검증 — 모집단이 정확히 이 파일들인지 잠근다(조용한 0개/2개 반환을 잡는다).
+    expect(sources.map(({ file }) => file)).toEqual(HOME_SCREEN_SOURCE_FILES);
     sources.forEach(({ file, source }) => {
       expect({ file, styled: /className=/.test(source) }).toEqual({
         file,
@@ -152,10 +170,12 @@ describe('토큰 사용 — 홈 화면 (AC-V1 기계 절반 · D-3)', () => {
 describe('SafeArea 규약 — 상태바 여백 (§7-14 · D-4)', () => {
   it('홈 화면이 SafeAreaView/useSafeAreaInsets를 쓰고, pt50 하드코딩은 없다', () => {
     const sources = homeScreenSources();
-    expect(sources.length).toBeGreaterThan(0);
+    // 필터 자기검증 — 모집단이 정확히 이 파일들인지 잠근다(조용한 0개/2개 반환을 잡는다).
+    expect(sources.map(({ file }) => file)).toEqual(HOME_SCREEN_SOURCE_FILES);
 
     // 긍정 — 어느 화면이든 인셋을 실제로 읽어야 한다.
     // Figma의 pt-50px은 상태바 영역을 프레임에 구워 넣은 값이라 기기마다 어긋난다(trip163 §7-14).
+    // 방아쇠 — 동결목록이 1건인 동안 some≡forEach; 2건↑이 되면 새 화면 누락을 못 잡으니 forEach로 강화한다.
     const usesInsets = sources.some(
       ({ source }) =>
         /useSafeAreaInsets/.test(source) || /SafeAreaView/.test(source)

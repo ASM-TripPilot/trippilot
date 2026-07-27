@@ -8,7 +8,7 @@ import path from 'path';
  * AC-1 · AC-2 · AC-3 (01b Seed) — FSD 구조 가드: features 세그먼트 개명 + pages/app-shell 층 신설.
  *
  * 무엇을 보장하나: 렌더로는 관찰할 수 없는 **폴더 배치** 수준의 제약을 잠근다.
- *  - auth·onboarding 슬라이스가 FSD 5세그먼트(ui/model/lib/config)로만 구성된다
+ *  - auth·onboarding·home 슬라이스가 FSD 5세그먼트(ui/model/lib/config)로만 구성된다
  *    (screens·components·hooks·containers·store 같은 옛 칸이 남아 있으면 red)
  *  - auth/lib에는 팩토리 2개(makeAuthorize·realAuthorize)만 남고, 설정·상수는 auth/config로 갈라졌다
  *  - 신설 pages 층 5슬라이스가 각각 `ui/*Page.tsx` + 재수출 `index.ts` 배럴을 갖고,
@@ -31,25 +31,34 @@ import path from 'path';
  * **A. 영구 규칙 — 유지한다.** eslint가 대체할 수 없다: 린트는 import를 보는 도구라
  * 부활한 폴더 안의 파일이 아무것도 import하지 않으면 규칙 자체가 돌지 않는다.
  * 폴더 이름을 금지하려면 파일 시스템을 읽어야 한다.
- *   - screens·components·containers·hooks·store 부활 금지 (it 1-1 · 1-2의 집합 단언)
+ *   - screens·components·containers·hooks·store 부활 금지 (it 1-1 · 1-2 · 1-3의 집합 단언)
  *   - app-shell이 src/app 밖에 있을 것 (it 3-1의 부정 단언)
  *   - pages 슬라이스가 배럴을 가질 것 (it 2-1의 배럴 단언)
  *
  * **B. 이행 체크포인트 — 한시적이다.** 이번 이동이 끝났는지 확인하는 스냅샷이라,
  * 정당한 신규 작업에도 red를 낸다(예: 화면을 하나 추가하면 pages 슬라이스가 6개가 된다).
- *   - auth/lib 파일이 정확히 2개 (it 1-3)
+ *   - auth/lib 파일이 정확히 2개 (it 1-4)
  *   - pages 슬라이스가 정확히 5개 (it 2-1 말미의 집합 단언)
- *   - 대표 파일 존재 단언 (it 1-1 · 1-2의 짝 단언)
+ *   - 대표 파일 존재 단언 (it 1-1 · 1-2 · 1-3의 짝 단언)
  *
  * B의 완화·삭제 시점: **사이클 4 종료 시 재판정**한다. 단, 그 전에도
  * **정당한 신규 작업이 B 때문에 red를 낸 것이 2회 누적되면 즉시 부분집합 검사로 완화**한다
  * (사이클 4를 기다리지 않는다). 가드가 죽는 가장 흔한 경로가 "정당한 작업을 계속 막아서
  * 사람들이 통째로 지우는 것"이라, 그 전에 조건부로 격하하는 편이 낫다.
+ *
+ * **B 카운터 제외구**: 카운터에 세는 red는 ① 그 단언을 만든 사이클 밖의 작업이 낸 것이고
+ * ② B 단언 자체를 갱신하지 않고는 통과할 수 없는 것이다(AND) — TDD red-first의 출생 red와,
+ * 같은 티켓 안에서 그 이동을 완성하며 해소되는 red는 세지 않는다. 카운터가 재는 것은
+ * 누적된 마찰이고, 출생 red는 가드가 실효함을 증명하는 정반대의 증거다. 카운터 단위는
+ * 파일 1개(B 범주 전체에 하나) — home 대표 파일 3건이 늘어도 쪼개지거나 리셋되지 않고
+ * B의 표면만 넓어진다. 이번 사이클(20260727-trip173-fsd-home-rename) 종료 시 현재값 =
+ * **0**(출생 red 3건은 제외구에 걸려 세지 않는다).
  */
 
 const ROOT = path.resolve('src');
 const AUTH_DIR = path.join(ROOT, 'features', 'auth');
 const ONB_DIR = path.join(ROOT, 'features', 'onboarding');
+const HOME_DIR = path.join(ROOT, 'features', 'home');
 const PAGES_DIR = path.join(ROOT, 'pages');
 const SHELL_DIR = path.join(ROOT, 'app-shell');
 const APP_DIR = path.join(ROOT, 'app');
@@ -165,6 +174,25 @@ describe('AC-1 · 슬라이스 세그먼트 개명 — FSD 5칸', () => {
 
     // 긍정(짝) — store/에서 옮겨온 preferenceStore.ts와 model/ 제자리인
     // resolveOnboardingStep.ts가 둘 다 도착했는지 본다. 하나만 보면 절반 이동을 놓친다.
+    representativeFiles.forEach((file) => {
+      expect(existsPair(file)).toEqual({ file, exists: true });
+    });
+  });
+
+  it('home 슬라이스가 {model, ui} 2칸뿐이고, 각 칸의 대표 파일이 실재한다', () => {
+    const representativeFiles = [
+      path.join(HOME_DIR, 'ui', 'HomeScreen.tsx'),
+      path.join(HOME_DIR, 'ui', 'HomeGlyphs.tsx'),
+      path.join(HOME_DIR, 'model', 'homeFixtures.ts'),
+    ];
+
+    const segments = listDirNames(HOME_DIR);
+
+    // 부정 겸 긍정 — 2칸만 있어야 한다(옛 두 칸 screens·components가 남아 있으면 red).
+    expect(segments).toEqual(['model', 'ui']);
+
+    // 긍정(짝) — 옛 두 칸(screens·components)에서 옮겨온 파일들이 실제로 ui/에
+    // 도착했는지 본다. 하나만 보면 절반 이동을 놓친다.
     representativeFiles.forEach((file) => {
       expect(existsPair(file)).toEqual({ file, exists: true });
     });

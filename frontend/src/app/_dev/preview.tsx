@@ -14,7 +14,7 @@ import {
   HOME_LOADING_PROPS,
   HOME_NO_TRIP_PROPS,
 } from '@/features/home/model/homeFixtures';
-import { HomeScreen } from '@/features/home/screens/HomeScreen';
+import { HomeScreen } from '@/features/home/ui/HomeScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
