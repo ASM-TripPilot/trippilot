@@ -1,5 +1,7 @@
 import Svg, { Path } from 'react-native-svg';
 
+import { AUTH_ICON_COLORS } from '../config/gradients';
+
 // 인증 화면 전용 벡터 글리프(D3 인라인 방식). Figma 에서 내려받은 .svg 의 좌표를
 // react-native-svg 프리미티브(<Svg><Path/>)로 1:1 옮긴 것 — transformer 미도입.
 // Figma 의 fill="var(--fill-0, ...)" CSS 변수 폴백은 실색으로 고정했다(RN 은 CSS 변수 미지원).
@@ -118,6 +120,43 @@ export function NaverIcon({ size = 20, testID }: GlyphProps) {
       <Path
         d="M6.66669 5.8335H8.91669L11.0834 9.16683V5.8335H13.3334V14.1668H11.0834L8.91669 10.8335V14.1668H6.66669V5.8335Z"
         fill="#ffffff"
+      />
+    </Svg>
+  );
+}
+
+// 에러 배너 경고 아이콘 — 형태 선례는 shared/location/LocationGlyphs.tsx 의
+// LocationInfoGlyph(원형 info, 같은 18px·strokeWidth 1.575·round cap/join, 내부 2 path).
+// 여기서는 원(info) 대신 삼각(warning) 외곽 + 세로 막대 + 하단 점 3-path.
+export function WarningTriangleGlyph({ size = 18, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+    >
+      <Path
+        d="M9 2.25L16.5 15H1.5L9 2.25Z"
+        stroke={AUTH_ICON_COLORS.warning}
+        strokeWidth={1.575}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 6.75V10.5"
+        stroke={AUTH_ICON_COLORS.warning}
+        strokeWidth={1.575}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 12.75H9.0075"
+        stroke={AUTH_ICON_COLORS.warning}
+        strokeWidth={1.575}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );

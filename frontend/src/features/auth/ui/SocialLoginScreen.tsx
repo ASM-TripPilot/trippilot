@@ -10,6 +10,7 @@ import {
   GoogleIcon,
   KakaoIcon,
   NaverIcon,
+  WarningTriangleGlyph,
 } from './AuthGlyphs';
 import { APP_ICON_COLORS } from '../config/gradients';
 import type { SocialLoginPhase } from '../model/useSocialLogin';
@@ -27,9 +28,11 @@ export interface SocialLoginScreenProps {
 
 type BrandIcon = ComponentType<{ size?: number; testID?: string }>;
 
-// 라벨은 D5(한글) 를 최대한 따르되, kakao 만 예외로 영문 브랜드명을 유지한다: 동결된
-// 충돌 시트 테스트가 `getByText(/카카오/)` 로 화면에 "카카오" 가 단 하나(충돌 메시지)만
-// 있다고 가정하므로, 버튼 라벨을 "카카오…" 로 바꾸면 매칭이 2개가 되어 계약이 깨진다.
+// 라벨 4종은 Figma c02-social-login 확정값(D5 한글) 그대로다. 예전엔 kakao 만 예외로
+// 영문 브랜드명을 유지했다 — 동결 충돌 시트 테스트가 화면 전역에서 "카카오" 가 단 하나
+// (충돌 메시지)만 있다고 가정했기 때문이다. 그 단언은 이제 안내 메시지 testID
+// (auth-login-conflict-message) 스코프로 좁혀져 있어 더 이상 화면 전역 유일성을 요구하지
+// 않는다 — 버튼 라벨이 한글이어도 계약이 깨지지 않는다.
 const SOCIAL_BUTTONS: {
   provider: SocialProvider;
   label: string;
@@ -37,7 +40,7 @@ const SOCIAL_BUTTONS: {
 }[] = [
   { provider: 'google', label: '구글로 계속하기', Icon: GoogleIcon },
   { provider: 'apple', label: '애플로 계속하기', Icon: AppleIcon },
-  { provider: 'kakao', label: 'Kakao로 계속하기', Icon: KakaoIcon },
+  { provider: 'kakao', label: '카카오로 계속하기', Icon: KakaoIcon },
   { provider: 'naver', label: '네이버로 계속하기', Icon: NaverIcon },
 ];
 
@@ -102,8 +105,12 @@ export function SocialLoginScreen({
       ) : null}
 
       {showErrorBanner ? (
-        <View testID="auth-login-error-banner" className="items-center">
-          <Text className="font-noto text-body text-muted">
+        <View
+          testID="auth-login-error-banner"
+          className="w-full flex-row items-center gap-[9px] rounded-button bg-primary-pale px-[14px] py-md"
+        >
+          <WarningTriangleGlyph size={18} />
+          <Text className="flex-1 font-noto-bold text-label font-bold text-primary-text">
             로그인에 실패했어요. 잠시 후 다시 시도해 주세요
           </Text>
         </View>
@@ -118,7 +125,7 @@ export function SocialLoginScreen({
             className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border-[1.5px] border-hairline-strong bg-canvas"
           >
             <Icon size={20} testID={`auth-login-${provider}-icon`} />
-            <Text className="font-noto-medium text-card-title font-medium text-ink">
+            <Text className="font-noto-bold text-card-title font-bold text-ink">
               {label}
             </Text>
           </Pressable>

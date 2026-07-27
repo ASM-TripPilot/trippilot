@@ -131,7 +131,9 @@ describe('c02-social-login — 이메일 충돌 바텀시트 (AC-ONB-01-6)', () 
     expect(screen.getByTestId('auth-login-conflict-title')).toHaveTextContent(
       '이미 가입된 계정이에요'
     );
-    expect(screen.getByText(/카카오/)).toBeOnTheScreen();
+    expect(screen.getByTestId('auth-login-conflict-message')).toHaveTextContent(
+      /카카오/
+    );
 
     fireEvent.press(screen.getByTestId('auth-login-conflict-continue'));
     expect(props.onConflictContinue).toHaveBeenCalledTimes(1);
