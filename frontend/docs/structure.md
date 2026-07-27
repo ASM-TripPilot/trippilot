@@ -59,8 +59,8 @@ frontend/
 | `src/app/(onboarding)/index.tsx` | **진입 단계 리다이렉트** (미완 → terms) |
 | `src/app/(onboarding)/terms.tsx` | 약관 라우트 — 컨테이너를 꽂는 얇은 래퍼 |
 | `src/app/(onboarding)/nickname.tsx` | 닉네임 라우트 — 얇은 래퍼 |
-| `src/app/(onboarding)/pref1.tsx` | 취향 1/2 라우트(c09) — `PrefStep1Container`를 꽂는 얇은 래퍼 |
-| `src/app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Container`를 꽂는 얇은 래퍼 |
+| `src/app/(onboarding)/pref1.tsx` | 취향 1/2 라우트(c09) — `PrefStep1Page`를 꽂는 얇은 래퍼(구 `PrefStep1Container`) |
+| `src/app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Page`를 꽂는 얇은 래퍼(구 `PrefStep2Container`) |
 | `src/app/(tabs)/_layout.tsx` | 탭 네비게이터 — `Tabs`에 `tabBar` 렌더프롭(Q4 전면 커스텀) + `BottomTabBar` 어댑터(라우트↔탭key 양방향 번역: `routeNameToTabKey`(index→home, 활성 표시) · `handlePressTab`(home→index, 누름 이동 — **홈 탭 press 미검증**, code-critic 경고1)) |
 | `src/app/(tabs)/index.tsx` | 홈 탭 라우트 — `HomeScreen`(no-trip 픽스처, 게이트① G-1)을 그리는 얇은 래퍼. **더 이상 껍데기 아님**(TRIP-170) |
 | `src/app/(tabs)/explore.tsx` | 탐색 탭 — **껍데기** |
