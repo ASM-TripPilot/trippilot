@@ -21,9 +21,9 @@
 
 - **스택**: Expo(development build + prebuild) · Expo Router · TypeScript strict · NativeWind · TanStack Query + Zustand · orval · Jest + fast-check
 - **경로 별칭**: `@/*` → `./src/*`
-- **구현 범위**: `auth` + `onboarding` **두 feature만 실구현.** 나머지 9개 feature는 `export {}` 한 줄짜리 빈 스텁이다.
+- **구현 범위**: `auth`·`home`·`onboarding` **세 feature만 실구현.** 나머지 자리는 도메인 작업이 시작될 때 새로 만든다 — TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}`) 14개를 전부 삭제했고, 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 디렉토리째 사라졌다.
 - **앱 런타임 목 0건.** msw는 테스트 오라클(`msw/node`)에만 있고, `src/__tests__/noMswInStaticGraph.test.ts`가 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제한다.
-- **문서 대상 파일 98개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함)
+- **문서 대상 파일 91개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함)
 
 ## 디렉토리
 
@@ -114,7 +114,7 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 | `src/features/auth/ui/AuthGlyphs.tsx` | 인라인 SVG — 앱아이콘 · 소셜 4종 로고 |
 | `src/features/auth/ui/SplashIllustration.tsx` | 인라인 SVG — 스플래시 일러스트 |
 
-> `src/features/auth/` 아래 `index.ts`는 여전히 **존재하지 않는다**(auth만 배럴이 없음) — 배럴 신설은 사이클 3 범위.
+> `src/features/auth/` 아래 `index.ts`는 여전히 **존재하지 않는다** — 이제 이게 표준이다. 배럴 신설 계획("사이클 3")은 폐기됐다(그 유예가 가리키던 사이클 3은 폐기된 FSD 이주 11사이클 계획의 것). TRIP-173 FSD 완결 2/4에서 home·onboarding의 빈 배럴 14개를 전부 삭제하며 방향이 뒤집혔다 — **구현 슬라이스는 배럴 없이 간다.**
 
 ## `src/features/onboarding/` — 실구현 ②
 
@@ -134,7 +134,6 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 | `src/features/onboarding/model/preferenceSelection.ts` | **순수 함수** — `toggleMulti`(복수 축)·`toggleSingle`(단일 축). `null`=미설정, 전부 해제 시 `[]`가 아니라 `null`로 복귀(US-ONB-14) |
 | `src/features/onboarding/model/preferenceStore.ts` | **Zustand 스토어**(구 `store/preferenceStore.ts`, TRIP-173에서 `model/`로 합류) — 취향 6축(styles·pace·budget·companions·foods·transports) 세션 메모리 상태. **persist 없음**(인터뷰3), 토글 판단은 `model/preferenceSelection`에 위임. `create(createPreferenceDraft)` 형태(구조 가드 6-2 정합 — 제네릭 직접 호출 시 `create<` 리터럴이 가드를 오탐시킴, 개념 [[구조 가드와 긍정 앵커]]) |
 | `src/features/onboarding/ui/OnboardingGlyphs.tsx` | 인라인 SVG — 약관·닉네임·취향 화면 글리프. 기존 5종(체크·재생성 등)+**신규 19종**(스타일7·페이스3·동행4·이동3·info·skip chevron 등, TRIP-163). raw hex 색 직박 — TRIP-173으로 `ui/`에서 `*Screen.tsx` 파일들과 **같은 폴더가 됐다.** F2 raw-hex 가드(`onboardingStructure.test.ts`)가 이제 디렉토리가 아니라 **`*Screen.tsx` 파일명 접미사로 필터**해 계속 미대상이다(`SCREEN_SOURCE_FILES` 상수로 6개 고정, code-critic W-2·W-3 확인) — 필터가 조용히 넓어지면 이 파일도 스캔 대상이 될 수 있으니 그 필터를 건드릴 땐 이 파일부터 확인 |
-| `src/features/onboarding/index.ts` | 배럴 스텁(`export {}`) — 아무도 안 씀. **제자리**(채우기는 사이클 3, `features/auth`용 신설 배럴과 한 덩어리) |
 
 ## `src/features/home/` — 실구현 ③ (TRIP-170)
 
@@ -146,13 +145,12 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 | `src/features/home/model/homeFixtures.ts` | 4상태 고정 목업(Q2 — Figma 표시값 그대로 상수화). `HOME_DEFAULT_PROPS`·`HOME_NO_TRIP_PROPS`·`HOME_EMPTY_PROPS`·`HOME_LOADING_PROPS` |
 | `src/features/home/ui/HomeGlyphs.tsx` | 홈 전용 인라인 SVG 10종(AuthGlyphs/OnboardingGlyphs 패턴). raw hex 직박 — TRIP-173으로 `ui/`에서 `*Screen.tsx` 파일과 **같은 폴더가 됐다.** D-3 가드(`homeStructure.test.ts`)가 이제 디렉토리가 아니라 **`*Screen.tsx` 파일명 접미사로 필터**해 계속 미대상이다(`HOME_SCREEN_SOURCE_FILES` 동결목록으로 1건 고정, code-critic W-1 확인) — 필터가 조용히 넓어지면 이 파일도 스캔 대상이 될 수 있으니 그 필터를 건드릴 땐 이 파일부터 확인 |
 | `src/features/home/ui/HomeScreen.tsx` | 4상태 프레젠테이션 화면. props만 받음 — `expo-router`·`@/shared/api`·타 feature import 0(homeStructure D-1이 기계 강제) |
-| `src/features/home/index.ts` | 배럴 스텁(`export {}`) — 아무도 안 씀 |
 
-## `src/features/` 빈 스텁 (`export {}` 한 줄)
+## `src/features/` — 아직 시작 안 한 도메인
 
-**디렉토리가 있다고 구현된 게 아니다.** 아래 8개는 전부 껍데기이며, 해당 도메인 작업 = 이 파일부터 채우는 일이다(`home`은 TRIP-170으로 위 실구현 ③절로 이동).
+TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개를 `git rm`으로 전부 삭제했다. 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 그 배럴이 디렉토리 안의 유일한 파일이라 **디렉토리째 사라졌다** — 지금 `src/features/`에는 `auth`·`home`·`onboarding` 3개뿐이다.
 
-`src/features/archive/index.ts` · `src/features/execution/index.ts` · `src/features/itinerary/index.ts` · `src/features/notification/index.ts` · `src/features/planb/index.ts` · `src/features/settings/index.ts` · `src/features/stay/index.ts` · `src/features/trip/index.ts`
+새 도메인을 시작할 때 빈 배럴부터 만들지 않는다 — **`auth`가 선례**다: 배럴 없이 딥 임포트로 시작하고, 재수출할 공개 API가 실제로 생기면 그때 배럴을 만든다. `export {};`만 있는 선점은 `fsdStructure.test.ts`의 AC-4(아래 테스트 인프라 절)가 기계로 막는다.
 
 ## `src/shared/`
 
@@ -165,11 +163,7 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 | `src/shared/location/LocationPreprompt.tsx` | **전체화면**(레이더 히어로·denied 전용 레이아웃 — 카드형은 폐기됐고 내부 마크업만 전면 교체, props/testID 시그니처 무변경). `default`/`permission-denied` 2상태. `expo-location`을 import조차 안 함(구조적으로 OS 다이얼로그 못 부름). **라우트 미등록**(실사용처 0, 프리뷰 전용) |
 | `src/shared/location/LocationGlyphs.tsx` | 인라인 SVG — 위치 화면 글리프(레이더 히어로·오프 타일). stroke/fill 색은 `locationColors.ts` 상수 경유(`shared/location/**` 는 F2 raw-hex 가드 대상) |
 | `src/shared/location/lib/locationColors.ts` | 위치 글리프 색 상수(raw hex 분리 — `gradients.ts` 패턴 재사용). 토큰 색과 수동 동기화 필요(03b 참고-2) |
-| `src/shared/location/index.ts` | 배럴 스텁(`export {}`) |
 | `src/shared/ui/BottomTabBar.tsx` | 순수 뷰 탭바(TRIP-170) — 5탭 아이콘 자체 보유(인라인 SVG), 네비게이션을 모른다(`activeKey`·`onPressTab` 두 prop뿐). testID `shell-tabbar-*` |
-| `src/shared/ui/index.ts` | 배럴 스텁(`export {}`) — `BottomTabBar`는 이 배럴을 거치지 않고 직접 import됨 |
-| `src/shared/validation/index.ts` | **빈 스텁** |
-| `src/shared/map/index.ts` | **빈 스텁** |
 
 ## 테스트 인프라
 
@@ -186,8 +180,8 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 | `src/test-support/splashGateMock.tsx` | `SplashGate` 목 |
 | `__mocks__/@gorhom/bottom-sheet.tsx` | 네이티브 모듈 자동 목 |
 | `src/__tests__/noMswInStaticGraph.test.ts` | 정적 import 그래프를 fs로 훑어 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제 |
-| `src/__tests__/importBoundary.test.ts` | import 경계 가드 — 계층·feature 격리 위반 차단 |
-| `src/__tests__/fsdStructure.test.ts` | **TRIP-173 신설(사이클 1 유일한 신규 파일)** — auth `{config,lib,model,ui}` 4칸·onboarding `{model,ui}` 2칸·**home `{model,ui}` 2칸(FSD 완결 1/4 신설, it 1-3)** 대표 파일 존재, `pages` 5슬라이스의 배럴·라우트 참조, `app-shell`이 `src/app` 밖에 있는지를 검사. **폴더 배치만 본다 — import 방향·소스 내용은 안 본다**(code-critic E3·E5·E6 실측). 사이클 2~4가 이 파일에 덧붙여 자란다. 주석 상단에 A(영구)/B(한시) 졸업 조건 명시(게이트①-1→①-2 재제시로 추가됨) |
+| `src/__tests__/importBoundary.test.ts` | import 경계 가드 — 계층·feature 격리 위반 차단. **FSD 완결 2/4에서 보강**(34→54줄, code-critic 발견 구멍 수리) — 프로브를 배럴 의존(구 `@/features/stay`, 삭제 예정 대상이었다)에서 실파일 딥 경로로 떼고, 단언을 에러 개수(`errorCount>0`)에서 **룰 ID**(`import/no-restricted-paths` 포함 · `import/no-unresolved` 불포함)로 바꿔 "경계 위반"과 "모듈 해석 실패"를 구분한다. **단독 실행 시 `NODE_OPTIONS=--experimental-vm-modules` 필요**(`pnpm exec jest` 단독 금지 — 없으면 2/2 실패, 테스트 결함처럼 보이지만 실행 방법 문제) |
+| `src/__tests__/fsdStructure.test.ts` | **TRIP-173 신설(사이클 1 유일한 신규 파일)** — auth `{config,lib,model,ui}` 4칸·onboarding `{model,ui}` 2칸·**home `{model,ui}` 2칸(FSD 완결 1/4 신설, it 1-3)** 대표 파일 존재, `pages` 5슬라이스의 배럴·라우트 참조, `app-shell`이 `src/app` 밖에 있는지를 검사. **폴더 배치만 본다 — import 방향·소스 내용은 안 본다**(code-critic E3·E5·E6 실측). **FSD 완결 2/4(AC-4, it 4-1) 신설** — `features`·`shared` 두 층 전수 스캔으로 빈 배럴(`export {};`) 0개 단언(A·영구) + 진짜 배럴(`shared/api`·`shared/storage`) 대표 심볼 생존 긍정 짝(B) + **스캔이 실제로 두 층에 닿았는지**(`scannedLayers` 앵커, code-critic W-1 보강 — 안 넣으면 `BARREL_LAYERS`를 비워도 green이었다)까지 확인한다. 사이클 3~4가 이 파일에 덧붙여 자란다. 주석 상단에 A(영구)/B(한시) 졸업 조건 명시(게이트①-1→①-2 재제시로 추가됨) |
 | `src/__tests__/onboardingStructure.test.ts` | 온보딩 계층·경계 구조 가드(서버 권한 경계 등). `PAGES_DIR`+`ONBOARDING_PAGE_SLICES`(TRIP-173 신설 — 온보딩 컨테이너 4개가 `pages/`로 나가며 금칙어 가드 사정거리에 다시 편입) |
 | `src/__tests__/onboardingPrefStructure.test.ts` | 취향 스토어·모델 구조 가드(TRIP-163) — persist 금지·`@/shared/api` 미참조·`create(` 표기(구조 가드 6-2, 개념 [[구조 가드와 긍정 앵커]]) |
 | `src/__tests__/homeStructure.test.ts` | 홈 소스 스캔 가드(TRIP-170, `@jest-environment node`) — 픽스처 상수화(D-1)·INV-3 `duration` 식별자 0(D-2)·토큰 raw-hex 0(D-3)·SafeArea 규약(D-4)·탭바 격리(D-5). D-3·D-4 모집단은 TRIP-173 FSD 완결 1/4에서 `screens/` 폴더 전체 → `ui/*Screen.tsx` 파일명 필터 + `HOME_SCREEN_SOURCE_FILES` 동결목록(현재 1건, `onboardingStructure` 선례와 동형)으로 교체됐다 |
