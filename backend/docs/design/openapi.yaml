@@ -387,6 +387,172 @@ paths:
       responses:
         '200': { description: alive }
 
+  /stays/search:
+    get:
+      tags: [stays]
+      summary: 숙소 탐색(날짜·인원 없이 · 최저가순)
+      description: >
+        지역·편의시설·유형으로 탐색. 필터는 AND, 정렬은 최저가순 고정(BR-U1-15).
+        가격은 최저가 스냅숏뿐(미확인은 null · BR-U1-14). 소요시간 미표시·거리만(INV-3).
+      parameters:
+        - { name: region, in: query, required: false, schema: { type: string }, description: '여행지(예: 제주)' }
+        - { name: amenity, in: query, required: false, schema: { type: array, items: { type: string } }, description: 편의시설 AND 필터 }
+        - { name: stayType, in: query, required: false, schema: { type: array, items: { type: string } }, description: 숙소 유형 필터 }
+      responses:
+        '200':
+          description: 탐색 결과(최저가순)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaySearchResponse' }
+
+  /stays/geocode:
+    get:
+      tags: [stays]
+      summary: 등록용 지오코딩(장소 검색 → 좌표 후보 multi-candidate)
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 좌표 후보
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/GeocodeCandidate' } }
+
+  /saved-stays:
+    post:
+      tags: [saved-stays]
+      summary: 숙소 등록(3경로 · 좌표/날짜 선택)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterSavedStayRequest' }
+      responses:
+        '201': { description: 등록됨, content: { application/json: { schema: { $ref: '#/components/schemas/SavedStay' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+    get:
+      tags: [saved-stays]
+      summary: 내 저장 숙소 목록
+      responses:
+        '200':
+          description: 목록
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/SavedStay' } }
+
+  /saved-stays/{savedStayId}:
+    parameters:
+      - { name: savedStayId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [saved-stays]
+      summary: 저장 숙소 조회(소유자만 · 타 계정 404)
+      responses:
+        '200': { description: 숙소, content: { application/json: { schema: { $ref: '#/components/schemas/SavedStay' } } } }
+        '404': { description: 없음/타 계정 }
+    patch:
+      tags: [saved-stays]
+      summary: 저장 숙소 편집(가변 필드 대체 · 좌표 확정)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EditSavedStayRequest' }
+      responses:
+        '200': { description: 수정됨, content: { application/json: { schema: { $ref: '#/components/schemas/SavedStay' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없음/타 계정 }
+    delete:
+      tags: [saved-stays]
+      summary: 저장 숙소 삭제(소유자만)
+      responses:
+        '204': { description: 삭제됨 }
+        '404': { description: 없음/타 계정 }
+
+  /trips:
+    post:
+      tags: [trips]
+      summary: 여행 생성(다도시·국내강제·날짜/Σnights 검증 · 취향 동결)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateTripRequest' } } }
+      responses:
+        '201': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Trip' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+    get:
+      tags: [trips]
+      summary: 내 여행 목록(삭제 제외)
+      responses:
+        '200':
+          description: 목록
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Trip' } }
+
+  /trips/{tripId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 여행 조회(소유자만 · 타 계정/삭제 404)
+      responses:
+        '200': { description: 여행, content: { application/json: { schema: { $ref: '#/components/schemas/Trip' } } } }
+        '404': { description: 없음/타 계정 }
+    patch:
+      tags: [trips]
+      summary: 여행 편집(가변 필드 대체 · 종료·삭제 후 불가)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EditTripRequest' } } }
+      responses:
+        '200': { description: 수정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Trip' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없음/타 계정 }
+    delete:
+      tags: [trips]
+      summary: 여행 삭제(소프트)
+      responses:
+        '204': { description: 삭제됨 }
+        '404': { description: 없음/타 계정 }
+
+  /trips/{tripId}/bases:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 구간 거점 배정(등록 숙소를 [dateFrom, dateTo) 거점으로 · 여행 기간 내 INV-U1-15)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AssignBaseRequest' } } }
+      responses:
+        '201': { description: 배정됨, content: { application/json: { schema: { $ref: '#/components/schemas/BaseAssignment' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없음/타 계정(여행 또는 숙소) }
+    get:
+      tags: [trips]
+      summary: 여행 거점 목록
+      responses:
+        '200': { description: 거점 목록, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/BaseAssignment' } } } } }
+        '404': { description: 없음/타 계정 }
+  /trips/{tripId}/bases/{baseAssignmentId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: baseAssignmentId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [trips]
+      summary: 거점 배정 삭제
+      responses:
+        '204': { description: 삭제됨 }
+        '404': { description: 없음/타 계정 }
+  /trips/{tripId}/coverage:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 커버리지 상태(숙박일별 auto/gap/overlap · blocked면 일정 생성 진입 차단 INV-U1-16)
+      responses:
+        '200': { description: 커버리지, content: { application/json: { schema: { $ref: '#/components/schemas/Coverage' } } } }
+        '404': { description: 없음/타 계정 }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -395,6 +561,186 @@ components:
       bearerFormat: JWT
 
   schemas:
+    StaySearchResponse:
+      type: object
+      required: [items, degraded, filterZeroReasons]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/StayItem' } }
+        degraded: { type: boolean, description: 일부 공급자 실패 시 true(부분 결과·재시도 안내) }
+        filterZeroReasons: { type: array, items: { type: string }, description: '필터로 0건일 때 완화 후보(예: stayType, amenity:오션뷰)' }
+
+    StayItem:
+      type: object
+      required: [externalSource, externalId, name, lat, lng, region, amenities, stayType]
+      properties:
+        externalSource: { type: string }
+        externalId: { type: string }
+        name: { type: string }
+        lat: { type: number, format: double }
+        lng: { type: number, format: double }
+        region: { type: string }
+        amenities: { type: array, items: { type: string } }
+        stayType: { type: string }
+        price:
+          allOf: [{ $ref: '#/components/schemas/StayPrice' }]
+          nullable: true
+          description: 최저가 스냅숏('부터 가격'). null=가격 미확인(BR-U1-14)
+
+    StayPrice:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, format: int64 }
+        currency: { type: string, example: KRW }
+
+    RegisterRoute:
+      type: string
+      enum: [MAP_SEARCH, LINK_PASTE, PIN]
+
+    SavedStay:
+      type: object
+      required: [savedStayId, name, coordConfirmed, registerRoute, createdAt, updatedAt]
+      properties:
+        savedStayId: { type: string, format: uuid }
+        name: { type: string }
+        lat: { type: number, format: double, nullable: true }
+        lng: { type: number, format: double, nullable: true }
+        coordConfirmed: { type: boolean, description: false면 거점 배정 불가(INV-U1-08) }
+        checkIn: { type: string, format: date, nullable: true }
+        checkOut: { type: string, format: date, nullable: true }
+        externalSource: { type: string, nullable: true }
+        externalId: { type: string, nullable: true }
+        registerRoute: { $ref: '#/components/schemas/RegisterRoute' }
+        memo: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    RegisterSavedStayRequest:
+      type: object
+      required: [name, registerRoute]
+      properties:
+        name: { type: string }
+        registerRoute: { $ref: '#/components/schemas/RegisterRoute' }
+        lat: { type: number, format: double, nullable: true }
+        lng: { type: number, format: double, nullable: true }
+        coordConfirmed: { type: boolean, default: false }
+        checkIn: { type: string, format: date, nullable: true }
+        checkOut: { type: string, format: date, nullable: true }
+        externalSource: { type: string, nullable: true }
+        externalId: { type: string, nullable: true }
+        memo: { type: string, nullable: true }
+
+    EditSavedStayRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        lat: { type: number, format: double, nullable: true }
+        lng: { type: number, format: double, nullable: true }
+        coordConfirmed: { type: boolean, default: false }
+        checkIn: { type: string, format: date, nullable: true }
+        checkOut: { type: string, format: date, nullable: true }
+        memo: { type: string, nullable: true }
+
+    GeocodeCandidate:
+      type: object
+      required: [name, address, lat, lng]
+      properties:
+        name: { type: string }
+        address: { type: string }
+        lat: { type: number, format: double }
+        lng: { type: number, format: double }
+
+    TripStatus:
+      type: string
+      enum: [PLANNED, CONFIRMED, ACTIVE, ENDED]
+
+    CompanionType:
+      type: string
+      enum: [혼자, 친구, 연인, 가족]
+
+    TripDestination:
+      type: object
+      required: [seq, region, nights]
+      properties:
+        seq: { type: integer }
+        region: { type: string }
+        nights: { type: integer }
+
+    Trip:
+      type: object
+      required: [tripId, title, startDate, endDate, party, preferenceSnapshot, destinations, status, createdAt, updatedAt]
+      properties:
+        tripId: { type: string, format: uuid }
+        title: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        party: { type: integer }
+        companionType: { allOf: [{ $ref: '#/components/schemas/CompanionType' }], nullable: true }
+        budgetTotal: { type: integer, format: int64, nullable: true }
+        preferenceSnapshot: { type: object, additionalProperties: true, description: 생성 시점 취향 동결(jsonb) }
+        destinations: { type: array, items: { $ref: '#/components/schemas/TripDestination' } }
+        status: { $ref: '#/components/schemas/TripStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateTripRequest:
+      type: object
+      required: [startDate, endDate, destinations]
+      properties:
+        title: { type: string, nullable: true, description: 미입력 시 목적지 기반 자동생성 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        party: { type: integer, default: 1 }
+        companionType: { allOf: [{ $ref: '#/components/schemas/CompanionType' }], nullable: true }
+        budgetTotal: { type: integer, format: int64, nullable: true }
+        preferenceSnapshot: { type: object, additionalProperties: true }
+        destinations: { type: array, items: { $ref: '#/components/schemas/TripDestination' } }
+
+    EditTripRequest:
+      type: object
+      required: [startDate, endDate, destinations]
+      properties:
+        title: { type: string, nullable: true }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        party: { type: integer, default: 1 }
+        companionType: { allOf: [{ $ref: '#/components/schemas/CompanionType' }], nullable: true }
+        budgetTotal: { type: integer, format: int64, nullable: true }
+        destinations: { type: array, items: { $ref: '#/components/schemas/TripDestination' } }
+
+    AssignBaseRequest:
+      type: object
+      required: [savedStayId, dateFrom, dateTo]
+      properties:
+        savedStayId: { type: string, format: uuid, description: 소유 등록 숙소 }
+        dateFrom: { type: string, format: date }
+        dateTo: { type: string, format: date, description: dateTo > dateFrom · 여행 기간 내(INV-U1-15) }
+
+    BaseAssignment:
+      type: object
+      required: [baseAssignmentId, savedStayId, dateFrom, dateTo]
+      properties:
+        baseAssignmentId: { type: string, format: uuid }
+        savedStayId: { type: string, format: uuid }
+        dateFrom: { type: string, format: date }
+        dateTo: { type: string, format: date }
+
+    Coverage:
+      type: object
+      required: [blocked, days]
+      properties:
+        blocked: { type: boolean, description: 미해결(gap/overlap)이 하나라도 있으면 true — 일정 생성 진입 차단(INV-U1-16) }
+        days: { type: array, items: { $ref: '#/components/schemas/DayCoverage' } }
+
+    DayCoverage:
+      type: object
+      required: [date, status]
+      properties:
+        date: { type: string, format: date }
+        status: { type: string, enum: [AUTO, GAP, OVERLAP], description: AUTO=후보1(확정) · GAP=후보0(공백) · OVERLAP=후보≥2(겹침) }
+        savedStayId: { type: string, format: uuid, nullable: true, description: AUTO일 때만 확정 거점 }
+
     TermsType:
       type: string
       enum: [TERMS_OF_SERVICE, PRIVACY_POLICY, LOCATION_TERMS, MARKETING, GPS_RECORDING, PERSONALIZATION]
