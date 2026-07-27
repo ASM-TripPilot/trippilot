@@ -96,3 +96,70 @@ describe('PrefStep2Page — 일괄 탈출 (AC4 · 5-6)', () => {
     expect(state.transports).toBeNull();
   });
 });
+
+describe('PrefStep2Page — 예산 축 탭↔스토어 왕복 (AC2 · US-ONB-06 · 5-7)', () => {
+  it('예산 구간을 탭하면 그 타일이 선택 표시되고 스토어 budget이 그 slug가 된다', () => {
+    // 준비 — 렌더(스토어는 beforeEach가 이미 reset해서 4축 모두 null).
+    render(<PrefStep2Page />);
+
+    // 실행 — 'low' 예산 타일을 탭.
+    fireEvent.press(screen.getByTestId('onboarding-pref2-budget-low'));
+
+    // 단언 ① — 읽기 경로: 스토어 값이 selectedBudget으로 내려가 화면이 다시 그려졌다.
+    expect(screen.getByTestId('onboarding-pref2-budget-low')).toBeSelected();
+    // 단언 ② — 쓰기 경로: 탭이 toggleBudget 액션에 연결돼 있다(budget은 단일 축이라
+    // toBe로 원시값 동일성을 본다 — 배열이 아니다).
+    expect(usePreferenceStore.getState().budget).toBe('low');
+  });
+});
+
+describe('PrefStep2Page — 동행 축 탭↔스토어 왕복 (AC2 · US-ONB-07 · 5-8)', () => {
+  it('동행 항목을 탭하면 그 타일이 선택 표시되고 스토어 companions에 담긴다', () => {
+    // 준비 — 렌더.
+    render(<PrefStep2Page />);
+
+    // 실행 — '혼자' 동행 타일을 탭.
+    fireEvent.press(screen.getByTestId('onboarding-pref2-companion-solo'));
+
+    // 단언 ① — 읽기 경로: 타일이 선택 표시된다.
+    expect(
+      screen.getByTestId('onboarding-pref2-companion-solo')
+    ).toBeSelected();
+    // 단언 ② — 쓰기 경로: companions는 복수 축이라 배열로 담긴다(원소 1개라 순서
+    // 자유도가 없으므로 toEqual로 길이·원소·순서 전부를 고정한다).
+    expect(usePreferenceStore.getState().companions).toEqual(['solo']);
+  });
+});
+
+describe('PrefStep2Page — 음식 축 탭↔스토어 왕복 (AC2 · US-ONB-10 · 5-9)', () => {
+  it('음식 칩을 탭하면 그 칩이 선택 표시되고 스토어 foods에 담긴다', () => {
+    // 준비 — 렌더. (기존 5-4는 'seafood'를 선주입으로 쓴다 — 여기는 다른 slug
+    // 'spicy'를 실제로 탭해, 이 케이스가 선주입이 아니라 쓰기 경로 증명임을 눈에 띄게 한다.)
+    render(<PrefStep2Page />);
+
+    // 실행 — '매운 음식' 칩을 탭.
+    fireEvent.press(screen.getByTestId('onboarding-pref2-food-spicy'));
+
+    // 단언 ① — 읽기 경로: 칩이 선택 표시된다.
+    expect(screen.getByTestId('onboarding-pref2-food-spicy')).toBeSelected();
+    // 단언 ② — 쓰기 경로: foods 배열에 담긴다.
+    expect(usePreferenceStore.getState().foods).toEqual(['spicy']);
+  });
+});
+
+describe('PrefStep2Page — 이동 축 탭↔스토어 왕복 (AC2 · US-ONB-09 · 5-10)', () => {
+  it('이동 항목을 탭하면 그 타일이 선택 표시되고 스토어 transports에 담긴다', () => {
+    // 준비 — 렌더.
+    render(<PrefStep2Page />);
+
+    // 실행 — '도보 위주' 이동 타일을 탭.
+    fireEvent.press(screen.getByTestId('onboarding-pref2-transport-walk'));
+
+    // 단언 ① — 읽기 경로: 타일이 선택 표시된다.
+    expect(
+      screen.getByTestId('onboarding-pref2-transport-walk')
+    ).toBeSelected();
+    // 단언 ② — 쓰기 경로: transports 배열에 담긴다.
+    expect(usePreferenceStore.getState().transports).toEqual(['walk']);
+  });
+});

@@ -98,3 +98,37 @@ describe('PrefStep1Page — 일괄 탈출 (AC4 · AC-11-1·2 · AC-14-1 · 5-3)'
     }
   );
 });
+
+describe('PrefStep1Page — 페이스 축 탭↔스토어 왕복 (AC3 · US-ONB-15 · 5-11)', () => {
+  it('페이스 타일을 탭하면 그 타일이 선택 표시되고 스토어 pace가 바뀐다', () => {
+    // 준비 — 렌더(스토어는 beforeEach가 이미 reset).
+    render(<PrefStep1Page />);
+
+    // 실행 — '균형' 페이스 타일을 탭(03b W-1 재현 원문과 같은 slug — 그 문서와 나란히
+    // 읽을 수 있게).
+    fireEvent.press(screen.getByTestId('onboarding-pref1-pace-balanced'));
+
+    // 단언 ① — 읽기 경로: 타일이 선택 표시된다.
+    expect(screen.getByTestId('onboarding-pref1-pace-balanced')).toBeSelected();
+    // 단언 ② — 쓰기 경로: pace는 단일 축이라 배열이 아니라 원시값(toBe)이다.
+    expect(usePreferenceStore.getState().pace).toBe('balanced');
+  });
+});
+
+describe('PrefStep1Page — 일괄 탈출은 기존 선택을 보존한다 (AC4 · US-ONB-11 · US-ONB-14 · 5-12)', () => {
+  it('이미 고른 값이 있어도 skip은 그 값을 지우지 않고 홈으로 replace한다', () => {
+    // 준비 — 화면을 거치지 않고 스토어에 직접 선주입(여기 관심사는 "skip 핸들러가
+    // 스토어를 건드리는가"이지 값이 어떻게 들어왔는가가 아니다 — 탭으로 만들 필요 없음).
+    usePreferenceStore.getState().toggleStyle('rest');
+    render(<PrefStep1Page />);
+
+    // 실행 — 하단 skip을 탭.
+    fireEvent.press(screen.getByTestId('onboarding-pref1-skip-bottom'));
+
+    // 단언 ① — 이 케이스의 주제: skip 핸들러가 스토어를 건드리지 않아 styles가
+    // 그대로 남는다(빈 배열로 초기화되지 않는다).
+    expect(usePreferenceStore.getState().styles).toEqual(['rest']);
+    // 단언 ② — 보존만 하고 못 나가면 반쪽이므로 내비도 함께 본다.
+    expect(routerMock.replace).toHaveBeenCalledWith('/');
+  });
+});
