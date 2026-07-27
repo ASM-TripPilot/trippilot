@@ -23,7 +23,7 @@
 - **경로 별칭**: `@/*` → `./src/*`
 - **구현 범위**: `auth`·`home`·`onboarding` **세 feature만 실구현.** 나머지 자리는 도메인 작업이 시작될 때 새로 만든다 — TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}`) 14개를 전부 삭제했고, 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 디렉토리째 사라졌다.
 - **앱 런타임 목 0건.** msw는 테스트 오라클(`msw/node`)에만 있고, `src/__tests__/noMswInStaticGraph.test.ts`가 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제한다.
-- **문서 대상 파일 91개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함)
+- **문서 대상 파일 92개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함)
 
 ## 디렉토리
 
@@ -163,7 +163,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `src/shared/location/LocationPreprompt.tsx` | **전체화면**(레이더 히어로·denied 전용 레이아웃 — 카드형은 폐기됐고 내부 마크업만 전면 교체, props/testID 시그니처 무변경). `default`/`permission-denied` 2상태. `expo-location`을 import조차 안 함(구조적으로 OS 다이얼로그 못 부름). **라우트 미등록**(실사용처 0, 프리뷰 전용) |
 | `src/shared/location/LocationGlyphs.tsx` | 인라인 SVG — 위치 화면 글리프(레이더 히어로·오프 타일). stroke/fill 색은 `locationColors.ts` 상수 경유(`shared/location/**` 는 F2 raw-hex 가드 대상) |
 | `src/shared/location/lib/locationColors.ts` | 위치 글리프 색 상수(raw hex 분리 — `gradients.ts` 패턴 재사용). 토큰 색과 수동 동기화 필요(03b 참고-2) |
-| `src/shared/ui/BottomTabBar.tsx` | 순수 뷰 탭바(TRIP-170) — 5탭 아이콘 자체 보유(인라인 SVG), 네비게이션을 모른다(`activeKey`·`onPressTab` 두 prop뿐). testID `shell-tabbar-*` |
+| `src/shared/ui/BottomTabBar.tsx` | 순수 뷰 탭바(TRIP-170) — 5탭 아이콘 자체 보유(인라인 SVG), 네비게이션을 모른다(`activeKey`·`onPressTab` 두 prop뿐). testID `shell-tabbar-*`. **TRIP-173 FSD 완결 3/4**에서 비주얼을 Figma 마스터(`1236:1177`)에 정합 — 풀폭 직각 바(74px·`bg-canvas`·`border-t`) → 투명 84px 밴드 안에 334×64 알약(`rounded-pill`·`bg-surface-soft`, 좌우 28px 여백). 탭 폭 `flex-1`(가변) → `w-[62px]`(고정). 아이콘 좌표계 `0 0 24 24` → `0 0 27 27` + path 10종 전량 교체. prop 계약·testID·접근성 전부 불변. 알약 배경은 1차 판정(Figma raw CSS `rgba(255,255,255,0.68)`)에서 프로덕션 렌더 실측(`#F7F7F7`)으로 **되정정**돼 `bg-surface-soft` 토큰이 됐다(raw 선언값과 렌더 합성값은 다른 질문 — 메커니즘은 미확정) |
 
 ## 테스트 인프라
 
@@ -187,6 +187,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `src/__tests__/homeStructure.test.ts` | 홈 소스 스캔 가드(TRIP-170, `@jest-environment node`) — 픽스처 상수화(D-1)·INV-3 `duration` 식별자 0(D-2)·토큰 raw-hex 0(D-3)·SafeArea 규약(D-4)·탭바 격리(D-5). D-3·D-4 모집단은 TRIP-173 FSD 완결 1/4에서 `screens/` 폴더 전체 → `ui/*Screen.tsx` 파일명 필터 + `HOME_SCREEN_SOURCE_FILES` 동결목록(현재 1건, `onboardingStructure` 선례와 동형)으로 교체됐다 |
 | `src/__tests__/onboardingPrefRoutes.test.tsx` | 취향 1/2·2/2 라우트 존재·내비게이션 계약 가드(TRIP-163) — push/replace/back 분기 |
 | `src/__tests__/tabsShell.test.tsx` | `(tabs)/_layout.tsx` 배선 가드(TRIP-170) — 5탭 등록 순서·`tabBar` 렌더프롭·어댑터 활성 매핑/press→navigate·홈 라우트 래퍼·4탭 껍데기 유지 |
+| `src/__tests__/tabbarVisual.test.ts` | **TRIP-173 FSD 완결 3/4 신설** — `BottomTabBar.tsx` 비주얼 소스 스캔 가드(AC-V1 밴드 84+알약 반경 · AC-V2 아이콘 좌표계 27 전량 · AC-V3 옛 풀폭 직각 바 흔적 0 · AC-V4 색 토큰 경유). **모든 `it`이 `stripComments()`로 주석을 제거한 뒤 스캔** — 게이트①-1에서 헤더 주석의 `rounded-pill` 문구가 부정 단언을 실제 코드 없이 만족시키는 거짓 GREEN이 나온 것을 게이트①-2에서 근본 수정. 렌더 크기(`size=27`, 호출부+기본값 12곳)·스크린샷이 잡은 수정값 6종(`h-[64px]`·`leading-[13px]`·`bg-surface-soft`·`w-[62px]`·`px-[28px]`·`style={PILL_SURFACE_STYLE}`)도 함께 잠근다. `active=1~4` 변형은 탭을 누를 수 없어(접근성 권한 부재) 코드 대조로만 담보 — 스크린샷은 홈 활성 1상태만 검증 |
 | `src/__tests__/devPreviewPref.test.tsx` | 프리뷰 `pref1`·`pref2` 상태 렌더 가드(TRIP-163) — 빈 선택 상태로 직접 렌더, 가드 우회 아님 |
 | `src/__tests__/devPreviewHome.test.tsx` | 프리뷰 홈 4키 가드(TRIP-170) — 딥링크 4키·토글 진입·미존재 키 splash 폴백 결정론 |
 | `src/__tests__/onboardingEntryGuard.test.tsx` | 온보딩 진입 리다이렉트·완료자 방어 가드 |
@@ -262,7 +263,7 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 - **프로덕션에 `@/mocks/*`·`msw`를 import하지 마라** → `noMswInStaticGraph.test.ts`가 잡는다.
 - **엣지 케이스 화면을 눈으로 보려면** → 목을 만들지 말고 `src/app/_dev/preview.tsx`에 상태를 추가한다.
 - **홈에 실 데이터를 배선하려면** → 서버 API가 아직 없다(TRIP-170 범위 밖). `homeFixtures.ts`를 API 훅으로 교체하는 자리이며, `HomeScreen.tsx`에 `msw`·`@/mocks/*`를 직접 넣지 마라(`noMswInStaticGraph.test.ts`가 잡는다).
-- **탭바 하단 인셋을 만지려면** → 전면 커스텀 탭바(74h)가 홈 인디케이터 기기의 bottom inset을 아직 합산하지 않는다(code-critic 경고2, 실기 이연 — 백엔드 부재로 실 홈 도달 불가해 미검증).
+- **탭바 하단 인셋을 만지려면** → 전면 커스텀 탭바(84h, TRIP-173 FSD 완결 3/4에서 74h→84h로 변경)가 홈 인디케이터 기기의 bottom inset을 아직 합산하지 않는다(code-critic 경고2 — 경고 자체는 그대로 유효. "탭바는 네비게이션도 SafeArea도 모르는 순수 뷰 계약"을 바꾸는 별도 결정이라 이번 사이클도 손대지 않았다, 01b Q1).
 - **실 OAuth 실행·검증(AC-S7)** → 아직 **실행 불가**(TRIP-172 04b, FAIL 아님·환경 전제 부재). `ios/Podfile.lock`에 `ExpoAuthSession`·`ExpoWebBrowser`·`ExpoCrypto` 0건(설치된 dev build가 2026-07-20, 이 3종 추가 이전) + `.env.local`의 `EXPO_PUBLIC_AUTH_FAKE=1` 아직 켜짐 + google clientId 빈 값(`GOCSPX-` = 웹/데스크톱 유형이라 `trippilot://` 커스텀 스킴 등록 불가, iOS 유형 재발급 필요) + kakao/naver clientId 키 자체가 `.env.local`에 없음. 재개 순서는 리포 devlog `2026-07-24-20260723-trip172-social-real-wiring.md` 참조. jest 343건 green은 이 전제와 무관.
 - **apple** → `oauthConfig`에 여전히 빈 슬롯(백엔드 fail-closed로 막아둠, 이번 범위 밖). **kakao/naver는 TRIP-172로 채워졌다** — naver는 `usePKCE:false`+`state` 필수인 비표준 갈래라 다시 만질 땐 `realAuthorize.ts`의 조건부 분기부터 확인.
 - **연령확인(결함 B)을 만지려면** → `useSocialLogin.ts:154`의 `confirmAge()`가 **여전히 같은 `authorizationCode`로 재교환**한다 — OAuth 인가코드는 1회용이라 실서버에서 반드시 거부된다. 인터뷰에서 확정된 목표(로그인 버튼 하단 고지 문구, 모달 없음)가 AC로 전환되지 않아 이번 사이클에서 손대지 못했다(TRIP-172 04b §4). 다음 사이클 1순위 — 게이트①부터 새로 열어야 한다(화면 계약 + 기존 테스트 9건 변경 필요).
