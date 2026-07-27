@@ -1,7 +1,8 @@
 /**
- * 취향 1/2 배선 (TRIP-163 · AC3 · AC4) — 스토어 ↔ 화면 ↔ 라우터.
- * NicknamePage/TermsPage와 동형: 훅(여기서는 스토어) 상태를 화면 props로,
- * 화면 콜백을 스토어 액션·router 호출로 옮긴다. 저장 배선(PUT)은 없다(Q1 — 범위 밖).
+ * 취향 1/2 배선 (AC3 · AC4) — usePreferenceStore ↔ PrefStep1Screen ↔ expo-router.
+ * 스타일·페이스 상태와 토글 액션을 셀렉터로 구독해 Screen에 내려주고, '다음'은 pref2로
+ * push(back()이 1/2로 돌아오도록 replace가 아니다), skip은 스토어를 건드리지 않고
+ * 홈으로 replace한다(US-ONB-11 — 미선택 축은 null로 유지).
  */
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
@@ -11,25 +12,26 @@ import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 
 export function PrefStep1Page(): ReactElement {
   const router = useRouter();
-  const styles = usePreferenceStore((state) => state.styles);
-  const pace = usePreferenceStore((state) => state.pace);
+
+  // getState()가 아니라 셀렉터로 구독해야 카드를 탭했을 때 화면이 다시 그려진다.
+  const selectedStyles = usePreferenceStore((state) => state.styles);
+  const selectedPace = usePreferenceStore((state) => state.pace);
   const toggleStyle = usePreferenceStore((state) => state.toggleStyle);
   const togglePace = usePreferenceStore((state) => state.togglePace);
 
-  // '다음' — 0개 선택에도 항상 진행(인터뷰4). push로 쌓아야 2/2의 back()이 여기로 돌아온다.
   const handleNext = () => {
     router.push('/(onboarding)/pref2');
   };
 
-  // 상·하단 '나중에 설정하고 시작' — 스토어는 건드리지 않고(미선택 축 null 유지) 홈으로.
   const handleSkipAll = () => {
+    // 스토어를 건드리지 않는다 — 미선택 축이 []가 아니라 null로 유지돼야 한다.
     router.replace('/');
   };
 
   return (
     <PrefStep1Screen
-      selectedStyles={styles}
-      selectedPace={pace}
+      selectedStyles={selectedStyles}
+      selectedPace={selectedPace}
       onToggleStyle={toggleStyle}
       onTogglePace={togglePace}
       onNext={handleNext}
