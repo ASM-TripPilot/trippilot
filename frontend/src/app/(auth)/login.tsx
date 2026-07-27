@@ -1,5 +1,5 @@
-import { SocialLoginContainer } from '@/features/auth/containers/SocialLoginContainer';
+import { LoginPage } from '@/pages/login';
 
 export default function LoginScreen() {
-  return <SocialLoginContainer />;
+  return <LoginPage />;
 }

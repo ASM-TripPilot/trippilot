@@ -25,6 +25,7 @@ const ROOT = path.resolve('src');
 const ONBOARDING_ROUTE_DIR = path.join(ROOT, 'app', '(onboarding)');
 const TABS_ROUTE_DIR = path.join(ROOT, 'app', '(tabs)');
 const FEATURE_DIR = path.join(ROOT, 'features', 'onboarding');
+const PAGES_DIR = path.join(ROOT, 'pages');
 
 function read(file: string): string {
   return fs.readFileSync(file, 'utf8');
@@ -40,8 +41,8 @@ describe('취향 라우트 배치 (AC3 · 6-1)', () => {
     expect(fs.existsSync(pref2Path)).toBe(true);
 
     // 긍정 — 얇은 래퍼답게 각자 해당 컨테이너를 참조한다(terms.tsx/nickname.tsx와 동형).
-    expect(read(pref1Path)).toMatch(/PrefStep1Container/);
-    expect(read(pref2Path)).toMatch(/PrefStep2Container/);
+    expect(read(pref1Path)).toMatch(/PrefStep1Page/);
+    expect(read(pref2Path)).toMatch(/PrefStep2Page/);
 
     // 부정 — 탭 그룹에는 pref 라우트가 없다.
     const tabsFiles = fs.existsSync(TABS_ROUTE_DIR)
@@ -53,7 +54,7 @@ describe('취향 라우트 배치 (AC3 · 6-1)', () => {
 
 describe('스토어 persist 금지 (AC5 · 6-2)', () => {
   it('preferenceStore.ts가 zustand create를 쓰되 영속 저장을 참조하지 않는다', () => {
-    const storePath = path.join(FEATURE_DIR, 'store', 'preferenceStore.ts');
+    const storePath = path.join(FEATURE_DIR, 'model', 'preferenceStore.ts');
 
     // 긍정 — 파일이 있고 zustand의 create를 실제로 쓴다.
     expect(fs.existsSync(storePath)).toBe(true);
@@ -71,11 +72,11 @@ describe('스토어 persist 금지 (AC5 · 6-2)', () => {
 describe('서버 미전송 (AC 제약: PUT 배선 없음 · ScopeBoundaryHit · 6-3)', () => {
   it('신규 취향 표면 전체가 서버 취향 저장 엔드포인트를 참조하지 않는다', () => {
     const files = [
-      path.join(FEATURE_DIR, 'store', 'preferenceStore.ts'),
-      path.join(FEATURE_DIR, 'containers', 'PrefStep1Container.tsx'),
-      path.join(FEATURE_DIR, 'containers', 'PrefStep2Container.tsx'),
-      path.join(FEATURE_DIR, 'screens', 'PrefStep1Screen.tsx'),
-      path.join(FEATURE_DIR, 'screens', 'PrefStep2Screen.tsx'),
+      path.join(FEATURE_DIR, 'model', 'preferenceStore.ts'),
+      path.join(PAGES_DIR, 'onboarding-pref1', 'ui', 'PrefStep1Page.tsx'),
+      path.join(PAGES_DIR, 'onboarding-pref2', 'ui', 'PrefStep2Page.tsx'),
+      path.join(FEATURE_DIR, 'ui', 'PrefStep1Screen.tsx'),
+      path.join(FEATURE_DIR, 'ui', 'PrefStep2Screen.tsx'),
       path.join(ONBOARDING_ROUTE_DIR, 'pref1.tsx'),
       path.join(ONBOARDING_ROUTE_DIR, 'pref2.tsx'),
     ];
@@ -104,12 +105,8 @@ describe('서버 미전송 (AC 제약: PUT 배선 없음 · ScopeBoundaryHit · 
 
 describe('약관·닉네임은 탈출 비대상 (AC4 · AC-11-3 · 6-4 · 선제 green)', () => {
   it('약관·닉네임 화면 소스에는 일괄 탈출 문구가 없다', () => {
-    const termsPath = path.join(FEATURE_DIR, 'screens', 'TermsScreen.tsx');
-    const nicknamePath = path.join(
-      FEATURE_DIR,
-      'screens',
-      'NicknameScreen.tsx'
-    );
+    const termsPath = path.join(FEATURE_DIR, 'ui', 'TermsScreen.tsx');
+    const nicknamePath = path.join(FEATURE_DIR, 'ui', 'NicknameScreen.tsx');
 
     // 긍정 — 두 화면 파일이 존재한다(부재 단언과 짝 — 가짜 통과 방지).
     expect(fs.existsSync(termsPath)).toBe(true);

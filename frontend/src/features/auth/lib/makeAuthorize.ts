@@ -1,7 +1,7 @@
 import type { SocialProvider } from '@/shared/api';
 
-import type { Authorize } from '../hooks/useSocialLogin';
-import { getOAuthConfig } from './oauthConfig';
+import type { Authorize } from '../model/useSocialLogin';
+import { getOAuthConfig } from '../config/oauthConfig';
 
 /**
  * dev fake OAuth provider 팩토리(DI 씨앗). `signIn(provider, makeAuthorize(provider))` 로 주입되어,

@@ -21,9 +21,9 @@
 
 - **스택**: Expo(development build + prebuild) · Expo Router · TypeScript strict · NativeWind · TanStack Query + Zustand · orval · Jest + fast-check
 - **경로 별칭**: `@/*` → `./src/*`
-- **구현 범위**: `auth` + `onboarding` **두 feature만 실구현.** 나머지 9개 feature는 `export {}` 한 줄짜리 빈 스텁이다.
+- **구현 범위**: `auth`·`home`·`onboarding` **세 feature만 실구현.** 나머지 자리는 도메인 작업이 시작될 때 새로 만든다 — TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}`) 14개를 전부 삭제했고, 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 디렉토리째 사라졌다.
 - **앱 런타임 목 0건.** msw는 테스트 오라클(`msw/node`)에만 있고, `src/__tests__/noMswInStaticGraph.test.ts`가 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제한다.
-- **문서 대상 파일 98개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함)
+- **문서 대상 파일 92개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함)
 
 ## 디렉토리
 
@@ -31,6 +31,8 @@
 frontend/
 ├── src/
 │   ├── app/          Expo Router 라우트 (파일 = 화면)
+│   ├── app-shell/    src/app **밖**의 루트 셸 조립 (TRIP-173 신설 — SplashGate)
+│   ├── pages/        FSD pages 층 — 화면별 배선 (TRIP-173 신설, 구 `features/*/containers` 5개가 이주)
 │   ├── features/     도메인 기능 (auth·onboarding 실구현, 나머지 9개 빈 스텁)
 │   ├── shared/       도메인 무관 공용
 │   ├── mocks/        테스트 오라클 전용 msw/node (앱 런타임 목 아님)
@@ -40,6 +42,8 @@ frontend/
 └── (설정) app.config.ts · orval.config.ts · eslint.config.js · babel.config.js
           jest.config.js · jest.integration.config.js · metro.config.js · tailwind.config.js
 ```
+
+**FSD 층 방향 규칙 — 아직 0개(TRIP-173 사이클 1 기준).** `app-shell`·`pages`가 신설됐지만 이번 사이클은 폴더 배치만 바꿨고, "하위 층이 상위 층을 참조하면 안 된다" 같은 방향 규칙은 eslint·테스트 어디에도 없다(사이클 4에서 도입 예정, code-critic 경고-1 실측 — `features` → `pages` 역참조를 lint 0 error로 통과시킴). 지금 이 규칙이 이미 있다고 가정하고 작업하지 마라.
 
 ## `src/app/` — 라우트
 
@@ -55,8 +59,8 @@ frontend/
 | `src/app/(onboarding)/index.tsx` | **진입 단계 리다이렉트** (미완 → terms) |
 | `src/app/(onboarding)/terms.tsx` | 약관 라우트 — 컨테이너를 꽂는 얇은 래퍼 |
 | `src/app/(onboarding)/nickname.tsx` | 닉네임 라우트 — 얇은 래퍼 |
-| `src/app/(onboarding)/pref1.tsx` | 취향 1/2 라우트(c09) — `PrefStep1Container`를 꽂는 얇은 래퍼 |
-| `src/app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Container`를 꽂는 얇은 래퍼 |
+| `src/app/(onboarding)/pref1.tsx` | 취향 1/2 라우트(c09) — `PrefStep1Page`를 꽂는 얇은 래퍼(구 `PrefStep1Container`) |
+| `src/app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Page`를 꽂는 얇은 래퍼(구 `PrefStep2Container`) |
 | `src/app/(tabs)/_layout.tsx` | 탭 네비게이터 — `Tabs`에 `tabBar` 렌더프롭(Q4 전면 커스텀) + `BottomTabBar` 어댑터(라우트↔탭key 양방향 번역: `routeNameToTabKey`(index→home, 활성 표시) · `handlePressTab`(home→index, 누름 이동 — **홈 탭 press 미검증**, code-critic 경고1)) |
 | `src/app/(tabs)/index.tsx` | 홈 탭 라우트 — `HomeScreen`(no-trip 픽스처, 게이트① G-1)을 그리는 얇은 래퍼. **더 이상 껍데기 아님**(TRIP-170) |
 | `src/app/(tabs)/explore.tsx` | 탐색 탭 — **껍데기** |
@@ -64,67 +68,89 @@ frontend/
 | `src/app/(tabs)/records.tsx` | 기록 탭 — **껍데기** |
 | `src/app/(tabs)/my.tsx` | 마이 탭 — **껍데기** |
 
-## `src/features/auth/` — 실구현 ①
+## `src/app-shell/` — 루트 셸 (TRIP-173 신설)
 
-계층: `screens`(프레젠테이션) → `containers`(배선) → `hooks`(상태) → `model`·`lib`(순수 로직)
+Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed 확정) — `src/app` **밖**에 있다.
 
 | 파일 | 역할 |
 |---|---|
-| `src/features/auth/screens/SplashScreen.tsx` | 스플래시 비주얼 (프레젠테이션 전용) |
-| `src/features/auth/screens/SocialLoginScreen.tsx` | 소셜 로그인 비주얼 (props 8개 순수 컴포넌트). 에러 배너 조건이 **블랙리스트**(연령제한·이메일충돌 전용화면 2종만 제외, 나머지는 phase가 `'error'`면 전부 배너 — TRIP-172 결함 F, INV-4). ⚠️ 하단 고지 문구는 여전히 기존 약관 문구뿐 — 결함 B(연령 고지 문구) 반영 안 됨 |
-| `src/features/auth/containers/SplashGate.tsx` | 부트스트랩 결과에 따라 라우팅 결정 |
-| `src/features/auth/containers/SocialLoginContainer.tsx` | 로그인 훅 ↔ 화면 배선 |
-| `src/features/auth/hooks/useBootstrapGate.ts` | 앱 시작 시 토큰 복원(`hydrate`가 첫 조회보다 선행) · 잠정/확정 분기. `BOOTSTRAP_TIMEOUT_MS` 포함. 로그인 성공(토큰 변경)을 `subscribeAccessToken`으로 구독해 재조회한다(TRIP-172 결함 A) — 구독은 첫 왕복이 끝난 뒤에만 건다 |
-| `src/features/auth/hooks/useSocialLogin.ts` | 소셜 로그인 흐름(PKCE · single-flight, `phaseRef` 잠금). `'exchanging'` phase 신설, `authorize()` reject는 `phase='error'`(INV-4)로 표면화(TRIP-172 결함 E). 성공 시 `saveTokens` + `setAccessToken` 둘 다. ⚠️ **결함 B 미해결** — `confirmAge()`가 여전히 같은 `authorizationCode`를 재전송한다(:154, OAuth 인가코드는 1회용이라 실서버에서 항상 거부됨). 다음 사이클 1순위 |
+| `src/app-shell/ui/SplashGate.tsx` | 부트스트랩 결과에 따라 라우팅 결정(구 `features/auth/containers/SplashGate.tsx`). 향후 `QueryClientProvider` 등 앱 전역 프로바이더가 여기 모일 자리 |
+| `src/app-shell/index.ts` | 배럴 — `SplashGate` 재수출. `src/app/_layout.tsx`가 이 배럴을 경유(딥 임포트 0건, code-critic E5 확인) |
+
+## `src/pages/` — FSD pages 층 (TRIP-173 신설, 5슬라이스)
+
+구 `features/{auth,onboarding}/containers/*`(훅 ↔ 화면 배선)가 이주한 자리. **아직 방향 규칙 없음**(위 "FSD 층 방향 규칙" 참조) — 지금은 폴더 배치일 뿐이다.
+
+| 슬라이스 | 파일 | 역할 |
+|---|---|---|
+| `login` | `src/pages/login/ui/LoginPage.tsx` | 로그인 훅 ↔ 화면 배선(구 `SocialLoginContainer.tsx`, 심볼도 `*Page`로 개명) |
+| | `src/pages/login/index.ts` | 배럴 — `LoginPage` 재수출 |
+| `onboarding-terms` | `src/pages/onboarding-terms/ui/TermsPage.tsx` | 약관 훅 ↔ 화면 배선(구 `TermsContainer.tsx`) |
+| | `src/pages/onboarding-terms/index.ts` | 배럴 |
+| `onboarding-nickname` | `src/pages/onboarding-nickname/ui/NicknamePage.tsx` | 닉네임 훅 ↔ 화면 배선(구 `NicknameContainer.tsx`) |
+| | `src/pages/onboarding-nickname/index.ts` | 배럴 |
+| `onboarding-pref1` | `src/pages/onboarding-pref1/ui/PrefStep1Page.tsx` | 취향 1/2 배선(구 `PrefStep1Container.tsx`) |
+| | `src/pages/onboarding-pref1/index.ts` | 배럴 |
+| `onboarding-pref2` | `src/pages/onboarding-pref2/ui/PrefStep2Page.tsx` | 취향 2/2 배선(구 `PrefStep2Container.tsx`) |
+| | `src/pages/onboarding-pref2/index.ts` | 배럴 |
+
+> **⚠️ 배럴 경유는 지금 관행일 뿐 강제되지 않는다** — 라우트 5개는 전부 배럴을 경유하지만(위반 0건), 승인 테스트(`fsdStructure.test.ts`)의 단언이 `toContain`(부분 문자열)이라 딥 임포트로 바꿔도 잡히지 않는다(code-critic 참고-1 실측). 회귀 방지는 승인 테스트 수정이 필요해 사이클 3 몫으로 이관됨.
+
+## `src/features/auth/` — 실구현 ①
+
+**계층 개명(TRIP-173)**: `ui`(프레젠테이션, 구 `screens`+`components`) → `model`(상태·훅, 구 `hooks`) → `lib`·`config`(순수 로직/설정, 구 `lib`가 둘로 분리). 배선(구 `containers`)은 `pages/login/ui/LoginPage.tsx`로 이동했다(위 절 참조).
+
+| 파일 | 역할 |
+|---|---|
+| `src/features/auth/ui/SplashScreen.tsx` | 스플래시 비주얼 (프레젠테이션 전용) |
+| `src/features/auth/ui/SocialLoginScreen.tsx` | 소셜 로그인 비주얼 (props 8개 순수 컴포넌트). 에러 배너 조건이 **블랙리스트**(연령제한·이메일충돌 전용화면 2종만 제외, 나머지는 phase가 `'error'`면 전부 배너 — TRIP-172 결함 F, INV-4). ⚠️ 하단 고지 문구는 여전히 기존 약관 문구뿐 — 결함 B(연령 고지 문구) 반영 안 됨. **TRIP-173 FSD 완결 4/4**(Figma `c02-social-login` `1284:1208` 정합) — 카카오 라벨 한글화(`카카오로 계속하기`) · 소셜 버튼 라벨 Bold화 · 에러 배너 재구성(배경 `bg-primary-pale`+모서리+`WarningTriangleGlyph`, 구 회색 텍스트 한 줄에서 교체). `SocialLoginScreen.visual.test.tsx`가 AC-V1~V3을 **렌더 층**(`within` 스코프)에서 잠금 — 소스 스캔은 위치를 못 봐서 안 씀(개념 [[가드의 사정거리]] 실측 6). ⚠️ 카카오 라벨 한글화로 충돌 시트(`이미 kakao 로그인으로`)와 표기가 갈라짐 — [[2026-07-28 카카오·kakao 표시명 불일치]] |
+| `src/features/auth/model/useBootstrapGate.ts` | 앱 시작 시 토큰 복원(`hydrate`가 첫 조회보다 선행) · 잠정/확정 분기. `BOOTSTRAP_TIMEOUT_MS` 포함. 로그인 성공(토큰 변경)을 `subscribeAccessToken`으로 구독해 재조회한다(TRIP-172 결함 A) — 구독은 첫 왕복이 끝난 뒤에만 건다 |
+| `src/features/auth/model/useSocialLogin.ts` | 소셜 로그인 흐름(PKCE · single-flight, `phaseRef` 잠금). `'exchanging'` phase 신설, `authorize()` reject는 `phase='error'`(INV-4)로 표면화(TRIP-172 결함 E). 성공 시 `saveTokens` + `setAccessToken` 둘 다. ⚠️ **결함 B 미해결** — `confirmAge()`가 여전히 같은 `authorizationCode`를 재전송한다(:154, OAuth 인가코드는 1회용이라 실서버에서 항상 거부됨). 다음 사이클 1순위 |
 | `src/features/auth/model/resolveBootstrapDestination.ts` | **순수 함수** — 부트스트랩 상태 → 목적지. `AUTHENTICATED`는 `onboardingCompleted`로 `HOME`/`ONBOARDING` 분기(TRIP-172 — 서버에 `ONBOARDING_INCOMPLETE` 상태 자체가 없다, D7) |
-| `src/features/auth/lib/makeAuthorize.ts` | authorize 팩토리(DI 주입점). **3갈래** — fake 토글 on→fake / off+clientId→`realAuthorize` **동적 import** / off+설정없음→throw(INV-4) |
-| `src/features/auth/lib/realAuthorize.ts` | **`expo-auth-session`을 참조하는 유일한 프로덕션 파일.** `AuthRequest`가 이제 `config.usePKCE`를 그대로 쓴다(naver만 false). PKCE 미사용 시 `codeVerifier`가 빈 문자열 대신 `generateOpaqueToken()` 대체값(백엔드 `@NotBlank` 회피, TRIP-172 결함 C). naver는 `state`도 직접 생성 — 둘 다 암호학적으로 안전한 난수는 아님(참고 #2, 실기 전 `expo-crypto` 교체 검토) |
-| `src/features/auth/lib/oauthConfig.ts` | provider별 OAuth config를 **env에서** 읽음(`EXPO_PUBLIC_{GOOGLE,KAKAO,NAVER}_*`). discovery 정적 하드코딩. **google·kakao·naver 채움**(TRIP-172), **apple만 빈 슬롯**(백엔드 fail-closed). naver는 `usePKCE:false` + `requiresState:true`(PKCE 미지원). 네이티브 의존 0 |
-| `src/features/auth/lib/gradients.ts` | 그라디언트·앱아이콘 색 상수 |
-| `src/features/auth/components/AuthGlyphs.tsx` | 인라인 SVG — 앱아이콘 · 소셜 4종 로고 |
-| `src/features/auth/components/SplashIllustration.tsx` | 인라인 SVG — 스플래시 일러스트 |
+| `src/features/auth/lib/makeAuthorize.ts` | authorize 팩토리(DI 주입점). **제자리**(TRIP-173에서 안 옮김). **3갈래** — fake 토글 on→fake / off+clientId→`realAuthorize` **동적 import** / off+설정없음→throw(INV-4) |
+| `src/features/auth/lib/realAuthorize.ts` | **`expo-auth-session`을 참조하는 유일한 프로덕션 파일.** **제자리**(TRIP-173에서 안 옮김). `AuthRequest`가 이제 `config.usePKCE`를 그대로 쓴다(naver만 false). PKCE 미사용 시 `codeVerifier`가 빈 문자열 대신 `generateOpaqueToken()` 대체값(백엔드 `@NotBlank` 회피, TRIP-172 결함 C). naver는 `state`도 직접 생성 — 둘 다 암호학적으로 안전한 난수는 아님(참고 #2, 실기 전 `expo-crypto` 교체 검토) |
+| `src/features/auth/config/oauthConfig.ts` | provider별 OAuth config를 **env에서** 읽음(`EXPO_PUBLIC_{GOOGLE,KAKAO,NAVER}_*`). discovery 정적 하드코딩. **google·kakao·naver 채움**(TRIP-172), **apple만 빈 슬롯**(백엔드 fail-closed). naver는 `usePKCE:false` + `requiresState:true`(PKCE 미지원). 네이티브 의존 0 |
+| `src/features/auth/config/gradients.ts` | 그라디언트·앱아이콘 색 상수. **TRIP-173 FSD 4/4** `AUTH_ICON_COLORS`(경고 글리프 색, `warning: '#C13515'` = tailwind `primary-text`) 추가 — `fsdStructure.test.ts:252`가 `auth/config/` 파일 목록을 완전일치 앵커해 새 파일 대신 이 모듈에 얹음(재사용 공개 API 표에도 등재) |
+| `src/features/auth/ui/AuthGlyphs.tsx` | 인라인 SVG — 앱아이콘 · 소셜 4종 로고 · **TRIP-173 FSD 4/4 신설** `WarningTriangleGlyph`(18×18 경고 삼각형 — `LocationInfoGlyph` 형태 선례 그대로, 색은 `AUTH_ICON_COLORS.warning` 경유, Figma 원본과 `d=`·색·굵기 글자 그대로 일치). `strokeWidth`·렌더 크기(`size`) 부분 회귀는 `loginVisual.test.ts`가 잠금(개념 [[가드의 사정거리]] 실측 6) |
+| `src/features/auth/ui/SplashIllustration.tsx` | 인라인 SVG — 스플래시 일러스트 |
+
+> `src/features/auth/` 아래 `index.ts`는 여전히 **존재하지 않는다** — 이제 이게 표준이다. 배럴 신설 계획("사이클 3")은 폐기됐다(그 유예가 가리키던 사이클 3은 폐기된 FSD 이주 11사이클 계획의 것). TRIP-173 FSD 완결 2/4에서 home·onboarding의 빈 배럴 14개를 전부 삭제하며 방향이 뒤집혔다 — **구현 슬라이스는 배럴 없이 간다.**
 
 ## `src/features/onboarding/` — 실구현 ②
 
-계층은 auth와 동형 + **`store/`(Zustand, 리포 첫 도입 — TRIP-163)**: `screens`(프레젠테이션) → `containers`(배선) → `hooks`·`store`(상태) → `model`(순수 로직).
+**계층 개명(TRIP-173)**: auth와 동형으로 축소 — `ui`(프레젠테이션, 구 `screens`+`components`) → `model`(상태·훅·스토어, 구 `hooks`+`store`+기존 `model`이 합류). 배선(구 `containers`)은 `pages/onboarding-{terms,nickname,pref1,pref2}/ui/`로 이동(위 `src/pages/` 절 참조). **`store/` 디렉토리는 폐지** — Zustand 스토어가 `model/`로 합류했다.
 
 | 파일 | 역할 |
 |---|---|
-| `src/features/onboarding/screens/TermsScreen.tsx` | 약관 화면(프레젠테이션 · props만) |
-| `src/features/onboarding/screens/NicknameScreen.tsx` | 닉네임 화면(오류·대체칩 표시만). 칩은 값(인덱스 아님)을 올림 |
-| `src/features/onboarding/screens/PrefStep1Screen.tsx` | 취향 1/2 화면(프레젠테이션 · Figma c09/1643:1183 정합) — 스타일 그리드(복수)+페이스(단일). props만, 스토어·네트워크 모름 |
-| `src/features/onboarding/screens/PrefStep2Screen.tsx` | 취향 2/2 화면(프레젠테이션 · Figma c09b/1774:2258 정합) — 예산(단일)+동행·음식·이동(복수) + back chevron(Q4 결정, 2/2 전용) |
-| `src/features/onboarding/containers/TermsContainer.tsx` | 약관 훅 ↔ 화면 배선. 성공 시 `router.replace('/(onboarding)/nickname')` |
-| `src/features/onboarding/containers/NicknameContainer.tsx` | 닉네임 훅 ↔ 화면 배선. 성공 시 **취향 1/2**(`/(onboarding)/pref1`)로 이동(TRIP-163 인터뷰1 — 종전 게이트(`/`) 복귀에서 교체. ⚠️ 파일 상단 docstring은 구 목적지를 서술한 채 stale — 03b 참고②, 후속 티켓) |
-| `src/features/onboarding/containers/PrefStep1Container.tsx` | 취향 1/2 배선 — 스토어 ↔ 화면 ↔ router. '다음'은 `push`(2/2의 `back()`이 되돌아오도록), 일괄 탈출은 `replace('/')`. 저장(PUT) 배선 없음(Q1 — 후속 wiring 사이클) |
-| `src/features/onboarding/containers/PrefStep2Container.tsx` | 취향 2/2 배선 — 스토어 ↔ 화면 ↔ router. back은 `router.back()`(Q4, 2/2 전용), '완료'·일괄 탈출 모두 `replace('/')`(닉네임과 동형 게이트 재판정 패턴) |
-| `src/features/onboarding/hooks/useTermsConsent.ts` | 약관 3종 로드·토글·`POST /me/consents` **1회** 제출. 실패 시 이동 안 함 |
-| `src/features/onboarding/hooks/useNickname.ts` | 닉네임 프리필 + **순서 저장**(형식→check→PATCH→complete). 각 단계 실패 시 다음 미호출 |
-| `src/features/onboarding/hooks/useOnboardingProgress.ts` | 온보딩 진행 상태 훅 seam. ⚠️ **현재 `{false,false}` 하드코딩**(FW1) — 아래 경고. 취향 스텝은 이 모델을 확장하지 않음(1회성 통과 흐름 — 02a §7-11) |
+| `src/features/onboarding/ui/TermsScreen.tsx` | 약관 화면(프레젠테이션 · props만) |
+| `src/features/onboarding/ui/NicknameScreen.tsx` | 닉네임 화면(오류·대체칩 표시만). 칩은 값(인덱스 아님)을 올림 |
+| `src/features/onboarding/ui/PrefStep1Screen.tsx` | 취향 1/2 화면(프레젠테이션 · Figma c09/1643:1183 정합) — 스타일 그리드(복수)+페이스(단일). props만, 스토어·네트워크 모름 |
+| `src/features/onboarding/ui/PrefStep2Screen.tsx` | 취향 2/2 화면(프레젠테이션 · Figma c09b/1774:2258 정합) — 예산(단일)+동행·음식·이동(복수) + back chevron(Q4 결정, 2/2 전용) |
+| `src/features/onboarding/model/useTermsConsent.ts` | 약관 3종 로드·토글·`POST /me/consents` **1회** 제출. 실패 시 이동 안 함 |
+| `src/features/onboarding/model/useNickname.ts` | 닉네임 프리필 + **순서 저장**(형식→check→PATCH→complete). 각 단계 실패 시 다음 미호출 |
+| `src/features/onboarding/model/useOnboardingProgress.ts` | 온보딩 진행 상태 훅 seam. ⚠️ **현재 `{false,false}` 하드코딩**(FW1) — 아래 경고. 취향 스텝은 이 모델을 확장하지 않음(1회성 통과 흐름 — 02a §7-11) |
 | `src/features/onboarding/model/resolveOnboardingStep.ts` | **순수 함수** — 진행 상태 → 잔여 단계(`terms`/`nickname`/`done`) |
 | `src/features/onboarding/model/validateNicknameFormat.ts` | **순수 함수** — 닉네임 길이(코드포인트 2~20)만. 내용 판정은 서버 권한 |
 | `src/features/onboarding/model/preferenceSelection.ts` | **순수 함수** — `toggleMulti`(복수 축)·`toggleSingle`(단일 축). `null`=미설정, 전부 해제 시 `[]`가 아니라 `null`로 복귀(US-ONB-14) |
-| `src/features/onboarding/store/preferenceStore.ts` | **Zustand 스토어**(신설 `store/` 디렉토리) — 취향 6축(styles·pace·budget·companions·foods·transports) 세션 메모리 상태. **persist 없음**(인터뷰3), 토글 판단은 `model/preferenceSelection`에 위임. `create(createPreferenceDraft)` 형태(구조 가드 6-2 정합 — 제네릭 직접 호출 시 `create<` 리터럴이 가드를 오탐시킴, 개념 [[구조 가드와 긍정 앵커]]) |
-| `src/features/onboarding/components/OnboardingGlyphs.tsx` | 인라인 SVG — 약관·닉네임·취향 화면 글리프. 기존 5종(체크·재생성 등)+**신규 19종**(스타일7·페이스3·동행4·이동3·info·skip chevron 등, TRIP-163). raw hex 색 직박(`screens/` 스코프 밖이라 F2 raw-hex 가드 미대상 — 03b 참고-2: 향후 `screens/`로 이동 시 red) |
-| `src/features/onboarding/index.ts` | 배럴 스텁(`export {}`) — 아무도 안 씀 |
+| `src/features/onboarding/model/preferenceStore.ts` | **Zustand 스토어**(구 `store/preferenceStore.ts`, TRIP-173에서 `model/`로 합류) — 취향 6축(styles·pace·budget·companions·foods·transports) 세션 메모리 상태. **persist 없음**(인터뷰3), 토글 판단은 `model/preferenceSelection`에 위임. `create(createPreferenceDraft)` 형태(구조 가드 6-2 정합 — 제네릭 직접 호출 시 `create<` 리터럴이 가드를 오탐시킴, 개념 [[구조 가드와 긍정 앵커]]) |
+| `src/features/onboarding/ui/OnboardingGlyphs.tsx` | 인라인 SVG — 약관·닉네임·취향 화면 글리프. 기존 5종(체크·재생성 등)+**신규 19종**(스타일7·페이스3·동행4·이동3·info·skip chevron 등, TRIP-163). raw hex 색 직박 — TRIP-173으로 `ui/`에서 `*Screen.tsx` 파일들과 **같은 폴더가 됐다.** F2 raw-hex 가드(`onboardingStructure.test.ts`)가 이제 디렉토리가 아니라 **`*Screen.tsx` 파일명 접미사로 필터**해 계속 미대상이다(`SCREEN_SOURCE_FILES` 상수로 6개 고정, code-critic W-2·W-3 확인) — 필터가 조용히 넓어지면 이 파일도 스캔 대상이 될 수 있으니 그 필터를 건드릴 땐 이 파일부터 확인 |
 
 ## `src/features/home/` — 실구현 ③ (TRIP-170)
 
-계층: `model`(순수 타입·상수) → `components`(전용 글리프) → `screens`(프레젠테이션). **컨테이너·훅 없음** — 서버 API 부재로 프레젠테이션 전용 슬라이스(props/상수 구동, 네트워크·라우팅 0).
+계층: `model`(순수 타입·상수) → `ui`(화면+전용 글리프, TRIP-173 FSD 완결 1/4에서 `screens`·`components` 2칸이 합류). **컨테이너·훅 없음** — 서버 API 부재로 프레젠테이션 전용 슬라이스(props/상수 구동, 네트워크·라우팅 0).
 
 | 파일 | 역할 |
 |---|---|
 | `src/features/home/model/homeTypes.ts` | prop 계약 타입 — 판별 유니온 `HomeSections`(`ready`/`empty`/`loading`) 포함 |
 | `src/features/home/model/homeFixtures.ts` | 4상태 고정 목업(Q2 — Figma 표시값 그대로 상수화). `HOME_DEFAULT_PROPS`·`HOME_NO_TRIP_PROPS`·`HOME_EMPTY_PROPS`·`HOME_LOADING_PROPS` |
-| `src/features/home/components/HomeGlyphs.tsx` | 홈 전용 인라인 SVG 10종(AuthGlyphs/OnboardingGlyphs 패턴). raw hex 직박(`screens/` 밖이라 D-3 가드 미대상) |
-| `src/features/home/screens/HomeScreen.tsx` | 4상태 프레젠테이션 화면. props만 받음 — `expo-router`·`@/shared/api`·타 feature import 0(homeStructure D-1이 기계 강제) |
-| `src/features/home/index.ts` | 배럴 스텁(`export {}`) — 아무도 안 씀 |
+| `src/features/home/ui/HomeGlyphs.tsx` | 홈 전용 인라인 SVG 10종(AuthGlyphs/OnboardingGlyphs 패턴). raw hex 직박 — TRIP-173으로 `ui/`에서 `*Screen.tsx` 파일과 **같은 폴더가 됐다.** D-3 가드(`homeStructure.test.ts`)가 이제 디렉토리가 아니라 **`*Screen.tsx` 파일명 접미사로 필터**해 계속 미대상이다(`HOME_SCREEN_SOURCE_FILES` 동결목록으로 1건 고정, code-critic W-1 확인) — 필터가 조용히 넓어지면 이 파일도 스캔 대상이 될 수 있으니 그 필터를 건드릴 땐 이 파일부터 확인 |
+| `src/features/home/ui/HomeScreen.tsx` | 4상태 프레젠테이션 화면. props만 받음 — `expo-router`·`@/shared/api`·타 feature import 0(homeStructure D-1이 기계 강제) |
 
-## `src/features/` 빈 스텁 (`export {}` 한 줄)
+## `src/features/` — 아직 시작 안 한 도메인
 
-**디렉토리가 있다고 구현된 게 아니다.** 아래 8개는 전부 껍데기이며, 해당 도메인 작업 = 이 파일부터 채우는 일이다(`home`은 TRIP-170으로 위 실구현 ③절로 이동).
+TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개를 `git rm`으로 전부 삭제했다. 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 그 배럴이 디렉토리 안의 유일한 파일이라 **디렉토리째 사라졌다** — 지금 `src/features/`에는 `auth`·`home`·`onboarding` 3개뿐이다.
 
-`src/features/archive/index.ts` · `src/features/execution/index.ts` · `src/features/itinerary/index.ts` · `src/features/notification/index.ts` · `src/features/planb/index.ts` · `src/features/settings/index.ts` · `src/features/stay/index.ts` · `src/features/trip/index.ts`
+새 도메인을 시작할 때 빈 배럴부터 만들지 않는다 — **`auth`가 선례**다: 배럴 없이 딥 임포트로 시작하고, 재수출할 공개 API가 실제로 생기면 그때 배럴을 만든다. `export {};`만 있는 선점은 `fsdStructure.test.ts`의 AC-4(아래 테스트 인프라 절)가 기계로 막는다.
 
 ## `src/shared/`
 
@@ -132,16 +158,12 @@ frontend/
 |---|---|
 | `src/shared/api/index.ts` | **구현됨** — axios 인스턴스 · 인터셉터 · 토큰 갱신 · 서버 호출 전체. `authedClient` 인스턴스가 온보딩 5종 + `fetchBootstrap`(TRIP-172 결함 A-2, 이전엔 무인증 `baseClient`였음)을 인증 경로로 보낸다. `SERVER_ERROR_CODE_TRANSLATIONS`가 서버 실코드→프론트 계약 코드 번역표(현재 `AGE_REQUIREMENT_NOT_MET`→`AGE_NOT_MET` 1건, `normalizeSocialError`의 `??` 결과값에 적용 — 승인 테스트가 이 표를 겨냥하지 않아 미검증) |
 | `src/shared/api/tokenManager.ts` | **구현됨** — 동기 in-memory 액세스토큰 홀더. SecureStore(비동기)와 공존, 인터셉터가 동기로 읽는다. `subscribeAccessToken`으로 토큰 변화를 구독 가능(TRIP-172, 값이 실제로 바뀔 때만 통지 — 동등비교 가드) |
-| `src/shared/storage/index.ts` | **구현됨** — expo-secure-store 토큰 저장소 |
+| `src/shared/storage/index.ts` | **구현됨** — expo-secure-store 토큰 저장소. `hasStoredToken`은 **accessToken 존재만 판정**한다(`getItemAsync(ACCESS_TOKEN_KEY) != null` — refreshToken만 없는 부분 저장도 true). TRIP-173 재작성 3/8에서 실수로 "두 토큰 다 있어야 true"로 좁혀졌다가(콜드스타트 폴백이 HOME→LOGIN으로 뒤집힘) code-critic이 잡아 원복됨 — 이 함수를 실제로 도는 테스트가 리포에 없어 재발해도 362건이 그대로 green이니 다음에 손댈 때 주의 |
 | `src/shared/version/compareVersion.ts` | **구현됨** — 버전 비교(강제 업데이트 판정) |
 | `src/shared/location/LocationPreprompt.tsx` | **전체화면**(레이더 히어로·denied 전용 레이아웃 — 카드형은 폐기됐고 내부 마크업만 전면 교체, props/testID 시그니처 무변경). `default`/`permission-denied` 2상태. `expo-location`을 import조차 안 함(구조적으로 OS 다이얼로그 못 부름). **라우트 미등록**(실사용처 0, 프리뷰 전용) |
 | `src/shared/location/LocationGlyphs.tsx` | 인라인 SVG — 위치 화면 글리프(레이더 히어로·오프 타일). stroke/fill 색은 `locationColors.ts` 상수 경유(`shared/location/**` 는 F2 raw-hex 가드 대상) |
 | `src/shared/location/lib/locationColors.ts` | 위치 글리프 색 상수(raw hex 분리 — `gradients.ts` 패턴 재사용). 토큰 색과 수동 동기화 필요(03b 참고-2) |
-| `src/shared/location/index.ts` | 배럴 스텁(`export {}`) |
-| `src/shared/ui/BottomTabBar.tsx` | 순수 뷰 탭바(TRIP-170) — 5탭 아이콘 자체 보유(인라인 SVG), 네비게이션을 모른다(`activeKey`·`onPressTab` 두 prop뿐). testID `shell-tabbar-*` |
-| `src/shared/ui/index.ts` | 배럴 스텁(`export {}`) — `BottomTabBar`는 이 배럴을 거치지 않고 직접 import됨 |
-| `src/shared/validation/index.ts` | **빈 스텁** |
-| `src/shared/map/index.ts` | **빈 스텁** |
+| `src/shared/ui/BottomTabBar.tsx` | 순수 뷰 탭바(TRIP-170) — 5탭 아이콘 자체 보유(인라인 SVG), 네비게이션을 모른다(`activeKey`·`onPressTab` 두 prop뿐). testID `shell-tabbar-*`. **TRIP-173 FSD 완결 3/4**에서 비주얼을 Figma 마스터(`1236:1177`)에 정합 — 풀폭 직각 바(74px·`bg-canvas`·`border-t`) → 투명 84px 밴드 안에 334×64 알약(`rounded-pill`·`bg-surface-soft`, 좌우 28px 여백). 탭 폭 `flex-1`(가변) → `w-[62px]`(고정). 아이콘 좌표계 `0 0 24 24` → `0 0 27 27` + path 10종 전량 교체. prop 계약·testID·접근성 전부 불변. 알약 배경은 1차 판정(Figma raw CSS `rgba(255,255,255,0.68)`)에서 프로덕션 렌더 실측(`#F7F7F7`)으로 **되정정**돼 `bg-surface-soft` 토큰이 됐다(raw 선언값과 렌더 합성값은 다른 질문 — 메커니즘은 미확정) |
 
 ## 테스트 인프라
 
@@ -158,12 +180,15 @@ frontend/
 | `src/test-support/splashGateMock.tsx` | `SplashGate` 목 |
 | `__mocks__/@gorhom/bottom-sheet.tsx` | 네이티브 모듈 자동 목 |
 | `src/__tests__/noMswInStaticGraph.test.ts` | 정적 import 그래프를 fs로 훑어 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제 |
-| `src/__tests__/importBoundary.test.ts` | import 경계 가드 — 계층·feature 격리 위반 차단 |
-| `src/__tests__/onboardingStructure.test.ts` | 온보딩 계층·경계 구조 가드(서버 권한 경계 등) |
+| `src/__tests__/importBoundary.test.ts` | import 경계 가드 — 계층·feature 격리 위반 차단. **FSD 완결 2/4에서 보강**(34→54줄, code-critic 발견 구멍 수리) — 프로브를 배럴 의존(구 `@/features/stay`, 삭제 예정 대상이었다)에서 실파일 딥 경로로 떼고, 단언을 에러 개수(`errorCount>0`)에서 **룰 ID**(`import/no-restricted-paths` 포함 · `import/no-unresolved` 불포함)로 바꿔 "경계 위반"과 "모듈 해석 실패"를 구분한다. **단독 실행 시 `NODE_OPTIONS=--experimental-vm-modules` 필요**(`pnpm exec jest` 단독 금지 — 없으면 2/2 실패, 테스트 결함처럼 보이지만 실행 방법 문제) |
+| `src/__tests__/fsdStructure.test.ts` | **TRIP-173 신설(사이클 1 유일한 신규 파일)** — auth `{config,lib,model,ui}` 4칸·onboarding `{model,ui}` 2칸·**home `{model,ui}` 2칸(FSD 완결 1/4 신설, it 1-3)** 대표 파일 존재, `pages` 5슬라이스의 배럴·라우트 참조, `app-shell`이 `src/app` 밖에 있는지를 검사. **폴더 배치만 본다 — import 방향·소스 내용은 안 본다**(code-critic E3·E5·E6 실측). **FSD 완결 2/4(AC-4, it 4-1) 신설** — `features`·`shared` 두 층 전수 스캔으로 빈 배럴(`export {};`) 0개 단언(A·영구) + 진짜 배럴(`shared/api`·`shared/storage`) 대표 심볼 생존 긍정 짝(B) + **스캔이 실제로 두 층에 닿았는지**(`scannedLayers` 앵커, code-critic W-1 보강 — 안 넣으면 `BARREL_LAYERS`를 비워도 green이었다)까지 확인한다. 사이클 3~4가 이 파일에 덧붙여 자란다. 주석 상단에 A(영구)/B(한시) 졸업 조건 명시(게이트①-1→①-2 재제시로 추가됨) |
+| `src/__tests__/onboardingStructure.test.ts` | 온보딩 계층·경계 구조 가드(서버 권한 경계 등). `PAGES_DIR`+`ONBOARDING_PAGE_SLICES`(TRIP-173 신설 — 온보딩 컨테이너 4개가 `pages/`로 나가며 금칙어 가드 사정거리에 다시 편입) |
 | `src/__tests__/onboardingPrefStructure.test.ts` | 취향 스토어·모델 구조 가드(TRIP-163) — persist 금지·`@/shared/api` 미참조·`create(` 표기(구조 가드 6-2, 개념 [[구조 가드와 긍정 앵커]]) |
-| `src/__tests__/homeStructure.test.ts` | 홈 소스 스캔 가드(TRIP-170, `@jest-environment node`) — 픽스처 상수화(D-1)·INV-3 `duration` 식별자 0(D-2)·토큰 raw-hex 0(D-3)·SafeArea 규약(D-4)·탭바 격리(D-5) |
+| `src/__tests__/homeStructure.test.ts` | 홈 소스 스캔 가드(TRIP-170, `@jest-environment node`) — 픽스처 상수화(D-1)·INV-3 `duration` 식별자 0(D-2)·토큰 raw-hex 0(D-3)·SafeArea 규약(D-4)·탭바 격리(D-5). D-3·D-4 모집단은 TRIP-173 FSD 완결 1/4에서 `screens/` 폴더 전체 → `ui/*Screen.tsx` 파일명 필터 + `HOME_SCREEN_SOURCE_FILES` 동결목록(현재 1건, `onboardingStructure` 선례와 동형)으로 교체됐다 |
 | `src/__tests__/onboardingPrefRoutes.test.tsx` | 취향 1/2·2/2 라우트 존재·내비게이션 계약 가드(TRIP-163) — push/replace/back 분기 |
 | `src/__tests__/tabsShell.test.tsx` | `(tabs)/_layout.tsx` 배선 가드(TRIP-170) — 5탭 등록 순서·`tabBar` 렌더프롭·어댑터 활성 매핑/press→navigate·홈 라우트 래퍼·4탭 껍데기 유지 |
+| `src/__tests__/tabbarVisual.test.ts` | **TRIP-173 FSD 완결 3/4 신설** — `BottomTabBar.tsx` 비주얼 소스 스캔 가드(AC-V1 밴드 84+알약 반경 · AC-V2 아이콘 좌표계 27 전량 · AC-V3 옛 풀폭 직각 바 흔적 0 · AC-V4 색 토큰 경유). **모든 `it`이 `stripComments()`로 주석을 제거한 뒤 스캔** — 게이트①-1에서 헤더 주석의 `rounded-pill` 문구가 부정 단언을 실제 코드 없이 만족시키는 거짓 GREEN이 나온 것을 게이트①-2에서 근본 수정. 렌더 크기(`size=27`, 호출부+기본값 12곳)·스크린샷이 잡은 수정값 6종(`h-[64px]`·`leading-[13px]`·`bg-surface-soft`·`w-[62px]`·`px-[28px]`·`style={PILL_SURFACE_STYLE}`)도 함께 잠근다. `active=1~4` 변형은 탭을 누를 수 없어(접근성 권한 부재) 코드 대조로만 담보 — 스크린샷은 홈 활성 1상태만 검증 |
+| `src/__tests__/loginVisual.test.ts` | **TRIP-173 FSD 완결 4/4 신설** — `AuthGlyphs.tsx`의 `WarningTriangleGlyph` 비주얼 **소스 스캔** 가드(AC-V4: `viewBox="0 0 18 18"` · `strokeWidth={1.575}` 배열 비교(개수·값·순서) · 렌더 크기 3곳 잠금(기본값·`size`→`width`/`height` 배선·호출부) · 색 상수 경유 · 스캔 대상 경로 존재 앵커). `stripComments` + 함수 블록/JSX 태그 슬라이스로 이 모듈의 다른 글리프 5개가 개수를 채워주는 우회를 차단(게이트①-2 보강, W-1·W-3 — `tabbarVisual.test.ts`와 같은 구멍이 두 사이클 연속 재현). AC-V1~V3(라벨 웨이트·에러 배너)은 이 파일이 아니라 `SocialLoginScreen.visual.test.tsx`의 **렌더 층**이 잠근다 — `className`이 jest 렌더 트리에 평문 prop으로 남는다는 4-a 실측으로 Seed를 뒤집은 결과(개념 [[가드의 사정거리]] 실측 6, "렌더 층과 소스 층은 사정거리가 다르다") |
 | `src/__tests__/devPreviewPref.test.tsx` | 프리뷰 `pref1`·`pref2` 상태 렌더 가드(TRIP-163) — 빈 선택 상태로 직접 렌더, 가드 우회 아님 |
 | `src/__tests__/devPreviewHome.test.tsx` | 프리뷰 홈 4키 가드(TRIP-170) — 딥링크 4키·토글 진입·미존재 키 splash 폴백 결정론 |
 | `src/__tests__/onboardingEntryGuard.test.tsx` | 온보딩 진입 리다이렉트·완료자 방어 가드 |
@@ -204,22 +229,25 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 | `fetchTerms` · `submitConsents` | `shared/api` | 약관 목록 · 동의 1회 제출(체크된 것만 GRANT) |
 | `fetchNicknameSuggestions` · `checkNickname` · `updateNickname` · `completeOnboarding` | `shared/api` | 후보 조회 · 서버 판정 · 저장 · 온보딩 완료 |
 | `setAccessToken` · `getAccessToken` · `clearAccessToken` · `hydrate` · `subscribeAccessToken` | `shared/api/tokenManager` | 동기 in-memory 토큰 홀더. `getAccessToken`은 **동기** 반환(인터셉터용). `subscribeAccessToken(listener)`은 토큰이 실제로 바뀔 때만 통지하고 구독 해제 함수를 반환한다(TRIP-172 신규 — 로그인 성공 후 부트스트랩 재조회의 유일한 신호) |
-| `saveTokens` · `getTokens` · `clearTokens` · `hasStoredToken` | `shared/storage` | 토큰 저장소 CRUD. **로그인 여부 판정도 `hasStoredToken`** |
+| `saveTokens` · `getTokens` · `clearTokens` · `hasStoredToken` | `shared/storage` | 토큰 저장소 CRUD. **로그인 여부 판정도 `hasStoredToken`**(accessToken 단독 판정 — 위 파일별 역할 표 참고, 심판 0이라 조용히 재발할 수 있다) |
 | `compareVersion` | `shared/version` | 버전 문자열 비교(`-1\|0\|1`) |
 | `makeAuthorize` | `features/auth/lib` | provider별 authorize 팩토리(DI 주입점) |
-| `getOAuthConfig` | `features/auth/lib/oauthConfig` | provider별 OAuth config(env). 네이티브 의존 0 |
+| `getOAuthConfig` | `features/auth/config/oauthConfig` | provider별 OAuth config(env). 네이티브 의존 0 |
 | `realAuthorize` | `features/auth/lib/realAuthorize` | expo-auth-session PKCE authorize. **`makeAuthorize`가 동적 import로만 부름** |
 | `resolveBootstrapDestination` | `features/auth/model` | 부트스트랩 상태 → 목적지(순수) |
 | `resolveOnboardingStep` · `validateNicknameFormat` | `features/onboarding/model` | 잔여 온보딩 단계 · 닉네임 길이 검증(순수) |
 | `toggleMulti` · `toggleSingle` | `features/onboarding/model/preferenceSelection` | 취향 축 토글 순수 규칙(복수/단일 공용). `null`=미설정, 빈 배열로 안 떨어짐(US-ONB-14) |
-| `usePreferenceStore` | `features/onboarding/store/preferenceStore` | 취향 6축 세션 메모리 Zustand 스토어(persist 없음) |
+| `usePreferenceStore` | `features/onboarding/model/preferenceStore` | 취향 6축 세션 메모리 Zustand 스토어(persist 없음). **TRIP-173에서 `store/`→`model/` 합류** |
 | `BottomTabBar` · `ShellTabKey` · `BottomTabBarProps` | `shared/ui` | 순수 뷰 탭바(TRIP-170) — `activeKey`·`onPressTab` 두 prop만, 네비게이션 모름 |
 | `HOME_DEFAULT_PROPS` · `HOME_NO_TRIP_PROPS` · `HOME_EMPTY_PROPS` · `HOME_LOADING_PROPS` | `features/home/model/homeFixtures` | 홈 4상태 Figma 고정 목업(Q2 — 서버 없어 유일한 데이터 소스) |
 | `HomeScreenProps` · `HomeSections`(외 조각 타입) | `features/home/model/homeTypes` | 홈 화면 prop 계약 — 판별 유니온 `HomeSections`(ready/empty/loading) |
-| `useBootstrapGate` · `useSocialLogin` | `features/auth/hooks` | 부트스트랩 · 소셜 로그인 훅 |
-| `useTermsConsent` · `useNickname` · `useOnboardingProgress` | `features/onboarding/hooks` | 약관 · 닉네임 · 진행 상태 훅 |
-| `SPLASH_BACKGROUND_COLORS` · `SPLASH_BACKGROUND_LOCATIONS` · `APP_ICON_COLORS` | `features/auth/lib/gradients` | 그라디언트 상수 |
-| `BOOTSTRAP_TIMEOUT_MS` | `features/auth/hooks` | 부트스트랩 타임아웃 |
+| `useBootstrapGate` · `useSocialLogin` | `features/auth/model` | 부트스트랩 · 소셜 로그인 훅. **TRIP-173에서 `hooks/`→`model/` 개명** |
+| `useTermsConsent` · `useNickname` · `useOnboardingProgress` | `features/onboarding/model` | 약관 · 닉네임 · 진행 상태 훅. **TRIP-173에서 `hooks/`→`model/` 개명** |
+| `SPLASH_BACKGROUND_COLORS` · `SPLASH_BACKGROUND_LOCATIONS` · `APP_ICON_COLORS` · `AUTH_ICON_COLORS` | `features/auth/config/gradients` | 그라디언트 상수. **TRIP-173에서 `lib/`→`config/` 개명**, `AUTH_ICON_COLORS`(경고 글리프 색)는 **FSD 완결 4/4 신설**(code-critic 03b 참고-1: 이 행 갱신 누락이 "이름 다른 재구현" 경로를 여는 사례로 실측됨 — 다음에 경고 아이콘 색이 또 필요하면 여기부터 본다) |
+| `BOOTSTRAP_TIMEOUT_MS` | `features/auth/model` | 부트스트랩 타임아웃 |
+| `LoginPage` | `pages/login` | 로그인 훅↔화면 배선(구 `features/auth/containers/SocialLoginContainer`, TRIP-173 신설) |
+| `TermsPage` · `NicknamePage` · `PrefStep1Page` · `PrefStep2Page` | `pages/onboarding-{terms,nickname,pref1,pref2}` | 온보딩 각 단계 배선(구 `features/onboarding/containers/*Container`, TRIP-173 신설) |
+| `SplashGate` | `app-shell` | 부트스트랩 결과 라우팅(구 `features/auth/containers/SplashGate`, TRIP-173 신설 — `src/app` 밖) |
 
 > ⚠️ **제거된 심볼**(참조하면 깨진다): `setApiAdapter` · `defaultAdapter` · `SCENARIO_LIST` · `getActiveScenarioKey`
 
@@ -236,8 +264,9 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 - **프로덕션에 `@/mocks/*`·`msw`를 import하지 마라** → `noMswInStaticGraph.test.ts`가 잡는다.
 - **엣지 케이스 화면을 눈으로 보려면** → 목을 만들지 말고 `src/app/_dev/preview.tsx`에 상태를 추가한다.
 - **홈에 실 데이터를 배선하려면** → 서버 API가 아직 없다(TRIP-170 범위 밖). `homeFixtures.ts`를 API 훅으로 교체하는 자리이며, `HomeScreen.tsx`에 `msw`·`@/mocks/*`를 직접 넣지 마라(`noMswInStaticGraph.test.ts`가 잡는다).
-- **탭바 하단 인셋을 만지려면** → 전면 커스텀 탭바(74h)가 홈 인디케이터 기기의 bottom inset을 아직 합산하지 않는다(code-critic 경고2, 실기 이연 — 백엔드 부재로 실 홈 도달 불가해 미검증).
+- **탭바 하단 인셋을 만지려면** → 전면 커스텀 탭바(84h, TRIP-173 FSD 완결 3/4에서 74h→84h로 변경)가 홈 인디케이터 기기의 bottom inset을 아직 합산하지 않는다(code-critic 경고2 — 경고 자체는 그대로 유효. "탭바는 네비게이션도 SafeArea도 모르는 순수 뷰 계약"을 바꾸는 별도 결정이라 이번 사이클도 손대지 않았다, 01b Q1).
 - **실 OAuth 실행·검증(AC-S7)** → 아직 **실행 불가**(TRIP-172 04b, FAIL 아님·환경 전제 부재). `ios/Podfile.lock`에 `ExpoAuthSession`·`ExpoWebBrowser`·`ExpoCrypto` 0건(설치된 dev build가 2026-07-20, 이 3종 추가 이전) + `.env.local`의 `EXPO_PUBLIC_AUTH_FAKE=1` 아직 켜짐 + google clientId 빈 값(`GOCSPX-` = 웹/데스크톱 유형이라 `trippilot://` 커스텀 스킴 등록 불가, iOS 유형 재발급 필요) + kakao/naver clientId 키 자체가 `.env.local`에 없음. 재개 순서는 리포 devlog `2026-07-24-20260723-trip172-social-real-wiring.md` 참조. jest 343건 green은 이 전제와 무관.
 - **apple** → `oauthConfig`에 여전히 빈 슬롯(백엔드 fail-closed로 막아둠, 이번 범위 밖). **kakao/naver는 TRIP-172로 채워졌다** — naver는 `usePKCE:false`+`state` 필수인 비표준 갈래라 다시 만질 땐 `realAuthorize.ts`의 조건부 분기부터 확인.
 - **연령확인(결함 B)을 만지려면** → `useSocialLogin.ts:154`의 `confirmAge()`가 **여전히 같은 `authorizationCode`로 재교환**한다 — OAuth 인가코드는 1회용이라 실서버에서 반드시 거부된다. 인터뷰에서 확정된 목표(로그인 버튼 하단 고지 문구, 모달 없음)가 AC로 전환되지 않아 이번 사이클에서 손대지 못했다(TRIP-172 04b §4). 다음 사이클 1순위 — 게이트①부터 새로 열어야 한다(화면 계약 + 기존 테스트 9건 변경 필요).
+- **로그인 화면 문구를 만지려면** → 카카오 버튼 라벨은 `카카오로 계속하기`(한글, TRIP-173 FSD 4/4). `getByText`류 매칭은 **2개 이상이면 throw**한다 — 충돌 시트 메시지도 같은 provider 문자열을 담을 수 있어 화면 전체 유일성을 가정한 단언은 깨진다(`SocialLoginScreen.test.tsx:134`는 이미 `getByTestId('auth-login-conflict-message')` 스코프로 회피됨). 표시명(`카카오`)과 provider 코드(`kakao`)가 화면 안에서 갈라져 있다 — [[2026-07-28 카카오·kakao 표시명 불일치]].
 - **화면 비주얼** → `figma-screen-impl` 스킬 절차를 따른다. 밴드 맵은 `.claude/skills/spec-perception/reference/figma-structure.md`.

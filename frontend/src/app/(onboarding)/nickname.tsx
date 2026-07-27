@@ -1,5 +1,5 @@
-import { NicknameContainer } from '@/features/onboarding/containers/NicknameContainer';
+import { NicknamePage } from '@/pages/onboarding-nickname';
 
 export default function NicknameRoute() {
-  return <NicknameContainer />;
+  return <NicknamePage />;
 }

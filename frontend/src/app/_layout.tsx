@@ -15,7 +15,7 @@ import {
 } from '@expo-google-fonts/noto-sans-kr';
 import * as SplashScreen from 'expo-splash-screen';
 
-import { SplashGate } from '@/features/auth/containers/SplashGate';
+import { SplashGate } from '@/app-shell';
 
 // 네이티브 스플래시(OS 부팅 화면)를 폰트 로드가 끝날 때까지 자동으로 숨기지 않게 붙잡는다.
 // 이것은 인앱 SplashScreen 컴포넌트(SplashGate 가 부트스트랩 중 그리는 화면)와는 별개 레이어 —

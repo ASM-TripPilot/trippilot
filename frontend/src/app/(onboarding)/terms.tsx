@@ -1,5 +1,5 @@
-import { TermsContainer } from '@/features/onboarding/containers/TermsContainer';
+import { TermsPage } from '@/pages/onboarding-terms';
 
 export default function TermsRoute() {
-  return <TermsContainer />;
+  return <TermsPage />;
 }
