@@ -33,6 +33,10 @@ abstract class AbstractOAuth2Client(
         return parseProfile(requestUserInfo(cfg, accessToken))
     }
 
+    /** SDK 발급 토큰 흐름 — 교환 없이 userinfo 만 호출한다. */
+    override fun fetchProfileByAccessToken(accessToken: String): SocialProfile =
+        parseProfile(requestUserInfo(config(), accessToken))
+
     private fun requestAccessToken(
         cfg: SocialProviderProperties.ProviderConfig,
         code: String,

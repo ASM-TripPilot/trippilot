@@ -78,4 +78,28 @@ class GoogleOAuthClientTest : StringSpec({
         profile.providerSub shouldBe "google-2"
         server.verify()
     }
+
+    "SDK access token 흐름은 교환 없이 userinfo 만 호출한다(카카오·네이버 SDK 경로)" {
+        val builder = RestClient.builder()
+        val server = MockRestServiceServer.bindTo(builder).build()
+        val props = SocialProviderProperties(
+            google = SocialProviderProperties.ProviderConfig(
+                userInfoUri = "https://oauth.example/userinfo",   // tokenUri·secret 불필요
+            ),
+        )
+
+        // 토큰 엔드포인트는 등록하지 않음 → 호출 시 MockRestServiceServer 가 실패(교환 없음을 보장)
+        server.expect(requestTo("https://oauth.example/userinfo"))
+            .andExpect(method(HttpMethod.GET))
+            .andExpect(header("Authorization", "Bearer sdk-token"))
+            .andRespond(withSuccess("""{"sub":"google-3","email":"sdk@example.com"}""", MediaType.APPLICATION_JSON))
+
+        val client = GoogleOAuthClient(props, builder)
+
+        val profile = client.fetchProfileByAccessToken("sdk-token")
+
+        profile.providerSub shouldBe "google-3"
+        profile.email shouldBe "sdk@example.com"
+        server.verify()
+    }
 })

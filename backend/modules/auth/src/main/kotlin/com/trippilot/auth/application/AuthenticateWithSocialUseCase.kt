@@ -4,6 +4,7 @@ import com.trippilot.auth.api.event.AccountCreated
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.SocialIdentity
+import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.auth.domain.port.SocialIdentityRepository
@@ -15,6 +16,7 @@ import com.trippilot.core.event.DomainEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.LocalDate
 
 /**
  * 소셜 로그인/가입 유스케이스 — code 교환 → account/social_identity upsert → 토큰 발급.
@@ -31,6 +33,7 @@ class AuthenticateWithSocialUseCase(
     private val eventPublisher: DomainEventPublisher,
     private val clock: Clock,
 ) {
+    /** code 교환 흐름(웹·커스텀 스킴 redirect). */
     @Transactional
     fun authenticate(command: SocialLoginCommand): SocialLoginResult {
         val profile = socialAuthPort.exchange(
@@ -39,7 +42,23 @@ class AuthenticateWithSocialUseCase(
             codeVerifier = command.codeVerifier,
             redirectUri = command.redirectUri,
         )
+        return completeLogin(profile, command.ageMethod, command.birthDate, command.deviceId)
+    }
 
+    /** 네이티브 SDK 토큰 흐름(카카오·네이버) — 프로필 취득만 다르고 이후는 동일. */
+    @Transactional
+    fun authenticateWithAccessToken(command: SocialTokenLoginCommand): SocialLoginResult {
+        val profile = socialAuthPort.authenticateWithAccessToken(command.provider, command.accessToken)
+        return completeLogin(profile, command.ageMethod, command.birthDate, command.deviceId)
+    }
+
+    /** 프로필 → account/social_identity upsert → 토큰 발급(두 흐름 공용). */
+    private fun completeLogin(
+        profile: SocialProfile,
+        ageMethod: AgeMethod?,
+        birthDate: LocalDate?,
+        deviceId: String,
+    ): SocialLoginResult {
         val existing = socialIdentityRepository.findByProviderAndProviderSub(profile.provider, profile.providerSub)
 
         val account: Account
@@ -51,18 +70,18 @@ class AuthenticateWithSocialUseCase(
             if (!account.canAuthenticate()) throw AuthenticationRequired()
             isNewUser = false
         } else {
-            val ageMethod = command.ageMethod
+            val confirmedAgeMethod = ageMethod
                 ?: throw ValidationFailed(listOf(FieldError("ageConfirmation", "신규 가입 시 연령확인이 필요합니다")))
             // BIRTH_DATE 는 생년월일 필수(INV-A2) — 클라 입력 오류이므로 400(도메인 require 로 500 나기 전에 차단)
-            if (ageMethod == AgeMethod.BIRTH_DATE && command.birthDate == null) {
+            if (confirmedAgeMethod == AgeMethod.BIRTH_DATE && birthDate == null) {
                 throw ValidationFailed(listOf(FieldError("ageConfirmation.birthDate", "생년월일 연령확인은 생년월일이 필요합니다")))
             }
             val now = clock.instant()
             account = accountRepository.save(
                 Account.registerViaSocial(
                     email = profile.email,
-                    ageMethod = ageMethod,
-                    birthDate = command.birthDate,
+                    ageMethod = confirmedAgeMethod,
+                    birthDate = birthDate,
                     now = now,
                 ),
             )
@@ -71,7 +90,7 @@ class AuthenticateWithSocialUseCase(
             isNewUser = true
         }
 
-        val refresh = refreshTokenService.issueFor(account.id, command.deviceId)
+        val refresh = refreshTokenService.issueFor(account.id, deviceId)
         return SocialLoginResult(
             accessToken = tokenIssuer.issue(account.id),
             refreshToken = refresh.rawToken,

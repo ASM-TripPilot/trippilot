@@ -52,6 +52,35 @@ paths:
         '422': { $ref: '#/components/responses/AgeNotMet' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
+  /auth/social/{provider}/token:
+    post:
+      tags: [auth]
+      summary: 소셜 로그인/가입 (네이티브 SDK access token)
+      description: >
+        카카오·네이버 등 네이티브 SDK가 발급한 access token 을 전달(서버 code 교환 없음, redirect 불필요).
+        서버는 토큰으로 userinfo 만 호출. 이후 계정 upsert·토큰 발급은 code 흐름과 동일. (Apple 미지원.)
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [kakao, naver, google] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SocialTokenLoginRequest' }
+      responses:
+        '200':
+          description: 로그인/가입 성공
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/SocialAuthFailed' }
+        '409': { $ref: '#/components/responses/SocialEmailConflict' }
+        '422': { $ref: '#/components/responses/AgeNotMet' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
   /auth/token/refresh:
     post:
       tags: [auth]
@@ -762,6 +791,16 @@ components:
         ageConfirmation:
           allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
           description: 신규 가입 시 필수, 기존 로그인 시 무시
+
+    SocialTokenLoginRequest:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken: { type: string, description: 네이티브 SDK가 발급한 제공자 access token }
+        ageConfirmation:
+          allOf: [{ $ref: '#/components/schemas/AgeConfirmation' }]
+          description: 신규 가입 시 필수, 기존 로그인 시 무시
+        deviceId: { type: string, nullable: true, description: 미제공 시 서버가 임의 부여(기기별 세션) }
 
     TokenPair:
       type: object

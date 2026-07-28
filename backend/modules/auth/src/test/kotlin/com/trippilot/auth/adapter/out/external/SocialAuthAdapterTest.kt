@@ -17,6 +17,7 @@ private class FakeClient(
     val result: () -> SocialProfile,
 ) : OAuthProviderClient {
     override fun fetchProfile(authorizationCode: String, codeVerifier: String, redirectUri: String) = result()
+    override fun fetchProfileByAccessToken(accessToken: String) = result()
 }
 
 class SocialAuthAdapterTest : StringSpec({
@@ -27,6 +28,12 @@ class SocialAuthAdapterTest : StringSpec({
         val adapter = SocialAuthAdapter(listOf(FakeClient(Provider.KAKAO) { profile }))
 
         adapter.exchange(Provider.KAKAO, "code", "verifier", "redirect") shouldBe profile
+    }
+
+    "토큰 흐름도 provider 로 디스패치한다" {
+        val adapter = SocialAuthAdapter(listOf(FakeClient(Provider.NAVER) { profile }))
+
+        adapter.authenticateWithAccessToken(Provider.NAVER, "sdk-token") shouldBe profile
     }
 
     "미지원 provider 는 SOCIAL_AUTH_FAILED(401)로 일반화한다" {
