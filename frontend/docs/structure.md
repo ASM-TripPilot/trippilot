@@ -154,6 +154,7 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 | 파일 | 역할 |
 |---|---|
 | `src/features/stay/model/useStaySearch.ts` | 생성 훅(`useGetStaysSearch`)을 도메인 이름으로 재수출하는 얇은 층(몸통 1줄). params를 그대로 전달만 — 오류 정규화·기본 파라미터 가공 0(D6, 소비 화면 부재로 명시적 이연). 존재 이유는 "생성물 경로(`orval.config.ts` 설정이 만들어 내는, `mode`·태그가 바뀌면 흔들리는 경로)를 한 곳에 가둔다"는 것이지 "나중에 계약을 더할 자리"가 아니다(게이트②에서 근거 교체) |
+| `src/features/stay/model/formatPrice.ts` | 순수 함수(TRIP-180) — 최저가 스냅숏(`StayPrice \| null \| undefined`)을 카드 문자열로 변환. 없음 → `'가격 미확인'`, 있음 → `'{천단위구분}원~'`. `currency` 미참조·시계/네트워크/저장소 미접근. 존재 판정은 `price == null`(falsy 아님 — `amount: 0`을 지키기 위해). 천단위 구분은 `toLocaleString`/`Intl` 대신 결정론적 정규식 조립(node↔Hermes 로케일 갈림 회피, 사용자 판정 대기 — 아래 개발로그 참조). 호출자 아직 0개(TRIP-181이 `StayCard`에서 연결 예정) |
 
 ## `src/features/` — 아직 시작 안 한 도메인
 
@@ -257,6 +258,7 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 | `authedClient` | `shared/api` | 이미 만들어진 인증 axios 인스턴스(TRIP-179부터 export — mutator 전용, 원래도 있던 심볼) |
 | `customInstance` | `shared/api/mutator` | orval 생성 클라이언트가 HTTP 호출에 위임하는 단일 함수(TRIP-179) — `authedClient` 경유 + 배열 쿼리 브래킷 없이 직렬화 |
 | `useStaySearch` | `features/stay/model` | `/stays/search` 도메인 훅(TRIP-179, 생성 훅의 얇은 재수출) — 소비 화면 아직 없음 |
+| `formatPrice` | `features/stay/model` | `formatPrice(price?: StayPrice \| null): string` — 최저가 스냅숏 → 카드 금액 문자열(TRIP-180, PBT 5건). 소비 화면 아직 없음 |
 | `fetchBootstrap` · `postSocialLogin` · `refreshTokens` | `shared/api` | 부트스트랩 조회 · 소셜 로그인 · 토큰 갱신 |
 | `fetchTerms` · `submitConsents` | `shared/api` | 약관 목록 · 동의 1회 제출(체크된 것만 GRANT) |
 | `fetchNicknameSuggestions` · `checkNickname` · `updateNickname` · `completeOnboarding` | `shared/api` | 후보 조회 · 서버 판정 · 저장 · 온보딩 완료 |
