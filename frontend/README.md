@@ -70,6 +70,7 @@ feature 내부 관례: `screens/ components/ containers/ hooks/ store/ model/ li
 ## API 계층
 
 - `shared/api`가 서버 통신의 단일 계층. orval이 `backend/docs/design/openapi.yaml`에서 axios 클라이언트·TanStack Query 훅·Zod 스키마를 생성한다.
+  - ⚠️ **Zod 스키마 생성은 아직 배선되지 않았다**(TRIP-179 기준 — `orval.config.ts`는 axios 클라이언트 + TanStack Query 훅까지만 생성한다). 아래 Zod 런타임 검증(§74~75)은 그 배선이 붙는 후속 티켓 범위다.
 - **생성물은 커밋한다** (`shared/api/generated/`). 재생성은 `pnpm codegen` — 스펙 변경 PR과 생성물 갱신을 같은 커밋으로.
 - **코드젠이 보장하는 건 "클라이언트 ↔ 스펙 문서" 정합까지다.** 스펙 ↔ 실제 서버 구현의 정합은 서버 쪽 책임(계약 테스트 등)이며, 클라이언트는 이를 신뢰하되 Zod 런타임 검증으로 안전망을 둔다.
 - Zod 응답 검증 적용 지점: **개발 모드에서는 전 응답, 프로덕션에서는 핵심 API(부트스트랩·일정·인증)만** — 성능과 안전의 절충.
