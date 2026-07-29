@@ -77,3 +77,8 @@ def test_ortools_only_imported_in_c2() -> None:
         if "ortools" in _external_imports(py):
             offenders.append(str(py.relative_to(_SRC)))
     assert not offenders, f"c2 밖에서 ortools import: {offenders}"
+
+
+def test_m7_imports_only_stdlib_and_internal() -> None:
+    """U3 DoD: m7 계층 순수성 (외부 패키지 0)."""
+    _assert_pure("m7")
