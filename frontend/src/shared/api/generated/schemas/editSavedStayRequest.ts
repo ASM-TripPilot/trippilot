@@ -7,6 +7,12 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
-export type GetStaysGeocodeParams = {
-  q: string;
-};
+export interface EditSavedStayRequest {
+  name: string;
+  lat?: number | null;
+  lng?: number | null;
+  coordConfirmed?: boolean;
+  checkIn?: string | null;
+  checkOut?: string | null;
+  memo?: string | null;
+}

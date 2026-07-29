@@ -6,7 +6,17 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { RegisterRoute } from './registerRoute';
 
-export type GetStaysGeocodeParams = {
-  q: string;
-};
+export interface RegisterSavedStayRequest {
+  name: string;
+  registerRoute: RegisterRoute;
+  lat?: number | null;
+  lng?: number | null;
+  coordConfirmed?: boolean;
+  checkIn?: string | null;
+  checkOut?: string | null;
+  externalSource?: string | null;
+  externalId?: string | null;
+  memo?: string | null;
+}

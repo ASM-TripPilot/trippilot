@@ -7,6 +7,10 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
-export type GetStaysGeocodeParams = {
-  q: string;
-};
+export type RegisterRoute = (typeof RegisterRoute)[keyof typeof RegisterRoute];
+
+export const RegisterRoute = {
+  MAP_SEARCH: 'MAP_SEARCH',
+  LINK_PASTE: 'LINK_PASTE',
+  PIN: 'PIN',
+} as const;

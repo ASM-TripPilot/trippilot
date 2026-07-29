@@ -7,12 +7,16 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
+export * from './editSavedStayRequest';
 export * from './errorResponse';
 export * from './errorResponseError';
 export * from './errorResponseErrorFieldsItem';
 export * from './geocodeCandidate';
 export * from './getStaysGeocodeParams';
 export * from './getStaysSearchParams';
+export * from './registerRoute';
+export * from './registerSavedStayRequest';
+export * from './savedStay';
 export * from './stayItem';
 export * from './stayPrice';
 export * from './staySearchResponse';
