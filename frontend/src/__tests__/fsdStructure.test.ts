@@ -48,7 +48,7 @@ import path from 'path';
  * **B. 이행 체크포인트 — 한시적이다.** 이번 이동이 끝났는지 확인하는 스냅샷이라,
  * 정당한 신규 작업에도 red를 낸다(예: 화면을 하나 추가하면 pages 슬라이스가 6개가 된다).
  *   - auth/lib 파일이 정확히 2개 (it 1-4)
- *   - pages 슬라이스가 정확히 5개 (it 2-1 말미의 집합 단언)
+ *   - pages 슬라이스가 정확히 6개 (it 2-1 말미의 집합 단언)
  *   - 대표 파일 존재 단언 (it 1-1 · 1-2 · 1-3의 짝 단언)
  *   - 유지 배럴 대표 심볼 단언 (it 4-1의 짝 단언 — shared/api·shared/storage)
  *
@@ -69,6 +69,12 @@ import path from 'path';
  * 사이클의 출생 red는 A 단언(빈 배럴 집합)에서만 나오므로 **카운터는 그대로 0**이다.
  * 같은 사이클 [리팩토링/보강]에서 더한 scannedLayers 앵커는 **A**라 B 표면·카운터 모두
  * 변동 없다(카운터 = 0 유지).
+ *
+ * 갱신(20260729-trip181-stay-search-list): it 2-1 말미의 PAGE_SLICES 집합 단언(5슬라이스
+ * 완전일치)이 `stay-search` 슬라이스 신설로 정당하게 red가 났다 — 제외구 AND 조건 둘 다
+ * 충족한다(① 그 단언을 만든 20260727 사이클 밖의 작업이고 ② 배열 갱신 없이는 통과 불가).
+ * **카운터 0 → 1.** 헤더 규약상 다음 pages 슬라이스 추가에서 2가 되면 그 사이클에서 즉시
+ * 부분집합 검사로 완화한다(사이클 4를 기다리지 않는다).
  */
 
 const ROOT = path.resolve('src');
@@ -290,6 +296,7 @@ describe('AC-2 · pages 층 신설 + 라우트 배선', () => {
       'onboarding-pref1',
       'onboarding-pref2',
       'onboarding-terms',
+      'stay-search',
     ]);
   });
 

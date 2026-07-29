@@ -63,6 +63,7 @@
     "@types/jest": "~29.5.14",
     "@types/node": "^26.1.1",
     "@types/react": "~19.1.0",
+    "@types/react-test-renderer": "^19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "eslint-import-resolver-typescript": "^4.4.5",
