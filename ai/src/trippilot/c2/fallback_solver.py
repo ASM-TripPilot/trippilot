@@ -67,6 +67,8 @@ class RuleFallbackSolver:
             slots: list[VisitSlot] = []
             # ① 고정 블록 — 시각 그대로 (HC3)
             for fb in sorted(fixed_by_day.get(day, []), key=lambda f: f.window.start):
+                if fb.poi_id in used:
+                    continue  # 중복 고정(예: regenerate가 잠근 슬롯 = 기존 fb) 방어
                 stay = int((fb.window.end - fb.window.start).total_seconds() // 60)
                 sp = score_of.get(fb.poi_id)
                 slots.append(VisitSlot(

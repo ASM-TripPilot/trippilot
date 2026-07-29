@@ -15,7 +15,14 @@ from typing import Mapping, Protocol, Sequence
 
 from trippilot.c2.constraints import check_all
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.itinerary import ItineraryProblem, ItinerarySolution, Violation
+from trippilot.domain.itinerary import (
+    FixedBlock,
+    ItineraryProblem,
+    ItinerarySolution,
+    TimeWindow,
+    Violation,
+    VisitSlot,
+)
 from trippilot.domain.observability import FallbackEvent, SolverRunRecord
 from trippilot.domain.poi import Poi
 
@@ -88,6 +95,34 @@ class HybridSolverFacade:
             return result
         # RuleFallback이 체인에 있으면 도달 불가. 도달 = 유효 해 자체가 없음(모순 입력)
         raise SolverConflictError("모든 단계 실패 — 고정 블록 모순 등 입력 확인 필요")
+
+    # ── warm-start 재생성 (U5-P2 멱등, 정본 §4.3) ──
+    def regenerate(self, problem: ItineraryProblem,
+                   locked_slots: Sequence[VisitSlot], deadline_ms: int,
+                   trace_id: TraceId | None = None) -> ItinerarySolution:
+        """고정 슬롯(locked)의 시각을 불변 보존하고 나머지만 재배치.
+
+        locked를 FixedBlock으로 승격해 HC3의 보호를 받게 한다 —
+        validate가 보존을 강제하므로 위반 해는 반환 자체가 불가능(INV-2).
+        """
+        promoted = tuple(
+            FixedBlock(poi_id=s.poi_id,
+                       window=TimeWindow(start=s.start_at, end=s.end_at),
+                       reason="locked")
+            for s in locked_slots
+        )
+        augmented = ItineraryProblem(
+            schedule_id=problem.schedule_id,
+            days=problem.days,
+            candidates=problem.candidates,
+            fixed_blocks=problem.fixed_blocks + promoted,
+            budget=problem.budget,
+            transport=problem.transport,
+            day_window=problem.day_window,
+            seed=problem.seed,  # 시드 동일 → 재실행 멱등 (U5-P2)
+            anchor=problem.anchor,
+        )
+        return self.solve(augmented, deadline_ms, trace_id)
 
     def _emit_fallback(self, tid: TraceId, from_: str, to: str, reason: str) -> None:
         self._trace.emit(FallbackEvent(  # DL-5: 침묵 스킵 금지

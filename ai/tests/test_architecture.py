@@ -66,3 +66,14 @@ def test_domain_does_not_import_ports() -> None:
         if bad:
             offenders[str(py.relative_to(_SRC))] = bad
     assert not offenders, f"domain이 ports를 import함(레이어 위반): {offenders}"
+
+
+def test_ortools_only_imported_in_c2() -> None:
+    """U2 DoD: ortools 의존은 c2 계층에만 (다른 계층 유입 자동 차단)."""
+    offenders = []
+    for py in _SRC.rglob("*.py"):
+        if "c2" in py.parts:
+            continue
+        if "ortools" in _external_imports(py):
+            offenders.append(str(py.relative_to(_SRC)))
+    assert not offenders, f"c2 밖에서 ortools import: {offenders}"

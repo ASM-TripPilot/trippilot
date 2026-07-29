@@ -206,3 +206,27 @@
   ② CP-SAT는 anytime — 주어진 예산을 전부 써서 개선. 리밋은 게이트 안쪽(2.8s)으로 설정해 반환 마진 확보
   ③ 후보 >60은 점수 상위 60 프리필터 (이동행렬 O(N²) 방지, 하루 슬롯 물리 한계 ~8개라 품질 손실 무시 가능) — 솔버 전처리로 설계 채택
 - 다음 절편: constraints.py(HC 순수함수) + scorer/fallback_solver + facade 시한 인지 체인 + PBT(U5-P1·P3, DL-P1·P2)
+
+## CONSTRUCTION — U2 절편2: HC 검증기 · 규칙 폴백 · 시한 인지 체인
+**Timestamp**: 2026-07-29T02:00:00Z
+**User Input**: "계속 가줘"
+**AI Response**: c2 컴포넌트 5개 + 테스트 11개 (63 green), 커밋·푸시.
+**Context**:
+- constraints.py HC1~4 순수함수(영업정보 없음=미적용/요일 없음=휴무 규칙 확정) · fallback_solver.py(그리디 정식판, RULE_FALLBACK/MINIMAL 정직 태깅) · facade.py(DL-1~5 구현, SolverConflictError는 d08 충돌 흐름으로 위임 예정) · config.py(G51 체류 테이블 초기값 확정) · travel.py
+- 도메인 보강: ItineraryProblem.anchor(정본 §4.1 누락분, 기본 None — 직렬화 호환)
+- 검증: DL-P1(예산 내 반환)·DL-P2(잔여 부족 시 스킵+관측)·INV-2(위반 해 반환 차단)·U5-P1 그리디판·U5-P3 결정론 — FakeClock으로 sleep 없이
+- 잔여: ortools_solver 정식 승격(SolverPort화)·llm_solver(2차)·repair·warm-start(U5-P2)·예산 단조(U5-P6)
+
+## CONSTRUCTION — U2 절편3: OR-Tools 승격 · LLM 2차 · repair · warm-start (U2 코어 완료)
+**Timestamp**: 2026-07-29T04:00:00Z
+**User Input**: "U2 계속"
+**AI Response**: c2 컴포넌트 완성 (8모듈), 테스트 76 green.
+**Context**:
+- ortools_solver.py: 벤치마크 모델 정식 승격 — 일자별 순차 CP-SAT, 규칙해 웜스타트, 프리필터 top-60, 요일 영업창(다중 창은 최장 창 보수 채택), 결정론(단일 워커+시드)
+- llm_solver.py: 2차 단계 — 파싱→closed-set 게이트(GateDropEvent)→검증→repair 1회→재검증, LlmCallRecord 성공/실패 모두 계측. 모델 주입(sonnet-5, AI-D07 ④)
+- repair.py: TIME_SHIFT_ONLY 전방 이동 수리, 고정 블록 불가침, 출처 보존. (FD의 domain 배치를 c2로 조정 — 직렬화 대상 아님, U5 API 노출 시 재검토)
+- facade.regenerate: locked→FixedBlock 승격으로 HC3 보호 하에 재배치 (U5-P2 멱등)
+- scorer.py: budget_fit 단조(U5-P6) + build_rule_score(A-1 ML 폴백)
+- PBT로 잡은 실버그 1건: regenerate 시 잠근 슬롯=기존 고정블록 중복 승격 → 규칙 폴백이 이중 배치 → HC2 위반 → SolverConflictError. 폴백 솔버에 중복 고정 방어 추가로 해소 (hypothesis 반례 재검증 통과)
+- 아키텍처 감시 확장: ortools import는 c2 계층에만 (자동 차단)
+- U2 잔여(경미): 소규모 oracle 전수 대조(U5-P1 보강)·2차 진입 '품질 미달' 트리거·지역탐색 2-opt(CP-SAT가 사실상 대체)
