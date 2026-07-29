@@ -10,6 +10,8 @@ import Svg, { Path } from 'react-native-svg';
 const INK = '#222222';
 const BODY = '#3F3F3F';
 const MUTED = '#6A6A6A';
+const PRIMARY = '#FF385C';
+const MUTED_SOFT = '#9AA1AB';
 
 type GlyphProps = {
   size?: number;
@@ -79,6 +81,126 @@ export function FilterSlidersGlyph({ size = 14, testID }: GlyphProps) {
         d="M10 4.5V12M10 12L7.8 9.8M10 12L12.2 9.8"
         stroke={BODY}
         strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 경고 삼각형(TRIP-182 §3-7) — partial 배너(20px·tone='ink') · error 배지(32px·
+// tone='primary') 겸용. 벡터는 Figma 1343:1429(배너, ink)·1344:1455(error, primary)에서
+// 그대로 추출했다 — 두 노드는 좌표 비율이 완전히 같은 도형이라(20 grid ↔ 32 grid 스케일만
+// 다름) 하나의 viewBox·path에 size prop만 바꿔 겸용한다.
+export function WarningTriangleGlyph({
+  size = 20,
+  tone = 'ink',
+  testID,
+}: GlyphProps & { tone?: 'ink' | 'primary' }) {
+  const color = tone === 'primary' ? PRIMARY : INK;
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M10 2.5L18.3333 16.6667H1.66667L10 2.5Z"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 7.5V11.6667"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 14.1667H10.0083"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 위치 핀(TRIP-182 §3-2) — empty 배지 32px, 분홍. Figma 1341:1378 벡터 그대로.
+export function MapPinGlyph({ size = 32, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="none"
+    >
+      <Path
+        d="M26.6667 13.3333C26.6667 21.3333 16 29.3333 16 29.3333C16 29.3333 5.33333 21.3333 5.33333 13.3333C5.33333 10.5044 6.45714 7.79125 8.45753 5.79086C10.4579 3.79047 13.171 2.66667 16 2.66667C18.829 2.66667 21.5421 3.79047 23.5425 5.79086C25.5429 7.79125 26.6667 10.5044 26.6667 13.3333Z"
+        stroke={PRIMARY}
+        strokeWidth={2.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16 17.3333C18.2091 17.3333 20 15.5425 20 13.3333C20 11.1242 18.2091 9.33333 16 9.33333C13.7909 9.33333 12 11.1242 12 13.3333C12 15.5425 13.7909 17.3333 16 17.3333Z"
+        stroke={PRIMARY}
+        strokeWidth={2.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 수동 등록 유도 카드 배지 플러스(TRIP-182 §3-2) — 22px, 분홍. Figma 1341:1391 벡터 그대로.
+export function PlusGlyph({ size = 22, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 22 22"
+      fill="none"
+    >
+      <Path
+        d="M11 4.58333V17.4167"
+        stroke={PRIMARY}
+        strokeWidth={2.38333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4.58333 11H17.4167"
+        stroke={PRIMARY}
+        strokeWidth={2.38333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 수동 등록 유도 카드 우측 셰브론(TRIP-182 §3-2) — 20px, muted-soft. Figma 1341:1397 벡터 그대로.
+export function ChevronRightGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M7.5 5L12.5 10L7.5 15"
+        stroke={MUTED_SOFT}
+        strokeWidth={1.75}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

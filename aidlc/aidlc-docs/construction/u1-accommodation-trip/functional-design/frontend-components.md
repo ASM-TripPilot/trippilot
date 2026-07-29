@@ -55,7 +55,9 @@ src/app/
 | `StaySearchResult` | 헤더 "{지역} · 날짜 미정 · N곳" · 필터 칩(가격대·지역·필터) · 카드 목록 | 필터 Zustand | `GET /stays/search` (region·amenity·stayType — 날짜·인원·정렬 없음: BR-U1-10/15) |
 | `StayCard` | 이름 · **최저가 스냅숏(`120,000원~ · 1박`)** · 거리 · ♥ 토글. 스냅숏 없으면 "가격 미확인"(BR-U1-14) | props: stay | `POST /saved-stays` · `DELETE /saved-stays/{savedStayId}` |
 | `PartialFailureBanner` | "일부 숙소 정보를 불러오지 못했어요 · 다시 시도"(BR-U1-17) | props: onRetry | — |
-| `FilterZeroNotice` | 0건을 만든 필터를 지목 + 완화 제안(BR-U1-16) | props: culpritFilters | — |
+| `FilterZeroNotice` | 0건을 만든 필터를 지목 + 완화 제안(BR-U1-16). **[구현 결정 · TRIP-182, 2026-07-30]** 실제 구현은 아래 `StateNotice`의 얇은 래퍼(자체 마크업 없음) — 근거: `frontend/src/features/stay/ui/StaySearchScreen.tsx`의 `FilterZeroNotice` 로컬 함수 | props: culpritFilters | — |
+| `StateNotice` | **[구현 결정 · TRIP-182, 2026-07-30]** `empty`·`filter-zero`·`error` **3상태 공용** 안내 블록(원형 배지 + 제목 + 부제 + 버튼 N) — 이 문서 승인(2026-07-23) 당시엔 없던 컴포넌트, 세 상태를 하나로 묶은 것은 요구사항이 아니라 구현 단계의 부품 분해 결정이다. 근거: `frontend/src/features/stay/ui/StateNotice.tsx` | props: icon·title·description·actions[](`variant: 'outline'\|'filled'\|'link'`)·dashed? | — |
+| `SkeletonList` | **[구현 결정 · TRIP-182, 2026-07-30]** `loading` 상태 전용 — 라벨(`숙소를 모으는 중`) + 스켈레톤 카드 2장. 이 문서 승인 당시 loading 대응 컴포넌트 행이 없었다(§3 공백). 근거: `frontend/src/features/stay/ui/SkeletonList.tsx` | — | — |
 | `StayDetail` | 사진 · 이름 · 라이브 정확가 · 편의시설 · 지도 · 제휴 고지 · CTA 2종 | — | ⚠️ 계약 미존재 (`/stays/{id}` · `/stays/{id}/live-price`) |
 | `OtaChoiceSheet` | OTA별 이름·가격 라디오 + 제휴 고지 + [이동](BR-U1-30·31) | props: options | ⚠️ 계약 미존재 (`/stays/{id}/outbound` → 딥링크) |
 | `AddToTripSheet` | `[일정에 추가]` — 여행 선택 → 거점 배정. 여행 없으면 생성으로(BR-U1-25) | — | `POST /trips/{tripId}/bases` |
@@ -66,6 +68,8 @@ src/app/
 | ├ `PinTab` | 지도 롱프레스로 핀 지정 → 역지오코딩 | — | ⚠️ 계약 미존재 (`/stays/reverse-geocode`) |
 | └ `StayDateFields` | 체크인/아웃 · "N박 · 나중에 바꿀 수 있어요" | Zod: `checkOut > checkIn`(UX 사본) | `POST /saved-stays` |
 | `MapApiFallback` | 지도 API 실패 시 핀 지정 폴백 안내(BR-U1-23) | — | — |
+
+> **문구 소유자 — `filterZeroReasons` 코드→표시명 변환.** **[구현 결정 · TRIP-182, 2026-07-30]** 계약(`filterZeroReasons: string[]`)은 `stayType`·`amenity:오션뷰` 같은 기계 코드만 준다. 한글 표시명으로 바꾸는 책임은 **프론트가 소유**한다 — 근거: `frontend/src/features/stay/model/filterReasonLabel.ts`(축 이름 사전 2줄 + 모르는 축은 코드 그대로 폴백). 이 문서 승인 당시 이 변환의 소유자가 정해져 있지 않았다(공백). 서버가 표시명 필드를 새로 주는 것으로 이 소유권이 바뀌면 이 문단부터 갱신한다.
 
 ## 4. 여행 생성 컴포넌트 (밴드 g · C6)
 
@@ -96,6 +100,8 @@ src/app/
 
 `explore-landing-{section}`(regions·stays·places·community) · `explore-landing-createtrip` · `explore-region-{code}` · `explore-places-search` · `explore-places-save-{poiId}` · `explore-saved-createtrip`
 `stay-search-filter-{axis}`(price·region·more) · `stay-card-{stayId}` · `stay-card-save-{stayId}` · `stay-search-partialfailure-retry` · `stay-detail-book` · `stay-detail-addtotrip` · `stay-ota-option-{otaCode}` · `stay-saved-setbase-{stayId}` · `stay-register-tab-{route}`(mapsearch·linkpaste·pin) · `stay-register-submit` · `stay-register-mapconfirm`
+
+**[구현 결정 · TRIP-182, 2026-07-30]** 위 `stay-search-partialfailure-retry` 외 나머지 4상태(loading·empty·filter-zero·error)의 testID — 이 문서 승인 당시 이 넷의 이름은 정해지지 않았다(§6 공백). 실제 구현이 확정한 값: `stay-search-loading` · `stay-search-skeleton-{i}`(i=0,1) · `stay-search-empty` · `stay-search-empty-region` · `stay-search-empty-filter` · `stay-search-register` · `stay-search-filterzero` · `stay-search-filterzero-clear` · `stay-search-filterzero-reset` · `stay-search-error` · `stay-search-error-retry` · `stay-search-error-register` · `stay-search-partialfailure`(배너 컨테이너 자체 — retry는 위와 동일). 근거: `frontend/src/features/stay/ui/StaySearchScreen.states.test.tsx`(게이트①-1 승인, TRIP-182).
 `trip-wizard-step{n}-next` · `trip-wizard-destination-add` · `trip-wizard-period-preset-{code}` · `trip-wizard-party-stepper` · `trip-wizard-pref-change` · `trip-base-assign-{stayId}` · `trip-base-coverage-day-{date}` · `trip-base-nostay-start`
 
 ## 7. PBT 대상 (클라이언트 순수 함수 · fast-check)
@@ -106,5 +112,6 @@ src/app/
 | `nightsSum(destinations) ≤ tripLength` | 임의 도시·박수 조합에서 위반 시 항상 거부(INV-U1-14) |
 | `formatPrice(snapshot?)` | 스냅숏 없음 → 항상 "가격 미확인", 있음 → 항상 "~" 접미 시작가. **어떤 입력에서도 소요 시간 문자열을 만들지 않는다**(INV-3) |
 | `seedMustVisits(savedPlaces)` | 중복 `sourcePoiId` 없음 · 원본 담기 해제와 독립(복사본 보존) |
+| `resolveStaySearchState(input) → StaySearchState` | **[구현 결정 · TRIP-182, 2026-07-30]** 임의의 `(isPending, isError, itemCount, degraded, filterZeroReasons)` 조합에서 결과 `kind`가 5개 리터럴(`loading`\|`error`\|`results`\|`filter-zero`\|`empty`) 중 **정확히 하나**이고 "아무것도 아님"이 없다. 요구사항 근거는 INV-4(결정론적 폴백·침묵 실패 금지) — 단 이 성질을 PBT 대상으로 뽑을 수 있었던 것 자체는 구현이 판정을 순수 함수로 분리한 결정에서 비롯한다. 이 문서 승인 당시 상태 판정 완전성은 PBT 대상 목록에 없었다(공백). 근거: `frontend/src/features/stay/model/staySearchState.test.ts`(fast-check, numRuns 500) |
 
 > **서버측 PBT**(참고): 커버리지 해소 결과의 전 날짜 확정성, 최저가 스냅숏 정규화·직렬화 왕복, 딥링크 파라미터 정확성 — U1 NFR 단계에서 확정. **closed-set 게이트 PBT(INV-1)가 CQ3=B로 U1에 편입**된다.

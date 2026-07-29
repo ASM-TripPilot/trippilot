@@ -37,7 +37,9 @@ const STAY_SURFACE_DIRS = [
  * (02a §6 판정②, `HomeGlyphs.tsx`가 `homeStructure.test.ts`의 D-3 스캔 밖인 것과 동형). */
 const SCREEN_FILES = ['features/stay/ui/StaySearchScreen.tsx'];
 
-/** 토큰으로 이미 존재하는 7색(브리프 §4-2 — 이 화면은 색 MISS가 0건이라 예외가 없다). */
+/** 토큰으로 이미 존재하는 11색(브리프 §4-2 — 이 화면은 색 MISS가 0건이라 예외가 없다).
+ * 추가 4색(surface-soft·primary-pale·muted-soft·surface-strong)은 TRIP-182 상태 변형이
+ * 새로 쓰는 색이다(02a §6-1). */
 const TOKENIZED_HEX = [
   '#ffffff',
   '#222222',
@@ -46,6 +48,10 @@ const TOKENIZED_HEX = [
   '#dddddd',
   '#ededed',
   '#ff385c',
+  '#f7f7f7',
+  '#ffe4e9',
+  '#9aa1ab',
+  '#f2f2f2',
 ];
 
 /**
@@ -215,5 +221,117 @@ describe('배선·라우트가 각자의 자리를 지킨다 (AC-8 · AC-9 소�
     expect(screenSource).toContain('stayKey');
     expect(screenSource).toContain('keyExtractor');
     expect(screenSource).not.toContain('externalId');
+  });
+});
+
+// ── TRIP-182 확장(02a §6-2) — 아래부터는 신규 describe 3개다. 위 4개 describe의 it 본문은
+// 한 글자도 바뀌지 않았다(TOKENIZED_HEX 상수 확장만 위에서 했다).
+
+/** `features/stay/ui` 디렉토리를 동적으로 훑는다(`*Glyphs.tsx` 제외) — `SCREEN_FILES`
+ * 배열을 늘리지 않고도 상태 부품 파일을 사정거리에 넣는 방식이다(02a §6-2 판정②).
+ * `Glyphs.tsx`를 빼는 이유는 SCREEN_FILES 주석과 동일 — SVG stroke/fill 색은 className으로
+ * 줄 수 없어 raw hex가 정당하다. */
+function stayUiSources() {
+  return readAll(
+    listSourceFiles(path.join(ROOT, 'features', 'stay', 'ui')).filter(
+      (file) => !/Glyphs\.tsx$/.test(file)
+    )
+  );
+}
+
+describe('상태 부품 파일도 토큰·경계를 지킨다 (V1 사정거리 확장 · 02a §6-2)', () => {
+  it('features/stay/ui 전체가 className 스타일링이고, 토큰화된 11색 raw hex·FORBIDDEN 문자열이 0건이다', () => {
+    const sources = stayUiSources();
+
+    // 긍정 짝 ① — 모집단에 화면 파일이 실제로 있다.
+    expect(sources.map((s) => s.file)).toContain(
+      'features/stay/ui/StaySearchScreen.tsx'
+    );
+    // 긍정 짝 ② — 상태 부품이 별도 파일로 분해됐다는 증거. 전부 인라인이면 이 숫자가
+    // 1로 멈춰 아래 부정 단언들이 조용히 공허해진다.
+    expect(sources.length).toBeGreaterThan(1);
+    // 긍정 짝 ③
+    sources.forEach(({ file, source }) => {
+      expect({ file, styled: /className=/.test(source) }).toEqual({
+        file,
+        styled: true,
+      });
+    });
+
+    // 부정 ① — 11색 raw hex 0건(기존 V1 describe와 동형).
+    const hexOffenders = sources.flatMap(({ file, source }) =>
+      TOKENIZED_HEX.filter((hex) => source.toLowerCase().includes(hex)).map(
+        (hex) => `${file}: ${hex}`
+      )
+    );
+    expect(hexOffenders).toEqual([]);
+
+    // 부정 ② — 이번 확장의 실질. 화면 1파일 스캔으로는 features/stay가 eslint FEATURES
+    // 배열 밖이라 `@/features/auth` 같은 타 feature 직접 import를 아무도 못 잡는다.
+    const FORBIDDEN_IN_STAY_UI = [
+      'useState',
+      'useReducer',
+      'zustand',
+      'expo-router',
+      '@tanstack/react-query',
+      'axios',
+      '@/shared/api/generated/stays',
+      'useStaySearch',
+      '@/features/home',
+      '@/features/auth',
+      '@/features/onboarding',
+    ];
+    const forbiddenOffenders = sources.flatMap(({ file, source }) =>
+      FORBIDDEN_IN_STAY_UI.filter((needle) => source.includes(needle)).map(
+        (needle) => `${file}: ${needle}`
+      )
+    );
+    expect(forbiddenOffenders).toEqual([]);
+  });
+});
+
+describe('SafeArea 구조 가드 (AC-13)', () => {
+  it('StaySearchScreen.tsx 루트가 SafeAreaView이고 edges에 top이 있으며, stay-search-root가 유지된다', () => {
+    const screenPath = path.join(
+      ROOT,
+      'features',
+      'stay',
+      'ui',
+      'StaySearchScreen.tsx'
+    );
+    const source = stripComments(fs.readFileSync(screenPath, 'utf8'));
+
+    expect(source).toContain('react-native-safe-area-context');
+    expect(source).toContain('SafeAreaView');
+    expect(source).toMatch(/edges=\{\[[^\]]*'top'/);
+    expect(source).toContain('stay-search-root');
+
+    // 잠그지 않는 것 — 안전영역의 실제 겹침은 기기의 물리적 형상값이라 렌더 트리에 없다.
+    // jest가 잴 수 있는 것은 여기까지고, 겹침 여부는 [검증] 6-b 실기 스모크 소관이다.
+  });
+});
+
+describe('AC-8 배선: 판정의 단일 출처', () => {
+  it('resolveStaySearchState는 StaySearchPage만 부르고, StaySearchScreen은 다시 부르지 않는다', () => {
+    const pagePath = path.join(
+      ROOT,
+      'pages',
+      'stay-search',
+      'ui',
+      'StaySearchPage.tsx'
+    );
+    const screenPath = path.join(
+      ROOT,
+      'features',
+      'stay',
+      'ui',
+      'StaySearchScreen.tsx'
+    );
+    const pageSource = stripComments(fs.readFileSync(pagePath, 'utf8'));
+    const screenSource = stripComments(fs.readFileSync(screenPath, 'utf8'));
+
+    expect(pageSource).toContain('resolveStaySearchState');
+    // 화면이 판정을 다시 유도하면 진실이 두 곳에 생긴다(Seed §2-1) — 짝은 위 긍정 단언.
+    expect(screenSource).not.toContain('resolveStaySearchState');
   });
 });
