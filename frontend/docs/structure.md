@@ -21,10 +21,10 @@
 
 - **스택**: Expo(development build + prebuild) · Expo Router · TypeScript strict · NativeWind · TanStack Query + Zustand · orval · Jest + fast-check
 - **경로 별칭**: `@/*` → `./src/*`
-- **구현 범위**: `auth`·`home`·`onboarding` **세 feature가 화면째 실구현.** `stay`는 TRIP-179로 **데이터 계층만** 생겼다(화면 0 — 아래 `src/features/stay/` 절). 나머지 자리는 도메인 작업이 시작될 때 새로 만든다 — TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}`) 14개를 전부 삭제했고, 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 디렉토리째 사라졌다(`stay`는 TRIP-179로 재등장).
+- **구현 범위**: `auth`·`home`·`onboarding`·`stay` **네 feature가 화면째 실구현.** `stay`는 TRIP-179(데이터 계층)·TRIP-180(`formatPrice`)에 이어 **TRIP-181로 첫 소비 화면**(e02 숙소 검색 결과 · default 상태)이 붙었다 — 아래 `src/features/stay/` 절. 나머지 자리는 도메인 작업이 시작될 때 새로 만든다 — TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}`) 14개를 전부 삭제했고, 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 디렉토리째 사라졌다(`stay`는 TRIP-179로 재등장).
 - **서버 상태 계층 신설(TRIP-179)**: TanStack Query `QueryClientProvider`가 `src/app/_layout.tsx`에 배선됐다(모듈 스코프 단일 `QueryClient`, 기본 옵션 미조정). orval이 `backend/docs/design/openapi.yaml`의 `stays` 태그만 코드젠(`filters.tags`, 아래 경고 참조)해 `src/shared/api/generated/`에 8파일을 생성한다. 생성 코드는 전부 `src/shared/api/mutator.ts`(`customInstance`)를 거쳐 기존 `authedClient`(Bearer·401 single-flight 리프레시)를 탄다 — 새 인증 코드 0.
 - **앱 런타임 목 0건.** msw는 테스트 오라클(`msw/node`)에만 있고, `src/__tests__/noMswInStaticGraph.test.ts`가 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제한다.
-- **문서 대상 파일 106개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함. TRIP-179로 +14 — 신규 테스트 3·`features/stay` 1·생성물 8·`mutator.ts` 1·`test-support` 1)
+- **문서 대상 파일 115개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함. TRIP-181로 +7 — `staySearchStructure.test.ts`·라우트·배럴·배선·화면·글리프·`stayKey.ts`)
 
 ## 디렉토리
 
@@ -68,6 +68,7 @@ frontend/
 | `src/app/(tabs)/itinerary.tsx` | 일정 탭 — **껍데기** |
 | `src/app/(tabs)/records.tsx` | 기록 탭 — **껍데기** |
 | `src/app/(tabs)/my.tsx` | 마이 탭 — **껍데기** |
+| `src/app/stays/index.tsx` | **신규(TRIP-181)** — `/stays` 라우트, `@/pages/stay-search` 배럴을 경유하는 얇은 래퍼(훅·마크업 0). `(tabs)` **밖**(탐색 탭의 하위 화면이라 탭 자체가 아님) — expo-router가 파일시스템 라우트를 자동 등록해 `SplashGate`의 어떤 `Stack.Protected` guard에도 안 걸린다. **실기로 확정**(04b 2차): 미인증 상태에서도 딥링크로 열린다(API 401이라 데이터 노출은 없음). 후속 티켓 + TRIP-183 선행 조건으로 유지 — 아래 경고 참조 |
 
 ## `src/app-shell/` — 루트 셸 (TRIP-173 신설)
 
@@ -78,7 +79,7 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 | `src/app-shell/ui/SplashGate.tsx` | 부트스트랩 결과에 따라 라우팅 결정(구 `features/auth/containers/SplashGate.tsx`). 향후 `QueryClientProvider` 등 앱 전역 프로바이더가 여기 모일 자리 |
 | `src/app-shell/index.ts` | 배럴 — `SplashGate` 재수출. `src/app/_layout.tsx`가 이 배럴을 경유(딥 임포트 0건, code-critic E5 확인) |
 
-## `src/pages/` — FSD pages 층 (TRIP-173 신설, 5슬라이스)
+## `src/pages/` — FSD pages 층 (TRIP-173 신설, 6슬라이스 — TRIP-181로 `stay-search` 추가)
 
 구 `features/{auth,onboarding}/containers/*`(훅 ↔ 화면 배선)가 이주한 자리. **아직 방향 규칙 없음**(위 "FSD 층 방향 규칙" 참조) — 지금은 폴더 배치일 뿐이다.
 
@@ -94,6 +95,8 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 | | `src/pages/onboarding-pref1/index.ts` | 배럴 |
 | `onboarding-pref2` | `src/pages/onboarding-pref2/ui/PrefStep2Page.tsx` | 취향 2/2 배선(구 `PrefStep2Container.tsx`) |
 | | `src/pages/onboarding-pref2/index.ts` | 배럴 |
+| `stay-search` | `src/pages/stay-search/ui/StaySearchPage.tsx` | **신규(TRIP-181)** — `useLocalSearchParams`로 `region` 읽고(배열·빈 문자열 방어 후 `\|\|` 폴백 `'부산'`) `useStaySearch({region})` 호출 → `region`·`items` 2 prop만 `StaySearchScreen`에 내림. `data?.items ?? []` 방어 |
+| | `src/pages/stay-search/index.ts` | 배럴(`StaySearchPage` 재수출) — 게이트②에서 배럴 유지 vs 딥임포트 선택지 중 **배럴 유지 채택**(6슬라이스 중 5개가 배럴 관례라 일관성) |
 
 > **⚠️ 배럴 경유는 지금 관행일 뿐 강제되지 않는다** — 라우트 5개는 전부 배럴을 경유하지만(위반 0건), 승인 테스트(`fsdStructure.test.ts`)의 단언이 `toContain`(부분 문자열)이라 딥 임포트로 바꿔도 잡히지 않는다(code-critic 참고-1 실측). 회귀 방지는 승인 테스트 수정이 필요해 사이클 3 몫으로 이관됨.
 
@@ -147,14 +150,17 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 | `src/features/home/ui/HomeGlyphs.tsx` | 홈 전용 인라인 SVG 10종(AuthGlyphs/OnboardingGlyphs 패턴). raw hex 직박 — TRIP-173으로 `ui/`에서 `*Screen.tsx` 파일과 **같은 폴더가 됐다.** D-3 가드(`homeStructure.test.ts`)가 이제 디렉토리가 아니라 **`*Screen.tsx` 파일명 접미사로 필터**해 계속 미대상이다(`HOME_SCREEN_SOURCE_FILES` 동결목록으로 1건 고정, code-critic W-1 확인) — 필터가 조용히 넓어지면 이 파일도 스캔 대상이 될 수 있으니 그 필터를 건드릴 땐 이 파일부터 확인 |
 | `src/features/home/ui/HomeScreen.tsx` | 4상태 프레젠테이션 화면. props만 받음 — `expo-router`·`@/shared/api`·타 feature import 0(homeStructure D-1이 기계 강제) |
 
-## `src/features/stay/` — 데이터 계층만 (TRIP-179)
+## `src/features/stay/` — 화면째 실구현 ④ (TRIP-179·180·181)
 
-**화면 0.** TRIP-173에서 빈 배럴과 함께 디렉토리째 삭제됐다가, TRIP-179가 서버 상태 배관(계약 동기화 + `QueryClientProvider` + 도메인 훅)의 첫 소비자 자리로 다시 만들었다. 지금 이 훅을 실제로 부르는 화면은 없다 — 다음 소비 화면이 붙는 티켓(01b §9 후속 티켓 후보 D)이 이 계층을 확장한다.
+TRIP-173에서 빈 배럴과 함께 디렉토리째 삭제됐다가, TRIP-179가 서버 상태 배관(계약 동기화 + `QueryClientProvider` + 도메인 훅)의 첫 소비자 자리로 다시 만들었다. **TRIP-181로 첫 소비 화면이 붙어 화면 0 상태를 벗어났다** — e02 숙소 검색 결과 · default(items 1건 이상) 하나만. 로딩·빈결과·필터0건·부분실패·오류 5상태는 TRIP-182 몫.
 
 | 파일 | 역할 |
 |---|---|
-| `src/features/stay/model/useStaySearch.ts` | 생성 훅(`useGetStaysSearch`)을 도메인 이름으로 재수출하는 얇은 층(몸통 1줄). params를 그대로 전달만 — 오류 정규화·기본 파라미터 가공 0(D6, 소비 화면 부재로 명시적 이연). 존재 이유는 "생성물 경로(`orval.config.ts` 설정이 만들어 내는, `mode`·태그가 바뀌면 흔들리는 경로)를 한 곳에 가둔다"는 것이지 "나중에 계약을 더할 자리"가 아니다(게이트②에서 근거 교체) |
-| `src/features/stay/model/formatPrice.ts` | 순수 함수(TRIP-180) — 최저가 스냅숏(`StayPrice \| null \| undefined`)을 카드 문자열로 변환. 없음 → `'가격 미확인'`, 있음 → `'{천단위구분}원~'`. `currency` 미참조·시계/네트워크/저장소 미접근. 존재 판정은 `price == null`(falsy 아님 — `amount: 0`을 지키기 위해). 천단위 구분은 `toLocaleString`/`Intl` 대신 결정론적 정규식 조립(node↔Hermes 로케일 갈림 회피, 사용자 판정 대기 — 아래 개발로그 참조). 호출자 아직 0개(TRIP-181이 `StayCard`에서 연결 예정) |
+| `src/features/stay/model/useStaySearch.ts` | 생성 훅(`useGetStaysSearch`)을 도메인 이름으로 재수출하는 얇은 층(몸통 1줄). params를 그대로 전달만 — 오류 정규화·기본 파라미터 가공 0(D6, 소비 화면 부재로 명시적 이연 — TRIP-181이 처음 소비했지만 이연 자체는 안 풀림). 존재 이유는 "생성물 경로(`orval.config.ts` 설정이 만들어 내는, `mode`·태그가 바뀌면 흔들리는 경로)를 한 곳에 가둔다"는 것이지 "나중에 계약을 더할 자리"가 아니다(게이트②에서 근거 교체) |
+| `src/features/stay/model/formatPrice.ts` | 순수 함수(TRIP-180) — 최저가 스냅숏(`StayPrice \| null \| undefined`)을 카드 문자열로 변환. 없음 → `'가격 미확인'`, 있음 → `'{천단위구분}원~'`. `currency` 미참조·시계/네트워크/저장소 미접근. 존재 판정은 `price == null`(falsy 아님 — `amount: 0`을 지키기 위해). 천단위 구분은 `toLocaleString`/`Intl` 대신 결정론적 정규식 조립(node↔Hermes 로케일 갈림 회피). **TRIP-181이 첫 호출자**(`StaySearchScreen.tsx`가 반환값을 그대로 씀, `· 1박` 접미 없음) |
+| `src/features/stay/model/stayKey.ts` | **신규(TRIP-181)** — 순수 함수 `` stayKey(item) = `${externalSource}:${externalId}` ``. 계약(`StayItem`)에 `stayId` 필드가 없어(정본 침묵) 직접 합성. React `keyExtractor`와 testID(`stay-card-{key}`·`stay-card-save-{key}`)의 **유일한 출처** — 화면 소스는 `item.externalId`를 직접 안 쓴다(소스 스캔이 반대증명으로 잠금) |
+| `src/features/stay/ui/StaySearchScreen.tsx` | **신규(TRIP-181)** — 프레젠테이션. `region`·`items` 2 prop만 받고 네트워크·라우터·로컬 상태를 전혀 모른다(목 0개로 렌더 테스트 가능). 내부 지역 컴포넌트 4개(`AppBar`·`FilterChip`·`ListHeader`·`StayCard`, export 안 함) + `FlatList`(`onEndReached` 계열 없음 — 무한 스크롤은 계약에 페이지네이션이 없어 의도적으로 없앤 기능, D1). 카드 순서는 서버 응답 순서 그대로(BR-U1-15, `.sort()`/`.filter()` 없음). 필터 칩 3개·저장 하트는 **시각 스텁**(testID만, 누름 배선 0 — "정직한 스텁": 저장 API가 없어 로컬 토글이 거짓 상태를 만들지 않도록 의도적으로 비반응). 루트가 `SafeAreaView`가 **아니라 일반 `View`** — 아래 경고 참조 |
+| `src/features/stay/ui/StayGlyphs.tsx` | **신규(TRIP-181)** — 인라인 SVG 4종(`BackChevronGlyph`·`ChevronDownGlyph`·`FilterSlidersGlyph`·`HeartOutlineGlyph`). 다른 feature(`HomeGlyphs`·`OnboardingGlyphs`)의 기존 글리프를 재사용하지 않고 새로 그렸다(features 간 직접 import 금지 관례 — `eslint.config.js`의 `FEATURES` 배열엔 `stay`가 없어 기계 강제는 없지만 소스 스캔 가드가 대신 잡는다). 하트 stroke는 `HomeGlyphs` 선례를 따라 `MUTED(#6A6A6A)`(회색 사진 플레이스홀더 위 명도 대비 확보, `ponytail:` 주석 — 실사진 전환 시 흰색 복귀). 색 3종(`ink`·`body`·`canvas`)은 raw hex 그대로(SVG `stroke`/`fill`은 className을 못 받음 — 리포 전체 관례, 아래 경고 참조) |
 
 ## `src/features/` — 아직 시작 안 한 도메인
 
@@ -208,7 +214,8 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `__mocks__/@gorhom/bottom-sheet.tsx` | 네이티브 모듈 자동 목 |
 | `src/__tests__/noMswInStaticGraph.test.ts` | 정적 import 그래프를 fs로 훑어 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제 |
 | `src/__tests__/importBoundary.test.ts` | import 경계 가드 — 계층·feature 격리 위반 차단. **FSD 완결 2/4에서 보강**(34→54줄, code-critic 발견 구멍 수리) — 프로브를 배럴 의존(구 `@/features/stay`, 삭제 예정 대상이었다)에서 실파일 딥 경로로 떼고, 단언을 에러 개수(`errorCount>0`)에서 **룰 ID**(`import/no-restricted-paths` 포함 · `import/no-unresolved` 불포함)로 바꿔 "경계 위반"과 "모듈 해석 실패"를 구분한다. **단독 실행 시 `NODE_OPTIONS=--experimental-vm-modules` 필요**(`pnpm exec jest` 단독 금지 — 없으면 2/2 실패, 테스트 결함처럼 보이지만 실행 방법 문제) |
-| `src/__tests__/fsdStructure.test.ts` | **TRIP-173 신설(사이클 1 유일한 신규 파일)** — auth `{config,lib,model,ui}` 4칸·onboarding `{model,ui}` 2칸·**home `{model,ui}` 2칸(FSD 완결 1/4 신설, it 1-3)** 대표 파일 존재, `pages` 5슬라이스의 배럴·라우트 참조, `app-shell`이 `src/app` 밖에 있는지를 검사. **폴더 배치만 본다 — import 방향·소스 내용은 안 본다**(code-critic E3·E5·E6 실측). **FSD 완결 2/4(AC-4, it 4-1) 신설** — `features`·`shared` 두 층 전수 스캔으로 빈 배럴(`export {};`) 0개 단언(A·영구) + 진짜 배럴(`shared/api`·`shared/storage`) 대표 심볼 생존 긍정 짝(B) + **스캔이 실제로 두 층에 닿았는지**(`scannedLayers` 앵커, code-critic W-1 보강 — 안 넣으면 `BARREL_LAYERS`를 비워도 green이었다)까지 확인한다. 사이클 3~4가 이 파일에 덧붙여 자란다. 주석 상단에 A(영구)/B(한시) 졸업 조건 명시(게이트①-1→①-2 재제시로 추가됨) |
+| `src/__tests__/fsdStructure.test.ts` | **TRIP-173 신설(사이클 1 유일한 신규 파일)** — auth `{config,lib,model,ui}` 4칸·onboarding `{model,ui}` 2칸·**home `{model,ui}` 2칸(FSD 완결 1/4 신설, it 1-3)** 대표 파일 존재, `pages` **6슬라이스**(TRIP-181로 `stay-search` 추가, B 카운터 0→1 — `PAGE_SLICES` forEach 상수는 미포함이라 개별 슬라이스 검사는 여전히 5개 대상)의 배럴·라우트 참조, `app-shell`이 `src/app` 밖에 있는지를 검사. **폴더 배치만 본다 — import 방향·소스 내용은 안 본다**(code-critic E3·E5·E6 실측). **FSD 완결 2/4(AC-4, it 4-1) 신설** — `features`·`shared` 두 층 전수 스캔으로 빈 배럴(`export {};`) 0개 단언(A·영구) + 진짜 배럴(`shared/api`·`shared/storage`) 대표 심볼 생존 긍정 짝(B) + **스캔이 실제로 두 층에 닿았는지**(`scannedLayers` 앵커, code-critic W-1 보강 — 안 넣으면 `BARREL_LAYERS`를 비워도 green이었다)까지 확인한다. 사이클 3~4가 이 파일에 덧붙여 자란다. 주석 상단에 A(영구)/B(한시) 졸업 조건 명시(게이트①-1→①-2 재제시로 추가됨). ⚠️ "pages 슬라이스가 정확히 N개" 배열 단언은 **디렉토리 이름만** 보고 내용은 안 봐서, 통합테스트 파일을 최종 위치에 물리적으로 쓰기만 해도 구현 전에 조기 green이 될 수 있다(TRIP-181 실측 — red 소급 확인에서 오판 금지 사전 기록 필요) |
+| `src/__tests__/staySearchStructure.test.ts` | **신규(TRIP-181)** — `@jest-environment node`로 소스를 텍스트 스캔(주석 제거 후). duration 식별자 0(INV-3, `STAY_SURFACE_DIRS` 3층 전체) · raw hex 0(V1, `SCREEN_FILES` 화면 1파일만 — `StayGlyphs.tsx`는 대상 밖, 아래 경고 참조) · 프레젠테이션 순수성(`useState`·`useReducer`·`zustand`·`expo-router`·query·axios·타 feature import 11종 0건) · 3파일(라우트·배선·화면) 상호 배제. `useState` 금지가 AC-7(정직한 스텁)의 소스 쪽 절반 |
 | `src/__tests__/onboardingStructure.test.ts` | 온보딩 계층·경계 구조 가드(서버 권한 경계 등). `PAGES_DIR`+`ONBOARDING_PAGE_SLICES`(TRIP-173 신설 — 온보딩 컨테이너 4개가 `pages/`로 나가며 금칙어 가드 사정거리에 다시 편입) |
 | `src/__tests__/onboardingPrefStructure.test.ts` | 취향 스토어·모델 구조 가드(TRIP-163) — persist 금지·`@/shared/api` 미참조·`create(` 표기(구조 가드 6-2, 개념 [[구조 가드와 긍정 앵커]]) |
 | `src/__tests__/homeStructure.test.ts` | 홈 소스 스캔 가드(TRIP-170, `@jest-environment node`) — 픽스처 상수화(D-1)·INV-3 `duration` 식별자 0(D-2)·토큰 raw-hex 0(D-3)·SafeArea 규약(D-4)·탭바 격리(D-5). D-3·D-4 모집단은 TRIP-173 FSD 완결 1/4에서 `screens/` 폴더 전체 → `ui/*Screen.tsx` 파일명 필터 + `HOME_SCREEN_SOURCE_FILES` 동결목록(현재 1건, `onboardingStructure` 선례와 동형)으로 교체됐다 |
@@ -258,7 +265,8 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 | `authedClient` | `shared/api` | 이미 만들어진 인증 axios 인스턴스(TRIP-179부터 export — mutator 전용, 원래도 있던 심볼) |
 | `customInstance` | `shared/api/mutator` | orval 생성 클라이언트가 HTTP 호출에 위임하는 단일 함수(TRIP-179) — `authedClient` 경유 + 배열 쿼리 브래킷 없이 직렬화 |
 | `useStaySearch` | `features/stay/model` | `/stays/search` 도메인 훅(TRIP-179, 생성 훅의 얇은 재수출) — 소비 화면 아직 없음 |
-| `formatPrice` | `features/stay/model` | `formatPrice(price?: StayPrice \| null): string` — 최저가 스냅숏 → 카드 금액 문자열(TRIP-180, PBT 5건). 소비 화면 아직 없음 |
+| `formatPrice` | `features/stay/model` | `formatPrice(price?: StayPrice \| null): string` — 최저가 스냅숏 → 카드 금액 문자열(TRIP-180, PBT 5건). **TRIP-181이 첫 소비**(`StaySearchScreen.tsx`) |
+| `stayKey` | `features/stay/model` | `stayKey(item: Pick<StayItem,'externalSource'\|'externalId'>): string` — `${externalSource}:${externalId}` 합성(TRIP-181). React key·testID 공용 출처 |
 | `fetchBootstrap` · `postSocialLogin` · `refreshTokens` | `shared/api` | 부트스트랩 조회 · 소셜 로그인 · 토큰 갱신 |
 | `fetchTerms` · `submitConsents` | `shared/api` | 약관 목록 · 동의 1회 제출(체크된 것만 GRANT) |
 | `fetchNicknameSuggestions` · `checkNickname` · `updateNickname` · `completeOnboarding` | `shared/api` | 후보 조회 · 서버 판정 · 저장 · 온보딩 완료 |
@@ -306,3 +314,7 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 - **화면 비주얼** → `figma-screen-impl` 스킬 절차를 따른다. 밴드 맵은 `.claude/skills/spec-perception/reference/figma-structure.md`.
 - **다른 태그를 코드젠하려면(stay 밖 도메인)** → `orval.config.ts`의 `filters.tags` 배열에 태그를 추가한다. 빼먹으면 `pnpm codegen`이 `openapi.yaml`의 **전체 29경로**를 생성해 `src/shared/api/generated/`가 이 문서의 "도구 생성물" 절과 어긋난다(`staySearchGenerated.test.ts`의 B-1 동결 단언도 red가 된다).
 - **`useStaySearch`에 기본 파라미터·오류 정규화를 얹으려면** → 지금은 params를 그대로 넘기기만 한다(D6 이연). `useStaySearch.integration.test.tsx`의 D-2가 `region` 파라미터를 실제 URL에서 단언하므로(게이트①-2 보강), 몰래 다른 필터를 끼워 넣으면 그 단언이 잡는다 — 단 **필터를 통째로 버리는 변경은 심판 사정거리 밖**이었다가 같은 보강으로 막혔다(03b W-1).
+- **`StaySearchScreen.tsx` 루트를 만지려면** → **SafeArea 결함이 아직 안 고쳐졌다**(TRIP-182로 이관, 04b 실기 스모크 2차 실측). 루트가 `SafeAreaView`가 아니라 일반 `View`라 앱바 타이틀이 상태바·노치와 겹친다. jest 심판 5개 전부 green인 채로 이 결함이 통과했다 — 안전영역은 기기의 물리적 형상값이라 렌더 트리에 안 나타난다. `HomeScreen.tsx`·`TermsScreen.tsx`처럼 `SafeAreaView edges={['top']}`로 감싸는 것이 정답이지만, 그 순간 게이트② 승인 해시가 바뀌어 재제시 대상이 된다.
+- **`/stays` 라우트 보호를 만지려면** → 새 라우트가 `SplashGate`의 어떤 `Stack.Protected` guard에도 안 걸린다(**실기로 확정** — 미인증 상태에서도 딥링크로 열림, API 401이라 데이터 노출은 없음). 고치려면 `SplashGate.tsx`(자체 동결 테스트 보유, 이 변경집합 밖)를 건드려야 한다 — TRIP-183(라우트 위치 결정)의 선행 조건으로 후속 티켓이 걸려 있다. 지금 혼자 고치면 두 번 작업이 된다.
+- **숙소 화면의 raw hex·정직한 스텁 가드를 믿으려면** → 둘 다 사정거리가 좁다. V1(raw hex 0건) 스캔은 `SCREEN_FILES`(화면 1파일)만 봐서 `StayGlyphs.tsx`의 raw hex 3종(`ink`·`body`·`canvas`)은 대상 밖(리포 전체 관례 — `HomeGlyphs`·`AuthGlyphs`도 동일 부채). AC-7(정직한 스텁) 잠금도 `SCREEN_FILES` 1파일 + `cardFingerprint`(testID·className·텍스트만 굳힘, `fill` 변화는 안 봄)뿐이라, 저장 하트의 `Pressable`을 `StayGlyphs.tsx`로 옮겨 거기서 `useState` 토글을 걸면 5개 심판이 전부 green인 채로 "저장됐다는 거짓말" 구현이 통과한다. 다음 사이클 심판 보강 후보(스캔 모집단을 `features/stay/ui/**`로 넓히거나 지문에 `fill`·`d` 포함).
+- **숙소 목록에 무한 스크롤을 다시 넣으려면** → `/stays/search`에 페이지네이션 파라미터가 없다(D1이 정본 `frontend-components.md`에서 이 항목을 삭제한 이유와 같다). `onEndReached`류를 붙이면 같은 1페이지를 반복 요청하거나 아무 일도 안 일어나는 함정이 되는데, 그 "없음"을 잠그는 단언이 어느 심판에도 없다(참고 3, 다음 사이클 후보).
