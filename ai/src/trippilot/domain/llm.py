@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Generic, TypeVar
 
-from trippilot.domain.common import PoiId
+from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi import Poi
 from trippilot.domain.serialization import from_iso, to_iso
 
@@ -74,6 +74,8 @@ class CandidatePool:
     poi_ids: frozenset[PoiId]
     pois: tuple[Poi, ...]
     generated_at: datetime  # tz-aware
+    anchor: GeoPoint | None = None      # 풀 생성 기준점 (ai-data-design §3.3, U3 보강)
+    radius_km: float | None = None      # 적용 반경 (다일 ×0.7 반영 후)
 
     def __post_init__(self) -> None:
         if self.generated_at.tzinfo is None:
@@ -92,6 +94,8 @@ class CandidatePool:
             "poi_ids": sorted(str(x) for x in self.poi_ids),
             "pois": [p.to_dict() for p in self.pois],
             "generated_at": to_iso(self.generated_at),
+            "anchor": self.anchor.to_dict() if self.anchor else None,
+            "radius_km": self.radius_km,
         }
 
     @classmethod
@@ -100,4 +104,6 @@ class CandidatePool:
             poi_ids=frozenset(PoiId(x) for x in d["poi_ids"]),
             pois=tuple(Poi.from_dict(x) for x in d["pois"]),
             generated_at=from_iso(d["generated_at"]),
+            anchor=GeoPoint.from_dict(d["anchor"]) if d.get("anchor") else None,
+            radius_km=d.get("radius_km"),
         )

@@ -242,3 +242,13 @@
 - 가격 캐싱 금지: U1 to_cacheable_dict 단일 경로 + SpyCache PBT(CACHE-P1)로 이중 강제
 - 신규 PBT: POOL-P1~P4·RES-P1/P2·CACHE-P1/P2
 - 브랜치: feature/TRIP-166-m7-place-data (TRIP-165 위 스택)
+
+## CONSTRUCTION — U3 코어 구현 (M7 Place Data)
+**Timestamp**: 2026-07-29T06:00:00Z
+**User Input**: "승인, 바로 코드로"
+**AI Response**: m7 4모듈 + 도메인 보강 + 테스트 15개 (91 green).
+**Context**:
+- pool_builder: 6단계 필터 (정본 확정값, now 주입 결정론) · entity_resolver: 자모 분해 Levenshtein — "성심땅→성심당" 실증 테스트 통과 · cached_repo: TTL 정책 + 가격 구조 차단(to_cacheable_dict 단일 경로, 히트 시 avg_cost=None로 원본 조회 필요성 명시)
+- 도메인: CandidatePool anchor·radius_km 보강(호환 유지), domain/m7.py(CandidatePoolRequest·EntityMatch·MatchDecision — poi_id=None ⇔ UNRESOLVED 정합 강제)
+- PBT: POOL-P1~4(반경·예산·품질·상한·결정론·휴무 배제) · RES-P1/P2 · CACHE-P1(가격 저장 0건)/P2(TTL 만료 재조회) — 전부 첫 실행 green
+- m7 계층 순수성 자동 감시 추가. U3 잔여: 실 PostgreSQL 어댑터(스캐폴딩 후속)·batch_check_closed Plan-B 연결(U6)
