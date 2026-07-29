@@ -193,3 +193,16 @@
 - business-logic-model.md: 컴포넌트 6종(facade·constraints·ortools·llm_solver·fallback·repair) + 시한 인지 체인 의사코드 + FakeClock/SlowSolver/적대적 제안 generator
 - business-rules.md: HC 게이트(G114)·시한 인지 규칙 DL-1~6·결정론 규칙·PBT 매핑(U5-P1/2/3/6 + 신규 DL-P1/P2·GATE-P)·벤치마크 게이트(후보 50≤3s, 미결 #3 판정 절차)·DoD
 - 다음: 사용자 승인 → 첫 절편 = OR-Tools 벤치마크
+
+## CONSTRUCTION — U2 첫 절편: OR-Tools 벤치마크 (미결 #3 종결)
+**Timestamp**: 2026-07-29T00:00:00Z
+**User Input**: "승인 + A" (U2 FD 승인, 스택 브랜치)
+**AI Response**: feature/TRIP-165-solver-core 분기, ortools 설치, day1 벤치마크 작성·실행 → 게이트 통과.
+**Context**:
+- 결과: 후보 50 = 2,813ms ✅(≤3s) · 고정블록 2개 포함 2,813ms ✅ · 500/5,000(top-60 프리필터) 회귀 없음 · 결정론 ✅(동일 시드 2회 동일 선택)
+- 판정: OR-Tools(CP-SAT) 확정 — 미결 #3 종결
+- 과정에서 얻은 설계 교훈 2건:
+  ① 다중 워커는 결정론 깨짐 → 단일 워커 + 그리디 초기해 힌트로 해소. 그리디(구성 휴리스틱)가 RuleFallbackSolver의 원형이자 CP-SAT 웜스타트를 겸함 — 체인 구조(규칙→OR-Tools 개선)가 벤치마크에서 실증됨
+  ② CP-SAT는 anytime — 주어진 예산을 전부 써서 개선. 리밋은 게이트 안쪽(2.8s)으로 설정해 반환 마진 확보
+  ③ 후보 >60은 점수 상위 60 프리필터 (이동행렬 O(N²) 방지, 하루 슬롯 물리 한계 ~8개라 품질 손실 무시 가능) — 솔버 전처리로 설계 채택
+- 다음 절편: constraints.py(HC 순수함수) + scorer/fallback_solver + facade 시한 인지 체인 + PBT(U5-P1·P3, DL-P1·P2)
