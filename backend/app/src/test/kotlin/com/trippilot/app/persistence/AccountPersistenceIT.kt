@@ -74,6 +74,15 @@ class AccountPersistenceIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `findActiveByEmail 은 대소문자 무시로 활성 계정을 찾고 없으면 null`() {
+        val email = "Dup-${UUID.randomUUID()}@Example.com"
+        accounts.save(Account.registerViaSocial(email, AgeMethod.SELF_DECLARED, null, now))
+
+        accounts.findActiveByEmail(email.lowercase()).shouldNotBeNull()      // 대소문자 무시 매칭
+        accounts.findActiveByEmail("nobody-${UUID.randomUUID()}@example.com") shouldBe null
+    }
+
+    @Test
     fun `(provider, sub) 복합 유니크 위반 시 예외`() {
         val account = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, now))
         val sub = "sub-${UUID.randomUUID()}"

@@ -23,6 +23,8 @@ class JpaAccountRepository(
         jpa.save(account.toEntity())
         return account
     }
+
+    override fun findActiveByEmail(email: String): Account? = jpa.findActiveByEmail(email)?.toDomain()
 }
 
 /** SocialIdentityRepository 포트의 JPA 구현. */

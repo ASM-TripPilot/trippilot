@@ -9,7 +9,17 @@ import java.time.Instant
 import java.util.UUID
 
 /** Spring Data JPA — account 테이블 CRUD. */
-interface AccountJpaRepository : JpaRepository<AccountJpaEntity, UUID>
+interface AccountJpaRepository : JpaRepository<AccountJpaEntity, UUID> {
+    /**
+     * 활성(인덱스 대상 상태) 계정 중 이메일 일치(대소문자 무시) 1건 — 소셜 이메일 충돌 판정(INV-A3).
+     * 상태 집합은 ux_account_email_active 인덱스와 동일(DELETED 제외).
+     */
+    @Query(
+        "select a from AccountJpaEntity a where lower(a.email) = lower(:email) " +
+            "and a.status in ('PENDING_VERIFICATION', 'ACTIVE', 'DELETION_PENDING')",
+    )
+    fun findActiveByEmail(@Param("email") email: String): AccountJpaEntity?
+}
 
 /** Spring Data JPA — social_identity 테이블 CRUD + (provider, sub) 조회 + 계정별 연결 조회. */
 interface SocialIdentityJpaRepository : JpaRepository<SocialIdentityJpaEntity, UUID> {
