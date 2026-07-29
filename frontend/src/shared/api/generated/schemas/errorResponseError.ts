@@ -6,7 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ErrorResponseErrorFieldsItem } from './errorResponseErrorFieldsItem';
 
-export type GetStaysGeocodeParams = {
-q: string;
+export type ErrorResponseError = {
+  code: string;
+  message: string;
+  traceId?: string;
+  fields?: ErrorResponseErrorFieldsItem[];
 };

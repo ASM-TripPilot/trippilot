@@ -6,7 +6,8 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ErrorResponseError } from './errorResponseError';
 
-export type GetStaysGeocodeParams = {
-q: string;
-};
+export interface ErrorResponse {
+  error: ErrorResponseError;
+}

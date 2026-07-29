@@ -142,7 +142,7 @@ describe('AC-1 · 계약 회귀 — /stays/search 실재 + servers base (A-1, �
 });
 
 describe('BR-U1-10 · BR-U1-15 · /stays/search 파라미터 이름 잠금 — 스펙 드리프트 가드 (게이트①-2 보정 W-3, A-1의 연장)', () => {
-  it('파라미터 이름이 region·amenity·stayType 순서로만 있고, 다른 이름이 섞이면 즉시 잡힌다', () => {
+  it('파라미터 이름이 region·amenity·stayType·lat·lng·radiusKm 순서로만 있고, 다른 이름이 섞이면 즉시 잡힌다', () => {
     const source = readOpenapiSource();
     const block = extractStaysSearchBlock(source);
     const paramNames = extractParamNames(block);
@@ -153,7 +153,18 @@ describe('BR-U1-10 · BR-U1-15 · /stays/search 파라미터 이름 잠금 — �
 
     // 완전 일치(순서 포함) — sort·page 등 새 파라미터가 추가되면 즉시 red. 정렬은 서버
     // 고정(BR-U1-15)·날짜·인원 없이 탐색(BR-U1-10)을 어기는 스펙 개정을 여기서 잠근다.
-    expect(paramNames).toEqual(['region', 'amenity', 'stayType']);
+    //
+    // TRIP-202에서 lat·lng·radiusKm 3개가 붙었다('내 주변' 좌표 스코프 · US-STAY-01 · BR-U1-11).
+    // 이 셋은 BR-U1-10/15와 충돌하지 않는다 — 날짜·인원이 아니고 정렬을 바꾸지도 않는다
+    // (금지 목록 FORBIDDEN_PARAM_NAMES는 staySearchGenerated 쪽에서 그대로 잠근다).
+    expect(paramNames).toEqual([
+      'region',
+      'amenity',
+      'stayType',
+      'lat',
+      'lng',
+      'radiusKm',
+    ]);
   });
 });
 

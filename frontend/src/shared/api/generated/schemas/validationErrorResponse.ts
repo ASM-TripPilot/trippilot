@@ -6,7 +6,9 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ErrorResponse } from './errorResponse';
 
-export type GetStaysGeocodeParams = {
-q: string;
-};
+/**
+ * 입력 검증 실패
+ */
+export type ValidationErrorResponse = ErrorResponse;

@@ -7,6 +7,7 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
-export type GetStaysGeocodeParams = {
-q: string;
+export type ErrorResponseErrorFieldsItem = {
+  field?: string;
+  reason?: string;
 };

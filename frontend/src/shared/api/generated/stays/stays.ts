@@ -6,7 +6,9 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
-import { useQuery } from '@tanstack/react-query';
+import {
+  useQuery
+} from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
@@ -16,7 +18,7 @@ import type {
   QueryKey,
   UndefinedInitialDataOptions,
   UseQueryOptions,
-  UseQueryResult,
+  UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
@@ -24,14 +26,15 @@ import type {
   GetStaysGeocodeParams,
   GetStaysSearchParams,
   StaySearchResponse,
+  ValidationErrorResponse
 } from '../schemas';
 
 import { customInstance } from '../../mutator';
 
-const withQueryKey = <T extends object, K>(
-  query: T,
-  queryKey: K
-): T & { queryKey: K } => {
+
+
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
   const result = { queryKey } as T & { queryKey: K };
   for (const key of Object.keys(query)) {
     // The explicit queryKey always wins, matching the previous
@@ -47,294 +50,189 @@ const withQueryKey = <T extends object, K>(
 };
 
 /**
- * 지역·편의시설·유형으로 탐색. 필터는 AND, 정렬은 최저가순 고정(BR-U1-15). 가격은 최저가 스냅숏뿐(미확인은 null · BR-U1-14). 소요시간 미표시·거리만(INV-3).
+ * 지역·편의시설·유형으로 탐색. 필터는 AND, 정렬은 최저가순 고정(BR-U1-15). 가격은 최저가 스냅숏뿐(미확인은 null · BR-U1-14). 소요시간 미표시·거리만(INV-3). lat·lng 로 '내 주변' 좌표 스코프(US-STAY-01 · BR-U1-11) — region·필터와 AND 로 걸린다. 좌표는 필터가 아니라 스코프라 filterZeroReasons(완화 제안)에 나타나지 않는다.
  * @summary 숙소 탐색(날짜·인원 없이 · 최저가순)
  */
 export const getStaysSearch = (
-  params?: GetStaysSearchParams,
-  signal?: AbortSignal
+    params?: GetStaysSearchParams,
+ signal?: AbortSignal
 ) => {
-  return customInstance<StaySearchResponse>({
-    url: `/stays/search`,
-    method: 'GET',
-    params,
-    signal,
-  });
-};
 
-export const getGetStaysSearchQueryKey = (params?: GetStaysSearchParams) => {
-  return [`/stays/search`, ...(params ? [params] : [])] as const;
-};
 
-export const getGetStaysSearchQueryOptions = <
-  TData = Awaited<ReturnType<typeof getStaysSearch>>,
-  TError = unknown,
->(
-  params?: GetStaysSearchParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getStaysSearch>>, TError, TData>
-    >;
-  }
+      return customInstance<StaySearchResponse>(
+      {url: `/stays/search`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+
+
+
+
+export const getGetStaysSearchQueryKey = (params?: GetStaysSearchParams,) => {
+    return [
+    `/stays/search`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetStaysSearchQueryOptions = <TData = Awaited<ReturnType<typeof getStaysSearch>>, TError = ValidationErrorResponse>(params?: GetStaysSearchParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStaysSearch>>, TError, TData>>, }
 ) => {
-  const { query: queryOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetStaysSearchQueryKey(params);
+const {query: queryOptions} = options ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getStaysSearch>>> = ({
-    signal,
-  }) => getStaysSearch(params, signal);
+  const queryKey =  queryOptions?.queryKey ?? getGetStaysSearchQueryKey(params);
 
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getStaysSearch>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
-};
 
-export type GetStaysSearchQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getStaysSearch>>
->;
-export type GetStaysSearchQueryError = unknown;
 
-export function useGetStaysSearch<
-  TData = Awaited<ReturnType<typeof getStaysSearch>>,
-  TError = unknown,
->(
-  params: undefined | GetStaysSearchParams,
-  options: {
-    query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getStaysSearch>>, TError, TData>
-    > &
-      Pick<
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStaysSearch>>> = ({ signal }) => getStaysSearch(params, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStaysSearch>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetStaysSearchQueryResult = NonNullable<Awaited<ReturnType<typeof getStaysSearch>>>
+export type GetStaysSearchQueryError = ValidationErrorResponse
+
+
+export function useGetStaysSearch<TData = Awaited<ReturnType<typeof getStaysSearch>>, TError = ValidationErrorResponse>(
+ params: undefined |  GetStaysSearchParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStaysSearch>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getStaysSearch>>,
           TError,
           Awaited<ReturnType<typeof getStaysSearch>>
-        >,
-        'initialData'
-      >;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>;
-};
-export function useGetStaysSearch<
-  TData = Awaited<ReturnType<typeof getStaysSearch>>,
-  TError = unknown,
->(
-  params?: GetStaysSearchParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getStaysSearch>>, TError, TData>
-    > &
-      Pick<
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStaysSearch<TData = Awaited<ReturnType<typeof getStaysSearch>>, TError = ValidationErrorResponse>(
+ params?: GetStaysSearchParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStaysSearch>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getStaysSearch>>,
           TError,
           Awaited<ReturnType<typeof getStaysSearch>>
-        >,
-        'initialData'
-      >;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>;
-};
-export function useGetStaysSearch<
-  TData = Awaited<ReturnType<typeof getStaysSearch>>,
-  TError = unknown,
->(
-  params?: GetStaysSearchParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getStaysSearch>>, TError, TData>
-    >;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>;
-};
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStaysSearch<TData = Awaited<ReturnType<typeof getStaysSearch>>, TError = ValidationErrorResponse>(
+ params?: GetStaysSearchParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStaysSearch>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary 숙소 탐색(날짜·인원 없이 · 최저가순)
  */
 
-export function useGetStaysSearch<
-  TData = Awaited<ReturnType<typeof getStaysSearch>>,
-  TError = unknown,
->(
-  params?: GetStaysSearchParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof getStaysSearch>>, TError, TData>
-    >;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>;
-} {
-  const queryOptions = getGetStaysSearchQueryOptions(params, options);
+export function useGetStaysSearch<TData = Awaited<ReturnType<typeof getStaysSearch>>, TError = ValidationErrorResponse>(
+ params?: GetStaysSearchParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStaysSearch>>, TError, TData>>, }
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+  const queryOptions = getGetStaysSearchQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
 
 /**
  * @summary 등록용 지오코딩(장소 검색 → 좌표 후보 multi-candidate)
  */
 export const getStaysGeocode = (
-  params: GetStaysGeocodeParams,
-  signal?: AbortSignal
+    params: GetStaysGeocodeParams,
+ signal?: AbortSignal
 ) => {
-  return customInstance<GeocodeCandidate[]>({
-    url: `/stays/geocode`,
-    method: 'GET',
-    params,
-    signal,
-  });
-};
 
-export const getGetStaysGeocodeQueryKey = (params?: GetStaysGeocodeParams) => {
-  return [`/stays/geocode`, ...(params ? [params] : [])] as const;
-};
 
-export const getGetStaysGeocodeQueryOptions = <
-  TData = Awaited<ReturnType<typeof getStaysGeocode>>,
-  TError = unknown,
->(
-  params: GetStaysGeocodeParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getStaysGeocode>>,
-        TError,
-        TData
-      >
-    >;
-  }
+      return customInstance<GeocodeCandidate[]>(
+      {url: `/stays/geocode`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+
+
+
+
+export const getGetStaysGeocodeQueryKey = (params?: GetStaysGeocodeParams,) => {
+    return [
+    `/stays/geocode`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetStaysGeocodeQueryOptions = <TData = Awaited<ReturnType<typeof getStaysGeocode>>, TError = unknown>(params: GetStaysGeocodeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStaysGeocode>>, TError, TData>>, }
 ) => {
-  const { query: queryOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetStaysGeocodeQueryKey(params);
+const {query: queryOptions} = options ?? {};
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getStaysGeocode>>> = ({
-    signal,
-  }) => getStaysGeocode(params, signal);
+  const queryKey =  queryOptions?.queryKey ?? getGetStaysGeocodeQueryKey(params);
 
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getStaysGeocode>>,
-    TError,
-    TData
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
-};
 
-export type GetStaysGeocodeQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getStaysGeocode>>
->;
-export type GetStaysGeocodeQueryError = unknown;
 
-export function useGetStaysGeocode<
-  TData = Awaited<ReturnType<typeof getStaysGeocode>>,
-  TError = unknown,
->(
-  params: GetStaysGeocodeParams,
-  options: {
-    query: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getStaysGeocode>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStaysGeocode>>> = ({ signal }) => getStaysGeocode(params, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStaysGeocode>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetStaysGeocodeQueryResult = NonNullable<Awaited<ReturnType<typeof getStaysGeocode>>>
+export type GetStaysGeocodeQueryError = unknown
+
+
+export function useGetStaysGeocode<TData = Awaited<ReturnType<typeof getStaysGeocode>>, TError = unknown>(
+ params: GetStaysGeocodeParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStaysGeocode>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getStaysGeocode>>,
           TError,
           Awaited<ReturnType<typeof getStaysGeocode>>
-        >,
-        'initialData'
-      >;
-  },
-  queryClient?: QueryClient
-): DefinedUseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>;
-};
-export function useGetStaysGeocode<
-  TData = Awaited<ReturnType<typeof getStaysGeocode>>,
-  TError = unknown,
->(
-  params: GetStaysGeocodeParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getStaysGeocode>>,
-        TError,
-        TData
-      >
-    > &
-      Pick<
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStaysGeocode<TData = Awaited<ReturnType<typeof getStaysGeocode>>, TError = unknown>(
+ params: GetStaysGeocodeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStaysGeocode>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getStaysGeocode>>,
           TError,
           Awaited<ReturnType<typeof getStaysGeocode>>
-        >,
-        'initialData'
-      >;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>;
-};
-export function useGetStaysGeocode<
-  TData = Awaited<ReturnType<typeof getStaysGeocode>>,
-  TError = unknown,
->(
-  params: GetStaysGeocodeParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getStaysGeocode>>,
-        TError,
-        TData
-      >
-    >;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>;
-};
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStaysGeocode<TData = Awaited<ReturnType<typeof getStaysGeocode>>, TError = unknown>(
+ params: GetStaysGeocodeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStaysGeocode>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary 등록용 지오코딩(장소 검색 → 좌표 후보 multi-candidate)
  */
 
-export function useGetStaysGeocode<
-  TData = Awaited<ReturnType<typeof getStaysGeocode>>,
-  TError = unknown,
->(
-  params: GetStaysGeocodeParams,
-  options?: {
-    query?: Partial<
-      UseQueryOptions<
-        Awaited<ReturnType<typeof getStaysGeocode>>,
-        TError,
-        TData
-      >
-    >;
-  },
-  queryClient?: QueryClient
-): UseQueryResult<TData, TError> & {
-  queryKey: DataTag<QueryKey, TData, TError>;
-} {
-  const queryOptions = getGetStaysGeocodeQueryOptions(params, options);
+export function useGetStaysGeocode<TData = Awaited<ReturnType<typeof getStaysGeocode>>, TError = unknown>(
+ params: GetStaysGeocodeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStaysGeocode>>, TError, TData>>, }
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
-    TData,
-    TError
-  > & { queryKey: DataTag<QueryKey, TData, TError> };
+  const queryOptions = getGetStaysGeocodeQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
+
