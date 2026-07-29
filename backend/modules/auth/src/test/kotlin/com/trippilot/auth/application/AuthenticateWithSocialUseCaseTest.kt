@@ -42,6 +42,7 @@ private class FakeSocialIdentityRepository : SocialIdentityRepository {
 
 private class FakeSocialAuthPort(private val profile: SocialProfile) : SocialAuthPort {
     override fun exchange(provider: Provider, authorizationCode: String, codeVerifier: String, redirectUri: String) = profile
+    override fun authenticateWithAccessToken(provider: Provider, accessToken: String) = profile
 }
 
 private class FakeTokenIssuer : TokenIssuer {
@@ -58,6 +59,7 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
     val clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
     val profile = SocialProfile(Provider.KAKAO, "kakao-sub-1", "user@example.com")
     val command = SocialLoginCommand(Provider.KAKAO, "auth-code", "verifier", "trippilot://auth", AgeMethod.SELF_DECLARED, null, "device-1")
+    val tokenCommand = SocialTokenLoginCommand(Provider.KAKAO, "sdk-access-token", AgeMethod.SELF_DECLARED, null, "device-1")
 
     fun fixture(): Triple<AuthenticateWithSocialUseCase, FakeSocialIdentityRepository, CapturingEventPublisher> {
         val accounts = FakeAccountRepository()
@@ -91,6 +93,21 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
 
         result.isNewUser shouldBe false
         identities.stored shouldHaveSize 1 // 추가 연결 없음
+        events.events.shouldBeEmpty()
+    }
+
+    "SDK 토큰 로그인도 신규 가입·재로그인이 code 흐름과 동일하게 동작한다" {
+        val (useCase, identities, events) = fixture()
+
+        val created = useCase.authenticateWithAccessToken(tokenCommand)
+        created.isNewUser shouldBe true
+        identities.stored shouldHaveSize 1
+        events.events.map { it.eventType } shouldBe listOf("auth.AccountCreated")
+
+        events.events.clear()
+        val relogin = useCase.authenticateWithAccessToken(tokenCommand)
+        relogin.isNewUser shouldBe false
+        identities.stored shouldHaveSize 1
         events.events.shouldBeEmpty()
     }
 

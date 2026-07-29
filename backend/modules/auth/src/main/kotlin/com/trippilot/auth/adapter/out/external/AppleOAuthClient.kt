@@ -35,6 +35,11 @@ class AppleOAuthClient(
         )
     }
 
+    override fun fetchProfileByAccessToken(accessToken: String): SocialProfile {
+        // Apple 은 userinfo 엔드포인트가 없다(신원은 id_token 안에) — access token 흐름 미지원.
+        throw UnsupportedOperationException("Apple 은 access token userinfo 흐름을 지원하지 않습니다")
+    }
+
     /** 토큰 교환 + id_token 파싱(무검증). JWKS 서명검증 추가 전까지 미사용(fail-closed). */
     @Suppress("unused")
     private fun exchangeAndDecodeUnverified(

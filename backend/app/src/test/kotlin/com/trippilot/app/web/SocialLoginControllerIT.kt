@@ -55,6 +55,19 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `SDK 토큰 로그인은 200 + isNewUser true + 토큰을 반환한다`() {
+        val (status, body) = post(
+            "/api/v1/auth/social/kakao/token",
+            """{"accessToken":"sdk-access-token","ageConfirmation":{"method":"SELF_DECLARED"}}""",
+        )
+
+        status shouldBe 200
+        body["isNewUser"].asBoolean() shouldBe true
+        body["accessToken"].asText().shouldNotBeBlank()
+        body["refreshToken"].asText().shouldNotBeBlank()
+    }
+
+    @Test
     fun `신규 가입인데 연령확인 누락이면 400 VALIDATION_ERROR`() {
         val (status, body) = post(
             "/api/v1/auth/social/naver",
@@ -76,6 +89,9 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
                 codeVerifier: String,
                 redirectUri: String,
             ) = SocialProfile(provider, "sub-${UUID.randomUUID()}", "user-${UUID.randomUUID()}@example.com")
+
+            override fun authenticateWithAccessToken(provider: Provider, accessToken: String) =
+                SocialProfile(provider, "sub-${UUID.randomUUID()}", "user-${UUID.randomUUID()}@example.com")
         }
     }
 }
