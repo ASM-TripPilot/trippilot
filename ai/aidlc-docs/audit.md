@@ -161,3 +161,35 @@
 - 임베딩 재선정: Titan v2는 Bedrock 전용이라 불가 → 잠정 로컬 오픈소스(multilingual-e5-large 또는 BGE-M3, 1024차원 유지 → pgvector 스키마 무변경, 결제 승인 불요). 미결 #6으로 등록
 - 파급: 미결 #1(LLM 벤더) 해소 / K-3(실벡터 색인) 승인 대기 목록에서 해소 — S6.1·S8.1 즉시 착수 가능으로 변경 / K-1 어댑터 확정 / "Bedrock" 표기는 "LLM API(Anthropic)"로 읽기 (README 표기 규칙 명시, 점진 개정)
 - 후속 필요: ai-cost-estimation.md를 Anthropic API 요금 기준으로 재산정, langchain-adoption.md의 ChatBedrock 표기 개정
+
+## DECISION — AI-D07 U2 솔버 시간 정책 (U2 착수 전 세팅 4건)
+**Timestamp**: 2026-07-25T00:00:00Z
+**User Input**: "U2 시간제한·제약 재세팅 — 4개 항목 차례로 선택"
+**AI Response**: ai-adr.md에 AI-D07 신설, FakeTravel SPEED 정정.
+**Context**:
+- ① 솔버 라이브러리: OR-Tools 우선 벤치마크 (미결 #3 진행 방식 확정 — U2 첫 절편)
+- ② day1 예산 5초→10초 상향 + day1부터 하이브리드 체인 전면 적용 (사용자 결정). ⚠️ D38 개정 사항 — 백엔드·기획 합의 전까지 "AI팀 제안" 플래그. 기존 5초 예산으로는 2차 LLM 솔버가 day1에서 구조적으로 불가능(설계 모순)했던 것의 해소
+- ③ SPEED 초기값: 도보4/대중교통20/차30 km/h (remote config). FakeTravel 차 40→30 정정, 52 tests green 유지
+- ④ 2차 솔버 모델: 경로별 분리 — day1·Plan-B=sonnet-5 / 백그라운드·regenerate=opus-4-8 (AI-D06 연장, 설정값)
+- 후속: D38 개정 합의(백엔드·기획), evaluation-metrics day1 SLO 개정(합의 후), U2 Functional Design에 본 결정 반영
+
+## DECISION — AI-D07 개정: day1 5초 유지 + 시한 인지 하이브리드 체인
+**Timestamp**: 2026-07-25T01:00:00Z
+**User Input**: "5초로 돌려주고, day1부터 하이브리드 방식 이용"
+**AI Response**: AI-D07을 같은 날 개정 — 10초 상향안 철회.
+**Context**:
+- day1 5초 유지 (D38 무변경 → 기획·백엔드 합의 절차 불필요해짐)
+- 모순 해소 방식: deadline-aware 체인 — 각 단계가 진입 전 잔여 시간 확인, 부족하면 스킵하고 다음 단계로. 체인 구조는 전 경로 동일, 경로별로 deadline만 다름
+- day1에서 2차 LLM이 도는 조건 = OR-Tools 조기 실패로 잔여 ≥ 2.5s일 때. 타임아웃 소진 시 규칙 직행(INV-4 자연 강등)
+- 후속: U2 FD에 deadline 파라미터 명세 + "deadline 초과 반환 없음" PBT 속성
+
+## CONSTRUCTION — U2 Functional Design (산출물 생성)
+**Timestamp**: 2026-07-25T02:00:00Z
+**User Input**: "U2 시작해줘" (사전 세팅 4건 AI-D07로 확정 후)
+**AI Response**: U2 Functional Design 3종 생성, aidlc-state 갱신, Jira TRIP-165 In Progress.
+**Context**:
+- 정본 근거: ai-implementation-design §1.2(C2 퍼사드)·§4.2(HC 4종)·§4.3(알고리즘)·§4.4(이동 추정), ai-testing-guide U5-P1~P6, AI-D07
+- domain-entities.md: SolverConfig(AI-D07 초기값 주입 컨테이너)·RepairResult/MinimalChangePolicy(§1.2 미확정 타입 확정)·ClockPort(G116 시계 주입)·LlmSlotProposal(2차 제안 스키마). SolveMode.BEDROCK enum 개명은 직렬화 호환 위해 보류(표기 규칙으로 커버)
+- business-logic-model.md: 컴포넌트 6종(facade·constraints·ortools·llm_solver·fallback·repair) + 시한 인지 체인 의사코드 + FakeClock/SlowSolver/적대적 제안 generator
+- business-rules.md: HC 게이트(G114)·시한 인지 규칙 DL-1~6·결정론 규칙·PBT 매핑(U5-P1/2/3/6 + 신규 DL-P1/P2·GATE-P)·벤치마크 게이트(후보 50≤3s, 미결 #3 판정 절차)·DoD
+- 다음: 사용자 승인 → 첫 절편 = OR-Tools 벤치마크

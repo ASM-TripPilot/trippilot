@@ -54,7 +54,9 @@
 
 ## Current Status
 - **Lifecycle Phase**: CONSTRUCTION
-- **Current Stage**: U1 Domain & Ports — Functional Design 산출물 생성 완료 (승인 대기)
-- **Next Stage**: 사용자 승인 → U1 NFR Requirements (또는 바로 Code Generation)
-- **Status**: 질문 9개 전부 권장안 확정 (uv·frozen dataclass·Protocol·tz-aware datetime·TracePort 통합·Eval 타입 포함·NFR-7 등록).
-  산출물: `construction/u1-domain-ports/functional-design/` 3종. requirements.md에 NFR-7(LLMOps) 4항목 등록 완료.
+- **Current Stage**: U2 C2 Solver Core — Functional Design 산출물 생성 완료 (승인 대기)
+- **Next Stage**: 사용자 승인 → U2 Code Generation 첫 절편 = OR-Tools 벤치마크 (미결 #3 해소)
+- **Status**:
+  - U1 완료 (2026-07-23): 도메인 12모듈·Port 7종·Fake 9종·PBT 52 green, 4대 불변식 타입 강제, CI 테스트 게이트. PR #25 리뷰 대기 (develop), Jira TRIP-164 In Review.
+  - U2 착수 (2026-07-25): 사전 세팅 4건 확정(AI-D07 — OR-Tools 우선 벤치마크·day1 5초 유지+시한 인지 하이브리드 체인·SPEED 초기값·2차 모델 경로별 분리).
+    산출물: `construction/u2-solver/functional-design/` 3종 (domain-entities 보강 · business-logic-model · business-rules).
