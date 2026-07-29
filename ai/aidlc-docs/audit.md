@@ -230,3 +230,15 @@
 - PBT로 잡은 실버그 1건: regenerate 시 잠근 슬롯=기존 고정블록 중복 승격 → 규칙 폴백이 이중 배치 → HC2 위반 → SolverConflictError. 폴백 솔버에 중복 고정 방어 추가로 해소 (hypothesis 반례 재검증 통과)
 - 아키텍처 감시 확장: ortools import는 c2 계층에만 (자동 차단)
 - U2 잔여(경미): 소규모 oracle 전수 대조(U5-P1 보강)·2차 진입 '품질 미달' 트리거·지역탐색 2-opt(CP-SAT가 사실상 대체)
+
+## CONSTRUCTION — U2 마무리 + U3 Functional Design
+**Timestamp**: 2026-07-29T05:00:00Z
+**User Input**: "C하고 U3 시작해줘"
+**AI Response**: U2 정리(스택 PR #40·TRIP-165 In Review·state 갱신) 후 U3 FD 3종 생성, TRIP-166 In Progress.
+**Context**:
+- U3 FD 근거: ai-data-design.md §3(6단계 필터 확정값)·§6(TTL: POI 24h/영업시간 6h/가격 금지)·§8(AI-D04 fuzzy)
+- 스코프 결정: REGION 해소는 U3 제외(라우터/U6 소유) · is_closed_today 당일 배치는 Plan-B 소유 · 웹 소싱 U6 · 공간 쿼리 캐싱 후속
+- CandidatePool에 anchor·radius_km 선택 필드 보강(정본 §3.3 누락분 — ItineraryProblem.anchor 방식)
+- 가격 캐싱 금지: U1 to_cacheable_dict 단일 경로 + SpyCache PBT(CACHE-P1)로 이중 강제
+- 신규 PBT: POOL-P1~P4·RES-P1/P2·CACHE-P1/P2
+- 브랜치: feature/TRIP-166-m7-place-data (TRIP-165 위 스택)
