@@ -1,8 +1,10 @@
 # U1 Accommodation & Trip Setup — Frontend Components
 
-> 아키텍처 준수: `frontend/README.md`(정본) — `src/app` 얇은 라우트 + `features/` 구현 + `shared/` 횡단, TanStack Query(서버 상태)·Zustand(UI 상태)·RHF+Zod(폼)·NativeWind. testID 규약 `{feature}-{screen}-{role}`.
+> **아키텍처 정본 = `frontend/README.md`.** 층 구조·폴더 규약을 이 문서에 옮겨 적지 않는다 — 사본은 갈라진다. 이 문서가 정하는 것은 **컴포넌트의 책임·상태·서버 연동**이지 그것이 놓일 폴더가 아니다. 상태 관리 스택(TanStack Query=서버 상태 · Zustand=UI 상태 · RHF+Zod=폼 · NativeWind)과 testID 규약 `{feature}-{screen}-{role}`도 그 정본을 따른다.
 > **클라이언트 검증은 전부 UX 사본** — 판정 정본은 서버(`business-rules.md`).
 > 화면 정본 = 라이브 Figma 밴드 d·e·g. 상태 변형은 **구 프레임의 동작·문구만 취하고 레이아웃은 신 default 기준으로 재해석**(Q14=A).
+>
+> **서버 연동 열 표기(2026-07-29 정정)**: 경로 정본은 언제나 `backend/docs/design/openapi.yaml`이고 아래 표는 그 사본이다. `⚠️ 계약 미존재`는 **이 문서가 계약보다 앞서 나간 자리** — 백엔드 계약·모듈이 생기기 전까지 프론트가 붙을 수 없다(후속 티켓 C 대기). 정정 전에는 존재하지 않는 경로가 실재하는 것처럼 적혀 있었다.
 
 ## 1. 라우트 골격 (U1이 추가하는 부분)
 
@@ -33,49 +35,51 @@ src/app/
 
 - 위저드·등록·상세는 **몰입 화면**이므로 탭바를 숨긴다(U0 BR-U0-29 상속).
 
-## 2. features/explore (밴드 d · C7)
+## 2. 탐색 컴포넌트 (밴드 d · C7)
+
+⚠️ **이 절의 서버 연동은 전부 계약 미존재다** — 장소 도메인은 openapi 경로 0개·백엔드 모듈 0개다(2026-07-29 실측). 후속 티켓 **C**(`place-data` 모듈 + `GET /places` · `POST/DELETE /saved-places`)가 선행되지 않으면 이 절의 어떤 컴포넌트도 붙지 않는다.
 
 | 컴포넌트 | 책임 | state / props | 서버 연동 |
 |---|---|---|---|
-| `ExploreLanding` | 4구획(여행지 칩 · 묵을 곳 · 가볼 곳 · 여행자 일정) + 하단 "담은 곳 N곳 · 여행 만들기" | 구획별 독립 쿼리(하나 실패해도 나머지 렌더) | `GET /explore/landing` |
-| `RegionPicker` | **d1b·e00 공용** — `purpose: 'trip' \| 'stay'`로 카피·다음 목적지 분기(BR-U1-07) | props: purpose | `GET /regions` |
-| `DestinationDetail` | 인기 스팟 그리드(담기 토글) · "이 지역에서 묵을 곳" · "{지역}으로 여행 만들기" | — | `GET /regions/{region}` |
-| `PlaceExplorer` | 검색 + 카테고리 칩(전체·명소·맛집·카페·야경·자연) · 담기 토글 · "N 담은 장소로 여행 만들기" | Zustand: 담기 낙관적 업데이트 | `GET /places` · `POST/DELETE /places/{poiId}/save` |
-| `SavedPlaceList` | 담은 순서 목록(순번·지역·태그) · "이 장소들로 여행 만들기" | — | `GET /me/saved-places` |
+| `ExploreLanding` | 4구획(여행지 칩 · 묵을 곳 · 가볼 곳 · 여행자 일정) + 하단 "담은 곳 N곳 · 여행 만들기" | 구획별 독립 쿼리(하나 실패해도 나머지 렌더) | ⚠️ 계약 미존재 (`/explore/landing`) |
+| `RegionPicker` | **d1b·e00 공용** — `purpose: 'trip' \| 'stay'`로 카피·다음 목적지 분기(BR-U1-07) | props: purpose | ⚠️ 계약 미존재 (`/regions`) |
+| `DestinationDetail` | 인기 스팟 그리드(담기 토글) · "이 지역에서 묵을 곳" · "{지역}으로 여행 만들기" | — | ⚠️ 계약 미존재 (`/regions/{region}`) |
+| `PlaceExplorer` | 검색 + 카테고리 칩(전체·명소·맛집·카페·야경·자연) · 담기 토글 · "N 담은 장소로 여행 만들기" | Zustand: 담기 낙관적 업데이트 | ⚠️ 계약 미존재 (`/places` · `/places/{poiId}/save`) — **C 대기** |
+| `SavedPlaceList` | 담은 순서 목록(순번·지역·태그) · "이 장소들로 여행 만들기" | — | ⚠️ 계약 미존재 (`/me/saved-places`) — **C 대기** |
 | `CommunityTeaser` | **1차 자리만** — 섹션 헤더 + 준비 중 안내. 실데이터·상세 라우팅 없음(BR-U1-05) | — | — |
 
-## 3. features/stay (밴드 e · C3·C4·C5)
+## 3. 숙소 컴포넌트 (밴드 e · C3·C4·C5)
 
 | 컴포넌트 | 책임 | state / props | 서버 연동 |
 |---|---|---|---|
-| `StaySearchResult` | 헤더 "{지역} · 날짜 미정 · N곳" · 필터 칩(가격대·지역·필터) · 카드 목록 | 필터 Zustand · 무한 스크롤 | `GET /stays?region=&filters=` |
-| `StayCard` | 이름 · **최저가 스냅숏(`₩120,000~ · 1박`)** · 거리 · ♥ 토글. 스냅숏 없으면 "가격 미확인"(BR-U1-14) | props: stay | `POST/DELETE /stays/{id}/save` |
+| `StaySearchResult` | 헤더 "{지역} · 날짜 미정 · N곳" · 필터 칩(가격대·지역·필터) · 카드 목록 | 필터 Zustand · 무한 스크롤 | `GET /stays/search` (region·amenity·stayType — 날짜·인원·정렬 없음: BR-U1-10/15) |
+| `StayCard` | 이름 · **최저가 스냅숏(`₩120,000~ · 1박`)** · 거리 · ♥ 토글. 스냅숏 없으면 "가격 미확인"(BR-U1-14) | props: stay | `POST /saved-stays` · `DELETE /saved-stays/{savedStayId}` |
 | `PartialFailureBanner` | "일부 숙소 정보를 불러오지 못했어요 · 다시 시도"(BR-U1-17) | props: onRetry | — |
 | `FilterZeroNotice` | 0건을 만든 필터를 지목 + 완화 제안(BR-U1-16) | props: culpritFilters | — |
-| `StayDetail` | 사진 · 이름 · 라이브 정확가 · 편의시설 · 지도 · 제휴 고지 · CTA 2종 | — | `GET /stays/{id}` · `GET /stays/{id}/live-price` |
-| `OtaChoiceSheet` | OTA별 이름·가격 라디오 + 제휴 고지 + [이동](BR-U1-30·31) | props: options | `POST /stays/{id}/outbound` → 딥링크 |
-| `AddToTripSheet` | `[일정에 추가]` — 여행 선택 → 거점 배정. 여행 없으면 생성으로(BR-U1-25) | — | `POST /trips/{id}/bases` |
-| `SavedStayList` | "저장한 숙소 N곳 · ♥로 담아둔 곳" · `거점` 배지(파생) · "다른 숙소를 거점으로 지정" | — | `GET /me/saved-stays?tripId=` |
+| `StayDetail` | 사진 · 이름 · 라이브 정확가 · 편의시설 · 지도 · 제휴 고지 · CTA 2종 | — | ⚠️ 계약 미존재 (`/stays/{id}` · `/stays/{id}/live-price`) |
+| `OtaChoiceSheet` | OTA별 이름·가격 라디오 + 제휴 고지 + [이동](BR-U1-30·31) | props: options | ⚠️ 계약 미존재 (`/stays/{id}/outbound` → 딥링크) |
+| `AddToTripSheet` | `[일정에 추가]` — 여행 선택 → 거점 배정. 여행 없으면 생성으로(BR-U1-25) | — | `POST /trips/{tripId}/bases` |
+| `SavedStayList` | "저장한 숙소 N곳 · ♥로 담아둔 곳" · `거점` 배지(파생) · "다른 숙소를 거점으로 지정" | — | `GET /saved-stays` |
 | `StayRegisterTabs` | 3탭(지도 검색 · 링크 붙여넣기 · 핀 지정) 공용 셸(BR-U1-21) | Zustand: 탭·후보·좌표확정 | — |
-| ├ `MapSearchTab` | 검색 → 후보 다중 시 라디오 선택 → 지도 확인 | RHF+Zod | `GET /stays/geocode?q=` |
-| ├ `LinkPasteTab` | OTA URL 파싱. 실패 시 원문 유지 + 타 탭 유도(BR-U1-24) | RHF+Zod: URL 형식 | `POST /stays/parse-link` |
-| ├ `PinTab` | 지도 롱프레스로 핀 지정 → 역지오코딩 | — | `GET /stays/reverse-geocode` |
+| ├ `MapSearchTab` | 검색 → 후보 다중 시 라디오 선택 → 지도 확인 | RHF+Zod | `GET /stays/geocode` |
+| ├ `LinkPasteTab` | OTA URL 파싱. 실패 시 원문 유지 + 타 탭 유도(BR-U1-24) | RHF+Zod: URL 형식 | ⚠️ 계약 미존재 (`/stays/parse-link`) |
+| ├ `PinTab` | 지도 롱프레스로 핀 지정 → 역지오코딩 | — | ⚠️ 계약 미존재 (`/stays/reverse-geocode`) |
 | └ `StayDateFields` | 체크인/아웃 · "N박 · 나중에 바꿀 수 있어요" | Zod: `checkOut > checkIn`(UX 사본) | `POST /saved-stays` |
 | `MapApiFallback` | 지도 API 실패 시 핀 지정 폴백 안내(BR-U1-23) | — | — |
 
-## 4. features/trip (밴드 g · C6)
+## 4. 여행 생성 컴포넌트 (밴드 g · C6)
 
 | 컴포넌트 | 책임 | state / props | 서버 연동 |
 |---|---|---|---|
 | `TripWizardLayout` | 2단계 진행 표시(1/2·2/2) · 뒤로가기 시 입력 보존 | Zustand: 위저드 드래프트 | — |
-| `DestinationChips` | 다중 도시 칩(`부산 · 2박 ×`) + "도시 추가"(BR-U1-34) | RHF: 배열 필드 | `GET /regions` |
-| `MustVisitSeedStrip` | 담은 곳에서 온 '꼭 갈 곳' 썸네일 · 개별 ×· "+N" · "더 담기"(BR-U1-37) | — | `GET /me/saved-places` |
+| `DestinationChips` | 다중 도시 칩(`부산 · 2박 ×`) + "도시 추가"(BR-U1-34) | RHF: 배열 필드 | ⚠️ 계약 미존재 (`/regions`) |
+| `MustVisitSeedStrip` | 담은 곳에서 온 '꼭 갈 곳' 썸네일 · 개별 ×· "+N" · "더 담기"(BR-U1-37) | — | ⚠️ 계약 미존재 (`/me/saved-places`) — **C 대기** |
 | `PeriodPicker` | 프리셋 칩(이번 주말·다음 주말·1박2일·3박4일) + 날짜 범위. 프리셋은 자동 채움일 뿐 수정 가능(BR-U1-36) | Zod: `end ≥ start`(UX 사본) | — |
 | `PartyPicker` | 인원 스테퍼 + 동반 유형(혼자·친구·연인·가족)(BR-U1-39) | — | — |
 | `PreferencePrefillCard` | "당신 취향으로 맞췄어요" + 칩 + [바꾸기] → 여행 단위 오버라이드(BR-U1-38) | — | `GET /me/preferences` |
-| `BaseSectionList` | 구간별 거점("1~2박 6/10-6/12 부산 — {숙소} · 거점" + [변경]) | — | `GET /trips/{id}/bases` |
-| `BaseCandidateList` | 숙소 후보 카드 · "거점으로 지정" · 지정 시 "✓ N박 · {지역}에 지정됨" | — | `POST /trips/{id}/bases` |
-| `CoverageResolveSheet` | **차단형 해소 시트** — 미해결 날짜별 선택(겹침: 후보 목록 / 공백: 직전 숙소·여행지 중심·숙소 지정)(BR-U1-44·45) | props: unresolvedDays | `POST /trips/{id}/bases/coverage` |
+| `BaseSectionList` | 구간별 거점("1~2박 6/10-6/12 부산 — {숙소} · 거점" + [변경]) | — | `GET /trips/{tripId}/coverage` (구간·배정 상태) · `DELETE /trips/{tripId}/bases/{baseAssignmentId}` |
+| `BaseCandidateList` | 숙소 후보 카드 · "거점으로 지정" · 지정 시 "✓ N박 · {지역}에 지정됨" | — | `POST /trips/{tripId}/bases` |
+| `CoverageResolveSheet` | **차단형 해소 시트** — 미해결 날짜별 선택(겹침: 후보 목록 / 공백: 직전 숙소·여행지 중심·숙소 지정)(BR-U1-44·45) | props: unresolvedDays | `GET /trips/{tripId}/coverage` → 해소는 `POST /trips/{tripId}/bases` 재배정 |
 | `NoStayStartButton` | "숙소 없이 시작하기"(BR-U1-40) | — | `POST /trips` |
 | `OverseasBlockDialog` | 국내 밖 목적지 차단 안내(BR-U1-35) | — | — |
 

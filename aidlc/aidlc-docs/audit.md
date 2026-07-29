@@ -432,3 +432,16 @@
 **Context**: CONSTRUCTION Per-Unit Loop — U1 NFR Design 승인 → Infrastructure Design SKIP → **U1 설계 종료**. 다음 = 사용자 지시 대기(U2 설계 착수 또는 U1 팀 개발 핸드오프). U0에 이어 U1도 설계 문서 8종으로 종료.
 
 ---
+## Post-Design Correction — U0·U1 frontend-components.md 정본 사본 드리프트 삭감 (A1)
+**Timestamp**: 2026-07-29T05:10:00Z
+**User Input**: "그러니까 내가 승인하면 기록까지해서 사이클 끝 -> 후속작업으로 aidlc/CLAUDE.md 규칙에 맞게 문서들 수정까지 하겠다는거 맞지?" → "아니 이어서 진행해 내 개입없이" (TRIP-179 사이클 종료 후 후속 티켓 A1 착수 지시)
+**AI Response**: 승인 완료된 설계 문서 2종(`u0-foundation/functional-design/frontend-components.md` · `u1-accommodation-trip/functional-design/frontend-components.md`)의 **드리프트만 정정**. 새 설계 결정·새 컴포넌트·새 요구사항 추가 0건 — 따라서 스테이지 진행이 아니며 승인 게이트 대상이 아니다.
+(1) **층 구조 사본 제거(2건)** — 두 문서 머리말이 `frontend/README.md`를 "정본"이라 선언하면서 정작 층 구조(`src/app` 얇은 라우트 + `features/` 구현 + `shared/` 횡단)를 **베껴 적고 있었고**, TRIP-173의 FSD 재편(`pages/`·`app-shell/`·`ui/model/lib/config`)으로 그 사본이 틀린 값이 됐다. 포인터만 남기고 서술 삭제 + "폴더가 아니라 컴포넌트의 책임·상태·서버 연동을 정한다"는 문서 역할을 명시. 처방이 FSD 포팅이 아니라 **삭감**인 이유: 다시 베끼면 다음 층 변경에 또 갈라진다(TRIP-173만 해도 층이 두 번 이동).
+(2) **폴더 단정 제목 제거(5건)** — `## 2. features/explore`·`## 3. features/stay`·`## 4. features/trip`(U1) / `## 2. features/onboarding`·`## 3. features/home`(U0) → 밴드·역할 기반 제목으로. 슬라이스 배치는 프론트 정본과 후속 티켓 A2 소관.
+(3) **경로·메서드 정정 — `backend/docs/design/openapi.yaml` 전수 대조(29경로)**. U1: `GET /stays?region=&filters=`→`GET /stays/search`(+BR-U1-10/15 제약 병기) · `POST/DELETE /stays/{id}/save`→`POST /saved-stays`·`DELETE /saved-stays/{savedStayId}` · `GET /me/saved-stays?tripId=`→`GET /saved-stays` · `GET /stays/geocode?q=`→`GET /stays/geocode` · `POST /trips/{id}/bases/coverage`→`GET /trips/{tripId}/coverage`(해소는 `POST /trips/{tripId}/bases` 재배정) · `GET /trips/{id}/bases`→`GET /trips/{tripId}/coverage`+`DELETE .../bases/{baseAssignmentId}`. U0: `GET /nickname/suggestions`→**POST** · `PUT /me/profile/nickname`→**PATCH**.
+(4) **계약 미존재 표식 신설(11건)** — 문서가 계약보다 앞서 나간 경로에 `⚠️ 계약 미존재`를 달았다. §2 탐색 전량(`/explore/landing`·`/regions`·`/regions/{region}`·`/places`·`/places/{poiId}/save`·`/me/saved-places`) + §3 숙소 일부(`/stays/{id}`·`/stays/{id}/live-price`·`/stays/{id}/outbound`·`/stays/parse-link`·`/stays/reverse-geocode`) + §4 `/regions`·`/me/saved-places`. §2 머리에 "장소 도메인은 openapi 0경로·백엔드 모듈 0개(2026-07-29 실측) — 후속 티켓 C 선행 필요" 경고를 달았다. 서버 연동 열 표기 규약도 머리말에 신설(정본은 openapi.yaml, 이 표는 사본).
+(5) **숫자 사본 제거(1건)** — U0 §4 "현행 openapi 20 경로"(실제 29) → 숫자를 박지 말고 정본을 가리키도록 교체.
+**존치**: 라우트 목록 · 컴포넌트 책임표 · testID 규약 · BR 매핑 · PBT 대상 — 폴더에 매이지 않은 실질이라 그대로 둔다.
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 스테이지 진행 아님 → `aidlc-state.md` 체크박스 변동 없음. 발단은 TRIP-179 사이클 [설계] 3-a 맹점 훑기에서 사용자가 제기한 "장소·숙소 비대칭" 논의이고, 그 자리에서 사이클 내 수정을 보류한 이유는 **역류 방지**(같은 사이클의 게이트가 방금 쓴 문서를 AC 근거로 인용하게 된다). 후속 티켓 A1으로 분리해 사이클 종료 후 착수. 남은 후속: **B**(장소 상세 스토리 신설 — Inception 변경, 승인 게이트 필요) · **C**(`place-data` 모듈 + 장소 계약 — 진짜 병목) · **A2**(장소 동급 재배치 — B 의존).
+
+---
