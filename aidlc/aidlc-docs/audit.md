@@ -445,3 +445,14 @@
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 스테이지 진행 아님 → `aidlc-state.md` 체크박스 변동 없음. 발단은 TRIP-179 사이클 [설계] 3-a 맹점 훑기에서 사용자가 제기한 "장소·숙소 비대칭" 논의이고, 그 자리에서 사이클 내 수정을 보류한 이유는 **역류 방지**(같은 사이클의 게이트가 방금 쓴 문서를 AC 근거로 인용하게 된다). 후속 티켓 A1으로 분리해 사이클 종료 후 착수. 남은 후속: **B**(장소 상세 스토리 신설 — Inception 변경, 승인 게이트 필요) · **C**(`place-data` 모듈 + 장소 계약 — 진짜 병목) · **A2**(장소 동급 재배치 — B 의존).
 
 ---
+
+## Post-Design Correction — U1 frontend-components.md 잔여 드리프트 2건 (TRIP-181 [기록] 반영)
+**Timestamp**: 2026-07-29T22:35:00Z
+**User Input**: TRIP-181 사이클 [설계] 3-a 맹점 훑기에서 사용자가 정본 반영 후보 4건(D1~D4) 중 D1·D2·D3 3건을 선택(`_workspace/20260729-trip181-stay-search-list/01b_ouroboros_seed.md` §6 — D4 밴드맵 드리프트는 하네스 파일이라 관측만 유지, 반영 대상에서 제외).
+**AI Response**: 승인 완료된 `u1-accommodation-trip/functional-design/frontend-components.md`의 **잔여 드리프트만 정정**(새 설계 결정·컴포넌트·요구사항 추가 0건 — 위 2026-07-29T05:10:00Z A1 정정과 같은 성격의 후속).
+(1) **D1** — §3 `StaySearchResult` 행의 state/props 열에서 "무한 스크롤" 삭제(`필터 Zustand · 무한 스크롤` → `필터 Zustand`, 파일 55행). 근거: `backend/docs/design/openapi.yaml`의 `/stays/search`에 페이지네이션 파라미터가 없어 구현 불가함을 TRIP-179·TRIP-181 두 사이클에서 실측 — 요구사항 근거 아니라 계약 실측 근거다.
+(2) **D2** — §3 `StayCard` 행의 가격 표기 `` `₩120,000~ · 1박` `` → `` `120,000원~ · 1박` `` 정정(파일 56행). 근거: TRIP-180에서 사용자가 확정한 구현 결정(`frontend/src/features/stay/model/formatPrice.ts`가 `120,000원~`을 반환) — **구현 결정이지 요구사항 근거가 아니다.** 다음 사이클이 이 서식을 요구사항 근거로 인용해서는 안 된다.
+D3(지라 TRIP-181 티켓 본문의 사실 오기 2건 — 빈 스텁 서술·경로 드리프트 서술)은 aidlc 문서가 아니라 **지라 TRIP-181 코멘트(comment id 10072)로 오케스트레이터가 이미 반영 완료** — 여기서는 중복 작업하지 않는다.
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 스테이지 진행 아님 → `aidlc-state.md` 체크박스 변동 없음. 정정 실행 주체: TRIP-181 사이클 [기록](scribe) 단계.
+
+---

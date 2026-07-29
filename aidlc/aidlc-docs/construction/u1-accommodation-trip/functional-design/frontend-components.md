@@ -52,8 +52,8 @@ src/app/
 
 | 컴포넌트 | 책임 | state / props | 서버 연동 |
 |---|---|---|---|
-| `StaySearchResult` | 헤더 "{지역} · 날짜 미정 · N곳" · 필터 칩(가격대·지역·필터) · 카드 목록 | 필터 Zustand · 무한 스크롤 | `GET /stays/search` (region·amenity·stayType — 날짜·인원·정렬 없음: BR-U1-10/15) |
-| `StayCard` | 이름 · **최저가 스냅숏(`₩120,000~ · 1박`)** · 거리 · ♥ 토글. 스냅숏 없으면 "가격 미확인"(BR-U1-14) | props: stay | `POST /saved-stays` · `DELETE /saved-stays/{savedStayId}` |
+| `StaySearchResult` | 헤더 "{지역} · 날짜 미정 · N곳" · 필터 칩(가격대·지역·필터) · 카드 목록 | 필터 Zustand | `GET /stays/search` (region·amenity·stayType — 날짜·인원·정렬 없음: BR-U1-10/15) |
+| `StayCard` | 이름 · **최저가 스냅숏(`120,000원~ · 1박`)** · 거리 · ♥ 토글. 스냅숏 없으면 "가격 미확인"(BR-U1-14) | props: stay | `POST /saved-stays` · `DELETE /saved-stays/{savedStayId}` |
 | `PartialFailureBanner` | "일부 숙소 정보를 불러오지 못했어요 · 다시 시도"(BR-U1-17) | props: onRetry | — |
 | `FilterZeroNotice` | 0건을 만든 필터를 지목 + 완화 제안(BR-U1-16) | props: culpritFilters | — |
 | `StayDetail` | 사진 · 이름 · 라이브 정확가 · 편의시설 · 지도 · 제휴 고지 · CTA 2종 | — | ⚠️ 계약 미존재 (`/stays/{id}` · `/stays/{id}/live-price`) |
