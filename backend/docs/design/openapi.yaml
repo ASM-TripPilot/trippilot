@@ -394,16 +394,22 @@ paths:
       description: >
         지역·편의시설·유형으로 탐색. 필터는 AND, 정렬은 최저가순 고정(BR-U1-15).
         가격은 최저가 스냅숏뿐(미확인은 null · BR-U1-14). 소요시간 미표시·거리만(INV-3).
+        lat·lng 로 '내 주변' 좌표 스코프(US-STAY-01 · BR-U1-11) — region·필터와 AND 로 걸린다.
+        좌표는 필터가 아니라 스코프라 filterZeroReasons(완화 제안)에 나타나지 않는다.
       parameters:
         - { name: region, in: query, required: false, schema: { type: string }, description: '여행지(예: 제주)' }
         - { name: amenity, in: query, required: false, schema: { type: array, items: { type: string } }, description: 편의시설 AND 필터 }
         - { name: stayType, in: query, required: false, schema: { type: array, items: { type: string } }, description: 숙소 유형 필터 }
+        - { name: lat, in: query, required: false, schema: { type: number, format: double, minimum: -90, maximum: 90 }, description: "'내 주변' 중심 위도. lng 와 짝이다 — 한쪽만 보내면 400" }
+        - { name: lng, in: query, required: false, schema: { type: number, format: double, minimum: -180, maximum: 180 }, description: "'내 주변' 중심 경도. lat 와 짝이다 — 한쪽만 보내면 400" }
+        - { name: radiusKm, in: query, required: false, schema: { type: number, format: double, exclusiveMinimum: 0, default: 5 }, description: 검색 반경(km). 좌표가 있을 때만 의미가 있고 생략하면 5km. 중심 없이 단독으로 보내면 400 }
       responses:
         '200':
           description: 탐색 결과(최저가순)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/StaySearchResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
 
   /stays/geocode:
     get:

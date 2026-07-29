@@ -20,12 +20,21 @@ class StaySearchService(
 ) {
     fun search(query: StaySearchQuery): StaySearch {
         val fetched = content.search(query.region)
-        val filtered = fetched.stays.filter { matches(it, query) }
+
+        // 좌표 스코프(TRIP-202)를 필터보다 **먼저** 적용한다. 순서가 뜻을 바꾼다 —
+        // filter-zero 원인은 아래에서 "스코프 안에 있었는데 필터가 지웠나"로 판정하므로,
+        // 반경 밖 숙소가 가진 편의시설을 근거로 원인을 세면 거짓말이 된다.
+        val inScope = query.nearby
+            ?.let { n -> fetched.stays.filter { n.covers(it.lat, it.lng) } }
+            ?: fetched.stays
+
+        val filtered = inScope.filter { matches(it, query) }
 
         // filter-zero(BR-U1-16): 필터가 있고, 필터 전엔 있었는데 필터 후 0건 → 원인 필터 표기.
+        // 좌표만으로 0건이면(inScope 가 비면) 완화 제안을 하지 않는다 — 좌표는 필터가 아니다.
         val zeroReasons =
-            if (query.hasFilter && filtered.isEmpty() && fetched.stays.isNotEmpty()) {
-                filterZeroReasons(fetched.stays, query)
+            if (query.hasFilter && filtered.isEmpty() && inScope.isNotEmpty()) {
+                filterZeroReasons(inScope, query)
             } else {
                 emptyList()
             }

@@ -3,11 +3,15 @@ package com.trippilot.accommodationsearch.domain
 /**
  * 숙소 탐색 조건. 날짜·인원 없이 탐색 가능(BR-U1-10).
  * amenities/stayTypes 필터는 AND 매칭. 정렬은 최저가순 고정(BR-U1-15) — 조건 없음.
+ *
+ * [nearby] 는 '내 주변' 좌표 스코프(TRIP-202). region 과 AND 로 걸리고, **필터가 아니라
+ * 스코프**라 [hasFilter] 에 포함되지 않는다 — filter-zero 완화 제안 대상이 아니다.
  */
 data class StaySearchQuery(
     val region: String? = null,
     val amenities: Set<String> = emptySet(),
     val stayTypes: Set<String> = emptySet(),
+    val nearby: Nearby? = null,
 ) {
     val hasFilter: Boolean get() = amenities.isNotEmpty() || stayTypes.isNotEmpty()
 }
