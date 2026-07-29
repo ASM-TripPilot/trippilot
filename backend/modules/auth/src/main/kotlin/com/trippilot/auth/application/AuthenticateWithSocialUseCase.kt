@@ -3,6 +3,7 @@ package com.trippilot.auth.application
 import com.trippilot.auth.api.event.AccountCreated
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
+import com.trippilot.auth.domain.Provider
 import com.trippilot.auth.domain.SocialIdentity
 import com.trippilot.auth.domain.SocialProfile
 import com.trippilot.auth.domain.port.AccountRepository
@@ -10,6 +11,8 @@ import com.trippilot.auth.domain.port.SocialAuthPort
 import com.trippilot.auth.domain.port.SocialIdentityRepository
 import com.trippilot.auth.domain.port.TokenIssuer
 import com.trippilot.core.error.AuthenticationRequired
+import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.event.DomainEventPublisher
@@ -76,6 +79,18 @@ class AuthenticateWithSocialUseCase(
             if (confirmedAgeMethod == AgeMethod.BIRTH_DATE && birthDate == null) {
                 throw ValidationFailed(listOf(FieldError("ageConfirmation.birthDate", "생년월일 연령확인은 생년월일이 필요합니다")))
             }
+            // INV-A3: 같은 이메일이 이미 다른 소셜로 활성 가입돼 있으면 충돌(409) — 어느 provider인지 안내.
+            // (DB ux_account_email_active 가 최종 방어이나, 여기서 잡아 500 대신 친절한 409로.)
+            profile.email?.let { email ->
+                accountRepository.findActiveByEmail(email)?.let { existing ->
+                    val providers = socialIdentityRepository.findByAccountId(existing.id).map { it.provider }
+                    throw ConflictDetected(
+                        current = providers.map { it.name },
+                        message = emailConflictMessage(providers),
+                        errorCode = ErrorCode.SOCIAL_EMAIL_CONFLICT,
+                    )
+                }
+            }
             val now = clock.instant()
             account = accountRepository.save(
                 Account.registerViaSocial(
@@ -96,5 +111,21 @@ class AuthenticateWithSocialUseCase(
             refreshToken = refresh.rawToken,
             isNewUser = isNewUser,
         )
+    }
+
+    private fun emailConflictMessage(providers: List<Provider>): String {
+        val names = providers.map { it.displayName() }.distinct()
+        return if (names.isEmpty()) {
+            "이미 가입된 이메일이에요."
+        } else {
+            "이미 ${names.joinToString(", ")}(으)로 가입된 이메일이에요. 해당 방법으로 로그인해 주세요."
+        }
+    }
+
+    private fun Provider.displayName(): String = when (this) {
+        Provider.GOOGLE -> "Google"
+        Provider.APPLE -> "Apple"
+        Provider.KAKAO -> "카카오"
+        Provider.NAVER -> "네이버"
     }
 }

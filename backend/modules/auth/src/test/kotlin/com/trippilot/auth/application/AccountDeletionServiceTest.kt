@@ -31,6 +31,7 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 private class FakeAccounts : AccountRepository {
+    override fun findActiveByEmail(email: String): Account? = null
     val stored = mutableMapOf<AccountId, Account>()
     override fun findById(id: AccountId) = stored[id]
     override fun save(account: Account) = account.also { stored[it.id] = it }
