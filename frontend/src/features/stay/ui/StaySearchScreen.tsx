@@ -240,7 +240,7 @@ function FilterZeroNotice({ reasons }: { reasons: string[] }): ReactElement {
   return (
     <StateNotice
       testID="stay-search-filterzero"
-      icon={<FilterSlidersGlyph size={32} />}
+      icon={<FilterSlidersGlyph size={32} tone="primary" />}
       title={`‘${label}’ 필터가 0건을 만들었어요`}
       description="필터를 해제하면 더 많은 숙소를 볼 수 있어요"
       actions={[

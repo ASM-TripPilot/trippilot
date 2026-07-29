@@ -61,7 +61,15 @@ export function ChevronDownGlyph({ size = 14, testID }: GlyphProps) {
 }
 
 // 필터 칩 '필터'(⇅) — 위/아래 화살표 쌍(정렬·필터 상투 아이콘).
-export function FilterSlidersGlyph({ size = 14, testID }: GlyphProps) {
+// 필터 칩(14px, tone 미지정 = body)과 filter-zero 원형 배지(32px, tone='primary')가 같은
+// 도형을 다른 색으로 쓴다 — WarningTriangleGlyph와 같은 형태로 색만 prop으로 뺀다.
+// 기본값을 body로 두는 이유: 칩이 먼저 이 글리프를 쓰고 있었고, 그 색이 바뀌면 안 된다.
+export function FilterSlidersGlyph({
+  size = 14,
+  tone = 'body',
+  testID,
+}: GlyphProps & { tone?: 'body' | 'primary' }) {
+  const stroke = tone === 'primary' ? PRIMARY : BODY;
   return (
     <Svg
       testID={testID}
@@ -72,14 +80,14 @@ export function FilterSlidersGlyph({ size = 14, testID }: GlyphProps) {
     >
       <Path
         d="M4 9.5V2M4 2L1.8 4.2M4 2L6.2 4.2"
-        stroke={BODY}
+        stroke={stroke}
         strokeWidth={1.3}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M10 4.5V12M10 12L7.8 9.8M10 12L12.2 9.8"
-        stroke={BODY}
+        stroke={stroke}
         strokeWidth={1.3}
         strokeLinecap="round"
         strokeLinejoin="round"
