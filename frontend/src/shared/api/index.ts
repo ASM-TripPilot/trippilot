@@ -258,7 +258,8 @@ function onSessionExpired(): void {
   void clearTokens();
 }
 
-const authedClient = createAuthedApiClient({
+/** orval mutator(`./mutator.ts`)가 타는 인증 계층 — export는 그 mutator 전용(TRIP-179 D3). */
+export const authedClient = createAuthedApiClient({
   baseURL: API_BASE_URL,
   getAccessToken,
   refreshTokens,

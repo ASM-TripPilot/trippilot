@@ -16,6 +16,11 @@ model: sonnet
 - **게이트 통과 현황은 최신 04 리포트의 pass/fail 표를 원문 복사한다(요약 재서술 금지) + 차수 n 병기.** 최신 리포트는 전달받지 않는다 — `04_qa-verifier_report_*`를 **직접 나열해 최대 n을 스스로 확정**하고, 원장(00_gates.md)의 검증 항목 수와 대조한다(불일치 = 리포트 삭제 의심, 개발로그에 명기). 게이트 노트 결과 섹션 ↔ 원장 승인 기록, 채팅 요약의 생략 불가 항목 ↔ 게이트 노트 일치 여부도 대조해 기록한다.
 - 리포 측 기록은 **리포 루트 기준** `frontend/docs/devlog/{YYYY-MM-DD}-{cycle-id}.md`에 남긴다(디렉토리 미존재 시 생성). **옵시디언 개발로그의 축약본이다** — 볼트 없는 사람과 MCP 실패 시 폴백이 용도이고, [메모리]는 이 파일을 읽지 않는다(옵시디언 쪽을 읽는다). 따라서 상세는 옵시디언에 몰고 여기엔 요약만 남긴다. cwd가 frontend일 때 상대경로로 쓰면 `frontend/frontend/...`가 된다 — 절대 경로로 확인 후 쓴다.
 - **밴드 맵 드리프트 반영**: 이번 사이클에서 [인지]가 라이브 Figma의 밴드 구성이 밴드 맵(`<리포 루트>/frontend/.claude/skills/spec-perception/reference/figma-structure.md`)과 다르다고 보고했으면 그 표를 실제 구성으로 고친다. **밴드 수준만** — 화면별 IO는 리포에 두지 않는다(Figma가 유일한 정본). 드리프트 보고가 없으면 건너뛴다.
+- **정본 반영 (aidlc)** — **3-a에서 사용자가 고른 항목만** 반영한다. 선택 목록은 오케스트레이터의 사이클 요약으로 받으며, **목록에 없는 것은 쓰지 않는다**(선택 없으면 이 항목 전체를 건너뛴다). 착수 전 `aidlc/CLAUDE.md`와 `aidlc/docs/SCOPE.md`를 읽는다 — 후자는 그 워크플로의 MANDATORY PRE-READ이고 현행 범위 경계를 정한다. 행선지가 둘로 갈린다:
+  - **(A) 변경 구현내용** → `aidlc/aidlc-docs/aidlc-state.md`의 `## Post-Inception Progress` 절에 append. 그 절은 *"AI-DLC 워크플로 밖 팀 개발 — 기록용, 스테이지 진행 아님"*으로 이미 라벨돼 있어 SCOPE(현행: CONSTRUCTION 설계 문서 단계만, Code Generation 제외)와 부딪히지 않는다. 승인 게이트·audit 불필요.
+  - **(B) 스펙 정정** → `aidlc/aidlc-docs/construction/{unit}/`. **이건 CONSTRUCTION 설계 단계라 `aidlc/CLAUDE.md`의 절차가 그대로 붙는다** — 해당 스테이지 규칙 파일(`.aidlc-rule-details/construction/…`) 로드 · 승인 게이트에서 정지 · `audit.md`에 사용자 입력을 **원문 그대로** append(요약 금지 · 전체 덮어쓰기 금지 · ISO 8601). **절차를 끝까지 밟을 수 없으면 쓰지 말고** 반환에 `(B) 미반영 — {사유}`를 명시한다. 반쯤 밟은 흔적이 제일 나쁘다.
+  - **출처 병기 의무**: 무엇을 쓰든 근거를 한 줄 붙인다 — `근거: {파일}:{행} 실측`(외부 사실)과 `근거: {티켓} 구현 결정`(우리가 정한 것)을 갈라 적는다. 후자는 **다음 사이클이 요구사항 근거로 인용하면 안 되는 것**이고, 구분이 없으면 구현 결정이 조용히 요구사항으로 승격된다.
+  - **실적 기록**: 개발로그에 `정본 반영 — 제시 n / 선택 n / (A) n / (B) n`을 남긴다(사이클 SKILL 3-a의 유지 판정 재료).
 - **구조 지도**: 이번 사이클이 파일을 추가·삭제·이동했거나 스텁을 채웠으면 **`<리포 루트>/frontend/docs/structure.md`를 갱신한다**(볼트에 스냅샷 노트를 만들지 마라 — `TripPilot/구조/`는 폐지됨). 절차 정본은 `obsidian-second-brain` 스킬의 "구조 지도" 항목이며 그대로 따른다. 여기엔 세 가지만 남긴다:
   - **기계 몫은 스크립트로 뽑는다** — `node <리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs`. 네가 쓰는 것은 **용도 한 줄 · 스텁 여부 · "지금 작업하려면" 경고**뿐이다.
   - **반환 전 `--check`를 돌려 통과시킨다.** *행은 있는데 파일이 없다*(삭제·이동 미반영)가 이 문서의 가장 흔한 실패였고, 이제 기계가 잡는다. 불일치를 남긴 채 반환하지 마라.
@@ -46,4 +51,4 @@ model: sonnet
 
 ## 협업
 - 오케스트레이터의 마지막 단계로 호출된다. 기록 완료 경로는 사이클 종료 보고에 포함된다.
-- `aidlc/` 이하 쓰기 금지(읽기 전용), atlassian MCP 사용 금지.
+- `aidlc/` 쓰기는 **위 「정본 반영」의 (A)·(B)에 한정**한다 — 사용자가 3-a에서 고른 항목만, 정해진 행선지에만. 쓸 수 있는 곳은 셋뿐이다: `aidlc-state.md`의 **`## Post-Inception Progress` 절**(A) · `construction/{unit}/`(B) · `audit.md`(B의 절차상 append). **그 밖은 전부 읽기 전용**이다 — `inception/` · `docs/SCOPE.md` · `aidlc-state.md`의 나머지 절(스테이지 진행 상태)은 팀·AI-DLC 절차 소관이라 사이클이 건드리지 않는다. atlassian MCP 사용 금지.

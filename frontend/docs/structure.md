@@ -21,9 +21,10 @@
 
 - **스택**: Expo(development build + prebuild) · Expo Router · TypeScript strict · NativeWind · TanStack Query + Zustand · orval · Jest + fast-check
 - **경로 별칭**: `@/*` → `./src/*`
-- **구현 범위**: `auth`·`home`·`onboarding` **세 feature만 실구현.** 나머지 자리는 도메인 작업이 시작될 때 새로 만든다 — TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}`) 14개를 전부 삭제했고, 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 디렉토리째 사라졌다.
+- **구현 범위**: `auth`·`home`·`onboarding` **세 feature가 화면째 실구현.** `stay`는 TRIP-179로 **데이터 계층만** 생겼다(화면 0 — 아래 `src/features/stay/` 절). 나머지 자리는 도메인 작업이 시작될 때 새로 만든다 — TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}`) 14개를 전부 삭제했고, 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 디렉토리째 사라졌다(`stay`는 TRIP-179로 재등장).
+- **서버 상태 계층 신설(TRIP-179)**: TanStack Query `QueryClientProvider`가 `src/app/_layout.tsx`에 배선됐다(모듈 스코프 단일 `QueryClient`, 기본 옵션 미조정). orval이 `backend/docs/design/openapi.yaml`의 `stays` 태그만 코드젠(`filters.tags`, 아래 경고 참조)해 `src/shared/api/generated/`에 8파일을 생성한다. 생성 코드는 전부 `src/shared/api/mutator.ts`(`customInstance`)를 거쳐 기존 `authedClient`(Bearer·401 single-flight 리프레시)를 탄다 — 새 인증 코드 0.
 - **앱 런타임 목 0건.** msw는 테스트 오라클(`msw/node`)에만 있고, `src/__tests__/noMswInStaticGraph.test.ts`가 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제한다.
-- **문서 대상 파일 92개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함)
+- **문서 대상 파일 106개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함. TRIP-179로 +14 — 신규 테스트 3·`features/stay` 1·생성물 8·`mutator.ts` 1·`test-support` 1)
 
 ## 디렉토리
 
@@ -49,7 +50,7 @@ frontend/
 
 | 파일 | 역할 |
 |---|---|
-| `src/app/_layout.tsx` | 루트 레이아웃. 폰트 로드 게이팅 + 네이티브 스플래시 제어 + `GestureHandlerRootView` + `SafeAreaProvider`(null 대비 initialMetrics) + `SplashGate` |
+| `src/app/_layout.tsx` | 루트 레이아웃. 폰트 로드 게이팅 + 네이티브 스플래시 제어 + `GestureHandlerRootView` + `SafeAreaProvider`(null 대비 initialMetrics) + **`QueryClientProvider`(TRIP-179, `SplashGate` 바깥에 배선 — 향후 `SplashGate`가 `useQuery`로 바뀌어도 안전)** + `SplashGate` |
 | `src/app/force-update.tsx` | 강제 업데이트 분기 화면 |
 | `src/app/reconsent.tsx` | 재동의 분기 화면 |
 | `src/app/_dev/preview.tsx` | **개발 전용 정적 프리뷰** — 네트워크 없이 시각 상태 전환. 진입은 딥링크 `trippilot://_dev/preview?state=<키>` 하나뿐(**15개** 상태 키 조준 — TRIP-170에서 홈 4상태(`home-default`·`home-no-trip`·`home-empty`·`home-loading`) 끝에 append. 부재·오타·배열 값은 splash 결정론 폴백 — `useLocalSearchParams`는 지연 초기화자로 최초 마운트 1회만 읽음). 같은 세션에서 연속 openurl 시 상태 미전환(1회만 읽는 계약 한계 — 실기 확인은 키마다 fresh 재기동) |
@@ -146,9 +147,18 @@ Expo Router가 `src/app`을 이미 점유해 비표준 이름을 썼다(01b Seed
 | `src/features/home/ui/HomeGlyphs.tsx` | 홈 전용 인라인 SVG 10종(AuthGlyphs/OnboardingGlyphs 패턴). raw hex 직박 — TRIP-173으로 `ui/`에서 `*Screen.tsx` 파일과 **같은 폴더가 됐다.** D-3 가드(`homeStructure.test.ts`)가 이제 디렉토리가 아니라 **`*Screen.tsx` 파일명 접미사로 필터**해 계속 미대상이다(`HOME_SCREEN_SOURCE_FILES` 동결목록으로 1건 고정, code-critic W-1 확인) — 필터가 조용히 넓어지면 이 파일도 스캔 대상이 될 수 있으니 그 필터를 건드릴 땐 이 파일부터 확인 |
 | `src/features/home/ui/HomeScreen.tsx` | 4상태 프레젠테이션 화면. props만 받음 — `expo-router`·`@/shared/api`·타 feature import 0(homeStructure D-1이 기계 강제) |
 
+## `src/features/stay/` — 데이터 계층만 (TRIP-179)
+
+**화면 0.** TRIP-173에서 빈 배럴과 함께 디렉토리째 삭제됐다가, TRIP-179가 서버 상태 배관(계약 동기화 + `QueryClientProvider` + 도메인 훅)의 첫 소비자 자리로 다시 만들었다. 지금 이 훅을 실제로 부르는 화면은 없다 — 다음 소비 화면이 붙는 티켓(01b §9 후속 티켓 후보 D)이 이 계층을 확장한다.
+
+| 파일 | 역할 |
+|---|---|
+| `src/features/stay/model/useStaySearch.ts` | 생성 훅(`useGetStaysSearch`)을 도메인 이름으로 재수출하는 얇은 층(몸통 1줄). params를 그대로 전달만 — 오류 정규화·기본 파라미터 가공 0(D6, 소비 화면 부재로 명시적 이연). 존재 이유는 "생성물 경로(`orval.config.ts` 설정이 만들어 내는, `mode`·태그가 바뀌면 흔들리는 경로)를 한 곳에 가둔다"는 것이지 "나중에 계약을 더할 자리"가 아니다(게이트②에서 근거 교체) |
+| `src/features/stay/model/formatPrice.ts` | 순수 함수(TRIP-180) — 최저가 스냅숏(`StayPrice \| null \| undefined`)을 카드 문자열로 변환. 없음 → `'가격 미확인'`, 있음 → `'{천단위구분}원~'`. `currency` 미참조·시계/네트워크/저장소 미접근. 존재 판정은 `price == null`(falsy 아님 — `amount: 0`을 지키기 위해). 천단위 구분은 `toLocaleString`/`Intl` 대신 결정론적 정규식 조립(node↔Hermes 로케일 갈림 회피, 사용자 판정 대기 — 아래 개발로그 참조). 호출자 아직 0개(TRIP-181이 `StayCard`에서 연결 예정) |
+
 ## `src/features/` — 아직 시작 안 한 도메인
 
-TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개를 `git rm`으로 전부 삭제했다. 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 그 배럴이 디렉토리 안의 유일한 파일이라 **디렉토리째 사라졌다** — 지금 `src/features/`에는 `auth`·`home`·`onboarding` 3개뿐이다.
+TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개를 `git rm`으로 전부 삭제했다. 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 그 배럴이 디렉토리 안의 유일한 파일이라 **디렉토리째 사라졌다** — `stay`는 위 절대로 TRIP-179로 재등장(데이터 계층만). 지금 `src/features/`에는 `auth`·`home`·`onboarding`·`stay` 4개뿐이다.
 
 새 도메인을 시작할 때 빈 배럴부터 만들지 않는다 — **`auth`가 선례**다: 배럴 없이 딥 임포트로 시작하고, 재수출할 공개 API가 실제로 생기면 그때 배럴을 만든다. `export {};`만 있는 선점은 `fsdStructure.test.ts`의 AC-4(아래 테스트 인프라 절)가 기계로 막는다.
 
@@ -156,7 +166,8 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 
 | 파일 | 역할 |
 |---|---|
-| `src/shared/api/index.ts` | **구현됨** — axios 인스턴스 · 인터셉터 · 토큰 갱신 · 서버 호출 전체. `authedClient` 인스턴스가 온보딩 5종 + `fetchBootstrap`(TRIP-172 결함 A-2, 이전엔 무인증 `baseClient`였음)을 인증 경로로 보낸다. `SERVER_ERROR_CODE_TRANSLATIONS`가 서버 실코드→프론트 계약 코드 번역표(현재 `AGE_REQUIREMENT_NOT_MET`→`AGE_NOT_MET` 1건, `normalizeSocialError`의 `??` 결과값에 적용 — 승인 테스트가 이 표를 겨냥하지 않아 미검증) |
+| `src/shared/api/index.ts` | **구현됨** — axios 인스턴스 · 인터셉터 · 토큰 갱신 · 서버 호출 전체. `authedClient` 인스턴스가 온보딩 5종 + `fetchBootstrap`(TRIP-172 결함 A-2, 이전엔 무인증 `baseClient`였음)을 인증 경로로 보낸다. `SERVER_ERROR_CODE_TRANSLATIONS`가 서버 실코드→프론트 계약 코드 번역표(현재 `AGE_REQUIREMENT_NOT_MET`→`AGE_NOT_MET` 1건, `normalizeSocialError`의 `??` 결과값에 적용 — 승인 테스트가 이 표를 겨냥하지 않아 미검증). `authedClient`는 **TRIP-179에서 처음 export**됐다(가시성만 변경, 새 심볼 아님 — `mutator.ts` 전용) |
+| `src/shared/api/mutator.ts` | **신규(TRIP-179)** — orval이 생성한 클라이언트(`generated/**`)가 실제 HTTP 호출에 쓰는 단일 범용 함수(`customInstance`). `authedClient`를 그대로 얹고(새 인증 코드 0), `paramsSerializer: { indexes: null }`로 배열 쿼리를 브래킷 없이 직렬화(`amenity=A&amenity=B` — Spring `@RequestParam List<String>` 계약), `response.data`만 반환(AxiosResponse 껍질 벗기기). 오류 정규화는 안 거친다(그대로 위로 흘려보냄 — D6 이연) |
 | `src/shared/api/tokenManager.ts` | **구현됨** — 동기 in-memory 액세스토큰 홀더. SecureStore(비동기)와 공존, 인터셉터가 동기로 읽는다. `subscribeAccessToken`으로 토큰 변화를 구독 가능(TRIP-172, 값이 실제로 바뀔 때만 통지 — 동등비교 가드) |
 | `src/shared/storage/index.ts` | **구현됨** — expo-secure-store 토큰 저장소. `hasStoredToken`은 **accessToken 존재만 판정**한다(`getItemAsync(ACCESS_TOKEN_KEY) != null` — refreshToken만 없는 부분 저장도 true). TRIP-173 재작성 3/8에서 실수로 "두 토큰 다 있어야 true"로 좁혀졌다가(콜드스타트 폴백이 HOME→LOGIN으로 뒤집힘) code-critic이 잡아 원복됨 — 이 함수를 실제로 도는 테스트가 리포에 없어 재발해도 362건이 그대로 green이니 다음에 손댈 때 주의 |
 | `src/shared/version/compareVersion.ts` | **구현됨** — 버전 비교(강제 업데이트 판정) |
@@ -164,6 +175,21 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `src/shared/location/LocationGlyphs.tsx` | 인라인 SVG — 위치 화면 글리프(레이더 히어로·오프 타일). stroke/fill 색은 `locationColors.ts` 상수 경유(`shared/location/**` 는 F2 raw-hex 가드 대상) |
 | `src/shared/location/lib/locationColors.ts` | 위치 글리프 색 상수(raw hex 분리 — `gradients.ts` 패턴 재사용). 토큰 색과 수동 동기화 필요(03b 참고-2) |
 | `src/shared/ui/BottomTabBar.tsx` | 순수 뷰 탭바(TRIP-170) — 5탭 아이콘 자체 보유(인라인 SVG), 네비게이션을 모른다(`activeKey`·`onPressTab` 두 prop뿐). testID `shell-tabbar-*`. **TRIP-173 FSD 완결 3/4**에서 비주얼을 Figma 마스터(`1236:1177`)에 정합 — 풀폭 직각 바(74px·`bg-canvas`·`border-t`) → 투명 84px 밴드 안에 334×64 알약(`rounded-pill`·`bg-surface-soft`, 좌우 28px 여백). 탭 폭 `flex-1`(가변) → `w-[62px]`(고정). 아이콘 좌표계 `0 0 24 24` → `0 0 27 27` + path 10종 전량 교체. prop 계약·testID·접근성 전부 불변. 알약 배경은 1차 판정(Figma raw CSS `rgba(255,255,255,0.68)`)에서 프로덕션 렌더 실측(`#F7F7F7`)으로 **되정정**돼 `bg-surface-soft` 토큰이 됐다(raw 선언값과 렌더 합성값은 다른 질문 — 메커니즘은 미확정) |
+
+### `src/shared/api/generated/` — 도구 생성물 (orval, TRIP-179)
+
+`pnpm codegen`(`orval.config.ts` — `filters: { mode: 'include', tags: ['stays'] }` + `httpClient: 'axios'` + `override.mutator`)이 `backend/docs/design/openapi.yaml`의 `stays` 태그 경로만 읽어 생성. **사람이 손댄 줄 0건** — 재생성하면 통째로 덮인다. 이 절 전체가 `docs/structure.md` 유지 규약의 "파일 목록" 기계 담당분에 해당하지만, 코드젠 필터가 없으면 전 태그(29경로)가 생성돼 여기 목록이 통째로 낡는다는 것 자체가 경고다(아래 "지금 작업하려면" 참조).
+
+| 파일 | 역할 |
+|---|---|
+| `src/shared/api/generated/stays/stays.ts` | `getStaysSearch`·`useGetStaysSearch`(TanStack Query 훅) · `getStaysGeocode`·`useGetStaysGeocode`(같은 태그라 동반 생성, 소비자 없음) |
+| `src/shared/api/generated/schemas/staySearchResponse.ts` | `StaySearchResponse` 타입(`items`·`degraded`·`filterZeroReasons`) |
+| `src/shared/api/generated/schemas/stayItem.ts` | `StayItem` 타입(`price?: StayPrice \| null` 포함) |
+| `src/shared/api/generated/schemas/stayPrice.ts` | `StayPrice` 타입 |
+| `src/shared/api/generated/schemas/getStaysSearchParams.ts` | `GetStaysSearchParams` 타입(`region?`·`amenity?`·`stayType?` — 날짜·인원·정렬 없음, BR-U1-10/15) |
+| `src/shared/api/generated/schemas/getStaysGeocodeParams.ts` | `GetStaysGeocodeParams` 타입(지오코딩, 소비자 없음) |
+| `src/shared/api/generated/schemas/geocodeCandidate.ts` | `GeocodeCandidate` 타입(지오코딩, 소비자 없음) |
+| `src/shared/api/generated/schemas/index.ts` | 위 스키마 배럴 재수출(export 없음 — re-export만) |
 
 ## 테스트 인프라
 
@@ -178,6 +204,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `src/test-support/expoRouterRedirectMock.tsx` | expo-router `Redirect`·`Stack` 목 — 진입 가드 테스트용 |
 | `src/test-support/expoRouterTabsMock.tsx` | expo-router `Tabs`/`Tabs.Screen` 관찰 목(TRIP-170) — `capturedTabsProps` 홀더 + `tabs-route-*` 마커 |
 | `src/test-support/splashGateMock.tsx` | `SplashGate` 목 |
+| `src/test-support/queryClientProbe.tsx` | **신규(TRIP-179)** — `SplashGate` 자리를 대신할 관찰용 가짜 컴포넌트. 렌더될 때 `useQueryClient()`를 불러 모듈 변수에 담고(`getObservedQueryClient`) `<View testID="query-client-probe" />`를 마커로 그린다. `resetObservedQueryClient`로 파일 간 상태를 비운다 |
 | `__mocks__/@gorhom/bottom-sheet.tsx` | 네이티브 모듈 자동 목 |
 | `src/__tests__/noMswInStaticGraph.test.ts` | 정적 import 그래프를 fs로 훑어 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제 |
 | `src/__tests__/importBoundary.test.ts` | import 경계 가드 — 계층·feature 격리 위반 차단. **FSD 완결 2/4에서 보강**(34→54줄, code-critic 발견 구멍 수리) — 프로브를 배럴 의존(구 `@/features/stay`, 삭제 예정 대상이었다)에서 실파일 딥 경로로 떼고, 단언을 에러 개수(`errorCount>0`)에서 **룰 ID**(`import/no-restricted-paths` 포함 · `import/no-unresolved` 불포함)로 바꿔 "경계 위반"과 "모듈 해석 실패"를 구분한다. **단독 실행 시 `NODE_OPTIONS=--experimental-vm-modules` 필요**(`pnpm exec jest` 단독 금지 — 없으면 2/2 실패, 테스트 결함처럼 보이지만 실행 방법 문제) |
@@ -197,6 +224,9 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `src/__tests__/devPreview.test.tsx` | 프리뷰 상태 렌더. 런타임 지뢰 목으로 네트워크 격리 |
 | `src/__tests__/devPreviewDeepLink.test.tsx` | 프리뷰 딥링크 `?state=` 파라미터 → 초기 화면 결정론 가드(부재·오타·대소문자·빈 문자열·배열 값 → 전부 splash 폴백) |
 | `src/__tests__/design-tokens.test.ts` | 디자인 토큰 가드 |
+| `src/__tests__/openapiContract.test.ts` | **TRIP-179 신설** — `backend/docs/design/openapi.yaml`을 글자로 읽어 검사(리포에 YAML 파서 의존 0). `/stays/search` 경로 존재·`servers`가 `/api/v1`로 끝남·정의 없는 `$ref` 0건(계약 회귀 앵커) + `/stays/search` 파라미터 이름을 `['region','amenity','stayType']`로 순서 포함 완전일치(게이트①-2 보강 — 헤더가 약속한 "스펙 드리프트 잠금" 사정거리를 뮤테이션 테스트로 실측해 좁힌 결과, `sort`·`page` 같은 파라미터 추가가 그 전엔 무심판으로 통과했다) |
+| `src/__tests__/rootLayoutQueryProvider.test.tsx` | **TRIP-179 신설** — 앱 루트를 실제 렌더해 `SplashGate` 자리(`queryClientProbe` 목) 안쪽에서 `QueryClient`가 잡히는지 확인(단언 3개: 던지지 않음·프로브 도달·진짜 인스턴스) |
+| `src/__tests__/staySearchGenerated.test.ts` | **TRIP-179 신설** — 코드젠의 출력을 검사(`pnpm codegen`을 직접 돌리지 않고 커밋된 생성물을 fs로 읽음, 모든 스캔은 `stripComments` 경유). B-0 전처리 자기검증·B-1 생성 파일 목록 동결 8경로·B-2 심볼 존재·B-3 파라미터·B-4 `duration` 식별자 0(INV-3)·B-5 응답 표현력 6종 |
 
 ## 명령
 
@@ -225,6 +255,10 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 | 심볼 | 위치 | 무엇 |
 |---|---|---|
 | `createAuthedApiClient` | `shared/api` | 인증 붙은 axios 인스턴스 생성 |
+| `authedClient` | `shared/api` | 이미 만들어진 인증 axios 인스턴스(TRIP-179부터 export — mutator 전용, 원래도 있던 심볼) |
+| `customInstance` | `shared/api/mutator` | orval 생성 클라이언트가 HTTP 호출에 위임하는 단일 함수(TRIP-179) — `authedClient` 경유 + 배열 쿼리 브래킷 없이 직렬화 |
+| `useStaySearch` | `features/stay/model` | `/stays/search` 도메인 훅(TRIP-179, 생성 훅의 얇은 재수출) — 소비 화면 아직 없음 |
+| `formatPrice` | `features/stay/model` | `formatPrice(price?: StayPrice \| null): string` — 최저가 스냅숏 → 카드 금액 문자열(TRIP-180, PBT 5건). 소비 화면 아직 없음 |
 | `fetchBootstrap` · `postSocialLogin` · `refreshTokens` | `shared/api` | 부트스트랩 조회 · 소셜 로그인 · 토큰 갱신 |
 | `fetchTerms` · `submitConsents` | `shared/api` | 약관 목록 · 동의 1회 제출(체크된 것만 GRANT) |
 | `fetchNicknameSuggestions` · `checkNickname` · `updateNickname` · `completeOnboarding` | `shared/api` | 후보 조회 · 서버 판정 · 저장 · 온보딩 완료 |
@@ -270,3 +304,5 @@ xcrun simctl io booted screenshot /tmp/shot.png        # 화면 캡처
 - **연령확인(결함 B)을 만지려면** → `useSocialLogin.ts:154`의 `confirmAge()`가 **여전히 같은 `authorizationCode`로 재교환**한다 — OAuth 인가코드는 1회용이라 실서버에서 반드시 거부된다. 인터뷰에서 확정된 목표(로그인 버튼 하단 고지 문구, 모달 없음)가 AC로 전환되지 않아 이번 사이클에서 손대지 못했다(TRIP-172 04b §4). 다음 사이클 1순위 — 게이트①부터 새로 열어야 한다(화면 계약 + 기존 테스트 9건 변경 필요).
 - **로그인 화면 문구를 만지려면** → 카카오 버튼 라벨은 `카카오로 계속하기`(한글, TRIP-173 FSD 4/4). `getByText`류 매칭은 **2개 이상이면 throw**한다 — 충돌 시트 메시지도 같은 provider 문자열을 담을 수 있어 화면 전체 유일성을 가정한 단언은 깨진다(`SocialLoginScreen.test.tsx:134`는 이미 `getByTestId('auth-login-conflict-message')` 스코프로 회피됨). 표시명(`카카오`)과 provider 코드(`kakao`)가 화면 안에서 갈라져 있다 — [[2026-07-28 카카오·kakao 표시명 불일치]].
 - **화면 비주얼** → `figma-screen-impl` 스킬 절차를 따른다. 밴드 맵은 `.claude/skills/spec-perception/reference/figma-structure.md`.
+- **다른 태그를 코드젠하려면(stay 밖 도메인)** → `orval.config.ts`의 `filters.tags` 배열에 태그를 추가한다. 빼먹으면 `pnpm codegen`이 `openapi.yaml`의 **전체 29경로**를 생성해 `src/shared/api/generated/`가 이 문서의 "도구 생성물" 절과 어긋난다(`staySearchGenerated.test.ts`의 B-1 동결 단언도 red가 된다).
+- **`useStaySearch`에 기본 파라미터·오류 정규화를 얹으려면** → 지금은 params를 그대로 넘기기만 한다(D6 이연). `useStaySearch.integration.test.tsx`의 D-2가 `region` 파라미터를 실제 URL에서 단언하므로(게이트①-2 보강), 몰래 다른 필터를 끼워 넣으면 그 단언이 잡는다 — 단 **필터를 통째로 버리는 변경은 심판 사정거리 밖**이었다가 같은 보강으로 막혔다(03b W-1).
