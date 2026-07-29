@@ -106,6 +106,9 @@ class TokenRefreshControllerIT : AbstractPostgresIntegrationTest() {
                 codeVerifier: String,
                 redirectUri: String,
             ) = SocialProfile(provider, "sub-${UUID.randomUUID()}", "user-${UUID.randomUUID()}@example.com")
+
+            override fun authenticateWithAccessToken(provider: Provider, accessToken: String) =
+                SocialProfile(provider, "sub-${UUID.randomUUID()}", "user-${UUID.randomUUID()}@example.com")
         }
     }
 }

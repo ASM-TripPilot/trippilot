@@ -127,6 +127,9 @@ class BootstrapOnboardingApiIT : AbstractPostgresIntegrationTest() {
         fun fakeSocialAuthPort(): SocialAuthPort = object : SocialAuthPort {
             override fun exchange(provider: Provider, authorizationCode: String, codeVerifier: String, redirectUri: String) =
                 SocialProfile(provider, "sub-${UUID.randomUUID()}", "user-${UUID.randomUUID()}@example.com")
+
+            override fun authenticateWithAccessToken(provider: Provider, accessToken: String) =
+                SocialProfile(provider, "sub-${UUID.randomUUID()}", "user-${UUID.randomUUID()}@example.com")
         }
     }
 }
