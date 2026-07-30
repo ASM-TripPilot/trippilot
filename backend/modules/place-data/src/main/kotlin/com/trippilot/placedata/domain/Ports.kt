@@ -24,6 +24,12 @@ interface PoiRepository {
     fun saveAll(pois: List<Poi>): List<Poi>
     fun findById(poiId: UUID): Poi?
     fun findActive(region: String?, category: PoiCategory?): List<Poi>
+
+    /** 반경 검색 프리필터 — bounding-box 내 ACTIVE. 정밀 반경 컷은 서비스(하버사인). */
+    fun findActiveInBounds(latMin: Double, latMax: Double, lngMin: Double, lngMax: Double): List<Poi>
+
+    /** 주어진 id 중 ACTIVE만(ground용 — 미확인·폐업 제외). */
+    fun findActiveByIds(poiIds: List<UUID>): List<Poi>
 }
 
 /**
