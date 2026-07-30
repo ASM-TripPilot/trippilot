@@ -33,6 +33,8 @@ class SecurityConfig {
                 it.requestMatchers(HttpMethod.GET, "/api/v1/bootstrap").permitAll()
                 it.requestMatchers("/actuator/health", "/actuator/health/**").permitAll() // compose·k8s 헬스체크
                 it.requestMatchers(HttpMethod.GET, "/api/health", "/api/integration").permitAll() // 통합 프로브
+                // API 문서(Swagger UI·스펙·정적 자산) — 로컬/개발 열람용(프로덕션은 프로파일로 차단 권장)
+                it.requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/openapi.yaml", "/webjars/**").permitAll()
                 it.anyRequest().authenticated()
             }
             .oauth2ResourceServer { it.jwt { } } // JwtDecoder 빈(common/security) 사용
