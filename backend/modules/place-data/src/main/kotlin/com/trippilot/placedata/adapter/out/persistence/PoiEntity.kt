@@ -42,6 +42,17 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
             "and (:category is null or p.category = :category)",
     )
     fun findActive(@Param("region") region: String?, @Param("category") category: String?): List<PoiEntity>
+
+    @Query(
+        "select p from PoiEntity p where p.dataStatus = 'ACTIVE' " +
+            "and p.lat between :latMin and :latMax and p.lng between :lngMin and :lngMax",
+    )
+    fun findActiveInBounds(
+        @Param("latMin") latMin: Double, @Param("latMax") latMax: Double,
+        @Param("lngMin") lngMin: Double, @Param("lngMax") lngMax: Double,
+    ): List<PoiEntity>
+
+    fun findByPoiIdInAndDataStatus(poiIds: Collection<UUID>, dataStatus: String): List<PoiEntity>
 }
 
 @Component
@@ -58,6 +69,12 @@ class PoiRepositoryAdapter(
 
     override fun findActive(region: String?, category: PoiCategory?): List<Poi> =
         jpa.findActive(region, category?.name).map { it.toDomain() }
+
+    override fun findActiveInBounds(latMin: Double, latMax: Double, lngMin: Double, lngMax: Double): List<Poi> =
+        jpa.findActiveInBounds(latMin, latMax, lngMin, lngMax).map { it.toDomain() }
+
+    override fun findActiveByIds(poiIds: List<UUID>): List<Poi> =
+        if (poiIds.isEmpty()) emptyList() else jpa.findByPoiIdInAndDataStatus(poiIds, DataStatus.ACTIVE.name).map { it.toDomain() }
 
     private fun Poi.toEntity() = PoiEntity(
         poiId = poiId, nameKo = nameKo, lat = lat, lng = lng, category = category.name, region = region,
