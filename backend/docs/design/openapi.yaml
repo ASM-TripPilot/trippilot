@@ -408,14 +408,6 @@ paths:
         '200': { description: 철회 완료 }
         '404': { $ref: '#/components/responses/NotFound' }
 
-  /health/liveness:
-    get:
-      tags: [bootstrap]
-      summary: LB shallow 헬스체크
-      security: []
-      responses:
-        '200': { description: alive }
-
   /stays/search:
     get:
       tags: [stays]

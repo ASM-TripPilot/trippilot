@@ -30,6 +30,11 @@
 - **포트 인터페이스에 메서드를 추가하면 모든 Fake/TestDouble 구현도 즉시 갱신할 것.** 안 하면 컴파일은 통과해도 다른 모듈 테스트의 fake가 깨진다. (TRIP-158 — RefreshTestDoubles)
 - **새 기능 모듈은 아키텍처 게이트에 등록할 것.** `ArchitectureRulesTest`의 R1 슬라이스·R5 패키지 목록에 모듈 패키지를 추가하지 않으면 경계 위반이 감지되지 않는다(vacuous pass). (TRIP-175)
 
+## Kotlin · 언어
+
+- **Kotlin 주석(특히 KDoc `/** */`) 안에 `/api/v1/**` 같은 `/*` 시퀀스를 넣지 말 것.** Kotlin은 블록주석이 **중첩**돼서, 경로 글로브의 `/`+`*`가 중첩주석을 열고 KDoc의 `*/`가 그 중첩분만 닫아 **파일 전체가 미완결 주석**이 된다("Unclosed comment" + 뒤이어 import·참조 전부 unresolved 연쇄). 주석에선 글로브를 "(base 하위)"처럼 풀어쓰거나 백틱/코드블록으로. (PR #44 OpenApiContractIT)
+- **Spring MVC의 `RequestMappingHandlerMapping` 은 `..mvc.method.annotation` 패키지다**(`..mvc.method` 아님). 또 컨텍스트에 매핑 빈이 여럿이라 주입 시 `@Qualifier("requestMappingHandlerMapping")`로 MVC 것을 지정(actuator 매핑과 구분). (PR #44)
+
 ## 테스트
 
 - **같은 패키지의 서로 다른 테스트 파일에 동일 이름의 private 최상위 테스트 더블(`FakeBases` 등)을 두지 말 것 → 파일마다 고유 이름(`StubBases`).** 한 모듈의 두 테스트가 같은 패키지에서 각각 `private class FakeBases`를 선언하자 "Redeclaration" 컴파일 에러 발생. 새 포트 메서드 추가로 여러 테스트의 Fake를 갱신할 때 특히 부딪힌다. (TRIP-178 검수 수정)
