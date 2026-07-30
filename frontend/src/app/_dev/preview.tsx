@@ -14,6 +14,8 @@ import {
   HOME_LOADING_PROPS,
   HOME_NO_TRIP_PROPS,
 } from '@/features/home/model/homeFixtures';
+import { REGIONS } from '@/features/explore/model/regions';
+import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
@@ -293,6 +295,79 @@ const PREVIEW_STATES: PreviewState[] = [
         onProceed={noop}
         onDefer={noop}
         onOpenSettings={noop}
+      />
+    ),
+  },
+  // ── e00·d1b 지역 선택 4키(TRIP-183) — 컨테이너 없이 화면에 props를 직접 넣는다 ──
+  // ⚠️ 프리뷰는 정적이라 **실제 OS 권한 다이얼로그는 뜨지 않는다.** 여기서 보는 것은
+  //    "권한이 거부됐을 때 화면이 어떻게 생겼나"까지고, 다이얼로그 자체는 실제 라우트
+  //    (`/explore/region`)에서 '내 주변'을 눌러야 확인된다. 둘은 다른 확인이다.
+  {
+    key: 'stay-region-default',
+    label: '지역 선택 · 숙소',
+    login: null,
+    render: () => (
+      <RegionPickerScreen
+        purpose="stay"
+        query=""
+        regions={REGIONS}
+        nearby={{ kind: 'idle' }}
+        onChangeQuery={noop}
+        onSelectRegion={noop}
+        onSelectNearby={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'stay-region-trip',
+    label: '지역 선택 · 여행지',
+    login: null,
+    render: () => (
+      // BR-U1-07 확인용 — 같은 컴포넌트에서 카피만 바뀌고 '내 주변'이 사라진다
+      <RegionPickerScreen
+        purpose="trip"
+        query=""
+        regions={REGIONS}
+        nearby={{ kind: 'idle' }}
+        onChangeQuery={noop}
+        onSelectRegion={noop}
+        onSelectNearby={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'stay-nearby-denied',
+    label: '내 주변 · 등록숙소 대체',
+    login: null,
+    render: () => (
+      <RegionPickerScreen
+        purpose="stay"
+        query=""
+        regions={REGIONS}
+        nearby={{ kind: 'fallback' }}
+        onChangeQuery={noop}
+        onSelectRegion={noop}
+        onSelectNearby={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'stay-nearby-no-fallback',
+    label: '내 주변 · 대체 불가',
+    login: null,
+    render: () => (
+      <RegionPickerScreen
+        purpose="stay"
+        query=""
+        regions={REGIONS}
+        nearby={{ kind: 'unavailable', reason: 'denied-no-fallback' }}
+        onChangeQuery={noop}
+        onSelectRegion={noop}
+        onSelectNearby={noop}
+        onBack={noop}
       />
     ),
   },

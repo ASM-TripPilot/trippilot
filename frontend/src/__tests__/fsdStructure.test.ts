@@ -289,6 +289,8 @@ describe('AC-2 · pages 층 신설 + 라우트 배선', () => {
     });
 
     // 부정 — 계획 밖 슬라이스가 끼어들거나 일부가 빠지면 red(위 forEach와 별개로 전체 집합을 잠근다).
+    // TRIP-183에서 `region-picker`(e00·d1b 지역 선택) 신설로 6 → 7. 정당한 red다 —
+    // 정본 `frontend-components.md` §1이 `explore/region.tsx` 라우트를 이미 declare 하고 있다.
     const slices = listDirNames(PAGES_DIR);
     expect(slices).toEqual([
       'login',
@@ -296,6 +298,7 @@ describe('AC-2 · pages 층 신설 + 라우트 배선', () => {
       'onboarding-pref1',
       'onboarding-pref2',
       'onboarding-terms',
+      'region-picker',
       'stay-search',
     ]);
   });

@@ -88,15 +88,36 @@ function readGeneratedSource(...segments: string[]): string {
   return stripComments(fs.readFileSync(full, 'utf8'));
 }
 
-/** 동결 8경로(§2-① 실측 그대로 — 재타이핑 금지). */
+/**
+ * 동결 17경로(§2-① 실측 그대로 — 재타이핑 금지).
+ *
+ * 8 → 12 → 17로 두 번 늘었고 둘 다 의도된 계약 변경이다.
+ * - **TRIP-202**: `/stays/search`에 `'400': ValidationError`가 붙으면서 orval이 에러 봉투
+ *   스키마 4종(`errorResponse`·`errorResponseError`·`errorResponseErrorFieldsItem`·
+ *   `validationErrorResponse`)을 함께 생성.
+ * - **TRIP-183**: `orval.config.ts` 태그에 `saved-stays` 추가(그 파일 주석이 정한 절차 —
+ *   *"다른 태그가 필요해지면 그 티켓에서 tags 배열에 추가해 재생성한다"*). '내 주변' 권한
+ *   거부 시 등록 숙소 좌표로 대체 조회하는 데 필요하다(BR-U1-11).
+ *
+ * **개수가 아니라 목록 전체를 잠그는 성질은 그대로다** — 의도치 않은 태그가 섞이면 여전히 잡힌다.
+ */
 const GENERATED_FILES_FROZEN = [
+  'shared/api/generated/saved-stays/saved-stays.ts',
+  'shared/api/generated/schemas/editSavedStayRequest.ts',
+  'shared/api/generated/schemas/errorResponse.ts',
+  'shared/api/generated/schemas/errorResponseError.ts',
+  'shared/api/generated/schemas/errorResponseErrorFieldsItem.ts',
   'shared/api/generated/schemas/geocodeCandidate.ts',
   'shared/api/generated/schemas/getStaysGeocodeParams.ts',
   'shared/api/generated/schemas/getStaysSearchParams.ts',
   'shared/api/generated/schemas/index.ts',
+  'shared/api/generated/schemas/registerRoute.ts',
+  'shared/api/generated/schemas/registerSavedStayRequest.ts',
+  'shared/api/generated/schemas/savedStay.ts',
   'shared/api/generated/schemas/stayItem.ts',
   'shared/api/generated/schemas/stayPrice.ts',
   'shared/api/generated/schemas/staySearchResponse.ts',
+  'shared/api/generated/schemas/validationErrorResponse.ts',
   'shared/api/generated/stays/stays.ts',
 ];
 
@@ -142,8 +163,8 @@ describe('스캔 전처리 · 주석 제거 자기검증 — B 파일 전체의 
   });
 });
 
-describe('AC-2 ②③ · 생성 파일 인벤토리 — 동결 8경로 (B-1, 한시 — 위 졸업 조건 B)', () => {
-  it('src/shared/api/generated/ 아래 .ts 파일 목록이 동결 8경로와 정확히 같다', () => {
+describe('AC-2 ②③ · 생성 파일 인벤토리 — 동결 17경로 (B-1, 한시 — 위 졸업 조건 B)', () => {
+  it('src/shared/api/generated/ 아래 .ts 파일 목록이 동결 17경로와 정확히 같다', () => {
     // 개수 > 0이 아니라 목록 전체를 잠근다 — 필터에 다른 태그가 섞여 들어와도 잡힌다.
     expect(listGeneratedFiles()).toEqual(GENERATED_FILES_FROZEN);
   });

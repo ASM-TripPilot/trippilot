@@ -24,6 +24,7 @@ import type {
   GetStaysGeocodeParams,
   GetStaysSearchParams,
   StaySearchResponse,
+  ValidationErrorResponse,
 } from '../schemas';
 
 import { customInstance } from '../../mutator';
@@ -47,7 +48,7 @@ const withQueryKey = <T extends object, K>(
 };
 
 /**
- * 지역·편의시설·유형으로 탐색. 필터는 AND, 정렬은 최저가순 고정(BR-U1-15). 가격은 최저가 스냅숏뿐(미확인은 null · BR-U1-14). 소요시간 미표시·거리만(INV-3).
+ * 지역·편의시설·유형으로 탐색. 필터는 AND, 정렬은 최저가순 고정(BR-U1-15). 가격은 최저가 스냅숏뿐(미확인은 null · BR-U1-14). 소요시간 미표시·거리만(INV-3). lat·lng 로 '내 주변' 좌표 스코프(US-STAY-01 · BR-U1-11) — region·필터와 AND 로 걸린다. 좌표는 필터가 아니라 스코프라 filterZeroReasons(완화 제안)에 나타나지 않는다.
  * @summary 숙소 탐색(날짜·인원 없이 · 최저가순)
  */
 export const getStaysSearch = (
@@ -68,7 +69,7 @@ export const getGetStaysSearchQueryKey = (params?: GetStaysSearchParams) => {
 
 export const getGetStaysSearchQueryOptions = <
   TData = Awaited<ReturnType<typeof getStaysSearch>>,
-  TError = unknown,
+  TError = ValidationErrorResponse,
 >(
   params?: GetStaysSearchParams,
   options?: {
@@ -95,11 +96,11 @@ export const getGetStaysSearchQueryOptions = <
 export type GetStaysSearchQueryResult = NonNullable<
   Awaited<ReturnType<typeof getStaysSearch>>
 >;
-export type GetStaysSearchQueryError = unknown;
+export type GetStaysSearchQueryError = ValidationErrorResponse;
 
 export function useGetStaysSearch<
   TData = Awaited<ReturnType<typeof getStaysSearch>>,
-  TError = unknown,
+  TError = ValidationErrorResponse,
 >(
   params: undefined | GetStaysSearchParams,
   options: {
@@ -121,7 +122,7 @@ export function useGetStaysSearch<
 };
 export function useGetStaysSearch<
   TData = Awaited<ReturnType<typeof getStaysSearch>>,
-  TError = unknown,
+  TError = ValidationErrorResponse,
 >(
   params?: GetStaysSearchParams,
   options?: {
@@ -143,7 +144,7 @@ export function useGetStaysSearch<
 };
 export function useGetStaysSearch<
   TData = Awaited<ReturnType<typeof getStaysSearch>>,
-  TError = unknown,
+  TError = ValidationErrorResponse,
 >(
   params?: GetStaysSearchParams,
   options?: {
@@ -161,7 +162,7 @@ export function useGetStaysSearch<
 
 export function useGetStaysSearch<
   TData = Awaited<ReturnType<typeof getStaysSearch>>,
-  TError = unknown,
+  TError = ValidationErrorResponse,
 >(
   params?: GetStaysSearchParams,
   options?: {

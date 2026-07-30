@@ -20,4 +20,21 @@ export type GetStaysSearchParams = {
    * 숙소 유형 필터
    */
   stayType?: string[];
+  /**
+   * '내 주변' 중심 위도. lng 와 짝이다 — 한쪽만 보내면 400
+   * @minimum -90
+   * @maximum 90
+   */
+  lat?: number;
+  /**
+   * '내 주변' 중심 경도. lat 와 짝이다 — 한쪽만 보내면 400
+   * @minimum -180
+   * @maximum 180
+   */
+  lng?: number;
+  /**
+   * 검색 반경(km). 좌표가 있을 때만 의미가 있고 생략하면 5km. 중심 없이 단독으로 보내면 400
+   * @exclusiveMinimum 0
+   */
+  radiusKm?: number;
 };
