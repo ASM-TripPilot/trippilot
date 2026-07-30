@@ -461,6 +461,36 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/Place' } }
 
+  /saved-places:
+    post:
+      tags: [places]
+      summary: 장소 담기(POI 북마크) — (계정,POI) 유일(INV-U1-04), ACTIVE POI만
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SavePlaceRequest' } } }
+      responses:
+        '201': { description: 담김, content: { application/json: { schema: { $ref: '#/components/schemas/SavedPlace' } } } }
+        '404': { description: POI 없음/비-ACTIVE }
+        '409': { description: 이미 담은 장소 }
+    get:
+      tags: [places]
+      summary: 내 담은 장소 목록(POI 정보 포함)
+      responses:
+        '200':
+          description: 담은 목록
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/SavedPlace' } }
+  /saved-places/{savedPlaceId}:
+    parameters:
+      - { name: savedPlaceId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [places]
+      summary: 담기 해제(소유자만 · 타 계정 404)
+      responses:
+        '204': { description: 해제됨 }
+        '404': { description: 없음/타 계정 }
+
   /saved-stays:
     post:
       tags: [saved-stays]
@@ -620,6 +650,20 @@ components:
         region: { type: string, nullable: true }
         openingHours: { type: string, nullable: true, description: NULL=미확인 }
         savedCount: { type: integer, format: int64 }
+
+    SavePlaceRequest:
+      type: object
+      required: [poiId]
+      properties:
+        poiId: { type: string, format: uuid, description: 담을 ACTIVE POI }
+
+    SavedPlace:
+      type: object
+      required: [savedPlaceId, savedAt, place]
+      properties:
+        savedPlaceId: { type: string, format: uuid }
+        savedAt: { type: string, format: date-time }
+        place: { $ref: '#/components/schemas/Place' }
 
     StaySearchResponse:
       type: object
