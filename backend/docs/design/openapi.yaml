@@ -445,6 +445,22 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/GeocodeCandidate' } }
 
+  /places:
+    get:
+      tags: [places]
+      summary: 장소(POI) 탐색 — ACTIVE만(INV-U1-01), 지역·카테고리 필터
+      description: >
+        수집 게이트(INV-1) 통과한 정본 POI. 소요시간 미표시(INV-3). 반경/취향 후보풀은 별도(C8 소비).
+      parameters:
+        - { name: region, in: query, required: false, schema: { type: string }, description: '지역(예: 제주)' }
+        - { name: category, in: query, required: false, schema: { $ref: '#/components/schemas/PoiCategory' } }
+      responses:
+        '200':
+          description: ACTIVE POI 목록
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Place' } }
+
   /saved-stays:
     post:
       tags: [saved-stays]
@@ -588,6 +604,23 @@ components:
       bearerFormat: JWT
 
   schemas:
+    PoiCategory:
+      type: string
+      enum: [명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화]
+
+    Place:
+      type: object
+      required: [poiId, nameKo, category, lat, lng, savedCount]
+      properties:
+        poiId: { type: string, format: uuid }
+        nameKo: { type: string }
+        category: { $ref: '#/components/schemas/PoiCategory' }
+        lat: { type: number, format: double }
+        lng: { type: number, format: double }
+        region: { type: string, nullable: true }
+        openingHours: { type: string, nullable: true, description: NULL=미확인 }
+        savedCount: { type: integer, format: int64 }
+
     StaySearchResponse:
       type: object
       required: [items, degraded, filterZeroReasons]
