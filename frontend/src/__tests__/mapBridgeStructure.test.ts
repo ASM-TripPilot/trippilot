@@ -32,6 +32,14 @@ const TEST_ONLY_DIRS = ['__tests__', '__mocks__', 'test-support', 'mocks'];
  * (경계 안쪽에 word-char 전환이 없어 고정 길이 32 매치가 성립하지 않는다, 02a M10 실측). */
 const HEX32_LITERAL = /\b[0-9a-f]{32}\b/i;
 
+/** 탐지기 자가검사용 합성 키. **소스에 32자 연속 hex를 리터럴로 남기면 안 된다** — A-3의
+ * 모집단이 `git ls-files`(추적 목록)라, 이 파일이 커밋되는 순간 자기 자신이 위반으로 잡힌다
+ * (커밋 전에는 미추적이라 green, 커밋 후 red — 실측). 16자씩 이어 붙여 런타임 값만 32-hex가
+ * 되게 한다. 아래 `.toBe(true)` 단언이 이 조립이 여전히 32-hex임을 스스로 증명한다. */
+const SYNTHETIC_HEX32 = 'a1b2c3d4e5f6a7b8' + 'c9d0e1f2a3b4c5d6';
+/** 40자 — `\b`가 40자 연속 hex 안에서 32자 매치를 성립시키지 않는다는 것을 확인하는 대조군. */
+const SYNTHETIC_HEX40 = SYNTHETIC_HEX32 + 'ff112233';
+
 /** D5/R1 양쪽을 포용하는 도메인 리터럴 — 값을 문자열로 못박으면 R1 폴백 시 이 테스트를
  * 고쳐야 한다(02a §5-20). `g` 없이 `match()`를 쓰면 global 상태 없이 등장 횟수를 셀 수 있다. */
 const DOMAIN_LITERAL = /https?:\/\/localhost(?::\d+)?/g;
@@ -138,14 +146,8 @@ describe('A-2 (소스 절반) — 키는 env 참조로만 들어오고 리터럴
     expect(offenders).toEqual([]);
 
     // 탐지기 자가검사 — 합성 위반을 실제로 잡고, 40자 SHA·31자 문자열은 잡지 않는다.
-    expect(
-      HEX32_LITERAL.test("const k = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';")
-    ).toBe(true);
-    expect(
-      HEX32_LITERAL.test(
-        "const sha = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6ff112233';"
-      )
-    ).toBe(false);
+    expect(HEX32_LITERAL.test(`const k = '${SYNTHETIC_HEX32}';`)).toBe(true);
+    expect(HEX32_LITERAL.test(`const sha = '${SYNTHETIC_HEX40}';`)).toBe(false);
     expect(
       HEX32_LITERAL.test("const short = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d';")
     ).toBe(false);
@@ -197,12 +199,8 @@ describe('A-3 — git 추적 파일 전수에 키 리터럴이 0건이다', () =
     expect(offenders).toEqual([]);
 
     // 탐지기 자가검사 — 1-2와 같은 합성 3종.
-    expect(
-      HEX32_LITERAL.test("const k = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';")
-    ).toBe(true);
-    expect(
-      HEX32_LITERAL.test('40-char: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6ff112233')
-    ).toBe(false);
+    expect(HEX32_LITERAL.test(`const k = '${SYNTHETIC_HEX32}';`)).toBe(true);
+    expect(HEX32_LITERAL.test(`40-char: ${SYNTHETIC_HEX40}`)).toBe(false);
     expect(HEX32_LITERAL.test('31-char: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d')).toBe(
       false
     );
