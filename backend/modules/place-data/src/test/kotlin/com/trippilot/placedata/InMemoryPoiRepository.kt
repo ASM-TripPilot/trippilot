@@ -22,5 +22,7 @@ class InMemoryPoiRepository : PoiRepository {
     override fun findActiveByIds(poiIds: List<UUID>) =
         stored.filter { active(it) && it.poiId in poiIds }
 
+    override fun findByIds(poiIds: List<UUID>) = stored.filter { it.poiId in poiIds }
+
     private fun active(p: Poi) = p.dataStatus == DataStatus.ACTIVE
 }

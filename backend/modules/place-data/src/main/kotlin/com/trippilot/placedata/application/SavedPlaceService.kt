@@ -42,8 +42,10 @@ class SavedPlaceService(
     }
 
     fun list(accountId: UUID): List<SavedPlaceView> {
+        // 상태 무관 조회 — 폐업·미검증 POI도 담은 채로 남는다(클라가 상태 뱃지 표시·삭제 가능).
+        // ACTIVE만 걸러버리면 목록에서 사라지되 행은 남아 재담기 불가(409)·삭제 불가(id 미노출)인 유령이 된다.
         val sps = saved.findByAccount(accountId)
-        val poiById = pois.findActiveByIds(sps.map { it.poiId }).associateBy { it.poiId }
+        val poiById = pois.findByIds(sps.map { it.poiId }).associateBy { it.poiId }
         return sps.mapNotNull { sp -> poiById[sp.poiId]?.let { SavedPlaceView(sp, it) } }
     }
 

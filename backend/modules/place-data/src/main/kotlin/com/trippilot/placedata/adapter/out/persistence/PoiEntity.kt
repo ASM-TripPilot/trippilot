@@ -53,6 +53,8 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
     ): List<PoiEntity>
 
     fun findByPoiIdInAndDataStatus(poiIds: Collection<UUID>, dataStatus: String): List<PoiEntity>
+
+    fun findByPoiIdIn(poiIds: Collection<UUID>): List<PoiEntity>
 }
 
 @Component
@@ -75,6 +77,9 @@ class PoiRepositoryAdapter(
 
     override fun findActiveByIds(poiIds: List<UUID>): List<Poi> =
         if (poiIds.isEmpty()) emptyList() else jpa.findByPoiIdInAndDataStatus(poiIds, DataStatus.ACTIVE.name).map { it.toDomain() }
+
+    override fun findByIds(poiIds: List<UUID>): List<Poi> =
+        if (poiIds.isEmpty()) emptyList() else jpa.findByPoiIdIn(poiIds).map { it.toDomain() }
 
     private fun Poi.toEntity() = PoiEntity(
         poiId = poiId, nameKo = nameKo, lat = lat, lng = lng, category = category.name, region = region,

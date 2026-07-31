@@ -46,6 +46,20 @@ class SavedPlaceServiceTest : StringSpec({
         svc.list(acc).single().poi.poiId shouldBe poiId
     }
 
+    "담아둔 POI가 폐업(CLOSED)해도 목록에 상태와 함께 남는다(지울 수 없는 유령 방지)" {
+        val pois = InMemoryPoiRepository()
+        val active = Poi.reconstitute(UUID.randomUUID(), "성산일출봉", 33.45, 126.94, PoiCategory.자연, "제주", null, DataStatus.ACTIVE, PoiSource.MANUAL, 0, clock.instant(), clock.instant())
+        pois.stored.add(active)
+        val svc = SavedPlaceService(FakeSavedPlaces(), pois, clock)
+        svc.save(acc, active.poiId) // ACTIVE일 때 담음
+        // 나중에 폐업 — 같은 poiId로 CLOSED 교체
+        pois.stored.clear()
+        pois.stored.add(Poi.reconstitute(active.poiId, "성산일출봉", 33.45, 126.94, PoiCategory.자연, "제주", null, DataStatus.CLOSED, PoiSource.MANUAL, 0, clock.instant(), clock.instant()))
+        val row = svc.list(acc).single()
+        row.poi.poiId shouldBe active.poiId
+        row.poi.dataStatus shouldBe DataStatus.CLOSED
+    }
+
     "없거나 비-ACTIVE POI 담기는 404" {
         val (svc, _, _) = fixture(status = DataStatus.UNVERIFIED)
         shouldThrow<ResourceNotFound> { svc.save(acc, UUID.randomUUID()) } // 없음
