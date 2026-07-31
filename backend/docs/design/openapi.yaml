@@ -671,7 +671,7 @@ components:
 
     Place:
       type: object
-      required: [poiId, nameKo, category, lat, lng, savedCount]
+      required: [poiId, nameKo, category, lat, lng, savedCount, dataStatus]
       properties:
         poiId: { type: string, format: uuid }
         nameKo: { type: string }
@@ -681,6 +681,10 @@ components:
         region: { type: string, nullable: true }
         openingHours: { type: string, nullable: true, description: NULL=미확인 }
         savedCount: { type: integer, format: int64 }
+        dataStatus:
+          type: string
+          enum: [ACTIVE, UNVERIFIED, LOST, CLOSED]
+          description: 탐색은 항상 ACTIVE, 담기 목록은 폐업(CLOSED)·미검증(UNVERIFIED)도 포함 — 클라 뱃지
 
     SavePlaceRequest:
       type: object

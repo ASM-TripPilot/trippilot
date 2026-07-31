@@ -30,6 +30,9 @@ interface PoiRepository {
 
     /** 주어진 id 중 ACTIVE만(ground용 — 미확인·폐업 제외). */
     fun findActiveByIds(poiIds: List<UUID>): List<Poi>
+
+    /** 주어진 id 전부(상태 무관 — 담기 목록 표시용, 폐업·미검증도 상태와 함께 노출). */
+    fun findByIds(poiIds: List<UUID>): List<Poi>
 }
 
 /**
