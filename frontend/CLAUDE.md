@@ -23,4 +23,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working in `fro
 - **"부채"가 두 장부다** — `/ponytail-debt`(미룬 코드 단축)과 이해부채(사용자가 이해하지 못한 개념)는 다르다. 섞어 세지 마라.
 - **유지 판정 없음 — 상시 존치**(사용자 결정). 위 「장치 판정 규칙」의 명시적 예외다. **다시 판정 조건을 달지 마라** — 떼는 조건이 없으므로 실적 집계도 제거 근거로 쓰지 않는다(집계 자체의 존폐는 scribe 소관).
 
+**백엔드 코드 이해(graphify):** `backend/` 는 프론트 담당이 쓴 코드가 아니라 구조 파악에 지식 그래프가 값을 낸다(1,487노드, tree-sitter AST라 LLM 0·무료). 쓰는 명령은 셋뿐이다 — `graphify explain "<클래스>"` · `graphify path "A" "B"` · `graphify affected "<타입>" --depth 2`.
+
+- ⚠️ **전역 `graphify` 스킬의 "질문을 `graphify query`로 먼저 처리하라"보다 이 절이 우선한다.** 자연어 질의는 키워드 충돌로 무관한 문서 노드를 끌어온다(실측: "지도" → SNS 공유 카드·솔버 엔진). `query`·MCP 서버는 쓰지 않는다 — 잘 되는 `path`·`affected`가 MCP에 아예 없다.
+- **계약의 정본은 `backend/docs/design/openapi.yaml`이다.** 그래프는 *구현이 실제로 어떻게 생겼나*만 답한다. 요구사항·스토리 매핑도 정본(`aidlc/aidlc-docs/inception/`)이 이기고 그래프는 손실 사본이다 — **프론트 코드 파악에도 쓰지 마라**(FSD 층과 커뮤니티가 안 맞아 187파일이 59조각으로 갈린다, 실측).
+- **조회 전 `git pull && graphify update .`** — 코드 층은 무료고 변경량 비례다. 자동 갱신은 없다(커밋 훅은 `post-merge`가 없어 머지를 못 잡는다). 파일이 줄어든 사이클 뒤엔 shrink guard로 거부될 수 있고 그땐 `--force`.
+- 제외 목록 정본은 리포 루트 `.graphifyignore`. `graphify claude install`·`hook install`은 **하지 마라**(CLAUDE.md·훅을 덮어써 하네스와 충돌).
+
+*유지 판정: 6사이클 관찰 — 위 세 명령 호출 0이면 이 절을 뗀다. 호출은 있는데 결과가 브리프·리뷰에 인용된 건수 0이어도 뗀다.*
+
 **변경 이력:** 하네스(에이전트·스킬·settings·이 파일)를 변경하면 **반드시** 옵시디언 `TripPilot/하네스 변경이력.md` 표에 행을 추가하라(append-only). 기록 서식과 압축 전 원장 확인 순서는 `harness-rule-edit` 스킬.
