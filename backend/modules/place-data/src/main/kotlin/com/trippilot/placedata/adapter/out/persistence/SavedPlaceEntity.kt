@@ -31,7 +31,8 @@ class SavedPlaceRepositoryAdapter(
     private val jpa: SavedPlaceJpaRepository,
 ) : SavedPlaceRepository {
 
-    override fun save(savedPlace: SavedPlace): SavedPlace = jpa.save(savedPlace.toEntity()).let { savedPlace }
+    // saveAndFlush — (account, poi) 유니크 위반(경합)을 커밋 전에 표면화해 서비스가 409 로 변환할 수 있게.
+    override fun save(savedPlace: SavedPlace): SavedPlace = jpa.saveAndFlush(savedPlace.toEntity()).let { savedPlace }
     override fun findByAccount(accountId: UUID) = jpa.findByAccountId(accountId).map { it.toDomain() }
     override fun findById(savedPlaceId: UUID) = jpa.findById(savedPlaceId).orElse(null)?.toDomain()
     override fun existsByAccountAndPoi(accountId: UUID, poiId: UUID) = jpa.existsByAccountIdAndPoiId(accountId, poiId)

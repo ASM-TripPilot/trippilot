@@ -7,7 +7,9 @@ import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.placedata.domain.SavedPlace
 import com.trippilot.placedata.domain.SavedPlaceRepository
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.util.UUID
 
@@ -23,13 +25,19 @@ class SavedPlaceService(
     private val pois: PoiRepository,
     private val clock: Clock,
 ) {
+    @Transactional
     fun save(accountId: UUID, poiId: UUID): SavedPlaceView {
         // 담기 대상은 실재 확인된 ACTIVE POI만(INV-1). 없거나 비-ACTIVE면 404.
         val poi = pois.findById(poiId)?.takeIf { it.dataStatus == DataStatus.ACTIVE } ?: throw ResourceNotFound()
         if (saved.existsByAccountAndPoi(accountId, poiId)) {
             throw ConflictDetected(message = "이미 담은 장소입니다.")
         }
-        val sp = saved.save(SavedPlace.create(accountId, poiId, clock.instant()))
+        val sp = try {
+            saved.save(SavedPlace.create(accountId, poiId, clock.instant()))
+        } catch (e: DataIntegrityViolationException) {
+            // 동시 담기 경합 — (account, poi) 유니크 위반(INV-U1-04). 선검사를 빠져나간 레이스.
+            throw ConflictDetected(message = "이미 담은 장소입니다.")
+        }
         return SavedPlaceView(sp, poi)
     }
 

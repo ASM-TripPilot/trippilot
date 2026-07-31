@@ -30,6 +30,11 @@ class MustVisitTest : StringSpec({
         MustVisit.add(trip, snap, poi, MustVisitType.FIXED, LocalDate.parse("2026-08-01"), LocalTime.parse("12:00"), null, now).type shouldBe MustVisitType.FIXED
     }
 
+    "ANYTIME에 고정 날짜·시각을 실으면 400(모순 데이터 차단)" {
+        shouldThrow<ValidationFailed> { MustVisit.add(trip, snap, poi, MustVisitType.ANYTIME, LocalDate.parse("2026-08-01"), null, null, now) }
+        shouldThrow<ValidationFailed> { MustVisit.add(trip, snap, poi, MustVisitType.ANYTIME, null, LocalTime.parse("12:00"), null, now) }
+    }
+
     "체류 시간 음수는 400" {
         shouldThrow<ValidationFailed> { MustVisit.add(trip, snap, poi, MustVisitType.ANYTIME, null, null, -1, now) }
     }
