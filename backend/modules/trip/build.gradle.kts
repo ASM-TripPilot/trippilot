@@ -9,6 +9,7 @@ dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.springBoot.get()}"))
 
     implementation(project(":common:core"))
+    implementation(project(":modules:place-data"))     // R1: 필수방문지 스냅숏 동결 — place-data.api(PoiSnapshotFacade)만 사용
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

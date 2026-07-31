@@ -626,6 +626,37 @@ paths:
         '200': { description: 커버리지, content: { application/json: { schema: { $ref: '#/components/schemas/Coverage' } } } }
         '404': { description: 없음/타 계정 }
 
+  /trips/{tripId}/must-visits:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 필수 방문지 추가 — POI 동결 스냅숏 참조(INV-U1-03) · FIXED 날짜·시각(INV-U1-17)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AddMustVisitRequest' } } }
+      responses:
+        '201': { description: 추가됨, content: { application/json: { schema: { $ref: '#/components/schemas/MustVisit' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 여행/POI 없음·비-ACTIVE·타 계정 }
+        '409': { description: 이미 추가된 필수 방문지(INV-U1-18) }
+    get:
+      tags: [trips]
+      summary: 여행 필수 방문지 목록
+      responses:
+        '200': { description: 목록, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/MustVisit' } } } } }
+        '404': { description: 없음/타 계정 }
+  /trips/{tripId}/must-visits/{mustVisitId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: mustVisitId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [trips]
+      summary: 필수 방문지 삭제
+      responses:
+        '204': { description: 삭제됨 }
+        '404': { description: 없음/타 계정 }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -844,6 +875,32 @@ components:
         date: { type: string, format: date }
         status: { type: string, enum: [AUTO, GAP, OVERLAP], description: AUTO=후보1(확정) · GAP=후보0(공백) · OVERLAP=후보≥2(겹침) }
         savedStayId: { type: string, format: uuid, nullable: true, description: AUTO일 때만 확정 거점 }
+
+    MustVisitType:
+      type: string
+      enum: [ANYTIME, FIXED]
+
+    AddMustVisitRequest:
+      type: object
+      required: [poiId, type]
+      properties:
+        poiId: { type: string, format: uuid, description: 담을 ACTIVE POI(동결 스냅숏으로 참조) }
+        type: { $ref: '#/components/schemas/MustVisitType' }
+        fixedDate: { type: string, format: date, nullable: true, description: FIXED면 필수(INV-U1-17) }
+        fixedStart: { type: string, format: partial-time, nullable: true, description: 'FIXED면 필수 · HH:mm[:ss]' }
+        dwellMin: { type: integer, nullable: true, description: 체류 희망 분(솔버 입력) }
+
+    MustVisit:
+      type: object
+      required: [mustVisitId, poiSnapshotId, sourcePoiId, type]
+      properties:
+        mustVisitId: { type: string, format: uuid }
+        poiSnapshotId: { type: string, format: uuid, description: 동결 스냅숏 참조(INV-U1-03) }
+        sourcePoiId: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/MustVisitType' }
+        fixedDate: { type: string, format: date, nullable: true }
+        fixedStart: { type: string, nullable: true }
+        dwellMin: { type: integer, nullable: true }
 
     TermsType:
       type: string
