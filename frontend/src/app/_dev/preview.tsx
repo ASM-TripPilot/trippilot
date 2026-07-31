@@ -22,6 +22,7 @@ import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
 import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
+import { KakaoMapView } from '@/shared/map';
 
 /**
  * expo-router 의 `useLocalSearchParams` 를 모듈 로드 시점에 딱 한 번 안전하게 구해온다.
@@ -395,6 +396,16 @@ const PREVIEW_STATES: PreviewState[] = [
     label: '홈 · 로딩',
     login: null,
     render: () => <HomeScreen {...HOME_LOADING_PROPS} />,
+  },
+  // 지도 계층 선행(TRIP-197 D9) — 층 C(실기) 진입점. 키/로드 실패 분기는 렌더 안 해봐야
+  // 알 수 없어 여기서는 해피패스 1키만 둔다(env 키는 빌드 시 번들에 인라인되므로 preview가
+  // 런타임에 비울 수 없다 — 실패 분기는 KakaoMapView.test.tsx가, C-2는 .env를 실제로 비우고
+  // 재기동해 확인한다).
+  {
+    key: 'map-default',
+    label: '지도 · 기본',
+    login: null,
+    render: () => <KakaoMapView center={{ lat: 37.5665, lng: 126.978 }} />,
   },
 ];
 
