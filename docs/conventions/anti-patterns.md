@@ -29,6 +29,8 @@
 - **스텁/인메모리 어댑터에 캐시(Redis)·서킷브레이커(Resilience4j)를 붙이지 말 것 → 실 외부 어댑터 단계로 이연.** 스텁은 외부 지연·실패가 없어 캐싱·보호할 대상이 없다. 포트 경계만 잡아두고 실 벤더 붙일 때 감싼다("측정된 필요까지 이연" 원칙). (TRIP-175)
 - **포트 인터페이스에 메서드를 추가하면 모든 Fake/TestDouble 구현도 즉시 갱신할 것.** 안 하면 컴파일은 통과해도 다른 모듈 테스트의 fake가 깨진다. (TRIP-158 — RefreshTestDoubles)
 - **새 기능 모듈은 아키텍처 게이트에 등록할 것.** `ArchitectureRulesTest`의 R1 슬라이스·R5 패키지 목록에 모듈 패키지를 추가하지 않으면 경계 위반이 감지되지 않는다(vacuous pass). (TRIP-175)
+- **여러 write를 하는 애플리케이션 서비스(특히 크로스모듈 퍼사드 write + 로컬 save)는 `@Transactional`로 묶을 것.** 없으면 각 repo 어댑터 호출이 독립 트랜잭션이라, 앞 write(예: `PoiSnapshotFacade.freeze`가 스냅숏 커밋)가 커밋된 뒤 뒤 단계(도메인 검증 throw·유니크 위반)가 실패하면 **고아 행**이 남는다. 순서 재배치("중복 먼저")로는 검증 throw·레이스를 못 막는다 — 원자성은 트랜잭션이 담당. (PR #50 — MustVisitService orphan poi_snapshot)
+- **check-then-insert 유니크 경합은 어댑터 `saveAndFlush` + 서비스 `catch DataIntegrityViolationException → 409`로 처리할 것.** 선검사(`existsBy…`)만 두면 레이스가 빠져나가 unmapped 500이 된다. `save`(플러시 지연)로는 위반이 커밋 시점에 터져 서비스 try 밖에서 새므로 반드시 `saveAndFlush`. (PR #50 — SavedPlace/MustVisit; 관례: auth `AccountDeletionService`·profile `NicknameService`)
 
 ## Kotlin · 언어
 
