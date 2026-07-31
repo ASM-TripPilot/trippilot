@@ -8,7 +8,9 @@ import com.trippilot.trip.domain.MustVisitRepository
 import com.trippilot.trip.domain.MustVisitType
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripRepository
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
@@ -34,20 +36,25 @@ class MustVisitService(
     private val snapshots: PoiSnapshotFacade,
     private val clock: Clock,
 ) {
+    @Transactional
     fun add(accountId: UUID, tripId: UUID, cmd: AddMustVisitCommand): MustVisit {
         ownedTrip(accountId, tripId)
-        // 중복 먼저(스냅숏 orphan 방지) — sourcePoiId = 담을 POI id.
+        // 선검사 중복은 409. 동결·검증·저장이 한 트랜잭션이라 이후 실패 시 스냅숏도 롤백된다(orphan 방지).
         if (mustVisits.existsByTripAndSourcePoi(tripId, cmd.poiId)) {
             throw ConflictDetected(message = "이미 추가된 필수 방문지입니다.")
         }
         // ACTIVE POI를 동결(없거나 비-ACTIVE면 404). 스냅숏 참조로 원본 변동에도 안정(INV-U1-03).
         val snap = snapshots.freeze(cmd.poiId) ?: throw ResourceNotFound()
-        return mustVisits.save(
-            MustVisit.add(
-                tripId, snap.poiSnapshotId, snap.sourcePoiId, cmd.type,
-                cmd.fixedDate, cmd.fixedStart, cmd.dwellMin, clock.instant(),
-            ),
+        val mustVisit = MustVisit.add(
+            tripId, snap.poiSnapshotId, snap.sourcePoiId, cmd.type,
+            cmd.fixedDate, cmd.fixedStart, cmd.dwellMin, clock.instant(),
         )
+        return try {
+            mustVisits.save(mustVisit)
+        } catch (e: DataIntegrityViolationException) {
+            // 동시 추가 경합 — (trip, sourcePoi) 유니크 위반(INV-U1-18). 선검사를 빠져나간 레이스.
+            throw ConflictDetected(message = "이미 추가된 필수 방문지입니다.")
+        }
     }
 
     fun list(accountId: UUID, tripId: UUID): List<MustVisit> {

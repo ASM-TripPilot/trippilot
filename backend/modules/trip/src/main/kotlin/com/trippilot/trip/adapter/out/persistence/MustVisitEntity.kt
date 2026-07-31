@@ -39,7 +39,8 @@ class MustVisitRepositoryAdapter(
     private val jpa: MustVisitJpaRepository,
 ) : MustVisitRepository {
 
-    override fun save(mustVisit: MustVisit): MustVisit = jpa.save(mustVisit.toEntity()).let { mustVisit }
+    // saveAndFlush — (trip, sourcePoi) 유니크 위반(경합)을 커밋 전에 표면화해 서비스가 409 로 변환할 수 있게.
+    override fun save(mustVisit: MustVisit): MustVisit = jpa.saveAndFlush(mustVisit.toEntity()).let { mustVisit }
     override fun findByTrip(tripId: UUID) = jpa.findByTripId(tripId).map { it.toDomain() }
     override fun findById(mustVisitId: UUID) = jpa.findById(mustVisitId).orElse(null)?.toDomain()
     override fun existsByTripAndSourcePoi(tripId: UUID, sourcePoiId: UUID) = jpa.existsByTripIdAndSourcePoiId(tripId, sourcePoiId)

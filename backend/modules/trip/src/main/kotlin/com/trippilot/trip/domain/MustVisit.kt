@@ -40,6 +40,10 @@ class MustVisit private constructor(
             if (type == MustVisitType.FIXED && (fixedDate == null || fixedStart == null)) {
                 errors += FieldError("fixed", "고정(FIXED) 필수 방문지는 날짜·시각이 필요합니다.") // INV-U1-17
             }
+            if (type == MustVisitType.ANYTIME && (fixedDate != null || fixedStart != null)) {
+                // 자유 배치인데 고정 시각이 실리면 솔버(INV-2)가 시각 고정으로 오해 — 모순 데이터 차단.
+                errors += FieldError("fixed", "자유(ANYTIME) 필수 방문지에는 고정 날짜·시각을 넣을 수 없습니다.")
+            }
             if (dwellMin != null && dwellMin < 0) errors += FieldError("dwellMin", "체류 시간은 0 이상입니다.")
             if (errors.isNotEmpty()) throw ValidationFailed(errors)
             return MustVisit(UUID.randomUUID(), tripId, poiSnapshotId, sourcePoiId, type, fixedDate, fixedStart, dwellMin, now)
