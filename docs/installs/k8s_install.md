@@ -346,14 +346,27 @@ kubectl cluster-info
 kubectl get nodes
 ```
 
-정상적인 예:
+출력 예시는 §7에서 선택한 프로비저닝 방식에 따라 다릅니다.
+
+**Kubeadm 방식** — 단일 노드
 
 ```text
 NAME             STATUS   ROLES           AGE   VERSION
 docker-desktop   Ready    control-plane   ...   ...
 ```
 
-`STATUS`가 `Ready`이면 정상입니다.
+**Kind 방식** — control-plane 1대 + worker 2대
+
+```text
+NAME                    STATUS   ROLES           AGE   VERSION
+desktop-control-plane   Ready    control-plane   ...   ...
+desktop-worker          Ready    <none>          ...   ...
+desktop-worker2         Ready    <none>          ...   ...
+```
+
+**노드 이름과 개수는 달라도 무방합니다.** 모든 노드의 `STATUS`가 `Ready`이면 정상입니다.
+
+> 컨텍스트 이름은 두 방식 모두 `docker-desktop`으로 동일합니다. 노드 이름(`desktop-control-plane`)과 혼동하지 마세요.
 
 시스템 Pod를 확인합니다.
 
