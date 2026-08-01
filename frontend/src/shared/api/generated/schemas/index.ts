@@ -7,7 +7,17 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
+export * from './addMustVisitRequest';
+export * from './assignBaseRequest';
+export * from './baseAssignment';
+export * from './companionType';
+export * from './coverage';
+export * from './createTripRequest';
+export * from './createTripRequestPreferenceSnapshot';
+export * from './dayCoverage';
+export * from './dayCoverageStatus';
 export * from './editSavedStayRequest';
+export * from './editTripRequest';
 export * from './errorResponse';
 export * from './errorResponseError';
 export * from './errorResponseErrorExistingProvider';
@@ -15,10 +25,29 @@ export * from './errorResponseErrorFieldsItem';
 export * from './geocodeCandidate';
 export * from './getStaysGeocodeParams';
 export * from './getStaysSearchParams';
+export * from './mustVisit';
+export * from './mustVisitType';
+export * from './prefArrayAxis';
+export * from './preferenceInput';
+export * from './preferenceInputActivitiesItem';
+export * from './preferenceInputBudgetTier';
+export * from './preferenceInputCompanionTypesItem';
+export * from './preferenceInputFoodTastesItem';
+export * from './preferenceInputPace';
+export * from './preferenceInputStylesItem';
+export * from './preferenceInputTransportModesItem';
+export * from './preferenceView';
+export * from './preferenceViewBudget';
+export * from './preferenceViewCompanion';
+export * from './prefScalarAxis';
 export * from './registerRoute';
 export * from './registerSavedStayRequest';
 export * from './savedStay';
 export * from './stayItem';
 export * from './stayPrice';
 export * from './staySearchResponse';
+export * from './trip';
+export * from './tripDestination';
+export * from './tripPreferenceSnapshot';
+export * from './tripStatus';
 export * from './validationErrorResponse';

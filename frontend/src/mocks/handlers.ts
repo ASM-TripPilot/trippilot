@@ -1,6 +1,11 @@
 import { http, HttpResponse } from 'msw';
 
 import type { BootstrapResponse, TokenPair } from '@/shared/api';
+import type {
+  CreateTripRequest,
+  PreferenceView,
+  Trip,
+} from '@/shared/api/generated/schemas';
 import { getOnboardingScenario } from '@/test-support/onboardingScenarios';
 import { getScenario, type MockScenario } from './scenarios';
 
@@ -158,6 +163,36 @@ function socialLoginResponse(provider: string, ageConfirmation: unknown) {
   }
 }
 
+/**
+ * TRIP-203 AC-8 — `Trip.required` 10필드를 갖춘 응답(상상해서 만들지 않는다). 요청 바디의
+ * 필수 3필드는 그대로 반영하고, 나머지 선택 필드는 openapi 기본값·null로 채운다.
+ */
+function tripFixture(body: CreateTripRequest): Trip {
+  return {
+    tripId: '00000000-0000-0000-0000-000000000001',
+    title: body.title ?? '제주 여행',
+    startDate: body.startDate,
+    endDate: body.endDate,
+    party: body.party ?? 1,
+    companionType: body.companionType ?? null,
+    budgetTotal: body.budgetTotal ?? null,
+    preferenceSnapshot: {},
+    destinations: body.destinations,
+    status: 'PLANNED',
+    createdAt: '2026-08-02T00:00:00Z',
+    updatedAt: '2026-08-02T00:00:00Z',
+  };
+}
+
+/** TRIP-203 AC-8 — `PreferenceView` 7축 밖을 발명하지 않는다. 예산 러프값(rawAmount)은
+ * 숫자로, isNeutralDefault 는 불리언으로 준다(AC-5 가 소비하는 모양). */
+function preferenceViewFixture(): PreferenceView {
+  return {
+    pace: { value: '균형있게', isNeutralDefault: false },
+    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
+  };
+}
+
 export const handlers = [
   http.get(`${BASE}/bootstrap`, () =>
     HttpResponse.json(bootstrapBody(getScenario()))
@@ -248,5 +283,15 @@ export const handlers = [
 
   http.post(`${BASE}/onboarding/complete`, () =>
     HttpResponse.json({ onboardingCompletedAt: '2026-07-21T00:00:00Z' })
+  ),
+
+  // ── TRIP-203 여행 생성·취향 조회 (AC-8) ──────────────────────────────
+  http.post(`${BASE}/trips`, async ({ request }) => {
+    const body = (await request.json()) as CreateTripRequest;
+    return HttpResponse.json(tripFixture(body), { status: 201 });
+  }),
+
+  http.get(`${BASE}/me/preferences`, () =>
+    HttpResponse.json(preferenceViewFixture())
   ),
 ];

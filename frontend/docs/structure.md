@@ -34,8 +34,9 @@
 - **구현 범위**: `auth`·`home`·`onboarding`·`stay`·`explore` **다섯 feature가 화면째 실구현**(`explore`는 TRIP-183에서 e00 지역 선택+'내 주변'으로 신설 — 이번 사이클[TRIP-197]에서 문서 소급 반영, 실제 구현은 그 사이클 산출물. 아래 `src/features/explore/` 절). `stay`는 TRIP-179(데이터 계층)·TRIP-180(`formatPrice`)·TRIP-181(e02 default 1상태)에 이어 **TRIP-182로 나머지 5상태**(loading·empty·filter-zero·partial-failure·error) + SafeArea 이관까지 붙어 **e02가 완결**됐다 — 아래 `src/features/stay/` 절. 나머지 자리는 도메인 작업이 시작될 때 새로 만든다 — TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}`) 14개를 전부 삭제했고, 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 디렉토리째 사라졌다(`stay`는 TRIP-179로 재등장).
 - **화면이 아닌 공용 신설**: `shared/map/`이 TRIP-197로 처음 생겼다 — 카카오 지도 JavaScript SDK를 WebView에 얹는 브리지(화면이 아니라 지도 렌더 표면만, 소비 화면은 후속 e05 티켓). 아래 `src/shared/map/` 절.
 - **서버 상태 계층 신설(TRIP-179)**: TanStack Query `QueryClientProvider`가 `src/app/_layout.tsx`에 배선됐다(모듈 스코프 단일 `QueryClient`, 기본 옵션 미조정). orval이 `backend/docs/design/openapi.yaml`의 `stays` 태그만 코드젠(`filters.tags`, 아래 경고 참조)해 `src/shared/api/generated/`에 8파일을 생성한다. 생성 코드는 전부 `src/shared/api/mutator.ts`(`customInstance`)를 거쳐 기존 `authedClient`(Bearer·401 single-flight 리프레시)를 탄다 — 새 인증 코드 0.
+- **여행 생성 계약 계층 신설(TRIP-203)**: `src/features/trip/model/`이 처음 생겼다 — **화면은 없다**(여행 생성 위저드는 TRIP-205 몫, 이 칸은 훅·타입·조립 함수까지). orval이 `trips`·`preferences` 태그를 추가 코드젠해 생성물이 **17→49파일**로 늘었다(엔드포인트 12+2, 스키마 30개 신규) — 태그 단위 필터라 오퍼레이션 하나만 못 골라 다수가 소비자 0으로 동반 생성됐다. 아래 `src/features/trip/`·`src/shared/api/generated/` 절.
 - **앱 런타임 목 0건.** msw는 테스트 오라클(`msw/node`)에만 있고, `src/__tests__/noMswInStaticGraph.test.ts`가 프로덕션의 `@/mocks/*`·`msw` import 0을 기계 강제한다.
-- **문서 대상 파일 143개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함. TRIP-181로 +7 — `staySearchStructure.test.ts`·라우트·배럴·배선·화면·글리프·`stayKey.ts`. TRIP-182로 +5 — `staySearchState.ts`·`filterReasonLabel.ts`·`StateNotice.tsx`·`SkeletonList.tsx`·`PartialFailureBanner.tsx`. **TRIP-183으로 +17(이번 사이클 소급 반영)** — `explore` 4파일·`region-picker` 2파일·라우트 2파일 + `saved-stays` 코드젠 9파일(스키마 8·클라이언트 1, 소비자 0). **TRIP-197로 +6** — `shared/map` 3파일(공존 테스트는 co-located 대표 제외) + 전역 테스트 2파일 + `__mocks__/react-native-webview.tsx`. **TRIP-198로 +8 = 151** — `stay-register` 슬라이스 2파일 · 라우트 1 · `features/stay` 모델 2 + 화면 1 · 전역 가드 1 · 목 1. **TRIP-199는 +0 = 151 불변** — 신규 소스 파일 0개, 기존 6개 수정만(전부 위 행에 반영) + 신규 테스트 5개는 전부 co-located라 대표 행에 흡수. **TRIP-210으로 +5 = 156** — `kakaoAuthorize.ts`·`naverAuthorize.ts`(SDK 어댑터 2) · `nativeSocialSdkMock.ts`(목 인프라) · `socialSdkSecrets.test.ts`·`socialSdkConfigPlugin.test.ts`(전역 가드 2). `nativeSdkLazyBoundary.test.ts`·`makeAuthorize.nativeSdk.test.ts`·`useSocialLogin.tokenPath.test.tsx`는 전부 기존 소스와 co-located라 대표 행에 흡수)
+- **문서 대상 파일 143개** (병렬 배치된 `*.test.ts(x)`는 대상 소스 행이 대표하므로 제외. `src/__tests__/` 전역 가드는 독립 산출물이라 포함. TRIP-181로 +7 — `staySearchStructure.test.ts`·라우트·배럴·배선·화면·글리프·`stayKey.ts`. TRIP-182로 +5 — `staySearchState.ts`·`filterReasonLabel.ts`·`StateNotice.tsx`·`SkeletonList.tsx`·`PartialFailureBanner.tsx`. **TRIP-183으로 +17(이번 사이클 소급 반영)** — `explore` 4파일·`region-picker` 2파일·라우트 2파일 + `saved-stays` 코드젠 9파일(스키마 8·클라이언트 1, 소비자 0). **TRIP-197로 +6** — `shared/map` 3파일(공존 테스트는 co-located 대표 제외) + 전역 테스트 2파일 + `__mocks__/react-native-webview.tsx`. **TRIP-198로 +8 = 151** — `stay-register` 슬라이스 2파일 · 라우트 1 · `features/stay` 모델 2 + 화면 1 · 전역 가드 1 · 목 1. **TRIP-199는 +0 = 151 불변** — 신규 소스 파일 0개, 기존 6개 수정만(전부 위 행에 반영) + 신규 테스트 5개는 전부 co-located라 대표 행에 흡수. **TRIP-210으로 +5 = 156** — `kakaoAuthorize.ts`·`naverAuthorize.ts`(SDK 어댑터 2) · `nativeSocialSdkMock.ts`(목 인프라) · `socialSdkSecrets.test.ts`·`socialSdkConfigPlugin.test.ts`(전역 가드 2). `nativeSdkLazyBoundary.test.ts`·`makeAuthorize.nativeSdk.test.ts`·`useSocialLogin.tokenPath.test.tsx`는 전부 기존 소스와 co-located라 대표 행에 흡수. **TRIP-203으로 +35 = 191** — `features/trip/model` 3파일(테스트 3개는 co-located 흡수) + orval `trips`·`preferences` 코드젠 32파일(엔드포인트 2·스키마 30, 다수 소비자 0 — 아래 `src/shared/api/generated/` 절))
 
 ## 디렉토리
 
@@ -203,6 +204,16 @@ d1b·e00 지역 선택 + '내 주변' 진입점. **컨테이너 없음** — 배
 
 **알려진 한계(숨기지 않음)**: ① '내 주변'이 대체 좌표(등록 숙소)로 이동했다는 고지가 결과 화면(e02)까지 안 이어진다(뒤로 오면 문구가 보이는 정도) — e02에 파라미터·배너를 더해야 하는 후속 티켓 ② d03 목적지 상세는 위 `[region].tsx` 스텁 그대로 ③ 집계(숙소 수·최저가) 없음(계약 없음, US-EXPL-02 예외항이 이미 규정) ④ `shared/location/LocationPreprompt.tsx`(권한 사전 안내 143줄)를 여전히 안 씀 — e00 동선에 그 자리가 Figma에 없음.
 
+## `src/features/trip/` — 계약 계층만, 화면 없음 (TRIP-203)
+
+**여행 생성 위저드(TRIP-205)가 아직 없다** — 이 슬라이스는 `model/`뿐이고 `ui/`가 없다. 서버 계약(orval `trips`·`preferences` 태그)을 도메인 이름으로 감싸는 얇은 층까지가 이번 칸이다. `useStaySearch`(TRIP-179) 선례를 그대로 반복 — 몸통이 짧은 이유는 게으름이 아니라 그 선례가 "생성물 경로를 한 곳에 가둔다"로 근거를 굳혀 둔 형태를 따른 것.
+
+| 파일 | 역할 |
+|---|---|
+| `src/features/trip/model/createTripRequest.ts` | `CreateTripInput` 타입(`= Omit<CreateTripRequest, 'budgetTotal'\|'preferenceSnapshot'>`) + 순수 함수 `buildCreateTripRequest(input, preference)`. `preference?.budget?.rawAmount`가 **숫자일 때만**(`typeof === 'number'`, `0`도 유효값으로 지킴) `budgetTotal` 키를 붙이고, `preferenceSnapshot`은 **런타임으로 걷어낸다**(`{...input}` 스프레드 전에 구조 분해로 제거 — `Omit`은 타입 선언일 뿐이라 그것만으론 안 지켜졌다, code-critic W-1 → 5-c 수정) |
+| `src/features/trip/model/useCreateTrip.ts` | `useCreateTrip()` — 생성물 `usePostTrips`를 그대로 반환하되 `onSuccess`에서 `invalidateQueries({queryKey: getGetTripsQueryKey()})` 한 줄만 얹는다(`GET /trips` 목록만 무효화, 취향 조회는 그대로 둠). ⚠️ 호출자가 `mutateAsync({ data: request })`처럼 생성물의 `{ data: }` 봉투를 그대로 봐야 하고, **그 경로로 `buildCreateTripRequest`를 우회해 `preferenceSnapshot`을 직접 실어 보내도 막는 장치가 없다**(code-critic W-2, 후속 티켓 후보 — 아래 "지금 작업하려면"이 아니라 devlog 인수인계 소관) |
+| `src/features/trip/model/usePreferencePrefill.ts` | `usePreferencePrefill()` — 생성물 `useGetMePreferences`를 그대로 반환하는 1줄. `features/onboarding/model/preferenceStore.ts`의 `usePreferenceStore`(로컬 드래프트, persist 없음, 서버 미전송)와 이름이 비슷하지만 다른 물건 — 이쪽은 서버가 이미 저장한 취향을 읽는다 |
+
 ## `src/features/` — 아직 시작 안 한 도메인
 
 TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개를 `git rm`으로 전부 삭제했다. 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 그 배럴이 디렉토리 안의 유일한 파일이라 **디렉토리째 사라졌다** — `stay`는 위 절대로 TRIP-179로 재등장(데이터 계층만). 지금 `src/features/`에는 `auth`·`home`·`onboarding`·`stay` 4개뿐이다.
@@ -237,7 +248,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 
 ### `src/shared/api/generated/` — 도구 생성물 (orval, TRIP-179)
 
-`pnpm codegen`(`orval.config.ts` — `filters: { mode: 'include', tags: ['stays', 'saved-stays'] }`(**TRIP-183으로 `saved-stays` 추가**, 이번 사이클 문서 소급 반영) + `httpClient: 'axios'` + `override.mutator`)이 `backend/docs/design/openapi.yaml`의 두 태그 경로만 읽어 생성. **사람이 손댄 줄 0건** — 재생성하면 통째로 덮인다. 이 절 전체가 `docs/structure.md` 유지 규약의 "파일 목록" 기계 담당분에 해당하지만, 코드젠 필터가 없으면 전 태그(29경로)가 생성돼 여기 목록이 통째로 낡는다는 것 자체가 경고다(아래 "지금 작업하려면" 참조).
+`pnpm codegen`(`orval.config.ts` — `filters: { mode: 'include', tags: ['stays', 'saved-stays', 'trips', 'preferences'] }`(**TRIP-183으로 `saved-stays` 추가, TRIP-203으로 `trips`·`preferences` 추가**) + `httpClient: 'axios'` + `override.mutator`)이 `backend/docs/design/openapi.yaml`의 네 태그 경로만 읽어 생성(17→49파일). **사람이 손댄 줄 0건** — 재생성하면 통째로 덮인다. `pnpm codegen`은 리포 prettier를 거치지 않는다 — 재생성 직후 포매터(`prettier --write`)를 돌리지 않으면 순수 포맷 차이로 큰 diff가 난다(codegen → prettier 순서 고정). 이 절 전체가 `docs/structure.md` 유지 규약의 "파일 목록" 기계 담당분에 해당하지만, 코드젠 필터가 없으면 전 태그가 생성돼 여기 목록이 통째로 낡는다는 것 자체가 경고다(아래 "지금 작업하려면" 참조). orval은 **태그 단위로만** 필터링해 오퍼레이션 하나만 못 고른다 — `trips` 태그 12개·`preferences` 태그 2개 오퍼레이션 중 이번에 배선된 것은 `POST /trips`·`GET /me/preferences` 둘뿐이고, 나머지는 `saved-stays` CRUD 5종과 같은 소비자 0 상태다.
 
 | 파일 | 역할 |
 |---|---|
@@ -255,9 +266,24 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `src/shared/api/generated/schemas/editSavedStayRequest.ts` | `EditSavedStayRequest` — `RegisterSavedStayRequest`에서 `registerRoute`·외부 출처 필드가 빠진 부분집합(경로 재변경 불가 암시) |
 | `src/shared/api/generated/schemas/savedStay.ts` | `SavedStay` — 응답 전체 형태. `coordConfirmed: boolean`에 "false면 거점 배정 불가(INV-U1-08)" 주석이 스키마 자체에 있음(orval이 openapi description을 그대로 옮김) |
 | `src/shared/api/generated/schemas/errorResponse.ts` | 공용 에러 응답 포락선 `{error: ErrorResponseError}` — saved-stays 전용이 아니라 U1 공용 형태 |
-| `src/shared/api/generated/schemas/errorResponseError.ts` | `ErrorResponseError` — `{code,message,traceId?,fields?}` |
+| `src/shared/api/generated/schemas/errorResponseError.ts` | `ErrorResponseError` — `{code,message,traceId?,fields?,existingProvider?}`(`existingProvider`는 TRIP-211 — SOCIAL_EMAIL_CONFLICT 409 전용, 이번 사이클은 그 재생성 빚만 선행 커밋 `df43082`로 분리 반영) |
+| `src/shared/api/generated/schemas/errorResponseErrorExistingProvider.ts` | **TRIP-211 재생성분(선행 커밋 `df43082`)** — `'google'\|'apple'\|'kakao'\|'naver'` |
 | `src/shared/api/generated/schemas/errorResponseErrorFieldsItem.ts` | `ErrorResponseErrorFieldsItem` — `{field?,reason?}`(필드별 검증 오류) |
 | `src/shared/api/generated/schemas/validationErrorResponse.ts` | `ValidationErrorResponse = ErrorResponse`(입력 검증 실패 — 별도 필드 없이 의미만 다른 타입 별칭) |
+| `src/shared/api/generated/trips/trips.ts` | **신규(TRIP-203)** — `postTrips`·`usePostTrips`(생성, 유일한 소비처) · `getTrips`·`useGetTrips`·`getGetTripsQueryKey`(목록, `useCreateTrip`의 무효화 키 출처) + `getTripsTripId`·`patchTripsTripId`·`deleteTripsTripId`·`postTripsTripIdBases`·`getTripsTripIdBases`·`deleteBasesId`·`getCoverage`·`postMustVisits`·`getMustVisits`·`deleteMustVisitsId` — **⚠️ 소비자 0**(bases·coverage·must-visits, TRIP-84·미티켓 US-TRIP-06·TRIP-209 소관. openapi에 `operationId` 0건이라 orval이 method+path로 이름을 지었다 — 티켓 표기 `createTrip`이 아니라 `postTrips`) |
+| `src/shared/api/generated/preferences/preferences.ts` | **신규(TRIP-203)** — `getMePreferences`·`useGetMePreferences`(조회, `usePreferencePrefill`이 재수출) + `putMePreferences`·`usePutMePreferences` — **⚠️ PUT은 소비자 0**(이번 칸은 조회만 배선, 계정 취향 수정 화면은 이 스토리 밖) |
+| `src/shared/api/generated/schemas/createTripRequest.ts` | `CreateTripRequest` — required `startDate`·`endDate`·`destinations`, 옵셔널 `title`·`party`·`companionType`·`budgetTotal`·`preferenceSnapshot`(AC-3·AC-6이 이 필수/옵셔널 경계를 잠근다) |
+| `src/shared/api/generated/schemas/trip.ts` | `Trip` — required 10필드(`tripId`·`title`·`startDate`·`endDate`·`party`·`preferenceSnapshot`·`destinations`·`status`·`createdAt`·`updatedAt`). `preferenceSnapshot`이 **응답에는 required**인 것이 AC-6("클라이언트는 안 보낸다")의 근거(채우는 주인은 서버) |
+| `src/shared/api/generated/schemas/tripDestination.ts` | `TripDestination` — `{seq,region,nights}` 셋 다 필수 |
+| `src/shared/api/generated/schemas/companionType.ts` | `CompanionType` — `'혼자'\|'친구'\|'연인'\|'가족'` 4값. **`'커플'` 없음**(온보딩 축과 다른 목록, BR-U1-39 — `커플→연인` 매핑 함수는 TRIP-204 소관) |
+| `src/shared/api/generated/schemas/tripStatus.ts` | `TripStatus` — `'PLANNED'\|'CONFIRMED'\|'ACTIVE'\|'ENDED'`(BR-U1-42 단방향) |
+| `src/shared/api/generated/schemas/tripPreferenceSnapshot.ts` | `Trip.preferenceSnapshot`의 타입(응답 쪽, required — 취향 동결 스냅숏. 만드는 자리는 서버, 클라이언트는 절대 안 만듦) |
+| `src/shared/api/generated/schemas/createTripRequestPreferenceSnapshot.ts` | `CreateTripRequest.preferenceSnapshot`의 타입(요청 쪽, 옵셔널 — `buildCreateTripRequest`가 이 키를 결과에서 걷어내 AC-6을 지킨다) |
+| `src/shared/api/generated/schemas/preferenceView.ts` | `PreferenceView` — 7축(`pace`·`budget`·`companion`·`styles`·`activities`·`foodTastes`·`transportModes`) **전부 옵셔널**. `usePreferencePrefill`의 반환 타입 |
+| `src/shared/api/generated/schemas/preferenceViewBudget.ts` | `PreferenceView.budget` — `{tier?,rawAmount?,isNeutralDefault?}`. `rawAmount`가 숫자일 때만 여행 생성 요청의 `budgetTotal`로 실린다 |
+| `src/shared/api/generated/schemas/preferenceViewCompanion.ts` | `PreferenceView.companion` — 동행 축 취향(이번 칸은 소비 안 함) |
+| `src/shared/api/generated/schemas/addMustVisitRequest.ts` · `src/shared/api/generated/schemas/assignBaseRequest.ts` · `src/shared/api/generated/schemas/baseAssignment.ts` · `src/shared/api/generated/schemas/coverage.ts` · `src/shared/api/generated/schemas/dayCoverage.ts` · `src/shared/api/generated/schemas/dayCoverageStatus.ts` · `src/shared/api/generated/schemas/editTripRequest.ts` · `src/shared/api/generated/schemas/mustVisit.ts` · `src/shared/api/generated/schemas/mustVisitType.ts` | **`trips` 태그가 통째로 딸려오며 생긴 소비자 0 스키마 9종**(bases·coverage·must-visits 도메인) — TRIP-84·TRIP-209 소관, 이번 사이클은 배선하지 않음 |
+| `src/shared/api/generated/schemas/preferenceInput.ts` · `src/shared/api/generated/schemas/preferenceInputActivitiesItem.ts` · `src/shared/api/generated/schemas/preferenceInputBudgetTier.ts` · `src/shared/api/generated/schemas/preferenceInputCompanionTypesItem.ts` · `src/shared/api/generated/schemas/preferenceInputFoodTastesItem.ts` · `src/shared/api/generated/schemas/preferenceInputPace.ts` · `src/shared/api/generated/schemas/preferenceInputStylesItem.ts` · `src/shared/api/generated/schemas/preferenceInputTransportModesItem.ts` · `src/shared/api/generated/schemas/prefArrayAxis.ts` · `src/shared/api/generated/schemas/prefScalarAxis.ts` | **`PUT /me/preferences` 요청 바디 스키마 10종 — ⚠️ 소비자 0**(이번 칸은 `GET`만 배선. 계정 취향 수정 화면이 생길 때 소비) |
 
 ## 테스트 인프라
 
@@ -321,6 +347,9 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `stayKey` | `features/stay/model` | `stayKey(item: Pick<StayItem,'externalSource'\|'externalId'>): string` — `${externalSource}:${externalId}` 합성(TRIP-181). React key·testID 공용 출처 |
 | `resolveStaySearchState` · `StaySearchState` | `features/stay/model/staySearchState` | 판별 유니온(5종) + 판정 순수 함수(TRIP-182, PBT 대상). 화면은 이 결과를 받기만 하고 재판정하지 않는다(구조 가드) |
 | `filterReasonLabel` | `features/stay/model/filterReasonLabel` | `filterZeroReasons` 코드 → 한글 표시명(TRIP-182). 축 사전 2줄 + 모르는 축 폴백 |
+| `buildCreateTripRequest` · `CreateTripInput` | `features/trip/model/createTripRequest` | 여행 생성 요청 조립 순수 함수(TRIP-203) — 예산 러프값 3갈래(있음·null·미도착) + `preferenceSnapshot` 런타임 제거 |
+| `useCreateTrip` | `features/trip/model` | `POST /trips` mutation 래퍼(TRIP-203) — 성공 시 `GET /trips` 목록만 무효화. `usePostTrips`(생성물)를 그대로 감싸 몸통 1줄, 반환값은 `{ data: CreateTripRequest }` 봉투를 그대로 노출 |
+| `usePreferencePrefill` | `features/trip/model` | `GET /me/preferences` 조회 훅(TRIP-203) — `useGetMePreferences` 재수출 1줄. `usePreferenceStore`(온보딩 로컬 드래프트)와 다른 물건 |
 | `fetchBootstrap` · `postSocialLogin` · `postSocialTokenLogin` · `refreshTokens` | `shared/api` | 부트스트랩 조회 · 소셜 로그인(인가코드 경로) · 소셜 로그인(**네이티브 SDK access token 경로**, TRIP-210) · 토큰 갱신. `postSocialTokenLogin`은 `postSocialLogin`과 완전히 같은 모양(무인증 `baseClient` + 기존 `normalizeSocialError` 재사용, 새 에러 매핑 0) |
 | `fetchTerms` · `submitConsents` | `shared/api` | 약관 목록 · 동의 1회 제출(체크된 것만 GRANT) |
 | `fetchNicknameSuggestions` · `checkNickname` · `updateNickname` · `completeOnboarding` | `shared/api` | 후보 조회 · 서버 판정 · 저장 · 온보딩 완료 |
