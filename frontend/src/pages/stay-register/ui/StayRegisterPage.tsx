@@ -21,6 +21,7 @@ import { useRouter } from 'expo-router';
 import type { GeocodeCandidate } from '@/shared/api/generated/schemas';
 import { usePostSavedStays } from '@/shared/api/generated/saved-stays/saved-stays';
 import { useGetStaysGeocode } from '@/shared/api/generated/stays/stays';
+import type { KakaoMapMessage } from '@/shared/map';
 
 import {
   applyDatePick,
@@ -32,6 +33,7 @@ import {
   buildStayRegisterRequest,
   canSubmitStayRegister,
   type StayRegisterFlow,
+  type StayRegisterTab,
 } from '@/features/stay/model/stayRegisterForm';
 import { StayRegisterScreen } from '@/features/stay/ui/StayRegisterScreen';
 
@@ -50,10 +52,16 @@ const EMPTY_RANGE: StayDateRange = { checkIn: null, checkOut: null };
 export function StayRegisterPage(): ReactElement {
   const router = useRouter();
 
+  const [activeTab, setActiveTab] = useState<StayRegisterTab>('mapsearch');
   const [query, setQuery] = useState('');
+  const [name, setName] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
   const [selectedCandidate, setSelectedCandidate] =
     useState<GeocodeCandidate | null>(null);
+  const [coordSource, setCoordSource] =
+    useState<StayRegisterFlow['coordSource']>('MAP_SEARCH');
+  const [pinAddressStatus, setPinAddressStatus] =
+    useState<StayRegisterFlow['pinAddressStatus']>('idle');
   const [coordConfirmed, setCoordConfirmed] = useState(false);
   const [mapSheetState, setMapSheetState] =
     useState<StayRegisterFlow['mapSheetState']>('closed');
@@ -90,10 +98,14 @@ export function StayRegisterPage(): ReactElement {
             : 'empty';
 
   const flow: StayRegisterFlow = {
+    activeTab,
     query,
+    name,
     searchStatus,
     candidates,
     selectedCandidate,
+    coordSource,
+    pinAddressStatus,
     coordConfirmed,
     mapSheetState,
     checkIn: dateRange.checkIn,
@@ -107,15 +119,76 @@ export function StayRegisterPage(): ReactElement {
     setSelectedCandidate(null);
     setCoordConfirmed(false);
     setMapSheetState('closed');
+    // 새 검색은 이전 핀 세션의 잔상도 지운다 — 안 지우면 검색으로 후보가 비었는데도 옛
+    // 핀의 "역지오코딩 실패" 배너가 핀 탭에 남아 있는 것처럼 보일 수 있다.
+    setPinAddressStatus('idle');
     // 재검색은 제출 실패도 지운다(5-b W-3). 안 지우면 "등록에 실패했어요" 배너가 다음
     // 검색을 넘어 살아남고, 후보가 초기화된 상태라 그 버튼이 침묵 no-op가 된다 —
     // B-1과 같은 뿌리(재검색이 submitStatus를 안 건드린다)에서 나온 두 번째 증상이다.
     setSubmitStatus('idle');
   }
 
+  /** 5-b 2차(B-2 잔여) — 핀 탭을 벗어나면 `PinPanel`의 지도(WebView 문서)가 언마운트된다
+   * (조건부 렌더, `StayRegisterScreen`의 `activeTab === 'pin'` 분기 — 시트 여닫기와 달리
+   * 이건 이번 칸 이전부터 있던 동작이라 손대지 않는다, §7-7). 역지오코딩이 진행 중일 때
+   * 그 문서가 죽으면 응답이 다시는 안 오므로, 손대지 않으면 `pinAddressStatus`가 'loading'에
+   * 영구히 갇힌다(P-9가 loading을 무표시로 잠가서 화면은 완전히 조용해진다 — INV-4 위반).
+   * 문서가 죽었다는 사실 자체를 상태에 반영해 실패로 떨어뜨린다 — 다시 핀 탭에 돌아와도
+   * 그 요청의 결과는 이제 영원히 안 올 것이므로, "실패했으니 이름을 직접 치라"는 안내가
+   * "아무 말 없이 멈춰 있다"보다 사실에 더 가깝다(P-2 계약). */
+  function handleSelectTab(tab: StayRegisterTab): void {
+    if (
+      activeTab === 'pin' &&
+      tab !== 'pin' &&
+      pinAddressStatus === 'loading'
+    ) {
+      setPinAddressStatus('error');
+    }
+    setActiveTab(tab);
+  }
+
   function handleSelectCandidate(candidate: GeocodeCandidate): void {
     setSelectedCandidate(candidate);
     setCoordConfirmed(false);
+    setCoordSource('MAP_SEARCH');
+    setPinAddressStatus('idle');
+  }
+
+  /** 핀 지정 탭의 지도가 올려보낸 메시지 — 해석은 전부 여기서 한다(화면은 무상태, G-2).
+   * 좌표 슬롯은 하나뿐이라(★10) 핀 좌표도 selectedCandidate에 담고 coordSource로만 출처를
+   * 구분한다. 새 핀은 항상 이전 확정을 푼다(D4 — 탭 전환은 제외지만 재핀은 포함). */
+  function handlePinMessage(message: KakaoMapMessage): void {
+    if (message.type === 'PIN_DROP') {
+      setSelectedCandidate({
+        name: '',
+        address: '',
+        lat: message.lat,
+        lng: message.lng,
+      });
+      setCoordSource('PIN');
+      setCoordConfirmed(false);
+      setPinAddressStatus('loading');
+      return;
+    }
+    if (message.type === 'GEOCODE_OK') {
+      const buildingName = message.buildingName ?? '';
+      setSelectedCandidate((prev) =>
+        prev === null
+          ? null
+          : { ...prev, address: message.address, name: buildingName }
+      );
+      setPinAddressStatus('ok');
+      // TRIP-199 5-a(W-1) — 숙소명 입력 상태(name)는 자동으로 채우지 않는다. 예전에는
+      // 여기서 건물명을 name에 채웠는데, 그 값이 name 상태에 남아 지도 검색 탭으로
+      // 되돌아가도 따라가고(그 화면엔 이름 칸이 없어 보지도 지우지도 못한다), 엉뚱한
+      // 후보를 확정해도 그 이름으로 나갔다. 건물명은 selectedCandidate.name에 이미
+      // 담기고 buildStayRegisterRequest의 폴백이 그것을 쓰므로, 자동 채움 없이도 핀 등록
+      // 결과는 그대로다.
+      return;
+    }
+    // GEOCODE_FAIL — 침묵 실패 금지(INV-4). 좌표는 이미 확보돼 있으니 등록 자체는
+    // 막지 않는다(D3) — canSubmitStayRegister는 pinAddressStatus를 보지 않는다.
+    setPinAddressStatus('error');
   }
 
   function handleOpenMapSheet(): void {
@@ -162,10 +235,13 @@ export function StayRegisterPage(): ReactElement {
     <StayRegisterScreen
       flow={flow}
       today={todayIso()}
+      onSelectTab={handleSelectTab}
       onChangeQuery={setQuery}
+      onChangeName={setName}
       onSubmitQuery={handleSubmitQuery}
       onRetrySearch={() => geocodeQuery.refetch()}
       onSelectCandidate={handleSelectCandidate}
+      onPinMessage={handlePinMessage}
       onOpenMapSheet={handleOpenMapSheet}
       onConfirmCoord={handleConfirmCoord}
       onCloseMapSheet={() => setMapSheetState('closed')}
