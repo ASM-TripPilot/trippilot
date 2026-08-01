@@ -75,6 +75,13 @@ import path from 'path';
  * 충족한다(① 그 단언을 만든 20260727 사이클 밖의 작업이고 ② 배열 갱신 없이는 통과 불가).
  * **카운터 0 → 1.** 헤더 규약상 다음 pages 슬라이스 추가에서 2가 되면 그 사이클에서 즉시
  * 부분집합 검사로 완화한다(사이클 4를 기다리지 않는다).
+ *
+ * 갱신(20260731-trip198-stay-register): `stay-register` 슬라이스 신설로 같은 단언이 또 red를
+ * 냈다 — 제외구 AND 조건 둘 다 충족(① 20260727 사이클 밖 ② 배열 갱신 없이는 통과 불가).
+ * **카운터 1 → 2 = 위 규약의 완화 시점.** 그래서 이 사이클에서 완전일치 → **부분집합 검사**로
+ * 격하한다. 잠그는 것은 "알려진 슬라이스가 사라지지 않았다"로 남고, 새 슬라이스 추가는 더는
+ * red를 내지 않는다. 슬라이스 **삭제·개명**은 여전히 잡힌다(그쪽이 이 단언의 실질이다).
+ * 격하했으므로 카운터는 여기서 **닫는다** — 더 셀 대상이 없다.
  */
 
 const ROOT = path.resolve('src');
@@ -288,19 +295,21 @@ describe('AC-2 · pages 층 신설 + 라우트 배선', () => {
       expect(barrelSource).toMatch(new RegExp(symbol));
     });
 
-    // 부정 — 계획 밖 슬라이스가 끼어들거나 일부가 빠지면 red(위 forEach와 별개로 전체 집합을 잠근다).
-    // TRIP-183에서 `region-picker`(e00·d1b 지역 선택) 신설로 6 → 7. 정당한 red다 —
-    // 정본 `frontend-components.md` §1이 `explore/region.tsx` 라우트를 이미 declare 하고 있다.
+    // 부정 — 알려진 슬라이스가 사라지거나 개명되면 red. 헤더 규약(B 카운터 2)대로
+    // 완전일치에서 **부분집합**으로 격하했다: 새 슬라이스 추가는 더는 red를 내지 않는다.
     const slices = listDirNames(PAGES_DIR);
-    expect(slices).toEqual([
-      'login',
-      'onboarding-nickname',
-      'onboarding-pref1',
-      'onboarding-pref2',
-      'onboarding-terms',
-      'region-picker',
-      'stay-search',
-    ]);
+    expect(slices).toEqual(
+      expect.arrayContaining([
+        'login',
+        'onboarding-nickname',
+        'onboarding-pref1',
+        'onboarding-pref2',
+        'onboarding-terms',
+        'region-picker',
+        'stay-search',
+        'stay-register',
+      ])
+    );
   });
 
   it('라우트 5개가 @/pages를 가리키고, src/app 어디에도 옛 컨테이너 경로 참조가 없다', () => {
