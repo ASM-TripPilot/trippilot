@@ -16,3 +16,9 @@
 
 # Claude Code (로컬 전용 설정)
 .claude/settings.local.json
+
+# 하네스 사이클 중간 산출물 (감사 추적용, 로컬 보존)
+_workspace/
+
+# graphify 지식 그래프 산출물 (로컬 볼트, 재생성 가능)
+graphify-out/
