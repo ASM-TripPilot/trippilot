@@ -434,6 +434,36 @@ describe('G-7 · e02에서 e05로 가는 문이 실제로 배선됐다 (01b Seed
   });
 });
 
+/**
+ * 게이트①-3 추가(2026-08-01) — **실기 스모크가 잡은 결함의 재발 방지**.
+ *
+ * 등록 화면은 몰입 화면(AC-11, 하단 탭바 없음)이라 상단 안전영역을 스스로 져야 하는데
+ * 루트가 맨 `View`였다. 그래서 제목 「숙소 등록」이 상태바 시계와 겹쳐 글자가 뭉개졌다
+ * (시뮬레이터 실측, 이 파일의 G-0~G-8과 렌더 테스트 550건 전부 green인 채로 통과했다).
+ *
+ * **같은 결함의 재발이다** — TRIP-181이 e02에서 내보냈고 TRIP-182가 `SafeAreaView`로
+ * 고치며 `staySearchStructure.test.ts`에 가드를 붙였는데, 새 화면을 만들 때 그 가드가
+ * 따라오지 않았다. 이 describe가 그 복제본이다.
+ */
+describe('G-9 · SafeArea — 몰입 화면이 상단 안전영역을 진다 (브리프 AC-11)', () => {
+  it('StayRegisterScreen.tsx 루트가 SafeAreaView이고 edges에 top이 있으며, stay-register-root가 유지된다', () => {
+    const source = readOne(SCREEN_FILE);
+
+    // 긍정 — 안전영역 컨테이너가 실재한다.
+    expect(source).toContain('react-native-safe-area-context');
+    expect(source).toContain('SafeAreaView');
+    expect(source).toMatch(/edges=\{\[[^\]]*'top'/);
+
+    // 짝 — 그러면서 기존 testID 계약(G-6 모집단)이 살아 있다. 루트를 갈아끼우며
+    // testID가 딸려 나가면 이 파일의 다른 가드와 렌더 테스트가 통째로 무너진다.
+    expect(source).toContain('stay-register-root');
+
+    // 잠그지 않는 것 — 실제 겹침은 기기의 물리적 형상값이라 렌더 트리에 없다.
+    // jest가 잴 수 있는 것은 "쓰긴 했나"까지고, 겹침 여부는 실기 스모크 소관이다
+    // (`staySearchStructure.test.ts` AC-13 가드의 같은 주석과 동일한 사정거리).
+  });
+});
+
 describe('G-8 · zod + useState 규약, 새 의존성 0 (01b Seed §3-5 · §7)', () => {
   it('폼 모델이 zod를 쓰고, RHF·zustand·새 라이브러리가 등록 표면과 package.json에 없다', () => {
     // 긍정 — 폼 검증의 정본이 zod 스키마다(티켓 "Zod 폼 검증(UX 사본)").

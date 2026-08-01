@@ -12,6 +12,7 @@
  */
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import type { GeocodeCandidate } from '@/shared/api/generated/schemas';
@@ -423,183 +424,185 @@ export function StayRegisterScreen({
     flow.selectedCandidate !== null && flow.mapSheetState === 'closed';
 
   return (
-    <View testID="stay-register-root" className="flex-1 bg-canvas">
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 32 }}
-      >
-        <Text className="font-noto-bold text-hero font-bold text-ink px-lg pb-sm pt-lg">
-          숙소 등록
-        </Text>
+    <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+      <View testID="stay-register-root" className="flex-1 bg-canvas">
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingBottom: 32 }}
+        >
+          <Text className="font-noto-bold text-hero font-bold text-ink px-lg pb-sm pt-lg">
+            숙소 등록
+          </Text>
 
-        <RegisterTabs />
+          <RegisterTabs />
 
-        <View className="w-full gap-md px-lg pt-lg">
-          <TextInput
-            testID="stay-register-search-input"
-            value={flow.query}
-            onChangeText={onChangeQuery}
-            returnKeyType="search"
-            placeholder="숙소 이름이나 주소로 검색"
-            onSubmitEditing={() => {
-              if (flow.searchStatus !== 'loading') onSubmitQuery();
-            }}
-            className="h-12 w-full rounded-input border border-hairline-strong px-md font-noto text-body text-ink"
-          />
-        </View>
-
-        <View className="w-full gap-md pt-md">
-          {flow.searchStatus === 'loading' ? <CandidateSkeleton /> : null}
-          {flow.searchStatus === 'error' ? (
-            <SearchFailBlock onRetrySearch={onRetrySearch} />
-          ) : null}
-          {flow.searchStatus === 'empty' ? (
-            <View testID="stay-register-candidate-empty" className="px-lg">
-              <Text className="font-noto text-body text-muted">
-                검색 결과가 없어요
-              </Text>
-            </View>
-          ) : null}
-          {flow.searchStatus === 'success' ? (
-            <CandidateList
-              candidates={flow.candidates}
-              selected={flow.selectedCandidate}
-              onSelectCandidate={onSelectCandidate}
+          <View className="w-full gap-md px-lg pt-lg">
+            <TextInput
+              testID="stay-register-search-input"
+              value={flow.query}
+              onChangeText={onChangeQuery}
+              returnKeyType="search"
+              placeholder="숙소 이름이나 주소로 검색"
+              onSubmitEditing={() => {
+                if (flow.searchStatus !== 'loading') onSubmitQuery();
+              }}
+              className="h-12 w-full rounded-input border border-hairline-strong px-md font-noto text-body text-ink"
             />
-          ) : null}
+          </View>
 
-          {showMapPreview && flow.selectedCandidate !== null ? (
-            <View
-              testID="stay-register-map-preview"
-              className="mx-lg h-[196px] overflow-hidden rounded-card"
-            >
-              <KakaoMapView
-                center={{
-                  lat: flow.selectedCandidate.lat,
-                  lng: flow.selectedCandidate.lng,
-                }}
-              />
-            </View>
-          ) : null}
-
-          {showCoordNotice || showMapConfirm ? (
-            <View className="gap-sm px-lg">
-              {showCoordNotice ? (
-                <View
-                  testID="stay-register-coordnotice"
-                  className="flex-row items-center rounded-button border border-info-border bg-info-bg px-md py-sm"
-                >
-                  <Text className="flex-1 font-noto text-body text-info">
-                    지도에서 위치를 확인해 주세요
-                  </Text>
-                </View>
-              ) : null}
-              {showMapConfirm ? (
-                <Pressable
-                  testID="stay-register-mapconfirm"
-                  accessibilityRole="button"
-                  onPress={onOpenMapSheet}
-                  className="h-12 items-center justify-center rounded-button border border-hairline-strong"
-                >
-                  <Text className="font-noto-bold text-card-title font-bold text-ink">
-                    지도에서 위치 확인
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
-
-          <Pressable
-            testID="stay-register-date-field"
-            accessibilityRole="button"
-            onPress={onOpenDateSheet}
-            className="mx-lg gap-xs rounded-button border border-hairline-strong px-md py-sm"
-          >
-            <Text className="font-noto text-label text-muted">
-              체크인 · 체크아웃 (선택)
-            </Text>
-            <Text
-              testID="stay-register-date-summary"
-              className="font-noto-bold text-card-title font-bold text-ink"
-            >
-              {dateSummary}
-            </Text>
-            {dateError ? (
-              <Text
-                testID="stay-register-date-error"
-                className="font-noto text-caption text-primary-text"
-              >
-                체크아웃은 체크인 이후 날짜를 선택하세요
-              </Text>
+          <View className="w-full gap-md pt-md">
+            {flow.searchStatus === 'loading' ? <CandidateSkeleton /> : null}
+            {flow.searchStatus === 'error' ? (
+              <SearchFailBlock onRetrySearch={onRetrySearch} />
             ) : null}
-          </Pressable>
+            {flow.searchStatus === 'empty' ? (
+              <View testID="stay-register-candidate-empty" className="px-lg">
+                <Text className="font-noto text-body text-muted">
+                  검색 결과가 없어요
+                </Text>
+              </View>
+            ) : null}
+            {flow.searchStatus === 'success' ? (
+              <CandidateList
+                candidates={flow.candidates}
+                selected={flow.selectedCandidate}
+                onSelectCandidate={onSelectCandidate}
+              />
+            ) : null}
 
-          <Pressable
-            testID="stay-register-submit"
-            accessibilityRole="button"
-            disabled={!canSubmit}
-            onPress={onSubmit}
-            className={`mx-lg h-12 items-center justify-center rounded-button ${
-              canSubmit ? 'bg-primary' : 'bg-surface-strong'
-            }`}
-          >
-            <Text
-              className={`font-noto-bold text-card-title font-bold ${
-                canSubmit ? 'text-on-primary' : 'text-muted-soft'
+            {showMapPreview && flow.selectedCandidate !== null ? (
+              <View
+                testID="stay-register-map-preview"
+                className="mx-lg h-[196px] overflow-hidden rounded-card"
+              >
+                <KakaoMapView
+                  center={{
+                    lat: flow.selectedCandidate.lat,
+                    lng: flow.selectedCandidate.lng,
+                  }}
+                />
+              </View>
+            ) : null}
+
+            {showCoordNotice || showMapConfirm ? (
+              <View className="gap-sm px-lg">
+                {showCoordNotice ? (
+                  <View
+                    testID="stay-register-coordnotice"
+                    className="flex-row items-center rounded-button border border-info-border bg-info-bg px-md py-sm"
+                  >
+                    <Text className="flex-1 font-noto text-body text-info">
+                      지도에서 위치를 확인해 주세요
+                    </Text>
+                  </View>
+                ) : null}
+                {showMapConfirm ? (
+                  <Pressable
+                    testID="stay-register-mapconfirm"
+                    accessibilityRole="button"
+                    onPress={onOpenMapSheet}
+                    className="h-12 items-center justify-center rounded-button border border-hairline-strong"
+                  >
+                    <Text className="font-noto-bold text-card-title font-bold text-ink">
+                      지도에서 위치 확인
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
+            <Pressable
+              testID="stay-register-date-field"
+              accessibilityRole="button"
+              onPress={onOpenDateSheet}
+              className="mx-lg gap-xs rounded-button border border-hairline-strong px-md py-sm"
+            >
+              <Text className="font-noto text-label text-muted">
+                체크인 · 체크아웃 (선택)
+              </Text>
+              <Text
+                testID="stay-register-date-summary"
+                className="font-noto-bold text-card-title font-bold text-ink"
+              >
+                {dateSummary}
+              </Text>
+              {dateError ? (
+                <Text
+                  testID="stay-register-date-error"
+                  className="font-noto text-caption text-primary-text"
+                >
+                  체크아웃은 체크인 이후 날짜를 선택하세요
+                </Text>
+              ) : null}
+            </Pressable>
+
+            <Pressable
+              testID="stay-register-submit"
+              accessibilityRole="button"
+              disabled={!canSubmit}
+              onPress={onSubmit}
+              className={`mx-lg h-12 items-center justify-center rounded-button ${
+                canSubmit ? 'bg-primary' : 'bg-surface-strong'
               }`}
             >
-              {flow.submitStatus === 'submitting' ? '등록 중…' : '등록하기'}
-            </Text>
-          </Pressable>
-
-          {flow.submitStatus === 'error' ? (
-            <View
-              testID="stay-register-submitfail"
-              className="mx-lg flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-md py-sm"
-            >
-              <Text className="flex-1 font-noto-bold text-label font-bold text-ink">
-                등록에 실패했어요
-              </Text>
-              {/* 가드가 페이지에도 있지만(5-b B-1) 눌리는데 아무 일도 안 나는 버튼은
-                  INV-4 위반이라, 게이트가 닫혔으면 여기서도 잠긴 것이 보이게 한다. */}
-              <Pressable
-                testID="stay-register-submitfail-retry"
-                accessibilityRole="button"
-                disabled={!canSubmit}
-                onPress={onSubmit}
+              <Text
+                className={`font-noto-bold text-card-title font-bold ${
+                  canSubmit ? 'text-on-primary' : 'text-muted-soft'
+                }`}
               >
-                <Text
-                  className={`font-noto-bold text-label font-bold ${
-                    canSubmit ? 'text-primary' : 'text-muted-soft'
-                  }`}
-                >
-                  다시 시도
+                {flow.submitStatus === 'submitting' ? '등록 중…' : '등록하기'}
+              </Text>
+            </Pressable>
+
+            {flow.submitStatus === 'error' ? (
+              <View
+                testID="stay-register-submitfail"
+                className="mx-lg flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-md py-sm"
+              >
+                <Text className="flex-1 font-noto-bold text-label font-bold text-ink">
+                  등록에 실패했어요
                 </Text>
-              </Pressable>
-            </View>
-          ) : null}
-        </View>
-      </ScrollView>
+                {/* 가드가 페이지에도 있지만(5-b B-1) 눌리는데 아무 일도 안 나는 버튼은
+                  INV-4 위반이라, 게이트가 닫혔으면 여기서도 잠긴 것이 보이게 한다. */}
+                <Pressable
+                  testID="stay-register-submitfail-retry"
+                  accessibilityRole="button"
+                  disabled={!canSubmit}
+                  onPress={onSubmit}
+                >
+                  <Text
+                    className={`font-noto-bold text-label font-bold ${
+                      canSubmit ? 'text-primary' : 'text-muted-soft'
+                    }`}
+                  >
+                    다시 시도
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+        </ScrollView>
 
-      {flow.mapSheetState !== 'closed' && flow.selectedCandidate !== null ? (
-        <MapSheet
-          mapSheetState={flow.mapSheetState}
-          candidate={flow.selectedCandidate}
-          onConfirmCoord={onConfirmCoord}
-          onCloseMapSheet={onCloseMapSheet}
-        />
-      ) : null}
+        {flow.mapSheetState !== 'closed' && flow.selectedCandidate !== null ? (
+          <MapSheet
+            mapSheetState={flow.mapSheetState}
+            candidate={flow.selectedCandidate}
+            onConfirmCoord={onConfirmCoord}
+            onCloseMapSheet={onCloseMapSheet}
+          />
+        ) : null}
 
-      {flow.dateSheetOpen ? (
-        <CalendarSheet
-          today={today}
-          checkIn={flow.checkIn}
-          calendarMonth={calendarMonth}
-          onShiftCalendarMonth={onShiftCalendarMonth}
-          onPickDate={onPickDate}
-          onCloseDateSheet={onCloseDateSheet}
-        />
-      ) : null}
-    </View>
+        {flow.dateSheetOpen ? (
+          <CalendarSheet
+            today={today}
+            checkIn={flow.checkIn}
+            calendarMonth={calendarMonth}
+            onShiftCalendarMonth={onShiftCalendarMonth}
+            onPickDate={onPickDate}
+            onCloseDateSheet={onCloseDateSheet}
+          />
+        ) : null}
+      </View>
+    </SafeAreaView>
   );
 }
