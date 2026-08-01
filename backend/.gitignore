@@ -5,8 +5,8 @@ build/
 
 # Kotlin / Java
 *.class
-/bin/
-/out/   # 루트 앵커 — 헥사고날 adapter/out/ 를 삼키지 않도록(#gitignore-out-trap)
+bin/
+out/
 
 # IDE
 .idea/

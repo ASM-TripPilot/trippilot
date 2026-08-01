@@ -1,74 +1,63 @@
 // TripPilot 전체 사이클 최소 스키마 (밴드 a~j)
 // dbdiagram.io 에 붙여넣기 → ERD 자동 렌더.
 // 원칙: 개념당 1테이블 · 최소 컬럼(PK·FK·핵심 필드·상태·시각). 제약·인덱스·전체 필드는 유닛 심화에서.
-// [동기화 2026-07-24] 밴드 c(계정·프로필)+공통 인프라는 실제 구현(마이그레이션 V1.0~V1.7) 기준으로 갱신 — PK명·컬럼·상태값이 코드와 일치.
-//   PK명은 테이블별 코드 실제명을 따름(account_id·social_identity_id·record_id·deletion_id, 단 outbox_event=id). 밴드 d~j(미구현)는 설계 스테이지 그대로.
 // 제외: 어시스턴트(b·타 담당), 숙소 위시리스트(후속), U1 세부 인프라(refresh_session·terms_version·location_legal_log·banned_word 등 → U1 상세 문서), 외부 캐시성(forecast·weather·stay_static_cache), 전송/전이성(generation_session·share_card_spec).
 
 // ── 계정·프로필 (c) ──
 Table account {
-  account_id uuid [pk]
-  email varchar [note: '소셜 제공 이메일. NULL=미제공(Apple 릴레이 등)']
-  status varchar [note: 'ACTIVE/DELETION_PENDING/DELETED/PENDING_VERIFICATION']
-  sanction_status varchar [note: 'NONE/WARNED/COMMUNITY_SUSPENDED/FULLY_SUSPENDED']
+  id uuid [pk]
+  email varchar
+  status varchar [note: 'ACTIVE/DELETION_PENDING/DELETED']
   age_method varchar [note: 'BIRTH_DATE/SELF_DECLARED']
   birth_date date
-  age_confirmed_at timestamptz
   created_at timestamptz
-  verified_at timestamptz [note: '소셜=created_at과 동일(제공자 신원 보증)']
-  deleted_at timestamptz
 }
 Table social_identity {
-  social_identity_id uuid [pk]
-  account_id uuid [ref: > account.account_id]
+  id uuid [pk]
+  account_id uuid [ref: > account.id]
   provider varchar [note: 'GOOGLE/APPLE/KAKAO/NAVER']
   provider_sub varchar
-  provider_email varchar
-  linked_at timestamptz
   indexes { (provider, provider_sub) [unique] }
+  created_at timestamptz
 }
 Table consent_record {
-  record_id bigint [pk, note: 'append-only']
-  account_id uuid [ref: > account.account_id]
+  id bigint [pk, note: 'append-only']
+  account_id uuid [ref: > account.id]
   terms_type varchar
   terms_version varchar
   action varchar [note: 'GRANT/REVOKE']
-  channel varchar [note: 'ONBOARDING/RECONSENT/SETTINGS']
   occurred_at timestamptz
-  // FK (terms_type, terms_version) → terms_version(terms_type, version). terms_version 테이블은 U1 상세 문서 소유.
 }
 Table profile {
-  account_id uuid [pk, ref: - account.account_id]
-  nickname varchar [note: '2~20자 · lower(nickname) 전역 유일(파기 시 NULL화)']
-  nickname_updated_at timestamptz
+  account_id uuid [pk, ref: - account.id]
+  nickname varchar [unique]
   onboarding_completed_at timestamptz
+  created_at timestamptz
 }
 Table preference_set {
-  account_id uuid [pk, ref: - account.account_id]
-  styles "text[]"
+  account_id uuid [pk, ref: - account.id]
+  styles "varchar[]"
   budget_tier varchar
   budget_raw_amount bigint
-  companion_types "text[]"
+  companion_types "varchar[]"
   pet_flag bool
-  activities "text[]"
-  transport_modes "text[]"
-  food_tastes "text[]"
+  activities "varchar[]"
+  transport_modes "varchar[]"
+  food_tastes "varchar[]"
   pace varchar
-  updated_at timestamptz
-  // INV-PR2: 각 축 NULL=미설정. INV-PR3: budget_raw_amount 비NULL이면 budget_tier 필수.
+  created_at timestamptz
 }
 Table deletion_schedule {
-  deletion_id uuid [pk]
-  account_id uuid [ref: > account.account_id, note: 'INV-D1: 활성 유예 계정당 1개(부분 유니크 account_id WHERE cancelled_at IS NULL)']
-  requested_at timestamptz
-  purge_at timestamptz [note: '= requested_at + 30d']
-  cascade_summary jsonb
+  account_id uuid [pk, ref: - account.id, note: '계정당 1건(활성 유예 1:1). 재신청=행 갱신·이력 비보존 → 재신청 이력 보존 필요 시 유닛 심화에서 1:N(별도 PK+활성 부분유니크)로 전환']
+  purge_at timestamptz
   cancelled_at timestamptz
 }
 
 // ── 앱셸 (a) ──
-// app_config: DB 테이블 아님 — 최소/권장 버전은 BootstrapProperties(trippilot.bootstrap) 설정으로 구현(GET /bootstrap).
-//             동적 원격구성 필요 시 테이블로 승격.
+Table app_config {
+  id int [pk]
+  min_supported_version varchar
+}
 
 // ── 장소·숙소 (d,e) ──
 Table poi {
@@ -89,13 +78,13 @@ Table poi_snapshot {
 }
 Table saved_place {
   id uuid [pk]
-  account_id uuid [ref: > account.account_id]
+  account_id uuid [ref: > account.id]
   poi_id uuid [ref: > poi.id]
   saved_at timestamptz
 }
 Table saved_stay {
   id uuid [pk, note: '등록 숙소=거점. StayIdentity 매핑 흡수']
-  account_id uuid [ref: > account.account_id]
+  account_id uuid [ref: > account.id]
   name varchar
   coord point
   check_in date
@@ -112,7 +101,7 @@ Table ota_partner {
 }
 Table outbound_click {
   id uuid [pk]
-  account_id uuid [ref: > account.account_id]
+  account_id uuid [ref: > account.id]
   saved_stay_id uuid [ref: > saved_stay.id]
   ota_partner_id uuid [ref: > ota_partner.id]
   clicked_at timestamptz
@@ -121,7 +110,7 @@ Table outbound_click {
 // ── 여행·필수방문지 (g) ──
 Table trip {
   id uuid [pk]
-  account_id uuid [ref: > account.account_id]
+  account_id uuid [ref: > account.id]
   title varchar
   destination varchar
   start_date date
@@ -290,7 +279,7 @@ Table trip_summary {
   stats jsonb
 }
 Table style_analysis {
-  account_id uuid [pk, ref: - account.account_id]
+  account_id uuid [pk, ref: - account.id]
   data jsonb
   sample_trip_count int
   updated_at timestamptz
@@ -301,9 +290,6 @@ Table outbox_event {
   id bigint [pk]
   event_id uuid [unique]
   event_type varchar
-  aggregate_type varchar
-  aggregate_id varchar
   payload jsonb
-  occurred_at timestamptz
-  published_at timestamptz [note: 'NULL=미발행']
+  published_at timestamptz
 }

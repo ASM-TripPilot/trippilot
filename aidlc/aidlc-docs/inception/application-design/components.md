@@ -74,8 +74,7 @@
 - **api**: `TripFacade` — `getTripContext(tripId)`(솔버 입력 집약).
 - **이벤트**: `TripCreated`, `MustVisitChanged`(→ 재계산).
 
-### C7. Place Data (모듈 7) · 에픽 E·F·**A(탐색)** · FR-SCHED·ADR-0009 · **RAG 게이트**
-> **유닛 배정 변경 (2026-07-23)**: C7은 **U3 → U1로 이동**한다. 탐색 랜딩·장소 담기·필수 방문지·숙소 지도 검색(밴드 d·e·g)이 POI 스키마를 먼저 요구하므로 U1이 소유하며, **INV-1 집행과 closed-set 게이트 PBT도 U1로 함께 이동**한다. U3는 C8(일정 생성)만 보유하고 U1의 `CandidatePoolPort`를 소비한다. (근거: U1 Functional Design CQ3=B)
+### C7. Place Data (모듈 7) · 에픽 E·F · FR-SCHED·ADR-0009 · **RAG 게이트**
 - **목적**: 장소(POI) 위치·영업시간·카테고리 **표준 스키마로 정규화** + **closed-set 후보 풀(RAG 그라운딩)** 제공. **INV-1 소유자**.
 - **책임**: 다중 지도/장소 API를 단일 스키마 뒤로 추상화(벤더 비종속), 영업시간 미확인 분리, 환각·폐업 POI 제외, 좌표·거리 산출 입력.
 - **api**: `PlaceDataFacade` = **`CandidatePoolPort`**(§3.4).
