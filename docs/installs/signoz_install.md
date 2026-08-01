@@ -1,10 +1,12 @@
 # SigNoz 설치 및 로그 검색 가이드
 
-이 문서는 TripPilot 로컬 개발환경에 **SigNoz**(오픈소스 관측 플랫폼)를 설치하고, 수집된 로그를 검색하는 방법을 설명합니다.
+이 문서는 TripPilot 로컬 개발환경의 **Kubernetes 클러스터에 SigNoz**(오픈소스 관측 플랫폼)를 설치하고, 수집된 로그를 검색하는 방법을 설명합니다.
 
 SigNoz는 OpenTelemetry 기반으로 **로그·트레이스·메트릭을 한 곳에서** 다루는 도구입니다. 백엔드(Spring Boot)와 AI 레이어(Python)에서 나오는 로그를 서비스 단위로 묶어 보고, 트레이스와 연결해 원인을 추적하는 것이 목적입니다.
 
-> **선행 조건**: [k8s_install.md](k8s_install.md)의 Docker Desktop 설치가 끝나 있어야 합니다.
+> **선행 조건**: [k8s_install.md](k8s_install.md)의 설치가 끝나 있어야 합니다 — Docker Desktop Kubernetes 활성화, `kubectl`, `helm`.
+>
+> **팀 표준은 Kubernetes 설치입니다.** SigNoz를 Docker 단독으로 띄우는 방법도 존재하지만, 실제 배포 환경(EKS)과 구성이 달라져 로컬에서 검증한 내용이 그대로 이어지지 않습니다. Docker 단독 방식은 [부록](#부록-docker-단독-설치-비표준)에 참고용으로만 남깁니다.
 
 ---
 
@@ -13,9 +15,9 @@ SigNoz는 OpenTelemetry 기반으로 **로그·트레이스·메트릭을 한 �
 - [SigNoz 설치 및 로그 검색 가이드](#signoz-설치-및-로그-검색-가이드)
   - [목차](#목차)
   - [0. 시작 전 확인](#0-시작-전-확인)
-  - [1. 설치 방식 선택](#1-설치-방식-선택)
-  - [2. Docker 단독 설치 (로컬 개발 권장)](#2-docker-단독-설치-로컬-개발-권장)
-  - [3. Kubernetes 설치](#3-kubernetes-설치)
+  - [1. Foundry 이해하기](#1-foundry-이해하기)
+  - [2. Kubernetes 설치](#2-kubernetes-설치)
+  - [3. 접속](#3-접속)
   - [4. 설치 확인](#4-설치-확인)
   - [5. 애플리케이션 연결 (OpenTelemetry)](#5-애플리케이션-연결-opentelemetry)
   - [6. 로그 검색하기](#6-로그-검색하기)
@@ -24,6 +26,7 @@ SigNoz는 OpenTelemetry 기반으로 **로그·트레이스·메트릭을 한 �
   - [9. 중지·제거](#9-중지제거)
   - [10. 문제 해결](#10-문제-해결)
   - [11. 공식 문서](#11-공식-문서)
+  - [부록: Docker 단독 설치 (비표준)](#부록-docker-단독-설치-비표준)
 
 ---
 
@@ -33,44 +36,63 @@ SigNoz는 OpenTelemetry 기반으로 **로그·트레이스·메트릭을 한 �
 
 | 항목 | 상태 |
 |---|---|
-| Docker 단독 설치 (§2) | **실제 설치로 검증** (foundryctl v0.2.17 / macOS 26.5 / Apple Silicon) |
-| 컨테이너 구성·포트·헬스체크 (§4) | **실측 확인** |
+| Kubernetes 설치 (§2) | **실제 설치로 검증** |
+| 접속·헬스체크 (§3·§4) | **실측 확인** |
+| Pod·서비스·PVC 구성 (§4) | **실측 확인** |
 | 로그 검색 UI·연산자 (§6) | 공식 문서 확인 |
-| Kubernetes 설치 (§3) | casting 형식만 확인, **클러스터 배포 미수행** |
+| 애플리케이션 OTel 연결 (§5) | **미검증** — 백엔드 코드가 아직 없어 실제 수집 미확인 |
+
+검증 환경: macOS 26.5 · Apple Silicon · Docker Desktop 29.6.2(10 CPU / 31.3GiB) · Kubernetes v1.36.1(Kind 방식 3노드) · Helm v4.2.3 · foundryctl v0.2.17 · SigNoz 차트 0.135.1
 
 ### 리소스 요구사항
 
-SigNoz는 **ClickHouse + ClickHouse Keeper + PostgreSQL**을 포함해 가볍지 않습니다. 컨테이너 6개가 상주합니다.
+SigNoz는 **ClickHouse + ClickHouse Operator + Zookeeper + PostgreSQL**을 포함해 가볍지 않습니다. Pod 6개가 상주하고 **PVC 18GiB**를 잡습니다.
 
 | 항목 | 요구사항 |
 |---|---|
-| Docker 할당 메모리 | **최소 4GB** (SigNoz 몫) |
-| 사용 포트 | `8080` (UI), `4317` (OTLP gRPC), `4318` (OTLP HTTP) |
+| Docker Desktop 할당 메모리 | **최소 6GB** 권장 (SigNoz 몫 4GB + 클러스터 오버헤드) |
+| 디스크 | PVC 18GiB (zookeeper 8Gi + postgres 10Gi) + ClickHouse 데이터 |
+| 사전 확인 | 클러스터 노드가 모두 `Ready` |
 
 > **주의 — 8GB MacBook 사용자**
-> [k8s_install.md](k8s_install.md) §6은 8GB 장비에 Docker 메모리 **4GB**를 권장합니다. 그 상태로 SigNoz를 띄우면 **SigNoz 하나가 할당량을 전부 소진**해 프로젝트 컨테이너를 함께 돌릴 수 없습니다.
+> [k8s_install.md](k8s_install.md) §6은 8GB 장비에 Docker 메모리 **4GB**를 권장합니다. 그 상태로 SigNoz를 올리면 **SigNoz 하나가 할당량을 전부 소진**해 프로젝트 애플리케이션을 함께 돌릴 수 없습니다.
 >
 > 8GB 장비라면 다음 중 하나를 택하세요.
 >
 > - SigNoz를 쓸 때만 Docker 메모리를 6GB로 올리고, 프로젝트 앱은 로컬(`./gradlew bootRun`)에서 실행
 > - SigNoz는 팀 공용 인스턴스를 사용하고 로컬에는 설치하지 않음
 
-포트 충돌을 미리 확인하세요. `8080`은 애플리케이션 기본 포트와 겹치기 쉽습니다.
+### 설치 전 컨텍스트 확인 (필수)
 
 ```bash
-lsof -i :8080 -i :4317 -i :4318
+kubectl config current-context
+kubectl get nodes
 ```
 
-출력이 있으면 해당 프로세스를 종료하거나 포트를 조정해야 합니다.
+`docker-desktop`이 아니면 **EKS에 설치될 수 있습니다.** 반드시 확인하고 진행하세요 ([k8s_install.md](k8s_install.md) §20).
+
+```bash
+kubectl config use-context docker-desktop
+```
 
 ---
 
-## 1. 설치 방식 선택
+## 1. Foundry 이해하기
 
-SigNoz는 **Foundry**(`foundryctl`)라는 CLI로 설치합니다. `casting.yaml` 설정 파일 하나에 "무엇을 어디에 배포할지"를 선언하면 Foundry가 배포 파일을 생성하고 실행까지 처리합니다.
+SigNoz는 **Foundry**(`foundryctl`)라는 CLI로 설치합니다. `casting.yaml` 설정 파일 하나에 "무엇을 어디에 배포할지"를 선언하면 Foundry가 Helm values를 생성하고 배포까지 처리합니다.
 
 > **중요**
-> 예전 방식인 `install.sh` 스크립트와 저장소에 번들된 `deploy/` 하위 docker-compose 파일은 **SigNoz v0.130.0부터 폐기(deprecated)되어 더 이상 유지보수되지 않습니다.** 인터넷에 남아 있는 "git clone 후 docker compose up" 안내는 모두 구버전입니다.
+> 예전 방식인 `install.sh` 스크립트와 저장소에 번들된 `deploy/` 하위 파일은 **SigNoz v0.130.0부터 폐기(deprecated)되어 더 이상 유지보수되지 않습니다.** 인터넷에 남아 있는 "git clone 후 설치" 안내는 모두 구버전입니다.
+
+### 하위 명령
+
+| 명령 | 역할 |
+|---|---|
+| `catalog` | 지원되는 배포 조합 출력 |
+| `gen examples` | 지원 조합별 **정답 예시 파일** 생성 |
+| `gauge` | 배포에 필요한 도구(`kubectl`·`helm`)가 있는지 검증 |
+| `forge` | casting을 읽어 Helm values 생성 → `pours/`에 출력 (**배포하지 않음**) |
+| `cast` | `gauge` + `forge` + 배포를 한 번에 실행 |
 
 지원 조합은 CLI가 직접 알려줍니다.
 
@@ -91,23 +113,13 @@ foundryctl catalog --format text
 └────────────┴───────────┴──────────┴──────────────────────┘
 ```
 
-로컬 개발에서는 **Docker 단독(`docker`/`compose`) 방식을 권장**합니다. 로컬 Kubernetes에 올리면 ClickHouse까지 클러스터 리소스를 잡아먹어 정작 개발 중인 애플리케이션이 밀립니다. 관측 도구는 애플리케이션 옆에서 조용히 돌면 충분합니다.
+우리는 **`kubernetes` / `helm`** 조합을 사용합니다.
 
-### foundryctl 하위 명령
-
-| 명령 | 역할 |
-|---|---|
-| `catalog` | 지원되는 배포 조합 출력 |
-| `gen examples` | 지원 조합별 **정답 예시 파일** 생성 (`docs/examples/` 하위) |
-| `gauge` | 배포에 필요한 도구가 설치돼 있는지 검증 |
-| `forge` | casting을 읽어 배포 파일 생성 → `pours/`에 출력 |
-| `cast` | `gauge` + `forge` + 배포를 한 번에 실행 |
-
-> **설정이 막히면 `foundryctl gen examples`를 먼저 돌리세요.** 웹 문서보다 정확합니다 — 실제로 공식 문서 페이지의 예시와 CLI가 요구하는 스키마가 달랐습니다(§2.3 참고).
+> **설정이 막히면 `foundryctl gen examples`를 먼저 돌리세요.** 웹 문서보다 정확합니다 — 실제로 공식 문서 페이지의 예시와 CLI가 요구하는 스키마가 달랐습니다(§2.3).
 
 ---
 
-## 2. Docker 단독 설치 (로컬 개발 권장)
+## 2. Kubernetes 설치
 
 ### 2.1 foundryctl 설치
 
@@ -138,82 +150,13 @@ foundryctl version --format text
 
 ### 2.2 작업 디렉터리 준비
 
-SigNoz 설정과 생성 파일은 **저장소 밖**에 두세요. `pours/` 산출물이 저장소를 오염시킵니다.
+생성 파일은 **저장소 밖**에 두세요. `pours/` 산출물이 저장소를 오염시킵니다.
 
 ```bash
 mkdir -p ~/signoz && cd ~/signoz
 ```
 
-### 2.3 casting.yaml 작성
-
-```bash
-cat > casting.yaml <<'YAML'
-apiVersion: v1alpha1
-kind: Installation
-metadata:
-  name: signoz
-spec:
-  deployment:
-    flavor: compose
-    mode: docker
-YAML
-```
-
-> **⚠️ 흔한 실수 — `deployment:` 레벨 누락**
-> `flavor`·`mode`는 반드시 **`spec.deployment` 아래**에 와야 합니다. 공식 문서 웹페이지에는 이 중간 레벨이 빠진 예시가 실려 있어, 그대로 복사하면 다음 오류가 납니다.
->
-> ```json
-> { "exception": { "type": "unsupported",
->   "message": "deployment '{Platform: Mode: Flavor: _:{}}' is not supported" } }
-> ```
->
-> `Platform`·`Mode`·`Flavor`가 **전부 빈 값**으로 찍히면 이 문제입니다. 값이 틀린 게 아니라 위치가 틀린 것입니다.
-
-### 2.4 사전 검증 후 배포
-
-```bash
-foundryctl gauge -f casting.yaml --format text
-```
-
-출력이 없으면 통과입니다. 이어서 배포합니다.
-
-```bash
-foundryctl cast -f casting.yaml --format text
-```
-
-이미지 내려받기와 ClickHouse 마이그레이션까지 **수 분**이 걸립니다. 중간에 끊지 마세요.
-
-완료 후 디렉터리에는 다음이 생깁니다.
-
-```text
-~/signoz/
-├── casting.yaml            # 내가 작성한 선언 파일
-├── casting.yaml.lock       # Foundry가 고정한 버전 정보
-└── pours/
-    └── deployment/
-        ├── compose.yaml    # 생성된 Docker Compose 파일
-        └── ingester/
-            ├── ingester.yaml
-            └── opamp.yaml
-```
-
-> 파일명이 `docker-compose.yaml`이 아니라 **`compose.yaml`**입니다.
-
-### 2.5 접속
-
-```text
-http://localhost:8080/
-```
-
-최초 접속 시 관리자 계정을 생성합니다. 로컬 전용 계정이므로 **실제로 쓰는 비밀번호를 재사용하지 마세요.**
-
----
-
-## 3. Kubernetes 설치
-
-로컬 Docker Desktop Kubernetes보다는 **팀 공용 클러스터·EKS에 올릴 때** 사용하는 경로입니다.
-
-> **미검증**: 아래 casting 형식은 `foundryctl gen examples`가 생성한 공식 예시와 동일함을 확인했으나, **실제 클러스터 배포는 수행하지 않았습니다.** 네임스페이스·릴리스명·`port-forward` 대상은 배포 후 `pours/deployment/`에 생성된 매니페스트에서 확인하세요.
+### 2.3 casting 작성
 
 ```bash
 cat > casting-k8s.yaml <<'YAML'
@@ -228,51 +171,160 @@ spec:
 YAML
 ```
 
-```bash
-foundryctl gauge -f casting-k8s.yaml --format text   # helm·kubectl 검증
-foundryctl forge -f casting-k8s.yaml --format text   # Helm values 생성 (배포 안 함)
-```
+> **⚠️ 흔한 실수 — `deployment:` 레벨 누락**
+> `flavor`·`mode`는 반드시 **`spec.deployment` 아래**에 와야 합니다. 공식 문서 웹페이지에는 이 중간 레벨이 빠진 예시가 실려 있어, 그대로 복사하면 다음 오류가 납니다.
+>
+> ```json
+> { "exception": { "type": "unsupported",
+>   "message": "deployment '{Platform: Mode: Flavor: _:{}}' is not supported" } }
+> ```
+>
+> `Platform`·`Mode`·`Flavor`가 **전부 빈 값**으로 찍히면 이 문제입니다. 값이 틀린 게 아니라 위치가 틀린 것입니다.
 
-`forge`까지만 돌리면 `pours/deployment/values.yaml`이 생성됩니다. **배포 전에 이 파일을 반드시 열어 확인하세요.** 확인 후 배포합니다.
-
-```bash
-foundryctl cast -f casting-k8s.yaml --format text
-```
-
-> Kubernetes(helm) 조합은 Docker 조합과 구성 요소가 다릅니다. Docker는 **ClickHouse Keeper**를 쓰는 반면, Helm values 기본값은 **Zookeeper**(`signoz/zookeeper:3.7.1`)를 사용합니다.
-
-EKS에 올릴 때는 [k8s_install.md](k8s_install.md) §20의 컨텍스트 확인 습관을 반드시 지키세요.
+### 2.4 도구 검증
 
 ```bash
-kubectl config current-context
+foundryctl gauge -f casting-k8s.yaml --format text
 ```
 
-Kustomize·ArgoCD 경로가 필요하면 `flavor: kustomize`로 바꾸면 됩니다.
+출력이 없으면 통과입니다.
+
+### 2.5 배포 파일 먼저 생성해 확인
+
+**바로 배포하지 말고 `forge`로 Helm values를 뽑아 확인하는 것을 권장합니다.**
+
+```bash
+foundryctl forge -f casting-k8s.yaml -p ./pours-k8s --format text
+```
+
+```text
+pours-k8s/deployment/values.yaml
+```
+
+생성된 values를 열어 구성 요소를 확인합니다.
+
+```bash
+grep -E 'enabled:|fullnameOverride|replicaCount' pours-k8s/deployment/values.yaml
+```
+
+기본값으로 `clickhouse`, `zookeeper`, `postgresql`, `otelCollector`, `telemetryStoreMigrator`가 모두 활성화됩니다. 리소스가 빠듯하면 이 파일에서 조정한 뒤 배포하세요.
+
+### 2.6 배포
+
+```bash
+foundryctl cast -f casting-k8s.yaml -p ./pours-k8s --format text
+```
+
+**약 3~4분** 소요됩니다. 다음 경고들이 출력되지만 **설치는 정상 진행됩니다.**
+
+```text
+warning: skipped value for zookeeper.initContainers: Not a table.
+Warning: spec.template.spec.containers[0].env[20]: hides previous definition of "SIGNOZ_SQLSTORE_PROVIDER"
+Warning: spec.template.spec.containers[0].env[21]: hides previous definition of "SIGNOZ_SQLSTORE_POSTGRES_DSN"
+```
+
+> 첫 번째는 Helm 4.x에서 나오는 값 파싱 경고, 나머지 둘은 환경변수 중복 정의 경고입니다. 셋 다 무시해도 됩니다.
+
+네임스페이스 `signoz`는 **자동 생성**되며, 별도로 만들 필요가 없습니다.
+
+---
+
+## 3. 접속
+
+SigNoz UI는 `ClusterIP` 서비스라 외부에 노출되지 않습니다. `port-forward`로 접속합니다.
+
+```bash
+kubectl port-forward -n signoz svc/signoz 8080:8080
+```
+
+명령을 실행한 터미널은 그대로 유지합니다. 브라우저에서 접속합니다.
+
+```text
+http://localhost:8080/
+```
+
+종료하려면 <kbd>Control</kbd> + <kbd>C</kbd>를 누릅니다.
+
+최초 접속 시 관리자 계정을 생성합니다. 로컬 전용 계정이므로 **실제로 쓰는 비밀번호를 재사용하지 마세요.**
+
+> `8080`이 이미 사용 중이면 로컬 포트만 바꾸면 됩니다.
+>
+> ```bash
+> kubectl port-forward -n signoz svc/signoz 18080:8080
+> ```
 
 ---
 
 ## 4. 설치 확인
 
-### 컨테이너 상태
+### Helm 릴리스
 
 ```bash
-docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -iE 'signoz|NAMES'
+helm list -n signoz
 ```
 
-정상 설치 시 다음 6개가 뜹니다.
+```text
+NAME    NAMESPACE  REVISION  STATUS    CHART           APP VERSION
+signoz  signoz     1         deployed  signoz-0.135.1  v0.135.1
+```
 
-| 컨테이너 | 역할 | 포트 |
+`STATUS`가 **`deployed`**여야 완료입니다. 마이그레이션이 끝나기 전에는 `pending-install`로 표시됩니다.
+
+### Pod 상태
+
+```bash
+kubectl get pods -n signoz
+```
+
+정상 설치 시 구성은 다음과 같습니다.
+
+| Pod | 역할 | 정상 상태 |
 |---|---|---|
-| `signoz-signoz-0` | UI + 쿼리 서비스 | `8080` |
-| `signoz-ingester-1` | OTel Collector (수집 입구) | `4317`, `4318` |
-| `signoz-telemetrystore-clickhouse-0-0` | ClickHouse — 로그·트레이스 저장 | 내부 |
-| `signoz-telemetrykeeper-clickhousekeeper-0` | ClickHouse Keeper — 코디네이션 | 내부 |
-| `signoz-metastore-postgres-0` | PostgreSQL — 대시보드·설정 등 메타데이터 | 내부 |
-| `signoz-telemetrystore-migrator` | 스키마 마이그레이션 | 내부 |
+| `signoz-0` | UI + 쿼리 서비스 | `1/1 Running` |
+| `signoz-ingester-*` | OTel Collector (수집 입구) | `1/1 Running` |
+| `chi-signoz-telemetrystore-clickhouse-cluster-0-0-0` | ClickHouse — 로그·트레이스 저장 | `1/1 Running` |
+| `signoz-telemetrystore-clickhouse-operator-*` | ClickHouse Operator | `2/2 Running` |
+| `signoz-telemetrykeeper-zookeeper-0` | Zookeeper — 코디네이션 | `1/1 Running` |
+| `signoz-metastore-postgres-0` | PostgreSQL — 대시보드·설정 메타데이터 | `1/1 Running` |
+| `signoz-telemetrystore-migrator-*` | 스키마 마이그레이션 (Job) | **`0/1 Completed`** |
 
-> **`signoz-telemetrystore-clickhouse-user-scripts`가 `Exited`인 것은 정상입니다.** 히스토그램 함수 바이너리를 내려받는 **1회성 초기화 작업**이라 끝나면 종료됩니다.
+> **정상이지만 오해하기 쉬운 두 가지**
+>
+> - **migrator가 `Completed`인 것은 정상입니다.** 스키마를 올리고 끝나는 Job이라 종료됩니다.
+> - **`signoz-0`의 RESTARTS가 2~3회인 것도 정상입니다.** PostgreSQL·ClickHouse가 준비되기 전에 먼저 떠서 생기는 backoff이며, 의존 서비스가 뜨면 안정화됩니다.
+
+ClickHouse Pod 이름이 `chi-`로 시작하는 이유는 Operator가 `ClickHouseInstallation` CR을 통해 생성하기 때문입니다.
+
+### 서비스
+
+```bash
+kubectl get svc -n signoz
+```
+
+| 서비스 | 주요 포트 | 용도 |
+|---|---|---|
+| `signoz` | `8080`, `8085`, `4320` | UI·API |
+| `signoz-ingester` | `4317`(otlp), `4318`(otlp-http) | **텔레메트리 수집** |
+| `signoz-metastore-postgres` | `5432` | 내부 |
+| `signoz-telemetrykeeper-zookeeper` | `2181` | 내부 |
+
+### 스토리지
+
+```bash
+kubectl get pvc -n signoz
+```
+
+```text
+NAME                                     STATUS  CAPACITY  STORAGECLASS
+data-signoz-telemetrykeeper-zookeeper-0  Bound   8Gi       standard
+pgdata-signoz-metastore-postgres-0       Bound   10Gi      standard
+```
+
+Docker Desktop의 기본 `standard` 스토리지클래스로 **자동 Bound**됩니다. 별도 설정이 필요 없습니다.
 
 ### 헬스체크
+
+port-forward가 켜진 상태에서:
 
 ```bash
 curl -s http://localhost:8080/api/v1/health
@@ -282,13 +334,11 @@ curl -s http://localhost:8080/api/v1/health
 {"status":"ok"}
 ```
 
-### UI 응답
+port-forward 없이 클러스터 안에서 직접 확인할 수도 있습니다.
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/
+kubectl exec -n signoz signoz-0 -- wget -qO- http://localhost:8080/api/v1/health
 ```
-
-`200`이면 정상입니다.
 
 ---
 
@@ -296,10 +346,18 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/
 
 SigNoz는 스스로 로그를 만들지 않습니다. **애플리케이션이 OTLP로 보내야** 화면에 나타납니다.
 
-| 프로토콜 | 주소 |
+수집 엔드포인트는 **애플리케이션이 어디서 도는지에 따라 달라집니다.**
+
+| 애플리케이션 위치 | OTLP 엔드포인트 |
 |---|---|
-| OTLP gRPC | `http://localhost:4317` |
-| OTLP HTTP | `http://localhost:4318` |
+| **클러스터 안** (Pod) | `http://signoz-ingester.signoz.svc.cluster.local:4317` |
+| **맥 로컬** (`bootRun` 등) | `http://localhost:4317` — **아래 port-forward 필요** |
+
+로컬에서 앱을 돌린다면 수집기로도 port-forward를 열어야 합니다. UI용과 별개의 터미널이 필요합니다.
+
+```bash
+kubectl port-forward -n signoz svc/signoz-ingester 4317:4317 4318:4318
+```
 
 ### 5.1 백엔드 (Spring Boot + Kotlin)
 
@@ -311,26 +369,16 @@ mkdir -p ~/otel && curl -L -o ~/otel/opentelemetry-javaagent.jar \
 ```
 
 ```bash
-java -javaagent:$HOME/otel/opentelemetry-javaagent.jar \
-  -Dotel.service.name=trippilot-backend \
-  -Dotel.exporter.otlp.endpoint=http://localhost:4317 \
-  -Dotel.logs.exporter=otlp \
-  -Dotel.traces.exporter=otlp \
-  -Dotel.metrics.exporter=otlp \
-  -jar app/build/libs/<APP_JAR>.jar
-```
-
-Gradle `bootRun`으로 띄운다면 환경변수로 전달할 수 있습니다.
-
-```bash
 JAVA_TOOL_OPTIONS="-javaagent:$HOME/otel/opentelemetry-javaagent.jar" \
 OTEL_SERVICE_NAME=trippilot-backend \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
 OTEL_LOGS_EXPORTER=otlp \
+OTEL_TRACES_EXPORTER=otlp \
+OTEL_METRICS_EXPORTER=otlp \
 ./gradlew :app:bootRun
 ```
 
-> `otel.service.name`은 **로그 검색의 1차 필터 키**가 됩니다. 모듈별로 다르게 주면 화면에서 섞이지 않습니다.
+> `OTEL_SERVICE_NAME`은 **로그 검색의 1차 필터 키**가 됩니다. 모듈별로 다르게 주면 화면에서 섞이지 않습니다.
 
 ### 5.2 AI 레이어 (Python)
 
@@ -491,45 +539,43 @@ service.name = trippilot-solver AND severity_text = ERROR
 
 ## 9. 중지·제거
 
-모든 명령은 생성된 compose 파일 위치에서 실행합니다.
+### 일시 중지 (데이터 유지)
+
+Pod만 0으로 줄여 리소스를 회수합니다. PVC와 설정은 남습니다.
 
 ```bash
-cd ~/signoz/pours/deployment
+kubectl scale statefulset,deployment --all --replicas=0 -n signoz
 ```
 
-### 중지 (컨테이너 유지)
+되돌릴 때:
 
 ```bash
-docker compose -f compose.yaml stop
+kubectl scale statefulset,deployment --all --replicas=1 -n signoz
 ```
 
-### 재시작
+### 릴리스 제거 (PVC 유지)
 
 ```bash
-docker compose -f compose.yaml start
+helm uninstall signoz -n signoz
 ```
 
-### 컨테이너 제거 (데이터 유지)
+> `helm uninstall`은 **PVC를 지우지 않습니다.** 재설치하면 기존 데이터가 그대로 붙습니다.
+
+### 완전 삭제
 
 ```bash
-docker compose -f compose.yaml down
-```
-
-### 데이터까지 완전 삭제
-
-```bash
-docker compose -f compose.yaml down -v
+helm uninstall signoz -n signoz
+kubectl delete pvc --all -n signoz
+kubectl delete namespace signoz
 ```
 
 > **주의**
-> `-v`는 볼륨을 지웁니다. **수집한 로그·트레이스·대시보드 설정이 모두 사라집니다.** 되돌릴 수 없습니다.
+> PVC 삭제는 **수집한 로그·트레이스·대시보드 설정을 모두 지웁니다.** 되돌릴 수 없습니다.
 
-### 디스크 회수
-
-ClickHouse는 디스크를 빠르게 먹습니다. 주기적으로 확인하세요.
+ClickHouse Operator가 설치한 CRD는 네임스페이스 삭제로 사라지지 않습니다. 완전히 정리하려면 별도로 확인하세요.
 
 ```bash
-docker system df
+kubectl get crd | grep -i clickhouse
 ```
 
 ---
@@ -549,24 +595,66 @@ source ~/.zshrc
 
 ### `deployment '{Platform: Mode: Flavor: _:{}}' is not supported`
 
-`casting.yaml`에서 **`spec.deployment` 레벨이 빠진** 경우입니다. §2.3의 형식과 대조하세요.
+casting에서 **`spec.deployment` 레벨이 빠진** 경우입니다. §2.3의 형식과 대조하세요.
 
 정답 예시를 직접 뽑아 비교할 수도 있습니다.
 
 ```bash
 foundryctl gen examples
-cat docs/examples/docker/compose/casting.yaml
+cat docs/examples/kubernetes/helm/casting.yaml
 ```
 
 ---
 
-### 포트 8080이 이미 사용 중
+### helm STATUS가 계속 `pending-install`
+
+마이그레이션 Job이 끝나지 않은 상태입니다. **정상 진행 중일 수 있으니 3~4분은 기다려 보세요.**
+
+진행 상황은 migrator 로그로 확인합니다.
 
 ```bash
-lsof -i :8080
+kubectl logs -n signoz job/signoz-telemetrystore-migrator --tail=20
 ```
 
-애플리케이션이 쓰고 있다면 둘 중 하나를 다른 포트로 옮겨야 합니다. 개발 중인 앱 쪽을 옮기는 편이 대개 간단합니다.
+`Operation completed`가 계속 찍히면 정상 진행 중입니다. ClickHouse가 뜨지 않아 멈춘 것이라면 아래를 확인하세요.
+
+```bash
+kubectl get pods -n signoz
+kubectl describe pod -n signoz <PENDING_POD>
+```
+
+---
+
+### Pod가 `Pending`에서 멈춤
+
+리소스 부족 또는 PVC 바인딩 실패입니다.
+
+```bash
+kubectl describe pod -n signoz <POD_NAME> | tail -20
+kubectl get pvc -n signoz
+kubectl get events -n signoz --sort-by=.lastTimestamp | tail -10
+```
+
+`Insufficient memory`가 보이면 Docker Desktop 할당 메모리를 늘리세요 ([k8s_install.md](k8s_install.md) §6).
+
+---
+
+### `signoz-0`이 여러 번 재시작됨
+
+**초기 기동 중 2~3회는 정상입니다.** PostgreSQL·ClickHouse 준비 전에 먼저 떠서 생기는 backoff입니다.
+
+재시작이 계속 늘어난다면 로그를 확인하세요.
+
+```bash
+kubectl logs -n signoz signoz-0 --tail=50
+kubectl logs -n signoz signoz-0 --previous --tail=50
+```
+
+---
+
+### port-forward가 끊김
+
+`port-forward`는 Pod가 재시작되면 끊깁니다. 명령을 다시 실행하세요. 터미널을 계속 붙잡고 있어야 한다는 점도 기억하세요.
 
 ---
 
@@ -575,46 +663,27 @@ lsof -i :8080
 수집 경로가 끊긴 것입니다. 순서대로 확인하세요.
 
 1. 애플리케이션에 OTel 에이전트가 실제로 붙었는지 (기동 로그에 OTel 배너가 뜨는지)
-2. `OTEL_EXPORTER_OTLP_ENDPOINT`가 `http://localhost:4317`로 설정됐는지
-3. 로그 익스포터가 켜져 있는지 (`OTEL_LOGS_EXPORTER=otlp`) — **트레이스만 켜고 로그를 빼먹는 실수가 가장 흔합니다**
-4. 컨테이너에서 앱을 돌린다면 `localhost`가 아니라 `host.docker.internal`이어야 합니다
+2. **로컬 앱이라면 ingester port-forward를 열었는지** (§5) — 가장 흔한 원인입니다
+3. 로그 익스포터가 켜져 있는지 (`OTEL_LOGS_EXPORTER=otlp`) — **트레이스만 켜고 로그를 빼먹는 실수가 잦습니다**
+4. 클러스터 안 앱이라면 엔드포인트가 `signoz-ingester.signoz.svc.cluster.local:4317`인지
 
 수집기 자체 로그도 확인해 보세요.
 
 ```bash
-docker logs signoz-ingester-1 --tail 50
+kubectl logs -n signoz -l app.kubernetes.io/name=signoz-otel-collector --tail=50
 ```
-
----
-
-### 컨테이너가 계속 재시작됨
-
-대부분 **메모리 부족**입니다. ClickHouse가 먼저 죽습니다.
-
-```bash
-docker stats --no-stream
-```
-
-Docker Desktop의 할당 메모리를 늘리세요 ([k8s_install.md](k8s_install.md) §6).
-
----
-
-### `signoz-telemetrystore-clickhouse-user-scripts`가 Exited 상태
-
-**정상입니다.** 1회성 초기화 컨테이너라 작업이 끝나면 종료됩니다. 재시작할 필요 없습니다.
 
 ---
 
 ### 오래된 설치 방법을 안내하는 블로그를 따라 했다면
 
-`git clone` 후 `deploy/` 아래 docker-compose를 띄우는 방식은 **v0.130.0부터 폐기**됐습니다. 그렇게 띄운 스택은 정리하고 §2부터 다시 진행하세요.
+`git clone` 후 번들 파일로 설치하는 방식은 **v0.130.0부터 폐기**됐습니다. 그렇게 띄운 스택은 정리하고 §2부터 다시 진행하세요.
 
 ---
 
 ## 11. 공식 문서
 
 - [SigNoz 문서 홈](https://signoz.io/docs/)
-- [Docker 단독 설치](https://signoz.io/docs/install/docker/)
 - [Kubernetes 설치](https://signoz.io/docs/install/kubernetes/)
 - [Helm 직접 배포](https://signoz.io/docs/install/kubernetes/others/)
 - [로그 사용 가이드](https://signoz.io/docs/userguide/logs/)
@@ -622,3 +691,44 @@ Docker Desktop의 할당 메모리를 늘리세요 ([k8s_install.md](k8s_install
 - [Foundry 소개 글](https://signoz.io/blog/introducing-signoz-foundry/)
 
 > 웹 문서와 CLI가 어긋나는 경우가 실제로 있었습니다(§2.3). **`foundryctl catalog`·`foundryctl gen examples`가 가장 정확한 기준**이며, 확인한 내용은 이 문서에 반영해 주세요.
+
+---
+
+## 부록: Docker 단독 설치 (비표준)
+
+> **팀 표준이 아닙니다.** 배포 환경(EKS)과 구성이 달라 로컬 검증 결과가 그대로 이어지지 않습니다. Kubernetes를 쓸 수 없는 상황에서만 참고하세요.
+
+casting의 `deployment`만 바꾸면 됩니다.
+
+```yaml
+apiVersion: v1alpha1
+kind: Installation
+metadata:
+  name: signoz
+spec:
+  deployment:
+    flavor: compose
+    mode: docker
+```
+
+```bash
+foundryctl cast -f casting.yaml --format text
+```
+
+접속은 port-forward 없이 `http://localhost:8080/`으로 바로 됩니다.
+
+### Kubernetes 방식과의 차이
+
+| 항목 | Kubernetes(helm) | Docker(compose) |
+|---|---|---|
+| 코디네이션 | **Zookeeper** | **ClickHouse Keeper** |
+| ClickHouse 관리 | ClickHouse **Operator**가 CR로 생성 | 컨테이너 직접 실행 |
+| UI 접속 | `port-forward` 필요 | `localhost:8080` 직접 |
+| 생성 파일 | `pours/deployment/values.yaml` | `pours/deployment/compose.yaml` |
+
+제거는 생성된 compose 파일 위치에서 수행합니다.
+
+```bash
+cd ~/signoz/pours/deployment
+docker compose -f compose.yaml down -v   # -v 는 데이터까지 삭제
+```
