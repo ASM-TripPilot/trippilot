@@ -89,9 +89,12 @@ function readGeneratedSource(...segments: string[]): string {
 }
 
 /**
- * 동결 17경로(§2-① 실측 그대로 — 재타이핑 금지).
+ * 동결 18경로(§2-① 실측 그대로 — 재타이핑 금지).
  *
- * 8 → 12 → 17로 두 번 늘었고 둘 다 의도된 계약 변경이다.
+ * 8 → 12 → 17 → 18로 세 번 늘었고 전부 의도된 계약 변경이다.
+ * - **TRIP-211**(18): `ErrorResponse.error`에 `existingProvider`가 추가되면서 그 enum 스키마
+ *   파일이 함께 생성. 이 티켓은 openapi만 고치고 재생성하지 않은 채 머지돼(PR #61) 생성물이
+ *   계약보다 낡아 있었고, TRIP-203이 재생성하며 드러났다.
  * - **TRIP-202**: `/stays/search`에 `'400': ValidationError`가 붙으면서 orval이 에러 봉투
  *   스키마 4종(`errorResponse`·`errorResponseError`·`errorResponseErrorFieldsItem`·
  *   `validationErrorResponse`)을 함께 생성.
@@ -106,6 +109,7 @@ const GENERATED_FILES_FROZEN = [
   'shared/api/generated/schemas/editSavedStayRequest.ts',
   'shared/api/generated/schemas/errorResponse.ts',
   'shared/api/generated/schemas/errorResponseError.ts',
+  'shared/api/generated/schemas/errorResponseErrorExistingProvider.ts',
   'shared/api/generated/schemas/errorResponseErrorFieldsItem.ts',
   'shared/api/generated/schemas/geocodeCandidate.ts',
   'shared/api/generated/schemas/getStaysGeocodeParams.ts',
@@ -163,8 +167,8 @@ describe('스캔 전처리 · 주석 제거 자기검증 — B 파일 전체의 
   });
 });
 
-describe('AC-2 ②③ · 생성 파일 인벤토리 — 동결 17경로 (B-1, 한시 — 위 졸업 조건 B)', () => {
-  it('src/shared/api/generated/ 아래 .ts 파일 목록이 동결 17경로와 정확히 같다', () => {
+describe('AC-2 ②③ · 생성 파일 인벤토리 — 동결 18경로 (B-1, 한시 — 위 졸업 조건 B)', () => {
+  it('src/shared/api/generated/ 아래 .ts 파일 목록이 동결 18경로와 정확히 같다', () => {
     // 개수 > 0이 아니라 목록 전체를 잠근다 — 필터에 다른 태그가 섞여 들어와도 잡힌다.
     expect(listGeneratedFiles()).toEqual(GENERATED_FILES_FROZEN);
   });

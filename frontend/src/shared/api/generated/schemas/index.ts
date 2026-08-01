@@ -10,6 +10,7 @@
 export * from './editSavedStayRequest';
 export * from './errorResponse';
 export * from './errorResponseError';
+export * from './errorResponseErrorExistingProvider';
 export * from './errorResponseErrorFieldsItem';
 export * from './geocodeCandidate';
 export * from './getStaysGeocodeParams';
