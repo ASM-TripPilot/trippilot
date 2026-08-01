@@ -45,7 +45,7 @@ export async function realAuthorize(
   switch (result.type) {
     case 'success':
       return {
-        type: 'success',
+        type: 'success-code',
         authorizationCode: result.params.code,
         codeVerifier: request.codeVerifier ?? generateOpaqueToken(),
         redirectUri,

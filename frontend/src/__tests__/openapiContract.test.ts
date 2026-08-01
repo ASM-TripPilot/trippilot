@@ -168,6 +168,31 @@ describe('BR-U1-10 · BR-U1-15 · /stays/search 파라미터 이름 잠금 — �
   });
 });
 
+describe('TRIP-210 AC-1·AC-2 · SDK 토큰 경로 계약 앵커 (선제 green)', () => {
+  it('/auth/social/{provider}/token 경로가 실재하고 SocialTokenLoginRequest 가 accessToken 을 필수로 요구한다', () => {
+    // ⚠️ **선제 green** — 실측으로 이미 충족돼 있어 지금 red 를 낼 수 없다. 그래도 남기는
+    // 이유: 이 경로 문자열이 TRIP-210 프론트 구현 전체의 근거인데, openapi.yaml 은 이 리포
+    // 안의 파일이라 백엔드 머지가 조용히 뒤집을 수 있다. 뒤집혀도 재생성 전까지는 아무
+    // 테스트도 안 깨지는 사각지대를 이 회귀 앵커가 메운다(같은 파일 AC-1 앵커와 같은 취지).
+    const source = readOpenapiSource();
+    const paths = extractPaths(source);
+
+    // 앵커 — 정규식이 실제로 뭔가를 모았다는 증거.
+    expect(paths.length).toBeGreaterThan(0);
+
+    // code 경로와 token 경로가 **둘 다** 있다(D3: google 은 code 경로에 남는다).
+    expect(paths).toContain('/auth/social/{provider}');
+    expect(paths).toContain('/auth/social/{provider}/token');
+
+    // 본문 계약 — accessToken 이 필수다. 프론트가 그 한 필드만 실어 보내는 근거(AC-1).
+    expect(source).toContain('SocialTokenLoginRequest:');
+    const schemaIdx = source.indexOf('    SocialTokenLoginRequest:');
+    expect(schemaIdx).toBeGreaterThan(-1);
+    const schemaBlock = source.slice(schemaIdx, schemaIdx + 400);
+    expect(schemaBlock).toContain('required: [accessToken]');
+  });
+});
+
 describe('AC-2 준비(D2) · 참조된 응답 정의가 전부 실재한다 — 이 파일의 진짜 red (A-2)', () => {
   it('components.responses에서 참조만 있고 정의가 없는 이름이 하나도 없다', () => {
     const source = readOpenapiSource();

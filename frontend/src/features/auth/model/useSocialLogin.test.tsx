@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { postSocialLogin } from '@/shared/api';
 import { saveTokens } from '@/shared/storage';
-import { useSocialLogin } from './useSocialLogin';
+import { useSocialLogin, type AuthorizeResult } from './useSocialLogin';
 
 jest.mock('@/shared/api', () => ({ postSocialLogin: jest.fn() }));
 jest.mock('@/shared/storage', () => ({ saveTokens: jest.fn() }));
@@ -14,18 +14,12 @@ const mockPostSocialLogin = postSocialLogin as jest.MockedFunction<
 >;
 const mockSaveTokens = saveTokens as jest.MockedFunction<typeof saveTokens>;
 
-type AuthorizeResult =
-  | {
-      type: 'success';
-      authorizationCode: string;
-      codeVerifier: string;
-      redirectUri: string;
-    }
-  | { type: 'cancel' }
-  | { type: 'dismiss' };
+// TRIP-210 — 이전 판은 여기에 AuthorizeResult 를 **손으로 복사**해 뒀다. 프로덕션 유니온이
+// 넓어져도 사본은 따라오지 않아, 낡은 형태로 계속 green 일 수 있는 자리였다(브리프 §5-3 참고).
+// 프로덕션 타입을 직접 import 해 그 드리프트를 구조적으로 없앤다.
 
 const authorizeSuccess = jest.fn(async (): Promise<AuthorizeResult> => ({
-  type: 'success',
+  type: 'success-code',
   authorizationCode: 'auth-code-123',
   codeVerifier: 'verifier-xyz',
   redirectUri: 'trippilot://oauth/google',
@@ -358,13 +352,13 @@ describe('useSocialLogin — 연속 탭 잠금 (AC-S5 · Seed §5 동시성안�
     // 준비 — 첫 인가(google)는 바깥에서 풀어줄 때까지 끝나지 않는다. 두 번째(kakao)는
     // 즉시 success 지만 "잠금 대상"이라 호출조차 되면 안 된다.
     const { authorize: authorizeBlocked, release } = createDeferredAuthorize({
-      type: 'success',
+      type: 'success-code',
       authorizationCode: 'auth-code-blocked',
       codeVerifier: 'verifier-blocked',
       redirectUri: 'trippilot://oauth/google',
     });
     const authorizeSecond = jest.fn(async (): Promise<AuthorizeResult> => ({
-      type: 'success',
+      type: 'success-code',
       authorizationCode: 'auth-code-second',
       codeVerifier: 'verifier-second',
       redirectUri: 'trippilot://oauth/kakao',
@@ -405,7 +399,7 @@ describe('useSocialLogin — 연속 탭 잠금 (AC-S5 · Seed §5 동시성안�
       return tokenPair(false);
     });
     const authorizeSecond = jest.fn(async (): Promise<AuthorizeResult> => ({
-      type: 'success',
+      type: 'success-code',
       authorizationCode: 'auth-code-second',
       codeVerifier: 'verifier-second',
       redirectUri: 'trippilot://oauth/naver',

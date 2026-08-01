@@ -16,7 +16,7 @@ React Native + Expo (TypeScript strict) 클라이언트.
 | 폼·스키마 | React Hook Form + Zod | 다단계 폼 리렌더 최소화, Zod 스키마는 API 응답 런타임 검증에 재사용 |
 | HTTP | axios(REST 전반) + 토큰 회전 인터셉터(401 시 리프레시 갱신 single-flight 직렬화) · **AI 실시간 응답은 `expo/fetch` 스트리밍 경로** | 동시 401에서 회전이 1회만 일어나야 재사용 오탐이 없음. axios는 XHR 기반이라 SSE/청크 스트리밍 불가 — 일정 생성 진행 표시 등은 expo/fetch(ReadableStream 지원)로. 두 경로가 토큰 첨부·오류 정규화 계층을 공유 |
 | 토큰 저장 | expo-secure-store (iOS Keychain / Android Keystore) | AsyncStorage·MMKV는 평문이라 토큰 저장 부적합 |
-| 소셜 로그인 | 어댑터 인터페이스 1개 뒤 프로바이더별 구현 — **카카오·네이버는 네이티브 SDK**(@react-native-seoul/kakao-login·naver-login — 카카오톡·네이버앱 간편 로그인, 미설치 시 웹 폴백) · Apple은 expo-apple-authentication · Google은 expo-auth-session | 검증·세션 발급은 전부 서버, 앱에 클라이언트 시크릿 없음. 어댑터가 서버 전달 자격 증명(인가 코드 또는 SDK 발급 토큰)을 표준화 — 백엔드 `/auth/social/{provider}` 계약이 양쪽을 수용해야 함(백엔드 협의 필요) |
+| 소셜 로그인 | 어댑터 인터페이스 1개 뒤 프로바이더별 구현 — **카카오·네이버는 네이티브 SDK**(@react-native-seoul/kakao-login·naver-login — 카카오톡·네이버앱 간편 로그인, 미설치 시 웹 폴백) · Apple은 expo-apple-authentication · Google은 expo-auth-session | 검증·세션 발급은 전부 서버, 앱에 클라이언트 시크릿은 **원칙적으로** 없음(예외는 아래 참고). 어댑터가 서버 전달 자격 증명(인가 코드 또는 SDK 발급 토큰)을 표준화 — 백엔드 `/auth/social/{provider}` code 경로와 `/auth/social/{provider}/token` 토큰 경로(TRIP-210)를 provider 별로 나눠 탄다 |
 | 애니메이션·제스처 | react-native-reanimated + react-native-gesture-handler + @gorhom/bottom-sheet | 바텀시트(제휴 고지·외부 지도 선택·필터)가 전역 UI 패턴. 네이티브 모듈이라 최초 스캐폴드에 포함 — 나중에 추가하면 EAS 재빌드 유발 |
 | 크래시 리포팅 | Sentry (@sentry/react-native + Expo config plugin) | 크래시·JS 오류·성능 수집. `beforeSend` 스크러빙으로 토큰·PII 차단 — "크래시 리포트에 토큰 미포함" 불변식의 집행 지점 |
 | 기기 능력 | expo-notifications(푸시, FCM/APNs) · expo-location(위치, 포그라운드 한정) · @react-native-community/netinfo(네트워크 상태) | `features/notification`·`shared/location`의 구현 스택. netinfo는 오프라인 큐 복구 감지 트리거 |
@@ -91,6 +91,7 @@ feature 내부 관례: `screens/ components/ containers/ hooks/ store/ model/ li
 - 환경 3종: `development` / `preview` / `production` — `eas.json` 프로파일과 1:1.
 - API base URL 등 환경값은 `app.config.ts` + EAS 환경변수로 주입. 코드에 하드코딩 금지, `.env`는 로컬 개발 편의용(미커밋).
 - 앱에는 시크릿을 두지 않는다(소셜 로그인은 PKCE, 교환은 서버). 지도 앱 키 등은 EAS 시크릿으로 빌드 시 주입.
+- **예외(D5 · TRIP-210)**: 네이버 네이티브 SDK(`@react-native-seoul/naver-login`)의 `initialize()`는 `consumerSecret`을 **필수 파라미터**로 요구한다 — 서버 교환 없이 SDK 초기화 시점에 바로 필요하므로 PKCE로 피할 수 없는 SDK 자체의 제약이다. 값은 하드코딩하지 않고 `EXPO_PUBLIC_NAVER_CLIENT_SECRET`(env)으로만 전달한다(`.env`에만 실값, `.env.example`은 이름만). 서버 쪽 access token 검증(BR-U0-02 fail-closed)은 이 값과 무관하게 그대로 유지되므로 보안 경계는 서버가 여전히 지킨다. 카카오 어댑터는 이 예외가 없다(시크릿 0).
 
 ## 테스트 전략
 

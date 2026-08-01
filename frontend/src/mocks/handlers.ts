@@ -113,53 +113,79 @@ const TERMS_VERSIONS: TermsVersionBody[] = [
 /** POST /nickname/suggestions 후보 3개 — D6(대체 후보 칩 3개)과 개수를 맞춘다. */
 const NICKNAME_SUGGESTIONS = ['여행자1234', '노을수집가', '골목탐험가'];
 
+/**
+ * 소셜 로그인 응답 판정 — code 경로(`/auth/social/{provider}`)와 SDK 토큰 경로
+ * (`/auth/social/{provider}/token`)가 **완전히 같은 에러 집합**을 쓰므로(openapi 실측: 401·409·
+ * 422·429 동일, 200 도 같은 TokenPair) 한 함수를 두 핸들러가 공유한다. 갈라 두면 두 경로의
+ * 목 거동이 조용히 어긋나 "code 는 되는데 token 만 안 되는" 가짜 차이를 만든다.
+ */
+function socialLoginResponse(provider: string, ageConfirmation: unknown) {
+  const scenario = getScenario();
+  switch (scenario.social) {
+    case 'auth-failed':
+      return HttpResponse.json(
+        { error: { code: 'SOCIAL_AUTH_FAILED' } },
+        { status: 401 }
+      );
+    case 'rate-limited':
+      return HttpResponse.json(
+        { error: { code: 'RATE_LIMITED' } },
+        { status: 429 }
+      );
+    case 'email-conflict':
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'SOCIAL_EMAIL_CONFLICT',
+            existingProvider: scenario.existingProvider,
+          },
+        },
+        { status: 409 }
+      );
+    case 'age-restricted':
+      if (ageConfirmation) {
+        return HttpResponse.json(
+          { error: { code: 'AGE_NOT_MET' } },
+          { status: 422 }
+        );
+      }
+      return HttpResponse.json(tokenPair(true, provider));
+    case 'new-user':
+      return HttpResponse.json(tokenPair(true, provider));
+    case 'existing-user':
+    default:
+      return HttpResponse.json(tokenPair(false, provider));
+  }
+}
+
 export const handlers = [
   http.get(`${BASE}/bootstrap`, () =>
     HttpResponse.json(bootstrapBody(getScenario()))
   ),
 
+  /**
+   * TRIP-210 — 네이티브 SDK access token 경로. **별도 핸들러가 반드시 필요하다**: 아래
+   * `/auth/social/:provider` 의 `:provider` 는 경로 세그먼트 **하나**만 매치하므로
+   * `/auth/social/kakao/token` 을 잡지 못한다(실측). 통합 버킷은
+   * `onUnhandledRequest:'error'` 로 돌기 때문에 핸들러가 없으면 테스트가 AC 실패가 아니라
+   * `InternalError: Cannot bypass a request when using the "error" strategy` 로 **준비
+   * 단계에서 죽는다** — 증상이 원인을 안 가리킨다.
+   */
+  http.post(
+    `${BASE}/auth/social/:provider/token`,
+    async ({ params, request }) => {
+      const body = (await request.json().catch(() => ({}))) as {
+        ageConfirmation?: unknown;
+      };
+      return socialLoginResponse(String(params.provider), body.ageConfirmation);
+    }
+  ),
+
   http.post(`${BASE}/auth/social/:provider`, async ({ params, request }) => {
-    const scenario = getScenario();
-    const provider = String(params.provider);
     const body = (await request.json().catch(() => ({}))) as {
       ageConfirmation?: unknown;
     };
-
-    switch (scenario.social) {
-      case 'auth-failed':
-        return HttpResponse.json(
-          { error: { code: 'SOCIAL_AUTH_FAILED' } },
-          { status: 401 }
-        );
-      case 'rate-limited':
-        return HttpResponse.json(
-          { error: { code: 'RATE_LIMITED' } },
-          { status: 429 }
-        );
-      case 'email-conflict':
-        return HttpResponse.json(
-          {
-            error: {
-              code: 'SOCIAL_EMAIL_CONFLICT',
-              existingProvider: scenario.existingProvider,
-            },
-          },
-          { status: 409 }
-        );
-      case 'age-restricted':
-        if (body.ageConfirmation) {
-          return HttpResponse.json(
-            { error: { code: 'AGE_NOT_MET' } },
-            { status: 422 }
-          );
-        }
-        return HttpResponse.json(tokenPair(true, provider));
-      case 'new-user':
-        return HttpResponse.json(tokenPair(true, provider));
-      case 'existing-user':
-      default:
-        return HttpResponse.json(tokenPair(false, provider));
-    }
+    return socialLoginResponse(String(params.provider), body.ageConfirmation);
   }),
 
   http.post(`${BASE}/auth/token/refresh`, () =>

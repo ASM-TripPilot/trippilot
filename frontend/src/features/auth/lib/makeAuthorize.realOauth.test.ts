@@ -93,7 +93,8 @@ describe('AC-OA-1 · fake 격리 (실 네이티브 모듈 비접근)', () => {
 
     const result = await makeAuthorize('google')();
 
-    expect(result.type).toBe('success');
+    // TRIP-210 D1 — 성공 멤버가 success-code / success-token 으로 갈렸다. 브라우저 OAuth 는 code 갈래.
+    expect(result.type).toBe('success-code');
     expect(promptAsyncSpy).not.toHaveBeenCalled();
   });
 });
@@ -106,8 +107,8 @@ describe('AC-OA-2 · 실 경로 success (PKCE 3필드)', () => {
 
     const result = await makeAuthorize('google')();
 
-    expect(result.type).toBe('success');
-    if (result.type !== 'success') {
+    expect(result.type).toBe('success-code');
+    if (result.type !== 'success-code') {
       throw new Error('unreachable');
     }
     expect(result.authorizationCode).toBe('auth-code-c');
@@ -161,7 +162,7 @@ describe('AC-OA-5 · 시크릿 비노출 (SEC-AUTH)', () => {
 
     const result = await makeAuthorize('google')();
 
-    expect(result.type).toBe('success');
+    expect(result.type).toBe('success-code');
     const keys = Object.keys(result).map((k) => k.toLowerCase());
     expect(keys).toContain('codeverifier');
     expect(keys).not.toContain('clientsecret');
@@ -190,7 +191,7 @@ describe('AC-S4 · kakao 실 경로 (결함 C · 케이스 21)', () => {
       })
     );
     expect(result).toMatchObject({
-      type: 'success',
+      type: 'success-code',
       authorizationCode: 'kakao-code',
     });
   });
@@ -237,8 +238,8 @@ describe('AC-S4 · naver codeVerifier 비지 않음 (결함 C · 백엔드 @NotB
     const result = await makeAuthorize('naver')();
 
     // 단언 — 빈 문자열도, 공백만 채운 우회도 금지한다.
-    expect(result.type).toBe('success');
-    if (result.type !== 'success') {
+    expect(result.type).toBe('success-code');
+    if (result.type !== 'success-code') {
       throw new Error('unreachable');
     }
     expect(typeof result.codeVerifier).toBe('string');

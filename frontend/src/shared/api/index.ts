@@ -43,6 +43,14 @@ export interface SocialLoginBody {
   ageConfirmation?: AgeConfirmation;
 }
 
+/** `/auth/social/{provider}/token`(네이티브 SDK access token 경로, TRIP-210) 요청 바디.
+ * deviceId 는 openapi 상 선택 필드지만 프론트에 기기 식별자 개념이 없어 의도적으로 넣지 않는다
+ * (D7 — 미제공 시 서버가 임의 부여). 필드에 없으면 실수로라도 실릴 수 없다. */
+export interface SocialTokenLoginBody {
+  accessToken: string;
+  ageConfirmation?: AgeConfirmation;
+}
+
 export interface AccountSummary {
   accountId: string;
   status: string;
@@ -227,6 +235,24 @@ export async function postSocialLogin(
   try {
     const response = await baseClient.post<TokenPair>(
       `/auth/social/${provider}`,
+      body
+    );
+    return response.data;
+  } catch (error) {
+    throw normalizeSocialError(error);
+  }
+}
+
+/** 네이티브 SDK가 발급한 access token으로 로그인/가입(TRIP-210 · BR-U0-02). code 경로와
+ * 에러 집합이 완전히 같아(openapi 실측) normalizeSocialError를 그대로 재사용한다. 로그인 전
+ * 호출이라 무인증 baseClient를 탄다(AC-6 · SEC-04). */
+export async function postSocialTokenLogin(
+  provider: SocialProvider,
+  body: SocialTokenLoginBody
+): Promise<TokenPair> {
+  try {
+    const response = await baseClient.post<TokenPair>(
+      `/auth/social/${provider}/token`,
       body
     );
     return response.data;

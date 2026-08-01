@@ -11,7 +11,8 @@ import path from 'path';
  * 무엇을 보장하나: 렌더로는 관찰할 수 없는 **폴더 배치** 수준의 제약을 잠근다.
  *  - auth·onboarding·home 슬라이스가 FSD 5세그먼트(ui/model/lib/config)로만 구성된다
  *    (screens·components·hooks·containers·store 같은 옛 칸이 남아 있으면 red)
- *  - auth/lib에는 팩토리 2개(makeAuthorize·realAuthorize)만 남고, 설정·상수는 auth/config로 갈라졌다
+ *  - auth/lib에 팩토리(makeAuthorize·realAuthorize)가 남아 있고, 설정·상수는 auth/config로 갈라져
+ *    되돌아오지 않았다 (20260802-trip210에서 "정확히 2개" 완전일치 → 부분집합으로 격하)
  *  - 신설 pages 층 5슬라이스가 각각 `ui/*Page.tsx` + 재수출 `index.ts` 배럴을 갖고,
  *    대응 라우트가 옛 컨테이너 경로가 아니라 그 배럴을 참조한다
  *  - 신설 app-shell 층이 src/app **밖**에 있어 Expo Router가 라우트로 등록하지 않는다
@@ -47,7 +48,7 @@ import path from 'path';
  *
  * **B. 이행 체크포인트 — 한시적이다.** 이번 이동이 끝났는지 확인하는 스냅샷이라,
  * 정당한 신규 작업에도 red를 낸다(예: 화면을 하나 추가하면 pages 슬라이스가 6개가 된다).
- *   - auth/lib 파일이 정확히 2개 (it 1-4)
+ *   - auth/lib 파일이 정확히 2개 (it 1-4) — 20260802-trip210에서 부분집합으로 격하·종료
  *   - pages 슬라이스가 정확히 6개 (it 2-1 말미의 집합 단언)
  *   - 대표 파일 존재 단언 (it 1-1 · 1-2 · 1-3의 짝 단언)
  *   - 유지 배럴 대표 심볼 단언 (it 4-1의 짝 단언 — shared/api·shared/storage)
@@ -82,6 +83,21 @@ import path from 'path';
  * 격하한다. 잠그는 것은 "알려진 슬라이스가 사라지지 않았다"로 남고, 새 슬라이스 추가는 더는
  * red를 내지 않는다. 슬라이스 **삭제·개명**은 여전히 잡힌다(그쪽이 이 단언의 실질이다).
  * 격하했으므로 카운터는 여기서 **닫는다** — 더 셀 대상이 없다.
+ *
+ * 갱신(20260802-trip210-social-sdk): **it 1-4의 `auth/lib 파일이 정확히 2개` 단언**이 이번 칸의
+ * 네이티브 SDK 인가 어댑터 2파일 신설로 red를 냈다. 제외구 AND 조건 둘 다 충족한다 — ① 그
+ * 단언을 만든 20260727-trip173-fsd-home-rename 사이클 **밖**의 작업이고, ② 완전일치 배열을
+ * 갱신하지 않고는 통과할 수 없다. 위 PAGE_SLICES 선례(20260731-trip198)와 **같은 규약·같은
+ * 방식**으로, 이 단언도 완전일치 → **부분집합 검사**로 격하한다:
+ *   - 남기는 것: `makeAuthorize.ts`·`realAuthorize.ts`가 여전히 lib에 있다(arrayContaining) +
+ *     모집단 비지 않음 앵커 + 갈라낸 설정 파일(gradients·oauthConfig)이 lib으로 되돌아오지
+ *     않았다(원 취지). → **삭제·개명은 여전히 잡힌다.**
+ *   - 푸는 것: lib에 새 파일이 늘어도 더는 red가 아니다.
+ * 이 단언도 격하로 **닫혔다**. **B 범주에 완전일치로 남은 단언**: it 1-1·1-2·1-3의 세그먼트
+ * 집합 단언(`toEqual(['model','ui',…])`)과 it 1-4의 configFiles 완전일치, it 4-1의 유지 배럴
+ * 대표 심볼 단언. 이들은 아직 정당한 작업에 red를 낸 적이 없어 카운터 0에서 시작한다 —
+ * 세그먼트 집합 쪽은 A(폴더 이름 금지)와 겹쳐 있어 격하 시 A까지 무뎌지지 않도록
+ * 주의해야 한다(격하한다면 "옛 칸 부재"만 남기는 형태여야 한다).
  */
 
 const ROOT = path.resolve('src');
@@ -254,12 +270,28 @@ describe('AC-1 · 슬라이스 세그먼트 개명 — FSD 5칸', () => {
     });
   });
 
-  it('auth/lib에는 팩토리 2개만 남고, 설정·상수는 auth/config로 갈라졌다', () => {
+  it('auth/lib에는 팩토리가 남아 있고, 설정·상수는 auth/config로 갈라졌다', () => {
     const libFiles = listProdFileNames(path.join(AUTH_DIR, 'lib'));
     const configFiles = listProdFileNames(path.join(AUTH_DIR, 'config'));
 
-    // 부정 — gradients.ts·oauthConfig.ts가 lib에 남아 있으면 즉시 빨개진다.
-    expect(libFiles).toEqual(['makeAuthorize.ts', 'realAuthorize.ts']);
+    // 앵커 — 모집단이 비지 않았다(디렉토리 부재 시 빈 배열이라 아래 포함 단언이 공허해진다).
+    expect(libFiles.length).toBeGreaterThan(0);
+
+    // 긍정(부분집합) — 알려진 팩토리 2개가 여전히 lib에 있다. 20260802-trip210에서 완전일치
+    // → 부분집합으로 격하했다(헤더 갱신 문단 참조): 신규 lib 파일 추가는 더는 red를 내지
+    // 않되, 이 둘의 **삭제·개명**은 여전히 잡힌다 — 그쪽이 이 단언의 실질이다.
+    expect(libFiles).toEqual(
+      expect.arrayContaining(['makeAuthorize.ts', 'realAuthorize.ts'])
+    );
+
+    // 부정 — 원 취지 보존: 설정·상수 파일이 lib으로 되돌아오지 않았다. config 목록과
+    // 대조하는 방식은 "되돌리기"를 놓친다(config에서 빠지면 대조군도 같이 사라진다) —
+    // 그래서 갈라낸 파일 이름을 직접 못박는다.
+    const CONFIG_ONLY_FILES = ['gradients.ts', 'oauthConfig.ts'];
+    const misplaced = libFiles.filter((file) =>
+      CONFIG_ONLY_FILES.includes(file)
+    );
+    expect(misplaced).toEqual([]);
 
     // 긍정(짝) — 옮긴 곳(config)에 실제로 도착했는가.
     expect(configFiles).toEqual(['gradients.ts', 'oauthConfig.ts']);
