@@ -46,10 +46,16 @@ const CANDIDATE_B: GeocodeCandidate = {
 };
 
 const IDLE_FLOW: StayRegisterFlow = {
+  // TRIP-199 신규 4축(activeTab·name·coordSource·pinAddressStatus)은 required라 여기서
+  // 채워야 한다 — 옵셔널로 두면 계약 변경이 사람 눈에 안 보인다(02a ★9).
+  activeTab: 'mapsearch',
   query: '',
+  name: '',
   searchStatus: 'idle',
   candidates: [],
   selectedCandidate: null,
+  coordSource: 'MAP_SEARCH',
+  pinAddressStatus: 'idle',
   coordConfirmed: false,
   mapSheetState: 'closed',
   checkIn: null,
@@ -72,6 +78,9 @@ type Handlers = ReturnType<typeof makeHandlers>;
 
 function makeHandlers() {
   return {
+    onSelectTab: jest.fn(),
+    onChangeName: jest.fn(),
+    onPinMessage: jest.fn(),
     onChangeQuery: jest.fn(),
     onSubmitQuery: jest.fn(),
     onRetrySearch: jest.fn(),
@@ -99,7 +108,7 @@ function renderScreen(
 }
 
 describe('R-1 · 3탭 셸과 몰입 화면 (AC-7 · 브리프 AC-11)', () => {
-  it('탭 3개가 모두 존재하되 지도 검색만 활성이고, 하단 탭바는 없다', () => {
+  it('탭 3개가 모두 존재하되 링크 붙여넣기는 잠겨 있고, 하단 탭바는 없다', () => {
     const handlers = renderScreen(IDLE_FLOW);
 
     // 긍정 — 등록 경로가 3가지임이 화면에서 사라지지 않는다(BR-U1-21).
@@ -107,14 +116,15 @@ describe('R-1 · 3탭 셸과 몰입 화면 (AC-7 · 브리프 AC-11)', () => {
     expect(screen.getByTestId('stay-register-tab-linkpaste')).toBeOnTheScreen();
     expect(screen.getByTestId('stay-register-tab-pin')).toBeOnTheScreen();
 
-    // 본체 — 이 칸의 범위는 지도 검색 탭뿐이므로 나머지 둘은 비활성이다.
+    // TRIP-199 계약 변경: 핀 탭의 `toBeDisabled()`를 뺀다 — 이번 티켓이 그 탭을 여는 것
+    // 자체다(AC-1 · BR-U1-23). 핀 탭이 실제로 열린다는 증명은
+    // `StayRegisterScreen.pin.test.tsx` P-1이 진다. 링크 붙여넣기는 계약 미존재라
+    // 그대로 잠긴다(확정 2 · D6).
     expect(screen.getByTestId('stay-register-tab-mapsearch')).toBeEnabled();
     expect(screen.getByTestId('stay-register-tab-linkpaste')).toBeDisabled();
-    expect(screen.getByTestId('stay-register-tab-pin')).toBeDisabled();
 
-    // 비활성 탭을 눌러도 아무 일이 없다 — "보이기만 하는 탭"이 아니라 진짜로 잠겼다.
+    // 잠긴 탭을 눌러도 아무 일이 없다 — "보이기만 하는 탭"이 아니라 진짜로 잠겼다.
     fireEvent.press(screen.getByTestId('stay-register-tab-linkpaste'));
-    fireEvent.press(screen.getByTestId('stay-register-tab-pin'));
     Object.values(handlers).forEach((fn) => expect(fn).not.toHaveBeenCalled());
 
     // 몰입 화면 — 하단 탭바를 숨긴다(브리프 AC-11 · U0 BR-U0-29 상속).
@@ -303,12 +313,14 @@ describe('R-6 · 지도·검색 실패 (AC-6 · §3-6)', () => {
     fireEvent.press(retry);
     expect(handlers.onRetrySearch).toHaveBeenCalledTimes(1);
 
-    // 폴백 버튼은 보이되 목적지가 다음 칸이라 잠겨 있다 — 반응 없는 버튼은 INV-4 위반이라
-    // "준비 중"임을 글자로 말한다(§3-6).
+    // TRIP-199 계약 변경: 폴백 버튼의 `toBeDisabled()`와 `/준비 중/`을 뒤집는다 —
+    // **이번 티켓이 이 버튼의 목적지를 만드는 일**이다(BR-U1-23 · US-STAY-08 예외).
+    // 목적지가 생겼는데 "준비 중"이라고 적혀 있으면 그것이 거짓말이 된다.
+    // 눌렀을 때 핀 탭으로 간다는 증명은 `StayRegisterScreen.pin.test.tsx` P-11이 진다.
     const pin = screen.getByTestId('stay-register-pinfallback');
     expect(within(pin).getByText('핀으로 직접 지정')).toBeOnTheScreen();
-    expect(pin).toBeDisabled();
-    expect(pin).toHaveTextContent(/준비 중/);
+    expect(pin).toBeEnabled();
+    expect(pin).not.toHaveTextContent(/준비 중/);
 
     // 실패 시에는 지도 캔버스 자체가 없다(Figma error-mapapi — 지도 자리를 배너가 대체).
     expect(screen.queryAllByTestId('stay-register-map-preview')).toHaveLength(

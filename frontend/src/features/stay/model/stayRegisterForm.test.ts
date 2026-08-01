@@ -29,10 +29,17 @@ const CANDIDATE: GeocodeCandidate = {
 
 /** 등록 직전(모든 조건이 갖춰진) 기본 상태 — 케이스마다 한 축만 무너뜨린다. */
 const READY: StayRegisterFlow = {
+  // TRIP-199 신규 4축은 required라 여기서 채워야 한다. `name: ''`은 "사용자가 이름을 안
+  // 쳤다"는 뜻이고, 그때 요청의 name은 후보 이름으로 떨어진다(02a ★11) — 아래 F-8의
+  // 기존 단언이 그대로 유지되는 이유다.
+  activeTab: 'mapsearch',
   query: '해운대',
+  name: '',
   searchStatus: 'success',
   candidates: [CANDIDATE],
   selectedCandidate: CANDIDATE,
+  coordSource: 'MAP_SEARCH',
+  pinAddressStatus: 'idle',
   coordConfirmed: true,
   mapSheetState: 'closed',
   checkIn: null,
@@ -112,6 +119,13 @@ describe('canSubmitStayRegister — 등록 가능 판정 (F-7)', () => {
         }),
         (input) => {
           const flow: StayRegisterFlow = {
+            // TRIP-199 신규 4축은 required라 이 리터럴도 채워야 한다(게이트①-2).
+            // 이 성질이 재는 것은 `coordConfirmed=false`의 절대성이므로 네 축은 고정값으로
+            // 둔다 — 이 축들을 흔든 판은 `stayRegisterForm.pin.test.ts` FP-3이 진다.
+            activeTab: 'mapsearch',
+            name: '',
+            coordSource: 'MAP_SEARCH',
+            pinAddressStatus: 'idle',
             query: input.query,
             searchStatus: input.searchStatus,
             candidates: [CANDIDATE],
@@ -187,8 +201,12 @@ describe('buildStayRegisterRequest — 요청 본문 조립 (F-8 · AC-1 · AC-5
     });
   });
 
-  it('후보가 있으면 registerRoute는 어떤 상태에서도 MAP_SEARCH이고 좌표는 후보 값 그대로다', () => {
-    // 이 칸의 등록 경로는 지도 검색 하나뿐이다(§3-5). LINK_PASTE·PIN이 새어 나갈 길이 없다.
+  it('좌표 출처가 MAP_SEARCH이면 registerRoute도 MAP_SEARCH이고 좌표는 후보 값 그대로다', () => {
+    // TRIP-199 계약 변경(전제): 원래 제목은 "어떤 상태에서도 MAP_SEARCH"였고 주석은
+    // "LINK_PASTE·PIN이 새어 나갈 길이 없다"였다. TRIP-199가 핀 경로를 열면서 그 전제가
+    // 거짓이 됐다 — 이제 `registerRoute`는 **좌표의 출처**(`coordSource`)를 따른다(D4).
+    // 단언 본문은 그대로 참이다(READY의 출처가 MAP_SEARCH라서). 사실과 어긋난 제목·주석만
+    // 고친다. 핀 쪽 판정은 `stayRegisterForm.pin.test.ts` FP-1이 진다.
     fc.assert(
       fc.property(
         fc.record({

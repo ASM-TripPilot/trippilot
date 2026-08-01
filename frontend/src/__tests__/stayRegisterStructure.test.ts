@@ -150,6 +150,12 @@ const REQUIRED_TEST_IDS = [
   'stay-register-submit',
   'stay-register-submitfail',
   'stay-register-submitfail-retry',
+  // TRIP-199 신규 5종 — 핀 지정 탭 표면(02a §3-5).
+  'stay-register-pin-panel',
+  'stay-register-pin-map',
+  'stay-register-pin-address',
+  'stay-register-pin-addressfail',
+  'stay-register-name-input',
 ];
 
 /** 티켓 §6이 이름까지 확정한 5종 — 위 목록이 조용히 그것들을 빠뜨리지 않았는지 잠근다. */
@@ -367,10 +373,18 @@ describe('G-5 · 지도를 재구현하지 않는다 (브리프 AC-S4 · 01b See
     expect(viaBarrel.length).toBeGreaterThan(0);
 
     // 본체 — 지도 브리지를 여기서 다시 조립하지 않는다(후보 N핀 확장도 이번 범위 밖, Seed §3-3).
+    //
+    // TRIP-199 확장(02a ★19): 뒤 3종은 이번 칸이 새로 만드는 표면(역지오코딩)을 덮는다.
+    // 확정 1이 역지오코딩을 프론트로 가져오면서 `coord2Address`·`kakao.maps.services`가
+    // 처음 등장하는데, 기존 지문 3종으로는 그것이 등록 표면으로 새도 잡히지 않았다.
+    // 지도·SDK 관련 변경은 전부 `src/shared/map/` 안에서만 일어나야 한다(Seed 제약).
     const FINGERPRINTS = [
       /react-native-webview/,
       /dapi\.kakao\.com/,
       /sdk\.js/,
+      /coord2Address/,
+      /kakao\.maps/,
+      /libraries=/,
     ];
     const offenders = sources
       .filter(({ source }) => FINGERPRINTS.some((re) => re.test(source)))
@@ -386,6 +400,25 @@ describe('G-5 · 지도를 재구현하지 않는다 (브리프 AC-S4 · 01b See
     ).toBe(2);
     expect(detect("import { WebView } from 'react-native-webview';")).toBe(1);
     expect(detect("import { KakaoMapView } from '@/shared/map';")).toBe(0);
+
+    // ★★ 전처리 × 신규 지문 조합 검사(02a ★5) — 각 정규식이 개별로 옳아도, 소스를 가공하는
+    // stripComments가 대상 문자열을 먼저 지워 버리면 탐지기는 조용히 눈이 먼다. 실제로
+    // 이 리포에서 두 번 터진 자리다(2026-07-31 TRIP-197 실사고). 그래서 신규 3종이
+    // **가공 결과에 살아남는지**를 실제 문자열로 잠근다.
+    const SDK_WITH_SERVICES =
+      'src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=X&autoload=false&libraries=services"';
+    expect(stripComments(SDK_WITH_SERVICES)).toContain('libraries=services');
+    expect(detect(SDK_WITH_SERVICES)).toBe(3); // dapi · sdk.js · libraries=
+
+    const GEOCODER_CALL =
+      'geocoder.coord2Address(lng, lat, function (r, s) {});';
+    expect(stripComments(GEOCODER_CALL)).toContain('coord2Address');
+    expect(detect(GEOCODER_CALL)).toBe(1);
+
+    expect(detect('kakao.maps.load(function () {});')).toBe(1);
+
+    // 반대 방향 — 진짜 주석 속 지문은 부정 단언을 거짓 만족시키지 않는다.
+    expect(detect('// coord2Address 는 여기서 쓰지 않는다')).toBe(0);
   });
 });
 
