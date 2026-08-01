@@ -56,10 +56,14 @@ describe('M-2 · 찍은 지점을 PIN_DROP 메시지로 올려보낸다 (AC-3)',
   it('지도 이벤트를 듣고 좌표를 postMessage로 RN에 넘기는 스크립트가 있다', () => {
     const html = buildMapHtml(CENTER, JS_KEY);
 
-    // 지도에 이벤트를 건다. **어떤 이벤트인지는 잠그지 않는다**(02a ★13-a) — 카카오 Web API
-    // 문서에서 'longpress'의 실재를 확인하지 못했고, 실기에서 무엇이 롱프레스로 매핑되는지는
-    // jest가 판정할 수 없다. 이름을 못박으면 어떤 구현으로도 통과 불가가 될 수 있다.
-    expect(html).toContain('kakao.maps.event.addListener');
+    // 지도에 이벤트를 건다. **어떤 이벤트인지도, 어떤 API로 거는지도 잠그지 않는다**(02a ★13-a).
+    //
+    // TRIP-210 6-b 실측으로 완화한 단언 — 원래는 `kakao.maps.event.addListener`를 문자열로
+    // 못박았는데, 그 경로로는 실기에서 이벤트가 **오지 않았다**(예외도 안 났다. 안쪽
+    // try/catch가 잡았으면 실패 표면이 떴을 것이다). 그래서 지도 컨테이너에 DOM 이벤트를
+    // 직접 거는 두 번째 시도로 갈아탔다. 등록 API 이름을 못박으면 그 전환이 "어떤 구현으로도
+    // 통과 불가"가 된다 — ★13-a가 이벤트 **이름**에 대해 경계했던 것과 같은 함정이다.
+    expect(html).toMatch(/addListener|addEventListener/);
 
     // 메시지 프로토콜만 잠근다 — 이것이 RN 쪽 onMessage와 맞물리는 유일한 계약이다.
     expect(html).toContain('PIN_DROP');
@@ -168,5 +172,145 @@ describe('M-5 · 기존 지도 계약 무회귀 (선제 green — 02a §6)', () 
     // center가 실제로 반영된다 — 좌표를 문자열로 어떻게 쓸지는 구현 자유라
     // "다른 입력 → 다른 출력"만 본다(KakaoMapView.test.tsx의 같은 판단).
     expect(html).not.toBe(buildMapHtml(OTHER_CENTER, JS_KEY));
+  });
+});
+
+describe('M-6 · ★ 롱프레스가 iOS 텍스트 선택에 가로채이지 않는다 (TRIP-199 6-b 실측 결함)', () => {
+  /**
+   * 6-b 실기에서 잡힌 결함: 지도를 길게 누르면 핀이 찍히는 대신 iOS의 텍스트 선택
+   * 핸들과 콜아웃 메뉴(Copy·Translate·Convert Meters)가 떴다. WKWebView는 길게 누르기를
+   * 기본적으로 선택 제스처로 해석하는데, 그것이 카카오 지도의 `mousedown` 리스너보다
+   * 먼저 잡아채 600ms 타이머가 아예 시작되지 않는다.
+   *
+   * 이 층은 jest가 **볼 수 있었다** — 대본이 그 CSS를 싣는지는 문자열 검사다(02a §2의
+   * 층 ⑴). TRIP-199의 승인 계약에 그 단언이 없었을 뿐이라, N-9("심판이 못 보는 층")가
+   * 아니라 **심판을 안 세운 층**이다.
+   */
+  const SUPPRESSION = [
+    /-webkit-user-select:\s*none/,
+    /(?<!-webkit-)user-select:\s*none/,
+    /-webkit-touch-callout:\s*none/,
+  ];
+
+  it('핀을 받는 지도의 대본이 선택·콜아웃을 전부 끈다', () => {
+    const html = buildMapHtml(CENTER, JS_KEY);
+
+    // 도달 앵커 — 스타일 블록 자체가 있다(없으면 아래가 "없는 것을 검사"하며 헛돈다).
+    expect(html).toContain('<style>');
+
+    SUPPRESSION.forEach((re) => expect(html).toMatch(re));
+  });
+
+  it('짝: 핀을 안 받는 지도(검색 미리보기·확정 시트)도 마찬가지다', () => {
+    // 그 지도들은 롱프레스로 핀을 만들지 않지만, 눌렀을 때 Copy/Translate 메뉴가 뜨는
+    // 것은 마찬가지로 오작동이다 — 억제는 `enablePin`과 무관해야 한다.
+    const html = buildMapHtml(CENTER, JS_KEY, false);
+
+    expect(html).toContain('<style>');
+    SUPPRESSION.forEach((re) => expect(html).toMatch(re));
+  });
+
+  it('탐지기 자가검사 — 접두사 붙은 속성만 있으면 표준 속성 단언이 잡아낸다', () => {
+    // (M-6 자가검사 — 아래 M-7과 무관)
+    // `-webkit-user-select`는 문자열 `user-select`를 품는다. 순진하게
+    // `toContain('user-select: none')`만 쓰면 표준 속성이 빠져도 통과한다.
+    const webkitOnly = '-webkit-user-select: none;';
+    const standardOnly = 'user-select: none;';
+
+    expect(SUPPRESSION[1].test(webkitOnly)).toBe(false);
+    expect(SUPPRESSION[1].test(standardOnly)).toBe(true);
+    expect(SUPPRESSION[0].test(webkitOnly)).toBe(true);
+  });
+});
+
+describe('M-7 · ★ 지도 셋업이 콜백 안에서 터져도 침묵하지 않는다 (INV-4 · TRIP-199 6-b 후속)', () => {
+  /**
+   * 기존 구조는 `try { kakao.maps.load(cb) } catch { … }`였다. `try`가 감싸는 것은
+   * **`load()` 호출**이고 `cb`는 나중에 비동기로 불리므로, 콜백 안에서 난 예외는 그
+   * catch로 **절대 안 온다**. 지도 생성·핀 대본이 터져도 아무 데도 안 알려지고 화면에는
+   * 멀쩡한 지도만 남는다 — INV-4·BR-U1-55가 금지한 침묵 실패다.
+   *
+   * 6-b 실기에서 롱프레스가 안 먹었을 때 원인을 좁히지 못한 이유가 정확히 이것이다:
+   * 실패했다는 사실 자체가 밖으로 나올 통로가 없었다.
+   */
+
+  /** `kakao.maps.load(` 이후 ~ 지도 생성 직전 구간. 콜백이 문을 열자마자 try를 여는지 본다. */
+  function callbackPreamble(html: string): string | null {
+    const start = html.indexOf('kakao.maps.load(');
+    const end = html.indexOf('new kakao.maps.Map');
+    return start === -1 || end === -1 || end < start
+      ? null
+      : html.slice(start, end);
+  }
+
+  it('콜백이 지도 생성 전에 try를 연다 (바깥 try는 이 자리를 못 지킨다)', () => {
+    const html = buildMapHtml(CENTER, JS_KEY);
+
+    // 도달 앵커 — 두 지점이 실재하고 순서도 맞다.
+    expect(callbackPreamble(html)).not.toBeNull();
+
+    expect(callbackPreamble(html)).toMatch(/try\s*\{/);
+  });
+
+  it('짝: 핀을 안 받는 지도도 같은 보호를 받는다', () => {
+    // 지도 생성 자체가 터지는 경우는 enablePin과 무관하다.
+    expect(callbackPreamble(buildMapHtml(CENTER, JS_KEY, false))).toMatch(
+      /try\s*\{/
+    );
+  });
+
+  it('실패를 알리는 통로가 늘었다 — 스크립트 onerror·바깥 catch·콜백 안 catch 셋', () => {
+    const html = buildMapHtml(CENTER, JS_KEY);
+    const posts = html.split(MAP_LOAD_FAILED_MESSAGE).length - 1;
+
+    // onerror 속성 1 + 상수 선언 참조는 없음(문자열 보간이라) + 바깥 catch 1 + 안쪽 catch 1
+    expect(posts).toBeGreaterThanOrEqual(3);
+  });
+
+  it('탐지기 자가검사 — 바깥에만 try가 있는 형태를 통과시키지 않는다', () => {
+    // 수정 전 구조를 그대로 흉내 낸 문자열. 콜백 구간(load( ~ new Map)에 try가 없다.
+    const before =
+      'try { kakao.maps.load(function () { var map = new kakao.maps.Map(x); }); } catch (e) {}';
+    expect(callbackPreamble(before)).not.toMatch(/try\s*\{/);
+
+    // 수정 후 형태는 통과한다.
+    const after =
+      'try { kakao.maps.load(function () { try { var map = new kakao.maps.Map(x); } catch (e) {} }); } catch (e) {}';
+    expect(callbackPreamble(after)).toMatch(/try\s*\{/);
+  });
+});
+
+describe('M-8 · 조립된 대본이 문법적으로 유효한 자바스크립트다 (선제 green — 회귀 앵커)', () => {
+  /**
+   * 이 파일은 자바스크립트를 **문자열로** 만든다. 문자열 안 코드는 tsc도 eslint도 안 본다 —
+   * 오타 하나로 문서 전체가 파싱 실패하면 지도가 통째로 죽는데, 그 실패는 WebView 안에서만
+   * 일어나 밖으로 안 나온다(안쪽 try/catch도 파싱 실패는 못 잡는다. 스크립트가 아예
+   * 실행되지 않기 때문이다).
+   *
+   * TRIP-210에서 대본이 8줄에서 50줄 넘게 커지면서 이 위험이 실질을 갖게 됐다.
+   * `new Function(src)`는 **파싱만** 하고 실행하지 않으므로 브라우저 없이도 문법을 잰다.
+   */
+  function inlineScript(html: string): string {
+    const open = html.lastIndexOf('<script>');
+    const close = html.lastIndexOf('</script>');
+    return html.slice(open + '<script>'.length, close);
+  }
+
+  it('핀 대본이 실린 문서도, 안 실린 문서도 파싱된다', () => {
+    // 도달 앵커 — 스크립트를 실제로 떼어냈다(빈 문자열이면 무엇이든 파싱된다).
+    expect(inlineScript(buildMapHtml(CENTER, JS_KEY)).length).toBeGreaterThan(
+      200
+    );
+
+    expect(
+      () => new Function(inlineScript(buildMapHtml(CENTER, JS_KEY)))
+    ).not.toThrow();
+    expect(
+      () => new Function(inlineScript(buildMapHtml(CENTER, JS_KEY, false)))
+    ).not.toThrow();
+  });
+
+  it('탐지기 자가검사 — 망가진 문법은 실제로 잡는다', () => {
+    expect(() => new Function('function ( {')).toThrow();
   });
 });

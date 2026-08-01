@@ -43,6 +43,20 @@ export const MAP_LOAD_FAILED_MESSAGE = 'kakao-sdk-load-failed';
  * 롱프레스 자체는 카카오 SDK에 내장 이벤트가 없어 `mousedown`+타이머로 흉내 낸다(짧게
  * 떼거나 지도를 끌면 취소) — 이 이벤트 판단은 jest 사정거리 밖이라 6-b 실기로만 확인된다.
  *
+ * TRIP-210 경량 사이클 — `<style>`이 선택·콜아웃을 끄는 이유. WKWebView는 길게 누르기를
+ * 기본적으로 **텍스트 선택 제스처**로 해석해, 그것이 지도의 `mousedown`보다 먼저 잡아채면
+ * 600ms 타이머가 아예 시작되지 않는다(TRIP-199 6-b 실측 — 지도를 길게 누르면 핀 대신
+ * 선택 핸들과 Copy·Translate 메뉴가 떴다). 지도는 문서가 아니라 조작 표면이라 선택 대상이
+ * 될 이유가 없고, 억제는 `enablePin`과 무관하게 모든 지도에 건다 — 핀을 안 받는 지도에서도
+ * 그 메뉴가 뜨는 것은 마찬가지로 오작동이다.
+ *
+ * TRIP-210 경량 사이클 — `kakao.maps.load` **콜백 안에도** try/catch가 있는 이유. 바깥
+ * try는 `load()` **호출**만 감싸고 콜백은 나중에 비동기로 불리므로, 지도 생성이나 핀 대본이
+ * 터져도 바깥 catch에는 **절대 안 온다**. 그러면 실패 사실이 어디로도 안 나가고 화면에는
+ * 멀쩡한 지도만 남는다(INV-4·BR-U1-55가 금지한 침묵 실패). TRIP-199 6-b에서 롱프레스가
+ * 안 먹었을 때 원인을 좁히지 못한 이유가 정확히 이 구멍이었다 — 실패했다는 사실 자체가
+ * 밖으로 나올 통로가 없었다.
+ *
  * TRIP-199 5-a(N-1·N-2·W-3) — 찍힌 지점은 `kakao.maps.Marker` 하나로 표시하고(재핀은
  * 위치만 옮긴다), 역지오코딩 요청마다 일련번호(`pinSeq`)를 매겨 **가장 최근 핀의 응답만**
  * 반영한다(늦게 온 이전 핀의 응답은 버린다). 주소 문자열이 빈 값이면(카카오가 지번 주소를
@@ -66,6 +80,7 @@ export function buildMapHtml(
     ? `
           var geocoder = new kakao.maps.services.Geocoder();
           var pressTimer = null;
+          var pressOrigin = null;
           var pinMarker = null;
           var pinSeq = 0;
 
@@ -113,16 +128,61 @@ export function buildMapHtml(
               clearTimeout(pressTimer);
               pressTimer = null;
             }
+            pressOrigin = null;
           }
 
-          kakao.maps.event.addListener(map, 'mousedown', function (mouseEvent) {
+          // 화면 픽셀 → 지도 좌표. 컨테이너 기준 좌표라야 해서 뷰포트 좌표에서
+          // 지도 엘리먼트의 위치를 뺀다.
+          function coordsAt(clientX, clientY) {
+            var rect = mapEl.getBoundingClientRect();
+            return map
+              .getProjection()
+              .coordsFromContainerPoint(
+                new kakao.maps.Point(clientX - rect.left, clientY - rect.top)
+              );
+          }
+
+          function startPress(clientX, clientY) {
             cancelPress();
+            pressOrigin = { x: clientX, y: clientY };
             pressTimer = setTimeout(function () {
-              dropPin(mouseEvent.latLng);
+              pressTimer = null;
+              dropPin(coordsAt(clientX, clientY));
             }, 600);
-          });
-          kakao.maps.event.addListener(map, 'mouseup', cancelPress);
-          kakao.maps.event.addListener(map, 'dragstart', cancelPress);
+          }
+
+          // 손가락은 가만히 있어도 미세하게 흔들린다 — 아무 움직임에나 취소하면
+          // 실기에서 롱프레스가 거의 성립하지 않는다. 문턱을 둔다.
+          function movedFar(clientX, clientY) {
+            if (pressOrigin === null) return false;
+            return (
+              Math.abs(clientX - pressOrigin.x) > 10 ||
+              Math.abs(clientY - pressOrigin.y) > 10
+            );
+          }
+
+          // 카카오의 합성 마우스 이벤트(kakao.maps.event.addListener(map,'mousedown'))는
+          // 실기에서 우리 리스너까지 오지 않았다(TRIP-210 6-b 실측 — 예외도 안 났다).
+          // 그래서 지도 컨테이너의 DOM 이벤트를 직접 듣는다. capture 단계로 등록해
+          // SDK가 중간에서 전파를 멈춰도 우리가 먼저 받는다.
+          mapEl.addEventListener('touchstart', function (e) {
+            if (e.touches.length !== 1) { cancelPress(); return; }
+            startPress(e.touches[0].clientX, e.touches[0].clientY);
+          }, true);
+          mapEl.addEventListener('touchmove', function (e) {
+            if (e.touches.length !== 1 || movedFar(e.touches[0].clientX, e.touches[0].clientY)) cancelPress();
+          }, true);
+          mapEl.addEventListener('touchend', cancelPress, true);
+          mapEl.addEventListener('touchcancel', cancelPress, true);
+
+          // 시뮬레이터·데스크톱 마우스 대비(터치로 변환되지 않는 환경).
+          mapEl.addEventListener('mousedown', function (e) {
+            startPress(e.clientX, e.clientY);
+          }, true);
+          mapEl.addEventListener('mousemove', function (e) {
+            if (movedFar(e.clientX, e.clientY)) cancelPress();
+          }, true);
+          mapEl.addEventListener('mouseup', cancelPress, true);
 `
     : '';
 
@@ -137,6 +197,11 @@ export function buildMapHtml(
     <base href="${REGISTERED_DOMAIN}/" />
     <style>
       html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; }
+      html, body, #map {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
     </style>
   </head>
   <body>
@@ -148,11 +213,16 @@ export function buildMapHtml(
     <script>
       try {
         kakao.maps.load(function () {
-          var map = new kakao.maps.Map(document.getElementById('map'), {
-            center: new kakao.maps.LatLng(${center.lat}, ${center.lng}),
-            level: 3,
-          });
-          ${pinScript}
+          try {
+            var mapEl = document.getElementById('map');
+            var map = new kakao.maps.Map(mapEl, {
+              center: new kakao.maps.LatLng(${center.lat}, ${center.lng}),
+              level: 3,
+            });
+            ${pinScript}
+          } catch (e) {
+            window.ReactNativeWebView.postMessage('${MAP_LOAD_FAILED_MESSAGE}');
+          }
         });
       } catch (e) {
         window.ReactNativeWebView.postMessage('${MAP_LOAD_FAILED_MESSAGE}');
