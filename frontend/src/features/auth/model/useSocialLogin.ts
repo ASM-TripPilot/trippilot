@@ -2,8 +2,10 @@ import { useCallback, useRef, useState } from 'react';
 
 import {
   postSocialLogin,
+  postSocialTokenLogin,
   type SocialLoginBody,
   type SocialProvider,
+  type SocialTokenLoginBody,
 } from '@/shared/api';
 import { setAccessToken } from '@/shared/api/tokenManager';
 import { saveTokens } from '@/shared/storage';
@@ -17,17 +19,28 @@ export type SocialLoginPhase =
   | 'cancelled'
   | 'error';
 
+// TRIP-210 D1 — 성공 멤버가 둘로 갈렸다. code 경로(브라우저 OAuth, PKCE 3필드)는 인가 코드를
+// 서버가 교환해야 하고, token 경로(네이티브 SDK)는 이미 access token 을 쥐고 있어 그대로
+// 넘긴다. 두 성공 멤버 모두 판별자 이름은 그대로 `type` 을 쓴다(현행 유지 · 재질문 금지).
 export type AuthorizeResult =
   | {
-      type: 'success';
+      type: 'success-code';
       authorizationCode: string;
       codeVerifier: string;
       redirectUri: string;
     }
+  | { type: 'success-token'; accessToken: string }
   | { type: 'cancel' }
   | { type: 'dismiss' };
 
 export type Authorize = () => Promise<AuthorizeResult>;
+
+/** 서버로 나가기 직전까지 들고 있는 교환 요청 — 갈래별로 엔드포인트와 바디 모양이 다르므로
+ * kind 로 태그해 exchange()가 어느 함수를 부를지 고른다. confirmAge() 재전송도 같은 갈래를
+ * 유지한 채 ageConfirmation 만 덧붙인다. */
+type PendingExchange =
+  | { kind: 'code'; provider: SocialProvider; body: SocialLoginBody }
+  | { kind: 'token'; provider: SocialProvider; body: SocialTokenLoginBody };
 
 interface SocialLoginState {
   signIn: (provider: SocialProvider, authorize: Authorize) => void;
@@ -64,19 +77,15 @@ export function useSocialLogin(): SocialLoginState {
     setPhase(next);
   }, []);
 
-  const pendingRef = useRef<{
-    provider: SocialProvider;
-    body: SocialLoginBody;
-  } | null>(null);
+  const pendingRef = useRef<PendingExchange | null>(null);
 
   const exchange = useCallback(
-    async (
-      provider: SocialProvider,
-      body: SocialLoginBody,
-      ageConfirmed: boolean
-    ) => {
+    async (pending: PendingExchange, ageConfirmed: boolean) => {
       try {
-        const tokens = await postSocialLogin(provider, body);
+        const tokens =
+          pending.kind === 'code'
+            ? await postSocialLogin(pending.provider, pending.body)
+            : await postSocialTokenLogin(pending.provider, pending.body);
         if (!ageConfirmed && tokens.isNewUser) {
           setIsNewUser(true);
           applyPhase('needs-age');
@@ -126,18 +135,31 @@ export function useSocialLogin(): SocialLoginState {
           applyPhase('error');
           return;
         }
-        if (result.type !== 'success') {
+        if (result.type === 'cancel' || result.type === 'dismiss') {
           applyPhase('cancelled');
           return;
         }
-        const body: SocialLoginBody = {
-          authorizationCode: result.authorizationCode,
-          codeVerifier: result.codeVerifier,
-          redirectUri: result.redirectUri,
-        };
-        pendingRef.current = { provider, body };
+        // D1 갈래 분기 — code(브라우저 OAuth)는 postSocialLogin, token(네이티브 SDK)은
+        // postSocialTokenLogin. 여기서 갈리면 반대 엔드포인트로 나가 실서버가 거부한다.
+        const pending: PendingExchange =
+          result.type === 'success-code'
+            ? {
+                kind: 'code',
+                provider,
+                body: {
+                  authorizationCode: result.authorizationCode,
+                  codeVerifier: result.codeVerifier,
+                  redirectUri: result.redirectUri,
+                },
+              }
+            : {
+                kind: 'token',
+                provider,
+                body: { accessToken: result.accessToken },
+              };
+        pendingRef.current = pending;
         applyPhase('exchanging');
-        await exchange(provider, body, false);
+        await exchange(pending, false);
       })();
     },
     [applyPhase, exchange]
@@ -149,11 +171,12 @@ export function useSocialLogin(): SocialLoginState {
       return;
     }
     applyPhase('authorizing');
-    void exchange(
-      pending.provider,
-      { ...pending.body, ageConfirmation: { method: 'SELF_DECLARED' } },
-      true
-    );
+    const ageConfirmation = { method: 'SELF_DECLARED' as const };
+    const resend: PendingExchange =
+      pending.kind === 'code'
+        ? { ...pending, body: { ...pending.body, ageConfirmation } }
+        : { ...pending, body: { ...pending.body, ageConfirmation } };
+    void exchange(resend, true);
   }, [applyPhase, exchange]);
 
   return { signIn, confirmAge, phase, errorCode, conflictProvider, isNewUser };

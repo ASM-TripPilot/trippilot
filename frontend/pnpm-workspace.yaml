@@ -1,5 +1,9 @@
 allowBuilds:
   '@sentry/cli': true
+  dooboolab-welcome: false
   esbuild: true
   msw: false
   unrs-resolver: true
+minimumReleaseAgeExclude:
+  - '@react-native-seoul/kakao-login@6.0.3'
+  - '@react-native-seoul/naver-login@5.0.1'

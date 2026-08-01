@@ -133,6 +133,9 @@ class AuthenticateWithSocialUseCaseTest : StringSpec({
         }
         ex.errorCode shouldBe ErrorCode.SOCIAL_EMAIL_CONFLICT
         ex.message shouldContain "카카오"
+        // TRIP-211 — 안내가 message 문자열에만 있으면 웹 계층이 그것을 파싱해야 한다.
+        // current 에 기존 provider 를 담아야 봉투가 계약 필드로 실어 보낼 수 있다(BR-U0-04 · INV-A3).
+        ex.current shouldBe listOf("KAKAO")
     }
 
     "신규 가입인데 BIRTH_DATE 연령확인에 생년월일이 없으면 ValidationFailed(400)" {

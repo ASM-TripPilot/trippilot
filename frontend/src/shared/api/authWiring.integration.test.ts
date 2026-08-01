@@ -13,6 +13,7 @@ import {
   fetchNicknameSuggestions,
   fetchTerms,
   postSocialLogin,
+  postSocialTokenLogin,
   refreshTokens,
   submitConsents,
   updateNickname,
@@ -212,6 +213,68 @@ describe('무인증 엔드포인트 배분 (C2·C3·C4 · SEC-04)', () => {
     expect(authByPath['/api/v1/auth/social/google']).toBeNull();
     expect(authByPath['/api/v1/terms']).toBeNull();
     expect(authByPath['/api/v1/auth/token/refresh']).toBeNull();
+  });
+});
+
+describe('AC-6 · SDK 토큰 경로도 무인증으로 나간다 (openapi security: [] · SEC-04)', () => {
+  it('홀더에 토큰이 있어도 /auth/social/{provider}/token 은 Authorization 없이 나간다', async () => {
+    // 준비 — 홀더를 채운다(대조군용). 로그인 **전** 호출이므로 토큰이 있더라도 실리면 안 된다.
+    setAccessToken('valid-access');
+
+    // 실행 — 대조군(인증 필요) 먼저, 그다음 토큰 경로 2종.
+    await completeOnboarding();
+    await postSocialTokenLogin('kakao', { accessToken: 'kakao-access-token' });
+    await postSocialTokenLogin('naver', { accessToken: 'naver-access-token' });
+
+    // 단언 — 대조군은 Bearer 를 싣는다(홀더가 실제로 차 있다는 증명. 이게 없으면 아래 둘이
+    // "요청이 안 나가서 통과"하는 가짜 통과다).
+    expect(authByPath['/api/v1/onboarding/complete']).toBe(
+      'Bearer valid-access'
+    );
+    // toBeNull = 요청이 나갔고(≠undefined) 헤더가 없다는 뜻. 빈 'Bearer ' 도 실패한다.
+    expect(authByPath['/api/v1/auth/social/kakao/token']).toBeNull();
+    expect(authByPath['/api/v1/auth/social/naver/token']).toBeNull();
+  });
+});
+
+describe('AC-1·AC-2 (배선) · 실제로 나가는 본문은 accessToken 하나뿐이다', () => {
+  it('요청 본문에 accessToken 만 담기고 code 경로 필드·deviceId 는 실리지 않는다', async () => {
+    // 준비 — 본문을 캡처하는 핸들러로 덮어쓴다(afterEach 의 resetHandlers 가 원복한다).
+    // 훅·API 래퍼 층의 목 단언과 달리, 여기서는 **직렬화되어 실제로 나간 JSON** 을 본다.
+    let capturedBody: unknown = null;
+    let capturedProvider: string | null = null;
+    server.use(
+      http.post(
+        `${BASE}/auth/social/:provider/token`,
+        async ({ params, request }) => {
+          capturedProvider = String(params.provider);
+          capturedBody = await request.json();
+          return HttpResponse.json({
+            accessToken: 'server-access',
+            tokenType: 'Bearer',
+            expiresIn: 3600,
+            refreshToken: 'server-refresh',
+            refreshExpiresIn: 7776000,
+            isNewUser: false,
+            account: {
+              accountId: '00000000-0000-0000-0000-000000000001',
+              status: 'ACTIVE',
+              email: null,
+              socialProviders: ['KAKAO'],
+              onboardingCompleted: true,
+            },
+          });
+        }
+      )
+    );
+
+    // 실행
+    await postSocialTokenLogin('kakao', { accessToken: 'wire-access-token' });
+
+    // 단언 — 완전 일치. authorizationCode·codeVerifier·redirectUri 가 섞여 들어가거나
+    // deviceId(D7: 미전송)가 붙으면 실패한다.
+    expect(capturedProvider).toBe('kakao');
+    expect(capturedBody).toEqual({ accessToken: 'wire-access-token' });
   });
 });
 
