@@ -40,6 +40,9 @@ export interface StaySearchScreenProps {
   state?: StaySearchState;
   /** partial 배너·error 재시도의 콜백(Q8). 미지정이면 정직한 스텁. */
   onRetry?: () => void;
+  /** 수동 등록 유도(empty·error) 콜백(01b Seed §3-6 — e05로 가는 문). 미지정이면 정직한
+   * 스텁이라 기존 2-prop 호출이 깨지지 않는다. */
+  onPressRegister?: () => void;
 }
 
 // 카드 그림자(브리프 §4-2 명시 raw 허용 — 그림자는 토큰 대상이 아니다, HomeScreen.tsx
@@ -170,12 +173,16 @@ function StayCard({ item }: { item: StayItem }): ReactElement {
 }
 
 /** 점선 박스 밖, 구분선 아래 수동 등록 유도 카드(AC-3 · US-STAY-10 예외 → US-STAY-08 연결). */
-function RegisterPromptCard(): ReactElement {
+function RegisterPromptCard({
+  onPress,
+}: {
+  onPress?: () => void;
+}): ReactElement {
   return (
     <Pressable
       testID="stay-search-register"
       accessibilityRole="button"
-      onPress={undefined}
+      onPress={onPress}
       className="w-full flex-row items-center gap-[14px] px-lg pb-lg"
     >
       <View className="h-10 w-10 items-center justify-center rounded-pill bg-primary-pale">
@@ -195,7 +202,11 @@ function RegisterPromptCard(): ReactElement {
 }
 
 /** empty(AC-2·AC-3) — 점선 안내 박스 + 구분선 + 수동 등록 카드(박스 밖 별도 형제). */
-function EmptyBlock(): ReactElement {
+function EmptyBlock({
+  onPressRegister,
+}: {
+  onPressRegister?: () => void;
+}): ReactElement {
   return (
     <View className="w-full gap-lg">
       {/* `px-lg`는 StateNotice **안쪽** 여백(내용물 오프셋)이라 점선 테두리를 못 민다 —
@@ -225,7 +236,7 @@ function EmptyBlock(): ReactElement {
       <View className="px-lg">
         <View className="h-[1px] w-full bg-hairline" />
       </View>
-      <RegisterPromptCard />
+      <RegisterPromptCard onPress={onPressRegister} />
     </View>
   );
 }
@@ -260,7 +271,13 @@ function FilterZeroNotice({ reasons }: { reasons: string[] }): ReactElement {
 }
 
 /** error(AC-7) — 이 상태만 1차 버튼이 채움(filled)이다. */
-function ErrorNotice({ onRetry }: { onRetry?: () => void }): ReactElement {
+function ErrorNotice({
+  onRetry,
+  onPressRegister,
+}: {
+  onRetry?: () => void;
+  onPressRegister?: () => void;
+}): ReactElement {
   return (
     <StateNotice
       testID="stay-search-error"
@@ -278,6 +295,7 @@ function ErrorNotice({ onRetry }: { onRetry?: () => void }): ReactElement {
           testID: 'stay-search-error-register',
           label: '숙소 직접 등록',
           variant: 'outline',
+          onPress: onPressRegister,
         },
       ]}
     />
@@ -296,20 +314,22 @@ function ErrorNotice({ onRetry }: { onRetry?: () => void }): ReactElement {
 function ListEmptyBlock({
   state,
   onRetry,
+  onPressRegister,
 }: {
   state: StaySearchState;
   onRetry?: () => void;
+  onPressRegister?: () => void;
 }): ReactElement | null {
   if (state.kind === 'loading') return <SkeletonList />;
   if (state.kind === 'results') return null;
 
   const notice =
     state.kind === 'error' ? (
-      <ErrorNotice onRetry={onRetry} />
+      <ErrorNotice onRetry={onRetry} onPressRegister={onPressRegister} />
     ) : state.kind === 'filter-zero' ? (
       <FilterZeroNotice reasons={state.reasons} />
     ) : (
-      <EmptyBlock />
+      <EmptyBlock onPressRegister={onPressRegister} />
     );
 
   return (
@@ -322,6 +342,7 @@ export function StaySearchScreen({
   items,
   state = { kind: 'results', degraded: false },
   onRetry,
+  onPressRegister,
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
@@ -353,7 +374,11 @@ export function StaySearchScreen({
             </>
           }
           ListEmptyComponent={
-            <ListEmptyBlock state={state} onRetry={onRetry} />
+            <ListEmptyBlock
+              state={state}
+              onRetry={onRetry}
+              onPressRegister={onPressRegister}
+            />
           }
           renderItem={({ item }) => (
             <View className="w-full px-lg">
