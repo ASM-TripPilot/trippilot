@@ -14,6 +14,7 @@ SigNoz는 OpenTelemetry 기반으로 **로그·트레이스·메트릭을 한 �
 
 - [SigNoz 설치 및 로그 검색 가이드](#signoz-설치-및-로그-검색-가이드)
   - [목차](#목차)
+  - [빠른 사용법](#빠른-사용법)
   - [0. 시작 전 확인](#0-시작-전-확인)
   - [1. Foundry 이해하기](#1-foundry-이해하기)
   - [2. Kubernetes 설치](#2-kubernetes-설치)
@@ -27,6 +28,87 @@ SigNoz는 OpenTelemetry 기반으로 **로그·트레이스·메트릭을 한 �
   - [10. 문제 해결](#10-문제-해결)
   - [11. 공식 문서](#11-공식-문서)
   - [부록: Docker 단독 설치 (비표준)](#부록-docker-단독-설치-비표준)
+
+---
+
+## 빠른 사용법
+
+명령 묶음만 모은 요약입니다. 처음이라면 [§0 시작 전 확인](#0-시작-전-확인)부터 읽으세요.
+
+### ① 최초 1회 — 설치
+
+```bash
+# foundryctl 설치 + PATH 등록
+curl -fsSL https://signoz.io/foundry.sh | bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+
+# 컨텍스트 확인 (필수 — EKS에 설치되는 사고 방지)
+kubectl config use-context docker-desktop
+
+# casting 작성 후 배포
+mkdir -p ~/signoz && cd ~/signoz
+cat > casting-k8s.yaml <<'YAML'
+apiVersion: v1alpha1
+kind: Installation
+metadata:
+  name: signoz
+spec:
+  deployment:
+    flavor: helm
+    mode: kubernetes
+YAML
+foundryctl cast -f casting-k8s.yaml -p ./pours-k8s --format text
+```
+
+약 3~4분 걸립니다. 자세한 설명과 주의사항은 [§2](#2-kubernetes-설치).
+
+### ② 매일 — 켜고 보기
+
+```bash
+# 전날 scale 0으로 내려뒀다면 다시 깨우기
+kubectl scale statefulset,deployment --all --replicas=1 -n signoz
+
+# UI 열기 — 이 터미널은 켜둔 채로 유지
+kubectl port-forward -n signoz svc/signoz 8080:8080
+```
+
+브라우저에서 `http://localhost:8080` → **Logs → Logs Explorer**
+
+맥에서 직접 돌리는 앱의 로그를 보내려면 **별도 터미널**에서 수집기도 열어야 합니다.
+
+```bash
+kubectl port-forward -n signoz svc/signoz-ingester 4317:4317 4318:4318
+```
+
+자세히는 [§3 접속](#3-접속) · [§5 애플리케이션 연결](#5-애플리케이션-연결-opentelemetry).
+
+### ③ 로그 검색 — 자주 쓰는 것
+
+```text
+service.name = trippilot-backend AND severity_text = ERROR
+body CONTAINS "timeout"
+trace_id = <TRACE_ID>
+```
+
+연산자는 `=` `!=` `IN` `NOT IN` `CONTAINS` `EXISTS`이고 `AND`/`OR`로 묶습니다. 자세히는 [§6](#6-로그-검색하기) · [§7](#7-자주-쓰는-로그-검색-예시).
+
+### ④ 종료
+
+| 목적 | 명령 |
+|---|---|
+| **오늘 작업 끝** (데이터 유지·리소스 회수) | `kubectl scale statefulset,deployment --all --replicas=0 -n signoz` |
+| 릴리스 제거 (PVC·데이터 유지) | `helm uninstall signoz -n signoz` |
+| **완전 삭제** (데이터까지) | `helm uninstall signoz -n signoz && kubectl delete pvc --all -n signoz && kubectl delete namespace signoz` |
+
+평소에는 **첫 번째(scale 0)**를 쓰세요. 재설치 없이 바로 되살아납니다. 자세히는 [§9](#9-중지제거).
+
+### 상태 확인 한 줄
+
+```bash
+helm list -n signoz && kubectl get pods -n signoz
+```
+
+`STATUS`가 `deployed`이고 Pod가 모두 `Running`(migrator만 `Completed`)이면 정상입니다.
 
 ---
 
