@@ -9,10 +9,13 @@ IMAGE_NAME="${IMAGE_NAME:-trippilot-backend}"
 IMAGE_TAG="${IMAGE_TAG:-dev}"
 IMAGE="${IMAGE_NAME}:${IMAGE_TAG}"
 DEPLOYMENT="trippilot-backend"
+POSTGRES="trippilot-postgres"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BACKEND_DIR="${REPO_ROOT}/backend"
 MANIFEST_DIR="${REPO_ROOT}/deploy/k8s/backend"
+POSTGRES_MANIFEST_DIR="${REPO_ROOT}/deploy/k8s/postgres"
+SIGNOZ_MANIFEST_DIR="${REPO_ROOT}/deploy/k8s/signoz"
 KIND_CONFIG="${REPO_ROOT}/deploy/kind/cluster.yaml"
 
 log()  { printf '\033[1;34m▸\033[0m %s\n' "$*"; }

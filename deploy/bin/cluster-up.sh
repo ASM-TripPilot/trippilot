@@ -52,13 +52,19 @@ log "SigNoz 기동 대기 (최대 10분)"
 kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=signoz -n signoz --timeout=600s >/dev/null 2>&1 || true
 kubectl get pods -n signoz
 
+# UI 를 고정 NodePort(30080 → 호스트 8080)로 연다. port-forward 를 켜 둘 필요가 없어진다.
+log "SigNoz UI NodePort 적용"
+kubectl apply -f "${SIGNOZ_MANIFEST_DIR}"
+
 cat <<EOF
 
 $(ok "클러스터 준비 완료")
 
-  SigNoz UI 열기 (별도 터미널, 켜둔 채 유지):
-    kubectl port-forward -n signoz svc/signoz 8080:8080
-    → http://localhost:8080
+  SigNoz UI:  http://localhost:8080     (port-forward 불필요)
+
+  ⚠️ 최초 1회 관리자 계정을 만들어야 합니다. 계정(=조직)이 없으면 collector 가
+     파이프라인 설정을 받지 못해 **OTLP 수신기 자체가 열리지 않습니다**.
+     비밀번호 규칙: 12자 이상 + 대문자 + 소문자 + 숫자 + 기호
 
   백엔드 빌드·배포:
     ./deploy/bin/build.sh && ./deploy/bin/deploy.sh
