@@ -112,6 +112,7 @@ src/app/
 | `PeriodPicker` | 프리셋 칩(이번 주말·다음 주말·1박2일·3박4일) + 날짜 범위. 프리셋은 자동 채움일 뿐 수정 가능(BR-U1-36) | Zod: `end ≥ start`(UX 사본) | — |
 | `PartyPicker` | 인원 스테퍼 + 동반 유형(혼자·친구·연인·가족)(BR-U1-39) | — | — |
 | `PreferencePrefillCard` | "당신 취향으로 맞췄어요" + 칩 + [바꾸기] → 여행 단위 오버라이드(BR-U1-38) | — | `GET /me/preferences` |
+| `BudgetInputField` | **[구현 결정 · TRIP-207, 2026-08-02]** 예산 총액 입력(선택) — 온보딩 취향 러프값(`PreferenceView.budget.rawAmount`) 프리필 + "온보딩에서 고른 '{티어}({구간})' 범위로 채웠어요" 안내 문구, 비우면 `budgetTotal` 키 자체를 전송하지 않는다(BR-U1-38 덮어쓰기 허용). 이 문서 승인 당시 §4 표에 예산 컴포넌트 행이 없었다(공백) — TRIP-182의 `StateNotice`·`SkeletonList` 구현 결정 소급 기록 방식을 따른다. 근거: `_workspace/20260802-trip207-budget-block/01_spec-analyst_brief.md` §3·§7-④ | Zustand: `budgetText`·`touched.budget`(파생값, 프리필은 스토어에 쓰지 않음) | `GET /me/preferences`(프리필 출처, `PreferencePrefillCard`와 동일 조회 재사용) |
 | `BaseSectionList` | 구간별 거점("1~2박 6/10-6/12 부산 — {숙소} · 거점" + [변경]) | — | **[정정 · 2026-08-02]** 구간 행의 원본은 `GET /trips/{tripId}/bases`(BaseAssignment[])다. `GET /trips/{tripId}/coverage`는 **날짜별 판정·`blocked`**를 주는 별개 응답으로, 하단 CTA 차단에만 쓴다(BR-U1-44) · `DELETE /trips/{tripId}/bases/{baseAssignmentId}` |
 | `BaseCandidateList` | 숙소 후보 카드 · "거점으로 지정" · 지정 시 "✓ N박 · {지역}에 지정됨" | — | `POST /trips/{tripId}/bases` |
 | `CoverageResolveSheet` | **차단형 해소 시트** — 미해결 날짜별 선택(겹침: 후보 목록 / 공백: 직전 숙소·여행지 중심·숙소 지정)(BR-U1-44·45) | props: unresolvedDays | `GET /trips/{tripId}/coverage` → 해소는 `POST /trips/{tripId}/bases` 재배정 |
@@ -119,6 +120,8 @@ src/app/
 | `OverseasBlockDialog` | 국내 밖 목적지 차단 안내(BR-U1-35) | — | — |
 
 **[라이브 실측 · 2026-08-02] 밴드 g에 변형 프레임이 늘었다** — `g01 · no-saved-places`(`2226:1732`) · `g01 · error`(`2226:1929`) · `g01 · blocked-overseas (dialog)`(`2228:1738`) · **`g03 필수 방문지 관리 · default`(`2230:1732`)**. `g01 · default`는 `1675:1183`. 이 문서 승인(2026-07-23) 당시 g01은 default 하나뿐이었고 "담은 곳 0"의 화면이 없어 TRIP-209가 그것을 미결로 남겼는데, **이제 프레임이 있다**(no-saved-places). g03은 US-TRIP-08(필수 방문지 지정 — 지라 티켓 미존재)의 화면이다.
+
+**[라이브 실측 · 2026-08-02, TRIP-207 [기록] 반영] `g01 · default`(`1675:1183`) 내부 구성이 바뀌었다 — 프레임 개수는 안 변했고 내용이 변했다.** 위 문단이 다루는 것은 g01의 **새 변형 프레임**이고, 이건 그 default 프레임 **안쪽**에 자식 노드가 늘어난 것이라 별개다: 예산 블록 `sec_budget`(`2225:2375`, 구분선 `d3w` `2225:2373` 포함, TRIP-207 소관 — `BudgetInputField` 위 행 참고) · 등록 숙소 날짜 가져오기 행 `stayImportRow`(`2225:2362`, TRIP-208 소관 — **이 문서는 이 노드에 컴포넌트 행을 아직 안 둔다**, TRIP-208 [기록]에서 소급). 근거: `_workspace/20260802-trip207-budget-block/01_spec-analyst_brief.md` §7-④.
 
 ## 5. 폼 검증 (UX 사본 명세)
 
@@ -139,6 +142,8 @@ src/app/
 **[구현 결정 · TRIP-182, 2026-07-30]** 위 `stay-search-partialfailure-retry` 외 나머지 4상태(loading·empty·filter-zero·error)의 testID — 이 문서 승인 당시 이 넷의 이름은 정해지지 않았다(§6 공백). 실제 구현이 확정한 값: `stay-search-loading` · `stay-search-skeleton-{i}`(i=0,1) · `stay-search-empty` · `stay-search-empty-region` · `stay-search-empty-filter` · `stay-search-register` · `stay-search-filterzero` · `stay-search-filterzero-clear` · `stay-search-filterzero-reset` · `stay-search-error` · `stay-search-error-retry` · `stay-search-error-register` · `stay-search-partialfailure`(배너 컨테이너 자체 — retry는 위와 동일). 근거: `frontend/src/features/stay/ui/StaySearchScreen.states.test.tsx`(게이트①-1 승인, TRIP-182).
 `trip-wizard-step{n}-next` · `trip-wizard-destination-add` · `trip-wizard-period-preset-{code}` · `trip-wizard-party-stepper` · `trip-wizard-pref-change` · `trip-base-assign-{stayId}` · `trip-base-coverage-day-{date}` · `trip-base-nostay-start`
 
+**[구현 결정 · TRIP-207, 2026-08-02]** 예산 testID 5종 — 이 문서 승인 당시 정해지지 않았다(공백). 게이트①에서 확정한 값: `trip-wizard-budget-block`(섹션 컨테이너) · `trip-wizard-budget-input`(총액 입력, 지라 티켓이 직접 지정) · `trip-wizard-budget-edit`(`수정` 어포던스) · `trip-wizard-budget-note`(프리필 안내 문구) · `trip-wizard-error-budget`(인라인 파싱 오류 — 위반 코드가 아니라 **블록 슬러그** 규약, 기존 `trip-wizard-error-destination`·`trip-wizard-error-period`와 동형). 근거: `_workspace/20260802-trip207-budget-block/02a_test-design_spec.md` §2-6.
+
 ## 7. PBT 대상 (클라이언트 순수 함수 · fast-check)
 
 | 대상 | 속성 |
@@ -148,5 +153,6 @@ src/app/
 | `formatPrice(snapshot?)` | 스냅숏 없음 → 항상 "가격 미확인", 있음 → 항상 "~" 접미 시작가. **어떤 입력에서도 소요 시간 문자열을 만들지 않는다**(INV-3) |
 | `seedMustVisits(savedPlaces)` | 중복 `sourcePoiId` 없음 · 원본 담기 해제와 독립(복사본 보존) |
 | `resolveStaySearchState(input) → StaySearchState` | **[구현 결정 · TRIP-182, 2026-07-30]** 임의의 `(isPending, isError, itemCount, degraded, filterZeroReasons)` 조합에서 결과 `kind`가 5개 리터럴(`loading`\|`error`\|`results`\|`filter-zero`\|`empty`) 중 **정확히 하나**이고 "아무것도 아님"이 없다. 요구사항 근거는 INV-4(결정론적 폴백·침묵 실패 금지) — 단 이 성질을 PBT 대상으로 뽑을 수 있었던 것 자체는 구현이 판정을 순수 함수로 분리한 결정에서 비롯한다. 이 문서 승인 당시 상태 판정 완전성은 PBT 대상 목록에 없었다(공백). 근거: `frontend/src/features/stay/model/staySearchState.test.ts`(fast-check, numRuns 500) |
+| `parseBudgetAmount(raw) → BudgetAmount` · `formatBudgetAmount(amount)` | **[구현 결정 · TRIP-207, 2026-08-02]** 표시값(`'1,200,000'`)↔전송값(`1200000`) 왕복 성질 — 임의 정수 n(0~1e12)에서 `parse(format(n))`이 `{kind:'amount', amount:n}`로 돌아오고, `format(n)`이 항상 `/^\d{1,3}(,\d{3})*$/` 모양이다. `0`도 유효값(falsy 판정 금지). 이 문서 승인 당시 예산 정규화는 PBT 대상 목록에 없었다(공백, 티켓이 명시 요구). `toLocaleString`/`Intl` 사용 0건도 함께 잠근다(node/Hermes 로케일 갈림 회피). 근거: `frontend/src/features/trip/model/budgetAmount.test.ts`(fast-check, `_workspace/20260802-trip207-budget-block/02a_test-design_spec.md` §3 N1) |
 
 > **서버측 PBT**(참고): 커버리지 해소 결과의 전 날짜 확정성, 최저가 스냅숏 정규화·직렬화 왕복, 딥링크 파라미터 정확성 — U1 NFR 단계에서 확정. **closed-set 게이트 PBT(INV-1)가 CQ3=B로 U1에 편입**된다.

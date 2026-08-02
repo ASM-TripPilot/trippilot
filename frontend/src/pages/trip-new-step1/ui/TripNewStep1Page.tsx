@@ -7,6 +7,10 @@ import { REGIONS } from '@/features/explore/model/regions';
 import type { CompanionType } from '@/shared/api/generated/schemas';
 
 import {
+  formatBudgetAmount,
+  parseBudgetAmount,
+} from '@/features/trip/model/budgetAmount';
+import {
   buildCreateTripRequest,
   type CreateTripInput,
 } from '@/features/trip/model/createTripRequest';
@@ -42,6 +46,11 @@ import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen'
  *     **나머지 전부(미상 코드·미상 필드·응답 자체 없음)는 배너로 떨어뜨린다** — 이것이
  *     INV-4 페일세이프다. 화면은 완성된 문자열만 받으므로 이 매핑이 화면에 새어 나가면
  *     `tripWizardStep1Boundary.test.ts`가 막는다(위반 코드 리터럴 0건 유지).
+ *  5. **예산 프리필·파싱·게이트(TRIP-207, 01b 불변식)** — 프리필은 스토어에 쓰지 않는
+ *     **파생값**이다(`touched`에 `'budget'`이 없는 동안만 취향 값을 보여준다). 이 파일
+ *     하나가 "프리필 쓰기가 사용자 입력과 같은 경로를 타면 자기 자신을 잠근다"는 불변식을
+ *     구조적으로 지킨다 — `setBudgetText`(사람 경로)는 `onChangeBudget`·blur 재포맷에서만
+ *     불리고, 프리필 표시는 그 액션을 거치지 않는다.
  */
 
 /** 서버 400의 `error.code`가 국내 밖 목적지를 가리키는 값. openapi에 enum이 없어
@@ -50,6 +59,10 @@ const OVERSEAS_DESTINATION_ERROR_CODE = 'OVERSEAS_DESTINATION';
 
 /** 종료일 역전 문구 — 클라 검증이 쓴다(Figma `2226:2119`). */
 const PERIOD_ERROR_MESSAGE = '종료일이 시작일보다 빨라요';
+
+/** 예산 파싱 실패 문구 — Figma에 오류 프레임이 없어 이 칸의 발명이다(02a §2-4, 게이트①
+ * 사용자 판단 보류 항목). 뒤집히면 이 상수 한 줄만 바꾸면 된다. */
+const BUDGET_ERROR_MESSAGE = '숫자만 입력해 주세요';
 
 /** 제출 실패 배너 본문 — Figma가 확정한 유일한 문구다(`2226:2128`). 미상 코드·미상 필드처럼
  * Figma가 문구를 안 정해 준 갈래도 이 문구로 떨어진다(그 밖 갈래의 본문은 정본이 없다,
@@ -89,6 +102,16 @@ function todayIso(): string {
   return `${year}-${month}-${day}`;
 }
 
+/** 프리필 신뢰 경계(5-c W-2) — `rawAmount`는 서버 응답이고 계약(`integer, nullable`)에
+ * `minimum`이 없다(openapi.yaml:1032). 음수·비정수까지 그대로 채우면 파싱 불가 문자열이
+ * 입력에 들어가 `[다음]`이 설명 없이 잠긴다 — 예산으로 성립하는 값(0 이상 정수)일 때만
+ * 채운다. `0`도 포함한다(★2) — truthy가 아니라 `Number.isInteger` 판정이라 걸리지 않는다. */
+function isPrefillableBudget(
+  value: number | null | undefined
+): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
 export function TripNewStep1Page({
   baseDate,
 }: TripNewStep1PageProps): ReactElement {
@@ -101,6 +124,7 @@ export function TripNewStep1Page({
   const presetCode = useTripWizardStore((state) => state.presetCode);
   const party = useTripWizardStore((state) => state.party);
   const companionType = useTripWizardStore((state) => state.companionType);
+  const budgetText = useTripWizardStore((state) => state.budgetText);
   const touched = useTripWizardStore((state) => state.touched);
   const addDestination = useTripWizardStore((state) => state.addDestination);
   const removeDestination = useTripWizardStore(
@@ -109,6 +133,7 @@ export function TripNewStep1Page({
   const setPeriod = useTripWizardStore((state) => state.setPeriod);
   const setParty = useTripWizardStore((state) => state.setParty);
   const selectCompanion = useTripWizardStore((state) => state.selectCompanion);
+  const setBudgetText = useTripWizardStore((state) => state.setBudgetText);
   const setCreatedTripId = useTripWizardStore(
     (state) => state.setCreatedTripId
   );
@@ -119,6 +144,26 @@ export function TripNewStep1Page({
     ...(preference.data?.activities?.value ?? []),
   ];
 
+  // 예산 프리필은 **파생값**이지 스토어에 쓰는 값이 아니다(TRIP-207 01b 불변식, 02a §2-4).
+  // `touched`에 `'budget'`이 없는 동안만 취향 값을 보여주고, 사용자가 한 번이라도 건드리면
+  // (지운 것도 포함, D6 ③) 그 뒤로는 원문(`budgetText`)이 이긴다 — 그래서 지운 상태가
+  // 재진입해도 되살아나지 않는다(AC-1c).
+  // 5-c W-2: 판정을 `isPrefillableBudget`(0 이상 정수)으로 좁힌다 — 음수 프리필은 "그 값이
+  // 서버로 나가는 것"이 아니라 "입력에 채워지는 것 자체"가 문제라, 채우는 문 앞에서 막는다.
+  const rawAmount = preference.data?.budget?.rawAmount;
+  const budgetTouched = touched.includes('budget');
+  const canPrefillBudget = isPrefillableBudget(rawAmount);
+  const prefillBudgetText = canPrefillBudget
+    ? formatBudgetAmount(rawAmount)
+    : '';
+  const effectiveBudgetText = budgetTouched ? budgetText : prefillBudgetText;
+  const budgetPrefilled = !budgetTouched && canPrefillBudget;
+  const parsedBudget = parseBudgetAmount(effectiveBudgetText);
+  const budgetError =
+    budgetTouched && parsedBudget.kind === 'invalid'
+      ? BUDGET_ERROR_MESSAGE
+      : undefined;
+
   // 서버 400 → 화면 표면(01b D4). `touched` 게이트를 안 탄다 — 사용자가 이미 제출을
   // 눌렀고 서버가 대답했으므로, 안 건드린 축이어도 반드시 보여야 한다(★13, INV-4).
   const [submitError, setSubmitError] = useState<string>();
@@ -126,10 +171,10 @@ export function TripNewStep1Page({
 
   // 5-c N-2: 배너가 뜬 뒤 드래프트를 고치면 배너는 옛 실패를 계속 보여주면서도 [다시 시도]는
   // 새 상태 기준으로 다시 판정한다 — 화면과 배너가 서로 다른 이야기를 하게 된다. 드래프트가
-  // 바뀌는 순간 배너를 걷어 그 어긋남을 없앤다.
+  // 바뀌는 순간 배너를 걷어 그 어긋남을 없앤다. 예산 축도 같은 이유로 더한다.
   useEffect(() => {
     setSubmitError(undefined);
-  }, [destinations, startDate, endDate, party, companionType]);
+  }, [destinations, startDate, endDate, party, companionType, budgetText]);
 
   const createTrip = useCreateTrip();
 
@@ -147,7 +192,8 @@ export function TripNewStep1Page({
     startDate !== '' &&
     endDate !== undefined &&
     endDate !== '' &&
-    violations.length === 0;
+    violations.length === 0 &&
+    parsedBudget.kind !== 'invalid';
 
   // 클라 검증 → 인라인 문구. **`touched`가 켜진 축만** — 아직 아무것도 안 고른 사용자에게
   // 페일클로즈 판정을 그대로 뿌리면 AC-10을 위반한다(01b D1·D3). 서버는 기간 축을 안 낸다
@@ -170,6 +216,24 @@ export function TripNewStep1Page({
     setPeriod(code, range.startDate, range.endDate);
   }
 
+  // blur에서 콤마를 한 번만 정리한다(01b D8). **`budgetTouched` 가드가 이 설계의 급소다**
+  // — 없으면 필드를 탭했다 그냥 나가기만 해도 `setBudgetText`가 불려 touched가 켜지고,
+  // 프리필이 영원히 잠긴다(01b 불변식, 02a ★1-b). 파싱 실패 값은 정리하지 않고 그대로
+  // 남겨 사용자가 무엇을 잘못 썼는지 볼 수 있게 한다(AC-4의 "남아 있으면").
+  // 5-c W-1: `Number.isSafeInteger`를 한 번 더 건다 — 안전 정수 범위 밖은 `String(n)`이
+  // 지수 표기(`1.1e+21`)로 줄여 써서 재포맷이 사용자가 친 원문을 그 표기로 덮어써 버린다.
+  // 자릿수 상한을 신설하는 게 아니라(01b ★14 그대로, 큰 값은 여전히 그대로 서버로 나간다),
+  // 왕복 못 하는 재포맷만 안 하는 것이다.
+  function handleBlurBudget(): void {
+    if (
+      budgetTouched &&
+      parsedBudget.kind === 'amount' &&
+      Number.isSafeInteger(parsedBudget.amount)
+    ) {
+      setBudgetText(formatBudgetAmount(parsedBudget.amount));
+    }
+  }
+
   async function submit(): Promise<void> {
     // 버튼이 비활성이면 눌리지 않지만, 배선도 스스로 판정을 다시 걷는다(`StayRegisterPage.
     // handleSubmit`과 같은 이유). `isPending`도 함께 건다 — 응답이 오기 전 두 번째 호출이
@@ -186,6 +250,11 @@ export function TripNewStep1Page({
       party,
       companionType,
       destinations,
+      // 사용자가 넣은 값만 나간다(TRIP-207 AC-2) — 취향은 이 함수에 더 이상 안 보인다.
+      // `empty`면 `undefined`라 키 자체가 안 붙는다(`buildCreateTripRequest`가 스프레드
+      // 전에 떼어내 조건부로만 다시 붙인다, ★3).
+      budgetTotal:
+        parsedBudget.kind === 'amount' ? parsedBudget.amount : undefined,
     };
 
     // 5-c W-2: `try`의 사정거리를 요청 한 줄로 좁힌다. 성공 뒤 부작용(id 기록·라우팅)에서
@@ -194,7 +263,7 @@ export function TripNewStep1Page({
     let trip: Awaited<ReturnType<typeof createTrip.mutateAsync>>;
     try {
       trip = await createTrip.mutateAsync({
-        data: buildCreateTripRequest(input, preference.data),
+        data: buildCreateTripRequest(input),
       });
     } catch (error) {
       const failure = classifyServerFailure(error);
@@ -229,6 +298,11 @@ export function TripNewStep1Page({
       periodError={periodError}
       submitError={submitError}
       overseasBlocked={overseasBlocked}
+      budgetText={effectiveBudgetText}
+      budgetPrefilled={budgetPrefilled}
+      budgetError={budgetError}
+      onChangeBudget={setBudgetText}
+      onBlurBudget={handleBlurBudget}
       onBack={() => router.back()}
       onAddDestination={addDestination}
       onRemoveDestination={removeDestination}

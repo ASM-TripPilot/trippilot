@@ -23,7 +23,8 @@ import type { PeriodPresetCode } from './tripWizardStep1';
  * `StateCreator` 변수로 먼저 확정하고 `create(그변수)` 형태로 호출한다.
  */
 
-export type TripWizardField = 'destinations' | 'period' | 'party' | 'companion';
+export type TripWizardField =
+  'destinations' | 'period' | 'party' | 'companion' | 'budget';
 
 export interface TripWizardDraft {
   destinations: TripDestination[];
@@ -32,6 +33,11 @@ export interface TripWizardDraft {
   presetCode?: PeriodPresetCode;
   party: number;
   companionType?: CompanionType;
+  /** 예산 입력 원문(콤마 포함 가능) — 사람이 친 그대로 담긴다. 파싱은 순수 함수
+   * (`budgetAmount.ts`) 몫이다. 프리필은 여기 쓰지 않는다 — 파생값이라 쓰는 경로 자체가
+   * 없다(01b 불변식 — 프리필이 `setBudgetText`를 타면 touched가 켜져 자기 자신을 잠근다,
+   * TRIP-207 02a §2-2). */
+  budgetText: string;
   /** 아직 소비자가 없다(문구를 안 그리므로) — TRIP-206이 이 값을 읽어 오류 문구를 건다. */
   touched: TripWizardField[];
   /** 제출 성공 응답이 준 `tripId`(01b D7). 라우트(`/trips/new/step2`)가 id를 안 나르므로
@@ -47,6 +53,9 @@ export interface TripWizardDraft {
   /** 1 미만은 1로 접는다(BR-U1-39 하한) — 화면의 `−` 비활성과 별개로 여기서도 방어한다. */
   setParty(next: number): void;
   selectCompanion(type: CompanionType): void;
+  /** 사람 경로 — 원문을 판단 없이 담고 `touched`에 `'budget'`을 켠다. **빈 문자열을 넣는
+   * 것도 "건드린 것"이다**(01b D6 ③) — 그래야 지운 상태가 재진입에도 보존된다(AC-1c). */
+  setBudgetText(next: string): void;
   setCreatedTripId(tripId: string): void;
   reset(): void;
 }
@@ -58,6 +67,7 @@ const INITIAL_DRAFT = {
   presetCode: undefined as PeriodPresetCode | undefined,
   party: 1,
   companionType: undefined as CompanionType | undefined,
+  budgetText: '',
   touched: [] as TripWizardField[],
   createdTripId: undefined as string | undefined,
 };
@@ -130,6 +140,11 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
     set((state) => ({
       companionType: type,
       touched: withTouched(state.touched, 'companion'),
+    })),
+  setBudgetText: (next) =>
+    set((state) => ({
+      budgetText: next,
+      touched: withTouched(state.touched, 'budget'),
     })),
   setCreatedTripId: (tripId) => set({ createdTripId: tripId }),
   reset: () => set(INITIAL_DRAFT),
