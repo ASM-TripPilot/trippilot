@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react-native';
 
 import type { OnboardingProgress } from '@/features/onboarding/model/resolveOnboardingStep';
-import { useOnboardingProgress } from '@/features/onboarding/hooks/useOnboardingProgress';
+import { useOnboardingProgress } from '@/features/onboarding/model/useOnboardingProgress';
 import OnboardingLayout from '@/app/(onboarding)/_layout';
 import OnboardingIndex from '@/app/(onboarding)/index';
 
@@ -31,7 +31,7 @@ jest.mock('expo-router', () => {
 });
 
 // 진행 상태 공급 훅을 목으로 세워, 임의 완료 상태를 주입한다.
-jest.mock('@/features/onboarding/hooks/useOnboardingProgress', () => ({
+jest.mock('@/features/onboarding/model/useOnboardingProgress', () => ({
   __esModule: true,
   useOnboardingProgress: jest.fn(),
 }));

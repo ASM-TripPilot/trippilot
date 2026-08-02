@@ -33,6 +33,10 @@ abstract class AbstractOAuth2Client(
         return parseProfile(requestUserInfo(cfg, accessToken))
     }
 
+    /** SDK 발급 토큰 흐름 — 교환 없이 userinfo 만 호출한다. */
+    override fun fetchProfileByAccessToken(accessToken: String): SocialProfile =
+        parseProfile(requestUserInfo(config(), accessToken))
+
     private fun requestAccessToken(
         cfg: SocialProviderProperties.ProviderConfig,
         code: String,
@@ -44,7 +48,8 @@ abstract class AbstractOAuth2Client(
             add("code", code)
             add("redirect_uri", redirectUri)
             add("client_id", cfg.clientId)
-            add("client_secret", cfg.clientSecret)
+            // public 클라이언트(예: Google iOS)는 client_secret 이 없다 — 설정됐을 때만 전송, 소유증명은 PKCE(code_verifier).
+            if (cfg.clientSecret.isNotBlank()) add("client_secret", cfg.clientSecret)
             add("code_verifier", codeVerifier)
         }
         val body = restClient.post()

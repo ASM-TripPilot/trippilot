@@ -30,17 +30,15 @@ jest.mock('@/shared/api', () => {
   throw new Error('프리뷰가 @/shared/api(네트워크 계층)를 런타임에 로드했다');
 });
 
-jest.mock('@/features/auth/containers/SocialLoginContainer', () => {
-  throw new Error(
-    '프리뷰가 SocialLoginContainer(컨테이너)를 런타임에 로드했다'
-  );
+jest.mock('@/pages/login/ui/LoginPage', () => {
+  throw new Error('프리뷰가 LoginPage(페이지)를 런타임에 로드했다');
 });
 
-jest.mock('@/features/auth/containers/SplashGate', () => {
+jest.mock('@/app-shell/ui/SplashGate', () => {
   throw new Error('프리뷰가 SplashGate(컨테이너)를 런타임에 로드했다');
 });
 
-jest.mock('@/features/auth/hooks/useSocialLogin', () => {
+jest.mock('@/features/auth/model/useSocialLogin', () => {
   throw new Error('프리뷰가 useSocialLogin(훅)을 런타임에 로드했다');
 });
 

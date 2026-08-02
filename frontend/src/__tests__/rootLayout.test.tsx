@@ -41,7 +41,7 @@ jest.mock('expo-font', () => ({ useFonts: () => [mockFontsLoaded, null] }));
 
 // 실물 SplashGate 는 렌더 즉시 부트스트랩 요청을 발사하므로,
 // "그려졌는가"만 testID 로 관찰하는 마커로 대체한다.
-jest.mock('@/features/auth/containers/SplashGate', () =>
+jest.mock('@/app-shell/ui/SplashGate', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('@/test-support/splashGateMock')
 );

@@ -1,0 +1,9 @@
+# graphify 지식 그래프에서 제외할 경로
+# (gitignore 문법. 제외만 가능하고 재포함은 안 된다 — .gitignore 로 빠진 것을 여기서 되살릴 수 없다)
+
+# Kiro/Amazon Q 툴 스티어링 규칙 — TripPilot 제품 지식이 아니라 도구의 자체 규칙서.
+# 2026-07-15 셋업 커밋 이후 변경 0. 문서 코퍼스의 13%(33개)를 차지하면서
+# 그래프에는 프로세스 의식(儀式)만 실어 온다.
+# 참고: aidlc/.aidlc-rule-details/ 는 의도적으로 남긴다 — SECURITY-01..15 ·
+# RESILIENCY-01..15 정의가 거기 있고 U0 NFR 설계 문서가 그걸 참조한다.
+ai/.kiro/

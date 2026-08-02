@@ -14,8 +14,14 @@ import {
   NotoSansKR_700Bold,
 } from '@expo-google-fonts/noto-sans-kr';
 import * as SplashScreen from 'expo-splash-screen';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { SplashGate } from '@/features/auth/containers/SplashGate';
+import { SplashGate } from '@/app-shell';
+
+// 서버 상태(TanStack Query)의 앱 전역 캐시 저장소 — 모듈 스코프에서 한 번만 만들어 리렌더마다
+// 다시 만들지 않는다. 기본 옵션은 손대지 않는다(TRIP-179 D5) — staleTime 등은 그 값을 실제로
+// 쓰는 소비 화면이 붙는 칸에서 근거와 함께 정한다.
+const queryClient = new QueryClient();
 
 // 네이티브 스플래시(OS 부팅 화면)를 폰트 로드가 끝날 때까지 자동으로 숨기지 않게 붙잡는다.
 // 이것은 인앱 SplashScreen 컴포넌트(SplashGate 가 부트스트랩 중 그리는 화면)와는 별개 레이어 —
@@ -57,7 +63,12 @@ export default function RootLayout() {
           }
         }
       >
-        <SplashGate />
+        {/* D4 — SplashGate 바깥. SplashGate 안에 두면 그 훅이 나중에 useQuery로 바뀔 때
+            Provider가 자기보다 아래에 있게 되어 깨진다(rootLayoutQueryProvider.test.tsx가
+            SplashGate를 목으로 갈아끼운 상태에서 이 배치를 간접적으로 강제한다). */}
+        <QueryClientProvider client={queryClient}>
+          <SplashGate />
+        </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

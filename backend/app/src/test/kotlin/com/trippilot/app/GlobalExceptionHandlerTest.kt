@@ -1,13 +1,17 @@
 package com.trippilot.app
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.app.web.CorrelationIdFilter
 import com.trippilot.app.web.error.GlobalExceptionHandler
+import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.RateLimited
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.UpstreamUnavailable
 import com.trippilot.core.error.ValidationFailed
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -62,5 +66,69 @@ class GlobalExceptionHandlerTest {
         res.statusCode.value() shouldBe 500
         res.body!!.error.code shouldBe "INTERNAL"
         res.body!!.error.message shouldNotContain "boom-secret-detail"
+    }
+
+    // ── TRIP-211 · 소셜 이메일 충돌에만 existingProvider 를 싣는다 (BR-U0-04 · INV-A3) ──
+
+    @Test
+    fun `SOCIAL_EMAIL_CONFLICT 는 기존 provider 를 소문자 코드로 계약 필드에 싣는다`() {
+        val res = handler.handleDomain(
+            ConflictDetected(
+                current = listOf("KAKAO"),
+                message = "이미 카카오(으)로 가입된 이메일이에요. 해당 방법으로 로그인해 주세요.",
+                errorCode = ErrorCode.SOCIAL_EMAIL_CONFLICT,
+            ),
+        )
+
+        res.statusCode.value() shouldBe 409
+        res.body!!.error.code shouldBe "SOCIAL_EMAIL_CONFLICT"
+        // 기계 코드 → 한글 표시명 변환은 프론트가 소유한다(TRIP-182 결정). 서버는 코드만 준다.
+        res.body!!.error.existingProvider shouldBe "kakao"
+    }
+
+    @Test
+    fun `제공자가 둘 이상이면 대표 1개만 준다 - 전체 나열은 message 소관이다`() {
+        val res = handler.handleDomain(
+            ConflictDetected(
+                current = listOf("GOOGLE", "KAKAO"),
+                message = "이미 구글, 카카오(으)로 가입된 이메일이에요.",
+                errorCode = ErrorCode.SOCIAL_EMAIL_CONFLICT,
+            ),
+        )
+
+        res.body!!.error.existingProvider shouldBe "google"
+    }
+
+    @Test
+    fun `다른 409 는 existingProvider 가 null 이라 응답 형태가 그대로다`() {
+        val res = handler.handleDomain(
+            ConflictDetected(current = "ACTIVE", errorCode = ErrorCode.NICKNAME_TAKEN),
+        )
+
+        res.statusCode.value() shouldBe 409
+        res.body!!.error.code shouldBe "NICKNAME_TAKEN"
+        // current 가 List 가 아닌 호출자(계정 상태 enum 등)도 있다 — 캐스팅 실패로 500 이 나면 안 된다.
+        res.body!!.error.existingProvider shouldBe null
+    }
+
+    @Test
+    fun `null 인 existingProvider 는 JSON 에 아예 나타나지 않는다`() {
+        // 계약 검사 — 필드를 추가해도 **다른 에러의 응답 형태는 불변**이어야 한다(회귀 금지).
+        // 이 리포는 Jackson 기본 포함 정책(ALWAYS)이라, 프로퍼티 수준 NON_NULL 이 없으면
+        // 모든 에러 본문에 "existingProvider": null 이 새로 생긴다.
+        val mapper = ObjectMapper()
+
+        val conflict = mapper.writeValueAsString(
+            handler.handleDomain(
+                ConflictDetected(
+                    current = listOf("NAVER"),
+                    errorCode = ErrorCode.SOCIAL_EMAIL_CONFLICT,
+                ),
+            ).body,
+        )
+        val notFound = mapper.writeValueAsString(handler.handleDomain(ResourceNotFound("없음")).body)
+
+        conflict shouldContain "\"existingProvider\":\"naver\""
+        notFound shouldNotContain "existingProvider"
     }
 }

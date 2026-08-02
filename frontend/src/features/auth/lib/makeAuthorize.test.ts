@@ -31,11 +31,13 @@ describe('makeAuthorize — fake 토글 ON (dev)', () => {
     delete process.env.EXPO_PUBLIC_AUTH_FAKE_OUTCOME;
   });
 
-  it('결과 지정이 없으면 authorizationCode·codeVerifier·provider별 redirectUri 를 담은 success 를 낸다', async () => {
+  it('결과 지정이 없으면 authorizationCode·codeVerifier·provider별 redirectUri 를 담은 success-code 를 낸다', async () => {
     const result = await makeAuthorize('google')();
 
-    expect(result.type).toBe('success');
-    if (result.type !== 'success') {
+    // TRIP-210 D1 — AuthorizeResult 의 성공 멤버가 둘로 갈렸다(success-code / success-token).
+    // fake 경로는 code 갈래를 흉내내므로 'success-code' 다.
+    expect(result.type).toBe('success-code');
+    if (result.type !== 'success-code') {
       throw new Error('unreachable');
     }
     expect(result.authorizationCode).toEqual(expect.any(String));
@@ -73,12 +75,12 @@ describe('makeAuthorize — fake 토글 ON (dev)', () => {
     expect(result.type).toBe('dismiss');
   });
 
-  it('알 수 없는 값이 들어오면 조용히 깨지지 않고 success 로 되돌아간다', async () => {
+  it('알 수 없는 값이 들어오면 조용히 깨지지 않고 success-code 로 되돌아간다', async () => {
     process.env.EXPO_PUBLIC_AUTH_FAKE_OUTCOME = 'nonsense-value';
 
     const result = await makeAuthorize('apple')();
 
-    expect(result.type).toBe('success');
+    expect(result.type).toBe('success-code');
   });
 });
 

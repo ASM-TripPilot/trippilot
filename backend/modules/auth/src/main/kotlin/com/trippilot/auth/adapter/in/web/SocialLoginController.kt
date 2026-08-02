@@ -33,6 +33,20 @@ class SocialLoginController(
         )
     }
 
+    /** 네이티브 SDK 토큰 로그인 — 앱이 카카오·네이버 SDK로 받은 access token 전달(code 교환 없음). */
+    @PostMapping("/{provider}/token")
+    fun loginWithToken(
+        @PathVariable provider: String,
+        @Valid @RequestBody request: SocialTokenLoginRequest,
+    ): SocialLoginResponse {
+        val result = authenticate.authenticateWithAccessToken(request.toCommand(parseProvider(provider)))
+        return SocialLoginResponse(
+            accessToken = result.accessToken,
+            refreshToken = result.refreshToken,
+            isNewUser = result.isNewUser,
+        )
+    }
+
     private fun parseProvider(raw: String): Provider =
         runCatching { Provider.valueOf(raw.uppercase()) }
             .getOrElse { throw ValidationFailed(listOf(FieldError("provider", "지원하지 않는 제공자: $raw"))) }

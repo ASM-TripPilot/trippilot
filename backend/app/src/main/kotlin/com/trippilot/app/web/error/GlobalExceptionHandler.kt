@@ -52,7 +52,9 @@ class GlobalExceptionHandler {
         }
 
         val fields = (ex as? ValidationFailed)?.fieldErrors?.map { ErrorResponse.Field(it.field, it.reason) }
-        val body = ErrorResponse(ErrorResponse.Body(ex.errorCode.name, ex.message ?: "", traceId(), fields))
+        val body = ErrorResponse(
+            ErrorResponse.Body(ex.errorCode.name, ex.message ?: "", traceId(), fields, existingProvider(ex)),
+        )
 
         val builder = ResponseEntity.status(status)
         if (ex is RateLimited) builder.header(HttpHeaders.RETRY_AFTER, ex.retryAfterSeconds.toString())
@@ -90,6 +92,21 @@ class GlobalExceptionHandler {
             ErrorResponse.Body(ErrorCode.INTERNAL.name, "내부 오류가 발생했습니다.", traceId(), null),
         )
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body)
+    }
+
+    /**
+     * 소셜 이메일 충돌(409)에 한해 기존 제공자를 계약 필드로 꺼낸다(TRIP-211 · BR-U0-04 · INV-A3).
+     *
+     * [ConflictDetected.current] 는 `Any?` 라 호출자마다 타입이 다르다(계정 상태 enum·provider 목록 등).
+     * 그래서 일반 필드로 노출하지 않고 **이 errorCode 에서만** 꺼낸다 — free-form object 가 되면
+     * openapi 계약이 계약 노릇을 못 한다. 세 번째 도메인이 같은 구조를 요구하면 그때 일반화한다.
+     *
+     * 한 계정에 social_identity 가 둘 이상일 수 있으나(구글 가입 후 카카오 연결) 프론트 문구가 단수
+     * 전제라 **대표 1개**(가장 먼저 연결된 것)만 준다. 복수 나열은 message 가 이미 담는다.
+     */
+    private fun existingProvider(ex: DomainException): String? {
+        if (ex !is ConflictDetected || ex.errorCode != ErrorCode.SOCIAL_EMAIL_CONFLICT) return null
+        return (ex.current as? List<*>)?.firstOrNull()?.toString()?.lowercase()
     }
 
     private fun traceId(): String? = MDC.get(CorrelationIdFilter.MDC_KEY)

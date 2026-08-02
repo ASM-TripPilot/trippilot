@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-import { fetchBootstrap, postSocialLogin } from '@/shared/api';
+import {
+  fetchBootstrap,
+  postSocialLogin,
+  postSocialTokenLogin,
+} from '@/shared/api';
 import { server } from './server';
 import { resetScenario, setScenario } from './scenarios';
 
@@ -107,6 +111,40 @@ describe('MSW /auth/social/{provider} 핸들러 — 신규/기존/에러', () =>
         ageConfirmation: { method: 'SELF_DECLARED' },
       })
     ).rejects.toMatchObject({ code: 'AGE_NOT_MET', status: 422 });
+  });
+});
+
+describe('MSW /auth/social/{provider}/token 핸들러 — 실패 응답 정규화 (TRIP-210)', () => {
+  /**
+   * code-critic 뮤테이션 D: `postSocialTokenLogin` 의 `throw normalizeSocialError(error)` 를
+   * `throw error` 로 바꿔도 621+80 전부 green 이었다. 원인은 **성공 경로만 심판이 있었다**는 것 —
+   * 훅 테스트는 `@/shared/api` 를 통째로 목 처리해 함수 본체가 사각지대이고, 통합 테스트의
+   * 새 케이스 2개는 둘 다 성공 응답만 다뤘다.
+   *
+   * 정규화가 빠지면 axios 원본 에러가 그대로 훅에 닿는다. axios 에러에도 `.code` 가 있지만
+   * 값은 `'ERR_BAD_REQUEST'` 라, 화면의 `errorCode === 'SOCIAL_EMAIL_CONFLICT'` 분기가 안 걸려
+   * **계정 연결 안내가 영영 안 뜬다**(같은 방식으로 만 14세 확인 화면도 사라진다).
+   *
+   * 위 code 경로(`/auth/social/{provider}`)의 같은 성질 테스트와 **같은 형태**로 세운다.
+   */
+  it('email-conflict 는 409 + existingProvider 를 code 경로와 똑같이 정규화한다', async () => {
+    setScenario('login-email-conflict');
+
+    // status·existingProvider 까지 보는 것이 핵심 — 원본 axios 에러에는 이 둘이 없다.
+    await expect(
+      postSocialTokenLogin('kakao', { accessToken: 'kakao-access-token' })
+    ).rejects.toMatchObject({
+      code: 'SOCIAL_EMAIL_CONFLICT',
+      status: 409,
+      existingProvider: 'kakao',
+    });
+  });
+
+  it('auth-failed 는 401 → NormalizedApiError(SOCIAL_AUTH_FAILED) 로 정규화된다', async () => {
+    setScenario('login-error-auth');
+    await expect(
+      postSocialTokenLogin('naver', { accessToken: 'naver-access-token' })
+    ).rejects.toMatchObject({ code: 'SOCIAL_AUTH_FAILED', status: 401 });
   });
 });
 

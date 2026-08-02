@@ -1,5 +1,7 @@
 package com.trippilot.app.web.error
 
+import com.fasterxml.jackson.annotation.JsonInclude
+
 /**
  * 실패 응답 봉투(U1-내부아키텍처 §4.1) — 성공(2xx)은 래퍼 없이 리소스 본문 그대로.
  * ```json
@@ -15,6 +17,19 @@ data class ErrorResponse(
         val traceId: String?,
         /** VALIDATION_ERROR 에만 존재. */
         val fields: List<Field>? = null,
+        /**
+         * SOCIAL_EMAIL_CONFLICT 에만 존재(TRIP-211 · BR-U0-04 · INV-A3) — 같은 이메일로 이미
+         * 가입된 기존 제공자를 클라이언트가 **계약 필드로** 읽어 "그 방법으로 로그인해 주세요"를
+         * 안내한다. message 문자열 파싱에 의존하면 안내가 서버 문구 릴리즈에 묶인다.
+         *
+         * 값은 소문자 코드(`kakao`·`naver`·`google`·`apple`) — 기계 코드에서 한글 표시명으로의
+         * 변환은 프론트가 소유한다(TRIP-182 결정 · frontend-components.md 「문구 소유자」).
+         *
+         * `fields` 가 VALIDATION_ERROR 에만 실리는 것과 같은 방식이되, **null 이면 아예 직렬화되지
+         * 않는다**(@JsonInclude NON_NULL) — 다른 409(닉네임 중복 등)의 응답 형태를 바꾸지 않기 위함.
+         */
+        @get:JsonInclude(JsonInclude.Include.NON_NULL)
+        val existingProvider: String? = null,
     )
 
     data class Field(

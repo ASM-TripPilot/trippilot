@@ -6,13 +6,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   SocialLoginScreen,
   type SocialLoginScreenProps,
-} from '@/features/auth/screens/SocialLoginScreen';
-import { SplashScreen } from '@/features/auth/screens/SplashScreen';
-import { NicknameScreen } from '@/features/onboarding/screens/NicknameScreen';
-import { PrefStep1Screen } from '@/features/onboarding/screens/PrefStep1Screen';
-import { PrefStep2Screen } from '@/features/onboarding/screens/PrefStep2Screen';
-import { TermsScreen } from '@/features/onboarding/screens/TermsScreen';
+} from '@/features/auth/ui/SocialLoginScreen';
+import { SplashScreen } from '@/features/auth/ui/SplashScreen';
+import {
+  HOME_DEFAULT_PROPS,
+  HOME_EMPTY_PROPS,
+  HOME_LOADING_PROPS,
+  HOME_NO_TRIP_PROPS,
+} from '@/features/home/model/homeFixtures';
+import { REGIONS } from '@/features/explore/model/regions';
+import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
+import { HomeScreen } from '@/features/home/ui/HomeScreen';
+import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
+import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
+import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
+import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
+import { KakaoMapView } from '@/shared/map';
 
 /**
  * expo-router 의 `useLocalSearchParams` 를 모듈 로드 시점에 딱 한 번 안전하게 구해온다.
@@ -288,6 +298,114 @@ const PREVIEW_STATES: PreviewState[] = [
         onOpenSettings={noop}
       />
     ),
+  },
+  // ── e00·d1b 지역 선택 4키(TRIP-183) — 컨테이너 없이 화면에 props를 직접 넣는다 ──
+  // ⚠️ 프리뷰는 정적이라 **실제 OS 권한 다이얼로그는 뜨지 않는다.** 여기서 보는 것은
+  //    "권한이 거부됐을 때 화면이 어떻게 생겼나"까지고, 다이얼로그 자체는 실제 라우트
+  //    (`/explore/region`)에서 '내 주변'을 눌러야 확인된다. 둘은 다른 확인이다.
+  {
+    key: 'stay-region-default',
+    label: '지역 선택 · 숙소',
+    login: null,
+    render: () => (
+      <RegionPickerScreen
+        purpose="stay"
+        query=""
+        regions={REGIONS}
+        nearby={{ kind: 'idle' }}
+        onChangeQuery={noop}
+        onSelectRegion={noop}
+        onSelectNearby={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'stay-region-trip',
+    label: '지역 선택 · 여행지',
+    login: null,
+    render: () => (
+      // BR-U1-07 확인용 — 같은 컴포넌트에서 카피만 바뀌고 '내 주변'이 사라진다
+      <RegionPickerScreen
+        purpose="trip"
+        query=""
+        regions={REGIONS}
+        nearby={{ kind: 'idle' }}
+        onChangeQuery={noop}
+        onSelectRegion={noop}
+        onSelectNearby={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'stay-nearby-denied',
+    label: '내 주변 · 등록숙소 대체',
+    login: null,
+    render: () => (
+      <RegionPickerScreen
+        purpose="stay"
+        query=""
+        regions={REGIONS}
+        nearby={{ kind: 'fallback' }}
+        onChangeQuery={noop}
+        onSelectRegion={noop}
+        onSelectNearby={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'stay-nearby-no-fallback',
+    label: '내 주변 · 대체 불가',
+    login: null,
+    render: () => (
+      <RegionPickerScreen
+        purpose="stay"
+        query=""
+        regions={REGIONS}
+        nearby={{ kind: 'unavailable', reason: 'denied-no-fallback' }}
+        onChangeQuery={noop}
+        onSelectRegion={noop}
+        onSelectNearby={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  // ── 홈 대시보드 4상태(TRIP-170) — 프레젠테이션 전용, 고정 픽스처로 그린다 ──
+  {
+    key: 'home-default',
+    label: '홈 · 기본',
+    login: null,
+    render: () => <HomeScreen {...HOME_DEFAULT_PROPS} />,
+  },
+  {
+    key: 'home-no-trip',
+    label: '홈 · 첫 사용자',
+    login: null,
+    render: () => <HomeScreen {...HOME_NO_TRIP_PROPS} />,
+  },
+  {
+    key: 'home-empty',
+    label: '홈 · 취향 부족',
+    login: null,
+    render: () => <HomeScreen {...HOME_EMPTY_PROPS} />,
+  },
+  {
+    key: 'home-loading',
+    label: '홈 · 로딩',
+    login: null,
+    render: () => <HomeScreen {...HOME_LOADING_PROPS} />,
+  },
+  // 지도 계층 선행(TRIP-197 D9) — 층 C(실기) 진입점. 키/로드 실패 분기는 렌더 안 해봐야
+  // 알 수 없어 여기서는 해피패스 1키만 둔다(env 키는 빌드 시 번들에 인라인되므로 preview가
+  // 런타임에 비울 수 없다 — 실패 분기는 KakaoMapView.test.tsx가, C-2는 .env를 실제로 비우고
+  // 재기동해 확인한다).
+  {
+    key: 'map-default',
+    label: '지도 · 기본',
+    login: null,
+    render: () => <KakaoMapView center={{ lat: 37.5665, lng: 126.978 }} />,
   },
 ];
 

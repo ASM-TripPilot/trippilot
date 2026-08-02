@@ -25,3 +25,7 @@ include(":common:test-support")   // 테스트 하네스(TRIP-149) — 각 모�
 include(":modules:auth")
 include(":modules:profile")
 include(":modules:moderation")
+include(":modules:accommodation-search")   // C3 숙소 탐색 (TRIP-175)
+include(":modules:saved-accommodation")   // C4 숙소 등록·거점 (TRIP-176)
+include(":modules:place-data")             // C7 POI 정본·수집게이트·후보풀 (TRIP-212)
+include(":modules:trip")   // C6 여행 생성 (TRIP-177)

@@ -27,11 +27,17 @@ class SocialAuthAdapter(
         authorizationCode: String,
         codeVerifier: String,
         redirectUri: String,
-    ): SocialProfile {
+    ): SocialProfile = dispatch(provider) { it.fetchProfile(authorizationCode, codeVerifier, redirectUri) }
+
+    override fun authenticateWithAccessToken(provider: Provider, accessToken: String): SocialProfile =
+        dispatch(provider) { it.fetchProfileByAccessToken(accessToken) }
+
+    /** 제공자 선택 + 예외 일반화(교환·토큰 흐름 공용). */
+    private fun dispatch(provider: Provider, call: (OAuthProviderClient) -> SocialProfile): SocialProfile {
         val client = byProvider[provider]
             ?: throw AuthenticationRequired("지원하지 않는 소셜 제공자", ErrorCode.SOCIAL_AUTH_FAILED)
         return try {
-            client.fetchProfile(authorizationCode, codeVerifier, redirectUri)
+            call(client)
         } catch (e: DomainException) {
             throw e
         } catch (e: HttpServerErrorException) {
@@ -41,7 +47,7 @@ class SocialAuthAdapter(
             // 연결 실패·타임아웃 → 업스트림 장애(503)
             throw UpstreamUnavailable(source = provider.name, fallbackApplied = false, cause = e)
         } catch (e: Exception) {
-            // 제공자 4xx(무효 code)·응답 파싱 실패 등 → 인증 실패(401). 원인 비노출, 로깅은 핸들러(cause 보존)
+            // 제공자 4xx(무효 토큰)·응답 파싱 실패 등 → 인증 실패(401). 원인 비노출, 로깅은 핸들러(cause 보존)
             throw AuthenticationRequired("소셜 인증에 실패했습니다.", ErrorCode.SOCIAL_AUTH_FAILED, cause = e)
         }
     }

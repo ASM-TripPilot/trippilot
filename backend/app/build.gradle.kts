@@ -12,6 +12,10 @@ dependencies {
     implementation(project(":modules:auth"))
     implementation(project(":modules:profile"))
     implementation(project(":modules:moderation"))
+    implementation(project(":modules:accommodation-search"))
+    implementation(project(":modules:saved-accommodation"))
+    implementation(project(":modules:trip"))
+    implementation(project(":modules:place-data"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.actuator)
@@ -23,6 +27,7 @@ dependencies {
     implementation(libs.logstash.logback.encoder)
     implementation(libs.spring.boot.flyway)
     implementation(libs.flyway.core)
+    implementation(libs.swagger.ui)                     // Swagger UI 정적 자산(/webjars/**)
     runtimeOnly(libs.flyway.database.postgresql)
     runtimeOnly(libs.postgresql)
 
@@ -39,3 +44,9 @@ dependencies {
 
 // 실행은 bootJar(실행 가능 jar)만 사용 — plain jar 비활성화(Docker COPY 시 jar 하나로 고정)
 tasks.named<Jar>("jar") { enabled = false }
+
+// 설계-우선 스펙 단일 소스: docs/design/openapi.yaml 을 정적 리소스로 복사 → /openapi.yaml 서빙 + 계약 테스트가 읽음.
+// (커밋된 중복 없음. 정본은 docs/design, 빌드 시 classpath 로 복사.)
+tasks.named<Copy>("processResources") {
+    from(rootProject.file("docs/design/openapi.yaml")) { into("static") }
+}

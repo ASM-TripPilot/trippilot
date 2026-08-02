@@ -1,5 +1,5 @@
-import { PrefStep2Container } from '@/features/onboarding/containers/PrefStep2Container';
+import { PrefStep2Page } from '@/pages/onboarding-pref2';
 
 export default function Pref2Route() {
-  return <PrefStep2Container />;
+  return <PrefStep2Page />;
 }
