@@ -1,6 +1,7 @@
 package com.trippilot.app.observability
 
 import io.opentelemetry.api.GlobalOpenTelemetry
+import io.opentelemetry.api.OpenTelemetry
 import io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender
 import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Configuration
@@ -28,9 +29,7 @@ class ObservabilityConfiguration {
         val openTelemetry = GlobalOpenTelemetry.get()
         OpenTelemetryAppender.install(openTelemetry)
 
-        // no-op 구현은 클래스명에 "Noop" 이 들어간다 — 에이전트 부재를 이걸로 판별한다.
-        val agentPresent = !openTelemetry.javaClass.name.contains("Noop", ignoreCase = true)
-        if (agentPresent) {
+        if (isTelemetryRecording(openTelemetry)) {
             log.info("OTLP 로그 전송 활성 — OpenTelemetry SDK 주입 완료")
         } else {
             log.warn(
@@ -41,6 +40,32 @@ class ObservabilityConfiguration {
         }
     }
 
+    /**
+     * 에이전트 유무를 **동작으로** 판별한다.
+     *
+     * 이전에는 반환된 객체의 클래스명에 "Noop" 이 들어가는지 보았는데, GlobalOpenTelemetry 는
+     * no-op 이든 SDK 든 ObfuscatedOpenTelemetry 로 감싸 돌려준다. 그래서 에이전트가 없어도
+     * 항상 "활성"으로 오판했다(실측) — 침묵 실패를 막으려던 코드가 스스로 침묵하고 있었다.
+     *
+     * no-op 트레이서가 만든 스팬은 SpanContext 가 유효하지 않다. 그 계약으로 가른다.
+     * 기동당 스팬 하나를 남기지만, "텔레메트리가 실제로 살아 있다"는 표식이라 그대로 둔다.
+     */
+    private fun isTelemetryRecording(openTelemetry: OpenTelemetry): Boolean {
+        val span = openTelemetry.getTracer(SELF_CHECK_SCOPE)
+            .spanBuilder("otel-agent-presence-check")
+            .startSpan()
+        return try {
+            span.spanContext.isValid
+        } finally {
+            span.end()
+        }
+    }
+
     // service.name·deployment.environment 는 메터 태그가 아니라 **리소스 속성**이 맞는 자리다.
-    // application.yml 의 management.otlp.metrics.export.resource-attributes 가 담당한다.
+    // 컨테이너에서는 OTEL_SERVICE_NAME·OTEL_RESOURCE_ATTRIBUTES 로 에이전트에 준다
+    // (backend/Dockerfile · deploy/k8s/backend/{configmap,deployment}.yaml).
+
+    private companion object {
+        const val SELF_CHECK_SCOPE = "com.trippilot.observability.selfcheck"
+    }
 }
