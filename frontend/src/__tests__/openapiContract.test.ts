@@ -112,6 +112,30 @@ function extractStaysSearchBlock(source: string): string {
   return source.slice(bodyStart, bodyEnd);
 }
 
+/**
+ * `components.schemas` 아래 이름 하나의 블록만 잘라낸다. 스키마 키는 4칸 들여쓰기이고 그
+ * 내용은 6칸 이상이므로, **다음 4칸 키**가 나오는 곳이 블록의 끝이다. 파일 전체를 훑으면
+ * 이웃 스키마의 문장이 섞인다 — 예컨대 `EditTripRequest`도 `CreateTripRequest`와 똑같은
+ * `required: [startDate, endDate, destinations]` 줄을 갖고 있어, 자르지 않으면 한쪽이
+ * 지워져도 다른 쪽 때문에 통과한다.
+ */
+const NEXT_SCHEMA_KEY_PATTERN = /\n {4}[A-Za-z]/;
+function extractSchemaBlock(source: string, name: string): string {
+  const start = `\n    ${name}:\n`;
+  const startIdx = source.indexOf(start);
+  if (startIdx === -1) {
+    return '';
+  }
+  const bodyStart = startIdx + start.length;
+  const rest = source.slice(bodyStart);
+  const nextKeyMatch = rest.match(NEXT_SCHEMA_KEY_PATTERN);
+  const bodyEnd =
+    nextKeyMatch && typeof nextKeyMatch.index === 'number'
+      ? bodyStart + nextKeyMatch.index
+      : source.length;
+  return source.slice(bodyStart, bodyEnd);
+}
+
 /** `/stays/search` 블록 안 `- { name: X, ...}` 파라미터 항목의 `name` 값 전부(등장 순서
  * 그대로 — 순서가 뒤집혀도 잡히도록 완전 일치로 비교한다). */
 const PARAM_NAME_PATTERN = /- \{ name: (\w+),/g;
@@ -190,6 +214,52 @@ describe('TRIP-210 AC-1·AC-2 · SDK 토큰 경로 계약 앵커 (선제 green)'
     expect(schemaIdx).toBeGreaterThan(-1);
     const schemaBlock = source.slice(schemaIdx, schemaIdx + 400);
     expect(schemaBlock).toContain('required: [accessToken]');
+  });
+});
+
+describe('TRIP-203 AC-3 · AC-4 · 여행 생성 계약 앵커 (A-3, 선제 green)', () => {
+  /**
+   * ⚠️ **선제 green** — openapi가 이미 이렇게 적혀 있어 지금 red를 낼 수 없다. 그래도 남기는
+   * 이유는 이 파일의 존재 이유 그대로다: **생성물은 리포에 커밋돼 있다.** 백엔드가 여기서
+   * `required`를 지우거나 enum에 `커플`을 넣어도, 누가 `pnpm codegen`을 돌리기 전까지는
+   * 생성물을 보는 테스트(`staySearchGenerated.test.ts` B-7·B-8)도 타입 테스트
+   * (`features/trip/model/tripContract.test.ts`)도 **아무 말도 하지 않는다.** 그 사각지대를
+   * 이 회귀 앵커가 메운다.
+   *
+   * 근거: US-TRIP-01(여행지·날짜 범위 필수) · BR-U1-34 · BR-U1-39(온보딩 `커플`은 `연인`으로
+   * 매핑 — 서버 여행 enum에 `커플`은 없다).
+   */
+  it('CreateTripRequest가 startDate·endDate·destinations를 required로 요구한다', () => {
+    const source = readOpenapiSource();
+    const block = extractSchemaBlock(source, 'CreateTripRequest');
+
+    // 앵커 — 블록 슬라이싱이 실제로 뭔가를 잡았다는 증거. 없으면 아래 포함 단언이 빈
+    // 문자열을 상대로 공허하게 실패/통과한다.
+    expect(block.length).toBeGreaterThan(0);
+
+    expect(block).toContain('required: [startDate, endDate, destinations]');
+
+    // 긍정(대조군) — 선택 필드는 required 줄 밖에 있어야 한다. 이게 없으면 required를
+    // 통째로 넓히는 방향의 계약 개정을 못 잡는다.
+    expect(block).toContain('budgetTotal:');
+    expect(block).not.toContain(
+      'required: [startDate, endDate, destinations, budgetTotal]'
+    );
+  });
+
+  it('CompanionType enum이 혼자·친구·연인·가족 4값이고 커플이 없다', () => {
+    const source = readOpenapiSource();
+    const block = extractSchemaBlock(source, 'CompanionType');
+
+    // 앵커 — 슬라이싱이 실제로 뭔가를 잡았다.
+    expect(block.length).toBeGreaterThan(0);
+
+    // 완전 일치(줄 전체) — 값 하나가 추가·삭제·개명되면 즉시 red.
+    expect(block).toContain('enum: [혼자, 친구, 연인, 가족]');
+
+    // 부정 짝 — 온보딩 축의 값이 여행 축으로 새어 들어오지 않았다.
+    expect(block).not.toContain('커플');
+    expect(block).not.toContain('부모님');
   });
 });
 

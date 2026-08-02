@@ -6,11 +6,15 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ErrorResponseErrorExistingProvider } from './errorResponseErrorExistingProvider';
 import type { ErrorResponseErrorFieldsItem } from './errorResponseErrorFieldsItem';
 
 export type ErrorResponseError = {
   code: string;
   message: string;
   traceId?: string;
+  /** VALIDATION_ERROR 에만 존재. */
   fields?: ErrorResponseErrorFieldsItem[];
+  /** SOCIAL_EMAIL_CONFLICT 에만 존재(BR-U0-04 · INV-A3). 같은 이메일로 이미 가입된 기존 제공자의 소문자 코드. 한 계정에 제공자가 둘 이상이면 대표 1개(가장 먼저 연결된 것)를 준다 — 전체 나열은 message 가 담는다. 다른 에러 코드의 응답에는 이 필드가 나타나지 않는다(직렬화 자체가 생략된다). */
+  existingProvider?: ErrorResponseErrorExistingProvider;
 };

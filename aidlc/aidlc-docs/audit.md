@@ -479,3 +479,47 @@ D3(지라 TRIP-181 티켓 본문의 사실 오기 2건 — 빈 스텁 서술·�
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 스테이지 진행 아님 → `aidlc-state.md` 체크박스 변동 없음. 발단은 TRIP-197 [인지] 브리프 §11-⑤ 드리프트 1(정본끼리 어긋남) 관측이고, 사이클 도중 수정을 보류한 이유는 역류 방지(같은 사이클의 게이트가 방금 쓴 문서를 AC 근거로 인용하게 된다). 실행 주체: 사이클 종료 후 오케스트레이터 직접(scribe 1차 시도는 승인 게이트 판단으로 미수행, 사용자 착수 지시 후 재개).
 
 ---
+
+## Post-Design Correction — U1 frontend-components.md 장소 도메인 계약 실재 반영 + 밴드 d 라이브 실측 (TRIP-184 서브태스크 준비)
+**Timestamp**: 2026-08-02T03:00:00Z
+**User Input**: "지라 TRIP-184 스토리 서브테스크에 지금 FE 구현 내용이 없는거 같은데 채워 넣어야해 확인후 채워넣어야하는 서브테크스 목록 출력만 해봐" → (라이브 Figma 확인 요구) → **"그럼 지금 여기서 aidlc에 없는 부분은 aidlc를 보강할 수 있도록하고 이를 통해서 이번 스토리 필요한 서브테스크들 사항들 상세하게해서 추가해놔"**. 이후 결정 4건을 사용자가 선택: (1) 사진 필드는 [BE] 칸으로 계약 보강 요청 (2) 정렬·검색은 클라이언트 처리 (3) 카테고리는 계약 enum이 정본 + 태그는 [BE] 요청 (4) 계약 보강 요청은 TRIP-184 밑 [BE] 칸 1개로.
+
+**AI Response**: 승인 완료된 `u1-accommodation-trip/functional-design/frontend-components.md`의 **드리프트 정정 + 라이브 실측 기록**. 새 스토리·새 컴포넌트 신설 0건 → 스테이지 진행 아님, `aidlc-state.md` 체크박스 변동 없음 (2026-07-29T05:10:00Z A1 · 2026-07-29T22:35:00Z D1·D2 · 2026-07-31T11:45:00Z SEC-U1-05 정정과 같은 성격의 네 번째 후속).
+
+(1) **§2 머리말 — "계약 미존재" 경고 해소(담기·장소 목록 한정)**. `origin/develop` openapi 실측으로 `GET /places?region&category` · `POST /saved-places`(409/404) · `GET /saved-places` · `DELETE /saved-places/{savedPlaceId}` 실재 확인. 백엔드도 TRIP-212(place-data 코어)·TRIP-214(saved_place + poi_snapshot 동결) 완료. **경로 이름이 이 문서가 앞서 적어둔 것과 다르다** — `/places/{poiId}/save`→`POST /saved-places`, `/me/saved-places`→`GET /saved-places`. 2026-07-29 시점 문장은 그때 사실이었으므로 삭제하지 않고 인용으로 남겼다. **탐색 랜딩·지역·목적지 상세(`/explore/landing`·`/regions`·`/regions/{region}`)는 여전히 계약 미존재**임을 같은 자리에 명시.
+
+(2) **§2 표 2행 정정** — `PlaceExplorer`·`SavedPlaceList`의 서버 연동 열을 실제 경로로 바꾸고, 책임 열에 라이브 d04·d02 실측(정렬 칩 3종 · 2열 사진 그리드 · `♥ 담음` 배지 · 순번 배지 · 태그 칩 · 확정 CTA 문구 · empty 문구)을 반영.
+
+(3) **§2-1 신설 — 밴드 d 라이브 노드 색인(7개)**. d01 `1672:1183` · d02 `1693:1183`/`1695:1183`(default·empty) · d03 `2091:2020` · **d04 `1692:1183`(default 1개뿐 — e02와 달리 상태 변형 프레임 없음)** · d05 `2176:2336` · **d06 `1907:1083`** · d1b `1834:2283`. 화면 상세 정본은 라이브이고 이 표는 "어느 노드를 열지"의 색인임을 명시.
+
+(4) **d06-장소 상세를 관측만 하고 표에 행을 추가하지 않았다.** 열어보면 `이 일정에 추가` CTA · "이 장소를 추천한 이유"(AI 추천 근거) · "현재 위치서 560m · 반경 내"로 **일정 생성·여행중 맥락**이고 ♥ 담기 CTA가 없다 — US-EXPL-04 소관이 아니다. 이 관측은 2026-07-29T05:10:00Z 항목이 남긴 **후속 B(장소 상세 스토리 신설 — Inception 변경이라 승인 게이트 필요)**의 근거를 보강한다. **스토리 없이 컴포넌트만 늘리면 근거 없는 구현이 되므로 행 추가는 승인 게이트로 넘긴다.**
+
+(5) **§2-2 신설 — 라이브 ↔ 계약 드리프트 5건(F-1~F-5) + 사용자 결정**. F-1 `Place.imageUrl` 부재(화면은 사진이 주역) → [BE] 계약 보강 요청 · F-2 정렬 3축에 `sort` 파라미터 없음 → 클라 정렬(`가까운 순`은 좌표 부재로 미노출) · F-3 검색바에 `q` 없음 → 클라 이름 필터 · F-4 칩 6종 vs enum 7종 + `바다`·`감성 골목`·`미식` 등 enum 밖 값 → **계약 enum이 정본** · F-5 `Place.tags` 부재 → [BE] 요청. BR-U1-06의 "N 저장" 배지가 라이브에서 정렬 칩 `지금 뜨는 순`·d05 `🔥 지금 급상승`으로 나타나는 표기 위치 차이도 같은 자리에 기록(BR의 실질 — 집계 실패 시 배지만 생략 — 은 유효).
+
+(6) **§4 `MustVisitSeedStrip` 행 정정** — `⚠️ 계약 미존재(/me/saved-places) — C 대기` → `GET /saved-places` · `/trips/{tripId}/must-visits` 둘 다 실재. **TRIP-209가 보류 사유로 적은 선행 2건이 해소됐다.** 같은 절에 밴드 g 라이브 변형 신설(`g01 · no-saved-places` `2226:1732` · `g01 · error` `2226:1929` · `g01 · blocked-overseas` `2228:1738` · **`g03 필수 방문지 관리` `2230:1732`**)을 기록 — TRIP-209가 "Figma에 담은 곳 0 변형이 없다"로 남긴 미결이 프레임 실재로 풀린다. g03은 US-TRIP-08(지라 티켓 미존재)의 화면.
+
+(7) **§6 testID — 공백 명시**. d04 카테고리 칩·정렬 칩·카드 컨테이너, d02 순번 항목·해제·빈 상태의 testID가 이 문서에 없음을 적고, TRIP-182가 e02 5상태 이름을 구현에서 확정해 소급 기록한 방식대로 **TRIP-184 게이트①에서 확정 후 소급**하도록 지정.
+
+**미반영으로 남긴 것**: ① d06 컴포넌트 행·장소 상세 스토리(후속 B — 승인 게이트) ② `business-rules.md` BR-U1-06 문면(표기 위치 차이는 FE 문서에만 적었다 — BR은 서버 판정 정본이고 배지 위치는 화면 결정) ③ `figma-structure.md` 밴드 맵(밴드 구성 자체는 라이브와 일치 — 화면 목록은 그 파일이 두지 않는다) ④ `stories.md` US-EXPL-04 AC(검색·정렬이 계약에 없다는 사실은 티켓의 미충족 기록으로 처리, 스토리 문면은 Inception이라 손대지 않는다).
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 실행 주체: TRIP-184 서브태스크 작성 작업(오케스트레이터 직접). 실측 근거는 `origin/develop:backend/docs/design/openapi.yaml`(448·464·484행)과 라이브 Figma(fileKey `1MTF3dtptIrbg8gld5IdO2` 캔버스 `1228:1045`) 전수 조회.
+
+---
+
+## Post-Design Correction — U1 frontend-components.md 거점·커버리지 3건 (TRIP-84 서브태스크 준비)
+**Timestamp**: 2026-08-02T04:30:00Z
+**User Input**: "야 그거 하고 TRIP-84도 똑같이해라" — 직전 TRIP-184 작업(2026-08-02T03:00:00Z 항목)과 같은 처리를 TRIP-84(US-TRIP-04 저장 숙소에서 등록)에 적용하라는 지시. 앞선 "그거"는 TRIP-209 본문 전면 갱신.
+
+**AI Response**: 승인 완료된 `u1-accommodation-trip/functional-design/frontend-components.md`의 **드리프트 정정 3건**. 새 요구사항·컴포넌트 0건 → 스테이지 진행 아님, `aidlc-state.md` 불변(같은 성격의 다섯 번째 후속).
+
+(1) **§7 PBT 대상 `resolveCoverage(trip, assignments)` — 클라이언트 대상에서 제외(취소선 + 사유)**. 실제 계약 `GET /trips/{tripId}/coverage`가 날짜별 `status`(AUTO·GAP·OVERLAP)와 `blocked`를 **서버에서 계산해 준다**(openapi `Coverage`·`DayCoverage`). 클라이언트가 같은 판정을 다시 구현하면 서버와 갈라지고 **INV-2**(사용자에게 보이는 판정은 서버·솔버 검증값)에 정면으로 어긋난다. 이 줄은 계약보다 앞서 쓰인 문서다. 클라이언트가 갖는 것은 표시용 구간 파생(`toBaseSections` — 박 번호 라벨·N박 묶음)뿐이며 그 속성을 대체 기재했다(TRIP-224).
+
+(2) **§4 `BaseSectionList` 서버 연동 정정** — 구간 행의 원본은 `GET /trips/{tripId}/bases`(BaseAssignment[])다. 기존 표기는 `GET /trips/{tripId}/coverage`를 "구간·배정 상태"의 원본으로 적었으나, coverage는 **날짜별 판정과 `blocked`**를 주는 별개 응답이고 구간(dateFrom~dateTo·savedStayId)을 주지 않는다. coverage는 하단 CTA 차단에만 쓴다(BR-U1-44 · INV-U1-16).
+
+(3) **§5 폼 검증 표의 오류 코드 정정** — "BR-U1-22·26 (409/422)" → **400(ValidationError)·404**. `/saved-stays`·`/trips/{tripId}/bases` 계약에 409·422는 존재하지 않는다. 잘못된 코드로 오류 분기를 짜면 모든 검증 실패가 미처리 경로로 빠진다.
+
+**함께 확인해 미반영으로 남긴 것**: ① US-TRIP-04 예외 AC("저장 숙소가 외부에서 더 이상 조회되지 않으면 캐시로 등록 허용 + '최신 정보 확인 불가' 표시")는 **계약에 판정 근거가 없다** — `SavedStay`에 외부 조회 상태·최신성 필드가 없고(externalSource·externalId·updatedAt뿐), 저장 숙소는 이미 계정 DB 값이라 프론트가 외부 조회 실패를 알 수단이 없다. 스토리 문면은 Inception이라 손대지 않고 **TRIP-226 본문에 미충족으로 기록**했다(계약 보강이 필요한 후속). ② Figma g02·e04 카드의 가격 표기가 여전히 `₩190,000~`인 것은 이미 알려진 D-3/D2 드리프트이고 구현 정본(`120,000원~` 형식)이 이긴다 — 문서는 2026-07-29에 이미 정정돼 추가 조치 없음.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 실행 주체: TRIP-84 서브태스크 작성 작업(오케스트레이터 직접). 실측 근거는 `origin/develop:backend/docs/design/openapi.yaml`(590~668행 · schemas `AssignBaseRequest`·`BaseAssignment`·`Coverage`·`DayCoverage`·`SavedStay`·`EditSavedStayRequest`)과 라이브 Figma(g02 `1707:1183`·`1708:1183` · e04 `1701:1183`·`1702:1183` · g01 no-saved-places `2226:1732`), 그리고 리포 실측(`src/shared/api/generated/trips/trips.ts`에 bases·coverage·must-visits 훅이 TRIP-203 codegen으로 이미 생성돼 있어 **TRIP-84에는 계약 동기화 칸이 불필요**).
+
+---

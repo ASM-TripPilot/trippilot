@@ -5,6 +5,8 @@ import {
   postSocialLogin,
   postSocialTokenLogin,
 } from '@/shared/api';
+import { getMePreferences } from '@/shared/api/generated/preferences/preferences';
+import { postTrips } from '@/shared/api/generated/trips/trips';
 import { server } from './server';
 import { resetScenario, setScenario } from './scenarios';
 
@@ -145,6 +147,82 @@ describe('MSW /auth/social/{provider}/token 핸들러 — 실패 응답 정규�
     await expect(
       postSocialTokenLogin('naver', { accessToken: 'naver-access-token' })
     ).rejects.toMatchObject({ code: 'SOCIAL_AUTH_FAILED', status: 401 });
+  });
+});
+
+describe('MSW /trips · /me/preferences 핸들러 — 계약 shape (TRIP-203 AC-8)', () => {
+  /**
+   * 무엇을 보장하나: 가짜 서버가 **openapi가 규정한 모양 그대로** 답한다. 목 응답을 상상해서
+   * 만들면 그 위에 세운 모든 테스트가 실제 서버와 어긋난 상태로 초록이 된다 — 이 스위트가
+   * 오라클 자신을 검사하는 유일한 자리다(위 소셜/부트스트랩 케이스와 같은 취지).
+   *
+   * 3동작: 준비(기본 핸들러 그대로 — 오버라이드하지 않는다) → 실행(생성 함수를 직접 호출)
+   * → 단언(응답 shape).
+   */
+
+  /** openapi `Trip.required` 그대로(10개 — 재타이핑 금지). */
+  const TRIP_REQUIRED_FIELDS = [
+    'tripId',
+    'title',
+    'startDate',
+    'endDate',
+    'party',
+    'preferenceSnapshot',
+    'destinations',
+    'status',
+    'createdAt',
+    'updatedAt',
+  ];
+
+  /** openapi `TripStatus` enum. 단방향 진행(PLANNED→CONFIRMED→ACTIVE→ENDED, BR-U1-42). */
+  const TRIP_STATUSES = ['PLANNED', 'CONFIRMED', 'ACTIVE', 'ENDED'];
+
+  /** openapi `PreferenceView`의 7축. 전부 옵셔널이라 "없을 수 있다"가 정상이고,
+   * 여기서 잠그는 것은 **이 목록 밖의 축이 발명되지 않았다**는 쪽이다. */
+  const PREFERENCE_AXES = [
+    'styles',
+    'activities',
+    'transportModes',
+    'foodTastes',
+    'pace',
+    'companion',
+    'budget',
+  ];
+
+  it('POST /trips 는 Trip 필수 10필드를 갖춘 응답을 낸다', async () => {
+    const trip = await postTrips({
+      startDate: '2026-09-01',
+      endDate: '2026-09-03',
+      destinations: [{ seq: 1, region: '제주', nights: 2 }],
+    });
+
+    expect(Object.keys(trip)).toEqual(
+      expect.arrayContaining(TRIP_REQUIRED_FIELDS)
+    );
+    // 값 수준 — 상태는 계약 enum 안에 있고, 목적지는 seq·region·nights 3필드를 갖는다.
+    expect(TRIP_STATUSES).toContain(trip.status);
+    expect(Object.keys(trip.destinations[0]).sort()).toEqual([
+      'nights',
+      'region',
+      'seq',
+    ]);
+  });
+
+  it('GET /me/preferences 는 PreferenceView 7축 밖의 축을 만들어 내지 않고, 예산 러프값을 준다', async () => {
+    const view = await getMePreferences();
+
+    // 앵커(긍정) — 응답이 비어 있지 않다. 없으면 아래 "밖의 축 0건"이 공허하게 통과한다.
+    expect(Object.keys(view).length).toBeGreaterThan(0);
+
+    // 부정 — 계약에 없는 축을 발명하지 않았다. 위반이 있으면 그 이름이 diff에 찍힌다.
+    const invented = Object.keys(view).filter(
+      (axis) => !PREFERENCE_AXES.includes(axis)
+    );
+    expect(invented).toEqual([]);
+
+    // 긍정 — 예산 축이 AC-5가 쓸 모양으로 온다(러프값은 정수, 중립 기본값 여부는 불리언).
+    expect(typeof view.budget?.rawAmount).toBe('number');
+    expect(typeof view.budget?.isNeutralDefault).toBe('boolean');
   });
 });
 
