@@ -11,6 +11,7 @@ testcontainers = "1.20.4"
 archunit = "1.3.0"
 konsist = "0.17.3"
 logstashLogbackEncoder = "8.0"
+opentelemetryInstrumentation = "2.14.0"
 swaggerUi = "5.17.14"
 
 [libraries]
@@ -45,6 +46,14 @@ konsist = { module = "com.lemonappdev:konsist", version.ref = "konsist" }
 
 # 로깅 (TRIP-148에서 사용)
 logstash-logback-encoder = { module = "net.logstash.logback:logstash-logback-encoder", version.ref = "logstashLogbackEncoder" }
+
+# 관측성 — OTLP 내보내기 (TRIP-218)
+# 담당을 나눈다: 로그=logback appender(마스킹 래퍼 경유) · 메트릭=Micrometer OTLP · 트레이스=OTel Java 에이전트
+# opentelemetry-spring-boot-starter 는 쓰지 않는다 — Boot 3 의 RestClientAutoConfiguration 을 참조해
+# Spring Boot 4 에서 컨텍스트가 깨진다(실측).
+opentelemetry-logback-appender = { module = "io.opentelemetry.instrumentation:opentelemetry-logback-appender-1.0", version = "2.14.0-alpha" }
+micrometer-registry-otlp = { module = "io.micrometer:micrometer-registry-otlp" }   # 버전은 Spring Boot BOM 관리
+
 swagger-ui = { module = "org.webjars:swagger-ui", version.ref = "swaggerUi" }  # Swagger UI 정적 자산(설계-우선 서빙)
 
 [bundles]
