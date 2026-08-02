@@ -134,6 +134,110 @@ export function HeartBadgeGlyph({ size = 12, testID }: GlyphProps) {
   );
 }
 
+/** d04 empty 상태 배지 — 위치 핀(32px, 분홍). e02 `MapPinGlyph`(1341:1378)와 같은 도형을
+ * feature 간 직접 import 금지 관례대로 이 파일에 다시 그린다. */
+export function MapPinGlyph({ size = 32, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="none"
+    >
+      <Path
+        d="M26.6667 13.3333C26.6667 21.3333 16 29.3333 16 29.3333C16 29.3333 5.33333 21.3333 5.33333 13.3333C5.33333 10.5044 6.45714 7.79125 8.45753 5.79086C10.4579 3.79047 13.171 2.66667 16 2.66667C18.829 2.66667 21.5421 3.79047 23.5425 5.79086C25.5429 7.79125 26.6667 10.5044 26.6667 13.3333Z"
+        stroke={PRIMARY}
+        strokeWidth={2.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16 17.3333C18.2091 17.3333 20 15.5425 20 13.3333C20 11.1242 18.2091 9.33333 16 9.33333C13.7909 9.33333 12 11.1242 12 13.3333C12 15.5425 13.7909 17.3333 16 17.3333Z"
+        stroke={PRIMARY}
+        strokeWidth={2.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** d04 filter-zero 상태 배지 — 슬라이더(32px). `tone`을 처음부터 파라미터화한다 — stay 쪽
+ * 형제 컴포넌트가 색 prop 없이 먹색으로 굳어 있던 결함(구조 지도 실측)을 이 파일에 복사하지
+ * 않기 위해서다. */
+export function FilterSlidersGlyph({
+  size = 32,
+  tone = 'primary',
+  testID,
+}: GlyphProps & { tone?: 'ink' | 'primary' }) {
+  const stroke = tone === 'primary' ? PRIMARY : INK;
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 14 14"
+      fill="none"
+    >
+      <Path
+        d="M4 9.5V2M4 2L1.8 4.2M4 2L6.2 4.2"
+        stroke={stroke}
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 4.5V12M10 12L7.8 9.8M10 12L12.2 9.8"
+        stroke={stroke}
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** d04 error 상태 배지 — 경고 삼각형(32px). */
+export function WarningTriangleGlyph({
+  size = 32,
+  tone = 'primary',
+  testID,
+}: GlyphProps & { tone?: 'ink' | 'primary' }) {
+  const color = tone === 'primary' ? PRIMARY : INK;
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M10 2.5L18.3333 16.6667H1.66667L10 2.5Z"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 7.5V11.6667"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 14.1667H10.0083"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** 안내 배너 정보 아이콘. */
 export function InfoGlyph({ size = 16, testID }: GlyphProps) {
   return (

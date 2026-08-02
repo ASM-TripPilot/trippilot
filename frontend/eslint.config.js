@@ -35,6 +35,40 @@ module.exports = defineConfig([
     },
   },
   {
+    // shared/ui 전체를 상태·라우팅·네트워크 import 금지로 묶을 수는 없다(BottomTabBar처럼
+    // shared/ui에 정당하게 상태를 가질 거주자가 있을 수 있다) — 그래서 "프레젠테이션 순수성"이
+    // 필요한 파일만 좁게 막는다. StateNotice.tsx는 features/stay/ui에서 승격되며 그 경계를 재던
+    // stay 쪽 소스 스캔(staySearchStructure.test.ts의 FORBIDDEN_IN_STAY_UI)의 사정거리 밖으로
+    // 나갔다(TRIP-222 03b W-3) — jest 스캔은 새로 못 만들어(sharedUiStructure.test.ts 동결)
+    // 여기서 대신 막는다.
+    files: ['src/shared/ui/StateNotice.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react',
+              importNames: ['useState', 'useReducer'],
+              message:
+                'StateNotice는 프레젠테이션 순수 컴포넌트다 — 로컬 상태는 호출부(feature) 몫.',
+            },
+            {
+              name: 'expo-router',
+              message:
+                'StateNotice는 라우팅을 모른다 — 이동은 호출부가 onPress로 넘긴다.',
+            },
+            {
+              name: '@tanstack/react-query',
+              message: 'StateNotice는 네트워크 상태를 모른다.',
+            },
+            { name: 'axios', message: 'StateNotice는 네트워크 상태를 모른다.' },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // 테스트 라이브러리(fast-check)의 표준 default import(`import fc from 'fast-check'`)는
     // `fc.property`/`fc.assert` 형태가 문서화된 API 다 — namespace 경고를 끈다.
     files: ['**/*.test.{ts,tsx}', '**/__tests__/**/*.{ts,tsx}'],
