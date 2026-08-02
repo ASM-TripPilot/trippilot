@@ -53,6 +53,16 @@ export function useSavedPlaces(deps: { isAuthed: boolean }) {
     );
   }
 
+  // d04(TRIP-221) 01b Seed Q2 ⓐ — CTA 숫자·하트 상태의 재료를 이 훅 하나로 모은다. 페이지가
+  // `GET /saved-places`를 따로 부르면 `enabled: isAuthed` 가드를 두 곳에 복제하게 되고,
+  // 그 복제가 TRIP-220 W-3(가드 누락)이 났던 자리다 — 캐시 소유자를 하나로 유지한다.
+  // `enabled: deps.isAuthed`는 새 요청만 막고, 로그인 중 채워진 캐시는 세션 만료 뒤에도
+  // 그대로 남는다 — 그래서 표시는 여기서 한 번 더 isAuthed로 접는다(게스트에게 남의 담김
+  // 표시가 새지 않게, BR-U1-03).
+  const savedPoiIds = deps.isAuthed
+    ? (savedListQuery.data ?? []).map((entry) => entry.place.poiId)
+    : [];
+
   /**
    * BR-U1-06 — savedCount는 GET /places가 주는 파생 집계라 담기·해제 둘 다 이 쪽도 흔든다.
    */
@@ -117,5 +127,5 @@ export function useSavedPlaces(deps: { isAuthed: boolean }) {
     }
   }
 
-  return { isSaved, save, remove };
+  return { isSaved, save, remove, savedPoiIds };
 }
