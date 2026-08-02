@@ -422,7 +422,8 @@ kubectl config use-context kind-trippilot
 foundryctl cast -f casting-k8s.yaml -p ./pours-k8s --format text
 
 <span class="c"># UI 열기 — 이 터미널은 켜둔 채 유지</span>
-kubectl port-forward -n signoz svc/signoz 8080:8080</pre>
+<span class="c"># port-forward 불필요 — NodePort 30080 이 호스트 8080 에 매핑됨</span>
+kubectl apply -f deploy/k8s/signoz/ui-nodeport.yaml</pre>
   <p>브라우저에서 <code>http://localhost:8080</code></p>
   <div class="note"><p>프로젝트 스크립트를 쓰면 클러스터 생성부터 한 번에 됩니다 —
     <code>./deploy/bin/cluster-up.sh</code></p></div>
@@ -599,13 +600,13 @@ just health
 <span class="s">{"status":"UP"}</span>
 <span class="s">{"status":"UP"}</span>
 
-curl http://localhost:8081/api/demo/ping
+curl http://localhost:8081/api/health
 <span class="s">{"status":"ok"}</span></pre>
   <p class="dim">원본은 <code>./deploy/bin/build.sh</code> · <code>./deploy/bin/deploy.sh</code> 입니다.</p>
   <p><strong>port-forward가 없는데 왜 될까요?</strong></p>
   <div class="flow">
     <span>localhost:8081</span><i>→</i><span>kind extraPortMapping</span>
-    <i>→</i><span>NodePort 30081</span><i>→</i><span>Service</span><i>→</i><span>Pod:8081</span>
+    <i>→</i><span>NodePort 30081</span><i>→</i><span>Service</span><i>→</i><span>Pod:8080</span>
   </div>
   <h3>코드를 고쳤다면</h3>
   <pre>./deploy/bin/update.sh   <span class="c"># 빌드 + kind load + rollout restart</span></pre>
@@ -771,14 +772,24 @@ email=traveler@example.com birth=1993-04-11 lat=33.4996
 <span class="s">authorization=*** *** email=***@*** birth=****-**-** lat=***</span></pre>
   <div class="note"><p><strong>개별 로그문에 맡기지 마세요.</strong>
     <code>MaskingAppender</code>를 모든 출력 앞단에 두어 <strong>구조적으로</strong> 강제합니다.</p></div>
-  <div class="trap"><span class="tag">함정 ⑥ — 오늘 실제로 뚫렸던 것</span>
-    <p>OTel Spring Boot starter가 기본값으로 <strong>root 로거에 자체 appender를 자동 부착</strong>합니다.
-    그대로 두면 마스킹을 우회한 <strong>원문이 그대로</strong> 적재됩니다 — 마스킹본과 원문이 <strong>둘 다</strong> 쌓입니다.</p>
-    <p><code>otel.instrumentation.logback-appender.enabled: false</code>로 끄고 설치를 앱이 소유해야 합니다.</p>
+  <div class="trap"><span class="tag">함정 ⑥ — 실제로 뚫렸던 것</span>
+    <p>OTel 에이전트가 기본값으로 <strong>root 로거에 자체 appender를 자동 부착</strong>합니다.
+    그대로 두면 마스킹을 우회한 <strong>원문이 그대로</strong> 적재됩니다.</p>
+    <p><code>OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED=false</code>로 끄고 설치를 앱이 소유해야 합니다.</p>
+  </div>
+  <div class="trap"><span class="tag">함정 ⑥-b — 경로가 둘이면 규칙도 갈린다</span>
+    <p>로그가 <strong>stdout JSON</strong>과 <strong>OTLP</strong> 두 경로로 나갑니다. 마스킹 규칙이 각각 따로 있으면
+    한쪽만 고쳤을 때 다른 쪽으로 원문이 샙니다.</p>
+    <p>실제로 <code>LogMasker</code>에는 Bearer 없는 JWT 규칙이 있었는데 <code>logback-spring.xml</code>에는
+    없었습니다. MDC에 토큰이 실리자 OTLP로는 <code>****</code>, stdout으로는 <strong>원문</strong>이 나갔습니다.</p>
+    <p class="dim">두 테스트가 이를 놓친 이유 — 둘 다 설정을 <b>손으로 복사</b>해 검증했기 때문입니다.
+    지금은 <code>MaskingParityTest</code>가 <code>logback-spring.xml</code>을 직접 읽어 두 경로를 비교합니다.</p>
   </div>
   <div class="notes"><b>강사 노트</b>
     "보안 통제는 켰다고 끝이 아니라 우회 경로가 없는지 확인해야 한다"는 교훈.
-    실제로 SigNoz에서 원문이 보였던 이야기를 하면 임팩트가 큽니다.</div>
+    실제로 SigNoz에서 원문이 보였던 이야기를 하면 임팩트가 큽니다.
+    ⑥-b는 "테스트가 있었는데도 못 잡은 이유"까지 이야기하면 더 좋습니다 — 정본이 아니라 복사본을 검증하면
+    드리프트는 잡히지 않습니다.</div>
 </section>
 
 <section class="slide">
@@ -796,11 +807,17 @@ pingCounter.increment()</pre>
       <span class="k">export</span>:
         <span class="k">url</span>: ${OTEL_EXPORTER_OTLP_ENDPOINT}/v1/metrics
         <span class="k">step</span>: 15s</pre>
-  <div class="trap"><span class="tag">주의 — 이중 발행</span>
-    <p>OTel starter도 메트릭을 내보낼 수 있습니다. Micrometer와 둘 다 켜면 같은 지표가 두 번 들어갑니다.
-    <code>otel.metrics.exporter: none</code>으로 한쪽을 끄세요.</p>
-    <p class="dim">담당을 나눕니다 — 로그: logback appender · 메트릭: Micrometer · 트레이스: OTel starter</p>
+  <div class="trap"><span class="tag">주의 — 이중 발행, 그리고 조용한 유실</span>
+    <p>에이전트도 메트릭을 내보낼 수 있습니다. Micrometer와 둘 다 켜면 같은 지표가 두 번 들어갑니다.
+    한쪽을 반드시 꺼야 합니다.</p>
+    <p><b>우리가 실측으로 만난 것은 더 고약했습니다.</b> 에이전트가 붙으면 Micrometer의 OTLP push가
+    <strong>오류 로그 하나 없이 유실</strong>됩니다. 에이전트를 떼면 같은 설정으로 즉시 적재됩니다.
+    그래서 메트릭 소유권을 <b>에이전트</b>로 넘겼습니다(<code>OTEL_METRICS_EXPORTER=otlp</code>).</p>
+    <p class="dim">담당을 나눕니다 — 로그: logback appender(마스킹 소유) · 메트릭·트레이스: OTel 에이전트</p>
   </div>
+  <div class="notes"><b>강사 노트</b>
+    "설계가 옳아 보여도 실측이 다르면 실측을 따른다"는 예시로 쓰기 좋습니다.
+    이중 발행을 막으려 <code>none</code>으로 뒀더니 아예 0건이 됐고, 로그에는 아무 단서도 없었습니다.</div>
   <div class="notes"><b>강사 노트</b>
     카디널리티도 짧게 짚어주세요 — URL에 ID가 들어가면 시계열이 폭발합니다. 라우트 템플릿으로 치환해야 합니다.</div>
 </section>
@@ -808,10 +825,17 @@ pingCounter.increment()</pre>
 <section class="slide">
   <div class="eyebrow"><b>Part 4</b><span>트레이스</span></div>
   <h2>트레이스는 거의 공짜입니다</h2>
-  <pre><span class="c">// build.gradle.kts — 의존성 한 줄</span>
-implementation(<span class="s">"io.opentelemetry.instrumentation:opentelemetry-spring-boot-starter"</span>)</pre>
-  <p>HTTP 서버·클라이언트 호출이 자동으로 계측되고, <code>trace_id</code>·<code>span_id</code>가
-     MDC에 주입되어 <strong>로그에도 자동으로 실립니다.</strong></p>
+  <pre><span class="c">// backend/Dockerfile — 코드 변경 0줄</span>
+ENTRYPOINT [<span class="s">"java"</span>, <span class="s">"-javaagent:/app/otel-agent.jar"</span>, <span class="s">"-jar"</span>, <span class="s">"/app/app.jar"</span>]</pre>
+  <p>HTTP 서버·클라이언트 호출과 DB 커넥션이 자동으로 계측되고, OTLP 로그에는
+     <code>trace_id</code>·<code>span_id</code>가 실려 <strong>로그↔트레이스가 이어집니다.</strong></p>
+  <div class="trap"><span class="tag">주의 — 에이전트 버전을 고정하세요</span>
+    <p><code>latest</code>로 받지 마세요. <b>2.14.0</b>은 Spring Boot 4에서 모든 HTTP 응답 본문을
+    <strong>0바이트</strong>로 만들고(상태 코드·헤더는 정상), logback 계측이 <code>NoSuchFieldError</code>를
+    일으켜 기동 자체를 실패시킵니다. 둘 다 실측입니다.</p>
+    <p class="dim">Spring Boot <b>starter</b>는 쓰지 않습니다 — 2.14.0이 Boot 3의
+    <code>RestClientAutoConfiguration</code>을 참조해 Boot 4에서 컨텍스트가 깨집니다.</p>
+  </div>
   <div class="flow">
     <span>느린 요청 발견</span><i>→</i><span>trace_id 복사</span>
     <i>→</i><span>로그에서 trace_id = ...</span><i>→</i><span>그 요청만의 로그</span>
@@ -841,7 +865,7 @@ trace_id = &lt;복사한 값&gt;</pre>
   <h3>확인할 것</h3>
   <ul>
     <li>로그에 <code>correlation_id</code>·<code>trace_id</code>가 있는가</li>
-    <li><code>/api/demo/masking</code> 로그에서 토큰·이메일이 <code>***</code>로 가려졌는가</li>
+    <li><code>just smoke</code> 의 마스킹 프로브 로그에서 토큰이 <code>****</code>로 가려졌는가 (두 경로 모두)</li>
     <li>Metrics에 <code>trippilot.demo.ping.total</code>이 보이는가</li>
     <li>Traces에서 요청 하나를 클릭해 span이 보이는가</li>
   </ul>
@@ -881,7 +905,7 @@ trace_id = &lt;복사한 값&gt;</pre>
     <tr><td>③</td><td><code>ErrImageNeverPull</code></td><td><code>kind load</code> 누락</td></tr>
     <tr><td>④</td><td><code>namespaces not found</code></td><td><code>apply -f dir</code>는 알파벳 순 → 네임스페이스 먼저</td></tr>
     <tr><td>⑤</td><td><code>CreateContainerConfigError</code></td><td><code>runAsNonRoot</code>는 <strong>숫자 UID</strong> 필요</td></tr>
-    <tr><td>⑥</td><td>마스킹된 로그와 원문이 <strong>둘 다</strong> 적재</td><td>OTel starter의 appender 자동 부착 → 끄기</td></tr>
+    <tr><td>⑥</td><td>마스킹된 로그와 원문이 <strong>둘 다</strong> 적재</td><td>OTel 에이전트의 appender 자동 부착 → 끄기</td></tr>
   </table>
   </div>
   <div class="note"><p>여섯 개 중 넷은 <strong>에러 메시지가 원인을 정확히 말해주지 않습니다.</strong>
@@ -929,7 +953,7 @@ just deploy
 just update          <span class="c"># 코드 변경 후</span>
 just rollback</pre></div>
     <div class="card"><h4>관측·진단</h4>
-      <pre style="margin:0;font-size:12px">just signoz          <span class="c"># UI port-forward</span>
+      <pre style="margin:0;font-size:12px">just signoz          <span class="c"># UI 주소 안내</span>
 just smoke           <span class="c"># 트래픽 발생</span>
 just verify-telemetry
 just logs / just status / just health</pre></div>
