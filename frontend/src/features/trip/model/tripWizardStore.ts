@@ -34,6 +34,9 @@ export interface TripWizardDraft {
   companionType?: CompanionType;
   /** 아직 소비자가 없다(문구를 안 그리므로) — TRIP-206이 이 값을 읽어 오류 문구를 건다. */
   touched: TripWizardField[];
+  /** 제출 성공 응답이 준 `tripId`(01b D7). 라우트(`/trips/new/step2`)가 id를 안 나르므로
+   * 여기 담아 둔다 — g02(TRIP-84·TRIP-193)가 읽는 소비자다. */
+  createdTripId?: string;
   addDestination(regionName: string, nights: number): void;
   removeDestination(regionName: string): void;
   setPeriod(
@@ -44,6 +47,7 @@ export interface TripWizardDraft {
   /** 1 미만은 1로 접는다(BR-U1-39 하한) — 화면의 `−` 비활성과 별개로 여기서도 방어한다. */
   setParty(next: number): void;
   selectCompanion(type: CompanionType): void;
+  setCreatedTripId(tripId: string): void;
   reset(): void;
 }
 
@@ -55,6 +59,7 @@ const INITIAL_DRAFT = {
   party: 1,
   companionType: undefined as CompanionType | undefined,
   touched: [] as TripWizardField[],
+  createdTripId: undefined as string | undefined,
 };
 
 /** 이미 켜져 있으면 그대로 둔다 — 집합이지 로그가 아니다(같은 축을 여러 번 건드려도
@@ -126,6 +131,7 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
       companionType: type,
       touched: withTouched(state.touched, 'companion'),
     })),
+  setCreatedTripId: (tripId) => set({ createdTripId: tripId }),
   reset: () => set(INITIAL_DRAFT),
 });
 

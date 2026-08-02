@@ -43,8 +43,13 @@ function toEpochDay(date: string): number {
 }
 
 /** 여행 기간(박). `endDate − startDate`(INV-U1-14) — 9/1~9/3은 2박이지 3이 아니다. 음수면
- * 종료일 역전이고, 0이면 당일치기다. */
-function tripLength(draft: TripDraft): number {
+ * 종료일 역전이고, 0이면 당일치기다.
+ *
+ * TRIP-206부터 export한다 — 여행지 박수 초과 문구(`숙소 박수(N박)가 여행 기간(M박)보다
+ * 많아요`)의 M이 이 값이고, 그 문구는 화면이 아니라 `TripNewStep1Page`가 조립한다(01b D1).
+ * 판정 로직은 그대로 `validateTripDraft` 하나뿐이고, 이 함수는 그 계산을 그대로 재사용할
+ * 뿐이다 — 같은 식을 컨테이너에 다시 적으면 두 계산이 갈라질 수 있다. */
+export function tripLength(draft: TripDraft): number {
   return toEpochDay(draft.endDate) - toEpochDay(draft.startDate);
 }
 

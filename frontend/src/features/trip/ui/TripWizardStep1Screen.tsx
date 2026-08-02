@@ -15,12 +15,14 @@ import {
   type PeriodPresetCode,
 } from '../model/tripWizardStep1';
 import {
+  AlertCircleGlyph,
   BackChevronGlyph,
   CalendarGlyph,
   ChevronDownGlyph,
   ChevronRightGlyph,
   FamilyGlyph,
   FriendsGlyph,
+  GlobeGlyph,
   HeartGlyph,
   PinGlyph,
   PlusGlyph,
@@ -33,13 +35,16 @@ import {
 } from './TripGlyphs';
 
 /**
- * TRIP-205 g01 여행 만들기 1/2 — **props만 받는 프레젠테이션 화면**(Figma `1675:1183` default ·
- * 제목은 `no-saved-places`(`2226:1732`) 정본 — 01b D1).
+ * TRIP-205/206 g01 여행 만들기 1/2 — **props만 받는 프레젠테이션 화면**(Figma `1675:1183`
+ * default · 제목은 `no-saved-places`(`2226:1732`) 정본 · 오류 표면 4종은 `error`(`2226:1929`)·
+ * `blocked-overseas`(`2228:1738`) 정본 — 01b D1).
  *
  * 무엇을 보장하나: 위저드 셸(앱바·진행 표시·하단 고정 CTA)과 입력 블록 5개(여행지·기간·
  * 인원·동반·취향)가 정본 문구대로 그려지고, 모든 상호작용이 판단 없이 그대로 위로 올라가며
  * (콜백 그대로 호출), `[다음]`의 활성 여부는 받은 `canProceed` **하나로만** 갈린다. 그리고
- * 이 화면은 어떤 상태에서도 오류 문구를 그리지 않는다(AC-10c — 판정은 하되 문구는 TRIP-206).
+ * 오류 표면(여행지·기간 인라인, 제출 실패 배너, 국내 차단 다이얼로그)은 **완성된 문자열
+ * prop을 받았을 때만** 그려진다 — 화면은 위반 코드를 모르고 스스로 판정하지 않는다(TRIP-206
+ * AC-9, 01b D1 — 판정→문구 매핑은 컨테이너 `TripNewStep1Page`가 끝낸다).
  *
  * 왜 props만 받는가: 이 화면이 쿼리 훅·라우터·`expo-location`을 전이 의존으로라도 물면 dev
  * 프리뷰가 터지고 테스트가 네트워크에 묶인다 — 그 제약은 렌더로 관찰할 수 없어
@@ -47,10 +52,13 @@ import {
  *
  * '도시 추가' 시트를 여닫는 상태와 시트 안에서 아직 확정하지 않은 지역·박수 선택은 이
  * 화면만 아는 **일회성 UI 상태**라 로컬 `useState`로 둔다 — confirm을 누르기 전까지는
- * 드래프트(스토어)에 반영되지 않으므로 AC-11(재진입 보존) 대상이 아니다.
+ * 드래프트(스토어)에 반영되지 않으므로 AC-11(재진입 보존) 대상이 아니다. 국내 차단
+ * 다이얼로그의 `국내 도시 고르기`도 **같은 시트를 재사용해서 연다**(01b D5 — 새 라우트를
+ * 만들지 않는다).
  *
- * 커버하지 않는 것: 서버 제출·오류 문구 표시(TRIP-206) · 예산 UI(TRIP-207) · 등록 숙소 날짜
- * 연계(TRIP-208) · '꼭 갈 곳'(TRIP-209) · 날짜 피커 캘린더(Figma 부재 — D4에 따라 진입점만).
+ * 커버하지 않는 것: 서버 제출·오류 판정·`touched` 게이팅(TRIP-206, `TripNewStep1Page` 몫) ·
+ * 예산 UI(TRIP-207) · 등록 숙소 날짜 연계(TRIP-208) · '꼭 갈 곳'(TRIP-209) · 날짜 피커
+ * 캘린더(Figma 부재 — D4에 따라 진입점만).
  */
 
 export interface TripWizardStep1ScreenProps {
@@ -67,6 +75,16 @@ export interface TripWizardStep1ScreenProps {
   regions: readonly { code: string; name: string }[];
   /** `[다음]` 활성 판정 **결과**만 받는다 — 위반 코드·`validateTripDraft`는 이 화면에 없다. */
   canProceed: boolean;
+  /** 여행지 블록 인라인 문구(완성형, TRIP-206). 화면은 문자열을 그대로 그릴 뿐 만들지
+   * 않는다 — `숙소 박수(N박)가 여행 기간(M박)보다 많아요` 조립은 컨테이너 몫이다. */
+  destinationError?: string;
+  /** 기간 블록 인라인 문구(완성형). 있으면 날짜 카드도 오류 얼굴(테두리·보조 문구 교체)이
+   * 된다. */
+  periodError?: string;
+  /** 제출 실패 배너 **본문**(완성형). 제목·버튼 라벨은 Figma 고정 문구라 화면이 갖는다. */
+  submitError?: string;
+  /** 국내 밖 차단 다이얼로그 노출 여부(BR-U1-35). */
+  overseasBlocked?: boolean;
   onBack(): void;
   onAddDestination(regionName: string, nights: number): void;
   onRemoveDestination(regionName: string): void;
@@ -76,6 +94,12 @@ export interface TripWizardStep1ScreenProps {
   onSelectCompanion(type: CompanionType): void;
   onChangePreference(): void;
   onNext(): void;
+  onRetrySubmit?(): void;
+  onCloseOverseasDialog?(): void;
+  /** '국내 도시 고르기' — 다이얼로그를 닫고 이 화면이 이미 가진 도시 추가 시트를 여는 것은
+   * 화면 내부 동작(아래 `openDestinationSheet`)이고, 이 콜백은 컨테이너에게 "골랐다"만
+   * 알린다(01b D5). */
+  onPickDomesticRegion?(): void;
 }
 
 const COMPANION_ICONS: Record<string, GlyphComponent> = {
@@ -105,6 +129,10 @@ export function TripWizardStep1Screen({
   preferenceChips,
   regions,
   canProceed,
+  destinationError,
+  periodError,
+  submitError,
+  overseasBlocked,
   onBack,
   onAddDestination,
   onRemoveDestination,
@@ -114,6 +142,9 @@ export function TripWizardStep1Screen({
   onSelectCompanion,
   onChangePreference,
   onNext,
+  onRetrySubmit,
+  onCloseOverseasDialog,
+  onPickDomesticRegion,
 }: TripWizardStep1ScreenProps): ReactElement {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetRegionCode, setSheetRegionCode] = useState<string | null>(null);
@@ -210,6 +241,17 @@ export function TripWizardStep1Screen({
                 </Text>
               </Pressable>
             </View>
+            {destinationError ? (
+              <View
+                testID="trip-wizard-error-destination"
+                className="flex-row items-center gap-[6px]"
+              >
+                <AlertCircleGlyph />
+                <Text className="font-noto-bold text-caption font-bold text-primary-text">
+                  {destinationError}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <View className="px-lg py-sm">
@@ -252,7 +294,11 @@ export function TripWizardStep1Screen({
               testID="trip-wizard-date-field"
               accessibilityRole="button"
               onPress={onPressPeriod}
-              className="flex-row items-center gap-md rounded-button border border-hairline-strong bg-canvas px-[14px] py-[13px]"
+              className={`flex-row items-center gap-md rounded-button bg-canvas px-[14px] py-[13px] ${
+                periodError
+                  ? 'border-[1.4px] border-primary'
+                  : 'border border-hairline-strong'
+              }`}
             >
               <CalendarGlyph />
               <View className="flex-1 gap-[2px]">
@@ -260,11 +306,24 @@ export function TripWizardStep1Screen({
                   {dateText ?? '날짜를 선택해 주세요'}
                 </Text>
                 <Text className="text-micro text-muted">
-                  선택한 프리셋으로 자동 채움
+                  {periodError
+                    ? '날짜를 다시 확인해주세요'
+                    : '선택한 프리셋으로 자동 채움'}
                 </Text>
               </View>
               <ChevronDownGlyph />
             </Pressable>
+            {periodError ? (
+              <View
+                testID="trip-wizard-error-period"
+                className="flex-row items-center gap-[6px] pl-[2px]"
+              >
+                <AlertCircleGlyph />
+                <Text className="font-noto-bold text-caption font-bold text-primary-text">
+                  {periodError}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <View className="px-lg py-sm">
@@ -382,6 +441,32 @@ export function TripWizardStep1Screen({
         </ScrollView>
 
         <View className="border-t border-hairline bg-canvas px-lg pb-[18px] pt-md">
+          {submitError ? (
+            <View
+              testID="trip-wizard-submit-banner"
+              className="mb-sm flex-row items-start gap-[10px] rounded-button bg-primary-pale p-md"
+            >
+              <AlertCircleGlyph size={18} />
+              <View className="flex-1 gap-[2px]">
+                <Text className="font-noto-bold text-label font-bold text-primary-text">
+                  여행을 만들지 못했어요
+                </Text>
+                <Text className="font-noto text-[11.5px] text-primary-text">
+                  {submitError}
+                </Text>
+              </View>
+              <Pressable
+                testID="trip-wizard-submit-banner-retry"
+                accessibilityRole="button"
+                onPress={onRetrySubmit}
+                className="items-center justify-center rounded-pill border-[1.4px] border-primary bg-canvas px-md py-[7px]"
+              >
+                <Text className="text-[12.5px] font-noto-bold font-bold text-primary-text">
+                  다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           <Pressable
             testID="trip-wizard-step1-next"
             accessibilityRole="button"
@@ -477,6 +562,60 @@ export function TripWizardStep1Screen({
               >
                 <Text className="text-[15px] font-noto-bold font-bold text-on-primary">
                   추가
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {overseasBlocked ? (
+          <View className="absolute inset-0 items-center justify-center px-xl">
+            <Pressable
+              testID="trip-wizard-overseas-backdrop"
+              className="absolute inset-0 bg-scrim/[58%]"
+              onPress={onCloseOverseasDialog}
+            />
+            <View
+              testID="trip-wizard-overseas-dialog"
+              className="w-full max-w-[310px] items-center gap-[8px] rounded-[20px] bg-canvas px-xl pb-[18px] pt-[22px]"
+            >
+              <View className="h-[56px] w-[56px] items-center justify-center rounded-pill bg-primary-pale">
+                <GlobeGlyph />
+              </View>
+              <Text className="text-section font-noto-bold font-bold text-ink">
+                지금은 국내 여행만 지원해요
+              </Text>
+              <View className="items-center">
+                <Text className="text-center font-noto text-label text-muted">
+                  해외 여행지는 준비 중이에요.
+                </Text>
+                <Text className="text-center font-noto text-label text-muted">
+                  국내 도시로 만들어볼까요?
+                </Text>
+              </View>
+              <Pressable
+                testID="trip-wizard-overseas-dialog-confirm"
+                accessibilityRole="button"
+                onPress={() => {
+                  // 새 라우트로 나가지 않는다 — 이 화면이 이미 가진 도시 추가 시트를 그대로
+                  // 연다(01b D5). 컨테이너에는 "골랐다"만 알린다.
+                  openDestinationSheet();
+                  onPickDomesticRegion?.();
+                }}
+                className="w-full items-center justify-center rounded-button bg-primary py-[13px]"
+              >
+                <Text className="text-[15.5px] font-noto-bold font-bold text-on-primary">
+                  국내 도시 고르기
+                </Text>
+              </Pressable>
+              <Pressable
+                testID="trip-wizard-overseas-dialog-close"
+                accessibilityRole="button"
+                onPress={onCloseOverseasDialog}
+                className="items-center justify-center py-[10px]"
+              >
+                <Text className="text-[13.5px] font-noto-bold font-bold text-muted">
+                  닫기
                 </Text>
               </Pressable>
             </View>

@@ -48,6 +48,25 @@ jest.mock('@/features/trip/model/usePreferencePrefill', () => ({
   usePreferencePrefill: () => ({ data: mockPreference }),
 }));
 
+/**
+ * TRIP-206 (01b D8) — **이 파일에 추가된 유일한 변경이다. 단언 16개는 한 줄도 안 고쳤다.**
+ *
+ * 왜 필요한가: 이 파일은 node 버킷이라 `QueryClientProvider`가 없다. TRIP-206이 페이지에
+ * `useCreateTrip`을 붙이는 순간 그 안의 `useQueryClient()`·`useMutation()`이 provider를 못
+ * 찾고 던져서, `render`하는 it 16개가 **코드가 맞아도 전부 실패**한다. 위 `usePreferencePrefill`
+ * 목킹과 같은 형태로 훅을 모듈째 갈아끼워 이 버킷을 네트워크에서 떼어 놓는다.
+ *
+ * 그래서 두 버킷의 역할이 갈린다 — 이 파일은 "**배선을 통과해도 화면이 여전히 그려진다**"를,
+ * `TripNewStep1Page.integration.test.tsx`는 "**제출이 실제로 계약대로 나간다**"를 본다.
+ */
+jest.mock('@/features/trip/model/useCreateTrip', () => ({
+  useCreateTrip: () => ({
+    mutateAsync: jest.fn().mockResolvedValue(undefined),
+    isPending: false,
+    reset: jest.fn(),
+  }),
+}));
+
 /** 기준일 고정 — 실행일이 바뀌어도 날짜 단언이 흔들리지 않는다(01b D5). */
 const BASE = '2026-06-10';
 

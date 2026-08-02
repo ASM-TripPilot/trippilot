@@ -414,6 +414,78 @@ export function SparkleGlyph({ size = 18, testID }: GlyphProps) {
   );
 }
 
+// 인라인 오류 경고(15) — Figma `2228:1733`(nightsErr) · `2226:2115`(dateErr). 제출 실패
+// 배너는 같은 도형을 18로 키워 쓴다(`2226:2122`) — 뷰박스를 그대로 스케일한 값이라 size
+// prop 하나로 겸한다(15px·18px 두 export가 좌표까지 정비례).
+export function AlertCircleGlyph({ size = 15, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 15 15"
+      fill="none"
+    >
+      <Path
+        d="M7.5 13.125C10.6066 13.125 13.125 10.6066 13.125 7.5C13.125 4.3934 10.6066 1.875 7.5 1.875C4.3934 1.875 1.875 4.3934 1.875 7.5C1.875 10.6066 4.3934 13.125 7.5 13.125Z"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={1.375}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M7.5 5V8.125"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={1.375}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M7.5 10.3125H7.50625"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={1.375}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 국내 차단 다이얼로그 배지 지구본(27) — Figma `2228:1926`.
+export function GlobeGlyph({ size = 27, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 27 27"
+      fill="none"
+    >
+      <Path
+        d="M13.5 23.625C19.0919 23.625 23.625 19.0919 23.625 13.5C23.625 7.90812 19.0919 3.375 13.5 3.375C7.90812 3.375 3.375 7.90812 3.375 13.5C3.375 19.0919 7.90812 23.625 13.5 23.625Z"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3.375 13.5H23.625"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M13.5 3.375C15.6907 6.296 16.875 9.84875 16.875 13.5C16.875 17.1512 15.6907 20.704 13.5 23.625C11.3093 20.704 10.125 17.1512 10.125 13.5C10.125 9.84875 11.3093 6.296 13.5 3.375Z"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // CTA 바 chevron-right(18, 흰색 고정 — 버튼 배경이 항상 분홍이라 선택 분기가 없다).
 export function ChevronRightGlyph({ size = 18, testID }: GlyphProps) {
   return (
