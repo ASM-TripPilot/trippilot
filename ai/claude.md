@@ -17,15 +17,27 @@ TripPilot AI는 LLM + 최적화 솔버 하이브리드 아키텍처로 여행 �
 3. **INV-3**: 소요시간 미표시 — 거리만
 4. **INV-4**: AI 실패 시 결정론 폴백 (침묵 실패 금지)
 
-## 멀티에이전트 구조 (업무 기준)
+## 멀티에이전트 구조 (2계층 — 업무 + 정보)
 
-- **Orchestrator**: 의도 파악 + Fast Path(간단한 task 직접 처리) + 에이전트 병렬 디스패치
-- **ScheduleAgent**: 일정 생성 (Generation 패턴, tool 6개)
-- **PlanBAgent**: 변수 대응 (RAG 패턴, KB 3종 + pgvector, tool 7개)
-- **ReflectAgent**: 회고 생성 (1차: 단순 LLM Generation, tool 2개. 추후 Multi-step 확장)
-- **EditAgent**: 일정 편집 (의도 해석 → 솔버 검증 → 반영, tool 5개)
+**업무 계층** (agent-redesign.md):
+- **Orchestrator**: 의도 파악(하이브리드 질문뱅크 매칭) + Fast Path + AgentTask 봉투로 병렬 디스패치
+- **ScheduleAgent**: 일정 생성 (Generation 패턴)
+- **PlanBAgent**: 변수 대응 (RAG 패턴, KB 3종 + pgvector)
+- **ReflectAgent**: 회고 생성 (1차: 단순 LLM Generation. 추후 Multi-step 확장)
+- **EditAgent**: 일정 편집 (의도 해석 → 솔버 검증 → 반영)
+
+**정보 계층** (agent-hierarchy-design.md — 업무 에이전트가 agent-as-tool로 호출):
+- **PlaceScoutAgent**(장소 후보, INV-1 관문) / **WeatherAgent**(일단위 날씨+트리거) / **TransitAgent**(교통·거리+지연 트리거) / **PersonaAgent**(KB-2) / **EventAgent**(행사, P2)
+- 규칙: 깊이 2 고정, 쓰기 금지, 응답에 FreshnessMeta 필수
 
 에이전트별 필요한 tool만 할당 (토큰 50~60% 절감).
+
+## 핵심 설계 문서 (application-design/)
+
+- 위임 프로토콜: `orchestrator-delegation-design.md` (AgentTask/AgentResult, deadline 상속, trace_id)
+- 입출력 계약: `agent-io-contracts.md` (FE↔BE↔Agent 대응)
+- 의도 파악: `intent-matching-design.md` / 평가 지표(최신성·신속도): `evaluation-metrics-design.md`
+- MLOps/LLMOps + ML 유형화: `mlops-llmops-design.md`
 
 ## Solver 하이브리드 전략
 

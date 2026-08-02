@@ -98,6 +98,11 @@ M16은 C1 위의 순수 소비자 계층이다. 자연어를 해석하는 **라�
 - 티어 분리로 비용·품질 최적화
 - LLM 벤더 교체 시 C1만 교체, 소비 모듈 무영향
 
+
+---
+위 - 배경지식
+---
+아래 - AI개발 핵심
 ---
 
 ## AI-D01: AI 코어(C1+C2)를 독립 Python 서비스로 구축 — D11 대비 분기
@@ -317,12 +322,43 @@ LLM 문장 품질은 PR마다 평가할 수 없다 (비용·시간·비결정성
 
 ---
 
+## AI-D06: LLM 벤더 확정 — Anthropic API 직접 (Bedrock 아님)
+
+**상태**: 확정 (2026-07-21, 결제 승인 경로 확정에 따라)
+
+**결정**:
+- LLM 호출 경로는 **Anthropic API 직접**(`api.anthropic.com`)이다. AWS Bedrock 경유가 아니다.
+- 어댑터: LangChain `ChatAnthropic`(langchain-anthropic) 또는 공식 `anthropic` Python SDK. `LlmPort` 뒤에 격리되므로 기존 설계의 Port 구조는 무변경.
+- **티어 라우팅 초기 제안** (model_id는 설정값 — 코드에 하드코딩 금지):
+
+| 티어 | 모델 (제안) | 대상 feature | 근거 |
+|---|---|---|---|
+| 경량 | `claude-haiku-4-5` | parse_intent, score_preferences, interpret_reason, paraphrase_query | 2.5s 타임아웃 내 응답, 최저 비용 |
+| 상위 | `claude-sonnet-5` | explain_slot, select_alternatives, generate_reflection, extract_places | 상위 품질 + 속도·비용 균형 (인터랙티브 예산 내) |
+| 오프라인 | `claude-opus-4-8` | LLM-judge 평가(L3), 질문뱅크 증강(K-4), 2차 솔버 실험 | 지연 무관 배치 — 품질 최우선 |
+
+- **임베딩 재선정 필요**: 기존 설계의 Titan Embeddings v2는 Bedrock 전용 서비스라 사용 불가.
+  **잠정안: 오픈소스 로컬 임베딩** — `multilingual-e5-large` 또는 `BGE-M3` (둘 다 1024차원 → **pgvector 스키마 무변경**, 한국어 지원 양호, sentence-transformers 로컬 실행이라 **추가 결제 승인 불요**). `EmbeddingPort` 뒤 격리로 추후 교체 가능. 최종 선정은 한국어 검색 품질 벤치마크 후.
+
+**이유**:
+- 회사 결제 승인이 Anthropic API 직접 경로로 진행됨 (Bedrock은 AWS 계정 과금 + 모델 접근 승인이라는 별도 절차).
+- Port 격리 원칙 덕에 벤더 전환 비용은 어댑터 구현체 1개 + 설정 전환 수준.
+
+**영향 범위**:
+- 문서 내 "Bedrock" 표기 → "LLM API(Anthropic)"로 읽는다 (점진 개정). "Bedrock 2차 솔버"도 동일 — Anthropic API 호출로 구현.
+- `langchain-adoption.md`의 ChatBedrock/BedrockEmbeddings → ChatAnthropic/로컬 임베딩으로 대체.
+- 비용 추정(ai-cost-estimation.md)은 Anthropic API 요금 기준으로 재산정 필요.
+- 미결 항목 1(LLM 벤더) 해소. 신규 미결: 임베딩 모델 최종 선정.
+
+---
+
 ## 미결 결정 사항
 
 | # | 결정 필요 항목 | 현재 상태 | 결정 시점 |
 |---|---|---|---|
-| 1 | LLM 벤더·모델 실체 | 미확정 (플레이스홀더) | 벤더 계약 시 |
+| 1 | ~~LLM 벤더·모델 실체~~ | **AI-D06으로 해소** — Anthropic API 직접, 티어 모델 제안 확정 | ~~벤더 계약 시~~ 완료 (2026-07-21) |
 | 2 | 통합 AI 서비스에서 C1을 별도 분리하는 시점 | C1+C2 통합 Python 서비스로 시작(AI-D01) | 팀 규모·배포 주기 기준 |
 | 3 | 솔버 알고리즘 라이브러리 | 자체 구현 vs OR-Tools | day1 5초 벤치마크 후 |
 | 4 | 취향 7축 택소노미 실체 | UX팀 협의 필요 | 온보딩 설계 확정 시 |
 | 5 | Places API 벤더 + 자유 웹 소싱 약관 | AI-D03 결정, 벤더 미정 | 벤더 선정 + 스크래핑·저장 약관 검토 |
+| 6 | 임베딩 모델 최종 선정 (Titan 대체) | AI-D06 잠정: multilingual-e5-large 또는 BGE-M3 (로컬, 1024차원) | 한국어 검색 품질 벤치마크 후 |
