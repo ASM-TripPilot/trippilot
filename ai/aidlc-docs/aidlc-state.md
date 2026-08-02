@@ -54,8 +54,8 @@
 
 ## Current Status
 - **Lifecycle Phase**: CONSTRUCTION
-- **Current Stage**: U3 M7 Place Data Core — 코어 구현 완료
-- **Next Stage**: U3 잔여(실 PostgreSQL 어댑터·batch_check_closed 연결)는 후속, U4 착수 가능
+- **Current Stage**: U4 C1 LLM Gateway — FD 작성 완료, 승인 대기
+- **Next Stage**: U4 코드 생성 (승인 후). U3 잔여(실 PostgreSQL 어댑터·batch_check_closed 연결)는 후속 백로그
 - **Status**:
   - U1 완료 (2026-07-23): 도메인 12모듈·Port 7종·Fake 9종·PBT 52 green, 4대 불변식 타입 강제, CI 테스트 게이트. PR #25 리뷰 대기 (develop), Jira TRIP-164 In Review.
   - U2 코어 완료 (2026-07-29): 벤치마크 게이트 통과(미결 #3 종결 — OR-Tools 확정), c2 8모듈(체인·HC·OR-Tools·LLM2차·repair·폴백·scorer), 76 tests green. PBT가 중복 고정블록 실버그 검출·수정. 잔여 경미 3건(oracle 대조·품질미달 트리거·2-opt)은 광택 백로그. Jira TRIP-165 In Review.

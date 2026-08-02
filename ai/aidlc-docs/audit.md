@@ -265,3 +265,12 @@
 - 웹 소싱 위치 명확화: Provider 아님 — 백그라운드 소싱 파이프라인(U6) 소속, LLM 추출은 그 안에서 (INV-1·지연 예산 근거)
 - 트레이드오프 기록: 이전 피드백(에이전트 도구 자율)과 절충 — 판단 자율 유지, 수집·확정 중앙화
 - 코드 영향 0 (U1~U4 무관, U5/U6 미구현 시점의 무비용 개정)
+
+## 2026-08-02 — U4 C1 LLM Gateway 착수 (FD)
+- 브랜치: feature/TRIP-167-c1-llm-gateway (U3 스택). Jira TRIP-167 → 진행중
+- FD 3종 작성: construction/u4-c1-gateway/functional-design/{domain-entities, business-logic-model, business-rules}.md
+- 설계 축: 코드-주도 단발 호출 (Claude tool-use 미채택 — 결정론·지연·검증·비용 근거 명문화)
+- "제한된 소형 LLM" 4겹 장치: LlmFeature closed-set(8기능) · 전용 프롬프트(yaml+semver) · 스키마 파서 · ClosedSetGate
+- 도메인 보강: LlmFeature/ModelTier(llm.py), PersonaSummary·TasteTag 7축(persona.py — 미결 #3 해소), Principal/ResourceRef/PermissionDeniedError(context.py — D31)
+- 어댑터: AnthropicAdapter는 client 주입식, 실 스모크 K-1 유보 (D37 CI 실 API 0 유지)
+- PBT 계획 8속성: GATE-P1/P2(U5-P5 승계) · GW-P1/P2 · ROUTE-P1 · CTX-P1 · PROMPT-P1 · SER-P1
