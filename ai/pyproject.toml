@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "TripPilot AI service — domain types, ports, and fakes (U1 walking skeleton)"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "ortools>=9.15.6755",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.30,<0.12.0"]

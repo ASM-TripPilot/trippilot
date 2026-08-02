@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 from trippilot.domain.common import (
     BudgetLevel,
+    GeoPoint,
     PoiId,
     ScheduleId,
     TransportMode,
@@ -192,6 +193,7 @@ class ItineraryProblem:
     transport: TransportMode
     day_window: TimeWindow
     seed: int
+    anchor: GeoPoint | None = None  # 숙소 기점 (정본 §4.1 — U1 누락분 보강)
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -207,6 +209,7 @@ class ItineraryProblem:
             "transport": self.transport.value,
             "day_window": self.day_window.to_dict(),
             "seed": self.seed,
+            "anchor": self.anchor.to_dict() if self.anchor else None,
         }
 
     @classmethod
@@ -222,6 +225,7 @@ class ItineraryProblem:
             transport=TransportMode(d["transport"]),
             day_window=TimeWindow.from_dict(d["day_window"]),
             seed=d["seed"],
+            anchor=GeoPoint.from_dict(d["anchor"]) if d.get("anchor") else None,
         )
 
 
