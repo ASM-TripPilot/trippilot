@@ -468,15 +468,21 @@ describe('AC-12 · INV-3 — 소요 시간 미표시 (BR-U1-54)', () => {
 });
 
 describe('AC-13 · 범위 — 다음 칸 것들을 미리 그리지 않는다 (01b D2)', () => {
-  it('예산 · 등록 숙소 날짜 가져오기 · 꼭 갈 곳이 없다', () => {
+  it('등록 숙소 날짜 가져오기 · 꼭 갈 곳이 없다', () => {
     render(<TripWizardStep1Screen {...filledProps()} />);
 
     // 라이브 Figma에는 셋 다 그려져 있지만 각자 티켓이 있다(TRIP-207 · 208 · 209).
     // 이 칸이 삼키면 티켓별 AC 충족 여부가 섞여 구분되지 않는다.
-    expect(root()).not.toHaveTextContent(/예산/);
-    expect(root()).not.toHaveTextContent(/₩/);
+    //
+    // ⚠️ **TRIP-207에서 예산 두 줄(`/예산/`·`/₩/`)을 걷어냈다**(02a §6-3). 그 두 줄은
+    // "예산은 TRIP-207 몫이니 미리 그리지 마라"는 칸막이였고, 그 티켓이 바로 이번 칸이라
+    // 임무가 끝났다. 남은 두 줄은 아직 유효한 칸막이다.
     expect(root()).not.toHaveTextContent(/가져오기/);
     expect(root()).not.toHaveTextContent(/꼭 갈 곳/);
+
+    // 칸막이를 걷은 자리를 반대 방향으로 다시 잠근다 — 안 그러면 "예산이 있어도 없어도
+    // 통과"가 된다. 블록의 내용은 `TripWizardStep1Screen.budget.test.tsx`가 본다.
+    expect(screen.getByTestId('trip-wizard-budget-block')).toBeTruthy();
 
     // 짝(긍정) — 이 칸 소관 블록은 그대로 있다. 없으면 위 부정 4줄이 공허해진다.
     expect(root()).toHaveTextContent(/여행지/);

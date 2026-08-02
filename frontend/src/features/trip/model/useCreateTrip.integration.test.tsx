@@ -16,14 +16,21 @@ import { useCreateTrip } from './useCreateTrip';
 import { usePreferencePrefill } from './usePreferencePrefill';
 
 /**
- * TRIP-203 AC-2 · AC-5 · AC-6 — 여행 생성 훅이 성공 경로를 끝까지 잇는다.
+ * TRIP-203 AC-2 (+ TRIP-207 AC-2 · AC-3 갱신) — 여행 생성 훅이 성공 경로를 끝까지 잇는다.
  *
  * 무엇을 보장하나:
  *  - **D-1 (AC-2)** 여행을 만들면 ① "내 여행 목록" 캐시가 무효화되어 실제로 다시 받아 오고
  *    ② 서버가 준 `Trip`이 가공 없이 호출자에게 돌아온다.
- *  - **D-2·D-3 (AC-5·AC-6)** 취향 조회 → 예산 러프값 → 생성 요청까지 한 줄기가 이어지고,
- *    **나가는 실제 요청 바디**에 값이 실리거나(있을 때) 키가 아예 없다(없을 때). 어느 경우에도
+ *  - **D-2·D-3 (TRIP-207 AC-2·AC-3)** 사용자가 넣은 예산이 **나가는 실제 요청 바디**에 실리거나
+ *    (넣었을 때) 키가 아예 없다(안 넣었을 때 — **취향에 러프값이 있어도**). 어느 경우에도
  *    `preferenceSnapshot`은 실리지 않는다.
+ *
+ * ⚠️ **TRIP-207에서 D-2·D-3의 주어가 바뀌었다**(02a §6-2). TRIP-203 승인 당시에는 예산 입력
+ * UI가 없어 "취향 → 예산 → 요청" 한 줄기가 유일한 경로였다. TRIP-207이 입력을 붙이면서
+ * US-TRIP-01("예산은 **선택**")이 요구하는 것이 뒤집혔고, `buildCreateTripRequest`는 취향을
+ * 인자로 받지 않는다. **D-3은 이 갱신으로 오히려 강해졌다** — 옛 D-3은 취향 응답을
+ * `rawAmount: null`로 덮어써서 만든 상황이었지만, 새 D-3은 기본 취향(`rawAmount: 1200000`)을
+ * 그대로 둔 채 입력에 예산 없이 보내 **AC-2를 wire 층에서 직접 심판한다**.
  *
  * > *(개념)* **mutation(뮤테이션)** — 서버 데이터를 *바꾸는* 호출(생성·수정·삭제)을 다루는
  * > TanStack Query 훅. 읽기용 `useQuery`와 달리 화면에 뜨자마자 저절로 실행되지 않고, 버튼을
@@ -198,7 +205,7 @@ describe('AC-2 · 여행 생성 성공 경로 (D-1)', () => {
     // 실행 — 생성을 딱 한 번 발사한다.
     await act(async () => {
       await result.current.create.mutateAsync({
-        data: buildCreateTripRequest(BASE_INPUT, result.current.prefill.data),
+        data: buildCreateTripRequest(BASE_INPUT),
       });
     });
 
@@ -214,56 +221,54 @@ describe('AC-2 · 여행 생성 성공 경로 (D-1)', () => {
   });
 });
 
-describe('AC-5 · AC-6 · 나가는 요청 바디 (D-2 · D-3)', () => {
-  it('취향에 예산 러프값이 있으면 budgetTotal로 실려 나가고, preferenceSnapshot은 실리지 않는다 (D-2)', async () => {
-    // 준비 — 기본 취향 핸들러가 rawAmount: 1200000 을 준다.
+describe('TRIP-207 AC-2 · AC-3 · 나가는 요청 바디 (D-2 · D-3)', () => {
+  it('사용자가 넣은 예산이 budgetTotal로 실려 나가고, preferenceSnapshot은 실리지 않는다 (D-2)', async () => {
+    // 준비 — 취향 조회는 그대로 돈다(프리필의 출처이므로). 다만 조립에는 넘어가지 않는다.
     setAccessToken('valid-access');
     const { result } = renderHook(() => useTripProbe(), {
       wrapper: createWrapper(),
     });
     await waitFor(() => expect(result.current.prefill.isSuccess).toBe(true));
 
-    // 실행 — 조회한 취향을 그대로 조립에 넘겨 한 줄기로 잇는다.
+    // 실행 — 예산은 **입력에서** 온다(화면의 예산 필드가 파싱해 넘긴 정수).
     await act(async () => {
       await result.current.create.mutateAsync({
-        data: buildCreateTripRequest(BASE_INPUT, result.current.prefill.data),
+        data: buildCreateTripRequest({ ...BASE_INPUT, budgetTotal: 1200000 }),
       });
     });
 
     // 앵커 — 요청이 실제로 나갔다. 없으면 아래 부정 단언이 "아무것도 안 보내서" 통과한다.
     expect(capturedBody).not.toBeNull();
 
-    // 단언 — 러프값이 그대로 실렸다.
+    // 단언 — 입력값이 그대로 실렸다.
     expect(capturedBody).toMatchObject({
       startDate: '2026-09-01',
       endDate: '2026-09-03',
       budgetTotal: 1200000,
     });
 
-    // 단언(AC-6) — 취향이 있어도 스냅숏은 보내지 않는다(동결은 서버 책임 · BR-U1-38).
+    // 단언 — 취향이 있어도 스냅숏은 보내지 않는다(동결은 서버 책임 · BR-U1-38).
     expect(Object.keys(capturedBody ?? {})).not.toContain('preferenceSnapshot');
   });
 
-  it('취향의 rawAmount가 null이면 budgetTotal 키가 아예 나가지 않는다 (D-3)', async () => {
-    // 준비 — 이 케이스만 취향 응답을 덮는다. 티어만 고르고 금액은 안 적은 상태이며,
-    // 순진한 구현이 `budgetTotal: null`을 실어 보내는 자리가 바로 여기다.
+  it('예산을 안 넣으면 취향에 러프값이 있어도 budgetTotal 키가 아예 나가지 않는다 (D-3)', async () => {
+    // 준비 — 취향 응답을 **덮지 않는다**. 기본 핸들러가 `rawAmount: 1200000`을 주고 있고,
+    // 프리필이 성공한 것도 아래에서 기다려 확인한다. 그 상태에서 예산 없이 보낸다 —
+    // TRIP-206까지의 구현이라면 여기서 1200000이 자동으로 붙었다(TRIP-207 AC-2가 뒤집은
+    // 바로 그 동작). 순진한 구현이 `budgetTotal: null`을 실어 보내는 자리이기도 하다.
     setAccessToken('valid-access');
-    server.use(
-      http.get(`${BASE}/me/preferences`, () =>
-        HttpResponse.json({
-          budget: { tier: '중간', rawAmount: null, isNeutralDefault: true },
-        } satisfies PreferenceView)
-      )
-    );
     const { result } = renderHook(() => useTripProbe(), {
       wrapper: createWrapper(),
     });
     await waitFor(() => expect(result.current.prefill.isSuccess).toBe(true));
+    // 앵커 — 취향에 러프값이 실제로 도착했다. 이게 없으면 "취향이 비어서" 키가 안 붙은
+    // 것과 구별되지 않아 이 케이스가 AC-2를 심판하지 못한다.
+    expect(result.current.prefill.data?.budget?.rawAmount).toBe(1200000);
 
     // 실행
     await act(async () => {
       await result.current.create.mutateAsync({
-        data: buildCreateTripRequest(BASE_INPUT, result.current.prefill.data),
+        data: buildCreateTripRequest(BASE_INPUT),
       });
     });
 
@@ -278,7 +283,7 @@ describe('AC-5 · AC-6 · 나가는 요청 바디 (D-2 · D-3)', () => {
     expect(Object.keys(capturedBody ?? {})).not.toContain('budgetTotal');
     expect(capturedBody?.budgetTotal).not.toBeNull();
 
-    // 단언(AC-6) — 취향이 비어도 스냅숏은 여전히 없다.
+    // 단언 — 예산을 안 실어도 스냅숏은 여전히 없다.
     expect(Object.keys(capturedBody ?? {})).not.toContain('preferenceSnapshot');
   });
 });

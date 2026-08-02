@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
-import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type {
@@ -57,8 +57,14 @@ import {
  * 만들지 않는다).
  *
  * 커버하지 않는 것: 서버 제출·오류 판정·`touched` 게이팅(TRIP-206, `TripNewStep1Page` 몫) ·
- * 예산 UI(TRIP-207) · 등록 숙소 날짜 연계(TRIP-208) · '꼭 갈 곳'(TRIP-209) · 날짜 피커
- * 캘린더(Figma 부재 — D4에 따라 진입점만).
+ * 등록 숙소 날짜 연계(TRIP-208) · '꼭 갈 곳'(TRIP-209) · 날짜 피커 캘린더(Figma 부재 — D4에
+ * 따라 진입점만).
+ *
+ * 예산 블록(TRIP-207, Figma `sec_budget` 2225:2375)도 이 화면이 판단 없이 그린다 — 프리필
+ * 여부·오류 문구는 컨테이너가 완성해 내려주고(`budgetPrefilled`·`budgetError`), 이 화면은
+ * 입력을 가공하지 않고 그대로 위로 올려보낸다(01b D8 — 실시간 재포맷 금지, blur 정리는
+ * 컨테이너 몫). 예산 훅을 여기서 직접 부르지 않는다 — 부르면
+ * `tripWizardStep1Boundary.test.ts`가 전이 의존으로 잡는다(AC-14).
  */
 
 export interface TripWizardStep1ScreenProps {
@@ -85,6 +91,19 @@ export interface TripWizardStep1ScreenProps {
   submitError?: string;
   /** 국내 밖 차단 다이얼로그 노출 여부(BR-U1-35). */
   overseasBlocked?: boolean;
+  /** 예산 입력에 그릴 **원문**(콤마 포함 가능). 없으면 빈 입력 — 컨테이너가 프리필·사용자
+   * 입력 중 무엇을 보일지 이미 정해 내려준 값이다(02a §2-4 `effectiveText`). */
+  budgetText?: string;
+  /** 지금 보이는 값이 취향에서 채워진 것인가 — true일 때만 Figma 고정 안내 문구를 그린다. */
+  budgetPrefilled?: boolean;
+  /** 예산 블록 인라인 문구(완성형, TRIP-206 D1 관례). 화면은 문자열을 그대로 그릴 뿐 스스로
+   * 판정하지 않는다. */
+  budgetError?: string;
+  onChangeBudget?(next: string): void;
+  /** blur를 그대로 알리기만 한다 — 여기서 `onChangeBudget`을 부르면 "사람이 값을 바꿨다"는
+   * 신호가 위조되어 프리필이 잠긴다(01b 불변식, 02a ★1-b). */
+  onBlurBudget?(): void;
+  onPressBudgetEdit?(): void;
   onBack(): void;
   onAddDestination(regionName: string, nights: number): void;
   onRemoveDestination(regionName: string): void;
@@ -101,6 +120,10 @@ export interface TripWizardStep1ScreenProps {
    * 알린다(01b D5). */
   onPickDomesticRegion?(): void;
 }
+
+/** Figma `2225:2391` 실측 문자열. 따옴표는 곡선 따옴표(‘ U+2018 / ’ U+2019)다 — 곧은
+ * `'`(U+0027)가 아니다. `formatDateRange`의 en dash(U+2013)와 같은 성질이다(02a ★11). */
+const BUDGET_PREFILL_NOTE = '온보딩에서 고른 ‘중간(50~150만)’ 범위로 채웠어요';
 
 const COMPANION_ICONS: Record<string, GlyphComponent> = {
   alone: SoloGlyph,
@@ -133,6 +156,12 @@ export function TripWizardStep1Screen({
   periodError,
   submitError,
   overseasBlocked,
+  budgetText,
+  budgetPrefilled,
+  budgetError,
+  onChangeBudget,
+  onBlurBudget,
+  onPressBudgetEdit,
   onBack,
   onAddDestination,
   onRemoveDestination,
@@ -149,6 +178,7 @@ export function TripWizardStep1Screen({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetRegionCode, setSheetRegionCode] = useState<string | null>(null);
   const [sheetNights, setSheetNights] = useState(1);
+  const budgetInputRef = useRef<TextInput>(null);
 
   function openDestinationSheet(): void {
     setSheetRegionCode(null);
@@ -437,6 +467,85 @@ export function TripWizardStep1Screen({
                 온보딩에서 고른 취향을 그대로 반영했어요
               </Text>
             </View>
+          </View>
+
+          {/* 예산 (TRIP-207, Figma sec_budget 2225:2375) */}
+          <View
+            testID="trip-wizard-budget-block"
+            className="gap-[10px] px-lg py-[6px]"
+          >
+            <View className="flex-row items-center gap-sm">
+              <Text className="text-[16px] font-noto-bold font-bold text-ink">
+                예산
+              </Text>
+              <View className="rounded-pill bg-surface-soft px-[9px] py-xs">
+                <Text className="text-[11.5px] font-noto text-muted">선택</Text>
+              </View>
+              <View className="flex-1" />
+            </View>
+            <View
+              className={`flex-row items-center gap-md rounded-input bg-canvas px-[14px] py-[13px] ${
+                budgetError
+                  ? 'border-[1.4px] border-primary'
+                  : 'border border-hairline-strong'
+              }`}
+            >
+              <View className="h-[22px] w-[22px] items-center justify-center">
+                <Text className="font-inter-bold text-section font-bold text-muted">
+                  ₩
+                </Text>
+              </View>
+              <View className="gap-[2px]">
+                <View className="flex-row items-center gap-[3px]">
+                  <TextInput
+                    ref={budgetInputRef}
+                    testID="trip-wizard-budget-input"
+                    value={budgetText ?? ''}
+                    onChangeText={onChangeBudget}
+                    onBlur={onBlurBudget}
+                    keyboardType="number-pad"
+                    className="font-inter-bold text-[16px] font-bold text-ink"
+                  />
+                  <Text className="font-noto-bold text-body font-bold text-ink">
+                    원
+                  </Text>
+                </View>
+                <Text className="text-[11.5px] font-noto text-muted">
+                  1인 총액 기준
+                </Text>
+              </View>
+              <View className="flex-1" />
+              <Pressable
+                testID="trip-wizard-budget-edit"
+                accessibilityRole="button"
+                onPress={() => {
+                  budgetInputRef.current?.focus();
+                  onPressBudgetEdit?.();
+                }}
+              >
+                <Text className="text-label font-noto-bold font-bold text-primary">
+                  수정
+                </Text>
+              </Pressable>
+            </View>
+            {budgetPrefilled ? (
+              <View testID="trip-wizard-budget-note">
+                <Text className="text-[11.5px] font-noto text-muted">
+                  {BUDGET_PREFILL_NOTE}
+                </Text>
+              </View>
+            ) : null}
+            {budgetError ? (
+              <View
+                testID="trip-wizard-error-budget"
+                className="flex-row items-center gap-[6px]"
+              >
+                <AlertCircleGlyph />
+                <Text className="font-noto-bold text-caption font-bold text-primary-text">
+                  {budgetError}
+                </Text>
+              </View>
+            ) : null}
           </View>
         </ScrollView>
 
