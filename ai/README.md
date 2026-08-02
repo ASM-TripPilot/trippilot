@@ -209,9 +209,11 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 
 ---
 
-## 정보 계층 에이전트 5종 (2계층 확장)
+## 구조 개정 (2026-08-02): 4상자 파이프라인 — 도구 겹침 0
 
-업무 에이전트 아래에 **정보 수집 전담 계층**을 신설. 업무 에이전트가 agent-as-tool로 호출하며, Orchestrator도 Fast Path에서 1개까지 직접 호출 가능. 상세 → `aidlc-docs/inception/application-design/agent-hierarchy-design.md`
+멘토 피드백(도구 겹침 금지) 반영. **Orchestrator(지휘) → Provider 5종(수집, LLM 0회) → Agent 4종(LLM 판단, 전속 도구 배타) → Solver 공통 관문(확정)**. 정보 수집은 Orchestrator 전속(InfoCollector), 정보 '에이전트'는 **Provider로 개명**, Solver는 도구가 아닌 공통 관문. 상세 → `aidlc-docs/inception/application-design/agent-structure-v2.md`
+
+### (구) 정보 계층 5종 — Provider로 개명됨
 
 | 에이전트 | 담당 | 우선순위 |
 |---|---|---|
