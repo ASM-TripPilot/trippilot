@@ -1,0 +1,987 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kubernetes와 관측성 — 3시간 실습</title>
+<style>
+  /* 최소 리셋 — 외부 리소스 없이 오프라인에서 동작합니다. */
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0}
+  img,svg{max-width:100%;height:auto}
+  button{font-family:inherit}
+</style>
+</head>
+<body>
+
+<style>
+  :root{
+    --paper:#f6f7f5; --ink:#111a21; --muted:#5b6a71; --line:#d8ddd8;
+    --panel:#ffffff; --panel-2:#eef1ed;
+    --signal:#15589e;
+    --log:#2f6f4f; --metric:#8a4a12; --trace:#6b3d8f;
+    --danger:#a32020;
+    --code-bg:#0f1720; --code-fg:#e6ecef;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+    --s1:.5rem; --s2:1rem; --s3:1.5rem; --s4:2.25rem; --s5:3.5rem;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#0d1418; --ink:#e8eeef; --muted:#93a3a9; --line:#223037;
+      --panel:#131d23; --panel-2:#0b1216;
+      --signal:#68adf0; --log:#6ec89a; --metric:#e0a566; --trace:#bb92e0;
+      --danger:#f08a8a; --code-bg:#080d11; --code-fg:#dbe4e8;
+    }
+  }
+  :root[data-theme="dark"]{
+      --paper:#0d1418; --ink:#e8eeef; --muted:#93a3a9; --line:#223037;
+      --panel:#131d23; --panel-2:#0b1216;
+      --signal:#68adf0; --log:#6ec89a; --metric:#e0a566; --trace:#bb92e0;
+      --danger:#f08a8a; --code-bg:#080d11; --code-fg:#dbe4e8;
+  }
+  :root[data-theme="light"]{
+      --paper:#f6f7f5; --ink:#111a21; --muted:#5b6a71; --line:#d8ddd8;
+      --panel:#ffffff; --panel-2:#eef1ed;
+      --signal:#15589e; --log:#2f6f4f; --metric:#8a4a12; --trace:#6b3d8f;
+      --danger:#a32020; --code-bg:#0f1720; --code-fg:#e6ecef;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+       font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased}
+
+  .rail{position:fixed;left:0;top:0;bottom:0;width:4px;background:var(--panel-2);z-index:50}
+  .rail-fill{width:100%;background:var(--signal);height:0;transition:height .25s ease}
+  .hud{position:fixed;right:var(--s3);bottom:var(--s2);z-index:50;display:flex;gap:var(--s2);
+       align-items:center;font-family:var(--mono);font-size:12px;color:var(--muted);
+       background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:6px 10px}
+  .hud button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;padding:2px 6px}
+  .hud button:hover{color:var(--signal)}
+  .hud button:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  .counter{font-variant-numeric:tabular-nums}
+
+  .slide{min-height:100vh;display:none;flex-direction:column;justify-content:center;
+         padding:var(--s5) clamp(var(--s3),6vw,6rem);max-width:1180px;margin:0 auto}
+  .slide.on{display:flex}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+           color:var(--muted);margin-bottom:var(--s2);display:flex;gap:var(--s2);align-items:baseline}
+  .eyebrow b{color:var(--signal);font-weight:600}
+  h1{font-size:clamp(2.4rem,5.5vw,4.2rem);line-height:1.02;letter-spacing:-.03em;
+     font-weight:800;margin:0 0 var(--s3);text-wrap:balance}
+  h2{font-size:clamp(1.7rem,3.4vw,2.6rem);line-height:1.1;letter-spacing:-.022em;
+     font-weight:750;margin:0 0 var(--s3);text-wrap:balance}
+  h3{font-size:1.12rem;letter-spacing:-.008em;font-weight:700;margin:var(--s3) 0 var(--s1)}
+  p{margin:0 0 var(--s2);max-width:62ch}
+  .lede{font-size:1.22rem;color:var(--muted);max-width:58ch}
+  ul,ol{margin:0 0 var(--s2);padding-left:1.15rem;max-width:64ch;display:flex;
+        flex-direction:column;gap:.42rem}
+  li::marker{color:var(--signal)}
+  .dim{color:var(--muted)}
+
+  pre{background:var(--code-bg);color:var(--code-fg);border-radius:3px;padding:var(--s2) var(--s3);
+      overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.65;margin:0 0 var(--s2)}
+  code{font-family:var(--mono);font-size:.9em}
+  p code,li code,td code{background:var(--panel-2);padding:1px 5px;border-radius:2px}
+  pre .c{color:#8fa3ad}
+  pre .k{color:#7fc4ff}
+  pre .s{color:#9ede9e}
+  pre .w{color:#ffc46b}
+  pre .e{color:#ff9a9a}
+
+  .grid{display:grid;gap:var(--s2);margin-bottom:var(--s2)}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:var(--s2)}
+  .card h4{margin:0 0 6px;font-size:.95rem;letter-spacing:-.005em}
+  .card p{font-size:.92rem;color:var(--muted);margin:0}
+
+  .signal-log{border-top:3px solid var(--log)}
+  .signal-metric{border-top:3px solid var(--metric)}
+  .signal-trace{border-top:3px solid var(--trace)}
+
+  .trap{border-left:3px solid var(--danger);background:var(--panel);padding:var(--s2) var(--s3);
+        margin:0 0 var(--s2);border-radius:0 3px 3px 0}
+  .trap .tag{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+             color:var(--danger);font-weight:700;display:block;margin-bottom:6px}
+  .trap p:last-child{margin-bottom:0}
+
+  .note{border-left:3px solid var(--signal);background:var(--panel);padding:var(--s2) var(--s3);
+        margin:0 0 var(--s2);border-radius:0 3px 3px 0}
+  .note p:last-child{margin-bottom:0}
+  .note pre:last-child{margin-bottom:0}
+
+  table{border-collapse:collapse;width:100%;font-size:.93rem;margin-bottom:var(--s2)}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+     color:var(--muted);font-weight:600}
+  .tbl-wrap{overflow-x:auto;margin-bottom:var(--s2)}
+
+  .lab{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;
+       letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--signal);
+       padding:5px 11px;border-radius:2px;font-weight:700;margin-bottom:var(--s2);align-self:flex-start}
+
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-family:var(--mono);
+        font-size:12.5px;margin-bottom:var(--s2)}
+  .flow span{background:var(--panel);border:1px solid var(--line);padding:7px 11px;border-radius:2px}
+  .flow i{color:var(--muted);font-style:normal}
+
+  .tt td:first-child{font-family:var(--mono);color:var(--signal);white-space:nowrap;width:1%}
+
+  .notes{margin-top:var(--s3);border-top:1px dashed var(--line);padding-top:var(--s2);
+         font-size:.88rem;color:var(--muted);display:none}
+  body.show-notes .notes{display:block}
+  .notes b{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+           color:var(--signal);display:block;margin-bottom:5px}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+  @media print{
+    .rail,.hud{display:none}
+    .slide{display:flex!important;min-height:auto;page-break-after:always;padding:1.5cm}
+    body{font-size:11pt}
+    .notes{display:block}
+  }
+</style>
+
+<div class="rail"><div class="rail-fill" id="railFill"></div></div>
+
+<div class="hud">
+  <button id="prev" aria-label="이전 슬라이드">←</button>
+  <span class="counter"><span id="cur">1</span>/<span id="tot">0</span></span>
+  <button id="next" aria-label="다음 슬라이드">→</button>
+  <button id="notesBtn" aria-label="강사 노트 토글">노트</button>
+</div>
+
+<main id="deck">
+
+<section class="slide on">
+  <div class="eyebrow"><b>실습 수업</b><span>3시간</span></div>
+  <h1>Kubernetes와 관측성</h1>
+  <p class="lede">로컬 클러스터를 만들고, 애플리케이션을 배포하고,
+     그 안에서 벌어지는 일을 로그·메트릭·트레이스로 들여다봅니다.</p>
+  <div class="flow" style="margin-top:2rem">
+    <span>kind</span><i>→</i><span>Docker 이미지</span><i>→</i><span>k8s 배포</span>
+    <i>→</i><span>OpenTelemetry</span><i>→</i><span>SigNoz</span>
+  </div>
+  <p class="dim" style="font-size:.9rem;margin-top:1rem">
+    이 자료의 모든 명령과 출력은 실제로 실행해 확인한 것입니다. 겪은 함정도 그대로 담았습니다.<br>
+    슬라이드는 저장소에 함께 있습니다 — <code>just slides</code></p>
+  <div class="notes"><b>강사 노트</b>
+    먼저 물어보세요 — "배포해 본 적 있나요? 그때 뭐가 제일 어려웠나요?"
+    오늘 다룰 함정 6가지는 전부 실제로 겪은 것들입니다. 미리 예고하면 집중도가 올라갑니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>오리엔테이션</b><span>10분</span></div>
+  <h2>오늘의 흐름</h2>
+  <div class="tbl-wrap">
+  <table class="tt">
+    <tr><td>00:00</td><td><strong>Part 1 — Kubernetes 기본</strong><br><span class="dim">왜 필요한가 · 핵심 오브젝트 · kind로 클러스터 만들기</span></td><td class="dim">45분</td></tr>
+    <tr><td>00:45</td><td><strong>Part 2 — 관측성</strong><br><span class="dim">3축 신호 · OpenTelemetry · SigNoz 설치</span></td><td class="dim">40분</td></tr>
+    <tr><td>01:25</td><td class="dim">휴식</td><td class="dim">10분</td></tr>
+    <tr><td>01:35</td><td><strong>Part 3 — 빌드와 배포</strong><br><span class="dim">이미지 · 매니페스트 · 스크립트화</span></td><td class="dim">45분</td></tr>
+    <tr><td>02:20</td><td><strong>Part 4 — 계측</strong><br><span class="dim">로그 · 메트릭 · 트레이스를 남기고 확인하기</span></td><td class="dim">35분</td></tr>
+    <tr><td>02:55</td><td><strong>정리</strong><br><span class="dim">오늘 겪은 함정 6가지</span></td><td class="dim">5분</td></tr>
+  </table>
+  </div>
+  <h3>시작 전 확인</h3>
+  <pre>brew install kind kubectl helm bazelisk just
+
+<span class="c"># 저장소에서 한 번에 확인</span>
+just doctor</pre>
+  <pre><span class="c">── 도구 ──</span>
+  <span class="s">✓ docker   /opt/homebrew/bin/docker</span>
+  <span class="s">✓ kubectl  /opt/homebrew/bin/kubectl</span>
+  <span class="s">✓ kind     /opt/homebrew/bin/kind</span>
+  <span class="s">✓ bazel    /opt/homebrew/bin/bazel</span>
+<span class="c">── 클러스터 ──</span>
+  컨텍스트: kind-trippilot
+  노드: trippilot-control-plane Ready</pre>
+  <div class="note"><p>오늘 쓰는 모든 명령은 <code>just</code> 로 감싸 두었습니다.
+    <code>just</code> 만 치면 목록이 나옵니다 — 외울 필요 없습니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    <code>just doctor</code> 를 먼저 돌리게 하면 환경 문제가 있는 학생을 초반에 걸러낼 수 있습니다.
+    Part 1 실습부터 도구가 필요합니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 1</b><span>Kubernetes</span></div>
+  <h1>왜 Kubernetes인가</h1>
+  <p class="lede">컨테이너 하나를 띄우는 건 쉽습니다. 어려운 건 그 다음입니다.</p>
+  <div class="notes"><b>강사 노트</b>
+    "docker run으로 충분한데 왜?"라는 질문에서 출발하세요.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 1</b><span>문제 정의</span></div>
+  <h2><code>docker run</code>만으로 안 되는 것들</h2>
+  <ul>
+    <li><strong>죽으면 누가 살리나</strong> — 프로세스가 꺼지면 그걸로 끝입니다.</li>
+    <li><strong>몇 개를 띄울 건가</strong> — 트래픽이 늘면 손으로 하나씩 늘려야 합니다.</li>
+    <li><strong>어디로 보낼 건가</strong> — 컨테이너 IP는 재시작마다 바뀝니다.</li>
+    <li><strong>무중단 배포는</strong> — 새 버전을 띄우고 옛 버전을 내리는 순서를 직접 관리해야 합니다.</li>
+    <li><strong>설정과 비밀은</strong> — 이미지에 구우면 환경마다 다시 빌드해야 합니다.</li>
+  </ul>
+  <p>Kubernetes는 이걸 <strong>"원하는 상태를 선언하면 시스템이 맞춰준다"</strong>는 하나의 모델로 풉니다.</p>
+  <div class="notes"><b>강사 노트</b>
+    각 항목마다 "여러분 프로젝트에서는 이걸 어떻게 하고 있나요?" 물어보면 좋습니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 1</b><span>핵심 개념</span></div>
+  <h2>선언적 모델</h2>
+  <p>명령형은 <em>방법</em>을 말합니다. 선언형은 <em>결과</em>를 말합니다.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h4>명령형</h4>
+      <pre style="margin:0"><span class="c"># 3개 띄워라</span>
+docker run app &amp;
+docker run app &amp;
+docker run app &amp;</pre>
+      <p style="margin-top:8px">하나 죽으면? 내가 알아채고 다시 띄워야 합니다.</p>
+    </div>
+    <div class="card">
+      <h4>선언형</h4>
+      <pre style="margin:0"><span class="k">replicas</span>: <span class="s">3</span></pre>
+      <p style="margin-top:8px">하나 죽으면? 컨트롤러가 알아서 채웁니다. 계속.</p>
+    </div>
+  </div>
+  <div class="note"><p><strong>이게 k8s를 이해하는 열쇠입니다.</strong>
+    YAML은 "명령"이 아니라 <strong>"내가 원하는 상태"</strong>입니다.
+    시스템은 현재 상태와 원하는 상태의 차이를 계속 줄입니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    나중에 <code>kubectl delete pod &lt;name&gt;</code>을 해보게 하면 이 개념이 몸으로 이해됩니다 —
+    곧바로 새 파드가 뜹니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 1</b><span>오브젝트</span></div>
+  <h2>알아야 할 다섯 가지</h2>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>오브젝트</th><th>한 줄 정의</th><th>왜 필요한가</th></tr>
+    <tr><td><code>Pod</code></td><td>컨테이너 1개 이상을 묶은 최소 배포 단위</td><td>k8s는 컨테이너가 아니라 파드를 스케줄합니다</td></tr>
+    <tr><td><code>Deployment</code></td><td>"파드를 N개 유지하라"는 선언</td><td>자가 치유 · 롤링 업데이트 · 롤백</td></tr>
+    <tr><td><code>Service</code></td><td>파드 집합에 붙는 고정 주소</td><td>파드 IP는 바뀝니다. 서비스 이름은 안 바뀝니다</td></tr>
+    <tr><td><code>ConfigMap</code></td><td>설정값 묶음</td><td>환경이 달라도 이미지는 하나</td></tr>
+    <tr><td><code>Namespace</code></td><td>리소스를 나누는 논리적 구획</td><td>이름 충돌 방지 · 권한 · 정리 단위</td></tr>
+  </table>
+  </div>
+  <div class="flow">
+    <span>Deployment</span><i>관리→</i><span>ReplicaSet</span><i>관리→</i><span>Pod</span>
+    <i>&nbsp;&nbsp;←노출</i><span>Service</span>
+  </div>
+  <div class="notes"><b>강사 노트</b>
+    ReplicaSet은 직접 만들 일이 거의 없습니다. Deployment가 버전마다 하나씩 만들고
+    롤백은 옛 ReplicaSet으로 되돌리는 것 — 이렇게 설명하면 <code>rollout undo</code>가 이해됩니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 1</b><span>로컬 환경</span></div>
+  <h2>로컬 Kubernetes 선택지</h2>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>도구</th><th>특징</th><th>로컬 빌드 이미지</th></tr>
+    <tr><td>Docker Desktop 내장</td><td>체크박스 하나로 켜짐</td><td class="dim">방식에 따라 다름 — 아래 참조</td></tr>
+    <tr><td><strong>kind</strong> (직접 설치)</td><td>노드를 컨테이너로. 구성을 YAML로 고정</td><td><code>kind load</code>로 주입</td></tr>
+    <tr><td>minikube</td><td>오래된 표준. 드라이버 선택 폭이 넓음</td><td><code>minikube image load</code></td></tr>
+    <tr><td>k3d / k3s</td><td>경량. 빠른 기동</td><td><code>k3d image import</code></td></tr>
+  </table>
+  </div>
+  <div class="trap"><span class="tag">함정 ① — 실제로 오늘 막혔던 지점</span>
+    <p><strong>Docker Desktop이 관리하는 kind 클러스터에서는 로컬 빌드 이미지를 배포할 수 없습니다.</strong>
+    노드가 호스트 Docker에 컨테이너로 보이지 않아 <code>kind load</code>를 쓸 수 없고,
+    모든 이미지 pull이 Docker Desktop 내부 미러로 강제 프록시되어 로컬 레지스트리를 띄워도 막힙니다.</p>
+    <p class="dim">→ 그래서 <strong>Docker Desktop 내장 k8s를 끄고 kind를 직접 설치</strong>했습니다.</p>
+  </div>
+  <div class="notes"><b>강사 노트</b>
+    이 함정은 검색해도 잘 안 나옵니다. 증상은 <code>ErrImageNeverPull</code> 또는
+    미러에서 오는 <code>500 Internal Server Error</code>입니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 1</b><span>실습 1</span></div>
+  <span class="lab">실습 1 · 15분</span>
+  <h2>kind 클러스터 만들기</h2>
+  <p>Docker Desktop → Settings → Kubernetes → <strong>Enable Kubernetes 체크 해제</strong> → Apply &amp; Restart</p>
+  <pre>brew install kind
+
+<span class="c"># 클러스터 정의를 파일로 둡니다 — 팀원 모두 같은 환경</span>
+kind create cluster --config deploy/kind/cluster.yaml
+
+kubectl config current-context   <span class="c"># kind-trippilot</span>
+kubectl get nodes                <span class="c"># trippilot-control-plane   Ready</span></pre>
+  <h3>cluster.yaml</h3>
+  <pre><span class="k">kind</span>: Cluster
+<span class="k">apiVersion</span>: kind.x-k8s.io/v1alpha4
+<span class="k">name</span>: trippilot
+<span class="k">nodes</span>:
+  - <span class="k">role</span>: control-plane
+    <span class="k">extraPortMappings</span>:
+      - <span class="k">containerPort</span>: 30081   <span class="c"># NodePort</span>
+        <span class="k">hostPort</span>: 8081        <span class="c"># 맥에서 접근할 포트</span></pre>
+  <div class="note"><p><code>extraPortMappings</code>는 <strong>클러스터 생성 시점에만</strong> 정할 수 있습니다.
+    포트를 추가하려면 클러스터를 다시 만들어야 하니 넉넉히 열어두세요.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    생성에 약 1분. 안 되는 학생은 Docker Desktop이 켜져 있는지 먼저 확인하세요.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 1</b><span>kubectl</span></div>
+  <h2>이것만 알면 시작할 수 있습니다</h2>
+  <pre><span class="c"># 보기</span>
+kubectl get pods -n trippilot
+kubectl describe pod &lt;이름&gt; -n trippilot   <span class="c"># 왜 안 뜨는지는 Events에</span>
+
+<span class="c"># 로그</span>
+kubectl logs -f deployment/trippilot-backend -n trippilot
+
+<span class="c"># 적용 / 삭제</span>
+kubectl apply -f deploy/k8s/backend
+kubectl delete -f deploy/k8s/backend
+
+<span class="c"># 컨텍스트 — 사고 방지의 핵심</span>
+kubectl config current-context</pre>
+  <div class="trap"><span class="tag">습관</span>
+    <p><code>delete</code>·<code>apply</code> 전에는 <strong>항상</strong> 현재 컨텍스트를 확인하세요.
+    운영 클러스터에 로컬 명령을 날리는 사고가 이 한 줄로 막힙니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    <code>describe</code>의 Events 섹션이 트러블슈팅의 8할입니다. 강조하세요.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 2</b><span>관측성</span></div>
+  <h1>배포했습니다.<br>그런데 잘 돌고 있나요?</h1>
+  <p class="lede">관측성은 "밖에서 보이는 것만으로 안에서 무슨 일이 일어나는지 알 수 있는가"입니다.</p>
+  <div class="notes"><b>강사 노트</b>
+    모니터링은 "미리 정한 질문에 답하는 것", 관측성은 "미리 생각 못 한 질문에도 답할 수 있는 것".</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 2</b><span>3축 신호</span></div>
+  <h2>세 가지 신호</h2>
+  <div class="grid g3">
+    <div class="card signal-log">
+      <h4>로그 (Log)</h4>
+      <p><strong>무슨 일이 있었나</strong><br>개별 사건의 기록. 가장 상세하지만 가장 비쌉니다.</p>
+    </div>
+    <div class="card signal-metric">
+      <h4>메트릭 (Metric)</h4>
+      <p><strong>얼마나 · 어떤 추세인가</strong><br>숫자를 집계한 시계열. 싸고 알람에 적합합니다.</p>
+    </div>
+    <div class="card signal-trace">
+      <h4>트레이스 (Trace)</h4>
+      <p><strong>어디서 시간을 썼나</strong><br>요청 하나가 지나간 경로와 구간별 소요.</p>
+    </div>
+  </div>
+  <h3>왜 셋 다 필요한가</h3>
+  <ul>
+    <li><strong>메트릭</strong>이 "p95 지연이 튀었다"고 알려줍니다. — 어디서?</li>
+    <li><strong>트레이스</strong>가 "외부 API 호출 구간에서 3초"라고 짚어줍니다. — 왜?</li>
+    <li><strong>로그</strong>가 "타임아웃, 재시도 3회 실패"라고 말해줍니다.</li>
+  </ul>
+  <div class="note"><p>셋을 잇는 것이 <strong>ID</strong>입니다. 트레이스 ID가 로그에 박혀 있어야
+    "이 느린 요청이 남긴 로그만" 골라볼 수 있습니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    이 3단계를 실제 장애 이야기처럼 들려주면 이해가 빠릅니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 2</b><span>표준</span></div>
+  <h2>OpenTelemetry와 OTLP</h2>
+  <p>예전에는 신호마다, 벤더마다 다른 라이브러리를 썼습니다. 벤더를 바꾸면 코드를 다 고쳐야 했습니다.</p>
+  <div class="flow">
+    <span>앱</span><i>— OTLP →</i><span>수집기</span><i>→</i><span>저장소</span><i>→</i><span>UI</span>
+  </div>
+  <ul>
+    <li><strong>OpenTelemetry</strong> — 계측 API·SDK의 표준 (CNCF)</li>
+    <li><strong>OTLP</strong> — 신호를 실어 나르는 <strong>벤더 중립 와이어 프로토콜</strong>. gRPC(4317) / HTTP(4318)</li>
+  </ul>
+  <div class="note"><p><strong>왜 중요한가:</strong> 앱은 OTLP로만 내보내면 됩니다.
+    수집기를 다른 것으로 바꿔도 <strong>애플리케이션 코드는 그대로</strong>, 엔드포인트만 바뀝니다.
+    되돌릴 수 있는 결정이 됩니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    "벤더 종속을 어떻게 피하나"는 실무에서 매우 자주 나오는 질문입니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 2</b><span>실습 2</span></div>
+  <span class="lab">실습 2 · 15분</span>
+  <h2>SigNoz 설치</h2>
+  <p>SigNoz는 OTLP로 세 신호를 모두 받아 ClickHouse에 저장하고 한 UI에서 보여주는 오픈소스 도구입니다.</p>
+  <pre><span class="c"># foundryctl 설치</span>
+curl -fsSL https://signoz.io/foundry.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
+
+<span class="c"># 컨텍스트 확인 — 필수!</span>
+kubectl config use-context kind-trippilot
+
+<span class="c"># 설치 (3~4분)</span>
+foundryctl cast -f casting-k8s.yaml -p ./pours-k8s --format text
+
+<span class="c"># UI 열기 — 이 터미널은 켜둔 채 유지</span>
+kubectl port-forward -n signoz svc/signoz 8080:8080</pre>
+  <p>브라우저에서 <code>http://localhost:8080</code></p>
+  <div class="note"><p>프로젝트 스크립트를 쓰면 클러스터 생성부터 한 번에 됩니다 —
+    <code>./deploy/bin/cluster-up.sh</code></p></div>
+  <div class="notes"><b>강사 노트</b>
+    설치 3~4분. 그동안 다음 슬라이드(함정 ②)를 미리 설명하세요.
+    <code>kubectl get pods -n signoz</code>로 진행 상황을 보여주면 좋습니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 2</b><span>함정</span></div>
+  <h2>설치했는데 아무것도 안 들어옵니다</h2>
+  <div class="trap"><span class="tag">함정 ② — 오늘 30분을 잡아먹은 것</span>
+    <p><strong>SigNoz 관리자 계정을 만들지 않으면 텔레메트리가 하나도 수집되지 않습니다.</strong></p>
+    <p>계정(=조직)이 없으면 서버가 collector 에이전트를 등록하지 못하고,
+    collector는 파이프라인 설정을 받지 못해 <strong>OTLP 수신기(4317·4318)를 아예 열지 않습니다.</strong></p>
+  </div>
+  <p>앱 쪽에서는 이렇게 보입니다 — 수집기 파드는 <code>Running</code>인데:</p>
+  <pre><span class="e">Failed to export logs. Failed to connect to
+signoz-ingester.signoz.svc.cluster.local/10.96.142.42:4318</span>
+<span class="e">Caused by: java.net.ConnectException: Connection refused</span></pre>
+  <p>서버 쪽 진짜 원인:</p>
+  <pre>kubectl logs -n signoz signoz-0 | grep "failed to find or create agent"
+<span class="e">{"level":"ERROR","msg":"failed to find or create agent", ...}</span></pre>
+  <h3>해결</h3>
+  <pre>curl -X POST http://localhost:8080/api/v1/register \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"admin","orgName":"trippilot",
+       "email":"admin@trippilot.local","password":"&lt;로컬전용-비밀번호&gt;"}'</pre>
+  <div class="note"><p>로컬 전용 계정입니다. <strong>실제로 쓰는 비밀번호를 재사용하지 마세요.</strong></p></div>
+  <h3>여기서 또 막힙니다 — 거부 사유 두 가지</h3>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>응답</th><th>원인</th><th>해결</th></tr>
+    <tr><td><code>invalid_password</code></td><td><strong>12자 이상 + 대문자 + 소문자 + 숫자 + 기호</strong></td><td>정책을 만족하는 비밀번호</td></tr>
+    <tr><td><code>self-registration is disabled</code></td><td>첫 계정이 이미 조직을 점유</td><td>기존 계정으로 로그인, 또는 완전 재설치</td></tr>
+  </table>
+  </div>
+  <p class="dim">UI에서는 이 메시지가 잘 안 보여 "그냥 안 된다"처럼 느껴집니다.</p>
+  <div class="notes"><b>강사 노트</b>
+    학생 전원이 계정을 만들었는지 확인하고 넘어가세요 — 안 만들면 Part 4가 통째로 안 됩니다.
+    비밀번호 정책 때문에 막히는 학생이 반드시 나옵니다. 예시를 하나 칠판에 적어두면 좋습니다.
+    "파드가 Running인데 왜 안 되지?"가 실무에서 얼마나 흔한 패턴인지 짚어주세요.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 3</b><span>빌드와 배포</span></div>
+  <h1>앱을 클러스터에 올리기</h1>
+  <p class="lede">이미지를 만들고, 노드에 넣고, 매니페스트로 선언하고, 굴러가는지 확인합니다.</p>
+  <div class="notes"><b>강사 노트</b>
+    여기서부터 실제 애플리케이션(Spring Boot + Kotlin)을 다룹니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 3</b><span>이미지</span></div>
+  <h2>멀티스테이지 Dockerfile</h2>
+  <pre><span class="c"># ---- build ----</span>
+<span class="k">FROM</span> gradle:8.14-jdk21 <span class="k">AS</span> build
+<span class="k">WORKDIR</span> /src
+<span class="c"># 의존성 레이어를 먼저 굳힌다 — 소스만 바뀌면 캐시 유지</span>
+<span class="k">COPY</span> settings.gradle.kts build.gradle.kts ./
+<span class="k">RUN</span> gradle --no-daemon :app:dependencies &gt; /dev/null 2&gt;&amp;1 || true
+<span class="k">COPY</span> . .
+<span class="k">RUN</span> gradle --no-daemon :app:bootJar -x test
+
+<span class="c"># ---- runtime ----</span>
+<span class="k">FROM</span> eclipse-temurin:21-jre
+<span class="k">COPY</span> --from=build /src/app/build/libs/*.jar /app/app.jar
+<span class="k">USER</span> 1001:1001
+<span class="k">ENV</span> JAVA_OPTS="-XX:MaxRAMPercentage=75.0"
+<span class="k">ENTRYPOINT</span> ["sh","-c","exec java $JAVA_OPTS -jar /app/app.jar"]</pre>
+  <div class="grid g2">
+    <div class="card"><h4>왜 두 단계인가</h4>
+      <p>빌드 도구(JDK·Gradle)는 실행에 필요 없습니다. 최종 이미지에서 빼면 크기와 공격면이 줄어듭니다.</p></div>
+    <div class="card"><h4>왜 MaxRAMPercentage인가</h4>
+      <p>없으면 JVM이 호스트 전체 메모리 기준으로 힙을 잡아 컨테이너 한도를 넘겨 <code>OOMKilled</code>됩니다.</p></div>
+  </div>
+  <div class="notes"><b>강사 노트</b>
+    <code>USER 1001:1001</code>이 숫자인 이유는 다음다음 슬라이드에서 다룹니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 3</b><span>핵심</span></div>
+  <h2>빌드했는데 파드가 안 뜹니다</h2>
+  <div class="trap"><span class="tag">함정 ③ — 로컬 k8s에서 가장 흔한 실수</span>
+    <p><strong>kind 노드는 호스트 Docker와 별도의 이미지 스토어를 씁니다.</strong>
+    <code>docker build</code>만 하면 노드에서는 그 이미지가 보이지 않습니다.</p>
+  </div>
+  <pre>kubectl get pods -n trippilot
+<span class="e">trippilot-backend-xxx   0/1   ErrImageNeverPull</span></pre>
+  <h3>해결 — 두 단계입니다</h3>
+  <pre>docker build -t trippilot-backend:dev backend
+<span class="w">kind load docker-image trippilot-backend:dev --name trippilot</span>   <span class="c"># ← 빠뜨리기 쉬움</span></pre>
+  <p>노드 안에 들어갔는지 직접 확인할 수 있습니다.</p>
+  <pre>docker exec trippilot-control-plane crictl images | grep trippilot</pre>
+  <div class="note"><p>그래서 <code>build.sh</code>가 두 명령을 <strong>항상 함께</strong> 실행합니다.
+    사람이 매번 기억해야 하는 규칙은 언젠가 지켜지지 않습니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    일부러 <code>kind load</code>를 빼고 배포해 <code>ErrImageNeverPull</code>을 직접 보여주면 확실히 각인됩니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 3</b><span>매니페스트</span></div>
+  <h2>네 개의 파일</h2>
+  <pre>deploy/k8s/backend/
+├── namespace.yaml     <span class="c"># 구획</span>
+├── configmap.yaml     <span class="c"># OTLP 엔드포인트 등 환경변수</span>
+├── deployment.yaml    <span class="c"># 파드 정의 · 프로브 · 리소스</span>
+└── service.yaml       <span class="c"># NodePort 30081</span></pre>
+  <h3>ConfigMap — 환경마다 달라지는 값</h3>
+  <pre><span class="k">data</span>:
+  <span class="c"># 클러스터 안에서는 서비스 DNS로 부릅니다.</span>
+  <span class="c"># localhost를 쓰면 파드 자기 자신을 가리켜 텔레메트리가 조용히 사라집니다.</span>
+  <span class="k">OTEL_EXPORTER_OTLP_ENDPOINT</span>: <span class="s">"http://signoz-ingester.signoz.svc.cluster.local:4318"</span>
+  <span class="k">DEPLOY_ENV</span>: <span class="s">"local-k8s"</span></pre>
+  <div class="trap"><span class="tag">함정 ④</span>
+    <p><code>kubectl apply -f &lt;디렉터리&gt;</code>는 <strong>파일명 알파벳 순</strong>으로 적용합니다.
+    <code>configmap</code>·<code>deployment</code>가 <code>namespace</code>보다 먼저 처리되어
+    <code>namespaces "trippilot" not found</code>로 실패합니다. → 네임스페이스를 <strong>먼저</strong>.</p>
+  </div>
+  <div class="notes"><b>강사 노트</b>
+    ConfigMap에 비밀을 넣으면 안 된다는 점도 짚어주세요 — 평문이고 조회 권한만 있으면 다 보입니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 3</b><span>Deployment</span></div>
+  <h2>프로브 세 가지</h2>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>프로브</th><th>질문</th><th>실패하면</th></tr>
+    <tr><td><code>startupProbe</code></td><td>기동이 끝났나?</td><td>계속 기다림 (liveness 유예)</td></tr>
+    <tr><td><code>livenessProbe</code></td><td>살아 있나?</td><td><strong>컨테이너 재시작</strong></td></tr>
+    <tr><td><code>readinessProbe</code></td><td>트래픽 받을 수 있나?</td><td>서비스에서 제외 (재시작 안 함)</td></tr>
+  </table>
+  </div>
+  <pre><span class="k">livenessProbe</span>:
+  <span class="k">httpGet</span>: { <span class="k">path</span>: /actuator/health/liveness, <span class="k">port</span>: http }
+<span class="k">startupProbe</span>:
+  <span class="k">httpGet</span>: { <span class="k">path</span>: /actuator/health/liveness, <span class="k">port</span>: http }
+  <span class="k">failureThreshold</span>: 30   <span class="c"># JVM 기동이 느려도 죽이지 않도록</span></pre>
+  <div class="note"><p><strong>liveness에 DB 같은 의존을 넣지 마세요.</strong>
+    DB가 잠깐 흔들리면 모든 파드가 동시에 재시작되어 장애가 증폭됩니다.
+    liveness는 <em>프로세스 생존</em>만 봅니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    실무에서 정말 자주 하는 실수입니다 — "DB 죽었는데 앱까지 다 죽었다"의 원인.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 3</b><span>보안</span></div>
+  <h2>securityContext</h2>
+  <pre><span class="k">securityContext</span>:
+  <span class="k">allowPrivilegeEscalation</span>: false
+  <span class="k">runAsNonRoot</span>: true
+  <span class="k">runAsUser</span>: 1001      <span class="c"># 이미지의 USER와 같은 숫자</span>
+  <span class="k">capabilities</span>: { <span class="k">drop</span>: ["ALL"] }</pre>
+  <div class="trap"><span class="tag">함정 ⑤ — 오늘 실제로 만난 에러</span>
+    <pre style="margin:8px 0 0"><span class="e">CreateContainerConfigError
+container has runAsNonRoot and image has non-numeric user (trippilot),
+cannot verify user is non-root</span></pre>
+    <p style="margin-top:8px"><strong>Dockerfile의 <code>USER</code>가 이름이면 kubelet이 non-root인지 검증하지 못합니다.</strong>
+    <code>USER trippilot</code> → <code>USER 1001:1001</code>로 바꿔야 합니다.</p>
+  </div>
+  <div class="notes"><b>강사 노트</b>
+    에러 메시지가 친절한 편입니다. "메시지를 끝까지 읽어라"는 교훈으로 연결하세요.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 3</b><span>실습 3</span></div>
+  <span class="lab">실습 3 · 15분</span>
+  <h2>빌드 → 배포 → 확인</h2>
+  <pre>just image     <span class="c"># docker build + kind load</span>
+just deploy    <span class="c"># apply + 롤아웃 대기</span>
+just health
+
+<span class="s">{"status":"UP"}</span>
+<span class="s">{"status":"UP"}</span>
+
+curl http://localhost:8081/api/demo/ping
+<span class="s">{"status":"ok"}</span></pre>
+  <p class="dim">원본은 <code>./deploy/bin/build.sh</code> · <code>./deploy/bin/deploy.sh</code> 입니다.</p>
+  <p><strong>port-forward가 없는데 왜 될까요?</strong></p>
+  <div class="flow">
+    <span>localhost:8081</span><i>→</i><span>kind extraPortMapping</span>
+    <i>→</i><span>NodePort 30081</span><i>→</i><span>Service</span><i>→</i><span>Pod:8081</span>
+  </div>
+  <h3>코드를 고쳤다면</h3>
+  <pre>./deploy/bin/update.sh   <span class="c"># 빌드 + kind load + rollout restart</span></pre>
+  <div class="note"><p>태그(<code>:dev</code>)를 바꾸지 않아도 됩니다.
+    <code>kind load</code>가 노드의 이미지를 교체했으므로 새로 뜬 파드는 새 이미지를 씁니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    학생들이 <code>curl</code>까지 성공하는지 꼭 확인하세요. 실패하면 <code>kubectl describe pod</code>의 Events를 같이 봅니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 3</b><span>자동화</span></div>
+  <h2>스크립트가 하는 진짜 일</h2>
+  <p>명령을 줄여주는 것보다 <strong>사고를 막는 것</strong>이 더 중요합니다.</p>
+  <pre><span class="c"># deploy/bin/_common.sh</span>
+require_kind_context() {
+  current="$(kubectl config current-context)"
+  <span class="k">if</span> [[ "${current}" != "kind-trippilot" ]]; <span class="k">then</span>
+    die "현재 컨텍스트가 '${current}' 입니다.
+         이 스크립트는 'kind-trippilot' 에서만 동작합니다."
+  <span class="k">fi</span>
+}</pre>
+  <ul>
+    <li><strong>컨텍스트 가드</strong> — 운영 클러스터에 로컬 배포가 나가는 사고를 원천 차단</li>
+    <li><strong>순서 강제</strong> — 네임스페이스 먼저, <code>kind load</code> 잊지 않기</li>
+    <li><strong>실패 시 진단</strong> — 롤아웃 실패하면 파드 상태와 <code>describe</code>를 자동 출력</li>
+  </ul>
+  <div class="note"><p><strong>확인이 아니라 차단으로 만드세요.</strong>
+    사람이 매번 지켜야 하는 규칙은 규칙이 아닙니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    이 철학은 뒤의 로그 마스킹에서 한 번 더 나옵니다. 연결해서 설명하면 좋습니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 3</b><span>명령 정리</span></div>
+  <h2><code>just</code> — 명령을 외우지 않기</h2>
+  <p>스크립트가 늘어나면 "그 명령이 뭐였더라"가 새로운 병목이 됩니다.
+     <code>just</code> 는 저장소 루트의 <code>justfile</code> 에 이름을 붙여 둡니다.</p>
+  <pre>just              <span class="c"># 뭘 할 수 있는지 목록</span>
+just doctor       <span class="c"># 도구·클러스터·앱 상태 한 번에</span>
+just up           <span class="c"># 클러스터 생성 → 이미지 빌드 → 배포</span></pre>
+  <div class="grid g3">
+    <div class="card"><h4>빌드·테스트</h4>
+      <pre style="margin:0;font-size:12px">just build
+just test
+just test-masking
+just run</pre></div>
+    <div class="card"><h4>배포</h4>
+      <pre style="margin:0;font-size:12px">just image
+just deploy
+just update
+just rollback</pre></div>
+    <div class="card"><h4>관측</h4>
+      <pre style="margin:0;font-size:12px">just signoz
+just smoke
+just verify-telemetry
+just logs</pre></div>
+  </div>
+  <div class="note"><p><code>justfile</code> 은 기존 스크립트를 <strong>대체하지 않고 감쌉니다.</strong>
+    실제 동작은 여전히 <code>deploy/bin/*.sh</code> 와 Bazel 에 있고, 여기서는 이름만 붙입니다.
+    한 겹이 더 생기지만 <strong>진입 장벽이 낮아지는 값</strong>이 더 큽니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    <code>just --list</code> 를 실제로 보여주세요. 설명이 주석에서 자동으로 나오는 것이 포인트입니다.
+    Makefile 과의 차이(탭 문제 없음, 인자 전달 쉬움, 기본이 "명령 실행"이지 "파일 빌드"가 아님)를 물어보면 좋습니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 3</b><span>빌드 시스템</span></div>
+  <h2>Bazel — 모노레포 한 그래프로</h2>
+  <p>이 저장소는 <strong>Gradle 과 Bazel 을 병행</strong>합니다. 각자 잘하는 일이 다릅니다.</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th></th><th>Gradle</th><th>Bazel</th></tr>
+    <tr><td>역할</td><td>컨테이너 이미지용 <code>bootJar</code></td><td>모노레포 전체 빌드·테스트</td></tr>
+    <tr><td>쓰는 곳</td><td><code>backend/Dockerfile</code></td><td><code>just build</code> · <code>just test</code></td></tr>
+    <tr><td>강점</td><td>Spring Boot 생태계와 밀착</td><td>증분·캐시, 언어 혼합, 정확한 의존 그래프</td></tr>
+  </table>
+  </div>
+  <pre>bazel build //backend/...
+bazel test  //backend/...
+<span class="s">Executed 2 out of 2 tests: 2 tests pass.</span></pre>
+  <h3>도입하며 고정한 세 가지</h3>
+  <ul>
+    <li><code>.bazelversion = 8.4.1</code> — Bazel 9는 <code>JavaPluginInfo</code>를 전역에서 제거해 rules_kotlin 2.1.x 가 로드되지 않습니다.</li>
+    <li>Kotlin 툴체인 <code>jvm_target = "21"</code> — 기본값 1.8이라 Spring 의 inline 함수 컴파일이 깨집니다.</li>
+    <li>JUnit 플랫폼 런처 <code>1.11.4</code> 명시 — Kotest 5.9.1이 1.9.x를 끌고 와 <code>NoSuchMethodError</code>가 납니다.</li>
+  </ul>
+  <div class="trap"><span class="tag">유지보수 부채</span>
+    <p>의존성 버전이 <code>MODULE.bazel</code> 과 <code>build.gradle.kts</code> <strong>두 곳</strong>에 있습니다.
+    한쪽만 고치면 드리프트가 생깁니다 — 언젠가 한쪽으로 정리해야 합니다.</p>
+  </div>
+  <div class="notes"><b>강사 노트</b>
+    "왜 둘 다 쓰나요?"가 나올 겁니다. 정직하게 답하세요 — 배포 파이프라인이 Gradle 에 의존하고 있어
+    한 번에 갈아타면 위험하기 때문입니다. 점진적 마이그레이션의 현실적인 모습입니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 4</b><span>계측</span></div>
+  <h1>이제 안을 들여다봅니다</h1>
+  <p class="lede">로그·메트릭·트레이스를 어떻게 남기고, SigNoz에서 어떻게 잇는지.</p>
+  <div class="notes"><b>강사 노트</b>
+    Part 4는 코드 중심입니다. 화면에 SigNoz를 띄워두고 진행하면 좋습니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 4</b><span>로그</span></div>
+  <h2>구조화 로그</h2>
+  <div class="grid g2">
+    <div class="card"><h4>이렇게 쓰면</h4>
+      <pre style="margin:0;font-size:12px">log.info("user " + id +
+  " failed after " + ms + "ms")</pre>
+      <p style="margin-top:8px">검색은 전문 검색(<code>CONTAINS</code>)뿐. 느리고 부정확합니다.</p></div>
+    <div class="card"><h4>이렇게 쓰면</h4>
+      <pre style="margin:0;font-size:12px">log.info("요청 실패",
+  kv("account_id", id),
+  kv("duration_ms", ms))</pre>
+      <p style="margin-top:8px">속성 필터(<code>=</code>)로 정확하고 빠르게 찾습니다.</p></div>
+  </div>
+  <h3>실제 출력 (stdout JSON)</h3>
+  <pre>{"@timestamp":"2026-08-02T00:41:39.739Z",
+ "message":"demo ping 처리 완료",
+ "level":"INFO",
+ <span class="s">"correlation_id":"b9bc3d010db3439a9425fbf28c8fa273"</span>,
+ <span class="s">"trace_id":"8653cd385e0a146114d8a959a3dd01e8"</span>,
+ <span class="s">"span_id":"624b3d488be08b2c"</span>,
+ "service.name":"trippilot-backend"}</pre>
+  <div class="note"><p><code>trace_id</code>가 로그에 자동으로 들어옵니다.
+    이것이 <strong>로그와 트레이스를 잇는 다리</strong>입니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    실제 로그를 <code>kubectl logs</code>로 띄워서 보여주세요. JSON이 눈에 보이면 이해가 빠릅니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 4</b><span>상관 ID</span></div>
+  <h2>요청 하나를 끝까지 따라가기</h2>
+  <pre><span class="k">class</span> CorrelationIdFilter : OncePerRequestFilter() {
+  <span class="k">override fun</span> doFilterInternal(req, res, chain) {
+    <span class="k">val</span> id = resolve(req.getHeader(<span class="s">"X-Correlation-Id"</span>))
+    MDC.put(<span class="s">"correlation_id"</span>, id)      <span class="c">// 이후 모든 로그에 자동 포함</span>
+    res.setHeader(<span class="s">"X-Correlation-Id"</span>, id)  <span class="c">// 클라이언트에 돌려줌</span>
+    <span class="k">try</span> { chain.doFilter(req, res) }
+    <span class="k">finally</span> { MDC.remove(<span class="s">"correlation_id"</span>) }  <span class="c">// 스레드 재사용 대비</span>
+  }
+}</pre>
+  <div class="grid g2">
+    <div class="card"><h4>클라이언트 값은 검증합니다</h4>
+      <p>형식(<code>[A-Za-z0-9_-]{8,64}</code>)을 벗어나면 새로 발급합니다. 로그 인젝션 방지.</p></div>
+    <div class="card"><h4>trace_id와 역할이 다릅니다</h4>
+      <p><code>trace_id</code>는 서버 내부 호출 경로, <code>correlation_id</code>는 클라이언트~비동기 잡까지 잇는 종단 축.</p></div>
+  </div>
+  <div class="notes"><b>강사 노트</b>
+    <code>finally</code>의 <code>MDC.remove</code>를 빠뜨리면 스레드 풀에서 이전 요청 ID가 새 나갑니다. 실제로 흔한 버그입니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 4</b><span>보안</span></div>
+  <h2>로그에 남기면 안 되는 것</h2>
+  <p>토큰·비밀번호·이메일·생년월일·좌표. 한번 수집되면 저장소에 그대로 남습니다.</p>
+  <pre><span class="c">// 마스킹 전 (합성 데이터)</span>
+authorization=Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxIn0.sig
+email=traveler@example.com birth=1993-04-11 lat=33.4996
+
+<span class="c">// 마스킹 후</span>
+<span class="s">authorization=*** *** email=***@*** birth=****-**-** lat=***</span></pre>
+  <div class="note"><p><strong>개별 로그문에 맡기지 마세요.</strong>
+    <code>MaskingAppender</code>를 모든 출력 앞단에 두어 <strong>구조적으로</strong> 강제합니다.</p></div>
+  <div class="trap"><span class="tag">함정 ⑥ — 오늘 실제로 뚫렸던 것</span>
+    <p>OTel Spring Boot starter가 기본값으로 <strong>root 로거에 자체 appender를 자동 부착</strong>합니다.
+    그대로 두면 마스킹을 우회한 <strong>원문이 그대로</strong> 적재됩니다 — 마스킹본과 원문이 <strong>둘 다</strong> 쌓입니다.</p>
+    <p><code>otel.instrumentation.logback-appender.enabled: false</code>로 끄고 설치를 앱이 소유해야 합니다.</p>
+  </div>
+  <div class="notes"><b>강사 노트</b>
+    "보안 통제는 켰다고 끝이 아니라 우회 경로가 없는지 확인해야 한다"는 교훈.
+    실제로 SigNoz에서 원문이 보였던 이야기를 하면 임팩트가 큽니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 4</b><span>메트릭</span></div>
+  <h2>메트릭 남기기</h2>
+  <pre><span class="c">// 도메인 카운터</span>
+<span class="k">private val</span> pingCounter = meterRegistry.counter(<span class="s">"trippilot.demo.ping.total"</span>)
+pingCounter.increment()</pre>
+  <p>Spring Boot Actuator가 <code>http.server.requests</code>(지연·상태코드·처리량)와
+     JVM 지표를 자동으로 만들어 줍니다. 우리는 도메인 지표만 추가하면 됩니다.</p>
+  <h3>OTLP로 내보내기</h3>
+  <pre><span class="k">management</span>:
+  <span class="k">otlp</span>:
+    <span class="k">metrics</span>:
+      <span class="k">export</span>:
+        <span class="k">url</span>: ${OTEL_EXPORTER_OTLP_ENDPOINT}/v1/metrics
+        <span class="k">step</span>: 15s</pre>
+  <div class="trap"><span class="tag">주의 — 이중 발행</span>
+    <p>OTel starter도 메트릭을 내보낼 수 있습니다. Micrometer와 둘 다 켜면 같은 지표가 두 번 들어갑니다.
+    <code>otel.metrics.exporter: none</code>으로 한쪽을 끄세요.</p>
+    <p class="dim">담당을 나눕니다 — 로그: logback appender · 메트릭: Micrometer · 트레이스: OTel starter</p>
+  </div>
+  <div class="notes"><b>강사 노트</b>
+    카디널리티도 짧게 짚어주세요 — URL에 ID가 들어가면 시계열이 폭발합니다. 라우트 템플릿으로 치환해야 합니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 4</b><span>트레이스</span></div>
+  <h2>트레이스는 거의 공짜입니다</h2>
+  <pre><span class="c">// build.gradle.kts — 의존성 한 줄</span>
+implementation(<span class="s">"io.opentelemetry.instrumentation:opentelemetry-spring-boot-starter"</span>)</pre>
+  <p>HTTP 서버·클라이언트 호출이 자동으로 계측되고, <code>trace_id</code>·<code>span_id</code>가
+     MDC에 주입되어 <strong>로그에도 자동으로 실립니다.</strong></p>
+  <div class="flow">
+    <span>느린 요청 발견</span><i>→</i><span>trace_id 복사</span>
+    <i>→</i><span>로그에서 trace_id = ...</span><i>→</i><span>그 요청만의 로그</span>
+  </div>
+  <div class="note"><p>모놀리스라도 켜 두는 편이 좋습니다. 비용이 거의 없고,
+    나중에 서비스를 분리할 때 이미 준비되어 있습니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    SigNoz Traces 화면에서 느린 요청을 하나 클릭해 span 분해를 보여주면 좋습니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 4</b><span>실습 4</span></div>
+  <span class="lab">실습 4 · 15분</span>
+  <h2>SigNoz에서 세 신호 확인</h2>
+  <pre><span class="c"># 트래픽 만들기 (ping ×5 + masking + boom)</span>
+just smoke
+
+<span class="c"># 적재됐는지 바로 확인 — ClickHouse 직접 조회</span>
+just verify-telemetry
+<span class="s">로그(총 / ERROR / 마스킹우회):  26   4   0</span>
+<span class="s">메트릭: trippilot.demo.ping.total</span>
+<span class="s">트레이스: 883</span></pre>
+  <p>SigNoz UI에서 <strong>Logs → Logs Explorer</strong>:</p>
+  <pre>service.name = trippilot-backend
+service.name = trippilot-backend AND severity_text = ERROR
+trace_id = &lt;복사한 값&gt;</pre>
+  <h3>확인할 것</h3>
+  <ul>
+    <li>로그에 <code>correlation_id</code>·<code>trace_id</code>가 있는가</li>
+    <li><code>/api/demo/masking</code> 로그에서 토큰·이메일이 <code>***</code>로 가려졌는가</li>
+    <li>Metrics에 <code>trippilot.demo.ping.total</code>이 보이는가</li>
+    <li>Traces에서 요청 하나를 클릭해 span이 보이는가</li>
+  </ul>
+  <div class="note"><p><strong>마스킹 회귀 감시:</strong> <code>body CONTAINS "Bearer eyJ"</code>로 검색해
+    <strong>결과가 나오면 사고</strong>입니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    메트릭은 15초 주기로 push되니 조금 기다려야 보입니다. 미리 알려주세요.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>Part 4</b><span>테스트</span></div>
+  <h2>관측성도 테스트로 고정합니다</h2>
+  <p>계측은 조용히 깨집니다. 라이브러리를 올렸더니 로그가 안 나가는데 아무도 모르는 상황이 실제로 생깁니다.</p>
+  <pre><span class="c">// appender 트리를 재귀 탐색해 "마스킹을 안 거친 출력 지점"을 찾는다</span>
+<span class="k">@Test</span>
+<span class="k">fun</span> `모든 로그 출력 지점이 마스킹을 거친다`() {
+  <span class="k">val</span> bypassing = logSinks().filterNot { (_, masked) -&gt; masked }
+  assertThat(bypassing).isEmpty()
+}</pre>
+  <div class="note"><p>root 바로 아래에는 OTel <strong>MDC</strong> 래퍼가 붙고 우리 마스킹 appender는
+    그 <strong>안쪽</strong>에 중첩됩니다. 1단계만 보면 오판합니다 — 트리를 끝까지 봐야 합니다.</p>
+    <pre style="margin:8px 0 0">root → [OTel MDC 래퍼] → [MASKED] → [STDOUT_JSON, OTLP]</pre>
+  </div>
+  <p class="dim">현재 백엔드 테스트 <strong>21건 전부 통과</strong>. 외부 의존이 없어 SigNoz 없이도 CI에서 돕니다.</p>
+  <div class="notes"><b>강사 노트</b>
+    이 테스트는 실제로 함정 ⑥을 잡아낸 것에서 나왔습니다. "버그를 테스트로 고정한다"의 좋은 예.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>정리</b><span>오늘의 함정</span></div>
+  <h2>오늘 실제로 막혔던 여섯 곳</h2>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>#</th><th>증상</th><th>원인 · 해결</th></tr>
+    <tr><td>①</td><td>로컬 이미지를 못 씀</td><td>Docker Desktop 관리 kind → <strong>kind 직접 설치</strong></td></tr>
+    <tr><td>②</td><td>수집기는 Running인데 <code>Connection refused</code></td><td>SigNoz <strong>관리자 계정 미생성</strong> → 수신기가 안 열림<br><span class="dim">계정 생성도 막힘: 비밀번호 정책 / 이미 조직 존재</span></td></tr>
+    <tr><td>③</td><td><code>ErrImageNeverPull</code></td><td><code>kind load</code> 누락</td></tr>
+    <tr><td>④</td><td><code>namespaces not found</code></td><td><code>apply -f dir</code>는 알파벳 순 → 네임스페이스 먼저</td></tr>
+    <tr><td>⑤</td><td><code>CreateContainerConfigError</code></td><td><code>runAsNonRoot</code>는 <strong>숫자 UID</strong> 필요</td></tr>
+    <tr><td>⑥</td><td>마스킹된 로그와 원문이 <strong>둘 다</strong> 적재</td><td>OTel starter의 appender 자동 부착 → 끄기</td></tr>
+  </table>
+  </div>
+  <div class="note"><p>여섯 개 중 넷은 <strong>에러 메시지가 원인을 정확히 말해주지 않습니다.</strong>
+    어디를 봐야 하는지 아는 것이 실력입니다 — 그래서 관측성이 필요합니다.</p></div>
+  <div class="notes"><b>강사 노트</b>
+    이 표를 인쇄해 나눠주면 실습 중 참고 자료가 됩니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>정리</b><span>핵심 원칙</span></div>
+  <h2>가져갈 것</h2>
+  <ul>
+    <li><strong>선언형으로 생각하기</strong> — "어떻게"가 아니라 "무엇을 원하는지"를 씁니다.</li>
+    <li><strong>확인이 아니라 차단</strong> — 사람이 매번 지켜야 하는 규칙은 스크립트로 강제합니다.</li>
+    <li><strong>침묵 실패를 만들지 않기</strong> — 실패는 반드시 흔적을 남겨야 합니다.</li>
+    <li><strong>벤더 중립 유지</strong> — OTLP로 내보내면 수집기는 바꿀 수 있는 결정이 됩니다.</li>
+    <li><strong>보안 통제는 구조로</strong> — 개별 호출자의 성실함에 기대지 않습니다.</li>
+    <li><strong>겪은 버그는 테스트로</strong> — 같은 실수를 두 번 하지 않는 유일한 방법입니다.</li>
+  </ul>
+  <h3>다음에 볼 것</h3>
+  <p class="dim">Ingress · HPA(오토스케일링) · Secret과 외부 시크릿 관리 ·
+     대시보드와 알람 설계 · 멀티노드에서만 드러나는 것들</p>
+  <div class="notes"><b>강사 노트</b>
+    질문 시간을 5분 남겨두세요. 가장 많이 나오는 질문: "운영에서도 이렇게 하나요?"
+    → 이미지는 레지스트리로, 시크릿은 외부 관리로, 나머지 구조는 거의 같다고 답하면 됩니다.</div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow"><b>부록</b><span>명령 모음</span></div>
+  <h2>치트시트</h2>
+  <div class="grid g2">
+    <div class="card"><h4>환경·클러스터</h4>
+      <pre style="margin:0;font-size:12px">just doctor          <span class="c"># 도구·클러스터·앱 상태</span>
+just cluster-up      <span class="c"># kind + SigNoz</span>
+just up              <span class="c"># 클러스터→빌드→배포</span>
+just cluster-down</pre></div>
+    <div class="card"><h4>빌드·테스트 (Bazel)</h4>
+      <pre style="margin:0;font-size:12px">just build
+just test
+just test-masking
+just run             <span class="c"># 클러스터 없이 실행</span></pre></div>
+    <div class="card"><h4>배포</h4>
+      <pre style="margin:0;font-size:12px">just image           <span class="c"># build + kind load</span>
+just deploy
+just update          <span class="c"># 코드 변경 후</span>
+just rollback</pre></div>
+    <div class="card"><h4>관측·진단</h4>
+      <pre style="margin:0;font-size:12px">just signoz          <span class="c"># UI port-forward</span>
+just smoke           <span class="c"># 트래픽 발생</span>
+just verify-telemetry
+just logs / just status / just health</pre></div>
+  </div>
+  <h3>원본 명령이 궁금하면</h3>
+  <pre>just --list          <span class="c"># 전체 목록</span>
+cat justfile         <span class="c"># 각 명령이 실제로 뭘 하는지</span></pre>
+  <p class="dim">저장소 문서: <code>deploy/README.md</code> ·
+     <code>docs/installs/k8s_install.md</code> · <code>docs/installs/signoz_install.md</code><br>
+     이 슬라이드: <code>docs/education/k8s-observability-class.html</code> — <code>just slides</code></p>
+  <div class="notes"><b>강사 노트</b>
+    이 슬라이드는 인쇄해서 나눠주기 좋습니다. 키보드: ←/→ 이동, N 강사 노트 토글.
+    슬라이드는 저장소에 단일 HTML 파일로 들어 있어 오프라인에서도 열립니다.</div>
+</section>
+
+</main>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var i = 0;
+  var cur = document.getElementById('cur');
+  var tot = document.getElementById('tot');
+  var fill = document.getElementById('railFill');
+  tot.textContent = slides.length;
+
+  function show(n){
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function(s, idx){ s.classList.toggle('on', idx === i); });
+    cur.textContent = i + 1;
+    fill.style.height = ((i + 1) / slides.length * 100) + '%';
+    window.scrollTo(0, 0);
+    try { history.replaceState(null, '', '#s' + (i + 1)); } catch (e) {}
+  }
+
+  document.getElementById('next').addEventListener('click', function(){ show(i + 1); });
+  document.getElementById('prev').addEventListener('click', function(){ show(i - 1); });
+  document.getElementById('notesBtn').addEventListener('click', function(){
+    document.body.classList.toggle('show-notes');
+  });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); show(i + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(i - 1); }
+    else if (e.key === 'Home') { show(0); }
+    else if (e.key === 'End') { show(slides.length - 1); }
+    else if (e.key === 'n' || e.key === 'N') { document.body.classList.toggle('show-notes'); }
+  });
+
+  var m = /^#s(\d+)$/.exec(location.hash || '');
+  show(m ? parseInt(m[1], 10) - 1 : 0);
+})();
+</script>
+</body>
+</html>
