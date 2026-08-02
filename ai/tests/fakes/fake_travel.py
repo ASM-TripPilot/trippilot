@@ -14,11 +14,12 @@ from trippilot.domain.travel import TravelEstimate
 _DETOUR = 1.3  # 직선거리 우회계수 (G106)
 _EARTH_KM = 6371.0088
 
-# 이동수단별 평속(km/h) — internal_minutes 합성용 (표시 안 됨, INV-3)
+# 이동수단별 평속(km/h) — remote config 초기값과 동일 (AI-D07)
+# internal_minutes 합성용 (표시 안 됨, INV-3)
 _SPEED_KMPH = {
     TransportMode.WALK: 4.0,
     TransportMode.PUBLIC: 20.0,
-    TransportMode.CAR: 40.0,
+    TransportMode.CAR: 30.0,
 }
 
 
