@@ -523,3 +523,25 @@ D3(지라 TRIP-181 티켓 본문의 사실 오기 2건 — 빈 스텁 서술·�
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 실행 주체: TRIP-84 서브태스크 작성 작업(오케스트레이터 직접). 실측 근거는 `origin/develop:backend/docs/design/openapi.yaml`(590~668행 · schemas `AssignBaseRequest`·`BaseAssignment`·`Coverage`·`DayCoverage`·`SavedStay`·`EditSavedStayRequest`)과 라이브 Figma(g02 `1707:1183`·`1708:1183` · e04 `1701:1183`·`1702:1183` · g01 no-saved-places `2226:1732`), 그리고 리포 실측(`src/shared/api/generated/trips/trips.ts`에 bases·coverage·must-visits 훅이 TRIP-203 codegen으로 이미 생성돼 있어 **TRIP-84에는 계약 동기화 칸이 불필요**).
 
 ---
+
+## Post-Design Correction — U1 frontend-components.md·business-rules.md 예산 블록 5건 (TRIP-207 [기록] 반영)
+**Timestamp**: 2026-08-02T23:10:00Z
+**User Input**: TRIP-207 사이클 [설계] 3-a 맹점 훑기에서 사용자가 정본 반영 후보 중 4건(§4 실측 문단 갱신·§6 testID 5종 등재·§7 PBT 대상 추가·BR-U1-33 예산 열거 추가)을 전부 채택했고, §4 `[구현 결정]` 컴포넌트 행 추가 1건은 지라 티켓 본문이 명시 요구해 선택 여부와 무관하게 함께 반영한다(근거: `_workspace/20260802-trip207-budget-block/01b_ouroboros_seed.md` AC-9 — "사용자가 3-a에서 4건 전부 채택 + 티켓 요구분 1건", TRIP-181/TRIP-197 [기록] 반영과 같은 처리 방식).
+
+**AI Response**: 승인 완료된 `u1-accommodation-trip/functional-design/frontend-components.md`·`business-rules.md`의 **드리프트 정정 + 구현 결정 소급 기록**. 새 스토리·새 컴포넌트 계약(엔드포인트) 신설 0건 → 스테이지 진행 아님, `aidlc-state.md` 체크박스 변동 없음(2026-07-29T05:10:00Z A1 · 2026-07-29T22:35:00Z D1·D2 · 2026-07-31T11:45:00Z SEC-U1-05 · 2026-08-02T03:00:00Z·04:30:00Z 정정과 같은 성격의 여섯 번째 후속).
+
+(1) **frontend-components.md §4 — `BudgetInputField` 구현 결정 행 신설(티켓 명시 요구)**. 예산 총액 입력(선택) — 온보딩 취향 러프값(`PreferenceView.budget.rawAmount`) 프리필 + 고정 안내 문구, 비우면 `budgetTotal` 키 자체 미전송(BR-U1-38 덮어쓰기 허용). 이 문서 승인(2026-07-23) 당시 §4 표에 예산 컴포넌트 행이 없었다(티켓이 직접 지목한 공백) — TRIP-182 `StateNotice`·`SkeletonList` 소급 기록 방식을 그대로 따른다.
+
+(2) **frontend-components.md §4 라이브 실측 문단 갱신** — `g01 · default`(`1675:1183`) **내부** 구성이 바뀐 것을 기존 "밴드 g 변형 프레임 신설" 문단과 분리해 별도로 적었다. 프레임 **개수**는 안 변했고 **내용**이 변했다: 예산 블록 `sec_budget`(`2225:2375`, 구분선 `d3w` `2225:2373`) + 등록 숙소 날짜 가져오기 행 `stayImportRow`(`2225:2362`, TRIP-208 소관 — 이번엔 컴포넌트 행을 두지 않고 존재만 기록, TRIP-208 [기록]에서 소급).
+
+(3) **frontend-components.md §6 — 예산 testID 5종 등재**. `trip-wizard-budget-block`·`trip-wizard-budget-input`(티켓 확정)·`trip-wizard-budget-edit`·`trip-wizard-budget-note`·`trip-wizard-error-budget`(블록 슬러그 규약, 기존 `trip-wizard-error-destination`·`-period`와 동형). 이 문서 승인 당시 공백이었다.
+
+(4) **frontend-components.md §7 — PBT 대상에 예산 정규화 추가**. `parseBudgetAmount`/`formatBudgetAmount`의 왕복 성질(표시값↔전송값, `0` 유효값, `toLocaleString`/`Intl` 0건). 이 문서 승인 당시 PBT 대상 목록에 없었다(공백).
+
+(5) **business-rules.md BR-U1-33 — 위저드 1단계 열거에 "예산" 추가**. "(1/2) 여행지·꼭 갈 곳·기간·인원·동반" → "…·동반·예산(선택, 온보딩 러프값 프리필)". g01 라이브 화면에는 있고 정본 열거에는 없던 공백.
+
+**미반영으로 남긴 것**: `stayImportRow`(TRIP-208 소관) 컴포넌트 행 자체는 아직 안 둔다 — 이번 반영은 존재 사실만 기록하고, 책임·state/props·서버 연동 정의는 TRIP-208 [기록]이 채운다.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-207 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260802-trip207-budget-block/01_spec-analyst_brief.md`(§3·§4·§7-④)·`02a_test-design_spec.md`(§2-6)와 라이브 Figma(`2225:2375`·`2225:2362`).
+
+---
