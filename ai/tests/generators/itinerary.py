@@ -23,7 +23,6 @@ from trippilot.domain.itinerary import (
 )
 from trippilot.domain.llm import ScoredPoi
 
-from tests.generators.geo import geo_points
 from tests.generators.observability import solver_run_records
 
 _KST = timezone(timedelta(hours=9))
@@ -132,7 +131,6 @@ def itinerary_problems(draw) -> ItineraryProblem:
         transport=draw(st.sampled_from(list(TransportMode))),
         day_window=draw(time_windows()),
         seed=draw(st.integers(min_value=0, max_value=2**31)),
-        anchor=draw(st.one_of(st.none(), geo_points())),
     )
 
 
