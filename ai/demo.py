@@ -95,6 +95,71 @@ print("  LLM 실패 후 관측 로그:", trace_events)
 print("  → 폴백이 기록됨(침묵 실패 없음)? :", len(trace_events) == 1)
 
 
+# ── U4 : 오염 출력 → 게이트 드롭 → 폴백 신호 ─────────────────
+title("U4 게이트", "환각 poi는 드롭되고, 전량 오염이면 폴백 신호가 남는다")
+
+from pathlib import Path
+
+from trippilot.c1.config import C1Config
+from trippilot.c1.gate import ClosedSetGate
+from trippilot.c1.gateway import GatewayFacade
+from trippilot.c1.prompts import PromptRegistry
+from trippilot.c1.workers.preference import build_prompt_vars
+from trippilot.domain.common import BudgetLevel
+from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.observability import GateDropEvent
+from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
+from trippilot.ports.llm_port import LlmResponse
+
+
+class CannedLlm:  # 준비된 답을 돌려주는 LLM (환각을 일부러 섞는다)
+    def __init__(self, text):
+        self._text = text
+
+    def invoke(self, request):
+        return LlmResponse(
+            raw_text=self._text, input_tokens=1, output_tokens=1,
+            latency_ms=1, model_id=request.model_id,
+        )
+
+
+class ListTrace:
+    def __init__(self):
+        self.events = []
+
+    def emit(self, event):
+        self.events.append(event)
+
+
+pool = CandidatePool(poi_ids=frozenset({PoiId("p1")}), pois=(seongsimdang,), generated_at=_NOW)
+persona = PersonaSummary(
+    taste_tags=(TasteTag.FOOD,), companion=CompanionType.COUPLE, budget=BudgetLevel.MID
+)
+cfg = C1Config(model_ids={ModelTier.LIGHT: "demo-light", ModelTier.HEAVY: "demo-heavy"})
+registry = PromptRegistry(Path(__file__).parent / "prompts")
+
+polluted = '{"scores": [{"poiId": "p1", "score": 0.9, "reason": "빵"}, {"poiId": "유령맛집", "score": 1.0, "reason": "환각"}]}'
+trace = ListTrace()
+facade = GatewayFacade(CannedLlm(polluted), registry, ClosedSetGate(), cfg, trace)
+result = facade.call(
+    LlmFeature.PREFERENCE_SCORING, build_prompt_vars(pool, persona), pool, TraceId("demo-u4"), _NOW
+)
+drops = [e for e in trace.events if isinstance(e, GateDropEvent)]
+print("  LLM이 답한 poi     : ['p1', '유령맛집']  ← 하나는 환각")
+print("  게이트 생존        :", [str(s.poi_id) for s in result.value])
+print("  드롭 관측(GateDrop):", [str(i) for i in drops[0].dropped_ids], "— 환각률 지표의 원천")
+
+all_bad = '{"scores": [{"poiId": "유령1", "score": 1.0, "reason": "전부 환각"}]}'
+trace2 = ListTrace()
+facade2 = GatewayFacade(CannedLlm(all_bad), registry, ClosedSetGate(), cfg, trace2)
+result2 = facade2.call(
+    LlmFeature.PREFERENCE_SCORING, build_prompt_vars(pool, persona), pool, TraceId("demo-u4b"), _NOW
+)
+fallbacks = [e for e in trace2.events if isinstance(e, FallbackEvent)]
+print("  전량 오염 응답     → is_fallback:", result2.is_fallback, "· value:", result2.value)
+print("  폴백 신호(INV-4)   :", fallbacks[0].reason, "→ 규칙 점수는 호출측이 실행")
+
+
 print(f"\n{'=' * 62}")
 print("  4대 불변식이 전부 '코드'로 강제됨.")
 print("  자동 검증(수천 케이스):  uv run pytest")

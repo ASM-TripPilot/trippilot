@@ -99,6 +99,17 @@ def test_c1_imports_only_stdlib_and_internal() -> None:
     assert not offenders, f"c1에 외부 패키지 import 위반: {offenders}"
 
 
+def test_anthropic_only_imported_in_c1_adapters() -> None:
+    """BR-U4-10: anthropic SDK 의존은 c1/adapters/ 한정 — 벤더 교체 시 이 경계만 갈아끼운다."""
+    offenders = []
+    for py in _SRC.rglob("*.py"):
+        if "adapters" in py.parts:
+            continue
+        if "anthropic" in _external_imports(py):
+            offenders.append(str(py.relative_to(_SRC)))
+    assert not offenders, f"adapters 밖에서 anthropic import: {offenders}"
+
+
 def test_yaml_only_imported_in_c1_prompts() -> None:
     """yaml 파서 의존은 PromptRegistry(c1/prompts.py) 한정 — ortools→c2와 같은 격리 패턴."""
     offenders = []
