@@ -82,3 +82,25 @@ def test_ortools_only_imported_in_c2() -> None:
 def test_m7_imports_only_stdlib_and_internal() -> None:
     """U3 DoD: m7 계층 순수성 (외부 패키지 0)."""
     _assert_pure("m7")
+
+
+def test_c1_imports_only_stdlib_and_internal() -> None:
+    """U4 DoD: c1 순수성 — 외부 패키지 0 (anthropic SDK는 adapters 한정, 어댑터 도입 시 예외 추가)."""
+    _assert_pure("c1")
+
+
+def test_c1_does_not_import_c2_or_m7() -> None:
+    """BR-U4-09: c1은 판단 재료 제공자 — 규칙 점수 폴백 실행은 호출측 몫이라 c2·m7 참조 금지."""
+    offenders: dict[str, set[str]] = {}
+    for py in (_SRC / "c1").rglob("*.py"):
+        tree = ast.parse(py.read_text(encoding="utf-8"))
+        bad = {
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            and node.module
+            and node.module.startswith(("trippilot.c2", "trippilot.m7"))
+        }
+        if bad:
+            offenders[str(py.relative_to(_SRC))] = bad
+    assert not offenders, f"c1이 c2/m7을 import함(경계 위반): {offenders}"
