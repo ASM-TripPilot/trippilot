@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from trippilot.domain.common import GeoPoint, PoiId
@@ -23,6 +24,32 @@ if TYPE_CHECKING:
     from trippilot.domain.observability import LlmCallRecord
 
 T = TypeVar("T")
+
+
+class LlmFeature(Enum):
+    """LLM에 허용된 기능 자체가 closed-set (U4 FD domain-entities §1).
+
+    이 enum 밖의 LLM 호출은 존재할 수 없다 (BR-U4-05) — "제한된 소형 LLM"
+    4겹 장치의 1겹. 게이트웨이가 호출 진입에서 타입 검증한다.
+    """
+
+    PREFERENCE_SCORING = "PREFERENCE_SCORING"  # U4
+    INTENT = "INTENT"  # U5
+    PARAPHRASE = "PARAPHRASE"  # U5
+    REASON_INTERPRETATION = "REASON_INTERPRETATION"  # U5
+    EXPLANATION = "EXPLANATION"  # U5
+    ALTERNATIVE_SELECTION = "ALTERNATIVE_SELECTION"  # U5
+    REFLECTION = "REFLECTION"  # U6
+    PLACE_EXTRACTION = "PLACE_EXTRACTION"  # U6 (백그라운드)
+
+
+class ModelTier(Enum):
+    """모델 티어 (AI-D06). 실제 model_id 문자열은 항상 C1Config 설정값 —
+    코드 하드코딩 금지 (BR-U4-08). OFFLINE은 배치·회귀 전용."""
+
+    LIGHT = "LIGHT"
+    HEAVY = "HEAVY"
+    OFFLINE = "OFFLINE"
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,0 +1,24 @@
+# PreferenceScoring 프롬프트 v0.1.0 — 정본: ai-prompt-design.md §2.1
+# semver는 반드시 따옴표 (yaml 암묵 타입 변환 방지). few-shot 예시는 K-2에서 보강.
+feature: PREFERENCE_SCORING
+version: "0.1.0"
+template: |
+  당신은 여행 일정 추천 시스템의 점수 산정 모듈입니다.
+  아래 사용자 취향과 후보 장소 목록을 보고, 각 장소에 0.0~1.0 사이의 선호 점수를 부여하세요.
+
+  규칙:
+  - 반드시 제공된 poiId 목록 안에서만 점수를 부여하세요 (목록 밖 ID 생성 금지)
+  - 모든 후보에 점수를 부여하세요 (누락 금지)
+  - reason은 한국어 1문장, 사용자에게 표시됩니다
+  - 아래 JSON 스키마를 정확히 따르고, JSON 외의 텍스트는 출력하지 마세요
+
+  [사용자 취향]
+  - 취향 태그: $taste_tags
+  - 동반자: $companion
+  - 예산: $budget
+
+  [후보 장소 목록] (poiId | 카테고리 | 상호명)
+  $candidates
+
+  [출력 JSON 스키마]
+  {"scores": [{"poiId": "string", "score": 0.0, "reason": "string"}]}

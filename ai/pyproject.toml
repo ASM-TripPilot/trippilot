@@ -5,7 +5,9 @@ description = "TripPilot AI service — domain types, ports, and fakes (U1 walki
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "anthropic>=0.120.2",
     "ortools>=9.15.6755",
+    "pyyaml>=6.0.3",
 ]
 
 [build-system]
