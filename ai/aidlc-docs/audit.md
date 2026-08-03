@@ -230,3 +230,38 @@
 - PBT로 잡은 실버그 1건: regenerate 시 잠근 슬롯=기존 고정블록 중복 승격 → 규칙 폴백이 이중 배치 → HC2 위반 → SolverConflictError. 폴백 솔버에 중복 고정 방어 추가로 해소 (hypothesis 반례 재검증 통과)
 - 아키텍처 감시 확장: ortools import는 c2 계층에만 (자동 차단)
 - U2 잔여(경미): 소규모 oracle 전수 대조(U5-P1 보강)·2차 진입 '품질 미달' 트리거·지역탐색 2-opt(CP-SAT가 사실상 대체)
+
+## CONSTRUCTION — U2 마무리 + U3 Functional Design
+**Timestamp**: 2026-07-29T05:00:00Z
+**User Input**: "C하고 U3 시작해줘"
+**AI Response**: U2 정리(스택 PR #40·TRIP-165 In Review·state 갱신) 후 U3 FD 3종 생성, TRIP-166 In Progress.
+**Context**:
+- U3 FD 근거: ai-data-design.md §3(6단계 필터 확정값)·§6(TTL: POI 24h/영업시간 6h/가격 금지)·§8(AI-D04 fuzzy)
+- 스코프 결정: REGION 해소는 U3 제외(라우터/U6 소유) · is_closed_today 당일 배치는 Plan-B 소유 · 웹 소싱 U6 · 공간 쿼리 캐싱 후속
+- CandidatePool에 anchor·radius_km 선택 필드 보강(정본 §3.3 누락분 — ItineraryProblem.anchor 방식)
+- 가격 캐싱 금지: U1 to_cacheable_dict 단일 경로 + SpyCache PBT(CACHE-P1)로 이중 강제
+- 신규 PBT: POOL-P1~P4·RES-P1/P2·CACHE-P1/P2
+- 브랜치: feature/TRIP-166-m7-place-data (TRIP-165 위 스택)
+
+## CONSTRUCTION — U3 코어 구현 (M7 Place Data)
+**Timestamp**: 2026-07-29T06:00:00Z
+**User Input**: "승인, 바로 코드로"
+**AI Response**: m7 4모듈 + 도메인 보강 + 테스트 15개 (91 green).
+**Context**:
+- pool_builder: 6단계 필터 (정본 확정값, now 주입 결정론) · entity_resolver: 자모 분해 Levenshtein — "성심땅→성심당" 실증 테스트 통과 · cached_repo: TTL 정책 + 가격 구조 차단(to_cacheable_dict 단일 경로, 히트 시 avg_cost=None로 원본 조회 필요성 명시)
+- 도메인: CandidatePool anchor·radius_km 보강(호환 유지), domain/m7.py(CandidatePoolRequest·EntityMatch·MatchDecision — poi_id=None ⇔ UNRESOLVED 정합 강제)
+- PBT: POOL-P1~4(반경·예산·품질·상한·결정론·휴무 배제) · RES-P1/P2 · CACHE-P1(가격 저장 0건)/P2(TTL 만료 재조회) — 전부 첫 실행 green
+- m7 계층 순수성 자동 감시 추가. U3 잔여: 실 PostgreSQL 어댑터(스캐폴딩 후속)·batch_check_closed Plan-B 연결(U6)
+
+## DESIGN — Agent 구조 v2: 4상자 파이프라인 (멘토 피드백 반영)
+**Timestamp**: 2026-08-02T00:00:00Z
+**User Input**: "멘토 피드백 — agent 도구가 겹치면 orchestrator가 위임을 혼동. 겹침 금지" + 구조 문답 후 확정
+**AI Response**: agent-structure-v2.md 신설 (정본), v1 배너 처리, 위임 프로토콜·인덱스·README 갱신.
+**Context**:
+- 확정 구조: Orchestrator(의도파악·Fast Path·InfoCollector 수집·위임) → Provider 5종(수집 전담, LLM 0회 — '정보 에이전트'에서 개명) → Agent 4종(LLM 판단, 전속 도구 완전 배타) → Solver 공통 관문(배치·검증·수리, Reflect는 스킵)
+- 용어 규칙 확정: Agent = LLM 판단 주체만(4종, 사용자 결정으로 명칭 유지) / Provider = 수집 / Solver = 관문
+- 겹침 해소: v1의 5개 중복 도구(place_scout 4곳·solver.validate 4곳 등) → 0. 라우팅은 테이블 유일 기준(도구 목록 판단 금지)
+- 신설 계약: 정보 요구표(intent별 수집 항목), InfoBundle(패킷+FreshnessMeta+상태값, 풀은 세션 캐시 참조), NEED_MORE_INFO 재요청(1회)
+- 웹 소싱 위치 명확화: Provider 아님 — 백그라운드 소싱 파이프라인(U6) 소속, LLM 추출은 그 안에서 (INV-1·지연 예산 근거)
+- 트레이드오프 기록: 이전 피드백(에이전트 도구 자율)과 절충 — 판단 자율 유지, 수집·확정 중앙화
+- 코드 영향 0 (U1~U4 무관, U5/U6 미구현 시점의 무비용 개정)
