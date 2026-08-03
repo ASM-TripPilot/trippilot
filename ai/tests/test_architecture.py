@@ -85,8 +85,29 @@ def test_m7_imports_only_stdlib_and_internal() -> None:
 
 
 def test_c1_imports_only_stdlib_and_internal() -> None:
-    """U4 DoD: c1 순수성 — 외부 패키지 0 (anthropic SDK는 adapters 한정, 어댑터 도입 시 예외 추가)."""
-    _assert_pure("c1")
+    """U4 DoD: c1 순수성 — 예외 2곳뿐: prompts.py의 yaml(프롬프트 정본 포맷),
+    adapters/의 anthropic(SDK는 어댑터 한정, BR-U4-10)."""
+    offenders: dict[str, set[str]] = {}
+    for py in (_SRC / "c1").rglob("*.py"):
+        bad = _external_imports(py)
+        if py.name == "prompts.py":
+            bad -= {"yaml"}
+        if "adapters" in py.parts:
+            bad -= {"anthropic"}
+        if bad:
+            offenders[str(py.relative_to(_SRC))] = bad
+    assert not offenders, f"c1에 외부 패키지 import 위반: {offenders}"
+
+
+def test_yaml_only_imported_in_c1_prompts() -> None:
+    """yaml 파서 의존은 PromptRegistry(c1/prompts.py) 한정 — ortools→c2와 같은 격리 패턴."""
+    offenders = []
+    for py in _SRC.rglob("*.py"):
+        if py.parent.name == "c1" and py.name == "prompts.py":
+            continue
+        if "yaml" in _external_imports(py):
+            offenders.append(str(py.relative_to(_SRC)))
+    assert not offenders, f"c1/prompts.py 밖에서 yaml import: {offenders}"
 
 
 def test_c1_does_not_import_c2_or_m7() -> None:
