@@ -163,7 +163,9 @@ def test_router_missing_model_id_raises() -> None:
         TierRouter(cfg).route(LlmFeature.EXPLANATION)  # HEAVY 미설정
 
 
-def test_router_resolves_all_default_features() -> None:
+def test_router_resolves_all_default_features_deterministically() -> None:
     router = TierRouter(_CFG)
-    for feature in LlmFeature:
-        assert router.route(feature) in _CFG.model_ids.values()  # ROUTE-P1 기반
+    for feature in LlmFeature:  # ROUTE-P1: 전 feature 스윕 + 결정론
+        first = router.route(feature)
+        assert first in _CFG.model_ids.values()
+        assert router.route(feature) == first
