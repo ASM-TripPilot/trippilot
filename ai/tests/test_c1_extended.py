@@ -212,3 +212,27 @@ def test_registry_loads_all_four_features() -> None:
         prompt, ref = reg.render(feature, variables)
         assert ref.version == "0.1.0" and feature.value == ref.feature
         assert "JSON" in prompt
+
+
+# ── TRIP-260 리뷰 후속 회귀 ──────────────────────────────────
+
+
+def test_extraction_gate_bool_coord_is_isolated() -> None:
+    """TRIP-260 #1: bool ⊂ int라 GeoPoint 범위 검사를 통과하던 구멍."""
+    raw = json.dumps({"places": [
+        {"name": "불좌표", "address": None, "coord": {"lat": True, "lng": 0},
+         "hours": None, "category": None, "confidence": 0.5, "sourceUrl": "https://x"},
+    ]})
+    out = PlaceExtractionGate().apply(
+        raw, None, feature=LlmFeature.PLACE_EXTRACTION, trace_id=_TID, now=_NOW
+    )
+    assert out.value == () and out.drop_event.dropped_count == 1
+
+
+def test_extraction_drop_event_has_no_pseudo_ids() -> None:
+    """TRIP-260 #3: 드롭 항목의 장소명/item[i]가 PoiId 지표를 오염하지 않는다."""
+    raw = json.dumps({"places": [{"confidence": 0.5, "sourceUrl": "https://z"}]})
+    out = PlaceExtractionGate().apply(
+        raw, None, feature=LlmFeature.PLACE_EXTRACTION, trace_id=_TID, now=_NOW
+    )
+    assert out.drop_event.dropped_ids == () and out.drop_event.dropped_count == 1

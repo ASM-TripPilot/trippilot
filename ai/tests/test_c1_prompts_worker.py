@@ -164,3 +164,13 @@ def test_worker_rejects_non_persona_context() -> None:
 
 def _empty_pool() -> CandidatePool:
     return CandidatePool(poi_ids=frozenset(), pois=(), generated_at=_NOW)
+
+
+def test_registry_rejects_stray_dollar_template(tmp_path: Path) -> None:
+    """TRIP-260 #2: 리터럴 $ 템플릿은 로드 시점에 거부 — 런타임 크래시 방지."""
+    (tmp_path / "bad.yaml").write_text(
+        "feature: PREFERENCE_SCORING\nversion: '0.1.0'\ntemplate: '가격 $10 이내'",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError):
+        PromptRegistry(tmp_path)

@@ -41,21 +41,20 @@ class PlaceExtractionGate:
             return GateOutcome(value=(), drop_event=None, error=f"parse_error: {e}")
 
         survivors: list[ExtractedPlace] = []
-        dropped: list[PoiId] = []
-        for i, item in enumerate(items):
+        dropped_count = 0
+        for item in items:
             place = self._to_place(item)
             if place is None:
-                name = item.get("name") if isinstance(item, dict) else None
-                dropped.append(PoiId(name if isinstance(name, str) and name else f"item[{i}]"))
+                dropped_count += 1  # 카운트만 — 장소명을 유사 PoiId로 지표에 넣지 않는다 (TRIP-260 #3)
             else:
                 survivors.append(place)
         drop_event = (
             GateDropEvent(
                 trace_id=trace_id, occurred_at=now, component="c1.gate",
-                feature=feature.value, dropped_ids=tuple(dropped),
-                total_count=len(items), dropped_count=len(dropped),
+                feature=feature.value, dropped_ids=(),  # 추출 드롭은 풀 ID가 아님 — 환각률 지표 순수성
+                total_count=len(items), dropped_count=dropped_count,
             )
-            if dropped else None
+            if dropped_count else None
         )
         return GateOutcome(value=tuple(survivors), drop_event=drop_event, error=None)
 
@@ -80,9 +79,12 @@ class PlaceExtractionGate:
         if coord_raw is not None:
             if not isinstance(coord_raw, dict):
                 return None
+            lat, lng = coord_raw.get("lat"), coord_raw.get("lng")
+            if isinstance(lat, bool) or isinstance(lng, bool):
+                return None  # bool ⊂ int라 범위 검사를 통과함 — 명시 격리 (TRIP-260 #1)
             try:
-                coord = GeoPoint(lat=coord_raw["lat"], lng=coord_raw["lng"])
-            except (KeyError, TypeError, ValueError):
+                coord = GeoPoint(lat=lat, lng=lng)
+            except (TypeError, ValueError):
                 return None  # 범위 밖/형식 오류 좌표 = 격리 (임의 생성 방어)
         address, hours, category = item.get("address"), item.get("hours"), item.get("category")
         if not all(v is None or isinstance(v, str) for v in (address, hours, category)):
