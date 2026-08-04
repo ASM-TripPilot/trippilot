@@ -142,7 +142,7 @@ def itinerary_solutions(draw) -> ItinerarySolution:
     if is_fallback:
         mode = draw(st.sampled_from([SolveMode.RULE_FALLBACK, SolveMode.MINIMAL]))
     else:
-        mode = draw(st.sampled_from([SolveMode.OR_TOOLS, SolveMode.BEDROCK]))
+        mode = draw(st.sampled_from([SolveMode.OR_TOOLS, SolveMode.LLM]))
     return ItinerarySolution(
         schedule_id=ScheduleId(draw(st.text(min_size=1, max_size=10))),
         days=tuple(draw(st.lists(day_solutions(), max_size=3))),

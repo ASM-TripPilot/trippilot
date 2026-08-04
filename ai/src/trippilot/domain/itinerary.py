@@ -31,10 +31,10 @@ if TYPE_CHECKING:
 
 
 class SolveMode(Enum):
-    """솔버가 어느 계층으로 해를 냈는지. BEDROCK이라도 HC 검증 후에만 반환."""
+    """솔버가 어느 계층으로 해를 냈는지. LLM이라도 HC 검증 후에만 반환 (벤더 중립 — AI-D06)."""
 
     OR_TOOLS = "OR_TOOLS"
-    BEDROCK = "BEDROCK"
+    LLM = "LLM"
     RULE_FALLBACK = "RULE_FALLBACK"
     MINIMAL = "MINIMAL"
 

@@ -39,14 +39,14 @@ TripPilot의 **AI 담당 설계 저장소**. 일정 생성·여행 중 변수 �
         v
 +--------------------------------------------------------------+
 | [도구풀 — 에이전트별 제한 할당]                                |
-| LLM 호출 (Bedrock) | M7 후보 조회 | Solver 배치/검증          |
+| LLM 호출 (Anthropic) | M7 후보 조회 | Solver 배치/검증          |
 | 벡터 검색 (RAG)    | 엔티티 해소  | 외부 API (날씨, 지도)    |
 +--------------------------------------------------------------+
         |
         v
 +--------------------------------------------------------------+
 |  C2 Solver — 하이브리드                                       |
-|  OR-Tools (1차 결정론) → Bedrock (2차) → 규칙 폴백 (최후)    |
+|  OR-Tools (1차 결정론) → LLM(Anthropic) (2차) → 규칙 폴백 (최후)    |
 |  모든 출력은 HC1~HC4 검증 통과 필수                           |
 +--------------------------------------------------------------+
         |
@@ -82,7 +82,7 @@ flowchart TD
 
         subgraph Core["AI 코어 (도구풀)"]
             C1["C1 LLM Gateway\nclosed-set 게이트\n티어 라우팅"]
-            C2["C2 Solver\nOR-Tools → Bedrock → 규칙폴백\nHC1~HC4 검증"]
+            C2["C2 Solver\nOR-Tools → LLM → 규칙폴백\nHC1~HC4 검증"]
             M7["M7 Place Data\nclosed-set 후보 풀\n엔티티 해소"]
         end
 
@@ -96,7 +96,7 @@ flowchart TD
     end
 
     subgraph External["외부 서비스"]
-        LLM["AWS Bedrock\n(Claude)"]
+        LLM["Anthropic API\n(Claude)"]
         KAKAO["카카오모빌리티\n(도로 거리)"]
         NAVER["네이버 지도\n(폴백)"]
         PLACES["Places API\n(POI 소싱)"]
@@ -194,7 +194,7 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 
 ### ReflectAgent — 회고 비서
 
-- **패턴**: 1차 — 단순 LLM Generation (DB 조회 → Bedrock 1회). 추후 C 확장(Multi-step)
+- **패턴**: 1차 — 단순 LLM Generation (DB 조회 → LLM 1회). 추후 C 확장(Multi-step)
 - **흐름 (1차)**: 방문 기록 DB 조회 → 충분성 판단(0건→스킵) → LLM 회고 생성 → 결과 반환
 - **할당 Tool (1차)**: `db.get_visit_history`, `llm.generate_reflection` **(2개만)**
 - **추후 추가**: `llm.analyze_style` (7축 스타일 분류, 누적 10곳 이상 시)
@@ -232,16 +232,16 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 "에이전트가 구해온 정보를 실현 가능하도록 최종 배치하는 결정론 엔진"
 
 ```
-OR-Tools (1차) → Bedrock LLM (2차) → 규칙 폴백 (최후)
+OR-Tools (1차) → LLM(Anthropic) (2차) → 규칙 폴백 (최후)
 ```
 
 | 계층 | 역할 | 특성 |
 |---|---|---|
 | OR-Tools | VRPTW 결정론 최적화 (3초 제한) | 빠름, 결정론, HC 네이티브 |
-| Bedrock | 복잡한 제약에서 창의적 배치 제안 | 유연하지만 비결정론 |
+| LLM(Anthropic) | 복잡한 제약에서 창의적 배치 제안 | 유연하지만 비결정론 |
 | 규칙 폴백 | 전부 실패 시 최소 일정 보장 | INV-4 보장 |
 
-Bedrock 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
+LLM 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
 
 ---
 
@@ -276,12 +276,12 @@ Bedrock 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반�
 | 적용 O | 적용 X (직접 구현) |
 |---|---|
 | PlanBAgent RAG 파이프라인 | Orchestrator |
-| Bedrock LLM 호출 | Solver (OR-Tools) |
+| LLM(Anthropic) 호출 | Solver (OR-Tools) |
 | pgvector 벡터 스토어 연동 | M7 후보 풀 생성 |
 | 임베딩 생성 | ScheduleAgent, EditAgent 로직 |
 | | HC1~HC4 검증, 에이전트 병렬 실행 |
 
-적용 이유: RAG 보일러플레이트 제거 + Bedrock 파싱·재시도 내장. 상세 → `aidlc-docs/inception/application-design/langchain-adoption.md`
+적용 이유: RAG 보일러플레이트 제거 + LLM 호출 파싱·재시도 내장. 상세 → `aidlc-docs/inception/application-design/langchain-adoption.md`
 
 ---
 
@@ -355,7 +355,7 @@ TripPilot_AI/
 - OPTW/TOPTW 최적화 + HC1~HC4 하드 제약 검증
 - 이동시간 추정: 어댑터 체인 (카카오 → 네이버 → 직선거리×1.3)
 - warm-start 재생성: 고정 블록 보존, 나머지만 재배치
-- 하이브리드: OR-Tools(1차) → Bedrock(2차) → 규칙 폴백(최후)
+- 하이브리드: OR-Tools(1차) → LLM(Anthropic)(2차) → 규칙 폴백(최후)
 
 ### M7 Place Data — closed-set 후보 풀
 
@@ -526,3 +526,4 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 | 2026-07-16 | 평가 지표 2축 — 최신성(F1 신선도+F2 현행성)·신속도(SLO) |
 | 2026-07-16 | MLOps/LLMOps 설계 + ML 패턴 유형화 (4유형 10후보, 학습 로그 6종) |
 | 2026-07-21 | AI-D06 — LLM 벤더 확정: Anthropic API 직접 (Bedrock 아님). 티어 라우팅 모델 제안, 임베딩 Titan → 로컬 오픈소스(잠정) |
+| 2026-08-04 | Bedrock 잔여 표기 일괄 정정 (AI-D06 반영) · `SolveMode.BEDROCK`→`LLM` 개명 (TRIP-256) |
