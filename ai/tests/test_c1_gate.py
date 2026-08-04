@@ -15,7 +15,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from trippilot.c1.config import C1Config
-from trippilot.c1.gate import ClosedSetGate
+from trippilot.c1.gates.scoring import ClosedSetGate
 from trippilot.c1.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, ModelTier

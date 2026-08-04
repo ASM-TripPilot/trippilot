@@ -16,7 +16,9 @@ from hypothesis import given
 
 from trippilot.c1.config import C1Config
 from trippilot.c1.context import ContextResolver
-from trippilot.c1.gate import ExplanationGate, PlaceExtractionGate, ReflectionGate
+from trippilot.c1.gates.explanation import ExplanationGate
+from trippilot.c1.gates.place_extraction import PlaceExtractionGate
+from trippilot.c1.gates.reflection import ReflectionGate
 from trippilot.c1.gateway import GatewayFacade
 from trippilot.c1.prompts import PromptRegistry
 from trippilot.c1.workers.explanation import ExplanationWorker

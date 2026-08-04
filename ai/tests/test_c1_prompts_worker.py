@@ -16,7 +16,7 @@ from hypothesis import given
 
 from trippilot.c1.config import C1Config
 from trippilot.c1.context import ContextResolver
-from trippilot.c1.gate import ClosedSetGate
+from trippilot.c1.gates.scoring import ClosedSetGate
 from trippilot.c1.gateway import GatewayFacade
 from trippilot.c1.prompts import PromptRegistry
 from trippilot.c1.workers.preference import PreferenceScoringWorker, build_prompt_vars
