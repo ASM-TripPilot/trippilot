@@ -49,10 +49,10 @@ class AcceptAllGate:
     """검증 통과 fake — 고정 scored 반환."""
 
     def __init__(self, scored: tuple[ScoredPoi, ...]) -> None:
-        self._scored = scored
+        self._value = scored
 
     def apply(self, raw_text, pool, *, feature, trace_id, now):
-        return GateOutcome(scored=self._scored, drop_event=None, error=None)
+        return GateOutcome(value=self._value, drop_event=None, error=None)
 
 
 class DropAllGate:
@@ -61,7 +61,7 @@ class DropAllGate:
     def apply(self, raw_text, pool, *, feature, trace_id, now):
         dropped = (PoiId("hallucinated-1"),)
         return GateOutcome(
-            scored=(),
+            value=(),
             drop_event=GateDropEvent(
                 trace_id=trace_id,
                 occurred_at=now,
@@ -79,7 +79,7 @@ class ParseFailGate:
     """스키마 파싱 실패 fake (5단 실패 = 폴백 경로)."""
 
     def apply(self, raw_text, pool, *, feature, trace_id, now):
-        return GateOutcome(scored=(), drop_event=None, error="parse_error: not json")
+        return GateOutcome(value=(), drop_event=None, error="parse_error: not json")
 
 
 def _facade(llm, gate) -> tuple[GatewayFacade, InMemoryTrace]:

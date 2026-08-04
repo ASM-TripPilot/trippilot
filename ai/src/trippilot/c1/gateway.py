@@ -110,7 +110,7 @@ class GatewayFacade:
         )
         if outcome.drop_event is not None:
             self._trace.emit(outcome.drop_event)
-        if outcome.error is not None or not outcome.scored:
+        if outcome.error is not None or not outcome.value:
             reason = outcome.error or "gate_dropped_all"
             return self._fallback(
                 feature, model_id, prompt_ref, trace_id, now, response, reason
@@ -121,7 +121,7 @@ class GatewayFacade:
         )
         self._trace.emit(record)
         return TypedResult(
-            value=outcome.scored, is_fallback=False, error=None, call_record=record
+            value=outcome.value, is_fallback=False, error=None, call_record=record
         )
 
     def _fallback(
