@@ -126,6 +126,46 @@ class Poi:
 
 
 @dataclass(frozen=True, slots=True)
+class ExtractedPlace:
+    """자유 웹 추출 원시 후보 (프롬프트 정본 §2.5, 수집 게이트 전 단계).
+
+    SourcedPoi(coord·category 필수)보다 앞선 형태 — 문서에 없는 필드는 null 보존
+    ("추측·창작 금지" 가드레일). 수집 게이트(U6 sourcing)가 지오코딩·검증 후 승격.
+    """
+
+    name: str
+    address: str | None
+    coord: GeoPoint | None  # 좌표 임의 생성 금지 — 주소만 있으면 None
+    hours: str | None
+    category_raw: str | None  # PoiCategory 매핑은 게이트 몫
+    confidence: float  # 0.0~1.0 (게이트에서 클램프)
+    source_url: str
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "address": self.address,
+            "coord": self.coord.to_dict() if self.coord else None,
+            "hours": self.hours,
+            "category_raw": self.category_raw,
+            "confidence": self.confidence,
+            "source_url": self.source_url,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ExtractedPlace":
+        return cls(
+            name=d["name"],
+            address=d["address"],
+            coord=GeoPoint.from_dict(d["coord"]) if d.get("coord") else None,
+            hours=d["hours"],
+            category_raw=d["category_raw"],
+            confidence=d["confidence"],
+            source_url=d["source_url"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SourcedPoi:
     """웹 소싱 원시 후보 (PlacesPort 반환, M7 수집 게이트 전 단계).
 

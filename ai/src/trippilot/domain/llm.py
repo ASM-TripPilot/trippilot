@@ -77,6 +77,57 @@ class ScoredPoi:
 
 
 @dataclass(frozen=True, slots=True)
+class PoiExplanation:
+    """슬롯별 추천 이유 (프롬프트 정본 §2.2). poi_id ∈ pool (게이트가 강제, INV-1)."""
+
+    poi_id: PoiId
+    text: str
+
+    def to_dict(self) -> dict:
+        return {"poi_id": str(self.poi_id), "text": self.text}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "PoiExplanation":
+        return cls(poi_id=PoiId(d["poi_id"]), text=d["text"])
+
+
+class Mood(Enum):
+    """회고 무드 (프롬프트 정본 §2.3 OutputSchema)."""
+
+    GREAT = "GREAT"
+    GOOD = "GOOD"
+    OKAY = "OKAY"
+    TIRED = "TIRED"
+
+
+@dataclass(frozen=True, slots=True)
+class ReflectionDraft:
+    """당일 회고 초안 (프롬프트 정본 §2.3). 실패 시 FallbackCard 구성은 호출측."""
+
+    title: str
+    body: str
+    highlights: tuple[str, ...]
+    mood: Mood
+
+    def to_dict(self) -> dict:
+        return {
+            "title": self.title,
+            "body": self.body,
+            "highlights": list(self.highlights),
+            "mood": self.mood.value,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ReflectionDraft":
+        return cls(
+            title=d["title"],
+            body=d["body"],
+            highlights=tuple(d["highlights"]),
+            mood=Mood(d["mood"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class TypedResult(Generic[T]):
     """LLM 호출 결과 래퍼. 성공/폴백 무관 call_record 첨부 (NFR-7.1) —
     소비 측이 계측 여부를 선택할 수 없게 한다.

@@ -1,0 +1,24 @@
+# PlaceExtraction 프롬프트 v0.1.0 — 정본: ai-prompt-design.md §2.5 (가드레일 원문 유지)
+feature: PLACE_EXTRACTION
+version: "0.1.0"
+template: |
+  당신은 웹 문서에서 장소 정보를 구조화하는 추출 모듈입니다.
+  아래 문서에서 실재하는 장소만 추출하세요.
+
+  규칙 (지어내기 금지):
+  - 문서에 명시된 사실만 추출하세요. 없는 필드는 null로 두세요 (추측·창작 금지)
+  - 좌표를 임의로 생성하지 마세요 — 주소만 있으면 coord=null (지오코딩은 코드가 수행)
+  - 영업시간이 불명확하면 hours=null
+  - 확실하지 않으면 confidence를 낮추세요
+  - 문서에 없는 장소를 나열하지 마세요
+  - 아래 JSON 스키마를 정확히 따르고, JSON 외의 텍스트는 출력하지 마세요
+
+  [질의 맥락]
+  - 대상 지역: $region
+  - 카테고리: $category
+
+  [웹 문서]
+  $document
+
+  [출력 JSON 스키마]
+  {"places": [{"name": "string", "address": "string|null", "coord": {"lat": 0.0, "lng": 0.0} , "hours": "string|null", "category": "string|null", "confidence": 0.0, "sourceUrl": "string"}]}

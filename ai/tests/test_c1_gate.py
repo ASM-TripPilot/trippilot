@@ -73,10 +73,10 @@ def test_gate_p1_no_hallucination_survives(case) -> None:
     out = _apply(_payload(entries), pool)
 
     assert out.error is None
-    survivor_ids = {str(s.poi_id) for s in out.scored}
+    survivor_ids = {str(s.poi_id) for s in out.value}
     assert survivor_ids <= {str(i) for i in pool.poi_ids}  # 환각 0 (INV-1)
     assert survivor_ids == valid_ids  # 정상분은 전원 생존
-    assert all(s.is_llm_score for s in out.scored)
+    assert all(s.is_llm_score for s in out.value)
     if polluted_ids:  # 드롭 수 = 입력 − 생존 (GATE-P1)
         assert out.drop_event is not None
         assert out.drop_event.dropped_count == len(polluted_ids)
@@ -85,7 +85,7 @@ def test_gate_p1_no_hallucination_survives(case) -> None:
     else:
         assert out.drop_event is None
     if not valid_ids:  # 전량 드롭/빈 출력 → scored 비움 (GATE-P2 폴백 재료)
-        assert out.scored == ()
+        assert out.value == ()
 
 
 # ── 승격 규칙: 클램프·중복·풀 부재 ──────────────────────────
@@ -95,22 +95,22 @@ def test_gate_p1_no_hallucination_survives(case) -> None:
 def test_score_clamped_to_unit_interval(pool: CandidatePool) -> None:
     pid = sorted(pool.poi_ids, key=str)[0]
     out = _apply(_payload([(str(pid), 2.5)]), pool)
-    assert out.scored[0].score == 1.0
+    assert out.value[0].score == 1.0
     out = _apply(_payload([(str(pid), -0.3)]), pool)
-    assert out.scored[0].score == 0.0
+    assert out.value[0].score == 0.0
 
 
 @given(candidate_pools().filter(lambda p: bool(p.poi_ids)))
 def test_duplicate_poi_id_keeps_first(pool: CandidatePool) -> None:
     pid = str(sorted(pool.poi_ids, key=str)[0])
     out = _apply(_payload([(pid, 0.2), (pid, 0.9)]), pool)
-    assert len(out.scored) == 1 and out.scored[0].score == 0.2
+    assert len(out.value) == 1 and out.value[0].score == 0.2
     assert out.drop_event is None  # 중복은 드롭 계수 아님
 
 
 def test_no_pool_is_fallback_signal_not_silent_pass() -> None:
     out = _apply(_payload([("p1", 0.5)]), None)
-    assert out.scored == () and out.error is not None
+    assert out.value == () and out.error is not None
     assert out.error.startswith("gate_error:")
 
 
@@ -140,7 +140,7 @@ def test_schema_violations_become_parse_error(raw: str) -> None:
 @given(candidate_pools().filter(lambda p: bool(p.poi_ids)))
 def test_parse_error_over_valid_pool(pool: CandidatePool) -> None:
     out = _apply("깨진 출력", pool)
-    assert out.scored == () and out.error is not None
+    assert out.value == () and out.error is not None
     assert out.error.startswith("parse_error:")
 
 
