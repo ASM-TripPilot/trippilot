@@ -1,10 +1,10 @@
 """U2 — LLM 2차 솔버 · RepairEngine · warm-start.
 
 증명하는 것:
-  ① golden      : 유효 제안 → BEDROCK 해 채택 + LlmCallRecord 계측
+  ① golden      : 유효 제안 → LLM 해 채택 + LlmCallRecord 계측
   ② INV-1 (2차) : 후보 밖 유령 id 제안 → 드롭 + GateDropEvent, 유효분만 생존
   ③ 강건성      : 깨진 JSON·타임아웃 → None → 체인이 규칙 폴백으로 (침묵 없음)
-  ④ repair      : HC2 위반 제안을 시각 이동으로 수리해 채택 (출처 BEDROCK 보존)
+  ④ repair      : HC2 위반 제안을 시각 이동으로 수리해 채택 (출처 LLM 보존)
   ⑤ U5-P2      : warm-start — locked 슬롯 시각 불변 + 재실행 멱등
 """
 
@@ -71,7 +71,7 @@ def _llm_stage(llm, index, trace):
 
 
 # ① golden — 유효 제안 채택 + 계측
-def test_golden_proposal_accepted_as_bedrock() -> None:
+def test_golden_proposal_accepted_as_llm() -> None:
     problem, index = _setup()
     trace = InMemoryTrace()
     llm = FakeLlm(canned=_canned([
@@ -81,7 +81,7 @@ def test_golden_proposal_accepted_as_bedrock() -> None:
 
     result = stage.solve(problem, remaining_ms=5000)
 
-    assert result is not None and result.solve_mode == SolveMode.BEDROCK
+    assert result is not None and result.solve_mode == SolveMode.LLM
     assert [str(s.poi_id) for d in result.days for s in d.slots] == ["a"]
     records = trace.of_type(LlmCallRecord)
     assert len(records) == 1 and records[0].success is True
@@ -146,7 +146,7 @@ def test_hc2_violating_proposal_is_repaired() -> None:
 
     result = stage.solve(problem, 5000)
 
-    assert result is not None and result.solve_mode == SolveMode.BEDROCK
+    assert result is not None and result.solve_mode == SolveMode.LLM
     slots = [s for d in result.days for s in d.slots]
     assert len(slots) == 2
     travel = _EST.estimate(index[PoiId("a")].coord, index[PoiId("b")].coord,

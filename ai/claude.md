@@ -41,13 +41,13 @@ TripPilot AI는 LLM + 최적화 솔버 하이브리드 아키텍처로 여행 �
 
 ## Solver 하이브리드 전략
 
-OR-Tools (1차 결정론) → Bedrock LLM (2차 창의적 제안) → 규칙 폴백 (최후 보장)
+OR-Tools (1차 결정론) → LLM(Anthropic) (2차 창의적 제안) → 규칙 폴백 (최후 보장)
 모든 출력은 HC1~HC4 검증 통과 필수.
 
 ## 기술 스택
 
-- Python 3.11+ / AWS Bedrock (Claude) / OR-Tools
-- LangChain (부분 도입 — PlanBAgent RAG + Bedrock 호출에만)
+- Python 3.11+ / Anthropic API 직접 (Claude — AI-D06) / OR-Tools
+- LangChain (부분 도입 — PlanBAgent RAG + LLM 호출에만)
 - pgvector / Titan Embeddings v2 / pytest + Hypothesis (PBT 19속성)
 
 ## 현재 상태

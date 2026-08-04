@@ -111,7 +111,7 @@ class LlmSolver:
             days.append(DaySolution(date=day, slots=tuple(slots), fixed_blocks=()))
         candidate = ItinerarySolution(
             schedule_id=problem.schedule_id, days=tuple(days),
-            is_fallback=False, solve_mode=SolveMode.BEDROCK, solver_run=None)
+            is_fallback=False, solve_mode=SolveMode.LLM, solver_run=None)
 
         # 검증 → 1회 수리 → 재검증 (INV-2: 통과분만 반환)
         if check_all(candidate, problem, self._pois, self._est) == []:
