@@ -135,8 +135,15 @@ export function HeartBadgeGlyph({ size = 12, testID }: GlyphProps) {
 }
 
 /** d04 empty 상태 배지 — 위치 핀(32px, 분홍). e02 `MapPinGlyph`(1341:1378)와 같은 도형을
- * feature 간 직접 import 금지 관례대로 이 파일에 다시 그린다. */
-export function MapPinGlyph({ size = 32, testID }: GlyphProps) {
+ * feature 간 직접 import 금지 관례대로 이 파일에 다시 그린다. `tone`은 TRIP-223(d02) 행의
+ * 지역구 핀(회색, 13px)을 위한 확장 — `FilterSlidersGlyph`·`WarningTriangleGlyph`의 색 prop
+ * 선례를 따른다(브리프 §6-2, 범용 색상표는 만들지 않는다). 기본값은 기존 d04 용법과 동일. */
+export function MapPinGlyph({
+  size = 32,
+  tone = 'primary',
+  testID,
+}: GlyphProps & { tone?: 'primary' | 'muted' }) {
+  const stroke = tone === 'muted' ? MUTED : PRIMARY;
   return (
     <Svg
       testID={testID}
@@ -147,14 +154,14 @@ export function MapPinGlyph({ size = 32, testID }: GlyphProps) {
     >
       <Path
         d="M26.6667 13.3333C26.6667 21.3333 16 29.3333 16 29.3333C16 29.3333 5.33333 21.3333 5.33333 13.3333C5.33333 10.5044 6.45714 7.79125 8.45753 5.79086C10.4579 3.79047 13.171 2.66667 16 2.66667C18.829 2.66667 21.5421 3.79047 23.5425 5.79086C25.5429 7.79125 26.6667 10.5044 26.6667 13.3333Z"
-        stroke={PRIMARY}
+        stroke={stroke}
         strokeWidth={2.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M16 17.3333C18.2091 17.3333 20 15.5425 20 13.3333C20 11.1242 18.2091 9.33333 16 9.33333C13.7909 9.33333 12 11.1242 12 13.3333C12 15.5425 13.7909 17.3333 16 17.3333Z"
-        stroke={PRIMARY}
+        stroke={stroke}
         strokeWidth={2.8}
         strokeLinecap="round"
         strokeLinejoin="round"

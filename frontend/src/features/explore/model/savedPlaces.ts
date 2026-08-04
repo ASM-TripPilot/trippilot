@@ -63,6 +63,11 @@ export function useSavedPlaces(deps: { isAuthed: boolean }) {
     ? (savedListQuery.data ?? []).map((entry) => entry.place.poiId)
     : [];
 
+  // TRIP-223(d02) — 목록 원본 자체가 필요한 첫 소비자(01b Seed Q1). savedPoiIds와 같은 이유로
+  // isAuthed를 한 번 더 접는다: enabled:false는 새 요청만 막고, 로그인 중 채워진 캐시는
+  // 세션 만료 뒤에도 남는다(BR-U1-03).
+  const savedPlaces = deps.isAuthed ? (savedListQuery.data ?? []) : [];
+
   /**
    * BR-U1-06 — savedCount는 GET /places가 주는 파생 집계라 담기·해제 둘 다 이 쪽도 흔든다.
    */
@@ -127,5 +132,17 @@ export function useSavedPlaces(deps: { isAuthed: boolean }) {
     }
   }
 
-  return { isSaved, save, remove, savedPoiIds };
+  return {
+    isSaved,
+    save,
+    remove,
+    savedPoiIds,
+    savedPlaces,
+    // TRIP-223(d02) — 01b Seed Q6(4얼굴)이 여기서 나온다. `enabled:false`인 게스트 쿼리는
+    // isPending이 영원히 true다(fetchStatus는 idle) — 이 값을 그대로 상태 판정에 태우면
+    // 게스트가 끝나지 않는 스켈레톤을 본다. 그래서 게스트 분기는 이 값보다 먼저 판정해야 한다.
+    isPending: savedListQuery.isPending,
+    isError: savedListQuery.isError,
+    refetch: savedListQuery.refetch,
+  };
 }

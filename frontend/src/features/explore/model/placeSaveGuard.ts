@@ -59,3 +59,31 @@ export const COORD_BLOCKED_NOTICE: PlaceSaveNotice = {
   message: '위치를 확인할 수 없어 담을 수 없어요',
   action: null,
 };
+
+/**
+ * 해제(d02) 실패 4갈래 — TRIP-223. `SAVE_FAILURE_NOTICE`는 전부 **담기** 기준 문구라
+ * ("지금은 담을 수 없는 장소예요" 등) 해제 화면에 그대로 쓰면 사용자가 "담기에 실패했다"로
+ * 읽는다(INV-4). `not-found`는 계약이 404 하나로 "없음"·"타 계정"을 묶어 주므로 원인을
+ * 단정하지 않는다(AC-G6 계승).
+ */
+export const REMOVE_FAILURE_NOTICE: Record<
+  SavedPlacesFailureReason,
+  PlaceSaveNotice
+> = {
+  unauthenticated: {
+    message: '로그인이 풀렸어요. 다시 로그인해 주세요',
+    action: 'login',
+  },
+  'saved-id-unknown': {
+    message: '담기 처리 중이에요. 잠시 후 다시 시도해 주세요',
+    action: null,
+  },
+  'not-found': {
+    message: '지금은 해제할 수 없는 장소예요',
+    action: null,
+  },
+  network: {
+    message: '연결이 불안정해 해제하지 못했어요',
+    action: 'retry',
+  },
+};
