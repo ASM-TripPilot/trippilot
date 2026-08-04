@@ -230,6 +230,45 @@ class ItineraryProblem:
 
 
 @dataclass(frozen=True, slots=True)
+class QualityScore:
+    """솔버 산출물 품질 점수 (정본 components.md §3.7 · FR-SOLVER-02).
+
+    성분 4개 전부 [0, 1] 무차원 비율 — duration/minutes 필드 없음(INV-3).
+    composite는 2차 솔버(LLM) 엔진 교체 판정의 관측 지표(프로젝트 수준 결정, AI-D06).
+    산식·가중치·임계값은 CONSTRUCTION·운영 결정(O-SOLVER) — 계산은 c2/quality.py.
+    """
+
+    preference_fit: float
+    constraint_satisfaction: float
+    route_efficiency: float
+    composite: float
+
+    def __post_init__(self) -> None:
+        for name in ("preference_fit", "constraint_satisfaction",
+                     "route_efficiency", "composite"):
+            v = getattr(self, name)
+            if not 0.0 <= v <= 1.0:
+                raise ValueError(f"QualityScore.{name} 범위 밖 [0,1]: {v}")
+
+    def to_dict(self) -> dict:
+        return {
+            "preference_fit": self.preference_fit,
+            "constraint_satisfaction": self.constraint_satisfaction,
+            "route_efficiency": self.route_efficiency,
+            "composite": self.composite,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "QualityScore":
+        return cls(
+            preference_fit=d["preference_fit"],
+            constraint_satisfaction=d["constraint_satisfaction"],
+            route_efficiency=d["route_efficiency"],
+            composite=d["composite"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ItinerarySolution:
     """솔버 출력. 반환 전 HC1~HC4 통과 필수 (INV-2, 검증은 U2).
 
@@ -242,6 +281,7 @@ class ItinerarySolution:
     is_fallback: bool
     solve_mode: SolveMode
     solver_run: "SolverRunRecord | None"
+    score: QualityScore | None = None  # 품질 점수 부착 지점 (§3.7) — 하위호환 기본 None
 
     def __post_init__(self) -> None:
         if self.is_fallback and self.solve_mode not in _FALLBACK_MODES:
@@ -256,6 +296,7 @@ class ItinerarySolution:
             "is_fallback": self.is_fallback,
             "solve_mode": self.solve_mode.value,
             "solver_run": self.solver_run.to_dict() if self.solver_run else None,
+            "score": self.score.to_dict() if self.score else None,
         }
 
     @classmethod
@@ -270,6 +311,12 @@ class ItinerarySolution:
             solver_run=(
                 SolverRunRecord.from_dict(d["solver_run"])
                 if d["solver_run"] is not None
+                else None
+            ),
+            # d.get: score 키가 없는 기존 직렬화본도 그대로 읽힌다 (하위호환)
+            score=(
+                QualityScore.from_dict(d["score"])
+                if d.get("score") is not None
                 else None
             ),
         )
