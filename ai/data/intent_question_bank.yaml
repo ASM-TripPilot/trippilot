@@ -1,0 +1,196 @@
+# 초안 v0.1 — 사람 검수 전 (intent-matching-design §seed 규격)
+#
+# - 의도 라벨: orchestrator-delegation-design.md §5 라우팅 테이블의 closed-set 13종
+#   (CONFIRM/CANCEL/UNDO는 버튼형 상태 전이라 질문뱅크 대상에서 제외 — §3.2의 "13종"과 일치)
+# - 의도당 8문장, 총 104문장. origin은 전부 seed (수기 작성).
+# - 특정 지역명·POI명은 슬롯 자리로 일반화: {장소} {지역} {날짜} {기간}
+# - 검수·편입 절차와 평가셋 분리 원칙은 ai/data/README.md 참조.
+
+version: "0.1-draft"
+origin: seed
+source:
+  - ai/aidlc-docs/inception/application-design/intent-matching-design.md
+  - ai/aidlc-docs/inception/application-design/orchestrator-delegation-design.md
+
+intents:
+  - intent: GENERATE_SCHEDULE
+    handler: ScheduleAgent
+    mode: Delegate
+    reviewed: false
+    questions:
+      - "일정 만들어줘"
+      - "{지역} 여행 계획 좀 짜줄래?"
+      - "{날짜}부터 {날짜}까지 {지역} 가는데 일정 추천해줘"
+      - "여행 스케줄 자동으로 만들어주세요"
+      - "이번 여행 코스 좀 짜봐"
+      - "저장해둔 장소들로 일정 구성해줘"
+      - "{지역} {기간} 일정 뽑아줘"
+      - "새 여행 일정을 생성해 주세요"
+
+  - intent: REGENERATE
+    handler: ScheduleAgent
+    mode: Delegate
+    reviewed: false
+    questions:
+      - "일정 처음부터 다시 짜줘"
+      - "이 일정 마음에 안 들어, 전체 다시 만들어줘"
+      - "다른 버전으로 일정 새로 뽑아줄래?"
+      - "지금 일정 갈아엎고 새로 짜자"
+      - "전체 일정 재생성해 주세요"
+      - "이번엔 다른 스타일로 전부 다시 추천해줘"
+      - "일정 리셋하고 새로 만들어줘"
+      - "통째로 다시 짜주면 안 돼?"
+
+  - intent: REPLAN
+    handler: PlanBAgent
+    mode: Delegate
+    reviewed: false
+    questions:
+      - "비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아"
+      - "지금 너무 늦어졌는데 남은 일정 다시 조정해줘"
+      - "{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?"
+      - "날씨가 안 좋아서 오늘 남은 코스 재정비가 필요해"
+      - "차가 막혀서 다음 일정 못 갈 것 같아, 남은 계획 다시 잡아줘"
+      - "눈 온다는데 내일 일정 안전하게 다시 짜줘"
+      - "갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘"
+      - "폭우 때문에 야외 일정은 못 할 것 같아요, 플랜B 부탁해요"
+
+  - intent: SUGGEST_ALTERNATIVE
+    handler: PlanBAgent
+    mode: Delegate
+    reviewed: false
+    questions:
+      - "{장소} 대신 갈 데 있어?"
+      - "여기 문 닫았네, 근처에 비슷한 곳 추천해줘"
+      - "{장소} 말고 다른 대안 알려줄래?"
+      - "이 자리에 넣을 만한 다른 장소 뭐 있을까요?"
+      - "비 오는데 여기 대신 실내로 갈 만한 곳 있어?"
+      - "{장소}가 사람이 너무 많대, 대체할 곳 골라줘"
+      - "지금 일정에 있는 이곳 대신 갈 만한 데 하나만 추천해주세요"
+      - "여기 갈 데가 마땅치 않네, 대안 장소 추천 부탁해"
+
+  - intent: GENERATE_REFLECTION
+    handler: ReflectAgent
+    mode: Delegate
+    reviewed: false
+    questions:
+      - "오늘 하루 회고 써줘"
+      - "오늘 여행 어땠는지 정리해줄래?"
+      - "오늘 다닌 곳들로 회고 만들어주세요"
+      - "하루 마무리 기록 남기고 싶어"
+      - "오늘의 여행 일기 작성해줘"
+      - "오늘 회고 생성해줘"
+      - "오늘 하루 돌아보는 글 하나 써줄 수 있어?"
+      - "방금 끝난 하루 정리 부탁해"
+
+  - intent: TRIP_SUMMARY
+    handler: ReflectAgent
+    mode: Delegate
+    reviewed: false
+    questions:
+      - "이번 여행 전체 요약해줘"
+      - "여행 끝났는데 총정리 한번 해줄래?"
+      - "이번 여행 전체를 한눈에 볼 수 있게 정리해주세요"
+      - "여행 전체 리포트 만들어줘"
+      - "이번 여정 요약본 뽑아줘"
+      - "여행 총평 좀 써줘"
+      - "처음부터 끝까지 어떻게 다녔는지 요약해줄 수 있어?"
+      - "이번 여행 하이라이트만 모아서 정리해줘"
+
+  - intent: STYLE_ANALYSIS
+    handler: ReflectAgent
+    mode: Delegate
+    reviewed: false
+    questions:
+      - "내 여행 스타일 분석해줘"
+      - "나는 어떤 스타일로 여행하는 것 같아?"
+      - "내가 다닌 곳들 보면 무슨 취향인지 알려줘"
+      - "제 여행 성향 좀 분석해 주세요"
+      - "내 여행 패턴이 궁금해"
+      - "나 여행 취향 분석 가능해?"
+      - "지금까지 기록으로 내 여행 유형 알려줄래?"
+      - "내 여행 스타일 진단해줘"
+
+  - intent: EDIT_SCHEDULE
+    handler: EditAgent
+    mode: Delegate
+    reviewed: false
+    questions:
+      - "저녁에 맛집 하나 넣어줘"
+      - "{장소} 일정에서 빼줘"
+      - "이 두 곳 순서 바꿔줄래?"
+      - "{장소}를 {날짜} 오전으로 옮겨주세요"
+      - "셋째 날 일정에 카페 한 군데 추가해줘"
+      - "이 장소 일정에서 삭제하고 싶어"
+      - "{장소}를 {장소}로 교체해줘"
+      - "마지막 일정 하나만 앞으로 당겨줘"
+
+  - intent: GET_NEXT_SLOT
+    handler: null            # Orchestrator 직접 (DB 조회)
+    mode: FastPath
+    reviewed: false
+    questions:
+      - "다음 일정 뭐야?"
+      - "이따가 어디 가기로 했지?"
+      - "다음에 갈 곳 알려줘"
+      - "지금 끝나면 그다음은 어디예요?"
+      - "다음 목적지가 어디였더라"
+      - "이 다음 스케줄 알려줄래?"
+      - "내일 첫 일정은 뭐야?"
+      - "다음 코스 하나만 말해줘"
+
+  - intent: SHOW_SCHEDULE
+    handler: null            # Orchestrator 직접 (DB 조회)
+    mode: FastPath
+    reviewed: false
+    questions:
+      - "지금 일정 보여줘"
+      - "오늘 스케줄 전체 좀 볼 수 있을까?"
+      - "내 여행 일정표 띄워줘"
+      - "{날짜} 일정 확인하고 싶어요"
+      - "전체 일정 한번 보여줄래?"
+      - "지금 계획이 어떻게 되어 있지?"
+      - "일정표 열어줘"
+      - "이번 여행 스케줄 정리된 거 보여주세요"
+
+  - intent: GET_WEATHER
+    handler: WeatherAgent
+    mode: FastPath
+    reviewed: false
+    questions:
+      - "내일 날씨 어때?"
+      - "{날짜}에 {지역} 비 와?"
+      - "오늘 우산 챙겨야 하나?"
+      - "여행지 날씨 알려줘"
+      - "이번 주말 날씨 어떤가요?"
+      - "지금 거기 기온 몇 도야?"
+      - "{지역} 날씨 예보 좀 확인해줄래?"
+      - "내일 야외 다니기 괜찮은 날씨야?"
+
+  - intent: GET_DISTANCE
+    handler: TransitAgent    # 거리만 응답 (INV-3 — 소요시간 미표시)
+    mode: FastPath
+    reviewed: false
+    questions:
+      - "여기서 {장소}까지 얼마나 멀어?"
+      - "{장소}랑 {장소} 사이 거리 알려줘"
+      - "다음 목적지까지 거리가 어떻게 돼요?"
+      - "{장소}까지 몇 킬로야?"
+      - "숙소에서 {장소}까지 먼 편이야?"
+      - "두 장소 간 거리 좀 확인해줄래?"
+      - "{장소} 여기서 가까워?"
+      - "지금 위치에서 {장소}까지 거리 알려주세요"
+
+  - intent: GET_POI_INFO
+    handler: PlaceScoutAgent
+    mode: FastPath
+    reviewed: false
+    questions:
+      - "{장소} 영업시간 알려줘"
+      - "{장소} 입장료 얼마야?"
+      - "{장소} 오늘 문 여는지 확인해줄래?"
+      - "{장소}가 어떤 곳인지 설명해줘"
+      - "{장소} 휴무일이 언제예요?"
+      - "이 장소 정보 좀 보여줘"
+      - "{장소} 전화번호 알 수 있을까?"
+      - "{장소} 리뷰나 평점 어때?"
