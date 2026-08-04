@@ -6,6 +6,8 @@
   ③ INV-2: 유효하지 않은 해(HC 위반)는 단계가 내놔도 반환되지 않음 → 다음 단계로
   ④ 관측: 성공 시 SolverRunRecord 발행, 강등마다 FallbackEvent (침묵 없음)
   ⑤ 모순 입력에서 SolverConflictError (전 단계 실패)
+  ⑥ TRIP-261: solve()의 모든 반환 경로(폴백 강등 포함)에 QualityScore 부착
+     — 성분 [0,1] + 결정론(같은 입력 2회 → 같은 score)
 """
 
 from __future__ import annotations
@@ -157,3 +159,44 @@ def test_empty_chain_raises_conflict() -> None:
         assert False, "SolverConflictError가 나야 함"
     except SolverConflictError:
         pass
+
+
+# ── ⑥ TRIP-261: QualityScore 배선 ──
+
+def test_solve_attaches_quality_score_with_unit_range_components() -> None:
+    problem, index = _setup()
+    facade = HybridSolverFacade(
+        [RuleFallbackSolver(index, _EST, _CFG)], index, _EST,
+        FakeClock(), InMemoryTrace())
+
+    result = facade.solve(problem, deadline_ms=5000)
+
+    assert result.score is not None
+    for v in (result.score.preference_fit, result.score.constraint_satisfaction,
+              result.score.route_efficiency, result.score.composite):
+        assert 0.0 <= v <= 1.0
+
+
+def test_solve_quality_score_is_deterministic() -> None:
+    problem, index = _setup()
+
+    def run() -> ItinerarySolution:
+        facade = HybridSolverFacade(
+            [RuleFallbackSolver(index, _EST, _CFG)], index, _EST,
+            FakeClock(), InMemoryTrace())
+        return facade.solve(problem, deadline_ms=5000)
+
+    assert run().score == run().score            # 같은 입력 2회 → 같은 score
+
+
+def test_degraded_fallback_path_also_gets_quality_score() -> None:
+    """강등 끝의 RULE_FALLBACK 해에도 score 부착 (INV-4: 폴백도 동급 산출물)."""
+    problem, index = _setup()
+    chain = [InvalidResultStage(), RuleFallbackSolver(index, _EST, _CFG)]
+    facade = HybridSolverFacade(chain, index, _EST, FakeClock(), InMemoryTrace())
+
+    result = facade.solve(problem, deadline_ms=5000)
+
+    assert result.solve_mode == SolveMode.RULE_FALLBACK
+    assert result.score is not None
+    assert result.score.constraint_satisfaction == 1.0  # 반환 해는 HC 위반 0건

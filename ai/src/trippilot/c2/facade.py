@@ -10,10 +10,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Mapping, Protocol, Sequence
 
 from trippilot.c2.constraints import check_all
+from trippilot.c2.quality import compute_quality
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.itinerary import (
     FixedBlock,
@@ -92,7 +94,12 @@ class HybridSolverFacade:
                 violations_found=0,
                 repaired=False,
             ))
-            return result
+            # 유일 수렴 반환점 — 모든 경로(OR-Tools·LLM·규칙 폴백)에 품질 점수 부착
+            # (§3.7, TRIP-261). regenerate()도 solve() 경유라 함께 커버된다.
+            return replace(
+                result,
+                score=compute_quality(result, problem, self._pois, self._est),
+            )
         # RuleFallback이 체인에 있으면 도달 불가. 도달 = 유효 해 자체가 없음(모순 입력)
         raise SolverConflictError("모든 단계 실패 — 고정 블록 모순 등 입력 확인 필요")
 
