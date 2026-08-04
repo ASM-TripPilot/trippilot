@@ -39,6 +39,11 @@ def _load_entry(path: Path) -> tuple[LlmFeature, _Entry]:
     template = data.get("template")
     if not isinstance(template, str) or not template.strip():
         raise ValueError(f"{path.name}: template 비어있음")
+    if not Template(template).is_valid():
+        # 리터럴 $가 있으면 렌더가 런타임에 ValueError로 죽는다 — 로드 시점 차단 (TRIP-260 #2)
+        raise ValueError(
+            f"{path.name}: template 플레이스홀더 형식 오류 — 리터럴 $는 $$로 이스케이프"
+        )
     return feature, _Entry(
         template=template, version=version, prompt_id=f"prompts/{path.name}"
     )

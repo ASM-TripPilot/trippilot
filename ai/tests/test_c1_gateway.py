@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 import pytest
 
 from trippilot.c1.config import C1Config
-from trippilot.c1.gate import GateOutcome
+from trippilot.c1.gates.base import GateOutcome
 from trippilot.c1.gateway import GatewayFacade, TierRouter
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import LlmFeature, ModelTier, ScoredPoi

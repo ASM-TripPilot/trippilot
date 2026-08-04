@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Protocol
 
 from trippilot.c1.config import C1Config
-from trippilot.c1.gate import ExitGate
+from trippilot.c1.gates.base import ExitGate
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi, TypedResult
 from trippilot.domain.observability import FallbackEvent, LlmCallRecord

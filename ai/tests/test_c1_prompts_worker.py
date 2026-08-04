@@ -16,7 +16,7 @@ from hypothesis import given
 
 from trippilot.c1.config import C1Config
 from trippilot.c1.context import ContextResolver
-from trippilot.c1.gate import ClosedSetGate
+from trippilot.c1.gates.scoring import ClosedSetGate
 from trippilot.c1.gateway import GatewayFacade
 from trippilot.c1.prompts import PromptRegistry
 from trippilot.c1.workers.preference import PreferenceScoringWorker, build_prompt_vars
@@ -164,3 +164,13 @@ def test_worker_rejects_non_persona_context() -> None:
 
 def _empty_pool() -> CandidatePool:
     return CandidatePool(poi_ids=frozenset(), pois=(), generated_at=_NOW)
+
+
+def test_registry_rejects_stray_dollar_template(tmp_path: Path) -> None:
+    """TRIP-260 #2: 리터럴 $ 템플릿은 로드 시점에 거부 — 런타임 크래시 방지."""
+    (tmp_path / "bad.yaml").write_text(
+        "feature: PREFERENCE_SCORING\nversion: '0.1.0'\ntemplate: '가격 $10 이내'",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError):
+        PromptRegistry(tmp_path)
