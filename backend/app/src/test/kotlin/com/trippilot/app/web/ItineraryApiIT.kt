@@ -57,6 +57,9 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
     }
 
+    private fun poiId(token: String): String =
+        call(HttpMethod.GET, "/api/v1/places?region=제주", token).second[0]["poiId"].asText()
+
     @Test
     fun `인증 없으면 401`() {
         call(HttpMethod.POST, "/api/v1/trips/${UUID.randomUUID()}/itinerary", null).first shouldBe 401
@@ -93,5 +96,23 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
         itineraries.findByTrip(UUID.fromString(trip)).size shouldBe 1
+    }
+
+    @Test
+    fun `필수 방문지가 고정 슬롯으로 생성에 반영`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        val poi = poiId(token)
+        // FIXED 필수 방문지 08-01 12:00 (여행 기간 내)
+        call(
+            HttpMethod.POST, "/api/v1/trips/$trip/must-visits", token,
+            """{"poiId":"$poi","type":"FIXED","fixedDate":"2026-08-01","fixedStart":"12:00","dwellMin":90}""",
+        ).first shouldBe 201
+
+        val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 201
+        val day0 = body["days"][0]["slots"]
+        val hasFixed = (0 until day0.size()).any { day0[it]["isFixed"].asBoolean() && day0[it]["poiId"].asText() == poi }
+        hasFixed shouldBe true // must_visit → fixedBlock → 고정 슬롯(HC3)
     }
 }

@@ -9,6 +9,7 @@ import com.trippilot.savedaccommodation.domain.RegisterRoute
 import com.trippilot.savedaccommodation.domain.SavedStay
 import com.trippilot.savedaccommodation.domain.SavedStayRepository
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
@@ -40,6 +41,7 @@ private class FakeStays : SavedStayRepository {
 private class FakeTrips : TripFacade {
     val periods = mutableMapOf<Pair<UUID, UUID>, TripPeriod>()
     override fun findPeriod(accountId: UUID, tripId: UUID) = periods[accountId to tripId]
+    override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? = null // 거점 배정 테스트 미사용
 }
 
 class BaseAssignmentServiceTest : StringSpec({
