@@ -646,6 +646,18 @@ paths:
       responses:
         '200': { description: 목록, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/MustVisit' } } } } }
         '404': { description: 없음/타 계정 }
+  /trips/{tripId}/itinerary:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: AI 일정 생성 — 소유 여행 날짜 기준 ScheduleAgent 호출·영속(첫 슬라이스). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: '#/components/schemas/GenerateItineraryRequest' } } }
+      responses:
+        '201': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
+        '404': { description: 여행 없음/타 계정 }
   /trips/{tripId}/must-visits/{mustVisitId}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -913,6 +925,39 @@ components:
         fixedDate: { type: string, format: date, nullable: true }
         fixedStart: { type: string, nullable: true }
         dwellMin: { type: integer, nullable: true }
+
+    GenerateItineraryRequest:
+      type: object
+      properties:
+        generationMode: { type: string, enum: [FULLY_AI, CO_PLAN], description: 미지정 시 FULLY_AI }
+
+    Itinerary:
+      type: object
+      required: [itineraryId, tripId, status, solveMode, isFallback, days]
+      properties:
+        itineraryId: { type: string, format: uuid }
+        tripId: { type: string, format: uuid }
+        status: { type: string, enum: [PLANNED, CONFIRMED] }
+        solveMode: { type: string, enum: [FULL_AI, DETERMINISTIC, MINIMAL] }
+        isFallback: { type: boolean }
+        days:
+          type: array
+          items:
+            type: object
+            required: [date, slots]
+            properties:
+              date: { type: string, format: date }
+              slots:
+                type: array
+                items:
+                  type: object
+                  required: [poiId, startAt, endAt, isFixed]
+                  properties:
+                    poiId: { type: string, format: uuid }
+                    startAt: { type: string, description: "HH:mm:ss (솔버 검증값 INV-2)" }
+                    endAt: { type: string }
+                    isFixed: { type: boolean }
+                    # INV-3: 소요시간(duration) 필드 없음 — 거리만(후속)
 
     TermsType:
       type: string
