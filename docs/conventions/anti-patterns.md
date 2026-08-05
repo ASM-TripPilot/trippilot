@@ -46,6 +46,8 @@
 - **백틱 테스트 함수명에 `<` `>` `.` `;` `[` `/` 등 JVM 식별자 금지문자를 넣지 말 것.** 예: `` `체크아웃 <= 체크인은 400` `` → 컴파일 에러 "Name contains illegal characters: <". 부등호는 "이하/초과" 같은 말로. (TRIP-176)
 - **fresh 계산값과 DB 왕복값의 타임스탬프를 정확 비교하지 말 것.** 방금 만든 `Instant`는 나노초, Postgres `timestamptz` 왕복은 마이크로초 → 로컬 통과·CI 실패로 flaky. 멱등성은 진행 clock(tick +1s) 단위테스트로 검증, E2E는 존재/비교만. (TRIP-159 — BootstrapOnboardingApiIT)
 - **PBT/제약 검증 시 조합 케이스를 빠뜨리지 말 것.** 예: filter-zero 원인 계산이 개별 필터만 보고 조합(각 필터는 개별 매칭이나 AND로 0건) 케이스를 놓쳤다 → 활성 필터 전부를 완화 후보로. (TRIP-175 검수)
+- **domain 패키지 경로(`/domain/`)에 프레임워크(Jackson·Spring·JPA)를 import하는 테스트를 두지 말 것 → `/contract/`·`/adapter/` 등 domain 밖 패키지에.** Konsist R2가 `files.filter { "/domain/" in path }`로 **테스트 소스까지 경로 기준으로 스캔**해서, domain 패키지에 둔 직렬화·계약 테스트가 jackson을 import하면 R2(domain 순수성)가 실패한다. (BE-1 TRIP-228 ScheduleAgent 계약 테스트 — snake_case 왕복 테스트를 `..domain..`→`..contract..`로 이동)
+- **DTO 왕복(round-trip) equality 테스트는 픽스처를 한 번만 생성해 비교할 것.** 픽스처 팩토리가 `UUID.randomUUID()` 등 비결정 값을 담으면 `readValue(write(a)) shouldBe factory()`가 매번 다른 인스턴스와 비교돼 깨진다 — `val a = factory()` 한 번 잡고 그 `a`와 비교. (TRIP-228)
 
 ## Git · 프로세스
 
