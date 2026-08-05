@@ -16,7 +16,6 @@ import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
@@ -35,11 +34,11 @@ class GenerateItineraryService(
     private val itineraries: ItineraryRepository,
     private val clock: Clock,
 ) {
-    @Transactional
     fun generate(accountId: UUID, tripId: UUID, mode: GenerationMode): Itinerary {
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
+        // 외부(ScheduleAgent) 호출은 트랜잭션 밖 — 영속만 원자적(replaceForTrip). BE-2 실 HTTP 어댑터가 DB 커넥션을 물지 않게.
         val output = scheduleAgent.generate(assembleInput(tripId, mode, period))
-        return itineraries.save(output.toItinerary(tripId))
+        return itineraries.replaceForTrip(tripId, output.toItinerary(tripId))
     }
 
     private fun assembleInput(tripId: UUID, mode: GenerationMode, period: TripPeriod): ScheduleAgentInput =

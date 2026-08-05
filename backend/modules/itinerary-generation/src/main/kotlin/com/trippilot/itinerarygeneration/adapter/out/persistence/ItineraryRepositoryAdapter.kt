@@ -45,6 +45,12 @@ class ItineraryRepositoryAdapter(
         return itinerary
     }
 
+    @Transactional
+    override fun replaceForTrip(tripId: UUID, itinerary: Itinerary): Itinerary {
+        itineraries.deleteByTripId(tripId) // 기존 일정 제거(day/slot은 DB FK cascade) — 여행당 1개
+        return save(itinerary)
+    }
+
     override fun findById(itineraryId: UUID): Itinerary? =
         itineraries.findById(itineraryId).orElse(null)?.toDomain()
 
