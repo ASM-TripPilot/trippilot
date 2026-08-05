@@ -1,6 +1,8 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
@@ -41,6 +43,7 @@ class GenerateItineraryService(
     private val baseAnchors: BaseAnchorFacade,
     private val scheduleAgent: ScheduleAgentPort,
     private val itineraries: ItineraryRepository,
+    private val events: DomainEventPublisher,
     private val clock: Clock,
 ) {
     fun generate(accountId: UUID, tripId: UUID, mode: GenerationMode): Itinerary {
@@ -57,7 +60,10 @@ class GenerateItineraryService(
             log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
             MinimalItineraryFallback.of(input, clock.instant())
         }
-        return itineraries.replaceForTrip(tripId, output.toItinerary(tripId))
+        val saved = itineraries.replaceForTrip(tripId, output.toItinerary(tripId))
+        // 생성 이벤트 발행(TRIP-230). 아웃박스 영속(relay)은 공통 인프라 후속 — 현재 인프로세스 발행.
+        events.publish(ItineraryGenerated(saved.itineraryId.toString(), tripId.toString(), saved.isFallback))
+        return saved
     }
 
     private fun assembleInput(
