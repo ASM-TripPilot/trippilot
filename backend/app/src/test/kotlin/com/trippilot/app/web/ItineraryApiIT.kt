@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
@@ -30,6 +31,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
 
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
+    @Autowired private lateinit var itineraries: ItineraryRepository
 
     private val json = ObjectMapper()
     private val now = Instant.parse("2026-08-01T00:00:00Z")
@@ -82,5 +84,14 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val trip = newTrip(owner)
         val intruder = newToken()
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", intruder).first shouldBe 404
+    }
+
+    @Test
+    fun `재생성하면 기존 일정 교체 — 여행당 1개`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        itineraries.findByTrip(UUID.fromString(trip)).size shouldBe 1
     }
 }

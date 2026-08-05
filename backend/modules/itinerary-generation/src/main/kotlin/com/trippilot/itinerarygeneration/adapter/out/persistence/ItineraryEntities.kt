@@ -53,6 +53,11 @@ class VisitSlotEntity(
 
 interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {
     fun findByTripId(tripId: UUID): List<ItineraryEntity>
+
+    // 여행 일정 교체용 — itinerary 삭제 시 day/slot은 DB FK ON DELETE CASCADE로 함께 제거.
+    @Modifying(clearAutomatically = true)
+    @Query("delete from ItineraryEntity i where i.tripId = :tripId")
+    fun deleteByTripId(@Param("tripId") tripId: UUID)
 }
 
 interface ItineraryDayJpaRepository : JpaRepository<ItineraryDayEntity, UUID> {

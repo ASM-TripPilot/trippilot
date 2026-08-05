@@ -117,4 +117,7 @@ interface ItineraryRepository {
     fun save(itinerary: Itinerary): Itinerary
     fun findById(itineraryId: UUID): Itinerary?
     fun findByTrip(tripId: UUID): List<Itinerary>
+
+    /** 여행의 현행 일정을 교체(원자적) — 재생성 시 기존 제거 후 저장. 여행당 1개 유지. */
+    fun replaceForTrip(tripId: UUID, itinerary: Itinerary): Itinerary
 }
