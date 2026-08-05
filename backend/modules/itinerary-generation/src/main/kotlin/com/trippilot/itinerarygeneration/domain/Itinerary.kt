@@ -54,7 +54,12 @@ class ItineraryDay private constructor(
 ) {
     companion object {
         fun of(date: LocalDate, dayOrder: Int, slots: List<VisitSlot>): ItineraryDay {
-            if (dayOrder < 0) throw ValidationFailed(listOf(FieldError("dayOrder", "일자 순서는 0 이상입니다.")))
+            val errors = mutableListOf<FieldError>()
+            if (dayOrder < 0) errors += FieldError("dayOrder", "일자 순서는 0 이상입니다.")
+            if (slots.map { it.orderIndex }.toSet().size != slots.size) {
+                errors += FieldError("slots", "슬롯 순서(orderIndex)는 중복될 수 없습니다.")
+            }
+            if (errors.isNotEmpty()) throw ValidationFailed(errors)
             return ItineraryDay(date, dayOrder, slots.sortedBy { it.orderIndex })
         }
     }
@@ -87,10 +92,15 @@ class Itinerary private constructor(
             isFallback: Boolean,
             days: List<ItineraryDay>,
             now: Instant,
-        ): Itinerary = Itinerary(
-            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, solveMode, isFallback,
-            days.sortedBy { it.dayOrder }, now, now,
-        )
+        ): Itinerary {
+            if (days.map { it.dayOrder }.toSet().size != days.size) {
+                throw ValidationFailed(listOf(FieldError("days", "일자 순서(dayOrder)는 중복될 수 없습니다.")))
+            }
+            return Itinerary(
+                UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, solveMode, isFallback,
+                days.sortedBy { it.dayOrder }, now, now,
+            )
+        }
 
         @Suppress("LongParameterList")
         fun reconstitute(

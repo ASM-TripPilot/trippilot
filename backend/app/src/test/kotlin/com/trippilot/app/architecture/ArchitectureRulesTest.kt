@@ -30,6 +30,8 @@ class ArchitectureRulesTest {
                 "com.trippilot.accommodationsearch..",
                 "com.trippilot.savedaccommodation..",
                 "com.trippilot.trip..",
+                "com.trippilot.placedata..",
+                "com.trippilot.itinerarygeneration..",
             )
             .because("R5: 의존 방향 app→modules→common, 역방향 금지")
             .allowEmptyShould(true)

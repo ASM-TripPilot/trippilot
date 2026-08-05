@@ -59,7 +59,8 @@ interface ItineraryDayJpaRepository : JpaRepository<ItineraryDayEntity, UUID> {
     fun findByItineraryIdOrderByDayOrderAsc(itineraryId: UUID): List<ItineraryDayEntity>
 
     // 자식 교체 시 bulk delete(즉시 실행)로 INSERT-before-DELETE 순서 문제 회피(anti-patterns.md).
-    @Modifying
+    // clearAutomatically: bulk delete가 L1 컨텍스트를 비워, 삭제된 옛 엔티티가 같은 tx에 잔존하지 않게(재저장 스테일 방지).
+    @Modifying(clearAutomatically = true)
     @Query("delete from ItineraryDayEntity d where d.itineraryId = :itineraryId")
     fun deleteByItineraryId(@Param("itineraryId") itineraryId: UUID)
 }
@@ -67,7 +68,7 @@ interface ItineraryDayJpaRepository : JpaRepository<ItineraryDayEntity, UUID> {
 interface VisitSlotJpaRepository : JpaRepository<VisitSlotEntity, UUID> {
     fun findByItineraryDayIdInOrderByOrderIndexAsc(dayIds: Collection<UUID>): List<VisitSlotEntity>
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("delete from VisitSlotEntity s where s.itineraryDayId in :dayIds")
     fun deleteByItineraryDayIdIn(@Param("dayIds") dayIds: Collection<UUID>)
 }
