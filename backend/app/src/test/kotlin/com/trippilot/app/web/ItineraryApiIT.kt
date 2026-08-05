@@ -90,6 +90,35 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `생성 후 조회하면 200, 동일 일정`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        body["tripId"].asText() shouldBe trip
+        body["status"].asText() shouldBe "PLANNED"
+        body["days"].size() shouldBe 2
+    }
+
+    @Test
+    fun `생성 전 조회는 404`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).first shouldBe 404
+    }
+
+    @Test
+    fun `타 계정 조회는 404`() {
+        val owner = newToken()
+        val trip = newTrip(owner)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", owner).first shouldBe 201
+        val intruder = newToken()
+        call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", intruder).first shouldBe 404
+    }
+
+    @Test
     fun `재생성하면 기존 일정 교체 — 여행당 1개`() {
         val token = newToken()
         val trip = newTrip(token)
