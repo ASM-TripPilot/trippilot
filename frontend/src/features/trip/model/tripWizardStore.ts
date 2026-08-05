@@ -45,8 +45,12 @@ export interface TripWizardDraft {
   createdTripId?: string;
   addDestination(regionName: string, nights: number): void;
   removeDestination(regionName: string): void;
+  /** `presetCode`가 `undefined`면 "어떤 칩도 선택 안 됨" — 프리셋이 아닌 출처(등록 숙소
+   * 날짜, TRIP-208)로 기간을 채우는 경로다. 상태 필드가 이미 `presetCode?`(초기 `undefined`)라
+   * 새 코드값이나 별도 액션을 만들지 않는다(01b D10 — 새 코드값은 `PERIOD_PRESETS`가 곧
+   * 칩 목록이라 5번째 칩을 낳는다). */
   setPeriod(
-    presetCode: PeriodPresetCode,
+    presetCode: PeriodPresetCode | undefined,
     startDate: string,
     endDate: string
   ): void;

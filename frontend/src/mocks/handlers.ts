@@ -294,4 +294,16 @@ export const handlers = [
   http.get(`${BASE}/me/preferences`, () =>
     HttpResponse.json(preferenceViewFixture())
   ),
+
+  /**
+   * TRIP-208 등록 숙소 날짜 연계 — 리포 최초의 `GET /saved-stays` 목이다.
+   *
+   * **기본값이 빈 목록인 이유**: 이 핸들러가 필요한 첫 번째 이유는 AC 심판이 아니라
+   * `TripNewStep1Page.integration.test.tsx`(승인 동결분)를 **살려 두는 것**이다. 그 버킷은
+   * `onUnhandledRequest: 'error'`로 돌기 때문에, 위저드 페이지가 이 경로를 부르는 순간
+   * 핸들러가 없으면 그 파일이 AC 실패가 아니라 **준비 단계에서 죽는다**. 빈 계정이 가장
+   * 무해한 기본값이고(대안 UI만 그려진다), 얼굴별 응답이 필요한 테스트는 `server.use(...)`로
+   * 각자 덮어쓴다(`TripNewStep1Page.stayImport.integration.test.tsx`).
+   */
+  http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
 ];

@@ -3,6 +3,7 @@
     "PONYTAIL_DEFAULT_MODE": "lite",
     "PONYTAIL_SUBAGENT_MATCHER": "^implementer$"
   },
+  "effortLevel": "high",
   "permissions": {
     "deny": [
       "mcp__obsidian__obsidian_delete_file"
