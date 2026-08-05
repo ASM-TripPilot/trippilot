@@ -15,4 +15,6 @@ dependencies {
 
     testImplementation(project(":common:test-support"))
     testImplementation(libs.kotest.property)
+    testImplementation(libs.jackson.module.kotlin)      // BE-1 계약 직렬화(snake_case) 왕복 테스트
+    testImplementation(libs.jackson.datatype.jsr310)
 }
