@@ -279,6 +279,15 @@ describe('PlaceExploreScreen — error (AC-7 · INV-4)', () => {
     expect(cardTestIds()).toEqual([]);
     expect(visibleNotices()).toEqual(['explore-places-error']);
   });
+
+  // 실기 스모크가 잡은 결함(2026-08-05) — 안내가 `FlatList` 밖·위에 있으면 검색바·카테고리
+  // 칩을 통째로 아래로 민다. testID 존재만 보는 단언은 두 배치 모두 통과하므로 여기서 잠근다.
+  it('에러 안내가 검색·필터 컨트롤을 아래로 밀지 않는다 — 목록 헤더 안에 그려진다', () => {
+    renderState({ kind: 'error' });
+
+    const grid = screen.getByTestId('explore-places-grid');
+    expect(within(grid).getByTestId('explore-places-error')).toBeOnTheScreen();
+  });
 });
 
 describe('PlaceExploreScreen — results 무회귀 (AC-8 · AC-G7)', () => {

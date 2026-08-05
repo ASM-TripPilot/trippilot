@@ -413,9 +413,12 @@ function ListEmptyBlock({
   return null;
 }
 
-/** error 안내(AC-7 · INV-4) — `ListEmptyBlock` 밖, `FlatList` 위에서 `state.kind==='error'`
+/** error 안내(AC-7 · INV-4) — `ListEmptyBlock` 밖, 목록 **헤더 안**에서 `state.kind==='error'`
  * 하나만 보고 그린다. 카드가 몇 장 떠 있든(재조회 실패로 이전 목록이 남아 있어도) 항상
- * 보인다(TRIP-222 03b W-1). */
+ * 보인다(TRIP-222 03b W-1).
+ * 헤더 안인 이유: `FlatList` 밖에 두면 검색바·카테고리 칩까지 통째로 아래로 밀린다
+ * (실기 스모크 실측 2026-08-05). 밖으로 뺀 것은 "카드가 있어도 보이게"가 목적이었고
+ * 헤더 안에서도 그 목적은 그대로 달성된다. */
 function ErrorNotice({ onRetry }: { onRetry?: () => void }): ReactElement {
   return (
     <View className="w-full items-center justify-center px-lg pt-xl">
@@ -506,8 +509,6 @@ export function PlaceExploreScreen({
       <View testID="explore-places-root" className="flex-1 bg-canvas">
         <AppBar onBack={onBack} />
 
-        {state.kind === 'error' ? <ErrorNotice onRetry={onRetry} /> : null}
-
         <FlatList<Place>
           testID="explore-places-grid"
           className="flex-1"
@@ -529,6 +530,9 @@ export function PlaceExploreScreen({
                 onSelect={onSelectCategory}
               />
               <SortRow />
+              {state.kind === 'error' ? (
+                <ErrorNotice onRetry={onRetry} />
+              ) : null}
             </View>
           }
           ListEmptyComponent={
