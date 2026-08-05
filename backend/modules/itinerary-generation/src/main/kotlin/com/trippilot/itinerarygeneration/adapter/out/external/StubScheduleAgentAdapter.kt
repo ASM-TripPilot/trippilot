@@ -21,9 +21,16 @@ import java.util.UUID
 @Component
 class StubScheduleAgentAdapter(private val clock: Clock) : ScheduleAgentPort {
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
+        val fixedByDate = input.fixedBlocks.filter { it.date != null }.groupBy { it.date }
         val days = input.timeWindows.map { tw ->
-            val poi = UUID.nameUUIDFromBytes("stub-${tw.date}".toByteArray()) // 결정론 placeholder
-            DaySchedule(tw.date, listOf(VisitSlotDisplay(poi, tw.start, tw.start.plusHours(1), false, "약 1km", false)))
+            val fixed = fixedByDate[tw.date].orEmpty().map { fb ->
+                val s = fb.start ?: tw.start
+                VisitSlotDisplay(fb.poiId, s, s.plusMinutes((fb.dwellMin ?: 60).toLong()), false, "약 1km", isFixed = true)
+            }
+            val placeholder = VisitSlotDisplay(
+                UUID.nameUUIDFromBytes("stub-${tw.date}".toByteArray()), tw.start, tw.start.plusHours(1), false, "약 1km", false,
+            )
+            DaySchedule(tw.date, (fixed + placeholder).sortedBy { it.startAt })
         }
         return ScheduleAgentOutput(
             days = days,
