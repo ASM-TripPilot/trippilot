@@ -24,6 +24,7 @@ import io.kotest.matchers.shouldBe
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneOffset
 import java.util.UUID
 
@@ -37,6 +38,13 @@ private class CapturingAgent(private val now: Instant) : ScheduleAgentPort {
             freshness = FreshnessMeta(now, degraded = false),
         )
     }
+    override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
+}
+
+/** ScheduleAgent(AI) 실패 재현 — INV-4 폴백 경로 검증용. */
+private class ThrowingAgent : ScheduleAgentPort {
+    override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput = throw RuntimeException("agent down")
     override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
 }
@@ -62,12 +70,15 @@ class GenerateItineraryServiceTest : StringSpec({
     val start = LocalDate.parse("2026-08-01")
     val end = LocalDate.parse("2026-08-03") // 계획일 08-01·02·03, 숙박일 08-01·02
 
-    fun service(agent: CapturingAgent, prefs: PreferenceSnapshot, anchors: List<DayAnchorView>): GenerateItineraryService {
+    fun service(agent: ScheduleAgentPort, prefs: PreferenceSnapshot, anchors: List<DayAnchorView>): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
             override fun findGenerationContext(accountId: UUID, tripId: UUID) =
                 if (accountId == acc) {
-                    TripGenerationContext(start, end, listOf("제주"), "친구", 500_000, listOf(FixedVisit(poi, start, null, 90)))
+                    TripGenerationContext(
+                        start, end, listOf("제주"), "친구", 500_000,
+                        listOf(FixedVisit(poi, start, LocalTime.parse("12:00"), 90)),
+                    )
                 } else {
                     null
                 }
@@ -118,5 +129,17 @@ class GenerateItineraryServiceTest : StringSpec({
         agent.captured!!.tripContext.budgetLevel shouldBe null
         agent.captured!!.preferenceProfile.styles shouldBe emptyList()
         agent.captured!!.anchors shouldBe emptyList()
+    }
+
+    "ScheduleAgent 실패 시 결정론 최소 폴백(INV-4) — isFallback·MINIMAL·고정블록 보존" {
+        val result = service(ThrowingAgent(), fullPrefs, emptyList()).generate(acc, tripId, GenerationMode.FULLY_AI)
+        result.isFallback shouldBe true
+        result.solveMode shouldBe SolveMode.MINIMAL
+        // must_visit 고정 블록(08-01 12:00)은 폴백에도 보존
+        val day0 = result.days.first { it.date == start }
+        day0.slots.single().let {
+            it.sourcePoiId shouldBe poi
+            it.isFixed shouldBe true
+        }
     }
 })

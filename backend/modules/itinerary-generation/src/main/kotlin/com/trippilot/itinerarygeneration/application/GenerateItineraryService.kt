@@ -7,6 +7,7 @@ import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.MinimalItineraryFallback
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
@@ -21,6 +22,7 @@ import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.LocalDate
@@ -45,8 +47,16 @@ class GenerateItineraryService(
         val ctx = trips.findGenerationContext(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val prefs = preferences.findPreferences(accountId)                                    // 취향 7축·예산등급(계정 스코프)
         val stayAnchors = baseAnchors.findStayNightAnchors(accountId, tripId)                 // 숙박일별 확정 거점 좌표
+        val input = assembleInput(tripId, mode, ctx, prefs, stayAnchors)
         // 외부(ScheduleAgent) 호출은 트랜잭션 밖 — 영속만 원자적(replaceForTrip). BE-2 실 HTTP 어댑터가 DB 커넥션을 물지 않게.
-        val output = scheduleAgent.generate(assembleInput(tripId, mode, ctx, prefs, stayAnchors))
+        // INV-4: AI 실패 시 침묵 금지 — 결정론 최소 폴백(must_visit 고정블록)으로 대체하고 isFallback 로 표시.
+        // (day1 조기노출/백그라운드 반환은 실 비동기 어댑터(BE-2/229) 도입 시 — 동기 스텁에선 이연.)
+        val output = try {
+            scheduleAgent.generate(input)
+        } catch (e: Exception) {
+            log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
+            MinimalItineraryFallback.of(input, clock.instant())
+        }
         return itineraries.replaceForTrip(tripId, output.toItinerary(tripId))
     }
 
@@ -102,6 +112,7 @@ class GenerateItineraryService(
     }
 
     companion object {
+        private val log = LoggerFactory.getLogger(GenerateItineraryService::class.java)
         private val DEFAULT_START = LocalTime.of(9, 0)
         private val DEFAULT_END = LocalTime.of(21, 0)
         private const val TOTAL_DEADLINE_MS = 20_000L
