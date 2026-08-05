@@ -664,6 +664,16 @@ paths:
       responses:
         '201': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/itinerary/confirm:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 일정 확정 — PLANNED→CONFIRMED 단방향 잠금
+      responses:
+        '200': { description: 확정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
+        '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
+        '409': { description: 이미 확정됨 }
   /trips/{tripId}/must-visits/{mustVisitId}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }

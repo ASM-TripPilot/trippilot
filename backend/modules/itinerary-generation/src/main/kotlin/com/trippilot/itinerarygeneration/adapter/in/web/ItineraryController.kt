@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.adapter.`in`.web
 
+import com.trippilot.itinerarygeneration.application.ConfirmItineraryService
 import com.trippilot.itinerarygeneration.application.GenerateItineraryService
 import com.trippilot.itinerarygeneration.application.ItineraryQueryService
 import com.trippilot.itinerarygeneration.domain.GenerationMode
@@ -23,6 +24,7 @@ import java.util.UUID
 class ItineraryController(
     private val service: GenerateItineraryService,
     private val queryService: ItineraryQueryService,
+    private val confirmService: ConfirmItineraryService,
 ) {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -38,6 +40,11 @@ class ItineraryController(
     @GetMapping
     fun get(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
         ItineraryResponse.from(queryService.get(principal.accountId(), tripId))
+
+    /** 확정 — PLANNED→CONFIRMED 단방향 잠금(이미 확정이면 409). */
+    @PostMapping("/confirm")
+    fun confirm(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
+        ItineraryResponse.from(confirmService.confirm(principal.accountId(), tripId))
 }
 
 /** 생성 요청 — 방식(미지정 시 FULLY_AI). */
