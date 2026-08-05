@@ -14,8 +14,15 @@ import {
   HOME_LOADING_PROPS,
   HOME_NO_TRIP_PROPS,
 } from '@/features/home/model/homeFixtures';
+import {
+  PREVIEW_PLACES,
+  PREVIEW_SAVED_PLACES,
+  PREVIEW_SAVED_POI_IDS,
+} from '@/features/explore/model/exploreFixtures';
 import { REGIONS } from '@/features/explore/model/regions';
+import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
+import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
@@ -406,6 +413,40 @@ const PREVIEW_STATES: PreviewState[] = [
     label: '지도 · 기본',
     login: null,
     render: () => <KakaoMapView center={{ lat: 37.5665, lng: 126.978 }} />,
+  },
+  // 탐색 2키(TRIP-221·223) — **results 얼굴 전용**이다. 실화면 딥링크로는 볼 수 없다:
+  // 백엔드가 401 이면 d04 는 항상 error, 세션이 없으면 d02 는 항상 게스트 안내로 떨어진다.
+  // 나머지 얼굴(loading·empty·filter-zero·error·게스트)은 실화면에서 그대로 재현되므로
+  // 여기 키를 늘리지 않는다.
+  {
+    key: 'places-results',
+    label: '장소 탐색 · 결과',
+    login: null,
+    render: () => (
+      <PlaceExploreScreen
+        places={PREVIEW_PLACES}
+        savedPoiIds={PREVIEW_SAVED_POI_IDS}
+        selectedCategory={null}
+        searchText=""
+        onSelectCategory={noop}
+        onChangeSearchText={noop}
+        onToggleSave={noop}
+        onPressCreateTrip={noop}
+      />
+    ),
+  },
+  {
+    key: 'saved-places-results',
+    label: '담은 장소 · 결과',
+    login: null,
+    render: () => (
+      <SavedPlaceListScreen
+        savedPlaces={PREVIEW_SAVED_PLACES}
+        onPressRemove={noop}
+        onPressCreateTrip={noop}
+        onPressBrowse={noop}
+      />
+    ),
   },
 ];
 
