@@ -39,18 +39,26 @@ import path from 'path';
  *     (TRIP-203 AC-4 런타임 짝 · BR-U1-39, B-8)
  *   - `stays/stays.ts`·`saved-stays/saved-stays.ts` 원본 바이트가 흔들리지 않는다
  *     (TRIP-203 AC-7, B-9)
+ *   - `places/places.ts`가 장소 4오퍼레이션의 함수·훅·쿼리키 헬퍼를 갖는다
+ *     (TRIP-220 AC-1, B-10)
+ *   - `place.ts`의 `tags`가 필수이고 `imageUrl`이 선택·nullable이다
+ *     (TRIP-220 AC-2, B-11)
  *
  * **B. 이행 체크포인트 — 한시적이다.** 생성 파일 **목록**을 동결 8경로로 정확히 고정한다
  * (B-1). 다른 태그를 `orval.config.ts`의 `filters.tags`에 추가하는 정당한 후속 티켓이 이
  * 숫자를 8 → N으로 만든다. 완화형: **"8경로를 부분집합으로 포함하고, `stays/stays.ts`가
  * 목록에 있다"**(개수 앵커와 엔드포인트 파일 존재는 그대로 지킨다).
  *
- * **B 카운터**: 이 파일 전용. 현재값 = **0**.
- * TRIP-203(20260802)의 red는 제외구 AND 조건 둘 다에 걸린다 — ① 이 단언을 만든 사이클
- * 밖의 작업이고 ② 목록을 갱신하지 않고는 통과할 수 없다. 그런데도 **격하하지 않고 갱신만
- * 한다**(01b Seed D2): 선례 2건(TRIP-183·TRIP-202)이 모두 갱신을 택했고, 격하는 가드를
- * 약화시키는 덜 되돌리기 쉬운 방향이라 사용자 판정 사안이다. 카운터를 어떻게 읽을지(위
- * 현재값 0이 실적과 어긋나 보인다) 자체가 이 사이클의 미결 1순위로 올라가 있다.
+ * **B 카운터**: 이 파일 전용. 현재값 = **4**.
+ * ⚠️ **TRIP-220(20260803)에서 `0` → `4`로 정정했다.** 숫자만 0에 멈춰 있었을 뿐 실적은
+ * 처음부터 0이 아니었다 — TRIP-203 devlog가 이미 "헤더는 0이라 적었는데 실적은 3건
+ * (TRIP-183·TRIP-202·TRIP-211재생성)"을 실측으로 남겼고, 여기에 이번 TRIP-220(places 태그
+ * 추가로 49→56)이 더해져 4다. 넷 다 제외구 AND 조건에 걸린다 — ① 이 단언을 만든 사이클
+ * 밖의 작업이고 ② 목록을 갱신하지 않고는 통과할 수 없다.
+ * 즉 아래 "2회 누적 시 격하" 시점은 **이미 지났다.** 그런데도 이번에도 **격하하지 않고
+ * 갱신만 한다**(01b Seed §3): 격하는 가드를 약화시키는, 덜 되돌리기 쉬운 방향이라 사용자
+ * 판정 사안이고 사용자 부재 중 대신 정하지 않는다. 숫자가 틀린 채로 두면 다음 사람도 같은
+ * 판정을 또 미루므로 **카운터만 실적값으로 고친다.** 격하/존치 판정은 여전히 미결이다.
  * **B 카운터 제외구**(`fsdStructure.test.ts`·`tabbarVisual.test.ts` 헤더에서 계승): 세는
  * red는 ① 이 단언을 만든 사이클 **밖**의 작업이 낸 것이고 ② B 단언 자체를 갱신하지 않고는
  * 통과할 수 없는 것이다(AND). 이번 사이클의 출생 red(B-1~B-5)는 전부 제외구에 걸려 세지
@@ -103,12 +111,17 @@ function readGeneratedSource(...segments: string[]): string {
 }
 
 /**
- * 동결 49경로(02a §6-③ 실측 그대로 — 재타이핑 금지).
+ * 동결 56경로(02a §6-③ 실측 그대로 — 재타이핑 금지).
  *
  * 순서는 JS `Array.prototype.sort()`(UTF-16 코드 단위) 기준이다. 셸 `sort`는 로케일 정렬이라
  * `prefScalarAxis.ts`의 자리가 달라진다 — 목록을 셸에서 뽑아 붙이면 완전 일치가 깨진다.
+ * TRIP-220이 더한 두 경로가 같은 함정의 또 다른 예다: `savePlaceRequest.ts`가
+ * `savedPlace.ts`**보다 앞**이다(`'P'`=80 < `'d'`=100 — 셸 정렬이면 뒤집힌다).
  *
- * 8 → 12 → 17 → 18 → 49로 네 번 늘었고 전부 의도된 계약 변경이다.
+ * 8 → 12 → 17 → 18 → 49 → 56으로 다섯 번 늘었고 전부 의도된 계약 변경이다.
+ * - **TRIP-220**(56): `orval.config.ts` 태그에 `places` 추가. 장소 4오퍼레이션
+ *   (`GET /places`·`POST /saved-places`·`GET /saved-places`·`DELETE /saved-places/{id}`)과
+ *   스키마 6개가 함께 생성된다. d04 탐색·d02 담은 장소 두 화면의 공통 선행 칸이다.
  * - **TRIP-203**(49): `orval.config.ts` 태그에 `trips`·`preferences` 추가. orval에는 오퍼레이션
  *   단위 필터가 없고 태그 단위뿐이라, 여행 12개·취향 2개 오퍼레이션이 통째로 딸려 오면서
  *   스키마 31개가 함께 생성된다(01b Seed D3에서 수용 — `saved-stays` CRUD 5종이 TRIP-183
@@ -126,6 +139,7 @@ function readGeneratedSource(...segments: string[]): string {
  * **개수가 아니라 목록 전체를 잠그는 성질은 그대로다** — 의도치 않은 태그가 섞이면 여전히 잡힌다.
  */
 const GENERATED_FILES_FROZEN = [
+  'shared/api/generated/places/places.ts',
   'shared/api/generated/preferences/preferences.ts',
   'shared/api/generated/saved-stays/saved-stays.ts',
   'shared/api/generated/schemas/addMustVisitRequest.ts',
@@ -144,11 +158,15 @@ const GENERATED_FILES_FROZEN = [
   'shared/api/generated/schemas/errorResponseErrorExistingProvider.ts',
   'shared/api/generated/schemas/errorResponseErrorFieldsItem.ts',
   'shared/api/generated/schemas/geocodeCandidate.ts',
+  'shared/api/generated/schemas/getPlacesParams.ts',
   'shared/api/generated/schemas/getStaysGeocodeParams.ts',
   'shared/api/generated/schemas/getStaysSearchParams.ts',
   'shared/api/generated/schemas/index.ts',
   'shared/api/generated/schemas/mustVisit.ts',
   'shared/api/generated/schemas/mustVisitType.ts',
+  'shared/api/generated/schemas/place.ts',
+  'shared/api/generated/schemas/placeDataStatus.ts',
+  'shared/api/generated/schemas/poiCategory.ts',
   'shared/api/generated/schemas/prefArrayAxis.ts',
   'shared/api/generated/schemas/prefScalarAxis.ts',
   'shared/api/generated/schemas/preferenceInput.ts',
@@ -164,6 +182,8 @@ const GENERATED_FILES_FROZEN = [
   'shared/api/generated/schemas/preferenceViewCompanion.ts',
   'shared/api/generated/schemas/registerRoute.ts',
   'shared/api/generated/schemas/registerSavedStayRequest.ts',
+  'shared/api/generated/schemas/savePlaceRequest.ts',
+  'shared/api/generated/schemas/savedPlace.ts',
   'shared/api/generated/schemas/savedStay.ts',
   'shared/api/generated/schemas/stayItem.ts',
   'shared/api/generated/schemas/stayPrice.ts',
@@ -238,8 +258,8 @@ describe('스캔 전처리 · 주석 제거 자기검증 — B 파일 전체의 
   });
 });
 
-describe('AC-2 ②③ · 생성 파일 인벤토리 — 동결 49경로 (B-1, 한시 — 위 졸업 조건 B)', () => {
-  it('src/shared/api/generated/ 아래 .ts 파일 목록이 동결 49경로와 정확히 같다', () => {
+describe('AC-2 ②③ · 생성 파일 인벤토리 — 동결 56경로 (B-1, 한시 — 위 졸업 조건 B)', () => {
+  it('src/shared/api/generated/ 아래 .ts 파일 목록이 동결 56경로와 정확히 같다', () => {
     // 개수 > 0이 아니라 목록 전체를 잠근다 — 필터에 다른 태그가 섞여 들어와도 잡힌다.
     expect(listGeneratedFiles()).toEqual(GENERATED_FILES_FROZEN);
   });
@@ -441,5 +461,75 @@ describe('TRIP-203 AC-7 · 재생성이 기존 산출물을 흔들지 않는다 
     );
 
     expect(actual).toEqual(ENDPOINT_FILE_SHA256);
+  });
+});
+
+describe('TRIP-220 AC-1 · 장소 클라이언트가 실제로 생성됐다 (B-10)', () => {
+  /**
+   * B-6(여행·취향)과 같은 이유로 파일 목록(B-1)과 별개로 필요하다: orval은 `filters.tags`에
+   * 없는 태그를 **조용히 건너뛴다**(에러도 없고 종료 코드도 0). B-1이 파일의 존재를, 이
+   * 단언이 그 안의 심볼을 잠근다.
+   *
+   * 이름은 전부 **실측한 생성 이름**이다(01c 코드젠 실측). openapi에 `operationId`가 0건이라
+   * orval이 method+path로 이름을 짓는다 — 티켓 본문의 `deleteSavedPlacesSavedPlaceId` 같은
+   * 긴 이름이 오기가 아니라 실제 생성 이름이다. 앱 코드는 이 이름을 몰라도 된다
+   * (도메인 훅 `useSavedPlaces`가 감싼다).
+   *
+   * 쿼리 키 헬퍼 2개는 AC-1 본문이 명시적으로 요구한다. 이게 없으면 무효화 키를 손으로 적게
+   * 되고, 생성물이 키를 바꿔도 아무도 모르게 어긋난다(`useCreateTrip`의 같은 근거).
+   */
+  it('places/places.ts가 장소 4오퍼레이션의 경로·함수·훅·쿼리키 헬퍼·타입 심볼을 갖는다', () => {
+    const source = readGeneratedSource('places', 'places.ts');
+
+    expect(source).toContain('/places');
+    expect(source).toContain('/saved-places');
+
+    expect(source).toContain('export const getPlaces');
+    expect(source).toContain('export const postSavedPlaces');
+    expect(source).toContain('export const getSavedPlaces');
+    expect(source).toContain('export const deleteSavedPlacesSavedPlaceId');
+
+    expect(source).toContain('useGetPlaces');
+    expect(source).toContain('usePostSavedPlaces');
+    expect(source).toContain('useGetSavedPlaces');
+    expect(source).toContain('useDeleteSavedPlacesSavedPlaceId');
+
+    expect(source).toContain('export const getGetPlacesQueryKey');
+    expect(source).toContain('export const getGetSavedPlacesQueryKey');
+
+    expect(source).toContain('Place');
+    expect(source).toContain('SavedPlace');
+    expect(source).toContain('SavePlaceRequest');
+  });
+});
+
+describe('TRIP-220 AC-2 · Place 타입이 TRIP-219 두 필드를 그대로 집어 갔다 (B-11)', () => {
+  /**
+   * 티켓 본문 24행("Place: … 사진·태그 필드 없음")은 같은 브랜치의 커밋 `c5139e9`(TRIP-219)가
+   * 뒤집었다. `orval.config.ts`의 input이 **워킹트리** openapi라 코드젠이 두 필드를 그대로
+   * 집어 가는데, 그것이 실제로 일어났는지는 이 칸이 아니면 아무도 보지 않는다 — 두 필드는
+   * 다음 칸(d04 사진 그리드 · d02 태그 칩)의 유일한 데이터 원본이다.
+   *
+   * 필수/선택의 방향이 서로 반대라는 점이 이 단언의 실질이다: `tags`는 required(미확보 시
+   * **빈 배열**이지 누락이 아니다), `imageUrl`은 optional·nullable(NULL=미확보 — 서버가 기본
+   * 이미지를 지어내지 않으므로 클라가 자리만 비운다).
+   */
+  it('place.ts의 tags가 필수 string[]이고 imageUrl이 선택·nullable이다', () => {
+    const source = readGeneratedSource('schemas', 'place.ts');
+
+    // 긍정 — 01c 실측 그대로의 두 줄.
+    expect(source).toContain('tags: string[];');
+    expect(source).toContain('imageUrl?: string | null;');
+
+    // 긍정(대조군) — 파일이 실제로 Place다. 이게 없으면 아래 부정 짝이 빈 문자열을 상대로
+    // 공허하게 통과한다.
+    expect(source).toContain('poiId: string;');
+
+    // 부정 짝 — 필수/선택이 뒤집힌 흔적. 등장하는 것을 모아 실패 diff에 어느 쪽이 뒤집혔는지
+    // 찍는다. `'imageUrl:'`은 물음표 없는 필수형을 잡는다(`imageUrl?:`에는 매치되지 않는다).
+    const flipped = ['tags?', 'imageUrl:'].filter((name) =>
+      source.includes(name)
+    );
+    expect(flipped).toEqual([]);
   });
 });

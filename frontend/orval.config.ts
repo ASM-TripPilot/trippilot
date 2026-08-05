@@ -7,13 +7,14 @@ import { defineConfig } from 'orval';
 // TRIP-203에서 trips·preferences 추가: 여행 생성 mutation·취향 조회 훅의 계약 원본(D6).
 // orval은 태그 단위 필터만 지원해 두 태그에 딸린 소비자 0 오퍼레이션(bases·coverage·
 // must-visits·PUT /me/preferences)도 함께 생성된다 — 01b Seed D3 수용.
+// TRIP-220에서 places 추가: 장소 탐색·담기 4오퍼레이션의 계약 원본(d04·d02 화면의 선행 칸).
 export default defineConfig({
   trippilot: {
     input: {
       target: '../backend/docs/design/openapi.yaml',
       filters: {
         mode: 'include',
-        tags: ['stays', 'saved-stays', 'trips', 'preferences'],
+        tags: ['stays', 'saved-stays', 'trips', 'preferences', 'places'],
       },
     },
     output: {

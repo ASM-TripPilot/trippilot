@@ -91,18 +91,24 @@ function extractReferencedResponseNames(source: string): string[] {
   return [...source.matchAll(RESPONSE_REF_PATTERN)].map((match) => match[1]);
 }
 
-/** `/stays/search:` 경로 블록만 잘라낸다(`extractResponsesBlock`과 같은 슬라이싱 방식) —
- * 시작 = `\n  /stays/search:\n`, 끝 = 그다음 2칸 들여쓰기 경로 키(`PATH_KEY_PATTERN`과 같은
+/** 경로 키 하나의 블록만 잘라낸다(`extractResponsesBlock`과 같은 슬라이싱 방식) —
+ * 시작 = `\n  <경로>:\n`, 끝 = 그다음 2칸 들여쓰기 경로 키(`PATH_KEY_PATTERN`과 같은
  * 모양) 또는 없으면 파일 끝. 다른 경로(`/stays/geocode` 등)에도 `- { name: ..., in: query`
- * 꼴 파라미터가 있으므로, 블록을 자르지 않고 파일 전체를 훑으면 남의 파라미터가 섞인다. */
-const STAYS_SEARCH_BLOCK_START = '\n  /stays/search:\n';
+ * 꼴 파라미터가 있으므로, 블록을 자르지 않고 파일 전체를 훑으면 남의 파라미터가 섞인다.
+ *
+ * TRIP-220에서 `/places`에도 같은 슬라이싱이 필요해져 경로를 인자로 받게 일반화했다
+ * (같은 파일 안에 같은 함수를 두 벌 두지 않는다). 시작 문자열이 `\n` + 2칸 + 경로 + `:` +
+ * `\n` 전체를 요구하므로 **`/places`가 `/saved-places`를 오탐하지 않는다** — 실측으로
+ * 확인했다(02a §5-④: `/places` → [region, category], `/saved-places` → []). 기존
+ * `/stays/search` 결과도 일반화 전후가 같다(같은 실측). */
 const NEXT_PATH_KEY_PATTERN = /\n {2}\/[^\s:]+:/;
-function extractStaysSearchBlock(source: string): string {
-  const startIdx = source.indexOf(STAYS_SEARCH_BLOCK_START);
+function extractPathBlock(source: string, pathKey: string): string {
+  const start = `\n  ${pathKey}:\n`;
+  const startIdx = source.indexOf(start);
   if (startIdx === -1) {
     return '';
   }
-  const bodyStart = startIdx + STAYS_SEARCH_BLOCK_START.length;
+  const bodyStart = startIdx + start.length;
   const rest = source.slice(bodyStart);
   const nextKeyMatch = rest.match(NEXT_PATH_KEY_PATTERN);
   const bodyEnd =
@@ -136,13 +142,11 @@ function extractSchemaBlock(source: string, name: string): string {
   return source.slice(bodyStart, bodyEnd);
 }
 
-/** `/stays/search` 블록 안 `- { name: X, ...}` 파라미터 항목의 `name` 값 전부(등장 순서
+/** 경로 블록 안 `- { name: X, ...}` 파라미터 항목의 `name` 값 전부(등장 순서
  * 그대로 — 순서가 뒤집혀도 잡히도록 완전 일치로 비교한다). */
 const PARAM_NAME_PATTERN = /- \{ name: (\w+),/g;
-function extractParamNames(staysSearchBlock: string): string[] {
-  return [...staysSearchBlock.matchAll(PARAM_NAME_PATTERN)].map(
-    (match) => match[1]
-  );
+function extractParamNames(pathBlock: string): string[] {
+  return [...pathBlock.matchAll(PARAM_NAME_PATTERN)].map((match) => match[1]);
 }
 
 describe('AC-1 · 계약 회귀 — /stays/search 실재 + servers base (A-1, 선제 green)', () => {
@@ -168,7 +172,7 @@ describe('AC-1 · 계약 회귀 — /stays/search 실재 + servers base (A-1, �
 describe('BR-U1-10 · BR-U1-15 · /stays/search 파라미터 이름 잠금 — 스펙 드리프트 가드 (게이트①-2 보정 W-3, A-1의 연장)', () => {
   it('파라미터 이름이 region·amenity·stayType·lat·lng·radiusKm 순서로만 있고, 다른 이름이 섞이면 즉시 잡힌다', () => {
     const source = readOpenapiSource();
-    const block = extractStaysSearchBlock(source);
+    const block = extractPathBlock(source, '/stays/search');
     const paramNames = extractParamNames(block);
 
     // 앵커 — 블록 슬라이싱·정규식이 실제로 뭔가를 모았다는 증거. 없으면 블록이 빈손이어도
@@ -260,6 +264,52 @@ describe('TRIP-203 AC-3 · AC-4 · 여행 생성 계약 앵커 (A-3, 선제 gree
     // 부정 짝 — 온보딩 축의 값이 여행 축으로 새어 들어오지 않았다.
     expect(block).not.toContain('커플');
     expect(block).not.toContain('부모님');
+  });
+});
+
+describe('TRIP-220 AC-10 · 장소 계약 앵커 (A-4, 선제 green)', () => {
+  /**
+   * ⚠️ **선제 green** — openapi가 이미 이렇게 적혀 있어 지금 red를 낼 수 없다. 그런데 이
+   * 앵커가 **가장 필요한 시점**이 지금이다: TRIP-219(`c5139e9`)가 방금 `Place`에 `imageUrl`·
+   * `tags`를 넣었고, 그 두 필드가 d04·d02 화면의 유일한 데이터 원본이다. 생성물은 리포에
+   * 커밋되므로 백엔드가 이 계약을 되돌려도 **누가 `pnpm codegen`을 돌리기 전까지는 생성물을
+   * 보는 테스트(B-10·B-11)도 아무 말을 하지 않는다.** 그 사각지대를 여기서 메운다
+   * (같은 파일 A-1·A-3 앵커와 같은 취지 · 01b Seed Q5).
+   */
+  it('/places의 쿼리 파라미터가 region·category 정확히 둘뿐이다', () => {
+    const source = readOpenapiSource();
+    const block = extractPathBlock(source, '/places');
+    const paramNames = extractParamNames(block);
+
+    // 앵커 — 블록 슬라이싱·정규식이 실제로 뭔가를 모았다는 증거. 없으면 빈손이어도 아래
+    // 완전 일치가 공허하게 통과해 sort·q 같은 신규 파라미터가 안 잡힌다.
+    expect(paramNames.length).toBeGreaterThan(0);
+
+    // 완전 일치(순서 포함) — 탐색 파라미터는 이 둘뿐이라는 것이 티켓·브리프가 함께 실측한
+    // 계약이다(sort·q·좌표 없음). 하나라도 늘면 즉시 red.
+    expect(paramNames).toEqual(['region', 'category']);
+  });
+
+  it('Place가 tags를 required로 요구하고 imageUrl은 선택으로 남는다', () => {
+    const source = readOpenapiSource();
+    const block = extractSchemaBlock(source, 'Place');
+
+    // 앵커 — 슬라이싱이 실제로 뭔가를 잡았다는 증거. 이웃 스키마(SavePlaceRequest)로 새지
+    // 않는 것은 실측으로 확인했다(02a §5-④).
+    expect(block.length).toBeGreaterThan(0);
+
+    // 완전 일치(줄 전체) — 필드 하나가 추가·삭제·개명되면 즉시 red.
+    expect(block).toContain(
+      'required: [poiId, nameKo, category, lat, lng, savedCount, dataStatus, tags]'
+    );
+
+    // 긍정(대조군) — 선택 필드가 실재한다. 이게 없으면 required만 보는 단언이 "imageUrl을
+    // 통째로 지우는" 방향의 계약 개정을 못 잡는다.
+    expect(block).toContain('imageUrl:');
+
+    // 부정 짝 — imageUrl이 required 줄로 옮겨간 흔적. NULL=미확보가 정상값이므로 필수가
+    // 되면 서버가 기본 이미지를 지어내야 한다(BR-U1-06 취지에 반한다).
+    expect(block).not.toContain('imageUrl]');
   });
 });
 
