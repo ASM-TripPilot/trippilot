@@ -468,23 +468,23 @@ describe('AC-12 · INV-3 — 소요 시간 미표시 (BR-U1-54)', () => {
 });
 
 describe('AC-13 · 범위 — 다음 칸 것들을 미리 그리지 않는다 (01b D2)', () => {
-  it('등록 숙소 날짜 가져오기 · 꼭 갈 곳이 없다', () => {
+  it('꼭 갈 곳이 없다', () => {
     render(<TripWizardStep1Screen {...filledProps()} />);
 
     // 라이브 Figma에는 셋 다 그려져 있지만 각자 티켓이 있다(TRIP-207 · 208 · 209).
     // 이 칸이 삼키면 티켓별 AC 충족 여부가 섞여 구분되지 않는다.
     //
-    // ⚠️ **TRIP-207에서 예산 두 줄(`/예산/`·`/₩/`)을 걷어냈다**(02a §6-3). 그 두 줄은
-    // "예산은 TRIP-207 몫이니 미리 그리지 마라"는 칸막이였고, 그 티켓이 바로 이번 칸이라
-    // 임무가 끝났다. 남은 두 줄은 아직 유효한 칸막이다.
-    expect(root()).not.toHaveTextContent(/가져오기/);
+    // ⚠️ **TRIP-207에서 예산 두 줄(`/예산/`·`/₩/`)을, TRIP-208에서 `/가져오기/` 한 줄을
+    // 걷어냈다**(각 사이클 02a §6). 걷어낸 줄들은 "그 티켓이 올 때까지 미리 그리지 마라"는
+    // 칸막이였고 해당 티켓이 도착해 임무가 끝났다. 남은 한 줄은 아직 유효한 칸막이다.
     expect(root()).not.toHaveTextContent(/꼭 갈 곳/);
 
-    // 칸막이를 걷은 자리를 반대 방향으로 다시 잠근다 — 안 그러면 "예산이 있어도 없어도
-    // 통과"가 된다. 블록의 내용은 `TripWizardStep1Screen.budget.test.tsx`가 본다.
+    // 칸막이를 걷은 자리를 반대 방향으로 다시 잠근다 — 안 그러면 "그 블록이 있어도 없어도
+    // 통과"가 된다. 각 블록의 내용은 `…budget.test.tsx`·`…stayImport.test.tsx`가 본다.
     expect(screen.getByTestId('trip-wizard-budget-block')).toBeTruthy();
+    expect(screen.getByTestId('trip-wizard-stayimport-block')).toBeTruthy();
 
-    // 짝(긍정) — 이 칸 소관 블록은 그대로 있다. 없으면 위 부정 4줄이 공허해진다.
+    // 짝(긍정) — 이 칸 소관 블록은 그대로 있다. 없으면 위 부정 단언이 공허해진다.
     expect(root()).toHaveTextContent(/여행지/);
     expect(root()).toHaveTextContent(/언제 가세요\?/);
     expect(root()).toHaveTextContent(/누구랑 가세요\?/);

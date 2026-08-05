@@ -8,6 +8,7 @@ import type {
   TripDestination,
 } from '@/shared/api/generated/schemas';
 
+import type { StayImportView } from '../model/stayDateImport';
 import {
   COMPANION_OPTIONS,
   formatDateRange,
@@ -17,6 +18,7 @@ import {
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
+  BedGlyph,
   CalendarGlyph,
   ChevronDownGlyph,
   ChevronRightGlyph,
@@ -57,8 +59,11 @@ import {
  * 만들지 않는다).
  *
  * 커버하지 않는 것: 서버 제출·오류 판정·`touched` 게이팅(TRIP-206, `TripNewStep1Page` 몫) ·
- * 등록 숙소 날짜 연계(TRIP-208) · '꼭 갈 곳'(TRIP-209) · 날짜 피커 캘린더(Figma 부재 — D4에
- * 따라 진입점만).
+ * '꼭 갈 곳'(TRIP-209) · 날짜 피커 캘린더(Figma 부재 — D4에 따라 진입점만).
+ *
+ * 등록 숙소 날짜 연계 행(TRIP-208)도 같은 규율이다 — 조회·판정·문구 조립은 전부 컨테이너가
+ * 끝내고 이 화면은 완성된 얼굴(`stayImport`) 하나와 실패 여부만 받는다. 여기서 조회 훅을
+ * 부르면 `tripWizardStep1Boundary.test.ts`가 전이 의존으로 잡는다.
  *
  * 예산 블록(TRIP-207, Figma `sec_budget` 2225:2375)도 이 화면이 판단 없이 그린다 — 프리필
  * 여부·오류 문구는 컨테이너가 완성해 내려주고(`budgetPrefilled`·`budgetError`), 이 화면은
@@ -99,6 +104,15 @@ export interface TripWizardStep1ScreenProps {
   /** 예산 블록 인라인 문구(완성형, TRIP-206 D1 관례). 화면은 문자열을 그대로 그릴 뿐 스스로
    * 판정하지 않는다. */
   budgetError?: string;
+  /** 등록 숙소 날짜 연계 행이 그릴 **얼굴(완성형)**. 없으면 자리표시 — 컨테이너가 아직
+   * 판정을 안 내려줬다는 뜻이다(TRIP-208). 목록도 조회 상태도 이 화면엔 오지 않는다. */
+  stayImport?: StayImportView;
+  /** 조회가 실패했나. **얼굴은 그대로 두고 재시도 행만 덧붙인다**(01b D4) — 실패로 얼굴을
+   * 갈아 끼우면 이미 받아 둔 숙소 정보가 사라진다. */
+  stayImportFailed?: boolean;
+  onImportStayDates?(): void;
+  onPressRegisterStay?(): void;
+  onRetryStayImport?(): void;
   onChangeBudget?(next: string): void;
   /** blur를 그대로 알리기만 한다 — 여기서 `onChangeBudget`을 부르면 "사람이 값을 바꿨다"는
    * 신호가 위조되어 프리필이 잠긴다(01b 불변식, 02a ★1-b). */
@@ -142,6 +156,150 @@ function codeForRegionName(
   return regions.find((region) => region.name === name)?.code ?? name;
 }
 
+/**
+ * 등록 숙소 날짜 연계 행(TRIP-208) — Figma `stayImportRow` 3변형: `2225:2362` 활성(가로 행,
+ * 실선) · `2226:2026` 비활성+사유(같은 가로 행, 배경·테두리·제목색만 교체 — `가져오기` 라벨은
+ * 분홍 그대로다) · `2226:1829` 대안(세로 스택, 점선 — 버튼을 숨기는 게 아니라 행 전체 교체).
+ *
+ * 자리표시에 글자를 넣지 않는다(01b D5) — 거짓 정보를 한 순간도 안 보여주면서 얼굴이 정해질
+ * 때 레이아웃도 안 민다. 조회 실패는 얼굴을 갈아 끼우지 않고 **아래에 행을 덧붙일 뿐**이다(D4).
+ */
+function StayImportRow({
+  view,
+  failed,
+  onImport,
+  onPressRegisterStay,
+  onPressManualDates,
+  onRetry,
+}: {
+  view?: StayImportView;
+  failed?: boolean;
+  onImport?(): void;
+  onPressRegisterStay?(): void;
+  onPressManualDates(): void;
+  onRetry?(): void;
+}): ReactElement {
+  const blocked = view?.kind === 'blocked';
+  const note =
+    view?.kind === 'blocked' || view?.kind === 'ready' ? view.note : undefined;
+
+  let face: ReactElement;
+  if (view?.kind === 'empty') {
+    face = (
+      <View
+        testID="trip-wizard-stayimport-block"
+        className="items-start gap-[10px] rounded-button border border-dashed border-hairline-strong bg-canvas-alt px-[14px] py-[13px]"
+      >
+        <View className="flex-row items-center gap-sm">
+          <BedGlyph size={18} tone="mutedSoft" />
+          <Text className="font-noto-bold text-label font-bold text-body">
+            등록한 숙소가 없어요
+          </Text>
+        </View>
+        <View className="flex-row items-center gap-sm">
+          <Pressable
+            testID="trip-wizard-register-stay"
+            accessibilityRole="button"
+            onPress={onPressRegisterStay}
+            className="items-center rounded-pill border-[1.4px] border-primary bg-canvas px-[14px] py-sm"
+          >
+            <Text className="text-[12.5px] font-noto-bold font-bold text-primary-text">
+              숙소 등록
+            </Text>
+          </Pressable>
+          <Pressable
+            testID="trip-wizard-manual-dates"
+            accessibilityRole="button"
+            onPress={onPressManualDates}
+            className="items-center rounded-pill border border-hairline-strong bg-canvas px-[14px] py-sm"
+          >
+            <Text className="text-[12.5px] font-noto-bold font-bold text-body">
+              날짜 직접 입력
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  } else if (note === undefined) {
+    // 자리표시 — 활성 행과 같은 상자에 회색 블록만 놓는다(`SkeletonList` 선례의 색·모서리).
+    face = (
+      <View
+        testID="trip-wizard-stayimport-block"
+        className="flex-row items-center gap-[10px] rounded-button border border-hairline-strong bg-canvas px-[14px] py-md"
+      >
+        <View className="h-[19px] w-[19px] rounded-[6px] bg-surface-strong" />
+        <View className="flex-1 gap-[2px]">
+          <View className="h-[13px] w-2/3 rounded-[6px] bg-hairline" />
+          <View className="h-[11px] w-1/2 rounded-[6px] bg-surface-strong" />
+        </View>
+      </View>
+    );
+  } else {
+    face = (
+      <View
+        testID="trip-wizard-stayimport-block"
+        className={`flex-row items-center gap-[10px] rounded-button px-[14px] py-md ${
+          blocked
+            ? 'border border-hairline bg-canvas-alt'
+            : 'border border-hairline-strong bg-canvas'
+        }`}
+      >
+        <BedGlyph tone={blocked ? 'disabled' : 'body'} />
+        <View className="gap-[2px]">
+          {/* 비활성 회색은 `features/trip/ui/TripGlyphs.tsx`의 `DISABLED` 상수와 같은 값이다
+              (토큰 컬렉션 밖 · Figma `2226:2027`). 한쪽만 바꾸면 한 행 안에 두 회색이 보이고
+              색은 어떤 테스트도 단언하지 않아 red가 나지 않는다. */}
+          <Text
+            className={`text-[13.5px] font-noto-bold font-bold ${
+              blocked ? 'text-[#C2CCD6]' : 'text-ink'
+            }`}
+          >
+            등록 숙소에서 날짜 가져오기
+          </Text>
+          <View testID="trip-wizard-stayimport-note">
+            <Text className="text-[11.5px] font-noto text-muted">{note}</Text>
+          </View>
+        </View>
+        <View className="flex-1" />
+        <Pressable
+          testID="trip-wizard-fetch-staydates"
+          accessibilityRole="button"
+          disabled={blocked}
+          onPress={onImport}
+        >
+          {/* 비활성이어도 라벨은 분홍 그대로다(Figma `2226:2036` 실측 — 01b D9). 눈으로는
+              활성과 구별되지 않으므로 `disabled` prop을 반드시 함께 건다. */}
+          <Text className="text-label font-noto-bold font-bold text-primary">
+            가져오기
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View className="gap-sm">
+      {face}
+      {failed ? (
+        <Pressable
+          testID="trip-wizard-stayimport-retry"
+          accessibilityRole="button"
+          onPress={onRetry}
+          className="flex-row items-center gap-[6px] pl-[2px]"
+        >
+          <AlertCircleGlyph />
+          <Text className="flex-1 font-noto text-caption text-muted">
+            숙소를 불러오지 못했어요
+          </Text>
+          <Text className="font-noto-bold text-caption font-bold text-primary-text">
+            다시 시도
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 export function TripWizardStep1Screen({
   destinations,
   startDate,
@@ -156,6 +314,11 @@ export function TripWizardStep1Screen({
   periodError,
   submitError,
   overseasBlocked,
+  stayImport,
+  stayImportFailed,
+  onImportStayDates,
+  onPressRegisterStay,
+  onRetryStayImport,
   budgetText,
   budgetPrefilled,
   budgetError,
@@ -354,6 +517,16 @@ export function TripWizardStep1Screen({
                 </Text>
               </View>
             ) : null}
+            {/* 등록 숙소 날짜 연계 (TRIP-208) — 기간 블록의 마지막 자식이고 기간 오류 뒤다
+                (Figma `error` 프레임 2226:1929가 그 순서를 확정했다). */}
+            <StayImportRow
+              view={stayImport}
+              failed={stayImportFailed}
+              onImport={onImportStayDates}
+              onPressRegisterStay={onPressRegisterStay}
+              onPressManualDates={onPressPeriod}
+              onRetry={onRetryStayImport}
+            />
           </View>
 
           <View className="px-lg py-sm">

@@ -17,6 +17,10 @@ const MUTED_SOFT = '#9AA1AB';
 const PRIMARY = '#FF385C';
 const PRIMARY_TEXT = '#C13515';
 const ON_PRIMARY = '#FFFFFF';
+/** 등록 숙소 행의 비활성 색(Figma `2226:2027`) — 토큰 컬렉션에 없는 푸른 회색이다.
+ * 같은 값이 `features/trip/ui/TripWizardStep1Screen.tsx`의 제목 임의값 클래스에도 있다 —
+ * 색을 바꿀 땐 두 자리를 함께 고친다(색은 어떤 테스트도 단언하지 않는다). */
+const DISABLED = '#C2CCD6';
 
 type GlyphProps = {
   size?: number;
@@ -479,6 +483,64 @@ export function GlobeGlyph({ size = 27, testID }: GlyphProps) {
         d="M13.5 3.375C15.6907 6.296 16.875 9.84875 16.875 13.5C16.875 17.1512 15.6907 20.704 13.5 23.625C11.3093 20.704 10.125 17.1512 10.125 13.5C10.125 9.84875 11.3093 6.296 13.5 3.375Z"
         stroke={PRIMARY_TEXT}
         strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** 등록 숙소 행의 세 얼굴이 쓰는 색조. 도형은 하나고 색만 갈린다. */
+export type BedTone = 'body' | 'disabled' | 'mutedSoft';
+
+const BED_STROKE: Record<BedTone, string> = {
+  body: BODY,
+  disabled: DISABLED,
+  mutedSoft: MUTED_SOFT,
+};
+
+// 등록 숙소 날짜 연계 침대(19) — Figma `2225:2363`(활성 #3F3F3F) · `2226:2027`(비활성
+// #C2CCD6) · `2226:1918`(대안 18px #9AA1AB). 세 노드의 path를 받아 대조하니 좌표까지
+// 정비례(19:18)라 색만 다른 같은 도형이었다 — AlertCircleGlyph처럼 size prop 하나로 겸한다.
+export function BedGlyph({
+  size = 19,
+  tone = 'body',
+  testID,
+}: GlyphProps & { tone?: BedTone }) {
+  const stroke = BED_STROKE[tone];
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 19 19"
+      fill="none"
+    >
+      <Path
+        d="M1.58333 3.16667V15.8333"
+        stroke={stroke}
+        strokeWidth={1.58333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M1.58333 6.33333H15.8333C16.2533 6.33333 16.656 6.50015 16.9529 6.79708C17.2499 7.09401 17.4167 7.49674 17.4167 7.91667V15.8333"
+        stroke={stroke}
+        strokeWidth={1.58333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M1.58333 13.4583H17.4167"
+        stroke={stroke}
+        strokeWidth={1.58333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4.75 6.33333V13.4583"
+        stroke={stroke}
+        strokeWidth={1.58333}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

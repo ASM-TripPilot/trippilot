@@ -20,6 +20,7 @@ import {
   validateTripDraft,
   type TripDraft,
 } from '@/features/trip/model/tripDraft';
+import { resolveStayImport } from '@/features/trip/model/stayDateImport';
 import {
   presetRange,
   type PeriodPresetCode,
@@ -27,6 +28,7 @@ import {
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { useCreateTrip } from '@/features/trip/model/useCreateTrip';
 import { usePreferencePrefill } from '@/features/trip/model/usePreferencePrefill';
+import { useSavedStays } from '@/features/trip/model/useSavedStays';
 import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen';
 
 /**
@@ -51,6 +53,9 @@ import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen'
  *     하나가 "프리필 쓰기가 사용자 입력과 같은 경로를 타면 자기 자신을 잠근다"는 불변식을
  *     구조적으로 지킨다 — `setBudgetText`(사람 경로)는 `onChangeBudget`·blur 재포맷에서만
  *     불리고, 프리필 표시는 그 액션을 거치지 않는다.
+ *  6. **등록 숙소 날짜 연계(TRIP-208, 01b D4·D10)** — `GET /saved-stays` 조회, 얼굴 판정
+ *     (`resolveStayImport`), 가져오기 → `setPeriod`, `/stays/register` 이동이 전부 여기다.
+ *     조회 실패는 얼굴을 갈아 끼우지 않고 별개 축(`stayImportFailed`)으로 내려간다.
  */
 
 /** 서버 400의 `error.code`가 국내 밖 목적지를 가리키는 값. openapi에 enum이 없어
@@ -177,6 +182,7 @@ export function TripNewStep1Page({
   }, [destinations, startDate, endDate, party, companionType, budgetText]);
 
   const createTrip = useCreateTrip();
+  const savedStays = useSavedStays();
 
   const draft: TripDraft = {
     destinations,
@@ -186,14 +192,40 @@ export function TripNewStep1Page({
   };
   const violations = validateTripDraft(draft);
 
-  const canProceed =
-    destinations.length > 0 &&
+  // "기간을 이미 골랐나" — `[다음]` 게이트의 "아직 안 고름" 조각이자 등록 숙소 행의 사유 ①
+  // 판정(BR-U1-41 임의 덮어쓰기 금지)이 같은 뜻으로 쓴다. 빈 문자열은 안 고른 것이다.
+  const periodFilled =
     startDate !== undefined &&
     startDate !== '' &&
     endDate !== undefined &&
-    endDate !== '' &&
+    endDate !== '';
+
+  const canProceed =
+    destinations.length > 0 &&
+    periodFilled &&
     violations.length === 0 &&
     parsedBudget.kind !== 'invalid';
+
+  // 등록 숙소 날짜 연계(TRIP-208) — 조회·판정·문구 조립이 전부 여기 있다(화면은 완성된 얼굴만
+  // 받는다, AC-13). ⚠️ **실패는 얼굴과 별개 축이다**: `isError`로 얼굴을 갈아 끼우면 이미
+  // 받아 둔 목록이 지워진다(미해결 문제로그 `2026-08-04` 재발 차단 · D4 · INV-4). 판정은
+  // 잔존 `data`로 그대로 돌리고, 실패는 `stayImportFailed`로 따로 내려보낸다.
+  const stayImport = resolveStayImport({
+    stays: savedStays.data,
+    loading: savedStays.isPending,
+    periodFilled,
+  });
+
+  function importStayDates(): void {
+    // 화면의 `disabled`는 접근성 상태만으로도 매처를 통과할 수 있으므로 배선도 스스로 문을
+    // 잠근다(`submit`·`StayRegisterPage.handleSubmit`과 같은 관례). 프리셋에서 온 날짜가
+    // 아니므로 코드 자리는 비운다 — 어떤 칩도 선택 표시되지 않는다(01b D10).
+    // ⚠️ 지우지 마라 — 이 가드는 판별 유니온의 **타입 좁히기**를 겸한다. 화면이 이미
+    // `disabled`로 막으니 중복이라 보고 지우면 아래 두 날짜 필드 접근이 `pnpm tsc`에서
+    // 깨진다. jest는 이 줄이 없어도 전량 green이라 못 잡는다(5-b 뮤테이션 실측).
+    if (stayImport.kind !== 'ready') return;
+    setPeriod(undefined, stayImport.checkIn, stayImport.checkOut);
+  }
 
   // 클라 검증 → 인라인 문구. **`touched`가 켜진 축만** — 아직 아무것도 안 고른 사용자에게
   // 페일클로즈 판정을 그대로 뿌리면 AC-10을 위반한다(01b D1·D3). 서버는 기간 축을 안 낸다
@@ -298,6 +330,11 @@ export function TripNewStep1Page({
       periodError={periodError}
       submitError={submitError}
       overseasBlocked={overseasBlocked}
+      stayImport={stayImport}
+      stayImportFailed={savedStays.isError}
+      onImportStayDates={importStayDates}
+      onPressRegisterStay={() => router.push('/stays/register')}
+      onRetryStayImport={() => void savedStays.refetch()}
       budgetText={effectiveBudgetText}
       budgetPrefilled={budgetPrefilled}
       budgetError={budgetError}

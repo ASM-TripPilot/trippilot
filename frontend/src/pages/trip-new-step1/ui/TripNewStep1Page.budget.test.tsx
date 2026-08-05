@@ -67,6 +67,23 @@ jest.mock('@/features/trip/model/useCreateTrip', () => ({
   }),
 }));
 
+/**
+ * TRIP-208 — **이 사이클이 이 파일에 더한 유일한 변경이다. 단언은 한 줄도 안 고쳤다.**
+ *
+ * 이 파일도 node 버킷이라 `QueryClientProvider`가 없다. TRIP-208이 페이지에
+ * `useSavedStays`(→ `useQuery`)를 붙이면 provider를 못 찾고 던져서 `render`하는 it이
+ * 전부 죽는다(02a §5-2 실행 확인). 로딩 상태를 돌려주므로 등록 숙소 행은 **글자 없는
+ * 자리표시**로 그려지고, 이 파일의 예산 심판은 그대로 유효하다.
+ */
+jest.mock('@/features/trip/model/useSavedStays', () => ({
+  useSavedStays: () => ({
+    data: undefined,
+    isPending: true,
+    isError: false,
+    refetch: jest.fn(),
+  }),
+}));
+
 /** 기준일 고정 — 실행일이 바뀌어도 날짜 단언이 흔들리지 않는다(TRIP-205 D5). */
 const BASE = '2026-06-10';
 
