@@ -10,7 +10,9 @@ dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.springBoot.get()}"))
 
     implementation(project(":common:core"))            // R5: 에러 계약
+    implementation(project(":modules:trip"))            // R1: trip.api(TripFacade)만 — 날짜·소유 조회
     implementation(libs.spring.boot.starter.data.jpa)  // out/persistence — itinerary/day/slot
+    implementation(libs.spring.boot.starter.web)        // adapter/in/web — 생성 API
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))
