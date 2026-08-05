@@ -5,8 +5,8 @@ import com.trippilot.core.error.ValidationFailed
 import java.time.Instant
 import java.util.UUID
 
-/** POI 카테고리(정본). DB CHECK와 동일 값. */
-enum class PoiCategory { 명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화 }
+/** POI 카테고리(정본). DB CHECK와 동일 값. 경계 코드 매핑(SIGHT/FOOD/CAFE/NIGHT_VIEW/NATURE/SHOPPING/CULTURE/ACTIVITY)은 리버스 read 포트(BE-5). */
+enum class PoiCategory { 명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화, 액티비티 }
 
 /** 수집 상태. 조회는 ACTIVE만(INV-U1-01). UNVERIFIED/LOST/CLOSED는 라이프사이클(후속). */
 enum class DataStatus { ACTIVE, UNVERIFIED, LOST, CLOSED }
