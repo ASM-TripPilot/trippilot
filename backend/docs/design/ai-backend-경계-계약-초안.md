@@ -1,7 +1,7 @@
 # AI ↔ 백엔드 경계 계약 — 백엔드 제안 초안
 
 > 목적: PR #70(TRIP-255) 경계 감사 후속. 두 경계 계약을 **백엔드가 초안**으로 잡아 AI팀 검토·공동 동결용으로 올린다.
-> 지위: **제안(draft)**. 미확정. AI팀 확인 후 정본화.
+> 지위: **합의**(2026-08-04, AI팀 회신 PR #76 — 4개 결정 전부 수용). 이 계약 기준으로 백엔드 실장·openapi 반영.
 > 근거: `ai/aidlc-docs/inception/application-design/agent-io-contracts.md`(AI 초안)·`ai/src`(실측)·백엔드 `modules/place-data`·`modules/trip`·`modules/profile`.
 
 ## 경계는 딱 두 개
@@ -58,7 +58,7 @@ AI의 `poi_db_port.py`(M7이 원하는 read 스펙)를 백엔드 REST로 노출�
 | `find_nearby(coord, radius_m, category)` | `GET /internal/pois/nearby?lat&lng&radiusM&category` |
 | `get_open_window(poi_id, on)` | `GET /internal/pois/{id}/open-window?on={date}` |
 | `batch_check_closed(ids, on)` | `POST /internal/pois:closedCheck { ids[], on }` |
-| ~~`upsert(poi)`~~ | **제외** — POI 수집·등록은 백엔드 소유(C7 수집 게이트 INV-1). AI는 write 안 함 → 확인 필요 |
+| ~~`upsert(poi)`~~ | **제외** — POI 수집·등록은 백엔드 소유(C7 게이트 INV-1). 웹소싱은 `:collect` 동기 제출(결정 3) |
 
 ### 2-A. POI 응답 스키마 (제안)
 
@@ -68,49 +68,48 @@ Poi {
   openHours[{ day, open, close }],   // AI get_open_window·영업필터용
   dataStatus(ACTIVE/UNVERIFIED/LOST/CLOSED),
   source(KAKAO_LOCAL/TOURAPI/MANUAL),
-  savedCount                          // 인기 신호(AI 정렬용) — rating 대체
+  savedCount,                         // 인기 신호 1순위 (rating 대체)
+  dataQuality(FULL/PARTIAL)           // 합성 정렬키 2순위 (완전성 파생, 결정 1)
 }
 // per-POI 비용(avg_cost)·평점(rating) 없음: 백엔드 정본 미보유(결정 1)
 ```
 
 ---
 
-## 협의거리 — 백엔드 결정 + AI 확인 요청
+## 협의거리 — 합의 완료 (AI 회신 2026-08-04, PR #76)
 
-백엔드 정본 기준으로 아래처럼 정한다. AI는 3개 항목만 확인·수용하면 된다(4번은 확정).
+백엔드 정본 기준 결정에 AI팀이 **4개 다 수용**. 아래는 최종 합의안.
 
-### 결정 1 · POI에 per-POI 비용·평점 없음 (백엔드 정본)
+### 결정 1 · POI에 per-POI 비용·평점 없음 (백엔드 정본) ✅
 
-- POI 정본은 **`avg_cost`·`rating`을 갖지 않는다.** 예산은 **trip/user 레벨**(preference_set.budget_tier · trip.budget_total)이지 per-POI가 아니다 — 정본대로 간다.
-- 따라서 AI `pool_builder` 조정 제안:
-  - **예산 필터(avg_cost) → 카테고리 소프트 가중치**로 전환 (원래 budget은 하드 아님·소프트 = `ai-architecture.md`와 정합).
-  - **인기 정렬(rating) → 백엔드 `savedCount`(담긴 수)** 로 대체.
-- 🔸 **AI 확인**: 이 두 전환 수용?
+- POI 정본은 **`avg_cost`·`rating`을 갖지 않는다.** 예산은 **trip/user 레벨**(preference_set.budget_tier · trip.budget_total)이지 per-POI가 아니다.
+- AI `pool_builder` 조정 (합의): 예산 필터 → **카테고리 소프트 가중치**, 인기 정렬 → **`savedCount`**.
+- **합성 정렬키(콜드스타트 대비, AI 제안)**: `savedCount ↓ → dataQuality(FULL>PARTIAL) ↓ → 거점거리 ↑ → poiId ↑`. 유저 쌓이면 savedCount가 자동 지배 → 전환 시점 불필요·결정론 유지.
+  → **백엔드 조치**: read 응답에 `dataQuality`(FULL/PARTIAL) 노출(완전성 파생).
 
-### 결정 2 · 카테고리 = 경계 코드 7종 고정 (백엔드 정본)
+### 결정 2 · 카테고리 = 경계 코드 8종 고정 (백엔드 정본) ✅
 
-백엔드 정본이 진실원이므로 경계 코드 7종을 고정하고, AI가 내부 enum을 여기에 맞춘다.
+AI가 ACTIVITY 추가 요청 → **8종**으로 확정. ETC는 AI가 폐기(수집 게이트가 카테고리 필수라 존재 이유 없음).
 
-| 백엔드(정본, 한글) | 경계 코드 | AI 현재 enum | 조치 |
-|---|---|---|---|
-| 명소 | `SIGHT` | SIGHT | ok |
-| 맛집 | `FOOD` | FOOD | ok |
-| 카페 | `CAFE` | CAFE | ok |
-| 쇼핑 | `SHOPPING` | SHOPPING | ok |
-| 야경 | `NIGHT_VIEW` | (없음) | AI 매핑 추가 |
-| 자연 | `NATURE` | (없음) | AI 매핑 추가 |
-| 문화 | `CULTURE` | (없음) | AI 매핑 추가 |
-| (없음) | — | STAY | 숙소=앵커 → 후보 제외 |
+| 백엔드(정본, 한글) | 경계 코드 | 조치 |
+|---|---|---|
+| 명소 | `SIGHT` | ok |
+| 맛집 | `FOOD` | ok |
+| 카페 | `CAFE` | ok |
+| 쇼핑 | `SHOPPING` | ok |
+| 야경 | `NIGHT_VIEW` | AI 매핑 신설 |
+| 자연 | `NATURE` | AI 매핑 신설 |
+| 문화 | `CULTURE` | AI 매핑 신설 |
+| **액티비티 (신설)** | `ACTIVITY` | **백엔드 신설** — place-data PoiCategory + Flyway poi CHECK 마이그레이션 |
+| — | ~~STAY~~ | 숙소=앵커, 후보 아님 → 제외 |
+| — | ~~ETC~~ | AI 폐기 |
 
-- 🔸 **AI 확인**: 내부 enum을 이 7종에 맞춰 매핑(야경·자연·문화 신설) 동의?
-
-### 결정 3 · MVP read-only, `upsert` 없음
+### 결정 3 · MVP read-only, `upsert` 없음 ✅
 
 - MVP에선 AI가 백엔드 POI 정본에 **write하지 않는다** (read 5종만). 수집·등록은 백엔드 C7 소유(INV-1 게이트).
-- 웹소싱 POI(U6, **후속**)는 AI가 직접 upsert하지 않고 **백엔드 수집 게이트 경유** `POST /internal/pois:collect`(NormalizedPlace 제출 → 게이트가 ACTIVE/반려 판정)로 등록.
-- 🔸 **AI 확인**: 웹소싱 POI를 게이트 제출 경로로 넘기는 데 동의(직접 write 제거)?
+- 웹소싱 POI(U6, **후속**)는 `POST /internal/pois:collect`로 등록 — **동기 판정**: 제출 응답에 즉시 ACTIVE/반려+사유 코드(목표 p95 2~3초), 등록 **즉시 read 포트 반영**(배치 대기 없음). → 다음 생성부터 새 장소가 후보에 든다.
 
-### 결정 4 · 프로토콜 = REST + 공유 openapi 코드젠 (gRPC 보류)
+### 결정 4 · 프로토콜 = REST + 공유 openapi 코드젠 (gRPC 보류) ✅
 
 - **REST/JSON over HTTP**로 확정.
 - 드리프트(P3 enum·P7 시그니처)는 **단일 `openapi.yaml`을 정본으로 두고 양쪽(Kotlin·Python) 코드 생성**해서 막는다 — gRPC의 `.proto` 단일계약과 같은 안전을 더 가볍게.
@@ -118,8 +117,12 @@ Poi {
 
 ---
 
-## 다음 단계
+## 다음 단계 (합의 후)
 
-1. AI팀이 이 초안 검토 → 위 4개 결정 항목 회신.
-2. 합의되면 이 문서를 정본화하고 `openapi.yaml`(포워드·리버스)에 계약 반영.
-3. 백엔드는 Fake로, AI는 U5(오케스트레이터+HTTP)로 병렬 착수.
+1. ✅ AI 회신 4개 수용 완료(2026-08-04) → 이 문서 = 합의 계약.
+2. **백엔드 실장**:
+   - (a) place-data `액티비티`(ACTIVITY) 카테고리 + Flyway poi CHECK 마이그레이션
+   - (b) 리버스 POI read 포트 5종 + `dataQuality` 노출
+   - (c) 포워드 `ScheduleAgentPort` + `ScheduleAgentInput/Output` DTO + FakeScheduleAgent (계약우선)
+3. `openapi.yaml`(포워드·리버스)에 계약 반영, 양쪽 코드젠.
+4. AI는 U5(오케스트레이터+HTTP) 병렬 착수.
