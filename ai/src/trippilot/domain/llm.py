@@ -41,6 +41,9 @@ class LlmFeature(Enum):
     ALTERNATIVE_SELECTION = "ALTERNATIVE_SELECTION"  # U5
     REFLECTION = "REFLECTION"  # U6
     PLACE_EXTRACTION = "PLACE_EXTRACTION"  # U6 (백그라운드)
+    # EditAgent 전속 — 편집 발화 → EditCommand 초안 번역.
+    # 확정된 EDIT_SCHEDULE 의도의 세부 번역이지 라우팅 재해석이 아니다 (DL-3, BR-AF-08).
+    EDIT_TRANSLATION = "EDIT_TRANSLATION"  # agent-foundation FD §1
 
 
 class ModelTier(Enum):
