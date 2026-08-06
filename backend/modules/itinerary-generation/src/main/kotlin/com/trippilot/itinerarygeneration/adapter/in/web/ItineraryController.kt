@@ -1,9 +1,11 @@
 package com.trippilot.itinerarygeneration.adapter.`in`.web
 
 import com.trippilot.itinerarygeneration.application.GenerateItineraryService
+import com.trippilot.itinerarygeneration.application.ItineraryQueryService
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import org.springframework.http.HttpStatus
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -15,11 +17,12 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
 
-/** 일정 생성 — 여행 하위 리소스. 소유 스코프(타 계정 404). POST = 생성. */
+/** 일정 생성 — 여행 하위 리소스. 소유 스코프(타 계정 404). POST = 생성 · GET = 조회. */
 @RestController
 @RequestMapping("/api/v1/trips/{tripId}/itinerary")
 class ItineraryController(
     private val service: GenerateItineraryService,
+    private val queryService: ItineraryQueryService,
 ) {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -31,6 +34,10 @@ class ItineraryController(
         val mode = request?.generationMode ?: GenerationMode.FULLY_AI
         return ItineraryResponse.from(service.generate(principal.accountId(), tripId, mode))
     }
+
+    @GetMapping
+    fun get(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
+        ItineraryResponse.from(queryService.get(principal.accountId(), tripId))
 }
 
 /** 생성 요청 — 방식(미지정 시 FULLY_AI). */
