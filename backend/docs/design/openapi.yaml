@@ -664,6 +664,16 @@ paths:
       responses:
         '201': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정 }
+    put:
+      tags: [trips]
+      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EditItineraryRequest' } } }
+      responses:
+        '200': { description: 편집됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
+        '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
+        '409': { description: 확정된 일정은 수정 불가 }
   /trips/{tripId}/itinerary/confirm:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -947,6 +957,29 @@ components:
       properties:
         generationMode: { type: string, enum: [FULLY_AI, CO_PLAN], description: 미지정 시 FULLY_AI }
 
+    EditItineraryRequest:
+      type: object
+      required: [days]
+      description: 편집(전체 교체) — 수정된 일자·슬롯 배열. 슬롯 순서 = 배열 순서
+      properties:
+        days:
+          type: array
+          items:
+            type: object
+            required: [date, slots]
+            properties:
+              date: { type: string, format: date }
+              slots:
+                type: array
+                items:
+                  type: object
+                  required: [poiId, startAt, endAt, isFixed]
+                  properties:
+                    poiId: { type: string, format: uuid }
+                    startAt: { type: string, description: "HH:mm:ss" }
+                    endAt: { type: string }
+                    isFixed: { type: boolean }
+
     Itinerary:
       type: object
       required: [itineraryId, tripId, status, solveMode, isFallback, days]
@@ -967,13 +1000,14 @@ components:
                 type: array
                 items:
                   type: object
-                  required: [poiId, startAt, endAt, isFixed, endsNextDay]
+                  required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation]
                   properties:
                     poiId: { type: string, format: uuid }
                     startAt: { type: string, description: "HH:mm:ss (솔버 검증값 INV-2)" }
                     endAt: { type: string }
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean, description: "자정 넘김(HC4) — true 면 endAt 은 익일 시각(시작일 귀속)" }
+                    hasViolation: { type: boolean, description: "편집 재검증(HC1-4) 위반 표시(비차단)" }
                     # INV-3: 소요시간(duration) 필드 없음 — 거리만(후속)
 
     TermsType:
