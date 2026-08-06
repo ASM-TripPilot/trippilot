@@ -44,6 +44,14 @@ class ItineraryTest : StringSpec({
         }
     }
 
+    "자정 넘김(endsNextDay)이면 종료<시작 허용(HC4)" {
+        val slot = VisitSlot.of(
+            UUID.randomUUID(), null, 0, LocalTime.parse("23:00"), LocalTime.parse("01:00"), endsNextDay = true,
+        )
+        slot.endsNextDay shouldBe true
+        slot.endAt shouldBe LocalTime.parse("01:00")
+    }
+
     "슬롯 순서 음수는 400" {
         shouldThrow<ValidationFailed> {
             VisitSlot.of(UUID.randomUUID(), null, -1, LocalTime.parse("10:00"), LocalTime.parse("11:00"))

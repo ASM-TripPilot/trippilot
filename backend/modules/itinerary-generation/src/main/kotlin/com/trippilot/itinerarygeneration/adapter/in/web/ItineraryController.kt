@@ -66,7 +66,7 @@ data class ItineraryResponse(
             solveMode = i.solveMode.name,
             isFallback = i.isFallback,
             days = i.days.map { d ->
-                DayResponse(d.date, d.slots.map { s -> SlotResponse(s.sourcePoiId, s.startAt, s.endAt, s.isFixed) })
+                DayResponse(d.date, d.slots.map { s -> SlotResponse(s.sourcePoiId, s.startAt, s.endAt, s.isFixed, s.endsNextDay) })
             },
         )
     }
@@ -75,4 +75,11 @@ data class ItineraryResponse(
 data class DayResponse(val date: LocalDate, val slots: List<SlotResponse>)
 
 /** 방문 슬롯 표시 — 시각·순서만(INV-2). 소요시간 필드 없음(INV-3, 거리는 후속 표시). */
-data class SlotResponse(val poiId: UUID, val startAt: LocalTime, val endAt: LocalTime, val isFixed: Boolean)
+/** [endsNextDay]: 자정 넘김(HC4) — true 면 endAt 은 익일 시각(시작일 귀속). 소요시간 없음(INV-3). */
+data class SlotResponse(
+    val poiId: UUID,
+    val startAt: LocalTime,
+    val endAt: LocalTime,
+    val isFixed: Boolean,
+    val endsNextDay: Boolean,
+)
