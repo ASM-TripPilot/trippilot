@@ -6,9 +6,6 @@ import com.trippilot.savedaccommodation.domain.BaseAssignmentRepository
 import com.trippilot.savedaccommodation.domain.RegisterRoute
 import com.trippilot.savedaccommodation.domain.SavedStay
 import com.trippilot.savedaccommodation.domain.SavedStayRepository
-import com.trippilot.trip.api.TripFacade
-import com.trippilot.trip.api.TripGenerationContext
-import com.trippilot.trip.api.TripPeriod
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -33,15 +30,9 @@ private class AnchorStays : SavedStayRepository {
     override fun delete(stay: SavedStay) { store.remove(stay.savedStayId) }
 }
 
-private class AnchorTrips : TripFacade {
-    val periods = mutableMapOf<Pair<UUID, UUID>, TripPeriod>()
-    override fun findPeriod(accountId: UUID, tripId: UUID) = periods[accountId to tripId]
-    override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? = null
-}
-
 /**
- * BaseAnchorFacade 계약 — 확정(AUTO) 숙박일만 거점 좌표로. GAP/OVERLAP·미소유는 제외.
- * 판정은 CoverageResolver 재사용(BaseAssignmentService.coverage 와 정합).
+ * BaseAnchorFacade 계약 — 확정(AUTO) 숙박일만 거점 좌표로. GAP/OVERLAP·좌표없음·거점없음은 제외.
+ * 소유 검증은 호출측 책임(퍼사드는 기간을 받아 좌표만 조립). 판정은 CoverageResolver 재사용.
  */
 class BaseAnchorQueryFacadeTest : StringSpec({
 
@@ -51,10 +42,7 @@ class BaseAnchorQueryFacadeTest : StringSpec({
     val end = LocalDate.parse("2026-08-04") // 숙박일 = 08-01·02·03 (체크아웃 08-04)
     val now = Instant.parse("2026-08-01T00:00:00Z")
 
-    fun facade(bases: AnchorBases, stays: AnchorStays): BaseAnchorQueryFacade {
-        val trips = AnchorTrips().apply { periods[acc to tripId] = TripPeriod(start, end) }
-        return BaseAnchorQueryFacade(bases, stays, trips)
-    }
+    fun facade(bases: AnchorBases, stays: AnchorStays) = BaseAnchorQueryFacade(bases, stays)
 
     fun stay(stays: AnchorStays, lat: Double, lng: Double): UUID =
         stays.save(SavedStay.register(acc, "숙소", lat, lng, true, null, null, null, null, RegisterRoute.PIN, null, now)).savedStayId
@@ -64,7 +52,7 @@ class BaseAnchorQueryFacadeTest : StringSpec({
         val stays = AnchorStays()
         val s = stay(stays, 37.5, 127.0)
         bases.save(BaseAssignment.assign(tripId, s, start, end, start, end, now))
-        facade(bases, stays).findStayNightAnchors(acc, tripId) shouldContainExactly listOf(
+        facade(bases, stays).findStayNightAnchors(tripId, start, end) shouldContainExactly listOf(
             DayAnchorView(LocalDate.parse("2026-08-01"), 37.5, 127.0),
             DayAnchorView(LocalDate.parse("2026-08-02"), 37.5, 127.0),
             DayAnchorView(LocalDate.parse("2026-08-03"), 37.5, 127.0),
@@ -76,12 +64,12 @@ class BaseAnchorQueryFacadeTest : StringSpec({
         val stays = AnchorStays()
         val s = stay(stays, 37.5, 127.0)
         bases.save(BaseAssignment.assign(tripId, s, start, LocalDate.parse("2026-08-03"), start, end, now)) // 08-03 공백
-        facade(bases, stays).findStayNightAnchors(acc, tripId).map { it.date } shouldContainExactly listOf(
+        facade(bases, stays).findStayNightAnchors(tripId, start, end).map { it.date } shouldContainExactly listOf(
             LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-02"),
         )
     }
 
-    "미소유 여행이면 빈 목록" {
-        facade(AnchorBases(), AnchorStays()).findStayNightAnchors(UUID.randomUUID(), tripId) shouldBe emptyList()
+    "거점 배정 없으면 빈 목록" {
+        facade(AnchorBases(), AnchorStays()).findStayNightAnchors(tripId, start, end) shouldBe emptyList()
     }
 })

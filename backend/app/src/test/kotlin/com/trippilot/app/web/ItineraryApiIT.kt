@@ -119,6 +119,28 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `확정하면 200 CONFIRMED, 조회 반영, 재확정 409`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+
+        val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+        rc shouldBe 200
+        body["status"].asText() shouldBe "CONFIRMED"
+        // 조회에도 CONFIRMED 반영
+        call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second["status"].asText() shouldBe "CONFIRMED"
+        // 재확정은 409(단방향 잠금)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 409
+    }
+
+    @Test
+    fun `생성 전 확정은 404`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 404
+    }
+
+    @Test
     fun `재생성하면 기존 일정 교체 — 여행당 1개`() {
         val token = newToken()
         val trip = newTrip(token)

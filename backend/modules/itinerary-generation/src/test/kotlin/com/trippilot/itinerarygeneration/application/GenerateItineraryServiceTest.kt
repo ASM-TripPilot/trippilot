@@ -10,6 +10,9 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
+import com.trippilot.core.event.DomainEvent
+import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
@@ -21,6 +24,10 @@ import com.trippilot.trip.api.TripPeriod
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.TransactionStatus
+import org.springframework.transaction.support.SimpleTransactionStatus
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -49,6 +56,18 @@ private class ThrowingAgent : ScheduleAgentPort {
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
 }
 
+private class CapturingPublisher : DomainEventPublisher {
+    val published = mutableListOf<DomainEvent>()
+    override fun publish(event: DomainEvent) { published += event }
+}
+
+/** 콜백을 그대로 실행하는 no-op tx 매니저(단위 테스트용 — 실 tx 없이 TransactionTemplate 통과). */
+private val NOOP_TX = object : PlatformTransactionManager {
+    override fun getTransaction(definition: TransactionDefinition?): TransactionStatus = SimpleTransactionStatus()
+    override fun commit(status: TransactionStatus) {}
+    override fun rollback(status: TransactionStatus) {}
+}
+
 private class FakeItineraries : ItineraryRepository {
     override fun save(itinerary: Itinerary): Itinerary = itinerary
     override fun findById(itineraryId: UUID): Itinerary? = null
@@ -70,7 +89,12 @@ class GenerateItineraryServiceTest : StringSpec({
     val start = LocalDate.parse("2026-08-01")
     val end = LocalDate.parse("2026-08-03") // 계획일 08-01·02·03, 숙박일 08-01·02
 
-    fun service(agent: ScheduleAgentPort, prefs: PreferenceSnapshot, anchors: List<DayAnchorView>): GenerateItineraryService {
+    fun service(
+        agent: ScheduleAgentPort,
+        prefs: PreferenceSnapshot,
+        anchors: List<DayAnchorView>,
+        publisher: DomainEventPublisher = CapturingPublisher(),
+    ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
             override fun findGenerationContext(accountId: UUID, tripId: UUID) =
@@ -87,9 +111,9 @@ class GenerateItineraryServiceTest : StringSpec({
             override fun findPreferences(accountId: UUID) = prefs
         }
         val baseAnchors = object : BaseAnchorFacade {
-            override fun findStayNightAnchors(accountId: UUID, tripId: UUID) = anchors
+            override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = anchors
         }
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, FakeItineraries(), clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, FakeItineraries(), publisher, NOOP_TX, clock)
     }
 
     val fullPrefs = PreferenceSnapshot(
@@ -129,6 +153,15 @@ class GenerateItineraryServiceTest : StringSpec({
         agent.captured!!.tripContext.budgetLevel shouldBe null
         agent.captured!!.preferenceProfile.styles shouldBe emptyList()
         agent.captured!!.anchors shouldBe emptyList()
+    }
+
+    "생성 시 ItineraryGenerated 이벤트 발행(TRIP-230)" {
+        val publisher = CapturingPublisher()
+        val result = service(CapturingAgent(now), fullPrefs, emptyList(), publisher).generate(acc, tripId, GenerationMode.FULLY_AI)
+        val event = publisher.published.filterIsInstance<ItineraryGenerated>().single()
+        event.aggregateId shouldBe result.itineraryId.toString()
+        event.tripId shouldBe tripId.toString()
+        event.isFallback shouldBe false
     }
 
     "ScheduleAgent 실패 시 결정론 최소 폴백(INV-4) — isFallback·MINIMAL·고정블록 보존" {
