@@ -121,6 +121,77 @@ def test_yaml_only_imported_in_c1_prompts() -> None:
     assert not offenders, f"c1/prompts.py 밖에서 yaml import: {offenders}"
 
 
+def _internal_imports(path: Path) -> set[str]:
+    """trippilot.* 내부 import 전체 (Import·ImportFrom 절대 import 모두)."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0 and node.module:
+                modules.add(node.module)
+    return {m for m in modules if m.startswith("trippilot")}
+
+
+_AGENT_LAYER_PREFIXES = (
+    "trippilot.agents",
+    "trippilot.orchestrator",
+    "trippilot.providers",
+    "trippilot.background",
+)
+
+
+def test_lower_layers_do_not_import_agent_layer() -> None:
+    """L-1 (BR-AF-10): 하위 계층은 상위(agents·orchestrator·providers·background)를 모른다."""
+    offenders: dict[str, set[str]] = {}
+    for subdir in ("domain", "ports", "c1", "c2", "m7"):
+        for py in (_SRC / subdir).rglob("*.py"):
+            bad = {
+                m
+                for m in _internal_imports(py)
+                if m.startswith(_AGENT_LAYER_PREFIXES)
+            }
+            if bad:
+                offenders[str(py.relative_to(_SRC))] = bad
+    assert not offenders, f"하위 계층이 agent 계층을 import함(L-1 위반): {offenders}"
+
+
+def test_agents_do_not_cross_import() -> None:
+    """L-2 (BR-AF-10): agents 형제 상호 import 금지 — 공용은 agents/base 또는 domain으로.
+    Agent 간 직접 호출 금지, Orchestrator 경유만."""
+    agents_dir = _SRC / "agents"
+    siblings = {p.name for p in agents_dir.iterdir() if p.is_dir()}
+    offenders: dict[str, set[str]] = {}
+    for py in agents_dir.rglob("*.py"):
+        own = py.relative_to(agents_dir).parts[0]  # 최상위 파일이면 파일명
+        bad = set()
+        for m in _internal_imports(py):
+            parts = m.split(".")
+            if parts[:2] == ["trippilot", "agents"] and len(parts) >= 3:
+                target = parts[2]
+                if target in siblings and target != own:
+                    bad.add(m)
+        if bad:
+            offenders[str(py.relative_to(_SRC))] = bad
+    assert not offenders, f"agents 형제 상호 import(L-2 위반): {offenders}"
+
+
+def test_agents_do_not_import_llm_port() -> None:
+    """L-3 (BR-AF-10): agents의 LlmPort 직접 import 금지 — LLM은 C1 게이트웨이 경유만
+    (4겹 장치 우회 차단)."""
+    offenders: dict[str, set[str]] = {}
+    for py in (_SRC / "agents").rglob("*.py"):
+        bad = {
+            m
+            for m in _internal_imports(py)
+            if m.startswith("trippilot.ports.llm_port")
+        }
+        if bad:
+            offenders[str(py.relative_to(_SRC))] = bad
+    assert not offenders, f"agents가 LlmPort를 직접 import함(L-3 위반): {offenders}"
+
+
 def test_c1_does_not_import_c2_or_m7() -> None:
     """BR-U4-09: c1은 판단 재료 제공자 — 규칙 점수 폴백 실행은 호출측 몫이라 c2·m7 참조 금지."""
     offenders: dict[str, set[str]] = {}
