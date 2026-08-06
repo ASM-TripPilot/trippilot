@@ -29,7 +29,6 @@ STAY_DEFAULT_MIN: dict[PoiCategory, int] = {
     PoiCategory.ACTIVITY: 120,
     PoiCategory.SHOPPING: 60,
     PoiCategory.STAY: 30,
-    PoiCategory.ETC: 60,
 }
 
 
