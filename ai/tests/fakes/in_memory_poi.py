@@ -49,10 +49,6 @@ class InMemoryPoi:
             if p.category is category and _haversine_km(coord, p.coord) <= radius_km
         )
 
-    def upsert(self, poi: Poi) -> PoiId:
-        self._store[poi.poi_id] = poi
-        return poi.poi_id
-
     def get_open_window(self, poi_id: PoiId, on: date) -> OpenHour | None:
         poi = self._store.get(poi_id)
         if poi is None:

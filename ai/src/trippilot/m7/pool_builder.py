@@ -1,6 +1,7 @@
 """CandidatePoolBuilder — 6단계 필터 파이프라인 (ai-data-design §3, U3 FD §2).
 
-이 출력이 INV-1 화이트리스트의 원천. 결정론:
+INV-1 화이트리스트의 정본은 backend C7 후보풀 — 본 빌더는 AI측 조립
+(read-only 소비, PR #76 결정3). 결정론:
 - I/O는 ①의 PoiDbPort 한 번, now는 주입 (wall-clock 직접 호출 금지)
 - 인기 정렬 tie-break = poi_id 오름차순
 """
