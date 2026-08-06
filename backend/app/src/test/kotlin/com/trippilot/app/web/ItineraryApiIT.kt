@@ -158,6 +158,9 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
         rc shouldBe 200
         body["status"].asText() shouldBe "CONFIRMED"
+        // poi_snapshot 동결(INV-U1-03) — 확정 시 전 슬롯이 스냅숏 참조를 가진다(실 ACTIVE POI, Fake 에이전트).
+        itineraries.findByTrip(UUID.fromString(trip)).single().days.flatMap { it.slots }
+            .all { it.poiSnapshotId != null } shouldBe true
         // 조회에도 CONFIRMED 반영
         call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second["status"].asText() shouldBe "CONFIRMED"
         // 재확정은 409(단방향 잠금)
