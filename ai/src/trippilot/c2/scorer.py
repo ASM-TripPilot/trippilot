@@ -19,7 +19,6 @@ CATEGORY_WEIGHT: dict[PoiCategory, float] = {
     PoiCategory.FOOD: 0.8,
     PoiCategory.CAFE: 0.6,
     PoiCategory.SHOPPING: 0.5,
-    PoiCategory.ETC: 0.4,
     PoiCategory.STAY: 0.0,
 }
 

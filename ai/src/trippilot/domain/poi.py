@@ -19,7 +19,6 @@ class PoiCategory(Enum):
     ACTIVITY = "ACTIVITY"
     SHOPPING = "SHOPPING"
     STAY = "STAY"
-    ETC = "ETC"
 
 
 class DataQuality(Enum):
