@@ -24,6 +24,10 @@ import com.trippilot.trip.api.TripPeriod
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.TransactionStatus
+import org.springframework.transaction.support.SimpleTransactionStatus
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -55,6 +59,13 @@ private class ThrowingAgent : ScheduleAgentPort {
 private class CapturingPublisher : DomainEventPublisher {
     val published = mutableListOf<DomainEvent>()
     override fun publish(event: DomainEvent) { published += event }
+}
+
+/** 콜백을 그대로 실행하는 no-op tx 매니저(단위 테스트용 — 실 tx 없이 TransactionTemplate 통과). */
+private val NOOP_TX = object : PlatformTransactionManager {
+    override fun getTransaction(definition: TransactionDefinition?): TransactionStatus = SimpleTransactionStatus()
+    override fun commit(status: TransactionStatus) {}
+    override fun rollback(status: TransactionStatus) {}
 }
 
 private class FakeItineraries : ItineraryRepository {
@@ -100,9 +111,9 @@ class GenerateItineraryServiceTest : StringSpec({
             override fun findPreferences(accountId: UUID) = prefs
         }
         val baseAnchors = object : BaseAnchorFacade {
-            override fun findStayNightAnchors(accountId: UUID, tripId: UUID) = anchors
+            override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = anchors
         }
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, FakeItineraries(), publisher, clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, FakeItineraries(), publisher, NOOP_TX, clock)
     }
 
     val fullPrefs = PreferenceSnapshot(

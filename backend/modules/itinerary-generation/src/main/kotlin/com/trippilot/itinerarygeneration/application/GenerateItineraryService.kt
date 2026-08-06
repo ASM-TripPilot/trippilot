@@ -26,6 +26,8 @@ import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
@@ -44,14 +46,18 @@ class GenerateItineraryService(
     private val scheduleAgent: ScheduleAgentPort,
     private val itineraries: ItineraryRepository,
     private val events: DomainEventPublisher,
+    transactionManager: PlatformTransactionManager,
     private val clock: Clock,
 ) {
+    private val tx = TransactionTemplate(transactionManager)
+
     fun generate(accountId: UUID, tripId: UUID, mode: GenerationMode): Itinerary {
         val ctx = trips.findGenerationContext(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val prefs = preferences.findPreferences(accountId)                                    // 취향 7축·예산등급(계정 스코프)
-        val stayAnchors = baseAnchors.findStayNightAnchors(accountId, tripId)                 // 숙박일별 확정 거점 좌표
+        // 소유·기간은 위에서 선검증 — 거점 앵커는 기간을 넘겨 조립(중복 trip 조회 없음).
+        val stayAnchors = baseAnchors.findStayNightAnchors(tripId, ctx.startDate, ctx.endDate)
         val input = assembleInput(tripId, mode, ctx, prefs, stayAnchors)
-        // 외부(ScheduleAgent) 호출은 트랜잭션 밖 — 영속만 원자적(replaceForTrip). BE-2 실 HTTP 어댑터가 DB 커넥션을 물지 않게.
+        // 외부(ScheduleAgent) 호출은 트랜잭션 밖 — DB 커넥션을 물지 않게. BE-2 실 HTTP 어댑터도 동일.
         // INV-4: AI 실패 시 침묵 금지 — 결정론 최소 폴백(must_visit 고정블록)으로 대체하고 isFallback 로 표시.
         // (day1 조기노출/백그라운드 반환은 실 비동기 어댑터(BE-2/229) 도입 시 — 동기 스텁에선 이연.)
         val output = try {
@@ -60,10 +66,12 @@ class GenerateItineraryService(
             log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
             MinimalItineraryFallback.of(input, clock.instant())
         }
-        val saved = itineraries.replaceForTrip(tripId, output.toItinerary(tripId))
-        // 생성 이벤트 발행(TRIP-230). 아웃박스 영속(relay)은 공통 인프라 후속 — 현재 인프로세스 발행.
-        events.publish(ItineraryGenerated(saved.itineraryId.toString(), tripId.toString(), saved.isFallback))
-        return saved
+        // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
+        return tx.execute {
+            val saved = itineraries.replaceForTrip(tripId, output.toItinerary(tripId))
+            events.publish(ItineraryGenerated(saved.itineraryId.toString(), tripId.toString(), saved.isFallback))
+            saved
+        }!!
     }
 
     private fun assembleInput(
