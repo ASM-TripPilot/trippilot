@@ -48,7 +48,7 @@ EDIT_TRANSLATION)는 EditAgent 전속 번역 도구. 전자는 의도 라벨+라
 Orchestrator: 의도 파악 → 정보 요구표 조회 → Provider 병렬 수집(InfoBundle) → AgentTask 발행
 Agent:        context_refs 재조회(D31) → 판단(전속 도구) → Proposal → AgentResult 회신
               정보 부족 → status=NEED_MORE_INFO (재수집·재위임 최대 1회 — 초과 시 업무 폴백)
-Solver 관문:  시각·순서 있는 Proposal만 통과 (Reflect 스킵) — 봉투 프로토콜 대상 아님 (v2 §8)
+Solver 관문:  시각·순서 있는 Proposal만 통과 (Reflect 스킵) — 봉투 프로토콜 대상 아님 (delegation-design §8 [v2 보강])
 ```
 
 - 재위임(`spawn`)마다 deadline 차감이 타입에서 강제된다 (DeadlineExhaustedError) — SPEED-P1의 구조적 토대.

@@ -9,7 +9,7 @@
 | BR-AF-03 | 자식 봉투 deadline = 부모 − 경과분. 잔여 ≤ 0이면 발행 자체 불가 (`spawn`이 유일한 자식 생성 경로, DeadlineExhaustedError) | DL-4 |
 | BR-AF-04 | Agent 경계에서 예외 던지기 금지 — 성공/폴백/실패 전부 AgentResult 상태값으로 수렴. FAILED·TIMEOUT ⇔ error 필수 | DL-5, INV-4 |
 | BR-AF-05 | `NEED_MORE_INFO` 재수집·재위임은 **최대 1회** — 초과 시 업무 폴백 (Orchestrator 정책) | v2 §3 |
-| BR-AF-06 | `InfoPacket.status=OK`면 FreshnessMeta 필수. Provider 실패는 예외가 아니라 상태값 (NO_CANDIDATES 등) | IO-6·IO-7 |
+| BR-AF-06 | `InfoPacket.status ∈ {OK, LOW}`면 FreshnessMeta 필수 (LOW는 부분 성공 — io-contracts 충분성 신호). Provider 실패는 예외가 아니라 상태값 (NO_CANDIDATES 등) | IO-6·IO-7 |
 | BR-AF-07 | `LlmFeature` 값 추가는 FD 개정 + tier_map + 프롬프트 yaml + ROUTE-P1 + audit 5종 세트 동반 — 코드 단독 enum 확장 금지 | BR-U4-05 정합 |
 | BR-AF-08 | `llm.parse_intent`(INTENT)는 **Orchestrator 전용**, `llm.translate_edit`(EDIT_TRANSLATION)는 **EditAgent 전속** — 도구·feature 겹침 0 유지 | v2 도구 배타 |
 | BR-AF-09 | 임베딩 차원 1024 고정 (`EmbeddingPort.dim`) — 반환 벡터 길이 ≠ dim은 위반. FakeEmbedding은 결정론(같은 텍스트 → 같은 벡터) | AI-D06, D37 |
@@ -25,7 +25,7 @@
 | ENV-P1 | 봉투·신선도 전 타입 직렬화 왕복 (AgentTask·AgentResult·InfoBundle·FreshnessMeta·ContextRef·TaskConstraints·TaskError·TaskMetrics) | 신규 delegation generator |
 | ENV-P2 | `spawn` 반복 적용 시 deadline 단조 감소 ∧ trace_id 불변 ∧ parent 연결 정확 ∧ 잔여 소진 시 항상 예외 (SPEED-P1 토대) | 경과분 무작위 시퀀스 |
 | ENV-P3 | AgentResult 상태-필드 정합: 불변식 표(domain-entities §2)를 위반하는 인스턴스는 생성 불가 | 무작위 필드 조합 → 생성 성공/실패 이분 |
-| ENV-P4 | InfoPacket: status=OK ∧ freshness=None인 인스턴스는 생성 불가 | 상태 스윕 |
+| ENV-P4 | InfoPacket: status ∈ {OK, LOW} ∧ freshness=None인 인스턴스는 생성 불가 | 상태 스윕 |
 | EMB-P1 | FakeEmbedding: 같은 텍스트 → 같은 벡터 ∧ len=dim ∧ L2 노름 ≈ 1.0 ∧ 다른 텍스트 → (사실상) 다른 벡터 | 무작위 유니코드 텍스트 |
 | EMB-P2 | InMemoryVectorStore: 저장 벡터 자신으로 검색 시 top1 = 자신 ∧ score 내림차순 ∧ top_k 상한 준수 ∧ 동점 시 item_id 사전순(결정론) | 무작위 벡터 셋 |
 | ROUTE-P1 (승계) | 전 feature 스윕에 `EDIT_TRANSLATION` 자동 포함 — tier_map 완전성 | 기존 U4 PBT 회귀 |
@@ -61,3 +61,4 @@
 | 미결 #4 | EDIT_TRANSLATION 티어 LIGHT 확정 여부 (복잡 편집 발화 정확도) | K-2 실모델 검증 |
 | 미결 #5 | Background의 LlmFeature 사용 상한 (현행 PLACE_EXTRACTION 1종 외 추가 여부) | U6 FD |
 | 미결 #6 | TripReadiness·FreshnessCurator 요구사항 정본 부재 (로드맵 유래 명칭만 존재) | 해당 기능 인셉션 문서화 |
+| 미결 #7 | 집계형 FreshnessMeta — `ScheduleAgentOutput.freshness`는 "사용 데이터 신선도 집계"(agent-io-contracts)인데 집계 스키마 미정의. 본 FD FreshnessMeta는 패킷 단일 source용 | 경계 계약 개정 (TRIP-282) |

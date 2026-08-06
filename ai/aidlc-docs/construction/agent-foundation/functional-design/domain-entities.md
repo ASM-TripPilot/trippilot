@@ -25,7 +25,7 @@ U1~U4가 만든 규격을 소비만 한다: `TypedResult[T]`·`CandidatePool`·`
 - **closed-set 개정 절차 (BR-U4-05 정합)** — enum 자체가 closed-set이므로 값 추가는 반드시 다음 5종 세트로:
   1. FD 문서 개정 (본 문서 + u4 FD domain-entities §1 티어 표) — 코드 단독 enum 확장 금지
   2. `C1Config.default_tier_map()` 항목 추가 — "전 feature가 tier_map에 존재" 테스트가 누락을 잡는다
-  3. `prompts/{feature}.yaml` v0.1.0 등록 (BR-U4-06 — PromptRef 없는 호출은 타입상 불가)
+  3. `prompts/{feature}.yaml` v0.1.0 등록 (BR-U4-06 — PromptRef 없는 호출은 타입상 불가. **등록 시점은 해당 feature를 호출하는 워커 구현 시** — enum 선행 추가는 1·2·4·5만으로 가능, 기존 4종 선등록 선례와 동일)
   4. ROUTE-P1(전 feature 스윕 PBT)이 자동으로 신규 값 포함 — 별도 조치 불요, green 확인만
   5. `audit.md` 기록 (AI-DLC append-only)
 
@@ -98,13 +98,13 @@ FreshnessMeta (frozen):
   stale: bool          # TTL 초과분을 폴백으로 반환했는가
 
 ProviderKind   (Enum): PLACE · WEATHER · TRANSIT · PERSONA · EVENT
-ProviderStatus (Enum): OK · LOW · NO_CANDIDATES · WEATHER_UNKNOWN · COLD_START · UNAVAILABLE   # 실패 = 상태값 (IO-7)
+ProviderStatus (Enum): OK · LOW · NO_CANDIDATES · WEATHER_UNKNOWN · COLD_START · UNAVAILABLE   # LOW=부분 성공(충분성 신호), OK·LOW 외가 실패 상태값 (IO-7)
 
 InfoPacket (frozen):
   provider: ProviderKind
   status: ProviderStatus
   data: dict                     # JSON-safe — Provider별 상세 스키마는 agent-io-contracts §5 채택
-  freshness: FreshnessMeta | None  # status=OK면 필수 (post-init, IO-6). 실패 상태값일 때만 None 허용
+  freshness: FreshnessMeta | None  # status ∈ {OK, LOW}면 필수 (post-init, IO-6 — LOW는 부분 성공이라 신선도 동봉). 실패 상태값일 때만 None 허용
 
 InfoBundle (frozen):
   packets: tuple[InfoPacket, ...]  # 소형 패킷(날씨·교통·페르소나) 직접 포함
