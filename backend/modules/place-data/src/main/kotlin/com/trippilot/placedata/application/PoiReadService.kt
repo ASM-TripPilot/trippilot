@@ -53,7 +53,8 @@ class PoiReadService(
         val errors = buildList {
             if (centerLat !in -90.0..90.0) add(FieldError("centerLat", "위도는 -90~90 이어야 합니다."))
             if (centerLng !in -180.0..180.0) add(FieldError("centerLng", "경도는 -180~180 이어야 합니다."))
-            if (radiusKm <= 0.0 || radiusKm > MAX_RADIUS_KM) add(FieldError("radiusKm", "반경은 0 초과 ${MAX_RADIUS_KM}km 이하여야 합니다."))
+            // 양수형 검사(NaN 도 걸러짐 — NaN 비교는 모두 false 라 부정형이면 우회됨).
+            if (!(radiusKm > 0.0 && radiusKm <= MAX_RADIUS_KM)) add(FieldError("radiusKm", "반경은 0 초과 ${MAX_RADIUS_KM}km 이하여야 합니다."))
         }
         if (errors.isNotEmpty()) throw ValidationFailed(errors)
     }

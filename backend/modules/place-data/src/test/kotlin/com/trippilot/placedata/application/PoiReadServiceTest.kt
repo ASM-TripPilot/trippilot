@@ -69,6 +69,8 @@ class PoiReadServiceTest : StringSpec({
         shouldThrow<ValidationFailed> { svc.findByRadius(200.0, 126.9, 5.0) }   // 위도 범위 밖
         shouldThrow<ValidationFailed> { svc.findByRadius(33.4, 126.9, -5.0) }   // 음수 반경
         shouldThrow<ValidationFailed> { svc.findByRadius(33.4, 126.9, 999.0) }  // 반경 상한 초과
+        shouldThrow<ValidationFailed> { svc.findByRadius(33.4, 126.9, Double.NaN) }   // NaN 반경(검증 우회 방지)
+        shouldThrow<ValidationFailed> { svc.findByRadius(Double.NaN, 126.9, 5.0) }    // NaN 좌표
     }
 
     "batchGet — 상한 초과는 400(ValidationFailed)" {
