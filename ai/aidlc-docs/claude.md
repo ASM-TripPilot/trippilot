@@ -1,18 +1,20 @@
-# aidlc-docs — AI-DLC 워크플로우 산출물
+# aidlc-docs — AI-DLC Workflow Artifacts
 
-이 디렉토리는 AI-DLC(AI-Driven Development Life Cycle) 프로세스의 **모든 문서 산출물**을 보관합니다.
-절대로 이 폴더에 application code를 넣지 마세요.
+> Korean version: ./claude.ko.md
 
-## 구조
+This directory holds **all document artifacts** of the AI-DLC (AI-Driven Development Life Cycle) process.
+Never put application code in this folder.
 
-- `aidlc-state.md` — 현재 워크플로우 진행 상태 (세션 재개 시 이것부터 읽기)
-- `audit.md` — 전체 인터랙션 감사 로그
-- `inception/` — INCEPTION Phase 산출물 (설계·요구사항·계획)
-- `construction/` — CONSTRUCTION Phase 산출물 (유닛별 상세 설계·코드 요약)
+## Structure
+
+- `aidlc-state.md` — current workflow progress state (read this first when resuming a session)
+- `audit.md` — audit log of all interactions
+- `inception/` — INCEPTION Phase artifacts (design · requirements · plans)
+- `construction/` — CONSTRUCTION Phase artifacts (per-unit detailed design · code summaries)
 - `operations/` — OPERATIONS Phase (placeholder)
 
-## 규칙
+## Rules
 
-- 새 파일 생성 전 `aidlc-state.md`의 현재 단계를 확인
-- 모든 변경은 `audit.md`에 타임스탬프와 함께 기록
-- 단계별 승인 없이 다음 단계로 넘어가지 않음
+- Before creating a new file, check the current stage in `aidlc-state.md`
+- Record every change in `audit.md` with a timestamp
+- Do not proceed to the next stage without per-stage approval
