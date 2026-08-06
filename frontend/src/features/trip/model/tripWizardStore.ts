@@ -5,14 +5,16 @@ import type {
   TripDestination,
 } from '@/shared/api/generated/schemas';
 
-import type { MustVisitSeedItem } from './mustVisitSeed';
+import { mergeMustVisitSeeds, type MustVisitSeedItem } from './mustVisitSeed';
 import type { PeriodPresetCode } from './tripWizardStep1';
 
 /**
  * 위저드 1/2 드래프트 — 화면 밖에 사는 세션 메모리 상자(TRIP-205, 01b §10.1 · D3).
  * `persist` 없음 — Zustand는 서버가 모르는 UI 상태만 둔다(frontend/README.md). 뒤로 갔다
  * 재진입해도 값이 남는 것(BR-U1-33)은 이 모듈이 앱 생존 중 유지되는 모듈 싱글턴이라
- * 저절로 성립한다 — 기기 저장소가 필요한 요구가 아니다.
+ * 저절로 성립한다 — 기기 저장소가 필요한 요구가 아니다. **예외는 시드 3필드뿐이다**:
+ * 위저드 셸이 진입마다 `resetMustVisits()`로 그 셋만 비운다(TRIP-288 D1 · AC-1). 사용자가
+ * 손으로 채운 축은 그 초기화에서도 그대로 남는다.
  *
  * `touched` — 사용자가 어떤 축을 건드렸는지 집합으로 기억한다. `validateTripDraft`(TRIP-204)는
  * 페일클로즈라 빈 드래프트에서도 위반 3개를 낸다 — 그대로 문구로 뿌리면 아무것도 안 고른
@@ -49,6 +51,11 @@ export interface TripWizardDraft {
    * 소유자는 Query 캐시다). */
   mustVisits: MustVisitSeedItem[];
   mustVisitsInitialized: boolean;
+  /** 사용자가 x로 뺀 `sourcePoiId`들(TRIP-288 D7) — 재시드가 되살리지 않게 기억해 둔다.
+   * 판정 기준은 이 집합 하나뿐이라, 탐색에서 담기를 풀었다 다시 담아도 여전히 제외다.
+   * **`INITIAL_DRAFT`에 있다는 것이 계약의 절반이다** — 새 진입(`reset`)이면 예전 제외가
+   * 함께 비워진다. 안 그러면 새 여행에서 "담았는데 안 들어오는" 새 증상이 생긴다. */
+  excludedMustVisitPoiIds: string[];
   addDestination(regionName: string, nights: number): void;
   removeDestination(regionName: string): void;
   /** `presetCode`가 `undefined`면 "어떤 칩도 선택 안 됨" — 프리셋이 아닌 출처(등록 숙소
@@ -70,9 +77,22 @@ export interface TripWizardDraft {
   /** **첫 호출만** 반영한다 — 재조회·리렌더마다 다시 채우면 사용자가 x로 뺀 항목이
    * 되살아나고, 자기가 뺀 곳이 여행에 등록되는 것을 보게 된다. */
   initMustVisits(items: MustVisitSeedItem[]): void;
+  /** 재시드 문(TRIP-288) — `initMustVisits`와 달리 **여러 번 불려도 일하되 더하기만** 한다.
+   * 두 문을 나눈 이유는 "2회차 무시"가 첫 문의 계약이기 때문이다(그 계약을 무르면 사용자가
+   * 뺀 항목이 되살아난다). 더할 게 없으면 `mustVisits`를 갈아 끼우지 않는다 — 이 액션은
+   * 화면 효과가 매 렌더 부르는 자리라, 갈아 끼우면 렌더 루프가 된다. */
+  addMustVisits(items: MustVisitSeedItem[]): void;
   /** **첫 일치 하나만** 뺀다 — `filter`는 같은 식별자가 둘 있을 때 전부 지운다(아래
-   * `removeDestination` 주석의 사고와 같은 함정이다). */
+   * `removeDestination` 주석의 사고와 같은 함정이다). 뺀 곳은 `excludedMustVisitPoiIds`에
+   * 적어 둔다 — 안 적으면 다음 재시드가 그 자리에 같은 곳을 다시 넣는다. */
   removeMustVisit(sourcePoiId: string): void;
+  /** 진입 초기화(TRIP-288 D1) — **시드 3필드만** 되돌린다. `reset()`과 문을 나눈 이유는
+   * 범위다: 위저드에 새로 들어오는 것은 "새 여행을 시작한다"지 "지금까지 친 것을 버린다"가
+   * 아니라, 사용자가 손으로 채운 축(여행지·기간·인원·동반·예산·`touched`)은 재진입에도
+   * 남아야 한다(BR-U1-33 · AC-1은 초기화 대상으로 시드 3개만 열거한다).
+   * `createdTripId`도 남긴다 — 정본이 수명을 정하지 않았고, step1의 두 소비자가 화면 지역
+   * 상태(`pendingMustVisits`)와 짝이라 새 마운트에서는 발화하지 않는다(02a §9-2). */
+  resetMustVisits(): void;
   reset(): void;
 }
 
@@ -88,6 +108,7 @@ const INITIAL_DRAFT = {
   createdTripId: undefined as string | undefined,
   mustVisits: [] as MustVisitSeedItem[],
   mustVisitsInitialized: false,
+  excludedMustVisitPoiIds: [] as string[],
 };
 
 /** 이미 켜져 있으면 그대로 둔다 — 집합이지 로그가 아니다(같은 축을 여러 번 건드려도
@@ -171,6 +192,20 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
         ? {}
         : { mustVisits: items, mustVisitsInitialized: true }
     ),
+  addMustVisits: (items) =>
+    set((state) => {
+      const mustVisits = mergeMustVisitSeeds({
+        current: state.mustVisits,
+        incoming: items,
+        excluded: state.excludedMustVisitPoiIds,
+      });
+      // 순수 함수가 같은 배열을 돌려줬는데 여기서 `[...mustVisits]`로 감싸면 참조가 새로
+      // 생겨 루프가 그대로 산다 — 층마다 따로 지켜야 하는 성질이다.
+      if (mustVisits === state.mustVisits && state.mustVisitsInitialized) {
+        return {};
+      }
+      return { mustVisits, mustVisitsInitialized: true };
+    }),
   removeMustVisit: (sourcePoiId) =>
     set((state) => {
       // `touched`는 건드리지 않는다 — 시드는 `[다음]` 게이트의 축이 아니라서, 여기서
@@ -186,7 +221,23 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
           ...state.mustVisits.slice(0, index),
           ...state.mustVisits.slice(index + 1),
         ],
+        // 집합이지 로그가 아니다(`withTouched`와 같은 판단) — 같은 곳을 두 번 빼도
+        // 한 번만 쌓인다.
+        excludedMustVisitPoiIds: state.excludedMustVisitPoiIds.includes(
+          sourcePoiId
+        )
+          ? state.excludedMustVisitPoiIds
+          : [...state.excludedMustVisitPoiIds, sourcePoiId],
       };
+    }),
+  // 초기값은 `INITIAL_DRAFT`에서 꺼내되, **어떤 키를 비울지는 손으로 적은 목록이다.**
+  // 시드 관련 필드를 새로 추가하면 여기에도 반드시 넣어야 한다 — 빠뜨려도 tsc·테스트가
+  // 아무것도 안 잡고, 그 필드만 이전 여행 값을 물고 넘어온다(TRIP-288 증상 A의 재발).
+  resetMustVisits: () =>
+    set({
+      mustVisits: INITIAL_DRAFT.mustVisits,
+      mustVisitsInitialized: INITIAL_DRAFT.mustVisitsInitialized,
+      excludedMustVisitPoiIds: INITIAL_DRAFT.excludedMustVisitPoiIds,
     }),
   reset: () => set(INITIAL_DRAFT),
 });

@@ -4,6 +4,7 @@ import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 
 import {
   MUST_VISIT_THUMBNAIL_LIMIT,
+  mergeMustVisitSeeds,
   mustVisitFailureNotice,
   resolveMustVisitSection,
   seedMustVisits,
@@ -292,6 +293,153 @@ describe('N1 · resolveMustVisitSection — 얼굴 판정 (01b D5 · D9)', () =>
     // ★ 이 한 줄이 D5 의 전부다 — 조회 실패를 0곳으로 떨어뜨리면 담아 둔 게 있는 사용자에게
     // "담은 게 없다"는 **거짓말**을 하게 된다(실제로는 못 불러온 것이다).
     expect(failed).not.toEqual(empty);
+  });
+});
+
+/**
+ * ─── TRIP-288 추가분 (N1-11 ~ N1-14) ───────────────────────────────────────────
+ *
+ * `mergeMustVisitSeeds` — 시드의 **재시드 규칙**. 담은 목록이 늘어난 채 화면이 다시 그려질 때
+ * 무엇을 더하고 무엇을 안 더하는가를 이 함수 하나가 정한다(01b D2 · D7 · D8 · D11).
+ *
+ * 네 성질을 동시에 진다:
+ *  ① `current` 를 **접두사로** 그대로 보존한다 — 담은 목록 순서로 재정렬하지 않는다(D11).
+ *  ② `current` 에도 `excluded` 에도 없는 것만 **뒤에** 이어 붙인다(D2 · D7).
+ *  ③ `incoming` 에서 사라진 항목을 **빼지 않는다** — 시드는 복사본이다(D8 · 동결 N4-6).
+ *  ④ 더할 게 없으면 **`current` 와 같은 배열 참조**를 그대로 돌려준다(01b 제약 11).
+ *
+ * 🔴 왜 ④가 급소인가 — 재시드는 `TripNewStep1Page` 의 `mustVisitsInitialized` 가드를 **푼다**.
+ * 그 순간 `savedPlaces.savedPlaces` 가 게스트·미도착에서 **매 렌더 새 빈 배열**을 내는 성질이
+ * 살아나, 내용이 같아도 새 배열을 돌려주면 렌더 → 효과 → 상태 교체 → 렌더의 무한 루프가 된다.
+ * 실측(02a §5 P3): 그 구현은 `render()` 자체가 `Maximum update depth exceeded` 로 던진다.
+ * 순수 층(N1-13) · 스토어 층(N2-9) · 화면 층(N4-12) 세 군데에 심판을 나눠 박는다 —
+ * 이 함수가 참조를 지켜도 스토어가 `[...next]` 로 감싸면 루프가 그대로 살기 때문이다.
+ *
+ * ── 졸업 조건 ── **A. 영구 규칙 — 유지한다.** 재정렬 금지·빼기 금지·참조 안정은 시드가 사는 한
+ * 유효하고, 항목이 늘어도 갱신이 필요 없다.
+ */
+describe('N1 · mergeMustVisitSeeds — 재시드 규칙 (TRIP-288 AC-2 · AC-3 · AC-4)', () => {
+  it('🔴 N1-11 새 것은 맨 뒤에 붙고, 기존 순서는 안 흔들리고, 사라진 것은 남는다', () => {
+    // 준비 — `current` 를 담은 목록과 **일부러 다른 순서**로 둔다(재정렬하는 구현을 잡는다).
+    // `incoming` 에는 `poi-2` 가 없다 — 사용자가 탐색에서 그 담기를 풀었다는 뜻이다.
+    const current = [seedItem('poi-2'), seedItem('poi-1')];
+    const incoming = [seedItem('poi-1'), seedItem('poi-3')];
+
+    const merged = mergeMustVisitSeeds({ current, incoming, excluded: [] });
+
+    // ① 재정렬 없음 ② 새 것(`poi-3`)은 맨 뒤 ③ `incoming` 에서 빠진 `poi-2` 는 **남는다**
+    expect(merged.map((seed) => seed.sourcePoiId)).toEqual([
+      'poi-2',
+      'poi-1',
+      'poi-3',
+    ]);
+    // 기존 항목을 새로 만들어 갈아 끼우지 않는다 — 같은 객체 그대로다.
+    expect(merged[0]).toBe(current[0]);
+  });
+
+  it('🔴 N1-12 뺀 곳은 다시 안 들어오고, 같이 온 새 곳은 들어온다', () => {
+    // 준비 — 사용자가 x 로 뺀 `poi-2` 는 **여전히 담은 목록에 있다**(담기와 시드는 독립이다).
+    const current = [seedItem('poi-1')];
+    const incoming = [seedItem('poi-1'), seedItem('poi-2'), seedItem('poi-3')];
+
+    const merged = mergeMustVisitSeeds({
+      current,
+      incoming,
+      excluded: ['poi-2'],
+    });
+
+    // 부정(`poi-2` 없음)과 긍정(`poi-3` 들어옴)이 한 단언 안에 있다 — 뒤가 없으면
+    // "아무것도 안 더하는" 구현이 통과한다.
+    expect(merged.map((seed) => seed.sourcePoiId)).toEqual(['poi-1', 'poi-3']);
+  });
+
+  it('🔴 N1-13 더할 게 없으면 같은 배열을 그대로 돌려준다 (렌더 루프 차단)', () => {
+    const current = [seedItem('poi-1'), seedItem('poi-2')];
+
+    // ① 같은 목록이 다시 왔다(재조회·리렌더가 늘 이 모양이다).
+    expect(
+      mergeMustVisitSeeds({ current, incoming: [...current], excluded: [] })
+    ).toBe(current);
+
+    // ② 비회원·빈 목록 — 여기가 루프가 가장 잘 나는 자리다.
+    const empty: MustVisitSeedItem[] = [];
+    expect(
+      mergeMustVisitSeeds({ current: empty, incoming: [], excluded: [] })
+    ).toBe(empty);
+
+    // ③ 짝(긍정) — 더할 게 있으면 **다른** 배열이 나온다. 없으면 "항상 current 를 돌려주는"
+    //    구현이 ①②를 공짜로 통과한다.
+    const grown = mergeMustVisitSeeds({
+      current,
+      incoming: [...current, seedItem('poi-3')],
+      excluded: [],
+    });
+    expect(grown).not.toBe(current);
+    expect(grown).toHaveLength(3);
+  });
+
+  it('🔴 N1-14 임의 입력에서도 네 성질이 동시에 선다 (PBT)', () => {
+    // ⚠️ **작은 풀**이라야 current·incoming·excluded 가 실제로 겹친다(02a ★5).
+    const poiIdArb = fc.constantFrom('poi-1', 'poi-2', 'poi-3', 'poi-4');
+    const uniqueSeedsArb = fc
+      .array(poiIdArb, { maxLength: 6 })
+      .map((ids): MustVisitSeedItem[] =>
+        [...new Set<string>(ids)].map((id) => seedItem(id))
+      );
+    // ⚠️ `fc.constantFrom` 은 **리터럴 유니온**을 준다 — `string[]` 으로 넓히지 않으면
+    // `excluded.includes(id)` 가 "string 을 유니온 자리에 넣었다"로 tsc 에서 죽는다.
+    const excludedArb = fc
+      .array(poiIdArb, { maxLength: 3 })
+      .map((ids): string[] => [...new Set<string>(ids)]);
+
+    // 메타 관찰 — 이 PBT 가 **더하기와 제외를 실제로 태웠는가**. 없으면 성질이 공허하다.
+    let sawAppended = false;
+    let sawExclusionBlock = false;
+
+    fc.assert(
+      fc.property(
+        uniqueSeedsArb,
+        uniqueSeedsArb,
+        excludedArb,
+        (current, incoming, excluded) => {
+          const merged = mergeMustVisitSeeds({ current, incoming, excluded });
+          const currentIds = current.map((seed) => seed.sourcePoiId);
+          const incomingIds = incoming.map((seed) => seed.sourcePoiId);
+          const mergedIds = merged.map((seed) => seed.sourcePoiId);
+          const appendedIds = mergedIds.slice(current.length);
+
+          if (appendedIds.length > 0) sawAppended = true;
+          if (
+            incomingIds.some(
+              (id) => excluded.includes(id) && !currentIds.includes(id)
+            )
+          ) {
+            sawExclusionBlock = true;
+          }
+
+          // ① 기존 시드가 앞에 그대로 있다(순서·내용 보존 · 빼기 금지).
+          expect(mergedIds.slice(0, current.length)).toEqual(currentIds);
+          // ② 같은 장소가 두 번 들어가지 않는다(BR-U1-50 — 서버 409 전에 클라가 막는다).
+          expect(new Set(mergedIds).size).toBe(mergedIds.length);
+          // ③ 새로 붙은 부분에 제외된 곳이 하나도 없다.
+          appendedIds.forEach((id) => expect(excluded).not.toContain(id));
+          // ④ 없던 장소를 지어내지 않는다.
+          mergedIds.forEach((id) =>
+            expect([...currentIds, ...incomingIds]).toContain(id)
+          );
+          // ⑤ 멱등 — 결과를 같은 입력으로 다시 태우면 **같은 참조**가 나온다(루프 차단의 성질판).
+          expect(
+            mergeMustVisitSeeds({ current: merged, incoming, excluded })
+          ).toBe(merged);
+        }
+      ),
+      { numRuns: 500 }
+    );
+
+    expect({ sawAppended, sawExclusionBlock }).toEqual({
+      sawAppended: true,
+      sawExclusionBlock: true,
+    });
   });
 });
 

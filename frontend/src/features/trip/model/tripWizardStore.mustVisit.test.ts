@@ -84,6 +84,83 @@ describe('N2 · 시드 목록의 초기값과 1회성 채우기', () => {
   });
 });
 
+/**
+ * ─── TRIP-288 추가분 (N2-7 ~ N2-9) ─────────────────────────────────────────────
+ *
+ * `addMustVisits` — 시드의 **두 번째 문**. 담은 목록이 늘어난 채 화면이 다시 그려질 때 들어오는
+ * 자리이고, `initMustVisits`(첫 문)와 달리 **여러 번 불려도 일한다**. 단 하는 일은 더하기뿐이다.
+ *
+ * ⚠️ 왜 문을 새로 내는가 — 위 N2-2 가 "`initMustVisits` 2회차는 무시"를 못 박고 있다(승인 동결).
+ * 재시드를 그 문으로 넣으려면 N2-2 를 고쳐야 하고, 그건 "사용자가 뺀 항목이 되살아나지 않는다"는
+ * 계약을 스스로 무르는 것이다. 그래서 계약은 그대로 두고 **더하기 전용 문**을 따로 낸다.
+ *
+ * 무엇을 보장하나:
+ *  - 두 번째 호출에서 **새 것만** 더한다(01b D2 · D11 — 기존 것 뒤에).
+ *  - x 로 뺀 곳은 **다시 담아도** 안 돌아온다(D7 — 판정 기준은 `sourcePoiId` 하나).
+ *  - 그 기억은 `reset()` 으로 **함께** 비워진다(D1 — 새 진입이면 예전 제외는 무효다).
+ *  - 바뀐 게 없으면 `mustVisits` 를 **새 배열로 갈아 끼우지 않는다**(제약 11 · 렌더 루프).
+ *
+ * 3동작 뼈대: 준비=액션으로 상태 만들기 → 실행=`addMustVisits` → 단언=`getState()` 값.
+ */
+describe('N2 · addMustVisits — 재시드 (TRIP-288 AC-1 · AC-2 · AC-4)', () => {
+  const ids = () => store().mustVisits.map((one) => one.sourcePoiId);
+
+  it('🔴 N2-7 첫 호출은 채우고, 두 번째 호출은 새 것만 뒤에 더한다', () => {
+    store().addMustVisits([seed('poi-1'), seed('poi-2')]);
+
+    // 긍정 짝 — 첫 호출이 실제로 반영됐다. 없으면 아래 "더해진다"가 공허하다.
+    expect(ids()).toEqual(['poi-1', 'poi-2']);
+    expect(store().mustVisitsInitialized).toBe(true);
+
+    // 실행 — 더 담기로 한 곳을 새로 담고 돌아왔다(같은 목록 + 새 한 건).
+    store().addMustVisits([seed('poi-1'), seed('poi-2'), seed('poi-3')]);
+
+    // 2회차가 통째로 무시되면(= N2-2 와 같은 문이면) `poi-3` 이 안 들어와 여기서 죽는다.
+    expect(ids()).toEqual(['poi-1', 'poi-2', 'poi-3']);
+  });
+
+  it('🔴 N2-8 뺀 곳은 다시 담아도 안 돌아오고, 새로 진입하면 돌아온다', () => {
+    store().addMustVisits([seed('poi-1'), seed('poi-2'), seed('poi-3')]);
+    store().removeMustVisit('poi-2');
+    expect(ids()).toEqual(['poi-1', 'poi-3']);
+
+    // 실행 ① — 탐색에서 `poi-2` 담기를 풀었다 다시 담고, `poi-4` 를 새로 담아 돌아왔다.
+    store().addMustVisits([
+      seed('poi-1'),
+      seed('poi-2'),
+      seed('poi-3'),
+      seed('poi-4'),
+    ]);
+
+    // 부정(`poi-2` 안 돌아옴)과 긍정 짝(`poi-4` 들어옴)이 한 단언 안에 있다.
+    expect(ids()).toEqual(['poi-1', 'poi-3', 'poi-4']);
+
+    // 실행 ② — 위저드에 **새로 진입**했다. 제외 기억은 드래프트의 일부라 함께 비워진다 —
+    // 안 비우면 새 여행에서 "담았는데 안 들어오는" 새 증상이 생긴다(01b D1 · AC-1).
+    store().reset();
+    store().addMustVisits([seed('poi-1'), seed('poi-2'), seed('poi-3')]);
+
+    expect(ids()).toEqual(['poi-1', 'poi-2', 'poi-3']);
+  });
+
+  it('🔴 N2-9 더할 게 없으면 목록을 새 배열로 갈아 끼우지 않는다 (렌더 루프 차단)', () => {
+    store().addMustVisits([seed('poi-1'), seed('poi-2')]);
+    const before = store().mustVisits;
+
+    // 실행 — 같은 목록이 또 도착했다(게스트·미도착 상태에서는 매 렌더 일어난다).
+    store().addMustVisits([seed('poi-1'), seed('poi-2')]);
+
+    // 내용이 같아도 **새 배열**이면 화면이 다시 그려지고, 그 렌더가 이 액션을 다시 불러
+    // 무한 루프가 된다(02a ★2 · §5 P3 실측 — render 가 던진다).
+    expect(store().mustVisits).toBe(before);
+
+    // 짝(긍정) — 그렇다고 아무 일도 안 하는 것은 아니다.
+    store().addMustVisits([seed('poi-1'), seed('poi-2'), seed('poi-3')]);
+    expect(store().mustVisits).not.toBe(before);
+    expect(ids()).toEqual(['poi-1', 'poi-2', 'poi-3']);
+  });
+});
+
 describe('N2 · removeMustVisit — 개별 제거 (AC-5 · BR-U1-37)', () => {
   it('🔴 N2-3 같은 식별자가 둘 있어도 한 번 누르면 하나만 사라진다', () => {
     // 준비 — 같은 `sourcePoiId` 두 건을 **일부러** 넣는다. `filter` 로 지우는 구현은

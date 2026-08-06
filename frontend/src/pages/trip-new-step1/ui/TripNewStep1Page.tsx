@@ -65,7 +65,8 @@ import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen'
  *     (`resolveStayImport`), 가져오기 → `setPeriod`, `/stays/register` 이동이 전부 여기다.
  *     조회 실패는 얼굴을 갈아 끼우지 않고 별개 축(`stayImportFailed`)으로 내려간다.
  *  7. **'꼭 갈 곳' 시드와 등록(TRIP-209, 01b D1~D6)** — `GET /saved-places` 조회 → 위저드
- *     드래프트에 **1회만** 복사(그래야 사용자가 뺀 항목이 되살아나지 않는다) → 생성 성공
+ *     드래프트로 복사(TRIP-288부터 **더하기만** 하는 재시드다 — 사용자가 뺀 항목이
+ *     되살아나지 않게 막는 것은 스토어의 제외 기억이다) → 생성 성공
  *     **뒤에** `POST /trips/{tripId}/must-visits` N건. 계약에 꼭 갈 곳을 생성 요청에 실을
  *     필드가 없어 2단이 강제된다. 등록은 여행 생성 `try` **바깥**이다 — 한 블록으로 묶으면
  *     등록 실패가 "여행 생성 실패"로 둔갑하고 사용자가 [다시 시도]로 여행을 하나 더 만든다.
@@ -166,7 +167,7 @@ export function TripNewStep1Page({
   const mustVisitsInitialized = useTripWizardStore(
     (state) => state.mustVisitsInitialized
   );
-  const initMustVisits = useTripWizardStore((state) => state.initMustVisits);
+  const addMustVisits = useTripWizardStore((state) => state.addMustVisits);
   const removeMustVisit = useTripWizardStore((state) => state.removeMustVisit);
 
   const preference = usePreferencePrefill();
@@ -233,20 +234,25 @@ export function TripNewStep1Page({
   const savedPlacesLoading = isAuthed && savedPlaces.isPending;
   const savedPlaceList = savedPlaces.savedPlaces;
 
-  // 시드는 **1회만** 채운다(01b — 세션당 한 번). 매 렌더 쿼리 결과에서 파생시키면 사용자가
-  // x로 뺀 항목이 다음 리렌더에 되살아나고, 담기를 푼 뒤 돌아오면 이미 복사된 시드가 사라진다
-  // (INV-U1-04는 양방향 독립이다).
+  // 시드는 담은 목록이 **늘어날 때마다** 다시 태우되 더하기만 한다(TRIP-288 D2 · D8). "이미
+  // 채웠나"로 막던 옛 가드를 풀지 않으면 더 담기로 새로 담고 돌아와도 시드에 영영 안 들어온다.
+  // 가드가 하던 두 가지 일은 다른 자리가 대신한다 — 사용자가 x로 뺀 항목은 스토어의 제외
+  // 기억이, 리렌더 루프는 `mergeMustVisitSeeds`의 참조 보존이 막는다.
+  // ⚠️ `mustVisitsInitialized`는 몸통이 읽지 않지만 **의존성으로 남긴다**: 위저드 셸
+  // (`app/trips/new/_layout.tsx`)의 진입 초기화가 이 플래그를 내리는 것이 이 효과를 다시
+  // 깨우는 유일한 신호다(React는 자식 효과를 부모보다 먼저 돌리므로, 초기화는 이 효과가 이미
+  // 한 번 돈 **뒤**에 온다). 빼면 새 진입이 시드를 비우기만 하고 사용자는 빈 목록을 본다.
   useEffect(() => {
-    if (mustVisitsInitialized || savedPlacesLoading || savedPlaces.isError) {
+    if (savedPlacesLoading || savedPlaces.isError) {
       return;
     }
-    initMustVisits(seedMustVisits(savedPlaceList));
+    addMustVisits(seedMustVisits(savedPlaceList));
   }, [
     mustVisitsInitialized,
     savedPlacesLoading,
     savedPlaces.isError,
     savedPlaceList,
-    initMustVisits,
+    addMustVisits,
   ]);
 
   // 얼굴 판정도 실패와 별개 축이다 — 잔존 시드가 있으면 실패·로딩이 그것을 덮지 않는다.
@@ -454,10 +460,15 @@ export function TripNewStep1Page({
 
     // ↓ 여기서부터는 위 `try` 바깥이다. 여행은 이미 만들어졌으므로 아래에서 나는 실패는
     // 등록 실패지 생성 실패가 아니다. 이동(2/2, g02 · TRIP-84)은 등록이 끝난 뒤에만 한다 —
-    // `tripWizardStore.reset()`은 여전히 부르지 않는다(01b D6).
+    // 제출은 드래프트를 비우지 않는다(TRIP-209 01b D6). 드래프트를 되돌리는 자리는 위저드
+    // **진입**뿐이고 거기서도 시드 3필드만이다(셸의 `resetMustVisits`, TRIP-288 D1).
+    // ⚠️ 시드를 여기서 **다시 읽는다**: `mustVisits`는 `[다음]`을 누른 순간 렌더의 값이라,
+    // `await` 동안 담은 목록이 도착해 시드가 늘어도 옛 값 그대로다 — 화면에 보이는 꼭 갈 곳이
+    // 한 건도 등록되지 않고 조용히 2/2로 넘어간다. 위 `submitLockedRef`가 처리한 것과 같은
+    // 사고("지금 값은 다음 렌더에야 보인다")다.
     await registerMustVisits(
       trip.tripId,
-      mustVisits.map((seed) => seed.sourcePoiId)
+      useTripWizardStore.getState().mustVisits.map((seed) => seed.sourcePoiId)
     );
   }
 

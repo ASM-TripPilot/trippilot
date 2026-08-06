@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -387,5 +388,159 @@ describe('🔴 N4 · 담은 목록이 아직 도착 전이면 [다음]을 잠깐
     fillValidDraft();
 
     expect(next()).toBeEnabled();
+  });
+});
+
+/**
+ * ─── TRIP-288 추가분 (N4-10 ~ N4-13) ───────────────────────────────────────────
+ *
+ * 여기서 보는 것은 **재시드가 화면까지 이어지는가**다. 지금은 시드가 세션당 한 번만 채워져,
+ * 더 담기로 새로 담고 돌아와도 썸네일이 그대로다 — 캡션의 숫자(서버 개수)만 늘어나 한 화면 안에서
+ * 숫자와 그림이 서로 다른 말을 한다(TRIP-288 증상 B).
+ *
+ * ⚠️ **썸네일 상한 3**(동결 N1-6·N1-7)이 이 칸의 설계를 좁힌다 — 시드가 4건이면 4번째는 `+1` 로
+ * 접혀 화면에 testID 가 아예 없다. 그래서 아래 두 케이스는 **최종 시드를 정확히 3건**으로 맞췄다.
+ * 안 그러면 "안 들어왔다"와 "접혀서 안 보인다"를 구별하지 못해 거짓 red 가 난다(02a ★6).
+ *
+ * ⚠️ 재시드는 `mustVisitsInitialized` 가드를 **푸는** 변경이라, 그 순간 게스트·미도착에서
+ * `savedPlaces.savedPlaces` 가 **매 렌더 새 빈 배열**을 내는 성질이 살아난다. N4-12 가 그 축의
+ * 심판이고, 목을 **게터**로 만들어 실물 훅과 같은 모양을 재현한다(02a ★3).
+ */
+
+/** 매 렌더 **새** 빈 배열을 주는 게스트 목 — 실물 `useSavedPlaces` 와 같은 모양(02a ★3). */
+function guestFreshEmpty() {
+  return {
+    get savedPlaces(): SavedPlace[] {
+      return [];
+    },
+    isPending: true,
+    isError: false,
+    refetch: mockRefetch,
+    remove: mockRemove,
+  };
+}
+
+/** 화면에 실제로 그려진 썸네일을 **화면 순서대로** 모은다(02a §5 P1 — pre-order 실측).
+ * `remove-`·`image-` 변종은 `\d+$` 앵커에 안 걸린다. */
+function thumbnailIds(): string[] {
+  return screen
+    .queryAllByTestId(/^trip-wizard-mustvisit-poi-\d+$/)
+    .map((node) => String(node.props.testID));
+}
+
+describe('🔴 N4 · 더 담기 복귀 재시드 (TRIP-288 AC-2 · AC-4)', () => {
+  it('N4-10 새로 담은 곳이 기존 시드 뒤에 붙고, 담은 목록 순서로 재정렬하지 않는다', () => {
+    // 준비 — 시드를 담은 목록과 **다른 순서**로 만들어 둔다(2 → 1).
+    mockSavedPlaces = loaded([
+      savedPlace('poi-2', '광안리'),
+      savedPlace('poi-1', '감천마을'),
+    ]);
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    // 앵커 — 재시드 전 순서. 없으면 아래 결과가 원래부터 그랬는지 구별이 안 된다.
+    expect(thumbnailIds()).toEqual([
+      'trip-wizard-mustvisit-poi-2',
+      'trip-wizard-mustvisit-poi-1',
+    ]);
+
+    // 실행 — 더 담기로 한 곳을 새로 담고 돌아왔다(서버 목록 순서는 1 → 2 → 3).
+    mockSavedPlaces = loaded([
+      savedPlace('poi-1', '감천마을'),
+      savedPlace('poi-2', '광안리'),
+      savedPlace('poi-3', '전포'),
+    ]);
+    screen.rerender(<TripNewStep1Page baseDate={BASE} />);
+
+    // 단언 — 새 것은 **맨 뒤**, 기존 둘은 순서 그대로. 담은 목록 순서로 다시 세우는 구현은
+    // 여기서 죽는다(01b D11).
+    expect(thumbnailIds()).toEqual([
+      'trip-wizard-mustvisit-poi-2',
+      'trip-wizard-mustvisit-poi-1',
+      'trip-wizard-mustvisit-poi-3',
+    ]);
+    // 캡션의 N 은 **서버 담은 장소 개수**라는 기존 계약(동결 N4-2 ③)이 그대로다.
+    expect(
+      within(screen.getByTestId('trip-wizard-saved-place-count')).getByText(
+        '담은 곳 3곳'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('N4-11 x 로 뺀 곳은 재시드로 되살아나지 않고, 함께 온 새 곳은 들어온다', () => {
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    // 준비 — 사용자가 한 곳을 뺐다. 그 장소는 **여전히 담은 목록에 있다**(담기와 시드는 독립).
+    fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-remove-poi-2'));
+    expect(thumbnailIds()).toEqual([
+      'trip-wizard-mustvisit-poi-1',
+      'trip-wizard-mustvisit-poi-3',
+    ]);
+
+    // 실행 — 더 담기로 한 곳을 새로 담고 돌아왔다.
+    mockSavedPlaces = loaded([...THREE, savedPlace('poi-4', '해운대')]);
+    screen.rerender(<TripNewStep1Page baseDate={BASE} />);
+
+    // 부정 — 뺀 곳이 되돌아오면 사용자는 자기가 뺀 곳이 여행에 등록되는 것을 보게 된다.
+    expect(screen.queryByTestId('trip-wizard-mustvisit-poi-2')).toBeNull();
+    // 긍정 짝 — 그렇다고 아무것도 안 더하는 것은 아니다. 둘을 한 케이스에서 같이 본다.
+    expect(thumbnailIds()).toEqual([
+      'trip-wizard-mustvisit-poi-1',
+      'trip-wizard-mustvisit-poi-3',
+      'trip-wizard-mustvisit-poi-4',
+    ]);
+    expect(
+      within(screen.getByTestId('trip-wizard-saved-place-count')).getByText(
+        '담은 곳 4곳'
+      )
+    ).toBeOnTheScreen();
+  });
+});
+
+describe('N4 · 재시드가 켜져도 무해해야 하는 축 (TRIP-288 AC-5 · AC-6)', () => {
+  it('N4-12 비회원은 빈 시드로 열리고, 재계산이 화면을 무한 루프로 몰지 않는다', () => {
+    // 준비 — 게스트는 요청 자체가 안 나가 `isPending` 이 **영원히 true** 이고, 담은 목록은
+    // **매 렌더 새 빈 배열**이다. 재시드가 그 빈 배열을 매번 새 상태로 갈아 끼우면 렌더 →
+    // 효과 → 갈아끼움 → 렌더의 무한 루프가 된다.
+    clearAccessToken();
+    mockSavedPlaces = guestFreshEmpty();
+
+    // 실행 — 루프가 나면 `render()` 자체가 `Maximum update depth exceeded` 로 **던진다**
+    // (02a §5 P3 실측). 즉 이 케이스는 통과하는 것만으로 루프 없음을 증명한다.
+    render(<TripNewStep1Page baseDate={BASE} />);
+    screen.rerender(<TripNewStep1Page baseDate={BASE} />);
+
+    // 단언 — 비회원은 담기 자체가 불가라(BR-U1-03) "담은 게 없다"가 참이다. 전용 안내를
+    // 새로 만들지 않는다(01b D10 · 제약 7).
+    expect(screen.getByTestId('trip-wizard-mustvisit-empty')).toBeOnTheScreen();
+    expect(thumbnailIds()).toEqual([]);
+    expect(useTripWizardStore.getState().mustVisits).toEqual([]);
+  });
+
+  it('N4-13 담은 목록 조회가 실패해도 [다음] 이 열리고, 눌렀을 때 여행 생성이 실제로 나간다', async () => {
+    // 조회 실패는 재시도가 성공할 때까지 계속 참이다 — 그 상태로 잠그면 서버가 아픈 동안
+    // 사용자가 여행을 **아예** 못 만든다. 잠금이 과하게 걸리는 것도 사용자에게는 조용한
+    // 차단이다(BR-U1-55 취지 · TRIP-209 게이트①-2 결정의 반대편 경계).
+    mockSavedPlaces = {
+      savedPlaces: [],
+      isPending: false,
+      isError: true,
+      refetch: mockRefetch,
+      remove: mockRemove,
+    };
+    mockMutateAsync.mockResolvedValue({ tripId: 'trip-1' });
+    render(<TripNewStep1Page baseDate={BASE} />);
+    fillValidDraft();
+
+    expect(next()).toBeEnabled();
+
+    // ⚠️ `toBeEnabled()` 는 접근성 상태만 읽는다 — 회색이기만 하고 실제로는 눌리는 버튼이
+    // 이 매처를 통과한 이력이 리포에 있다. **눌러서 요청이 나가는 것까지** 본다
+    // (동결 N4-8 이 반대 방향으로 같은 규약).
+    await act(async () => {
+      fireEvent.press(next());
+    });
+
+    expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    expect(routerMock.push).toHaveBeenCalledWith('/trips/new/step2');
   });
 });
