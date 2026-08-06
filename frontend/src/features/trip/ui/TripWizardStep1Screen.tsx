@@ -1,6 +1,13 @@
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type {
@@ -8,6 +15,7 @@ import type {
   TripDestination,
 } from '@/shared/api/generated/schemas';
 
+import type { MustVisitSectionView } from '../model/mustVisitSeed';
 import type { StayImportView } from '../model/stayDateImport';
 import {
   COMPANION_OPTIONS,
@@ -33,6 +41,7 @@ import {
   SparkleGlyph,
   StepperMinusGlyph,
   StepperPlusGlyph,
+  ThumbRemoveGlyph,
   type GlyphComponent,
 } from './TripGlyphs';
 
@@ -59,11 +68,15 @@ import {
  * 만들지 않는다).
  *
  * 커버하지 않는 것: 서버 제출·오류 판정·`touched` 게이팅(TRIP-206, `TripNewStep1Page` 몫) ·
- * '꼭 갈 곳'(TRIP-209) · 날짜 피커 캘린더(Figma 부재 — D4에 따라 진입점만).
+ * 날짜 피커 캘린더(Figma 부재 — D4에 따라 진입점만).
  *
  * 등록 숙소 날짜 연계 행(TRIP-208)도 같은 규율이다 — 조회·판정·문구 조립은 전부 컨테이너가
  * 끝내고 이 화면은 완성된 얼굴(`stayImport`) 하나와 실패 여부만 받는다. 여기서 조회 훅을
  * 부르면 `tripWizardStep1Boundary.test.ts`가 전이 의존으로 잡는다.
+ *
+ * '꼭 갈 곳' 시드 섹션(TRIP-209, Figma `1737:1083`·`2226:1770`)도 같다 — 조회·시드 판정·문구
+ * 조립은 전부 컨테이너가 끝내고 이 화면은 완성된 얼굴(`mustVisitSection`)과 실패 여부만
+ * 받는다. 등록 실패 배너는 제출 실패 배너와 자리는 같고 testID가 다르다(01b D2).
  *
  * 예산 블록(TRIP-207, Figma `sec_budget` 2225:2375)도 이 화면이 판단 없이 그린다 — 프리필
  * 여부·오류 문구는 컨테이너가 완성해 내려주고(`budgetPrefilled`·`budgetError`), 이 화면은
@@ -110,6 +123,22 @@ export interface TripWizardStep1ScreenProps {
   /** 조회가 실패했나. **얼굴은 그대로 두고 재시도 행만 덧붙인다**(01b D4) — 실패로 얼굴을
    * 갈아 끼우면 이미 받아 둔 숙소 정보가 사라진다. */
   stayImportFailed?: boolean;
+  /** '꼭 갈 곳' 섹션이 그릴 **얼굴(완성형)**(TRIP-209). 없으면 글자 없는 자리표시 —
+   * 컨테이너가 아직 판정을 안 내려줬다는 뜻이다. 담은 목록도 조회 상태도 여기 오지 않는다. */
+  mustVisitSection?: MustVisitSectionView;
+  /** 담은 장소 조회가 실패했나. `stayImportFailed`와 같은 규율이다 — 얼굴은 그대로 두고
+   * 재시도 행만 덧붙인다(01b D5). 실패로 얼굴을 갈아 끼우면 이미 받아 둔 시드가 사라진다. */
+  mustVisitSeedFailed?: boolean;
+  /** 여행지 칩 아래 `담은 곳 N곳`의 N — **서버 담은 장소 개수**다(01b D8). 시드를 빼도
+   * 줄지 않는다. 0·미지정이면 캡션 자체를 그리지 않는다. */
+  savedPlaceCount?: number;
+  /** must-visit 등록 실패 배너 **본문**(완성형). 없으면 배너 없음. 제출 실패 배너와 자리는
+   * 같지만 testID가 다르다 — 합치면 [다시 시도]가 여행을 하나 더 만든다(01b D2). */
+  mustVisitError?: string;
+  onRemoveMustVisit?(sourcePoiId: string): void;
+  onPressMoreMustVisits?(): void;
+  onRetryMustVisitSeeds?(): void;
+  onRetryMustVisits?(): void;
   onImportStayDates?(): void;
   onPressRegisterStay?(): void;
   onRetryStayImport?(): void;
@@ -300,6 +329,219 @@ function StayImportRow({
   );
 }
 
+/** Figma `1737:1084`(default) · `2226:1773`(no-saved-places) 실측 문구. */
+const MUST_VISIT_TITLE = '꼭 갈 곳';
+const MUST_VISIT_SEEDED_NOTE = '탐색에서 담은 곳을 그대로 가져왔어요';
+const MUST_VISIT_EMPTY_NOTE = '지금 담지 않아도 AI가 추천해줘요';
+
+/** 조회 실패 문구 — Figma에 프레임이 없어 게이트①에서 확정한 문구다(01b D5). */
+const MUST_VISIT_SEED_FAILED_NOTE = '담은 곳을 불러오지 못했어요';
+
+/** 썸네일 제거 버튼(20×20 흰 원) 그림자 — Figma `1740:1086` `0 2 5 rgba(0,0,0,.06)`.
+ * 그림자는 토큰 대상이 아니라 raw가 맞다(`HomeScreen.tsx` 선례). */
+const thumbRemoveShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 5,
+  elevation: 2,
+} as const;
+
+/** 자리표시 썸네일 3칸 — 도착 뒤 레이아웃이 밀리지 않게 실제 상한과 같은 수를 둔다. */
+const MUST_VISIT_PLACEHOLDER_SLOTS = ['a', 'b', 'c'];
+
+function MustVisitHead({ note }: { note?: string }): ReactElement {
+  return (
+    <View className="gap-xs">
+      <Text className="font-noto-bold text-card-title font-bold text-ink">
+        {MUST_VISIT_TITLE}
+      </Text>
+      {note === undefined ? null : (
+        <Text className="font-noto text-[12.5px] text-muted">{note}</Text>
+      )}
+    </View>
+  );
+}
+
+/** 64×64 점선 박스 — 시드가 있으면 `더 담기`, 0곳이면 행 전체를 채우는 `가고 싶은 곳 담기`
+ * (Figma `1740:1109` · `2226:1800`). 둘 다 같은 곳(d04 장소 탐색)으로 보낸다. */
+function MustVisitMoreChip({
+  testID,
+  label,
+  fill,
+  onPress,
+}: {
+  testID: string;
+  label: string;
+  fill?: boolean;
+  onPress?(): void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      onPress={onPress}
+      className={`h-[64px] items-center justify-center gap-xs rounded-button border-[1.5px] border-dashed border-hairline-strong ${
+        fill ? 'flex-1' : 'w-[64px]'
+      }`}
+    >
+      <PlusGlyph size={20} />
+      <Text className="text-center font-noto text-micro text-primary">
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * '꼭 갈 곳' 시드 섹션(TRIP-209 · Figma `1737:1083` default · `2226:1770` no-saved-places).
+ *
+ * 얼굴 넷이 **완성된 prop 하나로만** 갈린다 — 화면은 담은 목록도 조회 상태도 모른다.
+ * 조회 실패는 `StayImportRow`와 같은 규율이다: 얼굴을 갈아 끼우지 않고 재시도 행을 **아래에
+ * 덧붙일 뿐**이다(01b D5) — 갈아 끼우면 방금까지 보이던 썸네일이 사라진다.
+ *
+ * 자리표시에 글자를 넣지 않는다 — 도착 전에 "담은 곳이 없어요"를 그리면 담아 둔 사용자에게
+ * 한 순간 거짓말을 하게 된다.
+ */
+function MustVisitSection({
+  view,
+  failed,
+  onRemove,
+  onPressMore,
+  onRetry,
+}: {
+  view?: MustVisitSectionView;
+  failed?: boolean;
+  onRemove?(sourcePoiId: string): void;
+  onPressMore?(): void;
+  onRetry?(): void;
+}): ReactElement {
+  let face: ReactElement;
+  if (view?.kind === 'seeded') {
+    face = (
+      <>
+        <MustVisitHead note={MUST_VISIT_SEEDED_NOTE} />
+        <View className="w-full flex-row items-start gap-sm overflow-hidden">
+          {view.thumbnails.map((item) => (
+            <View
+              key={item.sourcePoiId}
+              testID={`trip-wizard-mustvisit-${item.sourcePoiId}`}
+              className="h-[84px] w-[64px]"
+            >
+              <View className="h-[64px] w-[64px] overflow-hidden rounded-[10px] bg-surface-strong">
+                {item.imageUrl === null ? null : (
+                  <Image
+                    testID={`trip-wizard-mustvisit-image-${item.sourcePoiId}`}
+                    source={{ uri: item.imageUrl }}
+                    resizeMode="cover"
+                    className="h-full w-full"
+                  />
+                )}
+              </View>
+              <Pressable
+                testID={`trip-wizard-mustvisit-remove-${item.sourcePoiId}`}
+                accessibilityRole="button"
+                onPress={() => onRemove?.(item.sourcePoiId)}
+                hitSlop={6}
+                style={thumbRemoveShadow}
+                className="absolute left-[44px] top-[2px] h-[20px] w-[20px] items-center justify-center rounded-[10px] bg-canvas"
+              >
+                <ThumbRemoveGlyph />
+              </Pressable>
+              <Text
+                numberOfLines={1}
+                className="absolute top-[70px] w-[64px] text-center font-noto text-[11.5px] text-body"
+              >
+                {item.name}
+              </Text>
+            </View>
+          ))}
+          {view.overflowCount > 0 ? (
+            <View
+              testID="trip-wizard-mustvisit-overflow"
+              className="h-[84px] w-[64px]"
+            >
+              <View className="h-[64px] w-[64px] items-center justify-center rounded-[10px] bg-surface-strong">
+                <Text className="font-inter-bold text-[20px] font-bold text-muted">
+                  {`+${view.overflowCount}`}
+                </Text>
+              </View>
+              <Text className="absolute top-[70px] w-[64px] text-center font-noto text-[11.5px] text-muted">
+                {`외 ${view.overflowCount}곳`}
+              </Text>
+            </View>
+          ) : null}
+          <MustVisitMoreChip
+            testID="trip-wizard-mustvisit-more"
+            label="더 담기"
+            onPress={onPressMore}
+          />
+        </View>
+      </>
+    );
+  } else if (view?.kind === 'empty') {
+    face = (
+      <>
+        <MustVisitHead note={MUST_VISIT_EMPTY_NOTE} />
+        <View className="w-full flex-row items-start">
+          <MustVisitMoreChip
+            testID="trip-wizard-mustvisit-empty"
+            label="가고 싶은 곳 담기"
+            fill
+            onPress={onPressMore}
+          />
+        </View>
+      </>
+    );
+  } else if (view?.kind === 'failed') {
+    // 부제 자리를 비우고 아래 재시도 행이 사유를 말한다 — 같은 문구를 두 곳에 그리면
+    // 섹션 안에 같은 텍스트가 둘이 된다.
+    face = <MustVisitHead />;
+  } else {
+    face = (
+      <>
+        <View className="gap-xs">
+          <View className="h-[15px] w-[64px] rounded-[6px] bg-hairline" />
+          <View className="h-[13px] w-[180px] rounded-[6px] bg-surface-strong" />
+        </View>
+        <View className="flex-row gap-sm">
+          {MUST_VISIT_PLACEHOLDER_SLOTS.map((slot) => (
+            <View
+              key={slot}
+              className="h-[64px] w-[64px] rounded-[10px] bg-surface-strong"
+            />
+          ))}
+        </View>
+      </>
+    );
+  }
+
+  return (
+    <View
+      testID="trip-wizard-mustvisit-block"
+      className="gap-md px-lg pt-[18px]"
+    >
+      {face}
+      {failed ? (
+        <Pressable
+          testID="trip-wizard-mustvisit-retry"
+          accessibilityRole="button"
+          onPress={onRetry}
+          className="flex-row items-center gap-[6px] pl-[2px]"
+        >
+          <AlertCircleGlyph />
+          <Text className="flex-1 font-noto text-caption text-muted">
+            {MUST_VISIT_SEED_FAILED_NOTE}
+          </Text>
+          <Text className="font-noto-bold text-caption font-bold text-primary-text">
+            다시 시도
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 export function TripWizardStep1Screen({
   destinations,
   startDate,
@@ -319,6 +561,14 @@ export function TripWizardStep1Screen({
   onImportStayDates,
   onPressRegisterStay,
   onRetryStayImport,
+  mustVisitSection,
+  mustVisitSeedFailed,
+  savedPlaceCount,
+  mustVisitError,
+  onRemoveMustVisit,
+  onPressMoreMustVisits,
+  onRetryMustVisitSeeds,
+  onRetryMustVisits,
   budgetText,
   budgetPrefilled,
   budgetError,
@@ -434,6 +684,13 @@ export function TripWizardStep1Screen({
                 </Text>
               </Pressable>
             </View>
+            {savedPlaceCount !== undefined && savedPlaceCount > 0 ? (
+              <View testID="trip-wizard-saved-place-count">
+                <Text className="font-noto text-caption text-muted">
+                  {`담은 곳 ${savedPlaceCount}곳`}
+                </Text>
+              </View>
+            ) : null}
             {destinationError ? (
               <View
                 testID="trip-wizard-error-destination"
@@ -446,6 +703,15 @@ export function TripWizardStep1Screen({
               </View>
             ) : null}
           </View>
+
+          {/* 꼭 갈 곳 (TRIP-209) — 여행지 블록 바로 아래, 구분선 위(Figma `1675:1183`의 순서). */}
+          <MustVisitSection
+            view={mustVisitSection}
+            failed={mustVisitSeedFailed}
+            onRemove={onRemoveMustVisit}
+            onPressMore={onPressMoreMustVisits}
+            onRetry={onRetryMustVisitSeeds}
+          />
 
           <View className="px-lg py-sm">
             <View className="h-[1px] w-full bg-hairline" />
@@ -741,6 +1007,29 @@ export function TripWizardStep1Screen({
                 testID="trip-wizard-submit-banner-retry"
                 accessibilityRole="button"
                 onPress={onRetrySubmit}
+                className="items-center justify-center rounded-pill border-[1.4px] border-primary bg-canvas px-md py-[7px]"
+              >
+                <Text className="text-[12.5px] font-noto-bold font-bold text-primary-text">
+                  다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {/* 등록 실패 배너 — 제출 실패 배너와 **같은 자리·다른 testID**다. 하나로 합치면
+              [다시 시도]가 `submit`을 다시 태워 여행이 하나 더 만들어진다(01b D2). */}
+          {mustVisitError ? (
+            <View
+              testID="trip-wizard-mustvisit-banner"
+              className="mb-sm flex-row items-center gap-[10px] rounded-button bg-primary-pale p-md"
+            >
+              <AlertCircleGlyph size={18} />
+              <Text className="flex-1 font-noto text-[11.5px] text-primary-text">
+                {mustVisitError}
+              </Text>
+              <Pressable
+                testID="trip-wizard-mustvisit-banner-retry"
+                accessibilityRole="button"
+                onPress={onRetryMustVisits}
                 className="items-center justify-center rounded-pill border-[1.4px] border-primary bg-canvas px-md py-[7px]"
               >
                 <Text className="text-[12.5px] font-noto-bold font-bold text-primary-text">

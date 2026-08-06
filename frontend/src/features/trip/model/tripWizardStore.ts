@@ -5,6 +5,7 @@ import type {
   TripDestination,
 } from '@/shared/api/generated/schemas';
 
+import type { MustVisitSeedItem } from './mustVisitSeed';
 import type { PeriodPresetCode } from './tripWizardStep1';
 
 /**
@@ -43,6 +44,11 @@ export interface TripWizardDraft {
   /** 제출 성공 응답이 준 `tripId`(01b D7). 라우트(`/trips/new/step2`)가 id를 안 나르므로
    * 여기 담아 둔다 — g02(TRIP-84·TRIP-193)가 읽는 소비자다. */
   createdTripId?: string;
+  /** '꼭 갈 곳' 시드(TRIP-209) — 담은 목록의 **복사본**이라 원본과 독립이다(BR-U1-37).
+   * 서버 응답이 아니라 자체 뷰모델을 담는다(frontend/README.md §66 — 서버 상태의 단일
+   * 소유자는 Query 캐시다). */
+  mustVisits: MustVisitSeedItem[];
+  mustVisitsInitialized: boolean;
   addDestination(regionName: string, nights: number): void;
   removeDestination(regionName: string): void;
   /** `presetCode`가 `undefined`면 "어떤 칩도 선택 안 됨" — 프리셋이 아닌 출처(등록 숙소
@@ -61,6 +67,12 @@ export interface TripWizardDraft {
    * 것도 "건드린 것"이다**(01b D6 ③) — 그래야 지운 상태가 재진입에도 보존된다(AC-1c). */
   setBudgetText(next: string): void;
   setCreatedTripId(tripId: string): void;
+  /** **첫 호출만** 반영한다 — 재조회·리렌더마다 다시 채우면 사용자가 x로 뺀 항목이
+   * 되살아나고, 자기가 뺀 곳이 여행에 등록되는 것을 보게 된다. */
+  initMustVisits(items: MustVisitSeedItem[]): void;
+  /** **첫 일치 하나만** 뺀다 — `filter`는 같은 식별자가 둘 있을 때 전부 지운다(아래
+   * `removeDestination` 주석의 사고와 같은 함정이다). */
+  removeMustVisit(sourcePoiId: string): void;
   reset(): void;
 }
 
@@ -74,6 +86,8 @@ const INITIAL_DRAFT = {
   budgetText: '',
   touched: [] as TripWizardField[],
   createdTripId: undefined as string | undefined,
+  mustVisits: [] as MustVisitSeedItem[],
+  mustVisitsInitialized: false,
 };
 
 /** 이미 켜져 있으면 그대로 둔다 — 집합이지 로그가 아니다(같은 축을 여러 번 건드려도
@@ -151,6 +165,29 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
       touched: withTouched(state.touched, 'budget'),
     })),
   setCreatedTripId: (tripId) => set({ createdTripId: tripId }),
+  initMustVisits: (items) =>
+    set((state) =>
+      state.mustVisitsInitialized
+        ? {}
+        : { mustVisits: items, mustVisitsInitialized: true }
+    ),
+  removeMustVisit: (sourcePoiId) =>
+    set((state) => {
+      // `touched`는 건드리지 않는다 — 시드는 `[다음]` 게이트의 축이 아니라서, 여기서
+      // 켜면 엉뚱한 축의 오류 문구 게이트가 열린다.
+      const index = state.mustVisits.findIndex(
+        (one) => one.sourcePoiId === sourcePoiId
+      );
+      if (index === -1) {
+        return {};
+      }
+      return {
+        mustVisits: [
+          ...state.mustVisits.slice(0, index),
+          ...state.mustVisits.slice(index + 1),
+        ],
+      };
+    }),
   reset: () => set(INITIAL_DRAFT),
 });
 
