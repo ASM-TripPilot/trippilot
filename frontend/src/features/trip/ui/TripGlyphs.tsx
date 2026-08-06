@@ -114,7 +114,39 @@ export function RemoveGlyph({ size = 14, testID }: GlyphProps) {
   );
 }
 
+// '꼭 갈 곳' 썸네일 제거 ×(12) — Figma `1740:1087`. 도시 칩의 RemoveGlyph와 도형은
+// 정비례하지만 색(#484848)과 굵기가 다르다 — 흰 원 위에 얹히는 아이콘이라 더 진하고 굵다.
+const THUMB_REMOVE = '#484848';
+
+export function ThumbRemoveGlyph({ size = 12, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 12 12"
+      fill="none"
+    >
+      <Path
+        d="M3 3L9 9"
+        stroke={THUMB_REMOVE}
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 3L3 9"
+        stroke={THUMB_REMOVE}
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // 도시 추가 칩 +(14) — Figma `1860:2329`. 텍스트는 primary-text지만 아이콘은 primary다.
+// '꼭 갈 곳' 점선 박스의 +(20, `1740:1110`)는 같은 도형의 정비례 확대라 size로 겸한다.
 export function PlusGlyph({ size = 14, testID }: GlyphProps) {
   return (
     <Svg

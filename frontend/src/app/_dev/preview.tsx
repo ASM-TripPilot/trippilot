@@ -25,6 +25,10 @@ import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
+import {
+  TripWizardStep1Screen,
+  type TripWizardStep1ScreenProps,
+} from '@/features/trip/ui/TripWizardStep1Screen';
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
 import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
@@ -119,6 +123,44 @@ const TERMS_ITEMS = [
     required: false,
     checked: false,
   },
+];
+
+/**
+ * g01 여행 만들기 1/2 — '꼭 갈 곳' 시드 섹션(TRIP-209)을 Figma와 눈으로 대조하기 위한 두 얼굴.
+ *
+ * 왜 프리뷰가 필요한가: 실화면 딥링크로는 **시드 얼굴을 볼 수 없다.** 백엔드가 401이면 담은
+ * 목록이 늘 비어 0곳 얼굴로만 떨어진다(d04·d02 프리뷰가 있는 것과 같은 이유).
+ *
+ * ⚠️ 썸네일 사진은 회색 자리로 보인다 — `imageUrl`이 프로덕션에서 전부 `null`이고 클라가
+ * 외부 URL을 지어내는 것은 INV-1이 막는다(`exploreFixtures.ts` 머리말과 같은 사정).
+ * 구현 실패가 아니다.
+ */
+const TRIP_WIZARD_BASE: TripWizardStep1ScreenProps = {
+  destinations: [{ seq: 1, region: '부산', nights: 3 }],
+  startDate: '2026-06-10',
+  endDate: '2026-06-13',
+  presetCode: '3n4d',
+  party: 2,
+  companionType: '친구',
+  preferenceChips: ['감성 골목', '야경'],
+  regions: REGIONS,
+  canProceed: true,
+  onBack: noop,
+  onAddDestination: noop,
+  onRemoveDestination: noop,
+  onSelectPreset: noop,
+  onPressPeriod: noop,
+  onChangeParty: noop,
+  onSelectCompanion: noop,
+  onChangePreference: noop,
+  onNext: noop,
+};
+
+/** Figma `1737:1083` 실측과 같은 구성 — 썸네일 3장 + `+2`(외 2곳) + 점선 `더 담기`. */
+const MUST_VISIT_THUMBNAILS = [
+  { sourcePoiId: 'poi-1', name: '감천문화마을', imageUrl: null },
+  { sourcePoiId: 'poi-2', name: '광안리해수욕장', imageUrl: null },
+  { sourcePoiId: 'poi-3', name: '전포카페거리', imageUrl: null },
 ];
 
 const PREVIEW_STATES: PreviewState[] = [
@@ -445,6 +487,38 @@ const PREVIEW_STATES: PreviewState[] = [
         onPressRemove={noop}
         onPressCreateTrip={noop}
         onPressBrowse={noop}
+      />
+    ),
+  },
+  // g01 '꼭 갈 곳' 2키(TRIP-209) — 시드 얼굴과 0곳 얼굴. 나머지 두 얼굴(자리표시·조회 실패)은
+  // 회선을 늦추거나 끊으면 실화면에서 그대로 재현되므로 여기 키를 늘리지 않는다.
+  {
+    key: 'trip-new-step1-seeded',
+    label: '여행 만들기 1/2 · 꼭 갈 곳',
+    login: null,
+    render: () => (
+      <TripWizardStep1Screen
+        {...TRIP_WIZARD_BASE}
+        savedPlaceCount={5}
+        mustVisitSection={{
+          kind: 'seeded',
+          thumbnails: MUST_VISIT_THUMBNAILS,
+          overflowCount: 2,
+        }}
+        onRemoveMustVisit={noop}
+        onPressMoreMustVisits={noop}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step1-no-saved',
+    label: '여행 만들기 1/2 · 담은 곳 0',
+    login: null,
+    render: () => (
+      <TripWizardStep1Screen
+        {...TRIP_WIZARD_BASE}
+        mustVisitSection={{ kind: 'empty' }}
+        onPressMoreMustVisits={noop}
       />
     ),
   },

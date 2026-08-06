@@ -545,3 +545,19 @@ D3(지라 TRIP-181 티켓 본문의 사실 오기 2건 — 빈 스텁 서술·�
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-207 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260802-trip207-budget-block/01_spec-analyst_brief.md`(§3·§4·§7-④)·`02a_test-design_spec.md`(§2-6)와 라이브 Figma(`2225:2375`·`2225:2362`).
 
 ---
+
+## Post-Design Correction — U1 frontend-components.md 꼭 갈 곳 시드 표면 6건 (TRIP-209 [기록] 반영)
+**Timestamp**: 2026-08-06T14:20:00Z
+**User Input**: TRIP-209 사이클 [설계] 3-a 맹점 훑기에서 사용자가 정본 공백 후보(`01_spec-analyst_brief.md` §8-③ "must-visit 등록 실패 표면이 정본에 없어 발명 대상")에 "(가) 반영"을 선택했다(`_workspace/20260805-trip209-mustvisit-seed/01b_ouroboros_seed.md` §4). 발명한 문구·자리·재시도 범위·썸네일 상한은 게이트①-1 승인(2026-08-06 02:50, 승인 발화 "ㄱㄱ")에서 5건 확정했고, 담은 목록 도착 전 제출 잠금 1건은 게이트①-1 이후 code-critic 적대적 리뷰가 찾은 무방비 경로를 메우며 게이트①-2 승인(2026-08-06 13:22, 승인 발화 "ㄱ")에서 별도로 확정했다(정본 AC 없음 — 게이트 결정으로 표기).
+
+**AI Response**: 승인 완료된 `u1-accommodation-trip/functional-design/frontend-components.md`의 **드리프트 정정(구현 결정 소급 기록) + testID 등재**. 새 스토리·새 컴포넌트 계약(엔드포인트) 신설 0건 → 스테이지 진행 아님, `aidlc-state.md` 체크박스 변동 없음(2026-07-29T05:10:00Z A1 · 2026-07-29T22:35:00Z D1·D2 · 2026-07-31T11:45:00Z SEC-U1-05 · 2026-08-02T03:00:00Z·04:30:00Z · 2026-08-02T23:10:00Z 정정과 같은 성격의 일곱 번째 후속).
+
+(1) **frontend-components.md §4 — `MustVisitSeedStrip` 구현 결정 문단 신설**. 썸네일 상한 3장 고정(특례 없음) · 등록 실패 배너 문구 `꼭 갈 곳 {N}곳 중 {M}곳을 등록하지 못했어요` · 배너 자리(제출 실패 배너와 같은 자리·다른 testID) · 재시도 사정거리(실패분만) · 조회 실패 부제 `담은 곳을 불러오지 못했어요` — 이상 5건은 게이트①-1 사용자 결정. 담은 목록 도착 전 `[다음]` 잠금(비회원 예외)은 게이트①-2 사용자 결정이며 **정본 AC 문장이 없음을 명시**했다. 전 6건에 "요구사항 근거가 아니라 구현 결정 — 다음 사이클이 요구사항 근거로 인용 금지" 라벨을 달았다(TRIP-181 D2 정정과 같은 규율).
+
+(2) **frontend-components.md §6 — 꼭 갈 곳 시드 testID 9종 등재**. 티켓 고정 4종(`trip-wizard-mustvisit-{sourcePoiId}`·`-remove-{sourcePoiId}`·`-more`·`-empty`) + 게이트①에서 확정한 신규 5종(`-block`·`-image-{sourcePoiId}`·`-overflow`·`-retry`·`-banner`/`-banner-retry`). 이 문서 승인 당시 공백이었다.
+
+**미반영(확인만)**: §7 PBT 대상 `seedMustVisits(savedPlaces)`는 이 문서 승인 당시 이미 등재돼 있어(중복 sourcePoiId 없음·원본 담기 해제와 독립) 추가 조치 없음.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-209 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260805-trip209-mustvisit-seed/00_gates.md`(게이트①-1·①-2 절)·`01_spec-analyst_brief.md`(§8-③)·`01b_ouroboros_seed.md`(§4)·`02a_test-design_spec.md`(§2-4).
+
+---

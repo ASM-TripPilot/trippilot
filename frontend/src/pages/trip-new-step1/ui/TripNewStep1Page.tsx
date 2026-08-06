@@ -1,10 +1,13 @@
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 
 import { REGIONS } from '@/features/explore/model/regions';
+import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { postTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
 import type { CompanionType } from '@/shared/api/generated/schemas';
+import { getAccessToken } from '@/shared/api/tokenManager';
 
 import {
   formatBudgetAmount,
@@ -20,6 +23,11 @@ import {
   validateTripDraft,
   type TripDraft,
 } from '@/features/trip/model/tripDraft';
+import {
+  mustVisitFailureNotice,
+  resolveMustVisitSection,
+  seedMustVisits,
+} from '@/features/trip/model/mustVisitSeed';
 import { resolveStayImport } from '@/features/trip/model/stayDateImport';
 import {
   presetRange,
@@ -56,6 +64,11 @@ import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen'
  *  6. **등록 숙소 날짜 연계(TRIP-208, 01b D4·D10)** — `GET /saved-stays` 조회, 얼굴 판정
  *     (`resolveStayImport`), 가져오기 → `setPeriod`, `/stays/register` 이동이 전부 여기다.
  *     조회 실패는 얼굴을 갈아 끼우지 않고 별개 축(`stayImportFailed`)으로 내려간다.
+ *  7. **'꼭 갈 곳' 시드와 등록(TRIP-209, 01b D1~D6)** — `GET /saved-places` 조회 → 위저드
+ *     드래프트에 **1회만** 복사(그래야 사용자가 뺀 항목이 되살아나지 않는다) → 생성 성공
+ *     **뒤에** `POST /trips/{tripId}/must-visits` N건. 계약에 꼭 갈 곳을 생성 요청에 실을
+ *     필드가 없어 2단이 강제된다. 등록은 여행 생성 `try` **바깥**이다 — 한 블록으로 묶으면
+ *     등록 실패가 "여행 생성 실패"로 둔갑하고 사용자가 [다시 시도]로 여행을 하나 더 만든다.
  */
 
 /** 서버 400의 `error.code`가 국내 밖 목적지를 가리키는 값. openapi에 enum이 없어
@@ -79,6 +92,12 @@ const SUBMIT_ERROR_MESSAGE = '네트워크를 확인하고 다시 시도해주�
  * 떨어뜨린다** — 5-c W-1: `fields[].field`로 "기간 오류"를 추측해 인라인 문구를 다는 것은
  * 계약이 말하지 않은 원인을 화면이 단정하는 것이라 거짓 설명이 된다. */
 type ServerSubmitFailure = 'overseas' | 'banner';
+
+/** must-visit 409 = "이미 그 여행에 있다"(BR-U1-50 · INV-U1-18). 목표 상태와 결과 상태가
+ * 같으므로 실패로 세지 않는다 — `savedPlaces.ts`의 담기 409와 같은 판단이다. */
+function isAlreadyRegistered(error: unknown): boolean {
+  return isAxiosError(error) && error.response?.status === 409;
+}
 
 function classifyServerFailure(error: unknown): ServerSubmitFailure {
   if (!isAxiosError(error) || !error.response) {
@@ -142,6 +161,13 @@ export function TripNewStep1Page({
   const setCreatedTripId = useTripWizardStore(
     (state) => state.setCreatedTripId
   );
+  const createdTripId = useTripWizardStore((state) => state.createdTripId);
+  const mustVisits = useTripWizardStore((state) => state.mustVisits);
+  const mustVisitsInitialized = useTripWizardStore(
+    (state) => state.mustVisitsInitialized
+  );
+  const initMustVisits = useTripWizardStore((state) => state.initMustVisits);
+  const removeMustVisit = useTripWizardStore((state) => state.removeMustVisit);
 
   const preference = usePreferencePrefill();
   const preferenceChips = [
@@ -181,8 +207,54 @@ export function TripNewStep1Page({
     setSubmitError(undefined);
   }, [destinations, startDate, endDate, party, companionType, budgetText]);
 
+  // 등록 실패 배너(TRIP-209) — 제출 실패(`submitError`)와 **다른 축**이다. 여기 값이 있다는
+  // 것은 "여행은 만들어졌고 꼭 갈 곳 일부가 등록되지 않았다"는 뜻이라, 재시도의 사정거리도
+  // 다르다(등록만 다시 한다). `pendingMustVisits`가 그 사정거리다 — 실패한 poiId만 남긴다.
+  const [mustVisitError, setMustVisitError] = useState<string>();
+  const [pendingMustVisits, setPendingMustVisits] = useState<string[]>([]);
+
+  // 5-c W-1·N-1: **제출 경로 잠금.** 두 뜻을 겸한다 — ① 등록 요청이 지금 날아가는 중이다
+  // ② 이미 성공해 이 화면의 일이 끝났다(step1은 스택에 남아 뒤로 오면 같은 버튼이 다시
+  // 눌린다). 둘 중 하나라도 참이면 `[다음]`은 여행을 새로 만들지 않고, 배너 [다시 시도]도
+  // 두 번째 요청을 만들지 않는다. 등록이 실패해 화면에 남을 때만 잠금을 푼다.
+  // ⚠️ `useState`가 아니라 `useRef`인 이유: 상태 갱신은 다음 렌더에야 보이므로 같은 틱에
+  // 연달아 들어온 두 번째 누름이 아직 옛 값을 읽는다. ref는 쓰는 즉시 보이고, 화면에
+  // 그리는 값이 아니라 리렌더도 필요 없다.
+  const submitLockedRef = useRef(false);
+
   const createTrip = useCreateTrip();
   const savedStays = useSavedStays();
+
+  const isAuthed = getAccessToken() !== null;
+  const savedPlaces = useSavedPlaces({ isAuthed });
+  // ⚠️ 게스트는 `enabled: isAuthed`라 요청이 안 나가고 `isPending`이 **영원히 true**다
+  // (훅 주석의 경고). 그대로 얼굴 판정에 태우면 위저드를 딥링크로 연 게스트가 끝나지 않는
+  // 자리표시를 본다 — `trips/new/**`는 `Stack.Protected` 밖이라 실제로 열린다.
+  const savedPlacesLoading = isAuthed && savedPlaces.isPending;
+  const savedPlaceList = savedPlaces.savedPlaces;
+
+  // 시드는 **1회만** 채운다(01b — 세션당 한 번). 매 렌더 쿼리 결과에서 파생시키면 사용자가
+  // x로 뺀 항목이 다음 리렌더에 되살아나고, 담기를 푼 뒤 돌아오면 이미 복사된 시드가 사라진다
+  // (INV-U1-04는 양방향 독립이다).
+  useEffect(() => {
+    if (mustVisitsInitialized || savedPlacesLoading || savedPlaces.isError) {
+      return;
+    }
+    initMustVisits(seedMustVisits(savedPlaceList));
+  }, [
+    mustVisitsInitialized,
+    savedPlacesLoading,
+    savedPlaces.isError,
+    savedPlaceList,
+    initMustVisits,
+  ]);
+
+  // 얼굴 판정도 실패와 별개 축이다 — 잔존 시드가 있으면 실패·로딩이 그것을 덮지 않는다.
+  const mustVisitSection = resolveMustVisitSection({
+    seeds: mustVisits,
+    loading: savedPlacesLoading,
+    failed: savedPlaces.isError,
+  });
 
   const draft: TripDraft = {
     destinations,
@@ -200,11 +272,19 @@ export function TripNewStep1Page({
     endDate !== undefined &&
     endDate !== '';
 
+  // 게이트①-2 사용자 결정 ③(03b W-5): 담은 목록이 **아직 도착 전이면 잠깐 막는다.** 그때
+  // 제출하면 시드가 비어 있어 꼭 갈 곳이 한 건도 등록되지 않은 여행이 만들어지고, 그 사실이
+  // 화면 어디에도 안 나타난다(침묵 실패 · BR-U1-55).
+  // ⚠️ `savedPlaces.isPending`을 그대로 쓰면 안 된다 — 게스트는 요청 자체가 안 나가 그 값이
+  // **영원히 참**이라 비회원이 여행을 영영 못 만든다(위저드는 `Stack.Protected` 밖이라 딥링크로
+  // 실제 열린다). 얼굴 판정이 이미 쓰는 `savedPlacesLoading`(= `isAuthed && isPending`)을
+  // 그대로 쓴다 — 판단을 두 벌 만들지 않는다. "아직 모른다"만 막고 "정말 0곳이다"는 통과시킨다.
   const canProceed =
     destinations.length > 0 &&
     periodFilled &&
     violations.length === 0 &&
-    parsedBudget.kind !== 'invalid';
+    parsedBudget.kind !== 'invalid' &&
+    !savedPlacesLoading;
 
   // 등록 숙소 날짜 연계(TRIP-208) — 조회·판정·문구 조립이 전부 여기 있다(화면은 완성된 얼굴만
   // 받는다, AC-13). ⚠️ **실패는 얼굴과 별개 축이다**: `isError`로 얼굴을 갈아 끼우면 이미
@@ -266,12 +346,73 @@ export function TripNewStep1Page({
     }
   }
 
+  /**
+   * 여행이 만들어진 **뒤** 남은 시드를 등록한다(TRIP-209 · BR-U1-48 `ANYTIME` 고정).
+   *
+   * `Promise.allSettled` — 여러 요청을 성공·실패 상관없이 전부 기다렸다가 결과 배열을 준다.
+   * `Promise.all`은 하나만 실패해도 즉시 던져 나머지 결과를 잃는데, 이 자리는 "3곳 중 1곳
+   * 실패"를 **세어서 문구로** 만들어야 하므로 `all`로는 만들 수 없다.
+   *
+   * ⚠️ 실패해도 여행을 롤백하지 않는다(BR-U1-51 입력 보존) — 이동만 멈추고 배너를 세운다.
+   * 재시도는 실패분만 다시 보낸다: 이미 성공한 건을 또 보내면 요청만 늘고, `POST /trips`를
+   * 다시 보내면 사용자에게 여행이 하나 더 생긴다(되돌릴 수 없다).
+   */
+  async function registerMustVisits(
+    tripId: string,
+    poiIds: string[]
+  ): Promise<void> {
+    if (submitLockedRef.current) return;
+    submitLockedRef.current = true;
+
+    const results = await Promise.allSettled(
+      poiIds.map((poiId) =>
+        postTripsTripIdMustVisits(tripId, { poiId, type: 'ANYTIME' })
+      )
+    );
+    const stillFailed = poiIds.filter((_, index) => {
+      const result = results[index];
+      return (
+        result.status === 'rejected' && !isAlreadyRegistered(result.reason)
+      );
+    });
+
+    setPendingMustVisits(stillFailed);
+    if (stillFailed.length > 0) {
+      // 화면에 남아 배너를 보여준다 — 여기서만 잠금을 푼다(배너의 [다시 시도]가 다시 타야
+      // 하므로). 조용히 삼키지 않는다(INV-4). 배너는 step1에만 있으므로 이동을 멈춘다.
+      submitLockedRef.current = false;
+      setMustVisitError(
+        mustVisitFailureNotice(poiIds.length, stillFailed.length)
+      );
+      return;
+    }
+
+    setMustVisitError(undefined);
+    // 성공 — 잠금을 **풀지 않는다**. 이 화면의 일은 끝났고, 스택에 남은 step1으로 되돌아와
+    // `[다음]`을 다시 눌러도 여행이 하나 더 만들어지면 안 된다(되돌릴 수 없다).
+    router.push('/trips/new/step2');
+  }
+
+  function retryMustVisits(): void {
+    if (createdTripId === undefined || pendingMustVisits.length === 0) return;
+    void registerMustVisits(createdTripId, pendingMustVisits);
+  }
+
   async function submit(): Promise<void> {
     // 버튼이 비활성이면 눌리지 않지만, 배선도 스스로 판정을 다시 걷는다(`StayRegisterPage.
     // handleSubmit`과 같은 이유). `isPending`도 함께 건다 — 응답이 오기 전 두 번째 호출이
     // 두 번째 요청을 만들지 않아야 한다(AC-6). 새 상태를 따로 만들지 않고 생성 훅이 이미
-    // 노출하는 값을 그대로 쓴다(01b Seed §기존 활용).
-    if (!canProceed || createTrip.isPending) return;
+    // 노출하는 값을 그대로 쓴다(01b Seed §기존 활용). 5-c W-1: `isPending`은 **생성** 요청만
+    // 덮는다 — 생성이 끝나고 등록이 날아가는 창(수백 ms~수 초, 화면에 아무 변화가 없다)은
+    // `submitLockedRef`가 덮는다. 그 창에서 다시 누르면 여행이 하나 더 만들어진다.
+    if (!canProceed || createTrip.isPending || submitLockedRef.current) return;
+
+    // 여행은 이미 만들어졌고 등록만 남았다 — 여기서 `POST /trips`를 다시 태우면 사용자에게
+    // 여행이 하나 더 생긴다(되돌릴 수 없다). 남은 일(등록)만 이어서 한다.
+    if (createdTripId !== undefined && pendingMustVisits.length > 0) {
+      await registerMustVisits(createdTripId, pendingMustVisits);
+      return;
+    }
 
     setSubmitError(undefined);
     setOverseasBlocked(false);
@@ -310,9 +451,14 @@ export function TripNewStep1Page({
 
     // g02(TRIP-84·TRIP-193)가 읽는 소비자다 — 라우트가 id를 안 나른다(01b D7).
     setCreatedTripId(trip.tripId);
-    // 2/2(거점 숙소, g02)는 TRIP-84(US-TRIP-04) 소관이라 자리만 라우트로 이동한다.
-    // `tripWizardStore.reset()`은 부르지 않는다(01b D6 — 위저드를 완전히 벗어날 때의 몫).
-    router.push('/trips/new/step2');
+
+    // ↓ 여기서부터는 위 `try` 바깥이다. 여행은 이미 만들어졌으므로 아래에서 나는 실패는
+    // 등록 실패지 생성 실패가 아니다. 이동(2/2, g02 · TRIP-84)은 등록이 끝난 뒤에만 한다 —
+    // `tripWizardStore.reset()`은 여전히 부르지 않는다(01b D6).
+    await registerMustVisits(
+      trip.tripId,
+      mustVisits.map((seed) => seed.sourcePoiId)
+    );
   }
 
   return (
@@ -335,6 +481,14 @@ export function TripNewStep1Page({
       onImportStayDates={importStayDates}
       onPressRegisterStay={() => router.push('/stays/register')}
       onRetryStayImport={() => void savedStays.refetch()}
+      mustVisitSection={mustVisitSection}
+      mustVisitSeedFailed={savedPlaces.isError}
+      savedPlaceCount={savedPlaceList.length}
+      mustVisitError={mustVisitError}
+      onRemoveMustVisit={removeMustVisit}
+      onPressMoreMustVisits={() => router.push('/explore/places')}
+      onRetryMustVisitSeeds={() => void savedPlaces.refetch()}
+      onRetryMustVisits={retryMustVisits}
       budgetText={effectiveBudgetText}
       budgetPrefilled={budgetPrefilled}
       budgetError={budgetError}

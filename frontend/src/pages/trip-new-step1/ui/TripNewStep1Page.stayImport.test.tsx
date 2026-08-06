@@ -79,6 +79,23 @@ jest.mock('@/features/trip/model/useSavedStays', () => ({
   useSavedStays: () => mockSavedStays,
 }));
 
+/**
+ * TRIP-209 — **이 사이클이 이 파일에 더한 유일한 변경이다. 단언은 한 줄도 안 고쳤다.**
+ *
+ * TRIP-209가 페이지에 `useSavedPlaces`(→ `useQuery`·`useQueryClient`)를 붙이는 순간
+ * provider 없는 이 버킷에서 render가 던진다(02a §5-4 실행 확인). 로딩 상태를 돌려주므로
+ * '꼭 갈 곳' 섹션은 **글자 없는 자리표시**가 되어 이 파일의 등록 숙소 심판은 그대로 유효하다.
+ */
+jest.mock('@/features/explore/model/savedPlaces', () => ({
+  useSavedPlaces: () => ({
+    savedPlaces: [],
+    isPending: true,
+    isError: false,
+    refetch: jest.fn(),
+    remove: jest.fn(),
+  }),
+}));
+
 /** 기준일 고정 — 실행일이 바뀌어도 날짜 단언이 흔들리지 않는다(TRIP-205 D5). */
 const BASE = '2026-06-10';
 

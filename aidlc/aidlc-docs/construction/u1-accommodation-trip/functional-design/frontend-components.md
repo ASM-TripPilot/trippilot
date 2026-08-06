@@ -123,6 +123,15 @@ src/app/
 
 **[라이브 실측 · 2026-08-02, TRIP-207 [기록] 반영] `g01 · default`(`1675:1183`) 내부 구성이 바뀌었다 — 프레임 개수는 안 변했고 내용이 변했다.** 위 문단이 다루는 것은 g01의 **새 변형 프레임**이고, 이건 그 default 프레임 **안쪽**에 자식 노드가 늘어난 것이라 별개다: 예산 블록 `sec_budget`(`2225:2375`, 구분선 `d3w` `2225:2373` 포함, TRIP-207 소관 — `BudgetInputField` 위 행 참고) · 등록 숙소 날짜 가져오기 행 `stayImportRow`(`2225:2362`, TRIP-208 소관 — **이 문서는 이 노드에 컴포넌트 행을 아직 안 둔다**, TRIP-208 [기록]에서 소급). 근거: `_workspace/20260802-trip207-budget-block/01_spec-analyst_brief.md` §7-④.
 
+**[구현 결정 · TRIP-209, 2026-08-06] `MustVisitSeedStrip` 등록 실패 표면 + 제출 잠금 — 이 문서 승인 당시 없던 공백을 게이트에서 확정.** `01_spec-analyst_brief.md` §8-③이 "must-visit 등록 실패의 문구·자리·재시도 어포던스는 정본에 없어 발명 대상"으로 관측했고, 3-a에서 사용자가 "(가) 반영"을 선택했다(`01b_ouroboros_seed.md` §4). 아래는 전부 **요구사항 근거가 아니라 우리가 정한 구현 결정**이다 — 다음 사이클이 요구사항 근거로 인용하지 말 것.
+
+- 썸네일 상한 **3장 고정, 특례 없음**(4건이어도 3장 + `+1`). 근거: 게이트①-1 사용자 결정(`_workspace/20260805-trip209-mustvisit-seed/00_gates.md` 게이트① 절, 2026-08-06 02:50) — 4장 배치 시 폭 실측(424px > 358px 가용폭) 제시 후 확정.
+- 등록 실패 배너 문구 `꼭 갈 곳 {N}곳 중 {M}곳을 등록하지 못했어요`. 근거: 게이트①-1 사용자 결정(제안대로).
+- 배너 자리 = 기존 제출 실패 배너와 **같은 자리**(하단 CTA 위) · **다른 testID**(`trip-wizard-mustvisit-banner`) — 같은 배너를 재사용하면 [다시 시도]가 여행 생성을 다시 태워 여행이 하나 더 생긴다. 근거: 게이트①-1 사용자 결정.
+- 재시도 사정거리 = **실패분만** 재등록(`POST /trips`는 다시 보내지 않는다). 근거: 게이트①-1 사용자 결정.
+- 조회 실패 부제 `담은 곳을 불러오지 못했어요`(0곳 얼굴과 반드시 구분 — 캡션은 그리지 않는다). 근거: 게이트①-1 사용자 결정.
+- **담은 목록 도착 전에는 `[다음]`을 잠근다(비회원은 예외 — 비회원은 조회 자체가 안 나가 "불러오는 중"이 영원히 참이므로, 그 값에 그대로 잠그면 비회원이 여행을 영영 못 만든다).** ⚠️ **정본 AC 문장 없음** — 이 결정의 근거는 브리프·Seed 어디에도 없고, 게이트①-1 승인 이후 code-critic 적대적 리뷰가 찾은 무방비 경로(담은 목록 미도착 상태에서 제출하면 꼭 갈 곳이 통째로 빠진 채 침묵 통과)를 메우며 사용자가 내린 **게이트①-2 결정**이다. 근거: 게이트①-2(`00_gates.md` 게이트①-2 절, 2026-08-06 13:22) — AC 코드를 날조하지 않고 "게이트 결정"으로 표기한다.
+
 ## 5. 폼 검증 (UX 사본 명세)
 
 | 폼 | 클라 검증(Zod) | 서버 정본 |
@@ -143,6 +152,8 @@ src/app/
 `trip-wizard-step{n}-next` · `trip-wizard-destination-add` · `trip-wizard-period-preset-{code}` · `trip-wizard-party-stepper` · `trip-wizard-pref-change` · `trip-base-assign-{stayId}` · `trip-base-coverage-day-{date}` · `trip-base-nostay-start`
 
 **[구현 결정 · TRIP-207, 2026-08-02]** 예산 testID 5종 — 이 문서 승인 당시 정해지지 않았다(공백). 게이트①에서 확정한 값: `trip-wizard-budget-block`(섹션 컨테이너) · `trip-wizard-budget-input`(총액 입력, 지라 티켓이 직접 지정) · `trip-wizard-budget-edit`(`수정` 어포던스) · `trip-wizard-budget-note`(프리필 안내 문구) · `trip-wizard-error-budget`(인라인 파싱 오류 — 위반 코드가 아니라 **블록 슬러그** 규약, 기존 `trip-wizard-error-destination`·`trip-wizard-error-period`와 동형). 근거: `_workspace/20260802-trip207-budget-block/02a_test-design_spec.md` §2-6.
+
+**[구현 결정 · TRIP-209, 2026-08-06]** 꼭 갈 곳 시드 testID 9종 — 이 문서 승인 당시 정해지지 않았다(공백). 티켓 고정 4종: `trip-wizard-mustvisit-{sourcePoiId}`(썸네일) · `trip-wizard-mustvisit-remove-{sourcePoiId}`(썸네일 `x`) · `trip-wizard-mustvisit-more`(점선 `더 담기`) · `trip-wizard-mustvisit-empty`(점선 `가고 싶은 곳 담기`, 0곳). 게이트①에서 확정한 신규 5종: `trip-wizard-mustvisit-block`(섹션 컨테이너) · `trip-wizard-mustvisit-image-{sourcePoiId}`(썸네일 사진, 있을 때만) · `trip-wizard-mustvisit-overflow`(`+N` 박스) · `trip-wizard-mustvisit-retry`(조회 실패 재시도 행) · `trip-wizard-mustvisit-banner`/`-banner-retry`(등록 실패 배너). 근거: `_workspace/20260805-trip209-mustvisit-seed/02a_test-design_spec.md` §2-4.
 
 ## 7. PBT 대상 (클라이언트 순수 함수 · fast-check)
 
