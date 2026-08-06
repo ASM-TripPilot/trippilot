@@ -76,7 +76,9 @@ class EditItineraryService(
 /** 편집안 → 재검증 입력(ScheduleAgentOutput). 시각·순서·고정은 슬롯 그대로. 거리/소요시간 없음(INV-3). */
 private fun EditItinerary.toOutput(solveMode: SolveMode, isFallback: Boolean, at: Instant): ScheduleAgentOutput =
     ScheduleAgentOutput(
-        days = days.map { d -> DaySchedule(d.date, d.slots.map { VisitSlotDisplay(it.poiId, it.startAt, it.endAt, false, null, it.isFixed) }) },
+        days = days.map { d ->
+            DaySchedule(d.date, d.slots.map { VisitSlotDisplay(it.poiId, it.startAt, it.endAt, endsNextDay = false, distanceRange = null, isFixed = it.isFixed) })
+        },
         day1ReadyAt = null,
         explanations = emptyMap(),
         solveMode = solveMode,
