@@ -82,10 +82,30 @@ class Itinerary private constructor(
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {
-    /** 확정 — PLANNED만 가능(이미 CONFIRMED면 409). */
+    /** 확정 — PLANNED만 가능(이미 CONFIRMED면 409). 상태 전이만(동결 없음). */
     fun confirm(now: Instant): Itinerary {
         if (status != ItineraryStatus.PLANNED) throw ConflictDetected(message = "이미 확정된 일정입니다.")
         return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, isFallback, days, createdAt, now)
+    }
+
+    /**
+     * 확정 + poi_snapshot 동결(INV-U1-03) — 각 슬롯 sourcePoiId 를 동결 스냅숏 id 로 세팅. 이미 확정이면 409.
+     * [snapshotByPoi] 는 전 슬롯 POI 를 덮어야 한다(호출 서비스가 freeze 로 완비 후 전달).
+     */
+    fun confirm(snapshotByPoi: Map<UUID, UUID>, now: Instant): Itinerary {
+        if (status != ItineraryStatus.PLANNED) throw ConflictDetected(message = "이미 확정된 일정입니다.")
+        val frozenDays = days.map { d ->
+            ItineraryDay.of(
+                d.date, d.dayOrder,
+                d.slots.map { s ->
+                    VisitSlot.of(
+                        s.sourcePoiId, snapshotByPoi.getValue(s.sourcePoiId), s.orderIndex,
+                        s.startAt, s.endAt, s.isFixed, s.hasViolation,
+                    )
+                },
+            )
+        }
+        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, isFallback, frozenDays, createdAt, now)
     }
 
     companion object {
