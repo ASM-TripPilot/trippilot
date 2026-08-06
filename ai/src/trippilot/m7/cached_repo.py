@@ -62,9 +62,6 @@ class CachedPoiRepository:
                     category: PoiCategory) -> tuple[Poi, ...]:
         return self._src.find_nearby(coord, radius_m, category)
 
-    def upsert(self, poi: Poi) -> PoiId:
-        return self._src.upsert(poi)
-
     def batch_check_closed(self, poi_ids: frozenset[PoiId],
                            on: date) -> frozenset[PoiId]:
         return self._src.batch_check_closed(poi_ids, on)

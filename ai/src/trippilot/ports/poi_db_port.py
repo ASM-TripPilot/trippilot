@@ -1,6 +1,8 @@
-"""PoiDbPort — M7 정본 저장소 콘센트 (business-logic-model.md §2.4).
+"""PoiDbPort — POI read-only 조회 콘센트 (business-logic-model.md §2.4).
 
-Protocol만 — 실 구현(PostgreSQL/PostGIS)은 U3 소유.
+POI 정본은 backend C7(place-data)이 단일 소유하고, 본 포트는 AI측
+read-only 소비 콘센트다 (PR #76 결정3: AI write 제거). Protocol만 —
+쓰기 메서드를 추가하지 않는다.
 """
 
 from __future__ import annotations
@@ -18,7 +20,6 @@ class PoiDbPort(Protocol):
     def find_nearby(
         self, coord: GeoPoint, radius_m: int, category: PoiCategory
     ) -> tuple[Poi, ...]: ...
-    def upsert(self, poi: Poi) -> PoiId: ...
     def get_open_window(self, poi_id: PoiId, on: date) -> OpenHour | None: ...
     def batch_check_closed(
         self, poi_ids: frozenset[PoiId], on: date
