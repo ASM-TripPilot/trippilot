@@ -44,7 +44,7 @@ _HOURS = (OpenHour(0, 540, 1260),)
 
 def _to_poi(poi_id: str, name: str) -> Poi:
     """이름 매칭만 보는 하네스 — 나머지 속성은 유효한 고정값."""
-    return Poi(PoiId(poi_id), name, PoiCategory.ETC, _COORD, _HOURS,
+    return Poi(PoiId(poi_id), name, PoiCategory.SIGHT, _COORD, _HOURS,
                None, None, DataQuality.FULL, PoiSource.SEED, None)
 
 
