@@ -26,6 +26,7 @@ class VisitSlot private constructor(
     val endAt: LocalTime,
     val isFixed: Boolean,
     val hasViolation: Boolean,
+    val endsNextDay: Boolean,   // 자정 넘김(HC4) — true 면 endAt(익일 시각) < startAt 허용
 ) {
     companion object {
         fun of(
@@ -36,12 +37,14 @@ class VisitSlot private constructor(
             endAt: LocalTime,
             isFixed: Boolean = false,
             hasViolation: Boolean = false,
+            endsNextDay: Boolean = false,
         ): VisitSlot {
             val errors = mutableListOf<FieldError>()
             if (orderIndex < 0) errors += FieldError("orderIndex", "순서는 0 이상입니다.")
-            if (endAt < startAt) errors += FieldError("endAt", "종료 시각은 시작 이후여야 합니다.")
+            // 자정 넘김이면 endAt 이 익일 시각이라 startAt 보다 작을 수 있음(HC4) — 그 경우만 허용.
+            if (endAt < startAt && !endsNextDay) errors += FieldError("endAt", "종료 시각은 시작 이후여야 합니다.")
             if (errors.isNotEmpty()) throw ValidationFailed(errors)
-            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation)
+            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay)
         }
     }
 }

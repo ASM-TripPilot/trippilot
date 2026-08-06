@@ -119,7 +119,9 @@ class GenerateItineraryService(
         val days = this.days.mapIndexed { dayIdx, d ->
             ItineraryDay.of(
                 d.date, dayIdx,
-                d.slots.mapIndexed { slotIdx, s -> VisitSlot.of(s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed) },
+                d.slots.mapIndexed { slotIdx, s ->
+                    VisitSlot.of(s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed, endsNextDay = s.endsNextDay)
+                },
             )
         }
         return Itinerary.create(tripId, solveMode, isFallback, days, clock.instant())

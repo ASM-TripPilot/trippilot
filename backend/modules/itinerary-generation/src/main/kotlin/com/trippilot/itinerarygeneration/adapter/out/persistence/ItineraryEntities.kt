@@ -49,6 +49,7 @@ class VisitSlotEntity(
     @Column(name = "end_at") var endAt: LocalTime,
     @Column(name = "is_fixed") var isFixed: Boolean,
     @Column(name = "has_violation") var hasViolation: Boolean,
+    @Column(name = "ends_next_day") var endsNextDay: Boolean,
 )
 
 interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {
