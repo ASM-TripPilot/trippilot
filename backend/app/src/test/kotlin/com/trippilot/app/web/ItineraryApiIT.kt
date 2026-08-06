@@ -168,6 +168,37 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `편집(PUT)하면 200, 새 배열 저장 + hasViolation 표시(비차단)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        val poi = poiId(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+
+        val editBody = """{"days":[
+            {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"10:00","endAt":"11:00","isFixed":false}]},
+            {"date":"2026-08-02","slots":[{"poiId":"$poi","startAt":"09:00","endAt":"10:00","isFixed":false}]}]}""".trimIndent()
+        val (rc, body) = call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody)
+        rc shouldBe 200
+        body["status"].asText() shouldBe "PLANNED"
+        val slot = body["days"][0]["slots"][0]
+        slot["poiId"].asText() shouldBe poi
+        slot["hasViolation"].asBoolean() shouldBe false // Fake validate 빈 목록(위반 내용 검증은 229)
+
+        // 조회에도 편집 반영
+        call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second["days"][0]["slots"][0]["poiId"].asText() shouldBe poi
+    }
+
+    @Test
+    fun `확정된 일정 편집은 409`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 200
+        val editBody = """{"days":[{"date":"2026-08-01","slots":[]}]}"""
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody).first shouldBe 409
+    }
+
+    @Test
     fun `생성 전 확정은 404`() {
         val token = newToken()
         val trip = newTrip(token)
