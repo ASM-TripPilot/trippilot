@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":common:core"))            // R5: 에러 계약
     implementation(libs.spring.boot.starter.data.jpa)  // out/persistence — poi
     implementation(libs.spring.boot.starter.web)        // adapter/in/web — 탐색 조회
+    implementation(libs.jackson.module.kotlin)          // 리버스 read 포트 응답 snake_case(@JsonNaming, AI 경계)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.kotlin.reflect)
 
