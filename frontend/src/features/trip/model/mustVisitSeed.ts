@@ -49,6 +49,40 @@ export function seedMustVisits(savedPlaces: SavedPlace[]): MustVisitSeedItem[] {
   return seeds;
 }
 
+/**
+ * 재시드 규칙(TRIP-288 D2·D7·D8·D11) — 담은 목록이 늘어난 채 다시 도착했을 때 **무엇을 더하는가**.
+ *
+ * `current`를 접두사로 그대로 두고, `current`에도 `excluded`에도 없는 것만 뒤에 이어 붙인다.
+ * 담은 목록 순서로 재정렬하지 않고, `incoming`에서 사라진 항목을 빼지도 않는다 — 시드는
+ * 복사본이라 원본 담기를 풀어도 이미 옮겨 온 것은 남는다(INV-U1-04 양방향 독립 · BR-U1-37).
+ *
+ * ⚠️ **더할 게 없으면 `current`를 그대로 돌려준다**(내용이 같은 새 배열이 아니다). 이 함수를
+ * 태우는 화면 효과에는 "이미 채웠나" 가드가 없고, 게스트·미도착에서는 담은 목록이 매 렌더
+ * 새 빈 배열이다 — 새 배열을 돌려주면 상태 교체 → 리렌더 → 재계산의 무한 루프가 되어
+ * `render()` 자체가 `Maximum update depth exceeded`로 죽는다.
+ */
+export function mergeMustVisitSeeds(input: {
+  current: MustVisitSeedItem[];
+  incoming: MustVisitSeedItem[];
+  excluded: string[];
+}): MustVisitSeedItem[] {
+  const known = new Set(input.current.map((seed) => seed.sourcePoiId));
+  const appended: MustVisitSeedItem[] = [];
+
+  for (const seed of input.incoming) {
+    const poiId = seed.sourcePoiId;
+    if (known.has(poiId) || input.excluded.includes(poiId)) {
+      continue;
+    }
+    known.add(poiId);
+    appended.push(seed);
+  }
+
+  return appended.length === 0
+    ? input.current
+    : [...input.current, ...appended];
+}
+
 /** 섹션이 그릴 네 얼굴. `loading`은 글자 없는 자리표시다 — 도착 전에 "담은 곳이 없어요"를
  * 그리면 담아 둔 사용자에게 한 순간 거짓말을 한다. */
 export type MustVisitSectionView =
