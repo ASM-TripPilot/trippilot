@@ -70,9 +70,15 @@ class SecondPhaseGenerator(
                 log.info("2차 결과 폐기 — 그 사이 일정이 바뀜(state={}). tripId={}", current.generationState, tripId)
                 return@execute null
             }
+            val remaining = output.toRemainingDays(current.days.size, secondInput.timeWindows.map { it.date })
+            SlotKey.warnIfUnmatched(
+                received = output.explanations.size,
+                matched = remaining.sumOf { d -> d.slots.count { it.placementReason != null } },
+                tripId = tripId,
+            )
             // 1차분(day1)은 영속본 그대로 보존하고 뒤에 이어붙인다 — 이미 노출된 날을 흔들지 않는다.
             val updated = current.completeGeneration(
-                current.days + output.toRemainingDays(current.days.size, secondInput.timeWindows.map { it.date }),
+                current.days + remaining,
                 clock.instant(),
                 output.solveMode, output.isFallback, output.candidatesSummary,
             )

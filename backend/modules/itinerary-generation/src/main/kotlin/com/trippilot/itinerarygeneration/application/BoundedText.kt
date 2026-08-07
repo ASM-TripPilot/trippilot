@@ -15,6 +15,10 @@ object BoundedText {
 
     fun clamp(value: String?, max: Int): String? {
         if (value == null || value.length <= max) return value
-        return value.take(max - 1) + "…"
+        // 자를 위치가 서로게이트 페어 한가운데면 한 칸 물러선다 — 그냥 자르면 고아 서로게이트가 남아
+        // UTF-8 인코딩에서 문자가 깨진다(AI 문구에 이모지가 섞일 수 있다).
+        var cut = max - 1
+        if (cut > 0 && value[cut - 1].isHighSurrogate()) cut -= 1
+        return value.take(cut) + "…"
     }
 }

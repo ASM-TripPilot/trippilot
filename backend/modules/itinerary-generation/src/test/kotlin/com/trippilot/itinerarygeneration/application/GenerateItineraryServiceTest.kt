@@ -307,6 +307,30 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         finished.itineraryId shouldBe returned.itineraryId // 같은 일정을 이어 채운다(교체 아님)
     }
 
+    "2차 일자에도 추천 근거가 붙는다(1차만 테스트하면 이 경로가 비어 있다)" {
+        val end = start.plusDays(2)
+        val poiByDate = generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.associateWith { UUID.randomUUID() }
+        val agent = object : ScheduleAgentPort {
+            override fun generate(input: ScheduleAgentInput) = ScheduleAgentOutput(
+                days = input.timeWindows.map { tw ->
+                    DaySchedule(tw.date, listOf(VisitSlotDisplay(poiByDate.getValue(tw.date), LocalTime.parse("10:00"), LocalTime.parse("11:00"), false, null, isFixed = false)))
+                },
+                day1ReadyAt = null,
+                explanations = poiByDate.entries.associate { (d, p) -> "$d#$p" to "$d 근거" },
+                solveMode = SolveMode.DETERMINISTIC, isFallback = false,
+                freshness = FreshnessMeta(now, degraded = false),
+            )
+            override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+            override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
+        }
+        val repo = FakeItineraries()
+        service(agent, repo, end).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val finished = repo.byTrip.getValue(tripId)
+        finished.days.map { d -> d.slots.single().placementReason } shouldContainExactly
+            listOf("$start 근거", "${start.plusDays(1)} 근거", "$end 근거")
+    }
+
     "2차는 1차 배정 POI 를 excludedPoiIds 로 제외(TRIP-293)" {
         val end = start.plusDays(2)
         val (agent, poiByDate) = emittingAgent(end)

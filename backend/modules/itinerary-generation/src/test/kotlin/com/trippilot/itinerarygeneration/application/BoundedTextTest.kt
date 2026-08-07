@@ -22,6 +22,16 @@ class BoundedTextTest : StringSpec({
         clamped.endsWith("…") shouldBe true // 잘렸다는 사실이 드러난다
     }
 
+    "서로게이트 페어 한가운데서 자르지 않는다(이모지가 깨지지 않게)" {
+        // 자를 위치(max-1)가 이모지 페어 한가운데가 되도록 구성
+        val text = "가".repeat(BoundedText.DISTANCE_RANGE_MAX - 2) + "\uD83C\uDFD6" + "나".repeat(20)
+        val clamped = BoundedText.clamp(text, BoundedText.DISTANCE_RANGE_MAX)!!
+
+        (clamped.length <= BoundedText.DISTANCE_RANGE_MAX) shouldBe true
+        // 마지막이 고아 서로게이트로 끝나면 UTF-8 인코딩에서 문자가 깨진다
+        clamped.dropLast(1).lastOrNull()?.isHighSurrogate() shouldBe false
+    }
+
     "경계값(상한과 같은 길이)은 자르지 않는다" {
         val exact = "가".repeat(BoundedText.DISTANCE_RANGE_MAX)
         BoundedText.clamp(exact, BoundedText.DISTANCE_RANGE_MAX) shouldBe exact
