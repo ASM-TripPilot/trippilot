@@ -666,14 +666,14 @@ paths:
         '404': { description: 여행 없음/타 계정 }
     put:
       tags: [trips]
-      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409
+      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정·생성 중 일정은 409
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/EditItineraryRequest' } } }
       responses:
         '200': { description: 편집됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
-        '409': { description: 확정된 일정은 수정 불가 }
+        '409': { description: 확정된 일정은 수정 불가 · 생성 진행 중(generationState=PARTIAL)은 수정 불가 }
   /trips/{tripId}/itinerary/confirm:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -998,7 +998,10 @@ components:
           enum: [PARTIAL, COMPLETE, FAILED]
           description: >
             생성 진행 상태(확정 상태와 다른 축) — PARTIAL=day1만 채워짐(2단계 생성 중) · COMPLETE=전 일자 완료 ·
-            FAILED=2차 실패(1차분은 유효). **PARTIAL 인 동안 확정은 409**(day1만 동결된 채 잠기는 것 방지).
+            FAILED=2차 실패(1차분은 유효). **PARTIAL 인 동안 확정·편집은 409**
+            (day1만 동결된 채 잠기거나, 뒤이어 도착하는 2차 결과가 편집을 덮어쓰는 것 방지).
+            생성 POST 는 day1 만 담은 PARTIAL 을 즉시 반환하므로, 클라이언트는 GET 으로 COMPLETE/FAILED 까지
+            폴링해 나머지 일자를 받는다(여행이 하루면 즉시 COMPLETE).
         days:
           type: array
           items:

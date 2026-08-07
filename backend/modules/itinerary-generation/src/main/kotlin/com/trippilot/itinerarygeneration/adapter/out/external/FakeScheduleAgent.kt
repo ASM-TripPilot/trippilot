@@ -29,9 +29,11 @@ class FakeScheduleAgent(
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
         val fixedByDate = input.fixedBlocks.filter { it.date != null }.groupBy { it.date }
         // 목적지 지역들의 ACTIVE 후보(정본) — 동결 가능한 실 poiId. closed-set(INV-1).
+        val excluded = input.excludedPoiIds.toSet() // day1 2단계 중복 방지(TRIP-293)
         val candidates = input.tripContext.destinations
             .flatMap { candidatePool.resolve(Area.Region(it), emptySet()) }
             .distinctBy { it.poiId }
+            .filter { it.poiId !in excluded }
 
         val days = input.timeWindows.mapIndexed { dayIdx, tw ->
             val fixed = fixedByDate[tw.date].orEmpty().map { fb ->

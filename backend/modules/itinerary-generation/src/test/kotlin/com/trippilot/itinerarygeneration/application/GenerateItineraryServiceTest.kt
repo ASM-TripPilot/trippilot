@@ -1,6 +1,8 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
+import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -9,7 +11,13 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.ItineraryDay
+import com.trippilot.itinerarygeneration.domain.PreferenceProfile
+import com.trippilot.itinerarygeneration.domain.RequestMeta
+import com.trippilot.itinerarygeneration.domain.TimeWindow
+import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.Violation
+import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.core.event.DomainEvent
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
@@ -35,12 +43,16 @@ import java.time.LocalTime
 import java.time.ZoneOffset
 import java.util.UUID
 
-private class CapturingAgent(private val now: Instant) : ScheduleAgentPort {
-    var captured: ScheduleAgentInput? = null
+/** 호출마다 입력을 기록 — day1 2단계라 1차/2차 두 번 불린다([captures] 순서 = 호출 순서). */
+private class CapturingAgent(private val now: Instant, private val emit: (LocalDate) -> List<VisitSlotDisplay> = { emptyList() }) :
+    ScheduleAgentPort {
+    val captures = mutableListOf<ScheduleAgentInput>()
+    val captured: ScheduleAgentInput? get() = captures.firstOrNull()
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
-        captured = input
+        captures += input
         return ScheduleAgentOutput(
-            days = emptyList(), day1ReadyAt = null, explanations = emptyMap(),
+            days = input.timeWindows.map { DaySchedule(it.date, emit(it.date)) },
+            day1ReadyAt = null, explanations = emptyMap(),
             solveMode = SolveMode.DETERMINISTIC, isFallback = false,
             freshness = FreshnessMeta(now, degraded = false),
         )
@@ -68,11 +80,13 @@ private val NOOP_TX = object : PlatformTransactionManager {
     override fun rollback(status: TransactionStatus) {}
 }
 
-private class FakeItineraries : ItineraryRepository {
-    override fun save(itinerary: Itinerary): Itinerary = itinerary
-    override fun findById(itineraryId: UUID): Itinerary? = null
-    override fun findByTrip(tripId: UUID): List<Itinerary> = emptyList()
-    override fun replaceForTrip(tripId: UUID, itinerary: Itinerary): Itinerary = itinerary
+/** 상태를 들고 있는 인메모리 저장소 — 2차 생성이 PARTIAL 을 다시 읽어 전이하므로 무상태 스텁으론 부족하다. */
+private open class FakeItineraries : ItineraryRepository {
+    val byTrip = mutableMapOf<UUID, Itinerary>()
+    open override fun save(itinerary: Itinerary): Itinerary = itinerary.also { byTrip[it.tripId] = it }
+    open override fun findById(itineraryId: UUID): Itinerary? = byTrip.values.firstOrNull { it.itineraryId == itineraryId }
+    open override fun findByTrip(tripId: UUID): List<Itinerary> = listOfNotNull(byTrip[tripId])
+    open override fun replaceForTrip(tripId: UUID, itinerary: Itinerary): Itinerary = itinerary.also { byTrip[tripId] = it }
 }
 
 /**
@@ -87,16 +101,20 @@ class GenerateItineraryServiceTest : StringSpec({
     val tripId = UUID.randomUUID()
     val poi = UUID.randomUUID()
     val start = LocalDate.parse("2026-08-01")
-    val end = LocalDate.parse("2026-08-03") // 계획일 08-01·02·03, 숙박일 08-01·02
+    val defaultEnd = LocalDate.parse("2026-08-03") // 계획일 08-01·02·03, 숙박일 08-01·02
+    val end = defaultEnd
 
     fun service(
         agent: ScheduleAgentPort,
         prefs: PreferenceSnapshot,
         anchors: List<DayAnchorView>,
         publisher: DomainEventPublisher = CapturingPublisher(),
+        repo: FakeItineraries = FakeItineraries(),
+        end: LocalDate = defaultEnd,
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
+            @Suppress("UNUSED_PARAMETER")
             override fun findGenerationContext(accountId: UUID, tripId: UUID) =
                 if (accountId == acc) {
                     TripGenerationContext(
@@ -113,7 +131,9 @@ class GenerateItineraryServiceTest : StringSpec({
         val baseAnchors = object : BaseAnchorFacade {
             override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = anchors
         }
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, FakeItineraries(), publisher, NOOP_TX, clock)
+        // 단위 테스트엔 Spring 프록시가 없어 @Async 가 걸리지 않는다 → 2차가 그 자리에서 동기 실행된다(결정론).
+        val second = SecondPhaseGenerator(agent, repo, NOOP_TX, clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, NOOP_TX, clock)
     }
 
     val fullPrefs = PreferenceSnapshot(
@@ -130,8 +150,9 @@ class GenerateItineraryServiceTest : StringSpec({
         input.preferenceProfile.styles shouldBe listOf("미식")
         input.preferenceProfile.transportModes shouldBe listOf("렌터카")
         input.preferenceProfile.petFriendly shouldBe true
-        input.timeWindows.map { it.date } shouldContainExactly listOf(start, start.plusDays(1), end)
+        input.timeWindows.map { it.date } shouldContainExactly listOf(start) // 1차 = day1 만
         input.fixedBlocks.single().poiId shouldBe poi
+        agent.captures[1].timeWindows.map { it.date } shouldContainExactly listOf(start.plusDays(1), end) // 2차 = 나머지
     }
 
     "앵커: 숙박일=거점 좌표, 체크아웃일=전날 거점(prev_stay)" {
@@ -141,9 +162,11 @@ class GenerateItineraryServiceTest : StringSpec({
             DayAnchorView(start.plusDays(1), 35.1, 129.0),   // 08-02
         )
         service(agent, fullPrefs, anchors).generate(acc, tripId, GenerationMode.FULLY_AI)
-        val a = agent.captured!!.anchors
-        a.map { it.date } shouldContainExactly listOf(start, start.plusDays(1), end)
-        a.first { it.date == end }.lat shouldBe 35.1 // 체크아웃일 08-03 = 전날(08-02) 거점
+        // 각 호출은 자기가 맡은 일자의 앵커만 받는다(1차=day1, 2차=나머지).
+        agent.captures[0].anchors.map { it.date } shouldContainExactly listOf(start)
+        val second = agent.captures[1].anchors
+        second.map { it.date } shouldContainExactly listOf(start.plusDays(1), end)
+        second.first { it.date == end }.lat shouldBe 35.1 // 체크아웃일 08-03 = 전날(08-02) 거점
     }
 
     "취향 미설정이면 빈 취향·null budgetLevel" {
@@ -174,5 +197,187 @@ class GenerateItineraryServiceTest : StringSpec({
             it.sourcePoiId shouldBe poi
             it.isFixed shouldBe true
         }
+    }
+})
+
+/** day1 조기 노출 2단계(TRIP-267) — 1차 즉시 반환(PARTIAL) · 2차 백그라운드 완료(COMPLETE). */
+class GenerateItineraryTwoPhaseTest : StringSpec({
+
+    val now = Instant.parse("2026-08-06T00:00:00Z")
+    val clock = Clock.fixed(now, ZoneOffset.UTC)
+    val acc = UUID.randomUUID()
+    val tripId = UUID.randomUUID()
+    val start = LocalDate.parse("2026-08-01")
+
+    val prefs = PreferenceSnapshot(emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null)
+
+    /** 일자마다 그 날짜 전용 POI 하나를 배정하는 에이전트 — 제외 목록 전파를 관찰하려면 실제 배정이 있어야 한다. */
+    fun emittingAgent(end: LocalDate): Pair<CapturingAgent, Map<LocalDate, UUID>> {
+        val poiByDate = generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }
+            .associateWith { UUID.randomUUID() }
+        val agent = CapturingAgent(now) { date ->
+            listOf(VisitSlotDisplay(poiByDate.getValue(date), LocalTime.parse("10:00"), LocalTime.parse("11:00"), false, null, isFixed = false))
+        }
+        return agent to poiByDate
+    }
+
+    /** 2차 입력 최소 구성 — 경합 테스트는 입력 내용이 아니라 "반영 여부"만 본다. */
+    fun agentInputFor(end: LocalDate) = ScheduleAgentInput(
+        tripId = tripId,
+        generationMode = GenerationMode.FULLY_AI,
+        tripContext = TripContext(listOf("제주"), start, end, "친구", null),
+        anchors = emptyList(),
+        timeWindows = listOf(TimeWindow(end, LocalTime.parse("09:00"), LocalTime.parse("21:00"))),
+        fixedBlocks = emptyList(),
+        preferenceProfile = PreferenceProfile(emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null),
+        recommendationStrength = null,
+        requestMeta = RequestMeta(UUID.randomUUID().toString(), now, 20_000L),
+    )
+
+    fun service(agent: ScheduleAgentPort, repo: FakeItineraries, end: LocalDate): GenerateItineraryService {
+        val trips = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) =
+                TripGenerationContext(start, end, listOf("제주"), "친구", 500_000, emptyList())
+        }
+        val preferences = object : PreferenceFacade {
+            override fun findPreferences(accountId: UUID) = prefs
+        }
+        val baseAnchors = object : BaseAnchorFacade {
+            override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
+        }
+        val second = SecondPhaseGenerator(agent, repo, NOOP_TX, clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, NOOP_TX, clock)
+    }
+
+    "다일 여행: 반환은 day1 만·PARTIAL, 2차 완료 후 전 일자·COMPLETE" {
+        val end = start.plusDays(2)
+        val (agent, _) = emittingAgent(end)
+        val repo = FakeItineraries()
+        val returned = service(agent, repo, end).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        // 사용자에게 즉시 돌려주는 값 = day1 만, 아직 생성 중
+        returned.generationState shouldBe GenerationState.PARTIAL
+        returned.days.map { it.date } shouldContainExactly listOf(start)
+
+        // 2차가 끝난 뒤 저장본 = 전 일자, dayOrder 연속
+        val finished = repo.byTrip.getValue(tripId)
+        finished.generationState shouldBe GenerationState.COMPLETE
+        finished.days.map { it.date } shouldContainExactly listOf(start, start.plusDays(1), end)
+        finished.days.map { it.dayOrder } shouldContainExactly listOf(0, 1, 2)
+        finished.itineraryId shouldBe returned.itineraryId // 같은 일정을 이어 채운다(교체 아님)
+    }
+
+    "2차는 1차 배정 POI 를 excludedPoiIds 로 제외(TRIP-293)" {
+        val end = start.plusDays(2)
+        val (agent, poiByDate) = emittingAgent(end)
+        service(agent, FakeItineraries(), end).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].excludedPoiIds shouldBe emptyList()             // 1차엔 제외 없음
+        agent.captures[1].excludedPoiIds shouldContainExactly listOf(poiByDate.getValue(start))
+    }
+
+    "1차 시한은 day1 예산(5s), 2차는 전체 예산(20s)" {
+        val end = start.plusDays(2)
+        val (agent, _) = emittingAgent(end)
+        service(agent, FakeItineraries(), end).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].requestMeta.deadlineMs shouldBe 5_000L
+        agent.captures[1].requestMeta.deadlineMs shouldBe 20_000L
+    }
+
+    "단일일 여행: 2차 없이 바로 COMPLETE" {
+        val (agent, _) = emittingAgent(start)
+        val returned = service(agent, FakeItineraries(), start).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        returned.generationState shouldBe GenerationState.COMPLETE
+        agent.captures.size shouldBe 1 // 2차 호출 없음
+    }
+
+    "그 사이 사용자가 편집·확정했으면 2차 결과를 버린다(덮어쓰기 금지)" {
+        val end = start.plusDays(2)
+        val (agent, _) = emittingAgent(end)
+        val repo = FakeItineraries()
+        // 1차 저장 직후 사용자가 편집을 끝낸 상태(COMPLETE)를 시뮬레이션 — 2차는 이 결과를 건드리면 안 된다.
+        val edited = Itinerary.create(
+            tripId, SolveMode.DETERMINISTIC, false,
+            listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.COMPLETE,
+        )
+        repo.byTrip[tripId] = edited
+        SecondPhaseGenerator(agent, repo, NOOP_TX, clock)
+            .completeRemaining(tripId, edited.itineraryId, agentInputFor(end))
+
+        repo.byTrip.getValue(tripId) shouldBe edited // 그대로
+    }
+
+    "재생성으로 일정이 교체됐으면 낡은 2차 결과를 버린다" {
+        val end = start.plusDays(2)
+        val (agent, _) = emittingAgent(end)
+        val repo = FakeItineraries()
+        val regenerated = Itinerary.create(
+            tripId, SolveMode.DETERMINISTIC, false,
+            listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.PARTIAL,
+        )
+        repo.byTrip[tripId] = regenerated
+        // 앞선 1차가 만들었던(이미 교체된) 일정 id 로 도착한 2차
+        SecondPhaseGenerator(agent, repo, NOOP_TX, clock)
+            .completeRemaining(tripId, UUID.randomUUID(), agentInputFor(end))
+
+        repo.byTrip.getValue(tripId) shouldBe regenerated // 새 일정은 여전히 PARTIAL(제 2차를 기다린다)
+    }
+
+    "2차 결과를 반영조차 못하면 FAILED 로 드러낸다(1차분은 유효)" {
+        val end = start.plusDays(2)
+        val (agent, _) = emittingAgent(end)
+        val partial = Itinerary.create(
+            tripId, SolveMode.FULL_AI, false,
+            listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.PARTIAL,
+        )
+        // 완료 반영(replaceForTrip)만 터지고 FAILED 표시는 통과하는 저장소 — 상태 전이 경로를 갈라 본다.
+        val repo = object : FakeItineraries() {
+            override fun replaceForTrip(tripId: UUID, itinerary: Itinerary): Itinerary {
+                if (itinerary.generationState == GenerationState.COMPLETE) throw RuntimeException("db down")
+                return super.replaceForTrip(tripId, itinerary)
+            }
+        }
+        repo.byTrip[tripId] = partial
+        SecondPhaseGenerator(agent, repo, NOOP_TX, clock).completeRemaining(tripId, partial.itineraryId, agentInputFor(end))
+
+        val finished = repo.byTrip.getValue(tripId)
+        finished.generationState shouldBe GenerationState.FAILED
+        finished.days.map { it.date } shouldContainExactly listOf(start) // 1차분 보존
+    }
+
+    "2차 실패: 결정론 최소 폴백으로 나머지를 채우고 저하를 표시(INV-4 — 1차와 대칭)" {
+        val end = start.plusDays(2)
+        val poi1 = UUID.randomUUID()
+        // 1차만 성공하고 2차 호출에서 터지는 에이전트
+        val agent = object : ScheduleAgentPort {
+            var calls = 0
+            override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
+                if (calls++ > 0) throw RuntimeException("agent down")
+                return ScheduleAgentOutput(
+                    days = input.timeWindows.map {
+                        DaySchedule(it.date, listOf(VisitSlotDisplay(poi1, LocalTime.parse("10:00"), LocalTime.parse("11:00"), false, null, isFixed = false)))
+                    },
+                    day1ReadyAt = null, explanations = emptyMap(),
+                    solveMode = SolveMode.DETERMINISTIC, isFallback = false,
+                    freshness = FreshnessMeta(now, degraded = false),
+                )
+            }
+            override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+            override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
+        }
+        val repo = FakeItineraries()
+        service(agent, repo, end).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val finished = repo.byTrip.getValue(tripId)
+        finished.generationState shouldBe GenerationState.COMPLETE   // 실패를 이유로 나머지를 비워두지 않는다
+        finished.days.map { it.date } shouldContainExactly listOf(start, start.plusDays(1), end)
+        finished.days.first().slots.single().sourcePoiId shouldBe poi1 // day1(1차 결과)은 그대로 보존
+        finished.days.drop(1).all { it.slots.isEmpty() } shouldBe true // 폴백엔 고정 블록만(여기선 없음)
+        // 품질 저하는 감추지 않는다 — 두 호출 중 낮은 등급으로 기록
+        finished.solveMode shouldBe SolveMode.MINIMAL
+        finished.isFallback shouldBe true
     }
 })
