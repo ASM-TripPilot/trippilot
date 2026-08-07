@@ -11,6 +11,7 @@ dependencies {
 
     implementation(project(":common:core"))            // R5: 에러 계약
     implementation(project(":modules:trip"))            // R1: trip.api(TripFacade)만 — 날짜·소유 조회
+    implementation(project(":modules:change-log"))   // R1: 변경 이력 기록 — change-log.api(ChangeLogFacade)만 사용
     implementation(project(":modules:profile"))         // R1: profile.api(PreferenceFacade)만 — 취향 7축·예산등급
     implementation(project(":modules:saved-accommodation")) // R1: saved-accommodation.api(BaseAnchorFacade)만 — 거점 좌표 앵커
     implementation(project(":modules:place-data"))      // R1: place-data.api(CandidatePoolPort)만 — Fake 에이전트가 실 ACTIVE 후보 emit

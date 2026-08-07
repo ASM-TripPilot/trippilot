@@ -58,10 +58,11 @@ class ItineraryController(
         ItineraryResponse.from(editService.edit(principal.accountId(), tripId, request.toCommand()))
 }
 
-/** 편집 요청 — 수정된 전체 일자·슬롯 배열(슬롯 순서 = 배열 순서). */
-data class EditItineraryRequest(val days: List<EditDayRequest>) {
+/** 편집 요청 — 수정된 전체 일자·슬롯 배열(슬롯 순서 = 배열 순서). [reason] 은 선택(변경 이력에 남는다). */
+data class EditItineraryRequest(val days: List<EditDayRequest>, val reason: String? = null) {
     fun toCommand() = EditItinerary(
         days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
+        reason,
     )
 }
 data class EditDayRequest(val date: LocalDate, val slots: List<EditSlotRequest>)

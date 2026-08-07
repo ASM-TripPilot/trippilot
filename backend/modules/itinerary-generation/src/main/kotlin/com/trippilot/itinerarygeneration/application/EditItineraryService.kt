@@ -1,5 +1,11 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.changelog.api.AppendChangeLog
+import com.trippilot.changelog.api.ChangeLogFacade
+import com.trippilot.changelog.api.ChangeSourceType
+import com.trippilot.changelog.api.DaySnapshotView
+import com.trippilot.changelog.api.ItinerarySnapshotView
+import com.trippilot.changelog.api.SlotSnapshotView
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.DaySchedule
@@ -25,8 +31,8 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
 
-/** 편집 요청 — 전체 교체(사용자가 수정한 일자·슬롯 배열). 슬롯 순서 = 배열 순서. */
-data class EditItinerary(val days: List<EditDay>)
+/** 편집 요청 — 전체 교체(사용자가 수정한 일자·슬롯 배열). 슬롯 순서 = 배열 순서. [reason] 은 선택(변경 이력에 남는다). */
+data class EditItinerary(val days: List<EditDay>, val reason: String? = null)
 data class EditDay(val date: LocalDate, val slots: List<EditSlot>)
 data class EditSlot(
     val poiId: UUID,
@@ -46,6 +52,7 @@ class EditItineraryService(
     private val trips: TripFacade,
     private val itineraries: ItineraryRepository,
     private val scheduleAgent: ScheduleAgentPort,
+    private val changeLog: ChangeLogFacade,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
 ) {
@@ -63,7 +70,21 @@ class EditItineraryService(
         // 재검증(비차단) — 외부(ScheduleAgent) 호출은 트랜잭션 밖(DB 커넥션 안 물게, generate 와 동일). Fake 는 빈 목록.
         val violations = scheduleAgent.validate(edit.toOutput(current.solveMode, current.isFallback, clock.instant()))
         val flagged = reshape(current, edit, violations)
-        return tx.execute { itineraries.replaceForTrip(tripId, flagged) }!!
+        return tx.execute {
+            val saved = itineraries.replaceForTrip(tripId, flagged)
+            // 이력은 **같은 트랜잭션**에 — 일정만 바뀌고 이력이 빠지는 상태를 만들지 않는다(US-PLANB-09).
+            changeLog.append(
+                AppendChangeLog(
+                    tripId = tripId,
+                    actor = accountId.toString(),
+                    sourceType = ChangeSourceType.MANUAL,
+                    reason = edit.reason,
+                    before = current.toSnapshot(),
+                    after = saved.toSnapshot(),
+                ),
+            )
+            saved
+        }!!
     }
 
     /** 편집안 + 위반 → 새 일정 슬롯 배열(위반 슬롯 has_violation=true). identity·createdAt·solveMode 는 현행 보존. */
@@ -85,6 +106,13 @@ class EditItineraryService(
             current.generationState, days, current.createdAt, clock.instant(), // 생성 진행 상태는 편집과 무관 — 보존
         )
     }
+
+    /** 일정 → 변경 이력 스냅숏. 시각·순서만 담는다(INV-3 소요시간 없음). */
+    private fun Itinerary.toSnapshot() = ItinerarySnapshotView(
+        days.map { d ->
+            DaySnapshotView(d.date, d.slots.map { SlotSnapshotView(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) })
+        },
+    )
 }
 
 /** 편집안 → 재검증 입력(ScheduleAgentOutput). 시각·순서·고정은 슬롯 그대로. 거리/소요시간 없음(INV-3). */
