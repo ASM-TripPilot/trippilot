@@ -764,3 +764,25 @@ D3(지라 TRIP-181 티켓 본문의 사실 오기 2건 — 빈 스텁 서술·�
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-226 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260807-trip226-base-gate/00_gates.md`(게이트①-1 §미수령·게이트② §정본 반영 선택)·`frontend/src/features/trip/ui/TripWizardStep2Screen.tsx:352,477,486,500`·`frontend/src/features/trip/model/baseGate.ts`(`isOutsideTripPeriod`). 이 항목이 손댄 `aidlc/` 파일은 `construction/u1-accommodation-trip/functional-design/{frontend-components.md,business-rules.md}`와 이 `audit.md` append뿐이다.
 
 ---
+
+## Post-Design Correction — U3 functional-design 경로 표기 드리프트 2건 + VisitSlotDisplay 필드셋 불일치 재확인 (TRIP-294 [기록] 반영)
+**Timestamp**: 2026-08-08T04:20:00Z
+**User Input**: TRIP-294 사이클(`20260808-trip294-itinerary-codegen`) [설계] 3-a 맹점 훑기에서 정본 반영 후보 A~E 5건이 제시됐고, 사용자가 **B·C·D 3건을 선택**했다(A는 계약 공백이라 문서 정정이 아니라 백엔드 티켓 후보로 상신 대상으로 분류돼 선택지에서 제외, E는 이번 칸에 화면 표면이 0이라 라이브 Figma를 열지 않아 드리프트 여부를 판정하지 않음). D는 `frontend/docs/structure.md` 소관이라 별도로 반영했다 — 이 audit 항목은 아이디엘씨 소관인 B·C 2건만 다룬다.
+
+**AI Response**: 승인 완료된 `u3-ai-itinerary` 설계 문서군의 **경로 표기 오류 정정(B) + 기존 미해소 항목 재확인(C, 문서 미수정)**. 새 스토리·새 컴포넌트 계약 신설 0건 → 스테이지 진행 아님, `aidlc-state.md` 체크박스 변동 없음.
+
+(1) **`construction/plans/u3-ai-itinerary-functional-design-plan.md` — Step 1 표의 `POST /api/v1/trips/{tripId}/itinerary` → `POST /trips/{tripId}/itinerary`로 정정(B)**. `backend/docs/design/openapi.yaml`의 `servers` 레벨에 이미 `/api/v1` 프리픽스가 있고(`- url: https://api.trippilot.app/api/v1`), 개별 `paths`(`/trips/{tripId}/itinerary`, L649)에는 그 프리픽스가 없다 — 실측 확인. 근거: `backend/docs/design/openapi.yaml:10,649` 실측.
+
+(2) **`construction/u3-ai-itinerary/functional-design/frontend-components.md` §2 `GenerationGate` — `GET /trips/{id}` → `GET /trips/{tripId}`로 정정(B)**. openapi 경로 파라미터 실제 이름과 대조. 근거: `backend/docs/design/openapi.yaml:650` 실측(`{ name: tripId, in: path, ... }`).
+
+(3) **같은 문서 §6 `ConfirmCta` — `POST /confirm` → `POST /trips/{tripId}/itinerary/confirm`으로 정정(B)**. 축약 표기가 실제 라우트 전체 경로와 달라 혼동 소지. 근거: `backend/docs/design/openapi.yaml:677` 실측.
+
+(4) **`VisitSlotDisplay` 필드셋 불일치 정정(C)**. plan 문서 **D-U3-7** 행의 스키마 스니펫(`VisitSlotDisplay{poiId, startAt, endAt, endsNextDay, distanceRange?, isFixed}`)이 `openapi.yaml`의 실제 슬롯 스키마와 **양방향으로 어긋났다** — 문서엔 있고 계약엔 없는 필드(`distanceRange`), 계약엔 있고 문서엔 없는 필드(`hasViolation`)가 각각 하나씩. 실제 REST 슬롯 6필드(`poiId·startAt·endAt·isFixed·endsNextDay·hasViolation`, 전부 required)로 **스니펫을 교체**하고 정정 사실·근거를 인라인 병기했다. **D-U3-7의 관측 자체(영업시간·휴관 경고 결여)는 여전히 미해소**이며, `hasViolation`이 불리언 하나뿐이라 위반 *사유*를 못 나른다는 점을 함께 명시했다. 근거: `backend/docs/design/openapi.yaml` 슬롯 스키마 ↔ `frontend/src/shared/api/generated/schemas/itineraryDaysItemSlotsItem.ts`(TRIP-294 재생성분) 대조 실측.
+
+  ⚠️ **경위 기록**: 이 항목은 [기록](scribe)이 *"D-U3-7에 이미 나타나 있으므로 별도 정정 없이 재확인만"*으로 판단해 **한 차례 미반영으로 남겼던 것**을, 사이클 종료 대조(8단계)에서 오케스트레이터가 3-a 사용자 선택 목록과 대조해 발견하고 직접 반영했다. 사용자는 3-a에서 C를 **정정 대상으로 명시 선택**했으므로 재확인 격하는 선택 범위를 좁힌 것이었다.
+
+**미반영으로 남긴 것**: A(`GenerationMode` 3종 vs 2종 계약 공백) — 문서 정정 대상이 아니라 백엔드 티켓 후보로 개발로그에만 상신, aidlc 파일 미변경. E(밴드 h 결번 리포 밴드 맵 기록 여부) — 이번 칸 화면 표면 0으로 판정 보류, aidlc·리포 밴드 맵 모두 미변경.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-294 사이클(`20260808-trip294-itinerary-codegen`) [기록](scribe) 단계. 실측 근거는 `_workspace/20260808-trip294-itinerary-codegen/01_spec-analyst_brief.md`(3-a 정본 반영 후보 A~E)·`backend/docs/design/openapi.yaml:10,649,650,677`. 이 항목이 손댄 `aidlc/` 파일은 `construction/plans/u3-ai-itinerary-functional-design-plan.md`·`construction/u3-ai-itinerary/functional-design/frontend-components.md`와 이 `audit.md` append뿐이다.
+
+---

@@ -34,7 +34,7 @@
 | 컴포넌트 | 책임 | 상태 / 서버 |
 |---|---|---|
 | `MethodPicker` | 3방식 카드 + `추천` 배지("AI와 같이 짜기"). 하단 "세 방법은 언제든지 서로 전환할 수 있어요" | 로컬 선택 → 라우팅 |
-| `GenerationGate` | 선행 조건 검사(BR-U3-01·02) — 숙소 0이면 CTA 비활성 + 사유, 지오코딩 실패면 지도 지정 요청 | `GET /trips/{id}` 앵커 |
+| `GenerationGate` | 선행 조건 검사(BR-U3-01·02) — 숙소 0이면 CTA 비활성 + 사유, 지오코딩 실패면 지도 지정 요청 | `GET /trips/{tripId}` 앵커 |
 | `MustVisitPicker` | 필수 방문지 선택(h05) · 시각 지정(h07) | **U1 API·규칙 인용** — 새 계약 만들지 않음 |
 
 > **G-U3-3 반영**: 스토리가 요구한 "예상 소요·인터랙션 양"은 라이브 카드에 **없다**. 라이브를 정본으로 삼아 **넣지 않는다**.
@@ -87,7 +87,7 @@
 | `EditScreen` | h24 — 추가·삭제·재정렬·시간 조정 | 변경마다 `validate`(비차단) |
 | `ViolationBadge` | 위반 배지 + 사유 | 저장 후에도 지속 가시화(BR-U3-13) |
 | `SaveConflictSheet` | "○곳에서 시간이 안 맞아요" → **[AI 자동 보정] / [그대로 저장]** | `repair` |
-| `ConfirmCta` | **[일정 확정하기]** → 확정 의미 한 줄 안내 | `POST /confirm`. 스냅숏 동결 실패 시 거부(BR-U3-27) |
+| `ConfirmCta` | **[일정 확정하기]** → 확정 의미 한 줄 안내 | `POST /trips/{tripId}/itinerary/confirm`. 스냅숏 동결 실패 시 거부(BR-U3-27) |
 | `ConfirmedView` | h34 읽기전용 + D-day·출발 맥락 + **[일정 수정]** | 수정 시 `CONFIRMED → PLANNED`(BR-U3-29) |
 | `StaySuggestScreen` | h27 — 권역 지도 + 후보(평균 이동 거리 순, before/after 거리) | US-SCHED-11 |
 
