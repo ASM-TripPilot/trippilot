@@ -140,7 +140,7 @@ def test_invalid_stage_result_is_rejected_inv2() -> None:
     result = facade.solve(problem, deadline_ms=5000)
 
     assert result.solve_mode == SolveMode.RULE_FALLBACK   # 위반 해는 반환 안 됨
-    assert facade.validate(result, problem) == []
+    assert facade.validate(result, problem, deadline_ms=1000) == []
     assert any(e.reason.startswith("invalid") for e in trace.of_type(FallbackEvent))
 
 
@@ -242,7 +242,7 @@ def test_negative_deadline_still_returns_deterministic_fallback() -> None:
 
     assert result.is_fallback is True
     assert result.solve_mode in {SolveMode.RULE_FALLBACK, SolveMode.MINIMAL}
-    assert facade.validate(result, problem) == []        # 폴백도 유효 해 (INV-2)
+    assert facade.validate(result, problem, deadline_ms=1000) == []        # 폴백도 유효 해 (INV-2)
     assert any(e.reason == "deadline_exhausted:last_resort"
                for e in trace.of_type(FallbackEvent))
 
@@ -270,7 +270,7 @@ def test_pbt_solve_never_raises_conflict_for_any_deadline(
     assert result.is_fallback is True
     assert result.solve_mode in {SolveMode.RULE_FALLBACK, SolveMode.MINIMAL}
     assert result.score is not None
-    assert facade.validate(result, problem) == []
+    assert facade.validate(result, problem, deadline_ms=1000) == []
 
 
 def test_contradictory_fixed_blocks_still_raise_conflict() -> None:

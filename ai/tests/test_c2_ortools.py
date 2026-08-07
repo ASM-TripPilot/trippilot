@@ -63,7 +63,7 @@ def test_chain_prefers_ortools_when_feasible(setup) -> None:
     facade = HybridSolverFacade(chain, index, _EST, FakeClock(), InMemoryTrace())
     result = facade.solve(problem, deadline_ms=5000)
     # OR-Tools가 유효 해를 내면 OR_TOOLS, 아니면 폴백 — 어느 쪽이든 유효해야 함
-    assert facade.validate(result, problem) == []
+    assert facade.validate(result, problem, deadline_ms=1000) == []
     assert result.solve_mode in (SolveMode.OR_TOOLS, SolveMode.RULE_FALLBACK,
                                  SolveMode.MINIMAL)
 
