@@ -183,7 +183,15 @@ class DaySolution:
 
 @dataclass(frozen=True, slots=True)
 class ItineraryProblem:
-    """솔버 입력. candidates ⊆ CandidatePool (INV-1). seed 고정 → 결정론(INV-4)."""
+    """솔버 입력. candidates ⊆ CandidatePool (INV-1). seed 고정 → 결정론(INV-4).
+
+    excluded_poi_ids: 이미 다른 호출에서 배정된 POI (day1 2단계 생성 — TRIP-293).
+    1차 `days=[day1]`로 solve → 배정된 poi_id를 2차 `days=[나머지]`의 제외 목록으로
+    넘기면 두 호출이 합쳐져도 POI 중복이 없다. 기본 빈 집합 = 기존 동작 그대로.
+
+    제외의 의미는 **후보 풀 축소**뿐이다 — closed-set 검증(INV-1)을 우회하지 않고,
+    고정 블록(HC3)은 제외보다 우선한다(모순 입력에서 하드 제약을 깨지 않기 위해).
+    """
 
     schedule_id: ScheduleId
     days: tuple[date, ...]
@@ -194,6 +202,7 @@ class ItineraryProblem:
     day_window: TimeWindow
     seed: int
     anchor: GeoPoint | None = None  # 숙소 기점 (정본 §4.1 — U1 누락분 보강)
+    excluded_poi_ids: frozenset[PoiId] = frozenset()  # 기배정 POI (TRIP-293)
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -210,6 +219,8 @@ class ItineraryProblem:
             "day_window": self.day_window.to_dict(),
             "seed": self.seed,
             "anchor": self.anchor.to_dict() if self.anchor else None,
+            # frozenset은 JSON 원시 타입이 아니다 → 정렬된 list (결정론적 직렬화)
+            "excluded_poi_ids": sorted(str(p) for p in self.excluded_poi_ids),
         }
 
     @classmethod
@@ -226,6 +237,10 @@ class ItineraryProblem:
             day_window=TimeWindow.from_dict(d["day_window"]),
             seed=d["seed"],
             anchor=GeoPoint.from_dict(d["anchor"]) if d.get("anchor") else None,
+            # d.get: 키가 없는 기존 직렬화본도 그대로 읽힌다 (하위호환)
+            excluded_poi_ids=frozenset(
+                PoiId(x) for x in d.get("excluded_poi_ids", ())
+            ),
         )
 
 

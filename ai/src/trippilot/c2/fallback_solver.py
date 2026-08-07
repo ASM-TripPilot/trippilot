@@ -1,6 +1,7 @@
 """RuleFallbackSolver — 체인 최후 단계 (정본 §4.3 구성 휴리스틱, U2 FD §2.5).
 
 항상 해를 반환한다 (INV-4 구조 보장): 최악 = 고정 블록만(또는 빈 일자).
+problem.excluded_poi_ids는 후보 풀에서 제외 (2단계 생성 중복 방지 — TRIP-293).
 결정론: 점수·id 정렬 기반, 무작위성 없음, wall-clock 미사용.
 벤치마크에서 CP-SAT 웜스타트 힌트로도 검증된 그 그리디의 정식판.
 """
@@ -55,8 +56,11 @@ class RuleFallbackSolver:
     def solve(self, problem: ItineraryProblem,
               remaining_ms: int = 0) -> ItinerarySolution:
         score_of = {c.poi_id: c for c in problem.candidates}
+        # 기배정 POI(TRIP-293)는 후보 풀에서만 뺀다 — 고정 블록(HC3)은 그대로 배치
+        ranked_src = [c for c in problem.candidates
+                      if c.poi_id not in problem.excluded_poi_ids]
         # 결정론 정렬: 점수 내림차순 → id 오름차순 (동점 tie-break)
-        ranked = sorted(problem.candidates, key=lambda c: (-c.score, str(c.poi_id)))
+        ranked = sorted(ranked_src, key=lambda c: (-c.score, str(c.poi_id)))
         fixed_by_day: dict = {}
         for fb in problem.fixed_blocks:
             fixed_by_day.setdefault(fb.window.start.date(), []).append(fb)

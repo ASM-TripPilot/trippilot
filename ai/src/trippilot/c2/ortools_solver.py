@@ -6,6 +6,8 @@
 - 후보 > 60은 점수 상위 60 프리필터 (이동행렬 O(N²) 방지)
 
 일자별 순차 해결: 잔여 시간을 일자 수로 분할, 앞 일자에서 쓴 POI는 제외.
+problem.excluded_poi_ids(다른 호출에서 이미 배정된 POI)는 used 초기값으로 주입한다
+— 2단계 생성(day1 먼저 → 나머지)에서 호출 간 중복 방지 (TRIP-293).
 INFEASIBLE(고정 블록 모순 등)·UNKNOWN이면 None → 체인 다음 단계 (INV-4).
 """
 
@@ -51,7 +53,8 @@ class OrToolsSolver:
     def solve(self, problem: ItineraryProblem,
               remaining_ms: int) -> ItinerarySolution | None:
         per_day_ms = max(_MIN_DAY_MS, remaining_ms // max(1, len(problem.days)))
-        used: set[PoiId] = set()
+        # 기배정 POI(TRIP-293)는 "이미 앞 일자에서 쓴 것"과 동일 취급 = used 초기값
+        used: set[PoiId] = set(problem.excluded_poi_ids)
         days_out: list[DaySolution] = []
         for day in problem.days:
             slots = self._solve_day(problem, day, used, per_day_ms)
@@ -211,6 +214,7 @@ class OrToolsSolver:
             day_window=problem.day_window,
             seed=problem.seed,
             anchor=problem.anchor,
+            excluded_poi_ids=problem.excluded_poi_ids,
         )
         greedy = RuleFallbackSolver(self._pois, self._est, self._cfg).solve(sub)
         return {s.poi_id: _mod(s.start_at) for d in greedy.days for s in d.slots}
