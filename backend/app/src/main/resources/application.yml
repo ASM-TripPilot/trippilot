@@ -53,7 +53,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
   endpoint:
     health:
       probes:
@@ -61,3 +61,42 @@ management:
   health:
     db:
       enabled: true
+  # 메트릭은 Micrometer 가 OTLP 로 push 한다(TRIP-218).
+  # 스크레이프가 아니라 push 이므로 수집기가 앱에 접근할 필요가 없다.
+  otlp:
+    metrics:
+      export:
+        enabled: ${OTEL_METRICS_ENABLED:true}
+        url: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/metrics
+        step: 15s
+        resource-attributes:
+          service.name: trippilot-backend
+          deployment.environment: ${DEPLOY_ENV:local}
+
+# ── 관측성(TRIP-218) ──────────────────────────────────────────────────────
+# 신호별 담당을 나눠 중복 발행을 막는다.
+#   로그          = logback OTLP appender (logback-spring.xml, 마스킹 래퍼 경유)
+#   메트릭·트레이스 = OTel Java 에이전트 (-javaagent)
+#
+# 메트릭이 에이전트 담당인 이유는 위 management.otlp.metrics.export 주석 참조
+# (에이전트와 Micrometer push 는 공존하지 못한다 — 실측).
+#
+# 트레이스·로그 전송은 **에이전트가 있어야** 동작한다. 에이전트가 없으면
+# GlobalOpenTelemetry 가 no-op 이라 OTLP 로 나가지 않고, stdout JSON 로그만 남는다
+# (조용히 죽지 않도록 ObservabilityConfiguration 이 기동 로그로 알린다).
+#
+# 실행 예(컨테이너 밖에서 직접 돌릴 때. 컨테이너는 backend/Dockerfile 이 같은 값을 이미 갖는다):
+#   JAVA_TOOL_OPTIONS="-javaagent:$HOME/otel/opentelemetry-javaagent.jar" \
+#   OTEL_SERVICE_NAME=trippilot-backend \
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+#   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
+#   OTEL_TRACES_EXPORTER=otlp OTEL_LOGS_EXPORTER=otlp OTEL_METRICS_EXPORTER=otlp \
+#   OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED=false \
+#   OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED=false \
+#   ./gradlew :app:bootRun
+#
+# 마지막 세 개가 중요하다.
+#   METRICS_EXPORTER=otlp          — 메트릭은 에이전트가 내보낸다(Micrometer push 는 유실됨)
+#   LOGBACK_APPENDER_ENABLED=false — 에이전트가 root 로거에 appender 를 자동 부착하면
+#                                    마스킹을 우회한 원문이 수집기로 나간다
+#   LOGBACK_MDC_ENABLED=false      — 에이전트 2.14.0 에서 NoSuchFieldError 로 기동 실패

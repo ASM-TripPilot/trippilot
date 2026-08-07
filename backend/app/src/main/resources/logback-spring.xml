@@ -31,14 +31,35 @@
                 <path>providerEmail</path>
                 <path>birthDate</path>
                 <path>birth_date</path>
-                <!-- 값 패턴: Bearer 토큰 · 이메일 주소 -->
+                <!-- 값 패턴: Bearer 토큰 · JWT 원문 · 이메일 주소 -->
                 <value>Bearer\s+[A-Za-z0-9\-._~+/]+=*</value>
+                <!--
+                  Bearer 접두사 없이 노출되는 JWT 3분절. 위 <path> 목록에 없는 필드
+                  (예: MDC 의 traceId)에 토큰이 실리면 이 규칙만이 막는다 — 실측으로 발견된 누출 경로다.
+                  LogMasker 의 같은 규칙과 짝이며, MaskingParityTest 가 두 경로의 일치를 감시한다.
+                -->
+                <value>\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*</value>
                 <value>[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}</value>
             </jsonGeneratorDecorator>
         </encoder>
     </appender>
 
+    <!--
+      OTLP 경로(TRIP-218) — SigNoz 수집.
+      ⚠️ 위 JSON appender 의 마스킹은 **인코더 레벨**이라 이 경로에는 걸리지 않는다.
+      그대로 두면 마스킹을 우회한 원문이 수집기로 나가므로 MaskingAppender 로 감싼다.
+      LogMasker 의 규칙 목록은 위 path/value 목록과 동기 유지할 것.
+    -->
+    <appender name="OTLP_RAW" class="io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender">
+        <captureCodeAttributes>true</captureCodeAttributes>
+        <captureMdcAttributes>*</captureMdcAttributes>
+    </appender>
+    <appender name="OTLP" class="com.trippilot.app.observability.MaskingAppender">
+        <appender-ref ref="OTLP_RAW"/>
+    </appender>
+
     <root level="INFO">
         <appender-ref ref="JSON"/>
+        <appender-ref ref="OTLP"/>
     </root>
 </configuration>
