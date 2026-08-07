@@ -7,6 +7,7 @@ import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
+import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.SolveMode
@@ -205,6 +206,39 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val (crc, confirmed) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
         crc shouldBe 200
         confirmed["days"][0]["slots"][0]["distanceRange"].asText() shouldBe "약 1.2km · 도보 추정"
+    }
+
+    @Test
+    fun `추천 근거·후보 요약이 재조회에서 유실되지 않는다(TRIP-306)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        // Fake 는 explanations·candidatesSummary 를 내지 않으므로 리포지토리로 직접 넣어 영속·왕복을 본다.
+        val slot = VisitSlot.of(
+            UUID.fromString(poiId(token)), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            placementReason = "취향(미식)과 동선에 맞는 곳",
+        )
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(
+                UUID.fromString(trip), SolveMode.FULL_AI, isFallback = false,
+                days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(slot))),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+                candidatesSummary = CandidatesSummary("LOW", 7, listOf("CAFE")),
+            ),
+        )
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        body["days"][0]["slots"][0]["placementReason"].asText() shouldBe "취향(미식)과 동선에 맞는 곳"
+        body["candidatesSummary"]["level"].asText() shouldBe "LOW"      // jsonb 왕복
+        body["candidatesSummary"]["poolSize"].asInt() shouldBe 7
+        body["candidatesSummary"]["shortfallCategories"][0].asText() shouldBe "CAFE"
+
+        // 확정해도 남는다 — 동결은 스냅숏 참조만 붙이는 것
+        val (crc, confirmed) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+        crc shouldBe 200
+        confirmed["days"][0]["slots"][0]["placementReason"].asText() shouldBe "취향(미식)과 동선에 맞는 곳"
+        confirmed["candidatesSummary"]["level"].asText() shouldBe "LOW"
     }
 
     @Test

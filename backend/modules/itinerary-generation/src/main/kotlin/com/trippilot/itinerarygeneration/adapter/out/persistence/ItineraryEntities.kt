@@ -4,6 +4,8 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
@@ -25,6 +27,9 @@ class ItineraryEntity(
     @Column(name = "generation_state") var generationState: String,
     @Column(name = "created_at") var createdAt: Instant,
     @Column(name = "updated_at") var updatedAt: Instant,
+    // 후보 충분성(BR-U2-05) — AI 판정값 그대로. Map 으로 jsonb 매핑(문자열 선직렬화 시 이중 인코딩).
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "candidates_summary") var candidatesSummary: Map<String, Any>?,
 )
 
 /** itinerary_day(V2.7). 일자별. */
@@ -52,6 +57,7 @@ class VisitSlotEntity(
     @Column(name = "has_violation") var hasViolation: Boolean,
     @Column(name = "ends_next_day") var endsNextDay: Boolean,
     @Column(name = "distance_range") var distanceRange: String?,
+    @Column(name = "placement_reason") var placementReason: String?,
 )
 
 interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {

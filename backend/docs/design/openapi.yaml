@@ -987,6 +987,17 @@ components:
       required: [days]
       description: 편집(전체 교체) — 수정된 일자·슬롯 배열. 슬롯 순서 = 배열 순서
       properties:
+        candidatesSummary:
+          nullable: true
+          description: >
+            후보 충분성(BR-U2-05). **판정은 AI 소유** — 백엔드는 level 을 그대로 전달하고 재계산하지 않는다.
+            LOW 면 "후보가 적어요" 안내를 띄운다. AI 가 값을 주지 않으면 null.
+          type: object
+          required: [level, poolSize, shortfallCategories]
+          properties:
+            level: { type: string, enum: [HIGH, MEDIUM, LOW] }
+            poolSize: { type: integer }
+            shortfallCategories: { type: array, items: { type: string } }
         days:
           type: array
           items:
@@ -1030,6 +1041,17 @@ components:
       type: object
       required: [days]
       properties:
+        candidatesSummary:
+          nullable: true
+          description: >
+            후보 충분성(BR-U2-05). **판정은 AI 소유** — 백엔드는 level 을 그대로 전달하고 재계산하지 않는다.
+            LOW 면 "후보가 적어요" 안내를 띄운다. AI 가 값을 주지 않으면 null.
+          type: object
+          required: [level, poolSize, shortfallCategories]
+          properties:
+            level: { type: string, enum: [HIGH, MEDIUM, LOW] }
+            poolSize: { type: integer }
+            shortfallCategories: { type: array, items: { type: string } }
         days:
           type: array
           items:
@@ -1066,6 +1088,17 @@ components:
             (day1만 동결된 채 잠기거나, 뒤이어 도착하는 2차 결과가 편집을 덮어쓰는 것 방지).
             생성 POST 는 day1 만 담은 PARTIAL 을 즉시 반환하므로, 클라이언트는 GET 으로 COMPLETE/FAILED 까지
             폴링해 나머지 일자를 받는다(여행이 하루면 즉시 COMPLETE).
+        candidatesSummary:
+          nullable: true
+          description: >
+            후보 충분성(BR-U2-05). **판정은 AI 소유** — 백엔드는 level 을 그대로 전달하고 재계산하지 않는다.
+            LOW 면 "후보가 적어요" 안내를 띄운다. AI 가 값을 주지 않으면 null.
+          type: object
+          required: [level, poolSize, shortfallCategories]
+          properties:
+            level: { type: string, enum: [HIGH, MEDIUM, LOW] }
+            poolSize: { type: integer }
+            shortfallCategories: { type: array, items: { type: string } }
         days:
           type: array
           items:
@@ -1085,6 +1118,12 @@ components:
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean, description: "자정 넘김(HC4) — true 면 endAt 은 익일 시각(시작일 귀속)" }
                     hasViolation: { type: boolean, description: "편집 재검증(HC1-4) 위반 표시(비차단)" }
+                    placementReason:
+                      type: string
+                      nullable: true
+                      description: >
+                        이 장소를 고른 이유(BR-U2-04). 문구는 시각·소요시간을 언급하지 않는다(BR-U2-09) —
+                        집행은 AI 프롬프트·후처리 책임이고 경계에서 문자열 검사는 하지 않는다.
                     distanceRange:
                       type: string
                       nullable: true

@@ -91,7 +91,24 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/itinerary/generate"))
             .andRespond(withSuccess(aiBody("LLM"), MediaType.APPLICATION_JSON))
-        adapter.generate(input).solveMode shouldBe SolveMode.FULL_AI // LLM 도 정상 산출
+        val out = adapter.generate(input)
+        out.solveMode shouldBe SolveMode.FULL_AI // LLM 도 정상 산출
+        // 형태가 계약과 다르면(level 없음) 등급을 지어내지 않고 없는 것으로 둔다 — 생성은 정상 진행
+        out.candidatesSummary shouldBe null
+    }
+
+    "candidates_summary 가 계약 형태면 그대로 전달한다(판정은 AI 소유 — 재계산 없음)" {
+        val (adapter, server) = fixture()
+        val body = aiBody("OR_TOOLS").replace(
+            """"candidates_summary":{"total":42}""",
+            """"candidates_summary":{"level":"LOW","pool_size":7,"shortfall_categories":["CAFE"]}""",
+        )
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/generate"))
+            .andRespond(withSuccess(body, MediaType.APPLICATION_JSON))
+        val summary = adapter.generate(input).candidatesSummary!!
+        summary.level shouldBe "LOW"
+        summary.poolSize shouldBe 7
+        summary.shortfallCategories shouldBe listOf("CAFE")
     }
 
     "RULE_FALLBACK → DETERMINISTIC, 200 + is_fallback=true 는 예외 없이 사용(대원칙)" {

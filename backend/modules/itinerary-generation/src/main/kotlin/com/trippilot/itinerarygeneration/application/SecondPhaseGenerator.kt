@@ -74,7 +74,7 @@ class SecondPhaseGenerator(
             val updated = current.completeGeneration(
                 current.days + output.toRemainingDays(current.days.size, secondInput.timeWindows.map { it.date }),
                 clock.instant(),
-                output.solveMode, output.isFallback,
+                output.solveMode, output.isFallback, output.candidatesSummary,
             )
             // 조건부 쓰기 — 위 가드를 읽은 뒤 재생성이 끼어들었으면 여기서 0행이 되어 아무것도 덮어쓰지 않는다.
             if (!itineraries.replaceIfCurrent(tripId, itineraryId, updated)) {
@@ -100,7 +100,11 @@ class SecondPhaseGenerator(
             ItineraryDay.of(
                 d.date, offset + idx,
                 d.slots.mapIndexed { slotIdx, s ->
-                    VisitSlot.of(s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed, endsNextDay = s.endsNextDay, distanceRange = s.distanceRange)
+                    VisitSlot.of(
+                        s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
+                        endsNextDay = s.endsNextDay, distanceRange = s.distanceRange,
+                        placementReason = explanations[SlotKey.of(d.date, s.poiId)],
+                    )
                 },
             )
         }

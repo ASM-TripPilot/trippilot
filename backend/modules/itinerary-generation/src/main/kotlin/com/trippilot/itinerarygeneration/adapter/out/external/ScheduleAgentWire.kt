@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.adapter.out.external
 
+import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
@@ -22,6 +23,8 @@ internal data class AiScheduleResponse(
     val days: List<AiDay> = emptyList(),
     val day1ReadyAt: Instant? = null,
     val explanations: Map<String, String> = emptyMap(),
+    // 후보 충분성 — AI 가 안 주면 null(백엔드가 지어내지 않는다).
+    val candidatesSummary: AiCandidatesSummary? = null,
     val solveMode: String,
     val isFallback: Boolean = false,
     val freshness: AiFreshness? = null,
@@ -42,6 +45,19 @@ internal data class AiSlot(
  * AI `FreshnessMeta` — 패킷 단일 source 의 신선도(외부 API 캐시 관점). 백엔드 도메인의
  * `FreshnessMeta(generatedAt, degraded)` 와 개념이 달라 아래 규칙으로 사영한다.
  */
+/**
+ * AI 후보 충분성 보고(`candidates_summary`) — 판정은 AI 소유라 값을 그대로 받는다(등급을 재정의하지 않는다).
+ *
+ * ⚠ **실제 필드명이 아직 미확정이다**(계약 초안의 `SufficiencyReport`). 그래서 전 필드를 optional 로 두고,
+ * `level` 이 없으면 요약 자체를 없는 것으로 본다 — 부가 메타 하나 때문에 일정 생성이 통째로 실패하면 안 된다.
+ * 형태가 확정되면 여기만 조이면 된다(TRIP-282 묶음).
+ */
+internal data class AiCandidatesSummary(
+    val level: String? = null,
+    val poolSize: Int = 0,
+    val shortfallCategories: List<String> = emptyList(),
+)
+
 internal data class AiFreshness(
     val source: String? = null,
     val fetchedAt: Instant? = null,
@@ -63,6 +79,10 @@ internal fun AiScheduleResponse.toDomain(receivedAt: Instant): ScheduleAgentOutp
     },
     day1ReadyAt = day1ReadyAt,
     explanations = explanations,
+    // level 이 없으면 등급을 지어내지 않는다 — 없는 것으로 둔다.
+    candidatesSummary = candidatesSummary?.level?.let {
+        CandidatesSummary(it, candidatesSummary.poolSize, candidatesSummary.shortfallCategories)
+    },
     solveMode = solveMode.toSolveMode(),
     isFallback = isFallback,
     freshness = FreshnessMeta(freshness?.fetchedAt ?: receivedAt, degraded = freshness?.stale ?: false),

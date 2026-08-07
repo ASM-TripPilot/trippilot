@@ -98,6 +98,7 @@ data class ItineraryResponse(
     val solveMode: String,
     val isFallback: Boolean,
     val generationState: String,
+    val candidatesSummary: CandidatesSummaryResponse?,
     val days: List<DayResponse>,
 ) {
     companion object {
@@ -108,6 +109,7 @@ data class ItineraryResponse(
             solveMode = i.solveMode.name,
             isFallback = i.isFallback,
             generationState = i.generationState.name,
+            candidatesSummary = i.candidatesSummary?.let { CandidatesSummaryResponse(it.level, it.poolSize, it.shortfallCategories) },
             days = i.days.map { d ->
                 DayResponse(d.date, d.slots.map { s -> SlotResponse.of(s, surfaces[s.sourcePoiId]) })
             },
@@ -117,10 +119,14 @@ data class ItineraryResponse(
 
 data class DayResponse(val date: LocalDate, val slots: List<SlotResponse>)
 
+/** 후보 충분성(BR-U2-05) — **AI 판정값 그대로**. 백엔드는 level 을 재계산하지 않는다. */
+data class CandidatesSummaryResponse(val level: String, val poolSize: Int, val shortfallCategories: List<String>)
+
 /**
  * 방문 슬롯 표시 — 시각·순서만(INV-2, 소요시간 없음 INV-3).
  * [endsNextDay]: 자정 넘김(HC4, endAt=익일 시각·시작일 귀속). [hasViolation]: 편집 재검증(HC1-4) 위반 표시(비차단).
  *
+ * [placementReason]: 이 장소를 고른 이유(BR-U2-04). 시각·소요시간 언급 없음(BR-U2-09).
  * [distanceRange]: 직전 지점에서의 이동 **거리 표시 문자열**(BR-U2-08) — 소요시간은 어떤 이유로도 없다(INV-3).
  * POI 표면(이름·좌표·사진·영업시간)은 추가 왕복 없이 여기 실린다(BR-U3-09). 정본에도 동결본에도 없는
  * 장소는 표면 필드가 전부 null 이다 — 그 경우에도 슬롯 자체는 사라지지 않는다.
@@ -134,6 +140,7 @@ data class SlotResponse(
     val endsNextDay: Boolean,
     val hasViolation: Boolean,
     val distanceRange: String?,
+    val placementReason: String?,
     val nameKo: String?,
     val lat: Double?,
     val lng: Double?,
@@ -152,6 +159,7 @@ data class SlotResponse(
             endsNextDay = s.endsNextDay,
             hasViolation = s.hasViolation,
             distanceRange = s.distanceRange,
+            placementReason = s.placementReason,
             nameKo = surface?.nameKo,
             lat = surface?.lat,
             lng = surface?.lng,

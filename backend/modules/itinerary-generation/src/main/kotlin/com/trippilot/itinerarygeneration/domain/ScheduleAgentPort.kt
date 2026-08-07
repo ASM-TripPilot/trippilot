@@ -91,13 +91,25 @@ data class RequestMeta(val requestId: String, val requestedAt: Instant, val dead
 data class ScheduleAgentOutput(
     val days: List<DaySchedule>,
     val day1ReadyAt: Instant?,             // day1 우선 반환 시각(5초 정책)
-    val explanations: Map<String, String>, // slotRef → 추천 이유(시각·소요시간 언급 금지)
+    /**
+     * 슬롯별 추천 이유. 키 규약 = `slotKey = "{date}#{poiId}"`(BR-U2-04 · Violation.slotKey 와 같은 규약).
+     * 문구는 시각·소요시간을 언급하지 않는다(BR-U2-09 — INV-2·INV-3 우회 차단). 집행은 AI 프롬프트·후처리 책임.
+     */
+    val explanations: Map<String, String>,
     val solveMode: SolveMode,              // FULL_AI | DETERMINISTIC | MINIMAL (도메인 재사용)
     val isFallback: Boolean,               // 침묵 실패 금지(INV-4, IO-2)
     val freshness: FreshnessMeta,
+    /** 후보 충분성 보고(BR-U2-05). **판정은 AI 소유** — 백엔드는 그대로 전달하고 재계산하지 않는다. */
+    val candidatesSummary: CandidatesSummary? = null,
 )
 
 data class DaySchedule(val date: LocalDate, val slots: List<VisitSlotDisplay>)
+
+/**
+ * 후보 충분성(BR-U2-05). [level] LOW 면 클라이언트가 "후보가 적어요" 안내를 띄운다.
+ * **판정은 AI 소유** — 백엔드는 level 을 그대로 전달하고 재계산하지 않는다.
+ */
+data class CandidatesSummary(val level: String, val poolSize: Int, val shortfallCategories: List<String> = emptyList())
 
 /**
  * 표시용 방문 슬롯 — 솔버 검증 시각·순서만(INV-2). **소요시간(duration) 필드 없음(INV-3)** — 거리만([distanceRange]).

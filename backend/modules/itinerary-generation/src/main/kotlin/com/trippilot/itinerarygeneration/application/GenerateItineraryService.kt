@@ -173,11 +173,16 @@ class GenerateItineraryService(
             ItineraryDay.of(
                 d.date, dayIdx,
                 d.slots.mapIndexed { slotIdx, s ->
-                    VisitSlot.of(s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed, endsNextDay = s.endsNextDay, distanceRange = s.distanceRange)
+                    VisitSlot.of(
+                        s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
+                        endsNextDay = s.endsNextDay, distanceRange = s.distanceRange,
+                        // 추천 근거를 슬롯에 붙여 영속한다 — 안 붙이면 재조회에서 사라진다(BR-U2-04 영속 항).
+                        placementReason = explanations[SlotKey.of(d.date, s.poiId)],
+                    )
                 },
             )
         }
-        return Itinerary.create(tripId, solveMode, isFallback, days, clock.instant(), state)
+        return Itinerary.create(tripId, solveMode, isFallback, days, clock.instant(), state, candidatesSummary)
     }
 
     companion object {

@@ -262,6 +262,33 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, NOOP_TX, clock)
     }
 
+    "추천 근거가 slotKey 로 슬롯에 붙어 영속된다(TRIP-306 · BR-U2-04)" {
+        val poi = UUID.randomUUID()
+        val agent = object : ScheduleAgentPort {
+            override fun generate(input: ScheduleAgentInput) = ScheduleAgentOutput(
+                days = input.timeWindows.map { tw ->
+                    DaySchedule(tw.date, listOf(VisitSlotDisplay(poi, LocalTime.parse("10:00"), LocalTime.parse("11:00"), false, null, isFixed = false)))
+                },
+                day1ReadyAt = null,
+                // 키 규약 = "{date}#{poiId}" — 어긋나면 근거가 슬롯에 안 붙고 조용히 빈 값이 된다
+                explanations = mapOf("$start#$poi" to "취향(미식)과 동선에 맞는 곳"),
+                solveMode = SolveMode.DETERMINISTIC, isFallback = false,
+                freshness = FreshnessMeta(now, degraded = false),
+                candidatesSummary = com.trippilot.itinerarygeneration.domain.CandidatesSummary("LOW", 7, listOf("CAFE")),
+            )
+            override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+            override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
+        }
+        val repo = FakeItineraries()
+        val returned = service(agent, repo, start).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        returned.days.single().slots.single().placementReason shouldBe "취향(미식)과 동선에 맞는 곳"
+        // 후보 요약은 AI 값 그대로 — 백엔드가 등급을 재계산하지 않는다
+        returned.candidatesSummary!!.level shouldBe "LOW"
+        returned.candidatesSummary!!.poolSize shouldBe 7
+        returned.candidatesSummary!!.shortfallCategories shouldBe listOf("CAFE")
+    }
+
     "다일 여행: 반환은 day1 만·PARTIAL, 2차 완료 후 전 일자·COMPLETE" {
         val end = start.plusDays(2)
         val (agent, _) = emittingAgent(end)
