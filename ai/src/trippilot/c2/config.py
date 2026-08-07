@@ -22,10 +22,20 @@ def _default_safety() -> dict[TransportMode, float]:
 
 
 # G51 — 카테고리 기본 체류시간(분). B-1(체류시간 ML)의 폴백 테이블.
+# PoiCategory 전 값을 덮어야 한다(직접 dict 조회 — 누락 시 KeyError).
+# 신규 3종은 G51 원표(ai-data-design.md §2.2, 세분 택소노미)를 현 8종으로 접어서 도출:
+#   NIGHT_VIEW 60 — 원표에 대응 행 없음. 전망대·야경 포인트는 조망 중심 단일 지점이라
+#                   관람 동선이 있는 SIGHT(75)보다 짧고 CAFE(45)보다는 길다.
+#   NATURE     90 — 원표 PARK 60(도심 공원)이 하한이나 '자연'은 산·해변·산책로를 함께 담아
+#                   이동 반경이 넓다 → SIGHT(75) 위, 시간 고정형 ACTIVITY(120) 아래.
+#   CULTURE    90 — 원표 MUSEUM 120 + HISTORIC 60을 함께 담는 상위 묶음이라 그 중간값.
 STAY_DEFAULT_MIN: dict[PoiCategory, int] = {
     PoiCategory.FOOD: 60,
     PoiCategory.CAFE: 45,
     PoiCategory.SIGHT: 75,
+    PoiCategory.NIGHT_VIEW: 60,
+    PoiCategory.NATURE: 90,
+    PoiCategory.CULTURE: 90,
     PoiCategory.ACTIVITY: 120,
     PoiCategory.SHOPPING: 60,
     PoiCategory.STAY: 30,
