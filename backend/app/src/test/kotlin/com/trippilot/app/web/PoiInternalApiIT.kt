@@ -19,7 +19,7 @@ import java.time.Instant
 
 /**
  * TRIP-265 — 리버스 POI read 포트 E2E. AI(M7) 경계용 `/internal/pois`(인증 필요, snake_case).
- * 시드 제주 POI(성산일출봉=자연/NATURE, image·영업시간 미보유→PARTIAL) 사용.
+ * 시드 제주 POI(성산일출봉=자연/NATURE, 영업시간 미보유→MINIMAL) 사용.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
@@ -63,7 +63,7 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
         poi["name_ko"].asText() shouldBe "성산일출봉"
         poi["category"].asText() shouldBe "NATURE"        // 자연 → NATURE
         poi["data_status"].asText() shouldBe "ACTIVE"
-        poi["data_quality"].asText() shouldBe "PARTIAL"   // 사진·영업시간 미보유
+        poi["data_quality"].asText() shouldBe "MINIMAL"   // 영업시간 미보유 → 영업일 판정 불가(AI 후보풀 제외 대상)
         poi.has("saved_count") shouldBe true
         poi.has("duration") shouldBe false                // INV-3
     }

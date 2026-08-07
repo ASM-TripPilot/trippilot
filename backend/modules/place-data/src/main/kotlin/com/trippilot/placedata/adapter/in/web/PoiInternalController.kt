@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies
 import com.fasterxml.jackson.databind.annotation.JsonNaming
 import com.trippilot.placedata.application.PoiReadService
 import com.trippilot.placedata.application.PoiWithDistance
-import com.trippilot.placedata.application.isDataFull
-import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -58,7 +56,7 @@ data class PoiReadResponse(
     val dataStatus: String,      // ACTIVE(현재 read 는 ACTIVE만)
     val source: String,          // KAKAO_LOCAL/TOURAPI/MANUAL
     val savedCount: Long,
-    val dataQuality: String,     // FULL/PARTIAL
+    val dataQuality: String,     // FULL/PARTIAL/MINIMAL (완전성 파생)
     val distanceM: Double?,      // 반경 조회 시 중심 거리(INV-3: 거리 OK)
 ) {
     companion object {
@@ -75,7 +73,7 @@ data class PoiReadResponse(
                 dataStatus = p.dataStatus.name,
                 source = p.source.name,
                 savedCount = p.savedCount,
-                dataQuality = if (p.isDataFull()) "FULL" else "PARTIAL",
+                dataQuality = p.dataQuality().name,
                 distanceM = pd.distanceM,
             )
         }

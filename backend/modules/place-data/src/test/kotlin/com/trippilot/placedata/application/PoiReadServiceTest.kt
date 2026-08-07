@@ -52,16 +52,17 @@ class PoiReadServiceTest : StringSpec({
         got.single().distanceM shouldBe 0.0
     }
 
-    "findByRadius — 합성 정렬: savedCount↓ → FULL>PARTIAL → 거리↑" {
+    "findByRadius — 합성 정렬: savedCount↓ → FULL>PARTIAL>MINIMAL → 거리↑" {
         val repo = InMemoryPoiRepository()
-        // 전부 반경 내(중심 근처). c=최고 savedCount, a=FULL, b=PARTIAL(a와 동 savedCount), d=거리 tiebreak
+        // 전부 반경 내(중심 근처). savedCount 동률(5)에서 품질 3등급 순서 확인 — top 은 savedCount 로 선두.
         val top = poi("top", 33.4590, 126.9430, savedCount = 10)
         val full = poi("full", 33.4592, 126.9432, savedCount = 5, imageUrl = "u", openingHours = "09:00-18:00")
-        val partial = poi("partial", 33.4588, 126.9428, savedCount = 5) // 미완비=PARTIAL, top보다 중심 가깝지만 savedCount 낮음
-        repo.saveAll(listOf(partial, full, top))
+        val partial = poi("partial", 33.4588, 126.9428, savedCount = 5, openingHours = "09:00-18:00") // 사진 없음
+        val minimal = poi("minimal", 33.4589, 126.9429, savedCount = 5, imageUrl = "u") // 영업시간 없음(사진 있어도 MINIMAL)
+        repo.saveAll(listOf(minimal, partial, full, top))
 
         PoiReadService(repo).findByRadius(33.4587, 126.9427, 5.0).map { it.poi.nameKo } shouldContainExactly
-            listOf("top", "full", "partial") // savedCount 10 → (5,FULL) → (5,PARTIAL)
+            listOf("top", "full", "partial", "minimal") // savedCount 10 → (5,FULL) → (5,PARTIAL) → (5,MINIMAL)
     }
 
     "findByRadius — 잘못된 좌표·반경은 400(ValidationFailed)" {

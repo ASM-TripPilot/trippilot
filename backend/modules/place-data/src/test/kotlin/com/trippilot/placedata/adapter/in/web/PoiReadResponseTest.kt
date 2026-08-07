@@ -31,13 +31,13 @@ class PoiReadResponseTest : StringSpec({
         }
     }
 
-    "dataQuality — 사진·영업시간 완비=FULL, 하나라도 없으면 PARTIAL" {
+    "dataQuality 3등급 — 영업시간 없으면 MINIMAL(사진 무관), 있으면 사진 유무로 FULL/PARTIAL" {
         fun q(imageUrl: String?, openingHours: String?) =
             PoiReadResponse.from(PoiWithDistance(poi(PoiCategory.맛집, imageUrl, openingHours), null)).dataQuality
         q("u", "09-18") shouldBe "FULL"
-        q("u", null) shouldBe "PARTIAL"
         q(null, "09-18") shouldBe "PARTIAL"
-        q(null, null) shouldBe "PARTIAL"
+        q("u", null) shouldBe "MINIMAL"  // 사진이 있어도 영업일 판정 불가 → 후보풀 제외 대상
+        q(null, null) shouldBe "MINIMAL"
     }
 
     "source·dataStatus·distance 전달" {

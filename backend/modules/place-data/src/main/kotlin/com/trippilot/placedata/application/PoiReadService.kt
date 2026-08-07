@@ -14,8 +14,8 @@ data class PoiWithDistance(val poi: Poi, val distanceM: Double?)
 
 /**
  * 리버스 POI 정본 read(C7 · BE-5) — AI(M7)가 후보풀을 빌드하려고 백엔드 정본을 읽는 경계용 조회.
- * **ACTIVE만**(INV-U1-01), closed-set(INV-1). 카테고리 경계코드·dataQuality 파생은 web 경계에서 매핑.
- * 콜드스타트 합성 정렬키(반경 조회): savedCount↓ → dataQuality(FULL>PARTIAL)↓ → 거점거리↑ → poiId↑.
+ * **ACTIVE만**(INV-U1-01), closed-set(INV-1). 카테고리 경계코드 매핑은 web 경계, dataQuality 파생은 도메인.
+ * 콜드스타트 합성 정렬키(반경 조회): savedCount↓ → dataQuality(FULL>PARTIAL>MINIMAL)↓ → 거점거리↑ → poiId↑.
  * (structured 영업시간·폐업체크는 스키마상 후속 — openingHours 는 원문 문자열.)
  */
 @Service
@@ -42,7 +42,7 @@ class PoiReadService(
             }
             .sortedWith(
                 compareByDescending<PoiWithDistance> { it.poi.savedCount }
-                    .thenByDescending { it.poi.isDataFull() }        // FULL > PARTIAL
+                    .thenBy { it.poi.dataQuality() }                  // FULL > PARTIAL > MINIMAL(선언 순서)
                     .thenBy { it.distanceM }                          // 거점거리 ↑
                     .thenBy { it.poi.poiId },                         // 결정론 tie-break
             )
@@ -64,6 +64,3 @@ class PoiReadService(
         private const val MAX_BATCH_SIZE = 200   // 배치 조회 상한
     }
 }
-
-/** dataQuality=FULL 판정 — 대표사진·영업시간 완비(그 외 PARTIAL). 완전성 파생(계약 BE-5). */
-internal fun Poi.isDataFull(): Boolean = imageUrl != null && openingHours != null
