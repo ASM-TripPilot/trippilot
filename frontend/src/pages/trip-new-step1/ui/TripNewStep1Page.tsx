@@ -7,6 +7,7 @@ import { REGIONS } from '@/features/explore/model/regions';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { postTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
 import type { CompanionType } from '@/shared/api/generated/schemas';
+import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { getAccessToken } from '@/shared/api/tokenManager';
 
 import {
@@ -93,12 +94,6 @@ const SUBMIT_ERROR_MESSAGE = '네트워크를 확인하고 다시 시도해주�
  * 떨어뜨린다** — 5-c W-1: `fields[].field`로 "기간 오류"를 추측해 인라인 문구를 다는 것은
  * 계약이 말하지 않은 원인을 화면이 단정하는 것이라 거짓 설명이 된다. */
 type ServerSubmitFailure = 'overseas' | 'banner';
-
-/** must-visit 409 = "이미 그 여행에 있다"(BR-U1-50 · INV-U1-18). 목표 상태와 결과 상태가
- * 같으므로 실패로 세지 않는다 — `savedPlaces.ts`의 담기 409와 같은 판단이다. */
-function isAlreadyRegistered(error: unknown): boolean {
-  return isAxiosError(error) && error.response?.status === 409;
-}
 
 function classifyServerFailure(error: unknown): ServerSubmitFailure {
   if (!isAxiosError(error) || !error.response) {
