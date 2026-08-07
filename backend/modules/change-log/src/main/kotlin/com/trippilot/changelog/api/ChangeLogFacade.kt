@@ -27,10 +27,10 @@ data class AppendChangeLog(
     val after: ItinerarySnapshotView,
 )
 
-/** 변경 출처. planB=자동 재계획 · manual=사용자 편집 · coedit=공동 편집 · assistant=AI 도우미. */
+/** 변경 출처(모듈 경계 표현). 도메인 [com.trippilot.changelog.domain.ChangeSource] 와 1:1. */
 enum class ChangeSourceType { PLAN_B, MANUAL, COEDIT, ASSISTANT }
 
-/** 전후 스냅숏 — 시각·순서만(INV-3 소요시간 없음). */
+/** 전후 스냅숏(모듈 경계 표현) — 시각·순서만(INV-3 소요시간 없음). */
 data class ItinerarySnapshotView(val days: List<DaySnapshotView>)
 data class DaySnapshotView(val date: LocalDate, val slots: List<SlotSnapshotView>)
 data class SlotSnapshotView(

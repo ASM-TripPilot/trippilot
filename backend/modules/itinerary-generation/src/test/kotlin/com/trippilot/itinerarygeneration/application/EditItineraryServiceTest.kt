@@ -61,6 +61,19 @@ private class EditFakeAgent(private val violations: List<Violation> = emptyList(
 }
 
 /** 편집 — 전체 교체, 비차단 재검증(위반→hasViolation), 확정 409, 미소유·없음 404. */
+/** 롤백 요청을 관찰하는 tx 매니저 — 이력 기록이 편집과 **같은 트랜잭션**인지 확인하는 데 쓴다. */
+private class RecordingTx : PlatformTransactionManager {
+    var rolledBack = false
+    override fun getTransaction(definition: TransactionDefinition?): TransactionStatus = SimpleTransactionStatus()
+    override fun commit(status: TransactionStatus) {}
+    override fun rollback(status: TransactionStatus) { rolledBack = true }
+}
+
+/** 기록 시도마다 터지는 Fake — 이력 실패가 편집을 되돌리는지 본다. */
+private class FailingChangeLog : ChangeLogFacade {
+    override fun append(command: AppendChangeLog): Unit = throw RuntimeException("change log down")
+}
+
 /** 편집이 남긴 변경 이력을 관찰하는 Fake — 실제 영속은 change-log 모듈 IT 가 본다. */
 private class RecordingChangeLog : ChangeLogFacade {
     val appended = mutableListOf<AppendChangeLog>()
@@ -105,6 +118,28 @@ class EditItineraryServiceTest : StringSpec({
 
     fun repoWith(it: Itinerary) = EditFakeItineraries().apply { replaceForTrip(tripId, it) }
 
+    "이력 기록이 실패하면 편집도 롤백된다(같은 트랜잭션 — 이 PR 의 핵심 보장)" {
+        val tx = RecordingTx()
+        shouldThrow<RuntimeException> {
+            EditItineraryService(trips(true), repoWith(current()), EditFakeAgent(), FailingChangeLog(), tx, clock)
+                .edit(acc, tripId, editReq)
+        }
+        // 기록이 tx 밖으로 나가면 이 단언이 깨진다 — 일정만 바뀌고 이력이 빠지는 상태를 막는 회귀 가드.
+        tx.rolledBack shouldBe true
+    }
+
+    "내용이 그대로면 이력을 남기지 않는다(append-only 라 지울 수 없다)" {
+        val base = current()
+        val log = RecordingChangeLog()
+        // 현재 상태와 동일한 편집안 — 전후가 같다
+        val sameAsCurrent = EditItinerary(
+            base.days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
+        )
+        EditItineraryService(trips(true), repoWith(base), EditFakeAgent(), log, NOOP_TX, clock)
+            .edit(acc, tripId, sameAsCurrent)
+        log.appended shouldBe emptyList()
+    }
+
     "편집하면 변경 이력이 전후 스냅숏·사유와 함께 남는다(US-PLANB-09)" {
         val repo = repoWith(current())
         val log = RecordingChangeLog()
@@ -118,6 +153,8 @@ class EditItineraryServiceTest : StringSpec({
         entry.reason shouldBe "비 예보로 실내로 변경"
         // 전후가 실제로 다른 상태여야 이력이 의미를 갖는다
         entry.before shouldNotBe entry.after
+        // before 는 "무엇이 있었는지"를 담아야 한다 — 빈 껍데기면 되짚을 수 없다
+        entry.before.days.single().slots.map { it.poiId } shouldBe current().days.single().slots.map { it.sourcePoiId }
         entry.after.days.single().slots.map { it.poiId } shouldBe editReq.days.single().slots.map { it.poiId }
     }
 

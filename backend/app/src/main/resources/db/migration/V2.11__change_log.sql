@@ -12,9 +12,13 @@ CREATE TABLE change_log_entry (
   at                  timestamptz NOT NULL
 );
 
--- 타임라인 조회(여행별 최신순)
-CREATE INDEX ix_change_log_trip_at ON change_log_entry (trip_id, at DESC);
+-- 타임라인 조회(여행별 최신순). at 동률은 IDENTITY 로 가르므로 정렬키를 그대로 덮는다.
+CREATE INDEX ix_change_log_trip_at ON change_log_entry (trip_id, at DESC, change_log_entry_id DESC);
 
--- append-only 강제 — 동의 증적·위치 법정 로그(V1.7)와 같은 방식으로 앱 롤에서 회수.
--- (여행 삭제 시에는 FK CASCADE 로 함께 정리된다 — 앱이 지우는 것이 아니다.)
+-- 앱 롤의 UPDATE/DELETE 회수 — 남은 이력이 사후에 바뀌면 "왜 바꿨는지" 되짚는 근거가 못 된다.
+--
+-- ⚠ 보존 범위는 consent_record·location_legal_log 와 **다르다**. 그쪽은 법정 보존이라 캐스케이드를 일부러
+-- 두지 않았지만(V1.2 '캐스케이드 없음: 법정 보존' · V1.3 'FK 미강제'), 이 이력은 여행에 딸린 사용자 데이터라
+-- 여행이 지워지면 함께 지워지는 것이 맞다(개인정보 파기). PostgreSQL 은 RI 캐스케이드를 참조 테이블의
+-- DELETE 권한과 무관하게 수행하므로, 위 REVOKE 는 **개별 행 조작만** 막는다 — 여행 단위 삭제는 막지 않는다.
 REVOKE UPDATE, DELETE ON change_log_entry FROM app_user;

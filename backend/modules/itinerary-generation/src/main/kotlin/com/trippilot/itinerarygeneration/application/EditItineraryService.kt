@@ -71,18 +71,26 @@ class EditItineraryService(
         val violations = scheduleAgent.validate(edit.toOutput(current.solveMode, current.isFallback, clock.instant()))
         val flagged = reshape(current, edit, violations)
         return tx.execute {
+            // before 는 트랜잭션 안에서 **다시 읽는다** — 위 재검증(외부 호출) 동안 다른 편집이 커밋됐으면
+            // 트랜잭션 밖에서 읽은 값은 이미 낡았고, 이력에 실제로 일어나지 않은 전이(A→C)가 남는다.
+            val beforeWrite = itineraries.findByTrip(tripId).firstOrNull() ?: current
             val saved = itineraries.replaceForTrip(tripId, flagged)
-            // 이력은 **같은 트랜잭션**에 — 일정만 바뀌고 이력이 빠지는 상태를 만들지 않는다(US-PLANB-09).
-            changeLog.append(
-                AppendChangeLog(
-                    tripId = tripId,
-                    actor = accountId.toString(),
-                    sourceType = ChangeSourceType.MANUAL,
-                    reason = edit.reason,
-                    before = current.toSnapshot(),
-                    after = saved.toSnapshot(),
-                ),
-            )
+            val before = beforeWrite.toSnapshot()
+            val after = saved.toSnapshot()
+            // 바뀐 게 없으면 남기지 않는다 — append-only 라 한 번 쌓인 무의미한 행은 지울 수 없다.
+            if (before != after) {
+                // 이력은 **같은 트랜잭션**에 — 일정만 바뀌고 이력이 빠지는 상태를 만들지 않는다(US-PLANB-09).
+                changeLog.append(
+                    AppendChangeLog(
+                        tripId = tripId,
+                        actor = accountId.toString(),
+                        sourceType = ChangeSourceType.MANUAL,
+                        reason = edit.reason,
+                        before = before,
+                        after = after,
+                    ),
+                )
+            }
             saved
         }!!
     }

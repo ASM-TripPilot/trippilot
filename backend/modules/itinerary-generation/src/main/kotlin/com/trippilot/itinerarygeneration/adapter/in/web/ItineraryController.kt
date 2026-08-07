@@ -9,6 +9,8 @@ import com.trippilot.itinerarygeneration.application.GenerateItineraryService
 import com.trippilot.itinerarygeneration.application.ItineraryQueryService
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -54,12 +56,17 @@ class ItineraryController(
 
     /** 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409. */
     @PutMapping
-    fun edit(principal: Principal, @PathVariable tripId: UUID, @RequestBody request: EditItineraryRequest): ItineraryResponse =
+    fun edit(principal: Principal, @PathVariable tripId: UUID, @Valid @RequestBody request: EditItineraryRequest): ItineraryResponse =
         ItineraryResponse.from(editService.edit(principal.accountId(), tripId, request.toCommand()))
 }
 
 /** 편집 요청 — 수정된 전체 일자·슬롯 배열(슬롯 순서 = 배열 순서). [reason] 은 선택(변경 이력에 남는다). */
-data class EditItineraryRequest(val days: List<EditDayRequest>, val reason: String? = null) {
+data class EditItineraryRequest(
+    val days: List<EditDayRequest>,
+    // 저장 컬럼 상한과 같은 값 — 여기서 막지 않으면 DB 가 22001 로 던져 편집까지 롤백되고 500 이 나간다.
+    @field:Size(max = 500, message = "사유는 500자 이하입니다.")
+    val reason: String? = null,
+) {
     fun toCommand() = EditItinerary(
         days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
         reason,

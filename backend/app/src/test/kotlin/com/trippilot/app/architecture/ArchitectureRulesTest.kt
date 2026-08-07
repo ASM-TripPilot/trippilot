@@ -32,6 +32,7 @@ class ArchitectureRulesTest {
                 "com.trippilot.trip..",
                 "com.trippilot.placedata..",
                 "com.trippilot.itinerarygeneration..",
+                "com.trippilot.changelog..",
             )
             .because("R5: 의존 방향 app→modules→common, 역방향 금지")
             .allowEmptyShould(true)
@@ -47,6 +48,7 @@ class ArchitectureRulesTest {
             "com.trippilot.trip..",
             "com.trippilot.placedata..",
             "com.trippilot.itinerarygeneration..",
+            "com.trippilot.changelog..",
         )
             .should().dependOnClassesThat().resideInAPackage("com.trippilot.app..")
             .because("R5: app 만 조립. 모듈은 app 을 모른다")
@@ -65,7 +67,7 @@ class ArchitectureRulesTest {
 
     @Test
     fun `R1 모듈 간 상호작용은 api 로만 (내부 직접참조 금지)`() {
-        slices().matching("com.trippilot.(auth|profile|moderation|accommodationsearch|savedaccommodation|trip|placedata|itinerarygeneration)..")
+        slices().matching("com.trippilot.(auth|profile|moderation|accommodationsearch|savedaccommodation|trip|placedata|itinerarygeneration|changelog)..")
             .should().notDependOnEachOther()
             // 다른 모듈의 api 퍼사드 의존은 허용(architecture.md). 내부(domain·application·adapter) 참조만 금지.
             .ignoreDependency(resideInAnyPackage("com.trippilot.."), resideInAPackage("..api.."))

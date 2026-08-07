@@ -697,6 +697,12 @@ paths:
     get:
       tags: [trips]
       summary: 변경 이력 타임라인 — "이날 무엇을 왜 바꿨는지"(최신순)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: 반환 상한(기본 100 · 최대 500). 이력은 append-only 로 쌓이고 한 건이 전후 스냅숏 둘을 담는다.
+          schema: { type: integer, default: 100, minimum: 1, maximum: 500 }
       description: >
         확정된 변경을 사유·전후 스냅숏·시각·출처와 함께 남긴 append-only 이력(US-PLANB-09).
         현재 출처는 수동 편집(MANUAL)뿐 — Plan-B·어시스턴트는 해당 모듈과 함께 붙는다.
@@ -1014,7 +1020,6 @@ components:
       type: object
       required: [actor, sourceType, at, before, after]
       properties:
-        entryId: { type: integer, format: int64 }
         actor: { type: string, description: 변경 주체 — 수동 편집이면 계정 id }
         sourceType: { type: string, enum: [PLAN_B, MANUAL, COEDIT, ASSISTANT] }
         reason: { type: string, nullable: true, description: 선택 — Plan-B 는 트리거 사유를 싣는다 }
@@ -1039,8 +1044,8 @@ components:
                   required: [poiId, startAt, endAt, isFixed, endsNextDay]
                   properties:
                     poiId: { type: string, format: uuid }
-                    startAt: { type: string, example: "10:00" }
-                    endAt: { type: string, example: "11:00" }
+                    startAt: { type: string, example: "10:00:00" }
+                    endAt: { type: string, example: "11:00:00" }
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean }
     Itinerary:

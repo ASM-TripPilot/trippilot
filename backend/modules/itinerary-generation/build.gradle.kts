@@ -16,7 +16,8 @@ dependencies {
     implementation(project(":modules:saved-accommodation")) // R1: saved-accommodation.api(BaseAnchorFacade)만 — 거점 좌표 앵커
     implementation(project(":modules:place-data"))      // R1: place-data.api(CandidatePoolPort)만 — Fake 에이전트가 실 ACTIVE 후보 emit
     implementation(libs.spring.boot.starter.data.jpa)  // out/persistence — itinerary/day/slot
-    implementation(libs.spring.boot.starter.web)        // adapter/in/web — 생성 API + RestClient(AI 경계 호출)
+    implementation(libs.spring.boot.starter.web)
+    implementation(libs.spring.boot.starter.validation)        // adapter/in/web — 생성 API + RestClient(AI 경계 호출)
     implementation(libs.jackson3.module.kotlin)         // AI 경계 매퍼(Jackson 3 = SB4 기본) — 와이어 DTO 역직렬화
     implementation(libs.kotlin.reflect)
 

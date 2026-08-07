@@ -1,11 +1,11 @@
 package com.trippilot.changelog.adapter.out.persistence
 
-import com.trippilot.changelog.api.ChangeSourceType
-import com.trippilot.changelog.api.DaySnapshotView
-import com.trippilot.changelog.api.ItinerarySnapshotView
-import com.trippilot.changelog.api.SlotSnapshotView
 import com.trippilot.changelog.domain.ChangeLogEntry
 import com.trippilot.changelog.domain.ChangeLogRepository
+import com.trippilot.changelog.domain.ChangeSource
+import com.trippilot.changelog.domain.DaySnapshot
+import com.trippilot.changelog.domain.ItinerarySnapshot
+import com.trippilot.changelog.domain.SlotSnapshot
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.GeneratedValue
@@ -14,6 +14,8 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Component
 import java.time.Instant
@@ -43,7 +45,8 @@ class ChangeLogEntryEntity(
 )
 
 interface ChangeLogJpaRepository : JpaRepository<ChangeLogEntryEntity, Long> {
-    fun findByTripIdOrderByAtDescChangeLogEntryIdDesc(tripId: UUID): List<ChangeLogEntryEntity>
+    // at 동률은 IDENTITY 로 갈라 순서를 결정론적으로 — 같은 초에 여러 건이 쌓일 수 있다.
+    fun findByTripIdOrderByAtDescChangeLogEntryIdDesc(tripId: UUID, pageable: Pageable): List<ChangeLogEntryEntity>
 }
 
 @Component
@@ -55,7 +58,7 @@ class ChangeLogRepositoryAdapter(private val jpa: ChangeLogJpaRepository) : Chan
                 changeLogEntryId = null,
                 tripId = entry.tripId,
                 actor = entry.actor,
-                sourceType = entry.sourceType.name,
+                sourceType = entry.source.name,
                 reason = entry.reason,
                 beforeSnapshot = entry.before.toMap(),
                 afterSnapshot = entry.after.toMap(),
@@ -65,22 +68,22 @@ class ChangeLogRepositoryAdapter(private val jpa: ChangeLogJpaRepository) : Chan
         return entry.copy(entryId = saved.changeLogEntryId)
     }
 
-    override fun findByTrip(tripId: UUID): List<ChangeLogEntry> =
-        jpa.findByTripIdOrderByAtDescChangeLogEntryIdDesc(tripId).map { it.toDomain() }
+    override fun findByTrip(tripId: UUID, limit: Int): List<ChangeLogEntry> =
+        jpa.findByTripIdOrderByAtDescChangeLogEntryIdDesc(tripId, PageRequest.of(0, limit)).map { it.toDomain() }
 
     private fun ChangeLogEntryEntity.toDomain() = ChangeLogEntry(
         entryId = changeLogEntryId,
         tripId = tripId,
         actor = actor,
-        sourceType = ChangeSourceType.valueOf(sourceType),
+        source = ChangeSource.valueOf(sourceType),
         reason = reason,
         before = beforeSnapshot.toSnapshot(),
         after = afterSnapshot.toSnapshot(),
         at = at,
     )
 
-    // ---- 스냅숏 ↔ jsonb(Map) 변환. 구조가 계약이라 필드명을 여기서 고정한다.
-    private fun ItinerarySnapshotView.toMap(): Map<String, Any> = mapOf(
+    // ---- 스냅숏 ↔ jsonb(Map) 변환. 저장 형식이 계약이라 필드명을 여기서 고정한다.
+    private fun ItinerarySnapshot.toMap(): Map<String, Any> = mapOf(
         "days" to days.map { d ->
             mapOf(
                 "date" to d.date.toString(),
@@ -97,22 +100,27 @@ class ChangeLogRepositoryAdapter(private val jpa: ChangeLogJpaRepository) : Chan
         },
     )
 
+    /**
+     * jsonb → 스냅숏. **읽기는 전부 방어적으로** 한다 — 이력은 append-only 라 한 번 저장된 행은 고칠 수 없고,
+     * 스냅숏 형태가 나중에 바뀌면(슬롯에 endsNextDay 가 V2.8 에서 늘었듯) 옛 행에 없는 필드를 단정 캐스팅하는 순간
+     * 그 여행의 타임라인이 **영구히 500** 이 된다. 못 읽는 조각은 버리고 읽히는 만큼 돌려준다.
+     */
     @Suppress("UNCHECKED_CAST")
-    private fun Map<String, Any>.toSnapshot(): ItinerarySnapshotView {
-        val days = (this["days"] as? List<Map<String, Any>>).orEmpty().map { d ->
-            DaySnapshotView(
-                date = LocalDate.parse(d["date"] as String),
-                slots = (d["slots"] as? List<Map<String, Any>>).orEmpty().map { s ->
-                    SlotSnapshotView(
-                        poiId = UUID.fromString(s["poiId"] as String),
-                        startAt = LocalTime.parse(s["startAt"] as String),
-                        endAt = LocalTime.parse(s["endAt"] as String),
-                        isFixed = s["isFixed"] as Boolean,
-                        endsNextDay = s["endsNextDay"] as Boolean,
-                    )
-                },
+    private fun Map<String, Any>.toSnapshot(): ItinerarySnapshot {
+        val days = (this["days"] as? List<Map<String, Any>>).orEmpty().mapNotNull { d ->
+            val date = (d["date"] as? String)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null
+            DaySnapshot(
+                date = date,
+                slots = (d["slots"] as? List<Map<String, Any>>).orEmpty().mapNotNull { s -> s.toSlot() },
             )
         }
-        return ItinerarySnapshotView(days)
+        return ItinerarySnapshot(days)
+    }
+
+    private fun Map<String, Any>.toSlot(): SlotSnapshot? {
+        val poiId = (this["poiId"] as? String)?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return null
+        val startAt = (this["startAt"] as? String)?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: return null
+        val endAt = (this["endAt"] as? String)?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: return null
+        return SlotSnapshot(poiId, startAt, endAt, this["isFixed"] as? Boolean ?: false, this["endsNextDay"] as? Boolean ?: false)
     }
 }
