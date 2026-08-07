@@ -15,7 +15,9 @@ import java.time.Clock
 import java.util.UUID
 
 /**
- * 일정 확정(C8 · US-SCHED-08) — PLANNED→CONFIRMED 단방향 잠금 + poi_snapshot 동결(INV-U1-03).
+ * 일정 확정(C8 · US-SCHED-08) — PLANNED→CONFIRMED 전이 + poi_snapshot 동결(INV-U1-03).
+ * 이 서비스 안에서는 단방향이다(재확정 409). 다만 **재생성(POST)에는 상태 가드가 없어** 확정이 풀린다 —
+ * 확정 해제 API 가 없어 재생성이 확정 일정을 다시 짜는 유일한 경로이기 때문이다. 확정 보호 여부는 미결(제품 사안).
  * 확정 시 각 슬롯 POI 를 스냅숏으로 동결(값 보존) — 하나라도 비-ACTIVE/소실이면 확정 불가(400).
  * 여행 없음·삭제·타 계정·생성 이력 없음은 404(존재 은닉). 이미 확정이면 409.
  */

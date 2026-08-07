@@ -47,7 +47,7 @@ class ItineraryController(
     fun get(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
         ItineraryResponse.from(queryService.get(principal.accountId(), tripId))
 
-    /** 확정 — PLANNED→CONFIRMED 단방향 잠금(이미 확정이면 409). */
+    /** 확정 — PLANNED→CONFIRMED(이미 확정이면 409). 재생성은 확정을 되돌린다(확정 해제 API 부재). */
     @PostMapping("/confirm")
     fun confirm(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
         ItineraryResponse.from(confirmService.confirm(principal.accountId(), tripId))
