@@ -28,6 +28,7 @@ spring-boot-flyway = { module = "org.springframework.boot:spring-boot-flyway" } 
 flyway-core = { module = "org.flywaydb:flyway-core" }
 flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin" }
+jackson3-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin" }   # SB4 기본 Jackson 3 — AI 경계 매퍼
 jackson-datatype-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect" }
 
