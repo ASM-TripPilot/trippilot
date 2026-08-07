@@ -1085,6 +1085,13 @@ components:
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean, description: "자정 넘김(HC4) — true 면 endAt 은 익일 시각(시작일 귀속)" }
                     hasViolation: { type: boolean, description: "편집 재검증(HC1-4) 위반 표시(비차단)" }
+                    distanceRange:
+                      type: string
+                      nullable: true
+                      description: >
+                        직전 지점에서의 이동 **거리 표시 문자열**(BR-U2-08) — 예 "약 1.2km · 도보 추정".
+                        직선거리 폴백이면 "추정" 표기가 포함된다. 소요시간은 어떤 이유로도 싣지 않는다(INV-3).
+                        편집 직후에는 순서가 바뀌어 값이 무효라 null 이다(재산출은 TRIP-309).
                     # --- POI 표면(BR-U3-09) — 추가 왕복 없이 지도·카드를 그릴 수 있게 합성해 싣는다.
                     #     확정 슬롯은 동결값(INV-U1-03)이 이긴다. 정본·동결본 모두 없으면 전부 null.
                     nameKo: { type: string, nullable: true }

@@ -37,6 +37,11 @@ class VisitSlot private constructor(
     val isFixed: Boolean,
     val hasViolation: Boolean,
     val endsNextDay: Boolean,   // 자정 넘김(HC4) — true 면 endAt(익일 시각) < startAt 허용
+    /**
+     * 직전 지점에서 이 슬롯까지의 이동 **거리 표시 문자열**(BR-U2-08) — 예 "약 1.2km · 도보 추정".
+     * 소요시간은 어떤 이유로도 담지 않는다(INV-3). 직선거리 폴백이면 "추정" 표기가 문자열에 포함된다.
+     */
+    val distanceRange: String?,
 ) {
     companion object {
         fun of(
@@ -48,13 +53,14 @@ class VisitSlot private constructor(
             isFixed: Boolean = false,
             hasViolation: Boolean = false,
             endsNextDay: Boolean = false,
+            distanceRange: String? = null,
         ): VisitSlot {
             val errors = mutableListOf<FieldError>()
             if (orderIndex < 0) errors += FieldError("orderIndex", "순서는 0 이상입니다.")
             // 자정 넘김이면 endAt 이 익일 시각이라 startAt 보다 작을 수 있음(HC4) — 그 경우만 허용.
             if (endAt < startAt && !endsNextDay) errors += FieldError("endAt", "종료 시각은 시작 이후여야 합니다.")
             if (errors.isNotEmpty()) throw ValidationFailed(errors)
-            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay)
+            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay, distanceRange)
         }
     }
 }
@@ -111,7 +117,9 @@ class Itinerary private constructor(
                 d.slots.map { s ->
                     VisitSlot.of(
                         s.sourcePoiId, snapshotByPoi.getValue(s.sourcePoiId), s.orderIndex,
-                        s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, // 자정 넘김(HC4) 보존 — 누락 시 검증 실패
+                        // 동결은 스냅숏 참조만 붙이는 것 — 표시값은 **전부 그대로 옮긴다**.
+                        // 하나라도 빠뜨리면 확정하는 순간 조용히 사라진다(endsNextDay 로 이미 겪은 회귀).
+                        s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange,
                     )
                 },
             )

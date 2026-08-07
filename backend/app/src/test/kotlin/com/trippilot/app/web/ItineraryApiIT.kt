@@ -179,6 +179,35 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `distanceRange 가 저장·조회·확정을 관통한다(TRIP-308)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        // Fake 는 거리 추정이 없어 null 을 낸다 → 리포지토리로 직접 값을 넣어 영속·왕복·동결 보존을 본다.
+        val slot = VisitSlot.of(
+            UUID.fromString(poiId(token)), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            distanceRange = "약 1.2km · 도보 추정",
+        )
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(
+                UUID.fromString(trip), SolveMode.DETERMINISTIC, isFallback = false,
+                days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(slot))),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+            ),
+        )
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        body["days"][0]["slots"][0]["distanceRange"].asText() shouldBe "약 1.2km · 도보 추정"
+        body["days"][0]["slots"][0].has("duration") shouldBe false // INV-3
+
+        // 확정해도 유지된다 — 동결은 스냅숏 참조만 붙이는 것
+        val (crc, confirmed) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+        crc shouldBe 200
+        confirmed["days"][0]["slots"][0]["distanceRange"].asText() shouldBe "약 1.2km · 도보 추정"
+    }
+
+    @Test
     fun `생성 전 조회는 404`() {
         val token = newToken()
         val trip = newTrip(token)

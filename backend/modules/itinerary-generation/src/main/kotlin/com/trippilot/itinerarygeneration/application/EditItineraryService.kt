@@ -102,6 +102,8 @@ class EditItineraryService(
                 d.date, dayIdx,
                 d.slots.mapIndexed { slotIdx, s ->
                     val violated = violations.any { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
+                    // distanceRange 는 싣지 않는다(null) — 순서·시각이 바뀌면 직전 거리는 이미 틀린 값이다.
+                    // 재산출은 AI 검증·수리(TRIP-309) 몫이라, 그때까지는 낡은 값을 보여주느니 비워 둔다.
                     VisitSlot.of(
                         s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
                         hasViolation = violated, endsNextDay = s.endsNextDay,

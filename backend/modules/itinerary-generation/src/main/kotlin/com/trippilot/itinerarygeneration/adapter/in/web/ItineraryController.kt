@@ -121,6 +121,7 @@ data class DayResponse(val date: LocalDate, val slots: List<SlotResponse>)
  * 방문 슬롯 표시 — 시각·순서만(INV-2, 소요시간 없음 INV-3).
  * [endsNextDay]: 자정 넘김(HC4, endAt=익일 시각·시작일 귀속). [hasViolation]: 편집 재검증(HC1-4) 위반 표시(비차단).
  *
+ * [distanceRange]: 직전 지점에서의 이동 **거리 표시 문자열**(BR-U2-08) — 소요시간은 어떤 이유로도 없다(INV-3).
  * POI 표면(이름·좌표·사진·영업시간)은 추가 왕복 없이 여기 실린다(BR-U3-09). 정본에도 동결본에도 없는
  * 장소는 표면 필드가 전부 null 이다 — 그 경우에도 슬롯 자체는 사라지지 않는다.
  * [openingHoursKnown] false = 영업시간 미확인 → 확정 배치가 아니라 사용자 확인 후보로 분리(US-SCHED-03 예외).
@@ -132,6 +133,7 @@ data class SlotResponse(
     val isFixed: Boolean,
     val endsNextDay: Boolean,
     val hasViolation: Boolean,
+    val distanceRange: String?,
     val nameKo: String?,
     val lat: Double?,
     val lng: Double?,
@@ -149,6 +151,7 @@ data class SlotResponse(
             isFixed = s.isFixed,
             endsNextDay = s.endsNextDay,
             hasViolation = s.hasViolation,
+            distanceRange = s.distanceRange,
             nameKo = surface?.nameKo,
             lat = surface?.lat,
             lng = surface?.lng,

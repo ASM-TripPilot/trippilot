@@ -173,7 +173,7 @@ class GenerateItineraryService(
             ItineraryDay.of(
                 d.date, dayIdx,
                 d.slots.mapIndexed { slotIdx, s ->
-                    VisitSlot.of(s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed, endsNextDay = s.endsNextDay)
+                    VisitSlot.of(s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed, endsNextDay = s.endsNextDay, distanceRange = s.distanceRange)
                 },
             )
         }

@@ -141,4 +141,19 @@ class ItineraryTest : StringSpec({
             Itinerary.create(trip, SolveMode.FULL_AI, false, listOf(d1, d2), now)
         }
     }
+
+    "확정해도 distanceRange 가 보존된다(동결은 스냅숏 참조만 붙인다 — TRIP-308)" {
+        val poi = UUID.randomUUID()
+        val slot = VisitSlot.of(
+            poi, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            distanceRange = "약 1.2km · 도보 추정",
+        )
+        val itinerary = Itinerary.create(
+            UUID.randomUUID(), SolveMode.FULL_AI, false,
+            listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(slot))),
+            Instant.parse("2026-08-06T00:00:00Z"),
+        )
+        val confirmed = itinerary.confirm(mapOf(poi to UUID.randomUUID()), Instant.parse("2026-08-06T01:00:00Z"))
+        confirmed.days.single().slots.single().distanceRange shouldBe "약 1.2km · 도보 추정"
+    }
 })
