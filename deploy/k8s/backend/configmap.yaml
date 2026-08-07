@@ -1,0 +1,19 @@
+# backend 의 환경변수. 이름·기본값은 application.yml 의 ${...} 자리표시자와
+# docker-compose.yml 의 backend 서비스에서 그대로 가져온 것이다.
+#
+# 소셜 로그인 시크릿은 여기에 넣지 않는다. 비어 있으면 소셜 로그인 시도 시에만
+# 실패하고 기동에는 영향이 없다 — 로컬 클러스터에는 그 편이 맞다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: trippilot
+data:
+  DB_URL: jdbc:postgresql://postgres:5432/trippilot?currentSchema=app
+  DB_USER: app_user
+  DB_PASSWORD: app_user
+  DB_MIGRATE_USER: app_migrate
+  DB_MIGRATE_PASSWORD: app_migrate
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  AI_URL: http://ai:8000

@@ -1,0 +1,83 @@
+# PostgreSQL 은 StatefulSet 으로 둔다. Deployment 로 두면 롤링 업데이트 때
+# 파드 두 개가 같은 볼륨을 잡으려 해서 데이터가 깨진다.
+#
+# 초기화 SQL(app_migrate·app_user 롤 + app 스키마)은 backend/docker/init 을
+# 그대로 ConfigMap 으로 만들어 마운트한다 — deploy/bin/deploy.sh 가 배포 시점에
+# 생성한다. 여기에 SQL 을 복사해두면 compose 쪽과 조용히 갈라진다.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: trippilot
+  labels:
+    app: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: postgres-credentials
+          env:
+            - name: TZ
+              value: UTC
+            # 기본 데이터 디렉토리에 바로 쓰면 볼륨 루트의 lost+found 때문에
+            # initdb 가 "directory not empty" 로 거부한다.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+                - -d
+                - trippilot
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: trippilot
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # Flyway 마이그레이션은 앱 기동 시 돌아간다. DB 가 아직 안 떠 있으면
+      # 앱이 죽고 CrashLoopBackOff 로 몇 분을 태우므로, 여기서 먼저 기다린다.
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postgres -p 5432 -U postgres; do
+                echo "postgres 대기 중..."
+                sleep 2
+              done
+      containers:
+        - name: backend
+          image: trippilot/backend:local
+          # kind 노드에 직접 적재한 이미지를 쓴다. Always 로 두면 레지스트리에
+          # 없는 태그를 당기려다 ImagePullBackOff 로 떨어진다.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: backend-config
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1536Mi
