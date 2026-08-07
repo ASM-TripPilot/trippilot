@@ -4,6 +4,7 @@
 > 실제 구현(`ai/src/trippilot/`, `backend/modules/place-data`) 간 어긋남 · 철저도: thorough
 > 대상 경계: AI ↔ 백엔드 (SolverPort · C7 Place Data · C1 LLM Gateway · S2 파이프라인)
 > **재감사: 2026-08-06 (TRIP-283)** — 각 P 항목에 "2026-08-06 현황" 추가, 신규 발견 N1~N6 추가.
+> **확정 반영: 2026-08-07 (TRIP-282 부분 이행)** — PR #104 회신으로 확정된 경계 경로·필드·프로토콜을 AI 문서에 정렬.
 > 아래 원문(2026-08-02 기준)은 역사 기록으로 보존한다.
 
 ## 2026-08-06 재감사 요약
@@ -26,6 +27,51 @@ P1~P8 이후 진행(TRIP-228·259·261·264, PR #76 계약 초안 합의)으로 
 
 상세는 각 P 항목의 "2026-08-06 현황"과 하단 [신규 발견 (2026-08-06)](#신규-발견-2026-08-06) 참조.
 INV-3는 양쪽 실측 통과 재확인 — [어긋남 아님](#어긋남-아님-참고) 절에 기록.
+
+---
+
+## 2026-08-07 확정 사항 (TRIP-282 부분 이행)
+
+PR #104(`backend/docs/design/ai-backend-경계-잔여협의-3점.md`) 회신으로 **경계 HTTP 와이어의 일부가 확정**됐다.
+확정분만 AI 문서에 정렬했고, **미확정분은 결론을 쓰지 않고 "협의 중"으로만 표기**했다.
+
+### 확정 — AI 문서 반영 완료
+
+| # | 확정 내용 | 근거 | 반영처 |
+|---|---|---|---|
+| F1 | 포워드 경계 경로 = `POST /ai/v1/itinerary/{generate\|validate\|repair}` | `/v1`만으로는 어느 서비스의 v1인지 모호 → 서비스명 접두. 리소스명은 **산출물 기준(`itinerary`)** 으로 백엔드 컨트롤러·스키마·DB 테이블과 통일 | `services.md §0`, `agent-io-contracts.md 0.1` |
+| F2 | `ScheduleAgent`(행위자) ≠ `itinerary`(산출물) — 층이 달라 **에이전트명은 유지** | 위와 동일 | `services.md §0`, `agent-io-contracts.md 0.1` (각 1줄 명시) |
+| F3 | 리버스 배치 read = `POST /internal/pois/batch-get`, 요청 필드 `poi_ids` | 백엔드 구현(#102) 기준. 계약 초안의 `:batchGet`·`ids`는 **미실현 표기** | `agent-io-contracts.md 0.1` |
+| F4 | 리버스 반경 read = `GET /internal/pois?centerLat&centerLng&radiusKm` | 백엔드 구현(#102) | `agent-io-contracts.md 0.1` |
+| F5 | 프로토콜 = **REST/JSON over HTTP 확정** (gRPC 보류, AI-D01 종결) | PR #76 결정4 | `agent-io-contracts.md §0·§7`, `api-documentation.md` 상단 |
+| F6 | `/c1/*`·`/c2/*`·`/m7/*` 세분 경로 = **폐기 방향** (논리 인터페이스 참고용으로만 보존) | PR #76 "굵은 경계 — 조각 조립 경계를 두지 않는다" | `api-documentation.md` 상단 지위 강등 註 |
+
+### 정정한 스테일 표기
+
+| 스테일 표기 | 위치 | 정정 |
+|---|---|---|
+| `POST /ai/generate` | `services.md §1.1` | → `POST /ai/v1/itinerary/generate` |
+| `POST /ai/route` | `services.md §2.1` | → `/ai/v1/...` (명명 규칙만 확정, 리소스명 협의 중) |
+| `POST /ai/replan` | `services.md §3.1` | → `/ai/v1/...` (명명 규칙만 확정, 리소스명 협의 중) |
+| "프로토콜(REST/gRPC)은 AI-D01 미확정" | `agent-io-contracts.md §0`·§7, `api-documentation.md` 상단 | → REST/JSON over HTTP 확정 (PR #76 결정4) |
+| `POST .../pois:batchGet { ids[] }` | 계약 초안 표기 (AI 측 인용) | → `POST /internal/pois/batch-get { poi_ids }` |
+
+> 본 문서 P4·P8 원문의 `POST /ai/generate` 표기는 **2026-08-02 감사 시점의 역사 기록**이며, F1이 이를 대체한다.
+
+### 미확정 — "협의 중"으로만 표기 (결론 미기입)
+
+| 항목 | 상태 |
+|---|---|
+| `dataQuality` 등급 수 (AI 3등급 MINIMAL/PARTIAL/FULL ↔ 백엔드 2등급 FULL/PARTIAL) | **AI가 MINIMAL 등급 추가를 요청, 백엔드 회신 대기.** MINIMAL은 AI 후보풀 제외 신호(좌표만·나머지 전무)로 쓰인다 |
+| SolveMode 4↔3 매핑 (N2 — `RULE_FALLBACK` 목적지) | 협의 중 |
+| `explanations` 키(`slot_id`) 의미·영속 (N3) | 협의 중 |
+| `candidates_summary` 백엔드 포트 대응 (N4) | 협의 중 |
+| `FreshnessMeta` 집계형 스키마 (N5) | 협의 중 |
+| `Violation` 스키마 통일 (P4 잔여) | 협의 중 |
+| day1 조기노출 방식 | 백엔드 "1차 스코프 제외" 제안에 AI 역제안 게시, **회신 대기** |
+| AI 도우미·Plan-B 경계 경로 리소스명 | 명명 규칙(`/ai/v1/...`)만 확정, 리소스명 협의 중 |
+| 리버스 이연 엔드포인트 (`nearby`·`open-window`·`closedCheck`) | 협의 중 (백엔드 `openingHours` 자유문자열 → structured 스키마 선행 필요) |
+| 에러/폴백 이원화 · 타임아웃 · 멱등키 | 협의 중 |
 
 ---
 
