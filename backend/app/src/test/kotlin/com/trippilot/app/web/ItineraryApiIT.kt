@@ -181,14 +181,16 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
 
         val editBody = """{"days":[
-            {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"10:00","endAt":"11:00","isFixed":false}]},
-            {"date":"2026-08-02","slots":[{"poiId":"$poi","startAt":"09:00","endAt":"10:00","isFixed":false}]}]}""".trimIndent()
+            {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"10:00","endAt":"11:00","isFixed":false,"endsNextDay":false}]},
+            {"date":"2026-08-02","slots":[{"poiId":"$poi","startAt":"23:00","endAt":"01:00","isFixed":false,"endsNextDay":true}]}]}""".trimIndent()
         val (rc, body) = call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody)
         rc shouldBe 200
         body["status"].asText() shouldBe "PLANNED"
         val slot = body["days"][0]["slots"][0]
         slot["poiId"].asText() shouldBe poi
         slot["hasViolation"].asBoolean() shouldBe false // Fake validate 빈 목록(위반 내용 검증은 229)
+        // 자정 넘김 슬롯도 편집으로 재현·보존된다(회귀) — 요청에 endsNextDay 를 실어야 소실되지 않는다.
+        body["days"][1]["slots"][0]["endsNextDay"].asBoolean() shouldBe true
 
         // 조회에도 편집 반영
         call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second["days"][0]["slots"][0]["poiId"].asText() shouldBe poi

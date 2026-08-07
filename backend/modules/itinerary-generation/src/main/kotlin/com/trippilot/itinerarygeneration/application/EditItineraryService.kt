@@ -27,7 +27,13 @@ import java.util.UUID
 /** 편집 요청 — 전체 교체(사용자가 수정한 일자·슬롯 배열). 슬롯 순서 = 배열 순서. */
 data class EditItinerary(val days: List<EditDay>)
 data class EditDay(val date: LocalDate, val slots: List<EditSlot>)
-data class EditSlot(val poiId: UUID, val startAt: LocalTime, val endAt: LocalTime, val isFixed: Boolean)
+data class EditSlot(
+    val poiId: UUID,
+    val startAt: LocalTime,
+    val endAt: LocalTime,
+    val isFixed: Boolean,
+    val endsNextDay: Boolean, // 자정 넘김(HC4) — 전체 교체 편집이라 클라가 현행 값을 그대로 실어야 소실되지 않는다
+)
 
 /**
  * 일정 편집 + 재검증(C8 · US-SCHED-06·07). 편집은 **비차단** — solver.validate(HC1-4)로 위반을 찾아
@@ -62,7 +68,10 @@ class EditItineraryService(
                 d.date, dayIdx,
                 d.slots.mapIndexed { slotIdx, s ->
                     val violated = violations.any { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
-                    VisitSlot.of(s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed, hasViolation = violated)
+                    VisitSlot.of(
+                        s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
+                        hasViolation = violated, endsNextDay = s.endsNextDay,
+                    )
                 },
             )
         }
@@ -77,7 +86,10 @@ class EditItineraryService(
 private fun EditItinerary.toOutput(solveMode: SolveMode, isFallback: Boolean, at: Instant): ScheduleAgentOutput =
     ScheduleAgentOutput(
         days = days.map { d ->
-            DaySchedule(d.date, d.slots.map { VisitSlotDisplay(it.poiId, it.startAt, it.endAt, endsNextDay = false, distanceRange = null, isFixed = it.isFixed) })
+            DaySchedule(
+                d.date,
+                d.slots.map { VisitSlotDisplay(it.poiId, it.startAt, it.endAt, it.endsNextDay, distanceRange = null, isFixed = it.isFixed) },
+            )
         },
         day1ReadyAt = null,
         explanations = emptyMap(),

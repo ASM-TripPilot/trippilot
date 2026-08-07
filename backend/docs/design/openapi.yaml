@@ -979,6 +979,10 @@ components:
                     startAt: { type: string, description: "HH:mm:ss" }
                     endAt: { type: string }
                     isFixed: { type: boolean }
+                    endsNextDay:
+                      type: boolean
+                      default: false
+                      description: 자정 넘김(HC4) — 전체 교체 편집이라 조회 응답의 현행 값을 그대로 실어야 플래그가 소실되지 않음
 
     Itinerary:
       type: object
