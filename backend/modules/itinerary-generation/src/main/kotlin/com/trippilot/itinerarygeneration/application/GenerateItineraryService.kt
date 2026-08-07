@@ -64,8 +64,16 @@ class GenerateItineraryService(
         // 나머지 일자는 배정된 POI 를 제외 목록으로 넘겨 백그라운드 2차 호출로 채운다(AI 는 동기 REST 유지).
         val firstDates = planDates.take(1)
         val remainingDates = planDates.drop(1)
+        // 2차가 고정 블록으로 배치할 must_visit 은 1차 후보에서 빼둔다 —
+        // 안 그러면 1차가 그 POI 를 자유 슬롯으로 day1 에 넣고, 2차가 제 날짜에 또 넣어 같은 곳을 두 번 간다.
+        val reservedForSecond = if (remainingDates.isEmpty()) {
+            emptyList()
+        } else {
+            ctx.fixedVisits.filterNot { it.date in firstDates }.map { it.poiId }.distinct()
+        }
         val firstInput = assembleInput(
             tripId, mode, ctx, prefs, stayAnchors, firstDates, DAY1_DEADLINE_MS,
+            excluded = reservedForSecond,
             carriesUndatedFixed = remainingDates.isEmpty(), // 날짜 미지정 must_visit 은 2차가 맡는다(없으면 1차)
         )
 

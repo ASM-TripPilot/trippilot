@@ -11,8 +11,11 @@ import java.time.Instant
 object MinimalItineraryFallback {
     fun of(input: ScheduleAgentInput, at: Instant): ScheduleAgentOutput {
         val fixedByDate = input.fixedBlocks.filter { it.date != null && it.start != null }.groupBy { it.date }
-        val days = input.timeWindows.map { tw ->
-            val slots = fixedByDate[tw.date].orEmpty().sortedBy { it.start }.map { fb ->
+        // 날짜 미지정(ANYTIME) must_visit — 버리면 폴백 일정에서 통째로 사라져 HC3 가 깨진다.
+        // 첫 일자의 지정 블록 뒤에 순서대로 붙인다(겹치지 않게).
+        val undated = input.fixedBlocks.filter { it.date == null }
+        val days = input.timeWindows.mapIndexed { dayIdx, tw ->
+            val dated = fixedByDate[tw.date].orEmpty().sortedBy { it.start }.map { fb ->
                 val start = fb.start!!
                 VisitSlotDisplay(
                     poiId = fb.poiId,
@@ -23,7 +26,17 @@ object MinimalItineraryFallback {
                     isFixed = true,
                 )
             }
-            DaySchedule(tw.date, slots)
+            val anytime = if (dayIdx != 0 || undated.isEmpty()) {
+                emptyList()
+            } else {
+                var cursor = maxOf(dated.maxOfOrNull { it.endAt } ?: tw.start, tw.start)
+                undated.map { fb ->
+                    val start = cursor
+                    cursor = start.plusMinutes((fb.dwellMin ?: DEFAULT_DWELL_MIN).toLong())
+                    VisitSlotDisplay(fb.poiId, start, cursor, endsNextDay = false, distanceRange = null, isFixed = true)
+                }
+            }
+            DaySchedule(tw.date, dated + anytime)
         }
         return ScheduleAgentOutput(
             days = days,
