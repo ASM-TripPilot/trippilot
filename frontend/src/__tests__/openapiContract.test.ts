@@ -25,6 +25,8 @@ import path from 'path';
  *     어떤 태그가 추가돼도 유효하다.
  *   - AC-2 준비(D2): `components.responses`에 참조되는 이름이 전부 정의돼 있다 — 지금은
  *     `RateLimited`·`ModerationUnavailable` 정의가 없어 **이 파일의 진짜 red**다.
+ *   - TRIP-294: itinerary 4오퍼레이션의 경로·메서드·응답 코드(201 포함)와 `Itinerary`·
+ *     `GenerateItineraryRequest`·`EditItineraryRequest` 스키마의 required·enum·INV-3(C-1·C-2).
  */
 
 const FRONTEND_SRC = path.resolve('src');
@@ -147,6 +149,63 @@ function extractSchemaBlock(source: string, name: string): string {
 const PARAM_NAME_PATTERN = /- \{ name: (\w+),/g;
 function extractParamNames(pathBlock: string): string[] {
   return [...pathBlock.matchAll(PARAM_NAME_PATTERN)].map((match) => match[1]);
+}
+
+/** 경로 블록 안 HTTP 메서드 키(4칸 들여쓰기, 등장 순서 그대로). */
+const HTTP_METHOD_KEY_PATTERN = /^ {4}(get|post|put|patch|delete):$/gm;
+function extractMethodNames(pathBlock: string): string[] {
+  return [...pathBlock.matchAll(HTTP_METHOD_KEY_PATTERN)].map(
+    (match) => match[1]
+  );
+}
+
+/** 경로 블록 안 응답 코드 키(`'201':`)를 **등장 순서 그대로** 모은다. 순서가 코드를 메서드에
+ * 묶는 유일한 수단이다 — 블록을 메서드별로 다시 자르지 않고도 "201이 post 자리에 있다"를
+ * 잴 수 있다. `\s+`가 아니라 ` +`인 것이 중요하다: `\s`는 줄바꿈을 삼켜 매치 시작 위치가
+ * 앞줄로 밀린다. */
+const RESPONSE_CODE_KEY_PATTERN = /^ +'(\d{3})':/gm;
+function extractResponseCodes(pathBlock: string): string[] {
+  return [...pathBlock.matchAll(RESPONSE_CODE_KEY_PATTERN)].map(
+    (match) => match[1]
+  );
+}
+
+/** 스키마 블록 안 `required: [...]` 줄 전부(중첩 깊이 무시, 등장 순서 그대로). 중첩 객체가
+ * 있는 스키마는 required 줄이 여러 개다 — `Itinerary`는 최상위·day·slot 세 층이다. */
+const REQUIRED_LINE_PATTERN = /^ *required: \[[^\]]*\]/gm;
+function extractRequiredLines(schemaBlock: string): string[] {
+  return [...schemaBlock.matchAll(REQUIRED_LINE_PATTERN)].map((match) =>
+    match[0].trim()
+  );
+}
+
+/** 스키마 블록 안 `enum: [...]` 조각 전부(등장 순서 그대로). */
+const ENUM_LIST_PATTERN = /enum: \[[^\]]*\]/g;
+function extractEnumLists(schemaBlock: string): string[] {
+  return [...schemaBlock.matchAll(ENUM_LIST_PATTERN)].map((match) => match[0]);
+}
+
+/**
+ * INV-3 — duration 계열이 **YAML 키로 선언된 자리**만 잡는다(글자 등장이 아니다).
+ *
+ * ⚠️ 이 구분이 이 파일에서 반드시 필요하다. `Itinerary` 스키마 블록 안에는
+ * `# INV-3: 소요시간(duration) 필드 없음 — 거리만(후속)` 이라는 **수호 주석**이 실재한다.
+ * "블록에 duration 글자가 없다"로 재면 INV-3을 지킨다고 선언하는 그 줄 때문에 영구 red가
+ * 되고, 통과시키려면 정본에서 수호 주석을 지워야 하는 거꾸로 된 압력이 생긴다.
+ *
+ * "그럼 YAML 주석을 걷어내면 되지 않나" — 안 된다. `#`부터 줄 끝까지 지우는 전처리는
+ * `$ref: '#/components/schemas/Itinerary'` 를 반으로 잘라먹는다(같은 유형의 실측 사고가
+ * 이 리포에 있다 — 주석 제거가 `//`를 지워 URL 단언을 통과 불가로 만든 건).
+ *
+ * 그래서 전처리를 만들지 않고 **탐지 대상을 키로 좁혔다.** 주석줄은 첫 비공백 문자가 `#`
+ * 이므로 이 패턴에 걸리지 않고, `durationMin:`·`travelDurationMinutes:` 같은 진짜 필드는
+ * 걸린다(둘 다 뮤테이션으로 확인 — 02a ★2).
+ */
+const FORBIDDEN_DURATION_KEY_PATTERN = /^ *\w*[Dd]uration\w*\s*:/gm;
+function extractDurationKeys(block: string): string[] {
+  return [...block.matchAll(FORBIDDEN_DURATION_KEY_PATTERN)].map((match) =>
+    match[0].trim()
+  );
 }
 
 describe('AC-1 · 계약 회귀 — /stays/search 실재 + servers base (A-1, 선제 green)', () => {
@@ -310,6 +369,150 @@ describe('TRIP-220 AC-10 · 장소 계약 앵커 (A-4, 선제 green)', () => {
     // 부정 짝 — imageUrl이 required 줄로 옮겨간 흔적. NULL=미확보가 정상값이므로 필수가
     // 되면 서버가 기본 이미지를 지어내야 한다(BR-U1-06 취지에 반한다).
     expect(block).not.toContain('imageUrl]');
+  });
+});
+
+describe('TRIP-294 AC-1 · AC-5 · 일정 4오퍼레이션 경로·메서드·응답 코드 (A-5, 선제 green)', () => {
+  /**
+   * ⚠️ **선제 green** — openapi가 이미 이렇게 적혀 있어 지금 red를 낼 수 없다. 그런데 이
+   * 앵커가 **가장 필요한 시점**이 지금이다: 브랜치를 딴 직후에도 백엔드 머지 두 건
+   * (#118 `generation_state` · #120 자정 넘김 회귀)이 이 블록을 흔들었다. 생성물은 리포에
+   * 커밋되므로, 백엔드가 여기서 경로를 옮기거나 201을 200으로 바꿔도 **누가 `pnpm codegen`
+   * 을 돌리기 전까지는 생성물을 보는 테스트도 아무 말을 하지 않는다.** 그 사각지대를 이
+   * 회귀 앵커가 메운다(같은 파일 A-1·A-3·A-4와 같은 취지).
+   *
+   * 추적: US-SCHED-01(생성)·06(조회)·07/08(편집)·12(확정) · 01b Seed AC-1·AC-5.
+   * 201의 근거는 openapi 원문뿐이다 — construction 문서에는 상태 코드 서술이 전무하고,
+   * 루트 CLAUDE.md가 "구현 결정은 소유 패키지 canon이 정본"이라 정했다.
+   */
+  it('두 itinerary 경로가 실재하고, GET/POST/PUT과 POST의 201이 정확한 자리에 있다', () => {
+    const source = readOpenapiSource();
+    const paths = extractPaths(source);
+    const itineraryBlock = extractPathBlock(
+      source,
+      '/trips/{tripId}/itinerary'
+    );
+    const confirmBlock = extractPathBlock(
+      source,
+      '/trips/{tripId}/itinerary/confirm'
+    );
+
+    // 앵커 — 정규식·블록 슬라이싱이 실제로 뭔가를 모았다는 증거. 없으면 아래 완전 일치가
+    // 빈 배열끼리 비교되며 공허하게 통과한다.
+    expect(paths.length).toBeGreaterThan(0);
+    expect(itineraryBlock.length).toBeGreaterThan(0);
+    expect(confirmBlock.length).toBeGreaterThan(0);
+
+    expect(paths).toContain('/trips/{tripId}/itinerary');
+    expect(paths).toContain('/trips/{tripId}/itinerary/confirm');
+
+    // 완전 일치(순서 포함) — 조회·생성·편집 세 메서드가 한 경로를 공유한다.
+    expect(extractMethodNames(itineraryBlock)).toEqual(['get', 'post', 'put']);
+
+    // 완전 일치(순서 포함) — 순서가 코드를 메서드에 묶는다: get(200·404) → post(201·404)
+    // → put(200·404·409). 세 번째 원소가 '201'이라는 것이 AC-5의 실질이다. "블록 어딘가에
+    // 201이 있다"보다 강하다 — 조회가 201을 내도록 뒤집히는 개정도 여기서 잡힌다.
+    expect(extractResponseCodes(itineraryBlock)).toEqual([
+      '200',
+      '404',
+      '201',
+      '404',
+      '200',
+      '404',
+      '409',
+    ]);
+
+    // 확정은 POST 하나뿐이고 생성이 아니라 상태 전이라 200이다(PLANNED→CONFIRMED 단방향
+    // 잠금, US-SCHED-12). 409는 이미 확정됨·생성 진행 중(generationState=PARTIAL) 등.
+    expect(extractMethodNames(confirmBlock)).toEqual(['post']);
+    expect(extractResponseCodes(confirmBlock)).toEqual(['200', '404', '409']);
+  });
+});
+
+describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 선제 green)', () => {
+  /**
+   * ⚠️ **선제 green** — 위 A-5와 같은 이유로 지금 통과한다. 남기는 이유도 같다.
+   *
+   * 추적: `endsNextDay`=HC4 자정 넘김 · `hasViolation`=US-SCHED-07 위반 가시화(비차단) ·
+   * `startAt`/`endAt`=**INV-2**(솔버 검증값만) · duration 부재=**INV-3**·BR-U3-08·BR-U2-08
+   * ("경계에 소요시간 필드를 추가하는 변경은 어떤 이유로도 금지").
+   *
+   * **값 조합은 보지 않는다** — `(solveMode, isFallback)`의 금지 짝 `(FULL_AI,true)`·
+   * `(MINIMAL,false)`(BR-U2-03)는 대응 PBT `PBT-U2-B2`가 **backend 소유**로 명시돼 있다.
+   * 프론트는 형태(필드가 있다/필수다/값 목록이 이것뿐이다)까지만 잠근다(01b Seed 확정 3).
+   */
+  it('Itinerary가 필수 7필드·day 2필드·slot 6필드를 요구하고 duration 계열 키가 0건이다', () => {
+    const source = readOpenapiSource();
+    const block = extractSchemaBlock(source, 'Itinerary');
+
+    // 앵커 — 슬라이싱이 실제로 뭔가를 잡았다는 증거. 이웃 스키마로 새지 않는 것은 실측으로
+    // 확인했다(02a §5).
+    expect(block.length).toBeGreaterThan(0);
+
+    // 완전 일치(순서 포함) — 세 층의 required 줄. 필드가 하나라도 빠지거나 늘면 즉시 red.
+    // `generationState`는 #118(TRIP-267 day1 선행)이 더한 축이다 — 확정 상태(status)와
+    // **다른 축**이고, PARTIAL 인 동안 확정이 409가 되는 근거다.
+    expect(extractRequiredLines(block)).toEqual([
+      'required: [itineraryId, tripId, status, solveMode, isFallback, generationState, days]',
+      'required: [date, slots]',
+      'required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation]',
+    ]);
+
+    // 완전 일치(순서 포함) — enum 값이 추가·삭제·개명되면 즉시 red.
+    expect(extractEnumLists(block)).toEqual([
+      'enum: [PLANNED, CONFIRMED]',
+      'enum: [FULL_AI, DETERMINISTIC, MINIMAL]',
+      'enum: [PARTIAL, COMPLETE, FAILED]',
+    ]);
+
+    // 부정(INV-3) — duration 계열이 **필드로** 선언된 자리. 걸린 것을 모아 실패 diff에 어떤
+    // 이름이 들어왔는지 찍는다.
+    expect(extractDurationKeys(block)).toEqual([]);
+
+    // 긍정(대조군) — 위 부정 단언이 상대하는 **수호 주석**이 살아 있다. 이 줄이 없으면
+    // 부정 단언은 "왜 duration 글자가 이 블록에 있는가"의 설명을 잃고, 다음 사람이 주석을
+    // 지우는 것으로 red를 "고치는" 길이 열린다. 주석만 지워도 여기서 red가 난다.
+    expect(block).toContain('# INV-3: 소요시간(duration) 필드 없음');
+  });
+
+  it('GenerateItineraryRequest는 generationMode가 선택이고 값이 2종뿐이다', () => {
+    const source = readOpenapiSource();
+    const block = extractSchemaBlock(source, 'GenerateItineraryRequest');
+
+    expect(block.length).toBeGreaterThan(0);
+
+    // required 줄이 하나도 없다 = 본문 전체가 선택이다(미지정 시 서버가 FULLY_AI).
+    expect(extractRequiredLines(block)).toEqual([]);
+
+    // ⚠️ u3 domain-entities는 `GenerationMode{FULLY_AI, CO_PLAN, MANUAL}` 3종으로 적었으나
+    // 계약은 2종뿐이다(드리프트 A — BE 티켓 후보로 상신, 01b Seed [기록] 입력). 이 단언은
+    // **계약 그대로**를 잠근다 — 문서가 아니라 openapi가 코드젠의 입력이기 때문이다.
+    expect(extractEnumLists(block)).toEqual(['enum: [FULLY_AI, CO_PLAN]']);
+  });
+
+  it('EditItineraryRequest의 슬롯은 필수 4필드뿐이다(응답 슬롯보다 2개 적다)', () => {
+    const source = readOpenapiSource();
+    const block = extractSchemaBlock(source, 'EditItineraryRequest');
+
+    expect(block.length).toBeGreaterThan(0);
+
+    // 요청 슬롯과 응답 슬롯을 **뒤섞는** 오사용을 막는 대조군이다. 응답 슬롯의 필수 6종 중
+    // `endsNextDay`는 여기서 선택(전체 교체 편집이라 조회 응답의 현행 값을 그대로 실어야
+    // 플래그가 소실되지 않는다 — #120 TRIP-279 회귀 수정), `hasViolation`은 아예 없다
+    // (서버가 재검증해 내려주는 값이지 클라가 올리는 값이 아니다).
+    expect(extractRequiredLines(block)).toEqual([
+      'required: [days]',
+      'required: [date, slots]',
+      'required: [poiId, startAt, endAt, isFixed]',
+    ]);
+
+    // 긍정(대조군) — 선택 필드가 실재한다. 이게 없으면 required만 보는 위 단언이
+    // "endsNextDay를 통째로 지우는" 방향의 개정을 못 잡는다(지우면 자정 넘김 플래그가
+    // 편집 왕복에서 소실된다 — #120이 고친 바로 그 회귀다).
+    expect(block).toContain('endsNextDay:');
+
+    // 부정 짝 — 서버 계산값이 요청 본문으로 새어 들어오지 않았다.
+    expect(block).not.toContain('hasViolation');
   });
 });
 

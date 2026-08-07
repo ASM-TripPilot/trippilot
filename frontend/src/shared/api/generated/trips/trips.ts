@@ -28,7 +28,10 @@ import type {
   BaseAssignment,
   Coverage,
   CreateTripRequest,
+  EditItineraryRequest,
   EditTripRequest,
+  GenerateItineraryRequest,
+  Itinerary,
   MustVisit,
   Trip,
   ValidationErrorResponse,
@@ -1294,6 +1297,420 @@ export function useGetTripsTripIdMustVisits<
   return withQueryKey(query, queryOptions.queryKey);
 }
 
+/**
+ * @summary 일정 조회 — 소유 여행의 현행 일정. 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+ */
+export const getTripsTripIdItinerary = (
+  tripId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<Itinerary>({
+    url: `/trips/${tripId}/itinerary`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetTripsTripIdItineraryQueryKey = (tripId: string) => {
+  return [`/trips/${tripId}/itinerary`] as const;
+};
+
+export const getGetTripsTripIdItineraryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTripsTripIdItineraryQueryKey(tripId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdItinerary>>
+  > = ({ signal }) => getTripsTripIdItinerary(tripId, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: tripId !== null && tripId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdItineraryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdItinerary>>
+>;
+export type GetTripsTripIdItineraryQueryError = void;
+
+export function useGetTripsTripIdItinerary<
+  TData = Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+  TError = void,
+>(
+  tripId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdItinerary>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdItinerary<
+  TData = Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdItinerary>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdItinerary<
+  TData = Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 일정 조회 — 소유 여행의 현행 일정. 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+ */
+
+export function useGetTripsTripIdItinerary<
+  TData = Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdItinerary>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdItineraryQueryOptions(tripId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary AI 일정 생성 — 소유 여행 날짜 기준 ScheduleAgent 호출·영속(첫 슬라이스). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+ */
+export const postTripsTripIdItinerary = (
+  tripId: string,
+  generateItineraryRequest?: GenerateItineraryRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<Itinerary>({
+    url: `/trips/${tripId}/itinerary`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data: generateItineraryRequest,
+    signal,
+  });
+};
+
+export const getPostTripsTripIdItineraryMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdItinerary>>,
+    TError,
+    { tripId: string; data?: GenerateItineraryRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdItinerary>>,
+  TError,
+  { tripId: string; data?: GenerateItineraryRequest },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdItinerary'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdItinerary>>,
+    { tripId: string; data?: GenerateItineraryRequest }
+  > = (props) => {
+    const { tripId, data } = props ?? {};
+
+    return postTripsTripIdItinerary(tripId, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdItineraryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTripsTripIdItinerary>>
+>;
+export type PostTripsTripIdItineraryMutationBody =
+  GenerateItineraryRequest | undefined;
+export type PostTripsTripIdItineraryMutationError = void;
+
+/**
+ * @summary AI 일정 생성 — 소유 여행 날짜 기준 ScheduleAgent 호출·영속(첫 슬라이스). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+ */
+export const usePostTripsTripIdItinerary = <TError = void, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdItinerary>>,
+      TError,
+      { tripId: string; data?: GenerateItineraryRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdItinerary>>,
+  TError,
+  { tripId: string; data?: GenerateItineraryRequest },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdItineraryMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409
+ */
+export const putTripsTripIdItinerary = (
+  tripId: string,
+  editItineraryRequest: EditItineraryRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<Itinerary>({
+    url: `/trips/${tripId}/itinerary`,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    data: editItineraryRequest,
+    signal,
+  });
+};
+
+export const getPutTripsTripIdItineraryMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putTripsTripIdItinerary>>,
+    TError,
+    { tripId: string; data: EditItineraryRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putTripsTripIdItinerary>>,
+  TError,
+  { tripId: string; data: EditItineraryRequest },
+  TContext
+> => {
+  const mutationKey = ['putTripsTripIdItinerary'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putTripsTripIdItinerary>>,
+    { tripId: string; data: EditItineraryRequest }
+  > = (props) => {
+    const { tripId, data } = props ?? {};
+
+    return putTripsTripIdItinerary(tripId, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PutTripsTripIdItineraryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putTripsTripIdItinerary>>
+>;
+export type PutTripsTripIdItineraryMutationBody = EditItineraryRequest;
+export type PutTripsTripIdItineraryMutationError = void;
+
+/**
+ * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409
+ */
+export const usePutTripsTripIdItinerary = <TError = void, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putTripsTripIdItinerary>>,
+      TError,
+      { tripId: string; data: EditItineraryRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof putTripsTripIdItinerary>>,
+  TError,
+  { tripId: string; data: EditItineraryRequest },
+  TContext
+> => {
+  return useMutation(
+    getPutTripsTripIdItineraryMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * @summary 일정 확정 — PLANNED→CONFIRMED 단방향 잠금
+ */
+export const postTripsTripIdItineraryConfirm = (
+  tripId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<Itinerary>({
+    url: `/trips/${tripId}/itinerary/confirm`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostTripsTripIdItineraryConfirmMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdItineraryConfirm>>,
+    TError,
+    { tripId: string },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdItineraryConfirm>>,
+  TError,
+  { tripId: string },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdItineraryConfirm'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdItineraryConfirm>>,
+    { tripId: string }
+  > = (props) => {
+    const { tripId } = props ?? {};
+
+    return postTripsTripIdItineraryConfirm(tripId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdItineraryConfirmMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTripsTripIdItineraryConfirm>>
+>;
+
+export type PostTripsTripIdItineraryConfirmMutationError = void;
+
+/**
+ * @summary 일정 확정 — PLANNED→CONFIRMED 단방향 잠금
+ */
+export const usePostTripsTripIdItineraryConfirm = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdItineraryConfirm>>,
+      TError,
+      { tripId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdItineraryConfirm>>,
+  TError,
+  { tripId: string },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdItineraryConfirmMutationOptions(options),
+    queryClient
+  );
+};
 /**
  * @summary 필수 방문지 삭제
  */

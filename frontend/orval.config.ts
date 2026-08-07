@@ -8,6 +8,7 @@ import { defineConfig } from 'orval';
 // orval은 태그 단위 필터만 지원해 두 태그에 딸린 소비자 0 오퍼레이션(bases·coverage·
 // must-visits·PUT /me/preferences)도 함께 생성된다 — 01b Seed D3 수용.
 // TRIP-220에서 places 추가: 장소 탐색·담기 4오퍼레이션의 계약 원본(d04·d02 화면의 선행 칸).
+// TRIP-294: itinerary 4오퍼레이션이 tags에 이미 있는 trips 소속이라 배열 수정 없이 재생성만 한다.
 export default defineConfig({
   trippilot: {
     input: {
