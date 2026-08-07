@@ -42,7 +42,7 @@ class PoiInternalController(
 data class BatchGetRequest(val poiIds: List<UUID>)
 
 /**
- * POI 정본 응답(snake_case). category=경계 코드, data_quality=완전성 파생(FULL/PARTIAL). 소요시간 없음(INV-3).
+ * POI 정본 응답(snake_case). category=경계 코드, data_quality=완전성 파생(FULL/PARTIAL/MINIMAL). 소요시간 없음(INV-3).
  */
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class PoiReadResponse(

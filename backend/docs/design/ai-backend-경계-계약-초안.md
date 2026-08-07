@@ -69,7 +69,7 @@ Poi {
   dataStatus(ACTIVE/UNVERIFIED/LOST/CLOSED),
   source(KAKAO_LOCAL/TOURAPI/MANUAL),
   savedCount,                         // 인기 신호 1순위 (rating 대체)
-  dataQuality(FULL/PARTIAL)           // 합성 정렬키 2순위 (완전성 파생, 결정 1)
+  dataQuality(FULL/PARTIAL/MINIMAL)   // 합성 정렬키 2순위 (완전성 파생, 결정 1 · 3등급은 PR #104 협의)
 }
 // per-POI 비용(avg_cost)·평점(rating) 없음: 백엔드 정본 미보유(결정 1)
 ```
@@ -84,8 +84,11 @@ Poi {
 
 - POI 정본은 **`avg_cost`·`rating`을 갖지 않는다.** 예산은 **trip/user 레벨**(preference_set.budget_tier · trip.budget_total)이지 per-POI가 아니다.
 - AI `pool_builder` 조정 (합의): 예산 필터 → **카테고리 소프트 가중치**, 인기 정렬 → **`savedCount`**.
-- **합성 정렬키(콜드스타트 대비, AI 제안)**: `savedCount ↓ → dataQuality(FULL>PARTIAL) ↓ → 거점거리 ↑ → poiId ↑`. 유저 쌓이면 savedCount가 자동 지배 → 전환 시점 불필요·결정론 유지.
-  → **백엔드 조치**: read 응답에 `dataQuality`(FULL/PARTIAL) 노출(완전성 파생).
+- **합성 정렬키(콜드스타트 대비, AI 제안)**: `savedCount ↓ → dataQuality(FULL>PARTIAL>MINIMAL) ↓ → 거점거리 ↑ → poiId ↑`. 유저 쌓이면 savedCount가 자동 지배 → 전환 시점 불필요·결정론 유지.
+  → **백엔드 조치**: read 응답에 `dataQuality`(FULL/PARTIAL/MINIMAL) 노출(완전성 파생).
+  → **3등급 파생 기준(PR #104 확정 요청분)**: `FULL`=영업시간+대표사진 · `PARTIAL`=영업시간O·사진X · **`MINIMAL`=영업시간 없음**(사진 무관).
+    MINIMAL 은 영업일 필터·HC1 을 신뢰할 수 없는 POI = AI 후보풀 제외 대상. 전제: 영업시간 원본이 존재해야 하므로
+    시드(`R__seed_stub_pois.sql`)에 영업시간을 채우고, 프로덕션 데이터는 **실 벤더 어댑터가 U5 통합 전에 선행**해야 한다.
 
 ### 결정 2 · 카테고리 = 경계 코드 8종 고정 (백엔드 정본) ✅
 

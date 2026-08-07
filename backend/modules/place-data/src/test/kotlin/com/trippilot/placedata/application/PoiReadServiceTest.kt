@@ -14,7 +14,7 @@ import io.kotest.matchers.shouldBe
 import java.time.Instant
 import java.util.UUID
 
-/** 리버스 read — ACTIVE만, 반경 하버사인 컷 + 합성 정렬키(savedCount↓ → FULL>PARTIAL → 거리↑ → poiId↑). */
+/** 리버스 read — ACTIVE만, 반경 하버사인 컷 + 합성 정렬키(savedCount↓ → FULL>PARTIAL>MINIMAL → 거리↑ → poiId↑). */
 class PoiReadServiceTest : StringSpec({
 
     val now = Instant.parse("2026-08-06T00:00:00Z")

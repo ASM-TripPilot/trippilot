@@ -15,9 +15,13 @@ enum class DataStatus { ACTIVE, UNVERIFIED, LOST, CLOSED }
 enum class PoiSource { KAKAO_LOCAL, TOURAPI, MANUAL }
 
 /**
- * 데이터 완전성 등급(경계 계약 BE-5) — AI 후보풀 품질 필터·정렬 신호. **선언 순서 = 품질 내림차순**(정렬 키).
+ * 데이터 완전성 등급(경계 계약 BE-5) — AI 후보풀 품질 필터·정렬 신호.
  * MINIMAL(영업시간 미확보)은 영업일 필터·HC1을 신뢰할 수 없어 AI가 후보에서 제외한다 — "문 닫은 곳이
  * 하드 제약 위반 없이 일정에 드는" 조용한 품질 저하를 막는 게 이 등급의 존재 이유(PR #104 협의).
+ *
+ * ⚠️ **선언 순서 = 품질 내림차순이며 정렬 키로 쓰인다**([PoiReadService] 합성 정렬). AI 측 동명 enum
+ * (`ai/src/trippilot/domain/poi.py`)은 반대 순서(오름차순)지만 와이어는 문자열 name 이라 무관하다 —
+ * "양쪽 순서를 맞추자"며 여기를 뒤집으면 정렬이 MINIMAL 우선으로 역전되니 바꾸지 말 것.
  */
 enum class DataQuality { FULL, PARTIAL, MINIMAL }
 

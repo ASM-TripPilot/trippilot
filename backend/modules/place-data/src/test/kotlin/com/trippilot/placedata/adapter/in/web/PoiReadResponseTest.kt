@@ -10,7 +10,7 @@ import io.kotest.matchers.shouldBe
 import java.time.Instant
 import java.util.UUID
 
-/** 경계 매핑 — 한글 카테고리→코드(8종 전수), dataQuality 파생(FULL/PARTIAL), 거리 전달. */
+/** 경계 매핑 — 한글 카테고리→코드(8종 전수), dataQuality 파생(FULL/PARTIAL/MINIMAL), 거리 전달. */
 class PoiReadResponseTest : StringSpec({
 
     val now = Instant.parse("2026-08-06T00:00:00Z")
