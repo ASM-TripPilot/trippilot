@@ -561,3 +561,206 @@ D3(지라 TRIP-181 티켓 본문의 사실 오기 2건 — 빈 스텁 서술·�
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-209 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260805-trip209-mustvisit-seed/00_gates.md`(게이트①-1·①-2 절)·`01_spec-analyst_brief.md`(§8-③)·`01b_ouroboros_seed.md`(§4)·`02a_test-design_spec.md`(§2-4).
 
 ---
+
+## CONSTRUCTION — U2 Itinerary Intelligence/Solver · Functional Design 착수 (Step 1~4)
+**Timestamp**: 2026-08-07T03:59:55Z
+**User Input**: "그럼 2 -> 3진행하자 실제 구현은 우리가 할거야 너는 문서 작업만"
+
+**AI Response**: U2(Itinerary Intelligence/Solver) Functional Design **Step 1~4 수행**, Step 5(답변 수집) 대기. 산출물 = `aidlc-docs/construction/plans/u2-itinerary-intelligence-functional-design-plan.md`(계획 + 질문 Q1~Q8).
+
+**Step 1 기존 자산 조사 — 핵심 발견**: U2는 **그린필드가 아니다**. U1 착수(코드 0줄)와 상황이 근본적으로 다르다.
+- `ai/src/trippilot/` 에 U2 실질이 **구현 완료**: c2 9모듈(facade·HC1~HC4 constraints·ortools·llm·fallback·scorer·travel·repair·quality) = `SolverPort`+`FeasibilityValidator`+`TravelEstimatePort`, c1(gateway·gates 4·workers 4·anthropic 어댑터) = `PreferenceScoringPort`/`LlmGatewayPort`, ports 9종.
+- `ai/aidlc-docs/` = **별도 AI-DLC 워크스페이스**(자체 inception + construction). 유닛 번호 체계가 다르다: aidlc U2 ≈ ai `u1-domain-ports`(2026-07-23 완료) + `u2-solver`(2026-07-29 코어 완료, 76 tests green) + `u4-c1-gateway`(FD 완료·승인 대기) + `agent-foundation`. **U2 기능설계가 이미 존재**(`u2-solver/functional-design/` 3종).
+- `backend/modules/itinerary-generation/` 에 U3(C8) 착수분 실재: `ScheduleAgentPort.kt`(경계 포트, TRIP-228) · 서비스 4 · 도메인 3 · 테스트 8 · `V2.7__itinerary.sql`·`V2.8__visit_slot_ends_next_day.sql`.
+- 프런트는 `(tabs)/itinerary.tsx` 셸뿐 — U3 화면 설계는 통째로 남음.
+- 드리프트 감사 `ai/docs/backend-ai-정합성-점검.md`(2026-08-06 재감사) P1~P8·N1~N6을 계획서에 표로 옮기고 현황 갱신: **N1(자정 넘김 HC4)은 `V2.8` + `endsNextDay`로 해소 확인**(TRIP-279 반영됨), P5 해소, 잔여 = P6(정본 `solver/` 디렉토리 표기)·N2~N6·Violation 스키마(TRIP-280·281·282).
+
+**제기한 쟁점**: 같은 대상의 설계 문서가 이미 세 곳(aidlc `component-methods.md` / ai `aidlc-docs` / backend `ai-backend-경계-계약-초안.md`)에 있고 서로 어긋나 있다. U2 FD를 규칙대로 풀세트로 새로 쓰면 **네 번째 정본**이 되어 즉시 드리프트한다 → Q1로 산출물 성격 자체를 사용자 결정에 부침(A 경계 접합 2종[권장] / B 풀세트 3종 / C U2 스킵).
+
+**질문 Q1~Q8**: Q1 산출물 성격 · Q2 정본 우선순위(실장 vs 설계, 권장=분할) · Q3 SolverPort 4메서드↔ScheduleAgentPort 3메서드 · Q4 O-SOLVER 임계(권장=관측·트리거만) · Q5 잔여 드리프트 결정 위치 · Q6 FeasibilityValidator 명명(권장=HC1~HC4 승격) · Q7 Bedrock 교체 취급 범위 · Q8 U3 라이브 Figma 밴드 h 대조 여부.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내. 사용자 지시로 U2→U3 순차 착수, **Code Generation은 범위 밖**(사용자 재확인: "실제 구현은 우리가 할거야 너는 문서 작업만"). 계획 승인 게이트 대기 중 — Step 6(산출물 생성) 미착수.
+
+---
+
+## CONSTRUCTION — U2 Functional Design · 답변 수집 + 산출물 생성 (Step 5~6)
+**Timestamp**: 2026-08-07T04:35:00Z
+**User Input**: "ㄱㄱ" (계획서 `[Answer]:` 태그에 직접 기입: **Q1=A · Q2=A · Q3=A · Q4=B · Q5=A · Q6=A · Q7=C/ai 폴더 확인 · Q8=A**)
+
+**AI Response**: 답변 8건 수집 — 모호 응답("depends"·"maybe"·"섞어서" 등) 0건 → 명확화 질문 파일 미생성. **Q2는 AI 권장안(C 분할)이 아닌 A(실장 우선)를 사용자가 선택** — 그대로 적용하되, 양쪽 실장이 서로 다를 때는 문서가 결정한다는 2순위 규칙을 business-rules §0에 명시(Q5=A와 정합). 불변식(INV-1~4)은 개정 대상이 아님을 3순위 규칙으로 못박음(현재 양쪽 실측 위반 0).
+
+**Q7=C 조사 실행**: `ai/` 전수 조사 결과 — `ai-adr.md` **AI-D06(2026-07-21)**: LLM 벤더 = **Anthropic API 직접(`api.anthropic.com`), AWS Bedrock 경유 아님**(회사 결제 승인이 Anthropic 직접 경로로 진행). 같은 ADR이 "'Bedrock 2차 솔버'도 Anthropic API 호출로 구현"이라 명시. ai 소스 전체 Bedrock/AgentCore 참조 **0건**, 2차 솔버 실장은 `c2/llm_solver.py`. → **인셉션 FR-SOLVER-02/03의 "Bedrock AgentCore 교체" 전제가 이미 폐기된 상태**임을 확인, BR-U2-16(벤더 중립 "엔진 교체"로 재정의)과 갭 G-U2-02로 기록.
+
+**산출물 2종** (`aidlc-docs/construction/u2-itinerary-intelligence/functional-design/`):
+1. **business-logic-model.md** — 소유 경계 지도(정본 계약 ↔ 실장 위치 ↔ 소유 팀) · 인용 정본 목록(재서술 금지) · **경계 2개**(포워드 ScheduleAgent · 리버스 POI read, 굵은 경계) · 포워드 요청/응답 필드표 · `validate`/`repair` 계약(N6 해소) · 호출 흐름 F-U2-1~3 · 폴백 체인 정본↔실장 대조 · **불변식 INV-1~4 집행 지점** · 미개통 2건(`recalculate`·`proposeSlotCandidates`) · 갭 **G-U2-01~09**
+2. **business-rules.md** — 규칙 적용 순서 3단(실장 우선 → 양쪽 상이 시 문서 결정 → 불변식은 개정 불가) · **BR-U2-01~16** · O-SOLVER 관측 4지표·판정 트리거 · PBT 경계 신설 3종 · 미결 O-U2-1~3
+
+**드리프트 종결 결정(핵심)**: BR-U2-01 Violation `{code, slotKey, detail}` 통일(P4 잔여) · BR-U2-02 **HC1~HC4를 정본 어휘로 승격**, 정본 5메서드 표기 폐기(Q6=A) · BR-U2-03 **SolveMode 4→3 매핑 확정**(`RULE_FALLBACK`→`DETERMINISTIC`+`isFallback`, 단사·역매핑 가능, 금지 조합 2건 명시 — N2 종결) · BR-U2-04 `slotKey="{date}#{poiId}"` 규약 + 영속 유실 해소 필요(N3) · BR-U2-05 `candidatesSummary` 신설(N4, 양쪽 미구현 확인) · BR-U2-06 FreshnessMeta는 경계=집계형 유지, AI per-source는 내부 관측용(N5) · BR-U2-07 **`FallbackMode` 5종 enum 폐기 → 3축 표현** · BR-U2-08 거리=표시 문자열, **경계에 duration 필드 추가 영구 금지**(INV-3) · BR-U2-09 explanations 시각·소요시간 언급 금지(INV-2/3 우회 차단).
+
+**Q4=B 이행**: 임계 숫자를 문서에 넣지 않고 관측 지표 4종(composite 분포·강등 비율·수동 편집률·재생성 요청률)과 판정 회의 트리거(표본 도달 / 4주 / 상대 악화)만 확정. **`QualityScore`는 경계로 넘기지 않기로 결정** — 소비자가 아직 없어 backend에 해석 책임만 생김. AI 텔레메트리 + backend 행동 지표를 판정 회의에서 합침.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계). Code Generation 미수행(사용자: "실제 구현은 우리가 할거야 너는 문서 작업만"). **승인 게이트 대기** — 승인 시 U3 Functional Design Plan 착수(Q8=A: 라이브 Figma 밴드 h 대조 포함).
+
+---
+
+## CONSTRUCTION — U2 Functional Design 승인 + U3 착수 지시
+**Timestamp**: 2026-08-07T04:50:00Z
+**User Input**: "ㄱㄱ"
+
+**AI Response**: U2 Functional Design **승인 완료**로 처리. 산출물 2종(`u2-itinerary-intelligence/functional-design/business-logic-model.md`·`business-rules.md`) 확정. 완료 메시지의 2선택지 중 "Continue to Next Stage — U3 AI Itinerary Generation · Functional Design"를 사용자가 선택 → U3 FD Step 1(유닛 컨텍스트 분석 + 기존 자산 조사 + Q8=A 라이브 Figma 대조) 착수.
+
+**U2 잔여 스테이지 처리**: NFR Requirements·NFR Design은 **미실행 상태로 남긴다**(스킵 확정 아님). 사용자 지시가 "2 → 3 진행"이었고 U2 산출물이 경계 접합 문서라 NFR 스테이지의 소비자가 아직 없다. 필요 시 U3 이후 복귀 가능. Infrastructure Design은 U0·U1과 동형으로 배포 계획 부재 → 해당 없음.
+
+**Context**: SCOPE.md 현행 범위 내. Code Generation 미수행(팀 직접 개발).
+
+---
+
+## CONSTRUCTION — U3 AI Itinerary Generation · Functional Design 착수 (Step 1~4)
+**Timestamp**: 2026-08-07T05:20:00Z
+**User Input**: (직전 "ㄱㄱ" 승인에 이은 U3 착수 — 별도 입력 없음)
+
+**AI Response**: U3 FD **Step 1~4 수행**, Step 5(답변) 대기. 산출물 = `plans/u3-ai-itinerary-functional-design-plan.md`(기존 자산 + 라이브 대조 + 질문 Q1~Q9).
+
+**Step 1 기존 자산**: backend `modules/itinerary-generation` 골격 실재 — 컨트롤러(`POST/GET/PUT /api/v1/trips/{tripId}/itinerary` + `POST /confirm`)·서비스 4(Generate·Edit·Confirm·Query)·도메인 3(`Itinerary`·`ScheduleAgentPort`·`MinimalItineraryFallback`)·테스트 8 + `V2.7`·`V2.8`. 도메인에 `ItineraryStatus{PLANNED,CONFIRMED}` 단방향 잠금(US-SCHED-12)·`VisitSlot`의 duration 필드 부재(INV-3 타입 강제)가 이미 반영됨. **frontend는 `(tabs)/itinerary.tsx` 빈 셸 = 화면 통째 미착수** → U3의 실질은 프런트 설계.
+
+**Step 1c 라이브 Figma 밴드 h 대조 (Q8=A 이행)**: 캔버스 `1228:1045` 행 `y=10640` **프레임 33개 = 화면 코드 30 + h36 변형 4**(`h04·h05·h07·h09~h21·h23~h36`, 결번 `h01·h02·h03·h06·h08·h22`). **시각 확인 4장**(`h04`·`h11`·`h25`·`h36-default` 스크린샷), 나머지 26코드는 프레임 이름 수준 매핑 — 계획서에 그 한계를 명시.
+
+**드리프트 D-U3-1~14**: (1) **h36 변경 이력·되돌리기가 스토리 0** — 실측 "바꾼 내용은 언제든 되돌릴 수 있어요" + 항목별 [되돌리기] (2) **U3·U4·U5·U9 4중 경계가 한 화면**(AI 재계획=U4 · 편집=U3 · 이력=U5 · `with-companions`=U9 후속게이트) (3) **동선 재정렬 제안 신규**(h25 "3.2km→2.4km, 이동 25% 감소" 배너 + h28 전·후) — U2가 미개통으로 남긴 `recalculate` 호출 (4) **시각 노출이 단계마다 다름** — h11 추천안은 시간대 라벨만(`오전·활동`), h25 완성은 구체 시각(`09:30`) (5) 추천 강도 `최소|균형|많이`가 요청 입력이 아니라 **결과 화면**에 (6) **"다른 후보 N"이 완전 AI 경로에도 존재** → U2가 `proposeSlotCandidates`를 CO_PLAN 소관으로 이연한 전제(O-U2-3)가 틀림 (7) 영업시간·`⚠︎ 월요일 휴관`이 화면에 있으나 경계 `VisitSlotDisplay`에 필드 없음 (8) 완성 일정 지도 5벌·시간표 2벌 신구 혼재 (9) 필수 방문지 화면(h05·h07)이 h밴드에 있으나 데이터는 U1 소유 (10) 같이 고르기 6화면 플로우 vs 스토리 한 줄 (11) h04 방식 카드에 스토리가 요구한 예상 소요·인터랙션 양 없음 (12·13) **정합 확인**: 2뷰 세그먼트·구간 거리만 표기(소요시간 0건, INV-3 준수)·[길찾기] 외부 위임·h35 후보 0건·h31 지도 폴백·h34 확정 읽기전용 (14) `h22map`이 밴드 d `d06-장소 상세` 자식에 잔존(이름 오탈).
+
+**질문 Q1~Q9**: Q1 변경 이력 소관(권장 A: U3=편집 이력만, Plan-B=U4·아카이브=U5·동행자=1차 제외) · Q2 동선 재정렬 지위(권장 A: 1차 포함 + `recalculate` 개통) · Q3 시각 노출 단계 정책(권장 A: 라이브대로) · Q4 추천 강도 동작(권장 A: 재생성) · Q5 `proposeSlotCandidates` 개통(권장 A: 지금 개통 + U2 O-U2-3 사후 종결) · Q6 화면 다벌 정본(권장 A: U1 선례) · Q7 필수 방문지 화면 소관(권장 A: 데이터=U1·화면=U3) · Q8 공동편집 1차 노출(권장 A: 제외) · Q9 영업시간 데이터 경로(권장 A: backend 합성).
+
+**Context**: SCOPE.md 현행 범위. Code Generation 미수행. **Q2·Q5 답변에 따라 U2 산출물(O-U2-3)의 사후 정정이 발생**할 수 있음 — 그 경우 U1 선례(2026-07-23 인셉션 사후 개정)와 같은 방식으로 처리.
+
+---
+
+## CONSTRUCTION — U3 Functional Design · 답변 수집 + 산출물 생성 (Step 5~6) + U2 사후 정정
+**Timestamp**: 2026-08-07T06:05:00Z
+**User Input**: "적음 ㄱㄱ" (계획서 `[Answer]:` 기입: **Q1=A · Q2=B · Q3=(D 줄에 "A") · Q4=A · Q5=A · Q6=A · Q7=A · Q8=A · Q9=A**)
+
+**AI Response**: 답변 9건 수집. **Q3은 `D) Other` 줄 끝에 "A"가 적히고 `[Answer]:`는 비어 있어 A(라이브대로 확정)로 해석**했고 그 해석을 계획서·본 로그에 명시했다. **Q2는 AI 권장안(A: `recalculate` 개통)이 아닌 B(재생성으로 대체)를 사용자가 선택** — 그대로 적용. 그 외 모호 응답 0 → 명확화 파일 미생성.
+
+**Q2=B와 Q4=A의 결합 결과를 설계로 흡수**: 둘 다 `generate` 재호출로 귀결되고 재생성은 사용자 편집분을 지운다 → **"재생성 계열" 공통 절차**(확인 대화 → 직전 상태 리비전 스냅숏 → 재호출 → 사용자 채택)를 신설(business-logic-model §1.1, BR-U3-17~22, INV-U3-08).
+
+**Q2=B가 드러낸 갭 G-U3-1**: `h25` 배너가 재생성 **전에** "동선 정리하면 3.2km → 2.4km · 이동 25% 감소"를 단언하는데, 재생성 방식에서는 돌려보기 전 그 수치를 알 수 없다. → 배너 문구에서 수치 제거(예: "동선을 더 짧게 정리해볼까요?") + 수치는 결과 화면(h28)에서만, 개선 없으면 원본 유지 + "지금 동선이 이미 짧아요"(BR-U3-20). **디자인 협의 필요**로 표기.
+
+**산출물 4종** (`aidlc-docs/construction/u3-ai-itinerary/functional-design/`):
+1. **business-logic-model.md** — DEC-U3-1~9 · 재생성 계열 공통 절차 · 플로우 F-U3-1~7(방식분기·완전AI·같이고르기·직접·편집재검증·완성확정·숙소후등록) · U2 경계 소비 지점 4종 · **`proposeSlotCandidates` 계약 §3.1** · 폴백 표시 표 · 갭 G-U3-1~7
+2. **domain-entities.md** — 기존 실장 3종(`Itinerary`·`ItineraryDay`·`VisitSlot`)을 정본으로 기록 + 신설 **`ItineraryRevision`**(편집 이력·되돌리기)·**`GenerationSession`**(day1 조기노출) · INV-U3-01~08 · 이벤트 4종 · 소유 경계표
+3. **business-rules.md** — **BR-U3-01~34**(진입·표시·편집·재생성·슬롯교체·확정·이력) + PBT-U3-1~5 + 미결 O-U3-1~4
+4. **frontend-components.md** — 라우트 15(빈 셸 `(tabs)/itinerary.tsx`를 채움) · 컴포넌트 33종 · 폼검증 · testID 제안값(구현 확정 시 소급 기록 규약 명시) · PBT
+
+**핵심 규칙**: BR-U3-07 **시각 노출 단계 정책**(초안=시간대 라벨만·완성/확정=검증 시각, 고정 블록은 초안에서도 시각) · BR-U3-09 영업시간은 backend가 C7 합성 · BR-U3-29 **확정 후 재편집 = `CONFIRMED → PLANNED` 역전이 신설**(도메인이 현재 단방향이라 이 규칙이 만드는 변경임을 명시, G-U3-6 해소) · BR-U3-31 U3 리비전은 4종(BASELINE·GENERATE·EDIT·RESTORE)뿐이고 Plan-B는 U4 기록 · BR-U3-34 `with-companions`는 컬럼도 만들지 않음.
+
+**U2 사후 정정 (Q5=A)**: 승인 완료된 U2 산출물 2종을 정정 — `business-logic-model.md` §7에서 `proposeSlotCandidates` 행을 취소선 처리하고 **§7.1 개통 확정** 신설(정정 사유 = U2 승인 시점 전제 "CO_PLAN 전용"이 라이브 실측으로 반증됨: `h11` "다른 후보 3" · `h12` 완전AI 슬롯 교체 화면), `business-rules.md` **O-U2-3 종결**(`recalculate`는 U4 유지 — U3가 DEC-U3-2로 부르지 않음). 결과: `ScheduleAgentPort`가 **4메서드**로 확정. 시그니처 정본은 U3 §3.1에 두고 U2는 참조만(중복 서술 금지). 스테이지 체크박스 변동 없음 — U1 정정 선례(2026-07-29·07-31·08-02·08-06)와 같은 성격.
+
+**Context**: SCOPE.md 현행 범위. Code Generation 미수행. **승인 게이트 대기.**
+
+---
+
+## CONSTRUCTION — U3 Functional Design 승인 + NFR Requirements 착수 (Step 1~4)
+**Timestamp**: 2026-08-07T06:40:00Z
+**User Input**: "nfr이 뭐지" → (설명 후) "ㄱㄱ"
+
+**AI Response**: (1) **NFR 개념 설명** — 기능 요구("무엇을 하는가") vs 비기능 요구("얼마나 잘 하는가"), U0·U1이 만든 4문서(`nfr-requirements`·`tech-stack-decisions`·`nfr-design-patterns`·`logical-components`)의 실물 예시(P-RES-U1-1 서킷 브레이커 격리 등) 제시. **U3 NFR의 실익을 솔직히 축소 평가**: 지연 예산·폴백·침묵 실패 금지 등 절반은 이미 U3 FD(BR-U3-*)에 들어갔고, 새로 나올 건 **재생성 비용 상한**·화면 성능 예산·오프라인 정책·관측 지표 정도 → "얇게, 신규 항목만" 권고.
+
+(2) **U3 Functional Design 승인 처리** — 사용자가 "NFR 돌릴까? U4로 갈까?"에 "ㄱㄱ"로 답해 다음 스테이지 진입을 선택했으므로 **직전 스테이지(U3 FD) 승인으로 해석**했다. 산출물 4종 확정.
+
+(3) **U3 NFR Requirements Step 1~4 수행**, Step 5 대기. 산출물 = `plans/u3-ai-itinerary-nfr-requirements-plan.md`.
+- **Step 1 결과**: FD에 이미 확정된 NFR성 규칙 **7건**(BR-U3-03 지연 예산 · 04·05 day1 조기노출/취소 · 11 침묵 실패 금지 · 08 INV-3 · 16 저장 대기 · 12 비차단 검증 · 18·19 재생성 스냅숏)을 표로 식별하고 **재서술 금지** 대상으로 못박음. 상속 기반선(50 RPS·99.9%·재시도 없음·서킷 분리·stale-if-error·security-baseline Full·PBT blocking) 명시.
+- **질문 Q1~Q6**(얇게 — 6문항): Q1 **재생성 비용 상한**(권장 A: 쿨다운+일일 회차 상한 — 이 스테이지를 도는 주된 이유) · Q2 화면 성능 예산(권장 A: 느슨한 목표치 + 가상화 도입 트리거) · Q3 관측 지표(권장 A: 수동 편집률·재생성 요청률 발행, **임계 없음** — BR-U2-15 승계) · Q4 오프라인 범위(권장 A: 확정 일정만 로컬 캐시) · Q5 리비전 보관 상한(권장 A: 최근 N개 + `BASELINE` 항상 보존) · Q6 기술 스택 델타(권장 A: 델타 없음, 구현 시 소급).
+
+**Context**: SCOPE.md 현행 범위. Code Generation 미수행. NFR Design 스테이지는 이 단계 승인 후 필요 여부를 재판단(패턴 대부분 U0·U1 상속 예상).
+
+---
+
+## CONSTRUCTION — U3 NFR Requirements · 실장 확인 + 산출물 생성 (Step 5~6)
+**Timestamp**: 2026-08-07T07:20:00Z
+**User Input**: "ai랑 백엔드 확인해보고 그거를 우선시하고 나머지는 권장"
+
+**AI Response**: Q1~Q6을 **실장 실측 → 실장 우선, 실장 근거 없는 항목만 권장안**으로 확정(U2 §0 규칙 1과 동형). 실측 대상: `ai/src/trippilot/{c1,c2,m7,domain}` · `backend/modules`·`app/src/main/resources/application.yml`·`build.gradle.kts` · `frontend/package.json`·`src/shared/map`.
+
+**실측 결과**:
+- **호출 상한 부재 확인** — ai에 rate-limit/throttle/quota 코드 0건(`budget`은 여행 예산 `BudgetLevel`이지 호출 비용 아님), backend에 bucket4j·resilience4j 등 rate-limit 의존 0건. → COST 요구를 **신규 도입**하되, 임의 쿨다운 상수(초안 10초) 대신 **진행 중 세션 재요청 거부**로 유도(생성 예산 day1 5s/전체 20s가 자연 쿨다운). 일일 회차 상한은 설정값 + "근거 없는 초기값(20회/일)" 라벨(BR-U2-15 승계).
+- **AI 관측 4종 이미 실재** — `LlmCallRecord`(input/output **토큰**·latency·success·model_id·feature) · `FallbackEvent`(from_mode→to_mode·reason) · `GateDropEvent` · `SolverRunRecord`(solve_mode·elapsed_ms·violations_found·repaired). **토큰이 기록되므로 비용 관측은 AI 쪽이 이미 가능** → OBS는 승계, U3 신규는 **수동 편집률·재생성 요청률 2종**만. backend actuator는 `health,info`만 노출 중.
+- **C1/C2 설정 승계** — `max_tokens=1024`·`temperature=0.0`·`timeout_sec=2.5` / `or_tools_limit_ms=3000`·`or_tools_min_ms=500`·`llm_stage_timeout_ms=2500`·`buffer_min=15`. U3가 별도 상한을 만들지 않음.
+- **frontend 실측** — `@gorhom/bottom-sheet`·`gesture-handler`·`reanimated`·`netinfo`·`@sentry/react-native` **있음** / `@shopify/flash-list`·`async-storage` **없음** / 지도는 `react-native-maps`가 아니라 **`@/shared/map/KakaoMapView`(react-native-webview + 카카오 JS SDK)**.
+
+**초안 권장안 1건 철회**: Q6 "델타 없음" → **델타 3건 실재**로 정정. 근거 = `KakaoMapViewProps`가 `{center, onMapMessage}`뿐이고 메시지도 `PIN_DROP`·`GEOCODE_OK`·`GEOCODE_FAIL` 3종이며, **`source.html`이 마운트 시점 center로 한 번만 조립돼 이후 center 변경에 반응하지 않는다**(TRIP-199 5-a 주석) → 밴드 h가 요구하는 **다중 번호 핀·동선 폴리라인·지도 스크러버(h32)·핀 탭** 미지원. 결정 = **라이브러리 교체가 아니라 기존 컴포넌트 확장**(벤더 교체는 U1 숙소 등록 `e05` 핀 지정까지 흔든다).
+
+**산출물 2종** (`u3-ai-itinerary/nfr-requirements/`):
+1. **nfr-requirements.md** — COST-U3-01~05 · PERF-U3-01~05 · OBS-U3-01~05 · DATA-U3-01~04 · OFFLINE-U3-01~04 · SEC-U3-01~03 + 재평가 트리거 3. 각 요구에 **"실장 / 근거" 열**을 두어 실측분과 권장분을 구분.
+2. **tech-stack-decisions.md** — 상속 7행 + **U3 델타 3**(① KakaoMapView 확장 ② 영속 저장소 조건부 추가 ③ 가상화 리스트 미도입·트리거만) + **backend 델타 5**(rate-limit 의존 미도입 — `GenerationSession` 상태로 구현 / `visit_slot.placement_reason` 컬럼 / `ItineraryStatus` 역전이 / `itinerary_revision` 테이블 신설 / actuator 노출 범위) + **AI 델타 없음**.
+
+**FD 중복 회피**: 지연 예산·조기 노출·침묵 실패 금지·INV-3·저장 대기·비차단 검증·재생성 스냅숏 **7건은 NFR 문서에 재서술하지 않고 BR-U3-* 참조로 처리**(계획서 Step 1 표).
+
+**Context**: SCOPE.md 현행 범위. Code Generation 미수행. **승인 게이트 대기.** NFR Design 필요 여부는 승인 후 재판단(패턴 대부분 U0·U1 상속 예상).
+
+---
+
+## CONSTRUCTION — U3 NFR Requirements 승인 + NFR Design SKIP + U3 설계 단계 종료
+**Timestamp**: 2026-08-07T07:45:00Z
+**User Input**: "ㄱㄱ nfr design은 스킵으로 기록하고 u3 종료"
+
+**AI Response**: (1) **U3 NFR Requirements 승인 완료** — 산출물 2종(`nfr-requirements.md`·`tech-stack-decisions.md`) 확정.
+
+(2) **NFR Design — SKIPPED (사용자 명시 지시)**. 사유 = **신규 정보가 거의 없다.** ① 복원력·성능 패턴 대부분이 U0·U1에서 이미 확정돼 그대로 상속된다(서킷 브레이커 벤더별 분리 · 재시도 없음 · stale-if-error · 침묵 실패 금지 사슬 · 응답 예산 2계층). ② U3 고유 패턴(재생성 억제 = 진행 중 세션 거부 + UI 흡수 + 일일 회차 설정값, 지도 컴포넌트 확장, 리비전 정리 정책)은 **이미 `nfr-requirements.md`(COST-U3-01~05·DATA-U3-01~04)와 `tech-stack-decisions.md`(델타 1~3, backend 델타 5)에 배치까지 기술**됐다. ③ 논리 컴포넌트 배치도 U0·U1의 것을 그대로 쓰며 U3 신규는 `itinerary_revision` 테이블 하나뿐이라 별도 문서가 필요 없다. **재개 조건** = 재생성 억제·지도 확장이 실측에서 부족하다고 판명되거나 새 횡단 패턴이 필요해질 때.
+
+(3) **Infrastructure Design — 해당 없음.** U0(2026-07-17)·U1(2026-07-23)과 동형 — 배포/클라우드 계획 부재로 결정의 근거·검증 수단이 없다(규칙상 CONDITIONAL "no infrastructure changes"). 재개 조건 = 배포/클라우드 진입 결정 시 별도 지시.
+
+(4) **✅ U3 AI Itinerary Generation 설계 단계 종료 (2026-08-07)** — 산출물 = functional-design **4** + nfr-requirements **2** = **6종**.
+
+**U3에서 남긴 후속 항목**(설계 밖 · 팀 개발/협의 대상):
+- **디자인 협의**: G-U3-1(h25 동선 정리 배너가 재생성 전에 "3.2km→2.4km" 수치를 단언 — 산출 불가라 문구에서 수치 제거 필요)
+- **backend 마이그레이션 3건**: `visit_slot.placement_reason`(explanations 영속 · U2 O-U2-2 승계) · `ItineraryStatus` 역전이 허용(BR-U3-29, 현재 PLANNED→CONFIRMED 단방향) · `itinerary_revision` 테이블 신설
+- **frontend 델타 1건(필수)**: `KakaoMapView` 확장 — `markers[]`·`polyline[]`·center 갱신·`MARKER_TAP`
+- **미결**: O-U3-1~4(배너 문구 · 리비전 보관·U5 이관 · explanations 영속 · h 밴드 결번 확인) · O-U2-3 잔여(`recalculate`는 U4) · O-SOLVER(운영)
+
+**현재 CONSTRUCTION 진척**: U0 종료(8종) · U1 종료(8종) · **U2 종료(2종 — FD만, NFR은 소비자 없어 미실행)** · **U3 종료(6종)**. U4~U9는 사용자 지시 대기.
+
+**Context**: SCOPE.md 현행 범위(설계 문서 단계) 준수. Code Generation·Build&Test는 전 유닛 범위 밖 — 코드는 팀이 각 패키지에서 직접 개발.
+
+---
+
+## Post-Design Correction — U1 frontend-components.md·business-rules.md 거점 배정 화면 5건 (TRIP-225 [기록] 반영)
+**Timestamp**: 2026-08-07T20:55:00Z
+**User Input**: TRIP-225 사이클 [설계] 3-a 맹점 훑기에서 사용자가 정본 반영 후보 4건을 전부 선택했다(승계 2건 포함 — 원 출처는 TRIP-224 사이클에서 선택됐으나 그 사이클의 [기록]이 "audit.md는 건드리지 마라"는 상충 지시로 미이행됐던 것). 5번째 항목(온램프 배너·차단 규칙 모순)은 게이트② 대화 중 사용자가 직접 발견해 추가됐다 — 승인 발화 "ㄱㄱ 그래도 중간에 숙소 없는 경우도 넘겨주고 나중에 숙소 추천해주는게 좋은거 같은데"(앞의 "ㄱㄱ"가 게이트② 승인, 뒷문장이 이 모순 관측 및 요구사항 변경 제안 — 이번 사이클 범위 밖이라 규칙 자체는 고치지 않고 관측만 기록).
+
+**AI Response**: 승인 완료된 `u1-accommodation-trip/functional-design/frontend-components.md`·`business-rules.md`의 **드리프트 정정 + 구현 결정 소급 기록 + 정본 모순 관측**. 새 스토리·새 컴포넌트 계약(엔드포인트) 신설 0건 → 스테이지 진행 아님, `aidlc-state.md` 체크박스 변동 없음(2026-07-29T05:10:00Z A1 · 2026-07-29T22:35:00Z D1·D2 · 2026-07-31T11:45:00Z SEC-U1-05 · 2026-08-02T03:00:00Z·04:30:00Z · 2026-08-02T23:10:00Z · 2026-08-06T14:20:00Z 정정과 같은 성격의 여덟 번째 후속).
+
+(1) **frontend-components.md §4 `BaseSectionList` — 구분자를 en dash로 정정**. `"1~2박 6/10-6/12"` → `"1–2박 6/10–6/12"`. 라이브 노드(`1861:2317`·`1861:2318`) 실측이 en dash를 쓴다.
+
+(2) **frontend-components.md §4 — g02 empty 변형(`1708:1183`) 실제 구성 기록**. 이 문서는 g02의 default(`1707:1183`)만 기술했고 empty는 공백이었다. 제목 `숙소 없이 시작해도 돼요` + 주 CTA `숙소 없이 계속` + 보조 CTA `숙소 둘러보기`(→ `/stays`) 2버튼 구성.
+
+(3) **frontend-components.md §4 — g02 거점 배정 화면 구현 결정 5건 소급 기록**(TRIP-209 선례 방식). 배정 날짜 출처(`SavedStay.checkIn`/`checkOut` 그대로, 별도 날짜 선택 UI 없음) · 계약 공백 플레이스홀더(사진·지역·거리·가격 4종, 회색 바) · 얼굴 5변형 중 loading·error·blocked 3종 신규 제작 · `변경 >` = DELETE로 해제만(시트 없음) · 미해결 날짜 앞 2개 고정 + `외 N일` 접기(막을지 판정 권위는 `blocked` 필드 하나). 전 5건에 "요구사항 근거가 아니라 구현 결정 — 다음 사이클이 요구사항 근거로 인용 금지" 라벨을 달았다.
+
+(4) **frontend-components.md §7 — `resolveCoverage` 취소선 행 삭제**. TRIP-84 정정(2026-08-02T04:30:00Z)에서 취소선만 그어 뒀던 클라이언트 PBT 항목을 행째로 지웠다 — 남겨 두면 훑어보는 사람이 "클라이언트가 커버리지를 판정한다"로 오독할 위험이 있었다.
+
+(5) **business-rules.md BR-U1-28 — 박 번호 산식 명문화**. `firstNight = (dateFrom − trip.startDate) + 1`, `lastNight = firstNight + nights − 1`. 누적 카운터가 아니라 **여행 시작일 고정 기준**이라 배정 사이에 빈 날짜가 있으면 번호가 건너뛴다.
+
+(6) **⭐ business-rules.md — 정본 모순 관측 신설(규칙은 변경하지 않음)**. BR-U1-40(온램프 배너 — "일정을 다 짜면 동선 기준으로 딱 맞는 숙소를 추천")과 BR-U1-47(거점 0 → 차단 대상 아님) + BR-U1-44(부분 채움 → 차단)를 겹치면 **"3박 중 0박 잡은 사용자는 통과하고 3박 중 2박 잡은 사용자는 막힌다"** — 더 많이 진행한 사용자가 더 막힌다. 배너 약속과 차단 규칙이 방향이 반대다. **요구사항 변경이라 이 사이클에서 규칙 자체는 고치지 않았다** — BR-U1-40·44·47 세 행 모두 원문 그대로다. 후속 검토가 필요하다는 관측 문단만 BR-U1-47 뒤에 추가했다.
+
+**미반영으로 남긴 것**: 없음 — 3-a 선택 4건 + 게이트 추가 1건, 총 5건 전부 반영했다.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-225 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260807-trip225-base-screen/01b_ouroboros_seed.md`(D1·D2·D3·D6·D16·D16-b)·`00_gates.md`(게이트② 절)·`03_implementer_notes.md`. 이 항목이 손댄 `aidlc/` 파일은 `construction/u1-accommodation-trip/functional-design/{frontend-components.md,business-rules.md}`와 이 `audit.md` append뿐이다 — 같은 시점 다른 세션이 진행 중인 U2·U3 관련 파일(`aidlc-state.md`·`construction/u2-itinerary-intelligence/`·`construction/u3-ai-itinerary/`·`construction/plans/u2-*.md`·`construction/plans/u3-*.md`)은 손대지 않았다.
+
+---
+
+## Post-Design Correction — U1 frontend-components.md·business-rules.md 거점 지정 전제 게이트 4건 (TRIP-226 [기록] 반영)
+**Timestamp**: 2026-08-08T01:15:00Z
+**User Input**: TRIP-226 사이클 [설계] 3-a 맹점 훑기에서 정본 반영 후보 A~E 5건을 제시했고, 사용자가 **A·B·C·D 4건을 선택**했다(게이트①-1 승인 시점엔 미수령이라 게이트② 재제시에서 수령 — `00_gates.md` "🔜 정본 반영 선택 — 수령 완료 (2026-08-07)"). E(e05 편집 모드 부재)는 지라 티켓(TRIP-192) 소관이라 이번 선택지에서 제외 — 개발로그 관측 + 후속 티켓 후보로만 남긴다.
+
+**AI Response**: 승인 완료된 `u1-accommodation-trip/functional-design/frontend-components.md`·`business-rules.md`의 **testID 드리프트 정정 + 경계 명문화 + 계약 공백 관측 2건**. 새 스토리·새 컴포넌트 계약(엔드포인트) 신설 0건 → 스테이지 진행 아님, `aidlc-state.md` 체크박스 변동 없음(TRIP-225 [기록]의 여덟 번째 후속에 이은 아홉 번째).
+
+(1) **frontend-components.md §6 — testID 드리프트 정정(A)**. 지라 티켓 문면의 `trip-base-blocked-{id}`는 실제로 쓰이지 않는다. 차단된 배정 후보 카드의 실물 testID는 `trip-base-assign-blocked-{id}`이고, `trip-base-blocked-*` 접두는 미해결 날짜 커버리지 안내행 3종(`-notice`·`-days`·`-more`)이 이미 점유한 이름 공간이다.
+
+(2) **business-rules.md BR-U1-27 — 기간 경계 등호 포함 명문화(B)**. `dateFrom >= trip.startDate && dateTo <= trip.endDate`이면 기간 안(경계일 포함), 아니면 벗어남. ⚠️ 서버 쪽 정본(`backend/docs/design/openapi.yaml`)에는 이 경계가 명시돼 있지 않아 **미확인**임을 함께 적었다 — 클라이언트 판정만 확정, BE 교차 확인 필요.
+
+(3) **business-rules.md BR-U1-56 뒤 — `error.code`·`fields[].reason` enum 부재 관측 신설(C, 규칙은 변경하지 않음, BE 티켓 후보)**. 계약에 오류 사유를 열거하는 스키마가 없어 클라이언트가 400/422/500을 상태 코드만으로 선판정한다(BR-U1-55 침묵 실패 금지와 긴장). enum을 발명하지 않고 관측만 기록했다.
+
+(4) **business-rules.md BR-U1-56 뒤 — `SavedStay` 신선도 필드 부재 관측 신설(D, 규칙은 변경하지 않음, BE 티켓 후보)**. 계약(`GetSavedStaysResponse`)에 최신성 확인 근거 필드가 없어 US-TRIP-04의 "최신 정보 확인 불가" 예외 AC를 클라이언트가 원리적으로 구현할 수 없다. US-TRIP-04를 채우는 마지막 칸(TRIP-178·224·225·226)이 끝나도 이 예외 AC는 **영구 미충족**으로 남는다 — 스토리 종료 판정 시 명시할 것.
+
+**미반영으로 남긴 것**: E(e05 편집 모드 부재) — 3-a에서 선택되지 않음, 지라 TRIP-192 후속 티켓 소관.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-226 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260807-trip226-base-gate/00_gates.md`(게이트①-1 §미수령·게이트② §정본 반영 선택)·`frontend/src/features/trip/ui/TripWizardStep2Screen.tsx:352,477,486,500`·`frontend/src/features/trip/model/baseGate.ts`(`isOutsideTripPeriod`). 이 항목이 손댄 `aidlc/` 파일은 `construction/u1-accommodation-trip/functional-design/{frontend-components.md,business-rules.md}`와 이 `audit.md` append뿐이다.
+
+---
