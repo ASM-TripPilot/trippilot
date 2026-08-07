@@ -8,11 +8,16 @@
   ⑤ 모순 입력에서 SolverConflictError (전 단계 실패)
   ⑥ TRIP-261: solve()의 모든 반환 경로(폴백 강등 포함)에 QualityScore 부착
      — 성분 [0,1] + 결정론(같은 입력 2회 → 같은 score)
+  ⑦ TRIP-291: 시한이 완전히 소진(잔여 ≤ 0)돼도 required_ms=0 최후 보루는 실행되어
+     solve()가 SolverConflictError 없이 결정론 폴백을 반환(INV-4) — 임의 deadline PBT 포함
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from trippilot.c2.config import SolverConfig
 from trippilot.c2.facade import HybridSolverFacade, SolverConflictError
@@ -27,6 +32,7 @@ from trippilot.domain.common import (
 )
 from trippilot.domain.itinerary import (
     DaySolution,
+    FixedBlock,
     ItineraryProblem,
     ItinerarySolution,
     SolveMode,
@@ -39,6 +45,7 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.in_memory_trace import InMemoryTrace
+from tests.generators.solver import solver_setups
 
 _KST = timezone(timedelta(hours=9))
 _CFG = SolverConfig()
@@ -200,3 +207,104 @@ def test_degraded_fallback_path_also_gets_quality_score() -> None:
     assert result.solve_mode == SolveMode.RULE_FALLBACK
     assert result.score is not None
     assert result.score.constraint_satisfaction == 1.0  # 반환 해는 HC 위반 0건
+
+
+# ── ⑦ TRIP-291: 시한 소진 상태에서도 최후 보루 실행 (INV-4) ──
+
+def test_last_resort_runs_even_when_deadline_fully_exhausted() -> None:
+    """잔여가 음수여도 required_ms=0 단계는 실행 — 예외 대신 결정론 폴백."""
+    problem, index = _setup()
+    clock, trace = FakeClock(), InMemoryTrace()
+    slow = SlowNoSolutionStage(clock, consume_ms=8000)   # 5초 예산을 3초 초과 소모
+    llm = ExpensiveStage()                               # 요구 2.5초 — 잔여 음수라 스킵
+    chain = [slow, llm, RuleFallbackSolver(index, _EST, _CFG)]
+    facade = HybridSolverFacade(chain, index, _EST, clock, trace)
+
+    result = facade.solve(problem, deadline_ms=5000)     # SolverConflictError 금지
+
+    assert result.is_fallback is True
+    assert result.solve_mode in {SolveMode.RULE_FALLBACK, SolveMode.MINIMAL}
+    assert result.score is not None
+    assert llm.calls == 0                                # 상위 단계는 여전히 스킵(DL-2 유지)
+    reasons = [e.reason for e in trace.of_type(FallbackEvent)]
+    assert "deadline" in reasons                         # 상위 단계 스킵 흔적
+    assert "deadline_exhausted:last_resort" in reasons   # 초과 실행 흔적 (침묵 금지)
+
+
+def test_negative_deadline_still_returns_deterministic_fallback() -> None:
+    """호출자가 이미 시한을 다 쓴 상태(음수 deadline)로 들어와도 해를 낸다."""
+    problem, index = _setup()
+    trace = InMemoryTrace()
+    facade = HybridSolverFacade(
+        [RuleFallbackSolver(index, _EST, _CFG)], index, _EST, FakeClock(), trace)
+
+    result = facade.solve(problem, deadline_ms=-1)
+
+    assert result.is_fallback is True
+    assert result.solve_mode in {SolveMode.RULE_FALLBACK, SolveMode.MINIMAL}
+    assert facade.validate(result, problem) == []        # 폴백도 유효 해 (INV-2)
+    assert any(e.reason == "deadline_exhausted:last_resort"
+               for e in trace.of_type(FallbackEvent))
+
+
+@settings(max_examples=60, deadline=None)
+@given(setup=solver_setups(),
+       budget_ms=st.integers(min_value=-10_000, max_value=10_000),
+       consume_ms=st.integers(min_value=0, max_value=20_000))
+def test_pbt_solve_never_raises_conflict_for_any_deadline(
+        setup, budget_ms: int, consume_ms: int) -> None:
+    """DL-P3(신규): 임의 (문제, deadline, 소모시간)에서 solve()는 빈손으로 끝나지 않는다.
+
+    체인에 RuleFallback이 있으면 시한이 아무리 부족해도 SolverConflictError는 없다 —
+    예외는 '입력 모순'만의 신호로 남는다 (INV-4).
+    """
+    problem, index = setup
+    clock, trace = FakeClock(), InMemoryTrace()
+    chain = [SlowNoSolutionStage(clock, consume_ms=consume_ms),
+             ExpensiveStage(),
+             RuleFallbackSolver(index, _EST, _CFG)]
+    facade = HybridSolverFacade(chain, index, _EST, clock, trace)
+
+    result = facade.solve(problem, deadline_ms=budget_ms)   # 예외 발생 = 실패
+
+    assert result.is_fallback is True
+    assert result.solve_mode in {SolveMode.RULE_FALLBACK, SolveMode.MINIMAL}
+    assert result.score is not None
+    assert facade.validate(result, problem) == []
+
+
+def test_contradictory_fixed_blocks_still_raise_conflict() -> None:
+    """시한이 넉넉해도 모순 입력(겹치는 고정 블록)은 여전히 SolverConflictError (d08 보존)."""
+    a = Poi(PoiId("a"), "A", PoiCategory.SIGHT, GeoPoint(37.75, 128.87),
+            (), None, None, DataQuality.FULL, PoiSource.SEED, None)
+    b = Poi(PoiId("b"), "B", PoiCategory.SIGHT, GeoPoint(37.20, 127.10),  # 멀리
+            (), None, None, DataQuality.FULL, PoiSource.SEED, None)
+    index = {a.poi_id: a, b.poi_id: b}
+    d = date(2026, 8, 5)
+    overlapping = (
+        FixedBlock(poi_id=a.poi_id,
+                   window=TimeWindow(datetime(2026, 8, 5, 10, 0, tzinfo=_KST),
+                                     datetime(2026, 8, 5, 11, 0, tzinfo=_KST)),
+                   reason="user_fixed"),
+        FixedBlock(poi_id=b.poi_id,
+                   window=TimeWindow(datetime(2026, 8, 5, 10, 30, tzinfo=_KST),
+                                     datetime(2026, 8, 5, 11, 30, tzinfo=_KST)),
+                   reason="user_fixed"),
+    )
+    problem = ItineraryProblem(
+        schedule_id=ScheduleId("s"), days=(d,),
+        candidates=(ScoredPoi(a.poi_id, 0.9, False), ScoredPoi(b.poi_id, 0.8, False)),
+        fixed_blocks=overlapping, budget=BudgetLevel.MID,
+        transport=TransportMode.PUBLIC,
+        day_window=TimeWindow(datetime(2026, 8, 5, 9, 0, tzinfo=_KST),
+                              datetime(2026, 8, 5, 21, 0, tzinfo=_KST)),
+        seed=7)
+    facade = HybridSolverFacade(
+        [RuleFallbackSolver(index, _EST, _CFG)], index, _EST,
+        FakeClock(), InMemoryTrace())
+
+    try:
+        facade.solve(problem, deadline_ms=60_000)         # 시한은 충분
+        assert False, "모순 입력에는 SolverConflictError가 나야 함"
+    except SolverConflictError:
+        pass

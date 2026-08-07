@@ -5,6 +5,10 @@
   → 유효(HC 통과) 해가 나오면 즉시 반환 → 최후의 RuleFallback(required_ms=0)이
   항상 해를 반환하므로 solve()가 빈손으로 끝나는 경로는 없다(INV-4).
 
+시한이 이미 소진(잔여 ≤ 0)돼도 required_ms=0 단계는 반드시 실행한다 —
+잔여를 음수 그대로 비교하면 최후 보루까지 스킵돼 INV-4가 깨지기 때문(TRIP-291).
+스킵 판정은 max(0, 잔여) 기준이라 required_ms > 0인 상위 단계는 여전히 스킵된다.
+
 시간 계산은 ClockPort.monotonic_ms()로만 한다 (DL-3, G116 결정론).
 """
 
@@ -73,10 +77,16 @@ class HybridSolverFacade:
         for idx, stage in enumerate(self._stages):
             next_name = (self._stages[idx + 1].name
                          if idx + 1 < len(self._stages) else "(end)")
-            if remaining() < stage.required_ms:  # DL-2: 진입 전 잔여 확인
+            left = remaining()
+            # DL-2: 진입 전 잔여 확인. 잔여가 음수여도 required_ms=0(최후 보루)은
+            # 스킵되지 않도록 max(0, ·)로 정규화 — 아니면 체인이 빈손으로 끝난다(INV-4).
+            if max(0, left) < stage.required_ms:
                 self._emit_fallback(tid, stage.name, next_name, "deadline")
                 continue
-            result = stage.solve(problem, remaining())
+            if left <= 0:  # 시한 소진 상태의 최후 보루 실행 — 침묵 금지 (DL-5)
+                self._emit_fallback(tid, stage.name, stage.name,
+                                    "deadline_exhausted:last_resort")
+            result = stage.solve(problem, max(0, left))
             if result is None:  # 해 없음 → 다음 단계 (기존 체인 의미)
                 self._emit_fallback(tid, stage.name, next_name, "no_solution")
                 continue
@@ -100,7 +110,8 @@ class HybridSolverFacade:
                 result,
                 score=compute_quality(result, problem, self._pois, self._est),
             )
-        # RuleFallback이 체인에 있으면 도달 불가. 도달 = 유효 해 자체가 없음(모순 입력)
+        # RuleFallback이 체인에 있으면 시한과 무관하게 도달 불가(TRIP-291).
+        # 도달 = 유효 해 자체가 없음(모순 입력) — "시간이 없어서"는 이유가 될 수 없다.
         raise SolverConflictError("모든 단계 실패 — 고정 블록 모순 등 입력 확인 필요")
 
     # ── warm-start 재생성 (U5-P2 멱등, 정본 §4.3) ──
