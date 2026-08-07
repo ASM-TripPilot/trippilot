@@ -41,10 +41,17 @@ export interface BaseSection {
   nightLabel: string;
 }
 
+/**
+ * 세 번째 인자는 **이 함수가 실제로 읽는 만큼**이다(TRIP-225 02a §1-1b). g02의 조회는 셋이고
+ * (01b D7·D14가 그 셋으로 실패 규칙을 짰다) 여행 상세는 그 셋에 없다 — 배선이 가진 것은
+ * 위저드 스토어의 `startDate` 하나다. `Trip` 전체를 요구하면 넷째 조회를 붙이거나 `as Trip`
+ * 캐스팅으로 얼버무리게 되는데, 후자는 이 파일의 승인 테스트가 명시적으로 거부한 수법이다.
+ * `Trip`은 `Pick<Trip, 'startDate'>`에 그대로 대입되므로 기존 호출·테스트는 그대로 통과한다.
+ */
 export function toBaseSections(
   assignments: BaseAssignment[],
   savedStays: SavedStay[],
-  trip: Trip
+  trip: Pick<Trip, 'startDate'>
 ): BaseSection[] {
   const nameById = new Map(
     savedStays.map((stay) => [stay.savedStayId, stay.name] as const)
