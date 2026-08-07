@@ -90,9 +90,9 @@ class Itinerary private constructor(
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {
-    /** 확정 — PLANNED만 가능(이미 CONFIRMED면 409). 상태 전이만(동결 없음). */
+    /** 확정 — PLANNED + 생성 완료만 가능(이미 확정이거나 생성 중이면 409). 상태 전이만(동결 없음). */
     fun confirm(now: Instant): Itinerary {
-        if (status != ItineraryStatus.PLANNED) throw ConflictDetected(message = "이미 확정된 일정입니다.")
+        requireConfirmable()
         return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, isFallback, generationState, days, createdAt, now)
     }
 
@@ -101,7 +101,7 @@ class Itinerary private constructor(
      * [snapshotByPoi] 는 전 슬롯 POI 를 덮어야 한다(호출 서비스가 freeze 로 완비 후 전달).
      */
     fun confirm(snapshotByPoi: Map<UUID, UUID>, now: Instant): Itinerary {
-        if (status != ItineraryStatus.PLANNED) throw ConflictDetected(message = "이미 확정된 일정입니다.")
+        requireConfirmable()
         val frozenDays = days.map { d ->
             ItineraryDay.of(
                 d.date, d.dayOrder,
@@ -114,6 +114,44 @@ class Itinerary private constructor(
             )
         }
         return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, isFallback, generationState, frozenDays, createdAt, now)
+    }
+
+    /**
+     * 확정 가능 조건 — PLANNED(단방향 잠금) **AND** 생성 완료.
+     * 생성 중(PARTIAL)에 확정하면 day1 만 동결된 채 잠겨(INV-U1-03) 2차 결과를 반영할 수 없다 → 409.
+     */
+    private fun requireConfirmable() {
+        if (status != ItineraryStatus.PLANNED) throw ConflictDetected(message = "이미 확정된 일정입니다.")
+        if (generationState == GenerationState.PARTIAL) {
+            throw ConflictDetected(message = "일정 생성이 진행 중입니다. 완료 후 확정할 수 있습니다.")
+        }
+    }
+
+    /**
+     * 2차 생성 완료 — 전 일자를 채우고 COMPLETE 로 전이(PARTIAL 에서만). identity·createdAt·확정상태는 보존.
+     * U5 2단계 호출의 완료 콜백이 쓴다 — [reconstitute] 를 직접 호출하면 status 를 실수로 되돌릴 수 있어 이 경로를 둔다.
+     */
+    fun completeGeneration(allDays: List<ItineraryDay>, now: Instant): Itinerary {
+        if (generationState != GenerationState.PARTIAL) {
+            throw ConflictDetected(message = "생성 중인 일정이 아닙니다.")
+        }
+        if (allDays.map { it.dayOrder }.toSet().size != allDays.size) {
+            throw ValidationFailed(listOf(FieldError("days", "일자 순서(dayOrder)는 중복될 수 없습니다.")))
+        }
+        return Itinerary(
+            itineraryId, tripId, status, solveMode, isFallback, GenerationState.COMPLETE,
+            allDays.sortedBy { it.dayOrder }, createdAt, now,
+        )
+    }
+
+    /** 2차 생성 실패 — 1차분(day1)은 유효하게 두고 FAILED 로 전이(PARTIAL 에서만). 침묵 실패 금지(INV-4). */
+    fun failGeneration(now: Instant): Itinerary {
+        if (generationState != GenerationState.PARTIAL) {
+            throw ConflictDetected(message = "생성 중인 일정이 아닙니다.")
+        }
+        return Itinerary(
+            itineraryId, tripId, status, solveMode, isFallback, GenerationState.FAILED, days, createdAt, now,
+        )
     }
 
     companion object {
