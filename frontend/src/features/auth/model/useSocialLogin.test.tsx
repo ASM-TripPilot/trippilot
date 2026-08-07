@@ -89,8 +89,12 @@ beforeEach(() => {
   authorizeReject.mockClear();
 });
 
-describe('useSocialLogin — 신규 가입 PKCE 교환 (AC-ONB-01-1·3)', () => {
-  it('provider 동의 code 를 PKCE 바디로 서버에 교환하고, 신규면 ACTIVE 계정 생성(isNewUser=true) 후 연령확인 단계로 간다', async () => {
+describe('useSocialLogin — 신규 가입 PKCE 교환 (AC-ONB-01-1·3 · TRIP-248 AC-10)', () => {
+  // TRIP-248 D1 — 200 응답의 isNewUser 를 보고 연령확인 단계로 가던 분기를 지웠다. 실서버에서
+  // 도달 불가한 분기였기 때문이다(신규의 첫 요청은 반드시 400). 그래서 이 케이스의 기대가
+  // needs-age 에서 success 로 바뀌었고, 픽스처는 **일부러 isNewUser:true 를 유지한다** —
+  // 죽은 분기가 남아 있으면 여기서 걸린다.
+  it('provider 동의 code 를 PKCE 바디로 교환하고, 첫 요청에는 연령확인을 싣지 않는다', async () => {
     mockPostSocialLogin.mockResolvedValue(tokenPair(true));
     const { result } = renderSocialLogin();
 
@@ -98,7 +102,7 @@ describe('useSocialLogin — 신규 가입 PKCE 교환 (AC-ONB-01-1·3)', () => 
       result.current.signIn('google', authorizeSuccess);
     });
 
-    await waitFor(() => expect(result.current.phase).toBe('needs-age'));
+    await waitFor(() => expect(result.current.phase).toBe('success'));
 
     expect(mockPostSocialLogin).toHaveBeenCalledTimes(1);
     const [provider, body] = mockPostSocialLogin.mock.calls[0];
@@ -108,10 +112,10 @@ describe('useSocialLogin — 신규 가입 PKCE 교환 (AC-ONB-01-1·3)', () => 
       codeVerifier: 'verifier-xyz',
       redirectUri: 'trippilot://oauth/google',
     });
+    // 사용자가 선언하지 않은 연령확인을 append-only 법정 동의 로그에 남기면 안 된다.
     expect(body.ageConfirmation).toBeUndefined();
     expect(result.current.isNewUser).toBe(true);
-    // 신규 계정은 연령확인 재전송 전까지 토큰을 커밋하지 않는다.
-    expect(mockSaveTokens).not.toHaveBeenCalled();
+    expect(mockSaveTokens).toHaveBeenCalledTimes(1);
   });
 
   it('교환 바디는 codeVerifier 만 담고 어떤 클라이언트 시크릿도 담지 않는다 (PKCE·시크릿 비노출, AC-ONB-01-3)', async () => {
@@ -133,27 +137,11 @@ describe('useSocialLogin — 신규 가입 PKCE 교환 (AC-ONB-01-1·3)', () => 
   });
 });
 
-describe('useSocialLogin — 연령확인 재전송 (AC-ONB-01-7)', () => {
-  it('신규 판정 후 confirmAge 는 ageConfirmation{method:SELF_DECLARED} 로 재전송하고 성공 시 토큰을 저장한다', async () => {
-    mockPostSocialLogin.mockResolvedValue(tokenPair(true));
-    const { result } = renderSocialLogin();
-
-    act(() => {
-      result.current.signIn('google', authorizeSuccess);
-    });
-    await waitFor(() => expect(result.current.phase).toBe('needs-age'));
-
-    act(() => {
-      result.current.confirmAge();
-    });
-    await waitFor(() => expect(result.current.phase).toBe('success'));
-
-    expect(mockPostSocialLogin).toHaveBeenCalledTimes(2);
-    const [, resendBody] = mockPostSocialLogin.mock.calls[1];
-    expect(resendBody.ageConfirmation).toEqual({ method: 'SELF_DECLARED' });
-    expect(mockSaveTokens).toHaveBeenCalledTimes(1);
-  });
-
+// TRIP-248 — 이 describe 에 있던 "code 갈래 confirmAge 재전송" 케이스는 삭제했다. D0(code 갈래
+// 재인가를 만들지 않는다) + D1(200→needs-age 분기 제거) + D3(code 갈래의 400 은 error 로 남긴다)
+// 를 합치면 code 갈래는 needs-age 에 도달할 경로가 없어, 그 케이스는 실서버에 존재하지 않는
+// 흐름을 지키고 있었다. token 갈래의 재전송 심판은 useSocialLogin.tokenPath.test.tsx 에 있다.
+describe('useSocialLogin — 연령 미달 응답 (AC-ONB-01-7)', () => {
   it('연령 미달로 서버가 422 AgeNotMet 를 반환하면 계정 미생성·에러(AGE_NOT_MET)로 남는다', async () => {
     mockPostSocialLogin.mockRejectedValue({ code: 'AGE_NOT_MET', status: 422 });
     const { result } = renderSocialLogin();
