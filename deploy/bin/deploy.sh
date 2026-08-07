@@ -59,15 +59,34 @@ else
   warn "signoz 네임스페이스가 없어 UI NodePort 를 건너뜁니다 (./deploy/bin/cluster-up.sh 참조)."
 fi
 
+# ── 나머지 서비스 (TRIP-325) ──────────────────────────────────────────────
+# redis 는 백엔드의 조회 캐시라 백엔드보다 먼저 있어야 하지만, 없어도 기능은
+# degrade 만 되므로 롤아웃을 기다리지는 않는다.
+log "redis 적용"
+kubectl apply -f "${REPO_ROOT}/deploy/k8s/redis"
+
+log "ai · frontend 적용"
+kubectl apply -f "${REPO_ROOT}/deploy/k8s/ai"
+kubectl apply -f "${REPO_ROOT}/deploy/k8s/frontend"
+
+for d in redis ai frontend; do
+  if ! kubectl rollout status "deployment/${d}" -n "${NAMESPACE}" --timeout=180s; then
+    warn "${d} 롤아웃 실패 — 진단 정보:"
+    kubectl describe "deployment/${d}" -n "${NAMESPACE}" | tail -20
+    die "배포 실패"
+  fi
+done
+
 cat <<EOF
 
 $(ok "배포 완료")
 
-  헬스체크:   curl http://localhost:8081/actuator/health/readiness
-  앱 확인:    curl http://localhost:8081/api/health
-  로그 보기:  kubectl logs -f deployment/${DEPLOYMENT} -n ${NAMESPACE}
+  frontend:   http://localhost:8080
+  backend:    http://localhost:8081/actuator/health/readiness
+  ai:         http://localhost:8082/health
+  SigNoz UI:  http://localhost:8083     (port-forward 불필요)
 
-  SigNoz UI:  http://localhost:8080     (port-forward 불필요)
+  로그 보기:  kubectl logs -f deployment/${DEPLOYMENT} -n ${NAMESPACE}
   SigNoz 필터: service.name = trippilot-backend
 
 EOF

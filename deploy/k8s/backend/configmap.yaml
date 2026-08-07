@@ -19,6 +19,13 @@ data:
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://signoz-ingester.signoz.svc.cluster.local:4318"
   DEPLOY_ENV: "local-k8s"
 
+  # ── 같은 클러스터의 다른 서비스(TRIP-325) ────────────────────────────────
+  # 숙소·여행 조회 캐시. 원본은 PostgreSQL 이므로 죽어도 기능은 degrade 만 된다.
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  # AI 서비스. 지금은 /health 만 응답하는 스텁이다.
+  AI_URL: "http://ai:8000"
+
   # 아래 두 개는 backend/Dockerfile 에도 같은 값이 ENV 로 박혀 있다(안전 기본값).
   # 여기에 다시 적는 이유는 **리뷰 가능하게** 하기 위해서다 — 이미지를 열어보지 않아도
   # 매니페스트만으로 "왜 이 설정인가"가 보여야 한다.

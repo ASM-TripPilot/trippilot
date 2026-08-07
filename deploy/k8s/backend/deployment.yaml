@@ -38,7 +38,9 @@ spec:
 
       containers:
         - name: app
-          image: trippilot-backend:dev
+          # Bazel 이 만든다(//deploy:backend_image). OTel 에이전트가 이미지 안에
+          # 들어 있고 entrypoint 에서 -javaagent 로 붙는다.
+          image: trippilot/backend:local
           # kind load 로 노드에 직접 넣은 이미지를 쓴다. 레지스트리가 없으므로 Never 여야 한다.
           # IfNotPresent 로 두면 이미지가 없을 때 레지스트리로 나가 ImagePullBackOff 가 된다.
           imagePullPolicy: Never

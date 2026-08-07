@@ -1,296 +1,155 @@
-# 로컬 Kubernetes 배포 가이드
+# 로컬 Kubernetes 구동
 
-백엔드와 PostgreSQL을 로컬 **kind** 클러스터에 빌드·배포하고, 로그·메트릭·트레이스를 SigNoz에서 확인하는 방법입니다.
+backend · frontend · ai · PostgreSQL · Redis 를 로컬 kind 클러스터 하나에서 함께 띄우고,
+로그·메트릭·트레이스를 SigNoz 에서 본다.
 
-> 선행 조건: Docker, `kubectl`, `helm`, `kind`, `foundryctl`, JDK 25.
-> 설치는 [../docs/installs/k8s_install.md](../docs/installs/k8s_install.md) 참조.
+빌드·테스트 진입점은 `just`, 컨테이너 이미지와 ai 패키지는 `Bazel` 이 소유한다.
 
----
+> 사전 준비: Docker Desktop · kind · kubectl · helm · foundryctl · bazelisk · just · JDK 25.
+> 설치 절차는 [docs/installs/k8s_install.md](../docs/installs/k8s_install.md) ·
+> [docs/installs/signoz_install.md](../docs/installs/signoz_install.md).
+> `just doctor` 로 무엇이 빠졌는지 한 번에 확인할 수 있다.
 
-## 빠른 시작
-
-`just`로 감싸 두었습니다. `just`만 치면 전체 목록이 나옵니다.
-
-```bash
-brew install just
-
-just doctor        # 도구·클러스터·앱 상태 확인
-just up            # 클러스터 생성 → 이미지 빌드 → 배포
-
-# SigNoz 최초 설정 (중요 — 건너뛰면 수집이 안 됩니다. 아래 트러블슈팅 참조)
-#   → http://localhost:8080 접속 후 관리자 계정 생성
-
-just smoke             # 트래픽 발생
-just verify-telemetry  # SigNoz 적재 확인
-```
-
-코드를 고친 뒤에는:
+## 한 줄로 띄우기
 
 ```bash
-just update
+just up      # 클러스터+SigNoz 생성 → backend 빌드 → 이미지 3종 → 배포
 ```
 
-<details>
-<summary>원본 스크립트로 직접 실행하기</summary>
+**최초 1회 SigNoz 관리자 계정을 만들어야 한다.** 계정(=조직)이 없으면 collector 가
+파이프라인 설정을 받지 못해 **OTLP 수신기 자체가 열리지 않는다.** 앱 쪽에는
+`Connection refused` 로 보인다. http://localhost:8083 에서 만든다
+(비밀번호: 12자 이상 + 대문자 + 소문자 + 숫자 + 기호).
 
 ```bash
-./deploy/bin/cluster-up.sh
-./deploy/bin/build.sh
-./deploy/bin/deploy.sh
-./deploy/bin/update.sh
+just health            # 네 서비스 응답 확인
+just smoke             # 텔레메트리를 만들 트래픽 발생 (마스킹 프로브 포함)
+just verify-telemetry  # SigNoz 에 실제로 적재됐는지 ClickHouse 직접 조회
+just down              # 클러스터 삭제 (데이터·텔레메트리 포함)
 ```
 
-`justfile`은 이 스크립트들을 **대체하지 않고 감쌉니다.** 각 명령이 실제로 무엇을 하는지는
-`cat justfile`로 확인하세요.
-</details>
+| 서비스 | 주소 |
+|---|---|
+| frontend | http://localhost:8080 |
+| backend | http://localhost:8081/actuator/health |
+| ai | http://localhost:8082/health |
+| SigNoz UI | http://localhost:8083 |
+| postgres | 클러스터 밖으로 열지 않음 — `just db-shell` |
 
----
+포트는 `deploy/kind/cluster.yaml` 의 NodePort → hostPort 매핑으로 고정돼 있다.
+`kubectl port-forward` 는 쓰지 않는다 — 이미 열린 매핑에 리스너를 겹치면 어느 쪽이
+응답할지 OS 바인딩 우선순위에 달리게 되고, 터미널도 붙잡고 있어야 한다.
 
-## 구성
+> **NodePort 와 hostPort 는 한 쌍이다.** 한쪽만 바꾸면 접근이 끊긴다. 그리고
+> `extraPortMappings` 는 **클러스터 생성 시점에만** 정할 수 있어, 포트를 추가하려면
+> 클러스터를 다시 만들어야 한다.
+
+## 자주 쓰는 것
+
+```bash
+just status                    # 파드·서비스 상태
+just logs trippilot-backend    # 로그 따라가기 (ai · frontend 도 같은 방식)
+just update                    # 이미지 새로 만들고 파드만 교체 (클러스터 유지)
+just db-shell                  # psql 접속
+just db-migrations             # 적용된 Flyway 마이그레이션 확인
+just signoz                    # SigNoz UI 주소·필터 안내
+just watch                     # 적재 상황 실시간
+just undeploy                  # 매니페스트만 제거 (클러스터·SigNoz 유지)
+```
+
+## 누가 무엇을 소유하는가
+
+| 대상 | 소유 도구 | 이유 |
+|---|---|---|
+| backend 빌드·테스트 | Gradle | Konsist·ArchUnit·Kotest PBT·Flyway·Testcontainers 가 모두 Gradle 게이트 위에 있다 |
+| frontend 빌드·테스트 | pnpm | Expo prebuild·Metro·Jest |
+| ai 빌드·테스트 | **Bazel** (rules_python) | 의존성이 pyproject 하나로 끝나고 재구축할 게이트가 없었다 |
+| 컨테이너 이미지 3종 | **Bazel** (rules_oci) | 베이스 이미지와 OTel 에이전트를 digest 로 한 곳에 고정 |
+| 로컬 클러스터 | kind + kubectl | 클러스터 정의를 파일로 고정 |
+| 진입점 | just | 세 툴체인의 명령을 한 곳에서 |
+
+Bazel 을 세 패키지 전체로 넓히지 않은 것은 의도된 선택이다. backend·frontend 의
+테스트 게이트를 Bazel 위에서 다시 만드는 비용이 얻는 것보다 크다.
+
+## 구조
 
 ```
 deploy/
-├── kind/cluster.yaml        클러스터 정의 (노드 수·포트 매핑)
+├── BUILD.bazel        # oci_image 3종 + OTel 에이전트 레이어
+├── kind/cluster.yaml  # 노드 · 포트 매핑 (30080·30081·30082·30083)
 ├── k8s/
-│   ├── backend/             백엔드 매니페스트
-│   │   ├── namespace.yaml
-│   │   ├── configmap.yaml   DB URL · OTLP 엔드포인트 · 에이전트 설정
-│   │   ├── deployment.yaml  initContainer(DB 대기) + 앱
-│   │   └── service.yaml     NodePort 30081 → 호스트 8081
-│   ├── postgres/            PostgreSQL (앱이 Flyway 마이그레이션을 돌리므로 필수)
-│   │   ├── secret.yaml          DB 자격증명 (로컬 전용)
-│   │   ├── configmap-init.yaml  롤·스키마 부트스트랩 SQL
-│   │   ├── statefulset.yaml
-│   │   └── service.yaml         ClusterIP (클러스터 밖으로 열지 않음)
-│   └── signoz/
-│       └── ui-nodeport.yaml SigNoz UI NodePort 30080 → 호스트 8080
-└── bin/
-    ├── _common.sh           공통 변수·컨텍스트 가드
-    ├── cluster-up.sh        클러스터 생성 + SigNoz 설치
-    ├── build.sh             이미지 빌드 + kind 노드 적재
-    ├── deploy.sh            PostgreSQL → 백엔드 순으로 적용 + 롤아웃 대기
-    └── update.sh            빌드 + 롤링 재시작
+│   ├── backend/       # namespace · configmap · deployment · service (+ backend 별칭)
+│   ├── postgres/      # secret · configmap-init · statefulset · service
+│   ├── redis/         # 조회 캐시 (비영속)
+│   ├── ai/            # 스텁 서비스
+│   ├── frontend/      # nginx 정적 + /api 프록시
+│   └── signoz/        # UI NodePort 30083
+└── bin/               # 멱등 스크립트 — just 가 호출, 셸에서도 그대로 실행 가능
+    ├── _common.sh     # 공통 변수·컨텍스트 가드
+    ├── cluster-up.sh  # 클러스터 생성 + SigNoz 설치
+    ├── stage.sh       # Gradle bootJar → Bazel 이 집어갈 자리로 복사
+    ├── images.sh      # Bazel 이미지 빌드 + Docker·kind 적재
+    ├── deploy.sh      # postgres → backend → redis·ai·frontend
+    └── down.sh        # 클러스터 삭제
 ```
-
----
-
-## 스크립트
-
-### `cluster-up.sh` — 클러스터 준비
-
-kind 클러스터를 만들고 SigNoz를 설치합니다. **멱등**이라 이미 있으면 건너뜁니다.
-
-완전히 새로 만들려면:
-
-```bash
-kind delete cluster --name trippilot
-./deploy/bin/cluster-up.sh
-```
-
-### `build.sh` — 빌드 + 노드 적재
-
-두 가지 일을 합니다.
-
-1. `docker build` — `backend/Dockerfile` (멀티스테이지: JDK 25로 빌드 → JRE 25로 실행)
-2. `kind load docker-image` — **이게 핵심입니다**
-
-> **`kind load`가 왜 필요한가**
-> kind 노드는 호스트 Docker와 **별도의 이미지 스토어**를 씁니다. `docker build`만 하면 노드에서는 그 이미지가 보이지 않아 파드가 `ErrImageNeverPull`로 멈춥니다. `kind load`가 이미지를 노드 안으로 복사합니다.
-
-11개 모듈을 컨테이너 안에서 전부 빌드하므로 첫 빌드는 5분 이상 걸립니다. Dockerfile이 Gradle 캐시를 BuildKit 캐시 마운트에 두므로 두 번째부터는 훨씬 빠릅니다.
-
-### `deploy.sh` — 배포
-
-PostgreSQL을 먼저 세우고 기동을 기다린 뒤 백엔드를 적용합니다. 실패하면 파드 상태·`describe`·최근 로그를 함께 보여줍니다.
-
-네임스페이스를 먼저 적용합니다 — `kubectl apply -f <디렉터리>`는 파일명 알파벳 순으로 처리해서, 그냥 두면 `configmap`·`deployment`가 `namespace`보다 먼저 적용돼 실패합니다.
-
-### `update.sh` — 코드 변경 후 재배포
-
-빌드 → 노드 적재 → `kubectl rollout restart`.
-
-태그(`:dev`)는 그대로 둡니다. 태그가 같아도 `kind load`가 노드의 이미지를 교체했으므로 새 파드는 새 이미지를 씁니다. 태그를 매번 바꾸면 노드에 옛 이미지만 쌓입니다.
-
----
-
-## 접근 방법
-
-| 대상 | 방법 |
-|---|---|
-| 백엔드 API | `curl http://localhost:8081/...` — **port-forward 불필요** |
-| SigNoz UI | http://localhost:8080 — **port-forward 불필요** |
-| PostgreSQL | `just db-shell` (클러스터 밖으로 열려 있지 않음) |
-
-둘 다 `Service`의 NodePort가 `kind/cluster.yaml`의 `extraPortMappings`로 호스트 포트에 연결돼 있기 때문입니다(백엔드 30081→8081, SigNoz 30080→8080).
-
-> **두 값은 한 쌍입니다.** 한쪽만 바꾸면 접근이 끊깁니다. 그리고 `extraPortMappings`는 **클러스터 생성 시점에만** 정할 수 있어, 포트를 추가하려면 클러스터를 다시 만들어야 합니다.
->
-> 이 매핑이 있으므로 `kubectl port-forward`로 8080을 또 열지 마세요. 같은 호스트 포트에 리스너가 둘 겹쳐 어느 쪽이 응답할지 OS 바인딩 우선순위에 달리게 됩니다.
-
-### 확인용 엔드포인트
-
-```bash
-curl http://localhost:8081/actuator/health/liveness   # 프로세스 생존
-curl http://localhost:8081/actuator/health/readiness  # 트래픽 수용 가능
-curl http://localhost:8081/api/health                 # 앱 응답
-curl http://localhost:8081/api/v1/terms               # 모듈 경유 조회
-```
-
-`/actuator/metrics` 등 나머지 actuator 엔드포인트는 Spring Security가 401로 막습니다 — 정상입니다.
-
----
 
 ## 관측성
 
-애플리케이션은 OTLP로 세 신호를 SigNoz에 보냅니다.
+애플리케이션은 OTLP 로 세 신호를 SigNoz 에 보낸다.
 
 | 신호 | 담당 | 근거 |
 |---|---|---|
 | 로그 | logback OTLP appender (`MaskingAppender` 경유) **+ stdout JSON** | 마스킹을 우리가 소유해야 함 |
-| 메트릭 | OTel Java 에이전트 | Micrometer OTLP push는 에이전트와 공존 시 조용히 유실됨(실측) |
-| 트레이스 | OTel Java 에이전트 | `opentelemetry-spring-boot-starter`는 Boot 4에서 컨텍스트가 깨짐 |
+| 메트릭 | OTel Java 에이전트 | Micrometer OTLP push 는 에이전트와 공존 시 조용히 유실됨(실측) |
+| 트레이스 | OTel Java 에이전트 | `opentelemetry-spring-boot-starter` 는 Boot 4 에서 컨텍스트가 깨짐 |
 
-에이전트는 `backend/Dockerfile`이 이미지에 넣고 `ENTRYPOINT`의 `-javaagent`로 붙입니다.
+**에이전트는 Bazel 이 이미지에 넣는다.** `MODULE.bazel` 의 `otel_javaagent`(버전·sha256
+고정) → `deploy/BUILD.bazel` 의 `otel_agent_layer` → entrypoint 의 `-javaagent`.
+버전은 `backend/gradle/libs.versions.toml` 의 `opentelemetryInstrumentation` 과 **같은
+릴리스 트레인**이어야 한다 — 어긋나면 로그에 trace_id 가 실리지 않아 로그↔트레이스
+상관이 끊긴다.
 
-### 반드시 유지해야 하는 에이전트 설정
+### 빠뜨리면 조용히 잘못 동작하는 설정
 
-`deploy/k8s/backend/configmap.yaml`과 `backend/Dockerfile`에 같은 값이 들어 있습니다. 셋 다 **빠뜨리면 조용히 잘못 동작**합니다.
+`deploy/BUILD.bazel` 의 `env` 와 `deploy/k8s/backend/configmap.yaml` 에 같은 값이 있다.
+두 곳에 두는 이유는 이미지를 열어보지 않아도 매니페스트만으로 "왜 이 설정인가"가
+보여야 하기 때문이다.
 
 | 설정 | 이유 |
 |---|---|
-| `OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED=false` | 에이전트가 root 로거에 appender를 자동 부착하면 `MaskingAppender`를 우회한 **원문 토큰·이메일**이 수집기로 나갑니다. 보안 사고입니다. |
-| `OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED=false` | 에이전트 2.14.0에서 `ILoggingEvent` 가상 필드가 주입되지 않아 첫 로그 호출에서 `NoSuchFieldError`로 **기동 자체가 실패**합니다. |
-| `OTEL_METRICS_EXPORTER=otlp` | 메트릭 소유권이 에이전트입니다. `none`으로 두면 메트릭이 하나도 적재되지 않습니다. |
+| `OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED=false` | 에이전트가 root 로거에 appender 를 자동 부착하면 `MaskingAppender` 를 우회한 **원문 토큰·이메일**이 수집기로 나간다. 보안 사고다 |
+| `OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED=false` | 에이전트의 logback MDC 계측이 넣는 가상 필드가 주입되지 않아 첫 로그에서 `NoSuchFieldError` 로 **기동 자체가 실패**한다(실측) |
+| `OTEL_METRICS_EXPORTER=otlp` | 메트릭도 에이전트가 내보낸다. Micrometer 의 OTLP push 는 에이전트가 붙으면 오류 로그 하나 없이 유실된다(실측) |
 
-엔드포인트는 실행 위치에 따라 다릅니다.
+`just verify-telemetry` 의 `unmasked_jwt` 가 0 이 아니면 사고다 — 원문 토큰이
+수집기로 나갔다는 뜻이다.
 
-| 실행 위치 | `OTEL_EXPORTER_OTLP_ENDPOINT` | 설정 위치 |
-|---|---|---|
-| 클러스터 안(파드) | `http://signoz-ingester.signoz.svc.cluster.local:4318` | `k8s/backend/configmap.yaml` |
-| 맥 로컬(`bootRun`) | `http://localhost:4318` + ingester port-forward | `application.yml` 기본값 |
+## 알아둘 것
 
-SigNoz **Logs → Logs Explorer**에서:
+**backend 이미지는 Gradle 산출물에 의존한다.** `just backend-build` 가 bootJar 를
+만들고 `deploy/bin/stage.sh` 가 `deploy/artifacts/backend/app.jar` 로 복사한다.
+jar 가 없으면 `just images` 가 거기서 멈춘다 — jar 없는 이미지를 만들어 파드가
+기동 직후 죽는 것보다 낫다.
 
-```text
-service.name = trippilot-backend
-service.name = trippilot-backend AND severity_text = ERROR
-```
+**이미지는 `imagePullPolicy: Never` 다.** kind 노드는 호스트 Docker 와 별도의 이미지
+스토어를 쓰고 레지스트리는 없다. `IfNotPresent` 로 두면 이미지가 없을 때 레지스트리로
+나가 `ImagePullBackOff` 가 된다.
 
-### 적재 확인
+**frontend 이미지는 정적 스텁이다.** 지금 `frontend/web/` 은 통합 테스트용
+`index.html` 하나다. 실제 웹 번들로 바꾸려면 `just frontend-web-export`.
+React Native 앱 자체는 시뮬레이터/실기에서 돈다 — 컨테이너 대상이 아니다.
+nginx 의 `/api` 프록시가 `backend` 라는 이름을 쓰므로(compose 와 공유), k8s 에는
+`deploy/k8s/backend/service-alias.yaml` 로 같은 이름의 Service 를 하나 더 둔다.
 
-UI를 거치지 않고 저장소를 직접 봅니다. "대시보드에 안 보인다"가 수집 실패인지 조회 조건 문제인지 가르는 것이 목적입니다.
+**ai 이미지에는 의존성 레이어가 없다.** `ai/main.py` 가 stdlib 만 쓰는 스텁이라
+그렇다. 실제 C1(LLM Gateway)·C2(Solver)가 anthropic·ortools 를 쓰기 시작하면
+`deploy/BUILD.bazel` 에 의존성 레이어를 하나 더 얹어야 한다. 테스트 쪽은 이미 실제
+의존성을 쓴다(`bazel test //ai:pytest`).
 
-```bash
-just verify-telemetry
-```
+**베이스 이미지는 digest 로 고정돼 있다.** 갱신하려면 `just images-digest` 의 출력을
+`MODULE.bazel` 에 옮겨 적는다. arm64 는 `linux/arm64/v8` 로 적어야 한다 — variant 를
+빼면 rules_oci 가 매니페스트를 못 찾는다.
 
-`unmasked_jwt`가 0이 아니면 **마스킹이 뚫린 것**이므로 사고로 다뤄야 합니다.
-
----
-
-## 트러블슈팅
-
-### SigNoz에 아무것도 안 들어옴 — 가장 흔한 원인
-
-**SigNoz 관리자 계정을 아직 만들지 않은 경우입니다.**
-
-계정(=조직)이 없으면 collector가 OpAMP로 파이프라인 설정을 받지 못해 **OTLP 수신기 자체가 열리지 않습니다.** 애플리케이션 쪽에는 `Connection refused`로 보입니다.
-
-증상 확인:
-
-```bash
-kubectl logs -n signoz signoz-0 --tail=20 | grep "failed to find or create agent"
-kubectl logs deployment/trippilot-backend -n trippilot --tail=20 | grep "Failed to export"
-```
-
-해결 — http://localhost:8080 에서 계정을 만듭니다.
-
-| 응답 | 원인 | 해결 |
-|---|---|---|
-| `invalid_password` | **12자 이상 + 대문자 + 소문자 + 숫자 + 기호** 필요 | 정책을 만족하는 비밀번호 사용 |
-| `self-registration is disabled` | 첫 계정이 이미 조직을 점유함 | 기존 계정으로 로그인하거나 아래처럼 재설치 |
-
-> 로컬 전용 계정입니다. **실제로 쓰는 비밀번호를 재사용하지 마세요.**
-
-계정 생성 후 30초 내에 collector가 설정을 받아 수집이 시작됩니다. 그래도 안 되면 `kubectl rollout restart deployment/signoz-ingester -n signoz`.
-
-### 파드가 `CrashLoopBackOff` — 로그에 `NoSuchFieldError ... __opentelemetryVirtualField`
-
-`OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED=false`가 빠졌습니다. ConfigMap을 확인하세요.
-
-이때 **진짜 원인이 가려집니다**. 로깅 자체가 깨지므로 Spring의 실패 보고도 함께 죽어, 원래의 기동 실패 이유가 보이지 않습니다. 원인을 보려면 에이전트를 잠시 떼고 띄우세요:
-
-```bash
-kubectl patch deployment trippilot-backend -n trippilot --type=json \
-  -p '[{"op":"add","path":"/spec/template/spec/containers/0/command","value":["java","-jar","/app/app.jar"]}]'
-# 확인이 끝나면 되돌리기
-kubectl patch deployment trippilot-backend -n trippilot --type=json \
-  -p '[{"op":"remove","path":"/spec/template/spec/containers/0/command"}]'
-```
-
-### 모든 HTTP 응답이 200인데 본문이 비어 있음
-
-OTel 에이전트 **2.14.0**의 증상입니다. 상태 코드와 헤더는 정상인데 본문이 0바이트가 됩니다. `backend/Dockerfile`의 `OTEL_AGENT_VERSION`이 2.30.0 이상인지 확인하세요.
-
-### 메트릭만 안 들어옴
-
-`OTEL_METRICS_EXPORTER`가 `none`이면 그렇습니다. `otlp`여야 합니다.
-에이전트가 붙은 상태에서 Micrometer의 OTLP push(`management.otlp.metrics.export`)는 **오류 로그 하나 없이 유실**되므로, 그쪽을 켜서 해결하려 하지 마세요.
-
-### 파드가 `ErrImageNeverPull`
-
-이미지를 노드에 적재하지 않았습니다. `./deploy/bin/build.sh`를 실행하세요.
-
-### 파드가 `CreateContainerConfigError`
-
-`container has runAsNonRoot and image has non-numeric user`라면, Dockerfile의 `USER`가 **숫자 UID**여야 합니다. kubelet은 이름으로는 non-root 여부를 검증하지 못합니다.
-
-### `Error opening zip file or JAR manifest missing: /app/otel-agent.jar`
-
-`ADD`로 받은 파일은 `0600 root:root`이고 `COPY`가 그 권한을 그대로 옮깁니다. 비루트(1001)로 실행하면 읽지 못합니다. `COPY --chmod=0644`로 받아야 합니다.
-
-### DB 초기화 SQL을 고쳤는데 반영되지 않음
-
-`/docker-entrypoint-initdb.d`의 스크립트는 **데이터 디렉터리가 비어 있을 때만** 실행됩니다. PVC를 지워야 합니다.
-
-```bash
-just db-reset      # ⚠️ DB 데이터가 전부 사라집니다
-```
-
-### 컨텍스트 오류로 스크립트가 멈춤
-
-```
-✗ 현재 컨텍스트가 'xxx' 입니다. 이 스크립트는 'kind-trippilot' 에서만 동작합니다.
-```
-
-의도된 차단입니다. EKS 컨텍스트에서 로컬 배포 스크립트가 도는 사고를 막습니다.
-
-```bash
-kubectl config use-context kind-trippilot
-```
-
-### SigNoz 완전 초기화
-
-```bash
-helm uninstall signoz -n signoz
-kubectl delete pvc --all -n signoz
-kubectl delete namespace signoz
-
-# Terminating 에서 멈추면 — ClickHouse CR 의 finalizer 를 처리할 오퍼레이터가
-# 이미 지워져 무한 대기한다. finalizer 를 직접 비운다.
-kubectl patch clickhouseinstallation signoz-telemetrystore-clickhouse -n signoz \
-  --type=merge -p '{"metadata":{"finalizers":[]}}'
-
-just cluster-up
-```
-
-> 수집한 로그·트레이스·대시보드가 **전부 사라집니다.** 되돌릴 수 없습니다.
-
----
-
-## 정리
-
-```bash
-just undeploy       # 앱만 제거
-just cluster-down   # 클러스터 통째로 (SigNoz 수집 데이터까지 사라짐)
-```
+**JDK 25 자동탐지.** Homebrew 로 깐 JDK 는 Gradle 이 못 찾는다. `just` 가
+`/opt/homebrew/opt/openjdk@25/...` 를 기본으로 넘기며, 다른 위치면 `TRIPPILOT_JDK25`
+환경변수로 지정한다.
