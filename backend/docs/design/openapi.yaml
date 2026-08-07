@@ -986,13 +986,17 @@ components:
 
     Itinerary:
       type: object
-      required: [itineraryId, tripId, status, solveMode, isFallback, days]
+      required: [itineraryId, tripId, status, solveMode, isFallback, generationState, days]
       properties:
         itineraryId: { type: string, format: uuid }
         tripId: { type: string, format: uuid }
         status: { type: string, enum: [PLANNED, CONFIRMED] }
         solveMode: { type: string, enum: [FULL_AI, DETERMINISTIC, MINIMAL] }
         isFallback: { type: boolean }
+        generationState:
+          type: string
+          enum: [PARTIAL, COMPLETE, FAILED]
+          description: 생성 진행 상태(확정 상태와 다른 축) — PARTIAL=day1만 채워짐(2단계 생성 중) · COMPLETE=전 일자 완료 · FAILED=2차 실패(1차분 유효)
         days:
           type: array
           items:

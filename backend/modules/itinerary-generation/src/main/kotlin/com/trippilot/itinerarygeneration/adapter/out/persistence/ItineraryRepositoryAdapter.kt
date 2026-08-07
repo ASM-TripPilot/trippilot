@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.adapter.out.persistence
 
+import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -78,10 +79,10 @@ class ItineraryRepositoryAdapter(
         }
         return Itinerary.reconstitute(
             itineraryId, tripId, ItineraryStatus.valueOf(status), SolveMode.valueOf(solveMode),
-            isFallback, domainDays, createdAt, updatedAt,
+            isFallback, GenerationState.valueOf(generationState), domainDays, createdAt, updatedAt,
         )
     }
 
     private fun Itinerary.toEntity() =
-        ItineraryEntity(itineraryId, tripId, status.name, solveMode.name, isFallback, createdAt, updatedAt)
+        ItineraryEntity(itineraryId, tripId, status.name, solveMode.name, isFallback, generationState.name, createdAt, updatedAt)
 }

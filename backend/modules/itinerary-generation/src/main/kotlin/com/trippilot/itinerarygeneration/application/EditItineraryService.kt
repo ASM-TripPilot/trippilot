@@ -77,7 +77,7 @@ class EditItineraryService(
         }
         return Itinerary.reconstitute(
             current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.isFallback,
-            days, current.createdAt, clock.instant(),
+            current.generationState, days, current.createdAt, clock.instant(), // 생성 진행 상태는 편집과 무관 — 보존
         )
     }
 }

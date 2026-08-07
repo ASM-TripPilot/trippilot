@@ -83,6 +83,7 @@ data class ItineraryResponse(
     val status: String,
     val solveMode: String,
     val isFallback: Boolean,
+    val generationState: String,
     val days: List<DayResponse>,
 ) {
     companion object {
@@ -92,6 +93,7 @@ data class ItineraryResponse(
             status = i.status.name,
             solveMode = i.solveMode.name,
             isFallback = i.isFallback,
+            generationState = i.generationState.name,
             days = i.days.map { d ->
                 DayResponse(d.date, d.slots.map { s -> SlotResponse(s.sourcePoiId, s.startAt, s.endAt, s.isFixed, s.endsNextDay, s.hasViolation) })
             },

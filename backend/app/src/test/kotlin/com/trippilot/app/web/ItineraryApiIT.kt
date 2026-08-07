@@ -112,6 +112,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         body["status"].asText() shouldBe "PLANNED"
         body["tripId"].asText() shouldBe trip
         body["days"].size() shouldBe 2 // 08-01 ~ 08-02(체크아웃 포함)
+        body["generationState"].asText() shouldBe "COMPLETE" // 단일 호출 = 완료(2단계 day1 은 U5 이후 PARTIAL)
         val slot = body["days"][0]["slots"][0]
         slot.has("startAt") shouldBe true
         slot.has("endAt") shouldBe true
