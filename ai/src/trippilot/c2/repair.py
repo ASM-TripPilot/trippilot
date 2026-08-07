@@ -6,6 +6,11 @@
 
 참고: FD는 이 타입들을 domain에 배치했으나, 직렬화·영속 대상이 아니라
 c2 내부 타입으로 조정 (U5 API 노출 시 재검토 — audit 기록).
+TRIP-292에서 `HybridSolverFacade.repair()`가 공개 경계로 승격되면서 RepairResult가
+백엔드 응답 스키마의 원천이 됐다 — 배치는 c2 유지, 직렬화 형태 확정은 U5 몫.
+
+시한(deadline)은 여기서 다루지 않는다: 시계 소유자는 퍼사드 하나뿐(DL-3)이고,
+이 함수는 단일 패스 순수 계산이라 중단점이 없다. 진입 스킵·초과 관측은 퍼사드가 한다.
 """
 
 from __future__ import annotations

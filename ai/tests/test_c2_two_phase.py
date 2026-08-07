@@ -262,8 +262,10 @@ def test_two_phase_generation_has_no_duplicate_poi() -> None:
     merged = _placed(phase1) + _placed(phase2)
     assert len(merged) == len(set(merged))  # 두 호출을 합쳐도 중복 0
     assert set(_placed(phase2)) & assigned == set()
-    assert facade.validate(phase1, replace(problem, days=problem.days[:1])) == []
-    assert facade.validate(phase2, replace(problem, days=problem.days[1:])) == []
+    assert facade.validate(phase1, replace(problem, days=problem.days[:1]),
+                           deadline_ms=1000) == []
+    assert facade.validate(phase2, replace(problem, days=problem.days[1:]),
+                           deadline_ms=1000) == []
 
 
 @settings(max_examples=25, deadline=None)
@@ -282,8 +284,8 @@ def test_pbt_two_phase_matches_single_call_uniqueness(setup) -> None:
 
     merged = _placed(phase1) + _placed(phase2)
     assert len(merged) == len(set(merged))  # 1회 호출과 동일한 "POI 1회 방문" 성질
-    assert facade.validate(phase1, p1) == []
-    assert facade.validate(phase2, p2) == []
+    assert facade.validate(phase1, p1, deadline_ms=1000) == []
+    assert facade.validate(phase2, p2, deadline_ms=1000) == []
 
 
 def test_two_phase_solve_mode_is_still_honest() -> None:
