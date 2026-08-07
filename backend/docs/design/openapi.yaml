@@ -657,29 +657,36 @@ paths:
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
     post:
       tags: [trips]
-      summary: AI 일정 생성 — 소유 여행 날짜 기준 ScheduleAgent 호출·영속(첫 슬라이스). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+      summary: AI 일정 생성 — day1 먼저 반환(2단계). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+      description: >
+        첫날(day1)만 담긴 `generationState=PARTIAL` 응답을 즉시 돌려주고, 나머지 일자는 백그라운드로 채운다.
+        클라이언트는 GET 으로 `COMPLETE`(전 일자 완료) 또는 `FAILED`(2차 중단) 까지 폴링한다.
+        여행이 하루면 2차 없이 즉시 `COMPLETE`. PARTIAL 인 동안 확정·편집은 409.
+        재생성(이 POST)에는 상태 제한이 없다 — 중단된 생성(PARTIAL)에서 벗어나는 탈출구이자,
+        **확정된 일정을 다시 짜는 유일한 경로**다(확정 해제 API 없음). 확정 일정에 호출하면
+        확정이 풀리고 PLANNED 새 일정으로 대체되며, 동결됐던 poi_snapshot 참조는 사라진다.
       requestBody:
         required: false
         content: { application/json: { schema: { $ref: '#/components/schemas/GenerateItineraryRequest' } } }
       responses:
-        '201': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
+        '201': { description: 생성됨(day1 만 담긴 PARTIAL · 하루 여행이면 COMPLETE), content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정 }
     put:
       tags: [trips]
-      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409
+      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정·생성 중 일정은 409
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/EditItineraryRequest' } } }
       responses:
         '200': { description: 편집됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
-        '409': { description: 확정된 일정은 수정 불가 }
+        '409': { description: 확정된 일정은 수정 불가 · 생성 진행 중(generationState=PARTIAL)은 수정 불가 }
   /trips/{tripId}/itinerary/confirm:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
     post:
       tags: [trips]
-      summary: 일정 확정 — PLANNED→CONFIRMED 단방향 잠금
+      summary: 일정 확정 — PLANNED→CONFIRMED(재확정 409). 재생성 POST 는 확정을 되돌린다
       responses:
         '200': { description: 확정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
@@ -998,7 +1005,10 @@ components:
           enum: [PARTIAL, COMPLETE, FAILED]
           description: >
             생성 진행 상태(확정 상태와 다른 축) — PARTIAL=day1만 채워짐(2단계 생성 중) · COMPLETE=전 일자 완료 ·
-            FAILED=2차 실패(1차분은 유효). **PARTIAL 인 동안 확정은 409**(day1만 동결된 채 잠기는 것 방지).
+            FAILED=2차 실패(1차분은 유효). **PARTIAL 인 동안 확정·편집은 409**
+            (day1만 동결된 채 잠기거나, 뒤이어 도착하는 2차 결과가 편집을 덮어쓰는 것 방지).
+            생성 POST 는 day1 만 담은 PARTIAL 을 즉시 반환하므로, 클라이언트는 GET 으로 COMPLETE/FAILED 까지
+            폴링해 나머지 일자를 받는다(여행이 하루면 즉시 COMPLETE).
         days:
           type: array
           items:

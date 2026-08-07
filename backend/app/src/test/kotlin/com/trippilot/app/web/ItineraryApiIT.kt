@@ -64,8 +64,32 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
     }
 
+    /**
+     * 2차 생성(백그라운드) 완료까지 조회 폴링 — 실 클라이언트가 하는 일과 동일.
+     * `@Async` 라 완료 시점이 비결정적이므로 상태로 기다린다(고정 sleep 금지).
+     */
+    private fun awaitComplete(trip: String, token: String): JsonNode {
+        val deadline = System.nanoTime() + AWAIT_TIMEOUT_NANOS
+        var last = json.createObjectNode() as JsonNode
+        while (System.nanoTime() < deadline) {
+            last = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second
+            when (last["generationState"]?.asText()) {
+                "PARTIAL" -> Thread.sleep(POLL_INTERVAL_MS)
+                // FAILED 를 통과시키면 뒤따르는 확정·편집 검증이 조용히 "실패한 일정" 위에서 돌게 된다.
+                "COMPLETE" -> return last
+                else -> error("2차 생성이 완료되지 않았습니다. 상태=$last")
+            }
+        }
+        error("2차 생성이 기한 내 끝나지 않았습니다. 마지막 상태=$last")
+    }
+
     private fun poiId(token: String): String =
         call(HttpMethod.GET, "/api/v1/places?region=제주", token).second[0]["poiId"].asText()
+
+    private companion object {
+        const val POLL_INTERVAL_MS = 50L
+        val AWAIT_TIMEOUT_NANOS = java.time.Duration.ofSeconds(20).toNanos()
+    }
 
     @Test
     fun `인증 없으면 401`() {
@@ -112,12 +136,18 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         rc shouldBe 201
         body["status"].asText() shouldBe "PLANNED"
         body["tripId"].asText() shouldBe trip
-        body["days"].size() shouldBe 2 // 08-01 ~ 08-02(체크아웃 포함)
-        body["generationState"].asText() shouldBe "COMPLETE" // 단일 호출 = 완료(2단계 day1 은 U5 이후 PARTIAL)
+        // day1 조기 노출(TRIP-267): 즉시 응답은 첫날만·생성 중
+        body["days"].size() shouldBe 1
+        body["generationState"].asText() shouldBe "PARTIAL"
         val slot = body["days"][0]["slots"][0]
         slot.has("startAt") shouldBe true
         slot.has("endAt") shouldBe true
         slot.has("duration") shouldBe false // INV-3: 소요시간 미노출
+
+        // 2차(백그라운드)가 나머지 일자를 채우고 COMPLETE 로 전이
+        val completed = awaitComplete(trip, token)
+        completed["generationState"].asText() shouldBe "COMPLETE"
+        completed["days"].size() shouldBe 2 // 08-01 ~ 08-02(체크아웃 포함)
     }
 
     @Test
@@ -133,6 +163,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val trip = newTrip(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
 
         val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
         rc shouldBe 200
@@ -162,6 +193,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val trip = newTrip(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
 
         val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
         rc shouldBe 200
@@ -181,6 +213,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val trip = newTrip(token)
         val poi = poiId(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
 
         val editBody = """{"days":[
             {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"10:00","endAt":"11:00","isFixed":false,"endsNextDay":false}]},
@@ -203,6 +236,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val trip = newTrip(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 200
         val editBody = """{"days":[{"date":"2026-08-01","slots":[]}]}"""
         call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody).first shouldBe 409
@@ -233,6 +267,9 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
 
         // 생성 중 확정은 409 — day1 만 동결된 채 잠기는 것 방지
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 409
+        // 생성 중 편집도 409 — 뒤이어 오는 2차 결과가 편집을 덮어써 유실되는 것 방지
+        val editBody = """{"days":[{"date":"2026-08-01","slots":[]}]}"""
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody).first shouldBe 409
     }
 
     @Test
@@ -247,7 +284,9 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val trip = newTrip(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
         itineraries.findByTrip(UUID.fromString(trip)).size shouldBe 1
     }
 

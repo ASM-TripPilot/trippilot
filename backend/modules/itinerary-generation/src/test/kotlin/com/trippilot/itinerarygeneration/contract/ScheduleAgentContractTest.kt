@@ -80,6 +80,8 @@ class ScheduleAgentContractTest : StringSpec({
         json shouldContain "\"preference_profile\""
         json shouldContain "\"deadline_ms\""
         json shouldContain "\"fixed_blocks\""
+        // 2단계 생성 중복 방지(TRIP-293) — 이름이 어긋나면 제외가 조용히 무력화된다
+        json shouldContain "\"excluded_poi_ids\""
         mapper.readValue(json, ScheduleAgentInput::class.java) shouldBe input
     }
 

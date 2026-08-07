@@ -9,7 +9,8 @@ import java.util.UUID
 
 /**
  * INV-4 결정론 폴백 — must_visit 고정 블록만으로 최소 일정. isFallback=true·MINIMAL·거리 없음(INV-3).
- * 시각 미지정(ANYTIME) 고정 블록은 배치하지 않는다(결정론 위치 불가).
+ * 시각 미지정(ANYTIME) 고정 블록도 첫 일자에 결정론적으로 배치한다 — 2단계 생성(TRIP-267)에서 ANYTIME 은
+ * 2차만 맡으므로, 폴백이 버리면 must_visit 이 일정에서 통째로 사라져 HC3 가 조용히 깨진다.
  */
 class MinimalItineraryFallbackTest : StringSpec({
 
@@ -51,11 +52,36 @@ class MinimalItineraryFallbackTest : StringSpec({
         out.days.first { it.date == d2 }.slots shouldBe emptyList()
     }
 
-    "시각 미지정(ANYTIME) 고정 블록은 배치하지 않음" {
+    "시각 미지정(ANYTIME) 고정 블록은 첫 일자에 배치 — 폴백에서도 HC3 유지" {
         val out = MinimalItineraryFallback.of(
             input(listOf(FixedBlock(poiB, null, null, null))),
             at,
         )
-        out.days.all { it.slots.isEmpty() } shouldBe true
+        val slot = out.days.first { it.date == d1 }.slots.single()
+        slot.poiId shouldBe poiB
+        slot.isFixed shouldBe true
+        out.days.first { it.date == d2 }.slots shouldBe emptyList()
+    }
+
+    "ANYTIME 이 하루 창을 넘치면 다음 날로 — 자정 감김으로 슬롯 검증이 터지지 않는다" {
+        // 09:00~21:00(12시간) 창에 10시간짜리 두 건 — 한 날에 쌓으면 LocalTime 이 자정을 넘어 감긴다.
+        val out = MinimalItineraryFallback.of(
+            input(listOf(FixedBlock(poiA, null, null, 600), FixedBlock(poiB, null, null, 600))),
+            at,
+        )
+        out.days.first { it.date == d1 }.slots.single().poiId shouldBe poiA
+        out.days.first { it.date == d2 }.slots.single().poiId shouldBe poiB
+        // 어떤 슬롯도 끝이 시작보다 앞서지 않는다(= 감기지 않았다)
+        out.days.flatMap { it.slots }.all { it.endAt > it.startAt } shouldBe true
+    }
+
+    "지정 블록과 ANYTIME 이 섞이면 지정 블록 뒤에 붙어 겹치지 않는다" {
+        val out = MinimalItineraryFallback.of(
+            input(listOf(FixedBlock(poiA, d1, LocalTime.parse("12:00"), 90), FixedBlock(poiB, null, null, null))),
+            at,
+        )
+        val slots = out.days.first { it.date == d1 }.slots
+        slots.map { it.poiId } shouldBe listOf(poiA, poiB)
+        slots[1].startAt shouldBe slots[0].endAt // 겹침 없음
     }
 })

@@ -6,6 +6,7 @@ import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -46,6 +47,7 @@ class GenerateItineraryService(
     private val scheduleAgent: ScheduleAgentPort,
     private val itineraries: ItineraryRepository,
     private val events: DomainEventPublisher,
+    private val secondPhase: SecondPhaseGenerator,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
 ) {
@@ -56,42 +58,92 @@ class GenerateItineraryService(
         val prefs = preferences.findPreferences(accountId)                                    // 취향 7축·예산등급(계정 스코프)
         // 소유·기간은 위에서 선검증 — 거점 앵커는 기간을 넘겨 조립(중복 trip 조회 없음).
         val stayAnchors = baseAnchors.findStayNightAnchors(tripId, ctx.startDate, ctx.endDate)
-        val input = assembleInput(tripId, mode, ctx, prefs, stayAnchors)
-        // 외부(ScheduleAgent) 호출은 트랜잭션 밖 — DB 커넥션을 물지 않게. BE-2 실 HTTP 어댑터도 동일.
+        val planDates = planDates(ctx.startDate, ctx.endDate)
+
+        // day1 조기 노출(TRIP-267 · PR #104 합의): 1차는 첫날만 짧은 시한으로 풀어 즉시 반환하고,
+        // 나머지 일자는 배정된 POI 를 제외 목록으로 넘겨 백그라운드 2차 호출로 채운다(AI 는 동기 REST 유지).
+        val firstDates = planDates.take(1)
+        val remainingDates = planDates.drop(1)
+        // 2차가 고정 블록으로 배치할 must_visit 은 1차 후보에서 빼둔다 —
+        // 안 그러면 1차가 그 POI 를 자유 슬롯으로 day1 에 넣고, 2차가 제 날짜에 또 넣어 같은 곳을 두 번 간다.
+        val reservedForSecond = if (remainingDates.isEmpty()) {
+            emptyList()
+        } else {
+            ctx.fixedVisits.filterNot { it.date in firstDates }.map { it.poiId }.distinct()
+        }
+        val firstInput = assembleInput(
+            tripId, mode, ctx, prefs, stayAnchors, firstDates, DAY1_DEADLINE_MS,
+            excluded = reservedForSecond,
+            carriesUndatedFixed = remainingDates.isEmpty(), // 날짜 미지정 must_visit 은 2차가 맡는다(없으면 1차)
+        )
+
+        // 외부(ScheduleAgent) 호출은 트랜잭션 밖 — DB 커넥션을 물지 않게.
         // INV-4: AI 실패 시 침묵 금지 — 결정론 최소 폴백(must_visit 고정블록)으로 대체하고 isFallback 로 표시.
-        // (day1 조기노출/백그라운드 반환은 실 비동기 어댑터(BE-2/229) 도입 시 — 동기 스텁에선 이연.)
         val output = try {
-            scheduleAgent.generate(input)
+            scheduleAgent.generate(firstInput)
         } catch (e: Exception) {
             log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
-            MinimalItineraryFallback.of(input, clock.instant())
+            MinimalItineraryFallback.of(firstInput, clock.instant())
         }
+        // 단일일 여행이면 1차로 끝 — 2차 없이 COMPLETE.
+        val state = if (remainingDates.isEmpty()) GenerationState.COMPLETE else GenerationState.PARTIAL
+
         // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
-        return tx.execute {
-            val saved = itineraries.replaceForTrip(tripId, output.toItinerary(tripId))
-            events.publish(ItineraryGenerated(saved.itineraryId.toString(), tripId.toString(), saved.isFallback))
-            saved
+        val saved = tx.execute {
+            val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, state, firstDates))
+            events.publish(ItineraryGenerated(it.itineraryId.toString(), tripId.toString(), it.isFallback))
+            it
         }!!
+
+        if (remainingDates.isNotEmpty()) {
+            // 1차에서 배정된 POI 는 2차 후보에서 제외(TRIP-293) — 같은 장소가 두 번 들어가지 않게.
+            val assigned = saved.days.flatMap { d -> d.slots.map { it.sourcePoiId } }.distinct()
+            val secondInput = assembleInput(
+                tripId, mode, ctx, prefs, stayAnchors, remainingDates, TOTAL_DEADLINE_MS, excluded = assigned,
+                carriesUndatedFixed = true,
+            )
+            // 2차가 고정 블록(HC3: 반드시 포함)으로 다시 싣는 POI 는 제외 목록에서 뺀다 —
+            // 같은 POI 를 "반드시 넣어라 + 후보에서 빼라"로 동시에 주면 계약이 모순된다(INV-1 ↔ HC3).
+            val fixedInSecond = secondInput.fixedBlocks.map { it.poiId }.toSet()
+            secondPhase.completeRemaining(
+                tripId, saved.itineraryId,
+                secondInput.copy(excludedPoiIds = secondInput.excludedPoiIds.filterNot { it in fixedInSecond }),
+            )
+        }
+        return saved
     }
 
+    @Suppress("LongParameterList")
     private fun assembleInput(
         tripId: UUID,
         mode: GenerationMode,
         ctx: TripGenerationContext,
         prefs: PreferenceSnapshot,
         stayAnchors: List<DayAnchorView>,
+        dates: List<LocalDate>,
+        deadlineMs: Long,
+        excluded: List<UUID> = emptyList(),
+        carriesUndatedFixed: Boolean = true,
     ): ScheduleAgentInput =
         ScheduleAgentInput(
             tripId = tripId,
             generationMode = mode,
             // budgetLevel(등급) = preference_set.budget_tier (경계 계약; trip.budget_total 아님)
             tripContext = TripContext(ctx.destinations, ctx.startDate, ctx.endDate, ctx.companionType, prefs.budgetTier),
-            anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors),                                    // 계획일별 거점 좌표
-            timeWindows = planDates(ctx.startDate, ctx.endDate).map { TimeWindow(it, DEFAULT_START, DEFAULT_END) },
-            fixedBlocks = ctx.fixedVisits.map { FixedBlock(it.poiId, it.date, it.start, it.dwellMin) },       // must_visit → 고정 블록(HC3)
+            anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors).filter { it.date in dates },          // 이 호출이 맡은 일자의 거점 좌표
+            timeWindows = dates.map { TimeWindow(it, DEFAULT_START, DEFAULT_END) },
+            // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
+            // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
+            // 하루짜리 1차에 전부 몰면 배치 공간이 없어 HC3 가 깨질 수 있고, 양쪽에 실으면 중복 배치된다.
+            // 기간 밖 날짜를 버리지 않는 이유: 어느 단계에도 안 실으면 AI 가 실현 불가를 보고할 기회조차 없이
+            // 백엔드가 조용히 삭제하게 된다(must_visit 등록은 기간을 검증하지 않는다).
+            fixedBlocks = ctx.fixedVisits
+                .filter { it.date in dates || (it.date !in planDates(ctx.startDate, ctx.endDate) && carriesUndatedFixed) }
+                .map { FixedBlock(it.poiId, it.date, it.start, it.dwellMin) },
             preferenceProfile = prefs.toProfile(),                                                            // preference_snapshot 7축
             recommendationStrength = null,
-            requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), TOTAL_DEADLINE_MS),
+            requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs),
+            excludedPoiIds = excluded,
         )
 
     /**
@@ -115,8 +167,9 @@ class GenerateItineraryService(
         generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.toList()
 
     /** ScheduleAgentOutput → Itinerary 애그리거트. 시각·순서는 솔버 검증값만(INV-2). poi_snapshot 동결은 확정(272). */
-    private fun ScheduleAgentOutput.toItinerary(tripId: UUID): Itinerary {
-        val days = this.days.mapIndexed { dayIdx, d ->
+    private fun ScheduleAgentOutput.toItinerary(tripId: UUID, state: GenerationState, dates: List<LocalDate>): Itinerary {
+        // 요청 일자에 맞춰 정렬 — 응답이 어긋나도 중복/누락 일자가 조용히 통과하지 못하게(외부 값 신뢰 금지).
+        val days = DayReconciliation.alignTo(dates, this.days).mapIndexed { dayIdx, d ->
             ItineraryDay.of(
                 d.date, dayIdx,
                 d.slots.mapIndexed { slotIdx, s ->
@@ -124,7 +177,7 @@ class GenerateItineraryService(
                 },
             )
         }
-        return Itinerary.create(tripId, solveMode, isFallback, days, clock.instant())
+        return Itinerary.create(tripId, solveMode, isFallback, days, clock.instant(), state)
     }
 
     companion object {
@@ -132,5 +185,6 @@ class GenerateItineraryService(
         private val DEFAULT_START = LocalTime.of(9, 0)
         private val DEFAULT_END = LocalTime.of(21, 0)
         private const val TOTAL_DEADLINE_MS = 20_000L
+        private const val DAY1_DEADLINE_MS = 5_000L // day1 조기 노출 예산(IO-1)
     }
 }

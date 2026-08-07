@@ -47,6 +47,12 @@ data class ScheduleAgentInput(
     val preferenceProfile: PreferenceProfile,  // preference_snapshot 7축
     val recommendationStrength: String?,
     val requestMeta: RequestMeta,          // 지연 예산 전파(IO-1)
+    /**
+     * 이미 다른 호출에서 배정된 POI — day1 2단계 생성의 중복 방지(TRIP-293).
+     * 1차 `timeWindows=[day1]` 로 생성 → 배정된 poiId 를 2차(나머지 일자) 제외 목록으로 넘긴다.
+     * AI 측 대응: `ItineraryProblem.excluded_poi_ids`(후보 풀·프롬프트·게이트에 동일 적용).
+     */
+    val excludedPoiIds: List<UUID> = emptyList(),
 )
 
 data class TripContext(

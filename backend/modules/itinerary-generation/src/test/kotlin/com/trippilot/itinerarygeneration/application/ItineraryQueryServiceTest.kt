@@ -24,6 +24,12 @@ private class QueryFakeItineraries : ItineraryRepository {
         store += itinerary
         return itinerary
     }
+    override fun replaceIfCurrent(tripId: UUID, expectedItineraryId: UUID, itinerary: Itinerary): Boolean {
+        replaceForTrip(tripId, itinerary)
+        return true
+    }
+    override fun findStalePartial(updatedBefore: java.time.Instant): List<Itinerary> = emptyList()
+
 }
 
 /** 조회 소유·존재 판정 — 미소유·일정없음은 404(존재 은닉). */
