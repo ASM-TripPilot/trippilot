@@ -1,9 +1,11 @@
-# construction — CONSTRUCTION Phase 산출물
+# construction — CONSTRUCTION Phase Artifacts
 
-CONSTRUCTION Phase에서 생성될 유닛별 상세 설계와 코드 요약이 여기에 들어갑니다.
-"HOW — 어떻게 만드는가"를 정의합니다.
+> Korean version: ./claude.ko.md
 
-## 예상 구조 (유닛별)
+Per-unit detailed designs and code summaries produced in the CONSTRUCTION Phase go here.
+They define "HOW — how it is built."
+
+## Expected Structure (per unit)
 
 ```
 construction/
@@ -30,7 +32,7 @@ construction/
 └── build-and-test/
 ```
 
-## 아직 미착수
+## Not Yet Started
 
-현재 INCEPTION 완료 + 멘토 피드백 반영 중.
-CONSTRUCTION은 피드백 반영 완료 후 U1부터 순차 진행 예정.
+Currently INCEPTION is complete and mentor feedback is being incorporated.
+CONSTRUCTION will proceed sequentially from U1 once the feedback work is complete.

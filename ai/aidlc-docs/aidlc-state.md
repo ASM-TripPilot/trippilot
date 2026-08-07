@@ -54,7 +54,9 @@
 
 ## Current Status
 - **Lifecycle Phase**: CONSTRUCTION
-- **Current Stage**: U1 Domain & Ports — Functional Design 산출물 생성 완료 (승인 대기)
-- **Next Stage**: 사용자 승인 → U1 NFR Requirements (또는 바로 Code Generation)
-- **Status**: 질문 9개 전부 권장안 확정 (uv·frozen dataclass·Protocol·tz-aware datetime·TracePort 통합·Eval 타입 포함·NFR-7 등록).
-  산출물: `construction/u1-domain-ports/functional-design/` 3종. requirements.md에 NFR-7(LLMOps) 4항목 등록 완료.
+- **Current Stage**: U4 C1 LLM Gateway — FD 작성 완료, 승인 대기
+- **Next Stage**: U4 코드 생성 (승인 후). U3 잔여(실 PostgreSQL 어댑터·batch_check_closed 연결)는 후속 백로그
+- **Status**:
+  - U1 완료 (2026-07-23): 도메인 12모듈·Port 7종·Fake 9종·PBT 52 green, 4대 불변식 타입 강제, CI 테스트 게이트. PR #25 리뷰 대기 (develop), Jira TRIP-164 In Review.
+  - U2 코어 완료 (2026-07-29): 벤치마크 게이트 통과(미결 #3 종결 — OR-Tools 확정), c2 8모듈(체인·HC·OR-Tools·LLM2차·repair·폴백·scorer), 76 tests green. PBT가 중복 고정블록 실버그 검출·수정. 잔여 경미 3건(oracle 대조·품질미달 트리거·2-opt)은 광택 백로그. Jira TRIP-165 In Review.
+  - U3 코어 완료 (2026-07-29): FD 3종 + m7 4모듈(6단계 필터·자모 fuzzy 해소·TTL 캐시 래퍼), 테스트 91 green (POOL-P1~4·RES-P1/P2·CACHE-P1/P2). 가격 캐싱 금지 구조+테스트 이중 강제.

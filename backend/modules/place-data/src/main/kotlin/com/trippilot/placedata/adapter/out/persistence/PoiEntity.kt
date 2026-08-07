@@ -9,6 +9,8 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -32,6 +34,10 @@ class PoiEntity(
     @Column(name = "saved_count") var savedCount: Long,
     @Column(name = "created_at") var createdAt: Instant,
     @Column(name = "updated_at") var updatedAt: Instant,
+    @Column(name = "image_url") var imageUrl: String? = null,
+    // text[] 매핑은 preference_set(V1.5) 선례와 동일 — 컨버터 없이 Hibernate 네이티브 배열.
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "tags") var tags: Array<String> = emptyArray(),
 )
 
 interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
@@ -85,11 +91,13 @@ class PoiRepositoryAdapter(
         poiId = poiId, nameKo = nameKo, lat = lat, lng = lng, category = category.name, region = region,
         openingHours = openingHours, dataStatus = dataStatus.name, source = source.name,
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
+        imageUrl = imageUrl, tags = tags.toTypedArray(),
     )
 
     private fun PoiEntity.toDomain() = Poi.reconstitute(
         poiId = poiId, nameKo = nameKo, lat = lat, lng = lng, category = PoiCategory.valueOf(category), region = region,
         openingHours = openingHours, dataStatus = DataStatus.valueOf(dataStatus), source = PoiSource.valueOf(source),
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
+        imageUrl = imageUrl, tags = tags.toList(),
     )
 }

@@ -13,7 +13,24 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/trippilot-ai
 
 jobs:
+  # U1+ 테스트 게이트 — PBT 52개(불변식·직렬화 왕복·결정론·아키텍처 순수성).
+  # 전부 fake 기반: 실 LLM·외부 API 호출 0 (D37). 실패 시 image 잡이 돌지 않는다(블로킹).
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: ai/uv.lock
+      - run: uv sync --locked
+      - run: uv run pytest -q
+
   image:
+    needs: test   # 테스트 통과해야만 이미지 빌드·발행 (블로킹 게이트)
     runs-on: ubuntu-latest
     permissions:
       contents: read

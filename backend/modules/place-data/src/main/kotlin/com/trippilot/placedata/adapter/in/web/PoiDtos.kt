@@ -17,13 +17,16 @@ data class PlaceResponse(
     val lng: Double,
     val region: String?,
     val openingHours: String?,
+    val imageUrl: String?,
+    val tags: List<String>,
     val savedCount: Long,
     val dataStatus: DataStatus,
 ) {
     companion object {
         fun from(p: Poi) = PlaceResponse(
             poiId = p.poiId, nameKo = p.nameKo, category = p.category, lat = p.lat, lng = p.lng,
-            region = p.region, openingHours = p.openingHours, savedCount = p.savedCount, dataStatus = p.dataStatus,
+            region = p.region, openingHours = p.openingHours, imageUrl = p.imageUrl, tags = p.tags,
+            savedCount = p.savedCount, dataStatus = p.dataStatus,
         )
     }
 }

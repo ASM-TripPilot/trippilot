@@ -646,6 +646,44 @@ paths:
       responses:
         '200': { description: 목록, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/MustVisit' } } } } }
         '404': { description: 없음/타 계정 }
+  /trips/{tripId}/itinerary:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 일정 조회 — 소유 여행의 현행 일정. 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
+        '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
+    post:
+      tags: [trips]
+      summary: AI 일정 생성 — 소유 여행 날짜 기준 ScheduleAgent 호출·영속(첫 슬라이스). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: '#/components/schemas/GenerateItineraryRequest' } } }
+      responses:
+        '201': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
+        '404': { description: 여행 없음/타 계정 }
+    put:
+      tags: [trips]
+      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EditItineraryRequest' } } }
+      responses:
+        '200': { description: 편집됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
+        '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
+        '409': { description: 확정된 일정은 수정 불가 }
+  /trips/{tripId}/itinerary/confirm:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 일정 확정 — PLANNED→CONFIRMED 단방향 잠금
+      responses:
+        '200': { description: 확정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
+        '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
+        '409': { description: 이미 확정됨 }
   /trips/{tripId}/must-visits/{mustVisitId}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -671,7 +709,7 @@ components:
 
     Place:
       type: object
-      required: [poiId, nameKo, category, lat, lng, savedCount, dataStatus]
+      required: [poiId, nameKo, category, lat, lng, savedCount, dataStatus, tags]
       properties:
         poiId: { type: string, format: uuid }
         nameKo: { type: string }
@@ -680,6 +718,14 @@ components:
         lng: { type: number, format: double }
         region: { type: string, nullable: true }
         openingHours: { type: string, nullable: true, description: NULL=미확인 }
+        imageUrl:
+          type: string
+          nullable: true
+          description: 대표 사진. NULL=미확보 — 서버가 기본 이미지를 지어내지 않으므로 클라가 자리만 비운다(BR-U1-06 취지)
+        tags:
+          type: array
+          items: { type: string }
+          description: 표시용 태그(감성 골목·야경·카페 등). 열린 집합이며 미확보 시 빈 배열
         savedCount: { type: integer, format: int64 }
         dataStatus:
           type: string
@@ -905,6 +951,64 @@ components:
         fixedDate: { type: string, format: date, nullable: true }
         fixedStart: { type: string, nullable: true }
         dwellMin: { type: integer, nullable: true }
+
+    GenerateItineraryRequest:
+      type: object
+      properties:
+        generationMode: { type: string, enum: [FULLY_AI, CO_PLAN], description: 미지정 시 FULLY_AI }
+
+    EditItineraryRequest:
+      type: object
+      required: [days]
+      description: 편집(전체 교체) — 수정된 일자·슬롯 배열. 슬롯 순서 = 배열 순서
+      properties:
+        days:
+          type: array
+          items:
+            type: object
+            required: [date, slots]
+            properties:
+              date: { type: string, format: date }
+              slots:
+                type: array
+                items:
+                  type: object
+                  required: [poiId, startAt, endAt, isFixed]
+                  properties:
+                    poiId: { type: string, format: uuid }
+                    startAt: { type: string, description: "HH:mm:ss" }
+                    endAt: { type: string }
+                    isFixed: { type: boolean }
+
+    Itinerary:
+      type: object
+      required: [itineraryId, tripId, status, solveMode, isFallback, days]
+      properties:
+        itineraryId: { type: string, format: uuid }
+        tripId: { type: string, format: uuid }
+        status: { type: string, enum: [PLANNED, CONFIRMED] }
+        solveMode: { type: string, enum: [FULL_AI, DETERMINISTIC, MINIMAL] }
+        isFallback: { type: boolean }
+        days:
+          type: array
+          items:
+            type: object
+            required: [date, slots]
+            properties:
+              date: { type: string, format: date }
+              slots:
+                type: array
+                items:
+                  type: object
+                  required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation]
+                  properties:
+                    poiId: { type: string, format: uuid }
+                    startAt: { type: string, description: "HH:mm:ss (솔버 검증값 INV-2)" }
+                    endAt: { type: string }
+                    isFixed: { type: boolean }
+                    endsNextDay: { type: boolean, description: "자정 넘김(HC4) — true 면 endAt 은 익일 시각(시작일 귀속)" }
+                    hasViolation: { type: boolean, description: "편집 재검증(HC1-4) 위반 표시(비차단)" }
+                    # INV-3: 소요시간(duration) 필드 없음 — 거리만(후속)
 
     TermsType:
       type: string

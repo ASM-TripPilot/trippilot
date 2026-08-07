@@ -16,6 +16,7 @@ dependencies {
     implementation(project(":modules:saved-accommodation"))
     implementation(project(":modules:trip"))
     implementation(project(":modules:place-data"))
+    implementation(project(":modules:itinerary-generation"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.actuator)

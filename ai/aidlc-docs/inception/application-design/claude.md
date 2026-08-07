@@ -1,28 +1,38 @@
-# application-design — 컴포넌트·서비스 설계
+# application-design — Component & Service Design
 
-이 폴더는 코드 구현 직전 수준의 상세 설계를 담습니다.
+> Korean version: ./claude.ko.md
 
-## 파일 목록
+This folder holds detailed design at the level just short of code implementation.
 
-- `components.md` — C1·C2·M7·API·Ports·Domain 내부 모듈 분해, 의존 규칙
-- `component-methods.md` — 공개/내부 메서드 시그니처 + 비즈니스 규칙
-- `services.md` — 오케스트레이션 플로우, 에러 경로, 상태 전이, 횡단 관심사
-- `agent-redesign.md` — **최신 에이전트 구조** (멘토 피드백 반영)
-- `planb-rag-design.md` — **PlanBAgent RAG 설계** (벡터 스토어, retrieve 전략, 파이프라인)
-- `langchain-adoption.md` — **LangChain 부분 도입** (적용 범위 + 이유 + 미적용 부분)
-- `reflect-agent-design.md` — **ReflectAgent 설계** (1차 A: 단순 LLM, 추후 C: Multi-step)
+## File List
 
-## 중요: agent-redesign.md가 최신
+- `components.md` — internal module breakdown of C1·C2·M7·API·Ports·Domain, dependency rules
+- `component-methods.md` — public/internal method signatures + business rules
+- `services.md` — orchestration flows, error paths, state transitions, cross-cutting concerns
+- `agent-redesign.md` — **the 4 task-agent structure** (mentor feedback incorporated)
+- `agent-structure-v2.md` — **latest canon: the 4-box pipeline** (Orchestrator / 5 Providers / 4 Agents / Solver gate — zero tool overlap)
+- `agent-hierarchy-design.md` — (old edition) 2-tier refinement — superseded by v2
+- `agent-io-contracts.md` — **I/O contracts** (FE screen IO ↔ BE DB·API ↔ Agent I/O mapping + FreshnessMeta)
+- `orchestrator-delegation-design.md` — **delegation protocol** (AgentTask/AgentResult envelopes, context_refs, deadline inheritance, trace_id)
+- `intent-matching-design.md` — **hybrid intent matching** (question-bank embedding matching + LLM similar-question voting)
+- `evaluation-metrics-design.md` — **2-axis evaluation metrics** (freshness F1/F2, responsiveness SLO)
+- `mlops-llmops-design.md` — **MLOps/LLMOps operations framework** + ML pattern typology (4 types, 10 candidates)
+- `planb-rag-design.md` — **PlanBAgent RAG design** (vector store, retrieve strategy, pipeline)
+- `langchain-adoption.md` — **LangChain partial adoption** (adoption scope + rationale + non-adopted parts)
+- `reflect-agent-design.md` — **ReflectAgent design** (phase 1 A: simple LLM; later C: Multi-step)
 
-멘토 피드백으로 워커(tool 기준) → 에이전트(업무 기준)로 재설계됨.
-이 파일이 components.md·services.md의 에이전트 관련 내용을 대체합니다.
+## Important: The Latest Canon for Agent Structure
 
-핵심 변경점:
-- 업무 기준 에이전트 4종 (Schedule/PlanB/Reflect/Edit)
-- Orchestrator Fast Path (간단한 task 직접 처리)
-- 에이전트 간/내부 병렬 실행
-- Solver 하이브리드 (OR-Tools → Bedrock → 규칙 폴백)
-- PlanBAgent: RAG 기반 (KB 3종 + pgvector)
-- ReflectAgent: 1차 단순 LLM Generation, 추후 Multi-step 확장
-- 에이전트별 Tool 제한 (토큰 절감)
-- LangChain 부분 도입 (Bedrock + RAG만)
+Per mentor feedback, the design was reworked from workers (tool-based) to agents (task-based) (`agent-redesign.md`).
+On 2026-07-16 `agent-hierarchy-design.md` introduced the 2-tier split; **on 2026-08-02 `agent-structure-v2.md` was re-revised under the tool-exclusivity principle (mentor feedback)** — information agents renamed to Providers, Solver made a common gate.
+The latest canon is agent-structure-v2.md.
+
+Key changes:
+- 4 task-based agents (Schedule/PlanB/Reflect/Edit)
+- Orchestrator Fast Path (handles simple tasks directly)
+- Parallel execution across and within agents
+- Solver hybrid (OR-Tools → Bedrock → rule-based fallback)
+- PlanBAgent: RAG-based (3 KBs + pgvector)
+- ReflectAgent: phase 1 simple LLM Generation, Multi-step expansion later
+- Per-agent tool restriction (token savings)
+- LangChain partial adoption (Bedrock + RAG only)

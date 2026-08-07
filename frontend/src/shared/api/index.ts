@@ -7,6 +7,7 @@ import {
 } from 'axios';
 
 import { clearTokens, getTokens, saveTokens } from '@/shared/storage';
+import type { ErrorResponseErrorFieldsItem } from './generated/schemas';
 import {
   clearAccessToken,
   getAccessToken,
@@ -73,6 +74,10 @@ export interface NormalizedApiError {
   code: string;
   status: number;
   existingProvider?: string | null;
+  /** VALIDATION_ERROR 의 어느 필드가 문제였는지(선택). TRIP-248 — 연령확인 누락 거절을 다른
+   * 400 과 구분하는 유일한 단서라, status 가 아니라 이 값으로 판정한다. 원소의 `field`·`reason`
+   * 은 openapi 상 둘 다 required 가 아니다 — 읽는 쪽이 부재를 견뎌야 한다. */
+  fields?: ErrorResponseErrorFieldsItem[];
 }
 
 export interface AuthedApiClientOptions {
@@ -212,7 +217,14 @@ function normalizeSocialError(error: unknown): NormalizedApiError {
   }
   const { status, data } = error.response;
   const body = data as
-    { error?: { code?: string; existingProvider?: string | null } } | undefined;
+    | {
+        error?: {
+          code?: string;
+          existingProvider?: string | null;
+          fields?: ErrorResponseErrorFieldsItem[];
+        };
+      }
+    | undefined;
   const bodyCode = body?.error?.code;
   return {
     code: bodyCode
@@ -220,6 +232,7 @@ function normalizeSocialError(error: unknown): NormalizedApiError {
       : statusToSocialErrorCode(status),
     status,
     existingProvider: body?.error?.existingProvider ?? null,
+    fields: body?.error?.fields,
   };
 }
 

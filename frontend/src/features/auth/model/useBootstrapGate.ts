@@ -3,7 +3,11 @@ import NetInfo from '@react-native-community/netinfo';
 
 import { fetchBootstrap } from '@/shared/api';
 import { getTokens, hasStoredToken } from '@/shared/storage';
-import { hydrate, subscribeAccessToken } from '@/shared/api/tokenManager';
+import {
+  getAccessToken,
+  hydrate,
+  subscribeAccessToken,
+} from '@/shared/api/tokenManager';
 import {
   resolveBootstrapDestination,
   type BootstrapDestination,
@@ -57,7 +61,20 @@ export function useBootstrapGate(): BootstrapGateState {
         setIsProvisional(false);
         setPhase('resolved');
       } catch {
-        // 응답 실패는 타임아웃 폴백/온라인 복구 경로가 처리한다.
+        if (cancelled) {
+          return;
+        }
+        if (!settled) {
+          // 최초 왕복의 실패는 타임아웃 폴백/온라인 복구 경로가 처리한다.
+          return;
+        }
+        // settled 이후의 재조회 실패(TRIP-222 03b W-2) — 최초 분기가 끝나면 타임아웃도
+        // 온라인 복구(NetInfo)도 다시 안 탄다(위 주석 "effect 재실행 금지" 참고). 이 재조회는
+        // 토큰 변경(로그인·`onSessionExpired`)이 불렀으므로, 지금 홀더 값으로 다시 분기해야
+        // 세션 만료가 SplashGate 를 LOGIN 으로 재해석한다 — 안 그러면 오프라인 중 세션이
+        // 만료돼도 destination 이 옛 값에 갇혀 `(auth)` 그룹이 영영 안 열린다.
+        setDestination(getAccessToken() !== null ? 'HOME' : 'LOGIN');
+        setIsProvisional(true);
       }
     };
 

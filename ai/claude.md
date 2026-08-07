@@ -1,49 +1,63 @@
-# TripPilot AI — 프로젝트 루트
+# TripPilot AI — Project Root
 
-## 프로젝트 개요
+> Korean version: ./claude.ko.md
 
-TripPilot AI는 LLM + 최적화 솔버 하이브리드 아키텍처로 여행 일정을 생성·재계획·회고하는 **독립 Python AI 서비스**입니다.
+## Project Overview
 
-## 핵심 구조
+TripPilot AI is an **independent Python AI service** that generates, replans, and reflects on travel itineraries with an LLM + optimization-solver hybrid architecture.
 
-- `aidlc-docs/` — AI-DLC 워크플로우 산출물 (설계·요구사항·계획)
-- `.kiro/` — Kiro IDE steering + AI-DLC 규칙 상세
-- `README.md` — 전체 설계 개요 (최신 정보의 기준)
+## Core Structure
 
-## 4대 불변식
+- `aidlc-docs/` — AI-DLC workflow artifacts (design · requirements · plans)
+- `.kiro/` — Kiro IDE steering + detailed AI-DLC rules
+- `README.md` — overall design overview (the reference for the latest information)
 
-1. **INV-1**: LLM은 closed-set 후보 안에서만 선택 (환각 0)
-2. **INV-2**: 사용자에게 보이는 시각·순서는 솔버 검증값만
-3. **INV-3**: 소요시간 미표시 — 거리만
-4. **INV-4**: AI 실패 시 결정론 폴백 (침묵 실패 금지)
+## Four Invariants
 
-## 멀티에이전트 구조 (업무 기준)
+1. **INV-1**: The LLM selects only from within the closed-set candidates (zero hallucination)
+2. **INV-2**: User-visible times and order come only from solver-verified values
+3. **INV-3**: Duration is never displayed — distance only
+4. **INV-4**: On AI failure, fall back deterministically (silent failure is forbidden)
 
-- **Orchestrator**: 의도 파악 + Fast Path(간단한 task 직접 처리) + 에이전트 병렬 디스패치
-- **ScheduleAgent**: 일정 생성 (Generation 패턴, tool 6개)
-- **PlanBAgent**: 변수 대응 (RAG 패턴, KB 3종 + pgvector, tool 7개)
-- **ReflectAgent**: 회고 생성 (1차: 단순 LLM Generation, tool 2개. 추후 Multi-step 확장)
-- **EditAgent**: 일정 편집 (의도 해석 → 솔버 검증 → 반영, tool 5개)
+## Multi-Agent Structure (2 tiers — task + information)
 
-에이전트별 필요한 tool만 할당 (토큰 50~60% 절감).
+**Task tier** (agent-redesign.md):
+- **Orchestrator**: intent detection (hybrid question-bank matching) + Fast Path + parallel dispatch via AgentTask envelopes
+- **ScheduleAgent**: itinerary generation (Generation pattern)
+- **PlanBAgent**: contingency handling (RAG pattern, 3 KBs + pgvector)
+- **ReflectAgent**: reflection generation (phase 1: simple LLM Generation; Multi-step expansion later)
+- **EditAgent**: itinerary editing (intent interpretation → solver verification → apply)
 
-## Solver 하이브리드 전략
+**Information tier** (agent-hierarchy-design.md — invoked by task agents as agent-as-tool):
+- **PlaceScoutAgent** (place candidates, INV-1 gate) / **WeatherAgent** (daily weather + triggers) / **TransitAgent** (transit·distance + delay triggers) / **PersonaAgent** (KB-2) / **EventAgent** (events, P2)
+- Rules: depth fixed at 2, no writes, FreshnessMeta required in responses
 
-OR-Tools (1차 결정론) → Bedrock LLM (2차 창의적 제안) → 규칙 폴백 (최후 보장)
-모든 출력은 HC1~HC4 검증 통과 필수.
+Each agent is assigned only the tools it needs (50–60% token savings).
 
-## 기술 스택
+## Key Design Documents (application-design/)
 
-- Python 3.11+ / AWS Bedrock (Claude) / OR-Tools
-- LangChain (부분 도입 — PlanBAgent RAG + Bedrock 호출에만)
-- pgvector / Titan Embeddings v2 / pytest + Hypothesis (PBT 19속성)
+- Delegation protocol: `orchestrator-delegation-design.md` (AgentTask/AgentResult, deadline inheritance, trace_id)
+- I/O contracts: `agent-io-contracts.md` (FE↔BE↔Agent mapping)
+- Intent matching: `intent-matching-design.md` / evaluation metrics (freshness·responsiveness): `evaluation-metrics-design.md`
+- MLOps/LLMOps + ML pattern typology: `mlops-llmops-design.md`
 
-## 현재 상태
+## Solver Hybrid Strategy
 
-INCEPTION 완료. 멘토 피드백 반영 완료 (에이전트 업무 기준 재설계).
-다음: CONSTRUCTION Phase (U1 Domain & Ports부터).
+OR-Tools (1st: deterministic) → LLM (Anthropic) (2nd: creative proposals) → rule-based fallback (final guarantee)
+All output must pass HC1~HC4 verification.
 
-## AI-DLC 규칙
+## Tech Stack
 
-`.kiro/aws-aidlc-rule-details/`에 상세 규칙.
-`aidlc-docs/aidlc-state.md`에서 현재 진행 상태 확인.
+- Python 3.11+ / Anthropic API directly (Claude — AI-D06) / OR-Tools
+- LangChain (partial adoption — only for PlanBAgent RAG + LLM calls)
+- pgvector / Titan Embeddings v2 / pytest + Hypothesis (19 PBT properties)
+
+## Current Status
+
+INCEPTION complete. Mentor feedback incorporated (agents redesigned around task responsibilities).
+Next: CONSTRUCTION Phase (starting from U1 Domain & Ports).
+
+## AI-DLC Rules
+
+Detailed rules in `.kiro/aws-aidlc-rule-details/`.
+Check current progress state in `aidlc-docs/aidlc-state.md`.

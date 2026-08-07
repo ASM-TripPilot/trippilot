@@ -94,4 +94,19 @@ class SavedPlaceApiIT : AbstractPostgresIntegrationTest() {
         val savedPlaceId = call(HttpMethod.POST, "/api/v1/saved-places", owner, """{"poiId":"$poiId"}""").second["savedPlaceId"].asText()
         call(HttpMethod.DELETE, "/api/v1/saved-places/$savedPlaceId", newToken()).first shouldBe 404
     }
+
+    /**
+     * TRIP-219 — image_url·tags(text[]) 왕복. 마이그레이션·Hibernate ARRAY 매핑·DTO·직렬화를 한 번에 태운다.
+     * 매핑이 깨지면 여기서 떨어진다(단위 테스트는 InMemory 리포지토리라 text[] 를 못 잡는다).
+     */
+    @Test
+    fun `장소 응답에 tags 배열과 imageUrl 이 실린다`() {
+        val token = newToken()
+        val place = call(HttpMethod.GET, "/api/v1/places?region=제주", token).second[0]
+
+        place["tags"].isArray shouldBe true
+        // 개수를 못박지 않는다 — findActive 에 ORDER BY 가 없어 어느 시드 POI 가 먼저 올지 정해져 있지 않다.
+        place["tags"].isEmpty shouldBe false
+        place["imageUrl"].isNull shouldBe true   // 실 수집 전이라 NULL(기본 이미지를 지어내지 않는다)
+    }
 }

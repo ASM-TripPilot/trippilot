@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { BottomTabBar } from '@/shared/ui/BottomTabBar';
+import { StateNotice } from '@/shared/ui/StateNotice';
 
 import { filterReasonLabel } from '../model/filterReasonLabel';
 import { formatPrice } from '../model/formatPrice';
@@ -21,7 +22,6 @@ import type { StaySearchState } from '../model/staySearchState';
 import { stayKey } from '../model/stayKey';
 import { PartialFailureBanner } from './PartialFailureBanner';
 import { SkeletonList } from './SkeletonList';
-import { StateNotice } from './StateNotice';
 import {
   BackChevronGlyph,
   ChevronDownGlyph,

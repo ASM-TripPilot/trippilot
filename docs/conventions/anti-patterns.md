@@ -39,12 +39,15 @@
 
 ## 테스트
 
+- **목(MSW 등) 핸들러를 서버의 성공 응답만으로 채우지 말 것 → 그 엔드포인트가 실제로 내는 에러 응답부터 맞춘다.** 목이 성공만 흉내내면 실패 분기가 **도달 불가인 채로 전 테스트 초록**이 되고, 도달 불가라는 사실 자체를 목이 가린다. 소셜 로그인 `new-user` 목이 200+`isNewUser:true`를 돌려줬으나 실서버는 신규 가입 첫 요청에 400(`fields[].field=ageConfirmation`)이라, 프론트의 `needs-age` 전이가 실서버에서 **영구 도달 불가**(=신규 가입 0건)인데 3개 테스트 파일이 계속 초록이었다. 구현을 고쳐도 목을 안 고치면 테스트가 옛 모양을 계속 지킨다. (TRIP-248 · 2026-08-02 코드 실측)
 - **같은 패키지의 서로 다른 테스트 파일에 동일 이름의 private 최상위 테스트 더블(`FakeBases` 등)을 두지 말 것 → 파일마다 고유 이름(`StubBases`).** 한 모듈의 두 테스트가 같은 패키지에서 각각 `private class FakeBases`를 선언하자 "Redeclaration" 컴파일 에러 발생. 새 포트 메서드 추가로 여러 테스트의 Fake를 갱신할 때 특히 부딪힌다. (TRIP-178 검수 수정)
 - **크로스모듈 포트/인터페이스 시그니처를 바꾸면 증분 `:app:test`가 아니라 `clean build`로 검증할 것.** 다른 모듈(예: :modules:auth의 `SocialAuthPort`)에 메서드를 추가하면 그걸 익명 구현한 :app 테스트의 Fake들이 깨지는데, Kotlin **증분 컴파일이 전이적으로 영향받는 테스트 파일을 재컴파일하지 않아** 로컬 `:app:test`는 통과하고 CI의 `./gradlew build`(clean)만 `:app:compileTestKotlin FAILED`로 터진다. (PR #38 — SocialAuthPort 4개 Fake 중 3개 누락)
 - **통합테스트(IT)가 있는 변경은 모듈 단위·일부 IT만 돌리고 푸시하지 말 것 → `:app:test` 전체를 돌린다.** 기동 부작용은 안 돌린 다른 IT에서만 터져 CI에서 처음 드러난다(로컬 초록·CI 빨강). (TRIP-175, PR #30)
 - **백틱 테스트 함수명에 `<` `>` `.` `;` `[` `/` 등 JVM 식별자 금지문자를 넣지 말 것.** 예: `` `체크아웃 <= 체크인은 400` `` → 컴파일 에러 "Name contains illegal characters: <". 부등호는 "이하/초과" 같은 말로. (TRIP-176)
 - **fresh 계산값과 DB 왕복값의 타임스탬프를 정확 비교하지 말 것.** 방금 만든 `Instant`는 나노초, Postgres `timestamptz` 왕복은 마이크로초 → 로컬 통과·CI 실패로 flaky. 멱등성은 진행 clock(tick +1s) 단위테스트로 검증, E2E는 존재/비교만. (TRIP-159 — BootstrapOnboardingApiIT)
 - **PBT/제약 검증 시 조합 케이스를 빠뜨리지 말 것.** 예: filter-zero 원인 계산이 개별 필터만 보고 조합(각 필터는 개별 매칭이나 AND로 0건) 케이스를 놓쳤다 → 활성 필터 전부를 완화 후보로. (TRIP-175 검수)
+- **domain 패키지 경로(`/domain/`)에 프레임워크(Jackson·Spring·JPA)를 import하는 테스트를 두지 말 것 → `/contract/`·`/adapter/` 등 domain 밖 패키지에.** Konsist R2가 `files.filter { "/domain/" in path }`로 **테스트 소스까지 경로 기준으로 스캔**해서, domain 패키지에 둔 직렬화·계약 테스트가 jackson을 import하면 R2(domain 순수성)가 실패한다. (BE-1 TRIP-228 ScheduleAgent 계약 테스트 — snake_case 왕복 테스트를 `..domain..`→`..contract..`로 이동)
+- **DTO 왕복(round-trip) equality 테스트는 픽스처를 한 번만 생성해 비교할 것.** 픽스처 팩토리가 `UUID.randomUUID()` 등 비결정 값을 담으면 `readValue(write(a)) shouldBe factory()`가 매번 다른 인스턴스와 비교돼 깨진다 — `val a = factory()` 한 번 잡고 그 `a`와 비교. (TRIP-228)
 
 ## Git · 프로세스
 

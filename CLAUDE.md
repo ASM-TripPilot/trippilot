@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 TripPilot is a B2C travel super-app ("여행자 슈퍼앱"): users explore/save stays and POIs, then the app owns everything *after booking* — AI itinerary generation, in-trip Plan-B replanning, and post-trip archive/reflection. Booking/payment itself is delegated to external OTA affiliate links.
 
-**Early implementation stage.** Backend has a real Gradle multi-module skeleton with Flyway migrations (V1.0–V1.6) and docker-compose/GHCR CI (TRIP-145~147, merged to main). Frontend architecture is fixed in `frontend/README.md` (TRIP-160) but code is not yet scaffolded; `ai/` is docs-only. Most design content is Korean documents — do not invent build/test/lint results for packages that have no code yet.
+**Implementation in progress.** Backend has a real Gradle multi-module skeleton with Flyway migrations (V1.0–V2.4 + repeatable `R__` seeds) and docker-compose/GHCR CI (TRIP-145~147, merged to main). Frontend is scaffolded and under active feature work — architecture canon is `frontend/README.md` (TRIP-160), FSD 층 구조에 TS/TSX 소스와 Jest 테스트가 실재한다. `ai/` 는 설계 문서 + 초기 스캐폴딩(`main.py`·`Dockerfile`) 단계다. Most design content is Korean documents — do not invent build/test/lint results for packages that have no code yet.
 
 ## Repository layout (important)
 
@@ -18,8 +18,8 @@ This is a **monorepo** (`ASM-TripPilot/trippilot`). Everything lives in one git 
 |---|---|
 | `docs/` | Team process docs — `docs/conventions/` (branch·commit·PR) and `docs/guides/` (Jira/Slack). |
 | `backend/` | Backend (Spring Boot + Kotlin modular monolith). **Gradle skeleton + Flyway migrations exist.** Design docs in `backend/docs/design/`. |
-| `frontend/` | Frontend (React Native + Expo). **Architecture canon = `frontend/README.md`**; screen IO catalog in `frontend/docs/`. Code not yet scaffolded. |
-| `ai/` | AI-layer design (itinerary/Plan-B/reflection AI architecture, prompts, solver, testing). Docs only. |
+| `frontend/` | Frontend (React Native + Expo). **Architecture canon = `frontend/README.md`**; `frontend/docs/` 에는 개발로그(`devlog/`)와 구조 지도(`structure.md`). 스캐폴딩 완료, 기능 개발 중. |
+| `ai/` | AI-layer design (itinerary/Plan-B/reflection AI architecture, prompts, solver, testing). 설계 문서 + 초기 스캐폴딩(`main.py`·`Dockerfile`). |
 | `aidlc/` | **AWS AI-DLC (Amazon Q) workspace.** 기획 참조 canon = `aidlc-docs/inception/` (requirements · user-stories · application-design · unit-of-work U0–U9). Construction-stage design docs go under `aidlc-docs/construction/`. Tool-state (`aidlc-state.md`, `audit.md`, `docs/SCOPE.md`) is updated only through the AI-DLC rules (append-only audit) — coordinate with the team. |
 
 `aidlc/aidlc-docs/planning/` **was removed on 2026-07-17 (team decision) — never reference it**; use `aidlc-docs/inception/` instead (git history retains the old files).
@@ -57,9 +57,9 @@ Construction-stage per-unit design docs are produced under `aidlc/aidlc-docs/con
 
 ## Build & test
 
-- **Backend (`backend/`):** Gradle (Kotlin DSL, multi-module) — **already scaffolded** (`backend/gradlew`). App assembly lives only in the `app` module; migrations are Flyway **SQL-first, forward-only** (`backend/app/src/main/resources/db/migration/V1.*.sql` = schema canon). Tests: Kotest + **kotest-property** (property-based testing is a *blocking* gate), MockK, Testcontainers, ArchUnit/Konsist. Commands: `./gradlew build`, `./gradlew test`, single test via `./gradlew test --tests "<FQCN>"` or `--tests "<Class.method>"`.
-- **Frontend (`frontend/`):** not yet scaffolded. Stack/testing canon = `frontend/README.md` (pnpm · Expo development build + prebuild · Expo Router · TanStack Query + Zustand · NativeWind · orval · Jest + fast-check).
-- **AI/Solver (`ai/`):** Python service (LLM gateway + solver) — not yet scaffolded.
+- **Backend (`backend/`):** Gradle (Kotlin DSL, multi-module) — **already scaffolded** (`backend/gradlew`). App assembly lives only in the `app` module; migrations are Flyway **SQL-first, forward-only** (`backend/app/src/main/resources/db/migration/V*.sql` = schema canon; `R__*.sql` 은 재실행 가능한 시드). Tests: Kotest + **kotest-property** (property-based testing is a *blocking* gate), MockK, Testcontainers, ArchUnit/Konsist. Commands: `./gradlew build`, `./gradlew test`, single test via `./gradlew test --tests "<FQCN>"` or `--tests "<Class.method>"`.
+- **Frontend (`frontend/`):** 스캐폴딩 완료. Stack/testing canon = `frontend/README.md` (pnpm · Expo development build + prebuild · Expo Router · TanStack Query + Zustand · NativeWind · orval · Jest + fast-check). 실제 스크립트(`frontend/package.json`): `pnpm lint` · `pnpm tsc` · `pnpm test` · `pnpm test:integration` · `pnpm test:node` · `pnpm codegen` · `pnpm format` · `pnpm start`/`ios`/`android`. 실행 순서의 정본은 `verify-gates` 스킬.
+- **AI/Solver (`ai/`):** Python service (LLM gateway + solver) — 초기 스캐폴딩(`ai/main.py`·`Dockerfile`), 서비스 로직은 미구현.
 - **CI:** `.github/workflows/{backend-ci, frontend-ci, ai-ci}.yml` (path-filtered). Gates before merge: solver hard-constraint PBT at 100%, closed-set gate PBT at 100%, and **all external APIs (LLM, distance/maps) faked in CI — zero real API calls**.
 
 Security/resilience baselines (`SECURITY-01..15`, `RESILIENCY-*`) and PBT are described as blocking across all phases — treat them as scaffolding to install in "Phase 0 walking skeleton," not afterthoughts. Legal/consent-log and location-legal-log tables are **append-only** (enforced at the DB permission level; the app role has no DELETE).

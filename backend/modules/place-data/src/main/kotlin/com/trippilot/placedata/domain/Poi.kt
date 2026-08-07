@@ -5,8 +5,8 @@ import com.trippilot.core.error.ValidationFailed
 import java.time.Instant
 import java.util.UUID
 
-/** POI 카테고리(정본). DB CHECK와 동일 값. */
-enum class PoiCategory { 명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화 }
+/** POI 카테고리(정본). DB CHECK와 동일 값. 경계 코드 매핑(SIGHT/FOOD/CAFE/NIGHT_VIEW/NATURE/SHOPPING/CULTURE/ACTIVITY)은 리버스 read 포트(BE-5). */
+enum class PoiCategory { 명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화, 액티비티 }
 
 /** 수집 상태. 조회는 ACTIVE만(INV-U1-01). UNVERIFIED/LOST/CLOSED는 라이프사이클(후속). */
 enum class DataStatus { ACTIVE, UNVERIFIED, LOST, CLOSED }
@@ -32,9 +32,15 @@ class Poi private constructor(
     val savedCount: Long,
     val createdAt: Instant,
     val updatedAt: Instant,
+    val imageUrl: String? = null,   // NULL=미확보. 기본 이미지를 지어내지 않는다(TRIP-219)
+    val tags: List<String> = emptyList(),   // 표시용 열린 집합. 미확보=빈 배열
 ) {
     companion object {
-        /** 수집·정규화 결과로 POI 생성. 좌표는 non-null 타입이라 여기 도달=INV-U1-02 통과(게이트가 선판정). */
+        /**
+         * 수집·정규화 결과로 POI 생성. 좌표는 non-null 타입이라 여기 도달=INV-U1-02 통과(게이트가 선판정).
+         * imageUrl·tags 는 수집 게이트가 채우지 않는다 — [NormalizedPlace] 에 두 값이 없고 현재 어댑터가
+         * 스텁뿐이라 채울 원본이 없다. 실 벤더 어댑터(라이선스·핫링크 정책 포함)가 붙는 티켓에서 정한다.
+         */
         fun collect(
             nameKo: String,
             lat: Double,
@@ -54,7 +60,10 @@ class Poi private constructor(
         fun reconstitute(
             poiId: UUID, nameKo: String, lat: Double, lng: Double, category: PoiCategory, region: String?,
             openingHours: String?, dataStatus: DataStatus, source: PoiSource, savedCount: Long,
-            createdAt: Instant, updatedAt: Instant,
-        ): Poi = Poi(poiId, nameKo, lat, lng, category, region, openingHours, dataStatus, source, savedCount, createdAt, updatedAt)
+            createdAt: Instant, updatedAt: Instant, imageUrl: String? = null, tags: List<String> = emptyList(),
+        ): Poi = Poi(
+            poiId, nameKo, lat, lng, category, region, openingHours, dataStatus, source, savedCount,
+            createdAt, updatedAt, imageUrl, tags,
+        )
     }
 }

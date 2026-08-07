@@ -4,7 +4,7 @@
  * 문구·버튼 개수·위계(variant)뿐이고, 그 차이는 전부 호출부(`StaySearchScreen.tsx`)가 prop으로
  * 넘긴다. `empty`만 점선 박스(`dashed`)를 두른다.
  */
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 export interface StateNoticeAction {
@@ -15,14 +15,20 @@ export interface StateNoticeAction {
   onPress?: () => void;
 }
 
-export interface StateNoticeProps {
+/** `icon`·`illustration` 중 정확히 하나 — 판별 유니온으로 강제한다(TRIP-223 03b W-1). 두
+ * 슬롯을 그냥 옵셔널로 두면 호출부가 둘 다 빠뜨려도 tsc가 안 운다(아이콘 배지가 조용히
+ * 사라진다) — `?: never` 짝이 "둘 다 없음"과 "둘 다 있음"을 타입 에러로 되돌린다. */
+type StateNoticeVisual =
+  | { icon: ReactElement; illustration?: never }
+  | { icon?: never; illustration: ReactNode };
+
+export type StateNoticeProps = StateNoticeVisual & {
   testID: string;
-  icon: ReactElement;
   title: string;
   description: string;
   actions: StateNoticeAction[];
   dashed?: boolean;
-}
+};
 
 function ActionButton({ action }: { action: StateNoticeAction }): ReactElement {
   if (action.variant === 'link') {
@@ -63,6 +69,7 @@ function ActionButton({ action }: { action: StateNoticeAction }): ReactElement {
 export function StateNotice({
   testID,
   icon,
+  illustration,
   title,
   description,
   actions,
@@ -75,9 +82,12 @@ export function StateNotice({
         dashed ? 'border-[1.5px] border-dashed border-hairline-strong' : ''
       }`}
     >
-      <View className="h-[72px] w-[72px] items-center justify-center rounded-pill bg-primary-pale">
-        {icon}
-      </View>
+      {illustration ??
+        (icon ? (
+          <View className="h-[72px] w-[72px] items-center justify-center rounded-pill bg-primary-pale">
+            {icon}
+          </View>
+        ) : null)}
       <Text className="text-center font-noto-bold text-[16px] font-bold text-ink">
         {title}
       </Text>

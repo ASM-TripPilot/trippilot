@@ -39,14 +39,14 @@ TripPilot의 **AI 담당 설계 저장소**. 일정 생성·여행 중 변수 �
         v
 +--------------------------------------------------------------+
 | [도구풀 — 에이전트별 제한 할당]                                |
-| LLM 호출 (Bedrock) | M7 후보 조회 | Solver 배치/검증          |
+| LLM 호출 (Anthropic) | M7 후보 조회 | Solver 배치/검증          |
 | 벡터 검색 (RAG)    | 엔티티 해소  | 외부 API (날씨, 지도)    |
 +--------------------------------------------------------------+
         |
         v
 +--------------------------------------------------------------+
 |  C2 Solver — 하이브리드                                       |
-|  OR-Tools (1차 결정론) → Bedrock (2차) → 규칙 폴백 (최후)    |
+|  OR-Tools (1차 결정론) → LLM(Anthropic) (2차) → 규칙 폴백 (최후)    |
 |  모든 출력은 HC1~HC4 검증 통과 필수                           |
 +--------------------------------------------------------------+
         |
@@ -82,7 +82,7 @@ flowchart TD
 
         subgraph Core["AI 코어 (도구풀)"]
             C1["C1 LLM Gateway\nclosed-set 게이트\n티어 라우팅"]
-            C2["C2 Solver\nOR-Tools → Bedrock → 규칙폴백\nHC1~HC4 검증"]
+            C2["C2 Solver\nOR-Tools → LLM → 규칙폴백\nHC1~HC4 검증"]
             M7["M7 Place Data\nclosed-set 후보 풀\n엔티티 해소"]
         end
 
@@ -96,7 +96,7 @@ flowchart TD
     end
 
     subgraph External["외부 서비스"]
-        LLM["AWS Bedrock\n(Claude)"]
+        LLM["Anthropic API\n(Claude)"]
         KAKAO["카카오모빌리티\n(도로 거리)"]
         NAVER["네이버 지도\n(폴백)"]
         PLACES["Places API\n(POI 소싱)"]
@@ -169,7 +169,10 @@ flowchart TD
 | **Delegate** | 다단계 판단이 필요한 복잡한 업무 | 에이전트에 위임 (병렬 가능) |
 | **Fallback** | 의도 파악 실패 | 기본 응답 + 수동 편집 경로 안내 |
 
-Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소/되돌리기
+Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소/되돌리기, 정보 에이전트 단일 질의(날씨·거리·POI)
+
+- **위임 프로토콜**: 모든 위임은 `AgentTask`/`AgentResult` 표준 봉투로 — 데이터 대신 참조(`context_refs`) 전달, deadline 상속, trace_id 전파. 상세 → `aidlc-docs/inception/application-design/orchestrator-delegation-design.md`
+- **의도 파악 하이브리드**: 의도별 질문뱅크 임베딩 매칭(1차, LLM 0회) → 저신뢰 시 LLM 유사질문 생성·투표(2차) → LLM 직접 분류(3차). 상세 → `aidlc-docs/inception/application-design/intent-matching-design.md`
 
 ---
 
@@ -191,7 +194,7 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 
 ### ReflectAgent — 회고 비서
 
-- **패턴**: 1차 — 단순 LLM Generation (DB 조회 → Bedrock 1회). 추후 C 확장(Multi-step)
+- **패턴**: 1차 — 단순 LLM Generation (DB 조회 → LLM 1회). 추후 C 확장(Multi-step)
 - **흐름 (1차)**: 방문 기록 DB 조회 → 충분성 판단(0건→스킵) → LLM 회고 생성 → 결과 반환
 - **할당 Tool (1차)**: `db.get_visit_history`, `llm.generate_reflection` **(2개만)**
 - **추후 추가**: `llm.analyze_style` (7축 스타일 분류, 누적 10곳 이상 시)
@@ -206,21 +209,39 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 
 ---
 
+## 구조 개정 (2026-08-02): 4상자 파이프라인 — 도구 겹침 0
+
+멘토 피드백(도구 겹침 금지) 반영. **Orchestrator(지휘) → Provider 5종(수집, LLM 0회) → Agent 4종(LLM 판단, 전속 도구 배타) → Solver 공통 관문(확정)**. 정보 수집은 Orchestrator 전속(InfoCollector), 정보 '에이전트'는 **Provider로 개명**, Solver는 도구가 아닌 공통 관문. 상세 → `aidlc-docs/inception/application-design/agent-structure-v2.md`
+
+### (구) 정보 계층 5종 — Provider로 개명됨
+
+| 에이전트 | 담당 | 우선순위 |
+|---|---|---|
+| **PlaceScoutAgent** | 장소 후보 확보 (M7 조회 → 충분성 판단 → 웹 소싱 → closed-set 보장, INV-1 관문) | 1차 (MVP) |
+| **WeatherAgent** | 일 단위 기상청 API 조회·캐싱, 강수 80%↑ 트리거 판정 | 1차 (MVP) |
+| **TransitAgent** | 교통·거리 (카카오→네이버→직선 체인), 지연 30분+ 트리거 판정 | 2차 |
+| **PersonaAgent** | KB-2 (저장 장소·선호 벡터·거절 이력) 조회·검색 | 2차 |
+| **EventAgent** | TourAPI 축제·행사 (M7 등록 게이트 경유) | P2 (인터페이스만) |
+
+계층 규칙: 정보 에이전트는 다른 에이전트 호출 금지(깊이 2 고정), 쓰기 금지, 모든 응답에 `FreshnessMeta`(신선도 메타) 필수. 정보 도구(`m7.*`, 날씨·교통 API)는 업무 계층에서 정보 계층으로 이동 — 개정 Tool 할당표는 상세 문서 참조.
+
+---
+
 ## C2 Solver — 하이브리드 전략
 
 "에이전트가 구해온 정보를 실현 가능하도록 최종 배치하는 결정론 엔진"
 
 ```
-OR-Tools (1차) → Bedrock LLM (2차) → 규칙 폴백 (최후)
+OR-Tools (1차) → LLM(Anthropic) (2차) → 규칙 폴백 (최후)
 ```
 
 | 계층 | 역할 | 특성 |
 |---|---|---|
 | OR-Tools | VRPTW 결정론 최적화 (3초 제한) | 빠름, 결정론, HC 네이티브 |
-| Bedrock | 복잡한 제약에서 창의적 배치 제안 | 유연하지만 비결정론 |
+| LLM(Anthropic) | 복잡한 제약에서 창의적 배치 제안 | 유연하지만 비결정론 |
 | 규칙 폴백 | 전부 실패 시 최소 일정 보장 | INV-4 보장 |
 
-Bedrock 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
+LLM 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
 
 ---
 
@@ -240,25 +261,27 @@ Bedrock 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반�
 | 영역 | 기술 | 비고 |
 |---|---|---|
 | 언어 | Python 3.11+ | AI 서비스 전체 |
-| LLM | AWS Bedrock (Claude) | 벤더 미확정, Port 격리 |
-| 솔버 | OR-Tools (1차) + Bedrock (2차 폴백) | 하이브리드 |
-| RAG 프레임워크 | LangChain (부분 도입) | PlanBAgent + Bedrock 호출에만 |
+| LLM | **Anthropic API 직접** (Claude) | **AI-D06 확정 (2026-07-21)** — Bedrock 아님. 티어: 경량 haiku-4-5 / 상위 sonnet-5 / 오프라인 opus-4-8 (설정값) |
+| 솔버 | OR-Tools (1차) + LLM (2차 폴백) | 하이브리드 — 2차도 Anthropic API 경유 |
+| RAG 프레임워크 | LangChain (부분 도입) | PlanBAgent + LLM 호출에만 (`ChatAnthropic`) |
 | 벡터 스토어 | pgvector (PostgreSQL) | 1차, 추후 OpenSearch 이전 가능 |
-| 임베딩 | Amazon Titan Embeddings v2 | 1024차원 |
-| 테스트 | pytest + Hypothesis (PBT) | 속성 19개 |
-| 패키지 관리 | uv/poetry (미확정) | — |
+| 임베딩 | 로컬 오픈소스 (잠정: multilingual-e5-large 또는 BGE-M3) | 1024차원 유지 → pgvector 스키마 무변경. Titan v2는 Bedrock 전용이라 대체 (AI-D06) |
+| 테스트 | pytest + Hypothesis (PBT) | 속성 19개 (+신규 5) |
+| 패키지 관리 | uv | U1 FD에서 확정 |
+
+> **표기 규칙 (AI-D06)**: 본 저장소 문서의 기존 "Bedrock" 표기는 "LLM API(Anthropic)"로 읽는다. 점진 개정 중.
 
 ### LangChain 적용 범위 (부분 도입)
 
 | 적용 O | 적용 X (직접 구현) |
 |---|---|
 | PlanBAgent RAG 파이프라인 | Orchestrator |
-| Bedrock LLM 호출 | Solver (OR-Tools) |
+| LLM(Anthropic) 호출 | Solver (OR-Tools) |
 | pgvector 벡터 스토어 연동 | M7 후보 풀 생성 |
 | 임베딩 생성 | ScheduleAgent, EditAgent 로직 |
 | | HC1~HC4 검증, 에이전트 병렬 실행 |
 
-적용 이유: RAG 보일러플레이트 제거 + Bedrock 파싱·재시도 내장. 상세 → `aidlc-docs/inception/application-design/langchain-adoption.md`
+적용 이유: RAG 보일러플레이트 제거 + LLM 호출 파싱·재시도 내장. 상세 → `aidlc-docs/inception/application-design/langchain-adoption.md`
 
 ---
 
@@ -298,9 +321,15 @@ TripPilot_AI/
 │   │   ├── requirements/
 │   │   ├── plans/
 │   │   ├── application-design/
-│   │   │   ├── agent-redesign.md      ← 에이전트 구조 (최신)
-│   │   │   ├── planb-rag-design.md    ← PlanB RAG 설계
-│   │   │   ├── langchain-adoption.md  ← LangChain 부분 도입
+│   │   │   ├── agent-redesign.md              ← 업무 에이전트 4종
+│   │   │   ├── agent-hierarchy-design.md      ← 2계층 세분화 (정보 에이전트 5종)
+│   │   │   ├── agent-io-contracts.md          ← FE↔BE↔Agent 입출력 계약
+│   │   │   ├── orchestrator-delegation-design.md ← 위임 봉투 프로토콜
+│   │   │   ├── intent-matching-design.md      ← 의도 파악 하이브리드
+│   │   │   ├── evaluation-metrics-design.md   ← 최신성·신속도 지표
+│   │   │   ├── mlops-llmops-design.md         ← MLOps/LLMOps + ML 유형화
+│   │   │   ├── planb-rag-design.md            ← PlanB RAG 설계
+│   │   │   ├── langchain-adoption.md          ← LangChain 부분 도입
 │   │   │   └── ...
 │   │   └── units/
 │   └── construction/        ← (미착수)
@@ -326,7 +355,7 @@ TripPilot_AI/
 - OPTW/TOPTW 최적화 + HC1~HC4 하드 제약 검증
 - 이동시간 추정: 어댑터 체인 (카카오 → 네이버 → 직선거리×1.3)
 - warm-start 재생성: 고정 블록 보존, 나머지만 재배치
-- 하이브리드: OR-Tools(1차) → Bedrock(2차) → 규칙 폴백(최후)
+- 하이브리드: OR-Tools(1차) → LLM(Anthropic)(2차) → 규칙 폴백(최후)
 
 ### M7 Place Data — closed-set 후보 풀
 
@@ -429,14 +458,30 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 - closed-set 게이트(INV-1)는 ML 선호점수에도 그대로 적용
 - 규칙 폴백 유지 (INV-4): ML 실패 → 기존 규칙 버전으로
 
+### MLOps · LLMOps (운영 체계)
+
+- **LLMOps는 MVP부터**: 프롬프트 레지스트리(버전·롤백), 4층 평가(PBT→평가셋→LLM-judge→온라인), trace_id 전량 트레이싱, 비용·쿼터 관리, 카나리/섀도 배포
+- **MLOps는 "로깅 먼저"**: 학습 라벨이 자동으로 쌓이는 로그 6종(선호 피드백·실측 체류·실측 이동·대안 선택·트리거 반응·의도 확정)을 MVP 스키마에 반영 → 모델은 DAU 1천 이후
+- **ML 패턴 유형화**: 점수·랭킹(A) / 수치 예측(B) / 분류(C) / 표현 학습(D) 4유형 10후보 + ML 금지 목록(hard 영역)
+- 상세 → `aidlc-docs/inception/application-design/mlops-llmops-design.md`
+
+### 평가 지표 — 최신성 · 신속도 (핵심 2축)
+
+솔버 HC 검증(hard gate) 위에 품질 평가 축 2개:
+
+- **최신성**: F1 데이터 신선도(도메인별 age/TTL, `FreshnessMeta` 기반) + F2 결과물 현행성(트리거 이후 데이터·현재 시각 실행 가능·영업 중·폐업 배제 등 체크리스트)
+- **신속도**: 지연 예산의 SLO 승격 (day1 5s / 전체 20s / Plan-B 10s / 도우미 3s / Fast Path 500ms) + 구간 분해 측정
+- 충돌 시 우선순위 규칙 포함 (Plan-B 트리거 검증은 최신성 우선, 여행 전 생성은 신속도 우선)
+- 상세 → `aidlc-docs/inception/application-design/evaluation-metrics-design.md`
+
 ---
 
 ## 임베딩 · 벡터 검색
 
 | 항목 | 선택 | 용도 |
 |---|---|---|
-| 임베딩 모델 | Amazon Titan Embeddings v2 (1024차원) | 사용자 페르소나·POI 설명 벡터화 |
-| 벡터 스토어 | pgvector (PostgreSQL) — 1차 | 유사도 검색 (PlanBAgent RAG) |
+| 임베딩 모델 | 로컬 오픈소스 — 잠정: multilingual-e5-large / BGE-M3 (1024차원, AI-D06) | 사용자 페르소나·POI 설명·질문뱅크 벡터화. 결제 승인 불요, 한국어 벤치마크 후 확정 |
+| 벡터 스토어 | pgvector (PostgreSQL) — 1차 | 유사도 검색 (PlanBAgent RAG, 의도 질문뱅크) |
 | 확장 | OpenSearch Serverless — 추후 스케일 시 | — |
 
 인덱싱 대상: 저장 장소 메모, 과거 방문 리뷰, POI 설명, 과거 Plan-B 결과
@@ -474,3 +519,11 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 | 2026-07-12 | Solver 하이브리드 확정 (OR-Tools → Bedrock → 규칙 폴백) |
 | 2026-07-12 | 에이전트별 Tool 제한 (토큰 절감) |
 | 2026-07-12 | LangChain 부분 도입 (Bedrock + RAG만) |
+| 2026-07-16 | 2계층 세분화 — 정보 에이전트 5종 신설 (PlaceScout/Weather/Transit/Persona/Event) |
+| 2026-07-16 | FE(화면 IO)↔BE(DB·API)↔Agent 입출력 계약 정의 (agent-io-contracts.md) |
+| 2026-07-16 | Orchestrator 위임 프로토콜 (AgentTask/AgentResult 봉투, deadline 상속, trace_id) |
+| 2026-07-16 | 의도 파악 하이브리드 (질문뱅크 매칭 + LLM 유사질문 투표) |
+| 2026-07-16 | 평가 지표 2축 — 최신성(F1 신선도+F2 현행성)·신속도(SLO) |
+| 2026-07-16 | MLOps/LLMOps 설계 + ML 패턴 유형화 (4유형 10후보, 학습 로그 6종) |
+| 2026-07-21 | AI-D06 — LLM 벤더 확정: Anthropic API 직접 (Bedrock 아님). 티어 라우팅 모델 제안, 임베딩 Titan → 로컬 오픈소스(잠정) |
+| 2026-08-04 | Bedrock 잔여 표기 일괄 정정 (AI-D06 반영) · `SolveMode.BEDROCK`→`LLM` 개명 (TRIP-256) |

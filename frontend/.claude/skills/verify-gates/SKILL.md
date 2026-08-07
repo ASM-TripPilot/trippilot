@@ -85,9 +85,15 @@ description: "TripPilot frontend 검증 게이트 실행 순서와 명령. '검�
 ### 0. 사전 점검 — 없으면 "실행 불가"(FAIL 아님)
 
 ```bash
-xcrun simctl list devices booted | grep -q Booted        # 시뮬레이터 부팅 상태
-xcrun simctl listapps booted | grep -q com.trippilot.app # dev build 설치 상태
+xcrun simctl list devices booted | grep -q Booted            # 시뮬레이터 부팅 상태
+xcrun simctl listapps booted | grep -q com.trippilot.app     # dev build 설치 상태
+curl -s --max-time 3 http://localhost:8081/status \
+  | grep -q packager-status:running                          # Metro 기동 상태
 ```
+
+⚠️ **Metro 줄이 셋째인 이유**: 앞 둘만 보고 들어가면 **번들이 없어 레드박스가 뜨는데, 화면만 봐서는 코드 결함과 구별되지 않는다**(`No script URL provided … unsanitizedScriptURLString = (null)`). 판정 2항목이 "레드박스 없음"이라 그대로 FAIL이 나고, **원인을 구현에서 찾게 된다** — 실측 1건(상세는 하네스 변경이력). 안 떠 있으면 실행 불가로 끝내지 말고 **띄우고 진행한다**: `pnpm start`(백그라운드) → 위 `curl`이 통과할 때까지 대기 → 앱 재기동. 앞 둘과 달리 이건 **한 줄로 복구되는 환경**이라 포기 조건이 아니다.
+
+*유지 판정: 6사이클 관찰 — 이 줄에 걸려 Metro를 띄운 건이 0건이면(= 늘 떠 있다는 뜻) 뗀다.*
 
 §0 사전 점검과 같은 정신이다 — **환경 부재는 실행 불가이지 FAIL이 아니다.** 사용자에게 보고하고, 이 상태로 [기록]에 가면 **"실기 미검증"을 강제 명기**한다.
 

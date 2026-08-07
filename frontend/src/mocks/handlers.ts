@@ -1,6 +1,11 @@
 import { http, HttpResponse } from 'msw';
 
 import type { BootstrapResponse, TokenPair } from '@/shared/api';
+import type {
+  CreateTripRequest,
+  PreferenceView,
+  Trip,
+} from '@/shared/api/generated/schemas';
 import { getOnboardingScenario } from '@/test-support/onboardingScenarios';
 import { getScenario, type MockScenario } from './scenarios';
 
@@ -151,11 +156,60 @@ function socialLoginResponse(provider: string, ageConfirmation: unknown) {
       }
       return HttpResponse.json(tokenPair(true, provider));
     case 'new-user':
-      return HttpResponse.json(tokenPair(true, provider));
+      // TRIP-248 — 실서버는 신규 가입 첫 요청(연령확인 미동봉)을 400 으로 거절한다
+      // (AuthenticateWithSocialUseCase.kt:76-77). 200 을 돌려주던 이전 목은 도달 불가 분기를
+      // 흉내내고 있었다. reason 문자열은 백엔드 원문 그대로다(발명 금지).
+      if (ageConfirmation) {
+        return HttpResponse.json(tokenPair(true, provider));
+      }
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            fields: [
+              {
+                field: 'ageConfirmation',
+                reason: '신규 가입 시 연령확인이 필요합니다',
+              },
+            ],
+          },
+        },
+        { status: 400 }
+      );
     case 'existing-user':
     default:
       return HttpResponse.json(tokenPair(false, provider));
   }
+}
+
+/**
+ * TRIP-203 AC-8 — `Trip.required` 10필드를 갖춘 응답(상상해서 만들지 않는다). 요청 바디의
+ * 필수 3필드는 그대로 반영하고, 나머지 선택 필드는 openapi 기본값·null로 채운다.
+ */
+function tripFixture(body: CreateTripRequest): Trip {
+  return {
+    tripId: '00000000-0000-0000-0000-000000000001',
+    title: body.title ?? '제주 여행',
+    startDate: body.startDate,
+    endDate: body.endDate,
+    party: body.party ?? 1,
+    companionType: body.companionType ?? null,
+    budgetTotal: body.budgetTotal ?? null,
+    preferenceSnapshot: {},
+    destinations: body.destinations,
+    status: 'PLANNED',
+    createdAt: '2026-08-02T00:00:00Z',
+    updatedAt: '2026-08-02T00:00:00Z',
+  };
+}
+
+/** TRIP-203 AC-8 — `PreferenceView` 7축 밖을 발명하지 않는다. 예산 러프값(rawAmount)은
+ * 숫자로, isNeutralDefault 는 불리언으로 준다(AC-5 가 소비하는 모양). */
+function preferenceViewFixture(): PreferenceView {
+  return {
+    pace: { value: '균형있게', isNeutralDefault: false },
+    budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
+  };
 }
 
 export const handlers = [
@@ -249,4 +303,26 @@ export const handlers = [
   http.post(`${BASE}/onboarding/complete`, () =>
     HttpResponse.json({ onboardingCompletedAt: '2026-07-21T00:00:00Z' })
   ),
+
+  // ── TRIP-203 여행 생성·취향 조회 (AC-8) ──────────────────────────────
+  http.post(`${BASE}/trips`, async ({ request }) => {
+    const body = (await request.json()) as CreateTripRequest;
+    return HttpResponse.json(tripFixture(body), { status: 201 });
+  }),
+
+  http.get(`${BASE}/me/preferences`, () =>
+    HttpResponse.json(preferenceViewFixture())
+  ),
+
+  /**
+   * TRIP-208 등록 숙소 날짜 연계 — 리포 최초의 `GET /saved-stays` 목이다.
+   *
+   * **기본값이 빈 목록인 이유**: 이 핸들러가 필요한 첫 번째 이유는 AC 심판이 아니라
+   * `TripNewStep1Page.integration.test.tsx`(승인 동결분)를 **살려 두는 것**이다. 그 버킷은
+   * `onUnhandledRequest: 'error'`로 돌기 때문에, 위저드 페이지가 이 경로를 부르는 순간
+   * 핸들러가 없으면 그 파일이 AC 실패가 아니라 **준비 단계에서 죽는다**. 빈 계정이 가장
+   * 무해한 기본값이고(대안 UI만 그려진다), 얼굴별 응답이 필요한 테스트는 `server.use(...)`로
+   * 각자 덮어쓴다(`TripNewStep1Page.stayImport.integration.test.tsx`).
+   */
+  http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
 ];
