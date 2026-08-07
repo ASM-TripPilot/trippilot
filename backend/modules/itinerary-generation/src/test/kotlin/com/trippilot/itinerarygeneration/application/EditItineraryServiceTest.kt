@@ -35,6 +35,12 @@ private class EditFakeItineraries : ItineraryRepository {
     override fun findById(itineraryId: UUID) = store.firstOrNull { it.itineraryId == itineraryId }
     override fun findByTrip(tripId: UUID) = store.filter { it.tripId == tripId }
     override fun replaceForTrip(tripId: UUID, itinerary: Itinerary) = itinerary.also { store.removeAll { s -> s.tripId == tripId }; store += it }
+    override fun replaceIfCurrent(tripId: UUID, expectedItineraryId: UUID, itinerary: Itinerary): Boolean {
+        replaceForTrip(tripId, itinerary)
+        return true
+    }
+    override fun findStalePartial(updatedBefore: java.time.Instant): List<Itinerary> = emptyList()
+
 }
 
 private val NOOP_TX = object : PlatformTransactionManager {

@@ -60,6 +60,20 @@ interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {
     @Modifying(clearAutomatically = true)
     @Query("delete from ItineraryEntity i where i.tripId = :tripId")
     fun deleteByTripId(@Param("tripId") tripId: UUID)
+
+    // 조건부 교체용 — 지울 대상을 id·생성상태로 못박아 "읽고-쓰는 사이 재생성" 창을 없앤다.
+    @Modifying(clearAutomatically = true)
+    @Query(
+        "delete from ItineraryEntity i " +
+            "where i.tripId = :tripId and i.itineraryId = :itineraryId and i.generationState = :state",
+    )
+    fun deleteIfCurrent(
+        @Param("tripId") tripId: UUID,
+        @Param("itineraryId") itineraryId: UUID,
+        @Param("state") state: String,
+    ): Int
+
+    fun findByGenerationStateAndUpdatedAtBefore(generationState: String, updatedAt: Instant): List<ItineraryEntity>
 }
 
 interface ItineraryDayJpaRepository : JpaRepository<ItineraryDayEntity, UUID> {

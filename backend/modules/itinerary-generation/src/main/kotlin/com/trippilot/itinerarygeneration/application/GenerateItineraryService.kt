@@ -82,7 +82,7 @@ class GenerateItineraryService(
 
         // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
         val saved = tx.execute {
-            val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, state))
+            val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, state, firstDates))
             events.publish(ItineraryGenerated(it.itineraryId.toString(), tripId.toString(), it.isFallback))
             it
         }!!
@@ -94,7 +94,13 @@ class GenerateItineraryService(
                 tripId, mode, ctx, prefs, stayAnchors, remainingDates, TOTAL_DEADLINE_MS, excluded = assigned,
                 carriesUndatedFixed = true,
             )
-            secondPhase.completeRemaining(tripId, saved.itineraryId, secondInput)
+            // 2차가 고정 블록(HC3: 반드시 포함)으로 다시 싣는 POI 는 제외 목록에서 뺀다 —
+            // 같은 POI 를 "반드시 넣어라 + 후보에서 빼라"로 동시에 주면 계약이 모순된다(INV-1 ↔ HC3).
+            val fixedInSecond = secondInput.fixedBlocks.map { it.poiId }.toSet()
+            secondPhase.completeRemaining(
+                tripId, saved.itineraryId,
+                secondInput.copy(excludedPoiIds = secondInput.excludedPoiIds.filterNot { it in fixedInSecond }),
+            )
         }
         return saved
     }
@@ -119,10 +125,12 @@ class GenerateItineraryService(
             anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors).filter { it.date in dates },          // 이 호출이 맡은 일자의 거점 좌표
             timeWindows = dates.map { TimeWindow(it, DEFAULT_START, DEFAULT_END) },
             // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
-            // 날짜 미지정(ANYTIME)은 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
+            // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
             // 하루짜리 1차에 전부 몰면 배치 공간이 없어 HC3 가 깨질 수 있고, 양쪽에 실으면 중복 배치된다.
+            // 기간 밖 날짜를 버리지 않는 이유: 어느 단계에도 안 실으면 AI 가 실현 불가를 보고할 기회조차 없이
+            // 백엔드가 조용히 삭제하게 된다(must_visit 등록은 기간을 검증하지 않는다).
             fixedBlocks = ctx.fixedVisits
-                .filter { it.date in dates || (it.date == null && carriesUndatedFixed) }
+                .filter { it.date in dates || (it.date !in planDates(ctx.startDate, ctx.endDate) && carriesUndatedFixed) }
                 .map { FixedBlock(it.poiId, it.date, it.start, it.dwellMin) },
             preferenceProfile = prefs.toProfile(),                                                            // preference_snapshot 7축
             recommendationStrength = null,
@@ -151,8 +159,9 @@ class GenerateItineraryService(
         generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.toList()
 
     /** ScheduleAgentOutput → Itinerary 애그리거트. 시각·순서는 솔버 검증값만(INV-2). poi_snapshot 동결은 확정(272). */
-    private fun ScheduleAgentOutput.toItinerary(tripId: UUID, state: GenerationState): Itinerary {
-        val days = this.days.mapIndexed { dayIdx, d ->
+    private fun ScheduleAgentOutput.toItinerary(tripId: UUID, state: GenerationState, dates: List<LocalDate>): Itinerary {
+        // 요청 일자에 맞춰 정렬 — 응답이 어긋나도 중복/누락 일자가 조용히 통과하지 못하게(외부 값 신뢰 금지).
+        val days = DayReconciliation.alignTo(dates, this.days).mapIndexed { dayIdx, d ->
             ItineraryDay.of(
                 d.date, dayIdx,
                 d.slots.mapIndexed { slotIdx, s ->

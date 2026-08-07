@@ -73,8 +73,12 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         var last = json.createObjectNode() as JsonNode
         while (System.nanoTime() < deadline) {
             last = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second
-            if (last["generationState"]?.asText() != "PARTIAL") return last
-            Thread.sleep(POLL_INTERVAL_MS)
+            when (last["generationState"]?.asText()) {
+                "PARTIAL" -> Thread.sleep(POLL_INTERVAL_MS)
+                // FAILED 를 통과시키면 뒤따르는 확정·편집 검증이 조용히 "실패한 일정" 위에서 돌게 된다.
+                "COMPLETE" -> return last
+                else -> error("2차 생성이 완료되지 않았습니다. 상태=$last")
+            }
         }
         error("2차 생성이 기한 내 끝나지 않았습니다. 마지막 상태=$last")
     }

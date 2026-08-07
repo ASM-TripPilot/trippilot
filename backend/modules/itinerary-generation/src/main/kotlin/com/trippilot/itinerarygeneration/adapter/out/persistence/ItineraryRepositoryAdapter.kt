@@ -9,6 +9,7 @@ import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -51,6 +52,18 @@ class ItineraryRepositoryAdapter(
         itineraries.deleteByTripId(tripId) // 기존 일정 제거(day/slot은 DB FK cascade) — 여행당 1개
         return save(itinerary)
     }
+
+    @Transactional
+    override fun replaceIfCurrent(tripId: UUID, expectedItineraryId: UUID, itinerary: Itinerary): Boolean {
+        // 삭제가 한 행도 못 지웠다 = 그 사이 재생성·전이가 일어났다 → 아무것도 쓰지 않는다.
+        if (itineraries.deleteIfCurrent(tripId, expectedItineraryId, GenerationState.PARTIAL.name) == 0) return false
+        save(itinerary)
+        return true
+    }
+
+    override fun findStalePartial(updatedBefore: Instant): List<Itinerary> =
+        itineraries.findByGenerationStateAndUpdatedAtBefore(GenerationState.PARTIAL.name, updatedBefore)
+            .map { it.toDomain() }
 
     override fun findById(itineraryId: UUID): Itinerary? =
         itineraries.findById(itineraryId).orElse(null)?.toDomain()

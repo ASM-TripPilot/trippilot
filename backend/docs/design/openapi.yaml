@@ -657,12 +657,17 @@ paths:
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
     post:
       tags: [trips]
-      summary: AI 일정 생성 — 소유 여행 날짜 기준 ScheduleAgent 호출·영속(첫 슬라이스). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+      summary: AI 일정 생성 — day1 먼저 반환(2단계). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+      description: >
+        첫날(day1)만 담긴 `generationState=PARTIAL` 응답을 즉시 돌려주고, 나머지 일자는 백그라운드로 채운다.
+        클라이언트는 GET 으로 `COMPLETE`(전 일자 완료) 또는 `FAILED`(2차 중단) 까지 폴링한다.
+        여행이 하루면 2차 없이 즉시 `COMPLETE`. PARTIAL 인 동안 확정·편집은 409.
+        재생성(이 POST)에는 상태 제한이 없어, 중단된 생성에서 벗어나는 탈출구로 쓸 수 있다.
       requestBody:
         required: false
         content: { application/json: { schema: { $ref: '#/components/schemas/GenerateItineraryRequest' } } }
       responses:
-        '201': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
+        '201': { description: 생성됨(day1 만 담긴 PARTIAL · 하루 여행이면 COMPLETE), content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정 }
     put:
       tags: [trips]

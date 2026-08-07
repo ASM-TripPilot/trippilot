@@ -11,8 +11,10 @@ import java.util.UUID
 /** 일정 상태. PLANNED→CONFIRMED 단방향(확정 후 읽기전용 잠금). */
 enum class ItineraryStatus { PLANNED, CONFIRMED }
 
-/** 솔버 산출 방식. AI 실패 시 폴백 단계 표시(INV-4). */
-/** 해법 등급 — **품질 높은 순으로 선언**(뒤일수록 저하). 2단계 생성이 두 호출의 등급을 합칠 때 이 순서를 쓴다. */
+/**
+ * 솔버 산출 방식. AI 실패 시 폴백 단계 표시(INV-4).
+ * **품질 높은 순으로 선언**(뒤일수록 저하) — 2단계 생성이 두 호출의 등급을 합칠 때 이 순서를 쓴다.
+ */
 enum class SolveMode { FULL_AI, DETERMINISTIC, MINIMAL }
 
 /**
@@ -200,4 +202,15 @@ interface ItineraryRepository {
 
     /** 여행의 현행 일정을 교체(원자적) — 재생성 시 기존 제거 후 저장. 여행당 1개 유지. */
     fun replaceForTrip(tripId: UUID, itinerary: Itinerary): Itinerary
+
+    /**
+     * 현행 일정이 [expectedItineraryId] 이고 아직 [GenerationState.PARTIAL] 일 때만 교체한다(조건부 쓰기).
+     * 백그라운드 2차 생성이 쓰는 경로 — 읽고-쓰는 사이에 재생성이 끼어들면 삭제 키가 `trip_id` 라
+     * 방금 만들어진 일정까지 지워버린다. 교체 여부를 **DB 조건**으로 판정해 그 창을 없앤다.
+     * @return 교체했으면 true, 조건이 깨져 아무것도 하지 않았으면 false.
+     */
+    fun replaceIfCurrent(tripId: UUID, expectedItineraryId: UUID, itinerary: Itinerary): Boolean
+
+    /** [Instant] 이전에 마지막으로 갱신된 채 아직 PARTIAL 인 일정 — 중단된 2차 생성을 찾는 용도. */
+    fun findStalePartial(updatedBefore: Instant): List<Itinerary>
 }

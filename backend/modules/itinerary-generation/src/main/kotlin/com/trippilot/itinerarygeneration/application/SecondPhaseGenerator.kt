@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -50,7 +51,7 @@ class SecondPhaseGenerator(
         }
 
         try {
-            applyOrDiscard(tripId, itineraryId, output)
+            applyOrDiscard(tripId, itineraryId, secondInput, output)
         } catch (e: Exception) {
             // 폴백조차 반영하지 못한 경우 — 상태로 드러낸다(침묵 금지).
             log.error("2차 결과 반영 실패 — FAILED 표시(day1 은 유효). tripId={}", tripId, e)
@@ -58,7 +59,7 @@ class SecondPhaseGenerator(
         }
     }
 
-    private fun applyOrDiscard(tripId: UUID, itineraryId: UUID, output: ScheduleAgentOutput) {
+    private fun applyOrDiscard(tripId: UUID, itineraryId: UUID, secondInput: ScheduleAgentInput, output: ScheduleAgentOutput) {
         tx.execute {
             val current = itineraries.findByTrip(tripId).firstOrNull() ?: return@execute null
             if (current.itineraryId != itineraryId) { // 재생성으로 교체된 뒤 도착한 낡은 결과
@@ -71,10 +72,14 @@ class SecondPhaseGenerator(
             }
             // 1차분(day1)은 영속본 그대로 보존하고 뒤에 이어붙인다 — 이미 노출된 날을 흔들지 않는다.
             val updated = current.completeGeneration(
-                current.days + output.toRemainingDays(current.days.size), clock.instant(),
+                current.days + output.toRemainingDays(current.days.size, secondInput.timeWindows.map { it.date }),
+                clock.instant(),
                 output.solveMode, output.isFallback,
             )
-            itineraries.replaceForTrip(tripId, updated)
+            // 조건부 쓰기 — 위 가드를 읽은 뒤 재생성이 끼어들었으면 여기서 0행이 되어 아무것도 덮어쓰지 않는다.
+            if (!itineraries.replaceIfCurrent(tripId, itineraryId, updated)) {
+                log.info("2차 결과 폐기 — 쓰기 직전 일정이 바뀜. tripId={}", tripId)
+            }
         }
     }
 
@@ -84,14 +89,14 @@ class SecondPhaseGenerator(
             tx.execute {
                 val current = itineraries.findByTrip(tripId).firstOrNull() ?: return@execute null
                 if (current.itineraryId != itineraryId || current.generationState != GenerationState.PARTIAL) return@execute null
-                itineraries.replaceForTrip(tripId, current.failGeneration(clock.instant()))
+                itineraries.replaceIfCurrent(tripId, itineraryId, current.failGeneration(clock.instant()))
             }
         }.onFailure { log.error("FAILED 표시조차 실패. tripId={}", tripId, it) }
     }
 
     /** 2차 응답 → 1차 일자 뒤에 이어지는 일자들. [offset] = 1차가 채운 일자 수(dayOrder 연속 보장). */
-    private fun ScheduleAgentOutput.toRemainingDays(offset: Int): List<ItineraryDay> =
-        days.mapIndexed { idx, d ->
+    private fun ScheduleAgentOutput.toRemainingDays(offset: Int, dates: List<LocalDate>): List<ItineraryDay> =
+        DayReconciliation.alignTo(dates, days).mapIndexed { idx, d ->
             ItineraryDay.of(
                 d.date, offset + idx,
                 d.slots.mapIndexed { slotIdx, s ->
