@@ -7,6 +7,7 @@ import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
+import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -112,6 +113,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         body["status"].asText() shouldBe "PLANNED"
         body["tripId"].asText() shouldBe trip
         body["days"].size() shouldBe 2 // 08-01 ~ 08-02(체크아웃 포함)
+        body["generationState"].asText() shouldBe "COMPLETE" // 단일 호출 = 완료(2단계 day1 은 U5 이후 PARTIAL)
         val slot = body["days"][0]["slots"][0]
         slot.has("startAt") shouldBe true
         slot.has("endAt") shouldBe true
@@ -204,6 +206,33 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 200
         val editBody = """{"days":[{"date":"2026-08-01","slots":[]}]}"""
         call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody).first shouldBe 409
+    }
+
+    @Test
+    fun `PARTIAL 저장·조회 관통 + 생성 중 확정은 409(TRIP-267 계약)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        // Fake 는 항상 COMPLETE 를 만드므로 리포지토리로 PARTIAL 을 직접 저장 —
+        // V2.9 CHECK 값 집합·varchar 길이·엔티티 round-trip 을 한 번에 검증한다.
+        val partial = Itinerary.create(
+            UUID.fromString(trip), SolveMode.FULL_AI, isFallback = false,
+            days = listOf(
+                ItineraryDay.of(
+                    LocalDate.parse("2026-08-01"), 0,
+                    listOf(VisitSlot.of(UUID.fromString(poiId(token)), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"))),
+                ),
+            ),
+            now = Instant.parse("2026-08-01T00:00:00Z"),
+            generationState = GenerationState.PARTIAL,
+        )
+        itineraries.replaceForTrip(UUID.fromString(trip), partial)
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        body["generationState"].asText() shouldBe "PARTIAL" // 저장→조회→직렬화 관통
+
+        // 생성 중 확정은 409 — day1 만 동결된 채 잠기는 것 방지
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 409
     }
 
     @Test
