@@ -143,6 +143,12 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         slot.has("startAt") shouldBe true
         slot.has("endAt") shouldBe true
         slot.has("duration") shouldBe false // INV-3: 소요시간 미노출
+        // POI 표면(TRIP-307) — 지도·카드를 추가 왕복 없이 그릴 수 있어야 한다
+        slot["nameKo"].isNull shouldBe false
+        slot["lat"].isNull shouldBe false
+        slot["lng"].isNull shouldBe false
+        slot.has("openingHoursKnown") shouldBe true
+        slot.has("imageUrl") shouldBe true   // 미확보면 null — 기본 이미지를 지어내지 않는다
 
         // 2차(백그라운드)가 나머지 일자를 채우고 COMPLETE 로 전이
         val completed = awaitComplete(trip, token)
@@ -198,6 +204,8 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
         rc shouldBe 200
         body["status"].asText() shouldBe "CONFIRMED"
+        // 확정 응답에도 표면이 실린다 — 확정 직후 화면이 비면 안 된다
+        body["days"][0]["slots"][0]["nameKo"].isNull shouldBe false
         // poi_snapshot 동결(INV-U1-03) — 확정 시 전 슬롯이 스냅숏 참조를 가진다(실 ACTIVE POI, Fake 에이전트).
         itineraries.findByTrip(UUID.fromString(trip)).single().days.flatMap { it.slots }
             .all { it.poiSnapshotId != null } shouldBe true

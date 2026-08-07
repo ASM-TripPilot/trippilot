@@ -7,8 +7,11 @@ import com.trippilot.itinerarygeneration.application.EditItineraryService
 import com.trippilot.itinerarygeneration.application.EditSlot
 import com.trippilot.itinerarygeneration.application.GenerateItineraryService
 import com.trippilot.itinerarygeneration.application.ItineraryQueryService
+import com.trippilot.itinerarygeneration.application.SlotSurface
+import com.trippilot.itinerarygeneration.application.SlotSurfaceAssembler
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
+import com.trippilot.itinerarygeneration.domain.VisitSlot
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
@@ -33,7 +36,10 @@ class ItineraryController(
     private val queryService: ItineraryQueryService,
     private val confirmService: ConfirmItineraryService,
     private val editService: EditItineraryService,
+    private val surfaces: SlotSurfaceAssembler,
 ) {
+    /** 네 응답 모두 같은 표면을 실어야 한다 — 조회로만 채워지면 생성·확정·편집 직후 화면이 빈다. */
+    private fun respond(itinerary: Itinerary) = ItineraryResponse.from(itinerary, surfaces.assemble(itinerary))
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     fun generate(
@@ -42,22 +48,22 @@ class ItineraryController(
         @RequestBody(required = false) request: GenerateItineraryRequest?,
     ): ItineraryResponse {
         val mode = request?.generationMode ?: GenerationMode.FULLY_AI
-        return ItineraryResponse.from(service.generate(principal.accountId(), tripId, mode))
+        return respond(service.generate(principal.accountId(), tripId, mode))
     }
 
     @GetMapping
     fun get(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
-        ItineraryResponse.from(queryService.get(principal.accountId(), tripId))
+        respond(queryService.get(principal.accountId(), tripId))
 
     /** 확정 — PLANNED→CONFIRMED(이미 확정이면 409). 재생성은 확정을 되돌린다(확정 해제 API 부재). */
     @PostMapping("/confirm")
     fun confirm(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
-        ItineraryResponse.from(confirmService.confirm(principal.accountId(), tripId))
+        respond(confirmService.confirm(principal.accountId(), tripId))
 
     /** 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409. */
     @PutMapping
     fun edit(principal: Principal, @PathVariable tripId: UUID, @Valid @RequestBody request: EditItineraryRequest): ItineraryResponse =
-        ItineraryResponse.from(editService.edit(principal.accountId(), tripId, request.toCommand()))
+        respond(editService.edit(principal.accountId(), tripId, request.toCommand()))
 }
 
 /** 편집 요청 — 수정된 전체 일자·슬롯 배열(슬롯 순서 = 배열 순서). [reason] 은 선택(변경 이력에 남는다). */
@@ -95,7 +101,7 @@ data class ItineraryResponse(
     val days: List<DayResponse>,
 ) {
     companion object {
-        fun from(i: Itinerary) = ItineraryResponse(
+        fun from(i: Itinerary, surfaces: Map<UUID, SlotSurface>) = ItineraryResponse(
             itineraryId = i.itineraryId,
             tripId = i.tripId,
             status = i.status.name,
@@ -103,7 +109,7 @@ data class ItineraryResponse(
             isFallback = i.isFallback,
             generationState = i.generationState.name,
             days = i.days.map { d ->
-                DayResponse(d.date, d.slots.map { s -> SlotResponse(s.sourcePoiId, s.startAt, s.endAt, s.isFixed, s.endsNextDay, s.hasViolation) })
+                DayResponse(d.date, d.slots.map { s -> SlotResponse.of(s, surfaces[s.sourcePoiId]) })
             },
         )
     }
@@ -114,6 +120,10 @@ data class DayResponse(val date: LocalDate, val slots: List<SlotResponse>)
 /**
  * 방문 슬롯 표시 — 시각·순서만(INV-2, 소요시간 없음 INV-3).
  * [endsNextDay]: 자정 넘김(HC4, endAt=익일 시각·시작일 귀속). [hasViolation]: 편집 재검증(HC1-4) 위반 표시(비차단).
+ *
+ * POI 표면(이름·좌표·사진·영업시간)은 추가 왕복 없이 여기 실린다(BR-U3-09). 정본에도 동결본에도 없는
+ * 장소는 표면 필드가 전부 null 이다 — 그 경우에도 슬롯 자체는 사라지지 않는다.
+ * [openingHoursKnown] false = 영업시간 미확인 → 확정 배치가 아니라 사용자 확인 후보로 분리(US-SCHED-03 예외).
  */
 data class SlotResponse(
     val poiId: UUID,
@@ -122,4 +132,31 @@ data class SlotResponse(
     val isFixed: Boolean,
     val endsNextDay: Boolean,
     val hasViolation: Boolean,
-)
+    val nameKo: String?,
+    val lat: Double?,
+    val lng: Double?,
+    val category: String?,
+    val openingHours: String?,
+    val openingHoursKnown: Boolean,
+    val imageUrl: String?,
+    val tags: List<String>,
+) {
+    companion object {
+        fun of(s: VisitSlot, surface: SlotSurface?) = SlotResponse(
+            poiId = s.sourcePoiId,
+            startAt = s.startAt,
+            endAt = s.endAt,
+            isFixed = s.isFixed,
+            endsNextDay = s.endsNextDay,
+            hasViolation = s.hasViolation,
+            nameKo = surface?.nameKo,
+            lat = surface?.lat,
+            lng = surface?.lng,
+            category = surface?.category,
+            openingHours = surface?.openingHours,
+            openingHoursKnown = surface?.openingHoursKnown ?: false,
+            imageUrl = surface?.imageUrl,
+            tags = surface?.tags.orEmpty(),
+        )
+    }
+}

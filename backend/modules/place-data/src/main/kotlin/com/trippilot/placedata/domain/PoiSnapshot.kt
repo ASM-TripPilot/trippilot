@@ -32,4 +32,7 @@ class PoiSnapshot private constructor(
 interface PoiSnapshotRepository {
     fun save(snapshot: PoiSnapshot): PoiSnapshot
     fun findById(poiSnapshotId: UUID): PoiSnapshot?
+
+    /** 일괄 조회 — 일정 슬롯 N개의 동결 표면을 한 번에(슬롯마다 왕복하지 않게). */
+    fun findByIds(poiSnapshotIds: Collection<UUID>): List<PoiSnapshot>
 }
