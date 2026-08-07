@@ -113,16 +113,25 @@ describe('LoginPage — fake×MSW 결합 전이 (AC-W-09)', () => {
     expect(socialRequests).toContain('/api/v1/auth/social/google');
   });
 
-  it('신규 판정 → 연령확인 바텀시트(auth-age-sheet)가 뜬다', async () => {
+  /**
+   * TRIP-248 D3 · AC-13 의 화면 관측. 이전 판은 여기서 구글 버튼으로 연령확인 시트를 기대했는데,
+   * 그건 목이 신규 첫 요청에 200 을 주던 시절의 흐름이다. 실서버는 400 으로 거절하고, code
+   * 갈래(구글)는 인가코드가 이미 소진돼 재전송할 수 없으므로 이 칸에서는 error 로 남긴다(D0·D3).
+   *
+   * ⚠️ code 갈래 재인가를 붙이는 칸에서는 이 기대가 뒤집힌다(배너 → 시트). 영구 규칙이 아니다.
+   * 카카오(token 갈래)가 시트까지 가는 것은 LoginPage.ageGate.integration.test.tsx 가 본다.
+   */
+  it('신규 판정이라도 code 갈래(구글)는 시트가 아니라 에러 배너를 띄운다', async () => {
     setScenario('login-success-new');
     render(<LoginPage />);
 
     fireEvent.press(screen.getByTestId('auth-login-google'));
 
     await waitFor(() =>
-      expect(screen.getByTestId('auth-age-sheet')).toBeOnTheScreen()
+      expect(screen.getByTestId('auth-login-error-banner')).toBeOnTheScreen()
     );
-    // needs-age 단계에선 아직 게이트로 이동하지 않는다.
+    // 완결 불가능한 흐름(확인 후 반드시 401)으로 사용자를 끌고 가지 않는다.
+    expect(screen.queryByTestId('auth-age-sheet')).toBeNull();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 

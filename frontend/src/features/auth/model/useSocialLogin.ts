@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import {
   postSocialLogin,
   postSocialTokenLogin,
+  type NormalizedApiError,
   type SocialLoginBody,
   type SocialProvider,
   type SocialTokenLoginBody,
@@ -57,6 +58,24 @@ interface SocialLoginState {
 const AUTHORIZE_FAILED_CODE = 'AUTHORIZE_FAILED';
 
 /**
+ * TRIP-248 — 서버가 "연령확인이 아직 없다"는 뜻으로 거절했는가. 실서버는 신규 가입의 첫 요청을
+ * 반드시 이 모양으로 되돌린다(AuthenticateWithSocialUseCase.kt:76-77).
+ *
+ * 필드명은 **완전일치**로 본다 — 같은 유스케이스가 던지는 `ageConfirmation.birthDate` 는
+ * "생년월일이 빠졌다"는 다른 실패라, 접두사로 보면 연령확인 시트가 잘못 뜬다.
+ * 상태코드는 보지 않는다(D2) — 연령 관련 상태가 정본(422)과 백엔드 구현(403)으로 이미 갈린
+ * 전례가 있어, body 의 code+fields 만 보면 서버가 상태를 바꿔도 프론트가 안 깨진다.
+ */
+function isAgeConfirmationRequired(
+  error: Partial<NormalizedApiError>
+): boolean {
+  return (
+    error.code === 'VALIDATION_ERROR' &&
+    (error.fields ?? []).some((f) => f.field === 'ageConfirmation')
+  );
+}
+
+/**
  * 소셜 로그인 오케스트레이션. provider 인가는 `authorize` 로 주입받고(PKCE 실구현은
  * 어댑터 뒤에 숨는다), 교환 바디에는 codeVerifier 만 실어 서버로 나른다(시크릿 비노출).
  * 신규 판정 시 토큰을 커밋하지 않고 연령확인(SELF_DECLARED) 재전송 후 저장한다.
@@ -86,11 +105,6 @@ export function useSocialLogin(): SocialLoginState {
           pending.kind === 'code'
             ? await postSocialLogin(pending.provider, pending.body)
             : await postSocialTokenLogin(pending.provider, pending.body);
-        if (!ageConfirmed && tokens.isNewUser) {
-          setIsNewUser(true);
-          applyPhase('needs-age');
-          return;
-        }
         setIsNewUser(tokens.isNewUser);
         await saveTokens({
           accessToken: tokens.accessToken,
@@ -99,10 +113,19 @@ export function useSocialLogin(): SocialLoginState {
         setAccessToken(tokens.accessToken);
         applyPhase('success');
       } catch (error) {
-        const normalized = error as {
-          code?: string;
-          existingProvider?: string | null;
-        };
+        const normalized = error as Partial<NormalizedApiError>;
+        // TRIP-248 — 연령확인 누락 거절은 실패가 아니라 "확인이 더 필요하다"는 신호다. 재전송이
+        // 가능한 token 갈래에서만(D3) 시트로 보낸다: code 갈래의 인가코드는 첫 요청에서 이미
+        // 소진돼, 확인을 받아 같은 코드로 다시 보내면 반드시 401 이다. 이미 확인을 실어 보낸
+        // 재전송이 또 이 거절을 받으면 시트를 반복해 띄우지 않고 에러로 표면화한다(INV-4).
+        if (
+          !ageConfirmed &&
+          pending.kind === 'token' &&
+          isAgeConfirmationRequired(normalized)
+        ) {
+          applyPhase('needs-age');
+          return;
+        }
         setErrorCode(normalized.code ?? 'UNKNOWN');
         setConflictProvider(normalized.existingProvider ?? null);
         applyPhase('error');

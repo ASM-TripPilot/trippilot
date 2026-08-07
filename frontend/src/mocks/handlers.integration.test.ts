@@ -21,6 +21,8 @@ import { resetScenario, setScenario } from './scenarios';
  */
 
 const REFRESH_URL = 'http://localhost:8080/api/v1/auth/token/refresh';
+/** 오라클 자기검증용 — 프론트 함수를 거치지 않고 목을 직접 두드릴 때 쓴다. */
+const SOCIAL_URL = 'http://localhost:8080/api/v1/auth/social';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
@@ -70,9 +72,43 @@ describe('MSW /auth/social/{provider} 핸들러 — 신규/기존/에러', () =>
     expect(tokens.refreshToken).toEqual(expect.any(String));
   });
 
-  it('new-user 는 TokenPair(isNewUser=true) 를 낸다', async () => {
+  /**
+   * TRIP-248 AC-12 — 목 정합. 이전 판은 여기서 `TokenPair(isNewUser=true)` 를 단언했는데,
+   * 실서버는 연령확인이 빠진 첫 요청을 절대 200 으로 받지 않는다. 목이 200 을 내는 한
+   * 그 위에 세운 모든 통합 테스트가 **실서버에 없는 흐름**을 검증하게 된다.
+   *
+   * 프론트 함수(postSocialLogin)가 아니라 **raw axios** 로 부른다 — 여기서 보려는 것은
+   * "가짜 서버가 실서버 모양으로 답하는가" 하나뿐이고, normalizeSocialError 가 fields 를
+   * 나르는지는 별개 관심사다(둘을 한 케이스에 섞으면 실패했을 때 원인이 안 보인다).
+   *
+   * status 리터럴을 단언하지 않는다: 판정은 body 의 code + fields 만 본다(D2). axios 는
+   * 비-2xx 에서만 reject 하므로 `rejects` 자체가 "에러 응답이다"를 이미 함의한다.
+   */
+  it('new-user 는 연령확인 없는 첫 요청에 VALIDATION_ERROR + fields[ageConfirmation] 로 거절한다', async () => {
     setScenario('login-success-new');
-    const tokens = await postSocialLogin('google', authorizeBody);
+
+    await expect(
+      axios.post(`${SOCIAL_URL}/google`, authorizeBody)
+    ).rejects.toMatchObject({
+      response: {
+        data: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            fields: [{ field: 'ageConfirmation' }],
+          },
+        },
+      },
+    });
+  });
+
+  it('new-user 는 연령확인을 동봉한 재전송에만 TokenPair(isNewUser=true) 를 낸다', async () => {
+    setScenario('login-success-new');
+
+    const tokens = await postSocialLogin('google', {
+      ...authorizeBody,
+      ageConfirmation: { method: 'SELF_DECLARED' },
+    });
+
     expect(tokens.isNewUser).toBe(true);
   });
 
