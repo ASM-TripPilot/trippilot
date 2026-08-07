@@ -1,5 +1,8 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.changelog.api.AppendChangeLog
+import com.trippilot.changelog.api.ChangeLogFacade
+import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.Itinerary
@@ -18,6 +21,7 @@ import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionStatus
@@ -57,6 +61,25 @@ private class EditFakeAgent(private val violations: List<Violation> = emptyList(
 }
 
 /** 편집 — 전체 교체, 비차단 재검증(위반→hasViolation), 확정 409, 미소유·없음 404. */
+/** 롤백 요청을 관찰하는 tx 매니저 — 이력 기록이 편집과 **같은 트랜잭션**인지 확인하는 데 쓴다. */
+private class RecordingTx : PlatformTransactionManager {
+    var rolledBack = false
+    override fun getTransaction(definition: TransactionDefinition?): TransactionStatus = SimpleTransactionStatus()
+    override fun commit(status: TransactionStatus) {}
+    override fun rollback(status: TransactionStatus) { rolledBack = true }
+}
+
+/** 기록 시도마다 터지는 Fake — 이력 실패가 편집을 되돌리는지 본다. */
+private class FailingChangeLog : ChangeLogFacade {
+    override fun append(command: AppendChangeLog): Unit = throw RuntimeException("change log down")
+}
+
+/** 편집이 남긴 변경 이력을 관찰하는 Fake — 실제 영속은 change-log 모듈 IT 가 본다. */
+private class RecordingChangeLog : ChangeLogFacade {
+    val appended = mutableListOf<AppendChangeLog>()
+    override fun append(command: AppendChangeLog) { appended += command }
+}
+
 class EditItineraryServiceTest : StringSpec({
 
     val clock = Clock.fixed(Instant.parse("2026-08-06T00:00:00Z"), ZoneOffset.UTC)
@@ -95,9 +118,67 @@ class EditItineraryServiceTest : StringSpec({
 
     fun repoWith(it: Itinerary) = EditFakeItineraries().apply { replaceForTrip(tripId, it) }
 
+    "이력 기록이 실패하면 편집도 롤백된다(같은 트랜잭션 — 이 PR 의 핵심 보장)" {
+        val tx = RecordingTx()
+        shouldThrow<RuntimeException> {
+            EditItineraryService(trips(true), repoWith(current()), EditFakeAgent(), FailingChangeLog(), tx, clock)
+                .edit(acc, tripId, editReq)
+        }
+        // 기록이 tx 밖으로 나가면 이 단언이 깨진다 — 일정만 바뀌고 이력이 빠지는 상태를 막는 회귀 가드.
+        tx.rolledBack shouldBe true
+    }
+
+    "내용이 그대로면 이력을 남기지 않는다(append-only 라 지울 수 없다)" {
+        val base = current()
+        val log = RecordingChangeLog()
+        // 현재 상태와 동일한 편집안 — 전후가 같다
+        val sameAsCurrent = EditItinerary(
+            base.days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
+        )
+        EditItineraryService(trips(true), repoWith(base), EditFakeAgent(), log, NOOP_TX, clock)
+            .edit(acc, tripId, sameAsCurrent)
+        log.appended shouldBe emptyList()
+    }
+
+    "편집하면 변경 이력이 전후 스냅숏·사유와 함께 남는다(US-PLANB-09)" {
+        val repo = repoWith(current())
+        val log = RecordingChangeLog()
+        EditItineraryService(trips(true), repo, EditFakeAgent(), log, NOOP_TX, clock)
+            .edit(acc, tripId, editReq.copy(reason = "비 예보로 실내로 변경"))
+
+        val entry = log.appended.single()
+        entry.tripId shouldBe tripId
+        entry.actor shouldBe acc.toString()      // 변경 주체 = 편집한 계정
+        entry.sourceType shouldBe ChangeSourceType.MANUAL
+        entry.reason shouldBe "비 예보로 실내로 변경"
+        // 전후가 실제로 다른 상태여야 이력이 의미를 갖는다
+        entry.before shouldNotBe entry.after
+        // before 는 "무엇이 있었는지"를 담아야 한다 — 빈 껍데기면 되짚을 수 없다
+        entry.before.days.single().slots.map { it.poiId } shouldBe current().days.single().slots.map { it.sourcePoiId }
+        entry.after.days.single().slots.map { it.poiId } shouldBe editReq.days.single().slots.map { it.poiId }
+    }
+
+    "사유 없이 편집해도 이력은 남는다(reason 은 선택)" {
+        val log = RecordingChangeLog()
+        EditItineraryService(trips(true), repoWith(current()), EditFakeAgent(), log, NOOP_TX, clock)
+            .edit(acc, tripId, editReq)
+        log.appended.single().reason shouldBe null
+    }
+
+    "편집이 거부되면 이력도 남지 않는다(확정 일정)" {
+        val base = current()
+        val snapshots = base.days.flatMap { it.slots }.associate { it.sourcePoiId to UUID.randomUUID() }
+        val repo = repoWith(base.confirm(snapshots, clock.instant()))
+        val log = RecordingChangeLog()
+        shouldThrow<ConflictDetected> {
+            EditItineraryService(trips(true), repo, EditFakeAgent(), log, NOOP_TX, clock).edit(acc, tripId, editReq)
+        }
+        log.appended shouldBe emptyList()
+    }
+
     "편집하면 새 배열로 교체 + 위반 없으면 hasViolation=false" {
         val repo = repoWith(current())
-        val svc = EditItineraryService(trips(true), repo, EditFakeAgent(), NOOP_TX, clock)
+        val svc = EditItineraryService(trips(true), repo, EditFakeAgent(), RecordingChangeLog(), NOOP_TX, clock)
         val result = svc.edit(acc, tripId, editReq)
         val slots = result.days.single().slots
         slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA) // 편집 순서
@@ -106,7 +187,7 @@ class EditItineraryServiceTest : StringSpec({
 
     "validate 위반을 해당 슬롯 hasViolation 으로 표시(비차단 저장)" {
         val repo = repoWith(current())
-        val svc = EditItineraryService(trips(true), repo, EditFakeAgent(listOf(Violation("TRAVEL_TIME", 0, 1, null))), NOOP_TX, clock)
+        val svc = EditItineraryService(trips(true), repo, EditFakeAgent(listOf(Violation("TRAVEL_TIME", 0, 1, null))), RecordingChangeLog(), NOOP_TX, clock)
         val slots = svc.edit(acc, tripId, editReq).days.single().slots
         slots[0].hasViolation shouldBe false
         slots[1].hasViolation shouldBe true // day0/slot1 위반
@@ -117,7 +198,7 @@ class EditItineraryServiceTest : StringSpec({
         val midnightEdit = EditItinerary(
             listOf(EditDay(day, listOf(EditSlot(poiA, LocalTime.parse("23:00"), LocalTime.parse("01:00"), isFixed = false, endsNextDay = true)))),
         )
-        val slot = EditItineraryService(trips(true), repo, EditFakeAgent(), NOOP_TX, clock)
+        val slot = EditItineraryService(trips(true), repo, EditFakeAgent(), RecordingChangeLog(), NOOP_TX, clock)
             .edit(acc, tripId, midnightEdit).days.single().slots.single()
         slot.endsNextDay shouldBe true
         slot.endAt shouldBe LocalTime.parse("01:00")
@@ -125,15 +206,15 @@ class EditItineraryServiceTest : StringSpec({
 
     "확정된 일정은 편집 불가 409" {
         val repo = repoWith(current { it.confirm(clock.instant()) })
-        shouldThrow<ConflictDetected> { EditItineraryService(trips(true), repo, EditFakeAgent(), NOOP_TX, clock).edit(acc, tripId, editReq) }
+        shouldThrow<ConflictDetected> { EditItineraryService(trips(true), repo, EditFakeAgent(), RecordingChangeLog(), NOOP_TX, clock).edit(acc, tripId, editReq) }
     }
 
     "생성된 일정 없으면 404" {
-        shouldThrow<ResourceNotFound> { EditItineraryService(trips(true), EditFakeItineraries(), EditFakeAgent(), NOOP_TX, clock).edit(acc, tripId, editReq) }
+        shouldThrow<ResourceNotFound> { EditItineraryService(trips(true), EditFakeItineraries(), EditFakeAgent(), RecordingChangeLog(), NOOP_TX, clock).edit(acc, tripId, editReq) }
     }
 
     "미소유 여행이면 404" {
         val repo = repoWith(current())
-        shouldThrow<ResourceNotFound> { EditItineraryService(trips(false), repo, EditFakeAgent(), NOOP_TX, clock).edit(acc, tripId, editReq) }
+        shouldThrow<ResourceNotFound> { EditItineraryService(trips(false), repo, EditFakeAgent(), RecordingChangeLog(), NOOP_TX, clock).edit(acc, tripId, editReq) }
     }
 })
