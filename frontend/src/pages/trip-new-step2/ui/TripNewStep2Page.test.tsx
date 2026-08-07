@@ -104,6 +104,13 @@ jest.mock('@/features/trip/model/useTripBases', () => ({
   useUnassignBase: () => ({ mutateAsync: mockUnassignMutate }),
 }));
 
+// TRIP-226 보강(게이트①-2). 배선이 이 훅들을 무조건 호출하고 그 안에서 `useQueryClient()`가
+// 돈다 — 목이 없으면 이 파일 전체가 `No QueryClient set`으로 죽는다. 단언은 바뀌지 않는다.
+jest.mock('@/features/trip/model/useBaseFix', () => ({
+  useFixSavedStay: () => ({ mutateAsync: jest.fn() }),
+  useExtendTripPeriod: () => ({ mutateAsync: jest.fn() }),
+}));
+
 const TRIP_ID = 'trip-1';
 const TRIP_START = '2026-06-10';
 const TRIP_END = '2026-06-13';

@@ -14,6 +14,10 @@ import {
   SearchGlyph,
   WarningTriangleGlyph,
 } from '@/features/trip/ui/TripGlyphs';
+import {
+  TripBaseFixSheet,
+  type TripBaseFixSheetProps,
+} from '@/features/trip/ui/TripBaseFixSheet';
 
 import type { UnresolvedDaysView } from '../model/baseScreen';
 
@@ -52,6 +56,11 @@ const LOAD_ERROR_DESCRIPTION = '잠시 후 다시 시도해 주세요';
 /** 인라인 재시도 어포던스 — error 얼굴에서 온 실재 문구를 재사용한다(02a §5-6 I-2). */
 const RETRY_LABEL = '다시 시도';
 
+/** 기간 확장 질의의 두 버튼(TRIP-226 · BR-U1-27 "여부를 묻는다"). 정적 카피라 화면이 갖는다 —
+ * 안내 문구 자체는 배선이 만들어 내린다(사유에 따라 갈릴 여지가 있는 값이라서). */
+const EXTEND_CONFIRM_LABEL = '기간 늘리고 지정';
+const EXTEND_CANCEL_LABEL = '그대로 두기';
+
 export interface BaseSectionRow {
   baseAssignmentId: string;
   /** `1–2박` — `toBaseSections`가 만든 값을 그대로 쓴다(재계산 금지). */
@@ -74,6 +83,14 @@ export interface BaseCandidateRow {
   assignPending: boolean;
   /** 있으면 지정이 막힌 사유(01b D4). */
   blockedReason?: string;
+  /** 여행 기간 밖이다(TRIP-226 · 01b D6 판정 결과). 있으면 경고가 상주하되 **지정을 막지는
+   * 않는다** — 거르는 것은 판정이고 판정은 서버 몫이다(D8 · D17). */
+  outOfPeriodNote?: string;
+  /** 기간 확장 여부를 묻는 중. 있으면 안내 + 확인·취소 두 버튼을 그린다(BR-U1-27). */
+  extendPrompt?: string;
+  /** 보완 진입 버튼 라벨. 없으면 버튼을 안 그린다 — 멀쩡한 숙소에 고치기 버튼이 붙으면
+   * 뭔가 잘못된 것처럼 보인다. */
+  fixLabel?: string;
   errorText?: string;
 }
 
@@ -90,6 +107,14 @@ export interface TripWizardStep2ScreenProps {
   /** 미해결 날짜 안내행. 없으면 안 그린다. */
   unresolved?: UnresolvedDaysView;
   coverageFailed: boolean;
+  /** 열려 있는 보완 시트. `undefined`면 시트를 **마운트하지 않는다** — 상시 마운트하면 모든
+   * 렌더가 WebView를 태운다(TRIP-226). */
+  fixSheet?: TripBaseFixSheetProps;
+  /** 아래 셋이 옵셔널인 이유: TRIP-225 승인 테스트가 이 prop들 없이 화면을 세운다. 필수로
+   * 올리면 그 동결 파일이 타입에서 깨진다(계약 확장이지 계약 변경이 아니다). */
+  onFix?: (savedStayId: string) => void;
+  onExtendConfirm?: (savedStayId: string) => void;
+  onExtendCancel?: () => void;
   onBack: () => void;
   onAssign: (savedStayId: string) => void;
   onRetryAssign: (savedStayId: string) => void;
@@ -252,10 +277,16 @@ function CandidateCard({
   candidate,
   onAssign,
   onRetryAssign,
+  onFix,
+  onExtendConfirm,
+  onExtendCancel,
 }: {
   candidate: BaseCandidateRow;
   onAssign: (savedStayId: string) => void;
   onRetryAssign: (savedStayId: string) => void;
+  onFix?: (savedStayId: string) => void;
+  onExtendConfirm?: (savedStayId: string) => void;
+  onExtendCancel?: () => void;
 }): ReactElement {
   return (
     <View
@@ -285,6 +316,20 @@ function CandidateCard({
         <View className="h-[13px] w-[124px] rounded-[6px] bg-surface-strong" />
         <View className="h-[16px] w-[104px] rounded-[6px] bg-surface-strong" />
         <View className="h-px w-full bg-hairline" />
+        {/* 기간 밖 경고는 카드 렌더 시점부터 상주한다(01b D8) — 누르고 나서야 알려 주면
+            사용자는 이미 확장 질의를 마주한 뒤다. e05 conflict 안내행(`1358:1578`) 서식.
+            ponytail: 그 프레임의 20px 아이콘(`1358:1579`)은 리포에 없고 모양도 미확정이라
+            글자만 세운다 — 에셋이 들어오면 이 View에 한 줄 더하면 된다. */}
+        {candidate.outOfPeriodNote === undefined ? null : (
+          <View className="w-full flex-row items-center gap-[10px] rounded-button border border-info-border bg-info-bg px-[14px] py-md">
+            <Text
+              testID={`trip-base-outofperiod-${candidate.savedStayId}`}
+              className="flex-1 font-noto text-label text-info"
+            >
+              {candidate.outOfPeriodNote}
+            </Text>
+          </View>
+        )}
         {candidate.assignedLabel === undefined ? (
           <>
             <Pressable
@@ -310,6 +355,21 @@ function CandidateCard({
                 {candidate.blockedReason}
               </Text>
             )}
+            {/* 225는 사유만 보이고 끝이라 막다른 길이었다 — 226이 더하는 것이 이 한 버튼이다.
+                두 축(좌표·날짜)의 목적지가 같은 시트라 버튼도 하나이고 라벨만 갈린다.
+                e05 보완 진입(`1358:1584`) 서식. */}
+            {candidate.fixLabel === undefined ? null : (
+              <Pressable
+                testID={`trip-base-fix-${candidate.savedStayId}`}
+                accessibilityRole="button"
+                onPress={() => onFix?.(candidate.savedStayId)}
+                className="h-12 w-full items-center justify-center rounded-button border border-hairline-strong bg-canvas"
+              >
+                <Text className="font-noto-bold text-card-title font-bold text-ink">
+                  {candidate.fixLabel}
+                </Text>
+              </Pressable>
+            )}
           </>
         ) : (
           <View className="flex-row items-center gap-[5px] self-start rounded-pill bg-primary-pale py-[5px] pl-[10px] pr-[11px]">
@@ -320,6 +380,43 @@ function CandidateCard({
             >
               {candidate.assignedLabel}
             </Text>
+          </View>
+        )}
+        {/* 확인·취소가 한 안내 안에 함께 선다 — 취소가 화면 저 멀리 있으면 질의가 아니라
+            통보다(BR-U1-27). e05 error-mapapi 카드(`1359:1561`) 서식. */}
+        {candidate.extendPrompt === undefined ? null : (
+          <View
+            testID={`trip-base-extendtrip-notice-${candidate.savedStayId}`}
+            className="w-full gap-[10px] rounded-[14px] border border-hairline bg-surface-soft p-lg"
+          >
+            <View className="w-full flex-row items-center gap-sm">
+              <WarningTriangleGlyph size={20} />
+              <Text className="flex-1 font-noto-bold text-body font-bold text-ink">
+                {candidate.extendPrompt}
+              </Text>
+            </View>
+            <View className="w-full flex-row items-center gap-sm">
+              <Pressable
+                testID="trip-base-extendtrip-cancel"
+                accessibilityRole="button"
+                onPress={() => onExtendCancel?.()}
+                className="h-12 flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
+              >
+                <Text className="font-noto-bold text-card-title font-bold text-muted">
+                  {EXTEND_CANCEL_LABEL}
+                </Text>
+              </Pressable>
+              <Pressable
+                testID="trip-base-extendtrip-confirm"
+                accessibilityRole="button"
+                onPress={() => onExtendConfirm?.(candidate.savedStayId)}
+                className="h-12 flex-1 items-center justify-center rounded-button bg-primary"
+              >
+                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+                  {EXTEND_CONFIRM_LABEL}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         )}
         {candidate.errorText === undefined ? null : (
@@ -481,6 +578,10 @@ export function TripWizardStep2Screen({
   generateDisabled,
   unresolved,
   coverageFailed,
+  fixSheet,
+  onFix,
+  onExtendConfirm,
+  onExtendCancel,
   onBack,
   onAssign,
   onRetryAssign,
@@ -664,6 +765,9 @@ export function TripWizardStep2Screen({
                           candidate={candidate}
                           onAssign={onAssign}
                           onRetryAssign={onRetryAssign}
+                          onFix={onFix}
+                          onExtendConfirm={onExtendConfirm}
+                          onExtendCancel={onExtendCancel}
                         />
                       ))}
                 </View>
@@ -680,6 +784,13 @@ export function TripWizardStep2Screen({
             </View>
           </ScrollView>
         ) : null}
+
+        {/* 열렸을 때만 마운트한다 — 상시 마운트하면 목록만 보는 사용자에게도 매 렌더 WebView가
+            따라붙는다. `key`로 숙소가 바뀌면 시트를 새로 세운다(앞 숙소의 지도 문서가 남지
+            않게 한다). */}
+        {fixSheet === undefined ? null : (
+          <TripBaseFixSheet key={fixSheet.savedStayId} {...fixSheet} />
+        )}
       </View>
     </SafeAreaView>
   );

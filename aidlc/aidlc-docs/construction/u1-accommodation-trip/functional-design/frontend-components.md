@@ -167,6 +167,8 @@ src/app/
 
 **[구현 결정 · TRIP-209, 2026-08-06]** 꼭 갈 곳 시드 testID 9종 — 이 문서 승인 당시 정해지지 않았다(공백). 티켓 고정 4종: `trip-wizard-mustvisit-{sourcePoiId}`(썸네일) · `trip-wizard-mustvisit-remove-{sourcePoiId}`(썸네일 `x`) · `trip-wizard-mustvisit-more`(점선 `더 담기`) · `trip-wizard-mustvisit-empty`(점선 `가고 싶은 곳 담기`, 0곳). 게이트①에서 확정한 신규 5종: `trip-wizard-mustvisit-block`(섹션 컨테이너) · `trip-wizard-mustvisit-image-{sourcePoiId}`(썸네일 사진, 있을 때만) · `trip-wizard-mustvisit-overflow`(`+N` 박스) · `trip-wizard-mustvisit-retry`(조회 실패 재시도 행) · `trip-wizard-mustvisit-banner`/`-banner-retry`(등록 실패 배너). 근거: `_workspace/20260805-trip209-mustvisit-seed/02a_test-design_spec.md` §2-4.
 
+**[드리프트 정정 · TRIP-226, 2026-08-07]** 지라 티켓 문면의 `trip-base-blocked-{id}`는 **쓰지 않는다.** 차단된 배정 후보 카드의 실물 testID는 `trip-base-assign-blocked-{id}`이고, `trip-base-blocked-*` 접두는 미해결 날짜 커버리지 안내행 3종(`trip-base-blocked-notice`(제목)·`trip-base-blocked-days`(날짜 나열)·`trip-base-blocked-more`(`외 N일` 접기 표시))이 이미 점유한 이름 공간이다 — 같은 접두를 카드에도 쓰면 두 다른 표면(안내행 vs 후보 카드)이 이름으로 충돌한다. 근거: `frontend/src/features/trip/ui/TripWizardStep2Screen.tsx:352,477,486,500` 실측.
+
 ## 7. PBT 대상 (클라이언트 순수 함수 · fast-check)
 
 | 대상 | 속성 |

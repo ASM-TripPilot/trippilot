@@ -744,3 +744,23 @@ D3(지라 TRIP-181 티켓 본문의 사실 오기 2건 — 빈 스텁 서술·�
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-225 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260807-trip225-base-screen/01b_ouroboros_seed.md`(D1·D2·D3·D6·D16·D16-b)·`00_gates.md`(게이트② 절)·`03_implementer_notes.md`. 이 항목이 손댄 `aidlc/` 파일은 `construction/u1-accommodation-trip/functional-design/{frontend-components.md,business-rules.md}`와 이 `audit.md` append뿐이다 — 같은 시점 다른 세션이 진행 중인 U2·U3 관련 파일(`aidlc-state.md`·`construction/u2-itinerary-intelligence/`·`construction/u3-ai-itinerary/`·`construction/plans/u2-*.md`·`construction/plans/u3-*.md`)은 손대지 않았다.
 
 ---
+
+## Post-Design Correction — U1 frontend-components.md·business-rules.md 거점 지정 전제 게이트 4건 (TRIP-226 [기록] 반영)
+**Timestamp**: 2026-08-08T01:15:00Z
+**User Input**: TRIP-226 사이클 [설계] 3-a 맹점 훑기에서 정본 반영 후보 A~E 5건을 제시했고, 사용자가 **A·B·C·D 4건을 선택**했다(게이트①-1 승인 시점엔 미수령이라 게이트② 재제시에서 수령 — `00_gates.md` "🔜 정본 반영 선택 — 수령 완료 (2026-08-07)"). E(e05 편집 모드 부재)는 지라 티켓(TRIP-192) 소관이라 이번 선택지에서 제외 — 개발로그 관측 + 후속 티켓 후보로만 남긴다.
+
+**AI Response**: 승인 완료된 `u1-accommodation-trip/functional-design/frontend-components.md`·`business-rules.md`의 **testID 드리프트 정정 + 경계 명문화 + 계약 공백 관측 2건**. 새 스토리·새 컴포넌트 계약(엔드포인트) 신설 0건 → 스테이지 진행 아님, `aidlc-state.md` 체크박스 변동 없음(TRIP-225 [기록]의 여덟 번째 후속에 이은 아홉 번째).
+
+(1) **frontend-components.md §6 — testID 드리프트 정정(A)**. 지라 티켓 문면의 `trip-base-blocked-{id}`는 실제로 쓰이지 않는다. 차단된 배정 후보 카드의 실물 testID는 `trip-base-assign-blocked-{id}`이고, `trip-base-blocked-*` 접두는 미해결 날짜 커버리지 안내행 3종(`-notice`·`-days`·`-more`)이 이미 점유한 이름 공간이다.
+
+(2) **business-rules.md BR-U1-27 — 기간 경계 등호 포함 명문화(B)**. `dateFrom >= trip.startDate && dateTo <= trip.endDate`이면 기간 안(경계일 포함), 아니면 벗어남. ⚠️ 서버 쪽 정본(`backend/docs/design/openapi.yaml`)에는 이 경계가 명시돼 있지 않아 **미확인**임을 함께 적었다 — 클라이언트 판정만 확정, BE 교차 확인 필요.
+
+(3) **business-rules.md BR-U1-56 뒤 — `error.code`·`fields[].reason` enum 부재 관측 신설(C, 규칙은 변경하지 않음, BE 티켓 후보)**. 계약에 오류 사유를 열거하는 스키마가 없어 클라이언트가 400/422/500을 상태 코드만으로 선판정한다(BR-U1-55 침묵 실패 금지와 긴장). enum을 발명하지 않고 관측만 기록했다.
+
+(4) **business-rules.md BR-U1-56 뒤 — `SavedStay` 신선도 필드 부재 관측 신설(D, 규칙은 변경하지 않음, BE 티켓 후보)**. 계약(`GetSavedStaysResponse`)에 최신성 확인 근거 필드가 없어 US-TRIP-04의 "최신 정보 확인 불가" 예외 AC를 클라이언트가 원리적으로 구현할 수 없다. US-TRIP-04를 채우는 마지막 칸(TRIP-178·224·225·226)이 끝나도 이 예외 AC는 **영구 미충족**으로 남는다 — 스토리 종료 판정 시 명시할 것.
+
+**미반영으로 남긴 것**: E(e05 편집 모드 부재) — 3-a에서 선택되지 않음, 지라 TRIP-192 후속 티켓 소관.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-226 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260807-trip226-base-gate/00_gates.md`(게이트①-1 §미수령·게이트② §정본 반영 선택)·`frontend/src/features/trip/ui/TripWizardStep2Screen.tsx:352,477,486,500`·`frontend/src/features/trip/model/baseGate.ts`(`isOutsideTripPeriod`). 이 항목이 손댄 `aidlc/` 파일은 `construction/u1-accommodation-trip/functional-design/{frontend-components.md,business-rules.md}`와 이 `audit.md` append뿐이다.
+
+---

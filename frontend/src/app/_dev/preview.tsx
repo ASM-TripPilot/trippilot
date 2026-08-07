@@ -139,6 +139,33 @@ const TERMS_ITEMS = [
  * ⚠️ 후보 카드의 사진·지역·거리·가격 자리는 회색으로 보인다 — `SavedStay` 계약에 그 필드가
  * 없어서다(01b D2). 구현 실패가 아니다.
  */
+/** g02 보완 시트(TRIP-226)의 대표값 — 좌표 미확정이라 지도 섹션이 그려지는 갈래다. */
+const FIX_SHEET_BASE: NonNullable<TripWizardStep2ScreenProps['fixSheet']> = {
+  savedStayId: 'stay-2',
+  stayName: '광안리 뷰 호텔',
+  center: { lat: 35.1587, lng: 129.1604 },
+  coordConfirmed: false,
+  pinDropped: false,
+  mapUnavailable: false,
+  dayOptions: [
+    { date: '2026-06-10', label: '6/10' },
+    { date: '2026-06-11', label: '6/11' },
+    { date: '2026-06-12', label: '6/12' },
+    { date: '2026-06-13', label: '6/13' },
+  ],
+  checkIn: null,
+  checkOut: null,
+  saveDisabled: true,
+  saveBlockedReason: '날짜를 모두 선택해 주세요',
+  saving: false,
+  onPinDrop: noop,
+  onConfirmCoord: noop,
+  onPickDay: noop,
+  onSave: noop,
+  onRetrySave: noop,
+  onClose: noop,
+};
+
 const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
   variant: 'default',
   subtitle: '6월 10일–13일',
@@ -638,6 +665,99 @@ const PREVIEW_STATES: PreviewState[] = [
         {...TRIP_BASE_SCREEN}
         generateDisabled
         coverageFailed
+      />
+    ),
+  },
+  // g02 전제 게이트 4변형(TRIP-226). 카드 표면 하나 + 시트 3갈래다. 시트도 화면과 같은
+  // 순수 프레젠테이션(`useState` 0건)이라 여기서 props 만 갈아 끼우면 얼굴이 그대로 나온다.
+  // ⚠️ 지도 갈래는 `EXPO_PUBLIC_KAKAO_MAP_JS_KEY` 가 있어야 WebView 가 뜬다 — 키가 없으면
+  // 아래 `mapfail` 과 같은 화면이 된다(그 판정이 실기에서 맞는지 보는 것이 이 상태의 목적).
+  {
+    key: 'trip-new-step2-gate',
+    label: '거점 숙소 2/2 · 전제 게이트',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        // 구간을 비워 후보 카드를 화면 위로 올린다 — 이 상태가 보여 줄 것은 카드 표면
+        // 넷(사유·보완 진입·기간 밖 경고·확장 질의)이고, 구간은 default 상태가 이미 보여 준다.
+        sections={[]}
+        candidates={[
+          {
+            savedStayId: 'stay-2',
+            name: '광안리 뷰 호텔',
+            isBase: false,
+            assignPending: false,
+            blockedReason: '지도에서 위치를 확인해 주세요',
+            fixLabel: '지도에서 위치 확인',
+          },
+          {
+            savedStayId: 'stay-3',
+            name: '감천 게스트하우스',
+            isBase: false,
+            assignPending: false,
+            blockedReason: '날짜가 없어 지정할 수 없어요',
+            fixLabel: '날짜 입력하기',
+          },
+          {
+            savedStayId: 'stay-5',
+            name: '제주 게스트하우스',
+            isBase: false,
+            assignPending: false,
+            outOfPeriodNote: '여행 기간을 벗어나요',
+          },
+          {
+            savedStayId: 'stay-6',
+            name: '서귀포 오션뷰 펜션',
+            isBase: false,
+            assignPending: false,
+            outOfPeriodNote: '여행 기간을 벗어나요',
+            extendPrompt: '여행 기간을 늘려서 지정할까요?',
+          },
+        ]}
+        onFix={noop}
+        onExtendConfirm={noop}
+        onExtendCancel={noop}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-fixsheet-map',
+    label: '거점 숙소 2/2 · 보완 시트(지도)',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        fixSheet={{ ...FIX_SHEET_BASE }}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-fixsheet-mapfail',
+    label: '거점 숙소 2/2 · 보완 시트(지도 불가)',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        fixSheet={{ ...FIX_SHEET_BASE, mapUnavailable: true }}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-fixsheet-error',
+    label: '거점 숙소 2/2 · 보완 시트(저장 실패)',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        fixSheet={{
+          ...FIX_SHEET_BASE,
+          coordConfirmed: true,
+          checkIn: '2026-06-11',
+          checkOut: '2026-06-13',
+          saveDisabled: false,
+          errorText: '저장하지 못했어요',
+        }}
       />
     ),
   },
