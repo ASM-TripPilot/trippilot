@@ -26,7 +26,7 @@ class StalePartialSweeperTest : StringSpec({
     fun partialUpdatedAt(at: Instant): Itinerary = Itinerary.reconstitute(
         UUID.randomUUID(), UUID.randomUUID(), com.trippilot.itinerarygeneration.domain.ItineraryStatus.PLANNED,
         SolveMode.FULL_AI, false, GenerationState.PARTIAL,
-        listOf(ItineraryDay.of(start, 0, emptyList())), at, at,
+        listOf(ItineraryDay.of(start, 0, emptyList())), at, at, null,
     )
 
     class Repo(seed: List<Itinerary>) : ItineraryRepository {

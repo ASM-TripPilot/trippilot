@@ -103,7 +103,8 @@ class Itinerary private constructor(
     val updatedAt: Instant,
     /**
      * 후보 충분성(BR-U2-05) — AI 판정값을 그대로 보관·전달. 백엔드는 재계산하지 않는다.
-     * **기본값을 두지 않는다** — 두면 상태 전이마다 조용히 null 로 떨어진다(endsNextDay·distanceRange 로 겪은 회귀).
+     * 생성자·[reconstitute] 모두 기본값을 두지 않는다 — 전이 진입점에 기본값이 있으면 호출자가 그냥 빠뜨리고
+     * 값이 조용히 사라진다(실제로 편집 경로에서 그렇게 유실됐다. endsNextDay·distanceRange 에 이은 세 번째).
      */
     val candidatesSummary: CandidatesSummary?,
 ) {
@@ -207,7 +208,7 @@ class Itinerary private constructor(
         fun reconstitute(
             itineraryId: UUID, tripId: UUID, status: ItineraryStatus, solveMode: SolveMode,
             isFallback: Boolean, generationState: GenerationState, days: List<ItineraryDay>,
-            createdAt: Instant, updatedAt: Instant, candidatesSummary: CandidatesSummary? = null,
+            createdAt: Instant, updatedAt: Instant, candidatesSummary: CandidatesSummary?,
         ): Itinerary = Itinerary(
             itineraryId, tripId, status, solveMode, isFallback, generationState,
             days.sortedBy { it.dayOrder }, createdAt, updatedAt, candidatesSummary,

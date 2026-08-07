@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.adapter.out.external
 
 import com.trippilot.itinerarygeneration.domain.CandidatesSummary
+import tools.jackson.databind.JsonNode
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
@@ -23,8 +24,13 @@ internal data class AiScheduleResponse(
     val days: List<AiDay> = emptyList(),
     val day1ReadyAt: Instant? = null,
     val explanations: Map<String, String> = emptyMap(),
-    // 후보 충분성 — AI 가 안 주면 null(백엔드가 지어내지 않는다).
-    val candidatesSummary: AiCandidatesSummary? = null,
+    /**
+     * 후보 충분성(`candidates_summary`) — **실제 형태가 미확정**이라(계약 초안의 `SufficiencyReport`)
+     * 타입을 고정하지 않고 원시 노드로 받는다. 객체가 아니어도(문자열·배열·null) 역직렬화가 깨지지 않아야 한다 —
+     * 이 필드 하나 때문에 정상 200 응답이 통째로 버려지고 MINIMAL 폴백으로 강등되면 안 된다(INV-4 취지 역행).
+     * 형태가 확정되면 데이터 클래스로 조인다(TRIP-282 묶음).
+     */
+    val candidatesSummary: JsonNode? = null,
     val solveMode: String,
     val isFallback: Boolean = false,
     val freshness: AiFreshness? = null,
@@ -45,18 +51,6 @@ internal data class AiSlot(
  * AI `FreshnessMeta` — 패킷 단일 source 의 신선도(외부 API 캐시 관점). 백엔드 도메인의
  * `FreshnessMeta(generatedAt, degraded)` 와 개념이 달라 아래 규칙으로 사영한다.
  */
-/**
- * AI 후보 충분성 보고(`candidates_summary`) — 판정은 AI 소유라 값을 그대로 받는다(등급을 재정의하지 않는다).
- *
- * ⚠ **실제 필드명이 아직 미확정이다**(계약 초안의 `SufficiencyReport`). 그래서 전 필드를 optional 로 두고,
- * `level` 이 없으면 요약 자체를 없는 것으로 본다 — 부가 메타 하나 때문에 일정 생성이 통째로 실패하면 안 된다.
- * 형태가 확정되면 여기만 조이면 된다(TRIP-282 묶음).
- */
-internal data class AiCandidatesSummary(
-    val level: String? = null,
-    val poolSize: Int = 0,
-    val shortfallCategories: List<String> = emptyList(),
-)
 
 internal data class AiFreshness(
     val source: String? = null,
@@ -79,10 +73,7 @@ internal fun AiScheduleResponse.toDomain(receivedAt: Instant): ScheduleAgentOutp
     },
     day1ReadyAt = day1ReadyAt,
     explanations = explanations,
-    // level 이 없으면 등급을 지어내지 않는다 — 없는 것으로 둔다.
-    candidatesSummary = candidatesSummary?.level?.let {
-        CandidatesSummary(it, candidatesSummary.poolSize, candidatesSummary.shortfallCategories)
-    },
+    candidatesSummary = candidatesSummary.toCandidatesSummary(),
     solveMode = solveMode.toSolveMode(),
     isFallback = isFallback,
     freshness = FreshnessMeta(freshness?.fetchedAt ?: receivedAt, degraded = freshness?.stale ?: false),
@@ -94,4 +85,18 @@ private fun String.toSolveMode(): SolveMode = when (uppercase()) {
     "RULE_FALLBACK", "DETERMINISTIC" -> SolveMode.DETERMINISTIC
     "MINIMAL" -> SolveMode.MINIMAL
     else -> throw IllegalArgumentException("알 수 없는 solve_mode: $this")
+}
+
+/**
+ * 원시 노드 → 후보 충분성. **없는 값을 지어내지 않는다** — level 이 없으면 요약 자체가 없는 것으로 보고,
+ * poolSize 가 없으면 0 이 아니라 null 로 둔다(0 은 "후보 0건"이라는 AI 판정으로 읽힌다).
+ */
+private fun JsonNode?.toCandidatesSummary(): CandidatesSummary? {
+    val node = this?.takeIf { it.isObject } ?: return null
+    val level = node.get("level")?.takeIf { it.isTextual }?.asString() ?: return null
+    val poolSize = node.get("pool_size")?.takeIf { it.isInt || it.isLong }?.asInt()
+    val shortfall = node.get("shortfall_categories")?.takeIf { it.isArray }
+        ?.mapNotNull { it.takeIf { n -> n.isTextual }?.asString() }
+        .orEmpty()
+    return CandidatesSummary(level, poolSize, shortfall)
 }

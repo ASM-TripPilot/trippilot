@@ -11,6 +11,7 @@ import com.trippilot.itinerarygeneration.application.SlotSurface
 import com.trippilot.itinerarygeneration.application.SlotSurfaceAssembler
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
+import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
@@ -111,7 +112,7 @@ data class ItineraryResponse(
             generationState = i.generationState.name,
             candidatesSummary = i.candidatesSummary?.let { CandidatesSummaryResponse(it.level, it.poolSize, it.shortfallCategories) },
             days = i.days.map { d ->
-                DayResponse(d.date, d.slots.map { s -> SlotResponse.of(s, surfaces[s.sourcePoiId]) })
+                DayResponse(d.date, d.slots.map { s -> SlotResponse.of(s, surfaces[s.sourcePoiId], i.status) })
             },
         )
     }
@@ -120,7 +121,7 @@ data class ItineraryResponse(
 data class DayResponse(val date: LocalDate, val slots: List<SlotResponse>)
 
 /** 후보 충분성(BR-U2-05) — **AI 판정값 그대로**. 백엔드는 level 을 재계산하지 않는다. */
-data class CandidatesSummaryResponse(val level: String, val poolSize: Int, val shortfallCategories: List<String>)
+data class CandidatesSummaryResponse(val level: String, val poolSize: Int?, val shortfallCategories: List<String>)
 
 /**
  * 방문 슬롯 표시 — 시각·순서만(INV-2, 소요시간 없음 INV-3).
@@ -131,6 +132,7 @@ data class CandidatesSummaryResponse(val level: String, val poolSize: Int, val s
  * POI 표면(이름·좌표·사진·영업시간)은 추가 왕복 없이 여기 실린다(BR-U3-09). 정본에도 동결본에도 없는
  * 장소는 표면 필드가 전부 null 이다 — 그 경우에도 슬롯 자체는 사라지지 않는다.
  * [openingHoursKnown] false = 영업시간 미확인 → 확정 배치가 아니라 사용자 확인 후보로 분리(US-SCHED-03 예외).
+ * **확정된 일정에서는 null** — 확정 전 분류 신호라 확정 뒤에는 판정 대상이 아니다.
  */
 data class SlotResponse(
     val poiId: UUID,
@@ -146,12 +148,12 @@ data class SlotResponse(
     val lng: Double?,
     val category: String?,
     val openingHours: String?,
-    val openingHoursKnown: Boolean,
+    val openingHoursKnown: Boolean?,
     val imageUrl: String?,
     val tags: List<String>,
 ) {
     companion object {
-        fun of(s: VisitSlot, surface: SlotSurface?) = SlotResponse(
+        fun of(s: VisitSlot, surface: SlotSurface?, status: ItineraryStatus) = SlotResponse(
             poiId = s.sourcePoiId,
             startAt = s.startAt,
             endAt = s.endAt,
@@ -165,7 +167,10 @@ data class SlotResponse(
             lng = surface?.lng,
             category = surface?.category,
             openingHours = surface?.openingHours,
-            openingHoursKnown = surface?.openingHoursKnown ?: false,
+            // 확정 일정에는 판정을 내지 않는다(null) — 이 값은 **확정 전 분류 신호**다.
+            // 확정 뒤에도 정본을 따라가면, 나중에 영업시간이 비는 순간 이미 확정된 슬롯이 "확인 필요"로
+            // 되돌아가 확정 일정의 안정성(INV-U1-03)을 깬다.
+            openingHoursKnown = if (status == ItineraryStatus.CONFIRMED) null else (surface?.openingHoursKnown ?: false),
             imageUrl = surface?.imageUrl,
             tags = surface?.tags.orEmpty(),
         )

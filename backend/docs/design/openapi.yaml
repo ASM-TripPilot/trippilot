@@ -987,17 +987,6 @@ components:
       required: [days]
       description: 편집(전체 교체) — 수정된 일자·슬롯 배열. 슬롯 순서 = 배열 순서
       properties:
-        candidatesSummary:
-          nullable: true
-          description: >
-            후보 충분성(BR-U2-05). **판정은 AI 소유** — 백엔드는 level 을 그대로 전달하고 재계산하지 않는다.
-            LOW 면 "후보가 적어요" 안내를 띄운다. AI 가 값을 주지 않으면 null.
-          type: object
-          required: [level, poolSize, shortfallCategories]
-          properties:
-            level: { type: string, enum: [HIGH, MEDIUM, LOW] }
-            poolSize: { type: integer }
-            shortfallCategories: { type: array, items: { type: string } }
         days:
           type: array
           items:
@@ -1041,17 +1030,6 @@ components:
       type: object
       required: [days]
       properties:
-        candidatesSummary:
-          nullable: true
-          description: >
-            후보 충분성(BR-U2-05). **판정은 AI 소유** — 백엔드는 level 을 그대로 전달하고 재계산하지 않는다.
-            LOW 면 "후보가 적어요" 안내를 띄운다. AI 가 값을 주지 않으면 null.
-          type: object
-          required: [level, poolSize, shortfallCategories]
-          properties:
-            level: { type: string, enum: [HIGH, MEDIUM, LOW] }
-            poolSize: { type: integer }
-            shortfallCategories: { type: array, items: { type: string } }
         days:
           type: array
           items:
@@ -1091,13 +1069,15 @@ components:
         candidatesSummary:
           nullable: true
           description: >
-            후보 충분성(BR-U2-05). **판정은 AI 소유** — 백엔드는 level 을 그대로 전달하고 재계산하지 않는다.
-            LOW 면 "후보가 적어요" 안내를 띄운다. AI 가 값을 주지 않으면 null.
+            후보 충분성(BR-U2-05). **판정은 AI 소유** — 백엔드는 값을 그대로 전달하고 재계산·검증하지 않는다.
+            AI 가 값을 주지 않거나 형태가 다르면 null. `level` 은 **열거로 고정하지 않는다** —
+            백엔드가 통과시키는 값이므로 AI 어휘(예: OK · LOW · NO_CANDIDATES)가 그대로 나갈 수 있다.
+            `poolSize` 는 AI 가 주지 않으면 없다(0 으로 채우지 않는다 — 0 은 "후보 0건"이라는 판정이다).
           type: object
-          required: [level, poolSize, shortfallCategories]
+          required: [level]
           properties:
-            level: { type: string, enum: [HIGH, MEDIUM, LOW] }
-            poolSize: { type: integer }
+            level: { type: string }
+            poolSize: { type: integer, nullable: true }
             shortfallCategories: { type: array, items: { type: string } }
         days:
           type: array
@@ -1110,7 +1090,7 @@ components:
                 type: array
                 items:
                   type: object
-                  required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, openingHoursKnown, tags]
+                  required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, tags]
                   properties:
                     poiId: { type: string, format: uuid }
                     startAt: { type: string, description: "HH:mm:ss (솔버 검증값 INV-2)" }
@@ -1145,9 +1125,12 @@ components:
                         NULL = 미확인.
                     openingHoursKnown:
                       type: boolean
+                      nullable: true
                       description: >
                         영업시간 확인 여부. false 면 확정 배치가 아니라 **사용자 확인 후보**로 분리한다
                         (US-SCHED-03 예외). 현재는 값 유무 판정까지만 신뢰할 수 있다.
+                        **확정된 일정(status=CONFIRMED)에서는 null** — 확정 전 분류 신호라 확정 뒤에는
+                        판정 대상이 아니다(정본을 따라가면 확정 슬롯이 사후에 재분류된다).
                     imageUrl:
                       type: string
                       nullable: true

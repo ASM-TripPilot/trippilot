@@ -102,8 +102,12 @@ class SecondPhaseGenerator(
                 d.slots.mapIndexed { slotIdx, s ->
                     VisitSlot.of(
                         s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
-                        endsNextDay = s.endsNextDay, distanceRange = s.distanceRange,
-                        placementReason = explanations[SlotKey.of(d.date, s.poiId)],
+                        endsNextDay = s.endsNextDay,
+                        // AI 문자열은 컬럼 상한을 넘을 수 있다 — 자르지 않으면 22001 로 생성 전체가 롤백된다.
+                        distanceRange = BoundedText.clamp(s.distanceRange, BoundedText.DISTANCE_RANGE_MAX),
+                        placementReason = BoundedText.clamp(
+                            explanations[SlotKey.of(d.date, s.poiId)], BoundedText.PLACEMENT_REASON_MAX,
+                        ),
                     )
                 },
             )

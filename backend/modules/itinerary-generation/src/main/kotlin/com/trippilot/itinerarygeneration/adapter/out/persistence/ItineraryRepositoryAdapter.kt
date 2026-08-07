@@ -105,13 +105,15 @@ class ItineraryRepositoryAdapter(
     )
 
     // ---- 후보 충분성 ↔ jsonb(Map). 읽기는 방어적으로 — 형태가 바뀌면 옛 행 조회가 영구히 깨진다.
-    private fun CandidatesSummary.toMap(): Map<String, Any> =
-        mapOf("level" to level, "poolSize" to poolSize, "shortfallCategories" to shortfallCategories)
+    private fun CandidatesSummary.toMap(): Map<String, Any> = buildMap {
+        put("level", level)
+        poolSize?.let { put("poolSize", it) } // 없으면 키 자체를 넣지 않는다(0 으로 채우면 판정을 지어내는 셈)
+        put("shortfallCategories", shortfallCategories)
+    }
 
-    @Suppress("UNCHECKED_CAST")
     private fun Map<String, Any>.toSummary(): CandidatesSummary? {
         val level = this["level"] as? String ?: return null
-        val poolSize = (this["poolSize"] as? Number)?.toInt() ?: 0
+        val poolSize = (this["poolSize"] as? Number)?.toInt()
         val shortfall = (this["shortfallCategories"] as? List<*>).orEmpty().filterIsInstance<String>()
         return CandidatesSummary(level, poolSize, shortfall)
     }

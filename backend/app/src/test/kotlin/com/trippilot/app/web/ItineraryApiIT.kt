@@ -7,6 +7,8 @@ import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
+import com.trippilot.placedata.domain.Poi
+import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -15,6 +17,7 @@ import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -40,6 +43,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var itineraries: ItineraryRepository
+    @Autowired private lateinit var pois: PoiRepository
 
     private val json = ObjectMapper()
     private val now = Instant.parse("2026-08-01T00:00:00Z")
@@ -82,6 +86,13 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
             }
         }
         error("2차 생성이 기한 내 끝나지 않았습니다. 마지막 상태=$last")
+    }
+
+    /** 하루 여행 — 생성이 2차 없이 즉시 COMPLETE 라 확정·편집을 바로 검증할 수 있다. */
+    private fun tripOneDay(token: String): String {
+        val body = """{"startDate":"2026-08-01","endDate":"2026-08-01","party":2,
+            "destinations":[{"seq":0,"region":"제주","nights":0}],"preferenceSnapshot":{}}""".trimIndent()
+        return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
     }
 
     private fun poiId(token: String): String =
@@ -155,6 +166,66 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val completed = awaitComplete(trip, token)
         completed["generationState"].asText() shouldBe "COMPLETE"
         completed["days"].size() shouldBe 2 // 08-01 ~ 08-02(체크아웃 포함)
+    }
+
+    @Test
+    fun `확정 후 원본 POI 가 개명돼도 확정 일정은 동결 이름을 보여준다(INV-U1-03 · TRIP-307)`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        val poi = poiId(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        val confirmedName = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+            .second["days"][0]["slots"][0]["nameKo"].asText()
+
+        // 확정 후 정본을 개명 — 확정 일정이 흔들리면 안 된다
+        val before = pois.findById(UUID.fromString(poi))!!
+        pois.saveAll(
+            listOf(
+                Poi.reconstitute(
+                    before.poiId, "이름이 바뀐 곳", before.lat, before.lng, before.category, before.region,
+                    before.openingHours, before.dataStatus, before.source, before.savedCount,
+                    before.createdAt, before.updatedAt, before.imageUrl, before.tags,
+                ),
+            ),
+        )
+
+        val after = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+            .second["days"][0]["slots"].let { slots -> (0 until slots.size()).map { slots[it] } }
+            .first { it["poiId"].asText() == poi }
+        after["nameKo"].asText() shouldBe confirmedName          // 동결값 유지
+        after["nameKo"].asText() shouldNotBe "이름이 바뀐 곳"
+        after["openingHoursKnown"].isNull shouldBe true          // 확정 일정엔 판정을 내지 않는다
+    }
+
+    @Test
+    fun `편집해도 추천 근거가 응답에 남고 표면도 실린다(TRIP-306·307)`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        val poi = poiId(token)
+        // 근거·요약을 넣은 상태를 만든 뒤 편집한다
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(
+                UUID.fromString(trip), SolveMode.FULL_AI, isFallback = false,
+                days = listOf(
+                    ItineraryDay.of(
+                        LocalDate.parse("2026-08-01"), 0,
+                        listOf(VisitSlot.of(UUID.fromString(poi), null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"), placementReason = "취향에 맞는 곳")),
+                    ),
+                ),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+                candidatesSummary = CandidatesSummary("LOW", 7, listOf("CAFE")),
+            ),
+        )
+
+        val editBody = """{"days":[
+            {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"13:00","endAt":"14:00","isFixed":false,"endsNextDay":false}]}]}"""
+        val (rc, body) = call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody)
+        rc shouldBe 200
+        // 시각만 옮긴 편집이 근거·요약을 지우면 안 된다(회귀 가드)
+        body["days"][0]["slots"][0]["placementReason"].asText() shouldBe "취향에 맞는 곳"
+        body["candidatesSummary"]["level"].asText() shouldBe "LOW"
+        body["days"][0]["slots"][0]["nameKo"].isNull shouldBe false // 편집 응답에도 표면이 실린다
     }
 
     @Test
