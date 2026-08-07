@@ -113,7 +113,7 @@ src/app/
 | `PartyPicker` | 인원 스테퍼 + 동반 유형(혼자·친구·연인·가족)(BR-U1-39) | — | — |
 | `PreferencePrefillCard` | "당신 취향으로 맞췄어요" + 칩 + [바꾸기] → 여행 단위 오버라이드(BR-U1-38) | — | `GET /me/preferences` |
 | `BudgetInputField` | **[구현 결정 · TRIP-207, 2026-08-02]** 예산 총액 입력(선택) — 온보딩 취향 러프값(`PreferenceView.budget.rawAmount`) 프리필 + "온보딩에서 고른 '{티어}({구간})' 범위로 채웠어요" 안내 문구, 비우면 `budgetTotal` 키 자체를 전송하지 않는다(BR-U1-38 덮어쓰기 허용). 이 문서 승인 당시 §4 표에 예산 컴포넌트 행이 없었다(공백) — TRIP-182의 `StateNotice`·`SkeletonList` 구현 결정 소급 기록 방식을 따른다. 근거: `_workspace/20260802-trip207-budget-block/01_spec-analyst_brief.md` §3·§7-④ | Zustand: `budgetText`·`touched.budget`(파생값, 프리필은 스토어에 쓰지 않음) | `GET /me/preferences`(프리필 출처, `PreferencePrefillCard`와 동일 조회 재사용) |
-| `BaseSectionList` | 구간별 거점("1~2박 6/10-6/12 부산 — {숙소} · 거점" + [변경]) | — | **[정정 · 2026-08-02]** 구간 행의 원본은 `GET /trips/{tripId}/bases`(BaseAssignment[])다. `GET /trips/{tripId}/coverage`는 **날짜별 판정·`blocked`**를 주는 별개 응답으로, 하단 CTA 차단에만 쓴다(BR-U1-44) · `DELETE /trips/{tripId}/bases/{baseAssignmentId}` |
+| `BaseSectionList` | 구간별 거점("1–2박 6/10–6/12 부산 — {숙소} · 거점" + [변경]) | — | **[정정 · 2026-08-02]** 구간 행의 원본은 `GET /trips/{tripId}/bases`(BaseAssignment[])다. `GET /trips/{tripId}/coverage`는 **날짜별 판정·`blocked`**를 주는 별개 응답으로, 하단 CTA 차단에만 쓴다(BR-U1-44) · `DELETE /trips/{tripId}/bases/{baseAssignmentId}` |
 | `BaseCandidateList` | 숙소 후보 카드 · "거점으로 지정" · 지정 시 "✓ N박 · {지역}에 지정됨" | — | `POST /trips/{tripId}/bases` |
 | `CoverageResolveSheet` | **차단형 해소 시트** — 미해결 날짜별 선택(겹침: 후보 목록 / 공백: 직전 숙소·여행지 중심·숙소 지정)(BR-U1-44·45) | props: unresolvedDays | `GET /trips/{tripId}/coverage` → 해소는 `POST /trips/{tripId}/bases` 재배정 |
 | `NoStayStartButton` | "숙소 없이 시작하기"(BR-U1-40) | — | `POST /trips` |
@@ -131,6 +131,18 @@ src/app/
 - 재시도 사정거리 = **실패분만** 재등록(`POST /trips`는 다시 보내지 않는다). 근거: 게이트①-1 사용자 결정.
 - 조회 실패 부제 `담은 곳을 불러오지 못했어요`(0곳 얼굴과 반드시 구분 — 캡션은 그리지 않는다). 근거: 게이트①-1 사용자 결정.
 - **담은 목록 도착 전에는 `[다음]`을 잠근다(비회원은 예외 — 비회원은 조회 자체가 안 나가 "불러오는 중"이 영원히 참이므로, 그 값에 그대로 잠그면 비회원이 여행을 영영 못 만든다).** ⚠️ **정본 AC 문장 없음** — 이 결정의 근거는 브리프·Seed 어디에도 없고, 게이트①-1 승인 이후 code-critic 적대적 리뷰가 찾은 무방비 경로(담은 목록 미도착 상태에서 제출하면 꼭 갈 곳이 통째로 빠진 채 침묵 통과)를 메우며 사용자가 내린 **게이트①-2 결정**이다. 근거: 게이트①-2(`00_gates.md` 게이트①-2 절, 2026-08-06 13:22) — AC 코드를 날조하지 않고 "게이트 결정"으로 표기한다.
+
+**[라이브 실측 · 2026-08-07, TRIP-225 [기록] 반영] g02 empty 변형(`1708:1183`)의 실제 구성 — 이 문서는 g02의 default(`1707:1183`)만 기술했고 empty는 공백이었다.** 제목 `숙소 없이 시작해도 돼요` + 주 CTA `숙소 없이 계속` + 보조 CTA `숙소 둘러보기`(→ `/stays`)의 2버튼 구성이다. default·empty 두 변형은 동시에 렌더되지 않으므로 `NoStayStartButton`은 두 변형에서 testID(`trip-base-nostay-start`)를 공유한다. 근거: `_workspace/20260807-trip225-base-screen/01b_ouroboros_seed.md` D3.
+
+**[구현 결정 · TRIP-225, 2026-08-07] g02 거점 배정 화면 5건 — 이 문서 승인 당시 없던 공백을 구현 단계에서 확정.** 아래는 전부 **요구사항 근거가 아니라 우리가 정한 구현 결정**이다 — 다음 사이클이 요구사항 근거로 인용하지 말 것.
+
+- 지정 시 보내는 `dateFrom`/`dateTo`는 `SavedStay.checkIn`/`checkOut` 값을 그대로 쓴다 — 별도 날짜 선택 UI는 신설하지 않는다. 근거: 게이트①③ 통합 승인(3-a 사용자 결정, D1).
+- 후보 카드의 사진·지역·거리·가격 4종은 계약 부재(`SavedStay`에 해당 필드 없음) — Figma 레이아웃대로 자리는 두되 값은 회색 플레이스홀더로 둔다(TRIP-224 D1 이연 승계). BE 계약 보강은 후속 티켓(사용자가 게이트②에서 지역·가격 보강 요청은 철회 — 사진은 미결로 남는다).
+- default 외 나머지 4변형 중 loading(`2454:1500`)·error(`2454:1639`)·blocked(`2454:1778`) 3얼굴을 신규 제작했다(empty는 위 라이브 실측 문단 참조).
+- `변경 >`은 DELETE로 배정만 해제하고 끝난다 — 후보 목록에서 다시 고른다. 별도 시트·스크롤 제어를 두지 않는다(TRIP-190 경계 비침범, D6).
+- 미해결 날짜 나열은 `status !== 'AUTO'`인 날짜 전부를 앞 2개 고정 + 3개 이상이면 `외 N일`로 접는다(TRIP-209 썸네일 상한 3 + `외 N곳` 선례와 같은 방식, D16). 막을지 판정의 권위는 여전히 `blocked` 필드 하나이고, 나열이 비어도 `blocked:true`면 막는다(D16-b).
+
+근거: `_workspace/20260807-trip225-base-screen/01b_ouroboros_seed.md`(D1·D2·D3·D6·D16·D16-b)·`03_implementer_notes.md`.
 
 ## 5. 폼 검증 (UX 사본 명세)
 
@@ -159,7 +171,6 @@ src/app/
 
 | 대상 | 속성 |
 |---|---|
-| ~~`resolveCoverage(trip, assignments) → DayResolution[]`~~ **[정정 · 2026-08-02] 클라이언트 대상이 아니다** — 실제 계약은 `GET /trips/{tripId}/coverage`가 날짜별 `status`(AUTO·GAP·OVERLAP)와 `blocked`를 **서버에서 계산해 준다**. 클라이언트가 같은 판정을 다시 구현하면 서버와 갈라지고 INV-2(사용자에게 보이는 판정은 서버·솔버 검증값)에 어긋난다. 이 줄은 계약보다 앞서 쓰였다. 클라이언트가 갖는 것은 **표시용 구간 파생**(`toBaseSections` — 박 번호 라벨·N박 묶음, TRIP-224)뿐이다 | 서버 소관(위 취소선) · 클라 대체 속성: 임의 배정 집합에서 결과 길이 = 입력 길이이고 다박 배정이 날짜 수만큼 쪼개지지 않는다(BR-U1-28) |
 | `nightsSum(destinations) ≤ tripLength` | 임의 도시·박수 조합에서 위반 시 항상 거부(INV-U1-14) |
 | `formatPrice(snapshot?)` | 스냅숏 없음 → 항상 "가격 미확인", 있음 → 항상 "~" 접미 시작가. **어떤 입력에서도 소요 시간 문자열을 만들지 않는다**(INV-3) |
 | `seedMustVisits(savedPlaces)` | 중복 `sourcePoiId` 없음 · 원본 담기 해제와 독립(복사본 보존) |
