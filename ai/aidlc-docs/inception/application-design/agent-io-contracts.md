@@ -1,6 +1,6 @@
 # Agent 입출력 계약 — Frontend IO ↔ Backend DB/API ↔ AI Agent I/O 대응
 
-> 근거 자료: `frontend/docs/와이어프레임-화면-IO정리.md`(화면 IO), `backend/docs/design/전체-최소-스키마.dbml`·`전체-API-서피스.md`(DB·REST 카탈로그), `ai/aidlc-docs/inception/reverse-engineering/api-documentation.md`(C1/C2/M7 논리 API).
+> 근거 자료: `frontend/docs/와이어프레임-화면-IO정리.md`(화면 IO), `backend/docs/design/전체-최소-스키마.dbml`·`전체-API-서피스.md`(DB·REST 카탈로그), `ai/aidlc-docs/inception/reverse-engineering/api-documentation.md`(C1/C2/M7 논리 API — 세분 경로는 폐기 방향, 0.1 참조).
 > 에이전트 구조는 `agent-hierarchy-design.md`(2계층)를 따른다.
 
 ---
@@ -20,11 +20,29 @@
 |---|---|
 | 클라 ↔ 백엔드 | JSON **camelCase**, `/api/v1`, Bearer (전체-API-서피스.md 기준) |
 | 백엔드 DB | **snake_case**, PK uuid, `timestamptz`(UTC) |
-| 백엔드 ↔ AI 서비스 | **snake_case** DTO. 프로토콜(REST/gRPC)은 AI-D01 미확정 — 본 문서는 논리 계약만 정의 |
+| 백엔드 ↔ AI 서비스 | **snake_case** DTO. 프로토콜은 **REST/JSON over HTTP 확정** (PR #76 결정4). 경계 HTTP 경로는 아래 0.1 |
 | 변환 책임 | camelCase↔snake_case 매핑은 **Kotlin 쪽(M8 등)이 소유**. AI 서비스는 snake_case만 안다 |
 | 표시 규칙 | 사용자 표시 DTO는 `VisitSlotDisplay` 계열만 — `internal_duration_min` 부재로 INV-3 정적 보장 |
 
 > ⚠ **정합성 플래그**: 와이어프레임(d06 "도보시간", d17 "총 이동시간", d18·e14 "이동/체류 시간", d27·b07 "평균 이동시간")은 INV-3(거리만 표시)와 상충한다. AI 계약은 INV-3를 따르며(시간값 미제공), 해당 화면은 **거리 표기로 대체되어야 한다**. 프론트 담당자와 조율 필요 — AI 서비스는 어떤 경우에도 표시용 이동시간을 반환하지 않는다.
+
+### 0.1 경계 HTTP 경로 (2026-08-07 확정)
+
+경계는 **딱 두 개**(포워드 ScheduleAgent · 리버스 POI 정본 read)이고, 조각 조립 경계는 두지 않는다(PR #76 "굵은 경계").
+경로 규칙: `/v1`만으로는 어느 서비스의 v1인지 모호하므로 **서비스명(`/ai`)을 접두**하고, 리소스명은 **산출물 기준(`itinerary`)** 으로 잡아
+백엔드 컨트롤러·스키마·DB 테이블 명칭과 통일한다. **`ScheduleAgent`는 "만드는 행위자"의 이름, `itinerary`는 "만들어진 산출물"의 이름** —
+층이 다르므로 에이전트명은 그대로 유지한다.
+
+| 방향 | 용도 | 경로 | 지위 |
+|---|---|---|---|
+| 포워드 | 일정 생성 (ScheduleAgent) | `POST /ai/v1/itinerary/generate` | **확정** — 구 표기 `POST /ai/generate`·`/ai/schedule` 폐기 |
+| 포워드 | 일정 검증 | `POST /ai/v1/itinerary/validate` | **확정** |
+| 포워드 | 일정 수리 | `POST /ai/v1/itinerary/repair` | **확정** |
+| 리버스 | POI 정본 read — 반경 (`find_by_radius`) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
+| 리버스 | POI 정본 read — 배치 (`find_by_ids`) | `POST /internal/pois/batch-get` · 요청 필드 `poi_ids` | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
+| 포워드 | AI 도우미 · Plan-B | `/ai/v1/...` 명명 규칙만 확정, 리소스명 **협의 중** | 미확정 |
+
+리버스 나머지(`nearby`·`open-window`·`closedCheck`)는 이연 — 협의 중.
 
 ---
 
@@ -322,7 +340,11 @@ class EventInfo:
 
 | 항목 | 상태 | 후속 |
 |---|---|---|
-| Kotlin↔Python 프로토콜 (REST vs gRPC) | 미확정 (AI-D01) | 확정 시 본 계약을 IDL(OpenAPI/proto)로 직렬화 |
+| Kotlin↔Python 프로토콜 (REST vs gRPC) | **확정 — REST/JSON over HTTP** (PR #76 결정4, 2026-08-04. AI-D01 종결. gRPC는 보류) | 단일 `openapi.yaml`을 정본으로 양쪽 코드젠 (경로는 0.1) |
+| AI 도우미·Plan-B 경계 경로 리소스명 | 협의 중 (명명 규칙 `/ai/v1/...`만 확정) | 확정 시 0.1 표 갱신 |
+| SolveMode 4↔3 매핑 · `explanations` 키 의미 · `candidates_summary` 대응 · `FreshnessMeta` 집계형 · `Violation` 스키마 | 협의 중 (TRIP-282) | 백엔드 회신 후 본 계약 갱신 |
+| `dataQuality` 등급 수 (AI 3등급 MINIMAL/PARTIAL/FULL ↔ 백엔드 2등급) | AI가 **MINIMAL 추가 요청**, 백엔드 회신 대기 | 회신 후 리버스 read 응답 스키마 확정 |
+| day1 조기노출 방식 | 협의 중 (백엔드 "1차 스코프 제외" 제안에 AI 역제안 게시, 회신 대기) | 확정 시 `day1_ready_at` 시맨틱 확정 |
 | AI 도우미 채팅 화면 | 와이어프레임에 부재 (M16, 타 팀 담당) | 자연어 입력의 진입점은 당분간 구조화 UI + EditAgent 자연어 편집. → `intent-matching-design.md`는 M16 합류 시 그대로 적용 |
 | 와이어프레임 시간 표기 vs INV-3 | 상충 플래그 | 프론트 조율 필요. AI 계약은 시간 미제공 유지 |
 | trigger_event 발행 주체 | 백엔드(M9) vs AI 정보 에이전트 | Weather/TransitAgent는 "판정"까지, 이벤트 발행·푸시는 백엔드 소유로 제안 (아웃박스 경유) |
