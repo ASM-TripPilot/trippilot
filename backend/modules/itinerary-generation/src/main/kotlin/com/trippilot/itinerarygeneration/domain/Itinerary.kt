@@ -100,7 +100,7 @@ class Itinerary private constructor(
                 d.slots.map { s ->
                     VisitSlot.of(
                         s.sourcePoiId, snapshotByPoi.getValue(s.sourcePoiId), s.orderIndex,
-                        s.startAt, s.endAt, s.isFixed, s.hasViolation,
+                        s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, // 자정 넘김(HC4) 보존 — 누락 시 검증 실패
                     )
                 },
             )

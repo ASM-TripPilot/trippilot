@@ -75,13 +75,14 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     fun `자정 넘김 슬롯 저장·조회 — ends_next_day 관통(TRIP-279)`() {
         val token = newToken()
         val trip = newTrip(token)
-        // 스텁은 자정 슬롯을 안 만드므로 리포지토리로 직접 저장 → 마이그레이션 CHECK 완화 + 엔티티 매핑 + DTO 노출 검증.
+        // Fake 는 자정 슬롯을 안 만드므로 리포지토리로 직접 저장 → CHECK 완화 + 엔티티 매핑 + DTO 노출 검증.
+        // POI 는 실 ACTIVE 정본을 쓴다(확정 시 poi_snapshot 동결이 가능해야 함).
         val midnight = Itinerary.create(
             UUID.fromString(trip), SolveMode.DETERMINISTIC, isFallback = false,
             days = listOf(
                 ItineraryDay.of(
                     LocalDate.parse("2026-08-01"), 0,
-                    listOf(VisitSlot.of(UUID.randomUUID(), null, 0, LocalTime.parse("23:00"), LocalTime.parse("01:00"), endsNextDay = true)),
+                    listOf(VisitSlot.of(UUID.fromString(poiId(token)), null, 0, LocalTime.parse("23:00"), LocalTime.parse("01:00"), endsNextDay = true)),
                 ),
             ),
             now = Instant.parse("2026-08-01T00:00:00Z"),
@@ -94,6 +95,11 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         slot["endsNextDay"].asBoolean() shouldBe true // 저장→조회→직렬화 전 구간 관통
         slot.has("startAt") shouldBe true
         slot.has("endAt") shouldBe true
+
+        // 확정도 통과해야 한다 — 동결 재조립에서 플래그가 빠지면 endAt<startAt 검증에 걸려 400(회귀).
+        val (confirmRc, confirmed) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+        confirmRc shouldBe 200
+        confirmed["days"][0]["slots"][0]["endsNextDay"].asBoolean() shouldBe true
     }
 
     @Test
@@ -175,14 +181,16 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
 
         val editBody = """{"days":[
-            {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"10:00","endAt":"11:00","isFixed":false}]},
-            {"date":"2026-08-02","slots":[{"poiId":"$poi","startAt":"09:00","endAt":"10:00","isFixed":false}]}]}""".trimIndent()
+            {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"10:00","endAt":"11:00","isFixed":false,"endsNextDay":false}]},
+            {"date":"2026-08-02","slots":[{"poiId":"$poi","startAt":"23:00","endAt":"01:00","isFixed":false,"endsNextDay":true}]}]}""".trimIndent()
         val (rc, body) = call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody)
         rc shouldBe 200
         body["status"].asText() shouldBe "PLANNED"
         val slot = body["days"][0]["slots"][0]
         slot["poiId"].asText() shouldBe poi
         slot["hasViolation"].asBoolean() shouldBe false // Fake validate 빈 목록(위반 내용 검증은 229)
+        // 자정 넘김 슬롯도 편집으로 재현·보존된다(회귀) — 요청에 endsNextDay 를 실어야 소실되지 않는다.
+        body["days"][1]["slots"][0]["endsNextDay"].asBoolean() shouldBe true
 
         // 조회에도 편집 반영
         call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second["days"][0]["slots"][0]["poiId"].asText() shouldBe poi
