@@ -37,6 +37,13 @@ class VisitSlot private constructor(
     val isFixed: Boolean,
     val hasViolation: Boolean,
     val endsNextDay: Boolean,   // 자정 넘김(HC4) — true 면 endAt(익일 시각) < startAt 허용
+    /**
+     * 직전 지점에서 이 슬롯까지의 이동 **거리 표시 문자열**(BR-U2-08) — 예 "약 1.2km · 도보 추정".
+     * 소요시간은 어떤 이유로도 담지 않는다(INV-3). 직선거리 폴백이면 "추정" 표기가 문자열에 포함된다.
+     */
+    val distanceRange: String?,
+    /** 추천 이유(BR-U2-04). 시각·소요시간 언급 없음(BR-U2-09) — 문구 집행은 AI 책임. */
+    val placementReason: String?,
 ) {
     companion object {
         fun of(
@@ -48,13 +55,15 @@ class VisitSlot private constructor(
             isFixed: Boolean = false,
             hasViolation: Boolean = false,
             endsNextDay: Boolean = false,
+            distanceRange: String? = null,
+            placementReason: String? = null,
         ): VisitSlot {
             val errors = mutableListOf<FieldError>()
             if (orderIndex < 0) errors += FieldError("orderIndex", "순서는 0 이상입니다.")
             // 자정 넘김이면 endAt 이 익일 시각이라 startAt 보다 작을 수 있음(HC4) — 그 경우만 허용.
             if (endAt < startAt && !endsNextDay) errors += FieldError("endAt", "종료 시각은 시작 이후여야 합니다.")
             if (errors.isNotEmpty()) throw ValidationFailed(errors)
-            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay)
+            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay, distanceRange, placementReason)
         }
     }
 }
@@ -92,11 +101,17 @@ class Itinerary private constructor(
     val days: List<ItineraryDay>,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /**
+     * 후보 충분성(BR-U2-05) — AI 판정값을 그대로 보관·전달. 백엔드는 재계산하지 않는다.
+     * 생성자·[reconstitute] 모두 기본값을 두지 않는다 — 전이 진입점에 기본값이 있으면 호출자가 그냥 빠뜨리고
+     * 값이 조용히 사라진다(실제로 편집 경로에서 그렇게 유실됐다. endsNextDay·distanceRange 에 이은 세 번째).
+     */
+    val candidatesSummary: CandidatesSummary?,
 ) {
     /** 확정 — PLANNED + 생성 완료만 가능(이미 확정이거나 생성 중이면 409). 상태 전이만(동결 없음). */
     fun confirm(now: Instant): Itinerary {
         requireConfirmable()
-        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, isFallback, generationState, days, createdAt, now)
+        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, isFallback, generationState, days, createdAt, now, candidatesSummary)
     }
 
     /**
@@ -111,12 +126,14 @@ class Itinerary private constructor(
                 d.slots.map { s ->
                     VisitSlot.of(
                         s.sourcePoiId, snapshotByPoi.getValue(s.sourcePoiId), s.orderIndex,
-                        s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, // 자정 넘김(HC4) 보존 — 누락 시 검증 실패
+                        // 동결은 스냅숏 참조만 붙이는 것 — 표시값은 **전부 그대로 옮긴다**.
+                        // 하나라도 빠뜨리면 확정하는 순간 조용히 사라진다(endsNextDay 로 이미 겪은 회귀).
+                        s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange, s.placementReason,
                     )
                 },
             )
         }
-        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, isFallback, generationState, frozenDays, createdAt, now)
+        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, isFallback, generationState, frozenDays, createdAt, now, candidatesSummary)
     }
 
     /**
@@ -139,6 +156,7 @@ class Itinerary private constructor(
         now: Instant,
         secondSolveMode: SolveMode = solveMode,
         secondIsFallback: Boolean = isFallback,
+        secondCandidatesSummary: CandidatesSummary? = null,
     ): Itinerary {
         if (generationState != GenerationState.PARTIAL) {
             throw ConflictDetected(message = "생성 중인 일정이 아닙니다.")
@@ -151,6 +169,8 @@ class Itinerary private constructor(
             // 저하가 사용자·운영에 감춰진다(INV-4 침묵 금지).
             itineraryId, tripId, status, maxOf(solveMode, secondSolveMode), isFallback || secondIsFallback,
             GenerationState.COMPLETE, allDays.sortedBy { it.dayOrder }, createdAt, now,
+            // 2차가 요약을 주면 그 값(전 일자 기준), 없으면 1차 값 유지
+            secondCandidatesSummary ?: candidatesSummary,
         )
     }
 
@@ -161,6 +181,7 @@ class Itinerary private constructor(
         }
         return Itinerary(
             itineraryId, tripId, status, solveMode, isFallback, GenerationState.FAILED, days, createdAt, now,
+            candidatesSummary,
         )
     }
 
@@ -171,14 +192,15 @@ class Itinerary private constructor(
             isFallback: Boolean,
             days: List<ItineraryDay>,
             now: Instant,
-            generationState: GenerationState = GenerationState.COMPLETE, // 단일 호출=완료. 2단계(day1)는 U5 이후 PARTIAL 사용
+            generationState: GenerationState = GenerationState.COMPLETE, // 단일 호출=완료. 2단계(day1)는 PARTIAL
+            candidatesSummary: CandidatesSummary? = null,
         ): Itinerary {
             if (days.map { it.dayOrder }.toSet().size != days.size) {
                 throw ValidationFailed(listOf(FieldError("days", "일자 순서(dayOrder)는 중복될 수 없습니다.")))
             }
             return Itinerary(
                 UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, solveMode, isFallback, generationState,
-                days.sortedBy { it.dayOrder }, now, now,
+                days.sortedBy { it.dayOrder }, now, now, candidatesSummary,
             )
         }
 
@@ -186,10 +208,10 @@ class Itinerary private constructor(
         fun reconstitute(
             itineraryId: UUID, tripId: UUID, status: ItineraryStatus, solveMode: SolveMode,
             isFallback: Boolean, generationState: GenerationState, days: List<ItineraryDay>,
-            createdAt: Instant, updatedAt: Instant,
+            createdAt: Instant, updatedAt: Instant, candidatesSummary: CandidatesSummary?,
         ): Itinerary = Itinerary(
             itineraryId, tripId, status, solveMode, isFallback, generationState,
-            days.sortedBy { it.dayOrder }, createdAt, updatedAt,
+            days.sortedBy { it.dayOrder }, createdAt, updatedAt, candidatesSummary,
         )
     }
 }

@@ -70,11 +70,17 @@ class SecondPhaseGenerator(
                 log.info("2차 결과 폐기 — 그 사이 일정이 바뀜(state={}). tripId={}", current.generationState, tripId)
                 return@execute null
             }
+            val remaining = output.toRemainingDays(current.days.size, secondInput.timeWindows.map { it.date })
+            SlotKey.warnIfUnmatched(
+                received = output.explanations.size,
+                matched = remaining.sumOf { d -> d.slots.count { it.placementReason != null } },
+                tripId = tripId,
+            )
             // 1차분(day1)은 영속본 그대로 보존하고 뒤에 이어붙인다 — 이미 노출된 날을 흔들지 않는다.
             val updated = current.completeGeneration(
-                current.days + output.toRemainingDays(current.days.size, secondInput.timeWindows.map { it.date }),
+                current.days + remaining,
                 clock.instant(),
-                output.solveMode, output.isFallback,
+                output.solveMode, output.isFallback, output.candidatesSummary,
             )
             // 조건부 쓰기 — 위 가드를 읽은 뒤 재생성이 끼어들었으면 여기서 0행이 되어 아무것도 덮어쓰지 않는다.
             if (!itineraries.replaceIfCurrent(tripId, itineraryId, updated)) {
@@ -100,7 +106,15 @@ class SecondPhaseGenerator(
             ItineraryDay.of(
                 d.date, offset + idx,
                 d.slots.mapIndexed { slotIdx, s ->
-                    VisitSlot.of(s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed, endsNextDay = s.endsNextDay)
+                    VisitSlot.of(
+                        s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
+                        endsNextDay = s.endsNextDay,
+                        // AI 문자열은 컬럼 상한을 넘을 수 있다 — 자르지 않으면 22001 로 생성 전체가 롤백된다.
+                        distanceRange = BoundedText.clamp(s.distanceRange, BoundedText.DISTANCE_RANGE_MAX),
+                        placementReason = BoundedText.clamp(
+                            explanations[SlotKey.of(d.date, s.poiId)], BoundedText.PLACEMENT_REASON_MAX,
+                        ),
+                    )
                 },
             )
         }

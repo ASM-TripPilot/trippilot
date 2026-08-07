@@ -1066,6 +1066,19 @@ components:
             (day1만 동결된 채 잠기거나, 뒤이어 도착하는 2차 결과가 편집을 덮어쓰는 것 방지).
             생성 POST 는 day1 만 담은 PARTIAL 을 즉시 반환하므로, 클라이언트는 GET 으로 COMPLETE/FAILED 까지
             폴링해 나머지 일자를 받는다(여행이 하루면 즉시 COMPLETE).
+        candidatesSummary:
+          nullable: true
+          description: >
+            후보 충분성(BR-U2-05). **판정은 AI 소유** — 백엔드는 값을 그대로 전달하고 재계산·검증하지 않는다.
+            AI 가 값을 주지 않거나 형태가 다르면 null. `level` 은 **열거로 고정하지 않는다** —
+            백엔드가 통과시키는 값이므로 AI 어휘(예: OK · LOW · NO_CANDIDATES)가 그대로 나갈 수 있다.
+            `poolSize` 는 AI 가 주지 않으면 없다(0 으로 채우지 않는다 — 0 은 "후보 0건"이라는 판정이다).
+          type: object
+          required: [level]
+          properties:
+            level: { type: string }
+            poolSize: { type: integer, nullable: true }
+            shortfallCategories: { type: array, items: { type: string } }
         days:
           type: array
           items:
@@ -1077,7 +1090,7 @@ components:
                 type: array
                 items:
                   type: object
-                  required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation]
+                  required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, tags]
                   properties:
                     poiId: { type: string, format: uuid }
                     startAt: { type: string, description: "HH:mm:ss (솔버 검증값 INV-2)" }
@@ -1085,6 +1098,44 @@ components:
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean, description: "자정 넘김(HC4) — true 면 endAt 은 익일 시각(시작일 귀속)" }
                     hasViolation: { type: boolean, description: "편집 재검증(HC1-4) 위반 표시(비차단)" }
+                    placementReason:
+                      type: string
+                      nullable: true
+                      description: >
+                        이 장소를 고른 이유(BR-U2-04). 문구는 시각·소요시간을 언급하지 않는다(BR-U2-09) —
+                        집행은 AI 프롬프트·후처리 책임이고 경계에서 문자열 검사는 하지 않는다.
+                    distanceRange:
+                      type: string
+                      nullable: true
+                      description: >
+                        직전 지점에서의 이동 **거리 표시 문자열**(BR-U2-08) — 예 "약 1.2km · 도보 추정".
+                        직선거리 폴백이면 "추정" 표기가 포함된다. 소요시간은 어떤 이유로도 싣지 않는다(INV-3).
+                        편집 직후에는 순서가 바뀌어 값이 무효라 null 이다(재산출은 TRIP-309).
+                    # --- POI 표면(BR-U3-09) — 추가 왕복 없이 지도·카드를 그릴 수 있게 합성해 싣는다.
+                    #     확정 슬롯은 동결값(INV-U1-03)이 이긴다. 정본·동결본 모두 없으면 전부 null.
+                    nameKo: { type: string, nullable: true }
+                    lat: { type: number, format: double, nullable: true }
+                    lng: { type: number, format: double, nullable: true }
+                    category: { type: string, nullable: true }
+                    openingHours:
+                      type: string
+                      nullable: true
+                      description: >
+                        영업시간 **원문 문자열**(자유형) — 기계 판정에 쓰지 말 것. structured 스키마는 U6.
+                        NULL = 미확인.
+                    openingHoursKnown:
+                      type: boolean
+                      nullable: true
+                      description: >
+                        영업시간 확인 여부. false 면 확정 배치가 아니라 **사용자 확인 후보**로 분리한다
+                        (US-SCHED-03 예외). 현재는 값 유무 판정까지만 신뢰할 수 있다.
+                        **확정된 일정(status=CONFIRMED)에서는 null** — 확정 전 분류 신호라 확정 뒤에는
+                        판정 대상이 아니다(정본을 따라가면 확정 슬롯이 사후에 재분류된다).
+                    imageUrl:
+                      type: string
+                      nullable: true
+                      description: NULL = 미확보. 기본 이미지를 지어내지 않는다(TRIP-219)
+                    tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
                     # INV-3: 소요시간(duration) 필드 없음 — 거리만(후속)
 
     TermsType:

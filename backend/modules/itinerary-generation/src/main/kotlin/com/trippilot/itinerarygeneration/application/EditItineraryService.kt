@@ -97,14 +97,20 @@ class EditItineraryService(
 
     /** 편집안 + 위반 → 새 일정 슬롯 배열(위반 슬롯 has_violation=true). identity·createdAt·solveMode 는 현행 보존. */
     private fun reshape(current: Itinerary, edit: EditItinerary, violations: List<Violation>): Itinerary {
+        // 편집은 전체 교체라 클라이언트가 안 보내는 파생값(추천 근거)은 여기서 이어받지 않으면 사라진다.
+        // 장소를 30분 옮겼다고 "왜 이 장소를 골랐는지"가 달라지지는 않으므로 (날짜, poiId) 로 맞춰 옮긴다.
+        val reasonBySlot = current.days.flatMap { d -> d.slots.map { (d.date to it.sourcePoiId) to it.placementReason } }.toMap()
         val days = edit.days.mapIndexed { dayIdx, d ->
             ItineraryDay.of(
                 d.date, dayIdx,
                 d.slots.mapIndexed { slotIdx, s ->
                     val violated = violations.any { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
+                    // distanceRange 는 싣지 않는다(null) — 순서·시각이 바뀌면 직전 거리는 이미 틀린 값이다.
+                    // 재산출은 AI 검증·수리(TRIP-309) 몫이라, 그때까지는 낡은 값을 보여주느니 비워 둔다.
                     VisitSlot.of(
                         s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
                         hasViolation = violated, endsNextDay = s.endsNextDay,
+                        placementReason = reasonBySlot[d.date to s.poiId],
                     )
                 },
             )
@@ -112,6 +118,7 @@ class EditItineraryService(
         return Itinerary.reconstitute(
             current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.isFallback,
             current.generationState, days, current.createdAt, clock.instant(), // 생성 진행 상태는 편집과 무관 — 보존
+            current.candidatesSummary, // 후보 충분성도 편집과 무관 — 보존(빠뜨리면 편집 한 번에 영구 소실)
         )
     }
 

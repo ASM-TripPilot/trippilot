@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.adapter.out.persistence
 
+import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -39,7 +40,8 @@ class ItineraryRepositoryAdapter(
                 slots.save(
                     VisitSlotEntity(
                         UUID.randomUUID(), dayId, s.sourcePoiId, s.poiSnapshotId,
-                        s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay,
+                        s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange,
+                        s.placementReason,
                     ),
                 )
             }
@@ -85,7 +87,7 @@ class ItineraryRepositoryAdapter(
                 (slotsByDay[d.itineraryDayId] ?: emptyList()).map { s ->
                     VisitSlot.of(
                         s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation,
-                        s.endsNextDay,
+                        s.endsNextDay, s.distanceRange, s.placementReason,
                     )
                 },
             )
@@ -93,9 +95,26 @@ class ItineraryRepositoryAdapter(
         return Itinerary.reconstitute(
             itineraryId, tripId, ItineraryStatus.valueOf(status), SolveMode.valueOf(solveMode),
             isFallback, GenerationState.valueOf(generationState), domainDays, createdAt, updatedAt,
+            candidatesSummary?.toSummary(),
         )
     }
 
-    private fun Itinerary.toEntity() =
-        ItineraryEntity(itineraryId, tripId, status.name, solveMode.name, isFallback, generationState.name, createdAt, updatedAt)
+    private fun Itinerary.toEntity() = ItineraryEntity(
+        itineraryId, tripId, status.name, solveMode.name, isFallback, generationState.name, createdAt, updatedAt,
+        candidatesSummary?.toMap(),
+    )
+
+    // ---- 후보 충분성 ↔ jsonb(Map). 읽기는 방어적으로 — 형태가 바뀌면 옛 행 조회가 영구히 깨진다.
+    private fun CandidatesSummary.toMap(): Map<String, Any> = buildMap {
+        put("level", level)
+        poolSize?.let { put("poolSize", it) } // 없으면 키 자체를 넣지 않는다(0 으로 채우면 판정을 지어내는 셈)
+        put("shortfallCategories", shortfallCategories)
+    }
+
+    private fun Map<String, Any>.toSummary(): CandidatesSummary? {
+        val level = this["level"] as? String ?: return null
+        val poolSize = (this["poolSize"] as? Number)?.toInt()
+        val shortfall = (this["shortfallCategories"] as? List<*>).orEmpty().filterIsInstance<String>()
+        return CandidatesSummary(level, poolSize, shortfall)
+    }
 }

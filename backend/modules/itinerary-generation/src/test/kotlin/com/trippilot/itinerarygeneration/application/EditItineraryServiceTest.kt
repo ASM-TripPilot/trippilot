@@ -6,6 +6,9 @@ import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.Itinerary
+import com.trippilot.itinerarygeneration.domain.ItineraryStatus
+import com.trippilot.itinerarygeneration.domain.GenerationState
+import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.RepairResult
@@ -174,6 +177,28 @@ class EditItineraryServiceTest : StringSpec({
             EditItineraryService(trips(true), repo, EditFakeAgent(), log, NOOP_TX, clock).edit(acc, tripId, editReq)
         }
         log.appended shouldBe emptyList()
+    }
+
+    "편집해도 추천 근거·후보 요약이 살아남는다(TRIP-306 회귀 가드)" {
+        // 편집안의 장소 중 하나에 근거를 달아두고, 편집 후에도 그 장소에 붙어 있는지 본다
+        val poi = editReq.days.single().slots.first().poiId
+        val base = Itinerary.reconstitute(
+            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, false,
+            GenerationState.COMPLETE,
+            listOf(
+                ItineraryDay.of(
+                    day, 0,
+                    listOf(VisitSlot.of(poi, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"), placementReason = "취향에 맞는 곳")),
+                ),
+            ),
+            clock.instant(), clock.instant(), CandidatesSummary("LOW", 7, listOf("CAFE")),
+        )
+        val result = EditItineraryService(trips(true), repoWith(base), EditFakeAgent(), RecordingChangeLog(), NOOP_TX, clock)
+            .edit(acc, tripId, editReq)
+
+        // 장소를 옮겼다고 "왜 이 장소를 골랐는지"가 사라지면 안 된다
+        result.days.single().slots.first { it.sourcePoiId == poi }.placementReason shouldBe "취향에 맞는 곳"
+        result.candidatesSummary?.level shouldBe "LOW"
     }
 
     "편집하면 새 배열로 교체 + 위반 없으면 hasViolation=false" {
