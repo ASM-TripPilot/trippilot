@@ -13,10 +13,20 @@ from trippilot.c2.travel import haversine_km
 from trippilot.domain.common import BudgetLevel, GeoPoint
 from trippilot.domain.poi import Poi, PoiCategory
 
+# 축은 "그 카테고리가 일정의 주 목적지가 되는 정도" — 명소 최상, 식음은 중간,
+# 쇼핑은 보조, STAY는 앵커라 0(선택 대상 아님). PoiCategory 전 값 커버 필수(직접 조회).
+# 신규 3종은 이 축 위에서:
+#   NIGHT_VIEW 0.9 — SIGHT 계열이나 야간 시간대에만 유효. 규칙 점수는 시간대 인지가 없어
+#                    SIGHT(1.0)와 동률이면 주간 슬롯에서 과선택된다 → 한 단 아래.
+#   NATURE     0.9 — 관람형 주 목적지(SIGHT 계열)지만 날씨 의존이 커 기본값은 한 단 아래.
+#   CULTURE    0.8 — 박물관·미술관·공연은 관심 의존도가 커 보편 선호가 낮다 → FOOD와 동급.
 CATEGORY_WEIGHT: dict[PoiCategory, float] = {
     PoiCategory.SIGHT: 1.0,
     PoiCategory.ACTIVITY: 0.9,
+    PoiCategory.NIGHT_VIEW: 0.9,
+    PoiCategory.NATURE: 0.9,
     PoiCategory.FOOD: 0.8,
+    PoiCategory.CULTURE: 0.8,
     PoiCategory.CAFE: 0.6,
     PoiCategory.SHOPPING: 0.5,
     PoiCategory.STAY: 0.0,

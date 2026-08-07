@@ -13,11 +13,28 @@ from trippilot.domain.common import GeoPoint, PoiId
 
 
 class PoiCategory(Enum):
+    """경계 카테고리 8종 + 내부 전용 STAY (TRIP-281).
+
+    앞 8종은 백엔드 `/internal/pois` read 포트가 내보내는 경계 코드와 값·집합이 동일하다
+    (`backend/.../placedata/domain/Poi.kt` 한글 정본 ↔ `PoiInternalController.boundaryCode()`:
+    명소=SIGHT · 맛집=FOOD · 카페=CAFE · 야경=NIGHT_VIEW · 자연=NATURE · 쇼핑=SHOPPING ·
+    문화=CULTURE · 액티비티=ACTIVITY).
+
+    한↔영 매핑은 **백엔드 리버스 read 포트(BE-5)가 이미 수행**해 영문 코드로 내보내므로
+    이 모듈에는 매핑이 필요 없다. 다만 한글 값을 그대로 받는 다른 경계(예: DB 직접 조회·
+    레거시 응답)가 생기면 매핑 어댑터가 필요하며, 그 위치는 U5 경계 어댑터 소관이다.
+    """
+
     FOOD = "FOOD"
     CAFE = "CAFE"
     SIGHT = "SIGHT"
+    NIGHT_VIEW = "NIGHT_VIEW"
+    NATURE = "NATURE"
+    CULTURE = "CULTURE"
     ACTIVITY = "ACTIVITY"
     SHOPPING = "SHOPPING"
+    # 내부 전용(숙소 앵커·체류시간 계산). 경계 카테고리 8종에 포함되지 않으며
+    # `/internal/pois` 응답에 등장하지 않는다 (PR #104 회신).
     STAY = "STAY"
 
 
