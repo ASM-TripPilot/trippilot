@@ -22,6 +22,19 @@ interface ScheduleAgentPort {
 /** 생성 방식(d11 추천 강도 분기). */
 enum class GenerationMode { FULLY_AI, CO_PLAN }
 
+/**
+ * ScheduleAgent 호출 실패 — **유효한 200 을 받지 못한 경우만**(경계 계약 PR #104).
+ * AI 가 200 을 반환하면 `isFallback=true` 여도 이 예외를 던지지 않는다(그건 AI 가 이미 폴백을 마친 결과물).
+ * 이 예외가 곧 백엔드 결정론 폴백(INV-4) 발동 신호.
+ * [retryable]: 네트워크 단절 등 재시도 가능 여부(현 정책은 재시도 없이 즉시 폴백 — 진단용 정보).
+ */
+class ScheduleAgentCallFailed(
+    val errorCode: String?,
+    val retryable: Boolean,
+    message: String,
+    cause: Throwable? = null,
+) : RuntimeException(message, cause)
+
 // ───────── 입력: ScheduleAgentInput ─────────
 
 data class ScheduleAgentInput(
