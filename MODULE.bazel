@@ -75,3 +75,22 @@ oci.pull(
     tag = "3.11-slim",
 )
 use_repo(oci, "nginx_alpine", "nginx_alpine_linux_amd64", "nginx_alpine_linux_arm64_v8", "python_slim", "python_slim_linux_amd64", "python_slim_linux_arm64_v8", "temurin_jre", "temurin_jre_linux_amd64", "temurin_jre_linux_arm64_v8")
+
+# ── OTel Java 에이전트 (TRIP-218) ───────────────────────────────
+# 트레이스·메트릭은 이 에이전트가 담당한다. 백엔드 이미지를 Bazel 로 옮기면서도
+# 에이전트는 그대로 따라와야 한다 — 빠지면 앱은 멀쩡히 뜨고 SigNoz 에만
+# 아무것도 안 들어온다(에러 없이 조용히).
+#
+# 버전은 backend/gradle/libs.versions.toml 의 opentelemetryInstrumentation 과
+# **같은 릴리스 트레인**이어야 한다. 어긋나면 로그에 trace_id 가 실리지 않아
+# 로그↔트레이스 상관이 끊긴다.
+http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+http_file(
+    name = "otel_javaagent",
+    downloaded_file_path = "otel-agent.jar",
+    # 체크섬을 고정한다 — 릴리스 태그는 옮겨질 수 있고, 이 에이전트는 우리 JVM
+    # 안에서 바이트코드를 고쳐 쓴다.
+    sha256 = "9d6bc2ad8dd8fb7f730984988e57b8ac0a82d81c7b3b8ae795378718733a509d",
+    urls = ["https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.30.0/opentelemetry-javaagent.jar"],
+)

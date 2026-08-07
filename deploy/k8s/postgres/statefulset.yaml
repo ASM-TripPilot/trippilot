@@ -1,74 +1,74 @@
-# PostgreSQL 은 StatefulSet 으로 둔다. Deployment 로 두면 롤링 업데이트 때
-# 파드 두 개가 같은 볼륨을 잡으려 해서 데이터가 깨진다.
-#
-# 초기화 SQL(app_migrate·app_user 롤 + app 스키마)은 backend/docker/init 을
-# 그대로 ConfigMap 으로 만들어 마운트한다 — deploy/bin/deploy.sh 가 배포 시점에
-# 생성한다. 여기에 SQL 을 복사해두면 compose 쪽과 조용히 갈라진다.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: postgres
+  name: trippilot-postgres
   namespace: trippilot
   labels:
-    app: postgres
+    app.kubernetes.io/name: trippilot-postgres
 spec:
-  serviceName: postgres
+  # StatefulSet 을 쓰는 이유는 복제가 아니라 **저장소** 때문이다. Deployment + PVC 로도
+  # 되지만, 롤링 시 새 파드가 옛 파드와 같은 볼륨을 동시에 잡으려다 멈춘다.
+  # StatefulSet 은 종료 후 생성 순서를 보장해 그 교착이 없다.
+  serviceName: trippilot-postgres
   replicas: 1
   selector:
     matchLabels:
-      app: postgres
+      app.kubernetes.io/name: trippilot-postgres
   template:
     metadata:
       labels:
-        app: postgres
+        app.kubernetes.io/name: trippilot-postgres
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: postgres:16-alpine     # docker-compose.yml 과 같은 태그
           ports:
             - name: postgres
               containerPort: 5432
-          envFrom:
-            - secretRef:
-                name: postgres-credentials
           env:
+            - name: POSTGRES_DB
+              value: trippilot
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
             - name: TZ
               value: UTC
-            # 기본 데이터 디렉토리에 바로 쓰면 볼륨 루트의 lost+found 때문에
-            # initdb 가 "directory not empty" 로 거부한다.
+            # 볼륨 루트에 바로 초기화하지 않고 하위 디렉터리를 쓴다.
+            # 마운트 지점에 남는 메타데이터가 있으면 initdb 가 "디렉터리가 비어있지 않다"며 거부한다.
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            # 이 디렉터리의 .sql 은 **데이터 디렉터리가 비어 있을 때만** 실행된다.
+            # 이미 초기화된 PVC 에 파일을 바꿔 넣어도 반영되지 않는다 —
+            # 롤을 바꾸려면 `just db-reset` 으로 PVC 를 지우고 다시 만들어야 한다.
             - name: init
               mountPath: /docker-entrypoint-initdb.d
               readOnly: true
+          # exec 프로브를 쓴다. postgres 는 HTTP 를 말하지 않는다.
+          # -U/-d 를 명시하지 않으면 컨테이너 기본 사용자로 붙어 로그에 인증 실패가 쌓인다.
           readinessProbe:
             exec:
-              command:
-                - pg_isready
-                - -U
-                - postgres
-                - -d
-                - trippilot
-            initialDelaySeconds: 5
+              command: ["pg_isready", "-U", "postgres", "-d", "trippilot"]
             periodSeconds: 5
-            failureThreshold: 12
+            failureThreshold: 6
           livenessProbe:
             exec:
-              command:
-                - pg_isready
-                - -U
-                - postgres
+              command: ["pg_isready", "-U", "postgres", "-d", "trippilot"]
             initialDelaySeconds: 30
-            periodSeconds: 15
+            periodSeconds: 10
+            failureThreshold: 6
           resources:
             requests:
               cpu: 100m
               memory: 256Mi
             limits:
-              memory: 1Gi
+              memory: 512Mi
       volumes:
         - name: init
           configMap:
@@ -78,6 +78,8 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
+        # kind 기본 StorageClass(standard / rancher.io/local-path)를 쓴다.
+        # storageClassName 을 적지 않는 이유: 다른 로컬 클러스터에서도 기본값으로 동작하도록.
         resources:
           requests:
             storage: 2Gi

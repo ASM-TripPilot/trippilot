@@ -18,7 +18,8 @@ spec:
       containers:
         - name: frontend
           image: trippilot/frontend:local
-          imagePullPolicy: IfNotPresent
+          # kind load 로 적재한 이미지. 레지스트리가 없으므로 Never.
+          imagePullPolicy: Never
           ports:
             - name: http
               containerPort: 80

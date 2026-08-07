@@ -1,27 +1,17 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend
+  name: trippilot-backend
   namespace: trippilot
+  labels:
+    app.kubernetes.io/name: trippilot-backend
 spec:
-  selector:
-    app: backend
-  ports:
-    - name: http
-      port: 8080
-      targetPort: http
----
-# 호스트에서 http://localhost:8081 로 직접 때려보기 위한 통로
-# (kind cluster.yaml 의 extraPortMappings 30081 → 8081).
-apiVersion: v1
-kind: Service
-metadata:
-  name: backend-nodeport
-  namespace: trippilot
-spec:
+  # NodePort 30081 은 deploy/kind/cluster.yaml 의 extraPortMappings 로 호스트 8081 에 연결된다.
+  # 덕분에 port-forward 없이 `curl http://localhost:8081` 로 바로 닿는다.
+  # 두 값은 한 쌍이므로 한쪽만 바꾸면 접근이 끊긴다.
   type: NodePort
   selector:
-    app: backend
+    app.kubernetes.io/name: trippilot-backend
   ports:
     - name: http
       port: 8080

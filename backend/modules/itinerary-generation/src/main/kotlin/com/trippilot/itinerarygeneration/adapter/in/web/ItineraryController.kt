@@ -60,10 +60,19 @@ class ItineraryController(
 
 /** 편집 요청 — 수정된 전체 일자·슬롯 배열(슬롯 순서 = 배열 순서). */
 data class EditItineraryRequest(val days: List<EditDayRequest>) {
-    fun toCommand() = EditItinerary(days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.poiId, it.startAt, it.endAt, it.isFixed) }) })
+    fun toCommand() = EditItinerary(
+        days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
+    )
 }
 data class EditDayRequest(val date: LocalDate, val slots: List<EditSlotRequest>)
-data class EditSlotRequest(val poiId: UUID, val startAt: LocalTime, val endAt: LocalTime, val isFixed: Boolean)
+/** [endsNextDay]: 자정 넘김(HC4). 전체 교체라 조회 응답의 현행 값을 그대로 실어야 플래그가 소실되지 않는다. */
+data class EditSlotRequest(
+    val poiId: UUID,
+    val startAt: LocalTime,
+    val endAt: LocalTime,
+    val isFixed: Boolean,
+    val endsNextDay: Boolean = false,
+)
 
 /** 생성 요청 — 방식(미지정 시 FULLY_AI). */
 data class GenerateItineraryRequest(val generationMode: GenerationMode?)
@@ -74,6 +83,7 @@ data class ItineraryResponse(
     val status: String,
     val solveMode: String,
     val isFallback: Boolean,
+    val generationState: String,
     val days: List<DayResponse>,
 ) {
     companion object {
@@ -83,6 +93,7 @@ data class ItineraryResponse(
             status = i.status.name,
             solveMode = i.solveMode.name,
             isFallback = i.isFallback,
+            generationState = i.generationState.name,
             days = i.days.map { d ->
                 DayResponse(d.date, d.slots.map { s -> SlotResponse(s.sourcePoiId, s.startAt, s.endAt, s.isFixed, s.endsNextDay, s.hasViolation) })
             },

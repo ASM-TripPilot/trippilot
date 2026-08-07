@@ -5,6 +5,7 @@
 # 그 디렉토리를 Bazel 에 열어주면 Gradle 산출물 수만 개를 매 빌드마다 스캔한다.
 
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
+cd "${REPO_ROOT}"
 
 SRC_DIR="backend/app/build/libs"
 DEST_DIR="deploy/artifacts/backend"

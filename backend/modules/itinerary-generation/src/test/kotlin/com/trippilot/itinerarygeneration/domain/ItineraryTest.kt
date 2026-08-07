@@ -33,6 +33,49 @@ class ItineraryTest : StringSpec({
         itinerary().confirm(now).status shouldBe ItineraryStatus.CONFIRMED
     }
 
+    "생성 중(PARTIAL)인 일정은 확정 불가 409 — day1 만 동결된 채 잠기는 것 방지" {
+        val partial = Itinerary.create(
+            trip, SolveMode.FULL_AI, false,
+            listOf(ItineraryDay.of(LocalDate.parse("2026-08-10"), 0, listOf(slot(0)))),
+            now, GenerationState.PARTIAL,
+        )
+        shouldThrow<ConflictDetected> { partial.confirm(now) }
+        shouldThrow<ConflictDetected> { partial.confirm(mapOf(), now) }
+    }
+
+    "2차 완료 전이 — PARTIAL→COMPLETE, 전 일자 반영·identity 보존" {
+        val partial = Itinerary.create(
+            trip, SolveMode.FULL_AI, false,
+            listOf(ItineraryDay.of(LocalDate.parse("2026-08-10"), 0, listOf(slot(0)))),
+            now, GenerationState.PARTIAL,
+        )
+        val allDays = listOf(
+            ItineraryDay.of(LocalDate.parse("2026-08-10"), 0, listOf(slot(0))),
+            ItineraryDay.of(LocalDate.parse("2026-08-11"), 1, listOf(slot(0))),
+        )
+        val completed = partial.completeGeneration(allDays, now)
+        completed.generationState shouldBe GenerationState.COMPLETE
+        completed.days.size shouldBe 2
+        completed.itineraryId shouldBe partial.itineraryId // identity 보존
+        completed.status shouldBe partial.status
+    }
+
+    "2차 실패 전이 — PARTIAL→FAILED, 1차분 유지" {
+        val partial = Itinerary.create(
+            trip, SolveMode.FULL_AI, false,
+            listOf(ItineraryDay.of(LocalDate.parse("2026-08-10"), 0, listOf(slot(0)))),
+            now, GenerationState.PARTIAL,
+        )
+        val failed = partial.failGeneration(now)
+        failed.generationState shouldBe GenerationState.FAILED
+        failed.days.size shouldBe 1 // day1 은 유효
+    }
+
+    "COMPLETE 상태에서 전이 호출은 409(생성 중 아님)" {
+        shouldThrow<ConflictDetected> { itinerary().completeGeneration(emptyList(), now) }
+        shouldThrow<ConflictDetected> { itinerary().failGeneration(now) }
+    }
+
     "이미 확정된 일정 재확정은 409" {
         val confirmed = itinerary().confirm(now)
         shouldThrow<ConflictDetected> { confirmed.confirm(now) }
@@ -42,6 +85,24 @@ class ItineraryTest : StringSpec({
         shouldThrow<ValidationFailed> {
             VisitSlot.of(UUID.randomUUID(), null, 0, LocalTime.parse("11:00"), LocalTime.parse("10:00"))
         }
+    }
+
+    "확정(동결)해도 자정 넘김 플래그가 보존된다 — 누락 시 검증 실패로 확정 불가(회귀)" {
+        val poi = UUID.randomUUID()
+        val midnight = Itinerary.create(
+            trip, SolveMode.DETERMINISTIC, isFallback = false,
+            days = listOf(
+                ItineraryDay.of(
+                    LocalDate.parse("2026-08-10"), 0,
+                    listOf(VisitSlot.of(poi, null, 0, LocalTime.parse("23:00"), LocalTime.parse("01:00"), endsNextDay = true)),
+                ),
+            ),
+            now = now,
+        )
+        val confirmed = midnight.confirm(mapOf(poi to UUID.randomUUID()), now) // 던지면 안 됨
+        val slot = confirmed.days.single().slots.single()
+        slot.endsNextDay shouldBe true
+        slot.poiSnapshotId shouldBe confirmed.days.single().slots.single().poiSnapshotId // 동결도 유지
     }
 
     "자정 넘김(endsNextDay)이면 종료<시작 허용(HC4)" {

@@ -12,6 +12,7 @@ import 'just/frontend.just'
 import 'just/ai.just'
 import 'just/bazel.just'
 import 'just/k8s.just'
+import 'just/observability.just'
 
 # 인자 없이 just 를 치면 레시피 목록을 보여준다.
 default:

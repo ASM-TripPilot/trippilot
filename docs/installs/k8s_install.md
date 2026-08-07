@@ -3,7 +3,15 @@
 이 문서는 macOS에서 Docker와 Kubernetes 기반의 로컬 개발환경을 구성하는 방법을 설명합니다.
 
 > **모든 팀원은 가능한 한 동일한 개발환경을 사용해야 합니다.**
-> 임의로 Minikube, kind, Colima, Rancher Desktop 등의 다른 Kubernetes 환경을 사용하지 마세요.
+> 이 프로젝트의 로컬 Kubernetes는 **kind**입니다. Docker Desktop 내장 Kubernetes,
+> Minikube, Colima, Rancher Desktop 등 다른 환경을 임의로 쓰지 마세요.
+>
+> **Docker Desktop은 계속 필요합니다** — kind가 그 위에서 노드를 컨테이너로 띄우기 때문입니다.
+> 다만 Docker Desktop의 *내장 Kubernetes 기능*은 켜지 않습니다(7장 참조).
+>
+> kind를 쓰는 이유는 클러스터 정의를 **코드로 고정**할 수 있어서입니다.
+> 노드 수와 포트 매핑이 `deploy/kind/cluster.yaml`에 있으므로 팀원 간 환경 차이가 생기지 않고,
+> 깨졌을 때 GUI를 헤매는 대신 클러스터를 지우고 한 줄로 다시 만들 수 있습니다.
 
 ---
 
@@ -19,7 +27,7 @@
   - [6. Docker Desktop 리소스 설정](#6-docker-desktop-리소스-설정)
     - [메모리가 8GB인 경우](#메모리가-8gb인-경우)
     - [메모리가 16GB 이상인 경우](#메모리가-16gb-이상인-경우)
-  - [7. Kubernetes 활성화](#7-kubernetes-활성화)
+  - [7. Kubernetes 활성화 (kind)](#7-kubernetes-활성화-kind)
   - [8. kubectl 설치](#8-kubectl-설치)
   - [9. Helm 설치](#9-helm-설치)
   - [10. k9s 설치](#10-k9s-설치)
@@ -57,7 +65,7 @@
     - [`docker: command not found`](#docker-command-not-found)
     - [`Cannot connect to the Docker daemon`](#cannot-connect-to-the-docker-daemon)
     - [`kubectl: command not found`](#kubectl-command-not-found)
-    - [현재 컨텍스트가 `docker-desktop`이 아님](#현재-컨텍스트가-docker-desktop이-아님)
+    - [현재 컨텍스트가 `kind-trippilot`이 아님](#현재-컨텍스트가-kind-trippilot이-아님)
     - [`The connection to the server ... was refused`](#the-connection-to-the-server--was-refused)
     - [노드가 `NotReady` 상태](#노드가-notready-상태)
     - [Pod가 `Pending` 상태](#pod가-pending-상태)
@@ -84,7 +92,7 @@
 | 도구 | 용도 |
 | --- | --- |
 | Docker Desktop | 컨테이너 이미지 빌드 및 실행 |
-| Docker Desktop Kubernetes | 로컬 Kubernetes 클러스터 |
+| kind | 로컬 Kubernetes 클러스터 (Docker Desktop 위에서 노드를 컨테이너로 실행) |
 | kubectl | Kubernetes 클러스터 관리 |
 | Helm | Kubernetes 애플리케이션 설치 및 관리 |
 | k9s | Kubernetes 리소스 터미널 UI 모니터링 |
@@ -95,7 +103,7 @@
 
 ```text
 로컬 개발
-└── Docker Desktop Kubernetes
+└── kind (Docker Desktop 위)
 
 팀 통합 테스트
 └── AWS EKS 개발 클러스터
@@ -286,24 +294,75 @@ MacBook 메모리에 따라 다음 값을 권장합니다.
 
 ---
 
-## 7. Kubernetes 활성화
+## 7. Kubernetes 활성화 (kind)
 
-Docker Desktop에서 다음 메뉴로 이동합니다.
+### 7.1 Docker Desktop 내장 Kubernetes는 끕니다
 
 ```text
-Docker Desktop → Settings → Kubernetes
+Docker Desktop → Settings → Kubernetes → Enable Kubernetes 해제
 ```
 
-다음과 같이 설정합니다.
+이미 꺼져 있다면 그대로 둡니다. 켜 두면 `kubectl` 컨텍스트가 `docker-desktop`과 `kind-trippilot` 둘로 늘어나, 어느 클러스터에 배포했는지 헷갈리고 메모리도 이중으로 씁니다.
 
-1. **Enable Kubernetes**를 활성화합니다.
-2. 클러스터 프로비저닝 방식(**Kubeadm** / **Kind**)을 선택하는 항목이 있다면, 특별한 안내가 없는 한 기본값을 그대로 사용합니다.
-3. **Apply & Restart**를 선택합니다.
-4. Kubernetes가 준비될 때까지 기다립니다.
+### 7.2 kind 설치
 
-Kubernetes 시작이 완료되면 Docker Desktop에서 Kubernetes가 실행 중인 상태로 표시됩니다.
+```bash
+brew install kind
+```
 
-> Kubernetes 설정 화면은 Docker Desktop 버전에 따라 조금 다르게 보일 수 있습니다.
+설치 확인:
+
+```bash
+kind version
+```
+
+### 7.3 클러스터 생성
+
+클러스터 정의는 저장소에 있습니다(`deploy/kind/cluster.yaml`). 직접 만들지 말고 스크립트를 쓰세요.
+
+```bash
+cd <프로젝트 루트>
+./deploy/bin/cluster-up.sh
+```
+
+이 스크립트는 **멱등**입니다. 이미 클러스터가 있으면 생성을 건너뛰고, SigNoz도 이미 있으면 설치를 건너뜁니다. 클러스터 생성과 SigNoz 설치를 함께 하므로 3~4분 걸립니다.
+
+생성 확인:
+
+```bash
+kind get clusters          # trippilot
+kubectl config current-context   # kind-trippilot
+kubectl get nodes
+```
+
+```text
+NAME                      STATUS   ROLES           AGE   VERSION
+trippilot-control-plane   Ready    control-plane   1m    v1.36.1
+```
+
+### 7.4 포트 매핑을 미리 알아둘 것
+
+`deploy/kind/cluster.yaml`이 노드 컨테이너의 포트를 호스트로 끌어옵니다.
+
+| 호스트 | NodePort | 용도 |
+|---|---|---|
+| `localhost:8081` | 30081 | 백엔드 API |
+| `localhost:8080` | 30080 | SigNoz UI |
+
+덕분에 `kubectl port-forward` 없이 바로 접근됩니다.
+
+> **`extraPortMappings`는 클러스터 생성 시점에만 정할 수 있습니다.** 포트를 추가하려면 클러스터를 다시 만들어야 합니다.
+>
+> 그리고 이 매핑이 이미 호스트 포트를 잡고 있으므로, 같은 포트로 `port-forward`를 겹쳐 열지 마세요. 리스너가 둘 생겨 어느 쪽이 응답할지 OS 바인딩 우선순위에 달리게 됩니다.
+
+### 7.5 클러스터를 새로 만들려면
+
+```bash
+kind delete cluster --name trippilot
+./deploy/bin/cluster-up.sh
+```
+
+> 수집한 로그·트레이스와 DB 데이터가 **전부 사라집니다.**
 
 ---
 
@@ -330,13 +389,13 @@ kubectl config current-context
 다음 결과가 출력되어야 합니다.
 
 ```text
-docker-desktop
+kind-trippilot
 ```
 
-다른 값이 나온다면 Docker Desktop 컨텍스트로 변경합니다.
+다른 값이 나온다면 kind 컨텍스트로 변경합니다.
 
 ```bash
-kubectl config use-context docker-desktop
+kubectl config use-context kind-trippilot
 ```
 
 클러스터 연결 상태와 노드를 확인합니다.
@@ -346,27 +405,14 @@ kubectl cluster-info
 kubectl get nodes
 ```
 
-출력 예시는 §7에서 선택한 프로비저닝 방식에 따라 다릅니다.
-
-**Kubeadm 방식** — 단일 노드
-
 ```text
-NAME             STATUS   ROLES           AGE   VERSION
-docker-desktop   Ready    control-plane   ...   ...
+NAME                      STATUS   ROLES           AGE   VERSION
+trippilot-control-plane   Ready    control-plane   ...   v1.36.1
 ```
 
-**Kind 방식** — control-plane 1대 + worker 2대
+단일 노드입니다. 백엔드가 단일 배포 모놀리스(D04)라 노드 간 분산은 검증 대상이 아니고, 노드를 늘리면 이미지를 노드마다 적재해야 하며 메모리만 더 듭니다. 필요해지면 `deploy/kind/cluster.yaml`의 `nodes`에 `- role: worker`를 추가합니다.
 
-```text
-NAME                    STATUS   ROLES           AGE   VERSION
-desktop-control-plane   Ready    control-plane   ...   ...
-desktop-worker          Ready    <none>          ...   ...
-desktop-worker2         Ready    <none>          ...   ...
-```
-
-**노드 이름과 개수는 달라도 무방합니다.** 모든 노드의 `STATUS`가 `Ready`이면 정상입니다.
-
-> 컨텍스트 이름은 두 방식 모두 `docker-desktop`으로 동일합니다. 노드 이름(`desktop-control-plane`)과 혼동하지 마세요.
+> **컨텍스트 이름은 `kind-trippilot`, 노드 이름은 `trippilot-control-plane`입니다.** kind는 컨텍스트 이름에 `kind-` 접두사를 붙이므로 둘이 다릅니다 — 혼동하지 마세요.
 
 시스템 Pod를 확인합니다.
 
@@ -478,7 +524,7 @@ k9s --context <CONTEXT_NAME>
 
 > **주의**
 > `Ctrl + d`는 확인 절차가 짧아 실수로 리소스를 삭제하기 쉽습니다.
-> 로컬 `docker-desktop` 컨텍스트가 아닌 곳에서는 사용하지 마세요.
+> 로컬 `kind-trippilot` 컨텍스트가 아닌 곳에서는 사용하지 마세요.
 
 ### 10.4 읽기 전용 모드
 
@@ -559,7 +605,7 @@ aws --version
 필수 확인 항목:
 
 - `docker version`이 오류 없이 실행됨
-- `kubectl config current-context` 결과가 `docker-desktop`
+- `kubectl config current-context` 결과가 `kind-trippilot`
 - `kubectl get nodes`의 노드가 `Ready`
 - Helm 버전이 출력됨
 - k9s 버전이 출력됨
@@ -692,77 +738,55 @@ kubectl config set-context \
 
 ## 15. 프로젝트 컨테이너 이미지 빌드
 
-프로젝트 루트에서 다음 명령을 실행합니다.
-
 ```bash
-docker build -t <APPLICATION_NAME>:dev .
+./deploy/bin/build.sh
 ```
 
-예:
+이 스크립트가 하는 일은 두 가지입니다.
 
-```bash
-docker build -t student-api:dev .
-```
+1. `docker build -t trippilot-backend:dev backend`
+2. `kind load docker-image trippilot-backend:dev --name trippilot`
+
+> **2번을 빠뜨리면 배포가 안 됩니다.**
+> kind 노드는 호스트 Docker와 **별도의 이미지 스토어**를 씁니다. `docker build`만 하면 노드에서는 그 이미지가 보이지 않아 파드가 `ErrImageNeverPull`로 멈춥니다. `kind load`가 이미지를 노드 안으로 복사합니다.
+>
+> Docker Desktop 내장 Kubernetes를 쓸 때는 이 단계가 필요 없었습니다. 같은 이미지 스토어를 공유했기 때문입니다. kind로 옮기면서 새로 생긴 단계이니 특히 주의하세요.
+
+백엔드는 11개 모듈을 컨테이너 안에서 전부 빌드하므로 **첫 빌드는 5분 이상** 걸립니다. Gradle 캐시를 BuildKit 캐시 마운트에 두었으므로 두 번째부터는 훨씬 빠릅니다.
 
 이미지 생성 확인:
 
 ```bash
-docker image ls
+docker image ls | grep trippilot-backend
 ```
-
-컨테이너만 먼저 실행해 확인하려면 다음 명령을 사용합니다.
-
-```bash
-docker run --rm \
-  -p 8080:8080 \
-  <APPLICATION_NAME>:dev
-```
-
-예:
-
-```bash
-docker run --rm \
-  -p 8080:8080 \
-  student-api:dev
-```
-
-> 애플리케이션의 실제 포트가 8080이 아니라면 프로젝트 설정에 맞게 변경합니다.
 
 ---
 
 ## 16. 로컬 Kubernetes에 프로젝트 배포
 
-프로젝트에서 **Kustomize**를 사용하는 경우:
-
 ```bash
-kubectl apply -k k8s/overlays/local
+./deploy/bin/deploy.sh
 ```
 
-프로젝트에서 **일반 Kubernetes YAML 파일**을 사용하는 경우:
+PostgreSQL을 먼저 세우고 기동을 기다린 뒤 백엔드를 적용합니다.
+
+> **DB가 먼저 떠야 합니다.** 백엔드는 기동 시 Flyway 마이그레이션을 돌리므로, DB 없이 뜨면 접속 실패로 죽습니다. `deploy.sh`가 순서를 지키고, Deployment의 initContainer가 한 번 더 기다립니다.
+
+`just`를 설치했다면 클러스터 생성부터 배포까지 한 번에 할 수 있습니다.
 
 ```bash
-kubectl apply -f k8s/
+brew install just
+just up            # cluster-up → build → deploy
 ```
 
-프로젝트에서 **Helm**을 사용하는 경우:
+배포 후 접근:
 
 ```bash
-helm upgrade --install <RELEASE_NAME> <CHART_PATH> \
-  --namespace <NAMESPACE> \
-  --create-namespace \
-  -f <LOCAL_VALUES_FILE>
+curl http://localhost:8081/api/health     # port-forward 불필요
+open http://localhost:8080                # SigNoz UI
 ```
 
-예:
-
-```bash
-helm upgrade --install student-api ./helm/student-api \
-  --namespace student-api \
-  --create-namespace \
-  -f ./helm/student-api/values-local.yaml
-```
-
-> 이 프로젝트에서 사용하는 실제 배포 명령은 프로젝트 README 또는 담당자의 안내를 따르세요.
+> 매니페스트 구성과 트러블슈팅은 [`deploy/README.md`](../../deploy/README.md)에 정리돼 있습니다.
 
 ---
 
@@ -825,32 +849,31 @@ kubectl exec -it <POD_NAME> \
 
 ## 18. 코드 변경 후 다시 배포하기
 
-로컬 이미지를 다시 빌드합니다.
-
 ```bash
-docker build -t <APPLICATION_NAME>:dev .
+./deploy/bin/update.sh      # 또는: just update
 ```
 
-동일한 이미지 태그를 사용하는 경우 Deployment를 재시작합니다.
+빌드 → **노드 적재** → 롤링 재시작을 한 번에 합니다.
+
+수동으로 한다면 순서는 이렇습니다.
 
 ```bash
-kubectl rollout restart deployment/<DEPLOYMENT_NAME>
+docker build -t trippilot-backend:dev backend
+kind load docker-image trippilot-backend:dev --name trippilot   # ← 빠뜨리기 쉬움
+kubectl rollout restart deployment/trippilot-backend -n trippilot
+kubectl rollout status  deployment/trippilot-backend -n trippilot
 ```
 
-배포 진행 상태를 확인합니다.
+> **`kind load`를 빼면 옛 코드가 계속 돕니다.**
+> `docker build`는 호스트 이미지 스토어만 갱신합니다. 노드 안의 이미지는 그대로이므로 재시작해도 새 파드가 옛 이미지를 씁니다. 오류가 나지 않고 **조용히 옛 동작을 유지**하기 때문에 가장 헷갈리는 실수입니다.
 
-```bash
-kubectl rollout status deployment/<DEPLOYMENT_NAME>
-```
+이미지 태그(`:dev`)는 그대로 둡니다. 태그가 같아도 `kind load`가 노드의 이미지를 교체했으므로 새 파드는 새 이미지를 씁니다. 태그를 매번 바꾸면 노드에 옛 이미지만 쌓입니다.
 
 새 Pod가 생성되었는지 확인합니다.
 
 ```bash
-kubectl get pods
+kubectl get pods -n trippilot
 ```
-
-> 프로젝트 설정에 따라 로컬 이미지를 Kubernetes 노드에 별도로 로드하거나 이미지 태그를 변경해야 할 수 있습니다.
-> 프로젝트의 실행 스크립트가 제공된다면 해당 스크립트를 우선 사용하세요.
 
 ---
 
@@ -913,7 +936,7 @@ kubectl config get-contexts
 로컬 Kubernetes로 변경:
 
 ```bash
-kubectl config use-context docker-desktop
+kubectl config use-context kind-trippilot
 ```
 
 EKS 컨텍스트는 담당자가 제공한 이름을 사용합니다.
@@ -1141,12 +1164,12 @@ brew install kubectl
 
 ---
 
-### 현재 컨텍스트가 `docker-desktop`이 아님
+### 현재 컨텍스트가 `kind-trippilot`이 아님
 
 컨텍스트를 변경합니다.
 
 ```bash
-kubectl config use-context docker-desktop
+kubectl config use-context kind-trippilot
 ```
 
 확인:
@@ -1162,14 +1185,27 @@ kubectl config current-context
 다음 내용을 확인합니다.
 
 1. Docker Desktop이 실행 중인지 확인합니다.
-2. Docker Desktop에서 Kubernetes가 활성화되어 있는지 확인합니다.
+2. kind 클러스터가 살아 있는지 확인합니다.
+
+   ```bash
+   kind get clusters          # trippilot 이 나와야 합니다
+   docker ps | grep trippilot-control-plane
+   ```
+
 3. 현재 컨텍스트를 확인합니다.
 
    ```bash
-   kubectl config current-context
+   kubectl config current-context   # kind-trippilot
    ```
 
-4. Docker Desktop Kubernetes를 재시작합니다.
+4. 그래도 안 되면 클러스터를 다시 만듭니다.
+
+   ```bash
+   kind delete cluster --name trippilot
+   ./deploy/bin/cluster-up.sh
+   ```
+
+   > 수집한 로그·트레이스와 DB 데이터가 전부 사라집니다.
 
 ---
 
@@ -1392,13 +1428,21 @@ kubectl delete namespace <NAMESPACE>
 
 ### Kubernetes 클러스터 전체 초기화
 
-Docker Desktop에서 다음 메뉴를 사용합니다.
+kind에서는 클러스터를 지우고 다시 만듭니다. GUI 메뉴가 아니라 명령 한 줄입니다 — 이것이 kind를 쓰는 이유이기도 합니다.
 
-```text
-Settings → Kubernetes → Reset Kubernetes Cluster
+```bash
+kind delete cluster --name trippilot
+./deploy/bin/cluster-up.sh
 ```
 
-> 이 작업은 로컬 Kubernetes의 모든 리소스를 삭제합니다. **팀에서 안내한 경우에만 실행하세요.**
+> 이 작업은 로컬 클러스터의 **모든 리소스를 삭제**합니다.
+> SigNoz가 수집한 로그·트레이스·대시보드와 PostgreSQL 데이터가 전부 사라지며 되돌릴 수 없습니다.
+
+DB만 비우고 싶다면 클러스터를 지울 필요가 없습니다.
+
+```bash
+just db-reset
+```
 
 ---
 
@@ -1410,9 +1454,10 @@ Settings → Kubernetes → Reset Kubernetes Cluster
 - [ ] Git이 설치되어 있다.
 - [ ] Docker Desktop이 실행 중이다.
 - [ ] `docker run --rm hello-world`가 성공한다.
-- [ ] Docker Desktop Kubernetes가 활성화되어 있다.
+- [ ] kind 클러스터 `trippilot`이 생성되어 있다(`kind get clusters`).
+- [ ] Docker Desktop 내장 Kubernetes는 꺼져 있다.
 - [ ] kubectl이 설치되어 있다.
-- [ ] 현재 Kubernetes 컨텍스트가 `docker-desktop`이다.
+- [ ] 현재 Kubernetes 컨텍스트가 `kind-trippilot`이다.
 - [ ] `kubectl get nodes`의 노드 상태가 `Ready`이다.
 - [ ] Helm이 설치되어 있다.
 - [ ] k9s가 설치되어 있고 `k9s` 실행 시 클러스터가 조회된다.
@@ -1420,7 +1465,7 @@ Settings → Kubernetes → Reset Kubernetes Cluster
 - [ ] 테스트 Nginx를 배포하고 브라우저로 접속했다.
 - [ ] 테스트 리소스를 삭제했다.
 - [ ] 프로젝트 저장소를 clone했다.
-- [ ] 프로젝트 이미지를 빌드할 수 있다.
+- [ ] 프로젝트 이미지를 빌드하고 `kind load`로 노드에 적재할 수 있다.
 - [ ] 민감 정보 관리 규칙을 확인했다.
 
 설치가 완료되면 다음 명령의 출력 결과를 담당자에게 공유합니다.
@@ -1458,7 +1503,7 @@ aws --version
 설치 화면이나 명령이 이 문서와 다르게 보일 경우 다음 공식 문서를 참고하세요.
 
 - [Docker Desktop for Mac 설치 문서](https://docs.docker.com/desktop/setup/install/mac-install/)
-- [Docker Desktop Kubernetes 문서](https://docs.docker.com/desktop/features/kubernetes/)
+- [kind 문서](https://kind.sigs.k8s.io/)
 - [Kubernetes macOS용 kubectl 설치 문서](https://kubernetes.io/docs/tasks/tools/install-kubectl-macos/)
 - [Helm 설치 문서](https://helm.sh/docs/intro/install/)
 - [k9s 공식 문서](https://k9scli.io/)

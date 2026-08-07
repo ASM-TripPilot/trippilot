@@ -80,8 +80,8 @@ class EditItineraryServiceTest : StringSpec({
             EditDay(
                 day,
                 listOf(
-                    EditSlot(poiB, LocalTime.parse("10:00"), LocalTime.parse("11:00"), isFixed = false),
-                    EditSlot(poiA, LocalTime.parse("12:00"), LocalTime.parse("13:00"), isFixed = false),
+                    EditSlot(poiB, LocalTime.parse("10:00"), LocalTime.parse("11:00"), isFixed = false, endsNextDay = false),
+                    EditSlot(poiA, LocalTime.parse("12:00"), LocalTime.parse("13:00"), isFixed = false, endsNextDay = false),
                 ),
             ),
         ),
@@ -104,6 +104,17 @@ class EditItineraryServiceTest : StringSpec({
         val slots = svc.edit(acc, tripId, editReq).days.single().slots
         slots[0].hasViolation shouldBe false
         slots[1].hasViolation shouldBe true // day0/slot1 위반
+    }
+
+    "자정 넘김 슬롯을 편집해도 플래그가 보존된다(회귀)" {
+        val repo = repoWith(current())
+        val midnightEdit = EditItinerary(
+            listOf(EditDay(day, listOf(EditSlot(poiA, LocalTime.parse("23:00"), LocalTime.parse("01:00"), isFixed = false, endsNextDay = true)))),
+        )
+        val slot = EditItineraryService(trips(true), repo, EditFakeAgent(), NOOP_TX, clock)
+            .edit(acc, tripId, midnightEdit).days.single().slots.single()
+        slot.endsNextDay shouldBe true
+        slot.endAt shouldBe LocalTime.parse("01:00")
     }
 
     "확정된 일정은 편집 불가 409" {

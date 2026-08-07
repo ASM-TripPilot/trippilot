@@ -22,6 +22,7 @@ class ItineraryEntity(
     @Column(name = "status") var status: String,
     @Column(name = "solve_mode") var solveMode: String,
     @Column(name = "is_fallback") var isFallback: Boolean,
+    @Column(name = "generation_state") var generationState: String,
     @Column(name = "created_at") var createdAt: Instant,
     @Column(name = "updated_at") var updatedAt: Instant,
 )

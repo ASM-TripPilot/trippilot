@@ -26,16 +26,52 @@ pkg_tar(
     remap_paths = {"artifacts/backend/app.jar": "app.jar"},
 )
 
+# OTel Java 에이전트를 별도 레이어로 얹는다. jar 가 바뀌어도 에이전트 레이어는
+# 그대로 재사용된다.
+pkg_tar(
+    name = "otel_agent_layer",
+    srcs = ["@otel_javaagent//file"],
+    package_dir = "/app",
+    remap_paths = {"otel-agent.jar": "otel-agent.jar"},
+)
+
 oci_image(
     name = "backend_image",
     base = "@temurin_jre",
+    # -javaagent 는 JAVA_TOOL_OPTIONS 가 아니라 entrypoint 에 직접 둔다.
+    # 환경변수 경로는 다른 값에 덮여 조용히 사라질 수 있고, 그러면 트레이스만
+    # 없는 채로 앱이 정상 기동한다.
     entrypoint = [
         "java",
+        "-javaagent:/app/otel-agent.jar",
         "-jar",
         "/app/app.jar",
     ],
+    # 관측성 안전 기본값(TRIP-218). ConfigMap 에도 같은 값이 있지만 이미지에도
+    # 둔다 — 이 셋은 빠뜨리면 **조용히** 잘못 동작한다.
+    #   LOGBACK_APPENDER_ENABLED=false : 에이전트가 root 로거에 appender 를 자동
+    #     부착하면 MaskingAppender 를 우회한 원문(토큰·이메일)이 수집기로 나간다.
+    #   LOGBACK_MDC_ENABLED=false      : 에이전트의 logback MDC 계측이 넣는 가상
+    #     필드가 주입되지 않아 첫 로그에서 NoSuchFieldError 로 기동이 실패한다.
+    #   METRICS_EXPORTER=otlp          : Micrometer 의 OTLP push 는 에이전트가
+    #     붙으면 조용히 유실된다(실측).
+    env = {
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+        "OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED": "false",
+        "OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED": "false",
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_METRICS_EXPORTER": "otlp",
+        "OTEL_SERVICE_NAME": "trippilot-backend",
+        "OTEL_TRACES_EXPORTER": "otlp",
+    },
     exposed_ports = ["8080"],
-    tars = [":backend_layer"],
+    tars = [
+        ":otel_agent_layer",
+        ":backend_layer",
+    ],
+    # deployment.yaml 의 runAsUser/runAsGroup 과 같은 숫자여야 한다.
+    # runAsNonRoot 는 이름이 아니라 숫자 UID 로만 검증할 수 있다.
+    user = "1001:1001",
 )
 
 oci_load(

@@ -26,6 +26,19 @@ dependencies {
     implementation(libs.jackson.datatype.jsr310)
     implementation(libs.kotlin.reflect)
     implementation(libs.logstash.logback.encoder)
+
+    // 관측성(TRIP-218) — 로그·메트릭·트레이스를 OTLP 로 내보낸다.
+    //
+    // opentelemetry-spring-boot-starter 는 쓰지 않는다. 2.14.0 이 Spring Boot 3 의
+    // RestClientAutoConfiguration 을 참조하는데 Boot 4 에서 그 클래스가 사라져
+    // ClassNotFoundException 으로 스프링 컨텍스트가 통째로 깨진다(실측).
+    //
+    // 대신 담당을 나눈다:
+    //   로그    = logback appender (아래 의존성, MaskingAppender 래퍼 경유)
+    //   메트릭  = Micrometer OTLP push (Boot 자체 자동설정)
+    //   트레이스 = OTel Java 에이전트 (-javaagent, 프레임워크 버전 무관)
+    implementation(libs.opentelemetry.logback.appender)
+    implementation(libs.micrometer.registry.otlp)
     implementation(libs.spring.boot.flyway)
     implementation(libs.flyway.core)
     implementation(libs.swagger.ui)                     // Swagger UI 정적 자산(/webjars/**)
