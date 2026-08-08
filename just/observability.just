@@ -9,9 +9,10 @@
 # (deploy/BUILD.bazel · MODULE.bazel 의 otel_javaagent).
 
 APP    := "trippilot-backend"
-API    := "http://localhost:8081"
+# host 는 just/k8s.just 에 있다 — 기본 localhost, TRIPPILOT_HOST 로 서버 IP 를 줄 수 있다.
+API    := "http://" + host + ":8081"
 # 8080 은 frontend 가 쓰므로 SigNoz UI 는 8083 이다(TRIP-325).
-SIGNOZ := "http://localhost:8083"
+SIGNOZ := "http://" + host + ":8083"
 
 # SigNoz UI 주소 안내 (port-forward 불필요 — NodePort 30083 → 호스트 8083)
 signoz:
