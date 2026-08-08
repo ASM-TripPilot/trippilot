@@ -13,6 +13,14 @@ import java.util.UUID
 object SlotKey {
     fun of(date: LocalDate, poiId: UUID): String = "$date#$poiId"
 
+    /** 역변환 — 형식이 어긋나면 null(호출자가 400 으로 돌린다). */
+    fun parse(key: String): Pair<LocalDate, UUID>? {
+        val (rawDate, rawPoi) = key.split("#", limit = 2).takeIf { it.size == 2 } ?: return null
+        val date = runCatching { LocalDate.parse(rawDate) }.getOrNull() ?: return null
+        val poiId = runCatching { UUID.fromString(rawPoi) }.getOrNull() ?: return null
+        return date to poiId
+    }
+
     /**
      * 근거를 받았는데 **하나도 매칭되지 않으면** 키 규약이 어긋난 것이다 — 침묵하면 "AI 가 근거를 안 준 것"과
      * 구분되지 않는다(INV-4 취지). 값 자체는 버리지 않고 그대로 두고 신호만 남긴다.

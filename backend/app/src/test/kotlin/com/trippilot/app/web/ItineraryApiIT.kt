@@ -229,6 +229,46 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `슬롯 교체 후보 — closed-set 이고 이미 일정에 있는 장소는 안 나온다(TRIP-311)`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+
+        val itin = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second
+        val inItinerary = itin["days"][0]["slots"].let { s -> (0 until s.size()).map { s[it]["poiId"].asText() } }
+        val slotKey = "2026-08-01#${inItinerary.first()}"
+
+        val (rc, body) = call(
+            HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token,
+            """{"slotKey":"$slotKey","radiusM":20000}""",
+        )
+        rc shouldBe 200
+        body.has("radiusMUsed") shouldBe true
+
+        val candidates = body["candidates"].let { c -> (0 until c.size()).map { c[it]["poiId"].asText() } }
+        // 이미 일정에 있는 장소는 다시 제안되지 않는다(BR-U3-24) — 서버가 유도한 제외 목록이 실제로 먹는지
+        candidates.none { it in inItinerary } shouldBe true
+        // 후보가 있으면 거리 표기가 붙고 소요시간은 없다(INV-3)
+        if (candidates.isNotEmpty()) {
+            body["candidates"][0]["distanceRange"].isNull shouldBe false
+            body["candidates"][0].has("duration") shouldBe false
+        }
+    }
+
+    @Test
+    fun `슬롯 키 형식이 틀리면 400, 없는 슬롯이면 404`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token, """{"slotKey":"이상한키"}""").first shouldBe 400
+        call(
+            HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token,
+            """{"slotKey":"2026-08-01#${UUID.randomUUID()}"}""",
+        ).first shouldBe 404
+    }
+
+    @Test
     fun `타 계정 여행이면 404`() {
         val owner = newToken()
         val trip = newTrip(owner)

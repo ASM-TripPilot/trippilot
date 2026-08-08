@@ -60,7 +60,7 @@ private val NOOP_TX = object : PlatformTransactionManager {
 }
 
 /** validate 는 주입된 위반을 반환(Fake). generate/repair 는 편집에서 미사용. */
-private class EditFakeAgent(private val violations: List<Violation> = emptyList()) : ScheduleAgentPort {
+private class EditFakeAgent(private val violations: List<Violation> = emptyList()) : StubScheduleAgent() {
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput = throw NotImplementedError()
     override fun validate(solution: ScheduleAgentOutput): List<Violation> = violations
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())

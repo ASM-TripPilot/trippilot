@@ -4,6 +4,8 @@ import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.Violation
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -102,6 +104,17 @@ class HttpScheduleAgentAdapter(
             throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 수리 응답 스키마 불일치: ${e.message}", cause = e)
         }
     }
+
+    /**
+     * 미개통 — AI 에 아직 슬롯 후보 경로가 없다(generate·validate·repair 3종만 열려 있음).
+     * **빈 목록을 돌려주지 않는다**: "주변에 후보가 없다"는 정상 결과와 구분되지 않아 사용자가 반경을
+     * 넓혀도 계속 0건인 이유를 알 수 없게 된다(INV-4 침묵 금지).
+     */
+    override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput =
+        throw ScheduleAgentCallFailed(
+            "SLOT_CANDIDATES_NOT_WIRED", retryable = false,
+            message = "AI 슬롯 후보 경계 미개통 — http 모드에서 후보 제안 불가(DEC-U3-5).",
+        )
 
     /** 에러 응답 → 도메인 실패. 바디 `{error_code, message, retryable}`(계약) 파싱 실패해도 상태코드로 판정. */
     private fun callFailed(status: Int, body: ByteArray): ScheduleAgentCallFailed {

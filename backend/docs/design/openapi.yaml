@@ -681,6 +681,25 @@ paths:
         '200': { description: 편집됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
         '409': { description: 확정된 일정은 수정 불가 · 생성 진행 중(generationState=PARTIAL)은 수정 불가 }
+  /trips/{tripId}/itinerary/slot-candidates:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 슬롯 교체 후보 — 완전 AI·같이 고르기 공통 경계
+      description: >
+        "다른 후보 N"(완전 AI)과 옵션 교체(같이 고르기)가 **같은 오퍼레이션**을 쓴다(BR-U3-23).
+        후보는 closed-set(INV-1) — 백엔드가 임의 POI 를 섞지 않는다.
+        **제외할 장소는 받지 않는다** — 이미 일정에 있는 POI 를 서버가 유도해 제외한다(BR-U3-24).
+        후보 0건이면 빈 목록이며, 클라이언트가 반경 확대·컨셉 변경을 제안한다(BR-U3-25).
+        조회지만 POST 인 이유는 입력이 복합(이웃 슬롯·컨셉·반경)이기 때문이다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SlotCandidatesRequest' } } }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/SlotCandidates' } } } }
+        '400': { description: 슬롯 키 형식 오류 }
+        '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
   /trips/{tripId}/itinerary/revisions:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1083,6 +1102,34 @@ components:
                     endAt: { type: string, example: "11:00:00" }
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean }
+    SlotCandidatesRequest:
+      type: object
+      required: [slotKey]
+      properties:
+        slotKey: { type: string, description: '교체할 슬롯 "{date}#{poiId}"(BR-U2-04 규약)', maxLength: 100 }
+        radiusM:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: 미지정이면 AI 기본 반경. h15 "반경 넓힘"이 이 값을 올려 재요청한다
+        concept: { type: string, nullable: true, maxLength: 40, description: h13 테마 }
+    SlotCandidates:
+      type: object
+      required: [candidates, radiusMUsed]
+      properties:
+        candidates:
+          type: array
+          description: 빈 목록 = 후보 0건 → 반경 확대·컨셉 변경 제안(BR-U3-25)
+          items:
+            type: object
+            required: [poiId, distanceRange, rationale]
+            properties:
+              poiId: { type: string, format: uuid }
+              distanceRange: { type: string, description: 거리만(INV-3) }
+              rationale: { type: string, description: closed-set 근거 — 시각·소요시간 언급 없음(BR-U2-09) }
+        radiusMUsed:
+          type: integer
+          description: 실제 사용 반경. AI 가 자동 확대했을 수 있어 그대로 표시한다
     RevisionList:
       type: object
       required: [revisions]
