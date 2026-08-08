@@ -47,6 +47,12 @@ data class ScheduleAgentInput(
     val preferenceProfile: PreferenceProfile,  // preference_snapshot 7축
     val recommendationStrength: String?,
     val requestMeta: RequestMeta,          // 지연 예산 전파(IO-1)
+    /**
+     * 이미 다른 호출에서 배정된 POI — day1 2단계 생성의 중복 방지(TRIP-293).
+     * 1차 `timeWindows=[day1]` 로 생성 → 배정된 poiId 를 2차(나머지 일자) 제외 목록으로 넘긴다.
+     * AI 측 대응: `ItineraryProblem.excluded_poi_ids`(후보 풀·프롬프트·게이트에 동일 적용).
+     */
+    val excludedPoiIds: List<UUID> = emptyList(),
 )
 
 data class TripContext(
@@ -85,13 +91,31 @@ data class RequestMeta(val requestId: String, val requestedAt: Instant, val dead
 data class ScheduleAgentOutput(
     val days: List<DaySchedule>,
     val day1ReadyAt: Instant?,             // day1 우선 반환 시각(5초 정책)
-    val explanations: Map<String, String>, // slotRef → 추천 이유(시각·소요시간 언급 금지)
+    /**
+     * 슬롯별 추천 이유. 키 규약 = `slotKey = "{date}#{poiId}"`(BR-U2-04).
+     * (Violation 은 현재 dayIndex·slotIndex 로 지시한다 — 같은 규약을 쓰지 않는다.)
+     * 문구는 시각·소요시간을 언급하지 않는다(BR-U2-09 — INV-2·INV-3 우회 차단). 집행은 AI 프롬프트·후처리 책임.
+     */
+    val explanations: Map<String, String>,
     val solveMode: SolveMode,              // FULL_AI | DETERMINISTIC | MINIMAL (도메인 재사용)
     val isFallback: Boolean,               // 침묵 실패 금지(INV-4, IO-2)
     val freshness: FreshnessMeta,
+    /** 후보 충분성 보고(BR-U2-05). **판정은 AI 소유** — 백엔드는 그대로 전달하고 재계산하지 않는다. */
+    val candidatesSummary: CandidatesSummary? = null,
 )
 
 data class DaySchedule(val date: LocalDate, val slots: List<VisitSlotDisplay>)
+
+/**
+ * 후보 충분성(BR-U2-05). [level] LOW 면 클라이언트가 "후보가 적어요" 안내를 띄운다.
+ * **판정은 AI 소유** — 백엔드는 level 을 그대로 전달하고 재계산하지 않는다.
+ */
+data class CandidatesSummary(
+    val level: String,
+    /** AI 가 주지 않으면 null — 0 으로 채우면 "후보 0건"이라는 판정을 백엔드가 지어내는 셈이다. */
+    val poolSize: Int?,
+    val shortfallCategories: List<String> = emptyList(),
+)
 
 /**
  * 표시용 방문 슬롯 — 솔버 검증 시각·순서만(INV-2). **소요시간(duration) 필드 없음(INV-3)** — 거리만([distanceRange]).

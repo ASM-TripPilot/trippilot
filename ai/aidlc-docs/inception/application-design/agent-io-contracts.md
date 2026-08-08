@@ -62,6 +62,13 @@
 
 ### 1.2 ScheduleAgent I/O (snake_case)
 
+> **day1 조기노출 = 백엔드가 같은 엔드포인트를 2번 동기 호출한다**(AI 역제안 채택 · TRIP-267).
+> AI 는 stateless 를 유지하고, 진행 상태·재시도·노출은 백엔드가 소유한다.
+> 1차 `time_windows=[day1]`·`deadline_ms=5000` → 즉시 사용자 노출 · 2차 `time_windows=[나머지 일자]`·
+> `deadline_ms=20000`·`excluded_poi_ids=[1차 배정 POI]` → 백그라운드 완료.
+> 각 호출은 **자기가 맡은 일자의** `anchors`·`fixed_blocks` 만 받는다. 날짜 미지정(ANYTIME) `fixed_blocks` 는
+> 배치 공간이 넓은 2차에 싣는다(하루 여행이면 1차). 2차가 실패하면 백엔드가 결정론 폴백으로 채운다(INV-4).
+
 ```python
 @dataclass
 class ScheduleAgentInput:
@@ -74,6 +81,7 @@ class ScheduleAgentInput:
     preference_profile: PreferenceProfile # preference_set 7축
     recommendation_strength: str | None
     request_meta: RequestMeta             # request_id, requested_at, deadline_ms
+    excluded_poi_ids: list[str] = []      # 이미 다른 호출에서 배정된 POI (2단계 생성 · TRIP-293)
 
 @dataclass
 class ScheduleAgentOutput:
@@ -344,7 +352,7 @@ class EventInfo:
 | AI 도우미·Plan-B 경계 경로 리소스명 | 협의 중 (명명 규칙 `/ai/v1/...`만 확정) | 확정 시 0.1 표 갱신 |
 | SolveMode 4↔3 매핑 · `explanations` 키 의미 · `candidates_summary` 대응 · `FreshnessMeta` 집계형 · `Violation` 스키마 | 협의 중 (TRIP-282) | 백엔드 회신 후 본 계약 갱신 |
 | `dataQuality` 등급 수 (AI 3등급 MINIMAL/PARTIAL/FULL ↔ 백엔드 2등급) | AI가 **MINIMAL 추가 요청**, 백엔드 회신 대기 | 회신 후 리버스 read 응답 스키마 확정 |
-| day1 조기노출 방식 | 협의 중 (백엔드 "1차 스코프 제외" 제안에 AI 역제안 게시, 회신 대기) | 확정 시 `day1_ready_at` 시맨틱 확정 |
+| day1 조기노출 방식 | **확정 — AI 역제안(2단계 동기 호출) 채택, 백엔드 구현 완료(TRIP-267)**. 아래 §1.2-A 참조 | `day1_ready_at` 은 미사용(백엔드가 `generation_state` 로 노출) |
 | AI 도우미 채팅 화면 | 와이어프레임에 부재 (M16, 타 팀 담당) | 자연어 입력의 진입점은 당분간 구조화 UI + EditAgent 자연어 편집. → `intent-matching-design.md`는 M16 합류 시 그대로 적용 |
 | 와이어프레임 시간 표기 vs INV-3 | 상충 플래그 | 프론트 조율 필요. AI 계약은 시간 미제공 유지 |
 | trigger_event 발행 주체 | 백엔드(M9) vs AI 정보 에이전트 | Weather/TransitAgent는 "판정"까지, 이벤트 발행·푸시는 백엔드 소유로 제안 (아웃박스 경유) |

@@ -657,33 +657,58 @@ paths:
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
     post:
       tags: [trips]
-      summary: AI 일정 생성 — 소유 여행 날짜 기준 ScheduleAgent 호출·영속(첫 슬라이스). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+      summary: AI 일정 생성 — day1 먼저 반환(2단계). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+      description: >
+        첫날(day1)만 담긴 `generationState=PARTIAL` 응답을 즉시 돌려주고, 나머지 일자는 백그라운드로 채운다.
+        클라이언트는 GET 으로 `COMPLETE`(전 일자 완료) 또는 `FAILED`(2차 중단) 까지 폴링한다.
+        여행이 하루면 2차 없이 즉시 `COMPLETE`. PARTIAL 인 동안 확정·편집은 409.
+        재생성(이 POST)에는 상태 제한이 없다 — 중단된 생성(PARTIAL)에서 벗어나는 탈출구이자,
+        **확정된 일정을 다시 짜는 유일한 경로**다(확정 해제 API 없음). 확정 일정에 호출하면
+        확정이 풀리고 PLANNED 새 일정으로 대체되며, 동결됐던 poi_snapshot 참조는 사라진다.
       requestBody:
         required: false
         content: { application/json: { schema: { $ref: '#/components/schemas/GenerateItineraryRequest' } } }
       responses:
-        '201': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
+        '201': { description: 생성됨(day1 만 담긴 PARTIAL · 하루 여행이면 COMPLETE), content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정 }
     put:
       tags: [trips]
-      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409
+      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정·생성 중 일정은 409
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/EditItineraryRequest' } } }
       responses:
         '200': { description: 편집됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
-        '409': { description: 확정된 일정은 수정 불가 }
+        '409': { description: 확정된 일정은 수정 불가 · 생성 진행 중(generationState=PARTIAL)은 수정 불가 }
   /trips/{tripId}/itinerary/confirm:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
     post:
       tags: [trips]
-      summary: 일정 확정 — PLANNED→CONFIRMED 단방향 잠금
+      summary: 일정 확정 — PLANNED→CONFIRMED(재확정 409). 재생성 POST 는 확정을 되돌린다
       responses:
         '200': { description: 확정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
         '409': { description: 이미 확정됨 · 생성 진행 중(generationState=PARTIAL) · 포함 장소가 더 이상 유효하지 않음 }
+  /trips/{tripId}/change-log:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 변경 이력 타임라인 — "이날 무엇을 왜 바꿨는지"(최신순)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: 반환 상한(기본 100 · 최대 500). 이력은 append-only 로 쌓이고 한 건이 전후 스냅숏 둘을 담는다.
+          schema: { type: integer, default: 100, minimum: 1, maximum: 500 }
+      description: >
+        확정된 변경을 사유·전후 스냅숏·시각·출처와 함께 남긴 append-only 이력(US-PLANB-09).
+        현재 출처는 수동 편집(MANUAL)뿐 — Plan-B·어시스턴트는 해당 모듈과 함께 붙는다.
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/ChangeLog' } } } }
+        '404': { description: 여행 없음/타 계정 }
   /trips/{tripId}/must-visits/{mustVisitId}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -984,6 +1009,45 @@ components:
                       default: false
                       description: 자정 넘김(HC4) — 전체 교체 편집이라 조회 응답의 현행 값을 그대로 실어야 플래그가 소실되지 않음
 
+    ChangeLog:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/ChangeLogEntry' }
+    ChangeLogEntry:
+      type: object
+      required: [actor, sourceType, at, before, after]
+      properties:
+        actor: { type: string, description: 변경 주체 — 수동 편집이면 계정 id }
+        sourceType: { type: string, enum: [PLAN_B, MANUAL, COEDIT, ASSISTANT] }
+        reason: { type: string, nullable: true, description: 선택 — Plan-B 는 트리거 사유를 싣는다 }
+        at: { type: string, format: date-time }
+        before: { $ref: '#/components/schemas/ItinerarySnapshot' }
+        after: { $ref: '#/components/schemas/ItinerarySnapshot' }
+    ItinerarySnapshot:
+      type: object
+      required: [days]
+      properties:
+        days:
+          type: array
+          items:
+            type: object
+            required: [date, slots]
+            properties:
+              date: { type: string, format: date }
+              slots:
+                type: array
+                items:
+                  type: object
+                  required: [poiId, startAt, endAt, isFixed, endsNextDay]
+                  properties:
+                    poiId: { type: string, format: uuid }
+                    startAt: { type: string, example: "10:00:00" }
+                    endAt: { type: string, example: "11:00:00" }
+                    isFixed: { type: boolean }
+                    endsNextDay: { type: boolean }
     Itinerary:
       type: object
       required: [itineraryId, tripId, status, solveMode, isFallback, generationState, days]
@@ -998,7 +1062,23 @@ components:
           enum: [PARTIAL, COMPLETE, FAILED]
           description: >
             생성 진행 상태(확정 상태와 다른 축) — PARTIAL=day1만 채워짐(2단계 생성 중) · COMPLETE=전 일자 완료 ·
-            FAILED=2차 실패(1차분은 유효). **PARTIAL 인 동안 확정은 409**(day1만 동결된 채 잠기는 것 방지).
+            FAILED=2차 실패(1차분은 유효). **PARTIAL 인 동안 확정·편집은 409**
+            (day1만 동결된 채 잠기거나, 뒤이어 도착하는 2차 결과가 편집을 덮어쓰는 것 방지).
+            생성 POST 는 day1 만 담은 PARTIAL 을 즉시 반환하므로, 클라이언트는 GET 으로 COMPLETE/FAILED 까지
+            폴링해 나머지 일자를 받는다(여행이 하루면 즉시 COMPLETE).
+        candidatesSummary:
+          nullable: true
+          description: >
+            후보 충분성(BR-U2-05). **판정은 AI 소유** — 백엔드는 값을 그대로 전달하고 재계산·검증하지 않는다.
+            AI 가 값을 주지 않거나 형태가 다르면 null. `level` 은 **열거로 고정하지 않는다** —
+            백엔드가 통과시키는 값이므로 AI 어휘(예: OK · LOW · NO_CANDIDATES)가 그대로 나갈 수 있다.
+            `poolSize` 는 AI 가 주지 않으면 없다(0 으로 채우지 않는다 — 0 은 "후보 0건"이라는 판정이다).
+          type: object
+          required: [level]
+          properties:
+            level: { type: string }
+            poolSize: { type: integer, nullable: true }
+            shortfallCategories: { type: array, items: { type: string } }
         days:
           type: array
           items:
@@ -1010,7 +1090,7 @@ components:
                 type: array
                 items:
                   type: object
-                  required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation]
+                  required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, tags]
                   properties:
                     poiId: { type: string, format: uuid }
                     startAt: { type: string, description: "HH:mm:ss (솔버 검증값 INV-2)" }
@@ -1018,6 +1098,44 @@ components:
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean, description: "자정 넘김(HC4) — true 면 endAt 은 익일 시각(시작일 귀속)" }
                     hasViolation: { type: boolean, description: "편집 재검증(HC1-4) 위반 표시(비차단)" }
+                    placementReason:
+                      type: string
+                      nullable: true
+                      description: >
+                        이 장소를 고른 이유(BR-U2-04). 문구는 시각·소요시간을 언급하지 않는다(BR-U2-09) —
+                        집행은 AI 프롬프트·후처리 책임이고 경계에서 문자열 검사는 하지 않는다.
+                    distanceRange:
+                      type: string
+                      nullable: true
+                      description: >
+                        직전 지점에서의 이동 **거리 표시 문자열**(BR-U2-08) — 예 "약 1.2km · 도보 추정".
+                        직선거리 폴백이면 "추정" 표기가 포함된다. 소요시간은 어떤 이유로도 싣지 않는다(INV-3).
+                        편집 직후에는 순서가 바뀌어 값이 무효라 null 이다(재산출은 TRIP-309).
+                    # --- POI 표면(BR-U3-09) — 추가 왕복 없이 지도·카드를 그릴 수 있게 합성해 싣는다.
+                    #     확정 슬롯은 동결값(INV-U1-03)이 이긴다. 정본·동결본 모두 없으면 전부 null.
+                    nameKo: { type: string, nullable: true }
+                    lat: { type: number, format: double, nullable: true }
+                    lng: { type: number, format: double, nullable: true }
+                    category: { type: string, nullable: true }
+                    openingHours:
+                      type: string
+                      nullable: true
+                      description: >
+                        영업시간 **원문 문자열**(자유형) — 기계 판정에 쓰지 말 것. structured 스키마는 U6.
+                        NULL = 미확인.
+                    openingHoursKnown:
+                      type: boolean
+                      nullable: true
+                      description: >
+                        영업시간 확인 여부. false 면 확정 배치가 아니라 **사용자 확인 후보**로 분리한다
+                        (US-SCHED-03 예외). 현재는 값 유무 판정까지만 신뢰할 수 있다.
+                        **확정된 일정(status=CONFIRMED)에서는 null** — 확정 전 분류 신호라 확정 뒤에는
+                        판정 대상이 아니다(정본을 따라가면 확정 슬롯이 사후에 재분류된다).
+                    imageUrl:
+                      type: string
+                      nullable: true
+                      description: NULL = 미확보. 기본 이미지를 지어내지 않는다(TRIP-219)
+                    tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
                     # INV-3: 소요시간(duration) 필드 없음 — 거리만(후속)
 
     TermsType:

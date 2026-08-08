@@ -42,6 +42,12 @@ private class ConfirmFakeItineraries : ItineraryRepository {
         store += itinerary
         return itinerary
     }
+    override fun replaceIfCurrent(tripId: UUID, expectedItineraryId: UUID, itinerary: Itinerary): Boolean {
+        replaceForTrip(tripId, itinerary)
+        return true
+    }
+    override fun findStalePartial(updatedBefore: java.time.Instant): List<Itinerary> = emptyList()
+
 }
 
 private class ConfirmCapturingPublisher : DomainEventPublisher {
