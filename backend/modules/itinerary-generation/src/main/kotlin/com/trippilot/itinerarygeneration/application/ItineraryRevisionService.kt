@@ -110,7 +110,7 @@ class ItineraryRevisionService(
 
             val restoredDays = target.snapshot.toDays(fixedFrom = current, violations = violations)
             val restored = Itinerary.reconstitute(
-                current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.isFallback,
+                current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.generationMode, current.isFallback,
                 current.generationState, restoredDays, current.createdAt, clock.instant(), current.candidatesSummary,
             )
             // 이미 같은 내용이면 쌓지 않는다 — 목록이 같은 버전으로 도배된다(편집과 같은 기준).

@@ -321,6 +321,40 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         returned.candidatesSummary!!.shortfallCategories shouldBe listOf("CAFE")
     }
 
+    "직접 만들기(MANUAL)는 AI 를 아예 부르지 않고 빈 일자만 만든다" {
+        val end = start.plusDays(2)
+        val (agent, _) = emittingAgent(end)
+        val repo = FakeItineraries()
+        val result = service(agent, repo, end).generate(acc, tripId, GenerationMode.MANUAL)
+
+        agent.captures shouldBe emptyList()          // 경계에 닿지 않는다 — 상대 enum 에 MANUAL 이 없어 422 다
+        result.days.map { it.date } shouldContainExactly listOf(start, start.plusDays(1), end)
+        result.days.all { it.slots.isEmpty() } shouldBe true
+        result.generationState shouldBe GenerationState.COMPLETE   // 2차를 기다리지 않는다
+        result.generationMode shouldBe GenerationMode.MANUAL
+    }
+
+    "직접 만들기는 폴백이 아니다 — isFallback 을 켜면 화면이 AI 실패로 오해한다" {
+        val (agent, _) = emittingAgent(start)
+        val result = service(agent, FakeItineraries(), start).generate(acc, tripId, GenerationMode.MANUAL)
+        result.isFallback shouldBe false
+        result.solveMode shouldBe SolveMode.MINIMAL   // AI 산출물이 아니라는 표시
+    }
+
+    "AI 방식에서 직접 만들기로 전환하면 빈 일정으로 교체된다" {
+        val end = start.plusDays(1)
+        val (agent, _) = emittingAgent(end)
+        val repo = FakeItineraries()
+        service(agent, repo, end).generate(acc, tripId, GenerationMode.FULLY_AI)
+        repo.byTrip.getValue(tripId).days.any { it.slots.isNotEmpty() } shouldBe true
+
+        service(agent, repo, end).generate(acc, tripId, GenerationMode.MANUAL)
+        val switched = repo.byTrip.getValue(tripId)
+        switched.generationMode shouldBe GenerationMode.MANUAL
+        switched.days.all { it.slots.isEmpty() } shouldBe true
+        // 전환 전 일정으로 되돌아가는 것은 리비전(TRIP-310)이 담당한다 — 여기서는 전환 자체만 본다.
+    }
+
     "다일 여행: 반환은 day1 만·PARTIAL, 2차 완료 후 전 일자·COMPLETE" {
         val end = start.plusDays(2)
         val (agent, _) = emittingAgent(end)
@@ -394,8 +428,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val (agent, _) = emittingAgent(end)
         val repo = FakeItineraries()
         // 1차 저장 직후 사용자가 편집을 끝낸 상태(COMPLETE)를 시뮬레이션 — 2차는 이 결과를 건드리면 안 된다.
-        val edited = Itinerary.create(
-            tripId, SolveMode.DETERMINISTIC, false,
+        val edited = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
             listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.COMPLETE,
         )
         repo.byTrip[tripId] = edited
@@ -409,8 +442,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val end = start.plusDays(2)
         val (agent, _) = emittingAgent(end)
         val repo = FakeItineraries()
-        val regenerated = Itinerary.create(
-            tripId, SolveMode.DETERMINISTIC, false,
+        val regenerated = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
             listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.PARTIAL,
         )
         repo.byTrip[tripId] = regenerated
@@ -466,8 +498,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
     "2차 결과를 반영조차 못하면 FAILED 로 드러낸다(1차분은 유효)" {
         val end = start.plusDays(2)
         val (agent, _) = emittingAgent(end)
-        val partial = Itinerary.create(
-            tripId, SolveMode.FULL_AI, false,
+        val partial = Itinerary.create(tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
             listOf(ItineraryDay.of(start, 0, emptyList())), now, GenerationState.PARTIAL,
         )
         // 완료 반영(replaceForTrip)만 터지고 FAILED 표시는 통과하는 저장소 — 상태 전이 경로를 갈라 본다.

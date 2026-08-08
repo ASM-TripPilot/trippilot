@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.RevisionActor
@@ -117,8 +118,7 @@ class EditItineraryServiceTest : StringSpec({
     }
 
     fun current(status: (Itinerary) -> Itinerary = { it }): Itinerary {
-        val base = Itinerary.create(
-            tripId, SolveMode.DETERMINISTIC, false,
+        val base = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
             listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"))))),
             clock.instant(),
         )
@@ -205,7 +205,7 @@ class EditItineraryServiceTest : StringSpec({
         // 편집안의 장소 중 하나에 근거를 달아두고, 편집 후에도 그 장소에 붙어 있는지 본다
         val poi = editReq.days.single().slots.first().poiId
         val base = Itinerary.reconstitute(
-            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, false,
+            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
             GenerationState.COMPLETE,
             listOf(
                 ItineraryDay.of(

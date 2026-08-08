@@ -5,6 +5,7 @@ import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.event.DomainEvent
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.itinerarygeneration.api.event.ItineraryConfirmed
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -80,10 +81,9 @@ class ConfirmItineraryServiceTest : StringSpec({
         override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? = null
     }
 
-    fun planned() = Itinerary.create(tripId, SolveMode.DETERMINISTIC, false, emptyList(), clock.instant())
+    fun planned() = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false, emptyList(), clock.instant())
 
-    fun plannedWith(poi: UUID) = Itinerary.create(
-        tripId, SolveMode.DETERMINISTIC, false,
+    fun plannedWith(poi: UUID) = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
         listOf(ItineraryDay.of(start, 0, listOf(VisitSlot.of(poi, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"))))),
         clock.instant(),
     )
@@ -113,8 +113,7 @@ class ConfirmItineraryServiceTest : StringSpec({
     "여러 슬롯(distinct POI) 전부 동결" {
         val poiA = UUID.randomUUID()
         val poiB = UUID.randomUUID()
-        val withTwo = Itinerary.create(
-            tripId, SolveMode.DETERMINISTIC, false,
+        val withTwo = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
             listOf(
                 ItineraryDay.of(
                     start, 0,

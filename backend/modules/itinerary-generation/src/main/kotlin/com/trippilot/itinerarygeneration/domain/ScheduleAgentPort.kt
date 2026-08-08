@@ -26,7 +26,13 @@ interface ScheduleAgentPort {
 }
 
 /** 생성 방식(d11 추천 강도 분기). */
-enum class GenerationMode { FULLY_AI, CO_PLAN }
+/**
+ * 사용자가 고른 생성 방식(US-SCHED-09).
+ *
+ * ⚠ [MANUAL] 은 **AI 경계에 보내지 않는다** — 직접 만들기는 AI 를 아예 부르지 않는 흐름이고,
+ * 상대 enum 에도 없어서 보내는 순간 422 다. 경계로 나가는 값은 [FULLY_AI]·[CO_PLAN] 뿐이다.
+ */
+enum class GenerationMode { FULLY_AI, CO_PLAN, MANUAL }
 
 /**
  * ScheduleAgent 호출 실패 — **유효한 200 을 받지 못한 경우만**(경계 계약 PR #104).

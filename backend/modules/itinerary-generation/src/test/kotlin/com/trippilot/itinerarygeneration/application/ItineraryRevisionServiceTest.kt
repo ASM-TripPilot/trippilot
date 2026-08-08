@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -91,7 +92,7 @@ class ItineraryRevisionServiceTest : StringSpec({
 
     fun itinerary(slots: List<VisitSlot>, status: ItineraryStatus = ItineraryStatus.PLANNED, state: GenerationState = GenerationState.COMPLETE) =
         Itinerary.reconstitute(
-            UUID.randomUUID(), tripId, status, SolveMode.FULL_AI, false, state,
+            UUID.randomUUID(), tripId, status, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false, state,
             listOf(ItineraryDay.of(d1, 0, slots)), now, now, null,
         )
 
@@ -117,7 +118,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val target = revs.stored.single()
         // 사용자가 편집해 상태가 달라진 뒤
         val v2 = itinerary(listOf(slot(cafe, "15:00", "16:00")))
-        its.current = Itinerary.reconstitute(v1.itineraryId, tripId, ItineraryStatus.PLANNED, v1.solveMode, false, GenerationState.COMPLETE, v2.days, now, now, null)
+        its.current = Itinerary.reconstitute(v1.itineraryId, tripId, ItineraryStatus.PLANNED, v1.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, v2.days, now, now, null)
         svc.record(its.current!!, RevisionActor.USER, RevisionKind.EDIT, "수정")
 
         val restored = svc.restore(acc, tripId, target.revisionId)
@@ -138,7 +139,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val target = revs.stored.single()
         // 현재는 숙소 고정 시각이 16:00 으로 바뀐 상태
         val nowFixed = itinerary(listOf(slot(hotel, "16:00", "17:00", fixed = true), slot(cafe, "20:00", "21:00", order = 1)))
-        its.current = Itinerary.reconstitute(old.itineraryId, tripId, ItineraryStatus.PLANNED, old.solveMode, false, GenerationState.COMPLETE, nowFixed.days, now, now, null)
+        its.current = Itinerary.reconstitute(old.itineraryId, tripId, ItineraryStatus.PLANNED, old.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, nowFixed.days, now, now, null)
 
         val restored = svc.restore(acc, tripId, target.revisionId)
 

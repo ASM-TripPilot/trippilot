@@ -108,7 +108,7 @@ class EditItineraryService(
             )
         }
         return Itinerary.reconstitute(
-            current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.isFallback,
+            current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.generationMode, current.isFallback,
             current.generationState, days, current.createdAt, clock.instant(), // 생성 진행 상태는 편집과 무관 — 보존
             current.candidatesSummary, // 후보 충분성도 편집과 무관 — 보존(빠뜨리면 편집 한 번에 영구 소실)
         )

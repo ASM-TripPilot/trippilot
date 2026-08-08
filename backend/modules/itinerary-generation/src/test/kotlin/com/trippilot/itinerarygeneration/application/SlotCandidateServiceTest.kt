@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -45,8 +46,7 @@ class SlotCandidateServiceTest : StringSpec({
     fun slot(poi: UUID, order: Int, start: String) =
         VisitSlot.of(poi, null, order, LocalTime.parse(start), LocalTime.parse(start).plusHours(1))
 
-    val itinerary = Itinerary.create(
-        tripId, SolveMode.FULL_AI, false,
+    val itinerary = Itinerary.create(tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
         listOf(
             ItineraryDay.of(
                 d1, 0,
