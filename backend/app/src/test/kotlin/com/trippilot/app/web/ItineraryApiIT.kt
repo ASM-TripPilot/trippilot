@@ -245,13 +245,12 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         body.has("radiusMUsed") shouldBe true
 
         val candidates = body["candidates"].let { c -> (0 until c.size()).map { c[it]["poiId"].asText() } }
+        // 0건이면 아래 단언들이 전부 공허하게 통과한다 — 후보가 실제로 나왔는지부터 못박는다.
+        candidates.isNotEmpty() shouldBe true
         // 이미 일정에 있는 장소는 다시 제안되지 않는다(BR-U3-24) — 서버가 유도한 제외 목록이 실제로 먹는지
         candidates.none { it in inItinerary } shouldBe true
-        // 후보가 있으면 거리 표기가 붙고 소요시간은 없다(INV-3)
-        if (candidates.isNotEmpty()) {
-            body["candidates"][0]["distanceRange"].isNull shouldBe false
-            body["candidates"][0].has("duration") shouldBe false
-        }
+        body["candidates"][0]["distanceRange"].isNull shouldBe false
+        body["candidates"][0].has("duration") shouldBe false // INV-3
     }
 
     @Test

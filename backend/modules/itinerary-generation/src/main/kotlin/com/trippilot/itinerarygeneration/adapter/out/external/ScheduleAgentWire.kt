@@ -141,7 +141,8 @@ internal typealias AiSchedulePayload = AiScheduleResponse
 
 internal data class AiRequestMeta(val requestId: String, val requestedAt: Instant, val deadlineMs: Long)
 
-internal fun AiViolation.toDomain(): Violation = Violation(code, dayIndex, slotIndex, detail.takeIf { it.isNotBlank() })
+internal fun AiViolation.toDomain(): Violation =
+    Violation(code, dayIndex, slotIndex, detail.takeIf { it.isNotBlank() }, slotRef)
 
 /** 도메인 산출물 → 상대 본문. 왕복 형태가 같아(생성 응답 = 검증 요청) 그대로 되돌려 보낸다. */
 internal fun ScheduleAgentOutput.toWire(): AiSchedulePayload = AiSchedulePayload(

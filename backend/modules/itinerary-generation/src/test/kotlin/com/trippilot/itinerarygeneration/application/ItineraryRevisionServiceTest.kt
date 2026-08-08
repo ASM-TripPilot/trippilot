@@ -15,6 +15,7 @@ import com.trippilot.itinerarygeneration.domain.NewRevision
 import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
@@ -184,5 +185,21 @@ class ItineraryRevisionServiceTest : StringSpec({
 
         shouldThrow<ResourceNotFound> { svc.restore(UUID.randomUUID(), tripId, revs.stored.single().revisionId) }
         shouldThrow<ResourceNotFound> { svc.restore(acc, tripId, UUID.randomUUID()) }
+    }
+
+    "되돌린 결과에도 위반 사유가 붙는다(배지만 켜면 화면이 이유를 못 그린다)" {
+        val revs = Revisions()
+        val v1 = itinerary(listOf(slot(cafe, "10:00", "11:00")))
+        val its = Itineraries(v1)
+        // 복원 결과를 재검증했더니 위반이 나온 상황 — 현행 고정 시각과 과거 배치의 조합은 솔버가 만든 적 없다.
+        val agent = NoopValidateAgent(listOf(Violation("TRAVEL_TIME", 0, 0, "이동이 빠듯해요")))
+        val svc = ItineraryRevisionService(revs, its, trips, agent, REV_NOOP_TX, clock)
+        svc.record(v1, RevisionActor.AI, RevisionKind.BASELINE, "처음")
+
+        val restored = svc.restore(acc, tripId, revs.stored.single().revisionId)
+
+        val s0 = restored.days.single().slots.single()
+        s0.hasViolation shouldBe true
+        s0.violationReason shouldBe "이동이 빠듯해요"
     }
 })

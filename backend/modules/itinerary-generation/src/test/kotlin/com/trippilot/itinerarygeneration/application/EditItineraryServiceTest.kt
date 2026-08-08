@@ -264,4 +264,41 @@ class EditItineraryServiceTest : StringSpec({
         val repo = repoWith(current())
         shouldThrow<ResourceNotFound> { EditItineraryService(trips(false), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock).edit(acc, tripId, editReq) }
     }
+
+    "위반 사유가 슬롯에 저장된다 — 여러 건이면 이어 붙이고 중복은 접는다" {
+        val repo = repoWith(current())
+        val agent = EditFakeAgent(
+            listOf(
+                Violation("TRAVEL_TIME", 0, 0, "이동이 빠듯해요"),
+                Violation("OPENING_HOURS", 0, 0, "영업시간 밖"),
+                Violation("TRAVEL_TIME", 0, 0, "이동이 빠듯해요"), // 중복
+            ),
+        )
+        val result = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+            .edit(acc, tripId, editReq)
+
+        val slot = result.days.single().slots.first()
+        slot.hasViolation shouldBe true
+        slot.violationReason shouldBe "이동이 빠듯해요 · 영업시간 밖"
+    }
+
+    "사유 없는 위반은 배지만 켜고 사유는 비운다(CHECK 제약과도 맞는다)" {
+        val repo = repoWith(current())
+        val agent = EditFakeAgent(listOf(Violation("HC1", 0, 0, null)))
+        val slot = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+            .edit(acc, tripId, editReq).days.single().slots.first()
+
+        slot.hasViolation shouldBe true
+        slot.violationReason shouldBe null
+    }
+
+    "위치를 못 찾은 위반은 어느 슬롯에도 안 붙는다 — 조용히 사라지지 않게 로그로 드러낸다" {
+        val repo = repoWith(current())
+        val agent = EditFakeAgent(listOf(Violation("HC3_UNPLACED", null, null, "필수 방문지가 배치되지 않았습니다")))
+        val result = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+            .edit(acc, tripId, editReq)
+
+        // 슬롯 표시로는 나타나지 않는다(붙일 자리가 없다) — 사용자 표면 노출은 별도 계약이 필요하다.
+        result.days.single().slots.all { !it.hasViolation } shouldBe true
+    }
 })

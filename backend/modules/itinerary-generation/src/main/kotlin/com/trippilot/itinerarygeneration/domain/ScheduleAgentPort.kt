@@ -159,6 +159,11 @@ data class Violation(
     val dayIndex: Int?,
     val slotIndex: Int?,
     val detail: String?,
+    /**
+     * 상대가 붙인 슬롯 지시자. **인덱스보다 이쪽이 1차 키**다 — 인덱스는 상대가 요청 본문을 스캔해 계산한
+     * 파생값이라, 검증한 일정과 수리를 요청하는 일정이 조금이라도 다르면 엉뚱한 슬롯을 가리킨다.
+     */
+    val slotRef: String? = null,
 )
 
 /** 최소 조정 수리 결과 — 시각·순서만(POI 불변). */

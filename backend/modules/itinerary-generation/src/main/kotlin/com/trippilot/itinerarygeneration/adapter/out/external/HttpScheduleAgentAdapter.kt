@@ -68,11 +68,6 @@ class HttpScheduleAgentAdapter(
         AiRequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs)
 
     /**
-     * 실 호출 미구현 — AI 측 `validate` 요청/응답 스키마가 미확정(TRIP-282 N6)이고, Violation 표현도
-     * AI `(code, slot_ref)` ↔ 백엔드 `(type, dayIndex, slotIndex)` 로 어긋나 있다.
-     * **빈 목록을 반환하지 않는다** — "위반 없음"으로 보이는 거짓 음성이 확정까지 흘러가는 것보다 실패가 안전하다.
-     */
-    /**
      * 편집 재검증(HC1-4). 위반은 **정상 응답 200**이고 빈 목록 = 위반 없음이다(IO-7).
      * 산출물 전체를 되돌려 보낸다 — 슬롯만 보내면 상대가 날짜 맥락을 잃어 위치 인덱스를 계산할 수 없다.
      */
@@ -92,7 +87,8 @@ class HttpScheduleAgentAdapter(
             REPAIR_PATH,
             AiRepairRequest(
                 solution.toWire(),
-                violations.map { AiViolation(it.type, null, it.detail.orEmpty(), it.dayIndex, it.slotIndex) },
+                // slotRef 를 되돌려 보낸다 — 인덱스만 보내면 검증 시점과 수리 대상이 어긋났을 때 상대가 복구할 수단이 없다.
+                violations.map { AiViolation(it.type, it.slotRef, it.detail.orEmpty(), it.dayIndex, it.slotIndex) },
                 requestMeta(REPAIR_DEADLINE_MS),
             ),
             AiRepairResponse::class.java,

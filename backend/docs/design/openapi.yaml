@@ -700,6 +700,7 @@ paths:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/SlotCandidates' } } } }
         '400': { description: 슬롯 키 형식 오류 }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
+        '409': { description: 확정된 일정 · 생성 진행 중 · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
   /trips/{tripId}/itinerary/revisions:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1111,7 +1112,10 @@ components:
           type: integer
           nullable: true
           minimum: 1
-          description: 미지정이면 AI 기본 반경. h15 "반경 넓힘"이 이 값을 올려 재요청한다
+          maximum: 50000
+          description: >
+            미지정이면 AI 기본 반경. h15 "반경 넓힘"이 이 값을 올려 재요청한다.
+            상한 50km — 넘기면 400. 상한이 없으면 탐색 범위가 전 지구를 덮어 DB 전체를 훑는다.
         concept: { type: string, nullable: true, maxLength: 40, description: h13 테마 }
     SlotCandidates:
       type: object
