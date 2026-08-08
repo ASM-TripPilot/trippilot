@@ -300,9 +300,58 @@ def test_payload_round_trips_into_validate_request() -> None:
         )
 
     assert response.status_code == 200
+    # 수퍼셋 발신: FREE_POI 는 day0 의 두 번째 슬롯 — 직렬화 시점 스캔으로 (0, 1) 계산
     assert response.json() == {
-        "violations": [{"code": "HC2", "slot_ref": FREE_POI, "detail": "이동시간 부족"}]
+        "violations": [{
+            "code": "HC2", "slot_ref": FREE_POI, "detail": "이동시간 부족",
+            "day_index": 0, "slot_index": 1,
+        }]
     }
+
+
+def test_violation_indices_computed_by_scanning_itinerary() -> None:
+    """수퍼셋 발신: 위치 인덱스는 요청 itinerary 스캔으로 계산 — 첫 슬롯은 (0, 0)."""
+    orchestrator = FakeOrchestrator(
+        make_outcome(),
+        violations=[Violation(code="HC1", slot_ref=FIXED_POI, detail="이용시간 밖")],
+    )
+    with client(orchestrator) as c:
+        generated = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST).json()
+        body = c.post(
+            "/ai/v1/itinerary/validate",
+            json={"itinerary": generated, "request_meta": BACKEND_REQUEST["request_meta"]},
+        ).json()
+
+    violation = body["violations"][0]
+    assert (violation["day_index"], violation["slot_index"]) == (0, 0)
+    # 기존 필드 회귀 없음 — code/slot_ref/detail 은 그대로 유지된다(수퍼셋)
+    assert (violation["code"], violation["slot_ref"], violation["detail"]) == (
+        "HC1", FIXED_POI, "이용시간 밖",
+    )
+
+
+def test_unplaced_violation_indices_are_null() -> None:
+    """HC3 미배치 위반: 슬롯이 없어서 위반인 것 — 인덱스는 null이 정직한 값(지어내지 않는다)."""
+    unplaced = "99999999-9999-4999-8999-999999999999"
+    orchestrator = FakeOrchestrator(
+        make_outcome(),
+        violations=[
+            Violation(code="HC3", slot_ref=PoiId(unplaced), detail="필수방문 미배치"),
+            Violation(code="HC2", slot_ref=None, detail="슬롯 무관 위반"),
+        ],
+    )
+    with client(orchestrator) as c:
+        generated = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST).json()
+        body = c.post(
+            "/ai/v1/itinerary/validate",
+            json={"itinerary": generated, "request_meta": BACKEND_REQUEST["request_meta"]},
+        ).json()
+
+    first, second = body["violations"]
+    assert first["slot_ref"] == unplaced
+    assert first["day_index"] is None and first["slot_index"] is None
+    assert second["slot_ref"] is None
+    assert second["day_index"] is None and second["slot_index"] is None
 
 
 def test_validate_returns_200_with_empty_violations() -> None:

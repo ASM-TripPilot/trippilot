@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 from datetime import date as date_type
-from typing import Callable, TypeVar
+from typing import Callable, Sequence, TypeVar
 
 from fastapi import APIRouter, Depends, Request
 
@@ -130,11 +130,35 @@ def to_payload(outcome: ItineraryOutcome) -> ItineraryPayload:
     )
 
 
-def to_violation(violation: Violation) -> ViolationSchema:
+def locate_slot(
+    days: Sequence[DayScheduleSchema], slot_ref: PoiId | str | None
+) -> tuple[int | None, int | None]:
+    """일정에서 `slot.poi_id == slot_ref`인 **첫 위치**의 (day_index, slot_index).
+
+    못 찾으면 (None, None) — 예: HC3 미배치 위반은 슬롯이 없어서 위반인 것이므로
+    null이 정직한 값이다(지어내지 않는다). 도메인 타입은 건드리지 않고
+    직렬화 계층에서만 계산한다(백엔드 `(type, dayIndex, slotIndex)` 표현과의 수퍼셋 대응).
+    """
+    if slot_ref is None:
+        return (None, None)
+    ref = str(slot_ref)
+    for day_index, day in enumerate(days):
+        for slot_index, slot in enumerate(day.slots):
+            if str(slot.poi_id) == ref:
+                return (day_index, slot_index)
+    return (None, None)
+
+
+def to_violation(
+    violation: Violation, days: Sequence[DayScheduleSchema] = ()
+) -> ViolationSchema:
+    day_index, slot_index = locate_slot(days, violation.slot_ref)
     return ViolationSchema(
         code=violation.code,
         slot_ref=str(violation.slot_ref) if violation.slot_ref is not None else None,
         detail=violation.detail,
+        day_index=day_index,
+        slot_index=slot_index,
     )
 
 
@@ -158,7 +182,10 @@ def validate(
     """편집 재검증(HC1~4). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다."""
     return _guarded(
         lambda: ValidateItineraryResponse(
-            violations=[to_violation(v) for v in orchestrator.validate(body)]
+            # 위치 인덱스는 요청으로 받은 itinerary를 스캔해 계산한다(수퍼셋 발신)
+            violations=[
+                to_violation(v, body.itinerary.days) for v in orchestrator.validate(body)
+            ]
         )
     )
 

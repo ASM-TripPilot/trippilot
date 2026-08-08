@@ -199,15 +199,20 @@ class ItineraryPayload(BoundaryModel):
 
 
 class ViolationSchema(BoundaryModel):
-    """하드 제약 위반 1건 — **AI 도메인 표현**(`code`/`slot_ref`).
+    """하드 제약 위반 1건 — AI 도메인 표현(`code`/`slot_ref`) + 위치 인덱스 **수퍼셋**.
 
-    백엔드 도메인은 `(type, dayIndex, slotIndex)`로 지시한다 — 대응은 TRIP-282 미결이며,
-    여기서 위치 인덱스를 지어내지 않는다(없는 정보를 만들지 않는다).
+    백엔드 도메인은 `(type, dayIndex, slotIndex)`로 지시한다. AI 도메인 타입에는 위치
+    인덱스가 없지만, **직렬화 시점에 일정(days)을 스캔해 계산**해서 함께 실어 보낸다
+    (routes.locate_slot) — 백엔드 어댑터는 code→type 매핑만 하면 된다.
+    `slot_ref`가 일정 어디에도 없으면(예: HC3 미배치 위반 — 슬롯이 없어서 위반인 것)
+    인덱스는 null이다. 지어내지 않는다.
     """
 
     code: str
     slot_ref: str | None = None
     detail: str = ""
+    day_index: int | None = None
+    slot_index: int | None = None
 
 
 class ValidateItineraryRequest(BoundaryModel):
