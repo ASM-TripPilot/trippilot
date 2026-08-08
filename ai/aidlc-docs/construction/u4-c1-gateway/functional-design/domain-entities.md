@@ -28,6 +28,14 @@ U4는 U1이 만든 규격을 **소비**한다. 아래 타입은 손대지 않는
 | `INTENT` / `PARAPHRASE` / `REASON_INTERPRETATION` | 경량 | U5 |
 | `EXPLANATION` / `ALTERNATIVE_SELECTION` / `REFLECTION` | 상위 | U5·U6 |
 | `PLACE_EXTRACTION` | 상위 (백그라운드) | U6 |
+| `EDIT_TRANSLATION` | 경량(LIGHT) | agent-foundation 스텝 ⓪ (**EditAgent 전속**) |
+
+> `EDIT_TRANSLATION` 역할: **확정된 EDIT_SCHEDULE 의도의 세부를 `EditCommand`로 번역**한다 —
+> 라우팅 의도 재해석이 아니다 (DL-3·BR-AF-02·BR-AF-08). 정의 정본은 agent-foundation FD domain-entities §1이고,
+> 본 표는 그 §1의 5종 세트 절차 step 1(u4 티어 표 반영)이다 — agent-foundation FD business-rules §4의 개정 항목
+> "u4 …domain-entities.md §1"은 **본 행으로 반영 완료** (TRIP-315).
+> 티어는 INTENT·PARAPHRASE와 동급 과업이라는 근거의 **제안값**이며, LIGHT 확정 여부는
+> 복잡 편집 발화 정확도를 K-2 실모델 검증에서 확인한 뒤 확정한다 (**미결 #4**, agent-foundation FD business-rules §5).
 
 ### ModelTier (StrEnum)
 
@@ -57,7 +65,18 @@ PermissionDeniedError(Exception)                      # 권한 위반 — "조�
 
 클라이언트가 넘긴 원본 데이터는 프롬프트에 넣지 않는다 — ResourceRef로 **요청자 권한 하에 재조회**한 값만 (D31). 위반 시 부분 성공 없이 즉시 예외.
 
-## 4. 파서 출력 (c1 내부 — 도메인 아님)
+## 4. 파서 출력 (c1 내부 — 도메인 아님) / 게이트 통과분의 도메인 승격
 
 LLM raw JSON의 중간 표현 `RawScore(poi_id_str, score, reason)`는 `c1/gate.py` 내부 타입.
 게이트 통과 후에만 `ScoredPoi`(도메인)로 승격 — **검증 전 데이터가 도메인 타입이 되는 것을 구조로 차단.**
+
+이 승격 규칙의 소유는 본 §4다. 따라서 **게이트 통과분 타입의 규격도 본 FD가 소유**한다:
+
+| 타입 | 실제 모듈 | 지위 |
+|---|---|---|
+| `EditTranslation` (`command: EditCommand` · `apply_mode: ApplyMode` + `to_dict`/`from_dict`) | `domain/edit.py` (U1 FD §5 Edit 인벤토리에 합류) | EDIT_TRANSLATION 게이트 **통과 후에만** 생성되는 도메인 타입. `apply_mode`는 LLM 제안이 아니라 `resolve_apply_mode`가 재계산한 값이고(AI-D02 하이브리드), 솔버 검증·실제 반영은 EditAgent(U5) 몫이라 이 타입은 **초안까지**다 (INV-2) |
+
+- 배치 근거: 게이트 파일에 두면 "검증 전/후" 경계가 c1 내부 타입(`RawScore`)과 시각적으로 구분되지 않고,
+  EditAgent(U5, agents 계층)가 소비할 때 `c1.gates` 모듈을 import해야 해 계층 규칙 L-3의 취지(하위 구현 세부 비노출)와 어긋난다.
+- 소유 FD 근거: 값의 **의미와 불변식**(무엇이 통과분인가·apply_mode를 누가 정하는가)은 C1 게이트 규격이므로 u4 FD.
+  agent-foundation FD §1은 `EDIT_TRANSLATION` **feature**(이름·티어·소유 에이전트)만 정의하고 출력 타입 규격은 정의하지 않는다.
