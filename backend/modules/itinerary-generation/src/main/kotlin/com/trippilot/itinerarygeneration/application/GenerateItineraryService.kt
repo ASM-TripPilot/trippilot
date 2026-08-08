@@ -11,6 +11,8 @@ import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.MinimalItineraryFallback
+import com.trippilot.itinerarygeneration.domain.RevisionActor
+import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
@@ -48,6 +50,7 @@ class GenerateItineraryService(
     private val itineraries: ItineraryRepository,
     private val events: DomainEventPublisher,
     private val secondPhase: SecondPhaseGenerator,
+    private val revisions: ItineraryRevisionService,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
 ) {
@@ -88,10 +91,20 @@ class GenerateItineraryService(
         // 단일일 여행이면 1차로 끝 — 2차 없이 COMPLETE.
         val state = if (remainingDates.isEmpty()) GenerationState.COMPLETE else GenerationState.PARTIAL
 
+        // 재생성이라면 **직전 상태로 돌아갈 지점**이 반드시 있어야 한다(INV-U3-08 · BR-U3-19).
+        val previous = itineraries.findByTrip(tripId).firstOrNull()
+
         // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
         val saved = tx.execute {
+            previous?.let { revisions.ensureRestorePoint(it) }
             val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, state, firstDates))
             events.publish(ItineraryGenerated(it.itineraryId.toString(), tripId.toString(), it.isFallback))
+            // 사용자가 실제로 본 버전을 모두 남긴다 — 그래야 목록의 모든 항목이 되돌리기 대상이 된다.
+            if (previous == null) {
+                revisions.record(it, RevisionActor.AI, RevisionKind.BASELINE, "AI가 처음 짠 일정")
+            } else {
+                revisions.record(it, RevisionActor.AI, RevisionKind.GENERATE, "AI가 일정을 다시 짬")
+            }
             it
         }!!
 

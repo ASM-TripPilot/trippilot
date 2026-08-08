@@ -5,6 +5,9 @@ import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
+import com.trippilot.itinerarygeneration.domain.NewRevision
+import com.trippilot.itinerarygeneration.domain.ItineraryRevisionRepository
+import com.trippilot.itinerarygeneration.domain.ItineraryRevision
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
@@ -83,6 +86,26 @@ private val NOOP_TX = object : PlatformTransactionManager {
     override fun rollback(status: TransactionStatus) {}
 }
 
+/** 테스트용 리비전 서비스 조립 — 생성 경로가 되돌리기 지점을 남기는지 보려면 실물이 필요하다. */
+internal fun genRevisions(repo: ItineraryRepository, trips: TripFacade, clock: Clock = Clock.fixed(Instant.parse("2026-08-06T00:00:00Z"), ZoneOffset.UTC)) =
+    ItineraryRevisionService(GenFakeRevisions(), repo, trips, NOOP_TX, clock)
+
+/** 리비전 기록을 관찰하는 인메모리 저장소 — seq 는 순서대로 부여. */
+private class GenFakeRevisions : ItineraryRevisionRepository {
+    val appended = mutableListOf<NewRevision>()
+    override fun append(revision: NewRevision): ItineraryRevision {
+        appended += revision
+        return ItineraryRevision(
+            UUID.randomUUID(), revision.tripId, revision.itineraryId, appended.size, revision.actor, revision.kind,
+            revision.summary, revision.detail, revision.snapshot, revision.createdAt,
+        )
+    }
+    override fun findByTrip(tripId: UUID) = appended.filter { it.tripId == tripId }.mapIndexed { i, r ->
+        ItineraryRevision(UUID.randomUUID(), r.tripId, r.itineraryId, i + 1, r.actor, r.kind, r.summary, r.detail, r.snapshot, r.createdAt)
+    }
+    override fun findById(revisionId: UUID): ItineraryRevision? = null
+}
+
 /** 상태를 들고 있는 인메모리 저장소 — 2차 생성이 PARTIAL 을 다시 읽어 전이하므로 무상태 스텁으론 부족하다. */
 private open class FakeItineraries : ItineraryRepository {
     val byTrip = mutableMapOf<UUID, Itinerary>()
@@ -145,7 +168,7 @@ class GenerateItineraryServiceTest : StringSpec({
         }
         // 단위 테스트엔 Spring 프록시가 없어 @Async 가 걸리지 않는다 → 2차가 그 자리에서 동기 실행된다(결정론).
         val second = SecondPhaseGenerator(agent, repo, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, NOOP_TX, clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, genRevisions(repo, trips), NOOP_TX, clock)
     }
 
     val fullPrefs = PreferenceSnapshot(
@@ -259,7 +282,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
         }
         val second = SecondPhaseGenerator(agent, repo, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, NOOP_TX, clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genRevisions(repo, trips), NOOP_TX, clock)
     }
 
     "추천 근거가 slotKey 로 슬롯에 붙어 영속된다(TRIP-306 · BR-U2-04)" {
@@ -519,7 +542,7 @@ class TwoPhaseDayCoverageTest : StringSpec({
                 override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
             }
             val second = SecondPhaseGenerator(agent, repo, NOOP_TX, clock)
-            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, NOOP_TX, clock)
+            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genRevisions(repo, trips), NOOP_TX, clock)
                 .generate(acc, tripId, GenerationMode.FULLY_AI)
 
             // 두 호출이 요청한 일자의 합 = 여행 일자, 중복 없음
