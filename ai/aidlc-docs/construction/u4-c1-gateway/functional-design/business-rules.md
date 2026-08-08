@@ -10,7 +10,7 @@
 | BR-U4-04 | 타임아웃 2.5초 (요청 예산 5초의 절반 이하) | NFR-1.2, D38 |
 | BR-U4-05 | `LlmFeature` enum 밖의 기능으로 게이트웨이 호출 불가 (ValueError) — "기능 목록도 closed-set" | AI-D06, 소형 LLM 제한 원칙 |
 | BR-U4-06 | 프롬프트는 `prompts/*.yaml` + semver — PromptRef 없는 LlmRequest는 타입상 불가능. 렌더는 결정론 | NFR-7.3 |
-| BR-U4-07 | 프롬프트 입력은 ResourceRef 재조회 값만, 필드 최소화(좌표 미포함) — 권한 위반 시 PermissionDeniedError, **조용한 제외 금지** | D31, G181 |
+| BR-U4-07 | 프롬프트 입력은 ResourceRef 재조회 값만, 필드 최소화(좌표 미포함) — 권한 위반 시 PermissionDeniedError, **조용한 제외 금지**. 재조회는 **한 계층에서만**: `ResourceRef`를 받는 워커가 소유(PreferenceScoring·Explanation), 상위 계층이 이미 재조회해 확정값을 넘긴 경우 워커는 다시 조회하지 않는다(EditTranslation ← EditAgent) — 소유 표는 business-logic-model §3.1 | D31, G181 |
 | BR-U4-08 | model_id는 항상 설정값(C1Config) — 코드에 모델 문자열 하드코딩 금지 | AI-D06 |
 | BR-U4-09 | 규칙 점수 폴백 **실행**은 호출측(U5) — C1은 신호만. c1 → c2·m7 import 금지 | agent-structure-v2 경계 |
 | BR-U4-10 | 실 API 호출은 CI·테스트에서 0건 — 어댑터는 주입식, 스모크는 K-1 | D37 |
