@@ -8,6 +8,7 @@ import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.NewRevision
 import com.trippilot.itinerarygeneration.domain.ItineraryRevisionRepository
 import com.trippilot.itinerarygeneration.domain.ItineraryRevision
+import com.trippilot.itinerarygeneration.domain.ItineraryRevisionSummary
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.CandidatesSummary
@@ -86,9 +87,10 @@ private class FakeRevisions : ItineraryRevisionRepository {
             revision.summary, revision.detail, revision.snapshot, revision.createdAt,
         )
     }
-    override fun findByTrip(tripId: UUID) = appended.mapIndexed { i, r ->
-        ItineraryRevision(UUID.randomUUID(), r.tripId, r.itineraryId, i + 1, r.actor, r.kind, r.summary, r.detail, r.snapshot, r.createdAt)
-    }
+    override fun findSummaries(tripId: UUID, limit: Int) = appended.mapIndexed { i, r ->
+        ItineraryRevisionSummary(UUID.randomUUID(), i + 1, r.actor, r.kind, r.summary, r.detail, r.createdAt)
+    }.takeLast(limit).reversed()
+    override fun existsForTrip(tripId: UUID) = appended.isNotEmpty()
     override fun findById(revisionId: UUID): ItineraryRevision? = null
 }
 
@@ -99,7 +101,7 @@ class EditItineraryServiceTest : StringSpec({
             override fun findPeriod(accountId: UUID, tripId: UUID) =
                 TripPeriod(LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-01"))
             override fun findGenerationContext(accountId: UUID, tripId: UUID) = null
-        }, tx, clock)
+        }, NoopValidateAgent(), tx, clock)
 
     val clock = Clock.fixed(Instant.parse("2026-08-06T00:00:00Z"), ZoneOffset.UTC)
     val acc = UUID.randomUUID()

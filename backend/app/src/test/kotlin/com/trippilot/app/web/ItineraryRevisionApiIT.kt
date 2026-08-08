@@ -61,6 +61,26 @@ class ItineraryRevisionApiIT : AbstractPostgresIntegrationTest() {
     private fun poiId(token: String): String =
         call(HttpMethod.GET, "/api/v1/places?region=제주", token).second[0]["poiId"].asText()
 
+    /** 다일 여행 — 2단계 생성을 타므로 리비전이 **전 일자**를 담는지 확인할 수 있다. */
+    private fun multiDayTrip(token: String): String {
+        val body = """{"startDate":"2026-08-01","endDate":"2026-08-03","party":2,
+            "destinations":[{"seq":0,"region":"제주","nights":2}],"preferenceSnapshot":{}}""".trimIndent()
+        val trip = call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        return trip
+    }
+
+    /** 2차 생성(백그라운드)이 끝날 때까지 조회 폴링 — 실 클라이언트와 동일. */
+    private fun awaitComplete(trip: String, token: String) {
+        val deadline = System.nanoTime() + java.time.Duration.ofSeconds(20).toNanos()
+        while (System.nanoTime() < deadline) {
+            val state = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second["generationState"]?.asText()
+            if (state != "PARTIAL") return
+            Thread.sleep(50)
+        }
+        error("2차 생성이 기한 내 끝나지 않았습니다.")
+    }
+
     @Test
     fun `인증 없으면 401`() {
         call(HttpMethod.GET, "/api/v1/trips/${UUID.randomUUID()}/itinerary/revisions", null).first shouldBe 401
@@ -119,6 +139,49 @@ class ItineraryRevisionApiIT : AbstractPostgresIntegrationTest() {
         after.size() shouldBe 3
         after[0]["kind"].asText() shouldBe "RESTORE"
         after[0]["seq"].asInt() shouldBe 3
+    }
+
+    @Test
+    fun `다일 여행은 리비전이 전 일자를 담는다 — 되돌려도 일정이 잘리지 않는다`() {
+        val token = newToken()
+        val trip = multiDayTrip(token)
+        awaitComplete(trip, token)
+        val dayCount = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second["days"].size()
+        dayCount shouldBe 3
+
+        // 2차 완료 시점에 BASELINE 이 남아야 한다 — 1차(day1)에서 남기면 여기서 1이 된다
+        val revs = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary/revisions", token).second["revisions"]
+        revs.size() shouldBe 1
+        revs[0]["kind"].asText() shouldBe "BASELINE"
+
+        val poi = poiId(token)
+        val editBody = """{"days":[
+            {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"13:00","endAt":"14:00","isFixed":false,"endsNextDay":false}]}]}"""
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody).first shouldBe 200
+
+        // 되돌리면 3일치가 그대로 복원돼야 한다(잘리면 여기서 1이 된다)
+        val baseline = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary/revisions", token)
+            .second["revisions"].let { r -> (0 until r.size()).map { r[it] } }.first { it["kind"].asText() == "BASELINE" }
+        val (rc, restored) = call(
+            HttpMethod.POST, "/api/v1/trips/$trip/itinerary/revisions/${baseline["revisionId"].asText()}/restore", token,
+        )
+        rc shouldBe 200
+        restored["days"].size() shouldBe dayCount
+    }
+
+    @Test
+    fun `사유가 200자를 넘어도 편집이 저장된다(리비전 summary 상한에 걸려 롤백되지 않는다)`() {
+        val token = newToken()
+        val trip = tripWithItinerary(token)
+        val poi = poiId(token)
+        val longReason = "가".repeat(400) // 요청 상한(500) 이내지만 summary 컬럼(200)은 초과
+        val body = """{"reason":"$longReason","days":[
+            {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"13:00","endAt":"14:00","isFixed":false,"endsNextDay":false}]}]}"""
+
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, body).first shouldBe 200
+        val revs = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary/revisions", token).second["revisions"]
+        revs[0]["kind"].asText() shouldBe "EDIT"
+        (revs[0]["summary"].asText().length <= 200) shouldBe true // 잘려서 저장된다
     }
 
     @Test

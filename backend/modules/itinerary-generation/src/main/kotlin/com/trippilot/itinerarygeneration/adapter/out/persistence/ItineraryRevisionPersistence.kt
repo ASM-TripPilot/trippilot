@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.adapter.out.persistence
 import com.trippilot.itinerarygeneration.domain.DaySnapshot
 import com.trippilot.itinerarygeneration.domain.ItineraryRevision
 import com.trippilot.itinerarygeneration.domain.ItineraryRevisionRepository
+import com.trippilot.itinerarygeneration.domain.ItineraryRevisionSummary
 import com.trippilot.itinerarygeneration.domain.ItinerarySnapshot
 import com.trippilot.itinerarygeneration.domain.NewRevision
 import com.trippilot.itinerarygeneration.domain.RevisionActor
@@ -14,6 +15,8 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
@@ -41,7 +44,8 @@ class ItineraryRevisionEntity(
 )
 
 interface ItineraryRevisionJpaRepository : JpaRepository<ItineraryRevisionEntity, UUID> {
-    fun findByTripIdOrderBySeqDesc(tripId: UUID): List<ItineraryRevisionEntity>
+    fun findByTripIdOrderBySeqDesc(tripId: UUID, pageable: Pageable): List<ItineraryRevisionEntity>
+    fun existsByTripId(tripId: UUID): Boolean
     fun findFirstByTripIdOrderBySeqDesc(tripId: UUID): ItineraryRevisionEntity?
 }
 
@@ -72,8 +76,15 @@ class ItineraryRevisionRepositoryAdapter(
         return jpa.save(entity).toDomain()
     }
 
-    override fun findByTrip(tripId: UUID): List<ItineraryRevision> =
-        jpa.findByTripIdOrderBySeqDesc(tripId).map { it.toDomain() }
+    override fun findSummaries(tripId: UUID, limit: Int): List<ItineraryRevisionSummary> =
+        jpa.findByTripIdOrderBySeqDesc(tripId, PageRequest.of(0, limit)).map {
+            ItineraryRevisionSummary(
+                it.revisionId, it.seq, RevisionActor.valueOf(it.actor), RevisionKind.valueOf(it.kind),
+                it.summary, it.detail, it.createdAt,
+            )
+        }
+
+    override fun existsForTrip(tripId: UUID): Boolean = jpa.existsByTripId(tripId)
 
     override fun findById(revisionId: UUID): ItineraryRevision? =
         jpa.findById(revisionId).orElse(null)?.toDomain()
@@ -104,15 +115,19 @@ class ItineraryRevisionRepositoryAdapter(
     )
 
     /**
-     * 읽기는 **전부 방어적으로** — 이력은 지울 수 없고, 스냅숏 형태가 나중에 늘면 옛 행의 단정 캐스팅이
-     * 그 일정의 이력 조회를 영구히 500 으로 만든다(change-log 에서 같은 지적을 받았다).
+     * 스냅숏은 **복원(파괴적 쓰기)의 입력**이라 부분 파싱을 허용하지 않는다 — 조각 하나라도 못 읽으면
+     * 빈 스냅숏을 돌려주고, 서비스가 그것을 "복원 불가"로 막는다(INV-4: 조용히 일부만 적용 금지).
+     * 목록 조회는 이 경로를 타지 않으므로(요약 전용 쿼리) 형태 드리프트가 조회를 막지도 않는다.
      */
     @Suppress("UNCHECKED_CAST")
     private fun Map<String, Any>.toSnapshot(): ItinerarySnapshot {
-        val days = (this["days"] as? List<Map<String, Any>>).orEmpty().mapNotNull { d ->
+        val rawDays = this["days"] as? List<Map<String, Any>> ?: return ItinerarySnapshot(emptyList())
+        val days = rawDays.map { d ->
             val date = (d["date"] as? String)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-                ?: return@mapNotNull null
-            DaySnapshot(date, (d["slots"] as? List<Map<String, Any>>).orEmpty().mapNotNull { it.toSlot() })
+                ?: return ItinerarySnapshot(emptyList()) // 하나라도 못 읽으면 전체를 못 읽은 것으로 본다
+            val rawSlots = d["slots"] as? List<Map<String, Any>> ?: return ItinerarySnapshot(emptyList())
+            val slots = rawSlots.map { it.toSlot() ?: return ItinerarySnapshot(emptyList()) }
+            DaySnapshot(date, slots)
         }
         return ItinerarySnapshot(days)
     }

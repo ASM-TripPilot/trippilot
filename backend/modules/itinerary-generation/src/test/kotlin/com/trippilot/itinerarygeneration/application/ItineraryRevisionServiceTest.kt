@@ -7,6 +7,7 @@ import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.ItineraryRevision
+import com.trippilot.itinerarygeneration.domain.ItineraryRevisionSummary
 import com.trippilot.itinerarygeneration.domain.ItineraryRevisionRepository
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.NewRevision
@@ -62,8 +63,10 @@ class ItineraryRevisionServiceTest : StringSpec({
                 revision.summary, revision.detail, revision.snapshot, revision.createdAt,
             ).also { stored += it }
         }
-        override fun findByTrip(tripId: UUID) =
-            stored.filter { it.tripId == tripId }.sortedByDescending { it.seq }
+        override fun findSummaries(tripId: UUID, limit: Int) =
+            stored.filter { it.tripId == tripId }.sortedByDescending { it.seq }.take(limit)
+                .map { ItineraryRevisionSummary(it.revisionId, it.seq, it.actor, it.kind, it.summary, it.detail, it.createdAt) }
+        override fun existsForTrip(tripId: UUID) = stored.any { it.tripId == tripId }
         override fun findById(revisionId: UUID) = stored.firstOrNull { it.revisionId == revisionId }
     }
 
@@ -92,7 +95,7 @@ class ItineraryRevisionServiceTest : StringSpec({
             listOf(ItineraryDay.of(d1, 0, slots)), now, now, null,
         )
 
-    fun service(revs: Revisions, its: Itineraries) = ItineraryRevisionService(revs, its, trips, REV_NOOP_TX, clock)
+    fun service(revs: Revisions, its: Itineraries) = ItineraryRevisionService(revs, its, trips, NoopValidateAgent(), REV_NOOP_TX, clock)
 
     "seq 는 1부터 단조 증가한다(INV-U3-06)" {
         val revs = Revisions()

@@ -43,12 +43,29 @@ data class SlotSnapshot(
     val placementReason: String?,
 )
 
+/**
+ * 목록 표시용 — **스냅숏을 담지 않는다**. 목록은 문구·주체·시각만 쓰는데 스냅숏까지 역직렬화하면
+ * 편집 200번한 여행에서 일정 200개를 파싱해 버리는 셈이다(되돌리기는 서버가 단건으로 읽는다).
+ */
+data class ItineraryRevisionSummary(
+    val revisionId: UUID,
+    val seq: Int,
+    val actor: RevisionActor,
+    val kind: RevisionKind,
+    val summary: String,
+    val detail: String?,
+    val createdAt: Instant,
+)
+
 interface ItineraryRevisionRepository {
     /** [ItineraryRevision.seq] 는 구현이 채운다(여행 기준 현재 최대+1). 동시 기록은 UNIQUE 제약이 막는다. */
     fun append(revision: NewRevision): ItineraryRevision
 
-    /** 여행의 리비전 — 최신순. */
-    fun findByTrip(tripId: UUID): List<ItineraryRevision>
+    /** 여행의 리비전 목록 — 최신순, 최대 [limit] 건. 스냅숏은 싣지 않는다. */
+    fun findSummaries(tripId: UUID, limit: Int): List<ItineraryRevisionSummary>
+
+    /** 되돌리기 지점이 하나라도 있는가 — 없으면 만들어야 한다(INV-U3-08). */
+    fun existsForTrip(tripId: UUID): Boolean
 
     fun findById(revisionId: UUID): ItineraryRevision?
 }

@@ -12,6 +12,8 @@ package com.trippilot.itinerarygeneration.application
 object BoundedText {
     const val DISTANCE_RANGE_MAX = 60
     const val PLACEMENT_REASON_MAX = 500
+    const val REVISION_SUMMARY_MAX = 200 // itinerary_revision.summary(V2.14)
+    const val REVISION_DETAIL_MAX = 500  // itinerary_revision.detail(V2.14)
 
     fun clamp(value: String?, max: Int): String? {
         if (value == null || value.length <= max) return value

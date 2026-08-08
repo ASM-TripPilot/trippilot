@@ -152,5 +152,6 @@ class ChangeLogApiIT : AbstractPostgresIntegrationTest() {
     fun `이력 없는 여행은 빈 목록`() {
         val token = newToken()
         val trip = tripWithItinerary(token)
+        call(HttpMethod.GET, "/api/v1/trips/$trip/change-log", token).second["entries"].size() shouldBe 0
     }
 }

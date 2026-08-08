@@ -2,11 +2,12 @@ package com.trippilot.itinerarygeneration.adapter.`in`.web
 
 import com.trippilot.itinerarygeneration.application.ItineraryRevisionService
 import com.trippilot.itinerarygeneration.application.SlotSurfaceAssembler
-import com.trippilot.itinerarygeneration.domain.ItineraryRevision
+import com.trippilot.itinerarygeneration.domain.ItineraryRevisionSummary
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.security.Principal
 import java.time.Instant
@@ -23,8 +24,12 @@ class ItineraryRevisionController(
     private val surfaces: SlotSurfaceAssembler,
 ) {
     @GetMapping
-    fun list(principal: Principal, @PathVariable tripId: UUID): RevisionListResponse =
-        RevisionListResponse(service.list(principal.accountId(), tripId).map { RevisionResponse.from(it) })
+    fun list(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @RequestParam(required = false, defaultValue = "${ItineraryRevisionService.DEFAULT_LIMIT}") limit: Int,
+    ): RevisionListResponse =
+        RevisionListResponse(service.list(principal.accountId(), tripId, limit).map { RevisionResponse.from(it) })
 
     /** 되돌리기 — 과거 리비전을 지우지 않고 새 리비전을 쌓는다(BR-U3-32). 확정·생성 중 일정은 409. */
     @PostMapping("/{revisionId}/restore")
@@ -54,7 +59,7 @@ data class RevisionResponse(
     val createdAt: Instant,
 ) {
     companion object {
-        fun from(r: ItineraryRevision) =
+        fun from(r: ItineraryRevisionSummary) =
             RevisionResponse(r.revisionId, r.seq, r.actor.name, r.kind.name, r.summary, r.detail, r.createdAt)
     }
 }

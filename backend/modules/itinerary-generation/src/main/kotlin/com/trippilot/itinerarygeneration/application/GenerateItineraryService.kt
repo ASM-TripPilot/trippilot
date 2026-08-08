@@ -99,11 +99,10 @@ class GenerateItineraryService(
             previous?.let { revisions.ensureRestorePoint(it) }
             val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, state, firstDates))
             events.publish(ItineraryGenerated(it.itineraryId.toString(), tripId.toString(), it.isFallback))
-            // 사용자가 실제로 본 버전을 모두 남긴다 — 그래야 목록의 모든 항목이 되돌리기 대상이 된다.
-            if (previous == null) {
-                revisions.record(it, RevisionActor.AI, RevisionKind.BASELINE, "AI가 처음 짠 일정")
-            } else {
-                revisions.record(it, RevisionActor.AI, RevisionKind.GENERATE, "AI가 일정을 다시 짬")
+            // 리비전은 **생성이 끝난 상태**에서만 남긴다. 여기서 PARTIAL(day1만)을 남기면 그 스냅숏으로 되돌릴 때
+            // 2차가 채운 나머지 일자가 통째로 사라진다 — 다일 여행은 2차 완료 시점에 남긴다(SecondPhaseGenerator).
+            if (state == GenerationState.COMPLETE) {
+                revisions.record(it, RevisionActor.AI, kindFor(previous), summaryFor(previous))
             }
             it
         }!!
@@ -121,10 +120,15 @@ class GenerateItineraryService(
             secondPhase.completeRemaining(
                 tripId, saved.itineraryId,
                 secondInput.copy(excludedPoiIds = secondInput.excludedPoiIds.filterNot { it in fixedInSecond }),
+                isRegeneration = previous != null,
             )
         }
         return saved
     }
+
+    /** 최초 생성이면 기준 버전(BASELINE), 재생성이면 GENERATE. */
+    private fun kindFor(previous: Itinerary?) = if (previous == null) RevisionKind.BASELINE else RevisionKind.GENERATE
+    private fun summaryFor(previous: Itinerary?) = if (previous == null) "AI가 처음 짠 일정" else "AI가 일정을 다시 짬"
 
     @Suppress("LongParameterList")
     private fun assembleInput(
