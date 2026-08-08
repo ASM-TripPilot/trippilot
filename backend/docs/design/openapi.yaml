@@ -1154,6 +1154,12 @@ components:
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean, description: "자정 넘김(HC4) — true 면 endAt 은 익일 시각(시작일 귀속)" }
                     hasViolation: { type: boolean, description: "편집 재검증(HC1-4) 위반 표시(비차단)" }
+                    violationReason:
+                      type: string
+                      nullable: true
+                      description: >
+                        위반 사유(BR-U3-13). 저장 후 재조회에도 남아 위반 블록을 **지속 가시화**한다.
+                        여러 건이면 " · " 로 이어 붙인다. hasViolation=false 면 항상 null.
                     placementReason:
                       type: string
                       nullable: true

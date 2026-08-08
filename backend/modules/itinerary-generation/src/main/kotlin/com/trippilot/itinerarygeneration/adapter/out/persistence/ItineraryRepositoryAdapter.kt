@@ -41,7 +41,7 @@ class ItineraryRepositoryAdapter(
                     VisitSlotEntity(
                         UUID.randomUUID(), dayId, s.sourcePoiId, s.poiSnapshotId,
                         s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange,
-                        s.placementReason,
+                        s.placementReason, s.violationReason,
                     ),
                 )
             }
@@ -87,7 +87,7 @@ class ItineraryRepositoryAdapter(
                 (slotsByDay[d.itineraryDayId] ?: emptyList()).map { s ->
                     VisitSlot.of(
                         s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation,
-                        s.endsNextDay, s.distanceRange, s.placementReason,
+                        s.endsNextDay, s.distanceRange, s.placementReason, s.violationReason,
                     )
                 },
             )

@@ -58,6 +58,7 @@ class VisitSlotEntity(
     @Column(name = "ends_next_day") var endsNextDay: Boolean,
     @Column(name = "distance_range") var distanceRange: String?,
     @Column(name = "placement_reason") var placementReason: String?,
+    @Column(name = "violation_reason") var violationReason: String?,
 )
 
 interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {
