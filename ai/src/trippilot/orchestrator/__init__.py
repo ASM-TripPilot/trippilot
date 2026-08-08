@@ -1,8 +1,10 @@
 """orchestrator — 의도 파악·복잡도 판단·위임 지휘 계층 (agent-foundation FD §1 예약 자리).
 
-본 유닛(U6-01, TRIP-242)이 채우는 것은 의도 라우팅 한 갈래뿐:
-- `question_bank`: 의도별 질문뱅크 yaml 적재 (검수 게이트 포함)
+현재 채워진 갈래:
+- `question_bank`: 의도별 질문뱅크 yaml 적재 (검수 게이트 포함, U6-01/TRIP-242)
 - `intent_router`: 3단 매칭(질문뱅크 → 유사질문 투표 → LLM 직접 분류) + 결정론 폴백
+- `itinerary_orchestrator`: M7 후보풀 → C1 선호점수 → C2 솔버 조립 + 폴백 계단
+  (U5-01/02, TRIP-237·238)
 
 Execution Plan 수립·InfoCollector·AgentTask 발행은 후속 유닛 소관.
 
