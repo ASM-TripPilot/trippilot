@@ -25,6 +25,7 @@
 
 ## 아키텍처 · 구현
 
+- **기존 인스턴스에서 파생시키는 frozen dataclass를 필드 나열로 재구성하지 말 것 → `dataclasses.replace(원본, 바꿀_필드=…)`.** 나열식은 나중에 **추가된 필드를 조용히 떨어뜨린다** — 생성자 호출이 그대로 성공하고(기본값이 채워짐) 모든 필드가 유효한 값이라 **타입 체크·기존 테스트로 검출되지 않으며**, 재구성이 있는 **한 경로에서만** 기능이 소실된다. `c2/facade.py`의 `regenerate()`가 `ItineraryProblem`을 나열로 재구성해, 뒤늦게 추가된 `excluded_poi_ids`(TRIP-293)를 빠뜨려 regenerate 경로에서만 기배정 POI 제외가 사라졌다. `replace`는 나열하지 않은 필드를 전부 그대로 옮기므로 필드가 추가돼도 파생이 자동으로 따라온다. (TRIP-292 재현·수정 · TRIP-314에서 `c2/ortools_solver.py::_greedy_hint` 동일 전환)
 - **`ApplicationRunner`/`@PostConstruct`로 기동 시 DB write를 하지 말 것.** 모든 `@SpringBootTest` 전체-컨텍스트 테스트가 그 write에 의존하게 돼, 스키마·컨테이너 설정이 다른 최소 테스트까지 컨텍스트 로드 실패로 깨진다. 시드는 `@Profile` 가드·테스트 픽스처·명시적 호출·`@Scheduled`로. (TRIP-175, PR #30 CI — DatabaseConnectivityIT)
 - **스텁/인메모리 어댑터에 캐시(Redis)·서킷브레이커(Resilience4j)를 붙이지 말 것 → 실 외부 어댑터 단계로 이연.** 스텁은 외부 지연·실패가 없어 캐싱·보호할 대상이 없다. 포트 경계만 잡아두고 실 벤더 붙일 때 감싼다("측정된 필요까지 이연" 원칙). (TRIP-175)
 - **포트 인터페이스에 메서드를 추가하면 모든 Fake/TestDouble 구현도 즉시 갱신할 것.** 안 하면 컴파일은 통과해도 다른 모듈 테스트의 fake가 깨진다. (TRIP-158 — RefreshTestDoubles)
