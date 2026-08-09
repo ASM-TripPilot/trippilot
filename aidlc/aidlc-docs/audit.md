@@ -786,3 +786,135 @@ D3(지라 TRIP-181 티켓 본문의 사실 오기 2건 — 빈 스텁 서술·�
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-294 사이클(`20260808-trip294-itinerary-codegen`) [기록](scribe) 단계. 실측 근거는 `_workspace/20260808-trip294-itinerary-codegen/01_spec-analyst_brief.md`(3-a 정본 반영 후보 A~E)·`backend/docs/design/openapi.yaml:10,649,650,677`. 이 항목이 손댄 `aidlc/` 파일은 `construction/plans/u3-ai-itinerary-functional-design-plan.md`·`construction/u3-ai-itinerary/functional-design/frontend-components.md`와 이 `audit.md` append뿐이다.
 
 ---
+
+## CONSTRUCTION — U4 In-trip & Plan-B / Functional Design (Step 1~4: 컨텍스트·자산조사·밴드 i 대조·계획 수립)
+**Timestamp**: 2026-08-08T07:45:00Z
+**User Input**: "aidlc construction u4 진행하자 구현은 각자 할거고 문서 작성만 해서 진행"
+**AI Response**: SCOPE.md 경계 확인(CONSTRUCTION 설계 문서 단계만, Code Generation·Build&Test 제외) 후 U4 Functional Design 착수. Step 1 유닛 컨텍스트(unit-of-work U4 = C9·C10·C11 / 스토리 16개 = US-PLANB-01~13 + US-ONTRIP-01~03) · Step 1b 기존 자산 조사 · Step 1c 라이브 Figma 밴드 `i` 대조 · Step 2~4 계획서 작성 완료. 계획서 = `aidlc-docs/construction/plans/u4-in-trip-planb-functional-design-plan.md`. 질문 **Q1~Q8** 상신, 답변 대기(승인 게이트 전 단계).
+
+**Step 1b 실측 요지**: backend 모듈 10개 중 **planb-detection·itinerary-recalculation·weather-context 3모듈 전무**(U4 백엔드 통째 신규) / `change-log` 모듈 + `V2.11__change_log.sql` **선재** — `ChangeSource.PLAN_B`·`reason`·append-only(앱 롤 UPDATE/DELETE 회수)까지 이미 있어 US-PLANB-09 절반 구현됨 / `ScheduleAgentPort`는 **3메서드**(generate·validate·repair) — `recalculate` 없음(U2가 U4로 남긴 미개통 계약)이고 **U3가 확정한 `proposeSlotCandidates`도 코드 미반영**(설계-코드 드리프트, U4 Q1=A면 개통 시점이 U4로 앞당겨짐) / `ai/ports` 9종에 **날씨 포트 없음** / frontend **밴드 i 라우트 0**.
+
+**Step 1c 밴드 i 관측**: 캔버스 `1228:1045` 행 `y=12485`, 프레임 **22개** = 화면 코드 19 + `i01` 변형 2 + 이름 없는 프레임 1(`2335:2231`, x=358). 결번 **i06·i11·i14**. 밴드 전체가 `· 통합` 접미사(상태 변형 합본 세대). 스크린샷 8장 시각 확인(`i01-변수감지`·`i03`·`i04`·`i09`·`i10`·`i13`·`i16`·`i18`). 드리프트 **D-U4-1~10** 도출 — 핵심 3건: (1) **대안 2~3개가 라이브에 없음**(i13은 단일 재계획안 + 슬롯별 `다른 후보 4`) (2) **재계획 지시 입력이 4단**(범위 3 + 사유 6 + 방향 지시어 7 + 자유 텍스트) — 스토리는 사유 1단 (3) **여행 중 화면에 U5(사진·메모·기록 탭) 혼재**. 정합 확인분(D-U4-8): i16 대안 0건 3옵션 · i18 영향 지표 3종 + 전후 지도 · 폴백 3화면 · **INV-3 준수(소요시간 표기 0건, 거리만)**.
+
+**Context**: CONSTRUCTION / U4 In-trip & Plan-B / Functional Design Step 1~4 완료, Step 5(답변 수집) 대기. 이번 항목이 손댄 `aidlc/` 파일은 `construction/plans/u4-in-trip-planb-functional-design-plan.md` 신규 생성과 이 `audit.md` append뿐이다. `aidlc-state.md`는 스테이지 완료 시점에 갱신한다.
+
+---
+
+## CONSTRUCTION — U4 In-trip & Plan-B / Functional Design (Step 5~7: 답변 수집·디자인 반영 재관측·산출물 4종)
+**Timestamp**: 2026-08-09T08:30:00Z
+**User Input (1)**: "작성함 여행중 trippilot를 계속 띄우는 방식은 여기서 생각해봐야할거 같고 이렇게 갈 때 필요한 피그마 수정사항 말해주면 수정함"
+**User Input (2)**: "피그마 수정함 확인 ㄱ"
+**User Input (3, 계획서 `[Answer]:` 기입)**: Q1="A" · Q2="A" · Q3="항상 떠있게 하는 꼼수가 없나요?" · Q4="이것도 꼼수가 없나" · Q5="C" · Q6="AI는 ai 폴더를 전적으로 따른다 지금 develop 브랜치에 최신 상황을 따르는걸로" · Q7="A 실제 기능은 없는 버튼까지만" · Q8="C"
+**User Input (4, 재확인 응답)**: Q3·Q4 통합 질문에 **"지오펜스 조합 (추천)"** 선택
+
+**AI Response**: Q3·Q4는 답이 아니라 되물음이라 **기술 선택지를 실측 기반으로 제시**했다(`frontend/package.json`에 `expo-location ~19.0.8` 선재 확인 → 신규 의존성 0으로 가능한 것부터). 제시안: ① 지오펜싱 `startGeofencingAsync`(앱이 꺼져 있어도 OS가 깨움, 배터리 저부하, '항상 허용' 필요) ② Android 포그라운드 서비스 ③ iOS `UIBackgroundModes:location` ④ Live Activity(표시 전용) / **불가 판정**: `expo-background-fetch`는 iOS가 주기를 정해 트리거 감지에 부적합. 사용자가 **① 지오펜스 조합** 선택 → **DEC-U4-6·7**(클라 신호 수집 + 서버 판정, 연속 추적 없음).
+
+**디자인 반영 사이클**: 답변에서 파생되는 피그마 수정 15건을 상신 → 사용자가 수정 → **밴드 `i` 재관측(27프레임, 스크린샷 10장)으로 전건 확인**. 수정 A 7건(`i09` 교통 삭제 · `i10` 내일까지 삭제 · `i03` 걸음 수 삭제 · `i01`·`i04` 재추정 시각 → 계획 시각 · `i13` 추천 강도 삭제 + 이동 수단 병기 · `i05` 혼잡도 삭제) · B 3변형 신설(`i01 기록 없음` · `i01 변수 감지(이동 지연)`·`(영업·휴무)` · `i10 범위 밖`) · **C 신규 화면 `i14 슬롯 후보 교체 (Plan-B)`** · D 무명 프레임 명명(`i01 되돌리기 토스트`). Q3·Q4 확정 후 추가 요청 4건(`c08` 항상-허용 변형 · `i03` 각주 · `l02` 민감도 행 · `l06` 상태 행)은 디자인 진행 중이며 설계는 이를 전제로 작성.
+
+**Q6 실측 결과 — `recalculate` 신설 철회**: `ai/`(develop)에 `domain/trigger.py`의 **`TriggerKind{WEATHER,CLOSURE,DELAY,MANUAL}`·`ReplanScope{FULL_DAY,PARTIAL_SLOTS,NONE}`·`TriggerEvalResult`가 이미 실재**하고, `c2/facade.py`의 **`regenerate(problem, locked_slots, deadline_ms)`가 Plan-B warm-start 그 자체**임을 확인(locked를 `FixedBlock`으로 승격해 HC3 보호, `validate`가 보존 강제 → 위반 해 반환 불가). 따라서 새 솔버 개념을 만들지 않고 백엔드 포트를 ai 실장에 맞춰 **`replan`으로 개통**(DEC-U4-5). 함께 확인된 것: `ai/main.py`는 **`/health`만 응답하는 스텁**으로 `POST /ai/*` HTTP 표면이 아직 없음(**G-U4-3** — 개발 착수 전 선행 티켓 필요).
+
+**산출물 4종** (`aidlc-docs/construction/u4-in-trip-planb/functional-design/`): `business-logic-model.md`(DEC-U4-1~11 · 트리거 판정 파이프라인 · 재계획 플로우 · `replan` 계약과 ai 매핑표 · 슬롯 후보 U3 계약 재사용 · 기준점 사다리 4단 · 폴백 표 · G-U4-1~8) · `domain-entities.md`(신설 6종 + 기존 재사용 5종 + INV-U4-01~09 + 이벤트 3 + 소유 경계표) · `business-rules.md`(**BR-U4-01~46** + PBT-U4-1~5 + O-U4-1~5) · `frontend-components.md`(라우트 12 · 컴포넌트 30여 · testID · PBT-U4-F1~F3).
+
+**U2 사후 정정 2건**: `u2-itinerary-intelligence/functional-design/business-logic-model.md` §7 표의 `recalculate` 행을 **종결**로 바꾸고 **§7.2 신설**(정정 사유·`replan` 시그니처·이름 드리프트 G-U4-4 기록, `ScheduleAgentPort` **5메서드**) · 같은 유닛 `business-rules.md` O-U2-3 행의 "`recalculate` → U4 유지" 문구를 **종결**로 갱신. 새 스토리·새 컴포넌트 신설 0 → U2 스테이지 체크박스 변동 없음.
+
+**Context**: CONSTRUCTION / U4 In-trip & Plan-B / Functional Design Step 5~7 완료, Step 8(승인 게이트) 대기. 이번 항목이 손댄 `aidlc/` 파일 = `construction/u4-in-trip-planb/functional-design/` 4종 신규 · `construction/plans/u4-in-trip-planb-functional-design-plan.md` 갱신 · `construction/u2-itinerary-intelligence/functional-design/{business-logic-model.md,business-rules.md}` 사후 정정 · 이 `audit.md` append. `aidlc-state.md`는 승인 후 갱신한다.
+
+---
+
+## Post-Design Correction — U3·U4 `frontend-components.md` 실제 층 배치 기준 재작성
+**Timestamp**: 2026-08-09T09:30:00Z
+**User Input**: "프론트컴포넌트 지금 frontend 폴더 아키텍처에 맞게 다시 u3도 같이 해줘"
+**AI Response**: `frontend/` 실측 결과 **문서가 전제한 배치와 리포의 실제 배치가 어긋나 있었다.** `frontend/README.md`가 적은 feature 내부 관례(`screens/ components/ containers/ hooks/ store/ model/ lib/`)와 달리 실제는 **FSD 층**(`src/app` 얇은 라우트 → `src/pages/<slice>/ui/*Page.tsx` + 배럴 → `src/features/<d>/{model,ui}` → `src/shared`)이고, `containers/`는 TRIP-173에서 `pages/` 층으로 이주해 사라졌다(`frontend/docs/structure.md` 실측). 초판 두 문서는 라우트 표 + 평면 컴포넌트 표로만 적혀 있어 **어느 층에 무엇을 두는지가 없었다** — 그대로 개발에 들어가면 배치가 각자 달라진다.
+
+**U3 `frontend-components.md` 재작성** (승인 완료 산출물의 사후 정정): §0 층 배치 규약(실재 선례에서 유도 — 라우트 5~9줄·배럴만 import·판정은 페이지에서 1회·구조 가드) · **§0.1 이미 구현된 것**(TRIP-295 `timeBandLabel.ts`·`slotKey.ts` / TRIP-296 `mustVisitList.ts`·`mustVisitTimeForm.ts`·`MustVisitPickerScreen.tsx`·`MustVisitTimeScreen.tsx`·`ItineraryGlyphs.tsx`·`pages/itinerary-mustvisit/` 3파일·라우트 2파일·`shared/api/isAlreadyRegistered.ts`·`__tests__/itineraryMustVisitStructure.test.ts` — 전부 ✅ 표기) · §1 라우트 15 · §2 pages 슬라이스 11 · §3 `features/itinerary/model` 파일 17(순수 9·훅 7·스토어 1) · §4 `features/itinerary/ui` 파일 18 · §5 shared 변경 3 · §6 구조 가드 5 · §8 testID(초판 유지) · §9 PBT를 **대상 파일에 결속**. 초판의 컴포넌트 책임·BR 참조·갭 반영은 전부 보존하고 **배치만 실재 관례로 옮겼다**.
+
+**U4 `frontend-components.md` 재작성**(미승인 산출물, 같은 기준): **feature 2개로 분할** — `features/execution`(에픽 G, i01~i05·i08) · `features/planb`(에픽 F, i09·i10·i12~i22). features 간 직접 import 금지 규칙상 `i01`(execution) → `i10`(planb) 이동은 **라우팅**, 공유물은 `shared/`로 승격. pages 슬라이스 10 · `execution/model` 10 · `execution/ui` 10 · `planb/model` 13 · `planb/ui` 13 · **shared 승격 6건**(`KakaoMapView` 다중핀·폴리라인·점선 확장 / `shared/location`에 지오펜스 + '항상 허용' 승격 경로 — 위치 권한·수집 단일 소유가 그 디렉토리라 U4가 새 위치 코드를 만들지 않는다 / `distanceLabel` 승격 후보 / orval 태그 / 오프라인 큐) · **구조 가드 7**(시각 산술 0건 · 걸음 수 심볼 0건 · `TriggerKind` 정확히 4종 · `ReplanScope` 정확히 2종 · `useApplyReplan` 호출처 1곳 · 소요시간 표기 0건 · pages 재귀 스캔) · PBT-U4-F1~F3을 대상 파일에 결속.
+
+**함께 기록한 실측 경고**: `trips/**`는 `(tabs)` 밖이라 `SplashGate`의 `Stack.Protected` guard에 안 걸려 **미인증 딥링크로 열린다**(`stays/`·`trips/new/**` 선례, `frontend/docs/structure.md` 경고). U4는 **알림 딥링크가 이 경로로 들어오므로** 두 문서 §1에 명시했다.
+
+**Context**: CONSTRUCTION / U3(승인 완료 산출물의 사후 정정) · U4(Functional Design 승인 게이트 대기 중 산출물 갱신). 새 스토리·새 결정 신설 0 — **배치 기준만 실재로 정렬**했으므로 U3 스테이지 체크박스 변동 없음. 이번 항목이 손댄 `aidlc/` 파일은 `construction/u3-ai-itinerary/functional-design/frontend-components.md` · `construction/u4-in-trip-planb/functional-design/frontend-components.md`와 이 `audit.md` append뿐이다. 실측 근거 = `frontend/docs/structure.md`(층 규약·경고) · `frontend/src/` 디렉토리 전수 · `src/app/trips/[tripId]/itinerary/must-visits/index.tsx`(라우트 관례) · `src/features/{trip,itinerary}/{model,ui}/` 파일 목록 · `src/pages/*/` 13슬라이스 · `src/__tests__/` 가드 40개.
+
+---
+
+## CONSTRUCTION — U4 Functional Design 승인 + NFR Requirements 착수 (Step 1~4)
+**Timestamp**: 2026-08-09T10:15:00Z
+**User Input**: "승인, NFR Requirements 진행"
+**AI Response**: U4 Functional Design **승인 기록** — `aidlc-state.md`에 U4 절 신설(FD [x] 승인 완료 2026-08-09 · 산출물 4종 · Q1~Q8 답변 · 밴드 `i` 대조와 디자인 반영 재관측 · U2 사후 정정 2건 · U3 `frontend-components.md` 사후 정정 기록). 이어서 **NFR Requirements 착수**.
+
+Step 1 FD 분석 — **재서술 금지 대상 8건** 식별(무발화 BR-U4-05·INV-U4-01 / 감지 단계 억제 BR-U4-08·INV-U4-02 / 확정 전 무변경 BR-U4-28·32 / 시각 재추정 없음 BR-U4-34·35 / 연속 추적 없음 BR-U4-41 / 걸음 수 없음 / 수동 전환 폴백 BR-U4-43·45 / 기준점 사다리 BR-U4-19). Step 1b 상속 기반선 정리(부하·복원력·보안·관측·PBT + **호출 상한 형태는 U3 COST-U3-01 승계**).
+
+**Step 1c 실장 확인 — 사용자 지시(U3 선례) 대로 실장 우선**. 주요 발견 5건:
+(1) ⚠️ **자기 정정** — 이전 대화에서 지오펜스를 "신규 의존성 0"이라 했으나 실측 결과 **`expo-task-manager`가 없다**(`startGeofencingAsync`는 `TaskManager.defineTask` 필요) → **신규 의존성 1개**. 또한 `app.config.ts`의 `expo-location` 플러그인이 **`locationWhenInUsePermission` 하나만** 설정돼 있어 **plugin 확장 + EAS 재빌드**(OTA 불가)가 붙는다. 이 비용을 Q1로 사용자 재확인에 부침.
+(2) `backend/V1.3__auth_location.sql`에 **위치 동의 3층**이 이미 있고 **`gps_recording_opt_in`(L3)** 가 실제 경로 기록의 동의 축이다 → U4는 **새 동의 축을 만들지 않는다**.
+(3) 같은 마이그레이션의 `location_legal_log`는 **append-only + `event_type='COLLECTION'`** 을 요구 → 좌표마다 로그를 남기면 **점 수만큼 행 폭증** → 기록 단위를 Q3로 부침.
+(4) `backend/app/.../AsyncConfig.kt`에 **`@EnableScheduling` + `StalePartialSweeper` 실재** → DEC-U4-6의 "트리거 평가 스케줄러 없음"은 유지하되 **`replan_session` 만료 정리는 기존 sweeper 패턴 재사용**(신규 인프라 0)으로 전제에 명시.
+(5) `backend/gradle/libs.versions.toml`에 resilience4j·bucket4j·Redis·Caffeine **전부 없음** → 호출 상한은 라이브러리 없이 세션 상태로만(U3와 동형). U1이 결정한 Redis는 미도입 상태라 Q4에서 끌어올지 물음.
+
+계획서 = `aidlc-docs/construction/plans/u4-in-trip-planb-nfr-requirements-plan.md`. 질문 **Q1~Q6** 상신(지오펜스 실비용 재확인 · 포그라운드 평가 주기 · 실제 경로 정밀도/보존/법정 로그 단위 · 날씨 조회 예산 · 알림 빈도 상한 수치 · 여행 중 오프라인 정책), 답변 대기.
+
+**Context**: CONSTRUCTION / U4 / Functional Design 승인 완료 → NFR Requirements Step 1~4 완료, Step 5(답변 수집) 대기. 이번 항목이 손댄 `aidlc/` 파일 = `aidlc-docs/aidlc-state.md`(U4 절 신설) · `construction/plans/u4-in-trip-planb-nfr-requirements-plan.md`(신규) · 이 `audit.md` append.
+
+---
+
+## CONSTRUCTION — U4 NFR Requirements (Step 5~7: 답변·산출물 2종)
+**Timestamp**: 2026-08-09T10:50:00Z
+**User Input**: "ㄱㄱ"
+**AI Response**: "ㄱㄱ"를 **Q1~Q6 추천안(A) 전부 채택**으로 해석하고 그 해석을 사용자에게 명시한 뒤 진행("다르면 알려주면 고친다"). 채택된 답: Q1=A(지오펜스 실비용 수용) · Q2=A(이벤트 기반, 주기 폴링 없음) · Q3=A(세션 단위 법정 로그 + 성긴 샘플링) · Q4=A(격자·발표시각 캐시, DB 테이블) · Q5=A(하루 상한 설정값, "근거 없는 초기값" 라벨) · Q6=A(오프라인 정책 그대로, 방문 체크만 큐잉).
+
+**산출물 2종** (`aidlc-docs/construction/u4-in-trip-planb/nfr-requirements/`):
+- `nfr-requirements.md` — **MOBILE-U4-01~07**(이 유닛에서 새로 생긴 축: 배터리·권한·네이티브 빌드) · PERF-U4-01~05 · COST-U4-01~06 · **LEGAL-U4-01~05** · DATA-U4-01~05 · OBS-U4-01~05 · OFFLINE-U4-01~05 · SEC-U4-01~04 + 재평가 트리거 6. FD 중복 8건은 머리말에서 참조로만 처리.
+- `tech-stack-decisions.md` — 상속 11행 + U4 델타 6 + 미도입 결정 8 + 개발 중 처리 3.
+
+**실장이 결정을 바꾼 항목 4건**:
+(1) **자기 정정 확정** — FD 단계에서 "지오펜스 신규 의존성 0"이라 한 것을 `tech-stack-decisions.md` 델타 1에 **정정 기록**으로 남겼다. 실제로는 `expo-task-manager` 1개 + `app.config.ts` 플러그인 확장(`locationAlwaysAndWhenInUsePermission`·Android 백그라운드 플래그) + **EAS 재빌드**(OTA 불가). 사용자가 Q1=A로 이 비용을 수용.
+(2) **위치 동의 축 신설 금지** — `V1.3` 실장의 3층 동의 중 **L3 `gps_recording_opt_in`이 이미 실제 경로 기록의 동의 축**이라 LEGAL-U4-01로 승계만 한다.
+(3) **법정 로그 폭증 차단** — `location_legal_log`가 append-only + `COLLECTION` 이벤트를 요구하므로 좌표마다 남기면 하루 수천 행. LEGAL-U4-02로 **수집 구간 시작·종료 각 1건**으로 확정하고, `detail`에 원시 좌표 금지(스키마 주석 승계)를 LEGAL-U4-03으로 명문화.
+(4) **스케줄링 신규 인프라 0** — `AsyncConfig.kt`의 `@EnableScheduling`·`StalePartialSweeper` 실재를 근거로 `replan_session` 정리를 기존 패턴 재사용(DATA-U4-05·델타 5). DEC-U4-6("트리거 평가 스케줄러 없음")과의 관계를 문서에 명시 — 평가는 클라 요청 응답으로, 스케줄러는 정리에만.
+
+**함께 승격한 보안 항목**: SEC-U4-02 — 알림 딥링크가 `trips/**`로 들어오는데 그 경로는 `(tabs)` 밖이라 `Stack.Protected` guard에 안 걸린다(`frontend/docs/structure.md` 실측 경고). **서버 인가가 유일한 방어선**임을 NFR로 못박았다. SEC-U4-04 — 로컬 알림 본문에 좌표 금지(잠금화면은 인증 이전 표면).
+
+**Context**: CONSTRUCTION / U4 / NFR Requirements Step 5~7 완료, Step 8(승인 게이트) 대기. 이번 항목이 손댄 `aidlc/` 파일 = `construction/u4-in-trip-planb/nfr-requirements/` 2종 신규 · `construction/plans/u4-in-trip-planb-nfr-requirements-plan.md` 체크박스 갱신 · 이 `audit.md` append. `aidlc-state.md`는 승인 후 갱신한다.
+
+---
+
+## CONSTRUCTION — U4 NFR Requirements 승인 + NFR Design (전 단계)
+**Timestamp**: 2026-08-09T11:20:00Z
+**User Input (1)**: "ㄱㄱ"
+**User Input (2)**: "Q1 A Q2 A인데 두 곳으로?"
+**AI Response**: (1) NFR Requirements **승인**으로 기록하고 `aidlc-state.md` 갱신. NFR Design 착수 — **얇게** 방침(상속 8영역 · NFR Requirements에 배치까지 적힌 7항 재서술 금지). 계획서 `plans/u4-in-trip-planb-nfr-design-plan.md`에 **질문 2건만** 상신.
+
+(2) Q1=A(서킷 미도입) 채택. **Q2는 사용자가 A(1곳)를 고르면서 "두 곳으로?"라고 변형을 제안** → **A′(다음 2곳)로 확정**. 채택 근거를 명시적으로 답변: iOS 20 리전 상한 대비 비용 사실상 0이고, A의 유일한 약점(순서 건너뛰기 시 감지 누락)이 대부분 덮인다. 대가로 **인접 리전 중첩 시 중복 진입 이벤트**가 생길 수 있어 `(tripId, slotKey)` 선착 하나만 도착 확정하는 규칙을 P-MOBILE-U4-1에 신설. 이로써 **O-U4-1 종결**.
+
+**Step 1c 실장 확인 — 문서-실장 드리프트 1건 발견**: U1 `nfr-design-patterns.md` P-RES-U1-1과 `logical-components.md`가 **Resilience4j 벤더별 서킷**을 전제하는데 `backend/gradle/libs.versions.toml`에 **라이브러리가 없다**. U4가 외부 벤더(기상청)를 하나 더 들이는 시점이라 정면으로 다뤘고, **Q1=A로 "지금 도입하지 않는다"** 결정. 근거 = 서킷이 막는 "장애 벤더에 매달려 자원 소진"이 **재시도 없음**(P-RES-U1-2)으로 이미 완화됐고, U4의 외부 실패는 전부 무발화 또는 수동 전환으로 끝나 사용자 경로가 막히지 않는다. 대체 = 짧은 타임아웃 + 벤더별 실패율 지표(OBS-U4-04). 대가(느린 실패 시 스레드 점유)와 재평가 조건도 문서에 명시.
+
+**산출물 2종** (`aidlc-docs/construction/u4-in-trip-planb/nfr-design/`):
+- `nfr-design-patterns.md` — **P-DET-U4-1**(신호 수집/판정 분리 — 클라는 임계를 모른다) · **P-DET-U4-2**(무발화 기본값, U0·U1 "침묵 실패 금지"와의 관계를 대상 구분으로 정리: *사용자가 요청한 동작*의 실패는 표면화, *요청하지 않은 선제 알림*은 근거 없으면 미생성) · P-DET-U4-3(억제 3축) · **P-RES-U4-1**(서킷 미도입) · **P-RES-U4-2**(날씨의 stale-if-error **역방향 예외** — 발화엔 만료분 금지, 표시엔 "확인 불가") · **P-MOBILE-U4-1**(지오펜스 슬라이딩 창 2 + 중복 진입 판정 + 강등 사슬) · P-CON-U4-1(세션 단일성 = 호출 상한이자 동시성 제어, 확정 시 낙관적 잠금) · P-PERF-U4-1~2 · P-DATA-U4-1~2 · P-OBS-U4-1(침묵의 근거를 관측으로 갚는다) + NFR 커버리지 + 미도입 6.
+- `logical-components.md` — **LC-U4-1~9**(TriggerEvaluator · SuppressionStore · WeatherPort+KmaWeatherAdapter+Cache · ReplanSessionCoordinator · ReplanAgentAdapter · VisitCheckService · LocationTrailRecorder+LegalLogEmitter · **GeofenceRegistrar**(shared/location) · **SignalCollector**(features/execution)) + 기존 자산 수용 8 + 마이그레이션 6 + 미결 4(O-U4-1 종결 반영).
+
+**U1 사후 정정 2건**: `u1-accommodation-trip/nfr-design/nfr-design-patterns.md` P-RES-U1-1 절 머리와 `logical-components.md` 서킷 행에 **"미실장 · U4에서 재확인(2026-08-09)"** 주석을 달아, 패턴이 문서로만 존재한다는 사실 + U4의 미도입 결정(P-RES-U4-1) + 재평가 조건을 연결했다. 새 결정 신설 0 — **사실 기록과 상호 참조만** 추가했으므로 U1 스테이지 체크박스 변동 없음.
+
+**Context**: CONSTRUCTION / U4 / NFR Requirements 승인 완료 → NFR Design Step 1~6 완료, Step 7~8(완료 메시지·승인 게이트) 진행. 이번 항목이 손댄 `aidlc/` 파일 = `construction/plans/u4-in-trip-planb-nfr-design-plan.md`(신규) · `construction/u4-in-trip-planb/nfr-design/` 2종(신규) · `construction/u1-accommodation-trip/nfr-design/{nfr-design-patterns.md,logical-components.md}`(주석 2건) · `aidlc-docs/aidlc-state.md` · 이 `audit.md` append.
+
+---
+
+## CONSTRUCTION — U4 NFR Design 승인 + Infrastructure Design SKIP + U4 설계 단계 종료
+**Timestamp**: 2026-08-09T11:45:00Z
+**User Input**: "승인, U4 설계 단계 종료"
+**AI Response**: NFR Design **승인**으로 기록하고, Infrastructure Design을 **SKIPPED**로 확정(U0·U1·U3와 동형 — 배포/클라우드 계획 부재로 클라우드 리소스 결정의 근거·검증 수단이 없음, 규칙상 CONDITIONAL "no infrastructure changes" 해당. 재개 조건 = 배포/클라우드 진입 결정 시 별도 지시). Code Generation은 SCOPE.md 현행 범위에 따라 **범위 제외**(팀이 각 패키지 디렉토리에서 직접 개발).
+
+**✅ U4 설계 단계 종료 (2026-08-09)** — 산출물 **8종**: functional-design 4(`business-logic-model.md`·`domain-entities.md`·`business-rules.md`·`frontend-components.md`) + nfr-requirements 2 + nfr-design 2. SCOPE.md 처리 규칙 2("Infrastructure Design 승인 후 Code Generation으로 넘어가지 말고 STOP — 설계 문서 요약을 제시하고 팀 개발로 핸드오프")를 그대로 이행한다.
+
+**이 유닛이 남긴 식별자**: DEC-U4-1~11 · INV-U4-01~09 · **BR-U4-01~46** · PBT-U4-1~5(서버)·F1~F3(클라) · G-U4-1~8 · O-U4-1(종결)~O-U4-5 · MOBILE/PERF/COST/LEGAL/DATA/OBS/OFFLINE/SEC-U4-* · P-*-U4 9종 · **LC-U4-1~9**.
+
+**다른 유닛 문서에 남긴 사후 정정 5건**(전부 이 유닛 진행 중 실장 확인에서 유도):
+1. U2 `business-logic-model.md` §7 `recalculate` 행 종결 + **§7.2 신설**(`replan` 개통, `ScheduleAgentPort` 5메서드)
+2. U2 `business-rules.md` O-U2-3 문구 갱신
+3. U3 `frontend-components.md` **실제 FSD 층 배치 기준 재작성**
+4. U1 `nfr-design-patterns.md` P-RES-U1-1에 "미실장 · U4에서 재확인" 주석
+5. U1 `logical-components.md` 서킷 행에 같은 주석
+
+**핸드오프 목록(설계 밖)**: backend 3모듈 + 마이그레이션 6 + `ScheduleAgentPort.replan` + openapi 태그 2 / ai HTTP 표면(G-U4-3, 개발 착수 선행) + O-U4-5 / frontend `expo-task-manager` + plugin 확장 + **EAS 재빌드 1회** + `KakaoMapView` 점선 + `shared/location` 지오펜스 + feature 2개 신설 / 인셉션 정정 상신 2(G-U4-1·G-U4-4) / 기상청 API 키 발급 / 디자인 확인 2(G-U4-7·G-U4-8) / 미결 O-U4-2~5.
+
+**Context**: CONSTRUCTION / U4 설계 단계 종료. 이번 항목이 손댄 `aidlc/` 파일 = `aidlc-docs/aidlc-state.md` · 이 `audit.md` append. 다음 유닛(U5~U9) 착수는 **사용자의 별도 지시** 대기(SCOPE.md 범위 제외 항목).
+
+---

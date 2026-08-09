@@ -207,5 +207,5 @@ CandidatesSummary { level: HIGH | MEDIUM | LOW, poolSize: Int, shortfallCategori
 |---|---|---|
 | **O-U2-1** | `INCLUDE_ONLY` 필수 방문지 **미배치**를 표현하는 코드가 HC1~HC4에 없다(BR-U2-02 주의). 별도 코드 신설(`HC5`?) vs `excluded` 목록으로 표현 | U3(생성 화면이 "못 담은 곳"을 어떻게 보여줄지 확정될 때) |
 | **O-U2-2** | `explanations` 영속 컬럼(`visit_slot.placement_reason`) 마이그레이션 | backend 티켓 |
-| ~~**O-U2-3**~~ | `proposeSlotCandidates` → **종결 (2026-08-07 · U3 DEC-U3-5)**: 완전 AI·같이 고르기 공통 경계로 개통, `ScheduleAgentPort`는 4메서드(§business-logic-model 7.1). `recalculate` → **U4 유지** — U3는 동선 재정렬을 `generate` 재호출로 구현(U3 DEC-U3-2)하므로 부르지 않음 | 종결 / U4 |
+| ~~**O-U2-3**~~ | `proposeSlotCandidates` → **종결 (2026-08-07 · U3 DEC-U3-5)**: 완전 AI·같이 고르기 공통 경계로 개통, `ScheduleAgentPort`는 4메서드(§business-logic-model 7.1). `recalculate` → **종결 (2026-08-09 · U4 DEC-U4-5)**: `replan`으로 개통, 어댑터가 ai `regenerate(problem, locked_slots)`로 매핑(§business-logic-model 7.2). `ScheduleAgentPort`는 **5메서드** | 종결 |
 | **O-SOLVER** | 엔진 교체 판정 임계 | 운영(BR-U2-14 트리거 도달 시) |
