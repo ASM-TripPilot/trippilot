@@ -136,7 +136,18 @@ data class FreshnessMeta(val generatedAt: Instant, val degraded: Boolean)
 // ───────── 검증 / 수리 ─────────
 
 /** 하드 제약 위반(HC1-4). */
-data class Violation(val type: String, val dayIndex: Int, val slotIndex: Int, val detail: String?)
+/**
+ * 하드 제약 위반 1건(HC1-4).
+ *
+ * [dayIndex]·[slotIndex]는 **nullable** — AI 가 보낸 요청을 스캔해 위치를 계산하는데, 못 찾으면 비워 보낸다.
+ * 위치를 모른다고 위반 자체를 버리면 "문제 없음"이라는 거짓 음성이 된다(INV-4) — 슬롯에 못 붙일 뿐 보고는 한다.
+ */
+data class Violation(
+    val type: String,
+    val dayIndex: Int?,
+    val slotIndex: Int?,
+    val detail: String?,
+)
 
 /** 최소 조정 수리 결과 — 시각·순서만(POI 불변). */
 data class RepairResult(val repaired: ScheduleAgentOutput, val changes: List<String>)

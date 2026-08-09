@@ -44,6 +44,11 @@ class VisitSlot private constructor(
     val distanceRange: String?,
     /** 추천 이유(BR-U2-04). 시각·소요시간 언급 없음(BR-U2-09) — 문구 집행은 AI 책임. */
     val placementReason: String?,
+    /**
+     * 위반 사유(BR-U3-13). [hasViolation] 이 true 일 때만 값이 있다.
+     * 배지만 남기면 저장 후 재조회에서 "무엇이 왜 문제인지"가 사라진다 — 지속 가시화가 요건이다.
+     */
+    val violationReason: String?,
 ) {
     companion object {
         fun of(
@@ -57,13 +62,14 @@ class VisitSlot private constructor(
             endsNextDay: Boolean = false,
             distanceRange: String? = null,
             placementReason: String? = null,
+            violationReason: String? = null,
         ): VisitSlot {
             val errors = mutableListOf<FieldError>()
             if (orderIndex < 0) errors += FieldError("orderIndex", "순서는 0 이상입니다.")
             // 자정 넘김이면 endAt 이 익일 시각이라 startAt 보다 작을 수 있음(HC4) — 그 경우만 허용.
             if (endAt < startAt && !endsNextDay) errors += FieldError("endAt", "종료 시각은 시작 이후여야 합니다.")
             if (errors.isNotEmpty()) throw ValidationFailed(errors)
-            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay, distanceRange, placementReason)
+            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay, distanceRange, placementReason, violationReason)
         }
     }
 }
@@ -129,6 +135,7 @@ class Itinerary private constructor(
                         // 동결은 스냅숏 참조만 붙이는 것 — 표시값은 **전부 그대로 옮긴다**.
                         // 하나라도 빠뜨리면 확정하는 순간 조용히 사라진다(endsNextDay 로 이미 겪은 회귀).
                         s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange, s.placementReason,
+                        s.violationReason,
                     )
                 },
             )
