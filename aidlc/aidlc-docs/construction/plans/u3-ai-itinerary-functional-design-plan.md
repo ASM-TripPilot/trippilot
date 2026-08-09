@@ -11,7 +11,7 @@
 
 | 자산 | 실재 | U3 관련성 |
 |---|---|---|
-| `backend/modules/itinerary-generation/` | 컨트롤러 1(`POST /api/v1/trips/{tripId}/itinerary` · `GET` · `POST /confirm` · `PUT`) · 서비스 4(Generate·Edit·Confirm·Query) · 도메인 3(`Itinerary`·`ScheduleAgentPort`·`MinimalItineraryFallback`) · 테스트 8 | **백엔드 골격 실재** — 4개 유스케이스가 이미 돌아감 |
+| `backend/modules/itinerary-generation/` | 컨트롤러 1(`POST /trips/{tripId}/itinerary` · `GET` · `POST /confirm` · `PUT`) · 서비스 4(Generate·Edit·Confirm·Query) · 도메인 3(`Itinerary`·`ScheduleAgentPort`·`MinimalItineraryFallback`) · 테스트 8 | **백엔드 골격 실재** — 4개 유스케이스가 이미 돌아감 |
 | `V2.7__itinerary.sql` · `V2.8__visit_slot_ends_next_day.sql` | `itinerary`·`itinerary_day`·`visit_slot`(+`ends_next_day`) | 스키마 선재 |
 | 도메인 `Itinerary.kt` | `ItineraryStatus{PLANNED, CONFIRMED}` 단방향 잠금 · `SolveMode{FULL_AI, DETERMINISTIC, MINIMAL}` · `VisitSlot(sourcePoiId, poiSnapshotId?, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay)` | US-SCHED-12 확정 잠금·INV-2/3 타입 강제 이미 반영 |
 | U2 산출물(2026-08-07) | 경계 계약 정본 + BR-U2-01~16 | **전제** — 재논의 대상 아님 |
@@ -34,7 +34,7 @@
 | **D-U3-4** | **시각 노출 정책이 화면 단계마다 다름** | US-SCHED-03: "사용자에게 보이는 모든 시각은 솔버 검증값" — 단계 구분 없음 | `h11 추천안`은 **구체 시각 없음**(`오전·활동`·`점심·식사` 시간대 라벨만, 숙소만 `21:00 도착`) / `h25 완성 일정`은 **구체 시각**(`09:30`·`12:00`·`14:00`·`18:30`·`21:00`) |
 | **D-U3-5** | **추천 강도가 결과 화면에 있음** | 경계 계약은 `recommendationStrength`를 **요청 입력**(d11)으로 정의 | `h11` 상단 세그먼트 **`최소 \| 균형 \| 많이`** — 결과를 본 뒤 조절. 재생성 트리거인지 클라 필터인지 불명 |
 | **D-U3-6** | **슬롯 교체가 '완전 AI' 경로에도 있음** | U2는 `proposeSlotCandidates`를 **CO_PLAN 소관으로 이연**(O-U2-3) | `h11` 슬롯마다 **"다른 후보 3 >"**, `h12 [완전AI] 슬롯 교체` 전용 화면 존재. `h18 [같이] 옵션 교체`와 별개 |
-| **D-U3-7** | **영업시간·휴관 경고가 경계 응답에 없음** | `VisitSlotDisplay{poiId, startAt, endAt, endsNextDay, distanceRange?, isFixed}` — 영업시간·위반 사유 필드 없음 | `h25` 슬롯에 `24시 개방`·`09:00–21:00 영업`·`10:00–18:00` + **`⚠︎ 월요일 휴관`** 경고 표시 |
+| **D-U3-7** | **영업시간·휴관 경고가 경계 응답에 없음** | REST 슬롯은 `{poiId, startAt, endAt, isFixed, endsNextDay, hasViolation}` 6필드 전부 required — 영업시간 필드 없음. `hasViolation`은 **불리언 하나뿐**이라 위반 *사유*를 못 나른다 (⚠️ 2026-08-08 TRIP-294 정정: 이 칸은 종전 `VisitSlotDisplay{… distanceRange?, isFixed}`로 적혀 있었으나 실제 계약과 **양방향으로 어긋났다** — `distanceRange`는 REST에 없고 `hasViolation`은 문서에 없었다. 근거 `backend/docs/design/openapi.yaml` 슬롯 스키마 · 생성물 `schemas/itineraryDaysItemSlotsItem.ts`) | `h25` 슬롯에 `24시 개방`·`09:00–21:00 영업`·`10:00–18:00` + **`⚠︎ 월요일 휴관`** 경고 표시 |
 | **D-U3-8** | **완성 일정 화면이 여러 벌** | 정본은 "시간표·지도 2뷰" 1쌍 | 지도 계열 **5벌**(`h26 지도`·`h29 지도뷰`·`h31 지도 폴백`·`h32 지도 스크러버`·`h33 지도형`) + 시간표 계열 **2벌**(`h25 시간표`·`h30 시간표뷰`). 신·구 세대 혼재 의심 — 정본 지정 필요 |
 | **D-U3-9** | 필수 방문지 화면이 h밴드에 | `must_visit`은 **U1(C6 Trip Creation)** 소유 | `h05 [AI·꼭갈곳] 필수 방문지(선택)` · `h07 [AI·꼭갈곳] 방문 시각 지정` — 생성 플로우 안에 있음 |
 | **D-U3-10** | '같이 고르기'가 6화면 플로우 | US-SCHED-10 한 줄: "슬롯별 반경 내 후보 선택" | `h13 컨셉` → `h14 테마 후보(도보 1.1km)` → `h15 반경 넓힘(약 11.3km)` → `h16 슬롯 채우기(동선)` → `h17 완성` → `h18 옵션 교체` |

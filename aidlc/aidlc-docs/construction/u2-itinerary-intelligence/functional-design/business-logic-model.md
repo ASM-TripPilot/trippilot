@@ -190,7 +190,7 @@ M8.generate(tripId, mode)
 
 | 정본 메서드 | 현재 | 개통 시점 |
 |---|---|---|
-| `recalculate(cmd)` — Plan-B 잔여 재정렬(warm-start) | 없음. `repair`는 편집 후 최소 조정용이라 대체 불가 | **U4(Plan-B)** — `repair` 확장 vs 별도 경계를 그때 결정. **U3에서 재확인(2026-08-07)**: 동선 재정렬은 `generate` 재호출로 구현하기로 확정(U3 DEC-U3-2)되어 U3는 이 메서드를 부르지 않는다 |
+| ~~`recalculate(cmd)`~~ — Plan-B 잔여 재정렬(warm-start) | **종결 (2026-08-09 · U4 DEC-U4-5)** — 아래 §7.2 | **U4에서 `replan`으로 개통.** `repair` 확장이 아니라 **ai 실장 `regenerate(problem, locked_slots)`에 백엔드 포트를 맞추는** 형태로 결정 |
 | ~~`proposeSlotCandidates(query)`~~ | **개통 확정 (2026-08-07 · U3 DEC-U3-5)** | 아래 §7.1 |
 
 > 지금 만들지 않는 이유: 소비자(U4 화면)가 확정되기 전에 시그니처를 못 박으면 그 자체가 새 드리프트원이 된다. **U2는 "없음 + 개통 시점"을 명시하는 것까지가 몫이다.**
@@ -206,6 +206,21 @@ fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput
 시그니처·필드 정의는 **U3 `business-logic-model.md` §3.1**에 있다(중복 서술 금지). 경계 규칙은 BR-U2-04(`slotKey`)·BR-U2-08(거리 표시)·BR-U2-09(문구 제약)을 그대로 따르며, 후보는 closed-set(INV-1)이다.
 
 > **이로써 `ScheduleAgentPort`는 4메서드**가 된다: `generate` · `validate` · `repair` · `proposeSlotCandidates`. openapi 반영은 BR-U2-10 절차를 따른다.
+
+### 7.2 `recalculate` — `replan`으로 개통 확정 (사후 정정 · 2026-08-09 · U4)
+
+**정정 사유**: 이 문서는 "`repair` 확장 vs 별도 경계"를 U4로 미뤘는데, **둘 다 아니었다.** U4 착수 시 `ai/`(develop) 실측에서 `HybridSolverFacade.regenerate(problem, locked_slots, deadline_ms)`가 **이미 Plan-B warm-start 그 자체**임이 확인됐다 — locked 슬롯을 `FixedBlock`으로 승격해 HC3 보호를 받게 하고 나머지만 재배치하며, `validate`가 보존을 강제하므로 위반 해는 반환 자체가 불가능하다(INV-2).
+
+따라서 새 솔버 개념을 만들지 않고 **백엔드 포트를 ai 실장에 맞춘다**(U4 DEC-U4-5, 사용자 Q6="AI는 ai 폴더를 전적으로 따른다").
+
+```kotlin
+fun replan(input: ReplanInput): ScheduleAgentOutput   // 어댑터가 ai regenerate(problem, locked_slots)로 매핑
+```
+
+시그니처·매핑표는 **U4 `business-logic-model.md` §3.1**에 있다(중복 서술 금지).
+
+> **이로써 `ScheduleAgentPort`는 5메서드**가 된다: `generate` · `validate` · `repair` · `proposeSlotCandidates` · `replan`.
+> **이름 드리프트 기록(G-U4-4)**: 인셉션 `component-methods.md` §2는 여전히 `recalculate(cmd: RecalculateCommand)`로 적혀 있다. **실장 이름(`regenerate`)과 경계 이름(`replan`)을 정본으로** 삼고 인셉션 표기 정정을 상신한다.
 
 ---
 

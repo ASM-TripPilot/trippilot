@@ -24,6 +24,13 @@ import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
+import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
+import {
+  startTimeOptions,
+  tripDayChips,
+} from '@/features/itinerary/model/mustVisitTimeForm';
+import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
+import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import {
   TripWizardStep1Screen,
@@ -165,6 +172,34 @@ const FIX_SHEET_BASE: NonNullable<TripWizardStep2ScreenProps['fixSheet']> = {
   onRetrySave: noop,
   onClose: noop,
 };
+
+/** h05 목록 3항목 — Figma 실측 데이터 그대로. `imageUrl` 이 전부 `null` 인 것은 다른 프리뷰
+ * 픽스처와 같은 이유다(서버 시드가 사진을 안 준다 — `exploreFixtures` 머리말). */
+const MUST_VISIT_PREVIEW_ITEMS: MustVisitListItem[] = [
+  {
+    mustVisitId: 'mv-a',
+    sourcePoiId: 'poi-a',
+    name: '부산시립미술관',
+    imageUrl: null,
+    type: 'FIXED',
+    fixedDate: '2026-06-11',
+    fixedStart: '13:00',
+  },
+  {
+    mustVisitId: 'mv-b',
+    sourcePoiId: 'poi-b',
+    name: '해운대 블루라인파크',
+    imageUrl: null,
+    type: 'ANYTIME',
+  },
+  {
+    mustVisitId: 'mv-c',
+    sourcePoiId: 'poi-c',
+    name: '감천문화마을',
+    imageUrl: null,
+    type: 'ANYTIME',
+  },
+];
 
 const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
   variant: 'default',
@@ -813,6 +848,46 @@ const PREVIEW_STATES: PreviewState[] = [
         sections={[]}
         candidates={[]}
         generateDisabled
+      />
+    ),
+  },
+  // h05·h07 필수 방문지 (TRIP-296) — Figma 대조용 격리 렌더.
+  {
+    key: 'itinerary-mustvisit-default',
+    label: '필수 방문지 h05',
+    login: null,
+    render: () => (
+      <MustVisitPickerScreen
+        view={{
+          kind: 'listed',
+          items: MUST_VISIT_PREVIEW_ITEMS,
+          staleFailed: false,
+        }}
+      />
+    ),
+  },
+  {
+    key: 'itinerary-mustvisit-time-default',
+    label: '방문 시각 지정 h07',
+    login: null,
+    render: () => (
+      <MustVisitTimeScreen
+        sourcePoiId="poi-a"
+        placeName="부산시립미술관"
+        region="부산 부산진구"
+        imageUrl={null}
+        dayChips={tripDayChips({
+          startDate: '2026-06-10',
+          endDate: '2026-06-12',
+        })}
+        startOptions={startTimeOptions()}
+        form={{
+          fixed: true,
+          fixedDate: '2026-06-11',
+          fixedStart: '13:00',
+          dwellKey: 'NORMAL',
+        }}
+        blockReason={null}
       />
     ),
   },

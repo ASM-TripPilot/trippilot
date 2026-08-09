@@ -1,123 +1,159 @@
 # U3 AI Itinerary Generation — Frontend Components
 
-> **아키텍처 정본 = `frontend/README.md`.** 층 구조·폴더 규약을 여기 옮겨 적지 않는다 — 사본은 갈라진다. 이 문서가 정하는 것은 **컴포넌트의 책임·상태·서버 연동**이다. 스택(TanStack Query=서버 상태 · Zustand=UI 상태 · RHF+Zod=폼 · NativeWind)과 testID 규약 `{feature}-{screen}-{role}`도 그 정본을 따른다.
-> **화면 정본**: 라이브 Figma 밴드 h. **`h25`(시간표)·`h26`(지도)가 완성 일정 정본**이고 `h29~h33`은 상태·변형의 **동작·문구만** 취한다(DEC-U3-6).
-> **현 상태**: `src/app/(tabs)/itinerary.tsx`는 빈 셸(`<Text>일정</Text>`) — 이 유닛이 처음 채운다.
+> **아키텍처 정본 = `frontend/README.md`, 현재 배치의 사실 정본 = `frontend/docs/structure.md`(+ 리포).** 층 규약을 여기 옮겨 적지 않는다 — 사본은 갈라진다. 이 문서가 정하는 것은 **어느 슬라이스에 무엇이 들어가고, 무엇을 서버에서 받고, 무엇을 재판정하지 않는가**이다.
+> **화면 정본**: 라이브 Figma 밴드 h. `h25`(시간표)·`h26`(지도)가 완성 일정 정본이고 `h29~h33`은 상태·변형의 **동작·문구만** 취한다(DEC-U3-6).
+> **⚠️ 2026-08-09 개정**: 초판은 `app/` 라우트 + 평면 컴포넌트 표로만 적혀 있어 리포의 실제 층 배치(`app` → `pages` → `features/{model,ui}` → `shared`)와 어긋났다. **실재 관례 기준으로 재작성**하고, TRIP-295·296으로 **이미 구현된 것**을 반영했다.
 
 ---
 
-## 1. 라우트 골격 (U3가 추가하는 부분)
+## 0. 층 배치 — 이 유닛이 지키는 관례 (실재 선례에서 유도)
 
-| 라우트 | 화면 | 비고 |
+| 층 | 규약 | 선례 |
 |---|---|---|
-| `(tabs)/itinerary.tsx` | 탭 진입 | 활성 여행 일정으로 리다이렉트 / 없으면 빈 상태 + [여행 만들기] |
-| `trips/[tripId]/itinerary/method` | **h04** 시작 방법 | 3방식 카드 |
-| `trips/[tripId]/itinerary/must-visits` | **h05** 필수 방문지(선택) | 데이터는 U1(`must_visit`) — DEC-U3-7 |
-| `trips/[tripId]/itinerary/must-visits/[poiId]` | **h07** 방문 시각 지정 | 〃 |
-| `trips/[tripId]/itinerary/generating` | **h09·h10** 생성 중 / 부분 결과 | 세션 폴링 |
-| `trips/[tripId]/itinerary/draft` | **h11·h12·h35** 추천안 · 슬롯 교체 · 후보 0건 | h12는 바텀시트 |
-| `trips/[tripId]/itinerary/copick` | **h13** 컨셉 | |
-| `trips/[tripId]/itinerary/copick/[slotKey]` | **h14·h15·h18** 후보 선택 · 반경 넓힘 · 옵션 교체 | 같은 화면의 상태 |
-| `trips/[tripId]/itinerary/manual` | **h19** 빈 일정 | |
-| `trips/[tripId]/itinerary/manual/add` | **h20·h21** 검색 · 주변 탐색 | 세그먼트 2탭 |
-| `trips/[tripId]/itinerary/index` | **h25·h26** 완성 일정 (+ h29~h34 상태) | **시간표\|지도 세그먼트가 같은 라우트** |
-| `trips/[tripId]/itinerary/edit` | **h24** 일정 편집 | |
-| `trips/[tripId]/itinerary/history` | **h36** 변경 이력 | 4변형 중 `with-companions` 제외(DEC-U3-8) |
-| `trips/[tripId]/itinerary/stay-suggest` | **h27** 동선 기준 숙소 추천 | US-SCHED-11 |
-| `trips/[tripId]/itinerary/reorder` | **h28** 동선 다시 정리(전·후) | 재생성 결과 비교(BR-U3-21) |
+| `src/app/**` | **얇은 라우트 래퍼(5~9줄)** — 훅·마크업 0. `useLocalSearchParams`로 params만 읽어 prop으로 내린다. import는 **`@/pages/<slice>` 배럴만**(딥 임포트 금지) | `app/trips/[tripId]/itinerary/must-visits/index.tsx` |
+| `src/pages/<slice>/` | `ui/<Name>Page.tsx` + `index.ts` 배럴. **훅 ↔ 화면 배선**이 여기 산다. 서버 훅 호출·판정 함수 호출·prop 조립 | `pages/itinerary-mustvisit/`, `pages/trip-new-step2/` |
+| `src/features/itinerary/model/` | **순수 함수 · TanStack Query 훅 · Zustand 스토어.** 판정은 여기 한 곳에서만 | `features/trip/model/baseGate.ts`, `useTripBases.ts`, `tripWizardStore.ts` |
+| `src/features/itinerary/ui/` | **props만 받는 프레젠테이션**. 화면 `*Screen.tsx` · 시트 `*Sheet.tsx` · 아이콘 `ItineraryGlyphs.tsx`. **재판정 금지** | `features/trip/ui/TripWizardStep2Screen.tsx` |
+| `src/shared/**` | 두 feature 이상이 쓰는 것. 지도(`shared/map`)·상태 안내(`shared/ui/StateNotice`)·API(`shared/api`) | `shared/map/KakaoMapView.tsx` |
+| `src/__tests__/<name>Structure.test.ts` | **구조 가드** — "화면이 재판정하지 않는다" 같은 기계 강제 없는 계약을 부정 단언으로 잠근다 | `itineraryMustVisitStructure.test.ts` |
 
-- **h23 핀 상세는 라우트가 아니다** — 지도 뷰의 바텀시트.
+- **features 간 직접 import 금지.** 화면 이동은 라우팅으로, 데이터 공유는 `shared/api` 훅으로.
+- 테스트는 소스 옆(co-located). 전역 가드만 `src/__tests__/`.
+
+## 0.1 이미 구현된 것 (2026-08-09 실측)
+
+| 파일 | 티켓 | 상태 |
+|---|---|---|
+| `features/itinerary/model/timeBandLabel.ts` · `slotKey.ts` | TRIP-295 | ✅ BR-U3-07 시간대 라벨 · BR-U2-04 slotKey 규약의 순수 함수 |
+| `features/itinerary/model/mustVisitList.ts` · `mustVisitTimeForm.ts` | TRIP-296 | ✅ h05·h07 |
+| `features/itinerary/ui/MustVisitPickerScreen.tsx` · `MustVisitTimeScreen.tsx` · `ItineraryGlyphs.tsx` | TRIP-296 | ✅ |
+| `pages/itinerary-mustvisit/{index.ts, ui/MustVisitListPage.tsx, ui/MustVisitTimePage.tsx}` | TRIP-296 | ✅ |
+| `app/trips/[tripId]/itinerary/must-visits/{index,[poiId]}.tsx` | TRIP-296 | ✅ |
+| `shared/api/isAlreadyRegistered.ts` | TRIP-296 | ✅ 409 판정 공용 승격 |
+| `__tests__/itineraryMustVisitStructure.test.ts` | TRIP-296 | ✅ |
+| `app/(tabs)/itinerary.tsx` | — | **껍데기** — 아래 §1이 채운다 |
+
+---
+
+## 1. 라우트 (`src/app/`)
+
+| 파일 | 화면 | 배럴 |
+|---|---|---|
+| `app/(tabs)/itinerary.tsx` | 탭 진입 — 활성 여행 일정으로 리다이렉트 / 없으면 빈 상태 + [여행 만들기] | `@/pages/itinerary-plan` |
+| `app/trips/[tripId]/itinerary/method.tsx` | **h04** 시작 방법 | `@/pages/itinerary-method` |
+| `app/trips/[tripId]/itinerary/must-visits/index.tsx` ✅ | **h05** | `@/pages/itinerary-mustvisit` |
+| `app/trips/[tripId]/itinerary/must-visits/[poiId].tsx` ✅ | **h07** | 〃 |
+| `app/trips/[tripId]/itinerary/generating.tsx` | **h09·h10** | `@/pages/itinerary-generating` |
+| `app/trips/[tripId]/itinerary/draft.tsx` | **h11·h12·h35** | `@/pages/itinerary-draft` |
+| `app/trips/[tripId]/itinerary/copick/index.tsx` | **h13** 컨셉 | `@/pages/itinerary-copick` |
+| `app/trips/[tripId]/itinerary/copick/[slotKey].tsx` | **h14·h15·h18** | 〃 |
+| `app/trips/[tripId]/itinerary/manual/index.tsx` | **h19** | `@/pages/itinerary-manual` |
+| `app/trips/[tripId]/itinerary/manual/add.tsx` | **h20·h21** | 〃 |
+| `app/trips/[tripId]/itinerary/index.tsx` | **h25·h26** (+h23·h29~h34 상태) | `@/pages/itinerary-plan` |
+| `app/trips/[tripId]/itinerary/edit.tsx` | **h24** | `@/pages/itinerary-edit` |
+| `app/trips/[tripId]/itinerary/history.tsx` | **h36** | `@/pages/itinerary-history` |
+| `app/trips/[tripId]/itinerary/stay-suggest.tsx` | **h27** | `@/pages/itinerary-stay-suggest` |
+| `app/trips/[tripId]/itinerary/reorder.tsx` | **h28** | `@/pages/itinerary-reorder` |
+
+- **h23 핀 상세·h12 슬롯 교체는 라우트가 아니다** — 각각 지도 뷰·추천안 화면의 바텀시트.
 - **h34 확정 읽기전용은 별도 라우트가 아니다** — `index`가 `status=CONFIRMED`일 때의 상태.
+- ⚠️ `trips/**`는 `(tabs)` 밖이라 `SplashGate`의 `Stack.Protected` guard에 안 걸린다 — **미인증 딥링크로 열린다**(`stays/`·`trips/new/**` 선례, structure.md 경고). U3가 새로 만드는 라우트도 같은 조건이며, 데이터 노출은 서버 401이 막는다.
 
-## 2. 생성 진입·방식 (h04·h05·h07)
+## 2. `src/pages/` 슬라이스
 
-| 컴포넌트 | 책임 | 상태 / 서버 |
+| 슬라이스 | `ui/<Name>Page.tsx` | 배선 책임 |
 |---|---|---|
-| `MethodPicker` | 3방식 카드 + `추천` 배지("AI와 같이 짜기"). 하단 "세 방법은 언제든지 서로 전환할 수 있어요" | 로컬 선택 → 라우팅 |
-| `GenerationGate` | 선행 조건 검사(BR-U3-01·02) — 숙소 0이면 CTA 비활성 + 사유, 지오코딩 실패면 지도 지정 요청 | `GET /trips/{id}` 앵커 |
-| `MustVisitPicker` | 필수 방문지 선택(h05) · 시각 지정(h07) | **U1 API·규칙 인용** — 새 계약 만들지 않음 |
+| `itinerary-method` | `MethodPage` | `useItineraryGate()` → 선행 조건 판정 결과를 prop으로. 방식 선택 → 라우팅 |
+| `itinerary-mustvisit` ✅ | `MustVisitListPage` · `MustVisitTimePage` | U1 API·규칙 인용(DEC-U3-7) |
+| `itinerary-generating` | `GeneratingPage` | `useGenerationSession(tripId)` 폴링 → `DAY1_READY`면 부분 결과로 전환, 완료 시 `draft`로 replace |
+| `itinerary-draft` | `DraftPage` | `useItineraryDraft()` + `resolveDraftState()` **판정 1회** → `DraftScreen`. 시트 열림은 로컬 상태 |
+| `itinerary-copick` | `ConceptPage` · `SlotCandidatePage` | `useSlotCandidates(slotKey, radiusM, concept)` |
+| `itinerary-manual` | `ManualPlanPage` · `PlaceAddPage` | 추가마다 `useValidateItinerary()` |
+| `itinerary-plan` | `ItineraryPlanPage` | `useItinerary(tripId)` + `resolvePlanState()` **판정 1회**(로딩·오류·확정·지도 실패) → `TimelineScreen`/`MapScreen` |
+| `itinerary-edit` | `ItineraryEditPage` | 편집 스토어 ↔ `useValidateItinerary()` 배선 |
+| `itinerary-history` | `HistoryPage` | `useRevisions(tripId)` · 되돌리기 뮤테이션 |
+| `itinerary-stay-suggest` | `StaySuggestPage` | `useStaySuggestion(itineraryId)` |
+| `itinerary-reorder` | `ReorderComparePage` | 재생성 호출 + 전·후 비교 데이터 조립 |
 
-> **G-U3-3 반영**: 스토리가 요구한 "예상 소요·인터랙션 양"은 라이브 카드에 **없다**. 라이브를 정본으로 삼아 **넣지 않는다**.
-> **G-U3-4 반영**: `MustVisitPicker`의 testID는 U1의 `trip-wizard-mustvisit-*` 계열을 **재사용하지 않는다** — 화면이 달라 셀렉터가 충돌한다. `itinerary-mustvisit-*`로 분리하되 **API·검증 규칙은 U1 정본을 그대로 따른다.**
+> **판정은 페이지에서 1회.** `stay-search` 선례(`resolveStaySearchState`)를 따른다 — 화면(`ui/`)이 같은 판정을 다시 하지 않으며, 그 사실을 구조 가드가 잠근다.
 
-## 3. 생성 진행 (h09·h10)
+## 3. `src/features/itinerary/model/` — 순수 함수 · 훅 · 스토어
 
-| 컴포넌트 | 책임 | 상태 / 서버 |
+| 파일 | 종류 | 책임 |
 |---|---|---|
-| `GeneratingScreen` | 단계 텍스트 · 진행률 · **[백그라운드로]** · **[취소]** | `GenerationSession` 폴링. `DAY1_READY`면 `PartialResult`로 전환 |
-| `PartialResult` | 1일차만 노출 + "나머지를 채우는 중" | 완료 시 `draft`로 자동 전환 |
-| `FallbackBanner` | `isFallback` / `solveMode=MINIMAL` / `candidatesLevel=LOW` 각각의 문구 | **BR-U3-11 — 침묵 금지.** 세 신호가 동시에 오면 심각도 높은 것 하나만 |
+| `timeBandLabel.ts` ✅ | 순수 | 시간대 라벨(`오전·활동`) — BR-U3-07 |
+| `slotKey.ts` ✅ | 순수 | `"{date}#{poiId}"` 조립·파싱 — BR-U2-04 |
+| `mustVisitList.ts` ✅ · `mustVisitTimeForm.ts` ✅ | 순수 | h05·h07 |
+| `generationGate.ts` | 순수 | BR-U3-01·02 — 숙소 0 / 지오코딩 실패 판정. **차단 사유 문자열까지 여기서** |
+| `draftState.ts` | 순수 | `resolveDraftState()` — 폴백 배너 3신호(`isFallback`·`solveMode=MINIMAL`·`candidatesLevel=LOW`) 중 **심각도 최상위 1개만** 고르는 것 포함(BR-U3-11) |
+| `planState.ts` | 순수 | `resolvePlanState()` — 로딩·오류·`CONFIRMED` 읽기전용·지도 실패 폴백 |
+| `legDistance.ts` | 순수 | 구간 표기 조립(`도보 950m`) + **총 이동거리 합산**. **소요시간 산출 함수를 두지 않는다**(INV-3) |
+| `routeDiff.ts` | 순수 | h28 전·후 diff 분류(추가·삭제·이동) + 개선 없음 판정 |
+| `openHoursWarning.ts` | 순수 | 서버가 준 영업시간·휴관 값의 **표시 형태만** 결정. 휴관 여부를 클라가 계산하지 않는다(BR-U3-09) |
+| `useItinerary.ts` | 훅 | `GET /trips/{tripId}/itinerary` |
+| `useGenerationSession.ts` | 훅 | 생성 세션 폴링(day1 우선) |
+| `useSlotCandidates.ts` | 훅 | `proposeSlotCandidates`(DEC-U3-5) |
+| `useValidateItinerary.ts` | 훅 | 편집 재검증(비차단) |
+| `useConfirmItinerary.ts` | 훅 | `POST /trips/{tripId}/itinerary/confirm` |
+| `useRevisions.ts` | 훅 | h36 이력·되돌리기 |
+| `itineraryEditStore.ts` | 스토어 | **UI 상태만** — 뷰 세그먼트(시간표/지도) · 편집 드래프트 · 시트 열림. **서버 응답을 복사하지 않는다** |
 
-## 4. 추천안 (h11·h12·h35)
+## 4. `src/features/itinerary/ui/` — 프레젠테이션
 
-| 컴포넌트 | 책임 | 상태 / 서버 |
+| 파일 | 화면 | 책임 (props만 받는다) |
 |---|---|---|
-| `DraftHeader` | "취향·거리로 채운 추천안이에요" + 우상단 **[직접 고르기]**(방식 전환, 진행분 보존 — BR-U3-06) | |
-| `StrengthSegment` | `최소 \| 균형 \| 많이` | **재생성 트리거**(BR-U3-22) — 변경 시 `RegenerateConfirm` 경유 |
-| `DayTabs` | `1일차 / 2일차` + 날짜 헤더(`6월 10일 · 화`) + `N곳` | |
-| `RouteMap` | OSM/CARTO 타일 + 번호 핀 + 동선 폴리라인 | 실패 시 지도 자리만 폴백(h31 문구 재사용) |
-| `DraftSlotCard` | 번호 · 사진 · **시간대 라벨**(`오전·활동`) · `AI 추천` 배지 · 장소명 · 해시태그 + 거리 · **[다른 후보 N]** | **시각 렌더 금지**(BR-U3-07·INV-U3-07). 고정 블록만 시각 표시(`21:00 도착 · 변경 불가`) |
-| `SlotCandidateSheet` | h12 — 후보 목록(거리·이유), 선택 시 교체 | `proposeSlotCandidates`(DEC-U3-5) |
-| `ZeroCandidateScreen` | h35 — **어느 조건이 0으로 만들었는지** 표시 + 완화 제안 | US-SCHED-02 예외 |
-| `RegenerateConfirm` | "직접 바꾼 N곳이 사라져요" 확인 | **BR-U3-18·19** — 확인 후 리비전 스냅숏 → `generate` |
+| `ItineraryGlyphs.tsx` ✅ | — | 아이콘 |
+| `MustVisitPickerScreen.tsx` ✅ · `MustVisitTimeScreen.tsx` ✅ | h05·h07 | |
+| `MethodPickerScreen.tsx` | h04 | 3방식 카드 + `추천` 배지. 차단 시 CTA 비활성 + 사유(판정값은 prop) |
+| `GeneratingScreen.tsx` | h09·h10 | 단계 텍스트·진행률·[백그라운드로]·[취소]. 부분 결과는 같은 화면의 상태 |
+| `DraftScreen.tsx` | h11 | `DayTabs` · 슬롯 카드 · 추천 강도 세그먼트. **시각 렌더 금지**(BR-U3-07) — 고정 블록만 `21:00 도착 · 변경 불가` |
+| `SlotCandidateSheet.tsx` | h12·h18 | 후보 목록(거리·이유) |
+| `ZeroCandidateScreen.tsx` | h35 | **어느 조건이 0으로 만들었는지** + 완화 제안 |
+| `RegenerateConfirmSheet.tsx` | — | "직접 바꾼 N곳이 사라져요"(BR-U3-18·19) |
+| `ConceptPickerScreen.tsx` · `SlotFillScreen.tsx` | h13~h17 | 반경 확대는 **서버가 준 `radiusMUsed`를 표시만**(BR-U3-25) |
+| `ManualPlanScreen.tsx` · `PlaceAddSheet.tsx` | h19~h21 | |
+| `TimelineScreen.tsx` | h25·h30·h34 | **검증 시각**(`09:30`) · 영업시간 · `⚠︎ 월요일 휴관` · 구간 `도보 950m` + [길찾기] |
+| `MapScreen.tsx` | h26·h29·h31~h33 | `shared/map` 소비. 실패 폴백은 판정값을 prop으로 받아 표시만 |
+| `PinDetailSheet.tsx` | h23 | |
+| `ItineraryEditScreen.tsx` | h24 | 위반 배지(저장 후에도 지속 — BR-U3-13) |
+| `SaveConflictSheet.tsx` | — | [AI 자동 보정] / [그대로 저장] |
+| `ReorderBanner.tsx` · `ReorderCompareScreen.tsx` | h25 배너·h28 | 배너에 **수치 단언 금지**(G-U3-1) |
+| `StaySuggestScreen.tsx` | h27 | |
+| `HistoryScreen.tsx` | h36 | actor 배지 · 상대 시각 · [되돌리기] · `기준 버전` 행 · empty. **`with-companions` 제외**(DEC-U3-8) |
 
-## 5. 같이 고르기 · 직접 (h13~h21)
+## 5. `src/shared/` 변경
 
-| 컴포넌트 | 책임 | 비고 |
-|---|---|---|
-| `ConceptPicker` | h13 컨셉(테마) 선택 | `concept` 파라미터 |
-| `SlotCandidateList` | h14·h18 — 후보 카드(거리 `도보 1.1km`·이유) | `proposeSlotCandidates` |
-| `RadiusExpander` | h15 — 후보 0/부족 시 반경 확대. **응답 `radiusMUsed`를 표시**(`약 11.3km`) | BR-U3-25 |
-| `SlotFillPreview` | h16 — 채운 뒤 동선 갱신 미리보기 | |
-| `EmptyItinerary` | h19 — 빈 일정 + [장소 추가] | |
-| `PlaceAddSheet` | h20 검색 / h21 주변 — 세그먼트 2탭 | U1 후보풀 소비 · 추가마다 `validate` |
+| 대상 | 변경 |
+|---|---|
+| `shared/map/KakaoMapView.tsx` | **확장 필요** — 다중 핀(번호)·폴리라인·center 갱신 미지원(U3 NFR 실측). itinerary와 execution(U4)이 함께 쓰므로 **처음부터 shared 소유** |
+| `shared/ui/StateNotice.tsx` | 재사용 — 지도 실패·후보 0건·오류 상태 |
+| `shared/api/generated/` | `itinerary` 태그 코드젠 추가 필요(`orval.config.ts` `filters.tags`) |
 
-## 6. 완성 일정 · 편집 · 확정 (h23~h34)
+## 6. 구조 가드 (`src/__tests__/`)
 
-| 컴포넌트 | 책임 | 상태 / 서버 |
-|---|---|---|
-| `ItineraryHeader` | `부산 여행 · 3박 4일` / `총 9곳 · 이동 12km` + 공유 · 더보기 | 합계는 **클라 계산** |
-| `ViewSegment` | **시간표 \| 지도** 전환 — 같은 데이터, 한쪽 수정 즉시 반영 | UI 상태(Zustand) |
-| `TimelineSlotCard` | **검증 시각**(`09:30`) · 시간대 라벨 · 장소 · **영업시간**(`09:00–21:00 영업`) · **`⚠︎ 월요일 휴관`** 경고 | 영업시간은 **backend 합성**(BR-U3-09) |
-| `LegRow` | 구간 — `도보 950m` / `차량 3.1km` + **[길찾기]**(외부 지도앱) | **소요시간 금지**(BR-U3-08) |
-| `ReorderBanner` | h25 배너 — "동선을 더 짧게 정리해볼까요?" → `reorder` | **수치 단언 제거**(G-U3-1) |
-| `ReorderCompare` | h28 전·후 비교 + [적용]/[취소]. 개선 없으면 "지금 동선이 이미 짧아요" | **클라 계산**(BR-U3-21·20) |
-| `MapView` + `PinDetailSheet` | h26 지도 + h23 핀 상세(슬롯 선택) | h32 스크러버는 지도 뷰의 옵션 동작 |
-| `MapFallback` | h31 — "지도를 불러오지 못했어요" + 시간표형 폴백 | 일정 데이터는 정상 제공 |
-| `EditScreen` | h24 — 추가·삭제·재정렬·시간 조정 | 변경마다 `validate`(비차단) |
-| `ViolationBadge` | 위반 배지 + 사유 | 저장 후에도 지속 가시화(BR-U3-13) |
-| `SaveConflictSheet` | "○곳에서 시간이 안 맞아요" → **[AI 자동 보정] / [그대로 저장]** | `repair` |
-| `ConfirmCta` | **[일정 확정하기]** → 확정 의미 한 줄 안내 | `POST /confirm`. 스냅숏 동결 실패 시 거부(BR-U3-27) |
-| `ConfirmedView` | h34 읽기전용 + D-day·출발 맥락 + **[일정 수정]** | 수정 시 `CONFIRMED → PLANNED`(BR-U3-29) |
-| `StaySuggestScreen` | h27 — 권역 지도 + 후보(평균 이동 거리 순, before/after 거리) | US-SCHED-11 |
+| 파일 | 잠그는 계약 |
+|---|---|
+| `itineraryMustVisitStructure.test.ts` ✅ | 기존 |
+| `itineraryDraftStructure.test.ts` | `DraftScreen.tsx`에 폴백 판정 분기가 **0건**(판정은 `draftState.ts` 한 곳) |
+| `itineraryTimeStructure.test.ts` | `ui/` 전 파일에 **소요시간 단위 문자열 0건**(`분`·`시간`이 이동 구간 문맥에 없음) — INV-3 |
+| `itineraryDraftTimeStructure.test.ts` | `DraftScreen.tsx`가 **`startAt`·`endAt`을 렌더하지 않는다**(고정 블록 예외만) — BR-U3-07 |
+| `pagesLayerStructure.test.ts` ✅ | 새 `itinerary-*` 슬라이스를 재귀 스캔이 자동 편입 |
 
-## 7. 변경 이력 (h36)
-
-| 컴포넌트 | 책임 | 비고 |
-|---|---|---|
-| `HistoryList` | "바꾼 내용은 언제든 되돌릴 수 있어요" + 항목(actor 배지 `나`/`AI` · 상대 시각 · 요약 · 상세 칩 · **[되돌리기]**) | `ItineraryRevision` |
-| `BaselineRow` | 최하단 `AI가 처음 짠 일정` + **`기준 버전`** 배지 — 되돌리기 없음 | `kind=BASELINE` |
-| `RestoreConfirm` | 되돌리기 확인 | **새 리비전을 쌓는다**(BR-U3-32) |
-| `HistoryEmpty` | 변경 없음 상태 | h36-empty |
-
-- **1차 미구현**: `with-companions` 변형(DEC-U3-8) · Plan-B 재계획 항목(U4 착수 후 합류, G-U3-2).
-
-## 8. 폼 검증 (UX 사본 명세 — 권위는 서버)
+## 7. 폼 검증 (UX 사본 — 권위는 서버)
 
 | 대상 | 규칙 |
 |---|---|
-| 시각 조정(h24) | `HH:mm`, 자정 넘김 허용(`endsNextDay`). 서버 재검증 결과가 최종 |
-| 체류 시간 | 최소·권장·최대 범위 안내만. 강제는 서버 |
-| 반경(h15) | 서버가 준 `radiusMUsed`를 표시만 — 클라가 임의 값 계산 금지 |
+| 시각 조정(h24) | `HH:mm`, 자정 넘김 허용(`endsNextDay`). 서버 재검증이 최종 |
+| 체류 시간 | 범위 안내만. 강제는 서버 |
+| 반경(h15) | 서버가 준 `radiusMUsed` 표시만 — 클라 계산 금지 |
 
-## 9. testID (규약 `{feature}-{screen}-{role}` · feature=`itinerary`)
+## 8. testID (규약 `{feature}-{screen}-{role}` · feature=`itinerary`)
 
 ```
 itinerary-method-fullai · -copick · -manual · -gate-blocked
 itinerary-generating-progress · -background · -cancel · -day1ready
 itinerary-draft-strength-{min|balanced|max} · -day-{n} · -slot-{slotKey}
-itinerary-draft-alt-{slotKey}          # [다른 후보 N]
-itinerary-draft-fallback-banner · -zero · -zero-relax
+itinerary-draft-alt-{slotKey} · -fallback-banner · -zero · -zero-relax
 itinerary-candidates-{poiId} · -radius-expand · -radius-used
 itinerary-timeline-slot-{slotKey} · -openhours-{slotKey} · -closed-warning-{slotKey}
 itinerary-leg-{fromSlotKey} · -directions-{fromSlotKey}
@@ -130,8 +166,8 @@ itinerary-mustvisit-{poiId} · -time-{poiId}       # U1 계열과 분리(G-U3-4)
 itinerary-regenerate-confirm · -regenerate-proceed · -regenerate-cancel
 ```
 
-> **[공백]** 위 목록은 화면 정본에서 유도한 **제안값**이다. U1 선례(TRIP-182·207·209)처럼 실제 구현이 확정한 값이 다르면 **구현 시점에 이 절에 소급 기록**한다.
+> **[공백]** 제안값이다. 구현이 확정한 값이 다르면 **구현 시점에 이 절에 소급 기록**한다(TRIP-182·207·209 선례).
 
-## 10. PBT 대상 (클라이언트 순수 함수 · fast-check)
+## 9. PBT (`model/` 순수 함수 · fast-check)
 
-`business-rules.md` §8의 **PBT-U3-1~5**를 그대로 따른다 — 총 이동거리 합산 · 시간대 라벨 사영 · 전·후 diff 분류 · `slotKey` 왕복 · 재생성 안전성.
+`business-rules.md` §8 **PBT-U3-1~5**를 그대로 따른다 — 대상 파일은 `legDistance.ts`(합산) · `timeBandLabel.ts`(라벨 사영) · `routeDiff.ts`(diff 분류) · `slotKey.ts`(왕복) · `draftState.ts`(재생성 안전성).
