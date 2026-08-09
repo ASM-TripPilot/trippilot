@@ -52,7 +52,7 @@ import java.util.UUID
 
 /** 호출마다 입력을 기록 — day1 2단계라 1차/2차 두 번 불린다([captures] 순서 = 호출 순서). */
 private class CapturingAgent(private val now: Instant, private val emit: (LocalDate) -> List<VisitSlotDisplay> = { emptyList() }) :
-    ScheduleAgentPort {
+    StubScheduleAgent() {
     val captures = mutableListOf<ScheduleAgentInput>()
     val captured: ScheduleAgentInput? get() = captures.firstOrNull()
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
@@ -69,7 +69,7 @@ private class CapturingAgent(private val now: Instant, private val emit: (LocalD
 }
 
 /** ScheduleAgent(AI) 실패 재현 — INV-4 폴백 경로 검증용. */
-private class ThrowingAgent : ScheduleAgentPort {
+private class ThrowingAgent : StubScheduleAgent() {
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput = throw RuntimeException("agent down")
     override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
@@ -296,7 +296,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
 
     "추천 근거가 slotKey 로 슬롯에 붙어 영속된다(TRIP-306 · BR-U2-04)" {
         val poi = UUID.randomUUID()
-        val agent = object : ScheduleAgentPort {
+        val agent = object : StubScheduleAgent() {
             override fun generate(input: ScheduleAgentInput) = ScheduleAgentOutput(
                 days = input.timeWindows.map { tw ->
                     DaySchedule(tw.date, listOf(VisitSlotDisplay(poi, LocalTime.parse("10:00"), LocalTime.parse("11:00"), false, null, isFixed = false)))
@@ -342,7 +342,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
     "2차 일자에도 추천 근거가 붙는다(1차만 테스트하면 이 경로가 비어 있다)" {
         val end = start.plusDays(2)
         val poiByDate = generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.associateWith { UUID.randomUUID() }
-        val agent = object : ScheduleAgentPort {
+        val agent = object : StubScheduleAgent() {
             override fun generate(input: ScheduleAgentInput) = ScheduleAgentOutput(
                 days = input.timeWindows.map { tw ->
                     DaySchedule(tw.date, listOf(VisitSlotDisplay(poiByDate.getValue(tw.date), LocalTime.parse("10:00"), LocalTime.parse("11:00"), false, null, isFixed = false)))
@@ -426,7 +426,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val poi = UUID.randomUUID()
         // 1차에 day1 만 요청했는데 전 일자를 돌려주는 에이전트(AI 가 아직 일자 분할을 지키지 않는 경우)
         val agent = CapturingAgent(now) { emptyList() }.let {
-            object : ScheduleAgentPort {
+            object : StubScheduleAgent() {
                 val inner = it
                 override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
                     inner.captures += input
@@ -489,7 +489,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val end = start.plusDays(2)
         val poi1 = UUID.randomUUID()
         // 1차만 성공하고 2차 호출에서 터지는 에이전트
-        val agent = object : ScheduleAgentPort {
+        val agent = object : StubScheduleAgent() {
             var calls = 0
             override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
                 if (calls++ > 0) throw RuntimeException("agent down")

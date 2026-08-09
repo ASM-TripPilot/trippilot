@@ -17,6 +17,12 @@ interface ScheduleAgentPort {
     fun generate(input: ScheduleAgentInput): ScheduleAgentOutput
     fun validate(solution: ScheduleAgentOutput): List<Violation>
     fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult
+
+    /**
+     * 슬롯 후보 제안(DEC-U3-5) — **완전 AI·같이 고르기 공통 경계**다. 경로별로 다른 API 를 두지 않는다(BR-U3-23).
+     * 후보는 closed-set(INV-1) — 백엔드가 임의 POI 를 섞지 않는다.
+     */
+    fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput
 }
 
 /** 생성 방식(d11 추천 강도 분기). */
@@ -151,3 +157,34 @@ data class Violation(
 
 /** 최소 조정 수리 결과 — 시각·순서만(POI 불변). */
 data class RepairResult(val repaired: ScheduleAgentOutput, val changes: List<String>)
+
+/**
+ * 슬롯 후보 요청. [excludePoiIds] 는 **백엔드가 현재 일정에서 유도**한다 — 클라이언트가 보내는 값을 믿으면
+ * 이미 일정에 있는 장소가 다시 추천된다(BR-U3-24).
+ */
+data class SlotCandidatesInput(
+    val tripId: UUID,
+    /** BR-U2-04 규약 `"{date}#{poiId}"`. */
+    val slotKey: String,
+    /** 직전·직후 슬롯 — 동선 트레이드오프 계산 입력. */
+    val neighborSlotKeys: List<String>,
+    /** 후보 탐색 중심(교체 대상 슬롯의 장소 좌표). */
+    val centerLat: Double,
+    val centerLng: Double,
+    /** null = AI 기본 반경. h15 "반경 넓힘"이 이 값을 올린다. */
+    val radiusM: Int?,
+    /** h13 컨셉(테마) — null 허용. */
+    val concept: String?,
+    val excludePoiIds: List<UUID>,
+    val requestMeta: RequestMeta,
+)
+
+/** [candidates] 빈 목록 = 후보 0건(h15 반경 확대 유도). [radiusMUsed] 는 **실제 사용 반경**(AI 가 자동 확대했을 수 있다). */
+data class SlotCandidatesOutput(
+    val candidates: List<SlotCandidate>,
+    val radiusMUsed: Int,
+    val freshness: FreshnessMeta,
+)
+
+/** [distanceRange] 거리만(INV-3). [rationale] 은 closed-set 근거 — 시각·소요시간 언급 금지(BR-U2-09). */
+data class SlotCandidate(val poiId: UUID, val distanceRange: String, val rationale: String)
