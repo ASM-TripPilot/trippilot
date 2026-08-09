@@ -24,11 +24,19 @@ import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
+import {
+  buildDraftPins,
+  formatDraftDayHeader,
+} from '@/features/itinerary/model/draftView';
 import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
 import {
   startTimeOptions,
   tripDayChips,
 } from '@/features/itinerary/model/mustVisitTimeForm';
+import {
+  DraftScreen,
+  type DraftScreenProps,
+} from '@/features/itinerary/ui/DraftScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
@@ -43,6 +51,10 @@ import {
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
 import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
+import type {
+  ItineraryDaysItem,
+  ItineraryDaysItemSlotsItem,
+} from '@/shared/api/generated/schemas';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { KakaoMapView } from '@/shared/map';
 
@@ -200,6 +212,114 @@ const MUST_VISIT_PREVIEW_ITEMS: MustVisitListItem[] = [
     type: 'ANYTIME',
   },
 ];
+
+/**
+ * h11 AI 추천안 초안(TRIP-297)의 하루 — 승인 테스트(`DraftScreen.test.tsx`)가 쓰는 슬롯 4개와
+ * **같은 모양**이다. 두 곳이 갈리면 "테스트에서 본 것"과 "눈으로 본 것"이 달라진다.
+ * 테스트 파일에서 import 하지 않고 값을 여기 다시 둔다 — 테스트는 프로덕션 그래프에
+ * 들어가면 안 된다(`MUST_VISIT_THUMBNAILS` 처럼 파일 상단 상수로 두는 이 파일의 관례).
+ *
+ * 한 벌이 동시에 덮는 것: 시간대 4종(오전·점심·오후·저녁) · 고정/비고정 · 좌표 유무 ·
+ * null 필드. 2번 슬롯은 이름·사진·태그·좌표를 **전부 안 주는** 슬롯이라 그 자리가 어떻게
+ * 비는지(AC-7)와 지도 핀이 ①③④ 로 건너뛰는 것(AC-13)을 한 화면에서 같이 볼 수 있다.
+ *
+ * ⚠️ `imageUrl` 이 전부 `null` 인 것은 다른 프리뷰 픽스처와 같은 이유다(`exploreFixtures`
+ * 머리말 — 이것이 지금 프로덕션의 실제 모습이고, 클라가 외부 URL 을 지어내는 것은 INV-1 이
+ * 막는다). 그래서 카드에 **사진 자리가 아예 없다**(AC-7 대로 요소를 안 그린다) — Figma 목업의
+ * 78px 썸네일이 빠져 보이는 것은 구현 실패가 아니다.
+ */
+const DRAFT_PREVIEW_DATE = '2026-06-10';
+
+const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
+  {
+    poiId: 'poi-a',
+    startAt: '09:30:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '성산일출봉',
+    imageUrl: null,
+    tags: ['바다', '포토'],
+    distanceRange: '약 1.2km · 도보 추정',
+    lat: 33.458,
+    lng: 126.942,
+  },
+  {
+    poiId: 'poi-b',
+    startAt: '12:30:00',
+    endAt: '13:30:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: null,
+    imageUrl: null,
+    tags: [],
+    lat: null,
+    lng: null,
+  },
+  {
+    poiId: 'poi-c',
+    startAt: '15:00:00',
+    endAt: '16:30:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '카페 그레이',
+    imageUrl: null,
+    tags: ['카페'],
+    lat: 33.489,
+    lng: 126.498,
+  },
+  {
+    poiId: 'poi-d',
+    startAt: '21:00:00',
+    endAt: '22:00:00',
+    isFixed: true,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '제주 신라스테이',
+    imageUrl: null,
+    tags: [],
+    lat: 33.487,
+    lng: 126.499,
+  },
+];
+
+const DRAFT_PREVIEW_DAYS: ItineraryDaysItem[] = [
+  { date: DRAFT_PREVIEW_DATE, slots: DRAFT_PREVIEW_SLOTS },
+];
+
+/** 좌표가 하나도 없는 날 — 핀이 0개라 **지도 블록이 통째로 빠지고 레이아웃이 위로 당겨진다.**
+ * 03 §3.1-3 의 자기 신고 자리이고 Figma 와 갈리는 지점이라, 눈으로 판단할 상태로 세운다. */
+const DRAFT_PREVIEW_DAYS_NO_COORDS: ItineraryDaysItem[] = [
+  {
+    date: DRAFT_PREVIEW_DATE,
+    slots: DRAFT_PREVIEW_SLOTS.map((slot) => ({
+      ...slot,
+      lat: null,
+      lng: null,
+    })),
+  },
+];
+
+const DRAFT_PREVIEW_BASE: DraftScreenProps = {
+  view: { kind: 'listed', days: DRAFT_PREVIEW_DAYS, staleFailed: false },
+  // 여행은 3일인데 첫날만 도착한 상태(2단계 생성 중) — 2·3일차 탭이 비활성으로 보인다.
+  tabs: [
+    { date: DRAFT_PREVIEW_DATE, dayNumber: 1, hasData: true },
+    { date: '2026-06-11', dayNumber: 2, hasData: false },
+    { date: '2026-06-12', dayNumber: 3, hasData: false },
+  ],
+  selectedDate: DRAFT_PREVIEW_DATE,
+  // 배선이 쓰는 판정 함수를 그대로 부른다 — 손으로 적으면 프리뷰와 실기가 갈린다.
+  pins: buildDraftPins(DRAFT_PREVIEW_SLOTS),
+  dayHeader: formatDraftDayHeader(DRAFT_PREVIEW_DATE),
+  canRetry: true,
+  onSelectDay: noop,
+  onRetry: noop,
+  onBack: noop,
+};
 
 const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
   variant: 'default',
@@ -888,6 +1008,64 @@ const PREVIEW_STATES: PreviewState[] = [
           dwellKey: 'NORMAL',
         }}
         blockReason={null}
+      />
+    ),
+  },
+  // h11 AI 추천안 초안 5상태(TRIP-297) — Figma `1870:1083` 대조용 격리 렌더.
+  // 화면이 props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로 나온다
+  // (`docs/structure.md` 경고: "엣지 케이스 화면을 눈으로 보려면 목을 만들지 말고 여기에
+  // 상태를 추가한다"). 실화면 딥링크로는 이 얼굴들을 볼 수 없다 — 생성 POST 가 만드는
+  // `tripId` 와 서버의 2단계 생성 응답이 있어야 하는데 백엔드 없이는 안 생긴다.
+  {
+    key: 'itinerary-draft-default',
+    label: '추천안 초안 h11',
+    login: null,
+    render: () => <DraftScreen {...DRAFT_PREVIEW_BASE} />,
+  },
+  {
+    key: 'itinerary-draft-stale-failed',
+    label: 'h11 · 부분 실패',
+    login: null,
+    render: () => (
+      <DraftScreen
+        {...DRAFT_PREVIEW_BASE}
+        view={{ kind: 'listed', days: DRAFT_PREVIEW_DAYS, staleFailed: true }}
+      />
+    ),
+  },
+  {
+    key: 'itinerary-draft-loading',
+    label: 'h11 · 로딩',
+    login: null,
+    render: () => (
+      <DraftScreen
+        {...DRAFT_PREVIEW_BASE}
+        view={{ kind: 'loading' }}
+        pins={[]}
+      />
+    ),
+  },
+  {
+    key: 'itinerary-draft-empty',
+    label: 'h11 · 빈 화면',
+    login: null,
+    render: () => (
+      <DraftScreen {...DRAFT_PREVIEW_BASE} view={{ kind: 'empty' }} pins={[]} />
+    ),
+  },
+  {
+    key: 'itinerary-draft-nopins',
+    label: 'h11 · 좌표 없는 날',
+    login: null,
+    render: () => (
+      <DraftScreen
+        {...DRAFT_PREVIEW_BASE}
+        view={{
+          kind: 'listed',
+          days: DRAFT_PREVIEW_DAYS_NO_COORDS,
+          staleFailed: false,
+        }}
+        pins={buildDraftPins(DRAFT_PREVIEW_DAYS_NO_COORDS[0].slots)}
       />
     ),
   },

@@ -10,6 +10,7 @@ import {
   REGISTERED_DOMAIN,
   type KakaoMapMessage,
   type MapCenter,
+  type MapPin,
 } from './mapHtml';
 
 /**
@@ -33,6 +34,10 @@ export interface KakaoMapViewProps {
   /** 핀 좌표·역지오코딩 결과 통로(TRIP-199). 옵셔널이라 기존 호출부(지도 시트·검색 미리보기)는
    * 안 넘겨도 그대로 동작한다 — 그 화면들은 아직 핀 메시지를 들을 이유가 없다. */
   onMapMessage?: (message: KakaoMapMessage) => void;
+  /** 번호 핀(TRIP-297). 옵셔널이라 기존 호출부 3곳은 안 넘겨도 그대로 동작한다. `center`와
+   * 같은 계약 아래 있다 — 마운트 시점 값으로 한 번 조립되고 이후 갱신되지 않으므로, 다른
+   * 핀 묶음을 그려야 하는 호출부는 `key`로 remount한다. */
+  pins?: MapPin[];
 }
 
 /** `unknown`이 유한한 수인가 — WebView가 보낸 값은 뭐든 올 수 있어 여기가 신뢰 경계다
@@ -45,6 +50,7 @@ function isFiniteNumber(value: unknown): value is number {
 export function KakaoMapView({
   center,
   onMapMessage,
+  pins,
 }: KakaoMapViewProps): ReactElement {
   const [loadFailed, setLoadFailed] = useState(false);
   const jsKey = process.env.EXPO_PUBLIC_KAKAO_MAP_JS_KEY;
@@ -61,7 +67,7 @@ export function KakaoMapView({
   // 그 좌표를 확정에 쓰지 않으므로, 지도에서 롱프레스해도 마커만 찍히고 아무 데도 반영되지
   // 않는 상태가 됐었다 — 대본 자체를 안 실어 그 오해를 없앤다.
   const [html] = useState(() =>
-    buildMapHtml(center, jsKey ?? '', onMapMessage !== undefined)
+    buildMapHtml(center, jsKey ?? '', onMapMessage !== undefined, pins)
   );
 
   // onError·onHttpError 둘 다 이 페이로드 없이 트리거만 본다 — 실패 사실 자체가 신호다.

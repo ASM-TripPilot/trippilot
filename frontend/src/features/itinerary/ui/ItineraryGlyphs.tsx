@@ -9,6 +9,7 @@ import Svg, { Path } from 'react-native-svg';
 // className 을 못 받는다.
 
 const INK = '#222222';
+const PRIMARY = '#FF385C';
 const BODY = '#3F3F3F';
 const MUTED = '#6A6A6A';
 const MUTED_SOFT = '#9AA1AB';
@@ -82,6 +83,35 @@ export function CheckGlyph({ size = 12, testID }: GlyphProps) {
         d="M10 3L4.5 8.5L2 6"
         stroke={PRIMARY_TEXT}
         strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// h11 안내줄 체크 원(20) — Figma `1870:1092`. 위 `CheckGlyph` 의 체크를 `InfoCircleGlyph` 의
+// 원 안에 넣은 형태라 세 아이콘이 한 벌로 보인다(이 파일의 기존 합성 방식과 같다).
+export function CheckCircleGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M10 17.5C14.1421 17.5 17.5 14.1421 17.5 10C17.5 5.85786 14.1421 2.5 10 2.5C5.85786 2.5 2.5 5.85786 2.5 10C2.5 14.1421 5.85786 17.5 10 17.5Z"
+        stroke={PRIMARY}
+        strokeWidth={1.66667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M13.3333 7.5L8.75 12.0833L6.66667 10"
+        stroke={PRIMARY}
+        strokeWidth={1.66667}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

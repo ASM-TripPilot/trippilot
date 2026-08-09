@@ -13,6 +13,17 @@ export interface MapCenter {
 }
 
 /**
+ * 번호가 붙은 지도 핀(TRIP-297). `number`는 지도가 정하지 않는다 — 호출부가 만든 값을
+ * 그대로 그린다(일정 초안에서는 좌표 없는 슬롯을 건너뛴 뒤에도 카드 번호를 유지해야 해
+ * 핀 번호가 ①③④처럼 뛴다).
+ */
+export interface MapPin {
+  number: number;
+  lat: number;
+  lng: number;
+}
+
+/**
  * RN↔WebView 메시지 프로토콜(TRIP-199). `postMessage`는 문자열 하나만 보낼 수 있어 종류를
  * 구분할 꼬리표(`type`)가 필요하다 — 이 판별 유니온이 그 꼬리표를 정의한다.
  */
@@ -74,8 +85,36 @@ export const MAP_LOAD_FAILED_MESSAGE = 'kakao-sdk-load-failed';
 export function buildMapHtml(
   center: MapCenter,
   jsKey: string,
-  enablePin: boolean = true
+  enablePin: boolean = true,
+  pins: MapPin[] = []
 ): string {
+  // TRIP-297 — 번호 핀은 `CustomOverlay`로 그린다(기본 `Marker`는 숫자를 못 싣는다).
+  // 핀이 둘 이상일 때만 `setBounds`로 전부 담는다 — 한 개짜리 bounds는 넓이가 0이라
+  // 최대 배율까지 확대되어 지도가 무엇을 보여주는지 알 수 없게 된다.
+  const numberedPinScript =
+    pins.length === 0
+      ? ''
+      : `
+          var numberedPins = ${JSON.stringify(pins)};
+          var pinBounds = new kakao.maps.LatLngBounds();
+          numberedPins.forEach(function (pin) {
+            var position = new kakao.maps.LatLng(pin.lat, pin.lng);
+            pinBounds.extend(position);
+            new kakao.maps.CustomOverlay({
+              map: map,
+              position: position,
+              yAnchor: 0.5,
+              content:
+                '<div style="width:26px;height:26px;border-radius:13px;background:#FF385C;color:#FFFFFF;font:700 13px sans-serif;display:flex;align-items:center;justify-content:center;">' +
+                pin.number +
+                '</div>',
+            });
+          });
+          if (numberedPins.length > 1) {
+            map.setBounds(pinBounds);
+          }
+`;
+
   const pinScript = enablePin
     ? `
           var geocoder = new kakao.maps.services.Geocoder();
@@ -219,6 +258,7 @@ export function buildMapHtml(
               center: new kakao.maps.LatLng(${center.lat}, ${center.lng}),
               level: 3,
             });
+            ${numberedPinScript}
             ${pinScript}
           } catch (e) {
             window.ReactNativeWebView.postMessage('${MAP_LOAD_FAILED_MESSAGE}');
