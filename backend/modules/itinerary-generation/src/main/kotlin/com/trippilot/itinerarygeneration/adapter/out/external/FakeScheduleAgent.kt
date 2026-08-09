@@ -92,7 +92,7 @@ class FakeScheduleAgent(
             candidates = found.take(MAX_CANDIDATES).map {
                 SlotCandidate(
                     poiId = it.poiId,
-                    distanceRange = it.distanceM?.let { m -> "약 ${"%.1f".format(m / 1000)}km" } ?: "거리 미확인",
+                    distanceRange = it.distanceM?.let { m -> "약 ${"%.1f".format(java.util.Locale.ROOT, m / 1000)}km" } ?: "거리 미확인",
                     rationale = input.concept?.let { c -> "$c 컨셉에 맞는 ${it.category}" } ?: "주변 ${it.category}",
                 )
             },

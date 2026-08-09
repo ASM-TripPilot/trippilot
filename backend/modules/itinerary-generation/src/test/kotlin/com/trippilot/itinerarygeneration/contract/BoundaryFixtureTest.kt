@@ -12,7 +12,6 @@ import com.trippilot.itinerarygeneration.domain.TripContext
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
-import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -57,22 +56,43 @@ class BoundaryFixtureTest : StringSpec({
         excludedPoiIds = listOf(UUID.fromString("44444444-4444-4444-8444-444444444444")),
     )
 
-    "실 어댑터 매퍼로 만든 요청을 픽스처로 남긴다" {
+    "실 어댑터 매퍼로 만든 요청이 커밋된 골든 픽스처와 같다" {
         val json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(input)
-        val out = File("build/contract/schedule-agent-request.json")
-        out.parentFile.mkdirs()
-        out.writeText(json + "\n")
+        val golden = requireNotNull(this::class.java.getResourceAsStream("/contract/schedule-agent-request.json"))
+            .readBytes().decodeToString()
 
-        // 상대 스키마가 extra="forbid" 라 필드명이 하나만 어긋나도 422 다 — 최상위 10개를 못박는다.
+        // 골든 파일은 AI 의 Pydantic 모델로 검증을 통과한 실물이다. 여기서 어긋나면
+        // **중첩 필드 이름이 바뀌었다는 뜻**이고, 상대는 extra="forbid" 라 런타임 422 가 된다.
+        // (예전엔 build/ 로만 떨궈 매번 새로 만든 문자열을 자기 자신과 비교했다 — 드리프트를 못 잡았다.)
+        json.trim() shouldBe golden.trim()
+    }
+
+    "경계로 나가는 모든 요청 타입에 카멜케이스가 새지 않는다" {
+        // 키만 본다 — 값에 섞인 카멜케이스에 오탐하지 않게. 숫자를 낀 이름(day1ReadyAt)도 잡는다.
+        val camelKey = Regex("\"[a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*\"\\s*:")
+
+        // 요청 타입 전부 — 생성뿐 아니라 TRIP-309 가 더한 검증·수리 요청도 같은 규칙을 받는다.
         listOf(
-            "trip_id", "generation_mode", "trip_context", "anchors", "time_windows",
-            "fixed_blocks", "preference_profile", "recommendation_strength", "request_meta", "excluded_poi_ids",
-        ).forEach { json shouldContain "\"$it\"" }
+            mapper.writeValueAsString(input),
+            mapper.writeValueAsString(sampleValidateRequest),
+            mapper.writeValueAsString(sampleRepairRequest),
+        ).forEach { camelKey.containsMatchIn(it) shouldBe false }
     }
 
-    "카멜케이스 필드가 하나도 새어나가지 않는다" {
-        val json = mapper.writeValueAsString(input)
-        // snake_case 전략이 빠지면 tripId·timeWindows 같은 이름이 그대로 나가 상대가 422 를 낸다.
-        Regex("\"[a-z]+[A-Z]").containsMatchIn(json) shouldBe false
-    }
 })
+
+private val samplePayload = com.trippilot.itinerarygeneration.adapter.out.external.AiScheduleResponse(
+    days = emptyList(), day1ReadyAt = null, explanations = emptyMap(),
+    solveMode = "OR_TOOLS", isFallback = false, freshness = null,
+)
+private val sampleMeta = com.trippilot.itinerarygeneration.adapter.out.external.AiRequestMeta(
+    "req-1", Instant.parse("2026-08-01T00:00:00Z"), 3_000,
+)
+private val sampleValidateRequest =
+    com.trippilot.itinerarygeneration.adapter.out.external.AiValidateRequest(samplePayload, sampleMeta)
+private val sampleRepairRequest =
+    com.trippilot.itinerarygeneration.adapter.out.external.AiRepairRequest(
+        samplePayload,
+        listOf(com.trippilot.itinerarygeneration.adapter.out.external.AiViolation("TRAVEL_TIME", "2026-08-01#p", "", 0, 1)),
+        sampleMeta,
+    )

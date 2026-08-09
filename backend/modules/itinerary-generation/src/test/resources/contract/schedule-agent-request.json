@@ -1,0 +1,49 @@
+{
+  "trip_id" : "11111111-1111-4111-8111-111111111111",
+  "generation_mode" : "FULLY_AI",
+  "trip_context" : {
+    "destinations" : [ "제주" ],
+    "start_date" : "2026-08-01",
+    "end_date" : "2026-08-03",
+    "companion_type" : "친구",
+    "budget_level" : "고급"
+  },
+  "anchors" : [ {
+    "date" : "2026-08-01",
+    "lat" : 33.4996,
+    "lng" : 126.5312
+  } ],
+  "time_windows" : [ {
+    "date" : "2026-08-01",
+    "start" : "09:00:00",
+    "end" : "21:00:00"
+  } ],
+  "fixed_blocks" : [ {
+    "poi_id" : "22222222-2222-4222-8222-222222222222",
+    "date" : "2026-08-01",
+    "start" : "12:00:00",
+    "dwell_min" : 90
+  }, {
+    "poi_id" : "33333333-3333-4333-8333-333333333333",
+    "date" : null,
+    "start" : null,
+    "dwell_min" : null
+  } ],
+  "preference_profile" : {
+    "styles" : [ "미식" ],
+    "activities" : [ "야경" ],
+    "food_tastes" : [ "해산물" ],
+    "transport_modes" : [ "렌터카" ],
+    "pace" : "알차게",
+    "companion_types" : [ "친구" ],
+    "pet_friendly" : true,
+    "budget_tier" : "고급"
+  },
+  "recommendation_strength" : null,
+  "request_meta" : {
+    "request_id" : "req-fixture-1",
+    "requested_at" : "2026-08-01T00:00:00Z",
+    "deadline_ms" : 5000
+  },
+  "excluded_poi_ids" : [ "44444444-4444-4444-8444-444444444444" ]
+}

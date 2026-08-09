@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.SolveMode
@@ -26,7 +27,7 @@ class SlotSurfaceAssemblerTest : StringSpec({
     val snapA = UUID.randomUUID()
 
     fun itinerary(vararg slots: VisitSlot) =
-        Itinerary.create(UUID.randomUUID(), SolveMode.FULL_AI, false, listOf(ItineraryDay.of(d1, 0, slots.toList())), now)
+        Itinerary.create(UUID.randomUUID(), SolveMode.FULL_AI, GenerationMode.FULLY_AI, false, listOf(ItineraryDay.of(d1, 0, slots.toList())), now)
 
     fun slot(poiId: UUID, snapshotId: UUID? = null) =
         VisitSlot.of(poiId, snapshotId, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"))

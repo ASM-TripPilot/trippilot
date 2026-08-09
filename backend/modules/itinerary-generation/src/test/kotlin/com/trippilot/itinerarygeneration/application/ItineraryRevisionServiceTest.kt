@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -14,6 +15,7 @@ import com.trippilot.itinerarygeneration.domain.NewRevision
 import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
@@ -91,7 +93,7 @@ class ItineraryRevisionServiceTest : StringSpec({
 
     fun itinerary(slots: List<VisitSlot>, status: ItineraryStatus = ItineraryStatus.PLANNED, state: GenerationState = GenerationState.COMPLETE) =
         Itinerary.reconstitute(
-            UUID.randomUUID(), tripId, status, SolveMode.FULL_AI, false, state,
+            UUID.randomUUID(), tripId, status, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false, state,
             listOf(ItineraryDay.of(d1, 0, slots)), now, now, null,
         )
 
@@ -117,7 +119,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val target = revs.stored.single()
         // 사용자가 편집해 상태가 달라진 뒤
         val v2 = itinerary(listOf(slot(cafe, "15:00", "16:00")))
-        its.current = Itinerary.reconstitute(v1.itineraryId, tripId, ItineraryStatus.PLANNED, v1.solveMode, false, GenerationState.COMPLETE, v2.days, now, now, null)
+        its.current = Itinerary.reconstitute(v1.itineraryId, tripId, ItineraryStatus.PLANNED, v1.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, v2.days, now, now, null)
         svc.record(its.current!!, RevisionActor.USER, RevisionKind.EDIT, "수정")
 
         val restored = svc.restore(acc, tripId, target.revisionId)
@@ -138,7 +140,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         val target = revs.stored.single()
         // 현재는 숙소 고정 시각이 16:00 으로 바뀐 상태
         val nowFixed = itinerary(listOf(slot(hotel, "16:00", "17:00", fixed = true), slot(cafe, "20:00", "21:00", order = 1)))
-        its.current = Itinerary.reconstitute(old.itineraryId, tripId, ItineraryStatus.PLANNED, old.solveMode, false, GenerationState.COMPLETE, nowFixed.days, now, now, null)
+        its.current = Itinerary.reconstitute(old.itineraryId, tripId, ItineraryStatus.PLANNED, old.solveMode, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE, nowFixed.days, now, now, null)
 
         val restored = svc.restore(acc, tripId, target.revisionId)
 
@@ -175,7 +177,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         shouldThrow<ConflictDetected> { svc.restore(acc, tripId, revs.stored.single().revisionId) }
     }
 
-    "타 계정·타 일정의 리비전은 404" {
+    "타 계정이거나 없는 리비전이면 404" {
         val revs = Revisions()
         val base = itinerary(listOf(slot(cafe, "10:00", "11:00")))
         val svc = service(revs, Itineraries(base))
@@ -183,5 +185,38 @@ class ItineraryRevisionServiceTest : StringSpec({
 
         shouldThrow<ResourceNotFound> { svc.restore(UUID.randomUUID(), tripId, revs.stored.single().revisionId) }
         shouldThrow<ResourceNotFound> { svc.restore(acc, tripId, UUID.randomUUID()) }
+    }
+
+    "다른 여행의 리비전을 이 여행에 복원할 수 없다(404)" {
+        // **실재하는데 다른 여행 것**이어야 이 가드를 지난다 — 없는 id 로는 앞단 조회에서 걸려 가드를 밟지 못한다.
+        // 이 여행은 내 것이라 소유권 검사도 통과하므로, 남는 방어선은 리비전의 여행 범위 확인뿐이다.
+        val revs = Revisions()
+        val mine = itinerary(listOf(slot(cafe, "10:00", "11:00")))
+        val svc = service(revs, Itineraries(mine))
+        val othersTrip = UUID.randomUUID()
+        val others = Itinerary.reconstitute(
+            UUID.randomUUID(), othersTrip, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            GenerationState.COMPLETE, listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, "20:00", "21:00")))), now, now, null,
+        )
+        svc.record(others, RevisionActor.USER, RevisionKind.EDIT, "남의 여행")
+        val foreign = revs.stored.single { it.tripId == othersTrip }
+
+        shouldThrow<ResourceNotFound> { svc.restore(acc, tripId, foreign.revisionId) }
+    }
+
+    "되돌린 결과에도 위반 사유가 붙는다(배지만 켜면 화면이 이유를 못 그린다)" {
+        val revs = Revisions()
+        val v1 = itinerary(listOf(slot(cafe, "10:00", "11:00")))
+        val its = Itineraries(v1)
+        // 복원 결과를 재검증했더니 위반이 나온 상황 — 현행 고정 시각과 과거 배치의 조합은 솔버가 만든 적 없다.
+        val agent = NoopValidateAgent(listOf(Violation("TRAVEL_TIME", 0, 0, "이동이 빠듯해요")))
+        val svc = ItineraryRevisionService(revs, its, trips, agent, REV_NOOP_TX, clock)
+        svc.record(v1, RevisionActor.AI, RevisionKind.BASELINE, "처음")
+
+        val restored = svc.restore(acc, tripId, revs.stored.single().revisionId)
+
+        val s0 = restored.days.single().slots.single()
+        s0.hasViolation shouldBe true
+        s0.violationReason shouldBe "이동이 빠듯해요"
     }
 })

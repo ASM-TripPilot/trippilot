@@ -1,6 +1,7 @@
 package com.trippilot.app
 
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.assertions.withClue
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.shouldBe
 import org.flywaydb.core.Flyway
@@ -77,6 +78,38 @@ class SchemaMigrationIT {
             c.createStatement().executeQuery(
                 "SELECT count(*) FROM banned_word_dictionary WHERE active",
             ).use { rs -> rs.next(); rs.getInt(1) shouldBe 1 }
+
+            // 3b) AI 가 채우는 텍스트 컬럼의 상한 — 코드가 이 길이에 맞춰 자른다.
+            // 컬럼만 줄이고 자르는 쪽을 안 고치면 varchar 초과로 저장이 통째로 실패한다(실제로 한 번 겪었다).
+            // 여기 값을 바꿔야 한다면 itinerary-generation 의 BoundedText 상수도 같이 바꿔야 한다.
+            // (BoundedText 는 internal 이라 app 모듈에서 참조할 수 없어 길이를 여기에 적어 둔다.)
+            mapOf(
+                "visit_slot" to mapOf(
+                    "distance_range" to 60,      // BoundedText.DISTANCE_RANGE_MAX
+                    "placement_reason" to 500,   // BoundedText.PLACEMENT_REASON_MAX
+                    "violation_reason" to 300,   // BoundedText.VIOLATION_REASON_MAX
+                ),
+                "itinerary_revision" to mapOf(
+                    "summary" to 200,            // BoundedText.REVISION_SUMMARY_MAX
+                    "detail" to 500,             // BoundedText.REVISION_DETAIL_MAX
+                ),
+            ).forEach { (table, columns) ->
+                columns.forEach { (column, expected) ->
+                    c.prepareStatement(
+                        "SELECT character_maximum_length FROM information_schema.columns " +
+                            "WHERE table_schema = 'app' AND table_name = ? AND column_name = ?",
+                    ).use { ps ->
+                        ps.setString(1, table)
+                        ps.setString(2, column)
+                        ps.executeQuery().use { rs ->
+                            withClue("$table.$column 상한이 바뀌었다 — BoundedText 상수도 같이 맞춰야 한다") {
+                                rs.next() shouldBe true
+                                rs.getInt(1) shouldBe expected
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // 4) app_user 권한 검증

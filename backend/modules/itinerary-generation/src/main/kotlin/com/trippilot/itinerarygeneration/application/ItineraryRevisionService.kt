@@ -109,12 +109,15 @@ class ItineraryRevisionService(
             requireRestorable(current)
 
             val restoredDays = target.snapshot.toDays(fixedFrom = current, violations = violations)
+            ViolationText.warnUnattached(violations, restoredDays, tripId)
             val restored = Itinerary.reconstitute(
-                current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.isFallback,
+                current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.generationMode, current.isFallback,
                 current.generationState, restoredDays, current.createdAt, clock.instant(), current.candidatesSummary,
             )
             // 이미 같은 내용이면 쌓지 않는다 — 목록이 같은 버전으로 도배된다(편집과 같은 기준).
-            if (current.toSnapshot() == restored.toSnapshot()) return@execute current
+            // 위반 상태까지 포함해 비교한다 — 스냅숏 비교는 위반 변화를 못 보고, 도메인 직접 비교는
+            // VisitSlot 이 data class 가 아니라 항상 "다름"이 된다.
+            if (ItineraryContent.sameAs(current, restored)) return@execute current
             val saved = itineraries.replaceForTrip(tripId, restored)
             record(saved, RevisionActor.USER, RevisionKind.RESTORE, "${target.seq}번째 버전으로 되돌림", target.summary)
             saved
@@ -168,12 +171,15 @@ class ItineraryRevisionService(
             ItineraryDay.of(
                 date, dayIdx,
                 drafts.mapIndexed { slotIdx, s ->
+                    val hit = violations.filter { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
                     VisitSlot.of(
                         s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
-                        hasViolation = violations.any { it.dayIndex == dayIdx && it.slotIndex == slotIdx },
+                        hasViolation = hit.isNotEmpty(),
                         endsNextDay = s.endsNextDay,
                         distanceRange = s.distanceRange,
                         placementReason = s.placementReason,
+                        // 복원 결과도 편집과 같은 기준으로 사유를 남긴다 — 배지만 켜면 화면이 이유를 못 그린다(BR-U3-13).
+                        violationReason = ViolationText.reasonOf(hit),
                     )
                 },
             )

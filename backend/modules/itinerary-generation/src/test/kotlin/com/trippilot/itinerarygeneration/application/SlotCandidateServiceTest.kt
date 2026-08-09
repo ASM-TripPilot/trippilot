@@ -1,7 +1,9 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -11,7 +13,10 @@ import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
+import com.trippilot.placedata.api.Area
+import com.trippilot.placedata.api.CandidatePoolPort
 import com.trippilot.placedata.api.FrozenPoiView
+import com.trippilot.placedata.api.GroundedPlace
 import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.trip.api.TripFacade
@@ -45,8 +50,7 @@ class SlotCandidateServiceTest : StringSpec({
     fun slot(poi: UUID, order: Int, start: String) =
         VisitSlot.of(poi, null, order, LocalTime.parse(start), LocalTime.parse(start).plusHours(1))
 
-    val itinerary = Itinerary.create(
-        tripId, SolveMode.FULL_AI, false,
+    val itinerary = Itinerary.create(tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
         listOf(
             ItineraryDay.of(
                 d1, 0,
@@ -89,8 +93,18 @@ class SlotCandidateServiceTest : StringSpec({
         }
     }
 
+    // 후보가 정본에 실재하는지 다시 확인하는 경로(INV-1) — 테스트는 전부 통과시키되 호출은 관측한다.
+    val pool = object : CandidatePoolPort {
+        var grounded = 0
+        override fun resolve(area: Area, categories: Set<String>) = emptyList<GroundedPlace>()
+        override fun ground(poiIds: List<UUID>): List<GroundedPlace> {
+            grounded++
+            return poiIds.map { GroundedPlace(it, "장소", 33.45, 126.56, "명소", null, null) }
+        }
+    }
+
     fun service(agent: CapturingAgent, stored: Itinerary? = itinerary) =
-        SlotCandidateService(trips, Repo(stored), agent, surfaces, clock)
+        SlotCandidateService(trips, Repo(stored), agent, surfaces, pool, clock)
 
     "이미 일정에 있는 장소를 서버가 제외 목록으로 만든다(BR-U3-24)" {
         val agent = CapturingAgent()
@@ -139,5 +153,40 @@ class SlotCandidateServiceTest : StringSpec({
         shouldThrow<ResourceNotFound> {
             service(CapturingAgent()).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, UUID.randomUUID()), null, null))
         }
+    }
+
+    "반경 상한을 넘으면 400 — 상한 없이 두면 전 DB 스캔이 된다" {
+        shouldThrow<ValidationFailed> {
+            service(CapturingAgent()).propose(
+                acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), Int.MAX_VALUE, null),
+            )
+        }
+    }
+
+    "확정된 일정에는 후보를 제안하지 않는다 — 골라도 편집이 막힌다" {
+        val confirmed = itinerary.confirm(
+            itinerary.days.flatMap { it.slots }.associate { it.sourcePoiId to UUID.randomUUID() }, now,
+        )
+        shouldThrow<ConflictDetected> {
+            service(CapturingAgent(), stored = confirmed).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null))
+        }
+    }
+
+    "같은 날 같은 장소가 둘이면 어느 슬롯인지 특정할 수 없어 409" {
+        val dup = Itinerary.create(
+            tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(d1, 0, listOf(slot(target, 0, "09:00"), slot(target, 1, "18:00")))),
+            now,
+        )
+        shouldThrow<ConflictDetected> {
+            service(CapturingAgent(), stored = dup).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null))
+        }
+    }
+
+    "후보는 정본에 실재하는지 다시 확인한다(INV-1 closed-set)" {
+        // 스펙 스코프에서 pool 을 공유하므로 증분으로 본다.
+        val before = pool.grounded
+        service(CapturingAgent()).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null))
+        pool.grounded shouldBe before + 1
     }
 })

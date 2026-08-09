@@ -23,6 +23,7 @@ class ItineraryEntity(
     @Column(name = "trip_id") var tripId: UUID,
     @Column(name = "status") var status: String,
     @Column(name = "solve_mode") var solveMode: String,
+    @Column(name = "generation_mode") var generationMode: String,
     @Column(name = "is_fallback") var isFallback: Boolean,
     @Column(name = "generation_state") var generationState: String,
     @Column(name = "created_at") var createdAt: Instant,

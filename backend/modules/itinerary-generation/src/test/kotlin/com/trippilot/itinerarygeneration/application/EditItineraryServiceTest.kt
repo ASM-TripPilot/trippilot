@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.RevisionActor
@@ -117,8 +118,7 @@ class EditItineraryServiceTest : StringSpec({
     }
 
     fun current(status: (Itinerary) -> Itinerary = { it }): Itinerary {
-        val base = Itinerary.create(
-            tripId, SolveMode.DETERMINISTIC, false,
+        val base = Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
             listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"))))),
             clock.instant(),
         )
@@ -205,7 +205,7 @@ class EditItineraryServiceTest : StringSpec({
         // 편집안의 장소 중 하나에 근거를 달아두고, 편집 후에도 그 장소에 붙어 있는지 본다
         val poi = editReq.days.single().slots.first().poiId
         val base = Itinerary.reconstitute(
-            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, false,
+            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
             GenerationState.COMPLETE,
             listOf(
                 ItineraryDay.of(
@@ -263,5 +263,42 @@ class EditItineraryServiceTest : StringSpec({
     "미소유 여행이면 404" {
         val repo = repoWith(current())
         shouldThrow<ResourceNotFound> { EditItineraryService(trips(false), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock).edit(acc, tripId, editReq) }
+    }
+
+    "위반 사유가 슬롯에 저장된다 — 여러 건이면 이어 붙이고 중복은 접는다" {
+        val repo = repoWith(current())
+        val agent = EditFakeAgent(
+            listOf(
+                Violation("TRAVEL_TIME", 0, 0, "이동이 빠듯해요"),
+                Violation("OPENING_HOURS", 0, 0, "영업시간 밖"),
+                Violation("TRAVEL_TIME", 0, 0, "이동이 빠듯해요"), // 중복
+            ),
+        )
+        val result = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+            .edit(acc, tripId, editReq)
+
+        val slot = result.days.single().slots.first()
+        slot.hasViolation shouldBe true
+        slot.violationReason shouldBe "이동이 빠듯해요 · 영업시간 밖"
+    }
+
+    "사유 없는 위반은 배지만 켜고 사유는 비운다(CHECK 제약과도 맞는다)" {
+        val repo = repoWith(current())
+        val agent = EditFakeAgent(listOf(Violation("HC1", 0, 0, null)))
+        val slot = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+            .edit(acc, tripId, editReq).days.single().slots.first()
+
+        slot.hasViolation shouldBe true
+        slot.violationReason shouldBe null
+    }
+
+    "위치를 못 찾은 위반은 어느 슬롯에도 안 붙는다 — 조용히 사라지지 않게 로그로 드러낸다" {
+        val repo = repoWith(current())
+        val agent = EditFakeAgent(listOf(Violation("HC3_UNPLACED", null, null, "필수 방문지가 배치되지 않았습니다")))
+        val result = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+            .edit(acc, tripId, editReq)
+
+        // 슬롯 표시로는 나타나지 않는다(붙일 자리가 없다) — 사용자 표면 노출은 별도 계약이 필요하다.
+        result.days.single().slots.all { !it.hasViolation } shouldBe true
     }
 })
