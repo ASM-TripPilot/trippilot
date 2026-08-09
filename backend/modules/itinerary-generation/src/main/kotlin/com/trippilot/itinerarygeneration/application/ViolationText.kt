@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.Violation
 import org.slf4j.LoggerFactory
 
@@ -20,11 +21,14 @@ object ViolationText {
 
     /**
      * 어느 슬롯에도 붙지 못한 위반을 드러낸다. 슬롯 단위 표시가 불가능한 종류라 화면에 못 싣는 대신,
-     * 최소한 운영에서는 보이게 한다. (사용자 표면 노출은 별도 계약이 필요하다 — 아래 TODO)
+     * 최소한 운영에서는 보이게 한다. (사용자 표면 노출은 별도 계약이 필요하다.)
+     *
+     * **위반 수를 세지 슬롯 수를 세지 않는다** — 한 슬롯에 위반이 여러 건 붙으면 슬롯 수로는 모자라 보여
+     * 없는 문제를 경고하게 된다.
      */
-    fun warnUnattached(violations: List<Violation>, attached: Int, tripId: java.util.UUID) {
-        val unlocatable = violations.count { it.dayIndex == null || it.slotIndex == null }
-        val dropped = violations.size - attached - unlocatable
+    fun warnUnattached(violations: List<Violation>, days: List<ItineraryDay>, tripId: java.util.UUID) {
+        val unlocatable = countUnlocatable(violations)
+        val dropped = countOutOfRange(violations, days)
         if (unlocatable > 0) {
             log.warn(
                 "슬롯에 붙지 못한 위반 {}건 — 위치를 알 수 없어 화면에 표시되지 않습니다. tripId={}, 종류={}",
@@ -36,6 +40,18 @@ object ViolationText {
             log.warn("범위를 벗어난 위반 {}건 — 검증 대상과 저장 대상이 어긋났습니다. tripId={}", dropped, tripId)
         }
     }
+
+    /** 위치를 아예 모르는 위반 — 붙일 슬롯이 없어서 위반인 종류(예: 필수 방문지 미배치). */
+    fun countUnlocatable(violations: List<Violation>): Int =
+        violations.count { it.dayIndex == null || it.slotIndex == null }
+
+    /** 인덱스는 있는데 그 자리에 슬롯이 없는 위반 — 검증 대상과 저장 대상이 어긋났다는 신호. */
+    fun countOutOfRange(violations: List<Violation>, days: List<ItineraryDay>): Int =
+        violations.count { v ->
+            val d = v.dayIndex ?: return@count false
+            val s = v.slotIndex ?: return@count false
+            days.getOrNull(d)?.slots?.getOrNull(s) == null
+        }
 
     private val log = LoggerFactory.getLogger(ViolationText::class.java)
 }

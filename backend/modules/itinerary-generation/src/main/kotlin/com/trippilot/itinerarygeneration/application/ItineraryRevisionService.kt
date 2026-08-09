@@ -109,7 +109,7 @@ class ItineraryRevisionService(
             requireRestorable(current)
 
             val restoredDays = target.snapshot.toDays(fixedFrom = current, violations = violations)
-            ViolationText.warnUnattached(violations, restoredDays.sumOf { d -> d.slots.count { it.hasViolation } }, tripId)
+            ViolationText.warnUnattached(violations, restoredDays, tripId)
             val restored = Itinerary.reconstitute(
                 current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.generationMode, current.isFallback,
                 current.generationState, restoredDays, current.createdAt, clock.instant(), current.candidatesSummary,

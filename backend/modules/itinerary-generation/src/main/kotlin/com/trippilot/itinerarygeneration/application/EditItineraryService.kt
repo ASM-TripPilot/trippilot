@@ -66,7 +66,7 @@ class EditItineraryService(
         // 재검증(비차단) — 외부(ScheduleAgent) 호출은 트랜잭션 밖(DB 커넥션 안 물게, generate 와 동일). Fake 는 빈 목록.
         val violations = scheduleAgent.validate(edit.toOutput(current.solveMode, current.isFallback, clock.instant()))
         val flagged = reshape(current, edit, violations)
-        ViolationText.warnUnattached(violations, flagged.days.sumOf { d -> d.slots.count { it.hasViolation } }, tripId)
+        ViolationText.warnUnattached(violations, flagged.days, tripId)
         return tx.execute {
             // 트랜잭션 안에서 다시 읽는다 — 위 재검증(외부 호출) 동안 다른 편집이 커밋됐으면 밖에서 읽은 값은 낡았다.
             val beforeWrite = itineraries.findByTrip(tripId).firstOrNull() ?: current
