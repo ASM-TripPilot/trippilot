@@ -51,6 +51,7 @@ Agent:        context_refs 재조회(D31) → 판단(전속 도구) → Proposal
 Solver 관문:  시각·순서 있는 Proposal만 통과 (Reflect 스킵) — 봉투 프로토콜 대상 아님 (delegation-design §8 [v2 보강])
 ```
 
+- `context_refs` 재조회는 **Agent 소유**다 — 그래서 EditAgent가 호출하는 C1 워커(`EDIT_TRANSLATION`)는 ContextResolver를 거치지 않고 확정 입력만 받는다 (이중 재조회 금지, 워커별 소유 표는 u4 FD business-logic-model §3.1).
 - 재위임(`spawn`)마다 deadline 차감이 타입에서 강제된다 (DeadlineExhaustedError) — SPEED-P1의 구조적 토대.
 - Agent 경계에서 예외는 밖으로 나가지 않는다 — 전부 AgentResult 상태값으로 수렴 (DL-5). C1의 BR-U4-02와 동형.
 

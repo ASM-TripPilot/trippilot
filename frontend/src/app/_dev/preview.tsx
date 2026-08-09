@@ -29,6 +29,10 @@ import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
 } from '@/features/trip/ui/TripWizardStep1Screen';
+import {
+  TripWizardStep2Screen,
+  type TripWizardStep2ScreenProps,
+} from '@/features/trip/ui/TripWizardStep2Screen';
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
 import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
@@ -124,6 +128,108 @@ const TERMS_ITEMS = [
     checked: false,
   },
 ];
+
+/**
+ * g02 거점 숙소 2/2 default 의 대표값(TRIP-225) — Figma `1707:1183` 실측을 그대로 옮겼다.
+ * 다른 변형은 이걸 스프레드하고 갈리는 prop 만 덮어쓴다.
+ *
+ * 왜 프리뷰가 필요한가: 실화면 딥링크로는 **`notrip` 얼굴밖에 볼 수 없다.** 나머지 넷은
+ * `tripId`가 있어야 하는데 그건 g01 제출(`POST /trips`)이 만들고, 백엔드 없이는 안 생긴다.
+ *
+ * ⚠️ 후보 카드의 사진·지역·거리·가격 자리는 회색으로 보인다 — `SavedStay` 계약에 그 필드가
+ * 없어서다(01b D2). 구현 실패가 아니다.
+ */
+/** g02 보완 시트(TRIP-226)의 대표값 — 좌표 미확정이라 지도 섹션이 그려지는 갈래다. */
+const FIX_SHEET_BASE: NonNullable<TripWizardStep2ScreenProps['fixSheet']> = {
+  savedStayId: 'stay-2',
+  stayName: '광안리 뷰 호텔',
+  center: { lat: 35.1587, lng: 129.1604 },
+  coordConfirmed: false,
+  pinDropped: false,
+  mapUnavailable: false,
+  dayOptions: [
+    { date: '2026-06-10', label: '6/10' },
+    { date: '2026-06-11', label: '6/11' },
+    { date: '2026-06-12', label: '6/12' },
+    { date: '2026-06-13', label: '6/13' },
+  ],
+  checkIn: null,
+  checkOut: null,
+  saveDisabled: true,
+  saveBlockedReason: '날짜를 모두 선택해 주세요',
+  saving: false,
+  onPinDrop: noop,
+  onConfirmCoord: noop,
+  onPickDay: noop,
+  onSave: noop,
+  onRetrySave: noop,
+  onClose: noop,
+};
+
+const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
+  variant: 'default',
+  subtitle: '6월 10일–13일',
+  sections: [
+    {
+      baseAssignmentId: 'ba-1',
+      nightLabel: '1–2박',
+      dateLabel: '6/10–6/12',
+      stayName: '해운대 오션 호텔',
+      changePending: false,
+    },
+    {
+      baseAssignmentId: 'ba-2',
+      nightLabel: '3박',
+      dateLabel: '6/12–6/13',
+      stayName: '경주 한옥스테이 봄',
+      changePending: false,
+    },
+  ],
+  candidates: [
+    {
+      savedStayId: 'stay-1',
+      name: '해운대 오션 호텔',
+      isBase: true,
+      assignedLabel: '1–2박에 지정됨',
+      assignPending: false,
+    },
+    {
+      savedStayId: 'stay-2',
+      name: '광안리 뷰 호텔',
+      isBase: false,
+      assignPending: false,
+    },
+    // 날짜를 안 넣고 저장한 숙소 — 등록 화면의 체크인/아웃이 `(선택)`이라 실제로 생긴다(D4).
+    {
+      savedStayId: 'stay-3',
+      name: '감천 게스트하우스',
+      isBase: false,
+      assignPending: false,
+      blockedReason: '날짜가 없어 지정할 수 없어요',
+    },
+    {
+      savedStayId: 'stay-4',
+      name: '경주 한옥스테이 봄',
+      isBase: true,
+      assignedLabel: '3박에 지정됨',
+      assignPending: false,
+      errorText: '지정하지 못했어요',
+    },
+  ],
+  generateDisabled: false,
+  coverageFailed: false,
+  onBack: noop,
+  onAssign: noop,
+  onRetryAssign: noop,
+  onChange: noop,
+  onRetryChange: noop,
+  onGenerate: noop,
+  onNoStayStart: noop,
+  onExploreStays: noop,
+  onRetryAll: noop,
+  onRestart: noop,
+  onRetryCoverage: noop,
+};
 
 /**
  * g01 여행 만들기 1/2 — '꼭 갈 곳' 시드 섹션(TRIP-209)을 Figma와 눈으로 대조하기 위한 두 얼굴.
@@ -519,6 +625,194 @@ const PREVIEW_STATES: PreviewState[] = [
         {...TRIP_WIZARD_BASE}
         mustVisitSection={{ kind: 'empty' }}
         onPressMoreMustVisits={noop}
+      />
+    ),
+  },
+  // g02 5변형(TRIP-225). 화면이 완성된 문자열·불리언만 받는 프레젠테이션이라, 배선 없이
+  // props 만 갈아 끼우면 다섯 얼굴이 그대로 나온다 — 실기로 얼굴을 보려면 여기가 정본이다
+  // (`docs/structure.md` 경고: "엣지 케이스 화면을 눈으로 보려면 목을 만들지 말고 여기에
+  // 상태를 추가한다"). blocked 는 default 에 unresolved + generateDisabled 만 얹은 것이다.
+  {
+    key: 'trip-new-step2-default',
+    label: '거점 숙소 2/2 · 기본',
+    login: null,
+    render: () => <TripWizardStep2Screen {...TRIP_BASE_SCREEN} />,
+  },
+  {
+    key: 'trip-new-step2-blocked',
+    label: '거점 숙소 2/2 · 차단',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        generateDisabled
+        unresolved={{
+          items: [
+            { date: '2026-06-11', label: '6/11' },
+            { date: '2026-06-13', label: '6/13' },
+          ],
+          overflowCount: 1,
+        }}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-coverage-failed',
+    label: '거점 숙소 2/2 · 커버리지 실패',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        generateDisabled
+        coverageFailed
+      />
+    ),
+  },
+  // g02 전제 게이트 4변형(TRIP-226). 카드 표면 하나 + 시트 3갈래다. 시트도 화면과 같은
+  // 순수 프레젠테이션(`useState` 0건)이라 여기서 props 만 갈아 끼우면 얼굴이 그대로 나온다.
+  // ⚠️ 지도 갈래는 `EXPO_PUBLIC_KAKAO_MAP_JS_KEY` 가 있어야 WebView 가 뜬다 — 키가 없으면
+  // 아래 `mapfail` 과 같은 화면이 된다(그 판정이 실기에서 맞는지 보는 것이 이 상태의 목적).
+  {
+    key: 'trip-new-step2-gate',
+    label: '거점 숙소 2/2 · 전제 게이트',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        // 구간을 비워 후보 카드를 화면 위로 올린다 — 이 상태가 보여 줄 것은 카드 표면
+        // 넷(사유·보완 진입·기간 밖 경고·확장 질의)이고, 구간은 default 상태가 이미 보여 준다.
+        sections={[]}
+        candidates={[
+          {
+            savedStayId: 'stay-2',
+            name: '광안리 뷰 호텔',
+            isBase: false,
+            assignPending: false,
+            blockedReason: '지도에서 위치를 확인해 주세요',
+            fixLabel: '지도에서 위치 확인',
+          },
+          {
+            savedStayId: 'stay-3',
+            name: '감천 게스트하우스',
+            isBase: false,
+            assignPending: false,
+            blockedReason: '날짜가 없어 지정할 수 없어요',
+            fixLabel: '날짜 입력하기',
+          },
+          {
+            savedStayId: 'stay-5',
+            name: '제주 게스트하우스',
+            isBase: false,
+            assignPending: false,
+            outOfPeriodNote: '여행 기간을 벗어나요',
+          },
+          {
+            savedStayId: 'stay-6',
+            name: '서귀포 오션뷰 펜션',
+            isBase: false,
+            assignPending: false,
+            outOfPeriodNote: '여행 기간을 벗어나요',
+            extendPrompt: '여행 기간을 늘려서 지정할까요?',
+          },
+        ]}
+        onFix={noop}
+        onExtendConfirm={noop}
+        onExtendCancel={noop}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-fixsheet-map',
+    label: '거점 숙소 2/2 · 보완 시트(지도)',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        fixSheet={{ ...FIX_SHEET_BASE }}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-fixsheet-mapfail',
+    label: '거점 숙소 2/2 · 보완 시트(지도 불가)',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        fixSheet={{ ...FIX_SHEET_BASE, mapUnavailable: true }}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-fixsheet-error',
+    label: '거점 숙소 2/2 · 보완 시트(저장 실패)',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        fixSheet={{
+          ...FIX_SHEET_BASE,
+          coordConfirmed: true,
+          checkIn: '2026-06-11',
+          checkOut: '2026-06-13',
+          saveDisabled: false,
+          errorText: '저장하지 못했어요',
+        }}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-loading',
+    label: '거점 숙소 2/2 · 로딩',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        variant="loading"
+        sections={[]}
+        candidates={[]}
+        generateDisabled
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-empty',
+    label: '거점 숙소 2/2 · 저장 숙소 0',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        variant="empty"
+        sections={[]}
+        candidates={[]}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-error',
+    label: '거점 숙소 2/2 · 조회 실패',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        variant="error"
+        sections={[]}
+        candidates={[]}
+        generateDisabled
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-notrip',
+    label: '거점 숙소 2/2 · 여행 없음',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        variant="notrip"
+        sections={[]}
+        candidates={[]}
+        generateDisabled
       />
     ),
   },

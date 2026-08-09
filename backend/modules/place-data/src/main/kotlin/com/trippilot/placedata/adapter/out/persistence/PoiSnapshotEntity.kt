@@ -37,6 +37,9 @@ class PoiSnapshotRepositoryAdapter(
     override fun save(snapshot: PoiSnapshot): PoiSnapshot = jpa.saveAndFlush(snapshot.toEntity()).let { snapshot }
     override fun findById(poiSnapshotId: UUID) = jpa.findById(poiSnapshotId).orElse(null)?.toDomain()
 
+    override fun findByIds(poiSnapshotIds: Collection<UUID>): List<PoiSnapshot> =
+        jpa.findAllById(poiSnapshotIds).map { it.toDomain() }
+
     private fun PoiSnapshot.toEntity() = PoiSnapshotEntity(
         poiSnapshotId, sourcePoiId, nameKo, lat, lng, category.name, snapshotAt,
     )

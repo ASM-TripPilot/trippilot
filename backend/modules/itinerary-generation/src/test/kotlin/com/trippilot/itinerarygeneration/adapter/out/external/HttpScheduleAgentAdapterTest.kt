@@ -91,7 +91,24 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/itinerary/generate"))
             .andRespond(withSuccess(aiBody("LLM"), MediaType.APPLICATION_JSON))
-        adapter.generate(input).solveMode shouldBe SolveMode.FULL_AI // LLM 도 정상 산출
+        val out = adapter.generate(input)
+        out.solveMode shouldBe SolveMode.FULL_AI // LLM 도 정상 산출
+        // 형태가 계약과 다르면(level 없음) 등급을 지어내지 않고 없는 것으로 둔다 — 생성은 정상 진행
+        out.candidatesSummary shouldBe null
+    }
+
+    "candidates_summary 가 계약 형태면 그대로 전달한다(판정은 AI 소유 — 재계산 없음)" {
+        val (adapter, server) = fixture()
+        val body = aiBody("OR_TOOLS").replace(
+            """"candidates_summary":{"total":42}""",
+            """"candidates_summary":{"level":"LOW","pool_size":7,"shortfall_categories":["CAFE"]}""",
+        )
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/generate"))
+            .andRespond(withSuccess(body, MediaType.APPLICATION_JSON))
+        val summary = adapter.generate(input).candidatesSummary!!
+        summary.level shouldBe "LOW"
+        summary.poolSize shouldBe 7
+        summary.shortfallCategories shouldBe listOf("CAFE")
     }
 
     "RULE_FALLBACK → DETERMINISTIC, 200 + is_fallback=true 는 예외 없이 사용(대원칙)" {
@@ -147,10 +164,76 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         shouldThrow<ScheduleAgentCallFailed> { adapter.generate(input) }.message!! shouldContain "500"
     }
 
-    "validate·repair 는 미배선 — 빈 목록(거짓 음성) 대신 실패" {
-        val (adapter, _) = fixture()
-        shouldThrow<ScheduleAgentCallFailed> { adapter.validate(dummyOutput()) }.errorCode shouldBe "VALIDATE_NOT_WIRED"
-        shouldThrow<ScheduleAgentCallFailed> { adapter.repair(dummyOutput(), emptyList()) }.errorCode shouldBe "REPAIR_NOT_WIRED"
+    "validate — 위반은 200 정상 응답이고 위치 인덱스가 그대로 실린다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andExpect(method(HttpMethod.POST))
+            // 산출물 전체를 되돌려 보낸다 — 슬롯만 보내면 상대가 날짜 맥락을 잃는다
+            .andExpect(jsonPath("$.itinerary.days").exists())
+            .andExpect(jsonPath("$.request_meta.deadline_ms").exists())
+            .andRespond(
+                withSuccess(
+                    """{"violations":[{"code":"TRAVEL_TIME","slot_ref":"2026-08-01#p","detail":"이동이 빠듯해요","day_index":0,"slot_index":1}]}""",
+                    MediaType.APPLICATION_JSON,
+                ),
+            )
+
+        val v = adapter.validate(dummyOutput()).single()
+        v.type shouldBe "TRAVEL_TIME"
+        v.dayIndex shouldBe 0
+        v.slotIndex shouldBe 1
+        v.detail shouldBe "이동이 빠듯해요"
+        server.verify()
+    }
+
+    "validate — 상대가 위치를 못 찾으면 인덱스가 비지만 위반은 버리지 않는다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andRespond(withSuccess("""{"violations":[{"code":"OPENING_HOURS","detail":""}]}""", MediaType.APPLICATION_JSON))
+
+        val v = adapter.validate(dummyOutput()).single()
+        v.type shouldBe "OPENING_HOURS"
+        v.dayIndex shouldBe null // 슬롯엔 못 붙지만 "위반 없음"으로 위장하지 않는다(INV-4)
+        v.detail shouldBe null   // 빈 문자열은 사유 없음으로 본다
+        server.verify()
+    }
+
+    "validate — 위반 없으면 빈 목록" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
+        adapter.validate(dummyOutput()) shouldBe emptyList()
+    }
+
+    "repair — 수리 불가(repaired=null)는 오류가 아니라 원본 유지" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/repair"))
+            .andRespond(withSuccess("""{"repaired":null,"changes":[]}""", MediaType.APPLICATION_JSON))
+
+        val result = adapter.repair(dummyOutput(), emptyList())
+        result.repaired shouldBe dummyOutput()  // 원본 그대로
+        result.changes shouldBe emptyList()
+        server.verify()
+    }
+
+    "repair — 수리되면 조정 결과와 변경 목록을 돌려준다" {
+        val (adapter, server) = fixture()
+        val poi = UUID.randomUUID()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/repair"))
+            .andRespond(
+                withSuccess(
+                    """{"repaired":{"days":[{"date":"2026-08-01","slots":[
+                       {"poi_id":"$poi","start_at":"11:00:00","end_at":"12:00:00","ends_next_day":false,"is_fixed":false}]}],
+                       "explanations":{},"solve_mode":"OR_TOOLS","is_fallback":false},
+                       "changes":["2번째 슬롯을 30분 뒤로"]}""",
+                    MediaType.APPLICATION_JSON,
+                ),
+            )
+
+        val result = adapter.repair(dummyOutput(), emptyList())
+        result.repaired.days.single().slots.single().startAt.toString() shouldBe "11:00"
+        result.changes.single() shouldBe "2번째 슬롯을 30분 뒤로"
+        server.verify()
     }
 })
 

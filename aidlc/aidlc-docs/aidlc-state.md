@@ -5,7 +5,7 @@
 - **Project Type**: Greenfield
 - **Start Date**: 2026-07-11T07:45:03Z
 - **Current Phase**: CONSTRUCTION — **설계 문서 단계만** (2026-07-17 사용자 명시 지시로 진입, docs/SCOPE.md 개정)
-- **Current Stage**: **U1 설계 종료 (2026-07-23)** — Functional Design·NFR Requirements·NFR Design 승인 완료, Infrastructure Design SKIP. 다음 = 사용자 지시 대기(U2 설계 착수 또는 U1 팀 개발). U0 설계는 2026-07-17 종료
+- **Current Stage**: **U2·U3 설계 종료 (2026-08-07)** — 사용자 지시로 U2→U3 순차 진행 완료. U2 = FD 2종(경계 접합, NFR 미실행) · U3 = FD 4종 + NFR Requirements 2종(NFR Design SKIP). 다음 = **사용자 지시 대기**(U4 착수 또는 U3 팀 개발). U0 종료 2026-07-17 · U1 종료 2026-07-23
 - **Execution Scope**: 유닛별 설계 문서(Functional/NFR Requirements/NFR Design/Infrastructure Design)까지만. **Code Generation·Build and Test 제외** — 코드는 팀이 각 패키지 디렉토리(`backend/`·`frontend/`·`ai/`)에서 직접 개발. 기획 참조는 `aidlc-docs/inception/` (planning/은 2026-07-17 제거).
 
 ## Workspace State (2026-07-17 동기화 — 인셉션 종료 후 팀 개발 현황 반영)
@@ -70,7 +70,24 @@
   - [~] Infrastructure Design — **SKIPPED** (2026-07-23 사용자 지시: "U0처럼 스킵") · 사유 = U0와 동형(배포/클라우드 계획 부재 → 리소스 결정의 근거·검증 수단 없음, CONDITIONAL "no infrastructure changes"). 재개 조건 = 배포/클라우드 진입 결정 시 별도 지시
   - [~] Code Generation — **범위 제외** (팀이 각 패키지 디렉토리에서 직접 개발)
   - ✅ **U1 설계 단계 종료 (2026-07-23)** — 산출물 = functional-design 4 + nfr-requirements 2 + nfr-design 2 = **8종**
-- U2~U9 — 유닛별 사용자 지시 대기
+- **U2 Itinerary Intelligence / Solver** (엔진 유닛 — 사용자 대면 스토리 0 / `SolverPort`·`FeasibilityValidator`·`PreferenceScoringPort`·`TravelEstimatePort`)
+  - [x] Functional Design — **승인 완료 (2026-08-07)** · 계획 `plans/u2-itinerary-intelligence-functional-design-plan.md`(Q1=A·Q2=A·Q3=A·Q4=B·Q5=A·Q6=A·Q7=C·Q8=A) · 산출물 **2종**(Q1=A 경계 접합 문서): `business-logic-model.md`(경계 계약 정본·불변식 집행점·갭 G-U2-01~09) + `business-rules.md`(BR-U2-01~16 드리프트 결정표·O-SOLVER 관측·PBT 경계 3종·미결 O-U2-1~3)
+  - ⚠️ **Step 1 발견 — U2는 그린필드가 아님**: 실질이 `ai/src/trippilot/`(c1·c2·ports)에 **구현 완료**, `ai/aidlc-docs/`에 **별도 AI-DLC 워크스페이스와 자체 U2 FD가 이미 존재**(유닛 번호 체계 상이: aidlc U2 ≈ ai u1-domain-ports + u2-solver + u4-c1-gateway + agent-foundation). 경계 포트 `backend/.../ScheduleAgentPort.kt` 실재(TRIP-228). 드리프트 감사 = `ai/docs/backend-ai-정합성-점검.md`(P1~P8·N1~N6, 잔여 TRIP-280·281·282). → **산출물 성격(접합 문서 vs 풀세트 vs 스킵)을 Q1로 사용자 결정에 부침**
+  - [~] Code Generation — **범위 제외** (팀이 각 패키지 디렉토리에서 직접 개발 — 2026-08-07 사용자 재확인)
+- **U3 AI Itinerary Generation** (C8 · US-SCHED-01~12 · 12 스토리)
+  - [x] Functional Design — **승인 완료 (2026-08-07)** · 계획 `plans/u3-ai-itinerary-functional-design-plan.md`(Q1=A·Q2=B·Q3=A·Q4=A·Q5=A·Q6=A·Q7=A·Q8=A·Q9=A) · 라이브 Figma 밴드 h **33프레임 대조** → 드리프트 D-U3-1~14
+  - 산출물 **4종**: `business-logic-model.md`(DEC-U3-1~9·F-U3-1~7·`proposeSlotCandidates` 계약·갭 G-U3-1~7) · `domain-entities.md`(신설 `ItineraryRevision`·`GenerationSession`·INV-U3-01~08) · `business-rules.md`(**BR-U3-01~34**·PBT-U3-1~5·미결 O-U3-1~4) · `frontend-components.md`(라우트 15·컴포넌트 33·testID)
+  - 상황: backend 골격 실재(컨트롤러 4엔드포인트·서비스 4·도메인 3·테스트 8·V2.7·V2.8) / **frontend `(tabs)/itinerary.tsx` 빈 셸** → 프런트 설계가 본체
+  - [x] NFR Requirements — **승인 완료 (2026-08-07)** · 계획 `plans/u3-ai-itinerary-nfr-requirements-plan.md` · **얇게 방침**(U0·U1 상속 + FD에 이미 들어간 NFR성 규칙 7건 재서술 금지) · **실장 우선**(사용자 지시로 `ai/`·`backend/`·`frontend/` 실측 후 결정)
+  - 산출물 **2종**: `nfr-requirements.md`(COST 5·PERF 5·OBS 5·DATA 4·OFFLINE 4·SEC 3 + 재평가 트리거 3) · `tech-stack-decisions.md`(상속 + **U3 델타 3** + backend 델타 5 + AI 델타 없음)
+  - 실측 핵심: **호출 상한 부재 확인**(ai·backend 모두) → 진행 중 세션 거부로 유도 · **AI 관측 4종 이미 실재**(토큰 기록 포함) → 승계, U3는 행동 지표 2종만 · **`KakaoMapView`가 다중 핀·폴리라인·center 갱신 미지원** → 초안 "델타 없음" 철회, **확장 필요**로 정정
+  - ⚠️ **U2 사후 정정 발생(2026-08-07)**: Q5=A로 `proposeSlotCandidates` **개통 확정** → U2 `business-logic-model` §7.1 신설 + `business-rules` **O-U2-3 종결**. `ScheduleAgentPort`는 **4메서드**(generate·validate·repair·proposeSlotCandidates). `recalculate`는 U4 유지(U3는 DEC-U3-2로 `generate` 재호출 사용). U2 스테이지 체크박스 변동 없음
+  - [~] NFR Design — **SKIPPED** (2026-08-07 사용자 명시 지시: "nfr design은 스킵으로 기록하고 u3 종료") · 사유 = 신규 정보 부재. 복원력·성능 패턴은 U0·U1 상속(서킷 분리·재시도 없음·stale-if-error·침묵 실패 사슬·응답 예산 2계층), U3 고유(재생성 억제·지도 확장·리비전 정리)는 이미 `nfr-requirements.md`·`tech-stack-decisions.md`에 배치까지 기술됨. 논리 컴포넌트 신규는 `itinerary_revision` 하나. **재개 조건** = 실측에서 부족 판명 또는 새 횡단 패턴 필요 시
+  - [~] Infrastructure Design — **해당 없음** (U0·U1과 동형 — 배포/클라우드 계획 부재)
+  - [~] Code Generation — **범위 제외** (팀 직접 개발)
+  - ✅ **U3 설계 단계 종료 (2026-08-07)** — 산출물 = functional-design 4 + nfr-requirements 2 = **6종**
+  - 후속(설계 밖): 디자인 협의 G-U3-1(배너 수치) · backend 마이그레이션 3(`visit_slot.placement_reason` · `ItineraryStatus` 역전이 · `itinerary_revision` 신설) · frontend `KakaoMapView` 확장(필수) · 미결 O-U3-1~4
+- U4~U9 — 유닛별 사용자 지시 대기
 
 ## Open Items (U0 — 설계 문서 없이 개발 중 처리)
 - **소셜 IdP 4종 콘솔 설정**: 앱 등록·키 발급(Apple p8·카카오/네이버 네이티브 키)·리다이렉트 URI(로컬/디바이스) — U0 인증 개발의 선결 블로커. Infrastructure Design SKIP으로 문서화 생략, 개발 중 각자 처리(사용자 승인 2026-07-17)

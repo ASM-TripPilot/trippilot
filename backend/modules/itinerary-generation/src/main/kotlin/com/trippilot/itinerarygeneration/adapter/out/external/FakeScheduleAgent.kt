@@ -6,6 +6,9 @@ import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
+import com.trippilot.itinerarygeneration.domain.SlotCandidate
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
@@ -29,9 +32,11 @@ class FakeScheduleAgent(
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
         val fixedByDate = input.fixedBlocks.filter { it.date != null }.groupBy { it.date }
         // 목적지 지역들의 ACTIVE 후보(정본) — 동결 가능한 실 poiId. closed-set(INV-1).
+        val excluded = input.excludedPoiIds.toSet() // day1 2단계 중복 방지(TRIP-293)
         val candidates = input.tripContext.destinations
             .flatMap { candidatePool.resolve(Area.Region(it), emptySet()) }
             .distinctBy { it.poiId }
+            .filter { it.poiId !in excluded }
 
         val days = input.timeWindows.mapIndexed { dayIdx, tw ->
             val fixed = fixedByDate[tw.date].orEmpty().map { fb ->
@@ -70,9 +75,43 @@ class FakeScheduleAgent(
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult =
         RepairResult(solution, emptyList())
 
+    /**
+     * 슬롯 후보 — **실제 반경 조회**로 ACTIVE 정본만 돌려준다(INV-1 closed-set).
+     * 후보가 0건이면 반경을 한 번 넓혀 다시 본다(h15 "반경 넓힘"을 서버가 흉내낸다) — 실 판단은 AI 몫.
+     * 근거 문구는 시각·소요시간을 언급하지 않는다(BR-U2-09).
+     */
+    override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput {
+        val excluded = input.excludePoiIds.toSet()
+        var radius = (input.radiusM ?: DEFAULT_RADIUS_M)
+        var found = search(input, radius, excluded)
+        if (found.isEmpty() && radius < WIDENED_RADIUS_M) {
+            radius = WIDENED_RADIUS_M
+            found = search(input, radius, excluded)
+        }
+        return SlotCandidatesOutput(
+            candidates = found.take(MAX_CANDIDATES).map {
+                SlotCandidate(
+                    poiId = it.poiId,
+                    distanceRange = it.distanceM?.let { m -> "약 ${"%.1f".format(m / 1000)}km" } ?: "거리 미확인",
+                    rationale = input.concept?.let { c -> "$c 컨셉에 맞는 ${it.category}" } ?: "주변 ${it.category}",
+                )
+            },
+            radiusMUsed = radius,
+            freshness = FreshnessMeta(clock.instant(), degraded = false),
+        )
+    }
+
+    private fun search(input: SlotCandidatesInput, radiusM: Int, excluded: Set<java.util.UUID>) =
+        candidatePool.resolve(Area.Radius(input.centerLat, input.centerLng, radiusM.toDouble()), emptySet())
+            .filter { it.poiId !in excluded }
+            .sortedBy { it.distanceM ?: Double.MAX_VALUE }
+
     companion object {
         private const val PICKS_PER_DAY = 2
         private const val SLOT_GAP_HOURS = 3
         private const val DEFAULT_DWELL_MIN = 60
+        private const val DEFAULT_RADIUS_M = 3_000
+        private const val WIDENED_RADIUS_M = 12_000
+        private const val MAX_CANDIDATES = 5
     }
 }

@@ -7,6 +7,9 @@ import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
+import com.trippilot.placedata.domain.Poi
+import com.trippilot.placedata.domain.PoiRepository
+import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.SolveMode
@@ -14,6 +17,7 @@ import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -39,6 +43,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var itineraries: ItineraryRepository
+    @Autowired private lateinit var pois: PoiRepository
 
     private val json = ObjectMapper()
     private val now = Instant.parse("2026-08-01T00:00:00Z")
@@ -64,8 +69,39 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
     }
 
+    /**
+     * 2차 생성(백그라운드) 완료까지 조회 폴링 — 실 클라이언트가 하는 일과 동일.
+     * `@Async` 라 완료 시점이 비결정적이므로 상태로 기다린다(고정 sleep 금지).
+     */
+    private fun awaitComplete(trip: String, token: String): JsonNode {
+        val deadline = System.nanoTime() + AWAIT_TIMEOUT_NANOS
+        var last = json.createObjectNode() as JsonNode
+        while (System.nanoTime() < deadline) {
+            last = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second
+            when (last["generationState"]?.asText()) {
+                "PARTIAL" -> Thread.sleep(POLL_INTERVAL_MS)
+                // FAILED 를 통과시키면 뒤따르는 확정·편집 검증이 조용히 "실패한 일정" 위에서 돌게 된다.
+                "COMPLETE" -> return last
+                else -> error("2차 생성이 완료되지 않았습니다. 상태=$last")
+            }
+        }
+        error("2차 생성이 기한 내 끝나지 않았습니다. 마지막 상태=$last")
+    }
+
+    /** 하루 여행 — 생성이 2차 없이 즉시 COMPLETE 라 확정·편집을 바로 검증할 수 있다. */
+    private fun tripOneDay(token: String): String {
+        val body = """{"startDate":"2026-08-01","endDate":"2026-08-01","party":2,
+            "destinations":[{"seq":0,"region":"제주","nights":0}],"preferenceSnapshot":{}}""".trimIndent()
+        return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
+    }
+
     private fun poiId(token: String): String =
         call(HttpMethod.GET, "/api/v1/places?region=제주", token).second[0]["poiId"].asText()
+
+    private companion object {
+        const val POLL_INTERVAL_MS = 50L
+        val AWAIT_TIMEOUT_NANOS = java.time.Duration.ofSeconds(20).toNanos()
+    }
 
     @Test
     fun `인증 없으면 401`() {
@@ -112,12 +148,124 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         rc shouldBe 201
         body["status"].asText() shouldBe "PLANNED"
         body["tripId"].asText() shouldBe trip
-        body["days"].size() shouldBe 2 // 08-01 ~ 08-02(체크아웃 포함)
-        body["generationState"].asText() shouldBe "COMPLETE" // 단일 호출 = 완료(2단계 day1 은 U5 이후 PARTIAL)
+        // day1 조기 노출(TRIP-267): 즉시 응답은 첫날만·생성 중
+        body["days"].size() shouldBe 1
+        body["generationState"].asText() shouldBe "PARTIAL"
         val slot = body["days"][0]["slots"][0]
         slot.has("startAt") shouldBe true
         slot.has("endAt") shouldBe true
         slot.has("duration") shouldBe false // INV-3: 소요시간 미노출
+        // POI 표면(TRIP-307) — 지도·카드를 추가 왕복 없이 그릴 수 있어야 한다
+        slot["nameKo"].isNull shouldBe false
+        slot["lat"].isNull shouldBe false
+        slot["lng"].isNull shouldBe false
+        slot.has("openingHoursKnown") shouldBe true
+        slot.has("imageUrl") shouldBe true   // 미확보면 null — 기본 이미지를 지어내지 않는다
+
+        // 2차(백그라운드)가 나머지 일자를 채우고 COMPLETE 로 전이
+        val completed = awaitComplete(trip, token)
+        completed["generationState"].asText() shouldBe "COMPLETE"
+        completed["days"].size() shouldBe 2 // 08-01 ~ 08-02(체크아웃 포함)
+    }
+
+    @Test
+    fun `확정 후 원본 POI 가 개명돼도 확정 일정은 동결 이름을 보여준다(INV-U1-03 · TRIP-307)`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        val poi = poiId(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        val confirmedName = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+            .second["days"][0]["slots"][0]["nameKo"].asText()
+
+        // 확정 후 정본을 개명 — 확정 일정이 흔들리면 안 된다
+        val before = pois.findById(UUID.fromString(poi))!!
+        pois.saveAll(
+            listOf(
+                Poi.reconstitute(
+                    before.poiId, "이름이 바뀐 곳", before.lat, before.lng, before.category, before.region,
+                    before.openingHours, before.dataStatus, before.source, before.savedCount,
+                    before.createdAt, before.updatedAt, before.imageUrl, before.tags,
+                ),
+            ),
+        )
+
+        val after = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+            .second["days"][0]["slots"].let { slots -> (0 until slots.size()).map { slots[it] } }
+            .first { it["poiId"].asText() == poi }
+        after["nameKo"].asText() shouldBe confirmedName          // 동결값 유지
+        after["nameKo"].asText() shouldNotBe "이름이 바뀐 곳"
+        after["openingHoursKnown"].isNull shouldBe true          // 확정 일정엔 판정을 내지 않는다
+    }
+
+    @Test
+    fun `편집해도 추천 근거가 응답에 남고 표면도 실린다(TRIP-306·307)`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        val poi = poiId(token)
+        // 근거·요약을 넣은 상태를 만든 뒤 편집한다
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(
+                UUID.fromString(trip), SolveMode.FULL_AI, isFallback = false,
+                days = listOf(
+                    ItineraryDay.of(
+                        LocalDate.parse("2026-08-01"), 0,
+                        listOf(VisitSlot.of(UUID.fromString(poi), null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"), placementReason = "취향에 맞는 곳")),
+                    ),
+                ),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+                candidatesSummary = CandidatesSummary("LOW", 7, listOf("CAFE")),
+            ),
+        )
+
+        val editBody = """{"days":[
+            {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"13:00","endAt":"14:00","isFixed":false,"endsNextDay":false}]}]}"""
+        val (rc, body) = call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody)
+        rc shouldBe 200
+        // 시각만 옮긴 편집이 근거·요약을 지우면 안 된다(회귀 가드)
+        body["days"][0]["slots"][0]["placementReason"].asText() shouldBe "취향에 맞는 곳"
+        body["candidatesSummary"]["level"].asText() shouldBe "LOW"
+        body["days"][0]["slots"][0]["nameKo"].isNull shouldBe false // 편집 응답에도 표면이 실린다
+    }
+
+    @Test
+    fun `슬롯 교체 후보 — closed-set 이고 이미 일정에 있는 장소는 안 나온다(TRIP-311)`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+
+        val itin = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second
+        val inItinerary = itin["days"][0]["slots"].let { s -> (0 until s.size()).map { s[it]["poiId"].asText() } }
+        val slotKey = "2026-08-01#${inItinerary.first()}"
+
+        val (rc, body) = call(
+            HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token,
+            """{"slotKey":"$slotKey","radiusM":20000}""",
+        )
+        rc shouldBe 200
+        body.has("radiusMUsed") shouldBe true
+
+        val candidates = body["candidates"].let { c -> (0 until c.size()).map { c[it]["poiId"].asText() } }
+        // 이미 일정에 있는 장소는 다시 제안되지 않는다(BR-U3-24) — 서버가 유도한 제외 목록이 실제로 먹는지
+        candidates.none { it in inItinerary } shouldBe true
+        // 후보가 있으면 거리 표기가 붙고 소요시간은 없다(INV-3)
+        if (candidates.isNotEmpty()) {
+            body["candidates"][0]["distanceRange"].isNull shouldBe false
+            body["candidates"][0].has("duration") shouldBe false
+        }
+    }
+
+    @Test
+    fun `슬롯 키 형식이 틀리면 400, 없는 슬롯이면 404`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token, """{"slotKey":"이상한키"}""").first shouldBe 400
+        call(
+            HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token,
+            """{"slotKey":"2026-08-01#${UUID.randomUUID()}"}""",
+        ).first shouldBe 404
     }
 
     @Test
@@ -133,12 +281,105 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val trip = newTrip(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
 
         val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
         rc shouldBe 200
         body["tripId"].asText() shouldBe trip
         body["status"].asText() shouldBe "PLANNED"
         body["days"].size() shouldBe 2
+    }
+
+    @Test
+    fun `distanceRange 가 저장·조회·확정을 관통한다(TRIP-308)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        // Fake 는 거리 추정이 없어 null 을 낸다 → 리포지토리로 직접 값을 넣어 영속·왕복·동결 보존을 본다.
+        val slot = VisitSlot.of(
+            UUID.fromString(poiId(token)), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            distanceRange = "약 1.2km · 도보 추정",
+        )
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(
+                UUID.fromString(trip), SolveMode.DETERMINISTIC, isFallback = false,
+                days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(slot))),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+            ),
+        )
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        body["days"][0]["slots"][0]["distanceRange"].asText() shouldBe "약 1.2km · 도보 추정"
+        body["days"][0]["slots"][0].has("duration") shouldBe false // INV-3
+
+        // 확정해도 유지된다 — 동결은 스냅숏 참조만 붙이는 것
+        val (crc, confirmed) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+        crc shouldBe 200
+        confirmed["days"][0]["slots"][0]["distanceRange"].asText() shouldBe "약 1.2km · 도보 추정"
+    }
+
+    @Test
+    fun `추천 근거·후보 요약이 재조회에서 유실되지 않는다(TRIP-306)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        // Fake 는 explanations·candidatesSummary 를 내지 않으므로 리포지토리로 직접 넣어 영속·왕복을 본다.
+        val slot = VisitSlot.of(
+            UUID.fromString(poiId(token)), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            placementReason = "취향(미식)과 동선에 맞는 곳",
+        )
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(
+                UUID.fromString(trip), SolveMode.FULL_AI, isFallback = false,
+                days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(slot))),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+                candidatesSummary = CandidatesSummary("LOW", 7, listOf("CAFE")),
+            ),
+        )
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        body["days"][0]["slots"][0]["placementReason"].asText() shouldBe "취향(미식)과 동선에 맞는 곳"
+        body["candidatesSummary"]["level"].asText() shouldBe "LOW"      // jsonb 왕복
+        body["candidatesSummary"]["poolSize"].asInt() shouldBe 7
+        body["candidatesSummary"]["shortfallCategories"][0].asText() shouldBe "CAFE"
+
+        // 확정해도 남는다 — 동결은 스냅숏 참조만 붙이는 것
+        val (crc, confirmed) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+        crc shouldBe 200
+        confirmed["days"][0]["slots"][0]["placementReason"].asText() shouldBe "취향(미식)과 동선에 맞는 곳"
+        confirmed["candidatesSummary"]["level"].asText() shouldBe "LOW"
+    }
+
+    @Test
+    fun `위반 사유가 저장·재조회·확정을 관통한다(TRIP-309 · BR-U3-13)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        // Fake 는 위반을 만들지 않으므로 리포지토리로 직접 넣어 영속·왕복·동결 보존을 본다.
+        val slot = VisitSlot.of(
+            UUID.fromString(poiId(token)), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            hasViolation = true, violationReason = "이동이 빠듯해요 · 영업시간 밖",
+        )
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(
+                UUID.fromString(trip), SolveMode.FULL_AI, isFallback = false,
+                days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(slot))),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+            ),
+        )
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        val s0 = body["days"][0]["slots"][0]
+        s0["hasViolation"].asBoolean() shouldBe true
+        s0["violationReason"].asText() shouldBe "이동이 빠듯해요 · 영업시간 밖"
+
+        // 확정해도 남는다 — 동결은 스냅숏 참조만 붙이는 것
+        val (crc, confirmed) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+        crc shouldBe 200
+        confirmed["days"][0]["slots"][0]["violationReason"].asText() shouldBe "이동이 빠듯해요 · 영업시간 밖"
     }
 
     @Test
@@ -162,10 +403,13 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val trip = newTrip(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
 
         val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
         rc shouldBe 200
         body["status"].asText() shouldBe "CONFIRMED"
+        // 확정 응답에도 표면이 실린다 — 확정 직후 화면이 비면 안 된다
+        body["days"][0]["slots"][0]["nameKo"].isNull shouldBe false
         // poi_snapshot 동결(INV-U1-03) — 확정 시 전 슬롯이 스냅숏 참조를 가진다(실 ACTIVE POI, Fake 에이전트).
         itineraries.findByTrip(UUID.fromString(trip)).single().days.flatMap { it.slots }
             .all { it.poiSnapshotId != null } shouldBe true
@@ -181,6 +425,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val trip = newTrip(token)
         val poi = poiId(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
 
         val editBody = """{"days":[
             {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"10:00","endAt":"11:00","isFixed":false,"endsNextDay":false}]},
@@ -203,6 +448,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val trip = newTrip(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 200
         val editBody = """{"days":[{"date":"2026-08-01","slots":[]}]}"""
         call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody).first shouldBe 409
@@ -233,6 +479,9 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
 
         // 생성 중 확정은 409 — day1 만 동결된 채 잠기는 것 방지
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).first shouldBe 409
+        // 생성 중 편집도 409 — 뒤이어 오는 2차 결과가 편집을 덮어써 유실되는 것 방지
+        val editBody = """{"days":[{"date":"2026-08-01","slots":[]}]}"""
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody).first shouldBe 409
     }
 
     @Test
@@ -247,7 +496,9 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val trip = newTrip(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        awaitComplete(trip, token)
         itineraries.findByTrip(UUID.fromString(trip)).size shouldBe 1
     }
 

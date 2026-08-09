@@ -66,6 +66,8 @@ class SchemaMigrationIT {
                 "marketing_consent", "location_consent_state", "location_legal_log",
                 "refresh_session", "deletion_schedule", "profile", "preference_set",
                 "banned_word_dictionary", "outbox_event", "shedlock",
+                "change_log_entry", // 변경 이력(V2.11 · TRIP-275)
+                "itinerary_revision", // 편집 이력·되돌리기(V2.14 · TRIP-310)
             )
 
             // R__ 시드 적용 확인 — 약관 6종 + 활성 금칙어 사전 1개
@@ -97,6 +99,22 @@ class SchemaMigrationIT {
             }
             shouldThrow<SQLException> {
                 c.createStatement().execute("DELETE FROM location_legal_log")
+            }
+
+            // 4c-2) 편집 이력도 append-only(V2.14) — 되돌리기는 새 행을 쌓지, 과거를 고치지 않는다(BR-U3-32)
+            shouldThrow<SQLException> {
+                c.createStatement().execute("UPDATE itinerary_revision SET summary = 'tampered'")
+            }
+            shouldThrow<SQLException> {
+                c.createStatement().execute("DELETE FROM itinerary_revision")
+            }
+
+            // 4c) 변경 이력도 append-only(V2.11) — 남은 이력이 사후에 바뀌면 되짚는 근거가 못 된다
+            shouldThrow<SQLException> {
+                c.createStatement().execute("UPDATE change_log_entry SET reason = 'tampered'")
+            }
+            shouldThrow<SQLException> {
+                c.createStatement().execute("DELETE FROM change_log_entry")
             }
         }
 

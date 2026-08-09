@@ -58,6 +58,26 @@ score(pool, persona_ref, principal):
 - 폴백: TypedResult(is_fallback=True)를 **그대로 반환** — 규칙 점수(U2 `scorer.build_rule_score`) 실행은
   호출측(U5 ScheduleAgent)의 몫. C1은 판단 재료 제공자이지 폴백 실행자가 아니다 (경계 = agent-structure-v2).
 
+## 3.1 워커별 컨텍스트 재조회 소유 (D31 경계)
+
+D31 재조회는 **정확히 한 계층에서만** 일어난다. "워커는 항상 ContextResolver를 거친다"가 아니라
+**개인·소유 데이터 참조(`ResourceRef`)를 프롬프트 재료로 직접 조립하는 쪽이 재조회를 소유한다.**
+이미 상위 계층이 재조회한 값을 워커가 다시 끌어오면 권한 검사·감사 로그가 이중으로 남고,
+두 조회 사이 값이 갈려 프롬프트와 Agent 판단의 입력이 어긋난다.
+
+| 워커 | ContextResolver 경유 | 재조회 소유자 | 근거 |
+|---|---|---|---|
+| `PreferenceScoringWorker` | **O** | 워커 자신 (`persona_ref`) | 호출측이 참조만 넘긴다 — 조립 지점이 워커 |
+| `ExplanationWorker` | **O** | 워커 자신 (`persona_ref`) | 동일 (취향 요약을 워커가 조립) |
+| `EditTranslationWorker` | **X** | **EditAgent (U5)** | 봉투 프로토콜상 Agent가 `context_refs`를 먼저 재조회한다 (agent-foundation FD business-logic-model §3 "Agent: context_refs 재조회(D31) → 판단"). 워커는 확정 입력(발화·대상 날짜·현재 슬롯·후보 풀)만 받고 **개인 데이터를 다시 끌어오지 않는다** |
+| `ReflectionWorker` | X | 호출측 | 입력이 서버 기록 요약값(`ReflectionInput`)이라 `ResourceRef` 자체가 없다 |
+| `PlaceExtractionWorker` | X | 해당 없음 | 입력이 웹 문서 — 개인·소유 데이터가 아니다 |
+
+- 판정 기준 한 줄: **`ResourceRef`를 인자로 받으면 그 워커가 재조회 소유자, 확정값을 받으면 호출측이 소유자.**
+  이 경계는 워커 생성자 시그니처로 드러난다 — `ContextResolver` 주입 여부가 곧 소유 표시다.
+- `EditTranslationWorker`가 D31을 우회하는 것이 아니다: 재조회는 EditAgent에서 이미 수행됐고, C1은 그 결과를 소비할 뿐이다.
+  따라서 BR-U4-07의 "재조회 값만" 요건은 여전히 충족된다 (재조회 **지점**이 워커 밖일 뿐).
+
 ## 4. AnthropicAdapter (LlmPort 플러그)
 
 - `anthropic` SDK를 **생성자 주입** 클라이언트로 감싼다 — 테스트는 fake client 객체로 매핑만 검증 (D37: CI 실 API 0).
