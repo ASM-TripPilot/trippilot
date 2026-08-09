@@ -15,11 +15,14 @@ internal object ItineraryContent {
 
     fun sameAs(a: Itinerary, b: Itinerary): Boolean = a.fingerprint() == b.fingerprint()
 
-    /** 표시·판정에 쓰이는 값 전부. 여기서 빠뜨린 필드는 "바뀌어도 안 바뀐 것"이 된다. */
+    /**
+     * 일자·슬롯이 담은 값 **전부**. 여기서 빠뜨린 필드는 "바뀌어도 안 바뀐 것"이 된다 —
+     * 필드를 늘리면 여기도 늘려야 한다. (일정 수준 상태(status·generationState)는 따로 다뤄서 제외.)
+     */
     private fun Itinerary.fingerprint(): List<Any?> = days.flatMap { d ->
         listOf(d.date, d.dayOrder) + d.slots.flatMap { s ->
             listOf(
-                s.sourcePoiId, s.orderIndex, s.startAt, s.endAt,
+                s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt, s.endAt,
                 s.isFixed, s.endsNextDay, s.hasViolation, s.violationReason,
                 s.distanceRange, s.placementReason,
             )
