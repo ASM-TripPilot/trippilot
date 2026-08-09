@@ -6,9 +6,10 @@
 **벡터를 직접 주입**해 구성한다. FakeEmbedding은 "동일 텍스트 왕복 매칭"(실제 seed 뱅크 e2e)과
 PBT의 임의 입력 처리에만 쓴다.
 
-**LLM 단계**: 실물 GatewayFacade + FakeLlm(결정론 canned) + 스텁 렌더러 + 게이트 대역.
-INTENT·PARAPHRASE용 프롬프트 yaml과 c1 게이트는 아직 없다(보고 항목) — 그 자리를
-테스트 대역이 채워 라우터↔게이트웨이 계약을 검증한다.
+**LLM 단계**: 실물 GatewayFacade + FakeLlm(결정론 canned) + **실물 PromptRegistry
+(prompts/intent.yaml·paraphrase.yaml) + 실물 게이트**(IntentGate·ParaphraseGate) — TRIP-313에서
+배선이 완성돼 대역이 사라졌다. 즉 이 파일의 2·3차 테스트는 전부 실제 경로를 탄다.
+게이트 자체의 단위 검증과 배선 e2e는 `test_c1_intent_gates.py`.
 """
 
 from __future__ import annotations
@@ -24,20 +25,20 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.c1.config import C1Config
-from trippilot.c1.gates.base import GateOutcome
+from trippilot.c1.gates.intent import IntentGate
+from trippilot.c1.gates.paraphrase import ParaphraseGate
 from trippilot.c1.gateway import GatewayFacade
+from trippilot.c1.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
 from trippilot.domain.intent import (
     ROUTABLE_INTENTS,
     ROUTING_TABLE,
     Intent,
-    IntentDraft,
     IntentMatch,
     MatchRoute,
     RoutingMode,
 )
 from trippilot.domain.llm import LlmFeature, ModelTier
-from trippilot.domain.prompt import PromptRef
 from trippilot.orchestrator.intent_router import (
     IntentRouter,
     IntentRouterConfig,
@@ -60,6 +61,7 @@ _NOW = datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc)
 _TID = TraceId("t-intent")
 _CFG = C1Config(model_ids={ModelTier.LIGHT: "m-l", ModelTier.HEAVY: "m-h"})
 _SEED_YAML = Path(__file__).resolve().parent.parent / "data" / "intent_question_bank.yaml"
+_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
 
 # ── 테스트 대역 ─────────────────────────────────────────────────────────
@@ -82,61 +84,22 @@ class _ScriptedEmbedding:
         return tuple(self.embed(t) for t in texts)
 
 
-class _StubRenderer:
-    """PromptRenderer 대역 — prompts/intent.yaml·paraphrase.yaml 미등록 상태를 대신한다."""
-
-    def render(self, feature: LlmFeature, variables):
-        rendered = f"{feature.value}|" + "|".join(f"{k}={v}" for k, v in sorted(variables.items()))
-        return rendered, PromptRef(
-            prompt_id=f"stub/{feature.value.lower()}.yaml", version="0.0.0-stub", feature=feature.value
-        )
-
-
-class _ParaphraseGate:
-    """PARAPHRASE 출구 게이트 대역 — {"questions": [str]} → tuple[str, ...]."""
-
-    def apply(self, raw_text, pool, *, feature, trace_id, now) -> GateOutcome:
-        try:
-            data = json.loads(raw_text)
-        except json.JSONDecodeError as e:
-            return GateOutcome(value=None, drop_event=None, error=f"parse_error: {e.msg}")
-        questions = data.get("questions") if isinstance(data, dict) else None
-        if not isinstance(questions, list) or not all(isinstance(q, str) for q in questions):
-            return GateOutcome(value=None, drop_event=None, error="parse_error: questions 비정상")
-        return GateOutcome(value=tuple(questions), drop_event=None, error=None)
-
-
-class _IntentGate:
-    """INTENT 출구 게이트 대역 — 라벨 closed-set 강제 후 IntentDraft 조립."""
-
-    def apply(self, raw_text, pool, *, feature, trace_id, now) -> GateOutcome:
-        try:
-            data = json.loads(raw_text)
-            if not isinstance(data, dict):
-                raise ValueError("최상위가 객체가 아님")
-            intent = Intent(data.get("intent"))  # closed-set 밖이면 ValueError
-            slots = data.get("slots") or {}
-            if not isinstance(slots, dict):
-                raise ValueError("slots 비정상")
-            draft = IntentDraft(intent=intent, slots=slots, confidence=data.get("confidence"))
-        except (json.JSONDecodeError, ValueError) as e:
-            return GateOutcome(value=None, drop_event=None, error=f"parse_error: {e}")
-        return GateOutcome(value=draft, drop_event=None, error=None)
-
-
 def _gateway(canned: str, gate) -> GatewayFacade:
-    return GatewayFacade(FakeLlm(canned=canned), _StubRenderer(), gate, _CFG, InMemoryTrace())
+    """실물 파이프라인 — 실물 프롬프트 yaml·실물 게이트, LLM만 결정론 fake (D37)."""
+    return GatewayFacade(
+        FakeLlm(canned=canned), PromptRegistry(_PROMPTS_DIR), gate, _CFG, InMemoryTrace()
+    )
 
 
 def _paraphrase_gw(*questions: str) -> GatewayFacade:
-    return _gateway(json.dumps({"questions": list(questions)}), _ParaphraseGate())
+    return _gateway(json.dumps({"questions": list(questions)}), ParaphraseGate())
 
 
 def _intent_gw(intent: str, slots: dict | None = None, confidence: float | None = None) -> GatewayFacade:
     body: dict = {"intent": intent, "slots": slots or {}}
     if confidence is not None:
         body["confidence"] = confidence
-    return _gateway(json.dumps(body), _IntentGate())
+    return _gateway(json.dumps(body), IntentGate())
 
 
 # ── 대본 뱅크 (각도로 유사도 조준) ──────────────────────────────────────
@@ -238,7 +201,7 @@ def test_vote_below_ratio_escalates_to_llm_direct() -> None:
 def test_paraphrase_failure_escalates_not_silently_votes() -> None:
     """유사질문 생성이 실패했을 때 원문 1표만으로 확정하면 애매함이 은폐된다 → 3차로."""
     router = _scripted_router(
-        paraphrase_gateway=_gateway("깨진 응답", _ParaphraseGate()),
+        paraphrase_gateway=_gateway("깨진 응답", ParaphraseGate()),
         intent_gateway=_intent_gw("GET_DISTANCE"),
     )
     match = router.route("애매한 질문", _TID, _NOW)
@@ -301,7 +264,9 @@ def test_polluted_bank_labels_are_ignored_inv1() -> None:
 
 def test_llm_failure_falls_back_with_reason() -> None:
     router = _scripted_router(
-        intent_gateway=GatewayFacade(FailingLlm(), _StubRenderer(), _IntentGate(), _CFG, InMemoryTrace())
+        intent_gateway=GatewayFacade(
+            FailingLlm(), PromptRegistry(_PROMPTS_DIR), IntentGate(), _CFG, InMemoryTrace()
+        )
     )
     match = router.route("생소한 질문", _TID, _NOW)
     assert match.match_route is MatchRoute.FALLBACK
@@ -476,7 +441,7 @@ def _pbt_router(gateways: bool) -> IntentRouter:
         embedding,
         store,
         # 게이트가 거부하는 응답 = LLM 실패 경로까지 함께 훑는다
-        intent_gateway=_gateway("JSON 아님", _IntentGate()),
+        intent_gateway=_gateway("JSON 아님", IntentGate()),
         paraphrase_gateway=_paraphrase_gw("변형1", "변형2", "변형3"),
     )
 
