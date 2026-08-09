@@ -6,15 +6,8 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { Revision } from './revision';
 
-/**
- * AI 가 **어떻게 풀었나**
- */
-export type ItinerarySolveMode =
-  (typeof ItinerarySolveMode)[keyof typeof ItinerarySolveMode];
-
-export const ItinerarySolveMode = {
-  FULL_AI: 'FULL_AI',
-  DETERMINISTIC: 'DETERMINISTIC',
-  MINIMAL: 'MINIMAL',
-} as const;
+export interface RevisionList {
+  revisions: Revision[];
+}

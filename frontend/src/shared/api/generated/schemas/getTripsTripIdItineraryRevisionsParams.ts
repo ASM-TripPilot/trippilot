@@ -7,14 +7,11 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
-/**
- * AI 가 **어떻게 풀었나**
- */
-export type ItinerarySolveMode =
-  (typeof ItinerarySolveMode)[keyof typeof ItinerarySolveMode];
-
-export const ItinerarySolveMode = {
-  FULL_AI: 'FULL_AI',
-  DETERMINISTIC: 'DETERMINISTIC',
-  MINIMAL: 'MINIMAL',
-} as const;
+export type GetTripsTripIdItineraryRevisionsParams = {
+  /**
+   * 반환 상한(기본 100 · 최대 500). 이력은 append-only 로 쌓이고 절대 줄지 않는다.
+   * @minimum 1
+   * @maximum 500
+   */
+  limit?: number;
+};

@@ -45,10 +45,10 @@ import path from 'path';
  *     (TRIP-220 AC-2, B-11)
  *   - `trips/trips.ts`가 일정 4오퍼레이션의 함수·훅·쿼리키 헬퍼를 갖는다
  *     (TRIP-294 AC-1, B-12)
- *   - 응답 슬롯 7필드가 전부 필수이고, 신규 선택 9필드가 선택으로 실재한다
+ *   - 응답 슬롯 7필드가 전부 필수이고, 신규 선택 10필드가 선택으로 실재한다
  *     (TRIP-294 AC-3 + 2026-08-08 계약 확장, B-13)
  *   - `candidatesSummary` 타입이 `level` 필수 + `| null` 을 유지한다(B-13-c)
- *   - 일정 enum 4종의 값 목록이 정확하다(TRIP-294 AC-3, B-14)
+ *   - 일정 enum 5종의 값 목록이 정확하다(TRIP-294 AC-3, B-14)
  *   - `trips/trips.ts`의 export 심볼 하한 92개가 전부 보존된다(B-15)
  *   - **일정 표면 파일**(패턴으로 고른다)에 duration 계열 식별자 0건(INV-3, B-16)
  *   - 그 판정 패턴 자체가 의도한 것을 잡고 남의 스키마를 안 잡는다(B-16-a)
@@ -581,8 +581,13 @@ const FORBIDDEN_DURATION_PATTERNS = [
  *
  * ⚠️ **`openingHours`는 영업시간이지 소요시간이 아니다** — INV-3 금칙어 스캔(B-4·B-16)이
  * 이 이름에 걸리지 않는 것을 확인했다. `distanceRange`도 거리이지 시간이 아니다.
+ *
+ * ⚠️ **2026-08-09 확장** — TRIP-309 가 `violationReason` 을 더해 **10필드**가 됐다.
+ * `hasViolation`(필수 boolean)의 사유 문자열이고 `hasViolation=false` 면 항상 null 이다
+ * (BR-U3-13). 위반 슬롯이 소수라 선택이 맞다.
  */
 const SLOT_OPTIONAL_FIELDS = [
+  'violationReason',
   'placementReason',
   'distanceRange',
   'nameKo',
@@ -978,7 +983,7 @@ describe('TRIP-294 AC-1 · 일정 클라이언트가 실제로 생성됐다 (B-1
   });
 });
 
-describe('슬롯 필드 계약 — 응답 7필수+선택 9 vs 요청 4필수 (B-13)', () => {
+describe('슬롯 필드 계약 — 응답 7필수+선택 10 vs 요청 4필수 (B-13)', () => {
   /**
    * 추적: `endsNextDay`=자정 넘김(HC4) · `hasViolation`=편집 후 위반 가시화(US-SCHED-07,
    * 비차단) · `startAt`/`endAt`=**INV-2**(솔버 검증값만 사용자에게 보인다).
@@ -987,7 +992,7 @@ describe('슬롯 필드 계약 — 응답 7필수+선택 9 vs 요청 4필수 (B-
    * `PBT-U2-B2`는 정본이 **backend 소유**로 명시했고, 소스 텍스트 스캔은 원리적으로 값
    * 조합을 볼 수 없다. 프론트는 형태까지만 잠근다(01b Seed 확정 3).
    */
-  it('응답 슬롯 7필드가 전부 필수이고, 신규 선택 9필드가 선택으로 실재한다', () => {
+  it('응답 슬롯 7필드가 전부 필수이고, 신규 선택 10필드가 선택으로 실재한다', () => {
     const source = readGeneratedSource(
       'schemas',
       'itineraryDaysItemSlotsItem.ts'
@@ -1016,16 +1021,16 @@ describe('슬롯 필드 계약 — 응답 7필수+선택 9 vs 요청 4필수 (B-
     ].filter((name) => source.includes(name));
     expect(loosened).toEqual([]);
 
-    // 긍정(대조군) — **신규 선택 9필드가 실재한다.** 필수 필드만 재던 위 단언들은 이 아홉을
+    // 긍정(대조군) — **신규 선택 10필드가 실재한다.** 필수 필드만 재던 위 단언들은 이 열을
     // 아무도 안 봤다: 서버가 `distanceRange`·`nameKo`를 통째로 빼도 필수 7줄은 그대로라
-    // 생성물 테스트가 침묵한다. 이 아홉이 h11 타임라인·h05 지도가 추가 왕복 없이 카드를
+    // 생성물 테스트가 침묵한다. 이 열이 h11 타임라인·h05 지도가 추가 왕복 없이 카드를
     // 그리는 유일한 데이터 원본이다(BR-U3-09).
     const absentOptional = SLOT_OPTIONAL_FIELDS.filter(
       (name) => !new RegExp(`^ *${name}\\?: `, 'm').test(source)
     );
     expect(absentOptional).toEqual([]);
 
-    // 부정 짝 — 그 아홉이 **필수로 뒤집힌 흔적**. 전부 nullable 이고 동시에 전부 null 일 수
+    // 부정 짝 — 그 열이 **필수로 뒤집힌 흔적**. 전부 nullable 이고 동시에 전부 null 일 수
     // 있는 것이 정상값이라("정본·동결본 모두 없으면 전부 null"), 필수가 되면 서버가 값을
     // 지어내야 한다.
     //
@@ -1079,6 +1084,15 @@ describe('슬롯 필드 계약 — 응답 7필수+선택 9 vs 요청 4필수 (B-
     // 부정 짝 — 필수로 뒤집힌 흔적. `nullable: true`이고 required 밖이라 선택이 정상이다
     // (AI가 값을 안 주거나 형태가 다르면 null).
     expect(source).not.toContain('candidatesSummary:');
+
+    // 긍정 — 2026-08-09 확장(TRIP-268)이 더한 **여덟 번째 필수 필드**. `solveMode` 와 축이
+    // 다르다: 저쪽은 AI 가 어떻게 풀었나, 이쪽은 사용자가 무엇을 골랐나(US-SCHED-09).
+    // 이 필드가 없으면 화면이 MANUAL(직접 만들기)을 `solveMode=MINIMAL`만 보고 **폴백으로
+    // 오독**한다 — MANUAL 은 `isFallback=false` 다.
+    expect(source).toContain('generationMode: ItineraryGenerationMode;');
+
+    // 부정 짝 — 선택으로 풀린 흔적. 선택이 되면 화면이 undefined 분기를 떠안는다.
+    expect(source).not.toContain('generationMode?');
   });
 
   it('candidatesSummary 타입이 level을 필수로 갖고 null을 허용한다 (B-13-c)', () => {
@@ -1122,7 +1136,7 @@ describe('슬롯 필드 계약 — 응답 7필수+선택 9 vs 요청 4필수 (B-
   });
 });
 
-describe('TRIP-294 AC-3 · 일정 enum 4종의 값 목록 (B-14)', () => {
+describe('TRIP-294 AC-3 · 일정 enum 5종의 값 목록 (B-14)', () => {
   /**
    * orval은 openapi enum을 **타입 + `as const` 객체** 두 벌로 뽑는다. 객체 쪽은 런타임에
    * 실재하므로 `Object.keys(ItineraryStatus)` 로도 잴 수 있지만, **여기서는 import 하지
@@ -1140,7 +1154,7 @@ describe('TRIP-294 AC-3 · 일정 enum 4종의 값 목록 (B-14)', () => {
     );
   };
 
-  it('status·solveMode·generationState·generationMode의 키와 값이 계약과 완전히 같다', () => {
+  it('status·solveMode·generationState·생성모드 요청·응답의 키와 값이 계약과 완전히 같다', () => {
     // 키=값 꼴로 비교한다 — 키만 보면 `PLANNED: 'CONFIRMED'` 같은 뒤바뀜을 못 잡는다.
     expect(readEnumEntries('itineraryStatus.ts')).toEqual([
       'PLANNED=PLANNED',
@@ -1159,11 +1173,22 @@ describe('TRIP-294 AC-3 · 일정 enum 4종의 값 목록 (B-14)', () => {
       'FAILED=FAILED',
     ]);
 
-    // ⚠️ u3 domain-entities는 `MANUAL`을 포함한 3종으로 설계했으나 계약은 2종뿐이다
-    // (드리프트 A — BE 티켓 후보). 생성물은 계약을 따르므로 여기도 2종이다.
-    expect(
-      readEnumEntries('generateItineraryRequestGenerationMode.ts')
-    ).toEqual(['FULLY_AI=FULLY_AI', 'CO_PLAN=CO_PLAN']);
+    // ⚠️ **드리프트 A 해소(2026-08-09 · TRIP-268)** — u3 domain-entities 가 3종으로 설계했고
+    // 계약이 2종이던 어긋남을, 계약에 `MANUAL` 을 더해 닫았다. 생성물은 계약을 따르므로
+    // 여기도 3종이다.
+    const requestModes = readEnumEntries(
+      'generateItineraryRequestGenerationMode.ts'
+    );
+    expect(requestModes).toEqual([
+      'FULLY_AI=FULLY_AI',
+      'CO_PLAN=CO_PLAN',
+      'MANUAL=MANUAL',
+    ]);
+
+    // 응답 쪽 짝 — orval 이 요청·응답을 **다른 파일 두 벌**로 뽑으므로 한쪽만 늘어도 타입은
+    // 안 깨진다(둘 다 문자열 리터럴 유니온이라 서로를 모른다). 목록이 갈리면 요청으로 보낸
+    // 값이 응답 타입에 없는 상태가 되므로, 같음을 **명시적으로** 잠근다.
+    expect(readEnumEntries('itineraryGenerationMode.ts')).toEqual(requestModes);
   });
 });
 

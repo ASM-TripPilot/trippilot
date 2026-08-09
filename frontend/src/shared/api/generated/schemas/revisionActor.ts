@@ -8,13 +8,11 @@
  */
 
 /**
- * AI 가 **어떻게 풀었나**
+ * 화면의 `나`/`AI` 배지
  */
-export type ItinerarySolveMode =
-  (typeof ItinerarySolveMode)[keyof typeof ItinerarySolveMode];
+export type RevisionActor = (typeof RevisionActor)[keyof typeof RevisionActor];
 
-export const ItinerarySolveMode = {
-  FULL_AI: 'FULL_AI',
-  DETERMINISTIC: 'DETERMINISTIC',
-  MINIMAL: 'MINIMAL',
+export const RevisionActor = {
+  USER: 'USER',
+  AI: 'AI',
 } as const;

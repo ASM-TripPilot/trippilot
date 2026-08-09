@@ -8,6 +8,7 @@
  */
 import type { ItineraryCandidatesSummary } from './itineraryCandidatesSummary';
 import type { ItineraryDaysItem } from './itineraryDaysItem';
+import type { ItineraryGenerationMode } from './itineraryGenerationMode';
 import type { ItineraryGenerationState } from './itineraryGenerationState';
 import type { ItinerarySolveMode } from './itinerarySolveMode';
 import type { ItineraryStatus } from './itineraryStatus';
@@ -16,7 +17,10 @@ export interface Itinerary {
   itineraryId: string;
   tripId: string;
   status: ItineraryStatus;
+  /** AI 가 **어떻게 풀었나** */
   solveMode: ItinerarySolveMode;
+  /** 사용자가 **무엇을 골랐나**(US-SCHED-09). solveMode 와 다른 축이다. MANUAL(직접 만들기)은 AI 를 아예 부르지 않고 빈 일자만 만든다 — 이때 solveMode=MINIMAL 이지만 **isFallback 은 false** 다(실패가 아니라 선택이다). */
+  generationMode: ItineraryGenerationMode;
   isFallback: boolean;
   /** 생성 진행 상태(확정 상태와 다른 축) — PARTIAL=day1만 채워짐(2단계 생성 중) · COMPLETE=전 일자 완료 · FAILED=2차 실패(1차분은 유효). **PARTIAL 인 동안 확정·편집은 409** (day1만 동결된 채 잠기거나, 뒤이어 도착하는 2차 결과가 편집을 덮어쓰는 것 방지). 생성 POST 는 day1 만 담은 PARTIAL 을 즉시 반환하므로, 클라이언트는 GET 으로 COMPLETE/FAILED 까지 폴링해 나머지 일자를 받는다(여행이 하루면 즉시 COMPLETE). */
   generationState: ItineraryGenerationState;

@@ -33,8 +33,12 @@ import type {
   EditTripRequest,
   GenerateItineraryRequest,
   GetTripsTripIdChangeLogParams,
+  GetTripsTripIdItineraryRevisionsParams,
   Itinerary,
   MustVisit,
+  RevisionList,
+  SlotCandidates,
+  SlotCandidatesRequest,
   Trip,
   ValidationErrorResponse,
 } from '../schemas';
@@ -1631,6 +1635,378 @@ export const usePutTripsTripIdItinerary = <TError = void, TContext = unknown>(
   );
 };
 /**
+ * "다른 후보 N"(완전 AI)과 옵션 교체(같이 고르기)가 **같은 오퍼레이션**을 쓴다(BR-U3-23). 후보는 closed-set(INV-1) — 백엔드가 임의 POI 를 섞지 않는다. **제외할 장소는 받지 않는다** — 이미 일정에 있는 POI 를 서버가 유도해 제외한다(BR-U3-24). 후보 0건이면 빈 목록이며, 클라이언트가 반경 확대·컨셉 변경을 제안한다(BR-U3-25). 조회지만 POST 인 이유는 입력이 복합(이웃 슬롯·컨셉·반경)이기 때문이다.
+ * @summary 슬롯 교체 후보 — 완전 AI·같이 고르기 공통 경계
+ */
+export const postTripsTripIdItinerarySlotCandidates = (
+  tripId: string,
+  slotCandidatesRequest: SlotCandidatesRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<SlotCandidates>({
+    url: `/trips/${tripId}/itinerary/slot-candidates`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data: slotCandidatesRequest,
+    signal,
+  });
+};
+
+export const getPostTripsTripIdItinerarySlotCandidatesMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdItinerarySlotCandidates>>,
+    TError,
+    { tripId: string; data: SlotCandidatesRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdItinerarySlotCandidates>>,
+  TError,
+  { tripId: string; data: SlotCandidatesRequest },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdItinerarySlotCandidates'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdItinerarySlotCandidates>>,
+    { tripId: string; data: SlotCandidatesRequest }
+  > = (props) => {
+    const { tripId, data } = props ?? {};
+
+    return postTripsTripIdItinerarySlotCandidates(tripId, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdItinerarySlotCandidatesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTripsTripIdItinerarySlotCandidates>>
+>;
+export type PostTripsTripIdItinerarySlotCandidatesMutationBody =
+  SlotCandidatesRequest;
+export type PostTripsTripIdItinerarySlotCandidatesMutationError = void;
+
+/**
+ * @summary 슬롯 교체 후보 — 완전 AI·같이 고르기 공통 경계
+ */
+export const usePostTripsTripIdItinerarySlotCandidates = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdItinerarySlotCandidates>>,
+      TError,
+      { tripId: string; data: SlotCandidatesRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdItinerarySlotCandidates>>,
+  TError,
+  { tripId: string; data: SlotCandidatesRequest },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdItinerarySlotCandidatesMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * U3 가 소유하는 이력은 **사용자 편집 + AI 생성 기준 버전**뿐이다(DEC-U3-1). Plan-B 재계획 이력은 U4, 여행 후 아카이브 change-log 는 U5 소유 — 한 화면에 섞여 보여도 데이터 소유는 다르다. 스냅숏 본문은 싣지 않는다(되돌리기는 서버가 수행).
+ * @summary 일정 편집 이력 — 되돌리기 지점 목록(최신순)
+ */
+export const getTripsTripIdItineraryRevisions = (
+  tripId: string,
+  params?: GetTripsTripIdItineraryRevisionsParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<RevisionList>({
+    url: `/trips/${tripId}/itinerary/revisions`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetTripsTripIdItineraryRevisionsQueryKey = (
+  tripId: string,
+  params?: GetTripsTripIdItineraryRevisionsParams
+) => {
+  return [
+    `/trips/${tripId}/itinerary/revisions`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetTripsTripIdItineraryRevisionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdItineraryRevisionsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetTripsTripIdItineraryRevisionsQueryKey(tripId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>
+  > = ({ signal }) => getTripsTripIdItineraryRevisions(tripId, params, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: tripId !== null && tripId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdItineraryRevisionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>
+>;
+export type GetTripsTripIdItineraryRevisionsQueryError = void;
+
+export function useGetTripsTripIdItineraryRevisions<
+  TData = Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+  TError = void,
+>(
+  tripId: string,
+  params: undefined | GetTripsTripIdItineraryRevisionsParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdItineraryRevisions<
+  TData = Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdItineraryRevisionsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdItineraryRevisions<
+  TData = Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdItineraryRevisionsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 일정 편집 이력 — 되돌리기 지점 목록(최신순)
+ */
+
+export function useGetTripsTripIdItineraryRevisions<
+  TData = Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdItineraryRevisionsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdItineraryRevisions>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdItineraryRevisionsQueryOptions(
+    tripId,
+    params,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * 과거 리비전을 **삭제하지 않고** 새 RESTORE 리비전을 쌓는다(BR-U3-32) — 되돌리기의 되돌리기가 가능하다. 고정 블록(숙소·시각 고정 필수 방문지)의 시각은 복원 스냅숏보다 **현행이 이긴다**(BR-U3-33 · INV-U3-03).
+ * @summary 되돌리기 — 과거 버전으로 복원(새 리비전을 쌓는다)
+ */
+export const postTripsTripIdItineraryRevisionsRevisionIdRestore = (
+  tripId: string,
+  revisionId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<Itinerary>({
+    url: `/trips/${tripId}/itinerary/revisions/${revisionId}/restore`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationOptions =
+  <TError = void, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<
+      Awaited<
+        ReturnType<typeof postTripsTripIdItineraryRevisionsRevisionIdRestore>
+      >,
+      TError,
+      { tripId: string; revisionId: string },
+      TContext
+    >;
+  }): UseMutationOptions<
+    Awaited<
+      ReturnType<typeof postTripsTripIdItineraryRevisionsRevisionIdRestore>
+    >,
+    TError,
+    { tripId: string; revisionId: string },
+    TContext
+  > => {
+    const mutationKey = ['postTripsTripIdItineraryRevisionsRevisionIdRestore'];
+    const { mutation: mutationOptions } = options
+      ? options.mutation &&
+        'mutationKey' in options.mutation &&
+        options.mutation.mutationKey
+        ? options
+        : { ...options, mutation: { ...options.mutation, mutationKey } }
+      : { mutation: { mutationKey } };
+
+    const mutationFn: MutationFunction<
+      Awaited<
+        ReturnType<typeof postTripsTripIdItineraryRevisionsRevisionIdRestore>
+      >,
+      { tripId: string; revisionId: string }
+    > = (props) => {
+      const { tripId, revisionId } = props ?? {};
+
+      return postTripsTripIdItineraryRevisionsRevisionIdRestore(
+        tripId,
+        revisionId
+      );
+    };
+
+    return { mutationFn, ...mutationOptions };
+  };
+
+export type PostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationResult =
+  NonNullable<
+    Awaited<
+      ReturnType<typeof postTripsTripIdItineraryRevisionsRevisionIdRestore>
+    >
+  >;
+
+export type PostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationError =
+  void;
+
+/**
+ * @summary 되돌리기 — 과거 버전으로 복원(새 리비전을 쌓는다)
+ */
+export const usePostTripsTripIdItineraryRevisionsRevisionIdRestore = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<
+        ReturnType<typeof postTripsTripIdItineraryRevisionsRevisionIdRestore>
+      >,
+      TError,
+      { tripId: string; revisionId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<
+    ReturnType<typeof postTripsTripIdItineraryRevisionsRevisionIdRestore>
+  >,
+  TError,
+  { tripId: string; revisionId: string },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationOptions(
+      options
+    ),
+    queryClient
+  );
+};
+/**
  * @summary 일정 확정 — PLANNED→CONFIRMED(재확정 409). 재생성 POST 는 확정을 되돌린다
  */
 export const postTripsTripIdItineraryConfirm = (
@@ -1715,7 +2091,7 @@ export const usePostTripsTripIdItineraryConfirm = <
   );
 };
 /**
- * 확정된 변경을 사유·전후 스냅숏·시각·출처와 함께 남긴 append-only 이력(US-PLANB-09). 현재 출처는 수동 편집(MANUAL)뿐 — Plan-B·어시스턴트는 해당 모듈과 함께 붙는다.
+ * 확정된 변경을 사유·전후 스냅숏·시각·출처와 함께 남긴 append-only 이력(US-PLANB-09). ⚠ **현재 생산자가 없어 항상 빈 목록이다.** 사용자 편집 이력은 DEC-U3-1 로 U3 소유가 되어 `GET /trips/{tripId}/itinerary/revisions` 로 옮겨갔고(TRIP-310), 이 엔드포인트는 Plan-B(U4)·아카이브(U5) 원천을 기다린다. 그때까지 화면에 붙이지 말 것.
  * @summary 변경 이력 타임라인 — "이날 무엇을 왜 바꿨는지"(최신순)
  */
 export const getTripsTripIdChangeLog = (

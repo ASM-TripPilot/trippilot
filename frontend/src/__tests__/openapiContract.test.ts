@@ -210,12 +210,17 @@ function extractEnumLists(schemaBlock: string): string[] {
 }
 
 /**
- * TRIP-307·308·306 이 슬롯에 더한 **선택 9필드**(`tags` 는 required 라 여기 없다).
+ * TRIP-307·308·306 이 슬롯에 더한 **선택 10필드**(`tags` 는 required 라 여기 없다).
  * 근거: BR-U2-04(`placementReason`) · BR-U2-08(`distanceRange`) · BR-U3-09(POI 표면 5종) ·
  * `openingHours`/`openingHoursKnown`(영업시간 원문·확인 여부 — **소요시간이 아니다**).
  * 전부 nullable 이고 동시에 전부 null 일 수 있다("정본·동결본 모두 없으면 전부 null").
+ *
+ * ⚠️ **2026-08-09 계약 확장 흡수** — TRIP-309(`cb6bc63`)가 `violationReason` 을 더했다.
+ * `hasViolation`(필수 boolean)의 **사유 문자열**이고 `hasViolation=false` 면 항상 null 이다
+ * (BR-U3-13). 필수가 아닌 이유가 여기 있다 — 위반이 없는 슬롯이 대다수라서.
  */
 const OPTIONAL_SLOT_FIELDS = [
+  'violationReason',
   'placementReason',
   'distanceRange',
   'nameKo',
@@ -493,7 +498,7 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
    * `(MINIMAL,false)`(BR-U2-03)는 대응 PBT `PBT-U2-B2`가 **backend 소유**로 명시돼 있다.
    * 프론트는 형태(필드가 있다/필수다/값 목록이 이것뿐이다)까지만 잠근다(01b Seed 확정 3).
    */
-  it('Itinerary가 필수 7필드·후보요약 1필드·day 2필드·slot 7필드를 요구하고 duration 계열 키가 0건이다', () => {
+  it('Itinerary가 필수 8필드·후보요약 1필드·day 2필드·slot 7필드를 요구하고 duration 계열 키가 0건이다', () => {
     const source = readOpenapiSource();
     const block = extractSchemaBlock(source, 'Itinerary');
 
@@ -510,17 +515,25 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
     // `required: [level]` 이 **2번째 자리**라는 것도 정보다: `candidatesSummary`(BR-U2-05)가
     // `days` 보다 앞에 선언돼 있다는 사실이 순서로 함께 잠긴다. `tags` 는 슬롯 required 의
     // 마지막 원소이고 미확보 시 **빈 배열**이지 누락이 아니다.
+    //
+    // ⚠️ **2026-08-09** — TRIP-268(`4bf9dae`)이 `generationMode` 를 `solveMode` **바로 뒤**
+    // 필수로 올렸다. 두 축이 붙어 있는 자리가 곧 의미다: `solveMode` 는 AI 가 **어떻게 풀었나**,
+    // `generationMode` 는 사용자가 **무엇을 골랐나**(US-SCHED-09)다. 섞으면 MANUAL 을
+    // 실패로 오독한다 — MANUAL 은 `solveMode=MINIMAL` 이지만 `isFallback=false` 다.
     expect(extractRequiredLines(block)).toEqual([
-      'required: [itineraryId, tripId, status, solveMode, isFallback, generationState, days]',
+      'required: [itineraryId, tripId, status, solveMode, generationMode, isFallback, generationState, days]',
       'required: [level]',
       'required: [date, slots]',
       'required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, tags]',
     ]);
 
-    // 완전 일치(순서 포함) — enum 값이 추가·삭제·개명되면 즉시 red.
+    // 완전 일치(순서 포함) — enum 값이 추가·삭제·개명되면 즉시 red. 3번째가
+    // `generationMode` 이고, 아래 GenerateItineraryRequest 의 목록과 **같아야 한다**
+    // (요청으로 보낸 값이 응답에 그대로 실린다 — 한쪽만 늘면 여기서 갈린다).
     expect(extractEnumLists(block)).toEqual([
       'enum: [PLANNED, CONFIRMED]',
       'enum: [FULL_AI, DETERMINISTIC, MINIMAL]',
+      'enum: [FULLY_AI, CO_PLAN, MANUAL]',
       'enum: [PARTIAL, COMPLETE, FAILED]',
     ]);
 
@@ -554,7 +567,7 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
     expect(promoted).toEqual([]);
   });
 
-  it('GenerateItineraryRequest는 generationMode가 선택이고 값이 2종뿐이다', () => {
+  it('GenerateItineraryRequest는 generationMode가 선택이고 값이 3종뿐이다', () => {
     const source = readOpenapiSource();
     const block = extractSchemaBlock(source, 'GenerateItineraryRequest');
 
@@ -563,10 +576,14 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
     // required 줄이 하나도 없다 = 본문 전체가 선택이다(미지정 시 서버가 FULLY_AI).
     expect(extractRequiredLines(block)).toEqual([]);
 
-    // ⚠️ u3 domain-entities는 `GenerationMode{FULLY_AI, CO_PLAN, MANUAL}` 3종으로 적었으나
-    // 계약은 2종뿐이다(드리프트 A — BE 티켓 후보로 상신, 01b Seed [기록] 입력). 이 단언은
-    // **계약 그대로**를 잠근다 — 문서가 아니라 openapi가 코드젠의 입력이기 때문이다.
-    expect(extractEnumLists(block)).toEqual(['enum: [FULLY_AI, CO_PLAN]']);
+    // ⚠️ **드리프트 A 해소(2026-08-09)** — u3 domain-entities 가 `GenerationMode{FULLY_AI,
+    // CO_PLAN, MANUAL}` 3종으로 적었는데 계약은 2종이던 어긋남을, TRIP-268(`4bf9dae`)이
+    // `MANUAL` 을 계약에 더해 닫았다. **문서 쪽이 아니라 계약 쪽이 움직여 맞은 것**이고,
+    // 이 단언은 그때도 지금도 **계약 그대로**를 잠근다 — 문서가 아니라 openapi 가 코드젠의
+    // 입력이기 때문이다. `MANUAL`(직접 만들기)은 AI 를 아예 부르지 않고 빈 일자만 만든다.
+    expect(extractEnumLists(block)).toEqual([
+      'enum: [FULLY_AI, CO_PLAN, MANUAL]',
+    ]);
   });
 
   it('EditItineraryRequest의 슬롯은 필수 4필드뿐이다(응답 슬롯보다 2개 적다)', () => {

@@ -17,6 +17,8 @@ export type ItineraryDaysItemSlotsItem = {
   endsNextDay: boolean;
   /** 편집 재검증(HC1-4) 위반 표시(비차단) */
   hasViolation: boolean;
+  /** 위반 사유(BR-U3-13). 저장 후 재조회에도 남아 위반 블록을 **지속 가시화**한다. 여러 건이면 " · " 로 이어 붙인다. hasViolation=false 면 항상 null. */
+  violationReason?: string | null;
   /** 이 장소를 고른 이유(BR-U2-04). 문구는 시각·소요시간을 언급하지 않는다(BR-U2-09) — 집행은 AI 프롬프트·후처리 책임이고 경계에서 문자열 검사는 하지 않는다. */
   placementReason?: string | null;
   /** 직전 지점에서의 이동 **거리 표시 문자열**(BR-U2-08) — 예 "약 1.2km · 도보 추정". 직선거리 폴백이면 "추정" 표기가 포함된다. 소요시간은 어떤 이유로도 싣지 않는다(INV-3). 편집 직후에는 순서가 바뀌어 값이 무효라 null 이다(재산출은 TRIP-309). */

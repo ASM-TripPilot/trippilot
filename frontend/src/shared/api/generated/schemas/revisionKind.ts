@@ -8,13 +8,13 @@
  */
 
 /**
- * AI 가 **어떻게 풀었나**
+ * BASELINE = "AI가 처음 짠 일정 · 기준 버전"(BR-U3-31)
  */
-export type ItinerarySolveMode =
-  (typeof ItinerarySolveMode)[keyof typeof ItinerarySolveMode];
+export type RevisionKind = (typeof RevisionKind)[keyof typeof RevisionKind];
 
-export const ItinerarySolveMode = {
-  FULL_AI: 'FULL_AI',
-  DETERMINISTIC: 'DETERMINISTIC',
-  MINIMAL: 'MINIMAL',
+export const RevisionKind = {
+  BASELINE: 'BASELINE',
+  GENERATE: 'GENERATE',
+  EDIT: 'EDIT',
+  RESTORE: 'RESTORE',
 } as const;

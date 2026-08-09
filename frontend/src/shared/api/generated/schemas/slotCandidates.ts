@@ -6,15 +6,11 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { SlotCandidatesCandidatesItem } from './slotCandidatesCandidatesItem';
 
-/**
- * AI 가 **어떻게 풀었나**
- */
-export type ItinerarySolveMode =
-  (typeof ItinerarySolveMode)[keyof typeof ItinerarySolveMode];
-
-export const ItinerarySolveMode = {
-  FULL_AI: 'FULL_AI',
-  DETERMINISTIC: 'DETERMINISTIC',
-  MINIMAL: 'MINIMAL',
-} as const;
+export interface SlotCandidates {
+  /** 빈 목록 = 후보 0건 → 반경 확대·컨셉 변경 제안(BR-U3-25) */
+  candidates: SlotCandidatesCandidatesItem[];
+  /** 실제 사용 반경. AI 가 자동 확대했을 수 있어 그대로 표시한다 */
+  radiusMUsed: number;
+}

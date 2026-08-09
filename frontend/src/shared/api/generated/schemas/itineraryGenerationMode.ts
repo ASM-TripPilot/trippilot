@@ -8,12 +8,12 @@
  */
 
 /**
- * 미지정 시 FULLY_AI
+ * 사용자가 **무엇을 골랐나**(US-SCHED-09). solveMode 와 다른 축이다. MANUAL(직접 만들기)은 AI 를 아예 부르지 않고 빈 일자만 만든다 — 이때 solveMode=MINIMAL 이지만 **isFallback 은 false** 다(실패가 아니라 선택이다).
  */
-export type GenerateItineraryRequestGenerationMode =
-  (typeof GenerateItineraryRequestGenerationMode)[keyof typeof GenerateItineraryRequestGenerationMode];
+export type ItineraryGenerationMode =
+  (typeof ItineraryGenerationMode)[keyof typeof ItineraryGenerationMode];
 
-export const GenerateItineraryRequestGenerationMode = {
+export const ItineraryGenerationMode = {
   FULLY_AI: 'FULLY_AI',
   CO_PLAN: 'CO_PLAN',
   MANUAL: 'MANUAL',

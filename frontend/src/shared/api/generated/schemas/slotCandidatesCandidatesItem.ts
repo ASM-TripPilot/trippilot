@@ -7,14 +7,10 @@
  * OpenAPI spec version: 0.1.0-draft
  */
 
-/**
- * AI 가 **어떻게 풀었나**
- */
-export type ItinerarySolveMode =
-  (typeof ItinerarySolveMode)[keyof typeof ItinerarySolveMode];
-
-export const ItinerarySolveMode = {
-  FULL_AI: 'FULL_AI',
-  DETERMINISTIC: 'DETERMINISTIC',
-  MINIMAL: 'MINIMAL',
-} as const;
+export type SlotCandidatesCandidatesItem = {
+  poiId: string;
+  /** 거리만(INV-3) */
+  distanceRange: string;
+  /** closed-set 근거 — 시각·소요시간 언급 없음(BR-U2-09) */
+  rationale: string;
+};
