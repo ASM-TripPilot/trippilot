@@ -49,8 +49,9 @@
 | 필드 | 타입 | 규칙 |
 |---|---|---|
 | `revisionId` | UUID | |
-| `itineraryId` | UUID | |
-| `seq` | Int | 단조 증가. 되돌리기는 **새 리비전을 쌓는다**(과거 삭제 없음) |
+| `tripId` | UUID | **소유 키**. 이력의 수명 주기는 여행에 매인다(아래 근거) |
+| `itineraryId` | UUID | "어느 일정의 버전이었나"를 남기는 **참고 값**(FK 미강제 — 교체돼 사라진 id 도 보존) |
+| `seq` | Int | **여행 안에서** 단조 증가. 되돌리기는 **새 리비전을 쌓는다**(과거 삭제 없음) |
 | `actor` | `RevisionActor{USER, AI}` | 화면의 `나`/`AI` 배지 |
 | `kind` | `RevisionKind{BASELINE, GENERATE, EDIT, RESTORE}` | `BASELINE` = "AI가 처음 짠 일정 · 기준 버전" |
 | `summary` | String | "광안리 해변 추가" · "용궁사 순서 이동" — **표시 문구** |
@@ -58,6 +59,10 @@
 | `snapshot` | jsonb | 복원용 일정 전체 스냅숏 |
 | `createdAt` | Instant | "18분 전" 상대 표기의 원천 |
 
+- **왜 `itineraryId`가 아니라 `tripId`에 매다나** (2026-08-08 정정 · TRIP-310 구현 중 확인):
+  - 편집·되돌리기는 일정을 **행 교체**(DELETE→INSERT)로 저장한다 → `itineraryId` FK를 CASCADE로 걸면 **편집 한 번에 이력이 전부 지워진다**.
+  - **재생성은 새 `itineraryId`를 발급**한다 → `itineraryId`로 묶으면 재생성 순간 과거 이력과 끊겨 "재생성 전으로 되돌리기"(BR-U3-19)가 불가능해진다.
+  - 즉 초판의 일정 기준 키는 **저장 방식을 전제하지 않은 설계**였다. 사용자가 인식하는 이력 단위도 "이 여행의 변경 이력"이라 `tripId`가 의미와도 맞는다.
 - **1차 미포함**: `planbTriggerId`(U4 소관) · `companionUserId`(U9, DEC-U3-8로 제외). **컬럼도 만들지 않는다** — 유닛이 오면 그때 추가.
 - **보존 정책**: 여행 종료 시 U5 아카이브 change-log로 이관/참조되는지는 **U5 설계에서 결정**(여기서 정하지 않음).
 
@@ -88,7 +93,7 @@
 | **INV-U3-03** | `isFixed=true` 슬롯은 재생성·repair·되돌리기 어느 경로에서도 시각이 바뀌지 않는다(HC3) |
 | **INV-U3-04** | `status=CONFIRMED`인 동안 슬롯 변경 API는 거부된다 |
 | **INV-U3-05** | 확정 시 모든 슬롯의 `poiSnapshotId`가 채워진다(null 없음) |
-| **INV-U3-06** | `ItineraryRevision.seq`는 itinerary 안에서 유일·단조. 되돌리기도 **새 seq를 쌓는다**(이력 삭제 금지) |
+| **INV-U3-06** | `ItineraryRevision.seq`는 **trip 안에서** 유일·단조(§2.1 정정 근거 참조). 되돌리기도 **새 seq를 쌓는다**(이력 삭제 금지) |
 | **INV-U3-07** | 초안 단계(h11·h17) 응답에는 **고정 블록을 제외한 슬롯의 시각을 렌더하지 않는다**(DEC-U3-3) — 데이터는 있어도 표시하지 않는다 |
 | **INV-U3-08** | 재생성 계열 동작은 **직전 상태를 리비전으로 남긴 뒤에만** 실행된다(§business-logic-model 1.1) |
 
