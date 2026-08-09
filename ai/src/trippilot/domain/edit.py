@@ -1,7 +1,10 @@
-"""편집 도메인 타입 (domain-entities.md §5, business-rules.md §6).
+"""편집 도메인 타입 (U1 FD domain-entities §5, business-rules.md §6).
 
 파괴적 편집 확인 필수: destructive op 또는 affected>1이면 CONFIRM_REQUIRED.
 resolve_apply_mode는 domain 내 순수 함수 (테스트 가능·결정론).
+
+`EditTranslation`은 EDIT_TRANSLATION 게이트 통과 후에만 만들어지는 **승격 타입** —
+규격 소유는 u4 FD domain-entities §4 (검증 전 데이터는 도메인 타입이 되지 못한다).
 """
 
 from __future__ import annotations
@@ -61,6 +64,28 @@ def resolve_apply_mode(cmd: EditCommand) -> ApplyMode:
     if cmd.op in DESTRUCTIVE_OPS or len(cmd.affected_slots) > 1:
         return ApplyMode.CONFIRM_REQUIRED
     return ApplyMode.AUTO_APPLY
+
+
+@dataclass(frozen=True, slots=True)
+class EditTranslation:
+    """번역 결과 = 명령 초안 + **코드가 확정한** 반영 모드 (u4 FD domain-entities §4).
+
+    LLM이 제안한 applyMode는 여기 도달하지 못한다 (게이트가 버리고 재계산).
+    솔버 검증·실제 반영은 EditAgent(U5) 몫 — 이 타입은 초안까지다 (INV-2).
+    """
+
+    command: EditCommand
+    apply_mode: ApplyMode
+
+    def to_dict(self) -> dict:
+        return {"command": self.command.to_dict(), "applyMode": self.apply_mode.value}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "EditTranslation":
+        return cls(
+            command=EditCommand.from_dict(d["command"]),
+            apply_mode=ApplyMode(d["applyMode"]),
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -47,7 +47,7 @@
 | `agent-structure-v2.md` §1 용어표 | "Background(자율 트리거형)" 범주 행 추가 — Agent 4종 제한의 적용 범위를 "라우팅 대상"으로 한정 명문화 |
 | `intent-matching-design.md` §4 | `llm.parse_intent` 소유를 "Orchestrator 전용" 명시 (현행 "C1 (경량)" 표기를 소유 주체 기준으로 정정) |
 | `orchestrator-delegation-design.md` §5 | 라우팅 테이블에 "자율 트리거형은 라우팅 테이블 밖 (issued_by=BACKGROUND_TRIGGER)" 각주 |
-| `u4-c1-gateway/functional-design/domain-entities.md` §1 | LlmFeature 표에 EDIT_TRANSLATION 행 추가 (BR-AF-07 절차의 일부) |
+| `u4-c1-gateway/functional-design/domain-entities.md` §1 | LlmFeature 표에 EDIT_TRANSLATION 행 추가 (BR-AF-07 절차의 일부) — **반영 완료 (TRIP-315)**, 미결 #4 표기 동반 |
 | `agent-io-contracts.md` §5 | 정보 계층 명칭을 v2 용어(Provider)로 정합화 + FreshnessMeta 정의 위치를 본 FD `domain/freshness.py`로 참조 전환 |
 | `ai/README.md` 도구 제한 표 | `llm.parse_intent` 행의 Edit 열 → Orchestrator 열로 이동, `llm.translate_edit` 행 신설 |
 

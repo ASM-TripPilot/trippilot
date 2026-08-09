@@ -5,9 +5,13 @@
   ② 결정론: 동일 입력 2회 → 동일 해 (소규모=OPTIMAL 도달, U5-P3)
   ③ 체인 통합: 가해 문제에서 facade가 OR_TOOLS 해를 선택 (규칙 폴백보다 우선)
   ④ U5-P6: budget_fit 단조성 — 저비용 POI는 예산↓일수록 보상↑, 고비용은 반대
+  ⑤ TRIP-314: 웜스타트 하위 문제가 좁히는 필드 외 전 필드를 원본 그대로 승계
 """
 
 from __future__ import annotations
+
+from dataclasses import fields
+from unittest.mock import patch
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -89,3 +93,32 @@ def test_budget_fit_unknown_cost_is_budget_neutral() -> None:
     assert (budget_fit(None, BudgetLevel.LOW)
             == budget_fit(None, BudgetLevel.MID)
             == budget_fit(None, BudgetLevel.HIGH))
+
+
+# ⑤ 회귀(TRIP-314) — 웜스타트 하위 문제의 필드 승계
+# 하루로 좁히는 3필드 외에는 원본을 그대로 이어받아야 한다. 필드를 나열해
+# 재구성하면 나중에 추가된 필드가 조용히 빠진다(TRIP-292의 excluded_poi_ids).
+# dataclasses.fields로 순회하므로 ItineraryProblem에 필드가 늘어도 자동 적용.
+_NARROWED_BY_GREEDY_HINT = {"days", "candidates", "fixed_blocks"}
+
+
+@settings(max_examples=10, deadline=None)
+@given(setup=solver_setups())
+def test_greedy_hint_subproblem_carries_over_untouched_fields(setup) -> None:
+    problem, index = setup
+    captured: list = []
+    original = RuleFallbackSolver.solve
+
+    def capturing(self, sub, *args, **kwargs):
+        captured.append(sub)
+        return original(self, sub, *args, **kwargs)
+
+    with patch.object(RuleFallbackSolver, "solve", capturing):
+        OrToolsSolver(index, _EST, _CFG)._greedy_hint(problem, problem.days[0], set())
+
+    assert len(captured) == 1
+    sub = captured[0]
+    for f in fields(problem):
+        if f.name in _NARROWED_BY_GREEDY_HINT:
+            continue
+        assert getattr(sub, f.name) == getattr(problem, f.name), f.name
