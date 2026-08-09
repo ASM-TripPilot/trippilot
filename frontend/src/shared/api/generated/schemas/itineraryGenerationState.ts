@@ -8,7 +8,7 @@
  */
 
 /**
- * 생성 진행 상태(확정 상태와 다른 축) — PARTIAL=day1만 채워짐(2단계 생성 중) · COMPLETE=전 일자 완료 · FAILED=2차 실패(1차분은 유효). **PARTIAL 인 동안 확정은 409**(day1만 동결된 채 잠기는 것 방지).
+ * 생성 진행 상태(확정 상태와 다른 축) — PARTIAL=day1만 채워짐(2단계 생성 중) · COMPLETE=전 일자 완료 · FAILED=2차 실패(1차분은 유효). **PARTIAL 인 동안 확정·편집은 409** (day1만 동결된 채 잠기거나, 뒤이어 도착하는 2차 결과가 편집을 덮어쓰는 것 방지). 생성 POST 는 day1 만 담은 PARTIAL 을 즉시 반환하므로, 클라이언트는 GET 으로 COMPLETE/FAILED 까지 폴링해 나머지 일자를 받는다(여행이 하루면 즉시 COMPLETE).
  */
 export type ItineraryGenerationState =
   (typeof ItineraryGenerationState)[keyof typeof ItineraryGenerationState];

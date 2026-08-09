@@ -17,4 +17,20 @@ export type ItineraryDaysItemSlotsItem = {
   endsNextDay: boolean;
   /** 편집 재검증(HC1-4) 위반 표시(비차단) */
   hasViolation: boolean;
+  /** 이 장소를 고른 이유(BR-U2-04). 문구는 시각·소요시간을 언급하지 않는다(BR-U2-09) — 집행은 AI 프롬프트·후처리 책임이고 경계에서 문자열 검사는 하지 않는다. */
+  placementReason?: string | null;
+  /** 직전 지점에서의 이동 **거리 표시 문자열**(BR-U2-08) — 예 "약 1.2km · 도보 추정". 직선거리 폴백이면 "추정" 표기가 포함된다. 소요시간은 어떤 이유로도 싣지 않는다(INV-3). 편집 직후에는 순서가 바뀌어 값이 무효라 null 이다(재산출은 TRIP-309). */
+  distanceRange?: string | null;
+  nameKo?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  category?: string | null;
+  /** 영업시간 **원문 문자열**(자유형) — 기계 판정에 쓰지 말 것. structured 스키마는 U6. NULL = 미확인. */
+  openingHours?: string | null;
+  /** 영업시간 확인 여부. false 면 확정 배치가 아니라 **사용자 확인 후보**로 분리한다 (US-SCHED-03 예외). 현재는 값 유무 판정까지만 신뢰할 수 있다. **확정된 일정(status=CONFIRMED)에서는 null** — 확정 전 분류 신호라 확정 뒤에는 판정 대상이 아니다(정본을 따라가면 확정 슬롯이 사후에 재분류된다). */
+  openingHoursKnown?: boolean | null;
+  /** NULL = 미확보. 기본 이미지를 지어내지 않는다(TRIP-219) */
+  imageUrl?: string | null;
+  /** 미확보 시 빈 배열 */
+  tags: string[];
 };

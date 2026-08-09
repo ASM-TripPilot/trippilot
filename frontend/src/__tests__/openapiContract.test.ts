@@ -179,11 +179,57 @@ function extractRequiredLines(schemaBlock: string): string[] {
   );
 }
 
+/**
+ * `required: [a, b, c]` 줄에서 **필드 이름만** 원소 단위로 뽑는다(모든 층을 합쳐서).
+ *
+ * ⚠️ 부분 문자열로 재면 안 된다 — `'hasViolation'.includes('lat')` 가 **참**이다
+ * (hasVio·**lat**·ion). "선택 필드가 required 로 승격되지 않았다"를 `줄.includes(이름)` 으로
+ * 재면 `lat` 이 영구 오탐으로 걸린다(실측 — 02a ★1). 목록을 쪼개 원소로 비교하면 그 구멍이
+ * 없다: 현행 `[]`, `nameKo` 를 승격시킨 뮤테이션에서는 `['nameKo']` 만 잡힌다.
+ */
+function extractRequiredFieldNames(requiredLines: string[]): string[] {
+  return requiredLines.flatMap((line) =>
+    line
+      .replace(/^required: \[/, '')
+      .replace(/\]$/, '')
+      .split(', ')
+  );
+}
+
+/** 스키마 블록 안에 **YAML 키로 선언된** 이름 중 없는 것을 모은다. 줄 앵커(`^ *이름:`)를
+ * 쓰는 이유는 위와 같다 — 짧은 이름(`lat`·`lng`)이 남의 식별자 안에 박혀 있어도 오탐하지
+ * 않는다. `category` 가 `shortfallCategories` 에 걸리지 않는 것도 실측 확인(02a V-2). */
+function findMissingSchemaKeys(block: string, names: string[]): string[] {
+  return names.filter((name) => !new RegExp(`^ *${name}:`, 'm').test(block));
+}
+
 /** 스키마 블록 안 `enum: [...]` 조각 전부(등장 순서 그대로). */
 const ENUM_LIST_PATTERN = /enum: \[[^\]]*\]/g;
 function extractEnumLists(schemaBlock: string): string[] {
   return [...schemaBlock.matchAll(ENUM_LIST_PATTERN)].map((match) => match[0]);
 }
+
+/**
+ * TRIP-307·308·306 이 슬롯에 더한 **선택 9필드**(`tags` 는 required 라 여기 없다).
+ * 근거: BR-U2-04(`placementReason`) · BR-U2-08(`distanceRange`) · BR-U3-09(POI 표면 5종) ·
+ * `openingHours`/`openingHoursKnown`(영업시간 원문·확인 여부 — **소요시간이 아니다**).
+ * 전부 nullable 이고 동시에 전부 null 일 수 있다("정본·동결본 모두 없으면 전부 null").
+ */
+const OPTIONAL_SLOT_FIELDS = [
+  'placementReason',
+  'distanceRange',
+  'nameKo',
+  'lat',
+  'lng',
+  'category',
+  'openingHours',
+  'openingHoursKnown',
+  'imageUrl',
+];
+
+/** BR-U2-05 `candidatesSummary` 의 선택 2필드. `poolSize` 는 AI 가 안 주면 **없다**(0으로
+ * 채우지 않는다 — 0은 "후보 0건"이라는 판정이라서). */
+const OPTIONAL_CANDIDATES_SUMMARY_FIELDS = ['poolSize', 'shortfallCategories'];
 
 /**
  * INV-3 — duration 계열이 **YAML 키로 선언된 자리**만 잡는다(글자 등장이 아니다).
@@ -437,25 +483,38 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
    * `startAt`/`endAt`=**INV-2**(솔버 검증값만) · duration 부재=**INV-3**·BR-U3-08·BR-U2-08
    * ("경계에 소요시간 필드를 추가하는 변경은 어떤 이유로도 금지").
    *
+   * ⚠️ **2026-08-08 계약 확장 흡수** — `origin/develop` 머지(`b7baff0`)가 슬롯에 10필드
+   * (`tags` 필수 + 선택 9)를, 최상위에 `candidatesSummary`(BR-U2-05)를 더했다. required 줄이
+   * 3 → 4로 늘었고 슬롯 required 는 6 → 7이 됐다. 이 단언이 **이 사이클에서 유일하게 실제로
+   * red 였던 자리**다 — 계약 원문을 읽는 심판이라 상류가 앞서 나가면 즉시 빨개진다(설계
+   * 의도대로 작동한 것). 함께 더한 선택 필드 대조군의 이유는 아래 단언 주석에 있다.
+   *
    * **값 조합은 보지 않는다** — `(solveMode, isFallback)`의 금지 짝 `(FULL_AI,true)`·
    * `(MINIMAL,false)`(BR-U2-03)는 대응 PBT `PBT-U2-B2`가 **backend 소유**로 명시돼 있다.
    * 프론트는 형태(필드가 있다/필수다/값 목록이 이것뿐이다)까지만 잠근다(01b Seed 확정 3).
    */
-  it('Itinerary가 필수 7필드·day 2필드·slot 6필드를 요구하고 duration 계열 키가 0건이다', () => {
+  it('Itinerary가 필수 7필드·후보요약 1필드·day 2필드·slot 7필드를 요구하고 duration 계열 키가 0건이다', () => {
     const source = readOpenapiSource();
     const block = extractSchemaBlock(source, 'Itinerary');
 
     // 앵커 — 슬라이싱이 실제로 뭔가를 잡았다는 증거. 이웃 스키마로 새지 않는 것은 실측으로
-    // 확인했다(02a §5).
+    // 확인했다 — 시작 문자열이 `\n    Itinerary:\n` 로 콜론+줄바꿈까지 요구해서
+    // `ItinerarySnapshot:`(뒤가 `S`)에 안 걸린다. 이 블록에 `ItinerarySnapshot`·`ChangeLog`
+    // 글자는 0건이다(02a V-4).
     expect(block.length).toBeGreaterThan(0);
 
-    // 완전 일치(순서 포함) — 세 층의 required 줄. 필드가 하나라도 빠지거나 늘면 즉시 red.
+    // 완전 일치(순서 포함) — 네 층의 required 줄. 필드가 하나라도 빠지거나 늘면 즉시 red.
     // `generationState`는 #118(TRIP-267 day1 선행)이 더한 축이다 — 확정 상태(status)와
-    // **다른 축**이고, PARTIAL 인 동안 확정이 409가 되는 근거다.
+    // **다른 축**이고, PARTIAL 인 동안 확정·편집이 409가 되는 근거다.
+    //
+    // `required: [level]` 이 **2번째 자리**라는 것도 정보다: `candidatesSummary`(BR-U2-05)가
+    // `days` 보다 앞에 선언돼 있다는 사실이 순서로 함께 잠긴다. `tags` 는 슬롯 required 의
+    // 마지막 원소이고 미확보 시 **빈 배열**이지 누락이 아니다.
     expect(extractRequiredLines(block)).toEqual([
       'required: [itineraryId, tripId, status, solveMode, isFallback, generationState, days]',
+      'required: [level]',
       'required: [date, slots]',
-      'required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation]',
+      'required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, tags]',
     ]);
 
     // 완전 일치(순서 포함) — enum 값이 추가·삭제·개명되면 즉시 red.
@@ -473,6 +532,26 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
     // 부정 단언은 "왜 duration 글자가 이 블록에 있는가"의 설명을 잃고, 다음 사람이 주석을
     // 지우는 것으로 red를 "고치는" 길이 열린다. 주석만 지워도 여기서 red가 난다.
     expect(block).toContain('# INV-3: 소요시간(duration) 필드 없음');
+
+    // 긍정(대조군) — **신규 선택 필드가 실재한다.** required 줄만 보는 위 단언은 선택 필드를
+    // 아무도 안 본다: 서버가 `distanceRange`·`nameKo` 를 통째로 빼도 required 4줄은 그대로라
+    // 계약 테스트가 침묵한다. 없는 이름을 모아 실패 diff에 **무엇이 사라졌는지** 찍는다.
+    expect(findMissingSchemaKeys(block, OPTIONAL_SLOT_FIELDS)).toEqual([]);
+    expect(
+      findMissingSchemaKeys(block, OPTIONAL_CANDIDATES_SUMMARY_FIELDS)
+    ).toEqual([]);
+
+    // 부정 짝 — 그 선택 필드들이 **required 로 승격되지 않았다.** 승격은 계약 위반이다:
+    // 열 개 전부 nullable 이고 "정본·동결본 모두 없으면 전부 null" 이 정상값이라, 필수가
+    // 되는 순간 서버가 값을 지어내야 한다(TRIP-219 `imageUrl` 과 같은 취지).
+    const requiredFieldNames = extractRequiredFieldNames(
+      extractRequiredLines(block)
+    );
+    const promoted = [
+      ...OPTIONAL_SLOT_FIELDS,
+      ...OPTIONAL_CANDIDATES_SUMMARY_FIELDS,
+    ].filter((name) => requiredFieldNames.includes(name));
+    expect(promoted).toEqual([]);
   });
 
   it('GenerateItineraryRequest는 generationMode가 선택이고 값이 2종뿐이다', () => {

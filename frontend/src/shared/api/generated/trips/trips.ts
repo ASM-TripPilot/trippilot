@@ -26,11 +26,13 @@ import type {
   AddMustVisitRequest,
   AssignBaseRequest,
   BaseAssignment,
+  ChangeLog,
   Coverage,
   CreateTripRequest,
   EditItineraryRequest,
   EditTripRequest,
   GenerateItineraryRequest,
+  GetTripsTripIdChangeLogParams,
   Itinerary,
   MustVisit,
   Trip,
@@ -1459,7 +1461,8 @@ export function useGetTripsTripIdItinerary<
 }
 
 /**
- * @summary AI 일정 생성 — 소유 여행 날짜 기준 ScheduleAgent 호출·영속(첫 슬라이스). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+ * 첫날(day1)만 담긴 `generationState=PARTIAL` 응답을 즉시 돌려주고, 나머지 일자는 백그라운드로 채운다. 클라이언트는 GET 으로 `COMPLETE`(전 일자 완료) 또는 `FAILED`(2차 중단) 까지 폴링한다. 여행이 하루면 2차 없이 즉시 `COMPLETE`. PARTIAL 인 동안 확정·편집은 409. 재생성(이 POST)에는 상태 제한이 없다 — 중단된 생성(PARTIAL)에서 벗어나는 탈출구이자, **확정된 일정을 다시 짜는 유일한 경로**다(확정 해제 API 없음). 확정 일정에 호출하면 확정이 풀리고 PLANNED 새 일정으로 대체되며, 동결됐던 poi_snapshot 참조는 사라진다.
+ * @summary AI 일정 생성 — day1 먼저 반환(2단계). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
  */
 export const postTripsTripIdItinerary = (
   tripId: string,
@@ -1520,7 +1523,7 @@ export type PostTripsTripIdItineraryMutationBody =
 export type PostTripsTripIdItineraryMutationError = void;
 
 /**
- * @summary AI 일정 생성 — 소유 여행 날짜 기준 ScheduleAgent 호출·영속(첫 슬라이스). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
+ * @summary AI 일정 생성 — day1 먼저 반환(2단계). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
  */
 export const usePostTripsTripIdItinerary = <TError = void, TContext = unknown>(
   options?: {
@@ -1544,7 +1547,7 @@ export const usePostTripsTripIdItinerary = <TError = void, TContext = unknown>(
   );
 };
 /**
- * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409
+ * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정·생성 중 일정은 409
  */
 export const putTripsTripIdItinerary = (
   tripId: string,
@@ -1604,7 +1607,7 @@ export type PutTripsTripIdItineraryMutationBody = EditItineraryRequest;
 export type PutTripsTripIdItineraryMutationError = void;
 
 /**
- * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409
+ * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정·생성 중 일정은 409
  */
 export const usePutTripsTripIdItinerary = <TError = void, TContext = unknown>(
   options?: {
@@ -1628,7 +1631,7 @@ export const usePutTripsTripIdItinerary = <TError = void, TContext = unknown>(
   );
 };
 /**
- * @summary 일정 확정 — PLANNED→CONFIRMED 단방향 잠금
+ * @summary 일정 확정 — PLANNED→CONFIRMED(재확정 409). 재생성 POST 는 확정을 되돌린다
  */
 export const postTripsTripIdItineraryConfirm = (
   tripId: string,
@@ -1685,7 +1688,7 @@ export type PostTripsTripIdItineraryConfirmMutationResult = NonNullable<
 export type PostTripsTripIdItineraryConfirmMutationError = void;
 
 /**
- * @summary 일정 확정 — PLANNED→CONFIRMED 단방향 잠금
+ * @summary 일정 확정 — PLANNED→CONFIRMED(재확정 409). 재생성 POST 는 확정을 되돌린다
  */
 export const usePostTripsTripIdItineraryConfirm = <
   TError = void,
@@ -1711,6 +1714,183 @@ export const usePostTripsTripIdItineraryConfirm = <
     queryClient
   );
 };
+/**
+ * 확정된 변경을 사유·전후 스냅숏·시각·출처와 함께 남긴 append-only 이력(US-PLANB-09). 현재 출처는 수동 편집(MANUAL)뿐 — Plan-B·어시스턴트는 해당 모듈과 함께 붙는다.
+ * @summary 변경 이력 타임라인 — "이날 무엇을 왜 바꿨는지"(최신순)
+ */
+export const getTripsTripIdChangeLog = (
+  tripId: string,
+  params?: GetTripsTripIdChangeLogParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<ChangeLog>({
+    url: `/trips/${tripId}/change-log`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetTripsTripIdChangeLogQueryKey = (
+  tripId: string,
+  params?: GetTripsTripIdChangeLogParams
+) => {
+  return [`/trips/${tripId}/change-log`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetTripsTripIdChangeLogQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdChangeLogParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetTripsTripIdChangeLogQueryKey(tripId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdChangeLog>>
+  > = ({ signal }) => getTripsTripIdChangeLog(tripId, params, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: tripId !== null && tripId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdChangeLogQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdChangeLog>>
+>;
+export type GetTripsTripIdChangeLogQueryError = void;
+
+export function useGetTripsTripIdChangeLog<
+  TData = Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+  TError = void,
+>(
+  tripId: string,
+  params: undefined | GetTripsTripIdChangeLogParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdChangeLog>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdChangeLog<
+  TData = Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdChangeLogParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdChangeLog>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdChangeLog<
+  TData = Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdChangeLogParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 변경 이력 타임라인 — "이날 무엇을 왜 바꿨는지"(최신순)
+ */
+
+export function useGetTripsTripIdChangeLog<
+  TData = Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdChangeLogParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdChangeLog>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdChangeLogQueryOptions(
+    tripId,
+    params,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
 /**
  * @summary 필수 방문지 삭제
  */

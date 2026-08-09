@@ -45,39 +45,43 @@ import path from 'path';
  *     (TRIP-220 AC-2, B-11)
  *   - `trips/trips.ts`가 일정 4오퍼레이션의 함수·훅·쿼리키 헬퍼를 갖는다
  *     (TRIP-294 AC-1, B-12)
- *   - 응답 슬롯 6필드가 전부 필수이고 요청 슬롯은 4필수+1선택이다(TRIP-294 AC-3, B-13)
+ *   - 응답 슬롯 7필드가 전부 필수이고, 신규 선택 9필드가 선택으로 실재한다
+ *     (TRIP-294 AC-3 + 2026-08-08 계약 확장, B-13)
+ *   - `candidatesSummary` 타입이 `level` 필수 + `| null` 을 유지한다(B-13-c)
  *   - 일정 enum 4종의 값 목록이 정확하다(TRIP-294 AC-3, B-14)
- *   - `trips/trips.ts`의 재생성 前 export 심볼 69개가 전부 보존된다
- *     (TRIP-294 AC-4③, B-15)
- *   - 일정 생성물 12파일에 duration 계열 식별자 0건(INV-3, B-16)
+ *   - `trips/trips.ts`의 export 심볼 하한 92개가 전부 보존된다(B-15)
+ *   - **일정 표면 파일**(패턴으로 고른다)에 duration 계열 식별자 0건(INV-3, B-16)
+ *   - 그 판정 패턴 자체가 의도한 것을 잡고 남의 스키마를 안 잡는다(B-16-a)
  *   - `package.json`의 `codegen` 스크립트가 포매터를 이어 돌린다(TRIP-294 AC-6, B-17)
  *
- * **B. 이행 체크포인트 — 한시적이다.** 생성 파일 **목록**을 동결 8경로로 정확히 고정한다
- * (B-1). 다른 태그를 `orval.config.ts`의 `filters.tags`에 추가하는 정당한 후속 티켓이 이
- * 숫자를 8 → N으로 만든다. 완화형: **"8경로를 부분집합으로 포함하고, `stays/stays.ts`가
- * 목록에 있다"**(개수 앵커와 엔드포인트 파일 존재는 그대로 지킨다).
+ * **B. 이행 체크포인트 — 2026-08-08 격하 집행으로 종료했다.**
+ * B-1(생성 파일 목록)은 **완전 일치에서 "부분집합 + 개수 하한 + 태그 폴더 집합"으로 격하**
+ * 됐다(사용자 확정 D1). 헤더가 예고한 "2회 누적 시 즉시 완화형" 조건이 6회차에 충족됐다 —
+ * 8 → 12 → 17 → 18 → 49 → 56 → 67 로 여섯 번 늘었고 **전부 정당한 계약 변경**이었다.
+ *   - 버리는 것: **파일이 늘어나는 것**을 더는 안 본다. 기존 태그 아래 새 오퍼레이션이
+ *     붙어 스키마가 늘어도 침묵한다 — 그것이 이 격하로 산 것이다(계약이 늘 때마다 사람이
+ *     목록을 손으로 옮겨 적던 비용).
+ *   - 부수 이득: **셸 `sort` ≠ JS `sort` 함정이 구조적으로 사라진다** — 목록을 다시 뽑아
+ *     붙일 일이 없어졌다(아래 하한 목록은 격하 시점 이후 갱신 대상이 아니다).
  *
- * **B 카운터**: 이 파일 전용. 현재값 = **5**.
- * ⚠️ **TRIP-294(20260808)에서 `4` → `5`로 올렸다.** itinerary 4오퍼레이션 재생성이 목록을
- * 56 → 67로 만들어 B-1이 또 red를 냈다 — 제외구 AND 조건에 걸린다(① 이 단언을 만든 사이클
- * 밖의 작업 ② 목록을 갱신하지 않고는 통과 불가). 이번에도 **격하하지 않고 갱신만 한다**
- * (01b Seed 확정 2) — 격하는 가드를 약화시키는 방향이라 사용자 판정 사안이고, 이번 칸의
- * 스코프 밖으로 미뤘다. 판정 자체는 여전히 미결이다.
- * ⚠️ **TRIP-220(20260803)에서 `0` → `4`로 정정했다.** 숫자만 0에 멈춰 있었을 뿐 실적은
- * 처음부터 0이 아니었다 — TRIP-203 devlog가 이미 "헤더는 0이라 적었는데 실적은 3건
- * (TRIP-183·TRIP-202·TRIP-211재생성)"을 실측으로 남겼고, 여기에 이번 TRIP-220(places 태그
- * 추가로 49→56)이 더해져 4다. 넷 다 제외구 AND 조건에 걸린다 — ① 이 단언을 만든 사이클
- * 밖의 작업이고 ② 목록을 갱신하지 않고는 통과할 수 없다.
- * 즉 아래 "2회 누적 시 격하" 시점은 **이미 지났다.** 그런데도 이번에도 **격하하지 않고
- * 갱신만 한다**(01b Seed §3): 격하는 가드를 약화시키는, 덜 되돌리기 쉬운 방향이라 사용자
- * 판정 사안이고 사용자 부재 중 대신 정하지 않는다. 숫자가 틀린 채로 두면 다음 사람도 같은
- * 판정을 또 미루므로 **카운터만 실적값으로 고친다.** 격하/존치 판정은 여전히 미결이다.
- * **B 카운터 제외구**(`fsdStructure.test.ts`·`tabbarVisual.test.ts` 헤더에서 계승): 세는
- * red는 ① 이 단언을 만든 사이클 **밖**의 작업이 낸 것이고 ② B 단언 자체를 갱신하지 않고는
- * 통과할 수 없는 것이다(AND). 이번 사이클의 출생 red(B-1~B-5)는 전부 제외구에 걸려 세지
- * 않는다 — 출생 red는 마찰이 아니라 가드가 실효함을 증명하는 정반대의 증거다.
- * **B 완화 시점**: 정당한 신규 작업이 B 때문에 red를 낸 것이 2회 누적되면 즉시 위 완화형으로
- * 격하한다(사이클 종료를 기다리지 않는다).
+ * ⚠️ **게이트①-2 정정 — 격하가 문서보다 넓게 뚫려 있었다.** 위 "버리는 것"을 *증가 방향*
+ * 으로만 적었으나, 실제로 잃었던 것은 **하한 목록 밖의 삭제**까지였다. 목록을 갱신하지
+ * 않기로 못 박았으므로 신규 8파일과 앞으로 생길 모든 파일이 영구히 목록 밖에 놓이는데,
+ * 개수 하한이 목록 길이(67)에 묶여 있어 **신규 7파일을 한꺼번에 지워도 통과**했다(실측).
+ * 개수 하한을 실측값으로 분리해(`GENERATED_FILE_COUNT_FLOOR`) 닫았다.
+ *
+ * **지금의 정확한 분담**(읽는 사람이 B-1 하나가 다 한다고 오해하지 않도록):
+ *   - 하한 목록 **안**의 삭제·개명 → B-1 차집합
+ *   - **모든** 파일의 삭제(목록 밖 포함) → B-1 개수 앵커
+ *   - 목록 **밖** 파일의 개명 → **무심판**. 배럴까지 함께 개명되면 `pnpm tsc`도 조용하다.
+ *     사정거리는 D4(`/change-log` 앵커 미설치)가 정한 범위와 같다.
+ *   - 새 태그 유입 → B-1 폴더 집합
+ *
+ * **B 카운터**: 최종값 **6**에서 종료. 더 세지 않는다 — 세던 마찰(목록 손질)이 격하로
+ * 사라졌으므로 숫자를 계속 굴리는 것이야말로 유지 판정 없는 장치다.
+ * (이력: 0 → 4 정정(TRIP-220) → 5(TRIP-294) → 6에서 격하 집행. 제외구 AND 조건은
+ * ① 단언을 만든 사이클 **밖**의 작업이 낸 red이고 ② 단언을 갱신하지 않고는 통과 불가.
+ * 여섯 건 전부 조건에 걸렸다.)
  */
 
 const ROOT = path.resolve('src');
@@ -124,12 +128,16 @@ function readGeneratedSource(...segments: string[]): string {
 }
 
 /**
- * 동결 67경로(02a §0 실측 그대로 — 재타이핑 금지).
+ * **하한 67경로** — "정확히 이 목록"이 아니라 "적어도 이것들은 있어야 한다"다(D1 격하).
  *
- * 순서는 JS `Array.prototype.sort()`(UTF-16 코드 단위) 기준이다. 셸 `sort`는 로케일 정렬이라
- * `prefScalarAxis.ts`의 자리가 달라진다 — 목록을 셸에서 뽑아 붙이면 완전 일치가 깨진다.
- * TRIP-220이 더한 두 경로가 같은 함정의 또 다른 예다: `savePlaceRequest.ts`가
- * `savedPlace.ts`**보다 앞**이다(`'P'`=80 < `'d'`=100 — 셸 정렬이면 뒤집힌다).
+ * 격하 전에는 완전 일치였고, 계약이 늘 때마다 사람이 목록을 다시 뽑아 옮겨 적어야 했다.
+ * 이제 **차집합만 본다** — 여기 있는 이름이 생성물에서 사라지거나 개명되면 red, 새 파일이
+ * 늘어나는 것은 통과. 그래서 이 배열은 **더 갱신하지 않는다**(늘어나도 하한은 유효하다).
+ *
+ * 순서는 이제 의미가 없다(부분집합 비교라서). 완전 일치이던 시절의 함정만 기록으로 남긴다:
+ * JS `Array.prototype.sort()`는 UTF-16 코드 단위, 셸 `sort`는 로케일 정렬이라 결과가 다르고
+ * `prefScalarAxis.ts`·`savePlaceRequest.ts`의 자리가 갈렸다. **격하로 이 함정의 사정거리가
+ * 0이 됐다** — 목록을 다시 뽑을 일이 없어졌기 때문이다.
  *
  * 8 → 12 → 17 → 18 → 49 → 56 → 67로 여섯 번 늘었고 전부 의도된 계약 변경이다.
  * - **TRIP-294**(67): 태그 추가가 아니라 **openapi가 먼저 나아간 것을 따라잡는 재생성**이다.
@@ -154,9 +162,10 @@ function readGeneratedSource(...segments: string[]): string {
  *   *"다른 태그가 필요해지면 그 티켓에서 tags 배열에 추가해 재생성한다"*). '내 주변' 권한
  *   거부 시 등록 숙소 좌표로 대체 조회하는 데 필요하다(BR-U1-11).
  *
- * **개수가 아니라 목록 전체를 잠그는 성질은 그대로다** — 의도치 않은 태그가 섞이면 여전히 잡힌다.
+ * ⚠️ **"의도치 않은 태그가 섞이면 잡힌다"는 성질은 이 배열이 더는 담당하지 않는다** —
+ * 아래 `GENERATED_TAG_DIRS`로 옮겼다.
  */
-const GENERATED_FILES_FROZEN = [
+const GENERATED_FILES_FLOOR = [
   'shared/api/generated/places/places.ts',
   'shared/api/generated/preferences/preferences.ts',
   'shared/api/generated/saved-stays/saved-stays.ts',
@@ -227,6 +236,39 @@ const GENERATED_FILES_FROZEN = [
 ];
 
 /**
+ * 생성물 최상위 폴더 = `orval.config.ts`의 `filters.tags` 그 자체(+공용 `schemas`).
+ *
+ * D1 격하로 파일 목록이 부분집합이 되면서 **"의도치 않은 태그가 섞여 들어오는 것"을 아무도
+ * 안 보게 됐다** — 부분집합도 개수 하한도 *늘어나는* 방향을 막지 못한다. 그 구멍만 여기서
+ * 메운다: `tags-split` 모드는 태그마다 폴더를 가르므로 **새 태그는 반드시 새 폴더를 만든다.**
+ *
+ * 유지 비용이 0에 가깝다는 것이 이 앵커의 정당성이다 — 태그를 바꿀 때만 변하고, 계약이
+ * 늘어나는 것으로는 절대 변하지 않는다(D1이 사려던 비용을 되살리지 않는다).
+ * 이번 확장의 `/trips/{tripId}/change-log`도 태그가 `trips`라 새 폴더를 만들지 않는다.
+ */
+const GENERATED_TAG_DIRS = [
+  'places',
+  'preferences',
+  'saved-stays',
+  'schemas',
+  'stays',
+  'trips',
+];
+
+/**
+ * 생성 파일 **총 개수의 하한**(2026-08-08 재생성 후 실측 75 = 하한 목록 67 + 신규 8).
+ *
+ * 하한 목록과 **따로 세는 이유**: 목록은 D1 격하로 더 이상 갱신하지 않기로 했으므로, 앞으로
+ * 생기는 파일은 전부 이름이 안 적힌 채로 남는다. 이름이 없으면 차집합이 그 소실을 못 본다 —
+ * **개수만이 볼 수 있다.** 이 상수를 목록 길이(67)로 두면 신규 8파일이 통째로 심판 밖이 된다
+ * (게이트①-2에서 실측으로 드러난 구멍).
+ *
+ * 계약이 확장되면 이 숫자는 올린다. 목록과 달리 **한 줄**이라 유지 비용이 D1이 없애려던
+ * 그 비용(67줄을 다시 뽑아 옮겨 적기)과는 자릿수가 다르다.
+ */
+const GENERATED_FILE_COUNT_FLOOR = 75;
+
+/**
  * TRIP-203 AC-7 — 재생성이 기존 엔드포인트 파일을 흔들지 않는다. **원본 바이트**의 sha256을
  * 동결한다(주석 제거를 거치지 않는다 — 가공하면 "바이트 동일"이라는 뜻 자체가 사라진다).
  * 값은 HEAD `df43082` 시점 커밋본 실측이고, 4태그 재생성 + prettier 후에도 같은 값이 나오는
@@ -287,21 +329,22 @@ function extractExportSymbols(source: string): string[] {
 }
 
 /**
- * TRIP-294 AC-4③ — 재생성 **前** 커밋본 `trips/trips.ts`의 export 심볼 전부(69개).
- * 추출 시점이 중요하다: 재생성 후에 뽑으면 itinerary 신규 심볼이 섞여 기준선이 무의미해진다.
+ * `trips/trips.ts`가 **적어도** 내보내야 하는 export 심볼 92개(2026-08-08 실측).
  *
- * ⚠️ **01b Seed는 "36개"라 적었다.** 36은 `export const`만 센 수이고(브리프 각주가 스스로
- * 인정한다 — `useGetTripsTripIdItinerary` 가 `export function` 이라 diff에 안 잡혔다는 대목),
- * 실제 export 심볼은 `const` 36 + `function` 5 + `type` 28 = **69**다. 69를 쓰는 이유는 Seed가
- * 개수 하한을 기각할 때 든 바로 그 근거다 — openapi에 `operationId`가 0건이라 orval이
- * method+path로 이름을 짓고, 경로가 조금만 바뀌면 이름이 통째로 바뀌므로 **개명이 실제
- * 위험**이다. 36 목록은 화면이 실제로 import 하는 조회 훅 5개(`useGetTrips`·
- * `useGetTripsTripIdCoverage` 등, 전부 `export function` 오버로드)를 통째로 놓친다.
+ * ⚠️ **취지가 바뀌었다(사용자 확정 D3): "재생성 前 스냅숏" → "현행 계약이 낳은 심볼의 하한".**
+ * 이전 값 69는 TRIP-294 *재생성 전* 스냅숏이었고, 그대로 두면 **TRIP-294가 만든 itinerary
+ * 심볼 23개를 아무도 안 지켰다** — 그 심볼들은 소비자가 0이라 지워지거나 개명돼도 `pnpm tsc`
+ * 가 못 잡는다(컴파일러는 아무도 import 하지 않는 이름의 소실을 오류로 보지 않는다).
+ * 69 + 23 = 92가 현행 계약이 실제로 낳는 심볼이고, 이제 그 전부를 지킨다.
  *
- * **부분집합 포함 검사이지 완전 일치가 아니다** — 재생성으로 늘어나는 itinerary 신규 심볼
- * 23개는 허용된다. 이 단언이 잡는 것은 오직 "줄었다 / 이름이 바뀌었다"다.
+ * **부분집합 포함 검사이지 완전 일치가 아니다** — 이번 재생성이 더할 `/change-log` 신규
+ * 심볼은 허용된다(계약 앵커는 세우지 않는다 — 사용자 확정 D4: 소비자 0이고 화면 미착수).
+ * 이 단언이 잡는 것은 오직 "줄었다 / 이름이 바뀌었다"다.
+ *
+ * 개명이 실제 위험인 이유: openapi에 `operationId`가 0건이라 orval이 method+path로 이름을
+ * 짓는다 — 경로가 조금만 바뀌면 이름이 통째로 바뀐다.
  */
-const TRIPS_EXPORT_SYMBOLS_BEFORE = [
+const TRIPS_EXPORT_SYMBOLS_FLOOR = [
   'DeleteTripsTripIdBasesBaseAssignmentIdMutationError',
   'DeleteTripsTripIdBasesBaseAssignmentIdMutationResult',
   'DeleteTripsTripIdMustVisitsMustVisitIdMutationError',
@@ -314,6 +357,8 @@ const TRIPS_EXPORT_SYMBOLS_BEFORE = [
   'GetTripsTripIdBasesQueryResult',
   'GetTripsTripIdCoverageQueryError',
   'GetTripsTripIdCoverageQueryResult',
+  'GetTripsTripIdItineraryQueryError',
+  'GetTripsTripIdItineraryQueryResult',
   'GetTripsTripIdMustVisitsQueryError',
   'GetTripsTripIdMustVisitsQueryResult',
   'GetTripsTripIdQueryError',
@@ -327,9 +372,17 @@ const TRIPS_EXPORT_SYMBOLS_BEFORE = [
   'PostTripsTripIdBasesMutationBody',
   'PostTripsTripIdBasesMutationError',
   'PostTripsTripIdBasesMutationResult',
+  'PostTripsTripIdItineraryConfirmMutationError',
+  'PostTripsTripIdItineraryConfirmMutationResult',
+  'PostTripsTripIdItineraryMutationBody',
+  'PostTripsTripIdItineraryMutationError',
+  'PostTripsTripIdItineraryMutationResult',
   'PostTripsTripIdMustVisitsMutationBody',
   'PostTripsTripIdMustVisitsMutationError',
   'PostTripsTripIdMustVisitsMutationResult',
+  'PutTripsTripIdItineraryMutationBody',
+  'PutTripsTripIdItineraryMutationError',
+  'PutTripsTripIdItineraryMutationResult',
   'deleteTripsTripId',
   'deleteTripsTripIdBasesBaseAssignmentId',
   'deleteTripsTripIdMustVisitsMustVisitId',
@@ -342,6 +395,8 @@ const TRIPS_EXPORT_SYMBOLS_BEFORE = [
   'getGetTripsTripIdBasesQueryOptions',
   'getGetTripsTripIdCoverageQueryKey',
   'getGetTripsTripIdCoverageQueryOptions',
+  'getGetTripsTripIdItineraryQueryKey',
+  'getGetTripsTripIdItineraryQueryOptions',
   'getGetTripsTripIdMustVisitsQueryKey',
   'getGetTripsTripIdMustVisitsQueryOptions',
   'getGetTripsTripIdQueryKey',
@@ -349,16 +404,23 @@ const TRIPS_EXPORT_SYMBOLS_BEFORE = [
   'getPatchTripsTripIdMutationOptions',
   'getPostTripsMutationOptions',
   'getPostTripsTripIdBasesMutationOptions',
+  'getPostTripsTripIdItineraryConfirmMutationOptions',
+  'getPostTripsTripIdItineraryMutationOptions',
   'getPostTripsTripIdMustVisitsMutationOptions',
+  'getPutTripsTripIdItineraryMutationOptions',
   'getTrips',
   'getTripsTripId',
   'getTripsTripIdBases',
   'getTripsTripIdCoverage',
+  'getTripsTripIdItinerary',
   'getTripsTripIdMustVisits',
   'patchTripsTripId',
   'postTrips',
   'postTripsTripIdBases',
+  'postTripsTripIdItinerary',
+  'postTripsTripIdItineraryConfirm',
   'postTripsTripIdMustVisits',
+  'putTripsTripIdItinerary',
   'useDeleteTripsTripId',
   'useDeleteTripsTripIdBasesBaseAssignmentId',
   'useDeleteTripsTripIdMustVisitsMustVisitId',
@@ -366,11 +428,15 @@ const TRIPS_EXPORT_SYMBOLS_BEFORE = [
   'useGetTripsTripId',
   'useGetTripsTripIdBases',
   'useGetTripsTripIdCoverage',
+  'useGetTripsTripIdItinerary',
   'useGetTripsTripIdMustVisits',
   'usePatchTripsTripId',
   'usePostTrips',
   'usePostTripsTripIdBases',
+  'usePostTripsTripIdItinerary',
+  'usePostTripsTripIdItineraryConfirm',
   'usePostTripsTripIdMustVisits',
+  'usePutTripsTripIdItinerary',
 ];
 
 /** TRIP-294 AC-1 — 일정 4오퍼레이션이 만들어 내야 할 이름. axios 함수 4 + 훅 4 + 쿼리키 1.
@@ -388,21 +454,107 @@ const ITINERARY_EXPECTED_SYMBOLS = [
   'getGetTripsTripIdItineraryQueryKey',
 ];
 
-/** INV-3 스캔의 모집단 — 일정 계약이 실제로 들어앉는 12파일. `itinerary/` 폴더가 아니라
- * `trips/trips.ts` 안이라는 점이 이 목록의 요지다(`tags-split` 모드 + 태그가 `trips`). */
-const ITINERARY_GENERATED_FILES = [
-  'trips/trips.ts',
-  'schemas/itinerary.ts',
-  'schemas/itineraryDaysItem.ts',
-  'schemas/itineraryDaysItemSlotsItem.ts',
-  'schemas/itineraryGenerationState.ts',
-  'schemas/itinerarySolveMode.ts',
-  'schemas/itineraryStatus.ts',
-  'schemas/generateItineraryRequest.ts',
-  'schemas/generateItineraryRequestGenerationMode.ts',
-  'schemas/editItineraryRequest.ts',
-  'schemas/editItineraryRequestDaysItem.ts',
-  'schemas/editItineraryRequestDaysItemSlotsItem.ts',
+const GENERATED_PREFIX = 'shared/api/generated/';
+
+/**
+ * INV-3 깊은 스캔의 모집단을 **이름 목록이 아니라 판정으로** 고른다(사용자 확정 D2).
+ *
+ * 왜 바꿨나: 전에는 12개를 손으로 적어 뒀고, 계약이 확장될 때마다 새 파일이 **조용히 빠졌다**
+ * — 목록에 없으면 스캔도 안 되므로 아무도 red를 못 본다. 이번 확장만 해도 `candidatesSummary`·
+ * `itinerarySnapshot` 3종·`changeLog` 계열이 통째로 새로 생긴다. 판정으로 바꾸면 다음 확장은
+ * 손댈 것이 없다.
+ *
+ * 두 갈래로 본다 — **경로 이름** 또는 **파일이 실제로 나르는 식별자**:
+ *
+ * ① 경로 `/(itinerar|changelog)/i` — orval은 스키마 이름으로 파일명을 지으므로 `Itinerary*`·
+ *    `ChangeLog*` 계열이 전부 걸린다(`itinerarySnapshotDaysItemSlotsItem.ts`·
+ *    `getTripsTripIdChangeLogParams.ts` 같은 긴 이름까지).
+ *    ⚠️ **`snapshot`을 패턴에 넣으면 안 된다** — 무관한 `tripPreferenceSnapshot.ts`·
+ *    `createTripRequestPreferenceSnapshot.ts` 2개가 딸려 온다(실측). `itinerarySnapshot*`은
+ *    이미 `itinerar`에 걸리므로 좁은 패턴으로 충분하다.
+ *
+ * ② 내용 `/(Itinerary|ChangeLog)/` — 이름에 단서가 없는 파일도 일정 타입을 나르면 잡는다.
+ *    `trips/trips.ts`가 이 갈래로 들어온다(`tags-split` + 태그가 `trips`라 일정 4오퍼레이션이
+ *    `itinerary/` 폴더가 아니라 그 파일 안에 앉는다) — 덕분에 **하드코딩한 파일명이 0개**다.
+ *    ⚠️ **`\b`를 붙이면 안 된다.** `\b`는 비단어→단어 전이에서만 생기는데
+ *    `EditItineraryRequest`의 `I` 앞은 `t`(단어 문자)라 경계가 없다 — `/\bItinerary/`는 편집·
+ *    생성 요청 5파일을 통째로 놓친다(실측: 7건 vs 13건).
+ */
+const ITINERARY_SURFACE_PATH_PATTERN = /(itinerar|changelog)/i;
+const ITINERARY_SURFACE_IDENTIFIER_PATTERN = /(Itinerary|ChangeLog)/;
+
+function isItinerarySurface(relPath: string, strippedSource: string): boolean {
+  return (
+    ITINERARY_SURFACE_PATH_PATTERN.test(relPath) ||
+    ITINERARY_SURFACE_IDENTIFIER_PATTERN.test(strippedSource)
+  );
+}
+
+/** 생성물 전체에서 일정 표면 파일만 골라 `{경로, 주석 제거된 소스}`로 돌려준다. */
+function listItinerarySurfaceFiles(): { rel: string; source: string }[] {
+  return listGeneratedFiles()
+    .map((full) => full.slice(GENERATED_PREFIX.length))
+    .map((rel) => ({ rel, source: readGeneratedSource(...rel.split('/')) }))
+    .filter(({ rel, source }) => isItinerarySurface(rel, source));
+}
+
+/** 모집단 하한 — 2026-08-08 실측 13(하드코딩이던 12 + 배럴 `schemas/index.ts`). 재생성으로
+ * 늘어나므로 하한으로 쓴다. 이 앵커가 없으면 판정이 아무것도 못 고른 상태에서 "위반 0건"이
+ * 공허하게 통과한다. */
+const ITINERARY_SURFACE_FLOOR = 13;
+
+/**
+ * B-16-a 자기검증용 표본 — **손으로 쓴 문자열이지 파일 시스템 조회가 아니다.**
+ * 그래서 orval이 실제로 어떤 이름을 뱉든 이 케이스는 영향을 받지 않는다(codegen 실행 전에
+ * 쓸 수 있는 이유). 판정기가 무엇을 잡고 무엇을 안 잡는지를 **의도로 못 박는다.**
+ */
+const SURFACE_MATCHER_SAMPLES = [
+  // 경로로 잡히는 것 — 이번 계약 확장이 낳을 이름들. 목록에 손으로 넣지 않아도 걸린다.
+  { rel: 'schemas/itineraryCandidatesSummary.ts', source: '', selected: true },
+  {
+    rel: 'schemas/itinerarySnapshotDaysItemSlotsItem.ts',
+    source: '',
+    selected: true,
+  },
+  { rel: 'schemas/changeLogEntrySourceType.ts', source: '', selected: true },
+  {
+    rel: 'schemas/getTripsTripIdChangeLogParams.ts',
+    source: '',
+    selected: true,
+  },
+  // 내용으로 잡히는 것 — 이름에 단서가 없어도 일정 타입을 나르면 걸린다.
+  {
+    rel: 'trips/trips.ts',
+    source: 'export type X = Itinerary;',
+    selected: true,
+  },
+  // `\b` 함정의 산증인 — 이름이 전혀 다른 파일이 편집 요청 타입만 나르는 경우.
+  {
+    rel: 'schemas/visitSlot.ts',
+    source: "import type { EditItineraryRequest } from './x';",
+    selected: true,
+  },
+  // 안 잡혀야 하는 것 — `Snapshot` 글자만 같은 남의 스키마.
+  {
+    rel: 'schemas/tripPreferenceSnapshot.ts',
+    source: 'export interface TripPreferenceSnapshot {}',
+    selected: false,
+  },
+  {
+    rel: 'schemas/createTripRequestPreferenceSnapshot.ts',
+    source: 'export type CreateTripRequestPreferenceSnapshot = {};',
+    selected: false,
+  },
+  {
+    rel: 'schemas/place.ts',
+    source: 'export interface Place { poiId: string; }',
+    selected: false,
+  },
+  {
+    rel: 'stays/stays.ts',
+    source: 'export const getStaysSearch = () => {};',
+    selected: false,
+  },
 ];
 
 /**
@@ -419,6 +571,27 @@ const FORBIDDEN_DURATION_PATTERNS = [
   /travelTime/i,
   /elapsed/i,
   /\bminutes\b/i,
+];
+
+/**
+ * 2026-08-08 계약 확장이 응답 슬롯에 더한 **선택 9필드**(`tags`는 required 라 여기 없다).
+ * 근거: BR-U2-04(`placementReason` 추천 근거) · BR-U2-08(`distanceRange` 이동 **거리** 문자열)
+ * · BR-U3-09(POI 표면 `nameKo`·`lat`·`lng`·`category`·`imageUrl`) · `openingHours`(영업시간
+ * 원문)·`openingHoursKnown`(확인 여부).
+ *
+ * ⚠️ **`openingHours`는 영업시간이지 소요시간이 아니다** — INV-3 금칙어 스캔(B-4·B-16)이
+ * 이 이름에 걸리지 않는 것을 확인했다. `distanceRange`도 거리이지 시간이 아니다.
+ */
+const SLOT_OPTIONAL_FIELDS = [
+  'placementReason',
+  'distanceRange',
+  'nameKo',
+  'lat',
+  'lng',
+  'category',
+  'openingHours',
+  'openingHoursKnown',
+  'imageUrl',
 ];
 
 /** `package.json`을 읽는다. jest의 실행 기준 디렉토리가 `frontend/` 라서 상대 경로로 닿는다
@@ -456,10 +629,45 @@ describe('스캔 전처리 · 주석 제거 자기검증 — B 파일 전체의 
   });
 });
 
-describe('AC-2 ②③ · 생성 파일 인벤토리 — 동결 67경로 (B-1, 한시 — 위 졸업 조건 B)', () => {
-  it('src/shared/api/generated/ 아래 .ts 파일 목록이 동결 67경로와 정확히 같다', () => {
-    // 개수 > 0이 아니라 목록 전체를 잠근다 — 필터에 다른 태그가 섞여 들어와도 잡힌다.
-    expect(listGeneratedFiles()).toEqual(GENERATED_FILES_FROZEN);
+describe('AC-2 ②③ · 생성 파일 인벤토리 — 하한 목록 + 개수 + 태그 폴더 (B-1, 완화형)', () => {
+  /**
+   * **완전 일치에서 격하된 자리다**(사용자 확정 D1 · 위 졸업 조건 B). 무엇을 잃고 무엇을
+   * 지키는지가 이 세 단언에 그대로 나뉘어 있다:
+   *   - 잃음: 파일이 **늘어나는** 것 자체는 안 본다(목록을 손으로 갱신하지 않기 위한 대가).
+   *   - 지킴 ①: 하한 목록(67) 안의 삭제·개명 → 차집합.
+   *   - 지킴 ②: **파일이 줄어드는 것 전부** → 개수 앵커(하한 목록 **밖**의 신규 파일 포함).
+   *   - 지킴 ③: 의도치 않은 새 태그 유입 → 폴더 집합(전에는 목록 완전 일치가 겸하던 몫).
+   *
+   * ⚠️ **게이트①-2에서 지킴 ②를 조였다.** 전에는 개수 하한이 `GENERATED_FILES_FLOOR.length`
+   * (67)여서 실제 75개 중 **8개가 사라져도 통과**했다 — 하한 목록 밖의 신규 파일이 통째로
+   * 심판 밖이었다(실측: 신규 7파일 동시 삭제 → 34 passed). 개수 하한을 현행 실측값으로 올려
+   * **하나만 없어져도 걸리게** 했다. 목록은 손대지 않았다 — 목록을 손으로 늘리는 비용을
+   * 없애는 것이 D1의 취지이고, 개수만 조여도 구멍이 닫힌다.
+   *
+   * **남는 사각 하나**: 하한 목록 **밖** 파일의 *개명*은 개수가 그대로라 여기서 안 걸린다.
+   * 파일과 배럴(`schemas/index.ts`)이 **함께** 개명되면 `pnpm tsc`도 조용하다. 사정거리는
+   * D4(`/change-log` 앵커 미설치)가 정한 범위와 같다 — 그 계약을 쓰는 화면이 붙는 티켓에서
+   * 앵커와 함께 닫는다.
+   */
+  it('하한 67경로가 하나도 사라지지 않았고, 총 개수가 줄지 않았고, 태그 폴더가 정확히 6개다', () => {
+    const files = listGeneratedFiles();
+
+    // 지킴 ① — 사라진 이름을 모아 비교한다. 실패 diff에 **무엇을 잃었는지**가 그대로 찍힌다.
+    const missing = GENERATED_FILES_FLOOR.filter((rel) => !files.includes(rel));
+    expect(missing).toEqual([]);
+
+    // 지킴 ② — 개수 앵커. 하한 목록 밖의 신규 파일은 이름이 안 적혀 있으므로 **개수만이**
+    // 그 소실을 잡는다. 늘어나는 것은 여전히 통과한다(계약 확장은 정상).
+    expect(files.length).toBeGreaterThanOrEqual(GENERATED_FILE_COUNT_FLOOR);
+
+    // 지킴 ③ — 태그 폴더 완전 일치. `tags-split`은 태그마다 폴더를 가르므로 새 태그가
+    // 섞여 들어오면 여기서 즉시 red다(파일이 몇 개 늘었는지는 더 이상 묻지 않는다).
+    const dirs = [
+      ...new Set(
+        files.map((rel) => rel.slice(GENERATED_PREFIX.length).split('/')[0])
+      ),
+    ].sort();
+    expect(dirs).toEqual(GENERATED_TAG_DIRS);
   });
 });
 
@@ -770,7 +978,7 @@ describe('TRIP-294 AC-1 · 일정 클라이언트가 실제로 생성됐다 (B-1
   });
 });
 
-describe('TRIP-294 AC-3 · 슬롯 필드 계약 — 응답 6필수 vs 요청 4필수 (B-13)', () => {
+describe('슬롯 필드 계약 — 응답 7필수+선택 9 vs 요청 4필수 (B-13)', () => {
   /**
    * 추적: `endsNextDay`=자정 넘김(HC4) · `hasViolation`=편집 후 위반 가시화(US-SCHED-07,
    * 비차단) · `startAt`/`endAt`=**INV-2**(솔버 검증값만 사용자에게 보인다).
@@ -779,19 +987,21 @@ describe('TRIP-294 AC-3 · 슬롯 필드 계약 — 응답 6필수 vs 요청 4�
    * `PBT-U2-B2`는 정본이 **backend 소유**로 명시했고, 소스 텍스트 스캔은 원리적으로 값
    * 조합을 볼 수 없다. 프론트는 형태까지만 잠근다(01b Seed 확정 3).
    */
-  it('응답 슬롯 6필드가 전부 필수이고, 옵셔널로 풀린 흔적이 없다', () => {
+  it('응답 슬롯 7필드가 전부 필수이고, 신규 선택 9필드가 선택으로 실재한다', () => {
     const source = readGeneratedSource(
       'schemas',
       'itineraryDaysItemSlotsItem.ts'
     );
 
-    // 긍정 — 실측 그대로의 6줄. 타입까지 함께 잠근다.
+    // 긍정 — 실측 그대로의 7줄. 타입까지 함께 잠근다. `tags`는 2026-08-08 확장이 더한
+    // 일곱 번째 필수 필드다(미확보 시 **빈 배열**이지 누락이 아니다 — `place.ts`와 같은 규칙).
     expect(source).toContain('poiId: string;');
     expect(source).toContain('startAt: string;');
     expect(source).toContain('endAt: string;');
     expect(source).toContain('isFixed: boolean;');
     expect(source).toContain('endsNextDay: boolean;');
     expect(source).toContain('hasViolation: boolean;');
+    expect(source).toContain('tags: string[];');
 
     // 부정 짝 — 옵셔널로 뒤집힌 흔적. 긍정만 두면 "전부 옵셔널로 푸는" 오생성을 못 가르고,
     // 부정만 두면 파일이 통째로 비어도 통과한다(B-7과 같은 짝 구성).
@@ -802,8 +1012,30 @@ describe('TRIP-294 AC-3 · 슬롯 필드 계약 — 응답 6필수 vs 요청 4�
       'isFixed?',
       'endsNextDay?',
       'hasViolation?',
+      'tags?',
     ].filter((name) => source.includes(name));
     expect(loosened).toEqual([]);
+
+    // 긍정(대조군) — **신규 선택 9필드가 실재한다.** 필수 필드만 재던 위 단언들은 이 아홉을
+    // 아무도 안 봤다: 서버가 `distanceRange`·`nameKo`를 통째로 빼도 필수 7줄은 그대로라
+    // 생성물 테스트가 침묵한다. 이 아홉이 h11 타임라인·h05 지도가 추가 왕복 없이 카드를
+    // 그리는 유일한 데이터 원본이다(BR-U3-09).
+    const absentOptional = SLOT_OPTIONAL_FIELDS.filter(
+      (name) => !new RegExp(`^ *${name}\\?: `, 'm').test(source)
+    );
+    expect(absentOptional).toEqual([]);
+
+    // 부정 짝 — 그 아홉이 **필수로 뒤집힌 흔적**. 전부 nullable 이고 동시에 전부 null 일 수
+    // 있는 것이 정상값이라("정본·동결본 모두 없으면 전부 null"), 필수가 되면 서버가 값을
+    // 지어내야 한다.
+    //
+    // ⚠️ `source.includes('lat:')` 로 재지 않고 줄 앵커 정규식을 쓰는 이유: 짧은 이름이 남의
+    // 식별자 안에 박힌다. openapi 쪽 같은 단언에서 **`hasViolation`이 `lat`을 품어**(hasVio·
+    // lat·ion) 부분 문자열 방식이 영구 오탐을 냈다(실측). 줄 앵커에는 그 구멍이 없다.
+    const promoted = SLOT_OPTIONAL_FIELDS.filter((name) =>
+      new RegExp(`^ *${name}: `, 'm').test(source)
+    );
+    expect(promoted).toEqual([]);
   });
 
   it('요청 슬롯은 endsNextDay가 선택이고 hasViolation이 아예 없다 (대조군)', () => {
@@ -838,6 +1070,55 @@ describe('TRIP-294 AC-3 · 슬롯 필드 계약 — 응답 6필수 vs 요청 4�
 
     // 부정 짝 — 선택으로 풀린 흔적.
     expect(source).not.toContain('generationState?');
+
+    // 긍정(대조군) — 2026-08-08 확장이 더한 최상위 선택 속성(BR-U2-05 후보 충분성).
+    // 여기서는 **속성이 실렸는지**만 본다. 그 속성이 가리키는 타입의 내용은 아래 별도
+    // 케이스가 잠근다(게이트①-2에서 그 자리가 통째로 비어 있던 것이 드러났다).
+    expect(source).toContain('candidatesSummary?');
+
+    // 부정 짝 — 필수로 뒤집힌 흔적. `nullable: true`이고 required 밖이라 선택이 정상이다
+    // (AI가 값을 안 주거나 형태가 다르면 null).
+    expect(source).not.toContain('candidatesSummary:');
+  });
+
+  it('candidatesSummary 타입이 level을 필수로 갖고 null을 허용한다 (B-13-c)', () => {
+    /**
+     * ⚠️ **게이트①-2에서 추가한 자리다.** 위 케이스는 `itinerary.ts`에 `candidatesSummary?`
+     * 라는 **글자가 있는지**만 봤고, 그 속성이 가리키는 타입 파일의 내용은 한 줄도 안 쟀다 —
+     * `level`을 지워도, `| null`을 지워도 전건 green이었다(실측). 이 스위트의 존재 이유가
+     * "생성물이 커밋돼 있어 계약과 갈라져도 아무도 모르는 사각지대"를 메우는 것인데, 이번
+     * 확장의 핵심 신설물에 대해 정확히 그 사각지대가 다시 열려 있었다.
+     *
+     * 게이트① 시점에는 타입 **이름**을 잠그지 않는 것이 옳았다(재생성 전이라 알 수 없었고,
+     * 적으면 심판이 산출물을 베끼는 형태가 된다). 그 이유는 이제 소멸했다 — 이름이
+     * `ItineraryCandidatesSummary`로 실측됐다.
+     */
+    const source = readGeneratedSource(
+      'schemas',
+      'itineraryCandidatesSummary.ts'
+    );
+
+    // 앵커 — 파일을 실제로 읽었다. 이게 없으면 아래 단언이 빈 문자열을 상대로 공허해진다.
+    expect(source).toContain('export type ItineraryCandidatesSummary =');
+
+    // 긍정 — `level`은 이 타입의 **유일한 필수 필드**다(openapi `required: [level]`).
+    // 값이 `string`인 것도 함께 잠근다: 계약이 일부러 enum을 안 박았다(*"판정은 AI 소유 —
+    // 백엔드가 통과시키는 값이므로 AI 어휘가 그대로 나갈 수 있다"*).
+    expect(source).toContain('level: string;');
+
+    // 부정 짝 — 선택으로 풀린 흔적.
+    expect(source).not.toContain('level?');
+
+    // 긍정 — **삼중 옵셔널의 세 번째 다리**. 이 타입은 `{...} | null` 이고 부모에서 `?`가
+    // 한 겹 더 붙어 최종적으로 `{...} | null | undefined` 가 된다. `| null`이 사라지면
+    // "AI가 값을 안 주면 null"이라는 계약(`nullable: true`)이 타입에서 소실되고, 화면이
+    // `== null` 분기를 지워도 컴파일러가 침묵한다.
+    expect(source).toContain('} | null;');
+
+    // 긍정(대조군) — 선택 2필드가 실재한다. `shortfallCategories`에 `| null`이 없는 것은
+    // 계약 그대로다(그 필드만 openapi에 nullable이 없다) — 이 차이를 함께 박아 둔다.
+    expect(source).toContain('poolSize?: number | null;');
+    expect(source).toContain('shortfallCategories?: string[];');
   });
 });
 
@@ -886,20 +1167,21 @@ describe('TRIP-294 AC-3 · 일정 enum 4종의 값 목록 (B-14)', () => {
   });
 });
 
-describe('TRIP-294 AC-4③ · 재생성이 기존 심볼을 지우지 않았다 (B-15, 선제 green)', () => {
+describe('재생성이 기존 심볼을 지우지 않았다 — 하한 92 (B-15, 선제 green)', () => {
   /**
-   * ⚠️ **선제 green** — 기준선을 지금 이 파일에서 뽑았으니 당연히 통과한다. **이 단언의
+   * ⚠️ **선제 green** — 하한을 지금 이 파일에서 뽑았으니 당연히 통과한다. **이 단언의
    * 심판 시점은 재생성 후**다. 지금 초록인 것이 정상이고, 재생성이 심볼을 지우거나 개명하면
    * 그때 red가 된다.
    *
-   * B-9(SHA256 바이트 동결)를 `trips/trips.ts` 에 걸 수 없어서 생긴 자리다 — 이번 재생성이
+   * B-9(SHA256 바이트 동결)를 `trips/trips.ts` 에 걸 수 없어서 생긴 자리다 — 재생성이
    * **바꾸는 대상** 파일이라 해시를 걸면 자기모순이다. 그래서 "바이트가 같다" 대신
    * "**줄지 않았다**"만 골라 잰다.
    *
-   * `pnpm tsc` 만으로는 부족하다: **소비자가 0인 심볼**(bases·coverage·must-visits 등 다수)이
-   * 개명돼도 아무도 import 하지 않으므로 컴파일러가 못 잡는다. 이 단언이 그 사각지대를 메운다.
+   * `pnpm tsc` 만으로는 부족하다: **소비자가 0인 심볼**(bases·coverage·must-visits·itinerary
+   * 전부)이 개명돼도 아무도 import 하지 않으므로 컴파일러가 못 잡는다. 이 단언이 그 사각지대를
+   * 메운다 — 기준선을 69에서 92로 올린 이유가 정확히 그것이다(D3).
    */
-  it('재생성 前 export 심볼 69개가 전부 여전히 존재한다(초과는 허용)', () => {
+  it('현행 계약이 낳은 export 심볼 92개가 전부 여전히 존재한다(초과는 허용)', () => {
     const source = readGeneratedSource('trips', 'trips.ts');
     const symbols = extractExportSymbols(source);
 
@@ -907,15 +1189,15 @@ describe('TRIP-294 AC-4③ · 재생성이 기존 심볼을 지우지 않았다 
     expect(symbols.length).toBeGreaterThan(0);
 
     // 사라진 이름을 모아 비교한다 — 실패 diff에 **무엇을 잃었는지**가 그대로 찍힌다.
-    // 완전 일치가 아니라 부분집합 포함이다: itinerary 신규 심볼이 늘어나는 것은 정상이다.
-    const missing = TRIPS_EXPORT_SYMBOLS_BEFORE.filter(
+    // 완전 일치가 아니라 부분집합 포함이다: `/change-log` 신규 심볼이 늘어나는 것은 정상이다.
+    const missing = TRIPS_EXPORT_SYMBOLS_FLOOR.filter(
       (name) => !symbols.includes(name)
     );
     expect(missing).toEqual([]);
   });
 });
 
-describe('TRIP-294 AC-2 · INV-3 — 일정 생성물에 소요시간 계열 0건 (B-16)', () => {
+describe('INV-3 — 일정 표면 생성물에 소요시간 계열 0건 (B-16, 패턴 스캔)', () => {
   /**
    * 추적: **INV-3**(루트 CLAUDE.md·`ai/README.md` — "duration 표시 금지, 거리만. DTO에
    * duration 필드 자체가 없어야 함") · BR-U3-08 · **BR-U2-08**("경계에 소요시간 필드를
@@ -927,36 +1209,72 @@ describe('TRIP-294 AC-2 · INV-3 — 일정 생성물에 소요시간 계열 0�
    * "안 만들어졌다"와 "만들어졌는데 깨끗하다"를 가른다. 금칙 목록도 더 넓다(위
    * `FORBIDDEN_DURATION_PATTERNS` 주석 참조).
    *
+   * ⚠️ **2026-08-08: 모집단이 하드코딩 12파일에서 판정으로 바뀌었다**(사용자 확정 D2).
+   * 손으로 적은 목록은 계약이 확장될 때마다 새 파일을 조용히 놓쳤다 — 목록에 없으면 스캔도
+   * 안 되므로 아무도 red를 못 본다. 판정 근거와 두 가지 함정(`snapshot` 오탐 · `\b` 누락)은
+   * `isItinerarySurface` 주석에 있고, 판정기 자체는 아래 B-16-a가 지킨다.
+   *
    * ⚠️ **거짓 RED 주의(사전 신고)**: 주석을 걷어내지 않으면 걸린다. orval이 openapi의
    * `summary`를 JSDoc으로 그대로 복사하는데 그 문장이 **"소요시간 미노출(INV-3)"** 이다 —
-   * INV-3을 지킨다고 **선언하는** 문장이지 위반이 아니다. 생성물의 `소요` 는 재생성 후
-   * 2건 → **6건**(trips.ts에 4건 추가)이 되고, `stripComments` 후에는 **0건**이다.
-   * qa-verifier의 수기 INV-3 grep이 이 6건을 만나므로 02 매핑 표에 같은 신고가 실려 있다.
+   * INV-3을 지킨다고 **선언하는** 문장이지 위반이 아니다. `stripComments` 후에는 **0건**이다.
+   *
+   * ⚠️ **게이트①-2 정정 — 실측 8건이다**(신고서에 6건이라 적혀 있었다. 재생성 前 전제도
+   * 틀렸다: `trips/trips.ts`는 그 시점에 이미 4건이었다). 내역:
+   *   `places/places.ts` 1 · `stays/stays.ts` 1 · `trips/trips.ts` 4 ·
+   *   **`schemas/itineraryDaysItemSlotsItem.ts` 2**(이번 재생성이 더한 것 —
+   *   `placementReason`·`distanceRange`의 JSDoc이고 둘 다 *"소요시간을 언급/탑재하지
+   *   않는다"*는 **수호 문장**이지 위반이 아니다).
+   * qa-verifier의 수기 INV-3 grep이 이 **8건**을 만난다 — 숫자가 어긋나면 차이를 미신고
+   * 위반으로 읽어 FAIL로 오판한다. 02 매핑 표에도 같은 값으로 신고가 실려 있다.
+   * 라틴 문자 `duration`·`travelTime`·`elapsed`·`minutes`는 생성물 75파일 전체에 0건이다.
    */
-  it('일정 12파일을 실제로 읽었고(Itinerary·슬롯·요청 타입 존재), 소요시간 계열은 0건이다', () => {
-    const sources = ITINERARY_GENERATED_FILES.map((rel) =>
-      readGeneratedSource(...rel.split('/'))
-    );
+  it('패턴이 고른 일정 표면 파일에 소요시간 계열이 0건이다', () => {
+    const surface = listItinerarySurfaceFiles();
 
-    // 앵커 ① — 12파일이 하나도 빠짐없이 읽혔다. 빈 문자열이 섞이면 그 경로가 diff에 찍힌다.
-    const emptyFiles = ITINERARY_GENERATED_FILES.filter(
-      (_rel, index) => sources[index].length === 0
-    );
+    // 앵커 ① — 판정이 실제로 파일을 골랐다. 이게 없으면 패턴이 아무것도 못 잡은 상태에서
+    // "위반 0건"이 공허하게 통과한다. 하한이므로 재생성이 파일을 더해도 그대로 유효하다.
+    expect(surface.length).toBeGreaterThanOrEqual(ITINERARY_SURFACE_FLOOR);
+
+    // 앵커 ② — 고른 파일이 하나도 빠짐없이 읽혔다. 빈 문자열이 섞이면 그 경로가 diff에 찍힌다.
+    const emptyFiles = surface
+      .filter(({ source }) => source.length === 0)
+      .map(({ rel }) => rel);
     expect(emptyFiles).toEqual([]);
 
-    // 앵커 ② — 모집단이 실제로 일정 계약이다. 이게 없으면 아래 "0건"이 공허해진다.
-    const combined = sources.join('\n');
+    // 앵커 ③ — 모집단이 실제로 일정 계약이다. 이게 없으면 아래 "0건"이 공허해진다.
+    const combined = surface.map(({ source }) => source).join('\n');
     expect(combined).toContain('Itinerary');
     expect(combined).toContain('ItineraryDaysItemSlotsItem');
     expect(combined).toContain('EditItineraryRequest');
 
     // 부정 — 위반 파일을 모아 실패 diff에 **어느 파일이** 오염됐는지 찍는다.
-    const offenders = ITINERARY_GENERATED_FILES.filter((_rel, index) =>
-      FORBIDDEN_DURATION_PATTERNS.some((pattern) =>
-        pattern.test(sources[index])
+    const offenders = surface
+      .filter(({ source }) =>
+        FORBIDDEN_DURATION_PATTERNS.some((pattern) => pattern.test(source))
       )
-    );
+      .map(({ rel }) => rel);
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('INV-3 모집단 판정기 자기검증 — 무엇을 잡고 무엇을 안 잡나 (B-16-a)', () => {
+  /**
+   * B-0(`stripComments` 자기검증)과 같은 자리의 장치다. B-16의 모집단이 **하드코딩 목록에서
+   * 판정으로** 바뀌면서, 이제 "무엇이 스캔되는가"가 정규식 두 줄에 달렸다 — 그 두 줄이 조용히
+   * 무뎌지면 INV-3 스캔이 빈손으로 통과한다.
+   *
+   * 표본은 **손으로 쓴 문자열**이라 파일 시스템·codegen 실행과 무관하다. 그래서 이 케이스는
+   * 재생성 전에도 심판을 세울 수 있고, orval이 실제로 어떤 이름을 뱉든 흔들리지 않는다.
+   */
+  it('일정·변경이력 파일을 잡고, 이름만 비슷한 남의 스키마는 안 잡는다', () => {
+    // 실행 — 표본마다 판정기를 태우고 기대와 어긋난 것만 모은다.
+    const misjudged = SURFACE_MATCHER_SAMPLES.filter(
+      (sample) =>
+        isItinerarySurface(sample.rel, sample.source) !== sample.selected
+    ).map((sample) => sample.rel);
+
+    // 단언 — 실패 diff에 **어느 경로에서 판정이 어긋났는지**가 그대로 찍힌다.
+    expect(misjudged).toEqual([]);
   });
 });
 
