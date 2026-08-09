@@ -22,7 +22,7 @@ from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from trippilot.c1.config import C1Config
-from trippilot.c1.gates.edit_translation import EditTranslation, EditTranslationGate
+from trippilot.c1.gates.edit_translation import EditTranslationGate
 from trippilot.c1.gateway import GatewayFacade
 from trippilot.c1.prompts import PromptRegistry
 from trippilot.c1.workers.edit_translation import (
@@ -31,7 +31,13 @@ from trippilot.c1.workers.edit_translation import (
     build_edit_translation_vars,
 )
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
-from trippilot.domain.edit import ApplyMode, EditCommand, EditOp, resolve_apply_mode
+from trippilot.domain.edit import (
+    ApplyMode,
+    EditCommand,
+    EditOp,
+    EditTranslation,
+    resolve_apply_mode,
+)
 from trippilot.domain.llm import CandidatePool, LlmFeature, ModelTier
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from tests.fakes.fake_llm import FailingLlm, FakeLlm
