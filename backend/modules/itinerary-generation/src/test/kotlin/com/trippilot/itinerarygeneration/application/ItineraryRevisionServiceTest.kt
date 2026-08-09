@@ -177,7 +177,7 @@ class ItineraryRevisionServiceTest : StringSpec({
         shouldThrow<ConflictDetected> { svc.restore(acc, tripId, revs.stored.single().revisionId) }
     }
 
-    "타 계정·타 일정의 리비전은 404" {
+    "타 계정이거나 없는 리비전이면 404" {
         val revs = Revisions()
         val base = itinerary(listOf(slot(cafe, "10:00", "11:00")))
         val svc = service(revs, Itineraries(base))
@@ -185,6 +185,23 @@ class ItineraryRevisionServiceTest : StringSpec({
 
         shouldThrow<ResourceNotFound> { svc.restore(UUID.randomUUID(), tripId, revs.stored.single().revisionId) }
         shouldThrow<ResourceNotFound> { svc.restore(acc, tripId, UUID.randomUUID()) }
+    }
+
+    "다른 여행의 리비전을 이 여행에 복원할 수 없다(404)" {
+        // **실재하는데 다른 여행 것**이어야 이 가드를 지난다 — 없는 id 로는 앞단 조회에서 걸려 가드를 밟지 못한다.
+        // 이 여행은 내 것이라 소유권 검사도 통과하므로, 남는 방어선은 리비전의 여행 범위 확인뿐이다.
+        val revs = Revisions()
+        val mine = itinerary(listOf(slot(cafe, "10:00", "11:00")))
+        val svc = service(revs, Itineraries(mine))
+        val othersTrip = UUID.randomUUID()
+        val others = Itinerary.reconstitute(
+            UUID.randomUUID(), othersTrip, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            GenerationState.COMPLETE, listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, "20:00", "21:00")))), now, now, null,
+        )
+        svc.record(others, RevisionActor.USER, RevisionKind.EDIT, "남의 여행")
+        val foreign = revs.stored.single { it.tripId == othersTrip }
+
+        shouldThrow<ResourceNotFound> { svc.restore(acc, tripId, foreign.revisionId) }
     }
 
     "되돌린 결과에도 위반 사유가 붙는다(배지만 켜면 화면이 이유를 못 그린다)" {
