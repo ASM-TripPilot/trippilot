@@ -11,11 +11,14 @@ import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.MinimalItineraryFallback
+import com.trippilot.itinerarygeneration.domain.RevisionActor
+import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
+import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -48,6 +51,7 @@ class GenerateItineraryService(
     private val itineraries: ItineraryRepository,
     private val events: DomainEventPublisher,
     private val secondPhase: SecondPhaseGenerator,
+    private val revisions: ItineraryRevisionService,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
 ) {
@@ -59,6 +63,10 @@ class GenerateItineraryService(
         // 소유·기간은 위에서 선검증 — 거점 앵커는 기간을 넘겨 조립(중복 trip 조회 없음).
         val stayAnchors = baseAnchors.findStayNightAnchors(tripId, ctx.startDate, ctx.endDate)
         val planDates = planDates(ctx.startDate, ctx.endDate)
+
+        // 직접 만들기는 AI 를 아예 부르지 않는다 — 빈 일자만 깔고 사용자가 편집으로 채운다(US-SCHED-09).
+        // 상대 enum 에 MANUAL 이 없어 경계로 나가면 422 이므로, 여기서 갈라 아예 호출 경로에 들어가지 않게 한다.
+        if (mode == GenerationMode.MANUAL) return createEmpty(tripId, ctx, planDates, previousOf(tripId))
 
         // day1 조기 노출(TRIP-267 · PR #104 합의): 1차는 첫날만 짧은 시한으로 풀어 즉시 반환하고,
         // 나머지 일자는 배정된 POI 를 제외 목록으로 넘겨 백그라운드 2차 호출로 채운다(AI 는 동기 REST 유지).
@@ -88,10 +96,19 @@ class GenerateItineraryService(
         // 단일일 여행이면 1차로 끝 — 2차 없이 COMPLETE.
         val state = if (remainingDates.isEmpty()) GenerationState.COMPLETE else GenerationState.PARTIAL
 
+        // 재생성이라면 **직전 상태로 돌아갈 지점**이 반드시 있어야 한다(INV-U3-08 · BR-U3-19).
+        val previous = previousOf(tripId)
+
         // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
         val saved = tx.execute {
-            val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, state, firstDates))
+            previous?.let { revisions.ensureRestorePoint(it) }
+            val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, mode, state, firstDates))
             events.publish(ItineraryGenerated(it.itineraryId.toString(), tripId.toString(), it.isFallback))
+            // 리비전은 **생성이 끝난 상태**에서만 남긴다. 여기서 PARTIAL(day1만)을 남기면 그 스냅숏으로 되돌릴 때
+            // 2차가 채운 나머지 일자가 통째로 사라진다 — 다일 여행은 2차 완료 시점에 남긴다(SecondPhaseGenerator).
+            if (state == GenerationState.COMPLETE) {
+                revisions.record(it, RevisionActor.AI, kindFor(previous), summaryFor(previous))
+            }
             it
         }!!
 
@@ -108,10 +125,43 @@ class GenerateItineraryService(
             secondPhase.completeRemaining(
                 tripId, saved.itineraryId,
                 secondInput.copy(excludedPoiIds = secondInput.excludedPoiIds.filterNot { it in fixedInSecond }),
+                isRegeneration = previous != null,
             )
         }
         return saved
     }
+
+    private fun previousOf(tripId: UUID) = itineraries.findByTrip(tripId).firstOrNull()
+
+    /**
+     * 빈 일정 — 일자만 있고 슬롯이 없다. AI 산출물이 아니므로 [SolveMode.MINIMAL]·`isFallback=false` 다
+     * (폴백이 아니라 **사용자가 고른 방식**이다 — isFallback 을 켜면 화면이 "AI 실패"로 오해한다).
+     */
+    private fun createEmpty(
+        tripId: UUID,
+        ctx: TripGenerationContext,
+        dates: List<LocalDate>,
+        previous: Itinerary?,
+    ): Itinerary = tx.execute {
+        previous?.let { revisions.ensureRestorePoint(it) } // 전환 전 상태를 남긴다 — 진행분이 사라지지 않게
+        val empty = Itinerary.create(
+            tripId, SolveMode.MINIMAL, GenerationMode.MANUAL, isFallback = false,
+            days = dates.mapIndexed { i, d -> ItineraryDay.of(d, i, emptyList()) },
+            now = clock.instant(), generationState = GenerationState.COMPLETE, candidatesSummary = null,
+        )
+        val saved = itineraries.replaceForTrip(tripId, empty)
+        events.publish(ItineraryGenerated(saved.itineraryId.toString(), tripId.toString(), saved.isFallback))
+        revisions.record(
+            saved, RevisionActor.USER,
+            if (previous == null) RevisionKind.BASELINE else RevisionKind.GENERATE,
+            "직접 만들기로 시작",
+        )
+        saved
+    }!!
+
+    /** 최초 생성이면 기준 버전(BASELINE), 재생성이면 GENERATE. */
+    private fun kindFor(previous: Itinerary?) = if (previous == null) RevisionKind.BASELINE else RevisionKind.GENERATE
+    private fun summaryFor(previous: Itinerary?) = if (previous == null) "AI가 처음 짠 일정" else "AI가 일정을 다시 짬"
 
     @Suppress("LongParameterList")
     private fun assembleInput(
@@ -167,7 +217,12 @@ class GenerateItineraryService(
         generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.toList()
 
     /** ScheduleAgentOutput → Itinerary 애그리거트. 시각·순서는 솔버 검증값만(INV-2). poi_snapshot 동결은 확정(272). */
-    private fun ScheduleAgentOutput.toItinerary(tripId: UUID, state: GenerationState, dates: List<LocalDate>): Itinerary {
+    private fun ScheduleAgentOutput.toItinerary(
+        tripId: UUID,
+        mode: GenerationMode,
+        state: GenerationState,
+        dates: List<LocalDate>,
+    ): Itinerary {
         // 요청 일자에 맞춰 정렬 — 응답이 어긋나도 중복/누락 일자가 조용히 통과하지 못하게(외부 값 신뢰 금지).
         val days = DayReconciliation.alignTo(dates, this.days).mapIndexed { dayIdx, d ->
             ItineraryDay.of(
@@ -191,7 +246,7 @@ class GenerateItineraryService(
             matched = days.sumOf { d -> d.slots.count { it.placementReason != null } },
             tripId = tripId,
         )
-        return Itinerary.create(tripId, solveMode, isFallback, days, clock.instant(), state, candidatesSummary)
+        return Itinerary.create(tripId, solveMode, mode, isFallback, days, clock.instant(), state, candidatesSummary)
     }
 
     companion object {

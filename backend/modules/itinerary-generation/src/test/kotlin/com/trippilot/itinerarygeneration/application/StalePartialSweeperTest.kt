@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -25,7 +26,7 @@ class StalePartialSweeperTest : StringSpec({
 
     fun partialUpdatedAt(at: Instant): Itinerary = Itinerary.reconstitute(
         UUID.randomUUID(), UUID.randomUUID(), com.trippilot.itinerarygeneration.domain.ItineraryStatus.PLANNED,
-        SolveMode.FULL_AI, false, GenerationState.PARTIAL,
+        SolveMode.FULL_AI, GenerationMode.FULLY_AI, false, GenerationState.PARTIAL,
         listOf(ItineraryDay.of(start, 0, emptyList())), at, at, null,
     )
 

@@ -19,8 +19,7 @@ class ItineraryTest : StringSpec({
     fun slot(order: Int, snapshot: UUID? = null) =
         VisitSlot.of(UUID.randomUUID(), snapshot, order, LocalTime.parse("10:00"), LocalTime.parse("11:00"))
 
-    fun itinerary() = Itinerary.create(
-        trip, SolveMode.FULL_AI, isFallback = false,
+    fun itinerary() = Itinerary.create(trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, isFallback = false,
         days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-10"), 0, listOf(slot(0), slot(1)))),
         now = now,
     )
@@ -34,8 +33,7 @@ class ItineraryTest : StringSpec({
     }
 
     "생성 중(PARTIAL)인 일정은 확정 불가 409 — day1 만 동결된 채 잠기는 것 방지" {
-        val partial = Itinerary.create(
-            trip, SolveMode.FULL_AI, false,
+        val partial = Itinerary.create(trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
             listOf(ItineraryDay.of(LocalDate.parse("2026-08-10"), 0, listOf(slot(0)))),
             now, GenerationState.PARTIAL,
         )
@@ -44,8 +42,7 @@ class ItineraryTest : StringSpec({
     }
 
     "2차 완료 전이 — PARTIAL→COMPLETE, 전 일자 반영·identity 보존" {
-        val partial = Itinerary.create(
-            trip, SolveMode.FULL_AI, false,
+        val partial = Itinerary.create(trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
             listOf(ItineraryDay.of(LocalDate.parse("2026-08-10"), 0, listOf(slot(0)))),
             now, GenerationState.PARTIAL,
         )
@@ -61,8 +58,7 @@ class ItineraryTest : StringSpec({
     }
 
     "2차 실패 전이 — PARTIAL→FAILED, 1차분 유지" {
-        val partial = Itinerary.create(
-            trip, SolveMode.FULL_AI, false,
+        val partial = Itinerary.create(trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
             listOf(ItineraryDay.of(LocalDate.parse("2026-08-10"), 0, listOf(slot(0)))),
             now, GenerationState.PARTIAL,
         )
@@ -89,8 +85,7 @@ class ItineraryTest : StringSpec({
 
     "확정(동결)해도 자정 넘김 플래그가 보존된다 — 누락 시 검증 실패로 확정 불가(회귀)" {
         val poi = UUID.randomUUID()
-        val midnight = Itinerary.create(
-            trip, SolveMode.DETERMINISTIC, isFallback = false,
+        val midnight = Itinerary.create(trip, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, isFallback = false,
             days = listOf(
                 ItineraryDay.of(
                     LocalDate.parse("2026-08-10"), 0,
@@ -138,7 +133,7 @@ class ItineraryTest : StringSpec({
         val d1 = ItineraryDay.of(LocalDate.parse("2026-08-10"), 0, listOf(slot(0)))
         val d2 = ItineraryDay.of(LocalDate.parse("2026-08-11"), 0, listOf(slot(0)))
         shouldThrow<ValidationFailed> {
-            Itinerary.create(trip, SolveMode.FULL_AI, false, listOf(d1, d2), now)
+            Itinerary.create(trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false, listOf(d1, d2), now)
         }
     }
 
@@ -148,8 +143,7 @@ class ItineraryTest : StringSpec({
             poi, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
             distanceRange = "약 1.2km · 도보 추정",
         )
-        val itinerary = Itinerary.create(
-            UUID.randomUUID(), SolveMode.FULL_AI, false,
+        val itinerary = Itinerary.create(UUID.randomUUID(), SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
             listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(slot))),
             Instant.parse("2026-08-06T00:00:00Z"),
         )

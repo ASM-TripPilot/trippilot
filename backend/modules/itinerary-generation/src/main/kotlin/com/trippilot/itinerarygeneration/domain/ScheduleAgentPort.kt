@@ -17,10 +17,22 @@ interface ScheduleAgentPort {
     fun generate(input: ScheduleAgentInput): ScheduleAgentOutput
     fun validate(solution: ScheduleAgentOutput): List<Violation>
     fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult
+
+    /**
+     * 슬롯 후보 제안(DEC-U3-5) — **완전 AI·같이 고르기 공통 경계**다. 경로별로 다른 API 를 두지 않는다(BR-U3-23).
+     * 후보는 closed-set(INV-1) — 백엔드가 임의 POI 를 섞지 않는다.
+     */
+    fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput
 }
 
 /** 생성 방식(d11 추천 강도 분기). */
-enum class GenerationMode { FULLY_AI, CO_PLAN }
+/**
+ * 사용자가 고른 생성 방식(US-SCHED-09).
+ *
+ * ⚠ [MANUAL] 은 **AI 경계에 보내지 않는다** — 직접 만들기는 AI 를 아예 부르지 않는 흐름이고,
+ * 상대 enum 에도 없어서 보내는 순간 422 다. 경계로 나가는 값은 [FULLY_AI]·[CO_PLAN] 뿐이다.
+ */
+enum class GenerationMode { FULLY_AI, CO_PLAN, MANUAL }
 
 /**
  * ScheduleAgent 호출 실패 — **유효한 200 을 받지 못한 경우만**(경계 계약 PR #104).
@@ -136,7 +148,54 @@ data class FreshnessMeta(val generatedAt: Instant, val degraded: Boolean)
 // ───────── 검증 / 수리 ─────────
 
 /** 하드 제약 위반(HC1-4). */
-data class Violation(val type: String, val dayIndex: Int, val slotIndex: Int, val detail: String?)
+/**
+ * 하드 제약 위반 1건(HC1-4).
+ *
+ * [dayIndex]·[slotIndex]는 **nullable** — AI 가 보낸 요청을 스캔해 위치를 계산하는데, 못 찾으면 비워 보낸다.
+ * 위치를 모른다고 위반 자체를 버리면 "문제 없음"이라는 거짓 음성이 된다(INV-4) — 슬롯에 못 붙일 뿐 보고는 한다.
+ */
+data class Violation(
+    val type: String,
+    val dayIndex: Int?,
+    val slotIndex: Int?,
+    val detail: String?,
+    /**
+     * 상대가 붙인 슬롯 지시자. **인덱스보다 이쪽이 1차 키**다 — 인덱스는 상대가 요청 본문을 스캔해 계산한
+     * 파생값이라, 검증한 일정과 수리를 요청하는 일정이 조금이라도 다르면 엉뚱한 슬롯을 가리킨다.
+     */
+    val slotRef: String? = null,
+)
 
 /** 최소 조정 수리 결과 — 시각·순서만(POI 불변). */
 data class RepairResult(val repaired: ScheduleAgentOutput, val changes: List<String>)
+
+/**
+ * 슬롯 후보 요청. [excludePoiIds] 는 **백엔드가 현재 일정에서 유도**한다 — 클라이언트가 보내는 값을 믿으면
+ * 이미 일정에 있는 장소가 다시 추천된다(BR-U3-24).
+ */
+data class SlotCandidatesInput(
+    val tripId: UUID,
+    /** BR-U2-04 규약 `"{date}#{poiId}"`. */
+    val slotKey: String,
+    /** 직전·직후 슬롯 — 동선 트레이드오프 계산 입력. */
+    val neighborSlotKeys: List<String>,
+    /** 후보 탐색 중심(교체 대상 슬롯의 장소 좌표). */
+    val centerLat: Double,
+    val centerLng: Double,
+    /** null = AI 기본 반경. h15 "반경 넓힘"이 이 값을 올린다. */
+    val radiusM: Int?,
+    /** h13 컨셉(테마) — null 허용. */
+    val concept: String?,
+    val excludePoiIds: List<UUID>,
+    val requestMeta: RequestMeta,
+)
+
+/** [candidates] 빈 목록 = 후보 0건(h15 반경 확대 유도). [radiusMUsed] 는 **실제 사용 반경**(AI 가 자동 확대했을 수 있다). */
+data class SlotCandidatesOutput(
+    val candidates: List<SlotCandidate>,
+    val radiusMUsed: Int,
+    val freshness: FreshnessMeta,
+)
+
+/** [distanceRange] 거리만(INV-3). [rationale] 은 closed-set 근거 — 시각·소요시간 언급 금지(BR-U2-09). */
+data class SlotCandidate(val poiId: UUID, val distanceRange: String, val rationale: String)

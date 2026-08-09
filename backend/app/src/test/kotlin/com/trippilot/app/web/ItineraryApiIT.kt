@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.placedata.domain.Poi
@@ -114,8 +115,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val trip = newTrip(token)
         // Fake 는 자정 슬롯을 안 만드므로 리포지토리로 직접 저장 → CHECK 완화 + 엔티티 매핑 + DTO 노출 검증.
         // POI 는 실 ACTIVE 정본을 쓴다(확정 시 poi_snapshot 동결이 가능해야 함).
-        val midnight = Itinerary.create(
-            UUID.fromString(trip), SolveMode.DETERMINISTIC, isFallback = false,
+        val midnight = Itinerary.create(UUID.fromString(trip), SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, isFallback = false,
             days = listOf(
                 ItineraryDay.of(
                     LocalDate.parse("2026-08-01"), 0,
@@ -205,8 +205,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         // 근거·요약을 넣은 상태를 만든 뒤 편집한다
         itineraries.replaceForTrip(
             UUID.fromString(trip),
-            Itinerary.create(
-                UUID.fromString(trip), SolveMode.FULL_AI, isFallback = false,
+            Itinerary.create(UUID.fromString(trip), SolveMode.FULL_AI, GenerationMode.FULLY_AI, isFallback = false,
                 days = listOf(
                     ItineraryDay.of(
                         LocalDate.parse("2026-08-01"), 0,
@@ -226,6 +225,70 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         body["days"][0]["slots"][0]["placementReason"].asText() shouldBe "취향에 맞는 곳"
         body["candidatesSummary"]["level"].asText() shouldBe "LOW"
         body["days"][0]["slots"][0]["nameKo"].isNull shouldBe false // 편집 응답에도 표면이 실린다
+    }
+
+    @Test
+    fun `슬롯 교체 후보 — closed-set 이고 이미 일정에 있는 장소는 안 나온다(TRIP-311)`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+
+        val itin = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second
+        val inItinerary = itin["days"][0]["slots"].let { s -> (0 until s.size()).map { s[it]["poiId"].asText() } }
+        val slotKey = "2026-08-01#${inItinerary.first()}"
+
+        val (rc, body) = call(
+            HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token,
+            """{"slotKey":"$slotKey","radiusM":20000}""",
+        )
+        rc shouldBe 200
+        body.has("radiusMUsed") shouldBe true
+
+        val candidates = body["candidates"].let { c -> (0 until c.size()).map { c[it]["poiId"].asText() } }
+        // 0건이면 아래 단언들이 전부 공허하게 통과한다 — 후보가 실제로 나왔는지부터 못박는다.
+        candidates.isNotEmpty() shouldBe true
+        // 이미 일정에 있는 장소는 다시 제안되지 않는다(BR-U3-24) — 서버가 유도한 제외 목록이 실제로 먹는지
+        candidates.none { it in inItinerary } shouldBe true
+        body["candidates"][0]["distanceRange"].isNull shouldBe false
+        body["candidates"][0].has("duration") shouldBe false // INV-3
+    }
+
+    @Test
+    fun `슬롯 키 형식이 틀리면 400, 없는 슬롯이면 404`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token, """{"slotKey":"이상한키"}""").first shouldBe 400
+        call(
+            HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token,
+            """{"slotKey":"2026-08-01#${UUID.randomUUID()}"}""",
+        ).first shouldBe 404
+    }
+
+    @Test
+    fun `직접 만들기로 생성하면 빈 일자만 만들어지고 편집으로 채운다(TRIP-268)`() {
+        val token = newToken()
+        val trip = newTrip(token)   // 08-01 ~ 08-02
+        val poi = poiId(token)
+
+        val (rc, body) = call(
+            HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token, """{"generationMode":"MANUAL"}""",
+        )
+        rc shouldBe 201
+        body["generationMode"].asText() shouldBe "MANUAL"
+        body["generationState"].asText() shouldBe "COMPLETE"   // 2차를 기다리지 않는다
+        body["isFallback"].asBoolean() shouldBe false          // 실패가 아니라 사용자의 선택
+        body["days"].size() shouldBe 2
+        (0 until body["days"].size()).all { body["days"][it]["slots"].size() == 0 } shouldBe true
+
+        // 빈 일정도 편집으로 채워진다(편집 서브태스크 재사용)
+        val editBody = """{"days":[
+            {"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"10:00","endAt":"11:00","isFixed":false,"endsNextDay":false}]}]}"""
+        val (erc, edited) = call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, editBody)
+        erc shouldBe 200
+        edited["days"][0]["slots"][0]["poiId"].asText() shouldBe poi
+        edited["generationMode"].asText() shouldBe "MANUAL"    // 편집으로 방식이 바뀌지 않는다
     }
 
     @Test
@@ -261,8 +324,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         )
         itineraries.replaceForTrip(
             UUID.fromString(trip),
-            Itinerary.create(
-                UUID.fromString(trip), SolveMode.DETERMINISTIC, isFallback = false,
+            Itinerary.create(UUID.fromString(trip), SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, isFallback = false,
                 days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(slot))),
                 now = Instant.parse("2026-08-01T00:00:00Z"),
             ),
@@ -290,8 +352,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         )
         itineraries.replaceForTrip(
             UUID.fromString(trip),
-            Itinerary.create(
-                UUID.fromString(trip), SolveMode.FULL_AI, isFallback = false,
+            Itinerary.create(UUID.fromString(trip), SolveMode.FULL_AI, GenerationMode.FULLY_AI, isFallback = false,
                 days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(slot))),
                 now = Instant.parse("2026-08-01T00:00:00Z"),
                 candidatesSummary = CandidatesSummary("LOW", 7, listOf("CAFE")),
@@ -310,6 +371,35 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         crc shouldBe 200
         confirmed["days"][0]["slots"][0]["placementReason"].asText() shouldBe "취향(미식)과 동선에 맞는 곳"
         confirmed["candidatesSummary"]["level"].asText() shouldBe "LOW"
+    }
+
+    @Test
+    fun `위반 사유가 저장·재조회·확정을 관통한다(TRIP-309 · BR-U3-13)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        // Fake 는 위반을 만들지 않으므로 리포지토리로 직접 넣어 영속·왕복·동결 보존을 본다.
+        val slot = VisitSlot.of(
+            UUID.fromString(poiId(token)), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            hasViolation = true, violationReason = "이동이 빠듯해요 · 영업시간 밖",
+        )
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(UUID.fromString(trip), SolveMode.FULL_AI, GenerationMode.FULLY_AI, isFallback = false,
+                days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(slot))),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+            ),
+        )
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        val s0 = body["days"][0]["slots"][0]
+        s0["hasViolation"].asBoolean() shouldBe true
+        s0["violationReason"].asText() shouldBe "이동이 빠듯해요 · 영업시간 밖"
+
+        // 확정해도 남는다 — 동결은 스냅숏 참조만 붙이는 것
+        val (crc, confirmed) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+        crc shouldBe 200
+        confirmed["days"][0]["slots"][0]["violationReason"].asText() shouldBe "이동이 빠듯해요 · 영업시간 밖"
     }
 
     @Test
@@ -390,8 +480,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val trip = newTrip(token)
         // Fake 는 항상 COMPLETE 를 만드므로 리포지토리로 PARTIAL 을 직접 저장 —
         // V2.9 CHECK 값 집합·varchar 길이·엔티티 round-trip 을 한 번에 검증한다.
-        val partial = Itinerary.create(
-            UUID.fromString(trip), SolveMode.FULL_AI, isFallback = false,
+        val partial = Itinerary.create(UUID.fromString(trip), SolveMode.FULL_AI, GenerationMode.FULLY_AI, isFallback = false,
             days = listOf(
                 ItineraryDay.of(
                     LocalDate.parse("2026-08-01"), 0,

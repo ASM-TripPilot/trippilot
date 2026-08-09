@@ -44,6 +44,11 @@ class VisitSlot private constructor(
     val distanceRange: String?,
     /** 추천 이유(BR-U2-04). 시각·소요시간 언급 없음(BR-U2-09) — 문구 집행은 AI 책임. */
     val placementReason: String?,
+    /**
+     * 위반 사유(BR-U3-13). [hasViolation] 이 true 일 때만 값이 있다.
+     * 배지만 남기면 저장 후 재조회에서 "무엇이 왜 문제인지"가 사라진다 — 지속 가시화가 요건이다.
+     */
+    val violationReason: String?,
 ) {
     companion object {
         fun of(
@@ -57,13 +62,14 @@ class VisitSlot private constructor(
             endsNextDay: Boolean = false,
             distanceRange: String? = null,
             placementReason: String? = null,
+            violationReason: String? = null,
         ): VisitSlot {
             val errors = mutableListOf<FieldError>()
             if (orderIndex < 0) errors += FieldError("orderIndex", "순서는 0 이상입니다.")
             // 자정 넘김이면 endAt 이 익일 시각이라 startAt 보다 작을 수 있음(HC4) — 그 경우만 허용.
             if (endAt < startAt && !endsNextDay) errors += FieldError("endAt", "종료 시각은 시작 이후여야 합니다.")
             if (errors.isNotEmpty()) throw ValidationFailed(errors)
-            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay, distanceRange, placementReason)
+            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay, distanceRange, placementReason, violationReason)
         }
     }
 }
@@ -96,6 +102,8 @@ class Itinerary private constructor(
     val tripId: UUID,
     val status: ItineraryStatus,
     val solveMode: SolveMode,
+    /** 사용자가 고른 생성 방식. [solveMode](AI 가 어떻게 풀었나)와 다른 축이다. */
+    val generationMode: GenerationMode,
     val isFallback: Boolean,
     val generationState: GenerationState,
     val days: List<ItineraryDay>,
@@ -111,7 +119,7 @@ class Itinerary private constructor(
     /** 확정 — PLANNED + 생성 완료만 가능(이미 확정이거나 생성 중이면 409). 상태 전이만(동결 없음). */
     fun confirm(now: Instant): Itinerary {
         requireConfirmable()
-        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, isFallback, generationState, days, createdAt, now, candidatesSummary)
+        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, generationMode, isFallback, generationState, days, createdAt, now, candidatesSummary)
     }
 
     /**
@@ -129,11 +137,12 @@ class Itinerary private constructor(
                         // 동결은 스냅숏 참조만 붙이는 것 — 표시값은 **전부 그대로 옮긴다**.
                         // 하나라도 빠뜨리면 확정하는 순간 조용히 사라진다(endsNextDay 로 이미 겪은 회귀).
                         s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange, s.placementReason,
+                        s.violationReason,
                     )
                 },
             )
         }
-        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, isFallback, generationState, frozenDays, createdAt, now, candidatesSummary)
+        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, generationMode, isFallback, generationState, frozenDays, createdAt, now, candidatesSummary)
     }
 
     /**
@@ -167,7 +176,7 @@ class Itinerary private constructor(
         return Itinerary(
             // 두 호출의 품질이 다르면 **낮은 쪽**을 기록한다 — 2차가 폴백으로 떨어졌는데 FULL_AI 로 남으면
             // 저하가 사용자·운영에 감춰진다(INV-4 침묵 금지).
-            itineraryId, tripId, status, maxOf(solveMode, secondSolveMode), isFallback || secondIsFallback,
+            itineraryId, tripId, status, maxOf(solveMode, secondSolveMode), generationMode, isFallback || secondIsFallback,
             GenerationState.COMPLETE, allDays.sortedBy { it.dayOrder }, createdAt, now,
             // 2차가 요약을 주면 그 값(전 일자 기준), 없으면 1차 값 유지
             secondCandidatesSummary ?: candidatesSummary,
@@ -180,7 +189,7 @@ class Itinerary private constructor(
             throw ConflictDetected(message = "생성 중인 일정이 아닙니다.")
         }
         return Itinerary(
-            itineraryId, tripId, status, solveMode, isFallback, GenerationState.FAILED, days, createdAt, now,
+            itineraryId, tripId, status, solveMode, generationMode, isFallback, GenerationState.FAILED, days, createdAt, now,
             candidatesSummary,
         )
     }
@@ -189,6 +198,7 @@ class Itinerary private constructor(
         fun create(
             tripId: UUID,
             solveMode: SolveMode,
+            generationMode: GenerationMode,
             isFallback: Boolean,
             days: List<ItineraryDay>,
             now: Instant,
@@ -199,7 +209,7 @@ class Itinerary private constructor(
                 throw ValidationFailed(listOf(FieldError("days", "일자 순서(dayOrder)는 중복될 수 없습니다.")))
             }
             return Itinerary(
-                UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, solveMode, isFallback, generationState,
+                UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, solveMode, generationMode, isFallback, generationState,
                 days.sortedBy { it.dayOrder }, now, now, candidatesSummary,
             )
         }
@@ -207,10 +217,10 @@ class Itinerary private constructor(
         @Suppress("LongParameterList")
         fun reconstitute(
             itineraryId: UUID, tripId: UUID, status: ItineraryStatus, solveMode: SolveMode,
-            isFallback: Boolean, generationState: GenerationState, days: List<ItineraryDay>,
+            generationMode: GenerationMode, isFallback: Boolean, generationState: GenerationState, days: List<ItineraryDay>,
             createdAt: Instant, updatedAt: Instant, candidatesSummary: CandidatesSummary?,
         ): Itinerary = Itinerary(
-            itineraryId, tripId, status, solveMode, isFallback, generationState,
+            itineraryId, tripId, status, solveMode, generationMode, isFallback, generationState,
             days.sortedBy { it.dayOrder }, createdAt, updatedAt, candidatesSummary,
         )
     }

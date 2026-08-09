@@ -44,8 +44,18 @@ class CandidatePoolBuilder:
         # ④ 품질 — MINIMAL 제외
         pois = [p for p in pois if p.quality in _ALLOWED_QUALITY]
 
-        # ⑤ 인기 정렬 (rating desc, None=0) → ⑥ 상한
-        pois.sort(key=lambda p: (-(p.rating or 0.0), str(p.poi_id)))
+        # ⑤ 정렬: 영업시간 보유 우선 → 인기(rating desc, None=0) → poi_id asc(tie-break)
+        #
+        # [임시] 영업시간 보유 여부를 최상위 정렬 키로 둔다 (TRIP-326, backend PR #104 합의).
+        # 근거: dataQuality MINIMAL 등급 도입이 U6까지 보류돼 그 전까지는 영업시간 없는 POI를
+        # 걸러낼 신호가 양쪽 모두 없다 — ③ 영업일 필터는 open_hours가 비면 통과시키고
+        # (정보 없음 ≠ 배제), HC1도 같은 이유로 미적용이라 휴무·폐점 장소가 하드 제약 위반
+        # 없이 편성될 수 있다. 그래서 **배제가 아니라 순위 강등**으로 완화한다: 후보가 희소한
+        # 지역에서도 POI가 사라지지 않고, ⑥ 상한 절단 시 영업시간 보유분이 먼저 살아남는다.
+        # 필터(①~④)는 그대로 — 특히 ④ _ALLOWED_QUALITY는 백엔드 합의대로 변경 없음.
+        # U6에서 structured 영업시간(openHours[{day,open,close}])이 들어오면 이 신호의 존치를
+        # 재평가한다.
+        pois.sort(key=lambda p: (0 if p.open_hours else 1, -(p.rating or 0.0), str(p.poi_id)))
         pois = pois[: self._cfg.max_candidates]
 
         return CandidatePool(

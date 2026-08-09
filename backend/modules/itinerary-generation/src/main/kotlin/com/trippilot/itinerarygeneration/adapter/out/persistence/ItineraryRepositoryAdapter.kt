@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.adapter.out.persistence
 
 import com.trippilot.itinerarygeneration.domain.CandidatesSummary
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
@@ -41,7 +42,7 @@ class ItineraryRepositoryAdapter(
                     VisitSlotEntity(
                         UUID.randomUUID(), dayId, s.sourcePoiId, s.poiSnapshotId,
                         s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange,
-                        s.placementReason,
+                        s.placementReason, s.violationReason,
                     ),
                 )
             }
@@ -87,20 +88,22 @@ class ItineraryRepositoryAdapter(
                 (slotsByDay[d.itineraryDayId] ?: emptyList()).map { s ->
                     VisitSlot.of(
                         s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation,
-                        s.endsNextDay, s.distanceRange, s.placementReason,
+                        s.endsNextDay, s.distanceRange, s.placementReason, s.violationReason,
                     )
                 },
             )
         }
         return Itinerary.reconstitute(
             itineraryId, tripId, ItineraryStatus.valueOf(status), SolveMode.valueOf(solveMode),
-            isFallback, GenerationState.valueOf(generationState), domainDays, createdAt, updatedAt,
+            GenerationMode.valueOf(generationMode), isFallback, GenerationState.valueOf(generationState),
+            domainDays, createdAt, updatedAt,
             candidatesSummary?.toSummary(),
         )
     }
 
     private fun Itinerary.toEntity() = ItineraryEntity(
-        itineraryId, tripId, status.name, solveMode.name, isFallback, generationState.name, createdAt, updatedAt,
+        itineraryId, tripId, status.name, solveMode.name, generationMode.name, isFallback, generationState.name,
+        createdAt, updatedAt,
         candidatesSummary?.toMap(),
     )
 

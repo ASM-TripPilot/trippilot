@@ -4,6 +4,8 @@ import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.Violation
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -11,6 +13,7 @@ import org.springframework.context.annotation.Primary
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import java.time.Clock
+import java.util.UUID
 
 /**
  * 실 AI 서비스(U5) HTTP 어댑터 — 포워드 경계(TRIP-229). `POST {baseUrl}/ai/v1/itinerary/generate`.
@@ -31,22 +34,7 @@ class HttpScheduleAgentAdapter(
 ) : ScheduleAgentPort {
 
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
-        val wire = try {
-            scheduleAgentRestClient.post()
-                .uri(GENERATE_PATH)
-                .body(input)
-                .retrieve()
-                .onStatus({ it.isError }) { _, response ->
-                    throw callFailed(response.statusCode.value(), response.body.readNBytes(MAX_ERROR_BODY_BYTES))
-                }
-                .body(AiScheduleResponse::class.java)
-                ?: throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 응답 본문이 비었습니다.")
-        } catch (e: ScheduleAgentCallFailed) {
-            throw e // 상태코드 판정 그대로 전달
-        } catch (e: Exception) {
-            // 네트워크 단절·read-timeout·역직렬화 실패 — "유효한 200 을 받지 못한 경우"(폴백 대상).
-            throw ScheduleAgentCallFailed(null, retryable = true, message = "AI 호출 실패: ${e.message}", cause = e)
-        }
+        val wire = post(GENERATE_PATH, input, AiScheduleResponse::class.java)
         return try {
             wire.toDomain(clock.instant())
         } catch (e: IllegalArgumentException) {
@@ -56,21 +44,72 @@ class HttpScheduleAgentAdapter(
     }
 
     /**
-     * 실 호출 미구현 — AI 측 `validate` 요청/응답 스키마가 미확정(TRIP-282 N6)이고, Violation 표현도
-     * AI `(code, slot_ref)` ↔ 백엔드 `(type, dayIndex, slotIndex)` 로 어긋나 있다.
-     * **빈 목록을 반환하지 않는다** — "위반 없음"으로 보이는 거짓 음성이 확정까지 흘러가는 것보다 실패가 안전하다.
+     * 경계 POST 공통 — 오류 상태는 도메인 실패로, 네트워크·역직렬화 실패는 재시도 가능 실패로 번역한다.
+     * **재시도는 하지 않는다**(호출자가 폴백을 결정한다).
+     */
+    private fun <T : Any> post(path: String, body: Any, type: Class<T>): T = try {
+        scheduleAgentRestClient.post()
+            .uri(path)
+            .body(body)
+            .retrieve()
+            .onStatus({ it.isError }) { _, response ->
+                throw callFailed(response.statusCode.value(), response.body.readNBytes(MAX_ERROR_BODY_BYTES))
+            }
+            .body(type)
+            ?: throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 응답 본문이 비었습니다.")
+    } catch (e: ScheduleAgentCallFailed) {
+        throw e // 상태코드 판정 그대로 전달
+    } catch (e: Exception) {
+        // 네트워크 단절·read-timeout·역직렬화 실패 — "유효한 200 을 받지 못한 경우"(폴백 대상).
+        throw ScheduleAgentCallFailed(null, retryable = true, message = "AI 호출 실패: ${e.message}", cause = e)
+    }
+
+    private fun requestMeta(deadlineMs: Long) =
+        AiRequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs)
+
+    /**
+     * 편집 재검증(HC1-4). 위반은 **정상 응답 200**이고 빈 목록 = 위반 없음이다(IO-7).
+     * 산출물 전체를 되돌려 보낸다 — 슬롯만 보내면 상대가 날짜 맥락을 잃어 위치 인덱스를 계산할 수 없다.
      */
     override fun validate(solution: ScheduleAgentOutput): List<Violation> =
-        throw ScheduleAgentCallFailed(
-            "VALIDATE_NOT_WIRED", retryable = false,
-            message = "AI validate 경계 미배선(TRIP-282 스키마 확정 대기) — http 모드에서 편집 재검증 불가.",
-        )
+        post(
+            VALIDATE_PATH,
+            AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS)),
+            AiValidateResponse::class.java,
+        ).violations.map { it.toDomain() }
 
-    /** 실 호출 미구현 — [validate] 와 동일 사유. */
-    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult =
+    /**
+     * 최소 조정 수리 — 시각·순서만 바꾸고 POI 는 불변이다(BR-U3-14).
+     * **수리 불가는 오류가 아니라 `repaired=null`** 이므로(IO-7) 원본을 그대로 돌려주고 변경 없음으로 표시한다.
+     */
+    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult {
+        val response = post(
+            REPAIR_PATH,
+            AiRepairRequest(
+                solution.toWire(),
+                // slotRef 를 되돌려 보낸다 — 인덱스만 보내면 검증 시점과 수리 대상이 어긋났을 때 상대가 복구할 수단이 없다.
+                violations.map { AiViolation(it.type, it.slotRef, it.detail.orEmpty(), it.dayIndex, it.slotIndex) },
+                requestMeta(REPAIR_DEADLINE_MS),
+            ),
+            AiRepairResponse::class.java,
+        )
+        val repaired = response.repaired ?: return RepairResult(solution, emptyList())
+        return try {
+            RepairResult(repaired.toDomain(clock.instant()), response.changes)
+        } catch (e: IllegalArgumentException) {
+            throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 수리 응답 스키마 불일치: ${e.message}", cause = e)
+        }
+    }
+
+    /**
+     * 미개통 — AI 에 아직 슬롯 후보 경로가 없다(generate·validate·repair 3종만 열려 있음).
+     * **빈 목록을 돌려주지 않는다**: "주변에 후보가 없다"는 정상 결과와 구분되지 않아 사용자가 반경을
+     * 넓혀도 계속 0건인 이유를 알 수 없게 된다(INV-4 침묵 금지).
+     */
+    override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput =
         throw ScheduleAgentCallFailed(
-            "REPAIR_NOT_WIRED", retryable = false,
-            message = "AI repair 경계 미배선(TRIP-282 스키마 확정 대기).",
+            "SLOT_CANDIDATES_NOT_WIRED", retryable = false,
+            message = "AI 슬롯 후보 경계 미개통 — http 모드에서 후보 제안 불가(DEC-U3-5).",
         )
 
     /** 에러 응답 → 도메인 실패. 바디 `{error_code, message, retryable}`(계약) 파싱 실패해도 상태코드로 판정. */
@@ -85,6 +124,12 @@ class HttpScheduleAgentAdapter(
 
     companion object {
         private const val GENERATE_PATH = "/ai/v1/itinerary/generate"
+        private const val VALIDATE_PATH = "/ai/v1/itinerary/validate"
+        private const val REPAIR_PATH = "/ai/v1/itinerary/repair"
+
+        // 편집 재검증·보정은 사용자가 화면에서 기다리는 동작이라 생성(20s)보다 짧게 잡는다.
+        private const val VALIDATE_DEADLINE_MS = 3_000L
+        private const val REPAIR_DEADLINE_MS = 5_000L
         private const val MAX_ERROR_BODY_BYTES = 8 * 1024 // 오류 페이지가 커도 힙을 물지 않게 상한
         private val ERROR_MAPPER = ScheduleAgentConfiguration.boundaryMapper()
     }

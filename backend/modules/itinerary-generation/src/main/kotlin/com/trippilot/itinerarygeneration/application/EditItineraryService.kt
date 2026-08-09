@@ -1,12 +1,8 @@
 package com.trippilot.itinerarygeneration.application
 
-import com.trippilot.changelog.api.AppendChangeLog
-import com.trippilot.changelog.api.ChangeLogFacade
-import com.trippilot.changelog.api.ChangeSourceType
-import com.trippilot.changelog.api.DaySnapshotView
-import com.trippilot.changelog.api.ItinerarySnapshotView
-import com.trippilot.changelog.api.SlotSnapshotView
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.itinerarygeneration.domain.RevisionActor
+import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
@@ -52,7 +48,7 @@ class EditItineraryService(
     private val trips: TripFacade,
     private val itineraries: ItineraryRepository,
     private val scheduleAgent: ScheduleAgentPort,
-    private val changeLog: ChangeLogFacade,
+    private val revisions: ItineraryRevisionService,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
 ) {
@@ -70,26 +66,18 @@ class EditItineraryService(
         // 재검증(비차단) — 외부(ScheduleAgent) 호출은 트랜잭션 밖(DB 커넥션 안 물게, generate 와 동일). Fake 는 빈 목록.
         val violations = scheduleAgent.validate(edit.toOutput(current.solveMode, current.isFallback, clock.instant()))
         val flagged = reshape(current, edit, violations)
+        ViolationText.warnUnattached(violations, flagged.days, tripId)
         return tx.execute {
-            // before 는 트랜잭션 안에서 **다시 읽는다** — 위 재검증(외부 호출) 동안 다른 편집이 커밋됐으면
-            // 트랜잭션 밖에서 읽은 값은 이미 낡았고, 이력에 실제로 일어나지 않은 전이(A→C)가 남는다.
+            // 트랜잭션 안에서 다시 읽는다 — 위 재검증(외부 호출) 동안 다른 편집이 커밋됐으면 밖에서 읽은 값은 낡았다.
             val beforeWrite = itineraries.findByTrip(tripId).firstOrNull() ?: current
+            // 편집 전 상태로 돌아갈 지점이 없으면 먼저 남긴다 — 첫 편집으로 원본이 사라지면 안 된다(INV-U3-08).
+            revisions.ensureRestorePoint(beforeWrite)
             val saved = itineraries.replaceForTrip(tripId, flagged)
-            val before = beforeWrite.toSnapshot()
-            val after = saved.toSnapshot()
-            // 바뀐 게 없으면 남기지 않는다 — append-only 라 한 번 쌓인 무의미한 행은 지울 수 없다.
-            if (before != after) {
-                // 이력은 **같은 트랜잭션**에 — 일정만 바뀌고 이력이 빠지는 상태를 만들지 않는다(US-PLANB-09).
-                changeLog.append(
-                    AppendChangeLog(
-                        tripId = tripId,
-                        actor = accountId.toString(),
-                        sourceType = ChangeSourceType.MANUAL,
-                        reason = edit.reason,
-                        before = before,
-                        after = after,
-                    ),
-                )
+            // 바뀐 게 없으면 쌓지 않는다 — 되돌리기 목록이 같은 버전으로 도배된다.
+            // 위반 상태까지 포함해 비교한다(스냅숏 비교는 위반 변화를 못 본다).
+            if (!ItineraryContent.sameAs(beforeWrite, saved)) {
+                // 이력은 **같은 트랜잭션**에 — 일정만 바뀌고 이력이 빠지는 상태를 만들지 않는다(INV-U3-06).
+                revisions.record(saved, RevisionActor.USER, RevisionKind.EDIT, edit.reason ?: "일정을 직접 수정함")
             }
             saved
         }!!
@@ -104,30 +92,26 @@ class EditItineraryService(
             ItineraryDay.of(
                 d.date, dayIdx,
                 d.slots.mapIndexed { slotIdx, s ->
-                    val violated = violations.any { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
+                    val hit = violations.filter { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
                     // distanceRange 는 싣지 않는다(null) — 순서·시각이 바뀌면 직전 거리는 이미 틀린 값이다.
                     // 재산출은 AI 검증·수리(TRIP-309) 몫이라, 그때까지는 낡은 값을 보여주느니 비워 둔다.
                     VisitSlot.of(
                         s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
-                        hasViolation = violated, endsNextDay = s.endsNextDay,
+                        hasViolation = hit.isNotEmpty(), endsNextDay = s.endsNextDay,
                         placementReason = reasonBySlot[d.date to s.poiId],
+                        // 저장 후에도 "무엇이 왜 문제인지"가 남아야 한다(BR-U3-13 지속 가시화).
+                        violationReason = ViolationText.reasonOf(hit),
                     )
                 },
             )
         }
         return Itinerary.reconstitute(
-            current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.isFallback,
+            current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.generationMode, current.isFallback,
             current.generationState, days, current.createdAt, clock.instant(), // 생성 진행 상태는 편집과 무관 — 보존
             current.candidatesSummary, // 후보 충분성도 편집과 무관 — 보존(빠뜨리면 편집 한 번에 영구 소실)
         )
     }
 
-    /** 일정 → 변경 이력 스냅숏. 시각·순서만 담는다(INV-3 소요시간 없음). */
-    private fun Itinerary.toSnapshot() = ItinerarySnapshotView(
-        days.map { d ->
-            DaySnapshotView(d.date, d.slots.map { SlotSnapshotView(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) })
-        },
-    )
 }
 
 /** 편집안 → 재검증 입력(ScheduleAgentOutput). 시각·순서·고정은 슬롯 그대로. 거리/소요시간 없음(INV-3). */
