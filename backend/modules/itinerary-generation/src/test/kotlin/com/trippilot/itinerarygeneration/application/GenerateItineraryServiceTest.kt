@@ -11,6 +11,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRevision
 import com.trippilot.itinerarygeneration.domain.ItineraryRevisionSummary
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.RepairResult
+import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
@@ -51,6 +52,28 @@ import java.time.ZoneOffset
 import java.util.UUID
 
 /** 호출마다 입력을 기록 — day1 2단계라 1차/2차 두 번 불린다([captures] 순서 = 호출 순서). */
+/**
+ * 실 AI 의 거부를 흉내낸다 — 미물질화(날짜·시각 없는) 고정 블록이 **하나라도** 있으면 요청 전체를 거부한다
+ * (그쪽 `api/wiring.py::_fixed_block` 이 변환 중 ValueError 를 던져 422 가 된다). 그 외 요청은 정상 응답.
+ */
+private class RejectAnytimeAgent(private val now: Instant, private val emitPoi: UUID) : StubScheduleAgent() {
+    override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
+        if (input.fixedBlocks.any { it.date == null || it.start == null }) {
+            throw ScheduleAgentCallFailed("DOMAIN_INVARIANT", retryable = false, message = "ANYTIME 고정 블록 미지원")
+        }
+        return ScheduleAgentOutput(
+            days = input.timeWindows.map {
+                DaySchedule(it.date, listOf(VisitSlotDisplay(emitPoi, LocalTime.parse("10:00"), LocalTime.parse("11:00"), false, null, isFixed = false)))
+            },
+            day1ReadyAt = null, explanations = emptyMap(),
+            solveMode = SolveMode.DETERMINISTIC, isFallback = false,
+            freshness = FreshnessMeta(now, degraded = false),
+        )
+    }
+    override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
+}
+
 private class CapturingAgent(private val now: Instant, private val emit: (LocalDate) -> List<VisitSlotDisplay> = { emptyList() }) :
     StubScheduleAgent() {
     val captures = mutableListOf<ScheduleAgentInput>()
@@ -155,6 +178,7 @@ class GenerateItineraryServiceTest : StringSpec({
         publisher: DomainEventPublisher = CapturingPublisher(),
         repo: FakeItineraries = FakeItineraries(),
         end: LocalDate = defaultEnd,
+        fixedVisits: List<FixedVisit> = listOf(FixedVisit(poi, start, LocalTime.parse("12:00"), 90)),
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -162,8 +186,7 @@ class GenerateItineraryServiceTest : StringSpec({
             override fun findGenerationContext(accountId: UUID, tripId: UUID) =
                 if (accountId == acc) {
                     TripGenerationContext(
-                        start, end, listOf("제주"), "친구", 500_000,
-                        listOf(FixedVisit(poi, start, LocalTime.parse("12:00"), 90)),
+                        start, end, listOf("제주"), "친구", 500_000, fixedVisits,
                     )
                 } else {
                     null
@@ -197,6 +220,53 @@ class GenerateItineraryServiceTest : StringSpec({
         input.timeWindows.map { it.date } shouldContainExactly listOf(start) // 1차 = day1 만
         input.fixedBlocks.single().poiId shouldBe poi
         agent.captures[1].timeWindows.map { it.date } shouldContainExactly listOf(start.plusDays(1), end) // 2차 = 나머지
+    }
+
+    "날짜 미지정(ANYTIME) 필수 방문지는 2차에 실린다 — 하루짜리 1차에 몰면 배치 공간이 없다" {
+        val anytime = UUID.randomUUID()
+        val agent = CapturingAgent(now)
+        service(
+            agent, fullPrefs, emptyList(),
+            fixedVisits = listOf(
+                FixedVisit(poi, start, LocalTime.parse("12:00"), 90), // 날짜 지정 → 1차(그 날짜가 1차 몫)
+                FixedVisit(anytime, null, null, null),                // ANYTIME → 2차
+            ),
+        ).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].fixedBlocks.map { it.poiId } shouldContainExactly listOf(poi)
+        agent.captures[1].fixedBlocks.map { it.poiId } shouldContainExactly listOf(anytime)
+    }
+
+    "ANYTIME 은 아직 물질화되지 않은 채 경계로 나간다 (M1 — 구현되면 이 테스트를 뒤집을 것)" {
+        // 알려진 간극. 실 AI 는 이 모양이면 **요청 전체를 422 로 거부**하고(그쪽 api/wiring.py),
+        // Fake 는 date != null 만 그룹핑해 조용히 버린다. 어느 쪽도 결과만 보고는 이유를 알 수 없다.
+        val anytime = UUID.randomUUID()
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(anytime, null, null, null)))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val block = agent.captures[1].fixedBlocks.single { it.poiId == anytime }
+        // 물질화가 들어오면 date·start 가 채워져 아래 두 줄이 깨진다 — 그때 값이 있음을 단언하도록 바꾼다.
+        block.date shouldBe null
+        block.start shouldBe null
+    }
+
+    "다일 여행에서 ANYTIME 때문에 2차가 거부돼도 day1 은 살아남는다 (관측되는 증상)" {
+        // 통합테스트에서 무엇을 보게 되는지 못 박는다 — '여행 전체가 폴백'이 아니라
+        // **day1 은 실 AI 결과, 나머지 일자만 MINIMAL** 이고 상태는 COMPLETE(isFallback=true) 다.
+        // 단일일 여행은 ANYTIME 이 1차에 실려 전체가 MINIMAL 이 된다(carriesUndatedFixed).
+        val anytime = UUID.randomUUID()
+        val emitted = UUID.randomUUID()
+        val agent = RejectAnytimeAgent(now, emitted)
+        val repo = FakeItineraries()
+        service(agent, fullPrefs, emptyList(), repo = repo, fixedVisits = listOf(FixedVisit(anytime, null, null, null)))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val saved = repo.findByTrip(tripId).single()
+        saved.generationState shouldBe GenerationState.COMPLETE // FAILED 가 아니다 — 폴백으로 채워졌다
+        saved.isFallback shouldBe true
+        saved.solveMode shouldBe SolveMode.MINIMAL
+        saved.days.first().slots.map { it.sourcePoiId } shouldContainExactly listOf(emitted) // day1 = 실 AI 결과 보존
     }
 
     "앵커: 숙박일=거점 좌표, 체크아웃일=전날 거점(prev_stay)" {

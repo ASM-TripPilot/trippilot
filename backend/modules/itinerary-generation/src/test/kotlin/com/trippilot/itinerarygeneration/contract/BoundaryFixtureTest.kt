@@ -44,7 +44,8 @@ class BoundaryFixtureTest : StringSpec({
         timeWindows = listOf(TimeWindow(LocalDate.parse("2026-08-01"), LocalTime.parse("09:00"), LocalTime.parse("21:00"))),
         fixedBlocks = listOf(
             FixedBlock(UUID.fromString("22222222-2222-4222-8222-222222222222"), LocalDate.parse("2026-08-01"), LocalTime.parse("12:00"), 90),
-            FixedBlock(UUID.fromString("33333333-3333-4333-8333-333333333333"), null, null, null), // ANYTIME
+            // ANYTIME(날짜·시각 미지정) — **AI 가 거부하는 모양이다**. 아래 "아직 물질화되지 않았다" 테스트 참고.
+            FixedBlock(UUID.fromString("33333333-3333-4333-8333-333333333333"), null, null, null),
         ),
         preferenceProfile = PreferenceProfile(
             styles = listOf("미식"), activities = listOf("야경"), foodTastes = listOf("해산물"),
@@ -61,10 +62,35 @@ class BoundaryFixtureTest : StringSpec({
         val golden = requireNotNull(this::class.java.getResourceAsStream("/contract/schedule-agent-request.json"))
             .readBytes().decodeToString()
 
-        // 골든 파일은 AI 의 Pydantic 모델로 검증을 통과한 실물이다. 여기서 어긋나면
+        // 골든 파일은 AI 의 Pydantic 모델(`api/schemas.py`) 검증을 통과한 실물이다. 여기서 어긋나면
         // **중첩 필드 이름이 바뀌었다는 뜻**이고, 상대는 extra="forbid" 라 런타임 422 가 된다.
         // (예전엔 build/ 로만 떨궈 매번 새로 만든 문자열을 자기 자신과 비교했다 — 드리프트를 못 잡았다.)
+        //
+        // ⚠ **스키마 통과 ≠ 수용**이다. 이 픽스처도 그쪽 Pydantic 은 통과하지만, 한 겹 안쪽
+        // 스키마→도메인 변환(`api/wiring.py`)에서 ANYTIME 블록이 거부돼 요청 전체가 422 가 된다.
+        // 이 테스트는 **필드 이름 드리프트**를 잡는 것이지 요청이 받아들여진다는 보증이 아니다.
         json.trim() shouldBe golden.trim()
+    }
+
+    /**
+     * AI 가 고정 블록을 수용하는 조건 — `api/wiring.py::_fixed_block` 의 판정을 그대로 옮긴 것.
+     * 도메인 `FixedBlock.window` 가 필수라 날짜·시각이 없으면 표현할 수 없고, 조용히 떨어뜨리는 대신
+     * **명시 실패(422)** 로 드러낸다(그쪽 INV-4).
+     */
+    fun aiAccepts(block: FixedBlock) = block.date != null && block.start != null
+
+    "ANYTIME must_visit 은 아직 물질화되지 않아 AI 가 거부하는 모양으로 나간다 (M1 — 구현 시 이 테스트를 뒤집을 것)" {
+        // 알려진 간극을 **못 박아 둔다**. 픽스처가 이 모양을 '정상'으로 굳혀 놓고 아무도 실패를 못 보면,
+        // 통합 때 "ANYTIME 이 있는 여행은 전부 MINIMAL 폴백"으로 나타나고 원인을 계약에서 찾지 못한다.
+        // 블록 하나만 나빠도 **그 호출 전체가 422** 다. 다일 여행이면 ANYTIME 은 2차에 실리므로
+        // day1 은 살아남고 나머지 일자만 MINIMAL 폴백된다(단일일이면 전체). GenerateItineraryServiceTest 참고.
+        val rejected = input.fixedBlocks.filterNot { aiAccepts(it) }
+        rejected.size shouldBe 1 // 물질화(M1)가 들어오면 0 이 되어야 한다 — 그때 이 값을 0 으로 바꾼다
+
+        // 물질화의 정의: 날짜와 시각이 **둘 다** 채워진다. 하나만 채우면 그대로 거부다.
+        aiAccepts(FixedBlock(UUID.randomUUID(), LocalDate.parse("2026-08-01"), null, null)) shouldBe false
+        aiAccepts(FixedBlock(UUID.randomUUID(), null, LocalTime.parse("12:00"), null)) shouldBe false
+        aiAccepts(FixedBlock(UUID.randomUUID(), LocalDate.parse("2026-08-01"), LocalTime.parse("12:00"), null)) shouldBe true
     }
 
     "경계로 나가는 모든 요청 타입에 카멜케이스가 새지 않는다" {
