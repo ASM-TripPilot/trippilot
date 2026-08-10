@@ -20,7 +20,7 @@ from typing import Mapping
 from ortools.sat.python import cp_model
 
 from trippilot.c2.config import STAY_DEFAULT_MIN, SolverConfig
-from trippilot.c2.fallback_solver import RuleFallbackSolver
+from trippilot.c2.fallback_solver import RuleFallbackSolver, placed_fixed_blocks
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -62,7 +62,10 @@ class OrToolsSolver:
             if slots is None:
                 return None  # 해 확보 실패 → 체인 다음 단계
             used.update(s.poi_id for s in slots)
-            days_out.append(DaySolution(date=day, slots=tuple(slots), fixed_blocks=()))
+            days_out.append(DaySolution(
+                date=day, slots=tuple(slots),
+                fixed_blocks=placed_fixed_blocks(problem, day, slots),  # TRIP-343
+            ))
         return ItinerarySolution(
             schedule_id=problem.schedule_id,
             days=tuple(days_out),

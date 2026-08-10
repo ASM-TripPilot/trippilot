@@ -9,12 +9,13 @@ problem.excluded_poi_ids는 후보 풀에서 제외 (2단계 생성 중복 방�
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Mapping
+from typing import Mapping, Sequence
 
 from trippilot.c2.config import STAY_DEFAULT_MIN, SolverConfig
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
+    FixedBlock,
     ItineraryProblem,
     ItinerarySolution,
     SolveMode,
@@ -27,6 +28,28 @@ def _at(day, template: datetime) -> datetime:
     """day 날짜에 template의 시각(time-of-day)·tz를 적용."""
     return datetime(day.year, day.month, day.day,
                     template.hour, template.minute, tzinfo=template.tzinfo)
+
+
+def placed_fixed_blocks(
+    problem: ItineraryProblem, day, slots: Sequence[VisitSlot]
+) -> tuple[FixedBlock, ...]:
+    """그 일자 고정 블록(HC3) 중 **실제 해에 배치된 것**만 (TRIP-343).
+
+    routes.to_payload는 `DaySolution.fixed_blocks`에서만 is_fixed를 판정한다 —
+    비워 두면 응답 is_fixed가 상시 false가 되어 백엔드 왕복 후 validate/repair의
+    HC3 검증 집합이 비어 버린다. 배치 사실은 지어내지 않고, HC3 판정과 동일 기준
+    (poi·시각 정확 일치 슬롯 존재)으로 해에서 읽는다.
+    """
+    return tuple(
+        fb for fb in problem.fixed_blocks
+        if fb.window.start.date() == day
+        and any(
+            s.poi_id == fb.poi_id
+            and s.start_at == fb.window.start
+            and s.end_at == fb.window.end
+            for s in slots
+        )
+    )
 
 
 def _open_ok(poi: Poi, start: datetime, end: datetime) -> bool:
@@ -122,7 +145,10 @@ class RuleFallbackSolver:
                 ))
                 used.add(cand.poi_id)
                 slots.sort(key=lambda s: s.start_at)
-            days.append(DaySolution(date=day, slots=tuple(slots), fixed_blocks=()))
+            days.append(DaySolution(
+                date=day, slots=tuple(slots),
+                fixed_blocks=placed_fixed_blocks(problem, day, slots),  # TRIP-343
+            ))
 
         placed_any = any(d.slots for d in days)
         return ItinerarySolution(

@@ -241,6 +241,48 @@ def test_generate_pierces_http_to_solver() -> None:
         assert revalidated.json() == {"violations": []}
 
 
+# ── ①-보강 고정 블록 is_fixed 관통 (TRIP-343) ────────────────────────
+# 회귀: 솔버가 DaySolution.fixed_blocks를 비워 응답 is_fixed가 상시 false였다 —
+# 백엔드가 false를 저장·왕복하면 validate/repair의 HC3 검증 집합이 비어 버린다.
+
+
+_FIXED_P1 = (
+    {"poi_id": "p1", "date": _DAY1.isoformat(), "start": "10:00", "dwell_min": 60},
+)
+
+
+def test_generate_fixed_block_slot_is_fixed_true() -> None:
+    """고정 블록 포함 generate → 해당 슬롯만 is_fixed=true (OR-Tools 경로)."""
+    with make_client() as client:
+        response = client.post(
+            "/ai/v1/itinerary/generate", json=_request(fixed_blocks=_FIXED_P1)
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["solve_mode"] == "OR_TOOLS"
+    slots = [s for d in body["days"] for s in d["slots"]]
+    p1 = next(s for s in slots if s["poi_id"] == "p1")
+    assert p1["is_fixed"] is True                                    # 회귀 핵심
+    assert (p1["start_at"], p1["end_at"]) == ("10:00:00", "11:00:00")  # HC3 시각 그대로
+    assert all(s["is_fixed"] is False for s in slots if s["poi_id"] != "p1")
+
+
+def test_generate_fixed_block_is_fixed_true_on_rule_fallback_path() -> None:
+    """최후 보루(규칙 폴백) 경로에서도 is_fixed=true — INV-4 폴백이라고 잃지 않는다."""
+    starved = SolverConfig(or_tools_min_ms=10**9)   # DL-2: 1차 단계 상시 스킵
+    with make_client(llm=FailingLlm(), solver_config=starved) as client:
+        response = client.post(
+            "/ai/v1/itinerary/generate", json=_request(fixed_blocks=_FIXED_P1)
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["solve_mode"] == "RULE_FALLBACK"
+    p1 = next(s for d in body["days"] for s in d["slots"] if s["poi_id"] == "p1")
+    assert p1["is_fixed"] is True
+
+
 # ── ② day1 2단계 관통 (TRIP-293) ─────────────────────────────────────
 
 
