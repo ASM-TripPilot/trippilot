@@ -59,6 +59,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      ai:
+        condition: service_healthy
+        # ai 는 full 프로파일 전용이라 `--profile backend` 단독 기동에는 없다.
+        # required:false 여야 그 경우 의존성이 무시된다 — 빼면 backend-only 가 ai 를 끌어올려
+        # 기존 동작(AI 없이 degrade)이 바뀐다.
+        required: false
     environment:
       DB_URL: jdbc:postgresql://db:5432/trippilot?currentSchema=app
       DB_USER: ${DB_USER:-app_user}
@@ -66,6 +72,10 @@ services:
       REDIS_HOST: ${REDIS_HOST:-redis}      # 숙소·여행 조회 캐시
       REDIS_PORT: ${REDIS_PORT:-6379}
       AI_URL: ${AI_URL:-http://ai:8000}     # full 프로파일에서 ai 컨테이너로 해석. backend-only 면 unreachable(degrade)
+      # 일정 생성 경계 전환(TRIP-229). 기본 fake 라 평소 동작은 그대로 —
+      # 공동 통합테스트에서만 AI_SCHEDULE_MODE=http 로 실 AI 컨테이너에 붙인다.
+      TRIPPILOT_AI_SCHEDULE_MODE: ${AI_SCHEDULE_MODE:-fake}
+      TRIPPILOT_AI_SCHEDULE_BASE_URL: ${AI_URL:-http://ai:8000}
       # 소셜 로그인 시크릿 — .env 에서 주입(컨테이너는 기본 프로파일이라 application-local.yml 안 읽음).
       # 미설정이면 빈 값 → 소셜 로그인 시도 시에만 실패(기동 무영향). 값은 .env.example 참고.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}

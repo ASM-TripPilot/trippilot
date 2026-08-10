@@ -5,6 +5,8 @@ import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.placedata.api.CandidatePoolPort
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.error.UpstreamUnavailable
+import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.error.FieldError
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -78,23 +80,36 @@ class SlotCandidateService(
         // 클라가 보내는 목록을 믿으면 누락분이 그대로 재추천된다.
         val inItinerary = itinerary.days.flatMap { d -> d.slots.map { it.sourcePoiId } }.distinct()
 
-        val proposed = scheduleAgent.proposeSlotCandidates(
-            SlotCandidatesInput(
-                tripId = tripId,
-                slotKey = request.slotKey,
-                // 동선 트레이드오프 입력 — 직전·직후 슬롯
-                neighborSlotKeys = listOfNotNull(
-                    day.slots.getOrNull(index - 1)?.let { SlotKey.of(date, it.sourcePoiId) },
-                    day.slots.getOrNull(index + 1)?.let { SlotKey.of(date, it.sourcePoiId) },
+        // 경계 실패를 그대로 흘리면 RuntimeException 이라 전역 핸들러가 500 으로 떨군다 —
+        // "우리가 터졌다"가 아니라 "지금은 못 준다"가 사실이다(http 모드에서 이 경로는 아직 미개통).
+        // openapi 도 이 오퍼레이션에 5xx 를 약속한 적이 없다. 503 + 폴백 없음으로 표면화한다(RESILIENCY-10).
+        val proposed = try {
+            scheduleAgent.proposeSlotCandidates(
+                SlotCandidatesInput(
+                    tripId = tripId,
+                    slotKey = request.slotKey,
+                    // 동선 트레이드오프 입력 — 직전·직후 슬롯
+                    neighborSlotKeys = listOfNotNull(
+                        day.slots.getOrNull(index - 1)?.let { SlotKey.of(date, it.sourcePoiId) },
+                        day.slots.getOrNull(index + 1)?.let { SlotKey.of(date, it.sourcePoiId) },
+                    ),
+                    centerLat = center.lat,
+                    centerLng = center.lng,
+                    radiusM = request.radiusM,
+                    concept = request.concept,
+                    excludePoiIds = inItinerary,
+                    requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), CANDIDATES_DEADLINE_MS),
                 ),
-                centerLat = center.lat,
-                centerLng = center.lng,
-                radiusM = request.radiusM,
-                concept = request.concept,
-                excludePoiIds = inItinerary,
-                requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), CANDIDATES_DEADLINE_MS),
-            ),
-        )
+            )
+        } catch (e: ScheduleAgentCallFailed) {
+            log.warn("슬롯 후보 제안 실패 — 503 으로 표면화합니다(폴백 없음). tripId={} errorCode={}", tripId, e.errorCode, e)
+            throw UpstreamUnavailable(
+                source = "schedule-agent",
+                fallbackApplied = false, // 후보는 지어낼 수 없다(INV-1) — 빈 목록은 "주변에 없음"과 구분되지 않는다
+                message = "장소 추천을 지금 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+                cause = e,
+            )
+        }
 
         // closed-set 재확인(INV-1) — 경계 너머가 지어낸 poiId 가 클라이언트로 나가면 그대로 일정에 들어간다.
         // 편집 경로에 POI 실재 검사가 없어 여기서 막지 않으면 확정 동결까지 흘러간다.

@@ -204,6 +204,38 @@ class ItineraryRevisionServiceTest : StringSpec({
         shouldThrow<ResourceNotFound> { svc.restore(acc, tripId, foreign.revisionId) }
     }
 
+    "AI 재검증이 실패해도 되돌리기는 500 이 되지 않는다 — 직전 위반 표시를 유지한 채 저장한다" {
+        val revs = Revisions()
+        // 현행 일정은 이미 위반이 표시된 상태
+        val flagged = Itinerary.reconstitute(
+            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            GenerationState.COMPLETE,
+            listOf(
+                ItineraryDay.of(
+                    d1, 0,
+                    listOf(
+                        VisitSlot.of(
+                            cafe, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+                            hasViolation = true, violationReason = "이동이 빠듯해요",
+                        ),
+                    ),
+                ),
+            ),
+            now, now, null,
+        )
+        val its = Itineraries(flagged)
+        val down = NoopValidateAgent(failure = RuntimeException("AI 다운"))
+        val svc = ItineraryRevisionService(revs, its, trips, down, REV_NOOP_TX, clock)
+        svc.record(flagged, RevisionActor.AI, RevisionKind.BASELINE, "처음")
+
+        val restored = svc.restore(acc, tripId, revs.stored.single().revisionId)
+
+        // 판정을 못 했다고 "깨끗하다"고 말하지 않는다 — 배지가 조용히 꺼지면 사용자는 문제를 못 본다.
+        val s0 = restored.days.single().slots.single()
+        s0.hasViolation shouldBe true
+        s0.violationReason shouldBe "이동이 빠듯해요"
+    }
+
     "되돌린 결과에도 위반 사유가 붙는다(배지만 켜면 화면이 이유를 못 그린다)" {
         val revs = Revisions()
         val v1 = itinerary(listOf(slot(cafe, "10:00", "11:00")))
