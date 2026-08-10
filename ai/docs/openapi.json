@@ -1,0 +1,920 @@
+{
+  "components": {
+    "schemas": {
+      "CandidatesSummarySchema": {
+        "additionalProperties": false,
+        "description": "후보 충분성(BR-U2-05). 판정은 AI 소유 — 백엔드는 그대로 전달한다.\n\n`pool_size`는 모르면 null로 둔다(0은 \"후보 0건\"이라는 판정으로 읽힌다).",
+        "properties": {
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "pool_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pool Size"
+          },
+          "shortfall_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shortfall Categories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "level"
+        ],
+        "title": "CandidatesSummarySchema",
+        "type": "object"
+      },
+      "DayAnchorSchema": {
+        "additionalProperties": false,
+        "description": "day별 공간 앵커(등록 숙소 해석 결과 = trip_base_day).",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "lng": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lng",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "lat",
+          "lng"
+        ],
+        "title": "DayAnchorSchema",
+        "type": "object"
+      },
+      "DayScheduleSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/VisitSlotDisplaySchema"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "DayScheduleSchema",
+        "type": "object"
+      },
+      "FixedBlockSchema": {
+        "additionalProperties": false,
+        "description": "시각 고정 필수방문지(HC3). ANYTIME이면 date/start/dwell_min은 null.",
+        "properties": {
+          "date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "dwell_min": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dwell Min"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          }
+        },
+        "required": [
+          "poi_id"
+        ],
+        "title": "FixedBlockSchema",
+        "type": "object"
+      },
+      "FreshnessMetaSchema": {
+        "additionalProperties": false,
+        "description": "IO-6 — 사용 데이터 신선도. 백엔드는 `fetched_at`→generatedAt, `stale`→degraded로 사영한다.",
+        "properties": {
+          "cache_hit": {
+            "default": false,
+            "title": "Cache Hit",
+            "type": "boolean"
+          },
+          "fetched_at": {
+            "format": "date-time",
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "ttl_sec": {
+            "default": 0,
+            "title": "Ttl Sec",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "fetched_at"
+        ],
+        "title": "FreshnessMetaSchema",
+        "type": "object"
+      },
+      "GenerateItineraryRequest": {
+        "additionalProperties": false,
+        "description": "`POST /ai/v1/itinerary/generate` 요청 = 백엔드 `ScheduleAgentInput`.\n\nday1 2단계 생성(TRIP-293): 1차 `time_windows=[day1]`·`deadline_ms=5000`,\n2차 `time_windows=[나머지]`·`excluded_poi_ids=[1차 배정 POI]`.",
+        "properties": {
+          "anchors": {
+            "items": {
+              "$ref": "#/components/schemas/DayAnchorSchema"
+            },
+            "title": "Anchors",
+            "type": "array"
+          },
+          "excluded_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Poi Ids",
+            "type": "array"
+          },
+          "fixed_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/FixedBlockSchema"
+            },
+            "title": "Fixed Blocks",
+            "type": "array"
+          },
+          "generation_mode": {
+            "$ref": "#/components/schemas/GenerationMode"
+          },
+          "preference_profile": {
+            "$ref": "#/components/schemas/PreferenceProfileSchema"
+          },
+          "recommendation_strength": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Strength"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "time_windows": {
+            "items": {
+              "$ref": "#/components/schemas/TimeWindowSchema"
+            },
+            "minItems": 1,
+            "title": "Time Windows",
+            "type": "array"
+          },
+          "trip_context": {
+            "$ref": "#/components/schemas/TripContextSchema"
+          },
+          "trip_id": {
+            "minLength": 1,
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id",
+          "generation_mode",
+          "trip_context",
+          "time_windows",
+          "preference_profile",
+          "request_meta"
+        ],
+        "title": "GenerateItineraryRequest",
+        "type": "object"
+      },
+      "GenerationMode": {
+        "description": "d11 추천 강도 분기. 백엔드는 Kotlin enum 이름(대문자)을 보낸다.",
+        "enum": [
+          "FULLY_AI",
+          "CO_PLAN"
+        ],
+        "title": "GenerationMode",
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ItineraryPayload": {
+        "additionalProperties": false,
+        "description": "일정 산출물 — generate 응답이자 validate/repair 요청 본문(같은 형태를 왕복한다).\n\n`solve_mode`는 AI 4값(OR_TOOLS|LLM|RULE_FALLBACK|MINIMAL)을 그대로 보낸다.\n백엔드 3값(FULL_AI|DETERMINISTIC|MINIMAL)으로의 축약은 어댑터가 소유한다(ScheduleAgentWire).\n`explanations` 키 규약 = `\"{date}#{poi_id}\"` (BR-U2-04), 문구는 시각·소요시간을 언급하지 않는다.",
+        "properties": {
+          "candidates_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidatesSummarySchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "day1_ready_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day1 Ready At"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DayScheduleSchema"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "explanations": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Explanations",
+            "type": "object"
+          },
+          "freshness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FreshnessMetaSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_fallback": {
+            "default": false,
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "solve_mode": {
+            "title": "Solve Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "solve_mode"
+        ],
+        "title": "ItineraryPayload",
+        "type": "object"
+      },
+      "PreferenceProfileSchema": {
+        "additionalProperties": false,
+        "description": "취향 7축(preference_snapshot).",
+        "properties": {
+          "activities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Activities",
+            "type": "array"
+          },
+          "budget_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Tier"
+          },
+          "companion_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Companion Types",
+            "type": "array"
+          },
+          "food_tastes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Food Tastes",
+            "type": "array"
+          },
+          "pace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pace"
+          },
+          "pet_friendly": {
+            "default": false,
+            "title": "Pet Friendly",
+            "type": "boolean"
+          },
+          "styles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Styles",
+            "type": "array"
+          },
+          "transport_modes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Transport Modes",
+            "type": "array"
+          }
+        },
+        "title": "PreferenceProfileSchema",
+        "type": "object"
+      },
+      "RepairItineraryRequest": {
+        "additionalProperties": false,
+        "description": "`POST /ai/v1/itinerary/repair` — 백엔드 포트 `repair(solution, violations)` 대응 + IO-1.",
+        "properties": {
+          "itinerary": {
+            "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/ViolationSchema"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "itinerary",
+          "request_meta"
+        ],
+        "title": "RepairItineraryRequest",
+        "type": "object"
+      },
+      "RepairItineraryResponse": {
+        "additionalProperties": false,
+        "description": "`repaired=null` = 수리 불가(정상 응답, IO-7) — 오류가 아니다.",
+        "properties": {
+          "changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "repaired": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItineraryPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "RepairItineraryResponse",
+        "type": "object"
+      },
+      "RequestMetaSchema": {
+        "additionalProperties": false,
+        "description": "IO-1 — 지연 예산 전파. day1 5s / 전체 20s.",
+        "properties": {
+          "deadline_ms": {
+            "exclusiveMinimum": 0.0,
+            "title": "Deadline Ms",
+            "type": "integer"
+          },
+          "request_id": {
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "requested_at",
+          "deadline_ms"
+        ],
+        "title": "RequestMetaSchema",
+        "type": "object"
+      },
+      "TimeWindowSchema": {
+        "additionalProperties": false,
+        "description": "날짜별 이용 시각(기본 09–21시). 도메인 TimeWindow와 같은 불변식(start < end).",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "end": {
+            "format": "time",
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "format": "time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "start",
+          "end"
+        ],
+        "title": "TimeWindowSchema",
+        "type": "object"
+      },
+      "TripContextSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "budget_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Level"
+          },
+          "companion_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Companion Type"
+          },
+          "destinations": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Destinations",
+            "type": "array"
+          },
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "destinations",
+          "start_date",
+          "end_date"
+        ],
+        "title": "TripContextSchema",
+        "type": "object"
+      },
+      "ValidateItineraryRequest": {
+        "additionalProperties": false,
+        "description": "`POST /ai/v1/itinerary/validate` — 백엔드 포트 `validate(solution)` 대응 + IO-1.",
+        "properties": {
+          "itinerary": {
+            "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          }
+        },
+        "required": [
+          "itinerary",
+          "request_meta"
+        ],
+        "title": "ValidateItineraryRequest",
+        "type": "object"
+      },
+      "ValidateItineraryResponse": {
+        "additionalProperties": false,
+        "description": "빈 목록 = 위반 없음. 상태코드는 200(위반은 정상 응답, IO-7).",
+        "properties": {
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/ViolationSchema"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "title": "ValidateItineraryResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "ViolationSchema": {
+        "additionalProperties": false,
+        "description": "하드 제약 위반 1건 — AI 도메인 표현(`code`/`slot_ref`) + 위치 인덱스 **수퍼셋**.\n\n백엔드 도메인은 `(type, dayIndex, slotIndex)`로 지시한다. AI 도메인 타입에는 위치\n인덱스가 없지만, **직렬화 시점에 일정(days)을 스캔해 계산**해서 함께 실어 보낸다\n(routes.locate_slot) — 백엔드 어댑터는 code→type 매핑만 하면 된다.\n`slot_ref`가 일정 어디에도 없으면(예: HC3 미배치 위반 — 슬롯이 없어서 위반인 것)\n인덱스는 null이다. 지어내지 않는다.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "day_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Index"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "slot_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot Index"
+          },
+          "slot_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot Ref"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ViolationSchema",
+        "type": "object"
+      },
+      "VisitSlotDisplaySchema": {
+        "additionalProperties": false,
+        "description": "표시용 방문 슬롯 — 솔버 검증 시각·순서만(INV-2), 거리만(INV-3).\n\n**소요시간 필드를 추가하지 말 것**: 도메인 `VisitSlot.stay_min`·`score`는\n내부값이라 이 사영에서 의도적으로 제외한다(IO-3).",
+        "properties": {
+          "distance_range": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance Range"
+          },
+          "end_at": {
+            "format": "time",
+            "title": "End At",
+            "type": "string"
+          },
+          "ends_next_day": {
+            "default": false,
+            "title": "Ends Next Day",
+            "type": "boolean"
+          },
+          "is_fixed": {
+            "default": false,
+            "title": "Is Fixed",
+            "type": "boolean"
+          },
+          "poi_id": {
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "start_at": {
+            "format": "time",
+            "title": "Start At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "start_at",
+          "end_at"
+        ],
+        "title": "VisitSlotDisplaySchema",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "일정 생성·검증·수리 경계 (U5). 와이어는 snake_case.",
+    "title": "TripPilot AI",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Root  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Root"
+      }
+    },
+    "/ai/v1/itinerary/generate": {
+      "post": {
+        "description": "일정 생성(굵은 경계). 시한 초과는 오류가 아니라 MINIMAL 폴백 200이다(TRIP-291).",
+        "operationId": "generate_ai_v1_itinerary_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateItineraryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItineraryPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/repair": {
+      "post": {
+        "description": "Plan-B 최소 조정(시각·순서만, POI 불변). 수리 불가면 `repaired=null` + 200(IO-7).",
+        "operationId": "repair_ai_v1_itinerary_repair_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepairItineraryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepairItineraryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Repair",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/validate": {
+      "post": {
+        "description": "편집 재검증(HC1~4). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다.",
+        "operationId": "validate_ai_v1_itinerary_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateItineraryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateItineraryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    }
+  }
+}

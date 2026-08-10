@@ -32,8 +32,13 @@ class PoiSnapshotRepositoryAdapter(
     private val jpa: PoiSnapshotJpaRepository,
 ) : PoiSnapshotRepository {
 
-    override fun save(snapshot: PoiSnapshot): PoiSnapshot = jpa.save(snapshot.toEntity()).let { snapshot }
+    // saveAndFlush: 소비자(must_visit·visit_slot)가 같은 tx 안에서 poi_snapshot_id 를 FK로 참조 —
+    // JPA 연관이 아닌 plain UUID FK라 Hibernate가 flush 순서를 보장 못 함. 즉시 flush 해 참조 무결성 확보.
+    override fun save(snapshot: PoiSnapshot): PoiSnapshot = jpa.saveAndFlush(snapshot.toEntity()).let { snapshot }
     override fun findById(poiSnapshotId: UUID) = jpa.findById(poiSnapshotId).orElse(null)?.toDomain()
+
+    override fun findByIds(poiSnapshotIds: Collection<UUID>): List<PoiSnapshot> =
+        jpa.findAllById(poiSnapshotIds).map { it.toDomain() }
 
     private fun PoiSnapshot.toEntity() = PoiSnapshotEntity(
         poiSnapshotId, sourcePoiId, nameKo, lat, lng, category.name, snapshotAt,

@@ -350,6 +350,8 @@ LLM 문장 품질은 PR마다 평가할 수 없다 (비용·시간·비결정성
 - 비용 추정(ai-cost-estimation.md)은 Anthropic API 요금 기준으로 재산정 필요.
 - 미결 항목 1(LLM 벤더) 해소. 신규 미결: 임베딩 모델 최종 선정.
 
+**부기 (2026-08-10, TRIP-340)**: 개발·검증용 OpenAI 호환 어댑터(`c1/adapters/openai_adapter.py`)가 `LlmPort` 뒤에 존재한다. Claude API 결제 승인 전에 K-2 실모델 검증을 진행하기 위한 조치로, 멘토 제공 GPT-5.6 엔드포인트를 사용한다(base_url 주입으로 OpenAI 호환 게이트웨이 대응). **프로덕션 기본은 Anthropic 유지** — 이 결정(AI-D06)을 뒤집지 않으며, Port 격리 원칙("벤더 전환 비용 = 어댑터 1개") 그대로 어댑터 계층에만 추가된다. 실 호출은 수동 스모크(`scripts/smoke_llm.py`)뿐, CI 실 호출 0건(D37)은 불변.
+
 ---
 
 ## AI-D07: U2 솔버 시간 정책 — day1 5초 유지 + 시한 인지 하이브리드 체인

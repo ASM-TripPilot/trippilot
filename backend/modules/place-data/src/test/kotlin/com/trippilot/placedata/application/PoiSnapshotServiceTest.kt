@@ -20,6 +20,9 @@ private class FakeSnapshots : PoiSnapshotRepository {
     val stored = mutableListOf<PoiSnapshot>()
     override fun save(snapshot: PoiSnapshot) = snapshot.also { stored.add(it) }
     override fun findById(poiSnapshotId: UUID) = stored.firstOrNull { it.poiSnapshotId == poiSnapshotId }
+    override fun findByIds(poiSnapshotIds: Collection<UUID>): List<PoiSnapshot> =
+        stored.filter { it.poiSnapshotId in poiSnapshotIds }
+
 }
 
 class PoiSnapshotServiceTest : StringSpec({

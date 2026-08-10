@@ -84,7 +84,7 @@ U1 (backend modules)
 | 자산 | 출처 | U1 델타 |
 |---|---|---|
 | 구조화 로깅·상관 ID·아웃박스·이벤트버스 | U0/TRIP-148 | 이벤트 6종 추가 발행(도메인 이벤트만, 인프라 그대로) |
-| 서킷 브레이커(Resilience4j) | U0 P-RES-2 | **다벤더 인스턴스 확장**(P-RES-U1-1) — 프레임워크 동일 |
+| 서킷 브레이커(Resilience4j) | U0 P-RES-2 | **다벤더 인스턴스 확장**(P-RES-U1-1) — 프레임워크 동일. ⚠️ **미실장 · U4에서 재확인(2026-08-09)**: `libs.versions.toml`에 라이브러리 없음 → U4가 "지금 도입하지 않는다"로 결정(P-RES-U4-1). 위 §29 `통합` 열의 "Resilience4j 서킷 인스턴스"도 같은 상태다 |
 | ShedLock 스케줄 락 | U0(V1.x) | `PriceSnapshotBatch` 재사용 |
 | ArchUnit·Konsist | U0/TRIP-150 | **closed-set 게이트 우회 금지 규칙 추가**(조회가 게이트 건너뛰지 못하게) |
 | 위치 동의·법정 로그 | U0/V1.3 | '내 주변' 이용 사실 append-only 기록(LEGAL-U1-02) — 신규 테이블 없음 |

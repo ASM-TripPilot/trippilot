@@ -1,6 +1,13 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -24,16 +31,39 @@ import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
+import {
+  buildDraftPins,
+  formatDraftDayHeader,
+} from '@/features/itinerary/model/draftView';
+import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
+import {
+  startTimeOptions,
+  tripDayChips,
+} from '@/features/itinerary/model/mustVisitTimeForm';
+import {
+  DraftScreen,
+  type DraftScreenProps,
+} from '@/features/itinerary/ui/DraftScreen';
+import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
+import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
 } from '@/features/trip/ui/TripWizardStep1Screen';
+import {
+  TripWizardStep2Screen,
+  type TripWizardStep2ScreenProps,
+} from '@/features/trip/ui/TripWizardStep2Screen';
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
 import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
+import type {
+  ItineraryDaysItem,
+  ItineraryDaysItemSlotsItem,
+} from '@/shared/api/generated/schemas';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
-import { KakaoMapView } from '@/shared/map';
+import { KakaoMapView, type MapPin } from '@/shared/map';
 
 /**
  * expo-router 의 `useLocalSearchParams` 를 모듈 로드 시점에 딱 한 번 안전하게 구해온다.
@@ -124,6 +154,278 @@ const TERMS_ITEMS = [
     checked: false,
   },
 ];
+
+/**
+ * g02 거점 숙소 2/2 default 의 대표값(TRIP-225) — Figma `1707:1183` 실측을 그대로 옮겼다.
+ * 다른 변형은 이걸 스프레드하고 갈리는 prop 만 덮어쓴다.
+ *
+ * 왜 프리뷰가 필요한가: 실화면 딥링크로는 **`notrip` 얼굴밖에 볼 수 없다.** 나머지 넷은
+ * `tripId`가 있어야 하는데 그건 g01 제출(`POST /trips`)이 만들고, 백엔드 없이는 안 생긴다.
+ *
+ * ⚠️ 후보 카드의 사진·지역·거리·가격 자리는 회색으로 보인다 — `SavedStay` 계약에 그 필드가
+ * 없어서다(01b D2). 구현 실패가 아니다.
+ */
+/** g02 보완 시트(TRIP-226)의 대표값 — 좌표 미확정이라 지도 섹션이 그려지는 갈래다. */
+const FIX_SHEET_BASE: NonNullable<TripWizardStep2ScreenProps['fixSheet']> = {
+  savedStayId: 'stay-2',
+  stayName: '광안리 뷰 호텔',
+  center: { lat: 35.1587, lng: 129.1604 },
+  coordConfirmed: false,
+  pinDropped: false,
+  mapUnavailable: false,
+  dayOptions: [
+    { date: '2026-06-10', label: '6/10' },
+    { date: '2026-06-11', label: '6/11' },
+    { date: '2026-06-12', label: '6/12' },
+    { date: '2026-06-13', label: '6/13' },
+  ],
+  checkIn: null,
+  checkOut: null,
+  saveDisabled: true,
+  saveBlockedReason: '날짜를 모두 선택해 주세요',
+  saving: false,
+  onPinDrop: noop,
+  onConfirmCoord: noop,
+  onPickDay: noop,
+  onSave: noop,
+  onRetrySave: noop,
+  onClose: noop,
+};
+
+/** h05 목록 3항목 — Figma 실측 데이터 그대로. `imageUrl` 이 전부 `null` 인 것은 다른 프리뷰
+ * 픽스처와 같은 이유다(서버 시드가 사진을 안 준다 — `exploreFixtures` 머리말). */
+const MUST_VISIT_PREVIEW_ITEMS: MustVisitListItem[] = [
+  {
+    mustVisitId: 'mv-a',
+    sourcePoiId: 'poi-a',
+    name: '부산시립미술관',
+    imageUrl: null,
+    type: 'FIXED',
+    fixedDate: '2026-06-11',
+    fixedStart: '13:00',
+  },
+  {
+    mustVisitId: 'mv-b',
+    sourcePoiId: 'poi-b',
+    name: '해운대 블루라인파크',
+    imageUrl: null,
+    type: 'ANYTIME',
+  },
+  {
+    mustVisitId: 'mv-c',
+    sourcePoiId: 'poi-c',
+    name: '감천문화마을',
+    imageUrl: null,
+    type: 'ANYTIME',
+  },
+];
+
+/** h05 지도 핀 3개 — Figma `1875:1083` 이 그린 부산 3지점. 배선에서는
+ * `buildMustVisitPins` 가 담은 장소 좌표로 만드는 값이라, 여기서는 그 결과 모양만 흉내 낸다. */
+const MUST_VISIT_PREVIEW_PINS: MapPin[] = [
+  { number: 1, lat: 35.1379, lng: 129.0596 },
+  { number: 2, lat: 35.1587, lng: 129.1604 },
+  { number: 3, lat: 35.163, lng: 129.0104 },
+];
+
+/**
+ * h11 AI 추천안 초안(TRIP-297)의 하루 — 승인 테스트(`DraftScreen.test.tsx`)가 쓰는 슬롯 4개와
+ * **같은 모양**이다. 두 곳이 갈리면 "테스트에서 본 것"과 "눈으로 본 것"이 달라진다.
+ * 테스트 파일에서 import 하지 않고 값을 여기 다시 둔다 — 테스트는 프로덕션 그래프에
+ * 들어가면 안 된다(`MUST_VISIT_THUMBNAILS` 처럼 파일 상단 상수로 두는 이 파일의 관례).
+ *
+ * 한 벌이 동시에 덮는 것: 시간대 4종(오전·점심·오후·저녁) · 고정/비고정 · 좌표 유무 ·
+ * null 필드. 2번 슬롯은 이름·사진·태그·좌표를 **전부 안 주는** 슬롯이라 그 자리가 어떻게
+ * 비는지(AC-7)와 지도 핀이 ①③④ 로 건너뛰는 것(AC-13)을 한 화면에서 같이 볼 수 있다.
+ *
+ * ⚠️ TRIP-339 로 판단이 바뀐 자리 — 예전에는 `imageUrl` 이 전부 `null` 이었고 그 머리말은
+ * "78px 썸네일이 빠져 보이는 것은 구현 실패가 아니다"라고 적혀 있었다. 그러나 프리뷰의 쓸모는
+ * **Figma 와 눈으로 대조하는 것**이라, 사진 칸이 통째로 빈 화면은 대조를 할 수 없게 만든다.
+ * 이제 1·3·4번 슬롯이 로컬 에셋에서 푼 URI 를 받는다. 2번 슬롯은 그대로 `null` 이라
+ * **사진이 없는 카드가 어떻게 그려지는지**도 같은 화면에서 계속 볼 수 있다.
+ * 클라가 외부 URL 을 지어내지 않는다는 INV-1 은 그대로다 — 값의 출처가 리포 안 파일이다.
+ *
+ * ⚠️ 좌표도 TRIP-339 에서 좁혔다(옛 최장 41km → 2.0km). Figma h11 지도는 가로 358px 에
+ * 1km ≈ 52px 축척이라 한 화면이 약 6.9km 인데, 41km 짜리 핀 묶음은 그 6배로 벌어져 축척이
+ * 아예 다른 그림이 됐다. 3·4번은 서로 241m 라 화면에서 겹쳐 보이기까지 했다. 셋을 실제
+ * 관광지인 성산일출봉 둘레(0.9~2.0km)로 모았다 — **카페·숙소 이름과 실제 위치는 맞지 않는다**
+ * (이 픽스처의 이름은 원래 가상이고, 여기서 재는 것은 축척과 배치다).
+ */
+const DRAFT_PREVIEW_DATE = '2026-06-10';
+
+/**
+ * 프리뷰 카드 썸네일 3장. 파일 출처·라이선스는 `src/assets/itinerary/CREDITS.md`.
+ *
+ * > **개념 — `require` + `Image.resolveAssetSource`**: React Native 에서 로컬 이미지는 URL 이
+ * > 아니라 `require('...jpg')` 로 번들에 싣는다. 그 결과는 번들러가 매긴 **에셋 참조**이지
+ * > 문자열이 아니라서, `<Image source={{ uri }} />` 처럼 문자열 URI 를 받는 자리에 넣으려면
+ * > `Image.resolveAssetSource(...).uri` 로 한 번 풀어야 한다.
+ *
+ * jest 에서는 에셋이 스텁으로 바뀌어 `.uri` 가 `undefined` 다 — 그래서 `?? null` 로 받아
+ * 계약(`imageUrl: string | null`)에 맞춰 떨어뜨린다. 테스트에서는 사진 없는 카드가 되고
+ * 실기에서만 썸네일이 뜬다. 실제 사진이 뜨는지는 6-b 실기 확인 몫이다.
+ */
+const DRAFT_PREVIEW_PHOTOS: (string | null)[] = [
+  require('@/assets/itinerary/draft-preview-1.jpg'),
+  require('@/assets/itinerary/draft-preview-2.jpg'),
+  require('@/assets/itinerary/draft-preview-3.jpg'),
+].map((source) => Image.resolveAssetSource(source)?.uri ?? null);
+
+const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
+  {
+    poiId: 'poi-a',
+    startAt: '09:30:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '성산일출봉',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+    tags: ['바다', '포토'],
+    distanceRange: '약 1.2km · 도보 추정',
+    lat: 33.458,
+    lng: 126.942,
+  },
+  {
+    poiId: 'poi-b',
+    startAt: '12:30:00',
+    endAt: '13:30:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: null,
+    imageUrl: null,
+    tags: [],
+    lat: null,
+    lng: null,
+  },
+  {
+    poiId: 'poi-c',
+    startAt: '15:00:00',
+    endAt: '16:30:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '카페 그레이',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+    tags: ['카페'],
+    lat: 33.4664,
+    lng: 126.9276,
+  },
+  {
+    poiId: 'poi-d',
+    startAt: '21:00:00',
+    endAt: '22:00:00',
+    isFixed: true,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '제주 신라스테이',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    tags: [],
+    lat: 33.4741,
+    lng: 126.9316,
+  },
+];
+
+const DRAFT_PREVIEW_DAYS: ItineraryDaysItem[] = [
+  { date: DRAFT_PREVIEW_DATE, slots: DRAFT_PREVIEW_SLOTS },
+];
+
+/** 좌표가 하나도 없는 날 — 핀이 0개라 **지도 블록이 통째로 빠지고 레이아웃이 위로 당겨진다.**
+ * 03 §3.1-3 의 자기 신고 자리이고 Figma 와 갈리는 지점이라, 눈으로 판단할 상태로 세운다. */
+const DRAFT_PREVIEW_DAYS_NO_COORDS: ItineraryDaysItem[] = [
+  {
+    date: DRAFT_PREVIEW_DATE,
+    slots: DRAFT_PREVIEW_SLOTS.map((slot) => ({
+      ...slot,
+      lat: null,
+      lng: null,
+    })),
+  },
+];
+
+const DRAFT_PREVIEW_BASE: DraftScreenProps = {
+  view: { kind: 'listed', days: DRAFT_PREVIEW_DAYS, staleFailed: false },
+  // 여행은 3일인데 첫날만 도착한 상태(2단계 생성 중) — 2·3일차 탭이 비활성으로 보인다.
+  tabs: [
+    { date: DRAFT_PREVIEW_DATE, dayNumber: 1, hasData: true },
+    { date: '2026-06-11', dayNumber: 2, hasData: false },
+    { date: '2026-06-12', dayNumber: 3, hasData: false },
+  ],
+  selectedDate: DRAFT_PREVIEW_DATE,
+  // 배선이 쓰는 판정 함수를 그대로 부른다 — 손으로 적으면 프리뷰와 실기가 갈린다.
+  pins: buildDraftPins(DRAFT_PREVIEW_SLOTS),
+  dayHeader: formatDraftDayHeader(DRAFT_PREVIEW_DATE),
+  canRetry: true,
+  onSelectDay: noop,
+  onRetry: noop,
+  onBack: noop,
+};
+
+const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
+  variant: 'default',
+  subtitle: '6월 10일–13일',
+  sections: [
+    {
+      baseAssignmentId: 'ba-1',
+      nightLabel: '1–2박',
+      dateLabel: '6/10–6/12',
+      stayName: '해운대 오션 호텔',
+      changePending: false,
+    },
+    {
+      baseAssignmentId: 'ba-2',
+      nightLabel: '3박',
+      dateLabel: '6/12–6/13',
+      stayName: '경주 한옥스테이 봄',
+      changePending: false,
+    },
+  ],
+  candidates: [
+    {
+      savedStayId: 'stay-1',
+      name: '해운대 오션 호텔',
+      isBase: true,
+      assignedLabel: '1–2박에 지정됨',
+      assignPending: false,
+    },
+    {
+      savedStayId: 'stay-2',
+      name: '광안리 뷰 호텔',
+      isBase: false,
+      assignPending: false,
+    },
+    // 날짜를 안 넣고 저장한 숙소 — 등록 화면의 체크인/아웃이 `(선택)`이라 실제로 생긴다(D4).
+    {
+      savedStayId: 'stay-3',
+      name: '감천 게스트하우스',
+      isBase: false,
+      assignPending: false,
+      blockedReason: '날짜가 없어 지정할 수 없어요',
+    },
+    {
+      savedStayId: 'stay-4',
+      name: '경주 한옥스테이 봄',
+      isBase: true,
+      assignedLabel: '3박에 지정됨',
+      assignPending: false,
+      errorText: '지정하지 못했어요',
+    },
+  ],
+  generateDisabled: false,
+  coverageFailed: false,
+  onBack: noop,
+  onAssign: noop,
+  onRetryAssign: noop,
+  onChange: noop,
+  onRetryChange: noop,
+  onGenerate: noop,
+  onNoStayStart: noop,
+  onExploreStays: noop,
+  onRetryAll: noop,
+  onRestart: noop,
+  onRetryCoverage: noop,
+};
 
 /**
  * g01 여행 만들기 1/2 — '꼭 갈 곳' 시드 섹션(TRIP-209)을 Figma와 눈으로 대조하기 위한 두 얼굴.
@@ -519,6 +821,296 @@ const PREVIEW_STATES: PreviewState[] = [
         {...TRIP_WIZARD_BASE}
         mustVisitSection={{ kind: 'empty' }}
         onPressMoreMustVisits={noop}
+      />
+    ),
+  },
+  // g02 5변형(TRIP-225). 화면이 완성된 문자열·불리언만 받는 프레젠테이션이라, 배선 없이
+  // props 만 갈아 끼우면 다섯 얼굴이 그대로 나온다 — 실기로 얼굴을 보려면 여기가 정본이다
+  // (`docs/structure.md` 경고: "엣지 케이스 화면을 눈으로 보려면 목을 만들지 말고 여기에
+  // 상태를 추가한다"). blocked 는 default 에 unresolved + generateDisabled 만 얹은 것이다.
+  {
+    key: 'trip-new-step2-default',
+    label: '거점 숙소 2/2 · 기본',
+    login: null,
+    render: () => <TripWizardStep2Screen {...TRIP_BASE_SCREEN} />,
+  },
+  {
+    key: 'trip-new-step2-blocked',
+    label: '거점 숙소 2/2 · 차단',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        generateDisabled
+        unresolved={{
+          items: [
+            { date: '2026-06-11', label: '6/11' },
+            { date: '2026-06-13', label: '6/13' },
+          ],
+          overflowCount: 1,
+        }}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-coverage-failed',
+    label: '거점 숙소 2/2 · 커버리지 실패',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        generateDisabled
+        coverageFailed
+      />
+    ),
+  },
+  // g02 전제 게이트 4변형(TRIP-226). 카드 표면 하나 + 시트 3갈래다. 시트도 화면과 같은
+  // 순수 프레젠테이션(`useState` 0건)이라 여기서 props 만 갈아 끼우면 얼굴이 그대로 나온다.
+  // ⚠️ 지도 갈래는 `EXPO_PUBLIC_KAKAO_MAP_JS_KEY` 가 있어야 WebView 가 뜬다 — 키가 없으면
+  // 아래 `mapfail` 과 같은 화면이 된다(그 판정이 실기에서 맞는지 보는 것이 이 상태의 목적).
+  {
+    key: 'trip-new-step2-gate',
+    label: '거점 숙소 2/2 · 전제 게이트',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        // 구간을 비워 후보 카드를 화면 위로 올린다 — 이 상태가 보여 줄 것은 카드 표면
+        // 넷(사유·보완 진입·기간 밖 경고·확장 질의)이고, 구간은 default 상태가 이미 보여 준다.
+        sections={[]}
+        candidates={[
+          {
+            savedStayId: 'stay-2',
+            name: '광안리 뷰 호텔',
+            isBase: false,
+            assignPending: false,
+            blockedReason: '지도에서 위치를 확인해 주세요',
+            fixLabel: '지도에서 위치 확인',
+          },
+          {
+            savedStayId: 'stay-3',
+            name: '감천 게스트하우스',
+            isBase: false,
+            assignPending: false,
+            blockedReason: '날짜가 없어 지정할 수 없어요',
+            fixLabel: '날짜 입력하기',
+          },
+          {
+            savedStayId: 'stay-5',
+            name: '제주 게스트하우스',
+            isBase: false,
+            assignPending: false,
+            outOfPeriodNote: '여행 기간을 벗어나요',
+          },
+          {
+            savedStayId: 'stay-6',
+            name: '서귀포 오션뷰 펜션',
+            isBase: false,
+            assignPending: false,
+            outOfPeriodNote: '여행 기간을 벗어나요',
+            extendPrompt: '여행 기간을 늘려서 지정할까요?',
+          },
+        ]}
+        onFix={noop}
+        onExtendConfirm={noop}
+        onExtendCancel={noop}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-fixsheet-map',
+    label: '거점 숙소 2/2 · 보완 시트(지도)',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        fixSheet={{ ...FIX_SHEET_BASE }}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-fixsheet-mapfail',
+    label: '거점 숙소 2/2 · 보완 시트(지도 불가)',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        fixSheet={{ ...FIX_SHEET_BASE, mapUnavailable: true }}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-fixsheet-error',
+    label: '거점 숙소 2/2 · 보완 시트(저장 실패)',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        fixSheet={{
+          ...FIX_SHEET_BASE,
+          coordConfirmed: true,
+          checkIn: '2026-06-11',
+          checkOut: '2026-06-13',
+          saveDisabled: false,
+          errorText: '저장하지 못했어요',
+        }}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-loading',
+    label: '거점 숙소 2/2 · 로딩',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        variant="loading"
+        sections={[]}
+        candidates={[]}
+        generateDisabled
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-empty',
+    label: '거점 숙소 2/2 · 저장 숙소 0',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        variant="empty"
+        sections={[]}
+        candidates={[]}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-error',
+    label: '거점 숙소 2/2 · 조회 실패',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        variant="error"
+        sections={[]}
+        candidates={[]}
+        generateDisabled
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step2-notrip',
+    label: '거점 숙소 2/2 · 여행 없음',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        variant="notrip"
+        sections={[]}
+        candidates={[]}
+        generateDisabled
+      />
+    ),
+  },
+  // h05·h07 필수 방문지 (TRIP-296) — Figma 대조용 격리 렌더.
+  {
+    key: 'itinerary-mustvisit-default',
+    label: '필수 방문지 h05',
+    login: null,
+    render: () => (
+      <MustVisitPickerScreen
+        view={{
+          kind: 'listed',
+          items: MUST_VISIT_PREVIEW_ITEMS,
+          staleFailed: false,
+        }}
+        pins={MUST_VISIT_PREVIEW_PINS}
+        // 배선이 h09 부재로 항상 넘기는 값(TRIP-326) — 비활성 CTA·건너뛰기가 실기에서
+        // 활성과 구별되는지는 눈으로만 볼 수 있다(문제로그 2026-08-08).
+        proceedBlockedReason="다음 단계는 아직 준비 중이에요"
+      />
+    ),
+  },
+  {
+    key: 'itinerary-mustvisit-time-default',
+    label: '방문 시각 지정 h07',
+    login: null,
+    render: () => (
+      <MustVisitTimeScreen
+        sourcePoiId="poi-a"
+        placeName="부산시립미술관"
+        region="부산 부산진구"
+        imageUrl={null}
+        dayChips={tripDayChips({
+          startDate: '2026-06-10',
+          endDate: '2026-06-12',
+        })}
+        startOptions={startTimeOptions()}
+        form={{
+          fixed: true,
+          fixedDate: '2026-06-11',
+          fixedStart: '13:00',
+          dwellKey: 'NORMAL',
+        }}
+        blockReason={null}
+      />
+    ),
+  },
+  // h11 AI 추천안 초안 5상태(TRIP-297) — Figma `1870:1083` 대조용 격리 렌더.
+  // 화면이 props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로 나온다
+  // (`docs/structure.md` 경고: "엣지 케이스 화면을 눈으로 보려면 목을 만들지 말고 여기에
+  // 상태를 추가한다"). 실화면 딥링크로는 이 얼굴들을 볼 수 없다 — 생성 POST 가 만드는
+  // `tripId` 와 서버의 2단계 생성 응답이 있어야 하는데 백엔드 없이는 안 생긴다.
+  {
+    key: 'itinerary-draft-default',
+    label: '추천안 초안 h11',
+    login: null,
+    render: () => <DraftScreen {...DRAFT_PREVIEW_BASE} />,
+  },
+  {
+    key: 'itinerary-draft-stale-failed',
+    label: 'h11 · 부분 실패',
+    login: null,
+    render: () => (
+      <DraftScreen
+        {...DRAFT_PREVIEW_BASE}
+        view={{ kind: 'listed', days: DRAFT_PREVIEW_DAYS, staleFailed: true }}
+      />
+    ),
+  },
+  {
+    key: 'itinerary-draft-loading',
+    label: 'h11 · 로딩',
+    login: null,
+    render: () => (
+      <DraftScreen
+        {...DRAFT_PREVIEW_BASE}
+        view={{ kind: 'loading' }}
+        pins={[]}
+      />
+    ),
+  },
+  {
+    key: 'itinerary-draft-empty',
+    label: 'h11 · 빈 화면',
+    login: null,
+    render: () => (
+      <DraftScreen {...DRAFT_PREVIEW_BASE} view={{ kind: 'empty' }} pins={[]} />
+    ),
+  },
+  {
+    key: 'itinerary-draft-nopins',
+    label: 'h11 · 좌표 없는 날',
+    login: null,
+    render: () => (
+      <DraftScreen
+        {...DRAFT_PREVIEW_BASE}
+        view={{
+          kind: 'listed',
+          days: DRAFT_PREVIEW_DAYS_NO_COORDS,
+          staleFailed: false,
+        }}
+        pins={buildDraftPins(DRAFT_PREVIEW_DAYS_NO_COORDS[0].slots)}
       />
     ),
   },

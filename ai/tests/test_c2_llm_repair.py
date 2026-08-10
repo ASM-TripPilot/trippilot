@@ -119,7 +119,7 @@ def test_broken_json_falls_back_through_chain() -> None:
     result = facade.solve(problem, deadline_ms=10_000)
 
     assert result.solve_mode == SolveMode.RULE_FALLBACK
-    assert facade.validate(result, problem) == []
+    assert facade.validate(result, problem, deadline_ms=1000) == []
 
 
 def test_llm_timeout_is_observed_and_falls_back() -> None:
@@ -154,7 +154,7 @@ def test_hc2_violating_proposal_is_repaired() -> None:
     gap = int((slots[1].start_at - slots[0].end_at).total_seconds() // 60)
     assert gap >= travel  # 수리로 HC2 충족
     facade = HybridSolverFacade([], index, _EST, FakeClock(), trace)
-    assert facade.validate(result, problem) == []
+    assert facade.validate(result, problem, deadline_ms=1000) == []
 
 
 # ⑤ U5-P2 — warm-start: locked 보존 + 멱등
@@ -179,4 +179,4 @@ def test_regenerate_preserves_locked_and_is_idempotent(setup) -> None:
     assert kept and kept[0].start_at == locked[0].start_at  # 시각 불변
     assert kept[0].end_at == locked[0].end_at
     assert regen1 == regen2  # 멱등 (U5-P2)
-    assert facade.validate(regen1, problem) == []
+    assert facade.validate(regen1, problem, deadline_ms=1000) == []

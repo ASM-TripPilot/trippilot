@@ -13,7 +13,7 @@
     "test": "pnpm run test:node && pnpm run test:integration",
     "test:node": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:integration": "jest --config jest.integration.config.js",
-    "codegen": "orval --config ./orval.config.ts"
+    "codegen": "orval --config ./orval.config.ts && prettier --write \"src/shared/api/generated/**/*.ts\""
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",

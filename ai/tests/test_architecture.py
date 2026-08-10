@@ -86,14 +86,14 @@ def test_m7_imports_only_stdlib_and_internal() -> None:
 
 def test_c1_imports_only_stdlib_and_internal() -> None:
     """U4 DoD: c1 순수성 — 예외 2곳뿐: prompts.py의 yaml(프롬프트 정본 포맷),
-    adapters/의 anthropic(SDK는 어댑터 한정, BR-U4-10)."""
+    adapters/의 벤더 SDK(anthropic·openai — SDK는 어댑터 한정, BR-U4-10)."""
     offenders: dict[str, set[str]] = {}
     for py in (_SRC / "c1").rglob("*.py"):
         bad = _external_imports(py)
         if py.name == "prompts.py":
             bad -= {"yaml"}
         if "adapters" in py.parts:
-            bad -= {"anthropic"}
+            bad -= {"anthropic", "openai"}
         if bad:
             offenders[str(py.relative_to(_SRC))] = bad
     assert not offenders, f"c1에 외부 패키지 import 위반: {offenders}"
@@ -108,6 +108,18 @@ def test_anthropic_only_imported_in_c1_adapters() -> None:
         if "anthropic" in _external_imports(py):
             offenders.append(str(py.relative_to(_SRC)))
     assert not offenders, f"adapters 밖에서 anthropic import: {offenders}"
+
+
+def test_openai_only_imported_in_c1_adapters() -> None:
+    """TRIP-340: openai SDK 의존도 c1/adapters/ 한정 — anthropic 규칙(BR-U4-10)과 동형.
+    개발·검증용 어댑터라도 SDK가 경계 밖으로 새면 벤더 교체 비용이 어댑터 1개를 넘는다."""
+    offenders = []
+    for py in _SRC.rglob("*.py"):
+        if "adapters" in py.parts:
+            continue
+        if "openai" in _external_imports(py):
+            offenders.append(str(py.relative_to(_SRC)))
+    assert not offenders, f"adapters 밖에서 openai import: {offenders}"
 
 
 def test_yaml_only_imported_in_c1_prompts() -> None:

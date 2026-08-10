@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trippilot-backend
+  namespace: trippilot
+  labels:
+    app.kubernetes.io/name: trippilot-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trippilot-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trippilot-backend
+    spec:
+      # DB 가 뜨기 전에 앱이 기동하면 Flyway 가 접속에 실패하며 컨텍스트가 죽는다.
+      # 재시작으로도 결국 복구되지만 CrashLoopBackOff 백오프가 붙어 배포가 몇 분씩 느려지고,
+      # 로그에 진짜 실패와 구분되지 않는 예외가 쌓인다. 여기서 한 번 기다리는 편이 낫다.
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h trippilot-postgres -p 5432 -U postgres -d trippilot; do
+                echo "postgres 대기 중..."
+                sleep 2
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 70          # alpine postgres 이미지의 postgres 사용자
+            capabilities:
+              drop: ["ALL"]
+
+      containers:
+        - name: app
+          # Bazel 이 만든다(//deploy:backend_image). OTel 에이전트가 이미지 안에
+          # 들어 있고 entrypoint 에서 -javaagent 로 붙는다.
+          image: trippilot/backend:local
+          # kind load 로 노드에 직접 넣은 이미지를 쓴다. 레지스트리가 없으므로 Never 여야 한다.
+          # IfNotPresent 로 두면 이미지가 없을 때 레지스트리로 나가 ImagePullBackOff 가 된다.
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+
+          envFrom:
+            - configMapRef:
+                name: backend-config
+          env:
+            # 자격증명만 Secret 에서. 나머지 설정은 위 ConfigMap 에서 온다.
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: postgres-credentials, key: DB_USER }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-credentials, key: DB_PASSWORD }
+            - name: DB_MIGRATE_USER
+              valueFrom:
+                secretKeyRef: { name: postgres-credentials, key: DB_MIGRATE_USER }
+            - name: DB_MIGRATE_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-credentials, key: DB_MIGRATE_PASSWORD }
+            # 트레이스·로그의 리소스 속성. 어느 환경에서 나온 신호인지 SigNoz 에서 구분한다.
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "deployment.environment=local-k8s"
+
+          # 프로세스 생존만 본다 — DB 등 의존을 넣으면 의존 순단이 파드 대량 축출로 증폭된다.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          # 트래픽 수용 가능 여부. 준비되기 전 요청이 들어오는 것을 막는다.
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          # JVM 기동 + Flyway 마이그레이션이 느려도 liveness 가 죽이지 않도록 유예를 준다.
+          # 5초 × 30 = 최대 150초. 에이전트가 클래스를 변환하며 붙으므로 맨 JVM 보다 느리다.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            # backend/Dockerfile 의 USER 와 같은 숫자 UID.
+            # runAsNonRoot 는 이름이 아니라 숫자 UID 로만 검증할 수 있다.
+            runAsUser: 1001
+            runAsGroup: 1001
+            capabilities:
+              drop: ["ALL"]

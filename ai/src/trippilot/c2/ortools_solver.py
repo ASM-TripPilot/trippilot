@@ -6,18 +6,21 @@
 - 후보 > 60은 점수 상위 60 프리필터 (이동행렬 O(N²) 방지)
 
 일자별 순차 해결: 잔여 시간을 일자 수로 분할, 앞 일자에서 쓴 POI는 제외.
+problem.excluded_poi_ids(다른 호출에서 이미 배정된 POI)는 used 초기값으로 주입한다
+— 2단계 생성(day1 먼저 → 나머지)에서 호출 간 중복 방지 (TRIP-293).
 INFEASIBLE(고정 블록 모순 등)·UNKNOWN이면 None → 체인 다음 단계 (INV-4).
 """
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Mapping
 
 from ortools.sat.python import cp_model
 
 from trippilot.c2.config import STAY_DEFAULT_MIN, SolverConfig
-from trippilot.c2.fallback_solver import RuleFallbackSolver
+from trippilot.c2.fallback_solver import RuleFallbackSolver, placed_fixed_blocks
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -51,14 +54,18 @@ class OrToolsSolver:
     def solve(self, problem: ItineraryProblem,
               remaining_ms: int) -> ItinerarySolution | None:
         per_day_ms = max(_MIN_DAY_MS, remaining_ms // max(1, len(problem.days)))
-        used: set[PoiId] = set()
+        # 기배정 POI(TRIP-293)는 "이미 앞 일자에서 쓴 것"과 동일 취급 = used 초기값
+        used: set[PoiId] = set(problem.excluded_poi_ids)
         days_out: list[DaySolution] = []
         for day in problem.days:
             slots = self._solve_day(problem, day, used, per_day_ms)
             if slots is None:
                 return None  # 해 확보 실패 → 체인 다음 단계
             used.update(s.poi_id for s in slots)
-            days_out.append(DaySolution(date=day, slots=tuple(slots), fixed_blocks=()))
+            days_out.append(DaySolution(
+                date=day, slots=tuple(slots),
+                fixed_blocks=placed_fixed_blocks(problem, day, slots),  # TRIP-343
+            ))
         return ItinerarySolution(
             schedule_id=problem.schedule_id,
             days=tuple(days_out),
@@ -200,17 +207,16 @@ class OrToolsSolver:
         return (best.open_min, best.close_min)
 
     def _greedy_hint(self, problem, day, used: set[PoiId]) -> dict[PoiId, int]:
-        sub = ItineraryProblem(
-            schedule_id=problem.schedule_id,
+        # replace()로 재구성한다(TRIP-314): 필드를 일일이 나열하면 ItineraryProblem에
+        # 나중에 추가되는 필드를 조용히 떨어뜨려 이 힌트 경로에서만 반영이 사라진다
+        # (regenerate가 excluded_poi_ids를 잃은 TRIP-292와 같은 자리). 여기서 바꾸는
+        # 것은 "그 하루로 좁히기" 3개뿐이고 seed 포함 나머지는 전부 그대로 이어진다.
+        sub = replace(
+            problem,
             days=(day,),
             candidates=tuple(c for c in problem.candidates if c.poi_id not in used),
             fixed_blocks=tuple(fb for fb in problem.fixed_blocks
                                if fb.window.start.date() == day),
-            budget=problem.budget,
-            transport=problem.transport,
-            day_window=problem.day_window,
-            seed=problem.seed,
-            anchor=problem.anchor,
         )
         greedy = RuleFallbackSolver(self._pois, self._est, self._cfg).solve(sub)
         return {s.poi_id: _mod(s.start_at) for d in greedy.days for s in d.slots}

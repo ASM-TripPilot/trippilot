@@ -12,7 +12,7 @@ import type { SocialProvider } from '@/shared/api';
 export type AuthOutcome = 'success' | 'cancel' | 'dismiss';
 
 export type SocialServerBehavior =
-  | 'new-user' // 신규 판정(isNewUser=true) → needs-age
+  | 'new-user' // 신규 → 연령확인 없는 첫 요청은 400 VALIDATION_ERROR, 동봉 재전송만 200
   | 'existing-user' // 기존(isNewUser=false) → success
   | 'auth-failed' // 401 SOCIAL_AUTH_FAILED
   | 'email-conflict' // 409 SOCIAL_EMAIL_CONFLICT + existingProvider

@@ -6,8 +6,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.120.2",
+    "fastapi>=0.115",
+    "openai>=2.53.0",
     "ortools>=9.15.6755",
     "pyyaml>=6.0.3",
+    "uvicorn>=0.30",
 ]
 
 [build-system]
@@ -21,6 +24,7 @@ module-name = "trippilot"
 dev = [
     "pytest>=8.0",
     "hypothesis>=6.100",
+    "httpx>=0.28",
 ]
 
 [tool.pytest.ini_options]

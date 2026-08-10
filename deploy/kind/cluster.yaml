@@ -1,0 +1,40 @@
+# TripPilot 로컬 개발용 kind 클러스터 정의.
+#
+# 이 파일이 로컬 환경의 정본이다. 팀원 간 환경 차이를 없애려고 GUI 설정 대신 코드로 둔다.
+#
+#   kind create cluster --config deploy/kind/cluster.yaml
+#
+# 단일 노드인 이유: 로컬에서 검증하려는 건 스케줄링이 아니라 "서비스들이 클러스터 안에서
+# 서로를 찾고 붙는가" 다. 노드를 늘리면 이미지를 노드마다 적재해야 하고 메모리만 더 든다.
+# 멀티노드가 필요해지면 nodes 에 `- role: worker` 를 추가한다.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: trippilot
+
+nodes:
+  - role: control-plane
+    # kind 는 파드 IP 로 호스트에서 직접 접근할 수 없다. NodePort 를 호스트 포트로 끌어와야
+    # `curl localhost:8081` 같은 접근이 된다. 이 매핑은 클러스터 생성 시점에만 정할 수 있어
+    # 나중에 필요해질 포트를 미리 열어 둔다 — 추가하려면 클러스터를 다시 만들어야 한다.
+    #
+    # NodePort 와 여기 값은 한 쌍이다. 한쪽만 바꾸면 접근이 끊긴다.
+    # 그리고 이 매핑이 있으므로 `kubectl port-forward` 로 같은 포트를 또 열면 안 된다 —
+    # 리스너가 둘 겹쳐 어느 쪽이 응답할지 불확실해진다.
+    extraPortMappings:
+      # frontend (deploy/k8s/frontend/service.yaml 의 NodePort 30080)
+      - containerPort: 30080
+        hostPort: 8080
+        protocol: TCP
+      # 백엔드 애플리케이션 (deploy/k8s/backend/service.yaml 의 NodePort 30081)
+      - containerPort: 30081
+        hostPort: 8081
+        protocol: TCP
+      # ai (deploy/k8s/ai/service.yaml 의 NodePort 30082)
+      - containerPort: 30082
+        hostPort: 8082
+        protocol: TCP
+      # SigNoz UI (deploy/k8s/signoz/ui-nodeport.yaml 의 NodePort 30083)
+      # 8080 은 frontend 가 쓰므로 관측성 UI 는 8083 으로 옮겼다(TRIP-325).
+      - containerPort: 30083
+        hostPort: 8083
+        protocol: TCP

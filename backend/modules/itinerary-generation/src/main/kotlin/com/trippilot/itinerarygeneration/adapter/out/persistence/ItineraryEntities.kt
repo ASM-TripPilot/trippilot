@@ -4,6 +4,8 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
@@ -21,9 +23,14 @@ class ItineraryEntity(
     @Column(name = "trip_id") var tripId: UUID,
     @Column(name = "status") var status: String,
     @Column(name = "solve_mode") var solveMode: String,
+    @Column(name = "generation_mode") var generationMode: String,
     @Column(name = "is_fallback") var isFallback: Boolean,
+    @Column(name = "generation_state") var generationState: String,
     @Column(name = "created_at") var createdAt: Instant,
     @Column(name = "updated_at") var updatedAt: Instant,
+    // 후보 충분성(BR-U2-05) — AI 판정값 그대로. Map 으로 jsonb 매핑(문자열 선직렬화 시 이중 인코딩).
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "candidates_summary") var candidatesSummary: Map<String, Any>?,
 )
 
 /** itinerary_day(V2.7). 일자별. */
@@ -49,6 +56,10 @@ class VisitSlotEntity(
     @Column(name = "end_at") var endAt: LocalTime,
     @Column(name = "is_fixed") var isFixed: Boolean,
     @Column(name = "has_violation") var hasViolation: Boolean,
+    @Column(name = "ends_next_day") var endsNextDay: Boolean,
+    @Column(name = "distance_range") var distanceRange: String?,
+    @Column(name = "placement_reason") var placementReason: String?,
+    @Column(name = "violation_reason") var violationReason: String?,
 )
 
 interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {
@@ -58,6 +69,20 @@ interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {
     @Modifying(clearAutomatically = true)
     @Query("delete from ItineraryEntity i where i.tripId = :tripId")
     fun deleteByTripId(@Param("tripId") tripId: UUID)
+
+    // 조건부 교체용 — 지울 대상을 id·생성상태로 못박아 "읽고-쓰는 사이 재생성" 창을 없앤다.
+    @Modifying(clearAutomatically = true)
+    @Query(
+        "delete from ItineraryEntity i " +
+            "where i.tripId = :tripId and i.itineraryId = :itineraryId and i.generationState = :state",
+    )
+    fun deleteIfCurrent(
+        @Param("tripId") tripId: UUID,
+        @Param("itineraryId") itineraryId: UUID,
+        @Param("state") state: String,
+    ): Int
+
+    fun findByGenerationStateAndUpdatedAtBefore(generationState: String, updatedAt: Instant): List<ItineraryEntity>
 }
 
 interface ItineraryDayJpaRepository : JpaRepository<ItineraryDayEntity, UUID> {

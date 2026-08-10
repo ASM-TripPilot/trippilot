@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 
 from hypothesis import given, settings
@@ -133,3 +134,64 @@ def test_hc4_catches_outside_day_window() -> None:
     _, _, _, problem, index = _fixture()
     sol = _solution(_slot("b", 8, 0, 9, 0))  # day window(09~21) 이전 시작 — 위반
     assert any(v.code == "HC4" for v in check_hc4(sol, problem))
+
+
+# ── ⑤ TRIP-343 회귀 — 배치된 고정 블록이 DaySolution.fixed_blocks로 노출된다
+# (비워 두면 경계 to_payload의 is_fixed가 상시 false → 왕복 후 HC3 검증 집합이 빈다)
+
+
+def _fixed(poi_id, h1, m1, h2, m2):
+    return FixedBlock(poi_id,
+                      TimeWindow(datetime(2026, 8, 5, h1, m1, tzinfo=_KST),
+                                 datetime(2026, 8, 5, h2, m2, tzinfo=_KST)),
+                      "user_fixed")
+
+
+def test_fallback_populates_placed_fixed_blocks() -> None:
+    d, poi_a, _, problem, index = _fixture()
+    fb = _fixed(poi_a.poi_id, 10, 0, 11, 0)  # poi_a 영업(10~18시) 안
+    solution = RuleFallbackSolver(index, _EST, _CFG).solve(
+        replace(problem, fixed_blocks=(fb,))
+    )
+    (day,) = solution.days
+    assert day.fixed_blocks == (fb,)  # 회귀: 상시 () 결함 (TRIP-343)
+    assert any(s.poi_id == fb.poi_id and s.start_at == fb.window.start
+               and s.end_at == fb.window.end for s in day.slots)
+
+
+def test_fallback_unplaced_fixed_block_is_not_exposed() -> None:
+    """미배치 고정 블록은 노출하지 않는다 — 배치 사실을 지어내지 않는다.
+
+    같은 POI 이중 고정: 둘째 날 블록은 중복 방어로 스킵(미배치) → 노출도 없어야 한다.
+    """
+    d, poi_a, _, problem, index = _fixture()
+    fb1 = _fixed(poi_a.poi_id, 10, 0, 11, 0)
+    fb2 = FixedBlock(poi_a.poi_id,
+                     TimeWindow(datetime(2026, 8, 6, 10, 0, tzinfo=_KST),
+                                datetime(2026, 8, 6, 11, 0, tzinfo=_KST)),
+                     "user_fixed")
+    solution = RuleFallbackSolver(index, _EST, _CFG).solve(
+        replace(problem, days=(d, date(2026, 8, 6)), fixed_blocks=(fb1, fb2))
+    )
+    day1, day2 = solution.days
+    assert day1.fixed_blocks == (fb1,)
+    assert day2.fixed_blocks == ()  # 스킵된 블록 — 슬롯도 노출도 없다
+    assert not day2.slots
+
+
+# TRIP-343 PBT — fixed_blocks는 "그 일자에 정확히 배치된 문제 고정 블록"과 일치
+@settings(max_examples=60)
+@given(setup=solver_setups())
+def test_fallback_fixed_blocks_mirror_placed_slots(setup) -> None:
+    problem, index = setup
+    solution = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    for day in solution.days:
+        placed = {(s.poi_id, s.start_at, s.end_at) for s in day.slots}
+        # 건전성: 노출된 블록은 전부 문제의 고정 블록이고 실제 배치돼 있다
+        for fb in day.fixed_blocks:
+            assert fb in problem.fixed_blocks
+            assert (fb.poi_id, fb.window.start, fb.window.end) in placed
+        # 완전성: 그 일자에 정확히 배치된 문제 고정 블록은 빠짐없이 노출된다
+        for fb in problem.fixed_blocks:
+            if (fb.poi_id, fb.window.start, fb.window.end) in placed:
+                assert fb in day.fixed_blocks

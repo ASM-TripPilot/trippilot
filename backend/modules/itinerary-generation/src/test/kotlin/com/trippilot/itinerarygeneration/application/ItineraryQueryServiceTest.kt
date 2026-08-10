@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.SolveMode
@@ -24,6 +25,12 @@ private class QueryFakeItineraries : ItineraryRepository {
         store += itinerary
         return itinerary
     }
+    override fun replaceIfCurrent(tripId: UUID, expectedItineraryId: UUID, itinerary: Itinerary): Boolean {
+        replaceForTrip(tripId, itinerary)
+        return true
+    }
+    override fun findStalePartial(updatedBefore: java.time.Instant): List<Itinerary> = emptyList()
+
 }
 
 /** 조회 소유·존재 판정 — 미소유·일정없음은 404(존재 은닉). */
@@ -43,7 +50,7 @@ class ItineraryQueryServiceTest : StringSpec({
 
     "소유 여행 + 일정 있으면 반환" {
         val repo = QueryFakeItineraries()
-        repo.replaceForTrip(tripId, Itinerary.create(tripId, SolveMode.DETERMINISTIC, false, emptyList(), now))
+        repo.replaceForTrip(tripId, Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false, emptyList(), now))
         ItineraryQueryService(trips(true), repo).get(acc, tripId).tripId shouldBe tripId
     }
 
@@ -55,7 +62,7 @@ class ItineraryQueryServiceTest : StringSpec({
 
     "미소유 여행이면 404" {
         val repo = QueryFakeItineraries()
-        repo.replaceForTrip(tripId, Itinerary.create(tripId, SolveMode.DETERMINISTIC, false, emptyList(), now))
+        repo.replaceForTrip(tripId, Itinerary.create(tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false, emptyList(), now))
         shouldThrow<ResourceNotFound> { ItineraryQueryService(trips(false), repo).get(acc, tripId) }
     }
 })

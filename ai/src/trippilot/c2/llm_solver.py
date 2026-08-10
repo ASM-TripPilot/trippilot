@@ -1,6 +1,7 @@
 """LlmSolver — 체인 2차 단계 (U2 FD §2.4, AI-D06/D07).
 
 흐름: 프롬프트 조립 → LlmPort 호출 → 파싱 → closed-set 필터(INV-1)
+     (closed set = candidates − excluded_poi_ids — 프롬프트·게이트 양쪽에 동일 적용)
      → 조립 → HC 검증 → (위반 시) repair 1회 → 재검증 → 통과 시에만 반환 (INV-2).
 실패·타임아웃·파싱 불가 → None (체인 다음 단계, 침묵 없음 — 관측 발행).
 
@@ -16,6 +17,7 @@ from typing import Mapping
 
 from trippilot.c2.config import SolverConfig
 from trippilot.c2.constraints import check_all
+from trippilot.c2.fallback_solver import placed_fixed_blocks
 from trippilot.c2.repair import repair
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.itinerary import (
@@ -72,8 +74,10 @@ class LlmSolver:
         if parsed is None:
             return None
 
-        # closed-set 필터 (INV-1 — 솔버 경로의 게이트)
-        whitelist = {c.poi_id for c in problem.candidates}
+        # closed-set 필터 (INV-1 — 솔버 경로의 게이트).
+        # 이 호출의 closed set = candidates − excluded_poi_ids (TRIP-293):
+        # 프롬프트에 준 목록과 동일하므로, 제외 POI 제안도 정당한 게이트 드롭이다.
+        whitelist = {c.poi_id for c in self._effective_candidates(problem)}
         score_of = {c.poi_id: c for c in problem.candidates}
         dropped: list[PoiId] = []
         total = 0
@@ -108,7 +112,10 @@ class LlmSolver:
         days = []
         for day in problem.days:
             slots = sorted(slots_by_day.get(day, []), key=lambda s: s.start_at)
-            days.append(DaySolution(date=day, slots=tuple(slots), fixed_blocks=()))
+            days.append(DaySolution(
+                date=day, slots=tuple(slots),
+                fixed_blocks=placed_fixed_blocks(problem, day, slots),  # TRIP-343
+            ))
         candidate = ItinerarySolution(
             schedule_id=problem.schedule_id, days=tuple(days),
             is_fallback=False, solve_mode=SolveMode.LLM, solver_run=None)
@@ -123,12 +130,21 @@ class LlmSolver:
         return None
 
     # ── 내부 ──
+    @staticmethod
+    def _effective_candidates(problem: ItineraryProblem) -> list:
+        """기배정 POI를 뺀 후보 풀 (TRIP-293). 제외가 비면 candidates 그대로."""
+        if not problem.excluded_poi_ids:
+            return list(problem.candidates)
+        return [c for c in problem.candidates
+                if c.poi_id not in problem.excluded_poi_ids]
+
     def _build_prompt(self, problem: ItineraryProblem) -> str:
         payload = {
             "days": [d.isoformat() for d in problem.days],
             "day_window": problem.day_window.to_dict(),
             "candidates": [
-                {"poi_id": str(c.poi_id), "score": c.score} for c in problem.candidates
+                {"poi_id": str(c.poi_id), "score": c.score}
+                for c in self._effective_candidates(problem)
             ],
             "fixed_blocks": [fb.to_dict() for fb in problem.fixed_blocks],
             "instruction": "closed-set: candidates의 poi_id만 사용해 일자별 배치를 "

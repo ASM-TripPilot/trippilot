@@ -1,6 +1,8 @@
 package com.trippilot.app
 
 import io.kotest.assertions.throwables.shouldThrow
+import com.trippilot.itinerarygeneration.application.BoundedText
+import io.kotest.assertions.withClue
 import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.shouldBe
 import org.flywaydb.core.Flyway
@@ -66,6 +68,8 @@ class SchemaMigrationIT {
                 "marketing_consent", "location_consent_state", "location_legal_log",
                 "refresh_session", "deletion_schedule", "profile", "preference_set",
                 "banned_word_dictionary", "outbox_event", "shedlock",
+                "change_log_entry", // 변경 이력(V2.11 · TRIP-275)
+                "itinerary_revision", // 편집 이력·되돌리기(V2.14 · TRIP-310)
             )
 
             // R__ 시드 적용 확인 — 약관 6종 + 활성 금칙어 사전 1개
@@ -75,6 +79,37 @@ class SchemaMigrationIT {
             c.createStatement().executeQuery(
                 "SELECT count(*) FROM banned_word_dictionary WHERE active",
             ).use { rs -> rs.next(); rs.getInt(1) shouldBe 1 }
+
+            // 3b) AI 가 채우는 텍스트 컬럼의 상한이 코드가 자르는 길이와 같은지.
+            // 컬럼만 줄이고 자르는 쪽을 안 고치면 varchar 초과로 저장이 통째로 실패한다(실제로 한 번 겪었다).
+            // 길이를 여기 옮겨 적지 않고 BoundedText 를 그대로 참조한다 — 옮겨 적으면 그 사본이 또 어긋난다.
+            mapOf(
+                "visit_slot" to mapOf(
+                    "distance_range" to BoundedText.DISTANCE_RANGE_MAX,
+                    "placement_reason" to BoundedText.PLACEMENT_REASON_MAX,
+                    "violation_reason" to BoundedText.VIOLATION_REASON_MAX,
+                ),
+                "itinerary_revision" to mapOf(
+                    "summary" to BoundedText.REVISION_SUMMARY_MAX,
+                    "detail" to BoundedText.REVISION_DETAIL_MAX,
+                ),
+            ).forEach { (table, columns) ->
+                columns.forEach { (column, expected) ->
+                    c.prepareStatement(
+                        "SELECT character_maximum_length FROM information_schema.columns " +
+                            "WHERE table_schema = 'app' AND table_name = ? AND column_name = ?",
+                    ).use { ps ->
+                        ps.setString(1, table)
+                        ps.setString(2, column)
+                        ps.executeQuery().use { rs ->
+                            withClue("$table.$column 상한과 BoundedText 상수가 어긋났다 — 둘을 같이 맞춰야 한다") {
+                                rs.next() shouldBe true
+                                rs.getInt(1) shouldBe expected
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // 4) app_user 권한 검증
@@ -97,6 +132,22 @@ class SchemaMigrationIT {
             }
             shouldThrow<SQLException> {
                 c.createStatement().execute("DELETE FROM location_legal_log")
+            }
+
+            // 4c-2) 편집 이력도 append-only(V2.14) — 되돌리기는 새 행을 쌓지, 과거를 고치지 않는다(BR-U3-32)
+            shouldThrow<SQLException> {
+                c.createStatement().execute("UPDATE itinerary_revision SET summary = 'tampered'")
+            }
+            shouldThrow<SQLException> {
+                c.createStatement().execute("DELETE FROM itinerary_revision")
+            }
+
+            // 4c) 변경 이력도 append-only(V2.11) — 남은 이력이 사후에 바뀌면 되짚는 근거가 못 된다
+            shouldThrow<SQLException> {
+                c.createStatement().execute("UPDATE change_log_entry SET reason = 'tampered'")
+            }
+            shouldThrow<SQLException> {
+                c.createStatement().execute("DELETE FROM change_log_entry")
             }
         }
 

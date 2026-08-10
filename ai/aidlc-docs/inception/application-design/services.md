@@ -4,6 +4,27 @@
 
 ---
 
+## 0. 경계 HTTP 경로 규칙 (2026-08-07 확정)
+
+> 근거: PR #104 회신. `/v1`만으로는 **어느 서비스의 v1인지 모호**해 서비스명(`/ai`)을 접두하고,
+> 리소스명은 **산출물 기준(`itinerary`)** 으로 잡아 백엔드 컨트롤러·스키마·DB 테이블 명칭과 통일한다.
+> **`ScheduleAgent`는 "만드는 행위자"의 이름, `itinerary`는 "만들어진 산출물"의 이름** — 층이 다르므로 에이전트명은 그대로 유지한다.
+
+| 경계 | 경로 | 지위 |
+|---|---|---|
+| 일정 생성 (포워드) | `POST /ai/v1/itinerary/generate` | **확정** — 구 표기 `POST /ai/generate` 폐기 |
+| 일정 검증 (포워드) | `POST /ai/v1/itinerary/validate` | **확정** |
+| 일정 수리 (포워드) | `POST /ai/v1/itinerary/repair` | **확정** |
+| POI 정본 read — 반경 (리버스) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
+| POI 정본 read — 배치 (리버스) | `POST /internal/pois/batch-get` (요청 필드 `poi_ids`) | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
+| AI 도우미 · Plan-B | `/ai/v1/...` 명명 규칙만 확정, 리소스명은 **협의 중** | 미확정 |
+
+프로토콜은 **REST/JSON over HTTP 확정**(PR #76 결정4). `/c1/*`·`/c2/*`·`/m7/*` 세분 경로
+(`../reverse-engineering/api-documentation.md`)는 PR #76 "굵은 경계 — 조각 조립 경계를 두지 않는다" 합의로
+**폐기 방향**이며, 논리 인터페이스 참고용으로만 남는다.
+
+---
+
 ## 1. 일정 생성 오케스트레이션 (핵심 플로우)
 
 ### 1.1 정상 경로
@@ -12,7 +33,7 @@
 [Kotlin M8] generate_itinerary(trip_id, mode)
     |
     v
-[API Layer] POST /ai/generate
+[API Layer] POST /ai/v1/itinerary/generate     # §0 확정 경로
     |
     v
 [ItineraryOrchestrator.generate()]
@@ -84,8 +105,8 @@ stateDiagram-v2
 [사용자 자연어] "비 와서 실내로 바꿔줘"
     |
     v
-[API Layer] POST /ai/route
-    |
+[API Layer] POST /ai/v1/... (AI 도우미)         # 구 표기 /ai/route 폐기.
+    |                                            # 명명 규칙만 확정, 리소스명 협의 중 (§0)
     v
 [AssistantOrchestrator.handle()]
     |
@@ -136,8 +157,8 @@ stateDiagram-v2
 [Kotlin M10] start_replan(trigger_context)
     |
     v
-[API Layer] POST /ai/replan
-    |
+[API Layer] POST /ai/v1/... (Plan-B)            # 구 표기 /ai/replan 폐기.
+    |                                            # 명명 규칙만 확정, 리소스명 협의 중 (§0)
     v
 [ReplanOrchestrator.generate_alternatives()]
     |

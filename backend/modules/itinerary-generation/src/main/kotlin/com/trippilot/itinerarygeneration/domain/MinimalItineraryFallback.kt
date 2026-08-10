@@ -11,8 +11,12 @@ import java.time.Instant
 object MinimalItineraryFallback {
     fun of(input: ScheduleAgentInput, at: Instant): ScheduleAgentOutput {
         val fixedByDate = input.fixedBlocks.filter { it.date != null && it.start != null }.groupBy { it.date }
+        // 날짜 미지정(ANYTIME) must_visit — 버리면 폴백 일정에서 통째로 사라져 HC3 가 깨진다(포함이 요건).
+        // 어느 날에 놓이는지는 폴백에서 따지지 않는다. 다만 한 날에 무한정 쌓으면 LocalTime 이 자정을 넘어 감겨
+        // endAt < startAt 이 되고(endsNextDay=false) 슬롯 검증에서 터진다 — 그래서 그 날 창이 차면 다음 날로 넘긴다.
+        val undated = ArrayDeque(input.fixedBlocks.filter { it.date == null })
         val days = input.timeWindows.map { tw ->
-            val slots = fixedByDate[tw.date].orEmpty().sortedBy { it.start }.map { fb ->
+            val dated = fixedByDate[tw.date].orEmpty().sortedBy { it.start }.map { fb ->
                 val start = fb.start!!
                 VisitSlotDisplay(
                     poiId = fb.poiId,
@@ -23,7 +27,17 @@ object MinimalItineraryFallback {
                     isFixed = true,
                 )
             }
-            DaySchedule(tw.date, slots)
+            val anytime = mutableListOf<VisitSlotDisplay>()
+            var cursor = maxOf(dated.maxOfOrNull { it.endAt } ?: tw.start, tw.start)
+            while (undated.isNotEmpty()) {
+                val fb = undated.first()
+                val end = cursor.plusMinutes((fb.dwellMin ?: DEFAULT_DWELL_MIN).toLong())
+                if (end > tw.end || end <= cursor) break // 창 초과 또는 자정 감김 → 이 날은 여기까지
+                anytime += VisitSlotDisplay(fb.poiId, cursor, end, endsNextDay = false, distanceRange = null, isFixed = true)
+                cursor = end
+                undated.removeFirst()
+            }
+            DaySchedule(tw.date, dated + anytime)
         }
         return ScheduleAgentOutput(
             days = days,

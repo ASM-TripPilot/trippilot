@@ -156,7 +156,26 @@ function socialLoginResponse(provider: string, ageConfirmation: unknown) {
       }
       return HttpResponse.json(tokenPair(true, provider));
     case 'new-user':
-      return HttpResponse.json(tokenPair(true, provider));
+      // TRIP-248 — 실서버는 신규 가입 첫 요청(연령확인 미동봉)을 400 으로 거절한다
+      // (AuthenticateWithSocialUseCase.kt:76-77). 200 을 돌려주던 이전 목은 도달 불가 분기를
+      // 흉내내고 있었다. reason 문자열은 백엔드 원문 그대로다(발명 금지).
+      if (ageConfirmation) {
+        return HttpResponse.json(tokenPair(true, provider));
+      }
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            fields: [
+              {
+                field: 'ageConfirmation',
+                reason: '신규 가입 시 연령확인이 필요합니다',
+              },
+            ],
+          },
+        },
+        { status: 400 }
+      );
     case 'existing-user':
     default:
       return HttpResponse.json(tokenPair(false, provider));
