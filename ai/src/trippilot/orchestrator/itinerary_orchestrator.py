@@ -3,7 +3,8 @@
 부품(M7 후보풀 · C1 선호점수 · C2 솔버 체인)은 각각 완성돼 있고, 이 모듈은 **조립**만 한다.
 
 ```
-요청 → ① M7 후보풀 build          (closed-set의 유일한 출처, INV-1)
+요청 → ⓪ 소유 검증 (fail-closed)   남의 persona_ref → 항상 403 (TRIP-333, 시한 무관)
+     → ① M7 후보풀 build          (closed-set의 유일한 출처, INV-1)
      → ② C1 선호 점수 (전 일자 1회) 실패·스킵 → 규칙 점수 (BR-U4-09의 "호출측"이 여기다)
      → ③ ItineraryProblem 조립     (후보는 ①의 풀에서 나온 것만)
      → ④ C2 solve                  (체인 폴백은 C2 소유 — 여기서 이중 폴백 금지)
@@ -68,6 +69,18 @@ class Clock(Protocol):
     """경과 시간 측정 — wall-clock 직접 호출 금지 (DL-3, c2 퍼사드와 같은 콘센트)."""
 
     def monotonic_ms(self) -> int: ...
+
+
+class OwnershipVerifier(Protocol):
+    """ContextResolver의 소유 검증 갈래 (TRIP-333 fail-closed).
+
+    보안 규칙의 권위는 C1 `llm_gateway.context.ContextResolver`에 있다 — 오케스트레이터는
+    검사를 복제하지 않고 그 검증 전용 공개 메서드만 호출한다. 저장소 조회·LLM 호출 없음.
+    """
+
+    def verify_ownership(
+        self, principal: Principal, refs: tuple[ResourceRef, ...]
+    ) -> None: ...
 
 
 class SolverFacade(Protocol):
@@ -302,6 +315,7 @@ class ItineraryOrchestrator:
         clock: Clock,
         trace: TracePort,
         *,
+        context_resolver: OwnershipVerifier,
         explanation_worker: ExplanationWorker | None = None,
         config: OrchestratorConfig | None = None,
     ) -> None:
@@ -310,6 +324,7 @@ class ItineraryOrchestrator:
         self._solvers = solver_provider
         self._clock = clock
         self._trace = trace
+        self._resolver = context_resolver  # 소유 검증 갈래만 쓴다 (TRIP-333)
         self._explainer = explanation_worker  # 미주입이면 설명 단계를 통째로 건너뛴다
         self._cfg = config or OrchestratorConfig()
 
@@ -347,6 +362,20 @@ class ItineraryOrchestrator:
     ) -> GenerationOutcome:
         t0 = self._clock.monotonic_ms()
         steps: list[Degradation] = []
+
+        # ⓪ 소유 검증 — fail-closed (TRIP-333, 팀 결정 2026-08-11).
+        #    권한 검사를 접근 시점(C1의 페르소나 재조회)에만 맡기면 DL-2 시한 스킵으로
+        #    C1이 통째로 건너뛰어질 때 남의 persona_ref가 403 없이 규칙 점수 일정으로
+        #    "성공"한다. deadline이 어떤 값이어도 남의 persona_ref는 항상 403 —
+        #    검사의 권위는 ContextResolver 한 곳이고, 여기서는 소유 검증 갈래만
+        #    호출한다(저장소 조회·LLM 호출 없음, 검사 복제 아님). 위반이면
+        #    PermissionDeniedError → generate가 FAILED(permission_denied)로 수렴 →
+        #    경계에서 403 retryable=false (api/errors.py 기존 매핑 그대로).
+        #    참고: 현 와이어에는 사용자 식별자가 없어 principal이 trip_id 파생
+        #    자기참조라(api/wiring.py) 경계에서 403이 실제 발현되지는 않는다 —
+        #    이 검사는 내부 계약을 미리 옳게 만드는 것으로, 실 식별자 합의 시
+        #    그대로 동작한다.
+        self._resolver.verify_ownership(request.principal, (request.persona_ref,))
 
         # ① M7 후보 풀 — closed-set의 유일한 출처 (INV-1)
         pool = self._pool_builder.build(
@@ -454,8 +483,8 @@ class ItineraryOrchestrator:
 
         if budget.c1_ms < self._cfg.c1_min_ms or remaining_ms <= 0:
             # DL-2: 진입 전 잔여 확인 — 부를 시간이 없으면 부르지 않는다(침묵 스킵 금지).
-            # 이 경로에서는 페르소나를 아예 읽지 않으므로 권한 검사(D31)도 일어나지 않는다
-            # — 권한은 접근 시점에 강제되고, 규칙 점수는 페르소나를 쓰지 않는다.
+            # 이 경로는 페르소나를 읽지 않지만, 소유 검증은 이미 _generate ⓪에서
+            # 끝났다(TRIP-333 fail-closed) — 남의 persona_ref는 여기 도달하지 못한다.
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
                           f"deadline:c1_budget={budget.c1_ms}ms")
             return self._rule_scores(request, pool), ScoringMode.RULE

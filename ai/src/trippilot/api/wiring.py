@@ -609,6 +609,8 @@ def build_orchestrator(
         provider,
         clock,
         trace,
+        # 소유 검증(fail-closed, TRIP-333)도 같은 resolver — 보안 규칙의 권위 1곳.
+        context_resolver=resolver,
         explanation_worker=ExplanationWorker(
             GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace), resolver
         ),

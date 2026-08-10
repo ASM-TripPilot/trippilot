@@ -248,6 +248,7 @@ def _build(
         _Solvers(trace, sink, primary=primary),
         clock if clock is not None else FakeClock(),
         trace,
+        context_resolver=resolver,  # 소유 검증(fail-closed, TRIP-333)도 같은 resolver
         explanation_worker=explainer,
         config=config,
     )
@@ -438,6 +439,7 @@ def test_allocate_day1_and_full_budgets() -> None:
 
 
 def test_short_deadline_skips_c1_but_still_returns_itinerary() -> None:
+    """정상 소유 요청은 시한 스킵 시에도 규칙 점수로 성공 (TRIP-333 회귀 가드)."""
     orchestrator, trace, sink = _build()
 
     outcome = orchestrator.generate(_request(), 500, _TRACE_ID, _NOW)
@@ -529,6 +531,55 @@ def test_permission_violation_fails_instead_of_silently_degrading() -> None:
     assert any(
         e.reason.startswith("permission_denied") for e in _orchestrator_events(trace)
     )
+
+
+def test_short_deadline_with_foreign_persona_still_fails_403() -> None:
+    """TRIP-333 fail-closed — DL-2 시한 스킵 경로에서도 남의 persona_ref는 403.
+
+    500ms면 C1 점수 단계가 통째로 스킵되어 페르소나를 읽지 않지만(접근 시점 검사
+    부재), 소유 검증은 조립 진입에서 ContextResolver 갈래로 강제되므로 규칙 점수
+    일정이 나가지 않고 FAILED(permission_denied → 경계 403)로 수렴한다.
+    """
+    orchestrator, trace, sink = _build()
+    foreign = ResourceRef(kind="persona", ref_id="persona-9", owner_id="someone-else")
+
+    outcome = orchestrator.generate(
+        _request(persona_ref=foreign), 500, _TRACE_ID, _NOW
+    )
+
+    assert outcome.status is GenerationStatus.FAILED
+    assert outcome.solution is None
+    assert outcome.error is not None
+    assert outcome.error.startswith("permission_denied")
+    assert outcome.scoring_mode is not ScoringMode.LLM
+    assert sink.problems == []                             # 솔버까지 가지 않았다
+    assert any(
+        e.reason.startswith("permission_denied") for e in _orchestrator_events(trace)
+    )
+
+
+@settings(max_examples=100, deadline=None)
+@given(deadline_ms=st.integers(min_value=-5_000, max_value=60_000))
+def test_pbt_foreign_persona_always_403_regardless_of_deadline(
+    deadline_ms: int,
+) -> None:
+    """TRIP-333 — 권한 위반 요청은 deadline이 어떤 값이어도 PermissionDeniedError 경로.
+
+    시한이 넉넉하면 C1 접근 시점에서, 짧아 스킵되면 조립 진입 소유 검증에서 —
+    어느 쪽이든 결과는 동일하게 FAILED(permission_denied)다 (fail-closed).
+    """
+    orchestrator, _, sink = _build()
+    foreign = ResourceRef(kind="persona", ref_id="persona-9", owner_id="someone-else")
+
+    outcome = orchestrator.generate(
+        _request(persona_ref=foreign), deadline_ms, _TRACE_ID, _NOW
+    )
+
+    assert outcome.status is GenerationStatus.FAILED
+    assert outcome.solution is None
+    assert outcome.error is not None
+    assert outcome.error.startswith("permission_denied")
+    assert sink.problems == []                             # 어떤 시한에서도 솔버 미도달
 
 
 def test_contradictory_fixed_blocks_return_explicit_failure() -> None:
@@ -629,10 +680,13 @@ def test_pbt_generate_never_raises_and_always_converges(
             not outcome.degradations
         )
     if mode == "permission":
-        # 권한 검사는 **접근 시점**에 일어난다: C1을 부르면 FAILED, 시한이 없어 아예
-        # 건너뛰면 페르소나를 읽지 않으므로 위반 자체가 없다. 어느 쪽이든 남의
-        # 페르소나에서 나온 LLM 점수가 결과에 실리는 경로는 없다.
-        assert outcome.scoring_mode is not ScoringMode.LLM
+        # TRIP-333 fail-closed (팀 결정 2026-08-11): 남의 persona_ref는 deadline이
+        # 어떤 값이어도 항상 PermissionDeniedError 경로(FAILED → 경계 403)다.
+        # DL-2 시한 스킵으로 C1이 통째로 건너뛰어져도 예외가 아니다 — 소유 검증은
+        # 접근 시점이 아니라 조립 진입(⓪)에서 ContextResolver 갈래로 강제된다.
+        assert outcome.status is GenerationStatus.FAILED
+        assert outcome.error is not None
+        assert outcome.error.startswith("permission_denied")
     # 봉투 부가 필드 정합 (TRIP-341): solved_at ⇔ 해 존재, 풀 실측은 지어내지 않는다
     assert (outcome.solved_at is not None) == (outcome.solution is not None)
     if outcome.status is not GenerationStatus.FAILED:
