@@ -22,6 +22,7 @@ from trippilot.c2.facade import HybridSolverFacade
 from trippilot.c2.fallback_solver import RuleFallbackSolver
 from trippilot.c2.llm_solver import LlmSolver
 from trippilot.c2.repair import MinimalChangePolicy
+from trippilot.c2.repair import repair as repair_engine
 from trippilot.c2.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
@@ -34,6 +35,7 @@ from trippilot.domain.itinerary import (
     DaySolution,
     ItineraryProblem,
     ItinerarySolution,
+    QualityScore,
     SolveMode,
     TimeWindow,
     VisitSlot,
@@ -288,6 +290,42 @@ def test_regenerate_preserves_excluded_with_locked_slots() -> None:
     assert set(_placed(regen)) & excluded == set()
     kept = [s for d in regen.days for s in d.slots if s.poi_id == locked[0].poi_id]
     assert kept and kept[0].start_at == locked[0].start_at  # locked 보존 유지
+
+
+# ── ⑤-1 repair 엔진 회귀 — QualityScore 소실 (TRIP-329) ──────
+
+def test_repair_engine_preserves_quality_score() -> None:
+    """모듈 함수 repair()는 입력 해의 QualityScore를 떨어뜨리지 않는다.
+
+    수정 전: repair()가 ItinerarySolution을 필드 나열로 재구성하며 score를
+    빠뜨려, 수리 경로를 지나면 품질 점수가 소실됐다 (안티패턴 TRIP-314 잔존).
+    퍼사드 경계는 수리 후 재계산해 덮어쓰지만(TRIP-261), 순수 엔진은 보존이
+    기본이다 — 잃는 것보다 낫다.
+    """
+    problem, index = _setup()
+    score = QualityScore(preference_fit=0.9, constraint_satisfaction=1.0,
+                         route_efficiency=0.8, composite=0.85)
+    broken = replace(_sol(_slot("a", 10, 0, 11, 15), _slot("b", 11, 20, 12, 20)),
+                     score=score)
+
+    result = repair_engine(broken, problem, index, _EST)
+
+    assert result.repaired is not None
+    assert result.repaired.score == score  # 수리가 품질 점수를 잃지 않는다
+
+
+def test_repair_engine_noop_preserves_quality_score() -> None:
+    """위반이 없어 이동이 0건이어도 score는 그대로 실려 나온다."""
+    problem, index = _setup()
+    score = QualityScore(preference_fit=0.7, constraint_satisfaction=1.0,
+                         route_efficiency=0.6, composite=0.75)
+    ok = replace(_sol(_slot("a", 10, 0, 11, 15), _slot("b", 13, 0, 14, 0)),
+                 score=score)
+
+    result = repair_engine(ok, problem, index, _EST)
+
+    assert result.repaired is not None and result.changes == ()
+    assert result.repaired.score == score
 
 
 # ── ⑥ llm_solver 내부 repair 경로 무회귀 ─────────────────────

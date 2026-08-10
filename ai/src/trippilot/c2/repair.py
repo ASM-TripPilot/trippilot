@@ -15,7 +15,7 @@ TRIP-292에서 `HybridSolverFacade.repair()`가 공개 경계로 승격되면서
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Mapping
@@ -112,19 +112,13 @@ def repair(solution: ItinerarySolution, problem: ItineraryProblem,
             if start != slot.start_at:
                 changes.append(RepairChange(slot.poi_id, "start_at",
                                             slot.start_at, start))
-            moved = VisitSlot(poi_id=slot.poi_id, start_at=start, end_at=end,
-                              stay_min=slot.stay_min, score=slot.score,
-                              is_llm_score=slot.is_llm_score)
+            moved = replace(slot, start_at=start, end_at=end)
             new_slots.append(moved)
             prev = moved
-        new_days.append(DaySolution(date=day.date, slots=tuple(new_slots),
-                                    fixed_blocks=day.fixed_blocks))
+        new_days.append(replace(day, slots=tuple(new_slots)))
 
-    repaired = ItinerarySolution(
-        schedule_id=solution.schedule_id,
-        days=tuple(new_days),
-        is_fallback=solution.is_fallback,
-        solve_mode=solution.solve_mode,  # 출처 보존 (수리는 출처를 바꾸지 않음)
-        solver_run=solution.solver_run,
-    )
+    # replace: 나열 재구성 금지(안티패턴 TRIP-314) — days 외 필드는 전부 그대로
+    # 옮긴다(출처 solve_mode·score 보존 포함). 나열식은 뒤에 추가된 필드를
+    # 조용히 떨어뜨렸다 — score(QualityScore) 소실이 실제 사례 (TRIP-329).
+    repaired = replace(solution, days=tuple(new_days))
     return RepairResult(repaired=repaired, changes=tuple(changes))
