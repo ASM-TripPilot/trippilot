@@ -224,6 +224,64 @@ export function ChevronDownGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
+// h35 완화 카드 우측 chevron-right(20) — Figma `1906:1083`. 위 `ChevronDownGlyph` 와 같은
+// 획 두께·색을 90° 돌린 형태다(같은 화면 스택에서 한 벌로 보이게).
+export function ChevronRightGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M7.5 5L12.5 10L7.5 15"
+        stroke={MUTED_SOFT}
+        strokeWidth={1.83333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// h35 히어로 배지 안의 「위치-off」(36) — Figma `1906:1083`. 지도 핀 위에 사선 하나를 그어
+// "여기서 찾을 곳이 없다"를 말한다. 색은 브랜드 primary 로, 배지 배경(primary-pale)과 한 쌍이다.
+export function LocationOffGlyph({ size = 36, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 21.5C12 21.5 19.5 15.25 19.5 9.75C19.5 5.60786 16.1421 2.25 12 2.25C7.85786 2.25 4.5 5.60786 4.5 9.75C4.5 15.25 12 21.5 12 21.5Z"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 12.25C13.3807 12.25 14.5 11.1307 14.5 9.75C14.5 8.36929 13.3807 7.25 12 7.25C10.6193 7.25 9.5 8.36929 9.5 9.75C9.5 11.1307 10.6193 12.25 12 12.25Z"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3.75 3.75L20.25 20.25"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** 원형 아이콘 두 종이 쓰는 색조. 빈 목록 얼굴은 배지 배경(primary-pale) 위라 primary-text 다. */
 export type CircleGlyphTone = 'muted' | 'primaryText';
 

@@ -1,7 +1,7 @@
 ---
 name: implementer
 description: 구현자 — 승인된 실패 테스트를 통과시키는 최소 구현을 작성한다. 테스트 수정 금지. 개발 사이클의 [구현]·[리팩토링] 단계 전담(사용자 검토 게이트 ② 대상 산출).
-model: opus
+model: claude-opus-4-8
 effort: xhigh
 ---
 

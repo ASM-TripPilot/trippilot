@@ -12,6 +12,7 @@ import { server } from '@/mocks/server';
 import { DRAFT_POLL_INTERVAL_MS } from '@/features/itinerary/model/draftView';
 import type {
   Itinerary,
+  ItineraryCandidatesSummary,
   ItineraryDaysItem,
   ItineraryGenerationState,
   ItineraryStatus,
@@ -75,13 +76,15 @@ const DAY1 = '2026-06-10';
 const DAY2 = '2026-06-11';
 const DAY3 = '2026-06-12';
 
-function trip(): Trip {
+/** `endDate` 를 케이스가 정할 수 있게 열어 둔다 — 탭 개수의 출처가 여행 기간이라
+ * (TRIP-297 01b D7) "부분 0건에도 탭이 그대로"(TRIP-298 AC-9)를 재려면 2일 여행이 필요하다. */
+function trip(endDate: string = DAY3): Trip {
   return {
     tripId: TRIP_ID,
     title: '제주 3일',
     // ★ 탭 개수의 출처 — `days.length` 가 아니라 이 두 날짜다(01b D7).
     startDate: DAY1,
-    endDate: DAY3,
+    endDate,
     party: 2,
     preferenceSnapshot: {},
     destinations: [{ seq: 1, region: '제주', nights: 2 }],
@@ -115,6 +118,11 @@ function itinerary(input: {
   dayCount: number;
   generationState: ItineraryGenerationState;
   status?: ItineraryStatus;
+  /** TRIP-298 — 3상태 옵셔널(`undefined`/`null`/객체)을 그대로 태운다. `undefined` 는
+   * JSON 직렬화에서 키째 사라지므로 "키 자체가 없는" 응답이 실제로 만들어진다. */
+  candidatesSummary?: ItineraryCandidatesSummary;
+  /** 일자 모양을 케이스가 직접 정할 때(슬롯 0장 · 날짜별 개수 차이). 없으면 기존 `dayCount`. */
+  days?: ItineraryDaysItem[];
 }): Itinerary {
   return {
     itineraryId: 'itin-1',
@@ -124,8 +132,31 @@ function itinerary(input: {
     generationMode: 'FULLY_AI',
     generationState: input.generationState,
     isFallback: false,
-    days: daysUpTo(input.dayCount),
+    candidatesSummary: input.candidatesSummary,
+    days: input.days ?? daysUpTo(input.dayCount),
   };
+}
+
+/** 카드 루트만 세는 셀렉터 — 번호·라벨·배지·사진이 같은 접두를 공유하므로 제외한다
+ * (동결 `DraftScreen.test.tsx` 가 세운 규약과 같은 형태). */
+const CARD_SUB_PREFIXES = [
+  'no-',
+  'band-',
+  'badge-',
+  'fixed-',
+  'image-',
+  'tags-',
+  'name-',
+];
+
+function cardTestIds(): string[] {
+  return screen
+    .queryAllByTestId(/^itinerary-draft-slot-/)
+    .map((node) => String(node.props.testID))
+    .filter((testID) => {
+      const tail = testID.slice('itinerary-draft-slot-'.length);
+      return !CARD_SUB_PREFIXES.some((prefix) => tail.startsWith(prefix));
+    });
 }
 
 /** 나간 요청의 `METHOD /경로` 누적 — **도착 순서 그대로** 쌓인다. */
@@ -135,6 +166,8 @@ let observedHits: string[] = [];
 let itineraryGetCalls = 0;
 /** GET /itinerary 가 n 번째(0-based)로 불릴 때 무엇을 돌려줄지 — 시나리오를 테스트가 정한다. */
 let itineraryScript: (call: number) => Itinerary;
+/** GET /trips/{id} 가 무엇을 돌려줄지 — 여행 기간을 케이스가 정한다(위 `itineraryScript` 와 동형). */
+let tripScript: () => Trip;
 
 function hitsFor(method: string, includes: string): number {
   return observedHits.filter(
@@ -162,12 +195,13 @@ beforeEach(() => {
   mockBack.mockClear();
   itineraryScript = () =>
     itinerary({ dayCount: 3, generationState: 'COMPLETE' });
+  tripScript = () => trip();
   setAccessToken('valid-access');
 
   // 통합 버킷은 `onUnhandledRequest: 'error'` 라 핸들러가 없으면 AC 실패가 아니라 **준비
   // 단계에서 죽는다**. 이 칸이 쓰는 세 경로를 매번 명시적으로 건다.
   server.use(
-    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+    http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(tripScript())),
     http.get(`${BASE}/trips/:tripId/itinerary`, () => {
       const call = itineraryGetCalls;
       itineraryGetCalls += 1;
@@ -311,5 +345,212 @@ describe('🔴 I3 · AC-11 — 다시 시도는 PLANNED 에서만 POST 를 낸�
     await sleep(50);
 
     expect(hitsFor('POST', '/itinerary')).toBe(0);
+  });
+});
+
+/* ───────────────────────── TRIP-298 · 강등 안내 + h35 후보 0건 ─────────────────────────
+ * 왜 이 축들이 통합 버킷에 있나: 심판의 핵심이 **응답 한 벌이 어떤 얼굴로 이어지나**다.
+ * 훅을 목킹하면 "페이지가 두 얼굴을 동시에 그리지 않는다"가 테스트의 *가정*이 되어 버린다
+ * (이 파일 머리말의 판단을 승계). 순수 판정 축은 `draftView.test.ts` M11~M14 가 따로 잰다 —
+ * 모델은 **규칙**을, 여기는 그 규칙이 실제 화면으로 **이어졌는지**를 잰다.
+ */
+
+const FALLBACK_BANNER = 'itinerary-draft-fallback-banner';
+
+const FACE_ROWS: {
+  name: string;
+  days: ItineraryDaysItem[];
+  summary?: ItineraryCandidatesSummary;
+  face: 'empty' | 'zero' | 'listed';
+}[] = [
+  {
+    name: '1행 · 일자 없음 + 요약 키 없음 → 빈 화면',
+    days: [],
+    summary: undefined,
+    face: 'empty',
+  },
+  {
+    name: "1'행 · 일자 없음 + 요약 null → 빈 화면",
+    days: [],
+    summary: null,
+    face: 'empty',
+  },
+  {
+    name: '2행 · 일자 없음 + 요약 객체 → 후보 0건(h35)',
+    days: [],
+    summary: { level: 'LOW' },
+    face: 'zero',
+  },
+  {
+    name: '3행 · 일자는 왔는데 슬롯 합계 0 + 요약 객체 → 후보 0건(h35)',
+    days: [
+      { date: DAY1, slots: [] },
+      { date: DAY2, slots: [] },
+    ],
+    summary: { level: 'LOW' },
+    face: 'zero',
+  },
+  {
+    name: '4행 · 슬롯 있음 + 요약 객체 → 목록(강등 안내는 곁에)',
+    days: daysUpTo(3),
+    summary: { level: 'LOW' },
+    face: 'listed',
+  },
+  {
+    name: '5행 · 슬롯 있음 + 요약 null → 목록',
+    days: daysUpTo(3),
+    summary: null,
+    face: 'listed',
+  },
+];
+
+describe('🔴 I4 · AC-5 — 01b D5 판정표대로 얼굴이 정확히 하나만 뜬다', () => {
+  it.each(FACE_ROWS)('$name', async ({ days, summary, face }) => {
+    itineraryScript = () =>
+      itinerary({
+        dayCount: 0,
+        generationState: 'COMPLETE',
+        days,
+        candidatesSummary: summary,
+      });
+
+    renderPage();
+
+    /**
+     * ★ 세 얼굴의 존재 여부를 **한 배열로 묶어 완전 일치**로 비교한다. 하나씩 따로 단언하면
+     * "빈 화면과 h35 가 동시에 떠 있는" 구현이 두 단언을 각각 통과한다 — AC-5 가 막으려는
+     * 사고가 정확히 그것이다(01b AC-5: "두 testID 가 동시에 뜨지 않는다").
+     */
+    await waitFor(() => {
+      expect([
+        screen.queryAllByTestId('itinerary-draft-empty').length > 0,
+        screen.queryAllByTestId('itinerary-draft-zero').length > 0,
+        cardTestIds().length > 0,
+      ]).toEqual([face === 'empty', face === 'zero', face === 'listed']);
+    });
+  });
+});
+
+describe('🔴 I5 · AC-4 — poolSize 가 없어도 0 으로 채우지 않는다', () => {
+  it.each([
+    { name: 'poolSize 키 자체가 없다', summary: { level: 'LOW' } },
+    {
+      name: 'poolSize 가 null 이다',
+      summary: { level: 'LOW', poolSize: null },
+    },
+    {
+      name: '진짜 0 이다 (NO_CANDIDATES · poolSize 0)',
+      summary: { level: 'NO_CANDIDATES', poolSize: 0 },
+    },
+  ])('$name — 안내는 뜨고 개수 표기는 0건이다', async ({ summary }) => {
+    itineraryScript = () =>
+      itinerary({
+        dayCount: 3,
+        generationState: 'COMPLETE',
+        candidatesSummary: summary,
+      });
+
+    renderPage();
+
+    // 긍정 짝 — 안내가 실제로 떴다. 없으면 아래 "숫자 0건"이 공허하다.
+    const banner = await screen.findByTestId(FALLBACK_BANNER);
+    // openapi 원문: *"poolSize 는 AI 가 주지 않으면 없다(0 으로 채우지 않는다 — 0 은 '후보
+    // 0건'이라는 판정이다)"*. `?? 0` 한 글자가 "모른다"를 "0건"으로 바꿔 놓는다.
+    expect(banner).not.toHaveTextContent(/\d/);
+
+    // ★ 세 번째 행이 요점 — **진짜 0** 이 와도 얼굴은 목록이다. 0건 판정은 문자열·숫자 어휘가
+    //   아니라 **슬롯 합계**로 한다(01b D5). 어휘가 얼굴을 정하면 서버가 말을 바꾸는 날
+    //   화면이 통째로 달라진다.
+    expect(screen.queryAllByTestId('itinerary-draft-zero')).toEqual([]);
+  });
+});
+
+describe('🔴 I6 · AC-8 — 완화 행이 실재하는 라우트로 간다 (01b D7)', () => {
+  it('완화 행을 누르면 필수 방문지 화면으로 한 번 이동한다', async () => {
+    itineraryScript = () =>
+      itinerary({
+        dayCount: 0,
+        generationState: 'COMPLETE',
+        days: [],
+        candidatesSummary: {
+          level: 'LOW',
+          shortfallCategories: ['1일 예산 5만원'],
+        },
+      });
+
+    renderPage();
+
+    fireEvent.press(await screen.findByTestId('itinerary-draft-zero-relax'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+
+    // ★ 목적지 표기 **형태**를 강요하지 않는다 — 리포에 `push('/문자열')` 과
+    //   `push({pathname, params})` 두 관례가 다 있어서, 한쪽으로 완전 일치를 걸면 정당한
+    //   구현이 red 가 된다. 직렬화해서 "어디로 갔나"만 잰다(02a ★8).
+    const destination = mockPush.mock.calls[0][0] as unknown;
+    const asText =
+      typeof destination === 'string'
+        ? destination
+        : JSON.stringify(destination);
+    expect(asText).toContain('/itinerary/must-visits');
+    expect(asText).toContain(TRIP_ID);
+    // 짝 — 슬롯 상세(`must-visits/[poiId]`)로 새지 않았다. 그 라우트는 poiId 가 필요하고
+    // 0건 화면에는 슬롯이 없다.
+    expect(asText).not.toContain('[poiId]');
+  });
+});
+
+describe('🔴 I7 · AC-9 — 일부 날짜만 0건이면 h11 을 유지한다 (01b D6)', () => {
+  it('1일차 2장 · 2일차 0장이면 탭·카드가 남고 안내만 곁에 붙는다', async () => {
+    // 준비 — 2일 여행. 이 리포에서 **네 번 반복된** 「얼굴 판정이 잔존 데이터를 가린다」 축이라
+    // 화면 전체를 h35 로 갈아 끼우는 구현을 여기서 죽인다.
+    tripScript = () => trip(DAY2);
+    itineraryScript = () =>
+      itinerary({
+        dayCount: 0,
+        generationState: 'COMPLETE',
+        days: [
+          {
+            date: DAY1,
+            slots: [
+              {
+                poiId: 'poi-1',
+                startAt: '09:30:00',
+                endAt: '11:00:00',
+                isFixed: false,
+                endsNextDay: false,
+                hasViolation: false,
+                tags: [],
+                nameKo: '광안리 해변',
+              },
+              {
+                poiId: 'poi-2',
+                startAt: '12:30:00',
+                endAt: '13:30:00',
+                isFixed: false,
+                endsNextDay: false,
+                hasViolation: false,
+                tags: [],
+                nameKo: 'F1963',
+              },
+            ],
+          },
+          { date: DAY2, slots: [] },
+        ],
+        candidatesSummary: { level: 'LOW' },
+      });
+
+    renderPage();
+
+    // ① 날짜 탭이 여행 기간(2일) 그대로다 — 빈 날이 탭을 지우지 않는다.
+    await waitFor(() =>
+      expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toHaveLength(2)
+    );
+    // ② 받은 두 장이 살아 있다.
+    expect(cardTestIds()).toHaveLength(2);
+    // ③ 안내는 곁에 붙어 있다(부족을 삼키지 않는다 — INV-4).
+    expect(screen.getByTestId(FALLBACK_BANNER)).toBeOnTheScreen();
+    // ④ 얼굴을 h35 로 갈아 끼우지 않았다.
+    expect(screen.queryAllByTestId('itinerary-draft-zero')).toEqual([]);
   });
 });
