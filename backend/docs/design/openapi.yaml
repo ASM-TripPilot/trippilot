@@ -701,6 +701,47 @@ paths:
         '400': { description: 슬롯 키 형식 오류 }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
         '409': { description: 확정된 일정 · 생성 진행 중 · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
+  /trips/{tripId}/replan-sessions:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 재계획 진입 — 세션을 연다(i10)
+      description: >
+        여행 **기간 안**에서만, **다시 짤 일정이 있을 때만** 연다.
+        이미 열린 세션이 있으면 **그것을 CANCELED 로 닫고 새로 시작**한다(INV-U4-06) — 막지 않는다.
+        사용자가 앱을 닫았다 다시 들어오는 것이 정상 흐름이라, 거부하면 영영 못 들어간다.
+        확정(APPLIED) 전에는 원 일정에 **어떤 쓰기도 발생하지 않는다**(INV-U4-05).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/StartReplanRequest' } } }
+      responses:
+        '201': { description: 세션 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
+        '400': { description: 범위·기준점 누락 · GPS/MANUAL 인데 좌표 없음 · 자유 입력 초과 }
+        '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
+        '409': { description: 여행 기간 밖 }
+  /trips/{tripId}/replan-sessions/{sessionId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 재계획 세션 조회 — 진행 상태와 재계획안
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
+        '404': { description: 여행 없음/타 계정/세션 없음(다른 여행 소속 포함) }
+  /trips/{tripId}/replan-sessions/{sessionId}/cancel:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 재계획 취소(i18) — 세션만 닫는다
+      description: 원 일정은 건드리지 않는다(INV-U4-05). 세션은 지우지 않고 CANCELED 로 남는다.
+      responses:
+        '200': { description: 취소됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
+        '404': { description: 여행 없음/타 계정/세션 없음 }
+        '409': { description: 이미 끝난 재계획 }
   /trips/{tripId}/itinerary/revisions:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1103,6 +1144,64 @@ components:
                     endAt: { type: string, example: "11:00:00" }
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean }
+    StartReplanRequest:
+      type: object
+      required: [scope, originKind]
+      properties:
+        scope:
+          type: string
+          enum: [PARTIAL_SLOTS, FULL_DAY]
+          description: 재계획 범위(DEC-U4-3). ai ReplanScope 어휘를 그대로 쓴다
+        originKind:
+          type: string
+          enum: [GPS, MANUAL, LAST_VISIT, STAY_ANCHOR]
+          description: '출발 기준점. GPS 가 없으면 수동 핀 → 마지막 방문지 → 숙소 순으로 내려간다'
+        originLat: { type: number, nullable: true, description: GPS·MANUAL 이면 필수 }
+        originLng: { type: number, nullable: true, description: GPS·MANUAL 이면 필수 }
+        reasons:
+          type: array
+          maxItems: 10
+          items: { type: string }
+          description: "i10 의 '왜'(다중). 서버가 어휘를 강제하지 않는다 — 해석은 재계획 경계가 한다"
+        directives:
+          type: array
+          maxItems: 10
+          items: { type: string }
+          description: "i10 의 '어떻게'(다중)"
+        freeText: { type: string, nullable: true, maxLength: 500 }
+        excludedPoiIds:
+          type: array
+          items: { type: string, format: uuid }
+          description: "'건너뛰기'가 채운다 — 재계획 시 후보에서 뺀다"
+        triggerId: { type: string, format: uuid, nullable: true, description: 자동 진입이면 근거 트리거. 수동이면 null }
+    ReplanSession:
+      type: object
+      required: [sessionId, tripId, itineraryId, scope, fromInstant, originKind, originEstimated, status, createdAt]
+      properties:
+        sessionId: { type: string, format: uuid }
+        tripId: { type: string, format: uuid }
+        itineraryId: { type: string, format: uuid, description: 어느 일정을 다시 짜는가 }
+        triggerId: { type: string, format: uuid, nullable: true }
+        scope: { type: string, enum: [PARTIAL_SLOTS, FULL_DAY] }
+        fromInstant: { type: string, format: date-time, description: "'지금 이후'의 기준점 — 이 시각 이전 슬롯은 대상이 아니다" }
+        originKind: { type: string, enum: [GPS, MANUAL, LAST_VISIT, STAY_ANCHOR] }
+        originLat: { type: number, nullable: true }
+        originLng: { type: number, nullable: true }
+        originEstimated:
+          type: boolean
+          description: GPS 가 아니면 추정 출발지다 — 화면이 그 사실을 밝혀야 한다(US-PLANB-10)
+        reasons: { type: array, items: { type: string } }
+        directives: { type: array, items: { type: string } }
+        freeText: { type: string, nullable: true }
+        excludedPoiIds: { type: array, items: { type: string, format: uuid } }
+        status:
+          type: string
+          enum: [COLLECTING, SOLVING, DRAFT, APPLIED, CANCELED, FAILED, NO_SOLUTION]
+          description: >
+            COLLECTING→SOLVING→DRAFT→APPLIED|CANCELED. 실패는 FAILED(오류)·NO_SOLUTION(해 없음)로 갈린다 —
+            사용자가 할 일이 다르다(재시도 vs 조건 완화)
+        createdAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time, nullable: true }
     SlotCandidatesRequest:
       type: object
       required: [slotKey]
