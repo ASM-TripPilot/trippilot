@@ -111,6 +111,20 @@ _TRANSPORT_TOKENS: Mapping[str, TransportMode] = {
 }
 _DEFAULT_DWELL_MIN = 60  # dwell_min 미지정 고정 블록의 기본 체류(분) — 계약 예시값
 
+# 백엔드 `toWire()`(ScheduleAgentWire.kt)는 저장 일정을 되돌려 보낼 때 자기 도메인
+# 어휘(FULL_AI|DETERMINISTIC|MINIMAL)로 회신한다 — 수신부가 비대칭 흡수한다(TRIP-342).
+# AI 4값은 그대로 통과, 그 외 미지 값은 SolveMode() ValueError→422 (무한 관대 금지).
+_BACKEND_SOLVE_MODES: Mapping[str, SolveMode] = {
+    "FULL_AI": SolveMode.OR_TOOLS,
+    "DETERMINISTIC": SolveMode.RULE_FALLBACK,
+    "MINIMAL": SolveMode.MINIMAL,
+}
+
+
+def _solve_mode_from(token: str) -> SolveMode:
+    mapped = _BACKEND_SOLVE_MODES.get(token)
+    return mapped if mapped is not None else SolveMode(token)
+
 
 # ── 실 콘센트 기본 구현 (외부 API 아님 — 조립 루트 소유) ──────────────
 
@@ -318,7 +332,7 @@ def _solution_from_payload(
         schedule_id=schedule_id,
         days=tuple(days),
         is_fallback=payload.is_fallback,
-        solve_mode=SolveMode(payload.solve_mode),
+        solve_mode=_solve_mode_from(payload.solve_mode),
         solver_run=None,
     )
 
