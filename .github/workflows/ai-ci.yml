@@ -82,4 +82,67 @@ jobs:
             docker logs ai-smoke || true
             exit 1
           fi
+      # 기동 성공 ≠ 생성 성공 — 기본 조립(in-memory fake, D37: 실 외부 호출 0)으로
+      # generate 관통을 검증한다. 앵커=DEMO_ANCHOR(제주), 1일 여행 — 2일이면 다일
+      # 반경 축소(×0.7 → 7km)로 시드 POI(8.3km)가 전부 걸러져 후보 0이 된다.
+      - name: generate 스모크 검증 — 기동 성공 ≠ 생성 성공 (TRIP-346)
+        run: |
+          cat > /tmp/gen-req.json <<'JSON'
+          {
+            "trip_id": "ci-smoke-346",
+            "generation_mode": "FULLY_AI",
+            "trip_context": {
+              "destinations": ["제주"],
+              "start_date": "2026-09-01",
+              "end_date": "2026-09-01",
+              "companion_type": "혼자",
+              "budget_level": "중간"
+            },
+            "anchors": [
+              {"date": "2026-09-01", "lat": 33.4362, "lng": 126.5255}
+            ],
+            "time_windows": [
+              {"date": "2026-09-01", "start": "09:00", "end": "21:00"}
+            ],
+            "fixed_blocks": [],
+            "preference_profile": {
+              "styles": ["자연"],
+              "transport_modes": ["대중교통"],
+              "budget_tier": "중간"
+            },
+            "request_meta": {
+              "request_id": "ci-smoke-346",
+              "requested_at": "2026-09-01T08:00:00+09:00",
+              "deadline_ms": 20000
+            },
+            "excluded_poi_ids": []
+          }
+          JSON
+          fail() {
+            echo "::error::generate 스모크 실패 — $1"
+            echo '--- 응답 본문 ---'; cat /tmp/gen-res.json || true; echo
+            echo '--- 컨테이너 로그 ---'; docker logs ai-smoke || true
+            exit 1
+          }
+          status=$(curl -sS -o /tmp/gen-res.json -w '%{http_code}' \
+            -X POST http://localhost:8000/ai/v1/itinerary/generate \
+            -H 'Content-Type: application/json' \
+            --data @/tmp/gen-req.json) || status=000
+          [ "$status" = "200" ] || fail "HTTP $status (200 기대)"
+          jq -e '.days | length > 0' /tmp/gen-res.json >/dev/null \
+            || fail 'days 비어있음'
+          # is_fallback=true 자체는 실패가 아니지만(아래 warning), 슬롯 0건 = 빈 일정은 실패
+          jq -e '[.days[].slots[]] | length > 0' /tmp/gen-res.json >/dev/null \
+            || fail '슬롯 0건 — 전 일자 빈 일정'
+          # INV-1 방향 검증: 배정 poi_id 전건이 데모 시드(e0000000- 접두 UUID)여야 한다
+          jq -e 'all(.days[].slots[].poi_id; startswith("e0000000-"))' /tmp/gen-res.json >/dev/null \
+            || fail '시드 밖 poi_id 존재 — e0000000- 접두 시드 UUID가 아님 (INV-1)'
+          # INV-3: 응답 원문 어디에도 duration 토큰이 없어야 한다 (거리만 노출)
+          if grep -qi 'duration' /tmp/gen-res.json; then
+            fail '응답에 duration 토큰 존재 (INV-3 위반)'
+          fi
+          if jq -e '.is_fallback == true' /tmp/gen-res.json >/dev/null; then
+            echo "::warning::generate 응답 is_fallback=true — 폴백 경로 생성 (solve_mode=$(jq -r .solve_mode /tmp/gen-res.json))"
+          fi
+          echo "generate 스모크 통과: slots=$(jq '[.days[].slots[]] | length' /tmp/gen-res.json) solve_mode=$(jq -r .solve_mode /tmp/gen-res.json)"
           docker stop ai-smoke

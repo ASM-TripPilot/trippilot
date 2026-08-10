@@ -1,7 +1,14 @@
-# 실모델 LLM 스모크 — 수동 실행 전용 (TRIP-340, K-2)
+# 실모델 LLM 스모크 — 일일 스케줄 + 수동 실행 (TRIP-340 K-2, TRIP-346)
 #
-# ai-ci와 완전히 분리된 워크플로다. push/PR 트리거가 **없어서** CI 실 호출 0건(D37)은
-# 그대로 유지된다 — 실모델 1건 호출은 사람이 Actions 탭에서 Run workflow를 눌렀을 때만.
+# 목적: 하루 1회(UTC 22시 = KST 아침 7시) 실모델 연결(엔드포인트·키·게이트 파싱)을
+# 감시한다. **머지 게이트가 아니다** — 실패해도 어떤 PR도 막지 않는다.
+#
+# ai-ci와 완전히 분리된 워크플로다. push/PR 트리거가 **없어서** PR CI 실 호출 0건(D37)은
+# 그대로 유지된다 — 실모델 호출은 일일 스케줄 1건 + 사람이 Run workflow를 눌렀을 때만.
+#
+# schedule 이벤트에는 inputs가 없어 `inputs.*`가 전부 빈 값 — env 매핑의
+# `inputs.x || '기본값'` 폴백이 스케줄 실행의 기본 구성(openai · gpt-5.6-terra ·
+# responses)을 보장한다. endpoint는 repo Variable AZURE_OPENAI_ENDPOINT 폴백.
 #
 # 키는 Repository Secret `AZUREAPIKEY`에서만 온다: 등록 후 값은 누구도 다시 볼 수 없고,
 # 로그에 찍히면 자동 마스킹되며, 포크 PR에는 전달되지 않는다.
@@ -17,6 +24,8 @@
 name: ai-llm-smoke
 
 on:
+  schedule:
+    - cron: '0 22 * * *'   # UTC 22시 = KST 아침 7시, 일일 1회 연결 감시
   workflow_dispatch:
     inputs:
       provider:
@@ -63,15 +72,16 @@ jobs:
       - run: uv sync --locked
       - name: 실모델 스모크 1건 (프롬프트 렌더 → 호출 → 게이트 파싱)
         env:
-          LLM_PROVIDER: ${{ inputs.provider }}
+          # schedule 실행에선 inputs.*가 전부 빈 값 — || 기본값이 성립해야 한다
+          LLM_PROVIDER: ${{ inputs.provider || 'openai' }}
           # 같은 시크릿을 두 이름으로 노출 — 제공자 선택에 따라 스크립트가 맞는 쪽을 읽는다
           AZURE_OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           AZURE_OPENAI_ENDPOINT: ${{ inputs.endpoint || vars.AZURE_OPENAI_ENDPOINT }}
           OPENAI_BASE_URL: ${{ inputs.endpoint || vars.AZURE_OPENAI_ENDPOINT }}
           AZURE_OPENAI_API_VERSION: ${{ inputs.api_version || vars.AZURE_OPENAI_API_VERSION }}
-          AZURE_OPENAI_DEPLOYMENT: ${{ inputs.model }}
-          OPENAI_MODEL: ${{ inputs.model }}
-          OPENAI_API: ${{ inputs.api }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ inputs.model || 'gpt-5.6-terra' }}
+          OPENAI_MODEL: ${{ inputs.model || 'gpt-5.6-terra' }}
+          OPENAI_API: ${{ inputs.api || 'responses' }}
           SMOKE_UTTERANCE: ${{ inputs.utterance }}
         run: uv run python scripts/smoke_llm.py
