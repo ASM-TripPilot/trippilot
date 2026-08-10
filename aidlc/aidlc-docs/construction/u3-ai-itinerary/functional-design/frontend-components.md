@@ -86,6 +86,8 @@
 | `mustVisitList.ts` ✅ · `mustVisitTimeForm.ts` ✅ | 순수 | h05·h07 |
 | `generationGate.ts` | 순수 | BR-U3-01·02 — 숙소 0 / 지오코딩 실패 판정. **차단 사유 문자열까지 여기서** |
 | `draftState.ts` | 순수 | `resolveDraftState()` — 폴백 배너 3신호(`isFallback`·`solveMode=MINIMAL`·`candidatesLevel=LOW`) 중 **심각도 최상위 1개만** 고르는 것 포함(BR-U3-11) |
+
+> **[구현 결정 · TRIP-298, 2026-08-11] 파일·함수 이름 소급 기록 — 정본 공백.** 이 절이 가정하는 `draftState.ts`/`resolveDraftState()`는 실제로 `src/features/itinerary/model/draftView.ts`/`resolveDraftView()`로 구현됐다(TRIP-297). 판정 대상(`view`, 즉 화면이 어느 얼굴을 그릴지)에 이름을 맞춘 것이지, 이 절의 나머지 서술(폴백 배너 신호·판정 위치)이 틀렸다는 뜻은 아니다. TRIP-297·TRIP-298 선례와 같은 소급 기록 방식 — **요구사항 근거가 아니라 구현 결정의 기록**이다.
 | `planState.ts` | 순수 | `resolvePlanState()` — 로딩·오류·`CONFIRMED` 읽기전용·지도 실패 폴백 |
 | `legDistance.ts` | 순수 | 구간 표기 조립(`도보 950m`) + **총 이동거리 합산**. **소요시간 산출 함수를 두지 않는다**(INV-3) |
 | `routeDiff.ts` | 순수 | h28 전·후 diff 분류(추가·삭제·이동) + 개선 없음 판정 |
@@ -135,6 +137,8 @@
 |---|---|
 | `itineraryMustVisitStructure.test.ts` ✅ | 기존 |
 | `itineraryDraftStructure.test.ts` | `DraftScreen.tsx`에 폴백 판정 분기가 **0건**(판정은 `draftState.ts` 한 곳) |
+
+> **[구현 결정 · TRIP-298, 2026-08-11] 파일 이름 소급 기록.** `draftState.ts`는 실제로 `draftView.ts`다(위 §3 소급 기록과 같은 건). `itineraryDraftStructure.test.ts` 자체는 실재하며 TRIP-298에서 `ZeroCandidateScreen.tsx` 경로를 추가로 잠그도록 확장됐다.
 | `itineraryTimeStructure.test.ts` | `ui/` 전 파일에 **소요시간 단위 문자열 0건**(`분`·`시간`이 이동 구간 문맥에 없음) — INV-3 |
 | `itineraryDraftTimeStructure.test.ts` | `DraftScreen.tsx`가 **`startAt`·`endAt`을 렌더하지 않는다**(고정 블록 예외만) — BR-U3-07 |
 | `pagesLayerStructure.test.ts` ✅ | 새 `itinerary-*` 슬라이스를 재귀 스캔이 자동 편입 |

@@ -77,3 +77,24 @@ describe('P1 · AC-6 무회귀 — 프리뷰 h11 상태가 픽스처를 싣고 �
     expect(screen.getByTestId('map-root')).toBeOnTheScreen();
   });
 });
+
+describe('🔴 P2 · TRIP-298 AC-V3 전제 — 프리뷰에 h35 후보 0건 상태가 있다', () => {
+  it('state=itinerary-draft-zero 로 열면 0건 화면과 완화 행 1개가 뜬다', () => {
+    /**
+     * [검증]의 Figma `1906:1083` 픽셀 대조는 **이 상태가 있어야** 시작된다. 실화면 딥링크로는
+     * 이 얼굴을 볼 수 없다 — 서버가 `candidatesSummary` 를 아직 안 준다(TRIP-306 미착수).
+     * `structure.md` 경고대로 목을 새로 만들지 않고 프리뷰에 상태를 더하는 길이다.
+     *
+     * ⚠️ 픽셀 충실도 자체는 이 테스트가 재지 않는다(테스트 불가 — 스크린샷 대조 몫). 여기서
+     * 잠그는 것은 "대조할 화면이 실제로 열린다"까지다.
+     */
+    mockSearchParams.state = 'itinerary-draft-zero';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('itinerary-draft-zero')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^itinerary-draft-zero-relax/)).toHaveLength(
+      1
+    );
+  });
+});
