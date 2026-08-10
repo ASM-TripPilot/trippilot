@@ -39,9 +39,9 @@ from trippilot.agents.planb.rag import (
     _persona_query,
     closed_set_filter,
 )
-from trippilot.c1.config import C1Config
-from trippilot.c1.gates.base import GateOutcome
-from trippilot.c1.gateway import GatewayFacade
+from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.gates.base import GateOutcome
+from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId
 from trippilot.domain.kb import KbDocument, KbHit, KbKind
 from trippilot.domain.llm import CandidatePool, ModelTier, ScoredPoi

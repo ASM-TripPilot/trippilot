@@ -55,8 +55,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from trippilot.c1.gates.intent import IntentGate
-from trippilot.c1.prompts import PromptRegistry
+from trippilot.llm_gateway.gates.intent import IntentGate
+from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
 from trippilot.domain.intent import ROUTABLE_INTENTS
 from trippilot.domain.llm import LlmFeature
@@ -83,7 +83,7 @@ def _build_adapter() -> tuple[LlmPort, str]:
     if provider == "azure":
         import openai
 
-        from trippilot.c1.adapters.openai_adapter import OpenAIAdapter
+        from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
 
         # AzureOpenAI는 openai.OpenAI의 서브클래스 — 어댑터는 그대로 쓴다.
         # Azure에선 model 자리에 모델 ID가 아니라 **배포 이름**이 들어간다.
@@ -96,7 +96,7 @@ def _build_adapter() -> tuple[LlmPort, str]:
     if provider == "openai":
         import openai
 
-        from trippilot.c1.adapters.openai_adapter import OpenAIAdapter
+        from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
 
         client = openai.OpenAI(
             api_key=_require("OPENAI_API_KEY"),
@@ -107,7 +107,7 @@ def _build_adapter() -> tuple[LlmPort, str]:
     if provider == "anthropic":
         import anthropic
 
-        from trippilot.c1.adapters.anthropic_adapter import AnthropicAdapter
+        from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
 
         client = anthropic.Anthropic(api_key=_require("ANTHROPIC_API_KEY"))
         return AnthropicAdapter(client), os.environ.get(

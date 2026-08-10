@@ -100,11 +100,11 @@ title("U4 게이트", "환각 poi는 드롭되고, 전량 오염이면 폴백 �
 
 from pathlib import Path
 
-from trippilot.c1.config import C1Config
-from trippilot.c1.gates.scoring import ClosedSetGate
-from trippilot.c1.gateway import GatewayFacade
-from trippilot.c1.prompts import PromptRegistry
-from trippilot.c1.workers.preference import build_prompt_vars
+from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gateway import GatewayFacade
+from trippilot.llm_gateway.prompts import PromptRegistry
+from trippilot.llm_gateway.workers.preference import build_prompt_vars
 from trippilot.domain.common import BudgetLevel
 from trippilot.domain.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import GateDropEvent

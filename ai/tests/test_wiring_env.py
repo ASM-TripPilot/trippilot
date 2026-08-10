@@ -19,7 +19,7 @@ from fastapi import FastAPI
 
 import main
 from trippilot.api import wiring
-from trippilot.c1.adapters.openai_adapter import OpenAIAdapter
+from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
 from trippilot.domain.poi import PoiCategory
 
 # 정본: backend/app/src/main/resources/db/migration/R__seed_stub_pois.sql

@@ -97,7 +97,7 @@ PR #104(`backend/docs/design/ai-backend-경계-잔여협의-3점.md`) 회신으�
 | # | 지점 | 판정 | 심각도 | 핵심 근거 A ↔ B |
 |---|---|---|---|---|
 | P1 | POI 정본·INV-1 이중 소유 | 확정 | 연동 차단 | `backend/.../PoiCollectionGate.kt:5` ↔ `ai/.../ai-architecture.md:83` |
-| P2 | 후보풀 필터 로직 불일치 | 확정 | 연동 차단 | `ai/.../m7/pool_builder.py:25-56` ↔ `backend/.../PlaceDataCandidatePool.kt:23-45` |
+| P2 | 후보풀 필터 로직 불일치 | 확정 | 연동 차단 | `ai/.../poi_curation/pool_builder.py:25-56` ↔ `backend/.../PlaceDataCandidatePool.kt:23-45` |
 | P3 | 카테고리 enum 불일치 | 확정 | 연동 차단 | `backend/.../Poi.kt:9` ↔ `ai/.../domain/poi.py:15-23` |
 | P4 | SolverPort 계약 형태·계층 | 확정(뉘앙스) | 혼동 유발 | `aidlc/.../component-methods.md:72-102` ↔ `ai/.../ports/solver_port.py:14-15` |
 | P5 | QualityScore 미구현 | 확정 | 혼동/정리 | `aidlc/.../components.md:179-182` ↔ ai grep 0건 |
@@ -113,7 +113,7 @@ PR #104(`backend/docs/design/ai-backend-경계-잔여협의-3점.md`) 회신으�
 
 - backend: `PoiCollectionGate.kt:5-10`("수집 게이트 — INV-1 소유자"), `Poi.kt:17-21`("POI 정본 C7"),
   `PlaceDataCandidatePool.kt:14-15`(212 POI 정본 위 closed-set INV-1).
-- ai: `m7/pool_builder.py:1-6`("이 출력이 INV-1 화이트리스트의 원천"), `domain/llm.py:71-90`(CandidatePool="INV-1 강제 지점"),
+- ai: `poi_curation/pool_builder.py:1-6`("이 출력이 INV-1 화이트리스트의 원천"), `domain/llm.py:71-90`(CandidatePool="INV-1 강제 지점"),
   `ports/poi_db_port.py:1-3`("M7 정본 저장소 … PostgreSQL/PostGIS U3 소유"), `ai-data-design.md:12-14`("M7 책임: POI 정본 관리").
 - 반박 가설("ai M7은 backend 소비 스텁") 기각: AI 문서에 `place-data`/`CandidatePoolPort`/C7 소비 언급 0건,
   `ai-architecture.md:77,83`은 M7을 최하위 자기 소유 컴포넌트로 규정.
@@ -131,7 +131,7 @@ PR #104(`backend/docs/design/ai-backend-경계-잔여협의-3점.md`) 회신으�
 
 > **2026-08-06 현황 — 부분 해소.** PR #76 결정1 합의: 예산은 하드 필터가 아닌 **소프트 가중치**로,
 > 인기 정렬은 rating 단독이 아닌 **savedCount 합성 정렬**로 간다는 제안이 수용됨.
-> 잔여(TRIP-280): ai `m7/pool_builder.py:25-56`은 여전히 예산 하드 필터 + rating 단독 정렬이고,
+> 잔여(TRIP-280): ai `poi_curation/pool_builder.py:25-56`은 여전히 예산 하드 필터 + rating 단독 정렬이고,
 > ai `domain/poi.py:72-81` `Poi`에 `saved_count`·`data_status` 필드가 없어 결정1 반영 자체가 불가
 > (backend `openapi.yaml:686` `Place`는 `savedCount`·`dataStatus` 필수).
 
@@ -173,8 +173,8 @@ PR #104(`backend/docs/design/ai-backend-경계-잔여협의-3점.md`) 회신으�
 
 > **2026-08-06 현황 — 해소.** TRIP-259(도메인 타입·계산)·TRIP-261(C2 facade 배선) 완료:
 > `ai/src/trippilot/domain/itinerary.py:233` `QualityScore`(preference_fit·constraint_satisfaction·
-> route_efficiency·composite, 전 성분 [0,1]), `ai/src/trippilot/c2/quality.py:86-105` `compute_quality`,
-> facade 모든 반환 경로 부착(`ai/src/trippilot/c2/facade.py:101`).
+> route_efficiency·composite, 전 성분 [0,1]), `ai/src/trippilot/solver_engine/quality.py:86-105` `compute_quality`,
+> facade 모든 반환 경로 부착(`ai/src/trippilot/solver_engine/facade.py:101`).
 
 ### P6 — 별도 `solver/` 디렉토리 잔존 (문서 정리)
 
@@ -240,7 +240,7 @@ PR #104(`backend/docs/design/ai-backend-경계-잔여협의-3점.md`) 회신으�
 - **INV-3 (duration 미표시)**: ai(`travel.py:55-60` public에서 internal_minutes 제외)·
   backend(`openapi.yaml:417,453`, `PoiDtos.kt:9`, `CandidatePoolPort.kt:17`) 양쪽 일관 준수.
   - **2026-08-06 실측 재확인 — 양쪽 통과.** ai: `domain/travel.py:1-7`(직렬화 경로 분리로 구조적 강제),
-    `c2/quality.py:8`(품질 계산조차 internal_minutes 미사용), `QualityScore` 전 성분 무차원 [0,1].
+    `solver_engine/quality.py:8`(품질 계산조차 internal_minutes 미사용), `QualityScore` 전 성분 무차원 [0,1].
     backend: `ScheduleAgentPort.kt:84` `VisitSlotDisplay` "duration 필드 없음(INV-3) — 거리만",
     `openapi.yaml:417,453` 유효.
 - **이벤트 소유**: AI 문서가 발행 주체를 backend(KB)로 올바로 귀속(`ai-implementation-design.md:117,154`,

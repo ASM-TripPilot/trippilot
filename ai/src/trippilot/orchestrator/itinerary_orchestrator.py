@@ -32,10 +32,10 @@ from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Mapping, Protocol
 
-from trippilot.c1.workers.explanation import ExplanationWorker
-from trippilot.c1.workers.preference import PreferenceScoringWorker
-from trippilot.c2.facade import SolverConflictError
-from trippilot.c2.scorer import build_rule_score
+from trippilot.llm_gateway.workers.explanation import ExplanationWorker
+from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.solver_engine.facade import SolverConflictError
+from trippilot.solver_engine.scorer import build_rule_score
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -52,10 +52,10 @@ from trippilot.domain.itinerary import (
     TimeWindow,
 )
 from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
-from trippilot.domain.m7 import CandidatePoolRequest
+from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.poi import Poi, PoiCategory
-from trippilot.m7.pool_builder import CandidatePoolBuilder
+from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.ports.trace_port import TracePort
 
 _COMPONENT = "orchestrator.itinerary"

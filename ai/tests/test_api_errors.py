@@ -19,7 +19,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from trippilot.api.app import HEALTH_BODY, create_app
-from trippilot.c2.facade import SolverConflictError
+from trippilot.solver_engine.facade import SolverConflictError
 from trippilot.domain.context import PermissionDeniedError
 from tests.test_api_contract import BACKEND_REQUEST, FakeOrchestrator, make_outcome
 

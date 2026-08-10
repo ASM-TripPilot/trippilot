@@ -68,27 +68,27 @@ def test_domain_does_not_import_ports() -> None:
     assert not offenders, f"domain이 ports를 import함(레이어 위반): {offenders}"
 
 
-def test_ortools_only_imported_in_c2() -> None:
-    """U2 DoD: ortools 의존은 c2 계층에만 (다른 계층 유입 자동 차단)."""
+def test_ortools_only_imported_in_solver_engine() -> None:
+    """U2 DoD: ortools 의존은 solver_engine(C2) 계층에만 (다른 계층 유입 자동 차단)."""
     offenders = []
     for py in _SRC.rglob("*.py"):
-        if "c2" in py.parts:
+        if "solver_engine" in py.parts:
             continue
         if "ortools" in _external_imports(py):
             offenders.append(str(py.relative_to(_SRC)))
-    assert not offenders, f"c2 밖에서 ortools import: {offenders}"
+    assert not offenders, f"solver_engine 밖에서 ortools import: {offenders}"
 
 
-def test_m7_imports_only_stdlib_and_internal() -> None:
-    """U3 DoD: m7 계층 순수성 (외부 패키지 0)."""
-    _assert_pure("m7")
+def test_poi_curation_imports_only_stdlib_and_internal() -> None:
+    """U3 DoD: poi_curation(구 M7) 계층 순수성 (외부 패키지 0)."""
+    _assert_pure("poi_curation")
 
 
-def test_c1_imports_only_stdlib_and_internal() -> None:
-    """U4 DoD: c1 순수성 — 예외 2곳뿐: prompts.py의 yaml(프롬프트 정본 포맷),
+def test_llm_gateway_imports_only_stdlib_and_internal() -> None:
+    """U4 DoD: llm_gateway(C1) 순수성 — 예외 2곳뿐: prompts.py의 yaml(프롬프트 정본 포맷),
     adapters/의 벤더 SDK(anthropic·openai — SDK는 어댑터 한정, BR-U4-10)."""
     offenders: dict[str, set[str]] = {}
-    for py in (_SRC / "c1").rglob("*.py"):
+    for py in (_SRC / "llm_gateway").rglob("*.py"):
         bad = _external_imports(py)
         if py.name == "prompts.py":
             bad -= {"yaml"}
@@ -96,11 +96,11 @@ def test_c1_imports_only_stdlib_and_internal() -> None:
             bad -= {"anthropic", "openai"}
         if bad:
             offenders[str(py.relative_to(_SRC))] = bad
-    assert not offenders, f"c1에 외부 패키지 import 위반: {offenders}"
+    assert not offenders, f"llm_gateway에 외부 패키지 import 위반: {offenders}"
 
 
-def test_anthropic_only_imported_in_c1_adapters() -> None:
-    """BR-U4-10: anthropic SDK 의존은 c1/adapters/ 한정 — 벤더 교체 시 이 경계만 갈아끼운다."""
+def test_anthropic_only_imported_in_llm_gateway_adapters() -> None:
+    """BR-U4-10: anthropic SDK 의존은 llm_gateway/adapters/ 한정 — 벤더 교체 시 이 경계만 갈아끼운다."""
     offenders = []
     for py in _SRC.rglob("*.py"):
         if "adapters" in py.parts:
@@ -110,8 +110,8 @@ def test_anthropic_only_imported_in_c1_adapters() -> None:
     assert not offenders, f"adapters 밖에서 anthropic import: {offenders}"
 
 
-def test_openai_only_imported_in_c1_adapters() -> None:
-    """TRIP-340: openai SDK 의존도 c1/adapters/ 한정 — anthropic 규칙(BR-U4-10)과 동형.
+def test_openai_only_imported_in_llm_gateway_adapters() -> None:
+    """TRIP-340: openai SDK 의존도 llm_gateway/adapters/ 한정 — anthropic 규칙(BR-U4-10)과 동형.
     개발·검증용 어댑터라도 SDK가 경계 밖으로 새면 벤더 교체 비용이 어댑터 1개를 넘는다."""
     offenders = []
     for py in _SRC.rglob("*.py"):
@@ -122,15 +122,15 @@ def test_openai_only_imported_in_c1_adapters() -> None:
     assert not offenders, f"adapters 밖에서 openai import: {offenders}"
 
 
-def test_yaml_only_imported_in_c1_prompts() -> None:
-    """yaml 파서 의존은 PromptRegistry(c1/prompts.py) 한정 — ortools→c2와 같은 격리 패턴."""
+def test_yaml_only_imported_in_llm_gateway_prompts() -> None:
+    """yaml 파서 의존은 PromptRegistry(llm_gateway/prompts.py) 한정 — ortools→solver_engine과 같은 격리 패턴."""
     offenders = []
     for py in _SRC.rglob("*.py"):
-        if py.parent.name == "c1" and py.name == "prompts.py":
+        if py.parent.name == "llm_gateway" and py.name == "prompts.py":
             continue
         if "yaml" in _external_imports(py):
             offenders.append(str(py.relative_to(_SRC)))
-    assert not offenders, f"c1/prompts.py 밖에서 yaml import: {offenders}"
+    assert not offenders, f"llm_gateway/prompts.py 밖에서 yaml import: {offenders}"
 
 
 def _internal_imports(path: Path) -> set[str]:
@@ -157,7 +157,7 @@ _AGENT_LAYER_PREFIXES = (
 def test_lower_layers_do_not_import_agent_layer() -> None:
     """L-1 (BR-AF-10): 하위 계층은 상위(agents·orchestrator·providers·background)를 모른다."""
     offenders: dict[str, set[str]] = {}
-    for subdir in ("domain", "ports", "c1", "c2", "m7"):
+    for subdir in ("domain", "ports", "llm_gateway", "solver_engine", "poi_curation"):
         for py in (_SRC / subdir).rglob("*.py"):
             bad = {
                 m
@@ -204,18 +204,19 @@ def test_agents_do_not_import_llm_port() -> None:
     assert not offenders, f"agents가 LlmPort를 직접 import함(L-3 위반): {offenders}"
 
 
-def test_c1_does_not_import_c2_or_m7() -> None:
-    """BR-U4-09: c1은 판단 재료 제공자 — 규칙 점수 폴백 실행은 호출측 몫이라 c2·m7 참조 금지."""
+def test_llm_gateway_does_not_import_solver_engine_or_poi_curation() -> None:
+    """BR-U4-09: llm_gateway(C1)는 판단 재료 제공자 — 규칙 점수 폴백 실행은 호출측 몫이라
+    solver_engine(C2)·poi_curation(구 M7) 참조 금지."""
     offenders: dict[str, set[str]] = {}
-    for py in (_SRC / "c1").rglob("*.py"):
+    for py in (_SRC / "llm_gateway").rglob("*.py"):
         tree = ast.parse(py.read_text(encoding="utf-8"))
         bad = {
             node.module
             for node in ast.walk(tree)
             if isinstance(node, ast.ImportFrom)
             and node.module
-            and node.module.startswith(("trippilot.c2", "trippilot.m7"))
+            and node.module.startswith(("trippilot.solver_engine", "trippilot.poi_curation"))
         }
         if bad:
             offenders[str(py.relative_to(_SRC))] = bad
-    assert not offenders, f"c1이 c2/m7을 import함(경계 위반): {offenders}"
+    assert not offenders, f"llm_gateway가 solver_engine/poi_curation을 import함(경계 위반): {offenders}"

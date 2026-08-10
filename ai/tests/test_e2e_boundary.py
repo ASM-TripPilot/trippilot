@@ -28,8 +28,8 @@ from fastapi.testclient import TestClient
 
 from trippilot.api.app import create_app
 from trippilot.api.wiring import build_dev_app, build_orchestrator, DEMO_ANCHOR
-from trippilot.c1.config import C1Config
-from trippilot.c2.config import SolverConfig
+from trippilot.llm_gateway.config import C1Config
+from trippilot.solver_engine.config import SolverConfig
 from trippilot.domain.common import BudgetLevel, GeoPoint
 from trippilot.domain.llm import ModelTier
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag

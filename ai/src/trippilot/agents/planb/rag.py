@@ -41,7 +41,7 @@ from trippilot.agents.planb.kb_retrieval import (
     retrieve_schedule,
     retrieve_situation,
 )
-from trippilot.c1.gateway import GatewayFacade
+from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.kb import KbHit, KbKind
 from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi

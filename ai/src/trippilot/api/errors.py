@@ -23,7 +23,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from trippilot.api.schemas import ErrorBody
-from trippilot.c2.facade import SolverConflictError
+from trippilot.solver_engine.facade import SolverConflictError
 from trippilot.domain.context import PermissionDeniedError
 
 # 오류 코드 — 백엔드 로그·분류의 키(문자열 안정성 유지).

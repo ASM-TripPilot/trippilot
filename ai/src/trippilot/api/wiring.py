@@ -56,20 +56,20 @@ from fastapi import FastAPI
 
 from trippilot.api import schemas
 from trippilot.api.app import create_app
-from trippilot.c1.config import C1Config
-from trippilot.c1.context import ContextResolver, ContextStore
-from trippilot.c1.gates.explanation import ExplanationGate
-from trippilot.c1.gates.scoring import ClosedSetGate
-from trippilot.c1.gateway import GatewayFacade
-from trippilot.c1.prompts import PromptRegistry
-from trippilot.c1.workers.explanation import ExplanationWorker
-from trippilot.c1.workers.preference import PreferenceScoringWorker
-from trippilot.c2.config import SolverConfig
-from trippilot.c2.facade import HybridSolverFacade, SolverConflictError
-from trippilot.c2.fallback_solver import RuleFallbackSolver
-from trippilot.c2.ortools_solver import OrToolsSolver
-from trippilot.c2.repair import RepairChange
-from trippilot.c2.travel import TravelEstimator, haversine_km
+from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.context import ContextResolver, ContextStore
+from trippilot.llm_gateway.gates.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gateway import GatewayFacade
+from trippilot.llm_gateway.prompts import PromptRegistry
+from trippilot.llm_gateway.workers.explanation import ExplanationWorker
+from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.solver_engine.config import SolverConfig
+from trippilot.solver_engine.facade import HybridSolverFacade, SolverConflictError
+from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
+from trippilot.solver_engine.ortools_solver import OrToolsSolver
+from trippilot.solver_engine.repair import RepairChange
+from trippilot.solver_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -94,8 +94,8 @@ from trippilot.domain.llm import ModelTier, PoiExplanation
 from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.travel import TravelEstimate
-from trippilot.m7.config import M7Config
-from trippilot.m7.pool_builder import CandidatePoolBuilder
+from trippilot.poi_curation.config import M7Config
+from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.orchestrator import itinerary_orchestrator as core
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
 from trippilot.ports.trace_port import TracePort

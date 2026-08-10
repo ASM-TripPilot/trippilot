@@ -22,18 +22,18 @@ from datetime import date, datetime, timedelta, timezone
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.c1.config import C1Config
-from trippilot.c1.context import ContextResolver
-from trippilot.c1.gates.base import GateOutcome
-from trippilot.c1.gates.explanation import ExplanationGate
-from trippilot.c1.gates.scoring import ClosedSetGate
-from trippilot.c1.gateway import GatewayFacade
-from trippilot.c1.workers.explanation import ExplanationWorker
-from trippilot.c1.workers.preference import PreferenceScoringWorker
-from trippilot.c2.config import SolverConfig
-from trippilot.c2.facade import HybridSolverFacade
-from trippilot.c2.fallback_solver import RuleFallbackSolver
-from trippilot.c2.travel import TravelEstimator
+from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.context import ContextResolver
+from trippilot.llm_gateway.gates.base import GateOutcome
+from trippilot.llm_gateway.gates.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gateway import GatewayFacade
+from trippilot.llm_gateway.workers.explanation import ExplanationWorker
+from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.solver_engine.config import SolverConfig
+from trippilot.solver_engine.facade import HybridSolverFacade
+from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
+from trippilot.solver_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -49,8 +49,8 @@ from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.prompt import PromptRef
-from trippilot.m7.config import M7Config
-from trippilot.m7.pool_builder import CandidatePoolBuilder
+from trippilot.poi_curation.config import M7Config
+from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.orchestrator.itinerary_orchestrator import (
     GenerateItineraryRequest,
     GenerationOutcome,
