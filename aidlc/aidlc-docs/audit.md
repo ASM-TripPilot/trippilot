@@ -948,3 +948,18 @@ Step 1 FD 분석 — **재서술 금지 대상 8건** 식별(무발화 BR-U4-05�
 **Selection**: 사이클 [설계] 3-a에서 관측된 정본 공백·드리프트 **6건 중 사용자가 3건을 선택**했다. 위 두 건이 그중 `aidlc/` 소관이고, 세 번째(Figma 밴드 맵 `[보관]` 세대 규칙)는 하네스 파일(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`) 소관이라 별도 장부(옵시디언 `TripPilot/하네스 변경이력.md`)에 기록했다. **미선택 3건은 `aidlc/`에 반영하지 않았다** — 개발로그에 관측으로만 남긴다(티켓 본문의 핀 색 서술이 Figma 실측과 반대인 점 · "assets 디렉토리가 없다"가 사실과 다른 점 포함).
 
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-339 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260810-trip339-map-surface/01_spec-analyst_brief.md`(§3 Figma 실측치·§8 ④ 드리프트 목록) · `01b_ouroboros_seed.md`(3-a 사용자 확정 표) · `00_gates.md`(게이트①·①-2·② 원장) · `04b_smoke_1_PASS.md`(실기 대조로 h05 무선·h11 유선 확인). 이번 항목이 손댄 `aidlc/` 파일 = 위 두 문서 + 이 `audit.md` append. `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음).
+
+---
+
+## Post-Design Correction — TRIP-298 (2026-08-11)
+
+**Action**: Construction 단계 기존 승인 산출물 2건에 **구현 결정 소급 주석** append.
+
+- `aidlc-docs/construction/u2-itinerary-intelligence/functional-design/business-rules.md` — BR-U2-05(`candidatesSummary` 신설) 절 뒤에 소급 주석 1문단 추가. BR-U2-05 원문은 `level: HIGH | MEDIUM | LOW` 열거를 확정하는데, 실제 구현 계약(`backend/docs/design/openapi.yaml:1183-1195`)은 `level: { type: string }`으로 열어 두고 "AI 어휘가 그대로 통과한다"고 명시한다 — 정반대다. 루트 CLAUDE.md 규칙상 구현 계약이 이긴다는 사실과, 프론트(`isCandidatesDemoted`)가 화이트리스트 비교로 이 드리프트에 이미 맞춰 짜여 있다는 사실을 원문 삭제 없이 추가만 했다.
+- `aidlc-docs/construction/u3-ai-itinerary/functional-design/frontend-components.md` — §3(`draftState.ts`/`resolveDraftState()`)·§6(`itineraryDraftStructure.test.ts` 행)에 각각 소급 기록 추가. 실제 구현은 `draftView.ts`/`resolveDraftView()`(TRIP-297)이고, 문서는 옛 이름을 그대로 가정하고 있었다. TRIP-297·TRIP-339 선례와 같은 "[구현 결정 · TRIP-XXX, 날짜]" 소급 기록 형식을 따랐다.
+
+**둘 다 요구사항 근거가 아니라 구현 결정(또는 계약 드리프트 사실)의 소급 기록이다** — 다음 사이클이 요구사항 근거로 인용하지 말 것을 각 문단에 명시했다.
+
+**Selection**: 사이클 [설계] 3-a에서 관측된 정본 반영 후보 **4건 중 사용자가 4건 전부 선택**했다. 그중 위 2건만 `aidlc/` 소관(B)이고, 나머지 2건(BR 코드 오인용 — `placementReason`에 붙은 `BR-U2-04`가 실제로는 slotKey 키 규약이고 문구 제약은 `BR-U2-09`인 것 · h11 이유 표면 화면 정본 부재)은 **백엔드 파일·미착수 화면 정본이라 `aidlc/`에 쓰지 않고 Jira TRIP-298 코멘트로만 보고**했다.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-298 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260810-trip298-reason-surface/00_ticket.txt`(스코프 절) · `04_qa-verifier_report_1_PASS.md` §6(경계면 QA — `level` 계약 대조) · `03_implementer_notes.md` §1.2(화이트리스트 근거). 이번 항목이 손댄 `aidlc/` 파일 = 위 두 문서 + 이 `audit.md` append. `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음).

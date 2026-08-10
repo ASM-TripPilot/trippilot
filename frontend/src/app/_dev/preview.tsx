@@ -46,6 +46,7 @@ import {
 } from '@/features/itinerary/ui/DraftScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
+import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import {
   TripWizardStep1Screen,
@@ -1111,6 +1112,21 @@ const PREVIEW_STATES: PreviewState[] = [
           staleFailed: false,
         }}
         pins={buildDraftPins(DRAFT_PREVIEW_DAYS_NO_COORDS[0].slots)}
+      />
+    ),
+  },
+  // h35 후보 0건(TRIP-298) — Figma `1906:1083` 대조용. 실화면 딥링크로는 이 얼굴을 볼 수
+  // 없다: 서버가 `candidatesSummary` 를 아직 안 준다(TRIP-306 미착수). 칩 문구는 Figma 목업
+  // 값 그대로이고, 실기에서는 **서버가 준 문자열이 그대로** 들어온다(01b D8).
+  {
+    key: 'itinerary-draft-zero',
+    label: 'h35 · 후보 0건',
+    login: null,
+    render: () => (
+      <ZeroCandidateScreen
+        shortfallCategories={['1일 예산 5만원', '700m 이내', '비건·24시간']}
+        onBack={noop}
+        onReduceMustVisits={noop}
       />
     ),
   },
