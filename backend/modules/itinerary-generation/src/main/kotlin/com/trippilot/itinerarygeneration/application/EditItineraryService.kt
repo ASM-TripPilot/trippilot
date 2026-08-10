@@ -102,11 +102,11 @@ class EditItineraryService(
                     // 재산출은 AI 검증·수리(TRIP-309) 몫이라, 그때까지는 낡은 값을 보여주느니 비워 둔다.
                     VisitSlot.of(
                         s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
-                        hasViolation = prior?.flagOf(d.date, s.poiId) ?: hit.isNotEmpty(),
+                        hasViolation = if (prior != null) prior.flagOf(d.date, s.poiId) else hit.isNotEmpty(),
                         endsNextDay = s.endsNextDay,
                         placementReason = reasonBySlot[d.date to s.poiId],
                         // 저장 후에도 "무엇이 왜 문제인지"가 남아야 한다(BR-U3-13 지속 가시화).
-                        violationReason = prior?.reasonOf(d.date, s.poiId) ?: ViolationText.reasonOf(hit),
+                        violationReason = if (prior != null) prior.reasonOf(d.date, s.poiId) else ViolationText.reasonOf(hit),
                     )
                 },
             )

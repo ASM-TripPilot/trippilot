@@ -182,12 +182,12 @@ class ItineraryRevisionService(
                     val hit = violations.filter { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
                     VisitSlot.of(
                         s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
-                        hasViolation = prior?.flagOf(date, s.poiId) ?: hit.isNotEmpty(),
+                        hasViolation = if (prior != null) prior.flagOf(date, s.poiId) else hit.isNotEmpty(),
                         endsNextDay = s.endsNextDay,
                         distanceRange = s.distanceRange,
                         placementReason = s.placementReason,
                         // 복원 결과도 편집과 같은 기준으로 사유를 남긴다 — 배지만 켜면 화면이 이유를 못 그린다(BR-U3-13).
-                        violationReason = prior?.reasonOf(date, s.poiId) ?: ViolationText.reasonOf(hit),
+                        violationReason = if (prior != null) prior.reasonOf(date, s.poiId) else ViolationText.reasonOf(hit),
                     )
                 },
             )

@@ -3,6 +3,8 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.core.error.UpstreamUnavailable
+import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.Itinerary
@@ -81,10 +83,11 @@ class SlotCandidateServiceTest : StringSpec({
         override fun findGenerationContext(accountId: UUID, tripId: UUID) = null
     }
 
-    class CapturingAgent : StubScheduleAgent() {
+    class CapturingAgent(private val failure: ScheduleAgentCallFailed? = null) : StubScheduleAgent() {
         var captured: SlotCandidatesInput? = null
         override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput {
             captured = input
+            failure?.let { throw it }
             return SlotCandidatesOutput(
                 listOf(SlotCandidate(UUID.randomUUID(), "약 1.1km", "주변 카페")),
                 radiusMUsed = 12_000,
@@ -105,6 +108,20 @@ class SlotCandidateServiceTest : StringSpec({
 
     fun service(agent: CapturingAgent, stored: Itinerary? = itinerary) =
         SlotCandidateService(trips, Repo(stored), agent, surfaces, pool, clock)
+
+    "경계가 실패하면 503 으로 표면화한다 — 500(우리가 터졌다)이 아니다" {
+        // http 모드에서 이 경로는 아직 미개통이라 어댑터가 SLOT_CANDIDATES_NOT_WIRED 를 던진다.
+        // 감싸지 않으면 RuntimeException 이라 전역 핸들러가 500 으로 떨구는데, 사실은 "지금은 못 준다"다.
+        val down = CapturingAgent(
+            ScheduleAgentCallFailed("SLOT_CANDIDATES_NOT_WIRED", retryable = false, message = "미개통"),
+        )
+        val e = shouldThrow<UpstreamUnavailable> {
+            service(down).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null))
+        }
+        e.source shouldBe "schedule-agent"
+        // 후보는 지어낼 수 없다(INV-1) — 빈 목록으로 접으면 "주변에 없음"과 구분되지 않는다.
+        e.fallbackApplied shouldBe false
+    }
 
     "이미 일정에 있는 장소를 서버가 제외 목록으로 만든다(BR-U3-24)" {
         val agent = CapturingAgent()
