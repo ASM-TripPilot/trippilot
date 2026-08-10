@@ -32,10 +32,15 @@ data class PlanBTrigger(
         fun active(
             tripId: UUID, itineraryId: UUID, kind: TriggerKind, affectedDate: LocalDate, slotKey: String?,
             payload: Map<String, Any>, scope: TriggerScope, reason: String, at: Instant,
-        ) = PlanBTrigger(
-            UUID.randomUUID(), tripId, itineraryId, kind, affectedDate, slotKey, payload,
-            shouldReplan = true, scope = scope, reason = reason, state = TriggerState.ACTIVE, detectedAt = at,
-        )
+        ): PlanBTrigger {
+            // 발화했는데 범위가 NONE 이면 모순이다 — 배너는 뜨는데 [대안 보기] 가 열 세션의 범위를 못 정한다.
+            // 재계획 세션의 범위는 PARTIAL_SLOTS·FULL_DAY 뿐이라 NONE 을 옮길 자리가 없다.
+            require(scope != TriggerScope.NONE) { "발화하는 트리거의 범위는 NONE 일 수 없습니다." }
+            return PlanBTrigger(
+                UUID.randomUUID(), tripId, itineraryId, kind, affectedDate, slotKey, payload,
+                shouldReplan = true, scope = scope, reason = reason, state = TriggerState.ACTIVE, detectedAt = at,
+            )
+        }
 
         /**
          * 판정은 했으나 발화하지 않는다. 억제(INV-U4-02) 또는 영향 없음(BR-U4-06)이 그 이유다.
