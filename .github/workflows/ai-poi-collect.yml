@@ -15,6 +15,13 @@
 # 켜져 있어도 빨간불이 나지 않게. 호출 상한 등 비밀 아닌 설정은 Repository Variables
 # (TOURAPI_MAX_CALLS · TOURAPI_AREA_CODE · TOURAPI_CONTENT_TYPES)로 생략 가능하며,
 # 실행 시 input을 채우면 그게 이긴다.
+#
+# 커서 이어가기 (TRIP-348): 수집 상태(collect_state.json — 커서 + 기제안 색인)를
+# `collect-state` **전용 브랜치**에 커밋·푸시해 실행 간 이어간다 (코드 히스토리 오염
+# 없음). 실행 전 브랜치에서 복원 → 스크립트가 커서부터 재개·기제안 스킵 → 실행 후
+# 갱신 상태를 다시 푸시. 상태 push 실패는 수집 성공을 뒤집지 않는다 (::warning::만 —
+# 다음날 중복은 색인 없이도 게이트가 막고, 낭비만 발생). 파일 I/O는 스크립트,
+# 전송(fetch·push)은 여기 워크플로 소관.
 name: ai-poi-collect
 
 on:
@@ -40,6 +47,8 @@ concurrency: ai-poi-collect   # 실 호출 워크플로는 동시 1건만 (일�
 jobs:
   collect:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # collect-state 전용 브랜치 push용 (잡 단위 최소 부여, TRIP-348)
     defaults:
       run:
         working-directory: ai
@@ -50,6 +59,11 @@ jobs:
           enable-cache: true
           cache-dependency-glob: ai/uv.lock
       - run: uv sync --locked
+      - name: 수집 상태 복원 (collect-state 전용 브랜치 → ai/collect_state.json)
+        run: |
+          git fetch origin collect-state 2>/dev/null \
+            && git show FETCH_HEAD:collect_state.json > collect_state.json \
+            || echo "::notice::수집 상태 없음 — 처음부터"
       - name: TourAPI 수집 (게이트 통과분 → 등록 제안 JSON)
         id: collect
         env:
@@ -60,6 +74,7 @@ jobs:
           TOURAPI_CONTENT_TYPES: ${{ inputs.content_types || vars.TOURAPI_CONTENT_TYPES }}
           TOURAPI_MAX_CALLS: ${{ inputs.max_calls || vars.TOURAPI_MAX_CALLS || '500' }}
           COLLECT_OUTPUT: collected_pois.json
+          COLLECT_STATE: collect_state.json   # 복원 단계가 놓은 경로 — 실행 후 같은 곳에 갱신
         run: |
           if [ -z "$TOUR_API_KEY" ]; then
             echo "::notice::TOUR_API_KEY 미등록 — 수집 생략"
@@ -70,10 +85,35 @@ jobs:
       - name: 잡 서머리 (수집·게이트 통과·드롭 통계)
         if: steps.collect.outputs.skipped != 'true'
         run: uv run python scripts/collect_pois.py --summary collected_pois.json >> "$GITHUB_STEP_SUMMARY"
-      - name: 등록 제안 artifact 보존 (30일)
+      - name: 수집 상태 영속 (collect-state 전용 브랜치 커밋·푸시)
+        if: steps.collect.outputs.skipped != 'true'
+        # plumbing(hash-object→mktree→commit-tree)으로 워킹트리를 건드리지 않고 커밋한다.
+        # 브랜치 부재 시 부모 없는 커밋(= orphan)으로 생성. push 실패는 수집 성공을
+        # 뒤집지 않는다 — 다음날 중복은 색인 없이도 게이트가 막고, 낭비만 발생.
+        run: |
+          if [ ! -f collect_state.json ]; then
+            echo "::warning::상태 파일 없음 — 영속 생략"
+            exit 0
+          fi
+          (
+            set -e
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            BLOB=$(git hash-object -w collect_state.json)
+            TREE=$(printf '100644 blob %s\tcollect_state.json\n' "$BLOB" | git mktree)
+            PARENT=""
+            if git fetch origin collect-state 2>/dev/null; then
+              PARENT="-p FETCH_HEAD"
+            fi
+            COMMIT=$(git commit-tree $TREE $PARENT -m "chore(ai): 수집 상태 갱신 — run ${{ github.run_id }} (TRIP-348)")
+            git push origin "$COMMIT:refs/heads/collect-state"
+          ) || echo "::warning::수집 상태 push 실패 — 다음 실행은 이어가기 없이 처음부터 (수집 자체는 성공)"
+      - name: 등록 제안 artifact 보존 (30일 — 상태 파일 동봉, 디버깅용)
         if: steps.collect.outputs.skipped != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: collected-pois
-          path: ai/collected_pois.json
+          path: |
+            ai/collected_pois.json
+            ai/collect_state.json
           retention-days: 30

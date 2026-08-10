@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from trippilot.ports.poi_sourcing_port import (
@@ -36,6 +36,11 @@ from trippilot.poi_curation.sourcing.mapping import (
     extract_region,
     map_category,
     parse_open_hours,
+)
+from trippilot.poi_curation.sourcing.state import (
+    CollectState,
+    KindCursor,
+    empty_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,6 +64,10 @@ class CollectStats:
     merged: int
     passed: int
     budget_exhausted: bool   # 한도 도달로 조기 종료했는가 (부분 성공 표시)
+    # ── TRIP-348 커서 이어가기 (기본값 유지 — 상태 없는 기존 호출과 완전 호환) ──
+    skipped_unchanged: int = 0                    # 기제안·modifiedtime 동일 → 상세 호출 없이 스킵
+    resumed_from: dict[str, int] = field(default_factory=dict)  # kind → 재개 시작 pageNo (>1만)
+    completed_kinds: tuple[str, ...] = ()         # 이번 실행 종료 시점 완주 상태인 kind
 
     def to_dict(self) -> dict:
         return {
@@ -71,6 +80,9 @@ class CollectStats:
             "merged": self.merged,
             "passed": self.passed,
             "budget_exhausted": self.budget_exhausted,
+            "skipped_unchanged": self.skipped_unchanged,
+            "resumed_from": dict(self.resumed_from),
+            "completed_kinds": list(self.completed_kinds),
         }
 
 
@@ -78,6 +90,8 @@ class CollectStats:
 class CollectResult:
     report: GateReport
     stats: CollectStats
+    # 이번 실행을 반영한 다음 상태 (커서 + 기제안 색인) — 저장은 스크립트 소관
+    next_state: CollectState = field(default_factory=empty_state)
 
 
 class _CallBudget:
@@ -105,38 +119,65 @@ def collect(
     max_calls: int,
     rows_per_page: int = 100,
     gate: CollectionGate | None = None,
+    state: CollectState | None = None,
 ) -> CollectResult:
-    """수집 실행. max_calls 도달 시 그 시점까지의 산출로 정상 반환한다."""
+    """수집 실행. max_calls 도달 시 그 시점까지의 산출로 정상 반환한다.
+
+    `state`(TRIP-348)를 주면: 미완주 커서는 그 pageNo부터 재개하고, 완주 커서는
+    처음부터 재순회하되 기제안 색인(modifiedtime 동일)으로 싸게 통과한다 — 스킵된
+    항목은 상세 호출도 안 나간다. 미주입이면 기존과 완전히 동일 (처음부터, 스킵 0).
+
+    TODO(TRIP-348 후속): 완주 후 재순회는 TourAPI 증분 엔드포인트
+    (areaBasedSyncList2 — modifiedtime 기준 변경분만)로 전환할 이음매다.
+    실키로 응답 형태를 검증할 수 있는 시점에 별도 티켓으로 — 지어내지 않는다.
+    """
     if max_calls <= 0:
         raise ValueError(f"max_calls 양수 필요: {max_calls}")
+    prior = state if state is not None else empty_state()
     budget = _CallBudget(max_calls)
     listed: list[SourcedPlaceRecord] = []
     hours_by_ref: dict[str, SourcedHours] = {}
     page_failures = 0
     detail_failures = 0
+    skipped_unchanged = 0
+    resumed_from: dict[str, int] = {}
+    cursors: dict[tuple[str, str], KindCursor] = dict(prior.cursors)
 
     for kind in content_types:
-        page_no, total_pages = 1, 1  # total은 1페이지 응답으로 갱신
-        while page_no <= total_pages:
+        cursor = prior.cursors.get((area_code, kind))
+        start_page = 1
+        if cursor is not None and not cursor.completed and cursor.next_page > 1:
+            start_page = cursor.next_page
+            resumed_from[kind] = start_page
+            logger.info("재개: kind=%s page=%d부터", kind, start_page)
+        page_no = start_page
+        total_pages: int | None = None  # 첫 성공 페이지 응답으로 확정
+        attempted = False               # 이 kind로 호출을 한 번이라도 소모했는가
+        while total_pages is None or page_no <= total_pages:
             if not budget.take():
                 logger.warning(
                     "호출 한도 %d 도달 — kind=%s page=%d 에서 중단, 확보분 %d건으로 산출 진행",
                     max_calls, kind, page_no, len(listed))
                 break
+            attempted = True
             try:
                 page = source.fetch_page(area_code, kind, page_no, rows_per_page)
             except SourcingError as e:
                 page_failures += 1
                 logger.warning("목록 페이지 실패(스킵): kind=%s page=%d — %s", kind, page_no, e)
-                if page_no == 1:
-                    break  # 총량을 모름 — 다음 타입으로
+                if total_pages is None:
+                    break  # 총량을 모름 — 다음 타입으로 (커서는 같은 페이지 재시도)
                 page_no += 1
                 continue
-            if page_no == 1:
+            if total_pages is None:
                 total_pages = -(-page.total_count // rows_per_page)  # ceil
             for record in page.records:
                 if not record.source_ref:
                     continue  # 식별자 없는 레코드는 상세 조회·병합 불가 — 목록에서 제외
+                known = prior.proposed.get(record.source_ref)
+                if known is not None and known == record.modified_at:
+                    skipped_unchanged += 1
+                    continue  # 기제안·변경 없음 — 상세 호출도 안 나감 (쿼터 절약의 본체)
                 listed.append(record)
                 if not budget.take():
                     continue  # 남은 항목은 영업시간 없이 산출 ("정보 없음 ≠ 배제")
@@ -148,6 +189,11 @@ def collect(
                     logger.warning("상세 실패(영업시간 없이 계속): contentid=%s — %s",
                                    record.source_ref, e)
             page_no += 1
+        if attempted:  # 호출 0건인 kind는 커서를 건드리지 않는다 (완주 마킹 보존)
+            if total_pages is not None and page_no > total_pages:
+                cursors[(area_code, kind)] = KindCursor(next_page=1, completed=True)
+            else:
+                cursors[(area_code, kind)] = KindCursor(next_page=page_no, completed=False)
         if budget.exhausted_hit:
             break
 
@@ -176,6 +222,18 @@ def collect(
         ))
 
     report = (gate or CollectionGate()).apply(candidates)
+
+    # 기제안 색인 갱신 — 이번 실행 통과분을 누적 (modifiedtime 없는 항목은 색인하지
+    # 않는다: 변경 여부를 판정할 수 없으니 다음 실행에도 재수록 — 지어내기 금지).
+    proposed = dict(prior.proposed)
+    for p in report.passed:
+        if p.candidate.modified_at:
+            proposed[p.candidate.source_ref] = p.candidate.modified_at
+    completed_kinds = tuple(
+        kind for kind in content_types
+        if (c := cursors.get((area_code, kind))) is not None and c.completed
+    )
+
     stats = CollectStats(
         http_calls=budget.used,
         listed=len(listed),
@@ -186,9 +244,16 @@ def collect(
         merged=report.merged,
         passed=len(report.passed),
         budget_exhausted=budget.exhausted_hit,
+        skipped_unchanged=skipped_unchanged,
+        resumed_from=resumed_from,
+        completed_kinds=completed_kinds,
     )
     logger.info("수집 완료: %s", stats.to_dict())
-    return CollectResult(report=report, stats=stats)
+    return CollectResult(
+        report=report,
+        stats=stats,
+        next_state=CollectState(cursors=cursors, proposed=proposed),
+    )
 
 
 def to_output_document(
