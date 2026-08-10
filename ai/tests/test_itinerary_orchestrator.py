@@ -633,3 +633,102 @@ def test_pbt_generate_never_raises_and_always_converges(
         # 건너뛰면 페르소나를 읽지 않으므로 위반 자체가 없다. 어느 쪽이든 남의
         # 페르소나에서 나온 LLM 점수가 결과에 실리는 경로는 없다.
         assert outcome.scoring_mode is not ScoringMode.LLM
+    # 봉투 부가 필드 정합 (TRIP-341): solved_at ⇔ 해 존재, 풀 실측은 지어내지 않는다
+    assert (outcome.solved_at is not None) == (outcome.solution is not None)
+    if outcome.status is not GenerationStatus.FAILED:
+        assert outcome.candidates_summary is not None
+        assert outcome.candidates_summary.pool_size == (
+            0 if mode == "empty_pool" else 3
+        )
+
+
+# ── ⑧ 봉투 부가 필드 — candidates_summary·solved_at (TRIP-341) ────────
+
+
+_BOUNDARY_CATEGORIES = tuple(c for c in PoiCategory if c is not PoiCategory.STAY)
+
+
+def test_candidates_summary_reports_pool_facts_low_level() -> None:
+    """풀 3건 전부 SIGHT → LOW + 나머지 7개 카테고리가 부족 목록에 실린다."""
+    orchestrator, _, _ = _build()
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    summary = outcome.candidates_summary
+    assert summary is not None
+    assert summary.pool_size == 3                      # len(pool.pois) 실측
+    assert summary.level == "LOW"
+    assert set(summary.shortfall_categories) == {
+        c.value for c in _BOUNDARY_CATEGORIES if c is not PoiCategory.SIGHT
+    }
+
+
+def test_candidates_summary_ok_when_every_category_present() -> None:
+    pois = tuple(
+        _poi(i, 0.001 * i, category=c)
+        for i, c in enumerate(_BOUNDARY_CATEGORIES, start=1)
+    )
+    ids = tuple(f"p{i}" for i in range(1, len(pois) + 1))
+    orchestrator, _, _ = _build(score_llm=FakeLlm(_scores_json(*ids)), pois=pois)
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    summary = outcome.candidates_summary
+    assert summary is not None
+    assert summary.level == "OK"
+    assert summary.pool_size == len(pois)
+    assert summary.shortfall_categories == ()
+
+
+def test_candidates_summary_no_candidates_on_empty_pool() -> None:
+    orchestrator, _, _ = _build(pois=_FAR_POIS)  # 전부 반경 밖 → 풀 0건
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    summary = outcome.candidates_summary
+    assert summary is not None
+    assert summary.level == "NO_CANDIDATES"
+    assert summary.pool_size == 0                      # 실측 0 — "모름"(None)이 아니다
+    assert set(summary.shortfall_categories) == {c.value for c in _BOUNDARY_CATEGORIES}
+
+
+def test_solved_at_derives_from_injected_now_not_wall_clock() -> None:
+    """solved_at = 주입 now + 단조시계 경과 — 정지 시계(경과 0)면 정확히 now다."""
+    orchestrator, _, _ = _build()  # FakeClock: monotonic 경과 0
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert outcome.status is GenerationStatus.SUCCESS
+    assert outcome.solved_at == _NOW                   # wall-clock 미개입 (DL-3)
+
+
+def test_solver_conflict_failure_keeps_pool_facts_but_no_solved_at() -> None:
+    """모순 고정 블록 FAILED — 해가 없으니 solved_at=None, 풀 실측 보고는 유지."""
+    conflicting = (
+        FixedBlock(
+            poi_id=PoiId("p1"),
+            window=TimeWindow(
+                datetime(2026, 8, 5, 10, 0, tzinfo=_KST),
+                datetime(2026, 8, 5, 11, 0, tzinfo=_KST),
+            ),
+            reason="user_fixed",
+        ),
+        FixedBlock(
+            poi_id=PoiId("p1"),
+            window=TimeWindow(
+                datetime(2026, 8, 5, 13, 0, tzinfo=_KST),
+                datetime(2026, 8, 5, 14, 0, tzinfo=_KST),
+            ),
+            reason="user_fixed",
+        ),
+    )
+    orchestrator, _, _ = _build()
+
+    outcome = orchestrator.generate(
+        _request(fixed_blocks=conflicting), 20_000, _TRACE_ID, _NOW
+    )
+
+    assert outcome.status is GenerationStatus.FAILED
+    assert outcome.solved_at is None                   # 검증 시각을 지어내지 않는다
+    assert outcome.candidates_summary is not None      # 풀은 실제로 만들었다
+    assert outcome.candidates_summary.pool_size == 3

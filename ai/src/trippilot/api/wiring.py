@@ -19,9 +19,21 @@ Protocol ↔ 실 오케스트레이터 간극과 어댑트 방식:
 - `RepairResult.changes`는 `RepairChange` 구조체 → 표시 문자열로 렌더한다(시각만,
   소요시간 미언급 — INV-3).
 
+generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아는 사실만 채운다):
+- `candidates_summary`: 오케스트레이터가 M7 풀 실측으로 만든 `CandidatesReport`를
+  그대로 사영한다(BR-U2-05 — 판정은 AI 소유).
+- `day1_ready_at`: 오케스트레이터 `solved_at`(주입 now + 단조시계 경과)을, **이 응답이
+  여행 1일차(trip_context.start_date)를 포함할 때만** 싣는다 — 2차 생성(나머지 일자)
+  응답에 1일차 준비 시각을 지어 싣지 않는다.
+- `distance_ranges`: 직전 지점(첫 슬롯=그 날의 앵커, 이후=앞 슬롯 POI 좌표)과의 거리
+  표시 문자열(BR-U2-08, "약 1.2km · 도보 추정"). 거리만 — 소요시간류 절대 미포함(INV-3).
+  좌표를 모르는 구간(미등록 POI·앵커 없는 날)은 산출하지 않는다.
+
 어댑터로 메우지 **않은** 간극(지어내지 않는다 — null/빈 값이 정직한 값):
-- `distance_ranges`·`freshness`·`candidates_summary`·`day1_ready_at`: 실 오케스트레이터가
-  산출하지 않는다 → 와이어에 null/빈 매핑으로 나간다(스키마 허용).
+- `freshness`: 도메인 `Poi`에 수집 시각 메타가 없다 → 집계 불가, null 유지
+  (풀 생성 시각을 수집 시각인 척 싣지 않는다).
+- repair 봉투의 `distance_ranges`·`candidates_summary`·`day1_ready_at`: repair 와이어에는
+  원 요청 컨텍스트(앵커·이동수단·풀)가 없다 → 기존대로 빈 값/null.
 - 와이어 `preference_profile`은 현 경로에서 미소비: 프롬프트 입력은 요청자 권한 하에
   **재조회한 값만** 쓴다(D31) — 페르소나는 주입된 `ContextStore`가 공급한다. 와이어에
   사용자 식별자가 없어 principal은 trip_id 파생 임시값이다(실 어댑터 시 백엔드 합의 필요).
@@ -81,6 +93,7 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.llm import ModelTier, PoiExplanation
 from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.travel import TravelEstimate
 from trippilot.m7.config import M7Config
 from trippilot.m7.pool_builder import CandidatePoolBuilder
 from trippilot.orchestrator import itinerary_orchestrator as core
@@ -238,7 +251,7 @@ class WiredOutcome:
     explanations: Mapping[str, str]
     distance_ranges: Mapping[str, str]
     freshness: FreshnessMeta | None
-    candidates_summary: None
+    candidates_summary: core.CandidatesReport | None
     day1_ready_at: datetime | None
 
 
@@ -266,16 +279,74 @@ def _keyed_explanations(
     return keyed
 
 
-def _envelope(solution: ItinerarySolution,
-              explanations: tuple[PoiExplanation, ...] = ()) -> WiredOutcome:
+def _envelope(
+    solution: ItinerarySolution,
+    explanations: tuple[PoiExplanation, ...] = (),
+    *,
+    distance_ranges: Mapping[str, str] | None = None,
+    candidates_summary: core.CandidatesReport | None = None,
+    day1_ready_at: datetime | None = None,
+) -> WiredOutcome:
+    """봉투 조립. 기본값(빈/None)은 산출 컨텍스트가 없는 경로(repair)의 정직한 값이다.
+
+    `freshness`는 항상 None: 도메인 `Poi`에 수집 시각 메타가 없어 집계 불가 —
+    풀 생성 시각을 수집 시각인 척 지어내지 않는다.
+    """
     return WiredOutcome(
         solution=solution,
         explanations=_keyed_explanations(solution, explanations),
-        distance_ranges={},  # 미산출 — 슬롯 distance_range는 null 사영(지어내지 않는다)
+        distance_ranges=distance_ranges if distance_ranges is not None else {},
         freshness=None,
-        candidates_summary=None,
-        day1_ready_at=None,
+        candidates_summary=candidates_summary,
+        day1_ready_at=day1_ready_at,
     )
+
+
+# ── 거리 표시 문자열 (BR-U2-08 · INV-3: 거리만, 소요시간류 절대 금지) ──
+
+
+_TRANSPORT_LABELS: Mapping[TransportMode, str] = {
+    TransportMode.WALK: "도보",
+    TransportMode.PUBLIC: "대중교통",
+    TransportMode.CAR: "자가용",
+}
+
+
+def _render_distance(estimate: TravelEstimate, mode: TransportMode) -> str:
+    """`TravelEstimate` → 표시 문자열 (계약 예시 "약 1.2km · 도보 추정").
+
+    거리는 범위 상한(도로 추정 = 직선 × 우회계수)을 쓴다 — 하한(직선)은 체감보다
+    짧게 읽힌다. `internal_minutes`는 어떤 경로로도 렌더하지 않는다(INV-3).
+    """
+    _, road_km = estimate.distance_km_range
+    suffix = " 추정" if estimate.is_estimated else ""
+    return f"약 {road_km:.1f}km · {_TRANSPORT_LABELS[mode]}{suffix}"
+
+
+def _distance_ranges(
+    solution: ItinerarySolution,
+    anchors: Mapping[date, GeoPoint],
+    coords: Mapping[PoiId, GeoPoint],
+    estimator: TravelEstimator,
+    mode: TransportMode,
+) -> dict[str, str]:
+    """연속 지점 간 거리 문자열 — 키 규약 `"{date}#{poi_id}"`(BR-U2-04).
+
+    직전 지점 = 첫 슬롯은 그 날의 앵커(숙소), 이후는 앞 슬롯 POI 좌표.
+    좌표를 모르는 지점(미등록 POI·앵커 없는 날)이 끼면 그 구간은 산출하지 않는다
+    (슬롯 distance_range는 null — 지어내지 않는다).
+    """
+    rendered: dict[str, str] = {}
+    for day in solution.days:
+        prev = anchors.get(day.date)
+        for slot in day.slots:
+            coord = coords.get(slot.poi_id)
+            if prev is not None and coord is not None:
+                estimate = estimator.estimate(prev, coord, mode)
+                key = f"{day.date.isoformat()}#{slot.poi_id}"
+                rendered[key] = _render_distance(estimate, mode)
+            prev = coord  # 좌표 미상이면 다음 구간도 산출 불가로 전파
+    return rendered
 
 
 def _failure_exception(error: str) -> Exception:
@@ -403,11 +474,13 @@ class WiredItineraryOrchestrator:
         orchestrator: core.ItineraryOrchestrator,
         solver_provider: ChainSolverProvider,
         poi_db: object,
+        estimator: TravelEstimator,
         tz: timezone = KST,
     ) -> None:
         self._orchestrator = orchestrator
         self._solvers = solver_provider
         self._poi_db = poi_db
+        self._estimator = estimator
         self._tz = tz
 
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
@@ -422,7 +495,45 @@ class WiredItineraryOrchestrator:
         if outcome.status is core.GenerationStatus.FAILED:
             raise _failure_exception(outcome.error or "unknown_failure")
         assert outcome.solution is not None  # GenerationOutcome 불변식(FAILED⇔None)
-        return _envelope(outcome.solution, outcome.explanations)
+        return _envelope(
+            outcome.solution,
+            outcome.explanations,
+            distance_ranges=self._distances_for(request, outcome.solution),
+            candidates_summary=outcome.candidates_summary,
+            day1_ready_at=self._day1_ready_at(request, outcome),
+        )
+
+    def _distances_for(
+        self,
+        request: schemas.GenerateItineraryRequest,
+        solution: ItinerarySolution,
+    ) -> dict[str, str]:
+        """배치된 POI 좌표를 poi_db에서 재조회해 구간 거리를 렌더한다(표시 전용 read)."""
+        ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
+        if not ids:
+            return {}
+        coords = {p.poi_id: p.coord for p in self._poi_db.find_by_ids(ids)}
+        anchors = {a.date: GeoPoint(a.lat, a.lng) for a in request.anchors}
+        return _distance_ranges(
+            solution, anchors, coords, self._estimator, _transport_from(request)
+        )
+
+    @staticmethod
+    def _day1_ready_at(
+        request: schemas.GenerateItineraryRequest,
+        outcome: core.GenerationOutcome,
+    ) -> datetime | None:
+        """이 응답이 여행 1일차를 포함할 때만 solved_at을 싣는다.
+
+        2차 생성(TRIP-293 — 나머지 일자만 요청)의 응답에 1일차 준비 시각을
+        실으면 지어낸 값이 된다 — 그 경우 null이 정직한 값.
+        """
+        if outcome.solved_at is None:
+            return None
+        day1 = request.trip_context.start_date
+        if any(w.date == day1 for w in request.time_windows):
+            return outcome.solved_at
+        return None
 
     def validate(
         self, request: schemas.ValidateItineraryRequest
@@ -503,7 +614,7 @@ def build_orchestrator(
         ),
         config=orchestrator_config,
     )
-    return WiredItineraryOrchestrator(orchestrator, provider, poi_db, tz=tz)
+    return WiredItineraryOrchestrator(orchestrator, provider, poi_db, estimator, tz=tz)
 
 
 # ── 로컬·스모크 조립 (in-memory fake — 실 DB·실 LLM 호출 0, D37) ─────
