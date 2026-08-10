@@ -13,6 +13,8 @@ env 스위치 (TRIP-344):
   `OPENAI_MODEL`(기본 gpt-5.6-terra) · `OPENAI_API`(chat|responses, 기본 responses
   — 멘토 게이트웨이가 responses만 라우팅). 조립 불가(키 누락 등)는 **기동 실패**로
   드러낸다 — INV-4는 런타임 폴백이지 설정 오류 은폐가 아니다(silent fallback 금지).
+- 미들웨어 한도·타임아웃 env(`TRIPPILOT_RATE_LIMIT_*` · `TRIPPILOT_TIMEOUT_*`,
+  TRIP-240)는 `create_app` 내부에서 해석된다 — `trippilot/api/middleware.py` 참조.
 
 `/health`는 기존 스텁과 동일한 `{"status": "UP", "service": "ai"}`를 유지한다
 (docker-compose 헬스체크 의존).
