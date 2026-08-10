@@ -918,3 +918,20 @@ Step 1 FD 분석 — **재서술 금지 대상 8건** 식별(무발화 BR-U4-05�
 **Context**: CONSTRUCTION / U4 설계 단계 종료. 이번 항목이 손댄 `aidlc/` 파일 = `aidlc-docs/aidlc-state.md` · 이 `audit.md` append. 다음 유닛(U5~U9) 착수는 **사용자의 별도 지시** 대기(SCOPE.md 범위 제외 항목).
 
 ---
+
+## Post-Design Correction — U3 frontend-components.md §8 testID 소급 기록 + 발명값 3건 명시 (TRIP-297 [기록] 반영)
+**Timestamp**: 2026-08-10T00:00:00Z
+
+**User Input**: TRIP-297 사이클 [설계] 3-a 맹점 훑기에서 사용자가 정본 반영 후보 4건 중 3건을 선택했다(오케스트레이터의 사이클 요약으로 [기록] 단계에 전달) — ① 티켓 본문 드리프트 5건은 Jira TRIP-297 코멘트로(aidlc 밖), ② testID 확정값 13종은 `frontend-components.md` §8 소급 기록, ③ 발명값 3건(성격 축 라벨 미구현·고정 블록 시각 절삭 `startAt.slice(0,5)`·폴링 2초·30회)은 정본에 발명값임을 명시 기록. 미선택 1건(`itineraryDraftTimeStructure.test.ts` 소스 스캔 표현 불가)은 관측만, 문서 미반영.
+
+**AI Response**: TRIP-182·TRIP-207·TRIP-209 [기록]이 확립한 "[구현 결정 · TRIP-XXX, 날짜]" 소급 기록 방식을 그대로 따라 `frontend-components.md` §8 뒤에 두 문단 추가:
+
+(1) **testID 13종 소급 기록** — `itinerary-draft-day-{n}`·`-slot-{slotKey}`·`-slot-no-{slotKey}`·`-slot-band-{slotKey}`·`-slot-badge-{slotKey}`·`-slot-fixed-{slotKey}`·`-slot-image-{slotKey}`·`-slot-tags-{slotKey}`·`-slot-name-{slotKey}`·`-stale-failed`·`-loading`·`-failed`·`-retry`. 원래 제안값(`-strength-{min|balanced|max}`·`-day-{n}`·`-slot-{slotKey}`)과 계열은 같으나 실제 확정 형태가 다르다 — 추천 강도 세그먼트는 이번 범위 밖이라 여전히 미확정. 근거: `_workspace/20260809-trip297-itinerary-draft/02a_test-design_spec.md` §3.1(게이트①-1 승인 테스트 동결 계약).
+
+(2) **발명값 3건 명시** — 성격 축 라벨 미구현(시간 축만, 정본 매핑 부재) · 고정 블록 시각 절삭 `startAt.slice(0,5)`(표시 포맷 정본 부재) · 폴링 간격 2초·상한 30회(수치 정본 부재). 셋 다 "요구사항 근거가 아니라 구현 결정 — 다음 사이클이 요구사항 근거로 인용 금지" 라벨을 달았다(TRIP-209 5건 소급 기록과 같은 라벨링 방식). 근거: `_workspace/20260809-trip297-itinerary-draft/01b_ouroboros_seed.md`(D4·D5·"폴링 수치" 절).
+
+미반영 1건(§6 `itineraryDraftTimeStructure.test.ts` 관측)도 §8 말미에 관측 사실로만 덧붙였다 — 문서의 결정 사항을 바꾸지 않음.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-297 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260809-trip297-itinerary-draft/00_gates.md`(정본 반영 선택 절)·`01b_ouroboros_seed.md`(D4·D5·폴링 수치)·`02a_test-design_spec.md`(§3.1·★13). 이번 항목이 손댄 `aidlc/` 파일 = `aidlc-docs/construction/u3-ai-itinerary/functional-design/frontend-components.md`(§8 뒤 2문단 추가) · 이 `audit.md` append. `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음).
+
+---

@@ -168,6 +168,34 @@ itinerary-regenerate-confirm · -regenerate-proceed · -regenerate-cancel
 
 > **[공백]** 제안값이다. 구현이 확정한 값이 다르면 **구현 시점에 이 절에 소급 기록**한다(TRIP-182·207·209 선례).
 
+**[구현 결정 · TRIP-297, 2026-08-10] h11 초안(`itinerary-draft-*`) testID 13종 — 위 제안값(`-strength-{min|balanced|max}` · `-day-{n}` · `-slot-{slotKey}`)과 계열은 같으나 실제 확정 형태는 다르다.** 추천 강도 세그먼트(`-strength-*`)는 이 사이클 범위 밖이라 여전히 미확정 — 아래는 그 나머지, h11이 실제로 구현한 값이다. TRIP-182·207·209와 같은 소급 기록 방식을 따른다.
+
+```
+itinerary-draft-day-{n}                날짜 탭 (n = 여행 며칠째)
+itinerary-draft-slot-{slotKey}         슬롯 카드 루트 (slotKey = buildSlotKey(day.date, slot.poiId))
+itinerary-draft-slot-no-{slotKey}      번호 배지
+itinerary-draft-slot-band-{slotKey}    시간대 라벨
+itinerary-draft-slot-badge-{slotKey}   'AI 추천' 배지 (isFixed:false 에만)
+itinerary-draft-slot-fixed-{slotKey}   고정 시각 표기 (isFixed:true 에만)
+itinerary-draft-slot-image-{slotKey}   사진 (imageUrl 있을 때만)
+itinerary-draft-slot-tags-{slotKey}    해시태그 줄 (tags 비어있지 않을 때만)
+itinerary-draft-slot-name-{slotKey}    장소명 (nameKo 있을 때만)
+itinerary-draft-stale-failed           부분 실패 배너
+itinerary-draft-loading                진행 표시
+itinerary-draft-failed                 전면 실패 얼굴
+itinerary-draft-retry                  다시 시도 버튼
+```
+
+근거: `_workspace/20260809-trip297-itinerary-draft/02a_test-design_spec.md` §3.1(게이트①-1 승인 테스트가 이 이름들을 직접 집는다) — 요구사항 근거가 아니라 게이트①에서 확정한 구현 결정. 다음 사이클이 요구사항 근거로 인용하지 말 것.
+
+**[구현 결정 · TRIP-297, 2026-08-10] 발명값 3건 — 정본에 근거가 없어 이 사이클이 직접 정한 값. 요구사항 근거로 인용 금지.**
+
+1. **성격 축 라벨 미구현(시간 축만)** — Figma·티켓 모두 "시간대 + 성격"(예: `오전 · 활동`) 라벨을 보여 주지만, 성격 축(활동·식사·전시·숙소 등)을 `PoiCategory` 7종에 매핑하는 정본이 없다. 이 사이클은 시간 축(`오전`/`점심`/`오후`/`저녁`, `timeBandLabel`)만 구현하고 성격 축은 뺐다 — 근거: `_workspace/20260809-trip297-itinerary-draft/01b_ouroboros_seed.md` D4, TRIP-295가 이미 같은 이유로 범위 밖으로 남긴 자리.
+2. **고정 블록 시각 절삭 `startAt.slice(0,5)`** — `isFixed:true` 슬롯의 시각 표기를 `"HH:mm:ss"` 문자열의 앞 5글자로 자르는 방식. 정본에 표시 포맷 규정이 없어 구현이 정함 — 근거: `_workspace/20260809-trip297-itinerary-draft/01b_ouroboros_seed.md` D5.
+3. **폴링 간격 2초·상한 30회(약 60초)** — 2단계 생성(PARTIAL→COMPLETE) 폴링의 구체 수치. 정본은 "폴링한다"는 사실만 있고 간격·상한 수치는 없음 — 근거: `_workspace/20260809-trip297-itinerary-draft/01b_ouroboros_seed.md` "폴링 수치" 절("정본 부재 — 이 사이클의 발명값" 원문 명시).
+
+**미반영(관측만)**: §6이 예고한 `itineraryDraftTimeStructure.test.ts`는 **소스 스캔으로 표현 불가**로 판명됐다 — 고정 블록 예외 때문에 소스에 `startAt`이 등장하는 것 자체가 정당해서다. 다음 유닛 설계 시 참고. 근거: `_workspace/20260809-trip297-itinerary-draft/02a_test-design_spec.md` ★13.
+
 ## 9. PBT (`model/` 순수 함수 · fast-check)
 
 `business-rules.md` §8 **PBT-U3-1~5**를 그대로 따른다 — 대상 파일은 `legDistance.ts`(합산) · `timeBandLabel.ts`(라벨 사영) · `routeDiff.ts`(diff 분류) · `slotKey.ts`(왕복) · `draftState.ts`(재생성 안전성).
