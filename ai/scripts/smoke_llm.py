@@ -7,20 +7,22 @@ INTENT 프롬프트 렌더(PromptRegistry) → 어댑터 실 호출 → IntentGa
 사용법:
     cd ai
 
-    # Azure OpenAI (멘토 제공 GPT-5.6 — 개발·검증용, AI-D06 부기)
+    # 멘토 제공 GPT-5.6 (Azure v1 API 표면 — 개발·검증용, AI-D06 부기)
+    # v1 표면(…services.ai.azure.com/openai/v1)은 표준 OpenAI 클라이언트 + base_url
+    # 방식이라 api-version 불필요. base_url은 /openai/v1 까지만 (경로는 SDK가 붙인다).
     # 키는 GitHub Actions Secret(AZUREAPIKEY)로만 보관 — .github/workflows/ai-llm-smoke.yml
+    LLM_PROVIDER=openai \
+    OPENAI_API_KEY=... \
+    OPENAI_BASE_URL=https://<리소스>.services.ai.azure.com/openai/v1 \
+    OPENAI_MODEL=gpt-5.6-terra \
+    uv run python scripts/smoke_llm.py
+
+    # 구식 Azure OpenAI (api-version 요구하는 엔드포인트 대비용 — 현 멘토 엔드포인트엔 불필요)
     LLM_PROVIDER=azure \
     AZURE_OPENAI_API_KEY=... \
     AZURE_OPENAI_ENDPOINT=https://<리소스>.openai.azure.com \
     AZURE_OPENAI_API_VERSION=<포털 표기값> \
     AZURE_OPENAI_DEPLOYMENT=gpt-5.6 \
-    uv run python scripts/smoke_llm.py
-
-    # OpenAI 호환 게이트웨이 (표준 chat.completions 형태)
-    LLM_PROVIDER=openai \
-    OPENAI_API_KEY=... \
-    OPENAI_BASE_URL=https://... \
-    OPENAI_MODEL=gpt-5.6 \
     uv run python scripts/smoke_llm.py
 
     # Anthropic (프로덕션 기본 — 결제 승인 후 K-1)

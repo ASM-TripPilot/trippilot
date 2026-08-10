@@ -6,30 +6,35 @@
 # 키는 Repository Secret `AZUREAPIKEY`에서만 온다: 등록 후 값은 누구도 다시 볼 수 없고,
 # 로그에 찍히면 자동 마스킹되며, 포크 PR에는 전달되지 않는다.
 #
-# 엔드포인트·api-version처럼 비밀 아닌 설정은 Repository **Variables**
+# 멘토 제공 엔드포인트는 Azure **v1 API 표면**(…services.ai.azure.com/openai/v1) — 표준
+# OpenAI 클라이언트 + base_url 방식이라 api-version이 필요 없다 → 기본 provider는 openai.
+# azure(구식 AzureOpenAI + api-version) 선택지는 다른 엔드포인트 대비용으로만 남긴다.
+#
+# 엔드포인트처럼 비밀 아닌 설정은 Repository **Variables**
 # (Settings → Secrets and variables → Actions → Variables 탭)에 두면 매번 입력을 생략할 수
-# 있다: AZURE_OPENAI_ENDPOINT · AZURE_OPENAI_API_VERSION. 실행 시 input을 채우면 그게 이긴다.
+# 있다: AZURE_OPENAI_ENDPOINT(등록됨) · AZURE_OPENAI_API_VERSION(구식 azure 선택 시만).
+# 실행 시 input을 채우면 그게 이긴다.
 name: ai-llm-smoke
 
 on:
   workflow_dispatch:
     inputs:
       provider:
-        description: 'LLM 제공자'
+        description: 'LLM 제공자 (v1 표면 = openai)'
         type: choice
-        options: [azure, openai]
-        default: azure
+        options: [openai, azure]
+        default: openai
       endpoint:
-        description: 'Azure 엔드포인트(https://<리소스>.openai.azure.com) 또는 OpenAI 호환 base_url — 비우면 repo Variable 사용'
+        description: 'base_url — /openai/v1 까지만, /responses 등 경로 제외 (비우면 repo Variable AZURE_OPENAI_ENDPOINT)'
         required: false
         type: string
       api_version:
-        description: 'Azure api-version (포털 표기값) — 비우면 repo Variable 사용'
+        description: '구식 azure 제공자 전용 api-version — v1 표면(openai)에선 불필요'
         required: false
         type: string
       model:
-        description: 'Azure 배포 이름 / OpenAI 모델 ID'
-        default: 'gpt-5.6'
+        description: '배포 이름 (gpt-5.6-terra | gpt-5.6-sol | gpt-5.6-luna)'
+        default: 'gpt-5.6-terra'
         type: string
       utterance:
         description: '스모크 발화 (비우면 스크립트 기본값)'
