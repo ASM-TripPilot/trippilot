@@ -36,6 +36,11 @@ on:
         description: '배포 이름 (gpt-5.6-terra | gpt-5.6-sol | gpt-5.6-luna)'
         default: 'gpt-5.6-terra'
         type: string
+      api:
+        description: 'API 표면 — 멘토 게이트웨이는 responses만 라우팅 (chat.completions는 500)'
+        type: choice
+        options: [responses, chat]
+        default: responses
       utterance:
         description: '스모크 발화 (비우면 스크립트 기본값)'
         required: false
@@ -67,5 +72,6 @@ jobs:
           AZURE_OPENAI_API_VERSION: ${{ inputs.api_version || vars.AZURE_OPENAI_API_VERSION }}
           AZURE_OPENAI_DEPLOYMENT: ${{ inputs.model }}
           OPENAI_MODEL: ${{ inputs.model }}
+          OPENAI_API: ${{ inputs.api }}
           SMOKE_UTTERANCE: ${{ inputs.utterance }}
         run: uv run python scripts/smoke_llm.py

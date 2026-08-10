@@ -76,6 +76,48 @@ def test_null_content_maps_to_empty_text() -> None:
     assert response.raw_text == ""
 
 
+class RecordingResponsesClient:
+    """responses.create 호출을 기록하고 준비된 응답을 돌려주는 fake."""
+
+    def __init__(self, output_text: str = '{"scores": []}') -> None:
+        self.kwargs: dict | None = None
+        self._output_text = output_text
+        self.responses = SimpleNamespace(create=self._create)
+
+    def _create(self, **kwargs):
+        self.kwargs = kwargs
+        return SimpleNamespace(
+            output_text=self._output_text,
+            usage=SimpleNamespace(input_tokens=12, output_tokens=7),
+            model=kwargs["model"],
+        )
+
+
+def test_responses_request_mapping_is_faithful() -> None:
+    client = RecordingResponsesClient()
+    OpenAIAdapter(client, api="responses").invoke(_REQUEST)
+
+    assert client.kwargs is not None
+    assert client.kwargs["model"] == "model-under-test"
+    assert client.kwargs["max_output_tokens"] == 1024  # responses 쪽 토큰 상한 키
+    assert client.kwargs["temperature"] == 0.0
+    assert client.kwargs["timeout"] == 2.5  # BR-U4-04 타임아웃 전달
+    assert client.kwargs["input"] == "점수를 매겨라"
+
+
+def test_responses_response_mapping_records_usage_tokens() -> None:
+    response = OpenAIAdapter(RecordingResponsesClient(), api="responses").invoke(_REQUEST)
+
+    assert response.raw_text == '{"scores": []}'
+    assert response.input_tokens == 12 and response.output_tokens == 7
+    assert response.model_id == "model-under-test"
+
+
+def test_unknown_api_is_rejected_at_construction() -> None:
+    with pytest.raises(ValueError):
+        OpenAIAdapter(RecordingClient(), api="grpc")
+
+
 def test_sdk_timeout_becomes_llm_timeout_error() -> None:
     class TimeoutClient:
         def __init__(self) -> None:

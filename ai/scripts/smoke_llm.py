@@ -15,6 +15,7 @@ INTENT 프롬프트 렌더(PromptRegistry) → 어댑터 실 호출 → IntentGa
     OPENAI_API_KEY=... \
     OPENAI_BASE_URL=https://<리소스>.services.ai.azure.com/openai/v1 \
     OPENAI_MODEL=gpt-5.6-terra \
+    OPENAI_API=responses \
     uv run python scripts/smoke_llm.py
 
     # 구식 Azure OpenAI (api-version 요구하는 엔드포인트 대비용 — 현 멘토 엔드포인트엔 불필요)
@@ -36,6 +37,7 @@ INTENT 프롬프트 렌더(PromptRegistry) → 어댑터 실 호출 → IntentGa
     OPENAI_API_KEY     openai 제공자 필수
     OPENAI_BASE_URL    선택 — OpenAI 호환 게이트웨이 엔드포인트 (미설정 시 표준 api.openai.com)
     OPENAI_MODEL       기본 "gpt-5.6"
+    OPENAI_API         chat | responses (기본 chat — 멘토 게이트웨이는 responses만 라우팅)
     ANTHROPIC_API_KEY  anthropic 제공자 필수
     ANTHROPIC_MODEL    기본 "claude-haiku-4-5"
     SMOKE_UTTERANCE    기본 "내일 오후에 비 오면 실내 일정으로 바꿔줘"
@@ -100,7 +102,8 @@ def _build_adapter() -> tuple[LlmPort, str]:
             api_key=_require("OPENAI_API_KEY"),
             base_url=_optional("OPENAI_BASE_URL"),  # None → 표준 엔드포인트
         )
-        return OpenAIAdapter(client), _optional("OPENAI_MODEL") or "gpt-5.6"
+        adapter = OpenAIAdapter(client, api=_optional("OPENAI_API") or "chat")
+        return adapter, _optional("OPENAI_MODEL") or "gpt-5.6"
     if provider == "anthropic":
         import anthropic
 
