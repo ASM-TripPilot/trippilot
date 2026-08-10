@@ -70,6 +70,7 @@ class SchemaMigrationIT {
                 "banned_word_dictionary", "outbox_event", "shedlock",
                 "change_log_entry", // 변경 이력(V2.11 · TRIP-275)
                 "itinerary_revision", // 편집 이력·되돌리기(V2.14 · TRIP-310)
+                "replan_session", // 재계획 세션(V2.17 · TRIP-273)
             )
 
             // R__ 시드 적용 확인 — 약관 6종 + 활성 금칙어 사전 1개
