@@ -1,0 +1,185 @@
+package com.trippilot.app.web
+
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.trippilot.auth.domain.Account
+import com.trippilot.auth.domain.AgeMethod
+import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.security.AccessTokenIssuer
+import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.http.HttpMethod
+import org.springframework.http.MediaType
+import org.springframework.http.client.JdkClientHttpRequestFactory
+import org.springframework.web.client.RestClient
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.UUID
+
+/**
+ * TRIP-273 — 재계획 진입 API E2E(i10·i18).
+ * 여기서 보는 것은 HTTP 표면이다 — 상태코드·소유 스코프·입력 검증. 저장 정합은 ReplanSessionPersistenceIT.
+ *
+ * 일정이 있어야 진입할 수 있으므로 **생성까지 태운다**(Fake ScheduleAgent 가 실 POI 를 emit 한다).
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class ReplanApiIT : AbstractPostgresIntegrationTest() {
+
+    @Value("\${local.server.port}")
+    private var port: Int = 0
+
+    @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
+    @Autowired private lateinit var accounts: AccountRepository
+
+    private val json = ObjectMapper()
+
+    private fun call(method: HttpMethod, path: String, bearer: String?, body: String? = null): Pair<Int, JsonNode> {
+        val spec = RestClient.builder()
+            .requestFactory(JdkClientHttpRequestFactory())
+            .baseUrl("http://localhost:$port")
+            .build()
+            .method(method).uri(path)
+        bearer?.let { spec.header("Authorization", "Bearer $it") }
+        body?.let { spec.contentType(MediaType.APPLICATION_JSON).body(it) }
+        val res = spec.retrieve().onStatus({ it.is4xxClientError || it.is5xxServerError }, { _, _ -> })
+            .toEntity(String::class.java)
+        val parsed = res.body?.takeIf { it.isNotBlank() }?.let { json.readTree(it) } ?: json.createObjectNode()
+        return res.statusCode.value() to parsed
+    }
+
+    private fun newToken(): String =
+        accessTokenIssuer.issue(
+            accounts.save(
+                Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, Instant.parse("2026-07-26T00:00:00Z")),
+            ).id.value.toString(),
+        ).value
+
+    private val today: LocalDate get() = LocalDate.now(ZoneId.of("Asia/Seoul"))
+
+    /** 서버 실 시계로 판정하므로 **오늘을 포함한** 여행을 만든다(고정 날짜는 날이 바뀌며 깨진다). */
+    private fun createTrip(token: String, start: LocalDate = today.minusDays(1), end: LocalDate = today.plusDays(1)): String {
+        val body = """
+            {"startDate":"$start","endDate":"$end","party":2,
+             "destinations":[{"seq":0,"region":"제주","nights":${end.toEpochDay() - start.toEpochDay()}}]}
+        """.trimIndent()
+        return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
+    }
+
+    private fun generate(token: String, tripId: String): Int =
+        call(HttpMethod.POST, "/api/v1/trips/$tripId/itinerary?mode=FULLY_AI", token).first
+
+    private val startBody = """
+        {"scope":"PARTIAL_SLOTS","originKind":"GPS","originLat":33.45,"originLng":126.56,
+         "reasons":["비가 와요"],"directives":["실내로 바꿔줘"]}
+    """.trimIndent()
+
+    @Test
+    fun `일정이 있으면 COLLECTING 으로 열린다 · 입력이 그대로 실린다`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId) shouldBe 201
+
+        val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
+        rc shouldBe 201
+        body["status"].asText() shouldBe "COLLECTING"
+        body["scope"].asText() shouldBe "PARTIAL_SLOTS"
+        body["reasons"][0].asText() shouldBe "비가 와요"
+        body["originEstimated"].asBoolean() shouldBe false // GPS 는 추정이 아니다
+        body["closedAt"].isNull shouldBe true
+    }
+
+    @Test
+    fun `다시 진입하면 이전 세션을 닫고 새로 연다 — 막지 않는다(INV-U4-06)`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId)
+        val first = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
+            .second["sessionId"].asText()
+
+        val (rc, second) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
+        rc shouldBe 201 // 409 가 아니다
+        (second["sessionId"].asText() == first) shouldBe false // 새 세션이다
+
+        val (_, closed) = call(HttpMethod.GET, "/api/v1/trips/$tripId/replan-sessions/$first", token)
+        closed["status"].asText() shouldBe "CANCELED" // 이전 시도는 이력으로 남는다
+    }
+
+    @Test
+    fun `생성된 일정이 없으면 404 — 그건 재계획이 아니라 생성이다`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody).first shouldBe 404
+    }
+
+    @Test
+    fun `여행 기간 밖이면 409`() {
+        val token = newToken()
+        val past = createTrip(token, today.minusDays(10), today.minusDays(8))
+        generate(token, past)
+        call(HttpMethod.POST, "/api/v1/trips/$past/replan-sessions", token, startBody).first shouldBe 409
+    }
+
+    @Test
+    fun `GPS·MANUAL 인데 좌표가 없으면 400 — 500 으로 새지 않는다`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId)
+        call(
+            HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token,
+            """{"scope":"FULL_DAY","originKind":"GPS"}""",
+        ).first shouldBe 400
+    }
+
+    @Test
+    fun `좌표 없는 기준점은 허용된다 — 추정 출발지로 표시된다`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId)
+        val (rc, body) = call(
+            HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token,
+            """{"scope":"FULL_DAY","originKind":"STAY_ANCHOR"}""",
+        )
+        rc shouldBe 201
+        body["originEstimated"].asBoolean() shouldBe true
+    }
+
+    @Test
+    fun `취소는 세션만 닫는다 · 두 번 닫으면 409`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId)
+        val id = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
+            .second["sessionId"].asText()
+
+        val (rc, canceled) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions/$id/cancel", token)
+        rc shouldBe 200
+        canceled["status"].asText() shouldBe "CANCELED"
+        call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions/$id/cancel", token).first shouldBe 409
+
+        // 원 일정은 그대로다(INV-U4-05)
+        call(HttpMethod.GET, "/api/v1/trips/$tripId/itinerary", token).first shouldBe 200
+    }
+
+    @Test
+    fun `타 계정이면 404 · 다른 여행의 세션도 404`() {
+        val owner = newToken()
+        val tripId = createTrip(owner)
+        generate(owner, tripId)
+        val id = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", owner, startBody)
+            .second["sessionId"].asText()
+
+        call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", newToken(), startBody).first shouldBe 404
+        val otherTrip = createTrip(owner)
+        call(HttpMethod.GET, "/api/v1/trips/$otherTrip/replan-sessions/$id", owner).first shouldBe 404
+    }
+
+    @Test
+    fun `인증 없으면 401`() {
+        call(HttpMethod.POST, "/api/v1/trips/${UUID.randomUUID()}/replan-sessions", null, startBody).first shouldBe 401
+    }
+}
