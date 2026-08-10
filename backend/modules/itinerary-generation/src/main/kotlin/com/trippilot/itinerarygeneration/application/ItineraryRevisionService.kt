@@ -19,6 +19,7 @@ import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
+import com.trippilot.itinerarygeneration.application.Revalidation.Companion.violations
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -101,15 +102,16 @@ class ItineraryRevisionService(
         // 복원 결과는 솔버가 만든 적 없는 조합이다(현행 고정 시각 + 과거 스냅숏). 편집과 같은 기준으로 재검증해
         // 위반을 표시한다 — 검증 안 된 시각을 hasViolation=false 로 내보내면 INV-2 를 우회하는 셈이다.
         val draftDays = target.snapshot.toDays(fixedFrom = preview)
-        val violations = scheduleAgent.validate(draftDays.toOutput(preview, clock.instant()))
+        // AI 가 죽어도 되돌리기는 막지 않는다 — 다만 판정을 못 했으면 "위반 없음"이라 말하지 않는다(Revalidation 참고).
+        val verdict = Revalidation.attempt(scheduleAgent, draftDays.toOutput(preview, clock.instant()), tripId)
 
         return tx.execute {
             // 가드를 **트랜잭션 안에서 다시** 본다 — 위 검증(외부 호출) 동안 확정이 커밋됐으면 그 확정을 되돌리게 된다.
             val current = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
             requireRestorable(current)
 
-            val restoredDays = target.snapshot.toDays(fixedFrom = current, violations = violations)
-            ViolationText.warnUnattached(violations, restoredDays, tripId)
+            val restoredDays = target.snapshot.toDays(fixedFrom = current, verdict = verdict)
+            ViolationText.warnUnattached(verdict.violations(), restoredDays, tripId)
             val restored = Itinerary.reconstitute(
                 current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.generationMode, current.isFallback,
                 current.generationState, restoredDays, current.createdAt, clock.instant(), current.candidatesSummary,
@@ -140,7 +142,13 @@ class ItineraryRevisionService(
         const val MAX_LIMIT = 500
     }
 
-    private fun ItinerarySnapshot.toDays(fixedFrom: Itinerary, violations: List<Violation> = emptyList()): List<ItineraryDay> {
+    private fun ItinerarySnapshot.toDays(
+        fixedFrom: Itinerary,
+        verdict: Revalidation = Revalidation.Judged(emptyList()),
+    ): List<ItineraryDay> {
+        val violations = verdict.violations()
+        // 판정 보류면 **현행 일정**의 표시를 잇는다 — 스냅숏에는 위반 상태가 없어(toSnapshot 이 안 담는다) 그쪽에서 이어받을 수 없다.
+        val prior = if (verdict is Revalidation.Withheld) PriorViolations(fixedFrom) else null
         // (날짜, poiId) 로 맞춘다 — poiId 만으로 묶으면 같은 숙소가 여러 날 고정된 경우 마지막 날 시각으로 뭉개진다.
         val fixedNow = fixedFrom.days.flatMap { d -> d.slots.filter { it.isFixed }.map { (d.date to it.sourcePoiId) to it } }.toMap()
         val used = mutableSetOf<Pair<java.time.LocalDate, java.util.UUID>>()
@@ -174,12 +182,12 @@ class ItineraryRevisionService(
                     val hit = violations.filter { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
                     VisitSlot.of(
                         s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
-                        hasViolation = hit.isNotEmpty(),
+                        hasViolation = prior?.flagOf(date, s.poiId) ?: hit.isNotEmpty(),
                         endsNextDay = s.endsNextDay,
                         distanceRange = s.distanceRange,
                         placementReason = s.placementReason,
                         // 복원 결과도 편집과 같은 기준으로 사유를 남긴다 — 배지만 켜면 화면이 이유를 못 그린다(BR-U3-13).
-                        violationReason = ViolationText.reasonOf(hit),
+                        violationReason = prior?.reasonOf(date, s.poiId) ?: ViolationText.reasonOf(hit),
                     )
                 },
             )

@@ -61,9 +61,12 @@ private val NOOP_TX = object : PlatformTransactionManager {
 }
 
 /** validate 는 주입된 위반을 반환(Fake). generate/repair 는 편집에서 미사용. */
-private class EditFakeAgent(private val violations: List<Violation> = emptyList()) : StubScheduleAgent() {
+private class EditFakeAgent(
+    private val violations: List<Violation> = emptyList(),
+    private val failure: RuntimeException? = null, // AI 장애 재현
+) : StubScheduleAgent() {
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput = throw NotImplementedError()
-    override fun validate(solution: ScheduleAgentOutput): List<Violation> = violations
+    override fun validate(solution: ScheduleAgentOutput): List<Violation> = failure?.let { throw it } ?: violations
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
 }
 
@@ -280,6 +283,39 @@ class EditItineraryServiceTest : StringSpec({
         val slot = result.days.single().slots.first()
         slot.hasViolation shouldBe true
         slot.violationReason shouldBe "이동이 빠듯해요 · 영업시간 밖"
+    }
+
+    "AI 재검증이 실패해도 편집은 500 이 되지 않는다 — 저장되고 직전 위반 표시가 유지된다" {
+        // 현행 poiA 슬롯에 이미 위반이 표시돼 있고, 편집안도 같은 날 poiA 를 유지한다.
+        val flagged = Itinerary.create(
+            tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
+            listOf(
+                ItineraryDay.of(
+                    day, 0,
+                    listOf(
+                        VisitSlot.of(
+                            poiA, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"),
+                            hasViolation = true, violationReason = "영업시간 밖",
+                        ),
+                    ),
+                ),
+            ),
+            clock.instant(),
+        )
+        val repo = repoWith(flagged)
+        val down = EditFakeAgent(failure = RuntimeException("AI 다운"))
+
+        val result = EditItineraryService(trips(true), repo, down, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+            .edit(acc, tripId, editReq)
+
+        // 편집은 사용자의 의도라 저장된다
+        result.days.single().slots.map { it.sourcePoiId } shouldBe listOf(poiB, poiA)
+        // 판정을 못 했으니 "깨끗하다"고 말하지 않는다 — poiA 의 직전 표시가 그대로 남는다
+        val a = result.days.single().slots.single { it.sourcePoiId == poiA }
+        a.hasViolation shouldBe true
+        a.violationReason shouldBe "영업시간 밖"
+        // 이력 없는 새 슬롯은 표시가 없다(원래 기본값 — 새 거짓을 만들지 않는다)
+        result.days.single().slots.single { it.sourcePoiId == poiB }.hasViolation shouldBe false
     }
 
     "사유 없는 위반은 배지만 켜고 사유는 비운다(CHECK 제약과도 맞는다)" {

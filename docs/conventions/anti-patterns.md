@@ -81,3 +81,4 @@
 - **스택형 브랜치를 squash 머지 후 rebase하지 말 것.** squash가 patch-id를 바꿔 add/add 충돌 발생 → `git rebase --onto origin/develop <oldBaseTip> <branch>`로 중복 커밋을 건너뛴다. (TRIP-152/153)
 - **작업 착수 시 가장 먼저 `git checkout -b feature/...` 로 브랜치를 만들 것.** 안 만들고 코딩하면 커밋이 develop에 직접 쌓인다(push는 보호로 막히지만 로컬 develop이 오염 → 커밋을 브랜치로 옮기고 `git branch -f develop origin/develop` 으로 되돌려야 함). (TRIP-177)
 - **develop에 직접 푸시하지 말 것 → 항상 feature 브랜치 + PR.** develop은 PR로만 받는다.
+- **외부 검증기가 실패했을 때 "위반 없음"으로 접지 말 것 → 판정 보류를 타입으로 구분할 것.** 재검증 호출을 `runCatching { }.getOrDefault(emptyList())` 로 접으면 AI 장애가 곧 **"검증했더니 깨끗하다"는 거짓 표시**가 되어 화면의 위반 배지가 조용히 꺼진다(사용자는 문제를 못 본 채 확정한다). 실패는 `Judged`/`Withheld` 로 나눠, 보류면 **직전 표시를 그대로 잇는다**. 아울러 이런 비차단 검증은 **호출 자체를 감싸지 않으면 사용자 API 가 그대로 500** 이 된다 — `EditItineraryService`·`ItineraryRevisionService` 가 무보호였다(AI팀 감사 지적, TRIP-309 후속).

@@ -14,6 +14,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.application.Revalidation.Companion.violations
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
@@ -64,9 +65,10 @@ class EditItineraryService(
         }
 
         // 재검증(비차단) — 외부(ScheduleAgent) 호출은 트랜잭션 밖(DB 커넥션 안 물게, generate 와 동일). Fake 는 빈 목록.
-        val violations = scheduleAgent.validate(edit.toOutput(current.solveMode, current.isFallback, clock.instant()))
-        val flagged = reshape(current, edit, violations)
-        ViolationText.warnUnattached(violations, flagged.days, tripId)
+        // AI 가 죽어도 편집은 막지 않는다. 대신 판정을 못 했으면 "위반 없음"이라 말하지 않는다(Revalidation 참고).
+        val verdict = Revalidation.attempt(scheduleAgent, edit.toOutput(current.solveMode, current.isFallback, clock.instant()), tripId)
+        val flagged = reshape(current, edit, verdict)
+        ViolationText.warnUnattached(verdict.violations(), flagged.days, tripId)
         return tx.execute {
             // 트랜잭션 안에서 다시 읽는다 — 위 재검증(외부 호출) 동안 다른 편집이 커밋됐으면 밖에서 읽은 값은 낡았다.
             val beforeWrite = itineraries.findByTrip(tripId).firstOrNull() ?: current
@@ -83,8 +85,11 @@ class EditItineraryService(
         }!!
     }
 
-    /** 편집안 + 위반 → 새 일정 슬롯 배열(위반 슬롯 has_violation=true). identity·createdAt·solveMode 는 현행 보존. */
-    private fun reshape(current: Itinerary, edit: EditItinerary, violations: List<Violation>): Itinerary {
+    /** 편집안 + 재검증 결과 → 새 일정 슬롯 배열(위반 슬롯 has_violation=true). identity·createdAt·solveMode 는 현행 보존. */
+    private fun reshape(current: Itinerary, edit: EditItinerary, verdict: Revalidation): Itinerary {
+        val violations = verdict.violations()
+        // 판정 보류면 직전 표시를 잇는다 — 못 물어봤다고 해서 깨끗해진 것은 아니다.
+        val prior = if (verdict is Revalidation.Withheld) PriorViolations(current) else null
         // 편집은 전체 교체라 클라이언트가 안 보내는 파생값(추천 근거)은 여기서 이어받지 않으면 사라진다.
         // 장소를 30분 옮겼다고 "왜 이 장소를 골랐는지"가 달라지지는 않으므로 (날짜, poiId) 로 맞춰 옮긴다.
         val reasonBySlot = current.days.flatMap { d -> d.slots.map { (d.date to it.sourcePoiId) to it.placementReason } }.toMap()
@@ -97,10 +102,11 @@ class EditItineraryService(
                     // 재산출은 AI 검증·수리(TRIP-309) 몫이라, 그때까지는 낡은 값을 보여주느니 비워 둔다.
                     VisitSlot.of(
                         s.poiId, null, slotIdx, s.startAt, s.endAt, s.isFixed,
-                        hasViolation = hit.isNotEmpty(), endsNextDay = s.endsNextDay,
+                        hasViolation = prior?.flagOf(d.date, s.poiId) ?: hit.isNotEmpty(),
+                        endsNextDay = s.endsNextDay,
                         placementReason = reasonBySlot[d.date to s.poiId],
                         // 저장 후에도 "무엇이 왜 문제인지"가 남아야 한다(BR-U3-13 지속 가시화).
-                        violationReason = ViolationText.reasonOf(hit),
+                        violationReason = prior?.reasonOf(d.date, s.poiId) ?: ViolationText.reasonOf(hit),
                     )
                 },
             )
