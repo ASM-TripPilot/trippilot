@@ -32,7 +32,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
-from trippilot.c1.gateway import GatewayFacade
+from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
 from trippilot.domain.intent import (
     ROUTABLE_INTENTS,

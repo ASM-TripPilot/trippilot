@@ -26,10 +26,10 @@ from dataclasses import dataclass
 from typing import NamedTuple, Sequence
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.m7 import MatchDecision
+from trippilot.domain.poi_curation import MatchDecision
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
-from trippilot.m7.config import M7Config
-from trippilot.m7.entity_resolver import fuzzy_match
+from trippilot.poi_curation.config import M7Config
+from trippilot.poi_curation.entity_resolver import fuzzy_match
 
 from benchmarks.data.entity_resolution_cases import CASES, ResolutionCase
 

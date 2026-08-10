@@ -18,8 +18,8 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from trippilot.c2.config import STAY_DEFAULT_MIN
-from trippilot.c2.scorer import CATEGORY_WEIGHT
+from trippilot.solver_engine.config import STAY_DEFAULT_MIN
+from trippilot.solver_engine.scorer import CATEGORY_WEIGHT
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.llm import CandidatePool, ScoredPoi
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource, SourcedPoi

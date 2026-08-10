@@ -24,11 +24,11 @@ import yaml
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.c1.config import C1Config
-from trippilot.c1.gates.intent import IntentGate
-from trippilot.c1.gates.paraphrase import ParaphraseGate
-from trippilot.c1.gateway import GatewayFacade
-from trippilot.c1.prompts import PromptRegistry
+from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.gates.intent import IntentGate
+from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
+from trippilot.llm_gateway.gateway import GatewayFacade
+from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
 from trippilot.domain.intent import (
     ROUTABLE_INTENTS,

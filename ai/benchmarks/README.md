@@ -10,7 +10,7 @@
 ## 엔티티 해소 임계 캘리브레이션 (TRIP-252)
 
 fuzzy_match 3단 판정 임계(AUTO ≥ 0.85 / CONFIRM ≥ 0.60 / 미만 UNRESOLVED,
-`src/trippilot/m7/config.py`)는 remote config 주입값이고, 실데이터 기반
+`src/trippilot/poi_curation/config.py`)는 remote config 주입값이고, 실데이터 기반
 캘리브레이션은 후속 과제다(business-rules §3). **실데이터가 없는 현 단계의
 산출물은 캘리브레이션 하네스**: 한국 POI 이름 변형을 모사한 라벨 케이스셋
 (`data/entity_resolution_cases.py`, 동일 장소 변형 8 + 유사 다른 장소 6)에

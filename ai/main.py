@@ -51,7 +51,7 @@ def _openai_llm_and_model() -> tuple[object, str]:
         )
     import openai
 
-    from trippilot.c1.adapters.openai_adapter import OpenAIAdapter
+    from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
 
     client = openai.OpenAI(
         api_key=api_key,

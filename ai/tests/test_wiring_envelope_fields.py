@@ -21,8 +21,8 @@ import re
 from datetime import date, datetime, timedelta, timezone
 
 from trippilot.api.wiring import _distance_ranges
-from trippilot.c2.config import SolverConfig
-from trippilot.c2.travel import TravelEstimator
+from trippilot.solver_engine.config import SolverConfig
+from trippilot.solver_engine.travel import TravelEstimator
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TransportMode
 from trippilot.domain.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
 
