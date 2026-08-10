@@ -27,7 +27,8 @@ import path from 'path';
  * **A. 영구 규칙** — S2(옵트인 경계) · S4(외부 URL 금지) · S7(색 팔레트)은 규칙이라 화면이 늘어도
  * 그대로 선다.
  * **B. 이행 체크포인트 — 한시적.** S3의 `DraftScreenProps` 필드 목록과 S6의 픽스처 상수 이름은
- * 이번 칸의 계약 스냅숏이라 정당한 리네임·필드 추가에 red를 낸다. **B 카운터 = 0.** 정당한 작업이
+ * 이번 칸의 계약 스냅숏이라 정당한 리네임·필드 추가에 red를 낸다. **B 카운터 = 1**(2026-08-10
+ * TRIP-298 이 `DraftScreenProps.demoted` 를 더하면서 S3가 red — 목록을 갱신했다). 정당한 작업이
  * 이 두 단언 때문에 red를 낸 것이 2회 누적되면 해당 단언만 뗀다.
  */
 
@@ -269,7 +270,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 3필드 그대로, DraftScreenProps 는 9필드 그대로, 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 3필드 그대로, DraftScreenProps 는 10필드 그대로, 화면에 에셋 해석 지문이 0건이다', () => {
     const mapHtmlSource = readOne(MAP_HTML_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -291,6 +292,9 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       'pins',
       'dayHeader',
       'canRetry',
+      // TRIP-298 이 더한 후보 강등 안내 스위치. 이 칸(TRIP-339)이 막으려던 것은 "사진을
+      // 넣으려고 프롭이 느는 것"이고, 이것은 다른 사이클의 승인된 계약이다(02a §2.2).
+      'demoted',
       'onSelectDay',
       'onRetry',
       'onBack',

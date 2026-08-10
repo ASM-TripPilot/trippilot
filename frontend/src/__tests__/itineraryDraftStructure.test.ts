@@ -58,6 +58,10 @@ const BARREL_REL = 'pages/itinerary-draft/index.ts';
 const PAGE_REL = 'pages/itinerary-draft/ui/DraftPage.tsx';
 const SCREEN_REL = 'features/itinerary/ui/DraftScreen.tsx';
 const MODEL_REL = 'features/itinerary/model/draftView.ts';
+/** TRIP-298 — h35 후보 0건 화면. 이름은 `frontend-components.md` §4 가 지정한 것이다. */
+const ZERO_SCREEN_REL = 'features/itinerary/ui/ZeroCandidateScreen.tsx';
+/** 화면 층 전수 — "판정은 model 한 곳"(§2·§6)의 모집단이다. */
+const UI_DIR_REL = 'features/itinerary/ui';
 
 /** 타이머 금지 스캔의 모집단 두 디렉토리. `pages` 쪽은 전역 가드와 겹치지만
  * `features/itinerary` 는 **어느 가드도 타이머를 보지 않는다** — 폴링 카운터를 model 에 두면서
@@ -170,12 +174,14 @@ describe('G2 · AC-V2 — 라우트는 얇다 (frontend-components.md §0)', () 
 });
 
 describe('G3 · 편입 앵커 — 새 파일이 기존 두 전수 스캔의 사정거리 안에 있다', () => {
-  it('화면·배선·배럴·모델이 그 경로에 실재하고 배럴이 DraftPage 를 재수출한다', () => {
+  it('화면·배선·배럴·모델·h35 화면이 그 경로에 실재하고 배럴이 DraftPage 를 재수출한다', () => {
     // 이 네 줄이 AC-V1·AC-V3 를 **공허하지 않게** 만든다. 모집단이 디렉토리 재귀라
     // (`features/itinerary` · `src/pages`) 경로에 실재하는 것이 곧 편입이다 —
     // 파일을 다른 곳에 두면 두 전역 가드는 아무것도 안 보면서 초록으로 남는다.
-    [SCREEN_REL, PAGE_REL, BARREL_REL, MODEL_REL].forEach((rel) =>
-      expect(existsPair(rel)).toEqual({ file: rel, exists: true })
+    // TRIP-298 이 `ZERO_SCREEN_REL` 을 더한다(AC-V2): 이 줄이 없으면 h35 화면이 raw hex
+    // 11종 0건 스캔 밖에 놓여도 아무도 모른다.
+    [SCREEN_REL, PAGE_REL, BARREL_REL, MODEL_REL, ZERO_SCREEN_REL].forEach(
+      (rel) => expect(existsPair(rel)).toEqual({ file: rel, exists: true })
     );
 
     // 배럴이 `export {}` 빈 스텁이 아니라 실제로 심볼을 재수출한다(fsdStructure AC-2 규약).
@@ -224,5 +230,55 @@ describe('G5 · AC-13 — 지도는 배럴로 가져오고 날짜마다 remount 
     //    그대로다. React key 는 props 에 안 실려 렌더 트리에서 볼 수 없어 소스로만 잴 수 있다.
     //    ⚠️ 한계: 이 단언은 "key 를 적었다"까지고 값이 옳은지는 [검증]의 화면 대조 몫이다.
     expect(screenSource).toMatch(/<KakaoMapView[^>]*\bkey=/);
+  });
+});
+
+describe('🔴 G6 · TRIP-298 AC-V1 — level 해석·0건 판정은 model 한 곳에 산다 (§2·§6)', () => {
+  it('판정이 model 에 있고 배선이 그것을 부르며, 화면 층에는 판정 어휘가 0건이다', () => {
+    /**
+     * ★ 조합 자가검사 먼저 — 전처리(`stripComments`)와 탐지기를 **함께** 태운다. 구현자가
+     * "candidatesSummary 판정은 model 몫" 이라고 **주석**을 다는 순간 그 주석 자체가 위반으로
+     * 잡히면 **어떤 구현으로도 통과할 수 없는 심판**이 된다(문제로그 2026-08-08 `duration`
+     * 수호 주석과 같은 사고 · 02a ★7).
+     */
+    const sample = [
+      '// candidatesSummary 판정은 model 이 한다 — 화면은 다시 보지 않는다.',
+      'const demoted = isCandidatesDemoted(data.candidatesSummary);',
+    ].join('\n');
+    const stripped = stripComments(sample);
+    // 표본의 `candidatesSummary` 2개(주석 1 + 코드 1) 중 **정확히 1개**만 남는다.
+    expect(stripped.split('candidatesSummary').length - 1).toBe(1);
+    expect(stripped).toContain('isCandidatesDemoted(');
+
+    // 긍정 짝 — 판정이 실재하고 배선이 그것을 부른다. 없으면 아래 "0건"이 공허하다.
+    const model = readOne(MODEL_REL);
+    expect(model).toMatch(/export function isCandidatesDemoted\b/);
+    // 01b D3 의 정규화(`trim().toUpperCase()`)가 model 안에 있다 — 화면이 아니라 여기다.
+    expect(model).toContain('toUpperCase');
+    expect(readOne(PAGE_REL)).toContain('isCandidatesDemoted');
+
+    const uiFiles = listSourceFiles(path.join(ROOT, UI_DIR_REL));
+    // 긍정 짝 — 모집단이 비어 있지 않다(빈 디렉토리에서 부정 단언이 공짜로 통과하는 것 방지).
+    expect(uiFiles.length).toBeGreaterThan(0);
+
+    /**
+     * 부정 — 화면 층은 요약을 보지도, 어휘를 알지도 못한다. 화면은 `demoted: boolean` 과
+     * `shortfallCategories: string[]` **만** 받는다(props 만 받는 층 규약). 판정이 두 층에
+     * 흩어지면 같은 규칙이 서로 다르게 진화한다.
+     *
+     * 졸업 조건: 이 절은 파일 머리말 분류의 **B(이행 체크포인트)** 다 — 심볼 스냅숏이라 정당한
+     * 리네임에 red 를 낸다. 기존 B 카운터 규칙(2회 누적 시 제거)을 그대로 승계한다.
+     */
+    const offenders = uiFiles
+      .map((full) => ({
+        file: path.relative(ROOT, full).split(path.sep).join('/'),
+        source: stripComments(fs.readFileSync(full, 'utf8')),
+      }))
+      .flatMap(({ file, source }) =>
+        ['candidatesSummary', "'OK'", "'HIGH'", "'LOW'", "'NO_CANDIDATES'"]
+          .filter((needle) => source.includes(needle))
+          .map((needle) => `${file}: ${needle}`)
+      );
+    expect(offenders).toEqual([]);
   });
 });

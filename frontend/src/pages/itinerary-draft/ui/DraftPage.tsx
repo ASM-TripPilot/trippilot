@@ -8,10 +8,12 @@ import {
   buildDraftPins,
   DRAFT_POLL_INTERVAL_MS,
   formatDraftDayHeader,
+  isCandidatesDemoted,
   resolveDraftView,
   shouldKeepPollingDraft,
 } from '@/features/itinerary/model/draftView';
 import { DraftScreen } from '@/features/itinerary/ui/DraftScreen';
+import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
@@ -129,6 +131,11 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       dataUpdateCount: pollCount,
     });
 
+  // 후보 요약은 **판정 함수에만** 넘긴다 — 화면 층은 이 값을 보지도, 그 어휘(`LOW` 따위)를
+  // 알지도 못한다(frontend-components.md §2·§6). 판정이 두 층에 흩어지면 같은 규칙이 서로
+  // 다르게 진화한다.
+  const summary = itinerary.data?.candidatesSummary;
+
   const view = resolveDraftView({
     days,
     loading: trip.isPending || itinerary.isPending,
@@ -140,6 +147,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       regenerate.isError ||
       itinerary.data?.generationState === 'FAILED' ||
       pollExhausted,
+    candidatesSummary: summary,
   });
 
   /**
@@ -186,6 +194,28 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     );
   }
 
+  /**
+   * 후보 0건은 **다른 화면**이다(h35) — 목록 화면 안의 빈 상태가 아니라, 조건을 밝히고
+   * 다음 행동을 주는 별도 얼굴이다. 그래서 `DraftScreen` 을 아예 그리지 않는다.
+   *
+   * 완화 제안 목적지는 **실재하는 라우트 하나뿐**이다(01b D7). 반경·예산 완화는 보낼
+   * 파라미터도 갈 화면도 없어서 그리지 않았다 — 갈 수 없는 곳으로 안내하지 않는다.
+   */
+  if (view.kind === 'zero') {
+    return (
+      <ZeroCandidateScreen
+        shortfallCategories={view.shortfallCategories}
+        onBack={() => router.back()}
+        onReduceMustVisits={() =>
+          router.push({
+            pathname: '/trips/[tripId]/itinerary/must-visits',
+            params: { tripId },
+          })
+        }
+      />
+    );
+  }
+
   return (
     <DraftScreen
       view={view}
@@ -196,6 +226,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       )}
       dayHeader={formatDraftDayHeader(selectedDate)}
       canRetry={itinerary.data?.status !== 'CONFIRMED'}
+      demoted={isCandidatesDemoted(summary)}
       onSelectDay={setPickedDate}
       onRetry={() => void handleRetry()}
       onBack={() => router.back()}
