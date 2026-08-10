@@ -3,6 +3,12 @@
 > 여행 중 변수 발생 시 기존 일정 + 사용자 페르소나를 기반으로 대안 일정을 생성하는 에이전트.
 > 핵심 패턴: **RAG (Retrieval-Augmented Generation)**
 
+> **개정 (2026-08-11, TRIP-332)** — 도구 소유권은 `agent-structure-v2.md`를 정본으로 채택 (근거: 최신 정본 + 도구 겹침 0 원칙). 결정 3항:
+> ① PlanBAgent **전속 도구는 `kb.retrieve_schedule` + `llm.select_alternatives` 2개** — §10의 7개 할당표는 구판(이력 참고용). persona·situation 정보는 Provider→InfoBundle 봉투로 수령하고, 후보 풀·솔버는 각각 PlaceProvider(봉투 내 풀 참조)·4단 공통 관문 소속.
+> ② KB-2(PERSONA)·KB-3(SITUATION)의 Provider 봉투 전환은 **InfoBundle 배선 후속 작업** — 그때까지 현행 retrieve 3종 구현(`ai/src/trippilot/agents/planb/kb_retrieval.py`)은 유지한다 (`KbHit` 이음매 덕에 전환 시 파이프라인 무영향).
+> ③ KB-1 구조화 DB 조회·KB-3 실시간 API로의 실소스 전환은 실데이터 연동 시점에 수행 (1단계는 세 KB 모두 `VectorStorePort` 동형).
+> §1~§9의 KB-1~3 구분·RAG 파이프라인·폴백 계단은 유효하다 — 바뀐 것은 "누가 그 정보를 가져오는가"(도구 소유권)뿐.
+
 ---
 
 ## 1. 왜 RAG인가
@@ -277,6 +283,9 @@ def get_user_preference_summary(user_id):
 ---
 
 ## 10. PlanBAgent 전용 Tool 정의
+
+> ⚠️ **[구판 — agent-structure-v2 §3으로 대체됨 (2026-08-11, TRIP-332)]**
+> 전속 도구는 `kb.retrieve_schedule` · `llm.select_alternatives` **2개**. `kb.retrieve_persona`·`kb.retrieve_situation` → Provider→InfoBundle 봉투 수령, `m7.get_candidates` → PlaceProvider(봉투 내 풀 참조), `solver.solve`·`solver.validate` → 4단 공통 관문. 아래 표·시그니처는 이력 참고용 (전환 일정은 문서 상단 개정 기록 참조).
 
 PlanBAgent의 LLM에는 아래 tool만 할당한다. 토큰 절감 + 역할 경계 강제.
 

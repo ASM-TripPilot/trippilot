@@ -107,7 +107,7 @@ EP-1 ──┬── EP-2 ──┐
 | S6.2 | ReflectAgent 1차 (DB 조회 + Bedrock 1회 + FallbackCard) | 0건→스킵, LLM 실패→통계 카드 (INV-4) |
 | S6.3 | EditAgent (parse_intent→엔티티 해소→검증→apply_mode 결정) | M16-P1~P3 통과, 파괴적 편집 확인 강제 |
 | S6.4 | 웹 소싱 + 수집 게이트 5단 (비동기) | SRC-P1~P3 통과, 게이트 미통과 POI 후보화 0 (INV-1) |
-| S6.5 | KB retrieve 3종 (schedule·persona·situation) | PlanB E2E에서 KB 3종 조립 확인 |
+| S6.5 | ~~KB retrieve 3종 (schedule·persona·situation)~~ → **PlanBAgent 전속 도구 2종 — `kb.retrieve_schedule` + `llm.select_alternatives`. persona·situation 정보는 Provider→InfoBundle 봉투 수령** (2026-08-11 TRIP-332 — agent-structure-v2 정본 채택, 도구 겹침 0 원칙) | ~~PlanB E2E에서 KB 3종 조립 확인~~ → **PlanB E2E에서 전속 도구 2종 + InfoBundle 조립 확인.** KB-2·KB-3의 봉투 전환은 InfoBundle 배선 후속 작업 — 그때까지 현행 retrieve 3종 구현 유지 (planb-rag-design 개정 기록 참조) |
 
 ---
 
