@@ -134,17 +134,23 @@ class GenerateItineraryService(
     /**
      * 아직 물질화되지 않은(ANYTIME) 고정 블록을 드러낸다 — 경계 계약 확정 문서 **M1**.
      *
-     * 실 AI 는 날짜·시각 없는 고정 블록을 표현할 수 없어 **요청 전체를 422 로 거부**하고(그쪽 `api/wiring.py`),
-     * 내장 Fake 는 `date != null` 만 그룹핑해 **조용히 버린다**. 둘 다 결과만 보면 이유를 알 수 없다 —
-     * 전자는 "그 여행만 통째로 MINIMAL 폴백", 후자는 "필수 방문지가 그냥 없음"으로 나타난다.
+     * 실 AI 는 날짜·시각 없는 고정 블록을 표현할 수 없어 **그 호출 하나를 통째로 422 로 거부**하고
+     * (그쪽 `api/wiring.py` — 블록 하나만 나빠도 요청 전체가 죽는다), 내장 Fake 는 `date != null` 만
+     * 그룹핑해 **조용히 버린다**. 둘 다 결과만 보면 이유를 알 수 없다.
+     *
+     * 관측되는 증상은 호출 단위라 여행 전체가 아니다:
+     * - 다일 여행 — ANYTIME 은 2차에 실리므로 **day1 은 실 AI 결과로 살아남고** 나머지 일자만 MINIMAL 폴백,
+     *   상태는 COMPLETE(isFallback=true). 사용자는 "뒷날들만 부실"로 겪는다.
+     * - 단일일 여행 — 2차가 없어 1차에 실리므로 그 일정 전체가 MINIMAL.
+     *
      * 물질화(M1)가 들어오면 이 경고는 자연히 사라진다.
      */
     private fun warnUnmaterialized(blocks: List<FixedBlock>, tripId: UUID) {
         val unmaterialized = blocks.count { it.date == null || it.start == null }
         if (unmaterialized > 0) {
             log.warn(
-                "날짜·시각 미지정 필수 방문지 {}건을 그대로 보냅니다 — 실 AI 는 요청 전체를 거부하고(422→폴백) " +
-                    "Fake 는 조용히 버립니다. 물질화 전까지의 알려진 간극입니다(M1). tripId={}",
+                "날짜·시각 미지정 필수 방문지 {}건을 그대로 보냅니다 — 실 AI 는 이 호출을 통째로 거부하고" +
+                    "(422→해당 일자분 MINIMAL 폴백) Fake 는 조용히 버립니다. 물질화 전까지의 알려진 간극입니다(M1). tripId={}",
                 unmaterialized, tripId,
             )
         }

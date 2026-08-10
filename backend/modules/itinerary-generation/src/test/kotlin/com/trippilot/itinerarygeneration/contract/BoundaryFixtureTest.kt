@@ -82,7 +82,8 @@ class BoundaryFixtureTest : StringSpec({
     "ANYTIME must_visit 은 아직 물질화되지 않아 AI 가 거부하는 모양으로 나간다 (M1 — 구현 시 이 테스트를 뒤집을 것)" {
         // 알려진 간극을 **못 박아 둔다**. 픽스처가 이 모양을 '정상'으로 굳혀 놓고 아무도 실패를 못 보면,
         // 통합 때 "ANYTIME 이 있는 여행은 전부 MINIMAL 폴백"으로 나타나고 원인을 계약에서 찾지 못한다.
-        // 블록 하나만 거부돼도 **요청 전체가 422** 라 그 여행의 생성이 통째로 폴백된다.
+        // 블록 하나만 나빠도 **그 호출 전체가 422** 다. 다일 여행이면 ANYTIME 은 2차에 실리므로
+        // day1 은 살아남고 나머지 일자만 MINIMAL 폴백된다(단일일이면 전체). GenerateItineraryServiceTest 참고.
         val rejected = input.fixedBlocks.filterNot { aiAccepts(it) }
         rejected.size shouldBe 1 // 물질화(M1)가 들어오면 0 이 되어야 한다 — 그때 이 값을 0 으로 바꾼다
 
