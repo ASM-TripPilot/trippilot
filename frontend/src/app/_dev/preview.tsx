@@ -56,7 +56,7 @@ import type {
   ItineraryDaysItemSlotsItem,
 } from '@/shared/api/generated/schemas';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
-import { KakaoMapView } from '@/shared/map';
+import { KakaoMapView, type MapPin } from '@/shared/map';
 
 /**
  * expo-router 의 `useLocalSearchParams` 를 모듈 로드 시점에 딱 한 번 안전하게 구해온다.
@@ -211,6 +211,14 @@ const MUST_VISIT_PREVIEW_ITEMS: MustVisitListItem[] = [
     imageUrl: null,
     type: 'ANYTIME',
   },
+];
+
+/** h05 지도 핀 3개 — Figma `1875:1083` 이 그린 부산 3지점. 배선에서는
+ * `buildMustVisitPins` 가 담은 장소 좌표로 만드는 값이라, 여기서는 그 결과 모양만 흉내 낸다. */
+const MUST_VISIT_PREVIEW_PINS: MapPin[] = [
+  { number: 1, lat: 35.1379, lng: 129.0596 },
+  { number: 2, lat: 35.1587, lng: 129.1604 },
+  { number: 3, lat: 35.163, lng: 129.0104 },
 ];
 
 /**
@@ -983,6 +991,10 @@ const PREVIEW_STATES: PreviewState[] = [
           items: MUST_VISIT_PREVIEW_ITEMS,
           staleFailed: false,
         }}
+        pins={MUST_VISIT_PREVIEW_PINS}
+        // 배선이 h09 부재로 항상 넘기는 값(TRIP-326) — 비활성 CTA·건너뛰기가 실기에서
+        // 활성과 구별되는지는 눈으로만 볼 수 있다(문제로그 2026-08-08).
+        proceedBlockedReason="다음 단계는 아직 준비 중이에요"
       />
     ),
   },

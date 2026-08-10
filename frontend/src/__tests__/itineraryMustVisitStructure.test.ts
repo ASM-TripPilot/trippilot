@@ -19,8 +19,12 @@ import path from 'path';
  * (화면 테스트 C20·C31) 로 나눠 재고, `pages` 층 소스는 이미 `pagesLayerStructure.test.ts` G-3 이
  * `stripComments` + 자가검사를 갖춘 채 잠그고 있다(중복해서 만들지 않는다).
  *
- * ⚠️ **`features` 간 직접 import 가드도 만들지 않는다** — ESLint `import/no-restricted-paths` 가
- * error 로 막고, 그 룰이 살아 있음은 `importBoundary.test.ts` 가 이미 검사한다.
+ * ⚠️ **정정(TRIP-326)** — 원래 이 자리에는 *"`features` 간 직접 import 가드는 만들지 않는다 —
+ * ESLint `import/no-restricted-paths` 가 막는다"* 고 적혀 있었다. **그 근거가 틀렸다.** 그 룰의
+ * `FEATURES` 배열이 `['onboarding','home']` 뿐이라(`frontend/docs/structure.md` 경고 절 · 01b §4
+ * 실측) **`itinerary` ↔ `explore` 는 실제로 안 막힌다.** `importBoundary.test.ts` 는 룰이
+ * *살아 있음*만 검사하므로 그 공백을 못 본다. 근거가 틀린 채로 두면 다음 사람도 같은 이유로
+ * 가드를 안 만든다 — 그래서 아래 **C38** 이 이 계열에 한해 소스로 직접 잰다(AC-19).
  */
 
 const ROOT = path.resolve('src');
@@ -213,5 +217,96 @@ describe('C37 · 라우트 두께 — 배선은 pages 층이 진다', () => {
       // 부정 — 라우트는 얇다. 조회·변이가 여기 있으면 `pages` 층 가드의 사정거리 밖으로 샌다.
       expect(source).not.toMatch(/\buseQuery\b|\buseMutation\b/);
     });
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-326 추가분 — features 경계(AC-19) · 지도 배럴(02a ★11).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const SCREEN_REL = 'features/itinerary/ui/MustVisitPickerScreen.tsx';
+
+/** 디렉토리 하나만 훑는다. 기존 `scanSources()` 는 두 디렉토리를 합쳐 주므로 "어느 쪽에
+ * 있으면 안 되고 어느 쪽에는 있어야 하는가" 를 가를 수 없다. */
+function scanOneDir(rel: string): { file: string; source: string }[] {
+  return listSourceFiles(path.join(ROOT, rel)).map((full) => ({
+    file: path.relative(ROOT, full).split(path.sep).join('/'),
+    source: stripComments(fs.readFileSync(full, 'utf8')),
+  }));
+}
+
+describe('C38 · AC-19 — features/itinerary 가 다른 feature 를 직접 가져오지 않는다', () => {
+  it('탐지기 자가검사 — 주석 속 경계 설명은 걷히고 코드의 import 는 살아남는다', () => {
+    // ★ 조합 검증(문제로그 2026-07-31). 이 파일들의 주석에는 `@/features/explore` 같은 경로가
+    //   설명으로 잔뜩 등장한다 — 전처리가 그것을 안 걷으면 **거짓 RED**(주석 때문에 위반),
+    //   너무 걷으면 **거짓 GREEN**(코드의 import 가 사라짐)이 된다. 둘 다 아님을 표본으로 잰다.
+    const sample = [
+      '/** 조합은 pages 층 몫이다 — 화면이 @/features/explore 를 직접 부르면 위반이다. */',
+      '// import { useSavedPlaces } from "@/features/explore/model/savedPlaces";',
+      "import { useSavedPlaces } from '@/features/explore/model/savedPlaces';",
+      "const doc = 'https://example.com/features/explore';",
+    ].join('\n');
+
+    const stripped = stripComments(sample);
+
+    // ① 주석 두 줄은 걷힌다 — 표본의 `@/features/explore` 3개(블록 주석 1 + 줄 주석 1 +
+    //    코드 1) 중 **정확히 1개**만 남는다. URL 줄에는 `@` 가 없어 이 셈에 안 들어간다.
+    expect(stripped.split('@/features/explore').length - 1).toBe(1);
+    expect(stripped).not.toContain('직접 부르면 위반이다');
+
+    // ② 코드의 import 문은 통째로 살아남는다. 순진한 `//.*` 제거는 URL 을 `'https:` 로 잘라
+    //    뒤따르는 단언을 공짜로 통과시킨다.
+    expect(stripped).toContain(
+      "import { useSavedPlaces } from '@/features/explore/model/savedPlaces';"
+    );
+    expect(stripped).toContain('https://example.com/features/explore');
+
+    // ③ 탐지기 자체 — import 문 형태만 잡고 URL 은 안 잡는다.
+    const FOREIGN_FEATURE_IMPORT = /from\s+'@\/features\/(?!itinerary\/)/g;
+    expect(stripped.match(FOREIGN_FEATURE_IMPORT)).toHaveLength(1);
+    expect(
+      "const doc = 'https://example.com/features/explore';".match(
+        FOREIGN_FEATURE_IMPORT
+      )
+    ).toBeNull();
+  });
+
+  it('화면 층에는 0건이고, 조인이 실제로 일어나는 pages 층에는 실재한다', () => {
+    const FOREIGN_FEATURE_IMPORT = /from\s+'@\/features\/(?!itinerary\/)/;
+
+    // 긍정 앵커 — 모집단이 비어 있지 않다. 빈 디렉토리에서는 아래 부정 단언이 공허하다.
+    const featureSources = scanOneDir('features/itinerary');
+    expect(featureSources.map(({ file }) => file)).toContain(SCREEN_REL);
+
+    // 🔴 부정 — 화면·모델이 남의 feature 를 직접 물면 두 슬라이스가 서로를 끌고 다닌다.
+    //    **기계 강제가 없는 자리다**(머리말 정정 참조) — 이 줄이 유일한 심판이다.
+    const offenders = featureSources
+      .filter(({ source }) => FOREIGN_FEATURE_IMPORT.test(source))
+      .map(({ file }) => file);
+    expect(offenders).toEqual([]);
+
+    // 🔴 짝 — 조인은 **어딘가에서는 실제로 일어나야 한다**. `pages` 층이 `features/explore` 의
+    //    담기 훅을 물고 있다는 사실이 위 0건을 "아무도 안 쓰는 상태" 와 구별한다.
+    const pageSources = scanOneDir('pages/itinerary-mustvisit');
+    const joiners = pageSources
+      .filter(({ source }) => source.includes("from '@/features/explore/"))
+      .map(({ file }) => file);
+    expect(joiners.length).toBeGreaterThan(0);
+  });
+});
+
+describe('C39 · 02a ★11 — h05 화면이 지도를 배럴로 가져온다', () => {
+  it('MustVisitPickerScreen 이 @/shared/map 배럴을 쓰고 딥 임포트가 0건이다', () => {
+    const source = readOne(SCREEN_REL);
+
+    // 긍정(짝) — 읽은 것이 정말 그 화면이다. 경로를 잘못 적으면 `readOne` 이 빈 문자열을
+    // 돌려주므로 이 줄이 없으면 아래 부정 단언이 공짜로 통과한다.
+    expect(source).toMatch(/export function MustVisitPickerScreen\b/);
+
+    // 🔴 배럴 경유여야 한다. 딥 임포트면 화면 테스트의 `jest.mock('@/shared/map', …)` 이 안 붙어
+    //    실물이 렌더되고, JS 키 없는 jest 에서 `map-failure` 로 떨어진다 — 테스트는 red 인데
+    //    **이유가 AC 와 무관해** 구현자가 엉뚱한 곳을 고친다(`itineraryDraftStructure` G5 선례).
+    expect(source).toContain("from '@/shared/map'");
+    expect(source).not.toContain('@/shared/map/KakaoMapView');
   });
 });
