@@ -94,6 +94,26 @@ class PoiExplanation:
         return cls(poi_id=PoiId(d["poi_id"]), text=d["text"])
 
 
+@dataclass(frozen=True, slots=True)
+class AlternativePick:
+    """Plan-B 대체지 선택 1건 (planb-rag-design §6 — 선택 + 이유).
+
+    poi_id ∈ pool (게이트가 강제, INV-1). 선호 순서는 튜플 내 위치가 표현한다 —
+    배치·시각 확정은 솔버 몫 (INV-2). reason은 사용자 표시 한국어 1문장이며
+    시각·소요시간 필드는 스키마에 자리 자체가 없다 (INV-3).
+    """
+
+    poi_id: PoiId
+    reason: str
+
+    def to_dict(self) -> dict:
+        return {"poi_id": str(self.poi_id), "reason": self.reason}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "AlternativePick":
+        return cls(poi_id=PoiId(d["poi_id"]), reason=d["reason"])
+
+
 class Mood(Enum):
     """회고 무드 (프롬프트 정본 §2.3 OutputSchema)."""
 
