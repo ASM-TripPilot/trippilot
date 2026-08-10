@@ -17,6 +17,7 @@ from typing import Mapping
 
 from trippilot.c2.config import SolverConfig
 from trippilot.c2.constraints import check_all
+from trippilot.c2.fallback_solver import placed_fixed_blocks
 from trippilot.c2.repair import repair
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.itinerary import (
@@ -111,7 +112,10 @@ class LlmSolver:
         days = []
         for day in problem.days:
             slots = sorted(slots_by_day.get(day, []), key=lambda s: s.start_at)
-            days.append(DaySolution(date=day, slots=tuple(slots), fixed_blocks=()))
+            days.append(DaySolution(
+                date=day, slots=tuple(slots),
+                fixed_blocks=placed_fixed_blocks(problem, day, slots),  # TRIP-343
+            ))
         candidate = ItinerarySolution(
             schedule_id=problem.schedule_id, days=tuple(days),
             is_fallback=False, solve_mode=SolveMode.LLM, solver_run=None)
