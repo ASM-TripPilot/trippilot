@@ -25,8 +25,13 @@ DB에 직접 쓰지 않는다. 백엔드 수신 API 협의 전까지는 GitHub A
                           보수적). 총 예산 = 등록 키 수 × 키당 상한. 총 예산 도달 시
                           그 시점까지 산출하고 정상 종료 (부분 성공 = 성공)
     COLLECT_OUTPUT        기본 "collected_pois.json"
+    COLLECT_STATE         기본 "collect_state.json" — 수집 커서 상태 (TRIP-348).
+                          파일이 있으면 로드해 커서 지점부터 재개 + 기제안·변경 없음
+                          항목 스킵, 없거나 손상이면 처음부터 + WARNING (우아한 강등).
+                          실행 끝에 갱신 상태를 같은 경로에 기록 (전송은 워크플로 소관)
 
-종료 코드: 0 = 게이트 통과 1건 이상 (부분 성공 포함), 1 = 게이트 통과 0건 또는 설정 오류.
+종료 코드: 0 = 게이트 통과 1건 이상 (부분 성공 포함) 또는 스킵만으로 소화된 실행
+(기제안·변경 없음 1건 이상 — 새 제안 0건이 정상), 1 = 통과·스킵 모두 0건 또는 설정 오류.
 """
 
 from __future__ import annotations
@@ -39,6 +44,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from trippilot.poi_curation.sourcing.pipeline import collect, to_output_document
+from trippilot.poi_curation.sourcing.state import load_state, state_to_dict
 from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter, UrllibHttpClient
 
 
@@ -71,6 +77,13 @@ def _print_summary(json_path: str) -> int:
     print(f"| 중복 병합 | {stats['merged']} |")
     print(f"| 페이지/상세 실패 | {stats['page_failures']} / {stats['detail_failures']} |")
     print(f"| 한도 도달 조기 종료 | {'예 (부분 성공)' if stats['budget_exhausted'] else '아니오'} |")
+    # TRIP-348 커서 이어가기 — 과거 산출 JSON에는 없을 수 있어 .get으로 읽는다
+    print(f"| 스킵 (기제안·변경 없음) | {stats.get('skipped_unchanged', 0)} |")
+    resumed = stats.get("resumed_from") or {}
+    resumed_txt = ", ".join(f"{k}: p{v}" for k, v in sorted(resumed.items())) or "—"
+    print(f"| 재개 지점 | {resumed_txt} |")
+    completed = stats.get("completed_kinds") or []
+    print(f"| 완주 타입 | {', '.join(completed) or '—'} |")
     if stats["gate_drops"]:
         print()
         print("| 게이트 드롭 사유 | 건수 |")
@@ -94,6 +107,7 @@ def main() -> int:
     ]
     calls_per_key = int(_optional("TOURAPI_MAX_CALLS") or "500")
     output = _optional("COLLECT_OUTPUT") or "collected_pois.json"
+    state_path = Path(_optional("COLLECT_STATE") or "collect_state.json")
 
     extra_keys = (key2,) if key2 else ()
     max_calls = calls_per_key * (1 + len(extra_keys))  # 총 예산 = 키 수 × 키당 상한
@@ -107,21 +121,34 @@ def main() -> int:
         area_code=area_code,
         content_types=content_types,
         max_calls=max_calls,
+        state=load_state(state_path),   # 없거나 손상 → 빈 상태 + WARNING (state.py)
     )
+    collected_at = datetime.now(UTC)    # CLI 스크립트만 wall-clock 직접 호출 허용
     doc = to_output_document(
         result,
         area_code=area_code,
         content_types=content_types,
-        collected_at=datetime.now(UTC),
+        collected_at=collected_at,
     )
     Path(output).write_text(
         json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
     stats = result.stats
+    # 갱신 상태 기록 — 파일 I/O는 여기(스크립트), 브랜치 전송은 워크플로 소관 (TRIP-348)
+    state_doc = state_to_dict(result.next_state, last_run={
+        "at": collected_at.isoformat(),
+        "area_code": area_code,
+        "content_types": content_types,
+        "http_calls": stats.http_calls,
+        "passed": stats.passed,
+        "skipped_unchanged": stats.skipped_unchanged,
+    })
+    state_path.write_text(
+        json.dumps(state_doc, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[collect] 산출: {output} — 게이트 통과 {stats.passed}건 "
           f"(호출 {stats.http_calls}/{max_calls} [키 {1 + len(extra_keys)}개×키당 "
-          f"{calls_per_key}], 목록 {stats.listed}건, "
-          f"한도조기종료={stats.budget_exhausted})")
-    if stats.passed == 0:
+          f"{calls_per_key}], 목록 {stats.listed}건, 스킵 {stats.skipped_unchanged}건, "
+          f"한도조기종료={stats.budget_exhausted}) · 상태: {state_path}")
+    if stats.passed == 0 and stats.skipped_unchanged == 0:
         print("[collect] FAIL 게이트 통과 0건 — 산출물 없음")
         return 1
     return 0
