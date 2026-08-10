@@ -172,6 +172,61 @@ class TriggerServiceTest : StringSpec({
         svc.evaluate(acc, tripId, signal(slotKey = slotA)) shouldBe null // 그 날 같은 사유는 전부 막힌다
     }
 
+    "날짜 전체 알림을 꺼도 다음 날은 다시 알린다 — DAY 억제는 그 날로 끝난다" {
+        // 만료를 안 두면 covers 가 슬롯을 가리지 않으므로 사실상 여행 전체가 꺼진다.
+        // 오늘 비 알림을 한 번 껐다고 내일치까지 막으면 사용자는 정작 필요한 알림을 못 받는다.
+        val triggers = Triggers()
+        val suppressions = Suppressions()
+        val svc = service(triggers, suppressions)
+        val t = svc.evaluate(acc, tripId, signal(slotKey = null))!!
+        svc.dismiss(acc, tripId, t.triggerId)
+
+        val off = suppressions.stored.single()
+        off.scopeType shouldBe SuppressionScope.DAY
+        // 그 날 자정(KST)까지만 — 08-11 KST 하루가 끝나는 08-11T15:00Z
+        off.expiresAt shouldBe Instant.parse("2026-08-11T15:00:00Z")
+
+        // 같은 날에는 막히고
+        off.isEffectiveAt(Instant.parse("2026-08-11T10:00:00Z")) shouldBe true
+        // 다음 날에는 다시 알릴 수 있다
+        off.isEffectiveAt(Instant.parse("2026-08-11T15:00:01Z")) shouldBe false
+    }
+
+    "슬롯 알림을 끄면 만료를 두지 않는다 — 그 방문지는 여행 내내 안 알린다" {
+        val triggers = Triggers()
+        val suppressions = Suppressions()
+        val svc = service(triggers, suppressions)
+        val t = svc.evaluate(acc, tripId, signal(slotKey = slotA))!!
+        svc.dismiss(acc, tripId, t.triggerId)
+
+        val off = suppressions.stored.single()
+        off.scopeType shouldBe SuppressionScope.SLOT
+        off.expiresAt shouldBe null
+    }
+
+    "지난 날짜 슬롯 신호는 폐기한다 — 어제 알림이 오늘 뜨면 이유를 알 수 없다(BR-U4-06)" {
+        val triggers = Triggers()
+        // 일정에는 어제 슬롯도 남아 있다(일정은 여행 전체를 담는다)
+        val past = "2026-08-10#${UUID.randomUUID()}"
+        val withPast = object : ItineraryFacade {
+            override fun findCurrent(accountId: UUID, tripId: UUID) =
+                ItineraryRef(itineraryId, "PLANNED", "COMPLETE", listOf(day), listOf(past, slotA))
+        }
+        val svc = TriggerService(trips, withPast, triggers, Suppressions(), sensitivity(), clockAt("2026-08-11T03:00:00Z"))
+
+        svc.evaluate(acc, tripId, signal(slotKey = past)) shouldBe null
+        triggers.stored.single().state shouldBe TriggerState.EXPIRED
+    }
+
+    "범위가 NONE 인 신호는 발화하지 않는다 — 배너만 뜨고 [대안 보기] 가 열 세션이 없으면 막다른 길이다" {
+        val triggers = Triggers()
+        val svc = service(triggers)
+        val none = signal().copy(scope = TriggerScope.NONE)
+
+        svc.evaluate(acc, tripId, none) shouldBe null
+        triggers.stored.single().shouldReplan shouldBe false // 기록은 남되 발화는 아니다
+    }
+
     "이미 닫힌 트리거는 다시 끌 수 없다(409) · 남의 여행 트리거는 404" {
         val triggers = Triggers()
         val svc = service(triggers)

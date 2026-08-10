@@ -70,10 +70,22 @@ class TriggerService(
         }
         val itinerary = itineraries.findCurrent(accountId, tripId) ?: return null // 재계획할 일정이 없다
 
-        // BR-U4-06: 남은 일정에 닿는 신호만 유효하다. 완료 슬롯 판정(visit_check)은 후속이라
-        // 지금은 "일정에 존재하는 슬롯"까지만 본다 — 지난 슬롯을 거르는 축은 그때 더한다.
-        val remaining = itinerary.slotKeys.toSet()
+        // BR-U4-06: 남은 일정에 닿는 신호만 유효하다. slotKey 가 "{date}#{poiId}" 라(BR-U2-04)
+        // **지난 날짜는 여기서 거른다** — 어제 슬롯에 대한 알림이 오늘 뜨면 사용자는 이유를 알 수 없다.
+        // 오늘 안에서 이미 지났는지·완료됐는지는 방문 실적(visit_check, U4 후속)이 와야 판정된다.
+        val remaining = itinerary.slotKeys.filter { dateOf(it)?.let { d -> d >= today } ?: true }.toSet()
         val activeOfKind = triggers.findActiveByTrip(tripId).filter { it.kind == signal.kind }.map { it.slotKey }.toSet()
+
+        // 범위가 NONE 인 신호는 "바꿀 게 없다"는 뜻이라 발화 대상이 아니다 — 판정 이전에 갈린다.
+        if (signal.scope == TriggerScope.NONE) {
+            triggers.save(
+                PlanBTrigger.silent(
+                    tripId, itinerary.itineraryId, signal.kind, signal.affectedDate, signal.slotKey,
+                    signal.payload, signal.reason, TriggerState.EXPIRED, now,
+                ),
+            )
+            return null
+        }
 
         val verdict = TriggerEvaluator.judge(
             kind = signal.kind,
@@ -126,16 +138,24 @@ class TriggerService(
             throw ConflictDetected(message = "이미 닫혔거나 지난 알림입니다.")
         }
         val now = clock.instant()
+        val dayScoped = trigger.slotKey == null
         suppressions.save(
             Suppression.of(
                 tripId, trigger.kind, trigger.slotKey,
                 // 슬롯을 특정한 신호면 그 슬롯만, 날짜 전체 신호면 그 날 전체를 끈다.
-                if (trigger.slotKey != null) SuppressionScope.SLOT else SuppressionScope.DAY,
+                if (dayScoped) SuppressionScope.DAY else SuppressionScope.SLOT,
                 now,
+                // **날짜 범위 억제는 그 날로 끝난다.** 만료를 안 두면 covers 가 슬롯을 가리지 않으므로
+                // 사실상 여행 전체가 꺼진다 — 오늘 비 알림을 한 번 껐다고 내일치까지 막으면 안 된다.
+                expiresAt = if (dayScoped) trigger.affectedDate.plusDays(1).atStartOfDay(TRAVEL_ZONE).toInstant() else null,
             ),
         )
         return triggers.save(trigger.copy(state = TriggerState.SUPPRESSED, shouldReplan = false))
     }
+
+    /** slotKey("{date}#{poiId}") 의 날짜. 형식이 어긋나면 null — 거르지 않고 통과시킨다(신호를 잃지 않게). */
+    private fun dateOf(slotKey: String): LocalDate? =
+        runCatching { LocalDate.parse(slotKey.substringBefore('#')) }.getOrNull()
 
     private companion object {
         private val log = LoggerFactory.getLogger(TriggerService::class.java)

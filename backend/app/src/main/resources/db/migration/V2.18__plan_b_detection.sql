@@ -24,7 +24,9 @@ CREATE TABLE plan_b_trigger (
   state          varchar(10)  NOT NULL CHECK (state IN ('ACTIVE','SUPPRESSED','CONSUMED','EXPIRED')),
   detected_at    timestamptz  NOT NULL,
   -- INV-U4-01: 발화하지 않기로 한 판정(should_replan=false)이 ACTIVE 로 남으면 화면에 노출된다.
-  CONSTRAINT chk_plan_b_trigger_active CHECK (state <> 'ACTIVE' OR should_replan)
+  CONSTRAINT chk_plan_b_trigger_active CHECK (state <> 'ACTIVE' OR should_replan),
+  -- 발화하는데 범위가 NONE 이면 [대안 보기] 가 열 세션의 범위를 정할 수 없다(세션 범위는 2종뿐).
+  CONSTRAINT chk_plan_b_trigger_scope CHECK (NOT should_replan OR scope IN ('FULL_DAY','PARTIAL_SLOTS'))
 );
 
 -- BR-U4-07: 동일 kind × 동일 slotKey 는 1회만 발화한다. 앱이 먼저 막지만, 지오펜스가 동시에 두 번
