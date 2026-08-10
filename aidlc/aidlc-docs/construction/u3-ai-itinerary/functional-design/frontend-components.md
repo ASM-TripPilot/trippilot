@@ -196,6 +196,14 @@ itinerary-draft-retry                  다시 시도 버튼
 
 **미반영(관측만)**: §6이 예고한 `itineraryDraftTimeStructure.test.ts`는 **소스 스캔으로 표현 불가**로 판명됐다 — 고정 블록 예외 때문에 소스에 `startAt`이 등장하는 것 자체가 정당해서다. 다음 유닛 설계 시 참고. 근거: `_workspace/20260809-trip297-itinerary-draft/02a_test-design_spec.md` ★13.
 
+**[구현 결정 · TRIP-339, 2026-08-10] h05·h11 공용 지도 시각 계약 — 정본 공백 소급 기록.** 이 문서는 h11 testID 13종(위)만 소급했고, 핀·연결선·지도 고정 여부는 한 줄도 다루지 않았다(`01_spec-analyst_brief.md` §8 ④). h05·h11이 같은 지도 대본(`buildMapHtml`)을 쓰므로 여기 한 번에 적는다.
+
+- **핀 마커** — 분홍(`#FF385C`) 채움 · 흰 테두리 2px · 흰 숫자(Inter Bold 13px, WebView 안에는 번들 폰트가 없어 `sans-serif`로 대체) · 물방울(원 지름 26 / 전체 28×36) · `yAnchor: 1`(꼬리 끝이 좌표를 가리킴).
+- **연결선 — h11만, h05는 없음.** 흰 6px 케이싱 + 분홍 2.8px 본선의 2겹, 인접 쌍만 잇는다(전결합 아님). h05는 선을 안 그린다 — 핀 번호가 사용자가 **담은 순서**일 뿐 확정 동선이 아니라서다(연결선을 그리면 화면이 아직 안 정해진 동선을 정해진 것처럼 말하게 된다).
+- **지도 고정(`viewOnly`)** — h05·h11만 옵트인. 나머지 화면(숙소 등록 3곳·거점 확정 1곳)은 좌표를 정하는 것이 기능 자체라 제외.
+
+근거: Figma `1870:1083`(h11)·`1875:1094`(h05) 실측 · TRIP-339. **요구사항 근거가 아니라 구현 결정의 소급 기록**이다(TRIP-297 선례와 같은 형식) — 다음 사이클이 요구사항 근거로 인용하지 말 것.
+
 ## 9. PBT (`model/` 순수 함수 · fast-check)
 
 `business-rules.md` §8 **PBT-U3-1~5**를 그대로 따른다 — 대상 파일은 `legDistance.ts`(합산) · `timeBandLabel.ts`(라벨 사영) · `routeDiff.ts`(diff 분류) · `slotKey.ts`(왕복) · `draftState.ts`(재생성 안전성).
