@@ -10,13 +10,21 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from trippilot.api.errors import install_error_handlers
+from trippilot.api.middleware import MiddlewareSettings, install_middlewares
 from trippilot.api.protocols import ItineraryOrchestrator
 from trippilot.api.routes import router
 
 HEALTH_BODY = {"status": "UP", "service": "ai"}
 
 
-def create_app(orchestrator: ItineraryOrchestrator | None = None) -> FastAPI:
+def create_app(
+    orchestrator: ItineraryOrchestrator | None = None,
+    middleware: MiddlewareSettings | None = None,
+) -> FastAPI:
+    """`middleware=None`이면 env 기반 기본 설정(TRIP-240 — middleware.py docstring).
+
+    미들웨어는 순수 ASGI 계층이라 `app.openapi()`(계약 스냅샷)에는 영향이 없다.
+    """
     app = FastAPI(
         title="TripPilot AI",
         version="0.1.0",
@@ -24,6 +32,7 @@ def create_app(orchestrator: ItineraryOrchestrator | None = None) -> FastAPI:
     )
     app.state.orchestrator = orchestrator
     install_error_handlers(app)
+    install_middlewares(app, middleware)
     app.include_router(router)
 
     # docker-compose·컨테이너 헬스체크가 쓰는 엔드포인트 — 응답 형태를 바꾸지 말 것.
