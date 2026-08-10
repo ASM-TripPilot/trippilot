@@ -326,6 +326,7 @@ export function DraftScreen({
                 key={mapKey}
                 center={{ lat: pins[0].lat, lng: pins[0].lng }}
                 pins={pins}
+                viewOnly
               />
             </View>
           )}

@@ -450,10 +450,15 @@ export function MustVisitPickerScreen({
                   계약) — 다른 핀 묶음을 그리는 유일한 수단이 key remount 다. 열쇠를 핀
                   자체로 만들면 같은 핀에서는 다시 태어나지 않는다(React 는 key 를 값으로
                   비교한다). `DraftScreen` 선례와 같은 형태. */}
+              {/* 연결선을 끈다 — 여기 핀 번호는 사용자가 **담은 순서**이지 돌아볼 순서가
+                  아니다. 선을 그으면 아직 정해지지 않은 동선을 정해진 것처럼 말하게 되고,
+                  다음 화면에서 솔버가 재배치하면 앱이 말을 바꾼 것으로 보인다. */}
               <KakaoMapView
                 key={JSON.stringify(mapPins)}
                 center={{ lat: mapPins[0].lat, lng: mapPins[0].lng }}
                 pins={mapPins}
+                viewOnly
+                connectPins={false}
               />
             </View>
           )}

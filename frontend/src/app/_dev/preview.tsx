@@ -1,6 +1,13 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -231,12 +238,38 @@ const MUST_VISIT_PREVIEW_PINS: MapPin[] = [
  * null 필드. 2번 슬롯은 이름·사진·태그·좌표를 **전부 안 주는** 슬롯이라 그 자리가 어떻게
  * 비는지(AC-7)와 지도 핀이 ①③④ 로 건너뛰는 것(AC-13)을 한 화면에서 같이 볼 수 있다.
  *
- * ⚠️ `imageUrl` 이 전부 `null` 인 것은 다른 프리뷰 픽스처와 같은 이유다(`exploreFixtures`
- * 머리말 — 이것이 지금 프로덕션의 실제 모습이고, 클라가 외부 URL 을 지어내는 것은 INV-1 이
- * 막는다). 그래서 카드에 **사진 자리가 아예 없다**(AC-7 대로 요소를 안 그린다) — Figma 목업의
- * 78px 썸네일이 빠져 보이는 것은 구현 실패가 아니다.
+ * ⚠️ TRIP-339 로 판단이 바뀐 자리 — 예전에는 `imageUrl` 이 전부 `null` 이었고 그 머리말은
+ * "78px 썸네일이 빠져 보이는 것은 구현 실패가 아니다"라고 적혀 있었다. 그러나 프리뷰의 쓸모는
+ * **Figma 와 눈으로 대조하는 것**이라, 사진 칸이 통째로 빈 화면은 대조를 할 수 없게 만든다.
+ * 이제 1·3·4번 슬롯이 로컬 에셋에서 푼 URI 를 받는다. 2번 슬롯은 그대로 `null` 이라
+ * **사진이 없는 카드가 어떻게 그려지는지**도 같은 화면에서 계속 볼 수 있다.
+ * 클라가 외부 URL 을 지어내지 않는다는 INV-1 은 그대로다 — 값의 출처가 리포 안 파일이다.
+ *
+ * ⚠️ 좌표도 TRIP-339 에서 좁혔다(옛 최장 41km → 2.0km). Figma h11 지도는 가로 358px 에
+ * 1km ≈ 52px 축척이라 한 화면이 약 6.9km 인데, 41km 짜리 핀 묶음은 그 6배로 벌어져 축척이
+ * 아예 다른 그림이 됐다. 3·4번은 서로 241m 라 화면에서 겹쳐 보이기까지 했다. 셋을 실제
+ * 관광지인 성산일출봉 둘레(0.9~2.0km)로 모았다 — **카페·숙소 이름과 실제 위치는 맞지 않는다**
+ * (이 픽스처의 이름은 원래 가상이고, 여기서 재는 것은 축척과 배치다).
  */
 const DRAFT_PREVIEW_DATE = '2026-06-10';
+
+/**
+ * 프리뷰 카드 썸네일 3장. 파일 출처·라이선스는 `src/assets/itinerary/CREDITS.md`.
+ *
+ * > **개념 — `require` + `Image.resolveAssetSource`**: React Native 에서 로컬 이미지는 URL 이
+ * > 아니라 `require('...jpg')` 로 번들에 싣는다. 그 결과는 번들러가 매긴 **에셋 참조**이지
+ * > 문자열이 아니라서, `<Image source={{ uri }} />` 처럼 문자열 URI 를 받는 자리에 넣으려면
+ * > `Image.resolveAssetSource(...).uri` 로 한 번 풀어야 한다.
+ *
+ * jest 에서는 에셋이 스텁으로 바뀌어 `.uri` 가 `undefined` 다 — 그래서 `?? null` 로 받아
+ * 계약(`imageUrl: string | null`)에 맞춰 떨어뜨린다. 테스트에서는 사진 없는 카드가 되고
+ * 실기에서만 썸네일이 뜬다. 실제 사진이 뜨는지는 6-b 실기 확인 몫이다.
+ */
+const DRAFT_PREVIEW_PHOTOS: (string | null)[] = [
+  require('@/assets/itinerary/draft-preview-1.jpg'),
+  require('@/assets/itinerary/draft-preview-2.jpg'),
+  require('@/assets/itinerary/draft-preview-3.jpg'),
+].map((source) => Image.resolveAssetSource(source)?.uri ?? null);
 
 const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   {
@@ -247,7 +280,7 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     endsNextDay: false,
     hasViolation: false,
     nameKo: '성산일출봉',
-    imageUrl: null,
+    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
     tags: ['바다', '포토'],
     distanceRange: '약 1.2km · 도보 추정',
     lat: 33.458,
@@ -274,10 +307,10 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     endsNextDay: false,
     hasViolation: false,
     nameKo: '카페 그레이',
-    imageUrl: null,
+    imageUrl: DRAFT_PREVIEW_PHOTOS[1],
     tags: ['카페'],
-    lat: 33.489,
-    lng: 126.498,
+    lat: 33.4664,
+    lng: 126.9276,
   },
   {
     poiId: 'poi-d',
@@ -287,10 +320,10 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     endsNextDay: false,
     hasViolation: false,
     nameKo: '제주 신라스테이',
-    imageUrl: null,
+    imageUrl: DRAFT_PREVIEW_PHOTOS[2],
     tags: [],
-    lat: 33.487,
-    lng: 126.499,
+    lat: 33.4741,
+    lng: 126.9316,
   },
 ];
 
