@@ -3,6 +3,7 @@
     "PONYTAIL_DEFAULT_MODE": "lite",
     "PONYTAIL_SUBAGENT_MATCHER": "^implementer$"
   },
+  "model": "claude-opus-4-8[1m]",
   "effortLevel": "high",
   "permissions": {
     "deny": [

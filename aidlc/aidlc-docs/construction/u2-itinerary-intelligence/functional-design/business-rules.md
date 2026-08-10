@@ -80,6 +80,8 @@ CandidatesSummary { level: HIGH | MEDIUM | LOW, poolSize: Int, shortfallCategori
 - **용도**: `LOW`면 "일부 추천이 빠졌어요" 안내(US-SCHED-09 폴백 체인의 `PARTIAL_PLACE_DATA` 자리).
 - **근거**: AI `agent-io-contracts.md` §1.2에 필드는 있으나 backend 포트에 대응이 없고, **타입 정의도 AI 코드에 없다**(미구현). 신설 = 양쪽 동시.
 
+> **소급 주석 (2026-08-11 · TRIP-298 [기록] · 근거: `backend/docs/design/openapi.yaml:1183-1195` 실측)**: 실제 구현 계약(`Itinerary.candidatesSummary.level`)은 위 `HIGH | MEDIUM | LOW` 열거로 **고정돼 있지 않다** — `openapi.yaml`은 `level: { type: string }`으로 열어 두고, "백엔드가 AI 값을 그대로 통과시키므로 `OK`·`LOW`·`NO_CANDIDATES` 같은 AI 어휘가 그대로 온다"고 명시한다. 루트 CLAUDE.md 정본 규칙상 구현 계약(`openapi.yaml`)이 이 문서의 열거 선언보다 우선한다. 프론트(`isCandidatesDemoted`, `src/features/itinerary/model/draftView.ts`)는 이 값을 enum으로 좁히지 않고 "조용할 값의 화이트리스트"(`['OK','HIGH']`)로 비교해, 이 문서가 열거하지 않은 미래 어휘도 자동으로 안전한 쪽(안내 노출)에 떨어지게 짜여 있다. 이 문서의 원 결정(BR-U2-05)이 틀렸다는 뜻은 아니다 — 구현 시점에 계약이 벌어졌다는 사실 기록이다.
+
 ### BR-U2-06 · `FreshnessMeta` 스키마 (N5 종결)
 
 **결정**: 경계는 **집계형** `{ generatedAt, degraded }` — backend 실장 유지. AI의 per-source `{source, fetched_at, cache_hit, ttl_sec, stale}`는 **AI 내부 관측용**이며 경계로 올리지 않는다.

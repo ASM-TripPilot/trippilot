@@ -47,6 +47,13 @@ const FIXED_NOTE_SUFFIX = ' 도착 · 변경 불가';
  * 조회 실패 · 2차 생성 실패 · 재생성 실패 · 폴링 상한 도달). 한 원인을 문구에 박으면 나머지
  * 경우에 **틀린 이유**를 말하게 된다. */
 const STALE_FAILED_NOTE = '일부 정보를 불러오지 못했어요';
+/** 후보 강등 안내(BR-U3-11 · TRIP-298). 위 `STALE_FAILED_NOTE` 와 같은 성격 — 목록 곁에
+ * 붙는 한 줄이지 얼굴이 아니다.
+ *
+ * **개수를 말하지 않는다.** 계약의 `poolSize` 는 AI 가 안 주면 없는 값이라 `?? 0` 으로 채우면
+ * "모른다"가 "후보 0건"이라는 **다른 사건**으로 바뀐다(openapi 원문의 경고). 이번 표면에는
+ * 개수 자리 자체를 두지 않는다. 시각·소요시간 어휘도 쓰지 않는다(INV-3 · BR-U3-10). */
+const DEMOTED_NOTE = '조건에 맞는 후보가 적어 일부 추천이 빠졌어요';
 const EMPTY_TITLE = '아직 만들어진 추천안이 없어요';
 const EMPTY_NOTE = `위 ${RETRY_LABEL}를 누르면 AI가 일정을 짜요`;
 const FAILED_TITLE = '추천안을 불러오지 못했어요';
@@ -71,6 +78,9 @@ export interface DraftScreenProps {
   pins: DraftPin[];
   dayHeader: string;
   canRetry: boolean;
+  /** 후보 강등 안내를 켤 것인가. **판정은 model 몫**이고 화면은 결과만 받는다.
+   * 미지정(기본 false)이 당분간의 정상 경로다 — 서버가 요약을 아직 안 준다. */
+  demoted?: boolean;
   onSelectDay: (date: string) => void;
   onRetry: () => void;
   onBack: () => void;
@@ -245,6 +255,7 @@ export function DraftScreen({
   pins,
   dayHeader,
   canRetry,
+  demoted = false,
   onSelectDay,
   onRetry,
   onBack,
@@ -307,6 +318,20 @@ export function DraftScreen({
               <AlertCircleGlyph />
               <Text className="flex-1 font-noto text-label text-body">
                 {STALE_FAILED_NOTE}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* 얼굴과 무관하게 뜬다 — 강등은 "무엇을 보여줄까"가 아니라 "받은 것에 무엇이
+              빠졌나"라서, 목록이 그대로 있는 채로 곁에 붙는다(01b D5 4행 · D6). */}
+          {demoted ? (
+            <View
+              testID="itinerary-draft-fallback-banner"
+              className="w-full flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-md py-md"
+            >
+              <InfoCircleGlyph />
+              <Text className="flex-1 font-noto text-label text-body">
+                {DEMOTED_NOTE}
               </Text>
             </View>
           ) : null}
