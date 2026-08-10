@@ -24,8 +24,9 @@
 
 **남긴 이음매 (실 pgvector·솔버 배선용)**
 - 벡터 소스: `VectorStorePort`/`EmbeddingPort` 주입 — pgvector 어댑터로 교체해도 본 파일 무변.
-- LLM: `alternative_gateway`는 `GatewayFacade | None`. `ALTERNATIVE_SELECTION`용 프롬프트
-  yaml·출구 게이트가 아직 없어 운영 배선에서는 항상 `None`이며, 그때는 규칙 랭킹으로 돈다.
+- LLM: `alternative_gateway`는 `GatewayFacade | None`. 주입되면
+  `AlternativeSelectionWorker`(TRIP-331 — 프롬프트 yaml·`AlternativeSelectionGate`와
+  4종 세트)를 경유해 호출하고, 미주입·실패 시 규칙 랭킹으로 돈다 (INV-4).
 - 솔버: `Alternative`를 그대로 `solve` 입력으로 넘기면 되도록 poi_id 목록만 담았다.
 """
 
@@ -42,9 +43,13 @@ from trippilot.agents.planb.kb_retrieval import (
     retrieve_situation,
 )
 from trippilot.llm_gateway.gateway import GatewayFacade
+from trippilot.llm_gateway.workers.alternative_selection import (
+    AlternativeSelectionInput,
+    AlternativeSelectionWorker,
+)
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.kb import KbHit, KbKind
-from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi
+from trippilot.domain.llm import AlternativePick, CandidatePool, ScoredPoi
 from trippilot.domain.trigger import TriggerParams
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
@@ -183,7 +188,12 @@ class PlanBRagPipeline:
     ) -> None:
         self._embedding = embedding
         self._store = store
-        self._gateway = alternative_gateway
+        # gateway 주입 = LLM 단계 활성화 — 워커(4종 세트) 경유로만 호출한다 (TRIP-331)
+        self._worker = (
+            AlternativeSelectionWorker(alternative_gateway)
+            if alternative_gateway is not None
+            else None
+        )
         self._cfg = config or PlanBRagConfig()
 
     # ── 공개 API ────────────────────────────────────────────────────────
@@ -225,7 +235,7 @@ class PlanBRagPipeline:
             )
 
         # [3] Generate
-        ranked_refs, used_llm, why = self._select(request, context, available)
+        ranked_refs, reasons, used_llm, why = self._select(request, context, available)
         if why:
             notes.append(why)
 
@@ -242,7 +252,8 @@ class PlanBRagPipeline:
             Alternative(
                 label=_ALTERNATIVE_LABELS[i],
                 poi_ids=(poi_id,),
-                rationale=self._rationale(request, used_llm),
+                # LLM이 낸 근거(사용자 표시 1문장)가 있으면 그대로, 없으면 출처 표기
+                rationale=reasons.get(str(poi_id)) or self._rationale(request, used_llm),
             )
             for i, poi_id in enumerate(kept[: self._cfg.max_alternatives])
         )
@@ -291,28 +302,37 @@ class PlanBRagPipeline:
         request: PlanBRagRequest,
         context: RagContext,
         available: tuple[PoiId, ...],
-    ) -> tuple[tuple[str, ...], bool, str]:
+    ) -> tuple[tuple[str, ...], Mapping[str, str], bool, str]:
+        """반환: (참조 순열, {참조: LLM 근거}, LLM 사용 여부, 폴백 사유)."""
         rule_ranked = _rule_ranking(context.persona, available)
-        if self._gateway is None:
-            return rule_ranked, False, "alternative_gateway_absent"
+        if self._worker is None:
+            return rule_ranked, {}, False, "alternative_gateway_absent"
         try:
-            result = self._gateway.call(
-                LlmFeature.ALTERNATIVE_SELECTION,
-                _prompt_vars(request, context, available, self._cfg.max_alternatives),
+            result = self._worker.select(
                 request.pool,
+                AlternativeSelectionInput(
+                    trigger_kind=request.trigger.kind.value,
+                    reason=request.reason,
+                    schedule_context=_join(context.schedule),
+                    situation_context=_join(context.situation),
+                    persona_context=_join(context.persona),
+                    max_alternatives=self._cfg.max_alternatives,
+                    excluded_poi_ids=request.excluded_poi_ids,
+                ),
                 request.trace_id,
                 request.now,
             )
         except Exception as e:  # 설정 버그(프롬프트 미등록 등)도 Plan-B를 죽이지 않는다
-            return rule_ranked, False, f"alternative_error: {type(e).__name__}: {e}"
+            return rule_ranked, {}, False, f"alternative_error: {type(e).__name__}: {e}"
         if result.is_fallback:
-            return rule_ranked, False, f"alternative_fallback: {result.error}"
-        selected = _as_refs(result.value)
-        if selected is None:
-            return rule_ranked, False, "alternative_bad_shape"
+            return rule_ranked, {}, False, f"alternative_fallback: {result.error}"
+        picked = _as_refs(result.value)
+        if picked is None:
+            return rule_ranked, {}, False, "alternative_bad_shape"
+        selected, reasons = picked
         if not selected:
-            return rule_ranked, False, "alternative_empty"
-        return selected, True, ""
+            return rule_ranked, {}, False, "alternative_empty"
+        return selected, reasons, True, ""
 
     def _rationale(self, request: PlanBRagRequest, used_llm: bool) -> str:
         source = "llm_select_alternatives" if used_llm else "rule_ranking"
@@ -335,24 +355,6 @@ def _situation_query(request: PlanBRagRequest) -> str:
 
 def _persona_query(request: PlanBRagRequest) -> str:
     return f"{request.reason} {request.trigger.kind.value} 대안 선호"
-
-
-def _prompt_vars(
-    request: PlanBRagRequest,
-    context: RagContext,
-    available: tuple[PoiId, ...],
-    max_alternatives: int,
-) -> Mapping[str, object]:
-    """프롬프트 변수. 후보 목록은 풀에서만 온다 — 모델이 고를 수 있는 값 자체를 한정 (INV-1)."""
-    return {
-        "trigger_kind": request.trigger.kind.value,
-        "reason": request.reason,
-        "schedule_context": _join(context.schedule),
-        "situation_context": _join(context.situation),
-        "persona_context": _join(context.persona),
-        "candidates": "\n".join(f"- {p}" for p in available),
-        "max_alternatives": str(max_alternatives),
-    }
 
 
 def _join(hits: Sequence[KbHit]) -> str:
@@ -381,17 +383,19 @@ def _rule_ranking(persona_hits: Sequence[KbHit], available: tuple[PoiId, ...]) -
     return tuple(ranked)
 
 
-def _as_refs(value: object) -> tuple[str, ...] | None:
-    """게이트 산출물 → 참조 목록. 인식 못 하는 형태는 None (폴백 신호).
+def _as_refs(value: object) -> tuple[tuple[str, ...], Mapping[str, str]] | None:
+    """게이트 산출물 → (참조 순열, {참조: 근거}). 인식 못 하는 형태는 None (폴백 신호).
 
-    `ALTERNATIVE_SELECTION` 출구 게이트가 아직 없어 산출물 타입이 확정 전이다.
-    현재는 기존 게이트 산출 형태인 `ScoredPoi` 시퀀스를 받아 점수 내림차순
-    (동점은 poi_id 사전순 — 결정론)으로 세운다.
+    정식 산출물은 `AlternativeSelectionGate`의 `AlternativePick` 시퀀스 — LLM이 낸
+    선호 순서를 그대로 쓴다 (같은 산출물이면 같은 순열 — 결정론).
+    점수형(`ScoredPoi`) 산출물도 호환 유지: 점수 내림차순(동점은 poi_id 사전순).
     """
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return None
     items = list(value)
+    if all(isinstance(x, AlternativePick) for x in items):
+        return tuple(str(p.poi_id) for p in items), {str(p.poi_id): p.reason for p in items}
     if not all(isinstance(x, ScoredPoi) for x in items):
         return None
     ordered = sorted(items, key=lambda s: (-s.score, str(s.poi_id)))
-    return tuple(str(s.poi_id) for s in ordered)
+    return tuple(str(s.poi_id) for s in ordered), {}
