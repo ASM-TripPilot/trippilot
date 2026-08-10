@@ -155,6 +155,7 @@ class GenerateItineraryServiceTest : StringSpec({
         publisher: DomainEventPublisher = CapturingPublisher(),
         repo: FakeItineraries = FakeItineraries(),
         end: LocalDate = defaultEnd,
+        fixedVisits: List<FixedVisit> = listOf(FixedVisit(poi, start, LocalTime.parse("12:00"), 90)),
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -162,8 +163,7 @@ class GenerateItineraryServiceTest : StringSpec({
             override fun findGenerationContext(accountId: UUID, tripId: UUID) =
                 if (accountId == acc) {
                     TripGenerationContext(
-                        start, end, listOf("제주"), "친구", 500_000,
-                        listOf(FixedVisit(poi, start, LocalTime.parse("12:00"), 90)),
+                        start, end, listOf("제주"), "친구", 500_000, fixedVisits,
                     )
                 } else {
                     null
@@ -197,6 +197,35 @@ class GenerateItineraryServiceTest : StringSpec({
         input.timeWindows.map { it.date } shouldContainExactly listOf(start) // 1차 = day1 만
         input.fixedBlocks.single().poiId shouldBe poi
         agent.captures[1].timeWindows.map { it.date } shouldContainExactly listOf(start.plusDays(1), end) // 2차 = 나머지
+    }
+
+    "날짜 미지정(ANYTIME) 필수 방문지는 2차에 실린다 — 하루짜리 1차에 몰면 배치 공간이 없다" {
+        val anytime = UUID.randomUUID()
+        val agent = CapturingAgent(now)
+        service(
+            agent, fullPrefs, emptyList(),
+            fixedVisits = listOf(
+                FixedVisit(poi, start, LocalTime.parse("12:00"), 90), // 날짜 지정 → 1차(그 날짜가 1차 몫)
+                FixedVisit(anytime, null, null, null),                // ANYTIME → 2차
+            ),
+        ).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].fixedBlocks.map { it.poiId } shouldContainExactly listOf(poi)
+        agent.captures[1].fixedBlocks.map { it.poiId } shouldContainExactly listOf(anytime)
+    }
+
+    "ANYTIME 은 아직 물질화되지 않은 채 경계로 나간다 (M1 — 구현되면 이 테스트를 뒤집을 것)" {
+        // 알려진 간극. 실 AI 는 이 모양이면 **요청 전체를 422 로 거부**하고(그쪽 api/wiring.py),
+        // Fake 는 date != null 만 그룹핑해 조용히 버린다. 어느 쪽도 결과만 보고는 이유를 알 수 없다.
+        val anytime = UUID.randomUUID()
+        val agent = CapturingAgent(now)
+        service(agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(anytime, null, null, null)))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val block = agent.captures[1].fixedBlocks.single { it.poiId == anytime }
+        // 물질화가 들어오면 date·start 가 채워져 아래 두 줄이 깨진다 — 그때 값이 있음을 단언하도록 바꾼다.
+        block.date shouldBe null
+        block.start shouldBe null
     }
 
     "앵커: 숙박일=거점 좌표, 체크아웃일=전날 거점(prev_stay)" {

@@ -131,6 +131,25 @@ class GenerateItineraryService(
         return saved
     }
 
+    /**
+     * 아직 물질화되지 않은(ANYTIME) 고정 블록을 드러낸다 — 경계 계약 확정 문서 **M1**.
+     *
+     * 실 AI 는 날짜·시각 없는 고정 블록을 표현할 수 없어 **요청 전체를 422 로 거부**하고(그쪽 `api/wiring.py`),
+     * 내장 Fake 는 `date != null` 만 그룹핑해 **조용히 버린다**. 둘 다 결과만 보면 이유를 알 수 없다 —
+     * 전자는 "그 여행만 통째로 MINIMAL 폴백", 후자는 "필수 방문지가 그냥 없음"으로 나타난다.
+     * 물질화(M1)가 들어오면 이 경고는 자연히 사라진다.
+     */
+    private fun warnUnmaterialized(blocks: List<FixedBlock>, tripId: UUID) {
+        val unmaterialized = blocks.count { it.date == null || it.start == null }
+        if (unmaterialized > 0) {
+            log.warn(
+                "날짜·시각 미지정 필수 방문지 {}건을 그대로 보냅니다 — 실 AI 는 요청 전체를 거부하고(422→폴백) " +
+                    "Fake 는 조용히 버립니다. 물질화 전까지의 알려진 간극입니다(M1). tripId={}",
+                unmaterialized, tripId,
+            )
+        }
+    }
+
     private fun previousOf(tripId: UUID) = itineraries.findByTrip(tripId).firstOrNull()
 
     /**
@@ -185,11 +204,15 @@ class GenerateItineraryService(
             // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
             // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
             // 하루짜리 1차에 전부 몰면 배치 공간이 없어 HC3 가 깨질 수 있고, 양쪽에 실으면 중복 배치된다.
-            // 기간 밖 날짜를 버리지 않는 이유: 어느 단계에도 안 실으면 AI 가 실현 불가를 보고할 기회조차 없이
-            // 백엔드가 조용히 삭제하게 된다(must_visit 등록은 기간을 검증하지 않는다).
+            //
+            // ⚠ 예전 주석은 "기간 밖 날짜도 실어야 AI 가 실현 불가를 보고한다"고 적었는데 **그 보고는 나오지 않는다** —
+            // AI 는 `problem.days` 에 없는 날짜의 고정 블록을 위반으로 세지 않고 스킵한다(그쪽 `constraints.py`).
+            // 회신 필드(`unplaced_must_visits`)가 계약에 생겨야 성립한다(경계 계약 확정 문서 M2). 그때까지는
+            // 침묵 드롭 위치가 백엔드에서 AI 로 옮겨간 상태일 뿐이다.
             fixedBlocks = ctx.fixedVisits
                 .filter { it.date in dates || (it.date !in planDates(ctx.startDate, ctx.endDate) && carriesUndatedFixed) }
-                .map { FixedBlock(it.poiId, it.date, it.start, it.dwellMin) },
+                .map { FixedBlock(it.poiId, it.date, it.start, it.dwellMin) }
+                .also { warnUnmaterialized(it, tripId) },
             preferenceProfile = prefs.toProfile(),                                                            // preference_snapshot 7축
             recommendationStrength = null,
             requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs),
