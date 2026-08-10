@@ -67,7 +67,7 @@ class ArchitectureRulesTest {
 
     @Test
     fun `R1 모듈 간 상호작용은 api 로만 (내부 직접참조 금지)`() {
-        slices().matching("com.trippilot.(auth|profile|moderation|accommodationsearch|savedaccommodation|trip|placedata|itinerarygeneration|changelog|recalculation|planbdetection)..")
+        slices().matching("com.trippilot.(auth|profile|moderation|accommodationsearch|savedaccommodation|trip|placedata|itinerarygeneration|changelog|recalculation|planbdetection|weathercontext)..")
             .should().notDependOnEachOther()
             // 다른 모듈의 api 퍼사드 의존은 허용(architecture.md). 내부(domain·application·adapter) 참조만 금지.
             .ignoreDependency(resideInAnyPackage("com.trippilot.."), resideInAPackage("..api.."))
