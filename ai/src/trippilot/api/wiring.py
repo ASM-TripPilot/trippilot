@@ -509,7 +509,9 @@ def build_orchestrator(
 # ── 로컬·스모크 조립 (in-memory fake — 실 DB·실 LLM 호출 0, D37) ─────
 
 
-DEMO_ANCHOR = GeoPoint(37.751, 128.876)  # 강릉 — 데모 시드의 기준점
+# 제주 — 데모 시드의 기준점(흑돼지거리·한라산의 중간점: 둘 다 PUBLIC 반경 10km 안).
+# 성산일출봉·월정리는 반경 밖 — 후보풀 반경 필터가 실제로 일하는 배치다.
+DEMO_ANCHOR = GeoPoint(33.4362, 126.5255)
 
 
 class UnwiredLlm:
@@ -553,16 +555,34 @@ class StaticPoiDb:
         )
 
 
+# 백엔드 시드 `backend/.../db/migration/R__seed_stub_pois.sql` 미러 (TRIP-344, 감사 F2).
+# poi_id가 백엔드 poi 테이블의 UUID와 다르면 백엔드 `AiSlot.poiId`(UUID) 역직렬화가
+# 실패하고 후속 조인·확정이 전부 깨진다 — id·이름·좌표·카테고리를 그대로 옮긴다.
+# 카테고리는 boundaryCode 한→영 번역표(domain/poi.py): 자연=NATURE·맛집=FOOD·카페=CAFE.
+_BACKEND_SEED_ROWS: tuple[tuple[str, str, PoiCategory, float, float], ...] = (
+    ("e0000000-0000-4000-8000-000000000001", "성산일출봉",
+     PoiCategory.NATURE, 33.4587, 126.9427),
+    ("e0000000-0000-4000-8000-000000000002", "제주 흑돼지거리",
+     PoiCategory.FOOD, 33.5108, 126.5219),
+    ("e0000000-0000-4000-8000-000000000003", "월정리 카페거리",
+     PoiCategory.CAFE, 33.5563, 126.7960),
+    ("e0000000-0000-4000-8000-000000000004", "한라산",
+     PoiCategory.NATURE, 33.3617, 126.5292),
+)
+
+
 def demo_poi_seed() -> tuple[Poi, ...]:
-    """로컬 스모크 시드 4건 — DEMO_ANCHOR 근방, 이름부터 데모임이 드러나게."""
-    categories = (PoiCategory.SIGHT, PoiCategory.FOOD,
-                  PoiCategory.CAFE, PoiCategory.NATURE)
+    """로컬 스모크 시드 4건 — 백엔드 R__seed_stub_pois.sql 과 id·이름·좌표·카테고리 일치.
+
+    백엔드 시드에 없는 필드는 데모용 값이다(지어낸 값): rating=4.0 은 자리표시자,
+    open_hours=() 는 정보 없음(HC1 미적용·순위 강등만), avg_cost=None 은 예산 필터 통과.
+    """
     return tuple(
         Poi(
-            poi_id=PoiId(f"demo-poi-{i}"),
-            name=f"데모 장소 {i}",
-            category=categories[i - 1],
-            coord=GeoPoint(DEMO_ANCHOR.lat + 0.004 * i, DEMO_ANCHOR.lng + 0.004 * i),
+            poi_id=PoiId(poi_id),
+            name=name,
+            category=category,
+            coord=GeoPoint(lat, lng),
             open_hours=(),
             avg_cost=None,
             rating=4.0,
@@ -570,23 +590,33 @@ def demo_poi_seed() -> tuple[Poi, ...]:
             source=PoiSource.SEED,
             confidence=None,
         )
-        for i in range(1, 5)
+        for poi_id, name, category, lat, lng in _BACKEND_SEED_ROWS
     )
 
 
-def build_dev_app() -> FastAPI:
-    """스모크·로컬 개발용 앱 — in-memory fake 조립(실 LLM·실 DB 0, D37).
+def build_dev_app(
+    *, llm: LlmPort | None = None, model_id: str | None = None
+) -> FastAPI:
+    """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
-    LLM은 UnwiredLlm이라 점수는 항상 규칙 폴백(정직한 강등), 일정은 OR-Tools가 낸다.
-    실 어댑터가 생기면 build_orchestrator 인자만 바꿔 끼운다.
+    기본(`llm` 미주입)은 UnwiredLlm — 점수는 항상 규칙 폴백(정직한 강등), 일정은
+    OR-Tools가 낸다. `llm` 주입 시 그 어댑터로 실 LLM만 배선한다(TRIP-344 최소 이행분
+    — POI·페르소나는 여전히 데모 시드; env 해석·클라이언트 조립은 main.py 소유,
+    벤더 SDK는 c1/adapters 한정이라 이 모듈은 LlmPort만 받는다).
+    `model_id`는 주입 LLM의 모델 식별자(LIGHT·HEAVY 양 티어 공용, BR-U4-08 주입 원칙).
     """
-    model_ids = {
-        # 실 모델 아님 — UnwiredLlm용 자리표시자. 실 배선 시 설정 주입(BR-U4-08).
-        ModelTier.LIGHT: os.environ.get("TRIPPILOT_MODEL_ID_LIGHT", "dev-unwired-light"),
-        ModelTier.HEAVY: os.environ.get("TRIPPILOT_MODEL_ID_HEAVY", "dev-unwired-heavy"),
-    }
+    if model_id is not None:
+        model_ids = {ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id}
+    else:
+        model_ids = {
+            # 실 모델 아님 — UnwiredLlm용 자리표시자. 실 배선 시 설정 주입(BR-U4-08).
+            ModelTier.LIGHT: os.environ.get(
+                "TRIPPILOT_MODEL_ID_LIGHT", "dev-unwired-light"),
+            ModelTier.HEAVY: os.environ.get(
+                "TRIPPILOT_MODEL_ID_HEAVY", "dev-unwired-heavy"),
+        }
     orchestrator = build_orchestrator(
-        llm=UnwiredLlm(),
+        llm=llm if llm is not None else UnwiredLlm(),
         poi_db=StaticPoiDb(demo_poi_seed()),
         context_store=StaticPersonaStore(
             PersonaSummary(taste_tags=(), companion=CompanionType.SOLO,

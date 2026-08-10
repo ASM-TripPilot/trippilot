@@ -21,6 +21,7 @@ FastAPI TestClient + **실 오케스트레이터·실 M7·실 C1·실 C2** + fak
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import date
 
 from fastapi.testclient import TestClient
@@ -480,4 +481,9 @@ def test_dev_app_assembly_serves_health_and_generate() -> None:
                                "lat": DEMO_ANCHOR.lat, "lng": DEMO_ANCHOR.lng}]
         response = client.post("/ai/v1/itinerary/generate", json=request)
         assert response.status_code == 200, response.text
-        assert _slot_ids(response.json())  # 데모 시드에서 실제 배정이 일어났다
+        placed = _slot_ids(response.json())
+        assert placed  # 데모 시드에서 실제 배정이 일어났다
+        # 백엔드 AiSlot.poiId는 UUID 타입 — 응답 poi_id 전건이 파싱 가능해야
+        # 역직렬화·후속 조인이 산다 (TRIP-344, 감사 F2).
+        for poi_id in placed:
+            uuid.UUID(poi_id)
