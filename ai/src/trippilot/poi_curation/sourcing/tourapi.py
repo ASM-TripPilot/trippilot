@@ -8,14 +8,21 @@ HTTP 클라이언트는 생성자 주입 — 테스트는 fake, 실행은 Urllib
 실키 스모크(scripts/collect_pois.py 수동/스케줄 실행)에서 검증**한다. 알려진
 변주는 반영: 빈 목록에서 `items`가 객체가 아니라 빈 문자열 ""로 오는 것,
 mapx/mapy(경도/위도)가 문자열로 오는 것.
+
+**키링 로테이션**: 계정별 일일 한도가 독립이라 키를 여러 개 등록해 합산 사용할
+수 있다. `extra_keys`를 주면 현재 키의 호출 수가 키당 상한(`calls_per_key`)에
+도달할 때 다음 키로 전환하고 **수집 시퀀스는 그대로 이어간다** (병렬 아님 —
+같은 페이지를 두 번 부르지 않는다). 키 순서는 (service_key, *extra_keys) 등록
+순서 고정(결정론). extra_keys가 없으면 기존 단일 키 동작과 완전히 동일하다.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import urllib.parse
 import urllib.request
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from trippilot.ports.poi_sourcing_port import (
@@ -24,6 +31,8 @@ from trippilot.ports.poi_sourcing_port import (
     SourcedPlaceRecord,
     SourcingError,
 )
+
+logger = logging.getLogger(__name__)
 
 _BASE = "https://apis.data.go.kr/B551011/KorService2"
 _OK_CODE = "0000"
@@ -57,18 +66,47 @@ class UrllibHttpClient:
 
 
 class TourApiAdapter:
-    """PoiSourcingPort 구현. service_key는 **디코딩 키**를 받는다 (urlencode 1회는 여기서)."""
+    """PoiSourcingPort 구현. 키는 전부 **디코딩 키**를 받는다 (urlencode 1회는 여기서).
+
+    키링: `extra_keys` 설정 시 실 HTTP 호출 수(시도 기준 — 파이프라인 예산과 동일
+    기준)가 키당 `calls_per_key`에 도달하면 다음 키로 전환한다 (INFO 로그).
+    마지막 키 소진 이후에도 마지막 키로 계속 호출한다 — 총 상한은 파이프라인
+    `max_calls`(= 키 수 × 키당 상한)가 지킨다.
+    """
 
     def __init__(
-        self, http: HttpGetJson, service_key: str, *, mobile_app: str = "TripPilot"
+        self,
+        http: HttpGetJson,
+        service_key: str,
+        *,
+        extra_keys: Sequence[str] = (),
+        calls_per_key: int | None = None,
+        mobile_app: str = "TripPilot",
     ) -> None:
+        if extra_keys and (calls_per_key is None or calls_per_key <= 0):
+            raise ValueError(
+                f"키 2개 이상이면 calls_per_key 양수 필요: {calls_per_key!r}")
         self._http = http
-        self._key = service_key
+        self._keys: tuple[str, ...] = (service_key, *extra_keys)
+        self._per_key = calls_per_key
         self._app = mobile_app
+        self._http_calls = 0  # 시도 기준 (실패 호출 포함 — 한도 소모와 동일 기준)
+        self._key_idx = 0
+
+    def _take_key(self) -> str:
+        """이번 HTTP 호출에 쓸 키 1건 소모. 키당 상한 도달 시 다음 키로 전환."""
+        if len(self._keys) > 1:
+            idx = min(self._http_calls // self._per_key, len(self._keys) - 1)
+            if idx != self._key_idx:
+                logger.info("키 전환: %d→%d, 누적 %d호출",
+                            self._key_idx + 1, idx + 1, self._http_calls)
+                self._key_idx = idx
+        self._http_calls += 1
+        return self._keys[self._key_idx]
 
     def _common_params(self) -> dict[str, str]:
+        # serviceKey는 _call이 키링에서 주입한다 (HTTP 1건 = 키 소모 1건)
         return {
-            "serviceKey": self._key,
             "MobileOS": "ETC",
             "MobileApp": self._app,
             "_type": "json",
@@ -121,8 +159,9 @@ class TourApiAdapter:
     # ── 내부 ─────────────────────────────────────────
     def _call(self, endpoint: str, params: Mapping[str, str]) -> dict:
         """HTTP 1건 + 봉투 해체. 비정상 봉투는 기본값 흡수가 아니라 실패로 승격(INV-4)."""
+        request_params = {"serviceKey": self._take_key(), **params}
         try:
-            payload = self._http.get_json(f"{_BASE}/{endpoint}", params)
+            payload = self._http.get_json(f"{_BASE}/{endpoint}", request_params)
         except Exception as e:  # urllib·JSON 파싱 등 — 원인 보존해 상위 로그로
             raise SourcingError(f"{endpoint} 호출 실패: {type(e).__name__}: {e}") from e
         if not isinstance(payload, dict):
