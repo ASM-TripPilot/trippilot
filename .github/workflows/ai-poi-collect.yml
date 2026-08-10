@@ -1,0 +1,75 @@
+# TourAPI POI 일일 수집 배치 (TRIP-246, U6-05)
+#
+# ai-ci와 완전히 분리된 워크플로다. push/PR 트리거가 **없어서** CI 실 호출 0건(D37)은
+# 그대로 유지된다 — 머지 게이트가 아니며, 실 호출은 스케줄(KST 새벽 4시) 또는 사람이
+# Actions 탭에서 Run workflow를 눌렀을 때만.
+#
+# 산출물은 "등록 제안" JSON일 뿐이다 (INV-1) — POI 정본은 backend C7 단일 소유(PR #76)라
+# DB에 직접 쓰지 않는다. 백엔드 수신 API 협의 전까지는 artifact(30일 보존)로만 남긴다.
+#
+# 키는 Repository Secret `TOUR_API_KEY`(data.go.kr **디코딩** 키)에서만 온다.
+# 키가 아직 미등록이면 수집을 생략하고 **성공 종료**한다 — 스케줄이 미리 켜져 있어도
+# 빨간불이 나지 않게. 호출 상한 등 비밀 아닌 설정은 Repository Variables
+# (TOURAPI_MAX_CALLS · TOURAPI_AREA_CODE · TOURAPI_CONTENT_TYPES)로 생략 가능하며,
+# 실행 시 input을 채우면 그게 이긴다.
+name: ai-poi-collect
+
+on:
+  workflow_dispatch:
+    inputs:
+      area_code:
+        description: 'TourAPI 지역 코드 (비우면 repo Variable → 기본 39 제주)'
+        required: false
+        type: string
+      max_calls:
+        description: 'HTTP 호출 상한 (비우면 repo Variable → 기본 500 — 개발계정 일 1,000의 절반)'
+        required: false
+        type: string
+      content_types:
+        description: 'contentTypeId 쉼표 목록 (비우면 기본 12,14,39 — 관광지·문화시설·음식점)'
+        required: false
+        type: string
+  schedule:
+    - cron: '0 19 * * *'   # UTC 19:00 = KST 새벽 4시
+
+concurrency: ai-poi-collect   # 실 호출 워크플로는 동시 1건만 (일일 한도 보호)
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: ai/uv.lock
+      - run: uv sync --locked
+      - name: TourAPI 수집 (게이트 통과분 → 등록 제안 JSON)
+        id: collect
+        env:
+          TOUR_API_KEY: ${{ secrets.TOUR_API_KEY }}
+          # schedule 실행에서는 inputs가 비므로 Variables → 스크립트 기본값 순으로 폴백
+          TOURAPI_AREA_CODE: ${{ inputs.area_code || vars.TOURAPI_AREA_CODE }}
+          TOURAPI_CONTENT_TYPES: ${{ inputs.content_types || vars.TOURAPI_CONTENT_TYPES }}
+          TOURAPI_MAX_CALLS: ${{ inputs.max_calls || vars.TOURAPI_MAX_CALLS || '500' }}
+          COLLECT_OUTPUT: collected_pois.json
+        run: |
+          if [ -z "$TOUR_API_KEY" ]; then
+            echo "::notice::TOUR_API_KEY 미등록 — 수집 생략"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          uv run python scripts/collect_pois.py
+      - name: 잡 서머리 (수집·게이트 통과·드롭 통계)
+        if: steps.collect.outputs.skipped != 'true'
+        run: uv run python scripts/collect_pois.py --summary collected_pois.json >> "$GITHUB_STEP_SUMMARY"
+      - name: 등록 제안 artifact 보존 (30일)
+        if: steps.collect.outputs.skipped != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: collected-pois
+          path: ai/collected_pois.json
+          retention-days: 30
