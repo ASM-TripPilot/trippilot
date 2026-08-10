@@ -17,6 +17,7 @@ dependencies {
     implementation(project(":modules:trip"))
     implementation(project(":modules:place-data"))
     implementation(project(":modules:itinerary-generation"))
+    implementation(project(":modules:weather-context"))
     implementation(project(":modules:planb-detection"))
     implementation(project(":modules:itinerary-recalculation"))
     implementation(project(":modules:change-log"))
