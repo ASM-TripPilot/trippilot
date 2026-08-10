@@ -18,4 +18,5 @@ dependencies {
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))
+    testImplementation(libs.kotest.property)   // 억제 규칙 PBT — 전이 의존에 기대지 않고 명시한다
 }

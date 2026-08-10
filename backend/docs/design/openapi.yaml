@@ -701,6 +701,30 @@ paths:
         '400': { description: 슬롯 키 형식 오류 }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
         '409': { description: 확정된 일정 · 생성 진행 중 · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
+  /trips/{tripId}/triggers:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 감지된 변화 목록 — 4카테고리·상태(최신순)
+      description: >
+        비차단 배너의 근거(US-PLANB-02). 트리거는 일정을 **자동으로 바꾸지 않는다** —
+        바꾸는 것은 사용자가 재계획을 시작했을 때뿐이다.
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TriggerList' } } } }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/triggers/{triggerEventId}/dismiss:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: triggerEventId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: '"그대로 둘게요" — 이후 같은 사유·같은 방문지로는 다시 알리지 않는다'
+      description: 지우지 않고 상태로 남긴다. 다시 알리지 않을 근거가 그 행이다.
+      responses:
+        '200': { description: 닫힘, content: { application/json: { schema: { $ref: '#/components/schemas/Trigger' } } } }
+        '404': { description: 여행 없음/타 계정/트리거 없음(다른 여행 소속 포함) }
+        '409': { description: 이미 닫혔거나 해소된 알림 }
   /trips/{tripId}/replan-sessions:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1142,6 +1166,31 @@ components:
                     endAt: { type: string, example: "11:00:00" }
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean }
+    TriggerList:
+      type: object
+      required: [triggers]
+      properties:
+        triggers: { type: array, items: { $ref: '#/components/schemas/Trigger' } }
+    Trigger:
+      type: object
+      required: [triggerEventId, type, value, status, detectedAt]
+      properties:
+        triggerEventId: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [WEATHER, HOURS, DELAY, STAY_OVER]
+          description: 강수·당일휴무·이동지연·체류초과
+        targetSlotId:
+          type: string
+          format: uuid
+          nullable: true
+          description: '어느 방문지에 대한 신호인가. null = 일정 전체(예: 광역 특보)'
+        value: { type: string, description: '감지값 요약(표시용, 예: "강수확률 80%"). 판정에 쓰지 않는다' }
+        status:
+          type: string
+          enum: [ACTIVE, NORMAL, DISMISSED]
+          description: 'ACTIVE=알리는 중 · NORMAL=상황 해소 · DISMISSED=사용자가 닫음. 해소와 닫음을 구분해야 재발 시 다시 알릴 수 있다'
+        detectedAt: { type: string, format: date-time }
     StartReplanRequest:
       type: object
       required: [reason, mode]
