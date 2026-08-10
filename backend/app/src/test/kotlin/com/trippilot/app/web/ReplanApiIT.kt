@@ -179,6 +179,22 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `기준점을 아예 안 보내도 열린다 — 서버가 사다리로 정한다(BR-U4-19)`() {
+        // 위치를 못 잡았다고 재계획을 막으면, 정작 위치가 불안정한 실내에서 가장 필요한데 못 쓴다.
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId)
+
+        val (rc, body) = call(
+            HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token,
+            """{"scope":"FULL_DAY"}""",
+        )
+        rc shouldBe 201
+        body["originKind"].asText() shouldBe "STAY_ANCHOR" // 숙소 없는 여행이라 사다리 끝
+        body["originEstimated"].asBoolean() shouldBe true  // 추정임을 밝힌다
+    }
+
+    @Test
     fun `인증 없으면 401`() {
         call(HttpMethod.POST, "/api/v1/trips/${UUID.randomUUID()}/replan-sessions", null, startBody).first shouldBe 401
     }

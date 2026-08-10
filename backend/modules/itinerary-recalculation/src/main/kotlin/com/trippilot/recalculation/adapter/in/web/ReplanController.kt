@@ -69,7 +69,8 @@ class ReplanController(private val service: ReplanSessionService) {
  */
 data class StartReplanRequest(
     @field:NotNull(message = "재계획 범위는 필수입니다.") val scope: ReplanScope?,
-    @field:NotNull(message = "출발 기준점 종류는 필수입니다.") val originKind: OriginKind?,
+    /** 생략하면 서버가 사다리로 정한다(BR-U4-19) — 위치를 못 잡았다고 재계획을 막지 않는다. */
+    val originKind: OriginKind? = null,
     val originLat: Double? = null,
     val originLng: Double? = null,
     @field:Size(max = 10, message = "사유는 10개까지 선택할 수 있습니다.") val reasons: List<String> = emptyList(),
@@ -79,17 +80,16 @@ data class StartReplanRequest(
     val triggerId: UUID? = null,
 ) {
     fun toCommand(): StartReplan {
-        val kind = originKind!!
         // 좌표 요건은 도메인이 강제하지만, 그대로 두면 IllegalArgumentException 이 500 으로 나간다.
         // 사용자가 고칠 수 있는 입력이므로 400 으로 돌린다.
-        if (kind in COORD_REQUIRED && (originLat == null || originLng == null)) {
+        if (originKind in COORD_REQUIRED && (originLat == null || originLng == null)) {
             throw ValidationFailed(
-                listOf(FieldError("originLat", "$kind 기준점에는 좌표(originLat·originLng)가 필요합니다.")),
+                listOf(FieldError("originLat", "$originKind 기준점에는 좌표(originLat·originLng)가 필요합니다.")),
             )
         }
         return StartReplan(
             scope = scope!!,
-            origin = ReplanOrigin(kind, originLat, originLng),
+            origin = originKind?.let { ReplanOrigin(it, originLat, originLng) },
             reasons = reasons,
             directives = directives,
             freeText = freeText,

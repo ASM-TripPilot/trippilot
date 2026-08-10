@@ -744,7 +744,7 @@ paths:
         content: { application/json: { schema: { $ref: '#/components/schemas/StartReplanRequest' } } }
       responses:
         '201': { description: 세션 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
-        '400': { description: 범위·기준점 누락 · GPS/MANUAL 인데 좌표 없음 · 자유 입력 초과 }
+        '400': { description: 범위 누락 · GPS/MANUAL 인데 좌표 없음 · 자유 입력 초과 }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
         '409': { description: 여행 기간 밖 }
   /trips/{tripId}/replan-sessions/{sessionId}:
@@ -1209,8 +1209,12 @@ components:
           description: 재계획 범위(DEC-U4-3). ai ReplanScope 어휘를 그대로 쓴다
         originKind:
           type: string
+          nullable: true
           enum: [GPS, MANUAL, LAST_VISIT, STAY_ANCHOR]
-          description: '출발 기준점. GPS 가 없으면 수동 핀 → 마지막 방문지 → 숙소 순으로 내려간다'
+          description: >
+            출발 기준점. **생략하면 서버가 사다리로 정한다**(BR-U4-19) —
+            실측 → 수동 핀 → 마지막 완료 방문지 → 등록 숙소 앵커.
+            위치를 못 잡았다고 재계획을 막지 않으며, 어떤 가정을 썼는지는 응답의 originKind·originEstimated 로 밝힌다
         originLat: { type: number, nullable: true, description: GPS·MANUAL 이면 필수 }
         originLng: { type: number, nullable: true, description: GPS·MANUAL 이면 필수 }
         reasons:
