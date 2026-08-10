@@ -1,0 +1,66 @@
+# 실모델 LLM 스모크 — 수동 실행 전용 (TRIP-340, K-2)
+#
+# ai-ci와 완전히 분리된 워크플로다. push/PR 트리거가 **없어서** CI 실 호출 0건(D37)은
+# 그대로 유지된다 — 실모델 1건 호출은 사람이 Actions 탭에서 Run workflow를 눌렀을 때만.
+#
+# 키는 Repository Secret `AZUREAPIKEY`에서만 온다: 등록 후 값은 누구도 다시 볼 수 없고,
+# 로그에 찍히면 자동 마스킹되며, 포크 PR에는 전달되지 않는다.
+#
+# 엔드포인트·api-version처럼 비밀 아닌 설정은 Repository **Variables**
+# (Settings → Secrets and variables → Actions → Variables 탭)에 두면 매번 입력을 생략할 수
+# 있다: AZURE_OPENAI_ENDPOINT · AZURE_OPENAI_API_VERSION. 실행 시 input을 채우면 그게 이긴다.
+name: ai-llm-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'LLM 제공자'
+        type: choice
+        options: [azure, openai]
+        default: azure
+      endpoint:
+        description: 'Azure 엔드포인트(https://<리소스>.openai.azure.com) 또는 OpenAI 호환 base_url — 비우면 repo Variable 사용'
+        required: false
+        type: string
+      api_version:
+        description: 'Azure api-version (포털 표기값) — 비우면 repo Variable 사용'
+        required: false
+        type: string
+      model:
+        description: 'Azure 배포 이름 / OpenAI 모델 ID'
+        default: 'gpt-5.6'
+        type: string
+      utterance:
+        description: '스모크 발화 (비우면 스크립트 기본값)'
+        required: false
+        type: string
+
+concurrency: ai-llm-smoke   # 실 호출 워크플로는 동시 1건만
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: ai/uv.lock
+      - run: uv sync --locked
+      - name: 실모델 스모크 1건 (프롬프트 렌더 → 호출 → 게이트 파싱)
+        env:
+          LLM_PROVIDER: ${{ inputs.provider }}
+          # 같은 시크릿을 두 이름으로 노출 — 제공자 선택에 따라 스크립트가 맞는 쪽을 읽는다
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
+          OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ inputs.endpoint || vars.AZURE_OPENAI_ENDPOINT }}
+          OPENAI_BASE_URL: ${{ inputs.endpoint || vars.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_VERSION: ${{ inputs.api_version || vars.AZURE_OPENAI_API_VERSION }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ inputs.model }}
+          OPENAI_MODEL: ${{ inputs.model }}
+          SMOKE_UTTERANCE: ${{ inputs.utterance }}
+        run: uv run python scripts/smoke_llm.py
