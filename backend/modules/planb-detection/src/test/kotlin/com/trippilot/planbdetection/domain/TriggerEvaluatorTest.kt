@@ -83,6 +83,15 @@ class TriggerEvaluatorTest : StringSpec({
             TriggerEvaluator.Verdict.NOT_AFFECTING
     }
 
+    "발화하는 트리거는 NONE 범위를 가질 수 없다 — 세션 범위로 옮길 자리가 없다" {
+        io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+            PlanBTrigger.active(
+                trip, java.util.UUID.randomUUID(), TriggerKind.WEATHER, java.time.LocalDate.parse("2026-08-11"),
+                slotA, emptyMap(), TriggerScope.NONE, "비 예보", at,
+            )
+        }
+    }
+
     // ── 속성 ───────────────────────────────────────────────────────────────
     "발화는 언제나 총량 안에서만 일어난다" {
         checkAll(Arb.int(0..30), Arb.enum<Sensitivity>()) { activated, sensitivity ->
