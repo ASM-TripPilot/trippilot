@@ -1,4 +1,5 @@
 import type {
+  ItineraryCandidatesSummary,
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
   ItineraryGenerationState,
@@ -118,22 +119,67 @@ export type DraftView =
   | { kind: 'loading' }
   | { kind: 'failed' }
   | { kind: 'empty' }
+  /** 만들기는 했는데 넣을 후보가 없었다(h35). 조건 목록은 서버 문자열 그대로 실려 나간다. */
+  | { kind: 'zero'; shortfallCategories: string[] }
   | { kind: 'listed'; days: ItineraryDaysItem[]; staleFailed: boolean };
 
 /**
- * 얼굴 판정 — **도착한 일자를 가장 먼저 본다.** 2차 생성이 죽어도 1차분은 유효하므로
+ * 안내를 **켜지 않을** 값의 목록이다. 반대로(켤 값의 목록으로) 짜면 서버가 어휘를 하나
+ * 늘리는 순간 화면이 조용해진다 — `level` 은 계약상 열거가 아니라 그냥 문자열이고 AI 어휘가
+ * 그대로 흘러나온다(openapi 원문). 모르는 값이 자동으로 시끄러운 쪽에 떨어져야 한다(INV-4).
+ */
+const QUIET_CANDIDATE_LEVELS = ['OK', 'HIGH'];
+
+/**
+ * 후보 강등 안내를 켤 것인가. 대소문자·앞뒤 공백은 같은 값으로 본다(01b D3).
+ *
+ * 요약이 **객체로 도착했을 때만** 판정한다(D4) — `undefined`(키 자체가 없음)와 `null`(AI 가
+ * 판정을 안 줬음)은 둘 다 "모른다"이지 "강등"이 아니다. 3상태라 `=== null` 만 보면 하나가 샌다.
+ */
+export function isCandidatesDemoted(
+  summary: ItineraryCandidatesSummary | undefined
+): boolean {
+  if (summary === undefined || summary === null) return false;
+  return !QUIET_CANDIDATE_LEVELS.includes(summary.level.trim().toUpperCase());
+}
+
+/**
+ * 얼굴 판정 — **손에 든 슬롯을 가장 먼저 본다.** 2차 생성이 죽어도 1차분은 유효하므로
  * (openapi: `FAILED` = 2차 실패, 1차분은 유효) 실패가 목록을 덮지 않고 `staleFailed` 라는
  * 별도 축으로 같은 값 안에 실려 나간다. 목록도 살고 실패도 삼켜지지 않는다(INV-4).
+ *
+ * 세는 단위가 **일자가 아니라 슬롯**인 것이 후보 0건(h35)의 급소다 — 서버는 빈 일자를 담아
+ * 보낼 수 있고, `days.length` 로만 보면 그 응답이 목록으로 새어 h35 가 영영 안 뜬다. 반대로
+ * 일부 날짜만 비었으면 합계가 0이 아니므로 목록이 그대로 유지된다(01b D5·D6).
+ *
+ * 0건 판정에 `level`·`poolSize` 어휘를 쓰지 않는 것도 같은 이유다 — 어휘가 얼굴을 정하면
+ * 서버가 말을 바꾸는 날 화면이 통째로 달라진다. 요약이 **객체로 도착했다**는 사실만 쓴다.
+ *
+ * 겹치는 조합의 순서(슬롯 > loading > failed > zero > empty)는 AC 가 정하지 않은 축이라
+ * 이 사이클의 구현 판단이다 — 근거는 03 리포트. `failed > zero` 만 심판이 잠갔다.
  */
 export function resolveDraftView(input: {
   days: ItineraryDaysItem[];
   loading: boolean;
   failed: boolean;
+  candidatesSummary?: ItineraryCandidatesSummary;
 }): DraftView {
-  if (input.days.length > 0) {
+  const slotCount = input.days.reduce((sum, day) => sum + day.slots.length, 0);
+  if (slotCount > 0) {
     return { kind: 'listed', days: input.days, staleFailed: input.failed };
   }
   if (input.loading) return { kind: 'loading' };
   if (input.failed) return { kind: 'failed' };
+
+  const summary = input.candidatesSummary;
+  if (summary !== undefined && summary !== null) {
+    // 키가 없는 것과 빈 배열을 여기서 하나로 만든다 — 화면이 "없음"과 "빈 배열"을 각각
+    // 다루면 같은 규칙이 두 층에 흩어진다(01b D8).
+    return {
+      kind: 'zero',
+      shortfallCategories: summary.shortfallCategories ?? [],
+    };
+  }
+
   return { kind: 'empty' };
 }
