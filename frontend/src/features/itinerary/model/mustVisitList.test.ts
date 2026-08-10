@@ -6,6 +6,7 @@ import type {
 
 import {
   MUST_VISIT_NAME_PLACEHOLDER,
+  buildMustVisitPins,
   joinMustVisits,
   resolveMustVisitListView,
   type MustVisitListItem,
@@ -300,5 +301,148 @@ describe('C6 · AC-9 · INV-3 — dwellMin 이 화면 층으로 넘어갈 통로
       'sourcePoiId',
       'type',
     ]);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-326 추가분 — 지도 핀(AC-1 · AC-2).
+ *
+ * 왜 항목(`MustVisitListItem`)에 좌표를 안 싣나: 그러면 C1(`toEqual` 로 항목 전체 모양)과
+ * C6(키 목록 완전 일치 = INV-3 자료형 가드) 두 승인 단언을 이 칸이 함께 열어야 한다. 좌표는
+ * **핀을 만들 때만** 담은 장소에서 읽고, 조인과 핀이 갈라지지 않는 것은 C8 이 교차로 잰다
+ * (02a ★13).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** 좌표를 갖는 담은 장소. 기존 `savedPlace()` 는 좌표가 전부 같은 값이라 "몇 번 핀이 어느
+ * 장소인가" 를 구별할 수 없다 — 이 칸만 좌표를 다르게 준다. */
+function savedPlaceAt(poiId: string, lat: number, lng: number): SavedPlace {
+  return {
+    savedPlaceId: `sp-${poiId}`,
+    savedAt: '2026-08-01T10:00:00.000Z',
+    place: { ...makePlace(poiId, `${poiId} 이름`, null), lat, lng },
+  };
+}
+
+const PIN_MUST_VISITS: MustVisit[] = [
+  mustVisit({ sourcePoiId: 'poi-a' }),
+  mustVisit({ sourcePoiId: 'poi-b' }),
+  mustVisit({ sourcePoiId: 'poi-c' }),
+];
+
+describe('C7 · AC-1 · AC-2 — 핀은 목록 번호를 그대로 쓰고 좌표 없는 항목만 건너뛴다', () => {
+  it('꼬리가 빠지면 [1,2], 가운데가 빠지면 [1,3] — 번호를 다시 매기지 않는다', () => {
+    // 준비 — 등록 3건. 담은 장소에서 하나씩 빼 가며 "좌표를 못 얻은 항목" 을 만든다.
+    // 계약 실측(01 §4): `Place.lat`·`lng` 는 required 라 **담은 목록에 없다 = 좌표가 없다** 이고,
+    // 다른 원인이 없다.
+    const items = joinMustVisits({
+      mustVisits: PIN_MUST_VISITS,
+      savedPlaces: [
+        savedPlaceAt('poi-a', 35.1, 129.1),
+        savedPlaceAt('poi-b', 35.2, 129.2),
+        savedPlaceAt('poi-c', 35.3, 129.3),
+      ],
+    });
+
+    // 실행/단언 ① 전부 좌표가 있으면 1..n 연속이고 좌표가 그 장소의 것이다(완전 일치).
+    expect(
+      buildMustVisitPins({
+        items,
+        savedPlaces: [
+          savedPlaceAt('poi-a', 35.1, 129.1),
+          savedPlaceAt('poi-b', 35.2, 129.2),
+          savedPlaceAt('poi-c', 35.3, 129.3),
+        ],
+      })
+    ).toEqual([
+      { number: 1, lat: 35.1, lng: 129.1 },
+      { number: 2, lat: 35.2, lng: 129.2 },
+      { number: 3, lat: 35.3, lng: 129.3 },
+    ]);
+
+    // ② 꼬리가 빠진다 — 3번이 없어지고 앞은 그대로.
+    expect(
+      buildMustVisitPins({
+        items,
+        savedPlaces: [
+          savedPlaceAt('poi-a', 35.1, 129.1),
+          savedPlaceAt('poi-b', 35.2, 129.2),
+        ],
+      }).map((pin) => pin.number)
+    ).toEqual([1, 2]);
+
+    // 🔴 ③ **가운데가 빠져도 뒤를 당기지 않는다.** 이것이 AC-2 의 급소다 — 재번호하면
+    //    사용자가 지도 ② 를 누르고 카드 ② 를 기대할 때 다른 장소가 나온다(TRIP-297 AC-13 승계).
+    const gap = buildMustVisitPins({
+      items,
+      savedPlaces: [
+        savedPlaceAt('poi-a', 35.1, 129.1),
+        savedPlaceAt('poi-c', 35.3, 129.3),
+      ],
+    });
+    expect(gap.map((pin) => pin.number)).toEqual([1, 3]);
+    expect(gap).toEqual([
+      { number: 1, lat: 35.1, lng: 129.1 },
+      { number: 3, lat: 35.3, lng: 129.3 },
+    ]);
+  });
+
+  it('C7-b 담은 장소가 하나도 없으면 핀이 0개다 (지도 카드를 안 그릴 근거 · D9)', () => {
+    const items = joinMustVisits({
+      mustVisits: PIN_MUST_VISITS,
+      savedPlaces: [],
+    });
+    expect(buildMustVisitPins({ items, savedPlaces: [] })).toEqual([]);
+    // 짝 — 항목 자체는 살아 있다. 핀이 0개인 것과 목록이 빈 것은 다른 사실이다.
+    expect(items).toHaveLength(3);
+  });
+
+  it('C7-c 입력 배열을 제자리에서 흔들지 않는다 (캐시 오염 금지)', () => {
+    const savedPlaces = [savedPlaceAt('poi-a', 35.1, 129.1)];
+    const items = joinMustVisits({ mustVisits: PIN_MUST_VISITS, savedPlaces });
+    const beforeItems = JSON.parse(JSON.stringify(items));
+    const beforeSaved = JSON.parse(JSON.stringify(savedPlaces));
+
+    buildMustVisitPins({ items, savedPlaces });
+
+    expect(items).toEqual(beforeItems);
+    expect(savedPlaces).toEqual(beforeSaved);
+  });
+});
+
+describe('C8 · 02a ★13 — 조인과 핀이 같은 입력에서 갈라지지 않는다', () => {
+  it('이름을 못 얻은 항목의 번호는 핀에 없고, 이름을 얻은 항목의 번호는 전부 있다', () => {
+    // 준비 — **한 벌의 입력**을 두 함수에 그대로 태운다. 조인 키 규칙이 두 함수에서 서로
+    // 다르게 진화하면 이 케이스가 먼저 죽는다(좌표를 항목에 싣지 않은 대가를 여기서 치른다).
+    const savedPlaces = [
+      savedPlaceAt('poi-a', 35.1, 129.1),
+      savedPlaceAt('poi-c', 35.3, 129.3),
+    ];
+    const input = { mustVisits: PIN_MUST_VISITS, savedPlaces };
+
+    // 실행
+    const items = joinMustVisits(input);
+    const pins = buildMustVisitPins({ items, savedPlaces });
+    const pinNumbers = pins.map((pin) => pin.number);
+
+    // 단언 ① 두 수가 다른 것이 정상이다(AC-2 — 핀 수와 목록 수가 다를 수 있다).
+    expect(items).toHaveLength(3);
+    expect(pins).toHaveLength(2);
+
+    // ② 이름이 없는 항목(= 담기를 푼 항목)의 번호는 핀에 없다.
+    const unnamed = items
+      .map((item, index) => ({ item, number: index + 1 }))
+      .filter(({ item }) => item.name === null)
+      .map(({ number }) => number);
+    expect(unnamed).toEqual([2]);
+    unnamed.forEach((number) => expect(pinNumbers).not.toContain(number));
+
+    // ③ 짝 — 이름이 있는 항목의 번호는 **전부** 있다. 없으면 "핀을 아예 안 만드는" 구현이
+    //    ② 를 공짜로 통과한다.
+    const named = items
+      .map((item, index) => ({ item, number: index + 1 }))
+      .filter(({ item }) => item.name !== null)
+      .map(({ number }) => number);
+    expect(named).toEqual([1, 3]);
+    expect(pinNumbers).toEqual(named);
   });
 });

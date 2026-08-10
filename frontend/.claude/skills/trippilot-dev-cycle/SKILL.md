@@ -15,6 +15,7 @@ description: "TripPilot frontend(React Native/Expo) 코드를 변경하는 모�
 |---|---|
 | [reference/resume.md](reference/resume.md) | **Phase 0 진입 시** — 사이클 ID 탐지·재개 판별·RESUME.md·데이터 전달 프로토콜 |
 | [reference/gate-protocol.md](reference/gate-protocol.md) | **게이트①·② 제시 직전** — 원장 기록 형식·해시 규약·제시 형식·이해부채·학습자 모드 |
+| [reference/annotation.md](reference/annotation.md) | **게이트 제시 순서 6(대화 주해) 직전** — 진행 방식·내용 규칙·함수 입자·줄 단위 승격·인라인 형식·비용 규약 |
 | [reference/troubleshooting.md](reference/troubleshooting.md) | **검증 FAIL·에이전트 실패·MCP 불가 시** — 에스컬레이션 상한·분기 처리 |
 
 요약으로 대신하지 마라. 게이트 제시와 재개 판별은 형식이 곧 규칙이라, 원문을 읽지 않으면 원장이 오염된다.

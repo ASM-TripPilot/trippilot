@@ -296,6 +296,13 @@ describe('M-8 · 조립된 대본이 문법적으로 유효한 자바스크립�
     return html.slice(open + '<script>'.length, close);
   }
 
+  /** TRIP-297 번호 핀. 두 개짜리와 한 개짜리를 갈라 태우는 이유는 대본이 `setBounds` 를
+   * 개수로 분기하기 때문이다 — 한쪽만 재면 다른 쪽 분기가 모집단 밖에 남는다. */
+  const NUMBERED_PINS = [
+    { number: 1, lat: 33.458, lng: 126.942 },
+    { number: 3, lat: 33.489, lng: 126.498 },
+  ];
+
   it('핀 대본이 실린 문서도, 안 실린 문서도 파싱된다', () => {
     // 도달 앵커 — 스크립트를 실제로 떼어냈다(빈 문자열이면 무엇이든 파싱된다).
     expect(inlineScript(buildMapHtml(CENTER, JS_KEY)).length).toBeGreaterThan(
@@ -307,6 +314,29 @@ describe('M-8 · 조립된 대본이 문법적으로 유효한 자바스크립�
     ).not.toThrow();
     expect(
       () => new Function(inlineScript(buildMapHtml(CENTER, JS_KEY, false)))
+    ).not.toThrow();
+  });
+
+  it('번호 핀 대본이 실린 문서도 파싱된다 (TRIP-297)', () => {
+    // ★ 도달 앵커가 이 케이스의 절반이다 — `pins` 를 안 넘기면 번호 핀 대본이 **빈 문자열**이라
+    //   위 케이스는 그 20여 줄을 **한 글자도 안 본 채** 초록이다. 길이가 실제로 늘었는지를
+    //   먼저 재서, 아래 파싱 단언이 진짜 그 대본을 태우고 있음을 보증한다.
+    const withoutPins = inlineScript(buildMapHtml(CENTER, JS_KEY));
+    const withPins = inlineScript(
+      buildMapHtml(CENTER, JS_KEY, true, NUMBERED_PINS)
+    );
+    expect(withPins.length).toBeGreaterThan(withoutPins.length);
+    expect(withPins).toContain('CustomOverlay');
+
+    // 본체 — 괄호·따옴표를 하나 빠뜨리면 여기서 잡힌다. 파싱 실패는 WebView 안에서
+    // 스크립트가 아예 실행되지 않는 것이라 **실패 표면조차 안 뜬다**(지도가 백지가 된다).
+    expect(() => new Function(withPins)).not.toThrow();
+    // 핀 1개 — `setBounds` 를 부르지 않는 반대쪽 분기.
+    expect(
+      () =>
+        new Function(
+          inlineScript(buildMapHtml(CENTER, JS_KEY, true, [NUMBERED_PINS[0]]))
+        )
     ).not.toThrow();
   });
 

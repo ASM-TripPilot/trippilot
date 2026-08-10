@@ -3,6 +3,7 @@ import type {
   MustVisitType,
   SavedPlace,
 } from '@/shared/api/generated/schemas';
+import type { MapPin } from '@/shared/map';
 
 /**
  * h05 필수 방문지 목록의 순수 판정 2종 — 조인과 얼굴.
@@ -59,6 +60,30 @@ export function joinMustVisits(input: {
       fixedDate: entry.fixedDate ?? undefined,
       fixedStart: entry.fixedStart ?? undefined,
     };
+  });
+}
+
+/**
+ * 지도에 찍을 번호 핀. 좌표는 담은 장소(`saved-places`)에만 있으므로 조인과 같은 키로 다시
+ * 읽는다 — 좌표를 못 얻은 항목은 **건너뛰되 뒤 항목의 번호를 당기지 않는다**(`buildDraftPins`
+ * 와 같은 규칙). 재번호하면 사용자가 지도 ② 를 누르고 카드 ② 를 기대할 때 다른 장소가 나온다.
+ *
+ * 좌표를 `MustVisitListItem` 에 싣지 않는 이유: 그 자료형의 키 목록이 `dwellMin` 을 막는
+ * INV-3 가드라(위 `joinMustVisits` 주석) 표시에 안 쓰는 값으로 넓히지 않는다. 조인과 핀이
+ * 같은 키 규칙 위에 있다는 것은 `mustVisitList.test.ts` C8 이 교차로 잰다.
+ */
+export function buildMustVisitPins(input: {
+  items: Pick<MustVisitListItem, 'sourcePoiId'>[];
+  savedPlaces: SavedPlace[];
+}): MapPin[] {
+  const placeByPoiId = new Map(
+    input.savedPlaces.map((entry) => [entry.place.poiId, entry.place])
+  );
+  return input.items.flatMap((item, index) => {
+    const place = placeByPoiId.get(item.sourcePoiId);
+    return place === undefined
+      ? []
+      : [{ number: index + 1, lat: place.lat, lng: place.lng }];
   });
 }
 

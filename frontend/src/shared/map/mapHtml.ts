@@ -13,6 +13,17 @@ export interface MapCenter {
 }
 
 /**
+ * 번호가 붙은 지도 핀(TRIP-297). `number`는 지도가 정하지 않는다 — 호출부가 만든 값을
+ * 그대로 그린다(일정 초안에서는 좌표 없는 슬롯을 건너뛴 뒤에도 카드 번호를 유지해야 해
+ * 핀 번호가 ①③④처럼 뛴다).
+ */
+export interface MapPin {
+  number: number;
+  lat: number;
+  lng: number;
+}
+
+/**
  * RN↔WebView 메시지 프로토콜(TRIP-199). `postMessage`는 문자열 하나만 보낼 수 있어 종류를
  * 구분할 꼬리표(`type`)가 필요하다 — 이 판별 유니온이 그 꼬리표를 정의한다.
  */
@@ -70,12 +81,105 @@ export const MAP_LOAD_FAILED_MESSAGE = 'kakao-sdk-load-failed';
  * 기본값은 `true`다 — `mapHtml.test.ts`가 여전히 2인자(`buildMapHtml(center, jsKey)`)로만
  * 불러 이 대본이 실려 있기를 요구하므로, 끄는 쪽(`KakaoMapView`가 `onMapMessage` 없이
  * 불릴 때)이 명시적으로 `false`를 넘긴다.
+ *
+ * TRIP-339 — `viewOnly`는 **보여주기 전용 지도**를 켜는 옵트인 인자다(기본 `false` = 현행).
+ * 막는 것은 사용자 제스처(드래그·핀치줌·더블탭줌)뿐이고 프로그램 카메라 이동(`setBounds`)은
+ * 그대로 통과한다 — 완전히 얼리면 핀 묶음이 화면에 안 맞춰져 지도가 쓸모없어진다. 기본값이
+ * 현행이어야 하는 이유는 나머지 호출부 다섯 자리(숙소 등록 3 · 거점 확정 1 · 프리뷰 브리지
+ * 데모 1)가 **지도를 움직여 좌표를 확정하는 것 자체가 기능**이라서다.
+ *
+ * TRIP-339 — `connectPins`는 반대로 **옵트아웃**이다(기본 `true` = 핀을 순서대로 잇는다).
+ * 끄는 쪽이 명시하는 이유는 핀 번호가 뜻하는 바가 화면마다 다르기 때문이다 — 일정 초안(h11)의
+ * 번호는 솔버가 확정한 **돌아볼 순서**라 선이 사실이고, 필수 방문지(h05)의 번호는 사용자가
+ * **담은 순서**일 뿐이라 선을 그으면 아직 정해지지 않은 동선을 정해진 것처럼 말하게 된다.
  */
 export function buildMapHtml(
   center: MapCenter,
   jsKey: string,
-  enablePin: boolean = true
+  enablePin: boolean = true,
+  pins: MapPin[] = [],
+  viewOnly: boolean = false,
+  connectPins: boolean = true
 ): string {
+  // TRIP-297 — 번호 핀은 `CustomOverlay`로 그린다(기본 `Marker`는 숫자를 못 싣는다).
+  // 핀이 둘 이상일 때만 `setBounds`로 전부 담는다 — 한 개짜리 bounds는 넓이가 0이라
+  // 최대 배율까지 확대되어 지도가 무엇을 보여주는지 알 수 없게 된다.
+  //
+  // TRIP-339 — 핀 그림은 Figma `1870:1117` 실측 물방울 SVG다. 원과 꼬리가 **한 도형의 한
+  // path**라 흰 2px 테두리가 이음매에서 끊기지 않는다(CSS 회전 트릭으로는 끊긴다).
+  // `yAnchor: 1`이라 조각의 아래끝(= 꼬리 끝)이 좌표에 놓인다. viewBox `3 2 28 36`은
+  // path 범위(x 4~30 · y 3~37)에 테두리 1px씩을 더한 값이라 화면 크기 28×36과 1:1이다.
+  //
+  // 연결선은 **핀이 둘 이상이고 `connectPins`가 켜져 있으면** 인접 쌍을 순서대로 잇는다
+  // (전결합 아님). 두 겹인 것은 케이싱(casing) 관용구다 — 색 하나로만 그으면 비슷한 색
+  // 도로·물 위에서 선이 사라지므로 굵은 흰 선을 먼저 깔고 그 위에 얇은 분홍 선을 얹는다.
+  // 좌표가 같은 인접 쌍도 건너뛰지 않는다 — 건너뛰려면 허용오차와 구간 번호 판정이 늘어나는데
+  // 그 코드가 막는 실패가 없다.
+  //
+  // `setBounds`는 선과 갈라 둔다 — 선을 끈 지도(h05)도 핀 묶음은 화면에 맞아야 한다.
+  const numberedPinScript =
+    pins.length === 0
+      ? ''
+      : `
+          var numberedPins = ${JSON.stringify(pins)};
+          var pinBounds = new kakao.maps.LatLngBounds();
+          var pinPath = numberedPins.map(function (pin) {
+            var position = new kakao.maps.LatLng(pin.lat, pin.lng);
+            pinBounds.extend(position);
+            return position;
+          });
+          var multiplePins = numberedPins.length > 1;
+          var linkPins = multiplePins && ${connectPins};
+
+          if (linkPins) {
+            // 흰 케이싱이 **먼저** — 카카오는 나중에 만든 선을 위에 그린다. strokeLineCap 은
+            // 카카오 문서에 없는 이름이라 안 먹을 수 있다(양 끝 둥근 마감은 R2 실기 확인 몫).
+            [
+              { color: '#FFFFFF', weight: 6 },
+              { color: '#FF385C', weight: 2.8 },
+            ].forEach(function (layer) {
+              new kakao.maps.Polyline({
+                map: map,
+                path: pinPath,
+                strokeWeight: layer.weight,
+                strokeColor: layer.color,
+                strokeOpacity: 1,
+                strokeStyle: 'solid',
+                strokeLineCap: 'round',
+              });
+            });
+          }
+
+          numberedPins.forEach(function (pin, index) {
+            new kakao.maps.CustomOverlay({
+              map: map,
+              position: pinPath[index],
+              yAnchor: 1,
+              content:
+                '<svg width="28" height="36" viewBox="3 2 28 36" style="display:block;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,0.2));">' +
+                '<path d="M17 3C9.8 3 4 8.5 4 15.5C4 24 17 37 17 37C17 37 30 24 30 15.5C30 8.5 24.2 3 17 3Z" fill="#FF385C" stroke="#FFFFFF" stroke-width="2"/>' +
+                '<text x="17" y="20" text-anchor="middle" fill="#FFFFFF" font-family="sans-serif" font-size="13" font-weight="700">' +
+                pin.number +
+                '</text></svg>',
+            });
+          });
+
+          if (multiplePins) {
+            map.setBounds(pinBounds);
+          }
+`;
+
+  // TRIP-339 — 제스처 차단. 드래그·더블탭은 지도 생성 옵션으로 걸고, 확대축소만
+  // `setZoomable`이라는 **메서드**다(카카오 생성 옵션에 `zoomable`이 없다). 그 호출을
+  // `setBounds` **뒤**에 두는 이유: 잠근 지도에서 프로그램 카메라 이동이 먹는지 리포에
+  // 선례가 0건이라(R5), 이 순서면 실기에서 안 먹더라도 핀 묶음 맞추기가 이미 끝나 있다.
+  const viewOnlyMapOptions = viewOnly
+    ? `
+              draggable: false,
+              disableDoubleClickZoom: true,`
+    : '';
+  const viewOnlyLockScript = viewOnly ? 'map.setZoomable(false);' : '';
+
   const pinScript = enablePin
     ? `
           var geocoder = new kakao.maps.services.Geocoder();
@@ -217,8 +321,10 @@ export function buildMapHtml(
             var mapEl = document.getElementById('map');
             var map = new kakao.maps.Map(mapEl, {
               center: new kakao.maps.LatLng(${center.lat}, ${center.lng}),
-              level: 3,
+              level: 3,${viewOnlyMapOptions}
             });
+            ${numberedPinScript}
+            ${viewOnlyLockScript}
             ${pinScript}
           } catch (e) {
             window.ReactNativeWebView.postMessage('${MAP_LOAD_FAILED_MESSAGE}');

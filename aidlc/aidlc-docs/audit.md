@@ -918,3 +918,33 @@ Step 1 FD 분석 — **재서술 금지 대상 8건** 식별(무발화 BR-U4-05�
 **Context**: CONSTRUCTION / U4 설계 단계 종료. 이번 항목이 손댄 `aidlc/` 파일 = `aidlc-docs/aidlc-state.md` · 이 `audit.md` append. 다음 유닛(U5~U9) 착수는 **사용자의 별도 지시** 대기(SCOPE.md 범위 제외 항목).
 
 ---
+
+## Post-Design Correction — U3 frontend-components.md §8 testID 소급 기록 + 발명값 3건 명시 (TRIP-297 [기록] 반영)
+**Timestamp**: 2026-08-10T00:00:00Z
+
+**User Input**: TRIP-297 사이클 [설계] 3-a 맹점 훑기에서 사용자가 정본 반영 후보 4건 중 3건을 선택했다(오케스트레이터의 사이클 요약으로 [기록] 단계에 전달) — ① 티켓 본문 드리프트 5건은 Jira TRIP-297 코멘트로(aidlc 밖), ② testID 확정값 13종은 `frontend-components.md` §8 소급 기록, ③ 발명값 3건(성격 축 라벨 미구현·고정 블록 시각 절삭 `startAt.slice(0,5)`·폴링 2초·30회)은 정본에 발명값임을 명시 기록. 미선택 1건(`itineraryDraftTimeStructure.test.ts` 소스 스캔 표현 불가)은 관측만, 문서 미반영.
+
+**AI Response**: TRIP-182·TRIP-207·TRIP-209 [기록]이 확립한 "[구현 결정 · TRIP-XXX, 날짜]" 소급 기록 방식을 그대로 따라 `frontend-components.md` §8 뒤에 두 문단 추가:
+
+(1) **testID 13종 소급 기록** — `itinerary-draft-day-{n}`·`-slot-{slotKey}`·`-slot-no-{slotKey}`·`-slot-band-{slotKey}`·`-slot-badge-{slotKey}`·`-slot-fixed-{slotKey}`·`-slot-image-{slotKey}`·`-slot-tags-{slotKey}`·`-slot-name-{slotKey}`·`-stale-failed`·`-loading`·`-failed`·`-retry`. 원래 제안값(`-strength-{min|balanced|max}`·`-day-{n}`·`-slot-{slotKey}`)과 계열은 같으나 실제 확정 형태가 다르다 — 추천 강도 세그먼트는 이번 범위 밖이라 여전히 미확정. 근거: `_workspace/20260809-trip297-itinerary-draft/02a_test-design_spec.md` §3.1(게이트①-1 승인 테스트 동결 계약).
+
+(2) **발명값 3건 명시** — 성격 축 라벨 미구현(시간 축만, 정본 매핑 부재) · 고정 블록 시각 절삭 `startAt.slice(0,5)`(표시 포맷 정본 부재) · 폴링 간격 2초·상한 30회(수치 정본 부재). 셋 다 "요구사항 근거가 아니라 구현 결정 — 다음 사이클이 요구사항 근거로 인용 금지" 라벨을 달았다(TRIP-209 5건 소급 기록과 같은 라벨링 방식). 근거: `_workspace/20260809-trip297-itinerary-draft/01b_ouroboros_seed.md`(D4·D5·"폴링 수치" 절).
+
+미반영 1건(§6 `itineraryDraftTimeStructure.test.ts` 관측)도 §8 말미에 관측 사실로만 덧붙였다 — 문서의 결정 사항을 바꾸지 않음.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-297 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260809-trip297-itinerary-draft/00_gates.md`(정본 반영 선택 절)·`01b_ouroboros_seed.md`(D4·D5·폴링 수치)·`02a_test-design_spec.md`(§3.1·★13). 이번 항목이 손댄 `aidlc/` 파일 = `aidlc-docs/construction/u3-ai-itinerary/functional-design/frontend-components.md`(§8 뒤 2문단 추가) · 이 `audit.md` append. `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음).
+
+---
+
+## Post-Design Correction — TRIP-339 (2026-08-10)
+
+**Action**: Construction 단계 기존 승인 산출물 2건에 **구현 결정 소급 기록** append.
+
+- `aidlc-docs/construction/u3-ai-itinerary/functional-design/frontend-components.md` — §8 뒤에 **h05·h11 공용 지도 시각 계약** 1문단 + 3항목 추가(핀 마커 형태·연결선 h11 전용·지도 고정 옵트인 범위). 이 문서가 h11 testID만 소급하고 지도 시각은 한 줄도 다루지 않았던 공백을 메운다.
+- `aidlc-docs/construction/u3-ai-itinerary/functional-design/domain-entities.md` — §3 INV 표 뒤에 **INV-U3-02 인용 문장 차이** 1문단 추가. 정본 원문(`orderIndex` 0..n-1, 데이터 인덱스)과 TRIP-339 티켓 인용(화면 표시 번호 1..n)이 갈리는 지점을 명시하고, 지도 핀 번호가 후자이며 **좌표 없는 슬롯을 건너뛰어도 재번호하지 않는다**는 결정을 남긴다. INV-U3-02 원문 자체는 변경하지 않았다.
+
+**둘 다 요구사항 근거가 아니라 구현 결정의 소급 기록이다** — 다음 사이클이 요구사항 근거로 인용하지 말 것을 각 문단에 명시했다(TRIP-297 선례와 같은 형식).
+
+**Selection**: 사이클 [설계] 3-a에서 관측된 정본 공백·드리프트 **6건 중 사용자가 3건을 선택**했다. 위 두 건이 그중 `aidlc/` 소관이고, 세 번째(Figma 밴드 맵 `[보관]` 세대 규칙)는 하네스 파일(`frontend/.claude/skills/spec-perception/reference/figma-structure.md`) 소관이라 별도 장부(옵시디언 `TripPilot/하네스 변경이력.md`)에 기록했다. **미선택 3건은 `aidlc/`에 반영하지 않았다** — 개발로그에 관측으로만 남긴다(티켓 본문의 핀 색 서술이 Figma 실측과 반대인 점 · "assets 디렉토리가 없다"가 사실과 다른 점 포함).
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-339 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260810-trip339-map-surface/01_spec-analyst_brief.md`(§3 Figma 실측치·§8 ④ 드리프트 목록) · `01b_ouroboros_seed.md`(3-a 사용자 확정 표) · `00_gates.md`(게이트①·①-2·② 원장) · `04b_smoke_1_PASS.md`(실기 대조로 h05 무선·h11 유선 확인). 이번 항목이 손댄 `aidlc/` 파일 = 위 두 문서 + 이 `audit.md` append. `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음).
