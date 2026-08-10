@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":common:core"))
     implementation(project(":modules:trip"))                   // R1: 소유·구간 검증 — trip.api
     implementation(project(":modules:itinerary-generation"))   // R1: 일정 요약 조회 — itinerarygeneration.api
+    implementation(project(":modules:saved-accommodation")) // R1: 기준점 사다리의 숙소 앵커 — savedaccommodation.api
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

@@ -19,7 +19,8 @@ import java.util.UUID
 /** 재계획 진입 입력(`i10`). 어휘는 화면이 정하고 서버는 그대로 싣는다. */
 data class StartReplan(
     val scope: ReplanScope,
-    val origin: ReplanOrigin,
+    /** 클라이언트가 알려준 기준점. **null 이면 서버가 사다리로 정한다**(BR-U4-19). */
+    val origin: ReplanOrigin?,
     val reasons: List<String>,
     val directives: List<String>,
     val freeText: String?,
@@ -41,6 +42,7 @@ class ReplanSessionService(
     private val trips: TripFacade,
     private val itineraries: ItineraryFacade,
     private val sessions: ReplanSessionRepository,
+    private val origins: OriginResolver,
     private val clock: Clock,
 ) {
 
@@ -69,7 +71,8 @@ class ReplanSessionService(
                 triggerId = request.triggerId,
                 scope = request.scope,
                 fromInstant = now, // '지금 이후'가 기준 — 이미 지난 슬롯은 대상이 아니다
-                origin = request.origin,
+                // 위치를 못 잡았어도 **막지 않는다** — 사다리를 내려가 가정을 밝힌다(BR-U4-19).
+                origin = origins.resolve(tripId, period.startDate, period.endDate, today, request.origin),
                 reasons = request.reasons,
                 directives = request.directives,
                 freeText = request.freeText,

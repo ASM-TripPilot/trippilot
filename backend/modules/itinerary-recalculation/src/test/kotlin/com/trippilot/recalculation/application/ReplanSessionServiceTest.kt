@@ -63,8 +63,15 @@ class ReplanSessionServiceTest : StringSpec({
             }
     }
 
+    /** 사다리는 여기서 검증하지 않는다(OriginResolverTest) — 숙소 없는 여행을 기본으로 둔다. */
+    val origins = OriginResolver(
+        object : com.trippilot.savedaccommodation.api.BaseAnchorFacade {
+            override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<com.trippilot.savedaccommodation.api.DayAnchorView>()
+        },
+    )
+
     fun service(sessions: Sessions, clock: Clock, hasItinerary: Boolean = true) =
-        ReplanSessionService(trips, itineraries(hasItinerary), sessions, clock)
+        ReplanSessionService(trips, itineraries(hasItinerary), sessions, origins, clock)
 
     val gpsOrigin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56)
     fun request(reasons: List<String> = listOf("비가 와요")) = StartReplan(
