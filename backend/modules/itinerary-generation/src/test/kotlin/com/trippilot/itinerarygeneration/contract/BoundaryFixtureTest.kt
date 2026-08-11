@@ -44,8 +44,8 @@ class BoundaryFixtureTest : StringSpec({
         timeWindows = listOf(TimeWindow(LocalDate.parse("2026-08-01"), LocalTime.parse("09:00"), LocalTime.parse("21:00"))),
         fixedBlocks = listOf(
             FixedBlock(UUID.fromString("22222222-2222-4222-8222-222222222222"), LocalDate.parse("2026-08-01"), LocalTime.parse("12:00"), 90),
-            // ANYTIME(날짜·시각 미지정) — **AI 가 거부하는 모양이다**. 아래 "아직 물질화되지 않았다" 테스트 참고.
-            FixedBlock(UUID.fromString("33333333-3333-4333-8333-333333333333"), null, null, null),
+            // 물질화된 ANYTIME(계약 M1) — 백엔드가 날짜·시각을 정해 보낸다. null 이면 AI 가 요청 전체를 거부한다.
+            FixedBlock(UUID.fromString("33333333-3333-4333-8333-333333333333"), LocalDate.parse("2026-08-01"), LocalTime.parse("09:00"), null),
         ),
         preferenceProfile = PreferenceProfile(
             styles = listOf("미식"), activities = listOf("야경"), foodTastes = listOf("해산물"),
@@ -79,13 +79,11 @@ class BoundaryFixtureTest : StringSpec({
      */
     fun aiAccepts(block: FixedBlock) = block.date != null && block.start != null
 
-    "ANYTIME must_visit 은 아직 물질화되지 않아 AI 가 거부하는 모양으로 나간다 (M1 — 구현 시 이 테스트를 뒤집을 것)" {
-        // 알려진 간극을 **못 박아 둔다**. 픽스처가 이 모양을 '정상'으로 굳혀 놓고 아무도 실패를 못 보면,
-        // 통합 때 "ANYTIME 이 있는 여행은 전부 MINIMAL 폴백"으로 나타나고 원인을 계약에서 찾지 못한다.
-        // 블록 하나만 나빠도 **그 호출 전체가 422** 다. 다일 여행이면 ANYTIME 은 2차에 실리므로
-        // day1 은 살아남고 나머지 일자만 MINIMAL 폴백된다(단일일이면 전체). GenerateItineraryServiceTest 참고.
+    "경계로 나가는 모든 고정 블록은 AI 가 수용하는 모양이다 (M1 물질화 완료)" {
+        // 블록 하나만 나빠도 **그 호출 전체가 422** 이고, 그 여행은 통째로 폴백된다.
+        // 물질화(MustVisitMaterializer)가 들어와 이제 거부될 블록이 없어야 한다.
         val rejected = input.fixedBlocks.filterNot { aiAccepts(it) }
-        rejected.size shouldBe 1 // 물질화(M1)가 들어오면 0 이 되어야 한다 — 그때 이 값을 0 으로 바꾼다
+        rejected.size shouldBe 0
 
         // 물질화의 정의: 날짜와 시각이 **둘 다** 채워진다. 하나만 채우면 그대로 거부다.
         aiAccepts(FixedBlock(UUID.randomUUID(), LocalDate.parse("2026-08-01"), null, null)) shouldBe false

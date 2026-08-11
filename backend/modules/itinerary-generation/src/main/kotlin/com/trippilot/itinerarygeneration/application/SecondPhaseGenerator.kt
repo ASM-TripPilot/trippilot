@@ -7,6 +7,7 @@ import com.trippilot.itinerarygeneration.domain.MinimalItineraryFallback
 import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
+import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -43,7 +44,14 @@ class SecondPhaseGenerator(
      * (INV-4 침묵 금지 — 사용자에게 "왜 나머지가 안 나왔는지"가 상태로 드러나야 한다).
      */
     @Async
-    fun completeRemaining(tripId: UUID, itineraryId: UUID, secondInput: ScheduleAgentInput, isRegeneration: Boolean) {
+    fun completeRemaining(
+        tripId: UUID,
+        itineraryId: UUID,
+        secondInput: ScheduleAgentInput,
+        isRegeneration: Boolean,
+        /** 조립 단계에서 자리를 못 찾아 보내지도 못한 필수 방문지 — AI 보고와 합쳐 최종 목록이 된다. */
+        assemblyUnplaced: List<UnplacedMustVisit> = emptyList(),
+    ) {
         // INV-4: 2차 실패도 1차와 **대칭**으로 결정론 최소 폴백(must_visit 고정블록)으로 채운다.
         // 실패를 이유로 나머지 일자를 비워두지 않되, solveMode=MINIMAL·isFallback 으로 저하를 드러낸다.
         val output = try {
@@ -54,7 +62,7 @@ class SecondPhaseGenerator(
         }
 
         try {
-            applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration)
+            applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration, assemblyUnplaced)
         } catch (e: Exception) {
             // 폴백조차 반영하지 못한 경우 — 상태로 드러낸다(침묵 금지).
             log.error("2차 결과 반영 실패 — FAILED 표시(day1 은 유효). tripId={}", tripId, e)
@@ -62,7 +70,14 @@ class SecondPhaseGenerator(
         }
     }
 
-    private fun applyOrDiscard(tripId: UUID, itineraryId: UUID, secondInput: ScheduleAgentInput, output: ScheduleAgentOutput, isRegeneration: Boolean) {
+    private fun applyOrDiscard(
+        tripId: UUID,
+        itineraryId: UUID,
+        secondInput: ScheduleAgentInput,
+        output: ScheduleAgentOutput,
+        isRegeneration: Boolean,
+        assemblyUnplaced: List<UnplacedMustVisit>,
+    ) {
         tx.execute {
             val current = itineraries.findByTrip(tripId).firstOrNull() ?: return@execute null
             if (current.itineraryId != itineraryId) { // 재생성으로 교체된 뒤 도착한 낡은 결과
@@ -85,7 +100,7 @@ class SecondPhaseGenerator(
                 clock.instant(),
                 output.solveMode, output.isFallback, output.candidatesSummary,
                 // 2차는 전 일자를 보고 판정하므로 그 결과가 최종이다 — 1차(day1만) 판정으로 되돌리지 않는다.
-                output.unplacedMustVisits,
+                assemblyUnplaced + output.unplacedMustVisits,
             )
             // 조건부 쓰기 — 위 가드를 읽은 뒤 재생성이 끼어들었으면 여기서 0행이 되어 아무것도 덮어쓰지 않는다.
             if (!itineraries.replaceIfCurrent(tripId, itineraryId, updated)) {
