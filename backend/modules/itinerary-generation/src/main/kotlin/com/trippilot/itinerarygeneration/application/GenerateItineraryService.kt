@@ -52,6 +52,7 @@ class GenerateItineraryService(
     private val itineraries: ItineraryRepository,
     private val events: DomainEventPublisher,
     private val secondPhase: SecondPhaseGenerator,
+    private val genSessions: GenerationSessionService,
     private val revisions: ItineraryRevisionService,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
@@ -80,41 +81,58 @@ class GenerateItineraryService(
         } else {
             ctx.fixedVisits.filterNot { it.date in firstDates }.map { it.poiId }.distinct()
         }
-        val firstAssembly = assembleInput(
-            tripId, mode, ctx, prefs, stayAnchors, firstDates, DAY1_DEADLINE_MS,
-            excluded = reservedForSecond,
-            carriesUndatedFixed = remainingDates.isEmpty(), // 날짜 미지정 must_visit 은 2차가 맡는다(없으면 1차)
-        )
-        val firstInput = firstAssembly.input
-
-        // 외부(ScheduleAgent) 호출은 트랜잭션 밖 — DB 커넥션을 물지 않게.
-        // INV-4: AI 실패 시 침묵 금지 — 결정론 최소 폴백(must_visit 고정블록)으로 대체하고 isFallback 로 표시.
-        val output = try {
-            scheduleAgent.generate(firstInput)
-        } catch (e: Exception) {
-            log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
-            MinimalItineraryFallback.of(firstInput, clock.instant())
-        }
-        // 단일일 여행이면 1차로 끝 — 2차 없이 COMPLETE.
-        val state = if (remainingDates.isEmpty()) GenerationState.COMPLETE else GenerationState.PARTIAL
+        // 화면(h09·h10)이 단계·[취소]를 그릴 상태 원천을 연다(BR-U3-04·05).
+        val session = genSessions.start(tripId, mode)
 
         // 재생성이라면 **직전 상태로 돌아갈 지점**이 반드시 있어야 한다(INV-U3-08 · BR-U3-19).
         val previous = previousOf(tripId)
 
-        // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
-        val saved = tx.execute {
-            previous?.let { revisions.ensureRestorePoint(it) }
-            val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, mode, state, firstDates, firstAssembly.unplaced))
-            events.publish(ItineraryGenerated(it.itineraryId.toString(), tripId.toString(), it.isFallback))
-            // 리비전은 **생성이 끝난 상태**에서만 남긴다. 여기서 PARTIAL(day1만)을 남기면 그 스냅숏으로 되돌릴 때
-            // 2차가 채운 나머지 일자가 통째로 사라진다 — 다일 여행은 2차 완료 시점에 남긴다(SecondPhaseGenerator).
-            if (state == GenerationState.COMPLETE) {
-                revisions.record(it, RevisionActor.AI, kindFor(previous), summaryFor(previous))
-            }
-            it
-        }!!
+        // 1차가 터지면 세션을 닫는다 — 안 닫으면 사용자는 500 을 받고도 화면에서 영원히 "생성 중"을 본다(INV-4 침묵 금지).
+        val saved = try {
+            val firstAssembly = assembleInput(
+                tripId, mode, ctx, prefs, stayAnchors, firstDates, DAY1_DEADLINE_MS,
+                excluded = reservedForSecond,
+                carriesUndatedFixed = remainingDates.isEmpty(), // 날짜 미지정 must_visit 은 2차가 맡는다(없으면 1차)
+            )
+            val firstInput = firstAssembly.input
 
-        if (remainingDates.isNotEmpty()) {
+            // 외부(ScheduleAgent) 호출은 트랜잭션 밖 — DB 커넥션을 물지 않게.
+            // INV-4: AI 실패 시 침묵 금지 — 결정론 최소 폴백(must_visit 고정블록)으로 대체하고 isFallback 로 표시.
+            val output = try {
+                scheduleAgent.generate(firstInput)
+            } catch (e: Exception) {
+                log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
+                MinimalItineraryFallback.of(firstInput, clock.instant())
+            }
+            // 단일일 여행이면 1차로 끝 — 2차 없이 COMPLETE.
+            val state = if (remainingDates.isEmpty()) GenerationState.COMPLETE else GenerationState.PARTIAL
+
+            // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
+            tx.execute {
+                previous?.let { revisions.ensureRestorePoint(it) }
+                val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, mode, state, firstDates, firstAssembly.unplaced))
+                events.publish(ItineraryGenerated(it.itineraryId.toString(), tripId.toString(), it.isFallback))
+                // day1 이 나왔다 — 폴백 여부·후보 등급을 함께 실어 배너가 **첫 노출부터** 사실을 말하게 한다(BR-U3-11).
+                genSessions.day1Ready(
+                    session.sessionId, it.itineraryId,
+                    isFallback = it.isFallback, candidatesLevel = it.candidatesSummary?.level,
+                )
+                // 리비전은 **생성이 끝난 상태**에서만 남긴다. 여기서 PARTIAL(day1만)을 남기면 그 스냅숏으로 되돌릴 때
+                // 2차가 채운 나머지 일자가 통째로 사라진다 — 다일 여행은 2차 완료 시점에 남긴다(SecondPhaseGenerator).
+                if (state == GenerationState.COMPLETE) {
+                    revisions.record(it, RevisionActor.AI, kindFor(previous), summaryFor(previous))
+                }
+                it
+            }!!
+        } catch (e: Exception) {
+            genSessions.failed(session.sessionId)
+            throw e
+        }
+
+        if (remainingDates.isEmpty()) {
+            // 하루 여행은 2차가 없다 — 여기서 닫지 않으면 세션이 DAY1_READY 로 영원히 남아 화면이 계속 폴링한다.
+            genSessions.completed(session.sessionId, saved.isFallback, saved.candidatesSummary?.level)
+        } else {
             // 1차에서 배정된 POI 는 2차 후보에서 제외(TRIP-293) — 같은 장소가 두 번 들어가지 않게.
             val assigned = saved.days.flatMap { d -> d.slots.map { it.sourcePoiId } }.distinct()
             val secondAssembly = assembleInput(
@@ -130,6 +148,7 @@ class GenerateItineraryService(
                 secondInput.copy(excludedPoiIds = secondInput.excludedPoiIds.filterNot { it in fixedInSecond }),
                 isRegeneration = previous != null,
                 assemblyUnplaced = secondAssembly.unplaced,
+                sessionId = session.sessionId,
             )
         }
         return saved
