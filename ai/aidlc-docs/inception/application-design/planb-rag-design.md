@@ -207,6 +207,8 @@ def get_user_preference_summary(user_id):
 
 ## 6. Augmented Prompt 구조
 
+> **상호참조 (2026-08-11, TRIP-349)**: 본 절 골격의 구현·feature 스펙(OutputSchema·게이트·폴백)은 `ai-prompt-design.md` §2.6(ALTERNATIVE_SELECTION, `ai/prompts/alternative_selection.yaml` v0.1.0) — 아래 예시는 설계 시점 원안이다.
+
 ```
 [System]
 너는 여행 중 변수 대응 전문가야.
