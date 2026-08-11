@@ -520,8 +520,14 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
     // 필수로 올렸다. 두 축이 붙어 있는 자리가 곧 의미다: `solveMode` 는 AI 가 **어떻게 풀었나**,
     // `generationMode` 는 사용자가 **무엇을 골랐나**(US-SCHED-09)다. 섞으면 MANUAL 을
     // 실패로 오독한다 — MANUAL 은 `solveMode=MINIMAL` 이지만 `isFallback=false` 다.
+    //
+    // ⚠️ **2026-08-11** — TRIP-350(#183)이 `unplacedMustVisits` 를 더하면서 그 items 의
+    // `required: [poiId, reasonCode, message]` 가 **2번째 자리**로 들어왔다(계약 M2).
+    // 이 배열이 비어 있다는 것이 "필수 방문지를 전부 배치했다"는 뜻이라, 세 필드는 **빠질 수 없다** —
+    // `message` 가 없으면 사용자는 왜 빠졌는지 못 듣고 장소가 조용히 사라진 것으로 보인다.
     expect(extractRequiredLines(block)).toEqual([
       'required: [itineraryId, tripId, status, solveMode, generationMode, isFallback, generationState, days]',
+      'required: [poiId, reasonCode, message]',
       'required: [level]',
       'required: [date, slots]',
       'required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, tags]',
