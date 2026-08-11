@@ -26,7 +26,9 @@ U4는 U1이 만든 규격을 **소비**한다. 아래 타입은 손대지 않는
 |---|---|---|
 | `PREFERENCE_SCORING` | 경량 | **U4 (본 유닛)** |
 | `INTENT` / `PARAPHRASE` / `REASON_INTERPRETATION` | 경량 | U5 |
-| `EXPLANATION` / `ALTERNATIVE_SELECTION` / `REFLECTION` | 상위 | U5·U6 |
+| ~~`EXPLANATION` / `ALTERNATIVE_SELECTION` / `REFLECTION`~~ `EXPLANATION` / `REFLECTION` | 상위 | U5·U6 |
+| `ALTERNATIVE_SELECTION` | 상위(HEAVY) | U5 (**PlanBAgent 전속** `llm.select_alternatives` — TRIP-331) |
+| `REFLECTION_NUDGE` | 경량(LIGHT) | U6 (회고 유도 푸시 문구 — TRIP-347) |
 | `PLACE_EXTRACTION` | 상위 (백그라운드) | U6 |
 | `EDIT_TRANSLATION` | 경량(LIGHT) | agent-foundation 스텝 ⓪ (**EditAgent 전속**) |
 
@@ -36,6 +38,11 @@ U4는 U1이 만든 규격을 **소비**한다. 아래 타입은 손대지 않는
 > "u4 …domain-entities.md §1"은 **본 행으로 반영 완료** (TRIP-315).
 > 티어는 INTENT·PARAPHRASE와 동급 과업이라는 근거의 **제안값**이며, LIGHT 확정 여부는
 > 복잡 편집 발화 정확도를 K-2 실모델 검증에서 확인한 뒤 확정한다 (**미결 #4**, agent-foundation FD business-rules §5).
+
+> **개정 (2026-08-11, TRIP-349)**: 선구현 반영 — `ALTERNATIVE_SELECTION`을 상위 그룹 행에서 분리해
+> 구현 소재(PlanBAgent 전속, TRIP-331)를 명시하고, `REFLECTION_NUDGE`(회고 유도 푸시 문구, TRIP-347) 행을 추가했다.
+> 티어 매핑의 구현 정본은 `llm_gateway/config.py::default_tier_map`(경량 6·상위 4)이며 본 표와 일치한다.
+> 프롬프트 스펙은 프롬프트 정본 §2.6(ALTERNATIVE_SELECTION)·§2.7(REFLECTION_NUDGE).
 
 ### ModelTier (StrEnum)
 

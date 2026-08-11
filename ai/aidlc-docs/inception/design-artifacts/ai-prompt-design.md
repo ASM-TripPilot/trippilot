@@ -4,6 +4,12 @@
 > 본 문서는 feature별 **프롬프트 구조·OutputSchema·검증 규칙**을 정의한다.
 > 표기: `[정본]` = 계약 확정 · `[설계권고]` = 착수 시 확정 대상.
 
+> **개정 (2026-08-11, TRIP-349)** — §2.6(AlternativeSelection)·§2.7(ReflectionNudge) 추가.
+> 두 절은 선구현(TRIP-331·TRIP-347) 코드를 **후속 기술**한 것이다(EDIT_TRANSLATION/TRIP-315 선례) —
+> 서술 근거는 `ai/prompts/{alternative_selection,reflection_nudge}.yaml` v0.1.0 +
+> `llm_gateway/gates/`·`workers/` 동명 모듈이며, 구현이 이미 계약을 고정했으므로 `[정본]`으로 표기한다.
+> §2 도입부의 워커 범위도 §2.1~2.3 → §2.1~2.3·2.5~2.7로 갱신.
+
 ---
 
 ## 1. 프롬프트 설계 원칙
@@ -32,7 +38,7 @@ LLM에 넘기는 필드는 **목적에 필요한 것만**. 서버가 ResourceRef
 
 ## 2. feature별 프롬프트 스펙
 
-> **라우터 vs 워커 (AI-D02)**: `INTENT`(§2.4)는 자연어 진입의 **라우터**로, 의도를 분류해 워커를 고르고 편집 명령·반영 모드를 정한다. 나머지 feature(§2.1~2.3)는 **워커**로 각자 판단·생성만 한다. 어떤 feature도 시각·순서를 확정하지 않는다(확정은 솔버).
+> **라우터 vs 워커 (AI-D02)**: `INTENT`(§2.4)는 자연어 진입의 **라우터**로, 의도를 분류해 워커를 고르고 편집 명령·반영 모드를 정한다. 나머지 feature(§2.1~2.3·2.5~2.7)는 **워커**로 각자 판단·생성만 한다. 어떤 feature도 시각·순서를 확정하지 않는다(확정은 솔버).
 
 ### 2.1 PreferenceScoring — 워커 (경량 티어) `[설계권고]`
 
@@ -244,6 +250,102 @@ if not validated:
 **출구 게이트(코드, ai-implementation-design.md §2.1)**: 추출 결과는 프롬프트가 아니라 **수집 게이트**가 최종 판정 — 좌표·영업시간·카테고리 결손 시 격리, 실재 미확인 시 격리, 중복 병합. **웹 원본은 게이트 통과 후에만 M7 후보**가 된다(INV-1).
 
 **폴백**: 추출 실패/저품질 → 해당 POI 격리, 생성은 DB 후보로 정상 진행.
+
+---
+
+### 2.6 AlternativeSelection — 워커 (상위 티어) `[정본]` — Plan-B 대체지 선택(TRIP-331)
+
+**목적**: 여행 중 변수(날씨·휴무·지연 등) 발생 시, **대체 후보 closed-set 안에서** 대안 POI를 선호 순서로 고르고 이유를 붙인다. PlanBAgent **전속 도구** `llm.select_alternatives`의 실체 — RAG 파이프라인의 Generate 단계이며, 프롬프트 골격의 정본은 [planb-rag-design.md](../application-design/planb-rag-design.md) §6(Augmented Prompt 구조)이다. 구현: `ai/prompts/alternative_selection.yaml` v0.1.0 · `llm_gateway/gates/alternative_selection.py` · `llm_gateway/workers/alternative_selection.py`.
+
+**입력 컨텍스트**:
+```
+- 문제 상황: 트리거 종류(trigger_kind) + 사유(reason — weather|closed|delay|canceled|fatigue|none)
+- KB 발췌 3종 (줄 단위 텍스트 — 검색·조립은 호출측 PlanBAgent 소유, planb-rag-design §5.2):
+  · schedule_context (KB-1: 영향 슬롯·일정)
+  · situation_context (KB-3: 상황 대응 지식)
+  · persona_context (KB-2: 선호·저장 장소)
+- 대체 후보 목록 (poiId + 카테고리 + 상호명만 — 좌표 미포함, poi_id 정렬로 결정론)
+  · 이미 방문·거절한 POI(excluded_poi_ids)는 목록에서 아예 제외 — 모델이 고를 수 있는 값 자체를 한정 (INV-1)
+- max_alternatives (최대 선택 수, ≥ 1)
+```
+
+**OutputSchema**:
+```json
+{
+  "selections": [
+    { "poiId": "string", "reason": "string(1문장, 표시용)" }
+  ]
+}
+```
+빈 `selections`는 오류가 아니라 **"적합 후보 없음" 신호** — 게이트웨이가 폴백으로 전환한다.
+
+**프롬프트 구조 (시스템, yaml 템플릿)**:
+```
+당신은 여행 중 변수 대응 전문가입니다.
+사용자의 기존 일정에서 문제가 생겼을 때, 아래 대체 후보 목록 안에서 대안을 고르세요.
+
+규칙:
+- 반드시 제공된 poiId 목록 안에서만 선택하세요 (목록 밖 ID 생성 금지)
+- 최대 N개를 상황에 적합한 순서대로 나열하세요 (중복 금지)
+- reason은 한국어 1문장, 사용자에게 표시됩니다
+- reason에 시각·이동시간·소요시간을 언급하지 마세요 — 시각은 솔버가 정합니다 (INV-3)
+- 적합한 후보가 없으면 억지로 고르지 말고 {"selections": []}로 응답하세요 (지어내기 금지)
+- JSON 스키마를 정확히 따르고, JSON 외의 텍스트는 출력하지 마세요
+```
+
+**closed-set 검증 게이트** (`AlternativeSelectionGate` — explanation 선례):
+```
+- poiId ⊆ 후보 풀 교차 (INV-1) — 풀 밖 항목만 드롭(항목 격리) + GateDropEvent 계측
+- 중복 poiId는 첫 등장만 채택
+- 생존분은 LLM이 낸 선호 순서 그대로 통과 — 이 순서는 제안일 뿐, 배치·시각 확정은 솔버 몫 (INV-2)
+- 통과분만 도메인 타입 AlternativePick으로 승격 (u4 FD §4 승격 규칙)
+- 스키마에 시각·소요시간 자리가 아예 없다 (INV-3)
+```
+
+**폴백**: 타임아웃(2.5초)·파싱 실패·전량 드롭 → `TypedResult(is_fallback=true)`. **규칙 랭킹 폴백의 실행은 호출측 PlanBAgent 몫** (BR-U4-09, planb-rag-design §7 폴백 계단) — C1은 신호만 내고, 침묵 실패는 없다 (INV-4).
+
+---
+
+### 2.7 ReflectionNudge — 워커 (경량 티어) `[정본]` — 회고 유도 푸시 문구(TRIP-347)
+
+**목적**: 여행 종료 후 회고 작성을 부드럽게 권유하는 **푸시 알림 문구 1문장**을 개인화 생성. Reflection(§2.3, 회고 본문)과 **별개 feature**다. 구현: `ai/prompts/reflection_nudge.yaml` v0.1.0 · `llm_gateway/gates/reflection_nudge.py` · `llm_gateway/workers/reflection_nudge.py`.
+
+**입력 컨텍스트** (이미 확정된 문자열 요약 — 조립은 호출측 몫, 실제 여행 기록만):
+```
+- 여행지 표시명 (destination)
+- 여행 기간 일수 (duration_days ≥ 1)
+- 사용자 성향 요약 1~2문장 (persona_summary)
+- 대표 방문지 0~2곳 (highlight_places — 대표성 순서는 호출측이 확정)
+```
+
+**OutputSchema**:
+```json
+{ "message": "string(1문장, 60자 이내)" }
+```
+
+**프롬프트 구조 (시스템, yaml 템플릿)**:
+```
+당신은 여행 회고 작성을 부드럽게 권유하는 어시스턴트입니다.
+방금 여행을 마친 사용자에게 보낼 푸시 알림 문구 한 줄을 작성하세요.
+
+규칙:
+- 정확히 1문장, 60자 이내로 작성하세요
+- 소요시간·시각·이동시간을 언급하지 마세요 (INV-3)
+- 과장하거나 확정적으로 단정하지 마세요 ("최고였죠!" 같은 단정 금지)
+- 여행 정보에 없는 내용을 지어내지 마세요
+- 이모지는 0~1개만 사용하세요
+- JSON 스키마를 정확히 따르고, JSON 외의 텍스트는 출력하지 마세요
+```
+
+**표시 안전성 게이트** (`ReflectionNudgeGate` — POI 선택이 없어 후보 풀과 무관, paraphrase 게이트와 같은 형). 위반은 error가 아니라 **드롭**(GateDropEvent — `dropped_ids`는 빈 튜플로 환각률 지표 순수성 유지):
+```
+① 빈 문자열·공백뿐 — 빈 알림은 보낼 수 없다
+② 60자 초과 — 푸시 문구는 잘리면 의미가 깨진다 (프롬프트의 "60자 이내"와 동일 값)
+③ 금지 토큰("분"·"시간"·"시각"·"duration") 포함 (INV-3)
+   — 부분 문자열 매칭이라 정상 문구를 과잉 드롭할 수 있으나 폴백 문구로 수렴할 뿐이라 fail-safe
+```
+
+**폴백**: 실패·드롭 시 결정론 기본 문구 `FALLBACK_NUDGE_MESSAGE`("이번 여행은 어떠셨나요? 한 줄로 남겨보세요")로 전환 — 기본 문구 스스로 게이트 규칙(60자 이내·금지 토큰 없음·비어 있지 않음)을 만족한다(테스트가 고정). 폴백 문구의 **사용**은 호출측(백엔드 notification/FCM) 소유이며, 알림이 안 나가는 침묵 실패는 금지 (INV-4).
 
 ---
 
