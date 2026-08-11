@@ -35,6 +35,10 @@ import {
   buildDraftPins,
   formatDraftDayHeader,
 } from '@/features/itinerary/model/draftView';
+import {
+  formatConfirmedDateRange,
+  type PlanDayTab,
+} from '@/features/itinerary/model/planState';
 import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
 import {
   startTimeOptions,
@@ -46,6 +50,7 @@ import {
 } from '@/features/itinerary/ui/DraftScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
+import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import {
@@ -464,6 +469,61 @@ const MUST_VISIT_THUMBNAILS = [
   { sourcePoiId: 'poi-1', name: '감천문화마을', imageUrl: null },
   { sourcePoiId: 'poi-2', name: '광안리해수욕장', imageUrl: null },
   { sourcePoiId: 'poi-3', name: '전포카페거리', imageUrl: null },
+];
+
+/**
+ * h25 완성 일정(TimelineScreen) 프리뷰 픽스처 — 피어 세션(frontend-82 "지라 TRIP-299 진행")이
+ * 제공한 h25 칩을 옮긴 것이다(크로스티켓 조율: TRIP-299 프리뷰 칩 누락 보완, [기록]에 출처 명시).
+ * h34 확정 프리뷰가 같은 데이터에 `status=CONFIRMED` 만 얹어 두 얼굴을 한 자리에서 대조한다.
+ * 슬롯 4개가 오전/저녁/점심 시간대·고정·위반·자정 넘김을 한 벌로 덮는다.
+ */
+const TIMELINE_PREVIEW_HEADER = {
+  title: '부산 여행',
+  nightsLabel: '3박 4일',
+  totalPlaces: 5,
+};
+const TIMELINE_PREVIEW_DAYS: PlanDayTab[] = [
+  { dayIndex: 1, date: '2026-06-10', count: 4 },
+  { dayIndex: 2, date: '2026-06-11', count: 1 },
+];
+const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
+  {
+    poiId: 'poi-a',
+    startAt: '09:30:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    tags: [],
+  },
+  {
+    poiId: 'poi-b',
+    startAt: '21:00:00',
+    endAt: '22:00:00',
+    isFixed: true,
+    endsNextDay: false,
+    hasViolation: false,
+    tags: [],
+  },
+  {
+    poiId: 'poi-c',
+    startAt: '13:00:00',
+    endAt: '14:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: true,
+    violationReason: '영업 종료 후 도착',
+    tags: [],
+  },
+  {
+    poiId: 'poi-d',
+    startAt: '22:30:00',
+    endAt: '06:00:00',
+    isFixed: false,
+    endsNextDay: true,
+    hasViolation: false,
+    tags: [],
+  },
 ];
 
 const PREVIEW_STATES: PreviewState[] = [
@@ -1127,6 +1187,53 @@ const PREVIEW_STATES: PreviewState[] = [
         shortfallCategories={['1일 예산 5만원', '700m 이내', '비건·24시간']}
         onBack={noop}
         onReduceMustVisits={noop}
+      />
+    ),
+  },
+  // h25 완성 일정(TRIP-299) — 피어가 제공한 프리뷰 칩. 실화면 딥링크로는 볼 수 없다(생성 POST 가
+  // 만드는 tripId + 완성 일정 응답이 백엔드 없이는 안 생긴다). 화면이 props 만 받는 프레젠테이션이라
+  // 배선 없이 얼굴이 그대로 나온다.
+  {
+    key: 'itinerary-timeline',
+    label: '완성 일정 · 시간표(h25)',
+    login: null,
+    render: () => (
+      <TimelineScreen
+        header={TIMELINE_PREVIEW_HEADER}
+        days={TIMELINE_PREVIEW_DAYS}
+        slots={TIMELINE_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        segment="timeline"
+        status="PLANNED"
+        onSelectDay={noop}
+        onSegmentChange={noop}
+        onBack={noop}
+        onConfirm={noop}
+      />
+    ),
+  },
+  // h34 확정 읽기전용(TRIP-300) — 같은 데이터에 status=CONFIRMED 를 얹은 확정 얼굴. 확정 배너·
+  // appbar `확정 일정`·하단 비활성 2버튼을 Figma h34 와 눈으로 대조한다. 부제는 실기와 같은 조립
+  // 함수(formatConfirmedDateRange)로 만든다 — 손으로 적으면 프리뷰와 실기가 갈린다.
+  {
+    key: 'itinerary-confirmed',
+    label: '확정 일정 · 읽기전용(h34)',
+    login: null,
+    render: () => (
+      <TimelineScreen
+        header={TIMELINE_PREVIEW_HEADER}
+        days={TIMELINE_PREVIEW_DAYS}
+        slots={TIMELINE_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        segment="timeline"
+        status="CONFIRMED"
+        confirmedSubtitle={`${formatConfirmedDateRange(
+          '2026-06-10',
+          '2026-06-13'
+        )} · 부산 여행 · 5곳`}
+        onSelectDay={noop}
+        onSegmentChange={noop}
+        onBack={noop}
       />
     ),
   },

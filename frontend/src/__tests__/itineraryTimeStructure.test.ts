@@ -60,6 +60,22 @@ const ROUTE_REL = 'app/trips/[tripId]/itinerary/index.tsx';
 const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
 
 /**
+ * (TRIP-300) 확정 배선이 **캐시 데이터를 버리는** 원시를 쓰는지 잡는 탐지기(02a ★3).
+ * `resetQueries`/`removeQueries`/`.clear(` 은 `data` 까지 버려 목록이 잠깐 사라진다(2026-08-10
+ * 실측 사고). 성공은 `setQueryData`, 409 정합은 `invalidateQueries`(무효화만, 데이터 보존)여야 한다.
+ *
+ * ⚠️ **왜 소스 가드인가**: mock 재조회는 **즉시** 반환하므로 데이터가 빈 순간(전이)이 렌더 테스트
+ * 눈에 안 보인다 — 행동 테스트로는 이 오용을 못 잡는다. 소스 층이 유일한 심판이다.
+ */
+const RESET_FAMILY = /\bresetQueries\b|\bremoveQueries\b|\.clear\(/;
+
+/** 확정 배선이 착지하는 두 자리(페이지 · 순수/훅 모델). 어느 쪽에 배선하든 사정거리 안이다. */
+const CONFIRM_WIRING_DIRS = [
+  'pages/itinerary-plan',
+  'features/itinerary/model',
+];
+
+/**
  * 스캔 전처리 — 주석을 걷는다. 블록 주석을 먼저 지운다(순서를 바꾸면 한 줄 안의 코드가 소실된다).
  * 줄 주석 규칙에서 **바로 앞 글자가 `:` 이면 주석으로 보지 않는다** — `'https://…'` 의 슬래시를
  * 주석 시작으로 오인하지 않기 위한 것이다(동결 가드들과 같은 규칙).
@@ -184,5 +200,57 @@ describe('🔴 G4 · AC-V — 라우트는 얇다 (frontend-components.md §0)',
     expect(source).not.toMatch(/\buseQuery\b|\buseMutation\b/);
     expect(source).not.toContain('FlatList');
     expect(source).not.toContain('KakaoMapView');
+  });
+});
+
+describe('G5 · TRIP-300 확정 배선이 캐시 데이터를 버리지 않는다 (INV-4 · 02a ★3)', () => {
+  it('G5-1 자가검사 — 주석 속 resetQueries 는 걷히고, 코드의 오용만 탐지된다', () => {
+    // ★ 조합 검증 — 전처리(stripComments)와 탐지기가 서로를 지우는지 실제 문자열로 본다(02a §5-C).
+    const sample = [
+      '// 성공은 setQueryData, 409 는 invalidateQueries — resetQueries 는 쓰지 않는다.',
+      'queryClient.setQueryData(key, data);',
+      'void queryClient.invalidateQueries({ queryKey: key });',
+      'queryClient.resetQueries({ queryKey: key });', // ← 코드의 위반
+    ].join('\n');
+
+    const stripped = stripComments(sample);
+
+    // ① 주석 속 금칙어는 걷힌다 — 걷지 않으면 "resetQueries 는 쓰지 않는다"는 수호 주석 자체가
+    //    아래 가드를 통과 불가능하게 만든다(거짓 RED).
+    expect(
+      stripComments('// resetQueries removeQueries .clear() 언급뿐')
+    ).not.toMatch(RESET_FAMILY);
+
+    // ② ★ 코드의 오용은 살아남아 탐지된다 — 순진한 제거가 코드를 지우면 심판이 공허해진다.
+    expect(stripped).toContain('resetQueries');
+    expect(RESET_FAMILY.test(stripped)).toBe(true);
+
+    // ③ 올바른 원시(setQueryData·invalidateQueries)는 걸리지 않는다 — 정상 배선을 red 로 만들지 않는다.
+    expect(stripped).toContain('setQueryData');
+    expect(stripped).toContain('invalidateQueries');
+    expect(RESET_FAMILY.test('queryClient.setQueryData(k, d);')).toBe(false);
+    expect(
+      RESET_FAMILY.test('queryClient.invalidateQueries({ queryKey });')
+    ).toBe(false);
+  });
+
+  it('G5-2 — 확정 배선이 사정거리 안에 착지하고, reset-family 는 0건이다', () => {
+    const sources = CONFIRM_WIRING_DIRS.flatMap((dir) =>
+      listSourceFiles(path.join(ROOT, dir)).map((full) => ({
+        file: relOf(full),
+        source: readOne(relOf(full)),
+      }))
+    );
+    const combined = sources.map(({ source }) => source).join('\n');
+
+    // 긍정 앵커 — 확정 mutation 배선이 이 두 자리 중 하나에 실재한다(RED now: 아직 미배선).
+    // 없으면 아래 "위반 0"이 확정 로직이 딴 데 있는데도 공허하게 통과한다.
+    expect(combined).toContain('usePostTripsTripIdItineraryConfirm');
+
+    // 부정 — 캐시 데이터를 버리는 원시가 0건이다. 성공=setQueryData, 409=invalidateQueries 여야 한다.
+    const offenders = sources
+      .filter(({ source }) => RESET_FAMILY.test(source))
+      .map(({ file }) => file);
+    expect(offenders).toEqual([]);
   });
 });

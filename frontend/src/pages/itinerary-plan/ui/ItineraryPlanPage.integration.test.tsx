@@ -125,24 +125,43 @@ function itinerary(): Itinerary {
   };
 }
 
-/** GET /itinerary 가 몇 번 처리됐나. 세그먼트 전환에도 이 값이 안 늘어야 한다(AC6). */
+/** 확정 흐름(TRIP-300)용 — 같은 일정을 status 만 갈아 끼운다. PLANNED 여야 활성 확정 CTA 가 뜬다. */
+function plannedItinerary(): Itinerary {
+  return { ...itinerary(), status: 'PLANNED' };
+}
+function confirmedItinerary(): Itinerary {
+  return { ...itinerary(), status: 'CONFIRMED' };
+}
+
+/** GET /itinerary 가 몇 번 처리됐나. 세그먼트 전환에도 이 값이 안 늘어야 한다(AC6). 확정 흐름에선
+ * 성공=불변(setQueryData), 409=+1(재조회), 404=불변(재조회 없음)으로 세 갈래를 가른다(★5·★6). */
 let itineraryGetCalls = 0;
-/** GET /itinerary 응답을 케이스가 정한다(정상 or 404). */
+/** POST /confirm 이 몇 번 처리됐나. press 1회 → POST 1건(중간 다이얼로그 없음 · ★9). */
+let confirmPostCalls = 0;
+/** GET /itinerary 응답을 케이스가 정한다(정상 · 404 · PLANNED/CONFIRMED). */
 let itineraryHandler: () => Response;
+/** POST /confirm 응답을 케이스가 정한다(200 CONFIRMED · 409 · 404). */
+let confirmHandler: () => Response;
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
   itineraryGetCalls = 0;
+  confirmPostCalls = 0;
   mockBack.mockClear();
   setAccessToken('valid-access');
   itineraryHandler = () => HttpResponse.json(itinerary());
+  confirmHandler = () => HttpResponse.json(confirmedItinerary());
 
   server.use(
     http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
     http.get(`${BASE}/trips/:tripId/itinerary`, () => {
       itineraryGetCalls += 1;
       return itineraryHandler();
+    }),
+    http.post(`${BASE}/trips/:tripId/itinerary/confirm`, () => {
+      confirmPostCalls += 1;
+      return confirmHandler();
     })
   );
 });
@@ -210,5 +229,107 @@ describe('🔴 I3 · AC9 — 일정이 아직 없으면(404) notFound 얼굴을 
     await screen.findByTestId('itinerary-view-notfound');
     // 짝 — 시간표로 갈아 끼우지 않았다.
     expect(screen.queryAllByTestId('itinerary-view-timeline')).toEqual([]);
+  });
+});
+
+/**
+ * ── TRIP-300 확정 mutation 3갈래 ─────────────────────────────────────────────
+ * 무엇을 보장하나:
+ *  - 🔴 성공(200)은 **재조회 없이** setQueryData 로 읽기전용 전환(I4 · ★6).
+ *  - 🔴 409 는 침묵 없이 안내 + 재조회로 정합하되, 전환과 잔존을 케이스로 가른다(I5a·I5b · ★2).
+ *  - 🔴 404 는 status 불변·재조회 없음(I7 · ★5). 409(+1)와 404(불변)를 GET 실건수로 가른다.
+ */
+describe('🔴 I4 · AC1 — 확정 성공(200)은 재조회 없이 읽기전용으로 전환한다 (setQueryData · US-SCHED-12)', () => {
+  it('확정 CTA press → POST /confirm 1건, GET 재조회 없이 확정 배너가 뜬다', async () => {
+    itineraryHandler = () => HttpResponse.json(plannedItinerary());
+    confirmHandler = () => HttpResponse.json(confirmedItinerary());
+
+    renderPage();
+
+    // PLANNED 로 열려 활성 확정 CTA 가 뜬다(첫 GET 1건).
+    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    await waitFor(() => expect(itineraryGetCalls).toBe(1));
+
+    // 누른다 — 중간 다이얼로그 없이 곧장 POST(★9).
+    fireEvent.press(cta);
+
+    // 확정 배너로 전환. 부제는 페이지 조립(날짜범위 · 제목 · 총 곳수). 곳수 = 전 일자 슬롯 합(2+1=3).
+    const banner = await screen.findByTestId('itinerary-confirmed-banner');
+    expect(banner).toHaveTextContent(/6월 10일 – 13일/);
+    expect(banner).toHaveTextContent(/제주 여행/);
+    expect(banner).toHaveTextContent(/3곳/);
+    expect(screen.getByText('확정 일정')).toBeOnTheScreen();
+
+    // ★6 — POST 1건, GET 은 **안 늘었다**(재조회 0). 응답을 캐시에 직접 주입(setQueryData)했다는
+    //   유일한 설명이다. invalidate/refetch 로 성공을 반영하면 GET 이 2가 되어 여기서 죽는다.
+    expect(confirmPostCalls).toBe(1);
+    expect(itineraryGetCalls).toBe(1);
+  });
+});
+
+describe('🔴 I5a · AC5 — 409 는 침묵 없이 안내 + 재조회, 서버가 PLANNED 면 편집 얼굴 유지 (INV-4)', () => {
+  it('confirm 이 409 면 인라인 안내가 뜨고 GET 을 다시 조회하며, PLANNED 얼굴이 남는다', async () => {
+    itineraryHandler = () => HttpResponse.json(plannedItinerary()); // 재조회해도 PLANNED
+    confirmHandler = () => new HttpResponse(null, { status: 409 });
+
+    renderPage();
+    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    await waitFor(() => expect(itineraryGetCalls).toBe(1));
+
+    fireEvent.press(cta);
+
+    // 침묵 아님(INV-4) — 인라인 안내가 뜬다.
+    const err = await screen.findByTestId('itinerary-confirm-error');
+    expect(err).toHaveTextContent(/\S/);
+
+    // 재조회로 정합 시도 — GET 이 한 번 더 나간다(invalidate → refetch). ★5 에서 404 와 갈린다.
+    await waitFor(() => expect(itineraryGetCalls).toBe(2));
+
+    // 서버 진실이 PLANNED 라 편집 얼굴 유지 — 타임라인·확정 CTA 가 남고 배너는 없다.
+    expect(screen.getByTestId('itinerary-view-timeline')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-confirm-cta')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId('itinerary-confirmed-banner')).toEqual([]);
+  });
+});
+
+describe('🔴 I5b · AC5 — 409 후 재조회가 CONFIRMED 면 읽기전용으로 정합한다 (INV-4 · ★2)', () => {
+  it('confirm 이 409 이고 서버가 이미 확정이면, 재조회로 확정 배너로 정합한다', async () => {
+    itineraryHandler = () => HttpResponse.json(plannedItinerary());
+    confirmHandler = () => new HttpResponse(null, { status: 409 });
+
+    renderPage();
+    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    await waitFor(() => expect(itineraryGetCalls).toBe(1));
+
+    // 409 직후 서버 진실은 이미 CONFIRMED(다른 경로로 확정됨) — 재조회가 그것을 받아온다.
+    itineraryHandler = () => HttpResponse.json(confirmedItinerary());
+    fireEvent.press(cta);
+
+    // 재조회로 확정 배너로 정합. ★2 — 얼굴이 읽기전용으로 바뀌면 인라인 안내는 그 리렌더에
+    //   지워지므로 이 케이스는 잔존 안내를 단언하지 않는다(전환과 잔존을 케이스로 갈랐다).
+    await screen.findByTestId('itinerary-confirmed-banner');
+    await waitFor(() => expect(itineraryGetCalls).toBe(2));
+  });
+});
+
+describe('🔴 I7 · AC6 — 404 는 status 를 바꾸지 않고 실패를 표시한다 (INV-4 · ★5)', () => {
+  it('confirm 이 404 면 안내가 뜨고, 재조회 없이 PLANNED 가 유지된다', async () => {
+    itineraryHandler = () => HttpResponse.json(plannedItinerary());
+    confirmHandler = () => new HttpResponse(null, { status: 404 });
+
+    renderPage();
+    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    await waitFor(() => expect(itineraryGetCalls).toBe(1));
+
+    fireEvent.press(cta);
+
+    // 실패 표시(INV-4).
+    const err = await screen.findByTestId('itinerary-confirm-error');
+    expect(err).toHaveTextContent(/\S/);
+
+    // ★5 — 404 는 409 와 달리 재조회하지 않는다(GET 불변 1). status 불변이라 배너도 없다.
+    expect(itineraryGetCalls).toBe(1);
+    expect(screen.queryAllByTestId('itinerary-confirmed-banner')).toEqual([]);
+    expect(screen.getByTestId('itinerary-confirm-cta')).toBeOnTheScreen();
   });
 });

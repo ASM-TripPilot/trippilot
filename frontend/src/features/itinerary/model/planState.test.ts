@@ -2,12 +2,13 @@ import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
 
 import {
   buildPlanDayTabs,
+  formatConfirmedDateRange,
   formatNightsLabel,
   resolvePlanState,
 } from './planState';
 
 /**
- * h25 완성 일정의 순수 판정/조립 3종.
+ * h25 완성 일정의 순수 판정/조립.
  *
  * 화면(`ui/TimelineScreen`)은 이 값들을 다시 계산하지 않는다 — 판정이 두 층에 흩어지면 같은
  * 규칙이 서로 다르게 진화한다(`draftView.ts` 와 같은 배치).
@@ -16,6 +17,7 @@ import {
  *  - `resolvePlanState` 가 로딩·404·실패·목록을 **우선순위대로** 하나의 얼굴로 가른다(AC9 · AC1).
  *  - `formatNightsLabel` 이 날짜 두 개를 "N박 M일"로 옮기되 **UTC 계산**이다(월·해 넘김 · CI 안전).
  *  - `buildPlanDayTabs` 가 날짜탭 메타(1..N · 곳 수)를 만든다(AC1).
+ *  - (TRIP-300) `formatConfirmedDateRange` 가 확정 배너의 날짜범위를 옮긴다(같은 달/달 넘김).
  */
 
 function day(date: string, slotCount: number): ItineraryDaysItem {
@@ -133,5 +135,28 @@ describe('M4 · buildPlanDayTabs — 날짜탭 메타 1..N', () => {
     ]);
     // 빈 입력은 빈 탭.
     expect(buildPlanDayTabs([])).toEqual([]);
+  });
+});
+
+describe('🔴 M5 · formatConfirmedDateRange — 확정 배너 날짜범위 (TRIP-300 · D3)', () => {
+  it('같은 달은 끝 월을 생략하고, 달이 바뀌면 양쪽 월을 넣고, 형식 오류는 빈 문자열이다', () => {
+    // 구분자는 en-dash `–`(U+2013) + 앞뒤 공백 — Figma·브리프 실측(hexdump e28093).
+    // 같은 달 = `6월 10일 – 13일`. 끝 날짜의 월은 뺀다(Figma 예시).
+    expect(formatConfirmedDateRange('2026-06-10', '2026-06-13')).toBe(
+      '6월 10일 – 13일'
+    );
+    // 달 바뀜 = `6월 30일 – 7월 2일`. 끝에 월이 필요할 때만 넣는다(D3).
+    expect(formatConfirmedDateRange('2026-06-30', '2026-07-02')).toBe(
+      '6월 30일 – 7월 2일'
+    );
+    // 해 넘김도 달 바뀜과 같은 형태(연도는 표기 안 함) — 로컬 Date 로 다루면 UTC-x 에서
+    // 하루 밀려 `12월 30일` 로 어긋난다(planState 의 utcDayTime 을 재사용해야 한다).
+    expect(formatConfirmedDateRange('2026-12-31', '2027-01-02')).toBe(
+      '12월 31일 – 1월 2일'
+    );
+    // 형식이 아니면 빈 문자열(호출부가 빈 배너로 갈라낸다 · formatNightsLabel 과 같은 가드).
+    expect(formatConfirmedDateRange('x', 'y')).toBe('');
+    // 역방향(end < start)도 빈 문자열 — 잘못된 범위를 배너에 그리지 않는다.
+    expect(formatConfirmedDateRange('2026-06-13', '2026-06-10')).toBe('');
   });
 });

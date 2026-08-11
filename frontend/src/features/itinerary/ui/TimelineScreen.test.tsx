@@ -1,3 +1,4 @@
+import type { ReactTestInstance } from 'react-test-renderer';
 import {
   fireEvent,
   render,
@@ -5,11 +6,15 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type {
+  ItineraryDaysItemSlotsItem,
+  ItineraryStatus,
+} from '@/shared/api/generated/schemas';
 
 import type { PlanDayTab } from '../model/planState';
 import { buildSlotKey } from '../model/slotKey';
 import { timeBandLabel } from '../model/timeBandLabel';
+import tailwindConfig from '../../../../tailwind.config.js';
 import {
   type ItineraryHeaderData,
   TimelineScreen,
@@ -27,6 +32,13 @@ import {
  *    왼쪽 절반을 안 그린다(01b Q2). "null이면 비운다"가 아니라 "채워져도 안 그린다"이다(02a ★2).
  *  - 고정 pill(AC3)·위반 배지(AC4, 저장무관)·자정 넘김 표기(AC5)·시간대 라벨(AC2)이 각각 뜬다.
  *  - 세그먼트 전환은 UI 상태(prop)로만 일어난다(AC6 화면부) — 데이터는 건드리지 않는다.
+ *
+ * (TRIP-300) 이 화면 위에 `status` 축을 얹는다 — 같은 화면의 두 얼굴이다:
+ *  - 🔴 **PLANNED**: 하단에 **활성** 확정 CTA(`itinerary-confirm-cta`, 스텁 개명 · AC1).
+ *  - 🔴 **CONFIRMED**: 확정 배너 + appbar `확정 일정` + 하단 [일정 수정]/[공유하기]**비활성** 2버튼,
+ *    확정 CTA는 **부재**(읽기전용 · AC2·3·4·7). 비활성 [공유하기]는 `toBeDisabled()` 만으론 못
+ *    잡는다 — Figma 분홍을 그대로 두면 "눌릴 것 같은데 안 눌리는" 함정이라 brand색 부재를 짝으로
+ *    잰다(02a ★1).
  *
  * *(개념)* **testID** — 화면 요소에 붙이는 테스트 전용 이름표. 사용자에겐 안 보이고, 테스트가
  * "그 요소"를 정확히 집어 오는 손잡이다.
@@ -146,13 +158,43 @@ function renderedTexts(): string[] {
   return out;
 }
 
-/** 소요시간 표기 탐지기(twin C7과 같은 것). 02a §5-C 실측 — 이 화면의 렌더 문자열에 오탐 0건이고,
- * 시각(`09:30`)은 걸리지 않는다(숫자 뒤가 `:`이지 `분/시간`이 아니다). */
+/** 소요시간 표기 탐지기(twin C7과 같은 것). 02a §5-B 실측 — 확정 얼굴 신규 문자열에도 오탐 0건이고,
+ * 시각(`09:30`)·날짜(`13일`)는 걸리지 않는다(`일`/`:`이지 `분/시간/소요`가 아니다). */
 const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
+
+/**
+ * *(개념)* **className** — NativeWind 가 쓰는 스타일 이름표. 이 환경에서는 렌더된 요소의 props 에
+ * 문자열 그대로 남아 있어(02a §5-A) jest 가 **색을 볼 수 있는 유일한 통로**다(`toHaveStyle` 은 못
+ * 쓴다 — `style` 이 undefined). `MustVisitPickerScreen`·`StaySearchScreen` 선례와 같은 방식.
+ *
+ * 브랜드 주색 **계열**(`primary`·`primary-active`·`primary-pale`·`primary-text`·`on-primary`)을
+ * `tailwind.config.js`(= Figma 변수 미러)에서 파생한다 — 손으로 적은 목록은 색이 늘면 늙는다.
+ */
+const BRAND_COLORS = Object.keys(
+  (
+    tailwindConfig as unknown as {
+      theme: { extend: { colors: Record<string, string> } };
+    }
+  ).theme.extend.colors
+)
+  .filter((name) => name === 'on-primary' || /^primary(-|$)/.test(name))
+  .sort((a, b) => b.length - a.length);
+
+/** `bg-primary` · `text-on-primary` 처럼 **유틸리티 접두 + 브랜드 색 이름** 한 덩어리. */
+const BRAND_TOKEN = new RegExp(`^[a-z]+-(?:${BRAND_COLORS.join('|')})$`);
+
+/** className 조각 중 브랜드 주색 계열을 **전부** 돌려준다. 비활성 버튼엔 `toEqual([])`(계열 전체
+ * 부재)로, 활성 CTA엔 `.not.toEqual([])`(색이 실제로 보임)로 쓴다 — ★1 시각 사각지대 봉쇄. */
+function brandTokensIn(node: ReactTestInstance): string[] {
+  return String(node.props.className ?? '')
+    .split(/\s+/)
+    .filter((token) => BRAND_TOKEN.test(token));
+}
 
 const onSelectDay = jest.fn();
 const onSegmentChange = jest.fn();
 const onBack = jest.fn();
+const onConfirm = jest.fn();
 
 type Overrides = {
   header?: ItineraryHeaderData;
@@ -160,6 +202,9 @@ type Overrides = {
   slots?: ItineraryDaysItemSlotsItem[];
   activeDayIndex?: number;
   segment?: ViewSegmentValue;
+  status?: ItineraryStatus;
+  confirmedSubtitle?: string;
+  confirmError?: string | null;
 };
 
 function renderScreen(over: Overrides = {}) {
@@ -170,9 +215,11 @@ function renderScreen(over: Overrides = {}) {
       slots={DAY1_SLOTS}
       activeDayIndex={0}
       segment="timeline"
+      status="PLANNED"
       onSelectDay={onSelectDay}
       onSegmentChange={onSegmentChange}
       onBack={onBack}
+      onConfirm={onConfirm}
       {...over}
     />
   );
@@ -182,6 +229,7 @@ beforeEach(() => {
   onSelectDay.mockClear();
   onSegmentChange.mockClear();
   onBack.mockClear();
+  onConfirm.mockClear();
 });
 
 describe('C1 · 탐지기 자가검사 — 이게 통과해야 아래 개수·순서 단언이 의미를 갖는다', () => {
@@ -419,18 +467,130 @@ describe('🔴 C9 · AC6 — 세그먼트 전환은 UI 상태(prop/콜백)로만
   });
 });
 
-describe('C10 · Q3·Q4 — 커스텀 앱바 뒤로 + 확정 CTA 는 비활성 스텁이다', () => {
-  it('뒤로 버튼이 onBack 을 부르고, 확정 CTA 는 있으나 disabled 이며 눌러도 무해하다', () => {
-    renderScreen();
+describe('🔴 C10 · AC1 — 커스텀 앱바 뒤로 + PLANNED 확정 CTA 는 활성이다 (US-SCHED-12)', () => {
+  it('뒤로가 onBack 을 부르고, 확정 CTA 는 활성·brand색이며 누르면 onConfirm 이 불린다', () => {
+    renderScreen({ status: 'PLANNED' });
 
     // Q3 — 커스텀 앱바 뒤로.
     fireEvent.press(screen.getByTestId('itinerary-view-back'));
     expect(onBack).toHaveBeenCalledTimes(1);
 
-    // Q4 — 확정은 US-SCHED-12 별 티켓. 그리되 disabled(onPress 생산자 0). `toBeDisabled()`
-    //   하나로는 "회색인데 눌리는" 구현을 통과시키므로(02a ★8) press 무해까지 짝으로 잰다.
-    const cta = screen.getByTestId('itinerary-view-confirm');
-    expect(cta).toBeDisabled();
-    expect(() => fireEvent.press(cta)).not.toThrow();
+    // ★ 개명(02a ★4) — 스텁 `itinerary-view-confirm`(disabled) 을 `itinerary-confirm-cta` 로
+    //   개명·**활성화**한다(티켓 §9). TRIP-299 의 disabled 단언은 이 칸에서 폐기된다.
+    const cta = screen.getByTestId('itinerary-confirm-cta');
+    expect(cta).toBeEnabled();
+
+    // 누르면 곧장 확정 요청으로 이어진다(중간 다이얼로그 없음 · Seed 흐름 02a ★9).
+    fireEvent.press(cta);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+
+    // 짝(★1 헬퍼 자가검증) — 활성 CTA 는 brand 색을 **실제로** 가진다. 이게 없으면 아래 확정
+    //   얼굴의 `brandTokensIn([])` 부정 단언이 "헬퍼가 아무 색도 못 본다"로 공허해진다.
+    expect(brandTokensIn(cta)).not.toEqual([]);
+  });
+});
+
+describe('🔴 C11 · AC3 — appbar 제목이 status 로 갈린다 (라이브 h34)', () => {
+  it('CONFIRMED 는 "확정 일정", PLANNED 는 "완성 일정" 이다', () => {
+    const confirmed = renderScreen({
+      status: 'CONFIRMED',
+      confirmedSubtitle: '6월 10일 – 13일',
+    });
+    // 완전 일치가 아니라 존재로 — 앱바 텍스트 노드만 정확히 집기 어려워 화면 전체에서 찾는다.
+    expect(screen.getByText('확정 일정')).toBeOnTheScreen();
+    // 짝 — PLANNED 제목은 안 뜬다(둘이 동시에 뜨는 구현을 죽인다).
+    expect(screen.queryByText('완성 일정')).toBeNull();
+
+    confirmed.unmount(); // 두 트리가 겹쳐 잡히지 않게 먼저 걷는다(리포 선례 `first.unmount()`).
+    renderScreen({ status: 'PLANNED' });
+    expect(screen.getByText('완성 일정')).toBeOnTheScreen();
+    expect(screen.queryByText('확정 일정')).toBeNull();
+  });
+});
+
+describe('🔴 C12 · AC2 — 확정 배너 (BR-U3-30 · 라이브 h34)', () => {
+  it('CONFIRMED 면 고정 제목과 내려준 부제를 그리고, PLANNED 면 배너가 없다', () => {
+    const confirmed = renderScreen({
+      status: 'CONFIRMED',
+      confirmedSubtitle: '6월 10일 – 13일 · 부산 여행 · 9곳',
+    });
+
+    // 배너 = 고정 제목(뷰 상수) + 부제(페이지가 조립해 내려준 prop 그대로). 부분 포함(정규식).
+    const banner = screen.getByTestId('itinerary-confirmed-banner');
+    expect(banner).toHaveTextContent(/일정이 확정됐어요/);
+    expect(banner).toHaveTextContent(/6월 10일 – 13일 · 부산 여행 · 9곳/);
+
+    // 짝(부재) — PLANNED 에는 배너가 0개다(★8 · queryBy 로 부재를 잰다).
+    confirmed.unmount();
+    renderScreen({ status: 'PLANNED' });
+    expect(screen.queryByTestId('itinerary-confirmed-banner')).toBeNull();
+  });
+});
+
+describe('🔴 C13 · AC4·AC7 — 읽기전용: 확정 CTA 부재 + 하단 비활성 2버튼 (INV-U3-04 · D1·D2)', () => {
+  it('CONFIRMED 는 확정 CTA 가 없고, [일정 수정]/[공유하기]가 비활성·무동작·사유 표시다', () => {
+    renderScreen({
+      status: 'CONFIRMED',
+      confirmedSubtitle: '6월 10일 – 13일 · 부산 여행 · 9곳',
+    });
+
+    // 읽기전용 — 확정 CTA 는 0개다(★7·★8: 부정엔 긍정 짝이 있어야 공허하지 않다).
+    expect(screen.queryAllByTestId('itinerary-confirm-cta')).toEqual([]);
+
+    // 긍정 짝 — 하단 2버튼이 실재한다.
+    const edit = screen.getByTestId('itinerary-confirmed-edit');
+    const share = screen.getByTestId('itinerary-confirmed-share');
+
+    // [일정 수정] — 비활성 + 사유(D1). 실제 역전이는 후속 티켓이라 여기선 비활성+사유가 끝.
+    expect(edit).toBeDisabled();
+    expect(edit).toHaveTextContent(/확정된 일정은 아직 수정할 수 없어요/);
+    expect(() => fireEvent.press(edit)).not.toThrow();
+
+    // [공유하기] — 비활성 + 사유(D2) + ★1 **brand색 부재**. Figma 는 이 버튼을 분홍 primary 로
+    //   그리므로, 색을 그대로 두고 disabled 만 걸면 "눌릴 것 같은데 안 눌리는" 함정이 된다 —
+    //   `toBeDisabled()`·press-무해를 다 통과하고도. brandTokensIn([]) 이 그걸 즉사시킨다.
+    expect(share).toBeDisabled();
+    expect(share).toHaveTextContent(/공유는 곧 제공돼요/);
+    expect(() => fireEvent.press(share)).not.toThrow();
+    expect(brandTokensIn(share)).toEqual([]);
+  });
+});
+
+describe('🔴 C14 · AC5·AC8 — 확정 실패 인라인 안내(INV-4) + 확정얼굴 소요시간 0(INV-3)', () => {
+  it('confirmError 가 있으면 타임라인 위에 안내를 그리고 화면을 벗어나지 않는다', () => {
+    // 확정 실패는 **같은 화면**의 인라인 안내다(이탈 아님). 타임라인·CTA 가 유지돼야 재시도가 된다.
+    const failed = renderScreen({
+      status: 'PLANNED',
+      confirmError: '이미 확정된 일정이에요',
+    });
+
+    // 침묵 아님(INV-4) — 안내가 비어 있지 않다.
+    const err = screen.getByTestId('itinerary-confirm-error');
+    expect(err).toHaveTextContent(/\S/);
+    // 이탈 아님 — 타임라인·확정 CTA 가 그대로라 다시 누를 수 있다(편집 얼굴 유지).
+    expect(screen.getByTestId('itinerary-view-timeline')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-confirm-cta')).toBeOnTheScreen();
+
+    // 짝(부재) — 실패가 없으면 안내도 없다.
+    failed.unmount();
+    renderScreen({ status: 'PLANNED' });
+    expect(screen.queryByTestId('itinerary-confirm-error')).toBeNull();
+  });
+
+  it('확정 얼굴 렌더 텍스트에 소요시간 표기가 0건이다 (INV-3 렌더 스캔)', () => {
+    renderScreen({
+      status: 'CONFIRMED',
+      confirmedSubtitle: '6월 10일 – 13일 · 부산 여행 · 9곳',
+    });
+
+    // 긍정 앵커 — 배너가 실제로 그려졌다(없으면 아래 "0건"이 빈 화면에서 공짜 통과).
+    const texts = renderedTexts();
+    expect(texts.some((t) => t.includes('일정이 확정됐어요'))).toBe(true);
+
+    // 부정 — 확정 얼굴 렌더 문자열에 분·시간·소요 표기가 없다(날짜 `13일` 은 안 걸린다 · 02a §5-B).
+    expect(texts.filter((t) => DURATION_TEXT.test(t))).toEqual([]);
+
+    // 짝(자가검사) — 탐지기가 진짜 소요시간은 잡는다(이 심판이 우회 불가임을 증명).
+    expect(DURATION_TEXT.test('이동 30분')).toBe(true);
   });
 });

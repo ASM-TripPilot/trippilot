@@ -2,7 +2,10 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
+import type {
+  ItineraryDaysItemSlotsItem,
+  ItineraryStatus,
+} from '@/shared/api/generated/schemas';
 
 import { formatDraftDayHeader } from '../model/draftView';
 import type { PlanDayTab } from '../model/planState';
@@ -11,6 +14,7 @@ import { timeBandLabel } from '../model/timeBandLabel';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
+  CheckCircleGlyph,
   LockGlyph,
 } from './ItineraryGlyphs';
 
@@ -27,8 +31,16 @@ import {
  * 파싱·정렬을 하면 시각이 뒤집힌다.
  */
 
-const APPBAR_TITLE = '완성 일정';
+// appbar 제목은 status 로 갈린다(라이브 h34) — PLANNED 은 h25 그대로, CONFIRMED 은 확정 얼굴.
+const APPBAR_TITLE_PLANNED = '완성 일정';
+const APPBAR_TITLE_CONFIRMED = '확정 일정';
 const CONFIRM_LABEL = '일정 확정하기';
+// 확정 배너·읽기전용 하단 2버튼 문구(TRIP-300 · D1·D2). 비활성 버튼의 사유는 침묵 금지(INV-4).
+const BANNER_TITLE = '일정이 확정됐어요';
+const EDIT_LABEL = '일정 수정';
+const EDIT_DISABLED_REASON = '확정된 일정은 아직 수정할 수 없어요';
+const SHARE_LABEL = '공유하기';
+const SHARE_DISABLED_REASON = '공유는 곧 제공돼요';
 const SEG_TIMELINE_LABEL = '시간표';
 const SEG_MAP_LABEL = '지도';
 const FIXED_CHIP = '고정';
@@ -61,6 +73,14 @@ export interface TimelineScreenProps {
   onSelectDay: (index: number) => void;
   onSegmentChange: (value: ViewSegmentValue) => void;
   onBack: () => void;
+  /** 확정 상태 축(TRIP-300) — 미지정은 PLANNED 취급. appbar 제목·배너·하단 영역을 가른다. */
+  status?: ItineraryStatus;
+  /** 확정 배너 부제 — 페이지가 `{범위} · {제목} · {N}곳` 으로 조립해 내려보낸다(CONFIRMED 전용). */
+  confirmedSubtitle?: string;
+  /** 확정 실패 인라인 안내 — truthy 면 PLANNED 타임라인 위에 그린다. null/undefined 면 없음. */
+  confirmError?: string | null;
+  /** PLANNED 확정 CTA press 콜백 — 곧장 확정 요청으로 잇는다(중간 다이얼로그 없음). */
+  onConfirm?: () => void;
 }
 
 function SegmentButton({
@@ -225,8 +245,14 @@ export function TimelineScreen({
   onSelectDay,
   onSegmentChange,
   onBack,
+  status,
+  confirmedSubtitle,
+  confirmError,
+  onConfirm,
 }: TimelineScreenProps): ReactElement {
   const activeDate = days[activeDayIndex]?.date ?? '';
+  // 확정 얼굴 트리거 — 미지정(undefined)은 PLANNED 취급이라 기존 호출부가 그대로 편집 얼굴이다.
+  const isConfirmed = status === 'CONFIRMED';
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -242,7 +268,7 @@ export function TimelineScreen({
             <BackChevronGlyph />
           </Pressable>
           <Text className="font-noto-bold text-section font-bold text-ink">
-            {APPBAR_TITLE}
+            {isConfirmed ? APPBAR_TITLE_CONFIRMED : APPBAR_TITLE_PLANNED}
           </Text>
         </View>
 
@@ -257,6 +283,26 @@ export function TimelineScreen({
             {`총 ${header.totalPlaces}곳`}
           </Text>
         </View>
+
+        {isConfirmed ? (
+          <View
+            testID="itinerary-confirmed-banner"
+            className="mx-lg mb-sm flex-row items-center gap-[10px] rounded-button bg-primary-pale px-[14px] py-md"
+          >
+            <CheckCircleGlyph size={20} />
+            <View className="flex-1 gap-[2px]">
+              <Text className="font-noto-bold text-body font-bold text-primary-text">
+                {BANNER_TITLE}
+              </Text>
+              {confirmedSubtitle === undefined ||
+              confirmedSubtitle === '' ? null : (
+                <Text className="font-noto text-caption text-primary-text">
+                  {confirmedSubtitle}
+                </Text>
+              )}
+            </View>
+          </View>
+        ) : null}
 
         <View className="flex-row gap-[3px] rounded-[8px] bg-hairline p-[3px] mx-lg">
           <SegmentButton
@@ -288,6 +334,18 @@ export function TimelineScreen({
         )}
 
         <ScrollView contentContainerClassName="gap-[14px] px-lg pb-lg pt-md">
+          {!isConfirmed && confirmError ? (
+            <View
+              testID="itinerary-confirm-error"
+              className="w-full flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
+            >
+              <AlertCircleGlyph size={20} tone="primaryText" />
+              <Text className="flex-1 font-noto text-label text-primary-text">
+                {confirmError}
+              </Text>
+            </View>
+          ) : null}
+
           {segment === 'timeline' ? (
             <View
               testID="itinerary-view-timeline"
@@ -327,16 +385,50 @@ export function TimelineScreen({
         </ScrollView>
 
         <View className="w-full px-lg pb-lg pt-sm">
-          <Pressable
-            testID="itinerary-view-confirm"
-            accessibilityRole="button"
-            disabled
-            className="h-12 w-full items-center justify-center rounded-button bg-hairline-strong"
-          >
-            <Text className="font-noto-bold text-[16px] font-bold text-muted-soft">
-              {CONFIRM_LABEL}
-            </Text>
-          </Pressable>
+          {isConfirmed ? (
+            // 읽기전용 하단 2버튼 — 둘 다 비활성(실동작은 후속 티켓)이되 사유로 침묵을 깬다(INV-4).
+            // [공유하기]는 Figma 가 분홍 primary 지만 비활성이라 brand색을 쓰지 않는다(회색 fill) —
+            // 안 그러면 "눌릴 것 같은데 안 눌리는" 함정이 된다(02a ★1).
+            <View className="w-full flex-row gap-sm">
+              <Pressable
+                testID="itinerary-confirmed-edit"
+                accessibilityRole="button"
+                disabled
+                className="flex-1 items-center justify-center gap-[2px] rounded-button border border-hairline-strong bg-canvas px-md py-sm"
+              >
+                <Text className="font-noto-bold text-card-title font-bold text-ink">
+                  {EDIT_LABEL}
+                </Text>
+                <Text className="font-noto text-caption text-muted">
+                  {EDIT_DISABLED_REASON}
+                </Text>
+              </Pressable>
+              <Pressable
+                testID="itinerary-confirmed-share"
+                accessibilityRole="button"
+                disabled
+                className="flex-1 items-center justify-center gap-[2px] rounded-button bg-hairline-strong px-md py-sm"
+              >
+                <Text className="font-noto-bold text-card-title font-bold text-muted-soft">
+                  {SHARE_LABEL}
+                </Text>
+                <Text className="font-noto text-caption text-muted-soft">
+                  {SHARE_DISABLED_REASON}
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              testID="itinerary-confirm-cta"
+              accessibilityRole="button"
+              onPress={onConfirm}
+              className="h-12 w-full items-center justify-center rounded-button bg-primary"
+            >
+              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+                {CONFIRM_LABEL}
+              </Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </SafeAreaView>
