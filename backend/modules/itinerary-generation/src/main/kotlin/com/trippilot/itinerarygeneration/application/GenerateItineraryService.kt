@@ -16,6 +16,7 @@ import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
+import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SolveMode
@@ -79,11 +80,12 @@ class GenerateItineraryService(
         } else {
             ctx.fixedVisits.filterNot { it.date in firstDates }.map { it.poiId }.distinct()
         }
-        val firstInput = assembleInput(
+        val firstAssembly = assembleInput(
             tripId, mode, ctx, prefs, stayAnchors, firstDates, DAY1_DEADLINE_MS,
             excluded = reservedForSecond,
             carriesUndatedFixed = remainingDates.isEmpty(), // 날짜 미지정 must_visit 은 2차가 맡는다(없으면 1차)
         )
+        val firstInput = firstAssembly.input
 
         // 외부(ScheduleAgent) 호출은 트랜잭션 밖 — DB 커넥션을 물지 않게.
         // INV-4: AI 실패 시 침묵 금지 — 결정론 최소 폴백(must_visit 고정블록)으로 대체하고 isFallback 로 표시.
@@ -102,7 +104,7 @@ class GenerateItineraryService(
         // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
         val saved = tx.execute {
             previous?.let { revisions.ensureRestorePoint(it) }
-            val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, mode, state, firstDates))
+            val it = itineraries.replaceForTrip(tripId, output.toItinerary(tripId, mode, state, firstDates, firstAssembly.unplaced))
             events.publish(ItineraryGenerated(it.itineraryId.toString(), tripId.toString(), it.isFallback))
             // 리비전은 **생성이 끝난 상태**에서만 남긴다. 여기서 PARTIAL(day1만)을 남기면 그 스냅숏으로 되돌릴 때
             // 2차가 채운 나머지 일자가 통째로 사라진다 — 다일 여행은 2차 완료 시점에 남긴다(SecondPhaseGenerator).
@@ -115,10 +117,11 @@ class GenerateItineraryService(
         if (remainingDates.isNotEmpty()) {
             // 1차에서 배정된 POI 는 2차 후보에서 제외(TRIP-293) — 같은 장소가 두 번 들어가지 않게.
             val assigned = saved.days.flatMap { d -> d.slots.map { it.sourcePoiId } }.distinct()
-            val secondInput = assembleInput(
+            val secondAssembly = assembleInput(
                 tripId, mode, ctx, prefs, stayAnchors, remainingDates, TOTAL_DEADLINE_MS, excluded = assigned,
                 carriesUndatedFixed = true,
             )
+            val secondInput = secondAssembly.input
             // 2차가 고정 블록(HC3: 반드시 포함)으로 다시 싣는 POI 는 제외 목록에서 뺀다 —
             // 같은 POI 를 "반드시 넣어라 + 후보에서 빼라"로 동시에 주면 계약이 모순된다(INV-1 ↔ HC3).
             val fixedInSecond = secondInput.fixedBlocks.map { it.poiId }.toSet()
@@ -126,34 +129,10 @@ class GenerateItineraryService(
                 tripId, saved.itineraryId,
                 secondInput.copy(excludedPoiIds = secondInput.excludedPoiIds.filterNot { it in fixedInSecond }),
                 isRegeneration = previous != null,
+                assemblyUnplaced = secondAssembly.unplaced,
             )
         }
         return saved
-    }
-
-    /**
-     * 아직 물질화되지 않은(ANYTIME) 고정 블록을 드러낸다 — 경계 계약 확정 문서 **M1**.
-     *
-     * 실 AI 는 날짜·시각 없는 고정 블록을 표현할 수 없어 **그 호출 하나를 통째로 422 로 거부**하고
-     * (그쪽 `api/wiring.py` — 블록 하나만 나빠도 요청 전체가 죽는다), 내장 Fake 는 `date != null` 만
-     * 그룹핑해 **조용히 버린다**. 둘 다 결과만 보면 이유를 알 수 없다.
-     *
-     * 관측되는 증상은 호출 단위라 여행 전체가 아니다:
-     * - 다일 여행 — ANYTIME 은 2차에 실리므로 **day1 은 실 AI 결과로 살아남고** 나머지 일자만 MINIMAL 폴백,
-     *   상태는 COMPLETE(isFallback=true). 사용자는 "뒷날들만 부실"로 겪는다.
-     * - 단일일 여행 — 2차가 없어 1차에 실리므로 그 일정 전체가 MINIMAL.
-     *
-     * 물질화(M1)가 들어오면 이 경고는 자연히 사라진다.
-     */
-    private fun warnUnmaterialized(blocks: List<FixedBlock>, tripId: UUID) {
-        val unmaterialized = blocks.count { it.date == null || it.start == null }
-        if (unmaterialized > 0) {
-            log.warn(
-                "날짜·시각 미지정 필수 방문지 {}건을 그대로 보냅니다 — 실 AI 는 이 호출을 통째로 거부하고" +
-                    "(422→해당 일자분 MINIMAL 폴백) Fake 는 조용히 버립니다. 물질화 전까지의 알려진 간극입니다(M1). tripId={}",
-                unmaterialized, tripId,
-            )
-        }
     }
 
     private fun previousOf(tripId: UUID) = itineraries.findByTrip(tripId).firstOrNull()
@@ -184,6 +163,12 @@ class GenerateItineraryService(
         saved
     }!!
 
+    /**
+     * 조립 결과 — 요청과 **넣을 자리가 없어 보내지 못한 필수 방문지**를 함께 돌려준다.
+     * 로그로만 남기면 사용자는 자기가 넣은 곳이 왜 없는지 끝내 알 수 없다(M2 채널로 이어붙인다).
+     */
+    private data class Assembled(val input: ScheduleAgentInput, val unplaced: List<UnplacedMustVisit>)
+
     /** 최초 생성이면 기준 버전(BASELINE), 재생성이면 GENERATE. */
     private fun kindFor(previous: Itinerary?) = if (previous == null) RevisionKind.BASELINE else RevisionKind.GENERATE
     private fun summaryFor(previous: Itinerary?) = if (previous == null) "AI가 처음 짠 일정" else "AI가 일정을 다시 짬"
@@ -199,8 +184,28 @@ class GenerateItineraryService(
         deadlineMs: Long,
         excluded: List<UUID> = emptyList(),
         carriesUndatedFixed: Boolean = true,
-    ): ScheduleAgentInput =
-        ScheduleAgentInput(
+    ): Assembled {
+        // ANYTIME(날짜·시각 미지정)을 여기서 **물질화**한다(계약 M1) — AI 고정 블록은 시간창이 필수라
+        // null 을 담을 자리가 없고, 솔버가 날짜를 다시 고르지도 못한다. 넣을 자리가 없으면 보내지 않고
+        // 미배치로 보고한다(M2 채널) — AI 가 거부할 모양을 보내 요청 전체를 죽이느니 낫다.
+        val candidates = ctx.fixedVisits
+            .filter { it.date in dates || (it.date !in planDates(ctx.startDate, ctx.endDate) && carriesUndatedFixed) }
+            .map { FixedBlock(it.poiId, it.date, it.start, it.dwellMin) }
+        val materialized = MustVisitMaterializer.materialize(
+            dated = candidates.filter { it.date != null && it.start != null },
+            anytime = candidates.filter { it.date == null || it.start == null },
+            dates = dates,
+            dayStart = DEFAULT_START,
+            dayEnd = DEFAULT_END,
+        )
+        if (materialized.unplaced.isNotEmpty()) {
+            log.info(
+                "필수 방문지 {}건은 넣을 자리가 없어 보내지 않고 보고합니다(M1). tripId={}",
+                materialized.unplaced.size, tripId,
+            )
+        }
+        return Assembled(
+            ScheduleAgentInput(
             tripId = tripId,
             generationMode = mode,
             // budgetLevel(등급) = preference_set.budget_tier (경계 계약; trip.budget_total 아님)
@@ -215,15 +220,15 @@ class GenerateItineraryService(
             // AI 는 `problem.days` 에 없는 날짜의 고정 블록을 위반으로 세지 않고 스킵한다(그쪽 `constraints.py`).
             // 회신 필드(`unplaced_must_visits`)가 계약에 생겨야 성립한다(경계 계약 확정 문서 M2). 그때까지는
             // 침묵 드롭 위치가 백엔드에서 AI 로 옮겨간 상태일 뿐이다.
-            fixedBlocks = ctx.fixedVisits
-                .filter { it.date in dates || (it.date !in planDates(ctx.startDate, ctx.endDate) && carriesUndatedFixed) }
-                .map { FixedBlock(it.poiId, it.date, it.start, it.dwellMin) }
-                .also { warnUnmaterialized(it, tripId) },
+            fixedBlocks = materialized.fixedBlocks,
             preferenceProfile = prefs.toProfile(),                                                            // preference_snapshot 7축
             recommendationStrength = null,
             requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs),
-            excludedPoiIds = excluded,
+                excludedPoiIds = excluded,
+            ),
+            materialized.unplaced,
         )
+    }
 
     /**
      * 계획일별 공간 앵커. 숙박일=확정 거점, 체크아웃일(endDate)=전날 거점(prev_stay).
@@ -251,6 +256,8 @@ class GenerateItineraryService(
         mode: GenerationMode,
         state: GenerationState,
         dates: List<LocalDate>,
+        /** 조립 단계에서 자리를 못 찾아 **보내지도 못한** 것 — AI 보고와 합쳐 하나의 목록으로 낸다. */
+        assemblyUnplaced: List<UnplacedMustVisit> = emptyList(),
     ): Itinerary {
         // 요청 일자에 맞춰 정렬 — 응답이 어긋나도 중복/누락 일자가 조용히 통과하지 못하게(외부 값 신뢰 금지).
         val days = DayReconciliation.alignTo(dates, this.days).mapIndexed { dayIdx, d ->
@@ -284,7 +291,8 @@ class GenerateItineraryService(
             )
         }
         return Itinerary.create(
-            tripId, solveMode, mode, isFallback, days, clock.instant(), state, candidatesSummary, unplacedMustVisits,
+            tripId, solveMode, mode, isFallback, days, clock.instant(), state, candidatesSummary,
+            assemblyUnplaced + unplacedMustVisits,
         )
     }
 

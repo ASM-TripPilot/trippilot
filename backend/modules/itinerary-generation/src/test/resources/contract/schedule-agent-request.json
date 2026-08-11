@@ -25,8 +25,8 @@
     "dwell_min" : 90
   }, {
     "poi_id" : "33333333-3333-4333-8333-333333333333",
-    "date" : null,
-    "start" : null,
+    "date" : "2026-08-01",
+    "start" : "09:00:00",
     "dwell_min" : null
   } ],
   "preference_profile" : {

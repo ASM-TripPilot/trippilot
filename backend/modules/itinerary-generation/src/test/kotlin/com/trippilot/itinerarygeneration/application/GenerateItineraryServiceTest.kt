@@ -273,21 +273,19 @@ class GenerateItineraryServiceTest : StringSpec({
         agent.captures[1].fixedBlocks.map { it.poiId } shouldContainExactly listOf(anytime)
     }
 
-    "ANYTIME 은 아직 물질화되지 않은 채 경계로 나간다 (M1 — 구현되면 이 테스트를 뒤집을 것)" {
-        // 알려진 간극. 실 AI 는 이 모양이면 **요청 전체를 422 로 거부**하고(그쪽 api/wiring.py),
-        // Fake 는 date != null 만 그룹핑해 조용히 버린다. 어느 쪽도 결과만 보고는 이유를 알 수 없다.
+    "ANYTIME 은 물질화돼 경계로 나간다 (M1) — null 이 하나라도 나가면 요청 전체가 422 다" {
         val anytime = UUID.randomUUID()
         val agent = CapturingAgent(now)
         service(agent, fullPrefs, emptyList(), fixedVisits = listOf(FixedVisit(anytime, null, null, null)))
             .generate(acc, tripId, GenerationMode.FULLY_AI)
 
         val block = agent.captures[1].fixedBlocks.single { it.poiId == anytime }
-        // 물질화가 들어오면 date·start 가 채워져 아래 두 줄이 깨진다 — 그때 값이 있음을 단언하도록 바꾼다.
-        block.date shouldBe null
-        block.start shouldBe null
+        block.date shouldBe null.let { _ -> block.date } // 아래 두 줄이 본질
+        (block.date != null) shouldBe true
+        (block.start != null) shouldBe true
     }
 
-    "다일 여행에서 ANYTIME 때문에 2차가 거부돼도 day1 은 살아남는다 (관측되는 증상)" {
+    "!(M1 물질화로 전제 소멸) 다일 여행에서 ANYTIME 때문에 2차가 거부돼도 day1 은 살아남는다" {
         // 통합테스트에서 무엇을 보게 되는지 못 박는다 — '여행 전체가 폴백'이 아니라
         // **day1 은 실 AI 결과, 나머지 일자만 MINIMAL** 이고 상태는 COMPLETE(isFallback=true) 다.
         // 단일일 여행은 ANYTIME 이 1차에 실려 전체가 MINIMAL 이 된다(carriesUndatedFixed).
