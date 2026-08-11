@@ -728,6 +728,29 @@ paths:
         '200': { description: 꺼짐, content: { application/json: { schema: { $ref: '#/components/schemas/Trigger' } } } }
         '404': { description: 여행 없음/타 계정/트리거 없음(다른 여행 소속 포함) }
         '409': { description: 이미 닫혔거나 지난 알림 }
+  /trips/{tripId}/stay-recommendations:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 숙소 나중 등록 온램프 — 동선 기준 권역·후보 평가(US-SCHED-11 · h27·h28)
+      description: >
+        숙소 없이 만든 일정의 **방문지 무게중심**으로 권역을 추천하고, 넘겨받은 후보를
+        **평균 이동 거리 순**으로 매긴다(before/after 함께). 거리는 전부 **추정(직선)** 이며 소요시간은 없다(INV-3).
+
+        후보 목록은 클라이언트가 `GET /stays/search` 로 얻어 넘긴다 — 숙소 검색은 C3 소유라 여기서 중개하지 않는다.
+        비워 보내면 권역만 돌려준다.
+
+        **등록 후 재정렬 API 는 없다** — 정본이 "숙소 등록 후 재정렬 = generate"로 못박았다(DEC-U3-2·4).
+        숙소를 등록한 뒤 `POST /trips/{tripId}/itinerary` 를 다시 부르면 그 숙소가 앵커로 들어간다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/StayRecommendationRequest' } } }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/StayRecommendation' } } } }
+        '400': { description: 후보 수 초과 }
+        '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
+        '409': { description: 좌표를 아는 방문지가 없어 권역을 낼 수 없음 }
   /trips/{tripId}/replan-sessions:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1199,6 +1222,38 @@ components:
           enum: [FULL_DAY, PARTIAL_SLOTS, NONE]
           description: 발화 시 재계획 범위 — [대안 보기] 가 이 값으로 세션을 연다
         detectedAt: { type: string, format: date-time }
+    StayRecommendationRequest:
+      type: object
+      properties:
+        candidates:
+          type: array
+          maxItems: 50
+          description: '`GET /stays/search` 결과에서 고른 후보. 비우면 권역만 돌려준다'
+          items:
+            type: object
+            required: [stayId, lat, lng]
+            properties:
+              stayId: { type: string }
+              lat: { type: number }
+              lng: { type: number }
+    StayRecommendation:
+      type: object
+      required: [centroidLat, centroidLng, avgDistanceM, candidates]
+      properties:
+        centroidLat: { type: number, description: 방문지 무게중심 — 지도에서 "이 근처"를 가리키는 점 }
+        centroidLng: { type: number }
+        avgDistanceM: { type: integer, description: 무게중심에서 각 방문지까지의 평균 거리 — 권역 반경의 근거 }
+        candidates:
+          type: array
+          description: 평균 이동 거리가 짧은 순
+          items:
+            type: object
+            required: [stayId, beforeAvgDistanceM, afterAvgDistanceM, deltaM]
+            properties:
+              stayId: { type: string }
+              beforeAvgDistanceM: { type: integer, description: 숙소 없이 방문지끼리 이어 다닐 때의 평균 구간 거리 }
+              afterAvgDistanceM: { type: integer, description: 그 숙소에서 출발·복귀할 때의 평균 구간 거리 }
+              deltaM: { type: integer, description: '음수면 줄어든다 — 화면이 "평균 N m 줄어요"로 쓴다' }
     StartReplanRequest:
       type: object
       required: [scope, originKind]
