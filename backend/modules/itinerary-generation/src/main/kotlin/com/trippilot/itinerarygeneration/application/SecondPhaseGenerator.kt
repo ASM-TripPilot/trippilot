@@ -84,6 +84,8 @@ class SecondPhaseGenerator(
                 current.days + remaining,
                 clock.instant(),
                 output.solveMode, output.isFallback, output.candidatesSummary,
+                // 2차는 전 일자를 보고 판정하므로 그 결과가 최종이다 — 1차(day1만) 판정으로 되돌리지 않는다.
+                output.unplacedMustVisits,
             )
             // 조건부 쓰기 — 위 가드를 읽은 뒤 재생성이 끼어들었으면 여기서 0행이 되어 아무것도 덮어쓰지 않는다.
             if (!itineraries.replaceIfCurrent(tripId, itineraryId, updated)) {

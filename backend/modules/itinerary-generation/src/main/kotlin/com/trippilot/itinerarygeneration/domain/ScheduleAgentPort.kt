@@ -114,7 +114,39 @@ data class ScheduleAgentOutput(
     val freshness: FreshnessMeta,
     /** 후보 충분성 보고(BR-U2-05). **판정은 AI 소유** — 백엔드는 그대로 전달하고 재계산하지 않는다. */
     val candidatesSummary: CandidatesSummary? = null,
+    /**
+     * 넣지 못한 필수 방문지 보고(계약 M2 · AI TRIP-350).
+     *
+     * 왜 필요한가: 기간 밖 must_visit 을 고정 블록으로 실어 보내면 AI 의 HC3 가 그 날짜를 스킵해
+     * **침묵 드롭**됐다 — 사용자는 "내가 넣은 곳이 왜 없지"를 알 방법이 없었다.
+     * 이 목록이 "왜 안 들어갔는지"를 돌려준다. **기본은 빈 목록**(= 전부 배치됨)이며,
+     * 필드가 없는 옛 AI 응답과도 같은 뜻이 되게 한다.
+     */
+    val unplacedMustVisits: List<UnplacedMustVisit> = emptyList(),
 )
+
+/**
+ * 넣지 못한 필수 방문지 1건.
+ *
+ * [reasonCode] 는 **닫힌 집합**이다 — 자유 문자열이면 백엔드가 분기할 수 없고 화면 문구도 정할 수 없다.
+ * 사용자 문구는 백엔드가 만든다(AI 는 코드만 준다).
+ */
+data class UnplacedMustVisit(val poiId: UUID, val reasonCode: UnplacedReason)
+
+/** AI 판정 사유(계약 확정 3값). 모르는 값이 오면 어댑터가 [UNKNOWN] 으로 접는다 — 새 값 때문에 생성 전체가 죽지 않게. */
+enum class UnplacedReason {
+    /** 고정 날짜가 여행 기간 밖. */
+    OUT_OF_RANGE,
+
+    /** 기간 안인데 다른 고정 블록과 시간이 겹친다(겹침이 증명된 경우만). */
+    WINDOW_CONFLICT,
+
+    /** 그 외 미배치 — 기간 안·겹침 없음인데 해에 없다. */
+    NO_FEASIBLE_SLOT,
+
+    /** 계약에 없는 값. 보고 자체를 잃지 않으려고 두는 자리다(사유는 "확인 불가"로 표시). */
+    UNKNOWN,
+}
 
 data class DaySchedule(val date: LocalDate, val slots: List<VisitSlotDisplay>)
 

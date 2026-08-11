@@ -7,6 +7,8 @@ import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
+import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
+import com.trippilot.itinerarygeneration.domain.UnplacedReason
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import org.springframework.stereotype.Component
@@ -98,6 +100,7 @@ class ItineraryRepositoryAdapter(
             GenerationMode.valueOf(generationMode), isFallback, GenerationState.valueOf(generationState),
             domainDays, createdAt, updatedAt,
             candidatesSummary?.toSummary(),
+            unplacedMustVisits.toUnplaced(),
         )
     }
 
@@ -105,7 +108,19 @@ class ItineraryRepositoryAdapter(
         itineraryId, tripId, status.name, solveMode.name, generationMode.name, isFallback, generationState.name,
         createdAt, updatedAt,
         candidatesSummary?.toMap(),
+        unplacedMustVisits.map { mapOf("poiId" to it.poiId.toString(), "reasonCode" to it.reasonCode.name) },
     )
+
+    /**
+     * jsonb → 미배치 보고. **읽기는 방어적으로** — 형태가 바뀌면 옛 행 조회가 영구히 깨진다.
+     * 모르는 사유·깨진 id 는 그 한 건만 버린다(candidates_summary 읽기와 같은 태도).
+     */
+    private fun List<Map<String, Any>>.toUnplaced(): List<UnplacedMustVisit> = mapNotNull { row ->
+        val id = runCatching { UUID.fromString(row["poiId"] as? String) }.getOrNull() ?: return@mapNotNull null
+        val reason = runCatching { UnplacedReason.valueOf(row["reasonCode"] as? String ?: "") }
+            .getOrElse { UnplacedReason.UNKNOWN }
+        UnplacedMustVisit(id, reason)
+    }
 
     // ---- 후보 충분성 ↔ jsonb(Map). 읽기는 방어적으로 — 형태가 바뀌면 옛 행 조회가 영구히 깨진다.
     private fun CandidatesSummary.toMap(): Map<String, Any> = buildMap {

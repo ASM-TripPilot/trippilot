@@ -115,6 +115,7 @@ class ItineraryRevisionService(
             val restored = Itinerary.reconstitute(
                 current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.generationMode, current.isFallback,
                 current.generationState, restoredDays, current.createdAt, clock.instant(), current.candidatesSummary,
+                current.unplacedMustVisits, // 되돌리기도 배치 판정을 바꾸지 않는다
             )
             // 이미 같은 내용이면 쌓지 않는다 — 목록이 같은 버전으로 도배된다(편집과 같은 기준).
             // 위반 상태까지 포함해 비교한다 — 스냅숏 비교는 위반 변화를 못 보고, 도메인 직접 비교는

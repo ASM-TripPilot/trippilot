@@ -115,6 +115,9 @@ class EditItineraryService(
             current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.generationMode, current.isFallback,
             current.generationState, days, current.createdAt, clock.instant(), // 생성 진행 상태는 편집과 무관 — 보존
             current.candidatesSummary, // 후보 충분성도 편집과 무관 — 보존(빠뜨리면 편집 한 번에 영구 소실)
+            // 미배치 보고도 보존한다. 사용자가 슬롯을 옮겼다고 "못 넣었던 곳"이 들어간 것은 아니다 —
+            // 그 판정은 AI 가 다시 생성할 때만 바뀐다.
+            current.unplacedMustVisits,
         )
     }
 

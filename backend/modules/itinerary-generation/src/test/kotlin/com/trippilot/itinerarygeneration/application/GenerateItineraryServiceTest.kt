@@ -12,6 +12,8 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRevisionSummary
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
+import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
+import com.trippilot.itinerarygeneration.domain.UnplacedReason
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
@@ -68,6 +70,40 @@ private class RejectAnytimeAgent(private val now: Instant, private val emitPoi: 
             day1ReadyAt = null, explanations = emptyMap(),
             solveMode = SolveMode.DETERMINISTIC, isFallback = false,
             freshness = FreshnessMeta(now, degraded = false),
+        )
+    }
+    override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
+}
+
+/** 미배치 보고를 돌려주는 대역. */
+private class ReportingAgent(private val now: Instant, private val unplaced: List<UnplacedMustVisit>) : StubScheduleAgent() {
+    override fun generate(input: ScheduleAgentInput) = ScheduleAgentOutput(
+        days = input.timeWindows.map { DaySchedule(it.date, emptyList()) },
+        day1ReadyAt = null, explanations = emptyMap(),
+        solveMode = SolveMode.DETERMINISTIC, isFallback = false,
+        freshness = FreshnessMeta(now, degraded = false),
+        unplacedMustVisits = unplaced,
+    )
+    override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
+    override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>) = RepairResult(solution, emptyList())
+}
+
+/** 1차·2차가 서로 다른 보고를 돌려주는 대역 — 어느 쪽이 최종으로 남는지 본다. */
+private class TwoPhaseReportingAgent(
+    private val now: Instant,
+    private val first: List<UnplacedMustVisit>,
+    private val second: List<UnplacedMustVisit>,
+) : StubScheduleAgent() {
+    private var calls = 0
+    override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
+        val unplaced = if (calls++ == 0) first else second
+        return ScheduleAgentOutput(
+            days = input.timeWindows.map { DaySchedule(it.date, emptyList()) },
+            day1ReadyAt = null, explanations = emptyMap(),
+            solveMode = SolveMode.DETERMINISTIC, isFallback = false,
+            freshness = FreshnessMeta(now, degraded = false),
+            unplacedMustVisits = unplaced,
         )
     }
     override fun validate(solution: ScheduleAgentOutput): List<Violation> = emptyList()
@@ -267,6 +303,28 @@ class GenerateItineraryServiceTest : StringSpec({
         saved.isFallback shouldBe true
         saved.solveMode shouldBe SolveMode.MINIMAL
         saved.days.first().slots.map { it.sourcePoiId } shouldContainExactly listOf(emitted) // day1 = 실 AI 결과 보존
+    }
+
+    "AI 가 보고한 미배치 필수 방문지가 일정에 실린다 — 안 실으면 재조회에서 사라진다(계약 M2)" {
+        val missed = UUID.randomUUID()
+        val agent = ReportingAgent(now, listOf(UnplacedMustVisit(missed, UnplacedReason.OUT_OF_RANGE)))
+        val repo = FakeItineraries()
+        service(agent, fullPrefs, emptyList(), repo = repo).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val saved = repo.findByTrip(tripId).single()
+        saved.unplacedMustVisits.single().poiId shouldBe missed
+        saved.unplacedMustVisits.single().reasonCode shouldBe UnplacedReason.OUT_OF_RANGE
+    }
+
+    "2차 보고가 최종이다 — 1차(day1만) 판정으로 되돌리지 않는다" {
+        // 1차는 day1 만 보고 판정하므로 "못 넣었다"가 나올 수 있지만, 2차가 전 일자를 보고 넣었을 수 있다.
+        // 1차 값을 유지하면 사용자는 이미 들어간 장소를 '못 넣었다'고 보게 된다.
+        val missed = UUID.randomUUID()
+        val agent = TwoPhaseReportingAgent(now, first = listOf(UnplacedMustVisit(missed, UnplacedReason.NO_FEASIBLE_SLOT)), second = emptyList())
+        val repo = FakeItineraries()
+        service(agent, fullPrefs, emptyList(), repo = repo).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        repo.findByTrip(tripId).single().unplacedMustVisits shouldBe emptyList()
     }
 
     "앵커: 숙박일=거점 좌표, 체크아웃일=전날 거점(prev_stay)" {

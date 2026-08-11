@@ -50,7 +50,7 @@ class ItineraryTest : StringSpec({
             ItineraryDay.of(LocalDate.parse("2026-08-10"), 0, listOf(slot(0))),
             ItineraryDay.of(LocalDate.parse("2026-08-11"), 1, listOf(slot(0))),
         )
-        val completed = partial.completeGeneration(allDays, now)
+        val completed = partial.completeGeneration(allDays, now, secondUnplaced = emptyList())
         completed.generationState shouldBe GenerationState.COMPLETE
         completed.days.size shouldBe 2
         completed.itineraryId shouldBe partial.itineraryId // identity 보존
@@ -68,7 +68,7 @@ class ItineraryTest : StringSpec({
     }
 
     "COMPLETE 상태에서 전이 호출은 409(생성 중 아님)" {
-        shouldThrow<ConflictDetected> { itinerary().completeGeneration(emptyList(), now) }
+        shouldThrow<ConflictDetected> { itinerary().completeGeneration(emptyList(), now, secondUnplaced = emptyList()) }
         shouldThrow<ConflictDetected> { itinerary().failGeneration(now) }
     }
 
