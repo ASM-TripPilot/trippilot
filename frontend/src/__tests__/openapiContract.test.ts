@@ -536,11 +536,16 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
     // 완전 일치(순서 포함) — enum 값이 추가·삭제·개명되면 즉시 red. 3번째가
     // `generationMode` 이고, 아래 GenerateItineraryRequest 의 목록과 **같아야 한다**
     // (요청으로 보낸 값이 응답에 그대로 실린다 — 한쪽만 늘면 여기서 갈린다).
+    //
+    // 5번째는 TRIP-350(#183)이 더한 `unplacedMustVisits[].reasonCode` 다 — 필수 방문지가
+    // **왜** 빠졌는지의 닫힌 어휘이고, `UNKNOWN` 이 마지막 자리인 것도 정보다(모르는 사유를
+    // 다른 코드로 위장하지 않는다).
     expect(extractEnumLists(block)).toEqual([
       'enum: [PLANNED, CONFIRMED]',
       'enum: [FULL_AI, DETERMINISTIC, MINIMAL]',
       'enum: [FULLY_AI, CO_PLAN, MANUAL]',
       'enum: [PARTIAL, COMPLETE, FAILED]',
+      'enum: [OUT_OF_RANGE, WINDOW_CONFLICT, NO_FEASIBLE_SLOT, UNKNOWN]',
     ]);
 
     // 부정(INV-3) — duration 계열이 **필드로** 선언된 자리. 걸린 것을 모아 실패 diff에 어떤
