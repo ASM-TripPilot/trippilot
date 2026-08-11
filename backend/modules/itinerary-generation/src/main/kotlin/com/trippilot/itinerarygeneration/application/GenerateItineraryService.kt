@@ -275,7 +275,17 @@ class GenerateItineraryService(
             matched = days.sumOf { d -> d.slots.count { it.placementReason != null } },
             tripId = tripId,
         )
-        return Itinerary.create(tripId, solveMode, mode, isFallback, days, clock.instant(), state, candidatesSummary)
+        // 못 넣은 필수 방문지 보고를 일정에 실어 영속한다 — 안 실으면 생성 직후 화면에만 보이고
+        // 재조회하면 사라진다(candidates_summary 에서 겪은 것과 같은 유실).
+        if (unplacedMustVisits.isNotEmpty()) {
+            log.info(
+                "필수 방문지 {}건을 넣지 못했습니다 — 사용자에게 사유와 함께 알립니다. tripId={} 사유={}",
+                unplacedMustVisits.size, tripId, unplacedMustVisits.map { it.reasonCode },
+            )
+        }
+        return Itinerary.create(
+            tripId, solveMode, mode, isFallback, days, clock.instant(), state, candidatesSummary, unplacedMustVisits,
+        )
     }
 
     companion object {

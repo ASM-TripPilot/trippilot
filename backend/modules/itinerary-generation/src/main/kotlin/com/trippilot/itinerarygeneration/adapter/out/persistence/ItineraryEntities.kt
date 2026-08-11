@@ -31,6 +31,9 @@ class ItineraryEntity(
     // 후보 충분성(BR-U2-05) — AI 판정값 그대로. Map 으로 jsonb 매핑(문자열 선직렬화 시 이중 인코딩).
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "candidates_summary") var candidatesSummary: Map<String, Any>?,
+    // 미배치 필수 방문지 보고(계약 M2). 빈 배열 = 전부 배치됨.
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "unplaced_must_visits") var unplacedMustVisits: List<Map<String, Any>>,
 )
 
 /** itinerary_day(V2.7). 일자별. */

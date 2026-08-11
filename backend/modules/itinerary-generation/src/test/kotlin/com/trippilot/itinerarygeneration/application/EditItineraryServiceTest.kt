@@ -20,6 +20,8 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
+import com.trippilot.itinerarygeneration.domain.UnplacedReason
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.trip.api.TripFacade
@@ -216,7 +218,7 @@ class EditItineraryServiceTest : StringSpec({
                     listOf(VisitSlot.of(poi, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"), placementReason = "취향에 맞는 곳")),
                 ),
             ),
-            clock.instant(), clock.instant(), CandidatesSummary("LOW", 7, listOf("CAFE")),
+            clock.instant(), clock.instant(), CandidatesSummary("LOW", 7, listOf("CAFE")), emptyList(),
         )
         val result = repoWith(base).let { r -> EditItineraryService(trips(true), r, EditFakeAgent(), revisionSvc(FakeRevisions(), r, NOOP_TX, clock), NOOP_TX, clock) }
             .edit(acc, tripId, editReq)
@@ -316,6 +318,22 @@ class EditItineraryServiceTest : StringSpec({
         a.violationReason shouldBe "영업시간 밖"
         // 이력 없는 새 슬롯은 표시가 없다(원래 기본값 — 새 거짓을 만들지 않는다)
         result.days.single().slots.single { it.sourcePoiId == poiB }.hasViolation shouldBe false
+    }
+
+    "편집해도 미배치 보고는 보존된다 — 슬롯을 옮겼다고 못 넣었던 곳이 들어간 건 아니다" {
+        val missed = UUID.randomUUID()
+        val base = Itinerary.reconstitute(
+            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false,
+            GenerationState.COMPLETE,
+            listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"))))),
+            clock.instant(), clock.instant(), null,
+            listOf(UnplacedMustVisit(missed, UnplacedReason.WINDOW_CONFLICT)),
+        )
+        val repo = repoWith(base)
+        val result = EditItineraryService(trips(true), repo, EditFakeAgent(), revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), NOOP_TX, clock)
+            .edit(acc, tripId, editReq)
+
+        result.unplacedMustVisits.single().poiId shouldBe missed
     }
 
     "사유 없는 위반은 배지만 켜고 사유는 비운다(CHECK 제약과도 맞는다)" {

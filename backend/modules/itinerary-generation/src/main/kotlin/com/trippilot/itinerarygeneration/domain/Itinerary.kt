@@ -115,11 +115,17 @@ class Itinerary private constructor(
      * 값이 조용히 사라진다(실제로 편집 경로에서 그렇게 유실됐다. endsNextDay·distanceRange 에 이은 세 번째).
      */
     val candidatesSummary: CandidatesSummary?,
+    /**
+     * 넣지 못한 필수 방문지(계약 M2). AI 판정 그대로 보관한다 — 백엔드가 재계산하지 않는다.
+     * 빈 목록 = 전부 배치됨. **기본값을 두지 않는다** — 두면 전이 지점에서 조용히 빠져
+     * 재조회 시 보고가 사라진다(같은 유실을 endsNextDay·distanceRange 등에서 이미 겪었다).
+     */
+    val unplacedMustVisits: List<UnplacedMustVisit>,
 ) {
     /** 확정 — PLANNED + 생성 완료만 가능(이미 확정이거나 생성 중이면 409). 상태 전이만(동결 없음). */
     fun confirm(now: Instant): Itinerary {
         requireConfirmable()
-        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, generationMode, isFallback, generationState, days, createdAt, now, candidatesSummary)
+        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, generationMode, isFallback, generationState, days, createdAt, now, candidatesSummary, unplacedMustVisits)
     }
 
     /**
@@ -142,7 +148,7 @@ class Itinerary private constructor(
                 },
             )
         }
-        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, generationMode, isFallback, generationState, frozenDays, createdAt, now, candidatesSummary)
+        return Itinerary(itineraryId, tripId, ItineraryStatus.CONFIRMED, solveMode, generationMode, isFallback, generationState, frozenDays, createdAt, now, candidatesSummary, unplacedMustVisits)
     }
 
     /**
@@ -166,6 +172,11 @@ class Itinerary private constructor(
         secondSolveMode: SolveMode = solveMode,
         secondIsFallback: Boolean = isFallback,
         secondCandidatesSummary: CandidatesSummary? = null,
+        /**
+         * 2차가 보고한 미배치 필수 방문지. **기본값을 두지 않는다** — 2차는 전 일자를 보고 판정하므로
+         * 그 결과가 곧 최종이다. 기본값을 두면 1차(day1만) 판정이 남아 사용자가 낡은 보고를 본다.
+         */
+        secondUnplaced: List<UnplacedMustVisit>,
     ): Itinerary {
         if (generationState != GenerationState.PARTIAL) {
             throw ConflictDetected(message = "생성 중인 일정이 아닙니다.")
@@ -180,6 +191,9 @@ class Itinerary private constructor(
             GenerationState.COMPLETE, allDays.sortedBy { it.dayOrder }, createdAt, now,
             // 2차가 요약을 주면 그 값(전 일자 기준), 없으면 1차 값 유지
             secondCandidatesSummary ?: candidatesSummary,
+            // 미배치 보고도 같은 규칙 — 2차가 보고하면 그 값이 전 일자 기준이다.
+            // 빈 목록은 "전부 배치됨"이라는 **판정**이라 1차 값으로 되돌리지 않는다.
+            secondUnplaced,
         )
     }
 
@@ -190,7 +204,7 @@ class Itinerary private constructor(
         }
         return Itinerary(
             itineraryId, tripId, status, solveMode, generationMode, isFallback, GenerationState.FAILED, days, createdAt, now,
-            candidatesSummary,
+            candidatesSummary, unplacedMustVisits,
         )
     }
 
@@ -204,13 +218,15 @@ class Itinerary private constructor(
             now: Instant,
             generationState: GenerationState = GenerationState.COMPLETE, // 단일 호출=완료. 2단계(day1)는 PARTIAL
             candidatesSummary: CandidatesSummary? = null,
+            /** AI 가 못 넣었다고 보고한 필수 방문지. 기본 빈 목록 = 전부 배치됨. */
+            unplacedMustVisits: List<UnplacedMustVisit> = emptyList(),
         ): Itinerary {
             if (days.map { it.dayOrder }.toSet().size != days.size) {
                 throw ValidationFailed(listOf(FieldError("days", "일자 순서(dayOrder)는 중복될 수 없습니다.")))
             }
             return Itinerary(
                 UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, solveMode, generationMode, isFallback, generationState,
-                days.sortedBy { it.dayOrder }, now, now, candidatesSummary,
+                days.sortedBy { it.dayOrder }, now, now, candidatesSummary, unplacedMustVisits,
             )
         }
 
@@ -219,9 +235,10 @@ class Itinerary private constructor(
             itineraryId: UUID, tripId: UUID, status: ItineraryStatus, solveMode: SolveMode,
             generationMode: GenerationMode, isFallback: Boolean, generationState: GenerationState, days: List<ItineraryDay>,
             createdAt: Instant, updatedAt: Instant, candidatesSummary: CandidatesSummary?,
+            unplacedMustVisits: List<UnplacedMustVisit>,
         ): Itinerary = Itinerary(
             itineraryId, tripId, status, solveMode, generationMode, isFallback, generationState,
-            days.sortedBy { it.dayOrder }, createdAt, updatedAt, candidatesSummary,
+            days.sortedBy { it.dayOrder }, createdAt, updatedAt, candidatesSummary, unplacedMustVisits,
         )
     }
 }

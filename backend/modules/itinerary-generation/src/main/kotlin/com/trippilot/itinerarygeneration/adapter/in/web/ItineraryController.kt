@@ -10,6 +10,7 @@ import com.trippilot.itinerarygeneration.application.ItineraryQueryService
 import com.trippilot.itinerarygeneration.application.SlotSurface
 import com.trippilot.itinerarygeneration.application.SlotSurfaceAssembler
 import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.application.UnplacedText
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -101,6 +102,11 @@ data class ItineraryResponse(
     val isFallback: Boolean,
     val generationState: String,
     val candidatesSummary: CandidatesSummaryResponse?,
+    /**
+     * 넣지 못한 필수 방문지. 빈 배열 = 전부 배치됨.
+     * 사용자에게 "왜 안 들어갔는지"를 알리는 채널이다 — 이게 없으면 조용히 사라진 것으로 보인다.
+     */
+    val unplacedMustVisits: List<UnplacedMustVisitResponse>,
     val days: List<DayResponse>,
 ) {
     companion object {
@@ -113,6 +119,7 @@ data class ItineraryResponse(
             isFallback = i.isFallback,
             generationState = i.generationState.name,
             candidatesSummary = i.candidatesSummary?.let { CandidatesSummaryResponse(it.level, it.poolSize, it.shortfallCategories) },
+            unplacedMustVisits = i.unplacedMustVisits.map { UnplacedMustVisitResponse(it.poiId, it.reasonCode.name, UnplacedText.of(it.reasonCode)) },
             days = i.days.map { d ->
                 DayResponse(d.date, d.slots.map { s -> SlotResponse.of(s, surfaces[s.sourcePoiId], i.status) })
             },
@@ -123,6 +130,12 @@ data class ItineraryResponse(
 data class DayResponse(val date: LocalDate, val slots: List<SlotResponse>)
 
 /** 후보 충분성(BR-U2-05) — **AI 판정값 그대로**. 백엔드는 level 을 재계산하지 않는다. */
+/**
+ * 넣지 못한 필수 방문지 1건.
+ * [reasonCode] 는 분기용(닫힌 집합), [message] 는 표시용 — 클라이언트가 문구를 지어내지 않게 서버가 준다.
+ */
+data class UnplacedMustVisitResponse(val poiId: UUID, val reasonCode: String, val message: String)
+
 data class CandidatesSummaryResponse(val level: String, val poolSize: Int?, val shortfallCategories: List<String>)
 
 /**

@@ -46,7 +46,7 @@ class ItineraryReadFacadeTest : StringSpec({
             ItineraryDay.of(d1, 0, listOf(slot(poiA, 0, "10:00"))),
             ItineraryDay.of(d2, 1, listOf(slot(poiB, 0, "11:00"))),
         ),
-        now, now, null,
+        now, now, null, emptyList(),
     )
 
     val trips = object : TripFacade {
@@ -94,7 +94,7 @@ class ItineraryReadFacadeTest : StringSpec({
             UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
             GenerationState.COMPLETE,
             listOf(ItineraryDay.of(d1, 0, listOf(slot(poiA, 0, "10:00"), slot(poiC, 1, "14:00")))),
-            now, now, null,
+            now, now, null, emptyList(),
         )
         ItineraryReadFacade(trips, repo(multi)).findCurrent(acc, tripId)!!.slotKeys shouldContainExactly
             listOf("$d1#$poiA", "$d1#$poiC")

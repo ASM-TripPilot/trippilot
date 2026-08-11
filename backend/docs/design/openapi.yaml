@@ -1338,6 +1338,21 @@ components:
             (day1만 동결된 채 잠기거나, 뒤이어 도착하는 2차 결과가 편집을 덮어쓰는 것 방지).
             생성 POST 는 day1 만 담은 PARTIAL 을 즉시 반환하므로, 클라이언트는 GET 으로 COMPLETE/FAILED 까지
             폴링해 나머지 일자를 받는다(여행이 하루면 즉시 COMPLETE).
+        unplacedMustVisits:
+          type: array
+          description: >
+            넣지 못한 필수 방문지. **빈 배열 = 전부 배치됨**(계약 M2).
+            판정은 AI 소유이고 백엔드는 보관·전달만 한다 — 사용자 문구(message)는 백엔드가 만든다.
+          items:
+            type: object
+            required: [poiId, reasonCode, message]
+            properties:
+              poiId: { type: string, format: uuid }
+              reasonCode:
+                type: string
+                enum: [OUT_OF_RANGE, WINDOW_CONFLICT, NO_FEASIBLE_SLOT, UNKNOWN]
+                description: 분기용 닫힌 집합. UNKNOWN = 계약에 없는 새 사유가 온 경우(보고 자체는 잃지 않는다)
+              message: { type: string, description: 표시용 문구 — 클라이언트가 지어내지 않게 서버가 준다 }
         candidatesSummary:
           nullable: true
           description: >

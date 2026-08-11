@@ -4,6 +4,8 @@ import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import tools.jackson.databind.JsonNode
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
+import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
+import com.trippilot.itinerarygeneration.domain.UnplacedReason
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
@@ -35,7 +37,15 @@ internal data class AiScheduleResponse(
     val solveMode: String,
     val isFallback: Boolean = false,
     val freshness: AiFreshness? = null,
+    /**
+     * 넣지 못한 필수 방문지(계약 M2). **기본 빈 목록** — 이 필드가 없는 옛 AI 응답도 같은 뜻이 되게 한다
+     * (배포 순서가 어긋나도 역직렬화가 깨지지 않는다).
+     */
+    val unplacedMustVisits: List<AiUnplacedMustVisit> = emptyList(),
 )
+
+/** 미배치 보고 1건. `reason_code` 는 닫힌 집합이지만 **문자열로 받는다** — 아래 매핑 주석 참고. */
+internal data class AiUnplacedMustVisit(val poiId: String, val reasonCode: String)
 
 internal data class AiDay(val date: LocalDate, val slots: List<AiSlot> = emptyList())
 
@@ -78,7 +88,31 @@ internal fun AiScheduleResponse.toDomain(receivedAt: Instant): ScheduleAgentOutp
     solveMode = solveMode.toSolveMode(),
     isFallback = isFallback,
     freshness = FreshnessMeta(freshness?.fetchedAt ?: receivedAt, degraded = freshness?.stale ?: false),
+    unplacedMustVisits = unplacedMustVisits.mapNotNull { it.toDomain() },
 )
+
+/**
+ * 미배치 보고 → 도메인. **보고 자체를 잃지 않는 것이 이 매핑의 목적**이라 관대하게 받는다:
+ * - 모르는 `reason_code` 는 [UnplacedReason.UNKNOWN] 으로 접는다. 새 사유가 추가됐다고 예외를 던지면
+ *   "못 넣었다"는 사실까지 함께 사라진다 — 침묵 드롭을 없애려고 만든 필드가 침묵 드롭을 만드는 셈이다.
+ *   (`solve_mode` 는 반대로 예외를 던진다 — 그건 오분류하면 폴백 판정이 통째로 틀어지기 때문이다.)
+ * - `poi_id` 가 UUID 가 아니면 **그 한 건만 버린다**. 어느 장소인지 모르면 화면에 띄울 수 없고,
+ *   한 건 때문에 나머지 보고까지 잃을 이유는 없다(로그로 드러낸다).
+ */
+private fun AiUnplacedMustVisit.toDomain(): UnplacedMustVisit? {
+    val id = runCatching { UUID.fromString(poiId) }.getOrNull()
+    if (id == null) {
+        wireLog.warn("미배치 보고의 poi_id 가 UUID 가 아닙니다 — 그 한 건만 버립니다. poiId={}", poiId)
+        return null
+    }
+    val reason = runCatching { UnplacedReason.valueOf(reasonCode.uppercase()) }.getOrElse {
+        wireLog.warn("알 수 없는 미배치 사유 — UNKNOWN 으로 접습니다. reasonCode={}", reasonCode)
+        UnplacedReason.UNKNOWN
+    }
+    return UnplacedMustVisit(id, reason)
+}
+
+private val wireLog = org.slf4j.LoggerFactory.getLogger("com.trippilot.itinerarygeneration.adapter.out.external.ScheduleAgentWire")
 
 /** AI solve_mode → 도메인 SolveMode. 미지 값은 예외(폴백 신호) — 조용한 오분류보다 낫다. */
 private fun String.toSolveMode(): SolveMode = when (uppercase()) {
