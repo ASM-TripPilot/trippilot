@@ -14,7 +14,7 @@ from trippilot.domain.llm import LlmFeature, ModelTier
 
 
 def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
-    """FD domain-entities §1의 기능→티어 기본 매핑 (경량 5·상위 4).
+    """FD domain-entities §1의 기능→티어 기본 매핑 (경량 6·상위 4).
 
     OFFLINE 티어는 배치·회귀 전용 — 기능 매핑에 등장하지 않는다.
     """
@@ -27,6 +27,8 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # INTENT·PARAPHRASE와 동급 과업 — LIGHT 확정 여부는 K-2 실모델 검증 대기
             # (agent-foundation FD 미결 #4)
             LlmFeature.EDIT_TRANSLATION: ModelTier.LIGHT,
+            # 푸시 문구 1문장 — 저비용 모델로 충분 (TRIP-347)
+            LlmFeature.REFLECTION_NUDGE: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             LlmFeature.ALTERNATIVE_SELECTION: ModelTier.HEAVY,
             LlmFeature.REFLECTION: ModelTier.HEAVY,
