@@ -3,8 +3,8 @@
   "cursors": {
     "39": {
       "12": {
-        "next_page": 1,
-        "completed": true
+        "next_page": 3,
+        "completed": false
       },
       "14": {
         "next_page": 1,
@@ -892,15 +892,15 @@
     "988441": "20250424182032"
   },
   "last_run": {
-    "at": "2026-08-10T20:01:08.942979+00:00",
+    "at": "2026-08-11T08:38:41.641559+00:00",
     "area_code": "39",
     "content_types": [
       "12",
       "14",
       "39"
     ],
-    "http_calls": 581,
-    "passed": 574,
-    "skipped_unchanged": 0
+    "http_calls": 2,
+    "passed": 0,
+    "skipped_unchanged": 100
   }
 }
