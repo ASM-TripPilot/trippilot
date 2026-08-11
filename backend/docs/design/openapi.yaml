@@ -701,6 +701,72 @@ paths:
         '400': { description: 슬롯 키 형식 오류 }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
         '409': { description: 확정된 일정 · 생성 진행 중 · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
+  /trips/{tripId}/visits:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 도착 체크 — 계획에 없던 곳이면 즉석 방문(US-ONTRIP-01 · US-REC-01)
+      description: >
+        계획(`visit_slot`)을 덮어쓰지 않고 **실적(actual) 계층**에 남긴다 —
+        계획은 "가기로 한 것", 여기는 "실제로 간 것"이라 둘이 달라도 그 자체가 사실이다.
+        `slotKey` 를 비우면 **즉석 방문**이다. 같은 슬롯을 두 번 체크하면 409 —
+        지오펜스가 한 번 이동에 두 리전을 깨워도 하나만 확정된다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ArriveRequest' } } }
+      responses:
+        '201': { description: 체크됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
+        '400': { description: 장소·체크 방식 누락 }
+        '404': { description: 여행 없음/타 계정 }
+        '409': { description: 이미 체크된 방문지 }
+  /trips/{tripId}/visits/days/{day}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: day, in: path, required: true, schema: { type: string, format: date } }
+    get:
+      tags: [trips]
+      summary: 그 날의 방문 기록
+      description: 즉석 방문은 슬롯 키가 없어 **도착 시각(여행지 기준 날짜)** 으로 묶인다.
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheckList' } } } }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/visits/{visitCheckId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [trips]
+      summary: 실제 시각 보정 — 자동 기록하되 수정 가능(US-REC-01)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdjustTimesRequest' } } }
+      responses:
+        '200': { description: 보정됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
+        '404': { description: 여행 없음/타 계정/기록 없음 }
+        '409': { description: 도착 없이 완료만 남기거나 순서가 뒤집힘 }
+  /trips/{tripId}/visits/{visitCheckId}/complete:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 방문 완료 — 이 시점부터 그 슬롯은 재계획에서 불변(INV-U4-04)
+      responses:
+        '200': { description: 완료됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
+        '404': { description: 여행 없음/타 계정/기록 없음 }
+        '409': { description: 도착 없이 완료 · 이미 완료·건너뜀 }
+  /trips/{tripId}/visits/{visitCheckId}/skip:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 건너뜀(취소) — 안 갔으므로 재계획에서 잠그지 않는다
+      responses:
+        '200': { description: 건너뜀, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
+        '404': { description: 여행 없음/타 계정/기록 없음 }
+        '409': { description: 이미 완료·건너뜀 }
   /trips/{tripId}/triggers:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1171,6 +1237,41 @@ components:
                     endAt: { type: string, example: "11:00:00" }
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean }
+    ArriveRequest:
+      type: object
+      required: [poiId, source]
+      properties:
+        slotKey:
+          type: string
+          nullable: true
+          description: '슬롯 경계 키 "{date}#{poiId}". **비우면 즉석 방문**(계획에 없던 곳)'
+        poiId: { type: string, format: uuid }
+        source:
+          type: string
+          enum: [AUTO_GEOFENCE, MANUAL]
+          description: 권한이 없거나 정확도가 낮으면 수동으로 대체된다(BR-U4-36)
+    AdjustTimesRequest:
+      type: object
+      properties:
+        arrivedAt: { type: string, format: date-time, nullable: true, description: 보내지 않으면 그대로 둔다(지우는 뜻이 아니다) }
+        completedAt: { type: string, format: date-time, nullable: true, description: 보내지 않으면 그대로 둔다. 도착 없이 완료만 남길 수 없다 }
+    VisitCheckList:
+      type: object
+      required: [visits]
+      properties:
+        visits: { type: array, items: { $ref: '#/components/schemas/VisitCheck' } }
+    VisitCheck:
+      type: object
+      required: [visitCheckId, poiId, source, spontaneous]
+      properties:
+        visitCheckId: { type: string, format: uuid }
+        slotKey: { type: string, nullable: true, description: null = 즉석 방문 }
+        poiId: { type: string, format: uuid }
+        arrivedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        skippedAt: { type: string, format: date-time, nullable: true, description: 건너뜀(취소). 완료와 동시에 참일 수 없다 }
+        source: { type: string, enum: [AUTO_GEOFENCE, MANUAL] }
+        spontaneous: { type: boolean, description: 계획에 없던 곳인가 — 화면의 '즉석 방문' 배지 근거 }
     TriggerList:
       type: object
       required: [triggers]

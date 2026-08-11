@@ -73,6 +73,7 @@ class SchemaMigrationIT {
                 "replan_session", // 재계획 세션(V2.17 · TRIP-273 · U4)
                 "plan_b_trigger", "plan_b_suppression", "plan_b_sensitivity", // 감지·억제(V2.18 · U4)
                 "weather_snapshot", // 날씨 캐시(V2.19 · U4)
+                "visit_check", // 방문 실적(V2.21 · US-ONTRIP-01·US-REC-01)
             )
 
             // R__ 시드 적용 확인 — 약관 6종 + 활성 금칙어 사전 1개
