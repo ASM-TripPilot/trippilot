@@ -64,11 +64,15 @@ def intro_item(content_id: str, kind: str, hours: str, rest: str) -> dict:
 
 
 class FakeTourApiHttp:
-    """(kind, page_no) → 목록 봉투, content_id → 상세 봉투. 등록 없는 요청은 빈 봉투."""
+    """(kind, page_no) → 목록 봉투, content_id → 상세 봉투. 등록 없는 요청은 빈 봉투.
+
+    다지역 테스트(TRIP-246 후속)는 (area_code, kind, page_no) 3-키도 섞어 쓸 수
+    있다 — 3-키가 우선, 없으면 기존 2-키(지역 무관)로 폴백 (기존 픽스처 무수정).
+    """
 
     def __init__(
         self,
-        pages: Mapping[tuple[str, int], dict] | None = None,
+        pages: Mapping[tuple[str, int] | tuple[str, str, int], dict] | None = None,
         intros: Mapping[str, dict] | None = None,
     ) -> None:
         self._pages = dict(pages or {})
@@ -78,6 +82,10 @@ class FakeTourApiHttp:
     def get_json(self, url: str, params: Mapping[str, str]) -> object:
         self.calls.append((url, dict(params)))
         if url.endswith("/areaBasedList2"):
+            area_key = (params["areaCode"], params["contentTypeId"],
+                        int(params["pageNo"]))
+            if area_key in self._pages:
+                return self._pages[area_key]
             key = (params["contentTypeId"], int(params["pageNo"]))
             return self._pages.get(key, envelope([], 0))
         if url.endswith("/detailIntro2"):

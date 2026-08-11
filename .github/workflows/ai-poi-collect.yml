@@ -7,14 +7,22 @@
 # 산출물은 "등록 제안" JSON일 뿐이다 (INV-1) — POI 정본은 backend C7 단일 소유(PR #76)라
 # DB에 직접 쓰지 않는다. 백엔드 수신 API 협의 전까지는 artifact(30일 보존)로만 남긴다.
 #
-# 키는 Repository Secrets `TOUR_API_KEY`(필수) · `TOUR_API_KEY2`(선택)에서만 온다
-# (둘 다 data.go.kr **디코딩** 키, 계정별 일일 한도 독립 — 키 2개면 합산 사용).
-# 키 2개 로테이션: 키 1이 **키당 상한**(TOURAPI_MAX_CALLS, 기본 500)을 소진하면 키 2로
-# 전환하고 수집 시퀀스를 그대로 이어간다 (병렬 아님 — 중복 크롤 0). 총 예산 = 키 수 ×
-# 키당 상한. TOUR_API_KEY 미등록이면 수집을 생략하고 **성공 종료**한다 — 스케줄이 미리
+# 키는 Repository Secrets `TOUR_API_KEY`(필수) · `TOUR_API_KEY2` · `TOUR_API_KEY3`(선택)
+# 에서만 온다 (모두 data.go.kr **디코딩** 키, 계정별 일일 한도 독립 — 등록 키만큼 합산).
+# 키링 로테이션: 현재 키가 **키당 상한**(vars.TOURAPI_MAX_CALLS=1000 — 개발계정 일
+# 1,000 전량)을 소진하면 다음 키로 전환하고 수집 시퀀스를 그대로 이어간다 (병렬 아님 —
+# 중복 크롤 0). 총 예산 = 키 수 × 키당 상한 (키 3개면 하루 3,000호출).
+#
+# 지역은 전국 골고루가 기본: TOURAPI_AREA_CODES(쉼표 목록) 미설정('')이면 스크립트가
+# 광역 17개 전부를 공평 순회한다 — 총 예산을 미완주 지역에 균등 분할하고, 나머지·조기
+# 종료분은 라운드로빈 포인터(수집 상태에 저장 — 매일 시작 지역 순환)로 이월. 완주
+# 지역은 색인 스킵 재순회가 저렴해 잔여 예산으로 마지막에. 단수 TOURAPI_AREA_CODE는
+# 하위호환 — 설정 시 그 지역만 (전국 순회를 원하면 비워둔다).
+#
+# TOUR_API_KEY 미등록이면 수집을 생략하고 **성공 종료**한다 — 스케줄이 미리
 # 켜져 있어도 빨간불이 나지 않게. 호출 상한 등 비밀 아닌 설정은 Repository Variables
-# (TOURAPI_MAX_CALLS · TOURAPI_AREA_CODE · TOURAPI_CONTENT_TYPES)로 생략 가능하며,
-# 실행 시 input을 채우면 그게 이긴다.
+# (TOURAPI_MAX_CALLS · TOURAPI_AREA_CODES · TOURAPI_AREA_CODE · TOURAPI_CONTENT_TYPES)로
+# 생략 가능하며, 실행 시 input을 채우면 그게 이긴다.
 #
 # 커서 이어가기 (TRIP-348): 수집 상태(collect_state.json — 커서 + 기제안 색인)를
 # `collect-state` **전용 브랜치**에 커밋·푸시해 실행 간 이어간다 (코드 히스토리 오염
@@ -27,12 +35,16 @@ name: ai-poi-collect
 on:
   workflow_dispatch:
     inputs:
+      area_codes:
+        description: 'TourAPI 지역 코드 쉼표 목록 — 공평 순회 (비우면 repo Variable → 기본 광역 17개 전부)'
+        required: false
+        type: string
       area_code:
-        description: 'TourAPI 지역 코드 (비우면 repo Variable → 기본 39 제주)'
+        description: '단수 지역 코드 하위호환 — 설정 시 그 지역만 (area_codes 무시)'
         required: false
         type: string
       max_calls:
-        description: '키당 HTTP 호출 상한 (비우면 repo Variable → 기본 500 — 개발계정 일 1,000의 절반; 총 예산 = 키 수 × 키당 상한)'
+        description: '키당 HTTP 호출 상한 (비우면 repo Variable TOURAPI_MAX_CALLS=1000 → 스크립트 기본 500; 총 예산 = 키 수 × 키당 상한)'
         required: false
         type: string
       content_types:
@@ -68,9 +80,11 @@ jobs:
         id: collect
         env:
           TOUR_API_KEY: ${{ secrets.TOUR_API_KEY }}
-          TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}   # 선택 — 미등록('')이면 키 1개 동작
+          TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}   # 선택 — 미등록('')이면 건너뜀
+          TOUR_API_KEY3: ${{ secrets.TOUR_API_KEY3 }}   # 선택 — 키링 세 번째
           # schedule 실행에서는 inputs가 비므로 Variables → 스크립트 기본값 순으로 폴백
-          TOURAPI_AREA_CODE: ${{ inputs.area_code || vars.TOURAPI_AREA_CODE }}
+          TOURAPI_AREA_CODES: ${{ inputs.area_codes || vars.TOURAPI_AREA_CODES || '' }}  # '' = 코드 기본 17개
+          TOURAPI_AREA_CODE: ${{ inputs.area_code || vars.TOURAPI_AREA_CODE }}  # 단수 하위호환 — 설정 시 그것만
           TOURAPI_CONTENT_TYPES: ${{ inputs.content_types || vars.TOURAPI_CONTENT_TYPES }}
           TOURAPI_MAX_CALLS: ${{ inputs.max_calls || vars.TOURAPI_MAX_CALLS || '500' }}
           COLLECT_OUTPUT: collected_pois.json
