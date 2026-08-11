@@ -3,6 +3,7 @@ package com.trippilot.savedaccommodation.adapter.`in`.web
 import com.trippilot.savedaccommodation.application.AssignBaseCommand
 import com.trippilot.savedaccommodation.application.TripCoverage
 import com.trippilot.savedaccommodation.domain.BaseAssignment
+import com.trippilot.savedaccommodation.domain.BaseResolution
 import com.trippilot.savedaccommodation.domain.CoverageStatus
 import com.trippilot.savedaccommodation.domain.DayCoverage
 import jakarta.validation.constraints.NotNull
@@ -29,6 +30,11 @@ data class BaseAssignmentResponse(
     }
 }
 
+/** 해소 시트의 선택 — 그 날 거점으로 쓸 숙소. 고를 수 있는 후보는 [DayCoverageDto.candidates]. */
+data class ResolveCoverageDayRequest(
+    @field:NotNull val savedStayId: UUID?,
+)
+
 /** 커버리지 상태 — blocked면 일정 생성 진입 차단(INV-U1-16). */
 data class CoverageResponse(
     val blocked: Boolean,
@@ -39,12 +45,19 @@ data class CoverageResponse(
     }
 }
 
+/**
+ * 하루 상태. [status] 는 배정이 말하는 판정, [resolution] 은 확정 여부 — **두 축이 다르다**.
+ * 겹침을 사용자가 풀면 `status=OVERLAP · resolution=USER_PICK` 이다(겹친 사실 자체는 남는다).
+ */
 data class DayCoverageDto(
     val date: LocalDate,
     val status: CoverageStatus,
     val savedStayId: UUID?,
+    val resolution: BaseResolution?,
+    /** 겹침일에 고를 수 있는 숙소. 그 외 날짜는 빈 배열. */
+    val candidates: List<UUID>,
 ) {
     companion object {
-        fun from(d: DayCoverage) = DayCoverageDto(d.date, d.status, d.savedStayId)
+        fun from(d: DayCoverage) = DayCoverageDto(d.date, d.status, d.savedStayId, d.resolution, d.candidates)
     }
 }

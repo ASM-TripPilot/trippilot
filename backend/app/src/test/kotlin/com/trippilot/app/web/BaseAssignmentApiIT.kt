@@ -106,6 +106,68 @@ class BaseAssignmentApiIT : AbstractPostgresIntegrationTest() {
         cov["days"][2]["status"].asText() shouldBe "GAP"
     }
 
+    /**
+     * TRIP-190 — 겹치게 등록한 사용자가 실제로 빠져나오는 경로. 해소가 없으면 배정을 지우는 것 말고
+     * 방법이 없었다. 화면이 하는 그대로 따라간다: 차단 확인 → 후보 확인 → 날짜별 선택 → 차단 해제.
+     */
+    @Test
+    fun `겹침을 날짜별로 골라 풀면 커버리지 차단이 해제된다`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        val a = newStay(token)
+        val b = newStay(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/bases", token, assignBody(a, "2026-08-01", "2026-08-04"))
+        call(HttpMethod.POST, "/api/v1/trips/$trip/bases", token, assignBody(b, "2026-08-01", "2026-08-04"))
+
+        val before = call(HttpMethod.GET, "/api/v1/trips/$trip/coverage", token).second
+        before["blocked"].asBoolean() shouldBe true
+        // 화면이 해소 시트를 그리려면 후보가 응답에 있어야 한다.
+        before["days"][0]["candidates"].size() shouldBe 2
+        before["days"][0]["resolution"].isNull shouldBe true
+
+        listOf("2026-08-01", "2026-08-02", "2026-08-03").forEachIndexed { i, date ->
+            val (rc, cov) = call(
+                HttpMethod.PUT, "/api/v1/trips/$trip/coverage/days/$date", token, """{"savedStayId":"$b"}""",
+            )
+            rc shouldBe 200
+            cov["days"][i]["resolution"].asText() shouldBe "USER_PICK"
+            cov["days"][i]["savedStayId"].asText() shouldBe b
+            // 배정이 겹친 사실 자체는 남는다 — 두 축이 다르다.
+            cov["days"][i]["status"].asText() shouldBe "OVERLAP"
+        }
+
+        call(HttpMethod.GET, "/api/v1/trips/$trip/coverage", token).second["blocked"].asBoolean() shouldBe false
+    }
+
+    @Test
+    fun `자동 확정된 날은 해소로 덮어쓸 수 없다(409)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        val stay = newStay(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/bases", token, assignBody(stay, "2026-08-01", "2026-08-04"))
+
+        val (rc, _) = call(
+            HttpMethod.PUT, "/api/v1/trips/$trip/coverage/days/2026-08-01", token, """{"savedStayId":"$stay"}""",
+        )
+        rc shouldBe 409
+    }
+
+    @Test
+    fun `남의 여행은 해소할 수 없다(404)`() {
+        val owner = newToken()
+        val trip = newTrip(owner)
+        val a = newStay(owner)
+        val b = newStay(owner)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/bases", owner, assignBody(a, "2026-08-01", "2026-08-04"))
+        call(HttpMethod.POST, "/api/v1/trips/$trip/bases", owner, assignBody(b, "2026-08-01", "2026-08-04"))
+
+        val stranger = newToken()
+        val (rc, _) = call(
+            HttpMethod.PUT, "/api/v1/trips/$trip/coverage/days/2026-08-01", stranger, """{"savedStayId":"$b"}""",
+        )
+        rc shouldBe 404
+    }
+
     @Test
     fun `겹치는 두 거점은 OVERLAP 차단`() {
         val token = newToken()

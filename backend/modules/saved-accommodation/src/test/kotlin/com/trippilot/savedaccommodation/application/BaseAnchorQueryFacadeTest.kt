@@ -42,7 +42,8 @@ class BaseAnchorQueryFacadeTest : StringSpec({
     val end = LocalDate.parse("2026-08-04") // 숙박일 = 08-01·02·03 (체크아웃 08-04)
     val now = Instant.parse("2026-08-01T00:00:00Z")
 
-    fun facade(bases: AnchorBases, stays: AnchorStays) = BaseAnchorQueryFacade(bases, stays)
+    fun facade(bases: AnchorBases, stays: AnchorStays, days: FakeTripBaseDays = FakeTripBaseDays()) =
+        BaseAnchorQueryFacade(bases, stays, days)
 
     fun stay(stays: AnchorStays, lat: Double, lng: Double): UUID =
         stays.save(SavedStay.register(acc, "숙소", lat, lng, true, null, null, null, null, RegisterRoute.PIN, null, now)).savedStayId
