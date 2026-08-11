@@ -40,6 +40,9 @@ class LlmFeature(Enum):
     EXPLANATION = "EXPLANATION"  # U5
     ALTERNATIVE_SELECTION = "ALTERNATIVE_SELECTION"  # U5
     REFLECTION = "REFLECTION"  # U6
+    # 여행 종료 후 회고 유도 푸시 문구 1문장 — REFLECTION(본문 생성)과 별개 기능.
+    # 알림 발송은 백엔드 notification(FCM) 소유 — c1은 문구 생성까지만 (TRIP-347).
+    REFLECTION_NUDGE = "REFLECTION_NUDGE"  # U6 (TRIP-347)
     PLACE_EXTRACTION = "PLACE_EXTRACTION"  # U6 (백그라운드)
     # EditAgent 전속 — 편집 발화 → EditCommand 초안 번역.
     # 확정된 EDIT_SCHEDULE 의도의 세부 번역이지 라우팅 재해석이 아니다 (DL-3, BR-AF-08).
