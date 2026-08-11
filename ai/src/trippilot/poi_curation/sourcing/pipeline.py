@@ -2,6 +2,8 @@
 
 흐름: PoiSourcingPort 페이지 순회(목록 1페이지 + 항목별 영업시간 1건씩 인터리브)
 → 카테고리 매핑(불가분 드롭+카운트) → 수집 게이트 5단 → 등록 제안 문서.
+다지역 실행은 `collect_areas`가 지역별 `collect`를 공평 배분으로 조립한다
+(전국 골고루 — 균등 분할 + 라운드로빈 이월, TRIP-246 후속).
 
 **호출 예산이 1급 규칙**: 포트 메서드 1회 = HTTP 1건 계약 위에서, max_calls
 도달 시 **그 시점까지 산출하고 정상 종료** (부분 성공 = 성공). 재시도 없음,
@@ -16,8 +18,8 @@ POI 정본은 backend C7 단일 소유(PR #76) — 정본 등록 후에만 close
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from trippilot.ports.poi_sourcing_port import (
@@ -51,6 +53,30 @@ SCHEMA_VERSION = 1
 SOURCE_NAME = "TOURAPI"
 _OPENING_HOURS_MAX = 200  # backend poi.opening_hours varchar(200)
 _NO_HOURS = SourcedHours(hours_raw=None, rest_raw=None)
+
+# TourAPI(KorService2) areaCode ↔ 광역 지자체 이름 — 17개 전부 (기본 순회 대상).
+# 1 서울 · 2 인천 · 3 대전 · 4 대구 · 5 광주 · 6 부산 · 7 울산 · 8 세종 ·
+# 31 경기 · 32 강원 · 33 충북 · 34 충남 · 35 경북 · 36 전북 · 37 전남 ·
+# 38 경남 · 39 제주
+AREA_NAMES: Mapping[str, str] = {
+    "1": "서울", "2": "인천", "3": "대전", "4": "대구", "5": "광주",
+    "6": "부산", "7": "울산", "8": "세종", "31": "경기", "32": "강원",
+    "33": "충북", "34": "충남", "35": "경북", "36": "전북", "37": "전남",
+    "38": "경남", "39": "제주",
+}
+DEFAULT_AREA_CODES: tuple[str, ...] = tuple(AREA_NAMES)
+
+
+def resolve_area_codes(single: str | None, multi: str | None) -> list[str]:
+    """env → 순회 지역 목록 (순서 = 설정 순서 고정, 결정론).
+
+    단수 `TOURAPI_AREA_CODE`가 설정되면 그 지역만(하위호환), 아니면 쉼표 목록
+    `TOURAPI_AREA_CODES`, 그것도 없으면 광역 17개 전부 (전국 골고루 기본).
+    """
+    if single and single.strip():
+        return [single.strip()]
+    codes = [a.strip() for a in (multi or "").split(",") if a.strip()]
+    return codes if codes else list(DEFAULT_AREA_CODES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,7 +278,10 @@ def collect(
     return CollectResult(
         report=report,
         stats=stats,
-        next_state=CollectState(cursors=cursors, proposed=proposed),
+        # 라운드로빈 포인터는 단일 지역 수집의 관심사가 아니다 — 입력값 보존만
+        # (회전은 collect_areas 소관)
+        next_state=CollectState(cursors=cursors, proposed=proposed,
+                                next_area=prior.next_area),
     )
 
 
@@ -305,3 +334,157 @@ def _truncate(text: str | None, limit: int) -> str | None:
     if text is None or len(text) <= limit:
         return text
     return text[: limit - 1] + "…"
+
+
+# ── 전국 다지역 공평 순회 (TRIP-246 후속) ─────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class MultiCollectResult:
+    """지역별 실행 결과 — 실행 순서(회전 순서) 그대로, 호출 0건 지역은 미포함."""
+
+    area_results: tuple[tuple[str, CollectResult], ...]  # (area_code, 결과)
+    next_state: CollectState  # 전 지역 커서·색인 + 회전된 라운드로빈 포인터
+
+
+def collect_areas(
+    source: PoiSourcingPort,
+    *,
+    area_codes: Sequence[str],
+    content_types: Sequence[str],
+    max_calls: int,
+    rows_per_page: int = 100,
+    gate: CollectionGate | None = None,
+    state: CollectState | None = None,
+) -> MultiCollectResult:
+    """다지역 공평 수집 — 총 예산(max_calls)을 지역별로 나눠 `collect`를 조립한다.
+
+    배분 규칙 (결정론 — 지역 순서는 `area_codes` 그대로, 포인터만 회전):
+    - 시작 지역 = 상태의 라운드로빈 포인터(next_area). 매 실행 다음 지역으로
+      한 칸 회전해 저장 — 시작 지역이 순환하므로 장기적으로 공평하다.
+    - **미완주 지역**(어느 타입이든 완주 전)에만 총 예산을 균등 분할(floor).
+      분할 나머지는 회전 순서 앞쪽 지역부터 1씩 더 배분한다.
+    - 조기 종료분(지역이 자기 몫을 다 못 쓰면)은 회전 순서상 다음 지역으로 이월.
+    - **완주 지역**(모든 타입 커서 completed)은 색인 스킵 재순회가 저렴하므로
+      배분에서 빼고, 잔여 예산이 남으면 마지막에 회전 순서대로 돈다.
+
+    지역 내부 동작(타입 순회·커서 재개·기제안 스킵)은 `collect` 그대로다.
+    """
+    if not area_codes:
+        raise ValueError("area_codes 비어 있음")
+    if max_calls <= 0:
+        raise ValueError(f"max_calls 양수 필요: {max_calls}")
+    current = state if state is not None else empty_state()
+
+    ordered = list(area_codes)
+    start = 0
+    if current.next_area is not None and current.next_area in ordered:
+        start = ordered.index(current.next_area)
+    # 포인터 지역이 목록에서 사라졌으면(env 변경) 처음부터 — 결정론 유지
+    rotated = ordered[start:] + ordered[:start]
+    next_pointer = ordered[(start + 1) % len(ordered)]
+
+    def _fully_completed(s: CollectState, area: str) -> bool:
+        return all(
+            (c := s.cursors.get((area, kind))) is not None and c.completed
+            for kind in content_types
+        )
+
+    pending = [a for a in rotated if not _fully_completed(current, a)]
+    finished = [a for a in rotated if _fully_completed(current, a)]
+
+    area_results: list[tuple[str, CollectResult]] = []
+    if pending:
+        share, remainder = divmod(max_calls, len(pending))
+        leftover = 0
+    else:
+        share, remainder = 0, 0
+        leftover = max_calls  # 전 지역 완주 — 전액 잔여 예산으로 재순회
+
+    carry = 0
+    for i, area in enumerate(pending):
+        alloc = share + (1 if i < remainder else 0) + carry
+        carry = 0
+        if alloc <= 0:
+            continue  # 예산 < 지역 수 — 이번 실행 몫 없음 (다음 실행에 포인터가 돈다)
+        result = collect(
+            source, area_code=area, content_types=content_types,
+            max_calls=alloc, rows_per_page=rows_per_page, gate=gate, state=current,
+        )
+        area_results.append((area, result))
+        current = result.next_state
+        carry = alloc - result.stats.http_calls  # 조기 종료분 이월
+    leftover += carry
+
+    for area in finished:  # 완주 지역은 잔여 예산으로 마지막에 (색인 스킵 — 저렴)
+        if leftover <= 0:
+            break
+        result = collect(
+            source, area_code=area, content_types=content_types,
+            max_calls=leftover, rows_per_page=rows_per_page, gate=gate, state=current,
+        )
+        area_results.append((area, result))
+        current = result.next_state
+        leftover -= result.stats.http_calls
+
+    return MultiCollectResult(
+        area_results=tuple(area_results),
+        next_state=replace(current, next_area=next_pointer),
+    )
+
+
+def to_multi_output_document(
+    result: MultiCollectResult,
+    *,
+    area_codes: Sequence[str],
+    content_types: Sequence[str],
+    collected_at: datetime,
+) -> dict:
+    """다지역 등록 제안 문서 — 제안 스키마는 to_output_document와 동일, 통계는
+    합산 + 지역별 분해(per_area). 지역 단수 필드(area_code) 대신 area_codes 목록."""
+    per_area = {
+        area: {"calls": 0, "passed": 0, "skipped": 0} for area in area_codes
+    }
+    totals = {
+        "http_calls": 0, "listed": 0, "page_failures": 0, "detail_failures": 0,
+        "category_unmapped": 0, "merged": 0, "passed": 0, "skipped_unchanged": 0,
+    }
+    gate_drops: dict[str, int] = {}
+    budget_exhausted = False
+    proposals: list[dict] = []
+    for area, r in result.area_results:
+        s = r.stats
+        per_area[area] = {
+            "calls": s.http_calls, "passed": s.passed,
+            "skipped": s.skipped_unchanged,
+        }
+        totals["http_calls"] += s.http_calls
+        totals["listed"] += s.listed
+        totals["page_failures"] += s.page_failures
+        totals["detail_failures"] += s.detail_failures
+        totals["category_unmapped"] += s.category_unmapped
+        totals["merged"] += s.merged
+        totals["passed"] += s.passed
+        totals["skipped_unchanged"] += s.skipped_unchanged
+        for reason, count in s.gate_drops.items():
+            gate_drops[reason] = gate_drops.get(reason, 0) + count
+        budget_exhausted = budget_exhausted or s.budget_exhausted
+        area_doc = to_output_document(
+            r, area_code=area, content_types=content_types,
+            collected_at=collected_at,
+        )
+        proposals.extend(area_doc["proposals"])
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "source": SOURCE_NAME,
+        "collected_at": collected_at.isoformat(),
+        "area_codes": list(area_codes),
+        "content_types": list(content_types),
+        "stats": {
+            **totals,
+            "gate_drops": gate_drops,
+            "budget_exhausted": budget_exhausted,
+            "per_area": per_area,
+        },
+        "proposals": proposals,
+    }

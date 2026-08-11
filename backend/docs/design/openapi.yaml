@@ -731,6 +731,72 @@ paths:
         '400': { description: 슬롯 키 형식 오류 }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
         '409': { description: 확정된 일정 · 생성 진행 중 · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 }
+  /trips/{tripId}/visits:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 도착 체크 — 계획에 없던 곳이면 즉석 방문(US-ONTRIP-01 · US-REC-01)
+      description: >
+        계획(`visit_slot`)을 덮어쓰지 않고 **실적(actual) 계층**에 남긴다 —
+        계획은 "가기로 한 것", 여기는 "실제로 간 것"이라 둘이 달라도 그 자체가 사실이다.
+        `slotKey` 를 비우면 **즉석 방문**이다. 같은 슬롯을 두 번 체크하면 409 —
+        지오펜스가 한 번 이동에 두 리전을 깨워도 하나만 확정된다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ArriveRequest' } } }
+      responses:
+        '201': { description: 체크됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
+        '400': { description: 장소·체크 방식 누락 }
+        '404': { description: 여행 없음/타 계정 }
+        '409': { description: 이미 체크된 방문지 }
+  /trips/{tripId}/visits/days/{day}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: day, in: path, required: true, schema: { type: string, format: date } }
+    get:
+      tags: [trips]
+      summary: 그 날의 방문 기록
+      description: 즉석 방문은 슬롯 키가 없어 **도착 시각(여행지 기준 날짜)** 으로 묶인다.
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheckList' } } } }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/visits/{visitCheckId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [trips]
+      summary: 실제 시각 보정 — 자동 기록하되 수정 가능(US-REC-01)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdjustTimesRequest' } } }
+      responses:
+        '200': { description: 보정됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
+        '404': { description: 여행 없음/타 계정/기록 없음 }
+        '409': { description: 도착 없이 완료만 남기거나 순서가 뒤집힘 }
+  /trips/{tripId}/visits/{visitCheckId}/complete:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 방문 완료 — 이 시점부터 그 슬롯은 재계획에서 불변(INV-U4-04)
+      responses:
+        '200': { description: 완료됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
+        '404': { description: 여행 없음/타 계정/기록 없음 }
+        '409': { description: 도착 없이 완료 · 이미 완료·건너뜀 }
+  /trips/{tripId}/visits/{visitCheckId}/skip:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 건너뜀(취소) — 안 갔으므로 재계획에서 잠그지 않는다
+      responses:
+        '200': { description: 건너뜀, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
+        '404': { description: 여행 없음/타 계정/기록 없음 }
+        '409': { description: 이미 완료·건너뜀 }
   /trips/{tripId}/triggers:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -758,6 +824,29 @@ paths:
         '200': { description: 꺼짐, content: { application/json: { schema: { $ref: '#/components/schemas/Trigger' } } } }
         '404': { description: 여행 없음/타 계정/트리거 없음(다른 여행 소속 포함) }
         '409': { description: 이미 닫혔거나 지난 알림 }
+  /trips/{tripId}/stay-recommendations:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 숙소 나중 등록 온램프 — 동선 기준 권역·후보 평가(US-SCHED-11 · h27·h28)
+      description: >
+        숙소 없이 만든 일정의 **방문지 무게중심**으로 권역을 추천하고, 넘겨받은 후보를
+        **평균 이동 거리 순**으로 매긴다(before/after 함께). 거리는 전부 **추정(직선)** 이며 소요시간은 없다(INV-3).
+
+        후보 목록은 클라이언트가 `GET /stays/search` 로 얻어 넘긴다 — 숙소 검색은 C3 소유라 여기서 중개하지 않는다.
+        비워 보내면 권역만 돌려준다.
+
+        **등록 후 재정렬 API 는 없다** — 정본이 "숙소 등록 후 재정렬 = generate"로 못박았다(DEC-U3-2·4).
+        숙소를 등록한 뒤 `POST /trips/{tripId}/itinerary` 를 다시 부르면 그 숙소가 앵커로 들어간다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/StayRecommendationRequest' } } }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/StayRecommendation' } } } }
+        '400': { description: 후보 수 초과 }
+        '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
+        '409': { description: 좌표를 아는 방문지가 없어 권역을 낼 수 없음 }
   /trips/{tripId}/replan-sessions:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1201,6 +1290,41 @@ components:
                     endAt: { type: string, example: "11:00:00" }
                     isFixed: { type: boolean }
                     endsNextDay: { type: boolean }
+    ArriveRequest:
+      type: object
+      required: [poiId, source]
+      properties:
+        slotKey:
+          type: string
+          nullable: true
+          description: '슬롯 경계 키 "{date}#{poiId}". **비우면 즉석 방문**(계획에 없던 곳)'
+        poiId: { type: string, format: uuid }
+        source:
+          type: string
+          enum: [AUTO_GEOFENCE, MANUAL]
+          description: 권한이 없거나 정확도가 낮으면 수동으로 대체된다(BR-U4-36)
+    AdjustTimesRequest:
+      type: object
+      properties:
+        arrivedAt: { type: string, format: date-time, nullable: true, description: 보내지 않으면 그대로 둔다(지우는 뜻이 아니다) }
+        completedAt: { type: string, format: date-time, nullable: true, description: 보내지 않으면 그대로 둔다. 도착 없이 완료만 남길 수 없다 }
+    VisitCheckList:
+      type: object
+      required: [visits]
+      properties:
+        visits: { type: array, items: { $ref: '#/components/schemas/VisitCheck' } }
+    VisitCheck:
+      type: object
+      required: [visitCheckId, poiId, source, spontaneous]
+      properties:
+        visitCheckId: { type: string, format: uuid }
+        slotKey: { type: string, nullable: true, description: null = 즉석 방문 }
+        poiId: { type: string, format: uuid }
+        arrivedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        skippedAt: { type: string, format: date-time, nullable: true, description: 건너뜀(취소). 완료와 동시에 참일 수 없다 }
+        source: { type: string, enum: [AUTO_GEOFENCE, MANUAL] }
+        spontaneous: { type: boolean, description: 계획에 없던 곳인가 — 화면의 '즉석 방문' 배지 근거 }
     TriggerList:
       type: object
       required: [triggers]
@@ -1229,6 +1353,38 @@ components:
           enum: [FULL_DAY, PARTIAL_SLOTS, NONE]
           description: 발화 시 재계획 범위 — [대안 보기] 가 이 값으로 세션을 연다
         detectedAt: { type: string, format: date-time }
+    StayRecommendationRequest:
+      type: object
+      properties:
+        candidates:
+          type: array
+          maxItems: 50
+          description: '`GET /stays/search` 결과에서 고른 후보. 비우면 권역만 돌려준다'
+          items:
+            type: object
+            required: [stayId, lat, lng]
+            properties:
+              stayId: { type: string }
+              lat: { type: number }
+              lng: { type: number }
+    StayRecommendation:
+      type: object
+      required: [centroidLat, centroidLng, avgDistanceM, candidates]
+      properties:
+        centroidLat: { type: number, description: 방문지 무게중심 — 지도에서 "이 근처"를 가리키는 점 }
+        centroidLng: { type: number }
+        avgDistanceM: { type: integer, description: 무게중심에서 각 방문지까지의 평균 거리 — 권역 반경의 근거 }
+        candidates:
+          type: array
+          description: 평균 이동 거리가 짧은 순
+          items:
+            type: object
+            required: [stayId, beforeAvgDistanceM, afterAvgDistanceM, deltaM]
+            properties:
+              stayId: { type: string }
+              beforeAvgDistanceM: { type: integer, description: 숙소 없이 방문지끼리 이어 다닐 때의 평균 구간 거리 }
+              afterAvgDistanceM: { type: integer, description: 그 숙소에서 출발·복귀할 때의 평균 구간 거리 }
+              deltaM: { type: integer, description: '음수면 줄어든다 — 화면이 "평균 N m 줄어요"로 쓴다' }
     StartReplanRequest:
       type: object
       required: [scope, originKind]

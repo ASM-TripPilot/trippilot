@@ -4,6 +4,7 @@
     "PONYTAIL_SUBAGENT_MATCHER": "^implementer$"
   },
   "model": "claude-opus-4-8[1m]",
+  "includeCoAuthoredBy": false,
   "effortLevel": "high",
   "permissions": {
     "deny": [

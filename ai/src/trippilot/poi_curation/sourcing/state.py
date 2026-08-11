@@ -41,6 +41,9 @@ class CollectState:
 
     cursors: Mapping[tuple[str, str], KindCursor] = field(default_factory=dict)
     proposed: Mapping[str, str] = field(default_factory=dict)  # contentid → modifiedtime
+    # 다지역 라운드로빈 포인터 — 다음 실행이 시작할 지역 코드 (TRIP-246 후속).
+    # None(구버전 상태 포함) 또는 현재 목록에 없는 코드면 목록 처음부터.
+    next_area: str | None = None
 
 
 def empty_state() -> CollectState:
@@ -75,7 +78,11 @@ def parse_state(text: str) -> CollectState:
         isinstance(k, str) and isinstance(v, str) for k, v in raw_proposed.items()
     ):
         raise ValueError("proposed 색인 형식 오류")
-    return CollectState(cursors=cursors, proposed=dict(raw_proposed))
+    next_area = doc.get("next_area")  # 구버전 상태에는 없음 — None 허용 (하위호환)
+    if next_area is not None and not isinstance(next_area, str):
+        raise ValueError(f"next_area 형식 오류: {next_area!r}")
+    return CollectState(cursors=cursors, proposed=dict(raw_proposed),
+                        next_area=next_area)
 
 
 def state_to_dict(state: CollectState, *, last_run: Mapping[str, object]) -> dict:
@@ -90,6 +97,7 @@ def state_to_dict(state: CollectState, *, last_run: Mapping[str, object]) -> dic
         "schema_version": STATE_VERSION,
         "cursors": nested,
         "proposed": dict(sorted(state.proposed.items())),
+        "next_area": state.next_area,
         "last_run": dict(last_run),
     }
 
