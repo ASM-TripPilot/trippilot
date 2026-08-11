@@ -208,10 +208,10 @@ def test_generate_pierces_http_to_solver() -> None:
         assert response.status_code == 200, response.text
         body = response.json()
 
-        # 와이어 계약 키 (백엔드 ScheduleAgentWire가 읽는 전부)
+        # 와이어 계약 키 (백엔드 ScheduleAgentWire가 읽는 전부 + TRIP-350 additive)
         assert set(body) == {
             "days", "day1_ready_at", "explanations", "solve_mode",
-            "is_fallback", "freshness", "candidates_summary",
+            "is_fallback", "freshness", "candidates_summary", "unplaced_must_visits",
         }
         assert body["solve_mode"] == "OR_TOOLS"     # 1차 단계가 실제로 해를 냈다
         assert body["is_fallback"] is False

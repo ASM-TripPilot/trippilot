@@ -28,6 +28,10 @@ generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아
 - `distance_ranges`: 직전 지점(첫 슬롯=그 날의 앵커, 이후=앞 슬롯 POI 좌표)과의 거리
   표시 문자열(BR-U2-08, "약 1.2km · 도보 추정"). 거리만 — 소요시간류 절대 미포함(INV-3).
   좌표를 모르는 구간(미등록 POI·앵커 없는 날)은 산출하지 않는다.
+- `unplaced_must_visits`(TRIP-350): 요청 fixed_blocks **대 응답 해 대조**로만 판정한다
+  (솔버 내부 무수정 — judge_unplaced_must_visits 참조). 침묵 드롭(TRIP-328) 해소:
+  기간 밖 블록은 HC3가 스킵해 200에서 조용히 사라졌었다 — 이제 사유와 함께 회신된다.
+  409(해소 불가 모순) 경로는 그대로다 — 이 필드는 200 부분 성공의 보고 채널일 뿐이다.
 
 어댑터로 메우지 **않은** 간극(지어내지 않는다 — null/빈 값이 정직한 값):
 - `freshness`: 도메인 `Poi`에 수집 시각 메타가 없다 → 집계 불가, null 유지
@@ -240,6 +244,87 @@ def _domain_generate_request(
     )
 
 
+# ── 미배치 필수방문 판정 (TRIP-350 — 요청 대비 응답 대조) ────────────
+
+REASON_OUT_OF_RANGE = "OUT_OF_RANGE"
+REASON_WINDOW_CONFLICT = "WINDOW_CONFLICT"
+REASON_NO_FEASIBLE_SLOT = "NO_FEASIBLE_SLOT"
+
+
+@dataclass(frozen=True, slots=True)
+class UnplacedMustVisit:
+    """미배치 필수방문 보고 1건. reason_code는 닫힌 집합(스키마 Literal이 강제)."""
+
+    poi_id: str
+    reason_code: str
+
+
+def judge_unplaced_must_visits(
+    request: schemas.GenerateItineraryRequest,
+    solution: ItinerarySolution,
+    tz: timezone,
+) -> tuple[UnplacedMustVisit, ...]:
+    """generate 응답의 `unplaced_must_visits` 판정 — 증명 가능한 것만 보고한다.
+
+    판정은 **요청(fixed_blocks) 대비 응답(해)** 대조뿐이다(솔버 내부 무수정):
+    - 배치됨: 해당 일자에 poi·시각 정확 일치 슬롯 존재(HC3와 동일 기준) → 보고 제외
+    - `OUT_OF_RANGE`: 블록 날짜가 여행 기간(trip_context.start~end) 밖 —
+      요청 시점에 확정 판정 가능(어느 호출도 배치할 수 없다)
+    - 유예(보고 제외): 기간 **안**인데 이 요청의 time_windows 일자 밖 — day1 2단계
+      생성(TRIP-293)의 2차로 미뤄진 블록이다. 이 응답의 미배치가 아니므로 오보하지
+      않는다(요청 밖 사정은 모른다).
+    - `WINDOW_CONFLICT`: 판정 대상 일자인데 미배치 + 요청의 **다른 고정 블록과 창
+      겹침이 증명될 때만**
+    - `NO_FEASIBLE_SLOT`: 그 외 미배치(기간 안·겹침 없음인데 해에 없음)
+
+    ANYTIME 블록(date/start 없음)은 이 함수에 도달하지 않는다 — `_fixed_block`이
+    요청 조립 단계에서 422로 명시 실패시킨다(INV-4).
+    """
+    if not request.fixed_blocks:
+        return ()
+    blocks = [_fixed_block(b, tz) for b in request.fixed_blocks]
+    slots_by_day = {day.date: day.slots for day in solution.days}
+    requested_days = {w.date for w in request.time_windows}
+    trip_start = request.trip_context.start_date
+    trip_end = request.trip_context.end_date
+
+    def satisfied(fb: FixedBlock) -> bool:
+        return any(
+            s.poi_id == fb.poi_id
+            and s.start_at == fb.window.start
+            and s.end_at == fb.window.end
+            for s in slots_by_day.get(fb.window.start.date(), ())
+        )
+
+    def overlaps_other(fb: FixedBlock) -> bool:
+        return any(
+            other is not fb
+            and fb.window.start < other.window.end
+            and other.window.start < fb.window.end
+            for other in blocks
+        )
+
+    reported: list[UnplacedMustVisit] = []
+    seen: set[tuple[str, str]] = set()
+    for fb in blocks:
+        if satisfied(fb):
+            continue
+        block_date = fb.window.start.date()
+        if not (trip_start <= block_date <= trip_end):
+            reason = REASON_OUT_OF_RANGE
+        elif block_date not in requested_days:
+            continue  # 유예 — 다른 호출(2차) 소관, 미배치로 오보하지 않는다
+        elif overlaps_other(fb):
+            reason = REASON_WINDOW_CONFLICT
+        else:
+            reason = REASON_NO_FEASIBLE_SLOT
+        key = (str(fb.poi_id), reason)
+        if key not in seen:  # 동일 (poi, 사유) 중복 보고 방지 — 요청 순서 보존
+            seen.add(key)
+            reported.append(UnplacedMustVisit(poi_id=str(fb.poi_id), reason_code=reason))
+    return tuple(reported)
+
+
 # ── Protocol 봉투 (api/protocols.py 구조 충족) ───────────────────────
 
 
@@ -253,6 +338,7 @@ class WiredOutcome:
     freshness: FreshnessMeta | None
     candidates_summary: core.CandidatesReport | None
     day1_ready_at: datetime | None
+    unplaced_must_visits: tuple[UnplacedMustVisit, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,11 +372,14 @@ def _envelope(
     distance_ranges: Mapping[str, str] | None = None,
     candidates_summary: core.CandidatesReport | None = None,
     day1_ready_at: datetime | None = None,
+    unplaced_must_visits: tuple[UnplacedMustVisit, ...] = (),
 ) -> WiredOutcome:
     """봉투 조립. 기본값(빈/None)은 산출 컨텍스트가 없는 경로(repair)의 정직한 값이다.
 
     `freshness`는 항상 None: 도메인 `Poi`에 수집 시각 메타가 없어 집계 불가 —
     풀 생성 시각을 수집 시각인 척 지어내지 않는다.
+    `unplaced_must_visits` 기본 빈 튜플: repair 와이어에는 원 요청 fixed_blocks가
+    없어 판정 불가 — 지어내지 않는다(generate 경로만 실값 주입).
     """
     return WiredOutcome(
         solution=solution,
@@ -299,6 +388,7 @@ def _envelope(
         freshness=None,
         candidates_summary=candidates_summary,
         day1_ready_at=day1_ready_at,
+        unplaced_must_visits=unplaced_must_visits,
     )
 
 
@@ -501,6 +591,9 @@ class WiredItineraryOrchestrator:
             distance_ranges=self._distances_for(request, outcome.solution),
             candidates_summary=outcome.candidates_summary,
             day1_ready_at=self._day1_ready_at(request, outcome),
+            unplaced_must_visits=judge_unplaced_must_visits(
+                request, outcome.solution, self._tz
+            ),
         )
 
     def _distances_for(
