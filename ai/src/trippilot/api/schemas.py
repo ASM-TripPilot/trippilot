@@ -23,6 +23,7 @@ from __future__ import annotations
 # unsupported operand for |: 'NoneType'). 모듈 별칭으로 참조해 충돌을 원천 차단한다.
 import datetime as dt
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -178,12 +179,31 @@ class CandidatesSummarySchema(BoundaryModel):
     shortfall_categories: list[str] = Field(default_factory=list)
 
 
+class UnplacedMustVisitSchema(BoundaryModel):
+    """미배치 필수방문 보고 1건 (TRIP-350 — PR #104에서 확정한 회신 계약).
+
+    배경(TRIP-328): 백엔드가 기간 밖 must_visit을 fixed_blocks에 실어 보내면
+    HC3가 범위 밖 날짜를 스킵해 **침묵 드롭**됐다 — 이 필드가 "왜 안 들어갔는지"를
+    돌려준다. `reason_code`는 **닫힌 집합**(백엔드가 분기·화면 문구에 사용):
+
+    - `OUT_OF_RANGE`: 고정 블록 날짜가 여행 기간(trip_context) 밖
+    - `WINDOW_CONFLICT`: 기간 안 미배치 + 다른 고정 블록과 시간 겹침이 증명됨
+    - `NO_FEASIBLE_SLOT`: 그 외 미배치 (기간 안·겹침 없음인데 해에 없음)
+    """
+
+    poi_id: str = Field(min_length=1)
+    reason_code: Literal["OUT_OF_RANGE", "NO_FEASIBLE_SLOT", "WINDOW_CONFLICT"]
+
+
 class ItineraryPayload(BoundaryModel):
     """일정 산출물 — generate 응답이자 validate/repair 요청 본문(같은 형태를 왕복한다).
 
     `solve_mode`는 AI 4값(OR_TOOLS|LLM|RULE_FALLBACK|MINIMAL)을 그대로 보낸다.
     백엔드 3값(FULL_AI|DETERMINISTIC|MINIMAL)으로의 축약은 어댑터가 소유한다(ScheduleAgentWire).
     `explanations` 키 규약 = `"{date}#{poi_id}"` (BR-U2-04), 문구는 시각·소요시간을 언급하지 않는다.
+    `unplaced_must_visits`는 additive(기본 빈 리스트 = 전부 배치됨) — generate 응답의
+    부분 성공(200) 보고 채널이다. 해소 불가 모순의 409 경로는 그대로다(약화 금지).
+    validate/repair 요청으로 왕복될 때는 판정 컨텍스트가 없으므로 소비하지 않는다.
     """
 
     days: list[DayScheduleSchema] = Field(default_factory=list)
@@ -193,6 +213,7 @@ class ItineraryPayload(BoundaryModel):
     is_fallback: bool = False
     freshness: FreshnessMetaSchema | None = None
     candidates_summary: CandidatesSummarySchema | None = None
+    unplaced_must_visits: list[UnplacedMustVisitSchema] = Field(default_factory=list)
 
 
 # ───────────────────────── 검증 / 수리 ─────────────────────────

@@ -36,6 +36,14 @@ class CandidatesSummaryLike(Protocol):
     shortfall_categories: Sequence[str]
 
 
+class UnplacedMustVisitLike(Protocol):
+    """미배치 필수방문 보고 1건 (TRIP-350). `reason_code`는 닫힌 집합
+    (OUT_OF_RANGE | NO_FEASIBLE_SLOT | WINDOW_CONFLICT) — 스키마 Literal이 강제한다."""
+
+    poi_id: str
+    reason_code: str
+
+
 class ItineraryOutcome(Protocol):
     """일정 산출물 + 표시에 필요한 부가 정보.
 
@@ -44,6 +52,8 @@ class ItineraryOutcome(Protocol):
 
     - `explanations` / `distance_ranges` 키 규약 = `"{date}#{poi_id}"` (BR-U2-04)
     - `distance_ranges` 값은 표시 문자열("약 1.2km · 도보 추정")이며 **시간을 담지 않는다**(INV-3)
+    - `unplaced_must_visits`: 요청 fixed_blocks 대비 해에 없는 필수방문의 사유 보고
+      (TRIP-350 — 빈 시퀀스 = 전부 배치됨)
     """
 
     solution: ItinerarySolution
@@ -52,6 +62,7 @@ class ItineraryOutcome(Protocol):
     freshness: FreshnessMeta | None
     candidates_summary: CandidatesSummaryLike | None
     day1_ready_at: datetime | None
+    unplaced_must_visits: Sequence[UnplacedMustVisitLike]
 
 
 class RepairOutcome(Protocol):

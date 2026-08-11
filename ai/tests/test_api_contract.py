@@ -50,6 +50,12 @@ class FakeSummary:
 
 
 @dataclass
+class FakeUnplaced:
+    poi_id: str
+    reason_code: str
+
+
+@dataclass
 class FakeOutcome:
     solution: ItinerarySolution
     explanations: Mapping[str, str] = field(default_factory=dict)
@@ -57,6 +63,7 @@ class FakeOutcome:
     freshness: FreshnessMeta | None = None
     candidates_summary: FakeSummary | None = None
     day1_ready_at: datetime | None = None
+    unplaced_must_visits: Sequence[FakeUnplaced] = ()
 
 
 @dataclass
@@ -230,11 +237,12 @@ def test_generate_response_matches_backend_wire_fields() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    # AiScheduleResponse(ScheduleAgentWire.kt) 가 읽는 키 전부
+    # AiScheduleResponse(ScheduleAgentWire.kt) 가 읽는 키 전부 (+TRIP-350 additive)
     assert set(body) == {
         "days", "day1_ready_at", "explanations", "solve_mode",
-        "is_fallback", "freshness", "candidates_summary",
+        "is_fallback", "freshness", "candidates_summary", "unplaced_must_visits",
     }
+    assert body["unplaced_must_visits"] == []  # 기본 = 전부 배치됨
     assert body["solve_mode"] == "OR_TOOLS"  # AI 4값 그대로 — 3값 축약은 백엔드 어댑터 몫
     assert body["is_fallback"] is False
     assert set(body["freshness"]) == {"source", "fetched_at", "cache_hit", "ttl_sec", "stale"}

@@ -30,6 +30,7 @@ from trippilot.api.schemas import (
     ItineraryPayload,
     RepairItineraryRequest,
     RepairItineraryResponse,
+    UnplacedMustVisitSchema,
     ValidateItineraryRequest,
     ValidateItineraryResponse,
     ViolationSchema,
@@ -127,6 +128,13 @@ def to_payload(outcome: ItineraryOutcome) -> ItineraryPayload:
         is_fallback=solution.is_fallback,
         freshness=_freshness(outcome.freshness),
         candidates_summary=_candidates_summary(outcome.candidates_summary),
+        # TRIP-350: 판정은 봉투(wiring) 소유 — 여기서는 사영만(빈 목록 = 전부 배치)
+        unplaced_must_visits=[
+            UnplacedMustVisitSchema(
+                poi_id=str(item.poi_id), reason_code=item.reason_code
+            )
+            for item in outcome.unplaced_must_visits
+        ],
     )
 
 
