@@ -25,3 +25,13 @@ dependencies {
     testImplementation(libs.jackson.module.kotlin)      // BE-1 계약 직렬화(snake_case) 왕복 테스트
     testImplementation(libs.jackson.datatype.jsr310)
 }
+
+// AI 경계 계약 정본(`ai/docs/openapi.json`)은 이 모듈 밖 — 리포 루트에 있다(AiBoundaryOpenApiTest, TRIP-334).
+// 입력으로 선언하지 않으면 상대가 계약을 바꿔도 Gradle 이 테스트를 UP-TO-DATE 로 건너뛴다 —
+// 로컬에서 게이트가 조용히 꺼진 채 초록이 된다(실측: 계약을 흔들어도 테스트가 아예 실행되지 않았다).
+// `files` 라서 파일이 없어도 여기서 죽지 않는다 — 없다는 사실은 테스트가 제 메시지로 알린다.
+tasks.test {
+    inputs.files(rootProject.file("../ai/docs/openapi.json"))
+        .withPropertyName("aiBoundaryContract")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}

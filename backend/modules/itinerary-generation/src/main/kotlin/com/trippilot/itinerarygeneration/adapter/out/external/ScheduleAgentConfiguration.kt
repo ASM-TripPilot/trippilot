@@ -45,7 +45,10 @@ class ScheduleAgentConfiguration {
     companion object {
         /**
          * AI 경계 전용 매퍼 — snake_case + Kotlin 데이터클래스. **앱 기본 매퍼와 무관하게 독립 생성**(공개 API 영향 없음).
-         * 와이어 타입은 [AiScheduleResponse] 계열이며 도메인 DTO 를 직접 직렬화하지 않는다.
+         *
+         * 수신형은 [AiScheduleResponse] 계열 와이어 타입이지만, **생성 요청은 도메인 타입
+         * ([com.trippilot.itinerarygeneration.domain.ScheduleAgentInput])을 그대로 직렬화한다** — 즉 그쪽 필드명이
+         * 곧 와이어 이름이다. 도메인 리팩터가 조용히 계약을 깨는 자리라 `AiBoundaryOpenApiTest` 가 지킨다(TRIP-334).
          */
         fun boundaryMapper(): JsonMapper = JsonMapper.builder()
             .addModule(KotlinModule.Builder().build())

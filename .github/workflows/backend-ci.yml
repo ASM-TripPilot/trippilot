@@ -1,13 +1,17 @@
 name: backend-ci
 
 # backend/ 변경 시에만 실행 (모노레포 경로 트리거)
+#
+# `ai/docs/openapi.json` 도 트리거에 넣는다 — 백엔드가 그 파일을 계약 정본으로 읽어 드리프트를 막는데
+# (`AiBoundaryOpenApiTest`, TRIP-334), backend/ 만 보면 **AI 가 계약을 바꾼 순간에는 이 게이트가 안 돈다**.
+# 그러면 다음 백엔드 PR 이 남의 변경 때문에 빨개지고, 그 사이 배포된 백엔드는 이미 어긋나 있다.
 on:
   push:
     branches: [develop]
-    paths: ['backend/**', '.github/workflows/backend-ci.yml']
+    paths: ['backend/**', 'ai/docs/openapi.json', '.github/workflows/backend-ci.yml']
   pull_request:
     branches: [develop]
-    paths: ['backend/**', '.github/workflows/backend-ci.yml']
+    paths: ['backend/**', 'ai/docs/openapi.json', '.github/workflows/backend-ci.yml']
   workflow_dispatch:
 
 env:
