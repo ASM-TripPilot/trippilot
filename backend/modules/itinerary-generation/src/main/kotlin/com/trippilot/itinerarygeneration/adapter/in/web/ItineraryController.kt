@@ -6,6 +6,7 @@ import com.trippilot.itinerarygeneration.application.EditItinerary
 import com.trippilot.itinerarygeneration.application.EditItineraryService
 import com.trippilot.itinerarygeneration.application.EditSlot
 import com.trippilot.itinerarygeneration.application.GenerateItineraryService
+import com.trippilot.itinerarygeneration.application.GenerationSessionService
 import com.trippilot.itinerarygeneration.application.ItineraryQueryService
 import com.trippilot.itinerarygeneration.application.SlotSurface
 import com.trippilot.itinerarygeneration.application.SlotSurfaceAssembler
@@ -39,9 +40,18 @@ class ItineraryController(
     private val confirmService: ConfirmItineraryService,
     private val editService: EditItineraryService,
     private val surfaces: SlotSurfaceAssembler,
+    private val genSessions: GenerationSessionService,
 ) {
-    /** 네 응답 모두 같은 표면을 실어야 한다 — 조회로만 채워지면 생성·확정·편집 직후 화면이 빈다. */
-    private fun respond(itinerary: Itinerary) = ItineraryResponse.from(itinerary, surfaces.assemble(itinerary))
+    /**
+     * 네 응답 모두 같은 표면을 실어야 한다 — 조회로만 채워지면 생성·확정·편집 직후 화면이 빈다.
+     *
+     * 진행 중 세션 id 를 함께 싣는다 — 이걸 안 주면 화면이 [취소]를 걸 대상을 알 수 없다.
+     * 별도 조회 엔드포인트를 두지 않은 이유: 화면은 어차피 이 응답을 폴링하고, 따로 두면
+     * 생성이 빨리 끝났을 때 "이미 없는 세션"을 조회하는 경합이 생긴다.
+     */
+    private fun respond(itinerary: Itinerary) = ItineraryResponse.from(
+        itinerary, surfaces.assemble(itinerary), genSessions.runningIdOf(itinerary.tripId),
+    )
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     fun generate(
@@ -101,6 +111,8 @@ data class ItineraryResponse(
     val generationMode: String,
     val isFallback: Boolean,
     val generationState: String,
+    /** 진행 중 생성 세션(h09·h10 폴링·[취소] 대상). 진행 중이 아니면 null. */
+    val generationSessionId: UUID?,
     val candidatesSummary: CandidatesSummaryResponse?,
     /**
      * 넣지 못한 필수 방문지. 빈 배열 = 전부 배치됨.
@@ -110,7 +122,7 @@ data class ItineraryResponse(
     val days: List<DayResponse>,
 ) {
     companion object {
-        fun from(i: Itinerary, surfaces: Map<UUID, SlotSurface>) = ItineraryResponse(
+        fun from(i: Itinerary, surfaces: Map<UUID, SlotSurface>, generationSessionId: UUID? = null) = ItineraryResponse(
             itineraryId = i.itineraryId,
             tripId = i.tripId,
             status = i.status.name,
@@ -118,6 +130,7 @@ data class ItineraryResponse(
             generationMode = i.generationMode.name,
             isFallback = i.isFallback,
             generationState = i.generationState.name,
+            generationSessionId = generationSessionId,
             candidatesSummary = i.candidatesSummary?.let { CandidatesSummaryResponse(it.level, it.poolSize, it.shortfallCategories) },
             unplacedMustVisits = i.unplacedMustVisits.map { UnplacedMustVisitResponse(it.poiId, it.reasonCode.name, UnplacedText.of(it.reasonCode)) },
             days = i.days.map { d ->

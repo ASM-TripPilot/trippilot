@@ -34,6 +34,7 @@ class SecondPhaseGenerator(
     private val scheduleAgent: ScheduleAgentPort,
     private val itineraries: ItineraryRepository,
     private val revisions: ItineraryRevisionService,
+    private val sessions: GenerationSessionService,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
 ) {
@@ -51,6 +52,8 @@ class SecondPhaseGenerator(
         isRegeneration: Boolean,
         /** 조립 단계에서 자리를 못 찾아 보내지도 못한 필수 방문지 — AI 보고와 합쳐 최종 목록이 된다. */
         assemblyUnplaced: List<UnplacedMustVisit> = emptyList(),
+        /** 진행 상태 세션(h09·h10). 사용자가 취소했으면 결과를 버린다(BR-U3-05). */
+        sessionId: UUID? = null,
     ) {
         // INV-4: 2차 실패도 1차와 **대칭**으로 결정론 최소 폴백(must_visit 고정블록)으로 채운다.
         // 실패를 이유로 나머지 일자를 비워두지 않되, solveMode=MINIMAL·isFallback 으로 저하를 드러낸다.
@@ -61,12 +64,20 @@ class SecondPhaseGenerator(
             MinimalItineraryFallback.of(secondInput, clock.instant())
         }
 
+        // 사용자가 [취소]를 눌렀으면 결과를 버린다 — 그만두겠다고 한 뒤 화면이 바뀌면 안 된다(BR-U3-05).
+        if (sessionId != null && sessions.isCanceled(sessionId)) {
+            log.info("2차 결과 폐기 — 사용자가 생성을 취소함. tripId={}", tripId)
+            return
+        }
+
         try {
             applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration, assemblyUnplaced)
+            sessionId?.let { sessions.completed(it, output.isFallback, output.candidatesSummary?.level) }
         } catch (e: Exception) {
             // 폴백조차 반영하지 못한 경우 — 상태로 드러낸다(침묵 금지).
             log.error("2차 결과 반영 실패 — FAILED 표시(day1 은 유효). tripId={}", tripId, e)
             markFailed(tripId, itineraryId)
+            sessionId?.let { sessions.failed(it) }
         }
     }
 

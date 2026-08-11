@@ -1,7 +1,9 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.GenerationSession
 import com.trippilot.itinerarygeneration.domain.GenerationState
+import com.trippilot.itinerarygeneration.domain.GenerationStatus
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -49,18 +51,25 @@ class StalePartialSweeperTest : StringSpec({
     "5분 넘게 멈춰 있던 PARTIAL 은 FAILED 로 내려 확정·편집 잠금을 푼다" {
         val stale = partialUpdatedAt(now.minusSeconds(600))
         val repo = Repo(listOf(stale))
-        StalePartialSweeper(repo, clock).sweep()
+        val sessionRepo = FakeGenerationSessions()
+        val session = sessionRepo.save(GenerationSession.start(stale.tripId, GenerationMode.FULLY_AI, now))
+        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock).sweep()
 
         val swept = repo.byTrip.getValue(stale.tripId)
         swept.generationState shouldBe GenerationState.FAILED
         swept.days.map { it.date } shouldBe listOf(start) // 1차분(day1)은 그대로 유효
+        // 세션도 같이 닫는다 — 한쪽만 정리하면 일정은 FAILED 인데 화면은 계속 "생성 중"이다.
+        sessionRepo.rows.getValue(session.sessionId).status shouldBe GenerationStatus.FAILED
     }
 
     "진행 중인 PARTIAL(2차 시한 이내)은 건드리지 않는다" {
         val running = partialUpdatedAt(now.minusSeconds(10))
         val repo = Repo(listOf(running))
-        StalePartialSweeper(repo, clock).sweep()
+        val sessionRepo = FakeGenerationSessions()
+        val session = sessionRepo.save(GenerationSession.start(running.tripId, GenerationMode.FULLY_AI, now))
+        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock).sweep()
 
         repo.byTrip.getValue(running.tripId).generationState shouldBe GenerationState.PARTIAL
+        sessionRepo.rows.getValue(session.sessionId).status shouldBe GenerationStatus.RUNNING
     }
 })

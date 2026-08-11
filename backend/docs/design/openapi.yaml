@@ -681,6 +681,36 @@ paths:
         '200': { description: 편집됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
         '409': { description: 확정된 일정은 수정 불가 · 생성 진행 중(generationState=PARTIAL)은 수정 불가 }
+  /trips/{tripId}/generation-sessions/{sessionId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 생성 진행 상태 조회 — 단계 텍스트의 원천(h09·h10)
+      description: >
+        **진행률(퍼센트)은 없다** — 계약에 그 값이 없고, 지어내면 사용자가 남은 시간을 오판한다.
+        화면은 `startedAt`·`day1ReadyAt` 으로 단계를 판단한다. 세션 id 는 일정 응답의
+        `generationSessionId` 로 받는다. `[백그라운드로]` 에 대응하는 오퍼레이션은 **없다** —
+        세션을 살린 채 화면만 이탈하는 것이라 서버가 할 일이 없다(BR-U3-05).
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/GenerationSession' } } } }
+        '404': { description: 여행 없음/타 계정/세션 없음/다른 여행의 세션 }
+  /trips/{tripId}/generation-sessions/{sessionId}/cancel:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 생성 취소(h09 [취소]) — 뒤이어 도착하는 2차 결과를 반영하지 않는다
+      description: >
+        세션을 `CANCELED` 로 닫는다(BR-U3-05). "부분 결과를 버린다"는 것은 **2차 결과를 반영하지 않는다**는
+        뜻이며, 이미 보여 준 day1 일정을 지우지 않는다 — 사용자가 보던 화면이 비어 버리기 때문이다.
+        일정은 `generationState=PARTIAL` 로 남고, 재생성(POST 일정)이 그 탈출구다.
+      responses:
+        '200': { description: 취소됨, content: { application/json: { schema: { $ref: '#/components/schemas/GenerationSession' } } } }
+        '404': { description: 여행 없음/타 계정/세션 없음/다른 여행의 세션 }
+        '409': { description: 이미 끝난 생성(완료·실패·취소됨) }
   /trips/{tripId}/itinerary/slot-candidates:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1313,6 +1343,34 @@ components:
         summary: { type: string, description: 표시 문구 }
         detail: { type: string, nullable: true }
         createdAt: { type: string, format: date-time, description: "\"18분 전\" 상대 표기의 원천" }
+    GenerationSession:
+      type: object
+      required: [sessionId, status, mode, isFallback, startedAt]
+      properties:
+        sessionId: { type: string, format: uuid }
+        itineraryId:
+          type: string
+          format: uuid
+          nullable: true
+          description: day1 확정 전에는 null — 일정 행이 생기기 전에도 세션은 존재한다.
+        status:
+          type: string
+          enum: [RUNNING, DAY1_READY, COMPLETED, FAILED, CANCELED]
+          description: >
+            RUNNING=1차 진행 중 · DAY1_READY=day1 노출됨(2차 진행 중) · COMPLETED=전 일자 완료 ·
+            FAILED=2차 실패(day1 분은 일정에 유효하게 남는다) · CANCELED=사용자가 취소.
+        mode: { type: string, enum: [FULLY_AI, CO_PLAN, MANUAL] }
+        isFallback:
+          type: boolean
+          description: 폴백 배너의 근거(INV-4 침묵 금지). day1 시점에 실려 배너가 첫 노출부터 사실을 말한다.
+        candidatesLevel: { type: string, nullable: true }
+        startedAt: { type: string, format: date-time }
+        day1ReadyAt: { type: string, format: date-time, nullable: true }
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 끝난 세션에만 있다 — 진행 중이면 null(DB CHECK 로도 강제).
     Itinerary:
       type: object
       required: [itineraryId, tripId, status, solveMode, generationMode, isFallback, generationState, days]
@@ -1338,6 +1396,14 @@ components:
             (day1만 동결된 채 잠기거나, 뒤이어 도착하는 2차 결과가 편집을 덮어쓰는 것 방지).
             생성 POST 는 day1 만 담은 PARTIAL 을 즉시 반환하므로, 클라이언트는 GET 으로 COMPLETE/FAILED 까지
             폴링해 나머지 일자를 받는다(여행이 하루면 즉시 COMPLETE).
+        generationSessionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            진행 중 생성 세션(h09·h10). 폴링·[취소]의 대상이며 **진행 중이 아니면 null** 이다.
+            별도 조회 엔드포인트를 두지 않은 이유 — 화면은 어차피 이 응답을 폴링하고,
+            따로 두면 생성이 빨리 끝났을 때 이미 없는 세션을 조회하는 경합이 생긴다.
         unplacedMustVisits:
           type: array
           description: >
