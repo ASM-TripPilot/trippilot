@@ -3,6 +3,7 @@ package com.trippilot.recalculation.application
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
+import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
 import com.trippilot.recalculation.domain.ReplanSession
@@ -43,6 +44,8 @@ class ReplanSessionService(
     private val itineraries: ItineraryFacade,
     private val sessions: ReplanSessionRepository,
     private val origins: OriginResolver,
+    private val visits: VisitCheckService,
+    private val poiSurfaces: PoiSurfaceFacade,
     private val clock: Clock,
 ) {
 
@@ -56,6 +59,10 @@ class ReplanSessionService(
         // 다시 짤 일정이 있어야 재계획이다. 없으면 그건 '생성'이지 재계획이 아니다.
         val itinerary = itineraries.findCurrent(accountId, tripId)
             ?: throw ResourceNotFound("생성된 일정이 없습니다.")
+
+        // 마지막 완료 방문지 좌표(있으면). 정본에서 사라진 POI 면 null 이 되고 사다리가 다음 단으로 내려간다.
+        val lastVisit = visits.lastCompletedPoi(tripId)
+            ?.let { poiSurfaces.findSurfaces(listOf(it))[it] }
 
         val now = clock.instant()
         // INV-U4-06 — 기존 열린 세션은 **닫고 시작한다**. 이전 시도의 draft 는 그 세션에 남아 이력이 된다.
@@ -72,7 +79,12 @@ class ReplanSessionService(
                 scope = request.scope,
                 fromInstant = now, // '지금 이후'가 기준 — 이미 지난 슬롯은 대상이 아니다
                 // 위치를 못 잡았어도 **막지 않는다** — 사다리를 내려가 가정을 밝힌다(BR-U4-19).
-                origin = origins.resolve(tripId, period.startDate, period.endDate, today, request.origin),
+                // 사다리 3단(마지막 완료 방문지)이 방문 실적 도착으로 실제로 채워진다(BR-U4-19).
+                // 좌표는 POI 정본에서 얻는다 — 실적은 poiId 만 들고 있다.
+                origin = origins.resolve(
+                    tripId, period.startDate, period.endDate, today, request.origin,
+                    lastVisitLat = lastVisit?.lat, lastVisitLng = lastVisit?.lng,
+                ),
                 reasons = request.reasons,
                 directives = request.directives,
                 freeText = request.freeText,

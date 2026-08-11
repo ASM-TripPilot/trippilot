@@ -4,6 +4,11 @@ import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
 import com.trippilot.itinerarygeneration.api.ItineraryRef
+import com.trippilot.placedata.api.FrozenPoiView
+import com.trippilot.placedata.api.PoiSurfaceFacade
+import com.trippilot.placedata.api.PoiSurfaceView
+import com.trippilot.recalculation.domain.VisitCheck
+import com.trippilot.recalculation.domain.VisitCheckRepository
 import com.trippilot.recalculation.domain.OriginKind
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
@@ -70,8 +75,26 @@ class ReplanSessionServiceTest : StringSpec({
         },
     )
 
+    /** 방문 실적·POI 표면은 사다리 3단 전용이라 여기서는 비운다(그 단은 OriginResolverTest 가 본다). */
+    class Visits(private val clock: Clock) : VisitCheckRepository {
+        val stored = mutableListOf<VisitCheck>()
+        override fun save(check: VisitCheck) = check.also { stored += it }
+        override fun findById(visitCheckId: UUID) = stored.firstOrNull { it.visitCheckId == visitCheckId }
+        override fun findByTrip(tripId: UUID) = stored.filter { it.tripId == tripId }
+        override fun findBySlot(tripId: UUID, slotKey: String) =
+            stored.firstOrNull { it.tripId == tripId && it.slotKey == slotKey }
+    }
+
+    val emptySurfaces = object : PoiSurfaceFacade {
+        override fun findSurfaces(poiIds: Collection<UUID>) = emptyMap<UUID, PoiSurfaceView>()
+        override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
+    }
+
     fun service(sessions: Sessions, clock: Clock, hasItinerary: Boolean = true) =
-        ReplanSessionService(trips, itineraries(hasItinerary), sessions, origins, clock)
+        ReplanSessionService(
+            trips, itineraries(hasItinerary), sessions, origins,
+            VisitCheckService(trips, Visits(clock), clock), emptySurfaces, clock,
+        )
 
     val gpsOrigin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56)
     fun request(reasons: List<String> = listOf("비가 와요")) = StartReplan(
