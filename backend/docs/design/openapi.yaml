@@ -593,6 +593,15 @@ paths:
     post:
       tags: [trips]
       summary: 구간 거점 배정(등록 숙소를 [dateFrom, dateTo) 거점으로 · 여행 기간 내 INV-U1-15)
+      description: >
+        여행 기간을 벗어나는 구간은 **거부한다**(400) — 서버가 여행 기간을 늘려 주지 않는다.
+        기간이 바뀌면 일정·커버리지·필수 방문지가 모두 영향을 받으므로, 늘릴지는 사용자가 정한다.
+        US-TRIP-03 의 "여행 기간 자동 확장 여부를 묻는다"는 **클라이언트 2단계**로 만족한다 —
+        400 을 받아 확인을 띄우고, `PATCH /trips/{tripId}` 로 기간을 고친 뒤 다시 배정한다.
+
+        그래서 400 의 `error.fields` 는 **어느 칸이 왜 틀렸는지**를 담는다:
+        시작일이 앞서면 `dateFrom`, 종료일이 넘으면 `dateTo` 이며 reason 에 여행 시작일·종료일이 들어간다
+        (화면이 "여행은 8/4까지예요, 늘릴까요?"를 그릴 근거). 양쪽 다 벗어나면 둘 다 담는다.
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/AssignBaseRequest' } } }
