@@ -54,6 +54,18 @@ class ReplanController(private val service: ReplanSessionService) {
         ReplanSessionResponse.from(service.get(principal.accountId(), tripId, sessionId))
 
     /** `i18` [취소] — 세션만 닫는다. 원 일정은 그대로다(INV-U4-05). */
+    /**
+     * `i18` [확정] — 초안을 일정에 반영한다. **일정이 바뀌는 유일한 지점**이다(INV-U4-05).
+     * 초안이 없거나(아직 산출 중·대안 없음) 이미 끝난 세션이면 409.
+     */
+    @PostMapping("/{sessionId}/apply")
+    fun apply(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @PathVariable sessionId: UUID,
+    ): ReplanSessionResponse =
+        ReplanSessionResponse.from(service.apply(principal.accountId(), tripId, sessionId))
+
     @PostMapping("/{sessionId}/cancel")
     fun cancel(
         principal: Principal,

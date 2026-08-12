@@ -8,10 +8,18 @@ import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
 import com.trippilot.recalculation.domain.ReplanSession
 import com.trippilot.recalculation.domain.ReplanSessionRepository
+import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.itinerarygeneration.api.ReplanCommand
+import com.trippilot.itinerarygeneration.api.ReplanFacade
+import com.trippilot.itinerarygeneration.api.ReplanProposal
+import com.trippilot.recalculation.api.event.ItineraryRecalculated
+import com.trippilot.recalculation.domain.ReplanStatus
 import com.trippilot.trip.api.TripFacade
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
@@ -46,6 +54,9 @@ class ReplanSessionService(
     private val origins: OriginResolver,
     private val visits: VisitCheckService,
     private val poiSurfaces: PoiSurfaceFacade,
+    private val solver: ReplanSolver,
+    private val replans: ReplanFacade,
+    private val events: DomainEventPublisher,
     private val clock: Clock,
 ) {
 
@@ -71,7 +82,7 @@ class ReplanSessionService(
             sessions.save(it.canceled(now))
         }
 
-        return sessions.save(
+        val opened = sessions.save(
             ReplanSession.start(
                 tripId = tripId,
                 itineraryId = itinerary.itineraryId,
@@ -92,6 +103,30 @@ class ReplanSessionService(
                 at = now,
             ),
         )
+        // 시트를 제출하면 곧바로 산출로 넘어간다 — 여기서 시작하지 않으면 세션이 COLLECTING 에 멈춰
+        // **영원히 로딩**이 된다. 산출은 비동기라 응답은 SOLVING 이고, 화면(i12)은 세션을 폴링해 로딩을 그린다.
+        val solving = sessions.save(opened.solving())
+        // **커밋된 뒤에** 시작한다 — 트랜잭션 안에서 부르면 비동기 스레드가 아직 없는 행을 읽어(다른 커넥션)
+        // 조용히 아무것도 하지 않고, 세션은 SOLVING 에 영원히 멈춘다(실측: E2E 가 20초 폴링 끝에 잡았다).
+        afterCommit { solver.solve(accountId, solving.sessionId) }
+        return solving
+    }
+
+    /**
+     * `i18` [확정] — **일정이 바뀌는 유일한 지점**이다(INV-U4-05).
+     * 반영 후에는 세션을 닫아 같은 초안이 두 번 반영되지 않게 한다.
+     */
+    @Transactional
+    fun apply(accountId: UUID, tripId: UUID, sessionId: UUID): ReplanSession {
+        val session = get(accountId, tripId, sessionId)
+        if (session.status != ReplanStatus.DRAFT) {
+            throw ConflictDetected(message = "확정할 재계획안이 없습니다.")
+        }
+        val draft = session.draft ?: throw ConflictDetected(message = "재계획안이 비어 있습니다.")
+        replans.apply(accountId, tripId, ReplanProposal.fromMap(draft))
+        val applied = sessions.save(session.applied(clock.instant()))
+        events.publish(ItineraryRecalculated(tripId.toString(), sessionId.toString()))
+        return applied
     }
 
     @Transactional(readOnly = true)
@@ -108,6 +143,16 @@ class ReplanSessionService(
         val session = get(accountId, tripId, sessionId)
         if (!session.isOpen) throw ConflictDetected(message = "이미 끝난 재계획입니다.")
         return sessions.save(session.canceled(clock.instant()))
+    }
+
+    /** 트랜잭션이 없으면(테스트 등) 그 자리에서 실행 — 결정론을 잃지 않는다. */
+    private fun afterCommit(action: () -> Unit) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) return action()
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() = action()
+            },
+        )
     }
 
     private companion object {

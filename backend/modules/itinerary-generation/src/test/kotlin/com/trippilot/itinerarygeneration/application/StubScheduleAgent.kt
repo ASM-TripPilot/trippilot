@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
+import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
@@ -23,4 +24,7 @@ internal abstract class StubScheduleAgent : ScheduleAgentPort {
         error("이 테스트는 repair 를 쓰지 않는다")
     override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput =
         error("이 테스트는 슬롯 후보를 쓰지 않는다")
+
+    override fun replan(input: ReplanInput): ScheduleAgentOutput =
+        error("이 테스트는 재계획을 쓰지 않는다")
 }

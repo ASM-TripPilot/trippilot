@@ -130,4 +130,12 @@ interface ReplanSessionRepository {
 
     /** 열린 세션(COLLECTING·SOLVING·DRAFT). INV-U4-06 판정 입력. */
     fun findOpenByTrip(tripId: UUID): ReplanSession?
+
+    /**
+     * **행 잠금**으로 읽는다 — 산출(비동기)과 취소·재진입이 같은 세션을 두고 경합한다.
+     * 잠금 없이 "읽고→검사하고→쓰면" 그 사이에 취소가 끼어들어 **닫힌 세션이 초안으로 되살아난다**
+     * (실측: 취소 직후 두 번째 취소가 409 대신 200 이 됐고, 재진입에서는 열린 세션이 둘이 되어
+     * 부분 유니크 인덱스 위반으로 터졌다).
+     */
+    fun findByIdForUpdate(sessionId: UUID): ReplanSession?
 }

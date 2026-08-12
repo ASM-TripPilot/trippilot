@@ -2,7 +2,14 @@ package com.trippilot.itinerarygeneration.adapter.out.external
 
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
+import com.trippilot.itinerarygeneration.domain.DayAnchor
+import com.trippilot.itinerarygeneration.domain.FixedBlock
+import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.PreferenceProfile
+import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
+import com.trippilot.itinerarygeneration.domain.TimeWindow
+import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
@@ -102,6 +109,42 @@ class HttpScheduleAgentAdapter(
     }
 
     /**
+     * 재계획(정본 §3.1) — **상대에 새 경로를 요구하지 않는다.** 잠금 슬롯을 고정 블록으로 승격해
+     * 이미 열려 있는 `generate` 를 그대로 쓴다(HC3 가 그 시각을 지킨다).
+     *
+     * ⚠ `reasons`·`directives`·`freeText` 는 **보내지 않는다** — 상대 요청 계약
+     * (`ai/docs/openapi.json` `GenerateItineraryRequest`)에 실을 자리가 없다. 없는 필드를 지어내면
+     * 422 로 전 호출이 폴백된다(그 드리프트는 `AiBoundaryOpenApiTest` 가 막는다). 사용자가 고른 '왜·어떻게'는
+     * 세션에 남아 이력이 되지만 **이번 산출에는 반영되지 않는다** — 반영하려면 AI 쪽 요청 계약에 필드가 먼저 생겨야 한다.
+     */
+    override fun replan(input: ReplanInput): ScheduleAgentOutput {
+        val generateInput = ScheduleAgentInput(
+            tripId = input.tripId,
+            generationMode = GenerationMode.FULLY_AI,
+            tripContext = TripContext(input.destinations, input.targetDate, input.targetDate, null, null),
+            // 상대는 후보 풀을 좌표에 매단다 — 앵커가 없으면 422 다(실측). 재계획의 기준점은 **현재 위치**이고,
+            // 없으면 호출측이 숙소 앵커로 채워 준다(BR-U4-19 사다리).
+            anchors = listOfNotNull(
+                input.originLat?.let { lat -> input.originLng?.let { lng -> DayAnchor(input.targetDate, lat, lng) } },
+            ),
+            // 창은 **하루 전체**다. '지금 이후만' 은 창을 좁혀서가 아니라 **잠금**으로 표현한다(정본 §3.1) —
+            // 창을 지금부터로 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 모순으로 거부한다(실측 409).
+            timeWindows = listOf(TimeWindow(input.targetDate, DAY_START, DAY_END)),
+            fixedBlocks = input.lockedBlocks,
+            preferenceProfile = NEUTRAL_PREFERENCES,
+            recommendationStrength = null,
+            requestMeta = input.requestMeta,
+            excludedPoiIds = input.excludedPoiIds,
+        )
+        val wire = post(GENERATE_PATH, generateInput, AiScheduleResponse::class.java)
+        return try {
+            wire.toDomain(clock.instant())
+        } catch (e: IllegalArgumentException) {
+            throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 재계획 응답 스키마 불일치: ${e.message}", cause = e)
+        }
+    }
+
+    /**
      * 미개통 — AI 에 아직 슬롯 후보 경로가 없다(generate·validate·repair 3종만 열려 있음).
      * **빈 목록을 돌려주지 않는다**: "주변에 후보가 없다"는 정상 결과와 구분되지 않아 사용자가 반경을
      * 넓혀도 계속 0건인 이유를 알 수 없게 된다(INV-4 침묵 금지).
@@ -132,6 +175,18 @@ class HttpScheduleAgentAdapter(
         private const val REPAIR_DEADLINE_MS = 5_000L
         private const val MAX_ERROR_BODY_BYTES = 8 * 1024 // 오류 페이지가 커도 힙을 물지 않게 상한
         private val ERROR_MAPPER = ScheduleAgentConfiguration.boundaryMapper()
+
+        private val DAY_START: java.time.LocalTime = java.time.LocalTime.of(9, 0)
+        private val DAY_END: java.time.LocalTime = java.time.LocalTime.of(21, 0)
+
+        /**
+         * 재계획은 **취향을 다시 묻지 않는다** — 중립 프로필로 보낸다.
+         * 여행 중 재계획의 입력은 '왜·어떻게'인데 그건 아직 경계에 실을 자리가 없고(위 주석),
+         * 계정 취향을 여기서 다시 조회하면 재계획 모듈이 profile 에 의존하게 된다(R1 확대).
+         */
+        private val NEUTRAL_PREFERENCES = PreferenceProfile(
+            emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null,
+        )
     }
 }
 
