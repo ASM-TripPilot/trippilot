@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 TripPilot is a B2C travel super-app ("여행자 슈퍼앱"): users explore/save stays and POIs, then the app owns everything *after booking* — AI itinerary generation, in-trip Plan-B replanning, and post-trip archive/reflection. Booking/payment itself is delegated to external OTA affiliate links.
 
-**Implementation in progress.** Backend has a real Gradle multi-module skeleton with Flyway migrations (V1.0–V2.4 + repeatable `R__` seeds) and docker-compose/GHCR CI (TRIP-145~147, merged to main). Frontend is scaffolded and under active feature work — architecture canon is `frontend/README.md` (TRIP-160), FSD 층 구조에 TS/TSX 소스와 Jest 테스트가 실재한다. `ai/` 는 설계 문서 + 초기 스캐폴딩(`main.py`·`Dockerfile`) 단계다. Most design content is Korean documents — do not invent build/test/lint results for packages that have no code yet.
+**Implementation in progress.** Backend is a working Gradle multi-module app — 13 feature modules, Flyway migrations V1.0–V2.22 + repeatable `R__` seeds, ~800 tests, docker-compose/GHCR CI. Frontend is scaffolded and under active feature work — architecture canon is `frontend/README.md` (TRIP-160), FSD 층 구조에 TS/TSX 소스와 Jest 테스트가 실재한다. `ai/` 도 **실서비스 코드가 있다** — FastAPI 경계 3종(`/ai/v1/itinerary/{generate,validate,repair}`)이 열려 있고 백엔드가 실제로 왕복 호출한다(2026-08-12 실측). Most design content is Korean documents — do not invent build/test/lint results.
 
 ## Repository layout (important)
 
@@ -19,7 +19,7 @@ This is a **monorepo** (`ASM-TripPilot/trippilot`). Everything lives in one git 
 | `docs/` | Team process docs — `docs/conventions/` (branch·commit·PR) and `docs/guides/` (Jira/Slack). |
 | `backend/` | Backend (Spring Boot + Kotlin modular monolith). **Gradle skeleton + Flyway migrations exist.** Design docs in `backend/docs/design/`. |
 | `frontend/` | Frontend (React Native + Expo). **Architecture canon = `frontend/README.md`**; `frontend/docs/` 에는 개발로그(`devlog/`)와 구조 지도(`structure.md`). 스캐폴딩 완료, 기능 개발 중. |
-| `ai/` | AI-layer design (itinerary/Plan-B/reflection AI architecture, prompts, solver, testing). 설계 문서 + 초기 스캐폴딩(`main.py`·`Dockerfile`). |
+| `ai/` | AI 서비스(FastAPI) + 설계 문서. `ai/src/trippilot/` 에 api·agents·orchestrator·solver_engine·llm_gateway 가 실재한다. **와이어 정본은 `ai/docs/openapi.json`** — AI CI 가 "실행 앱 스키마 == 커밋된 계약"을 강제하므로 항상 실서버와 일치한다. |
 | `aidlc/` | **AWS AI-DLC (Amazon Q) workspace.** 기획 참조 canon = `aidlc-docs/inception/` (requirements · user-stories · application-design · unit-of-work U0–U9). Construction-stage design docs go under `aidlc-docs/construction/`. Tool-state (`aidlc-state.md`, `audit.md`, `docs/SCOPE.md`) is updated only through the AI-DLC rules (append-only audit) — coordinate with the team. |
 
 `aidlc/aidlc-docs/planning/` **was removed on 2026-07-17 (team decision) — never reference it**; use `aidlc-docs/inception/` instead (git history retains the old files).
@@ -35,6 +35,7 @@ Read the canonical doc before changing behavior it owns:
 - Product requirements & stories: `aidlc/aidlc-docs/inception/requirements/requirements.md`, `inception/user-stories/{stories,personas}.md` (123 stories)
 - Components, methods, services, dependencies: `aidlc/aidlc-docs/inception/application-design/` (components C1–C17 · component-methods · services S1–S6 · component-dependency)
 - Unit breakdown & build order U0–U9: `aidlc/aidlc-docs/inception/application-design/unit-of-work{,-dependency,-story-map}.md`
+- **Per-unit design (엔티티·불변식·업무규칙·흐름): `aidlc/aidlc-docs/construction/<unit>/functional-design/`** — 유닛 작업을 **착수하기 전에 읽는다**. inception 보다 구체적이고, 둘이 다르면 이쪽이 최신이다. 건너뛰어 PR 두 건을 재작업한 적이 있다(U4)
 - Frontend architecture (stack·structure·boundaries·testing): `frontend/README.md`
 - Backend build order: `backend/docs/design/TripPilot-백엔드-우선순위-로드맵.md`; DB/API/schema under `backend/docs/design/` (`openapi.yaml`, `sql/V1.*.sql`, `*-스키마-설계.md`)
 - AI architecture & rules: `ai/README.md` (3-minute onboarding) → `ai-architecture.md` (WHY) → `ai-implementation-design.md` (HOW) → `ai-prompt-design.md`, `ai-testing-guide.md`, `ai-adr.md`
@@ -59,7 +60,7 @@ Construction-stage per-unit design docs are produced under `aidlc/aidlc-docs/con
 
 - **Backend (`backend/`):** Gradle (Kotlin DSL, multi-module) — **already scaffolded** (`backend/gradlew`). App assembly lives only in the `app` module; migrations are Flyway **SQL-first, forward-only** (`backend/app/src/main/resources/db/migration/V*.sql` = schema canon; `R__*.sql` 은 재실행 가능한 시드). Tests: Kotest + **kotest-property** (property-based testing is a *blocking* gate), MockK, Testcontainers, ArchUnit/Konsist. Commands: `./gradlew build`, `./gradlew test`, single test via `./gradlew test --tests "<FQCN>"` or `--tests "<Class.method>"`.
 - **Frontend (`frontend/`):** 스캐폴딩 완료. Stack/testing canon = `frontend/README.md` (pnpm · Expo development build + prebuild · Expo Router · TanStack Query + Zustand · NativeWind · orval · Jest + fast-check). 실제 스크립트(`frontend/package.json`): `pnpm lint` · `pnpm tsc` · `pnpm test` · `pnpm test:integration` · `pnpm test:node` · `pnpm codegen` · `pnpm format` · `pnpm start`/`ios`/`android`. 실행 순서의 정본은 `verify-gates` 스킬.
-- **AI/Solver (`ai/`):** Python service (LLM gateway + solver) — 초기 스캐폴딩(`ai/main.py`·`Dockerfile`), 서비스 로직은 미구현.
+- **AI/Solver (`ai/`):** Python service (FastAPI + LLM gateway + solver). 경계 3종만 열려 있다 — `generate`·`validate`·`repair`. **슬롯 후보 경로는 없다**(백엔드 http 모드에서 503). 백엔드는 기본 `AI_SCHEDULE_MODE=fake` 로 돌고, 실 연동은 `AI_SCHEDULE_MODE=http` + `docker compose --profile full up -d ai`. 왕복 검증은 `LIVE_AI=1 ./gradlew :app:test --tests "*LiveAiRoundTripIT*"`.
 - **CI:** `.github/workflows/{backend-ci, frontend-ci, ai-ci}.yml` (path-filtered). Gates before merge: solver hard-constraint PBT at 100%, closed-set gate PBT at 100%, and **all external APIs (LLM, distance/maps) faked in CI — zero real API calls**.
 
 Security/resilience baselines (`SECURITY-01..15`, `RESILIENCY-*`) and PBT are described as blocking across all phases — treat them as scaffolding to install in "Phase 0 walking skeleton," not afterthoughts. Legal/consent-log and location-legal-log tables are **append-only** (enforced at the DB permission level; the app role has no DELETE).
