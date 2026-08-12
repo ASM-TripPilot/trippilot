@@ -65,6 +65,17 @@ export interface ItineraryEditState {
   deleteSlot(date: string, poiId: string): void;
   /** `onDragEnd.data`를 받아 해당 날 슬롯을 고정 재고정 후 반영. */
   reorderSlots(date: string, reordered: Slot[]): void;
+  /**
+   * 대상 슬롯의 시각 3필드(startAt·endAt·endsNextDay)만 갱신 — 슬롯을 이동시키지 않고
+   * (배열 순서 = 슬롯 순서, INV-U3-02) 시드 원본도 안 건드린다(비파괴). `deleteSlot`·
+   * `reorderSlots`와 같은 "해당 날에만 얹는 얇은 래퍼"다. 없는 poiId 는 무해(어느 것도 안 바뀜).
+   * `endsNextDay`는 시트가 유도한 값을 그대로 싣는다 — 여기서 재판정하지 않는다(§3·★10).
+   */
+  adjustSlotTime(
+    date: string,
+    poiId: string,
+    patch: { startAt: string; endAt: string; endsNextDay: boolean }
+  ): void;
   /** 테스트/재진입 초기화(싱글턴 격리). */
   reset(): void;
 }
@@ -90,6 +101,26 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (set) => ({
       days: state.days.map((day) =>
         day.date === date
           ? { ...day, slots: reorderKeepingFixed(day.slots, reordered) }
+          : day
+      ),
+    })),
+  adjustSlotTime: (date, poiId, patch) =>
+    set((state) => ({
+      days: state.days.map((day) =>
+        day.date === date
+          ? {
+              ...day,
+              slots: day.slots.map((slot) =>
+                slot.poiId === poiId
+                  ? {
+                      ...slot,
+                      startAt: patch.startAt,
+                      endAt: patch.endAt,
+                      endsNextDay: patch.endsNextDay,
+                    }
+                  : slot
+              ),
+            }
           : day
       ),
     })),

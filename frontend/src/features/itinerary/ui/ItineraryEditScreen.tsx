@@ -72,6 +72,9 @@ export interface ItineraryEditScreenProps {
   onDeleteSlot: (poiId: string) => void;
   /** DraggableFlatList onDragEnd.data 포워딩 — 고정 재고정은 스토어가 한다. */
   onReorder: (data: ItineraryDaysItemSlotsItem[]) => void;
+  /** 비고정 시각칩 press → slotKey 발화(선택) — 시트 개폐·스토어는 페이지 몫이라 화면은 모른다.
+   * 미전달이면 무해 no-op(`onSave?` 선례). 고정 슬롯 시각칩엔 아예 안 붙는다(INV-U3-03). */
+  onEditSlotTime?: (slotKey: string) => void;
   /** 저장 CTA press 핸들러(선택) — 미전달이면 무해 no-op(슬라이스1 무동작 보존). */
   onSave?: () => void;
   /** non-null 이면 저장 오류 인라인 노트를 그린다 — 카드 리스트 밖·저장 버튼 위(순서 심판 오계수 회피). */
@@ -84,12 +87,14 @@ function SlotCard({
   index,
   drag,
   onDeleteSlot,
+  onEditSlotTime,
 }: {
   slot: ItineraryDaysItemSlotsItem;
   date: string;
   index: number;
   drag: () => void;
   onDeleteSlot: (poiId: string) => void;
+  onEditSlotTime?: (slotKey: string) => void;
 }): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   // 시각 칩 = 솔버 검증 시각만(INV-2). endsNextDay 면 endAt 이 익일 시각이라(HC4) 표기로만 가른다.
@@ -154,6 +159,10 @@ function SlotCard({
             <Pressable
               testID={`itinerary-edit-slot-time-${slotKey}`}
               accessibilityRole="button"
+              // 고정 슬롯은 시각 불변(INV-U3-03) — onPress 를 아예 안 붙인다(현행 무동작 유지).
+              onPress={
+                slot.isFixed ? undefined : () => onEditSlotTime?.(slotKey)
+              }
               className="flex-row items-center gap-xs rounded-pill border border-hairline-strong px-sm py-[3px]"
             >
               <ClockGlyph size={12} />
@@ -245,6 +254,7 @@ export function ItineraryEditScreen({
   onBack,
   onDeleteSlot,
   onReorder,
+  onEditSlotTime,
   onSave,
   saveError,
 }: ItineraryEditScreenProps): ReactElement {
@@ -337,6 +347,7 @@ export function ItineraryEditScreen({
                   index={getIndex() ?? 0}
                   drag={drag}
                   onDeleteSlot={onDeleteSlot}
+                  onEditSlotTime={onEditSlotTime}
                 />
               )}
               onDragEnd={({ data }) => onReorder(data)}

@@ -11,11 +11,13 @@ import {
   buildPlanDayTabs,
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
+import { parseSlotKey } from '@/features/itinerary/model/slotKey';
 import {
   AlertCircleGlyph,
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { ItineraryEditScreen } from '@/features/itinerary/ui/ItineraryEditScreen';
+import { SlotTimeSheet } from '@/features/itinerary/ui/SlotTimeSheet';
 import {
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdItineraryQueryOptions,
@@ -85,6 +87,9 @@ export function ItineraryEditPage({
   const queryClient = useQueryClient();
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // 어느 슬롯의 시각조정 시트가 열렸나(null = 닫힘). 시트 개폐는 화면이 아니라 여기가 쥔다
+  // (화면 순수성 유지, h07 선례) — 조건부 마운트라 닫히면 시트가 트리에서 사라진다.
+  const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
 
   const itinerary = useGetTripsTripIdItinerary(tripId);
   // TError=unknown 으로 열어 onError 의 error 를 axios 판정(isAlreadyRegistered)에 그대로 태운다(h11 선례).
@@ -93,6 +98,7 @@ export function ItineraryEditPage({
   const seed = useItineraryEditStore((s) => s.seed);
   const deleteSlot = useItineraryEditStore((s) => s.deleteSlot);
   const reorderSlots = useItineraryEditStore((s) => s.reorderSlots);
+  const adjustSlotTime = useItineraryEditStore((s) => s.adjustSlotTime);
   const days = useItineraryEditStore((s) => s.days);
 
   useEffect(() => {
@@ -176,17 +182,43 @@ export function ItineraryEditPage({
 
   const activeDate = state.days[activeDayIndex]?.date ?? '';
 
+  // 편집 중인 슬롯의 **현재 드래프트 값**을 찾아 시트에 시드한다 — 시트가 열렸고 그 슬롯이
+  // 드래프트에 실재할 때만 마운트한다(둘 중 하나라도 없으면 안 그린다).
+  const editing = editingSlotKey === null ? null : parseSlotKey(editingSlotKey);
+  const editingSlot =
+    editing !== null && editing.kind === 'ok'
+      ? days
+          .find((day) => day.date === editing.date)
+          ?.slots.find((slot) => slot.poiId === editing.poiId)
+      : undefined;
+
   return (
-    <ItineraryEditScreen
-      days={buildPlanDayTabs(state.days)}
-      slots={state.days[activeDayIndex]?.slots ?? []}
-      activeDayIndex={activeDayIndex}
-      onSelectDay={setActiveDayIndex}
-      onBack={() => router.back()}
-      onDeleteSlot={(poiId) => deleteSlot(activeDate, poiId)}
-      onReorder={(data) => reorderSlots(activeDate, data)}
-      onSave={handleSave}
-      saveError={saveError}
-    />
+    <>
+      <ItineraryEditScreen
+        days={buildPlanDayTabs(state.days)}
+        slots={state.days[activeDayIndex]?.slots ?? []}
+        activeDayIndex={activeDayIndex}
+        onSelectDay={setActiveDayIndex}
+        onBack={() => router.back()}
+        onDeleteSlot={(poiId) => deleteSlot(activeDate, poiId)}
+        onReorder={(data) => reorderSlots(activeDate, data)}
+        onEditSlotTime={setEditingSlotKey}
+        onSave={handleSave}
+        saveError={saveError}
+      />
+      {editing !== null &&
+      editing.kind === 'ok' &&
+      editingSlot !== undefined ? (
+        <SlotTimeSheet
+          startAt={editingSlot.startAt}
+          endAt={editingSlot.endAt}
+          onApply={(patch) => {
+            adjustSlotTime(editing.date, editing.poiId, patch);
+            setEditingSlotKey(null);
+          }}
+          onCancel={() => setEditingSlotKey(null)}
+        />
+      ) : null}
+    </>
   );
 }
