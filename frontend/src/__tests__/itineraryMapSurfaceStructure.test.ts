@@ -49,6 +49,12 @@ const OPEN_CALLERS = [
   'app/_dev/preview.tsx',
 ];
 
+/** 완성 일정 탐색 지도(h26 · TRIP-301). 좌표를 확정하는 화면(OPEN_CALLERS)이 아니라 완성된
+ * 일정을 훑어보는 지도라 별도로 열거한다 — viewOnly 는 **끈다**(D6: 제스처 허용 + setMaxLevel
+ * 줌아웃 상한). connectPins 는 기본값(동선 선). AC-8 이 요구하는 "새 호출부를 사람이 정해
+ * 열거에 더한다"의 이행 자리다. */
+const EXPLORE_CALLERS = ['features/itinerary/ui/TimelineScreen.tsx'];
+
 /** 게이트①-2 — 연결선을 **끄는** 유일한 자리(h05). 나머지 여섯 태그는 아무 말도 하지 않고
  * 기본값(`connectPins` = 잇는다)을 받는다 — h11(일정 초안)이 그 여섯 안에 있다. */
 const NO_LINE_CALLER = 'features/itinerary/ui/MustVisitPickerScreen.tsx';
@@ -207,7 +213,7 @@ describe('S1 · 조합 자가검사 — 전처리와 탐지기가 서로를 지�
 });
 
 describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 (옵트인 경계)', () => {
-  it('호출부 전수가 알려진 5파일뿐이고, h05·h11 태그에만 viewOnly 가 있다', () => {
+  it('호출부 전수가 알려진 6파일뿐이고, h05·h11 태그에만 viewOnly 가 있다', () => {
     const withTag = listSourceFiles(ROOT)
       .map((full) => ({ file: relOf(full), source: readOne(relOf(full)) }))
       .filter(({ source }) => source.includes('<KakaoMapView'))
@@ -216,7 +222,11 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
 
     // ① 도달 앵커 — 호출부가 통째로 이 심판 안에 있다. 새 호출부가 생기면 여기서 먼저 걸려
     //    "잠글 곳인가 아닌가"를 사람이 정하게 된다(모집단이 조용히 새는 것을 막는다).
-    expect(withTag).toEqual([...LOCKED_CALLERS, ...OPEN_CALLERS].sort());
+    //    TRIP-301 이 완성 일정 탐색 지도(EXPLORE_CALLERS)를 더했다 — 지금은 아직 미배선이라
+    //    실제 withTag 에 TimelineScreen 이 없어 여기서 red 가 난다(설계된 red · AC-8).
+    expect(withTag).toEqual(
+      [...LOCKED_CALLERS, ...OPEN_CALLERS, ...EXPLORE_CALLERS].sort()
+    );
 
     // ② 잠글 두 화면 — 태그마다 viewOnly 가 있다.
     LOCKED_CALLERS.forEach((rel) => {
@@ -230,6 +240,15 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
     const openTags = OPEN_CALLERS.flatMap((rel) => mapTagsOf(readOne(rel)));
     expect(openTags).toHaveLength(5);
     expect(openTags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual([]);
+
+    // ④ 완성 일정 탐색 지도 — 태그가 정확히 1개이고 viewOnly 를 켜지 않는다(D6). 이 선언이
+    //    "이 새 지도는 잠그지 않는다"를 사람이 명시한 자리다. 구현이 실수로 viewOnly 를 켜면
+    //    여기서 red — 탐색 지도가 제스처를 못 받게 되는 회귀를 막는다.
+    const exploreTags = EXPLORE_CALLERS.flatMap((rel) =>
+      mapTagsOf(readOne(rel))
+    );
+    expect(exploreTags).toHaveLength(1);
+    expect(exploreTags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual([]);
   });
 });
 
@@ -242,22 +261,26 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
    * 무엇을 보장하지 **못**하나: 태그에 적힌 **글자**까지다. 그 값이 컴포넌트를 통과해 실제 대본에
    * 닿는지는 이 층에서 볼 수 없다 — `KakaoMapView`가 그 프롭을 흘려도 여기는 초록이다.
    * 그 축은 실물 렌더 심판(`KakaoMapView.viewOnly.test.tsx` V3)이 잡는다. */
-  it('h05 태그에만 connectPins={false} 가 있고 나머지 여섯은 기본값을 받는다', () => {
+  it('h05 태그에만 connectPins={false} 가 있고 나머지 일곱은 기본값을 받는다', () => {
     const lineOffTags = mapTagsOf(readOne(NO_LINE_CALLER));
     const defaultTags = [
       ...LOCKED_CALLERS.filter((rel) => rel !== NO_LINE_CALLER),
       ...OPEN_CALLERS,
+      // TRIP-301 완성 일정 지도도 동선 선을 그린다 — 핀 번호가 솔버 확정 순서라 선이 사실이다
+      // (h11 과 같은 부류). connectPins 를 무언급 = 기본값(잇는다)으로 둔다.
+      ...EXPLORE_CALLERS,
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 6개 = S2가 세는 7개).
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 7개 = S2가 세는 8개).
+    //    지금은 TimelineScreen 미배선이라 나머지가 6개뿐 → 여기서 red(설계된 red · AC-8).
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(6);
+    expect(defaultTags).toHaveLength(7);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);
 
-    // ③ 나머지 여섯은 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11이 여기 있다 —
-    //    h11에 대해 이 심판이 요구하는 것은 "끄지 않았다"이고, 기본값이 정말 잇는지는 X3이 잰다.
+    // ③ 나머지 일곱은 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11·h26이 여기 있다 —
+    //    이 심판이 요구하는 것은 "끄지 않았다"이고, 기본값이 정말 잇는지는 X3이 잰다.
     expect(defaultTags.filter((tag) => /\bconnectPins\b/.test(tag))).toEqual(
       []
     );

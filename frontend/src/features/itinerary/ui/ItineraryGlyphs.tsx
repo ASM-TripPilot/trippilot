@@ -470,3 +470,68 @@ export function AlertCircleGlyph({
     </Svg>
   );
 }
+
+// h31 지도 폴백 경고 삼각형(24) — Figma `1912:1083`. 지도를 못 불러온 자리의 △! 표식. 회색
+// muted 로, 실패지만 치명적이지 않다는 톤(카드 목록으로 계속 볼 수 있다)에 맞춘다.
+export function WarningTriangleGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 4.5L21 20H3L12 4.5Z"
+        stroke={MUTED}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 10V14"
+        stroke={MUTED}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 16.8H12.008"
+        stroke={MUTED}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// h31 지도 폴백 재시도 새로고침(18) — Figma `1912:1083`. 호(arc)+화살촉 한 벌. 재시도 버튼
+// 글자와 같은 muted 로 은은한 어포던스.
+export function RefreshGlyph({ size = 18, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M15.8 8.5C15.2 5.65 12.85 3.75 10 3.75C6.55 3.75 3.75 6.55 3.75 10C3.75 13.45 6.55 16.25 10 16.25C12.6 16.25 14.85 14.65 15.75 12.3"
+        stroke={MUTED}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M15.5 4.5V8.5H11.5"
+        stroke={MUTED}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

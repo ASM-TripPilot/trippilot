@@ -30,7 +30,11 @@ export interface MapPin {
 export type KakaoMapMessage =
   | { type: 'PIN_DROP'; lat: number; lng: number }
   | { type: 'GEOCODE_OK'; address: string; buildingName?: string }
-  | { type: 'GEOCODE_FAIL' };
+  | { type: 'GEOCODE_FAIL' }
+  // TRIP-301 — 번호 핀을 탭하면 그 핀의 배열 위치(0-기반)를 올려보낸다. 호출부는 그 index로
+  // 슬롯을 역참조해 상세 시트를 연다(라우트 이동 아님). 좌표 결번이 있어도 index는 pins 배열
+  // 기준이라 엉뚱한 슬롯을 열지 않는다.
+  | { type: 'PIN_TAP'; index: number };
 
 export const REGISTERED_DOMAIN = 'https://localhost';
 
@@ -99,7 +103,8 @@ export function buildMapHtml(
   enablePin: boolean = true,
   pins: MapPin[] = [],
   viewOnly: boolean = false,
-  connectPins: boolean = true
+  connectPins: boolean = true,
+  maxLevel?: number
 ): string {
   // TRIP-297 — 번호 핀은 `CustomOverlay`로 그린다(기본 `Marker`는 숫자를 못 싣는다).
   // 핀이 둘 이상일 때만 `setBounds`로 전부 담는다 — 한 개짜리 bounds는 넓이가 0이라
@@ -150,13 +155,26 @@ export function buildMapHtml(
             });
           }
 
+          // TRIP-301 — 핀을 탭하면 배열 위치(index)를 RN 으로 올려 상세 시트를 연다. 인라인
+          // onclick 이 이 전역 함수를 부른다(오버레이 content 는 innerHTML 로 얹혀 인라인 핸들러가
+          // 살아 있다). content 는 그대로 문자열이라 물방울 SVG 계약(핀 모양 심판)이 안 깨진다.
+          // ponytail: 오버레이 클릭 발화·pointer-events 전달은 jest 사정거리 밖 — 6-b 실기로 확인/조정.
+          window.__pinTapOverlay = function (i) {
+            window.ReactNativeWebView.postMessage(
+              JSON.stringify({ type: 'PIN_TAP', index: i })
+            );
+          };
+
           numberedPins.forEach(function (pin, index) {
             new kakao.maps.CustomOverlay({
               map: map,
               position: pinPath[index],
               yAnchor: 1,
+              clickable: true,
               content:
-                '<svg width="28" height="36" viewBox="3 2 28 36" style="display:block;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,0.2));">' +
+                '<svg width="28" height="36" viewBox="3 2 28 36" onclick="window.__pinTapOverlay(' +
+                index +
+                ')" style="display:block;cursor:pointer;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,0.2));">' +
                 '<path d="M17 3C9.8 3 4 8.5 4 15.5C4 24 17 37 17 37C17 37 30 24 30 15.5C30 8.5 24.2 3 17 3Z" fill="#FF385C" stroke="#FFFFFF" stroke-width="2"/>' +
                 '<text x="17" y="20" text-anchor="middle" fill="#FFFFFF" font-family="sans-serif" font-size="13" font-weight="700">' +
                 pin.number +
@@ -179,6 +197,12 @@ export function buildMapHtml(
               disableDoubleClickZoom: true,`
     : '';
   const viewOnlyLockScript = viewOnly ? 'map.setZoomable(false);' : '';
+
+  // TRIP-301 D6 — 줌아웃 상한. 완성 일정 탐색 지도(h26)는 제스처를 허용(viewOnly=false)하되
+  // 한없이 줌아웃해 "중국까지 이탈"하는 것만 막는다. `setMaxLevel(n)`은 확대 배율의 최댓값
+  // (= 가장 멀리 본 상태)을 못 박는다. jest 잠금은 없다 — 실제 상한 효과는 6-b 실기 몫이다.
+  const maxLevelScript =
+    maxLevel === undefined ? '' : `map.setMaxLevel(${maxLevel});`;
 
   const pinScript = enablePin
     ? `
@@ -325,6 +349,7 @@ export function buildMapHtml(
             });
             ${numberedPinScript}
             ${viewOnlyLockScript}
+            ${maxLevelScript}
             ${pinScript}
           } catch (e) {
             window.ReactNativeWebView.postMessage('${MAP_LOAD_FAILED_MESSAGE}');

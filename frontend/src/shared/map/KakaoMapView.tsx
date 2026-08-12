@@ -47,6 +47,16 @@ export interface KakaoMapViewProps {
    * 핀 번호가 "돌아볼 순서"인 화면(h11 일정 초안)에서는 선이 사실이지만, "담은 순서"일 뿐인
    * 화면(h05 필수 방문지)에서는 아직 정해지지 않은 동선을 정해진 것처럼 말하게 된다. */
   connectPins?: boolean;
+  /** 로드 실패를 부모에 알리는 통로(TRIP-301). 없으면(현행 호출부) 실패는 내부 `map-failure`
+   * 표면으로만 처리한다. **넘긴 호출부(완성 일정 지도)는 스스로 폴백을 그리므로**, 메인 프레임
+   * 로드 오류(`onError`·`onHttpError`)는 이 콜백으로만 위임하고 내부 표면은 띄우지 않는다 —
+   * 부모가 지도를 통째로 걷어내고 카드 목록으로 대체하기 때문이다. SDK 서브리소스 실패
+   * (`MAP_LOAD_FAILED_MESSAGE`)는 내부 `map-failure`와 이 콜백을 **둘 다** 연다(배타 아님). */
+  onLoadFailed?: () => void;
+  /** 줌아웃 상한(TRIP-301 D6). 넘기면 대본이 `map.setMaxLevel(maxLevel)`을 부른다 — 완성 일정
+   * 탐색 지도가 한없이 줌아웃해 이탈하는 것을 막는다. `center`·`pins`와 같은 계약(마운트 시점
+   * 값으로 한 번 조립). */
+  maxLevel?: number;
 }
 
 /** `unknown`이 유한한 수인가 — WebView가 보낸 값은 뭐든 올 수 있어 여기가 신뢰 경계다
@@ -62,6 +72,8 @@ export function KakaoMapView({
   pins,
   viewOnly,
   connectPins,
+  onLoadFailed,
+  maxLevel,
 }: KakaoMapViewProps): ReactElement {
   const [loadFailed, setLoadFailed] = useState(false);
   const jsKey = process.env.EXPO_PUBLIC_KAKAO_MAP_JS_KEY;
@@ -84,12 +96,22 @@ export function KakaoMapView({
       onMapMessage !== undefined,
       pins,
       viewOnly,
-      connectPins
+      connectPins,
+      maxLevel
     )
   );
 
   // onError·onHttpError 둘 다 이 페이로드 없이 트리거만 본다 — 실패 사실 자체가 신호다.
-  const handleLoadError = (): void => setLoadFailed(true);
+  // 부모가 실패를 직접 받겠다고 하면(onLoadFailed 제공) 위임만 하고 내부 표면은 안 띄운다 —
+  // 부모(완성 일정 지도)가 지도를 걷어내고 폴백을 그리므로 내부 map-failure 가 중복이다.
+  // 부모가 없으면(현행 호출부) 예전처럼 내부 map-failure 로 전이한다(BR-U1-23·INV-4 무회귀).
+  const handleLoadError = (): void => {
+    if (onLoadFailed !== undefined) {
+      onLoadFailed();
+      return;
+    }
+    setLoadFailed(true);
+  };
 
   // onError·onHttpError는 메인 프레임(= HTML 문자열 자체)의 로드에만 반응한다 — source가
   // {html, baseUrl}이라 메인 프레임은 네트워크를 안 타 항상 성공하고, mapHtml.ts 안
@@ -103,7 +125,9 @@ export function KakaoMapView({
   const handleWebViewMessage = (event: WebViewMessageEvent): void => {
     const data = event.nativeEvent.data;
     if (data === MAP_LOAD_FAILED_MESSAGE) {
+      // SDK 서브리소스 실패 — 내부 표면과 부모 통로를 **둘 다** 연다(배타 아님, TRIP-301 KE3).
       setLoadFailed(true);
+      onLoadFailed?.();
       return;
     }
 
@@ -136,6 +160,14 @@ export function KakaoMapView({
     }
     if (message.type === 'GEOCODE_FAIL') {
       onMapMessage?.({ type: 'GEOCODE_FAIL' });
+      return;
+    }
+
+    // TRIP-301 — 핀 탭. index 는 WebView 가 보낸 신뢰 못 할 값이라 유한한 수만 통과시킨다
+    // (`isFiniteNumber`가 NaN·Infinity·문자열·null·누락을 한 번에 거른다). index 0 도 유효한
+    // 첫 핀이라 falsy 검사(`!index`)로 거르지 않는다.
+    if (message.type === 'PIN_TAP' && isFiniteNumber(message.index)) {
+      onMapMessage?.({ type: 'PIN_TAP', index: message.index });
     }
   };
 

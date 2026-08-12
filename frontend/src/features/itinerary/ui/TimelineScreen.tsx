@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -6,8 +7,13 @@ import type {
   ItineraryDaysItemSlotsItem,
   ItineraryStatus,
 } from '@/shared/api/generated/schemas';
+import {
+  KakaoMapView,
+  type KakaoMapMessage,
+  type MapCenter,
+} from '@/shared/map';
 
-import { formatDraftDayHeader } from '../model/draftView';
+import { buildDraftPins, formatDraftDayHeader } from '../model/draftView';
 import type { PlanDayTab } from '../model/planState';
 import { buildSlotKey } from '../model/slotKey';
 import { timeBandLabel } from '../model/timeBandLabel';
@@ -17,6 +23,9 @@ import {
   CheckCircleGlyph,
   LockGlyph,
 } from './ItineraryGlyphs';
+import { MapFallback } from './MapFallback';
+import { PinDetailSheet } from './PinDetailSheet';
+import { PoiSlotCard } from './PoiSlotCard';
 
 /**
  * h25 완성 일정 시간표 뷰(골격·검증 시각) — Figma `1880:1207`.
@@ -44,7 +53,13 @@ const SHARE_DISABLED_REASON = '공유는 곧 제공돼요';
 const SEG_TIMELINE_LABEL = '시간표';
 const SEG_MAP_LABEL = '지도';
 const FIXED_CHIP = '고정';
-const MAP_PLACEHOLDER_NOTE = '지도는 곧 제공돼요';
+
+// 좌표 슬롯이 하나도 없을 때의 지도 시작 좌표(핀이 있으면 setBounds 가 덮으므로 시작값일 뿐).
+// KakaoMapView 기존 호출부·테스트가 쓰는 서울 시청 좌표를 그대로 쓴다.
+const DEFAULT_MAP_CENTER: MapCenter = { lat: 37.5665, lng: 126.978 };
+// TRIP-301 D6 — 완성 일정 탐색 지도의 줌아웃 상한. 한 여행 권역을 벗어나 한없이 멀어지는 것만
+// 막는다(레벨이 클수록 멀리 본다). ponytail: 정확한 상한값은 6-b 실기에서 조정한다.
+const EXPLORE_MAP_MAX_LEVEL = 9;
 
 // 카드 그림자(h11 선례와 동일한 Figma 값). RN 은 box-shadow 가 없어 스타일 프로퍼티로 옮긴다.
 const cardShadow = {
@@ -254,6 +269,36 @@ export function TimelineScreen({
   // 확정 얼굴 트리거 — 미지정(undefined)은 PLANNED 취급이라 기존 호출부가 그대로 편집 얼굴이다.
   const isConfirmed = status === 'CONFIRMED';
 
+  // TRIP-301 지도 세그먼트 상태. 탭한 핀의 슬롯(상세 시트)·지도 로드 실패 여부만 이 화면이 쥔다.
+  const [selectedSlot, setSelectedSlot] =
+    useState<ItineraryDaysItemSlotsItem | null>(null);
+  const [mapFailed, setMapFailed] = useState(false);
+
+  // 핀은 좌표 있는 슬롯만(번호는 결번 없이 뛴다 · buildDraftPins 재사용). 상세 시트 역참조도
+  // 이 배열을 쓴다 — index 는 pins 배열 기준이라 좌표 결번에도 엉뚱한 슬롯을 열지 않는다.
+  const pins = buildDraftPins(slots);
+  const mapCenter: MapCenter =
+    pins.length > 0
+      ? { lat: pins[0].lat, lng: pins[0].lng }
+      : DEFAULT_MAP_CENTER;
+
+  // 핀 탭(PIN_TAP)만 이 화면이 소비한다 — index 로 핀을, 핀 번호로 슬롯을 역참조한다.
+  function handleMapMessage(message: KakaoMapMessage): void {
+    if (message.type !== 'PIN_TAP') return;
+    const pin = pins[message.index];
+    if (pin === undefined) return;
+    const slot = slots[pin.number - 1];
+    if (slot === undefined) return;
+    setSelectedSlot(slot);
+  }
+
+  // 지도 로드 실패를 부모가 받아 자체 폴백으로 그린다(화면을 안 비운다 · INV-4).
+  const handleMapLoadFailed = (): void => setMapFailed(true);
+  // 재시도 — mapFailed 를 내리면 지도가 다시 마운트돼(key=activeDate) 새 문서로 재로드된다.
+  const handleRetry = (): void => setMapFailed(false);
+
+  const showSheet = segment === 'map' && !mapFailed && selectedSlot !== null;
+
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View className="flex-1 bg-canvas">
@@ -373,13 +418,59 @@ export function TimelineScreen({
           ) : null}
 
           {segment === 'map' ? (
-            <View
-              testID="itinerary-view-map"
-              className="h-[240px] w-full items-center justify-center rounded-card border border-hairline bg-surface-soft"
-            >
-              <Text className="font-noto text-label text-muted">
-                {MAP_PLACEHOLDER_NOTE}
-              </Text>
+            <View className="w-full gap-md">
+              {mapFailed ? (
+                <MapFallback onRetry={handleRetry} />
+              ) : (
+                // 실지도(h26 탐색 지도) — 배럴로 가져와 얇은 가짜가 붙는다. viewOnly 무언급(제스처
+                // 허용 · D6)·connectPins 무언급(동선 선 기본). key=activeDate 라 날 바꾸면 새 핀으로
+                // 재로드된다(WebView 는 source 가 바뀌면 문서째 재로드하므로 remount 로 갈아끼운다).
+                <View
+                  testID="itinerary-view-map"
+                  className="h-[240px] w-full overflow-hidden rounded-card border border-hairline bg-surface-soft"
+                >
+                  <KakaoMapView
+                    key={activeDate}
+                    center={mapCenter}
+                    pins={pins}
+                    onMapMessage={handleMapMessage}
+                    onLoadFailed={handleMapLoadFailed}
+                    maxLevel={EXPLORE_MAP_MAX_LEVEL}
+                  />
+                </View>
+              )}
+
+              {mapFailed ? (
+                // 폴백 세로 목록 — 지도가 죽어도 통일 카드로 일정을 계속 본다(화면 안 비움).
+                <View className="w-full gap-sm">
+                  {slots.map((slot, index) => (
+                    <PoiSlotCard
+                      key={buildSlotKey(activeDate, slot.poiId)}
+                      slot={slot}
+                      date={activeDate}
+                      index={index}
+                      variant="list"
+                    />
+                  ))}
+                </View>
+              ) : (
+                // peekstrip 가로 목록 — 지도 밑에서 같은 통일 카드를 옆으로 넘겨 본다.
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerClassName="gap-sm pr-lg"
+                >
+                  {slots.map((slot, index) => (
+                    <PoiSlotCard
+                      key={buildSlotKey(activeDate, slot.poiId)}
+                      slot={slot}
+                      date={activeDate}
+                      index={index}
+                      variant="peek"
+                    />
+                  ))}
+                </ScrollView>
+              )}
             </View>
           ) : null}
         </ScrollView>
@@ -431,6 +522,13 @@ export function TimelineScreen({
           )}
         </View>
       </View>
+
+      {showSheet && selectedSlot !== null ? (
+        <PinDetailSheet
+          slot={selectedSlot}
+          onClose={() => setSelectedSlot(null)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
