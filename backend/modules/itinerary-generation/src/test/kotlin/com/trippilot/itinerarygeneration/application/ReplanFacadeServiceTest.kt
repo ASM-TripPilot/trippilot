@@ -240,4 +240,33 @@ class ReplanFacadeServiceTest : StringSpec({
 
         ReplanProposal.fromMap(original.toMap()) shouldBe original
     }
+
+    /**
+     * 상대가 **다른 날짜**를 돌려줬을 때. 그 슬롯을 오늘 것처럼 초안에 담으면, 확정 순간 오늘 일정이
+     * 엉뚱한 날의 계획으로 덮인다. 생성 경로에는 같은 상황의 가드가 이미 있다(일자 중복 방지).
+     */
+    "요청한 날짜가 응답에 없으면 대안 없음이다 — 다른 날 계획을 오늘로 옮기지 않는다" {
+        val other = today.plusDays(1)
+        val agent = Agent(listOf(DaySchedule(other, listOf(
+            VisitSlotDisplay(replacement, LocalTime.parse("16:00"), LocalTime.parse("17:00"), false, null, false),
+        ))))
+        val svc = fixture(agent).svc
+
+        svc.propose(command()).shouldBeNull()
+    }
+
+    /**
+     * 초안의 날짜가 일정에 없을 때. 조용히 통과시키면 **아무것도 안 바뀌었는데** "재계획 반영" 리비전만
+     * 쌓이고, 사용자는 반영됐다고 믿는다.
+     */
+    "초안 날짜가 일정에 없으면 반영하지 않는다" {
+        val agent = Agent(proposal(replacement))
+        val f = fixture(agent)
+        val proposal = f.svc.propose(command())!!
+        val strayDate = proposal.copy(date = today.plusDays(5))
+
+        shouldThrow<ConflictDetected> { f.svc.apply(acc, trip, strayDate) }
+        f.repo.byTrip.getValue(trip).days[0].slots.map { it.sourcePoiId } shouldContainExactly
+            listOf(morning, fixedNoon, evening) // 원본 그대로
+    }
 })

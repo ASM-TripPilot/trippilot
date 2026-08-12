@@ -61,8 +61,8 @@ class ReplanFacadeService(
                 destinations = ctx.destinations,
                 fromInstant = command.fromInstant,
                 targetDate = command.targetDate,
-                originLat = origin?.first,
-                originLng = origin?.second,
+                originLat = origin.first,
+                originLng = origin.second,
                 lockedBlocks = lockedBlocks(current, command),
                 reasons = command.reasons,
                 directives = command.directives,
@@ -71,7 +71,9 @@ class ReplanFacadeService(
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), REPLAN_DEADLINE_MS),
             ),
         )
-        val day = output.days.firstOrNull { it.date == command.targetDate } ?: output.days.firstOrNull()
+        // **요청한 날짜만** 받는다. 다른 날을 돌려줬을 때 그것을 오늘 초안으로 삼으면, 확정 순간
+        // 오늘 일정이 엉뚱한 날의 계획으로 덮인다(생성 경로에도 같은 취지의 가드가 있다).
+        val day = output.days.firstOrNull { it.date == command.targetDate }
         val slots = day?.slots.orEmpty().map {
             ReplanSlot(
                 poiId = it.poiId, startAt = it.startAt, endAt = it.endAt, isFixed = it.isFixed,
@@ -87,8 +89,9 @@ class ReplanFacadeService(
     /**
      * 후보 풀을 매달 좌표. 현재 위치가 없으면 그 날 숙소 앵커로 내려간다.
      * 둘 다 없으면 **다시 짤 근거가 없다** — 조용히 빈 결과를 주지 않고 실패로 올려 수동 편집으로 넘긴다(INV-4).
+     * 그래서 null 을 돌려주지 않는다(없으면 던진다) — nullable 로 두면 "좌표 없이도 부른다"로 읽힌다.
      */
-    private fun groundingPoint(command: ReplanCommand, ctx: TripGenerationContext): Pair<Double, Double>? {
+    private fun groundingPoint(command: ReplanCommand, ctx: TripGenerationContext): Pair<Double, Double> {
         command.originLat?.let { lat -> command.originLng?.let { lng -> return lat to lng } }
         val anchor = baseAnchors.findStayNightAnchors(command.tripId, ctx.startDate, ctx.endDate)
             .firstOrNull { it.date == command.targetDate }
@@ -143,6 +146,11 @@ class ReplanFacadeService(
         }
         revisions.ensureRestorePoint(current)
 
+        // 초안의 날짜가 일정에 없으면 **아무 일도 일어나지 않는다** — 조용히 통과시키면 바뀐 것 없이
+        // "재계획 반영" 리비전만 쌓이고 사용자는 반영됐다고 믿는다.
+        if (current.days.none { it.date == proposal.date }) {
+            throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다. 다시 재계획해 주세요.")
+        }
         val replaced = current.days.map { day ->
             if (day.date != proposal.date) day else ItineraryDay.of(day.date, day.dayOrder, proposal.slots.toSlots())
         }
