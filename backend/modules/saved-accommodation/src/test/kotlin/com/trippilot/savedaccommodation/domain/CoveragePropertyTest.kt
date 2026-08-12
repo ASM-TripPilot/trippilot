@@ -12,7 +12,8 @@ import java.util.UUID
 
 /**
  * 커버리지 리졸버 게이트 PBT-U1-2. 임의 기간·거점 스팬에 대해:
- * (1) 숙박일 [start, end) 정확 매핑 (2) 각 날 판정 = 덮는 거점 수 (3) blocked ⟺ 미해결 존재.
+ * (1) 숙박일 [start, end) 정확 매핑 (2) 각 날 판정 = 덮는 거점 수 (3) blocked ⟺ 미해결 존재
+ * (4) 사용자 선택(TRIP-190)은 **유효할 때만** 확정으로 세고, 판정(status) 자체는 바꾸지 않는다.
  */
 class CoveragePropertyTest : StringSpec({
 
@@ -56,6 +57,55 @@ class CoveragePropertyTest : StringSpec({
 
             // (3) 차단 ⟺ AUTO가 아닌 날 존재
             CoverageResolver.blocked(cov) shouldBe cov.any { it.status != CoverageStatus.AUTO }
+        }
+    }
+
+    /**
+     * 임의의 선택을 섞어도 — 유효한 선택만 확정으로 세고, 배정이 말하는 판정은 그대로다.
+     * 무효한 선택을 확정으로 세면 그 여행에 없는 숙소를 거점으로 일정을 짜게 된다.
+     */
+    "사용자 선택은 유효할 때만 확정으로 세고 판정은 그대로다" {
+        checkAll(
+            Arb.int(1..10),
+            Arb.list(Arb.pair(Arb.int(0..10), Arb.int(0..10)), 0..4),
+            Arb.list(Arb.int(0..10), 0..4),
+        ) { nights, rawSpans, pickDays ->
+            val end = start.plusDays(nights.toLong())
+            val spans = rawSpans.map { (x, y) ->
+                val from = minOf(x, y)
+                val to = maxOf(x, y).let { if (it == from) from + 1 else it }
+                BaseSpan(UUID.randomUUID(), start.plusDays(from.toLong()), start.plusDays(to.toLong()))
+            }
+            val assigned = spans.map { it.savedStayId }
+            // 배정된 숙소와 무관한 숙소를 섞는다 — 무효 선택이 통과하는지 보려면 둘 다 있어야 한다.
+            val pool = assigned + UUID.randomUUID()
+            val picks = pickDays.associate { d ->
+                start.plusDays(d.toLong()) to pool[d % pool.size]
+            }
+
+            val bare = CoverageResolver.resolve(start, end, spans)
+            val withPicks = CoverageResolver.resolve(start, end, spans, picks)
+
+            withPicks.zip(bare).forEach { (picked, plain) ->
+                // 판정(status)은 선택과 무관하다 — 겹친 사실은 골라도 남는다.
+                picked.status shouldBe plain.status
+
+                val pick = picks[picked.date]
+                val valid = when (plain.status) {
+                    CoverageStatus.AUTO -> false // 자동 확정일은 선택 대상이 아니다
+                    CoverageStatus.OVERLAP -> pick != null && pick in plain.candidates
+                    CoverageStatus.GAP -> pick != null && pick in assigned
+                }
+                if (valid) {
+                    picked.savedStayId shouldBe pick
+                    picked.resolution shouldBe BaseResolution.USER_PICK
+                } else {
+                    picked.savedStayId shouldBe plain.savedStayId
+                    picked.resolution shouldBe plain.resolution
+                }
+            }
+
+            CoverageResolver.blocked(withPicks) shouldBe withPicks.any { !it.settled }
         }
     }
 })

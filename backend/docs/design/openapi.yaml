@@ -626,6 +626,28 @@ paths:
         '200': { description: 커버리지, content: { application/json: { schema: { $ref: '#/components/schemas/Coverage' } } } }
         '404': { description: 없음/타 계정 }
 
+  /trips/{tripId}/coverage/days/{dayDate}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: dayDate, in: path, required: true, schema: { type: string, format: date }, description: 숙박일(체크아웃 당일 제외) }
+    put:
+      tags: [trips]
+      summary: 커버리지 해소 — 그 날 거점으로 쓸 숙소 선택(BR-U1-45 · resolution=user_pick)
+      description: >
+        겹침일(OVERLAP)·공백일(GAP)을 사용자가 풀어 일정 생성 게이트를 연다(INV-U1-16).
+        **자동 확정된 날(AUTO)은 409** — 후보가 하나뿐이라 고를 것이 없고, 바꾸려면 배정 자체를 고쳐야 한다.
+        고를 수 있는 숙소는 겹침일이면 그 날 `candidates`, 공백일이면 이 여행에 배정된 숙소다.
+        날짜가 곧 리소스 키(하루 1행)라 PUT 이며 같은 선택을 반복해도 결과가 같다.
+        응답은 **커버리지 전체** — 한 날을 풀면 `blocked` 가 바뀌므로 그 한 줄만 갱신하면 화면이 계속 막힌 것처럼 보인다.
+        전 숙박일이 확정되는 순간 `TripBaseResolved` 로 게이트가 열린다(BR-U1-46).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ResolveCoverageDayRequest' } } }
+      responses:
+        '200': { description: 해소됨(커버리지 전체), content: { application/json: { schema: { $ref: '#/components/schemas/Coverage' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { description: 없음/타 계정 }
+        '409': { description: 자동 확정된 날짜(배정을 수정해야 함) }
   /trips/{tripId}/must-visits:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1185,13 +1207,43 @@ components:
         blocked: { type: boolean, description: 미해결(gap/overlap)이 하나라도 있으면 true — 일정 생성 진입 차단(INV-U1-16) }
         days: { type: array, items: { $ref: '#/components/schemas/DayCoverage' } }
 
+    ResolveCoverageDayRequest:
+      type: object
+      required: [savedStayId]
+      properties:
+        savedStayId:
+          type: string
+          format: uuid
+          description: >
+            그 날 거점으로 쓸 숙소. 겹침일은 그 날 `candidates` 중에서, 공백일은 이 여행에 배정된 숙소 중에서만
+            고를 수 있다 — 밖의 숙소를 허용하면 그 여행과 무관한 곳에서 일정이 시작된다.
+
     DayCoverage:
       type: object
-      required: [date, status]
+      required: [date, status, candidates]
       properties:
         date: { type: string, format: date }
-        status: { type: string, enum: [AUTO, GAP, OVERLAP], description: AUTO=후보1(확정) · GAP=후보0(공백) · OVERLAP=후보≥2(겹침) }
-        savedStayId: { type: string, format: uuid, nullable: true, description: AUTO일 때만 확정 거점 }
+        status:
+          type: string
+          enum: [AUTO, GAP, OVERLAP]
+          description: >
+            **배정이 말하는 판정**(왜 손이 필요한가) — AUTO=후보1(자동 확정) · GAP=후보0(공백) · OVERLAP=후보≥2(겹침).
+            `resolution` 과 **다른 축**이다: 겹침을 사용자가 풀어도 배정이 겹친 사실은 그대로라 OVERLAP 으로 남는다.
+        savedStayId: { type: string, format: uuid, nullable: true, description: 확정된 거점(미해결이면 null) }
+        resolution:
+          type: string
+          enum: [AUTO, PREV_STAY, DESTINATION_CENTER, USER_PICK]
+          nullable: true
+          description: >
+            **확정 여부**(null = 미해결). AUTO=후보1 자동 확정 · USER_PICK=사용자가 해소 시트에서 선택(BR-U1-45).
+            PREV_STAY·DESTINATION_CENTER 는 공백일 선택지로 **아직 미구현**이다(값만 예약).
+            `blocked` 는 이 값이 null 인 날이 하나라도 있는지와 같다.
+        candidates:
+          type: array
+          items: { type: string, format: uuid }
+          description: >
+            겹침일에 고를 수 있는 숙소. 그 외 날짜는 **빈 배열**이다. 이걸 안 실으면 화면이 배정 목록을 따로 받아
+            날짜 겹침을 다시 계산해야 한다.
 
     MustVisitType:
       type: string

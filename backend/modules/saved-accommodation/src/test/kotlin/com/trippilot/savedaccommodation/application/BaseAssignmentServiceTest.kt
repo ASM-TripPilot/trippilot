@@ -57,7 +57,7 @@ class BaseAssignmentServiceTest : StringSpec({
         val trips = FakeTrips()
         val tripId = UUID.randomUUID()
         trips.periods[acc to tripId] = TripPeriod(start, end)
-        val svc = BaseAssignmentService(FakeBases(), stays, trips, clock)
+        val svc = BaseAssignmentService(FakeBases(), stays, trips, FakeTripBaseDays(), CapturingEvents(), clock)
         return Triple(svc, stays, acc to tripId)
     }
 
