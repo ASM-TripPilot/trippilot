@@ -84,6 +84,9 @@ services:
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      # 지역 지오코딩 경계(국내강제). 기본 스텁은 시드 8개만 국내로 안다 —
+      # 실 지역명으로 여행을 만들려면 kakao 로 켠다(키는 위 KAKAO_CLIENT_ID 를 그대로 쓴다).
+      TRIPPILOT_PLACE_GEOCODE_MODE: ${PLACE_GEOCODE_MODE:-stub}
     ports:
       - "8080:8080"
     healthcheck:
