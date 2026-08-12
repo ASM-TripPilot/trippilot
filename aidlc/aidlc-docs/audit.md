@@ -963,3 +963,24 @@ Step 1 FD 분석 — **재서술 금지 대상 8건** 식별(무발화 BR-U4-05�
 **Selection**: 사이클 [설계] 3-a에서 관측된 정본 반영 후보 **4건 중 사용자가 4건 전부 선택**했다. 그중 위 2건만 `aidlc/` 소관(B)이고, 나머지 2건(BR 코드 오인용 — `placementReason`에 붙은 `BR-U2-04`가 실제로는 slotKey 키 규약이고 문구 제약은 `BR-U2-09`인 것 · h11 이유 표면 화면 정본 부재)은 **백엔드 파일·미착수 화면 정본이라 `aidlc/`에 쓰지 않고 Jira TRIP-298 코멘트로만 보고**했다.
 
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-298 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260810-trip298-reason-surface/00_ticket.txt`(스코프 절) · `04_qa-verifier_report_1_PASS.md` §6(경계면 QA — `level` 계약 대조) · `03_implementer_notes.md` §1.2(화이트리스트 근거). 이번 항목이 손댄 `aidlc/` 파일 = 위 두 문서 + 이 `audit.md` append. `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음).
+
+---
+
+## Post-Design Correction — U3 frontend-components.md h24 저장 시트 단일 갈래 + validate 훅 제거 (TRIP-302 슬라이스2 [기록] 반영)
+**Timestamp**: 2026-08-12T08:15:00Z
+
+**User Input**: TRIP-302(h24 일정 편집) 슬라이스2 사이클 [설계] 3-a에서 사용자가 정본 반영 후보 중 **"반영"을 채택**했다(오케스트레이터의 사이클 요약으로 [기록] 단계에 전달, `_workspace/20260812-trip302-save-flow/01b_ouroboros_seed.md` "확정 결정" 절에 채택 항목 원문 기재) — ① §4 `SaveConflictSheet.tsx`의 `[AI 자동 보정] / [그대로 저장]` 2갈래를 `[그대로 저장]` 단일 갈래로(티켓 결정 가) ② §3 `useValidateItinerary.ts` 별도 훅 서술 제거(재검증은 PUT에 접힘 — 별도 validate 호출 없음) ③ §2(line 73) `itinerary-edit ↔ useValidateItinerary()` 배선 서술 삭제. 세 항목 모두 이 파일(`aidlc/aidlc-docs/construction/u3-ai-itinerary/functional-design/frontend-components.md`) 소관으로 지정, 이 한 자리만 aidlc 쓰기 허용.
+
+**AI Response**: TRIP-297·TRIP-339·TRIP-298 선례의 "[구현 결정 · TRIP-XXX, 날짜]" 소급 기록 방식을 따라 3건을 최소 수정으로 반영했다.
+
+(1) **§2 line 73** — `itinerary-edit` 슬라이스 배선 셀을 `편집 스토어 ↔ useValidateItinerary() 배선`에서 `편집 스토어 ↔ PUT 저장(재검증은 PUT에 접힘 — [구현 결정 · TRIP-302, 2026-08-12])`로 교체. 서버가 전체 교체 PUT 적용과 동시에 재검증까지 수행하므로 편집 화면 쪽에 별도 즉시 검증 호출이 없다는 실제 배선을 반영.
+
+(2) **§3** — `useValidateItinerary.ts | 훅 | 편집 재검증(비차단)` 행을 표에서 제거하고, 표 뒤에 소급 정정 블록을 추가: 이 절이 가정한 편집 중 실시간 검증 훅은 구현되지 않았다는 사실 + h24 저장 플로우(TRIP-302 슬라이스2)의 실제 재검증 경로(PUT 응답 자체가 재검증 결과)를 명시. **미반영 관측을 같은 블록에 병기**했다 — §2 line 71(`itinerary-manual`, h19~h21 미착수)이 여전히 같은 훅 이름을 참조하지만 이번 3-a 선택 범위 밖이라 손대지 않았고, 그 화면은 "추가마다 재검증"(증분)이라 h24의 "전체 교체 PUT"과 성격이 달라 같은 결정이 그대로 적용될지는 그 화면 착수 시 별도 재확인이 필요함을 남겼다.
+
+(3) **§4** — `SaveConflictSheet.tsx | — | [AI 자동 보정] / [그대로 저장]` 행을 `[그대로 저장] 단일 갈래 — [AI 자동 보정] 갈래 제거([구현 결정 · TRIP-302, 2026-08-12], 티켓 결정 가 · BR-U3-14 repair 미충족)`로 교체하고, 시트 자체는 이 결정과 별개로 Figma h24에 프레임이 미설계라 TRIP-302에서는 구현하지 않았음(이연)을 같은 셀에 병기 — 두 사실(갈래 수 결정 vs 시트 존재 자체의 이연)이 서로 다른 근거임을 섞지 않았다.
+
+**셋 다 요구사항 근거가 아니라 티켓 결정(가)의 소급 기록이다** — 다음 사이클이 이 세 문장을 요구사항 근거로 인용하지 말 것을 §3 정정 블록에 명시했다. §8 testID 목록(`-save-conflict`·`-save-repair`·`-save-asis`)은 3-a 선택 목록에 없어 **손대지 않았다**(시트 이연 자체가 아직 후속 티켓 대기 상태라 testID 확정 시점이 아님).
+
+**Selection**: 사이클 [설계] 3-a에서 사용자가 **"반영" 항목만 선택**(목록에 다른 항목 없음 — 전량 반영). 관측만 남긴 항목 2건(SaveConflictSheet Figma 미설계 → 디자이너 h24 시트 프레임 요청 후속 티켓 후보, openapi PUT 409 에러코드 미열거 → BE 인지 필요)은 `aidlc/` 소관이 아니라(Figma·BE 정본 공백) 개발로그 관측으로만 남기고 이 파일에 쓰지 않았다.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-302 슬라이스2 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260812-trip302-save-flow/01_spec-analyst_brief.md`(§8 ④ 드리프트 관측 · "재검증은 PUT 안에 접혀 있다 — validate를 부르는 별도 훅/코드를 만들지 마라") · `01b_ouroboros_seed.md`("확정 결정" 절 · "정본 반영(사용자 채택)" 항목) · `03_implementer_notes.md`(핸들세이브 구현 확인). 이번 항목이 손댄 `aidlc/` 파일 = `construction/u3-ai-itinerary/functional-design/frontend-components.md`(§2 line 73 · §3 표+정정 블록 · §4 표, 3곳) + 이 `audit.md` append뿐(`git status aidlc/` 실측 1파일 일치). `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음 — 코드 구현 소급 기록은 리포 devlog·구조 지도 소관, [기록] 별도 처리).

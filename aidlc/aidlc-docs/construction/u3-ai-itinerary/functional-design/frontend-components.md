@@ -70,7 +70,7 @@
 | `itinerary-copick` | `ConceptPage` · `SlotCandidatePage` | `useSlotCandidates(slotKey, radiusM, concept)` |
 | `itinerary-manual` | `ManualPlanPage` · `PlaceAddPage` | 추가마다 `useValidateItinerary()` |
 | `itinerary-plan` | `ItineraryPlanPage` | `useItinerary(tripId)` + `resolvePlanState()` **판정 1회**(로딩·오류·확정·지도 실패) → `TimelineScreen`/`MapScreen` |
-| `itinerary-edit` | `ItineraryEditPage` | 편집 스토어 ↔ `useValidateItinerary()` 배선 |
+| `itinerary-edit` | `ItineraryEditPage` | 편집 스토어 ↔ PUT 저장(재검증은 PUT에 접힘 — [구현 결정 · TRIP-302, 2026-08-12]) |
 | `itinerary-history` | `HistoryPage` | `useRevisions(tripId)` · 되돌리기 뮤테이션 |
 | `itinerary-stay-suggest` | `StaySuggestPage` | `useStaySuggestion(itineraryId)` |
 | `itinerary-reorder` | `ReorderComparePage` | 재생성 호출 + 전·후 비교 데이터 조립 |
@@ -95,10 +95,11 @@
 | `useItinerary.ts` | 훅 | `GET /trips/{tripId}/itinerary` |
 | `useGenerationSession.ts` | 훅 | 생성 세션 폴링(day1 우선) |
 | `useSlotCandidates.ts` | 훅 | `proposeSlotCandidates`(DEC-U3-5) |
-| `useValidateItinerary.ts` | 훅 | 편집 재검증(비차단) |
 | `useConfirmItinerary.ts` | 훅 | `POST /trips/{tripId}/itinerary/confirm` |
 | `useRevisions.ts` | 훅 | h36 이력·되돌리기 |
 | `itineraryEditStore.ts` | 스토어 | **UI 상태만** — 뷰 세그먼트(시간표/지도) · 편집 드래프트 · 시트 열림. **서버 응답을 복사하지 않는다** |
+
+> **[구현 결정 · TRIP-302, 2026-08-12] `useValidateItinerary.ts` 제거 — 정본 정정.** h24 편집 저장(TRIP-302 슬라이스2)에서 재검증은 `PUT /trips/{tripId}/itinerary` 안에 접혀 있다(서버가 전체 교체 적용 후 재검증까지 한 번에 수행) — 별도 즉시 재검증 훅/호출을 만들지 않는다(위 line 73 배선 설명도 같은 결정으로 갱신). 이 절이 가정했던 편집 중 실시간 검증 훅은 실제로 구현되지 않았다. **미반영 관측**: line 71 `itinerary-manual`(h19~h21, 미착수)이 여전히 같은 이름을 참조하지만 이번 결정 범위 밖이라 손대지 않았다 — 그 화면은 추가마다 재검증하는 다른 성격의 흐름(전체 교체 아님)이라 같은 결정이 그대로 적용될지는 그 화면 착수 시 재확인 필요.
 
 ## 4. `src/features/itinerary/ui/` — 프레젠테이션
 
@@ -118,7 +119,7 @@
 | `MapScreen.tsx` | h26·h29·h31~h33 | `shared/map` 소비. 실패 폴백은 판정값을 prop으로 받아 표시만 |
 | `PinDetailSheet.tsx` | h23 | |
 | `ItineraryEditScreen.tsx` | h24 | 위반 배지(저장 후에도 지속 — BR-U3-13) |
-| `SaveConflictSheet.tsx` | — | [AI 자동 보정] / [그대로 저장] |
+| `SaveConflictSheet.tsx` | — | [그대로 저장] 단일 갈래 — [AI 자동 보정] 갈래 제거([구현 결정 · TRIP-302, 2026-08-12], 티켓 결정 가 · BR-U3-14 repair 미충족). 시트 자체는 이 결정과 별개로 Figma 미설계라 TRIP-302에서는 이연(구현 안 됨) |
 | `ReorderBanner.tsx` · `ReorderCompareScreen.tsx` | h25 배너·h28 | 배너에 **수치 단언 금지**(G-U3-1) |
 | `StaySuggestScreen.tsx` | h27 | |
 | `HistoryScreen.tsx` | h36 | actor 배지 · 상대 시각 · [되돌리기] · `기준 버전` 행 · empty. **`with-companions` 제외**(DEC-U3-8) |
