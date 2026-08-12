@@ -984,3 +984,22 @@ Step 1 FD 분석 — **재서술 금지 대상 8건** 식별(무발화 BR-U4-05�
 **Selection**: 사이클 [설계] 3-a에서 사용자가 **"반영" 항목만 선택**(목록에 다른 항목 없음 — 전량 반영). 관측만 남긴 항목 2건(SaveConflictSheet Figma 미설계 → 디자이너 h24 시트 프레임 요청 후속 티켓 후보, openapi PUT 409 에러코드 미열거 → BE 인지 필요)은 `aidlc/` 소관이 아니라(Figma·BE 정본 공백) 개발로그 관측으로만 남기고 이 파일에 쓰지 않았다.
 
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-302 슬라이스2 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260812-trip302-save-flow/01_spec-analyst_brief.md`(§8 ④ 드리프트 관측 · "재검증은 PUT 안에 접혀 있다 — validate를 부르는 별도 훅/코드를 만들지 마라") · `01b_ouroboros_seed.md`("확정 결정" 절 · "정본 반영(사용자 채택)" 항목) · `03_implementer_notes.md`(핸들세이브 구현 확인). 이번 항목이 손댄 `aidlc/` 파일 = `construction/u3-ai-itinerary/functional-design/frontend-components.md`(§2 line 73 · §3 표+정정 블록 · §4 표, 3곳) + 이 `audit.md` append뿐(`git status aidlc/` 실측 1파일 일치). `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음 — 코드 구현 소급 기록은 리포 devlog·구조 지도 소관, [기록] 별도 처리).
+
+---
+
+## Post-Design Correction — U3 business-rules.md · domain-entities.md 계약 공백 2건 관측 (TRIP-302 슬라이스3 [기록] 반영)
+**Timestamp**: 2026-08-13T14:20:00Z
+
+**User Input**: TRIP-302(h24 일정 편집) 슬라이스3(시각조정 시트만, 범위 좁힘 — 다른후보·장소추가·slot-candidates·지도·SaveConflictSheet 이연) 사이클 [설계] 3-a에서 사용자가 정본 반영 후보 **4건 중 4건 전부 선택**했다(오케스트레이터의 사이클 요약으로 [기록] 단계에 전달). 그중 아래 2건이 `aidlc/`(B, 스펙 정정) 소관으로 지정됐다 — ③ "장소추가" 슬라이스가 이연된 근거인 slot-candidates 계약 공백(Q3)을 `business-rules.md`에, ④ "다른 후보" 슬라이스가 이연된 근거인 필수 슬롯 필드 부재(Q2)를 `domain-entities.md`에 기록. 나머지 2건(① 진입점 파일이 `TimelineScreen`이 아니라 `ItineraryEditScreen.tsx`인 것 ② `slot-candidates` 후보 스키마와 GET 일정 slot 스키마 혼동)은 Jira 티켓 서술·개발로그 관측 소관이라 `aidlc/`에 쓰지 않았다.
+
+**AI Response**: TRIP-297·TRIP-339·TRIP-298·TRIP-302 슬라이스2 선례의 "[구현 결정 · TRIP-XXX, 날짜]" 소급 기록 형식을 이번엔 **"[관측 · TRIP-XXX, 날짜]"**로 변형해 적용했다 — 앞의 네 선례는 전부 "실제로 이렇게 구현했다/짜기로 했다"는 **확정된 결정**의 소급 기록이었는데, 이번 2건은 확정된 결정이 아니라 **"이 계약에 빈 자리가 있어서 관련 슬라이스를 이연했다"는 갭 관측**이라 표현을 구분했다. 기존 BR/INV 번호·본문은 원문 그대로 두고 각 표 바로 뒤에 관측 블록만 추가했다(추가만, 삭제·수정 없음).
+
+(1) **`business-rules.md`** — BR-U3-15("슬롯 추가 시 삽입 가능한 시간대만 후보로 제시") 행 뒤에 관측 블록 추가: 이 규칙이 요구하는 시간대 판정을 **누가 계산하는지가 계약에 없다** — INV-2(클라 시간 판정 금지)를 지키려면 서버 책임이어야 하는데 `POST /trips/{tripId}/itinerary/slot-candidates` 최소 계약(`backend/docs/design/openapi.yaml:1287`, `SlotCandidates.candidates[]` required `[poiId, distanceRange, rationale]`)은 시간대 필드를 반환하지 않는다. "장소추가" 슬라이스가 이 공백 위에서 필터링 주체를 정할 수 없어 이연됐다는 사실을 병기했다.
+
+(2) **`domain-entities.md`** — §1.3 `VisitSlot` 필드 표 뒤(`duration 필드 없음` 문장 다음)에 관측 블록 추가: `isFixed`(시각 고정 여부)와 "필수 방문지인가"(`must_visit`, U1/C6 소유)는 동치가 아니다 — 시각 고정 없이 등록된 필수 방문지는 `isFixed=false`로 저장돼 다른후보 교체(BR-U3-23~26)를 막을 슬롯 레벨 근거가 없다. 실제 계약(`backend/docs/design/openapi.yaml:1379`, `slots[]` required 목록)에도 must-visit 플래그가 없음을 실측으로 확인했다. "다른 후보" 슬라이스가 `isFixed`를 근사값으로 쓸 수밖에 없어 이연됐다는 사실을 병기했다.
+
+**둘 다 요구사항 근거가 아니라 관측(gap observation)이다** — 다음 사이클이 이 두 문단을 BR-U3-15의 확정된 산출 주체나 `isFixed`의 확정된 의미 확장으로 인용하지 말 것을 각 문단에 명시했다. 백엔드 인지가 필요한 계약 공백이라 U3 설계만으로는 해소되지 않는다 — 후속 착수(장소추가/다른 후보 슬라이스) 시 백엔드와 재확인이 선행돼야 한다.
+
+**Selection**: 사이클 [설계] 3-a에서 사용자가 정본 반영 후보 **4건 중 4건 전부 선택**. 그중 `aidlc/` 소관(B)은 이 2건뿐이고, 나머지 2건(진입점 파일 오기 · 후보 vs GET slot 스키마 혼동)은 Jira 서술·개발로그 관측으로만 남기고 이 파일에 쓰지 않았다.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정(관측 추가)**. 정정 실행 주체: TRIP-302 슬라이스3 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260813-trip302-edit-sheets/01b_ouroboros_seed.md`(스코프 절 · "다른후보=필수 게이팅(Q2)·교체후 표시(Q4) 근사 필요, 장소추가=계약 공백 3중(Q3)" · D1 "3-a 맹점 ①, 정본 반영 대상") · `backend/docs/design/openapi.yaml:1287`·`:1379`(slot-candidates·slots 스키마 직접 조회). 이번 항목이 손댄 `aidlc/` 파일 = `construction/u3-ai-itinerary/functional-design/business-rules.md`(BR-U3-15 뒤 관측 블록) · `construction/u3-ai-itinerary/functional-design/domain-entities.md`(§1.3 뒤 관측 블록) + 이 `audit.md` append, 총 3파일(`git status aidlc/` 실측 일치). `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음 — 코드 구현 소급 기록은 리포 devlog·구조 지도 소관, [기록] 별도 처리).
