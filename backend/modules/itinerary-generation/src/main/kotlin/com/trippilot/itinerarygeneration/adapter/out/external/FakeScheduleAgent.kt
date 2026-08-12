@@ -9,6 +9,7 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.SlotCandidate
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
+import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
@@ -16,6 +17,7 @@ import com.trippilot.placedata.api.Area
 import com.trippilot.placedata.api.CandidatePoolPort
 import org.springframework.stereotype.Component
 import java.time.Clock
+import java.time.LocalTime
 
 /**
  * FakeScheduleAgent — 실 HTTP AI(U5/TRIP-229) 도착 전 계약-우선 개발용 결정론 Fake.
@@ -101,6 +103,33 @@ class FakeScheduleAgent(
         )
     }
 
+    /**
+     * 재계획 — 잠긴 슬롯은 그대로 두고 **그 뒤만** 다시 채운다(INV-U4-04).
+     * 잠금 판정은 호출측(C8)이 이미 끝냈다. 여기서는 잠긴 POI 를 후보에서 빼 중복 배치만 막는다.
+     */
+    override fun replan(input: ReplanInput): ScheduleAgentOutput {
+        val lockedPois = input.lockedSlotKeys.mapNotNull { it.substringAfter('#').toUuidOrNull() }.toSet()
+        val excluded = input.excludedPoiIds.toSet() + lockedPois
+        val candidates = candidatePool.resolve(Area.Region(REPLAN_REGION_HINT), emptySet())
+            .filter { it.poiId !in excluded }
+        // 잠긴 시각 이후부터 채운다 — 지금이 오후면 오전 자리를 다시 만들지 않는다.
+        val startAt = LocalTime.ofInstant(input.fromInstant, TRAVEL_ZONE).plusMinutes(REPLAN_LEAD_MIN.toLong())
+        val slots = candidates.take(PICKS_PER_DAY).mapIndexed { i, gp ->
+            val s = startAt.plusHours((i * SLOT_GAP_HOURS).toLong())
+            VisitSlotDisplay(gp.poiId, s, s.plusHours(1), false, null, isFixed = false)
+        }
+        return ScheduleAgentOutput(
+            days = listOf(DaySchedule(input.targetDate, slots)),
+            day1ReadyAt = clock.instant(),
+            explanations = emptyMap(),
+            solveMode = SolveMode.DETERMINISTIC,
+            isFallback = false,
+            freshness = FreshnessMeta(clock.instant(), degraded = false),
+        )
+    }
+
+    private fun String.toUuidOrNull() = runCatching { java.util.UUID.fromString(this) }.getOrNull()
+
     private fun search(input: SlotCandidatesInput, radiusM: Int, excluded: Set<java.util.UUID>) =
         candidatePool.resolve(Area.Radius(input.centerLat, input.centerLng, radiusM.toDouble()), emptySet())
             .filter { it.poiId !in excluded }
@@ -113,5 +142,11 @@ class FakeScheduleAgent(
         private const val DEFAULT_RADIUS_M = 3_000
         private const val WIDENED_RADIUS_M = 12_000
         private const val MAX_CANDIDATES = 5
+
+        /** Fake 는 지역을 모른다 — 데모 후보풀이 제주라 그 지역으로 본다(실 판단은 AI 몫). */
+        private const val REPLAN_REGION_HINT = "제주"
+        /** 지금 당장이 아니라 조금 뒤부터 — 이동 시간을 아예 0 으로 두면 화면이 비현실적으로 보인다. */
+        private const val REPLAN_LEAD_MIN = 30
+        private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
     }
 }

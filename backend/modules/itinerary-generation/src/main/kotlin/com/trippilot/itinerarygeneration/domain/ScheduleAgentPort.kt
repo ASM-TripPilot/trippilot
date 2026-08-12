@@ -23,7 +23,47 @@ interface ScheduleAgentPort {
      * 후보는 closed-set(INV-1) — 백엔드가 임의 POI 를 섞지 않는다.
      */
     fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput
+
+    /**
+     * 여행 중 재계획(U4 정본 §3.1 · DEC-U4-5) — **새 솔버 개념을 만들지 않는다**.
+     * 잠금 슬롯([ReplanInput.lockedSlotKeys])이 고정 블록으로 승격돼 HC3 보호를 받으므로,
+     * 상대는 이미 있는 재생성 경로를 그대로 쓴다.
+     *
+     * 반환이 곧 **초안**이다 — 원 일정에 반영하지 않는다(INV-U4-05). 해가 없으면 빈 일자를 돌려주고,
+     * 호출 실패는 [ScheduleAgentCallFailed] 로 올려 수동 편집 전환을 유도한다(INV-4).
+     */
+    fun replan(input: ReplanInput): ScheduleAgentOutput
 }
+
+/** 재계획 범위(DEC-U4-3) — ai `ReplanScope` 어휘를 그대로 쓴다. */
+enum class ReplanScope { PARTIAL_SLOTS, FULL_DAY }
+
+/**
+ * 재계획 입력(정본 §3.1).
+ *
+ * [lockedSlotKeys] 가 이 타입의 핵심이다 — 완료된 방문지·시각 고정 슬롯·숙소 앵커는 **다시 짜도 그대로**여야
+ * 한다(INV-U4-04). 잠금을 빠뜨리면 이미 다녀온 곳이 일정에서 사라지거나 시각이 밀린다.
+ */
+@Suppress("LongParameterList")
+data class ReplanInput(
+    val tripId: UUID,
+    val itineraryId: UUID,
+    val scope: ReplanScope,
+    /** '지금 이후'의 기준점. PARTIAL_SLOTS 는 이 시각 이전 슬롯을 전부 잠근다. */
+    val fromInstant: Instant,
+    val targetDate: LocalDate,
+    /** null 허용 — 기준점 사다리(BR-U4-19)로 정한 좌표가 없을 수도 있다. */
+    val originLat: Double?,
+    val originLng: Double?,
+    val lockedSlotKeys: List<String>,
+    /** `i10` '왜' — 선호 **가중치** 입력이다. 후보 풀은 closed-set 그대로(INV-1). */
+    val reasons: List<String>,
+    /** `i10` '어떻게' — 같은 취지. */
+    val directives: List<String>,
+    val freeText: String?,
+    val excludedPoiIds: List<UUID>,
+    val requestMeta: RequestMeta,
+)
 
 /** 생성 방식(d11 추천 강도 분기). */
 /**

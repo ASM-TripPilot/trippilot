@@ -12,7 +12,10 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Query
 import org.springframework.stereotype.Component
 import java.time.Instant
 import java.util.UUID
@@ -53,6 +56,11 @@ class ReplanSessionEntity(
 
 interface ReplanSessionJpaRepository : JpaRepository<ReplanSessionEntity, UUID> {
     fun findFirstByTripIdAndStatusIn(tripId: UUID, statuses: Collection<String>): ReplanSessionEntity?
+
+    /** 행 잠금 조회 — 비동기 산출과 취소·재진입의 경합을 직렬화한다(`SELECT … FOR UPDATE`). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from ReplanSessionEntity s where s.sessionId = :sessionId")
+    fun findForUpdate(sessionId: UUID): ReplanSessionEntity?
 }
 
 @Component
@@ -77,6 +85,9 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
 
     override fun findById(sessionId: UUID): ReplanSession? =
         jpa.findById(sessionId).orElse(null)?.toDomain()
+
+    override fun findByIdForUpdate(sessionId: UUID): ReplanSession? =
+        jpa.findForUpdate(sessionId)?.toDomain()
 
     override fun findOpenByTrip(tripId: UUID): ReplanSession? =
         jpa.findFirstByTripIdAndStatusIn(tripId, OPEN_STATUSES)?.toDomain()
