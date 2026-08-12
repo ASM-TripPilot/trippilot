@@ -440,10 +440,12 @@ paths:
         - { name: q, in: query, required: true, schema: { type: string } }
       responses:
         '200':
-          description: 좌표 후보
+          description: >
+            좌표 후보. **빈 배열 = 검색은 됐으나 결과 없음** — 벤더 장애(503)와 구분된다(BR-U1-23).
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/GeocodeCandidate' } }
+        '503': { $ref: '#/components/responses/PlaceSearchUnavailable' }
 
   /places:
     get:
@@ -1974,6 +1976,13 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     RateLimited:
       description: 요청 한도 초과
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    PlaceSearchUnavailable:
+      description: >
+        장소 검색 벤더를 호출하지 못함(`error.code=UPSTREAM_UNAVAILABLE`). 빈 결과와 달리 재입력으로 풀리지
+        않으므로 화면은 **핀 직접 지정 폴백**을 제시한다(BR-U1-23 · ADR-0011 침묵 실패 금지).
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
