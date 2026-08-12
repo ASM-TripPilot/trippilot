@@ -1,4 +1,4 @@
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 // h05·h07 전용 인라인 벡터 글리프(TripGlyphs/StayGlyphs/ExploreGlyphs 패턴 계승 · Figma 파일
 // 1MTF3dtptIrbg8gld5IdO2, 노드 1875:1083 · 1904:1083). 전부 Figma 벡터 path 실측이다.
@@ -41,8 +41,14 @@ export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
   );
 }
 
-// `고정` 칩 자물쇠(12) — Figma `1876:1089`.
-export function LockGlyph({ size = 12, testID }: GlyphProps) {
+// `고정` 칩 자물쇠(12) — Figma `1876:1089`. h25 는 primary-pale 칩이라 primary-text(기본),
+// h24 는 surface-strong(회색) 칩이라 `tone="muted"` 로 회색 자물쇠를 쓴다(같은 도형, 색만 스냅).
+export function LockGlyph({
+  size = 12,
+  tone = 'primaryText',
+  testID,
+}: GlyphProps & { tone?: CircleGlyphTone }) {
+  const stroke = tone === 'muted' ? MUTED : PRIMARY_TEXT;
   return (
     <Svg
       testID={testID}
@@ -53,17 +59,111 @@ export function LockGlyph({ size = 12, testID }: GlyphProps) {
     >
       <Path
         d="M9 5H3C2.44772 5 2 5.44772 2 6V9.5C2 10.0523 2.44772 10.5 3 10.5H9C9.55228 10.5 10 10.0523 10 9.5V6C10 5.44772 9.55228 5 9 5Z"
-        stroke={PRIMARY_TEXT}
+        stroke={stroke}
         strokeWidth={1.1}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M4 5V3.5C4 2.96957 4.21071 2.46086 4.58579 2.08579C4.96086 1.71071 5.46957 1.5 6 1.5C6.53043 1.5 7.03914 1.71071 7.41421 2.08579C7.78929 2.46086 8 2.96957 8 3.5V5"
-        stroke={PRIMARY_TEXT}
+        stroke={stroke}
         strokeWidth={1.1}
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// h24 편집 카드 드래그 핸들 ⋮⋮(18) — Figma `1896:1083`. 6점(2열×3행) 회색. 롱프레스로 드래그를
+// 잡는 손잡이라 어포던스가 은은한 muted-soft 다(비고정 슬롯에만 붙는다).
+export function DragHandleGlyph({ size = 18, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+    >
+      <Circle cx={6.5} cy={4.5} r={1.4} fill={MUTED_SOFT} />
+      <Circle cx={11.5} cy={4.5} r={1.4} fill={MUTED_SOFT} />
+      <Circle cx={6.5} cy={9} r={1.4} fill={MUTED_SOFT} />
+      <Circle cx={11.5} cy={9} r={1.4} fill={MUTED_SOFT} />
+      <Circle cx={6.5} cy={13.5} r={1.4} fill={MUTED_SOFT} />
+      <Circle cx={11.5} cy={13.5} r={1.4} fill={MUTED_SOFT} />
+    </Svg>
+  );
+}
+
+// h24 편집 카드 삭제 휴지통(18) — Figma `1896:1083`. 비고정 슬롯 우상단. 회색 muted.
+export function TrashGlyph({ size = 18, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+    >
+      <Path
+        d="M3 5H15"
+        stroke={MUTED}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M7 5V3.5C7 3.22386 7.22386 3 7.5 3H10.5C10.7761 3 11 3.22386 11 3.5V5"
+        stroke={MUTED}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4.5 5L4.95 14C4.97761 14.5523 5.43318 15 5.98613 15H12.0139C12.5668 15 13.0224 14.5523 13.05 14L13.5 5"
+        stroke={MUTED}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M7.5 8V12"
+        stroke={MUTED}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M10.5 8V12"
+        stroke={MUTED}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+// h24 [장소 추가] 버튼 플러스(18) — Figma `1896:1083`. 버튼 글자와 같은 ink.
+export function PlusGlyph({ size = 18, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+    >
+      <Path
+        d="M9 3.75V14.25"
+        stroke={INK}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M3.75 9H14.25"
+        stroke={INK}
+        strokeWidth={1.8}
+        strokeLinecap="round"
       />
     </Svg>
   );
