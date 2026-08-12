@@ -11,6 +11,8 @@ description: "TripPilot 백엔드(Kotlin·Spring·Gradle) 검증 절차 — 빌�
 
 ## 게이트 순서
 
+**모든 `./gradlew` 명령은 `backend/` 에서 실행한다.** 루트에서 돌리면 래퍼가 없다.
+
 작업 규모와 무관하게 **아래 순서**로 올라간다. 위 단계가 빨간데 아래로 가지 않는다 — 아래에서 나는 실패는
 원인이 섞여 진단이 몇 배로 비싸진다.
 
@@ -20,6 +22,7 @@ description: "TripPilot 백엔드(Kotlin·Spring·Gradle) 검증 절차 — 빌�
 | 2. 모듈 테스트 | `./gradlew :modules:<m>:test` | 도메인·애플리케이션 로직 |
 | 3. 역검증 | 아래 절차 | **가드·검증·불변식을 추가했다면 필수** |
 | 4. 실 DB IT | `./gradlew :app:test --tests "*<X>IT*"` | 스키마·제약·동시성을 건드렸다면 |
+| 4b. 구조·계약 | `./gradlew :app:test --tests "*ArchitectureRulesTest*" --tests "*KonsistRulesTest*" --tests "*OpenApiContractIT*"` | 모듈 경계(R1)·엔드포인트를 건드렸다면. 전체 빌드에 포함되지만 빨리 보고 싶을 때 |
 | 5. 전체 빌드 | `./gradlew build --no-build-cache --rerun-tasks` | **커밋·PR 전 항상** |
 | 6. 실 AI 왕복 | 아래 절차 | AI 경계(`ScheduleAgentPort`·어댑터·와이어 DTO)를 건드렸다면 |
 
@@ -33,19 +36,25 @@ description: "TripPilot 백엔드(Kotlin·Spring·Gradle) 검증 절차 — 빌�
 "BUILD SUCCESSFUL"을 낸다.** 실측으로 clean 직후 build 가 1초 만에 끝난 적이 있다 — 그때 보고한 "전체 통과"는
 아무것도 검증하지 않은 값이었다.
 
-통과를 보고할 때는 **테스트 수를 함께 센다**. 수가 갑자기 줄었으면 무언가가 실행되지 않은 것이다:
+통과를 보고할 때는 **테스트 수를 함께 센다**. 수가 갑자기 줄었으면 무언가가 실행되지 않은 것이다.
+
+`backend/` 에서 실행한다. 아래는 깊이를 고정하지 않고 훑으므로 루트에서 돌려도 같은 값이 나온다 —
+글롭 깊이를 박으면 모듈 결과를 빠뜨린 채 **작은 숫자를 태연히 내놓는다**(실측으로 걸렸다):
 
 ```bash
 python3 - <<'EOF'
-import glob,re
-tot=fail=0
-for f in glob.glob("*/build/test-results/test/*.xml")+glob.glob("*/*/build/test-results/test/*.xml"):
-    h=open(f).read(2000)
-    m=re.search(r'tests="(\d+)".*?failures="(\d+)".*?errors="(\d+)"',h)
-    if m: tot+=int(m.group(1)); fail+=int(m.group(2))+int(m.group(3))
-print("tests",tot,"failures",fail)
+import re
+from pathlib import Path
+tot = fail = files = 0
+for f in Path(".").rglob("build/test-results/test/*.xml"):
+    m = re.search(r'tests="(\d+)".*?failures="(\d+)".*?errors="(\d+)"', f.read_text()[:2000])
+    if m:
+        files += 1; tot += int(m.group(1)); fail += int(m.group(2)) + int(m.group(3))
+print(f"suites={files} tests={tot} failures={fail}")
 EOF
 ```
+
+**결과 파일은 지우기 전까지 남는다** — 방금 돌린 빌드의 값인지 확인하려면 `--rerun-tasks` 로 돌린 직후에 센다.
 
 ## 역검증 — 그 테스트가 정말 그것을 지키는가
 
@@ -160,6 +169,13 @@ annotation 에 결제·러너 메시지가 있으면 코드 문제가 아니다.
 - 새 가드·검증마다 역검증 완료
 - 실패한 것을 실패했다고 적었는가 — 건너뛴 검증이 있으면 PR 본문에 명시한다
 - 새로 겪은 실패는 `docs/conventions/anti-patterns.md` 에 한 줄 추가했는가(가설 아니라 **재현·검증된 것만**)
+
+## 이 리포에 **없는** 것 — 있다고 가정하지 마라
+
+- **detekt · ktlint · spotless 가 없다**(실측 0건). 코드에 `@Suppress("LongParameterList")` 같은 detekt 규칙명이
+  9곳 있는데 **아무것도 억제하지 않는다** — 있다고 착각한 흔적이다. 새로 쓰지 마라.
+- 스타일 검사는 컴파일러 경고와 리뷰가 전부다. 구조 규칙만 ArchUnit·Konsist 로 강제된다.
+- 도입 여부는 별개 안건이다. 이 스킬은 **지금 있는 것**만 다룬다.
 
 ## 관련 문서
 
