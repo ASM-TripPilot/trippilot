@@ -24,7 +24,10 @@ data class TripDestination(val seq: Int, val region: String, val nights: Int)
 
 /**
  * 여행(C6). 앱 소유. 생성 시 취향 동결(preferenceSnapshot).
- * 불변식: INV-U1-11(end≥start) · INV-U1-12(국내강제) · INV-U1-14(Σnights≤기간) · INV-U1-13(상태 단방향).
+ * 불변식: INV-U1-11(end≥start) · INV-U1-14(Σnights≤기간) · INV-U1-13(상태 단방향).
+ *
+ * **국내강제(INV-U1-12)는 여기서 하지 않는다** — 지역명 문자열이 아니라 좌표로 판정해야 하고(BR-U1-35),
+ * 그러려면 외부 조회가 필요하다. 도메인은 순수해야 하므로 판정은 `TripService` 가 place-data 퍼사드로 수행한다.
  * 편집·삭제는 ENDED/삭제 후 불가.
  */
 class Trip private constructor(
@@ -72,12 +75,6 @@ class Trip private constructor(
     }
 
     companion object {
-        // 국내강제(INV-U1-12) 스텁 — 실제는 지오코딩 후 대한민국 영역 검증(place-data·Sprint 3).
-        val KNOWN_KOREAN_REGIONS = setOf(
-            "서울", "부산", "인천", "대구", "대전", "광주", "울산", "세종",
-            "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
-            "경주", "강릉", "여수", "속초", "전주", "춘천", "통영", "포항", "안동", "목포", "군산", "가평",
-        )
 
         fun create(
             accountId: UUID,
@@ -116,8 +113,6 @@ class Trip private constructor(
             if (endDate.isBefore(startDate)) errors += FieldError("endDate", "종료일은 시작일 이후여야 합니다.") // INV-U1-11
             if (party < 1) errors += FieldError("party", "인원은 1명 이상이어야 합니다.")
             if (destinations.isEmpty()) errors += FieldError("destinations", "목적지는 최소 1개입니다.")
-            destinations.firstOrNull { it.region !in KNOWN_KOREAN_REGIONS }
-                ?.let { errors += FieldError("destinations", "지금은 국내 여행만 지원해요: ${it.region}") } // INV-U1-12
             if (destinations.any { it.nights < 0 }) errors += FieldError("destinations", "박수는 0 이상입니다.")
             val tripNights = ChronoUnit.DAYS.between(startDate, endDate)
             if (destinations.sumOf { it.nights }.toLong() > tripNights) {
