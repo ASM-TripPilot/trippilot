@@ -79,14 +79,15 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
     """.trimIndent()
 
     @Test
-    fun `일정이 있으면 COLLECTING 으로 열린다 · 입력이 그대로 실린다`() {
+    fun `일정이 있으면 세션이 열리고 곧바로 산출로 넘어간다 · 입력이 그대로 실린다`() {
         val token = newToken()
         val tripId = createTrip(token)
         generate(token, tripId) shouldBe 201
 
         val (rc, body) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
         rc shouldBe 201
-        body["status"].asText() shouldBe "COLLECTING"
+        // 시트 제출과 동시에 산출이 시작된다 — COLLECTING 에 멈추면 화면이 영원히 로딩이다.
+        body["status"].asText() shouldBe "SOLVING"
         body["scope"].asText() shouldBe "PARTIAL_SLOTS"
         body["reasons"][0].asText() shouldBe "비가 와요"
         body["originEstimated"].asBoolean() shouldBe false // GPS 는 추정이 아니다
@@ -192,6 +193,66 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
         rc shouldBe 201
         body["originKind"].asText() shouldBe "STAY_ANCHOR" // 숙소 없는 여행이라 사다리 끝
         body["originEstimated"].asBoolean() shouldBe true  // 추정임을 밝힌다
+    }
+
+    /**
+     * TRIP — 재계획의 결말. 산출(비동기)이 끝나 초안이 나오고, 확정에서 **비로소** 일정이 바뀐다.
+     * `@Async` 라 완료 시점이 비결정적이므로 상태로 기다린다(고정 sleep 금지).
+     */
+    @Test
+    fun `산출이 끝나면 초안이 나오고 확정에서 일정이 바뀐다`() {
+        val token = newToken()
+        val tripId = createTrip(token)
+        generate(token, tripId) shouldBe 201
+        // 생성 2차가 끝나기 전에 기준을 잡으면, 2차가 채운 일자를 재계획이 바꾼 것으로 오독한다.
+        awaitGenerated(token, tripId)
+        // **일자·슬롯**만 비교한다 — 응답 전체를 비교하면 그 사이 생성 세션이 닫히며(generationSessionId→null)
+        // 계획과 무관한 필드 때문에 실패한다. INV-U4-05 가 지키는 것은 계획이다.
+        val before = call(HttpMethod.GET, "/api/v1/trips/$tripId/itinerary", token).second["days"]
+
+        val sessionId = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
+            .second["sessionId"].asText()
+        val settled = awaitSettled(token, tripId, sessionId)
+
+        // 확정 전에는 일정이 그대로다(INV-U4-05).
+        call(HttpMethod.GET, "/api/v1/trips/$tripId/itinerary", token).second["days"] shouldBe before
+
+        when (settled["status"].asText()) {
+            "DRAFT" -> {
+                val (rc, applied) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions/$sessionId/apply", token)
+                rc shouldBe 200
+                applied["status"].asText() shouldBe "APPLIED"
+                // 두 번 확정하면 409 — 같은 초안이 두 번 반영되면 안 된다.
+                call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions/$sessionId/apply", token).first shouldBe 409
+            }
+            // 후보풀이 얕으면 대안이 없을 수 있다 — 그때도 확정은 막혀야 한다(빈 하루 확정 금지).
+            "NO_SOLUTION", "FAILED" ->
+                call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions/$sessionId/apply", token).first shouldBe 409
+            else -> error("산출이 끝나지 않았습니다: $settled")
+        }
+    }
+
+    /** 생성 2차(@Async)가 끝날 때까지 — 고정 sleep 대신 상태로 기다린다. */
+    private fun awaitGenerated(token: String, tripId: String) {
+        val deadline = System.nanoTime() + java.time.Duration.ofSeconds(20).toNanos()
+        while (System.nanoTime() < deadline) {
+            val state = call(HttpMethod.GET, "/api/v1/trips/$tripId/itinerary", token).second["generationState"].asText()
+            if (state != "PARTIAL") return
+            Thread.sleep(50)
+        }
+        error("생성이 기한 내 끝나지 않았습니다.")
+    }
+
+    /** 열린 상태(COLLECTING·SOLVING)를 벗어날 때까지 폴링 — 실 클라이언트가 하는 일과 같다. */
+    private fun awaitSettled(token: String, tripId: String, sessionId: String): JsonNode {
+        val deadline = System.nanoTime() + java.time.Duration.ofSeconds(20).toNanos()
+        var last = json.createObjectNode() as JsonNode
+        while (System.nanoTime() < deadline) {
+            last = call(HttpMethod.GET, "/api/v1/trips/$tripId/replan-sessions/$sessionId", token).second
+            if (last["status"].asText() !in setOf("COLLECTING", "SOLVING")) return last
+            Thread.sleep(50)
+        }
+        error("재계획 산출이 기한 내 끝나지 않았습니다. 마지막 상태=$last")
     }
 
     @Test

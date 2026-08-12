@@ -49,6 +49,8 @@ class ReplanSessionServiceTest : StringSpec({
             stored += it
         }
         override fun findById(sessionId: UUID) = stored.firstOrNull { it.sessionId == sessionId }
+        // 단일 스레드 테스트라 잠금은 의미가 없다 — 경합 자체는 실 DB IT 가 검증한다.
+        override fun findByIdForUpdate(sessionId: UUID) = findById(sessionId)
         override fun findOpenByTrip(tripId: UUID) = stored.firstOrNull { it.tripId == tripId && it.isOpen }
     }
 
@@ -93,7 +95,9 @@ class ReplanSessionServiceTest : StringSpec({
     fun service(sessions: Sessions, clock: Clock, hasItinerary: Boolean = true) =
         ReplanSessionService(
             trips, itineraries(hasItinerary), sessions, origins,
-            VisitCheckService(trips, Visits(clock), clock), emptySurfaces, clock,
+            VisitCheckService(trips, Visits(clock), clock), emptySurfaces,
+            ReplanSolver(sessions, VisitCheckService(trips, Visits(clock), clock), FakeReplans(), NOOP_TX, clock),
+            FakeReplans(), CapturingReplanEvents(), clock,
         )
 
     val gpsOrigin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56)
@@ -107,11 +111,12 @@ class ReplanSessionServiceTest : StringSpec({
         triggerId = null,
     )
 
-    "여행 기간 안이면 COLLECTING 으로 열린다 — 입력이 그대로 실린다" {
+    "여행 기간 안이면 세션이 열리고 곧바로 산출로 넘어간다 — 입력이 그대로 실린다" {
         val sessions = Sessions()
         val s = service(sessions, clockAt("2026-08-11T00:00:00Z")).start(acc, tripId, request())
 
-        s.status shouldBe ReplanStatus.COLLECTING
+        // 시트 제출과 동시에 산출이 시작된다 — COLLECTING 에 멈추면 화면이 영원히 로딩이다.
+        s.status shouldBe ReplanStatus.SOLVING
         s.itineraryId shouldBe itineraryId
         s.scope shouldBe ReplanScope.PARTIAL_SLOTS
         s.reasons shouldContainExactly listOf("비가 와요")
@@ -129,7 +134,7 @@ class ReplanSessionServiceTest : StringSpec({
 
         sessions.findById(first.sessionId)!!.status shouldBe ReplanStatus.CANCELED
         sessions.findById(first.sessionId)!!.closedAt shouldBe Instant.parse("2026-08-11T00:00:00Z")
-        second.status shouldBe ReplanStatus.COLLECTING
+        second.status shouldBe ReplanStatus.SOLVING
         sessions.stored.count { it.isOpen } shouldBe 1 // 언제나 하나
         sessions.stored.size shouldBe 2                // 이전 시도는 이력으로 남는다
     }
@@ -146,7 +151,7 @@ class ReplanSessionServiceTest : StringSpec({
     "구간 판정은 KST 기준 — UTC 로 보면 하루가 어긋난다" {
         // 08-09T16:00Z = KST 08-10 01:00 → 여행 첫날
         service(Sessions(), clockAt("2026-08-09T16:00:00Z")).start(acc, tripId, request())
-            .status shouldBe ReplanStatus.COLLECTING
+            .status shouldBe ReplanStatus.SOLVING
     }
 
     "다시 짤 일정이 없으면 404 — 그건 재계획이 아니라 생성이다" {
