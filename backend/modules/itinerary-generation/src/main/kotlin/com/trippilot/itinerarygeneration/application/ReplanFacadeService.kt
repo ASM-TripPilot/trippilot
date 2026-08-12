@@ -6,6 +6,7 @@ import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanFacade
 import com.trippilot.itinerarygeneration.api.ReplanProposal
 import com.trippilot.itinerarygeneration.api.ReplanSlot
+import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -17,7 +18,10 @@ import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.VisitSlot
+import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
+import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.trip.api.TripGenerationContext
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -36,6 +40,7 @@ class ReplanFacadeService(
     private val trips: TripFacade,
     private val itineraries: ItineraryRepository,
     private val scheduleAgent: ScheduleAgentPort,
+    private val baseAnchors: BaseAnchorFacade,
     private val revisions: ItineraryRevisionService,
     private val clock: Clock,
 ) : ReplanFacade {
@@ -44,16 +49,21 @@ class ReplanFacadeService(
     @Transactional(readOnly = true)
     override fun propose(command: ReplanCommand): ReplanProposal? {
         val current = ownedItinerary(command.accountId, command.tripId)
+        // 목적지는 여행에서 얻는다 — 빈 목록으로 보내면 상대가 422 로 거부한다(실측).
+        val ctx = trips.findGenerationContext(command.accountId, command.tripId) ?: throw ResourceNotFound()
+        // 기준점이 없으면 상대가 후보 풀을 매달 곳이 없다 — 숙소 앵커로 채운다(BR-U4-19 사다리의 마지막 단).
+        val origin = groundingPoint(command, ctx)
         val output = scheduleAgent.replan(
             ReplanInput(
                 tripId = command.tripId,
                 itineraryId = current.itineraryId,
                 scope = if (command.fullDay) ReplanScope.FULL_DAY else ReplanScope.PARTIAL_SLOTS,
+                destinations = ctx.destinations,
                 fromInstant = command.fromInstant,
                 targetDate = command.targetDate,
-                originLat = command.originLat,
-                originLng = command.originLng,
-                lockedSlotKeys = lockedKeys(current, command),
+                originLat = origin?.first,
+                originLng = origin?.second,
+                lockedBlocks = lockedBlocks(current, command),
                 reasons = command.reasons,
                 directives = command.directives,
                 freeText = command.freeText,
@@ -75,6 +85,21 @@ class ReplanFacadeService(
     }
 
     /**
+     * 후보 풀을 매달 좌표. 현재 위치가 없으면 그 날 숙소 앵커로 내려간다.
+     * 둘 다 없으면 **다시 짤 근거가 없다** — 조용히 빈 결과를 주지 않고 실패로 올려 수동 편집으로 넘긴다(INV-4).
+     */
+    private fun groundingPoint(command: ReplanCommand, ctx: TripGenerationContext): Pair<Double, Double>? {
+        command.originLat?.let { lat -> command.originLng?.let { lng -> return lat to lng } }
+        val anchor = baseAnchors.findStayNightAnchors(command.tripId, ctx.startDate, ctx.endDate)
+            .firstOrNull { it.date == command.targetDate }
+            ?: throw ScheduleAgentCallFailed(
+                "NO_GROUNDING_POINT", retryable = false,
+                message = "현재 위치도 숙소 거점도 없어 재계획 기준점을 정할 수 없습니다.",
+            )
+        return anchor.lat to anchor.lng
+    }
+
+    /**
      * 다시 짜도 그대로여야 하는 슬롯(INV-U4-04):
      * - **완료** — 이미 다녀왔다. 지우면 실적과 계획이 어긋난다(C10 이 알려 준다)
      * - **시각 고정** — 예약처럼 시각이 정해진 것(HC3)
@@ -82,13 +107,24 @@ class ReplanFacadeService(
      *
      * 잠금을 빠뜨리면 이미 다녀온 곳이 일정에서 사라지거나 예약 시각이 밀린다.
      */
-    private fun lockedKeys(current: Itinerary, command: ReplanCommand): List<String> {
-        val day = current.days.firstOrNull { it.date == command.targetDate } ?: return command.completedSlotKeys
+    private fun lockedBlocks(current: Itinerary, command: ReplanCommand): List<FixedBlock> {
+        val day = current.days.firstOrNull { it.date == command.targetDate } ?: return emptyList()
         val now = LocalTime.ofInstant(command.fromInstant, TRAVEL_ZONE)
-        val fromDay = day.slots
-            .filter { it.isFixed || (!command.fullDay && it.startAt < now) }
-            .map { "${command.targetDate}#${it.sourcePoiId}" }
-        return (command.completedSlotKeys + fromDay).distinct()
+        val completed = command.completedSlotKeys.toSet()
+        return day.slots
+            .filter {
+                it.isFixed ||
+                    (!command.fullDay && it.startAt < now) ||
+                    "${command.targetDate}#${it.sourcePoiId}" in completed
+            }
+            // 시각을 함께 싣는다 — 시각 없는 고정 블록은 상대가 거부한다(계약 M1).
+            .map { FixedBlock(it.sourcePoiId, command.targetDate, it.startAt, dwellMinutes(it.startAt, it.endAt)) }
+    }
+
+    /** 체류 분 — 자정 넘김이면 하루를 더한다(HC4). */
+    private fun dwellMinutes(start: LocalTime, end: LocalTime): Int {
+        val minutes = java.time.Duration.between(start, end).toMinutes()
+        return (if (minutes < 0) minutes + MINUTES_PER_DAY else minutes).toInt()
     }
 
     /**
@@ -141,5 +177,6 @@ class ReplanFacadeService(
 
         /** 여행 "지금"은 사용자가 있는 곳의 시각이다(서버 UTC 아님). */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
+        private const val MINUTES_PER_DAY = 24 * 60L
     }
 }

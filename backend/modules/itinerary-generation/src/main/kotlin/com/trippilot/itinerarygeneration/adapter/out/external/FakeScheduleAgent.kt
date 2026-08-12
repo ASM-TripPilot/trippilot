@@ -108,9 +108,10 @@ class FakeScheduleAgent(
      * 잠금 판정은 호출측(C8)이 이미 끝냈다. 여기서는 잠긴 POI 를 후보에서 빼 중복 배치만 막는다.
      */
     override fun replan(input: ReplanInput): ScheduleAgentOutput {
-        val lockedPois = input.lockedSlotKeys.mapNotNull { it.substringAfter('#').toUuidOrNull() }.toSet()
-        val excluded = input.excludedPoiIds.toSet() + lockedPois
-        val candidates = candidatePool.resolve(Area.Region(REPLAN_REGION_HINT), emptySet())
+        val excluded = input.excludedPoiIds.toSet() + input.lockedBlocks.map { it.poiId }
+        val candidates = input.destinations
+            .flatMap { candidatePool.resolve(Area.Region(it), emptySet()) }
+            .distinctBy { it.poiId }
             .filter { it.poiId !in excluded }
         // 잠긴 시각 이후부터 채운다 — 지금이 오후면 오전 자리를 다시 만들지 않는다.
         val startAt = LocalTime.ofInstant(input.fromInstant, TRAVEL_ZONE).plusMinutes(REPLAN_LEAD_MIN.toLong())
@@ -128,8 +129,6 @@ class FakeScheduleAgent(
         )
     }
 
-    private fun String.toUuidOrNull() = runCatching { java.util.UUID.fromString(this) }.getOrNull()
-
     private fun search(input: SlotCandidatesInput, radiusM: Int, excluded: Set<java.util.UUID>) =
         candidatePool.resolve(Area.Radius(input.centerLat, input.centerLng, radiusM.toDouble()), emptySet())
             .filter { it.poiId !in excluded }
@@ -142,9 +141,6 @@ class FakeScheduleAgent(
         private const val DEFAULT_RADIUS_M = 3_000
         private const val WIDENED_RADIUS_M = 12_000
         private const val MAX_CANDIDATES = 5
-
-        /** Fake 는 지역을 모른다 — 데모 후보풀이 제주라 그 지역으로 본다(실 판단은 AI 몫). */
-        private const val REPLAN_REGION_HINT = "제주"
         /** 지금 당장이 아니라 조금 뒤부터 — 이동 시간을 아예 0 으로 두면 화면이 비현실적으로 보인다. */
         private const val REPLAN_LEAD_MIN = 30
         private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")

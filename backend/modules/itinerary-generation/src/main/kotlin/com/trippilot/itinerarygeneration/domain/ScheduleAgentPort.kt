@@ -49,13 +49,23 @@ data class ReplanInput(
     val tripId: UUID,
     val itineraryId: UUID,
     val scope: ReplanScope,
+    /**
+     * 여행 목적지. **비우면 안 된다** — 상대 계약이 최소 1건을 요구해 빈 목록은 422 다(실측, 실 AI 왕복).
+     * 후보 지역 판단의 입력이기도 하다.
+     */
+    val destinations: List<String>,
     /** '지금 이후'의 기준점. PARTIAL_SLOTS 는 이 시각 이전 슬롯을 전부 잠근다. */
     val fromInstant: Instant,
     val targetDate: LocalDate,
     /** null 허용 — 기준점 사다리(BR-U4-19)로 정한 좌표가 없을 수도 있다. */
     val originLat: Double?,
     val originLng: Double?,
-    val lockedSlotKeys: List<String>,
+    /**
+     * 잠긴 슬롯 — **시각을 포함한다**. 상대는 시각 없는 고정 블록을 거부하므로(계약 M1, 실측 422)
+     * 키 문자열만으로는 보낼 수 없다. 정본이 `lockedSlotKeys: List<String>` 로 적은 자리지만,
+     * 그 모양은 실 계약과 만나면 성립하지 않는다.
+     */
+    val lockedBlocks: List<FixedBlock>,
     /** `i10` '왜' — 선호 **가중치** 입력이다. 후보 풀은 closed-set 그대로(INV-1). */
     val reasons: List<String>,
     /** `i10` '어떻게' — 같은 취지. */

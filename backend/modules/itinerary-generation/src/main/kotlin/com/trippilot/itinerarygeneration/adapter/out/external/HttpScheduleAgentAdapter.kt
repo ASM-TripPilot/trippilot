@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.adapter.out.external
 
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
+import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
@@ -117,18 +118,19 @@ class HttpScheduleAgentAdapter(
      * 세션에 남아 이력이 되지만 **이번 산출에는 반영되지 않는다** — 반영하려면 AI 쪽 요청 계약에 필드가 먼저 생겨야 한다.
      */
     override fun replan(input: ReplanInput): ScheduleAgentOutput {
-        val locked = input.lockedSlotKeys.mapNotNull { key ->
-            val poiId = runCatching { UUID.fromString(key.substringAfter('#')) }.getOrNull() ?: return@mapNotNull null
-            // 시각을 모르는 잠금은 날짜만 고정한다 — 상대가 HC3 로 자리를 비워 둔다.
-            FixedBlock(poiId, input.targetDate, null, null)
-        }
         val generateInput = ScheduleAgentInput(
             tripId = input.tripId,
             generationMode = GenerationMode.FULLY_AI,
-            tripContext = TripContext(emptyList(), input.targetDate, input.targetDate, null, null),
-            anchors = emptyList(),
-            timeWindows = listOf(TimeWindow(input.targetDate, replanStart(input), DAY_END)),
-            fixedBlocks = locked,
+            tripContext = TripContext(input.destinations, input.targetDate, input.targetDate, null, null),
+            // 상대는 후보 풀을 좌표에 매단다 — 앵커가 없으면 422 다(실측). 재계획의 기준점은 **현재 위치**이고,
+            // 없으면 호출측이 숙소 앵커로 채워 준다(BR-U4-19 사다리).
+            anchors = listOfNotNull(
+                input.originLat?.let { lat -> input.originLng?.let { lng -> DayAnchor(input.targetDate, lat, lng) } },
+            ),
+            // 창은 **하루 전체**다. '지금 이후만' 은 창을 좁혀서가 아니라 **잠금**으로 표현한다(정본 §3.1) —
+            // 창을 지금부터로 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 모순으로 거부한다(실측 409).
+            timeWindows = listOf(TimeWindow(input.targetDate, DAY_START, DAY_END)),
+            fixedBlocks = input.lockedBlocks,
             preferenceProfile = NEUTRAL_PREFERENCES,
             recommendationStrength = null,
             requestMeta = input.requestMeta,
@@ -141,10 +143,6 @@ class HttpScheduleAgentAdapter(
             throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 재계획 응답 스키마 불일치: ${e.message}", cause = e)
         }
     }
-
-    /** '지금 이후'만 다시 짠다 — 오늘 전체라도 이미 지난 시각을 다시 채우지는 않는다. */
-    private fun replanStart(input: ReplanInput) =
-        java.time.LocalTime.ofInstant(input.fromInstant, TRAVEL_ZONE)
 
     /**
      * 미개통 — AI 에 아직 슬롯 후보 경로가 없다(generate·validate·repair 3종만 열려 있음).
@@ -178,8 +176,7 @@ class HttpScheduleAgentAdapter(
         private const val MAX_ERROR_BODY_BYTES = 8 * 1024 // 오류 페이지가 커도 힙을 물지 않게 상한
         private val ERROR_MAPPER = ScheduleAgentConfiguration.boundaryMapper()
 
-        /** 여행 "지금"은 사용자가 있는 곳의 시각이다(서버 UTC 아님). */
-        private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
+        private val DAY_START: java.time.LocalTime = java.time.LocalTime.of(9, 0)
         private val DAY_END: java.time.LocalTime = java.time.LocalTime.of(21, 0)
 
         /**

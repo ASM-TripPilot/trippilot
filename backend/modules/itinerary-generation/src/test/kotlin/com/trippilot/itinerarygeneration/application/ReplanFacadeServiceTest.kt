@@ -11,6 +11,11 @@ import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.savedaccommodation.api.BaseAnchorFacade
+import com.trippilot.trip.api.TripFacade
+import com.trippilot.trip.api.TripGenerationContext
+import com.trippilot.trip.api.TripPeriod
+import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.SolveMode
@@ -99,13 +104,25 @@ class ReplanFacadeServiceTest : StringSpec({
         DaySchedule(today, pois.map { VisitSlotDisplay(it, LocalTime.parse("16:00"), LocalTime.parse("17:00"), false, null, false) }),
     )
 
+    // 목적지가 있어야 재계획을 보낼 수 있다 — 빈 목록은 상대가 422 로 거부한다(실측).
+    val replanTrips = object : TripFacade {
+        override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(today, today.plusDays(1))
+        override fun findGenerationContext(accountId: UUID, tripId: UUID) =
+            TripGenerationContext(today, today.plusDays(1), listOf("제주"), "친구", 500_000, emptyList())
+    }
+
+    // 재계획 기준점은 테스트에서 항상 현재 위치로 채운다 — 앵커 사다리까지 안 내려간다.
+    val noAnchors = object : BaseAnchorFacade {
+        override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
+    }
+
     /** 리비전 서비스를 **한 번만** 만들어 공유한다 — 다시 만들면 다른 저장소를 보게 되어 비교가 어긋난다. */
     class Fx(val svc: ReplanFacadeService, val repo: ReplanItineraries, val revisions: ItineraryRevisionService)
 
     fun fixture(agent: Agent, repo: ReplanItineraries = ReplanItineraries()): Fx {
         repo.byTrip[trip] = itinerary()
-        val revisions = genRevisions(repo, stubTrips, clock)
-        return Fx(ReplanFacadeService(stubTrips, repo, agent, revisions, clock), repo, revisions)
+        val revisions = genRevisions(repo, replanTrips, clock)
+        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, clock), repo, revisions)
     }
 
     fun command(fullDay: Boolean = false, completed: List<String> = emptyList()) = ReplanCommand(
@@ -121,7 +138,9 @@ class ReplanFacadeServiceTest : StringSpec({
         svc.propose(command(fullDay = false))
 
         // 09:00 은 지나갔고 12:00 은 고정 — 18:00 만 다시 짤 대상이다.
-        agent.inputs.single().lockedSlotKeys shouldContainExactly listOf("$today#$morning", "$today#$fixedNoon")
+        // 시각을 함께 실어야 상대가 받는다(계약 M1) — 키만 보내면 422 다.
+        agent.inputs.single().lockedBlocks.map { it.poiId to it.start } shouldContainExactly
+            listOf(morning to LocalTime.parse("09:00"), fixedNoon to LocalTime.parse("12:00"))
     }
 
     "오늘 전체를 다시 짤 때 — 시각 고정만 잠긴다(지나간 것은 푼다)" {
@@ -130,7 +149,7 @@ class ReplanFacadeServiceTest : StringSpec({
 
         svc.propose(command(fullDay = true))
 
-        agent.inputs.single().lockedSlotKeys shouldContainExactly listOf("$today#$fixedNoon")
+        agent.inputs.single().lockedBlocks.map { it.poiId } shouldContainExactly listOf(fixedNoon)
     }
 
     // 완료 실적은 C10 만 안다 — 전달이 끊기면 이미 다녀온 곳이 재계획에서 사라진다.
@@ -140,7 +159,7 @@ class ReplanFacadeServiceTest : StringSpec({
 
         svc.propose(command(fullDay = true, completed = listOf("$today#$evening")))
 
-        agent.inputs.single().lockedSlotKeys shouldContainExactly listOf("$today#$evening", "$today#$fixedNoon")
+        agent.inputs.single().lockedBlocks.map { it.poiId } shouldContainExactly listOf(fixedNoon, evening)
     }
 
     "산출은 일정에 손대지 않는다(INV-U4-05)" {
