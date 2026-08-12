@@ -72,6 +72,10 @@ export interface ItineraryEditScreenProps {
   onDeleteSlot: (poiId: string) => void;
   /** DraggableFlatList onDragEnd.data 포워딩 — 고정 재고정은 스토어가 한다. */
   onReorder: (data: ItineraryDaysItemSlotsItem[]) => void;
+  /** 저장 CTA press 핸들러(선택) — 미전달이면 무해 no-op(슬라이스1 무동작 보존). */
+  onSave?: () => void;
+  /** non-null 이면 저장 오류 인라인 노트를 그린다 — 카드 리스트 밖·저장 버튼 위(순서 심판 오계수 회피). */
+  saveError?: string | null;
 }
 
 function SlotCard({
@@ -241,6 +245,8 @@ export function ItineraryEditScreen({
   onBack,
   onDeleteSlot,
   onReorder,
+  onSave,
+  saveError,
 }: ItineraryEditScreenProps): ReactElement {
   const activeDate = days[activeDayIndex]?.date ?? '';
 
@@ -350,11 +356,23 @@ export function ItineraryEditScreen({
           </View>
         </NestableScrollContainer>
 
-        {/* 자리만 어포던스 — 저장 배선은 슬라이스2. 콜백 없이 렌더(press 무해). */}
-        <View className="w-full px-lg pb-lg pt-sm">
+        {/* 저장 배선(슬라이스2). 오류 노트는 카드 리스트 밖·저장 버튼 위에 둔다(cardOrder 오계수 회피, h11 선례). */}
+        <View className="w-full gap-sm px-lg pb-lg pt-sm">
+          {saveError === null || saveError === undefined ? null : (
+            <View
+              testID="itinerary-edit-save-error"
+              className="w-full flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
+            >
+              <AlertCircleGlyph size={20} tone="primaryText" />
+              <Text className="flex-1 font-noto text-label text-primary-text">
+                {saveError}
+              </Text>
+            </View>
+          )}
           <Pressable
             testID="itinerary-edit-save"
             accessibilityRole="button"
+            onPress={onSave}
             className="h-12 w-full items-center justify-center rounded-button bg-primary"
           >
             <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
