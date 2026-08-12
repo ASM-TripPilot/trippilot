@@ -115,10 +115,16 @@ class FakeScheduleAgent(
             .filter { it.poiId !in excluded }
         // 잠긴 시각 이후부터 채운다 — 지금이 오후면 오전 자리를 다시 만들지 않는다.
         val startAt = LocalTime.ofInstant(input.fromInstant, TRAVEL_ZONE).plusMinutes(REPLAN_LEAD_MIN.toLong())
-        val slots = candidates.take(PICKS_PER_DAY).mapIndexed { i, gp ->
-            val s = startAt.plusHours((i * SLOT_GAP_HOURS).toLong())
-            VisitSlotDisplay(gp.poiId, s, s.plusHours(1), false, null, isFixed = false)
-        }
+        // **그 날 안에 끝나는 것만** 만든다. 늦은 시각에 기계적으로 3시간씩 더하면 자정을 넘어
+        // `endAt < startAt` 인 슬롯이 나오고, 도메인 검증에 걸려 사용자에게 500 이 된다
+        // (실측: 19:33 KST 에 CI 만 실패, 18:44 에 돌린 로컬은 통과 — 시각 의존 결함).
+        val slots = candidates.take(PICKS_PER_DAY).mapIndexed { i, gp -> i to gp }
+            .mapNotNull { (i, gp) ->
+                val s = startAt.plusHours((i * SLOT_GAP_HOURS).toLong())
+                val e = s.plusHours(1)
+                // 시각이 되감겼으면(자정 넘김) 그 뒤로는 오늘 자리가 없다.
+                if (s < startAt || e <= s) null else VisitSlotDisplay(gp.poiId, s, e, false, null, isFixed = false)
+            }
         return ScheduleAgentOutput(
             days = listOf(DaySchedule(input.targetDate, slots)),
             day1ReadyAt = clock.instant(),
