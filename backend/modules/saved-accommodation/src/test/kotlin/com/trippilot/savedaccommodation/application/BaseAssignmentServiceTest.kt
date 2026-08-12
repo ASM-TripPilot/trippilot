@@ -13,7 +13,9 @@ import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -96,10 +98,39 @@ class BaseAssignmentServiceTest : StringSpec({
         shouldThrow<ValidationFailed> { svc.assign(acc, t.second, cmd(unconfirmed)) }
     }
 
-    "여행 기간 밖 구간은 400(INV-U1-15)" {
+    /**
+     * 기간 밖은 거부한다(INV-U1-15) — 서버가 여행 기간을 늘려 주지 않는다(US-TRIP-03 예외는 클라 2단계).
+     * 그래서 **어느 쪽이 왜 벗어났는지**가 오류에 담겨야 화면이 "기간을 늘릴까요?"를 그릴 수 있다.
+     */
+    "여행 종료일을 넘긴 구간은 400 — 종료일 칸에 여행 종료일을 담아 알린다" {
         val (svc, stays, t) = fixture()
         val s = stay(stays, acc)
-        shouldThrow<ValidationFailed> { svc.assign(acc, t.second, cmd(s, "2026-08-01", "2026-08-05")) }
+
+        val thrown = shouldThrow<ValidationFailed> { svc.assign(acc, t.second, cmd(s, "2026-08-01", "2026-08-05")) }
+
+        val error = thrown.fieldErrors.single()
+        error.field shouldBe "dateTo" // 시작일 칸을 지목하면 사용자가 엉뚱한 값을 고친다
+        error.reason shouldContain "2026-08-04" // 화면이 "여행은 8/4까지예요"를 그릴 근거
+    }
+
+    "여행 시작일보다 앞선 구간은 시작일 칸으로 알린다" {
+        val (svc, stays, t) = fixture()
+        val s = stay(stays, acc)
+
+        val thrown = shouldThrow<ValidationFailed> { svc.assign(acc, t.second, cmd(s, "2026-07-30", "2026-08-02")) }
+
+        val error = thrown.fieldErrors.single()
+        error.field shouldBe "dateFrom"
+        error.reason shouldContain "2026-08-01"
+    }
+
+    "양쪽 다 벗어나면 둘 다 알린다 — 하나씩 고치고 다시 막히지 않게" {
+        val (svc, stays, t) = fixture()
+        val s = stay(stays, acc)
+
+        val thrown = shouldThrow<ValidationFailed> { svc.assign(acc, t.second, cmd(s, "2026-07-30", "2026-08-09")) }
+
+        thrown.fieldErrors.map { it.field } shouldContainExactly listOf("dateFrom", "dateTo")
     }
 
     "이어붙은 구간 거점이면 커버리지 비차단" {

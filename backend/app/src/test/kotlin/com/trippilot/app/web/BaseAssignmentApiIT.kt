@@ -198,12 +198,24 @@ class BaseAssignmentApiIT : AbstractPostgresIntegrationTest() {
         call(HttpMethod.DELETE, "/api/v1/saved-stays/$stay", token).first shouldBe 409
     }
 
+    /**
+     * 기간 밖은 거부한다(INV-U1-15) — 서버가 여행 기간을 늘려 주지 않는다(US-TRIP-03 예외는 클라 2단계).
+     * 화면이 "여행은 8/4까지예요. 늘릴까요?"를 그리려면 **어느 칸이 왜 틀렸는지**가 응답에 있어야 한다.
+     */
     @Test
-    fun `여행 기간 밖 구간은 400`() {
+    fun `여행 기간 밖 구간은 400 — 어느 칸이 왜 틀렸는지 응답에 담긴다`() {
         val token = newToken()
         val trip = newTrip(token)
         val stay = newStay(token)
-        call(HttpMethod.POST, "/api/v1/trips/$trip/bases", token, assignBody(stay, "2026-08-01", "2026-08-05")).first shouldBe 400
+
+        val (rc, body) = call(
+            HttpMethod.POST, "/api/v1/trips/$trip/bases", token, assignBody(stay, "2026-08-01", "2026-08-05"),
+        )
+
+        rc shouldBe 400
+        val error = body["error"]["fields"][0]
+        error["field"].asText() shouldBe "dateTo"
+        error["reason"].asText().contains("2026-08-04") shouldBe true
     }
 
     @Test
