@@ -83,8 +83,11 @@ class SeedDemoScriptIT : AbstractPostgresIntegrationTest() {
         get("/trips/${tripOf("확정 완료")}/itinerary", token)["status"].asText() shouldBe "CONFIRMED"
 
         // s5 여행 중 — 오늘이 기간 안이고 방문 실적이 남아야 Plan-B 화면이 열린다.
+        //
+        // 날짜는 **여행지 기준(KST)** 으로 묻는다. 서버가 방문 실적을 그 기준으로 묶기 때문이다 —
+        // JVM 기본 존으로 물으면 UTC 러너에서 하루가 어긋나 빈 목록이 온다(실측: CI 16:15 UTC = KST 익일 01:15).
         val onTrip = tripOf("여행 중")
-        val today = java.time.LocalDate.now().toString()
+        val today = java.time.LocalDate.now(TRAVEL_ZONE).toString()
         assertThat(get("/trips/$onTrip/visits/days/$today", token)["visits"]).isNotEmpty()
 
         // s7 해소 후 생성 — 겹쳤지만 사용자가 골라 차단이 풀린 상태(TRIP-190 결말).
@@ -118,5 +121,8 @@ class SeedDemoScriptIT : AbstractPostgresIntegrationTest() {
         /** s1~s7 — 시나리오를 늘리면 여기도 함께 늘린다(개수가 조용히 줄면 이 테스트가 잡는다). */
         private const val SCENARIO_COUNT = 7
         private const val SCRIPT_TIMEOUT_SEC = 180L
+
+        /** 여행 "오늘"은 사용자가 있는 곳의 날짜지, 서버 UTC 날짜가 아니다. */
+        private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
     }
 }
