@@ -48,8 +48,10 @@ import {
   DraftScreen,
   type DraftScreenProps,
 } from '@/features/itinerary/ui/DraftScreen';
+import { ItineraryEditScreen } from '@/features/itinerary/ui/ItineraryEditScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
+import { SlotTimeSheet } from '@/features/itinerary/ui/SlotTimeSheet';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
@@ -1307,6 +1309,42 @@ const PREVIEW_STATES: PreviewState[] = [
         onBack={noop}
         onConfirm={noop}
       />
+    ),
+  },
+  // h24 일정 편집(TRIP-302) — 시각칩·삭제·"다른 후보" 어포던스가 있는 편집 화면. 시각칩을 누르면
+  // 아래 '시각 조정 시트' 가 열린다(프리뷰에선 둘을 각각 독립 진입으로 본다). 고정 슬롯(poi-b)은
+  // 시각칩에 onPress 가 안 붙어 조정이 안 열리는 것도 여기서 확인한다.
+  {
+    key: 'itinerary-edit',
+    label: '일정 편집 · h24(TRIP-302)',
+    login: null,
+    render: () => (
+      <ItineraryEditScreen
+        days={TIMELINE_PREVIEW_DAYS}
+        slots={TIMELINE_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        onSelectDay={noop}
+        onBack={noop}
+        onDeleteSlot={noop}
+        onReorder={noop}
+        onEditSlotTime={noop}
+        onSave={noop}
+      />
+    ),
+  },
+  {
+    key: 'itinerary-edit-time-sheet',
+    label: '시각 조정 시트 · h24(TRIP-302)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <SlotTimeSheet
+          startAt="10:15:00"
+          endAt="11:45:00"
+          onApply={noop}
+          onCancel={noop}
+        />
+      </View>
     ),
   },
   // h34 확정 읽기전용(TRIP-300) — 같은 데이터에 status=CONFIRMED 를 얹은 확정 얼굴. 확정 배너·
