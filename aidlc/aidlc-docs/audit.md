@@ -1003,3 +1003,26 @@ Step 1 FD 분석 — **재서술 금지 대상 8건** 식별(무발화 BR-U4-05�
 **Selection**: 사이클 [설계] 3-a에서 사용자가 정본 반영 후보 **4건 중 4건 전부 선택**. 그중 `aidlc/` 소관(B)은 이 2건뿐이고, 나머지 2건(진입점 파일 오기 · 후보 vs GET slot 스키마 혼동)은 Jira 서술·개발로그 관측으로만 남기고 이 파일에 쓰지 않았다.
 
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정(관측 추가)**. 정정 실행 주체: TRIP-302 슬라이스3 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260813-trip302-edit-sheets/01b_ouroboros_seed.md`(스코프 절 · "다른후보=필수 게이팅(Q2)·교체후 표시(Q4) 근사 필요, 장소추가=계약 공백 3중(Q3)" · D1 "3-a 맹점 ①, 정본 반영 대상") · `backend/docs/design/openapi.yaml:1287`·`:1379`(slot-candidates·slots 스키마 직접 조회). 이번 항목이 손댄 `aidlc/` 파일 = `construction/u3-ai-itinerary/functional-design/business-rules.md`(BR-U3-15 뒤 관측 블록) · `construction/u3-ai-itinerary/functional-design/domain-entities.md`(§1.3 뒤 관측 블록) + 이 `audit.md` append, 총 3파일(`git status aidlc/` 실측 일치). `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음 — 코드 구현 소급 기록은 리포 devlog·구조 지도 소관, [기록] 별도 처리).
+
+---
+
+## Post-Design Correction — U3 frontend-components.md 인라인 지도 모델 + 휴관칩 CONFIRMED null 계약 (TRIP-354 [기록] 반영)
+**Timestamp**: 2026-08-14T02:35:00Z
+
+**User Input**: TRIP-354(h25/h34 타임라인 Figma 풀디자인 정합) 사이클 [설계] 3-a에서 사용자가 "둘 다 반영"을 선택했다(오케스트레이터의 사이클 요약으로 [기록] 단계에 전달, `_workspace/20260813-trip354-timeline-full-design/01b_ouroboros_seed.md` "B. 정본 반영 선택" 절에 채택 항목 원문 기재) — ① **드리프트1**: 시간표/지도 세그먼트 토글 폐기(결정 D, 라이브 Figma h34가 지도를 상시 인라인으로 그림) → `frontend-components.md §1·§2·§4`를 인라인 모델로 갱신 ② **드리프트4**: 휴관칩 트리거(`openingHoursKnown===false`)가 계약상 CONFIRMED(h34)에서 항상 null이라 구조적으로 안 뜬다는 사실을 §에 명시. 관측만(반영 안 함) 2건 — 드리프트2(일자 총이동거리 계약 공백, 백엔드 계약이라 프론트 문서로 못 고침) · 드리프트3(category 매핑 공백) — 은 개발로그 관측으로만 남기고 이 파일에 쓰지 않았다.
+
+**AI Response**: TRIP-297·339·298·302 선례의 "[구현 결정 · TRIP-XXX, 날짜]" 소급 기록 방식을 따라 4곳을 최소 수정 + 1개 블록 추가로 반영했다.
+
+(1) **§1** — 라우트 경고 불릿 뒤에 1줄 추가: h25·h26 병기가 더는 세그먼트 토글이 아니라 단일 화면 상태임을 명시하고 §2·§4를 가리켰다.
+
+(2) **§2 line 72** — `itinerary-plan` 배선 셀을 `→ TimelineScreen/MapScreen`에서 `→ TimelineScreen 단일(지도 세그먼트/MapScreen 폐기)`로 교체.
+
+(3) **§3** — `openHoursWarning.ts` 행 뒤에 드리프트4 정정 블록 추가: 실제 트리거는 화면이 `slot.openingHoursKnown===false`를 직접 읽는 것이고, 그 값이 계약상 CONFIRMED에서 항상 null이라 h34(확정 읽기전용)에서는 휴관칩이 구조적으로 뜰 수 없다는 사실(PLANNED=h25에서만 뜬다)을 명시 — 다음 사이클이 h34 픽스처로 휴관칩 AC를 세우면 영영 안 떠서 잘못된 green이 나옴을 경고했다.
+
+(4) **§4** — `TimelineScreen.tsx` 행을 h25·h26·h29~h34로 확장하고 인라인 글랜스+확대 오버레이 배선을 명시, `MapScreen.tsx` 행은 취소선 처리해 "폐기"로 표시(별도 파일이 아니라 `TimelineScreen.tsx` 안의 확대 오버레이로 흡수됨). 표 뒤에 "인라인 지도 모델" 정정 블록을 추가해 결정 D의 확정 동작(인라인 글랜스 `viewOnly=true` 상시 + "지도 크게 보기"가 여는 로컬 상태 `expanded` 오버레이, `viewOnly=false`)과 `PoiSlotCard`(peek)가 고아가 아니라는 점 · `itineraryMapSurfaceStructure.test.ts`(S2④·S8)가 두 `KakaoMapView` 호출부를 소스 태그로 잠근다는 점을 기록했다.
+
+**넷 다 요구사항 근거가 아니라 구현 결정(또는 계약 사실)의 소급 기록이다** — 다음 사이클이 요구사항 근거로 인용하지 말 것을 각 블록에 명시했다.
+
+**Selection**: 사이클 [설계] 3-a에서 관측된 정본 반영 후보 **4건 중 사용자가 2건(드리프트1·4)을 선택**했다. `aidlc/` 소관(B)은 이 2건뿐이고, 나머지 2건(드리프트2·3)은 관측만 남기고 이 파일에 쓰지 않았다.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-354 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260813-trip354-timeline-full-design/01b_ouroboros_seed.md`("A. 3-a 팀 결정" 절 결정 D·Q4·Q5 · "B. 정본 반영 선택" 절) · `00_gates.md`(게이트①·② 원장, "사이클 중 정정" 절의 Q5 정정 경위) · `03_implementer_notes.md` §1(왜 이 설계인가 — 재사용 근거). 이번 항목이 손댄 `aidlc/` 파일 = `construction/u3-ai-itinerary/functional-design/frontend-components.md`(§1·§2·§3·§4, 4곳) + 이 `audit.md` append, 총 2파일(`git status aidlc/` 실측 일치). `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음 — 코드 구현 소급 기록은 리포 devlog·구조 지도 소관, [기록] 별도 처리).

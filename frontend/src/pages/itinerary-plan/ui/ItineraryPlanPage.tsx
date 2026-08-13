@@ -15,10 +15,7 @@ import {
   AlertCircleGlyph,
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
-import {
-  TimelineScreen,
-  type ViewSegmentValue,
-} from '@/features/itinerary/ui/TimelineScreen';
+import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
@@ -29,14 +26,15 @@ import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
- * h25 완성 일정 배선(TRIP-299) — 두 조회를 잇고, 뷰 세그먼트를 **페이지 로컬 UI 상태**로 든다.
+ * h25/h34 완성·확정 일정 배선(TRIP-299·300·354) — 두 조회를 잇는다. 시간표/지도 세그먼트
+ * 토글은 제거됐다(TRIP-354 결정 D · 지도 상시 인라인) — 뷰 로컬 상태는 활성 날짜 하나뿐이다.
  *
  * 이 파일이 지는 책임 — 화면은 이 중 어느 것도 모른다:
  *  1. **헤더는 두 조회의 조립이다** — 제목·기간은 `GET /trips`, 곳 수는 `GET /itinerary` 슬롯 합계.
  *  2. **404 는 전면 실패가 아니라 별도 얼굴이다** — "일정이 아직 없다"(`isNotFound`)를 `notFound`
  *     로 갈라 `resolvePlanState` 의 우선순위가 실패 겹침을 정리한다(INV-4).
- *  3. **세그먼트 전환은 재조회를 유발하지 않는다** — 뷰는 `useState` 라 쿼리 키가 그대로고, 캐시된
- *     쿼리는 리렌더에 다시 나가지 않는다(AC6). Zustand 는 pages 층 금지라 로컬 상태로 든다.
+ *  3. **날짜 전환은 재조회를 유발하지 않는다** — 활성 날은 `useState` 라 쿼리 키가 그대로고, 캐시된
+ *     쿼리는 리렌더에 다시 나가지 않는다. Zustand 는 pages 층 금지라 로컬 상태로 든다.
  */
 
 function PlanFace({
@@ -77,7 +75,6 @@ export function ItineraryPlanPage({
 }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [segment, setSegment] = useState<ViewSegmentValue>('timeline');
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
@@ -177,13 +174,11 @@ export function ItineraryPlanPage({
       days={buildPlanDayTabs(state.days)}
       slots={state.days[activeDayIndex]?.slots ?? []}
       activeDayIndex={activeDayIndex}
-      segment={segment}
       status={itinerary.data?.status}
       confirmedSubtitle={confirmedSubtitle}
       confirmError={confirmError}
       onConfirm={handleConfirm}
       onSelectDay={setActiveDayIndex}
-      onSegmentChange={setSegment}
       onBack={() => router.back()}
     />
   );

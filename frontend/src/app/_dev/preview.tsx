@@ -529,13 +529,16 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
 ];
 
 /**
- * h26 완성 일정 · 지도(TRIP-301) 프리뷰 픽스처 — `segment="map"` 로 실지도·peekstrip·핀 상세를
- * 한 화면에서 눈으로 보려는 것. 위 h25 픽스처는 좌표·POI 표면이 없어(지도가 텅 빔) 이 화면을
- * 못 보여준다. 부산 실좌표 3지점 + **좌표 부재 슬롯 1개**(자갈치)를 섞어, 핀이 ①②④ 로 건너뛰고
- * 카드엔 "지도 미표시" 배지가 뜨는 것(좌표 부재 규칙)과 영업시간 "미확인"·거리 null 을 한 자리에서
- * 같이 본다. 사진은 초안 프리뷰 썸네일 재사용(`DRAFT_PREVIEW_PHOTOS`).
- * ⚠️ 지도 폴백(h31)은 이 픽스처로 못 띄운다 — 폴백은 KakaoMapView 실제 로드 실패(onLoadFailed)로만
- * 켜지고 강제할 prop 이 없다. 카카오 JS 키가 있으면 지도가 뜨고, 없으면 자연히 폴백이 뜬다.
+ * 완성 일정 · **풀 표면**(TRIP-354) 프리뷰 픽스처 — 세그먼트 토글이 없어졌고(결정 D) 지도가 상시
+ * 인라인이라, 이 픽스처 하나가 인라인 글랜스 지도 + 풀카드(사진·이름·영업시간·태그) + 구간행(거리 +
+ * [길찾기]) + 날짜헤더 "이동 X"(legDistance 합산) + 휴관칩을 한 화면에서 보여준다. "지도 크게 보기"
+ * 를 누르면 h26 확대 오버레이(제스처 지도 + peekstrip + 핀 상세)가 열린다.
+ * 위 h25 픽스처는 좌표·POI 표면이 비어(null 반쪽 엣지) 사진·이름 없는 카드로 대비된다.
+ * 부산 실좌표 3지점 + **좌표 부재 슬롯 1개**(자갈치)를 섞어, 핀이 ①②④ 로 건너뛰고 카드엔 "지도
+ * 미표시" 배지·영업시간 "미확인"·휴관칩(openingHoursKnown false)이 한 자리에서 같이 보인다.
+ * 사진은 초안 프리뷰 썸네일 재사용(`DRAFT_PREVIEW_PHOTOS`).
+ * ⚠️ 지도 폴백(h31)은 이 픽스처로 못 띄운다 — 폴백은 확대 오버레이의 KakaoMapView 실제 로드
+ * 실패(onLoadFailed)로만 켜지고 강제할 prop 이 없다. 카카오 JS 키가 있으면 지도가 뜨고, 없으면 폴백.
  */
 const TIMELINE_MAP_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   {
@@ -545,7 +548,7 @@ const TIMELINE_MAP_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
-    tags: [],
+    tags: ['바다', '야경'],
     lat: 35.1532,
     lng: 129.1187,
     nameKo: '광안리 해변',
@@ -561,7 +564,7 @@ const TIMELINE_MAP_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     isFixed: false,
     endsNextDay: false,
     hasViolation: false,
-    tags: [],
+    tags: ['문화'],
     lat: 35.0966,
     lng: 129.0107,
     nameKo: '감천문화마을',
@@ -583,6 +586,7 @@ const TIMELINE_MAP_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     nameKo: '자갈치시장',
     category: '시장',
     openingHours: null,
+    openingHoursKnown: false,
     distanceRange: null,
     imageUrl: null,
   },
@@ -1281,20 +1285,19 @@ const PREVIEW_STATES: PreviewState[] = [
         days={TIMELINE_PREVIEW_DAYS}
         slots={TIMELINE_PREVIEW_SLOTS}
         activeDayIndex={0}
-        segment="timeline"
         status="PLANNED"
         onSelectDay={noop}
-        onSegmentChange={noop}
         onBack={noop}
         onConfirm={noop}
       />
     ),
   },
-  // h26 완성 일정 · 지도(TRIP-301) — segment="map" 으로 실지도·peekstrip·핀 상세를 눈으로 본다.
+  // 완성 일정 · 풀 표면(TRIP-354) — 인라인 글랜스 지도 + 풀카드(사진·이름·영업시간·태그) + 구간행 +
+  // 날짜헤더 "이동 X" + 휴관칩을 한 화면에서 본다. "지도 크게 보기"로 h26 확대 오버레이를 연다.
   // 좌표 부재 슬롯(자갈치)이 섞여 핀 결번 ①②④ + "지도 미표시" 배지도 한 화면에서 확인된다.
   {
     key: 'itinerary-map',
-    label: '완성 일정 · 지도(h26)',
+    label: '완성 일정 · 풀카드+인라인지도(h25/h34)',
     login: null,
     render: () => (
       <TimelineScreen
@@ -1302,10 +1305,8 @@ const PREVIEW_STATES: PreviewState[] = [
         days={TIMELINE_PREVIEW_DAYS}
         slots={TIMELINE_MAP_PREVIEW_SLOTS}
         activeDayIndex={0}
-        segment="map"
         status="PLANNED"
         onSelectDay={noop}
-        onSegmentChange={noop}
         onBack={noop}
         onConfirm={noop}
       />
@@ -1360,14 +1361,12 @@ const PREVIEW_STATES: PreviewState[] = [
         days={TIMELINE_PREVIEW_DAYS}
         slots={TIMELINE_PREVIEW_SLOTS}
         activeDayIndex={0}
-        segment="timeline"
         status="CONFIRMED"
         confirmedSubtitle={`${formatConfirmedDateRange(
           '2026-06-10',
           '2026-06-13'
         )} · 부산 여행 · 5곳`}
         onSelectDay={noop}
-        onSegmentChange={noop}
         onBack={noop}
       />
     ),
