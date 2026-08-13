@@ -22,6 +22,7 @@ model: sonnet
   - **실적 기록**: 개발로그에 `정본 반영 — 제시 n / 선택 n / (A) n / (B) n`을 남긴다(사이클 SKILL 3-a의 유지 판정 재료).
 - **구조 지도**: 이번 사이클이 파일을 추가·삭제·이동했거나 스텁을 채웠으면 **만진 층의 `<리포 루트>/frontend/.claude/rules/layer-*.md`를 갱신한다**(층별 파일 표는 거기로 이관됨 — path-scoped라 해당 폴더 만질 때만 로드). **층 무관분(재사용 공개 API·한눈에)만 `docs/structure.md`**. 볼트에 스냅샷 노트를 만들지 마라(`TripPilot/구조/` 폐지). 절차 정본은 `obsidian-second-brain` 스킬의 "구조 지도" 항목이며 그대로 따른다. 여기엔 세 가지만 남긴다:
   - **기계 몫은 스크립트로 뽑는다** — `node <리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs`. 네가 쓰는 것은 **용도 한 줄 · 스텁 여부**뿐이다(경고는 `.claude/rules/repo-traps.md` 소관).
+  - **신규 소스는 그 경로를 덮는 `layer-*.md`에 행을 추가한다** — `src/shared/**`→`layer-shared.md` · `src/features/{x}/**`→`layer-features-{x}.md` · `src/app/**`→`layer-app.md` · `src/pages/**`→`layer-pages.md` · 테스트→`layer-test.md`. **그 층의 규칙 파일이 없으면**(새 도메인 폴더) `layer-<층>.md`를 `paths: ["<경로>/**"]` 프론트매터로 **새로 만든다.** 빠뜨리면 `--check`가 '누락'으로 잡는다(TRIP-353 실측 — `shared/bootstrap/bootstrapReeval.ts`를 layer-shared에 안 넣어 FAIL, 상세는 하네스 변경이력).
   - **반환 전 `--check`를 돌려 통과시킨다.** *행은 있는데 파일이 없다*(삭제·이동 미반영)가 이 문서의 가장 흔한 실패였고, 이제 기계가 잡는다. 불일치를 남긴 채 반환하지 마라.
   - **`개념 유령`이 나오면 고칠 곳은 `structure.md`가 아니라 볼트다** — 옵시디언 개념 노트의 `설명하는코드`가 삭제·이동된 파일을 가리키고 있다는 뜻이다. 지목된 개념 노트를 열어 죽은 경로를 **살아 있는 후속 파일로 바꾸거나**(같은 것을 설명하는 파일이 있을 때) **목록에서 뺀다**(없을 때 — 전부 빠지면 `[]`). 이 조인이 썩으면 다음 [메모리]의 코드→개념 진입이 빈손이 된다.
   - **"무엇이 빈 스텁인가"가 1순위 임무**다 — 디렉토리 존재를 구현으로 오인하는 것을 막는 유일한 정보이고, 기계가 못 갈라 준다.

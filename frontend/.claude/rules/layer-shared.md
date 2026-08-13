@@ -95,3 +95,4 @@ paths:
 | `src/shared/api/generated/schemas/poiCategory.ts` | `PoiCategory` — 7종(명소·맛집·카페·야경·자연·쇼핑·문화). Figma d04 칩(6종)·카드 라벨(`바다`, enum 밖)과 3원 불일치 — `frontend-components.md` §2-2 F-4가 이미 기록, **enum이 정본** |
 | `src/shared/api/generated/schemas/savePlaceRequest.ts` | `SavePlaceRequest` — `{poiId}`(required) |
 | `src/shared/api/generated/schemas/savedPlace.ts` | `SavedPlace` — `{savedPlaceId,savedAt,place}` 셋 다 required |
+| `src/shared/bootstrap/bootstrapReeval.ts` | 온보딩 완료 → 부트스트랩 재평가 pub/sub 신호(값 없는 순수 이벤트, `subscribeAccessToken` 형태) — TRIP-353 |
