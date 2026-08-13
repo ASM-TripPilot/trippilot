@@ -10,6 +10,9 @@ import {
   getAccessToken,
   setAccessToken,
 } from '@/shared/api/tokenManager';
+// 실물 로드(딥 경로) — @/shared/api 목과 다른 모듈 specifier 라 목킹되지 않는다(케이스 3~8 이
+// tokenManager 실물 위에 선 것과 같은 사실). 신호를 실제로 발화해 훅의 구독을 관통 검증한다.
+import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 import { BOOTSTRAP_TIMEOUT_MS, useBootstrapGate } from './useBootstrapGate';
 
 jest.mock('@/shared/api', () => ({ fetchBootstrap: jest.fn() }));
@@ -323,6 +326,176 @@ describe('useBootstrapGate — 재조회 무응답은 잠정 분기를 쓰지 �
     expect(result.current.destination).toBe('LOGIN');
     expect(result.current.isProvisional).toBe(false);
     expect(getAccessToken()).toBe('new-access');
+  });
+});
+
+describe('useBootstrapGate — 온보딩 완료 재평가 신호 (AC-A1 · AC-A3 · 결함 A · TRIP-353)', () => {
+  it('온보딩 완료 신호가 재조회를 일으켜 destination 이 HOME 으로 갱신된다 (AC-A1)', async () => {
+    // 준비 — 콜드스타트는 무토큰(GUEST). 로그인 뒤 서버는 AUTHENTICATED+미완료(→ONBOARDING),
+    // 온보딩 완료 신호 뒤 재조회에서는 AUTHENTICATED+완료(→HOME)를 준다.
+    mockGetTokens.mockResolvedValue(null);
+    mockHasStoredToken.mockResolvedValue(false);
+    mockFetchBootstrap
+      .mockResolvedValueOnce(bootstrap('GUEST'))
+      .mockResolvedValueOnce(bootstrap('AUTHENTICATED', false))
+      .mockResolvedValue(bootstrap('AUTHENTICATED', true));
+
+    const { result } = renderHook(() => useBootstrapGate(), {
+      wrapper: createWrapper(),
+    });
+
+    // 실행 ① — 콜드스타트 → LOGIN.
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.destination).toBe('LOGIN');
+
+    // 실행 ② — 로그인 성공(토큰 변경)이 재조회를 일으켜 ONBOARDING 까지 간다(기존 경로 유지).
+    await act(async () => {
+      setAccessToken('new-access');
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.destination).toBe('ONBOARDING');
+
+    // 실행 ③ — 온보딩 완료 신호를 발화한다(라우터를 관통하지 않는 pub/sub).
+    await act(async () => {
+      notifyBootstrapReeval();
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    // 단언 — 신호가 세 번째 재조회를 일으켰고(총 3회) destination 이 HOME 으로 확정됐다.
+    expect(mockFetchBootstrap).toHaveBeenCalledTimes(3);
+    expect(result.current.destination).toBe('HOME');
+    expect(result.current.isProvisional).toBe(false);
+  });
+
+  it('완료 신호가 와도 서버가 여전히 미완료면 ONBOARDING 을 유지한다 (AC-A3 회귀)', async () => {
+    // 준비 — 재조회 응답도 AUTHENTICATED+미완료. 신호가 재조회는 일으키되 판정은 ONBOARDING 이어야 한다.
+    mockGetTokens.mockResolvedValue(null);
+    mockHasStoredToken.mockResolvedValue(false);
+    mockFetchBootstrap
+      .mockResolvedValueOnce(bootstrap('GUEST'))
+      .mockResolvedValue(bootstrap('AUTHENTICATED', false));
+
+    const { result } = renderHook(() => useBootstrapGate(), {
+      wrapper: createWrapper(),
+    });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    await act(async () => {
+      setAccessToken('new-access');
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.destination).toBe('ONBOARDING');
+
+    // 실행 — 완료 신호 발화.
+    await act(async () => {
+      notifyBootstrapReeval();
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    // 단언 — 재조회는 실제로 일어났지만(3회) 미완료자는 홈으로 새지 않는다.
+    expect(mockFetchBootstrap).toHaveBeenCalledTimes(3);
+    expect(result.current.destination).toBe('ONBOARDING');
+    expect(result.current.destination).not.toBe('HOME');
+  });
+});
+
+describe('useBootstrapGate — 첫 왕복 인증 실패/네트워크 실패 판별 (AC-B · 결함 B · TRIP-353)', () => {
+  it('첫 부트스트랩이 인증 실패(홀더 비워짐)로 끝나면 LOGIN 을 확정하고 홀더가 빈다 (AC-B1 · AC-B2)', async () => {
+    // 준비 — 저장소에 토큰이 있어 부팅 시 hydrate 되지만, 그 토큰이 무효라 첫 왕복에서
+    // 인터셉터가 홀더를 비운 뒤(onSessionExpired 흉내) reject 된다.
+    mockGetTokens.mockResolvedValue({
+      accessToken: 'stored-access',
+      refreshToken: 'stored-refresh',
+    });
+    mockHasStoredToken.mockResolvedValue(true);
+    mockFetchBootstrap.mockImplementation(async () => {
+      // 실서버 흐름의 충실한 축약: 401 → refresh 실패 → onSessionExpired → clearAccessToken → reject.
+      // onSessionExpired 는 @/shared/api 목이라 실행되지 않으므로, 홀더 비움을 목 안에서 직접 재현한다.
+      clearAccessToken();
+      throw new Error('401 Unauthorized');
+    });
+
+    const { result } = renderHook(() => useBootstrapGate(), {
+      wrapper: createWrapper(),
+    });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+
+    // 단언 — LOGIN 으로 확정(잠정 아님·해결됨) + 홀더가 비어 있다(BR-U0-09 메모리 측면이자 판별 신호).
+    expect(result.current.destination).toBe('LOGIN');
+    expect(result.current.isProvisional).toBe(false);
+    expect(result.current.phase).toBe('resolved');
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it('첫 부트스트랩이 네트워크 실패(홀더 유지)면 토큰을 지키고 LOGIN 을 확정하지 않는다 → 타임아웃 잠정 분기 (AC-B3)', async () => {
+    // 준비 — 저장 토큰 hydrate. 첫 왕복은 응답 없이 reject 하되 홀더는 건드리지 않는다
+    // (= onSessionExpired 미발화 = 네트워크 실패). 이 케이스가 인증실패/네트워크실패 판별의 핵심 심판이다.
+    mockGetTokens.mockResolvedValue({
+      accessToken: 'stored-access',
+      refreshToken: 'stored-refresh',
+    });
+    mockHasStoredToken.mockResolvedValue(true);
+    mockFetchBootstrap.mockImplementation(async () => {
+      throw new Error('Network Error'); // 홀더를 비우지 않는다
+    });
+
+    const { result } = renderHook(() => useBootstrapGate(), {
+      wrapper: createWrapper(),
+    });
+
+    // 실행 ① — 첫 왕복 실패 직후: 아직 확정하지 않고 loading 을 유지한다(토큰도 보존).
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.phase).toBe('loading');
+    expect(result.current.destination).toBeNull();
+    expect(getAccessToken()).toBe('stored-access');
+
+    // 실행 ② — 3초 타임아웃을 흘려보낸다.
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(BOOTSTRAP_TIMEOUT_MS);
+    });
+
+    // 단언 — 기존 타임아웃 경로로 잠정 분기(로컬 토큰 있음 → 잠정 HOME) + 토큰은 3초 뒤에도 보존.
+    expect(result.current.destination).toBe('HOME');
+    expect(result.current.isProvisional).toBe(true);
+    expect(getAccessToken()).toBe('stored-access');
+  });
+
+  it('게스트 콜드스타트에서 첫 왕복이 실패해도(홀더 null·저장 토큰 없음) LOGIN 을 즉시 확정하지 않는다 (AC-B3 판별 — hadStoredToken 절반 강제)', async () => {
+    // 준비 — 저장 토큰이 없어 hydrate 자체가 없다(홀더 null). 첫 왕복은 reject.
+    // 홀더가 null 이라도 "부팅 시 저장 토큰이 있었나"가 거짓이라 인증 실패가 아니다
+    // — 이 케이스가 판별을 "홀더 null 단독"이 아니라 "hadStoredToken AND 홀더 null"로 강제한다.
+    mockGetTokens.mockResolvedValue(null);
+    mockHasStoredToken.mockResolvedValue(false);
+    mockFetchBootstrap.mockImplementation(async () => {
+      throw new Error('Network Error');
+    });
+
+    const { result } = renderHook(() => useBootstrapGate(), {
+      wrapper: createWrapper(),
+    });
+
+    // 실행 ① — 첫 왕복 실패 직후: 홀더가 null 이어도 즉시 확정하지 않는다.
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.phase).toBe('loading');
+    expect(result.current.destination).toBeNull();
+
+    // 실행 ② — 타임아웃을 흘려보낸다.
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(BOOTSTRAP_TIMEOUT_MS);
+    });
+
+    // 단언 — 기존 경로로 잠정 LOGIN(로컬 토큰 없음), 확정(isProvisional:false)이 아니다.
+    expect(result.current.destination).toBe('LOGIN');
+    expect(result.current.isProvisional).toBe(true);
   });
 });
 

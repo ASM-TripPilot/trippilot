@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
+import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 import { PrefStep1Page } from './PrefStep1Page';
 
 /**
@@ -35,12 +36,23 @@ const routerMock = require('expo-router').router as {
   back: jest.Mock;
 };
 
+// TRIP-353 — 온보딩 완료 재평가 신호를 목킹해, 일괄 탈출이 신호를 발화하는지 spy 로 관찰한다.
+// 취향 1/2 의 '나중에 설정하고 시작'도 완료 탈출구라 홈 진입해야 한다(ticket AC-A · US-ONB-11).
+jest.mock('@/shared/bootstrap/bootstrapReeval', () => ({
+  notifyBootstrapReeval: jest.fn(),
+  subscribeBootstrapReeval: jest.fn(() => () => {}),
+}));
+const mockNotifyReeval = notifyBootstrapReeval as jest.MockedFunction<
+  typeof notifyBootstrapReeval
+>;
+
 beforeEach(() => {
   // 준비(공통) — 모듈 싱글턴 스토어를 매 테스트 전 되돌린다(§7-6).
   usePreferenceStore.getState().reset();
   routerMock.replace.mockClear();
   routerMock.push.mockClear();
   routerMock.back.mockClear();
+  mockNotifyReeval.mockClear();
 });
 
 describe('PrefStep1Page — 탭↔스토어 왕복 (AC3 · 5-1)', () => {
@@ -113,6 +125,26 @@ describe('PrefStep1Page — 페이스 축 탭↔스토어 왕복 (AC3 · US-ONB-
     // 단언 ② — 쓰기 경로: pace는 단일 축이라 배열이 아니라 원시값(toBe)이다.
     expect(usePreferenceStore.getState().pace).toBe('balanced');
   });
+});
+
+describe('PrefStep1Page — 온보딩 완료 재평가 신호 발화 (ticket AC-A · US-ONB-11 · TRIP-353)', () => {
+  it.each([
+    ['상단', 'onboarding-pref1-skip-top'],
+    ['하단', 'onboarding-pref1-skip-bottom'],
+  ])(
+    '%s 일괄 탈출을 탭하면 재평가 신호를 발화하고 홈으로 replace 한다',
+    (_label, testId) => {
+      // 준비 — 렌더.
+      render(<PrefStep1Page />);
+
+      // 실행 — 일괄 탈출 탭.
+      fireEvent.press(screen.getByTestId(testId));
+
+      // 단언 — 취향 1/2 탈출도 재평가 신호를 발화(결함 A — pref2 뿐 아니라 여기서도) + replace 유지.
+      expect(mockNotifyReeval).toHaveBeenCalledTimes(1);
+      expect(routerMock.replace).toHaveBeenCalledWith('/');
+    }
+  );
 });
 
 describe('PrefStep1Page — 일괄 탈출은 기존 선택을 보존한다 (AC4 · US-ONB-11 · US-ONB-14 · 5-12)', () => {
