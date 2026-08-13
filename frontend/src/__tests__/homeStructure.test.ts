@@ -258,3 +258,29 @@ describe('탭바 격리 — 몰입 화면에 스며들지 않는다 (AC-9 · D-5
     expect(offenders).toEqual([]);
   });
 });
+
+describe('단계 얼굴 단일 파일 강제 (TRIP-317 · 브리프 §8-7)', () => {
+  it('단계 얼굴 4종의 신 testID가 HomeScreen.tsx 한 파일에 있고, 별 *Face.tsx로 쪼개지지 않았다', () => {
+    const sources = homeScreenSources();
+
+    // 필터 자기검증 — 동결목록 1건 유지(별 *Screen.tsx 신설 금지). freeze-list는 `*Screen.tsx`
+    // 필터라 PlanningFace.tsx 같은 비-Screen 분리는 못 잡는다 — 아래 긍정·부정 짝이 그 구멍을 메운다.
+    expect(sources.map(({ file }) => file)).toEqual(HOME_SCREEN_SOURCE_FILES);
+
+    // 긍정 짝 — 단계 얼굴 스위치·신 testID가 이 한 파일에 실재해야 한다(구현 전엔 red).
+    const src = sources[0].source;
+    [
+      'home-trip-hero',
+      'home-next-stop',
+      'home-dash-itinerary',
+      'home-recap-card',
+      'home-saved-count-chip',
+    ].forEach((id) => expect(src).toContain(id));
+
+    // 부정 짝 — 얼굴을 별 파일(`*Face.tsx`)로 쪼개면 안 된다(HOME_SCREEN_SOURCE_FILES 동결 취지).
+    const uiFiles = listSourceFiles(path.join(HOME_DIR, 'ui')).map((f) =>
+      path.basename(f)
+    );
+    expect(uiFiles.filter((f) => /Face\.tsx$/.test(f))).toEqual([]);
+  });
+});

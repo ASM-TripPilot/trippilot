@@ -11,6 +11,7 @@ import {
   HOME_LOADING_PROPS,
   HOME_NO_TRIP_PROPS,
 } from '../model/homeFixtures';
+import type { HomePhase } from '../model/homeTypes';
 import { HomeScreen } from './HomeScreen';
 
 /**
@@ -247,5 +248,277 @@ describe('HomeScreen — CTA no-op (AC-8 · Q3 계승)', () => {
     fireEvent.press(screen.getByTestId('home-create-trip-fab'));
 
     expect(screen.getByTestId('home-dashboard-root')).toBeOnTheScreen();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-317 — 여행 단계 phase 얼굴 4종 (collecting·planning·upcoming·postTrip).
+//
+// 무엇을 보장하나: 316 discovery(위 8케이스, 무회귀) 위에 `phase` 판별값으로 4얼굴을
+// 그리되, 화면은 phase.kind로 스위치만 하고 단계를 스스로 도출하지 않는다(AC-5). 각 얼굴은
+// 브리프 §3 델타의 고유 요소(tripHero·스탯타일·회고카드 등)를 그리고 숨겨야 할 요소는
+// 부재하며(부정 짝), 어떤 얼굴에도 소요시간 문자열은 렌더되지 않는다(AC-6·INV-3).
+//
+// ★ INV-3 렌더 정규식 좁히기(브리프 §8-1): 316의 넓은 정규식 `/소요|\d+\s*분|\d+\s*시간/`은
+// upcoming nextCard의 "24시간 개방"(영업시간)에 거짓 매치한다(실검증 OLD.test=true). 아래
+// DURATION_RENDER는 이동·소요 키워드 + 수량이 붙은 것만 duration으로 보아 영업시간·시각·
+// 박수·거리를 제외한다. verify317.mjs 실행: 4얼굴+discovery 렌더 문자열 37종 0매치, 진짜
+// duration("소요 30분"·"도보 15분" 등) 전부 포착 확인(02a §5).
+const DURATION_RENDER =
+  /소요|(?:도보|차로|버스|버스로|자전거|자동차|걸어서|이동)\s*(?:약\s*)?\d+\s*(?:분|시간)|\d+\s*(?:분|시간)\s*(?:소요|이동|걸림|거리)/;
+
+// 테스트-로컬 phase 상수(픽스처 신설 안 함 — 가정 E: (tabs) 착지는 discovery 유지). 각 렌더는
+// {...HOME_DEFAULT_PROPS}로 안전한 discovery 기저를 깔고 phase를 주입한다 — 구 화면이 phase를
+// 무시하고 discovery를 크래시 없이 그린 뒤 신 단언이 깨끗이 red(02a ★9).
+const COLLECTING_PHASE: HomePhase = {
+  kind: 'collecting',
+  greetTitle: '담아둔 곳이 3곳 모였어요',
+  greetSubtitle: '마음에 든 곳들을 모아두고 있어요',
+  sectionTitle: '내가 담은 곳',
+  savedChipLabel: '담은 곳 3',
+  collections: [
+    {
+      title: '감천문화마을',
+      region: '부산 사하구',
+      badge: '부산',
+      savedAtLabel: '7월 30일 담음',
+    },
+    {
+      title: '해운대 해변',
+      region: '부산 해운대구',
+      badge: '부산',
+      savedAtLabel: '7월 28일 담음',
+    },
+  ],
+};
+
+const PLANNING_PHASE: HomePhase = {
+  kind: 'planning',
+  greetTitle: '부산 여행 D-21',
+  trip: {
+    badge: '계획 중',
+    dday: 'D-21',
+    ctaLabel: '일정 이어서 짜기',
+    title: '부산 여행',
+    meta: '6월 10일 – 6월 13일 · 3박 4일 · 2명',
+  },
+  bridge: {
+    title: '담은 곳 3곳이 아직 일정에 없어요',
+    subtitle: '남은 자리에 넣어볼까요',
+    ctaLabel: '일정에 추가',
+  },
+};
+
+const UPCOMING_PHASE: HomePhase = {
+  kind: 'upcoming',
+  greetName: '태현님',
+  greetTitle: '부산 여행이 곧 시작돼요',
+  trip: {
+    badge: '출발 전',
+    dday: 'D-3',
+    ctaLabel: '오늘 일정 보기',
+    title: '부산 여행',
+    meta: '6월 10일 – 6월 13일 · 3박 4일 · 2명',
+  },
+  stats: [
+    { label: '일정', value: '9곳 완성' },
+    { label: '숙소', value: '3/3', caption: '3박 등록' },
+  ],
+  nextStop: {
+    order: '1',
+    time: '09:30 · 활동',
+    title: '광안리 해변',
+    placeMeta: '24시간 개방 · 숙소서 950m',
+  },
+  nearby: {
+    title: '지금 내 주변 살펴보기',
+    subtitle: '부산 해운대구 · 걸어서 갈 만한 곳',
+  },
+  pastTrips: [
+    { title: '경주 여행 2026.04 · 2박' },
+    { title: '강릉 여행 2026.02 · 1박' },
+  ],
+};
+
+const POST_TRIP_PHASE: HomePhase = {
+  kind: 'postTrip',
+  greetTitle: '부산 여행 잘 다녀오셨어요?',
+  recap: {
+    title: '부산 여행 회고 보기',
+    meta: '4곳 방문 · 12km · 사진 6장 · 6.10–6.13',
+  },
+  share: {
+    title: '공유 카드로 남기기',
+    subtitle: '사진·동선을 카드 한 장으로',
+    ctaLabel: '공유 카드 만들기',
+  },
+  recommendationTitle: '다음엔 여기 어때요',
+  recommendations: [
+    { title: '통영 동피랑', region: '경남 통영', badge: '당일치기' },
+  ],
+  pastTrips: [{ title: '경주 여행 2026.04 · 2박' }],
+};
+
+describe('HomeScreen — collecting 얼굴 (AC-1 · US-SHELL-05)', () => {
+  it('저장개수 greet·"내가 담은 곳"·담은 곳 N 칩·지역 badge+저장일 카드를 그리고 softNote는 숨긴다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={COLLECTING_PHASE} />);
+
+    // 긍정 — collecting 고유 요소.
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(
+      /담아둔 곳이 3곳 모였어요/
+    );
+    expect(screen.getByText('내가 담은 곳')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-saved-count-chip')).toHaveTextContent(
+      /담은 곳 3/
+    );
+
+    // ★4 badge 의미 전환 함정 — collecting 카드는 지역 badge(`부산`)+저장일이지 discovery
+    // badge(`당일치기`)가 아니다. within(c0)로 스코프하고, `부산`은 exact라 region `부산 사하구`
+    // 리프와 구분된다(02a ★2).
+    const c0 = screen.getByTestId('home-collection-card-0');
+    expect(within(c0).getByText('부산')).toBeOnTheScreen();
+    expect(within(c0).getByText('7월 30일 담음')).toBeOnTheScreen();
+    expect(within(c0).queryByText('당일치기')).toBeNull();
+
+    // 부정 짝 — collecting은 softNote 숨김(§3-B).
+    expect(screen.queryByTestId('home-soft-note')).toBeNull();
+
+    // INV-3 — 소요시간 문맥 문자열 0.
+    expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
+  });
+});
+
+describe('HomeScreen — planning 얼굴 (AC-2 · US-SHELL-02)', () => {
+  it('tripHero "계획 중"·D-day·「일정 이어서 짜기」 CTA·브릿지행을 그리고 hero·grid는 숨긴다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
+
+    // greet(여행명+D-day).
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(
+      /부산 여행 D-21/
+    );
+
+    // tripHero — 배지·D-day·CTA·메타.
+    const hero = screen.getByTestId('home-trip-hero');
+    expect(hero).toHaveTextContent(/부산 여행/);
+    expect(screen.getByTestId('home-trip-hero-badge')).toHaveTextContent(
+      '계획 중'
+    );
+    expect(screen.getByTestId('home-trip-hero-dday')).toHaveTextContent('D-21');
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '일정 이어서 짜기'
+    );
+    // 메타는 리프가 쪼개질 수 있어 정규식 부분 매치(자손 텍스트 합침).
+    expect(hero).toHaveTextContent(/3박 4일 · 2명/);
+
+    // 브릿지행(softNote 슬롯 재사용) — 담은 곳이 일정에 없다는 잇기 카피 + "일정에 추가".
+    const bridge = screen.getByTestId('home-soft-note');
+    expect(
+      within(bridge).getByText(/담은 곳 3곳이 아직 일정에 없어요/)
+    ).toBeOnTheScreen();
+    expect(within(bridge).getByText('일정에 추가')).toBeOnTheScreen();
+
+    // 부정 짝 — planning은 magazineHero·"지금 뜨는 장소" grid 숨김(§3-B).
+    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
+    expect(screen.queryByTestId('home-spot-card-0')).toBeNull();
+
+    // INV-3.
+    expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
+  });
+});
+
+describe('HomeScreen — upcoming 얼굴 (AC-3 · US-SHELL-02)', () => {
+  it('이름 greet·tripHero 출발전·스탯타일 2·가장 먼저 갈 곳·지난 여행을 그리고 searchBar 등은 부재하며 소요시간은 0이다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={UPCOMING_PHASE} />);
+
+    // greet — 유일하게 사용자 이름 사용(개인화).
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(/태현님/);
+
+    // tripHero — 출발 전·D-3·오늘 일정 보기.
+    expect(screen.getByTestId('home-trip-hero-badge')).toHaveTextContent(
+      '출발 전'
+    );
+    expect(screen.getByTestId('home-trip-hero-dday')).toHaveTextContent('D-3');
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '오늘 일정 보기'
+    );
+
+    // 스탯 타일 2 — 일정 진행률·등록 숙소(US-SHELL-02).
+    expect(screen.getByTestId('home-dash-itinerary')).toHaveTextContent(
+      /9곳 완성/
+    );
+    expect(screen.getByTestId('home-dash-stay')).toHaveTextContent(/3\/3/);
+
+    // ★ INV-3 최상위 함정 — nextCard는 시각(09:30)·영업시간(24시간 개방)·거리(950m)를 그린다.
+    // 이들은 전부 렌더되어야 하고(허용), 그럼에도 소요시간 정규식은 0을 반환해야 한다.
+    const nextStop = screen.getByTestId('home-next-stop');
+    expect(within(nextStop).getByText('광안리 해변')).toBeOnTheScreen();
+    expect(nextStop).toHaveTextContent(/09:30/);
+    expect(nextStop).toHaveTextContent(/24시간 개방/);
+    expect(nextStop).toHaveTextContent(/950m/);
+
+    expect(screen.getByTestId('home-nearby-card')).toHaveTextContent(
+      /지금 내 주변/
+    );
+
+    // 지난 여행 2장.
+    expect(screen.getByTestId('home-past-trip-card-0')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-past-trip-card-1')).toBeOnTheScreen();
+
+    // 부정 짝 — upcoming만 searchBar 없음(브리프 §8-6). magazineHero·softNote·컬렉션/스팟도 부재.
+    expect(screen.queryByTestId('home-search-bar')).toBeNull();
+    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
+    expect(screen.queryByTestId('home-soft-note')).toBeNull();
+    expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
+    expect(screen.queryByTestId('home-spot-card-0')).toBeNull();
+
+    // INV-3 — "24시간 개방"은 좁힌 정규식에서 제외되므로 정당 화면이 거짓 red 안 남.
+    expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
+  });
+});
+
+describe('HomeScreen — postTrip 얼굴 (AC-4 · US-SHELL-02)', () => {
+  it('"잘 다녀오셨어요" greet·회고 보기 카드·공유행·추천·지난 여행을 그리고 hero·grid는 숨긴다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
+
+    expect(screen.getByTestId('home-greeting')).toHaveTextContent(
+      /잘 다녀오셨어요/
+    );
+
+    // 회고 진입(핵심 AC-4) — 회고 카드 + 방문 수·거리·사진 수(12km 거리 OK, 소요시간 0).
+    const recap = screen.getByTestId('home-recap-card');
+    expect(within(recap).getByText('부산 여행 회고 보기')).toBeOnTheScreen();
+    expect(recap).toHaveTextContent(/4곳 방문 · 12km · 사진 6장/);
+
+    // 공유행(softNote 슬롯 재사용).
+    const share = screen.getByTestId('home-soft-note');
+    expect(within(share).getByText(/공유 카드로 남기기/)).toBeOnTheScreen();
+    expect(within(share).getByText('공유 카드 만들기')).toBeOnTheScreen();
+
+    // 추천 섹션 + 지난 여행.
+    expect(screen.getByText('다음엔 여기 어때요')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-past-trip-card-0')).toBeOnTheScreen();
+
+    // 부정 짝 — postTrip은 magazineHero·grid 숨김(§3-B).
+    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
+    expect(screen.queryByTestId('home-spot-card-0')).toBeNull();
+
+    // INV-3.
+    expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
+  });
+});
+
+describe('HomeScreen — phase 미도출·주입 (AC-5 금지 · TRIP-206 S-6)', () => {
+  it('phase 미전달이면 discovery 얼굴이고, phase 주입 시 그 얼굴로 스위치한다(화면은 단계를 도출하지 않는다)', () => {
+    // (1) phase 미전달 → discovery 폴백. 화면은 여행 유무를 추론하지 않는다.
+    const view = render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+    expect(screen.getByText('오늘은 어디를 상상해볼까요')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-trip-hero')).toBeNull();
+    view.unmount();
+
+    // (2) 같은 화면에 phase=planning 주입 → tripHero로 스위치. discovery로 폴백하지 않는다.
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
   });
 });

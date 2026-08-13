@@ -16,10 +16,14 @@ import {
 } from '@/features/auth/ui/SocialLoginScreen';
 import { SplashScreen } from '@/features/auth/ui/SplashScreen';
 import {
+  HOME_COLLECTING_PROPS,
   HOME_DEFAULT_PROPS,
   HOME_EMPTY_PROPS,
   HOME_LOADING_PROPS,
   HOME_NO_TRIP_PROPS,
+  HOME_PLANNING_PROPS,
+  HOME_POST_TRIP_PROPS,
+  HOME_UPCOMING_PROPS,
 } from '@/features/home/model/homeFixtures';
 import {
   PREVIEW_PLACES,
@@ -890,6 +894,31 @@ const PREVIEW_STATES: PreviewState[] = [
     label: '홈 · 로딩',
     login: null,
     render: () => <HomeScreen {...HOME_LOADING_PROPS} />,
+  },
+  // ── 홈 여행 단계 얼굴 4종(TRIP-317) — 실기 판정 전용 진입점 ──
+  {
+    key: 'home-collecting',
+    label: '홈 · 담는 중',
+    login: null,
+    render: () => <HomeScreen {...HOME_COLLECTING_PROPS} />,
+  },
+  {
+    key: 'home-planning',
+    label: '홈 · 계획 중',
+    login: null,
+    render: () => <HomeScreen {...HOME_PLANNING_PROPS} />,
+  },
+  {
+    key: 'home-upcoming',
+    label: '홈 · 출발 전',
+    login: null,
+    render: () => <HomeScreen {...HOME_UPCOMING_PROPS} />,
+  },
+  {
+    key: 'home-post-trip',
+    label: '홈 · 여행 후',
+    login: null,
+    render: () => <HomeScreen {...HOME_POST_TRIP_PROPS} />,
   },
   // 지도 계층 선행(TRIP-197 D9) — 층 C(실기) 진입점. 키/로드 실패 분기는 렌더 안 해봐야
   // 알 수 없어 여기서는 해피패스 1키만 둔다(env 키는 빌드 시 번들에 인라인되므로 preview가

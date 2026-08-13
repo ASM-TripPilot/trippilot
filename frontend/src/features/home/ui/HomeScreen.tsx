@@ -6,6 +6,12 @@
  * 구성: 인사 헤더 → 검색바 → magazineHero(영감 카드) → "요즘 사람들이 담는 곳"(가로 스크롤) →
  * "지금 뜨는 장소"(2×2 그리드) → "여행자 일정"(가로 스크롤) → softNote(장소 온램프) → FAB.
  * 사진 에셋은 미번들이라 토큰색 플레이스홀더 + 스크림 그라디언트로 대체한다(가정 C).
+ *
+ * TRIP-317 — 여행 단계 얼굴 4종을 phase 판별값으로 얹는다(collecting·planning·upcoming·postTrip).
+ * 화면은 phase.kind로 스위치만 하고 여행 데이터를 뜯어 단계를 스스로 도출하지 않는다(TRIP-206
+ * S-6). phase 미전달/discovery → 316 얼굴 폴백. 각 얼굴은 브리프 §3 델타대로 공유 부품(tripHero·
+ * softNote·미니맵 카드 등)을 단계 데이터로 파라미터화해 조립한다. INV-3(소요시간 미표시)는
+ * 어떤 얼굴에도 소요시간 문자열·필드를 두지 않는다 — 시각(09:30)·거리(950m)만 표시한다.
  */
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -24,9 +30,15 @@ import type {
   HomeCollectionCard,
   HomeItineraryCard,
   HomeMagazineHero,
+  HomePhase,
   HomeScreenProps,
   HomeSections,
+  HomeSoftNote,
   HomeSpotCard,
+  HomeStatTile,
+  NextStop,
+  PastTrip,
+  TripHeroData,
 } from '../model/homeTypes';
 
 // 사진 위 흰 글씨 가독성을 위한 스크림 그라디언트(브리프 §3-D 명시 raw 허용 — 스크림은 토큰
@@ -59,17 +71,34 @@ const fabShadow = {
   elevation: 8,
 } as const;
 
+// upcoming 스탯 타일 2칸의 고정 testID(순서 고정 — 배열 위치로 잠근다).
+const STAT_TEST_IDS = ['home-dash-itinerary', 'home-dash-stay'] as const;
+
 // ── 인사 헤더 ───────────────────────────────────────────────────────────
-function GreetingHeader(): ReactElement {
+// discovery는 고정 카피, 단계 얼굴은 greetTitle/greetSubtitle/greetName을 주입받는다.
+function GreetingHeader({
+  title,
+  subtitle,
+  name,
+}: {
+  title: string;
+  subtitle?: string;
+  name?: string;
+}): ReactElement {
   return (
     <View className="w-full flex-row items-center gap-sm px-lg pb-[10px] pt-lg">
       <View testID="home-greeting" className="flex-1 gap-px">
+        {name ? (
+          <Text className="font-noto-bold text-[21px] font-bold text-ink">
+            {name}
+          </Text>
+        ) : null}
         <Text className="font-noto-bold text-[21px] font-bold text-ink">
-          오늘은 어디를 상상해볼까요
+          {title}
         </Text>
-        <Text className="font-noto text-[12.5px] text-muted">
-          떠나지 않아도, 구경하고 모으는 즐거움
-        </Text>
+        {subtitle ? (
+          <Text className="font-noto text-[12.5px] text-muted">{subtitle}</Text>
+        ) : null}
       </View>
       <Pressable
         testID="home-dashboard-bell"
@@ -205,7 +234,8 @@ function SectionEmptyBlock({ testID }: { testID: string }): ReactElement {
   );
 }
 
-// ── 컬렉션 카드(요즘 사람들이 담는 곳) ──────────────────────────────────
+// ── 컬렉션 카드(요즘 사람들이 담는 곳 · 내가 담은 곳 · 추천) ─────────────
+// savedAtLabel이 있으면(collecting) 하단 메타를 저장일로, 없으면(discovery·추천) 지역+핀으로 그린다.
 function CollectionCard({
   card,
   index,
@@ -237,12 +267,18 @@ function CollectionCard({
         <Text className="font-noto-bold text-[18px] font-bold text-on-primary">
           {card.title}
         </Text>
-        <View className="flex-row items-center gap-[4px]">
-          <LocationPinGlyph size={12} />
+        {card.savedAtLabel ? (
           <Text className="font-noto text-micro text-on-primary opacity-90">
-            {card.region}
+            {card.savedAtLabel}
           </Text>
-        </View>
+        ) : (
+          <View className="flex-row items-center gap-[4px]">
+            <LocationPinGlyph size={12} />
+            <Text className="font-noto text-micro text-on-primary opacity-90">
+              {card.region}
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -427,10 +463,14 @@ function ItinerariesSection({
   );
 }
 
-// ── softNote(장소 온램프 · US-SHELL-05) ─────────────────────────────────
+// ── softNote(장소 온램프 · US-SHELL-05 · 단계별 브릿지/공유행) ──────────
 // 배경 #fff7f8은 Figma가 변수 아닌 raw fill로 쓴 값 → 임의 raw 유지(가정 D). D-3 13색 밖이라
-// 자동 심판 사각지대이므로 [검증] 스크린샷 대조가 유일한 그물.
-function SoftNote(): ReactElement {
+// 자동 심판 사각지대이므로 [검증] 스크린샷 대조가 유일한 그물. note 미전달이면 discovery 온램프,
+// 전달되면 그 카피(planning 브릿지행 · postTrip 공유행)를 같은 슬롯에 그린다.
+function SoftNote({ note }: { note?: HomeSoftNote }): ReactElement {
+  const title = note?.title ?? '마음에 든 곳이 모이면';
+  const subtitle = note?.subtitle ?? '담아둔 장소로 여행을 만들 수 있어요';
+  const ctaLabel = note?.ctaLabel ?? '담은 곳';
   return (
     <View className="w-full px-lg pb-[24px] pt-[22px]">
       <View
@@ -439,11 +479,9 @@ function SoftNote(): ReactElement {
       >
         <View className="flex-1 gap-[2px]">
           <Text className="font-noto-bold text-[13.5px] font-bold text-ink">
-            마음에 든 곳이 모이면
+            {title}
           </Text>
-          <Text className="font-noto text-[11.5px] text-muted">
-            담아둔 장소로 여행을 만들 수 있어요
-          </Text>
+          <Text className="font-noto text-[11.5px] text-muted">{subtitle}</Text>
         </View>
         <Pressable
           testID="home-saved-places-cta"
@@ -452,10 +490,227 @@ function SoftNote(): ReactElement {
           className="rounded-pill border-[1.4px] border-primary bg-canvas px-md py-sm"
         >
           <Text className="font-noto-bold text-caption font-bold text-primary-text">
-            담은 곳
+            {ctaLabel}
           </Text>
         </Pressable>
       </View>
+    </View>
+  );
+}
+
+// ── tripHero(planning·upcoming 공용 여행 히어로 · 브리프 §3-C) ───────────
+// 사진+스크림 · 좌상단 단계 pill · 우상단 대형 D-day · 좌하단 primary CTA + 여행명 + 기간 메타.
+function TripHero({ trip }: { trip: TripHeroData }): ReactElement {
+  return (
+    <View className="w-full px-lg pt-[8px]">
+      <View
+        testID="home-trip-hero"
+        style={softCardShadow}
+        className="h-[300px] w-full overflow-hidden rounded-[18px]"
+      >
+        <View className="absolute inset-0 bg-surface-strong" />
+        <LinearGradient
+          colors={HERO_SCRIM_COLORS}
+          locations={SCRIM_LOCATIONS}
+          style={ABSOLUTE_FILL}
+        />
+        <View className="flex-1 justify-between px-lg py-lg">
+          <View className="w-full flex-row items-start justify-between">
+            <View
+              testID="home-trip-hero-badge"
+              className="self-start rounded-pill bg-canvas px-md py-[5px]"
+            >
+              <Text className="font-noto-bold text-[11.5px] font-bold text-ink">
+                {trip.badge}
+              </Text>
+            </View>
+            <Text
+              testID="home-trip-hero-dday"
+              className="font-noto-bold text-[28px] font-bold text-on-primary"
+            >
+              {trip.dday}
+            </Text>
+          </View>
+          <View className="w-full gap-[8px]">
+            <Pressable
+              testID="home-trip-hero-cta"
+              accessibilityRole="button"
+              onPress={undefined}
+              className="self-start rounded-pill bg-primary px-lg py-sm"
+            >
+              <Text className="font-noto-bold text-caption font-bold text-on-primary">
+                {trip.ctaLabel}
+              </Text>
+            </Pressable>
+            <Text className="font-noto-bold text-[24px] font-bold text-on-primary">
+              {trip.title}
+            </Text>
+            <Text className="font-noto text-[12.5px] text-on-primary opacity-90">
+              {trip.meta}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ── dashRow(upcoming 스탯 타일 2 · 일정 진행률·등록 숙소 · US-SHELL-02) ──
+function DashRow({ stats }: { stats: readonly HomeStatTile[] }): ReactElement {
+  return (
+    <View className="mx-lg flex-row gap-md">
+      {stats.map((tile, index) => (
+        <View
+          key={tile.label}
+          testID={STAT_TEST_IDS[index]}
+          className="flex-1 gap-[4px] rounded-card border border-primary bg-canvas px-md py-lg"
+        >
+          <Text className="font-noto text-label text-muted">{tile.label}</Text>
+          <Text className="font-noto-bold text-card-title font-bold text-ink">
+            {tile.value}
+          </Text>
+          {tile.caption ? (
+            <Text className="font-noto text-micro text-muted">
+              {tile.caption}
+            </Text>
+          ) : null}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ── nextStop(upcoming '가장 먼저 갈 곳' · 순번·시각·장소·영업시간+거리) ──
+// INV-3: time은 방문 시각(09:30, INV-2 솔버검증값 표시 허용), placeMeta는 영업시간+거리 — 소요시간 아님.
+function NextStopCard({ nextStop }: { nextStop: NextStop }): ReactElement {
+  return (
+    <View className="w-full gap-md">
+      <View className="w-full px-lg">
+        <Text className="font-noto-bold text-section font-bold text-ink">
+          가장 먼저 갈 곳
+        </Text>
+      </View>
+      <View
+        testID="home-next-stop"
+        style={softCardShadow}
+        className="mx-lg flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-md py-md"
+      >
+        <View className="h-[30px] w-[30px] items-center justify-center rounded-pill bg-primary">
+          <Text className="font-noto-bold text-caption font-bold text-on-primary">
+            {nextStop.order}
+          </Text>
+        </View>
+        <View className="flex-1 gap-[3px]">
+          <Text className="font-noto text-micro text-muted">
+            {nextStop.time}
+          </Text>
+          <Text className="font-noto-bold text-body font-bold text-ink">
+            {nextStop.title}
+          </Text>
+          <Text className="font-noto text-micro text-muted">
+            {nextStop.placeMeta}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ── 미니맵 카드(upcoming '지금 내 주변' · postTrip '회고 보기' 공용 · 브리프 §3-C) ──
+// 미니맵은 플레이스홀더(가정 F — shared/map 끌어오지 않음, 홈은 프레젠테이션 순수 유지).
+function MiniMapCard({
+  testID,
+  title,
+  subtitle,
+}: {
+  testID: string;
+  title: string;
+  subtitle: string;
+}): ReactElement {
+  return (
+    <View
+      testID={testID}
+      style={softCardShadow}
+      className="mx-lg flex-row items-center gap-md overflow-hidden rounded-card border border-hairline bg-canvas px-md py-md"
+    >
+      <View className="h-[54px] w-[54px] rounded-card bg-surface-soft" />
+      <View className="flex-1 gap-[3px]">
+        <Text className="font-noto-bold text-body font-bold text-ink">
+          {title}
+        </Text>
+        <Text className="font-noto text-micro text-muted">{subtitle}</Text>
+      </View>
+    </View>
+  );
+}
+
+// ── 지난 여행(upcoming·postTrip 공용) ───────────────────────────────────
+function PastTripsSection({
+  trips,
+}: {
+  trips: readonly PastTrip[];
+}): ReactElement {
+  return (
+    <View className="w-full gap-md">
+      <View className="w-full px-lg">
+        <Text className="font-noto-bold text-section font-bold text-ink">
+          지난 여행
+        </Text>
+      </View>
+      <View className="mx-lg gap-sm">
+        {trips.map((trip, index) => (
+          <View
+            key={trip.title}
+            testID={`home-past-trip-card-${index}`}
+            style={softCardShadow}
+            className="flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-md py-md"
+          >
+            <View className="h-[44px] w-[44px] rounded-card bg-surface-strong" />
+            <Text className="font-noto-bold text-body font-bold text-ink">
+              {trip.title}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// ── 컬렉션 가로 스트립(collecting '내가 담은 곳' · postTrip '다음엔 여기 어때요') ──
+function CollectionStrip({
+  title,
+  collections,
+}: {
+  title: string;
+  collections: readonly HomeCollectionCard[];
+}): ReactElement {
+  return (
+    <View className="w-full gap-md">
+      <SectionHeader title={title} moreTestID="home-collections-more" />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
+      >
+        {collections.map((card, index) => (
+          <CollectionCard key={card.title} card={card} index={index} />
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+// ── 담은 곳 N 칩(collecting · FAB 위 · US-SHELL-05 잇기) ─────────────────
+function SavedCountChip({ label }: { label: string }): ReactElement {
+  return (
+    <View
+      testID="home-saved-count-chip"
+      style={fabShadow}
+      className="absolute bottom-[160px] right-lg rounded-pill border-[1.4px] border-primary bg-canvas px-md py-sm"
+    >
+      <Text className="font-noto-bold text-caption font-bold text-primary-text">
+        {label}
+      </Text>
     </View>
   );
 }
@@ -481,7 +736,155 @@ function CreateTripFab(): ReactElement {
   );
 }
 
-export function HomeScreen({ hero, sections }: HomeScreenProps): ReactElement {
+// ── discovery 얼굴(316 발견·영감 피드) ──────────────────────────────────
+function DiscoveryBody({
+  hero,
+  sections,
+}: {
+  hero: HomeMagazineHero;
+  sections: HomeSections;
+}): ReactElement {
+  return (
+    <>
+      <GreetingHeader
+        title="오늘은 어디를 상상해볼까요"
+        subtitle="떠나지 않아도, 구경하고 모으는 즐거움"
+      />
+      <SearchBarBlock />
+      <MagazineHero hero={hero} />
+      <View className="w-full gap-[24px] pb-sm pt-[22px]">
+        <CollectionsSection sections={sections} />
+        <SpotsSection sections={sections} />
+        <ItinerariesSection sections={sections} />
+      </View>
+      <SoftNote />
+    </>
+  );
+}
+
+// ── collecting 얼굴(담는 중 · discovery와 가장 가까움) ──────────────────
+// greet 저장개수 · 섹션1 "내가 담은 곳"(지역 badge+저장일) · softNote 숨김 · 담은 곳 N 칩(오버레이).
+function CollectingBody({
+  hero,
+  sections,
+  phase,
+}: {
+  hero: HomeMagazineHero;
+  sections: HomeSections;
+  phase: Extract<HomePhase, { kind: 'collecting' }>;
+}): ReactElement {
+  return (
+    <>
+      <GreetingHeader title={phase.greetTitle} subtitle={phase.greetSubtitle} />
+      <SearchBarBlock />
+      <MagazineHero hero={hero} />
+      <View className="w-full gap-[24px] pb-sm pt-[22px]">
+        <CollectionStrip
+          title={phase.sectionTitle}
+          collections={phase.collections}
+        />
+        <SpotsSection sections={sections} />
+        <ItinerariesSection sections={sections} />
+      </View>
+    </>
+  );
+}
+
+// ── planning 얼굴(계획 중) ──────────────────────────────────────────────
+// greet 여행명+D-day · tripHero(계획 중) · 브릿지행(softNote 슬롯) · magazineHero·grid·lane 숨김.
+function PlanningBody({
+  phase,
+}: {
+  phase: Extract<HomePhase, { kind: 'planning' }>;
+}): ReactElement {
+  return (
+    <>
+      <GreetingHeader title={phase.greetTitle} />
+      <SearchBarBlock />
+      <TripHero trip={phase.trip} />
+      <SoftNote note={phase.bridge} />
+    </>
+  );
+}
+
+// ── upcoming 얼굴(출발 전 활성 여행 허브 · 가장 다른 얼굴) ───────────────
+// 이름 greet · tripHero(출발 전) · 스탯 2 · 가장 먼저 갈 곳 · 지금 내 주변 · 지난 여행.
+// searchBar·magazineHero·softNote·컬렉션/스팟 전부 없음(브리프 §8-6).
+function UpcomingBody({
+  phase,
+}: {
+  phase: Extract<HomePhase, { kind: 'upcoming' }>;
+}): ReactElement {
+  return (
+    <>
+      <GreetingHeader name={phase.greetName} title={phase.greetTitle} />
+      <TripHero trip={phase.trip} />
+      <View className="w-full gap-[24px] pb-sm pt-[22px]">
+        <DashRow stats={phase.stats} />
+        <NextStopCard nextStop={phase.nextStop} />
+        <MiniMapCard
+          testID="home-nearby-card"
+          title={phase.nearby.title}
+          subtitle={phase.nearby.subtitle}
+        />
+        <PastTripsSection trips={phase.pastTrips} />
+      </View>
+    </>
+  );
+}
+
+// ── postTrip 얼굴(다녀옴) ───────────────────────────────────────────────
+// greet 잘 다녀오셨어요 · 회고 보기 카드 · 추천 스트립 · 지난 여행 · 공유행(softNote 슬롯).
+function PostTripBody({
+  phase,
+}: {
+  phase: Extract<HomePhase, { kind: 'postTrip' }>;
+}): ReactElement {
+  return (
+    <>
+      <GreetingHeader title={phase.greetTitle} />
+      <SearchBarBlock />
+      <View className="w-full px-lg pt-[8px]">
+        <MiniMapCard
+          testID="home-recap-card"
+          title={phase.recap.title}
+          subtitle={phase.recap.meta}
+        />
+      </View>
+      <View className="w-full gap-[24px] pb-sm pt-[22px]">
+        <CollectionStrip
+          title={phase.recommendationTitle}
+          collections={phase.recommendations}
+        />
+        <PastTripsSection trips={phase.pastTrips} />
+      </View>
+      <SoftNote note={phase.share} />
+    </>
+  );
+}
+
+// 화면은 phase.kind로 스위치만 한다(단계를 스스로 도출하지 않는다, TRIP-206 S-6).
+function PhaseBody({ hero, sections, phase }: HomeScreenProps): ReactElement {
+  if (phase === undefined || phase.kind === 'discovery') {
+    return <DiscoveryBody hero={hero} sections={sections} />;
+  }
+  switch (phase.kind) {
+    case 'collecting':
+      return <CollectingBody hero={hero} sections={sections} phase={phase} />;
+    case 'planning':
+      return <PlanningBody phase={phase} />;
+    case 'upcoming':
+      return <UpcomingBody phase={phase} />;
+    case 'postTrip':
+      return <PostTripBody phase={phase} />;
+  }
+}
+
+export function HomeScreen({
+  hero,
+  sections,
+  phase,
+}: HomeScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="home-dashboard-root" className="flex-1 bg-canvas">
@@ -490,16 +893,11 @@ export function HomeScreen({ hero, sections }: HomeScreenProps): ReactElement {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 140 }}
         >
-          <GreetingHeader />
-          <SearchBarBlock />
-          <MagazineHero hero={hero} />
-          <View className="w-full gap-[24px] pb-sm pt-[22px]">
-            <CollectionsSection sections={sections} />
-            <SpotsSection sections={sections} />
-            <ItinerariesSection sections={sections} />
-          </View>
-          <SoftNote />
+          <PhaseBody hero={hero} sections={sections} phase={phase} />
         </ScrollView>
+        {phase?.kind === 'collecting' ? (
+          <SavedCountChip label={phase.savedChipLabel} />
+        ) : null}
         <CreateTripFab />
       </View>
     </SafeAreaView>
