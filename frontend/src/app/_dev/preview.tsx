@@ -526,6 +526,82 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   },
 ];
 
+/**
+ * h26 완성 일정 · 지도(TRIP-301) 프리뷰 픽스처 — `segment="map"` 로 실지도·peekstrip·핀 상세를
+ * 한 화면에서 눈으로 보려는 것. 위 h25 픽스처는 좌표·POI 표면이 없어(지도가 텅 빔) 이 화면을
+ * 못 보여준다. 부산 실좌표 3지점 + **좌표 부재 슬롯 1개**(자갈치)를 섞어, 핀이 ①②④ 로 건너뛰고
+ * 카드엔 "지도 미표시" 배지가 뜨는 것(좌표 부재 규칙)과 영업시간 "미확인"·거리 null 을 한 자리에서
+ * 같이 본다. 사진은 초안 프리뷰 썸네일 재사용(`DRAFT_PREVIEW_PHOTOS`).
+ * ⚠️ 지도 폴백(h31)은 이 픽스처로 못 띄운다 — 폴백은 KakaoMapView 실제 로드 실패(onLoadFailed)로만
+ * 켜지고 강제할 prop 이 없다. 카카오 JS 키가 있으면 지도가 뜨고, 없으면 자연히 폴백이 뜬다.
+ */
+const TIMELINE_MAP_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
+  {
+    poiId: 'poi-a',
+    startAt: '09:30:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    tags: [],
+    lat: 35.1532,
+    lng: 129.1187,
+    nameKo: '광안리 해변',
+    category: '해변',
+    openingHours: '24시간 개방',
+    distanceRange: null,
+    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+  },
+  {
+    poiId: 'poi-b',
+    startAt: '12:00:00',
+    endAt: '13:30:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    tags: [],
+    lat: 35.0966,
+    lng: 129.0107,
+    nameKo: '감천문화마을',
+    category: '명소',
+    openingHours: '09:00–18:00 영업',
+    distanceRange: '약 3.1km · 차량 추정',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+  },
+  {
+    poiId: 'poi-c',
+    startAt: '14:30:00',
+    endAt: '16:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    tags: [],
+    lat: null,
+    lng: null,
+    nameKo: '자갈치시장',
+    category: '시장',
+    openingHours: null,
+    distanceRange: null,
+    imageUrl: null,
+  },
+  {
+    poiId: 'poi-d',
+    startAt: '18:30:00',
+    endAt: '20:00:00',
+    isFixed: true,
+    endsNextDay: false,
+    hasViolation: false,
+    tags: [],
+    lat: 35.1587,
+    lng: 129.1604,
+    nameKo: '해운대 포차거리',
+    category: '활동',
+    openingHours: '17:00–02:00 영업',
+    distanceRange: '약 1.2km · 도보 추정',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+  },
+];
+
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
   {
@@ -1204,6 +1280,27 @@ const PREVIEW_STATES: PreviewState[] = [
         slots={TIMELINE_PREVIEW_SLOTS}
         activeDayIndex={0}
         segment="timeline"
+        status="PLANNED"
+        onSelectDay={noop}
+        onSegmentChange={noop}
+        onBack={noop}
+        onConfirm={noop}
+      />
+    ),
+  },
+  // h26 완성 일정 · 지도(TRIP-301) — segment="map" 으로 실지도·peekstrip·핀 상세를 눈으로 본다.
+  // 좌표 부재 슬롯(자갈치)이 섞여 핀 결번 ①②④ + "지도 미표시" 배지도 한 화면에서 확인된다.
+  {
+    key: 'itinerary-map',
+    label: '완성 일정 · 지도(h26)',
+    login: null,
+    render: () => (
+      <TimelineScreen
+        header={TIMELINE_PREVIEW_HEADER}
+        days={TIMELINE_PREVIEW_DAYS}
+        slots={TIMELINE_MAP_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        segment="map"
         status="PLANNED"
         onSelectDay={noop}
         onSegmentChange={noop}
