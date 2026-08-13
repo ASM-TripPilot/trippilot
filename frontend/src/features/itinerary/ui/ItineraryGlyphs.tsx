@@ -507,6 +507,155 @@ export function WarningTriangleGlyph({ size = 24, testID }: GlyphProps) {
   );
 }
 
+// h34 appbar 공유 아이콘(22) — TRIP-354 Q3. Figma `1884:1083` 우상단. iOS 공유(상자+위 화살표)
+// 형태를 손으로 재구성했다(Figma 벡터 실측 아님 — `AlertCircleGlyph` 선례처럼 도형만 맞춤). 정적
+// 스텁이라 탭 동작은 없다(실동작은 후속 TRIP-300). 앱바 제목과 같은 ink.
+export function ShareGlyph({ size = 22, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 3V15"
+        stroke={INK}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8 6.5L12 3L16 6.5"
+        stroke={INK}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8 10H6C4.89543 10 4 10.8954 4 12V19C4 20.1046 4.89543 21 6 21H18C19.1046 21 20 20.1046 20 19V12C20 10.8954 19.1046 10 18 10H16"
+        stroke={INK}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 구간행 이동수단 아이콘 · 도보(16) — TRIP-354. Figma `2246:1942`. 걷는 사람 실루엣을 손으로
+// 재구성. distanceRange 꼬리가 "도보 추정" 이면 이 글리프를 쓴다(차량은 아래 `CarGlyph`). 거리
+// 글자와 같은 muted.
+export function WalkGlyph({ size = 16, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Circle cx={9} cy={3} r={1.5} fill={MUTED} />
+      <Path
+        d="M9 5.5L8 9"
+        stroke={MUTED}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8 9L6.5 13"
+        stroke={MUTED}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8 9L10 11.5V13"
+        stroke={MUTED}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 6.5L11 8"
+        stroke={MUTED}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 구간행 이동수단 아이콘 · 차량(16) — TRIP-354. Figma `2246:1942`. 자동차 실루엣을 손으로
+// 재구성. distanceRange 꼬리가 "차량 추정" 이면 이 글리프를 쓴다. 거리 글자와 같은 muted.
+export function CarGlyph({ size = 16, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Path
+        d="M2 11L3 7.5C3.13 7.2 3.42 7 3.75 7H12.25C12.58 7 12.87 7.2 13 7.5L14 11V12.5H2V11Z"
+        stroke={MUTED}
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx={5} cy={12.5} r={1} fill={MUTED} />
+      <Circle cx={11} cy={12.5} r={1} fill={MUTED} />
+    </Svg>
+  );
+}
+
+// "지도 크게 보기" 확대 아이콘(14) — TRIP-354 Q5. Figma `2246:1989` pill. 네 귀 화살표(maximize)
+// 를 손으로 재구성. pill 글자와 같은 ink.
+export function ExpandGlyph({ size = 14, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Path
+        d="M6 3H3V6"
+        stroke={INK}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 3H13V6"
+        stroke={INK}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M6 13H3V10"
+        stroke={INK}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 13H13V10"
+        stroke={INK}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // h31 지도 폴백 재시도 새로고침(18) — Figma `1912:1083`. 호(arc)+화살촉 한 벌. 재시도 버튼
 // 글자와 같은 muted 로 은은한 어포던스.
 export function RefreshGlyph({ size = 18, testID }: GlyphProps) {

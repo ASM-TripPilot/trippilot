@@ -8,6 +8,7 @@ import {
   hydrate,
   subscribeAccessToken,
 } from '@/shared/api/tokenManager';
+import { subscribeBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 import {
   resolveBootstrapDestination,
   type BootstrapDestination,
@@ -44,7 +45,9 @@ export function useBootstrapGate(): BootstrapGateState {
   useEffect(() => {
     let cancelled = false;
     let settled = false;
+    let hadStoredToken = false;
     let unsubscribeToken: (() => void) | null = null;
+    let unsubscribeReeval: (() => void) | null = null;
 
     const applyServerResult = async () => {
       try {
@@ -65,7 +68,17 @@ export function useBootstrapGate(): BootstrapGateState {
           return;
         }
         if (!settled) {
-          // 최초 왕복의 실패는 타임아웃 폴백/온라인 복구 경로가 처리한다.
+          // 최초 왕복의 실패 중 "인증 실패"만 여기서 확정한다: 부팅 시 저장 토큰이 있었는데
+          // (hadStoredToken) 지금 홀더가 비었다면(getAccessToken() === null) 인터셉터가
+          // 401 → onSessionExpired 로 홀더를 비운 것뿐이다(유일한 확정 신호) → LOGIN 확정.
+          // 네트워크 실패(홀더 잔존)·게스트(hadStoredToken 거짓)는 타임아웃 폴백/온라인
+          // 복구 경로가 처리하도록 그대로 반환한다(무응답은 미확정 · 401만 확정).
+          if (hadStoredToken && getAccessToken() === null) {
+            settled = true;
+            setDestination('LOGIN');
+            setIsProvisional(false);
+            setPhase('resolved');
+          }
           return;
         }
         // settled 이후의 재조회 실패(TRIP-222 03b W-2) — 최초 분기가 끝나면 타임아웃도
@@ -86,6 +99,8 @@ export function useBootstrapGate(): BootstrapGateState {
       if (stored?.accessToken) {
         hydrate(stored.accessToken);
       }
+      // 결함 B 판별의 절반 — "부팅 시 저장 토큰이 hydrate 됐나"(홀더가 401 로 비면 인증 실패).
+      hadStoredToken = Boolean(stored?.accessToken);
       await applyServerResult();
       if (cancelled) {
         return;
@@ -93,6 +108,14 @@ export function useBootstrapGate(): BootstrapGateState {
       // 첫 왕복이 끝난 뒤에만 구독한다 — hydrate 의 복원 통지가 이 콜백을 다시 부르면
       // 부트스트랩이 부팅 시 두 번 나가버린다(케이스 3).
       unsubscribeToken = subscribeAccessToken(() => {
+        if (cancelled) {
+          return;
+        }
+        void applyServerResult();
+      });
+      // 온보딩 완료 재평가 신호(결함 A) — 토큰 구독과 같은 자리·같은 방식(effect 재실행이
+      // 아니라 같은 applyServerResult 재호출)이라 3초 타이머가 재무장되지 않는다(AC-S2).
+      unsubscribeReeval = subscribeBootstrapReeval(() => {
         if (cancelled) {
           return;
         }
@@ -126,6 +149,7 @@ export function useBootstrapGate(): BootstrapGateState {
       clearTimeout(timer);
       unsubscribe();
       unsubscribeToken?.();
+      unsubscribeReeval?.();
     };
   }, []);
 

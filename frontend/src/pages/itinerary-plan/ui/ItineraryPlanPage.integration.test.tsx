@@ -22,17 +22,20 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  * h25 배선을 **실 HTTP 로** 태우는 심판.
  *
  * 무엇을 보장하나:
- *  - 🔴 **세그먼트 전환은 서버를 다시 때리지 않는다**(AC6 · US-SCHED-06). 시간표↔지도는 UI 상태라
- *    `GET /itinerary` 실건수가 전환 전후로 **불변**이어야 한다. 훅 호출수는 리렌더마다 늘어 거짓이
- *    되므로(02a ★6) MSW 로 나간 요청을 실제로 센다.
  *  - 헤더가 **두 조회의 조립**이다 — 제목·기간(GET /trips)과 곳 수(GET /itinerary)를 합쳐 그린다(AC1).
  *  - 🔴 **일정이 아직 없으면(404) notFound 얼굴**을 그리지 시간표를 그리지 않는다(AC9 · isNotFound).
+ *  - 🔴 **확정 mutation 3갈래** — 성공(setQueryData 재조회0)·409(안내+재조회)·404(status 불변).
  *
- * 왜 통합 버킷인가: 심판의 핵심이 **어떤 요청이 몇 건 나갔나**다. 훅을 목킹하면 "전환에 재조회가
- * 없다"가 테스트의 *가정*이 되어 그 가정이 틀려도 아무도 모른다.
+ * **재작성(TRIP-354)**: 세그먼트 토글이 사라져(결정 D) 구 I1(세그먼트 전환 재조회 0)은 **삭제**한다
+ * — 토글 자체가 없어 잴 대상이 없다. 지도가 상시 인라인이라 페이지가 `KakaoMapView` 를 마운트하므로,
+ * 지도를 얇은 가짜로 바꿔 렌더 노이즈를 없앤다(이 파일의 관심사는 요청 건수지 지도가 아니다).
  *
- * 3동작 뼈대: 준비=가짜 서버 응답 지정 → 실행=열고 세그먼트를 탭 → 단언=나간 요청·보이는 것.
+ * 왜 통합 버킷인가: 심판의 핵심이 **어떤 요청이 몇 건 나갔나**다. 훅을 목킹하면 그 계수가 테스트의
+ * *가정*이 되어 그 가정이 틀려도 아무도 모른다.
+ *
+ * 3동작 뼈대: 준비=가짜 서버 응답 지정 → 실행=열고 확정 CTA 를 탭 → 단언=나간 요청·보이는 것.
  */
+jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다 — 실물
 // 로드를 피하려면 목킹한다(선례와 동형).
@@ -186,27 +189,6 @@ function renderPage() {
   }
   return render(<ItineraryPlanPage tripId={TRIP_ID} />, { wrapper: Wrapper });
 }
-
-describe('🔴 I1 · AC6 — 세그먼트 전환은 서버를 다시 때리지 않는다 (US-SCHED-06)', () => {
-  it('지도↔시간표를 오가도 GET /itinerary 는 딱 한 번만 나간다', async () => {
-    renderPage();
-
-    // 시간표가 뜬다(첫 조회 1건).
-    await screen.findByTestId('itinerary-view-timeline');
-    await waitFor(() => expect(itineraryGetCalls).toBe(1));
-
-    // 지도로 전환 — placeholder 가 뜬다.
-    fireEvent.press(screen.getByTestId('itinerary-view-segment-map'));
-    await screen.findByTestId('itinerary-view-map');
-    // ★ 핵심 — 전환은 UI 상태라 재조회가 없다. 재키잉·수동 refetch·조건부 enabled 만 이 값을 올린다.
-    expect(itineraryGetCalls).toBe(1);
-
-    // 다시 시간표로 — 여전히 1건이다.
-    fireEvent.press(screen.getByTestId('itinerary-view-segment-timeline'));
-    await screen.findByTestId('itinerary-view-timeline');
-    expect(itineraryGetCalls).toBe(1);
-  });
-});
 
 describe('🔴 I2 · AC1 — 헤더가 두 조회의 조립이다', () => {
   it('제목·기간(GET /trips)과 곳 수(GET /itinerary)를 합쳐 그린다', async () => {

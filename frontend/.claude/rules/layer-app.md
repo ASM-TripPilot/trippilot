@@ -1,0 +1,41 @@
+---
+paths:
+  - "src/app/**"
+---
+# `src/app/` — 라우트
+
+
+| 파일 | 역할 |
+|---|---|
+| `src/app/_layout.tsx` | 루트 레이아웃. 폰트 로드 게이팅 + 네이티브 스플래시 제어 + `GestureHandlerRootView` + `SafeAreaProvider`(null 대비 initialMetrics) + **`QueryClientProvider`(TRIP-179, `SplashGate` 바깥에 배선 — 향후 `SplashGate`가 `useQuery`로 바뀌어도 안전)** + `SplashGate` |
+| `src/app/force-update.tsx` | 강제 업데이트 분기 화면 |
+| `src/app/reconsent.tsx` | 재동의 분기 화면 |
+| `src/app/_dev/preview.tsx` | **개발 전용 정적 프리뷰** — 네트워크 없이 시각 상태 전환. 진입은 딥링크 `trippilot://_dev/preview?state=<키>` 하나뿐(**20개** 상태 키 조준 — TRIP-170에서 홈 4상태(`home-default`·`home-no-trip`·`home-empty`·`home-loading`) 끝에 append. 부재·오타·배열 값은 splash 결정론 폴백 — `useLocalSearchParams`는 지연 초기화자로 최초 마운트 1회만 읽음, **⚠️ 상태가 이미 열린 프리뷰 화면에서 딥링크만 바꿔 다시 열면 전환되지 않는다** — 토글을 직접 누르거나 앱을 재기동해야 새 키가 반영된다, TRIP-297 04b §5 실사고). 같은 세션에서 연속 openurl 시 상태 미전환(1회만 읽는 계약 한계 — 실기 확인은 키마다 fresh 재기동). **경량 사이클(20260805, TRIP-221·223)로 `places-results`·`saved-places-results` 2키 추가** — d04·d02의 **results 얼굴 전용**(실화면 딥링크로는 백엔드 401·세션 없음 때문에 원리적으로 도달 불가했다). 픽스처는 `exploreFixtures.ts`(아래 `src/features/explore/` 절). **TRIP-209로 `trip-new-step1-seeded`·`trip-new-step1-no-saved` 2키 추가(+74줄)** — g01 '꼭 갈 곳' 시드·0곳 두 얼굴. 기존 항목과 같은 형태(`PREVIEW_STATES` 배열에 `{key, label, login: null, render}` 추가뿐). ⚠️ 배너 얼굴·자리표시 얼굴·조회 실패 얼굴은 프리뷰 키가 없다(회선을 늦추거나 끊으면 실화면에서 재현되는 판단, 기존 탐색 2키와 같은 규율) — 또한 **이웃 블록(등록 숙소 행) props를 안 넘겨** 그 행이 회색·예산 빈칸으로 뜬다(대조 시 결함으로 오인 금지). 같은 세션에서 딥링크만 바꿔 열면 상태가 안 바뀌는 위 계약 한계가 이 두 키에도 그대로 적용된다(앱 재기동 필요). **TRIP-297로 `itinerary-draft-{default,stale-failed,loading,empty,nopins}` 5키 추가** — h11 초안 화면. 탭·핀·날짜 헤더는 하드코딩 대신 `buildDraftPins`·`formatDraftDayHeader`를 실제 호출(배선과 같은 값이 감). 6-b 실기 스모크에서 `-default`가 카카오 지도 실제 핀 렌더의 최초 확인 자리였다. **TRIP-339로 h11 픽스처에 사진 3장 배선 + 좌표 좁힘(41.2km→2.03km)** — `src/assets/itinerary/draft-preview-{1,2,3}.jpg`를 `require` → `Image.resolveAssetSource(...).uri ?? null`로 풀어 슬롯 `imageUrl`에 넣는다(jest에서는 `.uri`가 `undefined`라 사진 없는 카드가 되는 것이 정상 — 02a §2-A). 화면 코드(`DraftScreen.tsx`)·계약(`MapPin`·`DraftScreenProps`)은 무변경, 픽스처 안에서만 풀린다. 딥링크 `_dev/preview`는 expo-router의 라우팅 제외 대상(`+api`·`+html`·`+middleware`)에 안 들어가 **릴리스 빌드에서도 열린다** — `require`된 에셋 3장은 무조건 번들에 실린다(`CREDITS.md`에 도달성·라이선스 미확인·릴리스 전 할 일 명시) |
+| `src/app/(auth)/_layout.tsx` | 미인증 스택 |
+| `src/app/(auth)/login.tsx` | 소셜 로그인 화면 진입점 |
+| `src/app/(onboarding)/_layout.tsx` | 온보딩 스택 + **완료자만 홈으로 방어** |
+| `src/app/(onboarding)/index.tsx` | **진입 단계 리다이렉트** (미완 → terms) |
+| `src/app/(onboarding)/terms.tsx` | 약관 라우트 — 컨테이너를 꽂는 얇은 래퍼 |
+| `src/app/(onboarding)/nickname.tsx` | 닉네임 라우트 — 얇은 래퍼 |
+| `src/app/(onboarding)/pref1.tsx` | 취향 1/2 라우트(c09) — `PrefStep1Page`를 꽂는 얇은 래퍼(구 `PrefStep1Container`) |
+| `src/app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Page`를 꽂는 얇은 래퍼(구 `PrefStep2Container`) |
+| `src/app/(tabs)/_layout.tsx` | 탭 네비게이터 — `Tabs`에 `tabBar` 렌더프롭(Q4 전면 커스텀) + `BottomTabBar` 어댑터(라우트↔탭key 양방향 번역: `routeNameToTabKey`(index→home, 활성 표시) · `handlePressTab`(home→index, 누름 이동 — **홈 탭 press 미검증**, code-critic 경고1)) |
+| `src/app/(tabs)/index.tsx` | 홈 탭 라우트 — `HomeScreen`(no-trip 픽스처, 게이트① G-1)을 그리는 얇은 래퍼. **더 이상 껍데기 아님**(TRIP-170) |
+| `src/app/(tabs)/explore.tsx` | 탐색 탭 — **껍데기** |
+| `src/app/(tabs)/itinerary.tsx` | **TRIP-299로 껍데기 → 문지기로 재작성.** `useGetTrips()` 결과 length>0이면 첫 여행 문자열 리다이렉트(`/trips/{id}/itinerary`), 0이면 빈 상태+"여행 만들기". ⚠️ **W1(미룸→TRIP-301 코멘트)**: `isPending`/`isError`를 안 봐 로딩·조회 실패를 "여행 없음"으로 뭉갠다(여행 있는 사용자가 GET 실패 시 중복 생성 오이동 위험, code-critic 03b) |
+| `src/app/(tabs)/records.tsx` | 기록 탭 — **껍데기** |
+| `src/app/(tabs)/my.tsx` | 마이 탭 — **껍데기** |
+| `src/app/stays/index.tsx` | **신규(TRIP-181)** — `/stays` 라우트, `@/pages/stay-search` 배럴을 경유하는 얇은 래퍼(훅·마크업 0). `(tabs)` **밖**(탐색 탭의 하위 화면이라 탭 자체가 아님) — expo-router가 파일시스템 라우트를 자동 등록해 `SplashGate`의 어떤 `Stack.Protected` guard에도 안 걸린다. **실기로 확정**(04b 2차): 미인증 상태에서도 딥링크로 열린다(API 401이라 데이터 노출은 없음). 후속 티켓 + TRIP-183 선행 조건으로 유지 — 아래 경고 참조 |
+| `src/app/stays/register.tsx` | **신규(TRIP-198)** — `/stays/register` 라우트, `@/pages/stay-register` 배럴 경유 얇은 래퍼(5줄, `app/stays/index.tsx`와 동형). 구조 가드가 `useState`·`useGetStaysGeocode`·`FlatList` 0건을 부정 단언으로 잠근다. `stays/index.tsx`와 같은 미인증 딥링크 노출 조건을 공유한다(아래 경고 참조 — 이번 사이클도 안 풀었다) |
+| `src/app/explore/region.tsx` | **신규(TRIP-183, 이번 사이클 문서 소급 반영)** — d1b·e00 지역 선택 라우트. `@/pages/region-picker` 배럴을 경유하는 얇은 래퍼(9줄). 목적(`purpose`)은 쿼리 파라미터로 온다: `/explore/region`(기본 `stay`) · `?purpose=trip` |
+| `src/app/explore/destination/[region].tsx` | **신규(TRIP-183) — ⚠️ 스텁("자리만").** 27줄, "{지역} 상세 / 준비 중이에요"만 렌더. `typedRoutes: true`라 목적지 파일이 없으면 `router.push('/explore/destination/…')`가 타입 단계에서 막혀 만든 자리다 — `frontend-components.md` §2 `DestinationDetail`의 실제 요구(인기 스팟 그리드 등)는 **밴드 d 티켓 몫**이라 하나도 안 만들었다 |
+| `src/app/explore/places.tsx` | **신규(TRIP-221)** — d04 장소 탐색 라우트(9줄), `@/pages/place-explore` 배럴 경유 얇은 래퍼(훅·마크업 0, `stays/index.tsx`와 동형 관례). `region.tsx`·`destination/[region].tsx`와 같은 `(tabs)` 밖 파일시스템 라우트 — 미인증 딥링크 노출 여부는 이번 사이클에서 확인하지 않음 |
+| `src/app/explore/saved-places.tsx` | **신규(TRIP-223)** — d02 담은 장소 라우트(7줄), `@/pages/saved-places` 배럴 경유 얇은 래퍼(`places.tsx`와 동형). **앱 안에서 이 라우트로 가는 진입 링크가 0건**이다(d01이 아직 U0 빈 셸이라 딥링크로만 도달, 미충족 기록). 실기 스모크(04b n=1)에서는 미로그인 상태 딥링크가 로그인 화면으로 리다이렉트됐다(관찰만 — `stays/`·`trips/new/**`처럼 미인증 노출이 실측되진 않았으나, 메커니즘 자체를 이 사이클이 규명하진 않았다) |
+| `src/app/trips/new/_layout.tsx` | **TRIP-205 신설 → TRIP-288로 진입 초기화 `useEffect` 1개 추가(+24줄, 몸통 로직 0→1).** `(tabs)` **밖** — `stays/`·`stays/register`와 같은 구조(아래 경고 참조): `SplashGate`의 어떤 `Stack.Protected` guard에도 안 걸려 미인증 딥링크로 열린다(실기로 확정, `03_implementer_notes.md` "미인증 딥링크 확인 결과"). **TRIP-288 추가분**: 마운트 시 `resetMustVisits()` 1회 호출 — 의존성이 안정된 액션 하나뿐이라 리렌더로는 안 돈다. 실기 스모크(6-b n=1)는 프리뷰가 셸을 안 태워 이 재마운트 자체는 미검증(D4, 아래 `tripWizardStore.ts` 행 참고) |
+| `src/app/trips/new/step1.tsx` | **신규(TRIP-205)** — `/trips/new/step1` 라우트, `@/pages/trip-new-step1` 배럴 경유 얇은 래퍼(6줄, 훅·마크업 0, `stays/index.tsx`와 동형 관례). g01 위저드 1/2 진입점 |
+| `src/app/trips/new/step2.tsx` | **TRIP-206 자리만 라우트 → TRIP-225로 실 화면 교체(5줄).** `/trips/new/step2` 라우트, `@/pages/trip-new-step2` 배럴을 경유하는 얇은 래퍼(훅·마크업 0, `stays/index.tsx`와 동형 관례). g02 거점 숙소 화면 2/2(구간별 배정·저장 숙소 후보·거점 지정, US-TRIP-04). 자리만 라우트를 지키던 전역 가드(`tripWizardStep2Placeholder.test.ts`)는 삭제됐다 — g02 내용은 이제 `pages/trip-new-step2/`가 떠안는다 |
+| `src/app/trips/[tripId]/itinerary/must-visits/index.tsx` | **신규(TRIP-296, 6줄)** — h05 필수 방문지 목록 라우트, `@/pages/itinerary-mustvisit` 배럴 경유 얇은 래퍼(훅·마크업 0, `stays/index.tsx`와 동형 관례). `(tabs)` **밖** — 위 미인증 딥링크 노출 경고와 같은 구조(guard 안 걸림, 이번 사이클은 확인하지 않음) |
+| `src/app/trips/[tripId]/itinerary/must-visits/[poiId].tsx` | **신규(TRIP-296, 9줄)** — h07 방문 시각 지정 라우트, 같은 배럴 경유 얇은 래퍼. `poiId`는 지정하려는 필수 방문지의 `sourcePoiId`(URL 파라미터로 옴) |
+| `src/app/trips/[tripId]/itinerary/draft.tsx` | **신규(TRIP-297)** — h11 AI 추천안 초안 라우트, `@/pages/itinerary-draft` 배럴 경유 얇은 래퍼(훅·마크업 0, `stays/index.tsx`와 동형 관례). `(tabs)` 밖 — 같은 미인증 딥링크 노출 구조(guard 안 걸림, 이번 사이클도 확인하지 않음) |
+| `src/app/trips/[tripId]/itinerary/index.tsx` | **신규(TRIP-299)** — h25 완성 일정 시간표 라우트, `params.tripId`만 읽어 `@/pages/itinerary-plan` 배럴 경유로 넘기는 얇은 래퍼(조회·마크업 0, `stays/index.tsx`와 동형 관례). `(tabs)` 밖 — 같은 미인증 딥링크 노출 구조(guard 안 걸림, 확인 안 함) |
+| `src/app/trips/[tripId]/itinerary/edit.tsx` | **신규(TRIP-302, 슬라이스1)** — h24 일정 편집 라우트, `@/pages/itinerary-edit` 배럴 경유 얇은 래퍼(조회·마크업 0, `stays/index.tsx`와 동형 관례). `(tabs)` 밖 — 같은 미인증 딥링크 노출 구조(guard 안 걸림, 확인 안 함). **앱 진입 배선은 이 슬라이스 밖** — h25 `TimelineScreen`의 [일정 수정]은 TRIP-300 이후에도 비활성 스텁이라 `git grep`으로 preview·앱 어디서도 이 라우트 도달 경로가 0건(6-b 실기 스모크가 이 사유로 실행불가 판정, 후속에서 진입 배선 시 라이브 스모크 필수) |

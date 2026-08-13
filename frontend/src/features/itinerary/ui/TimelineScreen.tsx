@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
-import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Fragment, useState } from 'react';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type {
@@ -14,30 +14,41 @@ import {
 } from '@/shared/map';
 
 import { buildDraftPins, formatDraftDayHeader } from '../model/draftView';
+import { legDistance } from '../model/legDistance';
 import type { PlanDayTab } from '../model/planState';
 import { buildSlotKey } from '../model/slotKey';
 import { timeBandLabel } from '../model/timeBandLabel';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
+  CarGlyph,
   CheckCircleGlyph,
+  ChevronRightGlyph,
+  ExpandGlyph,
   LockGlyph,
+  ShareGlyph,
+  WalkGlyph,
 } from './ItineraryGlyphs';
 import { MapFallback } from './MapFallback';
 import { PinDetailSheet } from './PinDetailSheet';
 import { PoiSlotCard } from './PoiSlotCard';
 
 /**
- * h25 완성 일정 시간표 뷰(골격·검증 시각) — Figma `1880:1207`.
+ * h25/h34 완성·확정 일정 시간표 뷰 — Figma h34 `1884:1190`(TRIP-354 풀디자인 정합).
  *
- * 이 화면은 완성된 값만 받는다 — 조회도 판정도 하지 않는다. h11 초안과 갈리는 두 규칙이 이
- * 화면의 존재 이유다:
+ * 이 화면은 완성된 값만 받는다 — 조회도 판정도 하지 않는다. h11 초안과 갈리는 규칙:
  *  1. 완성이라 `isFixed` 무관하게 **모든 슬롯이 검증 시각을 보인다**(BR-U3-07 · h11 은 고정만).
- *  2. 카드는 **골격만** 그린다 — 서버가 장소명·사진·영업시간·category·거리를 줘도 왼쪽 절반을
- *     그리지 않는다(01b Q2). 넣지 않는 것이라 아예 참조하지 않는다.
+ *  2. 카드는 **풀카드**다(TRIP-354 — 이전엔 골격) — 사진·장소명·영업시간·첫 태그를 각각 값 하나만
+ *     담는 leaf 로 그린다. 라벨 축은 `timeBandLabel`(01b Q1, Figma 성격 축이 아니다).
+ *  3. 카드 사이 **구간행**이 슬롯 `distanceRange` 를 **문자열 그대로** 나른다(BR-U3-08 파생 금지).
+ *     날짜헤더의 "이동 X" 만 그 문자열들을 파싱·합산한 별개 파생이다(`legDistance`, Q2).
  *
- * 자정 넘김은 **문자열로만** 다룬다 — `endsNextDay` 면 `endAt < startAt` 이 정상이라(HC4) Date
- * 파싱·정렬을 하면 시각이 뒤집힌다.
+ * 세그먼트 토글(시간표/지도)은 없다(TRIP-354 결정 D) — 지도는 날짜탭 밑에 **작은 viewOnly 글랜스**로
+ * 상시 인라인이고, "지도 크게 보기"가 HEAD h26(제스처 지도 + peekstrip + 핀시트 + 폴백)을 화면 내
+ * 확대 오버레이(`expanded` 로컬 상태)로 연다(Q5). 기본/오버레이 지도는 상호 배타다.
+ *
+ * INV-3: 소요시간(분/시간/소요)은 소스·렌더 어디에도 없다 — 영업시간은 `slot.openingHours`(서버값)
+ * 로만 그린다. 자정 넘김은 **문자열로만** 다룬다(HC4 — `endAt < startAt` 이 정상이라 Date 정렬 금지).
  */
 
 // appbar 제목은 status 로 갈린다(라이브 h34) — PLANNED 은 h25 그대로, CONFIRMED 은 확정 얼굴.
@@ -50,9 +61,19 @@ const EDIT_LABEL = '일정 수정';
 const EDIT_DISABLED_REASON = '확정된 일정은 아직 수정할 수 없어요';
 const SHARE_LABEL = '공유하기';
 const SHARE_DISABLED_REASON = '공유는 곧 제공돼요';
-const SEG_TIMELINE_LABEL = '시간표';
-const SEG_MAP_LABEL = '지도';
 const FIXED_CHIP = '고정';
+// 풀카드 표면 문구(TRIP-354). 영업시간 null 은 "미확인"(PoiSlotCard 선례와 동일 규율).
+const MISSING_HOURS = '미확인';
+const NO_MAP_BADGE = '위치 정보 없음 · 지도 미표시';
+// 휴관칩 문구 — Figma 목업은 "월 휴관 확인" 이지만 요일 필드가 계약에 없어 **발명 금지**(01b Q4 ·
+// 02a ★10). 요일 없는 일반 문구로 둔다. 트리거는 `openingHoursKnown === false` 뿐(데이터 신호).
+const WARN_CHIP = '휴관일 확인';
+const DIRECTIONS_LABEL = '길찾기';
+const MAP_EXPAND_LABEL = '지도 크게 보기';
+const MAP_COLLAPSE_LABEL = '닫기';
+// 구간행 이동수단 판정 — 서버 `distanceRange` 꼬리("· 차량 추정")로 도보/차량 아이콘만 가른다.
+// 거리·이동수단만 본다(INV-3). 판정이 아니라 표시 아이콘 선택일 뿐이다.
+const CAR_MODE_HINT = '차량';
 
 // 좌표 슬롯이 하나도 없을 때의 지도 시작 좌표(핀이 있으면 setBounds 가 덮으므로 시작값일 뿐).
 // KakaoMapView 기존 호출부·테스트가 쓰는 서울 시청 좌표를 그대로 쓴다.
@@ -76,17 +97,13 @@ export interface ItineraryHeaderData {
   totalPlaces: number;
 }
 
-export type ViewSegmentValue = 'timeline' | 'map';
-
 export interface TimelineScreenProps {
   header: ItineraryHeaderData;
   days: PlanDayTab[];
   /** 활성 날의 슬롯만 — 페이지가 골라 내린다(키 조회지 판정 아님). */
   slots: ItineraryDaysItemSlotsItem[];
   activeDayIndex: number;
-  segment: ViewSegmentValue;
   onSelectDay: (index: number) => void;
-  onSegmentChange: (value: ViewSegmentValue) => void;
   onBack: () => void;
   /** 확정 상태 축(TRIP-300) — 미지정은 PLANNED 취급. appbar 제목·배너·하단 영역을 가른다. */
   status?: ItineraryStatus;
@@ -96,39 +113,6 @@ export interface TimelineScreenProps {
   confirmError?: string | null;
   /** PLANNED 확정 CTA press 콜백 — 곧장 확정 요청으로 잇는다(중간 다이얼로그 없음). */
   onConfirm?: () => void;
-}
-
-function SegmentButton({
-  value,
-  label,
-  segment,
-  onSegmentChange,
-}: {
-  value: ViewSegmentValue;
-  label: string;
-  segment: ViewSegmentValue;
-  onSegmentChange: (value: ViewSegmentValue) => void;
-}): ReactElement {
-  const active = segment === value;
-  return (
-    <Pressable
-      testID={`itinerary-view-segment-${value}`}
-      accessibilityRole="button"
-      onPress={() => onSegmentChange(value)}
-      style={active ? cardShadow : undefined}
-      className={`flex-1 items-center justify-center rounded-[8px] py-sm ${
-        active ? 'bg-primary' : ''
-      }`}
-    >
-      <Text
-        className={`font-noto-bold text-label font-bold ${
-          active ? 'text-on-primary' : 'text-muted'
-        }`}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
 }
 
 function DayTab({
@@ -165,8 +149,60 @@ function DayTab({
 }
 
 /**
- * 카드 한 장 — 골격만. 서버가 준 장소명·사진·영업시간·category·거리·태그는 참조하지 않는다
- * (01b Q2). 완성이라 고정 여부와 무관하게 검증 시각을 그린다(BR-U3-07).
+ * 카드 사이 **구간행**(connector) — 슬롯[i]의 `distanceRange` 를 카드[i-1]↔[i] 사이에 그린다.
+ * 첫 카드(i=0) 위엔 없고(직전 지점 없음), `distanceRange` 가 없으면 이 컴포넌트를 렌더하지 않는다
+ * (부모가 가른다 — 빈 문자열 렌더 금지, AC6).
+ *
+ * 무엇을 보장하나: 서버 문자열을 **가공 없이 그대로** 나른다(BR-U3-08 — "약 950m" 에서 소요시간을
+ * 유도하지 않는다). [길찾기]는 콜백을 아예 안 받는 죽은 스텁이라 press 가 무해하다(Q6 · 02a ★11).
+ */
+function SlotConnector({
+  slotKey,
+  distanceRange,
+}: {
+  slotKey: string;
+  distanceRange: string;
+}): ReactElement {
+  const byCar = distanceRange.includes(CAR_MODE_HINT);
+  return (
+    <View
+      testID={`itinerary-timeline-connector-${slotKey}`}
+      className="w-full flex-row items-center gap-[7px] pl-md"
+    >
+      {byCar ? <CarGlyph size={16} /> : <WalkGlyph size={16} />}
+      <Text
+        testID={`itinerary-timeline-connector-distance-${slotKey}`}
+        className="font-noto text-caption text-muted"
+      >
+        {distanceRange}
+      </Text>
+      <View className="h-0 flex-1 self-center border-t border-dashed border-hairline-strong" />
+      <Pressable
+        testID={`itinerary-timeline-connector-directions-${slotKey}`}
+        accessibilityRole="button"
+        hitSlop={6}
+        className="flex-row items-center gap-[2px]"
+      >
+        <Text className="font-noto-bold text-caption font-bold text-primary-text">
+          {DIRECTIONS_LABEL}
+        </Text>
+        <ChevronRightGlyph size={16} />
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * 카드 한 장 — **풀카드**(TRIP-354). 사진·장소명·영업시간·첫 태그를 각각 값 하나만 담는 leaf 로
+ * 그린다(RNTL `toHaveTextContent` 완전 일치 계약). 완성이라 고정 여부와 무관하게 검증 시각을
+ * 그린다(BR-U3-07).
+ *
+ * 반쪽 계약(null 이 정상 경로 · INV-1):
+ *  - `imageUrl` null → 사진 leaf 자체 부재(기본 이미지 발명 금지).
+ *  - `openingHours` null → 빈칸이 아니라 "미확인".
+ *  - `tags` [] → 태그 leaf 부재. `nameKo` null → 이름 leaf 부재(더미 텍스트 금지).
+ *  - 좌표 null → 카드는 목록에 남고 "지도 미표시" 배지를 단다(INV-4).
+ *  - 휴관칩은 `openingHoursKnown === false` 에서만(데이터 신호만, status 게이트 없음 · Q4).
  */
 function TimelineSlotCard({
   slot,
@@ -178,39 +214,55 @@ function TimelineSlotCard({
   index: number;
 }): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
+  const fieldId = (role: string): string =>
+    `itinerary-timeline-slot-${role}-${slotKey}`;
+  const hasImage = slot.imageUrl !== null && slot.imageUrl !== undefined;
+  const hasName = slot.nameKo !== null && slot.nameKo !== undefined;
+  const firstTag = slot.tags.length > 0 ? slot.tags[0] : null;
+  const hasCoord = typeof slot.lat === 'number' && typeof slot.lng === 'number';
+
   return (
     <View
       testID={`itinerary-timeline-slot-${slotKey}`}
       style={cardShadow}
-      className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas p-md"
+      className="w-full flex-row items-start gap-md rounded-card border border-hairline bg-canvas p-md"
     >
       <View className="h-[26px] w-[26px] items-center justify-center rounded-[8px] bg-primary">
         <Text
-          testID={`itinerary-timeline-slot-no-${slotKey}`}
+          testID={fieldId('no')}
           className="font-inter-bold text-label font-bold text-on-primary"
         >
           {String(index + 1)}
         </Text>
       </View>
 
+      {hasImage ? (
+        <Image
+          testID={fieldId('image')}
+          source={{ uri: slot.imageUrl as string }}
+          resizeMode="cover"
+          className="h-[78px] w-[78px] rounded-[12px]"
+        />
+      ) : null}
+
       <View className="flex-1 items-start gap-xs">
         <View className="flex-row flex-wrap items-center gap-xs">
           <Text
-            testID={`itinerary-timeline-slot-time-${slotKey}`}
+            testID={fieldId('time')}
             className="font-noto text-label text-muted"
           >
             {slot.startAt.slice(0, 5)}
           </Text>
           <Text className="font-noto text-label text-muted">·</Text>
           <Text
-            testID={`itinerary-timeline-slot-band-${slotKey}`}
+            testID={fieldId('band')}
             className="font-noto text-label text-muted"
           >
             {timeBandLabel(slot.startAt)}
           </Text>
           {slot.endsNextDay ? (
             <View
-              testID={`itinerary-timeline-slot-endsnext-${slotKey}`}
+              testID={fieldId('endsnext')}
               className="rounded-pill bg-surface-soft px-sm py-[2px]"
             >
               <Text className="font-noto text-caption text-muted">
@@ -219,6 +271,60 @@ function TimelineSlotCard({
             </View>
           ) : null}
         </View>
+
+        {hasName ? (
+          <Text
+            testID={fieldId('name')}
+            numberOfLines={1}
+            className="font-noto-bold text-card-title font-bold text-ink"
+          >
+            {slot.nameKo}
+          </Text>
+        ) : null}
+
+        <View className="flex-row flex-wrap items-center gap-xs">
+          <Text
+            testID={fieldId('hours')}
+            className="font-noto text-label text-muted"
+          >
+            {slot.openingHours === null || slot.openingHours === undefined
+              ? MISSING_HOURS
+              : slot.openingHours}
+          </Text>
+          {firstTag === null ? null : (
+            <>
+              <Text className="font-noto text-label text-muted">·</Text>
+              <Text
+                testID={fieldId('tag')}
+                className="font-noto text-label text-muted"
+              >
+                {`#${firstTag}`}
+              </Text>
+            </>
+          )}
+        </View>
+
+        {slot.openingHoursKnown === false ? (
+          <View
+            testID={fieldId('warnchip')}
+            className="self-start rounded-pill bg-primary-text px-sm py-[2px]"
+          >
+            <Text className="font-noto-bold text-micro font-bold text-on-primary">
+              {WARN_CHIP}
+            </Text>
+          </View>
+        ) : null}
+
+        {hasCoord ? null : (
+          <View
+            testID={fieldId('nomap')}
+            className="self-start rounded-pill bg-surface-soft px-sm py-[2px]"
+          >
+            <Text className="font-noto text-caption text-muted-soft">
+              {NO_MAP_BADGE}
+            </Text>
+          </View>
+        )}
 
         {slot.hasViolation ? (
           <View
@@ -256,9 +362,7 @@ export function TimelineScreen({
   days,
   slots,
   activeDayIndex,
-  segment,
   onSelectDay,
-  onSegmentChange,
   onBack,
   status,
   confirmedSubtitle,
@@ -269,10 +373,12 @@ export function TimelineScreen({
   // 확정 얼굴 트리거 — 미지정(undefined)은 PLANNED 취급이라 기존 호출부가 그대로 편집 얼굴이다.
   const isConfirmed = status === 'CONFIRMED';
 
-  // TRIP-301 지도 세그먼트 상태. 탭한 핀의 슬롯(상세 시트)·지도 로드 실패 여부만 이 화면이 쥔다.
+  // 지도 상태. 탭한 핀의 슬롯(상세 시트)·지도 로드 실패 여부·확대 오버레이 열림을 이 화면이 쥔다.
   const [selectedSlot, setSelectedSlot] =
     useState<ItineraryDaysItemSlotsItem | null>(null);
   const [mapFailed, setMapFailed] = useState(false);
+  // TRIP-354 Q5 — "지도 크게 보기"가 여는 화면 내 확대 오버레이(h26). 세그먼트 토글 대체(결정 D).
+  const [expanded, setExpanded] = useState(false);
 
   // 핀은 좌표 있는 슬롯만(번호는 결번 없이 뛴다 · buildDraftPins 재사용). 상세 시트 역참조도
   // 이 배열을 쓴다 — index 는 pins 배열 기준이라 좌표 결번에도 엉뚱한 슬롯을 열지 않는다.
@@ -297,7 +403,16 @@ export function TimelineScreen({
   // 재시도 — mapFailed 를 내리면 지도가 다시 마운트돼(key=activeDate) 새 문서로 재로드된다.
   const handleRetry = (): void => setMapFailed(false);
 
-  const showSheet = segment === 'map' && !mapFailed && selectedSlot !== null;
+  // 핀 상세 시트는 확대 오버레이(h26) 안에서만 뜬다 — 실패 아니고 핀이 골라졌을 때.
+  const showSheet = expanded && !mapFailed && selectedSlot !== null;
+
+  // 날짜헤더 "이동 X" — 그날 leg 거리들을 파싱·합산한 일자 총합(Q2). **첫 슬롯 제외**(`slice(1)`) —
+  // 첫 슬롯엔 직전 지점이 없어 그 `distanceRange` 는 leg 가 아니고, 구간행도 `index>0` 으로 억제하는
+  // 바로 그 집합이다(모집단 일치 — 서버가 첫 슬롯에 값을 실어도 헤더가 부풀지 않는다). 구간행이
+  // 문자열을 그대로 나르는 것과 **다른 값**이다. null 이면 헤더에 아무 것도 안 그린다("{N}곳"만).
+  const legLabel = legDistance(
+    slots.slice(1).map((slot) => slot.distanceRange)
+  );
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -315,6 +430,21 @@ export function TimelineScreen({
           <Text className="font-noto-bold text-section font-bold text-ink">
             {isConfirmed ? APPBAR_TITLE_CONFIRMED : APPBAR_TITLE_PLANNED}
           </Text>
+          {isConfirmed ? (
+            // 우상단 공유 아이콘(라이브 h34 · Q3) — CONFIRMED 에서만. 정적 스텁이라 onPress 를 아예
+            // 안 받아 press 가 무해하다(실동작은 후속 TRIP-300 · 02a ★11). 하단 [공유하기]와 같은 상태축.
+            <>
+              <View className="flex-1" />
+              <Pressable
+                testID="itinerary-view-share"
+                accessibilityRole="button"
+                accessibilityLabel="공유"
+                hitSlop={8}
+              >
+                <ShareGlyph />
+              </Pressable>
+            </>
+          ) : null}
         </View>
 
         <View
@@ -349,21 +479,6 @@ export function TimelineScreen({
           </View>
         ) : null}
 
-        <View className="flex-row gap-[3px] rounded-[8px] bg-hairline p-[3px] mx-lg">
-          <SegmentButton
-            value="timeline"
-            label={SEG_TIMELINE_LABEL}
-            segment={segment}
-            onSegmentChange={onSegmentChange}
-          />
-          <SegmentButton
-            value="map"
-            label={SEG_MAP_LABEL}
-            segment={segment}
-            onSegmentChange={onSegmentChange}
-          />
-        </View>
-
         {days.length === 0 ? null : (
           <View className="flex-row gap-sm px-lg pt-md">
             {days.map((tab, index) => (
@@ -391,44 +506,16 @@ export function TimelineScreen({
             </View>
           ) : null}
 
-          {segment === 'timeline' ? (
-            <View
-              testID="itinerary-view-timeline"
-              className="w-full gap-[14px]"
-            >
-              <View className="w-full flex-row items-center gap-sm">
-                <View className="h-[18px] w-[4px] rounded-[2px] bg-primary" />
-                <Text className="font-noto text-label text-muted">
-                  {formatDraftDayHeader(activeDate)}
-                </Text>
-                <View className="flex-1" />
-                <Text className="font-noto text-label text-muted">
-                  {`${slots.length}곳`}
-                </Text>
-              </View>
-              {slots.map((slot, index) => (
-                <TimelineSlotCard
-                  key={buildSlotKey(activeDate, slot.poiId)}
-                  slot={slot}
-                  date={activeDate}
-                  index={index}
-                />
-              ))}
-            </View>
-          ) : null}
-
-          {segment === 'map' ? (
-            <View className="w-full gap-md">
+          {expanded ? (
+            // h26 확대 오버레이(TRIP-354 Q5) — 세그먼트 토글 대신 "지도 크게 보기"가 여는 화면 내
+            // 확대 지도. HEAD 의 h26 렌더(제스처 지도 + peekstrip + 핀시트 + 폴백)를 그대로 담는다.
+            // "지도 크게 보기" press → `setExpanded(true)` 로 이 오버레이가 열리고, "닫기" 로 인라인
+            // 글랜스로 복귀한다. 기본/오버레이 지도는 상호 배타(`map-root` 언제나 하나).
+            <View testID="itinerary-map-expanded" className="w-full gap-md">
               {mapFailed ? (
                 <MapFallback onRetry={handleRetry} />
               ) : (
-                // 실지도(h26 탐색 지도) — 배럴로 가져와 얇은 가짜가 붙는다. viewOnly 무언급(제스처
-                // 허용 · D6)·connectPins 무언급(동선 선 기본). key=activeDate 라 날 바꾸면 새 핀으로
-                // 재로드된다(WebView 는 source 가 바뀌면 문서째 재로드하므로 remount 로 갈아끼운다).
-                <View
-                  testID="itinerary-view-map"
-                  className="h-[240px] w-full overflow-hidden rounded-card border border-hairline bg-surface-soft"
-                >
+                <View className="h-[360px] w-full overflow-hidden rounded-card border border-hairline bg-surface-soft">
                   <KakaoMapView
                     key={activeDate}
                     center={mapCenter}
@@ -439,40 +526,120 @@ export function TimelineScreen({
                   />
                 </View>
               )}
-
-              {mapFailed ? (
-                // 폴백 세로 목록 — 지도가 죽어도 통일 카드로 일정을 계속 본다(화면 안 비움).
-                <View className="w-full gap-sm">
-                  {slots.map((slot, index) => (
-                    <PoiSlotCard
-                      key={buildSlotKey(activeDate, slot.poiId)}
-                      slot={slot}
-                      date={activeDate}
-                      index={index}
-                      variant="list"
-                    />
-                  ))}
-                </View>
-              ) : (
-                // peekstrip 가로 목록 — 지도 밑에서 같은 통일 카드를 옆으로 넘겨 본다.
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerClassName="gap-sm pr-lg"
-                >
-                  {slots.map((slot, index) => (
-                    <PoiSlotCard
-                      key={buildSlotKey(activeDate, slot.poiId)}
-                      slot={slot}
-                      date={activeDate}
-                      index={index}
-                      variant="peek"
-                    />
-                  ))}
-                </ScrollView>
-              )}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerClassName="gap-sm pr-lg"
+              >
+                {slots.map((slot, index) => (
+                  <PoiSlotCard
+                    key={buildSlotKey(activeDate, slot.poiId)}
+                    slot={slot}
+                    date={activeDate}
+                    index={index}
+                    variant="peek"
+                  />
+                ))}
+              </ScrollView>
+              <Pressable
+                testID="itinerary-map-collapse"
+                accessibilityRole="button"
+                onPress={() => setExpanded(false)}
+                className="self-start rounded-pill border border-hairline-strong px-md py-sm"
+              >
+                <Text className="font-noto-bold text-label font-bold text-muted">
+                  {MAP_COLLAPSE_LABEL}
+                </Text>
+              </Pressable>
             </View>
-          ) : null}
+          ) : (
+            <>
+              {/* 기본: 작은 viewOnly 글랜스 지도 + "지도 크게 보기"(결정 D · 세그먼트 토글 대체).
+                  제스처·핀탭은 확대 오버레이(h26) 몫이라 글랜스엔 안 붙인다(01b Q5). */}
+              <View className="relative w-full">
+                <View
+                  testID="itinerary-view-map"
+                  className="h-[170px] w-full overflow-hidden rounded-card border border-hairline bg-surface-soft"
+                >
+                  <KakaoMapView
+                    key={activeDate}
+                    center={mapCenter}
+                    pins={pins}
+                    viewOnly
+                    maxLevel={EXPLORE_MAP_MAX_LEVEL}
+                  />
+                </View>
+                <Pressable
+                  testID="itinerary-map-expand"
+                  accessibilityRole="button"
+                  onPress={() => setExpanded(true)}
+                  hitSlop={6}
+                  className="absolute right-md top-md flex-row items-center gap-[4px] rounded-pill bg-canvas px-md py-sm"
+                >
+                  <ExpandGlyph size={14} />
+                  <Text className="font-noto-bold text-micro font-bold text-ink">
+                    {MAP_EXPAND_LABEL}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* 시간표 카드 목록 — 지도 밑 단일 스크롤. 골격 카드는 이 사이클에서 풀카드로 올라가고
+                  (구현자), 구간행·이동합계가 붙는다. */}
+              <View
+                testID="itinerary-view-timeline"
+                className="w-full gap-[14px]"
+              >
+                <View className="w-full flex-row items-center gap-sm">
+                  <View className="h-[18px] w-[4px] rounded-[2px] bg-primary" />
+                  <Text className="font-noto text-label text-muted">
+                    {formatDraftDayHeader(activeDate)}
+                  </Text>
+                  <View className="flex-1" />
+                  <Text className="font-noto text-label text-muted">
+                    {`${slots.length}곳`}
+                  </Text>
+                  {legLabel === null ? null : (
+                    <>
+                      <Text className="font-noto text-label text-muted">·</Text>
+                      <Text
+                        testID="itinerary-timeline-dayhdr-distance"
+                        className="font-noto text-label text-muted"
+                      >
+                        {legLabel}
+                      </Text>
+                    </>
+                  )}
+                </View>
+                {slots.map((slot, index) => {
+                  const slotKey = buildSlotKey(activeDate, slot.poiId);
+                  const range = slot.distanceRange;
+                  // 구간행은 첫 카드(index 0) 위엔 없고, distanceRange 가 있을 때만(빈 문자열 렌더 금지).
+                  const connectorRange =
+                    index > 0 &&
+                    range !== null &&
+                    range !== undefined &&
+                    range !== ''
+                      ? range
+                      : null;
+                  return (
+                    <Fragment key={slotKey}>
+                      {connectorRange === null ? null : (
+                        <SlotConnector
+                          slotKey={slotKey}
+                          distanceRange={connectorRange}
+                        />
+                      )}
+                      <TimelineSlotCard
+                        slot={slot}
+                        date={activeDate}
+                        index={index}
+                      />
+                    </Fragment>
+                  );
+                })}
+              </View>
+            </>
+          )}
         </ScrollView>
 
         <View className="w-full px-lg pb-lg pt-sm">

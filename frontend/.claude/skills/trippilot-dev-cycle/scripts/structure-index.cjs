@@ -88,15 +88,25 @@ function exportsOf(rel) {
   return [...found];
 }
 
-/** 문서 본문의 백틱 안에서 리포 상대 경로만 뽑는다. */
+/** 문서 본문의 백틱 안에서 리포 상대 경로만 뽑는다.
+ *  층별 파일 표는 `.claude/rules/layer-*.md`(path-scoped)로 이관됐으므로 거기까지 읽는다. */
 function documentedPaths() {
-  if (!fs.existsSync(DOC)) return null;
-  const doc = fs.readFileSync(DOC, 'utf8');
-  const set = new Set();
-  for (const m of doc.matchAll(/`([^`\n]+)`/g)) {
-    const v = m[1].trim();
-    if (/^(src|__mocks__)\/[^\s]+\.(ts|tsx)$/.test(v)) set.add(v);
+  const sources = [];
+  if (fs.existsSync(DOC)) sources.push(fs.readFileSync(DOC, 'utf8'));
+  const rulesDir = path.join(ROOT, '.claude', 'rules');
+  if (fs.existsSync(rulesDir)) {
+    for (const name of fs.readdirSync(rulesDir)) {
+      if (name.startsWith('layer-') && name.endsWith('.md'))
+        sources.push(fs.readFileSync(path.join(rulesDir, name), 'utf8'));
+    }
   }
+  if (!sources.length) return null;
+  const set = new Set();
+  for (const doc of sources)
+    for (const m of doc.matchAll(/`([^`\n]+)`/g)) {
+      const v = m[1].trim();
+      if (/^(src|__mocks__)\/[^\s]+\.(ts|tsx)$/.test(v)) set.add(v);
+    }
   return set;
 }
 

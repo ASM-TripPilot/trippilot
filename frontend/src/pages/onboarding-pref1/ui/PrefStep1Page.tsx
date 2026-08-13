@@ -8,6 +8,7 @@ import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
 import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
+import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 
 export function PrefStep1Page(): ReactElement {
@@ -24,7 +25,10 @@ export function PrefStep1Page(): ReactElement {
   };
 
   const handleSkipAll = () => {
+    // 취향 1/2 탈출도 완료로 취급해 재평가 신호를 발화한다(ticket AC-A · US-ONB-11 —
+    // pref2 만 고치면 1/2 에서 탈출한 사용자가 결함 A 그대로 약관으로 갇힌다).
     // 스토어를 건드리지 않는다 — 미선택 축이 []가 아니라 null로 유지돼야 한다.
+    notifyBootstrapReeval();
     router.replace('/');
   };
 

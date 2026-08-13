@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
+import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
 import { PrefStep2Page } from './PrefStep2Page';
 
 /**
@@ -31,11 +32,22 @@ const routerMock = require('expo-router').router as {
   back: jest.Mock;
 };
 
+// TRIP-353 — 온보딩 완료 재평가 신호를 목킹해, 완료·탈출이 신호를 발화하는지 spy 로 관찰한다.
+// 실물 몸통(pub/sub)은 bootstrapReeval.test.ts 가 따로 잠근다.
+jest.mock('@/shared/bootstrap/bootstrapReeval', () => ({
+  notifyBootstrapReeval: jest.fn(),
+  subscribeBootstrapReeval: jest.fn(() => () => {}),
+}));
+const mockNotifyReeval = notifyBootstrapReeval as jest.MockedFunction<
+  typeof notifyBootstrapReeval
+>;
+
 beforeEach(() => {
   usePreferenceStore.getState().reset();
   routerMock.replace.mockClear();
   routerMock.push.mockClear();
   routerMock.back.mockClear();
+  mockNotifyReeval.mockClear();
 });
 
 describe('PrefStep2Page — 복귀 시 선택값 보존 (AC2 · AC3 · 5-4)', () => {
@@ -161,5 +173,31 @@ describe('PrefStep2Page — 이동 축 탭↔스토어 왕복 (AC2 · US-ONB-09 
     ).toBeSelected();
     // 단언 ② — 쓰기 경로: transports 배열에 담긴다.
     expect(usePreferenceStore.getState().transports).toEqual(['walk']);
+  });
+});
+
+describe('PrefStep2Page — 온보딩 완료 재평가 신호 발화 (AC-A2 · TRIP-353)', () => {
+  it('완료(done)를 탭하면 재평가 신호를 발화하고 여전히 홈으로 replace 한다', () => {
+    // 준비 — 렌더.
+    render(<PrefStep2Page />);
+
+    // 실행 — 완료 CTA 탭.
+    fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
+
+    // 단언 — 재평가 신호를 정확히 1회 발화(결함 A 수정) + 기존 계약(홈으로 replace) 유지.
+    expect(mockNotifyReeval).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).toHaveBeenCalledWith('/');
+  });
+
+  it('일괄 탈출(skip-bottom)을 탭해도 재평가 신호를 발화하고 홈으로 replace 한다', () => {
+    // 준비 — 렌더.
+    render(<PrefStep2Page />);
+
+    // 실행 — 하단 '나중에 설정하고 시작' 탭.
+    fireEvent.press(screen.getByTestId('onboarding-pref2-skip-bottom'));
+
+    // 단언 — 탈출 경로도 반드시 신호를 발화한다(하나만 고치면 다른 쪽 사용자가 갇힘) + replace 유지.
+    expect(mockNotifyReeval).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).toHaveBeenCalledWith('/');
   });
 });

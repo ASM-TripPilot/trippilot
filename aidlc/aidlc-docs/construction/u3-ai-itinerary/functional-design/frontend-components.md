@@ -58,6 +58,7 @@
 - **h23 핀 상세·h12 슬롯 교체는 라우트가 아니다** — 각각 지도 뷰·추천안 화면의 바텀시트.
 - **h34 확정 읽기전용은 별도 라우트가 아니다** — `index`가 `status=CONFIRMED`일 때의 상태.
 - ⚠️ `trips/**`는 `(tabs)` 밖이라 `SplashGate`의 `Stack.Protected` guard에 안 걸린다 — **미인증 딥링크로 열린다**(`stays/`·`trips/new/**` 선례, structure.md 경고). U3가 새로 만드는 라우트도 같은 조건이며, 데이터 노출은 서버 401이 막는다.
+- **[구현 결정 · TRIP-354, 2026-08-14] h25·h26은 세그먼트가 아니라 단일 화면 상태다.** "화면" 칸의 h25·h26 병기는 예전엔 시간표/지도 두 세그먼트(토글로 전환)를 뜻했으나 그 토글을 폐기했다 — 아래 §2·§4의 소급 기록 참고.
 
 ## 2. `src/pages/` 슬라이스
 
@@ -69,7 +70,7 @@
 | `itinerary-draft` | `DraftPage` | `useItineraryDraft()` + `resolveDraftState()` **판정 1회** → `DraftScreen`. 시트 열림은 로컬 상태 |
 | `itinerary-copick` | `ConceptPage` · `SlotCandidatePage` | `useSlotCandidates(slotKey, radiusM, concept)` |
 | `itinerary-manual` | `ManualPlanPage` · `PlaceAddPage` | 추가마다 `useValidateItinerary()` |
-| `itinerary-plan` | `ItineraryPlanPage` | `useItinerary(tripId)` + `resolvePlanState()` **판정 1회**(로딩·오류·확정·지도 실패) → `TimelineScreen`/`MapScreen` |
+| `itinerary-plan` | `ItineraryPlanPage` | `useItinerary(tripId)` + `resolvePlanState()` **판정 1회**(로딩·오류·확정·지도 실패) → `TimelineScreen` 단일(지도 세그먼트/`MapScreen` 폐기 — [구현 결정 · TRIP-354, 2026-08-14] 아래 §4 참고) |
 | `itinerary-edit` | `ItineraryEditPage` | 편집 스토어 ↔ PUT 저장(재검증은 PUT에 접힘 — [구현 결정 · TRIP-302, 2026-08-12]) |
 | `itinerary-history` | `HistoryPage` | `useRevisions(tripId)` · 되돌리기 뮤테이션 |
 | `itinerary-stay-suggest` | `StaySuggestPage` | `useStaySuggestion(itineraryId)` |
@@ -92,6 +93,8 @@
 | `legDistance.ts` | 순수 | 구간 표기 조립(`도보 950m`) + **총 이동거리 합산**. **소요시간 산출 함수를 두지 않는다**(INV-3) |
 | `routeDiff.ts` | 순수 | h28 전·후 diff 분류(추가·삭제·이동) + 개선 없음 판정 |
 | `openHoursWarning.ts` | 순수 | 서버가 준 영업시간·휴관 값의 **표시 형태만** 결정. 휴관 여부를 클라가 계산하지 않는다(BR-U3-09) |
+
+> **[구현 결정 · TRIP-354, 2026-08-14] 휴관칩 트리거 = `openingHoursKnown === false` — CONFIRMED(h34)에서 구조적으로 안 뜬다.** 실제 트리거는 `slot.openingHoursKnown === false`(별도 `openHoursWarning.ts` 호출이 아니라 `TimelineScreen.tsx`가 이 값을 직접 읽음). 계약상 `openingHoursKnown`은 **CONFIRMED에서 항상 null**이라 h34(확정 읽기전용)에서는 휴관칩이 절대 뜨지 않는다 — PLANNED(h25, 아직 확정 전)에서 `openingHoursKnown===false`일 때만 뜬다. 다음 사이클이 h34 픽스처로 휴관칩 표시 AC를 세우면 영영 안 떠서 잘못된 green이 나온다는 것을 요구사항 근거가 아니라 이 사이클의 구현 확인으로 남긴다.
 | `useItinerary.ts` | 훅 | `GET /trips/{tripId}/itinerary` |
 | `useGenerationSession.ts` | 훅 | 생성 세션 폴링(day1 우선) |
 | `useSlotCandidates.ts` | 훅 | `proposeSlotCandidates`(DEC-U3-5) |
@@ -115,14 +118,22 @@
 | `RegenerateConfirmSheet.tsx` | — | "직접 바꾼 N곳이 사라져요"(BR-U3-18·19) |
 | `ConceptPickerScreen.tsx` · `SlotFillScreen.tsx` | h13~h17 | 반경 확대는 **서버가 준 `radiusMUsed`를 표시만**(BR-U3-25) |
 | `ManualPlanScreen.tsx` · `PlaceAddSheet.tsx` | h19~h21 | |
-| `TimelineScreen.tsx` | h25·h30·h34 | **검증 시각**(`09:30`) · 영업시간 · `⚠︎ 월요일 휴관` · 구간 `도보 950m` + [길찾기] |
-| `MapScreen.tsx` | h26·h29·h31~h33 | `shared/map` 소비. 실패 폴백은 판정값을 prop으로 받아 표시만 |
+| `TimelineScreen.tsx` | h25·h26·h29~h34 | **검증 시각**(`09:30`) · 영업시간 · 휴관칩 · 구간 `도보 950m`/차량 + [길찾기](스텁) · **인라인 지도 글랜스(상시, `viewOnly`) + "지도 크게 보기"→h26 확대 오버레이(로컬 상태 `expanded`) — [구현 결정 · TRIP-354, 2026-08-14] 아래 참고** |
+| ~~`MapScreen.tsx`~~ | — | **폐기([구현 결정 · TRIP-354, 2026-08-14])** — 별도 파일이 아니라 `TimelineScreen.tsx` 안의 확대 오버레이로 흡수됐다. 아래 참고 |
 | `PinDetailSheet.tsx` | h23 | |
 | `ItineraryEditScreen.tsx` | h24 | 위반 배지(저장 후에도 지속 — BR-U3-13) |
 | `SaveConflictSheet.tsx` | — | [그대로 저장] 단일 갈래 — [AI 자동 보정] 갈래 제거([구현 결정 · TRIP-302, 2026-08-12], 티켓 결정 가 · BR-U3-14 repair 미충족). 시트 자체는 이 결정과 별개로 Figma 미설계라 TRIP-302에서는 이연(구현 안 됨) |
 | `ReorderBanner.tsx` · `ReorderCompareScreen.tsx` | h25 배너·h28 | 배너에 **수치 단언 금지**(G-U3-1) |
 | `StaySuggestScreen.tsx` | h27 | |
 | `HistoryScreen.tsx` | h36 | actor 배지 · 상대 시각 · [되돌리기] · `기준 버전` 행 · empty. **`with-companions` 제외**(DEC-U3-8) |
+
+> **[구현 결정 · TRIP-354, 2026-08-14] 인라인 지도 모델 — 세그먼트 토글 폐기, h26은 화면 내 확대 오버레이.** 이 문서(§1·§2·§4)는 원래 시간표(h25)/지도(h26)를 `SegmentButton`으로 전환하는 **두 세그먼트**로 서술했고(§4 옛 `MapScreen.tsx` 행), TRIP-301은 그 지도 세그먼트를 실지도(제스처+peekstrip+핀시트)로 채웠다. TRIP-354가 Figma 풀디자인 정합 과정에서 **세그먼트 토글 자체를 없앴다**(라이브 Figma h34가 지도를 상시 인라인으로 그림) — `SegmentButton`×2·`ViewSegmentValue`·`segment`/`onSegmentChange` prop·`itinerary-view-segment-*` testID를 전부 제거했다.
+>
+> **확정 동작**: 날짜탭 밑에 작은 지도 글랜스(`viewOnly=true`, 잠긴 미리보기)가 **상시** 뜬다. "지도 크게 보기" pill을 누르면 **같은 화면 안에서** 로컬 상태 `expanded`가 켜지고, TRIP-301이 만든 지도 표면(제스처 지도 `viewOnly=false` + `PoiSlotCard` peekstrip + `PinDetailSheet`)이 확대 오버레이로 뜬다. "닫기"로 `expanded=false` → 인라인 복귀. **새 라우트·새 세그먼트가 아니라 로컬 상태 하나**다 — `KakaoMapView`는 오버레이가 열렸을 때만 마운트되는 한 인스턴스(`map-root` 단수).
+>
+> `PoiSlotCard`(peek variant)는 고아가 아니다 — 이 오버레이의 peekstrip에서 계속 쓰인다. 인라인 글랜스(`viewOnly=true`)와 오버레이(`viewOnly=false`)라는 두 `KakaoMapView` 호출부는 `itineraryMapSurfaceStructure.test.ts`(S2④·S8)가 소스 태그 단위로 정확히 2개로 잠근다.
+>
+> **요구사항 근거가 아니라 구현 결정의 소급 기록**이다(TRIP-297·339·298·302 선례와 같은 형식) — 다음 사이클이 요구사항 근거로 인용하지 말 것.
 
 ## 5. `src/shared/` 변경
 

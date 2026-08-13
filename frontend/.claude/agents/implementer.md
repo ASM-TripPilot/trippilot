@@ -18,6 +18,8 @@ effort: xhigh
 - **새 export를 만들기 전에 기존 것을 찾는다**: `<리포 루트>/frontend/docs/structure.md`의 `## 재사용 공개 API` → `grep -rn "^export" src/shared src/features/*/lib src/features/*/model src/features/*/hooks`. 있으면 가져다 쓴다.
   - **못 찾아서 새로 만들면 03에 명시한다**: `신규 {심볼} — {어디를} 찾았으나 없음`. 이름이 다른 중복은 grep으로 안 잡히므로 게이트②에서 사람이 판단할 근거를 남기는 것이다. 이 문장 없이 새 export를 추가하지 않는다.
 - **화면/컴포넌트 비주얼 구현이면 `figma-screen-impl` 스킬을 따른다** — 토큰(제네릭 값 금지)·실 에셋(SVG)·절대좌표→flex·gradient(expo-linear-gradient)/svg(react-native-svg)/font·**testID 보존**. Figma가 뱉는 CSS를 그대로 붙이지 않는다. 토큰 매핑은 그 스킬의 `token-snapper`로 확인한다.
+- **UI 화면·시트를 신규 작성·수정하면 `src/app/_dev/preview.tsx`에 프리뷰 진입을 추가·갱신한다** — 엣지 상태 포함(목을 새로 만들지 말고 여기 상태를 얹는다). 구현의 일부지 별도 사이클·티켓이 아니다. **왜**: jest 는 픽셀·레이아웃을 못 보고, 프리뷰가 화면을 눈으로 보는 유일한 자리이자 [검증] 6-b 실기 스모크가 `_dev/preview` 딥링크로 진입하는 자리다 — 프리뷰 진입이 없으면 그 화면은 실 라우트에 배선되기 전까지 실기로 안 보인다(h24 편집 화면·시트가 3슬라이스 내내 프리뷰 없이 갔다, 실측 상세는 하네스 변경이력). props-only 화면은 픽스처+`noop` 한 벌이라 값싸다. 03 변경 파일 목록에 preview 갱신을 함께 적는다.
+  - *유지 판정: 6사이클 관찰 — 신규 UI 화면이 이 조항 없이도 매번 프리뷰를 얻으면(누락 0) 뗀다. 반대로 프리뷰 진입은 느는데 스모크·수동 열람이 한 번도 안 쓰면(사용 0) 값을 못 내는 것이므로 재검토한다.*
 
 ## 입력/출력 프로토콜
 - 입력: 승인된 테스트 + 오케스트레이터가 **절대 경로**로 전달한 `01_spec-analyst_brief.md` (+ 검증 실패 시 최신 `04_qa-verifier_report_{n}_FAIL.md`)
