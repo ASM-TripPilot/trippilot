@@ -1,7 +1,10 @@
 package com.trippilot.app
 
+import com.trippilot.placedata.adapter.out.external.KakaoPlaceLookupAdapter
 import com.trippilot.placedata.adapter.out.external.KakaoRegionGeocodeAdapter
+import com.trippilot.placedata.adapter.out.external.StubPlaceLookupAdapter
 import com.trippilot.placedata.adapter.out.external.StubRegionGeocodeAdapter
+import com.trippilot.placedata.domain.PlaceLookupPort
 import com.trippilot.placedata.domain.RegionGeocodePort
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
@@ -36,9 +39,18 @@ class RegionGeocodeKakaoModeIT : AbstractPostgresIntegrationTest() {
     @Autowired
     lateinit var port: RegionGeocodePort
 
+    @Autowired
+    lateinit var lookup: PlaceLookupPort
+
     @Test
     fun `kakao 모드에서 앱이 뜨고 카카오 어댑터가 주입된다`() {
         assertThat(port).isInstanceOf(KakaoRegionGeocodeAdapter::class.java)
+    }
+
+    // 같은 스위치가 장소 검색도 가른다 — 여기도 스텁과 공존하므로 @Primary 로만 갈린다.
+    @Test
+    fun `kakao 모드에서 장소 검색도 카카오 어댑터가 주입된다`() {
+        assertThat(lookup).isInstanceOf(KakaoPlaceLookupAdapter::class.java)
     }
 }
 
@@ -52,8 +64,16 @@ class RegionGeocodeStubModeIT : AbstractPostgresIntegrationTest() {
     @Autowired
     lateinit var port: RegionGeocodePort
 
+    @Autowired
+    lateinit var lookup: PlaceLookupPort
+
     @Test
     fun `기본 모드에서 앱이 뜨고 스텁이 주입된다`() {
         assertThat(port).isInstanceOf(StubRegionGeocodeAdapter::class.java)
+    }
+
+    @Test
+    fun `기본 모드에서 장소 검색도 스텁이 주입된다`() {
+        assertThat(lookup).isInstanceOf(StubPlaceLookupAdapter::class.java)
     }
 }
