@@ -10,7 +10,8 @@ import path from 'path';
  * 무엇을 보장하나: 렌더로는 관찰할 수 없는 **소스·파일 배치 수준의 제약**을 잠근다.
  *  - 픽스처가 Figma 표시값 그대로 상수화돼 있고, 홈이 서버 호출·네비 심볼을 직접 물지 않는다
  *  - INV-3: home·(tabs) 소스 어디에도 `duration` 식별자가 없다(표시 문구 수준 검증은
- *    HomeScreen.test.tsx의 A-5가 런타임·스코프 단언으로 맡는다 — 이원화 이유는 02a §6-6)
+ *    HomeScreen.test.tsx의 AC-6 렌더 단언이 맡는다 — 소스/렌더 이원화)
+ *  - 구 세대 섹션 제목 3종이 재작성 후 소스에서 완전히 사라졌다(AC-7)
  *  - 색을 토큰이 아닌 하드코딩 hex로 박지 않았다
  *  - 상태바 여백을 50px로 굽지 않고 inset으로 잡았다(§7-14 규약, trip163 선례)
  *  - 탭바가 (tabs) 그룹 밖(몰입 화면)으로 스며들지 않는다
@@ -100,16 +101,18 @@ function homeAndTabsSources() {
 }
 
 describe('홈 픽스처 상수화 + 프레젠테이션 전용 (SC-2 · D-1)', () => {
-  it('homeFixtures.ts가 Figma 표시값을 상수화하고, 홈 소스는 서버 호출·네비 심볼을 import하지 않는다', () => {
+  it('homeFixtures.ts가 신 프레임 Figma 표시값을 상수화하고, 홈 소스는 서버 호출·네비 심볼을 import하지 않는다', () => {
     const fixturesPath = path.join(HOME_DIR, 'model', 'homeFixtures.ts');
 
-    // 긍정 — 픽스처 파일 존재 + Q2 고정 목업 표시값 그대로.
+    // 긍정 — 픽스처 파일 존재 + 신 프레임(2091:1357) 실측 표시값 그대로. 구 앵커
+    // (`부산 여행`·`D-12`·`도보 850m`)는 재작성으로 사라졌으므로 신 픽스처 전용 값으로
+    // 교체한다(감천문화마을은 신·구 공통이라 유지). 신 값이 없으면 아직 구 픽스처라 red.
     expect(fs.existsSync(fixturesPath)).toBe(true);
     const fixturesSource = fs.readFileSync(fixturesPath, 'utf8');
-    expect(fixturesSource).toContain('부산 여행');
-    expect(fixturesSource).toContain('D-12');
+    expect(fixturesSource).toContain('부산 · 광안리의 밤');
     expect(fixturesSource).toContain('감천문화마을');
-    expect(fixturesSource).toContain('도보 850m');
+    expect(fixturesSource).toContain('부산 사하구');
+    expect(fixturesSource).toContain('#감성카페');
 
     // 부정 — 서버 호출·네비 유입 차단(브리프 §6-1·§6-7).
     const sources = homeSources();
@@ -124,22 +127,55 @@ describe('홈 픽스처 상수화 + 프레젠테이션 전용 (SC-2 · D-1)', ()
 });
 
 describe('INV-3 grep — duration 식별자 금지 (SC-3 · D-2)', () => {
-  it('홈 소스에 거리 표기(도보 850m)는 있고, home·(tabs) 어디에도 duration 식별자는 없다', () => {
-    // 긍정 — 스캔 모집단이 실제로 채워졌다는 증거 겸 거리 표기 확인.
+  it('홈 소스에 신 섹션 앵커(요즘 사람들이 담는 곳)가 있고, home·(tabs) 어디에도 duration 식별자는 없다', () => {
+    // 긍정 — 스캔 모집단이 실제로 채워졌다는 증거(공집합 공허 통과 방지). 구 양성 앵커
+    // `도보 850m`는 신 화면에 거리·소요시간 표기가 하나도 없어 소멸했으므로(브리프 §8-1),
+    // 신 화면에 실재하는 섹션 헤더로 앵커를 교체한다.
     const sources = homeSources();
     expect(sources.length).toBeGreaterThan(0);
-    const hasDistance = sources.some(({ source }) =>
-      source.includes('도보 850m')
+    const hasSectionAnchor = sources.some(({ source }) =>
+      source.includes('요즘 사람들이 담는 곳')
     );
-    expect(hasDistance).toBe(true);
+    expect(hasSectionAnchor).toBe(true);
 
-    // 부정 — DTO·식별자 수준 duration 전면 금지(INV-3). '3분 전'류 표시 문구는
-    // 여기서 다루지 않는다 — 그건 정당한 상대시각 카피라 식별자 grep 대상이 아니다.
+    // 부정 — DTO·식별자 수준 duration 전면 금지(INV-3). 단어경계 없는 `/duration/i`로
+    // `stayDuration`류 합성 식별자까지 포착한다(단어경계 `\bduration\b`는 합성어를 놓치는
+    // 구멍 — 선례 stayRegisterStructure 게이트①-2). 홈+tabs 현행 소스 `duration` 0건 실측
+    // (강화가 부정 단언을 지금 red로 만들지 않음). '3분 전'류 상대시각 카피는 식별자 grep
+    // 대상이 아니다 — 표시 문구는 HomeScreen.test.tsx의 AC-6 렌더 단언이 맡는다.
     const combined = homeAndTabsSources();
     expect(combined.length).toBeGreaterThan(0);
     const offenders = combined
-      .filter(({ source }) => /\bduration\b/i.test(source))
+      .filter(({ source }) => /duration/i.test(source))
       .map(({ file }) => file);
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('구 세대 섹션 제목 제거 (AC-7)', () => {
+  it('홈 소스에 신 섹션 제목(여행자 일정)은 있고, 구 제목 3종은 어디에도 없다', () => {
+    const sources = homeSources();
+    expect(sources.length).toBeGreaterThan(0);
+
+    // 긍정 짝(가짜 통과 방지 규약) — 신 화면 섹션 제목이 실재해야 한다. 없으면 아직 구
+    // 화면이라 red. 부정만 두면 파일이 통째로 비어도 초록으로 통과한다.
+    const hasNewTitle = sources.some(({ source }) =>
+      source.includes('여행자 일정')
+    );
+    expect(hasNewTitle).toBe(true);
+
+    // 부정 — 재작성으로 코드에서 사라져야 하는 구 제목 3종(브리프 §3-B). 재작성 전에는
+    // HomeScreen.tsx에 그대로 있어 red.
+    const OLD_TITLES = [
+      '지금 인기 있는 장소',
+      '내 취향 여행지',
+      '지금 뜨는 · 내 취향 여행 기록',
+    ];
+    const offenders = sources.flatMap(({ file, source }) =>
+      OLD_TITLES.filter((title) => source.includes(title)).map(
+        (title) => `${file}: ${title}`
+      )
+    );
     expect(offenders).toEqual([]);
   });
 });

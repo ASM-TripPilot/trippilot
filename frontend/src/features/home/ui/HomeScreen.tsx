@@ -1,45 +1,48 @@
 /**
- * a01-home 프레젠테이션 화면 (TRIP-170 · Figma 1632:1108 정합, 4상태).
- * props만 받는다 — 네트워크·라우팅을 전혀 모른다(브리프 §6-1, homeStructure D-1이 기계 강제).
- * CTA는 전부 no-op(Q3) — onPress 미배선, accessibilityRole="button"만 유지한다.
+ * a01-home "발견·영감 피드" 프레젠테이션 화면 (TRIP-316 · 라이브 Figma 2091:1357 정합, 3상태).
+ * props(hero·sections)만 받는다 — 네트워크·라우팅을 전혀 모른다(homeStructure D-1이 기계 강제).
+ * CTA는 전부 no-op — onPress 미배선, accessibilityRole="button"만 유지한다.
+ *
+ * 구성: 인사 헤더 → 검색바 → magazineHero(영감 카드) → "요즘 사람들이 담는 곳"(가로 스크롤) →
+ * "지금 뜨는 장소"(2×2 그리드) → "여행자 일정"(가로 스크롤) → softNote(장소 온램프) → FAB.
+ * 사진 에셋은 미번들이라 토큰색 플레이스홀더 + 스크림 그라디언트로 대체한다(가정 C).
  */
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   BellGlyph,
-  ChevronRightGlyph,
-  ClockGlyph,
-  CommentGlyph,
-  FlameGlyph,
   HeartOutlineGlyph,
-  LikeHeartGlyph,
-  PencilGlyph,
+  LocationPinGlyph,
   PlusGlyph,
-  RouteDotsGlyph,
+  SearchGlyph,
+  SparkleGlyph,
 } from './HomeGlyphs';
 import type {
-  HomeNextPlan,
-  HomePopularPlace,
-  HomeResume,
+  HomeCollectionCard,
+  HomeItineraryCard,
+  HomeMagazineHero,
   HomeScreenProps,
   HomeSections,
-  HomeTasteBlock,
-  HomeTripHero,
+  HomeSpotCard,
 } from '../model/homeTypes';
 
-// 카드 그림자 2종(브리프 §3-D 명시 raw 허용 — 그림자는 토큰 대상이 아니다). RN은 box-shadow가
-// 없어 shadow-* 스타일 프로퍼티로 옮긴다.
-const heroCardShadow = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.08,
-  shadowRadius: 16,
-  elevation: 4,
-} as const;
+// 사진 위 흰 글씨 가독성을 위한 스크림 그라디언트(브리프 §3-D 명시 raw 허용 — 스크림은 토큰
+// 대상이 아니다). 상단 30%는 투명, 하단은 검정. 카드별 하단 농도만 Figma 실측대로 다르다.
+const SCRIM_LOCATIONS = [0.3, 1] as const;
+const HERO_SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.8)'] as const;
+const DEST_SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)'] as const;
+const SPOT_SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.66)'] as const;
 
+const ABSOLUTE_FILL = StyleSheet.absoluteFillObject;
+
+// hero 메타칩 반투명 흰 배경(브리프 §3-C 명시 raw 예외 — 알파는 토큰이 아니다).
+const HERO_CHIP_STYLE = { backgroundColor: 'rgba(255,255,255,0.22)' } as const;
+
+// 카드 그림자 2종(브리프 §3-D 명시 raw 허용 — 그림자는 토큰 대상이 아니다). RN은 box-shadow가
+// 없어 shadow-* 스타일 프로퍼티로 옮긴다. shadowColor '#000000'은 D-3 13색 밖이라 무제재.
 const softCardShadow = {
   shadowColor: '#000000',
   shadowOffset: { width: 0, height: 2 },
@@ -48,48 +51,26 @@ const softCardShadow = {
   elevation: 2,
 } as const;
 
-// hero 사진 스크림 그라디언트(브리프 §3-D 명시 raw 허용) — 상단 30%는 투명, 하단은 흑 72%.
-const SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)'] as const;
-const SCRIM_LOCATIONS = [0.3, 1] as const;
+const fabShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.22,
+  shadowRadius: 16,
+  elevation: 8,
+} as const;
 
-// ── 공용 섹션 헤더 ──────────────────────────────────────────────────────
-// showMore=false인 경우(empty·loading)엔 '더보기 ›'를 아예 그리지 않는다. 취향 블록(내 취향
-// 여행지)도 Figma엔 '더보기 ›'가 있어(1632:1258) 인기·취향·커뮤니티 3군데 모두 showMore를
-// 켠다(HomeScreen.test.tsx A-1c 총합 3 — 게이트①-2 후속, 03 §8-1).
-function SectionHeader({
-  title,
-  showMore,
-  moreTestID,
-}: {
-  title: string;
-  showMore: boolean;
-  moreTestID?: string;
-}): ReactElement {
+// ── 인사 헤더 ───────────────────────────────────────────────────────────
+function GreetingHeader(): ReactElement {
   return (
-    <View className="w-full flex-row items-center justify-between">
-      <Text className="font-noto-bold text-[16px] font-bold text-ink">
-        {title}
-      </Text>
-      {showMore ? (
-        <Pressable
-          testID={moreTestID}
-          accessibilityRole="button"
-          onPress={undefined}
-        >
-          <Text className="font-noto text-label text-muted">더보기 ›</Text>
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
-// ── 크롬(상단바) ────────────────────────────────────────────────────────
-function TopBar(): ReactElement {
-  return (
-    <View className="w-full flex-row items-center justify-between px-lg pb-sm pt-sm">
-      <Text className="font-inter-bold text-hero font-bold tracking-[-0.44px] text-ink">
-        TripPilot
-      </Text>
+    <View className="w-full flex-row items-center gap-sm px-lg pb-[10px] pt-lg">
+      <View testID="home-greeting" className="flex-1 gap-px">
+        <Text className="font-noto-bold text-[21px] font-bold text-ink">
+          오늘은 어디를 상상해볼까요
+        </Text>
+        <Text className="font-noto text-[12.5px] text-muted">
+          떠나지 않아도, 구경하고 모으는 즐거움
+        </Text>
+      </View>
       <Pressable
         testID="home-dashboard-bell"
         accessibilityRole="button"
@@ -103,57 +84,375 @@ function TopBar(): ReactElement {
   );
 }
 
-// ── hero(여행 카드) ─────────────────────────────────────────────────────
-function HeroCard({ trip }: { trip: HomeTripHero }): ReactElement {
+// ── 검색바(가짜 — Pressable+Text, 실 TextInput 아님 · 02a §4-8) ──────────
+function SearchBarBlock(): ReactElement {
+  return (
+    <View className="w-full px-lg pb-[14px] pt-[4px]">
+      <Pressable
+        testID="home-search-bar"
+        accessibilityRole="button"
+        onPress={undefined}
+        className="w-full flex-row items-center gap-[10px] rounded-pill bg-surface-soft px-lg py-[13px]"
+      >
+        <SearchGlyph size={19} />
+        <Text className="font-noto text-body text-muted-soft">
+          가고 싶은 도시·장소를 검색해보세요
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ── magazineHero(영감 카드) ─────────────────────────────────────────────
+function MagazineHero({ hero }: { hero: HomeMagazineHero }): ReactElement {
   return (
     <View
-      testID="home-dashboard-hero"
-      style={heroCardShadow}
-      className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
+      testID="home-magazine-hero"
+      className="h-[470px] w-full overflow-hidden"
     >
-      <View className="h-[150px] w-full overflow-hidden">
-        {/* 사진 자리 — 실 사진 소스 없음(브리프 §6) → 토큰 색 플레이스홀더 */}
-        <View className="absolute inset-0 bg-surface-strong" />
-        <LinearGradient
-          colors={SCRIM_COLORS}
-          locations={SCRIM_LOCATIONS}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        />
-        {trip.overlay ? (
-          <>
-            <View className="absolute left-[16px] top-[16px] rounded-pill bg-canvas px-md py-[6px]">
-              <Text className="font-inter-bold text-card-title font-bold text-primary-text">
-                {trip.overlay.dday}
-              </Text>
-            </View>
-            <Text className="absolute right-[16px] top-[22px] font-noto-bold text-label font-bold text-on-primary">
-              {trip.overlay.nights}
+      {/* 사진 자리 — 실 사진 소스 없음(가정 C) → 토큰색 플레이스홀더 + 스크림 */}
+      <View className="absolute inset-0 bg-surface-strong" />
+      <LinearGradient
+        colors={HERO_SCRIM_COLORS}
+        locations={SCRIM_LOCATIONS}
+        style={ABSOLUTE_FILL}
+      />
+      <View className="flex-1 justify-between px-lg pb-xl pt-xl">
+        {/* 상단: eyebrow pill + 하트 */}
+        <View className="w-full flex-row items-start justify-between">
+          <View className="flex-row items-center gap-[6px] self-start rounded-pill bg-canvas px-md py-[5px]">
+            <SparkleGlyph size={13} />
+            <Text className="font-noto-bold text-[11.5px] font-bold text-ink">
+              {hero.eyebrow}
             </Text>
-            <Text className="absolute bottom-[16px] left-[16px] font-noto-bold text-hero font-bold text-on-primary">
-              {trip.overlay.title}
+          </View>
+          <HeartOutlineGlyph size={30} />
+        </View>
+        {/* 하단: 타이틀 + 부제 + 메타칩 + 3-dot */}
+        <View className="w-full gap-[10px]">
+          <View className="gap-[6px]">
+            <Text className="font-noto-bold text-[28px] font-bold text-on-primary">
+              {hero.title}
             </Text>
-          </>
-        ) : null}
+            <Text className="font-noto text-[13.5px] text-on-primary opacity-90">
+              {hero.subtitle}
+            </Text>
+          </View>
+          <View className="flex-row gap-sm">
+            {hero.chips.map((chip) => (
+              <View
+                key={chip}
+                style={HERO_CHIP_STYLE}
+                className="rounded-pill px-[10px] py-[4px]"
+              >
+                <Text className="font-noto-bold text-micro font-bold text-on-primary">
+                  {chip}
+                </Text>
+              </View>
+            ))}
+          </View>
+          <View className="flex-row items-center gap-[5px] pt-[4px]">
+            <View className="h-[6px] w-[18px] rounded-pill bg-on-primary" />
+            <View className="h-[6px] w-[6px] rounded-pill bg-on-primary opacity-50" />
+            <View className="h-[6px] w-[6px] rounded-pill bg-on-primary opacity-50" />
+          </View>
+        </View>
       </View>
-      <View className="w-full gap-[13px] px-lg pb-lg pt-[14px]">
-        <Text className="font-noto text-label text-muted">{trip.meta}</Text>
-        <View
-          testID="home-dashboard-hero-progress"
-          className="h-[6px] w-full overflow-hidden rounded-pill bg-surface-strong"
+    </View>
+  );
+}
+
+// ── 공용 섹션 헤더(타이틀 + '더 보기') ──────────────────────────────────
+function SectionHeader({
+  title,
+  moreTestID,
+}: {
+  title: string;
+  moreTestID: string;
+}): ReactElement {
+  return (
+    <View className="w-full flex-row items-center justify-between px-lg">
+      <Text className="font-noto-bold text-section font-bold text-ink">
+        {title}
+      </Text>
+      <Pressable
+        testID={moreTestID}
+        accessibilityRole="button"
+        onPress={undefined}
+      >
+        <Text className="font-noto-bold text-[12.5px] font-bold text-muted underline">
+          더 보기
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ── 섹션 빈 플레이스홀더(AC-4 · 침묵 은닉 금지) ─────────────────────────
+function SectionEmptyBlock({ testID }: { testID: string }): ReactElement {
+  return (
+    <View
+      testID={testID}
+      className="mx-lg items-center gap-[6px] rounded-card border border-hairline bg-canvas-alt px-lg py-[26px]"
+    >
+      <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
+        아직 보여드릴 게 없어요
+      </Text>
+      <Text className="text-center font-noto text-label text-muted">
+        담아둔 장소가 쌓이면 여기에 골라 담아 드려요
+      </Text>
+    </View>
+  );
+}
+
+// ── 컬렉션 카드(요즘 사람들이 담는 곳) ──────────────────────────────────
+function CollectionCard({
+  card,
+  index,
+}: {
+  card: HomeCollectionCard;
+  index: number;
+}): ReactElement {
+  return (
+    <View
+      testID={`home-collection-card-${index}`}
+      style={softCardShadow}
+      className="h-[300px] w-[230px] overflow-hidden rounded-[18px]"
+    >
+      <View className="absolute inset-0 bg-surface-strong" />
+      <LinearGradient
+        colors={DEST_SCRIM_COLORS}
+        locations={SCRIM_LOCATIONS}
+        style={ABSOLUTE_FILL}
+      />
+      <View className="absolute inset-x-0 top-[12px] flex-row items-center justify-between px-[12px]">
+        <View className="rounded-pill bg-primary px-[10px] py-[4px]">
+          <Text className="font-noto-bold text-[10.5px] font-bold text-on-primary">
+            {card.badge}
+          </Text>
+        </View>
+        <HeartOutlineGlyph size={26} />
+      </View>
+      <View className="absolute inset-x-0 bottom-[16px] gap-[6px] px-[14px]">
+        <Text className="font-noto-bold text-[18px] font-bold text-on-primary">
+          {card.title}
+        </Text>
+        <View className="flex-row items-center gap-[4px]">
+          <LocationPinGlyph size={12} />
+          <Text className="font-noto text-micro text-on-primary opacity-90">
+            {card.region}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ── 스팟 카드(지금 뜨는 장소, 2×2 그리드 셀) ────────────────────────────
+function SpotCard({
+  card,
+  index,
+}: {
+  card: HomeSpotCard;
+  index: number;
+}): ReactElement {
+  return (
+    <View
+      testID={`home-spot-card-${index}`}
+      className="h-[166px] flex-1 overflow-hidden rounded-card"
+    >
+      <View className="absolute inset-0 bg-surface-strong" />
+      <LinearGradient
+        colors={SPOT_SCRIM_COLORS}
+        locations={SCRIM_LOCATIONS}
+        style={ABSOLUTE_FILL}
+      />
+      <View className="absolute right-[10px] top-[10px]">
+        <HeartOutlineGlyph size={22} />
+      </View>
+      <View className="absolute inset-x-0 bottom-[12px] gap-[3px] px-[12px]">
+        <Text className="font-noto-bold text-body font-bold text-on-primary">
+          {card.title}
+        </Text>
+        <Text className="font-noto text-micro text-on-primary opacity-90">
+          {card.tag}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ── 여행자 일정 카드(사진 + 본문) ───────────────────────────────────────
+function ItineraryCard({
+  card,
+  index,
+}: {
+  card: HomeItineraryCard;
+  index: number;
+}): ReactElement {
+  return (
+    <View
+      testID={`home-itinerary-card-${index}`}
+      style={softCardShadow}
+      className="w-[170px] overflow-hidden rounded-card border border-hairline bg-canvas"
+    >
+      <View className="h-[114px] w-full overflow-hidden bg-surface-strong">
+        <View className="absolute right-[8px] top-[8px]">
+          <HeartOutlineGlyph size={20} />
+        </View>
+      </View>
+      <View className="gap-[7px] px-md pb-md pt-[10px]">
+        <Text className="font-noto-bold text-body font-bold text-ink">
+          {card.title}
+        </Text>
+        <Text className="font-noto text-[12.5px] text-muted">
+          {card.nights}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ── 섹션1: 요즘 사람들이 담는 곳(가로 스크롤 · 3상태) ───────────────────
+function CollectionsSection({
+  sections,
+}: {
+  sections: HomeSections;
+}): ReactElement {
+  return (
+    <View className="w-full gap-md">
+      <SectionHeader
+        title="요즘 사람들이 담는 곳"
+        moreTestID="home-collections-more"
+      />
+      {sections.kind === 'ready' ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
         >
-          <View
-            style={{ width: `${trip.progressRatio * 100}%` }}
-            className="h-full rounded-pill bg-primary"
-          />
+          {sections.collections.map((card, index) => (
+            <CollectionCard key={card.title} card={card} index={index} />
+          ))}
+        </ScrollView>
+      ) : sections.kind === 'empty' ? (
+        <SectionEmptyBlock testID="home-collections-empty" />
+      ) : (
+        <View
+          testID="home-collections-skeleton"
+          className="mx-lg flex-row gap-md overflow-hidden"
+        >
+          {[0, 1].map((i) => (
+            <View
+              key={i}
+              className="h-[300px] w-[230px] rounded-[18px] bg-surface-strong"
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── 섹션2: 지금 뜨는 장소(2×2 그리드 · 3상태) ───────────────────────────
+function SpotsSection({ sections }: { sections: HomeSections }): ReactElement {
+  return (
+    <View className="w-full gap-md">
+      <SectionHeader title="지금 뜨는 장소" moreTestID="home-spots-more" />
+      {sections.kind === 'ready' ? (
+        <View className="mx-lg gap-md">
+          {[0, 1].map((row) => (
+            <View key={row} className="flex-row gap-md">
+              {sections.spots.slice(row * 2, row * 2 + 2).map((card, i) => (
+                <SpotCard key={card.title} card={card} index={row * 2 + i} />
+              ))}
+            </View>
+          ))}
+        </View>
+      ) : sections.kind === 'empty' ? (
+        <SectionEmptyBlock testID="home-spots-empty" />
+      ) : (
+        <View testID="home-spots-skeleton" className="mx-lg gap-md">
+          {[0, 1].map((row) => (
+            <View key={row} className="flex-row gap-md">
+              {[0, 1].map((c) => (
+                <View
+                  key={c}
+                  className="h-[166px] flex-1 rounded-card bg-surface-strong"
+                />
+              ))}
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── 섹션3: 여행자 일정(가로 스크롤 · 3상태) ─────────────────────────────
+function ItinerariesSection({
+  sections,
+}: {
+  sections: HomeSections;
+}): ReactElement {
+  return (
+    <View className="w-full gap-md">
+      <SectionHeader title="여행자 일정" moreTestID="home-itineraries-more" />
+      {sections.kind === 'ready' ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
+        >
+          {sections.itineraries.map((card, index) => (
+            <ItineraryCard key={card.title} card={card} index={index} />
+          ))}
+        </ScrollView>
+      ) : sections.kind === 'empty' ? (
+        <SectionEmptyBlock testID="home-itineraries-empty" />
+      ) : (
+        <View
+          testID="home-itineraries-skeleton"
+          className="mx-lg flex-row gap-md overflow-hidden"
+        >
+          {[0, 1].map((i) => (
+            <View
+              key={i}
+              className="h-[175px] w-[170px] rounded-card bg-surface-strong"
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── softNote(장소 온램프 · US-SHELL-05) ─────────────────────────────────
+// 배경 #fff7f8은 Figma가 변수 아닌 raw fill로 쓴 값 → 임의 raw 유지(가정 D). D-3 13색 밖이라
+// 자동 심판 사각지대이므로 [검증] 스크린샷 대조가 유일한 그물.
+function SoftNote(): ReactElement {
+  return (
+    <View className="w-full px-lg pb-[24px] pt-[22px]">
+      <View
+        testID="home-soft-note"
+        className="w-full flex-row items-center gap-[10px] rounded-card bg-[#fff7f8] px-lg py-[14px]"
+      >
+        <View className="flex-1 gap-[2px]">
+          <Text className="font-noto-bold text-[13.5px] font-bold text-ink">
+            마음에 든 곳이 모이면
+          </Text>
+          <Text className="font-noto text-[11.5px] text-muted">
+            담아둔 장소로 여행을 만들 수 있어요
+          </Text>
         </View>
         <Pressable
-          testID="home-dashboard-hero-cta"
+          testID="home-saved-places-cta"
           accessibilityRole="button"
           onPress={undefined}
-          className="h-12 w-full items-center justify-center rounded-button bg-primary"
+          className="rounded-pill border-[1.4px] border-primary bg-canvas px-md py-sm"
         >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            일정 보기
+          <Text className="font-noto-bold text-caption font-bold text-primary-text">
+            담은 곳
           </Text>
         </Pressable>
       </View>
@@ -161,415 +460,47 @@ function HeroCard({ trip }: { trip: HomeTripHero }): ReactElement {
   );
 }
 
-// ── 첫 사용자 대시 빈 카드 ──────────────────────────────────────────────
-function EmptyHeroCard(): ReactElement {
-  return (
-    <View
-      testID="home-dashboard-empty-hero"
-      className="w-full items-center gap-md rounded-card border-[1.5px] border-dashed border-hairline-strong bg-canvas px-lg py-[30px]"
-    >
-      <View className="h-14 w-14 items-center justify-center rounded-pill bg-surface-strong">
-        <PlusGlyph size={26} tone="muted" />
-      </View>
-      <Text className="text-center font-noto-bold text-[16px] font-bold text-ink">
-        아직 만든 여행이 없어요
-      </Text>
-      <Text className="text-center font-noto text-label text-muted">
-        가고 싶은 곳을 저장해 두면 여행 만들 때 &apos;꼭 갈 곳&apos;으로 담겨요
-      </Text>
-      <Pressable
-        testID="home-dashboard-empty-cta"
-        accessibilityRole="button"
-        onPress={undefined}
-        className="items-center justify-center rounded-button bg-primary px-2xl py-[13px]"
-      >
-        <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-          여행 만들기
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
-
-// ── 다음 일정 카드 ──────────────────────────────────────────────────────
-function NextPlanCard({ nextPlan }: { nextPlan: HomeNextPlan }): ReactElement {
-  return (
-    <View
-      testID="home-dashboard-next-plan"
-      style={softCardShadow}
-      className="w-full gap-[11px] rounded-card border border-hairline bg-canvas p-[14px]"
-    >
-      <View className="w-full flex-row items-center justify-between">
-        <View className="flex-row items-center gap-[6px]">
-          <ClockGlyph size={16} />
-          <Text className="font-noto text-[12.5px] text-muted">다음 일정</Text>
-        </View>
-        <Text className="font-noto text-[12.5px] text-muted">
-          {nextPlan.dateLabel}
-        </Text>
-      </View>
-      {/* 거리만 표기(INV-3) — '도보 850m'. within(next-plan)으로 스코프하는 A-5의 대상 텍스트 */}
-      <Text className="w-full font-noto-bold text-card-title font-bold text-ink">
-        {nextPlan.summary}
-      </Text>
-      <View className="w-full gap-[6px]">
-        <View className="w-full flex-row items-center justify-between">
-          <Text className="font-noto text-[12.5px] text-muted">
-            {nextPlan.prepLabel}
-          </Text>
-          <Text className="font-inter-bold text-[12.5px] font-bold text-primary">
-            {nextPlan.prepPercent}
-          </Text>
-        </View>
-        <View className="h-[6px] w-full flex-row overflow-hidden rounded-pill bg-hairline">
-          <View
-            style={{ flex: nextPlan.prepRatio }}
-            className="h-full bg-primary"
-          />
-          <View style={{ flex: 1 - nextPlan.prepRatio }} className="h-full" />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// ── 이어서 하기 카드 ────────────────────────────────────────────────────
-function ResumeCard({ resume }: { resume: HomeResume }): ReactElement {
-  return (
-    <View
-      testID="home-dashboard-resume"
-      style={softCardShadow}
-      className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas py-md pl-md pr-[14px]"
-    >
-      <View className="h-[46px] w-[46px] items-center justify-center rounded-button bg-primary-pale">
-        <PencilGlyph size={22} />
-      </View>
-      <View className="flex-1 gap-[3px]">
-        <Text className="font-noto-bold text-[11.5px] font-bold text-primary-text">
-          이어서 하기
-        </Text>
-        <Text className="font-noto-bold text-[14.5px] font-bold text-ink">
-          {resume.title}
-        </Text>
-        <Text className="font-noto text-caption text-muted">{resume.meta}</Text>
-      </View>
-      <ChevronRightGlyph size={20} />
-    </View>
-  );
-}
-
-// ── 인기 장소 카드 1장 ──────────────────────────────────────────────────
-function PopularCard({
-  place,
-  index,
-}: {
-  place: HomePopularPlace;
-  index: number;
-}): ReactElement {
-  return (
-    <View
-      testID={`home-dashboard-popular-card-${index}`}
-      className="w-[108px] gap-[6px]"
-    >
-      <View className="h-[74px] w-[108px] rounded-button bg-surface-strong" />
-      <Text className="font-noto-bold text-label font-bold text-ink">
-        {place.name}
-      </Text>
-      {place.hot ? (
-        <View className="flex-row items-center gap-[3px]">
-          <FlameGlyph size={12} />
-          <Text className="font-noto-bold text-caption font-bold text-primary-text">
-            급상승
-          </Text>
-        </View>
-      ) : (
-        <Text className="font-noto text-caption text-muted">{place.stat}</Text>
-      )}
-    </View>
-  );
-}
-
-// ── 인기 장소 섹션(3상태) ───────────────────────────────────────────────
-function PopularSectionBlock({
-  sections,
-}: {
-  sections: HomeSections;
-}): ReactElement {
-  if (sections.kind === 'ready') {
-    return (
-      <View className="w-full gap-md">
-        <SectionHeader
-          title="지금 인기 있는 장소"
-          showMore
-          moreTestID="home-dashboard-popular-more"
-        />
-        <View className="flex-row gap-[11px]">
-          {sections.popular.map((place, index) => (
-            <PopularCard key={place.name} place={place} index={index} />
-          ))}
-        </View>
-      </View>
-    );
-  }
-  if (sections.kind === 'empty') {
-    return (
-      <View className="w-full gap-md">
-        <SectionHeader title="지금 인기 있는 장소" showMore={false} />
-        <View
-          testID="home-dashboard-taste-setup"
-          className="w-full items-center gap-[14px] rounded-card border-[1.5px] border-dashed border-hairline-strong bg-canvas px-lg py-[28px]"
-        >
-          <Text className="text-center font-noto text-label text-muted">
-            {'온보딩 취향을 설정하면\n더 맞춤화된 추천을 받을 수 있어요'}
-          </Text>
-          <Pressable
-            testID="home-dashboard-taste-setup-cta"
-            accessibilityRole="button"
-            onPress={undefined}
-            className="items-center justify-center rounded-button bg-primary px-[22px] py-md"
-          >
-            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-              취향 설정
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-  return (
-    <View className="w-full gap-md">
-      <SectionHeader title="지금 인기 있는 장소" showMore={false} />
-      <View
-        testID="home-dashboard-skeleton-popular"
-        className="flex-row gap-[11px]"
-      >
-        {[0, 1, 2].map((i) => (
-          <View key={i} className="w-[108px] gap-[8px]">
-            <View className="h-[74px] w-[108px] rounded-button bg-[#e9e9e9]" />
-            <View className="h-[11px] w-[74px] rounded-[6px] bg-[#e9e9e9]" />
-            <View className="h-[10px] w-[52px] rounded-[5px] bg-[#e9e9e9]" />
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-// ── 취향 블록(default 전용) ─────────────────────────────────────────────
-function TasteBlockSection({ taste }: { taste: HomeTasteBlock }): ReactElement {
-  return (
-    <View className="w-full gap-md">
-      <SectionHeader title="내 취향 여행지" showMore />
-      <View testID="home-dashboard-taste" className="w-full gap-md">
-        <View className="flex-row gap-sm">
-          {taste.chips.map((chip) => (
-            <View
-              key={chip}
-              className="rounded-pill bg-primary-pale px-md py-[6px]"
-            >
-              <Text className="font-noto-bold text-caption font-bold text-primary-text">
-                {chip}
-              </Text>
-            </View>
-          ))}
-        </View>
-        <View
-          style={softCardShadow}
-          className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas py-md pl-md pr-[14px]"
-        >
-          <View className="h-[88px] w-[88px] rounded-button bg-surface-strong" />
-          <View className="flex-1 gap-[5px]">
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              {taste.featured.name}
-            </Text>
-            <Text className="font-noto text-label text-body">
-              {taste.featured.description}
-            </Text>
-            <View className="rounded-pill bg-primary-pale px-[9px] py-[4px]">
-              <Text className="font-noto-bold text-[11.5px] font-bold text-primary-text">
-                {taste.featured.badge}
-              </Text>
-            </View>
-          </View>
-          <HeartOutlineGlyph size={22} />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// ── 새 여행 만들기 버튼 ─────────────────────────────────────────────────
-function NewTripButton(): ReactElement {
+// ── FAB(여행 만들기 · 우하단 floating) ──────────────────────────────────
+// bottom 오프셋은 화면 쪽에서 직접 잡는다 — 탭바는 SafeArea/네비 모르는 순수 뷰 계약이라
+// bottom inset을 합산하지 않는다(repo-trap). 탭바(약 96px)+홈 인디케이터 위에 뜨도록 하고,
+// 실제 여백은 [검증] 6-b 실기 스모크에서 눈으로 조정한다(자동 심판 없음, 브리프 §8-4).
+function CreateTripFab(): ReactElement {
   return (
     <Pressable
-      testID="home-dashboard-new-trip"
+      testID="home-create-trip-fab"
       accessibilityRole="button"
       onPress={undefined}
-      className="h-12 w-full flex-row items-center justify-center gap-sm rounded-button border border-hairline-strong bg-canvas"
+      style={fabShadow}
+      className="absolute bottom-[100px] right-lg flex-row items-center justify-center gap-sm rounded-pill bg-primary py-md pl-xl pr-[22px]"
     >
-      <PlusGlyph size={20} tone="ink" />
-      <Text className="font-noto-bold text-card-title font-bold text-ink">
-        새 여행 만들기
+      <PlusGlyph size={22} />
+      <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+        여행 만들기
       </Text>
     </Pressable>
   );
 }
 
-// ── 커뮤니티(공개 기록) 섹션(3상태) ─────────────────────────────────────
-function CommunitySectionBlock({
-  sections,
-}: {
-  sections: HomeSections;
-}): ReactElement {
-  if (sections.kind === 'ready') {
-    const record = sections.record;
-    return (
-      <View className="w-full gap-md">
-        <SectionHeader title="지금 뜨는 · 내 취향 여행 기록" showMore />
-        <View
-          testID="home-dashboard-record-card"
-          style={heroCardShadow}
-          className="w-full gap-md rounded-card border border-hairline bg-canvas p-[14px]"
-        >
-          <View className="w-full flex-row items-center justify-between">
-            <View className="flex-row items-center gap-[10px]">
-              <View className="h-9 w-9 items-center justify-center rounded-pill bg-primary-pale">
-                <Text className="font-noto-bold text-body font-bold text-primary-text">
-                  {record.authorInitial}
-                </Text>
-              </View>
-              <View className="gap-[3px]">
-                <Text className="font-noto-bold text-body font-bold text-ink">
-                  {record.author}
-                </Text>
-                <Text className="font-noto text-caption text-muted">
-                  {record.authorTaste}
-                </Text>
-              </View>
-            </View>
-            <View className="flex-row items-center gap-[4px] rounded-pill bg-primary-pale py-[4px] pl-[9px] pr-[11px]">
-              <FlameGlyph size={12} />
-              <Text className="font-noto-bold text-caption font-bold text-primary-text">
-                인기
-              </Text>
-            </View>
-          </View>
-          <View className="w-full flex-row items-start gap-md">
-            <View className="flex-1 gap-[9px]">
-              <Text className="font-noto-bold text-card-title font-bold text-ink">
-                {record.title}
-              </Text>
-              <View className="flex-row gap-[6px]">
-                {record.chips.map((chip) => (
-                  <View
-                    key={chip}
-                    className="rounded-pill bg-surface-soft px-[9px] py-[4px]"
-                  >
-                    <Text className="font-noto text-caption text-body">
-                      {chip}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-              <Text className="font-noto text-caption text-muted">
-                {record.meta}
-              </Text>
-              <View className="flex-row items-center gap-[14px]">
-                <View className="flex-row items-center gap-[4px]">
-                  <LikeHeartGlyph size={15} />
-                  <Text className="font-inter-bold text-label font-bold text-ink">
-                    {record.likes}
-                  </Text>
-                </View>
-                <View className="flex-row items-center gap-[4px]">
-                  <CommentGlyph size={15} />
-                  <Text className="font-inter-bold text-label font-bold text-muted">
-                    {record.comments}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <View className="h-[96px] w-[96px] items-center justify-center rounded-button border border-hairline bg-canvas-alt">
-              <RouteDotsGlyph size={56} />
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  }
-  if (sections.kind === 'empty') {
-    return (
-      <View className="w-full gap-md">
-        <SectionHeader title="지금 뜨는 · 내 취향 여행 기록" showMore={false} />
-        <View
-          testID="home-dashboard-records-empty"
-          className="w-full items-center gap-[7px] rounded-card border-[1.5px] border-dashed border-hairline-strong bg-canvas px-lg py-[26px]"
-        >
-          <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
-            아직 공유된 여행 기록이 없어요
-          </Text>
-          <Text className="text-center font-noto text-label text-muted">
-            관심 장소를 저장하면 취향에 맞는 기록을 추천해 드려요
-          </Text>
-        </View>
-      </View>
-    );
-  }
-  return (
-    <View className="w-full gap-md">
-      <SectionHeader title="지금 뜨는 · 내 취향 여행 기록" showMore={false} />
-      <View
-        testID="home-dashboard-skeleton-record"
-        style={softCardShadow}
-        className="w-full gap-[14px] rounded-card border border-hairline bg-canvas p-[14px]"
-      >
-        <View className="flex-row items-center gap-[10px]">
-          <View className="h-9 w-9 rounded-pill bg-[#e9e9e9]" />
-          <View className="gap-[7px]">
-            <View className="h-3 w-[100px] rounded-[6px] bg-[#e9e9e9]" />
-            <View className="h-[10px] w-[66px] rounded-[5px] bg-[#e9e9e9]" />
-          </View>
-        </View>
-        <View className="w-full gap-[10px]">
-          <View className="h-[13px] w-[160px] rounded-[6px] bg-[#e9e9e9]" />
-          <View className="h-[11px] w-full rounded-[6px] bg-[#e9e9e9]" />
-          <View className="h-[11px] w-[120px] rounded-[6px] bg-[#e9e9e9]" />
-          <View className="h-[11px] w-[84px] rounded-[6px] bg-[#e9e9e9]" />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-export function HomeScreen({
-  trip,
-  nextPlan,
-  resume,
-  taste,
-  sections,
-}: HomeScreenProps): ReactElement {
+export function HomeScreen({ hero, sections }: HomeScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="home-dashboard-root" className="flex-1 bg-canvas">
-        <TopBar />
-        <ScrollView className="flex-1">
-          <View className="w-full gap-[22px] px-lg pb-xl pt-sm">
-            {trip ? <HeroCard trip={trip} /> : <EmptyHeroCard />}
-            {nextPlan ? <NextPlanCard nextPlan={nextPlan} /> : null}
-            {resume ? <ResumeCard resume={resume} /> : null}
-
-            {/* 새 여행 만들기 위치는 Figma상 상태별로 다르다: 취향 블록이 있으면(default) 그
-                뒤, 없으면(no-trip·empty·loading) hero 바로 다음 — 02a §4-C 픽스처 관측대로. */}
-            {!taste ? <NewTripButton /> : null}
-
-            <PopularSectionBlock sections={sections} />
-
-            {taste ? <TasteBlockSection taste={taste} /> : null}
-            {taste ? <NewTripButton /> : null}
-
-            <CommunitySectionBlock sections={sections} />
+        <ScrollView
+          className="flex-1"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 140 }}
+        >
+          <GreetingHeader />
+          <SearchBarBlock />
+          <MagazineHero hero={hero} />
+          <View className="w-full gap-[24px] pb-sm pt-[22px]">
+            <CollectionsSection sections={sections} />
+            <SpotsSection sections={sections} />
+            <ItinerariesSection sections={sections} />
           </View>
+          <SoftNote />
         </ScrollView>
+        <CreateTripFab />
       </View>
     </SafeAreaView>
   );

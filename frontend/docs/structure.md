@@ -121,8 +121,8 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `toggleMulti` · `toggleSingle` | `features/onboarding/model/preferenceSelection` | 취향 축 토글 순수 규칙(복수/단일 공용). `null`=미설정, 빈 배열로 안 떨어짐(US-ONB-14) |
 | `usePreferenceStore` | `features/onboarding/model/preferenceStore` | 취향 6축 세션 메모리 Zustand 스토어(persist 없음). **TRIP-173에서 `store/`→`model/` 합류** |
 | `BottomTabBar` · `ShellTabKey` · `BottomTabBarProps` | `shared/ui` | 순수 뷰 탭바(TRIP-170) — `activeKey`·`onPressTab` 두 prop만, 네비게이션 모름 |
-| `HOME_DEFAULT_PROPS` · `HOME_NO_TRIP_PROPS` · `HOME_EMPTY_PROPS` · `HOME_LOADING_PROPS` | `features/home/model/homeFixtures` | 홈 4상태 Figma 고정 목업(Q2 — 서버 없어 유일한 데이터 소스) |
-| `HomeScreenProps` · `HomeSections`(외 조각 타입) | `features/home/model/homeTypes` | 홈 화면 prop 계약 — 판별 유니온 `HomeSections`(ready/empty/loading) |
+| `HOME_DEFAULT_PROPS` · `HOME_NO_TRIP_PROPS` · `HOME_EMPTY_PROPS` · `HOME_LOADING_PROPS` | `features/home/model/homeFixtures` | 홈 4상수 Figma 고정 목업(Q2 — 서버 없어 유일한 데이터 소스). **TRIP-316 재작성**: 신 세대 "발견·영감 피드" 실측값으로 전면 교체, `HOME_NO_TRIP_PROPS`는 `HOME_DEFAULT_PROPS`와 바이트 동일(신 프레임에 no-trip 픽셀 정본 없음, 가정 B) |
+| `HomeScreenProps` · `HomeSections` · `HomeCollectionCard` · `HomeSpotCard` · `HomeItineraryCard` · `HomeMagazineHero` | `features/home/model/homeTypes` | 홈 화면 prop 계약(**TRIP-316 재작성** — 구 `trip`·`nextPlan`·`resume`·`taste` 계약 전부 폐기). `HomeScreenProps{hero; sections}` — `hero`는 상태 무관 고정 블록, `sections`는 판별 유니온 `HomeSections`(`ready`/`empty`/`loading`, 3섹션 한 덩어리로 동시 전환) |
 | `useBootstrapGate` · `useSocialLogin` | `features/auth/model` | 부트스트랩 · 소셜 로그인 훅. **TRIP-173에서 `hooks/`→`model/` 개명** |
 | `useTermsConsent` · `useNickname` · `useOnboardingProgress` | `features/onboarding/model` | 약관 · 닉네임 · 진행 상태 훅. **TRIP-173에서 `hooks/`→`model/` 개명** |
 | `SPLASH_BACKGROUND_COLORS` · `SPLASH_BACKGROUND_LOCATIONS` · `APP_ICON_COLORS` · `AUTH_ICON_COLORS` | `features/auth/config/gradients` | 그라디언트 상수. **TRIP-173에서 `lib/`→`config/` 개명**, `AUTH_ICON_COLORS`(경고 글리프 색)는 **FSD 완결 4/4 신설**(code-critic 03b 참고-1: 이 행 갱신 누락이 "이름 다른 재구현" 경로를 여는 사례로 실측됨 — 다음에 경고 아이콘 색이 또 필요하면 여기부터 본다) |

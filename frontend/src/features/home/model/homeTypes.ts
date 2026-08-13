@@ -1,81 +1,64 @@
-// 홈 대시보드 프레젠테이션 화면의 prop 계약(TRIP-170 · 02a §4-B). HomeScreen은 이 타입만
-// 알고 서버·네비게이션을 모른다 — 네트워크·라우팅은 이 계약 밖(브리프 §6-1).
+// 홈 "발견·영감 피드" 프레젠테이션 화면의 prop 계약(TRIP-316 · 라이브 Figma 2091:1357).
+// HomeScreen은 이 타입만 알고 서버·네비게이션을 모른다 — 네트워크·라우팅은 이 계약 밖
+// (repo-trap: 홈 전용 서버 API 없음). 구 세대 "여행 상태 대시보드" 계약(trip·nextPlan·
+// resume·taste)은 신 프레임에 대응 요소가 없어 전부 폐기됐다.
 
-/** 여행 카드(hero) 사진 위 오버레이 — Figma empty·loading 프레임엔 없다(§0 확정) → null 허용. */
-export interface HomeTripHero {
-  overlay: { dday: string; nights: string; title: string } | null;
-  /** '6.10~6.12 · 숙소 1곳 · 3명' */
-  meta: string;
-  /** 0~1 (default 픽스처 98/326 ≈ 0.3) */
-  progressRatio: number;
-}
-
-/** 다음 일정 카드 — default 상태에만 존재. summary는 거리만 표기한다(INV-3). */
-export interface HomeNextPlan {
-  /** '6.11 (수)' */
-  dateLabel: string;
-  /** '09:00 · 감천문화마을 · 도보 850m' — 거리만, INV-3 */
-  summary: string;
-  /** '여행 준비' */
-  prepLabel: string;
-  /** '60%' */
-  prepPercent: string;
-  /** 0~1 */
-  prepRatio: number;
-}
-
-/** 이어서 하기 카드 — default 상태에만 존재. */
-export interface HomeResume {
+/** 섹션1 "요즘 사람들이 담는 곳" 카드 1장 — 사진 위 badge pill·타이틀·지역. */
+export interface HomeCollectionCard {
+  /** '감천문화마을' */
   title: string;
-  meta: string;
+  /** '부산 사하구' — 핀 아이콘 옆 지역명 */
+  region: string;
+  /** '당일치기' — 좌상단 primary pill */
+  badge: string;
 }
 
-/** 인기 장소 카드 1장. hot=true면 '급상승' 배지(stat 무시), 아니면 stat 문구를 보여준다. */
-export interface HomePopularPlace {
-  name: string;
-  stat: string | null;
-  hot: boolean;
-}
-
-/** 취향 블록 — default 상태에만 존재. */
-export interface HomeTasteBlock {
-  chips: readonly string[];
-  featured: { name: string; description: string; badge: string };
-}
-
-/** 커뮤니티 공개 기록 카드 1장. */
-export interface HomeRecordCard {
-  author: string;
-  /** 아바타 원 안 글자 — Figma에서 author 전체 이름과 다른 별도 표시값(브리프 §authorRow). */
-  authorInitial: string;
-  authorTaste: string;
+/** 섹션2 "지금 뜨는 장소" 카드 1장 — 사진 위 타이틀·해시태그. */
+export interface HomeSpotCard {
+  /** '전포 카페거리' */
   title: string;
+  /** '#감성카페' — 해시태그 한 줄 */
+  tag: string;
+}
+
+/** 섹션3 "여행자 일정" 카드 1장 — 사진 + 타이틀·박수 라벨. */
+export interface HomeItineraryCard {
+  /** '부산 미식 3일 코스' */
+  title: string;
+  /** '2박 3일' — 'N박 M일' 표기(소요시간 아님, INV-3) */
+  nights: string;
+}
+
+/** 상단 영감 카드(magazineHero) — 상태와 무관한 고정 블록(3상태 모두 렌더). */
+export interface HomeMagazineHero {
+  /** '오늘의 여행 영감' — eyebrow pill 라벨 */
+  eyebrow: string;
+  /** '부산 · 광안리의 밤' — 28px 흰 타이틀 */
+  title: string;
+  /** '다리 위로 번지는 불빛, 상상만으로 설레는 야경' */
+  subtitle: string;
+  /** ['당일치기로 충분', '야경 명소'] — 반투명 흰 메타칩 */
   chips: readonly string[];
-  meta: string;
-  likes: string;
-  comments: string;
 }
 
 /**
  * 판별 유니온(discriminated union) — kind 값에 따라 나머지 필드 구성이 달라진다.
- * '인기·커뮤니티 자리'가 실카드(ready)/유도문구(empty)/스켈레톤(loading) 중
- * 하나의 모습만 가질 수 있음을 타입으로 강제한다.
+ * 3섹션(컬렉션·스팟·일정)을 한 덩어리로 묶어 "부분 실패 시 전 섹션 동시 empty/loading"을
+ * 표현한다. 섹션별 독립 실패는 이 union으로는 표현 불가 — 상태 5종 티켓에서 필요 시 확장.
  */
 export type HomeSections =
   | {
       kind: 'ready';
-      popular: readonly HomePopularPlace[];
-      record: HomeRecordCard;
+      collections: readonly HomeCollectionCard[];
+      spots: readonly HomeSpotCard[];
+      itineraries: readonly HomeItineraryCard[];
     }
   | { kind: 'empty' }
   | { kind: 'loading' };
 
 export interface HomeScreenProps {
-  /** null → no-trip 대시 카드(첫 사용자) */
-  trip: HomeTripHero | null;
-  /** default에만 값 — trip이 있어도 empty·loading은 null(§0 확정) */
-  nextPlan: HomeNextPlan | null;
-  resume: HomeResume | null;
-  taste: HomeTasteBlock | null;
+  /** 상단 영감 카드 — 상태 무관 고정 블록 */
+  hero: HomeMagazineHero;
+  /** 3섹션 데이터셋(판별 유니온) */
   sections: HomeSections;
 }

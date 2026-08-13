@@ -1,96 +1,71 @@
-// 홈 4상태 고정 목업(TRIP-170 · Q2 결정: Figma 표시값 그대로 상수화). 서버 API가 없어(브리프
-// §6-1) 홈은 이 상수들로만 구동되는 프레젠테이션 화면이다 — 런타임 목(msw 등) 사용 금지.
+// 홈 4상태 고정 목업(TRIP-316 · 라이브 Figma 2091:1357 표시값 그대로 상수화). 서버 API가
+// 없어(repo-trap) 홈은 이 상수들로만 구동되는 프레젠테이션 화면이다 — 런타임 목(msw 등) 금지.
 
 import type {
-  HomeNextPlan,
-  HomePopularPlace,
-  HomeRecordCard,
-  HomeResume,
+  HomeCollectionCard,
+  HomeItineraryCard,
+  HomeMagazineHero,
   HomeScreenProps,
-  HomeTasteBlock,
-  HomeTripHero,
+  HomeSections,
+  HomeSpotCard,
 } from './homeTypes';
 
-const DEFAULT_TRIP: HomeTripHero = {
-  overlay: { dday: 'D-12', nights: '2박 3일', title: '부산 여행' },
-  meta: '6.10~6.12 · 숙소 1곳 · 3명',
-  // Figma progressFill 98px / heroBody 트랙 폭 326px ≈ 0.3 (02a §4-C)
-  progressRatio: 98 / 326,
+const MAGAZINE_HERO: HomeMagazineHero = {
+  eyebrow: '오늘의 여행 영감',
+  title: '부산 · 광안리의 밤',
+  subtitle: '다리 위로 번지는 불빛, 상상만으로 설레는 야경',
+  chips: ['당일치기로 충분', '야경 명소'],
 };
 
-const DEFAULT_NEXT_PLAN: HomeNextPlan = {
-  dateLabel: '6.11 (수)',
-  summary: '09:00 · 감천문화마을 · 도보 850m',
-  prepLabel: '여행 준비',
-  prepPercent: '60%',
-  prepRatio: 0.6,
-};
-
-const DEFAULT_RESUME: HomeResume = {
-  title: '짜던 일정 이어서 편집',
-  meta: '부산 여행 · 2일차 · 3분 전',
-};
-
-const DEFAULT_TASTE: HomeTasteBlock = {
-  chips: ['바다', '미식', '느긋'],
-  featured: {
-    name: '해동용궁사',
-    description: '탁 트인 바다 위 사찰',
-    badge: '내 취향과 잘 맞아요',
-  },
-};
-
-const POPULAR_PLACES: readonly HomePopularPlace[] = [
-  { name: '감천문화마을', stat: '1.2k 저장', hot: false },
-  { name: '광안리 해변', stat: null, hot: true },
-  { name: '전포 카페거리', stat: '980 저장', hot: false },
+const COLLECTIONS: readonly HomeCollectionCard[] = [
+  { title: '감천문화마을', region: '부산 사하구', badge: '당일치기' },
+  { title: '해운대 해변', region: '부산 해운대구', badge: '1박 2일' },
+  { title: '해동용궁사', region: '부산 기장군', badge: '반나절' },
 ];
 
-const RECORD_CARD: HomeRecordCard = {
-  author: '여행자민',
-  // 아바타 원 안 글자는 author 전체 이름의 첫 글자가 아니라 Figma가 별도로 보여주는 값이다
-  // (authorRow: 아바타 "민" + "여행자민" — 게이트①-2 후속, 03 §8-4).
-  authorInitial: '민',
-  authorTaste: '바다·미식 느긋',
-  title: '부산 2박 3일 미식 코스',
-  chips: ['부산', '2박 3일', '친구'],
-  meta: '방문 8곳 · 동선 12km',
-  likes: '24',
-  comments: '8',
+const SPOTS: readonly HomeSpotCard[] = [
+  { title: '전포 카페거리', tag: '#감성카페' },
+  { title: '자갈치 시장', tag: '#로컬푸드' },
+  { title: '광안리 SUP', tag: '#액티비티' },
+  { title: '황령산 전망대', tag: '#야경명소' },
+];
+
+const ITINERARIES: readonly HomeItineraryCard[] = [
+  { title: '부산 미식 3일 코스', nights: '2박 3일' },
+  { title: '해운대 오션뷰 힐링', nights: '2박 3일' },
+  { title: '로컬 시장 & 카페', nights: '1박 2일' },
+];
+
+const READY_SECTIONS: HomeSections = {
+  kind: 'ready',
+  collections: COLLECTIONS,
+  spots: SPOTS,
+  itineraries: ITINERARIES,
 };
 
-/** AC-1 · 여행 있음(진행 중) — 크롬+hero+부가 카드 3종+섹션 전부. */
+/** AC-1 · 정상(ready) — 인사·검색·영감 hero·섹션 3종·온램프 전부. */
 export const HOME_DEFAULT_PROPS: HomeScreenProps = {
-  trip: DEFAULT_TRIP,
-  nextPlan: DEFAULT_NEXT_PLAN,
-  resume: DEFAULT_RESUME,
-  taste: DEFAULT_TASTE,
-  sections: { kind: 'ready', popular: POPULAR_PLACES, record: RECORD_CARD },
+  hero: MAGAZINE_HERO,
+  sections: READY_SECTIONS,
 };
 
-/** AC-2 · 첫 사용자 — trip null, 부가 카드 전부 null. 섹션은 §0 확정대로 실데이터 유지. */
+/**
+ * AC-3 · 첫 사용자 — 신 피드는 여행 유무와 무관하므로(가정 B) default와 동일 섹션을 그린다.
+ * 핵심은 온램프(softNote/FAB)가 그대로 노출된다는 것(장소 먼저 담기 유도, US-SHELL-05).
+ */
 export const HOME_NO_TRIP_PROPS: HomeScreenProps = {
-  trip: null,
-  nextPlan: null,
-  resume: null,
-  taste: null,
-  sections: { kind: 'ready', popular: POPULAR_PLACES, record: RECORD_CARD },
+  hero: MAGAZINE_HERO,
+  sections: READY_SECTIONS,
 };
 
-/** AC-3 · 취향 부족 — 섹션은 유도 카드/빈 문구로 채워진다(침묵 실패 아님). */
+/** AC-4 · 부분 실패(empty) — 빈 섹션은 가시 플레이스홀더로 드러난다(침묵 은닉 금지, INV-4). */
 export const HOME_EMPTY_PROPS: HomeScreenProps = {
-  trip: DEFAULT_TRIP,
-  nextPlan: null,
-  resume: null,
-  taste: null,
+  hero: MAGAZINE_HERO,
   sections: { kind: 'empty' },
 };
 
-/** AC-4 · 로딩 — 섹션은 스켈레톤, 가용 카드(hero·새 여행 만들기)는 정상 표시. */
+/** AC-5 · 로딩(loading) — 섹션 자리에 스켈레톤, 고정 블록(인사·검색·hero·온램프)은 정상. */
 export const HOME_LOADING_PROPS: HomeScreenProps = {
-  trip: DEFAULT_TRIP,
-  nextPlan: null,
-  resume: null,
-  taste: null,
+  hero: MAGAZINE_HERO,
   sections: { kind: 'loading' },
 };
