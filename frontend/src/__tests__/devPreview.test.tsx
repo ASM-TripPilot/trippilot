@@ -118,8 +118,10 @@ describe('dev 정적 프리뷰 — 13개 시각 상태', () => {
     selectState('login-conflict-sheet');
 
     // 정규식으로 부분 일치를 본다 — 문구 전체를 박으면 카피 수정마다 테스트가 깨진다.
+    // TRIP-352 정본 정합: 충돌 본문은 서버 코드(kakao)를 한글 표시명(카카오)으로 옮겨
+    // 보여준다(코드 원문 비노출, AC-C2). 그래서 라틴 /kakao/ 가 아니라 /카카오/ 로 잰다.
     expect(screen.getByTestId('auth-login-conflict-message')).toHaveTextContent(
-      /kakao/
+      /카카오/
     );
   });
 

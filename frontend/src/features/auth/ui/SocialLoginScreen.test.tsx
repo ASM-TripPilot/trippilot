@@ -167,9 +167,15 @@ describe('c02-social-login — 이메일 충돌 바텀시트 (AC-ONB-01-6 · AC-
       });
 
       // ▸단언 — 루트 앵커(공허한 통과 방지) + 코드 원문 부재(정규식) + 한글 표시명 존재.
+      // 한글 표시명은 queryAllByText(복수형)으로 잰다 — 매핑 후 한글은 버튼 라벨·본문·CTA
+      // 여러 곳에 뜨는데, 단수형 queryByText 는 매치 2개 이상이면 throw 하기 때문이다(≥1 을
+      // 요구하는 의도에 단수형이 잘못 쓰였다, 게이트①-2 교정). 코드 원문 부재 단언은 0매치라
+      // throw 없이 그대로 유효하다.
       expect(screen.getByTestId('auth-login-root')).toBeOnTheScreen();
       expect(screen.queryByText(new RegExp(code))).toBeNull();
-      expect(screen.queryByText(new RegExp(PROVIDER_KO[code]))).not.toBeNull();
+      expect(
+        screen.queryAllByText(new RegExp(PROVIDER_KO[code])).length
+      ).toBeGreaterThan(0);
     }
   );
 

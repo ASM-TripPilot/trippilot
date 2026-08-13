@@ -163,7 +163,7 @@ describe('LoginPage — fake×MSW 결합 전이 (AC-W-09)', () => {
 });
 
 describe('LoginPage — 409 이메일 충돌·재로그인 (AC-W-09 · AC-W-16)', () => {
-  it('409 는 충돌 바텀시트를 띄우고 기존 provider "코드"(kakao)를 노출한다', async () => {
+  it('409 는 충돌 바텀시트를 띄우고 기존 provider 를 한글 표시명(카카오)으로 노출한다', async () => {
     setScenario('login-email-conflict');
     render(<LoginPage />);
 
@@ -172,8 +172,13 @@ describe('LoginPage — 409 이메일 충돌·재로그인 (AC-W-09 · AC-W-16)'
     await waitFor(() =>
       expect(screen.getByTestId('auth-login-conflict-sheet')).toBeOnTheScreen()
     );
-    // conflictProvider 가 표시명("카카오")이 아니라 코드(kakao)로 흐른다(D5).
-    expect(screen.getByText(/kakao/)).toBeOnTheScreen();
+    // TRIP-352 정본 정합: conflictProvider 는 서버 코드(kakao)로 흘러 들어오지만, 화면은
+    // 코드 원문을 감추고 한글 표시명("카카오")으로 옮겨 보여준다(AC-C2 · BR-U0-04). 코드→
+    // 엔드포인트 라우팅은 코드 그대로라는 계약은 아래 onConflictContinue 테스트가 따로 잠근다.
+    expect(screen.getByTestId('auth-login-conflict-message')).toHaveTextContent(
+      /카카오/
+    );
+    expect(screen.queryByText(/kakao/)).toBeNull();
   });
 
   it('onConflictContinue 는 conflictProvider 코드(kakao)로 재로그인을 트리거한다', async () => {
