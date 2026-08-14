@@ -178,7 +178,7 @@ interface PreviewState {
   render?: () => ReactElement;
 }
 
-// 온보딩 약관 3행 — 필수 2종(D1) + 마케팅 선택. 버전은 서버가 주는 값을 흉내낸 대표값.
+// 온보딩 약관 3행 — 필수 3종(BR-U0-10, TRIP-366). 버전은 서버가 주는 값을 흉내낸 대표값.
 const TERMS_ITEMS = [
   {
     termsType: 'TERMS_OF_SERVICE',
@@ -190,15 +190,15 @@ const TERMS_ITEMS = [
   {
     termsType: 'PRIVACY_POLICY',
     version: '2.1',
-    label: '개인정보 처리방침',
+    label: '개인정보 수집·이용',
     required: true,
     checked: false,
   },
   {
-    termsType: 'MARKETING',
-    version: '1.2',
-    label: '마케팅 정보 수신',
-    required: false,
+    termsType: 'LOCATION_TERMS',
+    version: '1.1',
+    label: '위치기반서비스',
+    required: true,
     checked: false,
   },
 ];

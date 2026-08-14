@@ -3,10 +3,10 @@ import { render, screen } from '@testing-library/react-native';
 import { TermsScreen, type TermsScreenProps } from './TermsScreen';
 
 /**
- * AC A1 · A2 · A8(표시) · C6 — c06-terms 프레젠테이션 계약.
+ * AC A1 · A2 · A8(표시) · C6 — c06-terms 프레젠테이션 계약 (BR-U0-10 정합, TRIP-366).
  *
- * 무엇을 보장하나: 넘겨받은 상태를 화면이 **틀리지 않게 그리는가**. 상태를 바꾸는 규칙
- * (전체동의 동기화·활성 조건 계산)은 컨테이너 통합테스트가 맡는다 — 여기서 중복 검증하지 않는다.
+ * 무엇을 보장하나: 넘겨받은 상태를 화면이 **틀리지 않게 그리는가**. 어떤 약관을 그릴지 고르는 규칙
+ * (6종 → 필수 3종 필터)은 컨테이너 통합테스트가 맡는다 — 여기서 중복 검증하지 않는다.
  *
  * 3동작: 준비(props 로 화면 상태를 세운다) → 실행(렌더) → 단언(무엇이 보이고 무엇이 잠겼는가).
  *
@@ -15,35 +15,38 @@ import { TermsScreen, type TermsScreenProps } from './TermsScreen';
  * 구현이 접근성 정보를 제대로 달아야 통과한다(스크린리더 사용자에게도 같은 정보가 전달된다).
  */
 
-const REQUIRED_LABELS = {
+// BR-U0-10 정본 문구(TRIP-366 결정1 — 서버 body 의 [플레이스홀더] 임시값 대신 BR 문구를 라벨로).
+const LABELS = {
   TERMS_OF_SERVICE: '서비스 이용약관',
-  PRIVACY_POLICY: '개인정보 처리방침',
+  PRIVACY_POLICY: '개인정보 수집·이용',
+  LOCATION_TERMS: '위치기반서비스',
 };
 
 function makeProps(
   overrides: Partial<TermsScreenProps> = {}
 ): TermsScreenProps {
   return {
+    // BR-U0-10 — U0 온보딩은 필수 3종만 그린다. 셋 다 required=true(선택 항목 없음).
     items: [
       {
         termsType: 'TERMS_OF_SERVICE',
         version: '1.4',
-        label: REQUIRED_LABELS.TERMS_OF_SERVICE,
+        label: LABELS.TERMS_OF_SERVICE,
         required: true,
         checked: false,
       },
       {
         termsType: 'PRIVACY_POLICY',
         version: '2.1',
-        label: REQUIRED_LABELS.PRIVACY_POLICY,
+        label: LABELS.PRIVACY_POLICY,
         required: true,
         checked: false,
       },
       {
-        termsType: 'MARKETING',
-        version: '1.2',
-        label: '마케팅 정보 수신 동의',
-        required: false,
+        termsType: 'LOCATION_TERMS',
+        version: '1.1',
+        label: LABELS.LOCATION_TERMS,
+        required: true,
         checked: false,
       },
     ],
@@ -60,7 +63,7 @@ function makeProps(
 }
 
 describe('TermsScreen — 초기 상태 (AC A1)', () => {
-  it('아무것도 체크되지 않으면 다음 버튼이 잠기고 필수 2행이 미동의로 표시된다', () => {
+  it('아무것도 체크되지 않으면 다음 버튼이 잠기고 필수 3행이 미동의로 표시된다', () => {
     render(<TermsScreen {...makeProps()} />);
 
     expect(screen.getByTestId('onboarding-terms-next')).toBeDisabled();
@@ -70,28 +73,30 @@ describe('TermsScreen — 초기 상태 (AC A1)', () => {
     expect(
       screen.getByTestId('onboarding-terms-PRIVACY_POLICY')
     ).not.toBeChecked();
+    expect(
+      screen.getByTestId('onboarding-terms-LOCATION_TERMS')
+    ).not.toBeChecked();
     expect(screen.getByTestId('onboarding-terms-agreeall')).not.toBeChecked();
   });
 
-  it('필수 2종과 선택(마케팅) 1종을 각각 필수/선택으로 구분해 보여준다 (D1)', () => {
+  it('필수 3종(서비스·개인정보·위치)만 보이고 모두 필수 배지다 — 선택 배지가 없다 (BR-U0-10)', () => {
     render(<TermsScreen {...makeProps()} />);
 
-    // 필수/선택 구분이 없으면 사용자가 무엇을 꼭 동의해야 하는지 알 수 없다.
-    expect(
-      screen.getByText(REQUIRED_LABELS.TERMS_OF_SERVICE)
-    ).toBeOnTheScreen();
-    expect(screen.getByText(REQUIRED_LABELS.PRIVACY_POLICY)).toBeOnTheScreen();
-    expect(screen.getByText('마케팅 정보 수신 동의')).toBeOnTheScreen();
-    expect(screen.getAllByText('필수')).toHaveLength(2);
-    expect(screen.getAllByText('선택')).toHaveLength(1);
+    expect(screen.getByText(LABELS.TERMS_OF_SERVICE)).toBeOnTheScreen();
+    expect(screen.getByText(LABELS.PRIVACY_POLICY)).toBeOnTheScreen();
+    expect(screen.getByText(LABELS.LOCATION_TERMS)).toBeOnTheScreen();
+    // 세 항목 모두 필수 — 선택 배지가 하나도 없어야 한다(BR-U0-10).
+    expect(screen.getAllByText('필수')).toHaveLength(3);
+    expect(screen.queryByText('선택')).toBeNull();
   });
 
-  // 위치기반서비스(LOCATION_TERMS)는 c08 위치 흐름에서 별도 수집한다(D1) — 이 화면에 있으면 안 된다.
-  it('위치기반서비스 약관 행을 이 화면에서 노출하지 않는다 (D1 — c08 에서 수집)', () => {
+  // BR-U0-11 — 마케팅은 U0 온보딩에서 노출하지 않는다(후속 유닛 설정 화면 몫).
+  it('마케팅 약관 행을 이 화면에서 노출하지 않는다 (BR-U0-11)', () => {
     render(<TermsScreen {...makeProps()} />);
 
     expect(screen.getByTestId('onboarding-terms-root')).toBeOnTheScreen();
-    expect(screen.queryByTestId('onboarding-terms-LOCATION_TERMS')).toBeNull();
+    expect(screen.queryByTestId('onboarding-terms-MARKETING')).toBeNull();
+    expect(screen.queryByText('마케팅 정보 수신 동의')).toBeNull();
   });
 });
 
@@ -106,15 +111,20 @@ describe('TermsScreen — 미동의 안내 (AC A2)', () => {
               : item
           ),
           canProceed: false,
-          missingRequiredLabels: [REQUIRED_LABELS.PRIVACY_POLICY],
+          missingRequiredLabels: [LABELS.PRIVACY_POLICY, LABELS.LOCATION_TERMS],
         })}
       />
     );
 
     expect(screen.getByTestId('onboarding-terms-next')).toBeDisabled();
     // "무언가 덜 됐다"가 아니라 **무엇이** 덜 됐는지 이름이 나와야 한다(US-ONB-02 예외 AC).
+    // 두 라벨이 ", " 로 이어지므로 regex(부분 일치)로 확인한다 — 이 리포의 toHaveTextContent(문자열)은
+    // 기본 exact(전체 일치)라 부분 문자열엔 정규식이 필요하다(matches() exact=true 실측).
     expect(screen.getByTestId('onboarding-terms-missing')).toHaveTextContent(
-      REQUIRED_LABELS.PRIVACY_POLICY
+      /개인정보 수집·이용/
+    );
+    expect(screen.getByTestId('onboarding-terms-missing')).toHaveTextContent(
+      /위치기반서비스/
     );
   });
 
@@ -122,9 +132,7 @@ describe('TermsScreen — 미동의 안내 (AC A2)', () => {
     render(
       <TermsScreen
         {...makeProps({
-          items: makeProps().items.map((item) =>
-            item.required ? { ...item, checked: true } : item
-          ),
+          items: makeProps().items.map((item) => ({ ...item, checked: true })),
           canProceed: true,
           missingRequiredLabels: [],
         })}
