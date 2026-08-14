@@ -25,7 +25,7 @@ import path from 'path';
  */
 
 const ROOT = path.resolve('src');
-const TAB_BAR_HEIGHT = 84; // BottomTabBar 루트 밴드 h-[84px](A7 기준값)
+const TAB_BAR_HEIGHT = 96; // BottomTabBar 루트 밴드 h-[96px](SWT PRO Figma 실물)
 
 /**
  * 주석 제거 — 줄 주석 규칙에서 바로 앞 글자가 `:`이면 주석으로 보지 않는다
@@ -95,14 +95,14 @@ describe('AC-O2 · (tabs)/_layout 오버레이 배선', () => {
     const src = read(path.join(ROOT, 'shared', 'ui', 'BottomTabBar.tsx'));
 
     // 정체성 앵커 — 이 파일이 탭바 밴드다.
-    expect(src).toContain('h-[84px]');
+    expect(src).toContain('h-[96px]');
 
     // 루트 밴드 className 한 줄에 absolute + bottom-0 이 함께 있어야 오버레이가 성립한다.
     const overlayRoot =
-      /className="[^"]*\babsolute\b[^"]*\bbottom-0\b[^"]*h-\[84px\]/.test(
+      /className="[^"]*\babsolute\b[^"]*\bbottom-0\b[^"]*h-\[96px\]/.test(
         src
       ) ||
-      /className="[^"]*\bbottom-0\b[^"]*\babsolute\b[^"]*h-\[84px\]/.test(src);
+      /className="[^"]*\bbottom-0\b[^"]*\babsolute\b[^"]*h-\[96px\]/.test(src);
     expect(overlayRoot).toBe(true);
   });
 });

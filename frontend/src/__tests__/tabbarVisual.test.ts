@@ -173,65 +173,80 @@ describe('스캔 전처리 · 주석 제거 — AC-V1~V4 공통 전제', () => {
   });
 });
 
-describe('AC-T1·AC-T2·AC-O1 (구 AC-V1) · TRIP-201 신 치수 + 오버레이 — 밴드·알약·탭·라벨', () => {
-  it('신 치수(px-lg·46·26·10·2·67.6)가 있고, 구값(28·64·62)과 밴드 배경(bg-canvas)은 사라졌다', () => {
+describe('AC-T1·AC-T2·AC-O1 · SWT PRO Figma 실물 정합 — 밴드·프로스티드 알약·탭', () => {
+  it('Figma 실물 치수(px-30·h-96·flex-1·프로스티드 알약)가 있고, 201 티켓값·구값·밴드 배경은 사라졌다', () => {
     // Arrange — 소스 스캔은 읽는 것이 곧 실행이다(렌더 없음).
     const scanned = readScannedSource();
 
-    // 긍정(AC-T1) — 신 치수가 소스에 있다(가정 A1, 티켓 실측). 대괄호 `[` `]`는 정규식
-    // 특수문자라 `includes`만 쓴다. 요소별로 묶어 한 객체로 내면 실패 diff에 어느 값이
-    // 빠졌는지 한 번에 보인다. leading-[13px]은 seed A6로 유지, h-[84px]는 루트 높이 불변.
+    // 긍정(AC-T1) — Figma 실물(1236:1177 · SWT PRO 화면) 값이 소스에 있다. 대괄호 `[` `]`는
+    // 정규식 특수문자라 `includes`만 쓴다. 요소별로 묶어 한 객체로 내면 실패 diff에 어느 값이
+    // 빠졌는지 한 번에 보인다. 알약은 이제 프로스티드 글래스(expo-blur BlurView)라 배경 토큰
+    // 대신 BlurView·tint·overflow-hidden(블러를 알약 모양에 클립)을 잠근다. 알약 높이는
+    // Figma대로 내용물이 정하므로 고정 높이를 잠그지 않는다.
     expect({
       band: {
-        height: scanned.includes('h-[84px]'),
-        sidePadding: scanned.includes('px-lg'),
+        height: scanned.includes('h-[96px]'),
+        sidePadding: scanned.includes('px-[30px]'),
         topPadding: scanned.includes('pt-[26px]'),
       },
       pill: {
-        height: scanned.includes('h-[46px]'),
         radius: scanned.includes('rounded-pill'),
-        background: scanned.includes('bg-surface-soft'),
+        blur: scanned.includes('BlurView'),
+        tint: scanned.includes('tint="light"'),
+        clip: scanned.includes('overflow-hidden'),
         innerX: scanned.includes('px-[10px]'),
         innerY: scanned.includes('py-[2px]'),
-        surface: scanned.includes('style={PILL_SURFACE_STYLE}'),
+        shadow: scanned.includes('style={PILL_SHADOW_STYLE}'),
+        border: scanned.includes('style={PILL_BORDER_STYLE}'),
       },
-      tab: { width: scanned.includes('w-[67.6px]') },
-      label: { lineHeight: scanned.includes('leading-[13px]') },
+      tab: { width: scanned.includes('flex-1') },
     }).toEqual({
       band: { height: true, sidePadding: true, topPadding: true },
       pill: {
-        height: true,
         radius: true,
-        background: true,
+        blur: true,
+        tint: true,
+        clip: true,
         innerX: true,
         innerY: true,
-        surface: true,
+        shadow: true,
+        border: true,
       },
       tab: { width: true },
-      label: { lineHeight: true },
     });
 
-    // 부정(AC-T2 회귀 + AC-O1 밴드 투명) — 구값과 밴드 불투명 배경(bg-canvas)이 없다.
-    // `bg-canvas` 0건 = M-2 역전: 밴드는 투명, 표면은 알약(bg-surface-soft)만 진다(오버레이).
+    // 부정(AC-T2 회귀 + AC-O1 밴드 투명) — TRIP-201 티켓값(px-lg·h-46·w-67.6·h-84)·더 옛
+    // 구값(px-28·h-64·w-62)·불투명 알약(bg-surface-soft)·밴드 배경(bg-canvas)이 없다.
+    // `bg-canvas` 0건 = M-2 역전(오버레이): 밴드는 투명, 표면은 프로스티드 알약만 진다.
     // 긍/부정 짝을 이뤄 "갈아끼우다 만 중간 상태"(구값도 신값도 없음)를 통과시키지 않는다.
-    // ⚠️ 한계(02a ★O-1): 밴드에 bg-white 등 다른 불투명 토큰을 넣으면 이 스캔은 통과한다 —
-    // 실제 투명 여부는 [검증] 실기 몫(bg-canvas가 현재 밴드 전용 토큰이라 이 근사가 성립).
+    // ⚠️ 한계: 밴드에 다른 불투명 토큰을 넣는 우회는 실기가 잡는다(bg-canvas·bg-surface-soft가
+    // 각각 밴드·구 알약 전용 토큰이라 이 근사가 성립).
     expect({
+      t201SidePad: scanned.includes('px-lg'),
+      t201PillHeight: scanned.includes('h-[46px]'),
+      t201TabWidth: scanned.includes('w-[67.6px]'),
+      t201BandHeight: scanned.includes('h-[84px]'),
       oldSidePad: scanned.includes('px-[28px]'),
       oldPillHeight: scanned.includes('h-[64px]'),
       oldTabWidth: scanned.includes('w-[62px]'),
+      opaquePill: scanned.includes('bg-surface-soft'),
       bandBackground: scanned.includes('bg-canvas'),
     }).toEqual({
+      t201SidePad: false,
+      t201PillHeight: false,
+      t201TabWidth: false,
+      t201BandHeight: false,
       oldSidePad: false,
       oldPillHeight: false,
       oldTabWidth: false,
+      opaquePill: false,
       bandBackground: false,
     });
   });
 });
 
-describe('AC-V2 · 아이콘 좌표계 27 유지 + 렌더 크기 22 (TRIP-201) — 두 자리 독립 잠금', () => {
-  it('아이콘 10종이 전부 viewBox="0 0 27 27"이고 22px로 그려지며, 옛 27·24가 한 개도 없다', () => {
+describe('AC-V2 · 아이콘 좌표계 27 + 렌더 크기 27 (SWT PRO Figma 실물) — 두 자리 독립 잠금', () => {
+  it('아이콘 10종이 전부 viewBox="0 0 27 27"이고 27px로 그려지며, 201값 22·옛 24가 한 개도 없다', () => {
     // Arrange
     const scanned = readScannedSource();
 
@@ -259,17 +274,17 @@ describe('AC-V2 · 아이콘 좌표계 27 유지 + 렌더 크기 22 (TRIP-201) �
     // 문자열, 02a ★T-1). 두 자리를 다 잠근다 — 호출부 2곳(활성·비활성)과 아이콘 10종의
     // 기본값. 기본값까지 세는 이유: 호출부에서 prop을 아예 빼면 기본값이 렌더 크기가 된다.
     expect({
-      callSites22: count(scanned, 'size={22}'),
-      defaults22: count(scanned, 'size = 22'),
       callSites27: count(scanned, 'size={27}'),
       defaults27: count(scanned, 'size = 27'),
+      callSites22: count(scanned, 'size={22}'),
+      defaults22: count(scanned, 'size = 22'),
       callSites24: scanned.includes('size={24}'),
       defaults24: scanned.includes('size = 24'),
     }).toEqual({
-      callSites22: 2,
-      defaults22: 10,
-      callSites27: 0,
-      defaults27: 0,
+      callSites27: 2,
+      defaults27: 10,
+      callSites22: 0,
+      defaults22: 0,
       callSites24: false,
       defaults24: false,
     });
@@ -277,7 +292,7 @@ describe('AC-V2 · 아이콘 좌표계 27 유지 + 렌더 크기 22 (TRIP-201) �
 });
 
 describe('AC-V3 · 옛 풀폭 직각 바 흔적 제거', () => {
-  it('상단 실선(border-t)과 옛 높이(h-[74px])가 사라지고, 그 자리에 84px 밴드 + 알약이 있다', () => {
+  it('상단 실선(border-t)과 옛 높이(h-[74px])가 사라지고, 그 자리에 96px 밴드 + 알약이 있다', () => {
     // Arrange
     const scanned = readScannedSource();
 
@@ -304,9 +319,9 @@ describe('AC-V3 · 옛 풀폭 직각 바 흔적 제거', () => {
     // 문자열을 보기 때문에 이제야 실제로 작동한다(걷어내기 전에는 `rounded-pill`이 헤더
     // 주석으로 만족돼, 이 짝이 막겠다던 "중간 상태"가 정확히 통과했다).
     expect({
-      band84: scanned.includes('h-[84px]'),
+      band96: scanned.includes('h-[96px]'),
       pillRadius: scanned.includes('rounded-pill'),
-    }).toEqual({ band84: true, pillRadius: true });
+    }).toEqual({ band96: true, pillRadius: true });
   });
 });
 

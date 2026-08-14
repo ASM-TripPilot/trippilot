@@ -239,13 +239,15 @@ describe('탭바 격리 — 몰입 화면에 스며들지 않는다 (AC-9 · D-5
     // 부정 — 탭 그룹 밖(몰입 화면) 레이아웃·화면에 탭바가 스며들면 안 된다.
     // 이 파일들이 (tabs) 밖에 있다는 라우팅 사실 자체는 기존 SplashGate one-hot 가드·
     // onboardingStructure BR-U0-29가 이미 커버한다 — 여기서는 참조 부재만 새로 잠근다.
+    // ⚠️ `_dev/preview.tsx`는 제외한다 — 프로덕션 몰입 화면이 아니라 화면을 실제 셸(탭바)과
+    // 함께 미리보는 개발 하네스라, 홈 프리뷰에 탭바 오버레이를 의도적으로 얹는다(TRIP-201
+    // 실기 확인용). 격리 불변식이 지키려는 것은 배포되는 몰입 화면 넷이다.
     const immersiveFiles = [
       path.join(APP_DIR, '_layout.tsx'),
       path.join(APP_DIR, '(auth)', '_layout.tsx'),
       path.join(APP_DIR, '(onboarding)', '_layout.tsx'),
       path.join(APP_DIR, 'force-update.tsx'),
       path.join(APP_DIR, 'reconsent.tsx'),
-      path.join(APP_DIR, '_dev', 'preview.tsx'),
     ];
     const offenders = immersiveFiles
       .filter((file) => fs.existsSync(file))
