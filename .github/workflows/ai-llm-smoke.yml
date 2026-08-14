@@ -21,6 +21,12 @@
 # (Settings → Secrets and variables → Actions → Variables 탭)에 두면 매번 입력을 생략할 수
 # 있다: AZURE_OPENAI_ENDPOINT(등록됨) · AZURE_OPENAI_API_VERSION(구식 azure 선택 시만).
 # 실행 시 input을 채우면 그게 이긴다.
+#
+# 일정 생성 리허설 (TRIP-372): INTENT 스모크 뒤에 ai-poi-collect 최신 artifact의
+# 수집 실 POI로 랜덤 지역(날짜 시드 — 같은 날 재실행은 재현) 일정 생성을 관통시킨다
+# — 실데이터 × 실LLM × 솔버 전 구간의 일일 리허설이자 수집 데이터 품질의 조기 경보.
+# artifact가 없으면 리허설만 생략(성공 유지 — INTENT 스모크 성패와 분리), 결과는
+# 잡 서머리 시각표 + collect-state 브랜치 rehearsal_log.jsonl append + artifact 30일.
 name: ai-llm-smoke
 
 on:
@@ -60,6 +66,9 @@ concurrency: ai-llm-smoke   # 실 호출 워크플로는 동시 1건만
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # rehearsal_log.jsonl append push (collect-state 브랜치, TRIP-372)
+      actions: read     # gh run download — ai-poi-collect artifact 조회 (TRIP-372)
     defaults:
       run:
         working-directory: ai
@@ -85,3 +94,83 @@ jobs:
           OPENAI_API: ${{ inputs.api || 'responses' }}
           SMOKE_UTTERANCE: ${{ inputs.utterance }}
         run: uv run python scripts/smoke_llm.py
+
+      # ── 일정 생성 리허설 (TRIP-372) — 수집 실 POI × 실 LLM × 솔버 전 구간 ──
+      # 수집 artifact가 없으면(런 없음·만료) 리허설만 생략하고 성공 유지 —
+      # INTENT 스모크의 성패와 분리한다. 리허설 실행 자체의 실패는 잡을 붉힌다
+      # (수집 데이터 품질·생성 경로의 조기 경보가 목적이므로).
+      - name: 수집 artifact 다운로드 (ai-poi-collect 최신 성공 런)
+        id: fetch-pois
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list --workflow ai-poi-collect.yml --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId' || true)
+          if [ -z "$RUN_ID" ]; then
+            echo "::warning::ai-poi-collect 성공 런 없음 — 리허설 생략"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! gh run download "$RUN_ID" --name collected-pois --dir collected; then
+            echo "::warning::collected-pois artifact 다운로드 실패(만료 등) — 리허설 생략"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          POIS=$(find collected -name collected_pois.json | head -1)
+          if [ -z "$POIS" ]; then
+            echo "::warning::artifact에 collected_pois.json 없음 — 리허설 생략"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "pois_path=$POIS" >> "$GITHUB_OUTPUT"
+      - name: 일정 생성 리허설 (랜덤 지역 6~8 POI → generate 관통)
+        if: steps.fetch-pois.outputs.skipped != 'true'
+        env:
+          # LLM env는 위 INTENT 스모크 스텝과 동일 매핑
+          LLM_PROVIDER: ${{ inputs.provider || 'openai' }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
+          OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ inputs.endpoint || vars.AZURE_OPENAI_ENDPOINT }}
+          OPENAI_BASE_URL: ${{ inputs.endpoint || vars.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_VERSION: ${{ inputs.api_version || vars.AZURE_OPENAI_API_VERSION }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ inputs.model || 'gpt-5.6-terra' }}
+          OPENAI_MODEL: ${{ inputs.model || 'gpt-5.6-terra' }}
+          OPENAI_API: ${{ inputs.api || 'responses' }}
+          COLLECTED_POIS: ${{ steps.fetch-pois.outputs.pois_path }}
+          REHEARSAL_OUTPUT: rehearsal_result.json
+        run: uv run python scripts/smoke_itinerary.py
+      - name: 잡 서머리 (리허설 시각표)
+        if: steps.fetch-pois.outputs.skipped != 'true'
+        run: uv run python scripts/smoke_itinerary.py --summary rehearsal_result.json >> "$GITHUB_STEP_SUMMARY"
+      - name: 리허설 로그 영속 (collect-state 브랜치 rehearsal_log.jsonl append)
+        if: steps.fetch-pois.outputs.skipped != 'true'
+        # ai-poi-collect의 plumbing 커밋 패턴 그대로 — 워킹트리를 건드리지 않고
+        # 기존 트리(collect_state.json 등)를 **보존**한 채 rehearsal_log.jsonl만
+        # 교체·추가한다. push 실패는 리허설 성공을 뒤집지 않는다 (::warning::만).
+        run: |
+          (
+            set -e
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            PARENT=""
+            BASE_TREE=""
+            : > rehearsal_log.jsonl
+            if git fetch origin collect-state 2>/dev/null; then
+              PARENT="-p FETCH_HEAD"
+              git show FETCH_HEAD:rehearsal_log.jsonl > rehearsal_log.jsonl 2>/dev/null || : > rehearsal_log.jsonl
+              BASE_TREE=$(git ls-tree FETCH_HEAD | grep -v $'\trehearsal_log.jsonl$' || true)
+            fi
+            jq -c . rehearsal_result.json >> rehearsal_log.jsonl
+            BLOB=$(git hash-object -w rehearsal_log.jsonl)
+            TREE=$({ [ -n "$BASE_TREE" ] && printf '%s\n' "$BASE_TREE"; \
+                     printf '100644 blob %s\trehearsal_log.jsonl\n' "$BLOB"; } | git mktree)
+            COMMIT=$(git commit-tree $TREE $PARENT -m "chore(ai): 리허설 로그 append — run ${{ github.run_id }} (TRIP-372)")
+            git push origin "$COMMIT:refs/heads/collect-state"
+          ) || echo "::warning::리허설 로그 push 실패 — 기록만 유실 (리허설 자체는 성공)"
+      - name: 리허설 결과 artifact 보존 (30일)
+        if: steps.fetch-pois.outputs.skipped != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rehearsal-result
+          path: ai/rehearsal_result.json
+          retention-days: 30
