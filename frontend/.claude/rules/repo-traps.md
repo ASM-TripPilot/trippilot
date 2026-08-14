@@ -10,6 +10,7 @@
 - **온보딩 완료자 라우팅** → `useOnboardingProgress`가 **하드코딩 `false`**(FW1). 실 progress는 `onboardingCompleted`인데 `features/auth`에만 있고 importBoundary가 막는다 — `shared` 승격이 선행돼야 한다.
 - **세션 만료 UX** → 토큰만 clear하고 **즉시 리다이렉트는 없다**(FW2, 다음 부트스트랩이 자가치유).
 - **apple 소셜 로그인** → `oauthConfig`에 **빈 슬롯**(백엔드 fail-closed, 범위 밖). kakao·naver는 채워졌고, naver는 `usePKCE:false`+`state` 필수인 비표준 갈래라 다시 만질 땐 `realAuthorize.ts` 조건부 분기부터 본다.
+- **약관 라벨(`TERMS_LABELS`)은 신규 타입에 자동 대응 안 한다** → `useTermsConsent.ts`의 `ONBOARDING_TERMS_TYPES`(순회 대상)와 `TERMS_LABELS`(라벨 맵)는 **두 상수를 손으로 맞추는 관례일 뿐 구조적 강제가 아니다**(TRIP-366 커밋 a064e97 메시지의 "구조적 불가"는 부정확 — TRIP-375에서 정정). 폴백 `TERMS_LABELS[type] ?? term.termsType`이 있어 라벨을 안 채우면 원시 코드가 그대로 화면에 노출된다. TRIP-375가 **기존 3종을 지우는** 뮤테이션은 잠갔지만(TermsPage.integration), **새 약관 타입을 추가하고 라벨을 안 채우는** 케이스(A2/`missingRequiredLabels` 경로)는 렌더 소비자가 없어 여전히 못 잡는다(YAGNI 보류, 03_impl-notes 참조).
 
 ## home
 
