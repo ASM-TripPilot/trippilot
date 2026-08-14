@@ -5,9 +5,13 @@
  * 그 파일에 둔다 — 이 컴포넌트가 shared/ui에 있는 이유는 탭바가 특정 도메인 feature가
  * 아니라서다).
  *
- * 비주얼은 Figma 마스터 `1236:1177`(TRIP-173 3/4 사이클) 실측을 그대로 옮겼다 — 흰 배경(84px
- * 밴드) 위에 옅은 회색 알약(`surface-soft` 토큰, 좌우 28px 여백, 반경은 rounded-pill 토큰)이
- * 떠 있고, 아이콘은 27x27 좌표계다. 알약 배경은 마스터 raw CSS만 보면 반투명 흰색(68%)이지만
+ * 비주얼은 Figma 마스터 `1236:1177`(TRIP-173 3/4) 위에 TRIP-201 신 치수를 얹었다 — **투명**
+ * 84px 밴드(오버레이: 이 탭바 루트가 `absolute bottom-0`이라 화면 위에 떠서 씬이 탭바 높이만큼
+ * 줄지 않고 밴드는 배경을 안 진다 — react-navigation 은 커스텀 `tabBar` 렌더프롭에 `tabBarStyle`
+ * 을 적용하지 않으므로 `_layout` 옵션이 아니라 탭바 자신이 오버레이를 져야 한다) 위에 옅은
+ * 회색 알약(`surface-soft` 토큰, 좌우 16px
+ * 여백(px-lg), 반경은 rounded-pill 토큰)이 떠 있고, 아이콘 좌표계는 27x27 이되 렌더 크기는
+ * 22px 다(TRIP-201). 알약 배경은 마스터 raw CSS만 보면 반투명 흰색(68%)이지만
  * Figma 프로덕션 화면을 실제로 렌더한 값은 `#F7F7F7`(surface-soft)와 일치한다(스크린샷 대조
  * M-3 — raw 속성 하나만 보고 판단하면 틀린다). 테두리 알파값과 그림자는 토큰이 아니라 raw로
  * 둔다(Q3 — 그림자를 어차피 style 프로퍼티로 넘겨야 해서 추가 비용이 0이다. RN엔 CSS
@@ -45,7 +49,7 @@ const PILL_SURFACE_STYLE = {
 
 type TabIconProps = { size?: number };
 
-function HomeIconActive({ size = 27 }: TabIconProps) {
+function HomeIconActive({ size = 22 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -55,7 +59,7 @@ function HomeIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-function HomeIconInactive({ size = 27 }: TabIconProps) {
+function HomeIconInactive({ size = 22 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -76,7 +80,7 @@ function HomeIconInactive({ size = 27 }: TabIconProps) {
   );
 }
 
-function ExploreIconActive({ size = 27 }: TabIconProps) {
+function ExploreIconActive({ size = 22 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -90,7 +94,7 @@ function ExploreIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-function ExploreIconInactive({ size = 27 }: TabIconProps) {
+function ExploreIconInactive({ size = 22 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -111,7 +115,7 @@ function ExploreIconInactive({ size = 27 }: TabIconProps) {
   );
 }
 
-function ItineraryIconActive({ size = 27 }: TabIconProps) {
+function ItineraryIconActive({ size = 22 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -122,7 +126,7 @@ function ItineraryIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-function ItineraryIconInactive({ size = 27 }: TabIconProps) {
+function ItineraryIconInactive({ size = 22 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -157,7 +161,7 @@ function ItineraryIconInactive({ size = 27 }: TabIconProps) {
   );
 }
 
-function RecordsIconActive({ size = 27 }: TabIconProps) {
+function RecordsIconActive({ size = 22 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -167,7 +171,7 @@ function RecordsIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-function RecordsIconInactive({ size = 27 }: TabIconProps) {
+function RecordsIconInactive({ size = 22 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -181,7 +185,7 @@ function RecordsIconInactive({ size = 27 }: TabIconProps) {
   );
 }
 
-function MyIconActive({ size = 27 }: TabIconProps) {
+function MyIconActive({ size = 22 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -195,7 +199,7 @@ function MyIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-function MyIconInactive({ size = 27 }: TabIconProps) {
+function MyIconInactive({ size = 22 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -262,10 +266,14 @@ export function BottomTabBar({
   return (
     <View
       testID="shell-tabbar-root"
-      className="h-[84px] w-full bg-canvas px-[28px] pb-md pt-sm"
+      // 밴드는 투명 오버레이라 콘텐츠 위 84px를 덮는다. box-none으로 밴드 자신은 터치를
+      // 삼키지 않고(투명 여백 아래 스크롤·탭이 그대로 통과) 자식(알약)만 터치를 받는다
+      // (code-critic N1 — RN 순수 View는 투명해도 터치를 흡수한다).
+      pointerEvents="box-none"
+      className="absolute inset-x-0 bottom-0 h-[84px] px-lg pb-md pt-[26px]"
     >
       <View
-        className="h-[64px] flex-row rounded-pill bg-surface-soft px-md pb-sm pt-[6px]"
+        className="h-[46px] flex-row rounded-pill bg-surface-soft px-[10px] py-[2px]"
         style={PILL_SURFACE_STYLE}
       >
         {TAB_CONFIG.map(({ key, label, ActiveIcon, InactiveIcon }) => {
@@ -277,15 +285,15 @@ export function BottomTabBar({
               accessibilityRole="tab"
               accessibilityState={{ selected }}
               onPress={() => onPressTab(key)}
-              className="w-[62px] items-center gap-xs pt-xs pb-[2px]"
+              className="w-[67.6px] items-center gap-xs pt-xs pb-[2px]"
             >
               {selected ? (
                 <View testID={`shell-tabbar-icon-${key}-active`}>
-                  <ActiveIcon size={27} />
+                  <ActiveIcon size={22} />
                 </View>
               ) : (
                 <View testID={`shell-tabbar-icon-${key}-inactive`}>
-                  <InactiveIcon size={27} />
+                  <InactiveIcon size={22} />
                 </View>
               )}
               <Text

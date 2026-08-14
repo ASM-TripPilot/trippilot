@@ -34,6 +34,10 @@ import { REGIONS } from '@/features/explore/model/regions';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
+import {
+  ExploreLandingScreen,
+  type StayCardVM,
+} from '@/features/explore/ui/ExploreLandingScreen';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
 import {
   buildDraftPins,
@@ -118,6 +122,37 @@ try {
 
 // 프리뷰는 보기 전용이라 화면이 요구하는 콜백을 전부 빈 함수로 채운다.
 const noop = () => {};
+
+// d01 탐색 랜딩 숙소 레인 카드(라우트가 formatPrice·stayKey 로 만드는 뷰모델의 프리뷰 값).
+// 가격 미확인 카드를 한 장 섞어 formatPrice 두 갈래를 눈으로 확인한다(BR-U1-12/14).
+const EXPLORE_STAY_CARDS: StayCardVM[] = [
+  {
+    key: 'yanolja:1',
+    name: '해운대 오션 호텔',
+    region: '부산',
+    priceText: '145,000원~',
+  },
+  {
+    key: 'agoda:2',
+    name: '광안리 뷰 호텔',
+    region: '부산',
+    priceText: '가격 미확인',
+  },
+  {
+    key: 'yanolja:3',
+    name: '서면 시티 호텔',
+    region: '부산',
+    priceText: '98,000원~',
+  },
+];
+
+const EXPLORE_LANDING_BASE = {
+  heading: {
+    title: '무엇을 둘러볼까요?',
+    subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
+  },
+  onSubmitSearch: noop,
+} as const;
 
 const VIEW_ONLY_HANDLERS = {
   onSignIn: noop,
@@ -961,6 +996,53 @@ const PREVIEW_STATES: PreviewState[] = [
         onPressRemove={noop}
         onPressCreateTrip={noop}
         onPressBrowse={noop}
+      />
+    ),
+  },
+  // d01 탐색 랜딩(TRIP-201) — 3얼굴: 담은 곳 CTA / 담은 곳 0 안내 / 숙소 레인 실패 재시도.
+  {
+    key: 'explore-landing-default',
+    label: '탐색 랜딩 · 담은 곳 CTA',
+    login: null,
+    render: () => (
+      <ExploreLandingScreen
+        {...EXPLORE_LANDING_BASE}
+        stayLane={{
+          error: false,
+          cards: EXPLORE_STAY_CARDS,
+          onRetry: noop,
+          onSeeAll: noop,
+        }}
+        bridge={{ savedCount: 3, onPressCreateTrip: noop }}
+      />
+    ),
+  },
+  {
+    key: 'explore-landing-empty-bridge',
+    label: '탐색 랜딩 · 담은 곳 0',
+    login: null,
+    render: () => (
+      <ExploreLandingScreen
+        {...EXPLORE_LANDING_BASE}
+        stayLane={{
+          error: false,
+          cards: EXPLORE_STAY_CARDS,
+          onRetry: noop,
+          onSeeAll: noop,
+        }}
+        bridge={{ savedCount: 0, onPressCreateTrip: noop }}
+      />
+    ),
+  },
+  {
+    key: 'explore-landing-stay-error',
+    label: '탐색 랜딩 · 숙소 레인 실패',
+    login: null,
+    render: () => (
+      <ExploreLandingScreen
+        {...EXPLORE_LANDING_BASE}
+        stayLane={{ error: true, cards: [], onRetry: noop, onSeeAll: noop }}
+        bridge={{ savedCount: 2, onPressCreateTrip: noop }}
       />
     ),
   },

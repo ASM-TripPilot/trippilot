@@ -13,9 +13,10 @@ import { capturedTabsProps } from '@/test-support/expoRouterTabsMock';
  *  (2) `Tabs`에 `tabBar` 렌더프롭을 넘겨 탭바를 전면 커스텀한다(Q4),
  *  (3) 그 렌더프롭이 네비게이션 상태(state.index)를 `shell-tabbar-*` 활성 탭으로 정확히
  *      매핑하고, press 시 `navigation.navigate(라우트 이름)`을 호출한다,
- *  (4) `(tabs)/index.tsx`가 실물 `HomeScreen`을 그리고, `itinerary`는 TRIP-299로 실화면
- *      승격(그 탭 동작은 `src/__tests__/tabsItineraryRoute.test.tsx`가 잠근다), 나머지 3탭(explore·records·my)은
- *      껍데기를 유지한다.
+ *  (4) `(tabs)/index.tsx`가 실물 `HomeScreen`을 그리고, `itinerary`는 TRIP-299로,
+ *      `explore`는 TRIP-201로 실화면 승격(그 탭 동작은 각각
+ *      `src/__tests__/tabsItineraryRoute.test.tsx`·`tabsExploreRoute.test.tsx`가 잠근다),
+ *      나머지 2탭(records·my)은 껍데기를 유지한다.
  *
  * 왜 `src/app/` 밖에 두는가: expo-router의 require.context가 `.test.tsx`를 라우트로
  * 등록해 버리므로(`rootLayout.test` 관례) 라우트 파일 테스트는 항상 `src/__tests__/`에 둔다.
@@ -31,8 +32,6 @@ jest.mock('expo-router', () => require('@/test-support/expoRouterTabsMock'));
 const TabsLayout = require('@/app/(tabs)/_layout').default;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const IndexRoute = require('@/app/(tabs)/index').default;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const ExploreRoute = require('@/app/(tabs)/explore').default;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const RecordsRoute = require('@/app/(tabs)/records').default;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -143,14 +142,11 @@ describe('(tabs)/index.tsx — 홈 라우트 래퍼 (SC-1 · SC-5)', () => {
   });
 });
 
-describe('(tabs)/{explore,records,my} — 껍데기 유지 (SC-5 · 선제 green)', () => {
-  // itinerary 는 TRIP-299 로 실화면 승격 — 그 탭의 리다이렉트/빈상태 동작은
-  // `src/__tests__/tabsItineraryRoute.test.tsx`(게이트① 동결)가 잠근다. 여기서는 아직 껍데기인 3탭만 지킨다.
-  it('홈·일정 외 3탭은 각각 기존 텍스트 껍데기를 그대로 그린다', () => {
-    const { unmount: unmountExplore } = render(<ExploreRoute />);
-    expect(screen.getByText('탐색')).toBeOnTheScreen();
-    unmountExplore();
-
+describe('(tabs)/{records,my} — 껍데기 유지 (SC-5 · 선제 green)', () => {
+  // itinerary 는 TRIP-299 로, explore 는 TRIP-201 로 실화면 승격 — 그 탭들의 동작은
+  // `tabsItineraryRoute.test.tsx`·`tabsExploreRoute.test.tsx`(게이트① 동결)가 각각 잠근다.
+  // 여기서는 아직 껍데기인 2탭(records·my)만 지킨다.
+  it('홈·일정·탐색 외 2탭은 각각 기존 텍스트 껍데기를 그대로 그린다', () => {
     const { unmount: unmountRecords } = render(<RecordsRoute />);
     expect(screen.getByText('기록')).toBeOnTheScreen();
     unmountRecords();
