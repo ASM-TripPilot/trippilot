@@ -28,6 +28,16 @@ import { capturedTabsProps } from '@/test-support/expoRouterTabsMock';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('expo-router', () => require('@/test-support/expoRouterTabsMock'));
 
+// (tabs)/index.tsx 가 TRIP-371 로 useGetTrips·useSavedPlaces 를 물면서, IndexRoute 를 직접
+// 렌더하는 아래 SC-1 이 QueryClient 부재로 크래시한다 — discovery(빈 목록·담김 0)로 목킹해
+// home-dashboard-root 만 뜨게 둔다. 목적지 왕복·얼굴 판정은 tabsHomeRoute.test.tsx 가 진다.
+jest.mock('@/shared/api/generated/trips/trips', () => ({
+  useGetTrips: () => ({ data: [], isPending: false, isError: false }),
+}));
+jest.mock('@/features/explore/model/savedPlaces', () => ({
+  useSavedPlaces: () => ({ savedPoiIds: [] }),
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const TabsLayout = require('@/app/(tabs)/_layout').default;
 // eslint-disable-next-line @typescript-eslint/no-require-imports

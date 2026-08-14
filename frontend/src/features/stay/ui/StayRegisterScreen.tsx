@@ -37,6 +37,7 @@ import {
   type StayRegisterFlow,
   type StayRegisterTab,
 } from '../model/stayRegisterForm';
+import { BackChevronGlyph } from './StayGlyphs';
 
 export interface StayRegisterScreenProps {
   flow: StayRegisterFlow;
@@ -83,8 +84,36 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0');
 }
 
+/** 컴팩트 앱바(c) — 기존 4화면(StaySearch·RegionPicker·SavedPlaceList·PlaceExplore)의 지역
+ * AppBar 패턴을 재현한다. features 간 직접 import 금지 관례라 컴포넌트를 가져오지 않고 같은
+ * 형태를 지역 함수로 그린다. 뒤로가기는 `onBack`만 부른다 — 화면은 라우팅을 모르므로(구조
+ * 가드) `router.back()` 배선은 페이지가 진다. `onBack`이 없으면(프리즈 makeHandlers가 안
+ * 넘긴다) 눌러도 아무 일이 없다. */
+function AppBar({ onBack }: { onBack?: () => void }): ReactElement {
+  return (
+    <View className="h-14 w-full flex-row items-center gap-xs bg-canvas pl-sm pr-lg">
+      <Pressable
+        testID="stay-register-back"
+        accessibilityRole="button"
+        accessibilityLabel="뒤로 가기"
+        onPress={onBack}
+        className="h-10 w-10 items-center justify-center"
+      >
+        <BackChevronGlyph size={24} />
+      </Pressable>
+      <Text className="font-noto-bold text-section font-bold text-ink">
+        숙소 등록
+      </Text>
+    </View>
+  );
+}
+
 /** 3탭 셸 — 지도 검색·핀 지정 둘 다 이제 열려 있다(TRIP-199 AC-1). 링크 붙여넣기는 여전히
- * 계약이 없어 잠긴 채다(BR-U1-21·D6). 몰입 화면이라 하단 탭바는 그리지 않는다(브리프 AC-11). */
+ * 계약이 없어 잠긴 채다(BR-U1-21·D6). 몰입 화면이라 하단 탭바는 그리지 않는다(브리프 AC-11).
+ * 세 탭 모두 같은 고정 높이(`h-11`)를 갖고 라벨은 `numberOfLines={1}`이라 어느 칸도 2줄로
+ * 접혀 다른 칸 높이를 끌지 않는다(a — 줄바꿈 해소). 가운데 잠긴 탭은 "링크 붙여넣기"를 한
+ * 줄로 두고 "준비 중"을 작은 캡션으로 내려, 잠긴 이유 신호(INV-4)를 지우지 않으면서 한 줄에
+ * 담는다(01b OQ2). */
 function RegisterTabs({
   activeTab,
   onSelectTab,
@@ -98,13 +127,16 @@ function RegisterTabs({
         testID="stay-register-tab-mapsearch"
         accessibilityRole="tab"
         onPress={() => onSelectTab('mapsearch')}
-        className={`flex-1 items-center rounded-button py-sm ${
+        className={`h-11 flex-1 items-center justify-center rounded-button ${
           activeTab === 'mapsearch'
             ? 'bg-primary-pale'
             : 'border border-hairline'
         }`}
       >
-        <Text className="font-noto-bold text-label font-bold text-ink">
+        <Text
+          numberOfLines={1}
+          className="font-noto-bold text-label font-bold text-ink"
+        >
           지도 검색
         </Text>
       </Pressable>
@@ -112,21 +144,33 @@ function RegisterTabs({
         testID="stay-register-tab-linkpaste"
         accessibilityRole="tab"
         disabled
-        className="flex-1 items-center rounded-button border border-hairline py-sm"
+        className="h-11 flex-1 items-center justify-center rounded-button border border-hairline"
       >
-        <Text className="font-noto text-label text-muted-soft">
-          링크 붙여넣기 · 준비 중
+        <Text
+          numberOfLines={1}
+          className="font-noto text-label text-muted-soft"
+        >
+          링크 붙여넣기
+        </Text>
+        <Text
+          numberOfLines={1}
+          className="font-noto text-micro text-muted-soft"
+        >
+          준비 중
         </Text>
       </Pressable>
       <Pressable
         testID="stay-register-tab-pin"
         accessibilityRole="tab"
         onPress={() => onSelectTab('pin')}
-        className={`flex-1 items-center rounded-button py-sm ${
+        className={`h-11 flex-1 items-center justify-center rounded-button ${
           activeTab === 'pin' ? 'bg-primary-pale' : 'border border-hairline'
         }`}
       >
-        <Text className="font-noto-bold text-label font-bold text-ink">
+        <Text
+          numberOfLines={1}
+          className="font-noto-bold text-label font-bold text-ink"
+        >
           핀 지정
         </Text>
       </Pressable>
@@ -276,6 +320,21 @@ function PinPanel({
           WebView 안 마커로 보여준다(N-1). */}
         <KakaoMapView center={center} onMapMessage={onPinMessage} />
       </View>
+
+      {/* 핀 조작 안내(b) — 핀을 찍기 전(pinAddressStatus 'idle')에만 뜬다. 핀을 찍으면
+        loading/ok/error로 바뀌며 사라진다(안내가 상태 흐름과 일치). 지도 롱프레스(600ms)는
+        WebView 안 대본이라 jest 사정거리 밖이고, 여기서 여는 것은 그 조작법 안내 카피뿐이다
+        (01b OQ4). coordnotice와 같은 안내 토큰(info)을 써 화면 안 톤을 맞춘다. */}
+      {pinAddressStatus === 'idle' ? (
+        <View
+          testID="stay-register-pin-hint"
+          className="flex-row items-center rounded-button border border-info-border bg-info-bg px-md py-sm"
+        >
+          <Text className="flex-1 font-noto text-body text-info">
+            지도를 길게 눌러 위치를 지정하세요
+          </Text>
+        </View>
+      ) : null}
 
       {pinAddressStatus === 'ok' && candidate !== null ? (
         <View
@@ -577,6 +636,7 @@ export function StayRegisterScreen({
   onPickDate,
   onCloseDateSheet,
   onSubmit,
+  onBack,
   calendarMonth,
   onShiftCalendarMonth,
 }: StayRegisterScreenProps): ReactElement {
@@ -609,14 +669,12 @@ export function StayRegisterScreen({
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="stay-register-root" className="flex-1 bg-canvas">
+        <AppBar onBack={onBack} />
+
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ paddingBottom: 32 }}
         >
-          <Text className="font-noto-bold text-hero font-bold text-ink px-lg pb-sm pt-lg">
-            숙소 등록
-          </Text>
-
           <RegisterTabs activeTab={flow.activeTab} onSelectTab={onSelectTab} />
 
           {flow.activeTab === 'mapsearch' ? (

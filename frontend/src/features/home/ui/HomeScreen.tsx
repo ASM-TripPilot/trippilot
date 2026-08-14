@@ -1,7 +1,8 @@
 /**
  * a01-home "발견·영감 피드" 프레젠테이션 화면 (TRIP-316 · 라이브 Figma 2091:1357 정합, 3상태).
  * props(hero·sections)만 받는다 — 네트워크·라우팅을 전혀 모른다(homeStructure D-1이 기계 강제).
- * CTA는 전부 no-op — onPress 미배선, accessibilityRole="button"만 유지한다.
+ * 배선 CTA 3종(FAB·담은 곳·뜨는 장소 더보기)은 넘겨받은 콜백 prop만 발화하고(라우터 무지, D-1),
+ * 목적지 없는 컨트롤은 accessibilityRole="button"을 떼 접근성 트리에서 버튼이 아니다(TRIP-370).
  *
  * 구성: 인사 헤더 → 검색바 → magazineHero(영감 카드) → "요즘 사람들이 담는 곳"(가로 스크롤) →
  * "지금 뜨는 장소"(2×2 그리드) → "여행자 일정"(가로 스크롤) → softNote(장소 온램프) → FAB.
@@ -102,7 +103,6 @@ function GreetingHeader({
       </View>
       <Pressable
         testID="home-dashboard-bell"
-        accessibilityRole="button"
         onPress={undefined}
         className="h-10 w-10 items-center justify-center"
       >
@@ -119,7 +119,6 @@ function SearchBarBlock(): ReactElement {
     <View className="w-full px-lg pb-[14px] pt-[4px]">
       <Pressable
         testID="home-search-bar"
-        accessibilityRole="button"
         onPress={undefined}
         className="w-full flex-row items-center gap-[10px] rounded-pill bg-surface-soft px-lg py-[13px]"
       >
@@ -192,12 +191,19 @@ function MagazineHero({ hero }: { hero: HomeMagazineHero }): ReactElement {
 }
 
 // ── 공용 섹션 헤더(타이틀 + '더 보기') ──────────────────────────────────
+// asButton은 role(버튼으로 읽히는가)을, onMore는 press 핸들러를 각각 정한다 — 둘은 함께
+// 움직이지 않는다: 배선 인스턴스(뜨는 장소)는 콜백이 안 넘어온 단위 테스트에서도 버튼이어야
+// 하므로(370-AC-4) role은 콜백 유무가 아니라 구조로 굳힌다(비배선 더보기 2종은 role 제거).
 function SectionHeader({
   title,
   moreTestID,
+  onMore,
+  asButton = false,
 }: {
   title: string;
   moreTestID: string;
+  onMore?: () => void;
+  asButton?: boolean;
 }): ReactElement {
   return (
     <View className="w-full flex-row items-center justify-between px-lg">
@@ -206,8 +212,8 @@ function SectionHeader({
       </Text>
       <Pressable
         testID={moreTestID}
-        accessibilityRole="button"
-        onPress={undefined}
+        accessibilityRole={asButton ? 'button' : undefined}
+        onPress={onMore}
       >
         <Text className="font-noto-bold text-[12.5px] font-bold text-muted underline">
           더 보기
@@ -391,10 +397,21 @@ function CollectionsSection({
 }
 
 // ── 섹션2: 지금 뜨는 장소(2×2 그리드 · 3상태) ───────────────────────────
-function SpotsSection({ sections }: { sections: HomeSections }): ReactElement {
+function SpotsSection({
+  sections,
+  onMore,
+}: {
+  sections: HomeSections;
+  onMore?: () => void;
+}): ReactElement {
   return (
     <View className="w-full gap-md">
-      <SectionHeader title="지금 뜨는 장소" moreTestID="home-spots-more" />
+      <SectionHeader
+        title="지금 뜨는 장소"
+        moreTestID="home-spots-more"
+        onMore={onMore}
+        asButton
+      />
       {sections.kind === 'ready' ? (
         <View className="mx-lg gap-md">
           {[0, 1].map((row) => (
@@ -467,7 +484,13 @@ function ItinerariesSection({
 // 배경 #fff7f8은 Figma가 변수 아닌 raw fill로 쓴 값 → 임의 raw 유지(가정 D). D-3 13색 밖이라
 // 자동 심판 사각지대이므로 [검증] 스크린샷 대조가 유일한 그물. note 미전달이면 discovery 온램프,
 // 전달되면 그 카피(planning 브릿지행 · postTrip 공유행)를 같은 슬롯에 그린다.
-function SoftNote({ note }: { note?: HomeSoftNote }): ReactElement {
+function SoftNote({
+  note,
+  onPressCta,
+}: {
+  note?: HomeSoftNote;
+  onPressCta?: () => void;
+}): ReactElement {
   const title = note?.title ?? '마음에 든 곳이 모이면';
   const subtitle = note?.subtitle ?? '담아둔 장소로 여행을 만들 수 있어요';
   const ctaLabel = note?.ctaLabel ?? '담은 곳';
@@ -486,7 +509,7 @@ function SoftNote({ note }: { note?: HomeSoftNote }): ReactElement {
         <Pressable
           testID="home-saved-places-cta"
           accessibilityRole="button"
-          onPress={undefined}
+          onPress={onPressCta}
           className="rounded-pill border-[1.4px] border-primary bg-canvas px-md py-sm"
         >
           <Text className="font-noto-bold text-caption font-bold text-primary-text">
@@ -719,12 +742,12 @@ function SavedCountChip({ label }: { label: string }): ReactElement {
 // bottom 오프셋은 화면 쪽에서 직접 잡는다 — 탭바는 SafeArea/네비 모르는 순수 뷰 계약이라
 // bottom inset을 합산하지 않는다(repo-trap). 탭바(약 96px)+홈 인디케이터 위에 뜨도록 하고,
 // 실제 여백은 [검증] 6-b 실기 스모크에서 눈으로 조정한다(자동 심판 없음, 브리프 §8-4).
-function CreateTripFab(): ReactElement {
+function CreateTripFab({ onPress }: { onPress?: () => void }): ReactElement {
   return (
     <Pressable
       testID="home-create-trip-fab"
       accessibilityRole="button"
-      onPress={undefined}
+      onPress={onPress}
       style={fabShadow}
       className="absolute bottom-[100px] right-lg flex-row items-center justify-center gap-sm rounded-pill bg-primary py-md pl-xl pr-[22px]"
     >
@@ -740,9 +763,13 @@ function CreateTripFab(): ReactElement {
 function DiscoveryBody({
   hero,
   sections,
+  onPressSavedPlaces,
+  onPressSpotsMore,
 }: {
   hero: HomeMagazineHero;
   sections: HomeSections;
+  onPressSavedPlaces?: () => void;
+  onPressSpotsMore?: () => void;
 }): ReactElement {
   return (
     <>
@@ -754,10 +781,10 @@ function DiscoveryBody({
       <MagazineHero hero={hero} />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         <CollectionsSection sections={sections} />
-        <SpotsSection sections={sections} />
+        <SpotsSection sections={sections} onMore={onPressSpotsMore} />
         <ItinerariesSection sections={sections} />
       </View>
-      <SoftNote />
+      <SoftNote onPressCta={onPressSavedPlaces} />
     </>
   );
 }
@@ -864,9 +891,22 @@ function PostTripBody({
 }
 
 // 화면은 phase.kind로 스위치만 한다(단계를 스스로 도출하지 않는다, TRIP-206 S-6).
-function PhaseBody({ hero, sections, phase }: HomeScreenProps): ReactElement {
+function PhaseBody({
+  hero,
+  sections,
+  phase,
+  onPressSavedPlaces,
+  onPressSpotsMore,
+}: HomeScreenProps): ReactElement {
   if (phase === undefined || phase.kind === 'discovery') {
-    return <DiscoveryBody hero={hero} sections={sections} />;
+    return (
+      <DiscoveryBody
+        hero={hero}
+        sections={sections}
+        onPressSavedPlaces={onPressSavedPlaces}
+        onPressSpotsMore={onPressSpotsMore}
+      />
+    );
   }
   switch (phase.kind) {
     case 'collecting':
@@ -884,6 +924,9 @@ export function HomeScreen({
   hero,
   sections,
   phase,
+  onPressCreateTrip,
+  onPressSavedPlaces,
+  onPressSpotsMore,
 }: HomeScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -893,12 +936,18 @@ export function HomeScreen({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 140 }}
         >
-          <PhaseBody hero={hero} sections={sections} phase={phase} />
+          <PhaseBody
+            hero={hero}
+            sections={sections}
+            phase={phase}
+            onPressSavedPlaces={onPressSavedPlaces}
+            onPressSpotsMore={onPressSpotsMore}
+          />
         </ScrollView>
         {phase?.kind === 'collecting' ? (
           <SavedCountChip label={phase.savedChipLabel} />
         ) : null}
-        <CreateTripFab />
+        <CreateTripFab onPress={onPressCreateTrip} />
       </View>
     </SafeAreaView>
   );

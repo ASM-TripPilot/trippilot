@@ -44,6 +44,7 @@ import {
   ThumbRemoveGlyph,
   type GlyphComponent,
 } from './TripGlyphs';
+import { TripDateSheet } from './TripDateSheet';
 
 /**
  * TRIP-205/206 g01 여행 만들기 1/2 — **props만 받는 프레젠테이션 화면**(Figma `1675:1183`
@@ -151,7 +152,16 @@ export interface TripWizardStep1ScreenProps {
   onAddDestination(regionName: string, nights: number): void;
   onRemoveDestination(regionName: string): void;
   onSelectPreset(code: PeriodPresetCode): void;
+  /** 날짜 행·'날짜 직접 입력' 두 진입점이 공유하는 핸들러 — 날짜 선택 시트를 연다(TRIP-368). */
   onPressPeriod(): void;
+  /** 날짜 선택 시트가 열려 있나(배선이 소유). true일 때만 시트를 마운트한다(TRIP-368). */
+  dateSheetOpen?: boolean;
+  /** 시트를 닫는다(취소·확정 공통). */
+  onCloseDateSheet?(): void;
+  /** 시트에서 임의 기간을 확정하면 배선에 알린다 — 배선이 프리셋을 풀고 기간을 세운다(TRIP-368). */
+  onConfirmDates?(startDate: string, endDate: string): void;
+  /** 달력 과거 비활성 기준 '오늘'(주입, 결정론). 없으면 시트를 안전하게 못 열어 열지 않는다. */
+  baseDate?: string;
   onChangeParty(next: number): void;
   onSelectCompanion(type: CompanionType): void;
   onChangePreference(): void;
@@ -364,7 +374,8 @@ function MustVisitHead({ note }: { note?: string }): ReactElement {
 }
 
 /** 64×64 점선 박스 — 시드가 있으면 `더 담기`, 0곳이면 행 전체를 채우는 `가고 싶은 곳 담기`
- * (Figma `1740:1109` · `2226:1800`). 둘 다 같은 곳(d04 장소 탐색)으로 보낸다. */
+ * (Figma `1740:1109` · `2226:1800`). 둘 다 같은 `onPressMore` 를 부르지만, 배선이 담은 곳
+ * 유무로 목적지를 가른다(담은 곳 있으면 담은 장소 화면 d02, 없으면 장소 탐색 d04 — TRIP-367). */
 function MustVisitMoreChip({
   testID,
   label,
@@ -580,6 +591,10 @@ export function TripWizardStep1Screen({
   onRemoveDestination,
   onSelectPreset,
   onPressPeriod,
+  dateSheetOpen,
+  onCloseDateSheet,
+  onConfirmDates,
+  baseDate,
   onChangeParty,
   onSelectCompanion,
   onChangePreference,
@@ -1137,6 +1152,21 @@ export function TripWizardStep1Screen({
               </Pressable>
             </View>
           </View>
+        ) : null}
+
+        {dateSheetOpen === true && baseDate !== undefined ? (
+          <TripDateSheet
+            today={baseDate}
+            initialRange={{
+              startDate: startDate ?? null,
+              endDate: endDate ?? null,
+            }}
+            onConfirm={(start, end) => {
+              onConfirmDates?.(start, end);
+              onCloseDateSheet?.();
+            }}
+            onClose={() => onCloseDateSheet?.()}
+          />
         ) : null}
 
         {overseasBlocked ? (

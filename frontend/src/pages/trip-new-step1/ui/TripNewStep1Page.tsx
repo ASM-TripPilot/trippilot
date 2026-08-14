@@ -195,6 +195,9 @@ export function TripNewStep1Page({
   // 눌렀고 서버가 대답했으므로, 안 건드린 축이어도 반드시 보여야 한다(★13, INV-4).
   const [submitError, setSubmitError] = useState<string>();
   const [overseasBlocked, setOverseasBlocked] = useState(false);
+  // 날짜 선택 시트 열림 상태 — 날짜 행·'날짜 직접 입력' 두 진입점이 여는 시트를 배선이 소유한다
+  // (TRIP-368, 숙소 등록 CalendarSheet과 같은 배치 — 페이지가 열고 닫고, 화면이 마운트한다).
+  const [dateSheetOpen, setDateSheetOpen] = useState(false);
 
   // 5-c N-2: 배너가 뜬 뒤 드래프트를 고치면 배너는 옛 실패를 계속 보여주면서도 [다시 시도]는
   // 새 상태 기준으로 다시 판정한다 — 화면과 배너가 서로 다른 이야기를 하게 된다. 드래프트가
@@ -492,7 +495,15 @@ export function TripNewStep1Page({
       savedPlaceCount={savedPlaceList.length}
       mustVisitError={mustVisitError}
       onRemoveMustVisit={removeMustVisit}
-      onPressMoreMustVisits={() => router.push('/explore/places')}
+      onPressMoreMustVisits={() =>
+        // 담은 곳이 있으면 그것들을 모아 고르는 담은 장소 화면(d02)으로, 없으면 새로 담을 탐색으로
+        // 보낸다 — 담아둔 게 늘수록 탐색에서 다시 찾는 비용이 커지는 것을 막는다(TRIP-367).
+        router.push(
+          savedPlaceList.length > 0
+            ? '/explore/saved-places'
+            : '/explore/places'
+        )
+      }
       onRetryMustVisitSeeds={() => void savedPlaces.refetch()}
       onRetryMustVisits={retryMustVisits}
       budgetText={effectiveBudgetText}
@@ -504,7 +515,11 @@ export function TripNewStep1Page({
       onAddDestination={addDestination}
       onRemoveDestination={removeDestination}
       onSelectPreset={handleSelectPreset}
-      onPressPeriod={() => {}}
+      onPressPeriod={() => setDateSheetOpen(true)}
+      dateSheetOpen={dateSheetOpen}
+      onCloseDateSheet={() => setDateSheetOpen(false)}
+      onConfirmDates={(start, end) => setPeriod(undefined, start, end)}
+      baseDate={resolvedBaseDate}
       onChangeParty={setParty}
       onSelectCompanion={(type: CompanionType) => selectCompanion(type)}
       onChangePreference={() => {}}

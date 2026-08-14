@@ -36,3 +36,11 @@ export function Tabs({
 Tabs.Screen = function Screen({ name }: { name: string }) {
   return <View testID={`tabs-route-${name}`} />;
 };
+
+// `(tabs)/index.tsx`가 CTA 라우팅을 위해 `useRouter()`를 물면서(TRIP-370) tabsShell 이
+// IndexRoute 를 렌더할 때 이 목이 `useRouter`를 내놓지 않으면 크래시한다. tabsShell 은 라우팅을
+// 단언하지 않으므로(루트 렌더만 확인) push 는 무해한 no-op 으로 둔다 — 목적지 왕복 심판은
+// tabsHomeRoute.test.tsx 가 자체 `useRouter` 목으로 따로 진다.
+export function useRouter() {
+  return { push: () => {} };
+}

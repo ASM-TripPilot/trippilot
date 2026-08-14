@@ -181,4 +181,15 @@ export interface HomeScreenProps {
   sections: HomeSections;
   /** 여행 단계 판별값(TRIP-317) — 미전달/discovery면 316 얼굴, 그 외 kind면 단계 얼굴 */
   phase?: HomePhase;
+  /**
+   * CTA 배선 콜백(TRIP-370, 전부 옵셔널) — 화면은 라우터를 모른 채 넘겨받은 함수만 발화한다
+   * (라우팅은 `(tabs)/index.tsx` seam 이 진다, homeStructure D-1). 옵셔널이라 콜백을 안 넘기는
+   * 호출부(`_dev/preview.tsx` 등)도 깨지지 않는다.
+   */
+  /** FAB "여행 만들기" press → 여행 생성 1/2 진입 */
+  onPressCreateTrip?: () => void;
+  /** 온램프 "담은 곳" press → 담은 장소 화면 */
+  onPressSavedPlaces?: () => void;
+  /** "지금 뜨는 장소" 더 보기 press → 장소 탐색 */
+  onPressSpotsMore?: () => void;
 }

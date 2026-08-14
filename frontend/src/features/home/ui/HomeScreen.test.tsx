@@ -21,8 +21,14 @@ import { HomeScreen } from './HomeScreen';
  * 무엇을 보장하나: 인사·검색바·영감 hero·섹션 3종(요즘 담는 곳/뜨는 장소/여행자 일정)·
  * 온램프(softNote+FAB)가 한 화면에 존재하고(AC-1), 섹션 카드가 픽스처 실측값대로 렌더되며
  * (AC-2), 상태별(ready/empty/loading)로 가용 블록은 살고 빈 섹션은 가시 플레이스홀더로
- * 드러나며(AC-4·5·INV-4), 소요시간 문자열은 어디에도 없고(AC-6·INV-3), CTA는 전부 no-op
- * (AC-8)임을 잠근다.
+ * 드러나며(AC-4·5·INV-4), 소요시간 문자열은 어디에도 없음(AC-6·INV-3)을 잠근다.
+ *
+ * TRIP-370 — 홈 CTA 배선. 배선 CTA 3종(FAB·담은 곳·뜨는 장소 더보기)은 넘겨받은 콜백 prop 만
+ * 발화하고(370-AC-2, 화면은 라우터 무지), 목적지 없는 컨트롤(검색바·비배선 더보기·벨)은
+ * accessibilityRole="button"으로 노출되지 않으며(370-AC-3), discovery 에서 버튼 역할 집합은
+ * 배선된 3 CTA 와 정확히 같다(370-AC-4). 구 "CTA 전부 no-op(316-AC-8)" 락은 배선 CTA 를 빼고
+ * "비배선 컨트롤은 콜백 0·크래시 0"으로 갱신한다(370-AC-5). 라우터 왕복은 화면이 아니라
+ * `(tabs)/index.tsx` seam 이 지므로 `tabsHomeRoute.test.tsx`(370-AC-1)가 별도로 잰다.
  *
  * 텍스트 중복 함정(02a §4-2): 신 화면 중복 리프 — `2박 3일`(일정 0·1), `1박 2일`(컬렉션
  * badge 1 + 일정 2), `당일치기`(컬렉션 badge 0) vs hero chip `당일치기로 충분`, hero chip
@@ -53,6 +59,20 @@ const EXPECTED_ITINERARIES = [
   { title: '부산 미식 3일 코스', nights: '2박 3일' },
   { title: '해운대 오션뷰 힐링', nights: '2박 3일' },
   { title: '로컬 시장 & 카페', nights: '1박 2일' },
+] as const;
+
+// TRIP-370 — 배선 CTA(목적지 확정, 버튼 유지) vs 비배선 컨트롤(목적지 없음, 버튼 표식 제거).
+const WIRED_CTA_TEST_IDS = [
+  'home-create-trip-fab',
+  'home-saved-places-cta',
+  'home-spots-more',
+] as const;
+
+const UNWIRED_CONTROL_TEST_IDS = [
+  'home-search-bar',
+  'home-collections-more',
+  'home-itineraries-more',
+  'home-dashboard-bell',
 ] as const;
 
 describe('HomeScreen — 정상 렌더 존재 (AC-1)', () => {
@@ -234,19 +254,104 @@ describe('HomeScreen — INV-3 시간 미표시 (AC-6, 렌더 절반)', () => {
   });
 });
 
-describe('HomeScreen — CTA no-op (AC-8 · Q3 계승)', () => {
-  it('벨·검색바·더보기·카드·담은 곳·FAB를 눌러도 예외 없이 루트가 유지된다', () => {
+describe('HomeScreen — CTA 콜백 발화·격리 (370-AC-2)', () => {
+  it('각 배선 CTA press 는 자기 콜백만 정확히 1회 발화한다(화면은 라우터를 모른다)', () => {
+    // 준비 — 배선 콜백 3종을 jest.fn()으로 주입. HomeScreen 은 이 함수만 발화할 뿐 어디로
+    // 가는지(라우터)는 모른다 — 목적지 왕복은 tabsHomeRoute.test.tsx(370-AC-1)가 잰다.
+    const onPressCreateTrip = jest.fn();
+    const onPressSavedPlaces = jest.fn();
+    const onPressSpotsMore = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        onPressCreateTrip={onPressCreateTrip}
+        onPressSavedPlaces={onPressSavedPlaces}
+        onPressSpotsMore={onPressSpotsMore}
+      />
+    );
+
+    // 실행·단언 — FAB → 여행 생성 콜백만(다른 콜백은 안 건드림 = 오배선 차단).
+    fireEvent.press(screen.getByTestId('home-create-trip-fab'));
+    expect(onPressCreateTrip).toHaveBeenCalledTimes(1);
+    expect(onPressSavedPlaces).not.toHaveBeenCalled();
+    expect(onPressSpotsMore).not.toHaveBeenCalled();
+
+    // 담은 곳 → 담은 장소 콜백만.
+    onPressCreateTrip.mockClear();
+    fireEvent.press(screen.getByTestId('home-saved-places-cta'));
+    expect(onPressSavedPlaces).toHaveBeenCalledTimes(1);
+    expect(onPressCreateTrip).not.toHaveBeenCalled();
+    expect(onPressSpotsMore).not.toHaveBeenCalled();
+
+    // 뜨는 장소 더 보기 → 스팟 더보기 콜백만.
+    onPressSavedPlaces.mockClear();
+    fireEvent.press(screen.getByTestId('home-spots-more'));
+    expect(onPressSpotsMore).toHaveBeenCalledTimes(1);
+    expect(onPressCreateTrip).not.toHaveBeenCalled();
+    expect(onPressSavedPlaces).not.toHaveBeenCalled();
+  });
+});
+
+describe('HomeScreen — 비배선 컨트롤은 버튼 역할이 아니다 (370-AC-3 · 부정)', () => {
+  it('목적지 없는 컨트롤(검색바·비배선 더보기·벨)은 accessibilityRole="button"으로 노출되지 않는다', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
 
-    // 홈은 expo-router를 모르므로 이동 자체가 구조적으로 불가능하다 — 핸들러가 없으면
-    // press는 no-op로 반환한다(예외 아님, 02a §4-6). 던지면 이 시점에 실패한다.
+    // queryAllByRole('button')은 accessibilityRole/role 이 'button'인 접근성 요소만 돌려준다
+    // (RNTL 13.3.3 role.js 실검증, 02a §5). onPress 유무가 아니라 role 이 소속을 정한다 —
+    // 목적지 없는 컨트롤은 role 을 떼야 접근성 트리에서 버튼으로 안 읽힌다.
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID);
+
+    UNWIRED_CONTROL_TEST_IDS.forEach((id) => {
+      expect(buttonIds).not.toContain(id);
+    });
+  });
+});
+
+describe('HomeScreen — 버튼 역할 집합 == 배선된 CTA 집합 (370-AC-4 · 회귀)', () => {
+  it('discovery 접근성 트리에서 버튼으로 읽히는 것은 배선된 3개 CTA 뿐이다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    // 실제 onPress 목적지가 있는 요소만 버튼이어야 한다 — 집합 동치라 (a)비배선이 안 벗겨짐
+    // (b)배선 CTA 가 벗겨짐 (c)공유 SectionHeader 를 전부 벗겨 spots-more 도 사라짐 (d)새 버튼
+    // 유입, 넷 다 red 로 잡힌다.
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID)
+      .sort();
+
+    expect(buttonIds).toEqual([...WIRED_CTA_TEST_IDS].sort());
+  });
+});
+
+describe('HomeScreen — 비배선 컨트롤은 콜백 0·크래시 0 (370-AC-5 · 구 316-AC-8 갱신)', () => {
+  it('벨·검색바·비배선 더보기·카드를 눌러도 배선 콜백이 0회이고 루트가 유지된다', () => {
+    // 구 AC-8 은 FAB·담은 곳을 "눌러도 아무 일 없음(no-op)"으로 단언해 배선(370-AC-1/2)과
+    // 충돌했다 → 배선 CTA 는 이 목록에서 빠지고 발화는 위 370-AC-2 가 잰다. 여기 남는 것은
+    // 목적지 없는 컨트롤뿐 — 배선 콜백 3종을 전부 주입한 채 눌러 (a)이들이 실수로 배선 콜백을
+    // 발화하는 오배선과 (b)testID 유실(마크업이 통째로 사라짐)을 red 로 잡는다.
+    const onPressCreateTrip = jest.fn();
+    const onPressSavedPlaces = jest.fn();
+    const onPressSpotsMore = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        onPressCreateTrip={onPressCreateTrip}
+        onPressSavedPlaces={onPressSavedPlaces}
+        onPressSpotsMore={onPressSpotsMore}
+      />
+    );
+
     fireEvent.press(screen.getByTestId('home-dashboard-bell'));
     fireEvent.press(screen.getByTestId('home-search-bar'));
     fireEvent.press(screen.getByTestId('home-collections-more'));
+    fireEvent.press(screen.getByTestId('home-itineraries-more'));
     fireEvent.press(screen.getByTestId('home-collection-card-0'));
-    fireEvent.press(screen.getByTestId('home-saved-places-cta'));
-    fireEvent.press(screen.getByTestId('home-create-trip-fab'));
 
+    expect(onPressCreateTrip).not.toHaveBeenCalled();
+    expect(onPressSavedPlaces).not.toHaveBeenCalled();
+    expect(onPressSpotsMore).not.toHaveBeenCalled();
     expect(screen.getByTestId('home-dashboard-root')).toBeOnTheScreen();
   });
 });
