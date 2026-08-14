@@ -46,7 +46,13 @@ const DATE_PICKER = join(
   'model',
   'tripDatePicker.ts'
 );
-const DATE_SHEET = join(SRC_ROOT, 'features', 'trip', 'ui', 'TripDateSheet.tsx');
+const DATE_SHEET = join(
+  SRC_ROOT,
+  'features',
+  'trip',
+  'ui',
+  'TripDateSheet.tsx'
+);
 const WIZARD_ROUTE_DIR = join(SRC_ROOT, 'app', 'trips', 'new');
 const SOURCE_EXTENSIONS = ['.ts', '.tsx'];
 

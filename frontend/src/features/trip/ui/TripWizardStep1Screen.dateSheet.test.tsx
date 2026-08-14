@@ -197,9 +197,7 @@ describe('월 이동 (prev/next)', () => {
     expect(
       screen.getByTestId('trip-wizard-date-cell-2026-07-15')
     ).toBeOnTheScreen();
-    expect(
-      screen.queryByTestId('trip-wizard-date-cell-2026-06-15')
-    ).toBeNull();
+    expect(screen.queryByTestId('trip-wizard-date-cell-2026-06-15')).toBeNull();
 
     fireEvent.press(screen.getByTestId('trip-wizard-datesheet-prev'));
 
@@ -207,8 +205,6 @@ describe('월 이동 (prev/next)', () => {
     expect(
       screen.getByTestId('trip-wizard-date-cell-2026-06-15')
     ).toBeOnTheScreen();
-    expect(
-      screen.queryByTestId('trip-wizard-date-cell-2026-07-15')
-    ).toBeNull();
+    expect(screen.queryByTestId('trip-wizard-date-cell-2026-07-15')).toBeNull();
   });
 });
