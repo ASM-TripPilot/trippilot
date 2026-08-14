@@ -316,25 +316,26 @@ describe('N4 · 조회 상태별 얼굴 (01b D5 · D6)', () => {
   });
 });
 
-describe('N4 · 점선 박스가 장소 탐색으로 보낸다 (AC-6)', () => {
-  it('N4-7 시드가 있을 때도 0곳일 때도 같은 곳으로 간다', () => {
+describe('N4 · 더 담기는 담은 곳이 있으면 담은 장소 화면으로 (TRIP-367 · AC-6)', () => {
+  it('N4-7 담은 곳이 있으면 담은 장소 화면(d02)으로 간다', () => {
+    // beforeEach 가 loaded(THREE) — 담은 곳 3곳.
     render(<TripNewStep1Page baseDate={BASE} />);
 
     fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-more'));
 
-    expect(routerMock.push).toHaveBeenCalledWith('/explore/places');
+    // 이미 담아둔 것을 모아 고르는 자리가 담은 장소 화면이다 — 탐색으로 보내면 다시 찾아야 한다.
+    expect(routerMock.push).toHaveBeenCalledWith('/explore/saved-places');
     expect(routerMock.push).toHaveBeenCalledTimes(1);
+  });
 
-    // 0곳 얼굴의 점선도 같은 목적지다 — 여기가 갈리면 담은 곳이 없는 사용자가 담으러 갈
-    // 길을 잃는다.
-    useTripWizardStore.getState().reset();
-    routerMock.push.mockClear();
+  it('N4-7b 담은 곳이 0곳이면 지금처럼 장소 탐색으로 간다 — 담을 게 없을 땐 탐색이 맞다', () => {
     mockSavedPlaces = loaded([]);
-    screen.rerender(<TripNewStep1Page baseDate={BASE} />);
+    render(<TripNewStep1Page baseDate={BASE} />);
 
     fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-empty'));
 
     expect(routerMock.push).toHaveBeenCalledWith('/explore/places');
+    expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -492,7 +492,15 @@ export function TripNewStep1Page({
       savedPlaceCount={savedPlaceList.length}
       mustVisitError={mustVisitError}
       onRemoveMustVisit={removeMustVisit}
-      onPressMoreMustVisits={() => router.push('/explore/places')}
+      onPressMoreMustVisits={() =>
+        // 담은 곳이 있으면 그것들을 모아 고르는 담은 장소 화면(d02)으로, 없으면 새로 담을 탐색으로
+        // 보낸다 — 담아둔 게 늘수록 탐색에서 다시 찾는 비용이 커지는 것을 막는다(TRIP-367).
+        router.push(
+          savedPlaceList.length > 0
+            ? '/explore/saved-places'
+            : '/explore/places'
+        )
+      }
       onRetryMustVisitSeeds={() => void savedPlaces.refetch()}
       onRetryMustVisits={retryMustVisits}
       budgetText={effectiveBudgetText}
