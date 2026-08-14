@@ -112,6 +112,24 @@ describe('TermsPage — 서버 6종에서 필수 3종만 노출 (BR-U0-11)', () 
     expect(screen.queryByText('PERSONALIZATION')).toBeNull();
     expect(screen.queryByText('LOCATION_TERMS')).toBeNull();
   });
+
+  it('필수 3종은 BR 정본 라벨로 그려지고, 어떤 termsType 원시 코드도 텍스트로 새지 않는다 (BR-U0-10 · 라벨 폴백 방어)', async () => {
+    // 무엇을 보장하나: 라벨은 `TERMS_LABELS[type] ?? term.termsType` 폴백을 탄다. 필수 3종 중
+    // 하나라도 라벨 상수에서 빠지면 그 자리에 원시 코드(TERMS_OF_SERVICE 등)가 그대로 노출된다.
+    // 지금까지 이 폴백은 LOCATION_TERMS 부재만 봤고 TOS·PRIVACY 는 무판정이었다(TRIP-375).
+    await renderLoaded();
+
+    // 긍정 짝 — BR-U0-10 정본 문구가 실제로 화면에 있다. 없으면 아래 부정 단언이 공허해진다.
+    expect(screen.getByText('서비스 이용약관')).toBeOnTheScreen();
+    expect(screen.getByText('개인정보 수집·이용')).toBeOnTheScreen();
+    expect(screen.getByText('위치기반서비스')).toBeOnTheScreen();
+
+    // 부정 짝 — 세 종의 원시 코드는 어떤 형태로도 텍스트에 없다. 라벨 상수에서 한 종을
+    // 지우면(폴백이 원시 코드로 떨어지면) 이 짝이 red 를 낸다.
+    expect(screen.queryByText('TERMS_OF_SERVICE')).toBeNull();
+    expect(screen.queryByText('PRIVACY_POLICY')).toBeNull();
+    expect(screen.queryByText('LOCATION_TERMS')).toBeNull();
+  });
 });
 
 describe('TermsPage — 활성 조건은 필수 3종 전부 (AC A3 · A4 · BR-U0-10)', () => {

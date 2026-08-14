@@ -37,6 +37,16 @@ const SCREEN = join(
   'TripWizardStep1Screen.tsx'
 );
 const PURE = join(SRC_ROOT, 'features', 'trip', 'model', 'tripWizardStep1.ts');
+// TRIP-368 날짜 시트 두 파일 — 화면 전이 그래프에 들어오므로 같은 시계 금지(01b D5)를 받는다.
+// 신설 당시 이 스캔 모집단([SCREEN, PURE])에 안 들어와, 실클럭을 넣어도 통과하던 구멍(TRIP-375).
+const DATE_PICKER = join(
+  SRC_ROOT,
+  'features',
+  'trip',
+  'model',
+  'tripDatePicker.ts'
+);
+const DATE_SHEET = join(SRC_ROOT, 'features', 'trip', 'ui', 'TripDateSheet.tsx');
 const WIZARD_ROUTE_DIR = join(SRC_ROOT, 'app', 'trips', 'new');
 const SOURCE_EXTENSIONS = ['.ts', '.tsx'];
 
@@ -282,8 +292,8 @@ describe('AC-14 · 화면이 쿼리 훅·라우터·위치를 물지 않는다',
 });
 
 describe('AC-5 · 시계를 읽지 않는다 (01b D5 — 기준일은 주입받는다)', () => {
-  it('화면과 프리셋 계산 함수 어디에도 현재 시각 읽기가 없다', () => {
-    [SCREEN, PURE].forEach((file) => {
+  it('화면과 프리셋 계산 함수, 날짜 시트 두 파일 어디에도 현재 시각 읽기가 없다', () => {
+    [SCREEN, PURE, DATE_PICKER, DATE_SHEET].forEach((file) => {
       expect(existsPair(file)).toEqual({ file, exists: true });
 
       // 주석은 먼저 걷는다 — 머리말에 "화면이 new Date()를 부르면 안 된다"고 적는 것이

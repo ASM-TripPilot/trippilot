@@ -54,6 +54,13 @@ describe('tripDatePicker — isDateInRange', () => {
     expect(isDateInRange('2026-06-14', '2026-06-10', '2026-06-13')).toBe(false);
     expect(isDateInRange('2026-06-11', '2026-06-10', null)).toBe(false);
   });
+
+  it('하한도 본다 — 시작일보다 앞이면 false (하한 `date >= startDate` 잠금, TRIP-375)', () => {
+    // 지금까지 상한(`<= endDate`)만 밟혔다. 하한을 지우면 시작 전 날짜가 in-range 로 새서
+    // 달력 하이라이트가 왼쪽으로 번진다. 이 두 줄이 그 뮤테이션에 red 를 낸다.
+    expect(isDateInRange('2026-06-09', '2026-06-10', '2026-06-13')).toBe(false);
+    expect(isDateInRange('2026-06-01', '2026-06-10', '2026-06-13')).toBe(false);
+  });
 });
 
 describe('tripDatePicker — applyDatePick 은 역전 범위를 못 만든다 (INV-U1-11)', () => {

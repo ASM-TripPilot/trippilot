@@ -374,7 +374,8 @@ function MustVisitHead({ note }: { note?: string }): ReactElement {
 }
 
 /** 64×64 점선 박스 — 시드가 있으면 `더 담기`, 0곳이면 행 전체를 채우는 `가고 싶은 곳 담기`
- * (Figma `1740:1109` · `2226:1800`). 둘 다 같은 곳(d04 장소 탐색)으로 보낸다. */
+ * (Figma `1740:1109` · `2226:1800`). 둘 다 같은 `onPressMore` 를 부르지만, 배선이 담은 곳
+ * 유무로 목적지를 가른다(담은 곳 있으면 담은 장소 화면 d02, 없으면 장소 탐색 d04 — TRIP-367). */
 function MustVisitMoreChip({
   testID,
   label,

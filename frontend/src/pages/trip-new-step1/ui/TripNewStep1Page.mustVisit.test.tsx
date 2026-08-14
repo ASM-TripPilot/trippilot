@@ -22,7 +22,8 @@ import { TripNewStep1Page } from './TripNewStep1Page';
  *  - **D6** 게스트는 0곳 얼굴을 본다 — 끝나지 않는 스켈레톤이 아니다.
  *  - **D5** 조회 실패 얼굴이 0곳 얼굴과 구분되고 재시도가 진짜 재조회를 부른다.
  *  - **INV-U1-04(양방향)** 담은 목록이 줄어도 이미 복사된 시드는 지워지지 않는다.
- *  - **AC-6** 점선 박스가 d04 장소 탐색으로 보낸다.
+ *  - **AC-6** 점선 박스(0곳 얼굴)는 **담은 곳이 있으면** 담은 장소 화면(d02)으로, 없으면
+ *    장소 탐색(d04)으로 보낸다(TRIP-367 이후 조건 분기 — 분기 키는 `savedPlaceList.length`).
  *
  * 왜 node 버킷인가: 심판 대상이 "조회 **상태 조합**이 어떤 얼굴·어떤 스토어 변화로 이어지는가"다.
  * 게스트/로딩/실패/잔존을 손으로 갈아 끼워야 하므로 훅을 모듈째 목킹한다
@@ -335,6 +336,27 @@ describe('N4 · 더 담기는 담은 곳이 있으면 담은 장소 화면으로
     fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-empty'));
 
     expect(routerMock.push).toHaveBeenCalledWith('/explore/places');
+    expect(routerMock.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('🔴 N4-7c 담은 곳 3·시드 0(x로 전부 뺀 상태)이면 empty 얼굴도 담은 장소 화면(d02)으로 간다', () => {
+    // 왜 이 케이스인가: N4-7·N4-7b 는 savedPlaceList 와 mustVisits(시드)를 **항상 같은 값**으로만
+    // 줘서, 분기 키를 `savedPlaceList.length` → `mustVisits.length` 로 바꿔도 둘이 늘 함께 0/양수라
+    // 뮤테이션이 살아남았다(TRIP-375). 두 길이를 갈라놓아야 분기 키를 잠근다.
+    // beforeEach = loaded(THREE). 시드 3장을 x 로 전부 뺀다 → mustVisits 0, 담은 곳은 여전히 3.
+    render(<TripNewStep1Page baseDate={BASE} />);
+    ['poi-1', 'poi-2', 'poi-3'].forEach((poiId) => {
+      fireEvent.press(
+        screen.getByTestId(`trip-wizard-mustvisit-remove-${poiId}`)
+      );
+    });
+
+    // 시드가 비었으니 0곳 얼굴(empty)이 뜬다 — 담은 곳은 3곳 그대로다.
+    fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-empty'));
+
+    // 담은 곳이 있으므로 담은 장소 화면으로 가야 한다. 분기 키가 `mustVisits.length`(=0)로
+    // 뒤바뀌면 /explore/places 로 새 red 를 낸다.
+    expect(routerMock.push).toHaveBeenCalledWith('/explore/saved-places');
     expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
 });
