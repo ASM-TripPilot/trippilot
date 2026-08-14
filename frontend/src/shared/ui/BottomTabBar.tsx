@@ -5,15 +5,20 @@
  * 그 파일에 둔다 — 이 컴포넌트가 shared/ui에 있는 이유는 탭바가 특정 도메인 feature가
  * 아니라서다).
  *
- * 비주얼은 Figma 마스터 `1236:1177`(TRIP-173 3/4 사이클) 실측을 그대로 옮겼다 — 흰 배경(84px
- * 밴드) 위에 옅은 회색 알약(`surface-soft` 토큰, 좌우 28px 여백, 반경은 rounded-pill 토큰)이
- * 떠 있고, 아이콘은 27x27 좌표계다. 알약 배경은 마스터 raw CSS만 보면 반투명 흰색(68%)이지만
- * Figma 프로덕션 화면을 실제로 렌더한 값은 `#F7F7F7`(surface-soft)와 일치한다(스크린샷 대조
- * M-3 — raw 속성 하나만 보고 판단하면 틀린다). 테두리 알파값과 그림자는 토큰이 아니라 raw로
- * 둔다(Q3 — 그림자를 어차피 style 프로퍼티로 넘겨야 해서 추가 비용이 0이다. RN엔 CSS
- * box-shadow가 없다 — HomeScreen.tsx 그림자 관례와 동일). 하단 SafeArea 인셋은 이번엔
- * 합산하지 않는다(Q1 — 별도 게이트가 필요한 계약 변경이라 이연).
+ * 비주얼은 Figma 마스터 `1236:1177`(SWT PRO · 화면 페이지)의 실물에 정합한다 — **투명**
+ * 96px 밴드(오버레이: 이 탭바 루트가 `absolute bottom-0`이라 화면 위에 떠서 씬이 탭바 높이만큼
+ * 줄지 않고 밴드는 배경을 안 진다 — react-navigation 은 커스텀 `tabBar` 렌더프롭에 `tabBarStyle`
+ * 을 적용하지 않으므로 `_layout` 옵션이 아니라 탭바 자신이 오버레이를 져야 한다) 위에 좌우 30px
+ * 여백(px-[30px])의 프로스티드 글래스 알약(`expo-blur` BlurView · tint light · 반경 rounded-pill)이
+ * 떠 있다. 알약 배경은 Figma 실측 rgba(255,255,255,0.68)+backdrop-blur-14 를 실 블러로 재현한다
+ * (이전엔 raw 68% 흰색을 프로덕션 렌더 실측 #F7F7F7 불투명으로 되정정했으나, 탭바가 오버레이가
+ * 되며 아래 콘텐츠가 비쳐야 하므로 실 블러가 정본에 맞다). 아이콘 좌표계·렌더 크기 모두 27x27,
+ * 탭 폭은 flex-1(≈62), 라벨은 활성 primary·비활성 muted. 그림자는 BlurView overflow-hidden 밖
+ * 래퍼가, 테두리(50% 반투명 흰색 raw)는 BlurView 안쪽이 진다 — RN엔 CSS box-shadow가 없어 style
+ * 프로퍼티로 넘긴다(HomeScreen.tsx 그림자 관례와 동일). 하단 SafeArea 인셋은 합산하지 않는다.
+ * ⚠️ BlurView는 네이티브 모듈이라 코드 머지 후 `pnpm expo prebuild` + 재빌드해야 실기에 뜬다.
  */
+import { BlurView } from 'expo-blur';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -29,18 +34,22 @@ export interface BottomTabBarProps {
 const PRIMARY = '#FF385C';
 const MUTED = '#6A6A6A';
 
-// 알약 표면 — 배경은 className의 bg-surface-soft 토큰(M-3, 아래 참고)이 맡고, 여기는 테두리
-// 50% 반투명 흰색 + 부드러운 그림자만 담당한다(Figma 실측, Q3: 알파값은 토큰이 아니라 raw).
-// shadow-* 스타일 프로퍼티로 넘기는 것은 HomeScreen.tsx의 heroCardShadow/softCardShadow와
-// 같은 이 리포의 확립된 패턴이다.
-const PILL_SURFACE_STYLE = {
-  borderWidth: 1,
-  borderColor: 'rgba(255,255,255,0.5)',
+// 알약 그림자 — 바깥 래퍼가 진다(BlurView는 overflow-hidden으로 블러를 알약 모양에 맞춰
+// 잘라내야 하는데, overflow-hidden이 그림자까지 자르므로 그림자는 클리핑 밖 래퍼가 맡는다).
+// shadow-* 스타일 프로퍼티는 HomeScreen.tsx heroCardShadow와 같은 이 리포 확립 패턴.
+const PILL_SHADOW_STYLE = {
   shadowColor: '#000000',
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.1,
   shadowRadius: 14,
   elevation: 4,
+} as const;
+
+// 알약 테두리 — 50% 반투명 흰색(Figma 실측, Q3: 알파값은 토큰이 아니라 raw). BlurView 안쪽에
+// 두어야 클리핑된 알약 모양을 따라 테두리가 그려진다.
+const PILL_BORDER_STYLE = {
+  borderWidth: 1,
+  borderColor: 'rgba(255,255,255,0.5)',
 } as const;
 
 type TabIconProps = { size?: number };
@@ -262,44 +271,56 @@ export function BottomTabBar({
   return (
     <View
       testID="shell-tabbar-root"
-      className="h-[84px] w-full bg-canvas px-[28px] pb-md pt-sm"
+      // 밴드는 투명 오버레이라 콘텐츠 위 96px를 덮는다. box-none으로 밴드 자신은 터치를
+      // 삼키지 않고(투명 여백 아래 스크롤·탭이 그대로 통과) 자식(알약)만 터치를 받는다
+      // (code-critic N1 — RN 순수 View는 투명해도 터치를 흡수한다).
+      pointerEvents="box-none"
+      className="absolute inset-x-0 bottom-0 h-[96px] px-[30px] pt-[26px]"
     >
-      <View
-        className="h-[64px] flex-row rounded-pill bg-surface-soft px-md pb-sm pt-[6px]"
-        style={PILL_SURFACE_STYLE}
-      >
-        {TAB_CONFIG.map(({ key, label, ActiveIcon, InactiveIcon }) => {
-          const selected = key === activeKey;
-          return (
-            <Pressable
-              key={key}
-              testID={`shell-tabbar-tab-${key}`}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              onPress={() => onPressTab(key)}
-              className="w-[62px] items-center gap-xs pt-xs pb-[2px]"
-            >
-              {selected ? (
-                <View testID={`shell-tabbar-icon-${key}-active`}>
-                  <ActiveIcon size={27} />
-                </View>
-              ) : (
-                <View testID={`shell-tabbar-icon-${key}-inactive`}>
-                  <InactiveIcon size={27} />
-                </View>
-              )}
-              <Text
-                className={
-                  selected
-                    ? 'font-noto-bold text-micro leading-[13px] font-bold text-primary'
-                    : 'font-noto text-micro leading-[13px] text-muted'
-                }
+      {/* 그림자 래퍼 — BlurView의 overflow-hidden 바깥에 둬야 그림자가 안 잘린다. */}
+      <View className="rounded-pill" style={PILL_SHADOW_STYLE}>
+        <BlurView
+          // ponytail: intensity는 실기 캘리브레이션 노브 — Figma 반투명 흰 68%에 눈으로
+          // 맞춰 조정한다(RN 네이티브 블러 ≠ Figma 벡터 렌더라 값은 시뮬레이터에서 확정).
+          intensity={24}
+          tint="light"
+          experimentalBlurMethod="dimezisBlurView"
+          className="flex-row items-center overflow-hidden rounded-pill px-[10px] py-[2px]"
+          style={PILL_BORDER_STYLE}
+        >
+          {TAB_CONFIG.map(({ key, label, ActiveIcon, InactiveIcon }) => {
+            const selected = key === activeKey;
+            return (
+              <Pressable
+                key={key}
+                testID={`shell-tabbar-tab-${key}`}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                onPress={() => onPressTab(key)}
+                className="flex-1 items-center gap-[3px] py-[6px]"
               >
-                {label}
-              </Text>
-            </Pressable>
-          );
-        })}
+                {selected ? (
+                  <View testID={`shell-tabbar-icon-${key}-active`}>
+                    <ActiveIcon size={27} />
+                  </View>
+                ) : (
+                  <View testID={`shell-tabbar-icon-${key}-inactive`}>
+                    <InactiveIcon size={27} />
+                  </View>
+                )}
+                <Text
+                  className={
+                    selected
+                      ? 'font-noto-bold text-micro font-bold text-primary'
+                      : 'font-noto text-micro text-muted'
+                  }
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </BlurView>
       </View>
     </View>
   );

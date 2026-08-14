@@ -16,10 +16,14 @@ import {
 } from '@/features/auth/ui/SocialLoginScreen';
 import { SplashScreen } from '@/features/auth/ui/SplashScreen';
 import {
+  HOME_COLLECTING_PROPS,
   HOME_DEFAULT_PROPS,
   HOME_EMPTY_PROPS,
   HOME_LOADING_PROPS,
   HOME_NO_TRIP_PROPS,
+  HOME_PLANNING_PROPS,
+  HOME_POST_TRIP_PROPS,
+  HOME_UPCOMING_PROPS,
 } from '@/features/home/model/homeFixtures';
 import {
   PREVIEW_PLACES,
@@ -30,6 +34,10 @@ import { REGIONS } from '@/features/explore/model/regions';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
+import {
+  ExploreLandingScreen,
+  type StayCardVM,
+} from '@/features/explore/ui/ExploreLandingScreen';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
 import {
   buildDraftPins,
@@ -72,6 +80,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { KakaoMapView, type MapPin } from '@/shared/map';
+import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 /**
  * expo-router 의 `useLocalSearchParams` 를 모듈 로드 시점에 딱 한 번 안전하게 구해온다.
@@ -114,6 +123,37 @@ try {
 
 // 프리뷰는 보기 전용이라 화면이 요구하는 콜백을 전부 빈 함수로 채운다.
 const noop = () => {};
+
+// d01 탐색 랜딩 숙소 레인 카드(라우트가 formatPrice·stayKey 로 만드는 뷰모델의 프리뷰 값).
+// 가격 미확인 카드를 한 장 섞어 formatPrice 두 갈래를 눈으로 확인한다(BR-U1-12/14).
+const EXPLORE_STAY_CARDS: StayCardVM[] = [
+  {
+    key: 'yanolja:1',
+    name: '해운대 오션 호텔',
+    region: '부산',
+    priceText: '145,000원~',
+  },
+  {
+    key: 'agoda:2',
+    name: '광안리 뷰 호텔',
+    region: '부산',
+    priceText: '가격 미확인',
+  },
+  {
+    key: 'yanolja:3',
+    name: '서면 시티 호텔',
+    region: '부산',
+    priceText: '98,000원~',
+  },
+];
+
+const EXPLORE_LANDING_BASE = {
+  heading: {
+    title: '무엇을 둘러볼까요?',
+    subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
+  },
+  onSubmitSearch: noop,
+} as const;
 
 const VIEW_ONLY_HANDLERS = {
   onSignIn: noop,
@@ -608,6 +648,21 @@ const TIMELINE_MAP_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   },
 ];
 
+// 탭 화면 프리뷰에 셸 탭바를 얹어 실제 앱처럼 보이게 한다(TRIP-201 오버레이 확인용).
+// BottomTabBar 루트가 absolute bottom-0라 콘텐츠 위에 떠서 겹친다 — 프리뷰에서도 오버레이
+// 모양이 그대로 재현된다. onPressTab은 프리뷰라 no-op(네비게이션 없음).
+function withShellTabBar(
+  screen: ReactElement,
+  activeKey: ShellTabKey = 'home'
+): ReactElement {
+  return (
+    <View className="flex-1">
+      {screen}
+      <BottomTabBar activeKey={activeKey} onPressTab={() => {}} />
+    </View>
+  );
+}
+
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
   {
@@ -871,25 +926,50 @@ const PREVIEW_STATES: PreviewState[] = [
     key: 'home-default',
     label: '홈 · 기본',
     login: null,
-    render: () => <HomeScreen {...HOME_DEFAULT_PROPS} />,
+    render: () => withShellTabBar(<HomeScreen {...HOME_DEFAULT_PROPS} />),
   },
   {
     key: 'home-no-trip',
     label: '홈 · 첫 사용자',
     login: null,
-    render: () => <HomeScreen {...HOME_NO_TRIP_PROPS} />,
+    render: () => withShellTabBar(<HomeScreen {...HOME_NO_TRIP_PROPS} />),
   },
   {
     key: 'home-empty',
     label: '홈 · 취향 부족',
     login: null,
-    render: () => <HomeScreen {...HOME_EMPTY_PROPS} />,
+    render: () => withShellTabBar(<HomeScreen {...HOME_EMPTY_PROPS} />),
   },
   {
     key: 'home-loading',
     label: '홈 · 로딩',
     login: null,
-    render: () => <HomeScreen {...HOME_LOADING_PROPS} />,
+    render: () => withShellTabBar(<HomeScreen {...HOME_LOADING_PROPS} />),
+  },
+  // ── 홈 여행 단계 얼굴 4종(TRIP-317) — 실기 판정 전용 진입점 ──
+  {
+    key: 'home-collecting',
+    label: '홈 · 담는 중',
+    login: null,
+    render: () => withShellTabBar(<HomeScreen {...HOME_COLLECTING_PROPS} />),
+  },
+  {
+    key: 'home-planning',
+    label: '홈 · 계획 중',
+    login: null,
+    render: () => withShellTabBar(<HomeScreen {...HOME_PLANNING_PROPS} />),
+  },
+  {
+    key: 'home-upcoming',
+    label: '홈 · 출발 전',
+    login: null,
+    render: () => withShellTabBar(<HomeScreen {...HOME_UPCOMING_PROPS} />),
+  },
+  {
+    key: 'home-post-trip',
+    label: '홈 · 여행 후',
+    login: null,
+    render: () => withShellTabBar(<HomeScreen {...HOME_POST_TRIP_PROPS} />),
   },
   // 지도 계층 선행(TRIP-197 D9) — 층 C(실기) 진입점. 키/로드 실패 분기는 렌더 안 해봐야
   // 알 수 없어 여기서는 해피패스 1키만 둔다(env 키는 빌드 시 번들에 인라인되므로 preview가
@@ -932,6 +1012,53 @@ const PREVIEW_STATES: PreviewState[] = [
         onPressRemove={noop}
         onPressCreateTrip={noop}
         onPressBrowse={noop}
+      />
+    ),
+  },
+  // d01 탐색 랜딩(TRIP-201) — 3얼굴: 담은 곳 CTA / 담은 곳 0 안내 / 숙소 레인 실패 재시도.
+  {
+    key: 'explore-landing-default',
+    label: '탐색 랜딩 · 담은 곳 CTA',
+    login: null,
+    render: () => (
+      <ExploreLandingScreen
+        {...EXPLORE_LANDING_BASE}
+        stayLane={{
+          error: false,
+          cards: EXPLORE_STAY_CARDS,
+          onRetry: noop,
+          onSeeAll: noop,
+        }}
+        bridge={{ savedCount: 3, onPressCreateTrip: noop }}
+      />
+    ),
+  },
+  {
+    key: 'explore-landing-empty-bridge',
+    label: '탐색 랜딩 · 담은 곳 0',
+    login: null,
+    render: () => (
+      <ExploreLandingScreen
+        {...EXPLORE_LANDING_BASE}
+        stayLane={{
+          error: false,
+          cards: EXPLORE_STAY_CARDS,
+          onRetry: noop,
+          onSeeAll: noop,
+        }}
+        bridge={{ savedCount: 0, onPressCreateTrip: noop }}
+      />
+    ),
+  },
+  {
+    key: 'explore-landing-stay-error',
+    label: '탐색 랜딩 · 숙소 레인 실패',
+    login: null,
+    render: () => (
+      <ExploreLandingScreen
+        {...EXPLORE_LANDING_BASE}
+        stayLane={{ error: true, cards: [], onRetry: noop, onSeeAll: noop }}
+        bridge={{ savedCount: 2, onPressCreateTrip: noop }}
       />
     ),
   },

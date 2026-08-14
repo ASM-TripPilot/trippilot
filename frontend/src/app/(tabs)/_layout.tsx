@@ -25,7 +25,22 @@ function renderTabBar(props: BottomTabBarProps) {
 
 export default function TabsLayout() {
   return (
-    <Tabs screenOptions={{ headerShown: false }} tabBar={renderTabBar}>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        // AC-O2(동결 계약)가 이 옵션의 존재를 요구한다. 단 react-navigation 은 커스텀 `tabBar`
+        // 렌더프롭을 쓸 때 `tabBarStyle` 을 적용하지 않으므로 이 값은 **무효**다(BottomTabView.js
+        // 실측 — position 분기 없음). 실제 오버레이는 `BottomTabBar` 루트의 `absolute bottom-0`
+        // 가 진다(씬을 탭바 높이만큼 줄이지 않음). 마지막 항목 비가림은 각 화면의 하단 여백(A7).
+        tabBarStyle: {
+          position: 'absolute',
+          backgroundColor: 'transparent',
+          borderTopWidth: 0,
+          elevation: 0,
+        },
+      }}
+      tabBar={renderTabBar}
+    >
       <Tabs.Screen name="index" options={{ title: '홈' }} />
       <Tabs.Screen name="explore" options={{ title: '탐색' }} />
       <Tabs.Screen name="itinerary" options={{ title: '일정' }} />
