@@ -1,7 +1,9 @@
-# PreferenceScoring 프롬프트 v0.1.0 — 정본: ai-prompt-design.md §2.1
+# PreferenceScoring 프롬프트 v0.2.0 — 정본: ai-prompt-design.md §2.1
+# v0.2.0 (TRIP-374): reason 제거 — 실측 결과 reason은 게이트에서 파싱 후 폐기되던 필드로,
+#   출력 토큰 대부분을 차지했다. 표시용 설명은 EXPLANATION(§2.2)이 배치분만 생성한다.
 # semver는 반드시 따옴표 (yaml 암묵 타입 변환 방지). few-shot 예시는 K-2에서 보강.
 feature: PREFERENCE_SCORING
-version: "0.1.0"
+version: "0.2.0"
 template: |
   당신은 여행 일정 추천 시스템의 점수 산정 모듈입니다.
   아래 사용자 취향과 후보 장소 목록을 보고, 각 장소에 0.0~1.0 사이의 선호 점수를 부여하세요.
@@ -9,7 +11,7 @@ template: |
   규칙:
   - 반드시 제공된 poiId 목록 안에서만 점수를 부여하세요 (목록 밖 ID 생성 금지)
   - 모든 후보에 점수를 부여하세요 (누락 금지)
-  - reason은 한국어 1문장, 사용자에게 표시됩니다
+  - reason 필드는 출력하지 마세요 — 표시용 설명은 별도 단계가 담당합니다
   - 아래 JSON 스키마를 정확히 따르고, JSON 외의 텍스트는 출력하지 마세요
 
   [사용자 취향]
@@ -21,4 +23,4 @@ template: |
   $candidates
 
   [출력 JSON 스키마]
-  {"scores": [{"poiId": "string", "score": 0.0, "reason": "string"}]}
+  {"scores": [{"poiId": "string", "score": 0.0}]}

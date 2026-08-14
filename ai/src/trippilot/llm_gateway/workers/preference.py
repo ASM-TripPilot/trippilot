@@ -1,5 +1,8 @@
 """PreferenceScoringWorker — 취향 점수화, 경량 티어·전 일자 공용 1회 (U4 FD §3).
 
+점수는 수치만 산출한다 — 표시용 설명은 배치된 슬롯에 한해 EXPLANATION 워커
+소유 (TRIP-374, ai-prompt-design.md §2.2).
+
 흐름: ContextResolver 권한 재조회(D31) → 프롬프트 변수 조립(필드 최소화 G181,
 좌표 미포함) → gateway.call. 폴백이면 TypedResult(is_fallback=True)를 그대로
 반환 — 규칙 점수 실행은 호출측(U5)의 몫 (BR-U4-09).

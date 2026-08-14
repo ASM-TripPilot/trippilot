@@ -36,9 +36,8 @@ def _apply(raw_text: str, pool: CandidatePool | None):
 
 
 def _payload(entries: list[tuple[str, float]]) -> str:
-    return json.dumps(
-        {"scores": [{"poiId": i, "score": s, "reason": "r"} for i, s in entries]}
-    )
+    # v0.2.0 스키마 (TRIP-374) — reason 없음
+    return json.dumps({"scores": [{"poiId": i, "score": s} for i, s in entries]})
 
 
 # ── GATE-P1/P2: 적대적 PBT — 환각 0 ─────────────────────────
@@ -129,7 +128,6 @@ def test_no_pool_is_fallback_signal_not_silent_pass() -> None:
         '{"scores": [{"poiId": "a", "score": "high"}]}',  # score 문자열
         '{"scores": [{"poiId": "a", "score": true}]}',  # bool은 숫자 아님
         '{"scores": [{"poiId": "a", "score": NaN}]}',  # 비유한
-        '{"scores": [{"poiId": "a", "score": 0.5, "reason": 1}]}',  # reason 타입
     ],
 )
 def test_schema_violations_become_parse_error(raw: str) -> None:
@@ -144,10 +142,20 @@ def test_parse_error_over_valid_pool(pool: CandidatePool) -> None:
     assert out.error.startswith("parse_error:")
 
 
-def test_reason_missing_is_tolerated() -> None:
-    raw = '{"scores": [{"poiId": "x", "score": 0.5}]}'
-    out = _apply(raw, None)  # 파서 통과 여부만 — 풀 없음 오류가 먼저라 payload로 확인 불가
-    assert out.error == "gate_error: 후보 풀 없음"  # 즉 파서 이전에 풀 게이트
+@given(candidate_pools().filter(lambda p: bool(p.poi_ids)))
+def test_stray_reason_is_ignored_not_error(pool: CandidatePool) -> None:
+    """TRIP-374: reason은 계약에서 제거 — 구모델·전환기 응답에 섞여 와도 무시.
+
+    문자열이든 아니든(과거엔 비문자열이 parse_error) 통과하며, poiId·score
+    검증은 그대로 엄격하다 (INV-1 무관 필드의 관용).
+    """
+    pid = str(sorted(pool.poi_ids, key=str)[0])
+    for reason in ("한 문장 설명", 1, None, ["list"]):
+        raw = json.dumps({"scores": [{"poiId": pid, "score": 0.5, "reason": reason}]})
+        out = _apply(raw, pool)
+        assert out.error is None
+        assert [str(s.poi_id) for s in out.value] == [pid]
+        assert out.value[0].score == 0.5
 
 
 # ── 게이트웨이 통합 스모크: 실제 게이트로 end-to-end ─────────

@@ -1,7 +1,7 @@
 """U4-05 — PromptRegistry(yaml 로드·결정론 렌더) + PreferenceScoringWorker.
 
 PROMPT-P1: 렌더 결정론 ∧ 후보 poi_id 전원 프롬프트 포함(누락 금지) ∧ 좌표 문자열 미포함 (G181)
-DoD: prompts/preference_scoring.yaml v0.1.0 존재 + Registry 로드 왕복
+DoD: prompts/preference_scoring.yaml v0.2.0 존재 + Registry 로드 왕복 (TRIP-374: reason 없는 스키마)
 워커: 권한 재조회 → 조립 → gateway.call, 폴백 TypedResult 그대로 반환 (BR-U4-09)
 """
 
@@ -60,8 +60,11 @@ def test_preference_scoring_yaml_loads_with_semver() -> None:
         LlmFeature.PREFERENCE_SCORING, build_prompt_vars_empty()
     )
     assert ref.prompt_id == "prompts/preference_scoring.yaml"
-    assert ref.version == "0.1.0" and ref.feature == "PREFERENCE_SCORING"
+    assert ref.version == "0.2.0" and ref.feature == "PREFERENCE_SCORING"
     assert "poiId" in prompt  # 출력 스키마 안내 포함
+    # TRIP-374: 출력 스키마에 reason 없음 — 프롬프트는 reason 미출력을 지시
+    assert '"reason"' not in prompt
+    assert "reason 필드는 출력하지 마세요" in prompt
 
 
 def build_prompt_vars_empty() -> dict[str, str]:
@@ -132,6 +135,7 @@ def _worker(llm, store_value: object) -> PreferenceScoringWorker:
 @given(candidate_pools().filter(lambda p: bool(p.poi_ids)))
 def test_worker_end_to_end_success(pool: CandidatePool) -> None:
     pid = str(sorted(pool.poi_ids, key=str)[0])
+    # reason이 섞여 와도 무시하고 통과 (TRIP-374 전환기 관용) — end-to-end 확인
     canned = json.dumps({"scores": [{"poiId": pid, "score": 0.8, "reason": "r"}]})
     result = _worker(FakeLlm(canned=canned), _PERSONA).score(
         pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW

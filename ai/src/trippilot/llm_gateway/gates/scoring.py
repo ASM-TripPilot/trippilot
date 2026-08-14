@@ -18,21 +18,21 @@ from trippilot.domain.observability import GateDropEvent
 class RawScore:
     """LLM raw JSON의 중간 표현 — c1 내부 타입, 도메인 아님 (FD domain-entities §4).
 
-    게이트 통과 후에만 ScoredPoi로 승격. reason은 표시용 원문 보존
-    (현 도메인 ScoredPoi에는 없음 — 승격 시 버려진다).
+    게이트 통과 후에만 ScoredPoi로 승격. 점수는 순수 수치 계약(TRIP-374) —
+    reason은 계약에서 제거되어 보존하지 않는다.
     """
 
     poi_id_str: str
     score: float
-    reason: str
 
 
 def _parse_scores(raw_text: str) -> tuple[RawScore, ...]:
-    """OutputSchema(ai-prompt-design §2.1) 강제 파서 — 위반은 ValueError.
+    """OutputSchema(ai-prompt-design §2.1, v0.2.0) 강제 파서 — 위반은 ValueError.
 
-    {"scores": [{"poiId": str, "score": number, "reason": str}]}
-    poiId(비어있지 않은 str)·score(유한 number)는 필수, reason 누락은 ""로 허용.
-    score의 0.0~1.0 클램프는 승격 시(§3) — 파서는 형태만 본다.
+    {"scores": [{"poiId": str, "score": number}]}
+    poiId(비어있지 않은 str)·score(유한 number)는 필수 — 엄격 (INV-1 재료).
+    reason은 계약에서 제거됨(TRIP-374) — 구모델·전환기 응답에 섞여 와도
+    무시한다(관용). score의 0.0~1.0 클램프는 승격 시(§3) — 파서는 형태만 본다.
     """
     try:
         data = json.loads(raw_text)
@@ -52,10 +52,8 @@ def _parse_scores(raw_text: str) -> tuple[RawScore, ...]:
             raise ValueError(f"scores[{i}].score가 숫자가 아님")
         if not math.isfinite(score):
             raise ValueError(f"scores[{i}].score가 유한하지 않음")
-        reason = item.get("reason", "")
-        if not isinstance(reason, str):
-            raise ValueError(f"scores[{i}].reason이 문자열이 아님")
-        raws.append(RawScore(poi_id_str=poi_id, score=float(score), reason=reason))
+        # reason 등 계약 밖 잔존 필드는 무시 — 응답 전체를 실패시키지 않는다 (TRIP-374)
+        raws.append(RawScore(poi_id_str=poi_id, score=float(score)))
     return tuple(raws)
 
 
