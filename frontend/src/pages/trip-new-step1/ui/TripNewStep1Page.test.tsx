@@ -310,3 +310,72 @@ describe('AC-11 · 떠났다 돌아와도 입력이 남는다 (BR-U1-33)', () =>
     expect(screen.getByTestId('trip-wizard-step1-next')).toBeDisabled();
   });
 });
+
+/**
+ * TRIP-368 — 날짜 직접 선택 배선. 날짜 행을 누르면 시트가 열리고(배선이 `dateSheetOpen`을 켠다),
+ * 임의 기간을 확정하면 프리셋을 풀고 그 기간을 스토어에 세운다(왕복). 프리셋만 쓰던 경로는 그대로다.
+ */
+describe('TRIP-368 · 여행 기간 직접 선택', () => {
+  it('날짜 행을 누르면 날짜 선택 시트가 열린다', () => {
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    expect(screen.queryByTestId('trip-wizard-datesheet')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
+
+    expect(screen.getByTestId('trip-wizard-datesheet')).toBeOnTheScreen();
+  });
+
+  it('시트에서 임의 기간을 확정하면 날짜 행에 그 기간이 표시되고 시트가 닫힌다', () => {
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
+    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
+    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-17'));
+    fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
+
+    // 시트가 닫히고, 날짜 행에 고른 임의 기간이 뜬다.
+    expect(screen.queryByTestId('trip-wizard-datesheet')).toBeNull();
+    expect(screen.getByTestId('trip-wizard-date-field')).toHaveTextContent(
+      /6월 15일 – 6월 17일/
+    );
+  });
+
+  it('프리셋을 고른 뒤 임의 날짜를 확정하면 프리셋 칩 선택이 풀린다 (공존)', () => {
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    // 프리셋 3박 4일 선택 → 칩이 선택 상태다.
+    fireEvent.press(screen.getByTestId('trip-wizard-period-preset-3n4d'));
+    expect(
+      screen.getByTestId('trip-wizard-period-preset-3n4d').props
+        .accessibilityState.selected
+    ).toBe(true);
+
+    // 임의 날짜를 확정한다.
+    fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
+    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
+    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-17'));
+    fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
+
+    // 둘 다 선택된 것처럼 보이면 어느 쪽이 적용됐는지 알 수 없다 — 프리셋 칩이 풀려야 한다.
+    expect(
+      screen.getByTestId('trip-wizard-period-preset-3n4d').props
+        .accessibilityState.selected
+    ).toBe(false);
+  });
+
+  it('회귀 — 프리셋만 쓰면 지금처럼 날짜가 자동 채워진다', () => {
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-period-preset-3n4d'));
+
+    // 기준일 2026-06-10 → 3박 4일 = 6월 10일 – 6월 13일(기존 동작).
+    expect(screen.getByTestId('trip-wizard-date-field')).toHaveTextContent(
+      /6월 10일 – 6월 13일/
+    );
+    expect(
+      screen.getByTestId('trip-wizard-period-preset-3n4d').props
+        .accessibilityState.selected
+    ).toBe(true);
+  });
+});
