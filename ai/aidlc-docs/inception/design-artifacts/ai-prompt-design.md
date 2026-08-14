@@ -42,6 +42,13 @@ LLM에 넘기는 필드는 **목적에 필요한 것만**. 서버가 ResourceRef
 
 ### 2.1 PreferenceScoring — 워커 (경량 티어) `[설계권고]`
 
+> **개정 (2026-08-14, TRIP-374)** — OutputSchema에서 `reason` 제거 (프롬프트 v0.1.0 → v0.2.0).
+> 실측(TRIP-373): 점수 지연이 후보 건당 ~0.3초 선형(160건=50~78초)이고 대부분이 출력 토큰인데,
+> 게이트(`llm_gateway/gates/scoring.py`)는 reason을 파싱 후 폐기했다 — `ScoredPoi`에 reason 필드가
+> 없고 소비처 0. 제거로 출력 5,983→2,560 tok (−57%). 게이트는 잔존 reason이 섞여 와도 무시한다
+> (전환기 관용 — poiId·score 검증은 그대로 엄격, INV-1 불변).
+> 사용자 표시용 설명은 원래 **배치된 슬롯만 §2.2 Explanation**이 소유한다 — 역할 중복 제거.
+
 **목적**: 후보 POI 목록에 사용자 취향 기반 선호 점수 부여. 전 일자 공용 1회 호출.
 
 **입력 컨텍스트**:
@@ -52,14 +59,15 @@ LLM에 넘기는 필드는 **목적에 필요한 것만**. 서버가 ResourceRef
 - 후보 POI 목록 (ID + 카테고리 + 태그만 — 상호명 포함, 좌표 미포함)
 ```
 
-**OutputSchema**:
+**OutputSchema** (v0.2.0 — TRIP-374):
 ```json
 {
   "scores": [
-    { "poiId": "string", "score": "number(0.0~1.0)", "reason": "string(1문장, 표시용)" }
+    { "poiId": "string", "score": "number(0.0~1.0)" }
   ]
 }
 ```
+~~`"reason": "string(1문장, 표시용)"`~~ — TRIP-374로 제거. 표시 설명은 §2.2 Explanation 소유.
 
 **프롬프트 구조 (시스템)**:
 ```
@@ -69,9 +77,10 @@ LLM에 넘기는 필드는 **목적에 필요한 것만**. 서버가 ResourceRef
 규칙:
 - 반드시 제공된 poiId 목록 안에서만 점수를 부여하세요 (목록 밖 ID 생성 금지)
 - 모든 후보에 점수를 부여하세요 (누락 금지)
-- reason은 한국어 1문장, 사용자에게 표시됩니다
+- reason 필드는 출력하지 마세요 — 표시용 설명은 별도 단계가 담당합니다
 - JSON 스키마를 정확히 따르세요
 ```
+~~- reason은 한국어 1문장, 사용자에게 표시됩니다~~ (TRIP-374로 제거)
 
 **closed-set 검증 게이트**:
 ```python
