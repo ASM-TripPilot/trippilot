@@ -64,6 +64,10 @@ import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import {
+  StayRegisterScreen,
+  type StayRegisterScreenProps,
+} from '@/features/stay/ui/StayRegisterScreen';
+import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
 } from '@/features/trip/ui/TripWizardStep1Screen';
@@ -663,6 +667,34 @@ function withShellTabBar(
   );
 }
 
+/**
+ * e05 숙소 등록(TRIP-369) — 세 표면 수정(컴팩트 앱바 · 핀 조작 안내 · 세그먼트 줄바꿈 해소)을
+ * 한 화면에서 눈으로 대조하기 위한 얼굴. **핀 지정 탭 · 핀 찍기 전**(`pinAddressStatus:'idle'`)
+ * 으로 세우면 셋이 모두 보인다: 상단 컴팩트 앱바(뒤로가기 글리프 + 컴팩트 타이틀) · 3탭
+ * 세그먼트(가운데 "링크 붙여넣기" + "준비 중" 캡션, 잘림·높이 어긋남 없음) · 지도 아래
+ * "지도를 길게 눌러 위치를 지정하세요" 안내.
+ *
+ * 왜 프리뷰가 필요한가: 실화면 딥링크로는 이 상태(핀 세션)를 안정적으로 못 본다 — 핀은
+ * 지도 롱프레스로만 들어오고 백엔드 역지오코딩을 거친다. 화면은 무상태 프레젠테이션이라
+ * `flow`만 넣으면 그대로 그려진다.
+ */
+const STAY_REGISTER_PREVIEW_FLOW: StayRegisterScreenProps['flow'] = {
+  activeTab: 'pin',
+  query: '',
+  name: '',
+  searchStatus: 'idle',
+  candidates: [],
+  selectedCandidate: null,
+  coordSource: 'PIN',
+  pinAddressStatus: 'idle',
+  coordConfirmed: false,
+  mapSheetState: 'closed',
+  checkIn: null,
+  checkOut: null,
+  dateSheetOpen: false,
+  submitStatus: 'idle',
+};
+
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
   {
@@ -918,6 +950,33 @@ const PREVIEW_STATES: PreviewState[] = [
         onSelectRegion={noop}
         onSelectNearby={noop}
         onBack={noop}
+      />
+    ),
+  },
+  // e05 숙소 등록(TRIP-369) — 세 표면 수정을 한 화면에서 대조(핀 탭·핀 찍기 전).
+  {
+    key: 'stay-register-pin',
+    label: '숙소 등록 · 핀 지정',
+    login: null,
+    render: () => (
+      <StayRegisterScreen
+        flow={STAY_REGISTER_PREVIEW_FLOW}
+        today="2026-06-15"
+        onBack={noop}
+        onSelectTab={noop}
+        onChangeQuery={noop}
+        onChangeName={noop}
+        onSubmitQuery={noop}
+        onRetrySearch={noop}
+        onSelectCandidate={noop}
+        onPinMessage={noop}
+        onOpenMapSheet={noop}
+        onConfirmCoord={noop}
+        onCloseMapSheet={noop}
+        onOpenDateSheet={noop}
+        onPickDate={noop}
+        onCloseDateSheet={noop}
+        onSubmit={noop}
       />
     ),
   },

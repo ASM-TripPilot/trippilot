@@ -235,6 +235,7 @@ export function StayRegisterPage(): ReactElement {
     <StayRegisterScreen
       flow={flow}
       today={todayIso()}
+      onBack={() => router.back()}
       onSelectTab={handleSelectTab}
       onChangeQuery={setQuery}
       onChangeName={setName}
