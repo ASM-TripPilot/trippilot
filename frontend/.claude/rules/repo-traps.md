@@ -15,6 +15,7 @@
 ## home
 
 - **홈 실 데이터** → 서버 API가 **아직 없다**(TRIP-170 범위 밖). `homeFixtures.ts`를 API 훅으로 교체하는 자리.
+- **라이브 홈=discovery 고정, phase 얼굴 CTA는 무심판** → `(tabs)/index.tsx`는 `phase`를 안 넘겨 실착지는 항상 discovery다. `HomeScreen.test.tsx`의 버튼-집합 동치(370-AC-4)도 discovery만 렌더해서 잰다 — collecting의 `home-spots-more`, planning/postTrip의 `home-saved-places-cta`는 `accessibilityRole="button"`+`onPress=undefined`(무동작 버튼)로 남아도 전 심판 green. phase CTA를 배선할 때(U6/U7) 이 사각을 함께 잠가야 한다(TRIP-370 03b 참고-1).
 
 ## stay 검색
 
