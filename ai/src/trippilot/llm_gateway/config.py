@@ -41,6 +41,8 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
 class C1Config:
     model_ids: Mapping[ModelTier, str]  # 주입 필수 — 하드코딩 금지 (BR-U4-08)
     tier_map: Mapping[LlmFeature, ModelTier] = field(default_factory=default_tier_map)
-    timeout_sec: float = 2.5  # BR-U4-04
+    # BR-U4-04 기본값 — 즉답성 feature(INTENT 등) 기준. 단계 예산이 있는 호출
+    # (PREFERENCE_SCORING)은 GatewayFacade.call(timeout_sec=...)로 관통 (TRIP-376).
+    timeout_sec: float = 2.5
     max_tokens: int = 1024
     temperature: float = 0.0  # 결정론 지향

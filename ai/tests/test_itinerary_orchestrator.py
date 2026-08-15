@@ -202,6 +202,18 @@ class _Solvers:
         )
 
 
+class _RecordingLlm:
+    """FakeLlm 래퍼 — 게이트웨이가 실제 넘긴 LlmRequest 기록 (타임아웃 관통 검증)."""
+
+    def __init__(self, canned: str) -> None:
+        self._inner = FakeLlm(canned)
+        self.requests: list = []
+
+    def invoke(self, request):
+        self.requests.append(request)
+        return self._inner.invoke(request)
+
+
 class _BurningClock:
     """호출마다 시간이 흐르는 시계 — 상류가 예산을 다 태우는 상황 재현."""
 
@@ -426,16 +438,21 @@ def test_solver_degradation_recorded_without_duplicate_event() -> None:
 
 
 def test_allocate_day1_and_full_budgets() -> None:
+    """상한(M7·C1) + 솔버 바닥 — 1차 상한은 기존값 유지, 2차 점수 상한 14s (TRIP-376).
+
+    m7_ms·c1_ms는 단계 **상한**, c2_reserved_ms는 솔버 **최소 보장 바닥**이다 —
+    실제 솔버 예산은 solve 시점 잔여 전부(아래 잔여 테스트들이 증명).
+    """
     cfg = OrchestratorConfig()
 
     day1 = allocate(5_000, cfg)
     full = allocate(20_000, cfg)
 
     assert (day1.m7_ms, day1.c1_ms, day1.c2_reserved_ms) == (750, 1_750, 2_500)
-    assert (full.m7_ms, full.c1_ms, full.c2_reserved_ms) == (1_000, 2_500, 10_000)
+    assert (full.m7_ms, full.c1_ms, full.c2_reserved_ms) == (1_000, 14_000, 5_000)
     for b in (day1, full):
         assert b.c2_reserved_ms > 0
-        assert b.m7_ms + b.c1_ms + b.c2_reserved_ms <= b.total_ms
+        assert b.m7_ms + b.c1_ms + b.c2_reserved_ms <= b.total_ms  # 상한 합 ≤ total
 
 
 def test_short_deadline_skips_c1_but_still_returns_itinerary() -> None:
@@ -461,6 +478,62 @@ def test_c2_gets_reserved_budget_even_when_upstream_burns_everything() -> None:
 
     assert sink.deadlines[0] == 2_500                     # = c2_reserved_ms
     assert outcome.solution is not None
+
+
+def test_score_stage_cap_reaches_gateway_call_timeout() -> None:
+    """2차: 점수 상한 14,000ms가 LlmRequest.timeout_sec까지 **관통**한다 (TRIP-376).
+
+    상한만 늘리고 호출 시한이 고정 2.5s로 남으면 실호출(바닥 ~3s, TRIP-373 실측)이
+    먼저 잘려 상향이 무의미하다 — 관통이 이 티켓의 핵심이다.
+    """
+    llm = _RecordingLlm(_scores_json("p1", "p2", "p3"))
+    orchestrator, _, _ = _build(score_llm=llm)
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert outcome.scoring_mode is ScoringMode.LLM
+    assert [r.timeout_sec for r in llm.requests] == [14.0]
+
+
+def test_day1_score_call_timeout_stays_within_stage_cap() -> None:
+    """1차 회귀 가드: day1 점수 호출 시한은 상한 1,750ms — 즉답성이 14s로 늘지 않는다."""
+    llm = _RecordingLlm(_scores_json("p1", "p2", "p3"))
+    orchestrator, _, _ = _build(score_llm=llm)
+
+    orchestrator.generate(_request(), 5_000, _TRACE_ID, _NOW)
+
+    assert [r.timeout_sec for r in llm.requests] == [1.75]
+
+
+def test_solver_receives_full_remaining_when_upstream_finishes_early() -> None:
+    """2차: 상류가 일찍 끝나면 솔버는 바닥(5,000)이 아니라 잔여 전부를 받는다."""
+    orchestrator, _, sink = _build(clock=_BurningClock(step_ms=1_000))
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert outcome.solution is not None
+    assert sink.deadlines[0] >= 15_000  # 고정 분할이었다면 여기서 5,000에 묶인다
+
+
+def test_solver_floor_guaranteed_when_score_exhausts_its_cap() -> None:
+    """2차: 상류가 상한을 소진해도 솔버는 바닥 5,000ms 아래로 내려가지 않는다."""
+    orchestrator, _, sink = _build(clock=_BurningClock(step_ms=5_000))
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert outcome.solution is not None
+    assert sink.deadlines[0] == 5_000  # = total − 상한 합 (구조가 담보하는 바닥)
+
+
+def test_day1_solver_gets_more_than_old_fixed_slice_on_rule_path() -> None:
+    """1차: 규칙 점수로 즉시 끝나면 솔버가 종전 고정 2,500을 넘는 잔여를 받는다."""
+    orchestrator, _, sink = _build(score_llm=FailingLlm())
+
+    outcome = orchestrator.generate(_request(), 5_000, _TRACE_ID, _NOW)
+
+    assert outcome.scoring_mode is ScoringMode.RULE
+    assert sink.deadlines[0] > 2_500
+    assert sink.deadlines[0] == 5_000  # FakeClock 무경과 — 잔여 전부
 
 
 @settings(max_examples=100, deadline=None)

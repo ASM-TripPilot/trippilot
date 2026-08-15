@@ -76,6 +76,8 @@ class GatewayFacade:
         pool: CandidatePool | None,
         trace_id: TraceId,
         now: datetime,
+        *,
+        timeout_sec: float | None = None,
     ) -> TypedResult[tuple[ScoredPoi, ...]]:
         # 1 feature ∈ LlmFeature — 밖이면 호출 자체가 버그 (BR-U4-05, 폴백 아님)
         if not isinstance(feature, LlmFeature):
@@ -93,7 +95,12 @@ class GatewayFacade:
                     prompt_ref=prompt_ref,
                     max_tokens=self._cfg.max_tokens,
                     temperature=self._cfg.temperature,
-                    timeout_sec=self._cfg.timeout_sec,
+                    # 호출측 단계 예산 override (TRIP-376) — PREFERENCE_SCORING처럼
+                    # 단계 상한이 있는 호출이 넘긴다. 미지정이면 설정 기본
+                    # (INTENT 등 즉답성 feature는 그대로 2.5s).
+                    timeout_sec=(
+                        self._cfg.timeout_sec if timeout_sec is None else timeout_sec
+                    ),
                 )
             )
         except LlmTimeoutError as e:
