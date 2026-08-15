@@ -21,7 +21,7 @@ from trippilot.domain.itinerary import (
     SolveMode,
     VisitSlot,
 )
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi import Poi, PoiCategory
 
 
 def _at(day, template: datetime) -> datetime:
@@ -105,46 +105,80 @@ class RuleFallbackSolver:
                     is_llm_score=sp.is_llm_score if sp else False,
                 ))
                 used.add(fb.poi_id)
-            # ② 점수순 말단 삽입 (HC 위반 후보는 스킵, 삽입 불가 시 비워둠)
+            # ② 점수순 말단 삽입 + 식사 시간대 보정 (TRIP-379 — OR-Tools 소프트 항의
+            #    결정론 버전, HC 위반 후보는 스킵, 삽입 불가 시 비워둠).
+            #    규칙: 현재 말단 시각이 아직 식사가 없는 식사 창 안이고 직전 슬롯이
+            #    FOOD가 아니면 FOOD를 우선 시도(창당 1개·연속 금지의 그리디판),
+            #    그 외에는 FOOD 후순위. 배제가 아니라 시도 순서만 바꾼다 —
+            #    FOOD만 남으면 창 밖이어도 배치된다("정보 없음 ≠ 배제"와 같은 정신).
             day_end = _at(day, problem.day_window.end)
-            for cand in ranked:
-                if cand.poi_id in used:
-                    continue
-                poi = self._pois.get(cand.poi_id)
-                if poi is None:
-                    continue
-                stay = STAY_DEFAULT_MIN[poi.category]
+            windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
+            meal_done = [False] * len(windows)
+            remaining = [c for c in ranked if c.poi_id not in used]
+            while remaining:
                 last = slots[-1] if slots else None
-                if last is None:
-                    depart = _at(day, problem.day_window.start)
-                    travel_min = 0
-                    if problem.anchor is not None:
+                ref = last.end_at if last is not None \
+                    else _at(day, problem.day_window.start)
+                ref_mod = ref.hour * 60 + ref.minute
+                last_poi = self._pois.get(last.poi_id) if last is not None else None
+                last_is_food = (last_poi is not None
+                                and last_poi.category is PoiCategory.FOOD)
+                food_first = not last_is_food and any(
+                    not done and lo <= ref_mod < hi
+                    for done, (lo, hi) in zip(meal_done, windows))
+
+                def _is_food(c) -> bool:
+                    p = self._pois.get(c.poi_id)
+                    return p is not None and p.category is PoiCategory.FOOD
+
+                # 안정 정렬 — 선호 클래스 먼저, 클래스 안에서는 ranked 순서 유지
+                order = sorted(remaining, key=lambda c: _is_food(c) != food_first)
+                placed = False
+                for cand in order:
+                    remaining.remove(cand)  # 실패든 성공이든 그 일자 재시도 없음
+                    poi = self._pois.get(cand.poi_id)
+                    if poi is None:
+                        continue
+                    stay = STAY_DEFAULT_MIN[poi.category]
+                    if last is None:
+                        depart = _at(day, problem.day_window.start)
+                        travel_min = 0
+                        if problem.anchor is not None:
+                            travel_min = self._est.estimate(
+                                problem.anchor, poi.coord, problem.transport
+                            ).internal_minutes
+                    else:
+                        depart = last.end_at
                         travel_min = self._est.estimate(
-                            problem.anchor, poi.coord, problem.transport
-                        ).internal_minutes
-                else:
-                    last_poi = self._pois.get(last.poi_id)
-                    depart = last.end_at
-                    travel_min = self._est.estimate(
-                        last_poi.coord, poi.coord, problem.transport
-                    ).internal_minutes if last_poi else 0
-                start = depart + timedelta(minutes=travel_min)
-                end = start + timedelta(minutes=stay)
-                if end > day_end:
-                    continue  # day window 초과 (HC4)
-                if not _open_ok(poi, start, end):
-                    continue  # 영업시간 (HC1)
-                # 고정 블록과의 충돌: 말단 삽입이라 뒤에 오는 고정 블록만 위험
-                conflict = any(not (end <= s.start_at or start >= s.end_at)
-                               for s in slots)
-                if conflict:
-                    continue
-                slots.append(VisitSlot(
-                    poi_id=cand.poi_id, start_at=start, end_at=end,
-                    stay_min=stay, score=cand.score, is_llm_score=cand.is_llm_score,
-                ))
-                used.add(cand.poi_id)
-                slots.sort(key=lambda s: s.start_at)
+                            last_poi.coord, poi.coord, problem.transport
+                        ).internal_minutes if last_poi else 0
+                    start = depart + timedelta(minutes=travel_min)
+                    end = start + timedelta(minutes=stay)
+                    if end > day_end:
+                        continue  # day window 초과 (HC4)
+                    if not _open_ok(poi, start, end):
+                        continue  # 영업시간 (HC1)
+                    # 고정 블록과의 충돌: 말단 삽입이라 뒤에 오는 고정 블록만 위험
+                    conflict = any(not (end <= s.start_at or start >= s.end_at)
+                                   for s in slots)
+                    if conflict:
+                        continue
+                    slots.append(VisitSlot(
+                        poi_id=cand.poi_id, start_at=start, end_at=end,
+                        stay_min=stay, score=cand.score,
+                        is_llm_score=cand.is_llm_score,
+                    ))
+                    used.add(cand.poi_id)
+                    slots.sort(key=lambda s: s.start_at)
+                    if poi.category is PoiCategory.FOOD:
+                        s_mod = start.hour * 60 + start.minute
+                        for w, (lo, hi) in enumerate(windows):
+                            if s_mod < hi and s_mod + stay > lo:  # 창과 겹침
+                                meal_done[w] = True
+                    placed = True
+                    break  # 말단이 바뀌었으니 선호 재평가
+                if not placed:
+                    break  # 남은 후보 전부 배치 불가 — 일자 종료
             days.append(DaySolution(
                 date=day, slots=tuple(slots),
                 fixed_blocks=placed_fixed_blocks(problem, day, slots),  # TRIP-343

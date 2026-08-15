@@ -52,6 +52,18 @@ class SolverConfig:
     detour_factor: float = 1.3          # 직선거리 우회계수
     speeds_kmph: dict[TransportMode, float] = field(default_factory=_default_speeds)
     safety: dict[TransportMode, float] = field(default_factory=_default_safety)
+    # ── 식사 시간대 소프트 보정 (TRIP-379 신설 — 정본에 기존 규칙 없음:
+    # ai-data-design.md §2.2는 RESTAURANT 기본 체류 60분만 정의하고, 카테고리-시간대
+    # 적합성 규칙은 이 티켓이 처음 도입한다. 하드 제약(HC) 아님 — 식당 0개 풀에서도
+    # 일정은 나온다("정보 없음 ≠ 배제").)
+    # 창은 분-of-day [시작, 끝]: 점심 11:00~14:00, 저녁 17:00~20:00.
+    lunch_window_min: tuple[int, int] = (11 * 60, 14 * 60)
+    dinner_window_min: tuple[int, int] = (17 * 60, 20 * 60)
+    # 가중 단위 = 선호 점수와 동일 축(score ∈ [0,1]). 보조적 크기 원칙:
+    # 취향 점수 갭이 한 단(≥0.3) 이상이면 점수 서열이 그대로 이기고, 동률·근소 갭에서만
+    # 식사 리듬이 개입한다 — 보정이 취향 점수를 압도하지 않도록.
+    meal_bonus: float = 0.3             # 식사 창에 FOOD 1개 배치 시 창당 보상
+    meal_penalty: float = 0.2           # 창 밖 FOOD·FOOD 연속 배치 억제 (건당)
 
     def __post_init__(self) -> None:
         for name in ("or_tools_limit_ms", "or_tools_min_ms", "llm_stage_timeout_ms",
@@ -60,3 +72,10 @@ class SolverConfig:
                 raise ValueError(f"{name} 음수 불가")
         if self.detour_factor <= 0:
             raise ValueError("detour_factor 양수 필요")
+        for name in ("lunch_window_min", "dinner_window_min"):
+            lo, hi = getattr(self, name)
+            if not (0 <= lo < hi <= 1440):
+                raise ValueError(f"{name} 은 0 ≤ 시작 < 끝 ≤ 1440 분이어야 함")
+        for name in ("meal_bonus", "meal_penalty"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"{name} 음수 불가")
