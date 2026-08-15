@@ -29,7 +29,7 @@ from trippilot.domain.itinerary import (
     SolveMode,
     VisitSlot,
 )
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi import Poi, PoiCategory
 
 _PREFILTER_TOP_K = 60
 _MIN_DAY_MS = 100
@@ -157,7 +157,10 @@ class OrToolsSolver:
                     m.Add(start[j - 1] >= start[i - 1] + nodes[i - 1]["stay"]
                           + travel(i - 1, j - 1)).OnlyEnforceIf(lit)
         m.AddCircuit(arcs)
-        m.Maximize(sum(int(n["score"] * 1000) * visit[i] for i, n in enumerate(nodes)))
+        obj_terms: list = [int(n["score"] * 1000) * visit[i]
+                           for i, n in enumerate(nodes)]
+        obj_terms += self._meal_soft_terms(m, nodes, visit, start, arcs)
+        m.Maximize(sum(obj_terms))
 
         # 웜스타트 힌트 = 규칙해 (벤치마크 실증 구성)
         hint = self._greedy_hint(problem, day, used)
@@ -194,6 +197,62 @@ class OrToolsSolver:
             ))
         slots.sort(key=lambda s: s.start_at)
         return slots
+
+    def _meal_soft_terms(self, m: cp_model.CpModel, nodes, visit, start,
+                         arcs) -> list:
+        """식사 시간대 소프트 보정 항 (TRIP-379 — 하드 제약 아님, 목적함수만).
+
+        규칙(폴백 솔버와 동일 의미):
+          ① 각 식사 창(점심·저녁)에 FOOD 슬롯이 1개 배치되면 창당 +meal_bonus
+          ② 창 밖 FOOD 배치는 건당 -meal_penalty
+          ③ FOOD→FOOD 연속 배치(인접 아크)는 건당 -meal_penalty
+
+        스케일 근거: 점수 항이 int(score·1000)이고 score ∈ [0,1]이므로 보정도 같은
+        ×1000 축에 얹는다. 기본 보상 300·억제 200은 점수 한 단(0.2~0.3) 크기 —
+        취향 점수 갭이 그보다 크면 점수 서열이 그대로 이기고(보정이 취향을 압도 금지),
+        동률·근소 갭에서만 배치 시각·순서를 움직인다. 어느 항도 방문 가능성 자체를
+        제약하지 않으므로 HC1~4 충족 해 집합은 불변(검증기 무접촉).
+        """
+        bonus = int(self._cfg.meal_bonus * 1000)
+        penalty = int(self._cfg.meal_penalty * 1000)
+        food = [i for i, n in enumerate(nodes)
+                if n["poi"].category is PoiCategory.FOOD]
+        if not food or (bonus == 0 and penalty == 0):
+            return []
+        terms: list = []
+        in_window: dict[int, list] = {i: [] for i in food}
+        windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
+        for w_idx, (lo, hi) in enumerate(windows):
+            lits = []
+            for i in food:
+                n = nodes[i]
+                if n["lo"] > hi - n["stay"] or n["hi"] < lo:
+                    continue  # 이 창 안 배치가 시간창상 불가능 — 변수 생략
+                b = m.NewBoolVar(f"meal{w_idx}_{i}")
+                # b ⇒ (방문 ∧ 슬롯이 창 안에 완전 포함). 역방향 함의는 불필요 —
+                # b=1이 보상·감면으로만 작용하므로 유리하면 솔버가 스스로 세운다.
+                m.AddImplication(b, visit[i])
+                m.Add(start[i] >= lo).OnlyEnforceIf(b)
+                m.Add(start[i] + n["stay"] <= hi).OnlyEnforceIf(b)
+                lits.append(b)
+                in_window[i].append(b)
+            if lits:
+                r = m.NewBoolVar(f"meal_win{w_idx}")
+                m.AddBoolOr(lits).OnlyEnforceIf(r)  # r ⇒ 창에 FOOD ≥ 1
+                terms.append(bonus * r)             # ① 창당 1회 보상
+        # ② 창 밖 FOOD 억제: 방문 FOOD마다 -penalty, 창 안(b=1)이면 +penalty로 상쇄.
+        #    점심·저녁 창이 겹치지 않아 한 노드의 b는 최대 1개만 참 — 과잉 상쇄 없음.
+        for i in food:
+            terms.append(-penalty * visit[i])
+            for b in in_window[i]:
+                terms.append(penalty * b)
+        # ③ FOOD→FOOD 인접 아크 억제 (아크 (i+1, j+1) ↔ 노드 i→j 직행)
+        food_set = set(food)
+        for i, j, lit in arcs:
+            if (i != j and i >= 1 and j >= 1
+                    and i - 1 in food_set and j - 1 in food_set):
+                terms.append(-penalty * lit)
+        return terms
 
     def _day_open_window(self, poi: Poi, day) -> tuple[int, int] | None:
         """해당 요일 영업창 (없음=종일, 요일 미포함=휴무). 다중 창은 최장 창 채택
