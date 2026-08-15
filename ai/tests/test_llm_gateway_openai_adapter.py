@@ -55,7 +55,7 @@ def test_request_mapping_is_faithful() -> None:
     assert client.kwargs is not None
     assert client.kwargs["model"] == "model-under-test"
     assert client.kwargs["max_completion_tokens"] == 1024  # GPT-5 계열 신형 키
-    assert client.kwargs["temperature"] == 0.0
+    assert "temperature" not in client.kwargs  # GPT-5 계열 거부 — 미전달 (TRIP-377)
     assert client.kwargs["timeout"] == 2.5  # BR-U4-04 타임아웃 전달
     assert client.kwargs["messages"] == [{"role": "user", "content": "점수를 매겨라"}]
 
@@ -100,7 +100,7 @@ def test_responses_request_mapping_is_faithful() -> None:
     assert client.kwargs is not None
     assert client.kwargs["model"] == "model-under-test"
     assert client.kwargs["max_output_tokens"] == 1024  # responses 쪽 토큰 상한 키
-    assert client.kwargs["temperature"] == 0.0
+    assert "temperature" not in client.kwargs  # GPT-5 계열 거부 — 미전달 (TRIP-377)
     assert client.kwargs["timeout"] == 2.5  # BR-U4-04 타임아웃 전달
     assert client.kwargs["input"] == "점수를 매겨라"
 

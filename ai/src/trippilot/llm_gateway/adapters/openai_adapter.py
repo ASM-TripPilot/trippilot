@@ -38,10 +38,12 @@ class OpenAIAdapter:
         started = time.monotonic()
         try:
             if self._api == "responses":
+                # temperature 미전달 — GPT-5 계열은 파라미터째 거부(400,
+                # "Unsupported parameter: 'temperature'"). 결정론 의도(0.0)는 이
+                # 벤더에서 실현 불가 — 모델 기본값에 맡긴다 (TRIP-377).
                 resp = self._client.responses.create(
                     model=request.model_id,
                     max_output_tokens=request.max_tokens,
-                    temperature=request.temperature,
                     timeout=request.timeout_sec,
                     input=request.prompt,
                 )
@@ -54,7 +56,7 @@ class OpenAIAdapter:
                     model=request.model_id,
                     # GPT-5 계열은 구형 max_tokens 키를 거부한다 — 신형 키로 전달
                     max_completion_tokens=request.max_tokens,
-                    temperature=request.temperature,
+                    # temperature 미전달 — responses와 동일 사유 (TRIP-377)
                     timeout=request.timeout_sec,
                     messages=[{"role": "user", "content": request.prompt}],
                 )
