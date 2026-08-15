@@ -548,6 +548,24 @@ class ItineraryOrchestrator:
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
                           "c1_empty_after_closed_set")
             return self._rule_scores(request, pool), ScoringMode.RULE
+        if result.error is not None:
+            # 부분 청크 실패 (TRIP-378) — 워커가 성공 청크만 병합해 error에 표기했다.
+            # 실패 청크의 FallbackEvent는 게이트웨이가 청크별로 이미 발행했으므로
+            # 여기서는 결과에만 싣는다 (강등 이중 계수 방지).
+            steps.append(Degradation(stage="llm",
+                                     reason=f"c1_partial: {result.error}"))
+        missing = pool.poi_ids - {sp.poi_id for sp in scored}
+        if missing:
+            # 점수 없는 후보는 버리지 않고 규칙 점수로 보충한다 (TRIP-378) —
+            # 후보 탈락은 INV-1 게이트의 몫이지 점수 누락의 몫이 아니다.
+            # 규칙 점수 실행은 호출측 소유(BR-U4-09)고, 보충은 오케스트레이터
+            # 스스로의 결정이라 여기서 관측한다 (침묵 금지).
+            self._observe(trace_id, now, "llm", "llm_score", "llm_score",
+                          f"rule_backfill:{len(missing)}")
+            scored = scored + tuple(
+                sp for sp in self._rule_scores(request, pool)
+                if sp.poi_id in missing
+            )
         return scored, ScoringMode.LLM
 
     def _rule_scores(

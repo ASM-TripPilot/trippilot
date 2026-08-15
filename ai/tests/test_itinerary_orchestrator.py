@@ -16,8 +16,10 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -28,6 +30,7 @@ from trippilot.llm_gateway.gates.base import GateOutcome
 from trippilot.llm_gateway.gates.explanation import ExplanationGate
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
+from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.solver_engine.config import SolverConfig
@@ -45,7 +48,8 @@ from trippilot.domain.common import (
 from trippilot.domain.context import Principal, ResourceRef
 from trippilot.domain.itinerary import FixedBlock, SolveMode, TimeWindow
 from trippilot.domain.llm import ModelTier, ScoredPoi
-from trippilot.domain.observability import FallbackEvent
+from trippilot.domain.observability import FallbackEvent, ScoreChunkEvent
+from trippilot.ports.llm_port import LlmRequest, LlmResponse
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.prompt import PromptRef
@@ -236,13 +240,14 @@ def _build(
     store_value: object = _PERSONA,
     clock=None,
     config: OrchestratorConfig | None = None,
+    renderer=None,
 ):
     trace = InMemoryTrace()
     builder = CandidatePoolBuilder(InMemoryPoi(tuple(pois)), M7Config())
     resolver = ContextResolver(_Store(store_value))
     gateway = GatewayFacade(
         score_llm if score_llm is not None else FakeLlm(_scores_json("p1", "p2", "p3")),
-        _Renderer(),
+        renderer if renderer is not None else _Renderer(),
         score_gate if score_gate is not None else ClosedSetGate(),
         _C1CFG,
         trace,
@@ -859,3 +864,76 @@ def test_solver_conflict_failure_keeps_pool_facts_but_no_solved_at() -> None:
     assert outcome.solved_at is None                   # 검증 시각을 지어내지 않는다
     assert outcome.candidates_summary is not None      # 풀은 실제로 만들었다
     assert outcome.candidates_summary.pool_size == 3
+
+
+# ── ⑨ 병렬 청킹 부분 실패 · 규칙 점수 보충 (TRIP-378) ────────────────
+
+
+_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+_CANDIDATE_LINE = re.compile(r"^- (\S+) \|", re.MULTILINE)
+
+
+class _ChunkFailLlm:
+    """특정 poi_id가 후보에 실린 청크만 실패, 나머지 청크는 후보 전원 점수 응답."""
+
+    def __init__(self, poison: str) -> None:
+        self._poison = poison
+
+    def invoke(self, request: LlmRequest) -> LlmResponse:
+        ids = _CANDIDATE_LINE.findall(request.prompt)
+        if self._poison in ids:
+            raise RuntimeError("chunk down (fake)")
+        text = json.dumps({"scores": [{"poiId": x, "score": 0.5} for x in ids]})
+        return LlmResponse(
+            raw_text=text, input_tokens=1, output_tokens=1, latency_ms=1,
+            model_id=request.model_id,
+        )
+
+
+def test_partial_chunk_failure_backfills_failed_chunk_with_rule_scores() -> None:
+    """청크 1개 실패 → 성공분은 LLM 점수 유지, 실패 청크 POI는 규칙 점수 보충.
+
+    규칙 점수 산정은 호출측(오케스트레이터, BR-U4-09) 소유 — 워커는 성공분만 담은
+    TypedResult(+error 표기)를 내고, 병합 시점 보충은 여기서 일어난다. 후보 탈락 0.
+    """
+    pois = tuple(_poi(i, 0.0001 * i) for i in range(1, 41))  # 풀 40건 → 2청크
+    sorted_ids = sorted(str(p.poi_id) for p in pois)
+    orchestrator, trace, sink = _build(
+        score_llm=_ChunkFailLlm(sorted_ids[0]),  # 첫 청크(정렬 앞 20건)만 실패
+        pois=pois,
+        renderer=PromptRegistry(_PROMPTS_DIR),   # 프롬프트에 후보가 실려야 청크 구분 가능
+    )
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert outcome.status is GenerationStatus.DEGRADED
+    assert outcome.scoring_mode is ScoringMode.LLM     # 성공 청크가 있다 — LLM 모드 유지
+    assert any(d.reason.startswith("c1_partial") for d in outcome.degradations)
+    candidates = sink.problems[0].candidates
+    assert len(candidates) == 40                       # 실패 청크도 후보에서 안 빠진다
+    llm_ids = {str(c.poi_id) for c in candidates if c.is_llm_score}
+    rule_ids = {str(c.poi_id) for c in candidates if not c.is_llm_score}
+    assert llm_ids == set(sorted_ids[20:])             # 성공 청크 — LLM 점수 그대로
+    assert rule_ids == set(sorted_ids[:20])            # 실패 청크 — 규칙 점수 보충
+    assert any(
+        e.reason == "rule_backfill:20" for e in _orchestrator_events(trace)
+    )                                                  # 보충은 조립 스스로의 결정 — 관측
+    assert len(trace.of_type(ScoreChunkEvent)) == 1    # 청킹 요약 관측 (침묵 금지)
+
+
+def test_llm_omission_backfilled_with_rule_scores_on_single_call_path() -> None:
+    """단일 호출 경로에서 LLM이 일부 POI를 누락해도 후보에서 빠지지 않는다 (TRIP-378).
+
+    누락 보충은 강등이 아니라 점수 출처 혼합 — 결과는 SUCCESS, 보충 사실은
+    오케스트레이터 관측 이벤트로 남는다.
+    """
+    orchestrator, trace, sink = _build(score_llm=FakeLlm(_scores_json("p1")))
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert outcome.status is GenerationStatus.SUCCESS
+    assert outcome.scoring_mode is ScoringMode.LLM
+    candidates = sink.problems[0].candidates
+    assert {str(c.poi_id) for c in candidates} == {"p1", "p2", "p3"}
+    assert {str(c.poi_id) for c in candidates if c.is_llm_score} == {"p1"}
+    assert any(e.reason == "rule_backfill:2" for e in _orchestrator_events(trace))

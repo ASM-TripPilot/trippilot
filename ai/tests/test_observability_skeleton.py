@@ -1,7 +1,7 @@
 """U1 — LLMOps 관측 + INV-4 절편 PBT.
 
 증명하는 것:
-  ① 직렬화 왕복 (U5-P10): 관측 이벤트 4종 모두 왕복 동일
+  ① 직렬화 왕복 (U5-P10): 관측 이벤트 5종 모두 왕복 동일
   ② TypedResult 불변식   : is_fallback=True면 value는 None (INV-4)
   ③ INV-4 핵심          : LLM 실패 시 FallbackEvent가 발행된다 (침묵 실패 금지)
   ④ NFR-7.1            : 성공 호출도 LlmCallRecord로 계측된다
@@ -76,7 +76,7 @@ def _call_with_fallback(
         return TypedResult(value=None, is_fallback=True, error=str(e), call_record=None)
 
 
-# ① 관측 이벤트 직렬화 왕복 (4종)
+# ① 관측 이벤트 직렬화 왕복 (5종)
 @given(ev=trace_events())
 def test_trace_event_serialization_roundtrip(ev) -> None:
     assert ev.__class__.from_dict(ev.to_dict()) == ev

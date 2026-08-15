@@ -69,6 +69,16 @@ class GatewayFacade:
         self._router = TierRouter(config)
         self._trace = trace
 
+    @property
+    def config(self) -> C1Config:
+        """주입 설정 노출(읽기 전용) — 워커 계층 청킹 정책이 같은 설정을 본다 (TRIP-378)."""
+        return self._cfg
+
+    @property
+    def trace(self) -> TracePort:
+        """관측 콘센트 노출(읽기 전용) — 워커 계층 이벤트도 같은 곳으로 발행 (INV-4)."""
+        return self._trace
+
     def call(
         self,
         feature: LlmFeature,
