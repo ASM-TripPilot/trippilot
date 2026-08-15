@@ -49,6 +49,8 @@ class PreferenceScoringWorker:
         principal: Principal,
         trace_id: TraceId,
         now: datetime,
+        *,
+        timeout_sec: float | None = None,
     ) -> TypedResult[tuple[ScoredPoi, ...]]:
         # 권한 위반은 폴백이 아니라 즉시 예외 (D31 — 부분 성공 0)
         persona = self._resolver.resolve(principal, persona_ref)
@@ -62,4 +64,7 @@ class PreferenceScoringWorker:
             pool,
             trace_id,
             now,
+            # 호출측 단계 예산이 호출 타임아웃까지 관통 (TRIP-376) — 미지정이면
+            # 게이트웨이 기본(2.5s)이라 실호출 바닥 ~3s에서 항상 잘린다.
+            timeout_sec=timeout_sec,
         )

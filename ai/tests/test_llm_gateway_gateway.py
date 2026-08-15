@@ -112,6 +112,34 @@ def test_success_path_returns_value_and_consistent_record() -> None:
     assert trace.of_type(FallbackEvent) == []
 
 
+class _RecordingLlm:
+    """FakeLlm 래퍼 — 게이트웨이가 넘긴 LlmRequest 기록 (타임아웃 정합 검증)."""
+
+    def __init__(self) -> None:
+        self._inner = FakeLlm()
+        self.requests: list = []
+
+    def invoke(self, request):
+        self.requests.append(request)
+        return self._inner.invoke(request)
+
+
+def test_call_timeout_default_and_override() -> None:
+    """timeout_sec 미지정이면 설정 기본(2.5s — INTENT 등 즉답성 feature 불변),
+    지정하면 그 값이 LlmRequest까지 관통한다 (TRIP-376)."""
+    llm = _RecordingLlm()
+    facade, _ = _facade(llm, AcceptAllGate(_scored("p1")))
+
+    _call(facade)  # override 없음
+    facade.call(
+        LlmFeature.PREFERENCE_SCORING, {"k": "v"}, None, _TRACE_ID, _NOW,
+        timeout_sec=14.0,
+    )
+
+    assert [r.timeout_sec for r in llm.requests] == [_CFG.timeout_sec, 14.0]
+    assert _CFG.timeout_sec == 2.5
+
+
 # ── GW-P1: 실패 경로 전부 동일 형태로 수렴 ──────────────────
 
 

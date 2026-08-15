@@ -139,14 +139,22 @@ class GenerateItineraryRequest:
 class OrchestratorConfig:
     """시한 배분 파라미터 (services.md §5.1 타임아웃 정책의 주입 컨테이너).
 
+    배분 방식은 **단계별 상한 + 솔버는 잔여 전부** (TRIP-376, 고정 분할 폐기):
+    상류(M7·C1)는 상한까지만 쓰고, 솔버는 solve 시점 잔여를 전부 받는다.
     day1 5초·전체 20초 양쪽에서 성립해야 하므로 **고정 ms가 아니라 비율+상한**이다.
     """
 
-    c2_min_share: float = 0.5     # 전체 예산 중 C2가 최소로 가져가는 몫
-    c2_floor_ms: int = 1_000      # C2 최소 절대 예산 (전체가 더 작으면 전체까지만)
+    c2_min_share: float = 0.5     # 전체 예산 중 솔버 바닥이 가져가는 몫 (소예산용)
+    c2_floor_ms: int = 1_000      # 솔버 바닥 절대 하한 (전체가 더 작으면 전체까지만)
+    # 솔버 바닥 상한 — 솔버는 어차피 solve 시점 잔여를 **전부** 받으므로(④) 바닥을
+    # 키울 이유가 없고, 바닥이 크면 C1 상한이 그만큼 줄어든다. OR-Tools 실측
+    # 3.0~3.1s(193건, TRIP-373) + 여유 = 5s (TRIP-376).
+    c2_cap_ms: int = 5_000
     m7_share: float = 0.3         # 상류(M7+C1) 몫 중 M7 관측 배분
     m7_max_ms: int = 1_000        # M7은 로컬 조회 — 이 이상 걸리면 관측 대상
-    c1_max_ms: int = 2_500        # C1 LLM 호출 시한 정본 (services §5.1)
+    # C1 점수 단계 상한 — PREFERENCE_SCORING 실호출 바닥 ~3s(7건 3.2s)·변동 3~4배
+    # (TRIP-373 실측). 종전 2.5s에서는 LLM 점수가 구조적으로 미사용이었다 (TRIP-376).
+    c1_max_ms: int = 14_000
     c1_min_ms: int = 800          # 이보다 적게 배분되면 LLM 호출 자체를 스킵 (DL-2)
     explanation_min_ms: int = 1_500  # 설명 부착(선택 단계) 진입 하한
 
@@ -155,6 +163,8 @@ class OrchestratorConfig:
             raise ValueError("c2_min_share ∈ (0, 1)")
         if not 0.0 <= self.m7_share < 1.0:
             raise ValueError("m7_share ∈ [0, 1)")
+        if self.c2_cap_ms <= 0:
+            raise ValueError("c2_cap_ms 양수 필요 (total>0 ⇒ c2>0 불변식의 전제)")
         for name in ("c2_floor_ms", "m7_max_ms", "c1_max_ms", "c1_min_ms",
                      "explanation_min_ms"):
             if getattr(self, name) < 0:
@@ -163,11 +173,16 @@ class OrchestratorConfig:
 
 @dataclass(frozen=True, slots=True)
 class DeadlineBudget:
-    """단계별 시한 배분 결과.
+    """단계별 시한 배분 결과 — **상류는 상한, 솔버는 잔여 전부** (TRIP-376).
 
-    불변식(구조 강제): 상류(M7+C1) 배분의 합은 C2 몫을 침범할 수 없고, 전체 예산이
-    양수인 한 **C2 예산은 0보다 크다**. "배분이 나빠서 항상 최소 일정만 나오는" 상태는
-    이 타입의 인스턴스로 표현 자체가 불가능하다.
+    `m7_ms`·`c1_ms`는 각 단계의 **상한**(C1은 게이트웨이 호출 타임아웃으로 관통
+    강제)이고, `c2_reserved_ms`는 솔버의 **최소 보장 바닥**이다. 솔버의 실제 예산은
+    solve 시점 잔여 전부(≥ 바닥) — 앞 단계가 일찍 끝나면 그만큼 솔버가 더 받는다.
+
+    불변식(구조 강제): 상한 합 + 바닥 ≤ total (상한 합이 바닥을 침범할 수 없다 —
+    상한을 다 써도 바닥은 남는다), 전체 예산이 양수인 한 **바닥은 0보다 크다**.
+    "배분이 나빠서 항상 최소 일정만 나오는" 상태는 이 타입의 인스턴스로 표현 자체가
+    불가능하다.
     """
 
     total_ms: int
@@ -179,9 +194,9 @@ class DeadlineBudget:
         if min(self.m7_ms, self.c1_ms, self.c2_reserved_ms) < 0:
             raise ValueError("배분은 음수가 될 수 없음")
         if self.m7_ms + self.c1_ms + self.c2_reserved_ms > max(0, self.total_ms):
-            raise ValueError("상류 배분이 C2 몫을 침범함")
+            raise ValueError("상한 합이 솔버 바닥을 침범함")
         if self.total_ms > 0 and self.c2_reserved_ms <= 0:
-            raise ValueError("C2 예산이 0 이하 — 배분 규칙 위반")
+            raise ValueError("솔버 바닥이 0 이하 — 배분 규칙 위반")
 
 
 class ScoringMode(Enum):
@@ -290,14 +305,20 @@ _ZERO_BUDGET = DeadlineBudget(total_ms=0, m7_ms=0, c1_ms=0, c2_reserved_ms=0)
 
 
 def allocate(total_ms: int, config: OrchestratorConfig) -> DeadlineBudget:
-    """전체 예산 → 단계별 배분. C2 몫을 **먼저 떼고** 남은 것을 상류가 나눈다.
+    """전체 예산 → 단계별 상한 배분. 솔버 바닥을 **먼저 떼고** 남은 것이 상류 상한이다.
 
-    C2를 나중에 계산하면 상류가 다 써버렸을 때 0 이하가 된다 — 순서가 곧 보장이다.
-    - 5,000ms(day1): C2 2,500 예약 / M7 750 / C1 1,750
-    - 20,000ms(전체): C2 10,000 예약 / M7 1,000 / C1 2,500(정본 상한에서 절단)
+    바닥을 나중에 계산하면 상류가 다 써버렸을 때 0 이하가 된다 — 순서가 곧 보장이다.
+    솔버의 실제 예산은 이 바닥이 아니라 solve 시점 잔여 전부다(_generate ④).
+    - 5,000ms(day1): 바닥 2,500 / M7 상한 750 / C1 상한 1,750 (즉답 목적 —
+      실호출 바닥 ~3s > 상한이라 규칙 점수 유지가 의도)
+    - 20,000ms(전체): 바닥 5,000 / M7 상한 1,000 / C1 상한 14,000 (TRIP-376 —
+      점수 실호출 바닥 ~3s·변동 3~4배(TRIP-373 실측)라 종전 2.5s 배분은 미사용)
     """
     total = max(0, total_ms)
-    c2_reserved = min(total, max(config.c2_floor_ms, int(total * config.c2_min_share)))
+    c2_reserved = min(
+        total, config.c2_cap_ms,
+        max(config.c2_floor_ms, int(total * config.c2_min_share)),
+    )
     upstream = max(0, total - c2_reserved)
     m7 = min(config.m7_max_ms, int(upstream * config.m7_share))
     c1 = min(config.c1_max_ms, max(0, upstream - m7))
@@ -416,7 +437,10 @@ class ItineraryOrchestrator:
             excluded_poi_ids=request.excluded_poi_ids,  # 2단계 생성 그대로 통과
         )
 
-        # ④ C2 solve — 잔여 전액을 넘기되 예약분 아래로는 내려가지 않는다.
+        # ④ C2 solve — 솔버는 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
+        #    앞 단계가 일찍 끝나면 그만큼 더 받고(2차에서 점수 4s면 솔버 ~15s),
+        #    상한 밖 소모(m7 초과 등)가 있어도 바닥 아래로는 내려가지 않는다.
+        #    OR-Tools는 anytime — 잔여 시간이 곧 최적성이고 해 자체는 나온다.
         #    체인 폴백(OR-Tools→LLM→규칙→최소)은 C2가 이미 갖고 있다. 여기서
         #    재시도·재조립을 얹으면 이중 폴백이 되어 시한만 두 배로 쓴다 — 하지 않는다.
         c2_ms = max(
@@ -490,8 +514,13 @@ class ItineraryOrchestrator:
             return self._rule_scores(request, pool), ScoringMode.RULE
 
         try:
+            # 단계 상한이 게이트웨이 호출 타임아웃까지 **관통**한다 (TRIP-376) —
+            # 상한만 늘리고 호출 시한이 고정 2.5s로 남으면 실호출(바닥 ~3s,
+            # TRIP-373 실측)이 먼저 잘려 상향이 무의미하다. c2 llm_solver와 같은
+            # min(상한, 잔여) 패턴.
             result = self._scoring.score(
-                pool, request.persona_ref, request.principal, trace_id, now
+                pool, request.persona_ref, request.principal, trace_id, now,
+                timeout_sec=min(budget.c1_ms, remaining_ms) / 1000.0,
             )
         except PermissionDeniedError:
             raise  # D31 — 폴백 대상 아님 (generate가 FAILED로 수렴시킨다)
