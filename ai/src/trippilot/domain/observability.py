@@ -143,6 +143,50 @@ class GateDropEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class ScoreChunkEvent:
+    """PREFERENCE_SCORING 병렬 청킹 요약 (TRIP-378, 의무: U4 PreferenceScoringWorker).
+
+    청크 수·성공/실패 수를 침묵 없이 남긴다(INV-4) — 부분 실패(성공 청크만 병합)가
+    지표에서 보이게 한다. 청크별 개별 호출은 게이트웨이가 LlmCallRecord·FallbackEvent로
+    이미 계측하므로, 이 이벤트는 병합 관점의 요약 1건이다.
+    """
+
+    trace_id: TraceId
+    occurred_at: datetime
+    component: str
+    feature: str
+    pool_size: int
+    chunk_count: int
+    success_count: int
+    failure_count: int
+
+    def to_dict(self) -> dict:
+        return {
+            "trace_id": str(self.trace_id),
+            "occurred_at": to_iso(self.occurred_at),
+            "component": self.component,
+            "feature": self.feature,
+            "pool_size": self.pool_size,
+            "chunk_count": self.chunk_count,
+            "success_count": self.success_count,
+            "failure_count": self.failure_count,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ScoreChunkEvent":
+        return cls(
+            trace_id=TraceId(d["trace_id"]),
+            occurred_at=from_iso(d["occurred_at"]),
+            component=d["component"],
+            feature=d["feature"],
+            pool_size=d["pool_size"],
+            chunk_count=d["chunk_count"],
+            success_count=d["success_count"],
+            failure_count=d["failure_count"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SolverRunRecord:
     """솔버 실행 완료 시 발행 (의무: U2 SolverFacade). 5초 게이트·통과율 계측."""
 
@@ -179,4 +223,6 @@ class SolverRunRecord:
 
 
 # TracePort.emit()의 인자 타입 (domain-entities.md §8)
-TraceEvent = LlmCallRecord | FallbackEvent | GateDropEvent | SolverRunRecord
+TraceEvent = (
+    LlmCallRecord | FallbackEvent | GateDropEvent | ScoreChunkEvent | SolverRunRecord
+)

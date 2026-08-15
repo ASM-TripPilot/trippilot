@@ -1,6 +1,6 @@
 """[LLMOps] 관측 이벤트 generator (business-logic-model.md §4).
 
-trace_events: 4종 Union 중 하나 — 직렬화 왕복(U5-P10) 대상.
+trace_events: 5종 Union 중 하나 — 직렬화 왕복(U5-P10) 대상.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from trippilot.domain.observability import (
     FallbackEvent,
     GateDropEvent,
     LlmCallRecord,
+    ScoreChunkEvent,
     SolverRunRecord,
 )
 from trippilot.domain.prompt import PromptRef
@@ -87,6 +88,25 @@ def gate_drop_events() -> st.SearchStrategy[GateDropEvent]:
     return _build()
 
 
+def score_chunk_events() -> st.SearchStrategy[ScoreChunkEvent]:
+    @st.composite
+    def _build(draw) -> ScoreChunkEvent:
+        chunk_count = draw(st.integers(1, 10))
+        success = draw(st.integers(0, chunk_count))
+        return ScoreChunkEvent(
+            trace_id=TraceId(draw(st.text(min_size=1, max_size=12))),
+            occurred_at=draw(_datetimes()),
+            component=draw(st.text(min_size=1, max_size=15)),
+            feature=draw(st.text(min_size=1, max_size=15)),
+            pool_size=draw(st.integers(0, 300)),
+            chunk_count=chunk_count,
+            success_count=success,
+            failure_count=chunk_count - success,
+        )
+
+    return _build()
+
+
 def solver_run_records() -> st.SearchStrategy[SolverRunRecord]:
     return st.builds(
         SolverRunRecord,
@@ -105,5 +125,6 @@ def trace_events() -> st.SearchStrategy:
         llm_call_records(),
         fallback_events(),
         gate_drop_events(),
+        score_chunk_events(),
         solver_run_records(),
     )

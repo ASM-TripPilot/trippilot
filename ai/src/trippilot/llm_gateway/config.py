@@ -46,3 +46,16 @@ class C1Config:
     timeout_sec: float = 2.5
     max_tokens: int = 1024
     temperature: float = 0.0  # 결정론 지향
+    # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 실측(TRIP-373·376): 점수 지연 ≈
+    # 바닥 ~3s + 건당 ~0.2s 선형, 실전 풀 193건 단일 호출 44.5s로 단계 예산
+    # 14s(TRIP-376) 밖. 청크 20건 ≈ 6s — 변동 2배에도 예산 안이다.
+    # 풀 ≤ chunk_size면 단일 호출 현행 경로 그대로 (분기 비용 0).
+    score_chunk_size: int = 20
+    # 병렬수 N = ⌈풀 ÷ chunk_size⌉의 상한 — 실전 풀 193건에서 N=10 (동시 호출 폭주 방지).
+    score_max_parallel: int = 10
+
+    def __post_init__(self) -> None:
+        if self.score_chunk_size <= 0:
+            raise ValueError("score_chunk_size는 양수여야 함")
+        if self.score_max_parallel <= 0:
+            raise ValueError("score_max_parallel은 양수여야 함")
