@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping
 
 from trippilot.domain.common import (
     BudgetLevel,
@@ -191,6 +191,11 @@ class ItineraryProblem:
 
     제외의 의미는 **후보 풀 축소**뿐이다 — closed-set 검증(INV-1)을 우회하지 않고,
     고정 블록(HC3)은 제외보다 우선한다(모순 입력에서 하드 제약을 깨지 않기 위해).
+
+    daily_rain_prob: 날짜별 강수확률%(POP, 0~100) — 날씨 소프트 보정 입력(TRIP-383).
+    기본 None = 무보정(기존 생성자 호출 전부 무영향). 부분 매핑이다 — 예보 지평 밖
+    날짜는 키 없음(정보 없음을 0%로 지어내지 않는다). 하드 제약이 아니라 솔버
+    목적함수의 소프트 항에만 쓰인다 — 비가 와도 실외 배치는 가능하다.
     """
 
     schedule_id: ScheduleId
@@ -203,10 +208,15 @@ class ItineraryProblem:
     seed: int
     anchor: GeoPoint | None = None  # 숙소 기점 (정본 §4.1 — U1 누락분 보강)
     excluded_poi_ids: frozenset[PoiId] = frozenset()  # 기배정 POI (TRIP-293)
+    daily_rain_prob: Mapping[date, int] | None = None  # 날짜별 POP% (TRIP-383)
 
     def __post_init__(self) -> None:
         if not self.days:
             raise ValueError("days는 최소 1일")
+        if self.daily_rain_prob is not None:
+            for d, pop in self.daily_rain_prob.items():
+                if not 0 <= pop <= 100:
+                    raise ValueError(f"daily_rain_prob[{d}] 범위 밖 [0,100]: {pop}")
 
     def to_dict(self) -> dict:
         return {
@@ -221,6 +231,13 @@ class ItineraryProblem:
             "anchor": self.anchor.to_dict() if self.anchor else None,
             # frozenset은 JSON 원시 타입이 아니다 → 정렬된 list (결정론적 직렬화)
             "excluded_poi_ids": sorted(str(p) for p in self.excluded_poi_ids),
+            # date 키는 JSON 원시 타입이 아니다 → 정렬된 ISO 키 (결정론적 직렬화)
+            "daily_rain_prob": (
+                {d.isoformat(): self.daily_rain_prob[d]
+                 for d in sorted(self.daily_rain_prob)}
+                if self.daily_rain_prob is not None
+                else None
+            ),
         }
 
     @classmethod
@@ -240,6 +257,12 @@ class ItineraryProblem:
             # d.get: 키가 없는 기존 직렬화본도 그대로 읽힌다 (하위호환)
             excluded_poi_ids=frozenset(
                 PoiId(x) for x in d.get("excluded_poi_ids", ())
+            ),
+            daily_rain_prob=(
+                {date.fromisoformat(k): v
+                 for k, v in d["daily_rain_prob"].items()}
+                if d.get("daily_rain_prob") is not None
+                else None
             ),
         )
 

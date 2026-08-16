@@ -42,6 +42,18 @@ STAY_DEFAULT_MIN: dict[PoiCategory, int] = {
 }
 
 
+# TRIP-383 — 날씨 보정의 실외/실내 판정표 (경계 카테고리 8종 기준).
+# 실외: 자연·야경·액티비티 — 강수에 체험이 직접 훼손되는 축.
+# 실내: 문화(박물관류)·카페·쇼핑 — 강수 대피처로 기능하는 축.
+# FOOD·SIGHT·STAY는 중립 — 실내외 혼재(식당/명소)라 어느 쪽으로도 밀지 않는다.
+RAIN_OUTDOOR: frozenset[PoiCategory] = frozenset(
+    {PoiCategory.NATURE, PoiCategory.NIGHT_VIEW, PoiCategory.ACTIVITY}
+)
+RAIN_INDOOR: frozenset[PoiCategory] = frozenset(
+    {PoiCategory.CULTURE, PoiCategory.CAFE, PoiCategory.SHOPPING}
+)
+
+
 @dataclass(frozen=True, slots=True)
 class SolverConfig:
     or_tools_limit_ms: int = 3000
@@ -64,6 +76,16 @@ class SolverConfig:
     # 식사 리듬이 개입한다 — 보정이 취향 점수를 압도하지 않도록.
     meal_bonus: float = 0.3             # 식사 창에 FOOD 1개 배치 시 창당 보상
     meal_penalty: float = 0.2           # 창 밖 FOOD·FOOD 연속 배치 억제 (건당)
+    # ── 날씨 소프트 보정 (TRIP-383 — TRIP-379 식사 보정과 동형의 결정론 규칙).
+    # 하드 배제 금지: 비가 와도 실외 배치는 가능하고, 실외만 남은 풀에서도 일정은
+    # 나온다. problem.daily_rain_prob이 None이면 항 자체가 생기지 않아 종전과 동일.
+    rain_threshold_pct: int = 60        # 이 강수확률(%) 이상인 날짜만 보정 대상
+    # 가중 단위 = 선호 점수와 동일 축(score ∈ [0,1]) — 식사 보정 스케일 근거 그대로:
+    # 실외 억제 0.2는 meal_penalty와 같은 "한 단 미만" 크기라 취향 점수 갭이 한 단
+    # (≥0.3) 이상이면 점수 서열이 그대로 이기고, 동률·근소 갭에서만 실내로 재배치된다.
+    # 실내 보상 0.1은 억제의 절반(소폭) — 보상까지 크면 우천일 실내가 취향을 압도한다.
+    rain_outdoor_penalty: float = 0.2   # 우천일 실외(NATURE·NIGHT_VIEW·ACTIVITY) 억제
+    rain_indoor_bonus: float = 0.1      # 우천일 실내(CULTURE·CAFE·SHOPPING) 소폭 보상
 
     def __post_init__(self) -> None:
         for name in ("or_tools_limit_ms", "or_tools_min_ms", "llm_stage_timeout_ms",
@@ -76,6 +98,10 @@ class SolverConfig:
             lo, hi = getattr(self, name)
             if not (0 <= lo < hi <= 1440):
                 raise ValueError(f"{name} 은 0 ≤ 시작 < 끝 ≤ 1440 분이어야 함")
-        for name in ("meal_bonus", "meal_penalty"):
+        for name in ("meal_bonus", "meal_penalty",
+                     "rain_outdoor_penalty", "rain_indoor_bonus"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
+        if not 0 <= self.rain_threshold_pct <= 100:
+            raise ValueError(
+                f"rain_threshold_pct 범위 밖 [0,100]: {self.rain_threshold_pct}")
