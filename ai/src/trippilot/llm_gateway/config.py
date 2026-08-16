@@ -46,16 +46,35 @@ class C1Config:
     timeout_sec: float = 2.5
     max_tokens: int = 1024
     temperature: float = 0.0  # 결정론 지향
-    # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 실측(TRIP-373·376): 점수 지연 ≈
-    # 바닥 ~3s + 건당 ~0.2s 선형, 실전 풀 193건 단일 호출 44.5s로 단계 예산
-    # 14s(TRIP-376) 밖. 청크 20건 ≈ 6s — 변동 2배에도 예산 안이다.
-    # 풀 ≤ chunk_size면 단일 호출 현행 경로 그대로 (분기 비용 0).
-    score_chunk_size: int = 20
-    # 병렬수 N = ⌈풀 ÷ chunk_size⌉의 상한 — 실전 풀 193건에서 N=10 (동시 호출 폭주 방지).
+    # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 청크 크기는 고정 상수가 아니라
+    # 단계 예산에서 유도한다 (TRIP-380 적응형 공식, workers/preference.py
+    # adaptive_chunk_size). 종전 score_chunk_size=20 상수는 공식이 대체 — 예산
+    # 14s·기본 파라미터에서 공식이 정확히 20을 재현한다(현행 동등).
+    #
+    # 선형 지연 모델 (TRIP-373 실측): 청크 소요 ≈ base + per_item × 청크크기.
+    # 바닥 ~3s(7건 3.2s), 건당 ~0.2s (193건 단일 호출 44.5s).
+    score_base_ms: int = 3_000
+    score_per_item_ms: int = 200
+    # 안전율 — 실측 변동이 3~4배(TRIP-373)이고 청크 편차 4.8~19.5s(TRIP-380
+    # 계측)라, 기대 소요가 예산의 절반에 오도록 목표 시간을 예산/2로 잡는다.
+    score_safety: float = 2.0
+    # 청크 크기 클램프 — 너무 작으면 호출 바닥(base)만 반복 지불, 너무 크면
+    # 슬로 테일 한 방이 단계 전체를 삼킨다.
+    score_chunk_min: int = 5
+    score_chunk_max: int = 40
+    # 병렬수 N = ⌈풀 ÷ c*⌉의 상한 — 실전 풀 193건에서 N=10 (동시 호출 폭주 방지).
     score_max_parallel: int = 10
 
     def __post_init__(self) -> None:
-        if self.score_chunk_size <= 0:
-            raise ValueError("score_chunk_size는 양수여야 함")
+        if self.score_base_ms < 0:
+            raise ValueError("score_base_ms는 음수 불가")
+        if self.score_per_item_ms <= 0:
+            raise ValueError("score_per_item_ms는 양수여야 함")
+        if self.score_safety < 1.0:
+            raise ValueError("score_safety는 1.0 이상이어야 함 (목표 ≤ 예산)")
+        if self.score_chunk_min <= 0:
+            raise ValueError("score_chunk_min은 양수여야 함")
+        if self.score_chunk_max < self.score_chunk_min:
+            raise ValueError("score_chunk_max ≥ score_chunk_min이어야 함")
         if self.score_max_parallel <= 0:
             raise ValueError("score_max_parallel은 양수여야 함")

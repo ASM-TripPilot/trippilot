@@ -12,6 +12,10 @@
   ⑦ INV-1 PBT: 임의 풀 + 오염 응답(풀 밖 id 섞임) → 산출 ⊆ 풀, 중복 없음
   ⑧ timeout override 관통: 모든 청크 호출의 LlmRequest.timeout_sec = 단계 예산
   ⑨ 동시 실행: 청크 호출이 실제로 겹친다 (barrier — 순차였다면 타임아웃)
+
+TRIP-380 갱신: 청크 크기가 고정 상수(20)에서 단계 예산 유도 공식으로 바뀌어,
+워커 경로 테스트는 예산 14s를 명시해 c*=20(종전 상수 동치)을 재현한다.
+공식 자체·벽시계 마감은 test_llm_gateway_preference_wallclock.py 소유.
 """
 
 from __future__ import annotations
@@ -212,7 +216,9 @@ def test_merge_scores_every_poi_exactly_once() -> None:
     llm = _EchoScoresLlm()
     worker, trace = _worker(llm)
 
-    result = worker.score(pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW)
+    result = worker.score(
+        pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+    )
 
     assert result.is_fallback is False and result.error is None
     ids = _value_ids(result)
@@ -224,6 +230,7 @@ def test_merge_scores_every_poi_exactly_once() -> None:
     assert len(events) == 1
     assert (events[0].pool_size, events[0].chunk_count) == (50, 3)
     assert (events[0].success_count, events[0].failure_count) == (3, 0)
+    assert events[0].timed_out_count == 0              # 마감초과 없음 (TRIP-380)
 
 
 # ── ④ 부분 실패 ─────────────────────────────────────────────────────
@@ -233,7 +240,9 @@ def test_partial_chunk_failure_keeps_successes_without_fallback_signal() -> None
     pool = _pool(40)  # 2청크: c001~c020 / c021~c040
     worker, trace = _worker(_FailOnPoiLlm("c001"))
 
-    result = worker.score(pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW)
+    result = worker.score(
+        pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+    )
 
     assert result.is_fallback is False                 # 성공분이 있다 — 폴백 아님
     assert result.error is not None
@@ -253,7 +262,9 @@ def test_partial_chunk_failure_keeps_successes_without_fallback_signal() -> None
 def test_all_chunks_failed_is_same_fallback_signal_as_single_call() -> None:
     worker, trace = _worker(FailingLlm())
 
-    result = worker.score(_pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW)
+    result = worker.score(
+        _pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+    )
 
     assert result.is_fallback is True and result.value is None  # INV-4 경로 불변
     assert result.error is not None
@@ -268,11 +279,13 @@ def test_all_chunks_failed_is_same_fallback_signal_as_single_call() -> None:
 
 
 def test_small_pool_keeps_single_call_path() -> None:
-    pool = _pool(20)  # 경계값 — 딱 chunk_size
+    pool = _pool(20)  # 경계값 — 예산 14s에서 딱 c*(=20)
     llm = _EchoScoresLlm()
     worker, trace = _worker(llm)
 
-    result = worker.score(pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW)
+    result = worker.score(
+        pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+    )
 
     assert len(llm.requests) == 1                      # 청킹 없음 — 현행 경로 그대로
     assert trace.of_type(ScoreChunkEvent) == []
@@ -296,7 +309,9 @@ def test_pbt_merged_output_is_subset_of_pool(ids: list[str]) -> None:
     pool = _pool_of(tuple(ids))
     worker, _ = _worker(_PollutingLlm())
 
-    result = worker.score(pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW)
+    result = worker.score(
+        pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+    )
 
     assert result.is_fallback is False
     out = _value_ids(result)
@@ -324,7 +339,9 @@ def test_chunk_calls_actually_run_in_parallel() -> None:
     """barrier(2): 두 청크 호출이 겹쳐야만 통과 — 순차였다면 타임아웃 → 폴백."""
     worker, _ = _worker(_BarrierLlm(parties=2))
 
-    result = worker.score(_pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW)
+    result = worker.score(
+        _pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+    )
 
     assert result.is_fallback is False
     assert len(_value_ids(result)) == 40

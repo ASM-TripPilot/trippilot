@@ -149,6 +149,10 @@ class ScoreChunkEvent:
     청크 수·성공/실패 수를 침묵 없이 남긴다(INV-4) — 부분 실패(성공 청크만 병합)가
     지표에서 보이게 한다. 청크별 개별 호출은 게이트웨이가 LlmCallRecord·FallbackEvent로
     이미 계측하므로, 이 이벤트는 병합 관점의 요약 1건이다.
+
+    실패 사유 구분 (TRIP-380): `failure_count`는 마감 안에 **완료됐지만** 폴백으로
+    끝난 청크, `timed_out_count`는 단계 마감까지 완료되지 못해 결과가 폐기된 청크.
+    success + failure + timed_out = chunk_count.
     """
 
     trace_id: TraceId
@@ -159,6 +163,7 @@ class ScoreChunkEvent:
     chunk_count: int
     success_count: int
     failure_count: int
+    timed_out_count: int
 
     def to_dict(self) -> dict:
         return {
@@ -170,6 +175,7 @@ class ScoreChunkEvent:
             "chunk_count": self.chunk_count,
             "success_count": self.success_count,
             "failure_count": self.failure_count,
+            "timed_out_count": self.timed_out_count,
         }
 
     @classmethod
@@ -183,6 +189,7 @@ class ScoreChunkEvent:
             chunk_count=d["chunk_count"],
             success_count=d["success_count"],
             failure_count=d["failure_count"],
+            timed_out_count=d["timed_out_count"],
         )
 
 

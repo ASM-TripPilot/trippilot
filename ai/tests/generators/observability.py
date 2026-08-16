@@ -93,6 +93,7 @@ def score_chunk_events() -> st.SearchStrategy[ScoreChunkEvent]:
     def _build(draw) -> ScoreChunkEvent:
         chunk_count = draw(st.integers(1, 10))
         success = draw(st.integers(0, chunk_count))
+        failure = draw(st.integers(0, chunk_count - success))
         return ScoreChunkEvent(
             trace_id=TraceId(draw(st.text(min_size=1, max_size=12))),
             occurred_at=draw(_datetimes()),
@@ -101,7 +102,9 @@ def score_chunk_events() -> st.SearchStrategy[ScoreChunkEvent]:
             pool_size=draw(st.integers(0, 300)),
             chunk_count=chunk_count,
             success_count=success,
-            failure_count=chunk_count - success,
+            failure_count=failure,
+            # 사유 구분 (TRIP-380): 성공 + 실패 + 마감초과 = 청크 수
+            timed_out_count=chunk_count - success - failure,
         )
 
     return _build()
