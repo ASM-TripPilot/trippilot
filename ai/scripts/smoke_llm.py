@@ -91,6 +91,7 @@ def _build_adapter() -> tuple[LlmPort, str]:
             api_key=_require("AZURE_OPENAI_API_KEY"),
             azure_endpoint=_require("AZURE_OPENAI_ENDPOINT"),
             api_version=_require("AZURE_OPENAI_API_VERSION"),
+            max_retries=0,  # 재시도 무익 정책 (TRIP-381) — 아래 openai 분기 주석 참조
         )
         return OpenAIAdapter(client), _optional("AZURE_OPENAI_DEPLOYMENT") or "gpt-5.6"
     if provider == "openai":
@@ -101,6 +102,11 @@ def _build_adapter() -> tuple[LlmPort, str]:
         client = openai.OpenAI(
             api_key=_require("OPENAI_API_KEY"),
             base_url=_optional("OPENAI_BASE_URL"),  # None → 표준 엔드포인트
+            # 재시도 무익 정책 (TRIP-381): 결정론 실패는 재시도로 안 바뀜(백엔드
+            # 합의 원칙과 동일) + SDK 내부 자동 재시도(기본 2회)가 타임아웃 계약을
+            # 3배로 왜곡 — 2.5s 설정이 실제 ~10s (계측 실측). 스모크도 운영과 같은
+            # 클라이언트 정책으로 관측해야 지연 수치가 왜곡되지 않는다.
+            max_retries=0,
         )
         adapter = OpenAIAdapter(client, api=_optional("OPENAI_API") or "chat")
         return adapter, _optional("OPENAI_MODEL") or "gpt-5.6"
@@ -109,7 +115,11 @@ def _build_adapter() -> tuple[LlmPort, str]:
 
         from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
 
-        client = anthropic.Anthropic(api_key=_require("ANTHROPIC_API_KEY"))
+        client = anthropic.Anthropic(
+            api_key=_require("ANTHROPIC_API_KEY"),
+            # anthropic SDK도 기본 max_retries=2 — openai 분기와 같은 이유로 차단.
+            max_retries=0,  # 재시도 무익 정책 (TRIP-381)
+        )
         return AnthropicAdapter(client), os.environ.get(
             "ANTHROPIC_MODEL", "claude-haiku-4-5"
         )

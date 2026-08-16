@@ -56,6 +56,11 @@ def _openai_llm_and_model() -> tuple[object, str]:
     client = openai.OpenAI(
         api_key=api_key,
         base_url=_env("OPENAI_BASE_URL"),  # None → 표준 api.openai.com
+        # 재시도 무익 정책 (TRIP-381): 결정론 실패는 재시도로 안 바뀜(백엔드 합의
+        # 원칙과 동일) + SDK 내부 자동 재시도(기본 2회)가 타임아웃 계약을 3배로
+        # 왜곡한다 — 2.5s 설정이 실제 ~10s (2026-08-16 계측 실측). 재시도 판단은
+        # 게이트웨이/오케스트레이터 폴백 계단 소유 — SDK가 몰래 하지 않는다.
+        max_retries=0,
     )
     adapter = OpenAIAdapter(client, api=_env("OPENAI_API") or "responses")
     return adapter, _env("OPENAI_MODEL") or "gpt-5.6-terra"

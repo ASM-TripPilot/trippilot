@@ -6,7 +6,8 @@
 
 client는 생성자 주입 — anthropic_adapter와 동형. base_url 주입은 client 생성
 시점의 몫(`openai.OpenAI(api_key=..., base_url=...)`) — 표준 OpenAI가 아닌
-호환 게이트웨이도 같은 어댑터로 붙는다. 테스트는 fake client 객체로
+호환 게이트웨이도 같은 어댑터로 붙는다. **client는 max_retries=0으로 생성할 것**
+(TRIP-381 — SDK 내부 재시도가 타임아웃 계약을 3배로 왜곡, 조립 지점 책임). 테스트는 fake client 객체로
 요청/응답 매핑만 검증하고 CI에서 실 호출 0건 (BR-U4-10, D37).
 SDK 타임아웃은 LlmTimeoutError로 변환, 그 외 예외는 그대로 —
 게이트웨이가 폴백 신호로 수렴시킨다 (BR-U4-02).
