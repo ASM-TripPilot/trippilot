@@ -19,7 +19,12 @@ from typing import Mapping
 
 from ortools.sat.python import cp_model
 
-from trippilot.solver_engine.config import STAY_DEFAULT_MIN, SolverConfig
+from trippilot.solver_engine.config import (
+    RAIN_INDOOR,
+    RAIN_OUTDOOR,
+    STAY_DEFAULT_MIN,
+    SolverConfig,
+)
 from trippilot.solver_engine.fallback_solver import RuleFallbackSolver, placed_fixed_blocks
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
@@ -160,6 +165,7 @@ class OrToolsSolver:
         obj_terms: list = [int(n["score"] * 1000) * visit[i]
                            for i, n in enumerate(nodes)]
         obj_terms += self._meal_soft_terms(m, nodes, visit, start, arcs)
+        obj_terms += self._rain_soft_terms(problem, day, nodes, visit)
         m.Maximize(sum(obj_terms))
 
         # 웜스타트 힌트 = 규칙해 (벤치마크 실증 구성)
@@ -252,6 +258,37 @@ class OrToolsSolver:
             if (i != j and i >= 1 and j >= 1
                     and i - 1 in food_set and j - 1 in food_set):
                 terms.append(-penalty * lit)
+        return terms
+
+    def _rain_soft_terms(self, problem, day, nodes, visit) -> list:
+        """날씨 소프트 보정 항 (TRIP-383 — 식사 보정(_meal_soft_terms)과 동형).
+
+        규칙(폴백 솔버와 동일 의미): 그 일자 강수확률 ≥ rain_threshold_pct이면
+          ① 실외(NATURE·NIGHT_VIEW·ACTIVITY) 방문 건당 -rain_outdoor_penalty
+          ② 실내(CULTURE·CAFE·SHOPPING) 방문 건당 +rain_indoor_bonus
+
+        스케일 근거는 식사 보정과 동일 축(점수 항 int(score·1000), score ∈ [0,1]) —
+        억제 200·보상 100은 점수 한 단(0.2~0.3) 미만이라 취향 점수 갭이 크면 점수
+        서열이 그대로 이기고, 근소 갭에서만 실내로 재배치된다. 하드 배제 아님 —
+        방문 가능성 자체를 제약하지 않으므로(목적함수만) HC1~4 충족 해 집합은
+        불변(검증기 무접촉). 고정 블록 핀 노드는 visit=1 강제라 상수 오프셋일 뿐
+        해에 영향이 없다(HC3 우선).
+        """
+        rain = problem.daily_rain_prob
+        if rain is None:
+            return []
+        pop = rain.get(day)
+        if pop is None or pop < self._cfg.rain_threshold_pct:
+            return []  # 정보 없음·임계 미만 — 무보정 (정보 없음 ≠ 배제)
+        penalty = int(self._cfg.rain_outdoor_penalty * 1000)
+        bonus = int(self._cfg.rain_indoor_bonus * 1000)
+        terms: list = []
+        for i, n in enumerate(nodes):
+            category = n["poi"].category
+            if category in RAIN_OUTDOOR and penalty:
+                terms.append(-penalty * visit[i])
+            elif category in RAIN_INDOOR and bonus:
+                terms.append(bonus * visit[i])
         return terms
 
     def _day_open_window(self, poi: Poi, day) -> tuple[int, int] | None:

@@ -6,6 +6,7 @@
 요청 → ⓪ 소유 검증 (fail-closed)   남의 persona_ref → 항상 403 (TRIP-333, 시한 무관)
      → ① M7 후보풀 build          (closed-set의 유일한 출처, INV-1)
      → ② C1 선호 점수 (전 일자 1회) 실패·스킵 → 규칙 점수 (BR-U4-09의 "호출측"이 여기다)
+     → ②′ 날씨 예보 조회 (선택)     실패·미주입 → 무보정 (TRIP-383, 보정은 C2 소프트 항)
      → ③ ItineraryProblem 조립     (후보는 ①의 풀에서 나온 것만)
      → ④ C2 solve                  (체인 폴백은 C2 소유 — 여기서 이중 폴백 금지)
      → ⑤ (선택) C1 설명 부착        실패 → 설명 없이 진행
@@ -58,6 +59,7 @@ from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.poi import Poi, PoiCategory
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.ports.trace_port import TracePort
+from trippilot.ports.weather_port import WeatherPort
 
 _COMPONENT = "orchestrator.itinerary"
 
@@ -338,6 +340,7 @@ class ItineraryOrchestrator:
         *,
         context_resolver: OwnershipVerifier,
         explanation_worker: ExplanationWorker | None = None,
+        weather: WeatherPort | None = None,
         config: OrchestratorConfig | None = None,
     ) -> None:
         self._pool_builder = pool_builder
@@ -347,6 +350,7 @@ class ItineraryOrchestrator:
         self._trace = trace
         self._resolver = context_resolver  # 소유 검증 갈래만 쓴다 (TRIP-333)
         self._explainer = explanation_worker  # 미주입이면 설명 단계를 통째로 건너뛴다
+        self._weather = weather  # 미주입이면 날씨 보정 없이 생성한다 (TRIP-383)
         self._cfg = config or OrchestratorConfig()
 
     # ── 공개 API ────────────────────────────────────────────────────
@@ -423,6 +427,10 @@ class ItineraryOrchestrator:
             request, pool, budget, budget.total_ms - elapsed, steps, trace_id, now
         )
 
+        # ②′ 날씨 예보 (TRIP-383) — 결과는 problem에 실려 C2 소프트 항이 쓴다.
+        #    조회 실패 = 무보정 + 강등 기록(침묵 금지), 미주입 = 기능 부재(무보정).
+        daily_rain = self._daily_rain(request, steps, trace_id, now)
+
         # ③ ItineraryProblem 조립 — 후보는 ①의 풀에서 나온 것만 (INV-1)
         problem = ItineraryProblem(
             schedule_id=request.schedule_id,
@@ -435,6 +443,7 @@ class ItineraryOrchestrator:
             seed=request.seed,
             anchor=request.anchor,
             excluded_poi_ids=request.excluded_poi_ids,  # 2단계 생성 그대로 통과
+            daily_rain_prob=daily_rain,  # None = 무보정 (TRIP-383)
         )
 
         # ④ C2 solve — 솔버는 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
@@ -481,6 +490,37 @@ class ItineraryOrchestrator:
             candidates_summary=summary,
             solved_at=solved_at,
         )
+
+    # ── ②′ 날씨 예보 조회 (TRIP-383) ────────────────────────────────
+
+    def _daily_rain(
+        self,
+        request: GenerateItineraryRequest,
+        steps: list[Degradation],
+        trace_id: TraceId,
+        now: datetime,
+    ) -> dict[date, int] | None:
+        """여행 날짜들의 강수확률(%) 조회 — 생성은 날씨를 problem으로만 안다.
+
+        - **미주입(None)**: 기능 부재 — 무보정, 강등으로 세지 않는다(⑤ 설명 워커의
+          "미배선 = 기능 부재" 선례와 동일: 미배선을 강등으로 세면 기존 조립 전부가
+          DEGRADED로 바뀐다 — 기존 호출 무영향 원칙과 충돌).
+        - **조회 실패(예외)**: 무보정 + Degradation + FallbackEvent (침묵 금지,
+          INV-4 — 날씨 실패가 생성 실패가 되면 안 된다).
+        - 반환은 요청 날짜로 한정한다(예보 지평 밖·무관 날짜는 problem에 싣지 않음).
+          유효 예보가 없으면 None — 솔버 무보정 경로와 동일.
+        """
+        if self._weather is None:
+            return None
+        try:
+            forecast = self._weather.daily_forecast(request.anchor, request.days)
+        except Exception as e:
+            self._degrade(steps, trace_id, now, "weather", "weather_forecast",
+                          "no_adjust", f"weather_error: {type(e).__name__}: {e}")
+            return None
+        wanted = set(request.days)
+        filtered = {d: p for d, p in forecast.items() if d in wanted}
+        return filtered or None
 
     # ── ② 선호 점수 + 규칙 점수 폴백 ────────────────────────────────
 

@@ -103,6 +103,7 @@ from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.orchestrator import itinerary_orchestrator as core
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
 from trippilot.ports.trace_port import TracePort
+from trippilot.ports.weather_port import WeatherPort
 
 _logger = logging.getLogger("trippilot.wiring")
 
@@ -680,12 +681,15 @@ def build_orchestrator(
     clock: core.Clock | None = None,
     trace: TracePort | None = None,
     prompts_root: Path | None = None,
+    weather: WeatherPort | None = None,
     tz: timezone = KST,
 ) -> WiredItineraryOrchestrator:
     """실 구성요소 조립 → `create_app(orchestrator=...)`에 꽂을 어댑터.
 
     외부 의존(llm·poi_db·context_store)은 전부 인자 — 실 어댑터 등장 시 그 인자만
     바뀐다. c1_config는 model_id 하드코딩 금지(BR-U4-08) 때문에 기본값이 없다.
+    `weather`(TRIP-383)는 선택 — 기본 None이면 날씨 보정 없이 기존과 동일하게
+    생성한다(기존 호출 전부 무영향).
     """
     clock = clock if clock is not None else MonotonicClock()
     trace = trace if trace is not None else LoggingTrace()
@@ -707,6 +711,7 @@ def build_orchestrator(
         explanation_worker=ExplanationWorker(
             GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace), resolver
         ),
+        weather=weather,  # 선택 주입 (TRIP-383) — None이면 무보정
         config=orchestrator_config,
     )
     return WiredItineraryOrchestrator(orchestrator, provider, poi_db, estimator, tz=tz)
@@ -801,7 +806,10 @@ def demo_poi_seed() -> tuple[Poi, ...]:
 
 
 def build_dev_app(
-    *, llm: LlmPort | None = None, model_id: str | None = None
+    *,
+    llm: LlmPort | None = None,
+    model_id: str | None = None,
+    weather: WeatherPort | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -810,6 +818,8 @@ def build_dev_app(
     — POI·페르소나는 여전히 데모 시드; env 해석·클라이언트 조립은 main.py 소유,
     벤더 SDK는 c1/adapters 한정이라 이 모듈은 LlmPort만 받는다).
     `model_id`는 주입 LLM의 모델 식별자(LIGHT·HEAVY 양 티어 공용, BR-U4-08 주입 원칙).
+    `weather`는 선택 주입(TRIP-383) — env 해석·어댑터 조립은 main.py 소유, 기본 None
+    이면 날씨 보정 없이 기존과 동일.
     """
     if model_id is not None:
         model_ids = {ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id}
@@ -829,5 +839,6 @@ def build_dev_app(
                            budget=BudgetLevel.MID)
         ),
         c1_config=C1Config(model_ids=model_ids),
+        weather=weather,
     )
     return create_app(orchestrator)

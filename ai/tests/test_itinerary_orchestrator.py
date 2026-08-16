@@ -241,6 +241,7 @@ def _build(
     clock=None,
     config: OrchestratorConfig | None = None,
     renderer=None,
+    weather=None,
 ):
     trace = InMemoryTrace()
     builder = CandidatePoolBuilder(InMemoryPoi(tuple(pois)), M7Config())
@@ -267,6 +268,7 @@ def _build(
         trace,
         context_resolver=resolver,  # 소유 검증(fail-closed, TRIP-333)도 같은 resolver
         explanation_worker=explainer,
+        weather=weather,  # 선택 주입 (TRIP-383) — None이면 무보정
         config=config,
     )
     return orchestrator, trace, sink

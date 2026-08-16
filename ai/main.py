@@ -13,6 +13,8 @@ env 스위치 (TRIP-344):
   `OPENAI_MODEL`(기본 gpt-5.6-terra) · `OPENAI_API`(chat|responses, 기본 responses
   — 멘토 게이트웨이가 responses만 라우팅). 조립 불가(키 누락 등)는 **기동 실패**로
   드러낸다 — INV-4는 런타임 폴백이지 설정 오류 은폐가 아니다(silent fallback 금지).
+- `WEATHER_API`(TRIP-383) — 기상청 단기예보 서비스키(디코딩 키). 설정 시 날씨
+  소프트 보정용 KmaWeatherAdapter를 주입한다. 미설정 = 무보정(기존 그대로).
 - 미들웨어 한도·타임아웃 env(`TRIPPILOT_RATE_LIMIT_*` · `TRIPPILOT_TIMEOUT_*`,
   TRIP-240)는 `create_app` 내부에서 해석된다 — `trippilot/api/middleware.py` 참조.
 
@@ -66,20 +68,36 @@ def _openai_llm_and_model() -> tuple[object, str]:
     return adapter, _env("OPENAI_MODEL") or "gpt-5.6-terra"
 
 
+def _kma_weather():
+    """`WEATHER_API`(기상청 공공데이터포털 디코딩 키, TRIP-383) 설정 시 실 어댑터 조립.
+
+    미설정(빈 문자열 포함) = 미배선(None) — 날씨 보정 없이 기존 경로 그대로.
+    실 응답 드리프트는 실키 실행에서 검증한다 (테스트·CI 실 호출 0, D37).
+    """
+    key = _env("WEATHER_API")
+    if key is None:
+        return None
+    from trippilot.poi_curation.adapters.kma_weather import KmaWeatherAdapter
+    from trippilot.poi_curation.sourcing.tourapi import UrllibHttpClient
+
+    return KmaWeatherAdapter(UrllibHttpClient(), key)
+
+
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
     if os.environ.get("TRIPPILOT_WIRING") == "unwired":
         return create_app()
+    weather = _kma_weather()
     provider = _env("TRIPPILOT_LLM_PROVIDER")
     if provider is None:
-        return build_dev_app()
+        return build_dev_app(weather=weather)
     if provider != "openai":
         raise RuntimeError(
             f"TRIPPILOT_LLM_PROVIDER 미지원 값: {provider!r} — "
             "미설정(fake 조립) 또는 openai 만 지원"
         )
     llm, model_id = _openai_llm_and_model()
-    return build_dev_app(llm=llm, model_id=model_id)
+    return build_dev_app(llm=llm, model_id=model_id, weather=weather)
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.
