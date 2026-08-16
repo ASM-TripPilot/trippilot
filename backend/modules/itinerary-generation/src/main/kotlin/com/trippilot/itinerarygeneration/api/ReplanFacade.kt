@@ -25,8 +25,13 @@ interface ReplanFacade {
     /**
      * 초안을 일정에 반영한다 — 되돌릴 지점을 먼저 남기고(BR-U3-19) 대상 일자만 교체한다.
      * 확정된 일정은 반영하지 않는다(그쪽은 잠겨 있다).
+     *
+     * 반영과 **같은 트랜잭션에서** 변경 이력 1행을 남긴다(BR-U4-30). 전후 스냅숏은 일정을 소유한 이쪽이
+     * 만들고, [reason] 은 세션의 사유·지시어를 아는 C10 이 조립해 넘긴다 — 각자 가진 것만 낸다.
+     *
+     * @param reason 왜 바꿨는지 한 줄(BR-U4-31). **비워서 넘기지 않는다** — 이력의 존재 이유가 이 칸이다.
      */
-    fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal)
+    fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String)
 }
 
 /**

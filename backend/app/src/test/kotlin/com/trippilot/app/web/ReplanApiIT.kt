@@ -7,6 +7,7 @@ import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -219,11 +220,28 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
 
         when (settled["status"].asText()) {
             "DRAFT" -> {
+                // 확정 전에는 이력이 없다 — 아래 1행이 확정으로 생겼음을 이 대조가 보장한다.
+                call(HttpMethod.GET, "/api/v1/trips/$tripId/change-log", token).second["entries"].size() shouldBe 0
+
                 val (rc, applied) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions/$sessionId/apply", token)
                 rc shouldBe 200
                 applied["status"].asText() shouldBe "APPLIED"
+
+                // BR-U4-30 — 확정이 이력 1행을 남긴다. 이 배선이 없으면 조회는 **늘 빈 목록**이라
+                // "무엇을 왜 바꿨나"를 되짚을 수 없다(US-PLANB-09 의 목적 자체가 사라진다).
+                val entries = call(HttpMethod.GET, "/api/v1/trips/$tripId/change-log", token).second["entries"]
+                entries.size() shouldBe 1
+                val entry = entries[0]
+                entry["sourceType"].asText() shouldBe "PLAN_B"
+                // 시트에서 고른 사유·지시어가 그대로 문구가 된다(BR-U4-31) — 빈 칸으로 남기지 않는다.
+                entry["reason"].asText() shouldBe "비가 와요 · 실내로 바꿔줘"
+                entry["before"]["days"].size() shouldBeGreaterThan 0
+                entry["after"]["days"].size() shouldBeGreaterThan 0
+
                 // 두 번 확정하면 409 — 같은 초안이 두 번 반영되면 안 된다.
                 call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions/$sessionId/apply", token).first shouldBe 409
+                // 막힌 확정은 이력도 늘리지 않는다.
+                call(HttpMethod.GET, "/api/v1/trips/$tripId/change-log", token).second["entries"].size() shouldBe 1
             }
             // 후보풀이 얕으면 대안이 없을 수 있다 — 그때도 확정은 막혀야 한다(빈 하루 확정 금지).
             "NO_SOLUTION", "FAILED" ->

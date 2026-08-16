@@ -1,5 +1,11 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.changelog.api.AppendChangeLog
+import com.trippilot.changelog.api.ChangeLogFacade
+import com.trippilot.changelog.api.ChangeSourceType
+import com.trippilot.changelog.api.DaySnapshotView
+import com.trippilot.changelog.api.ItinerarySnapshotView
+import com.trippilot.changelog.api.SlotSnapshotView
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.api.ReplanCommand
@@ -42,6 +48,7 @@ class ReplanFacadeService(
     private val scheduleAgent: ScheduleAgentPort,
     private val baseAnchors: BaseAnchorFacade,
     private val revisions: ItineraryRevisionService,
+    private val changeLogs: ChangeLogFacade,
     private val clock: Clock,
 ) : ReplanFacade {
 
@@ -135,7 +142,7 @@ class ReplanFacadeService(
      * 되돌릴 지점을 먼저 남긴다(BR-U3-19) — 반영 후에 남기면 그 시점으로 못 돌아간다.
      */
     @Transactional
-    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal) {
+    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String) {
         val current = ownedItinerary(accountId, tripId)
         if (current.itineraryId != proposal.itineraryId) {
             // 그 사이 재생성으로 일정이 교체됐다 — 낡은 초안을 덮어쓰면 방금 만든 일정이 사라진다.
@@ -163,7 +170,29 @@ class ReplanFacadeService(
         )
         val saved = itineraries.replaceForTrip(tripId, next)
         revisions.record(saved, RevisionActor.AI, RevisionKind.EDIT, "여행 중 재계획 반영")
+        // BR-U4-30 — 확정 시 이력 1행. **같은 트랜잭션**이라 일정만 바뀌고 이력이 빠지는 상태가 없다.
+        // 리비전(되돌리기용 전체 스냅숏)과 역할이 다르다: 이쪽은 "무엇을 왜 바꿨나"를 사람이 읽는 기록이다.
+        changeLogs.append(
+            AppendChangeLog(
+                tripId = tripId,
+                actor = accountId.toString(),
+                sourceType = ChangeSourceType.PLAN_B,
+                reason = reason,
+                before = current.toSnapshotView(),
+                after = saved.toSnapshotView(),
+            ),
+        )
     }
+
+    /** 일정 → 이력 스냅숏(시각·순서만, INV-3 소요시간 없음). */
+    private fun Itinerary.toSnapshotView() = ItinerarySnapshotView(
+        days.map { day ->
+            DaySnapshotView(
+                day.date,
+                day.slots.map { SlotSnapshotView(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) },
+            )
+        },
+    )
 
     private fun List<ReplanSlot>.toSlots(): List<VisitSlot> = mapIndexed { i, s ->
         VisitSlot.of(
