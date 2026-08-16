@@ -47,6 +47,8 @@ class ExplanationWorker:
         principal: Principal,
         trace_id: TraceId,
         now: datetime,
+        *,
+        timeout_sec: float | None = None,
     ) -> TypedResult:
         persona = self._resolver.resolve(principal, persona_ref)
         if not isinstance(persona, PersonaSummary):
@@ -59,4 +61,7 @@ class ExplanationWorker:
             pool,
             trace_id,
             now,
+            # 호출측 잔여 예산이 호출 타임아웃까지 관통 (TRIP-381, 점수 단계
+            # TRIP-376과 동형) — 미지정이면 게이트웨이 기본(2.5s)이 잔여를 무시한다.
+            timeout_sec=timeout_sec,
         )

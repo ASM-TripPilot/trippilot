@@ -921,6 +921,47 @@ def test_partial_chunk_failure_backfills_failed_chunk_with_rule_scores() -> None
     assert len(trace.of_type(ScoreChunkEvent)) == 1    # 청킹 요약 관측 (침묵 금지)
 
 
+def test_explanation_call_timeout_receives_remaining_budget() -> None:
+    """EXPLANATION 호출 시한 = solve 후 **잔여** (TRIP-381 — 점수 단계와 같은 관통).
+
+    관통이 없으면 게이트웨이 기본 2.5s가 잔여를 무시하고, SDK 내부 재시도까지
+    겹치면 2.5s 설정이 실제 ~10s를 소모했다(계측 실측 — 20s 계약 후반부 정체).
+    _BurningClock(1s/호출)으로 설명 진입 시점 경과 5s → 잔여 15s가 그대로 닿는다.
+    """
+    expl = _RecordingLlm(_explanations_json("p1", "p2", "p3"))
+    orchestrator, _, _ = _build(expl_llm=expl, clock=_BurningClock(step_ms=1_000))
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert outcome.explanations                        # 잔여 충분 — 설명 생성 유지
+    assert [r.timeout_sec for r in expl.requests] == [15.0]  # = (20,000−5,000)/1000
+
+
+def test_explanation_skipped_below_threshold_without_llm_call() -> None:
+    """잔여 < explanation_min_ms → 호출 0회 + 빈 설명 + 강등 기록 (침묵 금지).
+
+    스킵 판단만으로 끝나야 한다 — 게이트웨이 기본 타임아웃으로라도 호출이 나가면
+    잔여 예산이 없는데 LLM 지연을 새로 사는 것이다 (TRIP-381의 두 번째 갈래).
+    """
+    expl = _RecordingLlm(_explanations_json("p1", "p2", "p3"))
+    orchestrator, trace, _ = _build(expl_llm=expl, clock=_BurningClock(step_ms=4_000))
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert expl.requests == []                         # 호출 자체가 없다
+    assert outcome.explanations == ()                  # 빈 설명 — 일정은 그대로
+    assert outcome.solution is not None
+    assert outcome.status is GenerationStatus.DEGRADED
+    assert any(
+        d.stage == "explanation" and d.reason.startswith("deadline:remaining=")
+        for d in outcome.degradations
+    )
+    assert any(
+        e.stage == "explanation" and e.reason.startswith("deadline:remaining=")
+        for e in _orchestrator_events(trace)
+    )
+
+
 def test_llm_omission_backfilled_with_rule_scores_on_single_call_path() -> None:
     """단일 호출 경로에서 LLM이 일부 POI를 누락해도 후보에서 빠지지 않는다 (TRIP-378).
 

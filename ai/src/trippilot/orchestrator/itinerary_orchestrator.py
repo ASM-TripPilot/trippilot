@@ -615,6 +615,9 @@ class ItineraryOrchestrator:
 
         remaining = budget.total_ms - (self._clock.monotonic_ms() - t0)
         if remaining < self._cfg.explanation_min_ms:
+            # 잔여 < 임계(explanation_min_ms, config) — 부를 시간이 없으면 부르지
+            # 않는다(DL-2). 설명은 부가 정보라 빈 설명으로 일정은 그대로 나가되,
+            # 스킵 사실은 강등 + 이벤트로 남긴다 (INV-4 침묵 금지).
             self._degrade(steps, trace_id, now, "explanation", "llm_explain",
                           "(none)", f"deadline:remaining={remaining}ms")
             return ()
@@ -623,6 +626,11 @@ class ItineraryOrchestrator:
             result = self._explainer.explain(
                 pool, tuple(ordered), request.persona_ref, request.principal,
                 trace_id, now,
+                # 잔여 예산이 호출 타임아웃까지 관통 (TRIP-381, 점수 단계와 같은
+                # 패턴) — 미관통이면 게이트웨이 기본 2.5s가 잔여(예: 300ms든
+                # 9s든)를 무시하고, SDK 내부 재시도까지 겹치면 2.5s 설정이 실제
+                # ~10s를 소모했다(계측 실측 — 20s 계약 초과의 후반부 정체).
+                timeout_sec=remaining / 1000.0,
             )
         except PermissionDeniedError:
             raise  # D31 — 권한 위반은 여기서도 폴백 대상이 아니다
