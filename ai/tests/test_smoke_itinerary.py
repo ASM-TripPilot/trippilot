@@ -7,6 +7,7 @@
   ③ 부족 시 재시도 — 흩어진 시군구는 건너뛰고 밀집 시군구로, 전부 실패면 명시 에러
   ④ 기록 JSON 스키마 — 계약 키 전량 + 슬롯 이름 매핑
   ⑤ 생성 관통 1건 — LLM 미주입(UnwiredLlm 경로: 규칙 점수 폴백)으로 200 + INV-1
+  ⑥ 인접 슬롯 실경로 검증 (TRIP-382) — 쌍 구성·오차 계산·키 부재 생략·legs 스키마
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import pytest
 
 from trippilot.api.wiring import UnwiredLlm
 from trippilot.solver_engine.travel import haversine_km
-from trippilot.domain.common import GeoPoint
+from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
@@ -27,8 +28,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from smoke_itinerary import (  # noqa: E402
     RehearsalError,
+    Selection,
     SelectionError,
+    attach_leg_verification,
+    build_leg_pairs,
     load_proposals,
+    measure_legs,
     run_rehearsal,
     select_rehearsal_pois,
 )
@@ -190,11 +195,13 @@ def test_rehearsal_passthrough_and_result_schema():
     assert result["poi_names"] == [p.name for p in selection.pois]
     assert result["llm_used"] is False  # UnwiredLlm — 성공 호출 0건 (정직한 강등)
     assert isinstance(result["latency_ms"], int)
-    names = {p.name for p in selection.pois}
+    ids = {str(p.poi_id): p.name for p in selection.pois}
     assert len(result["slots"]) >= 1
     for slot in result["slots"]:
-        assert set(slot) == {"start", "end", "name"}
-        assert slot["name"] in names  # 슬롯 poi ⊆ 선택 집합 (INV-1 사영)
+        assert set(slot) == {"start", "end", "name", "poi_id"}
+        assert slot["poi_id"] in ids  # 슬롯 poi ⊆ 선택 집합 (INV-1 사영)
+        assert slot["name"] == ids[slot["poi_id"]]
+    assert "legs" not in result  # 실경로 검증은 별도 선택 단계 (TRIP-382)
 
 
 def test_rehearsal_rejects_empty_days():
@@ -221,3 +228,128 @@ def test_rehearsal_rejects_empty_days():
             bad, llm=UnwiredLlm(), model_id="dev-unwired",
             smoke_date=dt.date(2026, 8, 14),
         )
+
+
+# ── ⑥ 인접 슬롯 실경로 검증 (TRIP-382) — fake만, 실 호출 0 ────────────
+
+from trippilot.solver_engine.config import SolverConfig  # noqa: E402
+from trippilot.solver_engine.travel import TravelEstimator  # noqa: E402
+from trippilot.ports.travel_time_port import (  # noqa: E402
+    MeasuredTravel,
+    TravelTimeError,
+)
+
+_ESTIMATOR = TravelEstimator(SolverConfig())
+
+
+class FakeTravel:
+    """고정 실측(분) 반환 — fail_after 번째 호출부터는 TravelTimeError."""
+
+    def __init__(self, real_minutes: float, fail_after: int | None = None) -> None:
+        self._real = real_minutes
+        self._fail_after = fail_after
+        self.calls = 0
+
+    def measure(self, from_, to, mode) -> MeasuredTravel:
+        self.calls += 1
+        if self._fail_after is not None and self.calls > self._fail_after:
+            raise TravelTimeError("한도 초과 (fake)")
+        return MeasuredTravel(
+            real_minutes=self._real, distance_km=1.0,
+            source="fake", approximated=True,
+        )
+
+
+def _leg_selection(n: int = 4) -> Selection:
+    """일렬 POI n개 — p0 앵커. 0.01° ≈ 1.1km 간격 (전부 반경 안)."""
+    pois = [_poi(f"p{i}", _BASE.lat + 0.01 * i, _BASE.lng) for i in range(n)]
+    return Selection(region="부산 해운대구", anchor=pois[0], pois=tuple(pois))
+
+
+def _slot(poi_id: str) -> dict:
+    return {"start": "09:00", "end": "10:00", "name": f"장소-{poi_id}",
+            "poi_id": poi_id}
+
+
+def test_leg_pairs_include_anchor_and_adjacent_slots():
+    selection = _leg_selection(4)
+    # 첫 슬롯이 앵커 자신 — 앵커→첫 슬롯은 0거리라 제외되고 인접 쌍만 남는다
+    pairs = build_leg_pairs(selection, [_slot("p0"), _slot("p1"), _slot("p2")])
+    assert [(str(a.poi_id), str(b.poi_id)) for a, b in pairs] == [
+        ("p0", "p1"), ("p1", "p2")
+    ]
+    # 첫 슬롯이 앵커가 아니면 앵커→첫 슬롯 leg가 맨 앞에 붙는다
+    pairs = build_leg_pairs(selection, [_slot("p1"), _slot("p2"), _slot("p3")])
+    assert [(str(a.poi_id), str(b.poi_id)) for a, b in pairs] == [
+        ("p0", "p1"), ("p1", "p2"), ("p2", "p3")
+    ]
+
+
+def test_leg_pairs_capped_at_max():
+    selection = _leg_selection(8)
+    slots = [_slot(f"p{i}") for i in range(1, 8)]  # 앵커 leg 포함 7건 후보
+    assert len(build_leg_pairs(selection, slots)) == 6  # MAX_LEGS 절단
+
+
+def test_measure_legs_err_pct_formula():
+    selection = _leg_selection(2)
+    pairs = build_leg_pairs(selection, [_slot("p1")])
+    est = _ESTIMATOR.estimate(
+        selection.pois[0].coord, selection.pois[1].coord, TransportMode.PUBLIC
+    ).internal_minutes
+    legs, failure = measure_legs(
+        pairs, travel=FakeTravel(real_minutes=20.0), estimator=_ESTIMATOR
+    )
+    assert failure is None
+    assert legs == [{
+        "from": "장소-p0", "to": "장소-p1", "est_min": est,
+        "real_min": 20.0, "err_pct": round((est - 20.0) / 20.0 * 100, 1),
+    }]
+
+
+def test_measure_legs_zero_real_has_no_err_pct():
+    selection = _leg_selection(2)
+    pairs = build_leg_pairs(selection, [_slot("p1")])
+    legs, failure = measure_legs(
+        pairs, travel=FakeTravel(real_minutes=0.0), estimator=_ESTIMATOR
+    )
+    assert failure is None
+    assert legs[0]["err_pct"] is None  # 비율 정의 불가 — 지어내지 않는다
+
+
+def test_measure_legs_stops_at_first_failure_with_partial_legs():
+    selection = _leg_selection(4)
+    pairs = build_leg_pairs(selection, [_slot("p1"), _slot("p2"), _slot("p3")])
+    travel = FakeTravel(real_minutes=10.0, fail_after=1)
+    legs, failure = measure_legs(pairs, travel=travel, estimator=_ESTIMATOR)
+    assert len(legs) == 1  # 실패 전까지의 부분 실측만
+    assert failure is not None and "한도 초과" in failure
+    assert travel.calls == 2  # 실패 지점에서 중단 — 남은 쌍에 호출 반복 없음
+
+
+def test_attach_skips_without_travel_port():
+    """키 부재(travel=None) — legs 없이 그대로, 예외 없음 (리허설 성패와 분리)."""
+    selection = _leg_selection(2)
+    result = {"slots": [_slot("p1")]}
+    attach_leg_verification(result, selection, None, _ESTIMATOR)
+    assert "legs" not in result
+
+
+def test_attach_skips_when_all_calls_fail():
+    selection = _leg_selection(2)
+    result = {"slots": [_slot("p1")]}
+    attach_leg_verification(
+        result, selection, FakeTravel(10.0, fail_after=0), _ESTIMATOR
+    )
+    assert "legs" not in result  # 실측 0건 — 빈 legs 를 기록하지 않는다
+
+
+def test_attach_records_legs_schema():
+    selection = _leg_selection(3)
+    result = {"slots": [_slot("p1"), _slot("p2")]}
+    attach_leg_verification(result, selection, FakeTravel(15.0), _ESTIMATOR)
+    assert len(result["legs"]) == 2  # 앵커→p1, p1→p2
+    for leg in result["legs"]:
+        assert set(leg) == {"from", "to", "est_min", "real_min", "err_pct"}
+        assert isinstance(leg["est_min"], int)
+        assert leg["real_min"] == 15.0
