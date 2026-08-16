@@ -447,6 +447,31 @@ paths:
               schema: { type: array, items: { $ref: '#/components/schemas/GeocodeCandidate' } }
         '503': { $ref: '#/components/responses/PlaceSearchUnavailable' }
 
+  /stays/reverse-geocode:
+    get:
+      tags: [stays]
+      summary: 핀 지정 역지오코딩(좌표 → 주소)
+      description: >
+        지도 롱프레스로 찍은 좌표의 주소를 얻는다(e05 핀 지정 탭 · BR-U1-21).
+
+        **주소를 못 얻어도 등록을 막지 마라.** 등록에 필요한 것은 확정된 좌표이고(BR-U1-22),
+        이 탭 자체가 지도 검색이 죽었을 때의 폴백이라(BR-U1-23) 같은 벤더가 여기서도 죽어 있을 수 있다.
+        503 이면 "주소 미확인"으로 표시하고 숙소 이름을 직접 받아 등록을 계속한다.
+
+        응답의 `lat`·`lng` 는 **요청값 그대로**다 — 벤더 대표 좌표로 갈아끼우지 않는다(핀이 정본).
+      parameters:
+        - { name: lat, in: query, required: true, schema: { type: number, format: double, minimum: -90, maximum: 90 } }
+        - { name: lng, in: query, required: true, schema: { type: number, format: double, minimum: -180, maximum: 180 } }
+      responses:
+        '200':
+          description: >
+            **`address: null` = 그 좌표에 주소가 없다**(바다·산·비주소 구역) — 벤더 장애(503)와 구분된다.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReverseGeocodeResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/PlaceSearchUnavailable' }
+
   /places:
     get:
       tags: [places]
@@ -1151,6 +1176,17 @@ components:
         address: { type: string }
         lat: { type: number, format: double }
         lng: { type: number, format: double }
+
+    ReverseGeocodeResult:
+      type: object
+      required: [address, lat, lng]
+      properties:
+        address:
+          type: string
+          nullable: true
+          description: 도로명 우선·없으면 지번. **null 은 그 좌표에 주소가 없다는 사실**이며 조회 실패(503)와 다르다
+        lat: { type: number, format: double, description: 요청한 좌표 그대로(핀이 정본) }
+        lng: { type: number, format: double, description: 요청한 좌표 그대로(핀이 정본) }
 
     TripStatus:
       type: string

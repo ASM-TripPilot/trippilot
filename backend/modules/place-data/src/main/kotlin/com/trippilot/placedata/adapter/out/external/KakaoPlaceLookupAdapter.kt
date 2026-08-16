@@ -1,6 +1,7 @@
 package com.trippilot.placedata.adapter.out.external
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.trippilot.placedata.domain.PlaceAddress
 import com.trippilot.placedata.domain.PlaceLocation
 import com.trippilot.placedata.domain.PlaceLookupPort
 import org.springframework.beans.factory.annotation.Value
@@ -51,6 +52,33 @@ class KakaoPlaceLookupAdapter(
             }
         }
 
+    /**
+     * 좌표 → 주소. 카카오 `coord2address` 는 **행정구역 주소만** 돌려준다(상호 없음).
+     *
+     * `x`=경도·`y`=위도 순서다 — 뒤집으면 엉뚱한 나라가 나오는데 200 이라 조용히 틀린다.
+     * 주소가 없는 좌표(바다·산)는 `documents` 가 빈 배열이고, 이는 정상 응답이라 null 로 옮긴다.
+     */
+    override fun reverseGeocode(lat: Double, lng: Double): PlaceAddress? {
+        val doc = client.get()
+            .uri {
+                it.path("/v2/local/geo/coord2address.json")
+                    .queryParam("x", lng)
+                    .queryParam("y", lat)
+                    .build()
+            }
+            .header("Authorization", "KakaoAK $restApiKey")
+            .retrieve()
+            .body(KakaoCoord2AddressResponse::class.java)
+            ?.documents
+            ?.firstOrNull()
+            ?: return null
+        // 도로명이 있으면 그쪽이 사람이 읽기 쉽다. 시골은 지번만 있는 경우가 많아 폴백이 필요하다.
+        val address = doc.roadAddress?.addressName?.takeIf { it.isNotBlank() }
+            ?: doc.address?.addressName?.takeIf { it.isNotBlank() }
+            ?: return null
+        return PlaceAddress(address)
+    }
+
     /** 주소검색에는 상호가 없다 — 이름 자리에 주소가 그대로 간다. 지어내지 않는다. */
     private fun byAddress(query: String): List<PlaceLocation> =
         get("/v2/local/search/address.json", query).mapNotNull { doc ->
@@ -75,6 +103,18 @@ class KakaoPlaceLookupAdapter(
 }
 
 internal data class KakaoPlaceResponse(val documents: List<KakaoPlaceDocument> = emptyList())
+
+/** `coord2address` 응답 — 문서 한 건에 도로명·지번이 각각(둘 중 하나는 null 일 수 있다). */
+internal data class KakaoCoord2AddressResponse(val documents: List<KakaoCoord2AddressDocument> = emptyList())
+
+internal data class KakaoCoord2AddressDocument(
+    @param:JsonProperty("road_address") val roadAddress: KakaoAddressName? = null,
+    val address: KakaoAddressName? = null,
+)
+
+internal data class KakaoAddressName(
+    @param:JsonProperty("address_name") val addressName: String? = null,
+)
 
 /**
  * 카카오 로컬 문서 — 키워드·주소 응답을 한 타입으로 받는다(주소 응답엔 `place_name` 이 없어 null).
