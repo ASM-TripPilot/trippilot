@@ -16,6 +16,8 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
 import org.springframework.http.MediaType
 import org.springframework.web.client.RestClient
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -71,6 +73,36 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
     fun `신규 가입인데 연령확인 누락이면 400 VALIDATION_ERROR`() {
         val (status, body) = post(
             "/api/v1/auth/social/naver",
+            """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth"}""",
+        )
+
+        status shouldBe 400
+        body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+    }
+
+    /**
+     * BR-U0-05 — "미충족 **422**, 계정 미생성". 오래도록 403 이 나가고 있었다(TRIP-249).
+     *
+     * 403 이면 클라이언트는 "권한 문제"로 읽어 재로그인·권한요청으로 유도한다 — 나이는 그걸로 바뀌지 않는다.
+     * 입력도 인증도 정상이고 **업무 규칙**에 걸린 것이라 422 다. 위 400(연령확인 값 자체가 없음)과 갈린다.
+     */
+    @Test
+    fun `만 14세 미만이면 422 — 400 과 갈린다`() {
+        val underage = LocalDate.now(ZoneId.of("Asia/Seoul")).minusYears(10)
+        val (status, body) = post(
+            "/api/v1/auth/social/naver",
+            """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth",
+                "ageConfirmation":{"method":"BIRTH_DATE","birthDate":"$underage"}}""",
+        )
+
+        status shouldBe 422
+        body["error"]["code"].asText() shouldBe "AGE_REQUIREMENT_NOT_MET"
+    }
+
+    @Test
+    fun `지원하지 않는 provider 는 400`() {
+        val (status, body) = post(
+            "/api/v1/auth/social/facebook",
             """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth"}""",
         )
 

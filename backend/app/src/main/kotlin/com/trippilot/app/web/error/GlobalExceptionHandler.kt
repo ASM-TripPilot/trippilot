@@ -36,7 +36,9 @@ class GlobalExceptionHandler {
     fun handleDomain(ex: DomainException): ResponseEntity<ErrorResponse> {
         val status = when (ex) {
             is AuthenticationRequired -> HttpStatus.UNAUTHORIZED
-            is AgeRequirementNotMet -> HttpStatus.FORBIDDEN
+            // 422 다(BR-U0-05 "미충족 422, 계정 미생성"). 403 이 아닌 이유: 입력은 형식·인증 모두 정상이고
+            // **업무 규칙**에 걸린 것이다. 403 은 "권한이 없다"라 클라이언트가 재로그인·권한요청으로 오독한다.
+            is AgeRequirementNotMet -> HttpStatus.UNPROCESSABLE_ENTITY
             is PermissionDenied -> HttpStatus.FORBIDDEN
             is ResourceNotFound -> HttpStatus.NOT_FOUND
             is ValidationFailed -> HttpStatus.BAD_REQUEST
