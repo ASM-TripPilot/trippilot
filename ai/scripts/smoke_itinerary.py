@@ -29,6 +29,10 @@ tests/test_smoke_itinerary.py 가 fake 데이터로만 검증한다 (실 호출 
     REHEARSAL_OUTPUT  기본 "rehearsal_result.json" — 기록용 1건 JSON
     LLM env           smoke_llm.py 와 동일 (LLM_PROVIDER/OPENAI_*/AZURE_*/ANTHROPIC_*)
                       — 어댑터 조립은 smoke_llm._build_adapter 를 그대로 재사용
+    TMAP_API_KEY      선택 (TRIP-382) — 있으면 생성 성공 후 인접 슬롯 쌍(~6건)을
+                      TMAP 실경로로 실측해 기록 JSON에 legs(추정 대 실측 오차)를
+                      추가한다. 키 부재·API 실패는 검증만 생략(WARNING) — 리허설
+                      성패와 분리. 실측 호출은 리허설 실행시에만 (D37 — pytest는 fake)
 
 종료 코드: 0 = 생성 200 + 검사(슬롯≥1 · INV-1 · INV-3) 통과 — LLM 실패로 규칙 점수
 강등돼도 성공(정직한 강등, INV-4). 1 = 선택 불가·생성 실패·검사 위반 (원인 출력).
@@ -53,12 +57,14 @@ from trippilot.api.wiring import (
     build_orchestrator,
 )
 from trippilot.llm_gateway.config import C1Config
-from trippilot.solver_engine.travel import haversine_km
-from trippilot.domain.common import BudgetLevel
+from trippilot.solver_engine.config import SolverConfig
+from trippilot.solver_engine.travel import TravelEstimator, haversine_km
+from trippilot.domain.common import BudgetLevel, TransportMode
 from trippilot.domain.llm import ModelTier
 from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.domain.poi import Poi
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
+from trippilot.ports.travel_time_port import TravelTimeError, TravelTimePort
 
 # 앵커 반경(km) — 후보풀 반경(M7 PUBLIC 10km)보다 좁게 잡아 "흩어진 POI로 후보 0"
 # 함정을 회피한다. 샘플 6~8개는 1일 일정 슬롯 수(대략 4~6)보다 여유 있는 최소 풀.
@@ -273,7 +279,10 @@ def run_rehearsal(
         },
         "poi_names": [p.name for p in selection.pois],
         "slots": [
-            {"start": s["start_at"], "end": s["end_at"], "name": names[s["poi_id"]]}
+            # poi_id 는 인접 슬롯 실경로 검증(TRIP-382)의 좌표 역참조용 — name 은
+            # 중복 가능해 키로 못 쓴다
+            {"start": s["start_at"], "end": s["end_at"],
+             "name": names[s["poi_id"]], "poi_id": s["poi_id"]}
             for _, s in slots
         ],
         "solve_mode": body["solve_mode"],
@@ -281,6 +290,90 @@ def run_rehearsal(
         "llm_used": recorder.ok_calls > 0,
         "latency_ms": latency_ms,
     }
+
+
+# ── 인접 슬롯 실경로 검증 (TRIP-382 — 추정 오차 축적, 2단계 캘리브레이션 재료) ──
+
+# 실측 상한 — 1일 일정(슬롯 4~6) 기준 앵커→첫 슬롯 포함 인접 쌍 ~6건이면 전량,
+# 그 이상은 API 한도 아끼기로 절단한다.
+MAX_LEGS = 6
+# 리허설 요청은 transport_modes=["대중교통"] 고정(_request_body) — 검증 수단도 일치.
+# v1 어댑터는 PUBLIC을 보행 API로 근사한다 (adapters/tmap.py docstring).
+LEG_MODE = TransportMode.PUBLIC
+
+
+def build_leg_pairs(
+    selection: Selection, slots: list[dict], max_legs: int = MAX_LEGS
+) -> list[tuple[Poi, Poi]]:
+    """확정 슬롯 순서의 인접 쌍 — 앵커→첫 슬롯 포함, 같은 POI 연속은 제외(0거리)."""
+    by_id = {str(p.poi_id): p for p in selection.pois}
+    chain = [selection.anchor] + [by_id[s["poi_id"]] for s in slots]
+    pairs = [(a, b) for a, b in zip(chain, chain[1:]) if a.poi_id != b.poi_id]
+    return pairs[:max_legs]
+
+
+def measure_legs(
+    pairs: list[tuple[Poi, Poi]],
+    *,
+    travel: TravelTimePort,
+    estimator: TravelEstimator,
+    mode: TransportMode = LEG_MODE,
+) -> tuple[list[dict], str | None]:
+    """쌍별 (솔버 추정 est_min, 실측 real_min, 오차 err_pct) — 오차 축적용 legs.
+
+    err_pct = (est − real) / real × 100 (양수 = 과대추정). real 0(동일 좌표 등)은
+    비율이 정의 불가라 None. API 실패 시 그 지점에서 중단하고 (부분 legs, 사유)를
+    반환한다 — 죽은 키·한도 초과에 남은 호출을 반복하지 않는다.
+    """
+    legs: list[dict] = []
+    for from_poi, to_poi in pairs:
+        est_min = estimator.estimate(from_poi.coord, to_poi.coord, mode).internal_minutes
+        try:
+            real = travel.measure(from_poi.coord, to_poi.coord, mode)
+        except TravelTimeError as e:
+            return legs, str(e)
+        err_pct = (
+            round((est_min - real.real_minutes) / real.real_minutes * 100, 1)
+            if real.real_minutes > 0 else None
+        )
+        legs.append({
+            "from": from_poi.name,
+            "to": to_poi.name,
+            "est_min": est_min,
+            "real_min": real.real_minutes,
+            "err_pct": err_pct,
+        })
+    return legs, None
+
+
+def attach_leg_verification(
+    result: dict,
+    selection: Selection,
+    travel: TravelTimePort | None,
+    estimator: TravelEstimator,
+) -> None:
+    """생성 성공 후 선택 단계 — result에 legs 추가 + stdout 표.
+
+    travel=None(키 부재)·API 실패는 검증만 생략(WARNING) — 리허설 성패와 분리
+    (반환값 없음, 예외 없음). 부분 실측이라도 legs 는 기록한다 (축적이 목적).
+    """
+    if travel is None:
+        print("[rehearsal] WARNING TMAP_API_KEY 없음 — 실경로 검증 생략 (TRIP-382)")
+        return
+    legs, failure = measure_legs(
+        build_leg_pairs(selection, result["slots"]), travel=travel, estimator=estimator
+    )
+    if failure is not None:
+        print(f"[rehearsal] WARNING TMAP 실측 실패({len(legs)}건까지 기록): {failure}")
+    if not legs:
+        return
+    result["legs"] = legs
+    print(f"[rehearsal] 실경로 검증 {len(legs)}건 (PUBLIC≈보행 근사, TRIP-382)")
+    print(f"[rehearsal]   {'구간':<30} est(분)  real(분)  err%")
+    for leg in legs:
+        err = f"{leg['err_pct']:+.1f}%" if leg["err_pct"] is not None else "n/a"
+        print(f"[rehearsal]   {leg['from']}→{leg['to']:<20} "
+              f"{leg['est_min']:>5}  {leg['real_min']:>7.1f}  {err:>7}")
 
 
 # ── CLI ──────────────────────────────────────────────────────────────
@@ -304,6 +397,15 @@ def _print_summary(json_path: str) -> int:
     print("|---|---|")
     for slot in result["slots"]:
         print(f"| {slot['start']}–{slot['end']} | {slot['name']} |")
+    if result.get("legs"):  # 실경로 검증이 돌았을 때만 (TRIP-382)
+        print()
+        print("### 인접 슬롯 실경로 검증 (TMAP · PUBLIC≈보행 근사)")
+        print("| 구간 | 추정(분) | 실측(분) | 오차 |")
+        print("|---|---|---|---|")
+        for leg in result["legs"]:
+            err = f"{leg['err_pct']:+.1f}%" if leg["err_pct"] is not None else "n/a"
+            print(f"| {leg['from']} → {leg['to']} | {leg['est_min']} "
+                  f"| {leg['real_min']} | {err} |")
     return 0
 
 
@@ -343,6 +445,21 @@ def main() -> int:
     except RehearsalError as e:
         print(f"[rehearsal] FAIL {e}")
         return 1
+
+    # 인접 슬롯 실경로 검증 (TRIP-382) — 키 있을 때만, 실패해도 리허설은 성공 유지.
+    # 어댑터·실 HTTP 조립은 여기(리허설 실행)에서만 — pytest는 fake (D37).
+    tmap_key = _optional("TMAP_API_KEY")
+    travel = None
+    if tmap_key:
+        from trippilot.solver_engine.adapters.tmap import (
+            TmapRouteAdapter,
+            UrllibHttpClient,
+        )
+
+        travel = TmapRouteAdapter(UrllibHttpClient(), tmap_key)
+    # wiring 기본 조립(build_orchestrator의 SolverConfig() 기본값)과 동일한 추정기 —
+    # 리허설 응답에 실제로 쓰인 추정과 같은 값이어야 오차 축적이 유효하다
+    attach_leg_verification(result, selection, travel, TravelEstimator(SolverConfig()))
 
     Path(output).write_text(
         json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
