@@ -37,6 +37,7 @@
 - **공유 `RestClient.Builder` 빈을 변형(mutate)하지 말 것 → 어댑터마다 전용 빌더 생성.** `DefaultRestClientBuilder` 는 copy-on-write 가 아니라 in-place 변경이고, 여러 모듈이 같은 이름·타입 빈을 `@ConditionalOnMissingBean` 으로 공유한다. baseUrl·requestFactory·컨버터를 붙이면 **다른 모듈의 HTTP 클라이언트가 오염**된다(소셜 로그인 장애 위험). (TRIP-229, PR #119)
 - **경계 전용 `HttpMessageConverter` 를 `@Bean` 으로 노출하지 말 것 → 설정 안에서 인스턴스로 만들어 해당 클라이언트에만 부착.** SB4 는 컨텍스트의 **모든** 컨버터 빈을 MVC 목록에도 주입하므로, AI 경계용 snake_case 컨버터가 **공개 API 응답을 snake_case 로** 바꿀 수 있다. (TRIP-229, PR #119)
 - **SB4 의 기본 Jackson 은 3(`tools.jackson`)** — 경계 매퍼도 Jackson 3로 만들 것. Jackson 2(`com.fasterxml`) 컨버터를 붙이면 실제 통신에서 역직렬화가 깨진다. 또 빈 `JsonMapper` 는 Kotlin 모듈을 자동 등록하지 않아 데이터클래스 역직렬화가 실패하므로 `tools.jackson.module:jackson-module-kotlin` 을 명시 등록. (TRIP-229)
+- **"충돌 없이 자동 병합됨"을 "합쳐도 된다"로 읽지 말 것 → 병합 결과를 실제로 빌드할 것.** git 이 말하는 것은 **겹친 줄이 없다**까지다. 한 브랜치가 바꾼 시그니처를 다른 브랜치가 부르고 있으면 서로 다른 hunk 라 **충돌 표시가 나지 않고 조용히 컴파일이 깨진다.** 실측: 브랜치 6개를 순서대로 합치자 `git merge` 는 6번 모두 성공했는데 빌드는 `KakaoPlaceLookupAdapter` 생성자 변경(타임아웃 도입) 때문에 깨졌다 — 그 파일을 건드린 두 브랜치는 **각자의 PR CI 에서는 둘 다 초록**이다(각각 develop 기준이라 상대 변경을 보지 못한다). 더 나쁜 것은 발현 시점이다: 먼저 머지한 PR 은 통과하고 **두 번째가 머지된 뒤 develop 이 깨진다.** 처방: 여러 브랜치를 쌓아 두었으면 머지 전에 스크래치 브랜치에 **머지 순서대로 합쳐 전체 빌드를 한 번 돌린다**(`git checkout -b scratch develop && git merge A B C…`). 겹치는 파일 목록은 `git diff --name-only develop..<branch>` 로 먼저 뽑아 두면 어디를 볼지 안다. (타임아웃·역지오코딩 브랜치)
 
 ## 아키텍처 · 구현
 
