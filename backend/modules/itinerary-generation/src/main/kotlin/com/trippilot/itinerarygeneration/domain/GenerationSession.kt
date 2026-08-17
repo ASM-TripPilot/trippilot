@@ -77,7 +77,19 @@ data class GenerationSession(
         )
     }
 
-    /** 실패. day1 분은 일정에 남아 유효하다 — 세션만 닫는다(INV-4 침묵 금지). */
+    /**
+     * 실패 — 세션만 닫는다(INV-4 침묵 금지).
+     *
+     * **`FAILED` 는 두 경우를 함께 가리키며 [itineraryId] 가 그 둘을 가른다.** 상태를 쪼개지 않은 이유는
+     * 이미 다른 필드로 파생되기 때문이다(진행률을 저장하지 않는 것과 같은 이유). 읽을 때 이 구분을 놓치기 쉬워
+     * 여기 적어 둔다.
+     *
+     * - [itineraryId] `!= null` — day1 은 나왔고 **일정에 남아 유효하다.** 2차(나머지 일자)가 실패한 것이다
+     * - [itineraryId] `== null` — day1 도 못 만들었다. **일정이 아예 없다.** 1차의 입력 조립·영속이 터진 경우이며,
+     *   호출측이 예외를 다시 던져 요청 자체가 에러로 끝난다
+     *
+     * AI 호출 실패는 여기로 오지 않는다 — 결정론 최소 폴백이 받아 day1 을 만들고 `DAY1_READY` 로 간다.
+     */
     fun failed(at: Instant): GenerationSession {
         require(isRunning) { "실패 전이는 진행 중일 때만 가능합니다(현재 $status)." }
         return copy(status = GenerationStatus.FAILED, finishedAt = at)

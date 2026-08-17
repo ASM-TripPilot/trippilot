@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.trippilot.placedata.domain.PlaceAddress
 import com.trippilot.placedata.domain.PlaceLocation
 import com.trippilot.placedata.domain.PlaceLookupPort
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Primary
@@ -31,10 +32,8 @@ import org.springframework.web.client.RestClient
 @ConditionalOnProperty(name = ["trippilot.place.geocode.mode"], havingValue = "kakao")
 class KakaoPlaceLookupAdapter(
     @Value("\${trippilot.social.kakao.client-id:}") private val restApiKey: String,
-    restClientBuilder: RestClient.Builder,
+    @param:Qualifier(KakaoLocalClientConfiguration.BEAN_NAME) private val client: RestClient,
 ) : PlaceLookupPort {
-
-    private val client = restClientBuilder.baseUrl(BASE_URL).build()
 
     override fun search(query: String): List<PlaceLocation> =
         byKeyword(query).ifEmpty { byAddress(query) }
@@ -96,7 +95,6 @@ class KakaoPlaceLookupAdapter(
             .orEmpty()
 
     private companion object {
-        private const val BASE_URL = "https://dapi.kakao.com"
         /** 후보 선택 UI 가 감당할 만큼만. 전부 받아도 사용자는 위에서 고른다. */
         private const val PAGE_SIZE = 5
     }
