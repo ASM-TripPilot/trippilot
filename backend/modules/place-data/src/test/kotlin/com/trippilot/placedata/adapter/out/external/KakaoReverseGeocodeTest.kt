@@ -19,10 +19,12 @@ import org.springframework.web.util.UriComponentsBuilder
  */
 class KakaoReverseGeocodeTest : StringSpec({
 
+    // baseUrl 은 [KakaoLocalClientConfiguration] 이 소유한다 — 어댑터가 더는 직접 걸지 않으므로
+    // 테스트도 같은 상수를 쓴다. 여기에 다른 값을 박으면 아래 requestTo 매처가 조용히 안 맞는다.
     fun fixture(): Pair<KakaoPlaceLookupAdapter, MockRestServiceServer> {
-        val builder = RestClient.builder()
+        val builder = RestClient.builder().baseUrl(KakaoLocalClientConfiguration.BASE_URL)
         val server = MockRestServiceServer.bindTo(builder).build()
-        return KakaoPlaceLookupAdapter("test-key", builder) to server
+        return KakaoPlaceLookupAdapter("test-key", builder.build()) to server
     }
 
     fun uri(lat: Double, lng: Double): String =
