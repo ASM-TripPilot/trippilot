@@ -21,14 +21,18 @@ internal class FakeReplans(
     val commands = mutableListOf<ReplanCommand>()
     val applied = mutableListOf<ReplanProposal>()
 
+    /** 확정 시 넘어온 이력 사유(BR-U4-31) — 조립이 맞는지 여기서 본다. */
+    val appliedReasons = mutableListOf<String>()
+
     override fun propose(command: ReplanCommand): ReplanProposal? {
         commands += command
         failWith?.let { throw it }
         return proposal
     }
 
-    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal) {
+    override fun apply(accountId: UUID, tripId: UUID, proposal: ReplanProposal, reason: String) {
         applied += proposal
+        appliedReasons += reason
     }
 
     companion object {

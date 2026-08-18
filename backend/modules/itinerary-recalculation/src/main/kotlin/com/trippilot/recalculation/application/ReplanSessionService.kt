@@ -123,10 +123,31 @@ class ReplanSessionService(
             throw ConflictDetected(message = "확정할 재계획안이 없습니다.")
         }
         val draft = session.draft ?: throw ConflictDetected(message = "재계획안이 비어 있습니다.")
-        replans.apply(accountId, tripId, ReplanProposal.fromMap(draft))
+        replans.apply(accountId, tripId, ReplanProposal.fromMap(draft), changeReason(session))
         val applied = sessions.save(session.applied(clock.instant()))
         events.publish(ItineraryRecalculated(tripId.toString(), sessionId.toString()))
         return applied
+    }
+
+    /**
+     * 이력의 `reason` 한 줄(BR-U4-31) — 진입 경로 + 사유 + 방향 지시어 + 자유입력을 ` · ` 로 잇는다.
+     * 예: `자동 감지 · 비 예보 · 실내로`.
+     *
+     * **비워서 넘기지 않는다.** 사유·지시어를 하나도 안 고른 수동 진입이면 최소한 "여행 중 재계획"이라도 남긴다 —
+     * 빈 칸은 이력을 열었을 때 "왜 바꿨는지"를 되짚을 근거를 없앤다(US-PLANB-09 의 목적 자체).
+     *
+     * 트리거 **요약**(예: `날씨(비 예보 70%)`)까지는 싣지 못한다 — 그 문구는 C9(planb-detection) 소유인데
+     * C10 은 C9 에 의존하지 않는다. 표시 문자열 하나 때문에 모듈 의존을 늘리지 않고, 자동 진입이라는
+     * 사실만 `triggerId` 유무로 남긴다(정본 §7 대비 축약 — 트리거 상세가 필요해지면 그때 경계를 연다).
+     */
+    private fun changeReason(session: ReplanSession): String {
+        val parts = buildList {
+            if (session.triggerId != null) add("자동 감지")
+            addAll(session.reasons)
+            addAll(session.directives)
+            session.freeText?.takeIf { it.isNotBlank() }?.let { add(it.trim()) }
+        }.filter { it.isNotBlank() }
+        return parts.joinToString(REASON_SEPARATOR).ifBlank { DEFAULT_REASON }.take(REASON_MAX)
     }
 
     @Transactional(readOnly = true)
@@ -160,5 +181,13 @@ class ReplanSessionService(
 
         /** 여행 "오늘"은 사용자가 있는 곳의 날짜지, 서버 UTC 날짜가 아니다. */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
+
+        private const val REASON_SEPARATOR = " · "
+
+        /** 사유·지시어를 하나도 안 고른 수동 진입의 최소 문구 — 빈 칸으로 남기지 않는다(BR-U4-31). */
+        private const val DEFAULT_REASON = "여행 중 재계획"
+
+        /** `change_log_entry.reason` 은 varchar(500) — 넘치면 저장이 통째로 실패한다(자유입력이 길 수 있다). */
+        private const val REASON_MAX = 500
     }
 }
