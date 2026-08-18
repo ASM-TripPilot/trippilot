@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.test.context.TestPropertySource
 import org.springframework.http.MediaType
 import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.jdbc.core.JdbcTemplate
@@ -32,6 +33,7 @@ import java.time.Instant
  * 외부 호출은 0이다 — 파일을 읽어 우리 경계에 태울 뿐이다(CI 정책 유지).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@TestPropertySource(properties = ["trippilot.service-auth.token=" + SERVICE_TOKEN])
 class PoiProposalRealDocumentIT : AbstractPostgresIntegrationTest() {
 
     @Value("\${local.server.port}")
@@ -61,7 +63,7 @@ class PoiProposalRealDocumentIT : AbstractPostgresIntegrationTest() {
             .baseUrl("http://localhost:$port")
             .build()
             .post().uri(path)
-            .header("Authorization", "Bearer $token")
+            .header("X-Service-Token", token)   // /internal 은 서비스 토큰만 받는다(TRIP-393)
             .contentType(MediaType.APPLICATION_JSON)
             .body(body)
             .retrieve().onStatus({ it.is4xxClientError || it.is5xxServerError }, { _, _ -> })
@@ -92,7 +94,7 @@ class PoiProposalRealDocumentIT : AbstractPostgresIntegrationTest() {
 
     @Test
     fun `실 수집본이 그대로 들어가고 다시 넣어도 행이 늘지 않는다`() {
-        val token = newToken()
+        val token = SERVICE_TOKEN
         val document = Files.readString(sharedDocument())
 
         val (rc, first) = post("/internal/pois/proposals", token, document)

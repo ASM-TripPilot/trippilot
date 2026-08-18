@@ -9,7 +9,9 @@ dependencies {
 
     implementation(project(":common:core"))
     implementation(libs.spring.boot.starter.oauth2.resource.server) // JwtEncoder/Decoder(Nimbus) + Bearer 필터
-    implementation(libs.kotlin.reflect)                              // @ConfigurationProperties 바인딩
+    implementation(libs.kotlin.reflect)
+    // 서비스 토큰 필터가 쓰는 서블릿 타입 — 런타임은 app 의 web starter 가 제공한다(여기서 톰캣을 끌지 않는다).
+    compileOnly("jakarta.servlet:jakarta.servlet-api")                              // @ConfigurationProperties 바인딩
 
     testImplementation(libs.bundles.kotest)
 }
