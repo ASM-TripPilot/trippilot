@@ -431,6 +431,23 @@ class GenerateItineraryServiceTest : StringSpec({
     }
 
     // 직접 만들기도 같은 가드를 지난다 — AI 를 안 부를 뿐 기존 일정을 지우는 것은 똑같다.
+    /**
+     * 2차 생성이 중단되면 스위퍼가 `FAILED` 로 내리되 **일정 행은 남긴다**. 그 행 때문에 여행 중
+     * 재생성이 막히면 사용자는 1일차만 있는 반쪽 일정에 갇힌다 — 실패한 생성은 지킬 계획이 아니다.
+     */
+    "실패한 일정은 여행 중에도 다시 만들 수 있다" {
+        val failedRepo = FakeItineraries().apply {
+            byTrip[tripId] = Itinerary.create(
+                tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+                listOf(ItineraryDay.of(start, 0, emptyList())),
+                now, GenerationState.FAILED,
+            )
+        }
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = failedRepo, clock = clockAt("2026-08-02"))
+
+        svc.generate(acc, tripId, GenerationMode.FULLY_AI).tripId shouldBe tripId
+    }
+
     "직접 만들기도 여행 중이면 409" {
         val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-02"))
 

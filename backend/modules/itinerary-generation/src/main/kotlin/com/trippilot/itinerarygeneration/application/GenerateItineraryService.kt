@@ -63,9 +63,14 @@ class GenerateItineraryService(
 
     fun generate(accountId: UUID, tripId: UUID, mode: GenerationMode): Itinerary {
         val ctx = trips.findGenerationContext(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
-        // **첫 생성은 막지 않는다** — 지울 계획이 없으니 아래 피해가 성립하지 않는다.
-        // 여행 중에 "아직 일정을 안 만들었는데 지금 만들래"는 정상 요구다.
-        if (previousOf(tripId) != null) guardTripPeriod(ctx.startDate, ctx.endDate)
+        // **지킬 계획이 있을 때만 막는다.** 첫 생성(일정 없음)과 실패한 생성은 대상이 아니다 —
+        // 여행 중에 "아직 일정이 없는데 지금 만들래"도, "생성이 깨졌으니 다시"도 정상 요구다.
+        // 2차 생성이 중단되면 스위퍼가 FAILED 로 내리되 **행은 남기므로**, 이 구분이 없으면
+        // 여행 중 사용자가 반쪽 일정에 갇힌다.
+        val existing = previousOf(tripId)
+        if (existing != null && existing.generationState != GenerationState.FAILED) {
+            guardTripPeriod(ctx.startDate, ctx.endDate)
+        }
         val prefs = preferences.findPreferences(accountId)                                    // 취향 7축·예산등급(계정 스코프)
         // 소유·기간은 위에서 선검증 — 거점 앵커는 기간을 넘겨 조립(중복 trip 조회 없음).
         val stayAnchors = baseAnchors.findStayNightAnchors(tripId, ctx.startDate, ctx.endDate)
