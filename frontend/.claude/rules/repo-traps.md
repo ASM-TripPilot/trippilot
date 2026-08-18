@@ -56,6 +56,10 @@
 
 - **`features` 간 import 금지에 기계 강제가 없는 feature가 있다** → `eslint.config.js`의 `FEATURES` 배열이 `['onboarding','home']`뿐이라 `itinerary`·`trip`·`explore`는 zone 검사 밖이다. 관례(조합은 `pages` 전담)로 지켜질 뿐, 어겨도 lint는 안 걸린다.
 
+## 여행 만들기 위저드 (g01)
+
+- **`TripWizardStep1Screen`의 confirm은 검색으로 좁혀진 목록이 아니라 항상 원본 `regions`(6개)에서 지역을 찾아야 한다** → `confirmDestination`(~:632) 안 `regions.find(...)`를 `sheetChipRegions.find(...)`(검색 결과)로 바꾸면 confirm이 조용히 무동작(선택한 지역이 좁힌 목록을 벗어났을 때 아무것도 안 담기고 시트도 안 닫힘)한다. 재현: 시트 열기 → 검색 `부`로 부산 선택 → 검색어를 `여수`로 바꿈(부산 칩이 시트에서 사라짐, 선택 상태는 유지) → confirm. **이 성질은 `TripWizardStep1Screen.test.tsx`의 `★확정은 full regions로 지역을 되찾는다` 테스트가 잠근다**(TRIP-387 게이트①-2, 뮤테이션 실측 — 위 뮤테이션이 그 테스트를 red로 만든다). 이 파일을 재편집할 때(예: 시트·검색·박수 스테퍼) 그 테스트를 지우면 blind spot이 재개방된다. 개념: [[좁힌 목록과 원본 목록의 소비처 분리]].
+
 ## 작업 관례
 
 - **엣지 케이스 화면을 눈으로 보려면** 목을 만들지 말고 `src/app/_dev/preview.tsx`에 상태를 추가한다.
