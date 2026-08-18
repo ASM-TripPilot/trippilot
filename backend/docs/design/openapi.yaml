@@ -47,6 +47,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TokenPair' }
+        '400':
+          description: >
+            입력 검증 실패 — 지원하지 않는 `provider`, 필수 필드 누락, 신규 가입 시 연령확인 누락.
+            **연령확인은 400 과 422 로 갈린다**: 값이 아예 없으면 400(입력 문제),
+            값은 있는데 만 14세 미만이면 422(규칙 위반)다.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '401': { $ref: '#/components/responses/SocialAuthFailed' }
         '409': { $ref: '#/components/responses/SocialEmailConflict' }
         '422': { $ref: '#/components/responses/AgeNotMet' }
@@ -76,6 +84,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TokenPair' }
+        '400':
+          description: >
+            입력 검증 실패 — 지원하지 않는 `provider`, `accessToken` 누락, 신규 가입 시 연령확인 누락.
+            연령은 **없으면 400 · 만 14세 미만이면 422** 로 갈린다(BR-U0-05).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '401': { $ref: '#/components/responses/SocialAuthFailed' }
         '409': { $ref: '#/components/responses/SocialEmailConflict' }
         '422': { $ref: '#/components/responses/AgeNotMet' }
@@ -2029,7 +2044,9 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     AgeNotMet:
-      description: 만 14세 미만(생성 차단)
+      description: >
+        만 14세 미만 — 계정을 만들지 않는다(BR-U0-05). 입력·인증은 정상이고 **업무 규칙**에 걸린 것이라
+        422 다. 연령확인 값 자체가 없으면 그건 입력 문제라 400 으로 갈린다.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
