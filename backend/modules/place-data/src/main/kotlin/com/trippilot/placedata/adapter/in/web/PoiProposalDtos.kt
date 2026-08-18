@@ -44,7 +44,14 @@ data class ProposalPoi(
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class ProposalCoord(val lat: Double? = null, val lng: Double? = null)
 
-/** `content_id` 가 멱등 키다 — 이게 없으면 재수집이 같은 행을 찾지 못한다. */
+/**
+ * `content_id` 가 멱등 키다 — 이게 없으면 재수집이 같은 행을 찾지 못한다.
+ *
+ * **`image_url` 은 일부러 받지 않는다.** 문서에는 들어 있지만(실측 1,043/1,104), 벤더 이미지를
+ * 우리 화면에 거는 것은 **라이선스·핫링크 정책**이 걸린 문제이고 리포가 그 판단을 실 벤더 어댑터
+ * 티켓으로 이연해 뒀다(`R__seed_stub_pois.sql` 주석 · TRIP-219). 정책이 정해지면 여기에 칸을 연다 —
+ * 그때까지는 받지 않는 편이 낫다. 받아 두면 어딘가에서 새어 나가 표시되기 시작한다.
+ */
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class ProposalProvenance(
     @param:JsonProperty("content_id") val contentId: String? = null,
@@ -73,4 +80,5 @@ fun ProposalItem.toCommand() = PoiProposal(
     // 영업시간은 **원문**을 저장한다 — 파싱본만 받으면 원문이 소실된다(상대 주석의 명시 사항).
     openingHours = openingHoursRaw,
     sourceRef = provenance?.contentId,
+    tags = tags,
 )

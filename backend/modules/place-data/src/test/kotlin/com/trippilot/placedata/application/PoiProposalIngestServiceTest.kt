@@ -34,7 +34,8 @@ class PoiProposalIngestServiceTest : StringSpec({
         category: PoiCategory? = PoiCategory.자연,
         region: String? = "서귀포시",
         hours: String? = "05:00~20:00",
-    ) = PoiProposal(name, lat, lng, category, region, hours, ref)
+        tags: List<String> = listOf("자연관광지", "일출"),
+    ) = PoiProposal(name, lat, lng, category, region, hours, ref, tags)
 
     "게이트를 통과한 제안이 ACTIVE 로 등록된다" {
         val repo = InMemoryPoiRepository()
@@ -172,5 +173,37 @@ class PoiProposalIngestServiceTest : StringSpec({
         // 같은 이름·좌표를 가진 수동 POI 가 따로 있어도 수집 갱신이 그걸 건드리면 안 된다.
         repo.findBySourceRefs(PoiSource.TOURAPI, listOf("500")).shouldNotBeNull()
         repo.findBySourceRefs(PoiSource.TOURAPI, listOf("없는키")) shouldBe emptyMap()
+    }
+    /**
+     * 상대는 모든 제안에 분류 명칭을 싣는다(실측 1,104/1,104). 이걸 버리면 `poi.tags` 가 늘 비고
+     * 화면의 태그 자리가 빈 칸이 된다 — **조용히** 그렇게 된다(오류가 없다).
+     */
+    "태그를 버리지 않는다" {
+        val repo = InMemoryPoiRepository()
+
+        PoiProposalIngestService(repo, clock).ingest(PoiSource.TOURAPI, listOf(proposal()))
+
+        repo.stored.single().tags shouldBe listOf("자연관광지", "일출")
+    }
+
+    "재수집이 태그를 갱신한다 — 벤더가 분류를 고치기도 한다" {
+        val repo = InMemoryPoiRepository()
+        val svc = PoiProposalIngestService(repo, clock)
+        svc.ingest(PoiSource.TOURAPI, listOf(proposal(tags = listOf("옛분류"))))
+
+        svc.ingest(PoiSource.TOURAPI, listOf(proposal(tags = listOf("새분류", "추가"))))
+
+        repo.stored.single().tags shouldBe listOf("새분류", "추가")
+    }
+
+    // 빈 태그로 덮어써 기존 값을 지우지 않는다 — 벤더가 이번에 안 준 것과 "없다"는 다르다.
+    "빈 태그는 기존 값을 지우지 않는다" {
+        val repo = InMemoryPoiRepository()
+        val svc = PoiProposalIngestService(repo, clock)
+        svc.ingest(PoiSource.TOURAPI, listOf(proposal(tags = listOf("유지되어야함"))))
+
+        svc.ingest(PoiSource.TOURAPI, listOf(proposal(tags = emptyList())))
+
+        repo.stored.single().tags shouldBe listOf("유지되어야함")
     }
 })

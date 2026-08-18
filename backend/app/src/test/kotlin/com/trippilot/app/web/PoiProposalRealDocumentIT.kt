@@ -9,12 +9,14 @@ import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.http.MediaType
 import org.springframework.http.client.JdkClientHttpRequestFactory
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.client.RestClient
 import java.nio.file.Files
 import java.nio.file.Path
@@ -37,6 +39,19 @@ class PoiProposalRealDocumentIT : AbstractPostgresIntegrationTest() {
 
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
+    @Autowired private lateinit var jdbc: JdbcTemplate
+
+    /**
+     * **넣은 것을 치운다.** Testcontainers 는 전 IT 가 공유하는 싱글톤이고 이 테스트는 HTTP 로 서버에
+     * 쓰기 때문에 트랜잭션 롤백이 닿지 않는다. 치우지 않으면 ACTIVE POI 1,100여 건이 뒤에 도는 모든 IT 의
+     * **후보풀에 그대로 남는다** — 일정 생성이 고르는 장소가 달라지고, 실패가 테스트 순서에 따라 갈린다.
+     *
+     * 수동 등록분(source_ref IS NULL)은 시드라 건드리지 않는다.
+     */
+    @AfterEach
+    fun cleanUpIngested() {
+        jdbc.update("DELETE FROM poi WHERE source_ref IS NOT NULL")
+    }
 
     private val json = ObjectMapper()
 

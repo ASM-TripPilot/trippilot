@@ -19,6 +19,8 @@ data class NormalizedPlace(
      * **지어내지 않는다.** null 이면 멱등 판정 대상이 아니라 매번 새 행이 된다.
      */
     val sourceRef: String? = null,
+    /** 표시용 태그(열린 집합). 벤더가 주면 그대로 싣는다 — 미확보면 빈 목록. */
+    val tags: List<String> = emptyList(),
 )
 
 /** 조회 지역 범위. 반경/bounding-box 프리필터는 후보풀(CandidatePoolPort, TRIP-213)에서. */

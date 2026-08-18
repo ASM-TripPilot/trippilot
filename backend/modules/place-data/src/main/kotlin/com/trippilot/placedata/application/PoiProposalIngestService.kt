@@ -24,6 +24,8 @@ data class PoiProposal(
     val openingHours: String?,
     /** 출처 원본 식별자(TourAPI contentId). 없으면 멱등할 수 없어 받지 않는다. */
     val sourceRef: String?,
+    /** 표시용 태그. 상대가 분류 명칭을 주므로 그대로 싣는다 — 버리면 화면이 빈 칸을 그린다. */
+    val tags: List<String> = emptyList(),
 )
 
 /**
@@ -84,6 +86,7 @@ class PoiProposalIngestService(
                 openingHours = proposal.openingHours,
                 source = source,
                 sourceRef = ref,
+                tags = proposal.tags,
             )
             // 게이트 판정은 여기 한 번뿐이다 — 통과 못 하면 신규든 갱신이든 손대지 않는다.
             if (!PoiCollectionGate.qualifies(place)) {
@@ -99,6 +102,7 @@ class PoiProposalIngestService(
                     existing = existing,
                     nameKo = place.nameKo, lat = place.lat!!, lng = place.lng!!, category = place.category!!,
                     region = place.region, openingHours = place.openingHours, now = now,
+                    tags = place.tags,
                 )
                 updated++
             }

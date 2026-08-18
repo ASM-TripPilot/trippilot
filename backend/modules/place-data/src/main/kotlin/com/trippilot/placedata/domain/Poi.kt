@@ -85,11 +85,12 @@ class Poi private constructor(
             dataStatus: DataStatus,
             now: Instant,
             sourceRef: String? = null,
+            tags: List<String> = emptyList(),
         ): Poi {
             if (nameKo.isBlank()) throw ValidationFailed(listOf(FieldError("nameKo", "POI 이름은 필수입니다.")))
             return Poi(
                 UUID.randomUUID(), nameKo, lat, lng, category, region, openingHours, dataStatus, source, 0,
-                now, now, sourceRef = sourceRef,
+                now, now, tags = tags, sourceRef = sourceRef,
             )
         }
 
@@ -102,11 +103,17 @@ class Poi private constructor(
         @Suppress("LongParameterList")
         fun refreshed(
             existing: Poi, nameKo: String, lat: Double, lng: Double, category: PoiCategory,
-            region: String?, openingHours: String?, now: Instant,
+            region: String?, openingHours: String?, now: Instant, tags: List<String> = emptyList(),
         ): Poi = Poi(
             existing.poiId, nameKo, lat, lng, category, region, openingHours,
+            // 상태는 **유지한다**. 폐업(CLOSED)·미검증은 사람이 내린 판단이거나 라이프사이클 결과인데,
+            // 매일 도는 대량 수집이 그걸 덮으면 손으로 정리한 것이 하룻밤에 되돌아간다.
             existing.dataStatus, existing.source, existing.savedCount, existing.createdAt, now,
-            existing.imageUrl, existing.tags, existing.sourceRef,
+            // 이미지는 아직 받지 않는다(수집 경로가 채우지 않음) — 기존 값을 지우지 않도록 그대로 잇는다.
+            existing.imageUrl,
+            // 태그는 갱신한다 — 벤더가 분류를 고치는 일이 있고, 표시용이라 최신이 맞다.
+            tags.ifEmpty { existing.tags },
+            existing.sourceRef,
         )
 
         @Suppress("LongParameterList")

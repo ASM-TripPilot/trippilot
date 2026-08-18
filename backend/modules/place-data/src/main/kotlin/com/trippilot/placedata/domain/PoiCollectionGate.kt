@@ -29,6 +29,7 @@ object PoiCollectionGate {
             // 출처 식별자는 게이트 판정에 쓰지 않는다(있고 없고가 실재 여부를 말하지 않는다).
             // 다만 승격된 POI 에는 실어 보내야 재수집이 같은 행을 찾을 수 있다.
             sourceRef = place.sourceRef,
+            tags = place.tags,
         )
     }
 }
