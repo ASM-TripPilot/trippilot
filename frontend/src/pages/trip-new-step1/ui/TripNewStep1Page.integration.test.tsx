@@ -234,6 +234,42 @@ describe('I-1 · AC-1 — 정상 제출이 계약대로 나가고 step2로 이�
   });
 });
 
+describe('I-9 · AC-3 · AC-5 (TRIP-389) — 달력 파생 경로의 제출 종료일은 반응형이다', () => {
+  it('출발일 확정 뒤 여행지를 더 담고 제출하면 POST 바디 endDate가 늘어난 박수 합으로 재파생된다', async () => {
+    // 왜 이 케이스가 필요한가(code-critic W-1): 달력으로 정한 종료일이 실제 서버 바디에
+    // 실리는지는 다른 어느 통합도 안 잰다(I-1은 프리셋 경로). 종료일을 확정 시점 1회 계산이
+    // 아니라 **제출 시점 박수 합으로 다시 파생**해 싣는지를 이 케이스가 잠근다.
+    renderPage();
+
+    // 준비 — 부산 1박을 담고, 달력에서 출발일 6/15를 단일 선택으로 확정한다.
+    addDestination('busan', 1);
+    fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
+    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
+    fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
+
+    // 실행(반응형의 핵심) — 확정 뒤에 경주 2박을 더 담는다. 박수 합이 1→3이 된다.
+    addDestination('gyeongju', 2);
+    await waitForPrefill();
+
+    // 앵커 — 아직 아무것도 안 나갔다.
+    expect(createHits()).toBe(0);
+    fireEvent.press(next());
+
+    await waitFor(() => expect(createHits()).toBe(1));
+    expect(postedBodies).toHaveLength(1);
+    // 종료일이 확정 시점 값(6/16, 박수 1)이 아니라 제출 시점 박수 합(3)으로 재파생된 6/18이다.
+    // deriveEndDate('2026-06-15', 3) = '2026-06-18'. 확정 시점 캐시를 실으면 6/16이 나와 red.
+    expect(postedBodies[0]).toMatchObject({
+      startDate: '2026-06-15',
+      endDate: '2026-06-18',
+      destinations: [
+        { seq: 1, region: '부산', nights: 1 },
+        { seq: 2, region: '경주', nights: 2 },
+      ],
+    });
+  });
+});
+
 describe('I-2 · AC-2 · AC-10 — 종료일 역전은 기간 블록에 서고 서버를 부르지 않는다', () => {
   it('기간 축만 건드린 상태에서 기간 문구만 뜨고 요청이 0건이다', async () => {
     // 준비 — 프리셋은 항상 올바른 범위를 만들므로 UI 조작만으로는 역전을 만들 수 없다

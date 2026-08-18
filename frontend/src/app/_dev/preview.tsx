@@ -1172,6 +1172,23 @@ const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // 출발일 선택 시트 열림(TRIP-389) — 달력이 단일 선택으로 바뀐 자리다. jest는 바텀시트 실개폐·
+  // 단일 셀 하이라이트 픽셀을 못 보므로(repo-traps 바텀시트 통과 목) 이 화면을 눈으로 보는 유일한
+  // 자리다. base가 출발일(2026-06-10)을 이미 들어 그 셀이 선택돼 열리고 확정이 활성이다.
+  {
+    key: 'trip-new-step1-datesheet',
+    label: '여행 만들기 1/2 · 출발일 시트',
+    login: null,
+    render: () => (
+      <TripWizardStep1Screen
+        {...TRIP_WIZARD_BASE}
+        dateSheetOpen
+        baseDate="2026-06-10"
+        onCloseDateSheet={noop}
+        onConfirmDates={noop}
+      />
+    ),
+  },
   // g02 5변형(TRIP-225). 화면이 완성된 문자열·불리언만 받는 프레젠테이션이라, 배선 없이
   // props 만 갈아 끼우면 다섯 얼굴이 그대로 나온다 — 실기로 얼굴을 보려면 여기가 정본이다
   // (`docs/structure.md` 경고: "엣지 케이스 화면을 눈으로 보려면 목을 만들지 말고 여기에

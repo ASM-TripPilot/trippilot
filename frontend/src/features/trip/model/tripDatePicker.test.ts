@@ -1,5 +1,4 @@
 import {
-  applyDatePick,
   dateCell,
   daysInMonth,
   firstWeekdayOfMonth,
@@ -8,10 +7,14 @@ import {
 } from './tripDatePicker';
 
 /**
- * TRIP-368 날짜 선택 순수 함수 — 달력 그리드 계산과 범위 전이(`applyDatePick`).
+ * TRIP-368 날짜 선택 순수 함수 — 달력 그리드 계산과 범위 판정(`isDateInRange`).
  *
- * 무엇을 보장하나: (1) 달력 칸 수·요일이 실제 달력과 맞고(에포크 산술이 `new Date`와 같은 답을
- * 내는가), (2) 날짜를 고르는 전이가 **역전·같은 날 범위를 구조적으로 못 만드는가**(INV-U1-11).
+ * 무엇을 보장하나: 달력 칸 수·요일이 실제 달력과 맞고(에포크 산술이 `new Date`와 같은 답을
+ * 내는가), 범위 판정이 양 끝 포함·하한 상한을 옳게 본다.
+ *
+ * ⚠️ TRIP-389로 시트가 **단일 선택**이 되면서 2단 범위 전이(`applyDatePick`) describe를
+ * 걷어냈다 — 그 전이를 부르던 소비자(`TripDateSheet`)가 사라져 dead가 됐다. 그리드 계산·
+ * `isDateInRange`는 시트가 여전히 쓰므로 그대로 둔다.
  *
  * 3동작: 준비(입력 날짜) → 실행(함수 호출) → 단언(반환 형태).
  */
@@ -60,40 +63,5 @@ describe('tripDatePicker — isDateInRange', () => {
     // 달력 하이라이트가 왼쪽으로 번진다. 이 두 줄이 그 뮤테이션에 red 를 낸다.
     expect(isDateInRange('2026-06-09', '2026-06-10', '2026-06-13')).toBe(false);
     expect(isDateInRange('2026-06-01', '2026-06-10', '2026-06-13')).toBe(false);
-  });
-});
-
-describe('tripDatePicker — applyDatePick 은 역전 범위를 못 만든다 (INV-U1-11)', () => {
-  it('빈 상태에서 고르면 시작만 정해진다(대기)', () => {
-    expect(
-      applyDatePick({ startDate: null, endDate: null }, '2026-06-15')
-    ).toEqual({ startDate: '2026-06-15', endDate: null });
-  });
-
-  it('시작보다 뒤를 고르면 범위가 완성된다', () => {
-    expect(
-      applyDatePick({ startDate: '2026-06-15', endDate: null }, '2026-06-17')
-    ).toEqual({ startDate: '2026-06-15', endDate: '2026-06-17' });
-  });
-
-  it('시작보다 앞을 고르면 역전을 만드는 대신 새 시작으로 다시 시작한다', () => {
-    expect(
-      applyDatePick({ startDate: '2026-06-15', endDate: null }, '2026-06-12')
-    ).toEqual({ startDate: '2026-06-12', endDate: null });
-  });
-
-  it('같은 날을 다시 고르면 같은 날 범위를 만들지 않고 다시 시작한다', () => {
-    expect(
-      applyDatePick({ startDate: '2026-06-15', endDate: null }, '2026-06-15')
-    ).toEqual({ startDate: '2026-06-15', endDate: null });
-  });
-
-  it('이미 완성된 범위에서 고르면 새로 시작한다', () => {
-    expect(
-      applyDatePick(
-        { startDate: '2026-06-15', endDate: '2026-06-17' },
-        '2026-06-20'
-      )
-    ).toEqual({ startDate: '2026-06-20', endDate: null });
   });
 });

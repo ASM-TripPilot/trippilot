@@ -1,6 +1,9 @@
+import fc from 'fast-check';
+
 import {
   COMPANION_OPTIONS,
   PERIOD_PRESETS,
+  deriveEndDate,
   formatDateRange,
   presetRange,
 } from './tripWizardStep1';
@@ -31,6 +34,17 @@ function daysBetween(from: string, to: string): number {
     return Date.UTC(year, month - 1, day);
   };
   return Math.round((toUtc(to) - toUtc(from)) / MS_PER_DAY);
+}
+
+/** 에포크 일수 → 'YYYY-MM-DD'. **테스트 오라클 전용** — `new Date`로 임의의 유효 날짜를
+ * 만든다(소스 스캔이 금지하는 건 프로덕션 파일이지 테스트가 아니다). PBT에서 `deriveEndDate`에
+ * 넘길 출발일을 무작위로 생성하는 데 쓴다. */
+function epochToIso(epochDay: number): string {
+  const t = new Date(epochDay * MS_PER_DAY);
+  const year = t.getUTCFullYear();
+  const month = String(t.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(t.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 describe('AC-5 · 기간 프리셋 → 날짜 범위 (기준일 주입)', () => {
@@ -134,5 +148,52 @@ describe('정본 어휘 — 프리셋·동반 유형 표', () => {
       { code: 'partner', type: '연인' },
       { code: 'family', type: '가족' },
     ]);
+  });
+});
+
+/**
+ * TRIP-389 — 여행 기간을 여행지 박수 합에서 파생한다. 달력은 출발일만 고르고, 종료일은
+ * `deriveEndDate(출발, Σ박수)`로 자동 계산한다.
+ *
+ * 무엇을 보장하나: (1) 종료일이 출발일에서 정확히 Σ박수만큼 뒤이고(월·연·윤년 경계도 정확),
+ * (2) 그래서 `종료일 − 출발일 === Σ박수`가 **항상** 성립한다 — 이 등호가 곧 "박수 합이 기간을
+ * 넘을 수 없다"(INV-U1-14)의 구조적 불가다(달력 파생 경로 한정 — 프리셋은 별도 함수라 스코프 밖).
+ *
+ * ⚠️ 시계를 안 읽는다 — 역변환은 `tripWizardStep1.ts`에 이미 private으로 있는 `fromEpochDay`
+ * (Hinnant civil_from_days)를 재사용하고 `new Date(`를 안 쓴다. 이 파일의 오라클(`new Date`)은
+ * 테스트 안에서만 쓰는 대조용이다(소스 스캔 대상은 프로덕션 파일뿐).
+ */
+describe('TRIP-389 · deriveEndDate — 출발일 + Σ박수 → 종료일 파생', () => {
+  it('1박은 하루 뒤, 0박은 당일, 월·연·윤년 경계를 정확히 넘는다', () => {
+    // 준비·실행·단언을 값마다 한 줄로 — 여러 경계를 한눈에 diff한다.
+    expect(deriveEndDate('2026-08-20', 1)).toBe('2026-08-21'); // 기본 1박
+    expect(deriveEndDate('2026-06-15', 0)).toBe('2026-06-15'); // 여행지 0개 → 당일(degrade)
+    expect(deriveEndDate('2026-08-31', 3)).toBe('2026-09-03'); // 월 넘김
+    expect(deriveEndDate('2026-12-30', 3)).toBe('2027-01-02'); // 연 넘김
+    expect(deriveEndDate('2024-02-28', 1)).toBe('2024-02-29'); // 2024 윤년 2월
+    expect(deriveEndDate('2024-02-28', 2)).toBe('2024-03-01'); // 윤년 2월 경계 넘김
+    expect(deriveEndDate('2026-02-28', 1)).toBe('2026-03-01'); // 2026 평년 2월
+  });
+});
+
+describe('AC-4 · deriveEndDate 경로는 종료일 − 출발일 === Σ박수 (PBT)', () => {
+  it('임의의 출발일·박수(≥0)에서 간격이 정확히 박수와 같다', () => {
+    // 예시가 못 보는 구석(월말·연말·윤년·먼 미래)을 무작위로 훑는다. 이 등호가 깨지지 않는
+    // 한 달력 파생 경로에서는 INV-U1-14 위반을 만들 방법이 없다. 프리셋 경로는 이 함수를
+    // 안 타므로(별도 presetRange) 여기서 잠그지 않는다 — 결정2 영역 침범 금지(02a ★2).
+    fc.assert(
+      fc.property(
+        // 출발 에포크 일수: 대략 1915~2035 범위(오라클로 유효 날짜 문자열을 만든다).
+        fc.integer({ min: -20000, max: 24000 }),
+        // 박수: 0(당일)부터 약 10년까지.
+        fc.integer({ min: 0, max: 3650 }),
+        (startEpoch, nights) => {
+          const startDate = epochToIso(startEpoch);
+          const endDate = deriveEndDate(startDate, nights);
+          expect(daysBetween(startDate, endDate)).toBe(nights);
+        }
+      ),
+      { numRuns: 500 }
+    );
   });
 });

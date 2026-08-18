@@ -6,14 +6,18 @@ import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
 
 /**
- * TRIP-368 g01 날짜 선택 시트 — 프리셋 밖 임의 기간을 달력에서 범위로 고른다.
+ * TRIP-389 g01 날짜 선택 시트 — 달력에서 **출발일만** 고른다(단일 선택). 종료일은 배선이
+ * 박수 합으로 파생하므로(`deriveEndDate`) 시트는 시작일 하나만 위로 올려보낸다.
  *
  * 무엇을 보장하나: (1) 두 진입점(날짜 행·'날짜 직접 입력')이 같은 열기 핸들러를 부르고,
- * (2) 배선이 `dateSheetOpen`을 켤 때만 시트가 마운트되며, (3) 달력에서 임의 범위를 고르고
- * 확정하면 그 시작·종료가 배선으로 올라가고, (4) 범위가 완성되기 전엔 확정이 잠긴다.
+ * (2) 배선이 `dateSheetOpen`을 켤 때만 시트가 마운트되며, (3) 셀 하나만 골라도 확정이 즉시
+ * 활성이고 그 출발일 하나가 배선으로 올라가며, (4) 2번째 셀 press는 범위가 아니라 출발을 교체한다.
  *
- * 판정(박수 초과 등)은 이 화면이 아니라 배선의 `validateTripDraft`가 한다 — 이 시트는 시작·종료만
- * 만든다. `applyDatePick`이 역전 범위를 구조적으로 못 만드는 성질은 `tripDatePicker.test.ts`가 본다.
+ * ⚠️ TRIP-368의 2단 범위 선택(`onConfirmDates(start, end)`)에서 TRIP-389의 단일 선택
+ * (`onConfirmDates(start)`)으로 전이했다 — 종료일이 화면 입력이 아니라 박수 합 파생이 됐기
+ * 때문이다. 범위·in-range 하이라이트 케이스는 그래서 걷어냈다.
+ *
+ * 판정(박수 초과 등)은 이 화면이 아니라 배선의 `validateTripDraft`가 한다.
  *
  * 3동작: 준비(props) → 실행(렌더·press) → 단언(보이는 것 / 불린 콜백).
  */
@@ -92,19 +96,19 @@ describe('시트는 dateSheetOpen 일 때만 마운트된다', () => {
   });
 });
 
-describe('임의 범위 선택 → 확정 (AC — 선택)', () => {
-  it('범위가 완성되기 전에는 확정이 잠긴다', () => {
+describe('단일 선택 → 확정 (AC-1)', () => {
+  it('출발일 셀 하나만 골라도 확정이 즉시 활성이다 (범위 완성 대기가 없다)', () => {
     render(<TripWizardStep1Screen {...props({ dateSheetOpen: true })} />);
 
-    // 아무것도 안 골랐을 때
+    // 부정 앵커 — 아무것도 안 골랐을 때는 잠겨 있다.
     expect(screen.getByTestId('trip-wizard-datesheet-confirm')).toBeDisabled();
 
-    // 시작만 골랐을 때도 잠겨 있어야 한다(종료 미정).
+    // 셀 하나(출발일)를 고르면 그 즉시 확정이 열린다 — 종료일을 더 고를 필요가 없다.
     fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
-    expect(screen.getByTestId('trip-wizard-datesheet-confirm')).toBeDisabled();
+    expect(screen.getByTestId('trip-wizard-datesheet-confirm')).toBeEnabled();
   });
 
-  it('시작·종료를 고른 뒤 확정하면 그 범위가 배선으로 올라가고 시트가 닫힌다 (2박 3일)', () => {
+  it('출발일을 고르고 확정하면 그 출발일 하나만 배선으로 올라가고 시트가 닫힌다', () => {
     const onConfirmDates = jest.fn();
     const onCloseDateSheet = jest.fn();
     render(
@@ -114,16 +118,16 @@ describe('임의 범위 선택 → 확정 (AC — 선택)', () => {
     );
 
     fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
-    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-17'));
-
-    expect(screen.getByTestId('trip-wizard-datesheet-confirm')).toBeEnabled();
     fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
 
-    expect(onConfirmDates).toHaveBeenCalledWith('2026-06-15', '2026-06-17');
+    // 종료일은 시트가 만들지 않는다 — 출발일 하나(1인자)만 올린다(배선이 박수로 파생).
+    expect(onConfirmDates).toHaveBeenCalledWith('2026-06-15');
     expect(onCloseDateSheet).toHaveBeenCalledTimes(1);
   });
 
-  it('과거 날짜 칸은 눌러도 범위에 안 들어간다 (오늘 이전 비활성)', () => {
+  it('이미 고른 뒤 다른 셀을 누르면 범위가 아니라 출발이 교체되고, 과거 셀은 무시된다', () => {
+    // 이전 2단 케이스 반증 — 06-15 를 고른 뒤 06-17 을 누르면 [06-15, 06-17] 범위가 아니라
+    // 출발이 06-17 로 갈아 끼워진다. 맨 앞 과거 셀(06-05)은 disabled 실차단이라 애초에 안 잡힌다.
     const onConfirmDates = jest.fn();
     render(
       <TripWizardStep1Screen
@@ -131,53 +135,25 @@ describe('임의 범위 선택 → 확정 (AC — 선택)', () => {
       />
     );
 
-    // BASE=2026-06-10 이전 칸은 disabled 라 눌러도 시작이 안 잡힌다.
+    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-05'));
+    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
+    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-17'));
+    fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
+
+    // 마지막 유효 셀(06-17)이 출발이다. 2단 범위를 만드는 구현이면 2인자로 불려 red.
+    expect(onConfirmDates).toHaveBeenCalledWith('2026-06-17');
+  });
+
+  it('과거 날짜 칸은 눌러도 시작이 안 잡혀 확정이 안 열린다 (오늘 이전 비활성 · disabled 실차단)', () => {
+    // §126 계승 — 단일 선택에서도 유효하고, 여기가 disabled 실차단의 그물이다. 06-05 가 가짜
+    // disabled(accessibilityState 만)면 press 가 시작을 잡아 확정이 enabled 로 바뀌어 red.
+    render(<TripWizardStep1Screen {...props({ dateSheetOpen: true })} />);
+
     expect(
       screen.getByTestId('trip-wizard-date-cell-2026-06-05')
     ).toBeDisabled();
     fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-05'));
     expect(screen.getByTestId('trip-wizard-datesheet-confirm')).toBeDisabled();
-  });
-
-  it('🔴 과거 셀을 눌러도 시작으로 안 잡히고, 이어 미래 셀을 누르면 그 미래 셀이 시작이 된다 (disabled prop 실차단)', () => {
-    // 앞 케이스는 "확정이 잠긴다"만 봐서, `disabled` 를 `accessibilityState` 만으로 바꿔도(회색인데
-    // 눌리는 함정) 통과했다. 이 케이스는 **과거 press 가 실제로 무시되는가**를 확정으로 본다(TRIP-375).
-    const onConfirmDates = jest.fn();
-    render(
-      <TripWizardStep1Screen
-        {...props({ dateSheetOpen: true, onConfirmDates })}
-      />
-    );
-
-    // 과거(06-05) → 미래(06-15) → 미래(06-17) 순으로 누른다.
-    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-05'));
-    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
-    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-17'));
-
-    fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
-
-    // disabled 가 실차단이면 과거 press 는 버려지고 시작은 06-15 다. 실차단이 아니면 시작이
-    // 06-05 로 잡혀 뒤 순서가 어긋나고, 이 정확 일치 단언이 red 를 낸다.
-    expect(onConfirmDates).toHaveBeenCalledWith('2026-06-15', '2026-06-17');
-  });
-});
-
-describe('in-range 하이라이트가 시작·종료 사이 칸에 켜진다 (AC — 렌더 단언)', () => {
-  it('🔴 시작·종료 사이 셀은 endpoint 가 아니어도 in-range 배경이 켜진다', () => {
-    // isDateInRange 하한/상한이 옳아도, 화면이 그 결과를 배경 토큰으로 그리지 않으면 사용자는
-    // 범위를 못 본다 — 그 렌더 연결이 지금까지 무판정이었다(TRIP-375).
-    render(<TripWizardStep1Screen {...props({ dateSheetOpen: true })} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
-    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-18'));
-
-    // 사이 셀(06-16)은 endpoint 가 아니라 in-range 배경(primary-pale)이라야 한다.
-    const mid = screen.getByTestId('trip-wizard-date-cell-2026-06-16');
-    expect(String(mid.props.className)).toContain('bg-primary-pale');
-
-    // 짝(부정) — 범위 밖 셀(06-20)은 그 배경이 없다. 없으면 "전부 켜는" 구현도 통과한다.
-    const outside = screen.getByTestId('trip-wizard-date-cell-2026-06-20');
-    expect(String(outside.props.className)).not.toContain('bg-primary-pale');
   });
 });
 

@@ -123,6 +123,17 @@ export function presetRange(
   return { startDate: fromEpochDay(start), endDate: fromEpochDay(start + 1) };
 }
 
+/**
+ * 출발일 + 박수 합 → 종료일(TRIP-389). 달력이 출발일만 고르고 종료일은 이 파생이 정한다.
+ * 에포크 일수의 정수 덧셈이라 `종료일 − 출발일 === nights`가 항상 성립해 INV-U1-14(박수 합이
+ * 기간을 넘을 수 없다)를 검사가 아니라 형태로 만든다 — 달력 파생 경로에서는 위반이 구조적으로
+ * 불가하다. `presetRange`와 같은 `base + N` 패턴이라 `fromEpochDay`를 그대로 재사용하고,
+ * `new Date(`를 안 써 월·연·윤년 경계를 넘으면서도 시계를 읽지 않는다.
+ */
+export function deriveEndDate(startDate: string, nights: number): string {
+  return fromEpochDay(toEpochDay(startDate) + nights);
+}
+
 function formatMonthDay(date: string): string {
   const [, month, day] = date.split('-').map(Number);
   return `${month}월 ${day}일`;

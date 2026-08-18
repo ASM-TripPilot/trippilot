@@ -1,7 +1,8 @@
 /**
- * 여행 기간 직접 선택(TRIP-368) 달력 순수 함수. 프리셋 밖 임의 날짜를 고르는 시트가 쓰는
- * 네 계산(월 일수 · 1일 요일 · 월 이동 · 범위 판정)과 날짜를 고르는 전이(`applyDatePick`)를 담는다.
- * 네트워크·화면을 건드리지 않고, **시계도 안 읽는다** — 오늘 날짜는 시트가 주입받아 넘긴다.
+ * 여행 기간 직접 선택 달력 순수 함수. 프리셋 밖 임의 날짜를 고르는 시트가 쓰는 네 계산(월 일수 ·
+ * 1일 요일 · 월 이동 · 범위 판정)을 담는다. 네트워크·화면을 건드리지 않고, **시계도 안 읽는다**
+ * — 오늘 날짜는 시트가 주입받아 넘긴다. (TRIP-389로 시트가 단일 선택이 되면서 2단 범위 전이
+ * `applyDatePick`과 그 범위 타입은 소비자가 사라져 제거했다 — 그리드·`isDateInRange`는 존치.)
  *
  * 요일·일수 계산은 전부 에포크 일수(UTC 정수)로 한다 — `new Date(...)` 생성자를 안 쓴다.
  * `tripWizardStep1.ts`가 같은 이유(`tripWizardStep1Boundary.test.ts`의 시계 금지)로 에포크 산술을
@@ -12,11 +13,6 @@
  */
 
 const MS_PER_DAY = 86_400_000;
-
-export interface TripDateRange {
-  startDate: string | null;
-  endDate: string | null;
-}
 
 function toEpochDay(date: string): number {
   const [year, month, day] = date.split('-').map(Number);
@@ -74,24 +70,6 @@ export function isDateInRange(
 ): boolean {
   if (startDate === null || endDate === null) return false;
   return date >= startDate && date <= endDate;
-}
-
-/**
- * 달력에서 날짜를 하나 골랐을 때의 다음 상태. 결과는 항상 "시작만(대기)" 아니면 "end > start"다 —
- * 역전·같은 날 범위를 **구조적으로** 만들지 않는다(INV-U1-11 종료일 ≥ 시작일을 검사가 아니라 형태로
- * 막는다). 이미 완성된 범위에서 다시 고르면 새로 시작한다.
- */
-export function applyDatePick(
-  range: TripDateRange,
-  picked: string
-): TripDateRange {
-  if (range.startDate === null || range.endDate !== null) {
-    return { startDate: picked, endDate: null };
-  }
-  if (picked > range.startDate) {
-    return { startDate: range.startDate, endDate: picked };
-  }
-  return { startDate: picked, endDate: null };
 }
 
 /** 'YYYY-MM'과 일(day)로 'YYYY-MM-DD' 셀 문자열을 만든다. */

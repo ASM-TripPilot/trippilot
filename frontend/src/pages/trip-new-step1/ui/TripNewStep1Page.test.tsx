@@ -312,10 +312,12 @@ describe('AC-11 · 떠났다 돌아와도 입력이 남는다 (BR-U1-33)', () =>
 });
 
 /**
- * TRIP-368 — 날짜 직접 선택 배선. 날짜 행을 누르면 시트가 열리고(배선이 `dateSheetOpen`을 켠다),
- * 임의 기간을 확정하면 프리셋을 풀고 그 기간을 스토어에 세운다(왕복). 프리셋만 쓰던 경로는 그대로다.
+ * TRIP-389 — 여행 기간 출발일 단일 선택 → 종료일 파생 배선. 날짜 행을 누르면 시트가 열리고
+ * (배선이 `dateSheetOpen`을 켠다), 출발일 하나를 확정하면 종료일을 박수 합으로 파생해 스토어에
+ * 세우고 프리셋을 푼다(왕복). ⚠️ 종료일은 **매 렌더 파생값**이라, 확정 뒤 여행지를 더 담으면
+ * 재확정 없이 다시 계산된다(AC-3, 맹점②). 프리셋만 쓰던 경로는 그대로다.
  */
-describe('TRIP-368 · 여행 기간 직접 선택', () => {
+describe('TRIP-389 · 여행 기간 출발일 단일 선택 → 종료일 파생', () => {
   it('날짜 행을 누르면 날짜 선택 시트가 열린다', () => {
     render(<TripNewStep1Page baseDate={BASE} />);
 
@@ -326,22 +328,45 @@ describe('TRIP-368 · 여행 기간 직접 선택', () => {
     expect(screen.getByTestId('trip-wizard-datesheet')).toBeOnTheScreen();
   });
 
-  it('시트에서 임의 기간을 확정하면 날짜 행에 그 기간이 표시되고 시트가 닫힌다', () => {
+  it('AC-2 · 출발일을 확정하면 종료일이 박수 합만큼 뒤로 파생돼 뜨고 시트가 닫힌다 (1박)', () => {
     render(<TripNewStep1Page baseDate={BASE} />);
 
+    // 준비 — 부산 1박(Σ=1). 실행 — 시트를 열어 출발일 하나만 고르고 확정한다.
+    addDestination('busan', 1);
     fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
     fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
-    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-17'));
     fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
 
-    // 시트가 닫히고, 날짜 행에 고른 임의 기간이 뜬다.
+    // 시트가 닫히고, 종료일은 deriveEndDate('2026-06-15', 1) = '2026-06-16' 이 파생돼 뜬다.
     expect(screen.queryByTestId('trip-wizard-datesheet')).toBeNull();
     expect(screen.getByTestId('trip-wizard-date-field')).toHaveTextContent(
-      /6월 15일 – 6월 17일/
+      /6월 15일 – 6월 16일/
     );
   });
 
-  it('프리셋을 고른 뒤 임의 날짜를 확정하면 프리셋 칩 선택이 풀린다 (공존)', () => {
+  it('AC-3 · 출발일 확정 뒤 여행지를 더 담으면 재확정 없이 종료일이 다시 파생된다 (반응형)', () => {
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    // 부산 1박으로 출발 06-15 확정 → 06-15 – 06-16.
+    addDestination('busan', 1);
+    fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
+    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
+    fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
+    expect(screen.getByTestId('trip-wizard-date-field')).toHaveTextContent(
+      /6월 15일 – 6월 16일/
+    );
+
+    // 실행 — **재확정 없이** 경주 2박을 더 담는다(Σ=3).
+    addDestination('gyeongju', 2);
+
+    // 종료일이 deriveEndDate('2026-06-15', 3) = '2026-06-18' 로 다시 파생된다. confirm 시점
+    // 한 번만 계산해 저장하는 구현이면 여기서 06-16 에 멈춰 red — render-time 파생만 green.
+    expect(screen.getByTestId('trip-wizard-date-field')).toHaveTextContent(
+      /6월 15일 – 6월 18일/
+    );
+  });
+
+  it('프리셋을 고른 뒤 임의 출발일을 확정하면 프리셋 칩 선택이 풀린다 (공존)', () => {
     render(<TripNewStep1Page baseDate={BASE} />);
 
     // 프리셋 3박 4일 선택 → 칩이 선택 상태다.
@@ -351,13 +376,13 @@ describe('TRIP-368 · 여행 기간 직접 선택', () => {
         .accessibilityState.selected
     ).toBe(true);
 
-    // 임의 날짜를 확정한다.
+    // 임의 출발일 하나를 확정한다(단일 선택).
     fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
     fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
-    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-17'));
     fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
 
-    // 둘 다 선택된 것처럼 보이면 어느 쪽이 적용됐는지 알 수 없다 — 프리셋 칩이 풀려야 한다.
+    // 둘 다 선택된 것처럼 보이면 어느 쪽이 적용됐는지 알 수 없다 — 프리셋 칩이 풀려야 한다
+    // (배선이 setPeriod(undefined, …)로 프리셋 코드를 비운다).
     expect(
       screen.getByTestId('trip-wizard-period-preset-3n4d').props
         .accessibilityState.selected

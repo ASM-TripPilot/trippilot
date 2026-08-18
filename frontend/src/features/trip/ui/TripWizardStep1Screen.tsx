@@ -168,8 +168,9 @@ export interface TripWizardStep1ScreenProps {
   dateSheetOpen?: boolean;
   /** 시트를 닫는다(취소·확정 공통). */
   onCloseDateSheet?(): void;
-  /** 시트에서 임의 기간을 확정하면 배선에 알린다 — 배선이 프리셋을 풀고 기간을 세운다(TRIP-368). */
-  onConfirmDates?(startDate: string, endDate: string): void;
+  /** 시트에서 출발일을 확정하면 배선에 알린다(1인자) — 배선이 프리셋을 풀고 종료일을 박수 합으로
+   * 파생해 기간을 세운다(TRIP-389). */
+  onConfirmDates?(startDate: string): void;
   /** 달력 과거 비활성 기준 '오늘'(주입, 결정론). 없으면 시트를 안전하게 못 열어 열지 않는다. */
   baseDate?: string;
   onChangeParty(next: number): void;
@@ -1206,12 +1207,9 @@ export function TripWizardStep1Screen({
         {dateSheetOpen === true && baseDate !== undefined ? (
           <TripDateSheet
             today={baseDate}
-            initialRange={{
-              startDate: startDate ?? null,
-              endDate: endDate ?? null,
-            }}
-            onConfirm={(start, end) => {
-              onConfirmDates?.(start, end);
+            initialStart={startDate ?? null}
+            onConfirm={(start) => {
+              onConfirmDates?.(start);
               onCloseDateSheet?.();
             }}
             onClose={() => onCloseDateSheet?.()}

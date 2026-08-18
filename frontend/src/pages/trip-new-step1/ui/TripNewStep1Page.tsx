@@ -31,6 +31,7 @@ import {
 } from '@/features/trip/model/mustVisitSeed';
 import { resolveStayImport } from '@/features/trip/model/stayDateImport';
 import {
+  deriveEndDate,
   presetRange,
   type PeriodPresetCode,
 } from '@/features/trip/model/tripWizardStep1';
@@ -199,6 +200,14 @@ export function TripNewStep1Page({
   // (TRIP-368, 숙소 등록 CalendarSheet과 같은 배치 — 페이지가 열고 닫고, 화면이 마운트한다).
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
 
+  // 기간을 달력 단일 선택으로 정했나(TRIP-389). 이 경로만 종료일이 박수 합 파생이다 — 프리셋
+  // (칩이 정한 종료일)·등록 숙소 가져오기(그 숙소의 실제 체크아웃)는 종료일이 그 자체로 권위라
+  // 파생하면 안 된다. 세 경로가 store에선 다 `presetCode===undefined`이거나 `endDate`가 채워져
+  // 구분되지 않으므로(맹점②), "달력이 정했나"를 여기서 기억한다. 재진입(remount)이면 false로
+  // 돌아간다 — 그때는 마지막 확정값(store)을 고정으로 보이고 재파생은 멈춘다(재진입 반응성은
+  // 정본·심판이 요구하지 않는다, 03 참고).
+  const [periodFromCalendar, setPeriodFromCalendar] = useState(false);
+
   // 여행지 시트 검색어(TRIP-387) — 이 상태를 페이지가 들고 `filterRegions`로 좁힌 목록을
   // `sheetRegions`로 내려보낸다. 화면은 `features/explore`를 import하지 못하므로(features 간
   // 금지) 필터는 여기서만 진다. 시트를 닫을 때 리셋은 안 한다 — 재량이고 테스트가 요구하지
@@ -266,10 +275,21 @@ export function TripNewStep1Page({
     failed: savedPlaces.isError,
   });
 
+  // 종료일은 저장값이 아니라 **매 렌더 파생값**이다(TRIP-389 · ★9 단일 출처). 달력 경로에서는
+  // 출발일 + 박수 합으로 매번 다시 계산하므로, 확정 뒤 여행지를 더 담아도 재확정 없이 종료일이
+  // 따라 바뀐다(AC-3, 맹점②). 이 파생값 하나가 표시·검증·게이트·제출의 단일 출처다. 프리셋·등록
+  // 숙소 경로에서는 그 경로가 정한 store endDate를 그대로 쓴다(그 종료일이 권위). store의 endDate는
+  // 달력 경로에선 confirm 시점 스냅숏(캐시)이라 여기서 안 읽는다 — 다만 step2가 store를 읽으므로
+  // 제출 시 파생값으로 맞춘다(submit 참고).
+  const derivedEnd =
+    periodFromCalendar && startDate !== undefined
+      ? deriveEndDate(startDate, nightsSum(destinations))
+      : endDate;
+
   const draft: TripDraft = {
     destinations,
     startDate: startDate ?? '',
-    endDate: endDate ?? '',
+    endDate: derivedEnd ?? '',
     party,
   };
   const violations = validateTripDraft(draft);
@@ -279,8 +299,8 @@ export function TripNewStep1Page({
   const periodFilled =
     startDate !== undefined &&
     startDate !== '' &&
-    endDate !== undefined &&
-    endDate !== '';
+    derivedEnd !== undefined &&
+    derivedEnd !== '';
 
   // 게이트①-2 사용자 결정 ③(03b W-5): 담은 목록이 **아직 도착 전이면 잠깐 막는다.** 그때
   // 제출하면 시드가 비어 있어 꼭 갈 곳이 한 건도 등록되지 않은 여행이 만들어지고, 그 사실이
@@ -314,6 +334,8 @@ export function TripNewStep1Page({
     // `disabled`로 막으니 중복이라 보고 지우면 아래 두 날짜 필드 접근이 `pnpm tsc`에서
     // 깨진다. jest는 이 줄이 없어도 전량 green이라 못 잡는다(5-b 뮤테이션 실측).
     if (stayImport.kind !== 'ready') return;
+    // 등록 숙소의 실제 체크인·체크아웃이 곧 기간이다 — 박수 파생 경로가 아니다(마커를 끈다).
+    setPeriodFromCalendar(false);
     setPeriod(undefined, stayImport.checkIn, stayImport.checkOut);
   }
 
@@ -335,6 +357,8 @@ export function TripNewStep1Page({
 
   function handleSelectPreset(code: PeriodPresetCode): void {
     const range = presetRange(code, resolvedBaseDate);
+    // 프리셋이 정한 종료일이 곧 기간이다 — 박수 파생 경로가 아니다(마커를 끈다).
+    setPeriodFromCalendar(false);
     setPeriod(code, range.startDate, range.endDate);
   }
 
@@ -424,12 +448,24 @@ export function TripNewStep1Page({
       return;
     }
 
+    // step2는 store의 startDate/endDate를 트립 기간으로 읽는다(그 화면은 이 티켓 밖이다). 달력
+    // 파생 경로는 종료일을 render에서만 다시 계산하므로, 넘어가기 전에 store를 지금 파생값으로
+    // 맞춘다 — 안 맞추면 확정 뒤 여행지를 더 담고 제출한 경우 step2가 옛 종료일을 보인다(제출값·
+    // step1 표시와 어긋남). 프리셋·등록 숙소 경로는 store가 이미 권위라 건드리지 않는다.
+    if (periodFromCalendar && startDate !== undefined) {
+      setPeriod(
+        undefined,
+        startDate,
+        deriveEndDate(startDate, nightsSum(destinations))
+      );
+    }
+
     setSubmitError(undefined);
     setOverseasBlocked(false);
 
     const input: CreateTripInput = {
       startDate: startDate ?? '',
-      endDate: endDate ?? '',
+      endDate: derivedEnd ?? '',
       party,
       companionType,
       destinations,
@@ -480,7 +516,7 @@ export function TripNewStep1Page({
     <TripWizardStep1Screen
       destinations={destinations}
       startDate={startDate}
-      endDate={endDate}
+      endDate={derivedEnd}
       presetCode={presetCode}
       party={party}
       companionType={companionType}
@@ -527,7 +563,16 @@ export function TripNewStep1Page({
       onPressPeriod={() => setDateSheetOpen(true)}
       dateSheetOpen={dateSheetOpen}
       onCloseDateSheet={() => setDateSheetOpen(false)}
-      onConfirmDates={(start, end) => setPeriod(undefined, start, end)}
+      onConfirmDates={(start) => {
+        // 달력 단일 선택 경로임을 표시한다 — 이 뒤로 종료일은 박수 합 파생이다(AC-3). store엔
+        // confirm 시점값을 스냅숏으로 남기되(캐시), 표시·판정 권위는 render 파생값이다.
+        setPeriodFromCalendar(true);
+        setPeriod(
+          undefined,
+          start,
+          deriveEndDate(start, nightsSum(destinations))
+        );
+      }}
       baseDate={resolvedBaseDate}
       onChangeParty={setParty}
       onSelectCompanion={(type: CompanionType) => selectCompanion(type)}
