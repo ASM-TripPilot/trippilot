@@ -65,11 +65,11 @@ data class TripResponse(
     val updatedAt: Instant,
 ) {
     companion object {
-        fun from(t: Trip) = TripResponse(
+        fun from(t: Trip, today: LocalDate) = TripResponse(
             tripId = t.tripId, title = t.title, startDate = t.startDate, endDate = t.endDate,
             party = t.party, companionType = t.companionType, budgetTotal = t.budgetTotal,
             preferenceSnapshot = t.preferenceSnapshot, destinations = t.destinations.map { DestinationDto.from(it) },
-            status = t.status, createdAt = t.createdAt, updatedAt = t.updatedAt,
+            status = t.statusAt(today), createdAt = t.createdAt, updatedAt = t.updatedAt,
         )
     }
 }
