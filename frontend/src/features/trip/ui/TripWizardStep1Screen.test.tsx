@@ -229,6 +229,50 @@ describe('AC-3 · 도시 추가 시트 (REGIONS 6지역 + 박수 지정)', () =>
   });
 });
 
+describe('AC-닫기 · 도시 추가 시트 닫기 어포던스 (TRIP-386)', () => {
+  // 이 시트는 gorhom 바텀시트가 아니라 절대배치 View라, 자매 TripDateSheet와 달리
+  // jest가 press·언마운트를 실제로 관측한다(바텀시트 목 사각 밖).
+
+  it('시트를 열면 눈에 보이는 "닫기" 컨트롤이 있다', () => {
+    render(<TripWizardStep1Screen {...props()} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // 준비→실행(오픈)→단언: 닫기 컨트롤이 존재하고 라벨이 '닫기'다.
+    const close = screen.getByTestId('trip-wizard-destination-close');
+    expect(close).toBeTruthy();
+    expect(close).toHaveTextContent(/닫기/);
+  });
+
+  it('"닫기"를 누르면 시트가 닫히고 아무것도 추가되지 않는다', () => {
+    const onAddDestination = jest.fn();
+    render(<TripWizardStep1Screen {...props({ onAddDestination })} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-close'));
+
+    // 사라짐은 queryBy+toBeNull로만 잴 수 있다(getBy는 부재 시 throw).
+    expect(screen.queryByTestId('trip-wizard-destination-sheet')).toBeNull();
+    // 화면은 목록을 props로 받으므로, 목록 불변을 "추가 콜백 미호출"로 대리 증명한다.
+    expect(onAddDestination).not.toHaveBeenCalled();
+  });
+
+  it('회귀 — 배경(딤)을 누르면 지금처럼 닫히고 아무것도 추가되지 않는다', () => {
+    const onAddDestination = jest.fn();
+    render(<TripWizardStep1Screen {...props({ onAddDestination })} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    fireEvent.press(
+      screen.getByTestId('trip-wizard-destination-sheet-backdrop')
+    );
+
+    // 백드롭이 화면을 실제로 덮는지(픽셀)는 jest가 못 본다 —
+    // 여기서 잠그는 것은 "press → 언마운트" 상태 전이뿐이며 그것으로 충분하다.
+    expect(screen.queryByTestId('trip-wizard-destination-sheet')).toBeNull();
+    expect(onAddDestination).not.toHaveBeenCalled();
+  });
+});
+
 describe('AC-5 · 기간 프리셋과 날짜 카드 (BR-U1-36)', () => {
   it('선택된 프리셋만 선택 상태이고 날짜 카드에 범위가 보인다', () => {
     render(<TripWizardStep1Screen {...filledProps()} />);

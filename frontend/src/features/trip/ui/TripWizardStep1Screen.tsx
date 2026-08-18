@@ -1150,6 +1150,16 @@ export function TripWizardStep1Screen({
                   추가
                 </Text>
               </Pressable>
+              <Pressable
+                testID="trip-wizard-destination-close"
+                accessibilityRole="button"
+                onPress={() => setSheetOpen(false)}
+                className="h-11 items-center justify-center"
+              >
+                <Text className="font-noto-medium text-body font-medium text-muted">
+                  닫기
+                </Text>
+              </Pressable>
             </View>
           </View>
         ) : null}
