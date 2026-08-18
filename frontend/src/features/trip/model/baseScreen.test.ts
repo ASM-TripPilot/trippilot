@@ -23,7 +23,7 @@ import {
 
 /** 여행 6/10~6/13의 숙박일 3개(6/10·6/11·6/12) + 6/13은 체크아웃일이라 서버가 안 센다. */
 function day(date: string, status: DayCoverage['status']): DayCoverage {
-  return { date, status };
+  return { date, status, candidates: [] };
 }
 
 describe('formatSectionRange — 구간 행 날짜 (6/10–6/12)', () => {

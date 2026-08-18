@@ -233,7 +233,7 @@ describe('G5 · AC-13 — 지도는 배럴로 가져오고 날짜마다 remount 
   });
 });
 
-describe('🔴 G6 · TRIP-298 AC-V1 — level 해석·0건 판정은 model 한 곳에 산다 (§2·§6)', () => {
+describe('🔴 G6 · TRIP-298 AC-V1 + TRIP-304 — 폴백 판정은 model 한 곳에 산다 (§2·§6)', () => {
   it('판정이 model 에 있고 배선이 그것을 부르며, 화면 층에는 판정 어휘가 0건이다', () => {
     /**
      * ★ 조합 자가검사 먼저 — 전처리(`stripComments`)와 탐지기를 **함께** 태운다. 구현자가
@@ -253,9 +253,12 @@ describe('🔴 G6 · TRIP-298 AC-V1 — level 해석·0건 판정은 model 한 �
     // 긍정 짝 — 판정이 실재하고 배선이 그것을 부른다. 없으면 아래 "0건"이 공허하다.
     const model = readOne(MODEL_REL);
     expect(model).toMatch(/export function isCandidatesDemoted\b/);
+    // TRIP-304 — 삼분 판정 순수 함수도 model 에 산다. `demoted` 는 이 함수가 흡수했다.
+    expect(model).toMatch(/export function resolveFallbackNotice\b/);
     // 01b D3 의 정규화(`trim().toUpperCase()`)가 model 안에 있다 — 화면이 아니라 여기다.
     expect(model).toContain('toUpperCase');
-    expect(readOne(PAGE_REL)).toContain('isCandidatesDemoted');
+    // 배선은 이제 삼분 판정 함수 하나를 부른다(demoted 는 그 안에서 재사용됨, 01b 결정 2).
+    expect(readOne(PAGE_REL)).toContain('resolveFallbackNotice');
 
     const uiFiles = listSourceFiles(path.join(ROOT, UI_DIR_REL));
     // 긍정 짝 — 모집단이 비어 있지 않다(빈 디렉토리에서 부정 단언이 공짜로 통과하는 것 방지).
@@ -275,7 +278,19 @@ describe('🔴 G6 · TRIP-298 AC-V1 — level 해석·0건 판정은 model 한 �
         source: stripComments(fs.readFileSync(full, 'utf8')),
       }))
       .flatMap(({ file, source }) =>
-        ['candidatesSummary', "'OK'", "'HIGH'", "'LOW'", "'NO_CANDIDATES'"]
+        // TRIP-304 확장 — 신규 폴백 신호 어휘(`solveMode`·`isFallback`·enum 값)도 화면 층에
+        // 0건이어야 한다. 화면은 판정 결과(`fallbackNotice`)만 받고 그 원천 어휘는 모른다(brief 원칙).
+        [
+          'candidatesSummary',
+          "'OK'",
+          "'HIGH'",
+          "'LOW'",
+          "'NO_CANDIDATES'",
+          'solveMode',
+          'isFallback',
+          "'MINIMAL'",
+          "'DETERMINISTIC'",
+        ]
           .filter((needle) => source.includes(needle))
           .map((needle) => `${file}: ${needle}`)
       );

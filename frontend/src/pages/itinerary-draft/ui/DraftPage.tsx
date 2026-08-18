@@ -8,8 +8,8 @@ import {
   buildDraftPins,
   DRAFT_POLL_INTERVAL_MS,
   formatDraftDayHeader,
-  isCandidatesDemoted,
   resolveDraftView,
+  resolveFallbackNotice,
   shouldKeepPollingDraft,
 } from '@/features/itinerary/model/draftView';
 import { DraftScreen } from '@/features/itinerary/ui/DraftScreen';
@@ -226,7 +226,11 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       )}
       dayHeader={formatDraftDayHeader(selectedDate)}
       canRetry={itinerary.data?.status !== 'CONFIRMED'}
-      demoted={isCandidatesDemoted(summary)}
+      fallbackNotice={resolveFallbackNotice({
+        solveMode: itinerary.data?.solveMode,
+        isFallback: itinerary.data?.isFallback,
+        candidatesSummary: summary,
+      })}
       onSelectDay={setPickedDate}
       onRetry={() => void handleRetry()}
       onBack={() => router.back()}

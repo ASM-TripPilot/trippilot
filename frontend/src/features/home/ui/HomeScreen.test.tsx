@@ -116,7 +116,10 @@ describe('HomeScreen — 정상 렌더 존재 (AC-1)', () => {
     // 온램프 — softNote + FAB.
     expect(screen.getByTestId('home-soft-note')).toBeOnTheScreen();
     const fab = screen.getByTestId('home-create-trip-fab');
-    expect(within(fab).getByText('여행 만들기')).toBeOnTheScreen();
+    // 라벨 없는 원형 FAB(Figma 2105:1757) — 보이는 글자는 없고 접근성 이름만 남는다.
+    // 텍스트를 지우면서 접근성 이름까지 같이 사라지는 것이 이 칸의 유일한 실패 경로다.
+    expect(within(fab).queryByText('여행 만들기')).toBeNull();
+    expect(fab).toHaveAccessibleName('여행 만들기');
   });
 });
 

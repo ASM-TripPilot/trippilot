@@ -43,6 +43,9 @@ export interface StaySearchScreenProps {
   /** 수동 등록 유도(empty·error) 콜백(01b Seed §3-6 — e05로 가는 문). 미지정이면 정직한
    * 스텁이라 기존 2-prop 호출이 깨지지 않는다. */
   onPressRegister?: () => void;
+  /** 앱바 뒤로가기 콜백. 목적지는 페이지가 정한다(화면은 라우터를 모른다). 미지정이면
+   * 정직한 스텁. */
+  onPressBack?: () => void;
 }
 
 // 카드 그림자(브리프 §4-2 명시 raw 허용 — 그림자는 토큰 대상이 아니다, HomeScreen.tsx
@@ -66,7 +69,7 @@ const FILTER_CHIPS: { axis: 'price' | 'region' | 'more'; label: string }[] = [
   { axis: 'more', label: '필터' },
 ];
 
-function AppBar(): ReactElement {
+function AppBar({ onPress }: { onPress?: () => void }): ReactElement {
   return (
     <View
       testID="stay-search-appbar"
@@ -75,7 +78,7 @@ function AppBar(): ReactElement {
       <Pressable
         testID="stay-search-back"
         accessibilityRole="button"
-        onPress={undefined}
+        onPress={onPress}
         className="h-10 w-10 items-center justify-center"
       >
         <BackChevronGlyph size={24} />
@@ -343,6 +346,7 @@ export function StaySearchScreen({
   state = { kind: 'results', degraded: false },
   onRetry,
   onPressRegister,
+  onPressBack,
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
@@ -351,7 +355,7 @@ export function StaySearchScreen({
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="stay-search-root" className="flex-1 bg-canvas">
-        <AppBar />
+        <AppBar onPress={onPressBack} />
 
         <FlatList<StayItem>
           testID="stay-search-list"

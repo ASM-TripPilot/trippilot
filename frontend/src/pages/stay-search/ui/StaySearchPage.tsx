@@ -62,6 +62,7 @@ export function StaySearchPage(): ReactElement {
       // `expo-router` 목이 `useLocalSearchParams`만 제공해, 훅을 렌더 시점에 부르면 즉시
       // 깨진다(실측, 03_implementer_notes.md). `router.push`는 실제로 눌렸을 때만 평가된다.
       onPressRegister={() => router.push('/stays/register')}
+      onPressBack={() => router.back()}
     />
   );
 }

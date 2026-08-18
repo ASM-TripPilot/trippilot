@@ -27,9 +27,10 @@ import path from 'path';
  * **A. 영구 규칙** — S2(옵트인 경계) · S4(외부 URL 금지) · S7(색 팔레트)은 규칙이라 화면이 늘어도
  * 그대로 선다.
  * **B. 이행 체크포인트 — 한시적.** S3의 `DraftScreenProps` 필드 목록과 S6의 픽스처 상수 이름은
- * 이번 칸의 계약 스냅숏이라 정당한 리네임·필드 추가에 red를 낸다. **B 카운터 = 1**(2026-08-10
- * TRIP-298 이 `DraftScreenProps.demoted` 를 더하면서 S3가 red — 목록을 갱신했다). 정당한 작업이
- * 이 두 단언 때문에 red를 낸 것이 2회 누적되면 해당 단언만 뗀다.
+ * 이번 칸의 계약 스냅숏이라 정당한 리네임·필드 추가에 red를 낸다. **B 카운터 = 2**(2026-08-10
+ * TRIP-298 이 `demoted` 를 더하며 red[1회], 2026-08-18 TRIP-304 가 `demoted`→`fallbackNotice`
+ * 리네임하며 red[2회] — 둘 다 목록을 갱신했다). **2회 누적으로 졸업 조건 도달** — S3 필드목록
+ * 단언 제거 여부는 [기록]/하네스 판정 몫으로 넘긴다(이번 사이클은 갱신 유지).
  */
 
 const ROOT = path.resolve('src');
@@ -331,9 +332,10 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       'pins',
       'dayHeader',
       'canRetry',
-      // TRIP-298 이 더한 후보 강등 안내 스위치. 이 칸(TRIP-339)이 막으려던 것은 "사진을
-      // 넣으려고 프롭이 느는 것"이고, 이것은 다른 사이클의 승인된 계약이다(02a §2.2).
-      'demoted',
+      // TRIP-298 이 더한 강등 스위치 `demoted` 를 TRIP-304 가 단일 폴백 배너 유니온으로 흡수했다
+      // (`fallbackNotice?: FallbackNotice | null`, 01b 결정 3). 필드 수는 그대로 10 — 사진을
+      // 넣으려고 프롭이 느는 것을 막는 이 칸(TRIP-339)의 취지는 유지된다(02a §2.2).
+      'fallbackNotice',
       'onSelectDay',
       'onRetry',
       'onBack',

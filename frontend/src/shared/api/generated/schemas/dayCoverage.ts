@@ -6,12 +6,17 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { DayCoverageResolution } from './dayCoverageResolution';
 import type { DayCoverageStatus } from './dayCoverageStatus';
 
 export interface DayCoverage {
   date: string;
-  /** AUTO=후보1(확정) · GAP=후보0(공백) · OVERLAP=후보≥2(겹침) */
+  /** **배정이 말하는 판정**(왜 손이 필요한가) — AUTO=후보1(자동 확정) · GAP=후보0(공백) · OVERLAP=후보≥2(겹침). `resolution` 과 **다른 축**이다: 겹침을 사용자가 풀어도 배정이 겹친 사실은 그대로라 OVERLAP 으로 남는다. */
   status: DayCoverageStatus;
-  /** AUTO일 때만 확정 거점 */
+  /** 확정된 거점(미해결이면 null) */
   savedStayId?: string | null;
+  /** **확정 여부**(null = 미해결). AUTO=후보1 자동 확정 · USER_PICK=사용자가 해소 시트에서 선택(BR-U1-45). PREV_STAY·DESTINATION_CENTER 는 공백일 선택지로 **아직 미구현**이다(값만 예약). `blocked` 는 이 값이 null 인 날이 하나라도 있는지와 같다. */
+  resolution?: DayCoverageResolution;
+  /** 겹침일에 고를 수 있는 숙소. 그 외 날짜는 **빈 배열**이다. 이걸 안 실으면 화면이 배정 목록을 따로 받아 날짜 겹침을 다시 계산해야 한다. */
+  candidates: string[];
 }

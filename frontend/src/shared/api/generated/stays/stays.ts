@@ -23,6 +23,7 @@ import type {
   GeocodeCandidate,
   GetStaysGeocodeParams,
   GetStaysSearchParams,
+  PlaceSearchUnavailableResponse,
   StaySearchResponse,
   ValidationErrorResponse,
 } from '../schemas';
@@ -205,7 +206,7 @@ export const getGetStaysGeocodeQueryKey = (params?: GetStaysGeocodeParams) => {
 
 export const getGetStaysGeocodeQueryOptions = <
   TData = Awaited<ReturnType<typeof getStaysGeocode>>,
-  TError = unknown,
+  TError = PlaceSearchUnavailableResponse,
 >(
   params: GetStaysGeocodeParams,
   options?: {
@@ -236,11 +237,11 @@ export const getGetStaysGeocodeQueryOptions = <
 export type GetStaysGeocodeQueryResult = NonNullable<
   Awaited<ReturnType<typeof getStaysGeocode>>
 >;
-export type GetStaysGeocodeQueryError = unknown;
+export type GetStaysGeocodeQueryError = PlaceSearchUnavailableResponse;
 
 export function useGetStaysGeocode<
   TData = Awaited<ReturnType<typeof getStaysGeocode>>,
-  TError = unknown,
+  TError = PlaceSearchUnavailableResponse,
 >(
   params: GetStaysGeocodeParams,
   options: {
@@ -266,7 +267,7 @@ export function useGetStaysGeocode<
 };
 export function useGetStaysGeocode<
   TData = Awaited<ReturnType<typeof getStaysGeocode>>,
-  TError = unknown,
+  TError = PlaceSearchUnavailableResponse,
 >(
   params: GetStaysGeocodeParams,
   options?: {
@@ -292,7 +293,7 @@ export function useGetStaysGeocode<
 };
 export function useGetStaysGeocode<
   TData = Awaited<ReturnType<typeof getStaysGeocode>>,
-  TError = unknown,
+  TError = PlaceSearchUnavailableResponse,
 >(
   params: GetStaysGeocodeParams,
   options?: {
@@ -314,7 +315,7 @@ export function useGetStaysGeocode<
 
 export function useGetStaysGeocode<
   TData = Awaited<ReturnType<typeof getStaysGeocode>>,
-  TError = unknown,
+  TError = PlaceSearchUnavailableResponse,
 >(
   params: GetStaysGeocodeParams,
   options?: {

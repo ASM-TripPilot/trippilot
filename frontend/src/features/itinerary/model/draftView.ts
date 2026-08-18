@@ -3,6 +3,7 @@ import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
   ItineraryGenerationState,
+  ItinerarySolveMode,
 } from '@/shared/api/generated/schemas';
 
 /**
@@ -141,6 +142,41 @@ export function isCandidatesDemoted(
 ): boolean {
   if (summary === undefined || summary === null) return false;
   return !QUIET_CANDIDATE_LEVELS.includes(summary.level.trim().toUpperCase());
+}
+
+/**
+ * 폴백·강등 안내 한 줄의 종류. 셋 중 **하나만** 뜬다 — 신호가 겹쳐도 심각도 최상위 하나로 접는다.
+ */
+export type FallbackNotice =
+  { kind: 'minimal' } | { kind: 'deterministic' } | { kind: 'demoted' };
+
+/**
+ * 세 신호(`solveMode`·`isFallback`·후보 요약)를 배너 하나로 접는다. 화면은 이 결과만 받고
+ * 원천 신호도 그 어휘도 모른다(판정이 두 층에 흩어지면 같은 규칙이 서로 다르게 진화한다).
+ *
+ * 심각도 순위 **MINIMAL > LOW(demoted) > DETERMINISTIC** — 실제 후보 누락(LOW)이 알고리즘
+ * 강등(DETERMINISTIC)보다 심각하다(01b). 그래서 `minimal → demoted → deterministic` 순으로
+ * 검사해 첫 매치를 반환하고, 아무 신호도 없으면 `null`(배너 0건)이다.
+ *
+ * `minimal` 갈래만 `isFallback` 을 함께 본다 — MANUAL(직접 만들기)은 `solveMode=MINIMAL` 이지만
+ * 실패가 아니라 선택이라 `isFallback=false` 다. 이 게이트가 없으면 빈 일정에 오배너가 뜬다.
+ * 그 게이트가 `demoted` 까지 삼키면 정당한 강등을 놓치므로, LOW 판정은 `isFallback` 과 무관하게 산다.
+ */
+export function resolveFallbackNotice(input: {
+  solveMode?: ItinerarySolveMode;
+  isFallback?: boolean;
+  candidatesSummary?: ItineraryCandidatesSummary;
+}): FallbackNotice | null {
+  if (input.solveMode === 'MINIMAL' && input.isFallback === true) {
+    return { kind: 'minimal' };
+  }
+  if (isCandidatesDemoted(input.candidatesSummary)) {
+    return { kind: 'demoted' };
+  }
+  if (input.isFallback === true && input.solveMode === 'DETERMINISTIC') {
+    return { kind: 'deterministic' };
+  }
+  return null;
 }
 
 /**

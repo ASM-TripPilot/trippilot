@@ -24,6 +24,8 @@ import type {
 
 import type {
   AddMustVisitRequest,
+  AdjustTimesRequest,
+  ArriveRequest,
   AssignBaseRequest,
   BaseAssignment,
   ChangeLog,
@@ -32,15 +34,25 @@ import type {
   EditItineraryRequest,
   EditTripRequest,
   GenerateItineraryRequest,
+  GenerationSession,
   GetTripsTripIdChangeLogParams,
   GetTripsTripIdItineraryRevisionsParams,
   Itinerary,
   MustVisit,
+  ReplanSession,
+  ResolveCoverageDayRequest,
   RevisionList,
   SlotCandidates,
   SlotCandidatesRequest,
+  StartReplanRequest,
+  StayRecommendation,
+  StayRecommendationRequest,
+  Trigger,
+  TriggerList,
   Trip,
   ValidationErrorResponse,
+  VisitCheck,
+  VisitCheckList,
 } from '../schemas';
 
 import { customInstance } from '../../mutator';
@@ -564,6 +576,8 @@ export const useDeleteTripsTripId = <TError = void, TContext = unknown>(
   return useMutation(getDeleteTripsTripIdMutationOptions(options), queryClient);
 };
 /**
+ * 여행 기간을 벗어나는 구간은 **거부한다**(400) — 서버가 여행 기간을 늘려 주지 않는다. 기간이 바뀌면 일정·커버리지·필수 방문지가 모두 영향을 받으므로, 늘릴지는 사용자가 정한다. US-TRIP-03 의 "여행 기간 자동 확장 여부를 묻는다"는 **클라이언트 2단계**로 만족한다 — 400 을 받아 확인을 띄우고, `PATCH /trips/{tripId}` 로 기간을 고친 뒤 다시 배정한다.
+ * 그래서 400 의 `error.fields` 는 **어느 칸이 왜 틀렸는지**를 담는다: 시작일이 앞서면 `dateFrom`, 종료일이 넘으면 `dateTo` 이며 reason 에 여행 시작일·종료일이 들어간다 (화면이 "여행은 8/4까지예요, 늘릴까요?"를 그릴 근거). 양쪽 다 벗어나면 둘 다 담는다.
  * @summary 구간 거점 배정(등록 숙소를 [dateFrom, dateTo) 거점으로 · 여행 기간 내 INV-U1-15)
  */
 export const postTripsTripIdBases = (
@@ -1054,6 +1068,97 @@ export function useGetTripsTripIdCoverage<
   return withQueryKey(query, queryOptions.queryKey);
 }
 
+/**
+ * 겹침일(OVERLAP)·공백일(GAP)을 사용자가 풀어 일정 생성 게이트를 연다(INV-U1-16). **자동 확정된 날(AUTO)은 409** — 후보가 하나뿐이라 고를 것이 없고, 바꾸려면 배정 자체를 고쳐야 한다. 고를 수 있는 숙소는 겹침일이면 그 날 `candidates`, 공백일이면 이 여행에 배정된 숙소다. 날짜가 곧 리소스 키(하루 1행)라 PUT 이며 같은 선택을 반복해도 결과가 같다. 응답은 **커버리지 전체** — 한 날을 풀면 `blocked` 가 바뀌므로 그 한 줄만 갱신하면 화면이 계속 막힌 것처럼 보인다. 전 숙박일이 확정되는 순간 `TripBaseResolved` 로 게이트가 열린다(BR-U1-46).
+ * @summary 커버리지 해소 — 그 날 거점으로 쓸 숙소 선택(BR-U1-45 · resolution=user_pick)
+ */
+export const putTripsTripIdCoverageDaysDayDate = (
+  tripId: string,
+  dayDate: string,
+  resolveCoverageDayRequest: ResolveCoverageDayRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<Coverage>({
+    url: `/trips/${tripId}/coverage/days/${dayDate}`,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    data: resolveCoverageDayRequest,
+    signal,
+  });
+};
+
+export const getPutTripsTripIdCoverageDaysDayDateMutationOptions = <
+  TError = ValidationErrorResponse | void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putTripsTripIdCoverageDaysDayDate>>,
+    TError,
+    { tripId: string; dayDate: string; data: ResolveCoverageDayRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putTripsTripIdCoverageDaysDayDate>>,
+  TError,
+  { tripId: string; dayDate: string; data: ResolveCoverageDayRequest },
+  TContext
+> => {
+  const mutationKey = ['putTripsTripIdCoverageDaysDayDate'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putTripsTripIdCoverageDaysDayDate>>,
+    { tripId: string; dayDate: string; data: ResolveCoverageDayRequest }
+  > = (props) => {
+    const { tripId, dayDate, data } = props ?? {};
+
+    return putTripsTripIdCoverageDaysDayDate(tripId, dayDate, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PutTripsTripIdCoverageDaysDayDateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putTripsTripIdCoverageDaysDayDate>>
+>;
+export type PutTripsTripIdCoverageDaysDayDateMutationBody =
+  ResolveCoverageDayRequest;
+export type PutTripsTripIdCoverageDaysDayDateMutationError =
+  ValidationErrorResponse | void;
+
+/**
+ * @summary 커버리지 해소 — 그 날 거점으로 쓸 숙소 선택(BR-U1-45 · resolution=user_pick)
+ */
+export const usePutTripsTripIdCoverageDaysDayDate = <
+  TError = ValidationErrorResponse | void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putTripsTripIdCoverageDaysDayDate>>,
+      TError,
+      { tripId: string; dayDate: string; data: ResolveCoverageDayRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof putTripsTripIdCoverageDaysDayDate>>,
+  TError,
+  { tripId: string; dayDate: string; data: ResolveCoverageDayRequest },
+  TContext
+> => {
+  return useMutation(
+    getPutTripsTripIdCoverageDaysDayDateMutationOptions(options),
+    queryClient
+  );
+};
 /**
  * @summary 필수 방문지 추가 — POI 동결 스냅숏 참조(INV-U1-03) · FIXED 날짜·시각(INV-U1-17)
  */
@@ -1635,6 +1740,284 @@ export const usePutTripsTripIdItinerary = <TError = void, TContext = unknown>(
   );
 };
 /**
+ * **진행률(퍼센트)은 없다** — 계약에 그 값이 없고, 지어내면 사용자가 남은 시간을 오판한다. 화면은 `startedAt`·`day1ReadyAt` 으로 단계를 판단한다. 세션 id 는 일정 응답의 `generationSessionId` 로 받는다. `[백그라운드로]` 에 대응하는 오퍼레이션은 **없다** — 세션을 살린 채 화면만 이탈하는 것이라 서버가 할 일이 없다(BR-U3-05).
+ * @summary 생성 진행 상태 조회 — 단계 텍스트의 원천(h09·h10)
+ */
+export const getTripsTripIdGenerationSessionsSessionId = (
+  tripId: string,
+  sessionId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<GenerationSession>({
+    url: `/trips/${tripId}/generation-sessions/${sessionId}`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetTripsTripIdGenerationSessionsSessionIdQueryKey = (
+  tripId: string,
+  sessionId: string
+) => {
+  return [`/trips/${tripId}/generation-sessions/${sessionId}`] as const;
+};
+
+export const getGetTripsTripIdGenerationSessionsSessionIdQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+  TError = void,
+>(
+  tripId: string,
+  sessionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetTripsTripIdGenerationSessionsSessionIdQueryKey(tripId, sessionId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>
+  > = ({ signal }) =>
+    getTripsTripIdGenerationSessionsSessionId(tripId, sessionId, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled:
+      tripId !== null &&
+      tripId !== undefined &&
+      sessionId !== null &&
+      sessionId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdGenerationSessionsSessionIdQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>
+>;
+export type GetTripsTripIdGenerationSessionsSessionIdQueryError = void;
+
+export function useGetTripsTripIdGenerationSessionsSessionId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+  TError = void,
+>(
+  tripId: string,
+  sessionId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdGenerationSessionsSessionId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+  TError = void,
+>(
+  tripId: string,
+  sessionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdGenerationSessionsSessionId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+  TError = void,
+>(
+  tripId: string,
+  sessionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 생성 진행 상태 조회 — 단계 텍스트의 원천(h09·h10)
+ */
+
+export function useGetTripsTripIdGenerationSessionsSessionId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+  TError = void,
+>(
+  tripId: string,
+  sessionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdGenerationSessionsSessionId>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdGenerationSessionsSessionIdQueryOptions(
+    tripId,
+    sessionId,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * 세션을 `CANCELED` 로 닫는다(BR-U3-05). "부분 결과를 버린다"는 것은 **2차 결과를 반영하지 않는다**는 뜻이며, 이미 보여 준 day1 일정을 지우지 않는다 — 사용자가 보던 화면이 비어 버리기 때문이다. 일정은 `generationState=PARTIAL` 로 남고, 재생성(POST 일정)이 그 탈출구다.
+ * @summary 생성 취소(h09 [취소]) — 뒤이어 도착하는 2차 결과를 반영하지 않는다
+ */
+export const postTripsTripIdGenerationSessionsSessionIdCancel = (
+  tripId: string,
+  sessionId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<GenerationSession>({
+    url: `/trips/${tripId}/generation-sessions/${sessionId}/cancel`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostTripsTripIdGenerationSessionsSessionIdCancelMutationOptions =
+  <TError = void, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<
+      Awaited<
+        ReturnType<typeof postTripsTripIdGenerationSessionsSessionIdCancel>
+      >,
+      TError,
+      { tripId: string; sessionId: string },
+      TContext
+    >;
+  }): UseMutationOptions<
+    Awaited<
+      ReturnType<typeof postTripsTripIdGenerationSessionsSessionIdCancel>
+    >,
+    TError,
+    { tripId: string; sessionId: string },
+    TContext
+  > => {
+    const mutationKey = ['postTripsTripIdGenerationSessionsSessionIdCancel'];
+    const { mutation: mutationOptions } = options
+      ? options.mutation &&
+        'mutationKey' in options.mutation &&
+        options.mutation.mutationKey
+        ? options
+        : { ...options, mutation: { ...options.mutation, mutationKey } }
+      : { mutation: { mutationKey } };
+
+    const mutationFn: MutationFunction<
+      Awaited<
+        ReturnType<typeof postTripsTripIdGenerationSessionsSessionIdCancel>
+      >,
+      { tripId: string; sessionId: string }
+    > = (props) => {
+      const { tripId, sessionId } = props ?? {};
+
+      return postTripsTripIdGenerationSessionsSessionIdCancel(
+        tripId,
+        sessionId
+      );
+    };
+
+    return { mutationFn, ...mutationOptions };
+  };
+
+export type PostTripsTripIdGenerationSessionsSessionIdCancelMutationResult =
+  NonNullable<
+    Awaited<ReturnType<typeof postTripsTripIdGenerationSessionsSessionIdCancel>>
+  >;
+
+export type PostTripsTripIdGenerationSessionsSessionIdCancelMutationError =
+  void;
+
+/**
+ * @summary 생성 취소(h09 [취소]) — 뒤이어 도착하는 2차 결과를 반영하지 않는다
+ */
+export const usePostTripsTripIdGenerationSessionsSessionIdCancel = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<
+        ReturnType<typeof postTripsTripIdGenerationSessionsSessionIdCancel>
+      >,
+      TError,
+      { tripId: string; sessionId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdGenerationSessionsSessionIdCancel>>,
+  TError,
+  { tripId: string; sessionId: string },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdGenerationSessionsSessionIdCancelMutationOptions(options),
+    queryClient
+  );
+};
+/**
  * "다른 후보 N"(완전 AI)과 옵션 교체(같이 고르기)가 **같은 오퍼레이션**을 쓴다(BR-U3-23). 후보는 closed-set(INV-1) — 백엔드가 임의 POI 를 섞지 않는다. **제외할 장소는 받지 않는다** — 이미 일정에 있는 POI 를 서버가 유도해 제외한다(BR-U3-24). 후보 0건이면 빈 목록이며, 클라이언트가 반경 확대·컨셉 변경을 제안한다(BR-U3-25). 조회지만 POST 인 이유는 입력이 복합(이웃 슬롯·컨셉·반경)이기 때문이다.
  * @summary 슬롯 교체 후보 — 완전 AI·같이 고르기 공통 경계
  */
@@ -1720,6 +2103,1311 @@ export const usePostTripsTripIdItinerarySlotCandidates = <
 > => {
   return useMutation(
     getPostTripsTripIdItinerarySlotCandidatesMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * 계획(`visit_slot`)을 덮어쓰지 않고 **실적(actual) 계층**에 남긴다 — 계획은 "가기로 한 것", 여기는 "실제로 간 것"이라 둘이 달라도 그 자체가 사실이다. `slotKey` 를 비우면 **즉석 방문**이다. 같은 슬롯을 두 번 체크하면 409 — 지오펜스가 한 번 이동에 두 리전을 깨워도 하나만 확정된다.
+ * @summary 도착 체크 — 계획에 없던 곳이면 즉석 방문(US-ONTRIP-01 · US-REC-01)
+ */
+export const postTripsTripIdVisits = (
+  tripId: string,
+  arriveRequest: ArriveRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<VisitCheck>({
+    url: `/trips/${tripId}/visits`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data: arriveRequest,
+    signal,
+  });
+};
+
+export const getPostTripsTripIdVisitsMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdVisits>>,
+    TError,
+    { tripId: string; data: ArriveRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdVisits>>,
+  TError,
+  { tripId: string; data: ArriveRequest },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdVisits'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdVisits>>,
+    { tripId: string; data: ArriveRequest }
+  > = (props) => {
+    const { tripId, data } = props ?? {};
+
+    return postTripsTripIdVisits(tripId, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdVisitsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTripsTripIdVisits>>
+>;
+export type PostTripsTripIdVisitsMutationBody = ArriveRequest;
+export type PostTripsTripIdVisitsMutationError = void;
+
+/**
+ * @summary 도착 체크 — 계획에 없던 곳이면 즉석 방문(US-ONTRIP-01 · US-REC-01)
+ */
+export const usePostTripsTripIdVisits = <TError = void, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdVisits>>,
+      TError,
+      { tripId: string; data: ArriveRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdVisits>>,
+  TError,
+  { tripId: string; data: ArriveRequest },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdVisitsMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * 즉석 방문은 슬롯 키가 없어 **도착 시각(여행지 기준 날짜)** 으로 묶인다.
+ * @summary 그 날의 방문 기록
+ */
+export const getTripsTripIdVisitsDaysDay = (
+  tripId: string,
+  day: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<VisitCheckList>({
+    url: `/trips/${tripId}/visits/days/${day}`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetTripsTripIdVisitsDaysDayQueryKey = (
+  tripId: string,
+  day: string
+) => {
+  return [`/trips/${tripId}/visits/days/${day}`] as const;
+};
+
+export const getGetTripsTripIdVisitsDaysDayQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+  TError = void,
+>(
+  tripId: string,
+  day: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetTripsTripIdVisitsDaysDayQueryKey(tripId, day);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>
+  > = ({ signal }) => getTripsTripIdVisitsDaysDay(tripId, day, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled:
+      tripId !== null &&
+      tripId !== undefined &&
+      day !== null &&
+      day !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdVisitsDaysDayQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>
+>;
+export type GetTripsTripIdVisitsDaysDayQueryError = void;
+
+export function useGetTripsTripIdVisitsDaysDay<
+  TData = Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+  TError = void,
+>(
+  tripId: string,
+  day: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdVisitsDaysDay<
+  TData = Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+  TError = void,
+>(
+  tripId: string,
+  day: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdVisitsDaysDay<
+  TData = Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+  TError = void,
+>(
+  tripId: string,
+  day: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 그 날의 방문 기록
+ */
+
+export function useGetTripsTripIdVisitsDaysDay<
+  TData = Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+  TError = void,
+>(
+  tripId: string,
+  day: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdVisitsDaysDay>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdVisitsDaysDayQueryOptions(
+    tripId,
+    day,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * @summary 실제 시각 보정 — 자동 기록하되 수정 가능(US-REC-01)
+ */
+export const patchTripsTripIdVisitsVisitCheckId = (
+  tripId: string,
+  visitCheckId: string,
+  adjustTimesRequest: AdjustTimesRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<VisitCheck>({
+    url: `/trips/${tripId}/visits/${visitCheckId}`,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    data: adjustTimesRequest,
+    signal,
+  });
+};
+
+export const getPatchTripsTripIdVisitsVisitCheckIdMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchTripsTripIdVisitsVisitCheckId>>,
+    TError,
+    { tripId: string; visitCheckId: string; data: AdjustTimesRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchTripsTripIdVisitsVisitCheckId>>,
+  TError,
+  { tripId: string; visitCheckId: string; data: AdjustTimesRequest },
+  TContext
+> => {
+  const mutationKey = ['patchTripsTripIdVisitsVisitCheckId'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchTripsTripIdVisitsVisitCheckId>>,
+    { tripId: string; visitCheckId: string; data: AdjustTimesRequest }
+  > = (props) => {
+    const { tripId, visitCheckId, data } = props ?? {};
+
+    return patchTripsTripIdVisitsVisitCheckId(tripId, visitCheckId, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchTripsTripIdVisitsVisitCheckIdMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchTripsTripIdVisitsVisitCheckId>>
+>;
+export type PatchTripsTripIdVisitsVisitCheckIdMutationBody = AdjustTimesRequest;
+export type PatchTripsTripIdVisitsVisitCheckIdMutationError = void;
+
+/**
+ * @summary 실제 시각 보정 — 자동 기록하되 수정 가능(US-REC-01)
+ */
+export const usePatchTripsTripIdVisitsVisitCheckId = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof patchTripsTripIdVisitsVisitCheckId>>,
+      TError,
+      { tripId: string; visitCheckId: string; data: AdjustTimesRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof patchTripsTripIdVisitsVisitCheckId>>,
+  TError,
+  { tripId: string; visitCheckId: string; data: AdjustTimesRequest },
+  TContext
+> => {
+  return useMutation(
+    getPatchTripsTripIdVisitsVisitCheckIdMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * @summary 방문 완료 — 이 시점부터 그 슬롯은 재계획에서 불변(INV-U4-04)
+ */
+export const postTripsTripIdVisitsVisitCheckIdComplete = (
+  tripId: string,
+  visitCheckId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<VisitCheck>({
+    url: `/trips/${tripId}/visits/${visitCheckId}/complete`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostTripsTripIdVisitsVisitCheckIdCompleteMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdComplete>>,
+    TError,
+    { tripId: string; visitCheckId: string },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdComplete>>,
+  TError,
+  { tripId: string; visitCheckId: string },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdVisitsVisitCheckIdComplete'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdComplete>>,
+    { tripId: string; visitCheckId: string }
+  > = (props) => {
+    const { tripId, visitCheckId } = props ?? {};
+
+    return postTripsTripIdVisitsVisitCheckIdComplete(tripId, visitCheckId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdVisitsVisitCheckIdCompleteMutationResult =
+  NonNullable<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdComplete>>
+  >;
+
+export type PostTripsTripIdVisitsVisitCheckIdCompleteMutationError = void;
+
+/**
+ * @summary 방문 완료 — 이 시점부터 그 슬롯은 재계획에서 불변(INV-U4-04)
+ */
+export const usePostTripsTripIdVisitsVisitCheckIdComplete = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdComplete>>,
+      TError,
+      { tripId: string; visitCheckId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdComplete>>,
+  TError,
+  { tripId: string; visitCheckId: string },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdVisitsVisitCheckIdCompleteMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * @summary 건너뜀(취소) — 안 갔으므로 재계획에서 잠그지 않는다
+ */
+export const postTripsTripIdVisitsVisitCheckIdSkip = (
+  tripId: string,
+  visitCheckId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<VisitCheck>({
+    url: `/trips/${tripId}/visits/${visitCheckId}/skip`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostTripsTripIdVisitsVisitCheckIdSkipMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdSkip>>,
+    TError,
+    { tripId: string; visitCheckId: string },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdSkip>>,
+  TError,
+  { tripId: string; visitCheckId: string },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdVisitsVisitCheckIdSkip'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdSkip>>,
+    { tripId: string; visitCheckId: string }
+  > = (props) => {
+    const { tripId, visitCheckId } = props ?? {};
+
+    return postTripsTripIdVisitsVisitCheckIdSkip(tripId, visitCheckId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdVisitsVisitCheckIdSkipMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdSkip>>
+>;
+
+export type PostTripsTripIdVisitsVisitCheckIdSkipMutationError = void;
+
+/**
+ * @summary 건너뜀(취소) — 안 갔으므로 재계획에서 잠그지 않는다
+ */
+export const usePostTripsTripIdVisitsVisitCheckIdSkip = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdSkip>>,
+      TError,
+      { tripId: string; visitCheckId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdSkip>>,
+  TError,
+  { tripId: string; visitCheckId: string },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdVisitsVisitCheckIdSkipMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * **발화 중인 트리거만 나간다**(INV-U4-01). 억제·무영향으로 남긴 판정은 "왜 알림이 안 왔나"를 답하기 위한 관측 기록이며 사용자에게 어떤 형태로도 노출되지 않는다. 트리거는 **제안까지만** 한다 — 어떤 트리거도 일정을 자동으로 바꾸지 않는다(BR-U4-09).
+ * @summary 감지된 변화 — 발화 중인 것만(i08·i09)
+ */
+export const getTripsTripIdTriggers = (
+  tripId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<TriggerList>({
+    url: `/trips/${tripId}/triggers`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetTripsTripIdTriggersQueryKey = (tripId: string) => {
+  return [`/trips/${tripId}/triggers`] as const;
+};
+
+export const getGetTripsTripIdTriggersQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTripsTripIdTriggersQueryKey(tripId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdTriggers>>
+  > = ({ signal }) => getTripsTripIdTriggers(tripId, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: tripId !== null && tripId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdTriggersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdTriggers>>
+>;
+export type GetTripsTripIdTriggersQueryError = void;
+
+export function useGetTripsTripIdTriggers<
+  TData = Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+  TError = void,
+>(
+  tripId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdTriggers>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdTriggers<
+  TData = Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdTriggers>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdTriggers<
+  TData = Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 감지된 변화 — 발화 중인 것만(i08·i09)
+ */
+
+export function useGetTripsTripIdTriggers<
+  TData = Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+  TError = void,
+>(
+  tripId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdTriggers>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdTriggersQueryOptions(tripId, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * 화면에서 배너만 감추는 동작이 아니다. 억제 레코드가 생겨 **다음 감지 때 같은 조합이 발화하지 않는다**. 슬롯을 특정한 신호면 그 슬롯만, 날짜 전체 신호면 그 날 전체를 끈다.
+ * @summary 알림 끄기 — 억제 레코드를 만든다(BR-U4-15)
+ */
+export const postTripsTripIdTriggersTriggerIdDismiss = (
+  tripId: string,
+  triggerId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<Trigger>({
+    url: `/trips/${tripId}/triggers/${triggerId}/dismiss`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostTripsTripIdTriggersTriggerIdDismissMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdTriggersTriggerIdDismiss>>,
+    TError,
+    { tripId: string; triggerId: string },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdTriggersTriggerIdDismiss>>,
+  TError,
+  { tripId: string; triggerId: string },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdTriggersTriggerIdDismiss'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdTriggersTriggerIdDismiss>>,
+    { tripId: string; triggerId: string }
+  > = (props) => {
+    const { tripId, triggerId } = props ?? {};
+
+    return postTripsTripIdTriggersTriggerIdDismiss(tripId, triggerId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdTriggersTriggerIdDismissMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTripsTripIdTriggersTriggerIdDismiss>>
+>;
+
+export type PostTripsTripIdTriggersTriggerIdDismissMutationError = void;
+
+/**
+ * @summary 알림 끄기 — 억제 레코드를 만든다(BR-U4-15)
+ */
+export const usePostTripsTripIdTriggersTriggerIdDismiss = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdTriggersTriggerIdDismiss>>,
+      TError,
+      { tripId: string; triggerId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdTriggersTriggerIdDismiss>>,
+  TError,
+  { tripId: string; triggerId: string },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdTriggersTriggerIdDismissMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * 숙소 없이 만든 일정의 **방문지 무게중심**으로 권역을 추천하고, 넘겨받은 후보를 **평균 이동 거리 순**으로 매긴다(before/after 함께). 거리는 전부 **추정(직선)** 이며 소요시간은 없다(INV-3).
+ * 후보 목록은 클라이언트가 `GET /stays/search` 로 얻어 넘긴다 — 숙소 검색은 C3 소유라 여기서 중개하지 않는다. 비워 보내면 권역만 돌려준다.
+ * **등록 후 재정렬 API 는 없다** — 정본이 "숙소 등록 후 재정렬 = generate"로 못박았다(DEC-U3-2·4). 숙소를 등록한 뒤 `POST /trips/{tripId}/itinerary` 를 다시 부르면 그 숙소가 앵커로 들어간다.
+ * @summary 숙소 나중 등록 온램프 — 동선 기준 권역·후보 평가(US-SCHED-11 · h27·h28)
+ */
+export const postTripsTripIdStayRecommendations = (
+  tripId: string,
+  stayRecommendationRequest: StayRecommendationRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<StayRecommendation>({
+    url: `/trips/${tripId}/stay-recommendations`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data: stayRecommendationRequest,
+    signal,
+  });
+};
+
+export const getPostTripsTripIdStayRecommendationsMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdStayRecommendations>>,
+    TError,
+    { tripId: string; data: StayRecommendationRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdStayRecommendations>>,
+  TError,
+  { tripId: string; data: StayRecommendationRequest },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdStayRecommendations'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdStayRecommendations>>,
+    { tripId: string; data: StayRecommendationRequest }
+  > = (props) => {
+    const { tripId, data } = props ?? {};
+
+    return postTripsTripIdStayRecommendations(tripId, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdStayRecommendationsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTripsTripIdStayRecommendations>>
+>;
+export type PostTripsTripIdStayRecommendationsMutationBody =
+  StayRecommendationRequest;
+export type PostTripsTripIdStayRecommendationsMutationError = void;
+
+/**
+ * @summary 숙소 나중 등록 온램프 — 동선 기준 권역·후보 평가(US-SCHED-11 · h27·h28)
+ */
+export const usePostTripsTripIdStayRecommendations = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdStayRecommendations>>,
+      TError,
+      { tripId: string; data: StayRecommendationRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdStayRecommendations>>,
+  TError,
+  { tripId: string; data: StayRecommendationRequest },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdStayRecommendationsMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * 여행 **기간 안**에서만, **다시 짤 일정이 있을 때만** 연다. 이미 열린 세션이 있으면 **그것을 CANCELED 로 닫고 새로 시작**한다(INV-U4-06) — 막지 않는다. 사용자가 앱을 닫았다 다시 들어오는 것이 정상 흐름이라, 거부하면 영영 못 들어간다. 확정(APPLIED) 전에는 원 일정에 **어떤 쓰기도 발생하지 않는다**(INV-U4-05).
+ * @summary 재계획 진입 — 세션을 연다(i10)
+ */
+export const postTripsTripIdReplanSessions = (
+  tripId: string,
+  startReplanRequest: StartReplanRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<ReplanSession>({
+    url: `/trips/${tripId}/replan-sessions`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data: startReplanRequest,
+    signal,
+  });
+};
+
+export const getPostTripsTripIdReplanSessionsMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessions>>,
+    TError,
+    { tripId: string; data: StartReplanRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdReplanSessions>>,
+  TError,
+  { tripId: string; data: StartReplanRequest },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdReplanSessions'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessions>>,
+    { tripId: string; data: StartReplanRequest }
+  > = (props) => {
+    const { tripId, data } = props ?? {};
+
+    return postTripsTripIdReplanSessions(tripId, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdReplanSessionsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTripsTripIdReplanSessions>>
+>;
+export type PostTripsTripIdReplanSessionsMutationBody = StartReplanRequest;
+export type PostTripsTripIdReplanSessionsMutationError = void;
+
+/**
+ * @summary 재계획 진입 — 세션을 연다(i10)
+ */
+export const usePostTripsTripIdReplanSessions = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdReplanSessions>>,
+      TError,
+      { tripId: string; data: StartReplanRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdReplanSessions>>,
+  TError,
+  { tripId: string; data: StartReplanRequest },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdReplanSessionsMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * @summary 재계획 세션 조회 — 진행 상태와 재계획안
+ */
+export const getTripsTripIdReplanSessionsSessionId = (
+  tripId: string,
+  sessionId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<ReplanSession>({
+    url: `/trips/${tripId}/replan-sessions/${sessionId}`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetTripsTripIdReplanSessionsSessionIdQueryKey = (
+  tripId: string,
+  sessionId: string
+) => {
+  return [`/trips/${tripId}/replan-sessions/${sessionId}`] as const;
+};
+
+export const getGetTripsTripIdReplanSessionsSessionIdQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+  TError = void,
+>(
+  tripId: string,
+  sessionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetTripsTripIdReplanSessionsSessionIdQueryKey(tripId, sessionId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>
+  > = ({ signal }) =>
+    getTripsTripIdReplanSessionsSessionId(tripId, sessionId, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled:
+      tripId !== null &&
+      tripId !== undefined &&
+      sessionId !== null &&
+      sessionId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdReplanSessionsSessionIdQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>
+>;
+export type GetTripsTripIdReplanSessionsSessionIdQueryError = void;
+
+export function useGetTripsTripIdReplanSessionsSessionId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+  TError = void,
+>(
+  tripId: string,
+  sessionId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdReplanSessionsSessionId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+  TError = void,
+>(
+  tripId: string,
+  sessionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdReplanSessionsSessionId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+  TError = void,
+>(
+  tripId: string,
+  sessionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 재계획 세션 조회 — 진행 상태와 재계획안
+ */
+
+export function useGetTripsTripIdReplanSessionsSessionId<
+  TData = Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+  TError = void,
+>(
+  tripId: string,
+  sessionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdReplanSessionsSessionId>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdReplanSessionsSessionIdQueryOptions(
+    tripId,
+    sessionId,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * **일정이 바뀌는 유일한 지점**이다(INV-U4-05) — 그 전까지 `itinerary`·`visit_slot` 은 진입 전과 같다. 대상 일자만 교체하고 나머지 일자는 손대지 않으며, 되돌릴 지점을 먼저 남긴다(BR-U3-19). 완료·시각 고정 슬롯은 산출 단계에서 이미 잠겨 있어 그대로 남는다(INV-U4-04). 반영 후 세션은 `APPLIED` 로 닫히고 `ItineraryRecalculated` 가 나간다.
+ * @summary 재계획 확정(i18) — 초안을 일정에 반영한다
+ */
+export const postTripsTripIdReplanSessionsSessionIdApply = (
+  tripId: string,
+  sessionId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<ReplanSession>({
+    url: `/trips/${tripId}/replan-sessions/${sessionId}/apply`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostTripsTripIdReplanSessionsSessionIdApplyMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdApply>>,
+    TError,
+    { tripId: string; sessionId: string },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdApply>>,
+  TError,
+  { tripId: string; sessionId: string },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdReplanSessionsSessionIdApply'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdApply>>,
+    { tripId: string; sessionId: string }
+  > = (props) => {
+    const { tripId, sessionId } = props ?? {};
+
+    return postTripsTripIdReplanSessionsSessionIdApply(tripId, sessionId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdReplanSessionsSessionIdApplyMutationResult =
+  NonNullable<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdApply>>
+  >;
+
+export type PostTripsTripIdReplanSessionsSessionIdApplyMutationError = void;
+
+/**
+ * @summary 재계획 확정(i18) — 초안을 일정에 반영한다
+ */
+export const usePostTripsTripIdReplanSessionsSessionIdApply = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdApply>>,
+      TError,
+      { tripId: string; sessionId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdApply>>,
+  TError,
+  { tripId: string; sessionId: string },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdReplanSessionsSessionIdApplyMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * 원 일정은 건드리지 않는다(INV-U4-05). 세션은 지우지 않고 CANCELED 로 남는다.
+ * @summary 재계획 취소(i18) — 세션만 닫는다
+ */
+export const postTripsTripIdReplanSessionsSessionIdCancel = (
+  tripId: string,
+  sessionId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<ReplanSession>({
+    url: `/trips/${tripId}/replan-sessions/${sessionId}/cancel`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostTripsTripIdReplanSessionsSessionIdCancelMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdCancel>>,
+    TError,
+    { tripId: string; sessionId: string },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdCancel>>,
+  TError,
+  { tripId: string; sessionId: string },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdReplanSessionsSessionIdCancel'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdCancel>>,
+    { tripId: string; sessionId: string }
+  > = (props) => {
+    const { tripId, sessionId } = props ?? {};
+
+    return postTripsTripIdReplanSessionsSessionIdCancel(tripId, sessionId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdReplanSessionsSessionIdCancelMutationResult =
+  NonNullable<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdCancel>>
+  >;
+
+export type PostTripsTripIdReplanSessionsSessionIdCancelMutationError = void;
+
+/**
+ * @summary 재계획 취소(i18) — 세션만 닫는다
+ */
+export const usePostTripsTripIdReplanSessionsSessionIdCancel = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdCancel>>,
+      TError,
+      { tripId: string; sessionId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdCancel>>,
+  TError,
+  { tripId: string; sessionId: string },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdReplanSessionsSessionIdCancelMutationOptions(options),
     queryClient
   );
 };
