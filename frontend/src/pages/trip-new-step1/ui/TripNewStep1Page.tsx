@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 
-import { REGIONS } from '@/features/explore/model/regions';
+import { filterRegions, REGIONS } from '@/features/explore/model/regions';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { postTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
 import type { CompanionType } from '@/shared/api/generated/schemas';
@@ -198,6 +198,12 @@ export function TripNewStep1Page({
   // 날짜 선택 시트 열림 상태 — 날짜 행·'날짜 직접 입력' 두 진입점이 여는 시트를 배선이 소유한다
   // (TRIP-368, 숙소 등록 CalendarSheet과 같은 배치 — 페이지가 열고 닫고, 화면이 마운트한다).
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
+
+  // 여행지 시트 검색어(TRIP-387) — 이 상태를 페이지가 들고 `filterRegions`로 좁힌 목록을
+  // `sheetRegions`로 내려보낸다. 화면은 `features/explore`를 import하지 못하므로(features 간
+  // 금지) 필터는 여기서만 진다. 시트를 닫을 때 리셋은 안 한다 — 재량이고 테스트가 요구하지
+  // 않아 최소로 둔다(02a §8).
+  const [destinationQuery, setDestinationQuery] = useState('');
 
   // 5-c N-2: 배너가 뜬 뒤 드래프트를 고치면 배너는 옛 실패를 계속 보여주면서도 [다시 시도]는
   // 새 상태 기준으로 다시 판정한다 — 화면과 배너가 서로 다른 이야기를 하게 된다. 드래프트가
@@ -480,6 +486,9 @@ export function TripNewStep1Page({
       companionType={companionType}
       preferenceChips={preferenceChips}
       regions={REGIONS}
+      sheetRegions={filterRegions(destinationQuery)}
+      destinationQuery={destinationQuery}
+      onChangeDestinationQuery={setDestinationQuery}
       canProceed={canProceed}
       destinationError={destinationError}
       periodError={periodError}

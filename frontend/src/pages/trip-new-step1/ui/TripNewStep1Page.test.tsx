@@ -379,3 +379,84 @@ describe('TRIP-368 · 여행 기간 직접 선택', () => {
     ).toBe(true);
   });
 });
+
+describe('TRIP-387 · 여행지 시트 검색 (슬라이스 1 배선)', () => {
+  // 화면 단위 테스트(TripWizardStep1Screen.test.tsx)는 sheetRegions를 손으로 주입해
+  // 화면 계약만 본다. 여기서는 페이지가 실제로 destQuery 상태를 들고 filterRegions로 좁혀
+  // 내려보내는 **왕복**을 잠근다 — 검색이 진짜로 동작하는지의 유일한 증거다.
+  const OTHER_CODES = ['gyeongju', 'seoul', 'jeju', 'gangneung', 'yeosu'];
+
+  it('AC-1 · AC-3 — "부"로 좁히면 부산만 남고, 골라 추가하면 스토어에 담긴다', () => {
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // 실행(검색): 페이지가 filterRegions('부')로 좁힌다.
+    fireEvent.changeText(
+      screen.getByTestId('trip-wizard-destination-search'),
+      '부'
+    );
+
+    // 단언(좁힘): 부산만 남는다 — 페이지가 실제로 filterRegions를 물었다는 증거.
+    expect(
+      screen.getByTestId('trip-wizard-destination-region-busan')
+    ).toBeTruthy();
+    OTHER_CODES.forEach((code) => {
+      expect(
+        screen.queryByTestId(`trip-wizard-destination-region-${code}`)
+      ).toBeNull();
+    });
+
+    // 실행(추가): 좁혀 찾은 부산을 골라 2박으로 확정한다.
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-region-busan'));
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc'));
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-confirm'));
+
+    // 단언(추가): 서버 계약 형태 그대로 스토어에 담긴다(region은 한글 이름, seq는 1부터).
+    expect(useTripWizardStore.getState().destinations).toEqual([
+      { seq: 1, region: '부산', nights: 2 },
+    ]);
+  });
+
+  it('AC-2 · 불일치 검색어면 칩 0개 + "없어요", 전체로 되돌아가지 않는다', () => {
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    fireEvent.changeText(
+      screen.getByTestId('trip-wizard-destination-search'),
+      '없는지역'
+    );
+
+    // filterRegions('없는지역') === [] → sheetRegions=[] → 화면 ?? 폴백이 살아 있는지
+    // 실 배선으로 확인한다(truthy 폴백이면 여기서 6개가 되살아난다, 02a ★1).
+    expect(
+      screen.queryAllByTestId(/^trip-wizard-destination-region-/)
+    ).toHaveLength(0);
+    expect(
+      screen.getByTestId('trip-wizard-destination-search-empty')
+    ).toHaveTextContent(/일치하는 지역이 없어요/);
+  });
+
+  it('함정 ③ · 검색이 걸려 있어도 이미 담은 도시 칩의 제거 testID는 그대로다', () => {
+    // regions prop은 화면 3곳(시트 칩·codeForRegionName·confirm)이 함께 쓴다. 검색을 위해
+    // 이 prop을 전역으로 좁히면 이미 담은 도시 칩의 testID 복원(codeForRegionName)이 깨진다
+    // — 그래서 좁히는 것은 별도 sheetRegions이고 regions는 full로 남는다(01b 함정, 02a ★2).
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    addDestination('busan', 1);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    // 부산을 시트에서 걸러내는 검색어를 친다.
+    fireEvent.changeText(
+      screen.getByTestId('trip-wizard-destination-search'),
+      '여수'
+    );
+
+    // 이미 담은 부산 칩의 제거 버튼은 여전히 ASCII 코드(-busan)로 잡힌다 — regions가 full이라
+    // codeForRegionName('부산')이 'busan'을 되찾는다. 전역으로 좁혔다면 못 찾아 testID가
+    // -부산(한글 폴백)이 되어 이 단언이 깨진다.
+    expect(
+      screen.getByTestId('trip-wizard-destination-remove-busan')
+    ).toBeTruthy();
+  });
+});

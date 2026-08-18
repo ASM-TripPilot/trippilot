@@ -545,3 +545,168 @@ describe('AC-13 · 범위 — 다음 칸 것들을 미리 그리지 않는다 (0
     expect(screen.queryByTestId('shell-tabbar-root')).toBeNull();
   });
 });
+
+describe('TRIP-387 · 시트 안 지역 검색 (슬라이스 1)', () => {
+  // 이 시트의 지역 목록은 두 갈래로 온다:
+  //  · sheetRegions(신규 optional) — 페이지가 filterRegions(query)로 이미 좁혀 내린 목록
+  //  · 미제공이면 regions(full 6개)로 폴백 — 기존 27케이스가 이 폴백에 얹혀 무손상이다
+  // 화면은 검색을 스스로 하지 않는다(features 간 import 금지) — 좁힌 결과만 받아 그린다.
+
+  /** 페이지가 '부'로 좁혀 부산 하나만 내려보낸 상태. */
+  const busanOnly = [{ code: 'busan', name: '부산' }];
+  const OTHER_CODES = ['gyeongju', 'seoul', 'jeju', 'gangneung', 'yeosu'];
+
+  it('AC-1 · sheetRegions로 좁힌 목록만 칩으로 그린다', () => {
+    render(
+      <TripWizardStep1Screen
+        {...props({ sheetRegions: busanOnly, destinationQuery: '부' })}
+      />
+    );
+
+    // 실행: 시트를 연다(칩·검색·문구는 sheetOpen일 때만 렌더된다, 02a ★6).
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // 단언: 부산 칩만 있고 나머지 5개 지역 칩은 없다.
+    expect(
+      screen.getByTestId('trip-wizard-destination-region-busan')
+    ).toBeTruthy();
+    OTHER_CODES.forEach((code) => {
+      expect(
+        screen.queryByTestId(`trip-wizard-destination-region-${code}`)
+      ).toBeNull();
+    });
+    // 칩 총수 1 — 정규식 testID 쿼리는 매칭 전부를 돌려준다(02a §5 실측).
+    expect(
+      screen.queryAllByTestId(/^trip-wizard-destination-region-/)
+    ).toHaveLength(1);
+  });
+
+  it('시트 안에 검색 입력이 있고, 제어 입력이라 친 문자열을 그대로 위로 올린다', () => {
+    // *(개념)* 제어 입력(controlled input): 화면에 보이는 값은 내부 상태가 아니라
+    // prop(destinationQuery)이 정한다. 사용자가 쳐도 화면은 스스로 안 바꾸고, 바뀐
+    // 문자열을 onChangeText로 위로 보고만 한다 — 예산 입력과 같은 규율이다.
+    const onChangeDestinationQuery = jest.fn();
+    render(
+      <TripWizardStep1Screen
+        {...props({ destinationQuery: '부', onChangeDestinationQuery })}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    const input = screen.getByTestId('trip-wizard-destination-search');
+
+    // 받은 값을 그대로 보여준다(제어 입력).
+    expect(input).toHaveDisplayValue('부');
+
+    // 실행: '경'으로 바꿔 친다.
+    fireEvent.changeText(input, '경');
+
+    // 단언: 가공 없이 그대로 올라간다. fireEvent.changeText는 editable !== false인
+    // 입력에만 흐르므로, 이 호출이 곧 "편집 가능"의 증거이기도 하다(budget 선례, 02a ★4).
+    expect(onChangeDestinationQuery).toHaveBeenCalledWith('경');
+    expect(onChangeDestinationQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC-2 · 불일치면 칩 0개 + "일치하는 지역이 없어요", 전체로 되돌아가지 않는다', () => {
+    // ⚠️ 이 사이클의 핵심 함정(02a ★1). 페이지가 불일치 검색어로 좁히면 sheetRegions는
+    // **빈 배열**이다. 화면은 (sheetRegions ?? regions)로 폴백하는데, nullish ??는
+    // null·undefined에만 폴백한다 — [] ?? regions === [](02a §5 실측). truthy 검사
+    // (sheetRegions?.length ? … : regions)를 쓰면 빈 배열이 full로 되돌아가 조용히 깨진다.
+    render(
+      <TripWizardStep1Screen
+        {...props({ sheetRegions: [], destinationQuery: '없는지역' })}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // 칩이 하나도 없다 — 빈 배열이 full로 되돌아가지 않았다는 증거다.
+    expect(
+      screen.queryAllByTestId(/^trip-wizard-destination-region-/)
+    ).toHaveLength(0);
+
+    // 그리고 "없다"고 말한다(정규식 — 문자열이면 완전 일치라 마크업에 취약, 02a ★3).
+    const empty = screen.getByTestId('trip-wizard-destination-search-empty');
+    expect(empty).toHaveTextContent(/일치하는 지역이 없어요/);
+  });
+
+  it('AC-2 짝 · 검색어가 비어 있으면(전체 표시) "없어요" 문구를 그리지 않는다', () => {
+    // "입력 안 함"과 "일치 없음"은 다르다 — 빈 검색어에서 empty 문구가 뜨면 처음 시트를
+    // 연 사용자가 "지역이 없다"는 거짓말을 본다. 조건은 길이 0 && 검색어 !== '' 둘 다여야 한다.
+    render(
+      <TripWizardStep1Screen
+        {...props({ sheetRegions: REGIONS, destinationQuery: '' })}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // 6개가 다 보이고, empty 문구는 없다.
+    expect(
+      screen.queryAllByTestId(/^trip-wizard-destination-region-/)
+    ).toHaveLength(REGIONS.length);
+    expect(
+      screen.queryByTestId('trip-wizard-destination-search-empty')
+    ).toBeNull();
+  });
+
+  it('AC-4 폴백 · sheetRegions 미제공이면 기존처럼 6개 전부 + empty 문구 없음', () => {
+    // 하위호환: 신규 prop을 하나도 안 주면 옛 경로 그대로다. 기존 props() 헬퍼가 이 상태라,
+    // 이 파일의 다른 27케이스가 통째로 이 폴백에 얹혀 있다(회귀 그물, 02a ★7).
+    render(<TripWizardStep1Screen {...props()} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    REGIONS.forEach((region) => {
+      expect(
+        screen.getByTestId(`trip-wizard-destination-region-${region.code}`)
+      ).toBeTruthy();
+    });
+    expect(
+      screen.queryByTestId('trip-wizard-destination-search-empty')
+    ).toBeNull();
+  });
+
+  it('★확정은 full regions로 지역을 되찾는다 — 고른 뒤 검색어가 바뀌어 그 지역이 시트에서 사라져도 담긴다', () => {
+    // 함정(code-critic 경고-1, 도달 가능): '부'로 부산을 고른 뒤 검색어를 '제주'로 바꾸면
+    // 부산은 좁힌 목록(sheetRegions)에서 사라지지만, 사용자가 이미 고른 선택(sheetRegionCode)은
+    // 리셋되지 않는다. 이때 확정하면 부산이 담겨야 한다 — 확정 resolution이 좁힌 목록이 아니라
+    // **full `regions`**를 봐야만 성립한다(01b 함정 ③). 이 성질을 잠그는 심판이 없어 신설한다.
+    const onAddDestination = jest.fn();
+    const { rerender } = render(
+      <TripWizardStep1Screen
+        {...props({
+          onAddDestination,
+          sheetRegions: [{ code: 'busan', name: '부산' }],
+          destinationQuery: '부',
+        })}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    // 준비: 좁힌 목록에 있는 부산을 고른다(내부 sheetRegionCode='busan').
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-region-busan'));
+
+    // 실행: 검색어가 '제주'로 바뀌어 페이지가 부산을 제외한 목록을 다시 내려보낸다.
+    // (rerender는 같은 컴포넌트 인스턴스라 내부 상태 sheetRegionCode='busan'이 유지된다.)
+    rerender(
+      <TripWizardStep1Screen
+        {...props({
+          onAddDestination,
+          sheetRegions: [{ code: 'jeju', name: '제주' }],
+          destinationQuery: '제주',
+        })}
+      />
+    );
+    // 부산 칩은 이제 시트에서 사라졌다(짝 — 이 전제가 있어야 함정이 성립).
+    expect(
+      screen.queryByTestId('trip-wizard-destination-region-busan')
+    ).toBeNull();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-confirm'));
+
+    // 단언: 좁힌 목록에 없어도 full regions로 부산을 되찾아 담는다.
+    expect(onAddDestination).toHaveBeenCalledWith('부산', 1);
+    expect(onAddDestination).toHaveBeenCalledTimes(1);
+  });
+});

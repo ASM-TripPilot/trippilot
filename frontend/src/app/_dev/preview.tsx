@@ -1155,6 +1155,23 @@ const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // 여행지 시트 검색 불일치 얼굴(TRIP-387) — jest는 픽셀·레이아웃을 못 보므로 "0개 + 없어요"
+  // 배치를 눈으로 대조하는 유일한 자리다. `[도시 추가]`를 눌러 시트를 연 뒤 확인한다(시트 열림은
+  // 화면 로컬 state라 정적 prop으로는 못 연다). `sheetRegions:[]`(불일치 결과) + 검색어가 함께
+  // 있어야 문구가 뜬다 — 빈 검색어면 전체가 보인다.
+  {
+    key: 'trip-new-step1-search-empty',
+    label: '여행 만들기 1/2 · 지역 검색 불일치',
+    login: null,
+    render: () => (
+      <TripWizardStep1Screen
+        {...TRIP_WIZARD_BASE}
+        sheetRegions={[]}
+        destinationQuery="없는지역"
+        onChangeDestinationQuery={noop}
+      />
+    ),
+  },
   // g02 5변형(TRIP-225). 화면이 완성된 문자열·불리언만 받는 프레젠테이션이라, 배선 없이
   // props 만 갈아 끼우면 다섯 얼굴이 그대로 나온다 — 실기로 얼굴을 보려면 여기가 정본이다
   // (`docs/structure.md` 경고: "엣지 케이스 화면을 눈으로 보려면 목을 만들지 말고 여기에
