@@ -51,6 +51,17 @@ class ServiceAuthenticationToken : AbstractAuthenticationToken(listOf(SimpleGran
  */
 class ServiceTokenAuthFilter(private val expected: String) : OncePerRequestFilter() {
 
+    /**
+     * **서비스 경계에서만 동작한다.** 경로를 안 가리면 서비스 토큰이 사용자 API 까지 인증해 버린다 —
+     * 계정을 쓰지 않는 엔드포인트(`/api/v1/stays/search`·`geocode`·`reverse-geocode`)는 그대로 통과하고,
+     * 그 셋은 벤더(카카오)를 부르므로 토큰이 새면 **쿼터를 태우는 무인증 프록시**가 된다.
+     *
+     * 나머지 사용자 API 가 401 로 끝나는 것은 `principal.accountId()` 가 "service" 를 UUID 로 읽지 못해서인데,
+     * 그건 방어가 아니라 우연이다.
+     */
+    override fun shouldNotFilter(request: HttpServletRequest): Boolean =
+        !request.requestURI.startsWith(PATH_PREFIX)
+
     override fun doFilterInternal(request: HttpServletRequest, response: HttpServletResponse, chain: FilterChain) {
         val presented = request.getHeader(HEADER)
         if (expected.isNotBlank() && !presented.isNullOrBlank() && matches(presented)) {
@@ -71,6 +82,9 @@ class ServiceTokenAuthFilter(private val expected: String) : OncePerRequestFilte
 
     companion object {
         const val HEADER = "X-Service-Token"
+
+        /** 이 접두사 아래에서만 서비스 인증이 성립한다. `SecurityConfig` 의 인가 규칙과 같은 범위여야 한다. */
+        const val PATH_PREFIX = "/internal/"
         private val log = LoggerFactory.getLogger(ServiceTokenAuthFilter::class.java)
 
         /** 기동 시 1회 — 꺼져 있다는 사실이 로그에 남아야 "왜 401 이 나나"를 되짚을 수 있다. */

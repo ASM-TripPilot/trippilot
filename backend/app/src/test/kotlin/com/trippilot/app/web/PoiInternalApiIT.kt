@@ -83,6 +83,29 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
             .first shouldBe 401
     }
 
+    /**
+     * **서비스 토큰은 사용자 API 를 열지 않는다.** 필터가 경로를 안 가리면 계정을 쓰지 않는 엔드포인트
+     * (`/stays/search`·`geocode`·`reverse-geocode`)가 그대로 통과하고, 셋 다 벤더를 부르므로
+     * 토큰이 새면 쿼터를 태우는 무인증 프록시가 된다. 나머지가 401 로 끝나는 것은
+     * `accountId()` 가 "service" 를 UUID 로 못 읽어서일 뿐 — 방어가 아니라 우연이다.
+     */
+    @Test
+    fun `서비스 토큰으로 사용자 API 를 부를 수 없다`() {
+        listOf(
+            "/api/v1/stays/geocode?q=제주",
+            "/api/v1/stays/reverse-geocode?lat=33.5&lng=126.5",
+            "/api/v1/stays/search?region=제주",
+        ).forEach { path ->
+            val rc = RestClient.builder().baseUrl("http://localhost:$port").build()
+                .get().uri(path)
+                .header("X-Service-Token", SERVICE_TOKEN)
+                .retrieve().onStatus({ it.is4xxClientError || it.is5xxServerError }, { _, _ -> })
+                .toEntity(String::class.java).statusCode.value()
+
+            rc shouldBe 401   // 서비스 인증이 아예 성립하지 않는다
+        }
+    }
+
     @Test
     fun `인증 없으면 401`() {
         call(HttpMethod.GET, "/internal/pois?centerLat=33.4587&centerLng=126.9427&radiusKm=5", null).first shouldBe 401
