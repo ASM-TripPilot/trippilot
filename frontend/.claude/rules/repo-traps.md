@@ -49,6 +49,8 @@
 
 - **INV-3: 소요시간 비표시, 거리만.** DTO·화면 어디에도 `duration` 필드를 두지 않는다.
 - **h05 CTA·건너뛰기는 아직 아무도 안 부른다** → `MustVisitPickerScreen`의 `onProceed`·`onSkip`은 생산자가 0이다(h09 미착수, 배선이 `proceedBlockedReason`을 항상 넘겨 활성 분기가 프로덕션 경로에서 도달 불가). 로직을 추가해도 지금은 아무 화면에서도 실행되지 않는다.
+- **h09 생성 중 화면의 무심판 3곳** (TRIP-305, 코드는 현재 옳음 — 회귀 방지 심판만 없음) → ① **마운트 POST "1회" 가드 무심판**: `GeneratingPage.tsx`의 `firedRef`를 지워도 승인 통합 테스트 전부 green(목이 컴포넌트를 pending→settled로 재렌더 안 시킴). 실 react-query는 재렌더돼 **생성 POST 2회=일정 2개** 생성 가능. jest·tsc·자체검증 어느 층도 못 봄. ② **체크리스트 정직성 무심판**(⚑C): `GeneratingScreen`의 3단계에 `<Text>완료</Text>`/`<Text>대기</Text>` 가짜 진척을 넣어도 5심판 green(S1은 3행·라벨만, S2는 `%`·`초`·`분/시간`만 봄) — in-flight엔 세션 데이터가 없어 단계 완료를 알 수 없다는 불변식이 기계 강제 없음. ③ **[백그라운드로] 목적지 무심판**: 통합 테스트가 "draft·generating 아님"만 봐서 엉뚱한 forward(`/(tabs)/records` 등)로 바꿔도 green. 목적지 자체(`/(tabs)/itinerary`)는 `AFTER_WIZARD_ROUTE` 재사용이라 의도적이나, 그 탭이 `trips[0]`(첫 여행)으로 리다이렉트해 **기존 여행 있는 재방문자는 생성 중인 여행이 아닌 옛 일정에 착지**(일정 탭의 기존 한계, h09 신규 결함 아님).
+- **h09 비결정형 진행바 애니메이션은 자동 심판 사각** → `IndeterminateBar`(RN `Animated`)는 jest에서 `onLayout` 미발화로 폭 0 → 정지. testID(`itinerary-generating-progress`)는 present라 순수 `<View/>`로 바꿔도 green. 6-b 실기가 세그먼트 **실렌더**만 확인하고 "좌→우로 흐르는지"는 정지 스크린샷이라 못 봄 — 지도 제스처(`viewOnly`)·바텀시트류와 같은 실기 전용 계열.
 
 ## features 경계
 

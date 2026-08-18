@@ -117,7 +117,7 @@ describe('🔴 G2 · 편입 앵커 — 새 파일이 기존 두 전수 스캔의
 });
 
 describe('🔴 G3 · 생성 선행조건 게이트는 h04 에 없다 (g02 소유)', () => {
-  it('배선은 POST 만 물고, 배선·화면 어디에도 coverage/savedStays/게이트 어휘가 0건이다', () => {
+  it('배선은 h09 로 navigate 하고, 배선·화면 어디에도 coverage/savedStays/게이트 어휘가 0건이다', () => {
     const page = readOne(PAGE_REL);
     const screen = readOne(SCREEN_REL);
 
@@ -125,8 +125,10 @@ describe('🔴 G3 · 생성 선행조건 게이트는 h04 에 없다 (g02 소유
     expect(page).toContain('ItineraryMethodPage');
     expect(screen).toMatch(/MethodPickerScreen/);
 
-    // 짝 — 배선은 생성 POST 훅을 문다(방식 선택 → 생성 요청).
-    expect(page).toContain('usePostTripsTripIdItinerary');
+    // 짝 — TRIP-305: 생성 POST 소유가 h04→h09 로 이동했다(AC-7·⚑B). 배선은 이제 POST 가 아니라
+    // 완전AI 선택 시 h09(생성 중) **라우트**로 navigate 한다. 라우트 경로로 앵커해야 옛 prop 이름
+    // `generating={…}` 에 우연히 걸리는 거짓 green 을 피한다(현행 h04 는 `itinerary/draft` 라 RED).
+    expect(page).toContain('itinerary/generating');
 
     // 부정 — 거점 커버리지·겹침 판단은 g02 소유다. h04 배선·화면 어디에도 그 조회·판정이 없다.
     // 되살아나면 판정이 두 곳에 흩어진다(개념: 판정 단일 출처).

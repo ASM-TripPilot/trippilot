@@ -689,8 +689,13 @@ export function RefreshGlyph({ size = 18, testID }: GlyphProps) {
 // 전부 벡터 path 실측. `react-native-svg-transformer` 가 없어 .svg 파일 import 가 안 되므로
 // 리포 관례대로 인라인 글리프로 둔다.
 
-// 「완전 AI가 짜기」 — 4각 반짝임(fill).
-export function FullAiGlyph({ size = 24, testID }: GlyphProps) {
+// 「완전 AI가 짜기」 — 4각 반짝임(fill). h04 카드는 회색(`body`) 기본, h09 진행 카드 히어로는
+// 브랜드 primary 로(같은 도형, 색만 스냅 — LockGlyph 의 tone 패턴 계승).
+export function FullAiGlyph({
+  size = 24,
+  tone = 'body',
+  testID,
+}: GlyphProps & { tone?: 'body' | 'primary' }) {
   return (
     <Svg
       testID={testID}
@@ -701,7 +706,7 @@ export function FullAiGlyph({ size = 24, testID }: GlyphProps) {
     >
       <Path
         d="M12 2L13.8 10.2L22 12L13.8 13.8L12 22L10.2 13.8L2 12L10.2 10.2L12 2Z"
-        fill={BODY}
+        fill={tone === 'primary' ? PRIMARY : BODY}
       />
     </Svg>
   );
