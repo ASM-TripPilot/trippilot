@@ -74,7 +74,12 @@ const ASSIGNMENT_FIXTURE: BaseAssignment = {
 const COVERAGE_FIXTURE: Coverage = {
   blocked: false,
   days: [
-    { date: '2026-06-10', status: 'AUTO', savedStayId: STAY_ID, candidates: [] },
+    {
+      date: '2026-06-10',
+      status: 'AUTO',
+      savedStayId: STAY_ID,
+      candidates: [],
+    },
   ],
 };
 
