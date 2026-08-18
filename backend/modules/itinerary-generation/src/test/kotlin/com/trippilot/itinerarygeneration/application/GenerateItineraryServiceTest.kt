@@ -42,7 +42,9 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.int
 import io.kotest.property.checkAll
+import com.trippilot.core.error.ConflictDetected
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.shouldBe
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
@@ -155,7 +157,7 @@ internal val stubTrips = object : TripFacade {
     override fun findGenerationContext(accountId: UUID, tripId: UUID) = null
 }
 
-internal fun genRevisions(repo: ItineraryRepository, trips: TripFacade, clock: Clock = Clock.fixed(Instant.parse("2026-08-06T00:00:00Z"), ZoneOffset.UTC)) =
+internal fun genRevisions(repo: ItineraryRepository, trips: TripFacade, clock: Clock = Clock.fixed(Instant.parse("2026-07-25T00:00:00Z"), ZoneOffset.UTC)) =
     ItineraryRevisionService(GenFakeRevisions(), repo, trips, NoopValidateAgent(), NOOP_TX, clock)
 
 /** 리비전 기록을 관찰하는 인메모리 저장소 — seq 는 순서대로 부여. */
@@ -200,7 +202,7 @@ private open class FakeItineraries : ItineraryRepository {
  */
 class GenerateItineraryServiceTest : StringSpec({
 
-    val now = Instant.parse("2026-08-06T00:00:00Z")
+    val now = Instant.parse("2026-07-25T00:00:00Z")
     val clock = Clock.fixed(now, ZoneOffset.UTC)
     val acc = UUID.randomUUID()
     val tripId = UUID.randomUUID()
@@ -218,6 +220,7 @@ class GenerateItineraryServiceTest : StringSpec({
         sessionRepo: FakeGenerationSessions = FakeGenerationSessions(),
         end: LocalDate = defaultEnd,
         fixedVisits: List<FixedVisit> = listOf(FixedVisit(poi, start, LocalTime.parse("12:00"), 90)),
+        clock: Clock = Clock.fixed(now, ZoneOffset.UTC),
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -373,12 +376,72 @@ class GenerateItineraryServiceTest : StringSpec({
             it.isFixed shouldBe true
         }
     }
+    // ── 재생성 가드(여행 기간) ──────────────────────────────────────────────
+    //
+    // 재생성은 기존 일정을 지우고 새로 만든다. 여행 중에 그러면 따라가던 계획이 통째로 갈리고
+    // **방문 실적이 유령이 된다** — visit_check 는 trip_id+slotKey 로 남아 삭제를 견딘다.
+    // 여행 중 변경은 재계획(Plan-B)의 몫이다.
+    //
+    // **첫 생성은 대상이 아니다** — 지울 계획이 없으면 이 피해가 성립하지 않는다. 그래서 아래 케이스들은
+    // 기존 일정을 미리 깔고 시작한다(그게 "재생성"의 정의다).
+
+    fun clockAt(day: String): Clock = Clock.fixed(Instant.parse("${day}T00:00:00Z"), ZoneOffset.UTC)
+
+    /** 이미 일정이 있는 상태 — 재생성 경로로 들어가게 한다. */
+    fun repoWithExisting(): FakeItineraries = FakeItineraries().apply {
+        byTrip[tripId] = Itinerary.create(
+            tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(start, 0, emptyList())),
+            now, GenerationState.COMPLETE,
+        )
+    }
+
+    "여행 시작 전이면 재생성된다" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-07-31"))
+
+        svc.generate(acc, tripId, GenerationMode.FULLY_AI).tripId shouldBe tripId
+    }
+
+    // 경계값 — 시작 당일은 이미 "여행 중"이다. 첫날 아침에 통째로 다시 짜면 그날 일정이 사라진다.
+    "여행 시작 당일이면 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-01"))
+
+        shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
+            .message.orEmpty() shouldContain "재계획"
+    }
+
+    "여행 중이면 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-02"))
+
+        shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
+    }
+
+    // 경계값 — 마지막 날도 여행 중이다(체크아웃일까지 계획일에 포함된다).
+    "여행 마지막 날이면 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-03"))
+
+        shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
+    }
+
+    "끝난 여행이면 409 — 문구가 다르다" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-04"))
+
+        shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.FULLY_AI) }
+            .message.orEmpty() shouldContain "끝난 여행"
+    }
+
+    // 직접 만들기도 같은 가드를 지난다 — AI 를 안 부를 뿐 기존 일정을 지우는 것은 똑같다.
+    "직접 만들기도 여행 중이면 409" {
+        val svc = service(CapturingAgent(now), fullPrefs, emptyList(), repo = repoWithExisting(), clock = clockAt("2026-08-02"))
+
+        shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.MANUAL) }
+    }
 })
 
 /** day1 조기 노출 2단계(TRIP-267) — 1차 즉시 반환(PARTIAL) · 2차 백그라운드 완료(COMPLETE). */
 class GenerateItineraryTwoPhaseTest : StringSpec({
 
-    val now = Instant.parse("2026-08-06T00:00:00Z")
+    val now = Instant.parse("2026-07-25T00:00:00Z")
     val clock = Clock.fixed(now, ZoneOffset.UTC)
     val acc = UUID.randomUUID()
     val tripId = UUID.randomUUID()
@@ -779,7 +842,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
 /** 2단계 분할이 여행 길이와 무관하게 일자를 정확히 한 번씩 덮는지 — 길이별 경계(1일·2일·N일)를 성질로 고정. */
 class TwoPhaseDayCoverageTest : StringSpec({
 
-    val now = Instant.parse("2026-08-06T00:00:00Z")
+    val now = Instant.parse("2026-07-25T00:00:00Z")
     val clock = Clock.fixed(now, ZoneOffset.UTC)
     val acc = UUID.randomUUID()
     val start = LocalDate.parse("2026-08-01")

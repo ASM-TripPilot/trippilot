@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
@@ -36,6 +37,7 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -61,6 +63,9 @@ class GenerateItineraryService(
 
     fun generate(accountId: UUID, tripId: UUID, mode: GenerationMode): Itinerary {
         val ctx = trips.findGenerationContext(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
+        // **첫 생성은 막지 않는다** — 지울 계획이 없으니 아래 피해가 성립하지 않는다.
+        // 여행 중에 "아직 일정을 안 만들었는데 지금 만들래"는 정상 요구다.
+        if (previousOf(tripId) != null) guardTripPeriod(ctx.startDate, ctx.endDate)
         val prefs = preferences.findPreferences(accountId)                                    // 취향 7축·예산등급(계정 스코프)
         // 소유·기간은 위에서 선검증 — 거점 앵커는 기간을 넘겨 조립(중복 trip 조회 없음).
         val stayAnchors = baseAnchors.findStayNightAnchors(tripId, ctx.startDate, ctx.endDate)
@@ -265,6 +270,31 @@ class GenerateItineraryService(
     private fun PreferenceSnapshot.toProfile(): PreferenceProfile =
         PreferenceProfile(styles, activities, foodTastes, transportModes, pace, companionTypes, petFriendly, budgetTier)
 
+    /**
+     * **재생성**이 허용되는 시점인가 — 기존 일정이 있을 때만 부른다(첫 생성은 대상이 아니다).
+     *
+     * 재생성은 기존 일정을 지우고 새로 만든다(`replaceForTrip`). 여행 중에 그러면 사용자가 따라가던 계획이
+     * 통째로 갈리고, **방문 실적이 유령이 된다** — `visit_check` 는 `trip_id + slotKey` 로 남아 삭제를 견디므로
+     * 일정에 없는 장소에 "방문 완료"가 남는다. 여행 중 계획 변경은 재계획(Plan-B)이 할 일이고, 그쪽은 오늘 하루만
+     * 다시 짜면서 다녀온 슬롯을 잠근다(INV-U4-04). 끝난 여행은 다시 만들 이유 자체가 없다.
+     *
+     * **여행 상태(`TripStatus`)로 판정하지 않는 이유**: 여행은 `PLANNED` 로 생성된 뒤 전이되지 않는다 —
+     * `canTransitionTo` 를 부르는 프로덕션 코드가 없다. 상태로 막으면 영원히 발화하지 않는 죽은 가드가 된다.
+     * 이 리포가 "여행 중"을 판정하는 방식은 날짜다 — `ReplanSessionService`·`TriggerService` 가 같은 식을 쓴다.
+     *
+     * **확정(`CONFIRMED`) 일정은 막지 않는다.** 편집도 복원도 이미 409 라, 재생성까지 막으면 확정한 여행은
+     * 손댈 방법이 하나도 없는 막다른 길이 된다. 확정 해제 API 가 생기기 전까지 재생성이 유일한 탈출구다.
+     */
+    private fun guardTripPeriod(startDate: LocalDate, endDate: LocalDate) {
+        val today = LocalDate.ofInstant(clock.instant(), TRAVEL_ZONE)
+        if (today > endDate) {
+            throw ConflictDetected(message = "이미 끝난 여행은 일정을 다시 만들 수 없어요.")
+        }
+        if (today >= startDate) {
+            throw ConflictDetected(message = "여행 중에는 일정을 다시 만들 수 없어요. 재계획으로 오늘 일정을 바꿔 주세요.")
+        }
+    }
+
     /** 여행 날짜(체크인~체크아웃 각 날짜, 체크아웃일 포함). */
     private fun planDates(start: LocalDate, end: LocalDate): List<LocalDate> =
         generateSequence(start) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.toList()
@@ -321,5 +351,8 @@ class GenerateItineraryService(
         private val DEFAULT_END = LocalTime.of(21, 0)
         private const val TOTAL_DEADLINE_MS = 20_000L
         private const val DAY1_DEADLINE_MS = 5_000L // day1 조기 노출 예산(IO-1)
+
+        /** 여행 "오늘"은 사용자가 있는 곳의 날짜다(서버 UTC 아님) — 재계획·감지와 같은 기준. */
+        private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
     }
 }

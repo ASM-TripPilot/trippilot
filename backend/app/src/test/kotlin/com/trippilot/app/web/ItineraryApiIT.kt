@@ -64,6 +64,17 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         return accessTokenIssuer.issue(account.id.value.toString()).value
     }
 
+    /**
+     * **미래 날짜** 여행 — 재생성이 허용되는 유일한 구간이다(여행 중·후는 409).
+     * 서버 실 시계로 판정하므로 고정 날짜를 쓸 수 없다. 날짜를 단언하는 테스트는 [newTrip] 을 그대로 쓴다.
+     */
+    private fun newFutureTrip(token: String): String {
+        val start = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).plusDays(30)
+        val body = """{"startDate":"$start","endDate":"${start.plusDays(1)}","party":2,
+            "destinations":[{"seq":0,"region":"제주","nights":1}],"preferenceSnapshot":{}}""".trimIndent()
+        return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
+    }
+
     private fun newTrip(token: String): String {
         val body = """{"startDate":"2026-08-01","endDate":"2026-08-02","party":2,
             "destinations":[{"seq":0,"region":"제주","nights":1}],"preferenceSnapshot":{}}""".trimIndent()
@@ -513,12 +524,27 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `재생성하면 기존 일정 교체 — 여행당 1개`() {
         val token = newToken()
-        val trip = newTrip(token)
+        val trip = newFutureTrip(token)   // 재생성은 여행 시작 전에만 허용된다
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
         awaitComplete(trip, token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
         awaitComplete(trip, token)
         itineraries.findByTrip(UUID.fromString(trip)).size shouldBe 1
+    }
+
+    /**
+     * 재생성 가드의 HTTP 표면. 여행 중 재생성은 따라가던 계획을 지우고 방문 실적을 유령으로 만든다 —
+     * 그 변경은 재계획(Plan-B)의 몫이다. **첫 생성은 막지 않는다**(지울 계획이 없다).
+     */
+    @Test
+    fun `끝난 여행은 첫 생성만 되고 재생성은 409`() {
+        val token = newToken()
+        val trip = newTrip(token)   // 2026-08-01~02 — 이미 지난 여행
+
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201  // 첫 생성은 허용
+        awaitComplete(trip, token)
+
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 409
     }
 
     @Test
