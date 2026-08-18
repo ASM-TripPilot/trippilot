@@ -7,6 +7,7 @@ import com.trippilot.placedata.domain.PoiSource
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.maps.shouldContainExactly
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import java.time.Clock
@@ -35,7 +36,8 @@ class PoiProposalIngestServiceTest : StringSpec({
         region: String? = "서귀포시",
         hours: String? = "05:00~20:00",
         tags: List<String> = listOf("자연관광지", "일출"),
-    ) = PoiProposal(name, lat, lng, category, region, hours, ref, tags)
+        imageUrl: String? = "https://tong.visitkorea.or.kr/sample.jpg",
+    ) = PoiProposal(name, lat, lng, category, region, hours, ref, tags, imageUrl)
 
     "게이트를 통과한 제안이 ACTIVE 로 등록된다" {
         val repo = InMemoryPoiRepository()
@@ -205,5 +207,45 @@ class PoiProposalIngestServiceTest : StringSpec({
         svc.ingest(PoiSource.TOURAPI, listOf(proposal(tags = emptyList())))
 
         repo.stored.single().tags shouldBe listOf("유지되어야함")
+    }
+    // 이미지는 출처가 준 원본만 싣는다(2026-08-18 결정). 실 데이터는 1,043/1,104 에만 있다.
+    "이미지 URL 을 그대로 싣는다" {
+        val repo = InMemoryPoiRepository()
+
+        PoiProposalIngestService(repo, clock).ingest(PoiSource.TOURAPI, listOf(proposal()))
+
+        repo.stored.single().imageUrl shouldBe "https://tong.visitkorea.or.kr/sample.jpg"
+    }
+
+    "이미지가 없으면 null — 기본 이미지를 지어내지 않는다" {
+        val repo = InMemoryPoiRepository()
+
+        PoiProposalIngestService(repo, clock).ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = null)))
+
+        repo.stored.single().imageUrl.shouldBeNull()
+    }
+
+    /**
+     * 벤더가 이번에 이미지를 안 준 것과 "이미지가 없다"는 다르다. null 로 덮으면 한 번 받은 이미지가
+     * 다음 수집에 조용히 사라진다 — 화면에 빈 자리가 생기고 원인을 되짚기 어렵다.
+     */
+    "재수집에 이미지가 없으면 기존 값을 지키다" {
+        val repo = InMemoryPoiRepository()
+        val svc = PoiProposalIngestService(repo, clock)
+        svc.ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = "https://a/keep.jpg")))
+
+        svc.ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = null)))
+
+        repo.stored.single().imageUrl shouldBe "https://a/keep.jpg"
+    }
+
+    "새 이미지가 오면 갱신한다" {
+        val repo = InMemoryPoiRepository()
+        val svc = PoiProposalIngestService(repo, clock)
+        svc.ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = "https://a/old.jpg")))
+
+        svc.ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = "https://a/new.jpg")))
+
+        repo.stored.single().imageUrl shouldBe "https://a/new.jpg"
     }
 })

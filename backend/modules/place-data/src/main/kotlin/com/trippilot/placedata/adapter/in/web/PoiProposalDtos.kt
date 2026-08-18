@@ -47,14 +47,15 @@ data class ProposalCoord(val lat: Double? = null, val lng: Double? = null)
 /**
  * `content_id` 가 멱등 키다 — 이게 없으면 재수집이 같은 행을 찾지 못한다.
  *
- * **`image_url` 은 일부러 받지 않는다.** 문서에는 들어 있지만(실측 1,043/1,104), 벤더 이미지를
- * 우리 화면에 거는 것은 **라이선스·핫링크 정책**이 걸린 문제이고 리포가 그 판단을 실 벤더 어댑터
- * 티켓으로 이연해 뒀다(`R__seed_stub_pois.sql` 주석 · TRIP-219). 정책이 정해지면 여기에 칸을 연다 —
- * 그때까지는 받지 않는 편이 낫다. 받아 두면 어딘가에서 새어 나가 표시되기 시작한다.
+ * `image_url` 도 받는다(2026-08-18 결정). 시드 주석(TRIP-219)이 이미지를 비워 둔 이유는
+ * "실 수집 전이라 정당한 원본이 없다" 였는데, 실 수집이 붙으면서 그 전제가 해소됐다 —
+ * TourAPI 가 준 원본 URL 이므로 출처가 분명하다. 값이 없으면 **null 로 둔다**(1,043/1,104 만 있다).
+ * 지어낸 기본 이미지를 넣지 않는 원칙은 그대로다.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class ProposalProvenance(
     @param:JsonProperty("content_id") val contentId: String? = null,
+    @param:JsonProperty("image_url") val imageUrl: String? = null,
 )
 
 /** 수신 결과 — 탈락은 **사유별**로 나간다(총계만 주면 무엇을 고쳐야 할지 알 수 없다). */
@@ -81,4 +82,5 @@ fun ProposalItem.toCommand() = PoiProposal(
     openingHours = openingHoursRaw,
     sourceRef = provenance?.contentId,
     tags = tags,
+    imageUrl = provenance?.imageUrl?.takeIf { it.isNotBlank() },
 )

@@ -30,6 +30,7 @@ object PoiCollectionGate {
             // 다만 승격된 POI 에는 실어 보내야 재수집이 같은 행을 찾을 수 있다.
             sourceRef = place.sourceRef,
             tags = place.tags,
+            imageUrl = place.imageUrl,
         )
     }
 }

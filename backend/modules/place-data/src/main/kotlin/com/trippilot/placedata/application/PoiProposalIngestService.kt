@@ -26,6 +26,8 @@ data class PoiProposal(
     val sourceRef: String?,
     /** 표시용 태그. 상대가 분류 명칭을 주므로 그대로 싣는다 — 버리면 화면이 빈 칸을 그린다. */
     val tags: List<String> = emptyList(),
+    /** 출처가 준 이미지 URL. 없으면 null — 기본 이미지를 지어내지 않는다. */
+    val imageUrl: String? = null,
 )
 
 /**
@@ -87,6 +89,7 @@ class PoiProposalIngestService(
                 source = source,
                 sourceRef = ref,
                 tags = proposal.tags,
+                imageUrl = proposal.imageUrl,
             )
             // 게이트 판정은 여기 한 번뿐이다 — 통과 못 하면 신규든 갱신이든 손대지 않는다.
             if (!PoiCollectionGate.qualifies(place)) {
@@ -102,7 +105,7 @@ class PoiProposalIngestService(
                     existing = existing,
                     nameKo = place.nameKo, lat = place.lat!!, lng = place.lng!!, category = place.category!!,
                     region = place.region, openingHours = place.openingHours, now = now,
-                    tags = place.tags,
+                    tags = place.tags, imageUrl = place.imageUrl,
                 )
                 updated++
             }

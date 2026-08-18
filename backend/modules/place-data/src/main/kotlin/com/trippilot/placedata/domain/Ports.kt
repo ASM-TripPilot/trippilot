@@ -21,6 +21,8 @@ data class NormalizedPlace(
     val sourceRef: String? = null,
     /** 표시용 태그(열린 집합). 벤더가 주면 그대로 싣는다 — 미확보면 빈 목록. */
     val tags: List<String> = emptyList(),
+    /** 출처가 준 이미지 URL. 미확보면 null — 게이트 판정에는 쓰지 않는다. */
+    val imageUrl: String? = null,
 )
 
 /** 조회 지역 범위. 반경/bounding-box 프리필터는 후보풀(CandidatePoolPort, TRIP-213)에서. */
