@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":common:core"))
     implementation(project(":modules:trip"))                   // R1: 소유·구간 검증 — trip.api
     implementation(project(":modules:itinerary-generation"))   // R1: 남은 슬롯 판정 — itinerarygeneration.api
+    implementation(project(":modules:weather-context"))        // R1: 강수확률 조회 — weathercontext.api(ContextFacade)
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
