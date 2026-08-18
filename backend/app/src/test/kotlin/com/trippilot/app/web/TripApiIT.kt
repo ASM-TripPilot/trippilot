@@ -52,11 +52,46 @@ class TripApiIT : AbstractPostgresIntegrationTest() {
         return accessTokenIssuer.issue(account.id.value.toString()).value
     }
 
-    private val createBody = """
-        {"startDate":"2026-08-01","endDate":"2026-08-04","party":2,"companionType":"연인",
+    /**
+     * **미래 날짜** — 여행 단계가 날짜에서 파생되므로(TRIP: statusAt) 고정 과거 날짜를 쓰면
+     * 생성 직후 상태가 `ENDED` 로 나온다. 날짜 자체를 단언하는 테스트는 아래 리터럴을 그대로 쓴다.
+     */
+    private val futureStart: java.time.LocalDate
+        get() = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).plusDays(30)
+
+    private val createBody: String
+        get() = """
+        {"startDate":"$futureStart","endDate":"${futureStart.plusDays(3)}","party":2,"companionType":"연인",
          "destinations":[{"seq":0,"region":"제주","nights":3}],
          "preferenceSnapshot":{"pace":"알차게","styles":["휴양"]}}
-    """.trimIndent()
+        """.trimIndent()
+
+    /**
+     * 여행 단계는 **날짜에서 파생**한다. 저장된 status 는 `PLANNED` 에서 움직이지 않아
+     * (전이를 부르는 코드가 없다), 지난 여행도 계속 "예정"으로 나가고 있었다 —
+     * 홈 화면이 끝난 여행을 못 거르고(`ENDED` 를 걸러 낸다) 여행 중 배지도 못 달았다(`ACTIVE` 를 기대한다).
+     */
+    @Test
+    fun `지난 여행은 ENDED · 여행 중이면 ACTIVE 로 나간다`() {
+        val token = newToken()
+        val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
+
+        val past = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"${today.minusDays(10)}","endDate":"${today.minusDays(8)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+        past["status"].asText() shouldBe "ENDED"
+
+        val ongoing = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"${today.minusDays(1)}","endDate":"${today.plusDays(1)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+        ongoing["status"].asText() shouldBe "ACTIVE"
+
+        // 경계 — 시작 당일부터 여행 중이다.
+        val startsToday = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"$today","endDate":"${today.plusDays(2)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+        startsToday["status"].asText() shouldBe "ACTIVE"
+    }
 
     @Test
     fun `인증 없으면 401`() {

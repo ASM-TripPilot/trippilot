@@ -48,6 +48,22 @@ class Trip private constructor(
 ) {
     val editable: Boolean get() = deletedAt == null && status != TripStatus.ENDED
 
+    /**
+     * 여행이 **지금 어느 단계인가** — 저장된 [status] 가 아니라 날짜에서 파생한다.
+     *
+     * 저장된 값은 `PLANNED` 에서 움직이지 않는다: [TripStatus.canTransitionTo] 를 부르는 프로덕션 코드가
+     * 없고 상태를 밀어 올리는 배치도 없다. 그래서 **지난 여행도 계속 "예정"으로 나갔다** — 홈 화면이
+     * 끝난 여행을 목록에서 못 거르고(`homePhase.ts` 는 `ENDED` 를 걸러 낸다), 여행 중에도 "여행 중" 배지를
+     * 못 달았다(`ACTIVE` 를 기대한다). 프론트 계약은 이미 옳았고 서버가 값을 안 준 것이다.
+     *
+     * `CONFIRMED` 는 날짜로 만들 수 없는 **사용자 행동**이라 여행 전 구간에서만 저장값을 그대로 쓴다.
+     */
+    fun statusAt(today: LocalDate): TripStatus = when {
+        today > endDate -> TripStatus.ENDED
+        today >= startDate -> TripStatus.ACTIVE
+        else -> status
+    }
+
     fun edit(
         title: String?,
         startDate: LocalDate,
