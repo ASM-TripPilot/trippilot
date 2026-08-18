@@ -740,21 +740,26 @@ function SavedCountChip({ label }: { label: string }): ReactElement {
 
 // ── FAB(여행 만들기 · 우하단 floating) ──────────────────────────────────
 // bottom 오프셋은 화면 쪽에서 직접 잡는다 — 탭바는 SafeArea/네비 모르는 순수 뷰 계약이라
-// bottom inset을 합산하지 않는다(repo-trap). 탭바(약 96px)+홈 인디케이터 위에 뜨도록 하고,
-// 실제 여백은 [검증] 6-b 실기 스모크에서 눈으로 조정한다(자동 심판 없음, 브리프 §8-4).
+// bottom inset을 합산하지 않는다(repo-trap). 실제 여백은 [검증] 6-b 실기 스모크에서 눈으로
+// 확인한다(자동 심판 없음, 브리프 §8-4).
+// 값의 출처는 Figma `a01-home · scrolled`(2105:1615) 실측이다 — 프레임 390×1464 에서
+// fabCollapsed(2105:1757)가 x=318·y=1324·56×56 이므로 우측 여백 16(=right-lg) · 바닥에서
+// 84(=1464-1380). 탭바 밴드는 96px 이지만 보이는 알약은 pt-[26px] 안쪽에서 시작하므로
+// 84 는 그 알약 위 14px 에 뜬다(디자인과 같은 관계). 라벨은 어느 상태에서도 그리지 않고
+// 접근성 이름만 `accessibilityLabel`로 남긴다 — 텍스트를 지우면 이름도 같이 사라진다.
+// ⚠️ 크기를 `h-14 w-14`로 쓰지 마라 — NativeWind 의 rem 기준이 14px 이라 3.5rem=49px 로
+// 렌더된다(실측). Figma px 를 옮길 때는 리포 관례대로 `h-[56px]` 브래킷을 쓴다.
 function CreateTripFab({ onPress }: { onPress?: () => void }): ReactElement {
   return (
     <Pressable
       testID="home-create-trip-fab"
       accessibilityRole="button"
+      accessibilityLabel="여행 만들기"
       onPress={onPress}
       style={fabShadow}
-      className="absolute bottom-[100px] right-lg flex-row items-center justify-center gap-sm rounded-pill bg-primary py-md pl-xl pr-[22px]"
+      className="absolute bottom-[84px] right-lg h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
     >
       <PlusGlyph size={22} />
-      <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-        여행 만들기
-      </Text>
     </Pressable>
   );
 }
