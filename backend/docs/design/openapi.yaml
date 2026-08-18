@@ -487,6 +487,24 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '503': { $ref: '#/components/responses/PlaceSearchUnavailable' }
 
+  /regions:
+    get:
+      tags: [places]
+      summary: 행정구역 카탈로그 — 새 여행의 목적지 선택(US-TRIP-01)
+      description: >
+        국내 행정구역만 담는다(INV-U1-12) — 어떤 질의로도 해외 지역이 나오지 않는다.
+        `selectable=false` 인 행(도·일반시의 행정구)은 목적지가 아니지만 묶음 표시를 위해 함께 온다.
+        `poiCount` 는 커버리지 — 0이면 후보풀이 비어 일정이 조용히 빈다(INV-1·INV-4). 화면이 "준비 중"을 그릴 근거다.
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string }, description: '이름·별칭 부분일치(예: 광주 → 전남광주통합특별시)' }
+        - { name: level, in: query, required: false, schema: { $ref: '#/components/schemas/RegionLevel' } }
+      responses:
+        '200':
+          description: 시도 → 층 → 이름 순 목록
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Region' } }
+
   /places:
     get:
       tags: [places]
@@ -1085,6 +1103,26 @@ components:
     PoiCategory:
       type: string
       enum: [명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화]
+
+    RegionLevel:
+      type: string
+      description: 카탈로그의 층. 코드는 시도 2자리·시군구 5자리(법정동코드 앞자리)
+      enum: [SIDO, SIGUNGU]
+
+    Region:
+      type: object
+      required: [regionCode, name, sidoName, level, selectable, poiCount]
+      properties:
+        regionCode: { type: string, description: '법정동코드 앞자리 — 시도 2자리·시군구 5자리', example: '51720' }
+        name: { type: string, example: 홍천군 }
+        sidoName: { type: string, description: '묶음 표시용 상위 시도명', example: 강원특별자치도 }
+        level: { $ref: '#/components/schemas/RegionLevel' }
+        selectable:
+          type: boolean
+          description: >
+            목적지로 고를 수 있는가. 도(道)는 범위가 넓어 POI 후보가 흩어지고,
+            일반시의 행정구(수원시 장안구)는 여행지로 범위가 어긋나 false 다
+        poiCount: { type: integer, description: '이 지역의 ACTIVE POI 수. 0이면 후보풀이 비어 있다', example: 0 }
 
     Place:
       type: object
