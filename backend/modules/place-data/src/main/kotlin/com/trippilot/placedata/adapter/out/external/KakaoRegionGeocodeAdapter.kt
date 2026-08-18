@@ -2,6 +2,7 @@ package com.trippilot.placedata.adapter.out.external
 
 import com.trippilot.placedata.domain.GeoPoint
 import com.trippilot.placedata.domain.RegionGeocodePort
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Primary
@@ -21,10 +22,8 @@ import org.springframework.web.client.RestClient
 @ConditionalOnProperty(name = ["trippilot.place.geocode.mode"], havingValue = "kakao")
 class KakaoRegionGeocodeAdapter(
     @Value("\${trippilot.social.kakao.client-id:}") private val restApiKey: String,
-    restClientBuilder: RestClient.Builder,
+    @param:Qualifier(KakaoLocalClientConfiguration.BEAN_NAME) private val client: RestClient,
 ) : RegionGeocodePort {
-
-    private val client = restClientBuilder.baseUrl(BASE_URL).build()
 
     override fun searchAddress(query: String) = search("/v2/local/search/address.json", query)
 
@@ -43,7 +42,6 @@ class KakaoRegionGeocodeAdapter(
     }
 
     private companion object {
-        private const val BASE_URL = "https://dapi.kakao.com"
         /** 판정에는 첫 결과면 충분하다 — 응답을 키우지 않는다. */
         private const val PAGE_SIZE = 1
     }

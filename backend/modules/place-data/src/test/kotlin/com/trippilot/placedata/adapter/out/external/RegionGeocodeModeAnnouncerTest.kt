@@ -16,7 +16,7 @@ import org.springframework.web.client.RestClient
  */
 class RegionGeocodeModeAnnouncerTest : StringSpec({
 
-    fun kakaoAdapter(key: String) = KakaoRegionGeocodeAdapter(key, RestClient.builder())
+    fun kakaoAdapter(key: String) = KakaoRegionGeocodeAdapter(key, RestClient.create())
 
     "kakao 모드인데 키가 비면 기동을 거부한다" {
         val announcer = RegionGeocodeModeAnnouncer(kakaoAdapter(""), mode = "kakao", restApiKey = "")
