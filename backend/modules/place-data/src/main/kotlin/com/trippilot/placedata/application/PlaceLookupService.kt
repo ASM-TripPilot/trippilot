@@ -34,6 +34,22 @@ class PlaceLookupService(
         return found.map { PlaceCandidate(it.name, it.address, it.lat, it.lng) }
     }
 
+    /**
+     * 좌표 → 주소. [search] 와 **같은 태도**다 — 못 찾은 것(null)과 못 부른 것(예외)을 섞지 않는다.
+     *
+     * 좌표 범위 검증은 여기서 하지 않는다. 값이 범위를 벗어났는지는 요청 형식의 문제라 웹 계층이
+     * 400 으로 막는 편이 사용자에게 정확하고, 여기까지 내려오면 이미 통과한 값이다.
+     */
+    override fun reverseGeocode(lat: Double, lng: Double): String? {
+        val found = try {
+            lookup.reverseGeocode(lat, lng)
+        } catch (e: Exception) {
+            log.warn("역지오코딩 실패 — 503 으로 표면화합니다(주소 없음으로 접지 않는다).", e)
+            throw UpstreamUnavailable(source = "kakao-local", fallbackApplied = false, cause = e)
+        }
+        return found?.address
+    }
+
     private companion object {
         private val log = LoggerFactory.getLogger(PlaceLookupService::class.java)
     }

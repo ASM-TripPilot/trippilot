@@ -16,6 +16,16 @@ interface PlaceLookupFacade {
      * @throws com.trippilot.core.error.UpstreamUnavailable 벤더를 부르지 못했을 때
      */
     fun search(query: String): List<PlaceCandidate>
+
+    /**
+     * 좌표 → 주소(핀 지정 탭 · e05). **null 은 "그 좌표에 주소가 없다"** — 바다·산·비주소 구역이다.
+     *
+     * 조회 실패는 null 이 아니라 예외다. 핀 지정은 지도 검색이 죽었을 때의 폴백 경로인데(BR-U1-23),
+     * 여기서도 실패를 null 로 접으면 사용자는 "주소가 없나 보다" 하고 핀만 옮기다 끝난다.
+     *
+     * @throws com.trippilot.core.error.UpstreamUnavailable 벤더를 부르지 못했을 때
+     */
+    fun reverseGeocode(lat: Double, lng: Double): String?
 }
 
 /** 좌표 후보 한 건 — 사용자 선택용이라 이름·주소가 함께 간다. */

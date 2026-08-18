@@ -13,6 +13,11 @@ dependencies {
     implementation(libs.spring.boot.starter.data.jpa)  // out/persistence — poi
     implementation(libs.spring.boot.starter.web)        // adapter/in/web — 탐색 조회
     implementation(libs.jackson.module.kotlin)          // 리버스 read 포트 응답 snake_case(@JsonNaming, AI 경계)
+    // 카카오 로컬 와이어 DTO 역직렬화(Kotlin data class). **선언하지 않으면 조용히 빈 결과가 된다** —
+    // SB4 의 RestClient 기본 컨버터는 Jackson 3 인데 Kotlin 모듈이 없으면 기본 생성자로 만들고 val 을 못 채워
+    // 예외 없이 `documents=[]` 가 된다. 지금까지는 itinerary-generation 의 같은 의존이 런타임 classpath 로
+    // 새어 들어 우연히 동작했다(모듈 단위 테스트에서 드러났다).
+    implementation(libs.jackson3.module.kotlin)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.kotlin.reflect)
 

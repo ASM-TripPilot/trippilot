@@ -37,6 +37,7 @@
 - **공유 `RestClient.Builder` 빈을 변형(mutate)하지 말 것 → 어댑터마다 전용 빌더 생성.** `DefaultRestClientBuilder` 는 copy-on-write 가 아니라 in-place 변경이고, 여러 모듈이 같은 이름·타입 빈을 `@ConditionalOnMissingBean` 으로 공유한다. baseUrl·requestFactory·컨버터를 붙이면 **다른 모듈의 HTTP 클라이언트가 오염**된다(소셜 로그인 장애 위험). (TRIP-229, PR #119)
 - **경계 전용 `HttpMessageConverter` 를 `@Bean` 으로 노출하지 말 것 → 설정 안에서 인스턴스로 만들어 해당 클라이언트에만 부착.** SB4 는 컨텍스트의 **모든** 컨버터 빈을 MVC 목록에도 주입하므로, AI 경계용 snake_case 컨버터가 **공개 API 응답을 snake_case 로** 바꿀 수 있다. (TRIP-229, PR #119)
 - **SB4 의 기본 Jackson 은 3(`tools.jackson`)** — 경계 매퍼도 Jackson 3로 만들 것. Jackson 2(`com.fasterxml`) 컨버터를 붙이면 실제 통신에서 역직렬화가 깨진다. 또 빈 `JsonMapper` 는 Kotlin 모듈을 자동 등록하지 않아 데이터클래스 역직렬화가 실패하므로 `tools.jackson.module:jackson-module-kotlin` 을 명시 등록. (TRIP-229)
+- **외부 와이어 DTO 를 역직렬화하는 모듈은 Jackson 3 Kotlin 모듈을 스스로 선언할 것 — 없어도 예외가 나지 않는다.** SB4 의 `RestClient` 기본 컨버터는 Jackson 3(`tools.jackson`)인데 Kotlin 모듈이 없으면 Kotlin data class 를 **기본 생성자로 만들고 `val` 을 채우지 못한다** — 예외 없이 전 필드가 기본값이 되어 `documents=[]` 같은 빈 결과가 된다. 200 을 받고도 후보 0건이라 **"못 찾음"과 구분되지 않는다**(벤더 장애와도 구분되지 않는다). 실측: place-data 는 Jackson **2** Kotlin 모듈만 선언한 채, `itinerary-generation` 이 선언한 Jackson 3 모듈이 런타임 classpath 로 새어 든 덕에 우연히 동작하고 있었다 — 그 모듈이 의존을 빼면 카카오 검색·역지오코딩이 조용히 빈 결과가 된다. 앱 전체 테스트에서는 절대 안 드러나고, **모듈 단위 테스트**(`MockRestServiceServer` + 바닐라 `RestClient.builder()`)에서만 잡힌다. (place-data 역지오코딩)
 
 ## 아키텍처 · 구현
 
