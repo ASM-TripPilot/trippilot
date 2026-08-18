@@ -60,6 +60,7 @@ import { ItineraryEditScreen } from '@/features/itinerary/ui/ItineraryEditScreen
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
 import { SlotTimeSheet } from '@/features/itinerary/ui/SlotTimeSheet';
+import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
@@ -1457,6 +1458,14 @@ const PREVIEW_STATES: PreviewState[] = [
         onReduceMustVisits={noop}
       />
     ),
+  },
+  // h04 시작 방법(TRIP-303) — props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로 나온다.
+  // 생성 선행조건(거점 커버리지·겹침) 게이트는 h04 에 없다 — 그 판단은 여행 생성 2/2(g02)가 소유한다.
+  {
+    key: 'itinerary-method',
+    label: 'h04 · 시작 방법',
+    login: null,
+    render: () => <MethodPickerScreen onBack={noop} onPressFullAi={noop} />,
   },
   // h25 완성 일정(TRIP-299) — 피어가 제공한 프리뷰 칩. 실화면 딥링크로는 볼 수 없다(생성 POST 가
   // 만드는 tripId + 완성 일정 응답이 백엔드 없이는 안 생긴다). 화면이 props 만 받는 프레젠테이션이라

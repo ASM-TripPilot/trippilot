@@ -80,7 +80,9 @@ const ASSIGNMENT_FIXTURE: BaseAssignment = {
 
 const COVERAGE_FIXTURE: Coverage = {
   blocked: false,
-  days: [{ date: '2026-06-10', status: 'AUTO', savedStayId: 'stay-a' }],
+  days: [
+    { date: '2026-06-10', status: 'AUTO', savedStayId: 'stay-a', candidates: [] },
+  ],
 };
 
 /** 나간 요청의 `METHOD /경로` 누적 — 재요청 횟수를 세는 데 쓴다. */

@@ -8,7 +8,7 @@
  */
 
 /**
- * AUTO=후보1(확정) · GAP=후보0(공백) · OVERLAP=후보≥2(겹침)
+ * **배정이 말하는 판정**(왜 손이 필요한가) — AUTO=후보1(자동 확정) · GAP=후보0(공백) · OVERLAP=후보≥2(겹침). `resolution` 과 **다른 축**이다: 겹침을 사용자가 풀어도 배정이 겹친 사실은 그대로라 OVERLAP 으로 남는다.
  */
 export type DayCoverageStatus =
   (typeof DayCoverageStatus)[keyof typeof DayCoverageStatus];

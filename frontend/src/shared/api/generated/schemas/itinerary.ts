@@ -12,6 +12,7 @@ import type { ItineraryGenerationMode } from './itineraryGenerationMode';
 import type { ItineraryGenerationState } from './itineraryGenerationState';
 import type { ItinerarySolveMode } from './itinerarySolveMode';
 import type { ItineraryStatus } from './itineraryStatus';
+import type { ItineraryUnplacedMustVisitsItem } from './itineraryUnplacedMustVisitsItem';
 
 export interface Itinerary {
   itineraryId: string;
@@ -24,6 +25,10 @@ export interface Itinerary {
   isFallback: boolean;
   /** 생성 진행 상태(확정 상태와 다른 축) — PARTIAL=day1만 채워짐(2단계 생성 중) · COMPLETE=전 일자 완료 · FAILED=2차 실패(1차분은 유효). **PARTIAL 인 동안 확정·편집은 409** (day1만 동결된 채 잠기거나, 뒤이어 도착하는 2차 결과가 편집을 덮어쓰는 것 방지). 생성 POST 는 day1 만 담은 PARTIAL 을 즉시 반환하므로, 클라이언트는 GET 으로 COMPLETE/FAILED 까지 폴링해 나머지 일자를 받는다(여행이 하루면 즉시 COMPLETE). */
   generationState: ItineraryGenerationState;
+  /** 진행 중 생성 세션(h09·h10). 폴링·[취소]의 대상이며 **진행 중이 아니면 null** 이다. 별도 조회 엔드포인트를 두지 않은 이유 — 화면은 어차피 이 응답을 폴링하고, 따로 두면 생성이 빨리 끝났을 때 이미 없는 세션을 조회하는 경합이 생긴다. */
+  generationSessionId?: string | null;
+  /** 넣지 못한 필수 방문지. **빈 배열 = 전부 배치됨**(계약 M2). 판정은 AI 소유이고 백엔드는 보관·전달만 한다 — 사용자 문구(message)는 백엔드가 만든다. */
+  unplacedMustVisits?: ItineraryUnplacedMustVisitsItem[];
   /** 후보 충분성(BR-U2-05). **판정은 AI 소유** — 백엔드는 값을 그대로 전달하고 재계산·검증하지 않는다. AI 가 값을 주지 않거나 형태가 다르면 null. `level` 은 **열거로 고정하지 않는다** — 백엔드가 통과시키는 값이므로 AI 어휘(예: OK · LOW · NO_CANDIDATES)가 그대로 나갈 수 있다. `poolSize` 는 AI 가 주지 않으면 없다(0 으로 채우지 않는다 — 0 은 "후보 0건"이라는 판정이다). */
   candidatesSummary?: ItineraryCandidatesSummary;
   days: ItineraryDaysItem[];

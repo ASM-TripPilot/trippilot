@@ -282,7 +282,7 @@ const GENERATED_FILE_COUNT_FLOOR = 75;
  */
 const ENDPOINT_FILE_SHA256: Record<string, string> = {
   'stays/stays.ts':
-    '0d599afe660ac5b9f64255911cd5b514d71b585211bf5830cd8e34cedfa5f307',
+    '5c2961e113d1f08e51d75031e5e46d4be73156b07c797856f92be7830c68fa15',
   'saved-stays/saved-stays.ts':
     '79fe27571bb827aaa31a24849ed111b87ef260341bf6769bf43bea5d15a44a46',
   // TRIP-294에서 places·preferences로 넓혔다(01b Seed 확정 6). 근거는 문제로그

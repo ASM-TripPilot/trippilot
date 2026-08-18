@@ -140,7 +140,7 @@ function assignment(over: Partial<BaseAssignment> = {}): BaseAssignment {
 }
 
 function day(date: string, status: DayCoverage['status']): DayCoverage {
-  return { date, status };
+  return { date, status, candidates: [] };
 }
 
 function loaded<T>(data: T): QueryStub<T> {

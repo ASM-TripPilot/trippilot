@@ -684,3 +684,85 @@ export function RefreshGlyph({ size = 18, testID }: GlyphProps) {
     </Svg>
   );
 }
+
+// h04 시작 방법 3방식 아이콘(24) — Figma `1903:1083`(opt 카드 아이콘 노드 1903:1092·1902·1115).
+// 전부 벡터 path 실측. `react-native-svg-transformer` 가 없어 .svg 파일 import 가 안 되므로
+// 리포 관례대로 인라인 글리프로 둔다.
+
+// 「완전 AI가 짜기」 — 4각 반짝임(fill).
+export function FullAiGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 2L13.8 10.2L22 12L13.8 13.8L12 22L10.2 13.8L2 12L10.2 10.2L12 2Z"
+        fill={BODY}
+      />
+    </Svg>
+  );
+}
+
+// 「AI와 같이 짜기」 — 반쯤 채운 원(테두리 + 왼쪽 절반 fill).
+export function CoPickGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 3C9.61305 3 7.32387 3.94821 5.63604 5.63604C3.94821 7.32387 3 9.61305 3 12C3 14.3869 3.94821 16.6761 5.63604 18.364C7.32387 20.0518 9.61305 21 12 21V3Z"
+        fill={PRIMARY_TEXT}
+      />
+    </Svg>
+  );
+}
+
+// 「직접 짜기」 — 3줄 목록.
+export function ManualGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M4 7H20"
+        stroke={BODY}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4 12H20"
+        stroke={BODY}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4 17H20"
+        stroke={BODY}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
