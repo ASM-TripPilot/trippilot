@@ -1,5 +1,6 @@
 package com.trippilot.placedata.application
 
+import com.trippilot.placedata.FakeRegionCatalog
 import com.trippilot.placedata.InMemoryPoiRepository
 import com.trippilot.placedata.domain.DataStatus
 import com.trippilot.placedata.domain.PoiCategory
@@ -37,12 +38,53 @@ class PoiProposalIngestServiceTest : StringSpec({
         hours: String? = "05:00~20:00",
         tags: List<String> = listOf("자연관광지", "일출"),
         imageUrl: String? = "https://tong.visitkorea.or.kr/sample.jpg",
-    ) = PoiProposal(name, lat, lng, category, region, hours, ref, tags, imageUrl)
+        address: String? = "제주특별자치도 제주시 일주동로 1",
+    ) = PoiProposal(name, lat, lng, category, region, hours, ref, tags, imageUrl, address)
+
+    /**
+     * 주소가 지역 코드의 유일한 근거다(TRIP-359). 상대가 주는 `region` 은 시군구 이름뿐이라
+     * `동구` 가 6개 시도에 겹친다 — 주소 첫 토큰(시도명)이 그 모호함을 없앤다.
+     */
+    "주소에서 지역 코드를 정해 붙인다" {
+        val repo = InMemoryPoiRepository()
+
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(address = "부산광역시 동구 초량동 1")))
+
+        repo.stored.single().regionCode shouldBe "26170"
+    }
+
+    /** 못 정하면 **붙이지 않는다** — 가까운 지역에 밀어 넣으면 그 지역 커버리지가 부풀어 거짓말을 한다. */
+    "주소를 못 읽어도 POI 자체는 받는다" {
+        val repo = InMemoryPoiRepository()
+
+        val result = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(address = null)))
+
+        result.registered shouldBe 1
+        repo.stored.single().regionCode.shouldBeNull()
+    }
+
+    /**
+     * 벤더가 이번에 주소를 안 준 것과 "지역을 모른다"는 다르다. null 로 덮으면 한 번 붙은 코드가
+     * 다음 수집에 떨어져 나가고 커버리지가 조용히 줄어든다.
+     */
+    "갱신분에 주소가 없으면 이미 붙은 코드를 지키다" {
+        val repo = InMemoryPoiRepository()
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(address = "부산광역시 동구 초량동 1")))
+
+        PoiProposalIngestService(repo, FakeRegionCatalog, later)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(address = null)))
+
+        repo.stored shouldHaveSize 1
+        repo.stored.single().regionCode shouldBe "26170"
+    }
 
     "게이트를 통과한 제안이 ACTIVE 로 등록된다" {
         val repo = InMemoryPoiRepository()
 
-        val result = PoiProposalIngestService(repo, clock).ingest(PoiSource.TOURAPI, listOf(proposal()))
+        val result = PoiProposalIngestService(repo, FakeRegionCatalog, clock).ingest(PoiSource.TOURAPI, listOf(proposal()))
 
         result.registered shouldBe 1
         result.updated shouldBe 0
@@ -56,7 +98,7 @@ class PoiProposalIngestServiceTest : StringSpec({
     /** 이 테스트가 이 클래스의 핵심이다 — 매일 도는 수집이 같은 장소를 계속 쌓으면 안 된다. */
     "같은 문서를 두 번 넣어도 행이 늘지 않는다" {
         val repo = InMemoryPoiRepository()
-        val svc = PoiProposalIngestService(repo, clock)
+        val svc = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
 
         svc.ingest(PoiSource.TOURAPI, listOf(proposal()))
         val second = svc.ingest(PoiSource.TOURAPI, listOf(proposal()))
@@ -69,10 +111,10 @@ class PoiProposalIngestServiceTest : StringSpec({
     // 벤더가 이름·좌표를 고치는 일이 실제로 있다(이전·개명). 갱신이 그걸 반영해야 한다.
     "재수집으로 값이 바뀌면 같은 행이 갱신된다 — id 는 유지된다" {
         val repo = InMemoryPoiRepository()
-        PoiProposalIngestService(repo, clock).ingest(PoiSource.TOURAPI, listOf(proposal()))
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock).ingest(PoiSource.TOURAPI, listOf(proposal()))
         val firstId = repo.stored.single().poiId
 
-        PoiProposalIngestService(repo, later)
+        PoiProposalIngestService(repo, FakeRegionCatalog, later)
             .ingest(PoiSource.TOURAPI, listOf(proposal(name = "성산일출봉(개명)", lat = 33.46)))
 
         repo.stored shouldHaveSize 1
@@ -91,7 +133,7 @@ class PoiProposalIngestServiceTest : StringSpec({
     "출처 식별자가 없으면 받지 않는다" {
         val repo = InMemoryPoiRepository()
 
-        val result = PoiProposalIngestService(repo, clock)
+        val result = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
             .ingest(PoiSource.TOURAPI, listOf(proposal(ref = null), proposal(ref = "  ")))
 
         result.registered shouldBe 0
@@ -103,7 +145,7 @@ class PoiProposalIngestServiceTest : StringSpec({
     "한 문서에 같은 식별자가 두 번 오면 한 건만 남는다" {
         val repo = InMemoryPoiRepository()
 
-        val result = PoiProposalIngestService(repo, clock)
+        val result = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
             .ingest(PoiSource.TOURAPI, listOf(proposal(name = "먼저"), proposal(name = "나중")))
 
         result.registered shouldBe 1
@@ -114,7 +156,7 @@ class PoiProposalIngestServiceTest : StringSpec({
     "게이트 탈락은 사유별로 센다" {
         val repo = InMemoryPoiRepository()
 
-        val result = PoiProposalIngestService(repo, clock).ingest(
+        val result = PoiProposalIngestService(repo, FakeRegionCatalog, clock).ingest(
             PoiSource.TOURAPI,
             listOf(
                 proposal(ref = "1", name = " "),
@@ -139,7 +181,7 @@ class PoiProposalIngestServiceTest : StringSpec({
     "일부가 탈락해도 나머지는 들어간다" {
         val repo = InMemoryPoiRepository()
 
-        val result = PoiProposalIngestService(repo, clock)
+        val result = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
             .ingest(PoiSource.TOURAPI, listOf(proposal(ref = "1"), proposal(ref = "2", lat = null)))
 
         result.registered shouldBe 1
@@ -150,7 +192,7 @@ class PoiProposalIngestServiceTest : StringSpec({
     // 식별자 체계는 벤더마다 독립이다 — 숫자가 같다고 같은 장소가 아니다.
     "출처가 다르면 같은 식별자라도 다른 장소다" {
         val repo = InMemoryPoiRepository()
-        val svc = PoiProposalIngestService(repo, clock)
+        val svc = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
 
         svc.ingest(PoiSource.TOURAPI, listOf(proposal(ref = "100")))
         val other = svc.ingest(PoiSource.KAKAO_LOCAL, listOf(proposal(ref = "100", name = "다른 곳")))
@@ -162,7 +204,7 @@ class PoiProposalIngestServiceTest : StringSpec({
     "빈 문서는 아무것도 하지 않는다" {
         val repo = InMemoryPoiRepository()
 
-        val result = PoiProposalIngestService(repo, clock).ingest(PoiSource.TOURAPI, emptyList())
+        val result = PoiProposalIngestService(repo, FakeRegionCatalog, clock).ingest(PoiSource.TOURAPI, emptyList())
 
         result shouldBe PoiIngestResult(0, 0, 0, emptyMap())
         repo.stored shouldHaveSize 0
@@ -170,7 +212,7 @@ class PoiProposalIngestServiceTest : StringSpec({
 
     "수동 등록분(sourceRef 없음)은 재수집에 영향받지 않는다" {
         val repo = InMemoryPoiRepository()
-        PoiProposalIngestService(repo, clock).ingest(PoiSource.TOURAPI, listOf(proposal(ref = "500")))
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock).ingest(PoiSource.TOURAPI, listOf(proposal(ref = "500")))
 
         // 같은 이름·좌표를 가진 수동 POI 가 따로 있어도 수집 갱신이 그걸 건드리면 안 된다.
         repo.findBySourceRefs(PoiSource.TOURAPI, listOf("500")).shouldNotBeNull()
@@ -183,14 +225,14 @@ class PoiProposalIngestServiceTest : StringSpec({
     "태그를 버리지 않는다" {
         val repo = InMemoryPoiRepository()
 
-        PoiProposalIngestService(repo, clock).ingest(PoiSource.TOURAPI, listOf(proposal()))
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock).ingest(PoiSource.TOURAPI, listOf(proposal()))
 
         repo.stored.single().tags shouldBe listOf("자연관광지", "일출")
     }
 
     "재수집이 태그를 갱신한다 — 벤더가 분류를 고치기도 한다" {
         val repo = InMemoryPoiRepository()
-        val svc = PoiProposalIngestService(repo, clock)
+        val svc = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
         svc.ingest(PoiSource.TOURAPI, listOf(proposal(tags = listOf("옛분류"))))
 
         svc.ingest(PoiSource.TOURAPI, listOf(proposal(tags = listOf("새분류", "추가"))))
@@ -201,7 +243,7 @@ class PoiProposalIngestServiceTest : StringSpec({
     // 빈 태그로 덮어써 기존 값을 지우지 않는다 — 벤더가 이번에 안 준 것과 "없다"는 다르다.
     "빈 태그는 기존 값을 지우지 않는다" {
         val repo = InMemoryPoiRepository()
-        val svc = PoiProposalIngestService(repo, clock)
+        val svc = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
         svc.ingest(PoiSource.TOURAPI, listOf(proposal(tags = listOf("유지되어야함"))))
 
         svc.ingest(PoiSource.TOURAPI, listOf(proposal(tags = emptyList())))
@@ -212,7 +254,7 @@ class PoiProposalIngestServiceTest : StringSpec({
     "이미지 URL 을 그대로 싣는다" {
         val repo = InMemoryPoiRepository()
 
-        PoiProposalIngestService(repo, clock).ingest(PoiSource.TOURAPI, listOf(proposal()))
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock).ingest(PoiSource.TOURAPI, listOf(proposal()))
 
         repo.stored.single().imageUrl shouldBe "https://tong.visitkorea.or.kr/sample.jpg"
     }
@@ -220,7 +262,7 @@ class PoiProposalIngestServiceTest : StringSpec({
     "이미지가 없으면 null — 기본 이미지를 지어내지 않는다" {
         val repo = InMemoryPoiRepository()
 
-        PoiProposalIngestService(repo, clock).ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = null)))
+        PoiProposalIngestService(repo, FakeRegionCatalog, clock).ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = null)))
 
         repo.stored.single().imageUrl.shouldBeNull()
     }
@@ -231,7 +273,7 @@ class PoiProposalIngestServiceTest : StringSpec({
      */
     "재수집에 이미지가 없으면 기존 값을 지키다" {
         val repo = InMemoryPoiRepository()
-        val svc = PoiProposalIngestService(repo, clock)
+        val svc = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
         svc.ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = "https://a/keep.jpg")))
 
         svc.ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = null)))
@@ -241,7 +283,7 @@ class PoiProposalIngestServiceTest : StringSpec({
 
     "새 이미지가 오면 갱신한다" {
         val repo = InMemoryPoiRepository()
-        val svc = PoiProposalIngestService(repo, clock)
+        val svc = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
         svc.ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = "https://a/old.jpg")))
 
         svc.ingest(PoiSource.TOURAPI, listOf(proposal(imageUrl = "https://a/new.jpg")))

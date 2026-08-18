@@ -108,6 +108,22 @@ class PoiProposalRealDocumentIT : AbstractPostgresIntegrationTest() {
         // (탈락이 0이어야 한다는 뜻은 아니다. 아래는 "전부 탈락"이라는 최악을 막는 하한이다.)
         first["registered"].asInt() + first["updated"].asInt() shouldBeGreaterThan received / 2
 
+        // **지역 코드가 실제로 붙는다**(TRIP-359). 상대가 주는 region 은 시군구 이름뿐이라
+        // `동구` 가 6개 시도에 겹친다 — 주소 첫 토큰(시도명)으로만 하나로 정해진다.
+        // 여기가 0이면 커버리지 집계가 통째로 비고, 화면은 전국을 "준비 중"으로 그린다.
+        // 정확한 행수로 묻지 않는다 — 공유 컨테이너라 다른 IT 가 남긴 수집분이 섞일 수 있다.
+        // "코드가 안 붙은 수집분이 하나도 없다"가 이 판정의 본질이다.
+        jdbc.queryForObject(
+            "SELECT count(*) FROM poi WHERE source_ref IS NOT NULL AND region_code IS NULL",
+            Int::class.java,
+        )!! shouldBe 0
+
+        // 시도 6곳에서 수집한 문서다 — 한 지역에 몰렸으면 판정이 아니라 기본값이 붙은 것이다.
+        jdbc.queryForObject(
+            "SELECT count(DISTINCT left(region_code, 2)) FROM poi WHERE source_ref IS NOT NULL",
+            Int::class.java,
+        )!! shouldBeGreaterThan 3
+
         // 같은 문서를 다시 — 수집은 매일 돈다. 여기서 늘면 후보풀에 중복이 쌓인다.
         val (_, second) = post("/internal/pois/proposals", token, document)
         second["registered"].asInt() shouldBe 0

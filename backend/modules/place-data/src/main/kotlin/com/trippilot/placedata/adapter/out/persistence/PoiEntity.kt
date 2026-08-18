@@ -28,6 +28,8 @@ class PoiEntity(
     @Column(name = "lng") var lng: Double,
     @Column(name = "category") var category: String,
     @Column(name = "region") var region: String?,
+    /** V2.25 — 행정구역 표준코드. region(FK) 참조. 못 정한 행은 null. */
+    @Column(name = "region_code") var regionCode: String? = null,
     @Column(name = "opening_hours") var openingHours: String?,
     @Column(name = "data_status") var dataStatus: String,
     @Column(name = "source") var source: String,
@@ -66,6 +68,18 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
 
     /** 멱등 판정용 — 같은 출처의 원본 식별자로 이미 아는 행을 찾는다. 상태 무관(폐업분도 다시 안 만든다). */
     fun findBySourceAndSourceRefIn(source: String, sourceRefs: Collection<String>): List<PoiEntity>
+
+    /**
+     * 지역 커버리지 집계(TRIP-359) — ACTIVE 만 센다(INV-U1-01).
+     *
+     * 코드별로 한 번에 모아 온 뒤 시도 롤업은 앱에서 접두사로 접는다([coverageOf]).
+     * 지역마다 상관 서브쿼리를 돌리면 300행짜리 목록 한 번에 300번 센다.
+     */
+    @Query(
+        "select p.regionCode, count(p) from PoiEntity p " +
+            "where p.dataStatus = 'ACTIVE' and p.regionCode is not null group by p.regionCode",
+    )
+    fun countActiveByRegionCode(): List<Array<Any>>
 }
 
 @Component
@@ -104,6 +118,7 @@ class PoiRepositoryAdapter(
 
     private fun Poi.toEntity() = PoiEntity(
         poiId = poiId, nameKo = nameKo, lat = lat, lng = lng, category = category.name, region = region,
+        regionCode = regionCode,
         openingHours = openingHours, dataStatus = dataStatus.name, source = source.name,
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
         imageUrl = imageUrl, tags = tags.toTypedArray(), sourceRef = sourceRef,
@@ -111,6 +126,7 @@ class PoiRepositoryAdapter(
 
     private fun PoiEntity.toDomain() = Poi.reconstitute(
         poiId = poiId, nameKo = nameKo, lat = lat, lng = lng, category = PoiCategory.valueOf(category), region = region,
+        regionCode = regionCode,
         openingHours = openingHours, dataStatus = DataStatus.valueOf(dataStatus), source = PoiSource.valueOf(source),
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
         imageUrl = imageUrl, tags = tags.toList(), sourceRef = sourceRef,

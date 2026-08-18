@@ -57,6 +57,11 @@ class Poi private constructor(
     val lng: Double,
     val category: PoiCategory,
     val region: String?,
+    /**
+     * 행정구역 표준코드(TRIP-359). 표시용 [region] 과 달리 **셀 수 있는 키**다 —
+     * 지역 커버리지 집계가 이 값으로만 성립한다. 주소에서 못 정했으면 null(지어내지 않는다).
+     */
+    val regionCode: String?,
     val openingHours: String?,   // NULL=미확인(허용, INV-U1 영업시간 분리)
     val dataStatus: DataStatus,
     val source: PoiSource,
@@ -87,10 +92,12 @@ class Poi private constructor(
             sourceRef: String? = null,
             tags: List<String> = emptyList(),
             imageUrl: String? = null,
+            // 기본값 인자는 **맨 뒤에** — 가운데 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다(실제로 깨졌다).
+            regionCode: String? = null,
         ): Poi {
             if (nameKo.isBlank()) throw ValidationFailed(listOf(FieldError("nameKo", "POI 이름은 필수입니다.")))
             return Poi(
-                UUID.randomUUID(), nameKo, lat, lng, category, region, openingHours, dataStatus, source, 0,
+                UUID.randomUUID(), nameKo, lat, lng, category, region, regionCode, openingHours, dataStatus, source, 0,
                 now, now, imageUrl = imageUrl, tags = tags, sourceRef = sourceRef,
             )
         }
@@ -104,10 +111,14 @@ class Poi private constructor(
         @Suppress("LongParameterList")
         fun refreshed(
             existing: Poi, nameKo: String, lat: Double, lng: Double, category: PoiCategory,
-            region: String?, openingHours: String?, now: Instant, tags: List<String> = emptyList(),
-            imageUrl: String? = null,
+            region: String?, openingHours: String?, now: Instant,
+            tags: List<String> = emptyList(), imageUrl: String? = null, regionCode: String? = null,
         ): Poi = Poi(
-            existing.poiId, nameKo, lat, lng, category, region, openingHours,
+            existing.poiId, nameKo, lat, lng, category, region,
+            // 못 정했으면 **기존 값을 지킨다**. 벤더가 이번에 주소를 안 준 것과 "지역을 모른다"는 다르다 —
+            // null 로 덮으면 한 번 붙은 코드가 다음 수집에 떨어져 나가고 커버리지가 조용히 줄어든다.
+            regionCode ?: existing.regionCode,
+            openingHours,
             // 상태는 **유지한다**. 폐업(CLOSED)·미검증은 사람이 내린 판단이거나 라이프사이클 결과인데,
             // 매일 도는 대량 수집이 그걸 덮으면 손으로 정리한 것이 하룻밤에 되돌아간다.
             existing.dataStatus, existing.source, existing.savedCount, existing.createdAt, now,
@@ -124,9 +135,9 @@ class Poi private constructor(
             poiId: UUID, nameKo: String, lat: Double, lng: Double, category: PoiCategory, region: String?,
             openingHours: String?, dataStatus: DataStatus, source: PoiSource, savedCount: Long,
             createdAt: Instant, updatedAt: Instant, imageUrl: String? = null, tags: List<String> = emptyList(),
-            sourceRef: String? = null,
+            sourceRef: String? = null, regionCode: String? = null,
         ): Poi = Poi(
-            poiId, nameKo, lat, lng, category, region, openingHours, dataStatus, source, savedCount,
+            poiId, nameKo, lat, lng, category, region, regionCode, openingHours, dataStatus, source, savedCount,
             createdAt, updatedAt, imageUrl, tags, sourceRef,
         )
     }

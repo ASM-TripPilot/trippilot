@@ -196,16 +196,24 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
                     before.poiId, "이름이 바뀐 곳", before.lat, before.lng, before.category, before.region,
                     before.openingHours, before.dataStatus, before.source, before.savedCount,
                     before.createdAt, before.updatedAt, before.imageUrl, before.tags,
+                    before.sourceRef, before.regionCode,
                 ),
             ),
         )
 
-        val after = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
-            .second["days"][0]["slots"].let { slots -> (0 until slots.size()).map { slots[it] } }
-            .first { it["poiId"].asText() == poi }
-        after["nameKo"].asText() shouldBe confirmedName          // 동결값 유지
-        after["nameKo"].asText() shouldNotBe "이름이 바뀐 곳"
-        after["openingHoursKnown"].isNull shouldBe true          // 확정 일정엔 판정을 내지 않는다
+        // **개명한 것을 되돌린다.** Testcontainers 는 전 IT 가 공유하는 싱글톤이고 이 쓰기는 HTTP 밖
+        // 리포지토리 직접 호출이라 롤백이 닿지 않는다. 되돌리지 않으면 시드 POI 가 '이름이 바뀐 곳'인 채로
+        // 남아 뒤에 도는 IT 가 이름으로 그 POI 를 찾지 못한다 — 실패가 테스트 순서에 따라 갈린다(실측).
+        try {
+            val after = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+                .second["days"][0]["slots"].let { slots -> (0 until slots.size()).map { slots[it] } }
+                .first { it["poiId"].asText() == poi }
+            after["nameKo"].asText() shouldBe confirmedName          // 동결값 유지
+            after["nameKo"].asText() shouldNotBe "이름이 바뀐 곳"
+            after["openingHoursKnown"].isNull shouldBe true          // 확정 일정엔 판정을 내지 않는다
+        } finally {
+            pois.saveAll(listOf(before))
+        }
     }
 
     @Test

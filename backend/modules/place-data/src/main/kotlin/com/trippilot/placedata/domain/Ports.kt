@@ -23,6 +23,11 @@ data class NormalizedPlace(
     val tags: List<String> = emptyList(),
     /** 출처가 준 이미지 URL. 미확보면 null — 게이트 판정에는 쓰지 않는다. */
     val imageUrl: String? = null,
+    /**
+     * 행정구역 표준코드(TRIP-359). 주소에서 정하지 못했으면 null.
+     * **맨 뒤에 둔다** — 가운데에 끼우면 위치 인자로 조립하는 어댑터가 조용히 어긋난다(실제로 깨졌다).
+     */
+    val regionCode: String? = null,
 )
 
 /** 조회 지역 범위. 반경/bounding-box 프리필터는 후보풀(CandidatePoolPort, TRIP-213)에서. */

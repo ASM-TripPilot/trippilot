@@ -3,6 +3,7 @@ package com.trippilot.placedata.adapter.out.persistence
 import com.trippilot.placedata.domain.Region
 import com.trippilot.placedata.domain.RegionCatalogPort
 import com.trippilot.placedata.domain.RegionLevel
+import com.trippilot.placedata.domain.coverageOf
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
@@ -24,7 +25,6 @@ class RegionEntity(
     @Column(name = "sido_name") var sidoName: String = "",
     @Column(name = "level") var level: String = "",
     @Column(name = "selectable") var selectable: Boolean = false,
-    @Column(name = "poi_count") var poiCount: Int = 0,
 )
 
 /** 복합 PK 식별자. 엔티티와 달리 ID 클래스는 값이므로 `data class` 가 맞다. */
@@ -73,18 +73,26 @@ interface RegionJpaRepository : JpaRepository<RegionEntity, String> {
 @Component
 class RegionCatalogAdapter(
     private val jpa: RegionJpaRepository,
+    private val pois: PoiJpaRepository,
 ) : RegionCatalogPort {
 
-    override fun find(query: String?, level: RegionLevel?): List<Region> =
-        jpa.search(query?.trim().orEmpty(), level?.name).map { it.toDomain() }
+    /**
+     * 커버리지는 **저장된 값이 아니라 지금 센 값**이다(TRIP-359) — 저장하면 POI 를 쓰는 경로를
+     * 하나만 빠뜨려도 조용히 낡는다. 집계는 코드별로 한 번 모아 오고, 시도 롤업만 앱에서 접는다.
+     */
+    override fun find(query: String?, level: RegionLevel?): List<Region> {
+        val counts = pois.countActiveByRegionCode()
+            .associate { (code, n) -> code as String to (n as Number).toInt() }
+        return jpa.search(query?.trim().orEmpty(), level?.name).map { it.toDomain(counts) }
+    }
 
-    private fun RegionEntity.toDomain() = Region(
+    private fun RegionEntity.toDomain(counts: Map<String, Int>) = Region(
         regionCode = regionCode,
         name = name,
         sidoCode = sidoCode,
         sidoName = sidoName,
         level = RegionLevel.valueOf(level),
         selectable = selectable,
-        poiCount = poiCount,
+        poiCount = coverageOf(regionCode, counts),
     )
 }

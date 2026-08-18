@@ -22,6 +22,8 @@ object PoiCollectionGate {
             lng = place.lng!!,
             category = place.category!!,
             region = place.region,
+            // 코드는 판정에 쓰지 않지만(못 정해도 실재하는 장소다) 승격분에는 실어야 커버리지가 센다.
+            regionCode = place.regionCode,
             openingHours = place.openingHours,
             source = place.source,
             dataStatus = DataStatus.ACTIVE,
