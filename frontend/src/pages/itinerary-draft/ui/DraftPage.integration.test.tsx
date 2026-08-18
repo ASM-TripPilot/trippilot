@@ -15,6 +15,7 @@ import type {
   ItineraryCandidatesSummary,
   ItineraryDaysItem,
   ItineraryGenerationState,
+  ItinerarySolveMode,
   ItineraryStatus,
   Trip,
 } from '@/shared/api/generated/schemas';
@@ -123,15 +124,18 @@ function itinerary(input: {
   candidatesSummary?: ItineraryCandidatesSummary;
   /** 일자 모양을 케이스가 직접 정할 때(슬롯 0장 · 날짜별 개수 차이). 없으면 기존 `dayCount`. */
   days?: ItineraryDaysItem[];
+  /** TRIP-304 — 폴백 신호 두 축. 기본값은 정상 경로(FULL_AI, false)라 I1~I7 은 무영향이다. */
+  solveMode?: ItinerarySolveMode;
+  isFallback?: boolean;
 }): Itinerary {
   return {
     itineraryId: 'itin-1',
     tripId: TRIP_ID,
     status: input.status ?? 'PLANNED',
-    solveMode: 'FULL_AI',
+    solveMode: input.solveMode ?? 'FULL_AI',
     generationMode: 'FULLY_AI',
     generationState: input.generationState,
-    isFallback: false,
+    isFallback: input.isFallback ?? false,
     candidatesSummary: input.candidatesSummary,
     days: input.days ?? daysUpTo(input.dayCount),
   };
@@ -552,5 +556,69 @@ describe('🔴 I7 · AC-9 — 일부 날짜만 0건이면 h11 을 유지한다 (
     expect(screen.getByTestId(FALLBACK_BANNER)).toBeOnTheScreen();
     // ④ 얼굴을 h35 로 갈아 끼우지 않았다.
     expect(screen.queryAllByTestId('itinerary-draft-zero')).toEqual([]);
+  });
+});
+
+/* ───────────────────────── TRIP-304 · 폴백·강등 배너 (배선 이음매) ─────────────────────────
+ * 왜 이 축들이 통합 버킷에 있나: `solveMode`·`isFallback` 두 신호가 **배선을 타고 배너로 이어지는지**는
+ * model 도 screen 도 못 본다 — 함수가 옳고 화면이 옳아도 배선이 이 두 값을 `resolveFallbackNotice` 에
+ * 안 넘기면 DETERMINISTIC 폴백에 배너가 안 뜬다(02a ★6). 규칙은 `draftView.fallback.test.ts` 가,
+ * 그림은 `DraftScreen.fallback.test.tsx` 가 따로 잰다 — 여기는 응답 한 벌이 실제 화면으로 **이어졌나**다.
+ */
+describe('🔴 I8 · AC-1·AC-2·AC-7 — solveMode·isFallback 신호가 배선을 타고 배너로 이어진다', () => {
+  it('AC-1 · DETERMINISTIC + isFallback=true → "기본 모드" 배너가 뜬다', async () => {
+    itineraryScript = () =>
+      itinerary({
+        dayCount: 3,
+        generationState: 'COMPLETE',
+        solveMode: 'DETERMINISTIC',
+        isFallback: true,
+      });
+
+    renderPage();
+
+    // 핵심어만 정규식으로 — 정확 문안은 01b 가 열어 뒀다(demoted 배너와 구별되는 지점).
+    expect(await screen.findByTestId(FALLBACK_BANNER)).toHaveTextContent(
+      /기본 모드/
+    );
+  });
+
+  it('AC-2 · MINIMAL + isFallback=true → 배너와 배너 내 [다시 시도] 버튼이 뜬다', async () => {
+    itineraryScript = () =>
+      itinerary({
+        dayCount: 3,
+        generationState: 'COMPLETE',
+        solveMode: 'MINIMAL',
+        isFallback: true,
+      });
+
+    renderPage();
+
+    expect(await screen.findByTestId(FALLBACK_BANNER)).toBeOnTheScreen();
+    // 배너 안 전용 retry(신규 testID) — 헤더의 `itinerary-draft-retry` 와 다른 버튼이다.
+    expect(
+      screen.getByTestId('itinerary-draft-fallback-retry')
+    ).toBeOnTheScreen();
+  });
+
+  it('🔴 AC-7 · MINIMAL + isFallback=false(MANUAL) → 배너가 0건이다 (실패가 아니라 선택)', async () => {
+    /**
+     * ⚠️ openapi 원문: MANUAL(직접 만들기)은 `solveMode=MINIMAL` 이지만 `isFallback=false` 다.
+     * 배선이 solveMode 만 보고 배너를 켜면 직접 만든 빈 일정에 "최소 일정 폴백" 오배너가 뜬다.
+     */
+    itineraryScript = () =>
+      itinerary({
+        dayCount: 3,
+        generationState: 'COMPLETE',
+        solveMode: 'MINIMAL',
+        isFallback: false,
+      });
+
+    renderPage();
+
+    // 긍정 앵커 — 목록은 정상으로 떴다(빈 화면이 아래 부정 단언을 공짜로 통과하는 것 방지).
+    await waitFor(() => expect(cardTestIds().length).toBeGreaterThan(0));
+    // 부정 — solveMode 만 보고 배너를 켜면 여기서 걸린다(isFallback 게이트가 없으면 red 로 전환).
+    expect(screen.queryAllByTestId(FALLBACK_BANNER)).toEqual([]);
   });
 });

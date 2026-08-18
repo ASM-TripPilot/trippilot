@@ -1444,6 +1444,42 @@ const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-304 폴백·강등 배너 3종 — 심각도 삼분(MINIMAL > LOW > DETERMINISTIC). 실화면 딥링크로는
+  // 아직 못 본다(서버가 solveMode/isFallback/요약 신호를 안 준다). 목록은 그대로고 배너 한 줄만
+  // 곁에 붙으며, MINIMAL 만 배너 안에 [다시 시도]를 갖는다.
+  {
+    key: 'itinerary-draft-fallback-deterministic',
+    label: 'h11 · 폴백(기본 모드)',
+    login: null,
+    render: () => (
+      <DraftScreen
+        {...DRAFT_PREVIEW_BASE}
+        fallbackNotice={{ kind: 'deterministic' }}
+      />
+    ),
+  },
+  {
+    key: 'itinerary-draft-fallback-minimal',
+    label: 'h11 · 폴백(최소 일정)',
+    login: null,
+    render: () => (
+      <DraftScreen
+        {...DRAFT_PREVIEW_BASE}
+        fallbackNotice={{ kind: 'minimal' }}
+      />
+    ),
+  },
+  {
+    key: 'itinerary-draft-fallback-demoted',
+    label: 'h11 · 후보 강등',
+    login: null,
+    render: () => (
+      <DraftScreen
+        {...DRAFT_PREVIEW_BASE}
+        fallbackNotice={{ kind: 'demoted' }}
+      />
+    ),
+  },
   // h35 후보 0건(TRIP-298) — Figma `1906:1083` 대조용. 실화면 딥링크로는 이 얼굴을 볼 수
   // 없다: 서버가 `candidatesSummary` 를 아직 안 준다(TRIP-306 미착수). 칩 문구는 Figma 목업
   // 값 그대로이고, 실기에서는 **서버가 준 문자열이 그대로** 들어온다(01b D8).

@@ -7,6 +7,10 @@ import type {
 } from '@/shared/api/generated/schemas';
 
 import type { DraftDayTab, DraftPin, DraftView } from '../model/draftView';
+// TRIP-304 로 `demoted?: boolean` prop 이 단일 `fallbackNotice?: FallbackNotice | null` 유니온의
+// `{ kind: 'demoted' }` 갈래로 흡수됐다(01b 결정 3). `import type` 은 babel 가 런타임에 지우므로
+// implementer 가 이 타입을 더하기 전에도 red 실행에 지장이 없다.
+import type { FallbackNotice } from '../model/draftView';
 import { buildSlotKey } from '../model/slotKey';
 import { DraftScreen } from './DraftScreen';
 
@@ -28,7 +32,7 @@ import { DraftScreen } from './DraftScreen';
  * 쓰면 새 테스트가 아니라 그 동결 심판이 먼저 red 가 된다(02a ★1). 같은 파일을 열어 섞으면
  * "안 깼다"를 바이트 동일성으로 보일 수 없다.
  *
- * 3동작 뼈대: 준비=`view`·`demoted` 를 만들어 렌더 → 실행=(없음, 표시 계약이다) → 단언=보이는 것·없는 것.
+ * 3동작 뼈대: 준비=`view`·`fallbackNotice` 를 만들어 렌더 → 실행=(없음, 표시 계약이다) → 단언=보이는 것·없는 것.
  */
 
 // 지도는 이 칸의 심판 대상이 아니다 — 실물 `KakaoMapView` 가 뜨지 않게만 막는다(동결 화면
@@ -95,7 +99,7 @@ function listed(days: ItineraryDaysItem[] = DAYS): DraftView {
   return { kind: 'listed', days, staleFailed: false };
 }
 
-type Overrides = { view?: DraftView; demoted?: boolean };
+type Overrides = { view?: DraftView; fallbackNotice?: FallbackNotice | null };
 
 function renderScreen(over: Overrides = {}) {
   return render(
@@ -147,7 +151,7 @@ describe('S0 · 자가검사 — 이게 통과해야 아래 "숫자 0건"·"문�
 
 describe('🔴 S1 · AC-1 — 강등 안내가 뜨고 얼굴을 갈아 끼우지 않는다 (BR-U3-11 · 01b D5 4행)', () => {
   it('배너 한 줄이 뜨고 카드 3장이 그대로 남는다', () => {
-    renderScreen({ demoted: true });
+    renderScreen({ fallbackNotice: { kind: 'demoted' } });
 
     // ① 안내가 삼켜지지 않았다(INV-4). **문구는 잠그지 않는다** — 01b §5 가 "정확한 문구
     //    미정"으로 열어 둔 자리라 존재와 "비어 있지 않음"만 잰다(동결 C12 의 stale-failed
@@ -173,7 +177,7 @@ describe('🔴 S1 · AC-1 — 강등 안내가 뜨고 얼굴을 갈아 끼우지
 });
 
 describe('S2 · AC-1 짝 · AC-3 화면 축 — 안 켜면 안 뜬다', () => {
-  it('demoted 를 안 넘기면 배너가 0건이고 목록은 평소대로다', () => {
+  it('fallbackNotice 를 안 넘기면 배너가 0건이고 목록은 평소대로다', () => {
     // 요약이 안 온 평상시(01b D4)의 화면이 이것이다. 이 짝이 없으면 "항상 배너"인 구현이
     // S1 을 그대로 통과한다 — 그리고 실기에서는 서버가 요약을 안 주므로(TRIP-306 미착수)
     // **이 경로가 당분간의 정상 경로**다.
@@ -186,7 +190,7 @@ describe('S2 · AC-1 짝 · AC-3 화면 축 — 안 켜면 안 뜬다', () => {
 
 describe('🔴 S3 · AC-4 — 개수 표기가 아예 없다 (poolSize 를 0 으로 채우지 않는다)', () => {
   it('배너 서브트리에 숫자가 한 글자도 없다', () => {
-    renderScreen({ demoted: true });
+    renderScreen({ fallbackNotice: { kind: 'demoted' } });
 
     /**
      * ⚠️ 모집단을 **배너로 잘랐다.** 화면 전체로 재면 `6월 10일 · 수` · `1일차` · `3곳` 이
