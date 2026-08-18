@@ -1,5 +1,6 @@
 package com.trippilot.placedata.adapter.out.external
 
+import com.trippilot.placedata.domain.PlaceAddress
 import com.trippilot.placedata.domain.PlaceLocation
 import com.trippilot.placedata.domain.PlaceLookupPort
 import org.springframework.stereotype.Component
@@ -19,4 +20,12 @@ class StubPlaceLookupAdapter : PlaceLookupPort {
         PlaceLocation(query, "제주특별자치도 제주시", 33.4996, 126.5312),
         PlaceLocation("$query 인근", "제주특별자치도 서귀포시", 33.2541, 126.5601),
     )
+
+    /**
+     * 좌표와 무관하게 고정 주소를 준다 — 스텁의 목적은 **핀 지정 흐름이 끝까지 도는지**를 재현하는 것이지
+     * 실제 주소를 맞히는 것이 아니다. 다만 위경도 범위를 벗어난 좌표는 null 을 줘서,
+     * "주소 없는 좌표"(바다 등) 경로도 스텁으로 밟아 볼 수 있게 한다.
+     */
+    override fun reverseGeocode(lat: Double, lng: Double): PlaceAddress? =
+        if (lat in -90.0..90.0 && lng in -180.0..180.0) PlaceAddress("제주특별자치도 제주시 첨단로 242") else null
 }

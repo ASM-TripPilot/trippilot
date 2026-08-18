@@ -27,6 +27,9 @@ interface BaseAssignmentRepository {
  */
 interface PlaceSearchPort {
     fun geocode(query: String): List<GeocodeCandidate>
+
+    /** 좌표 → 주소(핀 지정). 주소가 없는 좌표면 null, 조회 실패는 예외. */
+    fun reverseGeocode(lat: Double, lng: Double): String?
 }
 
 /** 지오코딩 후보 — multi-candidate 시 사용자 선택(e05). */

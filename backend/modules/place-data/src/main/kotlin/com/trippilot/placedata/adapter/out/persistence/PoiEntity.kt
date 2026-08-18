@@ -38,6 +38,8 @@ class PoiEntity(
     // text[] 매핑은 preference_set(V1.5) 선례와 동일 — 컨버터 없이 Hibernate 네이티브 배열.
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "tags") var tags: Array<String> = emptyArray(),
+    /** V2.23 — 출처 원본 식별자. 수동 등록분은 null. (source, source_ref) 부분 유니크. */
+    @Column(name = "source_ref") var sourceRef: String? = null,
 )
 
 interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
@@ -61,6 +63,9 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
     fun findByPoiIdInAndDataStatus(poiIds: Collection<UUID>, dataStatus: String): List<PoiEntity>
 
     fun findByPoiIdIn(poiIds: Collection<UUID>): List<PoiEntity>
+
+    /** 멱등 판정용 — 같은 출처의 원본 식별자로 이미 아는 행을 찾는다. 상태 무관(폐업분도 다시 안 만든다). */
+    fun findBySourceAndSourceRefIn(source: String, sourceRefs: Collection<String>): List<PoiEntity>
 }
 
 @Component
@@ -87,17 +92,27 @@ class PoiRepositoryAdapter(
     override fun findByIds(poiIds: List<UUID>): List<Poi> =
         if (poiIds.isEmpty()) emptyList() else jpa.findByPoiIdIn(poiIds).map { it.toDomain() }
 
+    override fun findBySourceRefs(source: PoiSource, sourceRefs: Collection<String>): Map<String, Poi> =
+        if (sourceRefs.isEmpty()) {
+            emptyMap()
+        } else {
+            jpa.findBySourceAndSourceRefIn(source.name, sourceRefs)
+                // sourceRef 가 null 인 행은 애초에 조회되지 않지만, 키가 null 이면 맵이 깨지므로 명시적으로 거른다.
+                .mapNotNull { e -> e.sourceRef?.let { it to e.toDomain() } }
+                .toMap()
+        }
+
     private fun Poi.toEntity() = PoiEntity(
         poiId = poiId, nameKo = nameKo, lat = lat, lng = lng, category = category.name, region = region,
         openingHours = openingHours, dataStatus = dataStatus.name, source = source.name,
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
-        imageUrl = imageUrl, tags = tags.toTypedArray(),
+        imageUrl = imageUrl, tags = tags.toTypedArray(), sourceRef = sourceRef,
     )
 
     private fun PoiEntity.toDomain() = Poi.reconstitute(
         poiId = poiId, nameKo = nameKo, lat = lat, lng = lng, category = PoiCategory.valueOf(category), region = region,
         openingHours = openingHours, dataStatus = DataStatus.valueOf(dataStatus), source = PoiSource.valueOf(source),
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
-        imageUrl = imageUrl, tags = tags.toList(),
+        imageUrl = imageUrl, tags = tags.toList(), sourceRef = sourceRef,
     )
 }

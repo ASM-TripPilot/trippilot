@@ -11,7 +11,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Mapping, Sequence
 
-from trippilot.solver_engine.config import STAY_DEFAULT_MIN, SolverConfig
+from trippilot.solver_engine.config import (
+    RAIN_INDOOR,
+    RAIN_OUTDOOR,
+    STAY_DEFAULT_MIN,
+    SolverConfig,
+)
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -114,7 +119,7 @@ class RuleFallbackSolver:
             day_end = _at(day, problem.day_window.end)
             windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
             meal_done = [False] * len(windows)
-            remaining = [c for c in ranked if c.poi_id not in used]
+            remaining = self._day_ranked(problem, day, ranked, used)
             while remaining:
                 last = slots[-1] if slots else None
                 ref = last.end_at if last is not None \
@@ -192,3 +197,33 @@ class RuleFallbackSolver:
             solve_mode=SolveMode.RULE_FALLBACK if placed_any else SolveMode.MINIMAL,
             solver_run=None,
         )
+
+    def _day_ranked(self, problem: ItineraryProblem, day,
+                    ranked: list, used: set[PoiId]) -> list:
+        """그 일자 후보 순위 — 우천일이면 날씨 보정 반영 (TRIP-383, OR-Tools 소프트
+        항의 결정론 버전).
+
+        규칙: 강수확률 ≥ rain_threshold_pct인 날짜는 실외 점수 -rain_outdoor_penalty ·
+        실내 +rain_indoor_bonus로 **순위만** 조정한다 — 배제가 아니라 시도 순서를
+        바꾸는 것뿐이라 실외만 남은 풀에서도 일정은 나온다(식사 보정과 같은 정신).
+        조정 점수는 정렬에만 쓰고 슬롯 score에는 싣지 않는다(선호 점수 의미 보존).
+        무보정(None·정보 없음·임계 미만)이면 ranked 순서 그대로 — 종전 동작과 동일.
+        """
+        remaining = [c for c in ranked if c.poi_id not in used]
+        rain = problem.daily_rain_prob
+        pop = rain.get(day) if rain is not None else None
+        if pop is None or pop < self._cfg.rain_threshold_pct:
+            return remaining
+
+        def _adjusted(c) -> float:
+            poi = self._pois.get(c.poi_id)
+            if poi is None:
+                return c.score
+            if poi.category in RAIN_OUTDOOR:
+                return c.score - self._cfg.rain_outdoor_penalty
+            if poi.category in RAIN_INDOOR:
+                return c.score + self._cfg.rain_indoor_bonus
+            return c.score
+
+        # ranked와 동일한 결정론 정렬 키(점수 내림차순 → id 오름차순)의 보정판
+        return sorted(remaining, key=lambda c: (-_adjusted(c), str(c.poi_id)))

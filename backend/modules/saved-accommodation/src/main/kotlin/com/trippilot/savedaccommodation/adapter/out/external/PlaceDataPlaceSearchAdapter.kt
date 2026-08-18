@@ -24,4 +24,6 @@ class PlaceDataPlaceSearchAdapter(
 
     override fun geocode(query: String): List<GeocodeCandidate> =
         lookup.search(query).map { GeocodeCandidate(it.name, it.address, it.lat, it.lng) }
+
+    override fun reverseGeocode(lat: Double, lng: Double): String? = lookup.reverseGeocode(lat, lng)
 }

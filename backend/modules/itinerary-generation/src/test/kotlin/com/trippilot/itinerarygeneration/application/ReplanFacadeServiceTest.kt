@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanProposal
@@ -22,6 +23,7 @@ import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
@@ -117,12 +119,18 @@ class ReplanFacadeServiceTest : StringSpec({
     }
 
     /** 리비전 서비스를 **한 번만** 만들어 공유한다 — 다시 만들면 다른 저장소를 보게 되어 비교가 어긋난다. */
-    class Fx(val svc: ReplanFacadeService, val repo: ReplanItineraries, val revisions: ItineraryRevisionService)
+    class Fx(
+        val svc: ReplanFacadeService,
+        val repo: ReplanItineraries,
+        val revisions: ItineraryRevisionService,
+        val changeLogs: CapturingChangeLogs,
+    )
 
     fun fixture(agent: Agent, repo: ReplanItineraries = ReplanItineraries()): Fx {
         repo.byTrip[trip] = itinerary()
         val revisions = genRevisions(repo, replanTrips, clock)
-        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, clock), repo, revisions)
+        val changeLogs = CapturingChangeLogs()
+        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, changeLogs, clock), repo, revisions, changeLogs)
     }
 
     fun command(fullDay: Boolean = false, completed: List<String> = emptyList()) = ReplanCommand(
@@ -189,7 +197,7 @@ class ReplanFacadeServiceTest : StringSpec({
         val secondDayBefore = repo.byTrip.getValue(trip).days[1]
         val proposal = svc.propose(command())!!
 
-        svc.apply(acc, trip, proposal)
+        svc.apply(acc, trip, proposal, REASON)
 
         val after = repo.byTrip.getValue(trip)
         after.days[0].slots.map { it.sourcePoiId } shouldContainExactly listOf(replacement)
@@ -202,9 +210,50 @@ class ReplanFacadeServiceTest : StringSpec({
         val f = fixture(agent)
         val proposal = f.svc.propose(command())!!
 
-        f.svc.apply(acc, trip, proposal)
+        f.svc.apply(acc, trip, proposal, REASON)
 
         f.revisions.list(acc, trip, limit = 10).size shouldBe 2 // 되돌리기 지점 + 재계획 반영
+    }
+
+    // BR-U4-30. 이력이 안 남으면 조회 API 가 늘 빈 목록이라 "무엇을 왜 바꿨나"를 되짚을 수 없다.
+    "확정하면 변경 이력 1행이 남는다 — 전후 스냅숏·사유·주체" {
+        val agent = Agent(proposal(replacement))
+        val f = fixture(agent)
+        val beforePoiIds = f.repo.byTrip.getValue(trip).days[0].slots.map { it.sourcePoiId }
+        val proposal = f.svc.propose(command())!!
+
+        f.svc.apply(acc, trip, proposal, REASON)
+
+        f.changeLogs.appended.size shouldBe 1
+        val entry = f.changeLogs.appended.single()
+        entry.tripId shouldBe trip
+        entry.actor shouldBe acc.toString()
+        entry.sourceType shouldBe ChangeSourceType.PLAN_B
+        entry.reason shouldBe REASON
+        // 전은 교체 전 값, 후는 교체 후 값 — 둘이 같으면 이력이 아무것도 말해주지 않는다.
+        entry.before.days.first().slots.map { it.poiId } shouldContainExactly beforePoiIds
+        entry.after.days.first().slots.map { it.poiId } shouldContainExactly listOf(replacement)
+    }
+
+    // 반영은 됐는데 이력만 빠지는 상태를 만들지 않는다 — 기록 실패는 삼키지 않고 올려 함께 롤백시킨다.
+    "이력 기록이 실패하면 예외를 삼키지 않는다" {
+        val agent = Agent(proposal(replacement))
+        val f = fixture(agent)
+        val proposal = f.svc.propose(command())!!
+        f.changeLogs.failWith = IllegalStateException("이력 저장 실패")
+
+        shouldThrow<IllegalStateException> { f.svc.apply(acc, trip, proposal, REASON) }
+    }
+
+    "반영하지 않고 끝나면 이력도 남기지 않는다" {
+        val agent = Agent(proposal(replacement))
+        val f = fixture(agent)
+        val proposal = f.svc.propose(command())!!
+        f.repo.byTrip[trip] = f.repo.byTrip.getValue(trip).confirm(now)
+
+        shouldThrow<ConflictDetected> { f.svc.apply(acc, trip, proposal, REASON) }
+
+        f.changeLogs.appended.shouldBeEmpty()
     }
 
     "그 사이 일정이 교체됐으면 반영하지 않는다 — 방금 만든 일정이 사라진다" {
@@ -215,7 +264,7 @@ class ReplanFacadeServiceTest : StringSpec({
         val proposal = svc.propose(command())!!
         repo.byTrip[trip] = itinerary() // 재생성으로 새 itineraryId
 
-        shouldThrow<ConflictDetected> { svc.apply(acc, trip, proposal) }
+        shouldThrow<ConflictDetected> { svc.apply(acc, trip, proposal, REASON) }
     }
 
     "확정된 일정에는 반영하지 않는다" {
@@ -226,7 +275,7 @@ class ReplanFacadeServiceTest : StringSpec({
         val proposal = svc.propose(command())!!
         repo.byTrip[trip] = repo.byTrip.getValue(trip).confirm(now)
 
-        shouldThrow<ConflictDetected> { svc.apply(acc, trip, proposal) }
+        shouldThrow<ConflictDetected> { svc.apply(acc, trip, proposal, REASON) }
     }
 
     "초안 왕복이 항등이다 — 저장했다 돌아와도 값이 새지 않는다" {
@@ -265,7 +314,7 @@ class ReplanFacadeServiceTest : StringSpec({
         val proposal = f.svc.propose(command())!!
         val strayDate = proposal.copy(date = today.plusDays(5))
 
-        shouldThrow<ConflictDetected> { f.svc.apply(acc, trip, strayDate) }
+        shouldThrow<ConflictDetected> { f.svc.apply(acc, trip, strayDate, REASON) }
         f.repo.byTrip.getValue(trip).days[0].slots.map { it.sourcePoiId } shouldContainExactly
             listOf(morning, fixedNoon, evening) // 원본 그대로
     }

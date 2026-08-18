@@ -9,7 +9,8 @@ plugins {
 dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.springBoot.get()}"))
 
-    implementation(project(":common:core"))            // R5: 에러 계약
+    implementation(project(":common:core"))             // R5: 에러 계약
+    implementation(project(":modules:change-log"))      // R1: changelog.api(ChangeLogFacade)만 — 확정 시 이력 append(BR-U4-30)
     implementation(project(":modules:trip"))            // R1: trip.api(TripFacade)만 — 날짜·소유 조회
     implementation(project(":modules:profile"))         // R1: profile.api(PreferenceFacade)만 — 취향 7축·예산등급
     implementation(project(":modules:saved-accommodation")) // R1: saved-accommodation.api(BaseAnchorFacade)만 — 거점 좌표 앵커

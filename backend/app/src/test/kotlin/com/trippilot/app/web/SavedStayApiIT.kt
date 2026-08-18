@@ -115,4 +115,27 @@ class SavedStayApiIT : AbstractPostgresIntegrationTest() {
         (b.size() > 0) shouldBe true
         b[0]["lat"].asDouble() shouldBe 33.4996
     }
+
+    // 핀 지정 탭(e05 3번째 경로 · BR-U1-21). 좌표는 사용자가 이미 정했고 여기서는 주소만 붙인다.
+    @Test
+    fun `역지오코딩은 주소와 함께 요청 좌표를 그대로 돌려준다`() {
+        val (s, b) = call(HttpMethod.GET, "/api/v1/stays/reverse-geocode?lat=33.4996&lng=126.5312", newToken())
+        s shouldBe 200
+        b["address"].isNull shouldBe false
+        // 벤더 대표 좌표로 갈아끼우면 사용자가 찍은 자리와 다른 곳이 등록된다 — 핀이 정본이다.
+        b["lat"].asDouble() shouldBe 33.4996
+        b["lng"].asDouble() shouldBe 126.5312
+    }
+
+    @Test
+    fun `범위 밖 좌표는 400 — 벤더에 묻지 않는다`() {
+        val token = newToken()
+        call(HttpMethod.GET, "/api/v1/stays/reverse-geocode?lat=91&lng=126.5", token).first shouldBe 400
+        call(HttpMethod.GET, "/api/v1/stays/reverse-geocode?lat=33.5&lng=181", token).first shouldBe 400
+    }
+
+    @Test
+    fun `역지오코딩도 인증이 필요하다`() {
+        call(HttpMethod.GET, "/api/v1/stays/reverse-geocode?lat=33.5&lng=126.5", null).first shouldBe 401
+    }
 }

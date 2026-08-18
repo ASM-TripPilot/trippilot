@@ -1,11 +1,13 @@
 package com.trippilot.placedata.application
 
 import com.trippilot.core.error.UpstreamUnavailable
+import com.trippilot.placedata.domain.PlaceAddress
 import com.trippilot.placedata.domain.PlaceLocation
 import com.trippilot.placedata.domain.PlaceLookupPort
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 
 /**
@@ -19,12 +21,19 @@ class PlaceLookupServiceTest : StringSpec({
     class Vendor(
         private val result: List<PlaceLocation> = emptyList(),
         private val fail: Boolean = false,
+        private val address: PlaceAddress? = null,
     ) : PlaceLookupPort {
         var calls = 0
         override fun search(query: String): List<PlaceLocation> {
             calls++
             if (fail) throw IllegalStateException("vendor down")
             return result
+        }
+
+        override fun reverseGeocode(lat: Double, lng: Double): PlaceAddress? {
+            calls++
+            if (fail) throw IllegalStateException("vendor down")
+            return address
         }
     }
 
@@ -55,5 +64,25 @@ class PlaceLookupServiceTest : StringSpec({
         val vendor = Vendor(listOf(shilla))
         PlaceLookupService(vendor).search("   ") shouldHaveSize 0
         vendor.calls shouldBe 0
+    }
+    // 역방향도 같은 태도다 — "주소가 없다"(null)와 "못 물어봤다"(예외)를 섞지 않는다.
+    "역지오코딩은 주소를 그대로 돌려준다" {
+        val addr = PlaceLookupService(Vendor(address = PlaceAddress("제주특별자치도 제주시 첨단로 242")))
+            .reverseGeocode(33.4996, 126.5312)
+
+        addr shouldBe "제주특별자치도 제주시 첨단로 242"
+    }
+
+    // 바다 위 좌표 등 — 정상 응답이라 null 이다. 이걸 예외로 만들면 화면이 장애로 오해한다.
+    "주소가 없는 좌표는 null — 예외가 아니다" {
+        PlaceLookupService(Vendor(address = null)).reverseGeocode(33.0, 130.0).shouldBeNull()
+    }
+
+    "역지오코딩 실패도 null 이 아니라 503 으로 올라간다" {
+        val e = shouldThrow<UpstreamUnavailable> {
+            PlaceLookupService(Vendor(fail = true)).reverseGeocode(33.4996, 126.5312)
+        }
+        e.source shouldBe "kakao-local"
+        e.fallbackApplied shouldBe false
     }
 })

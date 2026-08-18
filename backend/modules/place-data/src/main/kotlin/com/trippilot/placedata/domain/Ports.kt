@@ -14,6 +14,15 @@ data class NormalizedPlace(
     val region: String?,
     val openingHours: String?,
     val source: PoiSource,
+    /**
+     * 출처가 준 원본 식별자(TourAPI contentId 등). 벤더가 안 주면 null —
+     * **지어내지 않는다.** null 이면 멱등 판정 대상이 아니라 매번 새 행이 된다.
+     */
+    val sourceRef: String? = null,
+    /** 표시용 태그(열린 집합). 벤더가 주면 그대로 싣는다 — 미확보면 빈 목록. */
+    val tags: List<String> = emptyList(),
+    /** 출처가 준 이미지 URL. 미확보면 null — 게이트 판정에는 쓰지 않는다. */
+    val imageUrl: String? = null,
 )
 
 /** 조회 지역 범위. 반경/bounding-box 프리필터는 후보풀(CandidatePoolPort, TRIP-213)에서. */
@@ -33,6 +42,12 @@ interface PoiRepository {
 
     /** 주어진 id 전부(상태 무관 — 담기 목록 표시용, 폐업·미검증도 상태와 함께 노출). */
     fun findByIds(poiIds: List<UUID>): List<Poi>
+
+    /**
+     * 같은 출처의 원본 식별자로 이미 아는 POI 를 찾는다 — 수집 재실행이 행을 늘리지 않게 하는 판정용.
+     * 키는 `sourceRef`, 값은 그 POI. 못 찾은 ref 는 키 자체가 없다(빈 값으로 채우지 않는다).
+     */
+    fun findBySourceRefs(source: PoiSource, sourceRefs: Collection<String>): Map<String, Poi>
 }
 
 /**

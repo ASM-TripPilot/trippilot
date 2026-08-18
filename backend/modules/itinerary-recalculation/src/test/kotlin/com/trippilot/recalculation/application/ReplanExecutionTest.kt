@@ -145,6 +145,68 @@ class ReplanExecutionTest : StringSpec({
         f.events.published.map { it.eventType } shouldContainExactly listOf("recalculation.ItineraryRecalculated")
     }
 
+    // BR-U4-31 — 이력의 '왜' 칸은 C10 이 조립한다(스냅숏은 C8). 비면 이력을 열어도 되짚을 근거가 없다.
+    "확정 시 사유·지시어가 이력 문구로 이어진다" {
+        val f = fixture()
+        val opened = f.start()
+
+        f.service.apply(acc, trip, opened.sessionId)
+
+        f.replans.appliedReasons.single() shouldBe "비가 와요 · 실내로"
+    }
+
+    "자동 진입이면 그 사실이 문구 앞에 남는다" {
+        val f = fixture()
+        val opened = f.service.start(
+            acc, trip,
+            StartReplan(
+                triggerId = UUID.randomUUID(), scope = ReplanScope.PARTIAL_SLOTS,
+                origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
+                reasons = listOf("비가 와요"), directives = listOf("실내로"),
+                freeText = null, excludedPoiIds = emptyList(),
+            ),
+        )
+
+        f.service.apply(acc, trip, opened.sessionId)
+
+        f.replans.appliedReasons.single() shouldBe "자동 감지 · 비가 와요 · 실내로"
+    }
+
+    // 사유를 하나도 안 고르고 확정할 수 있다 — 그때도 빈 칸으로 남기지 않는다.
+    "사유를 하나도 안 골라도 최소 문구는 남는다" {
+        val f = fixture()
+        val opened = f.service.start(
+            acc, trip,
+            StartReplan(
+                triggerId = null, scope = ReplanScope.PARTIAL_SLOTS,
+                origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
+                reasons = emptyList(), directives = emptyList(), freeText = "   ", excludedPoiIds = emptyList(),
+            ),
+        )
+
+        f.service.apply(acc, trip, opened.sessionId)
+
+        f.replans.appliedReasons.single() shouldBe "여행 중 재계획"
+    }
+
+    // reason 은 varchar(500) — 넘치면 확정 저장이 통째로 실패한다(자유입력은 사용자가 길게 쓴다).
+    "자유입력이 길어도 컬럼 상한을 넘기지 않는다" {
+        val f = fixture()
+        val opened = f.service.start(
+            acc, trip,
+            StartReplan(
+                triggerId = null, scope = ReplanScope.PARTIAL_SLOTS,
+                origin = ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
+                reasons = emptyList(), directives = emptyList(),
+                freeText = "가".repeat(900), excludedPoiIds = emptyList(),
+            ),
+        )
+
+        f.service.apply(acc, trip, opened.sessionId)
+
+        f.replans.appliedReasons.single().length shouldBe 500
+    }
+
     // 초안 왕복(jsonb)에서 값이 새면 확정 순간 그 값이 사라진다.
     "초안은 세션에 저장됐다 돌아와도 같은 값이다" {
         val f = fixture()

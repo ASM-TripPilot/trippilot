@@ -15,7 +15,25 @@ package com.trippilot.placedata.domain
 interface PlaceLookupPort {
     /** 이름·주소 어느 쪽으로 쳐도 찾는다. 없으면 빈 목록. 조회 실패는 예외로 올린다. */
     fun search(query: String): List<PlaceLocation>
+
+    /**
+     * 좌표 → 주소(역방향). 핀 지정 탭이 쓴다 — 사용자가 지도를 길게 눌러 좌표를 먼저 정한 상태다.
+     *
+     * **주소가 없을 수 있다**(바다·산·비주소 구역). 그때는 null 이고, 이는 조회 실패와 다르다 —
+     * 실패는 예외로 올린다. 둘을 같은 값으로 접으면 화면이 "여긴 주소가 없네요"를 그리는데
+     * 실제로는 벤더가 죽은 것이라, 사용자는 핀을 옮겨 가며 계속 헛수고한다.
+     */
+    fun reverseGeocode(lat: Double, lng: Double): PlaceAddress?
 }
+
+/**
+ * 역지오코딩 결과 — **주소만**이다. 좌표를 되돌려주지 않는 이유는 정본이 사용자의 핀이기 때문이다.
+ * 벤더가 돌려주는 대표 좌표로 갈아끼우면 사용자가 찍은 자리와 다른 곳이 등록된다.
+ */
+data class PlaceAddress(
+    /** 도로명 주소 우선, 없으면 지번. 둘 다 없으면 이 결과 자체가 null 이다. */
+    val address: String,
+)
 
 /** 검색 결과 한 건. 사용자가 후보 중 고르므로 좌표만이 아니라 이름·주소가 함께 필요하다. */
 data class PlaceLocation(
