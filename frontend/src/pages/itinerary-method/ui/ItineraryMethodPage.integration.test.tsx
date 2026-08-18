@@ -2,55 +2,38 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor,
   within,
 } from '@testing-library/react-native';
 
 import { ItineraryMethodPage } from './ItineraryMethodPage';
 
 /**
- * TRIP-303 · h04 시작 방법 배선을 **실제 페이지→화면**으로 태우는 심판(게이트 제거 스코프).
+ * TRIP-303 → **TRIP-305 재작성**(게이트① 동결분 개봉 — 새 사이클이라 정당, `[[배선 이음매]]`).
+ *
+ * 무엇이 바뀌었나: 생성 POST 소유가 **h04→h09 로 이동**했다(AC-7·⚑B). h04 는 이제 완전AI 를
+ * 고르면 **h09(생성 중)로 navigate 만** 한다 — 인라인 스피너·POST·draft 라우팅은 h09 가 소유한다.
+ * 그래서 옛 "완전AI→POST+draft" · "POST 실패/중복제출" describe 는 삭제되고, 그 표면은 h09 의
+ * `GeneratingPage.integration.test.tsx`(AC-6)로 이관됐다.
  *
  * 무엇을 보장하나:
  *  - 3방식 카드가 Figma 문구 그대로 뜨고, 추천 배지는 [AI와 같이 짜기] **하나**에만 있다.
- *  - 완전AI 를 누르면 `POST {generationMode:'FULLY_AI'}` 를 **1회** 쏘고 draft 로 간다.
+ *  - 🔴 완전AI 를 누르면 **h09 로 navigate 하고 h04 에서는 POST 가 한 건도 안 나간다**(POST 는 h09 소유).
  *  - copick·manual 은 "준비 중"만 낼 뿐 POST·라우팅이 0 이다(착지 화면 미착수, 01b D2·D3).
  *
- * **생성 선행조건(거점 커버리지·겹침) 게이트는 여기 없다** — 그 판단은 여행 생성 2/2(g02,
- * `TripNewStep2Page`)가 소유한다. h04 는 방식 선택 + 생성 요청만 한다. 그래서 이 심판은
- * coverage·savedStays 를 목킹하지 않는다(읽지 않으니까).
- *
- * 3동작 뼈대: 준비=POST·라우터 목 → 실행=렌더하거나 카드를 누른다 → 단언=보이는 것·나간 요청.
+ * 3동작 뼈대: 준비=POST·라우터 목 → 실행=렌더하거나 카드를 누른다 → 단언=보이는 것·나간 요청·이동.
  */
 
 // jest.mock 팩토리는 파일 최상단으로 호이스팅돼 바깥 변수를 못 본다 — 이름이 `mock` 으로 시작하는
 // 변수만 예외다(리포 확립 규칙). 이 이름을 바꾸지 마라.
-const mockMutate = jest.fn(
-  (
-    _variables: unknown,
-    options?: {
-      onSuccess?: () => void;
-      onError?: () => void;
-      onSettled?: () => void;
-    }
-  ) => {
-    // 목이 배선의 콜백을 실제 상태(mockIsError)에 맞춰 태운다 — 실패면 onError, 아니면 onSuccess,
-    // 락 해제 검증을 위해 onSettled 는 항상. 실 react-query 의 성공/실패 흐름과 같은 형태.
-    if (mockIsError) options?.onError?.();
-    else options?.onSuccess?.();
-    options?.onSettled?.();
-  }
-);
+// `mockMutate` 는 이제 **"h04 에서 POST 가 안 나간다"를 잰다** — h04 가 POST 를 되살리면 red.
+const mockMutate = jest.fn();
 const mockPush = jest.fn();
-// 배선이 읽는 뮤테이션 상태 — 케이스별로 beforeEach 이후 갈아 끼운다(mock 접두라 호이스팅 예외).
-let mockIsPending = false;
-let mockIsError = false;
 
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   usePostTripsTripIdItinerary: () => ({
     mutate: mockMutate,
-    isPending: mockIsPending,
-    isError: mockIsError,
+    isPending: false,
+    isError: false,
   }),
 }));
 jest.mock('expo-router', () => ({
@@ -63,8 +46,6 @@ const TRIP_ID = 't1';
 beforeEach(() => {
   mockMutate.mockClear();
   mockPush.mockClear();
-  mockIsPending = false;
-  mockIsError = false;
 });
 
 function renderPage() {
@@ -124,38 +105,25 @@ describe('🔴 추천 배지는 copick 에만', () => {
   });
 });
 
-describe('🔴 완전AI → POST + draft 라우팅', () => {
-  it('완전AI 를 누르면 POST 가 1회 나가고 draft 로 이동한다', async () => {
+describe('🔴 완전AI → h09(생성 중)로 navigate, h04 POST 0 (AC-7 · ⚑B)', () => {
+  it('완전AI 를 누르면 generating 라우트로 이동하고 POST 는 h04 에서 안 나간다', () => {
     renderPage();
 
     fireEvent.press(screen.getByTestId('itinerary-method-fullai'));
 
-    expect(mockMutate).toHaveBeenCalledTimes(1);
-    const vars = mockMutate.mock.calls[0][0] as {
-      tripId: string;
-      data?: unknown;
-    };
-    expect(vars.tripId).toBe(TRIP_ID);
-
-    // 라우팅 형태(문자열/객체)를 강요하지 않고 직렬화해 "어디로 갔나"만 잰다(DraftPage I6 선례).
-    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    // 이동이 한 번 일어났다 — 목적지 형태(문자열/객체)를 강요하지 않고 직렬화해 "어디로 갔나"만
+    // 잰다(DraftPage I6 · 02a ★4). h09 로 갔고 tripId 를 실었다.
+    expect(mockPush).toHaveBeenCalledTimes(1);
     const destination = mockPush.mock.calls[0][0] as unknown;
     const asText =
       typeof destination === 'string'
         ? destination
         : JSON.stringify(destination);
-    expect(asText).toContain('/itinerary/draft');
+    expect(asText).toContain('generating');
     expect(asText).toContain(TRIP_ID);
-  });
 
-  it('요청 바디는 generationMode 하나뿐이다 (BR-U3-03)', () => {
-    renderPage();
-
-    fireEvent.press(screen.getByTestId('itinerary-method-fullai'));
-
-    const vars = mockMutate.mock.calls[0][0] as { data?: unknown };
-    // toEqual = 정확 일치 — deadlineMs·recommendationStrength·concept 등 여분 키 0 을 잠근다.
-    expect(vars.data).toEqual({ generationMode: 'FULLY_AI' });
+    // ★ POST 는 h04 에서 한 건도 안 나간다 — 생성 발화는 h09 가 마운트 시 소유한다(AC-7).
+    expect(mockMutate).not.toHaveBeenCalled();
   });
 });
 
@@ -183,41 +151,5 @@ describe('🔴 copick·manual 은 준비 중만 낸다 (01b D2·D3)', () => {
     expect(screen.getByTestId('itinerary-method-soon')).toBeOnTheScreen();
     expect(mockMutate).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
-  });
-});
-
-describe('🔴 완전AI POST 실패·중복 제출 (INV-4 · 침묵 금지)', () => {
-  it('POST 가 실패하면(isError) 재시도 안내가 뜨고 라우팅은 없다', () => {
-    // 준비 — 뮤테이션이 실패 상태. "눌러도 아무 일 없는 화면"을 막는 표면이 있어야 한다.
-    mockIsError = true;
-    renderPage();
-
-    expect(
-      screen.getByTestId('itinerary-method-generate-error')
-    ).toHaveTextContent(/다시 시도해 주세요/);
-    // 실패했으니 draft 로 안 갔다.
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  it('실패 상태에서 완전AI 를 다시 누르면 POST 를 재시도한다(카드가 활성으로 남는다)', () => {
-    mockIsError = true;
-    renderPage();
-
-    fireEvent.press(screen.getByTestId('itinerary-method-fullai'));
-    // 재시도 — 카드가 비활성이 아니라 다시 mutate 를 부른다.
-    expect(mockMutate).toHaveBeenCalledTimes(1);
-  });
-
-  it('생성 중(isPending)에는 재탭해도 POST 를 두 번 쏘지 않는다', () => {
-    // 준비 — 이미 생성 진행 중. 연타 방어.
-    mockIsPending = true;
-    renderPage();
-
-    // 진행 안내가 떠 사용자가 무반응이라 느끼지 않는다.
-    expect(screen.getByTestId('itinerary-method-generating')).toBeOnTheScreen();
-
-    fireEvent.press(screen.getByTestId('itinerary-method-fullai'));
-    // 배선이 isPending 이면 조기 반환 — 두 번째 요청이 안 나간다.
-    expect(mockMutate).not.toHaveBeenCalled();
   });
 });

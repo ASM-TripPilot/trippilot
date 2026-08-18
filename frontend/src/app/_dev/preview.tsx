@@ -56,6 +56,7 @@ import {
   DraftScreen,
   type DraftScreenProps,
 } from '@/features/itinerary/ui/DraftScreen';
+import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { ItineraryEditScreen } from '@/features/itinerary/ui/ItineraryEditScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
@@ -1502,6 +1503,31 @@ const PREVIEW_STATES: PreviewState[] = [
     label: 'h04 · 시작 방법',
     login: null,
     render: () => <MethodPickerScreen onBack={noop} onPressFullAi={noop} />,
+  },
+  // h09 생성 중(TRIP-305) — props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로 나온다. 진행
+  // 표면은 비결정형(RN Animated)이고 3단계는 균일 진행 중(⚑C, 완료 날조 없음)이다. 실화면 딥링크로는
+  // 잠깐만 스치는 얼굴이라(성공 즉시 draft 로 replace) 여기가 이 화면을 오래 보는 유일한 자리다.
+  {
+    key: 'itinerary-generating',
+    label: 'h09 · 생성 중',
+    login: null,
+    render: () => (
+      <GeneratingScreen onCancel={noop} onBackground={noop} onRetry={noop} />
+    ),
+  },
+  // h09 생성 실패(AC-6·INV-4) — POST 오류 시 침묵하지 않고 실패 표면 + [다시 시도]를 낸다.
+  {
+    key: 'itinerary-generating-failed',
+    label: 'h09 · 생성 실패',
+    login: null,
+    render: () => (
+      <GeneratingScreen
+        onCancel={noop}
+        onBackground={noop}
+        onRetry={noop}
+        failed
+      />
+    ),
   },
   // h25 완성 일정(TRIP-299) — 피어가 제공한 프리뷰 칩. 실화면 딥링크로는 볼 수 없다(생성 POST 가
   // 만드는 tripId + 완성 일정 응답이 백엔드 없이는 안 생긴다). 화면이 props 만 받는 프레젠테이션이라
