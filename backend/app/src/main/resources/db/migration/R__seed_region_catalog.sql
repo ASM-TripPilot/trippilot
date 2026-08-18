@@ -2,8 +2,7 @@
 -- 원본: 행정안전부 법정동코드 전체자료 / 생성: backend/scripts/gen_region_seed.py
 -- 시도 16 · 시군구·행정구 268 · 선택가능 237
 --
--- 멱등: PK 충돌 시 갱신. poi_count 는 **건드리지 않는다** — TRIP-359 가 채우는 값이라
--- 시드가 매 기동 0으로 되돌리면 커버리지 표시가 사라진다.
+-- 멱등: PK 충돌 시 갱신. 커버리지(POI 수)는 여기 없다 — 저장하지 않고 조회 때 센다(V2.25).
 
 INSERT INTO region (region_code, name, sido_code, sido_name, level, selectable) VALUES
   ('11', '서울특별시', '11', '서울특별시', 'SIDO', true),

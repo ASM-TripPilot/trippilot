@@ -68,10 +68,13 @@ data class PoiIngestResponse(
     val received: Int,
     val registered: Int,
     val updated: Int,
+    /** 받아들였지만 지역 코드를 못 정한 수. 0이 아니면 주소 형태가 바뀐 것이다(TRIP-359). */
+    val regionUnresolved: Int,
     val dropped: Map<String, Int>,
 ) {
     companion object {
-        fun from(r: PoiIngestResult) = PoiIngestResponse(r.received, r.registered, r.updated, r.dropped)
+        fun from(r: PoiIngestResult) =
+            PoiIngestResponse(r.received, r.registered, r.updated, r.regionUnresolved, r.dropped)
     }
 }
 

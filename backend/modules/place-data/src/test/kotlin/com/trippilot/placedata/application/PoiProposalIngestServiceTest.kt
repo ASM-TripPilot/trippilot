@@ -54,15 +54,30 @@ class PoiProposalIngestServiceTest : StringSpec({
         repo.stored.single().regionCode shouldBe "26170"
     }
 
-    /** 못 정하면 **붙이지 않는다** — 가까운 지역에 밀어 넣으면 그 지역 커버리지가 부풀어 거짓말을 한다. */
-    "주소를 못 읽어도 POI 자체는 받는다" {
+    /**
+     * 못 정하면 **붙이지 않는다** — 가까운 지역에 밀어 넣으면 그 지역 커버리지가 부풀어 거짓말을 한다.
+     * 대신 **응답으로 알린다**: 탈락이 아니라 `dropped` 에 안 잡히는데, 조용히 두면 수집 쪽은
+     * 자기 문서가 커버리지에서 빠진 줄 모른다(INV-4).
+     */
+    "주소를 못 읽으면 POI 는 받되 미해결로 보고한다" {
         val repo = InMemoryPoiRepository()
 
         val result = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
             .ingest(PoiSource.TOURAPI, listOf(proposal(address = null)))
 
         result.registered shouldBe 1
+        result.regionUnresolved shouldBe 1
+        result.dropped shouldContainExactly emptyMap<String, Int>()   // 탈락이 아니다
         repo.stored.single().regionCode.shouldBeNull()
+    }
+
+    "전부 해결되면 미해결은 0 이다" {
+        val repo = InMemoryPoiRepository()
+
+        val result = PoiProposalIngestService(repo, FakeRegionCatalog, clock)
+            .ingest(PoiSource.TOURAPI, listOf(proposal(address = "부산광역시 동구 초량동 1")))
+
+        result.regionUnresolved shouldBe 0
     }
 
     /**
@@ -206,7 +221,7 @@ class PoiProposalIngestServiceTest : StringSpec({
 
         val result = PoiProposalIngestService(repo, FakeRegionCatalog, clock).ingest(PoiSource.TOURAPI, emptyList())
 
-        result shouldBe PoiIngestResult(0, 0, 0, emptyMap())
+        result shouldBe PoiIngestResult(0, 0, 0, 0, emptyMap())
         repo.stored shouldHaveSize 0
     }
 

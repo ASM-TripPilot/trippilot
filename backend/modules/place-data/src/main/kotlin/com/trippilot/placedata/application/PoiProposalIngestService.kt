@@ -45,6 +45,12 @@ data class PoiIngestResult(
     val received: Int,
     val registered: Int,
     val updated: Int,
+    /**
+     * 받아들였지만 **지역 코드를 정하지 못한** 건수. 탈락이 아니라 `dropped` 에 안 잡히는데,
+     * 그대로 두면 커버리지만 조용히 줄어 화면이 "준비 중"을 틀리게 그린다(INV-4).
+     * 수집 쪽이 자기 문서를 고칠 수 있게 **응답으로** 돌려준다 — 로그만 남기면 상대는 못 본다.
+     */
+    val regionUnresolved: Int,
     val dropped: Map<String, Int>,
 )
 
@@ -124,11 +130,18 @@ class PoiProposalIngestService(
         }
 
         repo.saveAll(toSave)
+
+        // 지금 수집원(TourAPI)은 전 건이 해결된다 — 0이 아니면 **입력 형태가 바뀐 것**이다.
+        val unresolved = toSave.count { it.regionCode == null }
+        if (unresolved > 0) {
+            log.warn("지역 코드를 정하지 못한 POI {}건 — 주소 형태가 바뀌었는지 확인 필요(커버리지 집계에서 빠진다)", unresolved)
+        }
+
         log.info(
-            "POI 제안 수신 — 접수={} 신규={} 갱신={} 탈락={}",
-            proposals.size, registered, updated, dropped,
+            "POI 제안 수신 — 접수={} 신규={} 갱신={} 지역코드미상={} 탈락={}",
+            proposals.size, registered, updated, unresolved, dropped,
         )
-        return PoiIngestResult(proposals.size, registered, updated, dropped)
+        return PoiIngestResult(proposals.size, registered, updated, unresolved, dropped)
     }
 
     /**
