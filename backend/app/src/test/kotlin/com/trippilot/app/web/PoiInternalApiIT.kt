@@ -77,4 +77,78 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
         names.contains("성산일출봉") shouldBe true          // 중심점
         body[0].has("distance_m") shouldBe true
     }
+
+    /**
+     * 수집 등록 제안 수신 — **AI 산출 `collected_pois.json` 의 모양 그대로**를 태운다.
+     *
+     * 아래 본문은 `ai/.../sourcing/pipeline.py` 의 `to_output_document`(schema_version 1)에서 그대로 옮긴 것이다.
+     * 상대가 스키마를 바꾸면 이 테스트가 먼저 깨져야 한다 — 실 파일로 넣어 보고 나서야 아는 것보다 낫다.
+     */
+    @Test
+    fun `등록 제안을 받아 게이트를 태우고 저장한다 · 재수신은 행을 늘리지 않는다`() {
+        val token = newToken()
+        val doc = """
+            {"schema_version":1,"source":"TOURAPI","collected_at":"2026-08-18T04:00:00+09:00",
+             "area_code":"39","content_types":["12"],"stats":{"passed":1},
+             "proposals":[
+               {"provisional_id":"11111111-1111-4111-8111-111111111111","source":"TOURAPI",
+                "poi":{"poi_id":"11111111-1111-4111-8111-111111111111","name":"수신테스트폭포",
+                       "category":"NATURE","coord":{"lat":33.2447,"lng":126.5590},
+                       "open_hours":[],"avg_cost":null,"rating":null},
+                "tags":["폭포","산책"],"region":"서귀포시","opening_hours_raw":"09:00~22:00",
+                "provenance":{"content_id":"E2E-126508","content_type_id":"12",
+                              "address":"제주특별자치도 서귀포시","image_url":null,
+                              "modified_time":"20260818000000"}}]}
+        """.trimIndent()
+
+        val (rc, first) = call(HttpMethod.POST, "/internal/pois/proposals", token, doc)
+        rc shouldBe 200
+        first["registered"].asInt() shouldBe 1
+        first["updated"].asInt() shouldBe 0
+
+        // 실제로 후보풀에 들어갔는지 — 조회 경로로 확인한다(응답 숫자만 믿지 않는다).
+        val (_, nearby) = call(
+            HttpMethod.GET,
+            "/internal/pois?centerLat=33.2447&centerLng=126.5590&radiusKm=1",
+            token,
+        )
+        nearby.any { it["name_ko"].asText() == "수신테스트폭포" } shouldBe true
+
+        // 같은 문서를 다시 넣어도 늘지 않는다 — 수집은 매일 돈다.
+        val (_, second) = call(HttpMethod.POST, "/internal/pois/proposals", token, doc)
+        second["registered"].asInt() shouldBe 0
+        second["updated"].asInt() shouldBe 1
+    }
+
+    @Test
+    fun `우리 어휘에 없는 카테고리는 사유와 함께 탈락한다`() {
+        val token = newToken()
+        // STAY 는 AI 내부 전용이라 우리 8종에 없다 — 가까운 값으로 밀어 넣지 않는다.
+        val doc = """
+            {"schema_version":1,"source":"TOURAPI","proposals":[
+              {"poi":{"name":"어떤숙소","category":"STAY","coord":{"lat":33.5,"lng":126.5}},
+               "provenance":{"content_id":"E2E-STAY-1"}}]}
+        """.trimIndent()
+
+        val (rc, body) = call(HttpMethod.POST, "/internal/pois/proposals", token, doc)
+
+        rc shouldBe 200
+        body["registered"].asInt() shouldBe 0
+        body["dropped"]["unknown_category"].asInt() shouldBe 1
+    }
+
+    @Test
+    fun `모르는 출처는 400 — 임의로 가정하지 않는다`() {
+        val token = newToken()
+        val doc = """{"schema_version":1,"source":"NAVER_MAP","proposals":[]}"""
+
+        call(HttpMethod.POST, "/internal/pois/proposals", token, doc).first shouldBe 400
+    }
+
+    @Test
+    fun `제안 수신도 인증이 필요하다`() {
+        call(HttpMethod.POST, "/internal/pois/proposals", null, """{"source":"TOURAPI","proposals":[]}""")
+            .first shouldBe 401
+    }
+
 }
