@@ -15,6 +15,8 @@ import org.springframework.jdbc.core.JdbcTemplate
  * - **시드가 실제로 들어갔는가** — 생성 스크립트가 만든 SQL 이 문법·제약을 통과하는지는 실 DB 만 안다
  * - **재실행 멱등** — `R__` 은 체크섬이 바뀌면 매번 다시 돈다. 중복이 생기면 자동완성이 같은 지역을 두 번 보인다
  * - **`selectable` 규칙** — 도(道)는 범위가 넓어 목적지가 아니고, 광역시·특별자치시는 목적지다
+ *
+ * 커버리지(`poi_count`)는 여기서 보지 않는다 — 저장하지 않고 조회 때 센다(V2.25 · TRIP-359).
  */
 @SpringBootTest
 class RegionCatalogIT : AbstractPostgresIntegrationTest() {
@@ -101,24 +103,5 @@ class RegionCatalogIT : AbstractPostgresIntegrationTest() {
         )
 
         count("true") shouldBe before
-    }
-
-    /**
-     * `poi_count` 는 TRIP-359 가 채운다. 시드가 매 기동 0으로 되돌리면 커버리지 표시가 사라지므로
-     * `ON CONFLICT` 갱신 목록에 이 칸이 없어야 한다.
-     */
-    @Test
-    fun `시드 재적용이 poi_count 를 되돌리지 않는다`() {
-        jdbc.update("UPDATE region SET poi_count = 42 WHERE region_code = '11'")
-
-        jdbc.execute(
-            """
-            INSERT INTO region (region_code, name, sido_code, sido_name, level, selectable)
-            VALUES ('11', '서울특별시', '11', '서울특별시', 'SIDO', true)
-            ON CONFLICT (region_code) DO UPDATE SET name = EXCLUDED.name, updated_at = now()
-            """.trimIndent(),
-        )
-
-        jdbc.queryForObject("SELECT poi_count FROM region WHERE region_code = '11'", Int::class.java) shouldBe 42
     }
 }

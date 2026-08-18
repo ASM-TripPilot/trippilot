@@ -39,8 +39,13 @@ def short_name(full: str) -> str:
 
 
 def main(path: str) -> int:
+    src = Path(path)
+    if not src.is_file():
+        print(f"원본을 찾지 못했습니다: {src}", file=sys.stderr)
+        return 2
+
     alive = []
-    with open(path, encoding="cp949") as f:
+    with open(src, encoding="cp949") as f:
         next(f)
         for line in f:
             cols = line.rstrip("\n").split("\t")
@@ -76,8 +81,7 @@ def main(path: str) -> int:
         f"-- 원본: {SRC_NOTE} / 생성: backend/scripts/gen_region_seed.py",
         f"-- 시도 {len(sido)} · 시군구·행정구 {len(sigungu)} · 선택가능 {sum(1 for r in rows if r[5])}",
         f"--",
-        f"-- 멱등: PK 충돌 시 갱신. poi_count 는 **건드리지 않는다** — TRIP-359 가 채우는 값이라",
-        f"-- 시드가 매 기동 0으로 되돌리면 커버리지 표시가 사라진다.",
+        f"-- 멱등: PK 충돌 시 갱신. 커버리지(POI 수)는 여기 없다 — 저장하지 않고 조회 때 센다(V2.25).",
         "",
         "INSERT INTO region (region_code, name, sido_code, sido_name, level, selectable) VALUES",
     ]
@@ -94,7 +98,9 @@ def main(path: str) -> int:
     out.append("ON CONFLICT DO NOTHING;")
     out.append("")
 
-    dest = Path("backend/app/src/main/resources/db/migration/R__seed_region_catalog.sql")
+    # **CWD 에 의존하지 않는다.** 리포 루트에서만 도는 상대경로였다가, backend/ 에서 돌리면
+    # FileNotFoundError 트레이스백만 뱉고 끝났다 — 어디서 돌려도 같은 파일을 쓴다.
+    dest = Path(__file__).resolve().parents[1] / "app/src/main/resources/db/migration/R__seed_region_catalog.sql"
     dest.write_text("\n".join(out), encoding="utf-8")
     print(f"생성: {dest}  (시도 {len(sido)} · 시군구/행정구 {len(sigungu)} · 별칭 {len(aliases)})")
     return 0

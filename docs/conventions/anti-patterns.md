@@ -18,6 +18,7 @@
 - **다중 경로로 cascade되는 FK에 `ON DELETE RESTRICT`/`NO ACTION`을 쓰지 말 것 → `DEFERRABLE INITIALLY DEFERRED`.** `account → saved_stay` 와 `account → trip → base_assignment → saved_stay` 처럼 다이아몬드로 cascade되면, 즉시 검사되는 RESTRICT/NO ACTION이 cascade 도중 참조를 발견해 **계정 하드삭제(퍼지)를 깨뜨린다.** DEFERRABLE는 커밋 시점에 검사해 참조가 이미 사라져 통과하되, 직접 삭제 가드는 유지된다. (TRIP-174, PR #29 · 로컬 PostgreSQL 재현·검증)
 - **jsonb 컬럼을 수동 `ObjectMapper`로 직렬화하지 말 것 → 도메인 타입에 `@JdbcTypeCode(SqlTypes.JSON)`.** 수동 직렬화는 이중 인코딩(JSON 안에 escape된 JSON 문자열)을 만든다. `Map<String,String>`·`List<...>` 같은 도메인 타입에 직접 매핑하면 Hibernate가 처리. (TRIP-155)
 - **불변식을 앱에서만 지키지 말고 DB CHECK로도 강제할 것.** 예: `coord_confirmed=true`인데 좌표 null, lat/lng 한쪽만 있는 상태가 DB에서 허용됐음 → `CHECK ((lat IS NULL)=(lng IS NULL) AND (NOT coord_confirmed OR lat IS NOT NULL))`. (TRIP-174 검수)
+- **JPQL `concat`/`like` 안에 null 이 될 수 있는 파라미터를 넣지 말 것 → 빈 문자열 같은 값으로 정규화한다.** `(:q is null or r.name like concat('%', :q, '%'))` 는 **검색어 없는 호출만** 500 으로 끝난다 — Hibernate 가 null 파라미터의 타입을 `concat` 안에서 추론하지 못해 bytea 로 바인딩하고 `operator does not exist: character varying ~~ bytea` 가 난다. 평범한 `:x is null or col = :x` 는 멀쩡히 돌아서 같은 패턴이라고 착각하기 쉽다. 필터 있는 질의는 전부 통과하므로 실 DB IT 가 없으면 "검색은 되는데 목록만 안 나오는" 형태로 화면 붙일 때 발견된다. (TRIP-358, PR #229)
 - **마이그레이션은 반드시 실제 PostgreSQL에 V1→최신 전체 체인으로 적용해 검증할 것.** 파일 단독 문법 검사로는 FK cascade·권한·제약 상호작용 버그를 못 잡는다. Testcontainers 통합테스트(`SchemaMigrationIT`)나 로컬 docker DB로 실 적용. (TRIP-174)
 
 ## 설계 · 문서
@@ -59,6 +60,7 @@
 ## Kotlin · 언어
 
 - **Kotlin 주석(특히 KDoc `/** */`) 안에 `/api/v1/**` 같은 `/*` 시퀀스를 넣지 말 것.** Kotlin은 블록주석이 **중첩**돼서, 경로 글로브의 `/`+`*`가 중첩주석을 열고 KDoc의 `*/`가 그 중첩분만 닫아 **파일 전체가 미완결 주석**이 된다("Unclosed comment" + 뒤이어 import·참조 전부 unresolved 연쇄). 주석에선 글로브를 "(base 하위)"처럼 풀어쓰거나 백틱/코드블록으로. (PR #44 OpenApiContractIT)
+- **기본값이 있는 파라미터를 시그니처 가운데에 끼우지 말 것 → 맨 뒤에 붙인다.** `NormalizedPlace`·`Poi.reconstitute` 에 새 필드를 관련 필드 옆(가독성)에 넣었더니 **위치 인자로 조립하던 어댑터·테스트가 전부** 깨졌다. 타입이 달라 컴파일이 잡아 줬을 뿐이고, 인접 필드가 같은 타입이었다면(여기선 `String?` 이 연달아 있다) 조용히 값이 한 칸씩 밀린다. 가독성을 위한 배치는 KDoc 으로, 순서는 호환성으로 정한다. (TRIP-359, PR #230)
 - **Spring MVC의 `RequestMappingHandlerMapping` 은 `..mvc.method.annotation` 패키지다**(`..mvc.method` 아님). 또 컨텍스트에 매핑 빈이 여럿이라 주입 시 `@Qualifier("requestMappingHandlerMapping")`로 MVC 것을 지정(actuator 매핑과 구분). (PR #44)
 
 ## 테스트
@@ -68,6 +70,8 @@
 - **버그 수정 후 수정을 되돌려 테스트가 실제로 실패하는지 확인할 것(역검증).** 회귀 테스트가 버그를 잡지 못하는데 통과만 하는 경우를 걸러낸다. (TRIP-279, PR #120)
 - **새 상태값·enum 을 추가하면 기본값이 아닌 값으로 DB 왕복을 한 번은 검증할 것.** 기본값(`COMPLETE`)만 단언하면 CHECK 값 집합·컬럼 길이·엔티티 매핑 중 무엇도 실증되지 않아, 실제로 다른 값을 INSERT 하는 순간 제약 위반이 난다. (TRIP-267, PR #118)
 
+- **공유 Testcontainers 에서 시드 데이터를 변형했으면 반드시 되돌릴 것(try/finally · `@AfterEach`).** 확정 일정 동결을 검증하려고 시드 POI 를 리포지토리 직접 호출로 개명하고 두었더니, 그 이름으로 POI 를 찾는 무관한 IT 3건이 깨졌다. HTTP 밖 쓰기·HTTP 로 쓴 데이터는 **트랜잭션 롤백이 닿지 않는다.** 무서운 점은 발현 시점이다 — **테스트를 추가하기만 해도** 실행 순서가 바뀌어 몇 달 잠복하던 오염이 갑자기 무관한 PR 에서 터진다(실측: 새 IT 2개 추가에 기존 IT 3건 실패). (TRIP-359, PR #230)
+- **공유 컨테이너를 쓰는 IT 의 단언을 절대 행수로 걸지 말 것 → "위반이 0건" 같은 불변식으로.** `코드가 붙은 행 == 방금 등록한 행수` 는 다른 IT 가 남긴 수집분 한 줄에 깨진다. `코드가 안 붙은 수집분이 0건` 은 같은 것을 검증하면서 잔여 데이터에 흔들리지 않는다. (TRIP-359, PR #230)
 - **목(MSW 등) 핸들러를 서버의 성공 응답만으로 채우지 말 것 → 그 엔드포인트가 실제로 내는 에러 응답부터 맞춘다.** 목이 성공만 흉내내면 실패 분기가 **도달 불가인 채로 전 테스트 초록**이 되고, 도달 불가라는 사실 자체를 목이 가린다. 소셜 로그인 `new-user` 목이 200+`isNewUser:true`를 돌려줬으나 실서버는 신규 가입 첫 요청에 400(`fields[].field=ageConfirmation`)이라, 프론트의 `needs-age` 전이가 실서버에서 **영구 도달 불가**(=신규 가입 0건)인데 3개 테스트 파일이 계속 초록이었다. 구현을 고쳐도 목을 안 고치면 테스트가 옛 모양을 계속 지킨다. (TRIP-248 · 2026-08-02 코드 실측)
 - **같은 패키지의 서로 다른 테스트 파일에 동일 이름의 private 최상위 테스트 더블(`FakeBases` 등)을 두지 말 것 → 파일마다 고유 이름(`StubBases`).** 한 모듈의 두 테스트가 같은 패키지에서 각각 `private class FakeBases`를 선언하자 "Redeclaration" 컴파일 에러 발생. 새 포트 메서드 추가로 여러 테스트의 Fake를 갱신할 때 특히 부딪힌다. (TRIP-178 검수 수정)
 - **크로스모듈 포트/인터페이스 시그니처를 바꾸면 증분 `:app:test`가 아니라 `clean build`로 검증할 것.** 다른 모듈(예: :modules:auth의 `SocialAuthPort`)에 메서드를 추가하면 그걸 익명 구현한 :app 테스트의 Fake들이 깨지는데, Kotlin **증분 컴파일이 전이적으로 영향받는 테스트 파일을 재컴파일하지 않아** 로컬 `:app:test`는 통과하고 CI의 `./gradlew build`(clean)만 `:app:compileTestKotlin FAILED`로 터진다. (PR #38 — SocialAuthPort 4개 Fake 중 3개 누락)

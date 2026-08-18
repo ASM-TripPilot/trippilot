@@ -23,6 +23,18 @@ data class Region(
 enum class RegionLevel { SIDO, SIGUNGU }
 
 /**
+ * 지역 하나의 커버리지 — **그 코드로 시작하는 모든 POI**의 수.
+ *
+ * 시도 코드(2자리)는 그 안 시군구 코드(5자리)의 접두사다. 시도를 목적지로 고르면 그 안의 시군구 POI 가
+ * 전부 후보풀이 되므로 접두사 합이 곧 롤업이다 — 제주(50)를 고른 사람에게 제주시·서귀포시가 다 보이는 게 맞다.
+ *
+ * **저장하지 않고 조회 때마다 센다.** 저장하면 POI 를 쓰는 경로를 하나만 빠뜨려도 아무도 실패하지 않고,
+ * 화면은 커버리지가 있는 지역을 계속 "준비 중"으로 그린다(INV-4 침묵 실패 금지).
+ */
+fun coverageOf(regionCode: String, activeCountsByCode: Map<String, Int>): Int =
+    activeCountsByCode.entries.sumOf { (code, n) -> if (code.startsWith(regionCode)) n else 0 }
+
+/**
  * 카탈로그 조회 포트.
  *
  * **별칭도 같이 본다.** 광주광역시·전라남도가 폐지·통합돼 표준명만 두면 사용자가 익숙한 이름으로

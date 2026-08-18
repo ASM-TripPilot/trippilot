@@ -6,6 +6,8 @@ import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.placedata.domain.PoiCollectionGate
 import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.placedata.domain.PoiSource
+import com.trippilot.placedata.domain.RegionCatalogPort
+import com.trippilot.placedata.domain.RegionResolver
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -28,6 +30,11 @@ data class PoiProposal(
     val tags: List<String> = emptyList(),
     /** 출처가 준 이미지 URL. 없으면 null — 기본 이미지를 지어내지 않는다. */
     val imageUrl: String? = null,
+    /**
+     * 지역 코드를 정하는 유일한 근거. 없으면 코드를 못 붙인다(그래도 POI 자체는 받는다).
+     * 기본값이 있는 인자는 **맨 뒤에** 둔다 — 가운데 끼우면 위치 인자로 조립하는 호출이 조용히 어긋난다.
+     */
+    val address: String? = null,
 )
 
 /**
@@ -38,6 +45,12 @@ data class PoiIngestResult(
     val received: Int,
     val registered: Int,
     val updated: Int,
+    /**
+     * 받아들였지만 **지역 코드를 정하지 못한** 건수. 탈락이 아니라 `dropped` 에 안 잡히는데,
+     * 그대로 두면 커버리지만 조용히 줄어 화면이 "준비 중"을 틀리게 그린다(INV-4).
+     * 수집 쪽이 자기 문서를 고칠 수 있게 **응답으로** 돌려준다 — 로그만 남기면 상대는 못 본다.
+     */
+    val regionUnresolved: Int,
     val dropped: Map<String, Int>,
 )
 
@@ -54,12 +67,15 @@ data class PoiIngestResult(
 @Service
 class PoiProposalIngestService(
     private val repo: PoiRepository,
+    private val catalog: RegionCatalogPort,
     private val clock: Clock,
 ) {
 
     @Transactional
     fun ingest(source: PoiSource, proposals: List<PoiProposal>): PoiIngestResult {
         val now = clock.instant()
+        // 문서 한 건당 한 번만 읽는다 — 제안마다 조회하면 1,100여 번 같은 300행을 다시 읽는다.
+        val regions = catalog.find(null, null)
         val dropped = mutableMapOf<String, Int>()
         fun drop(reason: String) = dropped.merge(reason, 1, Int::plus)
 
@@ -85,6 +101,7 @@ class PoiProposalIngestService(
                 lng = proposal.lng,
                 category = proposal.category,
                 region = proposal.region,
+                regionCode = RegionResolver.resolve(proposal.address, regions),
                 openingHours = proposal.openingHours,
                 source = source,
                 sourceRef = ref,
@@ -104,7 +121,8 @@ class PoiProposalIngestService(
                 toSave += Poi.refreshed(
                     existing = existing,
                     nameKo = place.nameKo, lat = place.lat!!, lng = place.lng!!, category = place.category!!,
-                    region = place.region, openingHours = place.openingHours, now = now,
+                    region = place.region, regionCode = place.regionCode,
+                    openingHours = place.openingHours, now = now,
                     tags = place.tags, imageUrl = place.imageUrl,
                 )
                 updated++
@@ -112,11 +130,18 @@ class PoiProposalIngestService(
         }
 
         repo.saveAll(toSave)
+
+        // 지금 수집원(TourAPI)은 전 건이 해결된다 — 0이 아니면 **입력 형태가 바뀐 것**이다.
+        val unresolved = toSave.count { it.regionCode == null }
+        if (unresolved > 0) {
+            log.warn("지역 코드를 정하지 못한 POI {}건 — 주소 형태가 바뀌었는지 확인 필요(커버리지 집계에서 빠진다)", unresolved)
+        }
+
         log.info(
-            "POI 제안 수신 — 접수={} 신규={} 갱신={} 탈락={}",
-            proposals.size, registered, updated, dropped,
+            "POI 제안 수신 — 접수={} 신규={} 갱신={} 지역코드미상={} 탈락={}",
+            proposals.size, registered, updated, unresolved, dropped,
         )
-        return PoiIngestResult(proposals.size, registered, updated, dropped)
+        return PoiIngestResult(proposals.size, registered, updated, unresolved, dropped)
     }
 
     /**

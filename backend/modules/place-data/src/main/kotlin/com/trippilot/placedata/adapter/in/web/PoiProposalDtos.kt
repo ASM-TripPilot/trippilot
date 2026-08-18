@@ -56,6 +56,11 @@ data class ProposalCoord(val lat: Double? = null, val lng: Double? = null)
 data class ProposalProvenance(
     @param:JsonProperty("content_id") val contentId: String? = null,
     @param:JsonProperty("image_url") val imageUrl: String? = null,
+    /**
+     * 지번·도로명 주소. **지역 코드의 유일한 근거다**(TRIP-359) — 상대가 주는 `region` 은 시군구
+     * 이름뿐이라 `동구` 가 6개 시도에 걸쳐 겹친다(수집본 실측 118건). 첫 토큰이 시도명이라 그 모호함이 사라진다.
+     */
+    val address: String? = null,
 )
 
 /** 수신 결과 — 탈락은 **사유별**로 나간다(총계만 주면 무엇을 고쳐야 할지 알 수 없다). */
@@ -63,10 +68,13 @@ data class PoiIngestResponse(
     val received: Int,
     val registered: Int,
     val updated: Int,
+    /** 받아들였지만 지역 코드를 못 정한 수. 0이 아니면 주소 형태가 바뀐 것이다(TRIP-359). */
+    val regionUnresolved: Int,
     val dropped: Map<String, Int>,
 ) {
     companion object {
-        fun from(r: PoiIngestResult) = PoiIngestResponse(r.received, r.registered, r.updated, r.dropped)
+        fun from(r: PoiIngestResult) =
+            PoiIngestResponse(r.received, r.registered, r.updated, r.regionUnresolved, r.dropped)
     }
 }
 
@@ -78,6 +86,8 @@ fun ProposalItem.toCommand() = PoiProposal(
     category = PoiCategory.fromBoundaryCode(poi?.category),
     // 상대는 지역을 별도 칸으로 준다(addr1 에서 추출, 실패 시 null). 좌표에서 역산하지 않는다.
     region = region,
+    // 코드는 여기서 정하지 않는다 — 카탈로그가 필요해 응용 계층 소관이다.
+    address = provenance?.address,
     // 영업시간은 **원문**을 저장한다 — 파싱본만 받으면 원문이 소실된다(상대 주석의 명시 사항).
     openingHours = openingHoursRaw,
     sourceRef = provenance?.contentId,

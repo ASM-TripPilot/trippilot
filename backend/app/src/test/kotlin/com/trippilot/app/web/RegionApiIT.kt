@@ -111,17 +111,36 @@ class RegionApiIT : AbstractPostgresIntegrationTest() {
         body.rowOf("경기도")["selectable"].asBoolean() shouldBe false
     }
 
-    /** 커버리지 0인 지역을 고르면 후보풀이 비어 일정이 조용히 빈다 — 화면이 "준비 중"을 그릴 근거다. */
+    /**
+     * 커버리지 0인 지역을 고르면 후보풀이 비어 일정이 조용히 빈다 — 화면이 "준비 중"을 그릴 근거다.
+     *
+     * **저장된 값이 아니라 지금 센 값이다**(TRIP-359). 저장하면 POI 를 쓰는 경로를 하나만 빠뜨려도
+     * 아무도 실패하지 않고 화면만 계속 틀린 말을 한다.
+     */
     @Test
-    fun `커버리지가 응답에 실린다`() {
-        jdbc.update("UPDATE region SET poi_count = 7 WHERE region_code = '51720'")
+    fun `커버리지가 POI 실측으로 실린다`() {
+        val before = coverageOf("홍천군")
+
+        jdbc.update(
+            """
+            INSERT INTO poi (poi_id, name_ko, lat, lng, category, region, region_code,
+                             data_status, source, created_at, updated_at)
+            VALUES (gen_random_uuid(), '홍천 테스트', 37.6971, 127.8888, '자연', '홍천군', '51720',
+                    'ACTIVE', 'MANUAL', now(), now())
+            """.trimIndent(),
+        )
         try {
-            val (_, body) = call("/api/v1/regions?q=홍천", newToken())
-            body.rowOf("홍천군")["poiCount"].asInt() shouldBe 7
+            coverageOf("홍천군") shouldBe before + 1
+
+            // 시도를 고르면 그 안 시군구 POI 가 전부 후보풀이 된다 — 커버리지도 그렇게 접혀야 한다.
+            coverageOf("강원특별자치도") shouldBeGreaterThan 0
         } finally {
-            jdbc.update("UPDATE region SET poi_count = 0 WHERE region_code = '51720'")
+            jdbc.update("DELETE FROM poi WHERE name_ko = '홍천 테스트'")
         }
     }
+
+    private fun coverageOf(name: String): Int =
+        call("/api/v1/regions?q=$name", newToken()).second.rowOf(name)["poiCount"].asInt()
 
     /** 화면이 시도로 묶어 보여준다 — 같은 시도가 흩어져 오면 묶음이 여러 번 열린다. */
     @Test
