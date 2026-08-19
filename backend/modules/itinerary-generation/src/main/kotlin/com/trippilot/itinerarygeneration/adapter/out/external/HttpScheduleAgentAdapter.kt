@@ -37,6 +37,7 @@ import java.util.UUID
 @ConditionalOnProperty(name = ["trippilot.ai.schedule.mode"], havingValue = "http")
 class HttpScheduleAgentAdapter(
     private val scheduleAgentRestClient: RestClient,
+    private val localCandidates: LocalSlotCandidateSource,
     private val clock: Clock,
 ) : ScheduleAgentPort {
 
@@ -145,15 +146,20 @@ class HttpScheduleAgentAdapter(
     }
 
     /**
-     * 미개통 — AI 에 아직 슬롯 후보 경로가 없다(generate·validate·repair 3종만 열려 있음).
-     * **빈 목록을 돌려주지 않는다**: "주변에 후보가 없다"는 정상 결과와 구분되지 않아 사용자가 반경을
-     * 넓혀도 계속 0건인 이유를 알 수 없게 된다(INV-4 침묵 금지).
+     * AI 에 슬롯 후보 경로가 없다(generate·validate·repair 3종뿐). **우리 후보풀로 답한다.**
+     *
+     * 예전에는 503 을 던졌다 — "빈 목록은 후보 0건과 구분되지 않는다" 는 이유였고 그 판단은 옳았다.
+     * 다만 그때 선택지는 "빈 목록 vs 503" 둘뿐이었다. **실제 후보를 주되 순위가 덜 똑똑한** 세 번째 길이
+     * 있었고, 그 코드는 이미 [LocalSlotCandidateSource] 에 있었다(fake 경로가 쓰던 것).
+     *
+     * generate 로 우회할 수는 없다 — 나머지 슬롯을 고정하고 태워 봤으나 대체 후보가 나오지 않았고,
+     * AI 응답 슬롯에는 `rationale` 필드 자체가 없다(2026-08-20 실 AI 실측).
+     *
+     * 강등 사실을 결과에 실어 보낸다(`degraded=true`) — 화면이 "AI 추천 준비 중, 거리순" 을 말할 수
+     * 있어야 사용자가 오해하지 않고, 이 폴백이 조용히 영구화되지 않는다(INV-4 · TRIP-408 이 본선).
      */
     override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput =
-        throw ScheduleAgentCallFailed(
-            "SLOT_CANDIDATES_NOT_WIRED", retryable = false,
-            message = "AI 슬롯 후보 경계 미개통 — http 모드에서 후보 제안 불가(DEC-U3-5).",
-        )
+        localCandidates.propose(input, degraded = true)
 
     /** 에러 응답 → 도메인 실패. 바디 `{error_code, message, retryable}`(계약) 파싱 실패해도 상태코드로 판정. */
     private fun callFailed(status: Int, body: ByteArray): ScheduleAgentCallFailed {
