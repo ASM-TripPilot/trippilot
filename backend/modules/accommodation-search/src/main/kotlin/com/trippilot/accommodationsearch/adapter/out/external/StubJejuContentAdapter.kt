@@ -6,8 +6,13 @@ import com.trippilot.accommodationsearch.domain.Stay
 import org.springframework.stereotype.Component
 
 /**
- * 1차 스텁 콘텐츠 어댑터(DEC-3). 제주 고정 숙소 5곳.
- * 실 벤더(OTA/TourAPI) 어댑터로 교체 예정 — 그때 Resilience4j 서킷·타임아웃·Redis 캐시가 이 자리를 감싼다.
+ * 스텁 콘텐츠 어댑터 — 제주 고정 5곳(DEC-3).
+ *
+ * **기본값으로 남는다.** CI 게이트 정책이 "외부·실데이터 의존 0" 이고, 실 정본(`stay`)은 시드가
+ * 채우므로 시드 없는 환경에서도 검색이 돌아야 한다. 실 데이터로 돌리려면
+ * `trippilot.stay.content.mode=db` 로 켠다(`DbContentAdapter` 가 @Primary 로 이긴다).
+ *
+ * 이 스텁은 편의시설을 **가지고 있다** — 그래서 `amenitiesKnown` 기본값 true 가 맞다.
  */
 @Component
 class StubJejuContentAdapter : AccommodationContentPort {

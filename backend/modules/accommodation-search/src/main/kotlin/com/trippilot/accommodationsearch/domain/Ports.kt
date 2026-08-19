@@ -9,8 +9,17 @@ interface AccommodationContentPort {
     fun search(region: String?): ContentResult
 }
 
-/** 콘텐츠 조회 결과 — 부분 실패 표현(BR-U1-17). */
-data class ContentResult(val stays: List<Stay>, val degraded: Boolean)
+/**
+ * 콘텐츠 조회 결과 — 부분 실패 표현(BR-U1-17).
+ *
+ * [amenitiesKnown] 은 **공급자가 편의시설을 주는가**다. 아는 쪽이 어댑터라 여기서 말한다 —
+ * 서비스가 "빈 배열이면 모르는 것"이라고 추측하면, 진짜로 편의시설이 없는 숙소와 구분할 수 없다.
+ */
+data class ContentResult(
+    val stays: List<Stay>,
+    val degraded: Boolean,
+    val amenitiesKnown: Boolean = true,
+)
 
 /**
  * 최저가 스냅숏 조회 포트. 배치가 채운 값을 읽기만(INV-U1-05 — 정확가는 여기 없음).

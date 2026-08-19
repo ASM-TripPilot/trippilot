@@ -44,7 +44,11 @@ class StaySearchService(
             .map { StayResult(it, priceMap[it.key()]) }
             .sortedWith(compareBy(nullsLast<Long>()) { it.lowestPrice?.amount })  // 최저가순, 미확인은 뒤
 
-        return StaySearch(items, degraded = fetched.degraded, filterZeroReasons = zeroReasons)
+        return StaySearch(
+            items, degraded = fetched.degraded, filterZeroReasons = zeroReasons,
+            // 공급자가 말한 것을 그대로 옮긴다 — 여기서 추측하면 "편의시설 없는 숙소"와 구분이 사라진다.
+            amenitiesKnown = fetched.amenitiesKnown,
+        )
     }
 
     private fun matches(stay: Stay, q: StaySearchQuery): Boolean =
