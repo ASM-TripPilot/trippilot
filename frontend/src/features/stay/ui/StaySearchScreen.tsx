@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
-import { StateNotice } from '@/shared/ui/StateNotice';
+import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 
 import { filterReasonLabel } from '../model/filterReasonLabel';
 import { formatPrice } from '../model/formatPrice';
@@ -57,8 +57,18 @@ export interface StaySearchScreenProps {
   /** 지역·필터 칩 콜백(TRIP-415). 누른 칩의 axis 가 온다 — 지역 재선택·필터 시트는 페이지 몫.
    * 미지정이면 정직한 스텁(가격대 칩은 페이지가 axis 를 무시해 스텁으로 남는다). */
   onPressFilter?: (axis: 'price' | 'region' | 'more') => void;
-  /** 적용된 필터 개수(TRIP-415) — '필터' 칩에 배지로 드러낸다(0이면 배지 없음). */
+  /** 적용된 필터 개수(TRIP-415) — '필터' 칩에 배지로 드러낸다(0이면 배지 없음). empty 카드의
+   * "필터 완화" 조건부 렌더에도 쓰인다(TRIP-416 AC-3, `=== 0`일 때만 숨김). */
   activeFilterCount?: number;
+  /** empty 카드 "지역 바꾸기" 콜백(TRIP-416 AC-1). 목적지(/explore/region)는 페이지가 정한다.
+   * 미지정이면 정직한 스텁. */
+  onPressChangeRegion?: () => void;
+  /** empty "필터 완화"·filter-zero "필터 초기화" 공용 콜백(TRIP-416 AC-2·AC-4) — 적용필터 전체
+   * 해제. 미지정이면 정직한 스텁. */
+  onRelaxFilters?: () => void;
+  /** filter-zero "'{원인}' 필터 해제" 콜백(TRIP-416 AC-5) — 원인 코드(reasons[0]) 문자열을 받는다.
+   * 미지정이면 정직한 스텁. */
+  onClearCulpritFilter?: (reason: string) => void;
 }
 
 // 카드 그림자(브리프 §4-2 명시 raw 허용 — 그림자는 토큰 대상이 아니다, HomeScreen.tsx
@@ -240,12 +250,38 @@ function RegisterPromptCard({
   );
 }
 
-/** empty(AC-2·AC-3) — 점선 안내 박스 + 구분선 + 수동 등록 카드(박스 밖 별도 형제). */
+/** empty(AC-2·AC-3) — 점선 안내 박스 + 구분선 + 수동 등록 카드(박스 밖 별도 형제).
+ * "필터 완화"(AC-3)는 적용된 필터가 있을 때만 낸다 — 필터가 0이면 완화할 대상이 없어 무동작
+ * 버튼(이 티켓이 고치는 결함)을 재생산하기 때문. `activeFilterCount === 0`일 때만 숨기고,
+ * 미지정(undefined)은 "0"이 아니므로 유지한다(기존 2-prop 무회귀 — `?? 0` 폴백 금지). */
 function EmptyBlock({
+  activeFilterCount,
+  onPressChangeRegion,
+  onRelaxFilters,
   onPressRegister,
 }: {
+  activeFilterCount?: number;
+  onPressChangeRegion?: () => void;
+  onRelaxFilters?: () => void;
   onPressRegister?: () => void;
 }): ReactElement {
+  const actions: StateNoticeAction[] = [
+    {
+      testID: 'stay-search-empty-region',
+      label: '지역 바꾸기',
+      variant: 'outline',
+      onPress: onPressChangeRegion,
+    },
+  ];
+  if (activeFilterCount !== 0) {
+    actions.push({
+      testID: 'stay-search-empty-filter',
+      label: '필터 완화',
+      variant: 'outline',
+      onPress: onRelaxFilters,
+    });
+  }
+
   return (
     <View className="w-full gap-lg">
       {/* `px-lg`는 StateNotice **안쪽** 여백(내용물 오프셋)이라 점선 테두리를 못 민다 —
@@ -258,18 +294,7 @@ function EmptyBlock({
           icon={<MapPinGlyph size={32} />}
           title="조건에 맞는 숙소가 없어요"
           description="지역이나 필터를 바꿔 다시 찾아보세요"
-          actions={[
-            {
-              testID: 'stay-search-empty-region',
-              label: '지역 바꾸기',
-              variant: 'outline',
-            },
-            {
-              testID: 'stay-search-empty-filter',
-              label: '필터 완화',
-              variant: 'outline',
-            },
-          ]}
+          actions={actions}
         />
       </View>
       <View className="px-lg">
@@ -282,7 +307,15 @@ function EmptyBlock({
 
 /** filter-zero(AC-4) — `StateNotice`를 감싸는 얇은 래퍼(01b Seed §1 정본 이름). 자체
  * 마크업은 없고, 필터명 변환(`filterReasonLabel`)과 곡선 따옴표 문구만 조립한다. */
-function FilterZeroNotice({ reasons }: { reasons: string[] }): ReactElement {
+function FilterZeroNotice({
+  reasons,
+  onRelaxFilters,
+  onClearCulpritFilter,
+}: {
+  reasons: string[];
+  onRelaxFilters?: () => void;
+  onClearCulpritFilter?: (reason: string) => void;
+}): ReactElement {
   // `reasons[0]`은 타입상 `string`이지만 빈 배열이면 실제로는 `undefined`다(03b W-4) —
   // `?? ''`로 크래시만 막는다. 빈 배열 자체를 막는 타입 좁히기는 동결 테스트(reasons:
   // string[])의 tsc를 깨뜨려 별도 사이클이다(게이트② 미룸 항목).
@@ -298,11 +331,16 @@ function FilterZeroNotice({ reasons }: { reasons: string[] }): ReactElement {
           testID: 'stay-search-filterzero-clear',
           label: `‘${label}’ 필터 해제`,
           variant: 'outline',
+          // 화살표로 감싸 원인 코드 문자열(reasons[0])을 넘긴다 — 직결하면 RN 이 눌림 이벤트를
+          // 인자로 흘려 페이지의 relaxCulpritFilter(event, …)가 크래시한다(★3). 라벨과 제거값이
+          // 같은 reasons[0]에서 나와 "'오션뷰' 해제"라 써놓고 딴 걸 지우는 일이 없다(★2).
+          onPress: () => onClearCulpritFilter?.(reasons[0] ?? ''),
         },
         {
           testID: 'stay-search-filterzero-reset',
           label: '필터 초기화',
           variant: 'link',
+          onPress: onRelaxFilters,
         },
       ]}
     />
@@ -352,12 +390,20 @@ function ErrorNotice({
  * 짝을 이뤄야 실제로 중앙에 온다 — 하나만 있으면 효과가 없다. */
 function ListEmptyBlock({
   state,
+  activeFilterCount,
   onRetry,
   onPressRegister,
+  onPressChangeRegion,
+  onRelaxFilters,
+  onClearCulpritFilter,
 }: {
   state: StaySearchState;
+  activeFilterCount?: number;
   onRetry?: () => void;
   onPressRegister?: () => void;
+  onPressChangeRegion?: () => void;
+  onRelaxFilters?: () => void;
+  onClearCulpritFilter?: (reason: string) => void;
 }): ReactElement | null {
   if (state.kind === 'loading') return <SkeletonList />;
   if (state.kind === 'results') return null;
@@ -366,9 +412,18 @@ function ListEmptyBlock({
     state.kind === 'error' ? (
       <ErrorNotice onRetry={onRetry} onPressRegister={onPressRegister} />
     ) : state.kind === 'filter-zero' ? (
-      <FilterZeroNotice reasons={state.reasons} />
+      <FilterZeroNotice
+        reasons={state.reasons}
+        onRelaxFilters={onRelaxFilters}
+        onClearCulpritFilter={onClearCulpritFilter}
+      />
     ) : (
-      <EmptyBlock onPressRegister={onPressRegister} />
+      <EmptyBlock
+        activeFilterCount={activeFilterCount}
+        onPressChangeRegion={onPressChangeRegion}
+        onRelaxFilters={onRelaxFilters}
+        onPressRegister={onPressRegister}
+      />
     );
 
   return (
@@ -387,6 +442,9 @@ export function StaySearchScreen({
   onPressCreateTrip,
   onPressFilter,
   activeFilterCount,
+  onPressChangeRegion,
+  onRelaxFilters,
+  onClearCulpritFilter,
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
@@ -422,8 +480,12 @@ export function StaySearchScreen({
           ListEmptyComponent={
             <ListEmptyBlock
               state={state}
+              activeFilterCount={activeFilterCount}
               onRetry={onRetry}
               onPressRegister={onPressRegister}
+              onPressChangeRegion={onPressChangeRegion}
+              onRelaxFilters={onRelaxFilters}
+              onClearCulpritFilter={onClearCulpritFilter}
             />
           }
           renderItem={({ item }) => (

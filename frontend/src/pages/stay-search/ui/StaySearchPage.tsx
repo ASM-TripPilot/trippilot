@@ -9,6 +9,7 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 
+import { relaxCulpritFilter } from '@/features/stay/model/relaxCulpritFilter';
 import {
   buildStayFilterOptions,
   countActiveFilters,
@@ -112,6 +113,22 @@ export function StaySearchPage(): ReactElement {
         // 지역·필터 칩(TRIP-415) — 배지는 적용된 필터 개수(초안 아님).
         onPressFilter={handlePressFilter}
         activeFilterCount={countActiveFilters(amenityList, stayTypeList)}
+        // 빈 상태 카드 CTA(TRIP-416) — 화면은 라우터를 모른다(구조 가드), 배선은 이 페이지 몫.
+        // 지역 바꾸기는 필터 칩과 같은 목적지(/explore/region)로 진입한다(AC-1).
+        onPressChangeRegion={() => router.push('/explore/region')}
+        // 필터 완화(AC-2)·초기화(AC-4) 공용 — amenity/stayType 두 키만 비운다(region 은 merge 로
+        // 유지되므로 넣지 않는다, ★4). setParams 갱신 → useLocalSearchParams 갱신 → 재조회.
+        onRelaxFilters={() => router.setParams({ amenity: [], stayType: [] })}
+        // 원인 필터만 해제(AC-5) — relaxCulpritFilter 가 reason(=reasons[0])을 지금 적용된 두
+        // 배열에 매핑해 그 원인만 뺀 {amenity, stayType}를 낸다(정확히 두 키라 그대로 넘긴다).
+        onClearCulpritFilter={(reason) =>
+          router.setParams(
+            relaxCulpritFilter(reason, {
+              amenity: amenityList,
+              stayType: stayTypeList,
+            })
+          )
+        }
       />
       {sheetOpen ? (
         <StayFilterSheet
