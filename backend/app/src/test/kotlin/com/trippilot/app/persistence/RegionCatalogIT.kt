@@ -83,10 +83,28 @@ class RegionCatalogIT : AbstractPostgresIntegrationTest() {
      */
     @Test
     fun `동명이지역은 별칭도 여러 곳을 가리킨다`() {
-        aliasTargets("광주") shouldBe listOf("경기도 광주시", "전남광주통합특별시").sorted()
-
         // 고성군이 경남·강원에 둘 있다 — 접미사를 뗀 '고성'도 마찬가지다.
         aliasTargets("고성").size shouldBe 2
+    }
+
+    /**
+     * **'광주'는 고를 수 있는 답을 반드시 포함해야 한다.**
+     *
+     * 광주광역시가 폐지되며 그 자리는 12 아래 자치구 5곳이 됐는데 이름에 '광주'가 없어 검색에 안 걸리고,
+     * 상위 시도(12)는 옛 전남 전체라 목적지가 아니다. 별칭이 없으면 고를 수 있는 것이 **경기도 광주시
+     * 하나**뿐이라, 광주 여행을 가려던 사용자가 엉뚱한 도시를 고른다 — 조용히 틀리는 경로다.
+     */
+    @Test
+    fun `광주로 검색하면 옛 광주 자치구가 함께 잡힌다`() {
+        val found = aliasTargets("광주")
+
+        listOf("동구", "서구", "남구", "북구", "광산구")
+            .forEach { gu -> found.contains("전남광주통합특별시 $gu") shouldBe true }
+
+        // 경기도 광주시도 사실이므로 함께 온다 — 화면이 시도명으로 갈라 보여준다.
+        found.contains("경기도 광주시") shouldBe true
+        // 범위가 도(道) 규모인 통합 시도 자체는 목적지가 아니지만, 묶음 표시를 위해 목록에는 있다.
+        found.contains("전남광주통합특별시") shouldBe true
     }
 
     /** 별칭 하나가 가리키는 지역 이름들(시도명으로 한정해 동명 시군구를 구분한다). */
