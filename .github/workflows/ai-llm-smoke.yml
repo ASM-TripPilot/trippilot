@@ -140,6 +140,8 @@ jobs:
           REHEARSAL_OUTPUT: rehearsal_result.json
           # TRIP-382 — 있으면 인접 슬롯 실경로 검증(legs) 수행, 없으면 검증만 생략
           TMAP_API_KEY: ${{ secrets.TMAP_API_KEY }}
+          # TRIP-409 — 있으면 KMA 실예보 주입(실내/야외 보정), 없으면 무보정
+          WEATHER_API: ${{ secrets.WEATHER_API }}
         run: uv run python scripts/smoke_itinerary.py
       - name: 잡 서머리 (리허설 시각표)
         if: steps.fetch-pois.outputs.skipped != 'true'

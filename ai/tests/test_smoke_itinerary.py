@@ -186,8 +186,9 @@ def test_rehearsal_passthrough_and_result_schema():
     )
     assert set(result) == {
         "date", "region", "anchor", "poi_names", "slots",
-        "solve_mode", "is_fallback", "llm_used", "latency_ms",
+        "solve_mode", "is_fallback", "llm_used", "weather", "latency_ms",
     }
+    assert result["weather"] is None  # 날씨 미주입 — 기록도 없음 (TRIP-409)
     assert result["date"] == "2026-08-14"
     assert result["region"] == selection.region
     assert set(result["anchor"]) == {"poi_id", "name", "lat", "lng"}
@@ -353,3 +354,20 @@ def test_attach_records_legs_schema():
         assert set(leg) == {"from", "to", "est_min", "real_min", "err_pct"}
         assert isinstance(leg["est_min"], int)
         assert leg["real_min"] == 15.0
+
+
+def test_rehearsal_records_injected_weather():
+    """TRIP-409 — 주입 예보가 problem을 거쳐 결과에 기록된다 (실 호출 0, fake만)."""
+    class _FakeWeather:
+        def daily_forecast(self, coord, days):
+            return {d: 80 for d in days}
+
+    entries = _entries(_TWO_REGIONS)
+    smoke_date = dt.date(2026, 8, 14)
+    selection = select_rehearsal_pois(entries, smoke_date.isoformat())
+    result = run_rehearsal(
+        selection, llm=UnwiredLlm(), model_id="dev-unwired", smoke_date=smoke_date,
+        weather=_FakeWeather(),
+    )
+    trip_date = (smoke_date + dt.timedelta(days=1)).isoformat()
+    assert result["weather"] == {trip_date: 80}  # 여행일 예보만 (요청 날짜 필터)

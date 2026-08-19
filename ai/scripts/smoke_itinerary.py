@@ -173,6 +173,21 @@ class RecordingLlm:
         return response
 
 
+class RecordingWeather:
+    """주입 날씨 포트 계측 래퍼 (TRIP-409) — 오케스트레이터가 실제 쓴 예보를
+    가로채 기록한다 (추가 API 호출 0, 동작 무변경). 실패는 그대로 전파 →
+    오케스트레이터 Degradation 경로."""
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self.forecast: dict[str, int] | None = None
+
+    def daily_forecast(self, coord, days):
+        result = self._inner.daily_forecast(coord, days)
+        self.forecast = {d.isoformat(): pop for d, pop in result.items()}
+        return result
+
+
 class RehearsalError(Exception):
     """생성 실패 또는 검사(슬롯≥1 · INV-1 · INV-3) 위반."""
 
@@ -222,6 +237,7 @@ def run_rehearsal(
     model_id: str,
     smoke_date: dt.date,
     deadline_ms: int = 20_000,
+    weather=None,  # WeatherPort | None (TRIP-409) — 미주입=날씨 보정 없이 기존 그대로
 ) -> dict:
     """선택 POI로 실 조립 관통 1건 → 기록용 결과 dict. 위반은 RehearsalError.
 
@@ -232,6 +248,7 @@ def run_rehearsal(
     from fastapi.testclient import TestClient  # dev 의존(httpx) — 스크립트 실행시만
 
     recorder = RecordingLlm(llm)
+    weather_recorder = RecordingWeather(weather) if weather is not None else None
     orchestrator = build_orchestrator(
         llm=recorder,
         poi_db=StaticPoiDb(selection.pois),
@@ -242,6 +259,7 @@ def run_rehearsal(
         c1_config=C1Config(
             model_ids={ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id}
         ),
+        weather=weather_recorder,  # 선택 주입 (TRIP-409) — None이면 무보정
     )
     client = TestClient(create_app(orchestrator), raise_server_exceptions=False)
 
@@ -288,6 +306,8 @@ def run_rehearsal(
         "solve_mode": body["solve_mode"],
         "is_fallback": body["is_fallback"],
         "llm_used": recorder.ok_calls > 0,
+        # 오케스트레이터가 실제 쓴 예보 (TRIP-409) — 미주입·조회 실패면 None
+        "weather": weather_recorder.forecast if weather_recorder else None,
         "latency_ms": latency_ms,
     }
 
@@ -392,6 +412,9 @@ def _print_summary(json_path: str) -> int:
           f"앵커 {result['anchor']['name']}")
     print(f"- solve_mode `{result['solve_mode']}` · 폴백 {result['is_fallback']} · "
           f"LLM 사용 {result['llm_used']} · {result['latency_ms']}ms")
+    if result.get("weather"):  # 날씨 주입이 돌았을 때만 (TRIP-409)
+        pops = " · ".join(f"{d} {p}%" for d, p in sorted(result["weather"].items()))
+        print(f"- 예보(강수확률): {pops}")
     print()
     print("| 시각 | 장소 |")
     print("|---|---|")
@@ -438,13 +461,30 @@ def main() -> int:
     adapter, model_id = _build_adapter()
     print(f"[rehearsal] provider={os.environ.get('LLM_PROVIDER', 'openai')} "
           f"model={model_id}")
+
+    # 날씨 주입 (TRIP-409) — 키 있을 때만 실 어댑터 조립 (main.py _kma_weather 선례).
+    # 조회 실패는 오케스트레이터 Degradation 경로 — 리허설 성패와 분리.
+    weather = None
+    weather_key = _optional("WEATHER_API")
+    if weather_key:
+        from trippilot.poi_curation.adapters.kma_weather import KmaWeatherAdapter
+        from trippilot.poi_curation.sourcing.tourapi import UrllibHttpClient
+
+        weather = KmaWeatherAdapter(UrllibHttpClient(), weather_key)
+        print("[rehearsal] 날씨 주입: KMA 단기예보 (WEATHER_API)")
+    else:
+        print("[rehearsal] WEATHER_API 없음 — 날씨 보정 없이 진행")
+
     try:
         result = run_rehearsal(
-            selection, llm=adapter, model_id=model_id, smoke_date=smoke_date
+            selection, llm=adapter, model_id=model_id, smoke_date=smoke_date,
+            weather=weather,
         )
     except RehearsalError as e:
         print(f"[rehearsal] FAIL {e}")
         return 1
+    if result.get("weather"):
+        print(f"[rehearsal] 예보(강수확률%): {result['weather']}")
 
     # 인접 슬롯 실경로 검증 (TRIP-382) — 키 있을 때만, 실패해도 리허설은 성공 유지.
     # 어댑터·실 HTTP 조립은 여기(리허설 실행)에서만 — pytest는 fake (D37).
