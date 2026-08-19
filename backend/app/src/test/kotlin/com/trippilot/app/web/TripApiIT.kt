@@ -8,6 +8,7 @@ import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -125,6 +126,47 @@ class TripApiIT : AbstractPostgresIntegrationTest() {
     fun `국내 밖 목적지는 400`() {
         val body = """{"startDate":"2026-08-01","endDate":"2026-08-03","destinations":[{"seq":0,"region":"도쿄","nights":2}]}"""
         call(HttpMethod.POST, "/api/v1/trips", newToken(), body).first shouldBe 400
+    }
+
+    private fun createWith(region: String) = call(
+        HttpMethod.POST, "/api/v1/trips", newToken(),
+        """{"startDate":"2026-09-01","endDate":"2026-09-03","destinations":[{"seq":0,"region":"$region","nights":2}]}""",
+    )
+
+    /**
+     * 카탈로그 기반 판정(TRIP-360) — **여기서만 드러나는 것**은 시드가 실제로 조회되는지다.
+     * 단위 테스트의 대역은 내가 이해한 카탈로그만 흉내 낸다.
+     *
+     * `홍천군` 은 이 부모 티켓의 출발점이고, `부산`·`경주` 는 프론트가 지금 실제로 보내는 짧은 이름이다
+     * (frontend/src/features/explore/model/regions.ts) — 별칭이 없으면 정상 사용자가 막힌다.
+     */
+    @Test
+    fun `카탈로그에 있는 지역은 표준명·별칭 어느 쪽으로도 생성된다`() {
+        listOf("홍천군", "서울특별시", "제주특별자치도", "부산", "경주", "제주", "강릉", "여수")
+            .forEach { region -> createWith(region).first shouldBe 201 }
+    }
+
+    /**
+     * **부분 문자열은 통과하지 않는다.** 카탈로그 조회를 `LIKE %q%` 로 두면 `천` 한 글자가 천안시에 걸려
+     * 아무 글자나 목적지가 된다 — 검증이 통째로 무의미해진다. 조회는 `=` 여야 한다.
+     */
+    @Test
+    fun `지역명 일부만 보내면 거절한다`() {
+        listOf("천", "군", "특별시").forEach { partial -> createWith(partial).first shouldBe 400 }
+    }
+
+    /**
+     * 거절 사유가 갈려야 한다 — `홍천읍` 은 국내인데 "국내 여행만 지원해요" 라고 답하면 거짓이고,
+     * 사용자는 무엇을 고쳐야 하는지도 알 수 없다(INV-4).
+     */
+    @Test
+    fun `카탈로그에 없으면 사유를 구분해 거절한다`() {
+        val (rc, body) = createWith("홍천읍")
+
+        rc shouldBe 400
+        val reason = body["error"]["fields"][0]["reason"].asText()
+        reason shouldContain "지원하지 않는 지역"
+        reason.contains("국내 여행만") shouldBe false
     }
 
     @Test

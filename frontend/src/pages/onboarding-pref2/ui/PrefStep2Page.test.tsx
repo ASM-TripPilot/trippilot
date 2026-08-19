@@ -55,15 +55,15 @@ describe('PrefStep2Page — 복귀 시 선택값 보존 (AC2 · AC3 · 5-4)', ()
     // 준비 — 1/2에서 이미 골랐다고 가정하고 스토어에 직접 선주입(스토어는 화면과 독립된
     // 모듈 싱글턴이라 이렇게 미리 채워도 된다 — §1 개념 박스).
     usePreferenceStore.getState().toggleStyle('rest');
-    usePreferenceStore.getState().toggleFood('seafood');
+    usePreferenceStore.getState().toggleFood('japanese');
 
     // 실행 — 렌더 후 언마운트, 다시 렌더(1/2↔2/2 왕복의 등가).
     const { unmount } = render(<PrefStep2Page />);
     unmount();
     render(<PrefStep2Page />);
 
-    // 단언 — seafood 칩이 여전히 선택 상태(스토어가 화면 수명과 무관함을 증명).
-    expect(screen.getByTestId('onboarding-pref2-food-seafood')).toBeSelected();
+    // 단언 — japanese 칩이 여전히 선택 상태(스토어가 화면 수명과 무관함을 증명).
+    expect(screen.getByTestId('onboarding-pref2-food-japanese')).toBeSelected();
 
     // 실행 — back chevron 탭.
     fireEvent.press(screen.getByTestId('onboarding-pref2-back'));
@@ -97,8 +97,8 @@ describe('PrefStep2Page — 일괄 탈출 (AC4 · 5-6)', () => {
 
     // 단언 — 홈으로 replace.
     expect(routerMock.replace).toHaveBeenCalledWith('/');
-    // 단언 — 나머지 5축은 null 유지, styles는 그대로(01b: 고른 값 폐기 안 함 — 관찰 가능
-    // 차이 없음 결정의 표면).
+    // 단언 — 나머지 6축은 null 유지, styles는 그대로(01b: 고른 값 폐기 안 함 — 관찰 가능
+    // 차이 없음 결정의 표면). activities는 TRIP-254 신설 7번째 축 — 탈출이 이 축도 안 건드림.
     const state = usePreferenceStore.getState();
     expect(state.styles).toEqual(['rest']);
     expect(state.pace).toBeNull();
@@ -106,6 +106,7 @@ describe('PrefStep2Page — 일괄 탈출 (AC4 · 5-6)', () => {
     expect(state.companions).toBeNull();
     expect(state.foods).toBeNull();
     expect(state.transports).toBeNull();
+    expect(state.activities).toBeNull();
   });
 });
 
@@ -143,19 +144,38 @@ describe('PrefStep2Page — 동행 축 탭↔스토어 왕복 (AC2 · US-ONB-07 
   });
 });
 
-describe('PrefStep2Page — 음식 축 탭↔스토어 왕복 (AC2 · US-ONB-10 · 5-9)', () => {
+describe('PrefStep2Page — 음식 축 탭↔스토어 왕복 (AC-3 · US-ONB-10 · 5-9)', () => {
   it('음식 칩을 탭하면 그 칩이 선택 표시되고 스토어 foods에 담긴다', () => {
-    // 준비 — 렌더. (기존 5-4는 'seafood'를 선주입으로 쓴다 — 여기는 다른 slug
-    // 'spicy'를 실제로 탭해, 이 케이스가 선주입이 아니라 쓰기 경로 증명임을 눈에 띄게 한다.)
+    // 준비 — 렌더. (기존 5-4는 'japanese'를 선주입으로 쓴다 — 여기는 다른 slug
+    // 'korean'을 실제로 탭해, 이 케이스가 선주입이 아니라 쓰기 경로 증명임을 눈에 띄게 한다.)
     render(<PrefStep2Page />);
 
-    // 실행 — '매운 음식' 칩을 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref2-food-spicy'));
+    // 실행 — '한식' 칩을 탭.
+    fireEvent.press(screen.getByTestId('onboarding-pref2-food-korean'));
 
     // 단언 ① — 읽기 경로: 칩이 선택 표시된다.
-    expect(screen.getByTestId('onboarding-pref2-food-spicy')).toBeSelected();
+    expect(screen.getByTestId('onboarding-pref2-food-korean')).toBeSelected();
     // 단언 ② — 쓰기 경로: foods 배열에 담긴다.
-    expect(usePreferenceStore.getState().foods).toEqual(['spicy']);
+    expect(usePreferenceStore.getState().foods).toEqual(['korean']);
+  });
+});
+
+describe('PrefStep2Page — 활동 축 탭↔스토어 왕복 (AC-4 · US-ONB-08 · 5-11)', () => {
+  it('활동 칩을 탭하면 그 칩이 선택 표시되고 스토어 activities에 담긴다', () => {
+    // 준비 — 렌더(스토어는 beforeEach가 이미 reset해서 7축 모두 null).
+    render(<PrefStep2Page />);
+
+    // 실행 — '자연' 활동 칩을 탭(★food가 아니라 activity prefix).
+    fireEvent.press(screen.getByTestId('onboarding-pref2-activity-nature'));
+
+    // 단언 ① — 읽기 경로: 칩이 선택 표시된다(스토어 값이 selectedActivities로 내려가
+    // 화면이 다시 그려졌다).
+    expect(
+      screen.getByTestId('onboarding-pref2-activity-nature')
+    ).toBeSelected();
+    // 단언 ② — 쓰기 경로: 탭이 toggleActivity 액션에 연결돼 activities 배열에 담긴다
+    // (복수 축이라 배열 — 원소 1개라 toEqual로 길이·원소 전부 고정).
+    expect(usePreferenceStore.getState().activities).toEqual(['nature']);
   });
 });
 

@@ -861,10 +861,12 @@ const PREVIEW_STATES: PreviewState[] = [
       <PrefStep2Screen
         selectedBudget={null}
         selectedCompanions={null}
+        selectedActivities={null}
         selectedFoods={null}
         selectedTransports={null}
         onToggleBudget={noop}
         onToggleCompanion={noop}
+        onToggleActivity={noop}
         onToggleFood={noop}
         onToggleTransport={noop}
         onBack={noop}

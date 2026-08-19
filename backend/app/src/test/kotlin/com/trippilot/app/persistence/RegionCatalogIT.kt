@@ -71,11 +71,41 @@ class RegionCatalogIT : AbstractPostgresIntegrationTest() {
      */
     @Test
     fun `폐지된 옛 이름으로도 찾을 수 있다`() {
-        val found = jdbc.queryForList(
-            "SELECT r.name FROM region r JOIN region_alias a ON a.region_code = r.region_code WHERE a.alias = ?",
-            String::class.java, "광주",
+        aliasTargets("전라남도") shouldBe listOf("전남광주통합특별시")
+        aliasTargets("광주광역시") shouldBe listOf("전남광주통합특별시")
+    }
+
+    /**
+     * **'광주'는 두 곳을 가리킨다** — 통합으로 생긴 옛 광주(12)와 경기도 광주시(41610)다.
+     * 실재하는 중의성이라 하나를 고르면 거짓이 된다. 별칭 PK 가 (alias, region_code) 라 둘 다 담긴다.
+     *
+     * 사용자가 '광주'를 쳤을 때 무엇을 보여줄지는 화면의 몫이고, 카탈로그는 사실만 말한다.
+     */
+    @Test
+    fun `동명이지역은 별칭도 여러 곳을 가리킨다`() {
+        aliasTargets("광주") shouldBe listOf("경기도 광주시", "전남광주통합특별시").sorted()
+
+        // 고성군이 경남·강원에 둘 있다 — 접미사를 뗀 '고성'도 마찬가지다.
+        aliasTargets("고성").size shouldBe 2
+    }
+
+    /** 별칭 하나가 가리키는 지역 이름들(시도명으로 한정해 동명 시군구를 구분한다). */
+    private fun aliasTargets(alias: String): List<String> =
+        jdbc.queryForList(
+            """
+            SELECT CASE WHEN r.level = 'SIDO' THEN r.name ELSE r.sido_name || ' ' || r.name END
+            FROM region r JOIN region_alias a ON a.region_code = r.region_code
+            WHERE a.alias = ? ORDER BY 1
+            """.trimIndent(),
+            String::class.java, alias,
         )
-        found shouldBe listOf("전남광주통합특별시")
+
+    /** 프론트가 실제로 보내는 짧은 이름이 전부 잡혀야 한다 — 하나라도 빠지면 정상 사용자가 막힌다. */
+    @Test
+    fun `프론트가 보내는 짧은 이름이 전부 별칭에 있다`() {
+        listOf("부산", "경주", "서울", "제주", "강릉", "여수").forEach { name ->
+            aliasTargets(name).isEmpty() shouldBe false
+        }
     }
 
     @Test

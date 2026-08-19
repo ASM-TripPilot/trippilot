@@ -3,8 +3,8 @@ package com.trippilot.trip.application
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
-import com.trippilot.placedata.api.DomesticCheck
-import com.trippilot.placedata.api.DomesticRegionFacade
+import com.trippilot.placedata.api.DestinationCheck
+import com.trippilot.placedata.api.DestinationFacade
 import com.trippilot.trip.domain.CompanionType
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
@@ -41,11 +41,11 @@ data class EditTripCommand(
 @Service
 class TripService(
     private val repo: TripRepository,
-    private val domesticRegions: DomesticRegionFacade,
+    private val destinations: DestinationFacade,
     private val clock: Clock,
 ) {
     fun create(accountId: UUID, cmd: CreateTripCommand): Trip {
-        requireDomestic(cmd.destinations)
+        requireSupportedDestinations(cmd.destinations)
         return repo.save(
             Trip.create(
                 accountId, cmd.title, cmd.startDate, cmd.endDate, cmd.party, cmd.companionType,
@@ -55,19 +55,25 @@ class TripService(
     }
 
     /**
-     * 국내강제(INV-U1-12 · BR-U1-35) — 목적지가 하나라도 대한민국 밖이면 생성하지 않는다.
+     * 목적지 수용 판정(INV-U1-12 · BR-U1-35) — 카탈로그가 기준이다(TRIP-360).
      *
-     * **확인하지 못한 것은 막지 않는다.** 벤더 장애·쿼터 소진이 곧 "여행을 못 만든다"가 되면 안 된다 —
-     * 국내강제는 품질 가드지 보안 경계가 아니다. 대신 확인하지 못했다는 사실을 로그로 남긴다(INV-4).
-     * (화면 표면화는 후속 — 지금은 생성이 막히지 않는 것이 우선이다.)
+     * **왜 문구를 나누나.** 예전에는 무엇이 문제든 "지금은 국내 여행만 지원해요" 한 줄이었다.
+     * `홍천읍` 을 넣은 국내 사용자에게 그렇게 답하면 거짓이고, 무엇을 고쳐야 하는지도 알려주지 못한다.
+     * 판정은 C7 이 하고 여기서는 **말로 옮기기만** 한다 — 규칙이 두 모듈에 흩어지지 않도록.
      */
-    private fun requireDomestic(destinations: List<TripDestination>) {
-        val outside = destinations.filter { domesticRegions.check(it.region) == DomesticCheck.OUTSIDE }
-        if (outside.isNotEmpty()) {
-            throw ValidationFailed(
-                outside.map { FieldError("destinations", "지금은 국내 여행만 지원해요: ${it.region}") },
-            )
+    private fun requireSupportedDestinations(destinations: List<TripDestination>) {
+        val rejected = destinations.mapNotNull { d ->
+            when (this.destinations.check(d.region)) {
+                DestinationCheck.SUPPORTED -> null
+                DestinationCheck.OUTSIDE ->
+                    FieldError("destinations", "지금은 국내 여행만 지원해요: ${d.region}")
+                DestinationCheck.DOMESTIC_UNSUPPORTED ->
+                    FieldError("destinations", "아직 지원하지 않는 지역이에요: ${d.region}. 시·군·구 단위로 골라주세요.")
+                DestinationCheck.UNVERIFIED ->
+                    FieldError("destinations", "지역을 확인하지 못했어요: ${d.region}. 목록에서 골라주세요.")
+            }
         }
+        if (rejected.isNotEmpty()) throw ValidationFailed(rejected)
     }
 
     fun list(accountId: UUID): List<Trip> = repo.findByAccount(accountId).filter { it.deletedAt == null }
