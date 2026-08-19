@@ -72,10 +72,32 @@ jobs:
           cache-dependency-glob: ai/uv.lock
       - run: uv sync --locked
       - name: 수집 상태 복원 (collect-state 전용 브랜치 → ai/collect_state.json)
+        id: restore
+        # 리다이렉트(`git show > file`)는 show가 실패해도 **빈 파일을 남긴다** — 그러면
+        # 스크립트가 "상태 파일 손상"으로 처음부터 돌면서도 성공으로 끝난다(TRIP-348 회귀,
+        # 8/14~8/18 5일간 신규 3건). 임시 파일에 받아 성공했을 때만 자리에 놓는다.
+        # 브랜치에 **한 번이라도** 상태 파일이 있었는데 지금 없으면 유실이다 — 조용히
+        # 처음부터 돌지 말고 실패시킨다 (누가 트리를 덮어썼다는 뜻).
+        # pathspec은 현재 디렉토리 기준이라 여기(ai/)선 `:(top)` 없이는 루트 파일을
+        # 못 찾는다 — ls-tree --full-tree와 같은 함정.
         run: |
-          git fetch origin collect-state 2>/dev/null \
-            && git show FETCH_HEAD:collect_state.json > collect_state.json \
-            || echo "::notice::수집 상태 없음 — 처음부터"
+          rm -f collect_state.json collect_state.json.tmp
+          RESTORED=false
+          if ! git fetch origin collect-state 2>/dev/null; then
+            echo "::notice::collect-state 브랜치 없음 — 처음부터"
+          elif git show FETCH_HEAD:collect_state.json > collect_state.json.tmp 2>/dev/null; then
+            mv collect_state.json.tmp collect_state.json
+            RESTORED=true
+            echo "::notice::수집 상태 복원 — 커서부터 재개"
+          elif [ -n "$(git rev-list -1 FETCH_HEAD -- ':(top)collect_state.json')" ]; then
+            rm -f collect_state.json.tmp
+            echo "::error::수집 상태 유실 — collect-state 브랜치에 있던 collect_state.json이 현재 tip에 없다. 누군가 트리를 통째로 덮어썼다 (이대로 두면 매일 같은 지역만 재수집)."
+            exit 1
+          else
+            rm -f collect_state.json.tmp
+            echo "::notice::수집 상태 없음 (최초 실행) — 처음부터"
+          fi
+          echo "restored=$RESTORED" >> "$GITHUB_OUTPUT"
       - name: TourAPI 수집 (게이트 통과분 → 등록 제안 JSON)
         id: collect
         env:
@@ -103,7 +125,12 @@ jobs:
         if: steps.collect.outputs.skipped != 'true'
         # plumbing(hash-object→mktree→commit-tree)으로 워킹트리를 건드리지 않고 커밋한다.
         # 브랜치 부재 시 부모 없는 커밋(= orphan)으로 생성. push 실패는 수집 성공을
-        # 뒤집지 않는다 — 다음날 중복은 색인 없이도 게이트가 막고, 낭비만 발생.
+        # 뒤집지 않는다 (::warning::만 — 다음날 중복은 색인 없이도 게이트가 막는다).
+        #
+        # 브랜치는 ai-llm-smoke의 rehearsal_log.jsonl과 **공유**한다 — 기존 트리를 보존한
+        # 채 자기 파일만 교체해야 서로를 지우지 않는다. `git ls-tree`는 현재 디렉토리
+        # 프리픽스 기준이라 working-directory가 ai/ 인 여기서는 루트 파일이 **한 줄도 안
+        # 나온다** — `--full-tree` 필수 (이게 빠져서 두 워크플로가 서로를 덮어썼다).
         run: |
           if [ ! -f collect_state.json ]; then
             echo "::warning::상태 파일 없음 — 영속 생략"
@@ -113,12 +140,15 @@ jobs:
             set -e
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            BLOB=$(git hash-object -w collect_state.json)
-            TREE=$(printf '100644 blob %s\tcollect_state.json\n' "$BLOB" | git mktree)
             PARENT=""
+            BASE_TREE=""
             if git fetch origin collect-state 2>/dev/null; then
               PARENT="-p FETCH_HEAD"
+              BASE_TREE=$(git ls-tree --full-tree FETCH_HEAD | grep -v $'\tcollect_state.json$' || true)
             fi
+            BLOB=$(git hash-object -w collect_state.json)
+            TREE=$({ [ -n "$BASE_TREE" ] && printf '%s\n' "$BASE_TREE"; \
+                     printf '100644 blob %s\tcollect_state.json\n' "$BLOB"; } | git mktree)
             COMMIT=$(git commit-tree $TREE $PARENT -m "chore(ai): 수집 상태 갱신 — run ${{ github.run_id }} (TRIP-348)")
             git push origin "$COMMIT:refs/heads/collect-state"
           ) || echo "::warning::수집 상태 push 실패 — 다음 실행은 이어가기 없이 처음부터 (수집 자체는 성공)"
@@ -131,3 +161,33 @@ jobs:
             ai/collected_pois.json
             ai/collect_state.json
           retention-days: 30
+      - name: 이어가기 검증 (상태 왕복 + 재수집 감지 — 조용한 제자리걸음 차단)
+        if: steps.collect.outputs.skipped != 'true'
+        # 이 워크플로의 실패 모드는 "빨간불"이 아니라 **초록불인 채 같은 데이터만
+        # 다시 긁는 것**이었다 — 8/14~8/18 5일 연속 성공했는데 신규 POI 3건.
+        # 그래서 두 가지를 여기서 깨뜨린다.
+        #   (1) 왕복: 방금 push한 상태가 브랜치 tip에 실제로 남아 있는가.
+        #       (누가 트리를 덮어쓰면 다음 실행이 처음부터 도는데, 그 사실을
+        #        다음 실행이 아니라 **덮어쓴 바로 그 실행**에서 안다.)
+        #   (2) 재수집: 상태를 복원하고 돌았는데 기제안 스킵이 0건이면
+        #       커서가 안 먹은 것이다 — 목록을 받아왔는데도 0이면 회귀.
+        run: |
+          FAIL=0
+          if git fetch origin collect-state 2>/dev/null \
+             && git cat-file -e FETCH_HEAD:collect_state.json 2>/dev/null; then
+            echo "상태 왕복 확인 — 다음 실행은 커서부터 재개한다"
+          else
+            echo "::error::상태 왕복 실패 — push 직후인데 collect-state tip에 collect_state.json이 없다. 다음 실행이 처음부터 돌면서 같은 지역만 재수집하게 된다."
+            FAIL=1
+          fi
+          if [ "${{ steps.restore.outputs.restored }}" = "true" ] && [ -f collected_pois.json ]; then
+            LISTED=$(jq '.stats.listed' collected_pois.json)
+            SKIPPED=$(jq '.stats.skipped_unchanged // 0' collected_pois.json)
+            if [ "$LISTED" -gt 0 ] && [ "$SKIPPED" -eq 0 ]; then
+              echo "::error::재수집 의심 — 상태를 복원하고 돌았는데 목록 ${LISTED}건 중 기제안 스킵 0건. 커서·기제안 색인이 안 먹고 있다 (TRIP-348 회귀)."
+              FAIL=1
+            else
+              echo "이어가기 확인 — 목록 ${LISTED}건 중 기제안 스킵 ${SKIPPED}건"
+            fi
+          fi
+          exit $FAIL
