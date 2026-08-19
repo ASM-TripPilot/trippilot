@@ -241,3 +241,36 @@ describe('🔴 AC-8 · itinerary 조회 실패(비-404)면 여행 없음으로 �
     expect(screen.queryByTestId('itinerary-tab-empty')).toBeNull();
   });
 });
+
+// 오늘을 항상 포함하는 여행(과거~미래로 넓게) — 실제 오늘 날짜에 의존하지 않게 폭을 크게 둔다.
+function activeTrip(): Trip {
+  return { ...trip(), startDate: '2020-01-01', endDate: '2099-12-31' };
+}
+
+describe('🔴 TRIP-395 · 활성 여행이 오늘 구간 안이면 여행 중 화면(live)으로 보낸다 (US-ONTRIP-01)', () => {
+  it('오늘이 여행 구간 안이고 일정이 있으면 /trips/{id}/live 로 보낸다', () => {
+    mockUseGetTrips.mockReturnValue(tripsResult([activeTrip()]));
+    mockUseItinerary.mockReturnValue(
+      itineraryOk(itinerary('COMPLETE', 'PLANNED'))
+    );
+
+    render(<ItineraryTab />);
+
+    // 완전일치 — live 접미가 붙은 목적지여야 한다(draft·plan 등과 다르다).
+    expect(screen.getByTestId('redirect-href')).toHaveTextContent(
+      `/trips/${TRIP_ID}/live`
+    );
+  });
+
+  it('오늘이 구간 안이어도 일정이 없으면(404) live 가 아니라 생성(method)으로 폴백한다', () => {
+    mockUseGetTrips.mockReturnValue(tripsResult([activeTrip()]));
+    mockUseItinerary.mockReturnValue(itineraryHttpError(404));
+
+    render(<ItineraryTab />);
+
+    // 보여줄 일정이 없으므로 live 로 보내지 않는다 — 생성 방식부터.
+    expect(screen.getByTestId('redirect-href')).toHaveTextContent(
+      `/trips/${TRIP_ID}/itinerary/method`
+    );
+  });
+});

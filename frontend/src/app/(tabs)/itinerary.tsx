@@ -68,6 +68,16 @@ export default function ItineraryTab() {
       );
     }
 
+    // 활성 여행이 오늘 구간 안이면(오늘 ∈ [startDate, endDate]) 여행 중 화면으로 보낸다
+    // (US-ONTRIP-01 · 115-A). 날짜는 'YYYY-MM-DD' 문자열 비교로 충분하다. 단 일정이 아직
+    // 없으면(404) 보여줄 게 없어 아래 생성 흐름을 먼저 탄다.
+    const today = new Date().toISOString().slice(0, 10);
+    const todayInTrip =
+      today >= firstTrip.startDate && today <= firstTrip.endDate;
+    if (todayInTrip && !notFound) {
+      return <Redirect href={`/trips/${firstTrip.tripId}/live`} />;
+    }
+
     const destination = resolveItineraryDestination({
       notFound,
       generationState: itinerary.data?.generationState,

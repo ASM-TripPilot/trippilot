@@ -53,7 +53,7 @@ describe('LiveSlotCard', () => {
   });
 
   it('C2 상태 배지가 done/active/upcoming에 따라 완료/진행 중/예정을 그린다', () => {
-    const cases: Array<['done' | 'active' | 'upcoming', string]> = [
+    const cases: ['done' | 'active' | 'upcoming', string][] = [
       ['done', '완료'],
       ['active', '진행 중'],
       ['upcoming', '예정'],
