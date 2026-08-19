@@ -98,6 +98,16 @@ export interface TripWizardStep1ScreenProps {
   /** 도시 추가 시트 목록 — `pages` 층이 내려준다. 화면은 `@/features/explore/model/regions`를
    * 직접 import하지 않는다(features 간 import 금지 관례) — 형태만 구조적으로 받는다. */
   regions: readonly { code: string; name: string }[];
+  /** 시트의 검색 결과 목록(TRIP-387) — `pages`가 `filterRegions(query)`로 좁혀 내린다. 미제공
+   * 이면 `regions`(full)로 폴백한다(하위호환). ⚠️ 불일치 결과인 빈 배열 `[]`은 폴백 대상이
+   * 아니다 — 폴백은 nullish `??`라 null·undefined에만 걸린다. 빈 목록이 full로 되살아나면
+   * "일치 없음"이 조용히 "전체"로 되돌아간다(AC-2 핵심 함정). */
+  sheetRegions?: readonly { code: string; name: string }[];
+  /** 시트 검색 입력의 현재 값(제어 입력) — `pages`가 상태를 들고, 화면은 그대로 보여만 준다. */
+  destinationQuery?: string;
+  /** 검색 입력이 바뀌면 그대로 위로 올려보낸다 — 화면은 스스로 필터링하지 않는다(features 간
+   * import 금지, 필터는 `pages`가 진다). */
+  onChangeDestinationQuery?(next: string): void;
   /** `[다음]` 활성 판정 **결과**만 받는다 — 위반 코드·`validateTripDraft`는 이 화면에 없다. */
   canProceed: boolean;
   /** 여행지 블록 인라인 문구(완성형, TRIP-206). 화면은 문자열을 그대로 그릴 뿐 만들지
@@ -158,8 +168,9 @@ export interface TripWizardStep1ScreenProps {
   dateSheetOpen?: boolean;
   /** 시트를 닫는다(취소·확정 공통). */
   onCloseDateSheet?(): void;
-  /** 시트에서 임의 기간을 확정하면 배선에 알린다 — 배선이 프리셋을 풀고 기간을 세운다(TRIP-368). */
-  onConfirmDates?(startDate: string, endDate: string): void;
+  /** 시트에서 출발일을 확정하면 배선에 알린다(1인자) — 배선이 프리셋을 풀고 종료일을 박수 합으로
+   * 파생해 기간을 세운다(TRIP-389). */
+  onConfirmDates?(startDate: string): void;
   /** 달력 과거 비활성 기준 '오늘'(주입, 결정론). 없으면 시트를 안전하게 못 열어 열지 않는다. */
   baseDate?: string;
   onChangeParty(next: number): void;
@@ -562,6 +573,9 @@ export function TripWizardStep1Screen({
   companionType,
   preferenceChips,
   regions,
+  sheetRegions,
+  destinationQuery,
+  onChangeDestinationQuery,
   canProceed,
   destinationError,
   periodError,
@@ -623,6 +637,11 @@ export function TripWizardStep1Screen({
   }
 
   const dateText = formatDateRange(startDate, endDate);
+
+  // 시트 칩 목록만 좁힌다 — `regions`(full)는 이미 담은 칩 testID 복원·confirm resolution이
+  // 함께 쓰므로 전역으로 좁히지 않는다(01b 함정). nullish `??`라 불일치 결과인 빈 배열 `[]`은
+  // 그대로 남아 칩 0개가 되고, 미제공(undefined)일 때만 full로 폴백한다.
+  const sheetChipRegions = sheetRegions ?? regions;
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -1083,8 +1102,18 @@ export function TripWizardStep1Screen({
               <Text className="text-[16px] font-noto-bold font-bold text-ink">
                 여행지 추가
               </Text>
+              {/* 검색 입력(TRIP-387) — 제어 입력이라 값은 prop이 정하고, 화면은 친 문자열을
+                  onChangeText로 위로 올려보내기만 한다(예산 입력과 같은 규율). 필터는 pages가 진다. */}
+              <TextInput
+                testID="trip-wizard-destination-search"
+                value={destinationQuery ?? ''}
+                onChangeText={onChangeDestinationQuery}
+                placeholder="지역 검색"
+                placeholderTextColor="#9AA1AB"
+                className="rounded-pill border border-hairline-strong px-md py-sm font-noto text-body text-ink"
+              />
               <View className="flex-row flex-wrap gap-sm">
-                {regions.map((region) => {
+                {sheetChipRegions.map((region) => {
                   const selected = sheetRegionCode === region.code;
                   return (
                     <Pressable
@@ -1110,6 +1139,17 @@ export function TripWizardStep1Screen({
                   );
                 })}
               </View>
+              {/* 불일치 안내(TRIP-387) — "입력 안 함"과 "일치 없음"은 다르다. 빈 검색어(전체
+                  표시)에는 안 뜨고, 검색어가 있는데 결과가 0개일 때만 뜬다. 빈 목록이 여기 도달
+                  했다는 것 자체가 nullish `??` 폴백이 빈 배열을 안 되살렸다는 증거다(AC-2). */}
+              {sheetChipRegions.length === 0 &&
+              (destinationQuery ?? '') !== '' ? (
+                <View testID="trip-wizard-destination-search-empty">
+                  <Text className="font-noto text-body text-muted">
+                    일치하는 지역이 없어요
+                  </Text>
+                </View>
+              ) : null}
               <View className="flex-row items-center gap-md">
                 <Text className="flex-1 text-[15px] font-noto-bold font-bold text-ink">
                   박수
@@ -1150,6 +1190,16 @@ export function TripWizardStep1Screen({
                   추가
                 </Text>
               </Pressable>
+              <Pressable
+                testID="trip-wizard-destination-close"
+                accessibilityRole="button"
+                onPress={() => setSheetOpen(false)}
+                className="h-11 items-center justify-center"
+              >
+                <Text className="font-noto-medium text-body font-medium text-muted">
+                  닫기
+                </Text>
+              </Pressable>
             </View>
           </View>
         ) : null}
@@ -1157,12 +1207,9 @@ export function TripWizardStep1Screen({
         {dateSheetOpen === true && baseDate !== undefined ? (
           <TripDateSheet
             today={baseDate}
-            initialRange={{
-              startDate: startDate ?? null,
-              endDate: endDate ?? null,
-            }}
-            onConfirm={(start, end) => {
-              onConfirmDates?.(start, end);
+            initialStart={startDate ?? null}
+            onConfirm={(start) => {
+              onConfirmDates?.(start);
               onCloseDateSheet?.();
             }}
             onClose={() => onCloseDateSheet?.()}

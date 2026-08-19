@@ -151,6 +151,12 @@ export type HomePhase =
   | {
       kind: 'planning';
       greetTitle: string;
+      /**
+       * 지배 여행 tripId — 홈 카드 CTA 가 이 여행의 일정 화면으로 라우팅한다(TRIP-401). 서버
+       * 스키마 미참조 로컬 필드. 옵셔널인 이유: 프리뷰 픽스처·테스트가 phase 를 직접 만들 때
+       * 이 값을 안 넣어도 컴파일돼야 한다(라우팅 없는 정적 렌더). 라우트는 존재할 때만 CTA 를 건다.
+       */
+      dominantTripId?: string;
       trip: TripHeroData;
       bridge: HomeSoftNote;
     }
@@ -192,4 +198,6 @@ export interface HomeScreenProps {
   onPressSavedPlaces?: () => void;
   /** "지금 뜨는 장소" 더 보기 press → 장소 탐색 */
   onPressSpotsMore?: () => void;
+  /** planning 여행 카드 주 CTA press → 그 여행의 일정 화면(목적지는 라우트가 계산, TRIP-401) */
+  onPressTripHeroCta?: () => void;
 }

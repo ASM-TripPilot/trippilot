@@ -312,10 +312,12 @@ describe('AC-11 · 떠났다 돌아와도 입력이 남는다 (BR-U1-33)', () =>
 });
 
 /**
- * TRIP-368 — 날짜 직접 선택 배선. 날짜 행을 누르면 시트가 열리고(배선이 `dateSheetOpen`을 켠다),
- * 임의 기간을 확정하면 프리셋을 풀고 그 기간을 스토어에 세운다(왕복). 프리셋만 쓰던 경로는 그대로다.
+ * TRIP-389 — 여행 기간 출발일 단일 선택 → 종료일 파생 배선. 날짜 행을 누르면 시트가 열리고
+ * (배선이 `dateSheetOpen`을 켠다), 출발일 하나를 확정하면 종료일을 박수 합으로 파생해 스토어에
+ * 세우고 프리셋을 푼다(왕복). ⚠️ 종료일은 **매 렌더 파생값**이라, 확정 뒤 여행지를 더 담으면
+ * 재확정 없이 다시 계산된다(AC-3, 맹점②). 프리셋만 쓰던 경로는 그대로다.
  */
-describe('TRIP-368 · 여행 기간 직접 선택', () => {
+describe('TRIP-389 · 여행 기간 출발일 단일 선택 → 종료일 파생', () => {
   it('날짜 행을 누르면 날짜 선택 시트가 열린다', () => {
     render(<TripNewStep1Page baseDate={BASE} />);
 
@@ -326,22 +328,45 @@ describe('TRIP-368 · 여행 기간 직접 선택', () => {
     expect(screen.getByTestId('trip-wizard-datesheet')).toBeOnTheScreen();
   });
 
-  it('시트에서 임의 기간을 확정하면 날짜 행에 그 기간이 표시되고 시트가 닫힌다', () => {
+  it('AC-2 · 출발일을 확정하면 종료일이 박수 합만큼 뒤로 파생돼 뜨고 시트가 닫힌다 (1박)', () => {
     render(<TripNewStep1Page baseDate={BASE} />);
 
+    // 준비 — 부산 1박(Σ=1). 실행 — 시트를 열어 출발일 하나만 고르고 확정한다.
+    addDestination('busan', 1);
     fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
     fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
-    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-17'));
     fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
 
-    // 시트가 닫히고, 날짜 행에 고른 임의 기간이 뜬다.
+    // 시트가 닫히고, 종료일은 deriveEndDate('2026-06-15', 1) = '2026-06-16' 이 파생돼 뜬다.
     expect(screen.queryByTestId('trip-wizard-datesheet')).toBeNull();
     expect(screen.getByTestId('trip-wizard-date-field')).toHaveTextContent(
-      /6월 15일 – 6월 17일/
+      /6월 15일 – 6월 16일/
     );
   });
 
-  it('프리셋을 고른 뒤 임의 날짜를 확정하면 프리셋 칩 선택이 풀린다 (공존)', () => {
+  it('AC-3 · 출발일 확정 뒤 여행지를 더 담으면 재확정 없이 종료일이 다시 파생된다 (반응형)', () => {
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    // 부산 1박으로 출발 06-15 확정 → 06-15 – 06-16.
+    addDestination('busan', 1);
+    fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
+    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
+    fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
+    expect(screen.getByTestId('trip-wizard-date-field')).toHaveTextContent(
+      /6월 15일 – 6월 16일/
+    );
+
+    // 실행 — **재확정 없이** 경주 2박을 더 담는다(Σ=3).
+    addDestination('gyeongju', 2);
+
+    // 종료일이 deriveEndDate('2026-06-15', 3) = '2026-06-18' 로 다시 파생된다. confirm 시점
+    // 한 번만 계산해 저장하는 구현이면 여기서 06-16 에 멈춰 red — render-time 파생만 green.
+    expect(screen.getByTestId('trip-wizard-date-field')).toHaveTextContent(
+      /6월 15일 – 6월 18일/
+    );
+  });
+
+  it('프리셋을 고른 뒤 임의 출발일을 확정하면 프리셋 칩 선택이 풀린다 (공존)', () => {
     render(<TripNewStep1Page baseDate={BASE} />);
 
     // 프리셋 3박 4일 선택 → 칩이 선택 상태다.
@@ -351,13 +376,13 @@ describe('TRIP-368 · 여행 기간 직접 선택', () => {
         .accessibilityState.selected
     ).toBe(true);
 
-    // 임의 날짜를 확정한다.
+    // 임의 출발일 하나를 확정한다(단일 선택).
     fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
     fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
-    fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-17'));
     fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
 
-    // 둘 다 선택된 것처럼 보이면 어느 쪽이 적용됐는지 알 수 없다 — 프리셋 칩이 풀려야 한다.
+    // 둘 다 선택된 것처럼 보이면 어느 쪽이 적용됐는지 알 수 없다 — 프리셋 칩이 풀려야 한다
+    // (배선이 setPeriod(undefined, …)로 프리셋 코드를 비운다).
     expect(
       screen.getByTestId('trip-wizard-period-preset-3n4d').props
         .accessibilityState.selected
@@ -377,5 +402,86 @@ describe('TRIP-368 · 여행 기간 직접 선택', () => {
       screen.getByTestId('trip-wizard-period-preset-3n4d').props
         .accessibilityState.selected
     ).toBe(true);
+  });
+});
+
+describe('TRIP-387 · 여행지 시트 검색 (슬라이스 1 배선)', () => {
+  // 화면 단위 테스트(TripWizardStep1Screen.test.tsx)는 sheetRegions를 손으로 주입해
+  // 화면 계약만 본다. 여기서는 페이지가 실제로 destQuery 상태를 들고 filterRegions로 좁혀
+  // 내려보내는 **왕복**을 잠근다 — 검색이 진짜로 동작하는지의 유일한 증거다.
+  const OTHER_CODES = ['gyeongju', 'seoul', 'jeju', 'gangneung', 'yeosu'];
+
+  it('AC-1 · AC-3 — "부"로 좁히면 부산만 남고, 골라 추가하면 스토어에 담긴다', () => {
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // 실행(검색): 페이지가 filterRegions('부')로 좁힌다.
+    fireEvent.changeText(
+      screen.getByTestId('trip-wizard-destination-search'),
+      '부'
+    );
+
+    // 단언(좁힘): 부산만 남는다 — 페이지가 실제로 filterRegions를 물었다는 증거.
+    expect(
+      screen.getByTestId('trip-wizard-destination-region-busan')
+    ).toBeTruthy();
+    OTHER_CODES.forEach((code) => {
+      expect(
+        screen.queryByTestId(`trip-wizard-destination-region-${code}`)
+      ).toBeNull();
+    });
+
+    // 실행(추가): 좁혀 찾은 부산을 골라 2박으로 확정한다.
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-region-busan'));
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc'));
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-confirm'));
+
+    // 단언(추가): 서버 계약 형태 그대로 스토어에 담긴다(region은 한글 이름, seq는 1부터).
+    expect(useTripWizardStore.getState().destinations).toEqual([
+      { seq: 1, region: '부산', nights: 2 },
+    ]);
+  });
+
+  it('AC-2 · 불일치 검색어면 칩 0개 + "없어요", 전체로 되돌아가지 않는다', () => {
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    fireEvent.changeText(
+      screen.getByTestId('trip-wizard-destination-search'),
+      '없는지역'
+    );
+
+    // filterRegions('없는지역') === [] → sheetRegions=[] → 화면 ?? 폴백이 살아 있는지
+    // 실 배선으로 확인한다(truthy 폴백이면 여기서 6개가 되살아난다, 02a ★1).
+    expect(
+      screen.queryAllByTestId(/^trip-wizard-destination-region-/)
+    ).toHaveLength(0);
+    expect(
+      screen.getByTestId('trip-wizard-destination-search-empty')
+    ).toHaveTextContent(/일치하는 지역이 없어요/);
+  });
+
+  it('함정 ③ · 검색이 걸려 있어도 이미 담은 도시 칩의 제거 testID는 그대로다', () => {
+    // regions prop은 화면 3곳(시트 칩·codeForRegionName·confirm)이 함께 쓴다. 검색을 위해
+    // 이 prop을 전역으로 좁히면 이미 담은 도시 칩의 testID 복원(codeForRegionName)이 깨진다
+    // — 그래서 좁히는 것은 별도 sheetRegions이고 regions는 full로 남는다(01b 함정, 02a ★2).
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    addDestination('busan', 1);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+    // 부산을 시트에서 걸러내는 검색어를 친다.
+    fireEvent.changeText(
+      screen.getByTestId('trip-wizard-destination-search'),
+      '여수'
+    );
+
+    // 이미 담은 부산 칩의 제거 버튼은 여전히 ASCII 코드(-busan)로 잡힌다 — regions가 full이라
+    // codeForRegionName('부산')이 'busan'을 되찾는다. 전역으로 좁혔다면 못 찾아 testID가
+    // -부산(한글 폴백)이 되어 이 단언이 깨진다.
+    expect(
+      screen.getByTestId('trip-wizard-destination-remove-busan')
+    ).toBeTruthy();
   });
 });
