@@ -97,6 +97,9 @@ jobs:
             rm -f collect_state.json.tmp
             echo "::notice::수집 상태 없음 (최초 실행) — 처음부터"
           fi
+          # 신규율 진단은 **이번 실행 전** 색인과 비교해야 한다 — 스크립트가 상태를
+          # 제자리에 덮어쓰므로 지금 사본을 떠 둔다.
+          [ -f collect_state.json ] && cp collect_state.json collect_state.prev.json
           echo "restored=$RESTORED" >> "$GITHUB_OUTPUT"
       - name: TourAPI 수집 (게이트 통과분 → 등록 제안 JSON)
         id: collect
@@ -161,7 +164,22 @@ jobs:
             ai/collected_pois.json
             ai/collect_state.json
           retention-days: 30
-      - name: 이어가기 검증 (상태 왕복 + 재수집 감지 — 조용한 제자리걸음 차단)
+      - name: 신규율 진단 (50% 미만이면 원인·처방까지 — 제자리걸음이면 실패)
+        if: steps.collect.outputs.skipped != 'true'
+        # "며칠을 돌렸는데 왜 안 늘지"에 산출물로 답한다. 제안을 신규·갱신·반복으로
+        # 갈라 신규율을 재고, 임계 미만이면 원인 후보를 증거와 함께 잡 서머리에 남긴다
+        # (예산 굶주림·완주 후 재순회·게이트 드롭 편중·색인 미작동 …).
+        #
+        # 신규율이 낮다고 실패시키지는 않는다 — 지역을 완주한 뒤의 재순회처럼 정당하게
+        # 낮은 국면이 있다. 실패는 **제자리걸음**일 때만: 신규 0 · 스킵 0 이거나
+        # 같은 modified_time 이 다시 실린 경우. (앞선 판은 "스킵 0건"만 보고 실패시켰다가
+        # 미수집 지역 첫 수집(강원 100건 전부 신규)을 회귀로 오인해 빨간불을 냈다.)
+        run: |
+          uv run python scripts/collect_novelty.py \
+            --output collected_pois.json \
+            --prev-state collect_state.prev.json \
+            --fail-if-stalled >> "$GITHUB_STEP_SUMMARY"
+      - name: 이어가기 검증 (상태 왕복 — 다음 실행이 커서부터 재개할 수 있는가)
         if: steps.collect.outputs.skipped != 'true'
         # 이 워크플로의 실패 모드는 "빨간불"이 아니라 **초록불인 채 같은 데이터만
         # 다시 긁는 것**이었다 — 8/14~8/18 5일 연속 성공했는데 신규 POI 3건.
@@ -169,8 +187,7 @@ jobs:
         #   (1) 왕복: 방금 push한 상태가 브랜치 tip에 실제로 남아 있는가.
         #       (누가 트리를 덮어쓰면 다음 실행이 처음부터 도는데, 그 사실을
         #        다음 실행이 아니라 **덮어쓴 바로 그 실행**에서 안다.)
-        #   (2) 재수집: 상태를 복원하고 돌았는데 기제안 스킵이 0건이면
-        #       커서가 안 먹은 것이다 — 목록을 받아왔는데도 0이면 회귀.
+        #   (2) 재수집 판정은 앞 스텝(신규율 진단)이 맡는다 — 여기는 왕복만 본다.
         run: |
           FAIL=0
           if git fetch origin collect-state 2>/dev/null \
@@ -179,15 +196,5 @@ jobs:
           else
             echo "::error::상태 왕복 실패 — push 직후인데 collect-state tip에 collect_state.json이 없다. 다음 실행이 처음부터 돌면서 같은 지역만 재수집하게 된다."
             FAIL=1
-          fi
-          if [ "${{ steps.restore.outputs.restored }}" = "true" ] && [ -f collected_pois.json ]; then
-            LISTED=$(jq '.stats.listed' collected_pois.json)
-            SKIPPED=$(jq '.stats.skipped_unchanged // 0' collected_pois.json)
-            if [ "$LISTED" -gt 0 ] && [ "$SKIPPED" -eq 0 ]; then
-              echo "::error::재수집 의심 — 상태를 복원하고 돌았는데 목록 ${LISTED}건 중 기제안 스킵 0건. 커서·기제안 색인이 안 먹고 있다 (TRIP-348 회귀)."
-              FAIL=1
-            else
-              echo "이어가기 확인 — 목록 ${LISTED}건 중 기제안 스킵 ${SKIPPED}건"
-            fi
           fi
           exit $FAIL
