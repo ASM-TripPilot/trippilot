@@ -80,7 +80,10 @@ function AxisSegment(): ReactElement {
             key={axis.key}
             testID={`explore-axis-${axis.key}`}
             accessibilityRole="tab"
-            accessibilityState={{ selected }}
+            // 비-전체 3탭은 아직 동작하지 않아 비활성으로 낭독한다(색 아닌 신호). selected 는
+            // 불변('전체'만 true) — disabled 는 별개 필드라 무회귀(AC-E7 selected 판정 유지).
+            accessibilityState={{ selected, disabled: !selected }}
+            disabled={!selected}
             className={`flex-1 items-center rounded-pill py-sm ${
               selected ? 'bg-canvas' : ''
             }`}
@@ -94,6 +97,12 @@ function AxisSegment(): ReactElement {
             >
               {axis.label}
             </Text>
+            {/* 준비중 캡션 — 라벨과 별도 Text 노드로, 누르기 전에 "아직임"을 읽게 한다. */}
+            {selected ? null : (
+              <Text className="font-noto text-micro text-muted-soft">
+                준비 중
+              </Text>
+            )}
           </Pressable>
         );
       })}

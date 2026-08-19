@@ -137,14 +137,34 @@ function FilterChip({
   onPress?: () => void;
 }): ReactElement {
   const showBadge = axis === 'more' && (count ?? 0) > 0;
+  // 가격대는 계약(GET /stays/search)에 파라미터가 없어 아직 동작하지 않는다 — 준비중으로
+  // 정직하게 표기한다. 무동작 소유권이 페이지(axis 무시)에서 화면으로 옮겨온다: disabled 라
+  // press 가 no-op 이라 onPress(=onPressFilter('price'))가 아예 안 불린다. onPress 배선 자체는
+  // 그대로 둔다(staySearchStructure 동결이 FilterChip 의 onPress={onPress} 을 못박음 — 무동작은
+  // 배선 제거가 아니라 disabled 로 준다). 셰브론은 펼치기 암시라 제거한다(OQ1). V3 동결
+  // (rounded-pill·border-hairline-strong·"가격대" Text)은 그대로 둔다.
+  const comingSoon = axis === 'price';
   return (
     <Pressable
       testID={`stay-search-filter-${axis}`}
       accessibilityRole="button"
+      accessibilityState={{ disabled: comingSoon }}
+      disabled={comingSoon}
       onPress={onPress}
       className="flex-row items-center gap-xs rounded-pill border border-hairline-strong bg-canvas px-md py-sm"
     >
-      <Text className="font-noto text-body text-body">{label}</Text>
+      <Text
+        className={
+          comingSoon
+            ? 'font-noto text-body text-muted'
+            : 'font-noto text-body text-body'
+        }
+      >
+        {label}
+      </Text>
+      {comingSoon ? (
+        <Text className="font-noto text-micro text-muted-soft">준비 중</Text>
+      ) : null}
       {showBadge ? (
         <View className="h-[18px] min-w-[18px] items-center justify-center rounded-pill bg-primary px-[5px]">
           <Text className="font-noto-bold text-micro font-bold text-on-primary">
@@ -154,7 +174,7 @@ function FilterChip({
       ) : null}
       {axis === 'more' ? (
         <FilterSlidersGlyph size={14} />
-      ) : (
+      ) : comingSoon ? null : (
         <ChevronDownGlyph size={14} />
       )}
     </Pressable>
