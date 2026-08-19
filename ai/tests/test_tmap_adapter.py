@@ -1,9 +1,11 @@
-"""TmapRouteAdapter 검증 — 실 호출 0건 (fake HTTP만, D37) (TRIP-382).
+"""TmapRouteAdapter 검증 — 실 호출 0건 (fake HTTP만, D37) (TRIP-382·405).
 
-픽스처는 TMAP 문서 형태(features[].properties.totalTime 초·totalDistance 미터)
-기준 — 실 응답 드리프트는 실키 첫 실행(smoke_itinerary)에서 검증한다.
+픽스처는 TMAP 문서 형태 기준(자동차·보행 features[].properties / 대중교통
+metaData.plan.itineraries[]) — 실 응답 드리프트는 실키 첫 실행(smoke_itinerary)
+에서 검증한다.
   ① 매핑 — 초→분·미터→km, 좌표(X=경도·Y=위도), appKey 헤더, 요청 1건=호출 1건
-  ② 수단 라우팅 — CAR /routes, WALK /routes/pedestrian, PUBLIC 보행 근사(approximated)
+  ② 수단 라우팅 — CAR /tmap/routes, WALK /tmap/routes/pedestrian,
+     PUBLIC /transit/routes 실측 (근사 제거, TRIP-405)
   ③ 실패 승격 — HTTP 예외·형식 오류는 TravelTimeError (침묵 금지, INV-4)
 """
 
@@ -87,13 +89,45 @@ def test_walk_uses_pedestrian_endpoint():
     assert measured.source == "tmap_pedestrian"
 
 
-def test_public_approximates_with_pedestrian_endpoint():
-    """v1 대중교통 근사 — transit API는 실키 검증 후 후속 (어댑터 docstring)."""
-    http = FakeHttp(_payload(60, 1000))
+def _transit_payload(itineraries: list) -> dict:
+    return {"metaData": {"requestParameters": {}, "plan": {"itineraries": itineraries}}}
+
+
+def test_public_uses_transit_endpoint_without_approximation():
+    """대중교통 실측 (TRIP-405) — 보행 근사 제거, count=1·version 불요."""
+    http = FakeHttp(_transit_payload([{"totalTime": 2400, "totalDistance": 8000}]))
     measured = TmapRouteAdapter(http, "k").measure(_FROM, _TO, TransportMode.PUBLIC)
-    assert http.calls[0][0].endswith("/tmap/routes/pedestrian")
-    assert measured.approximated is True
-    assert measured.source == "tmap_pedestrian_approx"
+    url, headers, body = http.calls[0]
+    assert url.endswith("/transit/routes")
+    assert headers["appKey"] == "k"
+    assert body["count"] == 1
+    assert "version" not in body  # 자동차·보행 전용 필드
+    assert measured.approximated is False
+    assert measured.source == "tmap_transit"
+    assert measured.real_minutes == 40.0  # 2400초
+    assert measured.distance_km == 8.0
+
+
+def test_transit_falls_back_to_legs_distance_sum():
+    """totalDistance 없는 경로 — legs[].distance 합산 (문서상 표기 갈림 방어)."""
+    http = FakeHttp(_transit_payload([
+        {"totalTime": 600,
+         "legs": [{"distance": 300}, {"mode": "TRANSFER"}, {"distance": 700}]},
+    ]))
+    measured = TmapRouteAdapter(http, "k").measure(_FROM, _TO, TransportMode.PUBLIC)
+    assert measured.real_minutes == 10.0
+    assert measured.distance_km == 1.0  # 300 + 700 = 1000m
+
+
+@pytest.mark.parametrize("payload", [
+    {"result": {"status": 11, "message": "출발지 도착지 간 거리가 너무 가깝습니다"}},  # itineraries 없음
+    {"metaData": {"plan": {"itineraries": [{"fare": {}}]}}},  # totalTime 없음
+    {"metaData": {"plan": {"itineraries": [{"totalTime": 600}]}}},  # 거리 정보 전무
+])
+def test_transit_malformed_payload_raises(payload):
+    adapter = TmapRouteAdapter(FakeHttp(payload), "k")
+    with pytest.raises(TravelTimeError):
+        adapter.measure(_FROM, _TO, TransportMode.PUBLIC)
 
 
 # ── ③ 실패 승격 ──────────────────────────────────────────────────────

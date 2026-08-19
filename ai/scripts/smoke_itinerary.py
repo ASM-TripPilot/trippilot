@@ -298,7 +298,7 @@ def run_rehearsal(
 # 그 이상은 API 한도 아끼기로 절단한다.
 MAX_LEGS = 6
 # 리허설 요청은 transport_modes=["대중교통"] 고정(_request_body) — 검증 수단도 일치.
-# v1 어댑터는 PUBLIC을 보행 API로 근사한다 (adapters/tmap.py docstring).
+# PUBLIC은 TMAP 대중교통 API 실측 (TRIP-405 — 보행 근사 제거).
 LEG_MODE = TransportMode.PUBLIC
 
 
@@ -368,7 +368,7 @@ def attach_leg_verification(
     if not legs:
         return
     result["legs"] = legs
-    print(f"[rehearsal] 실경로 검증 {len(legs)}건 (PUBLIC≈보행 근사, TRIP-382)")
+    print(f"[rehearsal] 실경로 검증 {len(legs)}건 (PUBLIC=대중교통 실측, TRIP-405)")
     print(f"[rehearsal]   {'구간':<30} est(분)  real(분)  err%")
     for leg in legs:
         err = f"{leg['err_pct']:+.1f}%" if leg["err_pct"] is not None else "n/a"
@@ -399,7 +399,7 @@ def _print_summary(json_path: str) -> int:
         print(f"| {slot['start']}–{slot['end']} | {slot['name']} |")
     if result.get("legs"):  # 실경로 검증이 돌았을 때만 (TRIP-382)
         print()
-        print("### 인접 슬롯 실경로 검증 (TMAP · PUBLIC≈보행 근사)")
+        print("### 인접 슬롯 실경로 검증 (TMAP · PUBLIC=대중교통 실측)")
         print("| 구간 | 추정(분) | 실측(분) | 오차 |")
         print("|---|---|---|---|")
         for leg in result["legs"]:
