@@ -54,6 +54,9 @@ interface RegionJpaRepository : JpaRepository<RegionEntity, String> {
      * 층은 `level` 문자열이 아니라 **코드 길이**로 정렬한다 — 'SIDO' < 'SIGUNGU' 가 사전순으로도 맞지만
      * 그건 우연이고, 층 이름이 바뀌면 조용히 순서가 뒤집힌다.
      *
+     * **[q] 의 LIKE 메타문자는 어댑터가 이스케이프해 넘긴다**([escapeLike]) — 그래서 `escape` 절이 붙는다.
+     * 없으면 사용자가 친 `_` 가 "아무 글자 하나"로 해석돼 **빈 결과 대신 전체 목록**이 온다.
+     *
      * **[q] 는 null 을 받지 않는다.** `:q is null or … concat('%', :q, '%')` 로 쓰면 검색어 없는 호출이
      * 500 으로 끝난다 — Hibernate 가 null 파라미터의 타입을 `concat` 안에서 추론하지 못해 bytea 로 보내고
      * `operator does not exist: character varying ~~ bytea` 가 난다(실측). 빈 문자열이면 `%%` 라
@@ -62,9 +65,9 @@ interface RegionJpaRepository : JpaRepository<RegionEntity, String> {
     @Query(
         "select r from RegionEntity r where " +
             "(:level is null or r.level = :level) and " +
-            "(r.name like concat('%', :q, '%') or exists (" +
+            "(r.name like concat('%', :q, '%') escape '\\' or exists (" +
             "  select 1 from RegionAliasEntity a where a.regionCode = r.regionCode " +
-            "  and a.alias like concat('%', :q, '%')))" +
+            "  and a.alias like concat('%', :q, '%') escape '\\'))" +
             " order by r.sidoCode, length(r.regionCode), r.name",
     )
     fun search(@Param("q") q: String, @Param("level") level: String?): List<RegionEntity>
@@ -98,8 +101,16 @@ class RegionCatalogAdapter(
     override fun find(query: String?, level: RegionLevel?): List<Region> {
         val counts = pois.countActiveByRegionCode()
             .associate { (code, n) -> code as String to (n as Number).toInt() }
-        return jpa.search(query?.trim().orEmpty(), level?.name).map { it.toDomain(counts) }
+        return jpa.search(escapeLike(query?.trim().orEmpty()), level?.name).map { it.toDomain(counts) }
     }
+
+    /**
+     * LIKE 메타문자를 글자 그대로 만든다. 지역 이름에는 `%`·`_` 가 없으므로 결과는 "없음"이 맞고,
+     * 이스케이프하지 않으면 `_` 한 글자가 **전체 목록**을 부른다. 역슬래시를 먼저 바꿔야 한다 —
+     * 나중에 바꾸면 방금 넣은 이스케이프까지 다시 이스케이프된다.
+     */
+    private fun escapeLike(v: String): String =
+        v.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     private fun RegionEntity.toDomain(counts: Map<String, Int>) = Region(
         regionCode = regionCode,

@@ -92,6 +92,20 @@ class RegionApiIT : AbstractPostgresIntegrationTest() {
         body.names() shouldBe listOf("전남광주통합특별시")
     }
 
+    /**
+     * **LIKE 메타문자는 글자 그대로 봐야 한다.** 이스케이프하지 않으면 `_` 한 글자가 "아무 글자 하나"로
+     * 해석돼 **빈 결과 대신 전체 목록**이 온다 — 사용자는 자기가 친 것과 무관한 300행을 받는다.
+     * 지역 이름에 `%`·`_` 는 없으므로 결과가 비는 것이 맞다.
+     */
+    @Test
+    fun `와일드카드 문자는 글자 그대로 취급한다`() {
+        listOf("%", "_", "%%", "_a").forEach { q ->
+            val (status, body) = call("/api/v1/regions?q=" + java.net.URLEncoder.encode(q, "UTF-8"), newToken())
+            status shouldBe 200
+            body.size() shouldBe 0
+        }
+    }
+
     @Test
     fun `층으로 거르면 시군구가 섞이지 않는다`() {
         val (_, body) = call("/api/v1/regions?level=SIDO", newToken())
