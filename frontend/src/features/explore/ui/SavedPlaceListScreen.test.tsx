@@ -103,6 +103,7 @@ const SAVED: SavedPlace[] = [
 ];
 
 const onPressRemove = jest.fn();
+const onPressRestore = jest.fn();
 const onPressCreateTrip = jest.fn();
 const onPressBrowse = jest.fn();
 const onRetry = jest.fn();
@@ -113,6 +114,7 @@ const onBack = jest.fn();
 beforeEach(() => {
   [
     onPressRemove,
+    onPressRestore,
     onPressCreateTrip,
     onPressBrowse,
     onRetry,
@@ -127,6 +129,7 @@ function renderScreen(overrides: Partial<SavedPlaceListScreenProps> = {}) {
     <SavedPlaceListScreen
       savedPlaces={SAVED}
       onPressRemove={onPressRemove}
+      onPressRestore={onPressRestore}
       onPressCreateTrip={onPressCreateTrip}
       onPressBrowse={onPressBrowse}
       onRetry={onRetry}
@@ -529,5 +532,108 @@ describe('T-14 · 소요 시간 미표시 (N-3 · INV-3)', () => {
     // 부정 — INV-3: 사용자에게 보이는 소요 시간은 솔버 검증값만 쓸 수 있고, 이 화면에는
     // 그 재료가 아예 없다.
     expect(screen.queryAllByText(/분|시간|소요/)).toHaveLength(0);
+  });
+});
+
+/**
+ * ── TRIP-394 신규 (AC-1·AC-2) ────────────────────────────────────────────
+ * *(개념)* **released** — 이번 방문에서 하트를 눌러 "해제됨(빈 하트)"으로 바뀐 행.
+ * 페이지가 `releasedPoiIds`(poiId 목록)로 내려 주면, 그 poiId 인 행만 빈 하트가 된다.
+ *
+ * *(개념)* 빈/찬 하트는 **색**(SVG fill)으로 안 잰다 — repo-trap: `*Glyphs.tsx` 의 색 변화는
+ * 렌더로 안 잡혀 "저장됐다는 거짓말"이 통과한다. 대신 두 신호로 잰다:
+ *   ① **컴포넌트 정체성** — 빈 하트는 `HeartOutlineGlyph`, 찬 하트는 `HeartFilledGlyph` 로
+ *      **서로 다른 컴포넌트**다. 각자 다른 testID(`explore-saved-heart-outline-*` /
+ *      `explore-saved-heart-filled-*`)를 달아 "어느 컴포넌트가 그려졌나"를 정체성으로 잰다.
+ *   ② **accessibilityState.selected** — `toBeSelected()` 매처가 읽는 접근성 상태(담김=선택됨).
+ *      d04 카드 하트가 이미 쓰는 신호를 그대로 옮긴다.
+ * 하나만 맞고 하나만 틀린 구현(예: selected 는 false 인데 여전히 찬 하트를 그림)도 잡으려고
+ * 둘 다 건다.
+ */
+describe('T-15 · released 행은 빈 하트로 남고, 아닌 행은 찬 하트다 (AC-1)', () => {
+  it('빈/찬을 컴포넌트 정체성과 accessibilityState.selected 로 판별한다', () => {
+    // 준비 — sp-1(p1)·sp-3(p3)만 해제(빈 하트), sp-2·sp-4 는 담김(찬 하트).
+    renderScreen({ releasedPoiIds: ['p1', 'p3'] });
+
+    // 단언 ① released 행(sp-1·sp-3): 빈 하트 컴포넌트가 있고 찬 하트는 없다 + selected=false
+    ['sp-1', 'sp-3'].forEach((id) => {
+      expect(
+        screen.getByTestId(`explore-saved-heart-outline-${id}`)
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId(`explore-saved-heart-filled-${id}`)
+      ).toBeNull();
+      expect(
+        screen.getByTestId(`explore-saved-remove-${id}`)
+      ).not.toBeSelected();
+      // ★ 규칙의 본체 — 해제됐어도 행 자체는 목록에 남는다(사라지지 않는다).
+      expect(screen.getByTestId(`explore-saved-item-${id}`)).toBeOnTheScreen();
+    });
+
+    // 단언 ② 담김 행(sp-2·sp-4): 찬 하트 컴포넌트가 있고 빈 하트는 없다 + selected=true
+    ['sp-2', 'sp-4'].forEach((id) => {
+      expect(
+        screen.getByTestId(`explore-saved-heart-filled-${id}`)
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId(`explore-saved-heart-outline-${id}`)
+      ).toBeNull();
+      expect(screen.getByTestId(`explore-saved-remove-${id}`)).toBeSelected();
+    });
+  });
+});
+
+describe('T-16 · 하트 방향이 안 섞인다 (AC-2)', () => {
+  it('빈 하트는 되돌리기 콜백을, 찬 하트는 해제 콜백을 각각 한 번 올린다', () => {
+    // 준비 — sp-1 만 해제(빈 하트), 나머지는 담김.
+    renderScreen({ releasedPoiIds: ['p1'] });
+
+    // 실행 ① 빈 하트(sp-1) press → 되돌리기 콜백만 오른다.
+    fireEvent.press(screen.getByTestId('explore-saved-remove-sp-1'));
+    expect(onPressRestore.mock.calls).toEqual([[SAVED[0]]]);
+    expect(onPressRemove).not.toHaveBeenCalled();
+
+    // 실행 ② 찬 하트(sp-2) press → 해제 콜백만 오른다(되돌리기는 안 늘어난다).
+    fireEvent.press(screen.getByTestId('explore-saved-remove-sp-2'));
+    expect(onPressRemove.mock.calls).toEqual([[SAVED[1]]]);
+    expect(onPressRestore).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * ── TRIP-394 신규 (AC-3 · 개수/CTA 파생) ──────────────────────────────────
+ * released 행은 목록에 **남지만**, 담김이 풀린 항목이라 부제 `{N}곳` 개수와 "여행 만들기"
+ * CTA 활성 판정에서는 **뺀다**(01b Seed Q1=a · BR-U1-09). 이 제외는 화면 로직이라 T-15/16
+ * (하트 방향)이 못 본다 — 이 describe 가 그 파생을 직접 잠근다.
+ */
+describe('T-17 · released 는 목록에 남되 개수·CTA 에서 빠진다 (AC-3 파생)', () => {
+  it('일부만 released 면 부제 개수가 그만큼 줄고, 행은 그대로 남는다', () => {
+    // 준비 — 4곳 중 sp-2(p2) 하나만 해제. 남은 담김은 3곳.
+    renderScreen({ releasedPoiIds: ['p2'] });
+
+    // 단언 ① 부제는 released 를 뺀 3곳을 센다(제외를 지우면 '4곳'이 떠 red).
+    expect(
+      within(screen.getByTestId('explore-saved-subtitle')).getByText(
+        '3곳 · 마음에 든 순서대로'
+      )
+    ).toBeOnTheScreen();
+    // 단언 ② 그래도 released 행은 목록에서 사라지지 않는다(4행 그대로).
+    expect(screen.getByTestId('explore-saved-item-sp-2')).toBeOnTheScreen();
+    expect(itemTestIds()).toHaveLength(4);
+    // 단언 ③ 아직 담김이 1곳 이상이라 CTA 는 살아 있다.
+    expect(screen.getByTestId('explore-saved-createtrip')).toBeOnTheScreen();
+  });
+
+  it('전부 released 면 개수가 0 이 돼 부제·CTA 가 사라지되, 행 4개는 남는다', () => {
+    // 준비 — 4곳 모두 해제. 담김 0곳.
+    renderScreen({ releasedPoiIds: ['p1', 'p2', 'p3', 'p4'] });
+
+    // 단언 ① 개수 0 → 부제 없음(제외를 지우면 '4곳'이 떠 red).
+    expect(screen.queryByTestId('explore-saved-subtitle')).toBeNull();
+    // 단언 ② 개수 0 → CTA 없음(담을 게 없으니 여행 만들기로 못 넘어간다).
+    expect(screen.queryByTestId('explore-saved-createtrip')).toBeNull();
+    // 단언 ③ 그래도 빈 상태가 아니라 4행이 빈 하트로 남는다(되돌리기 여지).
+    expect(itemTestIds()).toHaveLength(4);
+    expect(screen.queryByTestId('explore-saved-empty')).toBeNull();
   });
 });

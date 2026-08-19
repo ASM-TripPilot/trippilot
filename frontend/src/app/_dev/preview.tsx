@@ -1133,6 +1133,23 @@ const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-394 — 해제(빈 하트) 엣지 상태. sp-1(p-2)·sp-3(p-7)만 released 로 빈 하트가 되고,
+  // 나머지는 찬 하트로 남는다(같은 목록에서 빈/찬을 대조). jest 는 색을 못 봐 실기 전용 자리.
+  {
+    key: 'saved-places-released',
+    label: '담은 장소 · 해제(빈 하트)',
+    login: null,
+    render: () => (
+      <SavedPlaceListScreen
+        savedPlaces={PREVIEW_SAVED_PLACES}
+        releasedPoiIds={['p-2', 'p-7']}
+        onPressRemove={noop}
+        onPressRestore={noop}
+        onPressCreateTrip={noop}
+        onPressBrowse={noop}
+      />
+    ),
+  },
   // d01 탐색 랜딩(TRIP-201) — 3얼굴: 담은 곳 CTA / 담은 곳 0 안내 / 숙소 레인 실패 재시도.
   {
     key: 'explore-landing-default',
