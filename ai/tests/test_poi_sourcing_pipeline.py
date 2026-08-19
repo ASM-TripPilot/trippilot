@@ -175,8 +175,11 @@ def test_collect_unmapped_category_dropped_before_gate() -> None:
 
 
 def test_collect_page_failure_logged_and_skipped() -> None:
+    # 에러 코드는 **키와 무관한** 것이어야 한다 — 키 관련 코드(30 미등록·22 한도초과 등)는
+    # TRIP-348 이후 "이 키로는 앞으로도 안 된다"는 신호라 다음 타입까지 멈춘다.
+    # 여기가 검증하려는 건 "한 페이지가 실패해도 다음 타입은 진행한다"이므로 일반 오류를 쓴다.
     http = FakeTourApiHttp(
-        pages={("12", 1): error_envelope(),
+        pages={("12", 1): error_envelope("01", "APPLICATION_ERROR"),
                ("39", 1): envelope([list_item(
                    "300", "올레국수", contenttypeid="39", mapx="126.53",
                    mapy="33.4996", cat1="A05", cat2="A0502", cat3="A05020100")], 1)})
@@ -184,6 +187,22 @@ def test_collect_page_failure_logged_and_skipped() -> None:
                      content_types=["12", "39"], max_calls=500)
     assert result.stats.page_failures == 1           # 실패 페이지는 스킵 (침묵 금지 — 카운트)
     assert result.stats.passed == 1                  # 다음 타입은 정상 진행
+
+
+def test_단일_키가_거부되면_남은_예산을_태우지_않는다() -> None:
+    """키가 하나뿐인데 그 키가 죽었으면 뒤 호출은 전부 실패가 확정이다.
+
+    계속 두드리면 아무것도 못 얻으면서 예산만 태운다 — 한도초과(22)로 죽은 경우엔
+    남의 쿼터까지 갉는다. 대신 조용히 성공으로 끝내지도 않는다(page_failures 로 드러난다).
+    """
+    http = FakeTourApiHttp(
+        pages={("12", 1): error_envelope("22", "LIMITED_NUMBER_OF_SERVICE_REQUESTS"),
+               ("39", 1): envelope([list_item("300", "올레국수", contenttypeid="39")], 1)})
+    result = collect(_adapter(http), area_code="39",
+                     content_types=["12", "39"], max_calls=500)
+    assert len(http.calls) == 1                      # 첫 거부 이후로는 안 두드린다
+    assert result.stats.passed == 0
+    assert result.stats.page_failures >= 1           # 침묵하지 않는다
 
 
 def test_collect_detail_failure_continues_without_hours() -> None:
