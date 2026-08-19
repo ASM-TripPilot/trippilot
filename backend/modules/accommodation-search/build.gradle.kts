@@ -9,6 +9,7 @@ dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.springBoot.get()}"))
 
     implementation(project(":common:core"))            // R5: 에러 계약
+    implementation(project(":modules:place-data"))     // R1: 지역명→표준코드 조회 — place-data.api(RegionLookupFacade)만 사용
     implementation(libs.spring.boot.starter.data.jpa)  // out/persistence — stay_price_snapshot
     implementation(libs.spring.boot.starter.web)        // adapter/in/web 컨트롤러
     implementation(libs.spring.boot.starter.validation)

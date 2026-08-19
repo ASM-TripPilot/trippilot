@@ -29,4 +29,14 @@ data class StaySearch(
     val items: List<StayResult>,
     val degraded: Boolean,
     val filterZeroReasons: List<String>,
+    /**
+     * 편의시설 정보를 **가지고 있는가**.
+     *
+     * false 면 "편의시설이 없는 숙소들"이 아니라 **아직 모른다**는 뜻이다. 현재 정본(LOCALDATA
+     * 인허가 대장)은 편의시설을 주지 않는다. 이 값을 안 내보내면 사용자가 '주차' 필터를 걸었을 때
+     * 0건이 "주차 되는 숙소가 없다"로 읽히고, 화면은 있지도 않은 필터를 계속 권한다(INV-4).
+     */
+    val amenitiesKnown: Boolean,
+    /** 공급자 상한에 걸려 일부만 본 결과인가 — 필터가 부분집합 위에서 돈다는 뜻이다. */
+    val truncated: Boolean,
 )

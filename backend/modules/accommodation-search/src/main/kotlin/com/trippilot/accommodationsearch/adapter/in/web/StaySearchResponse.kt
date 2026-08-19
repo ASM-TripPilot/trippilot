@@ -12,12 +12,24 @@ data class StaySearchResponse(
     val items: List<StayItemResponse>,
     val degraded: Boolean,
     val filterZeroReasons: List<String>,
+    /**
+     * false = 편의시설 정보를 **아직 모른다**(없는 것이 아니다). 화면은 편의시설 필터를 비활성화하거나
+     * "정보 준비 중"을 안내한다 — 안 그러면 필터 0건이 "그런 숙소가 없다"로 읽힌다.
+     */
+    val amenitiesKnown: Boolean,
+    /**
+     * true = 전국이 너무 많아 **일부만** 본 결과다(지역 미선택 시). 필터가 부분집합 위에서 돌았으므로
+     * "조건에 맞는 숙소가 없다"고 단정하면 안 된다 — 화면은 지역 선택을 권한다.
+     */
+    val truncated: Boolean,
 ) {
     companion object {
         fun from(s: StaySearch) = StaySearchResponse(
             items = s.items.map { StayItemResponse.from(it) },
             degraded = s.degraded,
             filterZeroReasons = s.filterZeroReasons,
+            amenitiesKnown = s.amenitiesKnown,
+            truncated = s.truncated,
         )
     }
 }
