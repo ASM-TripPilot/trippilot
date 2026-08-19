@@ -1,7 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { Trip } from '@/shared/api/generated/schemas';
-import { useGetTrips } from '@/shared/api/generated/trips/trips';
+import {
+  useGetTrips,
+  useGetTripsTripIdItinerary,
+} from '@/shared/api/generated/trips/trips';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import HomeRoute from '@/app/(tabs)/index';
 
@@ -37,6 +40,11 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: jest.fn(),
+  // TRIP-401 인프라 스텁 — 홈 route 가 지배 여행에 itinerary GET 을 붙이면서 이 훅이 무조건
+  // 호출된다(React 훅 규칙). planning 케이스가 미목킹 훅을 불러 크래시하는 것을 막는 무해 스텁이다
+  // (tabsShell 이 TRIP-371 에 useGetTrips 스텁을 받은 것과 동일 계열). 이 파일의 단언은 이 훅을
+  // 관찰하지 않는다 — 목적지 왕복은 tabsHomeItineraryCta.test.tsx 가 별도로 잰다.
+  useGetTripsTripIdItinerary: jest.fn(),
 }));
 
 jest.mock('@/features/explore/model/savedPlaces', () => ({
@@ -44,6 +52,9 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
 }));
 
 const mockUseGetTrips = useGetTrips as jest.MockedFunction<typeof useGetTrips>;
+const mockUseItinerary = useGetTripsTripIdItinerary as jest.MockedFunction<
+  typeof useGetTripsTripIdItinerary
+>;
 const mockUseSavedPlaces = useSavedPlaces as jest.MockedFunction<
   typeof useSavedPlaces
 >;
@@ -91,10 +102,19 @@ function savedResult(savedPoiIds: string[]) {
 beforeEach(() => {
   mockPush.mockClear();
   mockUseGetTrips.mockReset();
+  mockUseItinerary.mockReset();
   mockUseSavedPlaces.mockReset();
   // 기본값 — 여행 없음(discovery) + 담김 0. 아래 370 CTA 는 이 discovery 얼굴에서 돈다.
   mockUseGetTrips.mockReturnValue(tripsResult([]));
   mockUseSavedPlaces.mockReturnValue(savedResult([]));
+  // TRIP-401 인프라 — planning 케이스가 부를 itinerary 훅에 무해한 기본값(로딩/에러 아님)을
+  // 준다. 이 파일 단언은 목적지·href 를 안 보므로 어떤 상태든 planning 얼굴은 그대로 그려진다.
+  mockUseItinerary.mockReturnValue({
+    data: { generationState: 'COMPLETE', status: 'PLANNED' },
+    error: null,
+    isPending: false,
+    isError: false,
+  } as unknown as ReturnType<typeof useGetTripsTripIdItinerary>);
 });
 
 // ── TRIP-370 · CTA 왕복(discovery 얼굴, 무회귀) ────────────────────────────────

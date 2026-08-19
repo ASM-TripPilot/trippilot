@@ -484,12 +484,17 @@ function ItinerariesSection({
 // 배경 #fff7f8은 Figma가 변수 아닌 raw fill로 쓴 값 → 임의 raw 유지(가정 D). D-3 13색 밖이라
 // 자동 심판 사각지대이므로 [검증] 스크린샷 대조가 유일한 그물. note 미전달이면 discovery 온램프,
 // 전달되면 그 카피(planning 브릿지행 · postTrip 공유행)를 같은 슬롯에 그린다.
+// asButton은 CTA의 role(버튼으로 읽히는가)을 구조로 굳힌다 — 목적지가 배선된 discovery 온램프만
+// 버튼이고, 목적지 없는 슬롯(planning 브릿지·postTrip 공유, 기능 이연 BR-U3-15)은 role을 뗀다
+// (죽은 버튼 금지, TRIP-401). role을 콜백 유무로 파생하지 않는다(370-AC-4는 콜백 미주입에도 버튼).
 function SoftNote({
   note,
   onPressCta,
+  asButton = false,
 }: {
   note?: HomeSoftNote;
   onPressCta?: () => void;
+  asButton?: boolean;
 }): ReactElement {
   const title = note?.title ?? '마음에 든 곳이 모이면';
   const subtitle = note?.subtitle ?? '담아둔 장소로 여행을 만들 수 있어요';
@@ -508,7 +513,7 @@ function SoftNote({
         </View>
         <Pressable
           testID="home-saved-places-cta"
-          accessibilityRole="button"
+          accessibilityRole={asButton ? 'button' : undefined}
           onPress={onPressCta}
           className="rounded-pill border-[1.4px] border-primary bg-canvas px-md py-sm"
         >
@@ -523,7 +528,13 @@ function SoftNote({
 
 // ── tripHero(planning·upcoming 공용 여행 히어로 · 브리프 §3-C) ───────────
 // 사진+스크림 · 좌상단 단계 pill · 우상단 대형 D-day · 좌하단 primary CTA + 여행명 + 기간 메타.
-function TripHero({ trip }: { trip: TripHeroData }): ReactElement {
+function TripHero({
+  trip,
+  onPress,
+}: {
+  trip: TripHeroData;
+  onPress?: () => void;
+}): ReactElement {
   return (
     <View className="w-full px-lg pt-[8px]">
       <View
@@ -558,7 +569,7 @@ function TripHero({ trip }: { trip: TripHeroData }): ReactElement {
             <Pressable
               testID="home-trip-hero-cta"
               accessibilityRole="button"
-              onPress={undefined}
+              onPress={onPress}
               className="self-start rounded-pill bg-primary px-lg py-sm"
             >
               <Text className="font-noto-bold text-caption font-bold text-on-primary">
@@ -789,7 +800,7 @@ function DiscoveryBody({
         <SpotsSection sections={sections} onMore={onPressSpotsMore} />
         <ItinerariesSection sections={sections} />
       </View>
-      <SoftNote onPressCta={onPressSavedPlaces} />
+      <SoftNote asButton onPressCta={onPressSavedPlaces} />
     </>
   );
 }
@@ -826,14 +837,16 @@ function CollectingBody({
 // greet 여행명+D-day · tripHero(계획 중) · 브릿지행(softNote 슬롯) · magazineHero·grid·lane 숨김.
 function PlanningBody({
   phase,
+  onPressTripHeroCta,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
+  onPressTripHeroCta?: () => void;
 }): ReactElement {
   return (
     <>
       <GreetingHeader title={phase.greetTitle} />
       <SearchBarBlock />
-      <TripHero trip={phase.trip} />
+      <TripHero trip={phase.trip} onPress={onPressTripHeroCta} />
       <SoftNote note={phase.bridge} />
     </>
   );
@@ -902,6 +915,7 @@ function PhaseBody({
   phase,
   onPressSavedPlaces,
   onPressSpotsMore,
+  onPressTripHeroCta,
 }: HomeScreenProps): ReactElement {
   if (phase === undefined || phase.kind === 'discovery') {
     return (
@@ -917,7 +931,9 @@ function PhaseBody({
     case 'collecting':
       return <CollectingBody hero={hero} sections={sections} phase={phase} />;
     case 'planning':
-      return <PlanningBody phase={phase} />;
+      return (
+        <PlanningBody phase={phase} onPressTripHeroCta={onPressTripHeroCta} />
+      );
     case 'upcoming':
       return <UpcomingBody phase={phase} />;
     case 'postTrip':
@@ -932,6 +948,7 @@ export function HomeScreen({
   onPressCreateTrip,
   onPressSavedPlaces,
   onPressSpotsMore,
+  onPressTripHeroCta,
 }: HomeScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -947,6 +964,7 @@ export function HomeScreen({
             phase={phase}
             onPressSavedPlaces={onPressSavedPlaces}
             onPressSpotsMore={onPressSpotsMore}
+            onPressTripHeroCta={onPressTripHeroCta}
           />
         </ScrollView>
         {phase?.kind === 'collecting' ? (

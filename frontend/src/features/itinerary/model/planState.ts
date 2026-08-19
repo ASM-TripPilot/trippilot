@@ -1,4 +1,8 @@
-import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
+import type {
+  ItineraryDaysItem,
+  ItineraryGenerationState,
+  ItineraryStatus,
+} from '@/shared/api/generated/schemas';
 
 /**
  * TRIP-299 · h25 완성 일정 시간표 뷰의 순수 판정/조립.
@@ -47,6 +51,62 @@ export function resolvePlanState(input: {
   if (input.notFound) return { kind: 'notFound' };
   if (input.failed) return { kind: 'failed' };
   return { kind: 'listed', days: input.days };
+}
+
+/**
+ * TRIP-401 · 일정 진입 시 **어느 화면으로 보낼지**(목적지)를 정하는 순수 판정.
+ *
+ * `resolvePlanState`(위)와 관심사가 다르다 — 저건 *한 화면 안의 얼굴*을, 이건 *어느 화면*을
+ * 고른다. 그래서 이웃 export 로 새로 두고 `resolvePlanState` 는 건드리지 않는다. 두 진입점(홈
+ * 카드 CTA·일정 탭)이 **같은 이 함수를 호출**해 규칙이 한 곳에만 산다(AC-5).
+ *
+ * 우선순위: 404(없음)→method · PARTIAL(생성 중)→generating · FAILED(2차 실패, 1차분 유효)→draft ·
+ * CONFIRMED(확정=읽기전용)→plan · 그 외(COMPLETE+PLANNED, 미확정 초안)→draft. generationState 는
+ * status 와 독립 축이라(계약) 진행 상태를 확정 상태보다 먼저 본다(BR-U3-04/07/28 성격에서 파생).
+ */
+export type ItineraryDestination = 'method' | 'generating' | 'draft' | 'plan';
+
+export function resolveItineraryDestination(input: {
+  notFound: boolean;
+  generationState?: ItineraryGenerationState;
+  status?: ItineraryStatus;
+}): ItineraryDestination {
+  if (input.notFound) return 'method';
+  if (input.generationState === 'PARTIAL') return 'generating';
+  if (input.generationState === 'FAILED') return 'draft';
+  if (input.status === 'CONFIRMED') return 'plan';
+  return 'draft';
+}
+
+/**
+ * 목적지 토큰 + tripId → **문자열** 라우트 href. 두 진입점이 같은 조립기를 써 "plan 만 접미
+ * 없음" 특례가 한 곳에만 산다 — Redirect·push 관찰이 String(href) 기반이라 객체 href 는 금지다.
+ *
+ * 반환 타입은 각 라우트를 그대로 담은 템플릿 리터럴 유니온이다 — 순수 문자열(`string`)로 두면
+ * `typedRoutes` 가 `router.push`/`Redirect href` 에서 거부한다(라우트 파일에서 인라인 템플릿만
+ * 문맥 타이핑돼 통과하므로, 조립기를 밖에 두려면 라우트 타입을 직접 실어야 한다). expo-router 를
+ * import 하지 않아 이 model 층은 라우팅 무지로 남는다.
+ */
+export type ItineraryDestinationHref =
+  | `/trips/${string}/itinerary`
+  | `/trips/${string}/itinerary/method`
+  | `/trips/${string}/itinerary/generating`
+  | `/trips/${string}/itinerary/draft`;
+
+export function itineraryDestinationHref(
+  tripId: string,
+  destination: ItineraryDestination
+): ItineraryDestinationHref {
+  switch (destination) {
+    case 'method':
+      return `/trips/${tripId}/itinerary/method`;
+    case 'generating':
+      return `/trips/${tripId}/itinerary/generating`;
+    case 'draft':
+      return `/trips/${tripId}/itinerary/draft`;
+    case 'plan':
+      return `/trips/${tripId}/itinerary`;
+  }
 }
 
 /** `'YYYY-MM-DD'` 두 개 → `'N박 M일'`. 형식이 아니거나 끝이 시작보다 앞서면 빈 문자열. */

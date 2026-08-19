@@ -630,3 +630,54 @@ describe('HomeScreen — phase 미도출·주입 (AC-5 금지 · TRIP-206 S-6)',
     expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-401 — planning 얼굴의 버튼 역할 집합 + 브릿지 CTA de-button.
+//
+// 무엇을 보장하나: planning 얼굴에서 접근성 트리에 버튼으로 읽히는 것은 **배선된 CTA 뿐**이다
+// (여행 카드 CTA `home-trip-hero-cta` + FAB). 목적지 없는 브릿지 CTA "일정에 추가"
+// (`home-saved-places-cta`, 기능 이연 BR-U3-15)는 렌더는 되지만 버튼 역할이 아니다(죽은 버튼 금지).
+//
+// 왜 discovery 짝이 필요한가(02a §4-★4): 기존 370-AC-4(discovery 버튼 집합, 위)는 온램프
+// `home-saved-places-cta` 가 **콜백 미주입 상태로도** 버튼일 것을 요구한다. 아래 planning 테스트는
+// 같은 testID 의 브릿지가 non-button 일 것을 요구한다. 둘을 동시에 만족하는 유일한 형태는 role 을
+// `onPressCta` 유무로 파생하지 않고 **명시 `asButton` prop** 으로 굳히는 것(discovery=true·
+// planning=false). 두 테스트가 "콜백 유무 파생" 안티패턴을 협공한다.
+
+// planning 얼굴에서 목적지가 있어 버튼이어야 하는 것(구조로 굳힘 — 콜백 미주입에도 버튼).
+const PLANNING_WIRED_CTA_TEST_IDS = [
+  'home-create-trip-fab',
+  'home-trip-hero-cta',
+] as const;
+
+describe('🔴 HomeScreen — planning 버튼 역할 집합 == 배선 CTA 집합 (AC-7 · 370-AC-4 확장)', () => {
+  it('planning 접근성 트리에서 버튼으로 읽히는 것은 여행 카드 CTA·FAB 뿐이다', () => {
+    // 콜백을 주입하지 않는다 — role 이 콜백 유무 파생이 아니라 구조여야 함을 강제한다(★4).
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
+
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID)
+      .sort();
+
+    // 집합 동치 — 브릿지 CTA 가 안 벗겨지거나(현행) 배선 CTA 가 벗겨지면 red.
+    expect(buttonIds).toEqual([...PLANNING_WIRED_CTA_TEST_IDS].sort());
+  });
+});
+
+describe('🔴 HomeScreen — planning 브릿지 CTA 죽은 버튼 금지 (AC-6)', () => {
+  it('브릿지 "일정에 추가"는 렌더되지만 accessibilityRole="button"으로 노출되지 않는다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
+
+    // 긍정 — 브릿지 카드·라벨은 그대로 뜬다(카피를 지우는 게 아니라 버튼 역할만 뗀다).
+    const bridge = screen.getByTestId('home-soft-note');
+    expect(within(bridge).getByText('일정에 추가')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-saved-places-cta')).toBeOnTheScreen();
+
+    // 부정 — 접근성 버튼 집합에 브릿지 CTA 는 없다(목적지 없는 죽은 버튼 제거).
+    const buttonIds = screen
+      .queryAllByRole('button')
+      .map((node) => node.props.testID);
+    expect(buttonIds).not.toContain('home-saved-places-cta');
+  });
+});
