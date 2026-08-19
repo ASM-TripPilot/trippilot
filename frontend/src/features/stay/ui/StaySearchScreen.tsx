@@ -80,6 +80,9 @@ export interface StaySearchScreenProps {
   /** 응답 대기 중 키 집합(TRIP-417 AC-8) — 든 하트는 `disabled`(연타 중복 요청 차단).
    * 미지정=빈=전부 활성. */
   pendingKeys?: string[];
+  /** 카드 본문 탭 콜백(TRIP-420 AC-1) — 눌린 item을 그대로 올린다. 목적지(상세 라우트)는
+   * 페이지가 정한다(화면은 라우터를 모른다). 미지정=정직한 스텁(카드 press가 무동작). */
+  onPressCard?: (item: StayItem) => void;
 }
 
 // 카드 그림자(브리프 §4-2 명시 raw 허용 — 그림자는 토큰 대상이 아니다, HomeScreen.tsx
@@ -223,16 +226,20 @@ function StayCard({
   saved,
   pending,
   onToggleSave,
+  onPressCard,
 }: {
   item: StayItem;
   saved: boolean;
   pending: boolean;
   onToggleSave?: (item: StayItem) => void;
+  onPressCard?: (item: StayItem) => void;
 }): ReactElement {
   const key = stayKey(item);
   return (
-    <View
+    <Pressable
       testID={`stay-card-${key}`}
+      accessibilityRole="button"
+      onPress={() => onPressCard?.(item)}
       style={cardShadow}
       className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
     >
@@ -243,12 +250,18 @@ function StayCard({
         <Pressable
           testID={`stay-card-save-${key}`}
           accessibilityRole="button"
-          // 담김=선택됨(AC-10) — 빈/찬을 색이 아니라 이 상태 + 아래 글리프 정체성으로 관찰한다.
-          accessibilityState={{ selected: saved }}
-          // 응답 대기 중이면 눌러도 onPress가 안 불린다(AC-8 연타 가드) — disabled 프롭이
-          // accessibilityState.disabled 도 함께 세운다.
-          disabled={pending}
-          onPress={() => onToggleSave?.(item)}
+          // 담김=선택됨(AC-10) · 대기=비활성(TRIP-417 AC-8)을 색이 아니라 accessibilityState로
+          // 관찰한다. ⚠️ `disabled` 프롭을 쓰면 대기 하트가 터치 응답자에서 빠져 press가 카드
+          // Pressable로 버블링돼 상세로 튕긴다(TRIP-420 AC-3 함정) — accessibilityState.disabled는
+          // 하트를 터치 응답자로 남겨(버블 차단) RNTL press를 no-op으로 만든다(02a §5 probe).
+          accessibilityState={{ selected: saved, disabled: pending }}
+          // onPress는 항상 present한 함수로 두고(undefined면 조상=카드로 버블) 몸통 첫 줄에서
+          // pending을 가드한다 — 실기(RN)에선 accessibilityState.disabled가 onPress를 못 막으므로
+          // 이 내부 가드가 실제 연타 차단이다.
+          onPress={() => {
+            if (pending) return;
+            onToggleSave?.(item);
+          }}
           className="absolute right-[32px] top-[14px] h-[28px] w-[30px] items-center justify-center"
         >
           {saved ? (
@@ -273,7 +286,7 @@ function StayCard({
           {formatPrice(item.price)}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -504,6 +517,7 @@ export function StaySearchScreen({
   savedKeys = [],
   onToggleSave,
   pendingKeys = [],
+  onPressCard,
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
@@ -556,6 +570,7 @@ export function StaySearchScreen({
                   saved={savedKeys.includes(key)}
                   pending={pendingKeys.includes(key)}
                   onToggleSave={onToggleSave}
+                  onPressCard={onPressCard}
                 />
               </View>
             );

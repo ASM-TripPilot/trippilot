@@ -158,6 +158,13 @@ export function StaySearchPage(): ReactElement {
         savedKeys={savedKeys}
         pendingKeys={pendingKeys}
         onToggleSave={(item) => void attemptToggle(item)}
+        // 카드 탭 → 상세 라우트(TRIP-420 e02). stayKey의 콜론(:)이 path 세그먼트라
+        // encodeURIComponent로 %3A 인코딩한다(수신 측 [stayId]가 useLocalSearchParams로
+        // 디코드해 받는다). 템플릿 리터럴이라 typedRoutes에 `/stays/${string}`로 잡힌다
+        // (`+` 연결은 타입이 string으로 넓어져 typedRoutes에 안 붙는다, RegionPickerPage 선례).
+        onPressCard={(item) =>
+          router.push(`/stays/${encodeURIComponent(stayKey(item))}`)
+        }
       />
       {sheetOpen ? (
         <StayFilterSheet
