@@ -122,6 +122,11 @@ services:
       TRIPPILOT_WIRING: ${AI_WIRING:-}
       # 기상청 단기예보(디코딩 키). 미설정 = 날씨 보정 없음.
       WEATHER_API: ${WEATHER_API:-}
+      # 후보 POI 정본 실연동(TRIP-408) — SERVICE_AUTH_TOKEN(.env, TRIP-393)이 있을 때만
+      # 백엔드를 바라본다. 비우면 주소도 비어 기존 StaticPoiDb(제주 시드 4곳) 조립 —
+      # 주소만 있고 토큰이 없으면 ai 가 기동 실패하므로 둘을 한 변수로 묶는다.
+      TRIPPILOT_BACKEND_BASE_URL: ${SERVICE_AUTH_TOKEN:+http://backend:8080}
+      TRIPPILOT_SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
     ports:
       - "8000:8000"
     healthcheck:

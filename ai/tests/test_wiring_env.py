@@ -36,7 +36,8 @@ _BACKEND_SEED = {
 }
 
 _ENV_VARS = ("TRIPPILOT_WIRING", "TRIPPILOT_LLM_PROVIDER", "OPENAI_API_KEY",
-             "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_API")
+             "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_API",
+             "TRIPPILOT_BACKEND_BASE_URL", "TRIPPILOT_SERVICE_AUTH_TOKEN")
 
 
 @pytest.fixture(autouse=True)
@@ -180,3 +181,60 @@ def test_openai_provider_builds_full_app(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("OPENAI_MODEL", "gpt-5.6")
     monkeypatch.setenv("OPENAI_API", "chat")
     assert isinstance(main.build_app_from_env(), FastAPI)
+
+
+# ── ⑤ 백엔드 POI 정본 실연동 분기 (TRIP-408 — 조립만, 실 호출 0) ─────
+
+
+def _spy_dev_app(monkeypatch: pytest.MonkeyPatch) -> dict:
+    captured: dict = {}
+
+    def spy(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return FastAPI()
+
+    monkeypatch.setattr(main, "build_dev_app", spy)
+    return captured
+
+
+def test_backend_poi_env_unset_keeps_static_seed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """미설정 → poi_db=None → build_dev_app 이 StaticPoiDb 기본값으로 조립(AC 하위호환)."""
+    captured = _spy_dev_app(monkeypatch)
+    main.build_app_from_env()
+    assert captured["poi_db"] is None
+    real = wiring.build_orchestrator
+    inner: dict = {}
+
+    def spy(**kwargs: object) -> object:
+        inner.update(kwargs)
+        return real(**kwargs)
+
+    monkeypatch.setattr(wiring, "build_orchestrator", spy)
+    wiring.build_dev_app(poi_db=None)
+    assert isinstance(inner["poi_db"], wiring.StaticPoiDb)
+
+
+def test_backend_poi_env_set_wires_backend_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from trippilot.poi_curation.adapters.backend_poi_db import BackendPoiDb
+
+    monkeypatch.setenv("TRIPPILOT_BACKEND_BASE_URL", "http://backend:8080")
+    monkeypatch.setenv("TRIPPILOT_SERVICE_AUTH_TOKEN", "secret")
+    captured = _spy_dev_app(monkeypatch)
+    main.build_app_from_env()
+    assert isinstance(captured["poi_db"], BackendPoiDb)
+
+
+@pytest.mark.parametrize("token", [None, ""])
+def test_backend_url_without_token_fails_startup(
+    monkeypatch: pytest.MonkeyPatch, token: str | None,
+) -> None:
+    """주소만 있고 토큰 없음(빈 문자열 포함) → 기동 실패 — /internal 은 fail-closed."""
+    monkeypatch.setenv("TRIPPILOT_BACKEND_BASE_URL", "http://backend:8080")
+    if token is not None:
+        monkeypatch.setenv("TRIPPILOT_SERVICE_AUTH_TOKEN", token)
+    with pytest.raises(RuntimeError, match="TRIPPILOT_SERVICE_AUTH_TOKEN"):
+        main.build_app_from_env()

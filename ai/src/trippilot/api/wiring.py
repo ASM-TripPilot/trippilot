@@ -825,6 +825,7 @@ def build_dev_app(
     llm: LlmPort | None = None,
     model_id: str | None = None,
     weather: WeatherPort | None = None,
+    poi_db: object | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -835,6 +836,8 @@ def build_dev_app(
     `model_id`는 주입 LLM의 모델 식별자(LIGHT·HEAVY 양 티어 공용, BR-U4-08 주입 원칙).
     `weather`는 선택 주입(TRIP-383) — env 해석·어댑터 조립은 main.py 소유, 기본 None
     이면 날씨 보정 없이 기존과 동일.
+    `poi_db`는 선택 주입(TRIP-408, BackendPoiDb 실연동) — 기본 None 이면 기존
+    StaticPoiDb(제주 시드 4곳) 그대로(하위호환: 백엔드 없는 로컬 스모크).
     """
     if model_id is not None:
         model_ids = {ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id}
@@ -848,7 +851,7 @@ def build_dev_app(
         }
     orchestrator = build_orchestrator(
         llm=llm if llm is not None else UnwiredLlm(),
-        poi_db=StaticPoiDb(demo_poi_seed()),
+        poi_db=poi_db if poi_db is not None else StaticPoiDb(demo_poi_seed()),
         context_store=StaticPersonaStore(
             PersonaSummary(taste_tags=(), companion=CompanionType.SOLO,
                            budget=BudgetLevel.MID)
