@@ -36,6 +36,7 @@ import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
 import {
   ExploreLandingScreen,
+  type PlaceCardVM,
   type StayCardVM,
 } from '@/features/explore/ui/ExploreLandingScreen';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
@@ -198,12 +199,26 @@ const STAY_SEARCH_PREVIEW_ITEMS: StayItem[] = [
   },
 ];
 
+// 장소 레인(TRIP-418) — 3얼굴 모두 장소 레인을 채워 회색 자리·이름·지역을 눈으로 본다.
+// imageUrl 이 전부 null 이라 회색 자리가 실제 프로덕션 모습이다(exploreFixtures 머리말).
+const EXPLORE_PLACE_CARDS: PlaceCardVM[] = PREVIEW_PLACES.map((place) => ({
+  key: place.poiId,
+  name: place.nameKo,
+  region: place.region ?? '',
+}));
+
 const EXPLORE_LANDING_BASE = {
   heading: {
     title: '무엇을 둘러볼까요?',
     subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
   },
   onPressSearch: noop,
+  placeLane: {
+    error: false,
+    cards: EXPLORE_PLACE_CARDS,
+    onRetry: noop,
+    onSeeAll: noop,
+  },
 } as const;
 
 const VIEW_ONLY_HANDLERS = {

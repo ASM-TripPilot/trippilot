@@ -31,6 +31,14 @@ export interface StayCardVM {
   priceText: string;
 }
 
+// 장소 카드 뷰모델(TRIP-418) — 숙소 카드와 대칭이되 가격 필드가 없다. 계약(GET /places)에
+// 거리·소요시간(INV-3)·가격이 없어 이름·지역만 그린다.
+export interface PlaceCardVM {
+  key: string;
+  name: string;
+  region: string;
+}
+
 export interface ExploreLandingScreenProps {
   heading: { title: string; subtitle: string };
   /** 검색창 탭 — 입력 불가 진입 버튼이다. 실제 검색은 /explore/region 에서만 한다(TRIP-412).
@@ -39,6 +47,12 @@ export interface ExploreLandingScreenProps {
   stayLane: {
     error: boolean;
     cards: StayCardVM[];
+    onRetry: () => void;
+    onSeeAll: () => void;
+  };
+  placeLane: {
+    error: boolean;
+    cards: PlaceCardVM[];
     onRetry: () => void;
     onSeeAll: () => void;
   };
@@ -160,10 +174,80 @@ function StayLaneError({ onRetry }: { onRetry: () => void }): ReactElement {
   );
 }
 
+function PlaceCard({ card }: { card: PlaceCardVM }): ReactElement {
+  // 숙소 카드와 대칭 — 사진은 계약(Place.imageUrl)이 null 뿐이라 회색 자리(surface-strong)로
+  // 둔다(URL 을 지어내지 않는다, INV-1). 가격·거리·소요시간은 데이터가 없어 안 그린다(INV-3).
+  // 비-Pressable View — 카드 진입은 없고 진입은 "모두 보기"뿐이다(하트도 없다, 담기는 d04).
+  return (
+    <View testID={`explore-place-card-${card.key}`} className="w-[200px]">
+      <View className="h-[130px] w-full rounded-card bg-surface-strong" />
+      <Text
+        numberOfLines={1}
+        className="mt-sm font-noto-bold text-card-title font-bold text-ink"
+      >
+        {card.name}
+      </Text>
+      <Text numberOfLines={1} className="mt-xs font-noto text-label text-muted">
+        {card.region}
+      </Text>
+    </View>
+  );
+}
+
+function PlaceLaneError({ onRetry }: { onRetry: () => void }): ReactElement {
+  // 숙소 레인 실패와 대칭 — 침묵하지 않고 자리에 재시도를 띄운다(INV-4). 나머지 구획은 산다.
+  return (
+    <View className="items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl">
+      <WarningTriangleGlyph size={28} tone="primary" />
+      <Text className="font-noto text-label text-muted">
+        장소를 불러오지 못했어요
+      </Text>
+      <Pressable
+        testID="explore-lane-place-retry"
+        accessibilityRole="button"
+        onPress={onRetry}
+        className="rounded-button border border-hairline-strong bg-canvas px-lg py-sm"
+      >
+        <Text className="font-noto-bold text-label font-bold text-ink">
+          다시 시도
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function PlaceLane({
+  lane,
+}: {
+  lane: ExploreLandingScreenProps['placeLane'];
+}): ReactElement {
+  return (
+    <View testID="explore-lane-place" className="mt-2xl">
+      <LaneHeader
+        title="장소"
+        onSeeAll={lane.onSeeAll}
+        seeAllTestID="explore-lane-place-seeall"
+      />
+      {lane.error ? (
+        <PlaceLaneError onRetry={lane.onRetry} />
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View className="flex-row gap-md">
+            {lane.cards.map((card) => (
+              <PlaceCard key={card.key} card={card} />
+            ))}
+          </View>
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
 export function ExploreLandingScreen({
   heading,
   onPressSearch,
   stayLane,
+  placeLane,
   bridge,
 }: ExploreLandingScreenProps): ReactElement {
   const hasSaved = bridge.savedCount >= 1;
@@ -225,6 +309,9 @@ export function ExploreLandingScreen({
               </ScrollView>
             )}
           </View>
+
+          {/* 장소 가로 레인(TRIP-418) — 숙소 레인 대칭. 진입은 "모두 보기"뿐(→ /explore/places) */}
+          <PlaceLane lane={placeLane} />
 
           {/* 여행자 일정 — 자리만(BR-U1-05) */}
           <View testID="explore-lane-itin" className="mt-2xl">

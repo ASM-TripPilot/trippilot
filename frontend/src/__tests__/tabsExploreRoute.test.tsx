@@ -5,11 +5,16 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import type { StayItem, StayPrice } from '@/shared/api/generated/schemas';
+import type {
+  Place,
+  StayItem,
+  StayPrice,
+} from '@/shared/api/generated/schemas';
 import { formatPrice } from '@/features/stay/model/formatPrice';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useGetPlaces } from '@/shared/api/generated/places/places';
 import ExploreRoute from '@/app/(tabs)/explore';
 
 /**
@@ -26,14 +31,22 @@ import ExploreRoute from '@/app/(tabs)/explore';
  *  - 🔴 lane_stay 쿼리 error 여도 나머지 구획은 살고 lane_stay 자리에 재시도(AC-E6, INV-4).
  *  - 🔴 axisSeg 4탭, '전체'만 selected, 나머지 눌러도 무동작(AC-E7).
  *
- * 왜 이렇게 테스트하나(02a §0-1): 라우트는 router 가 렌더해 props 를 못 받으므로, 두 훅을
- * seam 으로 목한다 — `useStaySearch`(features/stay)·`useSavedPlaces`(features/explore). 조합·
- * `formatPrice`/`stayKey` 매핑은 **라우트**가 진다(랜딩 화면은 `placeExploreStructure` 재귀
- * 스캔이 `@/features/stay` import·훅·zustand 를 0건 강제하는 순수 프레젠테이션이라 화면이
- * 부를 수 없다). `formatPrice`·`stayKey` 는 순수 함수라 목하지 않고 실값으로 대조한다.
+ * TRIP-418 장소 레인 확장(AC-E1~E7 무변경, 세 번째 목 seam `useGetPlaces` 추가):
+ *  - 🔴 lane_place = `useGetPlaces` items 를 `visiblePlaces` 로 가공한 가로 카드, "모두 보기"
+ *    → `/explore/places`(인자 없음 — 無-region=전국, AC-1).
+ *  - 🔴 카드는 이름·지역만 그리고 가격·거리·소요시간 문자열이 없다 · region null 무크래시(AC-2).
+ *  - 🔴 lane_place 쿼리 error 여도 나머지 구획·숙소 레인은 살고, 자리에 재시도 → refetch(AC-3).
+ *
+ * 왜 이렇게 테스트하나(02a §0-1): 라우트는 router 가 렌더해 props 를 못 받으므로, 세 훅을
+ * seam 으로 목한다 — `useStaySearch`(features/stay)·`useSavedPlaces`(features/explore)·
+ * `useGetPlaces`(shared/api/generated/places). 조합·`formatPrice`/`stayKey`·`visiblePlaces`
+ * 매핑은 **라우트**가 진다(랜딩 화면은 `placeExploreStructure` 재귀 스캔이 `@/features/stay`
+ * import·훅·zustand 를 0건 강제하는 순수 프레젠테이션이라 화면이 부를 수 없다).
+ * `formatPrice`·`stayKey` 는 순수 함수라 목하지 않고 실값으로 대조한다.
  *
  * 목 seam 경로는 라우트의 import 경로와 정확히 같아야 한다(02a ★E-4): 배럴이 아니라
- * `@/features/stay/model/useStaySearch`·`@/features/explore/model/savedPlaces`.
+ * `@/features/stay/model/useStaySearch`·`@/features/explore/model/savedPlaces`·
+ * `@/shared/api/generated/places/places`.
  */
 
 const mockPush = jest.fn();
@@ -47,12 +60,18 @@ jest.mock('@/features/stay/model/useStaySearch', () => ({
 jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: jest.fn(),
 }));
+jest.mock('@/shared/api/generated/places/places', () => ({
+  useGetPlaces: jest.fn(),
+}));
 
 const mockUseStaySearch = useStaySearch as jest.MockedFunction<
   typeof useStaySearch
 >;
 const mockUseSavedPlaces = useSavedPlaces as jest.MockedFunction<
   typeof useSavedPlaces
+>;
+const mockUseGetPlaces = useGetPlaces as jest.MockedFunction<
+  typeof useGetPlaces
 >;
 
 function item(
@@ -106,13 +125,63 @@ function savedResult(savedPoiIds: string[]) {
   return { savedPoiIds } as unknown as ReturnType<typeof useSavedPlaces>;
 }
 
+// 장소 레인(TRIP-418) — 숙소 레인 대칭. 카드 VM 은 { key, name, region } 뿐(가격 없음).
+function place(
+  poiId: string,
+  nameKo: string,
+  region: string | null,
+  savedCount: number
+): Place {
+  return {
+    poiId,
+    nameKo,
+    category: '명소',
+    lat: 0,
+    lng: 0,
+    region,
+    openingHours: null,
+    imageUrl: null,
+    tags: [],
+    savedCount,
+    dataStatus: 'ACTIVE',
+  };
+}
+
+// 이름·지역을 다르게, savedCount 로 정렬 결정론(A>B). B 는 region=null — 라우트가 `region ?? ''`
+// 로 접어 카드가 크래시 없이 떠야 한다(AC-2).
+const PLACE_A = place('poi-1', '성산일출봉', '제주', 20);
+const PLACE_B = place('poi-2', '감천문화마을', null, 10);
+
+const mockPlacesRefetch = jest.fn();
+
+/** 라우트가 읽는 필드(data·isError·isPending·refetch)만 채운 조회 결과. */
+function placesResults(items: Place[]) {
+  return {
+    data: items,
+    isError: false,
+    isPending: false,
+    refetch: mockPlacesRefetch,
+  } as unknown as ReturnType<typeof useGetPlaces>;
+}
+function placesError() {
+  return {
+    data: undefined,
+    isError: true,
+    isPending: false,
+    refetch: mockPlacesRefetch,
+  } as unknown as ReturnType<typeof useGetPlaces>;
+}
+
 beforeEach(() => {
   mockPush.mockClear();
   mockUseStaySearch.mockReset();
   mockUseSavedPlaces.mockReset();
+  mockUseGetPlaces.mockReset();
+  mockPlacesRefetch.mockClear();
   // 기본값: 정상 데이터. 각 테스트가 필요한 축만 덮어쓴다.
   mockUseStaySearch.mockReturnValue(stayResults([CARD_A, CARD_B]));
   mockUseSavedPlaces.mockReturnValue(savedResult(['p1']));
+  mockUseGetPlaces.mockReturnValue(placesResults([PLACE_A, PLACE_B]));
 });
 
 describe('🔴 AC-E1 · AC-E8 — 6구획 렌더 + nearby 부재', () => {
@@ -264,5 +333,72 @@ describe('🔴 AC-E7 — axisSeg 비활성', () => {
     fireEvent.press(screen.getByTestId('explore-axis-stay'));
     expect(mockPush).not.toHaveBeenCalled();
     expect(screen.getByTestId('explore-axis-all')).toBeSelected();
+  });
+});
+
+describe('🔴 AC-1 — 장소 레인 진입로가 실재한다 (TRIP-418 ①③)', () => {
+  it('장소 레인을 그리고, "모두 보기" 를 누르면 /explore/places 로 이동한다', () => {
+    render(<ExploreRoute />);
+
+    expect(screen.getByTestId('explore-lane-place')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('explore-lane-place-seeall'));
+
+    // region 을 안 싣는다 — PlaceExplore 는 無-region 이면 전국이라 숙소 레인의 부산 폴백
+    // 함정이 없다. 인자 없는 정확 문자열이어야 한다.
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/places');
+  });
+});
+
+describe('🔴 AC-2 — 장소 데이터 매핑 · INV-1/3 · null region 무크래시', () => {
+  it('각 카드가 이름·지역을 그리고, 가격·거리·소요시간 문자열이 없다', () => {
+    mockUseGetPlaces.mockReturnValue(placesResults([PLACE_A, PLACE_B]));
+    render(<ExploreRoute />);
+
+    const cardA = screen.getByTestId('explore-place-card-poi-1');
+    expect(cardA).toBeOnTheScreen();
+    // getByText(문자열)=노드 전체 텍스트 완전 일치 → 이름·지역이 각자 Text 노드여야 통과.
+    expect(within(cardA).getByText('성산일출봉')).toBeOnTheScreen();
+    expect(within(cardA).getByText('제주')).toBeOnTheScreen();
+    // 가격·거리·소요시간(duration) 문자열 0(INV-3). 장소 카드 VM 에 가격 필드가 없다.
+    // 소스 차원(duration 식별자·URL 리터럴 0)은 placeExploreStructure 재귀 스캔이 함께 잠근다.
+    expect(within(cardA).queryByText(/원|1박|km|분|시간|₩/)).toBeNull();
+
+    // region 이 null 인 항목도 크래시 없이 카드가 뜬다(라우트가 `region ?? ''` 로 접는다).
+    const cardB = screen.getByTestId('explore-place-card-poi-2');
+    expect(cardB).toBeOnTheScreen();
+    expect(within(cardB).getByText('감천문화마을')).toBeOnTheScreen();
+    expect(within(cardB).queryByText(/원|1박|km|분|시간|₩/)).toBeNull();
+  });
+});
+
+describe('🔴 AC-3 — 부분 실패 · 독립 쿼리 (INV-4)', () => {
+  it('장소 조회 error 여도 나머지 구획·숙소 레인은 살고, 자리에 재시도 → refetch 한다', () => {
+    mockUseGetPlaces.mockReturnValue(placesError());
+    render(<ExploreRoute />);
+
+    // 침묵하지 않는다 — 장소 레인 자리에 재시도(가시적 실패 신호).
+    expect(screen.getByTestId('explore-lane-place-retry')).toBeOnTheScreen();
+
+    // 나머지 구획 생존(독립 쿼리, INV-4).
+    [
+      'explore-landing-heading',
+      'explore-landing-search',
+      'explore-axis-all',
+      'explore-lane-stay',
+      'explore-lane-itin',
+      'explore-bridge-cta',
+    ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
+
+    // 숙소 레인 독립 — 장소 error 가 숙소 error 를 유발하지 않는다.
+    expect(screen.queryByTestId('explore-lane-stay-retry')).toBeNull();
+    expect(
+      screen.getByTestId(`explore-stay-card-${stayKey(CARD_A)}`)
+    ).toBeOnTheScreen();
+
+    // 재시도 press → refetch 1회.
+    fireEvent.press(screen.getByTestId('explore-lane-place-retry'));
+    expect(mockPlacesRefetch).toHaveBeenCalledTimes(1);
   });
 });

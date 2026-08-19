@@ -6,8 +6,11 @@ import { formatPrice } from '@/features/stay/model/formatPrice';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { visiblePlaces } from '@/features/explore/model/placeListView';
+import { useGetPlaces } from '@/shared/api/generated/places/places';
 import {
   ExploreLandingScreen,
+  type PlaceCardVM,
   type StayCardVM,
 } from '@/features/explore/ui/ExploreLandingScreen';
 
@@ -28,6 +31,7 @@ import {
 export default function ExploreRoute(): ReactElement {
   const router = useRouter();
   const stay = useStaySearch();
+  const places = useGetPlaces();
   const isAuthed = getAccessToken() !== null;
   const { savedPoiIds } = useSavedPlaces({ isAuthed });
 
@@ -37,6 +41,16 @@ export default function ExploreRoute(): ReactElement {
     region: item.region,
     priceText: formatPrice(item.price),
   }));
+
+  // 장소 레인(TRIP-418) — 숙소 레인 대칭. `visiblePlaces` 인기순 전량(상한 없음, Q2). region 은
+  // 안 실어 보내므로(無-region=전국) "모두 보기"는 인자 없는 /explore/places 다.
+  const placeCards: PlaceCardVM[] = visiblePlaces(places.data ?? [], '').map(
+    (place) => ({
+      key: place.poiId,
+      name: place.nameKo,
+      region: place.region ?? '',
+    })
+  );
 
   // "모두 보기"가 실어 보낼 지역 — 레인 첫 카드의 지역(TRIP-412). 없으면 지역 없이 push 하고
   // 착지 화면의 폴백에 맡긴다. 지역을 실어야 부산 폴백(빈 목록)에 안 걸린다.
@@ -61,6 +75,14 @@ export default function ExploreRoute(): ReactElement {
               ? `/stays?region=${encodeURIComponent(laneRegion)}`
               : '/stays'
           ),
+      }}
+      placeLane={{
+        error: places.isError,
+        cards: placeCards,
+        onRetry: () => {
+          void places.refetch();
+        },
+        onSeeAll: () => router.push('/explore/places'),
       }}
       bridge={{
         savedCount: savedPoiIds.length,
