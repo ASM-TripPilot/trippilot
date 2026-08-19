@@ -6,7 +6,6 @@ import com.trippilot.placedata.api.DomesticCheck
 import com.trippilot.placedata.api.DomesticRegionFacade
 import com.trippilot.placedata.domain.RegionCatalogPort
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 
 /**
  * [DestinationFacade] 구현 — 카탈로그 먼저, 지오코딩은 사유를 가를 때만.
@@ -17,9 +16,12 @@ import org.springframework.transaction.annotation.Transactional
  *
  * 캐시를 두지 않는다. 조회 한 번이 인덱스 탄 단건이고, [DomesticRegionFacade] 가 자기 캐시를
  * 이미 갖고 있다 — 여기서 또 담으면 무효화 지점이 둘이 된다.
+ *
+ * **트랜잭션을 열지 않는다.** `@Transactional` 을 붙이면 아래 지오코딩 HTTP 호출이 그 안에서 일어나
+ * 벤더가 느린 동안 DB 커넥션을 붙잡는다 — 여행 생성이 몰리면 커넥션 풀이 벤더 지연에 인질이 된다.
+ * 카탈로그 조회는 리포지토리가 자기 트랜잭션을 열므로 여기서 감쌀 이유가 없다.
  */
 @Service
-@Transactional(readOnly = true)
 class DestinationService(
     private val catalog: RegionCatalogPort,
     private val domestic: DomesticRegionFacade,
