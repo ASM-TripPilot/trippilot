@@ -49,6 +49,9 @@ export interface StaySearchScreenProps {
   /** 하단 탭바 탭 콜백(TRIP-413). 누른 탭의 key 가 그대로 온다 — 라우팅은 페이지 몫이다.
    * 미지정이면 정직한 스텁이라 기존 2-prop 호출이 안 깨진다. */
   onPressTab?: (key: ShellTabKey) => void;
+  /** FAB "여행 만들기" 콜백(TRIP-414). 목적지(/trips/new/step1)는 페이지가 정한다.
+   * 미지정이면 정직한 스텁. */
+  onPressCreateTrip?: () => void;
 }
 
 // 카드 그림자(브리프 §4-2 명시 raw 허용 — 그림자는 토큰 대상이 아니다, HomeScreen.tsx
@@ -351,6 +354,7 @@ export function StaySearchScreen({
   onPressRegister,
   onPressBack,
   onPressTab,
+  onPressCreateTrip,
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
@@ -394,7 +398,11 @@ export function StaySearchScreen({
             </View>
           )}
           ItemSeparatorComponent={() => <View className="h-lg" />}
-          ListFooterComponent={<View className="h-10" />}
+          // FAB(absolute bottom-104 + h-52 = 상단 156)·탭바(96) 오버레이가 마지막 카드를
+          // 가리지 않도록 스크롤 끝 여백을 156까지 확보한다(TRIP-414, Figma fabSpacer 대응).
+          ListFooterComponent={
+            <View testID="stay-search-list-footer" className="h-[156px]" />
+          }
         />
 
         <BottomTabBar
@@ -405,7 +413,10 @@ export function StaySearchScreen({
         <Pressable
           testID="stay-search-fab"
           accessibilityRole="button"
-          onPress={undefined}
+          // 자식 Text 의 전각 '＋'가 스크린리더 이름에 새지 않게 명시한다(TRIP-414 접근성 AC,
+          // TRIP-391 홈 FAB 이 겪은 유일한 실패 경로와 동형).
+          accessibilityLabel="여행 만들기"
+          onPress={onPressCreateTrip}
           className="absolute bottom-[104px] right-lg h-[52px] items-center justify-center rounded-pill bg-primary px-xl"
         >
           <Text className="font-noto-bold text-card-title font-bold text-on-primary">

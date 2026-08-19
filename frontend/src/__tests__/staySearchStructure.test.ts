@@ -357,3 +357,27 @@ describe('탭바 배선(TRIP-413): 죽은 빈 함수가 남지 않는다', () =>
     expect(source).not.toMatch(/onPressTab=\{\(\)\s*=>\s*\{\s*\}\}/);
   });
 });
+
+// ── TRIP-414 확장 — FAB 배선. 위 describe 들의 it 본문은 한 글자도 바뀌지 않았다.
+describe('FAB 배선(TRIP-414): 죽은 undefined onPress 가 남지 않는다', () => {
+  it('stay-search-fab 이 onPress 콜백을 잇고, onPress={undefined} 스텁이 없다', () => {
+    const screenPath = path.join(
+      ROOT,
+      'features',
+      'stay',
+      'ui',
+      'StaySearchScreen.tsx'
+    );
+    const source = stripComments(fs.readFileSync(screenPath, 'utf8'));
+
+    // 긍정 짝 — FAB 이 실재하고 콜백 prop 을 잇는다.
+    expect(source).toContain('stay-search-fab');
+    expect(source).toContain('onPressCreateTrip');
+
+    // 부정 — FAB 블록에 onPress={undefined} 죽은 스텁이 남지 않는다(금지 AC). FAB Pressable
+    // 여는 태그부터 닫는 태그까지 잘라 그 안만 본다(저장 하트의 onPress={undefined}는 범위 밖).
+    const fabStart = source.indexOf('stay-search-fab');
+    const fabBlock = source.slice(fabStart, fabStart + 400);
+    expect(fabBlock).not.toMatch(/onPress=\{undefined\}/);
+  });
+});

@@ -67,6 +67,8 @@ export function StaySearchPage(): ReactElement {
       // 그린다. 그 복제 탭바를 실 라우팅에 잇는다: 탭 key → 해당 탭 URL 로 replace(이 스택
       // 화면을 떠나 탭으로 간다). home 만 파일 규약상 index 라 '/' 다((tabs)/_layout 매핑과 동형).
       onPressTab={(key) => router.replace(key === 'home' ? '/' : `/${key}`)}
+      // FAB "여행 만들기"(TRIP-414) — 탐색 랜딩 bridge CTA·PlaceExplore CtaBar 와 같은 목적지.
+      onPressCreateTrip={() => router.push('/trips/new/step1')}
     />
   );
 }
