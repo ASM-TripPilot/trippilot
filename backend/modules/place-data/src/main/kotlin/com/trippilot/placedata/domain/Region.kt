@@ -46,4 +46,12 @@ interface RegionCatalogPort {
      * @param level 층 필터. null 이면 전부
      */
     fun find(query: String?, level: RegionLevel?): List<Region>
+
+    /**
+     * 이름 또는 별칭 **정확 일치**. 없으면 빈 목록.
+     *
+     * [find] 의 부분일치를 검증에 쓰면 안 된다 — `천` 하나로 천안시가 잡혀 아무 글자나 통과한다.
+     * 동명이지역이 있어 여러 건일 수 있다(고성군이 경남·강원에 둘 있다) — 하나를 고르지 않고 그대로 준다.
+     */
+    fun findExact(name: String): List<Region>
 }

@@ -3,13 +3,14 @@ package com.trippilot.trip.application
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.trip.domain.Trip
-import com.trippilot.placedata.api.DomesticCheck
-import com.trippilot.placedata.api.DomesticRegionFacade
+import com.trippilot.placedata.api.DestinationCheck
+import com.trippilot.placedata.api.DestinationFacade
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -62,10 +63,29 @@ class TripServiceTest : StringSpec({
         }
     }
 
-    // 벤더 장애가 곧 "여행을 못 만든다"가 되면 안 된다 — 국내강제는 품질 가드지 보안 경계가 아니다.
-    "국내 여부를 확인하지 못하면 막지 않는다" {
+    /**
+     * **정책이 바뀐 자리다(TRIP-360).** 예전에는 확인 못 하면 통과시켰다 — 지오코딩이 유일한 기준이라
+     * 벤더 장애가 곧 전면 차단이었기 때문이다. 이제 정상 목적지는 카탈로그에서 끝나 외부를 타지 않으므로,
+     * "확인 못 함"까지 온 값은 어차피 지원하지 않는 이름이다. 거절하되 사유를 그렇게 말한다.
+     *
+     * 벤더 장애가 정상 사용자를 막지 않는다는 보장은 위 "목록에 없던 시·군·구도 통과한다" 가 맡는다 —
+     * 그쪽이 카탈로그 경로라 외부를 부르지 않는다.
+     */
+    "확인하지 못한 목적지는 거절한다" {
         val svc = TripService(FakeRepo(), FakeDomestic(down = true), clock)
-        svc.create(acc, cmd(dests = listOf(TripDestination(0, "어딘가", 2)))).tripId
+        val e = shouldThrow<ValidationFailed> {
+            svc.create(acc, cmd(dests = listOf(TripDestination(0, "어딘가", 2))))
+        }
+        // 문구가 사유를 구분해야 한다 — "국내만 지원해요" 로 뭉치면 사용자는 무엇을 고칠지 모른다.
+        e.fieldErrors.single().reason shouldContain "확인하지 못했어요"
+    }
+
+    "거절 문구가 사유별로 갈린다" {
+        val svc = TripService(FakeRepo(), FakeDomestic(), clock)
+        val e = shouldThrow<ValidationFailed> {
+            svc.create(acc, cmd(dests = listOf(TripDestination(0, "도쿄", 2))))
+        }
+        e.fieldErrors.single().reason shouldContain "국내 여행만"
     }
 
     "여러 목적지 중 하나만 국외여도 막는다" {
@@ -106,11 +126,11 @@ class TripServiceTest : StringSpec({
     }
 })
 
-/** 국내 판정 대역 — 시드에 있으면 국내, 없으면 국외. [down] 이면 확인 불가(UNKNOWN). */
-private class FakeDomestic(private val down: Boolean = false) : DomesticRegionFacade {
-    override fun check(region: String): DomesticCheck = when {
-        down -> DomesticCheck.UNKNOWN
-        region in setOf("제주", "부산", "천안", "속초시", "사하구") -> DomesticCheck.INSIDE
-        else -> DomesticCheck.OUTSIDE
+/** 목적지 판정 대역 — 카탈로그에 있는 것만 받는다. [down] 이면 확인 불가. */
+private class FakeDomestic(private val down: Boolean = false) : DestinationFacade {
+    override fun check(region: String): DestinationCheck = when {
+        down -> DestinationCheck.UNVERIFIED
+        region in setOf("제주", "부산", "천안", "속초시", "사하구") -> DestinationCheck.SUPPORTED
+        else -> DestinationCheck.OUTSIDE
     }
 }

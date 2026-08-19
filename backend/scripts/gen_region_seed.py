@@ -70,8 +70,48 @@ def main(path: str) -> int:
         rows.append((code, short_name(full), sido_code, by_sido.get(sido_code, full.split()[0]),
                      "SIGUNGU", is_plain))
 
-    # 별칭 — 폐지된 옛 이름으로도 찾게 한다. 통합 개편이 또 오면 여기만 늘린다.
-    aliases = [("광주", "12"), ("광주광역시", "12"), ("전남", "12"), ("전라남도", "12")]
+    # ── 별칭 ────────────────────────────────────────────────────────────────
+    # 사람이 쓰는 이름은 표준명이 아니다. 프론트가 실제로 보내는 값도 '부산'·'경주'·'제주' 처럼
+    # 짧은 형태다(frontend/src/features/explore/model/regions.ts 실측). 표준명만 두면 그 값들이
+    # 전부 "모르는 지역"이 된다 — 별칭이 그 간극을 메운다.
+
+    # 시도 약칭은 **접미사 제거로 만들 수 없다**. 충청북도→'충청북' 이 아니라 '충북' 이다.
+    # 규칙이 아니라 관용이라 표로 적는다.
+    SIDO_SHORT = {
+        "11": ["서울"], "26": ["부산"], "27": ["대구"], "28": ["인천"], "30": ["대전"],
+        "31": ["울산"], "36": ["세종"], "41": ["경기"], "43": ["충북"], "44": ["충남"],
+        "47": ["경북"], "48": ["경남"], "50": ["제주"], "51": ["강원"], "52": ["전북"],
+        # 12 는 통합 신설이라 관용 약칭이 없다 — 아래 폐지명 표가 '광주'·'전남' 을 맡는다.
+    }
+    # 폐지·개편 전 정식명. 사용자의 기억은 개편보다 느리다.
+    RETIRED = {
+        "12": ["광주", "광주광역시", "전남", "전라남도"],
+        "50": ["제주도"], "51": ["강원도"], "52": ["전라북도"],
+    }
+
+    seen = set()
+    aliases: list[tuple[str, str]] = []
+
+    def add(alias: str, code: str) -> None:
+        if (alias, code) not in seen and alias != by_sido.get(code):
+            seen.add((alias, code))
+            aliases.append((alias, code))
+
+    for code, names in {**{k: v for k, v in SIDO_SHORT.items()}}.items():
+        for n in names:
+            add(n, code)
+    for code, names in RETIRED.items():
+        for n in names:
+            add(n, code)
+
+    # 시·군은 접미사만 떼면 관용형이 된다(경주시→경주 · 홍천군→홍천).
+    # **구는 떼지 않는다** — '동구'→'동' 은 이름이 아니고, 자치구는 이미 짧다.
+    # 떼고 나서 겹치는 이름은 그대로 둔다(고성군이 경남·강원에 둘 있다 — 실재하는 중의성이라
+    # 하나를 고르면 거짓이 된다. 별칭 PK 가 (alias, region_code) 라 둘 다 담긴다).
+    for code, full, _is_plain in sorted(sigungu):
+        name = short_name(full)
+        if " " not in name and name[-1] in ("시", "군"):
+            add(name[:-1], code)
 
     def esc(v: str) -> str:
         return v.replace("'", "''")
@@ -79,7 +119,7 @@ def main(path: str) -> int:
     out = [
         f"-- R__ 반복 시드 — 행정구역 카탈로그(TRIP-357). **생성물이다. 손으로 고치지 마라.**",
         f"-- 원본: {SRC_NOTE} / 생성: backend/scripts/gen_region_seed.py",
-        f"-- 시도 {len(sido)} · 시군구·행정구 {len(sigungu)} · 선택가능 {sum(1 for r in rows if r[5])}",
+        f"-- 시도 {len(sido)} · 시군구·행정구 {len(sigungu)} · 선택가능 {sum(1 for r in rows if r[5])} · 별칭 {len(aliases)}",
         f"--",
         f"-- 멱등: PK 충돌 시 갱신. 커버리지(POI 수)는 여기 없다 — 저장하지 않고 조회 때 센다(V2.25).",
         "",
