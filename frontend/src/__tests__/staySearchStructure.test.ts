@@ -335,3 +335,25 @@ describe('AC-8 배선: 판정의 단일 출처', () => {
     expect(screenSource).not.toContain('resolveStaySearchState');
   });
 });
+
+// ── TRIP-413 확장 — 하단 탭바 복구. 위 describe 들의 it 본문은 한 글자도 바뀌지 않았다.
+describe('탭바 배선(TRIP-413): 죽은 빈 함수가 남지 않는다', () => {
+  it('StaySearchScreen 이 BottomTabBar 를 onPressTab prop 으로 잇고, 빈 함수 스텁이 없다', () => {
+    const screenPath = path.join(
+      ROOT,
+      'features',
+      'stay',
+      'ui',
+      'StaySearchScreen.tsx'
+    );
+    const source = stripComments(fs.readFileSync(screenPath, 'utf8'));
+
+    // 긍정 짝 — 탭바가 실재하고 onPressTab 배선이 있다.
+    expect(source).toContain('BottomTabBar');
+    expect(source).toContain('onPressTab');
+
+    // 부정 — 죽은 빈 함수 스텁(눌러도 무동작)이 남지 않는다(금지 AC). 공백 유무만 다른
+    // 두 형태를 다 막는다.
+    expect(source).not.toMatch(/onPressTab=\{\(\)\s*=>\s*\{\s*\}\}/);
+  });
+});

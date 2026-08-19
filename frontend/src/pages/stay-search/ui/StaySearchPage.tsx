@@ -63,6 +63,10 @@ export function StaySearchPage(): ReactElement {
       // 깨진다(실측, 03_implementer_notes.md). `router.push`는 실제로 눌렸을 때만 평가된다.
       onPressRegister={() => router.push('/stays/register')}
       onPressBack={() => router.back()}
+      // 하단 탭바(TRIP-413) — /stays 는 (tabs) 밖 라우트라 진짜 탭바가 없어 화면이 복제본을
+      // 그린다. 그 복제 탭바를 실 라우팅에 잇는다: 탭 key → 해당 탭 URL 로 replace(이 스택
+      // 화면을 떠나 탭으로 간다). home 만 파일 규약상 index 라 '/' 다((tabs)/_layout 매핑과 동형).
+      onPressTab={(key) => router.replace(key === 'home' ? '/' : `/${key}`)}
     />
   );
 }

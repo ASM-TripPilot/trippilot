@@ -13,7 +13,7 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { StayItem } from '@/shared/api/generated/schemas';
-import { BottomTabBar } from '@/shared/ui/BottomTabBar';
+import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import { filterReasonLabel } from '../model/filterReasonLabel';
@@ -46,6 +46,9 @@ export interface StaySearchScreenProps {
   /** 앱바 뒤로가기 콜백. 목적지는 페이지가 정한다(화면은 라우터를 모른다). 미지정이면
    * 정직한 스텁. */
   onPressBack?: () => void;
+  /** 하단 탭바 탭 콜백(TRIP-413). 누른 탭의 key 가 그대로 온다 — 라우팅은 페이지 몫이다.
+   * 미지정이면 정직한 스텁이라 기존 2-prop 호출이 안 깨진다. */
+  onPressTab?: (key: ShellTabKey) => void;
 }
 
 // 카드 그림자(브리프 §4-2 명시 raw 허용 — 그림자는 토큰 대상이 아니다, HomeScreen.tsx
@@ -347,6 +350,7 @@ export function StaySearchScreen({
   onRetry,
   onPressRegister,
   onPressBack,
+  onPressTab,
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
@@ -393,7 +397,10 @@ export function StaySearchScreen({
           ListFooterComponent={<View className="h-10" />}
         />
 
-        <BottomTabBar activeKey="explore" onPressTab={() => {}} />
+        <BottomTabBar
+          activeKey="explore"
+          onPressTab={(key) => onPressTab?.(key)}
+        />
 
         <Pressable
           testID="stay-search-fab"
