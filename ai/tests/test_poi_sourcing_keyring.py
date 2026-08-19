@@ -137,3 +137,75 @@ def test_extra_keys_require_positive_calls_per_key() -> None:
         TourApiAdapter(http, "k1", extra_keys=("k2",))
     with pytest.raises(ValueError):
         TourApiAdapter(http, "k1", extra_keys=("k2",), calls_per_key=0)
+
+
+# ── ⑤ 죽은 키 조기 퇴출 (TRIP-348) ────────────────────────────────
+# 실측 배경(2026-08-19): 2번 키가 403을 뱉는 동안 3번 키는 정상이었는데, 키링이
+# 호출 수로만 전환해 2번에 머물렀다 — 750콜 예산 중 318콜만 쓰고 6개 지역이 비었다.
+# 죽은 키는 뒤의 멀쩡한 키를 가리면 안 된다.
+
+def test_403_이면_그_키를_버리고_다음_키로_같은_요청을_재시도() -> None:
+    http = FakeTourApiHttp(pages=_two_page_http()._pages, dead_keys={"k1": 403})
+    adapter = TourApiAdapter(http, "k1", extra_keys=("k2",), calls_per_key=10)
+    collect(adapter, area_code="39", content_types=["12"], max_calls=8, rows_per_page=2)
+
+    keys = _service_keys(http)
+    assert keys[0] == "k1"            # 첫 호출은 1번 키로 나갔고
+    assert keys[1] == "k2"            # 거부되자 같은 요청이 2번 키로 다시 나갔다
+    assert "k1" not in keys[1:]       # 그 뒤로 죽은 키는 다시 쓰이지 않는다
+
+
+def test_퇴출_후에도_수집_결과는_단일_정상키와_동일() -> None:
+    """전환은 시퀀스를 어긋내지 않는다 — 같은 페이지를 두 번 세지도, 건너뛰지도 않는다."""
+    dead_first = FakeTourApiHttp(pages=_two_page_http()._pages, dead_keys={"k1": 403})
+    healthy = _two_page_http()
+
+    got = collect(TourApiAdapter(dead_first, "k1", extra_keys=("k2",), calls_per_key=10),
+                  area_code="39", content_types=["12"], max_calls=8, rows_per_page=2)
+    want = collect(TourApiAdapter(healthy, "only"),
+                   area_code="39", content_types=["12"], max_calls=7, rows_per_page=2)
+
+    assert ([c.poi.name for c in got.report.passed]
+            == [c.poi.name for c in want.report.passed])
+
+
+def test_키_관련_resultCode_도_퇴출_사유() -> None:
+    """403 만이 거부 신호가 아니다 — data.go.kr 은 200 + 에러 봉투로도 거부한다."""
+    http = FakeTourApiHttp(pages=_two_page_http()._pages, dead_keys={"k1": "30"})
+    adapter = TourApiAdapter(http, "k1", extra_keys=("k2",), calls_per_key=10)
+    collect(adapter, area_code="39", content_types=["12"], max_calls=8, rows_per_page=2)
+    assert _service_keys(http)[1] == "k2"
+
+
+def test_일시_장애는_퇴출_사유가_아니다() -> None:
+    """타임아웃·429 는 그 시점 API 상태다 — 실측으로 살아있는 키도 함께 타임아웃했다.
+
+    잘못 퇴출하면 멀쩡한 키를 잃는다. 429 는 키를 바꾸지 않고 그 호출만 실패한다.
+    """
+    http = FakeTourApiHttp(pages=_two_page_http()._pages, dead_keys={"k1": 429})
+    adapter = TourApiAdapter(http, "k1", extra_keys=("k2",), calls_per_key=10)
+    collect(adapter, area_code="39", content_types=["12"], max_calls=4, rows_per_page=2)
+    assert set(_service_keys(http)) == {"k1"}   # 여전히 1번 키를 쓴다
+
+
+def test_전부_죽으면_HTTP_를_더_쓰지_않는다() -> None:
+    """살아있는 키가 없는데 계속 두드리면 남은 예산을 헛되이 태운다."""
+    http = FakeTourApiHttp(pages=_two_page_http()._pages, dead_keys={"k1": 403, "k2": 403})
+    adapter = TourApiAdapter(http, "k1", extra_keys=("k2",), calls_per_key=10)
+    result = collect(adapter, area_code="39", content_types=["12"],
+                     max_calls=20, rows_per_page=2)
+
+    assert result.stats.passed == 0
+    assert len(http.calls) == 2          # 키마다 한 번씩만 — 그 뒤로는 안 두드린다
+    assert result.stats.page_failures >= 1   # 침묵하지 않는다
+
+
+def test_퇴출은_경고로_남는다(caplog) -> None:
+    """조용히 넘어가면 '왜 한 키만 쓰지'를 로그에서 찾을 수 없다."""
+    http = FakeTourApiHttp(pages=_two_page_http()._pages, dead_keys={"k1": 403})
+    adapter = TourApiAdapter(http, "k1", extra_keys=("k2",), calls_per_key=10)
+    with caplog.at_level(logging.WARNING, logger=_TOURAPI_LOGGER):
+        collect(adapter, area_code="39", content_types=["12"],
+                max_calls=8, rows_per_page=2)
+    assert any("키 1 퇴출" in r.getMessage() and "남은 키 1개" in r.getMessage()
+               for r in caplog.records)

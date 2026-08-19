@@ -14,6 +14,18 @@ mapx/mapy(경도/위도)가 문자열로 오는 것.
 도달할 때 다음 키로 전환하고 **수집 시퀀스는 그대로 이어간다** (병렬 아님 —
 같은 페이지를 두 번 부르지 않는다). 키 순서는 (service_key, *extra_keys) 등록
 순서 고정(결정론). extra_keys가 없으면 기존 단일 키 동작과 완전히 동일하다.
+
+**죽은 키 조기 퇴출**: 호출 수로만 전환하면 **죽은 키가 뒤의 멀쩡한 키를 가린다.**
+실측(2026-08-19)으로 2번 키가 403을 뱉는 동안 3번 키는 정상이었는데, 키링이 2번에
+머물러 750콜 예산 중 318콜만 쓰고 6개 지역이 통째로 비었다. 키를 못 쓰게 만드는
+응답(HTTP 403, 그리고 data.go.kr 봉투의 키 관련 resultCode — 미등록·접근거부·
+한도초과·기한만료)을 만나면 그 키를 **즉시 퇴출하고 다음 살아있는 키로 같은 요청을
+재시도**한다. 재시도는 키 수만큼만(각 키 1회) — 무한 재시도가 아니라 "이 키로는
+안 된다"의 확인이다. 전부 죽으면 HTTP를 더 쓰지 않고 즉시 실패한다.
+
+퇴출은 **키 단위 판정에만** 쓴다. 타임아웃·429는 키가 아니라 그 시점 API 상태라
+(실측: 같은 지역에서 살아있는 키도 함께 타임아웃) 퇴출 사유가 아니다 — 잘못 퇴출하면
+멀쩡한 키를 잃는다.
 """
 
 from __future__ import annotations
@@ -36,6 +48,12 @@ logger = logging.getLogger(__name__)
 
 _BASE = "https://apis.data.go.kr/B551011/KorService2"
 _OK_CODE = "0000"
+
+# 이 키로는 앞으로도 안 된다는 신호 — 만나면 키를 퇴출하고 다음 키로 넘어간다.
+# data.go.kr 공통 에러코드: 20 접근거부 · 22 한도초과 · 30 미등록 · 31 기한만료.
+# (재시도로 풀리는 일시 장애 — 타임아웃·429·5xx — 는 여기 없다. 그건 키 문제가 아니다.)
+_KEY_DEAD_CODES = frozenset({"20", "22", "30", "31"})
+_KEY_DEAD_HTTP = 403
 
 # detailIntro2의 영업시간·휴무일 필드명은 contentTypeId마다 다르다 (TourAPI 4.0).
 _INTRO_FIELDS: Mapping[str, tuple[str, str]] = {
@@ -65,6 +83,14 @@ class UrllibHttpClient:
             return json.loads(resp.read().decode("utf-8"))
 
 
+class _KeyRejected(Exception):
+    """이 키로는 앞으로도 안 된다 — 어댑터 내부에서만 쓰이고 밖으로 새지 않는다.
+
+    `SourcingError`(수집 실패)와 구분하는 이유: 전자는 **키를 바꾸면 풀리는** 실패라
+    같은 요청을 다음 키로 다시 걸어야 하고, 후자는 그대로 상위에 올려야 한다.
+    """
+
+
 class TourApiAdapter:
     """PoiSourcingPort 구현. 키는 전부 **디코딩 키**를 받는다 (urlencode 1회는 여기서).
 
@@ -92,17 +118,40 @@ class TourApiAdapter:
         self._app = mobile_app
         self._http_calls = 0  # 시도 기준 (실패 호출 포함 — 한도 소모와 동일 기준)
         self._key_idx = 0
+        self._dead: set[int] = set()  # 퇴출된 키 (403·키 관련 resultCode)
 
     def _take_key(self) -> str:
-        """이번 HTTP 호출에 쓸 키 1건 소모. 키당 상한 도달 시 다음 키로 전환."""
+        """이번 HTTP 호출에 쓸 키 1건 소모. 키당 상한 도달 또는 퇴출 시 다음 키로.
+
+        호출 수 기준으로 고른 뒤 **퇴출된 키는 건너뛴다** — 죽은 키가 뒤의 멀쩡한
+        키를 가리지 않게. 살아있는 키가 없으면 부르는 쪽이 먼저 막으므로 여기선
+        정상 경로만 다룬다.
+        """
         if len(self._keys) > 1:
             idx = min(self._http_calls // self._per_key, len(self._keys) - 1)
+            idx = self._next_alive(idx)
             if idx != self._key_idx:
                 logger.info("키 전환: %d→%d, 누적 %d호출",
                             self._key_idx + 1, idx + 1, self._http_calls)
                 self._key_idx = idx
         self._http_calls += 1
         return self._keys[self._key_idx]
+
+    def _next_alive(self, start: int) -> int:
+        """start부터 순환하며 첫 살아있는 키. 전부 죽었으면 start 그대로(부르는 쪽이 막는다)."""
+        n = len(self._keys)
+        for step in range(n):
+            idx = (start + step) % n
+            if idx not in self._dead:
+                return idx
+        return start
+
+    def _retire(self, reason: str) -> None:
+        """현재 키를 퇴출한다 — 조용히 넘어가지 않고 남은 키 수와 함께 경고로 남긴다."""
+        self._dead.add(self._key_idx)
+        alive = len(self._keys) - len(self._dead)
+        logger.warning("키 %d 퇴출 (%s) — 남은 키 %d개",
+                       self._key_idx + 1, reason, alive)
 
     def _common_params(self) -> dict[str, str]:
         # serviceKey는 _call이 키링에서 주입한다 (HTTP 1건 = 키 소모 1건)
@@ -158,11 +207,28 @@ class TourApiAdapter:
 
     # ── 내부 ─────────────────────────────────────────
     def _call(self, endpoint: str, params: Mapping[str, str]) -> dict:
+        """HTTP 1건 + 봉투 해체 — 키가 죽으면 다음 살아있는 키로 같은 요청을 재시도.
+
+        재시도 상한은 키 수(각 키 1회)다. 무한 재시도가 아니라 "이 키로는 안 된다"를
+        확인하는 것뿐 — 일시 장애(타임아웃·429)는 재시도 없이 그대로 올린다(포트 계약).
+        """
+        for _ in range(len(self._keys)):
+            if len(self._dead) == len(self._keys):
+                raise SourcingError(f"{endpoint} 호출 불가: 등록된 키가 전부 퇴출됨")
+            try:
+                return self._call_once(endpoint, params)
+            except _KeyRejected as e:
+                self._retire(str(e))
+        raise SourcingError(f"{endpoint} 호출 실패: 살아있는 키 없음 (전부 거부)")
+
+    def _call_once(self, endpoint: str, params: Mapping[str, str]) -> dict:
         """HTTP 1건 + 봉투 해체. 비정상 봉투는 기본값 흡수가 아니라 실패로 승격(INV-4)."""
         request_params = {"serviceKey": self._take_key(), **params}
         try:
             payload = self._http.get_json(f"{_BASE}/{endpoint}", request_params)
         except Exception as e:  # urllib·JSON 파싱 등 — 원인 보존해 상위 로그로
+            if getattr(e, "code", None) == _KEY_DEAD_HTTP:
+                raise _KeyRejected(f"HTTP {_KEY_DEAD_HTTP}") from e
             raise SourcingError(f"{endpoint} 호출 실패: {type(e).__name__}: {e}") from e
         if not isinstance(payload, dict):
             raise SourcingError(f"{endpoint} 응답이 JSON 객체가 아님")
@@ -170,6 +236,8 @@ class TourApiAdapter:
         code = header.get("resultCode") if isinstance(header, dict) else None
         if code != _OK_CODE:
             msg = header.get("resultMsg") if isinstance(header, dict) else "봉투 형식 오류"
+            if code in _KEY_DEAD_CODES:
+                raise _KeyRejected(f"resultCode={code} {msg}")
             raise SourcingError(f"{endpoint} resultCode={code!r}: {msg}")
         body = self._dig(payload, "response", "body")
         if not isinstance(body, dict):
