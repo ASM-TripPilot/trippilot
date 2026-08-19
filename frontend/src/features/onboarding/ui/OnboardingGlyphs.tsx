@@ -618,6 +618,101 @@ export function FamilyGlyph({
   );
 }
 
+// 동행 — 부모님(두 성인).
+export function ParentsGlyph({
+  size = 24,
+  selected,
+  testID,
+}: SelectableGlyphProps) {
+  const stroke = selectableStroke(selected);
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M7 9.3C8.27 9.3 9.3 8.27 9.3 7C9.3 5.73 8.27 4.7 7 4.7C5.73 4.7 4.7 5.73 4.7 7C4.7 8.27 5.73 9.3 7 9.3Z"
+        stroke={stroke}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 18C3.7 15.3 5.2 14 7 14C8.8 14 10.3 15.3 11 18"
+        stroke={stroke}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M17 9.3C18.27 9.3 19.3 8.27 19.3 7C19.3 5.73 18.27 4.7 17 4.7C15.73 4.7 14.7 5.73 14.7 7C14.7 8.27 15.73 9.3 17 9.3Z"
+        stroke={stroke}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M13 18C13.7 15.3 15.2 14 17 14C18.8 14 20.3 15.3 21 18"
+        stroke={stroke}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 동행 — 반려동물(발바닥).
+export function PetGlyph({
+  size = 24,
+  selected,
+  testID,
+}: SelectableGlyphProps) {
+  const stroke = selectableStroke(selected);
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M7.5 11.4C8.27 11.4 8.9 10.77 8.9 10C8.9 9.23 8.27 8.6 7.5 8.6C6.73 8.6 6.1 9.23 6.1 10C6.1 10.77 6.73 11.4 7.5 11.4Z"
+        stroke={stroke}
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10.7 9C11.53 9 12.2 8.33 12.2 7.5C12.2 6.67 11.53 6 10.7 6C9.87 6 9.2 6.67 9.2 7.5C9.2 8.33 9.87 9 10.7 9Z"
+        stroke={stroke}
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M14.3 9C15.13 9 15.8 8.33 15.8 7.5C15.8 6.67 15.13 6 14.3 6C13.47 6 12.8 6.67 12.8 7.5C12.8 8.33 13.47 9 14.3 9Z"
+        stroke={stroke}
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M17.5 11.4C18.27 11.4 18.9 10.77 18.9 10C18.9 9.23 18.27 8.6 17.5 8.6C16.73 8.6 16.1 9.23 16.1 10C16.1 10.77 16.73 11.4 17.5 11.4Z"
+        stroke={stroke}
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12.5 11.5C14.43 11.5 16 13.07 16 15C16 16.93 14.43 18.5 12.5 18.5C10.57 18.5 9 16.93 9 15C9 13.07 10.57 11.5 12.5 11.5Z"
+        stroke={stroke}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // 이동 — 도보 위주(발자국).
 export function WalkGlyph({
   size = 24,
@@ -754,6 +849,108 @@ export function CarGlyph({
         d="M6.5 14.5H8.5M15.5 14.5H17.5"
         stroke={stroke}
         strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+// 이동 — 택시(지붕 사인 얹은 차).
+export function TaxiGlyph({
+  size = 24,
+  selected,
+  testID,
+}: SelectableGlyphProps) {
+  const stroke = selectableStroke(selected);
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M9.5 3.8H14.5V5.8H9.5V3.8Z"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3.5 15.5V12L5.5 7.5C5.8 6.8 6.5 6.5 7.2 6.5H16.8C17.5 6.5 18.2 6.8 18.5 7.5L20.5 12V15.5"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3.5 12H20.5"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M3.5 15.5H20.5V18.5C20.5 19 20.1 19.5 19.5 19.5H18C17.5 19.5 17 19 17 18.5V17.5H7V18.5C7 19 6.5 19.5 6 19.5H4.5C4 19.5 3.5 19 3.5 18.5V15.5Z"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M6.5 14.5H8.5M15.5 14.5H17.5"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+// 이동 — 자전거(두 바퀴 + 프레임).
+export function BikeGlyph({
+  size = 24,
+  selected,
+  testID,
+}: SelectableGlyphProps) {
+  const stroke = selectableStroke(selected);
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M6 19.5C7.93 19.5 9.5 17.93 9.5 16C9.5 14.07 7.93 12.5 6 12.5C4.07 12.5 2.5 14.07 2.5 16C2.5 17.93 4.07 19.5 6 19.5Z"
+        stroke={stroke}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M18 19.5C19.93 19.5 21.5 17.93 21.5 16C21.5 14.07 19.93 12.5 18 12.5C16.07 12.5 14.5 14.07 14.5 16C14.5 17.93 16.07 19.5 18 19.5Z"
+        stroke={stroke}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M6 16L11 16L14 9.5L18 16"
+        stroke={stroke}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M11 16L12.7 9.3"
+        stroke={stroke}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M11.9 9.3H13.6M13.7 9.5H15.5"
+        stroke={stroke}
+        strokeWidth={1.7}
         strokeLinecap="round"
       />
     </Svg>

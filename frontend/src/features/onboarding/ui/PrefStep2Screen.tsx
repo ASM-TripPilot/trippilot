@@ -1,7 +1,9 @@
 /**
- * c09b-pref(통합 취향 2/2) 프레젠테이션 (TRIP-163 · AC2 · Figma 1774:2258 정합).
- * props 만 받고 스토어·네트워크를 모른다. back chevron은 Figma에 없지만 Q4 결정으로
- * 2/2 화면에만 추가한다(1/2는 back 없음 — Figma 완전 일치).
+ * c09b-pref(통합 취향 2/2) 프레젠테이션 (TRIP-163 · TRIP-254 정본 정합).
+ * props 만 받고 스토어·네트워크를 모른다. 예산(단일)+동행·활동·음식·이동(복수) 5블록.
+ * 동행·이동·음식·활동 값 도메인은 요구사항 정본(US-ONB-07~10 + §PreferenceSet + openapi)이
+ * 쥐며, 라이브 Figma(1774:2258)는 옛 세트를 그린 낡은 사본이라 근거가 아니다(TRIP-254 §드리프트).
+ * back chevron은 Q4 결정으로 2/2 화면에만 둔다(1/2는 back 없음).
  */
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -9,14 +11,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   BackChevronGlyph,
+  BikeGlyph,
   CarGlyph,
   CheckGlyph,
   FamilyGlyph,
   FriendsGlyph,
   HeartGlyph,
   InfoCircleGlyph,
+  ParentsGlyph,
+  PetGlyph,
   SkipChevronGlyph,
   SoloPersonGlyph,
+  TaxiGlyph,
   TransitGlyph,
   WalkGlyph,
   type GlyphComponent,
@@ -25,10 +31,12 @@ import {
 export interface PrefStep2ScreenProps {
   selectedBudget: string | null;
   selectedCompanions: readonly string[] | null;
+  selectedActivities: readonly string[] | null;
   selectedFoods: readonly string[] | null;
   selectedTransports: readonly string[] | null;
   onToggleBudget: (id: string) => void;
   onToggleCompanion: (id: string) => void;
+  onToggleActivity: (id: string) => void;
   onToggleFood: (id: string) => void;
   onToggleTransport: (id: string) => void;
   onBack: () => void;
@@ -51,33 +59,58 @@ const BUDGET_OPTIONS = [
   { slug: 'luxury', label: '럭셔리', amount: '300만원+' },
 ];
 
+// 동행 6종(US-ONB-07). couple slug는 유지하고 라벨만 "커플"(HeartGlyph 재사용 — 미래 PUT
+// enum 매핑 안정성). 반려동물은 화면상 칩 하나지만 계약에선 companionTypes가 아니라 별개
+// petFlag 불리언이다(TRIP-254 §맹점 — PUT 배선 칸 몫, 이번 사이클은 칩만 그린다).
 const COMPANION_OPTIONS: {
   slug: string;
   label: string;
   Icon: GlyphComponent;
 }[] = [
   { slug: 'solo', label: '혼자', Icon: SoloPersonGlyph },
+  { slug: 'couple', label: '커플', Icon: HeartGlyph },
   { slug: 'friends', label: '친구', Icon: FriendsGlyph },
-  { slug: 'couple', label: '연인', Icon: HeartGlyph },
   { slug: 'family', label: '가족', Icon: FamilyGlyph },
+  { slug: 'parents', label: '부모님', Icon: ParentsGlyph },
+  { slug: 'pet', label: '반려동물', Icon: PetGlyph },
 ];
 
+// 활동 8종(US-ONB-08). 정본(US-ONB-08 stories)은 스포츠를 더한 9종이나, 값 정본
+// (§PreferenceSet)·계약 activities enum·V1.5 DB CHECK는 8종(스포츠 없음)이다 — 계약이 값의
+// 저장 권한을 쥐므로 8종이 구현 가능한 진실이고, 스포츠는 BE 확인 대기다(TRIP-254 결정②).
+const ACTIVITY_OPTIONS = [
+  { slug: 'nature', label: '자연' },
+  { slug: 'history', label: '역사문화' },
+  { slug: 'themepark', label: '테마파크' },
+  { slug: 'foodtour', label: '맛집투어' },
+  { slug: 'cafe', label: '카페' },
+  { slug: 'exhibition', label: '전시' },
+  { slug: 'nightview', label: '야경' },
+  { slug: 'shopping', label: '쇼핑' },
+];
+
+// 음식 5종(US-ONB-10). 구 식사성향 5종(맛집 탐방·현지식·해산물·매운 음식·가리는 것 없음)은
+// 정본 값 도메인으로 교체됐다.
 const FOOD_OPTIONS = [
-  { slug: 'hotspot', label: '맛집 탐방' },
-  { slug: 'local', label: '현지식' },
-  { slug: 'seafood', label: '해산물' },
-  { slug: 'spicy', label: '매운 음식' },
-  { slug: 'any', label: '가리는 것 없음' },
+  { slug: 'korean', label: '한식' },
+  { slug: 'western', label: '양식' },
+  { slug: 'japanese', label: '일식' },
+  { slug: 'chinese', label: '중식' },
+  { slug: 'asian', label: '아시안' },
 ];
 
+// 이동 5종(US-ONB-09). rental 라벨은 "렌터카", walk 라벨은 "도보"(옛 "도보 위주"·"차량" 교체).
+// 5종이라 한 줄 3개 고정을 풀고 chunkPairs로 동행과 동형 행 청킹한다.
 const TRANSPORT_OPTIONS: {
   slug: string;
   label: string;
   Icon: GlyphComponent;
 }[] = [
-  { slug: 'walk', label: '도보 위주', Icon: WalkGlyph },
+  { slug: 'walk', label: '도보', Icon: WalkGlyph },
   { slug: 'transit', label: '대중교통', Icon: TransitGlyph },
-  { slug: 'car', label: '차량', Icon: CarGlyph },
+  { slug: 'rental', label: '렌터카', Icon: CarGlyph },
+  { slug: 'taxi', label: '택시', Icon: TaxiGlyph },
+  { slug: 'bike', label: '자전거', Icon: BikeGlyph },
 ];
 
 function chunkPairs<T>(items: T[]): T[][] {
@@ -186,22 +219,26 @@ function IconTile({
   );
 }
 
-interface FoodChipProps {
+interface ChipProps {
   slug: string;
   label: string;
   selected: boolean;
   onPress: () => void;
+  testIDPrefix: string;
 }
 
-function FoodChip({
+// 음식·활동 공용 칩(아이콘 없는 pill). testID prefix를 파라미터로 받아 축마다 다른 네임스페이스를
+// 준다(IconTile.testIDPrefix 선례) — 활동 칩은 food가 아니라 activity prefix를 달아야 한다.
+function Chip({
   slug,
   label,
   selected,
   onPress,
-}: FoodChipProps): ReactElement {
+  testIDPrefix,
+}: ChipProps): ReactElement {
   return (
     <Pressable
-      testID={`onboarding-pref2-food-${slug}`}
+      testID={`${testIDPrefix}-${slug}`}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
@@ -264,10 +301,12 @@ function TransportTile({
 export function PrefStep2Screen({
   selectedBudget,
   selectedCompanions,
+  selectedActivities,
   selectedFoods,
   selectedTransports,
   onToggleBudget,
   onToggleCompanion,
+  onToggleActivity,
   onToggleFood,
   onToggleTransport,
   onBack,
@@ -371,6 +410,29 @@ export function PrefStep2Screen({
           <View className="gap-md px-lg pb-xs pt-2xl">
             <View className="gap-xs">
               <Text className="font-noto-bold text-section font-bold text-ink">
+                어떤 활동을 즐기세요?
+              </Text>
+              <Text className="font-noto text-label text-muted">
+                여러 개 골라도 좋아요
+              </Text>
+            </View>
+            <View className="flex-row flex-wrap gap-sm">
+              {ACTIVITY_OPTIONS.map(({ slug, label }) => (
+                <Chip
+                  key={slug}
+                  slug={slug}
+                  label={label}
+                  selected={selectedActivities?.includes(slug) ?? false}
+                  onPress={() => onToggleActivity(slug)}
+                  testIDPrefix="onboarding-pref2-activity"
+                />
+              ))}
+            </View>
+          </View>
+
+          <View className="gap-md px-lg pb-xs pt-2xl">
+            <View className="gap-xs">
+              <Text className="font-noto-bold text-section font-bold text-ink">
                 음식 취향은?
               </Text>
               <Text className="font-noto text-label text-muted">
@@ -379,12 +441,13 @@ export function PrefStep2Screen({
             </View>
             <View className="flex-row flex-wrap gap-sm">
               {FOOD_OPTIONS.map(({ slug, label }) => (
-                <FoodChip
+                <Chip
                   key={slug}
                   slug={slug}
                   label={label}
                   selected={selectedFoods?.includes(slug) ?? false}
                   onPress={() => onToggleFood(slug)}
+                  testIDPrefix="onboarding-pref2-food"
                 />
               ))}
             </View>
@@ -394,18 +457,23 @@ export function PrefStep2Screen({
             <Text className="font-noto-bold text-section font-bold text-ink">
               이동은 어떻게 선호하세요?
             </Text>
-            <View className="flex-row gap-[11px]">
-              {TRANSPORT_OPTIONS.map(({ slug, label, Icon }) => (
-                <TransportTile
-                  key={slug}
-                  slug={slug}
-                  label={label}
-                  Icon={Icon}
-                  selected={selectedTransports?.includes(slug) ?? false}
-                  onPress={() => onToggleTransport(slug)}
-                />
-              ))}
-            </View>
+            {chunkPairs(TRANSPORT_OPTIONS).map((row) => (
+              <View
+                key={row.map((item) => item.slug).join('-')}
+                className="flex-row gap-[11px]"
+              >
+                {row.map(({ slug, label, Icon }) => (
+                  <TransportTile
+                    key={slug}
+                    slug={slug}
+                    label={label}
+                    Icon={Icon}
+                    selected={selectedTransports?.includes(slug) ?? false}
+                    onPress={() => onToggleTransport(slug)}
+                  />
+                ))}
+              </View>
+            ))}
           </View>
 
           <View className="px-lg py-sm">
