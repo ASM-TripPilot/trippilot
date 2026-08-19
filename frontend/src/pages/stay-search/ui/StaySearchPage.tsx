@@ -9,11 +9,17 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 
+import type { StayItem } from '@/shared/api/generated/schemas';
+import { getAccessToken } from '@/shared/api/tokenManager';
+
+import { relaxCulpritFilter } from '@/features/stay/model/relaxCulpritFilter';
+import { useSavedStays } from '@/features/stay/model/savedStays';
 import {
   buildStayFilterOptions,
   countActiveFilters,
   toggleFilterValue,
 } from '@/features/stay/model/stayFilterOptions';
+import { stayKey } from '@/features/stay/model/stayKey';
 import { resolveStaySearchState } from '@/features/stay/model/staySearchState';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { StayFilterSheet } from '@/features/stay/ui/StayFilterSheet';
@@ -49,6 +55,25 @@ export function StaySearchPage(): ReactElement {
     ...(amenityList.length > 0 ? { amenity: amenityList } : {}),
     ...(stayTypeList.length > 0 ? { stayType: stayTypeList } : {}),
   });
+
+  // 저장 하트(TRIP-417). isAuthed는 렌더 시점 1회 동기 판정(PlaceExplorePage 선례 — "판정 대기"
+  // 제3 상태가 안 생긴다). 담김 목록·토글은 useSavedStays 한 곳이 소유하고, 응답 대기 키만
+  // 페이지 로컬 상태로 들어 화면이 그 하트를 disabled로 만들게 한다(연타 중복 요청 차단, AC-8).
+  const isAuthed = getAccessToken() !== null;
+  const { isSaved, save, remove, savedKeys } = useSavedStays({ isAuthed });
+  const [pendingKeys, setPendingKeys] = useState<string[]>([]);
+
+  async function attemptToggle(item: StayItem): Promise<void> {
+    const key = stayKey(item);
+    setPendingKeys((keys) => [...keys, key]);
+    const outcome = isSaved(key) ? await remove(item) : await save(item);
+    setPendingKeys((keys) => keys.filter((k) => k !== key));
+
+    // 미인증 누름은 요청 없이 로그인으로 보낸다(BR-U1-03 · Q6, 죽은 버튼 회피).
+    if (outcome.kind === 'failed' && outcome.reason === 'unauthenticated') {
+      router.push('/(auth)/login');
+    }
+  }
 
   const state = resolveStaySearchState({
     isPending,
@@ -112,6 +137,27 @@ export function StaySearchPage(): ReactElement {
         // 지역·필터 칩(TRIP-415) — 배지는 적용된 필터 개수(초안 아님).
         onPressFilter={handlePressFilter}
         activeFilterCount={countActiveFilters(amenityList, stayTypeList)}
+        // 빈 상태 카드 CTA(TRIP-416) — 화면은 라우터를 모른다(구조 가드), 배선은 이 페이지 몫.
+        // 지역 바꾸기는 필터 칩과 같은 목적지(/explore/region)로 진입한다(AC-1).
+        onPressChangeRegion={() => router.push('/explore/region')}
+        // 필터 완화(AC-2)·초기화(AC-4) 공용 — amenity/stayType 두 키만 비운다(region 은 merge 로
+        // 유지되므로 넣지 않는다, ★4). setParams 갱신 → useLocalSearchParams 갱신 → 재조회.
+        onRelaxFilters={() => router.setParams({ amenity: [], stayType: [] })}
+        // 원인 필터만 해제(AC-5) — relaxCulpritFilter 가 reason(=reasons[0])을 지금 적용된 두
+        // 배열에 매핑해 그 원인만 뺀 {amenity, stayType}를 낸다(정확히 두 키라 그대로 넘긴다).
+        onClearCulpritFilter={(reason) =>
+          router.setParams(
+            relaxCulpritFilter(reason, {
+              amenity: amenityList,
+              stayType: stayTypeList,
+            })
+          )
+        }
+        // 저장 하트(TRIP-417) — 담김 집합·대기 집합은 값으로, 누름은 콜백으로 내린다. 화면은
+        // 저장/해제·라우팅을 모른다(구조 가드) — attemptToggle이 판정·요청·로그인 이동을 전담.
+        savedKeys={savedKeys}
+        pendingKeys={pendingKeys}
+        onToggleSave={(item) => void attemptToggle(item)}
       />
       {sheetOpen ? (
         <StayFilterSheet

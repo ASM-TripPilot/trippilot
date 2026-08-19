@@ -24,6 +24,7 @@ import {
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItineraryConfirm,
 } from '@/shared/api/generated/trips/trips';
+import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 
@@ -154,9 +155,12 @@ export function ItineraryPlanPage({
         },
         onError: (error) => {
           setConfirmError(CONFIRM_ERROR_NOTE);
-          // 404 는 되돌아갈 서버 상태가 없어 재조회하지 않는다. 그 밖(409 등)은 서버 진실이
-          // 이미 확정일 수 있어 무효화로 재조회해 정합한다(무효화만 — data 는 보존).
-          if (!isNotFound(error)) {
+          // 재조회는 **409 에서만** 건다 — 409 는 서버 진실이 이미 확정일 수 있어 무효화로
+          // 재조회해 정합한다(무효화만 — data 는 보존). 404·500·네트워크는 재조회하지 않는다:
+          // itinerary 상태가 안 바뀌었고, 백엔드가 넓게 죽은 outage 에서 재조회마저 실패하면
+          // itinerary.isError → resolvePlanState 가 failed 로 판정해 타임라인이 통째로 사라진다
+          // (INV-4 정반대). 인라인 안내(위 setConfirmError)만으로 침묵을 깬다(TRIP-355).
+          if (isAlreadyRegistered(error)) {
             void queryClient.invalidateQueries({
               queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
             });
