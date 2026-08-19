@@ -1,8 +1,8 @@
 /**
- * 취향 6축 세션 메모리 Zustand 스토어 (AC5 · AC4 · US-ONB-14).
+ * 취향 7축 세션 메모리 Zustand 스토어 (AC5 · AC4 · US-ONB-14).
  *
- * 6축 = 복수(styles·companions·foods·transports) + 단일(pace·budget). 1/2 화면은 이 중
- * styles·pace만 쓰지만, 2/2 화면(범위 밖 `PrefStep2Page`)이 나머지 4축을 셀렉터로 꺼내
+ * 7축 = 복수(styles·companions·foods·transports·activities) + 단일(pace·budget). 1/2 화면은
+ * 이 중 styles·pace만 쓰지만, 2/2 화면(범위 밖 `PrefStep2Page`)이 나머지 5축을 셀렉터로 꺼내
  * 쓰므로 여기서 줄이면 안 된다. 토글 판단은 여기서 다시 쓰지 않고 전부
  * `preferenceSelection`의 `toggleMulti`/`toggleSingle`에 위임한다.
  *
@@ -30,12 +30,14 @@ export interface PreferenceDraft {
   companions: string[] | null;
   foods: string[] | null;
   transports: string[] | null;
+  activities: string[] | null;
   toggleStyle: (id: string) => void;
   togglePace: (id: string) => void;
   toggleBudget: (id: string) => void;
   toggleCompanion: (id: string) => void;
   toggleFood: (id: string) => void;
   toggleTransport: (id: string) => void;
+  toggleActivity: (id: string) => void;
   reset: () => void;
 }
 
@@ -46,6 +48,7 @@ const INITIAL_DRAFT = {
   companions: null,
   foods: null,
   transports: null,
+  activities: null,
 } as const;
 
 const createPreferenceDraft: StateCreator<PreferenceDraft> = (set) => ({
@@ -60,6 +63,8 @@ const createPreferenceDraft: StateCreator<PreferenceDraft> = (set) => ({
   toggleFood: (id) => set((state) => ({ foods: toggleMulti(state.foods, id) })),
   toggleTransport: (id) =>
     set((state) => ({ transports: toggleMulti(state.transports, id) })),
+  toggleActivity: (id) =>
+    set((state) => ({ activities: toggleMulti(state.activities, id) })),
   // 로그아웃 등에서도 쓸 수 있는 정당한 프로덕션 액션 — 테스트 전용 뒷문이 아니다.
   reset: () => set(INITIAL_DRAFT),
 });

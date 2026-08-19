@@ -118,3 +118,42 @@ describe('약관·닉네임은 탈출 비대상 (AC4 · AC-11-3 · 6-4 · 선제
     expect(read(nicknamePath)).not.toMatch(/나중에 설정하고 시작/);
   });
 });
+
+describe('활동 스포츠 부재 주석 (AC-8 · 6-5)', () => {
+  it('PrefStep2Screen에 활동 블록이 있고, "스포츠는 정본 9종·계약 8종" 불일치 주석이 남아 있다', () => {
+    const screenPath = path.join(FEATURE_DIR, 'ui', 'PrefStep2Screen.tsx');
+    const source = read(screenPath);
+
+    // 긍정(짝) — 활동 블록이 실재한다(별도 testID prefix, 02a §2 계약). 이게 없으면
+    // "스포츠 언급"만으로 통과하는 공허 초록이 되므로 반드시 활동 블록 존재와 짝짓는다.
+    expect(source).toMatch(/onboarding-pref2-activity/);
+
+    // 긍정 — "스포츠" 언급이 소스에 남아 있다. 스포츠는 렌더 옵션이 아니므로(PrefStep2Screen
+    // 렌더 테스트가 옵션 부재를 별도로 잠근다) 소스에 등장하는 "스포츠"는 주석뿐이다.
+    expect(source).toMatch(/스포츠/);
+    // 긍정 — 그 주석이 정본 9종·계약 8종 불일치를 설명한다(BE 확인 대기). 표현 자유도를
+    // 위해 세 토큰 중 하나만 있으면 통과(구현자 문구 재량, 의도는 고정).
+    expect(source).toMatch(/8종|BE|계약/);
+  });
+});
+
+describe('g01 여행 생성 동반 유형 불변 (AC-10 · BR-U1-39 · 6-6 · 무회귀 앵커)', () => {
+  it('온보딩 라벨을 커플로 바꿔도 g01(여행 생성)의 "연인"은 그대로 남는다', () => {
+    const TRIP_MODEL_DIR = path.join(ROOT, 'features', 'trip', 'model');
+    const wizardStep1Path = path.join(TRIP_MODEL_DIR, 'tripWizardStep1.ts');
+    const tripDraftPath = path.join(TRIP_MODEL_DIR, 'tripDraft.ts');
+
+    // 긍정 — 두 정본 파일이 실재한다.
+    expect(fs.existsSync(wizardStep1Path)).toBe(true);
+    expect(fs.existsSync(tripDraftPath)).toBe(true);
+
+    // 긍정 — g01 동반 유형 목록에 "연인"이 여전히 있다(온보딩 커플과 별개 상수).
+    expect(read(wizardStep1Path)).toMatch(/연인/);
+
+    // 긍정 — tripDraft의 온보딩→g01 매핑이 "커플"과 "연인"을 둘 다 유지한다
+    // (`['커플','연인']` — 온보딩 라벨 변경이 이 매핑을 통해 g01의 "연인"으로 이어진다).
+    const tripDraftSource = read(tripDraftPath);
+    expect(tripDraftSource).toMatch(/연인/);
+    expect(tripDraftSource).toMatch(/커플/);
+  });
+});
