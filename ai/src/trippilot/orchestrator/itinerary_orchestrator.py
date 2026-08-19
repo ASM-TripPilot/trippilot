@@ -59,7 +59,8 @@ from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.poi import Poi, PoiCategory
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.ports.trace_port import TracePort
-from trippilot.ports.weather_port import WeatherPort
+from trippilot.domain.freshness import ProviderKind, ProviderStatus
+from trippilot.orchestrator.info_collector import InfoCollector
 
 _COMPONENT = "orchestrator.itinerary"
 
@@ -245,7 +246,7 @@ def candidates_report(pool: CandidatePool) -> CandidatesReport:
     """M7 풀 실측 → 충분성 보고. 지어내지 않는다 — 전부 풀에서 센 사실이다.
 
     - shortfall = 풀에 후보가 **0건**인 경계 카테고리 (카테고리별 최소 개수 임계는 1 —
-      임계 발명을 최소화한 1차 규칙. 정교한 판정은 PlaceScoutAgent(S7.1) 승격 시 이관)
+      임계 발명을 최소화한 1차 규칙. 정교한 판정은 PlaceScoutProvider(S7.1) 승격 시 이관)
     - level: 풀 자체가 비면 NO_CANDIDATES, 빠진 카테고리가 있으면 LOW, 아니면 OK
     """
     present = {p.category for p in pool.pois}
@@ -340,7 +341,7 @@ class ItineraryOrchestrator:
         *,
         context_resolver: OwnershipVerifier,
         explanation_worker: ExplanationWorker | None = None,
-        weather: WeatherPort | None = None,
+        info: InfoCollector | None = None,
         config: OrchestratorConfig | None = None,
     ) -> None:
         self._pool_builder = pool_builder
@@ -350,7 +351,8 @@ class ItineraryOrchestrator:
         self._trace = trace
         self._resolver = context_resolver  # 소유 검증 갈래만 쓴다 (TRIP-333)
         self._explainer = explanation_worker  # 미주입이면 설명 단계를 통째로 건너뛴다
-        self._weather = weather  # 미주입이면 날씨 보정 없이 생성한다 (TRIP-383)
+        # InfoCollector 경유 수집 (TRIP-406) — 미주입이면 날씨 보정 없이 생성.
+        self._info = info
         self._cfg = config or OrchestratorConfig()
 
     # ── 공개 API ────────────────────────────────────────────────────
@@ -500,26 +502,37 @@ class ItineraryOrchestrator:
         trace_id: TraceId,
         now: datetime,
     ) -> dict[date, int] | None:
-        """여행 날짜들의 강수확률(%) 조회 — 생성은 날씨를 problem으로만 안다.
+        """여행 날짜들의 강수확률(%) 수집 — 생성은 날씨를 problem으로만 안다.
 
-        - **미주입(None)**: 기능 부재 — 무보정, 강등으로 세지 않는다(⑤ 설명 워커의
-          "미배선 = 기능 부재" 선례와 동일: 미배선을 강등으로 세면 기존 조립 전부가
-          DEGRADED로 바뀐다 — 기존 호출 무영향 원칙과 충돌).
-        - **조회 실패(예외)**: 무보정 + Degradation + FallbackEvent (침묵 금지,
-          INV-4 — 날씨 실패가 생성 실패가 되면 안 된다).
+        TRIP-406부터 수집은 InfoCollector(→WeatherProvider) 경유 — 오케스트레이터는
+        포트를 모르고 InfoPacket 상태값만 소비한다 (agent-structure-v2 §3).
+        - **미주입(None)·Provider 미등록**: 기능 부재 — 무보정, 강등으로 세지
+          않는다(⑤ 설명 워커의 "미배선 = 기능 부재" 선례와 동일).
+        - **수집 실패(OK 아닌 상태값)**: 무보정 + Degradation + FallbackEvent
+          (침묵 금지, INV-4 — 날씨 실패가 생성 실패가 되면 안 된다).
         - 반환은 요청 날짜로 한정한다(예보 지평 밖·무관 날짜는 problem에 싣지 않음).
           유효 예보가 없으면 None — 솔버 무보정 경로와 동일.
         """
-        if self._weather is None:
+        if self._info is None:
             return None
-        try:
-            forecast = self._weather.daily_forecast(request.anchor, request.days)
-        except Exception as e:
+        packets = self._info.collect(
+            "GENERATE_SCHEDULE",
+            {"anchor": request.anchor, "days": request.days, "now": now},
+        )
+        packet = packets.get(ProviderKind.WEATHER)
+        if packet is None:  # Provider 미등록 — 기능 부재
+            return None
+        if packet.status is not ProviderStatus.OK:
             self._degrade(steps, trace_id, now, "weather", "weather_forecast",
-                          "no_adjust", f"weather_error: {type(e).__name__}: {e}")
+                          "no_adjust",
+                          f"weather_error: {packet.data.get('reason', packet.status.value)}")
             return None
         wanted = set(request.days)
-        filtered = {d: p for d, p in forecast.items() if d in wanted}
+        # 패킷 data는 JSON-safe(ISO 문자열 키) — problem 주입 전에 date로 복원
+        filtered = {
+            parsed: p for d, p in packet.data.get("daily", {}).items()
+            if (parsed := date.fromisoformat(d)) in wanted
+        }
         return filtered or None
 
     # ── ② 선호 점수 + 규칙 점수 폴백 ────────────────────────────────

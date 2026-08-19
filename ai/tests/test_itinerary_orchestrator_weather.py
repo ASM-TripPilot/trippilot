@@ -1,4 +1,7 @@
-"""TRIP-383 — 오케스트레이터 날씨 주입 경로 (WeatherPort 선택 주입, fake만).
+"""TRIP-383·406 — 오케스트레이터 날씨 경로 (InfoCollector→WeatherProvider 경유, fake만).
+
+TRIP-406부터 _build(weather=포트)는 실배선과 동일하게 Provider→InfoCollector로
+감싸 주입한다 — 아래 4계약은 전환 후에도 그대로 성립해야 한다.
 
 증명하는 것:
   ① 주입 + 조회 성공: 예보가 **요청 날짜로 한정**되어 problem.daily_rain_prob에

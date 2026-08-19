@@ -53,7 +53,10 @@ from trippilot.ports.llm_port import LlmRequest, LlmResponse
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.prompt import PromptRef
+from trippilot.domain.freshness import ProviderKind
+from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.poi_curation.config import M7Config
+from trippilot.providers.weather import WeatherProvider
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.orchestrator.itinerary_orchestrator import (
     GenerateItineraryRequest,
@@ -268,7 +271,9 @@ def _build(
         trace,
         context_resolver=resolver,  # 소유 검증(fail-closed, TRIP-333)도 같은 resolver
         explanation_worker=explainer,
-        weather=weather,  # 선택 주입 (TRIP-383) — None이면 무보정
+        # 실배선(wiring.py)과 같은 경로 — 포트를 Provider→InfoCollector로 감싼다 (TRIP-406)
+        info=(None if weather is None
+              else InfoCollector({ProviderKind.WEATHER: WeatherProvider(weather)})),
         config=config,
     )
     return orchestrator, trace, sink
