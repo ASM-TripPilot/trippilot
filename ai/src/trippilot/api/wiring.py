@@ -103,7 +103,10 @@ from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.orchestrator import itinerary_orchestrator as core
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
 from trippilot.ports.trace_port import TracePort
+from trippilot.domain.freshness import ProviderKind
+from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.ports.weather_port import WeatherPort
+from trippilot.providers.weather import WeatherProvider
 
 _logger = logging.getLogger("trippilot.wiring")
 
@@ -689,7 +692,8 @@ def build_orchestrator(
     외부 의존(llm·poi_db·context_store)은 전부 인자 — 실 어댑터 등장 시 그 인자만
     바뀐다. c1_config는 model_id 하드코딩 금지(BR-U4-08) 때문에 기본값이 없다.
     `weather`(TRIP-383)는 선택 — 기본 None이면 날씨 보정 없이 기존과 동일하게
-    생성한다(기존 호출 전부 무영향).
+    생성한다(기존 호출 전부 무영향). 포트는 여기서 WeatherProvider→InfoCollector로
+    감싸 주입한다(TRIP-406) — 오케스트레이터는 포트를 모른다.
     """
     clock = clock if clock is not None else MonotonicClock()
     trace = trace if trace is not None else LoggingTrace()
@@ -711,7 +715,10 @@ def build_orchestrator(
         explanation_worker=ExplanationWorker(
             GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace), resolver
         ),
-        weather=weather,  # 선택 주입 (TRIP-383) — None이면 무보정
+        info=(  # 선택 주입 (TRIP-383·406) — None이면 무보정
+            None if weather is None
+            else InfoCollector({ProviderKind.WEATHER: WeatherProvider(weather)})
+        ),
         config=orchestrator_config,
     )
     return WiredItineraryOrchestrator(orchestrator, provider, poi_db, estimator, tz=tz)
