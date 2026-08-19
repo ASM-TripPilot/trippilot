@@ -163,7 +163,7 @@ const EXPLORE_LANDING_BASE = {
     title: '무엇을 둘러볼까요?',
     subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
   },
-  onSubmitSearch: noop,
+  onPressSearch: noop,
 } as const;
 
 const VIEW_ONLY_HANDLERS = {
