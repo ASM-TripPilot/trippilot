@@ -66,6 +66,41 @@ export function buildDraftDayTabs(input: {
   return tabs;
 }
 
+export type GenerationDayState = 'done' | 'active' | 'waiting';
+
+export interface GenerationGaugeCell {
+  /** 여행 며칠째인가 — testID `itinerary-generating-day-{n}-*` 의 n. */
+  dayNumber: number;
+  date: string;
+  state: GenerationDayState;
+}
+
+/**
+ * h10 "만드는 중" 게이지의 일자별 3상태를 **탭에서 도출**한다(01b D1·D5).
+ *
+ * 도착한 일자(`hasData`)는 `done`, 아직 안 온 일자 중 **첫 번째**가 `active`(지금 만드는 중),
+ * 그 뒤는 전부 `waiting`(대기). 상태는 데이터가 정하므로 전부 `done` 으로 찍는 가짜 진척이
+ * 원천적으로 불가능하다. 진행 수치·채움비율은 계약(`generationState` 3값 열거)에 없어 넣지
+ * 않는다 — 상태 라벨 3종뿐이다(D5 · AC-6 진행률 금지).
+ */
+export function buildGenerationGauge(
+  tabs: DraftDayTab[]
+): GenerationGaugeCell[] {
+  let activeAssigned = false;
+  return tabs.map((tab) => {
+    let state: GenerationDayState;
+    if (tab.hasData) {
+      state = 'done';
+    } else if (!activeAssigned) {
+      state = 'active';
+      activeAssigned = true;
+    } else {
+      state = 'waiting';
+    }
+    return { dayNumber: tab.dayNumber, date: tab.date, state };
+  });
+}
+
 /** `'2026-06-10'` → `'6월 10일 · 수'`. 요일은 달력에서 계산한다(Figma 목업의 요일은 틀렸다). */
 export function formatDraftDayHeader(date: string): string {
   const time = utcDayTime(date);
@@ -122,7 +157,14 @@ export type DraftView =
   | { kind: 'empty' }
   /** 만들기는 했는데 넣을 후보가 없었다(h35). 조건 목록은 서버 문자열 그대로 실려 나간다. */
   | { kind: 'zero'; shortfallCategories: string[] }
-  | { kind: 'listed'; days: ItineraryDaysItem[]; staleFailed: boolean };
+  | {
+      kind: 'listed';
+      days: ItineraryDaysItem[];
+      staleFailed: boolean;
+      /** PARTIAL(2단계 생성 중)이면 목록 위에 h10 "만드는 중" 얼굴을 얹는 축(01b D1). 페이지가
+       * 실어 나른다 — `resolveDraftView` 는 이 값을 모른다(얼굴 판정과 별개 관심사, TRIP-401 선례). */
+      generating?: boolean;
+    };
 
 /**
  * 안내를 **켜지 않을** 값의 목록이다. 반대로(켤 값의 목록으로) 짜면 서버가 어휘를 하나

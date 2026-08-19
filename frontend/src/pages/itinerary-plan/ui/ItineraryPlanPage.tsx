@@ -9,6 +9,7 @@ import {
   buildPlanDayTabs,
   formatConfirmedDateRange,
   formatNightsLabel,
+  isConfirmLocked,
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
 import {
@@ -243,6 +244,7 @@ export function ItineraryPlanPage({
       slots={state.days[activeDayIndex]?.slots ?? []}
       activeDayIndex={activeDayIndex}
       status={itinerary.data?.status}
+      confirmLocked={isConfirmLocked(itinerary.data?.generationState)}
       confirmedSubtitle={confirmedSubtitle}
       confirmError={confirmError}
       onConfirm={handleConfirm}

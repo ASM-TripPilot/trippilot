@@ -136,7 +136,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   // 다르게 진화한다.
   const summary = itinerary.data?.candidatesSummary;
 
-  const view = resolveDraftView({
+  const baseView = resolveDraftView({
     days,
     loading: trip.isPending || itinerary.isPending,
     // 재생성 실패도 여기로 온다 — 실패하면 목록은 그대로인데 화면이 아무 말도 안 하게 된다
@@ -149,6 +149,17 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       pollExhausted,
     candidatesSummary: summary,
   });
+
+  // h10 "만드는 중" 얼굴은 목록(listed) 위에 **얹히는 축**이다(01b D1) — PARTIAL 이면 generating 을
+  // 실어 화면이 게이지·스켈레톤·제목을 h10 으로 바꾼다(탭·카드는 그대로 공존). `DraftScreenProps`
+  // 를 안 늘리려 새 프롭 대신 view 에 실어 나른다(프롭 수 동결 심판 · itineraryMapSurfaceStructure S3).
+  const view =
+    baseView.kind === 'listed'
+      ? {
+          ...baseView,
+          generating: itinerary.data?.generationState === 'PARTIAL',
+        }
+      : baseView;
 
   /**
    * 재생성 — **확정 일정에는 어떤 경로로도 보내지 않는다.**
