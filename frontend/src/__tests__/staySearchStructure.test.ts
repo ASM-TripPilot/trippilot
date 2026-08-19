@@ -381,3 +381,32 @@ describe('FAB 배선(TRIP-414): 죽은 undefined onPress 가 남지 않는다', 
     expect(fabBlock).not.toMatch(/onPress=\{undefined\}/);
   });
 });
+
+// ── TRIP-415 확장 — 지역·필터 칩 배선. 위 describe 들의 it 본문은 한 글자도 바뀌지 않았다.
+describe('필터 칩 배선(TRIP-415): 죽은 undefined onPress 가 남지 않는다', () => {
+  it('FilterChip 이 onPress prop 을 잇고, stay-search-filter 근처에 onPress={undefined} 가 없다', () => {
+    const screenPath = path.join(
+      ROOT,
+      'features',
+      'stay',
+      'ui',
+      'StaySearchScreen.tsx'
+    );
+    const source = stripComments(fs.readFileSync(screenPath, 'utf8'));
+
+    // 긍정 짝 — 필터 칩이 실재하고 콜백 prop 을 잇는다.
+    expect(source).toContain('stay-search-filter-');
+    expect(source).toContain('onPressFilter');
+
+    // FilterChip 정의부(testID `stay-search-filter-${axis}` 앞뒤)만 잘라 본다.
+    const chipStart = source.indexOf('stay-search-filter-${axis}');
+    const chipBlock = source.slice(chipStart - 200, chipStart + 400);
+
+    // 부정 — onPress={undefined} 죽은 스텁이 남지 않는다(금지 AC).
+    expect(chipBlock).not.toMatch(/onPress=\{undefined\}/);
+    // 긍정 — FilterChip 이 받은 onPress 를 Pressable 에 실제로 넘긴다. 이 단언이 없으면
+    // onPress 배선 줄을 통째로 지워도(칩이 무동작이 돼도) 위 부정 단언은 공허 통과다 —
+    // RNTL fireEvent.press 의 디스패치 특성상 행위 테스트가 이 제거를 못 잡기 때문(실측).
+    expect(chipBlock).toMatch(/onPress=\{onPress\}/);
+  });
+});

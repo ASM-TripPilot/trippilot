@@ -4,9 +4,11 @@
  * 네트워크·라우팅을 전혀 모른다(FSD 경계, 배선·상태 판정은 `pages/stay-search/ui/
  * StaySearchPage.tsx`가 진다). `state`는 옵셔널이고 기본값이 TRIP-181 default 얼굴이라
  * 기존 2-prop 호출은 한 글자도 바뀌지 않는다. 서버가 준 `items` 순서를 그대로 그리고
- * (BR-U1-15), 소요 시간은 어디에도 없으며(INV-3 · BR-U1-54), 필터 칩·저장 하트·목적지 없는
- * 완화/등록 버튼은 눌러도 아무것도 바뀌지 않는 정직한 스텁이다(Q7·Q9 — 저장 API·필터
- * 파라미터·등록 라우트가 아직 없다). `다시 시도`만 `onRetry`(=`refetch`)에 실배선된다(Q8).
+ * (BR-U1-15), 소요 시간은 어디에도 없다(INV-3 · BR-U1-54). 세 필터 칩은 화면 층에선 모두
+ * 동일하게 `onPressFilter(axis)`로 배선된다(TRIP-415) — 가격대가 "스텁"인 것은 화면이 아니라
+ * **페이지**가 'price' axis 를 무시해서 실현된다(계약에 가격대 파라미터가 없다 — 범위 밖).
+ * 저장 하트는 화면 층 스텁이다(`onPress={undefined}`, 저장 API 부재 Q9). `다시 시도`는
+ * `onRetry`(=`refetch`)에 실배선된다(Q8).
  */
 import type { ReactElement } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
@@ -52,6 +54,11 @@ export interface StaySearchScreenProps {
   /** FAB "여행 만들기" 콜백(TRIP-414). 목적지(/trips/new/step1)는 페이지가 정한다.
    * 미지정이면 정직한 스텁. */
   onPressCreateTrip?: () => void;
+  /** 지역·필터 칩 콜백(TRIP-415). 누른 칩의 axis 가 온다 — 지역 재선택·필터 시트는 페이지 몫.
+   * 미지정이면 정직한 스텁(가격대 칩은 페이지가 axis 를 무시해 스텁으로 남는다). */
+  onPressFilter?: (axis: 'price' | 'region' | 'more') => void;
+  /** 적용된 필터 개수(TRIP-415) — '필터' 칩에 배지로 드러낸다(0이면 배지 없음). */
+  activeFilterCount?: number;
 }
 
 // 카드 그림자(브리프 §4-2 명시 raw 허용 — 그림자는 토큰 대상이 아니다, HomeScreen.tsx
@@ -99,18 +106,31 @@ function AppBar({ onPress }: { onPress?: () => void }): ReactElement {
 function FilterChip({
   axis,
   label,
+  count,
+  onPress,
 }: {
   axis: 'price' | 'region' | 'more';
   label: string;
+  /** '필터'(more) 칩 배지용 적용 개수 — >0일 때만 배지를 그린다. */
+  count?: number;
+  onPress?: () => void;
 }): ReactElement {
+  const showBadge = axis === 'more' && (count ?? 0) > 0;
   return (
     <Pressable
       testID={`stay-search-filter-${axis}`}
       accessibilityRole="button"
-      onPress={undefined}
+      onPress={onPress}
       className="flex-row items-center gap-xs rounded-pill border border-hairline-strong bg-canvas px-md py-sm"
     >
       <Text className="font-noto text-body text-body">{label}</Text>
+      {showBadge ? (
+        <View className="h-[18px] min-w-[18px] items-center justify-center rounded-pill bg-primary px-[5px]">
+          <Text className="font-noto-bold text-micro font-bold text-on-primary">
+            {count}
+          </Text>
+        </View>
+      ) : null}
       {axis === 'more' ? (
         <FilterSlidersGlyph size={14} />
       ) : (
@@ -125,10 +145,14 @@ function ListHeader({
   region,
   count,
   showCount,
+  activeFilterCount,
+  onPressFilter,
 }: {
   region: string;
   count: number;
   showCount: boolean;
+  activeFilterCount?: number;
+  onPressFilter?: (axis: 'price' | 'region' | 'more') => void;
 }): ReactElement {
   return (
     <View className="w-full gap-[14px] px-lg pb-xl pt-[6px]">
@@ -140,7 +164,13 @@ function ListHeader({
       </Text>
       <View className="flex-row gap-sm">
         {FILTER_CHIPS.map(({ axis, label }) => (
-          <FilterChip key={axis} axis={axis} label={label} />
+          <FilterChip
+            key={axis}
+            axis={axis}
+            label={label}
+            count={axis === 'more' ? activeFilterCount : undefined}
+            onPress={() => onPressFilter?.(axis)}
+          />
         ))}
       </View>
     </View>
@@ -355,6 +385,8 @@ export function StaySearchScreen({
   onPressBack,
   onPressTab,
   onPressCreateTrip,
+  onPressFilter,
+  activeFilterCount,
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
@@ -377,6 +409,8 @@ export function StaySearchScreen({
                 region={region}
                 count={items.length}
                 showCount={showCount}
+                activeFilterCount={activeFilterCount}
+                onPressFilter={onPressFilter}
               />
               {degraded ? (
                 <View className="px-lg pb-lg">
