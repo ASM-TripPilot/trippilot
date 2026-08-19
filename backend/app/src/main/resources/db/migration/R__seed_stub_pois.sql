@@ -73,7 +73,7 @@ ON CONFLICT (poi_id) DO UPDATE SET
   updated_at    = now();
 
 -- ── 지역 코드(TRIP-359) ────────────────────────────────────────────────────
--- **시도 코드까지만 붙인다.** 이 시드가 아는 것은 `region='제주'` 뿐이고 그건 시도 수준 정보다.
+-- **시도 코드까지만 붙인다.** 이 시드가 아는 것은 `region` 문자열('제주'·'부산')뿐이고 그건 시도 수준 정보다.
 -- 성산일출봉이 서귀포시라는 것은 원본에 없다 — 기억으로 시군구를 채우면 지어낸 값이 커버리지에 섞인다.
 -- 제주특별자치도(50)는 그 자체로 고를 수 있는 목적지라(V2.24 selectable) 커버리지가 0으로 보이지 않는다.
 --
@@ -81,3 +81,5 @@ ON CONFLICT (poi_id) DO UPDATE SET
 -- 다른 값처럼 보인다. 한 줄로 두면 "전부 같은 근거로 붙었다"가 그대로 읽힌다.
 UPDATE poi SET region_code = '50'
  WHERE source = 'MANUAL' AND region = '제주' AND region_code IS DISTINCT FROM '50';
+UPDATE poi SET region_code = '26'
+ WHERE source = 'MANUAL' AND region = '부산' AND region_code IS DISTINCT FROM '26';

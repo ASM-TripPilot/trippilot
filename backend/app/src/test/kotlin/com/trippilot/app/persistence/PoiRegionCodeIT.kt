@@ -81,6 +81,17 @@ class PoiRegionCodeIT : AbstractPostgresIntegrationTest() {
             "SELECT count(*) FROM poi WHERE source = 'MANUAL' AND region = '제주' AND region_code <> '50'",
             Int::class.java,
         )!! shouldBe 0
+
+        // **한 지역만 보지 않는다.** 처음엔 '제주'만 단언했다가 부산 8건이 코드 없이 남은 것을 실 DB
+        // 커버리지 집계에서야 발견했다 — 시드에 지역이 늘면 조용히 빠진다.
+        //
+        // 대상은 **시드 행으로 좁힌다**(고정 UUID 접두사). `source='MANUAL'` 전체로 물었더니 CI 만 빨개졌다 —
+        // `PlaceApiIT` 가 수집 스텁으로 만드는 MANUAL POI(주소가 없어 코드도 없는 게 정상)가 공유 컨테이너에
+        // 남아 걸린다. 실행 순서가 다르면 로컬은 통과한다.
+        jdbc.queryForObject(
+            "SELECT count(*) FROM poi WHERE poi_id::text LIKE 'e0000000-0000-4000-8000-%' AND region_code IS NULL",
+            Int::class.java,
+        )!! shouldBe 0
     }
 
     /** 커버리지는 저장하지 않는다(조회 때 센다) — 컬럼이 남아 있으면 누군가 다시 그 값을 믿는다. */
