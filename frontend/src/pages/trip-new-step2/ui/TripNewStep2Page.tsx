@@ -134,10 +134,6 @@ const FIX_LABEL_TEXT: Record<BaseBlockReason, string> = {
  * feature import를 피해 값을 다시 적는다. */
 const FIX_MAP_DEFAULT_CENTER = { lat: 37.5665, lng: 126.978 };
 
-/** 위저드를 빠져나가는 목적지. 일정 생성 화면(g03)이 아직 없어 일정 탭으로 보낸다 —
- * 주 CTA와 보조 CTA가 같은 곳으로 가는 것은 g03이 서면 갈린다(TRIP-229). */
-const AFTER_WIZARD_ROUTE = '/(tabs)/itinerary' as const;
-
 type FailureMap = Record<string, string | undefined>;
 
 /** 시트가 고쳐 나가는 값. 목록의 숙소를 복사해 시작하고, 저장 전까지 서버와 무관하다. */
@@ -505,6 +501,19 @@ export function TripNewStep2Page(): ReactElement {
     return 'default';
   }
 
+  /** 두 출구 CTA의 공통 목적지 — 방식 선택(h04)으로 `replace`한다(TRIP-400). `push`가 아니라
+   * `replace`인 이유는 여행이 이미 서버에 만들어져(위저드로 되돌아갈 이유가 없고, back은
+   * `router.back()`이라) 파괴된 위저드 화면을 스택에서 걷어내야 하기 때문이다. `tripId`는
+   * 타입상 `string | undefined`지만 CTA가 보이는 얼굴에선 `notrip`이 먼저 이겨 항상 정의된다
+   * — 그 사실을 컴파일러에게 알리는 가드다(`runAssign`/`unassign`과 같은 관례). */
+  function goToMethod(): void {
+    if (tripId === undefined) return;
+    router.replace({
+      pathname: '/trips/[tripId]/itinerary/method',
+      params: { tripId },
+    });
+  }
+
   return (
     <TripWizardStep2Screen
       variant={resolveVariant()}
@@ -523,8 +532,8 @@ export function TripNewStep2Page(): ReactElement {
       onRetryAssign={assign}
       onChange={(baseAssignmentId) => void unassign(baseAssignmentId)}
       onRetryChange={(baseAssignmentId) => void unassign(baseAssignmentId)}
-      onGenerate={() => router.push(AFTER_WIZARD_ROUTE)}
-      onNoStayStart={() => router.push(AFTER_WIZARD_ROUTE)}
+      onGenerate={goToMethod}
+      onNoStayStart={goToMethod}
       onExploreStays={() => router.push('/stays')}
       onRetryAll={() => {
         void savedStays.refetch();

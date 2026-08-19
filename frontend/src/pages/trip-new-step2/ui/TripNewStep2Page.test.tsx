@@ -194,6 +194,8 @@ beforeEach(() => {
     routerMock.push,
     // 뒤로 가기는 `push`가 아니라 `back`이다(★23) — 케이스 사이에 누적되지 않게 함께 씻는다.
     routerMock.back,
+    // 두 출구 CTA는 `replace`를 쓴다(TRIP-400) — 여러 케이스가 호출 수를 재므로 함께 씻는다.
+    routerMock.replace,
     mockUseSavedStays,
     mockUseTripBases,
     mockUseTripCoverage,
@@ -285,7 +287,9 @@ describe('★1 · ★2 · D16-b — 막을지의 권위는 blocked 필드 하나
     const generate = screen.getByTestId('trip-base-generate');
     expect(generate).toBeDisabled();
     fireEvent.press(generate);
-    expect(routerMock.push).not.toHaveBeenCalled();
+    // 막힌 주 CTA는 이제 `replace`(새 API)를 겨눈다 — `push` not-called로 재면 generate가
+    // 더는 push를 안 써 공허 통과(vacuous green)한다. 실판정은 replace 축에서만 선다.
+    expect(routerMock.replace).not.toHaveBeenCalled();
 
     // 나열은 비어 있다 — 그래도 막힌다. 나열과 차단은 서로 다른 두 출처에서 온다.
     expect(screen.queryAllByTestId(/^trip-base-coverage-day-/)).toHaveLength(0);
@@ -524,15 +528,15 @@ describe('★5 · 실패 규칙 (01b D14 · D15)', () => {
     // ② 침묵하지 않는다(BR-U1-55).
     expect(screen.getByTestId('trip-base-coverage-error')).toBeOnTheScreen();
 
-    // ③ 주 CTA는 3단 차단.
+    // ③ 주 CTA는 3단 차단 — 막혔음을 재는 축은 새 API인 `replace`다(공허 통과 방지).
     const generate = screen.getByTestId('trip-base-generate');
     expect(generate).toBeDisabled();
     fireEvent.press(generate);
-    expect(routerMock.push).not.toHaveBeenCalled();
+    expect(routerMock.replace).not.toHaveBeenCalled();
 
-    // ④ 보조 CTA는 어느 실패에서도 활성이다(BR-U1-40 · BR-U1-47).
+    // ④ 보조 CTA는 어느 실패에서도 활성이다(BR-U1-40 · BR-U1-47) — h04로 replace 이동.
     fireEvent.press(screen.getByTestId('trip-base-nostay-start'));
-    expect(routerMock.push).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
   });
 
   it('🔴 D14 — bases가 실패하면 전면 error 얼굴로 간다', () => {
@@ -563,7 +567,7 @@ describe('★5 · 실패 규칙 (01b D14 · D15)', () => {
 
     expect(screen.getByTestId('trip-base-empty')).toBeOnTheScreen();
     fireEvent.press(screen.getByTestId('trip-base-nostay-start'));
-    expect(routerMock.push).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -610,7 +614,7 @@ describe('loading — 세 조회 중 하나라도 진행 중이면 자리를 잡
       screen.getAllByTestId(/^trip-base-skeleton-card-/).length
     ).toBeGreaterThan(0);
     fireEvent.press(screen.getByTestId('trip-base-nostay-start'));
-    expect(routerMock.push).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -622,7 +626,7 @@ describe('loading — 세 조회 중 하나라도 진행 중이면 자리를 잡
  * ------------------------------------------------------------------ */
 
 describe('★22 · B-1 — 주 CTA는 실제로 위저드를 벗어난다 (03b 차단)', () => {
-  it('🔴 활성 상태의 주 CTA를 누르면 일정 화면으로 이동한다', () => {
+  it('🔴 활성 상태의 주 CTA를 누르면 방식 선택(h04)으로 replace 이동한다', () => {
     // 03b 실측: 화면·페이지 두 층의 핸들러를 동시에 끊고 리포 전체 1,302케이스를 돌렸더니
     // 전원 green이었다. 거점을 정성껏 고른 사용자가 분홍 버튼을 눌러도 아무 일이 안 나고,
     // 남는 출구가 그 아래 회색 글씨뿐인 상태를 심판이 통과시킨다.
@@ -634,26 +638,37 @@ describe('★22 · B-1 — 주 CTA는 실제로 위저드를 벗어난다 (03b �
     fireEvent.press(generate);
 
     // ★26(W-6) — 1회로만 재면 "아무 데나 1회 가는" 배선이 통과한다. 목적지까지 잰다.
-    expect(routerMock.push).toHaveBeenCalledTimes(1);
-    expect(routerMock.push).toHaveBeenCalledWith('/(tabs)/itinerary');
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/method',
+      params: { tripId: 'trip-1' },
+    });
+    // AC-3 — 옛 일정 탭(`/(tabs)/itinerary`) push 경로가 사라진다(주 CTA는 replace만 쓴다).
+    expect(routerMock.push).not.toHaveBeenCalled();
   });
 });
 
 describe('★26 · W-6 — 이탈 목적지 (03b 경고)', () => {
   it('🔴 두 보조 CTA가 각자 제 목적지로 간다', () => {
-    // `router.push`가 1회 불렸다만 재면 `숙소 없이 시작하기`를 방금 지나온 step1로 되돌려도
+    // 이동이 1회 일어났다만 재면 `숙소 없이 시작하기`를 방금 지나온 step1로 되돌려도
     // 통과한다 — 그러면 사용자가 step1↔step2 고리에 갇혀 위저드에서 나갈 수 없다.
     mockSavedStaysResult = loaded([]);
     mockBasesResult = loaded([]);
     render(<TripNewStep2Page />);
 
     fireEvent.press(screen.getByTestId('trip-base-nostay-start'));
-    expect(routerMock.push).toHaveBeenLastCalledWith('/(tabs)/itinerary');
+    expect(routerMock.replace).toHaveBeenLastCalledWith({
+      pathname: '/trips/[tripId]/itinerary/method',
+      params: { tripId: 'trip-1' },
+    });
 
     fireEvent.press(screen.getByTestId('trip-base-explore-stays'));
     expect(routerMock.push).toHaveBeenLastCalledWith('/stays');
 
-    expect(routerMock.push).toHaveBeenCalledTimes(2);
+    // 두 출구가 서로 다른 API로 갈렸다 — nostay=replace(h04), 둘러보기=push(/stays).
+    // 총 호출을 API별로 분리해 재야 한쪽이 다른 쪽 목적지로 새는 것을 잡는다.
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+    expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
 
   it('🔴 ★23 · W-7 — 헤더 뒤로 가기는 히스토리를 되감는다 (push가 아니다)', () => {
@@ -758,11 +773,11 @@ describe('★24 · W-4 · BR-U1-55 — 나열이 비어도 막힌 이유는 남�
     // 나열은 여전히 비어 있다 — 없는 날짜를 지어내 채우는 것은 해법이 아니다.
     expect(screen.queryAllByTestId(/^trip-base-coverage-day-/)).toHaveLength(0);
 
-    // 차단은 그대로 3단(★12).
+    // 차단은 그대로 3단(★12) — 막혔음을 재는 축은 새 API인 `replace`다(공허 통과 방지).
     const generate = screen.getByTestId('trip-base-generate');
     expect(generate).toBeDisabled();
     fireEvent.press(generate);
-    expect(routerMock.push).not.toHaveBeenCalled();
+    expect(routerMock.replace).not.toHaveBeenCalled();
   });
 });
 
