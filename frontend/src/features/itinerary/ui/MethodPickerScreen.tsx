@@ -44,6 +44,7 @@ interface MethodCardProps {
   icon: ReactNode;
   iconBg: string;
   highlighted?: boolean;
+  disabled?: boolean;
   title: string;
   description: string;
   badge?: ReactNode;
@@ -55,6 +56,7 @@ function MethodCard({
   icon,
   iconBg,
   highlighted = false,
+  disabled = false,
   title,
   description,
   badge,
@@ -64,11 +66,13 @@ function MethodCard({
     <Pressable
       testID={testID}
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={cardShadow}
       className={`w-full flex-row items-center gap-[14px] rounded-card bg-canvas px-lg py-[18px] ${
         highlighted ? 'border-[1.5px] border-primary' : 'border border-hairline'
-      }`}
+      } ${disabled ? 'opacity-40' : ''}`}
     >
       <View
         className={`h-12 w-12 items-center justify-center rounded-pill ${iconBg}`}
@@ -89,18 +93,36 @@ function MethodCard({
   );
 }
 
+/** 다른 여행의 생성이 진행 중임을 알리는 서버 판정면(선행 BE 칸이 신설). 권한은 서버 — 화면은
+ * 스스로 세지 않고 주입받은 이 값만 그린다. */
+export interface ActiveGeneration {
+  tripId: string;
+  label?: string;
+}
+
+const BLOCKED_REASON =
+  '다른 여행의 일정을 만들고 있어요 — 한 번에 하나만 만들 수 있어요';
+const GOTO_ACTIVE_LABEL = '진행 중인 여행으로 가기';
+
 export interface MethodPickerScreenProps {
   onBack: () => void;
   /** 완전AI 탭 — 배선이 h09(생성 중)로 navigate 한다(POST 는 h09 소유). */
   onPressFullAi: () => void;
+  /** 진행 중인 다른 여행이 있으면(서버 판정면) 생성 진입을 막고 사유를 표시한다. null/미전달 = 미차단. */
+  activeGeneration?: ActiveGeneration | null;
+  /** 사유 안내의 "진행 중인 여행으로 가기". */
+  onPressActiveGeneration?: () => void;
 }
 
 export function MethodPickerScreen({
   onBack,
   onPressFullAi,
+  activeGeneration,
+  onPressActiveGeneration,
 }: MethodPickerScreenProps): ReactElement {
   const [soon, setSoon] = useState(false);
   const showSoon = () => setSoon(true);
+  const blocked = activeGeneration != null;
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -134,8 +156,30 @@ export function MethodPickerScreen({
             iconBg="bg-surface-strong"
             title="완전 AI가 짜기"
             description="취향·동선 맞춰 자동으로 완성"
-            onPress={onPressFullAi}
+            disabled={blocked}
+            onPress={blocked ? () => {} : onPressFullAi}
           />
+
+          {blocked ? (
+            <View
+              testID="itinerary-method-blocked-reason"
+              className="w-full gap-sm rounded-button border border-hairline bg-surface-soft px-lg py-md"
+            >
+              <Text className="font-noto text-label text-muted">
+                {BLOCKED_REASON}
+              </Text>
+              <Pressable
+                testID="itinerary-method-goto-active"
+                accessibilityRole="button"
+                onPress={onPressActiveGeneration}
+                hitSlop={6}
+              >
+                <Text className="font-noto-bold text-label font-bold text-primary-text">
+                  {GOTO_ACTIVE_LABEL}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           <MethodCard
             testID="itinerary-method-copick"
             icon={<CoPickGlyph />}

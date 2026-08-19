@@ -27,6 +27,9 @@ export function ItineraryMethodPage({
           params: { tripId },
         })
       }
+      // ponytail: 낙관적 스텁(TRIP-404). 서버 동시생성 판정면(선행 BE 칸)이 아직 없어 항상 미차단.
+      // 필드 신설 시 여기서 그 판정면을 넘기고 onPressActiveGeneration 을 배선한다.
+      activeGeneration={null}
     />
   );
 }

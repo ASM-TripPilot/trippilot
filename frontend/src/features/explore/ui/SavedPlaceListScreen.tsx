@@ -11,6 +11,7 @@ import { SAVED_PLACE_BADGE } from '../model/savedPlaceList';
 import {
   BackChevronGlyph,
   HeartFilledGlyph,
+  HeartOutlineGlyph,
   MapPinGlyph,
   WarningTriangleGlyph,
 } from './ExploreGlyphs';
@@ -34,7 +35,11 @@ export interface SavedPlaceListScreenProps {
   removeError?: PlaceSaveNotice | null;
   /** 미로그인 — 목록·빈 상태 대신 로그인 안내만 그린다. 미지정 = false. */
   isGuest?: boolean;
+  /** 이번 방문에서 해제(빈 하트)된 poiId 목록(TRIP-394). 미지정 = []. */
+  releasedPoiIds?: string[];
   onPressRemove: (saved: SavedPlace) => void;
+  /** 빈 하트(released) 행을 누르면 되돌리기(재담기). 미지정 = 미배선(TRIP-394). */
+  onPressRestore?: (saved: SavedPlace) => void;
   onPressCreateTrip: () => void;
   onPressBrowse: () => void;
   onRetry?: () => void;
@@ -91,11 +96,16 @@ function AppBar({
 function SavedPlaceRow({
   saved,
   rank,
+  released,
   onPressRemove,
+  onPressRestore,
 }: {
   saved: SavedPlace;
   rank: number;
+  /** 이번 방문에서 해제된(빈 하트) 행인가(TRIP-394). */
+  released: boolean;
   onPressRemove: (saved: SavedPlace) => void;
+  onPressRestore?: (saved: SavedPlace) => void;
 }): ReactElement {
   const { place } = saved;
   const badge = SAVED_PLACE_BADGE[place.dataStatus];
@@ -164,10 +174,25 @@ function SavedPlaceRow({
       <Pressable
         testID={`explore-saved-remove-${saved.savedPlaceId}`}
         accessibilityRole="button"
-        onPress={() => onPressRemove(saved)}
+        // 담김=선택됨. 빈/찬을 색이 아니라 이 접근성 상태 + 글리프 컴포넌트 정체성으로 잰다
+        // (repo-trap: SVG fill 은 렌더 트리에 안 남는다, 02a ★1 · d04 카드 하트와 같은 신호).
+        accessibilityState={{ selected: !released }}
+        onPress={() =>
+          released ? onPressRestore?.(saved) : onPressRemove(saved)
+        }
         className="h-[38px] w-[38px] items-center justify-center"
       >
-        <HeartFilledGlyph size={24} />
+        {released ? (
+          <HeartOutlineGlyph
+            size={24}
+            testID={`explore-saved-heart-outline-${saved.savedPlaceId}`}
+          />
+        ) : (
+          <HeartFilledGlyph
+            size={24}
+            testID={`explore-saved-heart-filled-${saved.savedPlaceId}`}
+          />
+        )}
       </Pressable>
     </View>
   );
@@ -175,10 +200,14 @@ function SavedPlaceRow({
 
 function ResultsList({
   savedPlaces,
+  releasedPoiIds,
   onPressRemove,
+  onPressRestore,
 }: {
   savedPlaces: SavedPlace[];
+  releasedPoiIds: string[];
   onPressRemove: (saved: SavedPlace) => void;
+  onPressRestore?: (saved: SavedPlace) => void;
 }): ReactElement {
   return (
     <FlatList<SavedPlace>
@@ -191,7 +220,9 @@ function ResultsList({
         <SavedPlaceRow
           saved={item}
           rank={index + 1}
+          released={releasedPoiIds.includes(item.place.poiId)}
           onPressRemove={onPressRemove}
+          onPressRestore={onPressRestore}
         />
       )}
     />
@@ -374,7 +405,9 @@ export function SavedPlaceListScreen({
   state = { kind: 'results' },
   removeError,
   isGuest = false,
+  releasedPoiIds = [],
   onPressRemove,
+  onPressRestore,
   onPressCreateTrip,
   onPressBrowse,
   onRetry,
@@ -388,9 +421,14 @@ export function SavedPlaceListScreen({
   // 03b W-2, TRIP-222 03b W-1 과 같은 방향).
   const showResults =
     face === 'results' || (face === 'error' && savedPlaces.length > 0);
-  const subtitle = showResults
-    ? `${savedPlaces.length}곳 · 마음에 든 순서대로`
-    : null;
+  // released(빈 하트) 행은 담김이 풀린 항목이라 개수·CTA 활성 판정에서 뺀다(01b Seed Q1=a,
+  // BR-U1-09 와 결이 맞음). 행 자체는 목록에 그대로 남는다(빈 하트).
+  const activeSavedCount = showResults
+    ? savedPlaces.filter((saved) => !releasedPoiIds.includes(saved.place.poiId))
+        .length
+    : 0;
+  const subtitle =
+    activeSavedCount > 0 ? `${activeSavedCount}곳 · 마음에 든 순서대로` : null;
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
@@ -406,7 +444,9 @@ export function SavedPlaceListScreen({
           <>
             <ResultsList
               savedPlaces={savedPlaces}
+              releasedPoiIds={releasedPoiIds}
               onPressRemove={onPressRemove}
+              onPressRestore={onPressRestore}
             />
             {removeError ? (
               <RemoveErrorBanner
@@ -414,7 +454,9 @@ export function SavedPlaceListScreen({
                 onPressAction={onPressRemoveErrorAction}
               />
             ) : null}
-            <CtaBar onPress={onPressCreateTrip} />
+            {activeSavedCount > 0 ? (
+              <CtaBar onPress={onPressCreateTrip} />
+            ) : null}
           </>
         ) : null}
       </View>

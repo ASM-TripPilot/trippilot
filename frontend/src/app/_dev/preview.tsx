@@ -60,6 +60,8 @@ import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { ItineraryEditScreen } from '@/features/itinerary/ui/ItineraryEditScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
+import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
+import { SlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
 import { SlotTimeSheet } from '@/features/itinerary/ui/SlotTimeSheet';
 import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
@@ -83,6 +85,7 @@ import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
+  SlotCandidatesCandidatesItem,
 } from '@/shared/api/generated/schemas';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { KakaoMapView, type MapPin } from '@/shared/map';
@@ -697,6 +700,22 @@ const STAY_REGISTER_PREVIEW_FLOW: StayRegisterScreenProps['flow'] = {
   submitStatus: 'idle',
 };
 
+// h12·h18 슬롯 교체 후보(TRIP-335) — 서버 응답 3필드만(poiId·distanceRange·rationale). 이름·사진은
+// 아직 안 실려(BE 후속) 카드가 플레이스홀더로 뜨는 미확보 표기를 눈으로 대조하는 자리다.
+const SLOT_CANDIDATES_PREVIEW: SlotCandidatesCandidatesItem[] = [
+  { poiId: 'poi-a', distanceRange: '560m', rationale: '취향에 가장 잘 맞아요' },
+  {
+    poiId: 'poi-b',
+    distanceRange: '1.1km',
+    rationale: '여유로운 페이스, 머무르기 좋아요',
+  },
+  {
+    poiId: 'poi-c',
+    distanceRange: '1.8km',
+    rationale: '자연과 예술, 조금 멀어요',
+  },
+];
+
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
   {
@@ -1109,6 +1128,23 @@ const PREVIEW_STATES: PreviewState[] = [
       <SavedPlaceListScreen
         savedPlaces={PREVIEW_SAVED_PLACES}
         onPressRemove={noop}
+        onPressCreateTrip={noop}
+        onPressBrowse={noop}
+      />
+    ),
+  },
+  // TRIP-394 — 해제(빈 하트) 엣지 상태. sp-1(p-2)·sp-3(p-7)만 released 로 빈 하트가 되고,
+  // 나머지는 찬 하트로 남는다(같은 목록에서 빈/찬을 대조). jest 는 색을 못 봐 실기 전용 자리.
+  {
+    key: 'saved-places-released',
+    label: '담은 장소 · 해제(빈 하트)',
+    login: null,
+    render: () => (
+      <SavedPlaceListScreen
+        savedPlaces={PREVIEW_SAVED_PLACES}
+        releasedPoiIds={['p-2', 'p-7']}
+        onPressRemove={noop}
+        onPressRestore={noop}
         onPressCreateTrip={noop}
         onPressBrowse={noop}
       />
@@ -1696,6 +1732,130 @@ const PREVIEW_STATES: PreviewState[] = [
           '2026-06-13'
         )} · 부산 여행 · 5곳`}
         onSelectDay={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  // h12·h18 슬롯 교체(TRIP-335) — candidates 는 아직 이름·사진 미확보(BE 후속)라 카드가 "이름 준비
+  // 중" 플레이스홀더 + 회색 사진 자리로 뜬다. 실화면 딥링크로는 볼 수 없다(생성 POST 가 만드는
+  // tripId + slot-candidates 응답이 백엔드 없이는 안 생긴다). 두 화면 모두 props 만 받는 프레젠테이션.
+  {
+    key: 'slot-candidate-sheet',
+    label: '다른 후보로 바꾸기 · 시트(h12)',
+    login: null,
+    render: () => (
+      <View className="flex-1 justify-end bg-scrim/40">
+        <SlotCandidateSheet
+          candidates={SLOT_CANDIDATES_PREVIEW}
+          currentPoiId="poi-current"
+          currentName="부산시립미술관"
+          isPending={false}
+          onSelectCandidate={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'slot-candidate-sheet-pending',
+    label: '다른 후보로 바꾸기 · 교체 중(h12)',
+    login: null,
+    render: () => (
+      <View className="flex-1 justify-end bg-scrim/40">
+        <SlotCandidateSheet
+          candidates={SLOT_CANDIDATES_PREVIEW}
+          currentPoiId="poi-current"
+          currentName="부산시립미술관"
+          isPending
+          onSelectCandidate={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'slot-candidate-sheet-empty',
+    label: '다른 후보로 바꾸기 · 0건(h12)',
+    login: null,
+    render: () => (
+      <View className="flex-1 justify-end bg-scrim/40">
+        <SlotCandidateSheet
+          candidates={[]}
+          currentPoiId="poi-current"
+          currentName="부산시립미술관"
+          isPending={false}
+          onSelectCandidate={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'slot-candidate-sheet-error',
+    label: '다른 후보로 바꾸기 · 실패(h12)',
+    login: null,
+    render: () => (
+      <View className="flex-1 justify-end bg-scrim/40">
+        <SlotCandidateSheet
+          candidates={SLOT_CANDIDATES_PREVIEW}
+          currentPoiId="poi-current"
+          currentName="부산시립미술관"
+          isPending={false}
+          errorMessage="확정된 일정이라 지금은 바꿀 수 없어요"
+          onSelectCandidate={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'option-swap',
+    label: '옵션 교체 · 화면(h18)',
+    login: null,
+    render: () => (
+      <OptionSwapScreen
+        candidates={SLOT_CANDIDATES_PREVIEW}
+        currentPoiId="poi-current"
+        currentName="부산시립미술관"
+        selectedPoiId={null}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        isPending={false}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'option-swap-selected',
+    label: '옵션 교체 · 선택 후 실패(h18)',
+    login: null,
+    render: () => (
+      <OptionSwapScreen
+        candidates={SLOT_CANDIDATES_PREVIEW}
+        currentPoiId="poi-current"
+        currentName="부산시립미술관"
+        selectedPoiId="poi-b"
+        onSelectRadio={noop}
+        onConfirm={noop}
+        isPending={false}
+        errorMessage="잠시 후 다시 시도해 주세요"
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'option-swap-empty',
+    label: '옵션 교체 · 0건(h18)',
+    login: null,
+    render: () => (
+      <OptionSwapScreen
+        candidates={[]}
+        currentPoiId="poi-current"
+        currentName="부산시립미술관"
+        selectedPoiId={null}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        isPending={false}
         onBack={noop}
       />
     ),
