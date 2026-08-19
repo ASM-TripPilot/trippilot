@@ -16,7 +16,7 @@ import { capturedTabsProps } from '@/test-support/expoRouterTabsMock';
  *  (4) `(tabs)/index.tsx`가 실물 `HomeScreen`을 그리고, `itinerary`는 TRIP-299로,
  *      `explore`는 TRIP-201로 실화면 승격(그 탭 동작은 각각
  *      `src/__tests__/tabsItineraryRoute.test.tsx`·`tabsExploreRoute.test.tsx`가 잠근다),
- *      나머지 2탭(records·my)은 껍데기를 유지한다.
+ *      나머지 2탭(records·my)은 TRIP-290으로 "준비 중" 상태 안내로 승격(더는 껍데기 아님).
  *
  * 왜 `src/app/` 밖에 두는가: expo-router의 require.context가 `.test.tsx`를 라우트로
  * 등록해 버리므로(`rootLayout.test` 관례) 라우트 파일 테스트는 항상 `src/__tests__/`에 둔다.
@@ -152,16 +152,28 @@ describe('(tabs)/index.tsx — 홈 라우트 래퍼 (SC-1 · SC-5)', () => {
   });
 });
 
-describe('(tabs)/{records,my} — 껍데기 유지 (SC-5 · 선제 green)', () => {
-  // itinerary 는 TRIP-299 로, explore 는 TRIP-201 로 실화면 승격 — 그 탭들의 동작은
-  // `tabsItineraryRoute.test.tsx`·`tabsExploreRoute.test.tsx`(게이트① 동결)가 각각 잠근다.
-  // 여기서는 아직 껍데기인 2탭(records·my)만 지킨다.
-  it('홈·일정·탐색 외 2탭은 각각 기존 텍스트 껍데기를 그대로 그린다', () => {
-    const { unmount: unmountRecords } = render(<RecordsRoute />);
-    expect(screen.getByText('기록')).toBeOnTheScreen();
-    unmountRecords();
+describe('(tabs)/{records,my} — 준비 중 안내 (INV-4 · SC-5)', () => {
+  // records·my 는 TRIP-290 으로 텍스트 껍데기 → "준비 중" 상태 안내(StateNotice)로 승격.
+  // itinerary(TRIP-299/401)·explore(TRIP-201) 는 이미 실화면이라 각자 라우트 테스트가 잠근다.
+  // 실화면(회고·설정)은 각 화면 티켓 몫 — 이 칸은 "안 되는 상태를 안 된다고 정확히 말하게" 까지.
+  // 정확한 제목("{탭} 준비 중")으로 단언한다 — 부분 정규식(/기록/)은 설명 문구와 이중 매치돼
+  // getByText 가 "여러 요소" 에러를 낸다(설명에도 '기록'이 들어감).
+  it('기록 탭은 빈 글자 화면이 아니라 placeholder + 탭 이름이 반영된 준비 중 안내를 그린다', () => {
+    render(<RecordsRoute />);
 
+    expect(
+      screen.getByTestId('shell-tab-placeholder-records')
+    ).toBeOnTheScreen();
+    expect(screen.getByText('기록 준비 중')).toBeOnTheScreen();
+    // wizard/딥링크 유도 버튼을 넣지 않는다 — 준비 중 안내는 무버튼(탭은 목록의 자리, 금지 AC).
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('마이 탭도 placeholder + 탭 이름이 반영된 준비 중 안내를 그린다', () => {
     render(<MyRoute />);
-    expect(screen.getByText('마이')).toBeOnTheScreen();
+
+    expect(screen.getByTestId('shell-tab-placeholder-my')).toBeOnTheScreen();
+    expect(screen.getByText('마이 준비 중')).toBeOnTheScreen();
+    expect(screen.queryByRole('button')).toBeNull();
   });
 });
