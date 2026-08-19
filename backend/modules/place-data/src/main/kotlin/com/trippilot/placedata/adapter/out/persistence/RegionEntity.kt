@@ -68,6 +68,14 @@ interface RegionJpaRepository : JpaRepository<RegionEntity, String> {
             " order by r.sidoCode, length(r.regionCode), r.name",
     )
     fun search(@Param("q") q: String, @Param("level") level: String?): List<RegionEntity>
+
+    /** 이름 또는 별칭 정확 일치(TRIP-360 목적지 검증). 부분일치가 아니라 `=` 다. */
+    @Query(
+        "select r from RegionEntity r where r.name = :n or exists (" +
+            "  select 1 from RegionAliasEntity a where a.regionCode = r.regionCode and a.alias = :n)" +
+            " order by r.regionCode",
+    )
+    fun findExact(@Param("n") name: String): List<RegionEntity>
 }
 
 @Component
@@ -80,6 +88,13 @@ class RegionCatalogAdapter(
      * 커버리지는 **저장된 값이 아니라 지금 센 값**이다(TRIP-359) — 저장하면 POI 를 쓰는 경로를
      * 하나만 빠뜨려도 조용히 낡는다. 집계는 코드별로 한 번 모아 오고, 시도 롤업만 앱에서 접는다.
      */
+    override fun findExact(name: String): List<Region> {
+        val key = name.trim()
+        if (key.isEmpty()) return emptyList()
+        // 커버리지는 여기서 세지 않는다 — 검증만 하는 자리라 POI 집계는 낭비다.
+        return jpa.findExact(key).map { it.toDomain(emptyMap()) }
+    }
+
     override fun find(query: String?, level: RegionLevel?): List<Region> {
         val counts = pois.countActiveByRegionCode()
             .associate { (code, n) -> code as String to (n as Number).toInt() }

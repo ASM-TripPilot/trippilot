@@ -34,4 +34,7 @@ object FakeRegionCatalog : RegionCatalogPort {
     )
 
     override fun find(query: String?, level: RegionLevel?): List<Region> = rows
+
+    /** 이름 정확 일치만 — 별칭이 필요한 테스트는 자기 대역을 따로 둔다. */
+    override fun findExact(name: String): List<Region> = rows.filter { it.name == name }
 }
