@@ -55,6 +55,10 @@ import { PoiSlotCard } from './PoiSlotCard';
 const APPBAR_TITLE_PLANNED = '완성 일정';
 const APPBAR_TITLE_CONFIRMED = '확정 일정';
 const CONFIRM_LABEL = '일정 확정하기';
+// PARTIAL(생성 중) 예방 잠금 사유 — 침묵 금지(INV-4). 정확 문안은 정본에 없어 심판은 "만드는 중"
+// 계열로만 잠근다(02a M4). 서버 계약(PARTIAL→409)의 예방 UX 일 뿐 — 권위는 서버(01b D2·D3).
+const CONFIRM_LOCKED_NOTE =
+  '일정을 만드는 중이에요 · 다 만들어지면 확정할 수 있어요';
 // 확정 배너·읽기전용 하단 2버튼 문구(TRIP-300 · D1·D2). 비활성 버튼의 사유는 침묵 금지(INV-4).
 const BANNER_TITLE = '일정이 확정됐어요';
 const EDIT_LABEL = '일정 수정';
@@ -113,6 +117,9 @@ export interface TimelineScreenProps {
   confirmError?: string | null;
   /** PLANNED 확정 CTA press 콜백 — 곧장 확정 요청으로 잇는다(중간 다이얼로그 없음). */
   onConfirm?: () => void;
+  /** 확정 예방 잠금(TRIP-337 · PARTIAL 생성 중) — true 면 확정 CTA 를 실제 disabled 로 두고 사유를
+   * 병기한다. 페이지가 `isConfirmLocked(generationState)` 로 판정해 내린다. 미지정=잠금 없음. */
+  confirmLocked?: boolean;
 }
 
 function DayTab({
@@ -368,6 +375,7 @@ export function TimelineScreen({
   confirmedSubtitle,
   confirmError,
   onConfirm,
+  confirmLocked = false,
 }: TimelineScreenProps): ReactElement {
   const activeDate = days[activeDayIndex]?.date ?? '';
   // 확정 얼굴 트리거 — 미지정(undefined)은 PLANNED 취급이라 기존 호출부가 그대로 편집 얼굴이다.
@@ -676,16 +684,38 @@ export function TimelineScreen({
               </Pressable>
             </View>
           ) : (
-            <Pressable
-              testID="itinerary-confirm-cta"
-              accessibilityRole="button"
-              onPress={onConfirm}
-              className="h-12 w-full items-center justify-center rounded-button bg-primary"
-            >
-              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                {CONFIRM_LABEL}
-              </Text>
-            </Pressable>
+            <View className="w-full gap-sm">
+              {confirmLocked ? (
+                <View
+                  testID="itinerary-confirm-locked-notice"
+                  className="w-full flex-row items-center gap-sm rounded-button bg-surface-soft px-md py-sm"
+                >
+                  <LockGlyph size={16} tone="muted" />
+                  <Text className="flex-1 font-noto text-label text-muted">
+                    {CONFIRM_LOCKED_NOTE}
+                  </Text>
+                </View>
+              ) : null}
+              {/* 잠금 시 실제 `disabled` — accessibilityState 만 켜면 press 가 살아 있어 확정 요청이
+                  나간다(02a M1·M2). disabled 는 responder 를 떼 눌러도 onConfirm 이 안 불린다. */}
+              <Pressable
+                testID="itinerary-confirm-cta"
+                accessibilityRole="button"
+                disabled={confirmLocked}
+                onPress={onConfirm}
+                className={`h-12 w-full items-center justify-center rounded-button ${
+                  confirmLocked ? 'bg-hairline-strong' : 'bg-primary'
+                }`}
+              >
+                <Text
+                  className={`font-noto-bold text-[16px] font-bold ${
+                    confirmLocked ? 'text-muted-soft' : 'text-on-primary'
+                  }`}
+                >
+                  {CONFIRM_LABEL}
+                </Text>
+              </Pressable>
+            </View>
           )}
         </View>
       </View>

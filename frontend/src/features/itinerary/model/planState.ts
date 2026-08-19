@@ -54,6 +54,21 @@ export function resolvePlanState(input: {
 }
 
 /**
+ * 확정(plan) CTA 를 미리 잠글 것인가 — `generationState==='PARTIAL'`(2단계 생성 중) 한 축뿐이다
+ * (01b D2·D3). PARTIAL 동안 확정은 서버가 409 로 거절하는 계약이라(openapi), 눌러 409 만 받는
+ * 죽은 활성 버튼을 예방하는 UX 다 — 권위는 서버에 있고 이건 그 사본이다(클라 검증=UX 사본).
+ *
+ * `resolvePlanState`(위)와 관심사가 달라 이웃 export 로 둔다 — 저건 *얼굴*을, 이건 *확정 가능
+ * 여부*를 가른다(TRIP-401 의 `resolveItineraryDestination` 과 같은 분리). status 축과 독립이라
+ * status 는 보지 않는다(계약: generationState ⊥ status · AC-7).
+ */
+export function isConfirmLocked(
+  generationState?: ItineraryGenerationState
+): boolean {
+  return generationState === 'PARTIAL';
+}
+
+/**
  * TRIP-401 · 일정 진입 시 **어느 화면으로 보낼지**(목적지)를 정하는 순수 판정.
  *
  * `resolvePlanState`(위)와 관심사가 다르다 — 저건 *한 화면 안의 얼굴*을, 이건 *어느 화면*을

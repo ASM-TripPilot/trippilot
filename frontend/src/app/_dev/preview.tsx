@@ -1507,6 +1507,24 @@ const PREVIEW_STATES: PreviewState[] = [
     render: () => <DraftScreen {...DRAFT_PREVIEW_BASE} />,
   },
   {
+    // h10 "만드는 중"(TRIP-337) — 같은 픽스처에 generating 만 얹는다. 게이지 3상태(day1 완성 /
+    // day2 생성 중 / day3 대기)와 스켈레톤은 tabs 에서 도출돼 손으로 적을 값이 없다.
+    key: 'itinerary-draft-generating',
+    label: 'h10 · 만드는 중',
+    login: null,
+    render: () => (
+      <DraftScreen
+        {...DRAFT_PREVIEW_BASE}
+        view={{
+          kind: 'listed',
+          days: DRAFT_PREVIEW_DAYS,
+          staleFailed: false,
+          generating: true,
+        }}
+      />
+    ),
+  },
+  {
     key: 'itinerary-draft-stale-failed',
     label: 'h11 · 부분 실패',
     login: null,
@@ -1651,6 +1669,25 @@ const PREVIEW_STATES: PreviewState[] = [
         slots={TIMELINE_PREVIEW_SLOTS}
         activeDayIndex={0}
         status="PLANNED"
+        onSelectDay={noop}
+        onBack={noop}
+        onConfirm={noop}
+      />
+    ),
+  },
+  {
+    // 확정 예방 잠금(TRIP-337 · AC-4) — PARTIAL 이면 확정 CTA 가 회색 disabled + 사유 병기.
+    key: 'itinerary-timeline-confirm-locked',
+    label: '완성 일정 · 확정 잠김(h25 PARTIAL)',
+    login: null,
+    render: () => (
+      <TimelineScreen
+        header={TIMELINE_PREVIEW_HEADER}
+        days={TIMELINE_PREVIEW_DAYS}
+        slots={TIMELINE_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        status="PLANNED"
+        confirmLocked
         onSelectDay={noop}
         onBack={noop}
         onConfirm={noop}
