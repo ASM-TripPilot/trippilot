@@ -58,9 +58,11 @@ import {
 } from '@/features/itinerary/ui/DraftScreen';
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { ItineraryEditScreen } from '@/features/itinerary/ui/ItineraryEditScreen';
+import { ManualPlanScreen } from '@/features/itinerary/ui/ManualPlanScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
 import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
+import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
 import { SlotTimeSheet } from '@/features/itinerary/ui/SlotTimeSheet';
 import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
@@ -161,7 +163,7 @@ const EXPLORE_LANDING_BASE = {
     title: '무엇을 둘러볼까요?',
     subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
   },
-  onSubmitSearch: noop,
+  onPressSearch: noop,
 } as const;
 
 const VIEW_ONLY_HANDLERS = {
@@ -1896,6 +1898,112 @@ const PREVIEW_STATES: PreviewState[] = [
         onConfirm={noop}
         isPending={false}
         onBack={noop}
+      />
+    ),
+  },
+  // h19·h20 직접 짜기(MANUAL, TRIP-338) — 화면은 props-only 라 배선 없이 상태만 넣어 그린다.
+  // 실화면 딥링크로는 빈 일정 생성 POST 를 백엔드가 만들어야 도달하므로(401 이면 못 봄) 여기가 눈
+  // 확인 자리다(6-b 실기 스모크 진입점). 빈 상태·슬롯 채움+위반·검색을 세 얼굴로 대조한다.
+  {
+    key: 'manual-empty',
+    label: '직접 짜기 · 빈 일정(h19)',
+    login: null,
+    render: () => (
+      <ManualPlanScreen
+        days={[{ date: '2026-06-10', slots: [] }]}
+        contextChips={['09:00 출발', '숙소 기준']}
+        onBack={noop}
+        onPressSearchAdd={noop}
+        onPressAddBand={noop}
+      />
+    ),
+  },
+  {
+    key: 'manual-filled',
+    label: '직접 짜기 · 슬롯 채움+위반(h19)',
+    login: null,
+    render: () => (
+      <ManualPlanScreen
+        days={[
+          {
+            date: '2026-06-10',
+            slots: [
+              {
+                poiId: 'poi-a',
+                startAt: '10:00:00',
+                endAt: '11:30:00',
+                isFixed: false,
+                endsNextDay: false,
+                hasViolation: false,
+                nameKo: '광안리 해변',
+                tags: [],
+              },
+              {
+                poiId: 'poi-b',
+                startAt: '13:00:00',
+                endAt: '14:00:00',
+                isFixed: false,
+                endsNextDay: false,
+                hasViolation: true,
+                violationReason: '점심시간과 겹쳐요',
+                nameKo: '자갈치 시장',
+                tags: [],
+              },
+              {
+                poiId: 'poi-c',
+                startAt: '19:00:00',
+                endAt: '20:00:00',
+                isFixed: true,
+                endsNextDay: false,
+                hasViolation: false,
+                nameKo: '해운대 포차거리',
+                tags: [],
+              },
+            ],
+          },
+        ]}
+        contextChips={['09:00 출발', '숙소 기준']}
+        onBack={noop}
+        onPressSearchAdd={noop}
+      />
+    ),
+  },
+  {
+    key: 'place-add',
+    label: '장소 추가·검색(h20)',
+    login: null,
+    render: () => (
+      <PlaceAddScreen
+        places={PREVIEW_PLACES}
+        searchText=""
+        selectedCategory={null}
+        addedPoiIds={PREVIEW_PLACES.slice(0, 1).map((place) => place.poiId)}
+        onChangeSearchText={noop}
+        onSelectCategory={noop}
+        onPressAdd={noop}
+        onPressDone={noop}
+        onBack={noop}
+        onPressViewPlan={noop}
+      />
+    ),
+  },
+  {
+    key: 'place-add-notready',
+    label: '장소 추가·일정 미도착(h20)',
+    login: null,
+    render: () => (
+      <PlaceAddScreen
+        places={PREVIEW_PLACES}
+        searchText=""
+        selectedCategory={null}
+        addedPoiIds={[]}
+        notReady
+        onChangeSearchText={noop}
+        onSelectCategory={noop}
+        onPressAdd={noop}
+        onPressDone={noop}
+        onBack={noop}
+        onPressViewPlan={noop}
       />
     ),
   },

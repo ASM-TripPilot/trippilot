@@ -335,3 +335,78 @@ describe('AC-8 배선: 판정의 단일 출처', () => {
     expect(screenSource).not.toContain('resolveStaySearchState');
   });
 });
+
+// ── TRIP-413 확장 — 하단 탭바 복구. 위 describe 들의 it 본문은 한 글자도 바뀌지 않았다.
+describe('탭바 배선(TRIP-413): 죽은 빈 함수가 남지 않는다', () => {
+  it('StaySearchScreen 이 BottomTabBar 를 onPressTab prop 으로 잇고, 빈 함수 스텁이 없다', () => {
+    const screenPath = path.join(
+      ROOT,
+      'features',
+      'stay',
+      'ui',
+      'StaySearchScreen.tsx'
+    );
+    const source = stripComments(fs.readFileSync(screenPath, 'utf8'));
+
+    // 긍정 짝 — 탭바가 실재하고 onPressTab 배선이 있다.
+    expect(source).toContain('BottomTabBar');
+    expect(source).toContain('onPressTab');
+
+    // 부정 — 죽은 빈 함수 스텁(눌러도 무동작)이 남지 않는다(금지 AC). 공백 유무만 다른
+    // 두 형태를 다 막는다.
+    expect(source).not.toMatch(/onPressTab=\{\(\)\s*=>\s*\{\s*\}\}/);
+  });
+});
+
+// ── TRIP-414 확장 — FAB 배선. 위 describe 들의 it 본문은 한 글자도 바뀌지 않았다.
+describe('FAB 배선(TRIP-414): 죽은 undefined onPress 가 남지 않는다', () => {
+  it('stay-search-fab 이 onPress 콜백을 잇고, onPress={undefined} 스텁이 없다', () => {
+    const screenPath = path.join(
+      ROOT,
+      'features',
+      'stay',
+      'ui',
+      'StaySearchScreen.tsx'
+    );
+    const source = stripComments(fs.readFileSync(screenPath, 'utf8'));
+
+    // 긍정 짝 — FAB 이 실재하고 콜백 prop 을 잇는다.
+    expect(source).toContain('stay-search-fab');
+    expect(source).toContain('onPressCreateTrip');
+
+    // 부정 — FAB 블록에 onPress={undefined} 죽은 스텁이 남지 않는다(금지 AC). FAB Pressable
+    // 여는 태그부터 닫는 태그까지 잘라 그 안만 본다(저장 하트의 onPress={undefined}는 범위 밖).
+    const fabStart = source.indexOf('stay-search-fab');
+    const fabBlock = source.slice(fabStart, fabStart + 400);
+    expect(fabBlock).not.toMatch(/onPress=\{undefined\}/);
+  });
+});
+
+// ── TRIP-415 확장 — 지역·필터 칩 배선. 위 describe 들의 it 본문은 한 글자도 바뀌지 않았다.
+describe('필터 칩 배선(TRIP-415): 죽은 undefined onPress 가 남지 않는다', () => {
+  it('FilterChip 이 onPress prop 을 잇고, stay-search-filter 근처에 onPress={undefined} 가 없다', () => {
+    const screenPath = path.join(
+      ROOT,
+      'features',
+      'stay',
+      'ui',
+      'StaySearchScreen.tsx'
+    );
+    const source = stripComments(fs.readFileSync(screenPath, 'utf8'));
+
+    // 긍정 짝 — 필터 칩이 실재하고 콜백 prop 을 잇는다.
+    expect(source).toContain('stay-search-filter-');
+    expect(source).toContain('onPressFilter');
+
+    // FilterChip 정의부(testID `stay-search-filter-${axis}` 앞뒤)만 잘라 본다.
+    const chipStart = source.indexOf('stay-search-filter-${axis}');
+    const chipBlock = source.slice(chipStart - 200, chipStart + 400);
+
+    // 부정 — onPress={undefined} 죽은 스텁이 남지 않는다(금지 AC).
+    expect(chipBlock).not.toMatch(/onPress=\{undefined\}/);
+    // 긍정 — FilterChip 이 받은 onPress 를 Pressable 에 실제로 넘긴다. 이 단언이 없으면
+    // onPress 배선 줄을 통째로 지워도(칩이 무동작이 돼도) 위 부정 단언은 공허 통과다 —
+    // RNTL fireEvent.press 의 디스패치 특성상 행위 테스트가 이 제거를 못 잡기 때문(실측).
+    expect(chipBlock).toMatch(/onPress=\{onPress\}/);
+  });
+});

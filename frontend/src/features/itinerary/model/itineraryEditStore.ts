@@ -33,6 +33,14 @@ export function removeSlot(slots: Slot[], poiId: string): Slot[] {
 }
 
 /**
+ * TRIP-338 · 슬롯을 **배열 끝에 붙인 새 배열**(배열 순서 = 슬롯 순서, INV-U3-02). 스프레드라
+ * 원본 배열은 안 건드린다(비파괴 — 시드한 GET 배열을 건드리지 않기 위함, `removeSlot`과 같은 패턴).
+ */
+export function addSlot(slots: Slot[], slot: Slot): Slot[] {
+  return [...slots, slot];
+}
+
+/**
  * 재정렬 결과를 다시 쌓되 **고정 슬롯은 원래 절대 인덱스에 재고정**한다(엣지1 · INV-U3-02).
  * lib(`onDragEnd.data`)이 준 배열이 고정을 밀어냈어도, 고정은 `original`의 자리를 지키고
  * 비고정만 `reordered` 순서로 빈 자리를 채운다. 핸들을 숨겨 드래그를 막아도 비고정을 고정

@@ -20,7 +20,8 @@ import {
  * `formatPrice`/`stayKey` 카드 매핑은 스캔 밖인 이 라우트(app 층)가 진다 — `itinerary.tsx`
  * 승격과 동형(브리프 §0-1).
  *
- * 검색 제출 → `/stays?region={입력}`(기존 라우트가 region 을 수신) · 모두 보기 → `/stays` ·
+ * 검색창 탭 → `/explore/region`(입력 불가 진입 버튼, 자유 문자열이 region 으로 새는 걸 막는다,
+ * TRIP-412) · 모두 보기 → `/stays?region={레인 지역}`(첫 카드 지역을 실어 부산 폴백 회피) ·
  * bridge CTA → `/trips/new/step1`(일정 탭 빈상태 CTA 목적지와 정합). 구획별 독립 쿼리라
  * 숙소 레인 실패가 나머지 구획을 안 죽인다(INV-4).
  */
@@ -37,24 +38,29 @@ export default function ExploreRoute(): ReactElement {
     priceText: formatPrice(item.price),
   }));
 
+  // "모두 보기"가 실어 보낼 지역 — 레인 첫 카드의 지역(TRIP-412). 없으면 지역 없이 push 하고
+  // 착지 화면의 폴백에 맡긴다. 지역을 실어야 부산 폴백(빈 목록)에 안 걸린다.
+  const laneRegion = stay.data?.items?.[0]?.region;
+
   return (
     <ExploreLandingScreen
       heading={{
         title: '무엇을 둘러볼까요?',
         subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
       }}
-      onSubmitSearch={(text) => {
-        const region = text.trim();
-        if (region.length === 0) return;
-        router.push(`/stays?region=${encodeURIComponent(region)}`);
-      }}
+      onPressSearch={() => router.push('/explore/region')}
       stayLane={{
         error: stay.isError,
         cards,
         onRetry: () => {
           void stay.refetch();
         },
-        onSeeAll: () => router.push('/stays'),
+        onSeeAll: () =>
+          router.push(
+            laneRegion
+              ? `/stays?region=${encodeURIComponent(laneRegion)}`
+              : '/stays'
+          ),
       }}
       bridge={{
         savedCount: savedPoiIds.length,

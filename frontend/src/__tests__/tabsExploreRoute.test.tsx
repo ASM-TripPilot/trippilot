@@ -75,11 +75,15 @@ function item(
   };
 }
 
-const CARD_A = item('yanolja', '1', '부산', '해운대 오션 호텔', {
+// 두 카드 지역을 일부러 다르게 둔다(서울 vs 제주) — "모두 보기"가 **레인 첫 카드**의 지역을
+// 데이터에서 파생해 싣는지(TRIP-412)를 잠근다. 둘이 같으면 region 을 리터럴로 하드코딩하거나
+// items[1] 로 잘못 집어도 통과해(무증명), 첫 카드 지역이라는 계약이 심판에 안 물린다(code-critic W-1).
+// region 없이 push 하면 착지 화면이 부산 폴백에 떨어지므로, 첫 카드 지역(서울)을 실어야 통과한다.
+const CARD_A = item('yanolja', '1', '서울', '명동 시티 호텔', {
   amount: 145000,
   currency: 'KRW',
 });
-const CARD_B = item('agoda', '2', '부산', '광안리 게스트하우스', null);
+const CARD_B = item('agoda', '2', '제주', '성산 게스트하우스', null);
 
 /** 라우트가 읽는 필드(data·isError·isPending)만 채운 조회 결과. */
 function stayResults(items: StayItem[]) {
@@ -131,18 +135,27 @@ describe('🔴 AC-E1 · AC-E8 — 6구획 렌더 + nearby 부재', () => {
   });
 });
 
-describe('🔴 AC-E2 — 검색 제출 → /stays?region={입력}', () => {
-  it('검색창에 입력 후 제출하면 그 지역으로 /stays 로 이동한다', () => {
+describe('🔴 AC-E2 — 검색창은 입력 불가 진입 버튼 → /explore/region (TRIP-412)', () => {
+  it('검색창을 누르면 지역 선택(/explore/region)으로 이동한다 — 자유 문자열이 region 으로 새지 않는다', () => {
     render(<ExploreRoute />);
 
-    fireEvent(screen.getByTestId('explore-landing-search'), 'submitEditing', {
-      nativeEvent: { text: '제주' },
-    });
+    // 검색창은 이제 TextInput 이 아니라 Pressable 진입 버튼이다 — 제출이 아니라 탭이다.
+    fireEvent.press(screen.getByTestId('explore-landing-search'));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
-    // decodeURIComponent — 리포 관례가 encodeURIComponent 로 인코딩한다(02a ★E-1).
-    const dest = String(mockPush.mock.calls[0][0]);
-    expect(decodeURIComponent(dest)).toContain('/stays?region=제주');
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/region');
+  });
+
+  it('자유 문자열이 region 으로 새지 않는다 — 제출(submitEditing)에는 반응하지 않는다', () => {
+    render(<ExploreRoute />);
+
+    // 편집 가능한 입력이 되살아나 submitEditing→region push 누출이 재개방되면 이 단언이 red
+    // (code-critic W-2). 진입 버튼은 제출 이벤트를 무시해야 한다.
+    fireEvent(screen.getByTestId('explore-landing-search'), 'submitEditing', {
+      nativeEvent: { text: '성산일출봉' },
+    });
+
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
 
@@ -163,13 +176,18 @@ describe('🔴 AC-E3 — lane_stay 데이터·가격 규칙·모두 보기', () 
     });
   });
 
-  it('"모두 보기" 를 누르면 지역 없이 /stays 로 이동한다', () => {
+  it('"모두 보기" 를 누르면 레인이 보여준 지역을 실어 /stays 로 이동한다 (TRIP-412)', () => {
     render(<ExploreRoute />);
 
     fireEvent.press(screen.getByTestId('explore-lane-stay-seeall'));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(String(mockPush.mock.calls[0][0])).toBe('/stays');
+    // 레인 첫 카드 지역(서울)을 실어 보낸다 — items[1]='제주'와 달라야 "첫 카드"임이 증명된다.
+    // 파라미터 없이 push 하면 착지 화면이 부산 폴백에 걸린다(TRIP-412 재현).
+    // decodeURIComponent — encodeURIComponent 인코딩 관례.
+    expect(decodeURIComponent(String(mockPush.mock.calls[0][0]))).toBe(
+      '/stays?region=서울'
+    );
   });
 });
 

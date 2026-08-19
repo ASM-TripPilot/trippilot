@@ -15,7 +15,7 @@
  * AC-O3). 탭바는 SafeArea 를 모르는 순수 뷰라 하단 여백은 콘텐츠(이 화면) 쪽에 둔다(repo-trap).
  */
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -33,8 +33,9 @@ export interface StayCardVM {
 
 export interface ExploreLandingScreenProps {
   heading: { title: string; subtitle: string };
-  /** 검색 제출 — TextInput onSubmitEditing 의 `e.nativeEvent.text` 가 그대로 온다. */
-  onSubmitSearch: (text: string) => void;
+  /** 검색창 탭 — 입력 불가 진입 버튼이다. 실제 검색은 /explore/region 에서만 한다(TRIP-412).
+   * 제출이 아니라 진입이므로 텍스트를 넘기지 않는다(자유 문자열이 region 으로 새는 걸 막는다). */
+  onPressSearch: () => void;
   stayLane: {
     error: boolean;
     cards: StayCardVM[];
@@ -161,7 +162,7 @@ function StayLaneError({ onRetry }: { onRetry: () => void }): ReactElement {
 
 export function ExploreLandingScreen({
   heading,
-  onSubmitSearch,
+  onPressSearch,
   stayLane,
   bridge,
 }: ExploreLandingScreenProps): ReactElement {
@@ -189,17 +190,18 @@ export function ExploreLandingScreen({
             </Text>
           </View>
 
-          {/* 검색 */}
-          <View className="mt-lg h-[52px] flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-lg">
+          {/* 검색 — 입력 불가 진입 버튼(TRIP-412). 탭하면 /explore/region 으로 간다. */}
+          <Pressable
+            testID="explore-landing-search"
+            accessibilityRole="button"
+            onPress={onPressSearch}
+            className="mt-lg h-[52px] flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-lg"
+          >
             <SearchGlyph size={20} />
-            <TextInput
-              testID="explore-landing-search"
-              placeholder="도시 · 장소 · 숙소 검색"
-              returnKeyType="search"
-              onSubmitEditing={(e) => onSubmitSearch(e.nativeEvent.text)}
-              className="flex-1 font-noto text-body text-ink placeholder:text-muted-soft"
-            />
-          </View>
+            <Text className="flex-1 font-noto text-body text-muted-soft">
+              도시 · 장소 · 숙소 검색
+            </Text>
+          </Pressable>
 
           {/* axisSeg — 전체만 활성 */}
           <AxisSegment />
