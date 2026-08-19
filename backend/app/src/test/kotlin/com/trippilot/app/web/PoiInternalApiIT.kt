@@ -8,10 +8,12 @@ import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.TestPropertySource
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
@@ -25,6 +27,20 @@ import java.time.Instant
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = ["trippilot.service-auth.token=" + SERVICE_TOKEN])
 class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
+
+    @Autowired private lateinit var cleanupJdbc: JdbcTemplate
+
+    /**
+     * **넣은 것을 치운다.** Testcontainers 는 전 IT 가 공유하는 싱글톤이고, 여기 쓰기는 트랜잭션
+     * 롤백이 닿지 않는다. 남기면 수집분 집계를 묻는 IT 가 내 문서와 무관한 행을 세게 된다.
+     *
+     * 무서운 점은 발현 시점이다 — 테스트를 **추가하기만 해도** 실행 순서가 바뀌어 몇 달 잠복하던
+     * 오염이 무관한 PR 에서 터진다(PR #241 실측).
+     */
+    @AfterEach
+    fun cleanUpOwnRows() {
+        cleanupJdbc.update("DELETE FROM poi WHERE source_ref LIKE 'E2E-%'")
+    }
 
     @Value("\${local.server.port}")
     private var port: Int = 0
