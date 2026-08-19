@@ -19,6 +19,13 @@ data class ContentResult(
     val stays: List<Stay>,
     val degraded: Boolean,
     val amenitiesKnown: Boolean = true,
+    /**
+     * 공급자가 **상한에 걸려 일부만 돌려줬는가**.
+     *
+     * true 면 뒤따르는 필터가 전체가 아니라 부분집합 위에서 돈다 — "조건에 맞는 숙소가 없다"가
+     * 사실이 아닐 수 있다. 조용히 자르면 그 차이가 사라진다.
+     */
+    val truncated: Boolean = false,
 )
 
 /**

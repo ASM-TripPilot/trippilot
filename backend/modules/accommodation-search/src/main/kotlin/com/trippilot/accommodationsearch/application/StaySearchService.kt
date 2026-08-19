@@ -48,6 +48,7 @@ class StaySearchService(
             items, degraded = fetched.degraded, filterZeroReasons = zeroReasons,
             // 공급자가 말한 것을 그대로 옮긴다 — 여기서 추측하면 "편의시설 없는 숙소"와 구분이 사라진다.
             amenitiesKnown = fetched.amenitiesKnown,
+            truncated = fetched.truncated,
         )
     }
 

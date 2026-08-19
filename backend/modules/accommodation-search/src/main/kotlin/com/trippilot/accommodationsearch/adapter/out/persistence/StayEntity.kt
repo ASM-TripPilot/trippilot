@@ -45,5 +45,9 @@ interface StayJpaRepository : JpaRepository<StayEntity, StayId> {
     @Query("select s from StayEntity s where s.regionCode like concat(:code, '%') order by s.name")
     fun findByRegionPrefix(@Param("code") code: String): List<StayEntity>
 
-    fun findAllByOrderByName(): List<StayEntity>
+    /**
+     * 지역 미선택 조회. **상한이 필수다** — 정본이 12,782곳이라 전량을 실으면 탐색 탭이 열리는 것만으로
+     * 수 MB 를 내려보낸다(FE `explore.tsx` 가 인자 없이 부른다).
+     */
+    fun findAllByOrderByName(page: org.springframework.data.domain.Pageable): List<StayEntity>
 }

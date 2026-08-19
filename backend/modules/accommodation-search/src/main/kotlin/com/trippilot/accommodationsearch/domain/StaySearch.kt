@@ -37,4 +37,6 @@ data class StaySearch(
      * 0건이 "주차 되는 숙소가 없다"로 읽히고, 화면은 있지도 않은 필터를 계속 권한다(INV-4).
      */
     val amenitiesKnown: Boolean,
+    /** 공급자 상한에 걸려 일부만 본 결과인가 — 필터가 부분집합 위에서 돈다는 뜻이다. */
+    val truncated: Boolean,
 )

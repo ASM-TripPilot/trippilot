@@ -96,6 +96,27 @@ class StayCatalogIT : AbstractPostgresIntegrationTest() {
         found.stays.all { it.amenities.isEmpty() } shouldBe true
     }
 
+    /**
+     * **지역을 안 고르면 상한이 걸린다.** 정본이 12,782곳이라 전량을 실으면 탐색 탭이 열리는 것만으로
+     * 수 MB 가 나간다 — FE `explore.tsx` 가 인자 없이 부른다. 스텁(5곳) 시절에는 없던 문제다.
+     *
+     * 자른 사실을 값으로 알려야 한다. 뒤따르는 필터가 부분집합 위에서 돌기 때문에,
+     * 조용히 자르면 "조건에 맞는 숙소가 없다"가 사실이 아닐 수 있다.
+     */
+    @Test
+    fun `지역을 안 고르면 상한을 걸고 잘랐다고 알린다`() {
+        val all = content.search(null)
+
+        all.stays.size shouldBe 200
+        all.truncated shouldBe true
+    }
+
+    /** 지역을 고르면 그 안은 전부 준다 — 상한은 전국 조회에만 건다. */
+    @Test
+    fun `지역을 고르면 자르지 않는다`() {
+        content.search("종로구").truncated shouldBe false
+    }
+
     /** 카탈로그에 없는 이름은 빈 결과다 — 지어낸 매칭으로 엉뚱한 지역 숙소를 보여주지 않는다. */
     @Test
     fun `모르는 지역명은 빈 결과다`() {

@@ -5,6 +5,7 @@ import com.trippilot.accommodationsearch.domain.ContentResult
 import com.trippilot.accommodationsearch.domain.Stay
 import com.trippilot.placedata.api.RegionLookupFacade
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.data.domain.PageRequest
 import org.springframework.context.annotation.Primary
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
@@ -31,7 +32,20 @@ class DbContentAdapter(
 
     override fun search(region: String?): ContentResult {
         val key = region?.trim()
-        if (key.isNullOrEmpty()) return ContentResult(jpa.findAllByOrderByName().map { it.toDomain() }, degraded = false, amenitiesKnown = false)
+        if (key.isNullOrEmpty()) {
+            // **지역 미선택은 상한을 건다.** 정본이 12,782곳이라 전량은 화면이 그리지도 못하고
+            // 탐색 탭이 열리는 것만으로 수 MB 가 나간다(FE explore.tsx 가 인자 없이 부른다).
+            // 자른 사실은 값으로 알린다 — 뒤따르는 필터가 부분집합 위에서 돌기 때문이다.
+            val page = jpa.findAllByOrderByName(PageRequest.of(0, UNSCOPED_LIMIT))
+            val total = jpa.count()   // CrudRepository 기본 제공
+            if (total > UNSCOPED_LIMIT) {
+                log.info("지역 미선택 숙소 조회 — 전체 {}곳 중 {}곳만 돌려줍니다.", total, UNSCOPED_LIMIT)
+            }
+            return ContentResult(
+                page.map { it.toDomain() }, degraded = false,
+                amenitiesKnown = false, truncated = total > UNSCOPED_LIMIT,
+            )
+        }
 
         // 동명이지역이 있다 — '고성'은 경남·강원 둘, '광주'는 옛 광주 자치구 5곳과 경기 광주시를 가리킨다.
         // 하나를 고르면 거짓이므로 전부를 대상으로 삼는다.
@@ -44,6 +58,12 @@ class DbContentAdapter(
         // **정본이 편의시설을 모른다**(LOCALDATA 인허가 대장에 그 칸이 없다). 빈 배열을 "없음"으로
         // 읽히게 두면 사용자가 필터를 걸었을 때 0건이 거짓말이 된다.
         return ContentResult(stays.map { it.toDomain() }, degraded = false, amenitiesKnown = false)
+    }
+
+    private companion object {
+        /** 지역을 안 고른 조회의 상한. 화면이 한 번에 보여줄 수 있는 규모를 넘지 않게. */
+        private const val UNSCOPED_LIMIT = 200
+        private val log = org.slf4j.LoggerFactory.getLogger(DbContentAdapter::class.java)
     }
 
     private fun StayEntity.toDomain() = Stay(
