@@ -14,6 +14,7 @@ const BODY = '#3F3F3F';
 const MUTED = '#6A6A6A';
 const MUTED_SOFT = '#9AA1AB';
 const PRIMARY_TEXT = '#C13515';
+const WHITE = '#FFFFFF';
 
 type GlyphProps = {
   size?: number;
@@ -143,8 +144,15 @@ export function TrashGlyph({ size = 18, testID }: GlyphProps) {
   );
 }
 
-// h24 [장소 추가] 버튼 플러스(18) — Figma `1896:1083`. 버튼 글자와 같은 ink.
-export function PlusGlyph({ size = 18, testID }: GlyphProps) {
+// h24 [장소 추가] 버튼 플러스(18) — Figma `1896:1083`. h24 버튼 글자와 같은 ink 가 기본이고,
+// h19 빈 밴드 원(primary-pale)엔 primary, primary 버튼(장소 검색 CTA·h20 추가)엔 white 로 스냅
+// 한다(같은 도형, 색만 — LockGlyph·FullAiGlyph 의 tone 패턴 계승, 기본값이 기존 h24 렌더 불변).
+export function PlusGlyph({
+  size = 18,
+  tone = 'ink',
+  testID,
+}: GlyphProps & { tone?: 'ink' | 'primary' | 'white' }) {
+  const stroke = tone === 'primary' ? PRIMARY : tone === 'white' ? WHITE : INK;
   return (
     <Svg
       testID={testID}
@@ -155,13 +163,13 @@ export function PlusGlyph({ size = 18, testID }: GlyphProps) {
     >
       <Path
         d="M9 3.75V14.25"
-        stroke={INK}
+        stroke={stroke}
         strokeWidth={1.8}
         strokeLinecap="round"
       />
       <Path
         d="M3.75 9H14.25"
-        stroke={INK}
+        stroke={stroke}
         strokeWidth={1.8}
         strokeLinecap="round"
       />
@@ -219,8 +227,14 @@ export function CheckCircleGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-// 카드 우측 편집 연필(20) — Figma `1876:1099`. FIXED 항목에만 붙는다.
-export function PencilGlyph({ size = 20, testID }: GlyphProps) {
+// 카드 우측 편집 연필(20) — Figma `1876:1099`. FIXED 항목에만 붙는 muted-soft 가 기본이고,
+// h19 hero 의 primary 원 안에서는 white 로 스냅한다(같은 도형, 색만 — PlusGlyph tone 패턴과 동형).
+export function PencilGlyph({
+  size = 20,
+  tone = 'mutedSoft',
+  testID,
+}: GlyphProps & { tone?: 'mutedSoft' | 'white' }) {
+  const stroke = tone === 'white' ? WHITE : MUTED_SOFT;
   return (
     <Svg
       testID={testID}
@@ -231,13 +245,41 @@ export function PencilGlyph({ size = 20, testID }: GlyphProps) {
     >
       <Path
         d="M10 16.6667H17.5"
-        stroke={MUTED_SOFT}
+        stroke={stroke}
         strokeWidth={1.66667}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M13.75 2.91667C14.0815 2.58515 14.5312 2.3989 15 2.3989C15.4688 2.3989 15.9185 2.58515 16.25 2.91667C16.5815 3.24819 16.7678 3.69783 16.7678 4.16667C16.7678 4.63551 16.5815 5.08515 16.25 5.41667L5.83333 15.8333L2.5 16.6667L3.33333 13.3333L13.75 2.91667Z"
+        stroke={stroke}
+        strokeWidth={1.66667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// h20 검색 필 돋보기(20) — Figma `1894:1090`. 검색 placeholder 와 같은 muted-soft. 원 + 손잡이.
+export function SearchGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M9.16667 15.8333C12.8486 15.8333 15.8333 12.8486 15.8333 9.16667C15.8333 5.48477 12.8486 2.5 9.16667 2.5C5.48477 2.5 2.5 5.48477 2.5 9.16667C2.5 12.8486 5.48477 15.8333 9.16667 15.8333Z"
+        stroke={MUTED_SOFT}
+        strokeWidth={1.66667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M17.5 17.5L13.875 13.875"
         stroke={MUTED_SOFT}
         strokeWidth={1.66667}
         strokeLinecap="round"
