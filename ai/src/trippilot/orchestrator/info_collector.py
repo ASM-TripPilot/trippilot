@@ -12,26 +12,75 @@ intent별 **정보 요구표**를 보고 등록된 Provider들을 호출해 Info
 - 대형 데이터(후보 풀)는 packet에 참조 키만 온다(DL-2) — 실체는
   `resolve_pool`로 PLACE Provider에서 꺼낸다.
 - 병렬 수집은 후속 — 현재 순차 호출 (Provider 3종이지만 전부 in-memory/단건 API).
+- TRANSIT Provider는 v2 타입(TransitRequest)으로 직접 호출 (TRIP-423).
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime, timezone
 
+from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.context import PermissionDeniedError
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
 from trippilot.domain.llm import CandidatePool
+from trippilot.domain.transit import TransitPurpose, TransitRequest
 from trippilot.providers.base import Provider
 
 # 정보 요구표 (agent-structure-v2 §3) — intent → 수집할 Provider 목록.
-# REPLAN·EDIT 행은 해당 경로 유닛에서 채운다.
 INFO_REQUIREMENTS: Mapping[str, tuple[ProviderKind, ...]] = {
     "GENERATE_SCHEDULE": (
         ProviderKind.PLACE,
         ProviderKind.WEATHER,
         ProviderKind.PERSONA,
     ),
+    "REPLAN": (
+        ProviderKind.WEATHER,
+        ProviderKind.TRANSIT,
+        ProviderKind.PERSONA,
+        ProviderKind.PLACE,
+    ),
 }
+
+
+def _build_transit_request(params: dict) -> TransitRequest:
+    """params dict에서 TransitRequest를 조립한다 (InfoCollector 전용).
+
+    params keys: origin, destination, mode, now(선택), expected_minutes(선택), purpose(선택)
+    """
+    origin = params["origin"]
+    if isinstance(origin, dict):
+        origin = GeoPoint.from_dict(origin)
+
+    destination = params["destination"]
+    if isinstance(destination, dict):
+        destination = GeoPoint.from_dict(destination)
+
+    mode = params["mode"]
+    if isinstance(mode, str):
+        mode = TransportMode(mode)
+
+    now = params.get("now")
+    if now is None:
+        now = datetime.now(timezone.utc)
+    elif isinstance(now, str):
+        from trippilot.domain.serialization import from_iso
+        now = from_iso(now)
+
+    purpose_raw = params.get("purpose", "delay_check")
+    if isinstance(purpose_raw, str):
+        purpose = TransitPurpose(purpose_raw)
+    else:
+        purpose = purpose_raw
+
+    return TransitRequest(
+        origin=origin,
+        destination=destination,
+        mode=mode,
+        purpose=purpose,
+        now=now,
+        expected_minutes=params.get("expected_minutes"),
+    )
 
 
 class InfoCollector:
@@ -46,7 +95,7 @@ class InfoCollector:
             if provider is None:  # 미등록 = 기능 부재 — 패킷 자체를 만들지 않는다
                 continue
             try:
-                packets[kind] = provider.fetch(params)
+                packets[kind] = self._call_provider(kind, provider, params)
             except PermissionDeniedError:
                 raise  # 보안 — 상태값 수렴 금지 (모듈 docstring)
             except Exception as e:  # Provider 계약 위반 — 수집은 계속 (INV-4)
@@ -57,6 +106,19 @@ class InfoCollector:
                     freshness=None,
                 )
         return packets
+
+    def _call_provider(
+        self, kind: ProviderKind, provider: Provider, params: dict
+    ) -> InfoPacket:
+        """Provider 종류별 타입 안전 호출 분기 (TRIP-423).
+
+        TRANSIT: params → TransitRequest 조립 → fetch_typed() 호출.
+        나머지: 기존대로 fetch(params: dict).
+        """
+        if kind is ProviderKind.TRANSIT and hasattr(provider, "fetch_typed"):
+            request = _build_transit_request(params)
+            return provider.fetch_typed(request)  # type: ignore[union-attr]
+        return provider.fetch(params)
 
     def resolve_pool(self, pool_ref: str) -> CandidatePool | None:
         """PLACE 패킷의 참조 키 → 풀 실체 (DL-2). 미등록·축출이면 None."""
