@@ -8,10 +8,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from trippilot.llm_gateway.context import ContextResolver
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.context import Principal, ResourceRef
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
 from trippilot.domain.persona import PersonaSummary
 
@@ -35,26 +33,22 @@ def build_explanation_vars(
 
 
 class ExplanationWorker:
-    def __init__(self, gateway: GatewayFacade, resolver: ContextResolver) -> None:
+    def __init__(self, gateway: GatewayFacade) -> None:
         self._gateway = gateway
-        self._resolver = resolver
 
     def explain(
         self,
         pool: CandidatePool,
         ordered_poi_ids: tuple[PoiId, ...],
-        persona_ref: ResourceRef,
-        principal: Principal,
+        persona: PersonaSummary,
         trace_id: TraceId,
         now: datetime,
         *,
         timeout_sec: float | None = None,
     ) -> TypedResult:
-        persona = self._resolver.resolve(principal, persona_ref)
+        # 재조회는 수집 단계(PersonaProvider) 소관 (TRIP-407) — 타입 계약만 지킨다
         if not isinstance(persona, PersonaSummary):
-            raise TypeError(
-                f"persona_ref 재조회 결과가 PersonaSummary 아님: {type(persona).__name__}"
-            )
+            raise TypeError(f"persona가 PersonaSummary 아님: {type(persona).__name__}")
         return self._gateway.call(
             LlmFeature.EXPLANATION,
             build_explanation_vars(pool, ordered_poi_ids, persona),

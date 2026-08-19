@@ -108,3 +108,124 @@ def test_collector_converts_leaked_exception_to_unavailable() -> None:
     packet = packets[ProviderKind.WEATHER]
     assert packet.status is ProviderStatus.UNAVAILABLE
     assert "RuntimeError" in packet.data["reason"]
+
+
+# ── TRIP-407 — PlaceProvider·PersonaProvider ─────────────────────────
+
+from trippilot.domain.common import BudgetLevel, TransportMode
+from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
+from trippilot.domain.persona import CompanionType, PersonaSummary
+from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.providers.persona import PersonaProvider
+from trippilot.providers.place import PlaceProvider
+
+import pytest
+
+_POOL_REQUEST = CandidatePoolRequest(
+    anchor=_ANCHOR, dates=(_D1,), budget=BudgetLevel.MID,
+    transport=TransportMode.PUBLIC,
+)
+_PRINCIPAL = Principal(user_id="u-owner")
+_PERSONA_REF = ResourceRef(kind="persona", ref_id="p1", owner_id="u-owner")
+_PERSONA = PersonaSummary(
+    taste_tags=(), companion=CompanionType.SOLO, budget=BudgetLevel.MID
+)
+
+
+class _FakePool:
+    def __init__(self, pois=("poi",)) -> None:
+        self.pois = pois
+
+
+class _FakeBuilder:
+    def __init__(self, pool=None, error: Exception | None = None) -> None:
+        self._pool = pool if pool is not None else _FakePool()
+        self._error = error
+
+    def build(self, request, now):
+        if self._error is not None:
+            raise self._error
+        return self._pool
+
+
+def test_place_provider_returns_resolvable_pool_ref() -> None:
+    """풀은 참조 키로만 (DL-2) — resolve로 실체 회수."""
+    pool = _FakePool()
+    provider = PlaceProvider(_FakeBuilder(pool))
+    packet = provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW})
+
+    assert packet.status is ProviderStatus.OK
+    assert packet.data["pool_size"] == 1
+    assert provider.resolve(packet.data["pool_ref"]) is pool
+    assert provider.resolve("없는-키") is None
+
+
+def test_place_provider_empty_pool_is_no_candidates_with_ref() -> None:
+    """빈 풀 = NO_CANDIDATES 상태값이되 ref는 있다 — 최소 일정 경로가 풀 객체를 쓴다."""
+    provider = PlaceProvider(_FakeBuilder(_FakePool(pois=())))
+    packet = provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW})
+
+    assert packet.status is ProviderStatus.NO_CANDIDATES
+    assert provider.resolve(packet.data["pool_ref"]) is not None
+
+
+def test_place_provider_build_failure_has_no_ref() -> None:
+    provider = PlaceProvider(_FakeBuilder(error=RuntimeError("db down")))
+    packet = provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW})
+
+    assert packet.status is ProviderStatus.NO_CANDIDATES
+    assert "pool_ref" not in packet.data
+    assert "RuntimeError" in packet.data["reason"]
+
+
+class _FakeResolver:
+    def __init__(self, value=None, error: Exception | None = None) -> None:
+        self._value = value
+        self._error = error
+
+    def resolve(self, principal, ref):
+        if self._error is not None:
+            raise self._error
+        return self._value
+
+
+_PERSONA_PARAMS = {"principal": _PRINCIPAL, "persona_ref": _PERSONA_REF, "now": _NOW}
+
+
+def test_persona_provider_roundtrips_summary() -> None:
+    packet = PersonaProvider(_FakeResolver(_PERSONA)).fetch(_PERSONA_PARAMS)
+
+    assert packet.status is ProviderStatus.OK
+    assert PersonaSummary.from_dict(packet.data["persona"]) == _PERSONA
+    assert packet.freshness is not None and packet.freshness.ttl_sec == 0  # 캐시 없음
+
+
+def test_persona_provider_missing_is_cold_start() -> None:
+    packet = PersonaProvider(
+        _FakeResolver(error=LookupError("재조회 실패"))
+    ).fetch(_PERSONA_PARAMS)
+    assert packet.status is ProviderStatus.COLD_START
+
+    packet = PersonaProvider(_FakeResolver({"raw": "dict"})).fetch(_PERSONA_PARAMS)
+    assert packet.status is ProviderStatus.COLD_START  # 타입 위반도 비가용
+
+
+def test_permission_denied_pierces_provider_and_collector() -> None:
+    """보안 — 권한 위반은 상태값으로 삼키지 않는다 (fail-closed, IO-7의 명시적 예외)."""
+    provider = PersonaProvider(_FakeResolver(error=PermissionDeniedError("남의 ref")))
+    with pytest.raises(PermissionDeniedError):
+        provider.fetch(_PERSONA_PARAMS)
+
+    collector = InfoCollector({ProviderKind.PERSONA: provider})
+    with pytest.raises(PermissionDeniedError):
+        collector.collect("GENERATE_SCHEDULE", _PERSONA_PARAMS)
+
+
+def test_collector_resolve_pool_delegates_to_place_provider() -> None:
+    pool = _FakePool()
+    provider = PlaceProvider(_FakeBuilder(pool))
+    collector = InfoCollector({ProviderKind.PLACE: provider})
+    packet = provider.fetch({"pool_request": _POOL_REQUEST, "now": _NOW})
+
+    assert collector.resolve_pool(packet.data["pool_ref"]) is pool
+    assert InfoCollector({}).resolve_pool("아무-키") is None  # PLACE 미등록

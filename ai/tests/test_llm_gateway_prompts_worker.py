@@ -126,10 +126,10 @@ def test_prompt_p1_deterministic_complete_and_coordinate_free(
 # ── 워커: 권한 → 조립 → 게이트웨이 (전 구간 실물) ────────────
 
 
-def _worker(llm, store_value: object) -> PreferenceScoringWorker:
+def _worker(llm) -> PreferenceScoringWorker:
     cfg = C1Config(model_ids={ModelTier.LIGHT: "m-l", ModelTier.HEAVY: "m-h"})
     gateway = GatewayFacade(llm, _registry(), ClosedSetGate(), cfg, InMemoryTrace())
-    return PreferenceScoringWorker(gateway, ContextResolver(_Store(store_value)))
+    return PreferenceScoringWorker(gateway)
 
 
 @given(candidate_pools().filter(lambda p: bool(p.poi_ids)))
@@ -137,32 +137,26 @@ def test_worker_end_to_end_success(pool: CandidatePool) -> None:
     pid = str(sorted(pool.poi_ids, key=str)[0])
     # reason이 섞여 와도 무시하고 통과 (TRIP-374 전환기 관용) — end-to-end 확인
     canned = json.dumps({"scores": [{"poiId": pid, "score": 0.8, "reason": "r"}]})
-    result = _worker(FakeLlm(canned=canned), _PERSONA).score(
-        pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW
+    result = _worker(FakeLlm(canned=canned)).score(
+        pool, _PERSONA, _TRACE_ID, _NOW
     )
     assert result.is_fallback is False
     assert [str(s.poi_id) for s in result.value] == [pid]
     assert result.value[0].is_llm_score is True
 
 
-def test_worker_permission_violation_raises_before_llm(pool=None) -> None:
-    foreign_ref = ResourceRef(kind="persona", ref_id="p", owner_id="u-else")
-    worker = _worker(FakeLlm(), _PERSONA)
-    with pytest.raises(PermissionDeniedError):
-        worker.score(_empty_pool(), foreign_ref, _PRINCIPAL, _TRACE_ID, _NOW)
-
-
 def test_worker_passes_fallback_through_unchanged() -> None:
-    result = _worker(FailingLlm(), _PERSONA).score(
-        _empty_pool(), _REF, _PRINCIPAL, _TRACE_ID, _NOW
+    result = _worker(FailingLlm()).score(
+        _empty_pool(), _PERSONA, _TRACE_ID, _NOW
     )
     assert result.is_fallback is True and result.value is None  # 실행은 호출측 (BR-U4-09)
 
 
 def test_worker_rejects_non_persona_context() -> None:
+    # 재조회는 PersonaProvider 소관(TRIP-407) — 워커는 타입 계약만 지킨다
     with pytest.raises(TypeError):
-        _worker(FakeLlm(), {"raw": "dict"}).score(
-            _empty_pool(), _REF, _PRINCIPAL, _TRACE_ID, _NOW
+        _worker(FakeLlm()).score(
+            _empty_pool(), {"raw": "dict"}, _TRACE_ID, _NOW
         )
 
 

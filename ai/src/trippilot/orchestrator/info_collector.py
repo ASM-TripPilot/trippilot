@@ -5,24 +5,32 @@ intent별 **정보 요구표**를 보고 등록된 Provider들을 호출해 Info
 
 - Provider 실패는 상태값(IO-7)이 원칙이지만, 계약을 어기고 예외가 새어 나와도
   수집이 죽지 않게 UNAVAILABLE 패킷으로 수렴한다 (INV-4 — 강등 판단은 호출측).
+  **단 PermissionDeniedError는 그대로 관통**한다 — 권한 위반을 상태값으로
+  수렴시키면 fail-closed(TRIP-333)가 무너진다 (PersonaProvider docstring).
 - 요구표에 있어도 **미등록 Provider는 건너뛴다** — 기능 부재는 실패가 아니다
   (오케스트레이터의 "미배선 = 기능 부재" 선례와 동일).
-- 현재 등록 대상은 Weather뿐 — Place(후보 풀)·Persona는 ItineraryOrchestrator가
-  기존 인라인 경로(pool_builder·context_resolver)로 직접 수집하며, Provider로의
-  이관은 후속 유닛 소관. 병렬 수집도 등록 Provider가 2종 이상이 될 때 붙인다.
+- 대형 데이터(후보 풀)는 packet에 참조 키만 온다(DL-2) — 실체는
+  `resolve_pool`로 PLACE Provider에서 꺼낸다.
+- 병렬 수집은 후속 — 현재 순차 호출 (Provider 3종이지만 전부 in-memory/단건 API).
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 
+from trippilot.domain.context import PermissionDeniedError
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
+from trippilot.domain.llm import CandidatePool
 from trippilot.providers.base import Provider
 
 # 정보 요구표 (agent-structure-v2 §3) — intent → 수집할 Provider 목록.
 # REPLAN·EDIT 행은 해당 경로 유닛에서 채운다.
 INFO_REQUIREMENTS: Mapping[str, tuple[ProviderKind, ...]] = {
-    "GENERATE_SCHEDULE": (ProviderKind.WEATHER,),
+    "GENERATE_SCHEDULE": (
+        ProviderKind.PLACE,
+        ProviderKind.WEATHER,
+        ProviderKind.PERSONA,
+    ),
 }
 
 
@@ -39,6 +47,8 @@ class InfoCollector:
                 continue
             try:
                 packets[kind] = provider.fetch(params)
+            except PermissionDeniedError:
+                raise  # 보안 — 상태값 수렴 금지 (모듈 docstring)
             except Exception as e:  # Provider 계약 위반 — 수집은 계속 (INV-4)
                 packets[kind] = InfoPacket(
                     provider=kind,
@@ -47,3 +57,9 @@ class InfoCollector:
                     freshness=None,
                 )
         return packets
+
+    def resolve_pool(self, pool_ref: str) -> CandidatePool | None:
+        """PLACE 패킷의 참조 키 → 풀 실체 (DL-2). 미등록·축출이면 None."""
+        place = self._providers.get(ProviderKind.PLACE)
+        resolve = getattr(place, "resolve", None)
+        return resolve(pool_ref) if callable(resolve) else None

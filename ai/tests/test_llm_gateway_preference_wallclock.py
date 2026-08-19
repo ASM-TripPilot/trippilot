@@ -110,7 +110,7 @@ def _worker(llm, cfg: C1Config | None = None) -> tuple[PreferenceScoringWorker, 
     gateway = GatewayFacade(
         llm, PromptRegistry(_PROMPTS_DIR), ClosedSetGate(), cfg, trace
     )
-    return PreferenceScoringWorker(gateway, ContextResolver(_Store())), trace
+    return PreferenceScoringWorker(gateway), trace
 
 
 def _echo_response(request: LlmRequest, ids: list[str]) -> LlmResponse:
@@ -202,7 +202,7 @@ def test_parallelism_table_kept_at_14s_budget(pool_size: int, expected_n: int) -
     llm = _EchoScoresLlm()
     worker, _ = _worker(llm)
 
-    worker.score(_pool(pool_size), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0)
+    worker.score(_pool(pool_size), _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0)
 
     assert len(llm.requests) == expected_n
 
@@ -213,8 +213,8 @@ def test_chunk_size_follows_budget() -> None:
     worker14, _ = _worker(llm14)
     worker8, _ = _worker(llm8)
 
-    worker14.score(_pool(20), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0)
-    worker8.score(_pool(20), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=8.0)
+    worker14.score(_pool(20), _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0)
+    worker8.score(_pool(20), _PERSONA, _TRACE_ID, _NOW, timeout_sec=8.0)
 
     assert len(llm14.requests) == 1
     assert len(llm8.requests) == 4
@@ -234,7 +234,7 @@ def test_deadline_exceeding_chunk_fails_and_stage_stays_bounded() -> None:
 
     started = time.monotonic()
     result = worker.score(
-        _pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=0.5
+        _pool(40), _PERSONA, _TRACE_ID, _NOW, timeout_sec=0.5
     )
     elapsed = time.monotonic() - started
     release.set()  # 유기 스레드 즉시 해제 (테스트 위생 — 인터프리터 종료 대기 방지)
@@ -262,7 +262,7 @@ def test_all_chunks_timed_out_is_fallback_signal() -> None:
     worker, trace = _worker(_BlockAll(), cfg=_fast_cfg())
 
     result = worker.score(
-        _pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=0.5
+        _pool(40), _PERSONA, _TRACE_ID, _NOW, timeout_sec=0.5
     )
     release.set()
 
@@ -286,7 +286,7 @@ def test_late_orphan_completion_is_discarded() -> None:
     )
 
     result = worker.score(
-        _pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=0.5
+        _pool(40), _PERSONA, _TRACE_ID, _NOW, timeout_sec=0.5
     )
     # 마감 후 유기 스레드를 풀어 늦은 응답을 완성시킨다
     release.set()
@@ -311,10 +311,10 @@ def test_merge_is_deterministic_regardless_of_arrival_order() -> None:
     worker_p, _ = _worker(plain)
 
     r_shuffled = worker_s.score(
-        _pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+        _pool(40), _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0
     )
     r_plain = worker_p.score(
-        _pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+        _pool(40), _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0
     )
 
     assert _value_ids(r_shuffled) == _value_ids(r_plain)          # 도착 순서 무관

@@ -102,7 +102,7 @@ def _worker(llm, cfg: C1Config | None = None) -> tuple[PreferenceScoringWorker, 
     gateway = GatewayFacade(
         llm, PromptRegistry(_PROMPTS_DIR), ClosedSetGate(), cfg, trace
     )
-    return PreferenceScoringWorker(gateway, ContextResolver(_Store())), trace
+    return PreferenceScoringWorker(gateway), trace
 
 
 def _echo_response(request: LlmRequest, ids: list[str]) -> LlmResponse:
@@ -217,7 +217,7 @@ def test_merge_scores_every_poi_exactly_once() -> None:
     worker, trace = _worker(llm)
 
     result = worker.score(
-        pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+        pool, _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0
     )
 
     assert result.is_fallback is False and result.error is None
@@ -241,7 +241,7 @@ def test_partial_chunk_failure_keeps_successes_without_fallback_signal() -> None
     worker, trace = _worker(_FailOnPoiLlm("c001"))
 
     result = worker.score(
-        pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+        pool, _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0
     )
 
     assert result.is_fallback is False                 # 성공분이 있다 — 폴백 아님
@@ -263,7 +263,7 @@ def test_all_chunks_failed_is_same_fallback_signal_as_single_call() -> None:
     worker, trace = _worker(FailingLlm())
 
     result = worker.score(
-        _pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+        _pool(40), _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0
     )
 
     assert result.is_fallback is True and result.value is None  # INV-4 경로 불변
@@ -284,7 +284,7 @@ def test_small_pool_keeps_single_call_path() -> None:
     worker, trace = _worker(llm)
 
     result = worker.score(
-        pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+        pool, _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0
     )
 
     assert len(llm.requests) == 1                      # 청킹 없음 — 현행 경로 그대로
@@ -310,7 +310,7 @@ def test_pbt_merged_output_is_subset_of_pool(ids: list[str]) -> None:
     worker, _ = _worker(_PollutingLlm())
 
     result = worker.score(
-        pool, _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+        pool, _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0
     )
 
     assert result.is_fallback is False
@@ -326,7 +326,7 @@ def test_timeout_override_passes_through_to_every_chunk_call() -> None:
     llm = _EchoScoresLlm()
     worker, _ = _worker(llm)
 
-    worker.score(_pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0)
+    worker.score(_pool(40), _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0)
 
     assert len(llm.requests) == 2
     assert [r.timeout_sec for r in llm.requests] == [14.0, 14.0]  # 청크가 작아도 예산 기준
@@ -340,7 +340,7 @@ def test_chunk_calls_actually_run_in_parallel() -> None:
     worker, _ = _worker(_BarrierLlm(parties=2))
 
     result = worker.score(
-        _pool(40), _REF, _PRINCIPAL, _TRACE_ID, _NOW, timeout_sec=14.0
+        _pool(40), _PERSONA, _TRACE_ID, _NOW, timeout_sec=14.0
     )
 
     assert result.is_fallback is False

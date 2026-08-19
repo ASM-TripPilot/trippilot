@@ -106,6 +106,8 @@ from trippilot.ports.trace_port import TracePort
 from trippilot.domain.freshness import ProviderKind
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.ports.weather_port import WeatherPort
+from trippilot.providers.persona import PersonaProvider
+from trippilot.providers.place import PlaceProvider
 from trippilot.providers.weather import WeatherProvider
 
 _logger = logging.getLogger("trippilot.wiring")
@@ -702,10 +704,20 @@ def build_orchestrator(
     resolver = ContextResolver(context_store)
     estimator = TravelEstimator(scfg)
     provider = ChainSolverProvider(estimator, clock, trace, scfg)
+    # 수집 계층 (TRIP-406·407) — 풀·페르소나 상시, 날씨는 포트 주입 시에만 등록.
+    # 페르소나 재조회도 같은 resolver — 보안 규칙의 권위 1곳 (TRIP-333·BR-U4-07).
+    providers: dict[ProviderKind, object] = {
+        ProviderKind.PLACE: PlaceProvider(
+            CandidatePoolBuilder(poi_db, m7_config if m7_config is not None else M7Config())
+        ),
+        ProviderKind.PERSONA: PersonaProvider(resolver),
+    }
+    if weather is not None:
+        providers[ProviderKind.WEATHER] = WeatherProvider(weather)
     orchestrator = core.ItineraryOrchestrator(
-        CandidatePoolBuilder(poi_db, m7_config if m7_config is not None else M7Config()),
+        InfoCollector(providers),
         PreferenceScoringWorker(
-            GatewayFacade(llm, renderer, ClosedSetGate(), c1_config, trace), resolver
+            GatewayFacade(llm, renderer, ClosedSetGate(), c1_config, trace)
         ),
         provider,
         clock,
@@ -713,11 +725,7 @@ def build_orchestrator(
         # 소유 검증(fail-closed, TRIP-333)도 같은 resolver — 보안 규칙의 권위 1곳.
         context_resolver=resolver,
         explanation_worker=ExplanationWorker(
-            GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace), resolver
-        ),
-        info=(  # 선택 주입 (TRIP-383·406) — None이면 무보정
-            None if weather is None
-            else InfoCollector({ProviderKind.WEATHER: WeatherProvider(weather)})
+            GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace)
         ),
         config=orchestrator_config,
     )
