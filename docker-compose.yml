@@ -105,6 +105,19 @@ services:
     build:
       context: ./ai
     container_name: trippilot-ai
+    environment:
+      # 상대 진입점(ai/main.py)이 읽는 스위치. **전부 비워 두는 것이 기본 동작**이다 —
+      # TRIPPILOT_LLM_PROVIDER 가 없으면 UnwiredLlm 으로 조립돼 점수는 규칙 폴백, 일정은 OR-Tools 가 낸다.
+      # 통로를 열어 두는 이유: 값이 필요해졌을 때 compose 를 고치는 게 아니라 .env 만 채우면 되게.
+      #
+      # openai 로 켜면 OPENAI_API_KEY 가 **필수**이고, 없으면 상대가 기동에 실패한다(의도된 fail-fast —
+      # 조용히 폴백하면 "실 LLM 으로 테스트했다"가 거짓이 된다).
+      TRIPPILOT_LLM_PROVIDER: ${AI_LLM_PROVIDER:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      # 기상청 단기예보(디코딩 키). 미설정 = 날씨 보정 없음.
+      WEATHER_API: ${WEATHER_API:-}
     ports:
       - "8000:8000"
     healthcheck:
