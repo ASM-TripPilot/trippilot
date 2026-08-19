@@ -46,7 +46,18 @@ class Trip private constructor(
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {
-    val editable: Boolean get() = deletedAt == null && status != TripStatus.ENDED
+    /**
+     * 편집 가능한가 — **날짜로 판정한다**(TRIP-U1 후속).
+     *
+     * 예전에는 저장된 [status] 가 `ENDED` 인지 봤다. 그런데 그 값은 **절대 `ENDED` 가 되지 않는다** —
+     * 상태를 밀어 올리는 코드도 배치도 없다([statusAt] 주석 참조). 그래서 아래 가드가 한 번도 발동한 적이
+     * 없고, 3년 전 끝난 여행의 날짜도 바꿀 수 있었다. 조용히 뚫려 있던 자리다.
+     *
+     * **여행 중(ACTIVE)은 막지 않는다.** 현장에서 일정이 바뀌는 것이 정상이고, 그건 재계획(C10)의 전제다.
+     * 끝난 여행만 막는다.
+     */
+    fun editableAt(today: LocalDate): Boolean =
+        deletedAt == null && statusAt(today) != TripStatus.ENDED
 
     /**
      * 여행이 **지금 어느 단계인가** — 저장된 [status] 가 아니라 날짜에서 파생한다.
@@ -74,7 +85,10 @@ class Trip private constructor(
         destinations: List<TripDestination>,
         now: Instant,
     ): Trip {
-        if (!editable) throw ConflictDetected(message = "종료·삭제된 여행은 편집할 수 없습니다.")
+        // 여행지 기준(KST)으로 오늘을 정한다 — 서버가 UTC 면 자정 무렵 하루가 어긋난다.
+        if (!editableAt(now.atZone(TRAVEL_ZONE).toLocalDate())) {
+            throw ConflictDetected(message = "종료·삭제된 여행은 편집할 수 없습니다.")
+        }
         validate(startDate, endDate, party, destinations)
         return Trip(
             tripId, accountId, resolveTitle(title, destinations), startDate, endDate, party,
@@ -91,6 +105,9 @@ class Trip private constructor(
     }
 
     companion object {
+        /** 여행지 기준 시간대. 서버 시간대(UTC)로 오늘을 정하면 자정 무렵 하루가 어긋난다. */
+        private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
+
 
         fun create(
             accountId: UUID,
