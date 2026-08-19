@@ -687,6 +687,7 @@ def build_orchestrator(
     trace: TracePort | None = None,
     prompts_root: Path | None = None,
     weather: WeatherPort | None = None,
+    travel_port: object | None = None,
     tz: timezone = KST,
 ) -> WiredItineraryOrchestrator:
     """실 구성요소 조립 → `create_app(orchestrator=...)`에 꽂을 어댑터.
@@ -703,6 +704,8 @@ def build_orchestrator(
     renderer = PromptRegistry(prompts_root if prompts_root is not None else _PROMPTS_ROOT)
     resolver = ContextResolver(context_store)
     estimator = TravelEstimator(scfg)
+    # travel_port 주입 시 ChainedTravelAdapter 등 실경로 어댑터 사용 (TRIP-432)
+    travel = travel_port if travel_port is not None else estimator
     provider = ChainSolverProvider(estimator, clock, trace, scfg)
     # 수집 계층 (TRIP-406·407) — 풀·페르소나 상시, 날씨는 포트 주입 시에만 등록.
     # 페르소나 재조회도 같은 resolver — 보안 규칙의 권위 1곳 (TRIP-333·BR-U4-07).
@@ -714,6 +717,9 @@ def build_orchestrator(
     }
     if weather is not None:
         providers[ProviderKind.WEATHER] = WeatherProvider(weather)
+    # Transit Provider — travel_port 주입 여부 무관하게 항상 등록 (TRIP-432)
+    from trippilot.providers.transit import TransitProvider
+    providers[ProviderKind.TRANSIT] = TransitProvider(port=travel)
     orchestrator = core.ItineraryOrchestrator(
         InfoCollector(providers),
         PreferenceScoringWorker(
@@ -729,7 +735,7 @@ def build_orchestrator(
         ),
         config=orchestrator_config,
     )
-    return WiredItineraryOrchestrator(orchestrator, provider, poi_db, estimator, tz=tz)
+    return WiredItineraryOrchestrator(orchestrator, provider, poi_db, travel, tz=tz)
 
 
 # ── 로컬·스모크 조립 (in-memory fake — 실 DB·실 LLM 호출 0, D37) ─────
@@ -826,6 +832,7 @@ def build_dev_app(
     model_id: str | None = None,
     weather: WeatherPort | None = None,
     poi_db: object | None = None,
+    travel_port: object | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -838,6 +845,8 @@ def build_dev_app(
     이면 날씨 보정 없이 기존과 동일.
     `poi_db`는 선택 주입(TRIP-408, BackendPoiDb 실연동) — 기본 None 이면 기존
     StaticPoiDb(제주 시드 4곳) 그대로(하위호환: 백엔드 없는 로컬 스모크).
+    `travel_port`는 선택 주입(TRIP-432, ChainedTravelAdapter) — 기본 None 이면
+    기존 TravelEstimator(하버사인) 그대로.
     """
     if model_id is not None:
         model_ids = {ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id}
@@ -858,5 +867,6 @@ def build_dev_app(
         ),
         c1_config=C1Config(model_ids=model_ids),
         weather=weather,
+        travel_port=travel_port,
     )
     return create_app(orchestrator)

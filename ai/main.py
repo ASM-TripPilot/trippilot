@@ -112,22 +112,41 @@ def _backend_poi_db():
     return BackendPoiDb(UrllibJsonClient(), base_url, token)
 
 
+def _tmap_travel():
+    """`TMAP_APP_KEY`(TRIP-432) 설정 시 ChainedTravelAdapter 조립.
+
+    TMAP 실경로 1차 → 하버사인 폴백 2차. 미설정 = None (기존 TravelEstimator 그대로).
+    """
+    app_key = _env("TMAP_APP_KEY")
+    if app_key is None:
+        return None
+    from trippilot.solver_engine.adapters.chained_travel import ChainedTravelAdapter
+    from trippilot.solver_engine.adapters.tmap import TmapRouteAdapter, UrllibHttpClient
+    from trippilot.solver_engine.config import SolverConfig
+    from trippilot.solver_engine.travel import TravelEstimator
+
+    tmap = TmapRouteAdapter(UrllibHttpClient(), app_key)
+    fallback = TravelEstimator(SolverConfig())
+    return ChainedTravelAdapter(primary=tmap, fallback=fallback)
+
+
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
     if os.environ.get("TRIPPILOT_WIRING") == "unwired":
         return create_app()
     weather = _kma_weather()
     poi_db = _backend_poi_db()
+    travel = _tmap_travel()
     provider = _env("TRIPPILOT_LLM_PROVIDER")
     if provider is None:
-        return build_dev_app(weather=weather, poi_db=poi_db)
+        return build_dev_app(weather=weather, poi_db=poi_db, travel_port=travel)
     if provider != "openai":
         raise RuntimeError(
             f"TRIPPILOT_LLM_PROVIDER 미지원 값: {provider!r} — "
             "미설정(fake 조립) 또는 openai 만 지원"
         )
     llm, model_id = _openai_llm_and_model()
-    return build_dev_app(llm=llm, model_id=model_id, weather=weather, poi_db=poi_db)
+    return build_dev_app(llm=llm, model_id=model_id, weather=weather, poi_db=poi_db, travel_port=travel)
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.
