@@ -29,6 +29,7 @@ import { KakaoMapView, type KakaoMapMessage } from '@/shared/map';
 import {
   daysInMonth,
   firstWeekdayOfMonth,
+  isDateInRange,
   nightsBetween,
 } from '../model/stayDates';
 import {
@@ -69,6 +70,11 @@ export interface StayRegisterScreenProps {
   calendarMonth?: string;
   /** 달 이동. 미지정이면 이동 버튼이 잠긴다(한 달만 그리던 기존 동작으로 정확히 되돌아간다). */
   onShiftCalendarMonth?: (delta: number) => void;
+  /** 선택 가능 하한/상한 'YYYY-MM-DD'(TRIP-390, 여행 기간). 둘 다 미지정이면 상·하한 없음
+   *  (오늘+ 유지). 실효 하한은 `max(today, minDate)`. 배선은 페이지가 `useTripWizardStore`에서
+   *  읽어 내린다 — 이 선언은 테스트 컴파일용이고, `CalendarSheet` 전달·셀 disable 계산은 구현자 몫. */
+  minDate?: string;
+  maxDate?: string;
 }
 
 function isSameCandidate(a: GeocodeCandidate, b: GeocodeCandidate): boolean {
@@ -422,6 +428,9 @@ function CandidateList({
 function CalendarSheet({
   today,
   checkIn,
+  checkOut,
+  minDate,
+  maxDate,
   calendarMonth,
   onShiftCalendarMonth,
   onPickDate,
@@ -429,6 +438,9 @@ function CalendarSheet({
 }: {
   today: string;
   checkIn: string | null;
+  checkOut: string | null;
+  minDate?: string;
+  maxDate?: string;
   calendarMonth?: string;
   onShiftCalendarMonth?: (delta: number) => void;
   onPickDate: (date: string) => void;
@@ -441,6 +453,11 @@ function CalendarSheet({
   const totalDays = daysInMonth(refYear, refMonth);
   const leadingBlanks = firstWeekdayOfMonth(refYear, refMonth);
   const dayNumbers = Array.from({ length: totalDays }, (_, i) => i + 1);
+
+  // 실효 하한 = max(오늘, 여행 시작일). 여행 기간을 모르면(minDate 없음) 오늘이 하한이다
+  // (기존 동작 유지). ISO 날짜 문자열은 사전식 비교가 시간 순서와 일치한다(stayDates 관례).
+  const effectiveMin =
+    minDate !== undefined && minDate > today ? minDate : today;
 
   // 지난 달로는 가지 않는다 — 그 달은 전 칸이 과거라 비활성이고, 빈 달을 보여줄 이유가 없다.
   const refMonthStr = `${refYear}-${pad2(refMonth)}`;
@@ -494,19 +511,35 @@ function CalendarSheet({
           ))}
           {dayNumbers.map((day) => {
             const dateStr = `${refYear}-${pad2(refMonth)}-${pad2(day)}`;
-            const disabled = dateStr < today;
+            // 하한(오늘/여행 시작일 이전) 또는 상한(여행 종료일 이후)이면 잠근다. 실 `disabled`
+            // prop이라야 press가 실제로 막힌다 — accessibilityState만 세우면 회색인데 눌린다.
+            const disabled =
+              dateStr < effectiveMin ||
+              (maxDate !== undefined && dateStr > maxDate);
+            // 고른 끝점(체크인/체크아웃)과 그 사이(범위)를 서로 다른 얼굴로 그린다. 삼항이
+            // bg-primary를 먼저 집어 끝점이 범위색으로 덮이지 않는다. isDateInRange는 한쪽이
+            // null이면 항상 false라 반쪽 범위는 사이가 안 칠해진다.
+            const isEndpoint = dateStr === checkIn || dateStr === checkOut;
+            const inRange = isDateInRange(dateStr, checkIn, checkOut);
             return (
               <Pressable
                 key={dateStr}
                 testID={`stay-register-date-cell-${dateStr}`}
                 accessibilityRole="button"
+                accessibilityState={{ selected: isEndpoint || inRange }}
                 disabled={disabled}
                 onPress={() => onPickDate(dateStr)}
-                className="h-10 w-[14.28%] items-center justify-center"
+                className={`h-10 w-[14.28%] items-center justify-center ${
+                  isEndpoint ? 'bg-primary' : inRange ? 'bg-primary-pale' : ''
+                }`}
               >
                 <Text
                   className={`font-noto text-body ${
-                    disabled ? 'text-muted-soft' : 'text-ink'
+                    isEndpoint
+                      ? 'text-on-primary'
+                      : disabled
+                        ? 'text-muted-soft'
+                        : 'text-ink'
                   }`}
                 >
                   {day}
@@ -639,12 +672,18 @@ export function StayRegisterScreen({
   onBack,
   calendarMonth,
   onShiftCalendarMonth,
+  minDate,
+  maxDate,
 }: StayRegisterScreenProps): ReactElement {
   const nights = nightsBetween(flow.checkIn, flow.checkOut);
+  // 체크인만 고른 반쪽 상태는 '날짜를 선택하세요'(아무것도 안 고른 것)와 구별해 다음 걸음을
+  // 안내한다(AC-3). 둘 다 고른 완성 범위·둘 다 없는 빈 상태 문구는 불변이다.
   const dateSummary =
     nights !== null
       ? `${nights}박 · 나중에 바꿀 수 있어요`
-      : '날짜를 선택하세요';
+      : flow.checkIn !== null && flow.checkOut === null
+        ? '체크아웃도 선택하세요'
+        : '날짜를 선택하세요';
   const dateError =
     flow.checkIn !== null && flow.checkOut !== null && nights === null;
   const canSubmit = canSubmitStayRegister(flow);
@@ -876,6 +915,9 @@ export function StayRegisterScreen({
           <CalendarSheet
             today={today}
             checkIn={flow.checkIn}
+            checkOut={flow.checkOut}
+            minDate={minDate}
+            maxDate={maxDate}
             calendarMonth={calendarMonth}
             onShiftCalendarMonth={onShiftCalendarMonth}
             onPickDate={onPickDate}

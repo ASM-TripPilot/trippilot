@@ -982,6 +982,44 @@ const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // e05 숙소 등록 달력(TRIP-390) — 선택 피드백·범위 하이라이트·여행 기간 상·하한을 눈으로 보는
+  // 자리. jest는 바텀시트 실개폐·셀 하이라이트 픽셀을 못 본다(repo-traps 바텀시트 통과 목, AC-8)
+  // — 이 화면이 그 셋을 실기로 확인하는 유일한 자리다. 체크인 17·체크아웃 19가 끝점(bg-primary),
+  // 18이 범위(bg-primary-pale)로 그려지고, 여행 기간 밖(16 이전·22 이후)은 회색 disabled다.
+  {
+    key: 'stay-register-calendar',
+    label: '숙소 등록 · 달력 범위',
+    login: null,
+    render: () => (
+      <StayRegisterScreen
+        flow={{
+          ...STAY_REGISTER_PREVIEW_FLOW,
+          activeTab: 'mapsearch',
+          checkIn: '2026-06-17',
+          checkOut: '2026-06-19',
+          dateSheetOpen: true,
+        }}
+        today="2026-06-15"
+        minDate="2026-06-16"
+        maxDate="2026-06-22"
+        onBack={noop}
+        onSelectTab={noop}
+        onChangeQuery={noop}
+        onChangeName={noop}
+        onSubmitQuery={noop}
+        onRetrySearch={noop}
+        onSelectCandidate={noop}
+        onPinMessage={noop}
+        onOpenMapSheet={noop}
+        onConfirmCoord={noop}
+        onCloseMapSheet={noop}
+        onOpenDateSheet={noop}
+        onPickDate={noop}
+        onCloseDateSheet={noop}
+        onSubmit={noop}
+      />
+    ),
+  },
   // ── 홈 대시보드 4상태(TRIP-170) — 프레젠테이션 전용, 고정 픽스처로 그린다 ──
   {
     key: 'home-default',

@@ -25,7 +25,6 @@ import type { KakaoMapMessage } from '@/shared/map';
 
 import {
   applyDatePick,
-  commitDateRange,
   shiftMonth,
   type StayDateRange,
 } from '@/features/stay/model/stayDates';
@@ -36,6 +35,7 @@ import {
   type StayRegisterTab,
 } from '@/features/stay/model/stayRegisterForm';
 import { StayRegisterScreen } from '@/features/stay/ui/StayRegisterScreen';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 /** 로컬 달력 기준 오늘 — 과거 날짜 비활성(§3-4)의 기준값이라 UTC로 어긋나면 자정 근처에서
  * 하루가 밀린다. */
@@ -49,8 +49,22 @@ function todayIso(): string {
 
 const EMPTY_RANGE: StayDateRange = { checkIn: null, checkOut: null };
 
-export function StayRegisterPage(): ReactElement {
+/** `baseDate`는 달력 기준 '오늘' 주입점(TRIP-390 · 선례 `TripNewStep1Page`) — 페이지 달력
+ *  테스트를 결정론으로 만든다. 미지정이면 실시계(`todayIso()`)로 폴백한다(프로덕션 경로). */
+export function StayRegisterPage({
+  baseDate,
+}: { baseDate?: string } = {}): ReactElement {
   const router = useRouter();
+  const today = baseDate ?? todayIso();
+
+  // 여행 기간(위저드 스토어)을 달력 상·하한으로 흘려보낸다(TRIP-390 · Seed Q1). features/stay는
+  // features/trip를 직접 못 읽으므로(조합은 pages 몫) 페이지가 구독해 문자열 prop으로 내린다.
+  // 시작·종료 둘 다 있을 때만 제한하고, 하나라도 비면 상·하한 없음(현행 오늘+ 유지, AC-6).
+  const startDate = useTripWizardStore((state) => state.startDate);
+  const endDate = useTripWizardStore((state) => state.endDate);
+  const hasTripPeriod = startDate !== undefined && endDate !== undefined;
+  const minDate = hasTripPeriod ? startDate : undefined;
+  const maxDate = hasTripPeriod ? endDate : undefined;
 
   const [activeTab, setActiveTab] = useState<StayRegisterTab>('mapsearch');
   const [query, setQuery] = useState('');
@@ -67,11 +81,11 @@ export function StayRegisterPage(): ReactElement {
     useState<StayRegisterFlow['mapSheetState']>('closed');
   const [dateRange, setDateRange] = useState<StayDateRange>(EMPTY_RANGE);
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
-  /** 달력이 보여주는 달 'YYYY-MM'. 시트를 열 때마다 체크인(없으면 오늘)의 달로 되맞춘다.
-   *  달력이 한 달만 그려 월 경계를 넘는 범위를 못 고르던 결함(5-b W-1) 때문에 생긴 상태다. */
-  const [calendarMonth, setCalendarMonth] = useState(() =>
-    todayIso().slice(0, 7)
-  );
+  /** 달력이 보여주는 달 'YYYY-MM'. 시트를 열 때마다 체크인(없으면 여행 시작 달, 그것도 없으면
+   *  오늘)의 달로 되맞춘다. 여행 기간이 오늘과 다른 달이면 오늘의 달로 열려 전 칸이 disabled가
+   *  되던 것을 minDate로 clamp한다(5-c). 달력이 한 달만 그려 월 경계를 넘는 범위를 못 고르던
+   *  결함(5-b W-1) 때문에 생긴 상태다. */
+  const [calendarMonth, setCalendarMonth] = useState(() => today.slice(0, 7));
   const [submitStatus, setSubmitStatus] =
     useState<StayRegisterFlow['submitStatus']>('idle');
 
@@ -202,12 +216,16 @@ export function StayRegisterPage(): ReactElement {
   }
 
   function handleOpenDateSheet(): void {
-    setCalendarMonth((dateRange.checkIn ?? todayIso()).slice(0, 7));
+    setCalendarMonth((dateRange.checkIn ?? minDate ?? today).slice(0, 7));
     setDateSheetOpen(true);
   }
 
+  /** AC-4 — 체크인만 고르고 닫아도 그 선택을 버리지 않는다(INV-4 침묵 금지). 예전엔 여기서
+   * `commitDateRange`로 반쪽을 `{null,null}`로 되돌렸는데, 그러면 눌린 체크인이 아무 말 없이
+   * 사라졌다. 순수 함수 `commitDateRange`(PBT 동결)는 손대지 않고 이 자리에서 리셋 호출만
+   * 없앤다 — dateRange가 그대로 남아 요약이 '체크아웃도 선택하세요'를 보인다. 반쪽이 서버로
+   * 새는 것은 `buildStayRegisterRequest`가 날짜 둘 다 있을 때만 키를 실어(both-or-nothing) 막는다. */
   function handleCloseDateSheet(): void {
-    setDateRange((prev) => commitDateRange(prev));
     setDateSheetOpen(false);
   }
 
@@ -234,7 +252,9 @@ export function StayRegisterPage(): ReactElement {
   return (
     <StayRegisterScreen
       flow={flow}
-      today={todayIso()}
+      today={today}
+      minDate={minDate}
+      maxDate={maxDate}
       onBack={() => router.back()}
       onSelectTab={handleSelectTab}
       onChangeQuery={setQuery}
