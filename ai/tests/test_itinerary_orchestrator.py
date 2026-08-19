@@ -56,6 +56,8 @@ from trippilot.domain.prompt import PromptRef
 from trippilot.domain.freshness import ProviderKind
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.poi_curation.config import M7Config
+from trippilot.providers.persona import PersonaProvider
+from trippilot.providers.place import PlaceProvider
 from trippilot.providers.weather import WeatherProvider
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.orchestrator.itinerary_orchestrator import (
@@ -259,21 +261,25 @@ def _build(
     explainer = None
     if expl_llm is not None:
         explainer = ExplanationWorker(
-            GatewayFacade(expl_llm, _Renderer(), ExplanationGate(), _C1CFG, trace),
-            resolver,
+            GatewayFacade(expl_llm, _Renderer(), ExplanationGate(), _C1CFG, trace)
         )
     sink = _Sink()
+    # 실배선(wiring.py)과 같은 수집 조립 (TRIP-406·407) — 풀·페르소나 상시,
+    # 날씨는 포트 주입 시에만 등록. 페르소나 재조회도 같은 resolver (권위 1곳).
+    providers = {
+        ProviderKind.PLACE: PlaceProvider(builder),
+        ProviderKind.PERSONA: PersonaProvider(resolver),
+    }
+    if weather is not None:
+        providers[ProviderKind.WEATHER] = WeatherProvider(weather)
     orchestrator = ItineraryOrchestrator(
-        builder,
-        PreferenceScoringWorker(gateway, resolver),
+        InfoCollector(providers),
+        PreferenceScoringWorker(gateway),
         _Solvers(trace, sink, primary=primary),
         clock if clock is not None else FakeClock(),
         trace,
         context_resolver=resolver,  # 소유 검증(fail-closed, TRIP-333)도 같은 resolver
         explanation_worker=explainer,
-        # 실배선(wiring.py)과 같은 경로 — 포트를 Provider→InfoCollector로 감싼다 (TRIP-406)
-        info=(None if weather is None
-              else InfoCollector({ProviderKind.WEATHER: WeatherProvider(weather)})),
         config=config,
     )
     return orchestrator, trace, sink
@@ -378,8 +384,9 @@ def test_c1_timeout_falls_back_to_rule_scores() -> None:
     assert any("timeout" in d.reason for d in outcome.degradations)
 
 
-def test_c1_worker_exception_is_observed_by_orchestrator() -> None:
-    """게이트웨이 밖에서 터진 실패 — 아무도 이벤트를 못 냈으니 조립이 낸다 (침묵 금지)."""
+def test_persona_unavailable_degrades_to_rule_scores() -> None:
+    """재조회 결과 타입 위반 — 수집 단계가 COLD_START로 분류(TRIP-407),
+    페르소나 없이 LLM 점수는 없다: 규칙 점수 강등 + 이벤트 (침묵 금지)."""
     orchestrator, trace, _ = _build(store_value=object())  # 재조회 결과 타입 위반
 
     outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
@@ -387,7 +394,7 @@ def test_c1_worker_exception_is_observed_by_orchestrator() -> None:
     assert outcome.scoring_mode is ScoringMode.RULE
     assert outcome.solution is not None
     events = _orchestrator_events(trace)
-    assert any(e.reason.startswith("score_error") for e in events)
+    assert any(e.reason.startswith("persona_unavailable") for e in events)
     assert any(e.to_mode == "rule_score" for e in events)
 
 
@@ -985,3 +992,18 @@ def test_llm_omission_backfilled_with_rule_scores_on_single_call_path() -> None:
     assert {str(c.poi_id) for c in candidates} == {"p1", "p2", "p3"}
     assert {str(c.poi_id) for c in candidates if c.is_llm_score} == {"p1"}
     assert any(e.reason == "rule_backfill:2" for e in _orchestrator_events(trace))
+
+
+def test_pool_unavailable_is_explicit_failure(monkeypatch) -> None:
+    """풀 확보 불가 — 요구표 "풀 없으면 즉시 실패" (TRIP-407, FAILED + 사유)."""
+    def _boom(self, request, now):
+        raise RuntimeError("db down")
+    monkeypatch.setattr(CandidatePoolBuilder, "build", _boom)
+    orchestrator, _, _ = _build()
+
+    outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
+
+    assert outcome.status is GenerationStatus.FAILED
+    assert outcome.solution is None
+    assert "pool_unavailable" in (outcome.error or "")
+    assert "RuntimeError" in outcome.error  # 사유 보존 (침묵 금지)

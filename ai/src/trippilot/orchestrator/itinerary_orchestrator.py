@@ -56,10 +56,10 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.observability import FallbackEvent
+from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.poi import Poi, PoiCategory
-from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.ports.trace_port import TracePort
-from trippilot.domain.freshness import ProviderKind, ProviderStatus
+from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
 from trippilot.orchestrator.info_collector import InfoCollector
 
 _COMPONENT = "orchestrator.itinerary"
@@ -333,7 +333,7 @@ def allocate(total_ms: int, config: OrchestratorConfig) -> DeadlineBudget:
 class ItineraryOrchestrator:
     def __init__(
         self,
-        pool_builder: CandidatePoolBuilder,
+        info: InfoCollector,
         scoring_worker: PreferenceScoringWorker,
         solver_provider: SolverProvider,
         clock: Clock,
@@ -341,18 +341,17 @@ class ItineraryOrchestrator:
         *,
         context_resolver: OwnershipVerifier,
         explanation_worker: ExplanationWorker | None = None,
-        info: InfoCollector | None = None,
         config: OrchestratorConfig | None = None,
     ) -> None:
-        self._pool_builder = pool_builder
+        # 수집은 전부 InfoCollector 경유 (TRIP-406·407) — 풀(PLACE)은 필수,
+        # 날씨(WEATHER)·페르소나(PERSONA)는 미등록 시 기능 부재로 동작.
+        self._info = info
         self._scoring = scoring_worker
         self._solvers = solver_provider
         self._clock = clock
         self._trace = trace
         self._resolver = context_resolver  # 소유 검증 갈래만 쓴다 (TRIP-333)
         self._explainer = explanation_worker  # 미주입이면 설명 단계를 통째로 건너뛴다
-        # InfoCollector 경유 수집 (TRIP-406) — 미주입이면 날씨 보정 없이 생성.
-        self._info = info
         self._cfg = config or OrchestratorConfig()
 
     # ── 공개 API ────────────────────────────────────────────────────
@@ -404,17 +403,33 @@ class ItineraryOrchestrator:
         #    그대로 동작한다.
         self._resolver.verify_ownership(request.principal, (request.persona_ref,))
 
-        # ① M7 후보 풀 — closed-set의 유일한 출처 (INV-1)
-        pool = self._pool_builder.build(
-            CandidatePoolRequest(
-                anchor=request.anchor,
-                dates=request.days,  # 부분집합 그대로 (day1 2단계 — 반경 규칙은 M7 소관)
-                budget=request.budget,
-                transport=request.transport,
-                radius_override_km=request.radius_override_km,
-            ),
-            now,
+        # ① 정보 수집 1회 (TRIP-407) — 요구표 GENERATE_SCHEDULE: 풀·날씨·페르소나.
+        #    풀(PLACE→M7)은 closed-set의 유일한 출처(INV-1)이자 필수 — 요구표
+        #    "풀 없으면 즉시 실패". 날씨·페르소나는 없어도 일정은 나간다.
+        packets = self._info.collect(
+            "GENERATE_SCHEDULE",
+            {
+                "pool_request": CandidatePoolRequest(
+                    anchor=request.anchor,
+                    dates=request.days,  # 부분집합 그대로 (반경 규칙은 M7 소관)
+                    budget=request.budget,
+                    transport=request.transport,
+                    radius_override_km=request.radius_override_km,
+                ),
+                "anchor": request.anchor,
+                "days": request.days,
+                "now": now,
+                "principal": request.principal,
+                "persona_ref": request.persona_ref,
+            },
         )
+        pool = self._resolve_pool(packets)
+        if pool is None:
+            place = packets.get(ProviderKind.PLACE)
+            reason = (place.data.get("reason", place.status.value)
+                      if place is not None else "place_provider_unregistered")
+            return self._failed(budget, f"pool_unavailable: {reason}", trace_id, now)
+        persona = self._collected_persona(packets)
         summary = candidates_report(pool)  # 풀 실측 보고 (BR-U2-05 — 경계로 그대로 나간다)
         m7_elapsed = self._clock.monotonic_ms() - t0
         if budget.m7_ms and m7_elapsed > budget.m7_ms:
@@ -426,12 +441,13 @@ class ItineraryOrchestrator:
         # ② C1 선호 점수 (전 일자 공용 1회) — 실패·스킵이면 규칙 점수 (INV-4)
         elapsed = self._clock.monotonic_ms() - t0
         candidates, mode = self._score(
-            request, pool, budget, budget.total_ms - elapsed, steps, trace_id, now
+            request, pool, persona, budget, budget.total_ms - elapsed, steps,
+            trace_id, now,
         )
 
         # ②′ 날씨 예보 (TRIP-383) — 결과는 problem에 실려 C2 소프트 항이 쓴다.
-        #    조회 실패 = 무보정 + 강등 기록(침묵 금지), 미주입 = 기능 부재(무보정).
-        daily_rain = self._daily_rain(request, steps, trace_id, now)
+        #    수집 실패 = 무보정 + 강등 기록(침묵 금지), 미등록 = 기능 부재(무보정).
+        daily_rain = self._daily_rain(request, packets, steps, trace_id, now)
 
         # ③ ItineraryProblem 조립 — 후보는 ①의 풀에서 나온 것만 (INV-1)
         problem = ItineraryProblem(
@@ -478,7 +494,7 @@ class ItineraryOrchestrator:
 
         # ⑤ (선택) 설명 부착 — 실패해도 일정은 그대로 나간다
         explanations = self._explain(
-            request, pool, solution, budget, t0, steps, trace_id, now
+            request, pool, persona, solution, budget, t0, steps, trace_id, now
         )
 
         return GenerationOutcome(
@@ -495,30 +511,48 @@ class ItineraryOrchestrator:
 
     # ── ②′ 날씨 예보 조회 (TRIP-383) ────────────────────────────────
 
+    def _resolve_pool(
+        self, packets: dict[ProviderKind, InfoPacket]
+    ) -> CandidatePool | None:
+        """PLACE 패킷 → 풀 실체. None = 풀 확보 불가 (호출측이 FAILED로 수렴)."""
+        packet = packets.get(ProviderKind.PLACE)
+        if packet is None:
+            return None
+        ref = packet.data.get("pool_ref")
+        if not isinstance(ref, str):  # 조립 예외 — ref 자체가 없다
+            return None
+        return self._info.resolve_pool(ref)
+
+    def _collected_persona(
+        self, packets: dict[ProviderKind, InfoPacket]
+    ) -> PersonaSummary | None:
+        """PERSONA 패킷 → PersonaSummary. 비가용이면 None (규칙 점수로 강등은 ②)."""
+        packet = packets.get(ProviderKind.PERSONA)
+        if packet is None or packet.status is not ProviderStatus.OK:
+            return None
+        try:
+            return PersonaSummary.from_dict(packet.data["persona"])
+        except Exception:  # 패킷 형식 오류 — 비가용과 동일 취급
+            return None
+
     def _daily_rain(
         self,
         request: GenerateItineraryRequest,
+        packets: dict[ProviderKind, InfoPacket],
         steps: list[Degradation],
         trace_id: TraceId,
         now: datetime,
     ) -> dict[date, int] | None:
-        """여행 날짜들의 강수확률(%) 수집 — 생성은 날씨를 problem으로만 안다.
+        """여행 날짜들의 강수확률(%) — ①에서 수집된 패킷 소비 (재수집 없음, TRIP-407).
 
-        TRIP-406부터 수집은 InfoCollector(→WeatherProvider) 경유 — 오케스트레이터는
-        포트를 모르고 InfoPacket 상태값만 소비한다 (agent-structure-v2 §3).
-        - **미주입(None)·Provider 미등록**: 기능 부재 — 무보정, 강등으로 세지
+        오케스트레이터는 포트를 모르고 InfoPacket 상태값만 본다 (agent-structure-v2 §3).
+        - **Provider 미등록(패킷 없음)**: 기능 부재 — 무보정, 강등으로 세지
           않는다(⑤ 설명 워커의 "미배선 = 기능 부재" 선례와 동일).
         - **수집 실패(OK 아닌 상태값)**: 무보정 + Degradation + FallbackEvent
           (침묵 금지, INV-4 — 날씨 실패가 생성 실패가 되면 안 된다).
         - 반환은 요청 날짜로 한정한다(예보 지평 밖·무관 날짜는 problem에 싣지 않음).
           유효 예보가 없으면 None — 솔버 무보정 경로와 동일.
         """
-        if self._info is None:
-            return None
-        packets = self._info.collect(
-            "GENERATE_SCHEDULE",
-            {"anchor": request.anchor, "days": request.days, "now": now},
-        )
         packet = packets.get(ProviderKind.WEATHER)
         if packet is None:  # Provider 미등록 — 기능 부재
             return None
@@ -541,6 +575,7 @@ class ItineraryOrchestrator:
         self,
         request: GenerateItineraryRequest,
         pool: CandidatePool,
+        persona: PersonaSummary | None,
         budget: DeadlineBudget,
         remaining_ms: int,
         steps: list[Degradation],
@@ -566,20 +601,26 @@ class ItineraryOrchestrator:
                           f"deadline:c1_budget={budget.c1_ms}ms")
             return self._rule_scores(request, pool), ScoringMode.RULE
 
+        if persona is None:
+            # 페르소나 비가용(COLD_START 등) — 취향 없이 LLM 점수는 의미가 없다.
+            # 규칙 점수로 강등 (INV-4 침묵 금지 — 사유는 PERSONA 패킷이 이미 안다).
+            self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
+                          "persona_unavailable")
+            return self._rule_scores(request, pool), ScoringMode.RULE
+
         try:
             # 단계 상한이 게이트웨이 호출 타임아웃까지 **관통**한다 (TRIP-376) —
             # 상한만 늘리고 호출 시한이 고정 2.5s로 남으면 실호출(바닥 ~3s,
             # TRIP-373 실측)이 먼저 잘려 상향이 무의미하다. c2 llm_solver와 같은
             # min(상한, 잔여) 패턴.
             result = self._scoring.score(
-                pool, request.persona_ref, request.principal, trace_id, now,
+                pool, persona, trace_id, now,
                 timeout_sec=min(budget.c1_ms, remaining_ms) / 1000.0,
             )
-        except PermissionDeniedError:
-            raise  # D31 — 폴백 대상 아님 (generate가 FAILED로 수렴시킨다)
         except Exception as e:
-            # 워커가 게이트웨이 밖에서 터진 경우(재조회 실패·설정 버그) — 게이트웨이는
-            # 이벤트를 낼 기회가 없었으므로 여기서 낸다.
+            # 워커가 게이트웨이 밖에서 터진 경우(설정 버그 등) — 게이트웨이는
+            # 이벤트를 낼 기회가 없었으므로 여기서 낸다. 권한 위반은 ⓪과 수집
+            # 단계(PersonaProvider)에서 이미 예외로 승격됐다 — 여기 도달 불가.
             self._degrade(steps, trace_id, now, "llm", "llm_score", "rule_score",
                           f"score_error: {type(e).__name__}: {e}")
             return self._rule_scores(request, pool), ScoringMode.RULE
@@ -645,6 +686,7 @@ class ItineraryOrchestrator:
         self,
         request: GenerateItineraryRequest,
         pool: CandidatePool,
+        persona: PersonaSummary | None,
         solution: ItinerarySolution,
         budget: DeadlineBudget,
         t0: int,
@@ -654,6 +696,11 @@ class ItineraryOrchestrator:
     ) -> tuple[PoiExplanation, ...]:
         if self._explainer is None:
             return ()  # 미배선 = 기능 부재이지 실패가 아니다 (강등으로 세지 않는다)
+        if persona is None:
+            # 페르소나 비가용 — 취향 근거 없는 설명은 지어내기다. 스킵 + 강등 기록.
+            self._degrade(steps, trace_id, now, "explanation", "llm_explain",
+                          "(none)", "persona_unavailable")
+            return ()
 
         seen: set[PoiId] = set()
         ordered: list[PoiId] = []
@@ -677,16 +724,13 @@ class ItineraryOrchestrator:
 
         try:
             result = self._explainer.explain(
-                pool, tuple(ordered), request.persona_ref, request.principal,
-                trace_id, now,
+                pool, tuple(ordered), persona, trace_id, now,
                 # 잔여 예산이 호출 타임아웃까지 관통 (TRIP-381, 점수 단계와 같은
                 # 패턴) — 미관통이면 게이트웨이 기본 2.5s가 잔여(예: 300ms든
                 # 9s든)를 무시하고, SDK 내부 재시도까지 겹치면 2.5s 설정이 실제
                 # ~10s를 소모했다(계측 실측 — 20s 계약 초과의 후반부 정체).
                 timeout_sec=remaining / 1000.0,
             )
-        except PermissionDeniedError:
-            raise  # D31 — 권한 위반은 여기서도 폴백 대상이 아니다
         except Exception as e:
             self._degrade(steps, trace_id, now, "explanation", "llm_explain",
                           "(none)", f"explain_error: {type(e).__name__}: {e}")

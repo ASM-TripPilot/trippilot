@@ -3,9 +3,11 @@
 점수는 수치만 산출한다 — 표시용 설명은 배치된 슬롯에 한해 EXPLANATION 워커
 소유 (TRIP-374, ai-prompt-design.md §2.2).
 
-흐름: ContextResolver 권한 재조회(D31) → 프롬프트 변수 조립(필드 최소화 G181,
-좌표 미포함) → gateway.call. 폴백이면 TypedResult(is_fallback=True)를 그대로
-반환 — 규칙 점수 실행은 호출측(U5)의 몫 (BR-U4-09).
+흐름: 재조회된 PersonaSummary 수령(재조회는 PersonaProvider 수집 단계 소관,
+TRIP-407 — BR-U4-07 "프롬프트 입력 = 요청자 권한 하 재조회 값"은 유지) →
+프롬프트 변수 조립(필드 최소화 G181, 좌표 미포함) → gateway.call. 폴백이면
+TypedResult(is_fallback=True)를 그대로 반환 — 규칙 점수 실행은 호출측(U5)의
+몫 (BR-U4-09).
 
 병렬 청킹 (TRIP-378): 실측(TRIP-373·376) 점수 지연 ≈ 바닥 ~3s + 건당 ~0.2s
 선형이라 큰 풀(실전 193건, 단일 호출 44.5s)은 단계 예산 14s 밖이다.
@@ -24,10 +26,8 @@ import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
-from trippilot.llm_gateway.context import ContextResolver
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.context import Principal, ResourceRef
 from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi, TypedResult
 from trippilot.domain.observability import ScoreChunkEvent
 from trippilot.domain.persona import PersonaSummary
@@ -104,26 +104,21 @@ def plan_chunks(
 
 
 class PreferenceScoringWorker:
-    def __init__(self, gateway: GatewayFacade, resolver: ContextResolver) -> None:
+    def __init__(self, gateway: GatewayFacade) -> None:
         self._gateway = gateway
-        self._resolver = resolver
 
     def score(
         self,
         pool: CandidatePool,
-        persona_ref: ResourceRef,
-        principal: Principal,
+        persona: PersonaSummary,
         trace_id: TraceId,
         now: datetime,
         *,
         timeout_sec: float | None = None,
     ) -> TypedResult[tuple[ScoredPoi, ...]]:
-        # 권한 위반은 폴백이 아니라 즉시 예외 (D31 — 부분 성공 0)
-        persona = self._resolver.resolve(principal, persona_ref)
+        # 재조회는 수집 단계(PersonaProvider) 소관 — 여기는 타입 계약만 지킨다
         if not isinstance(persona, PersonaSummary):
-            raise TypeError(
-                f"persona_ref 재조회 결과가 PersonaSummary 아님: {type(persona).__name__}"
-            )
+            raise TypeError(f"persona가 PersonaSummary 아님: {type(persona).__name__}")
         # 단계 예산 = 호출측 timeout override (TRIP-376에서 이미 관통되는 값).
         # 미지정이면 게이트웨이 기본 타임아웃이 실효 예산이다 — 공식·마감 모두
         # 같은 값을 쓴다 (예산이 바뀌면 청크 크기가 자동 추종, TRIP-380).

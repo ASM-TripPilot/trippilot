@@ -170,10 +170,8 @@ def test_explanation_worker_end_to_end() -> None:
 
     pool = _tiny_pool()
     canned = json.dumps({"explanations": [{"poiId": "p1", "text": "자연 취향에 맞아요. 여유로워요."}]})
-    worker = ExplanationWorker(
-        _facade(FakeLlm(canned=canned), ExplanationGate()), ContextResolver(_Store(_PERSONA))
-    )
-    result = worker.explain(pool, (PoiId("p1"),), _REF, _PRINCIPAL, _TID, _NOW)
+    worker = ExplanationWorker(_facade(FakeLlm(canned=canned), ExplanationGate()))
+    result = worker.explain(pool, (PoiId("p1"),), _PERSONA, _TID, _NOW)
     assert result.is_fallback is False
     assert isinstance(result.value[0], PoiExplanation)
 
