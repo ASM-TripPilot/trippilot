@@ -45,13 +45,7 @@ export function OptionSwapPage({
   const firedRef = useRef(false);
 
   useEffect(() => {
-    fetchCandidates(
-      { tripId, data: { slotKey } },
-      {
-        onError: (e) => console.log('PROBE_CAND_ERR', JSON.stringify({ status: e?.response?.status, body: e?.response?.data })),
-        onSuccess: (d) => console.log('PROBE_CAND_OK', JSON.stringify(d)),
-      }
-    );
+    fetchCandidates({ tripId, data: { slotKey } });
   }, [fetchCandidates, tripId, slotKey]);
 
   const parsed = parseSlotKey(slotKey);
