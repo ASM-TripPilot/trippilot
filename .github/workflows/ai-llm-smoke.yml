@@ -153,7 +153,10 @@ jobs:
         if: steps.fetch-pois.outputs.skipped != 'true'
         # ai-poi-collect의 plumbing 커밋 패턴 그대로 — 워킹트리를 건드리지 않고
         # 기존 트리(collect_state.json 등)를 **보존**한 채 rehearsal_log.jsonl만
-        # 교체·추가한다. push 실패는 리허설 성공을 뒤집지 않는다 (::warning::만).
+        # 교체·추가한다. `--full-tree` 없이는 ls-tree가 현재 디렉토리(ai/) 프리픽스로
+        # 걸러서 루트 파일이 한 줄도 안 나오고 — 보존은커녕 collect_state.json을
+        # 매일 지웠다 (TRIP-348 수집 커서가 5일간 초기화된 원인).
+        # push 실패는 리허설 성공을 뒤집지 않는다 (::warning::만).
         run: |
           (
             set -e
@@ -165,7 +168,7 @@ jobs:
             if git fetch origin collect-state 2>/dev/null; then
               PARENT="-p FETCH_HEAD"
               git show FETCH_HEAD:rehearsal_log.jsonl > rehearsal_log.jsonl 2>/dev/null || : > rehearsal_log.jsonl
-              BASE_TREE=$(git ls-tree FETCH_HEAD | grep -v $'\trehearsal_log.jsonl$' || true)
+              BASE_TREE=$(git ls-tree --full-tree FETCH_HEAD | grep -v $'\trehearsal_log.jsonl$' || true)
             fi
             jq -c . rehearsal_result.json >> rehearsal_log.jsonl
             BLOB=$(git hash-object -w rehearsal_log.jsonl)
