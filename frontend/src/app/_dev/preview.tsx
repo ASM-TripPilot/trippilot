@@ -73,6 +73,7 @@ import {
   StayRegisterScreen,
   type StayRegisterScreenProps,
 } from '@/features/stay/ui/StayRegisterScreen';
+import { StaySearchScreen } from '@/features/stay/ui/StaySearchScreen';
 import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
@@ -88,6 +89,7 @@ import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
   SlotCandidatesCandidatesItem,
+  StayItem,
 } from '@/shared/api/generated/schemas';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { KakaoMapView, type MapPin } from '@/shared/map';
@@ -155,6 +157,44 @@ const EXPLORE_STAY_CARDS: StayCardVM[] = [
     name: '서면 시티 호텔',
     region: '부산',
     priceText: '98,000원~',
+  },
+];
+
+// e02 저장 하트(TRIP-417) — jest 는 하트의 분홍 채움 색을 못 본다(repo-trap: 글리프 fill 무심판,
+// AC-V1). 이 진입점이 채움/빈/대기 세 상태를 한 화면에서 눈으로 확인하는 유일한 자리다.
+const STAY_SEARCH_PREVIEW_ITEMS: StayItem[] = [
+  {
+    externalSource: 'NAVER',
+    externalId: 's1',
+    name: '해운대 그랜드 호텔',
+    lat: 35.1587,
+    lng: 129.1604,
+    region: '해운대',
+    amenities: ['ocean'],
+    stayType: 'HOTEL',
+    price: { amount: 145000, currency: 'KRW' },
+  },
+  {
+    externalSource: 'NAVER',
+    externalId: 's2',
+    name: '서면 시티 호텔',
+    lat: 35.1577,
+    lng: 129.0594,
+    region: '서면',
+    amenities: ['wifi'],
+    stayType: 'HOTEL',
+    price: { amount: 98000, currency: 'KRW' },
+  },
+  {
+    externalSource: 'AGODA',
+    externalId: 's3',
+    name: '광안리 오션뷰',
+    lat: 35.1531,
+    lng: 129.1186,
+    region: '광안리',
+    amenities: ['ocean'],
+    stayType: 'PENSION',
+    price: null,
   },
 ];
 
@@ -1040,6 +1080,22 @@ const PREVIEW_STATES: PreviewState[] = [
         onPickDate={noop}
         onCloseDateSheet={noop}
         onSubmit={noop}
+      />
+    ),
+  },
+  // e02 저장 하트(TRIP-417) — s1 은 담김(찬 하트 분홍), s2 는 대기(disabled), s3 은 빈 하트.
+  // jest 는 색을 못 봐(AC-V1) 이 진입점이 분홍 채움을 눈으로 확인하는 유일한 자리다.
+  {
+    key: 'stay-search-saved',
+    label: '숙소 검색 · 저장 하트',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={STAY_SEARCH_PREVIEW_ITEMS}
+        savedKeys={['NAVER:s1']}
+        pendingKeys={['NAVER:s2']}
+        onToggleSave={noop}
       />
     ),
   },

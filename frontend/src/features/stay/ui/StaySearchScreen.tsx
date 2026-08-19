@@ -7,8 +7,9 @@
  * (BR-U1-15), 소요 시간은 어디에도 없다(INV-3 · BR-U1-54). 세 필터 칩은 화면 층에선 모두
  * 동일하게 `onPressFilter(axis)`로 배선된다(TRIP-415) — 가격대가 "스텁"인 것은 화면이 아니라
  * **페이지**가 'price' axis 를 무시해서 실현된다(계약에 가격대 파라미터가 없다 — 범위 밖).
- * 저장 하트는 화면 층 스텁이다(`onPress={undefined}`, 저장 API 부재 Q9). `다시 시도`는
- * `onRetry`(=`refetch`)에 실배선된다(Q8).
+ * 저장 하트는 옵셔널 prop 3개(`savedKeys`·`onToggleSave`·`pendingKeys`)로 채움/빈·누름·
+ * 대기(disabled)를 그리되 저장/해제 판정·네트워크는 모른다(TRIP-417, 미지정=빈 하트 무회귀).
+ * `다시 시도`는 `onRetry`(=`refetch`)에 실배선된다(Q8).
  */
 import type { ReactElement } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
@@ -29,6 +30,7 @@ import {
   ChevronDownGlyph,
   ChevronRightGlyph,
   FilterSlidersGlyph,
+  HeartFilledGlyph,
   HeartOutlineGlyph,
   MapPinGlyph,
   PlusGlyph,
@@ -69,6 +71,15 @@ export interface StaySearchScreenProps {
   /** filter-zero "'{원인}' 필터 해제" 콜백(TRIP-416 AC-5) — 원인 코드(reasons[0]) 문자열을 받는다.
    * 미지정이면 정직한 스텁. */
   onClearCulpritFilter?: (reason: string) => void;
+  /** 담김 상태 키 집합(TRIP-417 AC-3) — 든 카드는 찬 하트(+selected), 나머지는 빈 하트.
+   * 미지정=빈=전부 빈 하트(기존 2-prop 무회귀 — 저장 API 없이 채워진 하트는 거짓말). */
+  savedKeys?: string[];
+  /** 하트 누름 콜백(TRIP-417 AC-1·AC-2) — 눌린 item을 그대로 올린다(저장/해제 판정은 페이지 몫).
+   * 미지정=`onPress` 실질 무동작(정직한 스텁). */
+  onToggleSave?: (item: StayItem) => void;
+  /** 응답 대기 중 키 집합(TRIP-417 AC-8) — 든 하트는 `disabled`(연타 중복 요청 차단).
+   * 미지정=빈=전부 활성. */
+  pendingKeys?: string[];
 }
 
 // 카드 그림자(브리프 §4-2 명시 raw 허용 — 그림자는 토큰 대상이 아니다, HomeScreen.tsx
@@ -187,7 +198,17 @@ function ListHeader({
   );
 }
 
-function StayCard({ item }: { item: StayItem }): ReactElement {
+function StayCard({
+  item,
+  saved,
+  pending,
+  onToggleSave,
+}: {
+  item: StayItem;
+  saved: boolean;
+  pending: boolean;
+  onToggleSave?: (item: StayItem) => void;
+}): ReactElement {
   const key = stayKey(item);
   return (
     <View
@@ -202,10 +223,25 @@ function StayCard({ item }: { item: StayItem }): ReactElement {
         <Pressable
           testID={`stay-card-save-${key}`}
           accessibilityRole="button"
-          onPress={undefined}
+          // 담김=선택됨(AC-10) — 빈/찬을 색이 아니라 이 상태 + 아래 글리프 정체성으로 관찰한다.
+          accessibilityState={{ selected: saved }}
+          // 응답 대기 중이면 눌러도 onPress가 안 불린다(AC-8 연타 가드) — disabled 프롭이
+          // accessibilityState.disabled 도 함께 세운다.
+          disabled={pending}
+          onPress={() => onToggleSave?.(item)}
           className="absolute right-[32px] top-[14px] h-[28px] w-[30px] items-center justify-center"
         >
-          <HeartOutlineGlyph size={22} />
+          {saved ? (
+            <HeartFilledGlyph
+              testID={`stay-card-save-${key}-filled`}
+              size={22}
+            />
+          ) : (
+            <HeartOutlineGlyph
+              testID={`stay-card-save-${key}-outline`}
+              size={22}
+            />
+          )}
         </Pressable>
       </View>
       <View className="w-full gap-xs px-[14px] pb-[14px] pt-md">
@@ -445,6 +481,9 @@ export function StaySearchScreen({
   onPressChangeRegion,
   onRelaxFilters,
   onClearCulpritFilter,
+  savedKeys = [],
+  onToggleSave,
+  pendingKeys = [],
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
@@ -488,11 +527,19 @@ export function StaySearchScreen({
               onClearCulpritFilter={onClearCulpritFilter}
             />
           }
-          renderItem={({ item }) => (
-            <View className="w-full px-lg">
-              <StayCard item={item} />
-            </View>
-          )}
+          renderItem={({ item }) => {
+            const key = stayKey(item);
+            return (
+              <View className="w-full px-lg">
+                <StayCard
+                  item={item}
+                  saved={savedKeys.includes(key)}
+                  pending={pendingKeys.includes(key)}
+                  onToggleSave={onToggleSave}
+                />
+              </View>
+            );
+          }}
           ItemSeparatorComponent={() => <View className="h-lg" />}
           // FAB(absolute bottom-104 + h-52 = 상단 156)·탭바(96) 오버레이가 마지막 카드를
           // 가리지 않도록 스크롤 끝 여백을 156까지 확보한다(TRIP-414, Figma fabSpacer 대응).

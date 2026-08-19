@@ -9,12 +9,17 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 
+import type { StayItem } from '@/shared/api/generated/schemas';
+import { getAccessToken } from '@/shared/api/tokenManager';
+
 import { relaxCulpritFilter } from '@/features/stay/model/relaxCulpritFilter';
+import { useSavedStays } from '@/features/stay/model/savedStays';
 import {
   buildStayFilterOptions,
   countActiveFilters,
   toggleFilterValue,
 } from '@/features/stay/model/stayFilterOptions';
+import { stayKey } from '@/features/stay/model/stayKey';
 import { resolveStaySearchState } from '@/features/stay/model/staySearchState';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { StayFilterSheet } from '@/features/stay/ui/StayFilterSheet';
@@ -50,6 +55,25 @@ export function StaySearchPage(): ReactElement {
     ...(amenityList.length > 0 ? { amenity: amenityList } : {}),
     ...(stayTypeList.length > 0 ? { stayType: stayTypeList } : {}),
   });
+
+  // 저장 하트(TRIP-417). isAuthed는 렌더 시점 1회 동기 판정(PlaceExplorePage 선례 — "판정 대기"
+  // 제3 상태가 안 생긴다). 담김 목록·토글은 useSavedStays 한 곳이 소유하고, 응답 대기 키만
+  // 페이지 로컬 상태로 들어 화면이 그 하트를 disabled로 만들게 한다(연타 중복 요청 차단, AC-8).
+  const isAuthed = getAccessToken() !== null;
+  const { isSaved, save, remove, savedKeys } = useSavedStays({ isAuthed });
+  const [pendingKeys, setPendingKeys] = useState<string[]>([]);
+
+  async function attemptToggle(item: StayItem): Promise<void> {
+    const key = stayKey(item);
+    setPendingKeys((keys) => [...keys, key]);
+    const outcome = isSaved(key) ? await remove(item) : await save(item);
+    setPendingKeys((keys) => keys.filter((k) => k !== key));
+
+    // 미인증 누름은 요청 없이 로그인으로 보낸다(BR-U1-03 · Q6, 죽은 버튼 회피).
+    if (outcome.kind === 'failed' && outcome.reason === 'unauthenticated') {
+      router.push('/(auth)/login');
+    }
+  }
 
   const state = resolveStaySearchState({
     isPending,
@@ -129,6 +153,11 @@ export function StaySearchPage(): ReactElement {
             })
           )
         }
+        // 저장 하트(TRIP-417) — 담김 집합·대기 집합은 값으로, 누름은 콜백으로 내린다. 화면은
+        // 저장/해제·라우팅을 모른다(구조 가드) — attemptToggle이 판정·요청·로그인 이동을 전담.
+        savedKeys={savedKeys}
+        pendingKeys={pendingKeys}
+        onToggleSave={(item) => void attemptToggle(item)}
       />
       {sheetOpen ? (
         <StayFilterSheet
