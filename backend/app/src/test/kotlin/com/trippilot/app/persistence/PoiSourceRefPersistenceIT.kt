@@ -9,9 +9,11 @@ import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.maps.shouldContainKey
 import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.dao.DataIntegrityViolationException
 import java.time.Instant
 import java.util.UUID
@@ -26,6 +28,20 @@ import java.util.UUID
  */
 @SpringBootTest
 class PoiSourceRefPersistenceIT : AbstractPostgresIntegrationTest() {
+
+    @Autowired private lateinit var cleanupJdbc: JdbcTemplate
+
+    /**
+     * **넣은 것을 치운다.** Testcontainers 는 전 IT 가 공유하는 싱글톤이고, 여기 쓰기는 트랜잭션
+     * 롤백이 닿지 않는다. 남기면 후보풀에 정체불명의 장소가 섞여 일정 생성 결과가 테스트 순서에 따라 달라진다.
+     *
+     * 무서운 점은 발현 시점이다 — 테스트를 **추가하기만 해도** 실행 순서가 바뀌어 몇 달 잠복하던
+     * 오염이 무관한 PR 에서 터진다(PR #241 실측).
+     */
+    @AfterEach
+    fun cleanUpOwnRows() {
+        cleanupJdbc.update("DELETE FROM poi WHERE name_ko LIKE '테스트장소-%'")
+    }
 
     @Autowired private lateinit var pois: PoiRepository
 

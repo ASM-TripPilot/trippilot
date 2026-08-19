@@ -10,10 +10,12 @@ import com.trippilot.placedata.domain.Area
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.http.HttpMethod
 import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.web.client.RestClient
@@ -24,6 +26,20 @@ import java.time.Instant
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class PlaceApiIT : AbstractPostgresIntegrationTest() {
+
+    @Autowired private lateinit var cleanupJdbc: JdbcTemplate
+
+    /**
+     * **넣은 것을 치운다.** Testcontainers 는 전 IT 가 공유하는 싱글톤이고, 여기 쓰기는 트랜잭션
+     * 롤백이 닿지 않는다. 수집 스텁이 만드는 행은 시드와 **이름이 같아** 후보풀에 같은 장소가 두 벌 쌓인다.
+     *
+     * 무서운 점은 발현 시점이다 — 테스트를 **추가하기만 해도** 실행 순서가 바뀌어 몇 달 잠복하던
+     * 오염이 무관한 PR 에서 터진다(PR #241 실측).
+     */
+    @AfterEach
+    fun cleanUpOwnRows() {
+        cleanupJdbc.update("DELETE FROM poi WHERE source = 'MANUAL' AND source_ref IS NULL AND poi_id::text NOT LIKE 'e0000000-%'")
+    }
 
     @Value("\${local.server.port}")
     private var port: Int = 0
