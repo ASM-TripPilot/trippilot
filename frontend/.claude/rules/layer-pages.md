@@ -2,7 +2,7 @@
 paths:
   - "src/pages/**"
 ---
-# `src/pages/` — FSD pages 층 (TRIP-173 신설, 16슬라이스 — TRIP-181로 `stay-search`·TRIP-183으로 `region-picker`·TRIP-198로 `stay-register`·TRIP-205로 `trip-new-step1`·TRIP-221로 `place-explore`·TRIP-223로 `saved-places`·TRIP-225로 `trip-new-step2`·TRIP-296으로 `itinerary-mustvisit`·TRIP-297으로 `itinerary-draft`·TRIP-299로 `itinerary-plan`·**TRIP-302로 `itinerary-edit` 추가(슬라이스1)**·TRIP-335로 `itinerary-option-swap` 추가(슬라이스1, `itinerary-draft`엔 `SlotCandidateSheetContainer.tsx` 추가))
+# `src/pages/` — FSD pages 층 (TRIP-173 신설, 16슬라이스 — TRIP-181로 `stay-search`·TRIP-183으로 `region-picker`·TRIP-198로 `stay-register`·TRIP-205로 `trip-new-step1`·TRIP-221로 `place-explore`·TRIP-223로 `saved-places`·TRIP-225로 `trip-new-step2`·TRIP-296으로 `itinerary-mustvisit`·TRIP-297으로 `itinerary-draft`·TRIP-299로 `itinerary-plan`·**TRIP-302로 `itinerary-edit` 추가(슬라이스1)**·TRIP-335로 `itinerary-option-swap` 추가(슬라이스1, `itinerary-draft`엔 `SlotCandidateSheetContainer.tsx` 추가)·TRIP-338로 `itinerary-manual` 추가)
 
 
 구 `features/{auth,onboarding}/containers/*`(훅 ↔ 화면 배선)가 이주한 자리. **아직 방향 규칙 없음**(위 "FSD 층 방향 규칙" 참조) — 지금은 폴더 배치일 뿐이다.
@@ -45,5 +45,8 @@ paths:
 | | `src/pages/itinerary-edit/index.ts` | 배럴 — `ItineraryEditPage` 재수출(신규, TRIP-302) |
 | `itinerary-option-swap` | `src/pages/itinerary-option-swap/ui/OptionSwapPage.tsx` | **신규(TRIP-335, 슬라이스1)** — h18 배선(BR-U3-23의 h12 짝, 단독 라우트). 마운트 시 slot-candidates POST → 라디오 로컬상태 → "B로 교체" 확정 → `swapSlotPoi`+`buildEditItineraryRequest` → PUT → 성공 시 `router.back()`. `firedRef`로 동기 이중탭 방지(게이트①-2 C4가 신규 심판으로 뮤테이션 실측 — 5-b 경고1 봉합) + 콜드캐시 가드(경고3 봉합, C5). **라우트 파일 없음** — 컨테이너 컴포넌트만(슬라이스2 위저드와 라우트 공유 결정 대기, 브리프 §8 Q4) |
 | | `src/pages/itinerary-option-swap/index.ts` | 배럴 — `OptionSwapPage` 재수출(신규, TRIP-335) |
+| `itinerary-manual` | `src/pages/itinerary-manual/ui/ManualPlanPage.tsx` | **신규(TRIP-338)** — h19 빈 일정 배선. 마운트 시 `usePostTripsTripIdItinerary({generationMode:'MANUAL'})`를 `firedRef` 가드로 1회만 쏘고(GeneratingPage 선례) `useGetTripsTripIdItinerary`로 받은 `days`를 그대로 `ManualPlanScreen`에 내린다. h09(생성 중 폴링)는 건너뜀 — MANUAL은 AI 미호출·즉시 빈 일자라 2단계 폴링이 불필요(01b Q2). 폴백 배너 코드 경로 자체가 없다(MANUAL=`solveMode=MINIMAL`+`isFallback=false`, 폴백이 아니라 선택 — AC-2) |
+| | `src/pages/itinerary-manual/ui/PlaceAddPage.tsx` | **신규(TRIP-338) → 5-c로 캐시 무효화·notReady 도출 추가.** h20 장소 추가·검색 배선. `useGetPlaces({category?})`(검색어는 서버 계약에 키가 없어 안 보냄) + `visiblePlaces`로 이름 클라 필터 → "추가" → `SlotTimeSheet`(h24 재사용)로 시각 입력 → `addSlot`+`buildEditItineraryRequest` → PUT. **5-c 추가분(W-1)**: PUT 성공 시 `invalidateQueries(getGetTripsTripIdItineraryQueryKey)`로 h19 캐시 무효화(안 하면 추가한 장소가 h19에 영영 안 보임 — `SlotCandidateSheetContainer.tsx` 선례와 동형). **5-c 추가분(W-2)**: `notReady = itinerary.data?.days?.[0]?.date===undefined`를 도출해 `PlaceAddScreen`에 내리고 press를 가드(콜드/에러 캐시에서 add가 조용히 소실되는 것을 안내 배너+press 차단으로 막음) |
+| | `src/pages/itinerary-manual/index.ts` | 배럴 — `ManualPlanPage`·`PlaceAddPage` 재수출(신규, TRIP-338) |
 
 > **⚠️ 배럴 경유는 지금 관행일 뿐 강제되지 않는다** — 라우트 5개는 전부 배럴을 경유하지만(위반 0건), 승인 테스트(`fsdStructure.test.ts`)의 단언이 `toContain`(부분 문자열)이라 딥 임포트로 바꿔도 잡히지 않는다(code-critic 참고-1 실측). 회귀 방지는 승인 테스트 수정이 필요해 사이클 3 몫으로 이관됨. `region-picker`도 이 관행을 따른다(강제는 `fsdStructure.test.ts`의 pages 슬라이스 **7개 완전일치** 집합 단언뿐 — `PAGE_SLICES` forEach 상수 자체는 여전히 로그인·온보딩 5개만 대상, region-picker·stay-search는 그 forEach 밖).
