@@ -27,6 +27,10 @@ import java.util.UUID
 /** Fake 에이전트 — 실 ACTIVE 후보(정본) emit(가짜 UUID 아님)·고정 블록 반영·결정론. 동결(272) 가능하게 실 poiId. */
 class FakeScheduleAgentTest : StringSpec({
 
+    /** 슬롯 후보 로직은 공용 [LocalSlotCandidateSource] 가 갖는다 — 대역도 같은 것을 쓴다. */
+    fun agentOf(pool: CandidatePoolPort, clock: java.time.Clock) =
+        FakeScheduleAgent(pool, LocalSlotCandidateSource(pool, clock), clock)
+
     val clock = Clock.fixed(Instant.parse("2026-08-06T00:00:00Z"), ZoneOffset.UTC)
     val poiA = UUID.randomUUID()
     val poiB = UUID.randomUUID()
@@ -56,7 +60,7 @@ class FakeScheduleAgentTest : StringSpec({
             GroundedPlace(poiA, "성산", 33.4, 126.9, "자연", "제주", null),
             GroundedPlace(poiB, "한라산", 33.3, 126.5, "자연", "제주", null),
         )
-        val agent = FakeScheduleAgent(pool("제주", places), clock)
+        val agent = agentOf(pool("제주", places), clock)
         val inp = input(listOf("제주"), listOf(FixedBlock(fixedPoi, d1, LocalTime.of(12, 0), 90)))
 
         val out = agent.generate(inp)
@@ -70,7 +74,7 @@ class FakeScheduleAgentTest : StringSpec({
     }
 
     "후보 지역에 POI 없으면 고정 블록만" {
-        val agent = FakeScheduleAgent(pool("제주", emptyList()), clock)
+        val agent = agentOf(pool("제주", emptyList()), clock)
         val out = agent.generate(input(listOf("부산"), listOf(FixedBlock(fixedPoi, d1, LocalTime.of(12, 0), 90))))
         out.days.single().slots.all { it.isFixed } shouldBe true
     }
@@ -88,7 +92,7 @@ class FakeScheduleAgentTest : StringSpec({
         // 22:30 KST — 30분 뒤면 23:00 이고 한 시간이면 자정이다. `endsNextDay` 없이는 표현할 수 없으니
         // **아무것도 만들지 않는 것**이 맞다. 화면에는 "대안 없음"으로 나가 수동 편집으로 넘어간다.
         val lateClock = Clock.fixed(Instant.parse("2026-08-01T13:30:00Z"), ZoneOffset.UTC)
-        val agent = FakeScheduleAgent(pool("제주", places), lateClock)
+        val agent = agentOf(pool("제주", places), lateClock)
 
         val out = agent.replan(
             ReplanInput(
@@ -112,7 +116,7 @@ class FakeScheduleAgentTest : StringSpec({
             GroundedPlace(poiB, "한라산", 33.3, 126.5, "자연", "제주", null),
         )
         val noonClock = Clock.fixed(Instant.parse("2026-08-01T03:00:00Z"), ZoneOffset.UTC) // 12:00 KST
-        val agent = FakeScheduleAgent(pool("제주", places), noonClock)
+        val agent = agentOf(pool("제주", places), noonClock)
 
         val out = agent.replan(
             ReplanInput(

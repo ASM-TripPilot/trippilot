@@ -34,6 +34,8 @@ class ScheduleAgentSwitchTest : StringSpec({
         .withUserConfiguration(ScheduleAgentConfiguration::class.java)
         .withBean(Clock::class.java, { clock })
         .withBean(CandidatePoolPort::class.java, { pool })
+        // 두 어댑터가 공유하는 슬롯 후보 소스 — 스위치 판정에는 안 쓰이지만 주입은 돼야 컨텍스트가 뜬다.
+        .withBean(LocalSlotCandidateSource::class.java)
         .withBean(FakeScheduleAgent::class.java)
         .withBean(HttpScheduleAgentAdapter::class.java)
 

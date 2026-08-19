@@ -52,16 +52,26 @@ data class SlotCandidatesRequest(
 
 /**
  * [candidates] 빈 목록 = 후보 0건 → 클라이언트가 반경 확대·컨셉 변경을 제안한다(BR-U3-25).
- * [radiusMUsed] 는 **실제 사용 반경** — AI 가 자동 확대했을 수 있어 사용자에게 그대로 표시한다.
+ * [radiusMUsed] 는 **실제 사용 반경** — 자동 확대했을 수 있어 사용자에게 그대로 표시한다.
  */
 data class SlotCandidatesResponse(
     val candidates: List<SlotCandidateResponse>,
     val radiusMUsed: Int,
+    /**
+     * **AI 순위가 아니다**(TRIP-408 전까지 true).
+     *
+     * true 면 후보 집합은 정본 그대로지만 **정렬이 거리순**이고 근거 문구가 템플릿이며, 앞뒤 슬롯과의
+     * 동선을 따지지 않았다. 화면이 "AI 추천 준비 중, 가까운 순으로 보여드려요" 를 말할 근거다.
+     *
+     * 이 값을 안 내보내면 사용자는 취향이 반영된 줄 알고, 우리는 폴백이 임시라는 사실을 잊는다(INV-4).
+     */
+    val degraded: Boolean,
 ) {
     companion object {
         fun from(o: SlotCandidatesOutput) = SlotCandidatesResponse(
             o.candidates.map { SlotCandidateResponse(it.poiId, it.distanceRange, it.rationale) },
             o.radiusMUsed,
+            o.freshness.degraded,
         )
     }
 }
