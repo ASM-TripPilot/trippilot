@@ -5,6 +5,10 @@ import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
 import type { ProjectedSlot } from '../model/slotProgress';
 import { LiveItineraryScreen } from './LiveItineraryScreen';
 
+// 지도 세그먼트가 LiveMapScreen→KakaoMapView 를 태우므로 관찰 목으로 갈아끼운다(배럴 경유).
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+
 /**
  * TRIP-395 · LiveItineraryScreen(i01) — 여행 중 일정의 default 렌더 = "기록 없음" 변형.
  * 일자 칩 · 세그먼트(일정｜지도) · 타임라인. 기록이 없으면 전 슬롯이 예정으로 그려진다.
@@ -40,6 +44,9 @@ const baseProps = {
   segment: 'itinerary' as const,
   onSelectDay: jest.fn(),
   onSelectSegment: jest.fn(),
+  toggle: 'plan' as const,
+  onToggle: jest.fn(),
+  actualRoute: { enabled: false, reason: '위치 권한을 켜면 기록돼요', distanceKm: 0 },
 };
 
 describe('LiveItineraryScreen', () => {
@@ -58,9 +65,9 @@ describe('LiveItineraryScreen', () => {
     expect(screen.getByTestId('execution-live-slot-2026-08-20#b')).toBeTruthy();
   });
 
-  it('S3 지도 세그먼트면 타임라인 카드 대신 준비 중 자리를 그린다 (지도는 i02/i03·TRIP-397)', () => {
+  it('S3 지도 세그먼트면 타임라인 카드 대신 지도(LiveMapScreen)를 그린다', () => {
     render(<LiveItineraryScreen {...baseProps} segment="map" />);
-    expect(screen.getByTestId('execution-live-map-placeholder')).toBeTruthy();
+    expect(screen.getByTestId('execution-live-map')).toBeTruthy();
     expect(screen.queryByTestId('execution-live-slot-2026-08-20#a')).toBeNull();
   });
 

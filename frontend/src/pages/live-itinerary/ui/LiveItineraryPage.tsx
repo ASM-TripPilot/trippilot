@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { resolveActualRoute } from '@/features/execution/model/actualDistance';
 import { resolveLiveState } from '@/features/execution/model/liveState';
 import { useLiveItinerary } from '@/features/execution/model/useLiveItinerary';
 import {
   useLiveViewStore,
+  type LivePlanToggle,
   type LiveSegment,
 } from '@/features/execution/model/liveViewStore';
 import { projectSlotProgress } from '@/features/execution/model/slotProgress';
+import { useActualRoute } from '@/features/execution/model/useActualRoute';
 import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
@@ -40,6 +43,10 @@ export function LiveItineraryPage({
   const query = useLiveItinerary(tripId);
   const segment = useLiveViewStore((store) => store.segment);
   const setSegment = useLiveViewStore((store) => store.setSegment);
+  const toggle = useLiveViewStore((store) => store.toggle);
+  const setToggle = useLiveViewStore((store) => store.setToggle);
+  // 실제 경로 점열·위치 동의 → 레이어 판정(동의 없으면 비활성·거리 0, PBT-U4-F3).
+  const actualRoute = resolveActualRoute(useActualRoute());
   // 사용자가 고른 날(없으면 오늘). 훅 규칙상 조기 반환보다 위에서 무조건 선언한다.
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
@@ -108,6 +115,9 @@ export function LiveItineraryPage({
       segment={segment}
       onSelectDay={setSelectedDay}
       onSelectSegment={(next: LiveSegment) => setSegment(next)}
+      toggle={toggle}
+      onToggle={(next: LivePlanToggle) => setToggle(next)}
+      actualRoute={actualRoute}
     />
   );
 }

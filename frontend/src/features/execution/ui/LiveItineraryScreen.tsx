@@ -4,8 +4,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
 
-import type { LiveSegment } from '../model/liveViewStore';
+import type { ActualRouteView } from '../model/actualDistance';
+import type { LivePlanToggle, LiveSegment } from '../model/liveViewStore';
 import type { ProjectedSlot } from '../model/slotProgress';
+import { LiveMapScreen } from './LiveMapScreen';
 import { LiveSlotCard } from './LiveSlotCard';
 
 /**
@@ -23,8 +25,6 @@ const SEGMENTS: { key: LiveSegment; label: string }[] = [
   { key: 'map', label: '지도' },
 ];
 
-const MAP_PLACEHOLDER = '지도는 곧 제공돼요';
-
 export interface LiveItineraryScreenProps {
   days: ItineraryDaysItem[];
   /** 오늘(또는 사용자가 고른 날)의 인덱스. */
@@ -34,6 +34,10 @@ export interface LiveItineraryScreenProps {
   segment: LiveSegment;
   onSelectDay: (index: number) => void;
   onSelectSegment: (segment: LiveSegment) => void;
+  /** 지도 세그먼트의 계획｜실제 토글 + 실제 경로 판정(위치 동의 게이트). */
+  toggle: LivePlanToggle;
+  onToggle: (toggle: LivePlanToggle) => void;
+  actualRoute: ActualRouteView;
 }
 
 export function LiveItineraryScreen({
@@ -43,6 +47,9 @@ export function LiveItineraryScreen({
   segment,
   onSelectDay,
   onSelectSegment,
+  toggle,
+  onToggle,
+  actualRoute,
 }: LiveItineraryScreenProps): ReactElement {
   const activeDate = days[activeDayIndex]?.date ?? '';
 
@@ -106,14 +113,12 @@ export function LiveItineraryScreen({
       </View>
 
       {segment === 'map' ? (
-        <View
-          testID="execution-live-map-placeholder"
-          className="flex-1 items-center justify-center px-lg"
-        >
-          <Text className="font-noto text-body text-muted">
-            {MAP_PLACEHOLDER}
-          </Text>
-        </View>
+        <LiveMapScreen
+          slots={slots.map((projected) => projected.slot)}
+          toggle={toggle}
+          onToggle={onToggle}
+          actualRoute={actualRoute}
+        />
       ) : (
         <ScrollView contentContainerClassName="gap-md px-lg pb-2xl">
           {slots.map((projected) => (
