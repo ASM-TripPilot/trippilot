@@ -56,6 +56,7 @@ from trippilot.domain.prompt import PromptRef
 from trippilot.domain.freshness import ProviderKind
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.poi_curation.config import M7Config
+from trippilot.providers.event import EventProvider
 from trippilot.providers.persona import PersonaProvider
 from trippilot.providers.place import PlaceProvider
 from trippilot.providers.weather import WeatherProvider
@@ -247,6 +248,7 @@ def _build(
     config: OrchestratorConfig | None = None,
     renderer=None,
     weather=None,
+    events=None,
 ):
     trace = InMemoryTrace()
     builder = CandidatePoolBuilder(InMemoryPoi(tuple(pois)), M7Config())
@@ -272,6 +274,8 @@ def _build(
     }
     if weather is not None:
         providers[ProviderKind.WEATHER] = WeatherProvider(weather)
+    if events is not None:  # 행사 저장소 fake (TRIP-421)
+        providers[ProviderKind.EVENT] = EventProvider(events)
     orchestrator = ItineraryOrchestrator(
         InfoCollector(providers),
         PreferenceScoringWorker(gateway),
