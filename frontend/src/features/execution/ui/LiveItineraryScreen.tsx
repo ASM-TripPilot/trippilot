@@ -3,27 +3,40 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
+import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import type { ActualRouteView } from '../model/actualDistance';
 import type { LivePlanToggle, LiveSegment } from '../model/liveViewStore';
-import type { ProjectedSlot } from '../model/slotProgress';
+import type { ProjectedSlot, SlotState } from '../model/slotProgress';
+import {
+  RailActiveGlyph,
+  RailDoneGlyph,
+  RailUpcomingGlyph,
+} from './ExecutionGlyphs';
 import { LiveMapScreen } from './LiveMapScreen';
 import { LiveSlotCard } from './LiveSlotCard';
 
 /**
- * TRIP-395 · LiveItineraryScreen(i01) — 여행 중 일정의 default 렌더 = "기록 없음" 변형.
- * 일자 칩 · 세그먼트(일정｜지도) · 타임라인. 기록이 아직 없으면 전 슬롯이 예정으로 그려진다.
+ * TRIP-395 · LiveItineraryScreen(i01) — 여행 중 일정. 헤더(제목·부제·일자칩·세그먼트) +
+ * 좌측 레일 타임라인 + 하단 복제 탭바(유일한 탈출구, 뒤로가기 버튼 없음).
  *
  * 규율:
- *  - 일자 칩은 **"N일차"**(순번)로 라벨한다 — `new Date(day.date)` 로 요일·월일을 뽑지 않는다.
- *    여기서 Date 산술을 쓰면 시각-무추정 구조가드(liveTimeStructure)에 걸린다. 순번은 안전하다.
- *  - 지도 세그먼트(i02·i03)는 TRIP-397 소관 — 이 칸에서는 "준비 중" 자리만 둔다(빈 화면 대신).
+ *  - 일차 순번("N일차")과 헤더 제목의 순번은 `activeDayIndex + 1`(index 산술 — 시각 가드 무관).
+ *    부제(날짜 문자열)는 page/shared 가 포맷해 prop 으로 내린다 — execution 안에서 날짜를
+ *    포맷하면 시각-무추정 구조가드(liveTimeStructure)에 걸린다.
+ *  - 레일 시각은 서버 `startAt` 을 `slice` 로 자를 뿐(재추정 없음).
  */
 
 const SEGMENTS: { key: LiveSegment; label: string }[] = [
   { key: 'itinerary', label: '일정' },
   { key: 'map', label: '지도' },
 ];
+
+function RailDot({ state }: { state: SlotState }): ReactElement {
+  if (state === 'done') return <RailDoneGlyph size={20} />;
+  if (state === 'active') return <RailActiveGlyph size={20} />;
+  return <RailUpcomingGlyph size={16} />;
+}
 
 export interface LiveItineraryScreenProps {
   days: ItineraryDaysItem[];
@@ -38,6 +51,12 @@ export interface LiveItineraryScreenProps {
   toggle: LivePlanToggle;
   onToggle: (toggle: LivePlanToggle) => void;
   actualRoute: ActualRouteView;
+  /** 헤더 제목의 trip.title 부분(page 가 trip 조회로 주입). */
+  tripTitle: string;
+  /** 헤더 부제 — page/shared 가 조립한 완성 문자열("M월 D일 요일 · 오늘 일정"). */
+  subtitle: string;
+  /** 하단 복제 탭바 콜백 — page 가 router.replace 로 배선. */
+  onPressTab: (key: ShellTabKey) => void;
 }
 
 export function LiveItineraryScreen({
@@ -50,6 +69,9 @@ export function LiveItineraryScreen({
   toggle,
   onToggle,
   actualRoute,
+  tripTitle,
+  subtitle,
+  onPressTab,
 }: LiveItineraryScreenProps): ReactElement {
   const activeDate = days[activeDayIndex]?.date ?? '';
 
@@ -60,57 +82,74 @@ export function LiveItineraryScreen({
       style={{ flex: 1 }}
       className="bg-canvas-alt"
     >
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="grow-0"
-        contentContainerClassName="gap-sm px-lg py-md"
-      >
-        {days.map((_day, index) => {
-          const selected = index === activeDayIndex;
-          return (
-            <Pressable
-              key={index}
-              testID={`execution-live-daychip-${index}`}
-              onPress={() => onSelectDay(index)}
-              className={`rounded-pill px-md py-sm ${
-                selected ? 'bg-primary' : 'bg-surface-soft'
-              }`}
-            >
-              <Text
-                className={`font-noto-medium text-label ${
-                  selected ? 'text-on-primary' : 'text-body'
-                }`}
-              >
-                {`${index + 1}일차`}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <View className="gap-md px-lg pb-sm pt-md">
+        <View className="gap-[4px]">
+          <Text
+            testID="execution-live-header-title"
+            className="font-noto-bold text-[24px] font-bold leading-[30px] text-ink"
+          >
+            {`${tripTitle} · ${activeDayIndex + 1}일차`}
+          </Text>
+          <Text
+            testID="execution-live-header-subtitle"
+            className="font-noto text-[16px] text-muted"
+          >
+            {subtitle}
+          </Text>
+        </View>
 
-      <View className="flex-row gap-xs px-lg pb-sm">
-        {SEGMENTS.map(({ key, label }) => {
-          const selected = key === segment;
-          return (
-            <Pressable
-              key={key}
-              testID={`execution-live-segment-${key}`}
-              onPress={() => onSelectSegment(key)}
-              className={`rounded-button px-lg py-sm ${
-                selected ? 'bg-ink' : 'bg-surface-soft'
-              }`}
-            >
-              <Text
-                className={`font-noto-medium text-label ${
-                  selected ? 'text-on-primary' : 'text-muted'
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          className="grow-0"
+          contentContainerClassName="gap-sm"
+        >
+          {days.map((_day, index) => {
+            const selected = index === activeDayIndex;
+            return (
+              <Pressable
+                key={index}
+                testID={`execution-live-daychip-${index}`}
+                onPress={() => onSelectDay(index)}
+                className={`rounded-pill border px-md py-[4px] ${
+                  selected ? 'border-primary' : 'border-hairline-strong'
                 }`}
               >
-                {label}
-              </Text>
-            </Pressable>
-          );
-        })}
+                <Text
+                  className={`font-noto-medium text-label ${
+                    selected ? 'text-primary' : 'text-muted'
+                  }`}
+                >
+                  {`${index + 1}일차`}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <View className="flex-row gap-[4px] rounded-button bg-surface-soft p-[4px]">
+          {SEGMENTS.map(({ key, label }) => {
+            const selected = key === segment;
+            return (
+              <Pressable
+                key={key}
+                testID={`execution-live-segment-${key}`}
+                onPress={() => onSelectSegment(key)}
+                className={`flex-1 items-center rounded-button py-sm ${
+                  selected ? 'bg-primary' : ''
+                }`}
+              >
+                <Text
+                  className={`font-noto-medium text-label ${
+                    selected ? 'text-on-primary' : 'text-muted'
+                  }`}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       {segment === 'map' ? (
@@ -121,17 +160,33 @@ export function LiveItineraryScreen({
           actualRoute={actualRoute}
         />
       ) : (
-        <ScrollView contentContainerClassName="gap-md px-lg pb-2xl">
+        <ScrollView contentContainerClassName="gap-md px-lg pb-[112px] pt-xs">
           {slots.map((projected) => (
-            <LiveSlotCard
-              key={projected.slot.poiId}
-              slot={projected.slot}
-              date={activeDate}
-              state={projected.state}
-            />
+            <View key={projected.slot.poiId} className="flex-row">
+              <View className="w-[52px] flex-row">
+                <Text className="w-[36px] pt-[6px] text-right font-noto-medium text-caption text-body">
+                  {projected.slot.startAt.slice(0, 5)}
+                </Text>
+                <View className="w-[16px] items-center">
+                  <View className="absolute bottom-0 top-0 w-[2px] bg-hairline-strong" />
+                  <View className="mt-[4px] rounded-full bg-canvas-alt p-[1px]">
+                    <RailDot state={projected.state} />
+                  </View>
+                </View>
+              </View>
+              <View className="flex-1">
+                <LiveSlotCard
+                  slot={projected.slot}
+                  date={activeDate}
+                  state={projected.state}
+                />
+              </View>
+            </View>
           ))}
         </ScrollView>
       )}
+
+      <BottomTabBar activeKey="itinerary" onPressTab={onPressTab} />
     </SafeAreaView>
   );
 }

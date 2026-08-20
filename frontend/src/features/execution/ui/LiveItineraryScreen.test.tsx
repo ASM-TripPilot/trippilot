@@ -46,8 +46,23 @@ const baseProps = {
   onSelectSegment: jest.fn(),
   toggle: 'plan' as const,
   onToggle: jest.fn(),
-  actualRoute: { enabled: false, reason: '위치 권한을 켜면 기록돼요', distanceKm: 0 },
+  actualRoute: {
+    enabled: false,
+    reason: '위치 권한을 켜면 기록돼요',
+    distanceKm: 0,
+  },
+  // TRIP-395(재정합) 신규 prop — 헤더 제목(trip.title 기반)·부제(주입 문자열)·탭바 콜백.
+  tripTitle: '부산 여행',
+  subtitle: '6월 11일 목요일 · 오늘 일정',
+  onPressTab: jest.fn(),
 };
+
+// className 은 NativeWind 가 렌더 트리에 평문 prop 으로 남긴다(SocialLoginScreen.visual 선례).
+// 공백으로 쪼갠 토큰 배열로 만들어 원소 일치(toContain)로 스타일을 잰다.
+function classTokens(node: { props?: { className?: unknown } }): string[] {
+  const cn = node.props?.className;
+  return typeof cn === 'string' ? cn.split(/\s+/).filter(Boolean) : [];
+}
 
 describe('LiveItineraryScreen', () => {
   it('S1 루트·일자 칩·세그먼트 토글을 그린다', () => {
@@ -87,5 +102,48 @@ describe('LiveItineraryScreen', () => {
 
     fireEvent.press(screen.getByTestId('execution-live-segment-map'));
     expect(onSelectSegment).toHaveBeenCalledWith('map');
+  });
+
+  it('S5 헤더 제목("{trip.title} · N일차")·부제(주입 문자열)를 그린다 (AC-5)', () => {
+    render(
+      <LiveItineraryScreen
+        {...baseProps}
+        activeDayIndex={1}
+        tripTitle="부산 여행"
+        subtitle="6월 11일 목요일 · 오늘 일정"
+      />
+    );
+    // 제목 = "부산 여행 · 2일차"(정확 일치 — 일차 순번은 activeDayIndex+1, 화면 소유).
+    expect(screen.getByTestId('execution-live-header-title')).toHaveTextContent(
+      '부산 여행 · 2일차'
+    );
+    // 부제 = 주입 문자열 그대로(execution 안에서 new Date 안 함 — page/shared 가 포맷).
+    expect(
+      screen.getByTestId('execution-live-header-subtitle')
+    ).toHaveTextContent('6월 11일 목요일 · 오늘 일정');
+  });
+
+  it('S6 선택 세그먼트 색이 bg-ink 가 아니라 primary 계열이다 (AC-6)', () => {
+    render(<LiveItineraryScreen {...baseProps} segment="itinerary" />);
+    const selected = screen.getByTestId('execution-live-segment-itinerary');
+    const tokens = classTokens(selected);
+    expect(tokens).toContain('bg-primary');
+    expect(tokens).not.toContain('bg-ink');
+  });
+
+  it('S7 바닥에 탭바(activeKey=일정)를 그리고 탭 누름을 콜백으로 넘긴다 (AC-3)', () => {
+    const onPressTab = jest.fn();
+    render(<LiveItineraryScreen {...baseProps} onPressTab={onPressTab} />);
+
+    expect(screen.getByTestId('shell-tabbar-root')).toBeTruthy();
+    // 일정 탭이 활성(현재 화면이 일정) — 복제 탭바 activeKey='itinerary'.
+    expect(
+      screen.getByTestId('shell-tabbar-icon-itinerary-active')
+    ).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-home'));
+    expect(onPressTab).toHaveBeenCalledWith('home');
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-explore'));
+    expect(onPressTab).toHaveBeenCalledWith('explore');
   });
 });

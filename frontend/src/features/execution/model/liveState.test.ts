@@ -77,3 +77,53 @@ describe('resolveLiveState — 상태 판정', () => {
     expect(state).toEqual({ kind: 'loading' });
   });
 });
+
+/**
+ * TRIP-395(재정합) · notFound kind 추가 — 404(일정 미생성)를 네트워크 오류(5xx·무응답)와 가른다.
+ *
+ * *(개념)* 404 는 react-query 에서 `isError=true` 이기도 하다. 그래서 page 가 `isNotFound(error)`
+ * (응답 status===404)로 계산해 **`isNotFound` 를 따로 주입**하고, 이 함수가 error 보다 **먼저**
+ * notFound 를 낸다. 네트워크 오류(응답 없음)는 page 가 `isNotFound=false`(모름=안전측)를 주므로
+ * error 로 남는다. 우선순위: loading > notFound > error > outsideToday > active(겹침 없음).
+ *
+ * `isNotFound` 는 **옵셔널**(기본 false)이라 위 A1 케이스·기존 소비자를 안 깬다(additive).
+ */
+describe('resolveLiveState — notFound 판정', () => {
+  it('A2-1 404 입력(isNotFound·isError, 데이터 없음)이면 notFound다', () => {
+    const state = resolveLiveState({
+      ...base,
+      isNotFound: true,
+      isError: true,
+      itinerary: undefined,
+    });
+    expect(state).toEqual({ kind: 'notFound' });
+  });
+
+  it('A2-2 notFound가 error보다 우선한다', () => {
+    const state = resolveLiveState({
+      ...base,
+      isNotFound: true,
+      isError: true,
+    });
+    expect(state).toEqual({ kind: 'notFound' });
+  });
+
+  it('A2-3 네트워크 오류(isNotFound=false)는 여전히 error다 (notFound 게이트 미개방)', () => {
+    const state = resolveLiveState({
+      ...base,
+      isNotFound: false,
+      isError: true,
+      itinerary: undefined,
+    });
+    expect(state).toEqual({ kind: 'error' });
+  });
+
+  it('A2-4 로딩이 notFound보다 우선한다', () => {
+    const state = resolveLiveState({
+      ...base,
+      isLoading: true,
+      isNotFound: true,
+    });
+    expect(state).toEqual({ kind: 'loading' });
+  });
+});

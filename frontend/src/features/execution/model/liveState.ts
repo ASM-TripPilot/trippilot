@@ -11,6 +11,7 @@ import type { Itinerary } from '@/shared/api/generated/schemas';
 
 export type LiveState =
   | { kind: 'loading' }
+  | { kind: 'notFound' }
   | { kind: 'error' }
   | { kind: 'outsideToday' }
   | {
@@ -24,6 +25,11 @@ export type LiveState =
 export interface ResolveLiveStateInput {
   isLoading: boolean;
   isError: boolean;
+  /**
+   * 조회 오류가 404(일정 미생성)인가 — 호출부가 `isNotFound(error)`로 계산해 주입한다.
+   * 옵셔널(기본 false)이라 이 필드 없이 부르던 기존 소비자를 안 깬다(additive).
+   */
+  isNotFound?: boolean;
   itinerary: Itinerary | undefined;
   /** 'YYYY-MM-DD' — 호출부(훅/페이지)가 주입한다. */
   todayDate: string;
@@ -33,6 +39,9 @@ export interface ResolveLiveStateInput {
 
 export function resolveLiveState(input: ResolveLiveStateInput): LiveState {
   if (input.isLoading) return { kind: 'loading' };
+  // 404 는 react-query 에서 isError 이기도 하므로 error 보다 먼저 갈라야 한다(우선순위
+  // loading > notFound > error). 네트워크 오류(응답 없음)는 isNotFound=false 라 error 로 남는다.
+  if (input.isNotFound) return { kind: 'notFound' };
   if (input.isError || !input.itinerary) return { kind: 'error' };
 
   const todayIndex = input.itinerary.days.findIndex(

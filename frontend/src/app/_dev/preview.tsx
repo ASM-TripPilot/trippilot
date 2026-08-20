@@ -57,6 +57,8 @@ import {
   DraftScreen,
   type DraftScreenProps,
 } from '@/features/itinerary/ui/DraftScreen';
+import type { ProjectedSlot } from '@/features/execution/model/slotProgress';
+import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen';
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
 import { ItineraryEditScreen } from '@/features/itinerary/ui/ItineraryEditScreen';
 import { ManualPlanScreen } from '@/features/itinerary/ui/ManualPlanScreen';
@@ -770,6 +772,87 @@ const SLOT_CANDIDATES_PREVIEW: SlotCandidatesCandidatesItem[] = [
     poiId: 'poi-c',
     distanceRange: '1.8km',
     rationale: '자연과 예술, 조금 멀어요',
+  },
+];
+
+// i01 여행 중 일정(TRIP-395) — 완료·진행중·예정 세 카드 상태를 한 타임라인에서 대조한다.
+// 화면은 props-only 라 배선 없이 상태만 넣어 그린다(좌측 레일·헤더·복제 탭바 포함). 실화면
+// 딥링크로는 오늘 구간 안 여행 + 일정이 실재해야 도달하므로 여기가 눈 확인 자리다(6-b 진입점).
+const LIVE_ITINERARY_PREVIEW_SLOTS: ProjectedSlot[] = [
+  {
+    state: 'done',
+    slot: {
+      poiId: 'p1',
+      startAt: '09:30:00',
+      endAt: '10:50:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      nameKo: '감천문화마을',
+      distanceRange: null,
+      openingHours: null,
+      tags: [],
+    },
+  },
+  {
+    state: 'done',
+    slot: {
+      poiId: 'p2',
+      startAt: '11:00:00',
+      endAt: '11:50:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      nameKo: '광안리 해변',
+      distanceRange: null,
+      openingHours: null,
+      tags: [],
+    },
+  },
+  {
+    state: 'active',
+    slot: {
+      poiId: 'p3',
+      startAt: '13:00:00',
+      endAt: '14:30:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      nameKo: '부산시립미술관',
+      distanceRange: null,
+      openingHours: '10:00 - 18:00',
+      tags: [],
+    },
+  },
+  {
+    state: 'upcoming',
+    slot: {
+      poiId: 'p4',
+      startAt: '15:00:00',
+      endAt: '16:30:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      nameKo: '전포 카페거리',
+      distanceRange: '도보 600m',
+      openingHours: '11:00–22:00 영업',
+      tags: [],
+    },
+  },
+  {
+    state: 'upcoming',
+    slot: {
+      poiId: 'p5',
+      startAt: '17:00:00',
+      endAt: '18:30:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      nameKo: '해운대 해변',
+      distanceRange: '차량 8km',
+      openingHours: '24시간 개방',
+      tags: [],
+    },
   },
 ];
 
@@ -2075,6 +2158,37 @@ const PREVIEW_STATES: PreviewState[] = [
         onPressDone={noop}
         onBack={noop}
         onPressViewPlan={noop}
+      />
+    ),
+  },
+  // i01 여행 중 일정(TRIP-395) — 헤더(제목·부제·일자칩·세그먼트) + 좌측 레일 타임라인
+  // (완료 컴팩트 · 진행중 핑크테두리+버튼 · 예정 거리행+아이콘) + 하단 복제 탭바.
+  {
+    key: 'live-itinerary',
+    label: '여행 중 일정(i01)',
+    login: null,
+    render: () => (
+      <LiveItineraryScreen
+        days={[
+          { date: '2026-06-10', slots: [] },
+          { date: '2026-06-11', slots: [] },
+          { date: '2026-06-12', slots: [] },
+        ]}
+        activeDayIndex={1}
+        slots={LIVE_ITINERARY_PREVIEW_SLOTS}
+        segment="itinerary"
+        onSelectDay={noop}
+        onSelectSegment={noop}
+        toggle="plan"
+        onToggle={noop}
+        actualRoute={{
+          enabled: false,
+          reason: '위치 권한을 켜면 기록돼요',
+          distanceKm: 0,
+        }}
+        tripTitle="부산 여행"
+        subtitle="6월 11일 목요일 · 오늘 일정"
+        onPressTab={noop}
       />
     ),
   },
