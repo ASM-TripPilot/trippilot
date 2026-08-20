@@ -831,6 +831,7 @@ def build_dev_app(
     model_id: str | None = None,
     weather: WeatherPort | None = None,
     poi_db: object | None = None,
+    events: EventPort | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -863,5 +864,6 @@ def build_dev_app(
         ),
         c1_config=C1Config(model_ids=model_ids),
         weather=weather,
+        events=events,  # 행사 저장소 (TRIP-421) — None이면 무보정
     )
     return create_app(orchestrator)
