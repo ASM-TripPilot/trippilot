@@ -19,7 +19,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from types import MappingProxyType
 
 from trippilot.domain.kb import KbDocument, KbHit, KbKind
@@ -42,8 +43,65 @@ class KbIndexError(ValueError):
     """KB 적재 구조·차원 위반 — 데이터/설정 버그라 폴백 대상이 아니다."""
 
 
+class KbLoadError(ValueError):
+    """KB seed 파일 구조 위반 — question_bank.BankLoadError와 동형(데이터 버그, 폴백 아님)."""
+
+
 def collection_for(kb: KbKind) -> str:
     return KB_COLLECTIONS[kb]
+
+
+def load_kb_documents(data: object) -> tuple[KbDocument, ...]:
+    """seed 파일의 파싱 결과 → KbDocument 목록 (구조·위생 검증, TRIP-427).
+
+    파일 형식: `ai/data/planb_situation_kb.yaml` — 루트 `kb`가 문서 전체의 KB이고
+    `documents[*]`에는 kb를 다시 쓰지 않는다(문서마다 다르게 적을 수 있게 두면
+    라벨과 collection이 어긋나는 드리프트 지점이 하나 늘어난다).
+    """
+    root = data if isinstance(data, Mapping) else None
+    if root is None:
+        raise KbLoadError(f"루트가 매핑이 아님 ({type(data).__name__})")
+    try:
+        kb = KbKind(root.get("kb"))
+    except ValueError as e:
+        raise KbLoadError(f"kb 라벨 해석 불가: {root.get('kb')!r}") from e
+    entries = root.get("documents")
+    if not isinstance(entries, Sequence) or isinstance(entries, str) or not entries:
+        raise KbLoadError("documents가 비어있거나 목록이 아님")
+    documents: list[KbDocument] = []
+    seen: set[str] = set()
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, Mapping):
+            raise KbLoadError(f"documents[{i}]: 매핑이 아님")
+        doc_id = entry.get("doc_id")
+        if not isinstance(doc_id, str) or not doc_id:
+            raise KbLoadError(f"documents[{i}]: doc_id 누락")
+        if doc_id in seen:
+            raise KbLoadError(f"doc_id 중복: {doc_id!r}")
+        seen.add(doc_id)
+        text = entry.get("text")
+        if not isinstance(text, str):
+            raise KbLoadError(f"{doc_id}: text 누락")
+        poi_ref = entry.get("poi_ref")
+        if poi_ref is not None and not isinstance(poi_ref, str):
+            raise KbLoadError(f"{doc_id}: poi_ref는 문자열 또는 null")
+        metadata = entry.get("metadata") or {}
+        if not isinstance(metadata, Mapping):
+            raise KbLoadError(f"{doc_id}: metadata는 매핑")
+        try:
+            documents.append(
+                KbDocument(kb=kb, doc_id=doc_id, text=text,
+                           poi_ref=poi_ref, metadata=dict(metadata))
+            )
+        except ValueError as e:  # KbDocument 불변식(빈 text 등)도 적재 오류로 승격
+            raise KbLoadError(str(e)) from e
+    return tuple(documents)
+
+
+def load_kb_file(path: Path, parse: Callable[[str], object]) -> tuple[KbDocument, ...]:
+    """파일 → 문서 목록. yaml 파서는 주입받는다 — yaml 의존은 llm_gateway/prompts.py
+    한정(아키텍처 테스트 강제)이라 question_bank.load_bank_file과 같은 seam을 쓴다."""
+    return load_kb_documents(parse(path.read_text(encoding="utf-8")))
 
 
 def index_documents(
