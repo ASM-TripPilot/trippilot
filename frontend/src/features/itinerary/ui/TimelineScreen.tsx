@@ -32,6 +32,7 @@ import {
 import { MapFallback } from './MapFallback';
 import { PinDetailSheet } from './PinDetailSheet';
 import { PoiSlotCard } from './PoiSlotCard';
+import { SlotPhotoPlaceholder } from './SlotPhotoPlaceholder';
 
 /**
  * h25/h34 완성·확정 일정 시간표 뷰 — Figma h34 `1884:1190`(TRIP-354 풀디자인 정합).
@@ -250,7 +251,14 @@ function TimelineSlotCard({
           resizeMode="cover"
           className="h-[78px] w-[78px] rounded-[12px]"
         />
-      ) : null}
+      ) : (
+        // 사진 없는 슬롯(imageUrl null) — 빈 자리 대신 카테고리 틴트 플레이스홀더(TRIP-465). 사진과
+        // 상호 배타(hasImage 갈래) — 실사진을 지어내지 않는다(INV-1).
+        <SlotPhotoPlaceholder
+          category={slot.category}
+          testID={fieldId('photoplaceholder')}
+        />
+      )}
 
       <View className="flex-1 items-start gap-xs">
         <View className="flex-row flex-wrap items-center gap-xs">
