@@ -25,6 +25,9 @@ class RegionEntity(
     @Column(name = "sido_name") var sidoName: String = "",
     @Column(name = "level") var level: String = "",
     @Column(name = "selectable") var selectable: Boolean = false,
+    /** 대표 좌표(V2.24 컬럼 · `R__update_region_center.sql` 이 채운다). 데이터 없는 지역은 null. */
+    @Column(name = "lat") var lat: Double? = null,
+    @Column(name = "lng") var lng: Double? = null,
 )
 
 /** 복합 PK 식별자. 엔티티와 달리 ID 클래스는 값이므로 `data class` 가 맞다. */
@@ -120,5 +123,7 @@ class RegionCatalogAdapter(
         level = RegionLevel.valueOf(level),
         selectable = selectable,
         poiCount = coverageOf(regionCode, counts),
+        lat = lat,
+        lng = lng,
     )
 }
