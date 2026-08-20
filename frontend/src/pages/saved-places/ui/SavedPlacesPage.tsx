@@ -42,6 +42,7 @@ import {
   type StayRowVM,
 } from '@/features/explore/ui/SavedPlaceListScreen';
 import { useSavedStays } from '@/features/trip/model/useSavedStays';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { formatStayDateRange } from '@/features/trip/model/stayDateImport';
 
 /** 실패 시 재시도가 다시 밟아야 할 마지막 조작 — 해제냐 되돌리기냐를 함께 기억한다. */
@@ -208,7 +209,15 @@ export function SavedPlacesPage(): ReactElement {
       releasedPoiIds={[...releasedPoiIds]}
       onPressRemove={handlePressRemove}
       onPressRestore={handlePressRestore}
-      onPressCreateTrip={() => router.push('/trips/new/step1')}
+      onPressCreateTrip={() => {
+        // TRIP-458: d02 CTA 는 "진입"으로 친다(위저드 셸 JSDoc D3). 그런데 위저드 안 '더 담기'로
+        // d02 를 열고 돌아오면 `trips/new` 레이아웃이 스택에 살아 있어 셸 마운트의 `resetMustVisits`
+        // 가 재발화하지 않는다 → 직전에 x 로 뺀 poiId 가 `excludedMustVisitPoiIds` 에 남고, 추가 전용
+        // 재시드가 그걸 건너뛰어 '꼭 갈 곳'이 빈 채 열린다. 여기서 직접 reset 해 그 잔존 기억을 비운다
+        // (셸 재마운트라는 jest 무심판 경로에 기대지 않아 회귀를 통합 테스트로 잡을 수 있다).
+        useTripWizardStore.getState().resetMustVisits();
+        router.push('/trips/new/step1');
+      }}
       onPressBrowse={() => router.push('/explore/places')}
       onRetry={handleRetry}
       onPressLogin={() => router.push('/(auth)/login')}
