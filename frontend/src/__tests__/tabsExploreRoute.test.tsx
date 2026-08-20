@@ -15,16 +15,16 @@ import ExploreRoute from '@/app/(tabs)/explore';
 /**
  * (tabs)/탐색 진입 라우트 — 죽은 껍데기가 아니라 d01 탐색 랜딩(US-EXPL-01)을 배선한다.
  *
- * 무엇을 보장하나(칸1 AC-E1~E8):
- *  - 🔴 헤딩·검색·axisSeg·lane_stay·lane_itin 자리·bridgeBar 6구획을 그린다(AC-E1) ·
- *    nearby 는 안 그린다(AC-E8, 좌표 없음).
+ * 무엇을 보장하나(칸1 AC-E1~E6·E8 — TRIP-447 로 축 세그먼트 제거, AC-E7 삭제):
+ *  - 🔴 헤딩·검색·lane_stay·lane_itin 자리·bridgeBar 5구획을 그린다(AC-E1) ·
+ *    nearby 는 안 그린다(AC-E8, 좌표 없음). 축 세그먼트(axisSeg)는 걷어냈다(TRIP-447 AC-1,
+ *    소스 0건은 `exploreLandingAxisRemoval.test.ts` 가 별도로 잠근다).
  *  - 🔴 검색 제출 → `/stays?region={입력}` 이동(AC-E2).
  *  - 🔴 lane_stay = `useStaySearch` items 를 가로 카드로, 금액은 `formatPrice` 정확 일치,
  *    "· 1박"(정확 1박가) 없음, "모두 보기" → `/stays`(AC-E3).
  *  - 🔴 lane_itin 은 준비중 자리(실카드·라우팅 0, AC-E4).
  *  - 🔴 bridgeBar: 담은 곳 ≥1 → CTA + 여행 만들기 이동 · 0 → 안내, CTA 미노출(AC-E5).
  *  - 🔴 lane_stay 쿼리 error 여도 나머지 구획은 살고 lane_stay 자리에 재시도(AC-E6, INV-4).
- *  - 🔴 axisSeg 4탭, '전체'만 selected, 나머지 눌러도 무동작(AC-E7).
  *
  * 왜 이렇게 테스트하나(02a §0-1): 라우트는 router 가 렌더해 props 를 못 받으므로, 두 훅을
  * seam 으로 목한다 — `useStaySearch`(features/stay)·`useSavedPlaces`(features/explore). 조합·
@@ -115,20 +115,22 @@ beforeEach(() => {
   mockUseSavedPlaces.mockReturnValue(savedResult(['p1']));
 });
 
-describe('🔴 AC-E1 · AC-E8 — 6구획 렌더 + nearby 부재', () => {
-  it('헤딩·검색·axisSeg·lane_stay·lane_itin·bridge 를 그리고, nearby 는 안 그린다', () => {
+describe('🔴 AC-E1 · AC-E8 — 5구획 렌더 + nearby 부재', () => {
+  it('헤딩·검색·lane_stay·lane_itin·bridge 를 그리고, nearby·축 세그먼트는 안 그린다', () => {
     render(<ExploreRoute />);
 
-    // 긍정 — 6구획이 전부 있다.
+    // 긍정 — 5구획이 전부 있다(축 세그먼트는 TRIP-447 로 제거).
     [
       'explore-landing',
       'explore-landing-heading',
       'explore-landing-search',
-      'explore-axis-all',
       'explore-lane-stay',
       'explore-lane-itin',
       'explore-bridge-cta',
     ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
+
+    // 부정 — 축 세그먼트는 렌더되지 않는다(AC-1, 렌더 층 확인 — 소스 0건은 별도 스캔).
+    expect(screen.queryByTestId('explore-axis-all')).toBeNull();
 
     // 부정 — 좌표 파라미터가 없어 '내 주변' 블록은 없다(AC-E8).
     expect(screen.queryByTestId('explore-nearby')).toBeNull();
@@ -238,31 +240,11 @@ describe('🔴 AC-E6 — 부분 실패 · 독립 쿼리', () => {
     [
       'explore-landing-heading',
       'explore-landing-search',
-      'explore-axis-all',
       'explore-lane-itin',
       'explore-bridge-cta',
     ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
 
     // lane_stay 자리에 재시도(가시적 실패 신호).
     expect(screen.getByTestId('explore-lane-stay-retry')).toBeOnTheScreen();
-  });
-});
-
-describe('🔴 AC-E7 — axisSeg 비활성', () => {
-  it('4탭 중 전체만 selected 이고, 비활성 탭을 눌러도 무동작이다', () => {
-    render(<ExploreRoute />);
-
-    ['all', 'stay', 'place', 'itin'].forEach((k) =>
-      expect(screen.getByTestId(`explore-axis-${k}`)).toBeOnTheScreen()
-    );
-    expect(screen.getByTestId('explore-axis-all')).toBeSelected();
-    ['stay', 'place', 'itin'].forEach((k) =>
-      expect(screen.getByTestId(`explore-axis-${k}`)).not.toBeSelected()
-    );
-
-    // 비활성 탭 press → 네비 없음 + 활성 불변(A9 무동작).
-    fireEvent.press(screen.getByTestId('explore-axis-stay'));
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(screen.getByTestId('explore-axis-all')).toBeSelected();
   });
 });
