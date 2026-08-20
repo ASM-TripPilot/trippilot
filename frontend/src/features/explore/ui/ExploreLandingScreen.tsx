@@ -52,6 +52,9 @@ export interface ExploreLandingScreenProps {
     onToggleSave?: (card: StayCardVM) => void;
     saveError?: boolean;
     onDismissSaveError?: () => void;
+    // 카드 탭(TRIP-457 AC-6) — 눌린 card VM 을 그대로 올린다. 라우트가 key 로 원본 item 을
+    // 역조회해 상세 push 한다(onToggleSave 선례). 하트 press 는 카드 push 를 안 삼킨다(★F-4).
+    onPressCard?: (card: StayCardVM) => void;
   };
   /** 하단 bridge CTA. 담은 곳이 0곳이어도 CTA 는 유지된다(TRIP-448) — 0곳 분기로 CTA 를
    * 없애면 d02 빈 상태에 도달할 경로가 사라진다. `onPressCreateTrip` 은 역사적 이름이고,
@@ -96,19 +99,27 @@ function StayCard({
   saved,
   pending,
   onToggleSave,
+  onPressCard,
 }: {
   card: StayCardVM;
   saved: boolean;
   pending: boolean;
   onToggleSave?: (card: StayCardVM) => void;
+  onPressCard?: (card: StayCardVM) => void;
 }): ReactElement {
   // 사진은 계약(StayItem)에 URL 필드가 없어 회색 자리(surface-strong)로 둔다 — URL 을
   // 지어내지 않는다(INV-1). 메타는 이름·지역·최저가뿐: 거리·소요시간 데이터가 없다(INV-3).
   // 사진 우상단에 저장 하트(흰 원+하트, d04 PlaceCard 선례) — 담김/미담김을 서로 다른 글리프
   // 로 그려 색 토글이 아니라 testID 로 관찰되게 한다. 대기 중(pending)이면 disabled 라 재누름이
-  // onPress 를 안 부른다(연타 가드).
+  // onPress 를 안 부른다(연타 가드). 카드 루트는 Pressable — 하트 press 는 findEventHandler가
+  // 하트에서 멈춰 카드 push 를 삼키지 않는다(★F-4).
   return (
-    <View testID={`explore-stay-card-${card.key}`} className="w-[200px]">
+    <Pressable
+      testID={`explore-stay-card-${card.key}`}
+      accessibilityRole="button"
+      onPress={() => onPressCard?.(card)}
+      className="w-[200px]"
+    >
       <View className="h-[130px] w-full rounded-card bg-surface-strong">
         <Pressable
           testID={`explore-stay-save-${card.key}`}
@@ -143,7 +154,7 @@ function StayCard({
       <Text className="mt-xs font-noto-bold text-card-title font-bold text-ink">
         {card.priceText}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -201,6 +212,7 @@ export function ExploreLandingScreen({
     savedKeys = [],
     pendingKeys = [],
     onToggleSave,
+    onPressCard,
     saveError = false,
     onDismissSaveError,
   } = stayLane;
@@ -262,6 +274,7 @@ export function ExploreLandingScreen({
                       saved={savedKeys.includes(card.key)}
                       pending={pendingKeys.includes(card.key)}
                       onToggleSave={onToggleSave}
+                      onPressCard={onPressCard}
                     />
                   ))}
                 </View>
