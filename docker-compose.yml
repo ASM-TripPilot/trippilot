@@ -92,6 +92,8 @@ services:
       TRIPPILOT_STAY_CONTENT_MODE: ${STAY_CONTENT_MODE:-stub}
       # 서비스 간 호출(TRIP-393). 비우면 /internal 경계가 닫힌다 — AI 수집분 수신도 막힌다.
       TRIPPILOT_SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      # application.yml 은 ${SERVICE_AUTH_TOKEN:} 을 읽는다 — 접두 붙은 이름만 주면 빈 토큰이 되어 /internal 이 401 로 닫힌다(실측 2026-08-21).
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
     ports:
       - "8080:8080"
     healthcheck:
