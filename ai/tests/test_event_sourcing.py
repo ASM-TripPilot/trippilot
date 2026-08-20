@@ -182,3 +182,45 @@ def test_collect_region_glue(tmp_path) -> None:
                      "geocoded": 1, "added": 1, "fallback": False, "error": None}
     found, _ = store.search_events(_TODAY, _TODAY)
     assert found[0].coord == GeoPoint(35.1532, 129.1186)  # 지역 검색 좌표 부여됨
+
+
+def test_collect_region_geocodes_via_address_fallback(tmp_path) -> None:
+    """행사명 질의 실패 → 주소 폴백 질의로 좌표 확보 (첫 배치 실측 1/4 대응)."""
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    from collect_events import collect_region
+
+    class _AddressOnlyHttp:
+        def __init__(self) -> None:
+            self.local_queries: list[str] = []
+
+        def get_json(self, url, headers, params):
+            if url.endswith("/local"):
+                self.local_queries.append(params["query"])
+                if "달빛축제공원" in params["query"]:  # 주소 질의만 적중
+                    return {"items": [{"mapx": "1266400000", "mapy": "374000000"}]}
+                return {"items": []}
+            return {"items": [{"title": "송도맥주축제", "description": "d"}]}
+
+    class _FakeWorker:
+        def extract(self, region, period_start, period_end, snippets,
+                    trace_id, now, *, timeout_sec=None):
+            class _R:
+                value = (EventInfo(
+                    event_id="e", name="송도맥주축제", event_type=EventType.FESTIVAL,
+                    start=period_start, end=period_start, coord=None,
+                    address="인천 송도 달빛축제공원"),)
+                is_fallback = False
+                error = None
+            return _R()
+
+    http = _AddressOnlyHttp()
+    store = JsonEventStore(tmp_path / "events.json")
+    stats = collect_region("인천", client=NaverSearchClient(http, "i", "s", 20),
+                           worker=_FakeWorker(), store=store, today=_TODAY, now=_NOW)
+
+    assert http.local_queries == ["인천 송도맥주축제", "인천 송도 달빛축제공원"]
+    assert stats["geocoded"] == 1
+    found, _ = store.search_events(_TODAY, _TODAY)
+    assert found[0].coord == GeoPoint(37.4, 126.64)
