@@ -11,7 +11,17 @@ ALTER TABLE generation_session ADD COLUMN account_id uuid REFERENCES account(acc
 -- 기존 행은 여행에서 채운다(한 번뿐인 소급). 이후로는 세션 생성 시 적힌다.
 UPDATE generation_session s SET account_id = t.account_id FROM trip t WHERE t.trip_id = s.trip_id;
 
--- "이 계정에 살아 있는 세션" 조회가 유일한 접근 경로다. 끝난 세션은 대상이 아니라 부분 인덱스로 좁힌다.
-CREATE INDEX ix_generation_session_active
-    ON generation_session (account_id, started_at DESC)
+-- 소급이 끝났으니 이제 비어 있을 수 없다. 세션은 여행에서 CASCADE 로 매달려 있어 계정 없는 행이 생기지 않는다.
+-- NULL 을 허용하면 그 행이 조회에서 조용히 빠져 **제한을 우회한다**.
+ALTER TABLE generation_session ALTER COLUMN account_id SET NOT NULL;
+
+-- **UNIQUE 다.** 앱 가드만으로는 동시 요청 둘이 읽고-검사-쓰기 사이를 함께 통과할 수 있다 —
+-- 이 규칙이 막으려는 것이 바로 "연타"라 그 자리에서 뚫리면 규칙이 없는 것과 같다.
+-- 같은 여행 재생성은 이전 세션을 닫고 INSERT 하므로 이 인덱스에 걸리지 않는다(`saveAndFlush` 로 순서 보장).
+-- 여행 단위 `ux_generation_session_running`(V2.22)과 같은 방식·같은 상태 집합이다.
+CREATE UNIQUE INDEX ux_generation_session_account_running
+    ON generation_session (account_id)
  WHERE status IN ('RUNNING', 'DAY1_READY');
+
+-- 조회는 최신순으로 하나만 집는다.
+CREATE INDEX ix_generation_session_account ON generation_session (account_id, started_at DESC);

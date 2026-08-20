@@ -120,4 +120,70 @@ class GenerationSessionPersistenceIT : AbstractPostgresIntegrationTest() {
         sessions.findRunningByTrip(tripId)?.sessionId shouldBe fresh.sessionId
         sessions.findById(previous.sessionId)!!.status shouldBe GenerationStatus.CANCELED
     }
+    /**
+     * **계정당 진행 중 세션은 DB 가 하나로 강제한다**(TRIP-403).
+     *
+     * 앱 가드(`GenerationSessionService.start`)만으로는 동시 요청 둘이 읽고-검사-쓰기 사이를 함께
+     * 통과할 수 있다. 이 규칙이 막으려는 것이 **연타**라 그 자리에서 뚫리면 규칙이 없는 것과 같다.
+     * 여행 단위 제약(V2.22)과 같은 방식이라 여기서도 실물로 확인한다.
+     */
+    @Test
+    fun `같은 계정에 진행 중 세션이 둘이면 DB 가 막는다`() {
+        val tripA = newTrip()
+        val account = lastAccountId
+        val tripB = trips.save(
+            Trip.create(
+                accountId = account, title = null,
+                startDate = LocalDate.parse("2026-09-10"), endDate = LocalDate.parse("2026-09-12"),
+                party = 2, companionType = null, budgetTotal = null, preferenceSnapshot = emptyMap(),
+                destinations = listOf(TripDestination(0, "부산", 2)), now = now,
+            ),
+        ).tripId
+        sessions.save(GenerationSession.start(account, tripA, GenerationMode.FULLY_AI, now))
+
+        shouldThrow<DataIntegrityViolationException> {
+            sessions.save(GenerationSession.start(account, tripB, GenerationMode.FULLY_AI, now))
+        }
+    }
+
+    /**
+     * **닫고 여는 순서가 실물에서 통과한다**(TRIP-403).
+     *
+     * 만료된 세션을 닫고 다른 여행으로 새로 시작하는 경로는 한 트랜잭션에서 UPDATE→INSERT 를 잇는다.
+     * JPA 가 UPDATE 를 커밋까지 미루면 INSERT 가 먼저 나가 계정 유니크에 걸린다 — 어댑터가
+     * `saveAndFlush` 를 쓰는 이유가 그것이고, **Fake 는 유니크를 강제하지 않아 이 순서를 못 본다.**
+     */
+    @Test
+    fun `만료 세션을 닫으면 다른 여행으로 새로 시작할 수 있다`() {
+        val tripA = newTrip()
+        val account = lastAccountId
+        val stale = sessions.save(GenerationSession.start(account, tripA, GenerationMode.FULLY_AI, now))
+        val tripB = trips.save(
+            Trip.create(
+                accountId = account, title = null,
+                startDate = LocalDate.parse("2026-09-10"), endDate = LocalDate.parse("2026-09-12"),
+                party = 2, companionType = null, budgetTotal = null, preferenceSnapshot = emptyMap(),
+                destinations = listOf(TripDestination(0, "부산", 2)), now = now,
+            ),
+        ).tripId
+
+        sessions.save(stale.failed(now))
+        val fresh = sessions.save(GenerationSession.start(account, tripB, GenerationMode.FULLY_AI, now))
+
+        sessions.findRunningByAccount(account)?.sessionId shouldBe fresh.sessionId
+    }
+
+    /** 다른 계정끼리는 서로를 막지 않는다 — 제한 단위가 계정이라는 뜻이 그것이다. */
+    @Test
+    fun `다른 계정의 진행 중 세션은 서로 막지 않는다`() {
+        val tripA = newTrip()
+        val accountA = lastAccountId
+        val tripB = newTrip()
+        val accountB = lastAccountId
+        sessions.save(GenerationSession.start(accountA, tripA, GenerationMode.FULLY_AI, now))
+
+        sessions.save(GenerationSession.start(accountB, tripB, GenerationMode.FULLY_AI, now))
+            .accountId shouldBe accountB
+    }
+
 }
