@@ -68,6 +68,11 @@ import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
 import { SlotTimeSheet } from '@/features/itinerary/ui/SlotTimeSheet';
 import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
+import {
+  MyTripCard,
+  type MyTripCardVM,
+} from '@/features/itinerary/ui/MyTripCard';
+import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
@@ -774,6 +779,32 @@ const TIMELINE_PLACEHOLDER_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   distanceRange: index === 0 ? null : '약 1.2km · 도보 추정',
   imageUrl: null,
 }));
+
+// 내 여행 목록(h37, TRIP-468) 카드 VM 3종 — 완성·작성중·미도착(배지 degrade). 순수 카드라
+// 픽스처를 얹어 세 얼굴을 한 화면에서 본다(컨테이너·react-query 없이).
+const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
+  {
+    tripId: 'demo-done',
+    title: '서귀포시 여행',
+    metaLine: '6월 10일 ~ 13일 · 3박 4일 · 2명',
+    badge: 'done',
+    extra: '확정 장소 12곳',
+  },
+  {
+    tripId: 'demo-draft',
+    title: '부산 여행',
+    metaLine: '7월 2일 ~ 4일 · 2박 3일 · 4명',
+    badge: 'draft',
+    extra: '추천안 준비 중',
+  },
+  {
+    tripId: 'demo-load',
+    title: '경주 여행',
+    metaLine: '8월 1일 ~ 2일 · 1박 2일 · 1명',
+    badge: null,
+    extra: null,
+  },
+];
 
 // 탭 화면 프리뷰에 셸 탭바를 얹어 실제 앱처럼 보이게 한다(TRIP-201 오버레이 확인용).
 // BottomTabBar 루트가 absolute bottom-0라 콘텐츠 위에 떠서 겹친다 — 프리뷰에서도 오버레이
@@ -1942,6 +1973,35 @@ const PREVIEW_STATES: PreviewState[] = [
         onConfirm={noop}
       />
     ),
+  },
+  // 내 여행 목록 · h37(TRIP-468) — 완성(success 배지+"확정 장소 N곳")·작성중(primary 배지+resume
+  // CTA)·미도착(배지·부가정보 부재 degrade) 세 카드 + 사진 플레이스홀더·"최신순" 라벨을 한 화면에서
+  // Figma h37 2971:1656 과 대조한다. 배지 pill·resume 오버레이·사진 자리는 jest 사각(6-b 전용).
+  {
+    key: 'my-trips-list',
+    label: '내 여행 목록 · 완성/작성중/미도착(h37)',
+    login: null,
+    render: () => (
+      <MyTripsListScreen
+        mode="list"
+        onPressCreateTrip={noop}
+        cards={MY_TRIPS_PREVIEW_VMS.map((vm) => (
+          <MyTripCard key={vm.tripId} vm={vm} onPress={noop} />
+        ))}
+      />
+    ),
+  },
+  {
+    key: 'my-trips-empty',
+    label: '내 여행 목록 · empty(h37)',
+    login: null,
+    render: () => <MyTripsListScreen mode="empty" onPressCreateTrip={noop} />,
+  },
+  {
+    key: 'my-trips-loading',
+    label: '내 여행 목록 · 스켈레톤 2장(h37)',
+    login: null,
+    render: () => <MyTripsListScreen mode="loading" onPressCreateTrip={noop} />,
   },
   // h24 일정 편집(TRIP-302) — 시각칩·삭제·"다른 후보" 어포던스가 있는 편집 화면. 시각칩을 누르면
   // 아래 '시각 조정 시트' 가 열린다(프리뷰에선 둘을 각각 독립 진입으로 본다). 고정 슬롯(poi-b)은
