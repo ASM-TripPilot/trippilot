@@ -24,8 +24,8 @@ import {
  * `formatPrice`/`stayKey` 카드 매핑, 그리고 숙소 담기 하트(`useSavedStays`) 배선은 스캔 밖인
  * 이 라우트(app 층)가 진다 — `itinerary.tsx` 승격과 동형(브리프 §0-1).
  *
- * 검색창 탭 → `/explore/region`(입력 불가 진입 버튼, 자유 문자열이 region 으로 새는 걸 막는다,
- * TRIP-412) · 모두 보기 → `/stays?region={레인 지역}`(첫 카드 지역을 실어 부산 폴백 회피) ·
+ * 검색창 탭 → `/explore/search`(입력 불가 진입 버튼 — 입력은 d05 에서 받아 자유 문자열이 region
+ * 으로 새는 걸 막는다, TRIP-450 되돌림) · 모두 보기 → `/stays?region={레인 지역}`(첫 카드 지역을 실어 부산 폴백 회피) ·
  * bridge CTA → `/explore/saved-places`(담은 곳 d02, 0곳이어도 유지 — TRIP-448). 구획별 독립 쿼리라
  * 숙소 레인 실패가 나머지 구획을 안 죽인다(INV-4).
  *
@@ -69,7 +69,7 @@ export default function ExploreRoute(): ReactElement {
       title: '무엇을 둘러볼까요?',
       subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
     },
-    onPressSearch: () => router.push('/explore/region'),
+    onPressSearch: () => router.push('/explore/search'),
     stayLane: {
       error: stay.isError,
       cards,
