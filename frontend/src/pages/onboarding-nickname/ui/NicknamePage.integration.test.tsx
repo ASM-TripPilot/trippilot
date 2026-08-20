@@ -126,13 +126,14 @@ describe('NicknamePage — 수정 없이 통과 (AC B2 · B8)', () => {
     expect(completeIndex).toBeGreaterThan(patchIndex);
   });
 
-  it('완료되면 취향 1/2로 이동한다(서버는 이미 완료 상태)', async () => {
+  it('완료되면 위치 프리프롬프트(c08)로 이동한다(TRIP-459 — 체인에 c08 삽입)', async () => {
     await renderPrefilled();
 
     fireEvent.press(screen.getByTestId('onboarding-nickname-next'));
 
+    // AC-1 — nickname 저장·완료 성공 시 목적지가 pref1 → c08(위치). c08 이 pref1 앞에 끼어든다.
     await waitFor(() =>
-      expect(routerMock.replace).toHaveBeenCalledWith('/(onboarding)/pref1')
+      expect(routerMock.replace).toHaveBeenCalledWith('/(onboarding)/location')
     );
   });
 });

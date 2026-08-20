@@ -963,8 +963,9 @@ const PREVIEW_STATES: PreviewState[] = [
     label: '위치 · 프리프롬프트',
     login: null,
     render: () => (
+      // c08 이 온보딩 체인에서 실제로 주입하는 Figma 목적 문구(TRIP-459) — 프리뷰도 정본과 맞춘다.
       <LocationPreprompt
-        purposeContext="내 주변 숙소 탐색"
+        purposeContext="내 주변을 알면 더 잘 맞는 곳을 추천하고 길 안내도 막힘없이 이어져요"
         state="default"
         onProceed={noop}
         onDefer={noop}
