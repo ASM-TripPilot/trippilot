@@ -104,13 +104,18 @@ def collect_region(
              "geocoded": 0, "added": 0,
              "fallback": bool(result.is_fallback), "error": result.error}
 
-    # ③ 좌표 부여 — 예산 소진 시 남은 행사는 좌표 없이 등록 (부착만 제외, 유효)
+    # ③ 좌표 부여 — 행사명 → (실패 시) 주소 폴백 질의. 지역검색은 업체/장소 DB라
+    #    행사명 적중률이 낮다(첫 배치 실측 1/4) — 주소("송도 달빛축제공원")가 있으면
+    #    그쪽이 잘 잡힌다. 예산 소진 시 남은 행사는 좌표 없이 등록 (부착만 제외, 유효).
     enriched = []
     for event in extracted:
         coord = None
         try:
-            items = client.search("local", f"{region} {event.name}", display=1)
-            coord = coord_from_local_item(items[0]) if items else None
+            for query in filter(None, (f"{region} {event.name}", event.address)):
+                items = client.search("local", query, display=1)
+                coord = coord_from_local_item(items[0]) if items else None
+                if coord is not None:
+                    break
         except CallBudgetExceeded:
             pass  # 좌표만 포기 — 행사 등록은 계속
         if coord is not None:
