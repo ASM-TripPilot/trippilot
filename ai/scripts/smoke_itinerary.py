@@ -319,9 +319,13 @@ def run_rehearsal(
 # 실측 상한 — 1일 일정(슬롯 4~6) 기준 앵커→첫 슬롯 포함 인접 쌍 ~6건이면 전량,
 # 그 이상은 API 한도 아끼기로 절단한다.
 MAX_LEGS = 6
-# 리허설 요청은 transport_modes=["대중교통"] 고정(_request_body) — 검증 수단도 일치.
-# PUBLIC은 TMAP 대중교통 API 실측 (TRIP-405 — 보행 근사 제거).
-LEG_MODE = TransportMode.PUBLIC
+# 리허설 요청은 transport_modes=["대중교통"] — 솔버 PUBLIC 모드.
+# 실측 검증은 대중교통 우선 시도 → 403(상품 미구독 등) 시 자동차 → 보행 순 폴백.
+LEG_MODE_CHAIN: list[TransportMode] = [
+    TransportMode.PUBLIC,
+    TransportMode.CAR,
+    TransportMode.WALK,
+]
 
 
 def build_leg_pairs(
@@ -334,19 +338,55 @@ def build_leg_pairs(
     return pairs[:max_legs]
 
 
+def _is_forbidden(error: TravelTimeError) -> bool:
+    """403 Forbidden 여부 — 상품 미구독·키 권한 부족 등 재시도 무의미한 거절."""
+    return "403" in str(error)
+
+
+def _pick_leg_mode(
+    travel: "TravelTimePort",
+    sample_from: "GeoPoint",
+    sample_to: "GeoPoint",
+    chain: list[TransportMode] = LEG_MODE_CHAIN,
+) -> TransportMode:
+    """폴백 체인 중 첫 번째로 403 없이 호출 가능한 모드를 선택한다.
+
+    첫 쌍 1건으로 프로빙 — 403이면 다음 모드 시도, 전부 실패하면 마지막 모드 반환
+    (이후 measure_legs에서 실패가 기록될 뿐, 리허설 성패와 분리).
+    """
+    for mode in chain[:-1]:
+        try:
+            travel.measure(sample_from, sample_to, mode)
+            return mode
+        except TravelTimeError as e:
+            if _is_forbidden(e):
+                print(f"[rehearsal] TMAP {mode.value} 403 — 다음 수단으로 폴백")
+                continue
+            # 403 외 오류(네트워크 등)는 해당 모드가 지원은 되는 것 — 그대로 쓴다
+            return mode
+    return chain[-1]
+
+
 def measure_legs(
     pairs: list[tuple[Poi, Poi]],
     *,
     travel: TravelTimePort,
     estimator: TravelEstimator,
-    mode: TransportMode = LEG_MODE,
+    mode: TransportMode | None = None,
 ) -> tuple[list[dict], str | None]:
     """쌍별 (솔버 추정 est_min, 실측 real_min, 오차 err_pct) — 오차 축적용 legs.
 
+    mode가 None이면 LEG_MODE_CHAIN 첫 쌍으로 프로빙 후 선택한다 (403 폴백).
     err_pct = (est − real) / real × 100 (양수 = 과대추정). real 0(동일 좌표 등)은
     비율이 정의 불가라 None. API 실패 시 그 지점에서 중단하고 (부분 legs, 사유)를
     반환한다 — 죽은 키·한도 초과에 남은 호출을 반복하지 않는다.
     """
+    if not pairs:
+        return [], None
+    if mode is None:
+        from_poi, to_poi = pairs[0]
+        mode = _pick_leg_mode(travel, from_poi.coord, to_poi.coord)
+        print(f"[rehearsal] 실측 수단 확정: {mode.value}")
     legs: list[dict] = []
     for from_poi, to_poi in pairs:
         est_min = estimator.estimate(from_poi.coord, to_poi.coord, mode).internal_minutes
@@ -390,7 +430,7 @@ def attach_leg_verification(
     if not legs:
         return
     result["legs"] = legs
-    print(f"[rehearsal] 실경로 검증 {len(legs)}건 (PUBLIC=대중교통 실측, TRIP-405)")
+    print(f"[rehearsal] 실경로 검증 {len(legs)}건 (TMAP 실측)")
     print(f"[rehearsal]   {'구간':<30} est(분)  real(분)  err%")
     for leg in legs:
         err = f"{leg['err_pct']:+.1f}%" if leg["err_pct"] is not None else "n/a"
