@@ -129,6 +129,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `BOOTSTRAP_TIMEOUT_MS` | `features/auth/model` | 부트스트랩 타임아웃 |
 | `LoginPage` | `pages/login` | 로그인 훅↔화면 배선(구 `features/auth/containers/SocialLoginContainer`, TRIP-173 신설) |
 | `TermsPage` · `NicknamePage` · `PrefStep1Page` · `PrefStep2Page` | `pages/onboarding-{terms,nickname,pref1,pref2}` | 온보딩 각 단계 배선(구 `features/onboarding/containers/*Container`, TRIP-173 신설) |
+| `LocationPage` | `pages/onboarding-location` | **신규(TRIP-459)** — c08 위치 권한 프리프롬프트 배선. 동결 `shared/location/LocationPreprompt`(TRIP-162)의 콜백에 `expo-location` 실호출(리포 최초)을 건다. nickname→location→pref1 체인 삽입(D7 반전, `onboardingStructure.test.ts`) |
 | `SplashGate` | `app-shell` | 부트스트랩 결과 라우팅(구 `features/auth/containers/SplashGate`, TRIP-173 신설 — `src/app` 밖) |
 
 > ⚠️ **제거된 심볼**(참조하면 깨진다): `setApiAdapter` · `defaultAdapter` · `SCENARIO_LIST` · `getActiveScenarioKey`

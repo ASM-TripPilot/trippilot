@@ -17,6 +17,7 @@ paths:
 | `src/app/(onboarding)/index.tsx` | **진입 단계 리다이렉트** (미완 → terms) |
 | `src/app/(onboarding)/terms.tsx` | 약관 라우트 — 컨테이너를 꽂는 얇은 래퍼 |
 | `src/app/(onboarding)/nickname.tsx` | 닉네임 라우트 — 얇은 래퍼 |
+| `src/app/(onboarding)/location.tsx` | **신규(TRIP-459)** — c08 위치 권한 프리프롬프트 라우트(D7 반전, `onboardingStructure.test.ts`). `LocationPage`를 꽂는 얇은 래퍼. 체인상 nickname과 pref1 사이 |
 | `src/app/(onboarding)/pref1.tsx` | 취향 1/2 라우트(c09) — `PrefStep1Page`를 꽂는 얇은 래퍼(구 `PrefStep1Container`) |
 | `src/app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Page`를 꽂는 얇은 래퍼(구 `PrefStep2Container`) |
 | `src/app/(tabs)/_layout.tsx` | 탭 네비게이터 — `Tabs`에 `tabBar` 렌더프롭(Q4 전면 커스텀) + `BottomTabBar` 어댑터(라우트↔탭key 양방향 번역: `routeNameToTabKey`(index→home, 활성 표시) · `handlePressTab`(home→index, 누름 이동 — **홈 탭 press 미검증**, code-critic 경고1)). **TRIP-201**: `screenOptions.tabBarStyle:{position:'absolute',backgroundColor:'transparent',borderTopWidth:0,elevation:0}` 추가 — AC-O2 동결이 이 문자열의 존재를 요구하지만 **커스텀 `tabBar` 렌더프롭엔 무효**(react-navigation이 안 적용, RN 7.18.9 소스 실측). 실제 오버레이는 `shared/ui/BottomTabBar.tsx` 루트의 `absolute bottom-0`이 진다(위 `src/shared/` 절 참고, 개념 [[가드의 사정거리]] 실측 12) — 이 파일의 옵션은 무해한 죽은 문자열로 유지 |
