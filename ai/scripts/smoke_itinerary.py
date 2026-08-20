@@ -238,6 +238,7 @@ def run_rehearsal(
     smoke_date: dt.date,
     deadline_ms: int = 20_000,
     weather=None,  # WeatherPort | None (TRIP-409) — 미주입=날씨 보정 없이 기존 그대로
+    events=None,   # EventPort | None (TRIP-421) — 미주입=행사 보너스 없이 기존 그대로
 ) -> dict:
     """선택 POI로 실 조립 관통 1건 → 기록용 결과 dict. 위반은 RehearsalError.
 
@@ -260,6 +261,7 @@ def run_rehearsal(
             model_ids={ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id}
         ),
         weather=weather_recorder,  # 선택 주입 (TRIP-409) — None이면 무보정
+        events=events,  # 선택 주입 (TRIP-421) — None이면 행사 보너스 없음
     )
     client = TestClient(create_app(orchestrator), raise_server_exceptions=False)
 
@@ -475,10 +477,22 @@ def main() -> int:
     else:
         print("[rehearsal] WEATHER_API 없음 — 날씨 보정 없이 진행")
 
+    # 행사 저장소 (TRIP-421) — 웹소싱 배치 산출물이 있으면 주입 (미설정=기능 부재)
+    events = None
+    events_path = _optional("EVENTS_STORE")
+    if events_path and Path(events_path).exists():
+        from trippilot.background.event_store import JsonEventStore
+
+        events = JsonEventStore(Path(events_path))
+        print(f"[rehearsal] 행사 저장소 주입: {events.counts()['events']}건 "
+              f"({events.counts()['regions_covered']}개 지역 커버)")
+    else:
+        print("[rehearsal] EVENTS_STORE 없음 — 행사 보너스 없이 진행")
+
     try:
         result = run_rehearsal(
             selection, llm=adapter, model_id=model_id, smoke_date=smoke_date,
-            weather=weather,
+            weather=weather, events=events,
         )
     except RehearsalError as e:
         print(f"[rehearsal] FAIL {e}")

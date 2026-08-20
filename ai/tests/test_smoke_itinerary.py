@@ -371,3 +371,24 @@ def test_rehearsal_records_injected_weather():
     )
     trip_date = (smoke_date + dt.timedelta(days=1)).isoformat()
     assert result["weather"] == {trip_date: 80}  # 여행일 예보만 (요청 날짜 필터)
+
+
+def test_rehearsal_accepts_event_store(tmp_path):
+    """TRIP-421 — 행사 저장소 주입 관통 (실 호출 0, fake만). 결과 스키마 무변."""
+    from trippilot.background.event_store import JsonEventStore
+    from trippilot.domain.event import EventInfo, EventType
+
+    entries = _entries(_TWO_REGIONS)
+    smoke_date = dt.date(2026, 8, 14)
+    selection = select_rehearsal_pois(entries, smoke_date.isoformat())
+    store = JsonEventStore(tmp_path / "events.json")
+    store.upsert("부산", (EventInfo(
+        event_id="e1", name="테스트축제", event_type=EventType.FESTIVAL,
+        start=smoke_date + dt.timedelta(days=1), end=smoke_date + dt.timedelta(days=1),
+        coord=selection.anchor.coord, address=None),), dt.datetime.now(dt.timezone.utc))
+
+    result = run_rehearsal(
+        selection, llm=UnwiredLlm(), model_id="dev-unwired", smoke_date=smoke_date,
+        events=store,
+    )
+    assert len(result["slots"]) >= 1  # 행사 주입이 리허설을 깨지 않는다

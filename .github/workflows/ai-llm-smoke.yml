@@ -123,6 +123,20 @@ jobs:
             exit 0
           fi
           echo "pois_path=$POIS" >> "$GITHUB_OUTPUT"
+      - name: 행사 저장소 복원 (collect-state → collected_events.json, TRIP-421)
+        # 선택 단계 — 없으면 행사 보너스 없이 리허설 진행 (기능 부재 ≠ 실패).
+        # 임시 파일에 받아 성공했을 때만 자리에 (빈 파일 함정 방지, TRIP-348 선례).
+        if: steps.fetch-pois.outputs.skipped != 'true'
+        run: |
+          rm -f collected_events.json collected_events.json.tmp
+          if git fetch origin collect-state 2>/dev/null \
+             && git show FETCH_HEAD:collected_events.json > collected_events.json.tmp 2>/dev/null; then
+            mv collected_events.json.tmp collected_events.json
+            echo "::notice::행사 저장소 복원 — 리허설에 주입"
+          else
+            rm -f collected_events.json.tmp
+            echo "::notice::행사 저장소 없음 — 행사 보너스 없이 진행"
+          fi
       - name: 일정 생성 리허설 (랜덤 지역 6~8 POI → generate 관통)
         if: steps.fetch-pois.outputs.skipped != 'true'
         env:
@@ -142,6 +156,8 @@ jobs:
           TMAP_API_KEY: ${{ secrets.TMAP_API_KEY }}
           # TRIP-409 — 있으면 KMA 실예보 주입(실내/야외 보정), 없으면 무보정
           WEATHER_API: ${{ secrets.WEATHER_API }}
+          # TRIP-421 — 있으면 행사 근접 보너스 주입, 없으면 무보정
+          EVENTS_STORE: collected_events.json
         run: uv run python scripts/smoke_itinerary.py
       - name: 잡 서머리 (리허설 시각표)
         if: steps.fetch-pois.outputs.skipped != 'true'
