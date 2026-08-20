@@ -6,19 +6,23 @@ import { KakaoMapView, type MapCenter, type MapPin } from '@/shared/map';
 
 import type { ActualRouteView } from '../model/actualDistance';
 import type { LivePlanToggle } from '../model/liveViewStore';
+import type { MapPeekView } from '../model/mapPeek';
 
 /**
- * TRIP-397 · LiveMapScreen(i02·i03) — 여행 중 일정 지도.
+ * TRIP-397 · LiveMapScreen(i02·i03) — 여행 중 일정 지도(Figma 재정합).
  *
- * 계획 동선(슬롯 핀 + 자동 연결선)을 인터랙티브 지도(viewOnly 미전달 = 기본 제스처 허용 —
- * 드래그·핀치·줌, 다른 화면의 제스처 차단과 다르다)로 보이고, 계획｜실제 토글로 실제 경로를 겹친다.
+ * 세로 컬럼: ①계획 동선｜실제 경로 토글(지도 위쪽 **형제** — 오버레이 아님) → ②지도 250px 고정
+ * 블록 → ③peek 요약(남은 곳 수 또는 실제 거리 + 지금/다음 2행 + 전체 일정 링크 + 각주).
  *
- * 위치 동의가 없으면 실제 경로 레이어는 **비활성 + 사유**이고 계획 동선만 보인다(BR-U4-42 ·
- * PBT-U4-F3). 실제 거리는 `actualDistance`(거리만, 소요시간·걸음 수 없음 — INV-3·BR-U4-41).
+ * ⚠️ 결함#2 근본 수정 — 토글을 지도(WebView) 위 절대배치 오버레이로 두면 WebView 가 터치를
+ * 먹어 안 눌린다(repo-traps). 그래서 여기엔 절대배치를 쓰지 않고 지도와 세로로 나눈다. 렌더
+ * 위치는 jest 가 원리적으로 못 본다(가짜 카카오 SDK Proxy) — 소스 스캔 가드 + 6-b 실기 탭이 그물.
  *
- * ⚠️ 실기 전용(jest 무심판): 인터랙티브 제스처와 실제 경로 **점선 폴리라인**(shared/map 확장,
- * 별 게이트)은 여기서 그리지 않는다 — 가짜 카카오 SDK가 Proxy라 자동 심판이 없다(repo-traps).
- * 이 칸은 계획 핀·연결선·토글·gating·각주까지만 구조로 담보한다.
+ * peek 의 진행 상태(예정/진행/완료)는 raw 슬롯이 못 가져, 부모(LiveItineraryScreen)가
+ * buildMapPeek 로 도출해 `peek` prop 으로 내린다(★1). `slots` 는 핀 도출용으로 그대로 유지한다.
+ *
+ * 위치 동의가 없으면 실제 경로는 비활성 + 사유이고 계획 동선만 보인다(BR-U4-42 · PBT-U4-F3).
+ * 실제 거리는 거리만(소요시간·걸음 수 없음 — INV-3 · BR-U4-41).
  */
 
 const FOOTNOTE = '앱을 켜 둔 구간만 기록돼요';
@@ -26,8 +30,8 @@ const FOOTNOTE = '앱을 켜 둔 구간만 기록돼요';
 const DEFAULT_CENTER: MapCenter = { lat: 37.5665, lng: 126.978 };
 
 const TOGGLES: { key: LivePlanToggle; label: string }[] = [
-  { key: 'plan', label: '계획' },
-  { key: 'actual', label: '실제' },
+  { key: 'plan', label: '계획 동선' },
+  { key: 'actual', label: '실제 경로' },
 ];
 
 function buildPins(slots: ItineraryDaysItemSlotsItem[]): MapPin[] {
@@ -43,6 +47,37 @@ export interface LiveMapScreenProps {
   toggle: LivePlanToggle;
   onToggle: (toggle: LivePlanToggle) => void;
   actualRoute: ActualRouteView;
+  /** 사전 도출된 peek(부모가 buildMapPeek 로 만들어 주입, ★1). */
+  peek: MapPeekView;
+  /** "전체 일정 >" 링크 → 부모가 itinerary 세그먼트로 전환. */
+  onPressFullItinerary: () => void;
+}
+
+function PeekRow({
+  badge,
+  testID,
+  name,
+}: {
+  badge: string;
+  testID: string;
+  name: string;
+}): ReactElement {
+  return (
+    <View className="flex-row items-center gap-sm">
+      <View className="rounded-pill bg-surface-soft px-sm py-[2px]">
+        <Text className="font-noto-medium text-caption text-muted">
+          {badge}
+        </Text>
+      </View>
+      <Text
+        testID={testID}
+        className="font-noto-medium text-label text-body"
+        numberOfLines={1}
+      >
+        {name}
+      </Text>
+    </View>
+  );
 }
 
 export function LiveMapScreen({
@@ -50,18 +85,18 @@ export function LiveMapScreen({
   toggle,
   onToggle,
   actualRoute,
+  peek,
+  onPressFullItinerary,
 }: LiveMapScreenProps): ReactElement {
   const pins = buildPins(slots);
-  const center = pins.length > 0 ? { lat: pins[0].lat, lng: pins[0].lng } : DEFAULT_CENTER;
+  const center =
+    pins.length > 0 ? { lat: pins[0].lat, lng: pins[0].lng } : DEFAULT_CENTER;
 
   return (
     <View testID="execution-live-map" className="flex-1">
-      {/* 인터랙티브 지도 — 계획 핀 + 자동 연결선(계획 동선). viewOnly 를 안 넘겨 기본값
-          (제스처 허용)으로 둔다 — 다른 화면의 제스처 차단과 다르다(i02·i03 자유 탐색). */}
-      <KakaoMapView center={center} pins={pins} />
-
-      <View className="absolute bottom-0 left-0 right-0 gap-sm bg-canvas/90 px-lg py-md">
-        <View className="flex-row gap-xs">
+      {/* ① 계획 동선｜실제 경로 토글 — 지도 위쪽 형제. 좌측 정렬 흰 pill 세그먼트. */}
+      <View className="px-lg py-sm">
+        <View className="flex-row self-start gap-[4px] rounded-button bg-surface-soft p-[4px]">
           {TOGGLES.map(({ key, label }) => {
             const selected = key === toggle;
             return (
@@ -69,13 +104,13 @@ export function LiveMapScreen({
                 key={key}
                 testID={`execution-map-${key}-toggle`}
                 onPress={() => onToggle(key)}
-                className={`rounded-button px-lg py-sm ${
-                  selected ? 'bg-ink' : 'bg-surface-soft'
+                className={`w-[79px] items-center rounded-button py-[6px] ${
+                  selected ? 'bg-canvas' : ''
                 }`}
               >
                 <Text
                   className={`font-noto-medium text-label ${
-                    selected ? 'text-on-primary' : 'text-muted'
+                    selected ? 'text-ink' : 'text-muted'
                   }`}
                 >
                   {label}
@@ -84,22 +119,65 @@ export function LiveMapScreen({
             );
           })}
         </View>
+      </View>
 
-        {toggle === 'actual' &&
-          (actualRoute.enabled ? (
-            <Text
-              testID="execution-map-actual-distance"
-              className="font-noto-medium text-label text-body"
-            >
-              {`실제 이동 ${actualRoute.distanceKm.toFixed(1)}km`}
-            </Text>
-          ) : (
-            <View testID="execution-map-actual-disabled">
-              <Text className="font-noto text-label text-muted">
-                {actualRoute.reason}
+      {/* ② 계획 핀 + 자동 연결선 지도. 250px 고정 블록(flex-1 전체 아님) — 위 토글·아래 peek 와
+          컬럼을 이룬다. viewOnly 미전달 = 기본 제스처 허용(자유 탐색, i02·i03). */}
+      <View className="h-[250px]">
+        <KakaoMapView center={center} pins={pins} />
+      </View>
+
+      {/* ③ peek 요약 — 지금/다음 2행은 양쪽 토글 공통, 헤더는 토글로 갈린다(상호배타 ★2). */}
+      <View className="gap-sm px-lg py-md">
+        <View testID="execution-map-peek" className="gap-sm">
+          <View className="flex-row items-center justify-between">
+            {toggle === 'plan' ? (
+              <Text
+                testID="execution-map-peek-remaining"
+                className="font-noto-medium text-label text-ink"
+              >
+                {`남은 ${peek.remainingCount}곳`}
               </Text>
-            </View>
-          ))}
+            ) : actualRoute.enabled ? (
+              <Text
+                testID="execution-map-actual-distance"
+                className="font-noto-medium text-label text-ink"
+              >
+                {`실제 이동 ${actualRoute.distanceKm.toFixed(1)}km`}
+              </Text>
+            ) : (
+              <View testID="execution-map-actual-disabled">
+                <Text className="font-noto text-label text-muted">
+                  {actualRoute.reason}
+                </Text>
+              </View>
+            )}
+
+            <Pressable
+              testID="execution-map-peek-all"
+              onPress={onPressFullItinerary}
+            >
+              <Text className="font-noto-medium text-label text-muted">
+                전체 일정 ›
+              </Text>
+            </Pressable>
+          </View>
+
+          {peek.now && (
+            <PeekRow
+              badge="지금"
+              testID="execution-map-peek-now"
+              name={peek.now.name}
+            />
+          )}
+          {peek.next && (
+            <PeekRow
+              badge="다음"
+              testID="execution-map-peek-next"
+              name={peek.next.name}
+            />
+          )}
+        </View>
 
         <Text
           testID="execution-map-footnote"

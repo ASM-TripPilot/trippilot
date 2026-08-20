@@ -86,6 +86,15 @@ describe('LiveItineraryScreen', () => {
     expect(screen.queryByTestId('execution-live-slot-2026-08-20#a')).toBeNull();
   });
 
+  it('S8 지도 세그먼트 peek가 slots에서 도출된 "남은 N곳"을 그린다 (03bB 경고-1 배선 seam 잠금)', () => {
+    // baseProps.slots = 예정 2개 → LiveItineraryScreen이 buildMapPeek로 도출해 LiveMapScreen에
+    // 넘기는 그 배선 한 줄을 잠근다(도출·렌더는 각자 잠기나 그 사이 배선은 무심판이었다).
+    render(<LiveItineraryScreen {...baseProps} segment="map" />);
+    expect(
+      screen.getByTestId('execution-map-peek-remaining')
+    ).toHaveTextContent('남은 2곳');
+  });
+
   it('S4 일자 칩·세그먼트를 누르면 콜백이 그 값으로 불린다', () => {
     const onSelectDay = jest.fn();
     const onSelectSegment = jest.fn();

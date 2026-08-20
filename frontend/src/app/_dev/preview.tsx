@@ -27,10 +27,10 @@ import {
 } from '@/features/home/model/homeFixtures';
 import {
   PREVIEW_PLACES,
+  PREVIEW_REGIONS,
   PREVIEW_SAVED_PLACES,
   PREVIEW_SAVED_POI_IDS,
 } from '@/features/explore/model/exploreFixtures';
-import { REGIONS } from '@/features/explore/model/regions';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -561,7 +561,10 @@ const TRIP_WIZARD_BASE: TripWizardStep1ScreenProps = {
   party: 2,
   companionType: '친구',
   preferenceChips: ['감성 골목', '야경'],
-  regions: REGIONS,
+  // 위저드 화면 계약 `{code, name}` 으로 어댑트(선택 가능만) — 배선 `TripNewStep1Page` 와 같은 형태.
+  regions: PREVIEW_REGIONS.filter((region) => region.selectable).map(
+    (region) => ({ code: region.regionCode, name: region.name })
+  ),
   canProceed: true,
   onBack: noop,
   onAddDestination: noop,
@@ -1043,10 +1046,10 @@ const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // ── e00·d1b 지역 선택 4키(TRIP-183) — 컨테이너 없이 화면에 props를 직접 넣는다 ──
-  // ⚠️ 프리뷰는 정적이라 **실제 OS 권한 다이얼로그는 뜨지 않는다.** 여기서 보는 것은
-  //    "권한이 거부됐을 때 화면이 어떻게 생겼나"까지고, 다이얼로그 자체는 실제 라우트
-  //    (`/explore/region`)에서 '내 주변'을 눌러야 확인된다. 둘은 다른 확인이다.
+  // ── e00·d1b 지역 선택 4키(TRIP-445) — 컨테이너 없이 화면에 props를 직접 넣는다 ──
+  // 서버 카탈로그(`PREVIEW_REGIONS`)를 그린다. `-default`/`-trip`은 선택 가능 카드 + "준비 중"
+  // (poiCount=0) + 묶음 행(selectable=false)을 한 화면에서 대조하고, `-error`/`-loading`은
+  // 조회 실패·대기 얼굴을 본다(빈 목록으로 뭉개지 않는지 — INV-4).
   {
     key: 'stay-region-default',
     label: '지역 선택 · 숙소',
@@ -1055,11 +1058,12 @@ const PREVIEW_STATES: PreviewState[] = [
       <RegionPickerScreen
         purpose="stay"
         query=""
-        regions={REGIONS}
-        nearby={{ kind: 'idle' }}
+        regions={PREVIEW_REGIONS}
+        isLoading={false}
+        isError={false}
         onChangeQuery={noop}
         onSelectRegion={noop}
-        onSelectNearby={noop}
+        onRetry={noop}
         onBack={noop}
       />
     ),
@@ -1069,49 +1073,52 @@ const PREVIEW_STATES: PreviewState[] = [
     label: '지역 선택 · 여행지',
     login: null,
     render: () => (
-      // BR-U1-07 확인용 — 같은 컴포넌트에서 카피만 바뀌고 '내 주변'이 사라진다
+      // BR-U1-07 확인용 — 같은 컴포넌트에서 카피만 바뀐다.
       <RegionPickerScreen
         purpose="trip"
         query=""
-        regions={REGIONS}
-        nearby={{ kind: 'idle' }}
+        regions={PREVIEW_REGIONS}
+        isLoading={false}
+        isError={false}
         onChangeQuery={noop}
         onSelectRegion={noop}
-        onSelectNearby={noop}
+        onRetry={noop}
         onBack={noop}
       />
     ),
   },
   {
-    key: 'stay-nearby-denied',
-    label: '내 주변 · 등록숙소 대체',
+    key: 'stay-region-error',
+    label: '지역 선택 · 조회 실패',
     login: null,
     render: () => (
       <RegionPickerScreen
         purpose="stay"
         query=""
-        regions={REGIONS}
-        nearby={{ kind: 'fallback' }}
+        regions={[]}
+        isLoading={false}
+        isError
         onChangeQuery={noop}
         onSelectRegion={noop}
-        onSelectNearby={noop}
+        onRetry={noop}
         onBack={noop}
       />
     ),
   },
   {
-    key: 'stay-nearby-no-fallback',
-    label: '내 주변 · 대체 불가',
+    key: 'stay-region-loading',
+    label: '지역 선택 · 불러오는 중',
     login: null,
     render: () => (
       <RegionPickerScreen
         purpose="stay"
         query=""
-        regions={REGIONS}
-        nearby={{ kind: 'unavailable', reason: 'denied-no-fallback' }}
+        regions={[]}
+        isLoading
+        isError={false}
         onChangeQuery={noop}
         onSelectRegion={noop}
-        onSelectNearby={noop}
+        onRetry={noop}
         onBack={noop}
       />
     ),
@@ -2184,6 +2191,89 @@ const PREVIEW_STATES: PreviewState[] = [
         actualRoute={{
           enabled: false,
           reason: '위치 권한을 켜면 기록돼요',
+          distanceKm: 0,
+        }}
+        tripTitle="부산 여행"
+        subtitle="6월 11일 목요일 · 오늘 일정"
+        onPressTab={noop}
+      />
+    ),
+  },
+  // i02 여행 중 지도 · 계획 동선(TRIP-397) — 지도 위쪽 형제 토글 + 250px 지도 + peek("남은 N곳"
+  // + 지금/다음 2행 + 전체 일정 >). buildMapPeek 로 도출되는 peek 가 실배선과 같은 값.
+  {
+    key: 'live-map-plan',
+    label: '여행 중 지도 · 계획(i02)',
+    login: null,
+    render: () => (
+      <LiveItineraryScreen
+        days={[
+          { date: '2026-06-10', slots: [] },
+          { date: '2026-06-11', slots: [] },
+          { date: '2026-06-12', slots: [] },
+        ]}
+        activeDayIndex={1}
+        slots={LIVE_ITINERARY_PREVIEW_SLOTS}
+        segment="map"
+        onSelectDay={noop}
+        onSelectSegment={noop}
+        toggle="plan"
+        onToggle={noop}
+        actualRoute={{ enabled: false, reason: null, distanceKm: 0 }}
+        tripTitle="부산 여행"
+        subtitle="6월 11일 목요일 · 오늘 일정"
+        onPressTab={noop}
+      />
+    ),
+  },
+  // i03 여행 중 지도 · 실제 경로 + 위치 동의(TRIP-397) — 헤더 peek 가 "실제 이동 X km" 로 갈린다.
+  {
+    key: 'live-map-actual',
+    label: '여행 중 지도 · 실제(i03)',
+    login: null,
+    render: () => (
+      <LiveItineraryScreen
+        days={[
+          { date: '2026-06-10', slots: [] },
+          { date: '2026-06-11', slots: [] },
+          { date: '2026-06-12', slots: [] },
+        ]}
+        activeDayIndex={1}
+        slots={LIVE_ITINERARY_PREVIEW_SLOTS}
+        segment="map"
+        onSelectDay={noop}
+        onSelectSegment={noop}
+        toggle="actual"
+        onToggle={noop}
+        actualRoute={{ enabled: true, reason: null, distanceKm: 1.4 }}
+        tripTitle="부산 여행"
+        subtitle="6월 11일 목요일 · 오늘 일정"
+        onPressTab={noop}
+      />
+    ),
+  },
+  // i03 엣지 — 실제 경로인데 위치 미동의: 비활성 사유만, 거리 없음(BR-U4-42).
+  {
+    key: 'live-map-actual-off',
+    label: '여행 중 지도 · 실제·미동의(i03)',
+    login: null,
+    render: () => (
+      <LiveItineraryScreen
+        days={[
+          { date: '2026-06-10', slots: [] },
+          { date: '2026-06-11', slots: [] },
+          { date: '2026-06-12', slots: [] },
+        ]}
+        activeDayIndex={1}
+        slots={LIVE_ITINERARY_PREVIEW_SLOTS}
+        segment="map"
+        onSelectDay={noop}
+        onSelectSegment={noop}
+        toggle="actual"
+        onToggle={noop}
+        actualRoute={{
+          enabled: false,
+          reason: '위치 권한을 켜면 실제 이동 경로가 기록돼요',
           distanceKm: 0,
         }}
         tripTitle="부산 여행"

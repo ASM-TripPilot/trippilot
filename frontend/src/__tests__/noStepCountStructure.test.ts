@@ -20,8 +20,7 @@ const ROOT = path.resolve('src');
 const SCAN_DIRS = ['features', 'shared', 'pages', 'app'];
 
 /** 걸음-세기 합성어만. `stepper`·`step1`·`보통`은 안 걸린다. */
-const STEP_COUNT =
-  /pedometer|step[-_ ]?count|걸음\s*수|만보|보수계/i;
+const STEP_COUNT = /pedometer|step[-_ ]?count|걸음\s*수|만보|보수계/i;
 
 function stripComments(source: string): string {
   return source

@@ -7,6 +7,7 @@ import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import type { ActualRouteView } from '../model/actualDistance';
 import type { LivePlanToggle, LiveSegment } from '../model/liveViewStore';
+import { buildMapPeek } from '../model/mapPeek';
 import type { ProjectedSlot, SlotState } from '../model/slotProgress';
 import {
   RailActiveGlyph,
@@ -158,6 +159,10 @@ export function LiveItineraryScreen({
           toggle={toggle}
           onToggle={onToggle}
           actualRoute={actualRoute}
+          // peek 은 진행 상태가 필요해 raw slots 로는 못 만든다 — ProjectedSlot[] 을 가진 여기서
+          // 도출해 내린다(★1, page 로 안 올리는 이유는 03B). "전체 일정 >" 은 일정 세그먼트 전환.
+          peek={buildMapPeek(slots)}
+          onPressFullItinerary={() => onSelectSegment('itinerary')}
         />
       ) : (
         <ScrollView contentContainerClassName="gap-md px-lg pb-[112px] pt-xs">
