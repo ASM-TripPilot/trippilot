@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.domain
 
 import com.trippilot.core.error.ConflictDetected
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -115,14 +116,19 @@ data class GenerationSession(
  * 백그라운드가 죽으면 세션이 RUNNING 인 채로 영원히 남는다. 그것이 계정 제한을 붙잡으면
  * **다른 여행을 영영 못 만들게 된다** — 규칙이 사용자를 가둔다. 오래된 세션은 제한에서 제외한다.
  *
- * 상한은 전체 생성 시한(20초)과 2차 생성을 다 합쳐도 한참 남는 값이다 —
- * 정상 생성을 잘라내면 안 되고, 죽은 세션을 오래 붙잡아도 안 된다.
+ * 기준값은 [GENERATION_STALE_AFTER] 하나다 — 중단된 2차를 쓸어담는 스위퍼가 쓰는 것과 **같은 값**이다.
+ * 둘이 갈리면 "멈춘 생성"이 두 뜻이 되어, 같은 사고에도 day1 전에 죽으면 이만큼, 뒤에 죽으면 저만큼
+ * 기다리게 된다. 사용자에게는 같은 상황이다.
  */
 fun GenerationSession.isStale(at: Instant): Boolean =
-    startedAt.isBefore(at.minusSeconds(STALE_AFTER_SECONDS))
+    startedAt.isBefore(at.minus(GENERATION_STALE_AFTER))
 
-/** 10분. 정상 생성의 수십 배라 살아 있는 세션을 자르지 않는다. */
-private const val STALE_AFTER_SECONDS = 600L
+/**
+ * **멈춘 생성으로 보는 시간.** 2차 최대 시한(약 22초)의 십수 배라 진행 중인 생성을 건드리지 않는다.
+ *
+ * 여기 한 곳에서만 정한다 — 이 값을 쓰는 곳이 둘이다(계정 제한 해제 · 중단된 PARTIAL 정리).
+ */
+val GENERATION_STALE_AFTER: Duration = Duration.ofMinutes(5)
 
 enum class GenerationStatus { RUNNING, DAY1_READY, COMPLETED, FAILED, CANCELED }
 

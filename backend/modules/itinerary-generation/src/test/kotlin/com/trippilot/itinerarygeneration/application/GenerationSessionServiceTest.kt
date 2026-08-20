@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.itinerarygeneration.domain.GENERATION_STALE_AFTER
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.GenerationStatus
 import com.trippilot.trip.api.TripFacade
@@ -234,6 +235,31 @@ class GenerationSessionConcurrencyTest : StringSpec({
 
         s.tripId shouldBe tripB
         repo.rows[stuck.sessionId]!!.isRunning shouldBe false // 조용히 두지 않고 닫는다(INV-4)
+    }
+
+    /**
+     * **경계를 못으로 박는다.** 위 테스트는 30분을 써서 기준값을 5분에서 10분으로 바꿔도 통과한다 —
+     * 그러면 그 값은 아무도 지키지 않는 값이 된다. 여기서 양쪽을 함께 고정한다.
+     *
+     * 기준은 [GENERATION_STALE_AFTER] 하나이고, 중단된 PARTIAL 스위퍼도 같은 값을 본다.
+     * 갈리면 같은 사고에 day1 전후로 대기 시간이 달라진다.
+     */
+    "기준 직전은 아직 살아 있는 것으로 보고 막는다" {
+        val repo = FakeGenerationSessions()
+        svc(repo).start(acc, tripA, GenerationMode.FULLY_AI)
+
+        val justBefore = at.plus(GENERATION_STALE_AFTER).minusSeconds(1)
+
+        shouldThrow<ConflictDetected> { svc(repo, justBefore).start(acc, tripB, GenerationMode.FULLY_AI) }
+    }
+
+    "기준을 넘기면 멈춘 것으로 보고 풀어 준다" {
+        val repo = FakeGenerationSessions()
+        svc(repo).start(acc, tripA, GenerationMode.FULLY_AI)
+
+        val justAfter = at.plus(GENERATION_STALE_AFTER).plusSeconds(1)
+
+        svc(repo, justAfter).start(acc, tripB, GenerationMode.FULLY_AI).tripId shouldBe tripB
     }
 
     "다른 계정의 생성은 내 제한과 무관하다" {
