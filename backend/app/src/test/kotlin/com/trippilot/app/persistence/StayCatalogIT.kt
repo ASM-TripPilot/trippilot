@@ -117,6 +117,35 @@ class StayCatalogIT : AbstractPostgresIntegrationTest() {
         content.search("종로구").truncated shouldBe false
     }
 
+    /**
+     * **행정구가 있는 일반시도 조회돼야 한다.**
+     *
+     * 숙소를 `수원시 장안구`(41111) 코드로 저장하면, 사용자가 고를 수 있는 `수원시`(41110)로 조회할 때
+     * 접두사가 안 맞아 **0건**이 된다 — 41111 은 41110 으로 시작하지 않는다. 그래서 생성기가 행정구를
+     * 상위 시로 접는다(POI 쪽 `RegionResolver` 와 같은 규칙).
+     *
+     * 처음 검수 때 `종로구`·`서울`·`제주` 로만 확인해 **행정구 없는 지역만 표본에 있었고** 놓쳤다.
+     * 경기도만 9개 시가 해당한다.
+     */
+    @Test
+    fun `행정구가 있는 일반시로도 숙소가 조회된다`() {
+        listOf("수원시", "성남시", "창원시", "청주시", "포항시").forEach { city ->
+            content.search(city).stays.size shouldBeGreaterThan 0
+        }
+    }
+
+    /** 목적지로 고를 수 없는 코드에는 숙소가 붙어 있으면 안 된다 — 그 코드로는 아무도 조회하지 않는다. */
+    @Test
+    fun `고를 수 없는 지역 코드에 숙소가 저장되지 않는다`() {
+        jdbc.queryForObject(
+            """
+            SELECT count(*) FROM stay s JOIN region r ON r.region_code = s.region_code
+            WHERE NOT r.selectable
+            """.trimIndent(),
+            Int::class.java,
+        )!! shouldBe 0
+    }
+
     /** 카탈로그에 없는 이름은 빈 결과다 — 지어낸 매칭으로 엉뚱한 지역 숙소를 보여주지 않는다. */
     @Test
     fun `모르는 지역명은 빈 결과다`() {
