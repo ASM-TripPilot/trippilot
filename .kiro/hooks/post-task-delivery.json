@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "작업 완료 후 Delivery (Push + Jira + Slack)",
+      "trigger": "PostTaskExec",
+      "description": "Spec task 완료 후 자동으로 git push, PR 생성, Jira 상태를 In Review로 전환, Slack #dev 채널에 작업 완료 알림을 보낸다.",
+      "action": {
+        "type": "agent",
+        "prompt": "작업(task)이 완료되었다. 아래 delivery 절차를 순서대로 수행하라:\n\n1. **Git Push**: 현재 브랜치의 변경사항을 커밋하고 원격에 push한다.\n   - 브랜치명에 Jira 키(TRIP-XXX)가 포함되어 있는지 확인\n   - Conventional Commits 형식으로 커밋 메시지 작성\n   - `git push -u origin <branch>` 실행\n\n2. **PR 생성** (아직 PR이 없다면):\n   - `gh pr create --base develop --title \"<type>: <desc> (TRIP-XXX)\" --body \"<한국어 설명>\"`\n   - PR 제목은 Conventional Commits + Jira 키 포함\n\n3. **Jira 상태 업데이트**:\n   - 현재 브랜치에서 Jira 키(TRIP-XXX)를 추출\n   - 해당 티켓의 상태를 \"In Review\"로 전환 (PR 생성 시)\n   - Atlassian MCP 도구 사용: transitionJiraIssue\n\n4. **Slack 알림** (#dev 채널, ID: C0BEQH90DM5):\n   - 작업 완료 보고 메시지를 #dev 채널에 전송\n   - 포함 내용: Jira 티켓 키, 작업 요약, PR 링크\n   - 형식 예시: \"✅ TRIP-123 작업 완료 — <작업 요약>\\nPR: <link>\"\n\n각 단계에서 실패하면 실패 사유를 알려주되, 나머지 단계는 계속 진행한다."
+      }
+    }
+  ]
+}
