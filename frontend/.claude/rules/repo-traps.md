@@ -50,11 +50,11 @@
 ## 바텀시트 (`@gorhom/bottom-sheet`)
 
 - **딤 전면 커버·시트 실제 열림은 자동 심판이 없다** → `__mocks__/@gorhom/bottom-sheet.tsx`는 `BottomSheet`를 어떤 prop을 줘도 children을 무조건 렌더하는 통과 컴포넌트로 대체한다. 딤의 `bg-scrim/40` 색 토큰은 렌더 트리에 className으로 남아 잡히지만, 실제로 화면을 덮는 `absolute inset-0`(위치)와 시트의 실제 열림/닫힘(`snapPoints`·gorhom 런타임)은 jest가 원리적으로 못 본다 — 지도 제스처 차단(viewOnly)과 같은 함정 계열. 이 목을 공유하는 화면(로그인 시트 3종·`SlotTimeSheet`·`TripBaseFixSheet`·`PinDetailSheet`·`MustVisitTimeScreen`·`TripDateSheet`) 전부 해당, 실기 스모크가 유일한 그물.
+- **`TripBaseFixSheet`는 인터랙티브 지도를 바텀시트 안에 넣은 유일 사례라 제스처 prop 회귀가 조용히 재발할 수 있다** (TRIP-455) → 같은 통과형 목이라 `enableContentPanningGesture={false}`를 주든 안 주든 렌더 결과가 동일하다(jest가 이 prop의 유무를 원리적으로 구분 못 함). 이 prop이 "이 위치로 확인" 무반응의 **진짜 원인 수정**(콘텐츠 pan 제스처가 WebView 롱프레스를 삼키는 것을 막음)인데, 지우면 51/51 그대로 green이라 아무 심판도 못 잡는다(code-critic 경고-1 실측). 이 파일을 다시 만질 때 이 줄을 실수로 지우지 않았는지는 6-b 실기(`trip-new-step2-fixsheet-map` 프리뷰, 롱프레스→핀)로만 확인된다.
 
 ## itinerary
 
 - **INV-3: 소요시간 비표시, 거리만.** DTO·화면 어디에도 `duration` 필드를 두지 않는다.
-- **h05 CTA·건너뛰기는 아직 아무도 안 부른다** → `MustVisitPickerScreen`의 `onProceed`·`onSkip`은 생산자가 0이다(h09 미착수, 배선이 `proceedBlockedReason`을 항상 넘겨 활성 분기가 프로덕션 경로에서 도달 불가). 로직을 추가해도 지금은 아무 화면에서도 실행되지 않는다.
 - **h09 생성 중 화면의 무심판 3곳** (TRIP-305, 코드는 현재 옳음 — 회귀 방지 심판만 없음) → ① **마운트 POST "1회" 가드 무심판**: `GeneratingPage.tsx`의 `firedRef`를 지워도 승인 통합 테스트 전부 green(목이 컴포넌트를 pending→settled로 재렌더 안 시킴). 실 react-query는 재렌더돼 **생성 POST 2회=일정 2개** 생성 가능. jest·tsc·자체검증 어느 층도 못 봄. ② **체크리스트 정직성 무심판**(⚑C): `GeneratingScreen`의 3단계에 `<Text>완료</Text>`/`<Text>대기</Text>` 가짜 진척을 넣어도 5심판 green(S1은 3행·라벨만, S2는 `%`·`초`·`분/시간`만 봄) — in-flight엔 세션 데이터가 없어 단계 완료를 알 수 없다는 불변식이 기계 강제 없음. ③ **[백그라운드로] 목적지 무심판**: 통합 테스트가 "draft·generating 아님"만 봐서 엉뚱한 forward(`/(tabs)/records` 등)로 바꿔도 green. 목적지 자체(`/(tabs)/itinerary`)는 `AFTER_WIZARD_ROUTE` 재사용이라 의도적이나, 그 탭이 `trips[0]`(첫 여행)으로 리다이렉트해 **기존 여행 있는 재방문자는 생성 중인 여행이 아닌 옛 일정에 착지**(일정 탭의 기존 한계, h09 신규 결함 아님).
 - **h09 비결정형 진행바 애니메이션은 자동 심판 사각** → `IndeterminateBar`(RN `Animated`)는 jest에서 `onLayout` 미발화로 폭 0 → 정지. testID(`itinerary-generating-progress`)는 present라 순수 `<View/>`로 바꿔도 green. 6-b 실기가 세그먼트 **실렌더**만 확인하고 "좌→우로 흐르는지"는 정지 스크린샷이라 못 봄 — 지도 제스처(`viewOnly`)·바텀시트류와 같은 실기 전용 계열.
 - **h10 게이지 다중일차(dayCount≥2 PARTIAL) 도출은 무심판** (TRIP-337, 코드는 현재 옳음) → `buildGenerationGauge`(`draftView.ts`)는 `tabs.hasData`에서 옳게 일반 도출하지만, 승인 테스트는 day1만 도착한 단일 조합(`[done, active, waiting]`)만 잰다. 인덱스 하드코딩 뮤테이션(`i===0?'done':i===1?'active':'waiting'`)도 이 조합에서 우연히 같은 값을 내 살아남는다 — 3일 여행에 day1·day2 동시 도착(dayCount:2) PARTIAL이면 옳은 도출은 `[done, done, active]`인데 그 뮤테이션은 여전히 `[done, active, waiting]`(이미 도착한 day2를 "생성 중"으로 거짓 표시)을 낸다. 단 계약상 서버가 day1을 먼저 주는 순서를 보장해(01b) dayCount≥2 PARTIAL이 실서비스에 아직 등장하지 않아 현재는 결함이 아니라 무심판(도달 불가, 03b W1). 게이지 채움비율·스켈레톤 애니메이션은 정지 스크린샷 한계로 원리상 실기도 못 보는 h09 IndeterminateBar 계열.
@@ -81,6 +81,11 @@
 
 - **`TripNewStep1Page`·`RegionPickerScreen`을 렌더하는 node-버킷 테스트는 `useRegions`를 목해야 크래시 안 남** → 두 화면 모두 `useRegions()`(react-query)를 물어 `QueryClientProvider` 없는 node 버킷에서 렌더하면 `No QueryClient set` throw. 승인 테스트는 목을 걸었지만 sibling 테스트(`.budget`·`.mustVisit`·`.stayImport`·`tripWizardEntryReset`)는 처음엔 안 걸려 있었다(qa n=1 FAIL 실측) — 이 화면들을 렌더하는 새 테스트 파일을 추가할 때마다 같은 목이 필요하다는 사실을 기계가 강제하지 않는다.
 - **`regionTint` 팔레트 hex는 어느 raw-hex 스캔에도 안 걸린다** → `placeExploreStructure.test.ts`의 raw-hex 가드(AC-G7)는 `PlaceExploreScreen.tsx` 한 파일만 대상이고 `RegionPickerScreen.tsx`를 주석으로 명시 제외한다. `regionCatalogStructure.test.ts`도 hex 값 자체는 안 본다(URL·zustand·duration만 스캔). `regions.ts`의 `TINT_PALETTE`를 임의 hex로 바꿔도 어떤 심판도 안 잡는다.
+
+## 장소 상세 (explore, d06, TRIP-456)
+
+- **d06 조회 오류가 notFound로 접힌다** → `PlaceDetailPage.tsx`는 `GET /places`가 5xx·네트워크로 실패해도 별도 오류 얼굴이 없어 "장소를 찾을 수 없어요"로 접는다(`live-place`/i05와 동형 한계, 위 execution 절 참고). 콜드 딥링크+조회 실패에서만 발동, 웜 캐시 주 동선(d04→d06·d02→d06)은 무해. 오류 얼굴을 붙일 땐 `LiveItineraryPage`의 `resolveLiveState`(error/notFound 분리) 선례를 복제한다.
+- **d06 하트 해제(un-save) 경로에 회귀 심판이 없다** → `PlaceDetailPage.tsx`의 `remove(poiId)` 분기(이미 담긴 하트 press)를 누르는 통합테스트가 0이라, `remove` 인자를 잘못 바꾸거나 조건을 반전해도 승인 6스위트 전부 green. 코드는 현재 옳다(`remove(poiId)`가 내부에서 `findSavedPlaceId`로 역인덱스, d02와 같은 함수) — 지적 대상은 동작이 아니라 보호 심판 부재(h20 add→PUT 무심판과 동형 계열).
 
 ## 작업 관례
 
