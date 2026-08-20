@@ -9,6 +9,7 @@ dependencies = [
     "fastapi>=0.115",
     "openai>=2.53.0",
     "ortools>=9.15.6755",
+    "psycopg[binary]>=3.2",
     "pyyaml>=6.0.3",
     "uvicorn>=0.30",
 ]
