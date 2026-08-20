@@ -74,6 +74,10 @@ export function StaySearchPage(): ReactElement {
   const { isSaved, save, remove, savedKeys } = useSavedStays({ isAuthed });
   const [pendingKeys, setPendingKeys] = useState<string[]>([]);
 
+  // 이름·지역 검색어(TRIP-469) — 화면이 결과를 클라 부분일치로 좁힌다. 상태만 여기서 소유하고
+  // 좁히기·no-match 판정은 화면(순수)이 지므로 서버 판정(state)엔 안 섞는다.
+  const [nameQuery, setNameQuery] = useState('');
+
   async function attemptToggle(item: StayItem): Promise<void> {
     const key = stayKey(item);
     setPendingKeys((keys) => [...keys, key]);
@@ -183,6 +187,8 @@ export function StaySearchPage(): ReactElement {
             params: { stayId: stayKey(item), item: JSON.stringify(item) },
           })
         }
+        nameQuery={nameQuery}
+        onChangeNameQuery={setNameQuery}
       />
       {sheetOpen ? (
         <StayFilterSheet
