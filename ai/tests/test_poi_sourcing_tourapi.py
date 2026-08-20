@@ -63,6 +63,26 @@ def test_fetch_page_sends_common_params_once_per_call() -> None:
 
 
 # ── 어댑터: 상세(영업시간) ────────────────────────────────────
+def test_상시_개방은_24시간으로_읽는다() -> None:
+    """"시각을 모른다"가 아니라 "항상 열려 있다" — 지어내기가 아니라 원문 그대로다.
+
+    수집 8,043건 중 파싱 실패 3,475건의 절반(1,771건)이 이 한 문구였다.
+    공원·해변·자연관광지가 대부분이라 NATURE 영업시간 보유율이 3%까지 떨어졌다.
+    """
+    hours = parse_open_hours("상시 개방", None)
+    assert len(hours) == 7                                    # 요일 전부
+    assert {(h.open_min, h.close_min) for h in hours} == {(0, 1440)}
+
+
+def test_상시_개방은_해석_안되는_휴무_문구에_지지_않는다() -> None:
+    """원문이 이미 휴무 없음을 말한다 — 명절 안내가 붙었다고 통째로 버리지 않는다."""
+    assert len(parse_open_hours("상시 개방", "설날·추석 당일")) == 7
+
+
+def test_상시_개방이라도_읽히는_휴무는_존중한다() -> None:
+    assert len(parse_open_hours("상시개방", "매주 월요일")) == 6
+
+
 @pytest.mark.parametrize("kind", ["12", "14", "39"])
 def test_fetch_hours_reads_type_specific_fields(kind: str) -> None:
     http = FakeTourApiHttp(intros={
@@ -125,7 +145,6 @@ def test_parse_open_hours_past_midnight() -> None:
     [
         (None, None),                                  # 정보 없음
         ("", ""),
-        ("상시 개방", None),                            # 시각 없음
         ("[3~10월] 09:00~19:00 [11~2월] 09:00~18:00", ""),  # 계절별 — 확정 불가
         ("09:00~18:00", "매월 첫째 월요일"),             # 주차 가변 휴무 — 표현 불가
         ("09:00~18:00", "설날·추석 당일"),               # 명절 — 표현 불가
