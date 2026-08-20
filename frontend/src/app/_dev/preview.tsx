@@ -27,10 +27,12 @@ import {
 } from '@/features/home/model/homeFixtures';
 import {
   PREVIEW_PLACES,
+  PREVIEW_REGIONS,
   PREVIEW_SAVED_PLACES,
   PREVIEW_SAVED_POI_IDS,
 } from '@/features/explore/model/exploreFixtures';
-import { REGIONS } from '@/features/explore/model/regions';
+import type { PlaceDetailView } from '@/features/execution/model/placeDetailView';
+import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -544,7 +546,11 @@ const TRIP_WIZARD_BASE: TripWizardStep1ScreenProps = {
   party: 2,
   companionType: '친구',
   preferenceChips: ['감성 골목', '야경'],
-  regions: REGIONS,
+  // 위저드 화면 계약은 `{code, name}[]`이다(서버 `Region`이 아니라) — 페이지 `wizardRegions`와
+  // 같은 어댑트(selectable 만 남기고 regionCode→code)로 프리뷰 표본을 맞춘다.
+  regions: PREVIEW_REGIONS.filter((region) => region.selectable !== false).map(
+    (region) => ({ code: region.regionCode, name: region.name })
+  ),
   canProceed: true,
   onBack: noop,
   onAddDestination: noop,
@@ -758,6 +764,22 @@ const SLOT_CANDIDATES_PREVIEW: SlotCandidatesCandidatesItem[] = [
   },
 ];
 
+// i05 현재 장소 상세(TRIP-398) — Figma 대조용 완성 뷰. 결측 얼굴은 이 위에 상태만 얹는다.
+const LIVE_PLACE_PREVIEW_VIEW: PlaceDetailView = {
+  name: '광안리 해수욕장',
+  category: '해변',
+  tags: ['해변', '포토스팟', '야경', '이동선근처'],
+  imageUrl: null,
+  openingHours: '09:00~22:00 (상시 개방)',
+  openingHoursMissing: false,
+  hoursCaption: null,
+  location: '미확인',
+  slackLabel: '여유 있음 · 다음 부산시립미술관',
+  arrival: '14:20 도착',
+  lat: 35.15,
+  lng: 129.11,
+};
+
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
   {
@@ -957,11 +979,12 @@ const PREVIEW_STATES: PreviewState[] = [
       <RegionPickerScreen
         purpose="stay"
         query=""
-        regions={REGIONS}
-        nearby={{ kind: 'idle' }}
+        regions={PREVIEW_REGIONS}
+        isLoading={false}
+        isError={false}
         onChangeQuery={noop}
         onSelectRegion={noop}
-        onSelectNearby={noop}
+        onRetry={noop}
         onBack={noop}
       />
     ),
@@ -975,45 +998,12 @@ const PREVIEW_STATES: PreviewState[] = [
       <RegionPickerScreen
         purpose="trip"
         query=""
-        regions={REGIONS}
-        nearby={{ kind: 'idle' }}
+        regions={PREVIEW_REGIONS}
+        isLoading={false}
+        isError={false}
         onChangeQuery={noop}
         onSelectRegion={noop}
-        onSelectNearby={noop}
-        onBack={noop}
-      />
-    ),
-  },
-  {
-    key: 'stay-nearby-denied',
-    label: '내 주변 · 등록숙소 대체',
-    login: null,
-    render: () => (
-      <RegionPickerScreen
-        purpose="stay"
-        query=""
-        regions={REGIONS}
-        nearby={{ kind: 'fallback' }}
-        onChangeQuery={noop}
-        onSelectRegion={noop}
-        onSelectNearby={noop}
-        onBack={noop}
-      />
-    ),
-  },
-  {
-    key: 'stay-nearby-no-fallback',
-    label: '내 주변 · 대체 불가',
-    login: null,
-    render: () => (
-      <RegionPickerScreen
-        purpose="stay"
-        query=""
-        regions={REGIONS}
-        nearby={{ kind: 'unavailable', reason: 'denied-no-fallback' }}
-        onChangeQuery={noop}
-        onSelectRegion={noop}
-        onSelectNearby={noop}
+        onRetry={noop}
         onBack={noop}
       />
     ),
@@ -2060,6 +2050,37 @@ const PREVIEW_STATES: PreviewState[] = [
         onPressDone={noop}
         onBack={noop}
         onPressViewPlan={noop}
+      />
+    ),
+  },
+  // i05 현재 장소 상세(TRIP-398) — props-only 화면. jest 는 픽셀·레이아웃을 못 봐 이 자리가
+  // 유일하게 눈으로 보는 곳. 결측 얼굴은 model 결측 스위치를 켠 뷰를 그대로 얹는다.
+  {
+    key: 'live-place-default',
+    label: '현재 장소 상세 i05',
+    login: null,
+    render: () => (
+      <PlaceDetailScreen
+        view={LIVE_PLACE_PREVIEW_VIEW}
+        onPressItinerary={noop}
+      />
+    ),
+  },
+  {
+    key: 'live-place-unknown',
+    label: '현재 장소 상세 i05 · 결측(미확인·확인 필요)',
+    login: null,
+    render: () => (
+      <PlaceDetailScreen
+        view={{
+          ...LIVE_PLACE_PREVIEW_VIEW,
+          name: '미확인',
+          openingHours: '미확인',
+          openingHoursMissing: true,
+          hoursCaption: '확인 필요',
+          slackLabel: '미확인',
+        }}
+        onPressItinerary={noop}
       />
     ),
   },

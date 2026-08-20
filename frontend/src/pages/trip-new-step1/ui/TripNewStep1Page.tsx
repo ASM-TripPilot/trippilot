@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 
-import { filterRegions, REGIONS } from '@/features/explore/model/regions';
+import { filterRegions, useRegions } from '@/features/explore/model/regions';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { postTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
 import type { CompanionType } from '@/shared/api/generated/schemas';
@@ -50,9 +50,10 @@ import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen'
  *     (01b §6.3) — 앞 두 조건이 "아직 안 고름"을, 마지막이 "잘못 고름"을 가른다.
  *  2. 기준일 주입 — `baseDate` prop이 없으면 `todayIso()`로 채운다(`StayRegisterPage`
  *     선례와 동형). 프리셋 → 날짜 범위 계산(`presetRange`)도 여기서 하고 화면엔 결과만 내린다.
- *  3. `REGIONS`를 읽어 `regions` prop으로 내린다 — 화면이 `features/explore`를 직접 import하면
- *     features 간 import가 된다(리포 관례 금지). `RegionPickerPage`가 `regions={filterRegions(...)}`로
- *     내리는 형태와 같다.
+ *  3. 서버 카탈로그(`useRegions`)를 읽어 **선택 가능 지역만** `{code, name}`으로 어댑트해 `regions`
+ *     prop으로 내린다(TRIP-445) — 화면이 `features/explore`를 직접 import하면 features 간 import가
+ *     된다(리포 관례 금지). 어댑터가 서버 shape(`{regionCode,…}`)와 위저드 화면 계약(`{code,name}`)의
+ *     차이를 흡수하므로 화면·동결 테스트는 그대로다. selectable=false(도·행정구)는 걸러 시트에 안 올린다.
  *  4. **제출과 오류 매핑(TRIP-206, 01b D1·D4)** — 클라 위반은 `touched`가 켜진 축만 문구로
  *     내려보내고(§클라 오류 절), 서버 400은 알려진 형태만 인라인/다이얼로그로 골라내고
  *     **나머지 전부(미상 코드·미상 필드·응답 자체 없음)는 배너로 떨어뜨린다** — 이것이
@@ -213,6 +214,22 @@ export function TripNewStep1Page({
   // 금지) 필터는 여기서만 진다. 시트를 닫을 때 리셋은 안 한다 — 재량이고 테스트가 요구하지
   // 않아 최소로 둔다(02a §8).
   const [destinationQuery, setDestinationQuery] = useState('');
+
+  // 서버 지역 카탈로그(TRIP-445) — 화면이 `features/explore`를 직접 import 못 하므로 조합은 여기서.
+  // 선택 가능(selectable !== false) 지역만 남기고 위저드 화면 계약 `{code, name}`으로 어댑트해
+  // 서버 shape 차이를 흡수한다(동결 화면·테스트 불변). 시트 검색은 어댑트 전 서버 목록을 좁혀야
+  // `filterRegions`의 새 시그니처(`Region` 인자)와 맞는다.
+  const regionsQuery = useRegions();
+  const selectableRegions = (regionsQuery.data ?? []).filter(
+    (region) => region.selectable !== false
+  );
+  const wizardRegions = selectableRegions.map((region) => ({
+    code: region.regionCode,
+    name: region.name,
+  }));
+  const sheetRegions = filterRegions(selectableRegions, destinationQuery).map(
+    (region) => ({ code: region.regionCode, name: region.name })
+  );
 
   // 5-c N-2: 배너가 뜬 뒤 드래프트를 고치면 배너는 옛 실패를 계속 보여주면서도 [다시 시도]는
   // 새 상태 기준으로 다시 판정한다 — 화면과 배너가 서로 다른 이야기를 하게 된다. 드래프트가
@@ -521,8 +538,8 @@ export function TripNewStep1Page({
       party={party}
       companionType={companionType}
       preferenceChips={preferenceChips}
-      regions={REGIONS}
-      sheetRegions={filterRegions(destinationQuery)}
+      regions={wizardRegions}
+      sheetRegions={sheetRegions}
       destinationQuery={destinationQuery}
       onChangeDestinationQuery={setDestinationQuery}
       canProceed={canProceed}

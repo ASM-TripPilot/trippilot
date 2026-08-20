@@ -1,5 +1,9 @@
-import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
-import { PlaceDataStatus, PoiCategory } from '@/shared/api/generated/schemas';
+import type { Place, Region, SavedPlace } from '@/shared/api/generated/schemas';
+import {
+  PlaceDataStatus,
+  PoiCategory,
+  RegionLevel,
+} from '@/shared/api/generated/schemas';
 
 /**
  * dev 프리뷰(`_dev/preview`) 전용 픽스처 — `homeFixtures.ts` 선례와 같은 자리.
@@ -96,5 +100,66 @@ export const PREVIEW_SAVED_PLACES: SavedPlace[] = [
       158,
       PlaceDataStatus.CLOSED
     ),
+  },
+];
+
+/**
+ * d1b·e00 지역 선택(TRIP-445) 프리뷰 표본 — 서버 `GET /regions` 응답과 같은 shape.
+ *
+ * 왜 있나: results 얼굴을 실화면 딥링크로는 볼 수 없다(백엔드 401이면 항상 에러 얼굴). 프리뷰가
+ * props에 이 값을 직접 넣어 세 갈래 카드를 한눈에 그린다 — 선택 가능(poiCount>0)·**준비 중**
+ * (poiCount=0)·**묶음 행**(selectable=false 도/행정구)을 일부러 섞었다. `regionCode`는 서버가
+ * 주는 법정동코드 앞자리(숫자문자열)라 구 슬러그('busan')와 성격이 다르다(D2, 해시 tint 표본).
+ */
+export const PREVIEW_REGIONS: Region[] = [
+  {
+    regionCode: '11',
+    name: '서울특별시',
+    sidoName: '서울특별시',
+    level: RegionLevel.SIDO,
+    selectable: true,
+    poiCount: 128,
+  },
+  {
+    regionCode: '26',
+    name: '부산광역시',
+    sidoName: '부산광역시',
+    level: RegionLevel.SIDO,
+    selectable: true,
+    poiCount: 64,
+  },
+  {
+    regionCode: '50',
+    name: '제주특별자치도',
+    sidoName: '제주특별자치도',
+    level: RegionLevel.SIDO,
+    selectable: true,
+    poiCount: 41,
+  },
+  {
+    regionCode: '51720',
+    name: '홍천군',
+    sidoName: '강원특별자치도',
+    level: RegionLevel.SIGUNGU,
+    selectable: true,
+    poiCount: 7,
+  },
+  // 도(道) — 목적지가 아니라 묶음 표시용(selectable=false).
+  {
+    regionCode: '43',
+    name: '충청북도',
+    sidoName: '충청북도',
+    level: RegionLevel.SIDO,
+    selectable: false,
+    poiCount: 12,
+  },
+  // 후보풀이 빈 지역 — "준비 중"으로 그려지고 선택 불가(poiCount=0, INV-1).
+  {
+    regionCode: '43111',
+    name: '청주시 상당구',
+    sidoName: '충청북도',
+    level: RegionLevel.SIGUNGU,
+    selectable: true,
+    poiCount: 0,
   },
 ];

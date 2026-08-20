@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { PreferenceView } from '@/shared/api/generated/schemas';
+import type { PreferenceView, Region } from '@/shared/api/generated/schemas';
+import { RegionLevel } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 import { TripNewStep1Page } from './TripNewStep1Page';
@@ -109,6 +110,54 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
   }),
 }));
 
+/**
+ * TRIP-445 — **이 사이클이 이 파일에 더한 유일한 목이다. 기존 단언은 한 줄도 안 고쳤다.**
+ *
+ * 위 세 목(useCreateTrip·useSavedStays·useSavedPlaces)과 **같은 이유**다: 페이지가
+ * `useRegions`(→ `useQuery`)를 물게 되면 provider 없는 이 node 버킷에서 render가 던진다.
+ * `useRegions`만 갈아끼우고 `filterRegions`(새 2인자 시그니처)·`regionTint`는 requireActual
+ * 실물을 쓴다 — 시트 검색 좁힘 왕복(TRIP-387 describe)이 실 필터로 계속 잠긴다.
+ *
+ * `mockRegions`는 테스트마다 갈아끼운다(mock 접두라 호이스팅 예외). 기본값은 **슬러그 코드
+ * 6개**라 기존 `-busan` 등 testID 를 그대로 보존한다(02a ★5). AC-4/AC-5 describe 만
+ * 숫자 코드로 덮어써 pre-impl RED 를 만든다.
+ */
+let mockRegions: Region[];
+
+jest.mock('@/features/explore/model/regions', () => ({
+  ...jest.requireActual('@/features/explore/model/regions'),
+  useRegions: () => ({
+    data: mockRegions,
+    isPending: false,
+    isError: false,
+    refetch: jest.fn(),
+  }),
+}));
+
+/** 서버 `Region` 표본 도우미(테스트 전용). */
+function serverRegion(
+  over: Partial<Region> & Pick<Region, 'regionCode' | 'name'>
+): Region {
+  return {
+    sidoName: over.sidoName ?? '',
+    level: over.level ?? RegionLevel.SIGUNGU,
+    selectable: over.selectable ?? true,
+    poiCount: over.poiCount ?? 5,
+    ...over,
+  };
+}
+
+/** 기본 목 — 슬러그 코드·한글 이름 6개. 어댑트되면 `{code: regionCode, name}`이라 기존
+ * `trip-wizard-destination-region-busan` 등 testID 와 검색 좁힘('부'→부산)이 그대로 산다. */
+const DEFAULT_REGIONS: Region[] = [
+  serverRegion({ regionCode: 'busan', name: '부산' }),
+  serverRegion({ regionCode: 'gyeongju', name: '경주' }),
+  serverRegion({ regionCode: 'seoul', name: '서울' }),
+  serverRegion({ regionCode: 'jeju', name: '제주' }),
+  serverRegion({ regionCode: 'gangneung', name: '강릉' }),
+  serverRegion({ regionCode: 'yeosu', name: '여수' }),
+];
+
 /** 기준일 고정 — 실행일이 바뀌어도 날짜 단언이 흔들리지 않는다(01b D5). */
 const BASE = '2026-06-10';
 
@@ -139,6 +188,7 @@ beforeEach(() => {
     styles: { value: ['미식', '전시'] },
     activities: { value: ['야경'] },
   };
+  mockRegions = DEFAULT_REGIONS;
 });
 
 describe('AC-10b · AC-10c · 진입 직후', () => {
@@ -483,5 +533,50 @@ describe('TRIP-387 · 여행지 시트 검색 (슬라이스 1 배선)', () => {
     expect(
       screen.getByTestId('trip-wizard-destination-remove-busan')
     ).toBeTruthy();
+  });
+});
+
+describe('TRIP-445 · 위저드가 useRegions 를 소비하고 selectable-only 로 어댑트한다', () => {
+  it('AC-4 · 시트 칩이 useRegions(서버) 출처에서 온다 (구 슬러그가 아닌 서버 코드)', () => {
+    // 준비: 구 슬러그와 다른 서버 코드 '26'. pre-impl 엔 페이지가 REGIONS(슬러그)를 그려
+    // '26'이 없어 확실히 RED 다(02a ★5).
+    mockRegions = [
+      serverRegion({ regionCode: '26', name: '부산광역시', poiCount: 12 }),
+    ];
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    // 실행: 시트를 연다.
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // 단언: 어댑트된 칩 testID 가 서버 regionCode('26')다.
+    expect(
+      screen.getByTestId('trip-wizard-destination-region-26')
+    ).toBeTruthy();
+  });
+
+  it('AC-5 · selectable=false 지역은 시트 칩에 오지 않는다 (맹점④ 닫기)', () => {
+    // 준비: 선택 가능(26) + 도(道, selectable=false, 51) 섞음.
+    mockRegions = [
+      serverRegion({ regionCode: '26', name: '부산광역시', poiCount: 12 }),
+      serverRegion({
+        regionCode: '51',
+        name: '강원특별자치도',
+        level: RegionLevel.SIDO,
+        sidoName: '강원특별자치도',
+        selectable: false,
+        poiCount: 30,
+      }),
+    ];
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // 어댑터가 selectable !== false 만 남긴다 — 선택 가능은 오고, 도는 안 온다.
+    expect(
+      screen.getByTestId('trip-wizard-destination-region-26')
+    ).toBeTruthy();
+    expect(
+      screen.queryByTestId('trip-wizard-destination-region-51')
+    ).toBeNull();
   });
 });

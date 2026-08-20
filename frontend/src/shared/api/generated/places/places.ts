@@ -24,7 +24,9 @@ import type {
 
 import type {
   GetPlacesParams,
+  GetRegionsParams,
   Place,
+  Region,
   SavePlaceRequest,
   SavedPlace,
 } from '../schemas';
@@ -48,6 +50,140 @@ const withQueryKey = <T extends object, K>(
   }
   return result;
 };
+
+/**
+ * 국내 행정구역만 담는다(INV-U1-12) — 어떤 질의로도 해외 지역이 나오지 않는다. `selectable=false` 인 행(도·일반시의 행정구)은 목적지가 아니지만 묶음 표시를 위해 함께 온다. `poiCount` 는 커버리지 — 0이면 후보풀이 비어 일정이 조용히 빈다(INV-1·INV-4). 화면이 "준비 중"을 그릴 근거다.
+ * @summary 행정구역 카탈로그 — 새 여행의 목적지 선택(US-TRIP-01)
+ */
+export const getRegions = (params?: GetRegionsParams, signal?: AbortSignal) => {
+  return customInstance<Region[]>({
+    url: `/regions`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetRegionsQueryKey = (params?: GetRegionsParams) => {
+  return [`/regions`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetRegionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRegions>>,
+  TError = unknown,
+>(
+  params?: GetRegionsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getRegions>>, TError, TData>
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRegionsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRegions>>> = ({
+    signal,
+  }) => getRegions(params, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRegions>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetRegionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRegions>>
+>;
+export type GetRegionsQueryError = unknown;
+
+export function useGetRegions<
+  TData = Awaited<ReturnType<typeof getRegions>>,
+  TError = unknown,
+>(
+  params: undefined | GetRegionsParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getRegions>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRegions>>,
+          TError,
+          Awaited<ReturnType<typeof getRegions>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetRegions<
+  TData = Awaited<ReturnType<typeof getRegions>>,
+  TError = unknown,
+>(
+  params?: GetRegionsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getRegions>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRegions>>,
+          TError,
+          Awaited<ReturnType<typeof getRegions>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetRegions<
+  TData = Awaited<ReturnType<typeof getRegions>>,
+  TError = unknown,
+>(
+  params?: GetRegionsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getRegions>>, TError, TData>
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 행정구역 카탈로그 — 새 여행의 목적지 선택(US-TRIP-01)
+ */
+
+export function useGetRegions<
+  TData = Awaited<ReturnType<typeof getRegions>>,
+  TError = unknown,
+>(
+  params?: GetRegionsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getRegions>>, TError, TData>
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetRegionsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
 
 /**
  * 수집 게이트(INV-1) 통과한 정본 POI. 소요시간 미표시(INV-3). 반경/취향 후보풀은 별도(C8 소비).
