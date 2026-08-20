@@ -12,10 +12,13 @@
  * 서버 `Region` shape 은 `@/shared/api/generated/schemas` 가 정본이다 — 여기서 재선언하지 않는다.
  */
 
-import type { Region } from '@/shared/api/generated/schemas';
+import type { GetRegionsParams, Region } from '@/shared/api/generated/schemas';
 
 /**
- * `GET /regions` 조회 훅. 생성 훅 `useGetRegions()`(q 없음) 얇은 재수출이다.
+ * `GET /regions` 조회 훅. 생성 훅 `useGetRegions(params?)` 얇은 재수출이다.
+ *
+ * `params` 는 additive(TRIP-450 d05 통합 검색이 `{ q: 검색어 }` 로 서버 별칭 매칭을 쓴다) —
+ * 미지정이면 기존 호출(`useRegions()`, 전체 카탈로그)과 같다(무회귀).
  *
  * ⚠️ `useGetRegions` 를 정적 import 하지 않고 **호출 시점 require** 로 미룬다: 정적이면 이
  * 모듈이 네트워크 계층(`@/shared/api`)을 전이 의존으로 끌고, `regionTint` 를 import 하는
@@ -23,13 +26,13 @@ import type { Region } from '@/shared/api/generated/schemas';
  * `devPreview` 계열 동결 테스트의 지뢰 목이 준비 단계에서 터진다. 이 훅은 배선 층(page)에서만
  * 불리고 프리뷰는 화면만 그리므로, 로드를 호출 시점까지 미루면 그 전이 경로가 끊긴다.
  */
-export function useRegions() {
+export function useRegions(params?: GetRegionsParams) {
   type Places = typeof import('@/shared/api/generated/places/places');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const places: Places = require('@/shared/api/generated/places/places');
   // 반환 타입은 `useStaySearch` 선례처럼 추론에 맡긴다 — 호출이 기본 제네릭 인자를 적용해
   // `data: Region[] | undefined`가 된다(`ReturnType<typeof …>`는 제약을 써 `{}`로 무너진다).
-  return places.useGetRegions();
+  return places.useGetRegions(params);
 }
 
 /**

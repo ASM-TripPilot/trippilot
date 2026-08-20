@@ -6,9 +6,9 @@
  * 조회·`formatPrice`/`stayKey` 조합은 이 화면이 아니라 라우트(`(tabs)/explore.tsx`)가 진다.
  * 화면은 뷰모델(prop)만 받는다.
  *
- * 6구획(위→아래): 헤딩 · 검색 · axisSeg(4탭, '전체'만 활성) · 숙소 가로 레인 · 여행자 일정
- * 자리(준비 중) · 하단 bridgeBar(담은 곳 N곳 CTA / 0상태 안내). 여행자 일정은 1차엔 자리만
- * (BR-U1-05), 장소·'내 주변'은 스코프 밖이라 렌더하지 않는다.
+ * 5구획(위→아래): 헤딩 · 검색 · 숙소 가로 레인(카드 우상단 저장 하트) · 여행자 일정
+ * 자리(준비 중) · 하단 bridgeBar(담은 곳 N곳 CTA — 담은 곳 d02 로, 0곳이어도 유지). 여행자 일정은 1차엔 자리만
+ * (BR-U1-05), 장소·'내 주변'은 스코프 밖이라 렌더하지 않는다(TRIP-447로 축 4탭 제거).
  *
  * bridgeBar 는 탭바(오버레이) 위에 뜨는 고정 도크다 — 탭바 높이(84)만큼 위로 띄우고, 스크롤
  * 콘텐츠 하단 여백도 그만큼 확보해 마지막 항목이 안 가리게 한다(A7, `tabbarOverlay.test.ts`
@@ -19,6 +19,8 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  HeartFilledGlyph,
+  HeartOutlineGlyph,
   InfoGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
@@ -41,51 +43,24 @@ export interface ExploreLandingScreenProps {
     cards: StayCardVM[];
     onRetry: () => void;
     onSeeAll: () => void;
+    // 저장 하트(TRIP-447) — 전부 additive·안전 기본값(미지정 시 빈 하트·무동작=무회귀).
+    // 담김/미담김은 fill 색이 아니라 서로 다른 글리프 컴포넌트+testID 로 관찰한다(repo-trap
+    // 글리프 함정 회피). 배선(useSavedStays·pendingKeys·saveError)은 라우트가 진다 — 화면은
+    // `@/features/stay` import 금지라 훅을 직접 못 부른다(맹점 2).
+    savedKeys?: string[];
+    pendingKeys?: string[];
+    onToggleSave?: (card: StayCardVM) => void;
+    saveError?: boolean;
+    onDismissSaveError?: () => void;
   };
+  /** 하단 bridge CTA. 담은 곳이 0곳이어도 CTA 는 유지된다(TRIP-448) — 0곳 분기로 CTA 를
+   * 없애면 d02 빈 상태에 도달할 경로가 사라진다. `onPressCreateTrip` 은 역사적 이름이고,
+   * TRIP-448 이후 목적지는 위저드가 아니라 담은 곳(d02)이다(라우트가 목적지를 정한다). */
   bridge: { savedCount: number; onPressCreateTrip: () => void };
 }
 
 // 탭바(h-[84px]) 오버레이 위로 bridgeBar 를 띄우는 기준값. 스크롤 하단 여백도 이 위에 얹는다.
 const TAB_BAR_CLEARANCE = 84;
-
-// axisSeg 4탭 — '전체'만 활성(A9). 나머지 3탭은 눌러도 무동작이라 onPress 를 안 준다.
-const AXES: { key: string; label: string }[] = [
-  { key: 'all', label: '전체' },
-  { key: 'stay', label: '숙소' },
-  { key: 'place', label: '장소' },
-  { key: 'itin', label: '여행자 일정' },
-];
-
-function AxisSegment(): ReactElement {
-  return (
-    <View className="mt-lg flex-row gap-xs rounded-pill bg-surface-soft p-xs">
-      {AXES.map((axis) => {
-        const selected = axis.key === 'all';
-        return (
-          <Pressable
-            key={axis.key}
-            testID={`explore-axis-${axis.key}`}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-            className={`flex-1 items-center rounded-pill py-sm ${
-              selected ? 'bg-canvas' : ''
-            }`}
-          >
-            <Text
-              className={
-                selected
-                  ? 'font-noto-bold text-label font-bold text-ink'
-                  : 'font-noto text-label text-muted'
-              }
-            >
-              {axis.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
 
 function LaneHeader({
   title,
@@ -116,12 +91,46 @@ function LaneHeader({
   );
 }
 
-function StayCard({ card }: { card: StayCardVM }): ReactElement {
+function StayCard({
+  card,
+  saved,
+  pending,
+  onToggleSave,
+}: {
+  card: StayCardVM;
+  saved: boolean;
+  pending: boolean;
+  onToggleSave?: (card: StayCardVM) => void;
+}): ReactElement {
   // 사진은 계약(StayItem)에 URL 필드가 없어 회색 자리(surface-strong)로 둔다 — URL 을
   // 지어내지 않는다(INV-1). 메타는 이름·지역·최저가뿐: 거리·소요시간 데이터가 없다(INV-3).
+  // 사진 우상단에 저장 하트(흰 원+하트, d04 PlaceCard 선례) — 담김/미담김을 서로 다른 글리프
+  // 로 그려 색 토글이 아니라 testID 로 관찰되게 한다. 대기 중(pending)이면 disabled 라 재누름이
+  // onPress 를 안 부른다(연타 가드).
   return (
     <View testID={`explore-stay-card-${card.key}`} className="w-[200px]">
-      <View className="h-[130px] w-full rounded-card bg-surface-strong" />
+      <View className="h-[130px] w-full rounded-card bg-surface-strong">
+        <Pressable
+          testID={`explore-stay-save-${card.key}`}
+          accessibilityRole="button"
+          accessibilityState={{ selected: saved }}
+          disabled={pending}
+          onPress={() => onToggleSave?.(card)}
+          className="absolute right-sm top-sm h-8 w-8 items-center justify-center rounded-pill bg-on-primary"
+        >
+          {saved ? (
+            <HeartFilledGlyph
+              testID={`explore-stay-heart-filled-${card.key}`}
+              size={18}
+            />
+          ) : (
+            <HeartOutlineGlyph
+              testID={`explore-stay-heart-outline-${card.key}`}
+              size={18}
+            />
+          )}
+        </Pressable>
+      </View>
       <Text
         numberOfLines={1}
         className="mt-sm font-noto-bold text-card-title font-bold text-ink"
@@ -160,13 +169,41 @@ function StayLaneError({ onRetry }: { onRetry: () => void }): ReactElement {
   );
 }
 
+function StaySaveErrorBanner({
+  onDismiss,
+}: {
+  onDismiss?: () => void;
+}): ReactElement {
+  // 담기 실패를 침묵하지 않고 알린다(INV-4). 숙소 전용 일반 문구 — 장소 문구(SAVE_FAILURE_NOTICE)
+  // 를 재사용하면 "장소"가 노출된다(Seed Q4). 탭하면 배너가 닫힌다(다음 하트 press 로도 소멸).
+  return (
+    <Pressable
+      testID="explore-stay-save-error"
+      accessibilityRole="button"
+      onPress={onDismiss}
+      className="mb-md flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-md"
+    >
+      <WarningTriangleGlyph size={18} tone="primary" />
+      <Text className="flex-1 font-noto text-label text-muted">
+        담기에 실패했어요. 잠시 후 다시 시도해 주세요.
+      </Text>
+    </Pressable>
+  );
+}
+
 export function ExploreLandingScreen({
   heading,
   onPressSearch,
   stayLane,
   bridge,
 }: ExploreLandingScreenProps): ReactElement {
-  const hasSaved = bridge.savedCount >= 1;
+  const {
+    savedKeys = [],
+    pendingKeys = [],
+    onToggleSave,
+    saveError = false,
+    onDismissSaveError,
+  } = stayLane;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -203,9 +240,6 @@ export function ExploreLandingScreen({
             </Text>
           </Pressable>
 
-          {/* axisSeg — 전체만 활성 */}
-          <AxisSegment />
-
           {/* 숙소 가로 레인 */}
           <View testID="explore-lane-stay" className="mt-2xl">
             <LaneHeader
@@ -213,13 +247,22 @@ export function ExploreLandingScreen({
               onSeeAll={stayLane.onSeeAll}
               seeAllTestID="explore-lane-stay-seeall"
             />
+            {saveError ? (
+              <StaySaveErrorBanner onDismiss={onDismissSaveError} />
+            ) : null}
             {stayLane.error ? (
               <StayLaneError onRetry={stayLane.onRetry} />
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View className="flex-row gap-md">
                   {stayLane.cards.map((card) => (
-                    <StayCard key={card.key} card={card} />
+                    <StayCard
+                      key={card.key}
+                      card={card}
+                      saved={savedKeys.includes(card.key)}
+                      pending={pendingKeys.includes(card.key)}
+                      onToggleSave={onToggleSave}
+                    />
                   ))}
                 </View>
               </ScrollView>
@@ -238,39 +281,28 @@ export function ExploreLandingScreen({
           </View>
         </ScrollView>
 
-        {/* bridgeBar — 탭바 위 고정 도크. 담은 곳 ≥1 → CTA, 0 → 안내(BR-U1-09) */}
+        {/* bridgeBar — 탭바 위 고정 도크. 담은 곳(d02)으로 가는 CTA 는 담은 곳이 0곳이어도
+            유지된다(TRIP-448). 0곳이면 d02 의 빈 상태로 간다 — 그 경로가 이 CTA 뿐이다. */}
         <View
           className="absolute inset-x-0 px-lg"
           style={{ bottom: TAB_BAR_CLEARANCE }}
         >
-          {hasSaved ? (
-            <Pressable
-              testID="explore-bridge-cta"
-              accessibilityRole="button"
-              onPress={bridge.onPressCreateTrip}
-              className="h-14 flex-row items-center justify-center gap-sm rounded-pill bg-primary px-lg"
-            >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                ♥
-              </Text>
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                담은 곳 {bridge.savedCount}곳 · 여행 만들기
-              </Text>
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                ›
-              </Text>
-            </Pressable>
-          ) : (
-            <View
-              testID="explore-bridge-empty"
-              className="flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-lg py-md"
-            >
-              <InfoGlyph size={18} />
-              <Text className="flex-1 font-noto text-label text-muted">
-                아직 담은 곳이 없어요. 위 검색으로 마음에 드는 곳을 담아보세요.
-              </Text>
-            </View>
-          )}
+          <Pressable
+            testID="explore-bridge-cta"
+            accessibilityRole="button"
+            onPress={bridge.onPressCreateTrip}
+            className="h-14 flex-row items-center justify-center gap-sm rounded-pill bg-primary px-lg"
+          >
+            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+              ♥
+            </Text>
+            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+              담은 곳 {bridge.savedCount}곳
+            </Text>
+            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+              ›
+            </Text>
+          </Pressable>
         </View>
       </View>
     </SafeAreaView>

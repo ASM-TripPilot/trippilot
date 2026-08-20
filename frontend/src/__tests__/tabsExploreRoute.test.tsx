@@ -15,16 +15,17 @@ import ExploreRoute from '@/app/(tabs)/explore';
 /**
  * (tabs)/탐색 진입 라우트 — 죽은 껍데기가 아니라 d01 탐색 랜딩(US-EXPL-01)을 배선한다.
  *
- * 무엇을 보장하나(칸1 AC-E1~E8):
- *  - 🔴 헤딩·검색·axisSeg·lane_stay·lane_itin 자리·bridgeBar 6구획을 그린다(AC-E1) ·
- *    nearby 는 안 그린다(AC-E8, 좌표 없음).
- *  - 🔴 검색 제출 → `/stays?region={입력}` 이동(AC-E2).
+ * 무엇을 보장하나(칸1 AC-E1~E6·E8 — TRIP-447 로 축 세그먼트 제거, AC-E7 삭제):
+ *  - 🔴 헤딩·검색·lane_stay·lane_itin 자리·bridgeBar 5구획을 그린다(AC-E1) ·
+ *    nearby 는 안 그린다(AC-E8, 좌표 없음). 축 세그먼트(axisSeg)는 걷어냈다(TRIP-447 AC-1,
+ *    소스 0건은 `exploreLandingAxisRemoval.test.ts` 가 별도로 잠근다).
+ *  - 🔴 검색창 탭(입력 불가 진입 버튼) → `/explore/search`(d05 통합 검색, TRIP-450 되돌림 —
+ *    입력은 d05 에서 받아 자유 문자열이 region 으로 새지 않는다, AC-E2). #2(submitEditing 무동작) 유지.
  *  - 🔴 lane_stay = `useStaySearch` items 를 가로 카드로, 금액은 `formatPrice` 정확 일치,
  *    "· 1박"(정확 1박가) 없음, "모두 보기" → `/stays`(AC-E3).
  *  - 🔴 lane_itin 은 준비중 자리(실카드·라우팅 0, AC-E4).
- *  - 🔴 bridgeBar: 담은 곳 ≥1 → CTA + 여행 만들기 이동 · 0 → 안내, CTA 미노출(AC-E5).
+ *  - 🔴 bridgeBar: CTA 는 담은 곳(d02)으로, 담은 곳 0곳이어도 유지(AC-E5, TRIP-448).
  *  - 🔴 lane_stay 쿼리 error 여도 나머지 구획은 살고 lane_stay 자리에 재시도(AC-E6, INV-4).
- *  - 🔴 axisSeg 4탭, '전체'만 selected, 나머지 눌러도 무동작(AC-E7).
  *
  * 왜 이렇게 테스트하나(02a §0-1): 라우트는 router 가 렌더해 props 를 못 받으므로, 두 훅을
  * seam 으로 목한다 — `useStaySearch`(features/stay)·`useSavedPlaces`(features/explore). 조합·
@@ -115,35 +116,40 @@ beforeEach(() => {
   mockUseSavedPlaces.mockReturnValue(savedResult(['p1']));
 });
 
-describe('🔴 AC-E1 · AC-E8 — 6구획 렌더 + nearby 부재', () => {
-  it('헤딩·검색·axisSeg·lane_stay·lane_itin·bridge 를 그리고, nearby 는 안 그린다', () => {
+describe('🔴 AC-E1 · AC-E8 — 5구획 렌더 + nearby 부재', () => {
+  it('헤딩·검색·lane_stay·lane_itin·bridge 를 그리고, nearby·축 세그먼트는 안 그린다', () => {
     render(<ExploreRoute />);
 
-    // 긍정 — 6구획이 전부 있다.
+    // 긍정 — 5구획이 전부 있다(축 세그먼트는 TRIP-447 로 제거).
     [
       'explore-landing',
       'explore-landing-heading',
       'explore-landing-search',
-      'explore-axis-all',
       'explore-lane-stay',
       'explore-lane-itin',
       'explore-bridge-cta',
     ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
+
+    // 부정 — 축 세그먼트는 렌더되지 않는다(AC-1, 렌더 층 확인 — 소스 0건은 별도 스캔).
+    expect(screen.queryByTestId('explore-axis-all')).toBeNull();
 
     // 부정 — 좌표 파라미터가 없어 '내 주변' 블록은 없다(AC-E8).
     expect(screen.queryByTestId('explore-nearby')).toBeNull();
   });
 });
 
-describe('🔴 AC-E2 — 검색창은 입력 불가 진입 버튼 → /explore/region (TRIP-412)', () => {
-  it('검색창을 누르면 지역 선택(/explore/region)으로 이동한다 — 자유 문자열이 region 으로 새지 않는다', () => {
+describe('🔴 AC-E2 — 검색창은 입력 불가 진입 버튼 → /explore/search (TRIP-450, 되돌림)', () => {
+  it('검색창을 누르면 통합 검색(/explore/search)으로 이동한다 — 자유 문자열이 region 으로 새지 않는다', () => {
     render(<ExploreRoute />);
 
-    // 검색창은 이제 TextInput 이 아니라 Pressable 진입 버튼이다 — 제출이 아니라 탭이다.
+    // 검색창은 여전히 TextInput 이 아니라 Pressable 진입 버튼이다 — 제출이 아니라 탭이다.
+    // TRIP-450 으로 목적지만 지역 선택(/explore/region)에서 통합 검색(d05, /explore/search)으로
+    // 되돌린다. 입력은 d05 searchBar 에서 받으므로 d01 은 여전히 문자열을 안 다룬다(Option A —
+    // TRIP-412 가드 그대로 산다). #2(submitEditing 무동작)는 무변경 green.
     fireEvent.press(screen.getByTestId('explore-landing-search'));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/region');
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/search');
   });
 
   it('자유 문자열이 region 으로 새지 않는다 — 제출(submitEditing)에는 반응하지 않는다', () => {
@@ -204,27 +210,37 @@ describe('🔴 AC-E4 — lane_itin 자리만', () => {
   });
 });
 
-describe('🔴 AC-E5 — bridgeBar 분기 (긍/부정 짝)', () => {
-  it('담은 곳 ≥1 이면 "담은 곳 N곳" CTA + 여행 만들기 이동, empty 는 없다', () => {
+describe('🔴 AC-E5 — bridgeBar CTA 는 담은 곳(d02)으로, 0곳이어도 유지 (TRIP-448)', () => {
+  it('담은 곳 ≥1 이면 "담은 곳 N곳" CTA 를 누르면 담은 곳(d02)으로 간다 — 위저드 직행 아님', () => {
     mockUseSavedPlaces.mockReturnValue(savedResult(['p1', 'p2']));
     render(<ExploreRoute />);
 
     const cta = screen.getByTestId('explore-bridge-cta');
-    // 부분 포함(regex) — "담은 곳 2곳 · 여행 만들기" 안의 조각(02a ★E-2).
+    // 부분 포함(regex) — "담은 곳 2곳 ›" 안의 조각(★E-2, toHaveTextContent 는 exact).
     expect(cta).toHaveTextContent(/담은 곳 2곳/);
+    // 0상태 안내(empty)는 더 이상 없다 — CTA 로 단일화됐다.
     expect(screen.queryByTestId('explore-bridge-empty')).toBeNull();
 
     fireEvent.press(cta);
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(String(mockPush.mock.calls[0][0])).toContain('/trips/new');
+    // 목적지는 d02(담은 곳)다. 위저드(/trips/new)로 직행하면 red — 금지 AC.
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/saved-places');
   });
 
-  it('담은 곳 0 이면 안내(empty)만 있고 CTA 는 미노출이다', () => {
+  it('담은 곳 0 곳이어도 CTA 는 유지되고, 누르면 담은 곳(d02) 빈 상태로 간다', () => {
     mockUseSavedPlaces.mockReturnValue(savedResult([]));
     render(<ExploreRoute />);
 
-    expect(screen.getByTestId('explore-bridge-empty')).toBeOnTheScreen();
-    expect(screen.queryByTestId('explore-bridge-cta')).toBeNull();
+    // CTA 가 사라지지 않는다 — 0곳 분기로 없애면 d02 빈 상태 도달 경로가 사라진다(TRIP-448).
+    const cta = screen.getByTestId('explore-bridge-cta');
+    expect(cta).toBeOnTheScreen();
+    expect(cta).toHaveTextContent(/담은 곳 0곳/);
+    // 옛 0상태 안내는 없다.
+    expect(screen.queryByTestId('explore-bridge-empty')).toBeNull();
+
+    fireEvent.press(cta);
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/saved-places');
   });
 });
 
@@ -238,31 +254,11 @@ describe('🔴 AC-E6 — 부분 실패 · 독립 쿼리', () => {
     [
       'explore-landing-heading',
       'explore-landing-search',
-      'explore-axis-all',
       'explore-lane-itin',
       'explore-bridge-cta',
     ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
 
     // lane_stay 자리에 재시도(가시적 실패 신호).
     expect(screen.getByTestId('explore-lane-stay-retry')).toBeOnTheScreen();
-  });
-});
-
-describe('🔴 AC-E7 — axisSeg 비활성', () => {
-  it('4탭 중 전체만 selected 이고, 비활성 탭을 눌러도 무동작이다', () => {
-    render(<ExploreRoute />);
-
-    ['all', 'stay', 'place', 'itin'].forEach((k) =>
-      expect(screen.getByTestId(`explore-axis-${k}`)).toBeOnTheScreen()
-    );
-    expect(screen.getByTestId('explore-axis-all')).toBeSelected();
-    ['stay', 'place', 'itin'].forEach((k) =>
-      expect(screen.getByTestId(`explore-axis-${k}`)).not.toBeSelected()
-    );
-
-    // 비활성 탭 press → 네비 없음 + 활성 불변(A9 무동작).
-    fireEvent.press(screen.getByTestId('explore-axis-stay'));
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(screen.getByTestId('explore-axis-all')).toBeSelected();
   });
 });
