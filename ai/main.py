@@ -113,11 +113,11 @@ def _backend_poi_db():
 
 
 def _tmap_travel():
-    """`TMAP_APP_KEY`(TRIP-432) 설정 시 ChainedTravelAdapter 조립.
+    """`TMAP_API_KEY`(TRIP-432) 설정 시 ChainedTravelAdapter 조립.
 
     TMAP 실경로 1차 → 하버사인 폴백 2차. 미설정 = None (기존 TravelEstimator 그대로).
     """
-    app_key = _env("TMAP_APP_KEY")
+    app_key = _env("TMAP_API_KEY")
     if app_key is None:
         return None
     from trippilot.solver_engine.adapters.chained_travel import ChainedTravelAdapter
