@@ -112,22 +112,40 @@ def _backend_poi_db():
     return BackendPoiDb(UrllibJsonClient(), base_url, token)
 
 
+def _event_store():
+    """`EVENTS_STORE`(행사 저장소 JSON 경로, TRIP-421) 설정 시 조립.
+
+    미설정 = 미배선(None) — 행사 보너스 없이 기존 경로 그대로. 파일은 새벽 배치
+    (ai-event-collect)가 collect-state 브랜치에 쌓는 collected_events.json.
+    """
+    path = _env("EVENTS_STORE")
+    if path is None:
+        return None
+    from pathlib import Path as _Path
+
+    from trippilot.background.event_store import JsonEventStore
+
+    return JsonEventStore(_Path(path))
+
+
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
     if os.environ.get("TRIPPILOT_WIRING") == "unwired":
         return create_app()
     weather = _kma_weather()
     poi_db = _backend_poi_db()
+    events = _event_store()
     provider = _env("TRIPPILOT_LLM_PROVIDER")
     if provider is None:
-        return build_dev_app(weather=weather, poi_db=poi_db)
+        return build_dev_app(weather=weather, poi_db=poi_db, events=events)
     if provider != "openai":
         raise RuntimeError(
             f"TRIPPILOT_LLM_PROVIDER 미지원 값: {provider!r} — "
             "미설정(fake 조립) 또는 openai 만 지원"
         )
     llm, model_id = _openai_llm_and_model()
-    return build_dev_app(llm=llm, model_id=model_id, weather=weather, poi_db=poi_db)
+    return build_dev_app(llm=llm, model_id=model_id, weather=weather,
+                         poi_db=poi_db, events=events)
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.
