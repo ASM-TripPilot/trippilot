@@ -205,6 +205,18 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     );
   }
 
+  // 두 뒤로가기(h35 후보 0건 · h11 초안) 공통. 딥링크로 콜드 오픈돼 히스토리가 없으면
+  // (`canGoBack()===false`) 침묵 no-op 이 아니라 홈으로 replace 한다(INV-4). `/(tabs)/itinerary`
+  // 는 trips[0] 리다이렉트 함정이라 접미 없는 `/(tabs)` 로 간다. `ItineraryPlanPage.handleBack`
+  // 을 이 페이지에 지역 복제한 것이다(shared 승격 아님 — pages 간 import 금지 · YAGNI).
+  function handleBack(): void {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  }
+
   /**
    * 후보 0건은 **다른 화면**이다(h35) — 목록 화면 안의 빈 상태가 아니라, 조건을 밝히고
    * 다음 행동을 주는 별도 얼굴이다. 그래서 `DraftScreen` 을 아예 그리지 않는다.
@@ -216,7 +228,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     return (
       <ZeroCandidateScreen
         shortfallCategories={view.shortfallCategories}
-        onBack={() => router.back()}
+        onBack={handleBack}
         onReduceMustVisits={() =>
           router.push({
             pathname: '/trips/[tripId]/itinerary/must-visits',
@@ -244,7 +256,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       })}
       onSelectDay={setPickedDate}
       onRetry={() => void handleRetry()}
-      onBack={() => router.back()}
+      onBack={handleBack}
       // h25(완성 일정) — 접미 없는 index 라우트다(draft·generating 과 달리). 객체형 push 라야
       // `[tripId]` 가 params 로 해소된다(문자열 형태는 미해결로 깨진다 · TRIP-454 AC-5).
       onComplete={() =>

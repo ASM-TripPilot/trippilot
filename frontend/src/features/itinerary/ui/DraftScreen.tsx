@@ -581,16 +581,25 @@ export function DraftScreen({
             : null}
 
           {/* 완성 CTA — 스크롤 흐름의 마지막 자식이다(하단 고정 바 아님, `MustVisitPickerScreen`
-              ctaPrimary 선례). `listed` 얼굴에만 뜨고(PARTIAL 생성 중 포함) 항상 활성이다 —
-              h25 가 자체적으로 상태를 처리하므로 잠그지 않는다(TRIP-454 AC-4 · 02a ★8). */}
+              ctaPrimary 선례). `listed` 얼굴에만 뜨고(PARTIAL 생성 중 포함) CONFIRMED 면 잠긴다 —
+              재시도+완성 공용 확정 가드(canRetry=status!==CONFIRMED). PARTIAL 은 status 가 PLANNED 라
+              canRetry=true 로 활성 유지(생성 중은 막지 않는다). disabled 가 press 가드다 —
+              회색만 칠하면 responder 가 살아 눌린다(retry·confirm-cta 선례 · TRIP-466). */}
           {view.kind === 'listed' ? (
             <Pressable
               testID="itinerary-draft-complete"
               accessibilityRole="button"
+              disabled={!canRetry}
               onPress={onComplete}
-              className="w-full items-center justify-center rounded-button bg-primary py-lg"
+              className={`w-full items-center justify-center rounded-button py-lg ${
+                canRetry ? 'bg-primary' : 'bg-hairline-strong'
+              }`}
             >
-              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+              <Text
+                className={`font-noto-bold text-[16px] font-bold ${
+                  canRetry ? 'text-on-primary' : 'text-muted-soft'
+                }`}
+              >
                 {COMPLETE_LABEL}
               </Text>
             </Pressable>
