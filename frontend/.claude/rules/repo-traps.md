@@ -63,6 +63,11 @@
 - **MANUAL(직접 짜기)은 `solveMode=MINIMAL`인데 `isFallback=false`다** — 실패가 아니라 선택이라 폴백 배너를 띄우면 거짓말이 된다(TRIP-304와 신호가 겹쳐 헷갈리기 쉬움). `ManualPlanPage`/`Screen`엔 애초에 폴백 배너 코드 경로가 0이라 `ManualPlanPage.integration.test.tsx`의 "폴백 배너 부재" 단언은 지금 **공허 통과**(무엇을 바꿔도 green) — 실판정은 `draftView.fallback.test.ts` F-7이 이 표면 밖에서 진다. 이 화면에 폴백 로직을 새로 얹으면 그 순간부터가 진짜 트립와이어다.
 - **`notReady?`/`saveError?`/`demoted?` 류 후방호환 옵셔널 prop 추가는 게이트①을 재개봉하지 않는다** — 동결 심판이 그 prop·testID를 안 물면(기본값=기존 동작 불변) additive 확장으로 간주해 5-c에서 바로 반영한다(TRIP-338 W-2, 리포 선례 `confirmLocked?`·`saveError?`·`demoted?`와 동형). 단 이 판단은 "기존 seam을 안 건드렸다"는 사람 확인에 기대므로, seam을 리네임·재배치하면서 같은 논리를 쓰면 안 된다.
 
+## 여행 중 실행 (execution, i01~i05)
+
+- **`live-place`(i05)는 loading·오류·미도착을 전부 notFound로 접는다** (TRIP-398, 5-b 경고-2·★9, AC 없어 미룸) → `LivePlacePage.tsx`의 얼굴은 `-loading`/`-notfound`/`detail` 셋뿐이라 itinerary GET이 5xx·네트워크로 실패해도 `data` 미도착→`slots=[]`→`buildPlaceDetailView([],poiId)=null`→`-notfound`("장소를 찾을 수 없어요")로 조회 실패가 "부재"로 오표시된다. 형제 `LiveItineraryPage`는 `resolveLiveState`로 `error`와 `notFound`를 분리하는 선례가 있어 대비된다 — `live-place`에 오류 얼굴을 추가할 때 이 선례를 복제한다.
+- **`features/execution/**` 신규 파일은 `liveTimeStructure`·`executionDurationStructure` 두 가드에 자동 편입된다** → 재귀 스캔이라 파일을 새로 추가하는 순간부터 사정거리에 들어간다. `liveTimeStructure`는 `startAt`/`endAt` 식별자에 **인접한** 산술 연산자·`new Date`/`.getTime`/`.getHours`/`.getMinutes`·날짜라이브러리 import를 금지(합법 형태: `"HH:mm:ss".split(':')`로 쪼개 다른 이름 변수로 옮긴 뒤 함수 호출 사이에서 빼기 — `placeDetailView.ts`의 `resolveSlackLabel` 선례). `executionDurationStructure`(ui/** 한정)는 `\d+분`·`\d+시간`·`소요` 문자열을 금지 — 정성 라벨(예 "여유 있음")은 자연 회피한다.
+
 ## features 경계
 
 - **`features` 간 import 금지에 기계 강제가 없는 feature가 있다** → `eslint.config.js`의 `FEATURES` 배열이 `['onboarding','home']`뿐이라 `itinerary`·`trip`·`explore`는 zone 검사 밖이다. 관례(조합은 `pages` 전담)로 지켜질 뿐, 어겨도 lint는 안 걸린다.
@@ -70,6 +75,11 @@
 ## 여행 만들기 위저드 (g01)
 
 - **`TripWizardStep1Screen`의 confirm은 검색으로 좁혀진 목록이 아니라 항상 원본 `regions`(6개)에서 지역을 찾아야 한다** → `confirmDestination`(~:632) 안 `regions.find(...)`를 `sheetChipRegions.find(...)`(검색 결과)로 바꾸면 confirm이 조용히 무동작(선택한 지역이 좁힌 목록을 벗어났을 때 아무것도 안 담기고 시트도 안 닫힘)한다. 재현: 시트 열기 → 검색 `부`로 부산 선택 → 검색어를 `여수`로 바꿈(부산 칩이 시트에서 사라짐, 선택 상태는 유지) → confirm. **이 성질은 `TripWizardStep1Screen.test.tsx`의 `★확정은 full regions로 지역을 되찾는다` 테스트가 잠근다**(TRIP-387 게이트①-2, 뮤테이션 실측 — 위 뮤테이션이 그 테스트를 red로 만든다). 이 파일을 재편집할 때(예: 시트·검색·박수 스테퍼) 그 테스트를 지우면 blind spot이 재개방된다. 개념: [[좁힌 목록과 원본 목록의 소비처 분리]].
+
+## 지역 카탈로그 (explore/region, TRIP-445)
+
+- **`TripNewStep1Page`·`RegionPickerScreen`을 렌더하는 node-버킷 테스트는 `useRegions`를 목해야 크래시 안 남** → 두 화면 모두 `useRegions()`(react-query)를 물어 `QueryClientProvider` 없는 node 버킷에서 렌더하면 `No QueryClient set` throw. 승인 테스트는 목을 걸었지만 sibling 테스트(`.budget`·`.mustVisit`·`.stayImport`·`tripWizardEntryReset`)는 처음엔 안 걸려 있었다(qa n=1 FAIL 실측) — 이 화면들을 렌더하는 새 테스트 파일을 추가할 때마다 같은 목이 필요하다는 사실을 기계가 강제하지 않는다.
+- **`regionTint` 팔레트 hex는 어느 raw-hex 스캔에도 안 걸린다** → `placeExploreStructure.test.ts`의 raw-hex 가드(AC-G7)는 `PlaceExploreScreen.tsx` 한 파일만 대상이고 `RegionPickerScreen.tsx`를 주석으로 명시 제외한다. `regionCatalogStructure.test.ts`도 hex 값 자체는 안 본다(URL·zustand·duration만 스캔). `regions.ts`의 `TINT_PALETTE`를 임의 hex로 바꿔도 어떤 심판도 안 잡는다.
 
 ## 작업 관례
 
