@@ -148,6 +148,19 @@ describe('🟢 370-AC-1 · "지금 뜨는 장소" 더 보기 → /explore/places
   });
 });
 
+// ── TRIP-453 · entry 1 홈 검색바 → d05 통합 검색 ───────────────────────────────
+describe('🔴 453-AC-1a · 검색바 → /explore/search', () => {
+  it('홈 검색바를 누르면 통합 검색(d05)으로 이동한다', () => {
+    // 기본 목 = 빈 trips → discovery 얼굴. discovery 는 검색바를 그린다. 검색바는 지금 무동작
+    // (onPress=undefined)이라 push 가 0회 → red. 배선 뒤엔 정확히 /explore/search 한 곳으로 간다.
+    render(<HomeRoute />);
+
+    fireEvent.press(screen.getByTestId('home-search-bar'));
+
+    expect(mockPush.mock.calls).toEqual([['/explore/search']]);
+  });
+});
+
 // ── TRIP-371 · 실데이터 판정 ───────────────────────────────────────────────────
 describe('🔴 371-AC-1 · 비-ENDED 여행이 있으면 planning 얼굴', () => {
   it('여행 얼굴(trip-hero)을 그리고 discovery 히어로는 숨긴다', () => {

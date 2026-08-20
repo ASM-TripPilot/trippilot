@@ -38,7 +38,7 @@ import {
 
 type LandingBase = Pick<
   ExploreLandingScreenProps,
-  'heading' | 'onPressSearch' | 'bridge'
+  'heading' | 'onPressSearch' | 'onPressPlaces' | 'bridge'
 > & {
   stayLane: Pick<
     ExploreLandingScreenProps['stayLane'],
@@ -70,6 +70,9 @@ export default function ExploreRoute(): ReactElement {
       subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
     },
     onPressSearch: () => router.push('/explore/search'),
+    // "가볼 곳" 진입점 → d04 장소 목록(TRIP-453 entry 2). guest·SavableStayLane 양쪽이
+    // base 를 spread 하므로 한 곳에 두면 두 경로 모두 배선된다.
+    onPressPlaces: () => router.push('/explore/places'),
     stayLane: {
       error: stay.isError,
       cards,

@@ -262,3 +262,21 @@ describe('🔴 AC-E6 — 부분 실패 · 독립 쿼리', () => {
     expect(screen.getByTestId('explore-lane-stay-retry')).toBeOnTheScreen();
   });
 });
+
+// ── TRIP-453 · entry 2 d01 랜딩 → d04 장소 목록 진입점 ──────────────────────────
+describe('🔴 453-AC-2a — "가볼 곳" 구획에 장소 목록(d04) 진입점', () => {
+  it('장소 둘러보기 진입점을 누르면 /explore/places 로 이동한다', () => {
+    // d01 랜딩은 완성된 d04 장소 목록으로 가는 링크가 없었다(딥링크로만 도달). "가볼 곳" 구획에
+    // 최소 진입 링크(조회 없음, Q1=②)를 추가한다. 지금은 explore-lane-place-cta 미존재라
+    // getByTestId 가 throw → red. 배선 뒤엔 정확히 /explore/places 로 1회 push.
+    render(<ExploreRoute />);
+
+    const placeCta = screen.getByTestId('explore-lane-place-cta');
+    expect(placeCta).toBeOnTheScreen();
+
+    fireEvent.press(placeCta);
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/places');
+  });
+});

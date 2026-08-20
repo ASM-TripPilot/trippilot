@@ -62,14 +62,17 @@ const EXPECTED_ITINERARIES = [
 ] as const;
 
 // TRIP-370 — 배선 CTA(목적지 확정, 버튼 유지) vs 비배선 컨트롤(목적지 없음, 버튼 표식 제거).
+// TRIP-453(entry 1) — 검색바가 목적지(/explore/search)를 얻어 배선 CTA 로 승격 → WIRED 로 이동
+// (UNWIRED 에서 제거). 세 목록을 함께 손대야 한다(★2): WIRED(+search)·UNWIRED(−search)·
+// PLANNING_WIRED(+search·+card). 하나라도 빠뜨리면 371-AC-3/4·AC-7 중 하나가 red 로 새어난다.
 const WIRED_CTA_TEST_IDS = [
   'home-create-trip-fab',
   'home-saved-places-cta',
   'home-spots-more',
+  'home-search-bar',
 ] as const;
 
 const UNWIRED_CONTROL_TEST_IDS = [
-  'home-search-bar',
   'home-collections-more',
   'home-itineraries-more',
   'home-dashboard-bell',
@@ -645,9 +648,14 @@ describe('HomeScreen — phase 미도출·주입 (AC-5 금지 · TRIP-206 S-6)',
 // planning=false). 두 테스트가 "콜백 유무 파생" 안티패턴을 협공한다.
 
 // planning 얼굴에서 목적지가 있어 버튼이어야 하는 것(구조로 굳힘 — 콜백 미주입에도 버튼).
+// TRIP-453 — entry 1 검색바(항해 /explore/search)·entry 3 여행 카드 본체(항해=알약과 동일)가
+// planning 얼굴에서도 버튼으로 읽힌다. 카드 본체(home-trip-hero)와 알약(home-trip-hero-cta)은
+// 중첩 Pressable 이라 둘 다 버튼 집합에 든다(★1·★3).
 const PLANNING_WIRED_CTA_TEST_IDS = [
   'home-create-trip-fab',
   'home-trip-hero-cta',
+  'home-search-bar',
+  'home-trip-hero',
 ] as const;
 
 describe('🔴 HomeScreen — planning 버튼 역할 집합 == 배선 CTA 집합 (AC-7 · 370-AC-4 확장)', () => {
@@ -681,3 +689,45 @@ describe('🔴 HomeScreen — planning 브릿지 CTA 죽은 버튼 금지 (AC-6)
     expect(buttonIds).not.toContain('home-saved-places-cta');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-453 — 진입점 미배선 연결(화면측 콜백 배선). 라우터 왕복은 화면이 아니라
+// `(tabs)/index.tsx` seam 이 지므로 tabsHomeRoute/tabsHomeItineraryCta 가 별도로 잰다.
+// 여기서는 화면이 넘겨받은 콜백만 정확히 발화하는지(오배선·이중발화 없음)를 잠근다.
+
+describe('🔴 HomeScreen — 검색바 배선 (AC-1a · entry 1 화면측)', () => {
+  it('검색바 press 는 onPressSearch 만 정확히 1회 발화한다(다른 콜백 0회)', () => {
+    // 준비 — 4콜백 주입. 화면은 검색바→onPressSearch 로만 스레딩해야 하고, 다른 배선 CTA 의
+    // 콜백을 실수로 발화하면(오배선) red. onPressSearch 는 아직 HomeScreenProps 에 없지만 jest
+    // (babel)는 타입을 벗기고, 미소비 prop 은 런타임에 무시되므로 오늘은 0회로 정상 red 다.
+    const onPressSearch = jest.fn();
+    const onPressCreateTrip = jest.fn();
+    const onPressSavedPlaces = jest.fn();
+    const onPressSpotsMore = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        onPressSearch={onPressSearch}
+        onPressCreateTrip={onPressCreateTrip}
+        onPressSavedPlaces={onPressSavedPlaces}
+        onPressSpotsMore={onPressSpotsMore}
+      />
+    );
+
+    // 실행·단언 — 검색바 → 검색 콜백만.
+    fireEvent.press(screen.getByTestId('home-search-bar'));
+    expect(onPressSearch).toHaveBeenCalledTimes(1);
+    expect(onPressCreateTrip).not.toHaveBeenCalled();
+    expect(onPressSavedPlaces).not.toHaveBeenCalled();
+    expect(onPressSpotsMore).not.toHaveBeenCalled();
+  });
+});
+
+// entry 3(여행 카드 본체 → 일정)의 화면측 실판정은 **위 AC-7 planning 버튼-집합**이 진다:
+// home-trip-hero 가 accessibilityRole="button" 을 얻어 버튼 집합에 드는지가 유일하게 신뢰 가능한
+// 신호다. press 기반 화면 테스트는 **의도적으로 두지 않는다** — `TripHero` 는 onPress 를 prop 으로
+// 받는 합성 컴포넌트라, RNTL findEventHandler 가 위로 올라가다 TripHero 합성요소의 props.onPress
+// 를 집어(실검증 발견) home-trip-hero(순수 View)를 눌러도 onPressTripHeroCta 가 발화한다 →
+// 배선 여부와 무관한 공허 통과다. 게다가 Pressable host 요소는 props.onPress 를 노출하지 않아
+// (RN 내부 responder) 요소 단위 onPress 대조도 불가. 그래서 role(구조)만이 실판정이고, 목적지·
+// 이중발화 회귀는 라우트 층(tabsHomeItineraryCta)의 **구현 후 앵커**로 둔다(02a ★3·§5 (a)).

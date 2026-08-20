@@ -114,12 +114,16 @@ function GreetingHeader({
 }
 
 // ── 검색바(가짜 — Pressable+Text, 실 TextInput 아님 · 02a §4-8) ──────────
-function SearchBarBlock(): ReactElement {
+// TRIP-453: 검색바가 목적지(/explore/search)를 얻어 배선 컨트롤이 됐다 — role="button"은 콜백
+// 유무로 파생하지 않고 항상 붙인다(버튼-집합 테스트가 콜백 미주입으로 렌더, FAB 선례). 라우팅은
+// 라우트(`(tabs)/index.tsx`)가 지고 화면은 넘겨받은 onPress만 발화한다(homeStructure D-1).
+function SearchBarBlock({ onPress }: { onPress?: () => void }): ReactElement {
   return (
     <View className="w-full px-lg pb-[14px] pt-[4px]">
       <Pressable
         testID="home-search-bar"
-        onPress={undefined}
+        accessibilityRole="button"
+        onPress={onPress}
         className="w-full flex-row items-center gap-[10px] rounded-pill bg-surface-soft px-lg py-[13px]"
       >
         <SearchGlyph size={19} />
@@ -528,6 +532,10 @@ function SoftNote({
 
 // ── tripHero(planning·upcoming 공용 여행 히어로 · 브리프 §3-C) ───────────
 // 사진+스크림 · 좌상단 단계 pill · 우상단 대형 D-day · 좌하단 primary CTA + 여행명 + 기간 메타.
+// TRIP-453: 카드 본체(home-trip-hero)를 Pressable 로 승격해 알약(home-trip-hero-cta)과 **같은
+// onPress**(=onPressTripHeroCta)를 공유한다 — 목적지 규칙을 두 곳에 두지 않는다(신규 콜백 0).
+// role="button"은 항상 붙인다(콜백 미주입 렌더의 버튼-집합 테스트가 구조적 role 을 요구, ★1).
+// 중첩 Pressable 이라 알약 press 는 알약에서 멈추고 카드 본체로 안 번진다(이중발화 없음, ★3).
 function TripHero({
   trip,
   onPress,
@@ -537,8 +545,10 @@ function TripHero({
 }): ReactElement {
   return (
     <View className="w-full px-lg pt-[8px]">
-      <View
+      <Pressable
         testID="home-trip-hero"
+        accessibilityRole="button"
+        onPress={onPress}
         style={softCardShadow}
         className="h-[300px] w-full overflow-hidden rounded-[18px]"
       >
@@ -584,7 +594,7 @@ function TripHero({
             </Text>
           </View>
         </View>
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -781,11 +791,13 @@ function DiscoveryBody({
   sections,
   onPressSavedPlaces,
   onPressSpotsMore,
+  onPressSearch,
 }: {
   hero: HomeMagazineHero;
   sections: HomeSections;
   onPressSavedPlaces?: () => void;
   onPressSpotsMore?: () => void;
+  onPressSearch?: () => void;
 }): ReactElement {
   return (
     <>
@@ -793,7 +805,7 @@ function DiscoveryBody({
         title="오늘은 어디를 상상해볼까요"
         subtitle="떠나지 않아도, 구경하고 모으는 즐거움"
       />
-      <SearchBarBlock />
+      <SearchBarBlock onPress={onPressSearch} />
       <MagazineHero hero={hero} />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         <CollectionsSection sections={sections} />
@@ -811,15 +823,17 @@ function CollectingBody({
   hero,
   sections,
   phase,
+  onPressSearch,
 }: {
   hero: HomeMagazineHero;
   sections: HomeSections;
   phase: Extract<HomePhase, { kind: 'collecting' }>;
+  onPressSearch?: () => void;
 }): ReactElement {
   return (
     <>
       <GreetingHeader title={phase.greetTitle} subtitle={phase.greetSubtitle} />
-      <SearchBarBlock />
+      <SearchBarBlock onPress={onPressSearch} />
       <MagazineHero hero={hero} />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         <CollectionStrip
@@ -838,14 +852,16 @@ function CollectingBody({
 function PlanningBody({
   phase,
   onPressTripHeroCta,
+  onPressSearch,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
   onPressTripHeroCta?: () => void;
+  onPressSearch?: () => void;
 }): ReactElement {
   return (
     <>
       <GreetingHeader title={phase.greetTitle} />
-      <SearchBarBlock />
+      <SearchBarBlock onPress={onPressSearch} />
       <TripHero trip={phase.trip} onPress={onPressTripHeroCta} />
       <SoftNote note={phase.bridge} />
     </>
@@ -882,13 +898,15 @@ function UpcomingBody({
 // greet 잘 다녀오셨어요 · 회고 보기 카드 · 추천 스트립 · 지난 여행 · 공유행(softNote 슬롯).
 function PostTripBody({
   phase,
+  onPressSearch,
 }: {
   phase: Extract<HomePhase, { kind: 'postTrip' }>;
+  onPressSearch?: () => void;
 }): ReactElement {
   return (
     <>
       <GreetingHeader title={phase.greetTitle} />
-      <SearchBarBlock />
+      <SearchBarBlock onPress={onPressSearch} />
       <View className="w-full px-lg pt-[8px]">
         <MiniMapCard
           testID="home-recap-card"
@@ -916,6 +934,7 @@ function PhaseBody({
   onPressSavedPlaces,
   onPressSpotsMore,
   onPressTripHeroCta,
+  onPressSearch,
 }: HomeScreenProps): ReactElement {
   if (phase === undefined || phase.kind === 'discovery') {
     return (
@@ -924,20 +943,32 @@ function PhaseBody({
         sections={sections}
         onPressSavedPlaces={onPressSavedPlaces}
         onPressSpotsMore={onPressSpotsMore}
+        onPressSearch={onPressSearch}
       />
     );
   }
   switch (phase.kind) {
     case 'collecting':
-      return <CollectingBody hero={hero} sections={sections} phase={phase} />;
+      return (
+        <CollectingBody
+          hero={hero}
+          sections={sections}
+          phase={phase}
+          onPressSearch={onPressSearch}
+        />
+      );
     case 'planning':
       return (
-        <PlanningBody phase={phase} onPressTripHeroCta={onPressTripHeroCta} />
+        <PlanningBody
+          phase={phase}
+          onPressTripHeroCta={onPressTripHeroCta}
+          onPressSearch={onPressSearch}
+        />
       );
     case 'upcoming':
       return <UpcomingBody phase={phase} />;
     case 'postTrip':
-      return <PostTripBody phase={phase} />;
+      return <PostTripBody phase={phase} onPressSearch={onPressSearch} />;
   }
 }
 
@@ -949,6 +980,7 @@ export function HomeScreen({
   onPressSavedPlaces,
   onPressSpotsMore,
   onPressTripHeroCta,
+  onPressSearch,
 }: HomeScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -965,6 +997,7 @@ export function HomeScreen({
             onPressSavedPlaces={onPressSavedPlaces}
             onPressSpotsMore={onPressSpotsMore}
             onPressTripHeroCta={onPressTripHeroCta}
+            onPressSearch={onPressSearch}
           />
         </ScrollView>
         {phase?.kind === 'collecting' ? (

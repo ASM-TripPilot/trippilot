@@ -38,6 +38,10 @@ export interface ExploreLandingScreenProps {
   /** 검색창 탭 — 입력 불가 진입 버튼이다. 실제 검색은 /explore/region 에서만 한다(TRIP-412).
    * 제출이 아니라 진입이므로 텍스트를 넘기지 않는다(자유 문자열이 region 으로 새는 걸 막는다). */
   onPressSearch: () => void;
+  /** "가볼 곳" 진입점 탭 → d04 장소 목록(/explore/places, TRIP-453). **옵셔널** — 기존
+   * 소비처(cardPress 테스트·_dev/preview·save-integration)가 이 prop 없이 렌더하므로 필수화하면
+   * tsc 가 그 세 곳에서 깨진다. 미지정 시 CTA 는 렌더되되 무동작(무회귀). 라우팅은 라우트가 진다. */
+  onPressPlaces?: () => void;
   stayLane: {
     error: boolean;
     cards: StayCardVM[];
@@ -205,6 +209,7 @@ function StaySaveErrorBanner({
 export function ExploreLandingScreen({
   heading,
   onPressSearch,
+  onPressPlaces,
   stayLane,
   bridge,
 }: ExploreLandingScreenProps): ReactElement {
@@ -280,6 +285,25 @@ export function ExploreLandingScreen({
                 </View>
               </ScrollView>
             )}
+          </View>
+
+          {/* 가볼 곳 — d04 장소 목록 진입점(최소 링크, 조회 없음 · TRIP-453 entry 2). 정본
+              4구획의 "가볼 곳" 자리이나 1차엔 레인이 아니라 진입 링크 하나만 둔다(레인 복원은
+              별도 화면 티켓). 항상 렌더되고, 탭하면 라우트가 /explore/places 로 push 한다. */}
+          <View testID="explore-lane-place" className="mt-2xl">
+            <LaneHeader title="가볼 곳" />
+            <Pressable
+              testID="explore-lane-place-cta"
+              accessibilityRole="button"
+              onPress={onPressPlaces}
+              className="flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
+            >
+              <SearchGlyph size={18} />
+              <Text className="flex-1 font-noto text-label text-muted">
+                가볼 만한 장소 둘러보기
+              </Text>
+              <Text className="font-noto text-label text-muted">›</Text>
+            </Pressable>
           </View>
 
           {/* 여행자 일정 — 자리만(BR-U1-05) */}

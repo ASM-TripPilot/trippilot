@@ -228,6 +228,7 @@ const EXPLORE_LANDING_BASE = {
     subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
   },
   onPressSearch: noop,
+  onPressPlaces: noop,
 } as const;
 
 const VIEW_ONLY_HANDLERS = {
