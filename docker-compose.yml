@@ -135,7 +135,7 @@ services:
       TRIPPILOT_SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
       # TMAP 실경로 API(TRIP-432). 설정 시 ChainedTravelAdapter 활성화 —
       # 미설정 = 기존 하버사인 추정 그대로.
-      TMAP_APP_KEY: ${TMAP_APP_KEY:-}
+      TMAP_API_KEY: ${TMAP_API_KEY:-}
     ports:
       - "8000:8000"
     healthcheck:
