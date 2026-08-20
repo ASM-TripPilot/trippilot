@@ -209,6 +209,7 @@ class ItineraryProblem:
     anchor: GeoPoint | None = None  # 숙소 기점 (정본 §4.1 — U1 누락분 보강)
     excluded_poi_ids: frozenset[PoiId] = frozenset()  # 기배정 POI (TRIP-293)
     daily_rain_prob: Mapping[date, int] | None = None  # 날짜별 POP% (TRIP-383)
+    event_bonus: Mapping[PoiId, float] | None = None  # 행사 근접 보너스 [0,1] (TRIP-421)
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -217,6 +218,10 @@ class ItineraryProblem:
             for d, pop in self.daily_rain_prob.items():
                 if not 0 <= pop <= 100:
                     raise ValueError(f"daily_rain_prob[{d}] 범위 밖 [0,100]: {pop}")
+        if self.event_bonus is not None:
+            for pid, b in self.event_bonus.items():
+                if not 0.0 <= b <= 1.0:  # 양수만 — 감점 경로 없음 (TRIP-421 설계)
+                    raise ValueError(f"event_bonus[{pid}] 범위 밖 [0,1]: {b}")
 
     def to_dict(self) -> dict:
         return {
@@ -236,6 +241,12 @@ class ItineraryProblem:
                 {d.isoformat(): self.daily_rain_prob[d]
                  for d in sorted(self.daily_rain_prob)}
                 if self.daily_rain_prob is not None
+                else None
+            ),
+            "event_bonus": (
+                {str(p): self.event_bonus[p]
+                 for p in sorted(self.event_bonus, key=str)}
+                if self.event_bonus is not None
                 else None
             ),
         }
@@ -262,6 +273,11 @@ class ItineraryProblem:
                 {date.fromisoformat(k): v
                  for k, v in d["daily_rain_prob"].items()}
                 if d.get("daily_rain_prob") is not None
+                else None
+            ),
+            event_bonus=(
+                {PoiId(k): v for k, v in d["event_bonus"].items()}
+                if d.get("event_bonus") is not None
                 else None
             ),
         )

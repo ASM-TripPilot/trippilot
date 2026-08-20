@@ -106,6 +106,8 @@ from trippilot.ports.trace_port import TracePort
 from trippilot.domain.freshness import ProviderKind
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.ports.weather_port import WeatherPort
+from trippilot.ports.event_port import EventPort
+from trippilot.providers.event import EventProvider
 from trippilot.providers.persona import PersonaProvider
 from trippilot.providers.place import PlaceProvider
 from trippilot.providers.weather import WeatherProvider
@@ -687,6 +689,7 @@ def build_orchestrator(
     trace: TracePort | None = None,
     prompts_root: Path | None = None,
     weather: WeatherPort | None = None,
+    events: "EventPort | None" = None,  # 행사 저장소 (TRIP-421) — None이면 무보정
     tz: timezone = KST,
 ) -> WiredItineraryOrchestrator:
     """실 구성요소 조립 → `create_app(orchestrator=...)`에 꽂을 어댑터.
@@ -714,6 +717,8 @@ def build_orchestrator(
     }
     if weather is not None:
         providers[ProviderKind.WEATHER] = WeatherProvider(weather)
+    if events is not None:  # 행사 저장소 주입 시에만 등록 (TRIP-421)
+        providers[ProviderKind.EVENT] = EventProvider(events)
     orchestrator = core.ItineraryOrchestrator(
         InfoCollector(providers),
         PreferenceScoringWorker(

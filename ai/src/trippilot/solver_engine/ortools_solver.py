@@ -166,6 +166,7 @@ class OrToolsSolver:
                            for i, n in enumerate(nodes)]
         obj_terms += self._meal_soft_terms(m, nodes, visit, start, arcs)
         obj_terms += self._rain_soft_terms(problem, day, nodes, visit)
+        obj_terms += self._event_soft_terms(problem, nodes, visit)
         m.Maximize(sum(obj_terms))
 
         # 웜스타트 힌트 = 규칙해 (벤치마크 실증 구성)
@@ -289,6 +290,24 @@ class OrToolsSolver:
                 terms.append(-penalty * visit[i])
             elif category in RAIN_INDOOR and bonus:
                 terms.append(bonus * visit[i])
+        return terms
+
+    def _event_soft_terms(self, problem, nodes, visit) -> list:
+        """행사 근접 보너스 항 (TRIP-421 — 날씨 보정(_rain_soft_terms)과 동형).
+
+        problem.event_bonus[poi_id] ∈ [0,1] × event_bonus_scale — **양수만**
+        (감점 경로 없음: 행사가 취향에 안 맞으면 보너스 0일 뿐, POI 본연의 점수는
+        불변). 하드 배제 아님 — 목적함수만 건드리므로 HC1~4 해 집합 불변.
+        """
+        bonus = problem.event_bonus
+        if not bonus:  # None·빈 맵 — 항 자체가 없다 (종전 동작과 동일)
+            return []
+        scale = self._cfg.event_bonus_scale
+        terms: list = []
+        for i, n in enumerate(nodes):
+            value = bonus.get(n["poi"].poi_id)
+            if value:
+                terms.append(int(value * scale * 1000) * visit[i])
         return terms
 
     def _day_open_window(self, poi: Poi, day) -> tuple[int, int] | None:

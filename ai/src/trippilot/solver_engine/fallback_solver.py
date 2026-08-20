@@ -212,18 +212,25 @@ class RuleFallbackSolver:
         remaining = [c for c in ranked if c.poi_id not in used]
         rain = problem.daily_rain_prob
         pop = rain.get(day) if rain is not None else None
-        if pop is None or pop < self._cfg.rain_threshold_pct:
+        rainy = pop is not None and pop >= self._cfg.rain_threshold_pct
+        event_bonus = problem.event_bonus or {}
+        if not rainy and not event_bonus:
             return remaining
 
         def _adjusted(c) -> float:
+            score = c.score
+            # 행사 근접 보너스 (TRIP-421) — 양수만, 날짜 무관 (기간 겹침은 수집 필터가 이미 보장)
+            score += event_bonus.get(c.poi_id, 0.0) * self._cfg.event_bonus_scale
+            if not rainy:
+                return score
             poi = self._pois.get(c.poi_id)
             if poi is None:
-                return c.score
+                return score
             if poi.category in RAIN_OUTDOOR:
-                return c.score - self._cfg.rain_outdoor_penalty
+                return score - self._cfg.rain_outdoor_penalty
             if poi.category in RAIN_INDOOR:
-                return c.score + self._cfg.rain_indoor_bonus
-            return c.score
+                return score + self._cfg.rain_indoor_bonus
+            return score
 
         # ranked와 동일한 결정론 정렬 키(점수 내림차순 → id 오름차순)의 보정판
         return sorted(remaining, key=lambda c: (-_adjusted(c), str(c.poi_id)))

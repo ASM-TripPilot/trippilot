@@ -33,6 +33,7 @@ INFO_REQUIREMENTS: Mapping[str, tuple[ProviderKind, ...]] = {
         ProviderKind.PLACE,
         ProviderKind.WEATHER,
         ProviderKind.PERSONA,
+        ProviderKind.EVENT,  # 행사 근접 보너스 재료 (TRIP-421)
     ),
     "REPLAN": (
         ProviderKind.WEATHER,

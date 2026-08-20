@@ -86,6 +86,11 @@ class SolverConfig:
     # 실내 보상 0.1은 억제의 절반(소폭) — 보상까지 크면 우천일 실내가 취향을 압도한다.
     rain_outdoor_penalty: float = 0.2   # 우천일 실외(NATURE·NIGHT_VIEW·ACTIVITY) 억제
     rain_indoor_bonus: float = 0.1      # 우천일 실내(CULTURE·CAFE·SHOPPING) 소폭 보상
+    # ── 행사 근접 보너스 (TRIP-421 — 양수만, 감점 경로 없음).
+    # problem.event_bonus 값 [0,1](적합도×거리감쇠)에 이 스케일을 곱한다 —
+    # 최대치(1.0×0.15)가 rain_indoor_bonus급 "한 단 미만" 크기: 근소 갭에서만
+    # 행사 근접 POI가 유리해지고, 취향 점수 갭이 크면 서열 그대로.
+    event_bonus_scale: float = 0.15
 
     def __post_init__(self) -> None:
         for name in ("or_tools_limit_ms", "or_tools_min_ms", "llm_stage_timeout_ms",
@@ -99,7 +104,8 @@ class SolverConfig:
             if not (0 <= lo < hi <= 1440):
                 raise ValueError(f"{name} 은 0 ≤ 시작 < 끝 ≤ 1440 분이어야 함")
         for name in ("meal_bonus", "meal_penalty",
-                     "rain_outdoor_penalty", "rain_indoor_bonus"):
+                     "rain_outdoor_penalty", "rain_indoor_bonus",
+                     "event_bonus_scale"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
         if not 0 <= self.rain_threshold_pct <= 100:
