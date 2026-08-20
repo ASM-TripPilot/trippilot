@@ -77,6 +77,10 @@ import {
 } from '@/features/stay/ui/StayRegisterScreen';
 import { StaySearchScreen } from '@/features/stay/ui/StaySearchScreen';
 import { StayDetailScreen } from '@/features/stay/ui/StayDetailScreen';
+import {
+  SavedStayListScreen,
+  type SavedStayCardVM,
+} from '@/features/stay/ui/SavedStayListScreen';
 import { OtaChoiceSheet } from '@/features/stay/ui/OtaChoiceSheet';
 import { StayPriceSheet } from '@/features/stay/ui/StayPriceSheet';
 import {
@@ -781,6 +785,15 @@ const SLOT_CANDIDATES_PREVIEW: SlotCandidatesCandidatesItem[] = [
     distanceRange: '1.8km',
     rationale: '자연과 예술, 조금 멀어요',
   },
+];
+
+// e04 저장한 숙소(TRIP-461) — 카드 사진·지역·거리·가격은 계약 무라 회색 자리 + 이름·(있으면)
+// 날짜만 그린다(brief §화면·IO). 실화면 딥링크로는 백엔드 401 이면 게스트 얼굴로만 떨어져
+// results·empty 두 얼굴을 여기서 눈으로 대조한다(d04·d02 프리뷰 2키와 같은 사정).
+const SAVED_STAY_PREVIEW_CARDS: SavedStayCardVM[] = [
+  { savedStayId: 'ss-1', name: '해운대 오션 호텔', dateLabel: '6.10~6.13' },
+  { savedStayId: 'ss-2', name: '광안리 뷰 호텔' },
+  { savedStayId: 'ss-3', name: '감천 게스트하우스', dateLabel: '6.13~6.15' },
 ];
 
 // i05 현재 장소 상세(TRIP-398) — Figma 대조용 완성 뷰. 결측 얼굴은 이 위에 상태만 얹는다.
@@ -2175,6 +2188,35 @@ const PREVIEW_STATES: PreviewState[] = [
           slackLabel: '미확인',
         }}
         onPressItinerary={noop}
+      />
+    ),
+  },
+  // e04 저장한 숙소(TRIP-461) — results·empty 두 얼굴. jest 는 픽셀·레이아웃을 못 봐(6-b) 이
+  // 자리가 카드 그림자·거점 지정 하단 버튼·empty 콜라주·돋보기 CTA 를 눈으로 대조하는 곳이다.
+  {
+    key: 'saved-stays-default',
+    label: '저장한 숙소 e04 · 목록',
+    login: null,
+    render: () => (
+      <SavedStayListScreen
+        savedStays={SAVED_STAY_PREVIEW_CARDS}
+        face="results"
+        onPressCard={noop}
+        onPressRegister={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'saved-stays-empty',
+    label: '저장한 숙소 e04 · 빈 상태',
+    login: null,
+    render: () => (
+      <SavedStayListScreen
+        savedStays={[]}
+        face="empty"
+        onPressBrowse={noop}
+        onBack={noop}
       />
     ),
   },

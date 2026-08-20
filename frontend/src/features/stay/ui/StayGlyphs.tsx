@@ -141,7 +141,15 @@ export function WarningTriangleGlyph({
 }
 
 // 위치 핀(TRIP-182 §3-2) — empty 배지 32px, 분홍. Figma 1341:1378 벡터 그대로.
-export function MapPinGlyph({ size = 32, testID }: GlyphProps) {
+// tone: 분홍(기본, e02 empty 배지)과 먹색(e04 하단 "거점 지정" 버튼 핀 — 흰 버튼 위라 텍스트와
+// 같은 먹색) 겸용. FilterSlidersGlyph·WarningTriangleGlyph 의 tone 선례와 동형(색만 prop 으로).
+// 기본값을 primary 로 두는 이유: 기존 호출부(StaySearchScreen·StayDetailScreen)가 이 색을 쓴다.
+export function MapPinGlyph({
+  size = 32,
+  tone = 'primary',
+  testID,
+}: GlyphProps & { tone?: 'primary' | 'ink' }) {
+  const color = tone === 'ink' ? INK : PRIMARY;
   return (
     <Svg
       testID={testID}
@@ -152,15 +160,44 @@ export function MapPinGlyph({ size = 32, testID }: GlyphProps) {
     >
       <Path
         d="M26.6667 13.3333C26.6667 21.3333 16 29.3333 16 29.3333C16 29.3333 5.33333 21.3333 5.33333 13.3333C5.33333 10.5044 6.45714 7.79125 8.45753 5.79086C10.4579 3.79047 13.171 2.66667 16 2.66667C18.829 2.66667 21.5421 3.79047 23.5425 5.79086C25.5429 7.79125 26.6667 10.5044 26.6667 13.3333Z"
-        stroke={PRIMARY}
+        stroke={color}
         strokeWidth={2.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M16 17.3333C18.2091 17.3333 20 15.5425 20 13.3333C20 11.1242 18.2091 9.33333 16 9.33333C13.7909 9.33333 12 11.1242 12 13.3333C12 15.5425 13.7909 17.3333 16 17.3333Z"
-        stroke={PRIMARY}
+        stroke={color}
         strokeWidth={2.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// e04 empty CTA `숙소 둘러보기` 돋보기(19) — 분홍 버튼 위라 흰색(ON_PRIMARY). Figma 1702:1183
+// 벡터. TripGlyphs 에 동명 그림이 있으나 features 간 직접 import 금지(리포 관례)라 새로 그린다.
+export function SearchGlyph({ size = 19, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M9.16667 15C12.3883 15 15 12.3883 15 9.16667C15 5.94501 12.3883 3.33333 9.16667 3.33333C5.94501 3.33333 3.33333 5.94501 3.33333 9.16667C3.33333 12.3883 5.94501 15 9.16667 15Z"
+        stroke={ON_PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M17.5 17.5L13.75 13.75"
+        stroke={ON_PRIMARY}
+        strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
