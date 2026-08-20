@@ -1,4 +1,15 @@
-import { deleteItemAsync, getItemAsync, setItemAsync } from 'expo-secure-store';
+import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
+
+// 웹에는 SecureStore 가 없다(네이티브 전용 — 호출 시 reject). 개발용 웹 실행에 한해
+// localStorage 로 대체한다. 배포 대상은 네이티브뿐이라 SEC-09(OS 보안 저장소)의 예외가 아니다.
+const isWeb = Platform.OS === 'web';
+const getItemAsync = (k: string): Promise<string | null> =>
+  isWeb ? Promise.resolve(globalThis.localStorage?.getItem(k) ?? null) : SecureStore.getItemAsync(k);
+const setItemAsync = (k: string, v: string): Promise<void> =>
+  isWeb ? Promise.resolve(globalThis.localStorage?.setItem(k, v)) : SecureStore.setItemAsync(k, v);
+const deleteItemAsync = (k: string): Promise<void> =>
+  isWeb ? Promise.resolve(globalThis.localStorage?.removeItem(k)) : SecureStore.deleteItemAsync(k);
 
 /**
  * 토큰 저장소 — SEC-09: 클라 토큰은 OS 보안 저장소(expo-secure-store)에만 둔다.
