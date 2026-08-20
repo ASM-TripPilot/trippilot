@@ -56,6 +56,9 @@ const REASON_TITLE = '취향·거리로 채운 추천안이에요';
 const RETRY_LABEL = '다시 만들기';
 const AI_BADGE = 'AI 추천';
 const FIXED_CHIP = '고정';
+/** 비고정 슬롯의 교체 트리거 라벨. h24 `ItineraryEditScreen.ALT_LABEL` 과 같은 값 —
+ * 카운트를 안 붙인다(후보 수는 슬롯별 POST 조회 뒤에만 알아 pre-fetch 불가, 01b Q3). */
+const ALT_LABEL = '다른 후보 ›';
 /** 고정 블록만 예외로 여는 시각 줄. 앞 5자(`HH:mm`)만 쓴다 — 절삭 규칙은 01b D5. */
 const FIXED_NOTE_SUFFIX = ' 도착 · 변경 불가';
 
@@ -118,6 +121,11 @@ export interface DraftScreenProps {
   /** h25(완성 일정)로 가는 완성 CTA 콜백. 화면은 목적지를 모르고 이 콜백만 부른다 — 배선은
    * `DraftPage` 몫이다(TRIP-454 AC-5). `listed` 얼굴(PARTIAL 생성 중 포함) 하단에만 뜬다. */
   onComplete?: () => void;
+  /** 비고정 슬롯의 "다른 후보 ›" 를 누르면 그 슬롯 slotKey 로 부르는 콜백(TRIP-467). 화면은
+   * 어느 시트를 어떻게 여는지 모르고 이 콜백만 부른다 — 시트(`SlotCandidateSheetContainer`) 조건부
+   * 마운트는 `DraftPage` 몫이다. **미배선이면 트리거를 아예 안 그린다**(후방호환 gated — 기본
+   * 미배선=트리거 0이라 동결 화면 테스트·프리뷰 동작 불변). */
+  onPressSlot?: (slotKey: string) => void;
 }
 
 function DayTab({
@@ -163,10 +171,12 @@ function DraftSlotCard({
   slot,
   date,
   index,
+  onPressSlot,
 }: {
   slot: ItineraryDaysItemSlotsItem;
   date: string;
   index: number;
+  onPressSlot?: (slotKey: string) => void;
 }): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const tagText =
@@ -248,6 +258,23 @@ function DraftSlotCard({
             {tagText !== null && distance !== null ? ' · ' : null}
             {distance}
           </Text>
+        )}
+
+        {/* 슬롯 교체 트리거 — 비고정 슬롯에만, 그리고 배선(`onPressSlot`)이 있을 때만 그린다.
+            고정(숙소 앵커)엔 안 그려 교체 대상에서 뺀다(Q1 · INV). testID 는 카드 접두
+            `itinerary-draft-slot-` **밖**이라 카드 개수 셀렉터에 오계수되지 않는다(02a 함정①). */}
+        {slot.isFixed || onPressSlot === undefined ? null : (
+          <Pressable
+            testID={`itinerary-draft-alt-${slotKey}`}
+            accessibilityRole="button"
+            onPress={() => onPressSlot(slotKey)}
+            hitSlop={6}
+            className="self-start pt-[2px]"
+          >
+            <Text className="font-noto-bold text-caption font-bold text-primary-text">
+              {ALT_LABEL}
+            </Text>
+          </Pressable>
         )}
       </View>
 
@@ -382,6 +409,7 @@ export function DraftScreen({
   onRetry,
   onBack,
   onComplete,
+  onPressSlot,
 }: DraftScreenProps): ReactElement {
   // h10 "만드는 중" 얼굴 — PARTIAL 목록 위에 얹힌다(01b D1). 게이지 3상태는 탭(도착 여부)에서
   // 도출하므로 화면이 신호를 새 프롭 없이 받는다(view 로 전달 · DraftPage 참조).
@@ -565,6 +593,7 @@ export function DraftScreen({
                   slot={slot}
                   date={selectedDate}
                   index={index}
+                  onPressSlot={onPressSlot}
                 />
               ))}
             </>

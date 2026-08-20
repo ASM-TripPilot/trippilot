@@ -22,6 +22,8 @@ import {
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
 
+import { SlotCandidateSheetContainer } from './SlotCandidateSheetContainer';
+
 /**
  * h11 배선(TRIP-297) — 두 조회를 잇고, 2단계 생성을 폴링으로 잇고, 재생성을 보낸다.
  *
@@ -42,6 +44,10 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [pickedDate, setPickedDate] = useState<string | null>(null);
+  // 어느 슬롯의 교체 시트가 열렸나(=그 슬롯 slotKey). null 이면 닫힘. 컨테이너를 **조건부 마운트**해
+  // 닫힘 = 트리에서 제거(내부 POST/PUT/재조회 로직은 컨테이너가 소유 — `ItineraryEditPage.editingSlotKey`
+  // + `SlotTimeSheet` 선례와 동형).
+  const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
 
   const itineraryQueryKey = getGetTripsTripIdItineraryQueryKey(tripId);
 
@@ -240,31 +246,45 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   }
 
   return (
-    <DraftScreen
-      view={view}
-      tabs={tabs}
-      selectedDate={selectedDate}
-      pins={buildDraftPins(
-        days.find((day) => day.date === selectedDate)?.slots ?? []
-      )}
-      dayHeader={formatDraftDayHeader(selectedDate)}
-      canRetry={itinerary.data?.status !== 'CONFIRMED'}
-      fallbackNotice={resolveFallbackNotice({
-        solveMode: itinerary.data?.solveMode,
-        isFallback: itinerary.data?.isFallback,
-        candidatesSummary: summary,
-      })}
-      onSelectDay={setPickedDate}
-      onRetry={() => void handleRetry()}
-      onBack={handleBack}
-      // h25(완성 일정) — 접미 없는 index 라우트다(draft·generating 과 달리). 객체형 push 라야
-      // `[tripId]` 가 params 로 해소된다(문자열 형태는 미해결로 깨진다 · TRIP-454 AC-5).
-      onComplete={() =>
-        router.push({
-          pathname: '/trips/[tripId]/itinerary',
-          params: { tripId },
-        })
-      }
-    />
+    <>
+      <DraftScreen
+        view={view}
+        tabs={tabs}
+        selectedDate={selectedDate}
+        pins={buildDraftPins(
+          days.find((day) => day.date === selectedDate)?.slots ?? []
+        )}
+        dayHeader={formatDraftDayHeader(selectedDate)}
+        canRetry={itinerary.data?.status !== 'CONFIRMED'}
+        fallbackNotice={resolveFallbackNotice({
+          solveMode: itinerary.data?.solveMode,
+          isFallback: itinerary.data?.isFallback,
+          candidatesSummary: summary,
+        })}
+        onSelectDay={setPickedDate}
+        onRetry={() => void handleRetry()}
+        onBack={handleBack}
+        // h25(완성 일정) — 접미 없는 index 라우트다(draft·generating 과 달리). 객체형 push 라야
+        // `[tripId]` 가 params 로 해소된다(문자열 형태는 미해결로 깨진다 · TRIP-454 AC-5).
+        onComplete={() =>
+          router.push({
+            pathname: '/trips/[tripId]/itinerary',
+            params: { tripId },
+          })
+        }
+        // 비고정 슬롯 "다른 후보 ›" press → 그 슬롯 slotKey 를 담아 시트를 조건부 마운트한다(h12).
+        onPressSlot={(slotKey) => setEditingSlotKey(slotKey)}
+      />
+      {/* 죽은 코드였던 `SlotCandidateSheetContainer`(TRIP-335)의 유일한 마운트처. editingSlotKey
+          가 있을 때만 트리에 올려 열고, onClose 로 null 을 세워 트리에서 내린다(=닫힘). 내부
+          POST→선택→PUT→재조회는 컨테이너가 소유 — 여기선 열고/닫는 것만 배선한다(TRIP-467). */}
+      {editingSlotKey !== null ? (
+        <SlotCandidateSheetContainer
+          tripId={tripId}
+          slotKey={editingSlotKey}
+          onClose={() => setEditingSlotKey(null)}
+        />
+      ) : null}
+    </>
   );
 }
