@@ -209,6 +209,9 @@ export function SavedPlacesPage(): ReactElement {
       releasedPoiIds={[...releasedPoiIds]}
       onPressRemove={handlePressRemove}
       onPressRestore={handlePressRestore}
+      onPressRow={(saved) =>
+        router.push(`/explore/places/${saved.place.poiId}`)
+      }
       onPressCreateTrip={() => {
         // TRIP-458: d02 CTA 는 "진입"으로 친다(위저드 셸 JSDoc D3). 그런데 위저드 안 '더 담기'로
         // d02 를 열고 돌아오면 `trips/new` 레이아웃이 스택에 살아 있어 셸 마운트의 `resetMustVisits`

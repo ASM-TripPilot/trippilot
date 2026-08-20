@@ -139,6 +139,7 @@ export function PlaceExplorePage(): ReactElement {
       onSelectCategory={handleSelectCategory}
       onChangeSearchText={handleChangeSearchText}
       onToggleSave={handleToggleSave}
+      onPressCard={(place) => router.push(`/explore/places/${place.poiId}`)}
       onPressCreateTrip={() => router.push('/trips/new/step1')}
       onBack={() => router.back()}
       state={listState}

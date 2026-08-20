@@ -35,6 +35,31 @@ export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
   );
 }
 
+/** d06 갤러리 헤더 공유 — 세 점 + 잇는 선. `features/execution`의 ShareGlyph와 같은 그림이나
+ * features 간 직접 import 금지라 여기 다시 그린다(BackChevronGlyph가 StayGlyphs 셰브론을 안
+ * 가져다 쓴 것과 같은 관례). */
+export function ShareGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Circle cx={18} cy={5} r={2.4} stroke={INK} strokeWidth={1.8} />
+      <Circle cx={6} cy={12} r={2.4} stroke={INK} strokeWidth={1.8} />
+      <Circle cx={18} cy={19} r={2.4} stroke={INK} strokeWidth={1.8} />
+      <Path
+        d="M8.1 10.9L15.9 6.1M8.1 13.1L15.9 17.9"
+        stroke={INK}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 /** 검색 돋보기. */
 export function SearchGlyph({ size = 20, testID }: GlyphProps) {
   return (
