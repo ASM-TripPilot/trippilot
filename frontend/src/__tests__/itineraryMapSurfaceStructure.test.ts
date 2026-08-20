@@ -48,6 +48,8 @@ const OPEN_CALLERS = [
   'features/stay/ui/StayRegisterScreen.tsx',
   'features/trip/ui/TripBaseFixSheet.tsx',
   'app/_dev/preview.tsx',
+  // TRIP-397 i02·i03 여행 중 지도 — 자유 탐색이라 제스처를 잠그지 않는다(viewOnly 미전달).
+  'features/execution/ui/LiveMapScreen.tsx',
 ];
 
 /** 완성·확정 일정 화면(h25/h34 · TimelineScreen). **지도 호출부가 둘이다**(TRIP-354 · Q5 정정):
@@ -242,10 +244,10 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
       expect(tags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual(tags);
     });
 
-    // ③ 열어 둘 다섯 자리 — 태그가 정확히 5개이고 그중 어느 것에도 viewOnly 가 없다.
-    //    이 넷이 잠기면 지도를 움직여 좌표를 확정할 방법이 사라진다(회귀 금지).
+    // ③ 열어 둘 자리 — 태그가 정확히 6개(좌표 확정 3화면 5태그 + TRIP-397 LiveMapScreen 1태그)이고
+    //    그중 어느 것에도 viewOnly 가 없다. 이들이 잠기면 좌표 확정·여행 중 자유 탐색이 막힌다(회귀 금지).
     const openTags = OPEN_CALLERS.flatMap((rel) => mapTagsOf(readOne(rel)));
-    expect(openTags).toHaveLength(5);
+    expect(openTags).toHaveLength(6);
     expect(openTags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual([]);
 
     // ④ 완성·확정 일정 화면 — 지도 호출부가 **둘**이다(Q5). 파일이 아니라 **태그 단위로** 잠금
@@ -287,11 +289,11 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
       ...EXPLORE_CALLERS,
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 8개 = 총 9개).
-    //    Q5 로 TimelineScreen 이 지도 태그 2개(글랜스+h26)를 가지며 둘 다 기본값이라 나머지가
-    //    6→8개로 늘었다(설계된 갱신 · AC-8).
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 9개 = 총 10개).
+    //    Q5 로 TimelineScreen 이 지도 태그 2개(글랜스+h26)를 가져 6→8, TRIP-397 LiveMapScreen 이
+    //    1개 더해 8→9로 늘었다(설계된 갱신 · AC-8).
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(8);
+    expect(defaultTags).toHaveLength(9);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);
