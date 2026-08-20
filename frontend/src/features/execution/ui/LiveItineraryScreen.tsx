@@ -8,6 +8,7 @@ import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import type { ActualRouteView } from '../model/actualDistance';
 import type { LivePlanToggle, LiveSegment } from '../model/liveViewStore';
 import { buildMapPeek } from '../model/mapPeek';
+import { resolveNextDest, type NavDest } from '../model/nextNav';
 import type { ProjectedSlot, SlotState } from '../model/slotProgress';
 import {
   RailActiveGlyph,
@@ -58,6 +59,8 @@ export interface LiveItineraryScreenProps {
   subtitle: string;
   /** 하단 복제 탭바 콜백 — page 가 router.replace 로 배선. */
   onPressTab: (key: ShellTabKey) => void;
+  /** "다음 장소 길찾기" — page 가 openNextNav(딥링크 폴백 사다리)로 배선. active 다음 첫 upcoming 을 넘긴다. */
+  onPressNextNav?: (dest: NavDest) => void;
 }
 
 export function LiveItineraryScreen({
@@ -73,8 +76,11 @@ export function LiveItineraryScreen({
   tripTitle,
   subtitle,
   onPressTab,
+  onPressNextNav,
 }: LiveItineraryScreenProps): ReactElement {
   const activeDate = days[activeDayIndex]?.date ?? '';
+  // 진행 중 슬롯 다음 첫 upcoming(좌표 유한)을 다음 예정지로 도출 — active 카드에만 주입한다.
+  const nextDest = resolveNextDest(slots);
 
   return (
     <SafeAreaView
@@ -184,6 +190,12 @@ export function LiveItineraryScreen({
                   slot={projected.slot}
                   date={activeDate}
                   state={projected.state}
+                  nextDest={projected.state === 'active' ? nextDest : undefined}
+                  onPressNextNav={
+                    projected.state === 'active' && nextDest
+                      ? () => onPressNextNav?.(nextDest)
+                      : undefined
+                  }
                 />
               </View>
             </View>

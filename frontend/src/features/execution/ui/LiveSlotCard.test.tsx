@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 
@@ -145,5 +145,44 @@ describe('LiveSlotCard', () => {
     expect(
       screen.getByTestId(`execution-live-slot-range-${key()}`)
     ).toHaveTextContent('15:00–16:30');
+  });
+
+  // ── TRIP-399 · AC-3: active 카드의 "다음 예정지" 섹션(additive 옵셔널 prop) ──
+  // 기존 C1~C7·slot() 헬퍼는 무변경. 카드는 순수 뷰 — Linking·router 를 모른다(nextNav 유틸이
+  // 판정을 소유). state='active' + nextDest 있을 때만 거리행·CTA 를 그린다.
+  const nextDest = {
+    lat: 35.1,
+    lng: 129.1,
+    nameKo: '광안리',
+    distanceRange: '약 1.2km · 도보 추정',
+  };
+
+  it('N1 active 카드에 nextDest 를 주면 다음 예정지 거리와 [다음 장소 길찾기] CTA 를 그리고, CTA press 는 onPressNextNav 를 부른다', () => {
+    const onPressNextNav = jest.fn();
+    render(
+      <LiveSlotCard
+        slot={slot()}
+        date={DATE}
+        state="active"
+        nextDest={nextDest}
+        onPressNextNav={onPressNextNav}
+      />
+    );
+
+    // 거리 leaf 는 서버 문자열 하나만 담는다(toHaveTextContent 문자열=완전일치, RNTL 13.3.3).
+    expect(
+      screen.getByTestId('execution-arrive-next-distance')
+    ).toHaveTextContent('약 1.2km · 도보 추정');
+    expect(screen.getByTestId('execution-arrive-next-nav')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('execution-arrive-next-nav'));
+    expect(onPressNextNav).toHaveBeenCalledTimes(1);
+  });
+
+  it('N2 active 카드라도 nextDest 가 없으면 거리·CTA 섹션이 아예 없다 (AC-3 부재 · 회귀 앵커)', () => {
+    render(<LiveSlotCard slot={slot()} date={DATE} state="active" />);
+
+    expect(screen.queryByTestId('execution-arrive-next-distance')).toBeNull();
+    expect(screen.queryByTestId('execution-arrive-next-nav')).toBeNull();
   });
 });

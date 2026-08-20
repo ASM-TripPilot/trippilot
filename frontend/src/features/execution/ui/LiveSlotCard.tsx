@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 
+import type { NavDest } from '../model/nextNav';
 import type { SlotState } from '../model/slotProgress';
 import {
   CameraGlyph,
@@ -57,12 +58,18 @@ export interface LiveSlotCardProps {
   /** slotKey·표시 조립용 활성 날짜. */
   date: string;
   state: SlotState;
+  /** active 카드의 "다음 예정지"(첫 upcoming). 없으면 섹션 미렌더 — page 가 resolveNextDest 로 도출해 주입. */
+  nextDest?: NavDest | null;
+  /** "다음 장소 길찾기" CTA press 핸들러. 카드는 이 콜백만 부르고 Linking·router 를 모른다. */
+  onPressNextNav?: () => void;
 }
 
 export function LiveSlotCard({
   slot,
   date,
   state,
+  nextDest,
+  onPressNextNav,
 }: LiveSlotCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string =>
@@ -197,6 +204,29 @@ export function LiveSlotCard({
           </View>
         </View>
       )}
+
+      {active && nextDest ? (
+        <View className="flex-row items-center justify-between gap-sm pt-[2px]">
+          <View className="flex-row items-center gap-[6px]">
+            <RouteArrowGlyph size={13} color={MUTED} />
+            <Text
+              testID="execution-arrive-next-distance"
+              className="font-noto text-label text-body"
+            >
+              {nextDest.distanceRange}
+            </Text>
+          </View>
+          <Pressable
+            testID="execution-arrive-next-nav"
+            onPress={onPressNextNav}
+            className="rounded-button bg-primary px-md py-[6px]"
+          >
+            <Text className="font-noto-medium text-label text-on-primary">
+              다음 장소 길찾기
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
