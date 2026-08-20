@@ -30,6 +30,15 @@ data class ErrorResponse(
          */
         @get:JsonInclude(JsonInclude.Include.NON_NULL)
         val existingProvider: String? = null,
+        /**
+         * GENERATION_IN_PROGRESS 에만 존재(TRIP-403) — **지금 생성 중인 여행**의 식별자.
+         *
+         * 거절 사유만 주면 사용자는 무엇이 끝나기를 기다려야 하는지 모른다. 화면이 이 값으로
+         * 그 여행으로 이동시킬 수 있다. `existingProvider` 와 같은 방식이다 — 코드별 타입 필드,
+         * null 이면 미직렬화.
+         */
+        @get:JsonInclude(JsonInclude.Include.NON_NULL)
+        val activeTripId: String? = null,
     )
 
     data class Field(

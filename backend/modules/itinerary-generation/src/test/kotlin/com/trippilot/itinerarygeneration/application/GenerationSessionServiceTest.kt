@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.GenerationStatus
@@ -201,7 +202,9 @@ class GenerationSessionConcurrencyTest : StringSpec({
 
         val e = shouldThrow<ConflictDetected> { svc(repo).start(acc, tripB, GenerationMode.FULLY_AI) }
 
-        (e.current as ActiveGeneration).tripId shouldBe tripA
+        e.current shouldBe tripA
+        // 전용 코드여야 화면이 닉네임 중복 같은 다른 409 와 구분한다.
+        e.errorCode shouldBe ErrorCode.GENERATION_IN_PROGRESS
     }
 
     /**

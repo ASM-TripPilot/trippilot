@@ -14,6 +14,8 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.AfterEach
+import java.util.UUID
+import org.springframework.http.HttpStatus
 import org.junit.jupiter.api.Test
 import org.slf4j.MDC
 
@@ -131,4 +133,35 @@ class GlobalExceptionHandlerTest {
         conflict shouldContain "\"existingProvider\":\"naver\""
         notFound shouldNotContain "existingProvider"
     }
+    /**
+     * **진행 중인 여행이 계약 필드로 실린다**(TRIP-403).
+     *
+     * `ConflictDetected.current` 는 봉투에 자동으로 실리지 않는다 — errorCode 로 좁혀 꺼내는 코드가
+     * 있어야 한다. 그것을 빠뜨리면 409 는 나가는데 **어느 여행인지가 통째로 빠져** 화면이 안내를 못 한다.
+     */
+    @Test
+    fun `생성 충돌 409 는 진행 중인 여행을 계약 필드로 싣는다`() {
+        val running = UUID.randomUUID()
+
+        val res = handler.handleDomain(
+            ConflictDetected(
+                current = running,
+                errorCode = ErrorCode.GENERATION_IN_PROGRESS,
+                message = "다른 여행의 일정을 만들고 있어요.",
+            ),
+        )
+
+        res.statusCode shouldBe HttpStatus.CONFLICT
+        res.body!!.error.code shouldBe "GENERATION_IN_PROGRESS"
+        res.body!!.error.activeTripId shouldBe running.toString()
+    }
+
+    /** 다른 409 의 응답 모양은 바뀌지 않는다 — 필드가 아예 안 실린다. */
+    @Test
+    fun `다른 충돌에는 여행 식별자가 실리지 않는다`() {
+        val res = handler.handleDomain(ConflictDetected(message = "닉네임이 이미 사용 중입니다."))
+
+        res.body!!.error.activeTripId shouldBe null
+    }
+
 }

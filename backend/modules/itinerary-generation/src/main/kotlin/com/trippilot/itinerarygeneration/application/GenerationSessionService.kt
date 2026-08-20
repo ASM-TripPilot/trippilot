@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.GenerationSession
@@ -73,8 +74,11 @@ class GenerationSessionService(
             return
         }
 
+        // 어느 여행이 도는지 함께 준다 — 사유만 주면 사용자는 무엇이 끝나기를 기다릴지 모른다.
+        // 전용 코드를 쓴다: 기본 CONFLICT 로는 화면이 닉네임 중복 409 와 구분하지 못한다.
         throw ConflictDetected(
-            current = ActiveGeneration(active.tripId, active.sessionId, active.startedAt),
+            current = active.tripId,
+            errorCode = ErrorCode.GENERATION_IN_PROGRESS,
             message = "다른 여행의 일정을 만들고 있어요. 끝나면 다시 시도해 주세요.",
         )
     }
@@ -136,10 +140,3 @@ class GenerationSessionService(
     }
 }
 
-/**
- * 거절 응답에 실리는 "지금 돌고 있는 생성"(TRIP-403).
- *
- * 어느 여행인지 알려줘야 화면이 "○○ 여행 생성 중" 으로 안내하고 그리로 보낼 수 있다 —
- * 사유만 주면 사용자는 무엇을 기다려야 할지 모른다(INV-4).
- */
-data class ActiveGeneration(val tripId: UUID, val sessionId: UUID, val startedAt: Instant)
