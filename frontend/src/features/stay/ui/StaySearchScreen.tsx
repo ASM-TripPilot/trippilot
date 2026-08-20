@@ -80,6 +80,10 @@ export interface StaySearchScreenProps {
   /** 응답 대기 중 키 집합(TRIP-417 AC-8) — 든 하트는 `disabled`(연타 중복 요청 차단).
    * 미지정=빈=전부 활성. */
   pendingKeys?: string[];
+  /** 카드 탭 콜백(TRIP-457 AC-5) — 눌린 item을 그대로 올린다. 상세 라우트 push 는 페이지 몫
+   * (화면은 라우터를 모른다). 하트 press 는 카드 push 를 삼키지 않는다(★F-4 findEventHandler).
+   * 미지정=카드 press 무동작(정직한 스텁). */
+  onPressCard?: (item: StayItem) => void;
 }
 
 // 카드 그림자(브리프 §4-2 명시 raw 허용 — 그림자는 토큰 대상이 아니다, HomeScreen.tsx
@@ -203,16 +207,23 @@ function StayCard({
   saved,
   pending,
   onToggleSave,
+  onPressCard,
 }: {
   item: StayItem;
   saved: boolean;
   pending: boolean;
   onToggleSave?: (item: StayItem) => void;
+  onPressCard?: (item: StayItem) => void;
 }): ReactElement {
   const key = stayKey(item);
   return (
-    <View
+    // 카드 루트를 Pressable로 — 하트(자식 Pressable) press 는 findEventHandler가 하트에서
+    // 멈춰 카드 push 를 삼키지 않는다(★F-4). 동결 cardFingerprint 는 요소 타입·onPress 를 안
+    // 굳혀(testID·className·문자열 children만) 이 교체가 지문 불변이다(★F-1).
+    <Pressable
       testID={`stay-card-${key}`}
+      accessibilityRole="button"
+      onPress={() => onPressCard?.(item)}
       style={cardShadow}
       className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
     >
@@ -253,7 +264,7 @@ function StayCard({
           {formatPrice(item.price)}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -484,6 +495,7 @@ export function StaySearchScreen({
   savedKeys = [],
   onToggleSave,
   pendingKeys = [],
+  onPressCard,
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
@@ -536,6 +548,7 @@ export function StaySearchScreen({
                   saved={savedKeys.includes(key)}
                   pending={pendingKeys.includes(key)}
                   onToggleSave={onToggleSave}
+                  onPressCard={onPressCard}
                 />
               </View>
             );

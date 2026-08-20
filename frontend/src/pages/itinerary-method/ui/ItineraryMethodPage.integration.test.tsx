@@ -10,15 +10,21 @@ import { ItineraryMethodPage } from './ItineraryMethodPage';
 /**
  * TRIP-303 → **TRIP-305 재작성**(게이트① 동결분 개봉 — 새 사이클이라 정당, `[[배선 이음매]]`).
  *
- * 무엇이 바뀌었나: 생성 POST 소유가 **h04→h09 로 이동**했다(AC-7·⚑B). h04 는 이제 완전AI 를
- * 고르면 **h09(생성 중)로 navigate 만** 한다 — 인라인 스피너·POST·draft 라우팅은 h09 가 소유한다.
- * 그래서 옛 "완전AI→POST+draft" · "POST 실패/중복제출" describe 는 삭제되고, 그 표면은 h09 의
- * `GeneratingPage.integration.test.tsx`(AC-6)로 이관됐다.
+ * 무엇이 바뀌었나: 생성 POST 소유가 **h04→h09 로 이동**했다(TRIP-305 AC-7·⚑B). h04 는 완전AI 를
+ * 고르면 **navigate 만** 하고 생성 POST·draft 라우팅은 h09 가 소유한다 — 그래서 옛 "완전AI→
+ * POST+draft" · "POST 실패/중복제출" describe 는 삭제돼 h09 의 `GeneratingPage.integration.test.tsx`
+ * (AC-6)로 이관됐다. **TRIP-454 로 그 navigate 목적지가 h09 직행 → h05(필수 방문지) 편입으로
+ * 바뀌었다**(h05 CTA 가 h09 로 잇는다 · 아래 첫 describe).
  *
  * 무엇을 보장하나:
  *  - 3방식 카드가 Figma 문구 그대로 뜨고, 추천 배지는 [AI와 같이 짜기] **하나**에만 있다.
- *  - 🔴 완전AI 를 누르면 **h09 로 navigate 하고 h04 에서는 POST 가 한 건도 안 나간다**(POST 는 h09 소유).
- *  - copick·manual 은 "준비 중"만 낼 뿐 POST·라우팅이 0 이다(착지 화면 미착수, 01b D2·D3).
+ *  - 🔴 완전AI 를 누르면 **h05(필수 방문지)로 navigate 하고 h04 에서는 POST 가 한 건도 안 나간다**
+ *    (TRIP-454 로 h09 직행 → h05 편입 재작성 · 생성 POST 는 여전히 h09 가 소유).
+ *  - 🔴 직접 짜기(manual)를 누르면 **h19(빈 일정)로 navigate 하고 POST 는 h04 에서 0**이다(TRIP-460
+ *    개통 — MANUAL POST 는 h19 소유). 준비 중 게이트는 더는 안 뜬다.
+ *  - 🔴 copick(AI와 같이 짜기)을 누르면 **CO_PLAN 씨앗(생성 중 화면)으로 navigate 하고 준비 중이 안
+ *    뜨며 POST 는 h04 에서 0**이다(TRIP-462 개통 — 씨앗은 h09 GeneratingPage 를 CO_PLAN 으로 재사용,
+ *    생성 POST 는 씨앗 화면이 소유. 구 "준비 중만 낸다"에서 재작성, 새 사이클이라 정당).
  *
  * 3동작 뼈대: 준비=POST·라우터 목 → 실행=렌더하거나 카드를 누른다 → 단언=보이는 것·나간 요청·이동.
  */
@@ -105,30 +111,30 @@ describe('🔴 추천 배지는 copick 에만', () => {
   });
 });
 
-describe('🔴 완전AI → h09(생성 중)로 navigate, h04 POST 0 (AC-7 · ⚑B)', () => {
-  it('완전AI 를 누르면 generating 라우트로 이동하고 POST 는 h04 에서 안 나간다', () => {
+describe('🔴 완전AI → h05(필수 방문지)로 navigate, h04 POST 0 (TRIP-454 AC-1)', () => {
+  it('완전AI 를 누르면 must-visits 라우트로 이동하고(tripId 실림) POST 는 h04 에서 안 나간다', () => {
     renderPage();
 
     fireEvent.press(screen.getByTestId('itinerary-method-fullai'));
 
-    // 이동이 한 번 일어났다 — 목적지 형태(문자열/객체)를 강요하지 않고 직렬화해 "어디로 갔나"만
-    // 잰다(DraftPage I6 · 02a ★4). h09 로 갔고 tripId 를 실었다.
+    // 이동이 한 번 — 목적지 형태(문자열/객체)를 강요하지 않고 직렬화해 "어디로 갔나"만 잰다.
+    // 완전AI 는 이제 h05 로 가고, 거기서 CTA 가 h09 로 잇는다(브리프 part 1 · 02a AC-1).
     expect(mockPush).toHaveBeenCalledTimes(1);
     const destination = mockPush.mock.calls[0][0] as unknown;
     const asText =
       typeof destination === 'string'
         ? destination
         : JSON.stringify(destination);
-    expect(asText).toContain('generating');
+    expect(asText).toContain('must-visits');
     expect(asText).toContain(TRIP_ID);
 
-    // ★ POST 는 h04 에서 한 건도 안 나간다 — 생성 발화는 h09 가 마운트 시 소유한다(AC-7).
+    // ★ POST 는 h04 에서 한 건도 안 나간다 — 생성 발화는 여전히 h09 가 마운트 시 소유한다(무회귀).
     expect(mockMutate).not.toHaveBeenCalled();
   });
 });
 
-describe('🔴 copick·manual 은 준비 중만 낸다 (01b D2·D3)', () => {
-  it('copick 을 누르면 준비 중 안내만 뜨고 POST·라우팅이 0', () => {
+describe('🔴 copick → CO_PLAN 씨앗(생성 중)으로 navigate, h04 POST 0 (TRIP-462 개통)', () => {
+  it('copick 을 누르면 CO_PLAN 씨앗 라우트로 이동하고(tripId·모드 실림) 준비 중이 안 뜨며 POST 는 h04 에서 0', () => {
     renderPage();
 
     // 짝 — 탭 전엔 준비중 안내가 없다.
@@ -136,20 +142,51 @@ describe('🔴 copick·manual 은 준비 중만 낸다 (01b D2·D3)', () => {
 
     fireEvent.press(screen.getByTestId('itinerary-method-copick'));
 
-    expect(screen.getByTestId('itinerary-method-soon')).toBeOnTheScreen();
-    expect(mockMutate).not.toHaveBeenCalled();
-    expect(mockPush).not.toHaveBeenCalled();
-  });
+    // 이동이 한 번 — 목적지 형태(문자열/객체)를 강요하지 않고 직렬화해 "어디로 갔나"만 잰다
+    // (완전AI·manual 케이스 동형). 씨앗은 h09 생성 중 화면을 재사용한다(01b Q1 안 B).
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    const destination = mockPush.mock.calls[0][0] as unknown;
+    const asText =
+      typeof destination === 'string'
+        ? destination
+        : JSON.stringify(destination);
+    expect(asText).toContain('generating');
+    // ★ CO_PLAN 모드가 실려야 copick 씨앗이다 — 이게 완전AI(must-visits·모드 없음)와 갈라지는 지점.
+    // 모드 없이 generating 으로만 보내면 씨앗이 FULLY_AI 로 생성돼 draft 로 새므로 이 단언이 red.
+    expect(asText).toContain('CO_PLAN');
+    // ★ successRoute(생성 완료 후 착지)가 copick 허브여야 한다 — 이 값이 draft 로 새면 "AI와 같이 짜기"를
+    // 고른 사용자가 CO_PLAN 생성 후 완전AI 초안(h11)에 착지한다(5-b 경고-1). AC-1 목적지 계약의 급소.
+    expect(asText).toContain('copick');
+    expect(asText).toContain(TRIP_ID);
 
-  it('manual 을 누르면 준비 중 안내만 뜨고 POST·라우팅이 0', () => {
-    renderPage();
-
+    // ★ 준비 중 게이트가 더는 안 뜬다(게이트 해제) + 생성 POST 는 h04 에서 0(CO_PLAN POST 는 씨앗 소유).
     expect(screen.queryByTestId('itinerary-method-soon')).toBeNull();
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 직접 짜기 → h19(빈 일정)로 navigate, POST 0 (TRIP-460 개통)', () => {
+  it('manual 을 누르면 manual 라우트로 이동하고(tripId 실림) POST 는 h04 에서 안 나가며 준비 중이 안 뜬다', () => {
+    renderPage();
 
     fireEvent.press(screen.getByTestId('itinerary-method-manual'));
 
-    expect(screen.getByTestId('itinerary-method-soon')).toBeOnTheScreen();
+    // 이동이 한 번 — 목적지 형태를 강요하지 않고 직렬화해 "어디로 갔나"만 잰다(완전AI 케이스 동형).
+    // h19(빈 일정) manual 라우트로 갔고 tripId 를 실었다.
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    const destination = mockPush.mock.calls[0][0] as unknown;
+    const asText =
+      typeof destination === 'string'
+        ? destination
+        : JSON.stringify(destination);
+    expect(asText).toContain('manual');
+    // ★ 형제 라우트 `manual/add`(h20)와 가른다 — h19(빈 일정)로 가야 MANUAL POST(빈 일정 생성)를
+    // 소유한다. `.../manual/add` 로 오배선하면 이 단언이 red(code-critic 경고-1 봉합).
+    expect(asText).not.toContain('add');
+    expect(asText).toContain(TRIP_ID);
+
+    // ★ 준비 중 게이트가 더는 안 뜬다(게이트 해제) + 생성 POST 는 h04 에서 0(MANUAL POST 는 h19 소유).
+    expect(screen.queryByTestId('itinerary-method-soon')).toBeNull();
     expect(mockMutate).not.toHaveBeenCalled();
-    expect(mockPush).not.toHaveBeenCalled();
   });
 });

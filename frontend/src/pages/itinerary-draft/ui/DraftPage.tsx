@@ -245,6 +245,14 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       onSelectDay={setPickedDate}
       onRetry={() => void handleRetry()}
       onBack={() => router.back()}
+      // h25(완성 일정) — 접미 없는 index 라우트다(draft·generating 과 달리). 객체형 push 라야
+      // `[tripId]` 가 params 로 해소된다(문자열 형태는 미해결로 깨진다 · TRIP-454 AC-5).
+      onComplete={() =>
+        router.push({
+          pathname: '/trips/[tripId]/itinerary',
+          params: { tripId },
+        })
+      }
     />
   );
 }

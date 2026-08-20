@@ -44,6 +44,8 @@ import {
  */
 
 const SCREEN_TITLE = 'AI 추천안';
+/** h11→h25 완성 CTA 라벨. Figma h11(1870:1083)에 하단 CTA 가 없어 발명값이다(02a §6). */
+const COMPLETE_LABEL = '이 일정으로 완성';
 // h10 "만드는 중" 얼굴 문구(TRIP-337 · Figma 1872:1083). 제목엔 반드시 "만드는 중"이 든다(02a M5).
 // 게이지 캡션은 거리만 말한다(INV-3 — 소요시간·시각·퍼센트 없음). "곧 완성돼요"는 수치 없는 안내다.
 const GENERATING_TITLE = '일정 만드는 중';
@@ -113,6 +115,9 @@ export interface DraftScreenProps {
   onSelectDay: (date: string) => void;
   onRetry: () => void;
   onBack: () => void;
+  /** h25(완성 일정)로 가는 완성 CTA 콜백. 화면은 목적지를 모르고 이 콜백만 부른다 — 배선은
+   * `DraftPage` 몫이다(TRIP-454 AC-5). `listed` 얼굴(PARTIAL 생성 중 포함) 하단에만 뜬다. */
+  onComplete?: () => void;
 }
 
 function DayTab({
@@ -376,6 +381,7 @@ export function DraftScreen({
   onSelectDay,
   onRetry,
   onBack,
+  onComplete,
 }: DraftScreenProps): ReactElement {
   // h10 "만드는 중" 얼굴 — PARTIAL 목록 위에 얹힌다(01b D1). 게이지 3상태는 탭(도착 여부)에서
   // 도출하므로 화면이 신호를 새 프롭 없이 받는다(view 로 전달 · DraftPage 참조).
@@ -573,6 +579,22 @@ export function DraftScreen({
                   <GenerationSkeleton key={cell.date} cell={cell} />
                 ))
             : null}
+
+          {/* 완성 CTA — 스크롤 흐름의 마지막 자식이다(하단 고정 바 아님, `MustVisitPickerScreen`
+              ctaPrimary 선례). `listed` 얼굴에만 뜨고(PARTIAL 생성 중 포함) 항상 활성이다 —
+              h25 가 자체적으로 상태를 처리하므로 잠그지 않는다(TRIP-454 AC-4 · 02a ★8). */}
+          {view.kind === 'listed' ? (
+            <Pressable
+              testID="itinerary-draft-complete"
+              accessibilityRole="button"
+              onPress={onComplete}
+              className="w-full items-center justify-center rounded-button bg-primary py-lg"
+            >
+              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+                {COMPLETE_LABEL}
+              </Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       </View>
     </SafeAreaView>

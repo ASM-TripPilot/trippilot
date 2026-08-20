@@ -30,6 +30,7 @@ const PAGES_DIR = path.join(ROOT, 'pages');
  * (onboardingPrefStructure.test.ts:75-84와 같은 성격의 보정).
  */
 const ONBOARDING_PAGE_SLICES = [
+  'onboarding-location',
   'onboarding-nickname',
   'onboarding-pref1',
   'onboarding-pref2',
@@ -112,7 +113,7 @@ function screenSources() {
 }
 
 describe('온보딩 라우트 배치 (AC C5 · D4)', () => {
-  it('terms·nickname 라우트는 (onboarding) 그룹에 있고, 위치 라우트는 등록되지 않는다 (D7)', () => {
+  it('terms·nickname·location 라우트가 (onboarding) 체인에 있고, 위치 라우트는 (tabs) 밖이다 (D7 반전 · AC-10 · AC-2)', () => {
     // 긍정 — 체인 라우트가 실제로 있어야 한다.
     expect(fs.existsSync(path.join(ONBOARDING_ROUTE_DIR, 'terms.tsx'))).toBe(
       true
@@ -121,9 +122,19 @@ describe('온보딩 라우트 배치 (AC C5 · D4)', () => {
       true
     );
 
-    // 부정 — c08 은 라우트 없는 재사용 컴포넌트다(D7). 라우트가 생기면 잘못된 자리에 박힌 것이다.
-    const routeFiles = fs.readdirSync(ONBOARDING_ROUTE_DIR);
-    expect(routeFiles.filter((f) => /location/i.test(f))).toEqual([]);
+    // 긍정(D7 반전, TRIP-459) — c08 이 nickname→pref1 체인에 라우트로 삽입됐다. Q4 로 라우트명은
+    // `location`(도메인명 관례 terms/nickname/pref1/pref2 와 일치). 예전엔 "위치 라우트 0건" 을
+    // 강제했으나, 온보딩 체인 안 프리프롬프트를 3-a 에서 채택하면서 뒤집는다.
+    const onbRouteFiles = fs.readdirSync(ONBOARDING_ROUTE_DIR);
+    expect(onbRouteFiles.filter((f) => /location/i.test(f))).toEqual([
+      'location.tsx',
+    ]);
+
+    // 부정(짝) — 위치 라우트는 (tabs) 밖이다(BR-U0-29 무회귀 — 온보딩 전이 화면이라 탭바 없음).
+    const tabsFiles = fs.existsSync(TABS_ROUTE_DIR)
+      ? fs.readdirSync(TABS_ROUTE_DIR)
+      : [];
+    expect(tabsFiles.filter((f) => /location/i.test(f))).toEqual([]);
   });
 
   it('온보딩 라우트는 탭 그룹 밖에 있어 탭바가 그려지지 않는다 (BR-U0-29)', () => {

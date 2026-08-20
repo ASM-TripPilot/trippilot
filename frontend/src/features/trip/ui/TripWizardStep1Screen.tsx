@@ -1112,33 +1112,38 @@ export function TripWizardStep1Screen({
                 placeholderTextColor="#9AA1AB"
                 className="rounded-pill border border-hairline-strong px-md py-sm font-noto text-body text-ink"
               />
-              <View className="flex-row flex-wrap gap-sm">
-                {sheetChipRegions.map((region) => {
-                  const selected = sheetRegionCode === region.code;
-                  return (
-                    <Pressable
-                      key={region.code}
-                      testID={`trip-wizard-destination-region-${region.code}`}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      onPress={() => setSheetRegionCode(region.code)}
-                      className={`rounded-pill px-md py-sm ${
-                        selected
-                          ? 'bg-primary'
-                          : 'border border-hairline-strong bg-canvas'
-                      }`}
-                    >
-                      <Text
-                        className={`text-label font-noto-bold font-bold ${
-                          selected ? 'text-on-primary' : 'text-ink'
+              <ScrollView
+                testID="trip-wizard-destination-sheet-scroll"
+                className="max-h-[240px]"
+              >
+                <View className="flex-row flex-wrap gap-sm">
+                  {sheetChipRegions.map((region) => {
+                    const selected = sheetRegionCode === region.code;
+                    return (
+                      <Pressable
+                        key={region.code}
+                        testID={`trip-wizard-destination-region-${region.code}`}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        onPress={() => setSheetRegionCode(region.code)}
+                        className={`rounded-pill px-md py-sm ${
+                          selected
+                            ? 'bg-primary'
+                            : 'border border-hairline-strong bg-canvas'
                         }`}
                       >
-                        {region.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+                        <Text
+                          className={`text-label font-noto-bold font-bold ${
+                            selected ? 'text-on-primary' : 'text-ink'
+                          }`}
+                        >
+                          {region.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
               {/* 불일치 안내(TRIP-387) — "입력 안 함"과 "일치 없음"은 다르다. 빈 검색어(전체
                   표시)에는 안 뜨고, 검색어가 있는데 결과가 0개일 때만 뜬다. 빈 목록이 여기 도달
                   했다는 것 자체가 nullish `??` 폴백이 빈 배열을 안 되살렸다는 증거다(AC-2). */}

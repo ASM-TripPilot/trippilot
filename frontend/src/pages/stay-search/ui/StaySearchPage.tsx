@@ -12,6 +12,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
 
+import {
+  filterByPriceRange,
+  type PriceBucketId,
+} from '@/features/stay/model/priceRangeFilter';
 import { relaxCulpritFilter } from '@/features/stay/model/relaxCulpritFilter';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import {
@@ -23,6 +27,7 @@ import { stayKey } from '@/features/stay/model/stayKey';
 import { resolveStaySearchState } from '@/features/stay/model/staySearchState';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { StayFilterSheet } from '@/features/stay/ui/StayFilterSheet';
+import { StayPriceSheet } from '@/features/stay/ui/StayPriceSheet';
 import { StaySearchScreen } from '@/features/stay/ui/StaySearchScreen';
 
 /** URL은 신뢰 경계 — 같은 쿼리 키가 중복되면 배열로 온다. 계약(`GetStaysSearchParams`)은
@@ -50,6 +55,12 @@ export function StaySearchPage(): ReactElement {
   const [draftAmenity, setDraftAmenity] = useState<string[]>([]);
   const [draftStayType, setDraftStayType] = useState<string[]>([]);
 
+  // 가격대 시트(TRIP-457) — 계약(`/stays/search`)에 price 파라미터가 없어 서버 필터가 불가하므로
+  // 응답 items 를 `priceRangeFilter` 순수 함수로 클라 파생 필터한다(01b Q4 (a)). 시트 열림·선택
+  // 버킷은 이 배선이 소유(화면·시트는 useState 0건 구조 가드).
+  const [priceSheetOpen, setPriceSheetOpen] = useState(false);
+  const [priceBucket, setPriceBucket] = useState<PriceBucketId>('all');
+
   const { data, isPending, isError, refetch } = useStaySearch({
     region: resolvedRegion,
     ...(amenityList.length > 0 ? { amenity: amenityList } : {}),
@@ -75,21 +86,27 @@ export function StaySearchPage(): ReactElement {
     }
   }
 
+  // 가격대 파생 필터(TRIP-457) — 기본 `all`은 순서보존 전량이라 동결 통합테스트가 무회귀다
+  // (★F-6). 화면에 내리는 목록·개수(헤더 "N곳") 둘 다 이 파생 결과에서 나와 갈라지지 않는다.
+  const visibleItems = filterByPriceRange(data?.items ?? [], priceBucket);
+
   const state = resolveStaySearchState({
     isPending,
     isError,
-    // `data?.items ?? []` 아래와 방어 수준을 맞춘다(03b W-3) — `items`가 계약과 달리
-    // 없는 응답이 와도 `.length`에서 TypeError로 죽지 않고 0건으로 접는다(INV-4).
-    itemCount: data?.items?.length ?? 0,
+    itemCount: visibleItems.length,
     degraded: data?.degraded ?? false,
     filterZeroReasons: data?.filterZeroReasons ?? [],
   });
 
-  // 필터 칩(TRIP-415) — 지역=재선택 진입(/explore/region 재사용, 새 UI 안 만듦), 필터=시트 열기,
-  // 가격대=스텁(계약 파라미터 부재, 범위 밖이라 axis 를 무시한다).
+  // 필터 칩 — 지역=재선택 진입(/explore/region 재사용), 필터=시트 열기, 가격대=가격대 시트 열기
+  // (TRIP-457 복구 — 이전엔 axis 를 무시해 무동작이던 결함).
   function handlePressFilter(axis: 'price' | 'region' | 'more'): void {
     if (axis === 'region') {
       router.push('/explore/region');
+      return;
+    }
+    if (axis === 'price') {
+      setPriceSheetOpen(true);
       return;
     }
     if (axis === 'more') {
@@ -115,7 +132,7 @@ export function StaySearchPage(): ReactElement {
     <>
       <StaySearchScreen
         region={resolvedRegion}
-        items={data?.items ?? []}
+        items={visibleItems}
         state={state}
         // 화살표로 감싼다(03b N-3) — `onRetry={refetch}`면 RN이 `onPress(누름이벤트)`로
         // 불러 그 이벤트가 `refetch`의 옵션 인자 자리로 밀려든다. 여기서 인자를 끊으면
@@ -158,6 +175,14 @@ export function StaySearchPage(): ReactElement {
         savedKeys={savedKeys}
         pendingKeys={pendingKeys}
         onToggleSave={(item) => void attemptToggle(item)}
+        // 카드 탭(TRIP-457 AC-5) → 상세 라우트로 push(객체형·raw stayKey·item JSON — expo-router
+        // 자동 인코딩이라 수동 encode 안 함 ★F-3). 화면은 라우터를 모른다(구조 가드).
+        onPressCard={(item) =>
+          router.push({
+            pathname: '/stays/[stayId]',
+            params: { stayId: stayKey(item), item: JSON.stringify(item) },
+          })
+        }
       />
       {sheetOpen ? (
         <StayFilterSheet
@@ -171,6 +196,13 @@ export function StaySearchPage(): ReactElement {
           }
           onApply={handleApplyFilter}
           onClose={() => setSheetOpen(false)}
+        />
+      ) : null}
+      {priceSheetOpen ? (
+        <StayPriceSheet
+          selected={priceBucket}
+          onSelect={setPriceBucket}
+          onClose={() => setPriceSheetOpen(false)}
         />
       ) : null}
     </>

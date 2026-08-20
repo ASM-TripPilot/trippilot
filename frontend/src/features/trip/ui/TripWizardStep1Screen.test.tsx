@@ -719,3 +719,36 @@ describe('TRIP-387 · 시트 안 지역 검색 (슬라이스 1)', () => {
     expect(onAddDestination).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('TRIP-455 · 여행지 추가 시트 스크롤 (버그1)', () => {
+  // 버그1: 서버 카탈로그(GET /regions)가 화면보다 길어지면 칩 격자가 위로 밀려 상단 광역시
+  // (서울·부산)가 화면 밖으로 나가 선택 불가였다. 근본 원인은 칩 격자가 맨 <View>(flex-wrap,
+  // 높이 상한·스크롤 없음)라는 것. 수정은 칩 격자를 스크롤 컨테이너로 감싸는 것이다.
+  //
+  // jest가 못 보는 것: 실제 스크롤·클리핑·상단 칩 도달 가능성(RN 테스트 렌더러는 레이아웃을
+  // 계산 안 한다, 02a ★S). 그래서 이 심판은 **스크롤 컨테이너 존재**라는 구조만 잠근다 —
+  // 실제 도달성은 [검증] 6-b 실기(카탈로그 긴 상태로 시트 열어 서울·부산까지 스크롤) 몫이다.
+
+  it('🔴 시트를 열면 칩 목록을 감싸는 스크롤 컨테이너가 있다', () => {
+    // (준비) 기본 드래프트로 렌더.
+    render(<TripWizardStep1Screen {...props()} />);
+
+    // (실행) 시트를 연다 — 칩·스크롤 컨테이너는 sheetOpen일 때만 렌더된다(★6).
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // (단언) 앵커 — 시트가 실제로 열렸고 칩이 그려진다(스크롤 단언이 렌더 통째 죽음이나
+    // "스크롤 컨테이너가 칩을 삼켜 0개"로 공허 통과하지 않게).
+    expect(
+      screen.getByTestId('trip-wizard-destination-sheet')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('trip-wizard-destination-region-busan')
+    ).toBeOnTheScreen();
+
+    // 핵심 — 오늘은 이 컨테이너 testID가 없어 RED. 있으면 상단 칩이 화면 밖으로 영영
+    // 밀리지 않을 자리가 생긴다(실제 스크롤은 6-b).
+    expect(
+      screen.getByTestId('trip-wizard-destination-sheet-scroll')
+    ).toBeOnTheScreen();
+  });
+});

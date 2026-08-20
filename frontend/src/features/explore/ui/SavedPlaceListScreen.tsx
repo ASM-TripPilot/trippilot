@@ -51,6 +51,8 @@ export interface SavedPlaceListScreenProps {
   onPressRemove: (saved: SavedPlace) => void;
   /** 빈 하트(released) 행을 누르면 되돌리기(재담기). 미지정 = 미배선(TRIP-394). */
   onPressRestore?: (saved: SavedPlace) => void;
+  /** 행 본문 탭 → d06 상세. 미지정이면 행은 눌러도 무동작(additive, 게이트① 재개봉 없음). */
+  onPressRow?: (saved: SavedPlace) => void;
   onPressCreateTrip: () => void;
   onPressBrowse: () => void;
   onRetry?: () => void;
@@ -120,6 +122,7 @@ function SavedPlaceRow({
   released,
   onPressRemove,
   onPressRestore,
+  onPressRow,
 }: {
   saved: SavedPlace;
   rank: number;
@@ -127,14 +130,19 @@ function SavedPlaceRow({
   released: boolean;
   onPressRemove: (saved: SavedPlace) => void;
   onPressRestore?: (saved: SavedPlace) => void;
+  onPressRow?: (saved: SavedPlace) => void;
 }): ReactElement {
   const { place } = saved;
   const badge = SAVED_PLACE_BADGE[place.dataStatus];
   const tag = place.tags[0];
 
   return (
-    <View
+    // bare Pressable(accessibilityRole 없음) — d04 카드와 같은 규율(role 을 붙이면 개수 심판이
+    // 깨질 위험 · 여기 d02 엔 role-count 가드가 없지만 대칭 유지). d02 하트는 disabled 가 없어
+    // 항상 활성이라 하트 press 는 부모로 안 샌다(RNTL Probe A, ★2) — `!pending` 가드 불필요.
+    <Pressable
       testID={`explore-saved-item-${saved.savedPlaceId}`}
+      onPress={() => onPressRow?.(saved)}
       className="w-full flex-row items-center gap-md border-b border-hairline py-md"
     >
       <View
@@ -215,7 +223,7 @@ function SavedPlaceRow({
           />
         )}
       </Pressable>
-    </View>
+    </Pressable>
   );
 }
 
@@ -224,11 +232,13 @@ function ResultsList({
   releasedPoiIds,
   onPressRemove,
   onPressRestore,
+  onPressRow,
 }: {
   savedPlaces: SavedPlace[];
   releasedPoiIds: string[];
   onPressRemove: (saved: SavedPlace) => void;
   onPressRestore?: (saved: SavedPlace) => void;
+  onPressRow?: (saved: SavedPlace) => void;
 }): ReactElement {
   return (
     <FlatList<SavedPlace>
@@ -244,6 +254,7 @@ function ResultsList({
           released={releasedPoiIds.includes(item.place.poiId)}
           onPressRemove={onPressRemove}
           onPressRestore={onPressRestore}
+          onPressRow={onPressRow}
         />
       )}
     />
@@ -522,6 +533,7 @@ export function SavedPlaceListScreen({
   releasedPoiIds = [],
   onPressRemove,
   onPressRestore,
+  onPressRow,
   onPressCreateTrip,
   onPressBrowse,
   onRetry,
@@ -579,6 +591,7 @@ export function SavedPlaceListScreen({
                   releasedPoiIds={releasedPoiIds}
                   onPressRemove={onPressRemove}
                   onPressRestore={onPressRestore}
+                  onPressRow={onPressRow}
                 />
                 {removeError ? (
                   <RemoveErrorBanner

@@ -21,13 +21,13 @@ export function NicknamePage(): ReactElement {
     submit,
   } = useNickname();
 
-  // 저장·완료가 모두 성공하면 취향 1/2로 넘어간다(TRIP-163 인터뷰1 — '/'였던 목적지를
-  // 취향 온보딩으로 교체). 실패면 오류만 남고 머문다(INV-4).
+  // 저장·완료가 모두 성공하면 위치 프리프롬프트(c08)로 넘어간다(TRIP-459 — pref1 앞에 c08 삽입).
+  // 실패면 오류만 남고 머문다(INV-4).
   const handleNext = () => {
     void (async () => {
       const done = await submit();
       if (done) {
-        router.replace('/(onboarding)/pref1');
+        router.replace('/(onboarding)/location');
       }
     })();
   };

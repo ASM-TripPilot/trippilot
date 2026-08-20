@@ -76,6 +76,13 @@ import {
   type StayRegisterScreenProps,
 } from '@/features/stay/ui/StayRegisterScreen';
 import { StaySearchScreen } from '@/features/stay/ui/StaySearchScreen';
+import { StayDetailScreen } from '@/features/stay/ui/StayDetailScreen';
+import {
+  SavedStayListScreen,
+  type SavedStayCardVM,
+} from '@/features/stay/ui/SavedStayListScreen';
+import { OtaChoiceSheet } from '@/features/stay/ui/OtaChoiceSheet';
+import { StayPriceSheet } from '@/features/stay/ui/StayPriceSheet';
 import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
@@ -199,6 +206,21 @@ const STAY_SEARCH_PREVIEW_ITEMS: StayItem[] = [
     price: null,
   },
 ];
+
+// e03 상세(TRIP-457) — 편의시설 4칩·미니맵 자리·CTA 2종·제휴 고지를 눈으로 확인한다(jest 는
+// 픽셀·레이아웃을 못 본다, 6-b 실기 몫). 가격 미확인·notFound·시트 얼굴은 아래 프리뷰 키가
+// 유일한 열람처(실 라우트로는 백엔드/딥링크 없이 못 본다).
+const STAY_DETAIL_PREVIEW_ITEM: StayItem = {
+  externalSource: 'NAVER',
+  externalId: 'd1',
+  name: '해운대 오션 스위트',
+  lat: 35.1587,
+  lng: 129.1604,
+  region: '부산 해운대구 우동',
+  amenities: ['주차', '조식', '와이파이', '오션뷰'],
+  stayType: 'HOTEL',
+  price: { amount: 145000, currency: 'KRW' },
+};
 
 const EXPLORE_LANDING_BASE = {
   heading: {
@@ -461,6 +483,7 @@ const DRAFT_PREVIEW_BASE: DraftScreenProps = {
   onSelectDay: noop,
   onRetry: noop,
   onBack: noop,
+  onComplete: noop,
 };
 
 const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
@@ -764,6 +787,15 @@ const SLOT_CANDIDATES_PREVIEW: SlotCandidatesCandidatesItem[] = [
   },
 ];
 
+// e04 저장한 숙소(TRIP-461) — 카드 사진·지역·거리·가격은 계약 무라 회색 자리 + 이름·(있으면)
+// 날짜만 그린다(brief §화면·IO). 실화면 딥링크로는 백엔드 401 이면 게스트 얼굴로만 떨어져
+// results·empty 두 얼굴을 여기서 눈으로 대조한다(d04·d02 프리뷰 2키와 같은 사정).
+const SAVED_STAY_PREVIEW_CARDS: SavedStayCardVM[] = [
+  { savedStayId: 'ss-1', name: '해운대 오션 호텔', dateLabel: '6.10~6.13' },
+  { savedStayId: 'ss-2', name: '광안리 뷰 호텔' },
+  { savedStayId: 'ss-3', name: '감천 게스트하우스', dateLabel: '6.13~6.15' },
+];
+
 // i05 현재 장소 상세(TRIP-398) — Figma 대조용 완성 뷰. 결측 얼굴은 이 위에 상태만 얹는다.
 const LIVE_PLACE_PREVIEW_VIEW: PlaceDetailView = {
   name: '광안리 해수욕장',
@@ -944,8 +976,9 @@ const PREVIEW_STATES: PreviewState[] = [
     label: '위치 · 프리프롬프트',
     login: null,
     render: () => (
+      // c08 이 온보딩 체인에서 실제로 주입하는 Figma 목적 문구(TRIP-459) — 프리뷰도 정본과 맞춘다.
       <LocationPreprompt
-        purposeContext="내 주변 숙소 탐색"
+        purposeContext="내 주변을 알면 더 잘 맞는 곳을 추천하고 길 안내도 막힘없이 이어져요"
         state="default"
         onProceed={noop}
         onDefer={noop}
@@ -1087,6 +1120,80 @@ const PREVIEW_STATES: PreviewState[] = [
         pendingKeys={['NAVER:s2']}
         onToggleSave={noop}
       />
+    ),
+  },
+  // e03 숙소 상세(TRIP-457) — 몰입 화면(탭바 없음). default 는 편의시설 4칩·가격·미니맵·CTA 2종.
+  {
+    key: 'stay-detail-default',
+    label: '숙소 상세 · 기본(e03)',
+    login: null,
+    render: () => (
+      <StayDetailScreen
+        item={STAY_DETAIL_PREVIEW_ITEM}
+        saved={false}
+        onToggleSave={noop}
+        onPressBook={noop}
+        onPressAddToTrip={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // 담김(찬 하트 분홍) + "일정에 추가" 안내 표시 + 편의시설 결측("미확인") 엣지를 한 화면에.
+  {
+    key: 'stay-detail-saved',
+    label: '숙소 상세 · 담김+안내+편의시설 결측',
+    login: null,
+    render: () => (
+      <StayDetailScreen
+        item={{ ...STAY_DETAIL_PREVIEW_ITEM, amenities: [] }}
+        saved={true}
+        addedNotice={true}
+        onToggleSave={noop}
+        onPressBook={noop}
+        onPressAddToTrip={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // 파싱 실패/부재 얼굴(INV-4) — item=null.
+  {
+    key: 'stay-detail-notfound',
+    label: '숙소 상세 · 불러오기 실패(notFound)',
+    login: null,
+    render: () => (
+      <StayDetailScreen
+        item={null}
+        saved={false}
+        onToggleSave={noop}
+        onPressBook={noop}
+        onPressAddToTrip={noop}
+      />
+    ),
+  },
+  // 제휴 고지 시트(BR-U1-30) — book press 시 뜨는 시트. gorhom 이라 실 슬라이드는 실기 몫.
+  {
+    key: 'stay-ota-sheet',
+    label: '제휴 고지 시트 · e03(TRIP-457)',
+    login: null,
+    render: () => (
+      <View className="flex-1 justify-end bg-scrim/40">
+        <OtaChoiceSheet
+          item={STAY_DETAIL_PREVIEW_ITEM}
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  // e02 가격대 필터 시트(TRIP-457) — 프리셋 버킷 4개 라디오.
+  {
+    key: 'stay-price-sheet',
+    label: '가격대 필터 시트 · e02(TRIP-457)',
+    login: null,
+    render: () => (
+      <View className="flex-1 justify-end bg-scrim/40">
+        <StayPriceSheet selected="all" onSelect={noop} onClose={noop} />
+      </View>
     ),
   },
   // ── 홈 대시보드 4상태(TRIP-170) — 프레젠테이션 전용, 고정 픽스처로 그린다 ──
@@ -2081,6 +2188,35 @@ const PREVIEW_STATES: PreviewState[] = [
           slackLabel: '미확인',
         }}
         onPressItinerary={noop}
+      />
+    ),
+  },
+  // e04 저장한 숙소(TRIP-461) — results·empty 두 얼굴. jest 는 픽셀·레이아웃을 못 봐(6-b) 이
+  // 자리가 카드 그림자·거점 지정 하단 버튼·empty 콜라주·돋보기 CTA 를 눈으로 대조하는 곳이다.
+  {
+    key: 'saved-stays-default',
+    label: '저장한 숙소 e04 · 목록',
+    login: null,
+    render: () => (
+      <SavedStayListScreen
+        savedStays={SAVED_STAY_PREVIEW_CARDS}
+        face="results"
+        onPressCard={noop}
+        onPressRegister={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'saved-stays-empty',
+    label: '저장한 숙소 e04 · 빈 상태',
+    login: null,
+    render: () => (
+      <SavedStayListScreen
+        savedStays={[]}
+        face="empty"
+        onPressBrowse={noop}
+        onBack={noop}
       />
     ),
   },

@@ -17,7 +17,7 @@ import {
  * 화면은 **완성된 콜백만** 받는다 — 조회도 게이트 판정도 하지 않는다. 완전AI 탭은 배선의
  * `onPressFullAi`(h09 생성 중으로 navigate)로 넘긴다 — 생성 POST·진행/실패 표면은 h09 가 소유하므로
  * (TRIP-305·AC-7) 이 화면에는 없다. 여기서 지는 유일한 로컬 상태는 준비 중 안내(`soon`) 뿐 —
- * copick·manual 은 착지 화면이 아직 없어(01b D2·D3) 서버 효과·라우팅 없이 이 상태만 켠다.
+ * copick·manual 콜백이 미전달이면(프리뷰 등) 착지 화면 대신 이 상태만 켠다.
  * 생성 선행조건(거점 커버리지·겹침) 게이트도 이 칸에 없다 — g02(여행 생성 2/2)가 소유한다.
  */
 
@@ -108,6 +108,12 @@ export interface MethodPickerScreenProps {
   onBack: () => void;
   /** 완전AI 탭 — 배선이 h09(생성 중)로 navigate 한다(POST 는 h09 소유). */
   onPressFullAi: () => void;
+  /** 직접 짜기 탭 — 배선이 h19(빈 일정)로 navigate 한다(TRIP-460). 미전달 시 "준비 중" 폴백
+   * (후방호환 옵셔널 — `confirmLocked?`·`saveError?` 선례. 프리뷰는 폴백을 그대로 쓴다). */
+  onPressManual?: () => void;
+  /** AI와 같이 짜기 탭 — 배선이 CO_PLAN 씨앗(h09 생성 중)으로 navigate 한다(TRIP-462). 미전달 시
+   * "준비 중" 폴백(후방호환 옵셔널 — `onPressManual?` 선례). */
+  onPressCoPick?: () => void;
   /** 진행 중인 다른 여행이 있으면(서버 판정면) 생성 진입을 막고 사유를 표시한다. null/미전달 = 미차단. */
   activeGeneration?: ActiveGeneration | null;
   /** 사유 안내의 "진행 중인 여행으로 가기". */
@@ -117,6 +123,8 @@ export interface MethodPickerScreenProps {
 export function MethodPickerScreen({
   onBack,
   onPressFullAi,
+  onPressManual,
+  onPressCoPick,
   activeGeneration,
   onPressActiveGeneration,
 }: MethodPickerScreenProps): ReactElement {
@@ -197,7 +205,7 @@ export function MethodPickerScreen({
                 </Text>
               </View>
             }
-            onPress={showSoon}
+            onPress={onPressCoPick ?? showSoon}
           />
           <MethodCard
             testID="itinerary-method-manual"
@@ -205,7 +213,7 @@ export function MethodPickerScreen({
             iconBg="bg-surface-strong"
             title="직접 짜기"
             description="빈 일정에 원하는 장소를 직접 추가"
-            onPress={showSoon}
+            onPress={onPressManual ?? showSoon}
           />
 
           {soon ? (
