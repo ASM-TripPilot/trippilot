@@ -1171,11 +1171,23 @@ components:
 
     StaySearchResponse:
       type: object
-      required: [items, degraded, filterZeroReasons]
+      required: [items, degraded, filterZeroReasons, amenitiesKnown, truncated]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/StayItem' } }
         degraded: { type: boolean, description: 일부 공급자 실패 시 true(부분 결과·재시도 안내) }
         filterZeroReasons: { type: array, items: { type: string }, description: '필터로 0건일 때 완화 후보(예: stayType, amenity:오션뷰)' }
+        amenitiesKnown:
+          type: boolean
+          description: >
+            false = 편의시설 정보를 **아직 모른다**(없는 것이 아니다). 현재 정본은 그 칸을 주지 않는다.
+            화면은 편의시설 필터를 비활성화하거나 "정보 준비 중"을 안내한다 — 안 그러면 필터 0건이
+            "그런 숙소가 없다"로 읽힌다.
+        truncated:
+          type: boolean
+          description: >
+            true = 지역을 고르지 않아 **일부만** 본 결과다(전국 정본이 1만 곳을 넘는다).
+            필터가 부분집합 위에서 돌았으므로 "조건에 맞는 숙소가 없다"고 단정하면 안 된다 —
+            화면은 지역 선택을 권한다.
 
     StayItem:
       type: object
