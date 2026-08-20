@@ -84,9 +84,13 @@ class RuleFallbackSolver:
     def solve(self, problem: ItineraryProblem,
               remaining_ms: int = 0) -> ItinerarySolution:
         score_of = {c.poi_id: c for c in problem.candidates}
-        # 기배정 POI(TRIP-293)는 후보 풀에서만 뺀다 — 고정 블록(HC3)은 그대로 배치
+        # 기배정 POI(TRIP-293)는 후보 풀에서만 뺀다 — 고정 블록(HC3)은 그대로 배치.
+        # 고정 예약 POI 전체도 자유 경로에서 뺀다: 앞날 자유 배치가 선점하면
+        # 제 날의 고정 배치를 used 방어가 건너뛰어 HC3가 깨진다 (2026-08-21 실측).
+        reserved = {fb.poi_id for fb in problem.fixed_blocks}
         ranked_src = [c for c in problem.candidates
-                      if c.poi_id not in problem.excluded_poi_ids]
+                      if c.poi_id not in problem.excluded_poi_ids
+                      and c.poi_id not in reserved]
         # 결정론 정렬: 점수 내림차순 → id 오름차순 (동점 tie-break)
         ranked = sorted(ranked_src, key=lambda c: (-c.score, str(c.poi_id)))
         fixed_by_day: dict = {}
