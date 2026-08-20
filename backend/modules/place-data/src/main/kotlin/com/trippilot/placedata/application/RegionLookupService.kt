@@ -1,5 +1,6 @@
 package com.trippilot.placedata.application
 
+import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.placedata.domain.RegionCatalogPort
 import org.springframework.stereotype.Service
@@ -12,4 +13,11 @@ class RegionLookupService(
 
     override fun codesOf(regionName: String): List<String> =
         catalog.findExact(regionName).map { it.regionCode }
+
+    override fun centerOf(regionName: String): RegionCenter? =
+        catalog.findExact(regionName).firstNotNullOfOrNull { r ->
+            val lat = r.lat
+            val lng = r.lng
+            if (lat != null && lng != null) RegionCenter(lat, lng) else null
+        }
 }

@@ -17,6 +17,12 @@ data class Region(
     val level: RegionLevel,
     val selectable: Boolean,
     val poiCount: Int,
+    /**
+     * 대표 좌표 — 숙소가 없는 날의 앵커(TRIP-384). 우리가 가진 숙소·POI 의 무게중심이라
+     * 데이터가 한 건도 없는 지역은 null 이다. **지어내지 않는다.**
+     */
+    val lat: Double? = null,
+    val lng: Double? = null,
 )
 
 /** 카탈로그의 층. 시도 2자리 · 시군구 5자리(법정동코드 앞자리). */
