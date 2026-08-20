@@ -67,6 +67,7 @@ const EXPECTED_ITINERARIES = [
 // PLANNING_WIRED(+search·+card). 하나라도 빠뜨리면 371-AC-3/4·AC-7 중 하나가 red 로 새어난다.
 const WIRED_CTA_TEST_IDS = [
   'home-create-trip-fab',
+  'home-saved-places-fab', // TRIP-470 담은 곳 바로가기 FAB
   'home-saved-places-cta',
   'home-spots-more',
   'home-search-bar',
@@ -295,6 +296,25 @@ describe('HomeScreen — CTA 콜백 발화·격리 (370-AC-2)', () => {
     expect(onPressSpotsMore).toHaveBeenCalledTimes(1);
     expect(onPressCreateTrip).not.toHaveBeenCalled();
     expect(onPressSavedPlaces).not.toHaveBeenCalled();
+  });
+});
+
+describe('HomeScreen — 담은 곳 바로가기 FAB (TRIP-470)', () => {
+  it('하트 FAB press → onPressSavedPlaces 만 부른다(담은 곳 CTA 와 같은 콜백)', () => {
+    const onPressSavedPlaces = jest.fn();
+    const onPressCreateTrip = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        onPressSavedPlaces={onPressSavedPlaces}
+        onPressCreateTrip={onPressCreateTrip}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('home-saved-places-fab'));
+
+    expect(onPressSavedPlaces).toHaveBeenCalledTimes(1);
+    expect(onPressCreateTrip).not.toHaveBeenCalled(); // + FAB 과 안 헷갈림
   });
 });
 
@@ -653,6 +673,7 @@ describe('HomeScreen — phase 미도출·주입 (AC-5 금지 · TRIP-206 S-6)',
 // 중첩 Pressable 이라 둘 다 버튼 집합에 든다(★1·★3).
 const PLANNING_WIRED_CTA_TEST_IDS = [
   'home-create-trip-fab',
+  'home-saved-places-fab', // TRIP-470 담은 곳 바로가기 FAB(모든 얼굴 공통)
   'home-trip-hero-cta',
   'home-search-bar',
   'home-trip-hero',

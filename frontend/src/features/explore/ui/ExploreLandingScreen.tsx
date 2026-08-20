@@ -6,9 +6,10 @@
  * 조회·`formatPrice`/`stayKey` 조합은 이 화면이 아니라 라우트(`(tabs)/explore.tsx`)가 진다.
  * 화면은 뷰모델(prop)만 받는다.
  *
- * 5구획(위→아래): 헤딩 · 검색 · 숙소 가로 레인(카드 우상단 저장 하트) · 여행자 일정
- * 자리(준비 중) · 하단 bridgeBar(담은 곳 N곳 CTA — 담은 곳 d02 로, 0곳이어도 유지). 여행자 일정은 1차엔 자리만
- * (BR-U1-05), 장소·'내 주변'은 스코프 밖이라 렌더하지 않는다(TRIP-447로 축 4탭 제거).
+ * 6구획(위→아래): 헤딩 · 검색 · 숙소 가로 레인(카드 우상단 저장 하트) · 가볼 곳 가로 레인
+ * (장소 카드, TRIP-470 복원) · 여행자 일정 자리(준비 중) · 하단 bridgeBar(담은 곳 N곳 CTA —
+ * 담은 곳 d02 로, 0곳이어도 유지). 여행자 일정은 1차엔 자리만(BR-U1-05). 축 4탭(전체·숙소·장소·
+ * 여행자)·'지금 내 주변'은 복원하지 않는다 — 죽은 탭(TRIP-447)·삭제된 인프라(TRIP-445) 결정 유지.
  *
  * bridgeBar 는 탭바(오버레이) 위에 뜨는 고정 도크다 — 탭바 높이(84)만큼 위로 띄우고, 스크롤
  * 콘텐츠 하단 여백도 그만큼 확보해 마지막 항목이 안 가리게 한다(A7, `tabbarOverlay.test.ts`
@@ -33,11 +34,26 @@ export interface StayCardVM {
   priceText: string;
 }
 
+/** 가볼 곳 레인 카드(TRIP-470) — 사진 URL·저장 하트는 계약/스코프 밖이라 이름·지역만. */
+export interface PlaceCardVM {
+  poiId: string;
+  name: string;
+  region: string;
+}
+
 export interface ExploreLandingScreenProps {
   heading: { title: string; subtitle: string };
   /** 검색창 탭 — 입력 불가 진입 버튼이다. 실제 검색은 /explore/region 에서만 한다(TRIP-412).
    * 제출이 아니라 진입이므로 텍스트를 넘기지 않는다(자유 문자열이 region 으로 새는 걸 막는다). */
   onPressSearch: () => void;
+  /** 가볼 곳 가로 레인(TRIP-470) — 장소 카드 목록. 미지정/빈 목록이면 진입 링크(fallback)만
+   * 보여준다(로딩·데이터 없음 안전). 카드 press 는 d06(/explore/places/{poiId})로. */
+  placeLane?: {
+    error: boolean;
+    cards: PlaceCardVM[];
+    onRetry: () => void;
+    onPressCard: (poiId: string) => void;
+  };
   /** "가볼 곳" 진입점 탭 → d04 장소 목록(/explore/places, TRIP-453). **옵셔널** — 기존
    * 소비처(cardPress 테스트·_dev/preview·save-integration)가 이 prop 없이 렌더하므로 필수화하면
    * tsc 가 그 세 곳에서 깨진다. 미지정 시 CTA 는 렌더되되 무동작(무회귀). 라우팅은 라우트가 진다. */
@@ -162,6 +178,36 @@ function StayCard({
   );
 }
 
+// 가볼 곳 레인 카드(TRIP-470) — 사진 회색 자리 + 이름·지역. 저장 하트·가격 없음(스코프 밖).
+// 카드 press → d06 상세. 사진 URL 은 계약에 없어 지어내지 않는다(INV-1).
+function PlaceCard({
+  card,
+  onPress,
+}: {
+  card: PlaceCardVM;
+  onPress: (poiId: string) => void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID={`explore-place-card-${card.poiId}`}
+      accessibilityRole="button"
+      onPress={() => onPress(card.poiId)}
+      className="w-[160px]"
+    >
+      <View className="h-[110px] w-full rounded-card bg-surface-strong" />
+      <Text
+        numberOfLines={1}
+        className="mt-sm font-noto-bold text-card-title font-bold text-ink"
+      >
+        {card.name}
+      </Text>
+      <Text numberOfLines={1} className="mt-xs font-noto text-label text-muted">
+        {card.region}
+      </Text>
+    </Pressable>
+  );
+}
+
 function StayLaneError({ onRetry }: { onRetry: () => void }): ReactElement {
   // 부분 실패 — 침묵하지 않고 자리에 재시도를 띄운다(US-EXPL-01 · INV-4). 나머지 구획은 산다.
   return (
@@ -210,6 +256,7 @@ export function ExploreLandingScreen({
   heading,
   onPressSearch,
   onPressPlaces,
+  placeLane,
   stayLane,
   bridge,
 }: ExploreLandingScreenProps): ReactElement {
@@ -287,23 +334,54 @@ export function ExploreLandingScreen({
             )}
           </View>
 
-          {/* 가볼 곳 — d04 장소 목록 진입점(최소 링크, 조회 없음 · TRIP-453 entry 2). 정본
-              4구획의 "가볼 곳" 자리이나 1차엔 레인이 아니라 진입 링크 하나만 둔다(레인 복원은
-              별도 화면 티켓). 항상 렌더되고, 탭하면 라우트가 /explore/places 로 push 한다. */}
+          {/* 가볼 곳 — 장소 가로 레인(TRIP-470 레인 복원, 453 진입 링크는 로딩·빈 목록 fallback).
+              헤더 "모두 보기"(explore-lane-place-cta)는 d04(/explore/places)로, 카드 press 는
+              d06(/explore/places/{poiId})로. 세그·'지금 내 주변'은 복원하지 않는다(각각 죽은 탭·
+              삭제된 인프라 — TRIP-447/445 결정 유지). */}
           <View testID="explore-lane-place" className="mt-2xl">
-            <LaneHeader title="가볼 곳" />
-            <Pressable
-              testID="explore-lane-place-cta"
-              accessibilityRole="button"
-              onPress={onPressPlaces}
-              className="flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
-            >
-              <SearchGlyph size={18} />
-              <Text className="flex-1 font-noto text-label text-muted">
-                가볼 만한 장소 둘러보기
-              </Text>
-              <Text className="font-noto text-label text-muted">›</Text>
-            </Pressable>
+            <LaneHeader
+              title="가볼 곳"
+              onSeeAll={onPressPlaces}
+              seeAllTestID="explore-lane-place-cta"
+            />
+            {placeLane?.error ? (
+              <Pressable
+                testID="explore-lane-place-retry"
+                accessibilityRole="button"
+                onPress={placeLane.onRetry}
+                className="flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
+              >
+                <InfoGlyph size={18} />
+                <Text className="flex-1 font-noto text-label text-muted">
+                  장소를 불러오지 못했어요 · 다시 시도
+                </Text>
+              </Pressable>
+            ) : placeLane && placeLane.cards.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View className="flex-row gap-md">
+                  {placeLane.cards.map((card) => (
+                    <PlaceCard
+                      key={card.poiId}
+                      card={card}
+                      onPress={placeLane.onPressCard}
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+            ) : (
+              <Pressable
+                testID="explore-lane-place-empty"
+                accessibilityRole="button"
+                onPress={onPressPlaces}
+                className="flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
+              >
+                <SearchGlyph size={18} />
+                <Text className="flex-1 font-noto text-label text-muted">
+                  가볼 만한 장소 둘러보기
+                </Text>
+                <Text className="font-noto text-label text-muted">›</Text>
+              </Pressable>
+            )}
           </View>
 
           {/* 여행자 일정 — 자리만(BR-U1-05) */}

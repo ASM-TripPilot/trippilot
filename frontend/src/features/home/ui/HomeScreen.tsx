@@ -785,6 +785,23 @@ function CreateTripFab({ onPress }: { onPress?: () => void }): ReactElement {
   );
 }
 
+// 담은 곳 바로가기 FAB(TRIP-470 · Figma a01 2091:1357) — + FAB 바로 위 원형 핑크 버튼, d02 로.
+// 목적지는 라우트가 정하고(onPress 만 발화) 담은 곳 CTA(SoftNote)와 같은 콜백을 공유한다.
+function SavedPlacesFab({ onPress }: { onPress?: () => void }): ReactElement {
+  return (
+    <Pressable
+      testID="home-saved-places-fab"
+      accessibilityRole="button"
+      accessibilityLabel="담은 곳"
+      onPress={onPress}
+      style={fabShadow}
+      className="absolute bottom-[152px] right-lg h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
+    >
+      <HeartOutlineGlyph size={24} />
+    </Pressable>
+  );
+}
+
 // ── discovery 얼굴(316 발견·영감 피드) ──────────────────────────────────
 function DiscoveryBody({
   hero,
@@ -1003,6 +1020,7 @@ export function HomeScreen({
         {phase?.kind === 'collecting' ? (
           <SavedCountChip label={phase.savedChipLabel} />
         ) : null}
+        <SavedPlacesFab onPress={onPressSavedPlaces} />
         <CreateTripFab onPress={onPressCreateTrip} />
       </View>
     </SafeAreaView>

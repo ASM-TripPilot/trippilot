@@ -222,6 +222,19 @@ const STAY_DETAIL_PREVIEW_ITEM: StayItem = {
   price: { amount: 145000, currency: 'KRW' },
 };
 
+// 가볼 곳 가로 레인(TRIP-470) — 프리뷰에서 레인을 눈으로 보기 위한 표본 카드. `as const` 밖에
+// 둬야 cards 가 readonly 튜플로 굳지 않는다(placeLane.cards 는 PlaceCardVM[] 요구).
+const EXPLORE_LANDING_PLACE_LANE = {
+  error: false,
+  cards: [
+    { poiId: 'p1', name: '감천문화마을', region: '사하구' },
+    { poiId: 'p2', name: '광안리 해변', region: '수영구' },
+    { poiId: 'p3', name: '해운대 블루라인', region: '해운대구' },
+  ],
+  onRetry: noop,
+  onPressCard: noop,
+};
+
 const EXPLORE_LANDING_BASE = {
   heading: {
     title: '무엇을 둘러볼까요?',
@@ -229,6 +242,7 @@ const EXPLORE_LANDING_BASE = {
   },
   onPressSearch: noop,
   onPressPlaces: noop,
+  placeLane: EXPLORE_LANDING_PLACE_LANE,
 } as const;
 
 const VIEW_ONLY_HANDLERS = {
@@ -728,6 +742,38 @@ const TIMELINE_MAP_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     imageUrl: DRAFT_PREVIEW_PHOTOS[2],
   },
 ];
+
+/**
+ * TRIP-465 · 사진 없는 슬롯의 **카테고리 플레이스홀더** 프리뷰 픽스처 — 8종(명소·맛집·카페·야경·
+ * 자연·쇼핑·문화 + 폴백)을 한 화면에 세워 틴트·아이콘 정합을 Figma 노드 2989:1731 과 눈으로 대조한다.
+ * 전부 `imageUrl:null` 이라 사진 자리에 플레이스홀더가 뜬다(사진 있는 카드는 위 `itinerary-map`
+ * 픽스처가 담당 — 상호 배타). 폴백은 매핑 밖 카테고리("액티비티")로 유도한다.
+ */
+const TIMELINE_PLACEHOLDER_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
+  '명소',
+  '맛집',
+  '카페',
+  '야경',
+  '자연',
+  '쇼핑',
+  '문화',
+  '액티비티',
+].map((category, index) => ({
+  poiId: `poi-ph-${index}`,
+  startAt: `${String(9 + index).padStart(2, '0')}:00:00`,
+  endAt: `${String(10 + index).padStart(2, '0')}:00:00`,
+  isFixed: false,
+  endsNextDay: false,
+  hasViolation: false,
+  tags: [category],
+  lat: 35.16,
+  lng: 129.16,
+  nameKo: `${category} 장소`,
+  category,
+  openingHours: '09:00–18:00 영업',
+  distanceRange: index === 0 ? null : '약 1.2km · 도보 추정',
+  imageUrl: null,
+}));
 
 // 탭 화면 프리뷰에 셸 탭바를 얹어 실제 앱처럼 보이게 한다(TRIP-201 오버레이 확인용).
 // BottomTabBar 루트가 absolute bottom-0라 콘텐츠 위에 떠서 겹친다 — 프리뷰에서도 오버레이
@@ -1864,6 +1910,31 @@ const PREVIEW_STATES: PreviewState[] = [
         header={TIMELINE_PREVIEW_HEADER}
         days={TIMELINE_PREVIEW_DAYS}
         slots={TIMELINE_MAP_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        status="PLANNED"
+        onSelectDay={noop}
+        onBack={noop}
+        onConfirm={noop}
+      />
+    ),
+  },
+  // 사진 없는 슬롯의 카테고리 플레이스홀더(TRIP-465) — 8종 틴트·아이콘을 한 화면에서 Figma 2989:1731
+  // 과 대조한다(전부 imageUrl null). 픽셀·아이콘 fill 은 jest 사각이라 이 프리뷰가 유일한 육안 그물.
+  {
+    key: 'itinerary-timeline-placeholder',
+    label: '완성 일정 · 사진 없는 카테고리 플레이스홀더(h25)',
+    login: null,
+    render: () => (
+      <TimelineScreen
+        header={{ title: '부산 여행', nightsLabel: '3박 4일', totalPlaces: 8 }}
+        days={[
+          {
+            dayIndex: 1,
+            date: '2026-06-10',
+            count: TIMELINE_PLACEHOLDER_PREVIEW_SLOTS.length,
+          },
+        ]}
+        slots={TIMELINE_PLACEHOLDER_PREVIEW_SLOTS}
         activeDayIndex={0}
         status="PLANNED"
         onSelectDay={noop}
