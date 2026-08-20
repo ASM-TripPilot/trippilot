@@ -23,7 +23,7 @@ import ExploreRoute from '@/app/(tabs)/explore';
  *  - 🔴 lane_stay = `useStaySearch` items 를 가로 카드로, 금액은 `formatPrice` 정확 일치,
  *    "· 1박"(정확 1박가) 없음, "모두 보기" → `/stays`(AC-E3).
  *  - 🔴 lane_itin 은 준비중 자리(실카드·라우팅 0, AC-E4).
- *  - 🔴 bridgeBar: 담은 곳 ≥1 → CTA + 여행 만들기 이동 · 0 → 안내, CTA 미노출(AC-E5).
+ *  - 🔴 bridgeBar: CTA 는 담은 곳(d02)으로, 담은 곳 0곳이어도 유지(AC-E5, TRIP-448).
  *  - 🔴 lane_stay 쿼리 error 여도 나머지 구획은 살고 lane_stay 자리에 재시도(AC-E6, INV-4).
  *
  * 왜 이렇게 테스트하나(02a §0-1): 라우트는 router 가 렌더해 props 를 못 받으므로, 두 훅을
@@ -206,27 +206,37 @@ describe('🔴 AC-E4 — lane_itin 자리만', () => {
   });
 });
 
-describe('🔴 AC-E5 — bridgeBar 분기 (긍/부정 짝)', () => {
-  it('담은 곳 ≥1 이면 "담은 곳 N곳" CTA + 여행 만들기 이동, empty 는 없다', () => {
+describe('🔴 AC-E5 — bridgeBar CTA 는 담은 곳(d02)으로, 0곳이어도 유지 (TRIP-448)', () => {
+  it('담은 곳 ≥1 이면 "담은 곳 N곳" CTA 를 누르면 담은 곳(d02)으로 간다 — 위저드 직행 아님', () => {
     mockUseSavedPlaces.mockReturnValue(savedResult(['p1', 'p2']));
     render(<ExploreRoute />);
 
     const cta = screen.getByTestId('explore-bridge-cta');
-    // 부분 포함(regex) — "담은 곳 2곳 · 여행 만들기" 안의 조각(02a ★E-2).
+    // 부분 포함(regex) — "담은 곳 2곳 ›" 안의 조각(★E-2, toHaveTextContent 는 exact).
     expect(cta).toHaveTextContent(/담은 곳 2곳/);
+    // 0상태 안내(empty)는 더 이상 없다 — CTA 로 단일화됐다.
     expect(screen.queryByTestId('explore-bridge-empty')).toBeNull();
 
     fireEvent.press(cta);
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(String(mockPush.mock.calls[0][0])).toContain('/trips/new');
+    // 목적지는 d02(담은 곳)다. 위저드(/trips/new)로 직행하면 red — 금지 AC.
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/saved-places');
   });
 
-  it('담은 곳 0 이면 안내(empty)만 있고 CTA 는 미노출이다', () => {
+  it('담은 곳 0 곳이어도 CTA 는 유지되고, 누르면 담은 곳(d02) 빈 상태로 간다', () => {
     mockUseSavedPlaces.mockReturnValue(savedResult([]));
     render(<ExploreRoute />);
 
-    expect(screen.getByTestId('explore-bridge-empty')).toBeOnTheScreen();
-    expect(screen.queryByTestId('explore-bridge-cta')).toBeNull();
+    // CTA 가 사라지지 않는다 — 0곳 분기로 없애면 d02 빈 상태 도달 경로가 사라진다(TRIP-448).
+    const cta = screen.getByTestId('explore-bridge-cta');
+    expect(cta).toBeOnTheScreen();
+    expect(cta).toHaveTextContent(/담은 곳 0곳/);
+    // 옛 0상태 안내는 없다.
+    expect(screen.queryByTestId('explore-bridge-empty')).toBeNull();
+
+    fireEvent.press(cta);
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/saved-places');
   });
 });
 

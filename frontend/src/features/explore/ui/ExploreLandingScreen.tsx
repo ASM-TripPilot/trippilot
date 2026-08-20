@@ -7,7 +7,7 @@
  * 화면은 뷰모델(prop)만 받는다.
  *
  * 5구획(위→아래): 헤딩 · 검색 · 숙소 가로 레인(카드 우상단 저장 하트) · 여행자 일정
- * 자리(준비 중) · 하단 bridgeBar(담은 곳 N곳 CTA / 0상태 안내). 여행자 일정은 1차엔 자리만
+ * 자리(준비 중) · 하단 bridgeBar(담은 곳 N곳 CTA — 담은 곳 d02 로, 0곳이어도 유지). 여행자 일정은 1차엔 자리만
  * (BR-U1-05), 장소·'내 주변'은 스코프 밖이라 렌더하지 않는다(TRIP-447로 축 4탭 제거).
  *
  * bridgeBar 는 탭바(오버레이) 위에 뜨는 고정 도크다 — 탭바 높이(84)만큼 위로 띄우고, 스크롤
@@ -53,6 +53,9 @@ export interface ExploreLandingScreenProps {
     saveError?: boolean;
     onDismissSaveError?: () => void;
   };
+  /** 하단 bridge CTA. 담은 곳이 0곳이어도 CTA 는 유지된다(TRIP-448) — 0곳 분기로 CTA 를
+   * 없애면 d02 빈 상태에 도달할 경로가 사라진다. `onPressCreateTrip` 은 역사적 이름이고,
+   * TRIP-448 이후 목적지는 위저드가 아니라 담은 곳(d02)이다(라우트가 목적지를 정한다). */
   bridge: { savedCount: number; onPressCreateTrip: () => void };
 }
 
@@ -194,7 +197,6 @@ export function ExploreLandingScreen({
   stayLane,
   bridge,
 }: ExploreLandingScreenProps): ReactElement {
-  const hasSaved = bridge.savedCount >= 1;
   const {
     savedKeys = [],
     pendingKeys = [],
@@ -279,39 +281,28 @@ export function ExploreLandingScreen({
           </View>
         </ScrollView>
 
-        {/* bridgeBar — 탭바 위 고정 도크. 담은 곳 ≥1 → CTA, 0 → 안내(BR-U1-09) */}
+        {/* bridgeBar — 탭바 위 고정 도크. 담은 곳(d02)으로 가는 CTA 는 담은 곳이 0곳이어도
+            유지된다(TRIP-448). 0곳이면 d02 의 빈 상태로 간다 — 그 경로가 이 CTA 뿐이다. */}
         <View
           className="absolute inset-x-0 px-lg"
           style={{ bottom: TAB_BAR_CLEARANCE }}
         >
-          {hasSaved ? (
-            <Pressable
-              testID="explore-bridge-cta"
-              accessibilityRole="button"
-              onPress={bridge.onPressCreateTrip}
-              className="h-14 flex-row items-center justify-center gap-sm rounded-pill bg-primary px-lg"
-            >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                ♥
-              </Text>
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                담은 곳 {bridge.savedCount}곳 · 여행 만들기
-              </Text>
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                ›
-              </Text>
-            </Pressable>
-          ) : (
-            <View
-              testID="explore-bridge-empty"
-              className="flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-lg py-md"
-            >
-              <InfoGlyph size={18} />
-              <Text className="flex-1 font-noto text-label text-muted">
-                아직 담은 곳이 없어요. 위 검색으로 마음에 드는 곳을 담아보세요.
-              </Text>
-            </View>
-          )}
+          <Pressable
+            testID="explore-bridge-cta"
+            accessibilityRole="button"
+            onPress={bridge.onPressCreateTrip}
+            className="h-14 flex-row items-center justify-center gap-sm rounded-pill bg-primary px-lg"
+          >
+            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+              ♥
+            </Text>
+            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+              담은 곳 {bridge.savedCount}곳
+            </Text>
+            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
+              ›
+            </Text>
+          </Pressable>
         </View>
       </View>
     </SafeAreaView>

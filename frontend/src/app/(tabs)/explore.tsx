@@ -26,7 +26,7 @@ import {
  *
  * 검색창 탭 → `/explore/region`(입력 불가 진입 버튼, 자유 문자열이 region 으로 새는 걸 막는다,
  * TRIP-412) · 모두 보기 → `/stays?region={레인 지역}`(첫 카드 지역을 실어 부산 폴백 회피) ·
- * bridge CTA → `/trips/new/step1`(일정 탭 빈상태 CTA 목적지와 정합). 구획별 독립 쿼리라
+ * bridge CTA → `/explore/saved-places`(담은 곳 d02, 0곳이어도 유지 — TRIP-448). 구획별 독립 쿼리라
  * 숙소 레인 실패가 나머지 구획을 안 죽인다(INV-4).
  *
  * 담기 하트(TRIP-447): `useSavedStays`(react-query)는 `QueryClientProvider` 아래서만 돈다.
@@ -85,7 +85,9 @@ export default function ExploreRoute(): ReactElement {
     },
     bridge: {
       savedCount: savedPoiIds.length,
-      onPressCreateTrip: () => router.push('/trips/new/step1'),
+      // 담은 곳(d02)으로 간다 — 위저드 직행이 아니다(TRIP-448). 위저드 진입은 d02 의
+      // "이 장소들로 여행 만들기" 가 이미 진다. 0곳이어도 이 CTA 는 유지돼 d02 빈 상태로 간다.
+      onPressCreateTrip: () => router.push('/explore/saved-places'),
     },
   };
 
