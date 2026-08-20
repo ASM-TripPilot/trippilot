@@ -401,6 +401,7 @@ def measure_legs(
         legs.append({
             "from": from_poi.name,
             "to": to_poi.name,
+            "mode": mode.value,
             "est_min": est_min,
             "real_min": real.real_minutes,
             "err_pct": err_pct,
