@@ -121,15 +121,27 @@ class CollectResult:
 
 
 class _CallBudget:
-    """남은 호출 수. take()가 False면 즉시 산출 단계로 넘어간다 (예외 아님 — 정상 경로)."""
+    """남은 호출 수. take()가 False면 즉시 산출 단계로 넘어간다 (예외 아님 — 정상 경로).
 
-    def __init__(self, max_calls: int) -> None:
+    `parent`를 주면 상위 예산에서도 함께 차감한다 — 지역 예산 아래 타입별 몫을
+    두기 위한 것. 상위가 비면 자기 몫이 남아 있어도 못 쓴다.
+    """
+
+    def __init__(self, max_calls: int, parent: "_CallBudget | None" = None) -> None:
         self.remaining = max_calls
         self.used = 0
         self.exhausted_hit = False
+        self._parent = parent
 
     def take(self) -> bool:
         if self.remaining <= 0:
+            self.exhausted_hit = True
+            # 내 몫도 없고 상위(지역 예산)도 비었으면 **지역 소진**이다 — 상위는
+            # take()가 호출돼야 자기 플래그를 세우는데 여기서 막혀 못 간다.
+            if self._parent is not None and self._parent.remaining <= 0:
+                self._parent.exhausted_hit = True
+            return False
+        if self._parent is not None and not self._parent.take():
             self.exhausted_hit = True
             return False
         self.remaining -= 1
@@ -169,7 +181,15 @@ def collect(
     resumed_from: dict[str, int] = {}
     cursors: dict[tuple[str, str], KindCursor] = dict(prior.cursors)
 
+    # 타입별 몫 — 앞 타입(관광지)이 지역 예산을 다 먹어 뒤 타입(음식점)이 0건이
+    # 되는 걸 막는다. 실측: 강원 697건 중 음식점 1건, 경북·충남·경기·경남·전북은 0건 —
+    # 그 지역 일정에는 점심·저녁을 넣을 후보 자체가 없다. 완주한 타입이 남긴 몫은
+    # 다음 타입으로 이월한다(놀리지 않는다).
+    per_kind = max(1, max_calls // len(content_types))
+    carry = 0
+
     for kind in content_types:
+        kind_budget = _CallBudget(per_kind + carry, parent=budget)
         cursor = prior.cursors.get((area_code, kind))
         start_page = 1
         if cursor is not None and not cursor.completed and cursor.next_page > 1:
@@ -180,10 +200,11 @@ def collect(
         total_pages: int | None = None  # 첫 성공 페이지 응답으로 확정
         attempted = False               # 이 kind로 호출을 한 번이라도 소모했는가
         while total_pages is None or page_no <= total_pages:
-            if not budget.take():
+            if not kind_budget.take():
                 logger.warning(
-                    "호출 한도 %d 도달 — kind=%s page=%d 에서 중단, 확보분 %d건으로 산출 진행",
-                    max_calls, kind, page_no, len(listed))
+                    "호출 몫 소진 — kind=%s page=%d 에서 중단(타입 몫 %d, 지역 잔여 %d), "
+                    "확보분 %d건으로 산출 진행",
+                    kind, page_no, per_kind + carry, budget.remaining, len(listed))
                 break
             attempted = True
             try:
@@ -205,7 +226,7 @@ def collect(
                     skipped_unchanged += 1
                     continue  # 기제안·변경 없음 — 상세 호출도 안 나감 (쿼터 절약의 본체)
                 listed.append(record)
-                if not budget.take():
+                if not kind_budget.take():
                     continue  # 남은 항목은 영업시간 없이 산출 ("정보 없음 ≠ 배제")
                 try:
                     hours_by_ref[record.source_ref] = source.fetch_hours(
@@ -220,6 +241,7 @@ def collect(
                 cursors[(area_code, kind)] = KindCursor(next_page=1, completed=True)
             else:
                 cursors[(area_code, kind)] = KindCursor(next_page=page_no, completed=False)
+        carry = kind_budget.remaining   # 완주해서 남긴 몫은 다음 타입이 쓴다
         if budget.exhausted_hit:
             break
 
@@ -251,9 +273,21 @@ def collect(
 
     # 기제안 색인 갱신 — 이번 실행 통과분을 누적 (modifiedtime 없는 항목은 색인하지
     # 않는다: 변경 여부를 판정할 수 없으니 다음 실행에도 재수록 — 지어내기 금지).
+    #
+    # **영업시간 원문을 못 받은 항목도 색인하지 않는다.** 429·예산 소진으로 상세를
+    # 못 받아도 그 POI는 통과하는데(정보 없음 ≠ 배제), 색인까지 되면 다음 실행이
+    # 스킵해 **재시도 기회가 영영 사라진다** — 원본이 수정되지 않는 한 영업시간은
+    # 영구 빈칸이다(실측: 8,043건 중 3,840건이 이렇게 굳었다). 색인을 미루면 다음
+    # 실행이 목록에서 다시 만나 상세를 재시도한다. 원문을 받았는데 파싱만 실패한
+    # 경우는 색인한다 — 재조회해도 같은 원문이 오므로 파서를 고칠 문제다.
+    #
+    # 판정 기준은 원문 유무가 아니라 **상세 조회를 마쳤는가**(`hours_by_ref` 등재)다.
+    # TourAPI 레코드에 usetime 자체가 없어 빈 답이 오는 경우도 있는데, 원문 유무로
+    # 보면 그 POI는 매 실행 재조회돼 쿼터만 태운다 — "못 물어봤다"와 "물어봤더니
+    # 없더라"는 다르다.
     proposed = dict(prior.proposed)
     for p in report.passed:
-        if p.candidate.modified_at:
+        if p.candidate.modified_at and p.candidate.source_ref in hours_by_ref:
             proposed[p.candidate.source_ref] = p.candidate.modified_at
     completed_kinds = tuple(
         kind for kind in content_types

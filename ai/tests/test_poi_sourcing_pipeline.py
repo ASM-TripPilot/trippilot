@@ -152,7 +152,7 @@ def test_collect_respects_call_budget_with_partial_output() -> None:
     """상한 도달 시: HTTP 호출 정확히 ≤N + 그 시점까지 산출 + 정상 종료(부분 성공)."""
     http = _happy_http()
     result = collect(_adapter(http), area_code="39",
-                     content_types=["12", "39"], max_calls=2)
+                     content_types=["12"], max_calls=2)
     assert len(http.calls) <= 2                      # 실제 HTTP 호출로 검증
     assert result.stats.http_calls == 2
     assert result.stats.budget_exhausted
@@ -162,6 +162,21 @@ def test_collect_respects_call_budget_with_partial_output() -> None:
     without_detail = next(p for p in result.report.passed
                           if str(p.poi.poi_id) == "tourapi-101")
     assert without_detail.poi.open_hours == ()       # 정보 없음 ≠ 배제
+
+
+def test_예산은_타입별로_나눠_뒤_타입도_호출을_받는다() -> None:
+    """앞 타입이 지역 예산을 다 먹으면 뒤 타입은 0건이 된다 — 실측으로 그렇게 됐다.
+
+    강원 697건 중 음식점 1건, 경북·충남·경기·경남·전북 0건. 관광지(12)에서 예산이
+    끊겨 음식점(39)까지 못 갔고, 그 지역 일정에는 점심·저녁 후보가 없다.
+    """
+    http = _happy_http()
+    result = collect(_adapter(http), area_code="39",
+                     content_types=["12", "39"], max_calls=2)
+    kinds_called = {params["contentTypeId"] for url, params in http.calls
+                    if url.endswith("/areaBasedList2")}
+    assert kinds_called == {"12", "39"}              # 두 타입 다 목록을 받았다
+    assert result.stats.http_calls == 2
 
 
 def test_collect_unmapped_category_dropped_before_gate() -> None:
