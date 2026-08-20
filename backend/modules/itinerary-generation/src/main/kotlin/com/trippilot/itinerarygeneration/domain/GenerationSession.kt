@@ -141,4 +141,16 @@ interface GenerationSessionRepository {
      * **연타 횟수**에 비례한다. 제한 단위가 계정인 이유는 사용자가 체감하는 단위가 그것이기 때문이다.
      */
     fun findRunningByAccount(accountId: UUID): GenerationSession?
+
+    /**
+     * 이 계정의 생성 시작을 **직렬화한다**(TRIP-403). 트랜잭션이 끝나면 자동으로 풀린다.
+     *
+     * [findRunningByAccount] 로 보고 판단해서 쓰는 사이에 다른 요청이 끼어들 수 있다. 그러면 둘 다
+     * "진행 중 없음"으로 읽고 각자 INSERT 해 **유니크 인덱스에 걸린 쪽이 500** 을 받는다 — 데이터는
+     * 지켜지지만 사용자에게는 안내 없는 오류다. 여기서 줄을 세워 뒤에 온 쪽이 앞의 결과를 보고
+     * 제대로 409 를 받게 한다.
+     *
+     * 잠금을 무는 구간은 세션 행 두어 개를 쓰는 동안뿐이다 — 생성 자체는 이 트랜잭션 밖에서 돈다.
+     */
+    fun lockAccount(accountId: UUID)
 }

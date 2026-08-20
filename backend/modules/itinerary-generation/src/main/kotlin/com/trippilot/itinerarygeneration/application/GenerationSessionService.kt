@@ -62,6 +62,10 @@ class GenerationSessionService(
      * 거절할 때 **어느 여행이 진행 중인지** 함께 보낸다. 사유만 주면 사용자는 무엇을 기다려야 할지 모른다.
      */
     private fun guardSingleActive(accountId: UUID, tripId: UUID, now: Instant) {
+        // 읽기 **전에** 줄을 세운다. 보고 판단해서 쓰는 사이가 열려 있으면 동시 요청 둘이 함께
+        // "진행 중 없음"으로 읽고, 유니크에 걸린 쪽이 409 대신 500 을 받는다.
+        sessions.lockAccount(accountId)
+
         val active = sessions.findRunningByAccount(accountId) ?: return
         if (active.tripId == tripId) return // 같은 여행 — 탈출구는 항상 열려 있다
 
