@@ -151,3 +151,38 @@ export function RouteArrowGlyph({ size = 13, color = MUTED }: TintGlyphProps) {
     </Svg>
   );
 }
+
+// i05 헤더 뒤로가기(‹) — 화살표 없이 굵은 셰브론.
+export function BackArrowGlyph({
+  size = 24,
+  color = MUTED_SOFT,
+}: TintGlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M15 5L8 12L15 19"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// i05 헤더 공유 — 세 점 + 잇는 선.
+export function ShareGlyph({ size = 24, color = MUTED_SOFT }: TintGlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={18} cy={5} r={2.4} stroke={color} strokeWidth={1.8} />
+      <Circle cx={6} cy={12} r={2.4} stroke={color} strokeWidth={1.8} />
+      <Circle cx={18} cy={19} r={2.4} stroke={color} strokeWidth={1.8} />
+      <Path
+        d="M8.1 10.9L15.9 6.1M8.1 13.1L15.9 17.9"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
