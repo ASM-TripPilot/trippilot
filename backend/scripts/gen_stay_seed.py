@@ -63,8 +63,16 @@ def resolve(address: str, sido: dict, sigungu: dict):
         return None, None
     under = sigungu.get(sido_code, {})
     two = " ".join(parts[1:3]) if len(parts) >= 3 else None
+
+    # **행정구는 상위 시로 접는다.** `수원시 장안구`(41111)를 그대로 두면 사용자가 고를 수 있는
+    # `수원시`(41110)로 조회할 때 접두사가 안 맞아 **0건**이 된다 — 41111 은 41110 으로 시작하지 않는다.
+    # POI 쪽 `RegionResolver` 가 같은 규칙을 쓴다. 둘이 갈리면 같은 주소가 다른 코드로 저장된다.
     if two and two in under:
-        return under[two], two
+        code = under[two]
+        parent = under.get(parts[1]) if len(parts) >= 2 else None
+        if parent is not None:
+            return parent, parts[1]
+        return code, two
     if len(parts) >= 2 and parts[1] in under:
         return under[parts[1]], parts[1]
     return sido_code, parts[0]
