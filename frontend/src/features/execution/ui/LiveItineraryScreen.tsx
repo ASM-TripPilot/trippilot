@@ -63,6 +63,7 @@ export function LiveItineraryScreen({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        className="grow-0"
         contentContainerClassName="gap-sm px-lg py-md"
       >
         {days.map((_day, index) => {
