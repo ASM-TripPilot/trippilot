@@ -292,8 +292,10 @@ const ENDPOINT_FILE_SHA256: Record<string, string> = {
   //
   // ⚠️ `trips/trips.ts`에는 해시를 걸지 않는다 — 이번 재생성이 **바꾸는 대상** 파일이라
   // 자기모순이다. 그 파일은 대신 B-15(심볼 보존)가 "줄지 않았다"만 골라 잰다.
+  // TRIP-445에서 갱신: places 태그에 GET /regions 오퍼레이션이 추가돼 places.ts가
+  // 정당하게 바뀌었다(regions 전용, stays·trips 드리프트는 이 티켓에서 되돌려 섞이지 않게 했다).
   'places/places.ts':
-    '7e5363ebd511f108209de46f425f93c148fe29df84cff0c6be691ac007dbe2ca',
+    '7b010c8b93f75a9a44efafbb82ee257cb7db6c4d208d93b12f5d83383fc476ff',
   'preferences/preferences.ts':
     'c583726ab8b40694c99f5b3cc54d5da91a3b0bd0bd83f1b692ee9435e129a6fc',
 };

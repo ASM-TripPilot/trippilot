@@ -5,11 +5,20 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import { REGIONS } from '@/features/explore/model/regions';
-
 import { validateTripDraft } from '../model/tripDraft';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
+
+// TRIP-445 게이트①-2 결정 A — 삭제된 프로덕션 상수 `REGIONS`를 파일 로컬 `{code,name}[]`
+// 픽스처로 기계 교체(단언·동작 무변경, 위저드 화면 `regions` 계약과 같은 shape).
+const REGIONS: readonly { code: string; name: string }[] = [
+  { code: 'busan', name: '부산' },
+  { code: 'gyeongju', name: '경주' },
+  { code: 'seoul', name: '서울' },
+  { code: 'jeju', name: '제주' },
+  { code: 'gangneung', name: '강릉' },
+  { code: 'yeosu', name: '여수' },
+];
 
 /**
  * TRIP-205 g01 여행 만들기 1/2 — **props만 받는 프레젠테이션 화면**.

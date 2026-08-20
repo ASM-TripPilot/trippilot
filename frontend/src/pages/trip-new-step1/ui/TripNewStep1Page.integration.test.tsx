@@ -166,10 +166,15 @@ function renderPage() {
 }
 
 /** 도시 추가 시트를 열어 지역 하나를 N박으로 확정하는 3동작 묶음(승인 파일과 같은 형태). */
-function addDestination(regionCode: string, nights: number): void {
+async function addDestination(
+  regionCode: string,
+  nights: number
+): Promise<void> {
   fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+  // 지역 칩은 이제 async `useRegions()`에서 온다 — 첫 렌더엔 없으므로 뜰 때까지 기다린 뒤 누른다
+  // (TRIP-445 결정 C, 형제 통합 테스트의 `await findBy*` 관례와 동형, 단언 무변경).
   fireEvent.press(
-    screen.getByTestId(`trip-wizard-destination-region-${regionCode}`)
+    await screen.findByTestId(`trip-wizard-destination-region-${regionCode}`)
   );
   // 시트의 박수 기본값은 1이다.
   for (let i = 1; i < nights; i += 1) {
@@ -193,7 +198,7 @@ async function waitForPrefill(): Promise<void> {
 
 /** 정상 제출이 가능한 상태(부산 3박 + 3박 4일 = 박수 3 ≤ 기간 3)를 만든다. */
 async function fillValidDraft(): Promise<void> {
-  addDestination('busan', 3);
+  await addDestination('busan', 3);
   fireEvent.press(screen.getByTestId('trip-wizard-period-preset-3n4d'));
   await waitForPrefill();
 }
@@ -242,13 +247,13 @@ describe('I-9 · AC-3 · AC-5 (TRIP-389) — 달력 파생 경로의 제출 종�
     renderPage();
 
     // 준비 — 부산 1박을 담고, 달력에서 출발일 6/15를 단일 선택으로 확정한다.
-    addDestination('busan', 1);
+    await addDestination('busan', 1);
     fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
     fireEvent.press(screen.getByTestId('trip-wizard-date-cell-2026-06-15'));
     fireEvent.press(screen.getByTestId('trip-wizard-datesheet-confirm'));
 
     // 실행(반응형의 핵심) — 확정 뒤에 경주 2박을 더 담는다. 박수 합이 1→3이 된다.
-    addDestination('gyeongju', 2);
+    await addDestination('gyeongju', 2);
     await waitForPrefill();
 
     // 앵커 — 아직 아무것도 안 나갔다.
@@ -319,7 +324,7 @@ describe('I-3 · AC-3 · AC-10 — 박수 초과는 여행지 블록에 서고 �
     await waitForPrefill();
 
     // 실행 ① — 여행지만 건드린다. 기간을 아직 안 골랐다.
-    addDestination('busan', 5);
+    await addDestination('busan', 5);
 
     // 단언 ① — 아직 문구가 없다. `validateTripDraft`는 이 시점에도 페일클로즈로
     // NIGHTS_EXCEED_PERIOD를 낸다(날짜를 못 읽으니 옳은 판정이다). 그런데 문구를 만들면
@@ -359,8 +364,8 @@ describe('I-3 · AC-3 · AC-10 — 박수 초과는 여행지 블록에 서고 �
     await waitForPrefill();
 
     // 부산 2박 + 경주 2박 = 4박, 기간은 1박 2일 = 1박.
-    addDestination('busan', 2);
-    addDestination('gyeongju', 2);
+    await addDestination('busan', 2);
+    await addDestination('gyeongju', 2);
     fireEvent.press(screen.getByTestId('trip-wizard-period-preset-1n2d'));
 
     // 이 짝이 없으면 문구를 **통째로 하드코딩한** 구현도 위 테스트를 통과한다.

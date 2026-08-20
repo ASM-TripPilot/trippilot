@@ -90,6 +90,39 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: () => mockSavedPlaces,
 }));
 
+/**
+ * TRIP-445 (검증 n=1) — 위 세 목과 **같은 이유**: 레이아웃이 간접 렌더하는 `TripNewStep1Page`가
+ * `useRegions`(→ `useQuery`)를 물어 provider 없는 이 node 버킷에서 render 가 던진다. 승인
+ * `TripNewStep1Page.test.tsx` 목과 같은 형태로 `useRegions` 만 갈아끼우고 `filterRegions` 는
+ * requireActual 실물을 쓴다. 슬러그 6코드 동기 반환이라 기존 testID 가 그대로 산다. 단언 무변경.
+ */
+jest.mock('@/features/explore/model/regions', () => {
+  const region = (regionCode: string, name: string) => ({
+    regionCode,
+    name,
+    sidoName: name,
+    level: 'SIDO',
+    selectable: true,
+    poiCount: 5,
+  });
+  return {
+    ...jest.requireActual('@/features/explore/model/regions'),
+    useRegions: () => ({
+      data: [
+        region('busan', '부산'),
+        region('gyeongju', '경주'),
+        region('seoul', '서울'),
+        region('jeju', '제주'),
+        region('gangneung', '강릉'),
+        region('yeosu', '여수'),
+      ],
+      isPending: false,
+      isError: false,
+      refetch: jest.fn(),
+    }),
+  };
+});
+
 /** 기준일 고정 — 실행일이 바뀌어도 단언이 흔들리지 않는다. */
 const BASE = '2026-06-10';
 

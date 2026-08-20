@@ -56,27 +56,6 @@ export function SearchGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-/** '내 주변' 위치 핀. */
-export function NearbyPinGlyph({ size = 20, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z"
-        stroke={INK}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
-      <Circle cx={12} cy={10} r={2.6} stroke={INK} strokeWidth={1.8} />
-    </Svg>
-  );
-}
-
 /** d04 카드 하트 토글 — 담기지 않음(외곽선, Figma `1692:1230` 계열 실측 path). */
 export function HeartOutlineGlyph({ size = 18, testID }: GlyphProps) {
   return (
