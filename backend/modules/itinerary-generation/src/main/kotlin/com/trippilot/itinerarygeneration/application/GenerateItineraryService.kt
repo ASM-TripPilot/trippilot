@@ -95,7 +95,7 @@ class GenerateItineraryService(
             ctx.fixedVisits.filterNot { it.date in firstDates }.map { it.poiId }.distinct()
         }
         // 화면(h09·h10)이 단계·[취소]를 그릴 상태 원천을 연다(BR-U3-04·05).
-        val session = genSessions.start(tripId, mode)
+        val session = genSessions.start(accountId, tripId, mode)
 
         // 재생성이라면 **직전 상태로 돌아갈 지점**이 반드시 있어야 한다(INV-U3-08 · BR-U3-19).
         val previous = previousOf(tripId)

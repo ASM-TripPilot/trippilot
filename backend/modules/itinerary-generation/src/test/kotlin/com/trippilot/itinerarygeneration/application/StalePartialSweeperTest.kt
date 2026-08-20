@@ -52,7 +52,7 @@ class StalePartialSweeperTest : StringSpec({
         val stale = partialUpdatedAt(now.minusSeconds(600))
         val repo = Repo(listOf(stale))
         val sessionRepo = FakeGenerationSessions()
-        val session = sessionRepo.save(GenerationSession.start(stale.tripId, GenerationMode.FULLY_AI, now))
+        val session = sessionRepo.save(GenerationSession.start(UUID.randomUUID(), stale.tripId, GenerationMode.FULLY_AI, now))
         StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock).sweep()
 
         val swept = repo.byTrip.getValue(stale.tripId)
@@ -66,7 +66,7 @@ class StalePartialSweeperTest : StringSpec({
         val running = partialUpdatedAt(now.minusSeconds(10))
         val repo = Repo(listOf(running))
         val sessionRepo = FakeGenerationSessions()
-        val session = sessionRepo.save(GenerationSession.start(running.tripId, GenerationMode.FULLY_AI, now))
+        val session = sessionRepo.save(GenerationSession.start(UUID.randomUUID(), running.tripId, GenerationMode.FULLY_AI, now))
         StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock).sweep()
 
         repo.byTrip.getValue(running.tripId).generationState shouldBe GenerationState.PARTIAL
