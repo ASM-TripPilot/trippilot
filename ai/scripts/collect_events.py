@@ -75,6 +75,34 @@ def _queries(region: str, today: dt.date) -> tuple[tuple[str, str], ...]:
     )
 
 
+def _geocode(event, region: str, client: NaverSearchClient, kakao) -> object:
+    """행사 좌표 확보 체인 (TRIP-421 — 실측 기반 순서).
+
+    ① 네이버 지역검색 "지역+행사명" → ② 카카오 주소검색(주소 있으면, 정식
+    지오코더) → ③ 카카오 키워드검색 → ④ 네이버 지역검색 주소(카카오 미배선 시).
+    예산 소진은 그 자리에서 중단 — 좌표만 포기, 행사 등록은 계속.
+    """
+    def _naver(query: str):
+        items = client.search("local", query, display=1)
+        return coord_from_local_item(items[0]) if items else None
+
+    steps = [lambda: _naver(f"{region} {event.name}")]
+    if kakao is not None:
+        if event.address:
+            steps.append(lambda: kakao.address_to_coord(event.address))
+        steps.append(lambda: kakao.keyword_to_coord(f"{region} {event.name}"))
+    elif event.address:
+        steps.append(lambda: _naver(event.address))
+    for step in steps:
+        try:
+            coord = step()
+        except CallBudgetExceeded:
+            return None
+        if coord is not None:
+            return coord
+    return None
+
+
 def collect_region(
     region: str,
     *,
@@ -83,6 +111,7 @@ def collect_region(
     store: JsonEventStore,
     today: dt.date,
     now: dt.datetime,
+    kakao=None,  # KakaoLocalClient | None (지오코딩 보강 — 키 없으면 네이버만)
 ) -> dict:
     """지역 1곳 수집 — 통계 dict 반환. CallBudgetExceeded는 위로 전파(포인터 미전진)."""
     pairs: list[tuple[str, str]] = []
@@ -104,20 +133,11 @@ def collect_region(
              "geocoded": 0, "added": 0,
              "fallback": bool(result.is_fallback), "error": result.error}
 
-    # ③ 좌표 부여 — 행사명 → (실패 시) 주소 폴백 질의. 지역검색은 업체/장소 DB라
-    #    행사명 적중률이 낮다(첫 배치 실측 1/4) — 주소("송도 달빛축제공원")가 있으면
-    #    그쪽이 잘 잡힌다. 예산 소진 시 남은 행사는 좌표 없이 등록 (부착만 제외, 유효).
+    # ③ 좌표 부여 — _geocode 체인 (네이버 → 카카오 주소/키워드). 좌표 없는 행사도
+    #    유효하다 — POI 부착(보너스)만 제외.
     enriched = []
     for event in extracted:
-        coord = None
-        try:
-            for query in filter(None, (f"{region} {event.name}", event.address)):
-                items = client.search("local", query, display=1)
-                coord = coord_from_local_item(items[0]) if items else None
-                if coord is not None:
-                    break
-        except CallBudgetExceeded:
-            pass  # 좌표만 포기 — 행사 등록은 계속
+        coord = _geocode(event, region, client, kakao)
         if coord is not None:
             stats["geocoded"] += 1
             event = dataclasses.replace(event, coord=coord)
@@ -167,6 +187,17 @@ def main() -> int:
         _StderrTrace(),
     ))
     client = NaverSearchClient(UrllibHttpClient(), client_id, client_secret, max_calls)
+    # 카카오 지오코딩 보강 (TRIP-421) — 키 없으면 네이버 체인만 (기능 부재 ≠ 실패)
+    kakao = None
+    kakao_key = _optional("KAKAO_REST_API_KEY")
+    if kakao_key:
+        from trippilot.background.kakao_local import KakaoLocalClient
+
+        kakao = KakaoLocalClient(
+            UrllibHttpClient(), kakao_key,
+            int(_optional("KAKAO_MAX_CALLS") or "300"),
+        )
+        print("[events] 카카오 지오코딩 활성 (주소검색·키워드검색 폴백)")
     store = JsonEventStore(store_path)
 
     start = store.pointer % len(regions)
@@ -180,7 +211,7 @@ def main() -> int:
     for region in todo:
         try:
             stats = collect_region(region, client=client, worker=worker,
-                                   store=store, today=today, now=now)
+                                   store=store, today=today, now=now, kakao=kakao)
         except CallBudgetExceeded:
             budget_stopped = region  # 이 지역은 포인터 미전진 — 내일 여기부터
             print(f"[events] 하드캡 도달 — {region} 수집은 내일 재개")
