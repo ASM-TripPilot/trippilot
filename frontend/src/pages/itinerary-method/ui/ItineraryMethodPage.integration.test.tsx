@@ -10,14 +10,16 @@ import { ItineraryMethodPage } from './ItineraryMethodPage';
 /**
  * TRIP-303 → **TRIP-305 재작성**(게이트① 동결분 개봉 — 새 사이클이라 정당, `[[배선 이음매]]`).
  *
- * 무엇이 바뀌었나: 생성 POST 소유가 **h04→h09 로 이동**했다(AC-7·⚑B). h04 는 이제 완전AI 를
- * 고르면 **h09(생성 중)로 navigate 만** 한다 — 인라인 스피너·POST·draft 라우팅은 h09 가 소유한다.
- * 그래서 옛 "완전AI→POST+draft" · "POST 실패/중복제출" describe 는 삭제되고, 그 표면은 h09 의
- * `GeneratingPage.integration.test.tsx`(AC-6)로 이관됐다.
+ * 무엇이 바뀌었나: 생성 POST 소유가 **h04→h09 로 이동**했다(TRIP-305 AC-7·⚑B). h04 는 완전AI 를
+ * 고르면 **navigate 만** 하고 생성 POST·draft 라우팅은 h09 가 소유한다 — 그래서 옛 "완전AI→
+ * POST+draft" · "POST 실패/중복제출" describe 는 삭제돼 h09 의 `GeneratingPage.integration.test.tsx`
+ * (AC-6)로 이관됐다. **TRIP-454 로 그 navigate 목적지가 h09 직행 → h05(필수 방문지) 편입으로
+ * 바뀌었다**(h05 CTA 가 h09 로 잇는다 · 아래 첫 describe).
  *
  * 무엇을 보장하나:
  *  - 3방식 카드가 Figma 문구 그대로 뜨고, 추천 배지는 [AI와 같이 짜기] **하나**에만 있다.
- *  - 🔴 완전AI 를 누르면 **h09 로 navigate 하고 h04 에서는 POST 가 한 건도 안 나간다**(POST 는 h09 소유).
+ *  - 🔴 완전AI 를 누르면 **h05(필수 방문지)로 navigate 하고 h04 에서는 POST 가 한 건도 안 나간다**
+ *    (TRIP-454 로 h09 직행 → h05 편입 재작성 · 생성 POST 는 여전히 h09 가 소유).
  *  - 🔴 직접 짜기(manual)를 누르면 **h19(빈 일정)로 navigate 하고 POST 는 h04 에서 0**이다(TRIP-460
  *    개통 — MANUAL POST 는 h19 소유). 준비 중 게이트는 더는 안 뜬다.
  *  - copick 은 "준비 중"만 낼 뿐 POST·라우팅이 0 이다(착지 화면 미착수, 01b D2).
@@ -107,24 +109,24 @@ describe('🔴 추천 배지는 copick 에만', () => {
   });
 });
 
-describe('🔴 완전AI → h09(생성 중)로 navigate, h04 POST 0 (AC-7 · ⚑B)', () => {
-  it('완전AI 를 누르면 generating 라우트로 이동하고 POST 는 h04 에서 안 나간다', () => {
+describe('🔴 완전AI → h05(필수 방문지)로 navigate, h04 POST 0 (TRIP-454 AC-1)', () => {
+  it('완전AI 를 누르면 must-visits 라우트로 이동하고(tripId 실림) POST 는 h04 에서 안 나간다', () => {
     renderPage();
 
     fireEvent.press(screen.getByTestId('itinerary-method-fullai'));
 
-    // 이동이 한 번 일어났다 — 목적지 형태(문자열/객체)를 강요하지 않고 직렬화해 "어디로 갔나"만
-    // 잰다(DraftPage I6 · 02a ★4). h09 로 갔고 tripId 를 실었다.
+    // 이동이 한 번 — 목적지 형태(문자열/객체)를 강요하지 않고 직렬화해 "어디로 갔나"만 잰다.
+    // 완전AI 는 이제 h05 로 가고, 거기서 CTA 가 h09 로 잇는다(브리프 part 1 · 02a AC-1).
     expect(mockPush).toHaveBeenCalledTimes(1);
     const destination = mockPush.mock.calls[0][0] as unknown;
     const asText =
       typeof destination === 'string'
         ? destination
         : JSON.stringify(destination);
-    expect(asText).toContain('generating');
+    expect(asText).toContain('must-visits');
     expect(asText).toContain(TRIP_ID);
 
-    // ★ POST 는 h04 에서 한 건도 안 나간다 — 생성 발화는 h09 가 마운트 시 소유한다(AC-7).
+    // ★ POST 는 h04 에서 한 건도 안 나간다 — 생성 발화는 여전히 h09 가 마운트 시 소유한다(무회귀).
     expect(mockMutate).not.toHaveBeenCalled();
   });
 });

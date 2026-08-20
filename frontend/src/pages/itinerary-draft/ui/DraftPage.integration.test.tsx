@@ -622,3 +622,30 @@ describe('🔴 I8 · AC-1·AC-2·AC-7 — solveMode·isFallback 신호가 배선
     expect(screen.queryAllByTestId(FALLBACK_BANNER)).toEqual([]);
   });
 });
+
+/* ───────────────────────── TRIP-454 · h11→h25 완성 CTA 배선 ─────────────────────────
+ * 화면(DraftScreen)은 완성 버튼을 그리고 `onComplete` 만 부른다 — **어디로 가는지**는 이 배선의
+ * 책임이자 심판이다. 기본 시나리오(COMPLETE·PLANNED·3일 = listed 얼굴)에서 CTA 를 눌러 h25 로
+ * 정확히 가는지 잰다.
+ * ─────────────────────────────────────────────────────────────────────────── */
+describe('🔴 I9 · TRIP-454 AC-5 — 완성 CTA 를 누르면 h25 로 정확히 배선된다', () => {
+  it('listed 에서 완성 버튼을 누르면 /trips/[tripId]/itinerary 로 tripId 를 실어 한 번 이동한다', async () => {
+    renderPage();
+
+    fireEvent.press(await screen.findByTestId('itinerary-draft-complete'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+
+    // ★ 여기서는 **정확 일치**다(02a ★1·★2) — `'itinerary'` 부분문자열은 draft·generating
+    //   경로에도 있어 substring 매칭이면 엉뚱한 곳으로 가도 통과한다. h25 는 접미 없는
+    //   `/trips/[tripId]/itinerary` 다. 이 단언은 객체형 push(`{pathname, params}`)를 강제한다 —
+    //   문자열 `'/trips/[tripId]/itinerary'` 는 `[tripId]` 미해결이라 깨진 형태다(리포 선례
+    //   must-visits push 동형).
+    const dest = mockPush.mock.calls[0][0] as {
+      pathname?: string;
+      params?: { tripId?: string };
+    };
+    expect(dest.pathname).toBe('/trips/[tripId]/itinerary');
+    expect(dest.params?.tripId).toBe(TRIP_ID);
+  });
+});

@@ -213,6 +213,10 @@ const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
 const onSelectDay = jest.fn();
 const onRetry = jest.fn();
 const onBack = jest.fn();
+// TRIP-454 — h11→h25 완성 CTA 콜백. 아직 `DraftScreenProps` 에 없어(구현 전) tsc 는 이 prop 을
+// 거부하지만 jest 는 babel 이 타입을 벗겨 실행한다 — 완성 CTA testID 부재로 red 가 난다(구현용
+// 프롭 선언은 implementer 몫, 02a §6). 화면은 여분 prop 을 무시하므로 기존 케이스는 무영향이다.
+const onComplete = jest.fn();
 
 type ScreenOverrides = {
   view?: DraftView;
@@ -221,6 +225,7 @@ type ScreenOverrides = {
   pins?: DraftPin[];
   dayHeader?: string;
   canRetry?: boolean;
+  onComplete?: () => void;
 };
 
 function renderScreen(over: ScreenOverrides = {}) {
@@ -235,6 +240,7 @@ function renderScreen(over: ScreenOverrides = {}) {
       onSelectDay={onSelectDay}
       onRetry={onRetry}
       onBack={onBack}
+      onComplete={onComplete}
       {...over}
     />
   );
@@ -244,6 +250,7 @@ beforeEach(() => {
   onSelectDay.mockClear();
   onRetry.mockClear();
   onBack.mockClear();
+  onComplete.mockClear();
 });
 
 describe('C1 · 탐지기 자가검사 — 이게 통과해야 아래 개수·순서 단언이 의미를 갖는다', () => {
@@ -567,5 +574,65 @@ describe('C14 · 진행 표시 — 평범한 것 하나뿐이다 (티켓 스코�
     ['백그라운드', '취소', '%'].forEach((forbidden) => {
       expect(texts).not.toContain(forbidden);
     });
+  });
+});
+
+/* ───────────────────────── TRIP-454 · h11→h25 완성 CTA ─────────────────────────
+ * h11(추천안 초안)의 `listed` 얼굴 하단에 h25(완성 일정)로 가는 완성 버튼을 신설한다. 화면은
+ * 목적지를 모르고 `onComplete` 콜백만 부른다(배선은 `DraftPage` 몫 · AC-5). 라벨 `이 일정으로
+ * 완성` 은 발명값이다 — Figma h11(1870:1083)에 하단 CTA 가 없다(02a §6, scribe 소급 대상).
+ *
+ * 🔴 지금은 red 다: `itinerary-draft-complete` testID·`onComplete` prop 이 리포에 0건이다.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+describe('🔴 C15 · AC-4 — listed 얼굴에 완성 CTA 가 있고 누르면 onComplete 가 불린다', () => {
+  it('완성 버튼과 라벨이 뜨고, 눌러 onComplete 가 정확히 한 번 불린다', () => {
+    renderScreen();
+
+    // 긍정 앵커 — 버튼이 실재하고 라벨이 발명값 그대로다. `getByText(문자열)` 은 exact 텍스트노드
+    // 매치라 문안이 드리프트하면 red 다(`toHaveTextContent` 완전일치 함정은 피한다, 02a ★9·★10).
+    expect(screen.getByTestId('itinerary-draft-complete')).toBeOnTheScreen();
+    expect(screen.getByText('이 일정으로 완성')).toBeOnTheScreen();
+
+    // ★ 활성 증명은 press→콜백이다 — `toBeDisabled()` 단독은 "회색인데 눌리는" 구현을
+    //   통과시킨다(02a ★5). 눌러서 실제로 한 번 불리는 것으로 활성을 잰다.
+    fireEvent.press(screen.getByTestId('itinerary-draft-complete'));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('🔴 C16 · AC-4 — 생성 중(PARTIAL) listed 에서도 완성 CTA 가 활성이다', () => {
+  it('generating=true 여도 완성 버튼이 뜨고 눌러 onComplete 가 불린다 (잠금 없음)', () => {
+    // 오케 결정: h25 가 자체적으로 상태를 처리하므로 완성 CTA 는 PARTIAL 에서도 잠그지 않는다
+    // (`isConfirmLocked` 류 잠금 추가 금지 · 02a ★8). `listed.generating` 은 h10 "만드는 중"
+    // 얼굴을 얹는 축이다(model DraftView.listed.generating).
+    renderScreen({
+      view: {
+        kind: 'listed',
+        days: DAYS,
+        staleFailed: false,
+        generating: true,
+      },
+    });
+
+    expect(screen.getByTestId('itinerary-draft-complete')).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('itinerary-draft-complete'));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('C17 · AC-4 — 완성 CTA 는 비-listed 얼굴에는 없다 (선제 green · 짝 트립와이어)', () => {
+  // DraftScreen 의 비-listed 얼굴은 loading·failed·empty 3종이다(zero 는 DraftPage 가 가로채는
+  // 별도 `ZeroCandidateScreen` 이라 이 화면 계약 밖 · 02a ★6). CTA 가 아직 없어 지금은 전부
+  // green 이고, 구현 후에도 green 이면 "CTA 가 listed 에만 산다"는 트립와이어다 — 구현자가
+  // CTA 를 얼굴 무관 위치(ScrollView 최상위)에 두면 여기서 red 로 전환된다(02a ★7).
+  it.each([
+    { name: 'loading', view: { kind: 'loading' } as DraftView },
+    { name: 'failed', view: { kind: 'failed' } as DraftView },
+    { name: 'empty', view: { kind: 'empty' } as DraftView },
+  ])('$name 얼굴에는 완성 CTA 가 없다', ({ view }) => {
+    renderScreen({ view });
+
+    expect(screen.queryByTestId('itinerary-draft-complete')).toBeNull();
   });
 });

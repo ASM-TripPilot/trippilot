@@ -651,25 +651,49 @@ describe('🔴 I12 · AC-10 duplicate — POST 409 는 실패가 아니되 침�
   });
 });
 
-describe('🔴 I13 · AC-14 — CTA·건너뛰기가 비활성이고 사유가 보이며 눌러도 안 움직인다', () => {
-  it('두 표면이 잠기고 사유가 글자로 있으며 이동·요청이 0건이다', async () => {
+describe('🔴 I13 · TRIP-454 AC-2 — CTA·건너뛰기가 활성이고 각각 h09 로 가며 사유가 없다', () => {
+  /**
+   * TRIP-326(AC-14)에서 이 두 표면은 **상시 차단·무동작**이었다 — h09(생성 중)가 리포에 없어
+   * "목적지 없는 버튼을 말없이 죽이지 않으려"(INV-4) 사유 문구를 항상 띄웠다. h09 는 이제
+   * 존재하므로 이 사이클이 그 문을 연다: 배선만 바뀌고 화면 계약은 무수정이다(브리프 part 1 ·
+   * 맹점 ①). 재작성 정당 = 새 사이클(파일 머리말 · 02a §2).
+   */
+  it('두 표면이 활성이고 각각 눌러 generating 으로 가며 사유 문구가 없고 요청이 0건이다', async () => {
     await openList();
 
     const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
     const skip = screen.getByTestId('itinerary-mustvisit-screen-skip');
 
-    expect(proceed).toBeDisabled();
-    expect(skip).toBeDisabled();
-    // 🔴 발명값이다(01b D7 — 어느 프레임·문서에도 사유 문구가 없다). 심판이 없으면 조용히
-    //    드리프트한다.
-    expect(screen.getByText(BLOCKED_REASON)).toBeOnTheScreen();
+    // ① 활성 — 회색 잠금이 풀렸다. `toBeDisabled` 단독은 "회색인데 눌리는" 구현도 통과시키므로
+    //    아래 press→이동을 짝으로 붙인다(02a ★5).
+    expect(proceed).not.toBeDisabled();
+    expect(skip).not.toBeDisabled();
+    // ② 사유 문구 부재 — 목적지가 생겼으므로 "준비 중" 안내가 사라진다(브리프 INV-4 절).
+    //    기존 I13 이 `getByText(BLOCKED_REASON)` 으로 존재를 증명했었다 — 그 null-safe 짝이다.
+    expect(screen.queryByText(BLOCKED_REASON)).toBeNull();
 
-    mockPush.mockClear();
+    // ③ 다음 CTA → h09(생성 중). 목적지 형태를 강요하지 않고 직렬화해 "어디로 갔나"만 잰다.
     fireEvent.press(proceed);
-    fireEvent.press(skip);
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    const proceedDest = mockPush.mock.calls[0][0];
+    const proceedFlat =
+      typeof proceedDest === 'string'
+        ? proceedDest
+        : JSON.stringify(proceedDest);
+    expect(proceedFlat).toContain('generating');
+    expect(proceedFlat).toContain(TRIP_ID);
 
-    // "눌러도 아무 일이 없다" 는 그 자체로 위반이므로 위 사유 문구와 **세트로** 잰다.
-    expect(mockPush).not.toHaveBeenCalled();
+    // ④ 건너뛰기도 같은 목적지(h09). 앞 호출과 섞이지 않게 비우고 다시 잰다.
+    mockPush.mockClear();
+    fireEvent.press(skip);
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    const skipDest = mockPush.mock.calls[0][0];
+    const skipFlat =
+      typeof skipDest === 'string' ? skipDest : JSON.stringify(skipDest);
+    expect(skipFlat).toContain('generating');
+    expect(skipFlat).toContain(TRIP_ID);
+
+    // ⑤ 전진은 요청을 만들지 않는다 — 생성 POST 는 h09 가 마운트 시 소유한다(무회귀).
     expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
   });

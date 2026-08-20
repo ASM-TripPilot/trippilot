@@ -461,6 +461,7 @@ const DRAFT_PREVIEW_BASE: DraftScreenProps = {
   onSelectDay: noop,
   onRetry: noop,
   onBack: noop,
+  onComplete: noop,
 };
 
 const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {

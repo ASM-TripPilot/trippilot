@@ -312,7 +312,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 3필드 그대로, DraftScreenProps 는 10필드 그대로, 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 3필드 그대로, DraftScreenProps 는 11필드(onComplete 편입), 화면에 에셋 해석 지문이 0건이다', () => {
     const mapHtmlSource = readOne(MAP_HTML_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -326,7 +326,8 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       'lat',
       'lng',
     ]);
-    // 화면 계약도 그대로 — 사진을 넣으려고 프롭을 늘리면 여기서 걸린다.
+    // 화면 계약 스냅숏 — 사진을 넣으려고 프롭을 늘리면 여기서 걸린다(이 칸 TRIP-339 의 취지).
+    // 필드 추가는 **정당한 계약 변경일 때만** 이 목록을 함께 갱신해 통과시킨다(이행 체크포인트 B).
     expect(interfaceFields(screenSource, 'DraftScreenProps')).toEqual([
       'view',
       'tabs',
@@ -335,12 +336,15 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       'dayHeader',
       'canRetry',
       // TRIP-298 이 더한 강등 스위치 `demoted` 를 TRIP-304 가 단일 폴백 배너 유니온으로 흡수했다
-      // (`fallbackNotice?: FallbackNotice | null`, 01b 결정 3). 필드 수는 그대로 10 — 사진을
-      // 넣으려고 프롭이 느는 것을 막는 이 칸(TRIP-339)의 취지는 유지된다(02a §2.2).
+      // (`fallbackNotice?: FallbackNotice | null`, 01b 결정 3).
       'fallbackNotice',
       'onSelectDay',
       'onRetry',
       'onBack',
+      // TRIP-454 — h11→h25 완성 CTA 콜백. **프로퍼티형** `onComplete?: () => void` 여야
+      // interfaceFields 가 잡는다(메서드 단축형 `onComplete?()` 는 미캡처 — 02a §5 node 실측).
+      // 반드시 마지막 필드(toEqual 순서 민감).
+      'onComplete',
     ]);
 
     // 에셋 해석은 픽스처 몫이다 — 화면이 로컬 파일을 알면 계약이 둘로 갈린다.
