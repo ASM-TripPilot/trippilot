@@ -108,6 +108,9 @@ export interface MethodPickerScreenProps {
   onBack: () => void;
   /** 완전AI 탭 — 배선이 h09(생성 중)로 navigate 한다(POST 는 h09 소유). */
   onPressFullAi: () => void;
+  /** 직접 짜기 탭 — 배선이 h19(빈 일정)로 navigate 한다(TRIP-460). 미전달 시 "준비 중" 폴백
+   * (후방호환 옵셔널 — `confirmLocked?`·`saveError?` 선례. 프리뷰는 폴백을 그대로 쓴다). */
+  onPressManual?: () => void;
   /** 진행 중인 다른 여행이 있으면(서버 판정면) 생성 진입을 막고 사유를 표시한다. null/미전달 = 미차단. */
   activeGeneration?: ActiveGeneration | null;
   /** 사유 안내의 "진행 중인 여행으로 가기". */
@@ -117,6 +120,7 @@ export interface MethodPickerScreenProps {
 export function MethodPickerScreen({
   onBack,
   onPressFullAi,
+  onPressManual,
   activeGeneration,
   onPressActiveGeneration,
 }: MethodPickerScreenProps): ReactElement {
@@ -205,7 +209,7 @@ export function MethodPickerScreen({
             iconBg="bg-surface-strong"
             title="직접 짜기"
             description="빈 일정에 원하는 장소를 직접 추가"
-            onPress={showSoon}
+            onPress={onPressManual ?? showSoon}
           />
 
           {soon ? (

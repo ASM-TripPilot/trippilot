@@ -18,7 +18,9 @@ import { ItineraryMethodPage } from './ItineraryMethodPage';
  * 무엇을 보장하나:
  *  - 3방식 카드가 Figma 문구 그대로 뜨고, 추천 배지는 [AI와 같이 짜기] **하나**에만 있다.
  *  - 🔴 완전AI 를 누르면 **h09 로 navigate 하고 h04 에서는 POST 가 한 건도 안 나간다**(POST 는 h09 소유).
- *  - copick·manual 은 "준비 중"만 낼 뿐 POST·라우팅이 0 이다(착지 화면 미착수, 01b D2·D3).
+ *  - 🔴 직접 짜기(manual)를 누르면 **h19(빈 일정)로 navigate 하고 POST 는 h04 에서 0**이다(TRIP-460
+ *    개통 — MANUAL POST 는 h19 소유). 준비 중 게이트는 더는 안 뜬다.
+ *  - copick 은 "준비 중"만 낼 뿐 POST·라우팅이 0 이다(착지 화면 미착수, 01b D2).
  *
  * 3동작 뼈대: 준비=POST·라우터 목 → 실행=렌더하거나 카드를 누른다 → 단언=보이는 것·나간 요청·이동.
  */
@@ -127,7 +129,7 @@ describe('🔴 완전AI → h09(생성 중)로 navigate, h04 POST 0 (AC-7 · ⚑
   });
 });
 
-describe('🔴 copick·manual 은 준비 중만 낸다 (01b D2·D3)', () => {
+describe('🔴 copick 은 준비 중만 낸다 (01b D2)', () => {
   it('copick 을 누르면 준비 중 안내만 뜨고 POST·라우팅이 0', () => {
     renderPage();
 
@@ -140,16 +142,30 @@ describe('🔴 copick·manual 은 준비 중만 낸다 (01b D2·D3)', () => {
     expect(mockMutate).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
   });
+});
 
-  it('manual 을 누르면 준비 중 안내만 뜨고 POST·라우팅이 0', () => {
+describe('🔴 직접 짜기 → h19(빈 일정)로 navigate, POST 0 (TRIP-460 개통)', () => {
+  it('manual 을 누르면 manual 라우트로 이동하고(tripId 실림) POST 는 h04 에서 안 나가며 준비 중이 안 뜬다', () => {
     renderPage();
-
-    expect(screen.queryByTestId('itinerary-method-soon')).toBeNull();
 
     fireEvent.press(screen.getByTestId('itinerary-method-manual'));
 
-    expect(screen.getByTestId('itinerary-method-soon')).toBeOnTheScreen();
+    // 이동이 한 번 — 목적지 형태를 강요하지 않고 직렬화해 "어디로 갔나"만 잰다(완전AI 케이스 동형).
+    // h19(빈 일정) manual 라우트로 갔고 tripId 를 실었다.
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    const destination = mockPush.mock.calls[0][0] as unknown;
+    const asText =
+      typeof destination === 'string'
+        ? destination
+        : JSON.stringify(destination);
+    expect(asText).toContain('manual');
+    // ★ 형제 라우트 `manual/add`(h20)와 가른다 — h19(빈 일정)로 가야 MANUAL POST(빈 일정 생성)를
+    // 소유한다. `.../manual/add` 로 오배선하면 이 단언이 red(code-critic 경고-1 봉합).
+    expect(asText).not.toContain('add');
+    expect(asText).toContain(TRIP_ID);
+
+    // ★ 준비 중 게이트가 더는 안 뜬다(게이트 해제) + 생성 POST 는 h04 에서 0(MANUAL POST 는 h19 소유).
+    expect(screen.queryByTestId('itinerary-method-soon')).toBeNull();
     expect(mockMutate).not.toHaveBeenCalled();
-    expect(mockPush).not.toHaveBeenCalled();
   });
 });
