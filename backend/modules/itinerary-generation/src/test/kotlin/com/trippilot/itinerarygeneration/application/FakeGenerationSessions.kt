@@ -26,6 +26,10 @@ internal class FakeGenerationSessions : GenerationSessionRepository {
 
     override fun findRunningByTrip(tripId: UUID): GenerationSession? =
         rows.values.firstOrNull { it.tripId == tripId && it.isRunning }
+
+    /** 실물과 같이 **가장 최근** 것을 준다 — 여러 건이면 어느 것을 보여줄지가 판정에 걸린다. */
+    override fun findRunningByAccount(accountId: UUID): GenerationSession? =
+        rows.values.filter { it.accountId == accountId && it.isRunning }.maxByOrNull { it.startedAt }
 }
 
 internal fun genSessions(

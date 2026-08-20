@@ -19,6 +19,8 @@ import java.util.UUID
 data class GenerationSession(
     val sessionId: UUID,
     val tripId: UUID,
+    /** 동시 생성 제한의 단위(TRIP-403). 세션을 여는 쪽이 아는 값이라 그때 함께 적는다. */
+    val accountId: UUID,
     /** day1 확정 전에는 null — 일정 행이 생기기 전에도 세션은 존재한다. */
     val itineraryId: UUID?,
     val status: GenerationStatus,
@@ -31,18 +33,19 @@ data class GenerationSession(
     val finishedAt: Instant?,
 ) {
     companion object {
-        fun start(tripId: UUID, mode: GenerationMode, at: Instant) = GenerationSession(
-            UUID.randomUUID(), tripId, null, GenerationStatus.RUNNING, mode,
+        fun start(accountId: UUID, tripId: UUID, mode: GenerationMode, at: Instant) = GenerationSession(
+            UUID.randomUUID(), tripId, accountId, null, GenerationStatus.RUNNING, mode,
             isFallback = false, candidatesLevel = null, startedAt = at, day1ReadyAt = null, finishedAt = null,
         )
 
         @Suppress("LongParameterList")
         fun reconstitute(
-            sessionId: UUID, tripId: UUID, itineraryId: UUID?, status: GenerationStatus, mode: GenerationMode,
+            sessionId: UUID, tripId: UUID, accountId: UUID, itineraryId: UUID?,
+            status: GenerationStatus, mode: GenerationMode,
             isFallback: Boolean, candidatesLevel: String?,
             startedAt: Instant, day1ReadyAt: Instant?, finishedAt: Instant?,
         ) = GenerationSession(
-            sessionId, tripId, itineraryId, status, mode, isFallback, candidatesLevel,
+            sessionId, tripId, accountId, itineraryId, status, mode, isFallback, candidatesLevel,
             startedAt, day1ReadyAt, finishedAt,
         )
     }
@@ -106,6 +109,21 @@ data class GenerationSession(
     }
 }
 
+/**
+ * 이 세션이 **너무 오래 살아 있는가**(TRIP-403).
+ *
+ * 백그라운드가 죽으면 세션이 RUNNING 인 채로 영원히 남는다. 그것이 계정 제한을 붙잡으면
+ * **다른 여행을 영영 못 만들게 된다** — 규칙이 사용자를 가둔다. 오래된 세션은 제한에서 제외한다.
+ *
+ * 상한은 전체 생성 시한(20초)과 2차 생성을 다 합쳐도 한참 남는 값이다 —
+ * 정상 생성을 잘라내면 안 되고, 죽은 세션을 오래 붙잡아도 안 된다.
+ */
+fun GenerationSession.isStale(at: Instant): Boolean =
+    startedAt.isBefore(at.minusSeconds(STALE_AFTER_SECONDS))
+
+/** 10분. 정상 생성의 수십 배라 살아 있는 세션을 자르지 않는다. */
+private const val STALE_AFTER_SECONDS = 600L
+
 enum class GenerationStatus { RUNNING, DAY1_READY, COMPLETED, FAILED, CANCELED }
 
 interface GenerationSessionRepository {
@@ -115,4 +133,12 @@ interface GenerationSessionRepository {
 
     /** 진행 중 세션(RUNNING·DAY1_READY). 중복 생성을 막고 폴링 대상을 찾는 데 쓴다. */
     fun findRunningByTrip(tripId: UUID): GenerationSession?
+
+    /**
+     * 이 **계정**에 진행 중인 세션(TRIP-403). 여러 건이면 가장 최근 것.
+     *
+     * 생성은 LLM·솔버를 쓰는 무거운 작업이라 동시 실행을 열어두면 비용·지연이 사용자 수가 아니라
+     * **연타 횟수**에 비례한다. 제한 단위가 계정인 이유는 사용자가 체감하는 단위가 그것이기 때문이다.
+     */
+    fun findRunningByAccount(accountId: UUID): GenerationSession?
 }

@@ -19,6 +19,8 @@ import java.util.UUID
 class GenerationSessionEntity(
     @Id @Column(name = "session_id") var sessionId: UUID,
     @Column(name = "trip_id") var tripId: UUID,
+    /** V2.27 — 동시 생성 제한의 단위(TRIP-403). */
+    @Column(name = "account_id") var accountId: UUID,
     @Column(name = "itinerary_id") var itineraryId: UUID?,
     @Column(name = "status") var status: String,
     @Column(name = "mode") var mode: String,
@@ -29,12 +31,19 @@ class GenerationSessionEntity(
     @Column(name = "finished_at") var finishedAt: Instant?,
 ) {
     protected constructor() : this(
-        UUID.randomUUID(), UUID.randomUUID(), null, "", "", false, null, Instant.EPOCH, null, null,
+        UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), null, "", "", false, null,
+        Instant.EPOCH, null, null,
     )
 }
 
 interface GenerationSessionJpaRepository : JpaRepository<GenerationSessionEntity, UUID> {
     fun findFirstByTripIdAndStatusIn(tripId: UUID, statuses: Collection<String>): GenerationSessionEntity?
+
+    /** 가장 최근 것 하나 — 제한 판정에는 "살아 있는 게 있는가"와 "어느 여행인가"만 필요하다. */
+    fun findFirstByAccountIdAndStatusInOrderByStartedAtDesc(
+        accountId: UUID,
+        statuses: Collection<String>,
+    ): GenerationSessionEntity?
 }
 
 @Component
@@ -48,7 +57,8 @@ class GenerationSessionPersistence(
      */
     override fun save(session: GenerationSession): GenerationSession = jpa.saveAndFlush(
         GenerationSessionEntity(
-            session.sessionId, session.tripId, session.itineraryId, session.status.name, session.mode.name,
+            session.sessionId, session.tripId, session.accountId, session.itineraryId,
+            session.status.name, session.mode.name,
             session.isFallback, session.candidatesLevel,
             session.startedAt, session.day1ReadyAt, session.finishedAt,
         ),
@@ -60,8 +70,11 @@ class GenerationSessionPersistence(
     override fun findRunningByTrip(tripId: UUID): GenerationSession? =
         jpa.findFirstByTripIdAndStatusIn(tripId, RUNNING_STATUSES)?.toDomain()
 
+    override fun findRunningByAccount(accountId: UUID): GenerationSession? =
+        jpa.findFirstByAccountIdAndStatusInOrderByStartedAtDesc(accountId, RUNNING_STATUSES)?.toDomain()
+
     private fun GenerationSessionEntity.toDomain() = GenerationSession.reconstitute(
-        sessionId, tripId, itineraryId, GenerationStatus.valueOf(status), GenerationMode.valueOf(mode),
+        sessionId, tripId, accountId, itineraryId, GenerationStatus.valueOf(status), GenerationMode.valueOf(mode),
         isFallback, candidatesLevel, startedAt, day1ReadyAt, finishedAt,
     )
 

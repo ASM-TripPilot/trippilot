@@ -40,9 +40,13 @@ class GenerationSessionPersistenceIT : AbstractPostgresIntegrationTest() {
 
     private val now = Instant.parse("2026-08-11T00:00:00Z")
 
+    /** 세션이 계정을 들고 있어(V2.27) FK 를 만족하려면 여행을 만든 그 계정을 알아야 한다. */
+    private lateinit var lastAccountId: UUID
+
     private fun newTrip(): UUID = trips.save(
         Trip.create(
-            accountId = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, now)).id.value,
+            accountId = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, now))
+                .id.value.also { lastAccountId = it },
             title = null,
             startDate = LocalDate.parse("2026-08-10"),
             endDate = LocalDate.parse("2026-08-12"),
@@ -58,7 +62,7 @@ class GenerationSessionPersistenceIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `세션이 그대로 왕복한다 - day1 전에는 일정 id 가 없다`() {
         val tripId = newTrip()
-        val saved = sessions.save(GenerationSession.start(tripId, GenerationMode.CO_PLAN, now))
+        val saved = sessions.save(GenerationSession.start(lastAccountId, tripId, GenerationMode.CO_PLAN, now))
 
         val found = sessions.findById(saved.sessionId)!!
         found.tripId shouldBe tripId
@@ -78,7 +82,7 @@ class GenerationSessionPersistenceIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `진행 중 세션은 하나뿐 - 도메인·영속·DB 인덱스가 같은 집합이다`() {
         val tripId = newTrip()
-        val running = sessions.save(GenerationSession.start(tripId, GenerationMode.FULLY_AI, now))
+        val running = sessions.save(GenerationSession.start(lastAccountId, tripId, GenerationMode.FULLY_AI, now))
         sessions.findRunningByTrip(tripId)?.sessionId shouldBe running.sessionId
 
         // DAY1_READY 도 여전히 진행 중이다 — 빠지면 아래 INSERT 가 500 이 된다
@@ -86,18 +90,18 @@ class GenerationSessionPersistenceIT : AbstractPostgresIntegrationTest() {
         sessions.findRunningByTrip(tripId)?.sessionId shouldBe day1.sessionId
 
         shouldThrow<DataIntegrityViolationException> {
-            sessions.save(GenerationSession.start(tripId, GenerationMode.FULLY_AI, now))
+            sessions.save(GenerationSession.start(lastAccountId, tripId, GenerationMode.FULLY_AI, now))
         }
     }
 
     @Test
     fun `끝난 세션은 진행 중으로 세지 않는다 - 재생성할 수 있고 이력은 남는다`() {
         val tripId = newTrip()
-        val first = sessions.save(GenerationSession.start(tripId, GenerationMode.FULLY_AI, now))
+        val first = sessions.save(GenerationSession.start(lastAccountId, tripId, GenerationMode.FULLY_AI, now))
         sessions.save(first.completed(isFallback = false, candidatesLevel = null, at = now))
 
         sessions.findRunningByTrip(tripId) shouldBe null
-        val second = sessions.save(GenerationSession.start(tripId, GenerationMode.FULLY_AI, now))
+        val second = sessions.save(GenerationSession.start(lastAccountId, tripId, GenerationMode.FULLY_AI, now))
         sessions.findRunningByTrip(tripId)?.sessionId shouldBe second.sessionId
         sessions.findById(first.sessionId)!!.status shouldBe GenerationStatus.COMPLETED
     }
@@ -108,10 +112,10 @@ class GenerationSessionPersistenceIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `이전 세션을 닫고 곧바로 새로 열 수 있다 - 쓰기 순서가 뒤집히지 않는다`() {
         val tripId = newTrip()
-        val previous = sessions.save(GenerationSession.start(tripId, GenerationMode.FULLY_AI, now))
+        val previous = sessions.save(GenerationSession.start(lastAccountId, tripId, GenerationMode.FULLY_AI, now))
 
         sessions.save(previous.canceled(now))
-        val fresh = sessions.save(GenerationSession.start(tripId, GenerationMode.CO_PLAN, now))
+        val fresh = sessions.save(GenerationSession.start(lastAccountId, tripId, GenerationMode.CO_PLAN, now))
 
         sessions.findRunningByTrip(tripId)?.sessionId shouldBe fresh.sessionId
         sessions.findById(previous.sessionId)!!.status shouldBe GenerationStatus.CANCELED
