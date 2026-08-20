@@ -190,3 +190,20 @@ def test_registry_renders_event_extraction_prompt() -> None:
     assert ref.version == "0.1.0" and ref.feature == _FEAT.value
     assert "JSON" in prompt and "부산불꽃축제" in prompt
     assert "duration" not in prompt.lower()  # INV-3 — 소요시간류 자리 없음
+
+
+# ── 코드 펜스 포장 제거 (2026-08-20 첫 배치 실측 parse_error 재현) ────
+
+
+def test_fenced_json_is_unwrapped_before_parse() -> None:
+    from trippilot.llm_gateway.gates.base import _strip_code_fence
+
+    body = '{"events": []}'
+    assert _strip_code_fence(f"```json\n{body}\n```") == body
+    assert _strip_code_fence(f"```\n{body}\n```") == body
+    assert _strip_code_fence(body) == body  # 펜스 없으면 무변
+    # 펜스를 벗겨도 JSON이 아니면 여전히 실패 — 관대화가 아니라 포장 제거
+    import pytest as _pytest
+    from trippilot.llm_gateway.gates.base import _load_json_object
+    with _pytest.raises(ValueError):
+        _load_json_object("```json\n행사 없음\n```", "events")

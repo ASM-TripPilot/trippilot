@@ -47,10 +47,23 @@ class ExitGate(Protocol):
     ) -> GateOutcome: ...
 
 
+def _strip_code_fence(raw_text: str) -> str:
+    """마크다운 코드 펜스(```json … ```) 제거 — GPT-5.6 실측 (2026-08-20 첫
+    행사 수집 배치에서 parse_error 재현). json.loads가 뒤에서 여전히 전체를
+    검증하므로 관대화가 아니라 포장 제거다."""
+    text = raw_text.strip()
+    if not text.startswith("```"):
+        return text
+    lines = text.splitlines()
+    if lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines[1:])  # 첫 줄(``` 또는 ```json) 제거
+
+
 def _load_json_object(raw_text: str, root_key: str) -> object:
     """공통: JSON 로드 + 최상위 {root_key: ...} 강제. 위반은 ValueError."""
     try:
-        data = json.loads(raw_text)
+        data = json.loads(_strip_code_fence(raw_text))
     except json.JSONDecodeError as e:
         raise ValueError(f"JSON 아님: {e.msg}") from e
     if not isinstance(data, dict) or root_key not in data:
