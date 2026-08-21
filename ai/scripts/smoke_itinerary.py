@@ -24,6 +24,8 @@ tests/test_smoke_itinerary.py 가 fake 데이터로만 검증한다 (실 호출 
 
 환경변수:
     COLLECTED_POIS    필수 — 수집 제안 JSON 경로 (collect_pois.py 산출물)
+    SMOKE_REGION      선택 — 시군구 강제 (예: "해운대구"). 설정 시 그 한 곳만.
+    SMOKE_REGIONS     선택 — 실행당 지역 수 (기본 3). SMOKE_REGION 설정 시 무시.
     SMOKE_DATE        YYYY-MM-DD, 기본 오늘 KST 날짜 (CLI라 wall-clock 직접 호출 허용
                       — smoke_llm·collect_pois와 같은 관례)
     REHEARSAL_OUTPUT  기본 "rehearsal_result.json" — 기록용 1건 JSON
@@ -76,6 +78,9 @@ REHEARSAL_DAYS = 3
 MIN_POIS = 6
 MAX_POIS = 8
 MAX_ATTEMPTS = 5  # 반경 내 POI 부족 시 다른 시군구 재시도 상한
+# 실행당 리허설 지역 수 — 하루 한 곳만 보면 17개 시도 중 어디가 못 쓸 상태인지
+# 며칠이 지나야 드러난다. SMOKE_REGIONS env 로 오버라이드.
+REHEARSAL_REGIONS = 3
 
 
 class SelectionError(Exception):
@@ -115,8 +120,14 @@ def select_rehearsal_pois(
     min_pois: int = MIN_POIS,
     max_pois: int = MAX_POIS,
     max_attempts: int = MAX_ATTEMPTS,
+    region: str | None = None,
 ) -> Selection:
     """날짜 시드 랜덤 선택 — 같은 (날짜, 데이터)는 항상 같은 결과.
+
+    `region`(SMOKE_REGION)을 주면 **그 시군구만** 시도한다 — 날짜 시드는 어느 지역이
+    걸릴지 고를 수 없어서, 특정 지역의 수집 품질을 보거나 그 지역에서 난 실패를
+    재현할 방법이 없었다(부산 2일 리허설을 돌리려고 스크립트를 임시로 고쳐야 했다).
+    반경 풀은 그대로 전체 수집분에서 뽑는다 — 강제 대상은 앵커가 서는 시군구뿐이다.
 
     ① region 목록에서 날짜 시드로 시군구 후보 순서를 뽑고(최대 max_attempts곳)
     ② 그 시군구 POI 중 앵커 1개 랜덤 → **전체 수집 POI** 중 앵커 반경 radius_km
@@ -125,17 +136,23 @@ def select_rehearsal_pois(
     반경 내가 min 미만이면 다음 시군구로 재시도, 전부 실패면 SelectionError.
     """
     by_region: dict[str, list[Poi]] = {}
-    for poi, region in entries:
-        if region:  # region 추출 실패(null)는 시군구 선택 대상에서 제외
-            by_region.setdefault(region, []).append(poi)
+    for poi, poi_region in entries:   # region 은 파라미터 — 루프 변수로 가리지 않는다
+        if poi_region:  # region 추출 실패(null)는 시군구 선택 대상에서 제외
+            by_region.setdefault(poi_region, []).append(poi)
     if not by_region:
         raise SelectionError("region 있는 제안이 0건 — 수집 JSON 확인 필요")
 
     # 시드에 들어가는 순서를 안정화 — JSON 항목 순서가 바뀌어도 같은 선택
     regions = sorted(by_region)
     all_pois = sorted((p for p, _ in entries), key=lambda p: str(p.poi_id))
-    region_rng = random.Random(smoke_date)
-    attempts = region_rng.sample(regions, min(max_attempts, len(regions)))
+    if region is not None:
+        if region not in by_region:
+            raise SelectionError(
+                f"지역 {region!r} 이 수집분에 없다 — 후보 {len(regions)}곳")
+        attempts = [region]
+    else:
+        region_rng = random.Random(smoke_date)
+        attempts = region_rng.sample(regions, min(max_attempts, len(regions)))
 
     tried: list[str] = []
     for region in attempts:
@@ -159,6 +176,43 @@ def select_rehearsal_pois(
         f"{len(attempts)}개 시군구 전부 반경 {radius_km}km 내 {min_pois}개 미만 — "
         f"시도: {', '.join(tried)}"
     )
+
+
+def select_rehearsal_batch(
+    entries: tuple[tuple[Poi, str | None], ...],
+    smoke_date: str,
+    *,
+    count: int,
+    **kwargs,
+) -> list[Selection]:
+    """서로 다른 시군구 count 곳을 날짜 시드로 골라 각각 Selection 을 만든다.
+
+    하루 한 지역만 보면 커버리지가 얇다 — 수집은 17개 시도로 퍼져 있는데 검증은
+    한 곳뿐이라, 어느 지역의 데이터가 못 쓸 상태인지 며칠이 지나야 드러난다.
+    반경 미달로 실패한 지역은 건너뛰고 다음 후보로 — count 를 못 채워도 확보한
+    만큼 돌린다(부분 성공). 전부 실패해야 SelectionError.
+
+    같은 날 재실행은 같은 지역 집합 — 순서까지 결정론이라 실패 재현이 된다.
+    """
+    regions = sorted({r for _, r in entries if r})
+    if not regions:
+        raise SelectionError("region 있는 제안이 0건 — 수집 JSON 확인 필요")
+    order = random.Random(smoke_date).sample(regions, len(regions))
+
+    picked: list[Selection] = []
+    skipped: list[str] = []
+    for region in order:
+        if len(picked) >= count:
+            break
+        try:
+            picked.append(select_rehearsal_pois(
+                entries, smoke_date, region=region, **kwargs))
+        except SelectionError as e:
+            skipped.append(str(e))
+    if not picked:
+        raise SelectionError(
+            f"{len(order)}개 시군구 전부 선택 불가 — 예: {skipped[0] if skipped else '?'}")
+    return picked
 
 
 # ── 생성 관통 (in-process TestClient — 서버 프로세스 불필요) ─────────
@@ -457,8 +511,21 @@ def _optional(name: str) -> str | None:
 
 
 def _print_summary(json_path: str) -> int:
-    """결과 JSON → 잡 서머리용 마크다운 표 (GITHUB_STEP_SUMMARY 리다이렉트 용도)."""
-    result = json.loads(Path(json_path).read_text(encoding="utf-8"))
+    """결과 JSON → 잡 서머리용 마크다운 표 (GITHUB_STEP_SUMMARY 리다이렉트 용도).
+
+    산출은 지역별 결과의 배열이다. 단일 객체(다지역 이전 산출)도 읽는다 — 예전
+    artifact 를 다시 요약할 때 죽지 않게.
+    """
+    doc = json.loads(Path(json_path).read_text(encoding="utf-8"))
+    results = doc if isinstance(doc, list) else [doc]
+    for i, result in enumerate(results):
+        if i:
+            print()
+        _print_one(result)
+    return 0
+
+
+def _print_one(result: dict) -> None:
     print("## 일정 생성 리허설 (수집 POI × 실 LLM × 솔버)")
     print(f"- 날짜 {result['date']} · 지역 **{result['region']}** · "
           f"앵커 {result['anchor']['name']}")
@@ -481,7 +548,6 @@ def _print_summary(json_path: str) -> int:
             err = f"{leg['err_pct']:+.1f}%" if leg["err_pct"] is not None else "n/a"
             print(f"| {leg['from']} → {leg['to']} | {leg['est_min']} "
                   f"| {leg['real_min']} | {err} |")
-    return 0
 
 
 def main() -> int:
@@ -502,16 +568,25 @@ def main() -> int:
     entries = load_proposals(doc)
     days = int(_optional("SMOKE_DAYS") or REHEARSAL_DAYS)
     print(f"[rehearsal] 수집 POI {len(entries)}건 로드 — 날짜 시드 {smoke_date_str} · {days}일 일정")
+    forced = _optional("SMOKE_REGION")
+    wanted = 1 if forced else int(_optional("SMOKE_REGIONS") or REHEARSAL_REGIONS)
+    picker = dict(min_pois=MIN_POIS * days, max_pois=MAX_POIS * days)
     try:
-        selection = select_rehearsal_pois(
-            entries, smoke_date_str,
-            min_pois=MIN_POIS * days, max_pois=MAX_POIS * days)
+        if forced:
+            selections = [select_rehearsal_pois(
+                entries, smoke_date_str, region=forced, **picker)]
+        else:
+            selections = select_rehearsal_batch(
+                entries, smoke_date_str, count=wanted, **picker)
     except SelectionError as e:
         print(f"[rehearsal] FAIL 선택 불가: {e}")
         return 1
-    print(f"[rehearsal] 지역 {selection.region} · 앵커 {selection.anchor.name} · "
-          f"POI {len(selection.pois)}개: "
-          + ", ".join(p.name for p in selection.pois))
+    if len(selections) < wanted:
+        print(f"[rehearsal] WARNING 지역 {wanted}곳 요청 — {len(selections)}곳만 확보 "
+              f"(나머지는 반경 내 POI 부족)")
+    for sel in selections:
+        print(f"[rehearsal] 지역 {sel.region} · 앵커 {sel.anchor.name} · "
+              f"POI {len(sel.pois)}개: " + ", ".join(p.name for p in sel.pois))
 
     adapter, model_id = _build_adapter()
     print(f"[rehearsal] provider={os.environ.get('LLM_PROVIDER', 'openai')} "
@@ -542,17 +617,6 @@ def main() -> int:
     else:
         print("[rehearsal] EVENTS_STORE 없음 — 행사 보너스 없이 진행")
 
-    try:
-        result = run_rehearsal(
-            selection, llm=adapter, model_id=model_id, smoke_date=smoke_date,
-            weather=weather, events=events, days=days,
-        )
-    except RehearsalError as e:
-        print(f"[rehearsal] FAIL {e}")
-        return 1
-    if result.get("weather"):
-        print(f"[rehearsal] 예보(강수확률%): {result['weather']}")
-
     # 인접 슬롯 실경로 검증 (TRIP-382) — 키 있을 때만, 실패해도 리허설은 성공 유지.
     # 어댑터·실 HTTP 조립은 여기(리허설 실행)에서만 — pytest는 fake (D37).
     tmap_key = _optional("TMAP_API_KEY")
@@ -566,16 +630,43 @@ def main() -> int:
         travel = TmapRouteAdapter(UrllibHttpClient(), tmap_key)
     # wiring 기본 조립(build_orchestrator의 SolverConfig() 기본값)과 동일한 추정기 —
     # 리허설 응답에 실제로 쓰인 추정과 같은 값이어야 오차 축적이 유효하다
-    attach_leg_verification(result, selection, travel, TravelEstimator(SolverConfig()))
+    estimator = TravelEstimator(SolverConfig())
+
+    # 지역 하나가 실패해도 나머지는 돌린다 — 한 지역의 데이터 문제로 그날 검증을
+    # 통째로 잃으면, 정작 그 지역이 문제라는 사실도 못 남는다. 전부 실패해야 FAIL.
+    results: list[dict] = []
+    failures: list[str] = []
+    for sel in selections:
+        try:
+            result = run_rehearsal(
+                sel, llm=adapter, model_id=model_id, smoke_date=smoke_date,
+                weather=weather, events=events, days=days,
+            )
+        except RehearsalError as e:
+            print(f"[rehearsal] FAIL {sel.region}: {e}")
+            failures.append(f"{sel.region}: {e}")
+            continue
+        if result.get("weather"):
+            print(f"[rehearsal] 예보(강수확률%): {result['weather']}")
+        attach_leg_verification(result, sel, travel, estimator)
+        results.append(result)
+        print(f"[rehearsal] PASS {sel.region} solve_mode={result['solve_mode']} "
+              f"is_fallback={result['is_fallback']} llm_used={result['llm_used']} "
+              f"latency={result['latency_ms']}ms")
+        for slot in result["slots"]:
+            print(f"[rehearsal]   {slot['start']}–{slot['end']}  {slot['name']}")
+
+    if not results:
+        print(f"[rehearsal] FAIL 지역 {len(selections)}곳 전부 실패")
+        return 1
+    if failures:
+        print(f"[rehearsal] WARNING {len(failures)}/{len(selections)}곳 실패 — "
+              + " | ".join(failures))
 
     Path(output).write_text(
-        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+        json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    print(f"[rehearsal] PASS solve_mode={result['solve_mode']} "
-          f"is_fallback={result['is_fallback']} llm_used={result['llm_used']} "
-          f"latency={result['latency_ms']}ms → {output}")
-    for slot in result["slots"]:
-        print(f"[rehearsal]   {slot['start']}–{slot['end']}  {slot['name']}")
+    print(f"[rehearsal] {len(results)}곳 기록 → {output}")
     return 0
 
 
