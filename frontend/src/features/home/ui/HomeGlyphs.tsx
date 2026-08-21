@@ -167,3 +167,72 @@ export function PlusGlyph({ size = 22, testID }: GlyphProps) {
     </Svg>
   );
 }
+
+// 담은 곳 saved-menu 미니 FAB 아이콘(TRIP-494 홈 확장, Figma a01 3012:1731).
+/** 담은 장소 미니 FAB — 위치 핀(분홍, 흰 원 위). 26px 확대판(hero 우상단 WHITE 핀과 색·용도 상이). */
+export function MapPinGlyph({ size = 26, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 2.5C8.4 2.5 5.5 5.4 5.5 9c0 4.6 6.5 12 6.5 12s6.5-7.4 6.5-12c0-3.6-2.9-6.5-6.5-6.5Z"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Circle cx={12} cy={9} r={2.4} stroke={PRIMARY} strokeWidth={1.8} />
+    </Svg>
+  );
+}
+
+/** 저장한 숙소 미니 FAB — 여행 가방(분홍, 흰 원 위). */
+export function SuitcaseGlyph({ size = 26, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M5 8.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18v-8A1.5 1.5 0 0 1 5 8.5Z"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 8.5V7a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 7v1.5"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+      <Path d="M12 8.5V21" stroke={PRIMARY} strokeWidth={1.8} />
+    </Svg>
+  );
+}
+
+/** saved-menu 닫기(X) — 펼친 FAB 위(분홍 원 위 흰 X). */
+export function CloseGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M6 6l12 12M18 6L6 18"
+        stroke={WHITE}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}

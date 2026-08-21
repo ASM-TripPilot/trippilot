@@ -21,12 +21,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   BellGlyph,
+  CloseGlyph,
   HeartFilledGlyph,
   HeartOutlineGlyph,
   LocationPinGlyph,
+  MapPinGlyph,
   PlusGlyph,
   SearchGlyph,
   SparkleGlyph,
+  SuitcaseGlyph,
 } from './HomeGlyphs';
 import type {
   HomeCollectionCard,
@@ -786,22 +789,71 @@ function CreateTripFab({ onPress }: { onPress?: () => void }): ReactElement {
   );
 }
 
-// 담은 곳 바로가기 FAB(TRIP-470 · Figma a01 2091:1357) — + FAB 바로 위 원형 흰 버튼, d02 로.
-// 흰 배경 + 채움 하트다(핑크 배경 + 흰 아웃라인에서 뒤집었다) — 바로 아래 '+' FAB 이 이미
-// bg-primary 라, 둘 다 핑크면 두 원이 한 덩어리로 읽혀 구분이 안 된다.
-// 목적지는 라우트가 정하고(onPress 만 발화) 담은 곳 CTA(SoftNote)와 같은 콜백을 공유한다.
-function SavedPlacesFab({ onPress }: { onPress?: () => void }): ReactElement {
+// 담은 곳 saved-menu FAB(TRIP-494 홈 확장 · Figma a01 3012:1731) — + FAB 바로 위 흰 원형 하트.
+// 누르면 두 미니 FAB 으로 펼쳐진다: 담은 장소(위치핀→d02) · 저장한 숙소(가방→e04). 열리면
+// 하트가 X(닫기, 핑크)로 바뀌고 배후 backdrop 이 뜬다(바깥 탭으로 닫힘). 열림 상태·목적지는
+// 라우트가 소유해 prop 으로 내린다(화면 useState 0건 — homeStructure 순수성, 탐색 랜딩과 동형).
+function SavedMenuFab({
+  open,
+  onToggle,
+  onPressSavedPlaces,
+  onPressSavedStays,
+}: {
+  open: boolean;
+  onToggle?: () => void;
+  onPressSavedPlaces?: () => void;
+  onPressSavedStays?: () => void;
+}): ReactElement {
   return (
-    <Pressable
-      testID="home-saved-places-fab"
-      accessibilityRole="button"
-      accessibilityLabel="담은 곳"
-      onPress={onPress}
-      style={fabShadow}
-      className="absolute bottom-[152px] right-lg h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
-    >
-      <HeartFilledGlyph size={26} />
-    </Pressable>
+    <>
+      {open ? (
+        <Pressable
+          testID="home-saved-menu-backdrop"
+          accessibilityRole="button"
+          accessibilityLabel="담은 곳 메뉴 닫기"
+          onPress={onToggle}
+          className="absolute inset-0"
+        />
+      ) : null}
+      <View className="absolute bottom-[152px] right-lg flex-row items-center gap-md">
+        {open ? (
+          <>
+            <Pressable
+              testID="home-saved-places-fab"
+              accessibilityRole="button"
+              accessibilityLabel="담은 장소"
+              onPress={onPressSavedPlaces}
+              style={fabShadow}
+              className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+            >
+              <MapPinGlyph size={26} />
+            </Pressable>
+            <Pressable
+              testID="home-saved-stays-fab"
+              accessibilityRole="button"
+              accessibilityLabel="저장한 숙소"
+              onPress={onPressSavedStays}
+              style={fabShadow}
+              className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+            >
+              <SuitcaseGlyph size={26} />
+            </Pressable>
+          </>
+        ) : null}
+        <Pressable
+          testID="home-saved-menu-toggle"
+          accessibilityRole="button"
+          accessibilityLabel={open ? '담은 곳 메뉴 닫기' : '담은 곳'}
+          onPress={onToggle}
+          style={fabShadow}
+          className={`h-[56px] w-[56px] items-center justify-center rounded-full ${
+            open ? 'bg-primary' : 'bg-canvas'
+          }`}
+        >
+          {open ? <CloseGlyph size={24} /> : <HeartFilledGlyph size={26} />}
+        </Pressable>
+      </View>
+    </>
   );
 }
 
@@ -998,9 +1050,12 @@ export function HomeScreen({
   phase,
   onPressCreateTrip,
   onPressSavedPlaces,
+  onPressSavedStays,
   onPressSpotsMore,
   onPressTripHeroCta,
   onPressSearch,
+  savedMenuOpen,
+  onToggleSavedMenu,
 }: HomeScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -1023,7 +1078,12 @@ export function HomeScreen({
         {phase?.kind === 'collecting' ? (
           <SavedCountChip label={phase.savedChipLabel} />
         ) : null}
-        <SavedPlacesFab onPress={onPressSavedPlaces} />
+        <SavedMenuFab
+          open={savedMenuOpen ?? false}
+          onToggle={onToggleSavedMenu}
+          onPressSavedPlaces={onPressSavedPlaces}
+          onPressSavedStays={onPressSavedStays}
+        />
         <CreateTripFab onPress={onPressCreateTrip} />
       </View>
     </SafeAreaView>

@@ -67,7 +67,7 @@ const EXPECTED_ITINERARIES = [
 // PLANNING_WIRED(+search·+card). 하나라도 빠뜨리면 371-AC-3/4·AC-7 중 하나가 red 로 새어난다.
 const WIRED_CTA_TEST_IDS = [
   'home-create-trip-fab',
-  'home-saved-places-fab', // TRIP-470 담은 곳 바로가기 FAB
+  'home-saved-menu-toggle', // TRIP-494 담은 곳 saved-menu FAB(닫힘=하트 토글)
   'home-saved-places-cta',
   'home-spots-more',
   'home-search-bar',
@@ -299,21 +299,48 @@ describe('HomeScreen — CTA 콜백 발화·격리 (370-AC-2)', () => {
   });
 });
 
-describe('HomeScreen — 담은 곳 바로가기 FAB (TRIP-470)', () => {
-  it('하트 FAB press → onPressSavedPlaces 만 부른다(담은 곳 CTA 와 같은 콜백)', () => {
+describe('HomeScreen — 담은 곳 saved-menu FAB (TRIP-494)', () => {
+  it('닫힌 상태: 하트 토글 press → onToggleSavedMenu 만 부른다(미니 FAB 은 아직 없다)', () => {
+    const onToggleSavedMenu = jest.fn();
     const onPressSavedPlaces = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        savedMenuOpen={false}
+        onToggleSavedMenu={onToggleSavedMenu}
+        onPressSavedPlaces={onPressSavedPlaces}
+      />
+    );
+
+    // 닫힘 — 미니 FAB 은 트리에 없다.
+    expect(screen.queryByTestId('home-saved-places-fab')).toBeNull();
+    expect(screen.queryByTestId('home-saved-stays-fab')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('home-saved-menu-toggle'));
+    expect(onToggleSavedMenu).toHaveBeenCalledTimes(1);
+    expect(onPressSavedPlaces).not.toHaveBeenCalled(); // 토글은 이동이 아니라 펼침이다
+  });
+
+  it('열린 상태: 담은 장소 미니 FAB→onPressSavedPlaces · 저장한 숙소 미니 FAB→onPressSavedStays', () => {
+    const onPressSavedPlaces = jest.fn();
+    const onPressSavedStays = jest.fn();
     const onPressCreateTrip = jest.fn();
     render(
       <HomeScreen
         {...HOME_DEFAULT_PROPS}
+        savedMenuOpen
         onPressSavedPlaces={onPressSavedPlaces}
+        onPressSavedStays={onPressSavedStays}
         onPressCreateTrip={onPressCreateTrip}
       />
     );
 
     fireEvent.press(screen.getByTestId('home-saved-places-fab'));
-
     expect(onPressSavedPlaces).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(screen.getByTestId('home-saved-stays-fab'));
+    expect(onPressSavedStays).toHaveBeenCalledTimes(1);
+
     expect(onPressCreateTrip).not.toHaveBeenCalled(); // + FAB 과 안 헷갈림
   });
 });
@@ -673,7 +700,7 @@ describe('HomeScreen — phase 미도출·주입 (AC-5 금지 · TRIP-206 S-6)',
 // 중첩 Pressable 이라 둘 다 버튼 집합에 든다(★1·★3).
 const PLANNING_WIRED_CTA_TEST_IDS = [
   'home-create-trip-fab',
-  'home-saved-places-fab', // TRIP-470 담은 곳 바로가기 FAB(모든 얼굴 공통)
+  'home-saved-menu-toggle', // TRIP-494 담은 곳 saved-menu FAB(모든 얼굴 공통, 닫힘=하트 토글)
   'home-trip-hero-cta',
   'home-search-bar',
   'home-trip-hero',
