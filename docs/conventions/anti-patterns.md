@@ -60,6 +60,7 @@
 - **여러 write를 하는 애플리케이션 서비스(특히 크로스모듈 퍼사드 write + 로컬 save)는 `@Transactional`로 묶을 것.** 없으면 각 repo 어댑터 호출이 독립 트랜잭션이라, 앞 write(예: `PoiSnapshotFacade.freeze`가 스냅숏 커밋)가 커밋된 뒤 뒤 단계(도메인 검증 throw·유니크 위반)가 실패하면 **고아 행**이 남는다. 순서 재배치("중복 먼저")로는 검증 throw·레이스를 못 막는다 — 원자성은 트랜잭션이 담당. (PR #50 — MustVisitService orphan poi_snapshot)
 - **check-then-insert 유니크 경합은 어댑터 `saveAndFlush` + 서비스 `catch DataIntegrityViolationException → 409`로 처리할 것.** 선검사(`existsBy…`)만 두면 레이스가 빠져나가 unmapped 500이 된다. `save`(플러시 지연)로는 위반이 커밋 시점에 터져 서비스 try 밖에서 새므로 반드시 `saveAndFlush`. (PR #50 — SavedPlace/MustVisit; 관례: auth `AccountDeletionService`·profile `NicknameService`)
 - **산출 구조체의 필드를 `()`·기본값으로 채워 넘기지 말 것 → 원천(해·문제)에서 읽어 채우고 경계 왕복 회귀 테스트를 둘 것.** 경계 사영이 그 필드에서 사실을 읽으면(AI `routes.to_payload`가 `DaySolution.fixed_blocks`로 `is_fixed` 판정) 기본값이 그대로 응답이 된다 — 타입도 테스트도 통과하는 침묵 소실. 실제로 세 솔버(OR-Tools·규칙·LLM)가 전부 `fixed_blocks=()`로 보내 응답 `is_fixed`가 상시 false였고, 백엔드 왕복 후 HC3 검증 집합이 비어 repair가 사용자 고정 시각을 침묵 이동할 수 있었다. (TRIP-343)
+- **조건부 `@Configuration` 에 설정 프로퍼티를 매달지 말 것 → 쓰는 쪽과 같은 층의 조건 없는 설정에서 등록할 것.** `@ConditionalOnProperty` 가 걸린 설정에서 `@EnableConfigurationProperties` 로 등록하고 **조건 밖의 빈**이 그것을 주입받으면, 조건이 꺼진 모드에서 **컨텍스트 전체가 안 뜬다**. 실측: AI 어댑터 설정이 `mode=http` 조건부인데 거기에 시간 예산 프로퍼티를 등록해 기본(fake) 모드 **IT 290건이 기동 실패**했다. 모듈 단위 테스트는 스프링을 안 띄워 전부 초록이라 `./gradlew :app:test` 에서야 드러난다 — 조건부 설정에는 **그 모드에서만 필요한 것**만 담는다. (`ScheduleDeadlineProperties`, TRIP-474)
 
 ## Kotlin · 언어
 

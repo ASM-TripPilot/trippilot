@@ -116,19 +116,15 @@ data class GenerationSession(
  * 백그라운드가 죽으면 세션이 RUNNING 인 채로 영원히 남는다. 그것이 계정 제한을 붙잡으면
  * **다른 여행을 영영 못 만들게 된다** — 규칙이 사용자를 가둔다. 오래된 세션은 제한에서 제외한다.
  *
- * 기준값은 [GENERATION_STALE_AFTER] 하나다 — 중단된 2차를 쓸어담는 스위퍼가 쓰는 것과 **같은 값**이다.
- * 둘이 갈리면 "멈춘 생성"이 두 뜻이 되어, 같은 사고에도 day1 전에 죽으면 이만큼, 뒤에 죽으면 저만큼
- * 기다리게 된다. 사용자에게는 같은 상황이다.
- */
-fun GenerationSession.isStale(at: Instant): Boolean =
-    startedAt.isBefore(at.minus(GENERATION_STALE_AFTER))
-
-/**
- * **멈춘 생성으로 보는 시간.** 2차 최대 시한(약 22초)의 십수 배라 진행 중인 생성을 건드리지 않는다.
+ * [staleAfter] 는 **설정에서 온다**(`ScheduleDeadlineProperties.staleAfter`) — 중단된 2차를 쓸어담는
+ * 스위퍼가 쓰는 것과 **같은 값**이다. 둘이 갈리면 "멈춘 생성"이 두 뜻이 되어, 같은 사고에도 day1 전에
+ * 죽으면 이만큼, 뒤에 죽으면 저만큼 기다리게 된다. 사용자에게는 같은 상황이다.
  *
- * 여기 한 곳에서만 정한다 — 이 값을 쓰는 곳이 둘이다(계정 제한 해제 · 중단된 PARTIAL 정리).
+ * 상수가 아닌 이유: 시간제약을 걸지 않으면 정상 생성이 수 분을 쓸 수 있어(TRIP-474) 기준이 함께 늘어야
+ * 한다. 고정해 두면 **살아 있는 생성을 죽은 것으로 보고 잘라낸다.**
  */
-val GENERATION_STALE_AFTER: Duration = Duration.ofMinutes(5)
+fun GenerationSession.isStale(at: Instant, staleAfter: Duration): Boolean =
+    startedAt.isBefore(at.minus(staleAfter))
 
 enum class GenerationStatus { RUNNING, DAY1_READY, COMPLETED, FAILED, CANCELED }
 

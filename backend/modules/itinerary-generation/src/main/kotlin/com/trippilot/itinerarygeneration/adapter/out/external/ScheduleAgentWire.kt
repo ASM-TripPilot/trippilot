@@ -173,7 +173,8 @@ internal data class AiViolation(
 /** 우리가 보내는 산출물 본문 — 응답 수신형([AiScheduleResponse])과 필드가 같아 그대로 재사용한다. */
 internal typealias AiSchedulePayload = AiScheduleResponse
 
-internal data class AiRequestMeta(val requestId: String, val requestedAt: Instant, val deadlineMs: Long)
+/** `deadline_ms` 는 선택 필드다 — null 이면 AI 가 시간제약 없이 돈다(TRIP-473 계약). */
+internal data class AiRequestMeta(val requestId: String, val requestedAt: Instant, val deadlineMs: Long?)
 
 internal fun AiViolation.toDomain(): Violation =
     Violation(code, dayIndex, slotIndex, detail.takeIf { it.isNotBlank() }, slotRef)

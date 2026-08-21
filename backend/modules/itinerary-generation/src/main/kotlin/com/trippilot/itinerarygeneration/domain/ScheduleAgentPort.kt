@@ -152,7 +152,11 @@ data class PreferenceProfile(
 )
 
 /** 지연 예산 전파(IO-1) — day1 5s / 전체 20s. */
-data class RequestMeta(val requestId: String, val requestedAt: Instant, val deadlineMs: Long)
+/**
+ * IO-1 지연 예산. [deadlineMs] 가 **null 이면 시한을 걸지 않는다**(TRIP-473/474 — AI 계약상
+ * 미지정 = 무제한). 값을 실으면 종전과 동일하게 동작한다.
+ */
+data class RequestMeta(val requestId: String, val requestedAt: Instant, val deadlineMs: Long?)
 
 // ───────── 출력: ScheduleAgentOutput ─────────
 

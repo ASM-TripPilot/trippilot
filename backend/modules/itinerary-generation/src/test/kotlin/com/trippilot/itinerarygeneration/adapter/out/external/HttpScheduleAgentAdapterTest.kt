@@ -57,7 +57,10 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             override fun resolve(area: Area, categories: Set<String>) = emptyList<GroundedPlace>()
             override fun ground(poiIds: List<UUID>) = emptyList<GroundedPlace>()
         }
-        return HttpScheduleAgentAdapter(builder.build(), LocalSlotCandidateSource(emptyPool, clock), clock) to server
+        // 생성용·편집용 두 클라이언트로 나뉘었지만(read 상한만 다르다) 여기선 같은 목 서버를 본다 —
+        // 이 테스트가 보는 것은 경계 페이로드지 타임아웃이 아니다.
+        val client = builder.build()
+        return HttpScheduleAgentAdapter(client, client, LocalSlotCandidateSource(emptyPool, clock), clock) to server
     }
 
     val input = ScheduleAgentInput(
