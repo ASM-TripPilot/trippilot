@@ -90,7 +90,7 @@ jobs:
           LLM_PROVIDER: openai
           OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           OPENAI_BASE_URL: ${{ vars.AZURE_OPENAI_ENDPOINT }}
-          OPENAI_MODEL: gpt-5.6-terra
+          OPENAI_MODEL: gpt-5.6-luna   # 행사 추출은 luna 배포 사용 (사용자 지정 2026-08-21)
           OPENAI_API: responses
         run: |
           if [ -z "$NAVER_SEARCH_CLIENT_ID" ]; then
