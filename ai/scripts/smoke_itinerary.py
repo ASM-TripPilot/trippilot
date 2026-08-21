@@ -219,13 +219,20 @@ def select_rehearsal_batch(
 
 
 class RecordingLlm:
-    """주입 LLM 계측 래퍼 — 성공 호출 수로 llm_used 를 판정한다 (동작 무변경)."""
+    """주입 LLM 계측 래퍼 — 호출 수를 센다 (동작 무변경).
+
+    시도(`calls`)와 성공(`ok_calls`)을 따로 센다: 실패한 호출도 토큰·지연을
+    쓰므로 비용은 시도 기준이고, `llm_used` 판정은 성공 기준이다. 생성 1회가
+    LLM 을 몇 번 부르는지는 기록에 없어 "리허설 3곳 = LLM 3회"인지 알 수 없었다.
+    """
 
     def __init__(self, inner: LlmPort) -> None:
         self._inner = inner
+        self.calls = 0
         self.ok_calls = 0
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
+        self.calls += 1                         # 실패해도 비용은 나갔다
         response = self._inner.invoke(request)  # 실패는 그대로 전파 → 게이트웨이 폴백
         self.ok_calls += 1
         return response
@@ -378,6 +385,10 @@ def run_rehearsal(
         "solve_mode": body["solve_mode"],
         "is_fallback": body["is_fallback"],
         "llm_used": recorder.ok_calls > 0,
+        # 생성 1회당 LLM 호출 수 — 시도 기준(실패 포함)이 비용, 괄호 안이 성공.
+        # 며칠 쌓이면 "생성 1회 = 몇 콜"이 추세로 보인다 (TRIP-372).
+        "llm_calls": recorder.calls,
+        "llm_ok_calls": recorder.ok_calls,
         # 오케스트레이터가 실제 쓴 예보 (TRIP-409) — 미주입·조회 실패면 None
         "weather": weather_recorder.forecast if weather_recorder else None,
         "latency_ms": latency_ms,
@@ -529,8 +540,11 @@ def _print_one(result: dict) -> None:
     print("## 일정 생성 리허설 (수집 POI × 실 LLM × 솔버)")
     print(f"- 날짜 {result['date']} · 지역 **{result['region']}** · "
           f"앵커 {result['anchor']['name']}")
+    calls = result.get("llm_calls")
+    llm = (f"LLM {calls}콜(성공 {result.get('llm_ok_calls')})" if calls is not None
+           else f"LLM 사용 {result['llm_used']}")   # 예전 산출 호환
     print(f"- solve_mode `{result['solve_mode']}` · 폴백 {result['is_fallback']} · "
-          f"LLM 사용 {result['llm_used']} · {result['latency_ms']}ms")
+          f"{llm} · {result['latency_ms']}ms")
     if result.get("weather"):  # 날씨 주입이 돌았을 때만 (TRIP-409)
         pops = " · ".join(f"{d} {p}%" for d, p in sorted(result["weather"].items()))
         print(f"- 예보(강수확률): {pops}")
@@ -651,7 +665,8 @@ def main() -> int:
         attach_leg_verification(result, sel, travel, estimator)
         results.append(result)
         print(f"[rehearsal] PASS {sel.region} solve_mode={result['solve_mode']} "
-              f"is_fallback={result['is_fallback']} llm_used={result['llm_used']} "
+              f"is_fallback={result['is_fallback']} "
+              f"llm={result['llm_calls']}콜(성공 {result['llm_ok_calls']}) "
               f"latency={result['latency_ms']}ms")
         for slot in result["slots"]:
             print(f"[rehearsal]   {slot['start']}–{slot['end']}  {slot['name']}")

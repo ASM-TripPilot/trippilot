@@ -188,8 +188,12 @@ def test_rehearsal_passthrough_and_result_schema():
     )
     assert set(result) == {
         "date", "region", "anchor", "poi_names", "slots",
-        "solve_mode", "is_fallback", "llm_used", "weather", "latency_ms",
+        "solve_mode", "is_fallback", "llm_used", "llm_calls", "llm_ok_calls",
+        "weather", "latency_ms",
     }
+    # UnwiredLlm 은 매번 예외 → 시도는 세고 성공은 0 (비용은 시도 기준)
+    assert result["llm_calls"] >= 1 and result["llm_ok_calls"] == 0
+    assert result["llm_used"] is False
     assert result["weather"] is None  # 날씨 미주입 — 기록도 없음 (TRIP-409)
     assert result["date"] == "2026-08-14"
     assert result["region"] == selection.region
