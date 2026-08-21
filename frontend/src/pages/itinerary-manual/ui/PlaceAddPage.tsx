@@ -48,7 +48,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   const itinerary = useGetTripsTripIdItinerary(tripId);
   const save = usePutTripsTripIdItinerary();
 
-  const visible = visiblePlaces(places.data ?? [], searchText);
+  const visible = visiblePlaces(places.data?.items ?? [], searchText);
 
   // 담을 대상 일자 — 일정 GET 미도착·실패면 undefined(첫 날에 담는다, h20 일자 선택 UI Figma 공백).
   const days = itinerary.data?.days ?? [];

@@ -17,4 +17,6 @@ export type ErrorResponseError = {
   fields?: ErrorResponseErrorFieldsItem[];
   /** SOCIAL_EMAIL_CONFLICT 에만 존재(BR-U0-04 · INV-A3). 같은 이메일로 이미 가입된 기존 제공자의 소문자 코드. 한 계정에 제공자가 둘 이상이면 대표 1개(가장 먼저 연결된 것)를 준다 — 전체 나열은 message 가 담는다. 다른 에러 코드의 응답에는 이 필드가 나타나지 않는다(직렬화 자체가 생략된다). */
   existingProvider?: ErrorResponseErrorExistingProvider;
+  /** GENERATION_IN_PROGRESS 에만 존재(TRIP-403). 지금 일정을 생성 중인 여행. 거절 사유만 주면 사용자는 무엇이 끝나기를 기다려야 하는지 모른다 — 화면이 이 값으로 그 여행으로 이동시킨다. `existingProvider` 와 같은 방식으로 다른 에러 코드의 응답에는 나타나지 않는다(직렬화 생략). */
+  activeTripId?: string;
 };

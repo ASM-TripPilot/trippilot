@@ -33,6 +33,7 @@ import type {
   CreateTripRequest,
   EditItineraryRequest,
   EditTripRequest,
+  ErrorResponse,
   GenerateItineraryRequest,
   GenerationSession,
   GetTripsTripIdChangeLogParams,
@@ -1570,7 +1571,11 @@ export function useGetTripsTripIdItinerary<
 }
 
 /**
- * 첫날(day1)만 담긴 `generationState=PARTIAL` 응답을 즉시 돌려주고, 나머지 일자는 백그라운드로 채운다. 클라이언트는 GET 으로 `COMPLETE`(전 일자 완료) 또는 `FAILED`(2차 중단) 까지 폴링한다. 여행이 하루면 2차 없이 즉시 `COMPLETE`. PARTIAL 인 동안 확정·편집은 409. 재생성(이 POST)에는 상태 제한이 없다 — 중단된 생성(PARTIAL)에서 벗어나는 탈출구이자, **확정된 일정을 다시 짜는 유일한 경로**다(확정 해제 API 없음). 확정 일정에 호출하면 확정이 풀리고 PLANNED 새 일정으로 대체되며, 동결됐던 poi_snapshot 참조는 사라진다.
+ * 첫날(day1)만 담긴 `generationState=PARTIAL` 응답을 먼저 돌려주고, 나머지 일자는 백그라운드로 채운다. 클라이언트는 GET 으로 `COMPLETE`(전 일자 완료) 또는 `FAILED`(2차 중단) 까지 폴링한다.
+ *
+ * ⏱ **응답까지, 그리고 폴링이 끝나기까지 수 분이 걸릴 수 있다.** 2026-08-21 팀 결정으로 생성 시간제약을 해제했다(TRIP-474) — AI 에 시한을 싣지 않으므로 후보 풀이 클수록 오래 걸린다. **짧은 폴링 상한을 두면 화면이 반쪽 일정에 머문 채 조용히 멈춘다.** 정말 멈춘 생성은 서버가 판정해 `FAILED` 로 내리므로(약 11분), 그보다 길게 버티면 반드시 종착 상태를 본다. 9월에 시간제약이 재도입되면 다시 수십 초대로 돌아온다(TRIP-475). 여행이 하루면 2차 없이 즉시 `COMPLETE`. PARTIAL 인 동안 확정·편집은 409. 재생성(이 POST)에는 상태 제한이 없다 — 중단된 생성(PARTIAL)에서 벗어나는 탈출구이자, **확정된 일정을 다시 짜는 유일한 경로**다(확정 해제 API 없음). 확정 일정에 호출하면 확정이 풀리고 PLANNED 새 일정으로 대체되며, 동결됐던 poi_snapshot 참조는 사라진다.
+ *
+ * **같은 여행**의 재생성에는 상태 제한이 없다(위 탈출구). 다만 **다른 여행의 생성이 진행 중이면 409** — 생성은 LLM·솔버를 쓰는 무거운 작업이라 동시 실행을 열어두면 비용·지연이 사용자 수가 아니라 연타 횟수에 비례한다(TRIP-403). 거절 응답의 `error.activeTripId` 에 진행 중인 여행이 실린다. 멈춘 생성(백그라운드 비정상 종료)은 일정 시간 뒤 제한에서 풀린다 — 규칙이 사용자를 가두지 않는다.
  * @summary AI 일정 생성 — day1 먼저 반환(2단계). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
  */
 export const postTripsTripIdItinerary = (
@@ -1588,7 +1593,7 @@ export const postTripsTripIdItinerary = (
 };
 
 export const getPostTripsTripIdItineraryMutationOptions = <
-  TError = void,
+  TError = void | ErrorResponse,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1629,12 +1634,15 @@ export type PostTripsTripIdItineraryMutationResult = NonNullable<
 >;
 export type PostTripsTripIdItineraryMutationBody =
   GenerateItineraryRequest | undefined;
-export type PostTripsTripIdItineraryMutationError = void;
+export type PostTripsTripIdItineraryMutationError = void | ErrorResponse;
 
 /**
  * @summary AI 일정 생성 — day1 먼저 반환(2단계). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
  */
-export const usePostTripsTripIdItinerary = <TError = void, TContext = unknown>(
+export const usePostTripsTripIdItinerary = <
+  TError = void | ErrorResponse,
+  TContext = unknown,
+>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof postTripsTripIdItinerary>>,

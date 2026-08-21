@@ -54,7 +54,7 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
 
   // 두 캐시(목록·담은목록)를 다 본다 — CLOSED/UNVERIFIED 담긴 장소는 /places(ACTIVE만)엔 없다.
   const place =
-    (placesQuery.data ?? []).find((p) => p.poiId === poiId) ??
+    (placesQuery.data?.items ?? []).find((p) => p.poiId === poiId) ??
     savedPlaces.find((entry) => entry.place.poiId === poiId)?.place ??
     null;
 

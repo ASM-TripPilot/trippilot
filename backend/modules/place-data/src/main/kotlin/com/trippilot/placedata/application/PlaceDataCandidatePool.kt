@@ -31,7 +31,7 @@ class PlaceDataCandidatePool(
 
         return when (area) {
             is Area.Region ->
-                poiQuery.search(area.region, null).filter(::matchesCat).map { it.grounded(null) }
+                poiQuery.allIn(area.region, null).filter(::matchesCat).map { it.grounded(null) }
 
             is Area.Radius -> {
                 val box = BoundingBox.around(area.centerLat, area.centerLng, area.radiusM)

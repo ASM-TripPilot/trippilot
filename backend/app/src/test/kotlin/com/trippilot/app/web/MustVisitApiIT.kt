@@ -60,7 +60,7 @@ class MustVisitApiIT : AbstractPostgresIntegrationTest() {
     }
 
     private fun poiId(token: String): String =
-        call(HttpMethod.GET, "/api/v1/places?region=제주", token).second[0]["poiId"].asText()
+        call(HttpMethod.GET, "/api/v1/places?region=제주", token).second["items"][0]["poiId"].asText()
 
     @Test
     fun `인증 없으면 401`() {

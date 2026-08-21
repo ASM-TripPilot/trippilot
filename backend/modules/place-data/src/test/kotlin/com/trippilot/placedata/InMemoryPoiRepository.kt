@@ -3,6 +3,7 @@ package com.trippilot.placedata
 import com.trippilot.placedata.domain.DataStatus
 import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
+import com.trippilot.placedata.domain.PoiCursor
 import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.placedata.domain.PoiSource
 import java.util.UUID
@@ -24,18 +25,30 @@ class InMemoryPoiRepository : PoiRepository {
     override fun findById(poiId: UUID) = stored.firstOrNull { it.poiId == poiId }
 
     /**
-     * 실 쿼리와 **같은 규칙**이다 — 코드 접두사 매칭 + 이름·id 정렬(TRIP-503).
+     * 실 쿼리와 **같은 규칙**이다 — 코드 접두사 · 이름검색 · 지점 이후 · 상한(TRIP-503).
      * 이름 일치로 두면 대역만 통과하고 실 DB 에서 다른 도시가 섞인다.
      *
      * 다만 **정렬 기준까지 같지는 않다** — 여기는 JVM 코드포인트 순서이고 실 DB 는 콜레이션을 쓴다.
-     * 그래서 "순서가 무엇인가"는 이 대역으로 단정하지 않는다(실 DB IT 가 결정성만 확인한다).
+     * 그래서 "순서가 무엇인가"·"커서가 정확히 맞물리는가"는 이 대역으로 단정하지 않는다(실 DB IT 몫).
      */
-    override fun findActive(regionCodes: List<String>, category: PoiCategory?) =
-        stored.filter { p ->
-            active(p) &&
-                (category == null || p.category == category) &&
-                (regionCodes.isEmpty() || regionCodes.any { c -> p.regionCode?.startsWith(c) == true })
-        }.sortedWith(compareBy({ it.nameKo }, { it.poiId }))
+    override fun findActive(
+        regionCodes: List<String>,
+        category: PoiCategory?,
+        query: String,
+        after: PoiCursor?,
+        limit: Int,
+    ) = stored.filter { p ->
+        active(p) &&
+            (category == null || p.category == category) &&
+            (regionCodes.isEmpty() || regionCodes.any { c -> p.regionCode?.startsWith(c) == true }) &&
+            (query.isEmpty() || p.nameKo.contains(query, ignoreCase = true))
+    }.sortedWith(compareBy({ it.nameKo }, { it.poiId }))
+        .filter { p ->
+            // 정렬 키와 **같은 순서로** 비교해야 커서가 정확히 맞물린다.
+            after == null || p.nameKo > after.nameKo ||
+                (p.nameKo == after.nameKo && p.poiId > after.poiId)
+        }
+        .take(limit)
 
     override fun findActiveInBounds(latMin: Double, latMax: Double, lngMin: Double, lngMax: Double) =
         stored.filter { active(it) && it.lat in latMin..latMax && it.lng in lngMin..lngMax }

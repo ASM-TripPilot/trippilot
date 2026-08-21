@@ -20,5 +20,11 @@ class PoiController(
     fun list(
         @RequestParam(required = false) region: String?,
         @RequestParam(required = false) category: PoiCategory?,
-    ): List<PlaceResponse> = query.search(region, category).map { PlaceResponse.from(it) }
+        @RequestParam(required = false) q: String?,
+        @RequestParam(required = false) cursor: String?,
+        @RequestParam(required = false) limit: Int?,
+    ): PlaceListResponse {
+        val page = query.search(region, category, q, cursor, limit)
+        return PlaceListResponse(page.items.map { PlaceResponse.from(it) }, page.nextCursor)
+    }
 }

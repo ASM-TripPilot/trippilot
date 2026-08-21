@@ -59,7 +59,7 @@ class ItineraryRevisionApiIT : AbstractPostgresIntegrationTest() {
     }
 
     private fun poiId(token: String): String =
-        call(HttpMethod.GET, "/api/v1/places?region=제주", token).second[0]["poiId"].asText()
+        call(HttpMethod.GET, "/api/v1/places?region=제주", token).second["items"][0]["poiId"].asText()
 
     /** 다일 여행 — 2단계 생성을 타므로 리비전이 **전 일자**를 담는지 확인할 수 있다. */
     private fun multiDayTrip(token: String): String {

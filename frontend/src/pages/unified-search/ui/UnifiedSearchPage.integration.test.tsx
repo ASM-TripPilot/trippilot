@@ -143,7 +143,8 @@ function regionsResult(list: Region[]) {
 }
 function placesResult(list: Place[]) {
   return {
-    data: list,
+    // 응답이 `{items, nextCursor}` 객체다(TRIP-503) — 배열이 아니다.
+    data: { items: list, nextCursor: null },
     isError: false,
     isPending: false,
     refetch: jest.fn(),

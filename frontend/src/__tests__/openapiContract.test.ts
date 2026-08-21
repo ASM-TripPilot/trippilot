@@ -144,9 +144,15 @@ function extractSchemaBlock(source: string, name: string): string {
   return source.slice(bodyStart, bodyEnd);
 }
 
-/** 경로 블록 안 `- { name: X, ...}` 파라미터 항목의 `name` 값 전부(등장 순서
- * 그대로 — 순서가 뒤집혀도 잡히도록 완전 일치로 비교한다). */
-const PARAM_NAME_PATTERN = /- \{ name: (\w+),/g;
+/**
+ * 경로 블록 안 파라미터 항목의 `name` 값 전부(등장 순서 그대로 — 순서가 뒤집혀도 잡히도록
+ * 완전 일치로 비교한다).
+ *
+ * **두 표기를 모두 읽는다** — 인라인(`- { name: X, ... }`)과 블록(`- name: X`). 인라인만 읽던 시절엔
+ * 설명이 긴 파라미터가 블록으로 쓰이면서 **가드를 조용히 통과했다**(TRIP-503 에서 드러났다).
+ * 잡지 못하는 표기가 있으면 "완전 일치"가 완전하지 않다.
+ */
+const PARAM_NAME_PATTERN = /- (?:\{ )?name: (\w+)[,\n]/g;
 function extractParamNames(pathBlock: string): string[] {
   return [...pathBlock.matchAll(PARAM_NAME_PATTERN)].map((match) => match[1]);
 }
@@ -395,9 +401,9 @@ describe('TRIP-220 AC-10 · 장소 계약 앵커 (A-4, 선제 green)', () => {
     // 완전 일치가 공허하게 통과해 sort·q 같은 신규 파라미터가 안 잡힌다.
     expect(paramNames.length).toBeGreaterThan(0);
 
-    // 완전 일치(순서 포함) — 탐색 파라미터는 이 둘뿐이라는 것이 티켓·브리프가 함께 실측한
-    // 계약이다(sort·q·좌표 없음). 하나라도 늘면 즉시 red.
-    expect(paramNames).toEqual(['region', 'category']);
+    // 완전 일치(순서 포함). TRIP-503 에서 목록 계약이 늘었다 — 상한·지점·서버검색이 붙었다.
+    // 이 단정을 유지하는 이유는 그대로다: 파라미터가 조용히 하나 더 늘면 즉시 red 여야 한다.
+    expect(paramNames).toEqual(['region', 'category', 'q', 'limit', 'cursor']);
   });
 
   it('Place가 tags를 required로 요구하고 imageUrl은 선택으로 남는다', () => {
