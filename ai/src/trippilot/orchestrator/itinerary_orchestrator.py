@@ -133,6 +133,8 @@ class GenerateItineraryRequest:
     seed: int
     fixed_blocks: tuple[FixedBlock, ...] = ()
     excluded_poi_ids: frozenset[PoiId] = frozenset()
+    # 설명 생략 요청 (TRIP-479) — 백엔드가 설명을 별도 경계로 병렬 조회할 때 false.
+    include_explanations: bool = True
     radius_override_km: float | None = None
 
     def __post_init__(self) -> None:
@@ -742,6 +744,8 @@ class ItineraryOrchestrator:
         trace_id: TraceId,
         now: datetime,
     ) -> tuple[PoiExplanation, ...]:
+        if not request.include_explanations:
+            return ()  # 요청된 생략 (TRIP-479) — 강등이 아니다 (별도 경계로 조회)
         if self._explainer is None:
             return ()  # 미배선 = 기능 부재이지 실패가 아니다 (강등으로 세지 않는다)
         if persona is None:
