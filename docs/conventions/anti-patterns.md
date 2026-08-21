@@ -41,6 +41,8 @@
 - **"충돌 없이 자동 병합됨"을 "합쳐도 된다"로 읽지 말 것 → 병합 결과를 실제로 빌드할 것.** git 이 말하는 것은 **겹친 줄이 없다**까지다. 한 브랜치가 바꾼 시그니처를 다른 브랜치가 부르고 있으면 서로 다른 hunk 라 **충돌 표시가 나지 않고 조용히 컴파일이 깨진다.** 실측: 브랜치 6개를 순서대로 합치자 `git merge` 는 6번 모두 성공했는데 빌드는 `KakaoPlaceLookupAdapter` 생성자 변경(타임아웃 도입) 때문에 깨졌다 — 그 파일을 건드린 두 브랜치는 **각자의 PR CI 에서는 둘 다 초록**이다(각각 develop 기준이라 상대 변경을 보지 못한다). 더 나쁜 것은 발현 시점이다: 먼저 머지한 PR 은 통과하고 **두 번째가 머지된 뒤 develop 이 깨진다.** 처방: 여러 브랜치를 쌓아 두었으면 머지 전에 스크래치 브랜치에 **머지 순서대로 합쳐 전체 빌드를 한 번 돌린다**(`git checkout -b scratch develop && git merge A B C…`). 겹치는 파일 목록은 `git diff --name-only develop..<branch>` 로 먼저 뽑아 두면 어디를 볼지 안다. (타임아웃·역지오코딩 브랜치)
 - **외부 와이어 DTO 를 역직렬화하는 모듈은 Jackson 3 Kotlin 모듈을 스스로 선언할 것 — 없어도 예외가 나지 않는다.** SB4 의 `RestClient` 기본 컨버터는 Jackson 3(`tools.jackson`)인데 Kotlin 모듈이 없으면 Kotlin data class 를 **기본 생성자로 만들고 `val` 을 채우지 못한다** — 예외 없이 전 필드가 기본값이 되어 `documents=[]` 같은 빈 결과가 된다. 200 을 받고도 후보 0건이라 **"못 찾음"과 구분되지 않는다**(벤더 장애와도 구분되지 않는다). 실측: place-data 는 Jackson **2** Kotlin 모듈만 선언한 채, `itinerary-generation` 이 선언한 Jackson 3 모듈이 런타임 classpath 로 새어 든 덕에 우연히 동작하고 있었다 — 그 모듈이 의존을 빼면 카카오 검색·역지오코딩이 조용히 빈 결과가 된다. 앱 전체 테스트에서는 절대 안 드러나고, **모듈 단위 테스트**(`MockRestServiceServer` + 바닐라 `RestClient.builder()`)에서만 잡힌다. (place-data 역지오코딩)
 
+- **AI 와이어 계약(`ai/docs/openapi.json`)에 요청 필드를 추가하면 같은 PR에서 백엔드 DTO에도 추가할 것 → backend-ci까지 초록 확인 후 머지.** 백엔드 `AiBoundaryOpenApiTest`가 요청 키의 **정확 일치**를 강제하고, 경로 필터상 ai 계약 파일 변경이 backend-ci를 트리거한다 — ai만 보고 머지하면 develop이 그 자리에서 빨간불이 된다. (TRIP-479, PR #306 — `include_explanations` 추가로 실측)
+
 ## 아키텍처 · 구현
 
 - **새 설정 키를 만들면 `application.yml`·compose·`.env` 를 **한 커밋에서 함께** 옮길 것 → 하나라도 빠지면 "설정은 맞는데 값이 도달하지 않는" 상태가 된다.** `trippilot.stay.content.mode` 를 `application.yml` 에 만들고 compose 통로를 안 열어, `.env` 에 `db` 를 넣고 띄웠는데 기동 로그는 계속 "스텁(제주 5곳)"이었다. **빌드로는 절대 안 잡힌다** — 기본값으로 조용히 뜨기 때문이다. 띄워서 로그를 봐야 드러난다. 그래서 모드 스위치에는 **기동 시 어느 구현으로 떴는지 로그 한 줄**을 함께 둔다(`RegionGeocodeModeAnnouncer` 선례). 덧: 같은 함정을 남의 서비스(compose 의 `ai` 에 environment 블록 부재)에서 지적하고 **바로 다음 작업에서 내가 반복했다** — 지적한 규칙이 내 코드에도 적용되는지 확인할 것. (숙소 실 데이터, PR #260→#261)
@@ -87,6 +89,8 @@
 - **타임아웃 가드의 역검증을 "가드 제거"로 하지 말 것 → 값을 틀리게 바꿀 것.** 타임아웃을 지우면 테스트가 **실패하는 대신 무한히 매달려** 역검증이 성립하지 않는다 — 무엇이 무엇을 지키는지 못 본다. `setReadTimeout(주입값)` → `setReadTimeout(Duration.ofSeconds(30))` 처럼 **상한을 넘는 고정값**으로 바꾸면 종료되면서 정상적으로 FAILED 가 난다. 덧: macOS 에는 `timeout` 명령이 없어(`127 command not found`) 셸 상한으로 매달림을 끊으려는 시도가 **조용히 실패한다** — `python3 subprocess.run(timeout=)` 을 쓴다. 아울러 타임아웃 유무는 **실 소켓에서만 드러나** `MockRestServiceServer` 로는 원리적으로 구분되지 않으므로, "연결은 받아주고 한 바이트도 쓰지 않는" `ServerSocket` 으로 재현한다. (카카오·OAuth 타임아웃)
 
 ## Git · 프로세스
+
+- **체크 조회와 `gh pr merge`를 한 셸 명령으로 엮지 말 것 → 모든 체크 잡의 결론을 눈으로 확인한 뒤 별도 명령으로 머지.** `gh pr checks --watch`가 0으로 끝나도 **늦게 붙는 워크플로**(경로 필터 교차분 — 예: ai 계약 파일이 트리거하는 backend-ci)가 그 뒤에 실패할 수 있고, `A | head && merge` 꼴 파이프는 A의 실패를 삼킨다. (TRIP-479, PR #306 — 실패 체크를 지나쳐 머지한 실측)
 
 - **스택형 브랜치를 squash 머지 후 rebase하지 말 것.** squash가 patch-id를 바꿔 add/add 충돌 발생 → `git rebase --onto origin/develop <oldBaseTip> <branch>`로 중복 커밋을 건너뛴다. (TRIP-152/153)
 - **작업 착수 시 가장 먼저 `git checkout -b feature/...` 로 브랜치를 만들 것.** 안 만들고 코딩하면 커밋이 develop에 직접 쌓인다(push는 보호로 막히지만 로컬 develop이 오염 → 커밋을 브랜치로 옮기고 `git branch -f develop origin/develop` 으로 되돌려야 함). (TRIP-177)
