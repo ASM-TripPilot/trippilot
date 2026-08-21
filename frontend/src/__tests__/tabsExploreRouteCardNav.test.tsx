@@ -4,6 +4,7 @@ import type { StayItem } from '@/shared/api/generated/schemas';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useGetPlaces } from '@/shared/api/generated/places/places';
 import ExploreRoute from '@/app/(tabs)/explore';
 
 /**
@@ -28,12 +29,21 @@ jest.mock('@/features/stay/model/useStaySearch', () => ({
 jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: jest.fn(),
 }));
+// 가볼 곳 레인(TRIP-470)으로 라우트가 useGetPlaces 를 물게 됨 — 이 unit 버킷엔
+// QueryClientProvider 가 없어 실훅이 `No QueryClient set` 으로 크래시한다. 형제
+// tabsExploreRoute.test 와 동일한 목 seam 으로 고정(useStaySearch·useSavedPlaces 선례).
+jest.mock('@/shared/api/generated/places/places', () => ({
+  useGetPlaces: jest.fn(),
+}));
 
 const mockUseStaySearch = useStaySearch as jest.MockedFunction<
   typeof useStaySearch
 >;
 const mockUseSavedPlaces = useSavedPlaces as jest.MockedFunction<
   typeof useSavedPlaces
+>;
+const mockUseGetPlaces = useGetPlaces as jest.MockedFunction<
+  typeof useGetPlaces
 >;
 
 const CARD_A: StayItem = {
@@ -59,13 +69,23 @@ function stayResults(items: StayItem[]) {
 function savedResult(savedPoiIds: string[]) {
   return { savedPoiIds } as unknown as ReturnType<typeof useSavedPlaces>;
 }
+/** 가볼 곳 레인(TRIP-470) — 라우트는 data(장소 배열)·isError·refetch 만 읽는다. */
+function placesResult() {
+  return {
+    data: [],
+    isError: false,
+    refetch: jest.fn(),
+  } as unknown as ReturnType<typeof useGetPlaces>;
+}
 
 beforeEach(() => {
   mockPush.mockClear();
   mockUseStaySearch.mockReset();
   mockUseSavedPlaces.mockReset();
+  mockUseGetPlaces.mockReset();
   mockUseStaySearch.mockReturnValue(stayResults([CARD_A]));
   mockUseSavedPlaces.mockReturnValue(savedResult([]));
+  mockUseGetPlaces.mockReturnValue(placesResult());
 });
 
 /** 상세 라우트로 가는 객체형 push 만 골라낸다. */
