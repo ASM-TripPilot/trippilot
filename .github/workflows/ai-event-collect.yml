@@ -81,7 +81,7 @@ jobs:
           NAVER_SEARCH_CLIENT_SECRET: ${{ secrets.NAVER_SEARCH_CLIENT_SECRET }}
           NAVER_MAX_CALLS: ${{ inputs.max_calls || vars.NAVER_MAX_CALLS || '300' }}
           # TRIP-421 — 있으면 카카오 지오코딩 보강 (주소·키워드), 없으면 네이버만
-          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY_AI }}
           KAKAO_MAX_CALLS: ${{ vars.KAKAO_MAX_CALLS || '300' }}
           EVENT_REGIONS: ${{ inputs.regions || '' }}
           EVENT_REGIONS_PER_RUN: ${{ inputs.regions_per_run || '3' }}
