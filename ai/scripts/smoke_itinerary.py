@@ -69,6 +69,10 @@ from trippilot.ports.travel_time_port import TravelTimeError, TravelTimePort
 # 앵커 반경(km) — 후보풀 반경(M7 PUBLIC 10km)보다 좁게 잡아 "흩어진 POI로 후보 0"
 # 함정을 회피한다. 샘플 6~8개는 1일 일정 슬롯 수(대략 4~6)보다 여유 있는 최소 풀.
 RADIUS_KM = 8.0
+# 리허설 여행 일수 기본값 — 다일 실측 축적(TRIP-476). SMOKE_DAYS env로 오버라이드
+# (busan-2day 실험 브랜치와 같은 손잡이). MIN/MAX_POIS는 **1일 기준**이고 선택
+# 시점에 일수를 곱한다.
+REHEARSAL_DAYS = 3
 MIN_POIS = 6
 MAX_POIS = 8
 MAX_ATTEMPTS = 5  # 반경 내 POI 부족 시 다른 시군구 재시도 상한
@@ -192,22 +196,32 @@ class RehearsalError(Exception):
     """생성 실패 또는 검사(슬롯≥1 · INV-1 · INV-3) 위반."""
 
 
-def _request_body(selection: Selection, smoke_date: dt.date, deadline_ms: int) -> dict:
-    """내일 날짜 1일 여행 — 앵커=선택 앵커 좌표, 09~20시 (백엔드 와이어 형태)."""
-    trip_date = (smoke_date + dt.timedelta(days=1)).isoformat()
+def _request_body(
+    selection: Selection, smoke_date: dt.date, deadline_ms: int | None,
+    days: int = REHEARSAL_DAYS,
+) -> dict:
+    """내일부터 days일 여행 — 앵커=선택 앵커 좌표(매일 동일·숙소 가정), 09~20시.
+
+    deadline_ms=None이면 request_meta에서 생략 — 시간제약 없음(TRIP-473 계약).
+    """
+    dates = [(smoke_date + dt.timedelta(days=1 + i)).isoformat() for i in range(days)]
     anchor = selection.anchor.coord
     return {
         "trip_id": f"rehearsal-{smoke_date.isoformat()}",
         "generation_mode": "FULLY_AI",
         "trip_context": {
             "destinations": [selection.region],
-            "start_date": trip_date,
-            "end_date": trip_date,
+            "start_date": dates[0],
+            "end_date": dates[-1],
             "companion_type": "혼자",
             "budget_level": "중간",
         },
-        "anchors": [{"date": trip_date, "lat": anchor.lat, "lng": anchor.lng}],
-        "time_windows": [{"date": trip_date, "start": "09:00", "end": "20:00"}],
+        "anchors": [
+            {"date": d, "lat": anchor.lat, "lng": anchor.lng} for d in dates
+        ],
+        "time_windows": [
+            {"date": d, "start": "09:00", "end": "20:00"} for d in dates
+        ],
         "fixed_blocks": [],
         "preference_profile": {
             "styles": [],
@@ -224,7 +238,8 @@ def _request_body(selection: Selection, smoke_date: dt.date, deadline_ms: int) -
             "request_id": f"rehearsal-{smoke_date.isoformat()}",
             # CLI 스크립트만 wall-clock 직접 호출 허용 (smoke_llm·collect_pois 관례)
             "requested_at": dt.datetime.now(KST).isoformat(),
-            "deadline_ms": deadline_ms,
+            # deadline_ms 미지정 = 무제한 (TRIP-473) — 다일 리허설은 종전 20s를 넘을 수 있다
+            **({"deadline_ms": deadline_ms} if deadline_ms is not None else {}),
         },
         "excluded_poi_ids": [],
     }
@@ -236,7 +251,8 @@ def run_rehearsal(
     llm: LlmPort,
     model_id: str,
     smoke_date: dt.date,
-    deadline_ms: int = 20_000,
+    deadline_ms: int | None = None,  # None=무제한 (TRIP-473) — 다일 LLM은 20s 초과 가능
+    days: int = REHEARSAL_DAYS,
     weather=None,  # WeatherPort | None (TRIP-409) — 미주입=날씨 보정 없이 기존 그대로
     events=None,   # EventPort | None (TRIP-421) — 미주입=행사 보너스 없이 기존 그대로
 ) -> dict:
@@ -268,7 +284,7 @@ def run_rehearsal(
     started = time.monotonic()
     response = client.post(
         "/ai/v1/itinerary/generate",
-        json=_request_body(selection, smoke_date, deadline_ms),
+        json=_request_body(selection, smoke_date, deadline_ms, days=days),
     )
     latency_ms = int((time.monotonic() - started) * 1000)
 
@@ -300,10 +316,10 @@ def run_rehearsal(
         "poi_names": [p.name for p in selection.pois],
         "slots": [
             # poi_id 는 인접 슬롯 실경로 검증(TRIP-382)의 좌표 역참조용 — name 은
-            # 중복 가능해 키로 못 쓴다
-            {"start": s["start_at"], "end": s["end_at"],
+            # 중복 가능해 키로 못 쓴다. date 는 다일 검토·일경계 leg 제외용 (TRIP-476)
+            {"date": day, "start": s["start_at"], "end": s["end_at"],
              "name": names[s["poi_id"]], "poi_id": s["poi_id"]}
-            for _, s in slots
+            for day, s in slots
         ],
         "solve_mode": body["solve_mode"],
         "is_fallback": body["is_fallback"],
@@ -331,10 +347,21 @@ LEG_MODE_CHAIN: list[TransportMode] = [
 def build_leg_pairs(
     selection: Selection, slots: list[dict], max_legs: int = MAX_LEGS
 ) -> list[tuple[Poi, Poi]]:
-    """확정 슬롯 순서의 인접 쌍 — 앵커→첫 슬롯 포함, 같은 POI 연속은 제외(0거리)."""
+    """확정 슬롯 순서의 인접 쌍 — 앵커→첫 슬롯 포함, 같은 POI 연속은 제외(0거리).
+
+    다일 일정에서는 **일 경계를 넘는 인접쌍을 제외**한다(TRIP-476) — 마지막 슬롯→
+    다음날 첫 슬롯은 실제 이동이 아니라(숙소 복귀 사이) 오차 통계를 오염시킨다.
+    date 없는 슬롯(구형 기록)은 전부 같은 날로 취급 — 기존 동작 그대로.
+    """
     by_id = {str(p.poi_id): p for p in selection.pois}
-    chain = [selection.anchor] + [by_id[s["poi_id"]] for s in slots]
-    pairs = [(a, b) for a, b in zip(chain, chain[1:]) if a.poi_id != b.poi_id]
+    first_date = slots[0].get("date") if slots else None
+    chain = [(selection.anchor, first_date)] + [
+        (by_id[s["poi_id"]], s.get("date")) for s in slots
+    ]
+    pairs = [
+        (a, b) for (a, da), (b, db) in zip(chain, chain[1:])
+        if a.poi_id != b.poi_id and da == db
+    ]
     return pairs[:max_legs]
 
 
@@ -473,9 +500,12 @@ def main() -> int:
 
     doc = json.loads(Path(pois_path).read_text(encoding="utf-8"))
     entries = load_proposals(doc)
-    print(f"[rehearsal] 수집 POI {len(entries)}건 로드 — 날짜 시드 {smoke_date_str}")
+    days = int(_optional("SMOKE_DAYS") or REHEARSAL_DAYS)
+    print(f"[rehearsal] 수집 POI {len(entries)}건 로드 — 날짜 시드 {smoke_date_str} · {days}일 일정")
     try:
-        selection = select_rehearsal_pois(entries, smoke_date_str)
+        selection = select_rehearsal_pois(
+            entries, smoke_date_str,
+            min_pois=MIN_POIS * days, max_pois=MAX_POIS * days)
     except SelectionError as e:
         print(f"[rehearsal] FAIL 선택 불가: {e}")
         return 1
@@ -515,7 +545,7 @@ def main() -> int:
     try:
         result = run_rehearsal(
             selection, llm=adapter, model_id=model_id, smoke_date=smoke_date,
-            weather=weather, events=events,
+            weather=weather, events=events, days=days,
         )
     except RehearsalError as e:
         print(f"[rehearsal] FAIL {e}")
