@@ -2793,6 +2793,84 @@ export function useGetTripsTripIdTriggers<
 }
 
 /**
+ * **본문이 없다.** 다른 신호원과 달리 날씨는 신호원이 서버 쪽(기상청)이라 클라이언트가 보낼 것이 없고, 강수확률 임계도 서버가 소유한다(G-U4-2 · BR-U4-03) — 클라이언트는 임계를 알지 못하며 알 필요도 없다.
+ * **조회 실패·임계 미만·억제는 모두 `204`** 다. 셋 다 화면이 할 일이 같기 때문이다(배너 없음). 특히 조회 실패를 "비 안 옴"으로 접지 않는다 — 확인하지 못한 것은 무발화이고, 만료된 예보로는 발화하지 않는다(BR-U4-05 · INV-U4-09 허위 알림 금지).
+ * `GET` 이 아니라 `POST` 인 이유는 판정 결과를 행으로 남기기 때문이다(조회가 아니다). 트리거는 **제안까지만** 한다 — 일정을 자동으로 바꾸지 않는다(BR-U4-09).
+ * @summary 날씨 확인 — 서버가 강수확률을 읽어 임계 초과면 트리거를 만든다
+ */
+export const weatherCheck = (tripId: string, signal?: AbortSignal) => {
+  return customInstance<Trigger | void>({
+    url: `/trips/${tripId}/triggers/weather-check`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getWeatherCheckMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof weatherCheck>>,
+    TError,
+    { tripId: string },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof weatherCheck>>,
+  TError,
+  { tripId: string },
+  TContext
+> => {
+  const mutationKey = ['weatherCheck'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof weatherCheck>>,
+    { tripId: string }
+  > = (props) => {
+    const { tripId } = props ?? {};
+
+    return weatherCheck(tripId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type WeatherCheckMutationResult = NonNullable<
+  Awaited<ReturnType<typeof weatherCheck>>
+>;
+
+export type WeatherCheckMutationError = void;
+
+/**
+ * @summary 날씨 확인 — 서버가 강수확률을 읽어 임계 초과면 트리거를 만든다
+ */
+export const useWeatherCheck = <TError = void, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof weatherCheck>>,
+      TError,
+      { tripId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof weatherCheck>>,
+  TError,
+  { tripId: string },
+  TContext
+> => {
+  return useMutation(getWeatherCheckMutationOptions(options), queryClient);
+};
+/**
  * 화면에서 배너만 감추는 동작이 아니다. 억제 레코드가 생겨 **다음 감지 때 같은 조합이 발화하지 않는다**. 슬롯을 특정한 신호면 그 슬롯만, 날짜 전체 신호면 그 날 전체를 끈다.
  * @summary 알림 끄기 — 억제 레코드를 만든다(BR-U4-15)
  */

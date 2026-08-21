@@ -636,3 +636,38 @@ describe('C17 · AC-4 — 완성 CTA 는 비-listed 얼굴에는 없다 (선제 
     expect(screen.queryByTestId('itinerary-draft-complete')).toBeNull();
   });
 });
+
+/* ───────────────────────── TRIP-466 · 확정 가드 — 완성 CTA 잠금 ─────────────────────────
+ * (a) CONFIRMED 이후 완성 버튼이 유효하지 않다. TRIP-454 가 완성 CTA 를 "항상 활성"으로 넣었고
+ * (C15·C16), 이 사이클이 거기에 **CONFIRMED 예외 하나**를 뚫는다. 잠금은 새 prop 이 아니라 기존
+ * `canRetry` 값 재사용이다 — 재시도 버튼(`itinerary-draft-retry`, `disabled={!canRetry}`)과 **같은
+ * 잠금값**이라, 재시도 잠금 심판 C13 과 완전 동형으로 짠다.
+ *
+ * 왜 canRetry 인가: DraftPage 가 `canRetry={status !== 'CONFIRMED'}` 를 이미 넘긴다. 즉 CONFIRMED
+ * 면 false, PLANNED·PARTIAL 이면 true — "CONFIRMED 만 잠근다"가 자연히 성립한다(PARTIAL 은 status
+ * 가 PLANNED 라 활성 유지, 배선 정확성은 DraftPage 통합 I11 이 잰다).
+ *
+ * 🔴 지금은 red 다: 완성 CTA 에 `disabled` 도 canRetry 참조도 없다(`onPress={onComplete}` 만).
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+describe('🔴 C18 · TRIP-466 AC-a1 — canRetry=false(CONFIRMED) 면 완성 CTA 가 잠긴다', () => {
+  it('canRetry=false 면 완성 버튼이 비활성이고 눌러도 onComplete 가 0회다', () => {
+    // 준비 — listed 얼굴(기본)에 완성 CTA 는 그대로 뜨되, canRetry 가 false 다.
+    renderScreen({ canRetry: false });
+
+    const complete = screen.getByTestId('itinerary-draft-complete');
+
+    // ★ `toBeDisabled()` 단독은 "회색인데 눌리는" 구현을 통과시킨다(C13·C10 실측 · 02a ★2).
+    //   그래서 press→콜백 0회를 **짝**으로 잰다 — 진짜 `disabled` prop 이 걸려야 둘 다 성립한다.
+    expect(complete).toBeDisabled();
+    fireEvent.press(complete);
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('canRetry=true 면 완성 버튼이 눌린다 — "항상 잠그는" 구현을 죽이는 짝', () => {
+    renderScreen({ canRetry: true });
+
+    fireEvent.press(screen.getByTestId('itinerary-draft-complete'));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+});

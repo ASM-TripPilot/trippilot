@@ -124,6 +124,9 @@ function violationId(date: string, poiId: string): string {
  * ⚠️ **재작성으로 하위 6접두가 늘었다**(풀카드): `image/name/hours/tag/warnchip/nomap`. 이 목록에
  * 새 접두를 안 넣으면 풀카드가 자라는 순간 개수·순서 단언이 조용히 어긋난다(02a ★2). 위반 배지는
  * 다른 접두(`itinerary-edit-`), 구간행은 `itinerary-timeline-connector-` 라 안 섞인다.
+ * TRIP-465: 사진 없는 슬롯의 카테고리 플레이스홀더가 `photoplaceholder-` 하위접두로 붙는다 —
+ * SLOT_B/C/D 는 imageUrl 이 null 이라 그 자리에 플레이스홀더가 서므로, 안 넣으면 카드 개수가
+ * 4→7 로 부풀어 C1 자가검사가 red 가 된다(additive 확장의 셀렉터 정합).
  */
 const CARD_SUB_PREFIXES = [
   'no-',
@@ -132,6 +135,7 @@ const CARD_SUB_PREFIXES = [
   'fixed-',
   'endsnext-',
   'image-',
+  'photoplaceholder-',
   'name-',
   'hours-',
   'tag-',

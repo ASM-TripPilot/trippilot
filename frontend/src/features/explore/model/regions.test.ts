@@ -3,7 +3,7 @@ import fc from 'fast-check';
 import type { Region } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
 
-import { filterRegions, regionTint } from './regions';
+import { filterRegions, limitRegionsWhenEmpty, regionTint } from './regions';
 
 /**
  * TRIP-445 지역 카탈로그 서버 연동 — 순수 모델 두 개.
@@ -133,5 +133,31 @@ describe('regionTint(regionCode) — 임의 코드용 해시 폴백(맹점①)',
       JSON.stringify(regionTint(String(1000 + i * 37)))
     );
     expect(new Set(pairs).size).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('limitRegionsWhenEmpty(list, query, limit) — 빈 질의는 대표 소수만(TRIP-469)', () => {
+  it('검색어가 비면(공백만 포함) 앞쪽 limit 개만 준다', () => {
+    const many = Array.from({ length: 30 }, (_, i) =>
+      region({ regionCode: String(i), name: `지역${i}` })
+    );
+    expect(limitRegionsWhenEmpty(many, '', 6)).toHaveLength(6);
+    expect(limitRegionsWhenEmpty(many, '   ', 6)).toHaveLength(6);
+    // 순서 보존 — 앞 6개가 곧 대표(서버 정렬 신뢰).
+    expect(limitRegionsWhenEmpty(many, '', 6)[0].name).toBe('지역0');
+  });
+
+  it('검색어가 있으면 목록 전체를 그대로 준다(캡 안 함)', () => {
+    const many = Array.from({ length: 30 }, (_, i) =>
+      region({ regionCode: String(i), name: `지역${i}` })
+    );
+    expect(limitRegionsWhenEmpty(many, '지역', 6)).toHaveLength(30);
+  });
+
+  it('limit 기본값은 6이다', () => {
+    const many = Array.from({ length: 10 }, (_, i) =>
+      region({ regionCode: String(i), name: `지역${i}` })
+    );
+    expect(limitRegionsWhenEmpty(many, '')).toHaveLength(6);
   });
 });

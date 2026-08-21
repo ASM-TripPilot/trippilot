@@ -156,10 +156,15 @@ describe('resolveHomePhase — 지배 여행 선택(가장 이른 비-ENDED)', (
   });
 });
 
-describe('resolveHomePhase — 상태별 badge(01b Q2)', () => {
-  it('ACTIVE 여행은 badge 가 "여행 중"이다', () => {
+// ── TRIP-472 · badge 는 날짜로만 판정한다(dday 와 같은 소스라 모순 조합이 안 나온다) ──────────
+// 이전(01b Q2)엔 badge 가 server status(ACTIVE?)를, dday 가 today 를 봤다 — 두 소스가 달라
+// "여행 중" + "D-1" 모순이 노출됐다. 이제 오늘이 [startDate, endDate] 안이면 '여행 중', 아니면
+// '계획 중'. status 는 badge 를 좌우하지 않는다(→ ctaLabel 로 옮겨감, 아래 describe).
+describe('resolveHomePhase — badge 는 날짜 기반(TRIP-472)', () => {
+  it('오늘이 [startDate, endDate] 안이면 badge 가 "여행 중" (status 무관 — PLANNED 여도)', () => {
     const result = resolveHomePhase({
-      trips: [trip({ status: 'ACTIVE', startDate: '2026-06-05' })],
+      // start 05-29 ≤ today 06-01 ≤ end 06-13(팩토리 기본). status 는 일부러 PLANNED.
+      trips: [trip({ status: 'PLANNED', startDate: '2026-05-29' })],
       today: '2026-06-01',
       savedCount: 0,
       formatTripMeta: metaOfTitle,
@@ -167,15 +172,73 @@ describe('resolveHomePhase — 상태별 badge(01b Q2)', () => {
     expect(result?.kind === 'planning' && result.trip.badge).toBe('여행 중');
   });
 
-  it('PLANNED 여행은 badge 가 "계획 중"이다', () => {
+  it('오늘이 시작 전이면 badge 는 "계획 중" — ACTIVE 여도(모순 제거의 핵심)', () => {
+    // 서버가 아직 안 시작한 여행을 ACTIVE 로 줘도(status 앞섬), 날짜상 D-21 이면 '계획 중'.
     const result = resolveHomePhase({
-      trips: [trip({ status: 'PLANNED', startDate: '2026-06-22' })],
+      trips: [trip({ status: 'ACTIVE', startDate: '2026-06-22' })],
       today: '2026-06-01',
       savedCount: 0,
       formatTripMeta: metaOfTitle,
     });
     expect(result?.kind === 'planning' && result.trip.badge).toBe('계획 중');
+    // badge 와 dday 가 한 소스라 "여행 중" + "D-n" 조합이 원천적으로 안 나온다.
+    expect(result?.kind === 'planning' && result.trip.dday).toBe('D-21');
   });
+});
+
+describe('resolveHomePhase — badge×dday 모순 없음(PBT, TRIP-472)', () => {
+  it('badge 가 "여행 중"이면 dday 는 절대 "D-n"(시작 전)이 아니다', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('PLANNED', 'CONFIRMED', 'ACTIVE'),
+        fc.integer({ min: 18262, max: 22280 }), // startEpoch
+        fc.integer({ min: 0, max: 20 }), // 여행 길이(박)
+        fc.integer({ min: -30, max: 30 }), // today 오프셋(시작일 대비)
+        (status, startEpoch, nights, offset) => {
+          const start = toDateString(startEpoch);
+          const end = toDateString(startEpoch + nights);
+          const today = toDateString(startEpoch + offset);
+          const result = resolveHomePhase({
+            trips: [trip({ status, startDate: start, endDate: end })],
+            today,
+            savedCount: 0,
+            formatTripMeta: metaOfTitle,
+          });
+          if (result?.kind !== 'planning') return;
+          if (result.trip.badge === '여행 중') {
+            // 시작 전(D-<숫자>)인데 여행 중이면 모순 — 절대 없어야 한다.
+            // 'D-DAY'(시작 당일)는 여행 중과 정합이라 제외한다.
+            const isFuture =
+              result.trip.dday.startsWith('D-') && result.trip.dday !== 'D-DAY';
+            expect(isFuture).toBe(false);
+          }
+        }
+      ),
+      { numRuns: 500 }
+    );
+  });
+});
+
+describe('resolveHomePhase — ctaLabel 은 status 로 분기(TRIP-472)', () => {
+  const CASES: { status: Trip['status']; expected: string }[] = [
+    { status: 'PLANNED', expected: '일정 이어서 짜기' },
+    { status: 'CONFIRMED', expected: '확정 일정 보기' },
+    { status: 'ACTIVE', expected: '여행 일정 보기' },
+  ];
+  it.each(CASES)(
+    '$status → ctaLabel "$expected"(하드코딩 「일정 이어서 짜기」 고정이면 red)',
+    ({ status, expected }) => {
+      const result = resolveHomePhase({
+        trips: [trip({ status, startDate: '2026-06-22' })],
+        today: '2026-06-01',
+        savedCount: 0,
+        formatTripMeta: metaOfTitle,
+      });
+      expect(result?.kind === 'planning' && result.trip.ctaLabel).toBe(
+        expected
+      );
+    }
+  );
 });
 
 describe('resolveHomePhase — title·dday·meta 전달', () => {

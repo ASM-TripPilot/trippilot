@@ -52,6 +52,19 @@ export function filterRegions(
 }
 
 /**
+ * 검색어가 비어 있으면 앞쪽 소수(인기 지역 등)만, 입력이 있으면 목록 전체를 그대로 준다
+ * (TRIP-469). 서버가 카탈로그를 인기·대표 순으로 정렬해 주므로 앞 `limit` 개가 곧 대표 지역이다
+ * — 빈 질의에 서울 25개 구까지 전부 쏟아내던 것을 소수로 좁히는 자리. 순서는 보존한다.
+ */
+export function limitRegionsWhenEmpty(
+  regions: readonly Region[],
+  query: string,
+  limit = 6
+): readonly Region[] {
+  return query.trim() === '' ? regions.slice(0, limit) : regions;
+}
+
+/**
  * 지역 사진 자리 — 리포에 이미지 에셋이 0건이라(실측) 그라데이션으로 대체한다. 사진이 들어오면
  * 이 팔레트를 지우고 <Image> 로 바꾼다. 색은 이 파일 안에서만 raw hex 로 고정한다
  * (`regionTint` 반환은 LinearGradient `colors` 가 요구하는 hex 문자열이라 className 불가).

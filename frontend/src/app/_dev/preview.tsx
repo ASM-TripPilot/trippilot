@@ -68,6 +68,11 @@ import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
 import { SlotTimeSheet } from '@/features/itinerary/ui/SlotTimeSheet';
 import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
+import {
+  MyTripCard,
+  type MyTripCardVM,
+} from '@/features/itinerary/ui/MyTripCard';
+import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
@@ -222,12 +227,27 @@ const STAY_DETAIL_PREVIEW_ITEM: StayItem = {
   price: { amount: 145000, currency: 'KRW' },
 };
 
+// 가볼 곳 가로 레인(TRIP-470) — 프리뷰에서 레인을 눈으로 보기 위한 표본 카드. `as const` 밖에
+// 둬야 cards 가 readonly 튜플로 굳지 않는다(placeLane.cards 는 PlaceCardVM[] 요구).
+const EXPLORE_LANDING_PLACE_LANE = {
+  error: false,
+  cards: [
+    { poiId: 'p1', name: '감천문화마을', region: '사하구' },
+    { poiId: 'p2', name: '광안리 해변', region: '수영구' },
+    { poiId: 'p3', name: '해운대 블루라인', region: '해운대구' },
+  ],
+  onRetry: noop,
+  onPressCard: noop,
+};
+
 const EXPLORE_LANDING_BASE = {
   heading: {
     title: '무엇을 둘러볼까요?',
     subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
   },
   onPressSearch: noop,
+  onPressPlaces: noop,
+  placeLane: EXPLORE_LANDING_PLACE_LANE,
 } as const;
 
 const VIEW_ONLY_HANDLERS = {
@@ -725,6 +745,64 @@ const TIMELINE_MAP_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     openingHours: '17:00–02:00 영업',
     distanceRange: '약 1.2km · 도보 추정',
     imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+  },
+];
+
+/**
+ * TRIP-465 · 사진 없는 슬롯의 **카테고리 플레이스홀더** 프리뷰 픽스처 — 8종(명소·맛집·카페·야경·
+ * 자연·쇼핑·문화 + 폴백)을 한 화면에 세워 틴트·아이콘 정합을 Figma 노드 2989:1731 과 눈으로 대조한다.
+ * 전부 `imageUrl:null` 이라 사진 자리에 플레이스홀더가 뜬다(사진 있는 카드는 위 `itinerary-map`
+ * 픽스처가 담당 — 상호 배타). 폴백은 매핑 밖 카테고리("액티비티")로 유도한다.
+ */
+const TIMELINE_PLACEHOLDER_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
+  '명소',
+  '맛집',
+  '카페',
+  '야경',
+  '자연',
+  '쇼핑',
+  '문화',
+  '액티비티',
+].map((category, index) => ({
+  poiId: `poi-ph-${index}`,
+  startAt: `${String(9 + index).padStart(2, '0')}:00:00`,
+  endAt: `${String(10 + index).padStart(2, '0')}:00:00`,
+  isFixed: false,
+  endsNextDay: false,
+  hasViolation: false,
+  tags: [category],
+  lat: 35.16,
+  lng: 129.16,
+  nameKo: `${category} 장소`,
+  category,
+  openingHours: '09:00–18:00 영업',
+  distanceRange: index === 0 ? null : '약 1.2km · 도보 추정',
+  imageUrl: null,
+}));
+
+// 내 여행 목록(h37, TRIP-468) 카드 VM 3종 — 완성·작성중·미도착(배지 degrade). 순수 카드라
+// 픽스처를 얹어 세 얼굴을 한 화면에서 본다(컨테이너·react-query 없이).
+const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
+  {
+    tripId: 'demo-done',
+    title: '서귀포시 여행',
+    metaLine: '6월 10일 ~ 13일 · 3박 4일 · 2명',
+    badge: 'done',
+    extra: '확정 장소 12곳',
+  },
+  {
+    tripId: 'demo-draft',
+    title: '부산 여행',
+    metaLine: '7월 2일 ~ 4일 · 2박 3일 · 4명',
+    badge: 'draft',
+    extra: '추천안 준비 중',
+  },
+  {
+    tripId: 'demo-load',
+    title: '경주 여행',
+    metaLine: '8월 1일 ~ 2일 · 1박 2일 · 1명',
+    badge: null,
+    extra: null,
   },
 ];
 
@@ -1870,6 +1948,60 @@ const PREVIEW_STATES: PreviewState[] = [
         onConfirm={noop}
       />
     ),
+  },
+  // 사진 없는 슬롯의 카테고리 플레이스홀더(TRIP-465) — 8종 틴트·아이콘을 한 화면에서 Figma 2989:1731
+  // 과 대조한다(전부 imageUrl null). 픽셀·아이콘 fill 은 jest 사각이라 이 프리뷰가 유일한 육안 그물.
+  {
+    key: 'itinerary-timeline-placeholder',
+    label: '완성 일정 · 사진 없는 카테고리 플레이스홀더(h25)',
+    login: null,
+    render: () => (
+      <TimelineScreen
+        header={{ title: '부산 여행', nightsLabel: '3박 4일', totalPlaces: 8 }}
+        days={[
+          {
+            dayIndex: 1,
+            date: '2026-06-10',
+            count: TIMELINE_PLACEHOLDER_PREVIEW_SLOTS.length,
+          },
+        ]}
+        slots={TIMELINE_PLACEHOLDER_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        status="PLANNED"
+        onSelectDay={noop}
+        onBack={noop}
+        onConfirm={noop}
+      />
+    ),
+  },
+  // 내 여행 목록 · h37(TRIP-468) — 완성(success 배지+"확정 장소 N곳")·작성중(primary 배지+resume
+  // CTA)·미도착(배지·부가정보 부재 degrade) 세 카드 + 사진 플레이스홀더·"최신순" 라벨을 한 화면에서
+  // Figma h37 2971:1656 과 대조한다. 배지 pill·resume 오버레이·사진 자리는 jest 사각(6-b 전용).
+  {
+    key: 'my-trips-list',
+    label: '내 여행 목록 · 완성/작성중/미도착(h37)',
+    login: null,
+    render: () => (
+      <MyTripsListScreen
+        mode="list"
+        onPressCreateTrip={noop}
+        cards={MY_TRIPS_PREVIEW_VMS.map((vm) => (
+          <MyTripCard key={vm.tripId} vm={vm} onPress={noop} />
+        ))}
+      />
+    ),
+  },
+  {
+    key: 'my-trips-empty',
+    label: '내 여행 목록 · empty(h37)',
+    login: null,
+    render: () => <MyTripsListScreen mode="empty" onPressCreateTrip={noop} />,
+  },
+  {
+    key: 'my-trips-loading',
+    label: '내 여행 목록 · 스켈레톤 2장(h37)',
+    login: null,
+    render: () => <MyTripsListScreen mode="loading" onPressCreateTrip={noop} />,
   },
   // h24 일정 편집(TRIP-302) — 시각칩·삭제·"다른 후보" 어포던스가 있는 편집 화면. 시각칩을 누르면
   // 아래 '시각 조정 시트' 가 열린다(프리뷰에선 둘을 각각 독립 진입으로 본다). 고정 슬롯(poi-b)은

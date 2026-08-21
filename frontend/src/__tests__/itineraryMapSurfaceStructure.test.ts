@@ -312,7 +312,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 3필드 그대로, DraftScreenProps 는 11필드(onComplete 편입), 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 3필드 그대로, DraftScreenProps 는 12필드(onPressSlot 편입), 화면에 에셋 해석 지문이 0건이다', () => {
     const mapHtmlSource = readOne(MAP_HTML_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -343,8 +343,12 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       'onBack',
       // TRIP-454 — h11→h25 완성 CTA 콜백. **프로퍼티형** `onComplete?: () => void` 여야
       // interfaceFields 가 잡는다(메서드 단축형 `onComplete?()` 는 미캡처 — 02a §5 node 실측).
-      // 반드시 마지막 필드(toEqual 순서 민감).
       'onComplete',
+      // TRIP-467 — h12 슬롯 교체 트리거 콜백. 비고정 슬롯 "다른 후보 ›" press → `DraftPage` 가
+      // 조건부 마운트하는 `SlotCandidateSheetContainer` 로 이어진다. **프로퍼티형**
+      // `onPressSlot?: (slotKey: string) => void` 여야 잡힌다(위와 동형). 반드시 마지막 필드
+      // (toEqual 순서 민감 · 후방호환 옵셔널: 기본=미배선=트리거 0, `onComplete?` 편입과 동형).
+      'onPressSlot',
     ]);
 
     // 에셋 해석은 픽스처 몫이다 — 화면이 로컬 파일을 알면 계약이 둘로 갈린다.

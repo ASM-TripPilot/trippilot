@@ -22,6 +22,7 @@ interface HomeNav {
   onPressCreateTrip: () => void;
   onPressSavedPlaces: () => void;
   onPressSpotsMore: () => void;
+  onPressSearch: () => void;
 }
 
 // 지배 planning 여행이 있을 때만 마운트되는 자식 — 여기서만 지배 여행의 itinerary GET 을 문다.
@@ -83,6 +84,7 @@ export default function HomeRoute() {
     onPressCreateTrip: () => router.push('/trips/new/step1'),
     onPressSavedPlaces: () => router.push('/explore/saved-places'),
     onPressSpotsMore: () => router.push('/explore/places'),
+    onPressSearch: () => router.push('/explore/search'),
   };
 
   // 조회 진행 중 — 섹션만 로딩 스켈레톤, phase 미전달. no-trip(discovery)으로 확정하지 않는다(INV-4).

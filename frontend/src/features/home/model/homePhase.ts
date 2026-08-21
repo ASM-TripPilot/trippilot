@@ -68,14 +68,45 @@ export function formatDday(startDate: string, today: string): string {
 }
 
 /**
+ * 오늘이 [startDate, endDate] 안이면 여행 중. formatDday 와 같은 UTC epoch-day 산술이라
+ * badge 와 dday 가 한 소스를 공유한다(TRIP-472 · 모순 조합 제거). 형식 이상이면 false(계획 중).
+ */
+function isTraveling(
+  startDate: string,
+  endDate: string,
+  today: string
+): boolean {
+  const start = toEpochDay(startDate);
+  const end = toEpochDay(endDate);
+  const now = toEpochDay(today);
+  if (Number.isNaN(start) || Number.isNaN(end) || Number.isNaN(now)) {
+    return false;
+  }
+  return start <= now && now <= end;
+}
+
+/**
+ * status → 홈 카드 CTA 문구(TRIP-472). 목적지는 라우트가 resolveItineraryDestination 으로
+ * 정하고 여기선 문구만 맞춘다 — CONFIRMED/ACTIVE 도 "일정 이어서 짜기"로 보이던 결함 해소.
+ * 카피 정본 미명시라 h25/h34(완성·확정 일정 보기) 취지로 채운다.
+ */
+function ctaLabelForStatus(status: string): string {
+  if (status === 'CONFIRMED') return '확정 일정 보기';
+  if (status === 'ACTIVE') return '여행 일정 보기';
+  return '일정 이어서 짜기';
+}
+
+/**
  * 지배 여행(가장 이른 startDate 의 비-ENDED)을 골라 planning 얼굴을 조립한다.
  * 비-ENDED 여행이 없으면(빈 목록·전부 ENDED) undefined — 라우트가 phase 미전달로 discovery.
  *
  * startDate 는 'YYYY-MM-DD' 라 문자열 사전순 비교가 곧 연대순이다(별도 파싱 불필요).
- * badge 는 ACTIVE 만 '여행 중', 나머지 비-ENDED 는 '계획 중'(01b Q2).
+ * badge 는 오늘이 [startDate, endDate] 안이면 '여행 중', 아니면 '계획 중'(TRIP-472). dday 와
+ * 같은 날짜 소스라 "여행 중"+"D-1" 같은 모순이 안 나온다(구 01b Q2 의 server-status 기준을 폐기).
+ * ctaLabel 은 status 로 분기한다(TRIP-472) — 확정/여행중 일정도 계속 "일정 이어서 짜기"로 보이던
+ * 결함 해소. 탭 목적지 자체는 라우트(resolveItineraryDestination)가 지므로 여기선 문구만 맞춘다.
  * meta 는 이 파일이 만들지 않고 주입받은 formatTripMeta 로 조립한다(경계 우회, §4-★1).
- * greetTitle·ctaLabel·bridge 카피는 정본 미명시라 fixture PLANNING 값 기준으로 채운다
- * (게이트②/리뷰 확인 대상, savedCount 는 실카운트를 그대로 반영).
+ * greetTitle·bridge 카피는 정본 미명시라 fixture PLANNING 값 기준으로 채운다(savedCount 는 실카운트).
  */
 export function resolveHomePhase(
   input: ResolveHomePhaseInput
@@ -95,9 +126,11 @@ export function resolveHomePhase(
     greetTitle: `${dominant.title} ${dday}`,
     dominantTripId: dominant.tripId,
     trip: {
-      badge: dominant.status === 'ACTIVE' ? '여행 중' : '계획 중',
+      badge: isTraveling(dominant.startDate, dominant.endDate, today)
+        ? '여행 중'
+        : '계획 중',
       dday,
-      ctaLabel: '일정 이어서 짜기',
+      ctaLabel: ctaLabelForStatus(dominant.status),
       title: dominant.title,
       meta: formatTripMeta(dominant),
     },

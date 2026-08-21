@@ -200,4 +200,6 @@ export interface HomeScreenProps {
   onPressSpotsMore?: () => void;
   /** planning 여행 카드 주 CTA press → 그 여행의 일정 화면(목적지는 라우트가 계산, TRIP-401) */
   onPressTripHeroCta?: () => void;
+  /** 검색바 press → 통합 검색(d05, `/explore/search`, TRIP-453) */
+  onPressSearch?: () => void;
 }

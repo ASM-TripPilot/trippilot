@@ -9,9 +9,11 @@ import { stayKey } from '@/features/stay/model/stayKey';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useGetPlaces } from '@/shared/api/generated/places/places';
 import {
   ExploreLandingScreen,
   type ExploreLandingScreenProps,
+  type PlaceCardVM,
   type StayCardVM,
 } from '@/features/explore/ui/ExploreLandingScreen';
 
@@ -38,7 +40,7 @@ import {
 
 type LandingBase = Pick<
   ExploreLandingScreenProps,
-  'heading' | 'onPressSearch' | 'bridge'
+  'heading' | 'onPressSearch' | 'onPressPlaces' | 'placeLane' | 'bridge'
 > & {
   stayLane: Pick<
     ExploreLandingScreenProps['stayLane'],
@@ -49,8 +51,18 @@ type LandingBase = Pick<
 export default function ExploreRoute(): ReactElement {
   const router = useRouter();
   const stay = useStaySearch();
+  const places = useGetPlaces();
   const isAuthed = getAccessToken() !== null;
   const { savedPoiIds } = useSavedPlaces({ isAuthed });
+
+  // 가볼 곳 레인(TRIP-470) — 앞쪽 소수만(가로 레인이라 전량 필요 없음). 카드 press → d06.
+  const placeCards: PlaceCardVM[] = (places.data ?? [])
+    .slice(0, 8)
+    .map((place) => ({
+      poiId: place.poiId,
+      name: place.nameKo,
+      region: place.region ?? '',
+    }));
 
   const items = stay.data?.items ?? [];
   const cards: StayCardVM[] = items.map((item) => ({
@@ -70,6 +82,18 @@ export default function ExploreRoute(): ReactElement {
       subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
     },
     onPressSearch: () => router.push('/explore/search'),
+    // "가볼 곳" 진입점 → d04 장소 목록(TRIP-453 entry 2). guest·SavableStayLane 양쪽이
+    // base 를 spread 하므로 한 곳에 두면 두 경로 모두 배선된다.
+    onPressPlaces: () => router.push('/explore/places'),
+    // 가볼 곳 가로 레인(TRIP-470) — 카드 press → d06 상세.
+    placeLane: {
+      error: places.isError,
+      cards: placeCards,
+      onRetry: () => {
+        void places.refetch();
+      },
+      onPressCard: (poiId) => router.push(`/explore/places/${poiId}`),
+    },
     stayLane: {
       error: stay.isError,
       cards,

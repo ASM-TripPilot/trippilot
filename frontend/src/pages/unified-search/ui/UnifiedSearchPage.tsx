@@ -23,7 +23,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { formatPrice } from '@/features/stay/model/formatPrice';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
-import { useRegions } from '@/features/explore/model/regions';
+import {
+  limitRegionsWhenEmpty,
+  useRegions,
+} from '@/features/explore/model/regions';
 import { visiblePlaces } from '@/features/explore/model/placeListView';
 import { useGetPlaces } from '@/shared/api/generated/places/places';
 import { UnifiedSearchScreen } from '@/features/explore/ui/UnifiedSearchScreen';
@@ -45,14 +48,18 @@ export function UnifiedSearchPage(): ReactElement {
     { enabled: resolvedRegionName !== undefined }
   );
 
-  const regionRows = regionList.map((region) => ({
-    code: region.regionCode,
-    name: region.name,
-    // 특정된 지역 이름을 실어 숙소 목록으로 — 검색어(날문자열)가 아니라 카탈로그명(RegionPickerPage
-    // purpose='stay' 선례). encodeURIComponent 는 리포 관례.
-    onPress: () =>
-      router.push(`/stays?region=${encodeURIComponent(region.name)}`),
-  }));
+  // 검색어가 비면 대표 지역 소수만(TRIP-469) — 서울 25개 구까지 전부 쏟던 것을 좁힌다.
+  // 숙소 2단 조회의 지역명은 위 regionList[0] 그대로라 이 캡은 표시 행에만 영향한다.
+  const regionRows = limitRegionsWhenEmpty(regionList, searchText).map(
+    (region) => ({
+      code: region.regionCode,
+      name: region.name,
+      // 특정된 지역 이름을 실어 숙소 목록으로 — 검색어(날문자열)가 아니라 카탈로그명(RegionPickerPage
+      // purpose='stay' 선례). encodeURIComponent 는 리포 관례.
+      onPress: () =>
+        router.push(`/stays?region=${encodeURIComponent(region.name)}`),
+    })
+  );
 
   const placeCards = visiblePlaces(places.data ?? [], searchText).map(
     (place) => ({
@@ -69,11 +76,18 @@ export function UnifiedSearchPage(): ReactElement {
     priceText: formatPrice(item.price),
   }));
 
+  // 검색어가 비면 "… 검색 결과" 대신 안내 문구(빈 따옴표 헤딩 방지, TRIP-469).
+  const heading =
+    searchText.trim() === ''
+      ? '여행지 · 장소 · 숙소 검색'
+      : `'${searchText}' 검색 결과`;
+
   return (
     <UnifiedSearchScreen
+      onBack={() => router.back()}
       searchText={searchText}
       onChangeSearch={setSearchText}
-      heading={`'${searchText}' 검색 결과`}
+      heading={heading}
       region={{
         error: regions.isError,
         rows: regionRows,

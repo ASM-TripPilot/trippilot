@@ -10,6 +10,7 @@ import { formatPrice } from '@/features/stay/model/formatPrice';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useGetPlaces } from '@/shared/api/generated/places/places';
 import ExploreRoute from '@/app/(tabs)/explore';
 
 /**
@@ -48,12 +49,20 @@ jest.mock('@/features/stay/model/useStaySearch', () => ({
 jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: jest.fn(),
 }));
+// 가볼 곳 레인(TRIP-470)은 라우트가 useGetPlaces 를 문다 — 이 unit 버킷엔 QueryClientProvider 가
+// 없어 실훅이 크래시하므로 목 seam 으로 고정한다(useStaySearch·useSavedPlaces 선례와 동형).
+jest.mock('@/shared/api/generated/places/places', () => ({
+  useGetPlaces: jest.fn(),
+}));
 
 const mockUseStaySearch = useStaySearch as jest.MockedFunction<
   typeof useStaySearch
 >;
 const mockUseSavedPlaces = useSavedPlaces as jest.MockedFunction<
   typeof useSavedPlaces
+>;
+const mockUseGetPlaces = useGetPlaces as jest.MockedFunction<
+  typeof useGetPlaces
 >;
 
 function item(
@@ -107,13 +116,24 @@ function savedResult(savedPoiIds: string[]) {
   return { savedPoiIds } as unknown as ReturnType<typeof useSavedPlaces>;
 }
 
+/** 가볼 곳 레인(TRIP-470) — 라우트는 data(장소 배열)·isError·refetch 만 읽는다. */
+function placesResult() {
+  return {
+    data: [],
+    isError: false,
+    refetch: jest.fn(),
+  } as unknown as ReturnType<typeof useGetPlaces>;
+}
+
 beforeEach(() => {
   mockPush.mockClear();
   mockUseStaySearch.mockReset();
   mockUseSavedPlaces.mockReset();
+  mockUseGetPlaces.mockReset();
   // 기본값: 정상 데이터. 각 테스트가 필요한 축만 덮어쓴다.
   mockUseStaySearch.mockReturnValue(stayResults([CARD_A, CARD_B]));
   mockUseSavedPlaces.mockReturnValue(savedResult(['p1']));
+  mockUseGetPlaces.mockReturnValue(placesResult());
 });
 
 describe('🔴 AC-E1 · AC-E8 — 5구획 렌더 + nearby 부재', () => {
@@ -260,5 +280,63 @@ describe('🔴 AC-E6 — 부분 실패 · 독립 쿼리', () => {
 
     // lane_stay 자리에 재시도(가시적 실패 신호).
     expect(screen.getByTestId('explore-lane-stay-retry')).toBeOnTheScreen();
+  });
+});
+
+// ── TRIP-453 · entry 2 d01 랜딩 → d04 장소 목록 진입점 ──────────────────────────
+describe('🔴 453-AC-2a — "가볼 곳" 구획에 장소 목록(d04) 진입점', () => {
+  it('장소 둘러보기 진입점을 누르면 /explore/places 로 이동한다', () => {
+    // d01 랜딩은 완성된 d04 장소 목록으로 가는 링크가 없었다(딥링크로만 도달). "가볼 곳" 구획에
+    // 최소 진입 링크(조회 없음, Q1=②)를 추가한다. 지금은 explore-lane-place-cta 미존재라
+    // getByTestId 가 throw → red. 배선 뒤엔 정확히 /explore/places 로 1회 push.
+    render(<ExploreRoute />);
+
+    const placeCta = screen.getByTestId('explore-lane-place-cta');
+    expect(placeCta).toBeOnTheScreen();
+
+    fireEvent.press(placeCta);
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/places');
+  });
+});
+
+// ── TRIP-470 · 가볼 곳 가로 레인(장소 카드) ─────────────────────────────────────
+describe('🟢 470 — 가볼 곳 레인: 장소 카드 렌더 + press → d06', () => {
+  function placesWith(list: unknown[]) {
+    return {
+      data: list,
+      isError: false,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof useGetPlaces>;
+  }
+
+  it('장소가 있으면 카드를 그리고, 카드 press → /explore/places/{poiId}', () => {
+    mockUseGetPlaces.mockReturnValue(
+      placesWith([
+        { poiId: 'poi-1', nameKo: '감천문화마을', region: '사하구' },
+        { poiId: 'poi-2', nameKo: '광안리 해변', region: '수영구' },
+      ])
+    );
+
+    render(<ExploreRoute />);
+
+    expect(screen.getByTestId('explore-place-card-poi-1')).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('explore-place-card-poi-2'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/places/poi-2');
+  });
+
+  it('장소 조회 오류면 레인 자리에 다시 시도(explore-lane-place-retry)를 그린다', () => {
+    mockUseGetPlaces.mockReturnValue({
+      data: undefined,
+      isError: true,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof useGetPlaces>);
+
+    render(<ExploreRoute />);
+
+    expect(screen.getByTestId('explore-lane-place-retry')).toBeOnTheScreen();
   });
 });

@@ -12,7 +12,7 @@
  * `다시 시도`는 `onRetry`(=`refetch`)에 실배선된다(Q8).
  */
 import type { ReactElement } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { StayItem } from '@/shared/api/generated/schemas';
@@ -84,6 +84,20 @@ export interface StaySearchScreenProps {
    * (화면은 라우터를 모른다). 하트 press 는 카드 push 를 삼키지 않는다(★F-4 findEventHandler).
    * 미지정=카드 press 무동작(정직한 스텁). */
   onPressCard?: (item: StayItem) => void;
+  /** 이름·지역 검색어(TRIP-469) — 결과를 클라이언트에서 이름/지역 부분일치로 좁힌다(서버 계약에
+   * 키워드 파라미터가 없다). 미지정이면 검색창 자체가 안 뜨고 items 전체가 그대로 그려진다. */
+  nameQuery?: string;
+  /** 검색어 입력 콜백(TRIP-469) — 이 콜백이 있을 때만 검색창을 렌더한다(상태는 페이지 몫). */
+  onChangeNameQuery?: (text: string) => void;
+}
+
+/** 이름·지역 부분일치로 좁힌다 — 빈 검색어는 전체를 그대로(입력 없음 ≠ 일치 없음). */
+function filterByNameQuery(items: StayItem[], query: string): StayItem[] {
+  const needle = query.trim();
+  if (needle === '') return items;
+  return items.filter(
+    (item) => item.name.includes(needle) || item.region.includes(needle)
+  );
 }
 
 // 카드 그림자(브리프 §4-2 명시 raw 허용 — 그림자는 토큰 대상이 아니다, HomeScreen.tsx
@@ -437,6 +451,7 @@ function ErrorNotice({
  * 짝을 이뤄야 실제로 중앙에 온다 — 하나만 있으면 효과가 없다. */
 function ListEmptyBlock({
   state,
+  nameNoMatch,
   activeFilterCount,
   onRetry,
   onPressRegister,
@@ -445,6 +460,8 @@ function ListEmptyBlock({
   onClearCulpritFilter,
 }: {
   state: StaySearchState;
+  /** name 검색이 results 를 0건으로 좁혔을 때(TRIP-469) — 빈 body 대신 안내를 낸다. */
+  nameNoMatch?: boolean;
   activeFilterCount?: number;
   onRetry?: () => void;
   onPressRegister?: () => void;
@@ -453,7 +470,19 @@ function ListEmptyBlock({
   onClearCulpritFilter?: (reason: string) => void;
 }): ReactElement | null {
   if (state.kind === 'loading') return <SkeletonList />;
-  if (state.kind === 'results') return null;
+  if (state.kind === 'results') {
+    if (!nameNoMatch) return null;
+    return (
+      <View className="w-full flex-1 items-center justify-center">
+        <Text
+          testID="stay-search-name-empty"
+          className="py-2xl text-center font-noto text-body text-muted"
+        >
+          검색 결과가 없어요
+        </Text>
+      </View>
+    );
+  }
 
   const notice =
     state.kind === 'error' ? (
@@ -496,10 +525,20 @@ export function StaySearchScreen({
   onToggleSave,
   pendingKeys = [],
   onPressCard,
+  nameQuery,
+  onChangeNameQuery,
 }: StaySearchScreenProps): ReactElement {
   // loading·error엔 'degraded'가 없다 — `in` 좁히기로 판별 유니온을 안전하게 읽는다.
   const degraded = 'degraded' in state ? state.degraded : false;
   const showCount = state.kind !== 'loading' && state.kind !== 'error';
+
+  // 이름·지역 검색은 화면 층에서 좁힌다(순수 · TRIP-469). 검색어가 있고 results 가 0건이면
+  // 빈 body 대신 "검색 결과가 없어요"를 낸다(nameNoMatch).
+  const visibleItems = filterByNameQuery(items, nameQuery ?? '');
+  const nameNoMatch =
+    (nameQuery ?? '').trim() !== '' &&
+    state.kind === 'results' &&
+    visibleItems.length === 0;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -510,13 +549,27 @@ export function StaySearchScreen({
           testID="stay-search-list"
           className="flex-1"
           contentContainerStyle={listContentStyle}
-          data={items}
+          data={visibleItems}
           keyExtractor={(item) => stayKey(item)}
           ListHeaderComponent={
             <>
+              {onChangeNameQuery ? (
+                <View className="px-lg pt-sm">
+                  <View className="flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-md py-3">
+                    <MapPinGlyph size={16} />
+                    <TextInput
+                      testID="stay-search-name-input"
+                      value={nameQuery ?? ''}
+                      onChangeText={onChangeNameQuery}
+                      placeholder="숙소 이름 · 지역 검색"
+                      className="flex-1 font-noto text-body text-ink"
+                    />
+                  </View>
+                </View>
+              ) : null}
               <ListHeader
                 region={region}
-                count={items.length}
+                count={visibleItems.length}
                 showCount={showCount}
                 activeFilterCount={activeFilterCount}
                 onPressFilter={onPressFilter}
@@ -531,6 +584,7 @@ export function StaySearchScreen({
           ListEmptyComponent={
             <ListEmptyBlock
               state={state}
+              nameNoMatch={nameNoMatch}
               activeFilterCount={activeFilterCount}
               onRetry={onRetry}
               onPressRegister={onPressRegister}

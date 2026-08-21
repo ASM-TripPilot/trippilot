@@ -69,32 +69,47 @@ describe('스토어 persist 금지 (AC5 · 6-2)', () => {
   });
 });
 
-describe('서버 미전송 (AC 제약: PUT 배선 없음 · ScopeBoundaryHit · 6-3)', () => {
-  it('신규 취향 표면 전체가 서버 취향 저장 엔드포인트를 참조하지 않는다', () => {
-    const files = [
-      path.join(FEATURE_DIR, 'model', 'preferenceStore.ts'),
-      path.join(PAGES_DIR, 'onboarding-pref1', 'ui', 'PrefStep1Page.tsx'),
-      path.join(PAGES_DIR, 'onboarding-pref2', 'ui', 'PrefStep2Page.tsx'),
-      path.join(FEATURE_DIR, 'ui', 'PrefStep1Screen.tsx'),
-      path.join(FEATURE_DIR, 'ui', 'PrefStep2Screen.tsx'),
-      path.join(ONBOARDING_ROUTE_DIR, 'pref1.tsx'),
-      path.join(ONBOARDING_ROUTE_DIR, 'pref2.tsx'),
-    ];
+// TRIP-471 — 취향 서버 영속을 켰다(구 "PUT 배선 없음" 잠금 해제). 완료 배선은 **PrefStep2Page
+// 한 곳**에만 산다: 그 페이지가 PUT 훅을 물어 완료 시 취향을 서버로 보낸다. 스토어는 여전히
+// 세션 메모리 전용(영속 계층 참조 0)이고, 1/2·화면·라우트도 서버를 안 만진다.
+describe('서버 영속 (TRIP-471: 완료 배선은 PrefStep2Page 한 곳)', () => {
+  const PREF2_PAGE = path.join(
+    PAGES_DIR,
+    'onboarding-pref2',
+    'ui',
+    'PrefStep2Page.tsx'
+  );
 
-    // 긍정 — 파일들이 전부 존재한다(조용한 배선 선행을 차단하려면 대상이 실재해야 한다).
-    files.forEach((file) => {
+  // PUT 을 안 만져야 하는 표면 — 스토어(세션 전용 유지)·1/2·두 화면·두 라우트.
+  const SERVER_FREE_FILES = [
+    path.join(FEATURE_DIR, 'model', 'preferenceStore.ts'),
+    path.join(PAGES_DIR, 'onboarding-pref1', 'ui', 'PrefStep1Page.tsx'),
+    path.join(FEATURE_DIR, 'ui', 'PrefStep1Screen.tsx'),
+    path.join(FEATURE_DIR, 'ui', 'PrefStep2Screen.tsx'),
+    path.join(ONBOARDING_ROUTE_DIR, 'pref1.tsx'),
+    path.join(ONBOARDING_ROUTE_DIR, 'pref2.tsx'),
+  ];
+
+  it('PrefStep2Page 는 취향 저장 PUT 훅을 배선한다(긍정 — 조용한 미배선 회귀 차단)', () => {
+    expect(fs.existsSync(PREF2_PAGE)).toBe(true);
+    const source = read(PREF2_PAGE);
+    expect(source.includes('usePutMePreferences')).toBe(true);
+    expect(source.includes('toPreferenceInput')).toBe(true);
+  });
+
+  it('스토어·1/2·화면·라우트는 여전히 서버 저장 계층을 참조하지 않는다', () => {
+    SERVER_FREE_FILES.forEach((file) => {
       expect({ file, exists: fs.existsSync(file) }).toEqual({
         file,
         exists: true,
       });
     });
 
-    // 부정 — 저장 엔드포인트·함수·네트워크 계층 참조가 전혀 없다.
-    const offenders = files.flatMap((file) => {
+    const offenders = SERVER_FREE_FILES.flatMap((file) => {
       const source = read(file);
       const hits = [
         '/me/preferences',
-        'updatePreferences',
+        'usePutMePreferences',
         '@/shared/api',
       ].filter((needle) => source.includes(needle));
       return hits.map((needle) => `${file}: ${needle}`);

@@ -16,6 +16,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  BackChevronGlyph,
   InfoGlyph,
   SearchGlyph,
   WarningTriangleGlyph,
@@ -40,6 +41,9 @@ export interface UnifiedSearchStayCard {
 }
 
 export interface UnifiedSearchScreenProps {
+  /** 앱바 뒤로가기(TRIP-469 — RegionPickerScreen 과 패턴 통일). 목적지는 페이지가 정한다.
+   * 미지정이면 정직한 스텁(버튼은 렌더되되 무동작). */
+  onBack?: () => void;
   /** 검색창 현재 값 — 입력은 d05 에서 받는다(d01 은 Pressable 진입 버튼일 뿐). */
   searchText: string;
   onChangeSearch: (text: string) => void;
@@ -106,6 +110,7 @@ function CardPhoto(): ReactElement {
 }
 
 export function UnifiedSearchScreen({
+  onBack,
   searchText,
   onChangeSearch,
   heading,
@@ -116,6 +121,12 @@ export function UnifiedSearchScreen({
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="explore-search-root" className="flex-1 bg-canvas">
+        {/* 앱바 — RegionPickerScreen 과 같은 뒤로가기(TRIP-469). */}
+        <View className="flex-row items-center gap-sm px-lg py-sm">
+          <Pressable testID="explore-search-back" onPress={onBack} hitSlop={8}>
+            <BackChevronGlyph />
+          </Pressable>
+        </View>
         <ScrollView
           className="flex-1"
           showsVerticalScrollIndicator={false}
@@ -156,6 +167,13 @@ export function UnifiedSearchScreen({
                 testID="explore-search-region-retry"
                 onRetry={region.onRetry}
               />
+            ) : region.rows.length === 0 ? (
+              <Text
+                testID="explore-search-region-empty"
+                className="py-2xl text-center font-noto text-label text-muted"
+              >
+                검색 결과가 없어요
+              </Text>
             ) : (
               <View className="gap-xs">
                 {region.rows.map((row) => (

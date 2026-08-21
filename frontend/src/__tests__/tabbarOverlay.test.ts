@@ -133,7 +133,16 @@ describe('AC-O3 · 콘텐츠 하단 여백 ≥ 탭바 높이', () => {
   });
 
   it('일정 빈 상태는 중앙 정렬이라 오버레이 하단에 가릴 항목이 없다 (선제 green)', () => {
-    const p = path.join(ROOT, 'app', '(tabs)', 'itinerary.tsx');
+    // TRIP-468: 일정 탭이 리다이렉트→"내 여행 목록"으로 바뀌며 빈 상태가
+    // (tabs)/itinerary.tsx → features/itinerary/ui/MyTripsListScreen.tsx 로 이주했다.
+    // 가드 의도(중앙정렬 빈 상태)는 그대로, 파일 타깃만 이동한 화면으로 재조준한다.
+    const p = path.join(
+      ROOT,
+      'features',
+      'itinerary',
+      'ui',
+      'MyTripsListScreen.tsx'
+    );
     const src = read(p);
     // 정체성 앵커 — 이 파일이 일정 탭 빈 상태다.
     expect(src).toContain('itinerary-tab-empty');
