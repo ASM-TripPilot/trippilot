@@ -62,6 +62,7 @@ export default function ExploreRoute(): ReactElement {
       poiId: place.poiId,
       name: place.nameKo,
       region: place.region ?? '',
+      imageUrl: place.imageUrl ?? null,
     }));
 
   const items = stay.data?.items ?? [];

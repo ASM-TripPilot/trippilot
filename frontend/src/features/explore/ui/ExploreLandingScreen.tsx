@@ -16,7 +16,7 @@
  * AC-O3). 탭바는 SafeArea 를 모르는 순수 뷰라 하단 여백은 콘텐츠(이 화면) 쪽에 둔다(repo-trap).
  */
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -34,11 +34,13 @@ export interface StayCardVM {
   priceText: string;
 }
 
-/** 가볼 곳 레인 카드(TRIP-470) — 사진 URL·저장 하트는 계약/스코프 밖이라 이름·지역만. */
+/** 가볼 곳 레인 카드(TRIP-470) — 이름·지역 + 사진(TRIP-496, `Place.imageUrl` 계약에 존재).
+ *  저장 하트는 여전히 스코프 밖. `imageUrl` 은 옵셔널(없으면 회색 플레이스홀더, 지어내지 않음·INV-1). */
 export interface PlaceCardVM {
   poiId: string;
   name: string;
   region: string;
+  imageUrl?: string | null;
 }
 
 export interface ExploreLandingScreenProps {
@@ -178,8 +180,8 @@ function StayCard({
   );
 }
 
-// 가볼 곳 레인 카드(TRIP-470) — 사진 회색 자리 + 이름·지역. 저장 하트·가격 없음(스코프 밖).
-// 카드 press → d06 상세. 사진 URL 은 계약에 없어 지어내지 않는다(INV-1).
+// 가볼 곳 레인 카드(TRIP-470) — 사진 + 이름·지역. 저장 하트·가격 없음(스코프 밖). 카드 press → d06 상세.
+// 사진은 `imageUrl` 이 있을 때만 그린다 — 없으면 회색 플레이스홀더(기본 이미지 발명 금지·INV-1, TRIP-496).
 function PlaceCard({
   card,
   onPress,
@@ -194,7 +196,16 @@ function PlaceCard({
       onPress={() => onPress(card.poiId)}
       className="w-[160px]"
     >
-      <View className="h-[110px] w-full rounded-card bg-surface-strong" />
+      {card.imageUrl ? (
+        <Image
+          testID={`explore-place-card-image-${card.poiId}`}
+          source={{ uri: card.imageUrl }}
+          resizeMode="cover"
+          className="h-[110px] w-full rounded-card bg-surface-strong"
+        />
+      ) : (
+        <View className="h-[110px] w-full rounded-card bg-surface-strong" />
+      )}
       <Text
         numberOfLines={1}
         className="mt-sm font-noto-bold text-card-title font-bold text-ink"
