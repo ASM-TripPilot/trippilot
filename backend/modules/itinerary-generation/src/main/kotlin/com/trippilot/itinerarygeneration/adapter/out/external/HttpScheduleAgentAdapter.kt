@@ -37,6 +37,8 @@ import java.util.UUID
 @ConditionalOnProperty(name = ["trippilot.ai.schedule.mode"], havingValue = "http")
 class HttpScheduleAgentAdapter(
     private val scheduleAgentRestClient: RestClient,
+    /** 편집 경로 전용 — 생성만큼 오래 기다리지 않는다(설정 주석 참고). */
+    private val scheduleAgentBoundedRestClient: RestClient,
     private val localCandidates: LocalSlotCandidateSource,
     private val clock: Clock,
 ) : ScheduleAgentPort {
@@ -55,8 +57,13 @@ class HttpScheduleAgentAdapter(
      * 경계 POST 공통 — 오류 상태는 도메인 실패로, 네트워크·역직렬화 실패는 재시도 가능 실패로 번역한다.
      * **재시도는 하지 않는다**(호출자가 폴백을 결정한다).
      */
-    private fun <T : Any> post(path: String, body: Any, type: Class<T>): T = try {
-        scheduleAgentRestClient.post()
+    private fun <T : Any> post(
+        path: String,
+        body: Any,
+        type: Class<T>,
+        client: RestClient = scheduleAgentRestClient,
+    ): T = try {
+        client.post()
             .uri(path)
             .body(body)
             .retrieve()
@@ -84,6 +91,7 @@ class HttpScheduleAgentAdapter(
             VALIDATE_PATH,
             AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS)),
             AiValidateResponse::class.java,
+            scheduleAgentBoundedRestClient,
         ).violations.map { it.toDomain() }
 
     /**
@@ -100,6 +108,7 @@ class HttpScheduleAgentAdapter(
                 requestMeta(REPAIR_DEADLINE_MS),
             ),
             AiRepairResponse::class.java,
+            scheduleAgentBoundedRestClient,
         )
         val repaired = response.repaired ?: return RepairResult(solution, emptyList())
         return try {

@@ -33,16 +33,29 @@ class ScheduleAgentConfiguration {
     fun scheduleAgentRestClient(
         properties: ScheduleAgentProperties,
         deadlines: ScheduleDeadlineProperties,
-    ): RestClient =
+    ): RestClient = client(properties, deadlines.waitCeilingMs + properties.readTimeoutMarginMs)
+
+    /**
+     * **짧게 끊는 클라이언트** — 편집 재검증(validate)·최소수리(repair)용.
+     *
+     * 이 둘은 사용자의 편집 요청 **안에서 동기로** 돈다. 편집은 "AI 가 죽어도 막지 않는다"가 설계 의도인데
+     * ([com.trippilot.itinerarygeneration.application.Revalidation]), 그 회복은 **소켓이 끊긴 다음에야** 작동한다.
+     * 생성용 상한(시간제약 해제 시 612초)을 그대로 쓰면 AI 가 응답을 멈췄을 때 편집이 10분간 막힌다 —
+     * 막지 않겠다는 의도가 뒤집힌다. 값의 근거는 [ScheduleDeadlineProperties.editWait] 에 있다.
+     */
+    @Bean
+    fun scheduleAgentBoundedRestClient(
+        properties: ScheduleAgentProperties,
+        deadlines: ScheduleDeadlineProperties,
+    ): RestClient = client(properties, deadlines.editWait.toMillis() + properties.readTimeoutMarginMs)
+
+    private fun client(properties: ScheduleAgentProperties, readTimeoutMs: Long): RestClient =
         RestClient.builder() // 전용 빌더(공유 빈 미사용)
             .baseUrl(properties.baseUrl)
             .requestFactory(
                 SimpleClientHttpRequestFactory().apply {
                     setConnectTimeout(Duration.ofMillis(properties.connectTimeoutMs))
-                    // 소켓 read 1회 상한 = **기다려 주기로 한 시간** + 마진.
-                    // 시한을 안 걸 때(기본)는 그 시간이 20초가 아니라 610초다 — 예전 산식을 그대로 두면
-                    // 우리가 22초에 먼저 끊어, 시간제약을 푼 의미가 사라지고 증상은 "전부 폴백"으로만 보인다.
-                    setReadTimeout(Duration.ofMillis(deadlines.waitCeilingMs + properties.readTimeoutMarginMs))
+                    setReadTimeout(Duration.ofMillis(readTimeoutMs))
                 },
             )
             .messageConverters { it.add(0, JacksonJsonHttpMessageConverter(boundaryMapper())) }

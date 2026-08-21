@@ -10,6 +10,11 @@ import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration
 import com.trippilot.itinerarygeneration.application.GenerationConfiguration
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import io.kotest.matchers.comparables.shouldBeGreaterThan
+import io.kotest.matchers.comparables.shouldBeLessThan
+import io.kotest.matchers.shouldBe
+import org.springframework.web.client.RestClient
+import java.time.Duration
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -56,4 +61,39 @@ class ScheduleAgentSwitchTest : StringSpec({
             ctx.getBean(ScheduleAgentPort::class.java).shouldBeInstanceOf<HttpScheduleAgentAdapter>()
         }
     }
+
+    /**
+     * **편집은 생성만큼 기다리지 않는다.**
+     *
+     * 편집(PUT)은 `validate` 를 요청 안에서 동기로 부른다. "AI 가 죽어도 편집은 막지 않는다"가 설계
+     * 의도인데(`Revalidation`), 그 회복은 **소켓이 끊긴 다음에야** 작동한다. 생성용 상한(시간제약을
+     * 풀면 612초)을 공유하면 AI 가 응답을 멈췄을 때 편집이 10분간 막혀 의도가 뒤집힌다.
+     */
+    "편집용 클라이언트는 생성용보다 짧은 read 상한을 쓴다" {
+        runner.withPropertyValues(
+            "trippilot.ai.schedule.mode=http",
+            "trippilot.ai.schedule.base-url=http://ai:8000",
+        ).run { ctx ->
+            val generate = readTimeoutOf(ctx.getBean("scheduleAgentRestClient", RestClient::class.java))
+            val bounded = readTimeoutOf(ctx.getBean("scheduleAgentBoundedRestClient", RestClient::class.java))
+
+            // 기본(시한 미전송)에서 생성은 AI 백스톱 600초를 넘겨 기다린다.
+            generate shouldBeGreaterThan Duration.ofSeconds(600)
+            // 편집은 짧게 끊되, 실측 재검증(약 20초)을 자르지 않을 만큼은 준다.
+            bounded shouldBe Duration.ofMillis(62_000)
+            bounded shouldBeLessThan generate
+        }
+    }
 })
+
+/** 스프링이 값을 노출하지 않아 반사로 읽는다 — 상한이 실제로 갈렸는지는 이 방법으로만 확인된다. */
+private fun readTimeoutOf(client: RestClient): Duration {
+    fun field(target: Any, name: String): Any? = generateSequence(target.javaClass) { it.superclass }
+        .mapNotNull { c -> runCatching { c.getDeclaredField(name) }.getOrNull() }
+        .firstOrNull()?.apply { isAccessible = true }?.get(target)
+
+    val factory = requireNotNull(field(client, "clientRequestFactory") ?: field(client, "requestFactory")) {
+        "RestClient 내부 요청 팩토리를 찾지 못했다 — 스프링 구조가 바뀌었으면 이 테스트를 고쳐야 한다."
+    }
+    return Duration.ofMillis((requireNotNull(field(factory, "readTimeout")) as Number).toLong())
+}

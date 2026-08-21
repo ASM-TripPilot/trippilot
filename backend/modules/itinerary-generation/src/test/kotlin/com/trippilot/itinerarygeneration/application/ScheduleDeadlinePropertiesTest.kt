@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.application
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.comparables.shouldBeGreaterThan
+import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import java.time.Duration
 
@@ -59,4 +60,16 @@ class ScheduleDeadlinePropertiesTest : StringSpec({
     "시한을 거는 모드의 기준은 종전 5분이다" {
         ScheduleDeadlineProperties(enforced = true).staleAfter shouldBe Duration.ofMinutes(5)
     }
+    /**
+     * **편집 상한은 실측 재검증보다 넉넉하고 생성 상한보다는 짧다.** 시한(3·5초)에 맞춰 조이면
+     * 정상 재검증이 잘려 편집이 위반 표시를 잃고, 생성용을 공유하면 AI 가 멈췄을 때 편집이 10분 막힌다.
+     * 실측(2026-08-21): validate 20.1초 · repair 20.7초.
+     */
+    "편집 상한은 실측 재검증보다 크고 생성 상한보다 작다" {
+        listOf(ScheduleDeadlineProperties(), ScheduleDeadlineProperties(enforced = true)).forEach { p ->
+            p.editWait shouldBeGreaterThan Duration.ofSeconds(25)
+            p.editWait.toMillis() shouldBeLessThan p.unenforcedWaitMs
+        }
+    }
+
 })
