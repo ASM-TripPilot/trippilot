@@ -303,7 +303,7 @@ def test_measure_legs_err_pct_formula():
     )
     assert failure is None
     assert legs == [{
-        "from": "장소-p0", "to": "장소-p1", "est_min": est,
+        "from": "장소-p0", "to": "장소-p1", "mode": "PUBLIC", "est_min": est,
         "real_min": 20.0, "err_pct": round((est - 20.0) / 20.0 * 100, 1),
     }]
 
@@ -326,6 +326,57 @@ def test_measure_legs_stops_at_first_failure_with_partial_legs():
     assert len(legs) == 1  # 실패 전까지의 부분 실측만
     assert failure is not None and "한도 초과" in failure
     assert travel.calls == 2  # 실패 지점에서 중단 — 남은 쌍에 호출 반복 없음
+
+
+class ModeGatedTravel:
+    """허용 모드만 성공, 나머지는 403 — 폴백 체인 검증용 (allowed=None이면 전부 403)."""
+
+    def __init__(self, allowed: TransportMode | None) -> None:
+        self._allowed = allowed
+        self.calls: list[TransportMode] = []
+
+    def measure(self, from_, to, mode) -> MeasuredTravel:
+        self.calls.append(mode)
+        if mode is not self._allowed:
+            raise TravelTimeError("HTTP 403 Forbidden (fake)")
+        return MeasuredTravel(
+            real_minutes=12.0, distance_km=1.0, source="fake", approximated=True,
+        )
+
+
+def test_measure_legs_falls_back_past_403_without_extra_probe():
+    """PUBLIC·CAR 403 → 같은 쌍을 WALK로 재시도해 확정 — 프로브 이중 호출 없음."""
+    selection = _leg_selection(3)
+    pairs = build_leg_pairs(selection, [_slot("p1"), _slot("p2")])
+    travel = ModeGatedTravel(allowed=TransportMode.WALK)
+    legs, failure = measure_legs(pairs, travel=travel, estimator=_ESTIMATOR)
+    assert failure is None
+    assert [leg["mode"] for leg in legs] == ["WALK", "WALK"]
+    # 첫 쌍에서 체인 소진(2회 403 + 1회 성공), 이후 쌍은 확정 수단으로 1회씩
+    assert travel.calls == [TransportMode.PUBLIC, TransportMode.CAR,
+                            TransportMode.WALK, TransportMode.WALK]
+
+
+def test_measure_legs_all_modes_403_reports_failure():
+    """WALK까지 403 — 남은 수단이 없으면 실패를 그대로 보고한다 (침묵 금지)."""
+    selection = _leg_selection(2)
+    pairs = build_leg_pairs(selection, [_slot("p1")])
+    legs, failure = measure_legs(
+        pairs, travel=ModeGatedTravel(allowed=None), estimator=_ESTIMATOR
+    )
+    assert legs == []
+    assert failure is not None and "403" in failure
+
+
+def test_measure_legs_explicit_mode_does_not_fall_back():
+    """호출자가 수단을 고정하면 403이라도 다른 수단으로 바꾸지 않는다."""
+    legs, failure = measure_legs(
+        build_leg_pairs(_leg_selection(2), [_slot("p1")]),
+        travel=ModeGatedTravel(allowed=TransportMode.WALK),
+        estimator=_ESTIMATOR,
+        mode=TransportMode.PUBLIC,
+    )
+    assert legs == [] and failure is not None and "403" in failure
 
 
 def test_attach_skips_without_travel_port():
@@ -351,7 +402,7 @@ def test_attach_records_legs_schema():
     attach_leg_verification(result, selection, FakeTravel(15.0), _ESTIMATOR)
     assert len(result["legs"]) == 2  # 앵커→p1, p1→p2
     for leg in result["legs"]:
-        assert set(leg) == {"from", "to", "est_min", "real_min", "err_pct"}
+        assert set(leg) == {"from", "to", "mode", "est_min", "real_min", "err_pct"}
         assert isinstance(leg["est_min"], int)
         assert leg["real_min"] == 15.0
 
