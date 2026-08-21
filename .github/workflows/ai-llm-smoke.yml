@@ -183,7 +183,10 @@ jobs:
               git show FETCH_HEAD:rehearsal_log.jsonl > rehearsal_log.jsonl 2>/dev/null || : > rehearsal_log.jsonl
               BASE_TREE=$(git ls-tree --full-tree FETCH_HEAD | grep -v $'\trehearsal_log.jsonl$' || true)
             fi
-            jq -c . rehearsal_result.json >> rehearsal_log.jsonl
+            # 산출은 지역별 결과 배열 — 한 줄 = 한 지역이라야 로그가 읽힌다.
+            # 예전 단일 객체 산출도 그대로 받는다(배열이 아니면 그 자체를 한 줄로).
+            jq -c 'if type=="array" then .[] else . end' rehearsal_result.json \
+              >> rehearsal_log.jsonl
             BLOB=$(git hash-object -w rehearsal_log.jsonl)
             TREE=$({ [ -n "$BASE_TREE" ] && printf '%s\n' "$BASE_TREE"; \
                      printf '100644 blob %s\trehearsal_log.jsonl\n' "$BLOB"; } | git mktree)

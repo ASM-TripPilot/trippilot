@@ -36,6 +36,7 @@ from smoke_itinerary import (  # noqa: E402
     load_proposals,
     measure_legs,
     run_rehearsal,
+    select_rehearsal_batch,
     select_rehearsal_pois,
 )
 
@@ -497,3 +498,55 @@ def test_없는_region_은_조용히_랜덤으로_넘어가지_않는다():
     entries = tuple((p, "해운대구") for p in _leg_selection(8).pois)
     with pytest.raises(SelectionError, match="수집분에 없다"):
         select_rehearsal_pois(entries, "2026-08-21", region="없는구")
+
+
+# ── 다지역 배치 (SMOKE_REGIONS) ────────────────────────────────────────
+# 하루 한 지역만 보면 커버리지가 얇다 — 수집은 17개 시도로 퍼져 있는데 검증은
+# 한 곳뿐이라, 어느 지역 데이터가 못 쓸 상태인지 며칠이 지나야 드러난다.
+
+def _multi_region_entries(regions: dict[str, int]):
+    """{지역명: POI수} → entries. 지역마다 좌표를 띄워 반경이 안 섞이게 한다."""
+    out, i = [], 0
+    for r, n in regions.items():
+        base_lat = _BASE.lat + i * 2.0          # 2도 ≈ 222km — 반경 8km 밖
+        out += [(_poi(f"{r}-{k}", base_lat + 0.005 * k, _BASE.lng), r)
+                for k in range(n)]
+        i += 1
+    return tuple(out)
+
+
+def test_배치는_서로_다른_지역을_고른다():
+    entries = _multi_region_entries({"가구": 8, "나구": 8, "다구": 8})
+    picked = select_rehearsal_batch(entries, "2026-08-21", count=3,
+                                    min_pois=3, max_pois=5)
+    assert len({s.region for s in picked}) == 3
+
+
+def test_배치는_같은_날_같은_집합을_고른다():
+    entries = _multi_region_entries({"가구": 8, "나구": 8, "다구": 8, "라구": 8})
+    a = select_rehearsal_batch(entries, "2026-08-21", count=2, min_pois=3, max_pois=5)
+    b = select_rehearsal_batch(entries, "2026-08-21", count=2, min_pois=3, max_pois=5)
+    assert [s.region for s in a] == [s.region for s in b]
+
+
+def test_반경_미달_지역은_건너뛰고_다음_후보로():
+    """한 지역이 얇다고 그날 검증을 통째로 잃지 않는다."""
+    entries = _multi_region_entries({"얇은구": 2, "가구": 8, "나구": 8})
+    picked = select_rehearsal_batch(entries, "2026-08-21", count=2,
+                                    min_pois=3, max_pois=5)
+    assert "얇은구" not in {s.region for s in picked}
+    assert len(picked) == 2
+
+
+def test_요청보다_적게_확보해도_있는_만큼_돌린다():
+    entries = _multi_region_entries({"가구": 8, "얇은구": 2})
+    picked = select_rehearsal_batch(entries, "2026-08-21", count=3,
+                                    min_pois=3, max_pois=5)
+    assert [s.region for s in picked] == ["가구"]   # 부분 성공
+
+
+def test_전부_선택_불가면_실패한다():
+    entries = _multi_region_entries({"얇은구": 2, "더얇은구": 1})
+    with pytest.raises(SelectionError, match="전부 선택 불가"):
+        select_rehearsal_batch(entries, "2026-08-21", count=2,
+                               min_pois=3, max_pois=5)
