@@ -115,6 +115,12 @@ data class ScheduleAgentInput(
      * AI 측 대응: `ItineraryProblem.excluded_poi_ids`(후보 풀·프롬프트·게이트에 동일 적용).
      */
     val excludedPoiIds: List<UUID> = emptyList(),
+    /**
+     * 설명 생략 요청(TRIP-479) — false 면 AI 가 설명 LLM 단계를 건너뛰고 즉시 반환하며,
+     * 설명은 `POST /ai/v1/itinerary/explanations` 로 별도 조회한다. true(기본) = 기존 동작.
+     * 맨 뒤 배치는 기본값 파라미터 규칙(anti-patterns) — 기존 호출 전부 무변경.
+     */
+    val includeExplanations: Boolean = true,
 )
 
 data class TripContext(
