@@ -80,6 +80,26 @@ def test_도보_치환은_대중교통보다_느려지지_않는다() -> None:
         assert _est(km, TransportMode.PUBLIC).internal_minutes <= transit_only
 
 
+def test_600m_이하는_계산상_대중교통이_빨라도_걷는다() -> None:
+    """사람은 600m 를 버스로 가지 않는다 — 속도 상수가 바뀌어도 이 바닥은 유지된다."""
+    cfg = SolverConfig()
+    # 도보를 일부러 느리게 만들어 min() 만으로는 대중교통이 이기게 한다
+    slow = SolverConfig(speeds_kmph={**cfg.speeds_kmph, TransportMode.WALK: 0.5})
+    km = cfg.public_walk_max_km - 0.05
+    e = TravelEstimator(slow).estimate(
+        GeoPoint(35.0, 129.0), GeoPoint(35.0 + km / 111.19, 129.0), TransportMode.PUBLIC)
+    assert e.source == "haversine_x_detour(walk)"
+
+
+def test_600m_바로_위는_빠른_쪽을_따른다() -> None:
+    cfg = SolverConfig()
+    slow = SolverConfig(speeds_kmph={**cfg.speeds_kmph, TransportMode.WALK: 0.5})
+    km = cfg.public_walk_max_km + 0.05
+    e = TravelEstimator(slow).estimate(
+        GeoPoint(35.0, 129.0), GeoPoint(35.0 + km / 111.19, 129.0), TransportMode.PUBLIC)
+    assert e.source == "haversine_x_detour"   # 도보가 느리므로 대중교통
+
+
 def test_도보_모드_자체는_바뀌지_않는다() -> None:
     """치환은 PUBLIC 요청에만 적용된다 — WALK 요청은 버퍼 포함 그대로."""
     assert _est(0.3, TransportMode.WALK).source == "haversine_x_detour"

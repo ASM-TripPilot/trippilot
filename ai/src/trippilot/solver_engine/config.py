@@ -62,6 +62,11 @@ class SolverConfig:
     local_search_min_remaining_ms: int = 3000
     buffer_min: int = 15                # G106 솔버 내부 버퍼
     detour_factor: float = 1.3          # 직선거리 우회계수
+    # 대중교통 요청이라도 이 거리(직선, km) 이하는 걷는다 — 계산상 대중교통이 빨라도.
+    # 정류장까지 걸어가 기다리고 갈아타는 수고는 buffer_min 하나로 다 담기지 않고,
+    # 사람은 600m 를 버스로 가지 않는다. 현재 상수에서 손익분기(직선 약 0.7km)보다
+    # 안쪽이라 지금은 min() 과 결론이 같지만, 속도 상수가 바뀌어도 이 바닥은 유지된다.
+    public_walk_max_km: float = 0.6
     speeds_kmph: dict[TransportMode, float] = field(default_factory=_default_speeds)
     safety: dict[TransportMode, float] = field(default_factory=_default_safety)
     # ── 식사 시간대 소프트 보정 (TRIP-379 신설 — 정본에 기존 규칙 없음:
@@ -99,6 +104,8 @@ class SolverConfig:
                 raise ValueError(f"{name} 음수 불가")
         if self.detour_factor <= 0:
             raise ValueError("detour_factor 양수 필요")
+        if self.public_walk_max_km < 0:
+            raise ValueError("public_walk_max_km 음수 불가")
         for name in ("lunch_window_min", "dinner_window_min"):
             lo, hi = getattr(self, name)
             if not (0 <= lo < hi <= 1440):
