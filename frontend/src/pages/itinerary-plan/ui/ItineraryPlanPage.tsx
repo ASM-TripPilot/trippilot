@@ -135,6 +135,15 @@ export function ItineraryPlanPage({
     });
   }
 
+  // 완성(listed) 일정 → h24 편집 진입(TRIP-482). `goCreate` 의 동적 라우트 push 관용구(객체 1인자)를
+  // 복제해 tripId 를 경로 파라미터에 싣는다. 화면(TimelineScreen)은 라우팅을 모르므로 여기서 배선한다.
+  function goEdit(): void {
+    router.push({
+      pathname: '/trips/[tripId]/itinerary/edit',
+      params: { tripId },
+    });
+  }
+
   const trip = useGetTripsTripId(tripId);
   const itinerary = useGetTripsTripIdItinerary(tripId);
   // TError=unknown 으로 열어 onError 의 error 를 axios 판정(isNotFound)에 그대로 태운다.
@@ -252,6 +261,7 @@ export function ItineraryPlanPage({
       confirmedSubtitle={confirmedSubtitle}
       confirmError={confirmError}
       onConfirm={handleConfirm}
+      onEdit={goEdit}
       onSelectDay={setActiveDayIndex}
       onBack={handleBack}
     />

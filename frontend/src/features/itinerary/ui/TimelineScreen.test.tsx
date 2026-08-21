@@ -206,6 +206,7 @@ function brandTokensIn(node: ReactTestInstance): string[] {
 const onSelectDay = jest.fn();
 const onBack = jest.fn();
 const onConfirm = jest.fn();
+const onEdit = jest.fn();
 
 type Overrides = {
   header?: ItineraryHeaderData;
@@ -228,6 +229,7 @@ function renderScreen(over: Overrides = {}) {
       onSelectDay={onSelectDay}
       onBack={onBack}
       onConfirm={onConfirm}
+      onEdit={onEdit}
       {...over}
     />
   );
@@ -237,6 +239,7 @@ beforeEach(() => {
   onSelectDay.mockClear();
   onBack.mockClear();
   onConfirm.mockClear();
+  onEdit.mockClear();
 });
 
 describe('C1 · 탐지기 자가검사 — 이게 통과해야 아래 개수·순서 단언이 의미를 갖는다', () => {
@@ -455,7 +458,11 @@ describe('🔴 C12 · AC4·AC7 — 읽기전용: 확정 CTA 부재 + 하단 비�
     const share = screen.getByTestId('itinerary-confirmed-share');
 
     expect(edit).toBeDisabled();
-    expect(edit).toHaveTextContent(/확정된 일정은 아직 수정할 수 없어요/);
+    // TRIP-482 정책 B(01b Q2) — 확정 편집(CONFIRMED→PLANNED 역전이)은 백엔드 미구현(G-U3-6)이라
+    //   비활성 유지하되, 사유를 임시성 모호어("아직")에서 **상태 서술**로 정정한다(INV-4). 문자열이
+    //   아닌 정규식인 이유: 이 버튼은 라벨+사유 두 Text 를 담아 toHaveTextContent(문자열)=완전일치가
+    //   실패한다(부분매치는 정규식뿐 — 02a ★1·§5-A node_modules 실검증).
+    expect(edit).toHaveTextContent(/확정한 일정 편집은 준비 중이에요/);
     expect(() => fireEvent.press(edit)).not.toThrow();
 
     // [공유하기] — 비활성 + 사유 + ★1 **brand색 부재**. Figma 는 이 버튼을 분홍 primary 로 그리므로,
@@ -516,5 +523,41 @@ describe('🔴 C14 · Q3 — appbar 공유 아이콘은 CONFIRMED 에서만 뜨�
     confirmed.unmount();
     renderScreen({ status: 'PLANNED' });
     expect(screen.queryByTestId('itinerary-view-share')).toBeNull();
+  });
+});
+
+/**
+ * 🔴 C15 · AC1·AC2 (TRIP-482) — h24 편집으로 **들어가는 문**은 PLANNED(h25) 얼굴에만 뜬다.
+ *
+ * 무엇을 보장하나: h25 완성 일정에 편집 진입 어포던스(신규 testID `itinerary-view-edit`)가 생기고
+ * press 가 `onEdit` 콜백을 부른다. 그 어포던스가 CONFIRMED(h34)로 **새지 않는다**(한 파일이 status
+ * 로 두 얼굴을 겸하는 함정 — 잘못 두면 확정 일정에도 편집 문이 열린다).
+ *
+ * **형태는 안 잠근다**(직접 버튼 vs kebab 메뉴 vs FAB — 01b Q1 로 구현·6-b 실기 이연) — testID·press·
+ * status 게이트만 잰다. 라우팅(→ edit 라우트 push)은 화면이 모르므로(구조 가드) 페이지 통합테스트가
+ * 별도로 잠근다(`ItineraryPlanPage.edit.integration.test.tsx`).
+ */
+describe('🔴 C15 · AC1·AC2 — 편집 진입 어포던스는 PLANNED 에만 뜨고 press 는 onEdit 을 부른다', () => {
+  it('PLANNED 앱바에 itinerary-view-edit 가 있고, 누르면 onEdit 이 정확히 1회 불린다', () => {
+    // 준비 — 기본 renderScreen 은 PLANNED. onEdit 은 모듈 목(beforeEach 에서 클리어).
+    renderScreen({ status: 'PLANNED' });
+
+    // 실행 — 편집 진입 어포던스를 누른다(부재면 getByTestId 가 throw → red).
+    fireEvent.press(screen.getByTestId('itinerary-view-edit'));
+
+    // 단언 — 콜백이 정확히 1회. 라우팅 자체는 여기서 안 본다(페이지 통합이 잠금).
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it('CONFIRMED(h34) 얼굴에는 itinerary-view-edit 가 없다 — onEdit 을 줘도 안 뜬다(status 게이트)', () => {
+    // 준비 — onEdit 은 기본 JSX 로 여전히 넘어간다. 그런데도 CONFIRMED 는 어포던스를 그리면 안 된다
+    //   (onEdit 유무가 아니라 status 가 원인임을 증명하는 가장 강한 형태 — 02a ★3).
+    renderScreen({
+      status: 'CONFIRMED',
+      confirmedSubtitle: '6월 10일 – 13일 · 부산 여행 · 9곳',
+    });
+
+    // 단언 — h34 에는 편집 진입 어포던스가 부재(그 자리는 하단 비활성 [일정 수정] 버튼 · C12).
+    expect(screen.queryByTestId('itinerary-view-edit')).toBeNull();
   });
 });

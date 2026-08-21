@@ -1907,6 +1907,7 @@ const PREVIEW_STATES: PreviewState[] = [
         onSelectDay={noop}
         onBack={noop}
         onConfirm={noop}
+        onEdit={noop}
       />
     ),
   },
