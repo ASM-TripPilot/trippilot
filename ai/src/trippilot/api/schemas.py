@@ -45,11 +45,16 @@ class GenerationMode(str, Enum):
 
 
 class RequestMetaSchema(BoundaryModel):
-    """IO-1 — 지연 예산 전파. day1 5s / 전체 20s."""
+    """IO-1 — 지연 예산 전파. 값은 백엔드 소유(종전 day1 5s / 전체 20s).
+
+    `deadline_ms` 미지정 = **시간제약 없음** (2026-08-21 FE 연동 팀 결정, TRIP-473)
+    — 예산 계단(INV-4)은 그대로 두고 시간 때문에 강등되지 않게만 한다. 제약을
+    재도입하려면 백엔드가 값을 다시 싣기만 하면 된다(AI 재작업 없음).
+    """
 
     request_id: str = Field(min_length=1)
     requested_at: dt.datetime
-    deadline_ms: int = Field(gt=0)
+    deadline_ms: int | None = Field(default=None, gt=0)
 
 
 class TripContextSchema(BoundaryModel):
