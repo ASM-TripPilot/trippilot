@@ -226,9 +226,14 @@ export function TripNewStep1Page({
   const wizardRegions = selectableRegions.map((region) => ({
     code: region.regionCode,
     name: region.name,
+    poiCount: region.poiCount,
   }));
   const sheetRegions = filterRegions(selectableRegions, destinationQuery).map(
-    (region) => ({ code: region.regionCode, name: region.name })
+    (region) => ({
+      code: region.regionCode,
+      name: region.name,
+      poiCount: region.poiCount,
+    })
   );
 
   // 5-c N-2: 배너가 뜬 뒤 드래프트를 고치면 배너는 옛 실패를 계속 보여주면서도 [다시 시도]는

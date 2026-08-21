@@ -97,12 +97,13 @@ export interface TripWizardStep1ScreenProps {
   preferenceChips: string[];
   /** 도시 추가 시트 목록 — `pages` 층이 내려준다. 화면은 `@/features/explore/model/regions`를
    * 직접 import하지 않는다(features 간 import 금지 관례) — 형태만 구조적으로 받는다. */
-  regions: readonly { code: string; name: string }[];
+  regions: readonly { code: string; name: string; poiCount?: number }[];
   /** 시트의 검색 결과 목록(TRIP-387) — `pages`가 `filterRegions(query)`로 좁혀 내린다. 미제공
    * 이면 `regions`(full)로 폴백한다(하위호환). ⚠️ 불일치 결과인 빈 배열 `[]`은 폴백 대상이
    * 아니다 — 폴백은 nullish `??`라 null·undefined에만 걸린다. 빈 목록이 full로 되살아나면
-   * "일치 없음"이 조용히 "전체"로 되돌아간다(AC-2 핵심 함정). */
-  sheetRegions?: readonly { code: string; name: string }[];
+   * "일치 없음"이 조용히 "전체"로 되돌아간다(AC-2 핵심 함정).
+   * `poiCount`(TRIP-363)는 additive — 0이면 시트 칩에 "준비 중" 배지를 단다(INV-1 커버리지). */
+  sheetRegions?: readonly { code: string; name: string; poiCount?: number }[];
   /** 시트 검색 입력의 현재 값(제어 입력) — `pages`가 상태를 들고, 화면은 그대로 보여만 준다. */
   destinationQuery?: string;
   /** 검색 입력이 바뀌면 그대로 위로 올려보낸다 — 화면은 스스로 필터링하지 않는다(features 간
@@ -200,7 +201,7 @@ const COMPANION_ICONS: Record<string, GlyphComponent> = {
  * 없으면(이론상 도달 불가, 이 칸에서 추가하는 도시는 전부 그 목록에서 고른다) 이름 자체를
  * 폴백으로 쓴다. */
 function codeForRegionName(
-  regions: readonly { code: string; name: string }[],
+  regions: readonly { code: string; name: string; poiCount?: number }[],
   name: string
 ): string {
   return regions.find((region) => region.name === name)?.code ?? name;
@@ -1126,7 +1127,7 @@ export function TripWizardStep1Screen({
                         accessibilityRole="button"
                         accessibilityState={{ selected }}
                         onPress={() => setSheetRegionCode(region.code)}
-                        className={`rounded-pill px-md py-sm ${
+                        className={`flex-row items-center gap-xs rounded-pill px-md py-sm ${
                           selected
                             ? 'bg-primary'
                             : 'border border-hairline-strong bg-canvas'
@@ -1139,6 +1140,20 @@ export function TripWizardStep1Screen({
                         >
                           {region.name}
                         </Text>
+                        {/* POI 커버리지(TRIP-363) — poiCount 0이면 후보풀이 비어 일정이
+                            조용히 빈다(INV-1). 고르기 전에 "준비 중"으로 알린다(결정 a:
+                            고를 수는 있게 두되 배지로 경고 — INV-4). poiCount 미제공(구
+                            {code,name} 픽스처)이면 배지 없음(무회귀). */}
+                        {region.poiCount === 0 ? (
+                          <Text
+                            testID={`trip-wizard-destination-coming-soon-${region.code}`}
+                            className={`text-caption font-noto ${
+                              selected ? 'text-on-primary' : 'text-muted'
+                            }`}
+                          >
+                            준비 중
+                          </Text>
+                        ) : null}
                       </Pressable>
                     );
                   })}

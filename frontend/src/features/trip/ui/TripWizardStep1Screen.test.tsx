@@ -238,6 +238,45 @@ describe('AC-3 · 도시 추가 시트 (REGIONS 6지역 + 박수 지정)', () =>
   });
 });
 
+describe('TRIP-363 · POI 커버리지 배지 (poiCount 0 = "준비 중")', () => {
+  // 결정 a — poiCount 0 지역도 고를 수는 있게 두되, 고르기 전에 "준비 중"으로 알린다
+  // (INV-1 후보풀 빔 · INV-4 침묵 실패 금지). poiCount 미제공(구 {code,name})은 배지 없음.
+  const COVERAGE_REGIONS = [
+    { code: 'jeju', name: '제주', poiCount: 4 },
+    { code: 'hongcheon', name: '홍천군', poiCount: 0 },
+  ];
+
+  it('poiCount 0인 지역 칩엔 "준비 중" 배지가 뜨고, 0이 아니면 안 뜬다', () => {
+    render(<TripWizardStep1Screen {...props({ regions: COVERAGE_REGIONS })} />);
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // poiCount 0 → 배지 present.
+    expect(
+      screen.getByTestId('trip-wizard-destination-coming-soon-hongcheon')
+    ).toHaveTextContent(/준비 중/);
+    // poiCount>0 → 배지 absent(짝 — 무조건 배지를 다는 구현을 배제).
+    expect(
+      screen.queryByTestId('trip-wizard-destination-coming-soon-jeju')
+    ).toBeNull();
+  });
+
+  it('poiCount 0인 지역도 고를 수 있다 (결정 a — 배지로 경고하되 선택 자체는 막지 않는다)', () => {
+    const onAddDestination = jest.fn();
+    render(
+      <TripWizardStep1Screen
+        {...props({ regions: COVERAGE_REGIONS, onAddDestination })}
+      />
+    );
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // 준비 중 지역을 고르면 확정이 활성화된다(선택 가능).
+    fireEvent.press(
+      screen.getByTestId('trip-wizard-destination-region-hongcheon')
+    );
+    expect(screen.getByTestId('trip-wizard-destination-confirm')).toBeEnabled();
+  });
+});
+
 describe('AC-닫기 · 도시 추가 시트 닫기 어포던스 (TRIP-386)', () => {
   // 이 시트는 gorhom 바텀시트가 아니라 절대배치 View라, 자매 TripDateSheet와 달리
   // jest가 press·언마운트를 실제로 관측한다(바텀시트 목 사각 밖).
