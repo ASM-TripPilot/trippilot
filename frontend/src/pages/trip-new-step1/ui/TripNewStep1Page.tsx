@@ -252,6 +252,10 @@ export function TripNewStep1Page({
   // 연달아 들어온 두 번째 누름이 아직 옛 값을 읽는다. ref는 쓰는 즉시 보이고, 화면에
   // 그리는 값이 아니라 리렌더도 필요 없다.
   const submitLockedRef = useRef(false);
+  // 2/2 로 **넘어간 적이 있는가**. `submitLockedRef` 와 다른 축이다 — 잠금은 등록이 날아가는
+  // 중에도 켜지지만 이 값은 이동이 실제로 일어난 뒤에만 켜진다. `[다음]` 재탭을 이동으로
+  // 돌려보내는 문(`submit` 머리)이 이 값을 본다.
+  const navigatedRef = useRef(false);
 
   const createTrip = useCreateTrip();
   const savedStays = useSavedStays();
@@ -440,7 +444,9 @@ export function TripNewStep1Page({
 
     setMustVisitError(undefined);
     // 성공 — 잠금을 **풀지 않는다**. 이 화면의 일은 끝났고, 스택에 남은 step1으로 되돌아와
-    // `[다음]`을 다시 눌러도 여행이 하나 더 만들어지면 안 된다(되돌릴 수 없다).
+    // `[다음]`을 다시 눌러도 여행이 하나 더 만들어지면 안 된다(되돌릴 수 없다). 다만 그때
+    // 버튼이 죽어 보이지 않도록 이동만은 다시 하게, 여기서 이동 사실을 기록한다.
+    navigatedRef.current = true;
     router.push('/trips/new/step2');
   }
 
@@ -456,6 +462,17 @@ export function TripNewStep1Page({
     // 노출하는 값을 그대로 쓴다(01b Seed §기존 활용). 5-c W-1: `isPending`은 **생성** 요청만
     // 덮는다 — 생성이 끝나고 등록이 날아가는 창(수백 ms~수 초, 화면에 아무 변화가 없다)은
     // `submitLockedRef`가 덮는다. 그 창에서 다시 누르면 여행이 하나 더 만들어진다.
+    // 잠금은 **중복 생성**을 막으려는 것이지 버튼을 죽이려는 것이 아니다. 아래 일반 가드가
+    // 조용히 `return` 하면 활성인 `[다음]`이 아무 일도 안 해 사용자는 고장으로 읽는다
+    // (2/2 에서 뒤로 와 다시 누르는 흔한 경로 · 실측 2026-08-21). 이미 한 번 넘어간 뒤라면
+    // 새로 만들지 않고 그 여행의 2/2 로 다시 보낸다 — 생성도 등록도 타지 않으므로 "여행은
+    // 하나뿐"은 그대로다.
+    // ⚠️ 조건은 `submitLockedRef` 가 아니라 `navigatedRef` 다. 잠금은 **등록이 날아가는
+    // 중에도** 켜져 있어서(I-8), 잠금으로 열면 등록이 끝나기 전에 2/2 로 새어 나간다.
+    if (navigatedRef.current) {
+      router.push('/trips/new/step2');
+      return;
+    }
     if (!canProceed || createTrip.isPending || submitLockedRef.current) return;
 
     // 여행은 이미 만들어졌고 등록만 남았다 — 여기서 `POST /trips`를 다시 태우면 사용자에게

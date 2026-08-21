@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   BellGlyph,
+  HeartFilledGlyph,
   HeartOutlineGlyph,
   LocationPinGlyph,
   PlusGlyph,
@@ -785,7 +786,9 @@ function CreateTripFab({ onPress }: { onPress?: () => void }): ReactElement {
   );
 }
 
-// 담은 곳 바로가기 FAB(TRIP-470 · Figma a01 2091:1357) — + FAB 바로 위 원형 핑크 버튼, d02 로.
+// 담은 곳 바로가기 FAB(TRIP-470 · Figma a01 2091:1357) — + FAB 바로 위 원형 흰 버튼, d02 로.
+// 흰 배경 + 채움 하트다(핑크 배경 + 흰 아웃라인에서 뒤집었다) — 바로 아래 '+' FAB 이 이미
+// bg-primary 라, 둘 다 핑크면 두 원이 한 덩어리로 읽혀 구분이 안 된다.
 // 목적지는 라우트가 정하고(onPress 만 발화) 담은 곳 CTA(SoftNote)와 같은 콜백을 공유한다.
 function SavedPlacesFab({ onPress }: { onPress?: () => void }): ReactElement {
   return (
@@ -795,9 +798,9 @@ function SavedPlacesFab({ onPress }: { onPress?: () => void }): ReactElement {
       accessibilityLabel="담은 곳"
       onPress={onPress}
       style={fabShadow}
-      className="absolute bottom-[152px] right-lg h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
+      className="absolute bottom-[152px] right-lg h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
     >
-      <HeartOutlineGlyph size={24} />
+      <HeartFilledGlyph size={26} />
     </Pressable>
   );
 }
