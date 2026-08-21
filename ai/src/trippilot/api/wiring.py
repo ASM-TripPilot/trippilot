@@ -102,6 +102,7 @@ from trippilot.agents.planb.rag import PlanBRagPipeline, PlanBRagRequest
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
+from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.orchestrator import itinerary_orchestrator as core
@@ -808,8 +809,12 @@ def build_orchestrator(
         providers[ProviderKind.EVENT] = EventProvider(events)
     orchestrator = core.ItineraryOrchestrator(
         InfoCollector(providers),
-        PreferenceScoringWorker(
-            GatewayFacade(llm, renderer, ClosedSetGate(), c1_config, trace)
+        # 점수 캐시 (TRIP-477) — 2단계 생성(1차 day1→2차 잔여)의 중복 LLM 점수 제거.
+        # 폴백은 캐시하지 않으므로 UnwiredLlm·강등 경로 동작은 기존과 동일.
+        CachingScoringWorker(
+            PreferenceScoringWorker(
+                GatewayFacade(llm, renderer, ClosedSetGate(), c1_config, trace)
+            )
         ),
         provider,
         clock,
