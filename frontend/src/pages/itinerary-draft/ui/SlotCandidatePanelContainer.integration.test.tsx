@@ -19,26 +19,26 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 
-import { SlotCandidateSheetContainer } from './SlotCandidateSheetContainer';
+import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
 
 /**
- * h12 완전 AI 슬롯 교체 배선을 **실 HTTP 로** 태우는 심판(ItineraryEditPage.integration 골격).
+ * h12 완전 AI 슬롯 교체 배선을 **실 HTTP 로** 태우는 심판(TRIP-335→483 이관).
+ *
+ * 프레젠테이션이 바텀시트→인라인 패널로 바뀌었지만 **배선 로직은 재사용**이다 — 이 파일은
+ * 그 로직이 개명(`SlotCandidateSheetContainer`→`SlotCandidatePanelContainer`) 후에도 그대로
+ * 무는지를 실 요청으로 재확인한다(★D). testID 는 `-sheet`→`-panel` 개명분만 반영한다.
  *
  * 무엇을 보장하나:
- *  - 마운트(=시트 열림)에 slot-candidates POST 1건이 나가고 slotKey 만 실린다 — 제외목록·반경
- *    필드 없음(AC1·BR-U3-24 와이어).
- *  - 화면에 뜬 후보 카드 집합 = 응답 후보 집합(INV-1 와이어).
- *  - "선택" 탭 → 치환된 **전체 days** 를 PUT 1건으로, 성공 시 onClose + 조회 무효화 재조회(AC2).
- *  - ★핵심(AC4·repo-trap h09): 펜딩이 전파되기 전 **동기 연속 탭 2회여도 PUT 1건** — firedRef 강제.
- *  - PUT 실패(409·500·네트워크)는 인라인 오류로 뜨고 시트를 안 닫는다(AC7).
- *
- * 왜 통합 버킷인가: "PUT 이 몇 건 나갔나·바디가 맞나·무효화로 재조회했나" 는 훅을 목킹하면
- * 테스트의 *가정*이 된다. 실제 버튼 press 로 나간 요청·보이는 것만 관찰한다(선례 IS1·IS4).
+ *  - 마운트(=패널 열림)에 slot-candidates POST 1건, slotKey 만(BR-U3-24).
+ *  - 화면 후보 집합 = 응답 집합(INV-1) · "선택"→치환 전체 days PUT 1건·성공 시 onClose+재조회.
+ *  - ★h09: 동기 연속 탭 2회여도 PUT 1건(firedRef).
+ *  - PUT 409/500/네트워크 실패는 인라인 오류로 뜨고 패널을 안 닫는다(AC3·INV-4).
+ *  - 🔴 **헤더에 시간대가 관통된다**(`{시간대} — 다른 후보로 바꾸기`, K10 · 신규).
+ *  - 🔴 **응답 degraded===true 면 강등 고지가 뜬다**(K11 · AC6 · 신규).
  *
  * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=열고 선택 → 단언=나간 요청·보이는 것.
  */
 
-// 생성 클라이언트의 인증 계층이 expo-secure-store 를 정적으로 문다 — 실물 로드 회피(h25 선례).
 jest.mock('@/shared/storage', () => ({
   saveTokens: jest.fn().mockResolvedValue(undefined),
   getTokens: jest.fn().mockResolvedValue({
@@ -55,7 +55,7 @@ const DAY1 = '2026-06-10';
 const DAY2 = '2026-06-11';
 const CURRENT_SLOT_KEY = buildSlotKey(DAY1, 'a');
 
-/** day1=[a, b] · day2=[c](endsNextDay:true). 교체 대상은 day1 의 a. */
+/** day1=[a(09:30 → 오전), b] · day2=[c](endsNextDay:true). 교체 대상은 day1 의 a. */
 function itinerary(): Itinerary {
   const days: ItineraryDaysItem[] = [
     {
@@ -115,6 +115,7 @@ const CANDIDATES = {
     { poiId: 'Y', distanceRange: '1.1km', rationale: '조용한 카페' },
   ],
   radiusMUsed: 1100,
+  degraded: false,
 };
 
 let getCalls = 0;
@@ -123,6 +124,7 @@ let putCalls = 0;
 let postBody: unknown = null;
 let putBody: unknown = null;
 let putHandler: () => Response;
+let candidatesResponse: object = CANDIDATES;
 
 const mockClose = jest.fn();
 
@@ -134,6 +136,7 @@ beforeEach(() => {
   putCalls = 0;
   postBody = null;
   putBody = null;
+  candidatesResponse = CANDIDATES;
   mockClose.mockClear();
   setAccessToken('valid-access');
   putHandler = () => HttpResponse.json(itinerary());
@@ -148,7 +151,7 @@ beforeEach(() => {
       async ({ request }) => {
         postCalls += 1;
         postBody = await request.json();
-        return HttpResponse.json(CANDIDATES);
+        return HttpResponse.json(candidatesResponse);
       }
     ),
     http.put(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
@@ -176,7 +179,7 @@ function renderContainer() {
     );
   }
   return render(
-    <SlotCandidateSheetContainer
+    <SlotCandidatePanelContainer
       tripId={TRIP_ID}
       slotKey={CURRENT_SLOT_KEY}
       onClose={mockClose}
@@ -186,20 +189,19 @@ function renderContainer() {
 }
 
 const CANDIDATE_ROOT =
-  /^itinerary-candidate-(?!sheet|current|empty|error|name-|image-|distance-|rationale-|select-|radio-)/;
+  /^itinerary-candidate-(?!panel|current|empty|error|degraded|name-|image-|distance-|rationale-|select-|radio-)/;
 
-describe('🔴 SlotCandidateSheetContainer (h12) 배선', () => {
-  it('C1 · AC1·BR-U3-24 — 마운트에 slot-candidates POST 1건, slotKey 만 실린다(제외목록 없음)', async () => {
+describe('🔴 SlotCandidatePanelContainer (h12) 배선', () => {
+  it('K1 · AC1·BR-U3-24 — 마운트에 slot-candidates POST 1건, slotKey 만 실린다(제외목록 없음)', async () => {
     renderContainer();
 
     await waitFor(() => expect(postCalls).toBe(1));
     expect((postBody as { slotKey: string }).slotKey).toBe(CURRENT_SLOT_KEY);
-    // radiusM·concept·excludePoiIds 등 없음 — slotKey 하나뿐.
     expect(Object.keys(postBody as object).sort()).toEqual(['slotKey']);
     await screen.findByTestId('itinerary-candidate-X');
   });
 
-  it('C2 · INV-1 — 렌더 후보 카드 집합 = 응답 후보 집합', async () => {
+  it('K2 · INV-1 — 렌더 후보 카드 집합 = 응답 후보 집합', async () => {
     renderContainer();
 
     await screen.findByTestId('itinerary-candidate-X');
@@ -209,7 +211,7 @@ describe('🔴 SlotCandidateSheetContainer (h12) 배선', () => {
     expect(poiIds.sort()).toEqual(['X', 'Y'].sort());
   });
 
-  it('C3 · AC1·AC2 — "선택" 탭 → 치환된 전체 days 를 PUT 1건, 성공 시 onClose + 조회 재조회', async () => {
+  it('K3 · AC1·AC3 — "선택" 탭 → 치환된 전체 days 를 PUT 1건, 성공 시 onClose + 조회 재조회', async () => {
     renderContainer();
     await screen.findByTestId('itinerary-candidate-select-X');
     await waitFor(() => expect(getCalls).toBe(1));
@@ -218,28 +220,22 @@ describe('🔴 SlotCandidateSheetContainer (h12) 배선', () => {
 
     await waitFor(() => expect(putCalls).toBe(1));
     const body = putBody as EditItineraryRequest;
-    // 전체 교체 — 두 일자 전부.
     expect(body.days.map((d) => d.date)).toEqual([DAY1, DAY2]);
-    // a → X 치환 · 이웃 b 불변.
     expect(body.days[0].slots[0].poiId).toBe('X');
     expect(body.days[0].slots[1].poiId).toBe('b');
-    // 옛 시각 초까지 보존.
     expect(body.days[0].slots[0].startAt).toBe('09:30:00');
-    // 5필드뿐 — 제외목록 없음(와이어 확인).
     expect(Object.keys(body.days[0].slots[0]).sort()).toEqual(
       ['poiId', 'startAt', 'endAt', 'isFixed', 'endsNextDay'].sort()
     );
 
-    // 성공 → 시트 닫힘(onClose) + 조회 무효화로 재조회(GET 1→2).
     await waitFor(() => expect(mockClose).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getCalls).toBe(2));
   });
 
-  it('C4 · AC4(★h09) — 동기 연속 탭 2회여도 PUT 은 1건이다', async () => {
+  it('K4 · AC3(★h09) — 동기 연속 탭 2회여도 PUT 은 1건이다', async () => {
     renderContainer();
     const button = await screen.findByTestId('itinerary-candidate-select-X');
 
-    // 펜딩이 전파(재렌더)되기 전 같은 틱에 두 번 — firedRef 없으면 두 번째가 통과해 PUT 2건.
     act(() => {
       fireEvent.press(button);
       fireEvent.press(button);
@@ -249,7 +245,7 @@ describe('🔴 SlotCandidateSheetContainer (h12) 배선', () => {
     expect(putCalls).toBe(1);
   });
 
-  it('C5 · AC7 — PUT 409(확정)는 인라인 오류로 뜨고 시트를 안 닫는다', async () => {
+  it('K5 · AC3 — PUT 409(확정)는 인라인 오류로 뜨고 패널을 안 닫는다', async () => {
     putHandler = () =>
       HttpResponse.json(
         {
@@ -263,12 +259,11 @@ describe('🔴 SlotCandidateSheetContainer (h12) 배선', () => {
     await waitFor(() => expect(putCalls).toBe(1));
     const err = await screen.findByTestId('itinerary-candidate-error');
     expect(err).toHaveTextContent(/\S/);
-    // 실패엔 안 닫힌다(성공만 닫는다).
     expect(mockClose).toHaveBeenCalledTimes(0);
-    expect(screen.getByTestId('itinerary-candidate-sheet')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-candidate-panel')).toBeOnTheScreen();
   });
 
-  it('C6 · AC7·INV-4 — PUT 500 도 침묵하지 않는다', async () => {
+  it('K6 · AC3·INV-4 — PUT 500 도 침묵하지 않는다', async () => {
     putHandler = () => new HttpResponse(null, { status: 500 });
     renderContainer();
     fireEvent.press(await screen.findByTestId('itinerary-candidate-select-X'));
@@ -278,7 +273,7 @@ describe('🔴 SlotCandidateSheetContainer (h12) 배선', () => {
     expect(mockClose).toHaveBeenCalledTimes(0);
   });
 
-  it('C7 · AC7·INV-4 — PUT 네트워크 실패도 침묵하지 않는다', async () => {
+  it('K7 · AC3·INV-4 — PUT 네트워크 실패도 침묵하지 않는다', async () => {
     putHandler = () => HttpResponse.error();
     renderContainer();
     fireEvent.press(await screen.findByTestId('itinerary-candidate-select-X'));
@@ -287,9 +282,7 @@ describe('🔴 SlotCandidateSheetContainer (h12) 배선', () => {
     expect(err).toHaveTextContent(/\S/);
   });
 
-  // 5-b 경고2 봉합 — 현 슬롯 실이름은 후보와 달리 이미 GET 에 있다(nameKo). 배선이 이를 내려
-  // 플레이스홀더 대신 실이름을 보이는지 잠근다(후보 이름·사진은 여전히 미확보).
-  it('C8 · 경고2 — 현 슬롯은 실이름(nameKo)을 보인다, "이름 준비 중" 아님', async () => {
+  it('K8 · 경고2 — 현 슬롯은 실이름(nameKo)을 보인다, "이름 준비 중" 아님', async () => {
     renderContainer();
     const current = await screen.findByTestId('itinerary-candidate-current');
 
@@ -297,10 +290,7 @@ describe('🔴 SlotCandidateSheetContainer (h12) 배선', () => {
     expect(current).not.toHaveTextContent('이름 준비 중');
   });
 
-  // 5-b 경고3 봉합 — itinerary GET 미도착(콜드 캐시) 중 선택하면 빈 days 전체교체 PUT 이 나가
-  // 일정이 소실될 수 있다. 로딩 가드가 이를 막는지 잠근다.
-  it('C9 · 경고3 — GET 미도착 중 선택 → PUT 0(빈 days 전체교체 방지)', async () => {
-    // GET 을 영영 응답하지 않게 덮어 itinerary.data 를 undefined 로 묶는다(POST 는 즉시 응답).
+  it('K9 · 경고3 — GET 미도착 중 선택 → PUT 0(빈 days 전체교체 방지)', async () => {
     server.use(
       http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
         await delay('infinite');
@@ -308,12 +298,38 @@ describe('🔴 SlotCandidateSheetContainer (h12) 배선', () => {
       })
     );
     renderContainer();
-    await screen.findByTestId('itinerary-candidate-select-X'); // POST 는 도착
+    await screen.findByTestId('itinerary-candidate-select-X');
 
     fireEvent.press(screen.getByTestId('itinerary-candidate-select-X'));
 
     await waitFor(() => expect(postCalls).toBe(1));
     expect(putCalls).toBe(0);
     expect(mockClose).toHaveBeenCalledTimes(0);
+  });
+
+  it('K10 · AC2 — 헤더에 현 슬롯 시간대가 관통된다(09:30 → 오전)', async () => {
+    renderContainer();
+
+    const title = await screen.findByTestId('itinerary-candidate-panel-title');
+    // 현 슬롯 startAt 09:30:00 → timeBandLabel = 오전. 헤더는 `{시간대} — 다른 후보로 바꾸기`.
+    await waitFor(() =>
+      expect(title).toHaveTextContent(/오전 — 다른 후보로 바꾸기/)
+    );
+  });
+
+  it('K11 · AC6·★E — 응답 degraded===true 면 강등 고지가 뜨고, false 면 미표시', async () => {
+    candidatesResponse = { ...CANDIDATES, degraded: true };
+    renderContainer();
+
+    const notice = await screen.findByTestId('itinerary-candidate-degraded');
+    expect(notice).toHaveTextContent(/AI 추천 준비 중/);
+  });
+
+  it('K11b · AC6 — degraded===false 면 강등 고지가 미표시(후보는 뜬다)', async () => {
+    candidatesResponse = { ...CANDIDATES, degraded: false };
+    renderContainer();
+
+    await screen.findByTestId('itinerary-candidate-X');
+    expect(screen.queryByTestId('itinerary-candidate-degraded')).toBeNull();
   });
 });

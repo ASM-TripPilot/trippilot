@@ -22,7 +22,7 @@ import {
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
 
-import { SlotCandidateSheetContainer } from './SlotCandidateSheetContainer';
+import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
 
 /**
  * h11 배선(TRIP-297) — 두 조회를 잇고, 2단계 생성을 폴링으로 잇고, 재생성을 보낸다.
@@ -44,9 +44,9 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [pickedDate, setPickedDate] = useState<string | null>(null);
-  // 어느 슬롯의 교체 시트가 열렸나(=그 슬롯 slotKey). null 이면 닫힘. 컨테이너를 **조건부 마운트**해
-  // 닫힘 = 트리에서 제거(내부 POST/PUT/재조회 로직은 컨테이너가 소유 — `ItineraryEditPage.editingSlotKey`
-  // + `SlotTimeSheet` 선례와 동형).
+  // 어느 슬롯의 교체 패널이 펼쳐졌나(=그 슬롯 slotKey). null 이면 닫힘. 패널은 그 카드 **바로 아래**
+  // 스크롤 흐름에 인라인으로 뜨고(바텀시트 아님 · TRIP-483), 화면이 이 값과 일치하는 카드 자리에서만
+  // `renderSlotPanel(slotKey)` 을 불러 컨테이너를 마운트한다 — 닫힘 = 값이 null 이라 안 그려짐.
   const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
 
   const itineraryQueryKey = getGetTripsTripIdItineraryQueryKey(tripId);
@@ -246,45 +246,54 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   }
 
   return (
-    <>
-      <DraftScreen
-        view={view}
-        tabs={tabs}
-        selectedDate={selectedDate}
-        pins={buildDraftPins(
-          days.find((day) => day.date === selectedDate)?.slots ?? []
-        )}
-        dayHeader={formatDraftDayHeader(selectedDate)}
-        canRetry={itinerary.data?.status !== 'CONFIRMED'}
-        fallbackNotice={resolveFallbackNotice({
-          solveMode: itinerary.data?.solveMode,
-          isFallback: itinerary.data?.isFallback,
-          candidatesSummary: summary,
-        })}
-        onSelectDay={setPickedDate}
-        onRetry={() => void handleRetry()}
-        onBack={handleBack}
-        // h25(완성 일정) — 접미 없는 index 라우트다(draft·generating 과 달리). 객체형 push 라야
-        // `[tripId]` 가 params 로 해소된다(문자열 형태는 미해결로 깨진다 · TRIP-454 AC-5).
-        onComplete={() =>
-          router.push({
-            pathname: '/trips/[tripId]/itinerary',
-            params: { tripId },
-          })
-        }
-        // 비고정 슬롯 "다른 후보 ›" press → 그 슬롯 slotKey 를 담아 시트를 조건부 마운트한다(h12).
-        onPressSlot={(slotKey) => setEditingSlotKey(slotKey)}
-      />
-      {/* 죽은 코드였던 `SlotCandidateSheetContainer`(TRIP-335)의 유일한 마운트처. editingSlotKey
-          가 있을 때만 트리에 올려 열고, onClose 로 null 을 세워 트리에서 내린다(=닫힘). 내부
-          POST→선택→PUT→재조회는 컨테이너가 소유 — 여기선 열고/닫는 것만 배선한다(TRIP-467). */}
-      {editingSlotKey !== null ? (
-        <SlotCandidateSheetContainer
+    <DraftScreen
+      view={view}
+      tabs={tabs}
+      selectedDate={selectedDate}
+      pins={buildDraftPins(
+        days.find((day) => day.date === selectedDate)?.slots ?? []
+      )}
+      dayHeader={formatDraftDayHeader(selectedDate)}
+      canRetry={itinerary.data?.status !== 'CONFIRMED'}
+      fallbackNotice={resolveFallbackNotice({
+        solveMode: itinerary.data?.solveMode,
+        isFallback: itinerary.data?.isFallback,
+        candidatesSummary: summary,
+      })}
+      onSelectDay={setPickedDate}
+      onRetry={() => void handleRetry()}
+      onBack={handleBack}
+      // h25(완성 일정) — 접미 없는 index 라우트다(draft·generating 과 달리). 객체형 push 라야
+      // `[tripId]` 가 params 로 해소된다(문자열 형태는 미해결로 깨진다 · TRIP-454 AC-5).
+      onComplete={() =>
+        router.push({
+          pathname: '/trips/[tripId]/itinerary',
+          params: { tripId },
+        })
+      }
+      // 비고정 슬롯 "다른 후보 ›" press → 그 슬롯 slotKey 를 **토글**한다(같은 슬롯 재press 는 닫힘 ·
+      // 한 번에 한 슬롯 · TRIP-483 ★C). 재대입 `setEditingSlotKey(k)` 은 같은 값이라 안 닫힌다.
+      onPressSlot={(slotKey) =>
+        setEditingSlotKey((prev) => (prev === slotKey ? null : slotKey))
+      }
+      expandedSlotKey={editingSlotKey}
+      // 패널 내용(후보 POST→선택→PUT→재조회)은 컨테이너가 소유한다 — 화면은 이 함수를 펼친 카드
+      // 아래 자리에만 불러 컨테이너를 마운트한다(TRIP-335→483 로직 재사용, 프레젠테이션만 인라인).
+      renderSlotPanel={(slotKey) => (
+        <SlotCandidatePanelContainer
           tripId={tripId}
-          slotKey={editingSlotKey}
+          slotKey={slotKey}
           onClose={() => setEditingSlotKey(null)}
         />
-      ) : null}
-    </>
+      )}
+      // 「처음부터 직접」·「직접 고르기」 공통 목적지 — 수동 짜기 라우트(h19). 접미 있는 라우트라
+      // 객체형 push 로 `[tripId]` 를 해소한다(onComplete 선례 · TRIP-483 AC-4).
+      onManualPlan={() =>
+        router.push({
+          pathname: '/trips/[tripId]/itinerary/manual',
+          params: { tripId },
+        })
+      }
+    />
   );
 }
