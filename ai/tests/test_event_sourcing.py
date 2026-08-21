@@ -179,7 +179,8 @@ def test_collect_region_glue(tmp_path) -> None:
                            store=store, today=_TODAY, now=_NOW)
 
     assert stats == {"region": "부산", "snippets": 1, "extracted": 1,
-                     "geocoded": 1, "added": 1, "fallback": False, "error": None}
+                     "generic_dropped": 0, "geocoded": 1, "added": 1,
+                     "fallback": False, "error": None}
     found, _ = store.search_events(_TODAY, _TODAY)
     assert found[0].coord == GeoPoint(35.1532, 129.1186)  # 지역 검색 좌표 부여됨
 
@@ -281,3 +282,81 @@ def test_geocode_step_failure_falls_through(tmp_path) -> None:
     naver = NaverSearchClient(_BoomHttp(), "i", "s", 10)
     kakao = KakaoLocalClient(_BoomHttp(), "kk", 10)
     assert _geocode(_E(), "부산", naver, kakao) is None  # 예외 전파 없이 None
+
+
+# ── TRIP-421 품질 3종 (실측 2026-08-21 기반) ─────────────────────────
+
+
+def test_region_bounds_reject_cross_region_coord() -> None:
+    """서울 행사에 부산 좌표(실측 오매칭) — 정합 위반은 좌표 폐기."""
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    from collect_events import coord_in_region
+
+    busan = GeoPoint(35.327, 129.295)
+    assert coord_in_region("서울", busan) is False
+    assert coord_in_region("부산", busan) is True
+    assert coord_in_region("서울", GeoPoint(37.57, 127.07)) is True
+    assert coord_in_region("미지의지역", busan) is True  # 막을 근거 없음 — 통과
+
+
+def test_generic_name_filter() -> None:
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    from collect_events import is_generic_name
+
+    assert is_generic_name("콘서트-광주", "광주") is True
+    assert is_generic_name("마을축제", "울산") is True
+    assert is_generic_name("복합문화행사", "세종") is True
+    assert is_generic_name("무주반딧불축제", "전북") is False
+    assert is_generic_name("서울세계불꽃축제 2026", "서울") is False
+
+
+def test_dedup_absorbs_name_variants(tmp_path) -> None:
+    """연도·회차·괄호·후행 장르어·수식 접두어 변형이 전부 1건으로 수렴."""
+    from trippilot.background.event_store import normalize_name
+
+    assert normalize_name("2026 세종한글축제") == normalize_name("세종한글축제")
+    assert normalize_name("제6회 감악산 꽃별여행") == normalize_name("감악산 꽃별여행")
+    assert (normalize_name("「모래 위에 피는 K-MUSIC」 공연")
+            == normalize_name("모래 위에 피는 K-MUSIC"))
+
+    store = JsonEventStore(tmp_path / "e.json")
+    d = _TODAY + timedelta(days=10)
+    store.upsert("서울", (_event("서울세계불꽃축제 2026", d, d),), _NOW)
+    added = store.upsert("서울", (
+        _event("한화와 함께하는 서울세계불꽃축제 2026", d, d),  # 포함 변형
+    ), _NOW)
+    assert added == 0 and store.counts()["events"] == 1
+
+
+def test_sanitize_retroactively_cleans_store(tmp_path) -> None:
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    from collect_events import coord_in_region, is_generic_name
+
+    store = JsonEventStore(tmp_path / "e.json")
+    d = _TODAY + timedelta(days=5)
+    store.upsert("서울", (
+        _event("동대문구 맥주축제", d, d, coord=GeoPoint(35.327, 129.295)),  # 오매칭 좌표
+        _event("서울세계불꽃축제", d, d),
+    ), _NOW)
+    store.upsert("광주", (_event("콘서트-광주", d, d),), _NOW)  # 저품질
+    store.upsert("세종", (_event("세종한글축제", d, d),), _NOW)
+    # 변형 중복은 upsert가 이미 막으므로, 소급 정리 검증용으로 직접 주입
+    store._doc["events"].append(
+        {**_event("2026 세종한글축제", d, d).to_dict(),
+         "region": "세종", "collected_at": "2026-08-21T00:00:00+09:00"})
+
+    cleaned = store.sanitize(
+        drop_event=lambda region, e: is_generic_name(e.name, region),
+        coord_ok=coord_in_region,
+    )
+    assert cleaned == {"dropped": 1, "coord_cleared": 1, "deduped": 1}
+    found, _ = store.search_events(d, d)
+    names = {e.name for e in found}
+    assert "콘서트-광주" not in names and "2026 세종한글축제" not in names
+    assert next(e for e in found if "맥주축제" in e.name).coord is None  # 좌표만 제거

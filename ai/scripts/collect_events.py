@@ -53,6 +53,58 @@ EXTRACT_TIMEOUT_SEC = 30.0  # 배치는 지연 예산이 없다 — 넉넉히
 DEFAULT_REGIONS = ("서울", "인천", "대전", "대구", "광주", "부산", "울산", "세종",
                    "경기", "강원", "충북", "충남", "경북", "경남", "전북", "전남", "제주")
 
+# 지역 대략 경계 (lat_min, lat_max, lng_min, lng_max) — 지오코딩 오매칭 차단용
+# (실측 2026-08-21: 서울 "동대문구 맥주축제"가 부산 좌표를 받았다). 목적이 "다른
+# 광역을 잡은 명백한 오매칭 차단"이라 경계는 후하게 — 접경 오차는 허용한다.
+REGION_BOUNDS = {
+    "서울": (37.40, 37.72, 126.75, 127.20),
+    "인천": (37.00, 37.99, 124.50, 126.90),   # 서해 도서 포함
+    "대전": (36.15, 36.55, 127.20, 127.60),
+    "대구": (35.55, 36.40, 128.30, 128.80),   # 군위 편입 포함
+    "광주": (35.00, 35.30, 126.60, 127.05),
+    "부산": (34.85, 35.45, 128.70, 129.35),
+    "울산": (35.25, 35.80, 128.90, 129.50),
+    "세종": (36.35, 36.80, 127.05, 127.45),
+    "경기": (36.80, 38.35, 126.30, 127.90),
+    "강원": (36.95, 38.70, 127.00, 129.45),
+    "충북": (35.95, 37.30, 127.20, 128.70),
+    "충남": (35.90, 37.10, 125.85, 127.70),
+    "경북": (35.50, 37.60, 127.75, 131.05),   # 울릉·독도 포함
+    "경남": (34.50, 36.00, 127.50, 129.35),
+    "전북": (35.25, 36.20, 125.85, 127.95),
+    "전남": (33.85, 35.55, 124.95, 127.60),
+    "제주": (33.05, 34.10, 126.05, 127.05),
+}
+
+
+def coord_in_region(region: str, coord) -> bool:
+    """좌표가 수집 지역의 대략 경계 안인가 — 미지 지역명은 통과(막을 근거 없음)."""
+    bounds = REGION_BOUNDS.get(region)
+    if bounds is None or coord is None:
+        return True
+    lat_min, lat_max, lng_min, lng_max = bounds
+    return lat_min <= coord.lat <= lat_max and lng_min <= coord.lng <= lng_max
+
+
+# 저품질 이름 필터 (실측 2026-08-21: "콘서트-광주"·"마을축제"·"복합문화행사") —
+# 정규화 후 일반어 조합뿐이면 어떤 행사인지 식별 불가라 등록 가치가 없다.
+_GENERIC_WORDS = frozenset({
+    "축제", "공연", "전시", "행사", "콘서트", "페스티벌", "마켓", "문화",
+    "복합", "마을", "지역", "이번", "주말",
+})
+
+
+def is_generic_name(name: str, region: str) -> bool:
+    from trippilot.background.event_store import normalize_name
+
+    text = normalize_name(name).replace(region, "")
+    if len(text) < 4:
+        return True  # 지역명 빼고 3자 이하 — 식별 불가
+    remainder = text
+    for word in _GENERIC_WORDS:
+        remainder = remainder.replace(word, "")
+    return len(remainder) < 2  # 일반어를 걷어내면 남는 게 없다
+
 
 def _optional(name: str) -> str | None:
     return os.environ.get(name) or None
@@ -108,6 +160,11 @@ def _geocode(event, region: str, client: NaverSearchClient, kakao) -> object:
             print(f"[events] 지오코딩 단계 실패({type(e).__name__}: {e}) — 다음 단계로",
                   file=sys.stderr)
             continue
+        if coord is not None and not coord_in_region(region, coord):
+            # 다른 광역을 잡은 오매칭 (실측: 서울 행사 → 부산 좌표) — 버리고 다음 단계
+            print(f"[events] 지역 정합 위반 좌표 폐기({region}: {coord.lat:.3f},{coord.lng:.3f})",
+                  file=sys.stderr)
+            continue
         if coord is not None:
             return coord
     return None
@@ -140,8 +197,13 @@ def collect_region(
     )
     extracted = tuple(result.value or ())
     stats = {"region": region, "snippets": len(pairs), "extracted": len(extracted),
-             "geocoded": 0, "added": 0,
+             "generic_dropped": 0, "geocoded": 0, "added": 0,
              "fallback": bool(result.is_fallback), "error": result.error}
+    # 저품질 이름 필터 — 일반어뿐인 이름은 식별 불가 (게이트는 환각 방어 소유,
+    # 품질 컷은 배치 규칙 소유)
+    kept = tuple(e for e in extracted if not is_generic_name(e.name, region))
+    stats["generic_dropped"] = len(extracted) - len(kept)
+    extracted = kept
 
     # ③ 좌표 부여 — _geocode 체인 (네이버 → 카카오 주소/키워드). 좌표 없는 행사도
     #    유효하다 — POI 부착(보너스)만 제외.
@@ -237,6 +299,14 @@ def main() -> int:
 
     store.pointer = (start + completed) % len(regions)
     purged = store.purge_expired(today)
+    # 기존 레코드 소급 정리 (TRIP-421 품질 3종 — 규칙 강화 이전 등록분에 재적용)
+    cleaned = store.sanitize(
+        drop_event=lambda region, e: is_generic_name(e.name, region),
+        coord_ok=coord_in_region,
+    )
+    if any(cleaned.values()):
+        print(f"[events] 소급 정리 — 저품질 삭제 {cleaned['dropped']} · "
+              f"오매칭 좌표 제거 {cleaned['coord_cleared']} · 변형 중복 제거 {cleaned['deduped']}")
     store.save()
 
     run = {"calls_used": client.calls_used, "max_calls": max_calls, "purged": purged,
