@@ -53,7 +53,7 @@ class SavedPlaceApiIT : AbstractPostgresIntegrationTest() {
     }
 
     private fun anyPoiId(token: String): String =
-        call(HttpMethod.GET, "/api/v1/places?region=제주", token).second[0]["poiId"].asText()
+        call(HttpMethod.GET, "/api/v1/places?region=제주", token).second["items"][0]["poiId"].asText()
 
     @Test
     fun `인증 없으면 401`() {
@@ -102,10 +102,10 @@ class SavedPlaceApiIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `장소 응답에 tags 배열과 imageUrl 이 실린다`() {
         val token = newToken()
-        val place = call(HttpMethod.GET, "/api/v1/places?region=제주", token).second[0]
+        val place = call(HttpMethod.GET, "/api/v1/places?region=제주", token).second["items"][0]
 
         place["tags"].isArray shouldBe true
-        // 개수를 못박지 않는다 — findActive 에 ORDER BY 가 없어 어느 시드 POI 가 먼저 올지 정해져 있지 않다.
+        // 개수를 못박지 않는다 — 태그 수는 시드 내용이라 여기 관심사가 아니다(매핑이 도는지만 본다).
         place["tags"].isEmpty shouldBe false
         place["imageUrl"].isNull shouldBe true   // 실 수집 전이라 NULL(기본 이미지를 지어내지 않는다)
     }

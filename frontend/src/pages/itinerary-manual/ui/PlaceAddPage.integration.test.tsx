@@ -107,11 +107,14 @@ beforeEach(() => {
   server.use(
     http.get(`${BASE}/places`, ({ request }) => {
       const category = new URL(request.url).searchParams.get('category');
-      return HttpResponse.json(
-        category === null
-          ? PLACES
-          : PLACES.filter((place) => place.category === category)
-      );
+      // 응답이 `{items, nextCursor}` 객체다(TRIP-503) — 배열이 아니다.
+      return HttpResponse.json({
+        items:
+          category === null
+            ? PLACES
+            : PLACES.filter((place) => place.category === category),
+        nextCursor: null,
+      });
     }),
     // 방어 핸들러 — 배선이 현재 일정을 읽거나 저장해도 검색 심판이 안 깨지게(응답 형태만 최소).
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>

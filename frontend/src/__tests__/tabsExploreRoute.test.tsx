@@ -116,10 +116,13 @@ function savedResult(savedPoiIds: string[]) {
   return { savedPoiIds } as unknown as ReturnType<typeof useSavedPlaces>;
 }
 
-/** 가볼 곳 레인(TRIP-470) — 라우트는 data(장소 배열)·isError·refetch 만 읽는다. */
+/**
+ * 가볼 곳 레인(TRIP-470) — 라우트는 data.items·isError·refetch 만 읽는다.
+ * 응답이 `{items, nextCursor}` 객체다(TRIP-503) — 배열이 아니다.
+ */
 function placesResult() {
   return {
-    data: [],
+    data: { items: [], nextCursor: null },
     isError: false,
     refetch: jest.fn(),
   } as unknown as ReturnType<typeof useGetPlaces>;
@@ -314,7 +317,7 @@ describe('🔴 453-AC-2a — "가볼 곳" 구획에 장소 목록(d04) 진입점
 describe('🟢 470 — 가볼 곳 레인: 장소 카드 렌더 + press → d06', () => {
   function placesWith(list: unknown[]) {
     return {
-      data: list,
+      data: { items: list, nextCursor: null },
       isError: false,
       refetch: jest.fn(),
     } as unknown as ReturnType<typeof useGetPlaces>;

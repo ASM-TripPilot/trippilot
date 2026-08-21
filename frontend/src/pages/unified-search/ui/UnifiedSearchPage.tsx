@@ -61,7 +61,7 @@ export function UnifiedSearchPage(): ReactElement {
     })
   );
 
-  const placeCards = visiblePlaces(places.data ?? [], searchText).map(
+  const placeCards = visiblePlaces(places.data?.items ?? [], searchText).map(
     (place) => ({
       poiId: place.poiId,
       name: place.nameKo,

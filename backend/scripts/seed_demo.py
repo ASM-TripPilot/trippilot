@@ -109,7 +109,9 @@ def log(msg: str) -> None:
 def pois(api: Api, region: str) -> list[dict]:
     """지역의 ACTIVE POI. 비어 있으면 후보풀이 없다는 뜻이라 여기서 멈춘다 — 빈 일정을 만들어 놓고
     '생성이 이상하다'고 오해하는 편이 훨씬 비싸다(INV-1 closed-set)."""
-    found = api.get(f"/places?region={urllib.parse.quote(region)}") or []
+    # 응답이 `{items, nextCursor}` 객체다(TRIP-503) — 배열이 아니다.
+    # 시더는 후보 4건이면 충분해 다음 장을 이어 받지 않는다.
+    found = (api.get(f"/places?region={urllib.parse.quote(region)}") or {}).get("items") or []
     if len(found) < 4:
         raise SystemExit(
             f"'{region}' ACTIVE POI 가 {len(found)}건뿐입니다. 후보풀이 비면 일정이 빈 채로 생성됩니다.\n"

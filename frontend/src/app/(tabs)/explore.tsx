@@ -61,7 +61,7 @@ export default function ExploreRoute(): ReactElement {
   const [savedMenuOpen, setSavedMenuOpen] = useState(false);
 
   // 가볼 곳 레인(TRIP-470) — 앞쪽 소수만(가로 레인이라 전량 필요 없음). 카드 press → d06.
-  const placeCards: PlaceCardVM[] = (places.data ?? [])
+  const placeCards: PlaceCardVM[] = (places.data?.items ?? [])
     .slice(0, 8)
     .map((place) => ({
       poiId: place.poiId,

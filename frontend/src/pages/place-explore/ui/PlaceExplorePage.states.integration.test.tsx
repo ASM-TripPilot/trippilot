@@ -151,7 +151,7 @@ beforeEach(() => {
   server.use(
     http.get(`${BASE}/places`, async () => {
       await placesGate.opened;
-      return HttpResponse.json(PLACES);
+      return HttpResponse.json({ items: PLACES, nextCursor: null });
     }),
     http.get(`${BASE}/saved-places`, () => HttpResponse.json(savedRows)),
     http.post(`${BASE}/saved-places`, async ({ request }) => {
@@ -225,7 +225,11 @@ describe('S-1 · 첫 조회 중에는 스켈레톤이 뜬다 (AC-4)', () => {
 describe('S-2 · 0건이면 다른 지역으로 보낸다 (AC-5 · 01b Seed Q4)', () => {
   it('안내가 뜨고 "다른 지역 보기"가 여행 목적 지역 선택으로 보낸다', async () => {
     setAccessToken('valid-access');
-    server.use(http.get(`${BASE}/places`, () => HttpResponse.json([])));
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      )
+    );
 
     renderPage();
 
@@ -278,7 +282,7 @@ describe('S-4 · 조회 실패의 재시도가 실제로 서버를 다시 부른
         attempts += 1;
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(PLACES);
+          : HttpResponse.json({ items: PLACES, nextCursor: null });
       })
     );
 
@@ -516,7 +520,11 @@ describe('S-11 · 좌표 방어 배선 (01b Seed Q12 · BR-U1-02 · US-EXPL-04 �
       lat: null,
       lng: null,
     } as unknown as Place;
-    server.use(http.get(`${BASE}/places`, () => HttpResponse.json([noCoords])));
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [noCoords], nextCursor: null })
+      )
+    );
 
     await renderLoaded();
 

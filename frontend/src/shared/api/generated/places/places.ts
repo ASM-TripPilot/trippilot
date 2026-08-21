@@ -25,7 +25,7 @@ import type {
 import type {
   GetPlacesParams,
   GetRegionsParams,
-  Place,
+  PlaceList,
   Region,
   SavePlaceRequest,
   SavedPlace,
@@ -186,11 +186,11 @@ export function useGetRegions<
 }
 
 /**
- * 수집 게이트(INV-1) 통과한 정본 POI. 소요시간 미표시(INV-3). 반경/취향 후보풀은 별도(C8 소비).
+ * 수집 게이트(INV-1) 통과한 정본 POI. 소요시간 미표시(INV-3). 반경/취향 후보풀은 별도(C8 소비). 정렬은 **이름순**이며 동명은 `poiId` 로 갈린다 — 같은 조회가 매번 같은 순서를 준다.
  * @summary 장소(POI) 탐색 — ACTIVE만(INV-U1-01), 지역·카테고리 필터
  */
 export const getPlaces = (params?: GetPlacesParams, signal?: AbortSignal) => {
-  return customInstance<Place[]>({
+  return customInstance<PlaceList>({
     url: `/places`,
     method: 'GET',
     params,

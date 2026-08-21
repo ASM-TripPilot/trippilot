@@ -93,7 +93,9 @@ beforeEach(() => {
   setAccessToken('valid-access');
 
   server.use(
-    http.get(`${BASE}/places`, () => HttpResponse.json(placesData)),
+    http.get(`${BASE}/places`, () =>
+      HttpResponse.json({ items: placesData, nextCursor: null })
+    ),
     http.get(`${BASE}/saved-places`, () => HttpResponse.json(savedRows)),
     http.post(`${BASE}/saved-places`, async ({ request }) => {
       const body = (await request.json()) as { poiId: string };
