@@ -97,7 +97,14 @@ def _geocode(event, region: str, client: NaverSearchClient, kakao) -> object:
         try:
             coord = step()
         except CallBudgetExceeded:
-            return None
+            return None  # 예산 소진 — 체인 종료
+        except Exception as e:
+            # 지오코딩 실패(403·타임아웃 등)는 배치를 죽이면 안 된다 — 좌표만
+            # 포기하고 다음 단계로 (2026-08-21 실측: 카카오맵 미활성 403이 배치
+            # 전체를 중단시켰다. 침묵은 아니다 — stderr 기록).
+            print(f"[events] 지오코딩 단계 실패({type(e).__name__}: {e}) — 다음 단계로",
+                  file=sys.stderr)
+            continue
         if coord is not None:
             return coord
     return None

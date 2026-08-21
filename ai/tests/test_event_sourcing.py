@@ -260,3 +260,24 @@ def test_kakao_geocode_chain(tmp_path) -> None:
     capped = KakaoLocalClient(_KakaoHttp(), "kk", 0)
     with pytest.raises(CallBudgetExceeded):
         capped.address_to_coord("아무 주소")
+
+
+def test_geocode_step_failure_falls_through(tmp_path) -> None:
+    """지오코딩 HTTP 실패(403 등)는 배치를 죽이지 않는다 — 다음 단계 시도 후 좌표만 포기."""
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    from collect_events import _geocode
+    from trippilot.background.kakao_local import KakaoLocalClient
+
+    class _E:
+        name = "행사"
+        address = "주소"
+
+    class _BoomHttp:
+        def get_json(self, url, headers, params):
+            raise OSError("HTTP Error 403: Forbidden")
+
+    naver = NaverSearchClient(_BoomHttp(), "i", "s", 10)
+    kakao = KakaoLocalClient(_BoomHttp(), "kk", 10)
+    assert _geocode(_E(), "부산", naver, kakao) is None  # 예외 전파 없이 None
