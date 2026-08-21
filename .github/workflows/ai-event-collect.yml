@@ -84,7 +84,7 @@ jobs:
           KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY_AI }}
           KAKAO_MAX_CALLS: ${{ vars.KAKAO_MAX_CALLS || '300' }}
           EVENT_REGIONS: ${{ inputs.regions || '' }}
-          EVENT_REGIONS_PER_RUN: ${{ inputs.regions_per_run || '3' }}
+          EVENT_REGIONS_PER_RUN: ${{ inputs.regions_per_run || vars.EVENT_REGIONS_PER_RUN || '3' }}
           EVENTS_STORE: collected_events.json
           # LLM 추출 — ai-llm-smoke와 동일 조립 (GPT-5.6 v1 표면, Responses API)
           LLM_PROVIDER: openai
