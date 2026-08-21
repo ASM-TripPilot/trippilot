@@ -26,6 +26,9 @@ class InMemoryPoiRepository : PoiRepository {
     /**
      * 실 쿼리와 **같은 규칙**이다 — 코드 접두사 매칭 + 이름·id 정렬(TRIP-503).
      * 이름 일치로 두면 대역만 통과하고 실 DB 에서 다른 도시가 섞인다.
+     *
+     * 다만 **정렬 기준까지 같지는 않다** — 여기는 JVM 코드포인트 순서이고 실 DB 는 콜레이션을 쓴다.
+     * 그래서 "순서가 무엇인가"는 이 대역으로 단정하지 않는다(실 DB IT 가 결정성만 확인한다).
      */
     override fun findActive(regionCodes: List<String>, category: PoiCategory?) =
         stored.filter { p ->

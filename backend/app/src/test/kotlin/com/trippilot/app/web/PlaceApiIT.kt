@@ -11,6 +11,7 @@ import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldNotContain
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -147,13 +148,63 @@ class PlaceApiIT : AbstractPostgresIntegrationTest() {
         }
     }
 
+    /**
+     * **시군구를 고르면 그 구만이다.** 접두사 길이가 어긋나면(예: 시도 2자리로 잘라 비교) 조회가
+     * 광역 전체로 조용히 번진다 — 결과가 늘어날 뿐이라 화면만 봐서는 틀린 줄 모른다.
+     * 역검증에서 이 변이가 안 잡혀 추가했다.
+     */
+    @Test
+    fun `시군구를 고르면 같은 시도의 다른 구는 안 들어온다`() {
+        val token = newToken()
+        val 동구 = seedPoi("코드검증-부산동구", 35.13, 129.05, "26170")
+        val 해운대구 = seedPoi("코드검증-부산해운대구", 35.16, 129.16, "26350")
+
+        try {
+            val got = call("/api/v1/places?region=동구", token).second.names()
+
+            got shouldContain "코드검증-부산동구"
+            got shouldNotContain "코드검증-부산해운대구" // 같은 부산이지만 다른 구다
+        } finally {
+            cleanupJdbc.update("DELETE FROM poi WHERE poi_id in (?, ?)", 동구, 해운대구)
+        }
+    }
+
+    /**
+     * **정렬이 실제로 걸려 있다.** 결정성만 보면 행이 적을 때 우연히 통과한다(역검증에서 `ORDER BY`
+     * 제거가 안 잡혔다). 넣은 순서의 역순으로 심어, 서버가 다시 세우는지 본다.
+     *
+     * 이름은 순수 한글로 고른다 — 콜레이션과 코드포인트 순서가 갈리지 않는 구간이라
+     * 이 단정이 환경에 따라 흔들리지 않는다.
+     */
+    @Test
+    fun `이름순으로 세워서 준다`() {
+        val token = newToken()
+        val ids = listOf("코드검증다", "코드검증나", "코드검증가")
+            .map { seedPoi(it, 35.13, 129.05, "26170") } // 심는 순서 = 다,나,가
+
+        try {
+            val got = call("/api/v1/places?region=동구", token).second.names()
+                .filter { it.startsWith("코드검증") }
+
+            got shouldBe listOf("코드검증가", "코드검증나", "코드검증다")
+        } finally {
+            ids.forEach { cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", it) }
+        }
+    }
+
     /** 모르는 이름에 전국을 돌려주면 화면이 그것을 "그 지역 장소"로 표시한다 — 없다고 말하는 편이 맞다. */
     @Test
     fun `모르는 지역명은 빈 목록이다`() {
         call("/api/v1/places?region=Paris", newToken()).second.size() shouldBe 0
     }
 
-    /** 정렬이 결정적이어야 뒤에 붙일 페이지네이션(TRIP-502)이 성립한다 — 없으면 행이 중복·누락된다. */
+    /**
+     * 정렬이 결정적이어야 뒤에 붙일 페이지네이션(TRIP-502)이 성립한다 — 없으면 행이 중복·누락된다.
+     *
+     * **자바 정렬과 같은지는 묻지 않는다.** 순서의 주인은 DB 콜레이션이고 그것은 JVM 의 코드포인트
+     * 순서와 다를 수 있다(운영 glibc vs 로컬 alpine/musl). 같다고 단정하면 **로컬·CI 는 통과하고
+     * 배포 환경에서만 깨지는** 테스트가 된다 — 여기서는 "매번 같은 순서인가"만 묻는다.
+     */
     @Test
     fun `같은 조회는 같은 순서를 준다`() {
         val token = newToken()
@@ -161,8 +212,26 @@ class PlaceApiIT : AbstractPostgresIntegrationTest() {
         val first = call("/api/v1/places?region=제주", token).second.names()
         val second = call("/api/v1/places?region=제주", token).second.names()
 
+        first.size shouldBeGreaterThan 1 // 순서를 논할 수 있는 규모인지 먼저 확인한다
         first shouldBe second
-        first shouldBe first.sorted()
+    }
+
+    /** 동명이지역(코드 여러 개)도 **한 쿼리**로 돌아 같은 정렬 권한을 쓴다 — 이름에 따라 순서가 갈리지 않는다. */
+    @Test
+    fun `동명이지역 조회도 정렬이 결정적이다`() {
+        val token = newToken()
+        val a = seedPoi("코드검증-부산동구", 35.13, 129.05, "26170")
+        val b = seedPoi("코드검증-대구동구", 35.88, 128.63, "27140")
+
+        try {
+            val first = call("/api/v1/places?region=동구", token).second.names()
+            val second = call("/api/v1/places?region=동구", token).second.names()
+
+            first shouldBe second
+            first.size shouldBeGreaterThan 1
+        } finally {
+            cleanupJdbc.update("DELETE FROM poi WHERE poi_id in (?, ?)", a, b)
+        }
     }
 
     /** 지역 코드를 직접 심는다 — 수집 경로는 코드를 붙이지만 이 테스트가 보려는 것은 조회 규칙이다. */
