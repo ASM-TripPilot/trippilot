@@ -35,8 +35,12 @@ internal class FakeGenerationSessions : GenerationSessionRepository {
         rows.values.filter { it.accountId == accountId && it.isRunning }.maxByOrNull { it.startedAt }
 }
 
+/** 기본값은 **배포 기본과 같다**(시한 미전송) — 대역이 실제와 다른 모드로 돌면 검증이 헛돈다. */
+internal val defaultDeadlines = ScheduleDeadlineProperties()
+
 internal fun genSessions(
     trips: TripFacade = stubTrips,
     repo: GenerationSessionRepository = FakeGenerationSessions(),
     clock: Clock = Clock.fixed(Instant.parse("2026-08-06T00:00:00Z"), ZoneOffset.UTC),
-) = GenerationSessionService(trips, repo, clock)
+    deadlines: ScheduleDeadlineProperties = defaultDeadlines,
+) = GenerationSessionService(trips, repo, clock, deadlines)

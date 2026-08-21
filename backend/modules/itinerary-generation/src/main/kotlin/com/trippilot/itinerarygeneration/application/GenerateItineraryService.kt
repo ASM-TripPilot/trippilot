@@ -61,6 +61,7 @@ class GenerateItineraryService(
     private val regions: RegionLookupFacade,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
+    private val deadlines: ScheduleDeadlineProperties,
 ) {
     private val tx = TransactionTemplate(transactionManager)
 
@@ -103,7 +104,7 @@ class GenerateItineraryService(
         // 1차가 터지면 세션을 닫는다 — 안 닫으면 사용자는 500 을 받고도 화면에서 영원히 "생성 중"을 본다(INV-4 침묵 금지).
         val saved = try {
             val firstAssembly = assembleInput(
-                tripId, mode, ctx, prefs, stayAnchors, firstDates, DAY1_DEADLINE_MS,
+                tripId, mode, ctx, prefs, stayAnchors, firstDates, deadlines.day1Budget(),
                 excluded = reservedForSecond,
                 carriesUndatedFixed = remainingDates.isEmpty(), // 날짜 미지정 must_visit 은 2차가 맡는다(없으면 1차)
             )
@@ -149,7 +150,7 @@ class GenerateItineraryService(
             // 1차에서 배정된 POI 는 2차 후보에서 제외(TRIP-293) — 같은 장소가 두 번 들어가지 않게.
             val assigned = saved.days.flatMap { d -> d.slots.map { it.sourcePoiId } }.distinct()
             val secondAssembly = assembleInput(
-                tripId, mode, ctx, prefs, stayAnchors, remainingDates, TOTAL_DEADLINE_MS, excluded = assigned,
+                tripId, mode, ctx, prefs, stayAnchors, remainingDates, deadlines.totalBudget(), excluded = assigned,
                 carriesUndatedFixed = true,
             )
             val secondInput = secondAssembly.input
@@ -213,7 +214,7 @@ class GenerateItineraryService(
         prefs: PreferenceSnapshot,
         stayAnchors: List<DayAnchorView>,
         dates: List<LocalDate>,
-        deadlineMs: Long,
+        deadlineMs: Long?,
         excluded: List<UUID> = emptyList(),
         carriesUndatedFixed: Boolean = true,
     ): Assembled {
@@ -379,8 +380,6 @@ class GenerateItineraryService(
         private val log = LoggerFactory.getLogger(GenerateItineraryService::class.java)
         private val DEFAULT_START = LocalTime.of(9, 0)
         private val DEFAULT_END = LocalTime.of(21, 0)
-        private const val TOTAL_DEADLINE_MS = 20_000L
-        private const val DAY1_DEADLINE_MS = 5_000L // day1 조기 노출 예산(IO-1)
 
         /** 여행 "오늘"은 사용자가 있는 곳의 날짜다(서버 UTC 아님) — 재계획·감지와 같은 기준. */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")

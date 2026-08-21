@@ -29,6 +29,7 @@ class GenerationSessionService(
     private val trips: TripFacade,
     private val sessions: GenerationSessionRepository,
     private val clock: Clock,
+    private val deadlines: ScheduleDeadlineProperties,
 ) {
 
     /**
@@ -69,7 +70,7 @@ class GenerationSessionService(
         val active = sessions.findRunningByAccount(accountId) ?: return
         if (active.tripId == tripId) return // 같은 여행 — 탈출구는 항상 열려 있다
 
-        if (active.isStale(now)) {
+        if (active.isStale(now, deadlines.staleAfter)) {
             log.warn(
                 "멈춘 생성 세션을 닫습니다 — 제한이 사용자를 가두지 않게. sessionId={} tripId={} startedAt={}",
                 active.sessionId, active.tripId, active.startedAt,

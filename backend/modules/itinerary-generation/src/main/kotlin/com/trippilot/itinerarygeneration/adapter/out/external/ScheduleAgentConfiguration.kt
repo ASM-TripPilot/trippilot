@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.adapter.out.external
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import com.trippilot.itinerarygeneration.application.ScheduleDeadlineProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -29,14 +30,19 @@ import java.time.Duration
 class ScheduleAgentConfiguration {
 
     @Bean
-    fun scheduleAgentRestClient(properties: ScheduleAgentProperties): RestClient =
+    fun scheduleAgentRestClient(
+        properties: ScheduleAgentProperties,
+        deadlines: ScheduleDeadlineProperties,
+    ): RestClient =
         RestClient.builder() // 전용 빌더(공유 빈 미사용)
             .baseUrl(properties.baseUrl)
             .requestFactory(
                 SimpleClientHttpRequestFactory().apply {
                     setConnectTimeout(Duration.ofMillis(properties.connectTimeoutMs))
-                    // 소켓 read 1회 상한. 전체 시한은 AI 가 deadline_ms 로 자체 관리(계약) — 여기선 무한 대기 방지용.
-                    setReadTimeout(Duration.ofMillis(properties.maxDeadlineMs + properties.readTimeoutMarginMs))
+                    // 소켓 read 1회 상한 = **기다려 주기로 한 시간** + 마진.
+                    // 시한을 안 걸 때(기본)는 그 시간이 20초가 아니라 610초다 — 예전 산식을 그대로 두면
+                    // 우리가 22초에 먼저 끊어, 시간제약을 푼 의미가 사라지고 증상은 "전부 폴백"으로만 보인다.
+                    setReadTimeout(Duration.ofMillis(deadlines.waitCeilingMs + properties.readTimeoutMarginMs))
                 },
             )
             .messageConverters { it.add(0, JacksonJsonHttpMessageConverter(boundaryMapper())) }

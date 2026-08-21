@@ -3,7 +3,6 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
-import com.trippilot.itinerarygeneration.domain.GENERATION_STALE_AFTER
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.GenerationStatus
 import com.trippilot.trip.api.TripFacade
@@ -185,7 +184,7 @@ class GenerationSessionConcurrencyTest : StringSpec({
     val tripB = UUID.randomUUID()
 
     fun svc(repo: FakeGenerationSessions, now: Instant = at) =
-        GenerationSessionService(stubTrips, repo, Clock.fixed(now, ZoneOffset.UTC))
+        GenerationSessionService(stubTrips, repo, Clock.fixed(now, ZoneOffset.UTC), defaultDeadlines)
 
     "진행 중이 없으면 지금과 똑같이 시작한다" {
         val repo = FakeGenerationSessions()
@@ -241,14 +240,14 @@ class GenerationSessionConcurrencyTest : StringSpec({
      * **경계를 못으로 박는다.** 위 테스트는 30분을 써서 기준값을 5분에서 10분으로 바꿔도 통과한다 —
      * 그러면 그 값은 아무도 지키지 않는 값이 된다. 여기서 양쪽을 함께 고정한다.
      *
-     * 기준은 [GENERATION_STALE_AFTER] 하나이고, 중단된 PARTIAL 스위퍼도 같은 값을 본다.
+     * 기준은 `ScheduleDeadlineProperties.staleAfter` 하나이고, 중단된 PARTIAL 스위퍼도 같은 값을 본다.
      * 갈리면 같은 사고에 day1 전후로 대기 시간이 달라진다.
      */
     "기준 직전은 아직 살아 있는 것으로 보고 막는다" {
         val repo = FakeGenerationSessions()
         svc(repo).start(acc, tripA, GenerationMode.FULLY_AI)
 
-        val justBefore = at.plus(GENERATION_STALE_AFTER).minusSeconds(1)
+        val justBefore = at.plus(defaultDeadlines.staleAfter).minusSeconds(1)
 
         shouldThrow<ConflictDetected> { svc(repo, justBefore).start(acc, tripB, GenerationMode.FULLY_AI) }
     }
@@ -257,7 +256,7 @@ class GenerationSessionConcurrencyTest : StringSpec({
         val repo = FakeGenerationSessions()
         svc(repo).start(acc, tripA, GenerationMode.FULLY_AI)
 
-        val justAfter = at.plus(GENERATION_STALE_AFTER).plusSeconds(1)
+        val justAfter = at.plus(defaultDeadlines.staleAfter).plusSeconds(1)
 
         svc(repo, justAfter).start(acc, tripB, GenerationMode.FULLY_AI).tripId shouldBe tripB
     }

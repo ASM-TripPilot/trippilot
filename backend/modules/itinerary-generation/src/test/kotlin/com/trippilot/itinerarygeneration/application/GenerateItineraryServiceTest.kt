@@ -243,9 +243,9 @@ class GenerateItineraryServiceTest : StringSpec({
         }
         // 단위 테스트엔 Spring 프록시가 없어 @Async 가 걸리지 않는다 → 2차가 그 자리에서 동기 실행된다(결정론).
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다 — 인스턴스를 나누면 취소가 사라진다.
-        val sessions = genSessions(trips, sessionRepo, clock)
+        val sessions = genSessions(trips, sessionRepo, clock, defaultDeadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, NOOP_TX, clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, NOOP_TX, clock, defaultDeadlines)
     }
 
     val fullPrefs = PreferenceSnapshot(
@@ -527,6 +527,8 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         repo: FakeItineraries,
         end: LocalDate,
         sessionRepo: FakeGenerationSessions = FakeGenerationSessions(),
+        // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
+        deadlines: ScheduleDeadlineProperties = defaultDeadlines,
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -540,9 +542,9 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
         }
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다.
-        val sessions = genSessions(trips, sessionRepo, clock)
+        val sessions = genSessions(trips, sessionRepo, clock, deadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, NOOP_TX, clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, NOOP_TX, clock, deadlines)
     }
 
     "추천 근거가 slotKey 로 슬롯에 붙어 영속된다(TRIP-306 · BR-U2-04)" {
@@ -657,10 +659,28 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         agent.captures[1].excludedPoiIds shouldContainExactly listOf(poiByDate.getValue(start))
     }
 
-    "1차 시한은 day1 예산(5s), 2차는 전체 예산(20s)" {
+    /**
+     * **기본은 시한을 싣지 않는다**(TRIP-474). AI 계약상 미지정 = 시간제약 없음이라,
+     * 값을 실으면 시간 때문에 규칙 폴백으로 강등되는 경로가 도로 열린다.
+     */
+    "기본 설정에서는 시한을 싣지 않는다" {
         val end = start.plusDays(2)
         val (agent, _) = emittingAgent(end)
         service(agent, FakeItineraries(), end).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].requestMeta.deadlineMs shouldBe null
+        agent.captures[1].requestMeta.deadlineMs shouldBe null
+    }
+
+    /**
+     * **재도입은 플래그 한 줄이다**(TRIP-475 9월 예정). 값을 지우지 않고 끈 이유가 이것이므로,
+     * 켰을 때 종전과 같은 값이 나가는지 지금 고정해 둔다 — 나중에 확인하면 이미 늦다.
+     */
+    "플래그를 켜면 1차 day1 예산(5s), 2차 전체 예산(20s) 그대로다" {
+        val end = start.plusDays(2)
+        val (agent, _) = emittingAgent(end)
+        service(agent, FakeItineraries(), end, deadlines = ScheduleDeadlineProperties(enforced = true))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
 
         agent.captures[0].requestMeta.deadlineMs shouldBe 5_000L
         agent.captures[1].requestMeta.deadlineMs shouldBe 20_000L
@@ -921,7 +941,7 @@ class TwoPhaseDayCoverageTest : StringSpec({
                 override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
             }
             val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), genSessions(), NOOP_TX, clock)
-            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, NOOP_TX, clock)
+            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, NOOP_TX, clock, defaultDeadlines)
                 .generate(acc, tripId, GenerationMode.FULLY_AI)
 
             // 두 호출이 요청한 일자의 합 = 여행 일자, 중복 없음

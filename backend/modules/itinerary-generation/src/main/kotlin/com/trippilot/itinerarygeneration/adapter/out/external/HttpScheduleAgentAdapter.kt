@@ -72,7 +72,7 @@ class HttpScheduleAgentAdapter(
         throw ScheduleAgentCallFailed(null, retryable = true, message = "AI 호출 실패: ${e.message}", cause = e)
     }
 
-    private fun requestMeta(deadlineMs: Long) =
+    private fun requestMeta(deadlineMs: Long?) =
         AiRequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs)
 
     /**

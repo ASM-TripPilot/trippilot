@@ -8,6 +8,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.types.shouldBeInstanceOf
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration
+import com.trippilot.itinerarygeneration.application.GenerationConfiguration
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import java.time.Clock
 import java.time.Instant
@@ -31,7 +32,9 @@ class ScheduleAgentSwitchTest : StringSpec({
 
     val runner = ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(PropertyPlaceholderAutoConfiguration::class.java))
-        .withUserConfiguration(ScheduleAgentConfiguration::class.java)
+        // 시한 설정은 조건부 어댑터 설정 **밖**에서 등록된다(기본 fake 모드에도 필요하다) —
+        // 슬라이스에서 빼면 실물과 다른 조합을 검증하게 된다.
+        .withUserConfiguration(GenerationConfiguration::class.java, ScheduleAgentConfiguration::class.java)
         .withBean(Clock::class.java, { clock })
         .withBean(CandidatePoolPort::class.java, { pool })
         // 두 어댑터가 공유하는 슬롯 후보 소스 — 스위치 판정에는 안 쓰이지만 주입은 돼야 컨텍스트가 뜬다.
