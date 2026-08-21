@@ -18,6 +18,11 @@ import java.util.UUID
 @Service
 class PlaceDataCandidatePool(
     private val repo: PoiRepository,
+    /**
+     * 지역 이름 해석을 **탐색과 같은 규칙으로** 한다(TRIP-503). 여기서 따로 이름 일치로 거르면
+     * 후보풀에 다른 도시가 섞이거나(`동구`) 광역 조회가 비어(`부산` 8/149) 생성 품질이 조용히 나빠진다.
+     */
+    private val poiQuery: PoiQueryService,
 ) : CandidatePoolPort {
 
     override fun resolve(area: Area, categories: Set<String>): List<GroundedPlace> {
@@ -26,7 +31,7 @@ class PlaceDataCandidatePool(
 
         return when (area) {
             is Area.Region ->
-                repo.findActive(area.region, null).filter(::matchesCat).map { it.grounded(null) }
+                poiQuery.search(area.region, null).filter(::matchesCat).map { it.grounded(null) }
 
             is Area.Radius -> {
                 val box = BoundingBox.around(area.centerLat, area.centerLng, area.radiusM)

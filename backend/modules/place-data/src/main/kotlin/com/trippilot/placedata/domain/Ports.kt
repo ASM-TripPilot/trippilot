@@ -37,7 +37,14 @@ data class Area(val region: String)
 interface PoiRepository {
     fun saveAll(pois: List<Poi>): List<Poi>
     fun findById(poiId: UUID): Poi?
-    fun findActive(region: String?, category: PoiCategory?): List<Poi>
+    /**
+     * ACTIVE POI 조회(INV-U1-01).
+     *
+     * @param regionCodes 지역 필터. **빈 목록 = 지역을 안 걸렀다**(전체). 값이 있으면 각 코드의
+     *   **접두사**로 매칭한다 — `26`(부산) 하나로 그 안 시군구가 전부 잡힌다.
+     *   지역명 해석은 서비스가 한다(동명이지역은 코드가 여러 개다).
+     */
+    fun findActive(regionCodes: List<String>, category: PoiCategory?): List<Poi>
 
     /** 반경 검색 프리필터 — bounding-box 내 ACTIVE. 정밀 반경 컷은 서비스(하버사인). */
     fun findActiveInBounds(latMin: Double, latMax: Double, lngMin: Double, lngMax: Double): List<Poi>
