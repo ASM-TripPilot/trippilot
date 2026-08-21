@@ -224,3 +224,39 @@ def test_collect_region_geocodes_via_address_fallback(tmp_path) -> None:
     assert stats["geocoded"] == 1
     found, _ = store.search_events(_TODAY, _TODAY)
     assert found[0].coord == GeoPoint(37.4, 126.64)
+
+
+def test_kakao_geocode_chain(tmp_path) -> None:
+    """카카오 배선 시 체인: 네이버 행사명 → 카카오 주소 → 카카오 키워드 (TRIP-421)."""
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    from collect_events import _geocode
+    from trippilot.background.kakao_local import KakaoLocalClient
+
+    class _E:
+        name = "송도맥주축제"
+        address = "인천 송도 달빛축제공원"
+
+    class _KakaoHttp:
+        def __init__(self) -> None:
+            self.urls: list[str] = []
+
+        def get_json(self, url, headers, params):
+            self.urls.append(url)
+            assert headers["Authorization"] == "KakaoAK kk"
+            if url.endswith("address.json"):
+                return {"documents": [{"x": "126.64", "y": "37.40"}]}
+            return {"documents": []}
+
+    naver = NaverSearchClient(_FakeHttp({"items": []}), "i", "s", 10)  # 행사명 실패
+    kakao = KakaoLocalClient(_KakaoHttp(), "kk", 10)
+    coord = _geocode(_E(), "인천", naver, kakao)
+
+    assert coord == GeoPoint(37.40, 126.64)  # 카카오 주소검색이 잡았다
+    assert kakao.calls_used == 1  # 주소에서 적중 — 키워드까지 안 감
+
+    # 카카오도 상한 규약 동일 — 초과 호출 0건
+    capped = KakaoLocalClient(_KakaoHttp(), "kk", 0)
+    with pytest.raises(CallBudgetExceeded):
+        capped.address_to_coord("아무 주소")
