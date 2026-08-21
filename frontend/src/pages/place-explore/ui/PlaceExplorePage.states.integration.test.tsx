@@ -149,9 +149,12 @@ beforeEach(() => {
   saveGate.release();
 
   server.use(
-    http.get(`${BASE}/places`, async () => {
+    http.get(`${BASE}/places`, async ({ request }) => {
       await placesGate.opened;
-      return HttpResponse.json({ items: PLACES, nextCursor: null });
+      // 서버가 q(이름 부분일치)로 거른다(TRIP-502) — 검색은 서버 몫이라 이 스텁도 q 를 반영한다.
+      const q = new URL(request.url).searchParams.get('q');
+      const result = q ? PLACES.filter((p) => p.nameKo.includes(q)) : PLACES;
+      return HttpResponse.json({ items: result, nextCursor: null });
     }),
     http.get(`${BASE}/saved-places`, () => HttpResponse.json(savedRows)),
     http.post(`${BASE}/saved-places`, async ({ request }) => {
@@ -245,7 +248,7 @@ describe('S-2 · 0건이면 다른 지역으로 보낸다 (AC-5 · 01b Seed Q4)'
 });
 
 describe('S-3 · 검색어가 0건을 만들면 그 검색어를 지목한다 (AC-6 · BR-U1-16 취지)', () => {
-  it('검색어를 문구에 박고, 해제하면 목록이 되돌아오며, 서버는 다시 부르지 않는다', async () => {
+  it('검색어를 문구에 박고, 해제하면 목록이 되돌아온다 (검색은 서버가 한다 — TRIP-502)', async () => {
     setAccessToken('valid-access');
 
     await renderLoaded();
@@ -268,8 +271,8 @@ describe('S-3 · 검색어가 0건을 만들면 그 검색어를 지목한다 (A
 
     // 해제 수단이 실제로 조건을 지운다 — 문구만 있고 버튼이 아무 일도 안 하면 no-op 컨트롤이다.
     await waitFor(() => expect(cardTestIds()).toHaveLength(5));
-    // 계약에 `q` 파라미터가 없다 — 검색·해제 어느 쪽도 서버를 부르지 않는다.
-    expect(hitsOf('GET', '/api/v1/places')).toHaveLength(1);
+    // 검색·해제는 서버가 한다(q) — 각각 새 요청이 나간다(초기 + 검색 + 해제, 로드된 페이지 한정 아님).
+    expect(hitsOf('GET', '/api/v1/places').length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -502,8 +505,11 @@ describe('S-10 · 배너는 다음 조작 시 사라진다 (01b Seed Q5 — 타�
     await waitFor(() =>
       expect(screen.queryByTestId('explore-places-saveerror')).toBeNull()
     );
-    // 긍정 짝 — 화면이 통째로 죽어서 "없음"이 된 게 아니다.
-    expect(cardTestIds()).toEqual(['explore-places-card-p2']);
+    // 긍정 짝 — 화면이 통째로 죽어서 "없음"이 된 게 아니다. 검색은 서버가 하므로(q=광안, TRIP-502)
+    // 새 조회가 해소되면 p2 만 남는다(클라 즉시 필터 아님 — waitFor 로 서버 응답을 기다린다).
+    await waitFor(() =>
+      expect(cardTestIds()).toEqual(['explore-places-card-p2'])
+    );
   });
 });
 

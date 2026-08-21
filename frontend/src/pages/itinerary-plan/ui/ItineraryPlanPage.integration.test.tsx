@@ -234,7 +234,7 @@ describe('🔴 I3 · AC9 — 일정이 아직 없으면(404) notFound 얼굴을 
  *  - 🔴 404 는 status 불변·재조회 없음(I7 · ★5). 409(+1)와 404(불변)를 GET 실건수로 가른다.
  */
 describe('🔴 I4 · AC1 — 확정 성공(200)은 재조회 없이 읽기전용으로 전환한다 (setQueryData · US-SCHED-12)', () => {
-  it('확정 CTA press → POST /confirm 1건, GET 재조회 없이 확정 배너가 뜬다', async () => {
+  it('확정 CTA press → POST /confirm 1건, GET 재조회 없이 읽기전용(확정)으로 전환한다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => HttpResponse.json(confirmedItinerary());
 
@@ -247,12 +247,10 @@ describe('🔴 I4 · AC1 — 확정 성공(200)은 재조회 없이 읽기전용
     // 누른다 — 중간 다이얼로그 없이 곧장 POST(★9).
     fireEvent.press(cta);
 
-    // 확정 배너로 전환. 부제는 페이지 조립(날짜범위 · 제목 · 총 곳수). 곳수 = 전 일자 슬롯 합(2+1=3).
-    const banner = await screen.findByTestId('itinerary-confirmed-banner');
-    expect(banner).toHaveTextContent(/6월 10일 – 13일/);
-    expect(banner).toHaveTextContent(/제주 여행/);
-    expect(banner).toHaveTextContent(/3곳/);
-    expect(screen.getByText('확정 일정')).toBeOnTheScreen();
+    // 확정(읽기전용)으로 전환 — TRIP-505 로 배너가 제거됐으므로 상시 앱바 제목 '확정 일정' 을
+    //   전환 앵커로 쓴다(배너 앵커 파손 봉합 · 02a ★T1). 읽기전용이라 확정 CTA 가 사라진다.
+    await screen.findByText('확정 일정');
+    expect(screen.queryByTestId('itinerary-confirm-cta')).toBeNull();
 
     // ★6 — POST 1건, GET 은 **안 늘었다**(재조회 0). 응답을 캐시에 직접 주입(setQueryData)했다는
     //   유일한 설명이다. invalidate/refetch 로 성공을 반영하면 GET 이 2가 되어 여기서 죽는다.
@@ -287,7 +285,7 @@ describe('🔴 I5a · AC5 — 409 는 침묵 없이 안내 + 재조회, 서버�
 });
 
 describe('🔴 I5b · AC5 — 409 후 재조회가 CONFIRMED 면 읽기전용으로 정합한다 (INV-4 · ★2)', () => {
-  it('confirm 이 409 이고 서버가 이미 확정이면, 재조회로 확정 배너로 정합한다', async () => {
+  it('confirm 이 409 이고 서버가 이미 확정이면, 재조회로 확정 얼굴로 정합한다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => new HttpResponse(null, { status: 409 });
 
@@ -299,9 +297,10 @@ describe('🔴 I5b · AC5 — 409 후 재조회가 CONFIRMED 면 읽기전용으
     itineraryHandler = () => HttpResponse.json(confirmedItinerary());
     fireEvent.press(cta);
 
-    // 재조회로 확정 배너로 정합. ★2 — 얼굴이 읽기전용으로 바뀌면 인라인 안내는 그 리렌더에
+    // 재조회로 확정 얼굴로 정합. ★2 — 얼굴이 읽기전용으로 바뀌면 인라인 안내는 그 리렌더에
     //   지워지므로 이 케이스는 잔존 안내를 단언하지 않는다(전환과 잔존을 케이스로 갈랐다).
-    await screen.findByTestId('itinerary-confirmed-banner');
+    //   TRIP-505 로 배너가 제거돼 상시 앱바 제목 '확정 일정' 을 정합 앵커로 쓴다(02a ★T1).
+    await screen.findByText('확정 일정');
     await waitFor(() => expect(itineraryGetCalls).toBe(2));
   });
 });

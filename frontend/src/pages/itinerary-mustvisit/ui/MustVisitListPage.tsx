@@ -11,7 +11,10 @@ import {
 } from '@/features/itinerary/model/mustVisitList';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import type { AddMustVisitRequest } from '@/shared/api/generated/schemas';
+import type {
+  AddMustVisitRequest,
+  GenerateItineraryRequestGenerationMode,
+} from '@/shared/api/generated/schemas';
 import {
   deleteTripsTripIdMustVisitsMustVisitId,
   getGetTripsTripIdMustVisitsQueryKey,
@@ -63,8 +66,12 @@ type DemoteFailure =
 
 export function MustVisitListPage({
   tripId,
+  mode,
 }: {
   tripId: string;
+  /** copick 갈래 신호(TRIP-504). undefined=완전AI(기존 동작 불변, 후방호환 additive).
+   * CO_PLAN 이면 다음/건너뛰기가 CO_PLAN generating + 첫 슬롯 successRoute 로 잇는다(AC-5). */
+  mode?: GenerateItineraryRequestGenerationMode;
 }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -194,6 +201,28 @@ export function MustVisitListPage({
           ? DEMOTE_DUPLICATE
           : undefined;
 
+  // 다음/건너뛰기는 둘 다 h09(생성 중)로 간다. copick 갈래(mode=CO_PLAN)면 h04 에서 실려 온 신호를
+  // 그대로 h09 로 넘기고, successRoute 를 **첫 슬롯 경로 템플릿**으로 싣는다(01b Q3·AC-5). h05 시점엔
+  // slotKey 를 아직 모르므로 `[slotKey]` 세그먼트가 든 템플릿이고, h09 가 생성 후 실 slotKey 를
+  // 채운다(GeneratingPage). 완전AI 갈래(mode 없음)는 기존 FULLY_AI generating 그대로다(무회귀).
+  function goToGenerating(): void {
+    if (mode === 'CO_PLAN') {
+      router.push({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: {
+          tripId,
+          mode: 'CO_PLAN',
+          successRoute: '/trips/[tripId]/itinerary/copick/[slotKey]',
+        },
+      });
+      return;
+    }
+    router.push({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: { tripId },
+    });
+  }
+
   return (
     <MustVisitPickerScreen
       view={view}
@@ -203,20 +232,10 @@ export function MustVisitListPage({
       })}
       demoteErrorText={demoteErrorText}
       onBack={() => router.back()}
-      // 다음/건너뛰기 둘 다 h09(생성 중)로 잇는다(TRIP-454 AC-2). h09 는 이제 존재하므로
-      // 상시 차단·사유 문구가 사라졌다 — 화면 계약(`onProceed`/`onSkip` 활성)은 무수정이다.
-      onProceed={() =>
-        router.push({
-          pathname: '/trips/[tripId]/itinerary/generating',
-          params: { tripId },
-        })
-      }
-      onSkip={() =>
-        router.push({
-          pathname: '/trips/[tripId]/itinerary/generating',
-          params: { tripId },
-        })
-      }
+      // 다음/건너뛰기 둘 다 h09(생성 중)로 잇는다(TRIP-454 AC-2 · TRIP-504 AC-5). copick 갈래면
+      // CO_PLAN 신호+첫 슬롯 successRoute 를 싣는다(위 `goToGenerating`). 화면 계약은 무수정.
+      onProceed={goToGenerating}
+      onSkip={goToGenerating}
       onPressItem={(sourcePoiId) =>
         router.push({
           pathname: '/trips/[tripId]/itinerary/must-visits/[poiId]',

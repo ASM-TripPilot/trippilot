@@ -812,7 +812,7 @@ function SavedMenuFab({
           accessibilityRole="button"
           accessibilityLabel="담은 곳 메뉴 닫기"
           onPress={onToggle}
-          className="absolute inset-0"
+          className="absolute inset-0 bg-scrim/40"
         />
       ) : null}
       <View className="absolute bottom-[152px] right-lg flex-row items-center gap-md">

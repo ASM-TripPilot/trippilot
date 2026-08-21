@@ -20,9 +20,10 @@ import { PlaceAddPage } from './PlaceAddPage';
  * 무엇을 보장하나(심판 대상 = **실제로 나간 요청**이라 msw 로 관찰):
  *  - 🔴 **P1 (★)** 첫 조회의 나간 `/places` URL 쿼리 키가 {region,category} **부분집합**이다 —
  *    **검색어 파라미터가 없다**(계약에 검색어 키가 없음, 클라가 이름으로 거른다).
- *  - 🔴 **P2 (★)** 검색어를 넣어도 **서버를 다시 안 부르고**(히트 수 그대로) 이름(nameKo) 부분일치로
- *    카드가 좁혀진다(`visiblePlaces` 재사용).
+ *  - 🔴 **P2 (TRIP-502)** 검색은 **서버가 한다**(`q`) — 검색어를 넣으면 서버를 다시 부르고, 서버가
+ *    거른 결과만 남는다(로드된 페이지 한정 검색이 아니다).
  *  - 🔴 **P3** 카테고리 칩은 `category` 파라미터로 **서버를 다시 부른다**.
+ *  - 🔴 **P4 (TRIP-502)** 목록 끝에 닿으면 `nextCursor` 로 다음 장을 이어 받는다(무한 스크롤).
  *
  * 왜 통합 버킷인가: 최종 직렬화된 URL·재요청 횟수는 msw 만 본다(place-explore 계승). "getPlaces
  * 호출 인자에 검색어 키 부재"(01b ★)의 더 강한 판본 — hook 인자가 아니라 **나간 URL** 을 잰다.
@@ -106,15 +107,16 @@ beforeEach(() => {
 
   server.use(
     http.get(`${BASE}/places`, ({ request }) => {
-      const category = new URL(request.url).searchParams.get('category');
-      // 응답이 `{items, nextCursor}` 객체다(TRIP-503) — 배열이 아니다.
-      return HttpResponse.json({
-        items:
-          category === null
-            ? PLACES
-            : PLACES.filter((place) => place.category === category),
-        nextCursor: null,
-      });
+      const url = new URL(request.url);
+      const category = url.searchParams.get('category');
+      const q = url.searchParams.get('q');
+      // 서버가 category·q(이름 부분일치)로 거른다(TRIP-502) — 응답은 {items, nextCursor}.
+      let result = PLACES;
+      if (category !== null) {
+        result = result.filter((place) => place.category === category);
+      }
+      if (q) result = result.filter((place) => place.nameKo.includes(q));
+      return HttpResponse.json({ items: result, nextCursor: null });
     }),
     // 방어 핸들러 — 배선이 현재 일정을 읽거나 저장해도 검색 심판이 안 깨지게(응답 형태만 최소).
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
@@ -205,22 +207,24 @@ describe('🔴 P1 · AC-5 (★) — 첫 조회 URL 에 검색어 파라미터가
   });
 });
 
-describe('🔴 P2 · AC-5 (★) — 검색어는 서버를 다시 안 부르고 이름 부분일치로 좁힌다', () => {
-  it('검색 "해" → 재요청 0 + 이름에 "해" 든 카드만 남는다', async () => {
+describe('🔴 P2 · AC-5·TRIP-502 — 검색은 서버가 한다(q) — 로드된 페이지 한정이 아니다', () => {
+  it('검색 "해" → q 로 서버를 다시 부르고, 서버가 거른 결과(p2)만 남는다', async () => {
     await renderPage();
-
-    const before = hitsOf('GET', '/api/v1/places').length;
 
     fireEvent.changeText(screen.getByTestId('itinerary-place-search'), '해');
 
-    // 서버를 다시 안 부른다 — 클라 필터(visiblePlaces)라 히트 수가 그대로다.
+    // 검색은 서버가 한다 — '해' 안 든 p1 은 사라지고, q 를 실은 새 요청이 나간다(로드된 페이지 한정 아님).
     await waitFor(() =>
       expect(screen.queryByTestId('itinerary-place-card-p1')).toBeNull()
     );
-    expect(hitsOf('GET', '/api/v1/places').length).toBe(before);
+    const hits = hitsOf('GET', '/api/v1/places');
+    expect(hits.length).toBeGreaterThanOrEqual(2);
+    expect(new URL(hits[hits.length - 1].url).searchParams.get('q')).toBe('해');
 
-    // 이름에 '해' 든 p2 만 남고, 안 든 p1·p3 는 사라진다.
-    expect(screen.getByTestId('itinerary-place-card-p2')).toBeOnTheScreen();
+    // 서버가 거른 결과: '해' 든 p2 만 남고, 안 든 p3 는 없다.
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-p2')).toBeOnTheScreen()
+    );
     expect(screen.queryByTestId('itinerary-place-card-p3')).toBeNull();
   });
 });
@@ -237,5 +241,34 @@ describe('🔴 P3 · AC-5 — 카테고리 칩은 category 파라미터로 서�
     // URL.searchParams.get 이 퍼센트 인코딩을 자동 디코드 — 한글 enum 비교가 성립한다.
     const second = hitsOf('GET', '/api/v1/places')[1];
     expect(new URL(second.url).searchParams.get('category')).toBe('맛집');
+  });
+});
+
+describe('🔴 P4 · TRIP-502 — 모두 보기는 커서로 이어 받는다 (무한 스크롤)', () => {
+  it('목록 끝에 닿으면 nextCursor 로 다음 장을 이어 받는다', async () => {
+    const PAGE2 = [makePlace('p9', '태종대', '명소', 5)];
+    // 첫 장은 nextCursor 를 주고, cursor 가 실린 요청엔 다음 장을 준다.
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor');
+        return cursor
+          ? HttpResponse.json({ items: PAGE2, nextCursor: null })
+          : HttpResponse.json({ items: PLACES, nextCursor: 'C2' });
+      })
+    );
+
+    await renderPage();
+
+    // 목록 끝에 닿음 → 다음 장 요청. onEndReached 배선을 지우면 p9 가 안 와 red 가 된다(뮤테이션 심판).
+    fireEvent(screen.getByTestId('itinerary-place-list'), 'endReached');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-place-card-p9')).toBeOnTheScreen()
+    );
+    // 다음 장 요청에 cursor 가 실린다.
+    const hits = hitsOf('GET', '/api/v1/places');
+    expect(new URL(hits[hits.length - 1].url).searchParams.get('cursor')).toBe(
+      'C2'
+    );
   });
 });

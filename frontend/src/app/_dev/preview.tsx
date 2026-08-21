@@ -45,10 +45,7 @@ import {
   buildDraftPins,
   formatDraftDayHeader,
 } from '@/features/itinerary/model/draftView';
-import {
-  formatConfirmedDateRange,
-  type PlanDayTab,
-} from '@/features/itinerary/model/planState';
+import { type PlanDayTab } from '@/features/itinerary/model/planState';
 import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
 import {
   startTimeOptions,
@@ -1917,6 +1914,24 @@ const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => <MethodPickerScreen onBack={noop} onPressFullAi={noop} />,
   },
+  // h04 재생성 확인(TRIP-504) — 기존 일정이 있을 때 copick 이 곧장 진행하지 않고 뜨는 인라인 확인.
+  // 실화면에선 조회로 판정해 켜지는 얼굴이라, 여기서 상태만 얹어(`showRegenerateConfirm`) 육안 대조한다.
+  {
+    key: 'itinerary-method-regenerate',
+    label: 'h04 · 재생성 확인',
+    login: null,
+    render: () => (
+      <MethodPickerScreen
+        onBack={noop}
+        onPressFullAi={noop}
+        onPressCoPick={noop}
+        onPressManual={noop}
+        showRegenerateConfirm
+        onRegenerateContinue={noop}
+        onRegenerateCancel={noop}
+      />
+    ),
+  },
   // h09 생성 중(TRIP-305) — props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로 나온다. 진행
   // 표면은 비결정형(RN Animated)이고 3단계는 균일 진행 중(⚑C, 완료 날조 없음)이다. 실화면 딥링크로는
   // 잠깐만 스치는 얼굴이라(성공 즉시 draft 로 replace) 여기가 이 화면을 오래 보는 유일한 자리다.
@@ -2092,9 +2107,9 @@ const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
-  // h34 확정 읽기전용(TRIP-300) — 같은 데이터에 status=CONFIRMED 를 얹은 확정 얼굴. 확정 배너·
-  // appbar `확정 일정`·하단 비활성 2버튼을 Figma h34 와 눈으로 대조한다. 부제는 실기와 같은 조립
-  // 함수(formatConfirmedDateRange)로 만든다 — 손으로 적으면 프리뷰와 실기가 갈린다.
+  // h34 확정 읽기전용(TRIP-505 정리) — 같은 데이터에 status=CONFIRMED 를 얹은 확정 얼굴. 배너·
+  // 하단 비활성 2버튼·부제 조립은 제거됐고, 그 자리에 `itinerary-confirmed-note` 안내 한 줄이
+  // 뜬다(appbar `확정 일정`·공유 아이콘은 유지). 안내·공유 어중간한 상태를 눈으로 대조하는 자리.
   {
     key: 'itinerary-confirmed',
     label: '확정 일정 · 읽기전용(h34)',
@@ -2106,10 +2121,6 @@ const PREVIEW_STATES: PreviewState[] = [
         slots={TIMELINE_PREVIEW_SLOTS}
         activeDayIndex={0}
         status="CONFIRMED"
-        confirmedSubtitle={`${formatConfirmedDateRange(
-          '2026-06-10',
-          '2026-06-13'
-        )} · 부산 여행 · 5곳`}
         onSelectDay={noop}
         onBack={noop}
       />

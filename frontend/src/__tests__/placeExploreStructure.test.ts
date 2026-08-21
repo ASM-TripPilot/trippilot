@@ -230,6 +230,7 @@ describe('AC-G5 · 화면 프레젠테이션 순수성 · AC-G6 · feature 경�
       'axios',
       '@/shared/api/generated/places',
       'useGetPlaces',
+      'usePlacesInfinite',
       'useSavedPlaces',
       '@/features/stay',
       '@/features/trip',
@@ -325,15 +326,17 @@ describe('층 책임 분리 — 라우트 · 배선 · 화면', () => {
     expect(routeSource).not.toContain('FlatList');
 
     const pageSource = stripComments(fs.readFileSync(pagePath, 'utf8'));
-    // 배선은 조회·인증 판정·가공·라우팅을 갖되 마크업은 모른다.
-    expect(pageSource).toContain('useGetPlaces');
+    // 배선은 조회·인증 판정·라우팅을 갖되 마크업은 모른다. TRIP-502로 검색·정렬·페이지네이션을
+    // 서버가 하므로(usePlacesInfinite로 q·cursor 전달) 클라 가공(visiblePlaces)은 사라졌다.
+    expect(pageSource).toContain('usePlacesInfinite');
     expect(pageSource).toContain('useSavedPlaces');
-    expect(pageSource).toContain('visiblePlaces');
     expect(pageSource).toContain('getAccessToken');
+    expect(pageSource).not.toContain('visiblePlaces');
     expect(pageSource).not.toContain('FlatList');
 
     const screenSource = stripComments(fs.readFileSync(screenPath, 'utf8'));
-    // 화면이 정렬·검색을 다시 하면 진실이 두 곳에 생긴다(단일 출처).
+    // 화면이 검색·정렬을 다시 하면 진실이 두 곳에 생긴다(단일 출처 — 서버).
     expect(screenSource).not.toContain('visiblePlaces');
+    expect(screenSource).not.toContain('usePlacesInfinite');
   });
 });

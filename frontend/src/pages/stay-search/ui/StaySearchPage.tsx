@@ -102,11 +102,11 @@ export function StaySearchPage(): ReactElement {
     filterZeroReasons: data?.filterZeroReasons ?? [],
   });
 
-  // 필터 칩 — 지역=통합검색 진입(/explore/search, TRIP-495 — 지역 전용 화면이 아니라 탐색 탭의
-  // 통합검색으로 간다), 필터=시트 열기, 가격대=가격대 시트 열기.
+  // 필터 칩 — 지역=여행지 선택 진입(/explore/region?purpose=stay, TRIP-499 — 통합검색 은퇴,
+  // 지역 선택 정본으로 복귀), 필터=시트 열기, 가격대=가격대 시트 열기.
   function handlePressFilter(axis: 'price' | 'region' | 'more'): void {
     if (axis === 'region') {
-      router.push('/explore/search');
+      router.push('/explore/region?purpose=stay');
       return;
     }
     if (axis === 'price') {
@@ -159,8 +159,8 @@ export function StaySearchPage(): ReactElement {
         onPressFilter={handlePressFilter}
         activeFilterCount={countActiveFilters(amenityList, stayTypeList)}
         // 빈 상태 카드 CTA(TRIP-416) — 화면은 라우터를 모른다(구조 가드), 배선은 이 페이지 몫.
-        // 지역 바꾸기는 필터 칩과 같은 목적지(/explore/search, 통합검색)로 진입한다(TRIP-495).
-        onPressChangeRegion={() => router.push('/explore/search')}
+        // 지역 바꾸기는 필터 칩과 같은 목적지(/explore/region?purpose=stay, 여행지 선택)로 진입한다(TRIP-499).
+        onPressChangeRegion={() => router.push('/explore/region?purpose=stay')}
         // 필터 완화(AC-2)·초기화(AC-4) 공용 — amenity/stayType 두 키만 비운다(region 은 merge 로
         // 유지되므로 넣지 않는다, ★4). setParams 갱신 → useLocalSearchParams 갱신 → 재조회.
         onRelaxFilters={() => router.setParams({ amenity: [], stayType: [] })}

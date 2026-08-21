@@ -99,7 +99,7 @@ export default function HomeRoute() {
       router.push('/stays/saved');
     },
     onPressSpotsMore: () => router.push('/explore/places'),
-    onPressSearch: () => router.push('/explore/search'),
+    onPressSearch: () => router.push('/explore/region?purpose=trip'),
     savedMenuOpen,
     onToggleSavedMenu: () => setSavedMenuOpen((v) => !v),
   };

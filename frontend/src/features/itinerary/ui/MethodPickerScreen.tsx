@@ -104,6 +104,14 @@ const BLOCKED_REASON =
   '다른 여행의 일정을 만들고 있어요 — 한 번에 하나만 만들 수 있어요';
 const GOTO_ACTIVE_LABEL = '진행 중인 여행으로 가기';
 
+// TRIP-504 재생성 확인 — 문구는 일반형이다. "직접 바꾼 N곳이 사라져요"의 N 을 FE 가 셀 계약이
+// 없어(01b 맹점 5) 곳 수를 발명하지 않고 일반 문구로 낮춘다. 리비전 스냅숏은 서버(U3) 책임.
+const REGENERATE_TITLE = '기존 일정을 새로 만들어요';
+const REGENERATE_BODY =
+  'AI와 같이 다시 짜면 지금 일정이 새 초안으로 바뀌어요. 계속할까요?';
+const REGENERATE_CONTINUE_LABEL = '계속';
+const REGENERATE_CANCEL_LABEL = '취소';
+
 export interface MethodPickerScreenProps {
   onBack: () => void;
   /** 완전AI 탭 — 배선이 h09(생성 중)로 navigate 한다(POST 는 h09 소유). */
@@ -118,6 +126,12 @@ export interface MethodPickerScreenProps {
   activeGeneration?: ActiveGeneration | null;
   /** 사유 안내의 "진행 중인 여행으로 가기". */
   onPressActiveGeneration?: () => void;
+  /** TRIP-504 재생성 확인 — 기존 일정이 있을 때 copick 이 곧장 진행하지 않고 이 확인을 먼저 띄운다.
+   * 판정(조회로 기존 일정 유무)과 상태는 배선(ItineraryMethodPage)이 쥐고, 화면은 이 세 값으로만
+   * 그린다(후방호환 옵셔널 — `onPressManual?`·`activeGeneration?` 선례). 미전달=확인 없음. */
+  showRegenerateConfirm?: boolean;
+  onRegenerateContinue?: () => void;
+  onRegenerateCancel?: () => void;
 }
 
 export function MethodPickerScreen({
@@ -127,6 +141,9 @@ export function MethodPickerScreen({
   onPressCoPick,
   activeGeneration,
   onPressActiveGeneration,
+  showRegenerateConfirm = false,
+  onRegenerateContinue,
+  onRegenerateCancel,
 }: MethodPickerScreenProps): ReactElement {
   const [soon, setSoon] = useState(false);
   const showSoon = () => setSoon(true);
@@ -207,6 +224,45 @@ export function MethodPickerScreen({
             }
             onPress={onPressCoPick ?? showSoon}
           />
+
+          {showRegenerateConfirm ? (
+            <View
+              testID="itinerary-method-regenerate-confirm"
+              className="w-full gap-md rounded-card border border-primary bg-primary-pale px-lg py-lg"
+            >
+              <Text className="font-noto-bold text-[16px] font-bold text-ink">
+                {REGENERATE_TITLE}
+              </Text>
+              <Text className="font-noto text-label text-body">
+                {REGENERATE_BODY}
+              </Text>
+              <View className="flex-row items-center justify-end gap-sm">
+                <Pressable
+                  testID="itinerary-method-regenerate-confirm-cancel"
+                  accessibilityRole="button"
+                  onPress={onRegenerateCancel}
+                  className="rounded-button border border-hairline bg-canvas px-lg py-sm"
+                  hitSlop={6}
+                >
+                  <Text className="font-noto-bold text-label font-bold text-muted">
+                    {REGENERATE_CANCEL_LABEL}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  testID="itinerary-method-regenerate-confirm-continue"
+                  accessibilityRole="button"
+                  onPress={onRegenerateContinue}
+                  className="rounded-button bg-primary px-lg py-sm"
+                  hitSlop={6}
+                >
+                  <Text className="font-noto-bold text-label font-bold text-on-primary">
+                    {REGENERATE_CONTINUE_LABEL}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+
           <MethodCard
             testID="itinerary-method-manual"
             icon={<ManualGlyph />}
