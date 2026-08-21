@@ -7,6 +7,8 @@
      예외(BR-AF-09 — 조용한 절단·패딩 금지), 빈 배치 무호출
   ③ TitanEmbedding — invoke_model 본문(dimensions·normalize), 응답 파싱, 차원
      위반 예외, 배치 = 단건 루프(순서 보존)
+  ④ SentenceTransformerEmbedding — normalize 요청, 순서 보존, 차원 위반 예외,
+     빈 배치 무호출 (모델 로드 0 — fake 인코더만, 다운로드도 없다)
 """
 
 from __future__ import annotations
@@ -19,6 +21,10 @@ import pytest
 
 from trippilot.agents.adapters.pgvector_store import PgVectorStore
 from trippilot.llm_gateway.adapters.openai_embedding import OpenAiEmbeddingAdapter
+from trippilot.llm_gateway.adapters.sentence_transformer_embedding import (
+    DEFAULT_MODEL,
+    SentenceTransformerEmbeddingAdapter,
+)
 from trippilot.llm_gateway.adapters.titan_embedding import TitanEmbeddingAdapter
 
 
@@ -187,3 +193,50 @@ def test_titan_batch_loops_preserving_order() -> None:
     vectors = TitanEmbeddingAdapter(client, dim=2).embed_batch(["a", "b", "c"])
     assert len(client.calls) == 3  # 단건 API — 벤더 배치 없음
     assert vectors == ((1.0, 1.0), (2.0, 2.0), (3.0, 3.0))
+
+
+# ── ④ SentenceTransformerEmbedding (로컬 모델 — fake 인코더) ─────────
+
+
+class FakeEncoder:
+    """SentenceTransformer.encode 호환 fake. 실 모델 로드·다운로드 0건 (D37)."""
+
+    def __init__(self, dim: int = 1024) -> None:
+        self.dim = dim
+        self.calls: list[tuple[list, dict]] = []
+
+    def encode(self, texts, **kwargs):
+        self.calls.append((list(texts), kwargs))
+        # 텍스트마다 다른 값 — 순서가 섞이면 테스트가 잡아낸다
+        return [[float(i)] * self.dim for i, _ in enumerate(texts)]
+
+
+def test_sentence_transformer_requests_normalized_vectors() -> None:
+    encoder = FakeEncoder()
+    SentenceTransformerEmbeddingAdapter(encoder).embed("비 오는 날 실내 대안")
+    assert encoder.calls[0][1]["normalize_embeddings"] is True
+
+
+def test_sentence_transformer_batch_preserves_order() -> None:
+    encoder = FakeEncoder()
+    vectors = SentenceTransformerEmbeddingAdapter(encoder).embed_batch(["a", "b", "c"])
+    assert [v[0] for v in vectors] == [0.0, 1.0, 2.0]
+    assert encoder.calls[0][0] == ["a", "b", "c"]
+
+
+def test_sentence_transformer_wrong_dim_raises_not_truncates() -> None:
+    adapter = SentenceTransformerEmbeddingAdapter(FakeEncoder(dim=768))
+    with pytest.raises(ValueError, match="BR-AF-09"):
+        adapter.embed("차원이 다른 모델")
+
+
+def test_sentence_transformer_empty_batch_makes_no_call() -> None:
+    encoder = FakeEncoder()
+    assert SentenceTransformerEmbeddingAdapter(encoder).embed_batch([]) == ()
+    assert encoder.calls == []
+
+
+def test_sentence_transformer_defaults_to_kure_and_dim_1024() -> None:
+    """포트에 질의/문서 구분이 없어 프리픽스 불필요 모델이어야 한다 (모듈 docstring)."""
+    assert DEFAULT_MODEL == "nlpai-lab/KURE-v1"
+    assert SentenceTransformerEmbeddingAdapter(FakeEncoder()).dim == 1024

@@ -17,10 +17,12 @@
 모든 시나리오에서 산출 POI ⊂ 후보 풀(INV-1), 산출물에 시각·소요시간 필드 부재(INV-2·3)를
 검사한다.
 
-**임베딩은 결정론 해시**다 — 멘토 게이트웨이에 임베딩 배포가 없다(404 DeploymentNotFound,
-2026-08-21 실측). 의미 유사도가 없으므로 R 단계에서 검증되는 것은 **배선**(collection
-배정·kb 재태깅·부분 실패 격리)이지 검색 품질이 아니다. 실임베딩이 붙으면 이 클래스만
-교체한다. 스토어는 실물 pgvector 이므로 어댑터 왕복은 진짜로 밟는다.
+**임베딩**: `EMBEDDING_MODEL` 을 주면 로컬 실모델(기본 KURE-v1, 1024차원 한국어),
+없으면 결정론 해시로 돈다. 해시에는 의미 유사도가 없어 R 단계에서 검증되는 것이
+**배선**(collection 배정·kb 재태깅·부분 실패 격리)뿐이므로, 검색 품질까지 보려면
+모델을 켜라. 멘토 게이트웨이에는 임베딩 배포가 없다(404 DeploymentNotFound,
+2026-08-21 실측) — 그래서 원격이 아니라 로컬 모델이다. 스토어는 어느 쪽이든 실물
+pgvector 라 어댑터 왕복은 진짜로 밟는다.
 
 사용법:
     cd ai
@@ -34,6 +36,8 @@
     COLLECTED_POIS           수집 제안 JSON (collect_pois.py 산출물). 있으면 우선.
     COLLECTED_POIS_DB        수집 sqlite (기본 "collected_pois.db"). JSON 없을 때 사용.
     SMOKE_REGION             기본 "제주시" — 후보 풀을 뽑을 시군구
+    EMBEDDING_MODEL          로컬 임베딩 모델명. 값 없으면 해시. "1" 이면 기본 KURE-v1.
+                             켜려면 `uv pip install sentence-transformers` (의존성에 없음)
     LLM env                  smoke_llm.py 와 동일. 미설정이면 시나리오 ②만 생략(성공 유지).
 
 종료 코드: 0 = 5종(또는 ② 생략 시 4종) 통과 / 1 = 계약 위반·실행 실패 / 2 = 사전조건 미충족
@@ -99,6 +103,30 @@ class HashEmbedding:
 
     def embed_batch(self, texts) -> tuple[tuple[float, ...], ...]:
         return tuple(self.embed(t) for t in texts)
+
+
+def build_embedding():
+    """EMBEDDING_MODEL 있으면 로컬 실모델, 없으면 해시. 모델 로드는 여기(조립 진입점)만."""
+    name = os.environ.get("EMBEDDING_MODEL")
+    if not name:
+        return HashEmbedding()
+    try:
+        from sentence_transformers import SentenceTransformer
+    except ModuleNotFoundError as e:  # 의존성에 없다(의도) — 되살리는 명령을 바로 준다
+        raise SystemExit(
+            "sentence-transformers 미설치 — `uv pip install sentence-transformers`.\n"
+            "  프로젝트 의존성이 아니라서 `uv sync` 하면 다시 지워진다 (boto3 선례).\n"
+            "  EMBEDDING_MODEL 을 비우면 해시 임베딩으로 계속 돌아간다."
+        ) from e
+
+    from trippilot.llm_gateway.adapters.sentence_transformer_embedding import (
+        DEFAULT_MODEL,
+        SentenceTransformerEmbeddingAdapter,
+    )
+
+    model_name = DEFAULT_MODEL if name == "1" else name
+    print(f"임베딩 모델 로드: {model_name} (최초 실행은 내려받느라 오래 걸린다)")
+    return SentenceTransformerEmbeddingAdapter(SentenceTransformer(model_name))
 
 
 class CannedLlm:
@@ -191,7 +219,7 @@ def kb_documents(pool: CandidatePool) -> list[KbDocument]:
 # ── 실행 ────────────────────────────────────────────────────────────────
 
 
-def pipeline(store, llm, model_id: str | None) -> PlanBRagPipeline:
+def pipeline(store, embedding, llm, model_id: str | None) -> PlanBRagPipeline:
     mid = model_id or "unused"
     gateway = None if llm is None else GatewayFacade(
         llm, PromptRegistry(PROMPTS), AlternativeSelectionGate(),
@@ -205,13 +233,13 @@ def pipeline(store, llm, model_id: str | None) -> PlanBRagPipeline:
         LoggingTrace(),
     )
     return PlanBRagPipeline(
-        HashEmbedding(), store, alternative_gateway=gateway,
+        embedding, store, alternative_gateway=gateway,
         config=PlanBRagConfig(max_alternatives=3),
     )
 
 
-def run(title, store, pool, llm=None, model_id=None, excluded=frozenset()) -> dict:
-    result = pipeline(store, llm, model_id).run(
+def run(title, store, embedding, pool, llm=None, model_id=None, excluded=frozenset()) -> dict:
+    result = pipeline(store, embedding, llm, model_id).run(
         PlanBRagRequest(
             trigger=TriggerParams(TriggerKind.WEATHER, ScheduleId("smoke-planb-1"),
                                   date.today(), {"pop": 80}),
@@ -253,11 +281,11 @@ def main() -> int:
 
     store = PgVectorStore(lambda: psycopg.connect(dsn))
     docs = kb_documents(pool)
-    embedding = HashEmbedding()
+    embedding = build_embedding()
     try:
         print(f"KB 적재 {index_documents(docs, embedding, store)}건 (실 pgvector)")
 
-        r1 = run("① 게이트웨이 미주입 → 규칙 랭킹", store, pool)
+        r1 = run("① 게이트웨이 미주입 → 규칙 랭킹", store, embedding, pool)
         assert r1["fallback_level"] == 1, r1
         assert "alternative_gateway_absent" in r1["notes"], r1
         # KB-2 저장 장소 2곳이 규칙 랭킹 상위를 차지한다. 둘 사이의 순서는 고정하지
@@ -271,22 +299,22 @@ def main() -> int:
 
         if os.environ.get("LLM_PROVIDER"):
             adapter, model_id = _build_adapter()
-            r2 = run(f"② 실 LLM 선택 (model={model_id})", store, pool, adapter, model_id)
+            r2 = run(f"② 실 LLM 선택 (model={model_id})", store, embedding, pool, adapter, model_id)
             assert r2["fallback_level"] == 0, f"실모델인데 폴백: {r2['notes']}"
             assert all(a["rationale"].strip() for a in r2["alternatives"]), r2
         else:
             print("\n── ② 실 LLM 선택 — LLM_PROVIDER 미설정, 생략 (성공 유지)")
 
         ghost = json.dumps({"selections": [{"poiId": "tourapi-000000", "reason": "환각"}]})
-        r3 = run("③ 풀 밖 id 응답 → 게이트 드롭 → 규칙 랭킹", store, pool, CannedLlm(ghost))
+        r3 = run("③ 풀 밖 id 응답 → 게이트 드롭 → 규칙 랭킹", store, embedding, pool, CannedLlm(ghost))
         assert r3["fallback_level"] == 1, r3
         assert any("alternative_fallback" in n for n in r3["notes"]), r3
 
-        r4 = run("④ LLM 장애 → 규칙 랭킹", store, pool, FailingLlm())
+        r4 = run("④ LLM 장애 → 규칙 랭킹", store, embedding, pool, FailingLlm())
         assert r4["fallback_level"] == 1, r4
         assert any("alternative_fallback" in n for n in r4["notes"]), r4
 
-        r5 = run("⑤ 후보 전량 제외 → 대안 0 + 사유", store, pool,
+        r5 = run("⑤ 후보 전량 제외 → 대안 0 + 사유", store, embedding, pool,
                  excluded=frozenset(p.poi_id for p in pool.pois))
         assert r5["alternatives"] == [] and r5["empty_reason"] == "no_candidates", r5
     finally:  # 실 collection(persona 등)에 스모크 문서를 남기지 않는다
