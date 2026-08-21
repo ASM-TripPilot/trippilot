@@ -92,6 +92,7 @@ import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
 } from '@/features/trip/ui/TripWizardStep1Screen';
+import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
 import {
   TripWizardStep2Screen,
   type TripWizardStep2ScreenProps,
@@ -581,6 +582,17 @@ const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
  * 외부 URL을 지어내는 것은 INV-1이 막는다(`exploreFixtures.ts` 머리말과 같은 사정).
  * 구현 실패가 아니다.
  */
+/** 취향 override 시트(TRIP-484) 선택지 표본 — 온보딩 스타일 7종(slug→한국어)과 같은 목록. */
+const PREF_OVERRIDE_OPTIONS = [
+  { slug: 'rest', label: '휴양' },
+  { slug: 'gourmet', label: '미식' },
+  { slug: 'nature', label: '자연' },
+  { slug: 'art', label: '문화예술' },
+  { slug: 'activity', label: '액티비티' },
+  { slug: 'sightseeing', label: '관광' },
+  { slug: 'shopping', label: '쇼핑' },
+];
+
 const TRIP_WIZARD_BASE: TripWizardStep1ScreenProps = {
   destinations: [{ seq: 1, region: '부산', nights: 3 }],
   startDate: '2026-06-10',
@@ -1495,6 +1507,28 @@ const PREVIEW_STATES: PreviewState[] = [
         baseDate="2026-06-10"
         onCloseDateSheet={noop}
         onConfirmDates={noop}
+      />
+    ),
+  },
+  // 취향 '바꾸기' 시트 열림(TRIP-484) — Figma 프레임 부재라 발명 레이아웃이다. jest는 바텀시트
+  // 실개폐를 못 보므로(통과 목) 시트 문구·칩 선택 하이라이트를 눈으로 보는 유일한 자리다.
+  // '미식'을 선택 상태로 열어 선택/비선택 칩을 한 화면에서 대조한다.
+  {
+    key: 'trip-new-step1-prefsheet',
+    label: '여행 만들기 1/2 · 취향 바꾸기 시트',
+    login: null,
+    render: () => (
+      <TripWizardStep1Screen
+        {...TRIP_WIZARD_BASE}
+        prefSheet={
+          <PrefOverrideSheet
+            options={PREF_OVERRIDE_OPTIONS}
+            selected={['미식']}
+            onToggle={noop}
+            onConfirm={noop}
+            onClose={noop}
+          />
+        }
       />
     ),
   },

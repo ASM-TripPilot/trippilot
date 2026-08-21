@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import {
   Image,
@@ -177,6 +177,9 @@ export interface TripWizardStep1ScreenProps {
   onChangeParty(next: number): void;
   onSelectCompanion(type: CompanionType): void;
   onChangePreference(): void;
+  /** 취향 override 시트(page-local `PrefOverrideSheet`) — 배선이 조건부로 만들어 넘긴다(닫힘=null).
+   * `TripDateSheet`처럼 이 트리에 마운트하되, 무엇을·열림 여부는 배선이 소유한다(★1 조건부 마운트). */
+  prefSheet?: ReactNode;
   onNext(): void;
   onRetrySubmit?(): void;
   onCloseOverseasDialog?(): void;
@@ -613,6 +616,7 @@ export function TripWizardStep1Screen({
   onChangeParty,
   onSelectCompanion,
   onChangePreference,
+  prefSheet,
   onNext,
   onRetrySubmit,
   onCloseOverseasDialog,
@@ -1235,6 +1239,8 @@ export function TripWizardStep1Screen({
             onClose={() => onCloseDateSheet?.()}
           />
         ) : null}
+
+        {prefSheet}
 
         {overseasBlocked ? (
           <View className="absolute inset-0 items-center justify-center px-xl">

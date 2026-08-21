@@ -6,7 +6,11 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { useGetTrips } from '@/shared/api/generated/trips/trips';
-import type { PreferenceView, Trip } from '@/shared/api/generated/schemas';
+import type {
+  CreateTripRequest,
+  PreferenceView,
+  Trip,
+} from '@/shared/api/generated/schemas';
 
 import {
   buildCreateTripRequest,
@@ -21,9 +25,10 @@ import { usePreferencePrefill } from './usePreferencePrefill';
  * 무엇을 보장하나:
  *  - **D-1 (AC-2)** 여행을 만들면 ① "내 여행 목록" 캐시가 무효화되어 실제로 다시 받아 오고
  *    ② 서버가 준 `Trip`이 가공 없이 호출자에게 돌아온다.
- *  - **D-2·D-3 (TRIP-207 AC-2·AC-3)** 사용자가 넣은 예산이 **나가는 실제 요청 바디**에 실리거나
- *    (넣었을 때) 키가 아예 없다(안 넣었을 때 — **취향에 러프값이 있어도**). 어느 경우에도
- *    `preferenceSnapshot`은 실리지 않는다.
+ *  - **D-2·D-3 (TRIP-207 AC-2·AC-3 + TRIP-484 정책 A)** 사용자가 넣은 예산이 **나가는 실제 요청
+ *    바디**에 실리거나(넣었을 때) 키가 아예 없다(안 넣었을 때 — **취향에 러프값이 있어도**).
+ *    그리고 **`preferenceSnapshot`은 입력이 실었을 때만 wire까지 그대로 나가고**(D-2), 입력이
+ *    안 실었으면 wire에도 없다(D-3 — 훅이 스냅숏을 지어내지 않는다).
  *
  * ⚠️ **TRIP-207에서 D-2·D-3의 주어가 바뀌었다**(02a §6-2). TRIP-203 승인 당시에는 예산 입력
  * UI가 없어 "취향 → 예산 → 요청" 한 줄기가 유일한 경로였다. TRIP-207이 입력을 붙이면서
@@ -222,22 +227,29 @@ describe('AC-2 · 여행 생성 성공 경로 (D-1)', () => {
 });
 
 describe('TRIP-207 AC-2 · AC-3 · 나가는 요청 바디 (D-2 · D-3)', () => {
-  it('사용자가 넣은 예산이 budgetTotal로 실려 나가고, preferenceSnapshot은 실리지 않는다 (D-2)', async () => {
-    // 준비 — 취향 조회는 그대로 돈다(프리필의 출처이므로). 다만 조립에는 넘어가지 않는다.
+  it('입력이 실은 예산과 preferenceSnapshot이 wire까지 그대로 나간다 (D-2)', async () => {
+    // 준비 — 취향 조회는 그대로 돈다(프리필의 출처). 조립에 넘어가는 스냅숏은 **입력이 실은 값**이다.
     setAccessToken('valid-access');
     const { result } = renderHook(() => useTripProbe(), {
       wrapper: createWrapper(),
     });
     await waitFor(() => expect(result.current.prefill.isSuccess).toBe(true));
 
-    // 실행 — 예산은 **입력에서** 온다(화면의 예산 필드가 파싱해 넘긴 정수).
+    // 실행 — 예산과 override 스냅숏이 **입력에서** 온다(화면의 예산 필드·취향 시트가 넘긴 값).
+    // `CreateTripRequest`(변수)로 타이핑해야 `preferenceSnapshot`을 실을 수 있다(★8, 리터럴
+    // 이면 excess-property 검사에 걸린다).
+    const input: CreateTripRequest = {
+      ...BASE_INPUT,
+      budgetTotal: 1200000,
+      preferenceSnapshot: { styles: ['휴양'] },
+    };
     await act(async () => {
       await result.current.create.mutateAsync({
-        data: buildCreateTripRequest({ ...BASE_INPUT, budgetTotal: 1200000 }),
+        data: buildCreateTripRequest(input),
       });
     });
 
-    // 앵커 — 요청이 실제로 나갔다. 없으면 아래 부정 단언이 "아무것도 안 보내서" 통과한다.
+    // 앵커 — 요청이 실제로 나갔다. 없으면 아래 단언이 "아무것도 안 보내서" 통과한다.
     expect(capturedBody).not.toBeNull();
 
     // 단언 — 입력값이 그대로 실렸다.
@@ -247,8 +259,10 @@ describe('TRIP-207 AC-2 · AC-3 · 나가는 요청 바디 (D-2 · D-3)', () => 
       budgetTotal: 1200000,
     });
 
-    // 단언 — 취향이 있어도 스냅숏은 보내지 않는다(동결은 서버 책임 · BR-U1-38).
-    expect(Object.keys(capturedBody ?? {})).not.toContain('preferenceSnapshot');
+    // 단언 — 스냅숏이 wire까지 그대로 나간다(TRIP-484 정책 A — 뮤테이션 훅이 우회로 지우지 않는다).
+    expect(capturedBody).toMatchObject({
+      preferenceSnapshot: { styles: ['휴양'] },
+    });
   });
 
   it('예산을 안 넣으면 취향에 러프값이 있어도 budgetTotal 키가 아예 나가지 않는다 (D-3)', async () => {
@@ -283,7 +297,8 @@ describe('TRIP-207 AC-2 · AC-3 · 나가는 요청 바디 (D-2 · D-3)', () => 
     expect(Object.keys(capturedBody ?? {})).not.toContain('budgetTotal');
     expect(capturedBody?.budgetTotal).not.toBeNull();
 
-    // 단언 — 예산을 안 실어도 스냅숏은 여전히 없다.
+    // 단언 — 입력이 스냅숏을 안 실었으므로 wire에도 없다(훅이 지어내지 않는다 — 조건부 통과의
+    // 나머지 절반, D-2의 짝).
     expect(Object.keys(capturedBody ?? {})).not.toContain('preferenceSnapshot');
   });
 });

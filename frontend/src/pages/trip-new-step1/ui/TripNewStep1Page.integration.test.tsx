@@ -228,8 +228,14 @@ describe('I-1 · AC-1 — 정상 제출이 계약대로 나가고 step2로 이�
       budgetTotal: 800000,
     });
 
-    // 단언 ③ — 생성 시점 취향 동결은 서버 책임이다(BR-U1-38). 클라가 보내면 위반.
-    expect(Object.keys(postedBodies[0])).not.toContain('preferenceSnapshot');
+    // 단언 ③ (TRIP-484 정책 A) — override를 안 했어도 **프리필 스냅숏**이 실려 나간다. BE는 받은
+    // 것만 저장하고 스스로 동결하지 않으므로(TripApiIT 실측) FE가 보내야 취향이 여행에 동결된다.
+    // shape는 PreferenceInput(평평한 한국어 enum)이라 칩과 같은 값이다(PREFERENCE.styles·activities).
+    expect(Object.keys(postedBodies[0])).toContain('preferenceSnapshot');
+    expect(postedBodies[0].preferenceSnapshot).toMatchObject({
+      styles: ['미식', '전시'],
+      activities: ['야경'],
+    });
 
     // 단언 ④ — 2/2 단계로 이동한다.
     await waitFor(() =>
