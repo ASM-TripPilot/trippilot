@@ -148,16 +148,17 @@ describe('🟢 370-AC-1 · "지금 뜨는 장소" 더 보기 → /explore/places
   });
 });
 
-// ── TRIP-453 · entry 1 홈 검색바 → d05 통합 검색 ───────────────────────────────
-describe('🔴 453-AC-1a · 검색바 → /explore/search', () => {
-  it('홈 검색바를 누르면 통합 검색(d05)으로 이동한다', () => {
-    // 기본 목 = 빈 trips → discovery 얼굴. discovery 는 검색바를 그린다. 검색바는 지금 무동작
-    // (onPress=undefined)이라 push 가 0회 → red. 배선 뒤엔 정확히 /explore/search 한 곳으로 간다.
+// ── TRIP-499 · AC-1 홈 검색바 → 여행지 선택(정본) ─────────────────────────────
+describe('🔴 499-AC-1 · 검색바 → /explore/region?purpose=trip', () => {
+  it('홈 검색바를 누르면 여행지 선택(RegionPicker, trip)으로 이동한다', () => {
+    // 기본 목 = 빈 trips → discovery 얼굴. discovery 는 검색바를 그린다. 지금 소스는 옛 목적지
+    // (/explore/search)로 push 하므로 새 목적지 단언과 불일치 → red. 배선 뒤엔 정확히
+    // /explore/region?purpose=trip 한 곳으로 간다(trip↔stay 오타는 완전 일치 단언이 잡는다).
     render(<HomeRoute />);
 
     fireEvent.press(screen.getByTestId('home-search-bar'));
 
-    expect(mockPush.mock.calls).toEqual([['/explore/search']]);
+    expect(mockPush.mock.calls).toEqual([['/explore/region?purpose=trip']]);
   });
 });
 

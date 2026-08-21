@@ -55,6 +55,20 @@ function region(
 const BUSAN = region({ regionCode: '26', name: '부산광역시', poiCount: 12 });
 const JEJU = region({ regionCode: '50', name: '제주특별자치도', poiCount: 8 });
 
+// TRIP-499 큐레이션(AC-5/6) 픽스처 — 7개(상한 6 초과)여야 "앞 6개만"과 "전량 렌더"가 갈린다.
+// 6개면 둘 다 6개 보여 공허 통과. 배열 순서 = 서버 대표순(limitRegionsWhenEmpty 가 앞 6개 slice).
+// 이름에 공통 토큰 '시' 를 심어 AC-6 이 "7개 다 매칭되는 검색"으로 6개 상한 미적용을 증명한다.
+// 전부 selectable·poiCount>0 이라 RegionPickerScreen 이 SelectableCard(testID explore-region-{code})로 그린다.
+const SEVEN_REGIONS: Region[] = [
+  region({ regionCode: 'R01', name: '부산시' }),
+  region({ regionCode: 'R02', name: '대구시' }),
+  region({ regionCode: 'R03', name: '인천시' }),
+  region({ regionCode: 'R04', name: '광주시' }),
+  region({ regionCode: 'R05', name: '대전시' }),
+  region({ regionCode: 'R06', name: '울산시' }),
+  region({ regionCode: 'R07', name: '세종시' }),
+];
+
 beforeEach(() => {
   mockPush.mockClear();
   mockRefetch.mockClear();
@@ -109,6 +123,37 @@ describe('지역 선택 → 목적지 라우팅', () => {
     );
     // 좁혀졌는지도 함께 본다 — 필터가 안 걸리면 이 단언이 무의미해진다.
     expect(screen.queryByTestId('explore-region-50')).toBeNull();
+  });
+});
+
+describe('AC-5/AC-6 · 큐레이션 (TRIP-499 · 빈 검색어면 앞 6개만, 검색 시 상한 미적용)', () => {
+  it('AC-5 · 빈 검색어면 앞 6개만 렌더하고 7번째 지역은 부재다', () => {
+    // 준비 — 대표순 7개 지역(상한 6 초과). 검색어는 입력하지 않는다(빈 문자열).
+    mockRegionsResult.data = SEVEN_REGIONS;
+
+    // 실행 — 초기 렌더 그대로(빈 검색어) 관찰.
+    render(<RegionPickerPage />);
+
+    // 단언 — 1번째·6번째는 있고, 7번째는 없다. 지금 페이지는 상한 없이 filterRegions 결과를 전량
+    // 그리므로 7번째가 present → "부재" 단언이 실패해 red. 배선(limitRegionsWhenEmpty) 후 6개로
+    // 잘려 green. 6번째 present 는 상한이 6임을 잠근다(5로 낮아지면 red).
+    expect(screen.getByTestId('explore-region-R01')).toBeTruthy();
+    expect(screen.getByTestId('explore-region-R06')).toBeTruthy();
+    expect(screen.queryByTestId('explore-region-R07')).toBeNull();
+  });
+
+  it('AC-6 · 검색어를 넣으면 매칭 지역이 6개 상한 없이 전량 렌더된다(선제 green)', () => {
+    // 준비 — 이름에 공통 토큰 '시' 를 가진 7개.
+    mockRegionsResult.data = SEVEN_REGIONS;
+    render(<RegionPickerPage />);
+
+    // 실행 — '시' 는 7개 전부에 포함되므로 filterRegions 가 7개를 다 돌려준다.
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '시');
+
+    // 단언 — 7개가 다 매칭되는데 7번째가 보이면 6개 상한이 안 걸린 것. 무조건 slice(0,6)
+    // (검색 중에도 자름) 뮤테이션이면 7번째가 잘려 red 가 된다.
+    expect(screen.getByTestId('explore-region-R01')).toBeTruthy();
+    expect(screen.getByTestId('explore-region-R07')).toBeTruthy();
   });
 });
 

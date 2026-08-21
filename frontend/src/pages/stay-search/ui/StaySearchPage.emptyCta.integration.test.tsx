@@ -17,7 +17,8 @@ import { StaySearchPage } from './StaySearchPage';
  * 필터 URL 갱신으로 이어지는지는 이 배선 층에서만 확인할 수 있다.
  *
  * 무엇을 보장하나:
- *  - empty "지역 바꾸기" press → `router.push('/explore/region')`(상단 지역 칩과 같은 목적지).
+ *  - empty "지역 바꾸기" press → `router.push('/explore/region?purpose=stay')`(상단 지역 칩과
+ *    같은 목적지, TRIP-499 재배선 — 여행지 선택 정본).
  *  - empty "필터 완화"(적용필터 있음) press → `router.setParams({amenity:[], stayType:[]})`.
  *  - filter-zero "필터 초기화" press → 전체 해제(위와 동일 동작).
  *  - filter-zero "'{원인}' 필터 해제" press → 원인만 뺀 값으로 `setParams`(조식은 남고 오션뷰만 빠짐).
@@ -92,8 +93,8 @@ function createWrapper() {
   };
 }
 
-describe('StaySearchPage — empty 지역 바꾸기 (AC-1)', () => {
-  it('지역 바꾸기 버튼을 누르면 통합검색 /explore/search 로 push 한다 (TRIP-495)', async () => {
+describe('StaySearchPage — empty 지역 바꾸기 (TRIP-499 · AC-4)', () => {
+  it('지역 바꾸기 버튼을 누르면 여행지 선택 /explore/region?purpose=stay 로 push 한다', async () => {
     // 준비: 필터 없는 빈 상태.
     render(<StaySearchPage />, { wrapper: createWrapper() });
     await waitFor(() =>
@@ -103,8 +104,8 @@ describe('StaySearchPage — empty 지역 바꾸기 (AC-1)', () => {
     // 실행
     fireEvent.press(screen.getByTestId('stay-search-empty-region'));
 
-    // 단언
-    expect(mockPush).toHaveBeenCalledWith('/explore/search');
+    // 단언 — 지금 소스는 옛 목적지(/explore/search)로 push → red.
+    expect(mockPush).toHaveBeenCalledWith('/explore/region?purpose=stay');
   });
 });
 

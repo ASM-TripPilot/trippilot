@@ -20,8 +20,9 @@ import ExploreRoute from '@/app/(tabs)/explore';
  *  - 🔴 헤딩·검색·lane_stay·lane_itin 자리·담은 곳 FAB 5구획을 그린다(AC-E1) ·
  *    nearby 는 안 그린다(AC-E8, 좌표 없음). 축 세그먼트(axisSeg)는 걷어냈다(TRIP-447 AC-1,
  *    소스 0건은 `exploreLandingAxisRemoval.test.ts` 가 별도로 잠근다).
- *  - 🔴 검색창 탭(입력 불가 진입 버튼) → `/explore/search`(d05 통합 검색, TRIP-450 되돌림 —
- *    입력은 d05 에서 받아 자유 문자열이 region 으로 새지 않는다, AC-E2). #2(submitEditing 무동작) 유지.
+ *  - 🔴 검색창 탭(입력 불가 진입 버튼) → `/explore/region?purpose=trip`(여행지 선택 정본,
+ *    TRIP-499 재배선 — 입력은 RegionPicker 에서 받아 자유 문자열이 region 으로 새지 않는다, AC-E2).
+ *    #2(submitEditing 무동작) 유지.
  *  - 🔴 lane_stay = `useStaySearch` items 를 가로 카드로, 금액은 `formatPrice` 정확 일치,
  *    "· 1박"(정확 1박가) 없음, "모두 보기" → `/stays`(AC-E3).
  *  - 🔴 lane_itin 은 준비중 자리(실카드·라우팅 0, AC-E4).
@@ -158,18 +159,20 @@ describe('🔴 AC-E1 · AC-E8 — 5구획 렌더 + nearby 부재', () => {
   });
 });
 
-describe('🔴 AC-E2 — 검색창은 입력 불가 진입 버튼 → /explore/search (TRIP-450, 되돌림)', () => {
-  it('검색창을 누르면 통합 검색(/explore/search)으로 이동한다 — 자유 문자열이 region 으로 새지 않는다', () => {
+describe('🔴 AC-E2(TRIP-499) — 검색창은 입력 불가 진입 버튼 → /explore/region?purpose=trip', () => {
+  it('검색창을 누르면 여행지 선택(RegionPicker, trip)으로 이동한다 — 자유 문자열이 region 으로 새지 않는다', () => {
     render(<ExploreRoute />);
 
     // 검색창은 여전히 TextInput 이 아니라 Pressable 진입 버튼이다 — 제출이 아니라 탭이다.
-    // TRIP-450 으로 목적지만 지역 선택(/explore/region)에서 통합 검색(d05, /explore/search)으로
-    // 되돌린다. 입력은 d05 searchBar 에서 받으므로 d01 은 여전히 문자열을 안 다룬다(Option A —
-    // TRIP-412 가드 그대로 산다). #2(submitEditing 무동작)는 무변경 green.
+    // TRIP-499 로 목적지를 통합 검색(/explore/search)에서 여행지 선택 정본(/explore/region?purpose=trip)
+    // 으로 재배선한다. 입력은 RegionPicker searchBar 에서 받으므로 d01 은 여전히 문자열을 안
+    // 다룬다(TRIP-412 가드 그대로 산다). 지금 소스는 옛 목적지라 red. #2(submitEditing 무동작)는 무변경 green.
     fireEvent.press(screen.getByTestId('explore-landing-search'));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/search');
+    expect(String(mockPush.mock.calls[0][0])).toBe(
+      '/explore/region?purpose=trip'
+    );
   });
 
   it('자유 문자열이 region 으로 새지 않는다 — 제출(submitEditing)에는 반응하지 않는다', () => {
