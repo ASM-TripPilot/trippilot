@@ -48,7 +48,9 @@ class TravelEstimator:
         if mode is TransportMode.PUBLIC:
             # 걸어갈 땐 정류장 대기·환승이 없으므로 buffer 를 빼고 잰다.
             on_foot = self._minutes(road, TransportMode.WALK)
-            if on_foot < minutes:
+            # ① 600m 이하는 계산상 대중교통이 빨라도 걷는다 (config 주석 참조)
+            # ② 그보다 멀어도 도보가 빠르면 도보 — 사람이 하는 선택
+            if straight <= self._cfg.public_walk_max_km or on_foot < minutes:
                 minutes, source = on_foot, "haversine_x_detour(walk)"
 
         return TravelEstimate(
