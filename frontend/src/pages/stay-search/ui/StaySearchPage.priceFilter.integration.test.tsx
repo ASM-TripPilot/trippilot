@@ -124,7 +124,7 @@ describe('PF1·PF2 · 가격대 칩 복구 (AC-12)', () => {
 });
 
 describe('PF3 · 지역 칩 무회귀 (AC-13)', () => {
-  it('지역 칩은 여전히 /explore/region 으로 간다', async () => {
+  it('지역 칩은 통합검색 /explore/search 로 간다 (TRIP-495)', async () => {
     render(<StaySearchPage />, { wrapper: createWrapper() });
     await waitFor(() =>
       expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
@@ -132,6 +132,6 @@ describe('PF3 · 지역 칩 무회귀 (AC-13)', () => {
 
     fireEvent.press(screen.getByTestId('stay-search-filter-region'));
 
-    expect(mockPush).toHaveBeenCalledWith('/explore/region');
+    expect(mockPush).toHaveBeenCalledWith('/explore/search');
   });
 });

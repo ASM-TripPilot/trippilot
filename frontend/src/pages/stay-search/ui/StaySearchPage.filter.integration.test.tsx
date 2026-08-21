@@ -96,7 +96,7 @@ function createWrapper() {
 }
 
 describe('StaySearchPage — 지역 칩 (TRIP-415)', () => {
-  it('지역 칩을 누르면 /explore/region 으로 간다', async () => {
+  it('지역 칩을 누르면 통합검색 /explore/search 로 간다 (TRIP-495)', async () => {
     render(<StaySearchPage />, { wrapper: createWrapper() });
     await waitFor(() =>
       expect(screen.getByText('테스트 스테이')).toBeOnTheScreen()
@@ -104,7 +104,7 @@ describe('StaySearchPage — 지역 칩 (TRIP-415)', () => {
 
     fireEvent.press(screen.getByTestId('stay-search-filter-region'));
 
-    expect(mockPush).toHaveBeenCalledWith('/explore/region');
+    expect(mockPush).toHaveBeenCalledWith('/explore/search');
   });
 });
 

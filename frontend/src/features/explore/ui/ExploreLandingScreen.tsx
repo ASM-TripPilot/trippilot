@@ -45,7 +45,8 @@ export interface PlaceCardVM {
 
 export interface ExploreLandingScreenProps {
   heading: { title: string; subtitle: string };
-  /** 검색창 탭 — 입력 불가 진입 버튼이다. 실제 검색은 /explore/region 에서만 한다(TRIP-412).
+  /** 검색창 탭 — 입력 불가 진입 버튼이다. 실제 검색은 통합검색 /explore/search 에서 한다
+   * (TRIP-450 으로 /explore/region 에서 되돌림 — 목적지는 소비 라우트가 정한다).
    * 제출이 아니라 진입이므로 텍스트를 넘기지 않는다(자유 문자열이 region 으로 새는 걸 막는다). */
   onPressSearch: () => void;
   /** 가볼 곳 가로 레인(TRIP-470) — 장소 카드 목록. 미지정/빈 목록이면 진입 링크(fallback)만
@@ -302,7 +303,7 @@ export function ExploreLandingScreen({
             </Text>
           </View>
 
-          {/* 검색 — 입력 불가 진입 버튼(TRIP-412). 탭하면 /explore/region 으로 간다. */}
+          {/* 검색 — 입력 불가 진입 버튼. 탭하면 통합검색 /explore/search 로 간다(TRIP-450). */}
           <Pressable
             testID="explore-landing-search"
             accessibilityRole="button"

@@ -93,7 +93,7 @@ function createWrapper() {
 }
 
 describe('StaySearchPage — empty 지역 바꾸기 (AC-1)', () => {
-  it('지역 바꾸기 버튼을 누르면 /explore/region 으로 push 한다', async () => {
+  it('지역 바꾸기 버튼을 누르면 통합검색 /explore/search 로 push 한다 (TRIP-495)', async () => {
     // 준비: 필터 없는 빈 상태.
     render(<StaySearchPage />, { wrapper: createWrapper() });
     await waitFor(() =>
@@ -104,7 +104,7 @@ describe('StaySearchPage — empty 지역 바꾸기 (AC-1)', () => {
     fireEvent.press(screen.getByTestId('stay-search-empty-region'));
 
     // 단언
-    expect(mockPush).toHaveBeenCalledWith('/explore/region');
+    expect(mockPush).toHaveBeenCalledWith('/explore/search');
   });
 });
 
