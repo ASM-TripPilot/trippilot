@@ -319,9 +319,13 @@ def run_rehearsal(
 # 실측 상한 — 1일 일정(슬롯 4~6) 기준 앵커→첫 슬롯 포함 인접 쌍 ~6건이면 전량,
 # 그 이상은 API 한도 아끼기로 절단한다.
 MAX_LEGS = 6
-# 리허설 요청은 transport_modes=["대중교통"] 고정(_request_body) — 검증 수단도 일치.
-# PUBLIC은 TMAP 대중교통 API 실측 (TRIP-405 — 보행 근사 제거).
-LEG_MODE = TransportMode.PUBLIC
+# 리허설 요청은 transport_modes=["대중교통"] — 솔버 PUBLIC 모드.
+# 실측 검증은 대중교통 우선 시도 → 403(상품 미구독 등) 시 자동차 → 보행 순 폴백.
+LEG_MODE_CHAIN: list[TransportMode] = [
+    TransportMode.PUBLIC,
+    TransportMode.CAR,
+    TransportMode.WALK,
+]
 
 
 def build_leg_pairs(
@@ -334,26 +338,44 @@ def build_leg_pairs(
     return pairs[:max_legs]
 
 
+def _is_forbidden(error: TravelTimeError) -> bool:
+    """403 Forbidden 여부 — 상품 미구독·키 권한 부족 등 재시도 무의미한 거절."""
+    return "403" in str(error)
+
+
 def measure_legs(
     pairs: list[tuple[Poi, Poi]],
     *,
     travel: TravelTimePort,
     estimator: TravelEstimator,
-    mode: TransportMode = LEG_MODE,
+    mode: TransportMode | None = None,
 ) -> tuple[list[dict], str | None]:
     """쌍별 (솔버 추정 est_min, 실측 real_min, 오차 err_pct) — 오차 축적용 legs.
 
+    mode가 None이면 LEG_MODE_CHAIN을 쓴다 — 403(상품 미구독·키 권한)이 나오면
+    **같은 쌍을 다음 수단으로 재시도**해 수단을 확정한다. 별도 프로빙 호출은 하지
+    않는다: 프로브는 첫 쌍을 이중 호출해 API 한도(MAX_LEGS 절단의 이유)를 낭비하고,
+    성공 1회 예산을 프로브가 소진하면 부분 실측이 통째로 사라진다.
     err_pct = (est − real) / real × 100 (양수 = 과대추정). real 0(동일 좌표 등)은
-    비율이 정의 불가라 None. API 실패 시 그 지점에서 중단하고 (부분 legs, 사유)를
+    비율이 정의 불가라 None. 403 외 실패는 그 지점에서 중단하고 (부분 legs, 사유)를
     반환한다 — 죽은 키·한도 초과에 남은 호출을 반복하지 않는다.
     """
+    remaining = [mode] if mode is not None else list(LEG_MODE_CHAIN)
+    mode = remaining.pop(0)
     legs: list[dict] = []
     for from_poi, to_poi in pairs:
-        est_min = estimator.estimate(from_poi.coord, to_poi.coord, mode).internal_minutes
-        try:
-            real = travel.measure(from_poi.coord, to_poi.coord, mode)
-        except TravelTimeError as e:
-            return legs, str(e)
+        while True:
+            est_min = estimator.estimate(
+                from_poi.coord, to_poi.coord, mode).internal_minutes
+            try:
+                real = travel.measure(from_poi.coord, to_poi.coord, mode)
+            except TravelTimeError as e:
+                if _is_forbidden(e) and remaining:
+                    print(f"[rehearsal] TMAP {mode.value} 403 — 다음 수단으로 폴백")
+                    mode = remaining.pop(0)
+                    continue
+                return legs, str(e)
+            break
         err_pct = (
             round((est_min - real.real_minutes) / real.real_minutes * 100, 1)
             if real.real_minutes > 0 else None
@@ -361,6 +383,7 @@ def measure_legs(
         legs.append({
             "from": from_poi.name,
             "to": to_poi.name,
+            "mode": mode.value,
             "est_min": est_min,
             "real_min": real.real_minutes,
             "err_pct": err_pct,
@@ -390,7 +413,7 @@ def attach_leg_verification(
     if not legs:
         return
     result["legs"] = legs
-    print(f"[rehearsal] 실경로 검증 {len(legs)}건 (PUBLIC=대중교통 실측, TRIP-405)")
+    print(f"[rehearsal] 실경로 검증 {len(legs)}건 (TMAP 실측)")
     print(f"[rehearsal]   {'구간':<30} est(분)  real(분)  err%")
     for leg in legs:
         err = f"{leg['err_pct']:+.1f}%" if leg["err_pct"] is not None else "n/a"
