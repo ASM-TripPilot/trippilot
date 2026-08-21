@@ -486,7 +486,7 @@ describe('🔴 I-8 · 등록이 날아가는 중에 [다음]을 다시 눌러도
 });
 
 describe('🔴 I-9 · 등록이 끝나 넘어간 뒤에 되돌아와 다시 눌러도 여행은 하나뿐', () => {
-  it('이동 후 두 번째 press 는 생성도 등록도 이동도 다시 만들지 않는다', async () => {
+  it('이동 후 두 번째 press 는 생성도 등록도 다시 만들지 않고, 이동만 다시 한다', async () => {
     renderPage();
     await screen.findByTestId('trip-wizard-mustvisit-poi-1');
     fillValidDraft();
@@ -506,10 +506,14 @@ describe('🔴 I-9 · 등록이 끝나 넘어간 뒤에 되돌아와 다시 눌�
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
-    // 단언 — 이 화면의 일은 이미 끝났다. 아무것도 두 번째로 나가지 않는다.
+    // 단언 — 지켜야 할 것은 **되돌릴 수 없는 쪽**뿐이다: 여행은 하나, 등록 물결도 한 번.
     expect(createHits()).toBe(1);
     expect(mustVisitHits()).toBe(3);
-    expect(mockPush).toHaveBeenCalledTimes(1);
+    // 이동은 다시 한다(2026-08-21 실측 회귀) — 예전 계약은 여기서 아무것도 안 하는 것이었고,
+    // 그 결과 활성인 `[다음]`이 무반응이라 사용자가 고장으로 읽었다. 이동은 되돌릴 수 있으므로
+    // 잠금이 막아야 할 대상이 아니다.
+    expect(mockPush).toHaveBeenCalledTimes(2);
+    expect(mockPush).toHaveBeenNthCalledWith(2, '/trips/new/step2');
   });
 });
 
