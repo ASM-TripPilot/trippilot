@@ -2,8 +2,12 @@ import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 
+import { firstCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
-import type { GenerateItineraryRequestGenerationMode } from '@/shared/api/generated/schemas';
+import type {
+  GenerateItineraryRequestGenerationMode,
+  Itinerary,
+} from '@/shared/api/generated/schemas';
 import { usePostTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
 
 /**
@@ -29,9 +33,13 @@ export function GeneratingPage({
   tripId: string;
   /** 생성 모드. 미지정=FULLY_AI. copick 씨앗은 CO_PLAN 을 넘긴다(TRIP-462). */
   mode?: GenerateItineraryRequestGenerationMode;
-  /** 성공 후 목적지 pathname. 미지정=draft(h11). copick 씨앗은 허브를 넘긴다(TRIP-462). */
+  /** 성공 후 목적지 pathname. 미지정=draft(h11). copick 씨앗(TRIP-504)은 첫 슬롯 라우트 템플릿을
+   * 넘기고, 이 화면이 생성 응답의 days 로 실 slotKey 를 채워 replace 한다.
+   * ponytail: `copick`(허브 h16)는 안 (가) 흐름에서 라우팅이 끊겼다 — 파일 존치, 유니온 멤버는 후속 정리 대상. */
   successRoute?:
-    '/trips/[tripId]/itinerary/draft' | '/trips/[tripId]/itinerary/copick';
+    | '/trips/[tripId]/itinerary/draft'
+    | '/trips/[tripId]/itinerary/copick'
+    | '/trips/[tripId]/itinerary/copick/[slotKey]';
 }): ReactElement {
   const router = useRouter();
   const generate = usePostTripsTripIdItinerary();
@@ -41,11 +49,28 @@ export function GeneratingPage({
     generate.mutate(
       { tripId, data: { generationMode: mode } },
       {
-        onSuccess: () =>
-          router.replace({
-            pathname: successRoute,
-            params: { tripId },
-          }),
+        onSuccess: (data: Itinerary) => {
+          // copick 씨앗은 허브가 아니라 **첫 비고정 슬롯**의 SlotFillPage 로 착지한다(01b 순회 세부,
+          // AC-6). h05 는 slotKey 를 몰라 템플릿만 실어 보내므로, 채우는 것은 이 화면이다 — 생성
+          // 응답이 곧 생성된 일정(days 포함, `customInstance<Itinerary>`)이라 별도 GET 불요.
+          if (successRoute === '/trips/[tripId]/itinerary/copick/[slotKey]') {
+            const slotKey = firstCoPickSlotKey(data.days);
+            if (slotKey === null) {
+              // 채울 비고정 슬롯이 하나도 없다(전부 고정) — 순회할 것이 없으니 곧장 h17(완성 확인).
+              router.replace({
+                pathname: '/trips/[tripId]/itinerary/copick/complete',
+                params: { tripId },
+              });
+              return;
+            }
+            router.replace({
+              pathname: '/trips/[tripId]/itinerary/copick/[slotKey]',
+              params: { tripId, slotKey },
+            });
+            return;
+          }
+          router.replace({ pathname: successRoute, params: { tripId } });
+        },
       }
     );
   }, [generate, router, tripId, mode, successRoute]);

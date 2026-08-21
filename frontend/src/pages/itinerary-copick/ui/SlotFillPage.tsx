@@ -1,8 +1,10 @@
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
+import { nextCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
 import { formatRadiusUsed } from '@/features/itinerary/model/radiusUsedLabel';
 import { parseSlotKey } from '@/features/itinerary/model/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
@@ -11,6 +13,7 @@ import { ConceptPickerScreen } from '@/features/itinerary/ui/ConceptPickerScreen
 import { SlotFillScreen } from '@/features/itinerary/ui/SlotFillScreen';
 import type { SlotCandidatesRequest } from '@/shared/api/generated/schemas';
 import {
+  getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItinerarySlotCandidates,
   usePutTripsTripIdItinerary,
@@ -22,8 +25,9 @@ import {
  *
  * 흐름: 마운트=컨셉 화면(조회 0) → 컨셉 탭/스킵 → `slot-candidates` POST(slotKey + radiusM + concept)
  * → 후보 화면 → 반경 세그먼트로 radiusM 올려 재조회 → 라디오 단일선택 → "A로 선택" → GET 캐시의
- * days 에서 `swapSlotPoi` 로 대상 슬롯만 갈아 `buildEditItineraryRequest` 로 PUT 전체교체 → **성공만**
- * `router.back()`(허브 복귀). 실패는 이동 없이 인라인 오류.
+ * days 에서 `swapSlotPoi` 로 대상 슬롯만 갈아 `buildEditItineraryRequest` 로 PUT 전체교체 → **성공 시
+ * 다음 비고정 슬롯으로 `router.replace`(선형 전진, TRIP-504), 다음이 없으면 h17(완성 확인)로.** 구
+ * `router.back()`(허브 복귀)은 폐기. 실패는 이동 없이 인라인 오류.
  *
  * 계약이 아직 못 받치는 것:
  *  - 컨셉 목록·반경 단계 정수값은 **정본 부재라 이 사이클이 동결**한 발명값이다(3-a 결정). 반경 3단째는
@@ -69,6 +73,7 @@ export function SlotFillPage({
   slotContextLabel,
 }: SlotFillPageProps): ReactElement {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const itinerary = useGetTripsTripIdItinerary(tripId);
   const { mutate: fetchCandidates, data: candidatesData } =
     usePostTripsTripIdItinerarySlotCandidates();
@@ -142,15 +147,39 @@ export function SlotFillPage({
     }
     firedRef.current = true;
     setErrorMessage(null);
+    // ⚠️ 전진 계산은 **스왑 전** 원본 days·**원본 slotKey** 로 한다(01b ★11). 스왑 후 days 로 원본
+    // 키를 찾으면 그 슬롯의 poiId 는 이미 X 라 못 찾는다. 콜드캐시 가드가 days 존재를 이미 보장.
+    const days = itinerary.data.days;
+    const nextKey = nextCoPickSlotKey(days, slotKey);
     const nextDays = swapSlotPoi(
-      itinerary.data.days,
+      days,
       { date: parsed.date, poiId: parsed.poiId },
       selectedPoiId
     );
     putItinerary(
       { tripId, data: buildEditItineraryRequest(nextDays) },
       {
-        onSuccess: () => router.back(),
+        // 확정 성공 = 허브 복귀(구 `router.back()`)가 아니라 **다음 비고정 슬롯으로 선형 전진**.
+        // 다음이 없으면 h17(완성 확인)로. 스택에 안 쌓이게 replace(01b 순회 세부).
+        onSuccess: () => {
+          // 전진 전에 GET 캐시를 무효화(재조회)한다 — 안 하면 다음 슬롯 SlotFillPage 가 같은
+          // 쿼리키를 stale 한 옛 days 로 읽어, 방금 확정한 앞 슬롯을 되돌린 채 PUT 한다(순차
+          // 채우기 데이터 손실). 형제 SlotCandidatePanelContainer 와 같은 패턴.
+          void queryClient.invalidateQueries({
+            queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
+          });
+          if (nextKey === null) {
+            router.replace({
+              pathname: '/trips/[tripId]/itinerary/copick/complete',
+              params: { tripId },
+            });
+            return;
+          }
+          router.replace({
+            pathname: '/trips/[tripId]/itinerary/copick/[slotKey]',
+            params: { tripId, slotKey: nextKey },
+          });
+        },
         onError: (error) => {
           firedRef.current = false;
           setErrorMessage(resolveSlotSwapError(error).message);

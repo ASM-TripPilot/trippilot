@@ -1917,6 +1917,24 @@ const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => <MethodPickerScreen onBack={noop} onPressFullAi={noop} />,
   },
+  // h04 재생성 확인(TRIP-504) — 기존 일정이 있을 때 copick 이 곧장 진행하지 않고 뜨는 인라인 확인.
+  // 실화면에선 조회로 판정해 켜지는 얼굴이라, 여기서 상태만 얹어(`showRegenerateConfirm`) 육안 대조한다.
+  {
+    key: 'itinerary-method-regenerate',
+    label: 'h04 · 재생성 확인',
+    login: null,
+    render: () => (
+      <MethodPickerScreen
+        onBack={noop}
+        onPressFullAi={noop}
+        onPressCoPick={noop}
+        onPressManual={noop}
+        showRegenerateConfirm
+        onRegenerateContinue={noop}
+        onRegenerateCancel={noop}
+      />
+    ),
+  },
   // h09 생성 중(TRIP-305) — props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로 나온다. 진행
   // 표면은 비결정형(RN Animated)이고 3단계는 균일 진행 중(⚑C, 완료 날조 없음)이다. 실화면 딥링크로는
   // 잠깐만 스치는 얼굴이라(성공 즉시 draft 로 replace) 여기가 이 화면을 오래 보는 유일한 자리다.
