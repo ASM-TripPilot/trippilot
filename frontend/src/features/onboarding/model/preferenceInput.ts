@@ -27,7 +27,10 @@ export interface PreferenceDraftValues {
   activities: string[] | null;
 }
 
-const STYLE: Record<string, PreferenceInputStylesItem> = {
+/** slug→한국어 스타일 라벨 카탈로그. `toPreferenceInput`이 쓰고, TRIP-484 여행 단위 취향
+ * override 시트(`pages/trip-new-step1`)가 option 목록(`{slug, label}`)을 이 한 벌에서 만든다 —
+ * slug→한국어 매핑을 두 벌로 복제하지 않으려고 export 한다. */
+export const STYLE: Record<string, PreferenceInputStylesItem> = {
   rest: '휴양',
   gourmet: '미식',
   nature: '자연',

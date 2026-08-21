@@ -65,7 +65,7 @@ import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerSc
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
 import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
 import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
-import { SlotCandidateSheet } from '@/features/itinerary/ui/SlotCandidateSheet';
+import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
 import { SlotTimeSheet } from '@/features/itinerary/ui/SlotTimeSheet';
 import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
 import {
@@ -92,6 +92,7 @@ import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
 } from '@/features/trip/ui/TripWizardStep1Screen';
+import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
 import {
   TripWizardStep2Screen,
   type TripWizardStep2ScreenProps,
@@ -581,6 +582,17 @@ const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
  * 외부 URL을 지어내는 것은 INV-1이 막는다(`exploreFixtures.ts` 머리말과 같은 사정).
  * 구현 실패가 아니다.
  */
+/** 취향 override 시트(TRIP-484) 선택지 표본 — 온보딩 스타일 7종(slug→한국어)과 같은 목록. */
+const PREF_OVERRIDE_OPTIONS = [
+  { slug: 'rest', label: '휴양' },
+  { slug: 'gourmet', label: '미식' },
+  { slug: 'nature', label: '자연' },
+  { slug: 'art', label: '문화예술' },
+  { slug: 'activity', label: '액티비티' },
+  { slug: 'sightseeing', label: '관광' },
+  { slug: 'shopping', label: '쇼핑' },
+];
+
 const TRIP_WIZARD_BASE: TripWizardStep1ScreenProps = {
   destinations: [{ seq: 1, region: '부산', nights: 3 }],
   startDate: '2026-06-10',
@@ -1498,6 +1510,28 @@ const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // 취향 '바꾸기' 시트 열림(TRIP-484) — Figma 프레임 부재라 발명 레이아웃이다. jest는 바텀시트
+  // 실개폐를 못 보므로(통과 목) 시트 문구·칩 선택 하이라이트를 눈으로 보는 유일한 자리다.
+  // '미식'을 선택 상태로 열어 선택/비선택 칩을 한 화면에서 대조한다.
+  {
+    key: 'trip-new-step1-prefsheet',
+    label: '여행 만들기 1/2 · 취향 바꾸기 시트',
+    login: null,
+    render: () => (
+      <TripWizardStep1Screen
+        {...TRIP_WIZARD_BASE}
+        prefSheet={
+          <PrefOverrideSheet
+            options={PREF_OVERRIDE_OPTIONS}
+            selected={['미식']}
+            onToggle={noop}
+            onConfirm={noop}
+            onClose={noop}
+          />
+        }
+      />
+    ),
+  },
   // g02 5변형(TRIP-225). 화면이 완성된 문자열·불리언만 받는 프레젠테이션이라, 배선 없이
   // props 만 갈아 끼우면 다섯 얼굴이 그대로 나온다 — 실기로 얼굴을 보려면 여기가 정본이다
   // (`docs/structure.md` 경고: "엣지 케이스 화면을 눈으로 보려면 목을 만들지 말고 여기에
@@ -1907,6 +1941,7 @@ const PREVIEW_STATES: PreviewState[] = [
         onSelectDay={noop}
         onBack={noop}
         onConfirm={noop}
+        onEdit={noop}
       />
     ),
   },
@@ -2062,76 +2097,100 @@ const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h12·h18 슬롯 교체(TRIP-335) — candidates 는 아직 이름·사진 미확보(BE 후속)라 카드가 "이름 준비
-  // 중" 플레이스홀더 + 회색 사진 자리로 뜬다. 실화면 딥링크로는 볼 수 없다(생성 POST 가 만드는
-  // tripId + slot-candidates 응답이 백엔드 없이는 안 생긴다). 두 화면 모두 props 만 받는 프레젠테이션.
+  // h12 슬롯 교체(TRIP-335→483) — 바텀시트를 슬롯 카드 아래 **인라인 확장 패널**로 이관했다. candidates
+  // 는 아직 이름·사진 미확보(BE 후속)라 카드가 "이름 준비 중" 플레이스홀더 + 회색 사진 자리로 뜬다.
+  // 실화면 딥링크로는 볼 수 없다(생성 POST 가 만드는 tripId + slot-candidates 응답이 백엔드 없이는
+  // 안 생긴다). 인라인 패널이라 오버레이 없이 스크롤 흐름 안에서 그리고, 헤더에 시간대(오후)를 얹는다.
   {
-    key: 'slot-candidate-sheet',
-    label: '다른 후보로 바꾸기 · 시트(h12)',
+    key: 'slot-candidate-panel',
+    label: '다른 후보로 바꾸기 · 인라인 패널(h12)',
     login: null,
     render: () => (
-      <View className="flex-1 justify-end bg-scrim/40">
-        <SlotCandidateSheet
+      <ScrollView contentContainerClassName="gap-md p-lg">
+        <SlotCandidatePanel
           candidates={SLOT_CANDIDATES_PREVIEW}
           currentPoiId="poi-current"
           currentName="부산시립미술관"
+          timeBand="오후"
           isPending={false}
           onSelectCandidate={noop}
           onClose={noop}
         />
-      </View>
+      </ScrollView>
     ),
   },
   {
-    key: 'slot-candidate-sheet-pending',
+    key: 'slot-candidate-panel-pending',
     label: '다른 후보로 바꾸기 · 교체 중(h12)',
     login: null,
     render: () => (
-      <View className="flex-1 justify-end bg-scrim/40">
-        <SlotCandidateSheet
+      <ScrollView contentContainerClassName="gap-md p-lg">
+        <SlotCandidatePanel
           candidates={SLOT_CANDIDATES_PREVIEW}
           currentPoiId="poi-current"
           currentName="부산시립미술관"
+          timeBand="오후"
           isPending
           onSelectCandidate={noop}
           onClose={noop}
         />
-      </View>
+      </ScrollView>
     ),
   },
   {
-    key: 'slot-candidate-sheet-empty',
+    key: 'slot-candidate-panel-degraded',
+    label: '다른 후보로 바꾸기 · 강등 고지(h12)',
+    login: null,
+    render: () => (
+      <ScrollView contentContainerClassName="gap-md p-lg">
+        <SlotCandidatePanel
+          candidates={SLOT_CANDIDATES_PREVIEW}
+          currentPoiId="poi-current"
+          currentName="부산시립미술관"
+          timeBand="오후"
+          isPending={false}
+          degraded
+          onSelectCandidate={noop}
+          onClose={noop}
+        />
+      </ScrollView>
+    ),
+  },
+  {
+    key: 'slot-candidate-panel-empty',
     label: '다른 후보로 바꾸기 · 0건(h12)',
     login: null,
     render: () => (
-      <View className="flex-1 justify-end bg-scrim/40">
-        <SlotCandidateSheet
+      <ScrollView contentContainerClassName="gap-md p-lg">
+        <SlotCandidatePanel
           candidates={[]}
           currentPoiId="poi-current"
           currentName="부산시립미술관"
+          timeBand="오후"
           isPending={false}
           onSelectCandidate={noop}
           onClose={noop}
         />
-      </View>
+      </ScrollView>
     ),
   },
   {
-    key: 'slot-candidate-sheet-error',
+    key: 'slot-candidate-panel-error',
     label: '다른 후보로 바꾸기 · 실패(h12)',
     login: null,
     render: () => (
-      <View className="flex-1 justify-end bg-scrim/40">
-        <SlotCandidateSheet
+      <ScrollView contentContainerClassName="gap-md p-lg">
+        <SlotCandidatePanel
           candidates={SLOT_CANDIDATES_PREVIEW}
           currentPoiId="poi-current"
           currentName="부산시립미술관"
+          timeBand="오후"
           isPending={false}
           errorMessage="확정된 일정이라 지금은 바꿀 수 없어요"
           onSelectCandidate={noop}
           onClose={noop}
         />
-      </View>
+      </ScrollView>
     ),
   },
   {

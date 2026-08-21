@@ -591,8 +591,10 @@ describe('🔴 C15 · AC-4 — listed 얼굴에 완성 CTA 가 있고 누르면 
 
     // 긍정 앵커 — 버튼이 실재하고 라벨이 발명값 그대로다. `getByText(문자열)` 은 exact 텍스트노드
     // 매치라 문안이 드리프트하면 red 다(`toHaveTextContent` 완전일치 함정은 피한다, 02a ★9·★10).
+    // TRIP-483: Figma 하단 2버튼 정합으로 라벨 교체(`이 일정으로 완성`→`이대로 확정`). testID·
+    // onComplete 배선·canRetry 잠금 계약은 무변경 — 라벨 문자열만(02a ★F).
     expect(screen.getByTestId('itinerary-draft-complete')).toBeOnTheScreen();
-    expect(screen.getByText('이 일정으로 완성')).toBeOnTheScreen();
+    expect(screen.getByText('이대로 확정')).toBeOnTheScreen();
 
     // ★ 활성 증명은 press→콜백이다 — `toBeDisabled()` 단독은 "회색인데 눌리는" 구현을
     //   통과시킨다(02a ★5). 눌러서 실제로 한 번 불리는 것으로 활성을 잰다.

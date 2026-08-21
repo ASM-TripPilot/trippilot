@@ -57,7 +57,7 @@ export interface TripWizardDraft {
    * 함께 비워진다. 안 그러면 새 여행에서 "담았는데 안 들어오는" 새 증상이 생긴다. */
   excludedMustVisitPoiIds: string[];
   addDestination(regionName: string, nights: number): void;
-  removeDestination(regionName: string): void;
+  removeDestination(seq: number): void;
   /** `presetCode`가 `undefined`면 "어떤 칩도 선택 안 됨" — 프리셋이 아닌 출처(등록 숙소
    * 날짜, TRIP-208)로 기간을 채우는 경로다. 상태 필드가 이미 `presetCode?`(초기 `undefined`)라
    * 새 코드값이나 별도 액션을 만들지 않는다(01b D10 — 새 코드값은 `PERIOD_PRESETS`가 곧
@@ -139,30 +139,18 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
       ]),
       touched: withTouched(state.touched, 'destinations'),
     })),
-  removeDestination: (regionName) =>
-    set((state) => {
-      // `filter`로 지우면 같은 지역을 두 번 담았을 때(시트가 중복을 걸러내지 않는다)
-      // 이름이 같은 항목이 전부 사라진다 — 부산 하나를 지우려다 부산 전부를 잃는다
-      // (5-c, code-critic W-3 실측). `findIndex` + 그 한 자리만 잘라내 "첫 일치 하나만"
-      // 지운다. 사용자가 누른 *그* 칩을 정확히 짚지는 못한다 — `onRemoveDestination`이
-      // 지역 이름만 받고 `seq`는 안 받기 때문(승인된 화면 테스트가 `toHaveBeenCalledWith('부산')`
-      // 문자열 인자 하나로 고정돼 있어 여기서 시그니처를 못 바꾼다) — 다만 "둘 다 조용히
-      // 사라지는" 상태는 없앤다.
-      const index = state.destinations.findIndex(
-        (one) => one.region === regionName
-      );
-      const nextDestinations =
-        index === -1
-          ? state.destinations
-          : [
-              ...state.destinations.slice(0, index),
-              ...state.destinations.slice(index + 1),
-            ];
-      return {
-        destinations: renumberSeq(nextDestinations),
-        touched: withTouched(state.touched, 'destinations'),
-      };
-    }),
+  removeDestination: (seq) =>
+    set((state) => ({
+      // `seq`로 지운다(TRIP-364) — 이름과 달리 목록 안에서 유일하다(renumberSeq가 1..N을
+      // 매긴다). 같은 지역을 두 번 담아도 사용자가 누른 *그* 칩을 정확히 짚는다. 이름으로
+      // 지우던 옛 구현은 첫 일치만 지워 "누른 것을 지우지 못하던" 뿌리였고(더 전에는 `filter`로
+      // 전부 지워 "부산 하나를 지우려다 부산 전부를 잃던" 버그였다), 코드/seq 식별로 그 뿌리를
+      // 없앤다. 못 찾는 seq는 조용히 무동작(filter가 아무것도 안 지움).
+      destinations: renumberSeq(
+        state.destinations.filter((one) => one.seq !== seq)
+      ),
+      touched: withTouched(state.touched, 'destinations'),
+    })),
   setPeriod: (presetCode, startDate, endDate) =>
     set((state) => ({
       presetCode,

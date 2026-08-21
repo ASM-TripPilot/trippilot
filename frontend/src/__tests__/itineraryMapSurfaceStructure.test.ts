@@ -312,7 +312,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 3필드 그대로, DraftScreenProps 는 12필드(onPressSlot 편입), 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 3필드 그대로, DraftScreenProps 는 15필드(TRIP-483 인라인 패널 3종 편입), 화면에 에셋 해석 지문이 0건이다', () => {
     const mapHtmlSource = readOne(MAP_HTML_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -345,10 +345,19 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       // interfaceFields 가 잡는다(메서드 단축형 `onComplete?()` 는 미캡처 — 02a §5 node 실측).
       'onComplete',
       // TRIP-467 — h12 슬롯 교체 트리거 콜백. 비고정 슬롯 "다른 후보 ›" press → `DraftPage` 가
-      // 조건부 마운트하는 `SlotCandidateSheetContainer` 로 이어진다. **프로퍼티형**
-      // `onPressSlot?: (slotKey: string) => void` 여야 잡힌다(위와 동형). 반드시 마지막 필드
-      // (toEqual 순서 민감 · 후방호환 옵셔널: 기본=미배선=트리거 0, `onComplete?` 편입과 동형).
+      // 조건부 마운트하는 `SlotCandidatePanelContainer` 로 이어진다. **프로퍼티형**
+      // `onPressSlot?: (slotKey: string) => void` 여야 잡힌다(위와 동형).
       'onPressSlot',
+      // TRIP-483 — h12 바텀시트→인라인 패널 이관(3종, 후방호환 옵셔널·프로퍼티형).
+      //  · expandedSlotKey?: string | null — 어느 슬롯 패널이 열렸나(null=닫힘).
+      //  · renderSlotPanel?: (slotKey: string) => ReactNode — DraftPage 가 공급, 화면은 매칭
+      //    카드 slotKey 로만 호출(패널 조립은 배선 몫). **한 줄 유지**(여러 줄이면 내부 `slotKey:`
+      //    가 2칸 들여쓰기로 오지 않게 — interfaceFields 정규식 안전, 02a §1-A).
+      //  · onManualPlan?: () => void — 「처음부터 직접」·「직접 고르기」 공통(→ manual 라우트).
+      // 이 순서 그대로(toEqual 순서 민감). 12→15 는 additive 계약 변경(B 카운터 이행분).
+      'expandedSlotKey',
+      'renderSlotPanel',
+      'onManualPlan',
     ]);
 
     // 에셋 해석은 픽스처 몫이다 — 화면이 로컬 파일을 알면 계약이 둘로 갈린다.

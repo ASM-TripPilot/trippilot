@@ -26,6 +26,7 @@ import {
   ChevronRightGlyph,
   ExpandGlyph,
   LockGlyph,
+  PencilGlyph,
   ShareGlyph,
   WalkGlyph,
 } from './ItineraryGlyphs';
@@ -63,7 +64,7 @@ const CONFIRM_LOCKED_NOTE =
 // 확정 배너·읽기전용 하단 2버튼 문구(TRIP-300 · D1·D2). 비활성 버튼의 사유는 침묵 금지(INV-4).
 const BANNER_TITLE = '일정이 확정됐어요';
 const EDIT_LABEL = '일정 수정';
-const EDIT_DISABLED_REASON = '확정된 일정은 아직 수정할 수 없어요';
+const EDIT_DISABLED_REASON = '확정한 일정 편집은 준비 중이에요';
 const SHARE_LABEL = '공유하기';
 const SHARE_DISABLED_REASON = '공유는 곧 제공돼요';
 const FIXED_CHIP = '고정';
@@ -121,6 +122,9 @@ export interface TimelineScreenProps {
   /** 확정 예방 잠금(TRIP-337 · PARTIAL 생성 중) — true 면 확정 CTA 를 실제 disabled 로 두고 사유를
    * 병기한다. 페이지가 `isConfirmLocked(generationState)` 로 판정해 내린다. 미지정=잠금 없음. */
   confirmLocked?: boolean;
+  /** PLANNED(h25) 편집 진입 어포던스 press 콜백 — 페이지가 edit 라우트 push 를 여기 배선(TRIP-482).
+   * 미지정=기존 동작 불변(후방호환, `onConfirm?` 선례). CONFIRMED(h34) 얼굴엔 어포던스가 없다. */
+  onEdit?: () => void;
 }
 
 function DayTab({
@@ -384,6 +388,7 @@ export function TimelineScreen({
   confirmError,
   onConfirm,
   confirmLocked = false,
+  onEdit,
 }: TimelineScreenProps): ReactElement {
   const activeDate = days[activeDayIndex]?.date ?? '';
   // 확정 얼굴 트리거 — 미지정(undefined)은 PLANNED 취급이라 기존 호출부가 그대로 편집 얼굴이다.
@@ -460,7 +465,23 @@ export function TimelineScreen({
                 <ShareGlyph />
               </Pressable>
             </>
-          ) : null}
+          ) : (
+            // PLANNED(h25) 편집 진입 어포던스(TRIP-482) — 앱바 우측 직접 진입(리포에 메뉴 프리미티브가
+            // 없어 kebab 메뉴를 발명하지 않는다 · 01b Q1). press → onEdit(페이지가 edit 라우트 push 를
+            // 여기 배선). CONFIRMED(h34)엔 이 자리 대신 하단 비활성 [일정 수정] 버튼이 온다(status 게이트).
+            <>
+              <View className="flex-1" />
+              <Pressable
+                testID="itinerary-view-edit"
+                accessibilityRole="button"
+                accessibilityLabel="일정 편집"
+                onPress={onEdit}
+                hitSlop={8}
+              >
+                <PencilGlyph />
+              </Pressable>
+            </>
+          )}
         </View>
 
         <View

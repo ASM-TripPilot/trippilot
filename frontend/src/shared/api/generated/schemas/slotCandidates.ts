@@ -13,4 +13,6 @@ export interface SlotCandidates {
   candidates: SlotCandidatesCandidatesItem[];
   /** 실제 사용 반경. AI 가 자동 확대했을 수 있어 그대로 표시한다 */
   radiusMUsed: number;
+  /** **AI 순위가 아니다**(true). 후보 집합은 정본 그대로지만 정렬이 거리순이고 근거 문구가 템플릿이며 앞뒤 슬롯과의 동선을 안 따졌다. 화면은 "AI 추천 준비 중, 가까운 순" 을 안내한다(INV-4). */
+  degraded: boolean;
 }

@@ -20,30 +20,25 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { DraftPage } from './DraftPage';
 
 /**
- * h11(DraftPage) 에 죽은 코드 `SlotCandidateSheetContainer`(h12)를 **트리거 배선**하는 심판을
- * 실 HTTP 로 태운다(TRIP-467). 컨테이너 내부(POST→선택→PUT→닫힘·재조회)는 이미
- * `SlotCandidateSheetContainer.integration.test.tsx` 9케이스로 완결 — 여기선 **트리거만** 잰다.
+ * h11(DraftPage) 에 h12 슬롯 교체를 **인라인 패널**로 배선하는 심판(TRIP-467→483 이관). 컨테이너
+ * 내부(POST→선택→PUT→닫힘·재조회)는 `SlotCandidatePanelContainer.integration.test.tsx` 가
+ * 완결 — 여기선 **트리거·토글·인라인 배치·manual 어포던스** 페이지 층 배선만 잰다.
  *
  * 무엇을 보장하나(전부 페이지 층 배선):
- *  - 🔴 배선 전엔 시트가 없다 — 컨테이너는 **조건부 마운트**라 트리에 없고 POST 도 0(AC-4 · 죽은
- *    코드의 런타임 증거 · DraftPage 가 유일 마운트처).
- *  - 🔴 비고정 슬롯 트리거 press → 시트 마운트 + **그 슬롯의 slotKey** 로 slot-candidates POST 1건
- *    (AC-1 · 02a ★B). 바디는 slotKey 하나뿐(BR-U3-24 와이어).
- *  - 🔴 고정 슬롯은 트리거 부재라 열 방법이 없다(AC-2 · Q1 · 02a ★A).
- *  - 🔴 닫기 → 컨테이너 언마운트(AC-3 · editingSlotKey 클리어).
+ *  - 🔴 배선 전엔 패널이 없다 — 조건부 마운트라 트리에 없고 POST 0(AC-1).
+ *  - 🔴 비고정 트리거 press → **인라인 패널 마운트**(`itinerary-candidate-panel`) + 그 slotKey 로
+ *    slot-candidates POST 1건(AC-1 · ★B). 바디는 slotKey 하나뿐(BR-U3-24).
+ *  - 🔴 고정 슬롯은 트리거 부재라 열 방법이 없다(AC-2).
+ *  - 🔴 X 로 닫힘 · **같은 트리거 재press 로 토글 접힘**(AC-1 · ★C).
+ *  - 🔴 「처음부터 직접」·「직접 고르기」 → manual 라우트 push(AC-4).
  *
- * 왜 통합 버킷인가: "시트가 열렸다/닫혔다" 는 조건부 마운트라 목 시트의 마운트/언마운트로만
- * 관찰된다(바텀시트 목=통과 컴포넌트, 02a §1-D). "어느 slotKey 로 POST 가 나갔나" 는 훅을
- * 목킹하면 테스트의 가정이 되므로 **실 요청**으로 잰다(slot-time 통합 선례).
+ * 왜 통합 버킷인가: "패널이 열렸다/닫혔다" 는 조건부 마운트라 마운트/언마운트로 관찰된다(인라인
+ * 패널은 일반 View 라 열림/접힘이 jest 로 보인다 · 02a §1-D). "어느 slotKey 로 POST 가 나갔나" 는
+ * 훅을 목킹하면 테스트의 가정이 되므로 **실 요청**으로 잰다.
  *
- * ⚠️ 동결 `DraftPage.integration.test.tsx`·`DraftScreen.test.tsx` 는 손대지 않는다(AC-5 무회귀,
- * 02a 함정①·②로 무영향 보장) — 이 파일은 별도 additive 스위트다.
- *
- * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=트리거/닫기 press → 단언=시트 마운트·POST slotKey.
+ * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=트리거/닫기/manual press → 단언=마운트·POST·push.
  */
 
-// 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다 — 실물 로드
-// 회피(DraftPage.integration 선례와 동형).
 jest.mock('@/shared/storage', () => ({
   saveTokens: jest.fn().mockResolvedValue(undefined),
   getTokens: jest.fn().mockResolvedValue({
@@ -54,19 +49,17 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-// DraftPage 가 마운트에 `useRouter()` 를 부른다 — 목이 없으면 렌더가 죽는다. 이 파일은 라우팅을
-// 안 누르지만 훅 존재만 필요(동결 파일과 동형 셋업).
+// manual 라우트 push 를 관찰하려면 모듈 스코프 목이 필요하다(호이스트 가드 회피 위해 `mock` 접두).
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
-    push: jest.fn(),
+    push: mockPush,
     back: jest.fn(),
     replace: jest.fn(),
     canGoBack: () => true,
   }),
 }));
 
-// 지도는 이 칸의 심판 대상이 아니다 — WebView 실물이 뜨지 않게만 막는다. 인라인 팩토리는
-// NativeWind babel 호이스트에 걸리므로 모듈을 require(리포 선례와 동형).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
 
@@ -141,19 +134,19 @@ function itinerary(): Itinerary {
   };
 }
 
-/** slot-candidates 응답(컨테이너 자기 통합테스트와 같은 형태). */
 const CANDIDATES = {
   candidates: [
     { poiId: 'X', distanceRange: '420m', rationale: '가장 가까운 실내 전시' },
     { poiId: 'Y', distanceRange: '1.1km', rationale: '조용한 카페' },
   ],
   radiusMUsed: 1100,
+  degraded: false,
 };
 
 let postCalls = 0;
 let postBody: unknown = null;
 
-const SHEET = 'itinerary-candidate-sheet';
+const PANEL = 'itinerary-candidate-panel';
 
 function altId(poiId: string): string {
   return `itinerary-draft-alt-${buildSlotKey(DAY1, poiId)}`;
@@ -167,6 +160,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   postCalls = 0;
   postBody = null;
+  mockPush.mockClear();
   setAccessToken('valid-access');
 
   server.use(
@@ -207,60 +201,83 @@ function renderPage() {
   return render(<DraftPage tripId={TRIP_ID} />, { wrapper: Wrapper });
 }
 
-describe('🔴 I0 · AC-4 — 배선 전엔 시트가 없다 (죽은 코드 · DraftPage 가 유일 마운트처)', () => {
-  it('아무 트리거도 누르기 전엔 컨테이너가 트리에 없고 slot-candidates POST 도 0건이다', async () => {
+describe('🔴 D1 · AC-1 — 배선 전엔 패널이 없다 (조건부 마운트 · DraftPage 가 유일 마운트처)', () => {
+  it('아무 트리거도 누르기 전엔 패널이 트리에 없고 slot-candidates POST 도 0건이다', async () => {
     renderPage();
-    // 목록 얼굴이 떴다(긍정 앵커) — 비고정 카드가 실재해야 아래가 공허하지 않다.
     await screen.findByTestId(cardId('poi-a'));
 
-    // 컨테이너는 조건부 마운트라 트리에 없다 — 마운트만으로 시트가 뜨거나 POST 가 새지 않는다.
-    expect(screen.queryByTestId(SHEET)).toBeNull();
+    expect(screen.queryByTestId(PANEL)).toBeNull();
     expect(postCalls).toBe(0);
   });
 });
 
-describe('🔴 I1 · AC-1 — 비고정 트리거 press → 시트 마운트 + 그 slotKey 로 POST 1건', () => {
-  it('poi-b 트리거를 누르면 시트가 뜨고 slot-candidates POST 가 poi-b 의 slotKey 로 나간다', async () => {
+describe('🔴 D2 · AC-1 — 비고정 트리거 press → 인라인 패널 마운트 + 그 slotKey 로 POST 1건', () => {
+  it('poi-b 트리거를 누르면 패널이 뜨고 slot-candidates POST 가 poi-b 의 slotKey 로 나간다', async () => {
     renderPage();
-    // 둘째(poi-b)를 눌러 첫 슬롯 하드코딩을 죽인다(02a ★B).
     fireEvent.press(await screen.findByTestId(altId('poi-b')));
 
-    // 시트가 마운트된다(=조건부 마운트로 열림. 실열림·딤은 6-b 실기 · 02a 함정③).
-    expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+    expect(await screen.findByTestId(PANEL)).toBeOnTheScreen();
 
-    // 마운트된 컨테이너가 POST 를 1건 쏘고, 바디의 slotKey 가 눌린 그 슬롯이다.
     await waitFor(() => expect(postCalls).toBe(1));
     expect((postBody as { slotKey: string }).slotKey).toBe(
       buildSlotKey(DAY1, 'poi-b')
     );
-    // 바디는 slotKey 하나뿐 — 제외목록·반경 없음(BR-U3-24 와이어 재확인).
     expect(Object.keys(postBody as object)).toEqual(['slotKey']);
   });
 });
 
-describe('🔴 I2 · AC-2 — 고정 슬롯은 트리거 부재라 열 방법이 없다 (Q1)', () => {
-  it('고정 카드엔 트리거가 없고(비고정엔 있고) 시트도 안 뜬다', async () => {
+describe('🔴 D3 · AC-2 — 고정 슬롯은 트리거 부재라 열 방법이 없다', () => {
+  it('고정 카드엔 트리거가 없고(비고정엔 있고) 패널도 안 뜬다', async () => {
     renderPage();
     await screen.findByTestId(cardId('poi-a'));
 
-    // 부정 — 고정 슬롯 트리거 부재. `isFixed` 무관 렌더 뮤테이션은 여기서 red(★A).
     expect(screen.queryByTestId(altId('poi-fixed'))).toBeNull();
-    // 긍정 짝 — 비고정엔 트리거가 있다.
     expect(screen.getByTestId(altId('poi-a'))).toBeOnTheScreen();
-    // 누를 트리거가 없으니 시트도 없다.
-    expect(screen.queryByTestId(SHEET)).toBeNull();
+    expect(screen.queryByTestId(PANEL)).toBeNull();
   });
 });
 
-describe('🔴 I3 · AC-3 — 닫기 → 컨테이너 언마운트 (editingSlotKey 클리어)', () => {
-  it('시트를 열고 닫기 버튼을 누르면 컨테이너가 트리에서 사라진다', async () => {
+describe('🔴 D4 · AC-1 — 닫기 X → 패널 언마운트 (editingSlotKey 클리어)', () => {
+  it('패널을 열고 닫기 버튼을 누르면 패널이 트리에서 사라진다', async () => {
     renderPage();
     fireEvent.press(await screen.findByTestId(altId('poi-a')));
-    await screen.findByTestId(SHEET);
+    await screen.findByTestId(PANEL);
 
-    fireEvent.press(screen.getByTestId('itinerary-candidate-sheet-close'));
+    fireEvent.press(screen.getByTestId('itinerary-candidate-panel-close'));
 
-    // 조건부 마운트라 닫으면 트리에서 제거된다 — 다시 다른 슬롯을 열 수 있는 상태로 복귀.
-    await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId(PANEL)).toBeNull());
+  });
+});
+
+describe('🔴 D5 · AC-1 — 같은 트리거 재press 로 토글 접힘 (한 번에 한 슬롯 · ★C)', () => {
+  it('poi-a 트리거를 눌러 열고, 다시 눌러 접는다', async () => {
+    renderPage();
+    const trigger = await screen.findByTestId(altId('poi-a'));
+
+    fireEvent.press(trigger);
+    await screen.findByTestId(PANEL);
+
+    // 같은 트리거 재press → 접힘. `setEditingSlotKey(k)`(재대입) 구현은 안 닫혀 여기서 red.
+    fireEvent.press(screen.getByTestId(altId('poi-a')));
+    await waitFor(() => expect(screen.queryByTestId(PANEL)).toBeNull());
+  });
+});
+
+describe('🔴 D6 · AC-4 — 「처음부터 직접」·「직접 고르기」 → manual 라우트 push', () => {
+  it('두 어포던스 모두 /trips/[tripId]/itinerary/manual 로 push 한다', async () => {
+    renderPage();
+    await screen.findByTestId(cardId('poi-a'));
+
+    const expected = {
+      pathname: '/trips/[tripId]/itinerary/manual',
+      params: { tripId: TRIP_ID },
+    };
+
+    fireEvent.press(screen.getByTestId('itinerary-draft-manual'));
+    expect(mockPush).toHaveBeenLastCalledWith(expected);
+
+    fireEvent.press(screen.getByTestId('itinerary-draft-pick-manual'));
+    expect(mockPush).toHaveBeenLastCalledWith(expected);
+    expect(mockPush).toHaveBeenCalledTimes(2);
   });
 });
