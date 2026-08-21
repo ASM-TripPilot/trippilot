@@ -649,12 +649,19 @@
       },
       "RequestMetaSchema": {
         "additionalProperties": false,
-        "description": "IO-1 — 지연 예산 전파. day1 5s / 전체 20s.",
+        "description": "IO-1 — 지연 예산 전파. 값은 백엔드 소유(종전 day1 5s / 전체 20s).\n\n`deadline_ms` 미지정 = **시간제약 없음** (2026-08-21 FE 연동 팀 결정, TRIP-473)\n— 예산 계단(INV-4)은 그대로 두고 시간 때문에 강등되지 않게만 한다. 제약을\n재도입하려면 백엔드가 값을 다시 싣기만 하면 된다(AI 재작업 없음).",
         "properties": {
           "deadline_ms": {
-            "exclusiveMinimum": 0.0,
-            "title": "Deadline Ms",
-            "type": "integer"
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline Ms"
           },
           "request_id": {
             "minLength": 1,
@@ -669,8 +676,7 @@
         },
         "required": [
           "request_id",
-          "requested_at",
-          "deadline_ms"
+          "requested_at"
         ],
         "title": "RequestMetaSchema",
         "type": "object"

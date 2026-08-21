@@ -15,7 +15,9 @@ env (전부 선택 — 기본값은 관대하게, 통합테스트·로컬 개발
   - `TRIPPILOT_RATE_LIMIT_RPS`   초당 토큰 충전율(기본 100). 0 이하 = rate-limit 비활성.
   - `TRIPPILOT_RATE_LIMIT_BURST` 버킷 용량(기본 1000).
   - `TRIPPILOT_TIMEOUT_MARGIN_MS`  deadline 위 여유 마진(기본 5000).
-  - `TRIPPILOT_TIMEOUT_DEFAULT_MS` 바디에 deadline이 없을 때의 기준값(기본 30000).
+  - `TRIPPILOT_TIMEOUT_DEFAULT_MS` 바디에 deadline이 없을 때의 기준값(기본 600000
+    — deadline 미지정=시간제약 없음(TRIP-473) 결정 이후 이 백스톱은 행(hang) 방지
+    안전망만 맡는다; 제약 복원은 백엔드가 deadline_ms를 다시 실으면 된다).
   잘못된 값(파싱 불가·비양수 마진)은 기동 실패로 **드러낸다**(설정 오류 은폐 금지).
 
 INV-4: rate-limit·백스톱 발동은 조용히 지나가지 않는다 — 구조화 로그(warning/error)
@@ -74,7 +76,7 @@ class MiddlewareSettings:
     rate_limit_rps: float = 100.0
     rate_limit_burst: int = 1000
     timeout_margin_ms: int = 5000
-    timeout_default_deadline_ms: int = 30000
+    timeout_default_deadline_ms: int = 600000  # 행 방지 안전망 (TRIP-473 — 시간제약 아님)
 
     def __post_init__(self) -> None:
         if self.timeout_margin_ms <= 0:

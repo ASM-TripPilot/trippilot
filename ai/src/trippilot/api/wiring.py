@@ -181,6 +181,11 @@ class LoggingTrace:
 # ── 와이어 → 도메인 번역 (generate) ──────────────────────────────────
 
 
+def _deadline_budget(meta: schemas.RequestMetaSchema) -> int:
+    """미지정 deadline = 시간제약 없음(TRIP-473) — 계단에는 무제한 상수를 대입한다."""
+    return meta.deadline_ms if meta.deadline_ms is not None else UNBOUNDED_DEADLINE_MS
+
+
 def _tz_aware(value: datetime, tz: timezone) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=tz)
 
@@ -604,7 +609,7 @@ class WiredItineraryOrchestrator:
         meta = request.request_meta
         outcome = self._orchestrator.generate(
             _domain_generate_request(request, self._tz),
-            meta.deadline_ms,
+            _deadline_budget(meta),
             TraceId(meta.request_id),
             _tz_aware(meta.requested_at, self._tz),
         )
@@ -662,7 +667,7 @@ class WiredItineraryOrchestrator:
         )
         facade = self._solvers.for_pool(poi_index)
         return facade.validate(
-            solution, problem, request.request_meta.deadline_ms,
+            solution, problem, _deadline_budget(request.request_meta),
             TraceId(request.request_meta.request_id),
         )
 
@@ -672,7 +677,7 @@ class WiredItineraryOrchestrator:
         )
         facade = self._solvers.for_pool(poi_index)
         result = facade.repair(
-            solution, problem, request.request_meta.deadline_ms,
+            solution, problem, _deadline_budget(request.request_meta),
             TraceId(request.request_meta.request_id),
         )
         return WiredRepairOutcome(
@@ -828,6 +833,11 @@ def build_orchestrator(
 # 제주 — 데모 시드의 기준점(흑돼지거리·한라산의 중간점: 둘 다 PUBLIC 반경 10km 안).
 # 성산일출봉·월정리는 반경 밖 — 후보풀 반경 필터가 실제로 일하는 배치다.
 DEMO_ANCHOR = GeoPoint(33.4362, 126.5255)
+
+# deadline_ms 미지정(=시간제약 없음, TRIP-473) 시 예산 계단에 대입하는 값.
+# 미들웨어 백스톱 기본(timeout_default_deadline_ms)과 같은 값 — 백스톱(+margin)이
+# 항상 이 예산보다 뒤에 발동해 정상 폴백과 겹치지 않는 순서가 유지된다.
+UNBOUNDED_DEADLINE_MS = 600_000
 
 
 class UnwiredLlm:
