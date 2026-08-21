@@ -165,8 +165,10 @@ describe('AC-4 · 여행지 칩 (BR-U1-34)', () => {
 
     fireEvent.press(screen.getByTestId('trip-wizard-destination-remove-busan'));
 
-    // 서버 계약의 `region`은 한글 이름이다(코드가 아니다 — regions.ts 주석).
-    expect(onRemoveDestination).toHaveBeenCalledWith('부산');
+    // TRIP-364 — 삭제는 이름이 아니라 그 칩의 `seq`로 올라간다(목록 안 유일 식별자).
+    // 부산은 filledProps에서 seq 1이다. 이름으로 올려보내던 옛 계약은 같은 지역 중복 시
+    // "누른 그 칩"을 못 짚었다.
+    expect(onRemoveDestination).toHaveBeenCalledWith(1);
     expect(onRemoveDestination).toHaveBeenCalledTimes(1);
     // 짝 — × 버튼을 눌렀는데 칩 본체(또는 '도시 추가')까지 함께 불리지 않는다.
     expect(onAddDestination).not.toHaveBeenCalled();

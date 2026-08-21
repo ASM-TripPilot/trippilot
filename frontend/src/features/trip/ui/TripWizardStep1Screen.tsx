@@ -161,7 +161,7 @@ export interface TripWizardStep1ScreenProps {
   onPressBudgetEdit?(): void;
   onBack(): void;
   onAddDestination(regionName: string, nights: number): void;
-  onRemoveDestination(regionName: string): void;
+  onRemoveDestination(seq: number): void;
   onSelectPreset(code: PeriodPresetCode): void;
   /** 날짜 행·'날짜 직접 입력' 두 진입점이 공유하는 핸들러 — 날짜 선택 시트를 연다(TRIP-368). */
   onPressPeriod(): void;
@@ -699,7 +699,7 @@ export function TripWizardStep1Screen({
                     <Pressable
                       testID={`trip-wizard-destination-remove-${code}`}
                       accessibilityRole="button"
-                      onPress={() => onRemoveDestination(destination.region)}
+                      onPress={() => onRemoveDestination(destination.seq)}
                       hitSlop={6}
                     >
                       <RemoveGlyph />
