@@ -46,6 +46,7 @@ import os
 import random
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -319,9 +320,14 @@ def run_rehearsal(
 # 실측 상한 — 1일 일정(슬롯 4~6) 기준 앵커→첫 슬롯 포함 인접 쌍 ~6건이면 전량,
 # 그 이상은 API 한도 아끼기로 절단한다.
 MAX_LEGS = 6
-# 리허설 요청은 transport_modes=["대중교통"] 고정(_request_body) — 검증 수단도 일치.
-# PUBLIC은 TMAP 대중교통 API 실측 (TRIP-405 — 보행 근사 제거).
-LEG_MODE = TransportMode.PUBLIC
+# 리허설 요청은 transport_modes=["대중교통"] 고정(_request_body) — 검증 수단도 대중교통이
+# 1순위다. 다만 TMAP은 **상품별로 활용 신청이 따로**라, 키가 있어도 대중교통만 403이
+# 나올 수 있다(실측 2026-08-21: /transit/routes 403, 리허설 legs 가 매일 0건이었다).
+# 그때 검증을 통째로 포기하는 대신 자동차 → 보행 순으로 내려간다 — 수단이 달라도
+# "추정 대 실측" 오차는 여전히 쓸모 있고, 어느 수단으로 쟀는지 legs 에 적어 둔다.
+# 하버사인 폴백은 여기 없다: 실측이 목적인데 추정으로 대체하면 검증이 아니다.
+LEG_MODES = (TransportMode.PUBLIC, TransportMode.CAR, TransportMode.WALK)
+LEG_MODE = LEG_MODES[0]   # 하위호환 — 단일 수단으로 부르던 자리
 
 
 def build_leg_pairs(
@@ -339,21 +345,36 @@ def measure_legs(
     *,
     travel: TravelTimePort,
     estimator: TravelEstimator,
-    mode: TransportMode = LEG_MODE,
+    modes: Sequence[TransportMode] = LEG_MODES,
 ) -> tuple[list[dict], str | None]:
     """쌍별 (솔버 추정 est_min, 실측 real_min, 오차 err_pct) — 오차 축적용 legs.
 
     err_pct = (est − real) / real × 100 (양수 = 과대추정). real 0(동일 좌표 등)은
-    비율이 정의 불가라 None. API 실패 시 그 지점에서 중단하고 (부분 legs, 사유)를
-    반환한다 — 죽은 키·한도 초과에 남은 호출을 반복하지 않는다.
+    비율이 정의 불가라 None.
+
+    수단은 `modes` 순서대로 내려간다 (대중교통 → 자동차 → 보행). 어떤 수단이
+    실패하면 **그 수단은 이후 쌍에서도 다시 쓰지 않는다** — TMAP 상품 미신청이면
+    쌍마다 같은 403을 반복해 봐야 호출만 태운다. 전부 실패해야 (부분 legs, 사유)를
+    반환한다. est_min 은 실제로 실측한 수단으로 계산해 같은 잣대로 비교한다.
     """
     legs: list[dict] = []
+    idx = 0
+    failure: str | None = None
     for from_poi, to_poi in pairs:
-        est_min = estimator.estimate(from_poi.coord, to_poi.coord, mode).internal_minutes
-        try:
-            real = travel.measure(from_poi.coord, to_poi.coord, mode)
-        except TravelTimeError as e:
-            return legs, str(e)
+        real = None
+        while idx < len(modes):
+            mode = modes[idx]
+            try:
+                real = travel.measure(from_poi.coord, to_poi.coord, mode)
+                break
+            except TravelTimeError as e:
+                failure = f"{mode.value}: {e}"
+                print(f"[rehearsal] WARNING {mode.value} 실측 실패 — 다음 수단으로: {e}")
+                idx += 1
+        if real is None:
+            return legs, failure   # 수단이 다 떨어졌다
+        est_min = estimator.estimate(
+            from_poi.coord, to_poi.coord, modes[idx]).internal_minutes
         err_pct = (
             round((est_min - real.real_minutes) / real.real_minutes * 100, 1)
             if real.real_minutes > 0 else None
@@ -361,6 +382,7 @@ def measure_legs(
         legs.append({
             "from": from_poi.name,
             "to": to_poi.name,
+            "mode": modes[idx].value,   # 수단이 섞이면 오차 해석이 달라진다 — 명시
             "est_min": est_min,
             "real_min": real.real_minutes,
             "err_pct": err_pct,
@@ -386,15 +408,17 @@ def attach_leg_verification(
         build_leg_pairs(selection, result["slots"]), travel=travel, estimator=estimator
     )
     if failure is not None:
-        print(f"[rehearsal] WARNING TMAP 실측 실패({len(legs)}건까지 기록): {failure}")
+        print(f"[rehearsal] WARNING 실측 수단이 모두 실패"
+              f"({len(legs)}건까지 기록) — 마지막 사유: {failure}")
     if not legs:
         return
     result["legs"] = legs
-    print(f"[rehearsal] 실경로 검증 {len(legs)}건 (PUBLIC=대중교통 실측, TRIP-405)")
-    print(f"[rehearsal]   {'구간':<30} est(분)  real(분)  err%")
+    used = sorted({leg["mode"] for leg in legs})
+    print(f"[rehearsal] 실경로 검증 {len(legs)}건 (수단: {', '.join(used)} — TRIP-382)")
+    print(f"[rehearsal]   {'구간':<30} 수단      est(분)  real(분)  err%")
     for leg in legs:
         err = f"{leg['err_pct']:+.1f}%" if leg["err_pct"] is not None else "n/a"
-        print(f"[rehearsal]   {leg['from']}→{leg['to']:<20} "
+        print(f"[rehearsal]   {leg['from']}→{leg['to']:<20} {leg['mode']:<8} "
               f"{leg['est_min']:>5}  {leg['real_min']:>7.1f}  {err:>7}")
 
 

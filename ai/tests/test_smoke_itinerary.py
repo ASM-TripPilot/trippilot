@@ -33,6 +33,7 @@ from smoke_itinerary import (  # noqa: E402
     attach_leg_verification,
     build_leg_pairs,
     load_proposals,
+    LEG_MODES,
     measure_legs,
     run_rehearsal,
     select_rehearsal_pois,
@@ -244,15 +245,22 @@ _ESTIMATOR = TravelEstimator(SolverConfig())
 
 
 class FakeTravel:
-    """고정 실측(분) 반환 — fail_after 번째 호출부터는 TravelTimeError."""
+    """고정 실측(분) 반환 — fail_after 번째 호출부터는 TravelTimeError.
 
-    def __init__(self, real_minutes: float, fail_after: int | None = None) -> None:
+    `fail_modes` 는 그 수단만 실패시킨다 — TMAP 상품 미신청(대중교통만 403)을 재현.
+    """
+
+    def __init__(self, real_minutes: float, fail_after: int | None = None,
+                 fail_modes: frozenset | set | None = None) -> None:
         self._real = real_minutes
         self._fail_after = fail_after
+        self._fail_modes = fail_modes or frozenset()
         self.calls = 0
 
     def measure(self, from_, to, mode) -> MeasuredTravel:
         self.calls += 1
+        if mode in self._fail_modes:
+            raise TravelTimeError(f"{mode.value} 미신청 (fake 403)")
         if self._fail_after is not None and self.calls > self._fail_after:
             raise TravelTimeError("한도 초과 (fake)")
         return MeasuredTravel(
@@ -303,8 +311,9 @@ def test_measure_legs_err_pct_formula():
     )
     assert failure is None
     assert legs == [{
-        "from": "장소-p0", "to": "장소-p1", "est_min": est,
-        "real_min": 20.0, "err_pct": round((est - 20.0) / 20.0 * 100, 1),
+        "from": "장소-p0", "to": "장소-p1", "mode": TransportMode.PUBLIC.value,
+        "est_min": est, "real_min": 20.0,
+        "err_pct": round((est - 20.0) / 20.0 * 100, 1),
     }]
 
 
@@ -318,14 +327,29 @@ def test_measure_legs_zero_real_has_no_err_pct():
     assert legs[0]["err_pct"] is None  # 비율 정의 불가 — 지어내지 않는다
 
 
-def test_measure_legs_stops_at_first_failure_with_partial_legs():
+def test_measure_legs_모든_수단이_실패해야_중단한다():
+    """수단 하나가 죽어도 검증을 통째로 버리지 않는다 — 실측 배경이 그거였다.
+
+    TMAP은 상품별 활용 신청이 따로라 키가 있어도 대중교통만 403이 날 수 있다
+    (2026-08-21 리허설 legs 가 매일 0건이던 원인). 자동차·보행까지 내려가 본다.
+    """
     selection = _leg_selection(4)
     pairs = build_leg_pairs(selection, [_slot("p1"), _slot("p2"), _slot("p3")])
     travel = FakeTravel(real_minutes=10.0, fail_after=1)
     legs, failure = measure_legs(pairs, travel=travel, estimator=_ESTIMATOR)
-    assert len(legs) == 1  # 실패 전까지의 부분 실측만
+    assert len(legs) == 1        # 첫 쌍은 성공, 그 뒤로 3개 수단이 차례로 실패
     assert failure is not None and "한도 초과" in failure
-    assert travel.calls == 2  # 실패 지점에서 중단 — 남은 쌍에 호출 반복 없음
+    # 실패한 수단은 이후 쌍에서 재시도하지 않는다 — 쌍마다 403을 반복하면 호출 낭비
+    assert travel.calls == 1 + len(LEG_MODES)
+
+
+def test_measure_legs_첫_수단_실패시_다음_수단으로_내려간다():
+    selection = _leg_selection(2)
+    pairs = build_leg_pairs(selection, [_slot("p1")])
+    travel = FakeTravel(real_minutes=12.0, fail_modes={TransportMode.PUBLIC})
+    legs, failure = measure_legs(pairs, travel=travel, estimator=_ESTIMATOR)
+    assert failure is None
+    assert legs[0]["mode"] == TransportMode.CAR.value   # 대중교통 403 → 자동차로
 
 
 def test_attach_skips_without_travel_port():
@@ -351,7 +375,7 @@ def test_attach_records_legs_schema():
     attach_leg_verification(result, selection, FakeTravel(15.0), _ESTIMATOR)
     assert len(result["legs"]) == 2  # 앵커→p1, p1→p2
     for leg in result["legs"]:
-        assert set(leg) == {"from", "to", "est_min", "real_min", "err_pct"}
+        assert set(leg) == {"from", "to", "mode", "est_min", "real_min", "err_pct"}
         assert isinstance(leg["est_min"], int)
         assert leg["real_min"] == 15.0
 
