@@ -1,5 +1,13 @@
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PoiCategory, type Place } from '@/shared/api/generated/schemas';
@@ -56,6 +64,10 @@ export interface PlaceAddScreenProps {
   onBack(): void;
   /** 하단 "일정에서 위치·순서 보기" → h19 복귀. */
   onPressViewPlan(): void;
+  /** 목록 끝에 닿으면 다음 장을 이어 받는다(TRIP-502 무한 스크롤). 미지정=무동작(additive). */
+  onEndReached?: () => void;
+  /** 다음 장을 받는 중이면 목록 하단 로딩(footer). 미지정=false. */
+  isFetchingMore?: boolean;
 }
 
 /** 카테고리 칩 하나 — 활성(primary bg + white) / 비활성(border + body). */
@@ -105,6 +117,8 @@ export function PlaceAddScreen({
   onPressDone,
   onBack,
   onPressViewPlan,
+  onEndReached,
+  isFetchingMore = false,
 }: PlaceAddScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -188,24 +202,38 @@ export function PlaceAddScreen({
           )}
         </View>
 
-        <ScrollView contentContainerClassName="gap-md px-lg pb-2xl pt-sm">
-          {places.length === 0 ? (
+        <FlatList<Place>
+          testID="itinerary-place-list"
+          data={places}
+          keyExtractor={(place) => place.poiId}
+          contentContainerClassName="gap-md px-lg pb-2xl pt-sm"
+          ListEmptyComponent={
             <View className="w-full items-center py-2xl">
               <Text className="font-noto text-body text-muted">
                 {EMPTY_TEXT}
               </Text>
             </View>
-          ) : (
-            places.map((place) => (
-              <PlaceAddCard
-                key={place.poiId}
-                place={place}
-                added={addedPoiIds.includes(place.poiId)}
-                onPressAdd={() => onPressAdd(place)}
-              />
-            ))
+          }
+          renderItem={({ item }) => (
+            <PlaceAddCard
+              place={item}
+              added={addedPoiIds.includes(item.poiId)}
+              onPressAdd={() => onPressAdd(item)}
+            />
           )}
-        </ScrollView>
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isFetchingMore ? (
+              <View
+                testID="itinerary-place-loading-more"
+                className="w-full items-center py-lg"
+              >
+                <ActivityIndicator />
+              </View>
+            ) : null
+          }
+        />
 
         <View className="w-full border-t border-hairline bg-canvas px-lg py-md">
           <Pressable
