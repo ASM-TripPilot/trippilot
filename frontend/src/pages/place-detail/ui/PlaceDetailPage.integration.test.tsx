@@ -137,6 +137,8 @@ function renderSeeded(
     listCache?: Place[];
     listCacheParams?: GetPlacesParams;
     guest?: boolean;
+    /** true면 무한쿼리 모양(InfiniteData)으로 심는다 — d04(TRIP-502)가 심는 실제 캐시 모양. */
+    infinite?: boolean;
   } = {}
 ): void {
   if (opts.guest) clearAccessToken();
@@ -147,11 +149,15 @@ function renderSeeded(
     },
   });
   if (opts.listCache !== undefined) {
-    // 캐시는 이제 PlaceList(`{items, nextCursor}`)를 담는다(TRIP-503) — 앞 화면이 심는 모양 그대로.
-    client.setQueryData(getGetPlacesQueryKey(opts.listCacheParams), {
-      items: opts.listCache,
-      nextCursor: null,
-    });
+    // 랜딩(TRIP-500)은 PlaceList(`{items, nextCursor}`), d04·수동추가(TRIP-502)는 무한쿼리라
+    // InfiniteData(`{pages, pageParams}`)를 담는다 — 앞 화면이 심는 두 모양을 그대로 재현한다.
+    const value = opts.infinite
+      ? {
+          pages: [{ items: opts.listCache, nextCursor: null }],
+          pageParams: [undefined],
+        }
+      : { items: opts.listCache, nextCursor: null };
+    client.setQueryData(getGetPlacesQueryKey(opts.listCacheParams), value);
   }
   function wrapper({ children }: { children: ReactNode }) {
     return (
@@ -377,6 +383,24 @@ describe('D10·D11 · code-critic 사각 봉합 (TRIP-501)', () => {
       expect(screen.getByTestId('explore-place-notfound')).toBeOnTheScreen()
     );
     expect(screen.queryByTestId('explore-place-loading')).toBeNull();
+    expect(placesHandler).not.toHaveBeenCalled();
+  });
+
+  it('D12 d04 무한쿼리 캐시(InfiniteData)에서도 장소를 찾는다 (TRIP-502 크로스티켓)', async () => {
+    // 준비 — d04 가 심는 실제 캐시 모양(InfiniteData). 상세가 PlaceList 만 읽으면 못 찾아 notFound 로
+    //  깨진다(d04→d06 웜 경로) — placesFromCache 가 pages 도 훑는지 잠근다(뮤테이션 심판).
+    renderSeeded('p1', {
+      listCache: [makePlace()],
+      listCacheParams: { region: '부산', category: '문화' },
+      infinite: true,
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-detail')).toBeOnTheScreen()
+    );
+    expect(screen.getByTestId('explore-place-title')).toHaveTextContent(
+      '부산시립미술관'
+    );
     expect(placesHandler).not.toHaveBeenCalled();
   });
 });

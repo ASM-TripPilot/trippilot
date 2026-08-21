@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   Pressable,
@@ -68,6 +69,10 @@ export interface PlaceExploreScreenProps {
   onClearFilter?: () => void;
   /** 배너 액션 버튼(재시도·로그인하기 공용) — 무엇을 하는지는 `saveError.action`이 정한다. */
   onPressSaveErrorAction?: () => void;
+  /** 목록 끝에 닿으면 다음 장을 이어 받는다(TRIP-502 무한 스크롤). 미지정이면 무동작(additive). */
+  onEndReached?: () => void;
+  /** 다음 장을 받는 중이면 목록 하단에 로딩 표시(footer). 미지정 = false. */
+  isFetchingMore?: boolean;
 }
 
 /** 칩 code는 셀렉터 전용 latin, 라벨·서버 질의값은 계약 enum 그대로(`regions.ts` 규칙 —
@@ -512,6 +517,8 @@ export function PlaceExploreScreen({
   onPressChangeRegion,
   onClearFilter,
   onPressSaveErrorAction,
+  onEndReached,
+  isFetchingMore = false,
 }: PlaceExploreScreenProps): ReactElement {
   const savedSet = new Set(savedPoiIds);
   const pendingSet = new Set(pendingPoiIds);
@@ -565,6 +572,18 @@ export function PlaceExploreScreen({
               onPressCard={onPressCard}
             />
           )}
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isFetchingMore ? (
+              <View
+                testID="explore-places-loading-more"
+                className="w-full items-center py-lg"
+              >
+                <ActivityIndicator />
+              </View>
+            ) : null
+          }
         />
 
         {saveError ? (

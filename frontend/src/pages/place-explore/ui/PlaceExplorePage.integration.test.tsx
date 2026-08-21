@@ -22,11 +22,12 @@ import { PlaceExplorePage } from './PlaceExplorePage';
  *  - **P-1 (AC-3)** 카테고리 칩은 `category` 파라미터로 **서버를 다시 부르고**, 그 응답이 카드에
  *    반영된다. 선택된 칩만 활성이다.
  *  - **P-2 (Seed Q9)** 라우트에 `region` 이 있으면 싣고, 없으면 파라미터 자체를 만들지 않는다.
- *  - **P-3 (AC-7·AC-8)** 정렬·검색은 **서버를 다시 부르지 않는다**(히트수로 확인).
+ *  - **P-3 (AC-8·TRIP-502)** 검색은 **서버가 한다**(`q`) — 클라 재정렬 없이 서버 순서를 그린다.
  *  - **P-4 (AC-4)** 하트를 누르면 **서버가 답하기 전에** 담김 표기와 CTA 숫자가 바뀐다.
  *  - **P-5 (AC-5)** 해제는 `savedPlaceId` 로 나가고, 0곳이 되면 CTA 바가 사라진다.
  *  - **P-6 (AC-6)** CTA 는 여행 생성 1/2 로 보낸다.
  *  - **P-7 (Seed Q1·BR-U1-03)** 게스트는 담은 목록 조회조차 보내지 않는다.
+ *  - **P-8 (TRIP-502)** 목록 끝에 닿으면 `nextCursor` 로 다음 장을 이어 받는다(무한 스크롤).
  *
  * 왜 통합 버킷인가: 심판 대상이 "**실제로 나간 요청**"이다. 직렬화가 끝난 최종 URL·재요청
  * 횟수·나간 경로의 id 는 msw 만 관찰할 수 있다(`savedPlaces.integration.test.tsx` 계승).
@@ -156,15 +157,16 @@ beforeEach(() => {
   // 조용히 통과하지 않고 에러가 된다 — 그 성질을 그대로 쓴다.
   server.use(
     http.get(`${BASE}/places`, ({ request }) => {
-      const category = new URL(request.url).searchParams.get('category');
-      // 응답이 `{items, nextCursor}` 객체다(TRIP-503) — 배열이 아니다.
-      return HttpResponse.json({
-        items:
-          category === null
-            ? PLACES
-            : PLACES.filter((place) => place.category === category),
-        nextCursor: null,
-      });
+      const url = new URL(request.url);
+      const category = url.searchParams.get('category');
+      const q = url.searchParams.get('q');
+      // 서버가 category·q(이름 부분일치)로 거른다(TRIP-502) — 응답은 {items, nextCursor}.
+      let result = PLACES;
+      if (category !== null) {
+        result = result.filter((place) => place.category === category);
+      }
+      if (q) result = result.filter((place) => place.nameKo.includes(q));
+      return HttpResponse.json({ items: result, nextCursor: null });
     }),
     http.get(`${BASE}/saved-places`, () => HttpResponse.json(savedRows)),
     http.post(`${BASE}/saved-places`, async ({ request }) => {
@@ -264,29 +266,33 @@ describe('P-2 · region 라우트 파라미터 (01b Seed Q9)', () => {
   });
 });
 
-describe('P-3 · 정렬·검색은 서버를 다시 부르지 않는다 (AC-7 · AC-8)', () => {
-  it('목록은 savedCount 내림차순이고, 검색어를 넣어도 요청이 늘지 않는다', async () => {
+describe('P-3 · 검색은 서버가 한다 (q) — 로드된 페이지 한정이 아니다 (AC-8 · TRIP-502)', () => {
+  it('서버가 준 순서를 그대로 그리고, 검색어를 넣으면 q 로 서버를 다시 부른다', async () => {
     setAccessToken('valid-access');
 
     await renderPage();
 
-    // 서버가 준 순서(p1..p5)가 아니라 savedCount 내림차순이다 — 리터럴로 적어 게이트①에서
-    // 사람 눈에 보이게 한다(30·21·12·7·3).
+    // 서버가 준 순서 그대로 그린다 — 클라 재정렬 없음(정렬은 서버 소유=이름순, TRIP-502).
+    // 예전엔 visiblePlaces 가 savedCount 내림차순으로 클라 정렬했으나 그 층을 걷어냈다.
     expect(cardTestIds()).toEqual([
-      'explore-places-card-p2',
-      'explore-places-card-p5',
       'explore-places-card-p1',
+      'explore-places-card-p2',
       'explore-places-card-p3',
       'explore-places-card-p4',
+      'explore-places-card-p5',
     ]);
 
     fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
 
+    // 검색은 서버가 한다 — q 를 실은 새 요청이 나가고, 서버가 거른 결과만 남는다(로드된 페이지 한정 아님).
     await waitFor(() =>
       expect(cardTestIds()).toEqual(['explore-places-card-p2'])
     );
-    // 계약에 `q` 파라미터가 없다 — 검색은 받아온 목록 안에서 끝나야 한다.
-    expect(hitsOf('GET', '/api/v1/places')).toHaveLength(1);
+    const hits = hitsOf('GET', '/api/v1/places');
+    expect(hits.length).toBeGreaterThanOrEqual(2);
+    expect(new URL(hits[hits.length - 1].url).searchParams.get('q')).toBe(
+      '해변'
+    );
   });
 });
 
@@ -406,5 +412,38 @@ describe('P-7 · 게스트는 담은 목록을 아예 부르지 않는다 (01b S
         '담음'
       )
     ).toHaveLength(0);
+  });
+});
+
+describe('P-8 · 모두 보기는 커서로 이어 받는다 (무한 스크롤 · TRIP-502)', () => {
+  it('목록 끝에 닿으면 nextCursor 로 다음 장을 이어 받는다', async () => {
+    setAccessToken('valid-access');
+    const PAGE2 = [makePlace('p6', '태종대', '명소', '영도구', 5)];
+    // 첫 장은 nextCursor 를 주고, cursor 가 실린 요청엔 다음 장을 준다.
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor');
+        return cursor
+          ? HttpResponse.json({ items: PAGE2, nextCursor: null })
+          : HttpResponse.json({ items: PLACES, nextCursor: 'CURSOR_2' });
+      })
+    );
+
+    await renderPage();
+    expect(cardTestIds()).toHaveLength(5);
+
+    // 목록 끝에 닿음 → 다음 장 요청. onEndReached 배선을 지우면 p6 가 안 와 red 가 된다(뮤테이션 심판).
+    fireEvent(screen.getByTestId('explore-places-grid'), 'endReached');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-card-p6')).toBeOnTheScreen()
+    );
+    // 첫 장 + 다음 장이 함께 그려진다(5 + 1).
+    expect(cardTestIds()).toHaveLength(6);
+    // 다음 장 요청에 cursor 가 실린다(첫 요청엔 없다).
+    const hits = hitsOf('GET', '/api/v1/places');
+    expect(new URL(hits[hits.length - 1].url).searchParams.get('cursor')).toBe(
+      'CURSOR_2'
+    );
   });
 });

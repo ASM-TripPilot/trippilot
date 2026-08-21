@@ -21,6 +21,7 @@ import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { Share, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import type { InfiniteData } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { getGetPlacesQueryKey } from '@/shared/api/generated/places/places';
@@ -44,6 +45,17 @@ const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
 );
 
+// 목록 캐시는 두 모양이 섞인다 — 랜딩은 PlaceList(단일 장, TRIP-500), d04·수동추가는
+// InfiniteData(여러 장, TRIP-502). 둘 다에서 Place[] 를 뽑는다.
+function placesFromCache(
+  data: PlaceList | InfiniteData<PlaceList> | undefined
+): Place[] {
+  if (data === undefined) return [];
+  return 'pages' in data
+    ? data.pages.flatMap((page) => page.items)
+    : data.items;
+}
+
 export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -61,8 +73,10 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
 
   // 목록 캐시(필터 조합 무관 전부)를 훑어 poiId 를 찾는다 — 새 조회를 일으키지 않는다(TRIP-501).
   const cachedListPlace = queryClient
-    .getQueriesData<PlaceList>({ queryKey: getGetPlacesQueryKey() })
-    .flatMap(([, data]) => data?.items ?? [])
+    .getQueriesData<PlaceList | InfiniteData<PlaceList>>({
+      queryKey: getGetPlacesQueryKey(),
+    })
+    .flatMap(([, data]) => placesFromCache(data))
     .find((p) => p.poiId === poiId);
 
   // 스냅숏 → 목록 캐시 → 담은목록 순으로 본다 — CLOSED/UNVERIFIED 담긴 장소는 /places(ACTIVE만)엔 없다.
