@@ -106,6 +106,9 @@ export interface TripWizardStep2ScreenProps {
   generateDisabled: boolean;
   /** 미해결 날짜 안내행. 없으면 안 그린다. */
   unresolved?: UnresolvedDaysView;
+  /** 거점 0으로 진행하면 결과가 폴백(INV-4)이 된다는 경고 문구. 없으면 안 그린다 —
+   * 배선이 "담은 숙소는 있는데 거점 0"일 때만 채운다(TRIP-490). */
+  fallbackWarning?: string;
   coverageFailed: boolean;
   /** 열려 있는 보완 시트. `undefined`면 시트를 **마운트하지 않는다** — 상시 마운트하면 모든
    * 렌더가 WebView를 태운다(TRIP-226). */
@@ -514,6 +517,7 @@ function CtaBlock({
   generateDisabled,
   coverageFailed,
   unresolved,
+  fallbackWarning,
   onGenerate,
   onNoStayStart,
   onRetryCoverage,
@@ -522,6 +526,7 @@ function CtaBlock({
   | 'generateDisabled'
   | 'coverageFailed'
   | 'unresolved'
+  | 'fallbackWarning'
   | 'onGenerate'
   | 'onNoStayStart'
   | 'onRetryCoverage'
@@ -530,6 +535,17 @@ function CtaBlock({
     <View className="w-full gap-md">
       {unresolved === undefined ? null : (
         <BlockedNotice unresolved={unresolved} />
+      )}
+      {fallbackWarning === undefined ? null : (
+        <View className="w-full flex-row items-start gap-sm rounded-[14px] bg-surface-soft px-lg py-md">
+          <WarningTriangleGlyph />
+          <Text
+            testID="trip-base-fallback-warning"
+            className="flex-1 font-noto text-label leading-[20px] text-muted"
+          >
+            {fallbackWarning}
+          </Text>
+        </View>
       )}
       {coverageFailed ? (
         <InlineFailure
@@ -577,6 +593,7 @@ export function TripWizardStep2Screen({
   candidates,
   generateDisabled,
   unresolved,
+  fallbackWarning,
   coverageFailed,
   fixSheet,
   onFix,
@@ -786,6 +803,7 @@ export function TripWizardStep2Screen({
               generateDisabled={generateDisabled}
               coverageFailed={coverageFailed}
               unresolved={unresolved}
+              fallbackWarning={fallbackWarning}
               onGenerate={onGenerate}
               onNoStayStart={onNoStayStart}
               onRetryCoverage={onRetryCoverage}
