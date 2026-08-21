@@ -85,8 +85,15 @@ export interface ExploreLandingScreenProps {
   bridge: { savedCount: number; onPressCreateTrip: () => void };
 }
 
-// 탭바(h-[84px]) 오버레이 위로 bridgeBar 를 띄우는 기준값. 스크롤 하단 여백도 이 위에 얹는다.
-const TAB_BAR_CLEARANCE = 84;
+// 담은 곳 FAB 그림자(홈 SavedPlacesFab 선례) — RN 은 box-shadow 가 없어 style prop 으로 옮긴다.
+// shadowColor '#000000' 은 토큰화 대상이 아니라 raw-hex 가드 사정거리 밖이다(홈 fabShadow 선례).
+const FAB_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.22,
+  shadowRadius: 12,
+  elevation: 6,
+} as const;
 
 function LaneHeader({
   title,
@@ -408,29 +415,20 @@ export function ExploreLandingScreen({
           </View>
         </ScrollView>
 
-        {/* bridgeBar — 탭바 위 고정 도크. 담은 곳(d02)으로 가는 CTA 는 담은 곳이 0곳이어도
-            유지된다(TRIP-448). 0곳이면 d02 의 빈 상태로 간다 — 그 경로가 이 CTA 뿐이다. */}
-        <View
-          className="absolute inset-x-0 px-lg"
-          style={{ bottom: TAB_BAR_CLEARANCE }}
+        {/* 담은 곳(d02) 바로가기 FAB — 탐색 랜딩 우하단 흰 원형 채움 하트(Figma d01 1672:1183,
+            홈 SavedPlacesFab TRIP-470 선례). 풀폭 핑크 CTA 바에서 교체(TRIP-494). 담은 곳이
+            0곳이어도 유지된다(TRIP-448 계약 계승 — 0곳이면 d02 빈 상태로 간다). 개수는 하트
+            글리프가 아니라 접근성 라벨로만 알린다(정본 FAB 은 하트만, 라벨 없음). */}
+        <Pressable
+          testID="explore-saved-places-fab"
+          accessibilityRole="button"
+          accessibilityLabel={`담은 곳 ${bridge.savedCount}곳`}
+          onPress={bridge.onPressCreateTrip}
+          style={FAB_SHADOW}
+          className="absolute bottom-[100px] right-lg h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
         >
-          <Pressable
-            testID="explore-bridge-cta"
-            accessibilityRole="button"
-            onPress={bridge.onPressCreateTrip}
-            className="h-14 flex-row items-center justify-center gap-sm rounded-pill bg-primary px-lg"
-          >
-            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-              ♥
-            </Text>
-            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-              담은 곳 {bridge.savedCount}곳
-            </Text>
-            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-              ›
-            </Text>
-          </Pressable>
-        </View>
+          <HeartFilledGlyph size={26} />
+        </Pressable>
       </View>
     </SafeAreaView>
   );
