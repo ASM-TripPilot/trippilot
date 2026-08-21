@@ -46,7 +46,7 @@ from trippilot.domain.llm import ModelTier
 
 KST = dt.timezone(dt.timedelta(hours=9))
 HORIZON_DAYS = 60      # 수집 지평 — 오늘부터 이 일수 안의 행사만 노린다
-SNIPPET_CAP = 40       # 워커 입력 상한 (프롬프트 비대 방지)
+SNIPPET_CAP = 60       # 워커 입력 상한 (프롬프트 비대 방지)
 EXTRACT_TIMEOUT_SEC = 30.0  # 배치는 지연 예산이 없다 — 넉넉히
 
 # 광역 17개 — 검색 쿼리용 지역명 (TourAPI 코드 순회와 같은 공평 순회 정신)
@@ -67,10 +67,13 @@ class _StderrTrace:
 
 
 def _queries(region: str, today: dt.date) -> tuple[tuple[str, str], ...]:
-    """지역당 검색 3건 — (종류, 쿼리). 호출 예산과 재현율의 절충점."""
+    """지역당 검색 5건 — (종류, 쿼리). 80% 캡 상향(2026-08-21)으로 재현율 확대."""
+    nxt = today.replace(day=1) + dt.timedelta(days=32)  # 다음 달 (수집 지평 60일 안)
     return (
         ("webkr", f"{region} 축제 {today.year}년 {today.month}월"),
+        ("webkr", f"{region} 축제 {nxt.year}년 {nxt.month}월"),
         ("webkr", f"{region} 행사 전시 공연 일정"),
+        ("news", f"{region} 축제 개막 개최"),
         ("blog", f"{region} 이번 달 축제 행사"),
     )
 
