@@ -20,6 +20,8 @@ from datetime import datetime
 from typing import Mapping, Protocol, Sequence
 
 from trippilot.api.schemas import (
+    AlternativesRequest,
+    AlternativesResponse,
     GenerateItineraryRequest,
     RepairItineraryRequest,
     ValidateItineraryRequest,
@@ -80,3 +82,5 @@ class ItineraryOrchestrator(Protocol):
     def validate(self, request: ValidateItineraryRequest) -> Sequence[Violation]: ...
 
     def repair(self, request: RepairItineraryRequest) -> RepairOutcome: ...
+
+    def alternatives(self, request: AlternativesRequest) -> AlternativesResponse: ...

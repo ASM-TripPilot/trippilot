@@ -98,6 +98,10 @@ from trippilot.domain.llm import ModelTier, PoiExplanation
 from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.travel import TravelEstimate
+from trippilot.agents.planb.rag import PlanBRagPipeline, PlanBRagRequest
+from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.domain.trigger import TriggerKind, TriggerParams
+from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.orchestrator import itinerary_orchestrator as core
@@ -197,6 +201,15 @@ def _transport_from(request: schemas.GenerateItineraryRequest) -> TransportMode:
         if mode is not None:
             return mode
     return TransportMode.PUBLIC
+
+
+def _token_or(tokens: Mapping, text: str | None, default):
+    """단일 토큰 → enum. 미인식·미지정은 기본값 (소프트 제약 — 배제 아님)."""
+    if text:
+        value = tokens.get(text.strip().upper())
+        if value is not None:
+            return value
+    return default
 
 
 def _seed_from(trip_id: str) -> int:
@@ -574,12 +587,17 @@ class WiredItineraryOrchestrator:
         poi_db: object,
         estimator: TravelEstimator,
         tz: timezone = KST,
+        *,
+        pool_builder: CandidatePoolBuilder,
+        rag: PlanBRagPipeline,
     ) -> None:
         self._orchestrator = orchestrator
         self._solvers = solver_provider
         self._poi_db = poi_db
         self._estimator = estimator
         self._tz = tz
+        self._pool_builder = pool_builder
+        self._rag = rag
 
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
     def generate(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
@@ -672,6 +690,60 @@ class WiredItineraryOrchestrator:
         poi_index = {p.poi_id: p for p in self._poi_db.find_by_ids(ids)}
         return solution, problem, poi_index
 
+    def alternatives(
+        self, request: schemas.AlternativesRequest
+    ) -> schemas.AlternativesResponse:
+        """Plan-B 대안 제안 (TRIP-428) — 풀 빌드(M7) → RAG 파이프라인 → 사영.
+
+        풀은 요청 앵커 반경으로 여기서 직접 만든다(INV-1 — 후보 자격은 M7 소유,
+        generate와 같은 빌더·같은 poi_db). 파이프라인은 예외를 던지지 않는다 —
+        실패는 전부 fallback_level·notes·empty_reason 상태값으로 나간다(INV-4).
+        """
+        now = _tz_aware(request.request_meta.requested_at, self._tz)
+        pool = self._pool_builder.build(
+            CandidatePoolRequest(
+                anchor=GeoPoint(request.anchor.lat, request.anchor.lng),
+                dates=tuple(request.dates),
+                budget=_token_or(_BUDGET_TOKENS, request.budget_level, BudgetLevel.MID),
+                transport=_token_or(
+                    _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC),
+            ),
+            now=now,
+        )
+        result = self._rag.run(
+            PlanBRagRequest(
+                trigger=TriggerParams(
+                    kind=TriggerKind(request.trigger.kind),
+                    schedule_id=ScheduleId(request.trigger.schedule_id),
+                    affected_date=request.trigger.affected_date,
+                    payload=request.trigger.payload,
+                ),
+                reason=request.reason,
+                pool=pool,
+                trace_id=TraceId(request.request_meta.request_id),
+                now=now,
+                excluded_poi_ids=frozenset(
+                    PoiId(p) for p in request.excluded_poi_ids),
+            )
+        )
+        return schemas.AlternativesResponse(
+            alternatives=[
+                schemas.AlternativeSchema(
+                    label=a.label,
+                    poi_ids=[str(p) for p in a.poi_ids],
+                    rationale=a.rationale,
+                )
+                for a in result.alternatives
+            ],
+            is_fallback=result.is_fallback,
+            fallback_level=result.fallback_level,
+            notes=list(result.notes),
+            retrieved=dict(result.retrieved),
+            dropped_out_of_pool=list(result.dropped_out_of_pool),
+            empty_reason=result.empty_reason,
+            pool_size=len(pool.poi_ids),
+        )
+
 
 # ── 조립 함수 (composition root) ─────────────────────────────────────
 
@@ -690,6 +762,8 @@ def build_orchestrator(
     prompts_root: Path | None = None,
     weather: WeatherPort | None = None,
     events: "EventPort | None" = None,  # 행사 저장소 (TRIP-421) — None이면 무보정
+    vector_store: object | None = None,
+    embedding: object | None = None,
     tz: timezone = KST,
 ) -> WiredItineraryOrchestrator:
     """실 구성요소 조립 → `create_app(orchestrator=...)`에 꽂을 어댑터.
@@ -709,12 +783,20 @@ def build_orchestrator(
     provider = ChainSolverProvider(estimator, clock, trace, scfg)
     # 수집 계층 (TRIP-406·407) — 풀·페르소나 상시, 날씨는 포트 주입 시에만 등록.
     # 페르소나 재조회도 같은 resolver — 보안 규칙의 권위 1곳 (TRIP-333·BR-U4-07).
+    pool_builder = CandidatePoolBuilder(
+        poi_db, m7_config if m7_config is not None else M7Config())
     providers: dict[ProviderKind, object] = {
-        ProviderKind.PLACE: PlaceProvider(
-            CandidatePoolBuilder(poi_db, m7_config if m7_config is not None else M7Config())
-        ),
+        ProviderKind.PLACE: PlaceProvider(pool_builder),
         ProviderKind.PERSONA: PersonaProvider(resolver),
     }
+    # Plan-B RAG (TRIP-428) — 벡터·임베딩 미주입이면 Unwired 스텁: 파이프라인이
+    # 검색 실패를 notes로 남기고 빈 컨텍스트 + 규칙 랭킹으로 강등한다(INV-4).
+    rag = PlanBRagPipeline(
+        embedding if embedding is not None else UnwiredEmbedding(),
+        vector_store if vector_store is not None else UnwiredVectorStore(),
+        alternative_gateway=GatewayFacade(
+            llm, renderer, AlternativeSelectionGate(), c1_config, trace),
+    )
     if weather is not None:
         providers[ProviderKind.WEATHER] = WeatherProvider(weather)
     if events is not None:  # 행사 저장소 주입 시에만 등록 (TRIP-421)
@@ -734,7 +816,10 @@ def build_orchestrator(
         ),
         config=orchestrator_config,
     )
-    return WiredItineraryOrchestrator(orchestrator, provider, poi_db, estimator, tz=tz)
+    return WiredItineraryOrchestrator(
+        orchestrator, provider, poi_db, estimator, tz=tz,
+        pool_builder=pool_builder, rag=rag,
+    )
 
 
 # ── 로컬·스모크 조립 (in-memory fake — 실 DB·실 LLM 호출 0, D37) ─────
@@ -753,6 +838,34 @@ class UnwiredLlm:
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
         raise RuntimeError("실 LLM 미배선 — 규칙 점수 폴백 (D37)")
+
+
+class UnwiredEmbedding:
+    """실 임베딩 미배선 명시 실패 — RAG 파이프라인이 빈 검색 컨텍스트로 강등한다(INV-4).
+
+    가짜 벡터를 지어내지 않는다(해시 fake는 의미 유사도가 없어 검색을 오염시킨다).
+    """
+
+    dim = 1024  # AI-D06
+
+    def embed(self, text: str) -> tuple[float, ...]:
+        raise RuntimeError("실 임베딩 미배선 — KB 검색 생략(빈 컨텍스트 강등)")
+
+    def embed_batch(self, texts) -> tuple[tuple[float, ...], ...]:
+        raise RuntimeError("실 임베딩 미배선 — KB 검색 생략(빈 컨텍스트 강등)")
+
+
+class UnwiredVectorStore:
+    """실 벡터 스토어 미배선 명시 실패 — UnwiredEmbedding과 같은 계약."""
+
+    def upsert(self, collection, item_id, vector, payload) -> None:
+        raise RuntimeError("실 벡터 스토어 미배선")
+
+    def search(self, collection, vector, top_k):
+        raise RuntimeError("실 벡터 스토어 미배선 — KB 검색 생략(빈 컨텍스트 강등)")
+
+    def delete(self, collection, item_id) -> None:
+        raise RuntimeError("실 벡터 스토어 미배선")
 
 
 class StaticPersonaStore:
@@ -832,6 +945,8 @@ def build_dev_app(
     weather: WeatherPort | None = None,
     poi_db: object | None = None,
     events: EventPort | None = None,
+    vector_store: object | None = None,
+    embedding: object | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -865,5 +980,7 @@ def build_dev_app(
         c1_config=C1Config(model_ids=model_ids),
         weather=weather,
         events=events,  # 행사 저장소 (TRIP-421) — None이면 무보정
+        vector_store=vector_store,
+        embedding=embedding,
     )
     return create_app(orchestrator)

@@ -37,7 +37,8 @@ _BACKEND_SEED = {
 
 _ENV_VARS = ("TRIPPILOT_WIRING", "TRIPPILOT_LLM_PROVIDER", "OPENAI_API_KEY",
              "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_API",
-             "TRIPPILOT_BACKEND_BASE_URL", "TRIPPILOT_SERVICE_AUTH_TOKEN")
+             "TRIPPILOT_BACKEND_BASE_URL", "TRIPPILOT_SERVICE_AUTH_TOKEN",
+             "TRIPPILOT_VECTOR_DB_URL", "TRIPPILOT_EMBEDDING_PROVIDER")
 
 
 @pytest.fixture(autouse=True)
@@ -237,4 +238,40 @@ def test_backend_url_without_token_fails_startup(
     if token is not None:
         monkeypatch.setenv("TRIPPILOT_SERVICE_AUTH_TOKEN", token)
     with pytest.raises(RuntimeError, match="TRIPPILOT_SERVICE_AUTH_TOKEN"):
+        main.build_app_from_env()
+
+
+# ── ⑥ Plan-B RAG 벡터 실배선 분기 (TRIP-428 — 조립만, 실 호출 0) ─────
+
+
+def test_vector_env_unset_leaves_rag_unwired(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = _spy_dev_app(monkeypatch)
+    main.build_app_from_env()
+    assert captured["vector_store"] is None and captured["embedding"] is None
+
+
+def test_vector_env_set_wires_pgvector_and_openai_embedding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from trippilot.agents.adapters.pgvector_store import PgVectorStore
+    from trippilot.llm_gateway.adapters.openai_embedding import OpenAiEmbeddingAdapter
+
+    monkeypatch.setenv("TRIPPILOT_VECTOR_DB_URL", "postgresql://x:x@localhost:5433/ai_kb")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-no-real-call")
+    captured = _spy_dev_app(monkeypatch)
+    main.build_app_from_env()  # 커넥션은 지연 팩토리 — 조립 시 실 접속 없음
+    assert isinstance(captured["vector_store"], PgVectorStore)
+    assert isinstance(captured["embedding"], OpenAiEmbeddingAdapter)
+
+
+@pytest.mark.parametrize("key", [None, ""])
+def test_vector_url_without_embedding_key_fails_startup(
+    monkeypatch: pytest.MonkeyPatch, key: str | None,
+) -> None:
+    monkeypatch.setenv("TRIPPILOT_VECTOR_DB_URL", "postgresql://x:x@localhost:5433/ai_kb")
+    if key is not None:
+        monkeypatch.setenv("OPENAI_API_KEY", key)
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         main.build_app_from_env()
