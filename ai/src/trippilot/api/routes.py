@@ -25,6 +25,8 @@ from trippilot.api.protocols import (
 from trippilot.api.schemas import (
     AlternativesRequest,
     AlternativesResponse,
+    ExplanationsRequest,
+    ExplanationsResponse,
     CandidatesSummarySchema,
     DayScheduleSchema,
     FreshnessMetaSchema,
@@ -228,6 +230,22 @@ def alternatives(
     구형 조립(alternatives 미구현 오케스트레이터)은 503으로 명시 실패한다(INV-4).
     """
     handler = getattr(orchestrator, "alternatives", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(lambda: handler(request))
+
+
+@router.post("/explanations", response_model=ExplanationsResponse)
+def explanations(
+    request: ExplanationsRequest,
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> ExplanationsResponse:
+    """슬롯별 설명 조회 (TRIP-479) — generate(include_explanations=false)와 짝.
+
+    설명은 부가 정보다: LLM 실패도 200 + 빈 맵 + 사유로 나간다(침묵 금지, INV-4).
+    구형 조립(미구현 오케스트레이터)은 503 명시 실패.
+    """
+    handler = getattr(orchestrator, "explanations", None)
     if handler is None:
         raise orchestrator_not_wired()
     return _guarded(lambda: handler(request))

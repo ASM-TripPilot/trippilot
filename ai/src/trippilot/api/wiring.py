@@ -94,7 +94,7 @@ from trippilot.domain.itinerary import (
     Violation,
     VisitSlot,
 )
-from trippilot.domain.llm import ModelTier, PoiExplanation
+from trippilot.domain.llm import CandidatePool, ModelTier, PoiExplanation
 from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.travel import TravelEstimate
@@ -268,6 +268,7 @@ def _domain_generate_request(
         seed=_seed_from(request.trip_id),
         fixed_blocks=tuple(_fixed_block(b, tz) for b in request.fixed_blocks),
         excluded_poi_ids=frozenset(PoiId(x) for x in request.excluded_poi_ids),
+        include_explanations=request.include_explanations,
     )
 
 
@@ -596,6 +597,8 @@ class WiredItineraryOrchestrator:
         *,
         pool_builder: CandidatePoolBuilder,
         rag: PlanBRagPipeline,
+        explainer: ExplanationWorker,
+        context_resolver: ContextResolver,
     ) -> None:
         self._orchestrator = orchestrator
         self._solvers = solver_provider
@@ -604,6 +607,8 @@ class WiredItineraryOrchestrator:
         self._tz = tz
         self._pool_builder = pool_builder
         self._rag = rag
+        self._explainer = explainer
+        self._resolver = context_resolver
 
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
     def generate(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
@@ -750,6 +755,57 @@ class WiredItineraryOrchestrator:
             pool_size=len(pool.poi_ids),
         )
 
+    def explanations(
+        self, request: schemas.ExplanationsRequest
+    ) -> schemas.ExplanationsResponse:
+        """슬롯별 설명 조회 (TRIP-479) — 재구성 → 풀 조립 → ExplanationWorker.
+
+        설명은 부가 정보라 실패도 200 + 빈 맵 + 사유다(침묵 금지). 페르소나는
+        generate와 같은 trip_id 파생 참조(D31)로 해석 — 소유 검증 규칙 재사용.
+        """
+        meta = request.request_meta
+        now = _tz_aware(meta.requested_at, self._tz)
+        trace_id = TraceId(meta.request_id)
+        solution = _solution_from_payload(
+            request.itinerary, ScheduleId(request.trip_id), self._tz)
+        ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
+        pois = tuple(self._poi_db.find_by_ids(ids)) if ids else ()
+        if not pois:
+            # 미등록 POI뿐(고정 블록 유래 등) — 근거 없이 지어내지 않는다
+            return schemas.ExplanationsResponse(
+                explanations={}, is_fallback=True, reason="no_registered_pois")
+        pool = CandidatePool(
+            poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=now)
+        owner = f"trip:{request.trip_id}"
+        persona = self._resolver.resolve(
+            Principal(user_id=owner),
+            ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
+        )
+        seen: set[PoiId] = set()
+        ordered = tuple(
+            slot.poi_id
+            for day in solution.days for slot in day.slots
+            if pool.contains(slot.poi_id)
+            and not (slot.poi_id in seen or seen.add(slot.poi_id))
+        )
+        try:
+            result = self._explainer.explain(
+                pool, ordered, persona, trace_id, now,
+                timeout_sec=_deadline_budget(meta) / 1000.0,
+            )
+        except Exception as e:  # 설정 버그 등 — 설명 없음으로 정직 보고
+            return schemas.ExplanationsResponse(
+                explanations={}, is_fallback=True,
+                reason=f"explain_error: {type(e).__name__}: {e}")
+        if result.is_fallback or not result.value:
+            return schemas.ExplanationsResponse(
+                explanations={}, is_fallback=True,
+                reason=f"explanation_fallback: {result.error}")
+        keyed = _keyed_explanations(
+            solution, tuple(x for x in result.value if pool.contains(x.poi_id)))
+        return schemas.ExplanationsResponse(
+            explanations=dict(keyed), is_fallback=False, reason=None)
+
 
 # ── 조립 함수 (composition root) ─────────────────────────────────────
 
@@ -807,6 +863,9 @@ def build_orchestrator(
         providers[ProviderKind.WEATHER] = WeatherProvider(weather)
     if events is not None:  # 행사 저장소 주입 시에만 등록 (TRIP-421)
         providers[ProviderKind.EVENT] = EventProvider(events)
+    explainer = ExplanationWorker(
+        GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace)
+    )
     orchestrator = core.ItineraryOrchestrator(
         InfoCollector(providers),
         # 점수 캐시 (TRIP-477) — 2단계 생성(1차 day1→2차 잔여)의 중복 LLM 점수 제거.
@@ -821,14 +880,13 @@ def build_orchestrator(
         trace,
         # 소유 검증(fail-closed, TRIP-333)도 같은 resolver — 보안 규칙의 권위 1곳.
         context_resolver=resolver,
-        explanation_worker=ExplanationWorker(
-            GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace)
-        ),
+        explanation_worker=explainer,
         config=orchestrator_config,
     )
     return WiredItineraryOrchestrator(
         orchestrator, provider, poi_db, estimator, tz=tz,
         pool_builder=pool_builder, rag=rag,
+        explainer=explainer, context_resolver=resolver,
     )
 
 

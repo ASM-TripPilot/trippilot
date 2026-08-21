@@ -271,6 +271,64 @@
         "title": "DayScheduleSchema",
         "type": "object"
       },
+      "ExplanationsRequest": {
+        "additionalProperties": false,
+        "description": "배치 일정의 슬롯별 설명 조회 — generate(include_explanations=false)와 짝.\n\n페르소나는 generate와 같은 trip_id 파생 참조로 해석한다(D31 자기참조,\nTRIP-333 fail-closed 유지). 시각·순서는 받기만 하고 바꾸지 않는다(INV-2).",
+        "properties": {
+          "itinerary": {
+            "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "trip_id": {
+            "minLength": 1,
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id",
+          "itinerary",
+          "request_meta"
+        ],
+        "title": "ExplanationsRequest",
+        "type": "object"
+      },
+      "ExplanationsResponse": {
+        "additionalProperties": false,
+        "description": "slot_key(BR-U2-04: \"날짜#poi_id\") → 설명 1문장. 실패는 빈 맵 + 사유(침묵 금지).",
+        "properties": {
+          "explanations": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Explanations",
+            "type": "object"
+          },
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "explanations",
+          "is_fallback"
+        ],
+        "title": "ExplanationsResponse",
+        "type": "object"
+      },
       "FixedBlockSchema": {
         "additionalProperties": false,
         "description": "시각 고정 필수방문지(HC3). ANYTIME이면 date/start/dwell_min은 null.",
@@ -386,6 +444,11 @@
           },
           "generation_mode": {
             "$ref": "#/components/schemas/GenerationMode"
+          },
+          "include_explanations": {
+            "default": true,
+            "title": "Include Explanations",
+            "type": "boolean"
           },
           "preference_profile": {
             "$ref": "#/components/schemas/PreferenceProfileSchema"
@@ -1062,6 +1125,48 @@
           }
         },
         "summary": "Alternatives",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/explanations": {
+      "post": {
+        "description": "슬롯별 설명 조회 (TRIP-479) — generate(include_explanations=false)와 짝.\n\n설명은 부가 정보다: LLM 실패도 200 + 빈 맵 + 사유로 나간다(침묵 금지, INV-4).\n구형 조립(미구현 오케스트레이터)은 503 명시 실패.",
+        "operationId": "explanations_ai_v1_itinerary_explanations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplanationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplanationsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explanations",
         "tags": [
           "itinerary"
         ]

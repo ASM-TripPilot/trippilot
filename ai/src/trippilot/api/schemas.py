@@ -132,6 +132,8 @@ class GenerateItineraryRequest(BoundaryModel):
     recommendation_strength: str | None = None
     request_meta: RequestMetaSchema
     excluded_poi_ids: list[str] = Field(default_factory=list)
+    # 설명 생략 (TRIP-479) — 설명은 POST /ai/v1/itinerary/explanations로 별도 조회
+    include_explanations: bool = True
 
     @field_validator("generation_mode", mode="before")
     @classmethod
@@ -333,3 +335,26 @@ class AlternativesResponse(BoundaryModel):
     dropped_out_of_pool: list[str]  # closed-set 밖이라 버려진 참조 (INV-1 가시화)
     empty_reason: str | None = None
     pool_size: int = Field(ge=0)
+
+
+# ── 설명 분리 경계 (TRIP-479) ────────────────────────────────────────
+
+
+class ExplanationsRequest(BoundaryModel):
+    """배치 일정의 슬롯별 설명 조회 — generate(include_explanations=false)와 짝.
+
+    페르소나는 generate와 같은 trip_id 파생 참조로 해석한다(D31 자기참조,
+    TRIP-333 fail-closed 유지). 시각·순서는 받기만 하고 바꾸지 않는다(INV-2).
+    """
+
+    trip_id: str = Field(min_length=1)
+    itinerary: ItineraryPayload
+    request_meta: RequestMetaSchema
+
+
+class ExplanationsResponse(BoundaryModel):
+    """slot_key(BR-U2-04: "날짜#poi_id") → 설명 1문장. 실패는 빈 맵 + 사유(침묵 금지)."""
+
+    explanations: dict[str, str]
+    is_fallback: bool
+    reason: str | None = None
