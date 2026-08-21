@@ -354,4 +354,12 @@ describe('🟢 470 — 가볼 곳 레인: 장소 카드 렌더 + press → d06',
 
     expect(screen.getByTestId('explore-lane-place-retry')).toBeOnTheScreen();
   });
+
+  // TRIP-500 — 가로 레인은 개수 제한. 레인이 전량(약 2MB)을 받지 않고 limit 을 실어 필요한 개수만
+  // 요청하는지 잠근다. useGetPlaces() 로 되돌리면(인자 없음) 이 단언이 red 가 된다(뮤테이션 심판).
+  it('가볼 곳 레인은 서버에 개수 제한(limit)을 실어 전량 수신을 막는다 (TRIP-500)', () => {
+    render(<ExploreRoute />);
+
+    expect(mockUseGetPlaces).toHaveBeenCalledWith({ limit: 8 });
+  });
 });

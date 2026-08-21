@@ -49,10 +49,15 @@ type LandingBase = Pick<
   >;
 };
 
+// 가볼 곳 가로 레인에 그릴 카드 수 = 서버에 요청할 limit(TRIP-500). 레인 개수와 요청 개수의 단일 출처.
+const PLACE_LANE_LIMIT = 8;
+
 export default function ExploreRoute(): ReactElement {
   const router = useRouter();
   const stay = useStaySearch();
-  const places = useGetPlaces();
+  // 가로 레인은 개수 제한으로 통일(TRIP-500) — 전량(약 2MB)을 받아 8장만 쓰던 것을, 서버에
+  // limit 을 실어 필요한 개수만 받는다(계약 TRIP-503). '모두 보기'(세로 목록)만 무한 스크롤이다.
+  const places = useGetPlaces({ limit: PLACE_LANE_LIMIT });
   const isAuthed = getAccessToken() !== null;
   const { savedPoiIds } = useSavedPlaces({ isAuthed });
 
@@ -61,8 +66,9 @@ export default function ExploreRoute(): ReactElement {
   const [savedMenuOpen, setSavedMenuOpen] = useState(false);
 
   // 가볼 곳 레인(TRIP-470) — 앞쪽 소수만(가로 레인이라 전량 필요 없음). 카드 press → d06.
+  // 서버가 이미 limit 으로 잘라 주므로 slice 는 방어선(서버가 limit 을 무시해도 레인 개수 고정).
   const placeCards: PlaceCardVM[] = (places.data?.items ?? [])
-    .slice(0, 8)
+    .slice(0, PLACE_LANE_LIMIT)
     .map((place) => ({
       poiId: place.poiId,
       name: place.nameKo,
