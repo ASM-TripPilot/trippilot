@@ -52,6 +52,11 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/features/explore/model/regions', () => ({
+  // 순수 함수(limitRegionsWhenEmpty·filterRegions)는 실물 유지하고 useRegions 만 목한다
+  // — TRIP-469가 UnifiedSearchPage 에 limitRegionsWhenEmpty 소비를 추가하면서, useRegions
+  // 만 목하던 이 팩토리가 그 함수를 undefined 로 만들어 크래시했다(RegionPickerPage.integration
+  // 등 선례와 동일 패턴으로 정합).
+  ...jest.requireActual('@/features/explore/model/regions'),
   useRegions: jest.fn(),
 }));
 jest.mock('@/shared/api/generated/places/places', () => ({
