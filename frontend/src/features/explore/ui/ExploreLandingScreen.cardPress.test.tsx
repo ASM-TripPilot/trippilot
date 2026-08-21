@@ -38,7 +38,13 @@ function baseProps(
       onSeeAll: () => {},
       ...overrides,
     },
-    bridge: { savedCount: 0, onPressCreateTrip: () => {} },
+    savedMenu: {
+      open: false,
+      savedCount: 0,
+      onToggle: () => {},
+      onPressSavedPlaces: () => {},
+      onPressSavedStays: () => {},
+    },
   };
 }
 

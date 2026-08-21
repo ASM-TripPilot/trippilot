@@ -7,23 +7,26 @@
  * 화면은 뷰모델(prop)만 받는다.
  *
  * 6구획(위→아래): 헤딩 · 검색 · 숙소 가로 레인(카드 우상단 저장 하트) · 가볼 곳 가로 레인
- * (장소 카드, TRIP-470 복원) · 여행자 일정 자리(준비 중) · 하단 bridgeBar(담은 곳 N곳 CTA —
- * 담은 곳 d02 로, 0곳이어도 유지). 여행자 일정은 1차엔 자리만(BR-U1-05). 축 4탭(전체·숙소·장소·
- * 여행자)·'지금 내 주변'은 복원하지 않는다 — 죽은 탭(TRIP-447)·삭제된 인프라(TRIP-445) 결정 유지.
+ * (장소 카드, TRIP-470 복원) · 여행자 일정 자리(준비 중) · 우하단 담은 곳 saved-menu FAB
+ * (TRIP-494 — 하트 FAB 을 누르면 담은 장소→d02 · 저장한 숙소→e04 두 미니 FAB 으로 펼쳐진다).
+ * 여행자 일정은 1차엔 자리만(BR-U1-05). 축 4탭(전체·숙소·장소·여행자)·'지금 내 주변'은
+ * 복원하지 않는다 — 죽은 탭(TRIP-447)·삭제된 인프라(TRIP-445) 결정 유지.
  *
- * bridgeBar 는 탭바(오버레이) 위에 뜨는 고정 도크다 — 탭바 높이(84)만큼 위로 띄우고, 스크롤
- * 콘텐츠 하단 여백도 그만큼 확보해 마지막 항목이 안 가리게 한다(A7, `tabbarOverlay.test.ts`
- * AC-O3). 탭바는 SafeArea 를 모르는 순수 뷰라 하단 여백은 콘텐츠(이 화면) 쪽에 둔다(repo-trap).
+ * FAB 은 탭바(오버레이) 위에 뜨는 고정 요소다(bottom-[100px]). 스크롤 콘텐츠 하단 여백을
+ * 넉넉히 둬 마지막 항목이 안 가리게 한다. 탭바는 SafeArea 를 모르는 순수 뷰다(repo-trap).
  */
 import type { ReactElement } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  CloseGlyph,
   HeartFilledGlyph,
   HeartOutlineGlyph,
   InfoGlyph,
+  MapPinGlyph,
   SearchGlyph,
+  SuitcaseGlyph,
   WarningTriangleGlyph,
 } from '@/features/explore/ui/ExploreGlyphs';
 
@@ -79,10 +82,17 @@ export interface ExploreLandingScreenProps {
     // 역조회해 상세 push 한다(onToggleSave 선례). 하트 press 는 카드 push 를 안 삼킨다(★F-4).
     onPressCard?: (card: StayCardVM) => void;
   };
-  /** 하단 bridge CTA. 담은 곳이 0곳이어도 CTA 는 유지된다(TRIP-448) — 0곳 분기로 CTA 를
-   * 없애면 d02 빈 상태에 도달할 경로가 사라진다. `onPressCreateTrip` 은 역사적 이름이고,
-   * TRIP-448 이후 목적지는 위저드가 아니라 담은 곳(d02)이다(라우트가 목적지를 정한다). */
-  bridge: { savedCount: number; onPressCreateTrip: () => void };
+  /** 담은 곳 saved-menu FAB(우하단, Figma a01 3012:1731). 하트 FAB 을 누르면 두 미니 FAB
+   * (담은 장소→d02 · 저장한 숙소→e04)으로 펼쳐지고, 열린 상태에선 하트가 X(닫기)로 바뀐다.
+   * 열림 상태·라우팅은 순수 화면이 못 지므로 라우트가 소유해 prop 으로 내린다(구조 가드 —
+   * 화면 useState 0건). 개수는 접근성 라벨로만 알린다. */
+  savedMenu: {
+    open: boolean;
+    savedCount: number;
+    onToggle: () => void;
+    onPressSavedPlaces: () => void;
+    onPressSavedStays: () => void;
+  };
 }
 
 // 담은 곳 FAB 그림자(홈 SavedPlacesFab 선례) — RN 은 box-shadow 가 없어 style prop 으로 옮긴다.
@@ -277,7 +287,7 @@ export function ExploreLandingScreen({
   onPressPlaces,
   placeLane,
   stayLane,
-  bridge,
+  savedMenu,
 }: ExploreLandingScreenProps): ReactElement {
   const {
     savedKeys = [],
@@ -415,20 +425,65 @@ export function ExploreLandingScreen({
           </View>
         </ScrollView>
 
-        {/* 담은 곳(d02) 바로가기 FAB — 탐색 랜딩 우하단 흰 원형 채움 하트(Figma d01 1672:1183,
-            홈 SavedPlacesFab TRIP-470 선례). 풀폭 핑크 CTA 바에서 교체(TRIP-494). 담은 곳이
-            0곳이어도 유지된다(TRIP-448 계약 계승 — 0곳이면 d02 빈 상태로 간다). 개수는 하트
-            글리프가 아니라 접근성 라벨로만 알린다(정본 FAB 은 하트만, 라벨 없음). */}
-        <Pressable
-          testID="explore-saved-places-fab"
-          accessibilityRole="button"
-          accessibilityLabel={`담은 곳 ${bridge.savedCount}곳`}
-          onPress={bridge.onPressCreateTrip}
-          style={FAB_SHADOW}
-          className="absolute bottom-[100px] right-lg h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
-        >
-          <HeartFilledGlyph size={26} />
-        </Pressable>
+        {/* 담은 곳 saved-menu FAB — 우하단 하트 FAB 을 누르면 두 미니 FAB 으로 펼쳐진다(Figma
+            a01 3012:1731). 왼→오: 담은 장소(위치핀→d02) · 저장한 숙소(가방→e04) · 하트/닫기.
+            열리면 배후 backdrop 이 뜨고, 바깥 탭으로 닫힌다. 풀폭 핑크 CTA 바에서 교체(TRIP-494).
+            열림 상태는 라우트 소유(화면 useState 0건 구조 가드). */}
+        {savedMenu.open ? (
+          <Pressable
+            testID="explore-saved-menu-backdrop"
+            accessibilityRole="button"
+            accessibilityLabel="담은 곳 메뉴 닫기"
+            onPress={savedMenu.onToggle}
+            className="absolute inset-0"
+          />
+        ) : null}
+        <View className="absolute bottom-[100px] right-lg flex-row items-center gap-md">
+          {savedMenu.open ? (
+            <>
+              <Pressable
+                testID="explore-saved-places-fab"
+                accessibilityRole="button"
+                accessibilityLabel={`담은 장소 ${savedMenu.savedCount}곳`}
+                onPress={savedMenu.onPressSavedPlaces}
+                style={FAB_SHADOW}
+                className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+              >
+                <MapPinGlyph size={26} tone="primary" />
+              </Pressable>
+              <Pressable
+                testID="explore-saved-stays-fab"
+                accessibilityRole="button"
+                accessibilityLabel="저장한 숙소"
+                onPress={savedMenu.onPressSavedStays}
+                style={FAB_SHADOW}
+                className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+              >
+                <SuitcaseGlyph size={26} />
+              </Pressable>
+            </>
+          ) : null}
+          <Pressable
+            testID="explore-saved-menu-toggle"
+            accessibilityRole="button"
+            accessibilityLabel={
+              savedMenu.open
+                ? '담은 곳 메뉴 닫기'
+                : `담은 곳 ${savedMenu.savedCount}곳`
+            }
+            onPress={savedMenu.onToggle}
+            style={FAB_SHADOW}
+            className={`h-[56px] w-[56px] items-center justify-center rounded-full ${
+              savedMenu.open ? 'bg-primary' : 'bg-canvas'
+            }`}
+          >
+            {savedMenu.open ? (
+              <CloseGlyph size={24} />
+            ) : (
+              <HeartFilledGlyph size={26} />
+            )}
+          </Pressable>
+        </View>
       </View>
     </SafeAreaView>
   );

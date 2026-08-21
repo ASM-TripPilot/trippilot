@@ -22,14 +22,25 @@ function baseProps(cards: PlaceCardVM[]): ExploreLandingScreenProps {
   return {
     heading: { title: '무엇을 둘러볼까요?', subtitle: '둘러봐요' },
     onPressSearch: () => {},
-    stayLane: { error: false, cards: [], onRetry: () => {}, onSeeAll: () => {} },
+    stayLane: {
+      error: false,
+      cards: [],
+      onRetry: () => {},
+      onSeeAll: () => {},
+    },
     placeLane: {
       error: false,
       cards,
       onRetry: () => {},
       onPressCard: () => {},
     },
-    bridge: { savedCount: 0, onPressCreateTrip: () => {} },
+    savedMenu: {
+      open: false,
+      savedCount: 0,
+      onToggle: () => {},
+      onPressSavedPlaces: () => {},
+      onPressSavedStays: () => {},
+    },
   };
 }
 

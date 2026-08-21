@@ -1411,7 +1411,13 @@ const PREVIEW_STATES: PreviewState[] = [
           onRetry: noop,
           onSeeAll: noop,
         }}
-        bridge={{ savedCount: 3, onPressCreateTrip: noop }}
+        savedMenu={{
+          open: true,
+          savedCount: 3,
+          onToggle: noop,
+          onPressSavedPlaces: noop,
+          onPressSavedStays: noop,
+        }}
       />
     ),
   },
@@ -1428,7 +1434,13 @@ const PREVIEW_STATES: PreviewState[] = [
           onRetry: noop,
           onSeeAll: noop,
         }}
-        bridge={{ savedCount: 0, onPressCreateTrip: noop }}
+        savedMenu={{
+          open: false,
+          savedCount: 0,
+          onToggle: noop,
+          onPressSavedPlaces: noop,
+          onPressSavedStays: noop,
+        }}
       />
     ),
   },
@@ -1440,7 +1452,13 @@ const PREVIEW_STATES: PreviewState[] = [
       <ExploreLandingScreen
         {...EXPLORE_LANDING_BASE}
         stayLane={{ error: true, cards: [], onRetry: noop, onSeeAll: noop }}
-        bridge={{ savedCount: 2, onPressCreateTrip: noop }}
+        savedMenu={{
+          open: false,
+          savedCount: 2,
+          onToggle: noop,
+          onPressSavedPlaces: noop,
+          onPressSavedStays: noop,
+        }}
       />
     ),
   },

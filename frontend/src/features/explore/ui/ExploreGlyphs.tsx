@@ -8,11 +8,59 @@ const INK = '#222222';
 const MUTED = '#6A6A6A';
 const MUTED_SOFT = '#9AA1AB';
 const PRIMARY = '#FF385C';
+const ON_PRIMARY = '#FFFFFF';
 
 type GlyphProps = {
   size?: number;
   testID?: string;
 };
+
+/** 담은 곳 saved-menu 저장한 숙소 미니 FAB — 여행 가방(분홍, 흰 원 위). Figma a01 3012:1913. */
+export function SuitcaseGlyph({ size = 26, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M5 8.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18v-8A1.5 1.5 0 0 1 5 8.5Z"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 8.5V7a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 7v1.5"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+      <Path d="M12 8.5V21" stroke={PRIMARY} strokeWidth={1.8} />
+    </Svg>
+  );
+}
+
+/** 담은 곳 saved-menu 닫기(X) — 펼친 FAB 위(분홍 원 위 흰 X). Figma a01 3012:1909. */
+export function CloseGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M6 6l12 12M18 6L6 18"
+        stroke={ON_PRIMARY}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
 
 /** 앱바 뒤로가기 셰브론. */
 export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
