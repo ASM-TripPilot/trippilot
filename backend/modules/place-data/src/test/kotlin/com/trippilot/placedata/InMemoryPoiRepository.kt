@@ -23,8 +23,16 @@ class InMemoryPoiRepository : PoiRepository {
     }
     override fun findById(poiId: UUID) = stored.firstOrNull { it.poiId == poiId }
 
-    override fun findActive(region: String?, category: PoiCategory?) =
-        stored.filter { active(it) && (region == null || it.region == region) && (category == null || it.category == category) }
+    /**
+     * 실 쿼리와 **같은 규칙**이다 — 코드 접두사 매칭 + 이름·id 정렬(TRIP-503).
+     * 이름 일치로 두면 대역만 통과하고 실 DB 에서 다른 도시가 섞인다.
+     */
+    override fun findActive(regionCodes: List<String>, category: PoiCategory?) =
+        stored.filter { p ->
+            active(p) &&
+                (category == null || p.category == category) &&
+                (regionCodes.isEmpty() || regionCodes.any { c -> p.regionCode?.startsWith(c) == true })
+        }.sortedWith(compareBy({ it.nameKo }, { it.poiId }))
 
     override fun findActiveInBounds(latMin: Double, latMax: Double, lngMin: Double, lngMax: Double) =
         stored.filter { active(it) && it.lat in latMin..latMax && it.lng in lngMin..lngMax }

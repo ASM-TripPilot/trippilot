@@ -511,8 +511,17 @@ paths:
       summary: 장소(POI) 탐색 — ACTIVE만(INV-U1-01), 지역·카테고리 필터
       description: >
         수집 게이트(INV-1) 통과한 정본 POI. 소요시간 미표시(INV-3). 반경/취향 후보풀은 별도(C8 소비).
+        정렬은 **이름순**이며 동명은 `poiId` 로 갈린다 — 같은 조회가 매번 같은 순서를 준다.
       parameters:
-        - { name: region, in: query, required: false, schema: { type: string }, description: '지역(예: 제주)' }
+        - name: region
+          in: query
+          required: false
+          schema: { type: string }
+          description: >
+            지역 **이름**(표준명·별칭 모두 — `부산`·`부산광역시` 둘 다 통한다). 서버가 행정구역 코드로
+            해석해 **접두사**로 조회하므로 시도를 고르면 그 안 시군구가 전부 잡힌다.
+            동명이지역(`동구` 는 대전·대구·광주·부산에 있다)은 **그 이름을 가진 지역 전부**가 대상이다 —
+            하나를 고르면 거짓이 된다. 카탈로그에 없는 이름은 **빈 목록**이다(전국으로 넓히지 않는다).
         - { name: category, in: query, required: false, schema: { $ref: '#/components/schemas/PoiCategory' } }
       responses:
         '200':

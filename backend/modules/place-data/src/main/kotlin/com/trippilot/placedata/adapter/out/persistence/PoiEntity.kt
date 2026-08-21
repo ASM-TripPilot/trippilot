@@ -45,13 +45,38 @@ class PoiEntity(
 )
 
 interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
-    /** ACTIVE만(INV-U1-01) + 선택 지역·카테고리 필터. 상태를 쿼리에 고정해 closed-set 서빙 보장. */
+    /**
+     * ACTIVE만(INV-U1-01) + 선택 카테고리. 상태를 쿼리에 고정해 closed-set 서빙 보장.
+     *
+     * **정렬을 쿼리가 정한다.** 없으면 DB 가 매번 다른 순서를 줄 수 있어 같은 화면이 요청마다
+     * 달라지고, 뒤에 붙일 페이지네이션(TRIP-502)이 아예 성립하지 않는다(행 중복·누락).
+     * 이름이 같은 장소가 있으므로 `poiId` 로 동점을 깬다.
+     */
     @Query(
         "select p from PoiEntity p where p.dataStatus = 'ACTIVE' " +
-            "and (:region is null or p.region = :region) " +
-            "and (:category is null or p.category = :category)",
+            "and (:category is null or p.category = :category) " +
+            "order by p.nameKo, p.poiId",
     )
-    fun findActive(@Param("region") region: String?, @Param("category") category: String?): List<PoiEntity>
+    fun findActive(@Param("category") category: String?): List<PoiEntity>
+
+    /**
+     * 지역 코드 **접두사** 매칭(TRIP-503). `26` → 부산 전체, `26440` → 강서구만.
+     *
+     * 이름(`p.region`)으로 거르지 않는 이유: 시군구명은 **유일하지 않다**. `동구` 는 대전·대구·광주·부산에
+     * 모두 있어 이름으로 거르면 네 도시가 한 목록에 섞인다(실측 118건). 광역명(`부산`)은 적재분에
+     * 거의 없어 8건만 잡혔다(코드 기준 149건). 코드가 유일하고 접두사로 롤업까지 된다 —
+     * 숙소(`StayEntity.findByRegionPrefix`)가 같은 방식이다.
+     */
+    @Query(
+        "select p from PoiEntity p where p.dataStatus = 'ACTIVE' " +
+            "and (:category is null or p.category = :category) " +
+            "and p.regionCode like concat(:code, '%') " +
+            "order by p.nameKo, p.poiId",
+    )
+    fun findActiveByRegionPrefix(
+        @Param("code") code: String,
+        @Param("category") category: String?,
+    ): List<PoiEntity>
 
     @Query(
         "select p from PoiEntity p where p.dataStatus = 'ACTIVE' " +
@@ -94,8 +119,14 @@ class PoiRepositoryAdapter(
 
     override fun findById(poiId: UUID): Poi? = jpa.findById(poiId).orElse(null)?.toDomain()
 
-    override fun findActive(region: String?, category: PoiCategory?): List<Poi> =
-        jpa.findActive(region, category?.name).map { it.toDomain() }
+    override fun findActive(regionCodes: List<String>, category: PoiCategory?): List<Poi> {
+        if (regionCodes.isEmpty()) return jpa.findActive(category?.name).map { it.toDomain() }
+        // 동명이지역이면 코드가 여럿이다 — 전부 모아 이름순으로 다시 세운다(쿼리별 정렬은 합치면 깨진다).
+        return regionCodes.flatMap { jpa.findActiveByRegionPrefix(it, category?.name) }
+            .distinctBy { it.poiId }
+            .map { it.toDomain() }
+            .sortedWith(compareBy({ it.nameKo }, { it.poiId }))
+    }
 
     override fun findActiveInBounds(latMin: Double, latMax: Double, lngMin: Double, lngMax: Double): List<Poi> =
         jpa.findActiveInBounds(latMin, latMax, lngMin, lngMax).map { it.toDomain() }

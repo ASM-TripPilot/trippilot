@@ -9,6 +9,8 @@ import com.trippilot.placedata.application.PoiCollectionService
 import com.trippilot.placedata.domain.Area
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -101,4 +103,79 @@ class PlaceApiIT : AbstractPostgresIntegrationTest() {
         (0 until body.size()).all { body[it]["category"].asText() == "맛집" } shouldBe true
         body.names().contains("자갈치시장") shouldBe true
     }
+    /**
+     * **동명이구가 섞이지 않는다**(TRIP-503).
+     *
+     * 이름(`poi.region`)으로 거르던 시절, `동구` 는 대전·대구·광주·부산에 모두 있어 네 도시가 한 목록에
+     * 섞여 나왔다(실측 118건). 사용자가 대전 동구를 골라도 부산 것이 보인다 — 상한 문제가 아니라
+     * **틀린 결과**다. 코드 접두사로 거르면 그 이름을 가진 지역들만 정확히 모인다.
+     *
+     * 실 DB 로만 확인되는 이유: 인메모리 대역은 우리가 넣은 것만 들고 있어 **섞일 다른 도시가 없다.**
+     */
+    @Test
+    fun `같은 이름의 다른 도시 장소가 섞이지 않는다`() {
+        val token = newToken()
+        val 부산동구 = seedPoi("코드검증-부산동구", 35.13, 129.05, "26170")
+        val 대구동구 = seedPoi("코드검증-대구동구", 35.88, 128.63, "27140")
+
+        try {
+            val 부산 = call("/api/v1/places?region=부산", token).second.names()
+            val 대구 = call("/api/v1/places?region=대구", token).second.names()
+
+            부산 shouldContain "코드검증-부산동구"
+            부산 shouldNotContain "코드검증-대구동구"
+            대구 shouldContain "코드검증-대구동구"
+            대구 shouldNotContain "코드검증-부산동구"
+        } finally {
+            cleanupJdbc.update("DELETE FROM poi WHERE poi_id in (?, ?)", 부산동구, 대구동구)
+        }
+    }
+
+    /**
+     * **시도를 고르면 그 안 시군구가 전부 잡힌다** — 코드 접두사라 성립한다.
+     * 이름 일치 시절에는 적재분 `region` 이 시군구명이라 광역 조회가 거의 비었다(실측 부산 8/149).
+     */
+    @Test
+    fun `시도로 조회하면 하위 시군구 장소까지 잡힌다`() {
+        val token = newToken()
+        val id = seedPoi("코드검증-해운대", 35.16, 129.16, "26350")
+
+        try {
+            call("/api/v1/places?region=부산", token).second.names() shouldContain "코드검증-해운대"
+        } finally {
+            cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", id)
+        }
+    }
+
+    /** 모르는 이름에 전국을 돌려주면 화면이 그것을 "그 지역 장소"로 표시한다 — 없다고 말하는 편이 맞다. */
+    @Test
+    fun `모르는 지역명은 빈 목록이다`() {
+        call("/api/v1/places?region=Paris", newToken()).second.size() shouldBe 0
+    }
+
+    /** 정렬이 결정적이어야 뒤에 붙일 페이지네이션(TRIP-502)이 성립한다 — 없으면 행이 중복·누락된다. */
+    @Test
+    fun `같은 조회는 같은 순서를 준다`() {
+        val token = newToken()
+
+        val first = call("/api/v1/places?region=제주", token).second.names()
+        val second = call("/api/v1/places?region=제주", token).second.names()
+
+        first shouldBe second
+        first shouldBe first.sorted()
+    }
+
+    /** 지역 코드를 직접 심는다 — 수집 경로는 코드를 붙이지만 이 테스트가 보려는 것은 조회 규칙이다. */
+    private fun seedPoi(name: String, lat: Double, lng: Double, regionCode: String): java.util.UUID {
+        val id = java.util.UUID.randomUUID()
+        cleanupJdbc.update(
+            """
+            INSERT INTO poi (poi_id, name_ko, lat, lng, category, region, region_code, data_status, source)
+            VALUES (?, ?, ?, ?, '명소', '동구', ?, 'ACTIVE', 'MANUAL')
+            """.trimIndent(),
+            id, name, lat, lng, regionCode,
+        )
+        return id
+    }
+
 }
