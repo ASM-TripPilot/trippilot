@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from smoke_itinerary import (  # noqa: E402
     RehearsalError,
+    _request_body,
     Selection,
     SelectionError,
     attach_leg_verification,
@@ -199,10 +200,31 @@ def test_rehearsal_passthrough_and_result_schema():
     ids = {str(p.poi_id): p.name for p in selection.pois}
     assert len(result["slots"]) >= 1
     for slot in result["slots"]:
-        assert set(slot) == {"start", "end", "name", "poi_id"}
+        assert set(slot) == {"date", "start", "end", "name", "poi_id"}
         assert slot["poi_id"] in ids  # 슬롯 poi ⊆ 선택 집합 (INV-1 사영)
         assert slot["name"] == ids[slot["poi_id"]]
     assert "legs" not in result  # 실경로 검증은 별도 선택 단계 (TRIP-382)
+
+
+def test_request_body_builds_three_day_trip_without_deadline():
+    """TRIP-476 — 기본 3일: 날짜별 앵커·창 3건, deadline_ms 미포함(무제한, TRIP-473)."""
+    selection = select_rehearsal_pois(_entries(_TWO_REGIONS), "2026-08-14")
+    body = _request_body(selection, dt.date(2026, 8, 14), None)
+    dates = [f"2026-08-{d}" for d in (15, 16, 17)]
+    assert body["trip_context"]["start_date"] == dates[0]
+    assert body["trip_context"]["end_date"] == dates[-1]
+    assert [a["date"] for a in body["anchors"]] == dates
+    assert [w["date"] for w in body["time_windows"]] == dates
+    assert "deadline_ms" not in body["request_meta"]
+
+
+def test_request_body_single_day_backward_compatible():
+    """SMOKE_DAYS=1 경로 — 종전 1일 형태 그대로 (deadline 지정도 관통)."""
+    selection = select_rehearsal_pois(_entries(_TWO_REGIONS), "2026-08-14")
+    body = _request_body(selection, dt.date(2026, 8, 14), 20_000, days=1)
+    assert body["trip_context"]["start_date"] == body["trip_context"]["end_date"] == "2026-08-15"
+    assert len(body["anchors"]) == len(body["time_windows"]) == 1
+    assert body["request_meta"]["deadline_ms"] == 20_000
 
 
 def test_rehearsal_rejects_empty_days():
@@ -283,6 +305,18 @@ def test_leg_pairs_include_anchor_and_adjacent_slots():
     pairs = build_leg_pairs(selection, [_slot("p1"), _slot("p2"), _slot("p3")])
     assert [(str(a.poi_id), str(b.poi_id)) for a, b in pairs] == [
         ("p0", "p1"), ("p1", "p2"), ("p2", "p3")
+    ]
+
+
+def test_leg_pairs_skip_day_boundary():
+    """다일 일정 — 마지막 슬롯→다음날 첫 슬롯 쌍은 실측 대상이 아니다 (TRIP-476)."""
+    selection = _leg_selection(5)
+    slots = [dict(_slot("p1"), date="2026-08-15"), dict(_slot("p2"), date="2026-08-15"),
+             dict(_slot("p3"), date="2026-08-16"), dict(_slot("p4"), date="2026-08-16")]
+    pairs = build_leg_pairs(selection, slots)
+    assert [(str(a.poi_id), str(b.poi_id)) for a, b in pairs] == [
+        ("p0", "p1"), ("p1", "p2"),  # 앵커(첫날 취급)→p1 + 첫날 인접쌍
+        ("p3", "p4"),                # 둘째날 인접쌍 — p2→p3(일경계)는 제외
     ]
 
 
@@ -420,8 +454,9 @@ def test_rehearsal_records_injected_weather():
         selection, llm=UnwiredLlm(), model_id="dev-unwired", smoke_date=smoke_date,
         weather=_FakeWeather(),
     )
-    trip_date = (smoke_date + dt.timedelta(days=1)).isoformat()
-    assert result["weather"] == {trip_date: 80}  # 여행일 예보만 (요청 날짜 필터)
+    trip_dates = [(smoke_date + dt.timedelta(days=1 + i)).isoformat()
+                  for i in range(3)]  # 기본 3일 여행 (TRIP-476)
+    assert result["weather"] == {d: 80 for d in trip_dates}  # 여행일 예보만
 
 
 def test_rehearsal_accepts_event_store(tmp_path):
