@@ -27,8 +27,10 @@ import { type ItineraryHeaderData, TimelineScreen } from './TimelineScreen';
  *
  * `status` 축은 같은 화면의 두 얼굴이다:
  *  - 🔴 **PLANNED**: 하단에 **활성** 확정 CTA + appbar 공유 아이콘 **부재**(C9·C14).
- *  - 🔴 **CONFIRMED**: 확정 배너 + appbar `확정 일정` + **공유 아이콘** + 하단 [일정 수정]/[공유하기]
- *    **비활성** 2버튼, 확정 CTA 부재(C10~C14).
+ *  - 🔴 **CONFIRMED**: appbar `확정 일정` + **공유 아이콘** + 하단 **슬림 안내 한 줄**(C10·C14·C16).
+ *    **TRIP-505 정리**: 확정 배너·하단 비활성 2버튼([일정 수정]/[공유하기])·부제 조립은 **제거**됐다
+ *    — 확정 이후 손댈 방법은 재생성뿐이라 편집/공유가 가능한 것처럼 보이는 표면을 없앴다. 그 자리를
+ *    `itinerary-confirmed-note` 안내 한 줄이 대신한다(C11·C12 는 부재로, C16 은 안내 존재로 잠근다).
  *
  * *(개념)* **testID** — 화면 요소에 붙이는 테스트 전용 이름표. 사용자에겐 안 보이고, 테스트가 그
  * 요소를 정확히 집어 오는 손잡이다. **얇은 가짜 지도**(`@/shared/map` 목) — 상시 인라인 지도가
@@ -214,7 +216,6 @@ type Overrides = {
   slots?: ItineraryDaysItemSlotsItem[];
   activeDayIndex?: number;
   status?: ItineraryStatus;
-  confirmedSubtitle?: string;
   confirmError?: string | null;
 };
 
@@ -414,10 +415,7 @@ describe('🔴 C9 · AC1 — 커스텀 앱바 뒤로 + PLANNED 확정 CTA 는 �
 
 describe('🔴 C10 · AC3 — appbar 제목이 status 로 갈린다 (라이브 h34)', () => {
   it('CONFIRMED 는 "확정 일정", PLANNED 는 "완성 일정" 이다', () => {
-    const confirmed = renderScreen({
-      status: 'CONFIRMED',
-      confirmedSubtitle: '6월 10일 – 13일',
-    });
+    const confirmed = renderScreen({ status: 'CONFIRMED' });
     expect(screen.getByText('확정 일정')).toBeOnTheScreen();
     expect(screen.queryByText('완성 일정')).toBeNull();
 
@@ -428,50 +426,39 @@ describe('🔴 C10 · AC3 — appbar 제목이 status 로 갈린다 (라이브 h
   });
 });
 
-describe('🔴 C11 · AC2 — 확정 배너 (BR-U3-30 · 라이브 h34)', () => {
-  it('CONFIRMED 면 고정 제목과 내려준 부제를 그리고, PLANNED 면 배너가 없다', () => {
-    const confirmed = renderScreen({
-      status: 'CONFIRMED',
-      confirmedSubtitle: '6월 10일 – 13일 · 부산 여행 · 9곳',
-    });
+describe('🔴 C11 · AC-4 (TRIP-505) — 확정 배너 제거: 어느 얼굴에도 배너가 없다', () => {
+  it('CONFIRMED 얼굴에 itinerary-confirmed-banner 가 렌더되지 않고 배너 문구도 사라진다', () => {
+    // 준비 — 확정 얼굴로 연다(배너가 있던 자리). 부제 조립은 제거됐으므로 prop 을 안 준다.
+    const confirmed = renderScreen({ status: 'CONFIRMED' });
 
-    const banner = screen.getByTestId('itinerary-confirmed-banner');
-    expect(banner).toHaveTextContent(/일정이 확정됐어요/);
-    expect(banner).toHaveTextContent(/6월 10일 – 13일 · 부산 여행 · 9곳/);
+    // 단언 — 확정 배너 부재. 구현 전엔 배너가 실재해 이 단언이 red 다(동결 재작성 · 02a ★T2).
+    expect(screen.queryByTestId('itinerary-confirmed-banner')).toBeNull();
+    // 짝 — 배너 문구도 렌더에서 사라진다(testID 만 지우고 텍스트가 몰래 남는 회귀 차단 · ★T4).
+    expect(screen.queryByText('일정이 확정됐어요')).toBeNull();
 
+    // PLANNED 얼굴도 여전히 배너 없음(회귀 앵커 — 편집 얼굴은 원래도 배너가 없었다).
     confirmed.unmount();
     renderScreen({ status: 'PLANNED' });
     expect(screen.queryByTestId('itinerary-confirmed-banner')).toBeNull();
   });
 });
 
-describe('🔴 C12 · AC4·AC7 — 읽기전용: 확정 CTA 부재 + 하단 비활성 2버튼 (INV-U3-04 · D1·D2)', () => {
-  it('CONFIRMED 는 확정 CTA 가 없고, [일정 수정]/[공유하기]가 비활성·무동작·사유 표시다', () => {
-    renderScreen({
-      status: 'CONFIRMED',
-      confirmedSubtitle: '6월 10일 – 13일 · 부산 여행 · 9곳',
-    });
+describe('🔴 C12 · AC-3 (TRIP-505) — 읽기전용 하단 2버튼 제거 + 확정 CTA 여전히 부재', () => {
+  it('CONFIRMED 는 [일정 수정]/[공유하기] 두 버튼이 모두 없고, 확정 CTA 도 없다', () => {
+    renderScreen({ status: 'CONFIRMED' });
 
-    expect(screen.queryAllByTestId('itinerary-confirm-cta')).toEqual([]);
+    // 확정 CTA 는 CONFIRMED 얼굴에 애초에 없다(무회귀 유지 — 확정 후 다시 확정할 수 없다).
+    expect(screen.queryByTestId('itinerary-confirm-cta')).toBeNull();
 
-    const edit = screen.getByTestId('itinerary-confirmed-edit');
-    const share = screen.getByTestId('itinerary-confirmed-share');
+    // ★ 제거된 두 버튼 — 옛 C12 의 "존재·비활성·사유·brand색 부재" 단언을 **부재**로 뒤집는다.
+    //   확정 후 손댈 방법은 재생성뿐이라 편집/공유 스텁을 없앤다(AC-3 · 02a ★T2).
+    expect(screen.queryByTestId('itinerary-confirmed-edit')).toBeNull();
+    expect(screen.queryByTestId('itinerary-confirmed-share')).toBeNull();
 
-    expect(edit).toBeDisabled();
-    // TRIP-482 정책 B(01b Q2) — 확정 편집(CONFIRMED→PLANNED 역전이)은 백엔드 미구현(G-U3-6)이라
-    //   비활성 유지하되, 사유를 임시성 모호어("아직")에서 **상태 서술**로 정정한다(INV-4). 문자열이
-    //   아닌 정규식인 이유: 이 버튼은 라벨+사유 두 Text 를 담아 toHaveTextContent(문자열)=완전일치가
-    //   실패한다(부분매치는 정규식뿐 — 02a ★1·§5-A node_modules 실검증).
-    expect(edit).toHaveTextContent(/확정한 일정 편집은 준비 중이에요/);
-    expect(() => fireEvent.press(edit)).not.toThrow();
-
-    // [공유하기] — 비활성 + 사유 + ★1 **brand색 부재**. Figma 는 이 버튼을 분홍 primary 로 그리므로,
-    //   색을 그대로 두고 disabled 만 걸면 "눌릴 것 같은데 안 눌리는" 함정이 된다. brandTokensIn([]) 이
-    //   그걸 즉사시킨다.
-    expect(share).toBeDisabled();
-    expect(share).toHaveTextContent(/공유는 곧 제공돼요/);
-    expect(() => fireEvent.press(share)).not.toThrow();
-    expect(brandTokensIn(share)).toEqual([]);
+    // 짝 — 두 버튼의 라벨 텍스트도 화면에서 사라진다(testID 만 지우고 텍스트가 남는 회귀 차단 ·
+    //   ★T4). `queryByText(문자열)` 은 exact 라 라벨이 정확히 있으면 잡힌다(§5-A·§5-B 실검증).
+    expect(screen.queryByText('일정 수정')).toBeNull();
+    expect(screen.queryByText('공유하기')).toBeNull();
   });
 });
 
@@ -492,14 +479,14 @@ describe('🔴 C13 · AC5·AC9 — 확정 실패 인라인 안내(INV-4) + 확�
     expect(screen.queryByTestId('itinerary-confirm-error')).toBeNull();
   });
 
-  it('확정 얼굴 렌더 텍스트에 소요시간 표기가 0건이다 (INV-3 렌더 스캔)', () => {
-    renderScreen({
-      status: 'CONFIRMED',
-      confirmedSubtitle: '6월 10일 – 13일 · 부산 여행 · 9곳',
-    });
+  it('확정 얼굴 렌더 텍스트에 소요시간 표기가 0건이다 (INV-3 렌더 스캔 · 유지)', () => {
+    renderScreen({ status: 'CONFIRMED' });
 
     const texts = renderedTexts();
-    expect(texts.some((t) => t.includes('일정이 확정됐어요'))).toBe(true);
+    // 긍정 앵커 — 옛 배너 문구('일정이 확정됐어요')가 TRIP-505 로 제거되므로(AC-4), 확정 얼굴에
+    //   **상시 있는** 앱바 제목 '확정 일정' 을 앵커로 쓴다(빈 화면에서 "0건"이 공짜 통과 방지 ·
+    //   02a ★T1·§5-C). 검출기·모집단은 동결 그대로다(§5-D).
+    expect(texts.some((t) => t.includes('확정 일정'))).toBe(true);
 
     // 날짜 `13일`·`4일` 은 안 걸린다(`일` 이지 `분/시간/소요` 가 아니다 · 02a §5-D).
     expect(texts.filter((t) => DURATION_TEXT.test(t))).toEqual([]);
@@ -509,10 +496,7 @@ describe('🔴 C13 · AC5·AC9 — 확정 실패 인라인 안내(INV-4) + 확�
 
 describe('🔴 C14 · Q3 — appbar 공유 아이콘은 CONFIRMED 에서만 뜨고 정적(스텁)이다 (라이브 h34)', () => {
   it('CONFIRMED 는 공유 아이콘이 있고 눌러도 무해하며, PLANNED 에는 없다', () => {
-    const confirmed = renderScreen({
-      status: 'CONFIRMED',
-      confirmedSubtitle: '6월 10일 – 13일 · 부산 여행 · 9곳',
-    });
+    const confirmed = renderScreen({ status: 'CONFIRMED' });
 
     // 긍정 — 공유 아이콘이 뜬다. 실동작은 후속(TRIP-300)이라 눌러도 예외가 없다(죽은 스텁 · 02a ★11).
     const share = screen.getByTestId('itinerary-view-share');
@@ -552,12 +536,40 @@ describe('🔴 C15 · AC1·AC2 — 편집 진입 어포던스는 PLANNED 에만 
   it('CONFIRMED(h34) 얼굴에는 itinerary-view-edit 가 없다 — onEdit 을 줘도 안 뜬다(status 게이트)', () => {
     // 준비 — onEdit 은 기본 JSX 로 여전히 넘어간다. 그런데도 CONFIRMED 는 어포던스를 그리면 안 된다
     //   (onEdit 유무가 아니라 status 가 원인임을 증명하는 가장 강한 형태 — 02a ★3).
-    renderScreen({
-      status: 'CONFIRMED',
-      confirmedSubtitle: '6월 10일 – 13일 · 부산 여행 · 9곳',
-    });
+    renderScreen({ status: 'CONFIRMED' });
 
-    // 단언 — h34 에는 편집 진입 어포던스가 부재(그 자리는 하단 비활성 [일정 수정] 버튼 · C12).
+    // 단언 — h34 에는 편집 진입 어포던스가 부재(그 자리엔 확정 안내 한 줄 · C16).
     expect(screen.queryByTestId('itinerary-view-edit')).toBeNull();
+  });
+});
+
+/**
+ * 🔴 C16 · AC-6 (TRIP-505) — 배너·버튼을 지운 뒤에도 "확정된 일정이며 바꾸려면 재생성이 필요하다"를
+ * 화면에서 알 수 있다(INV-4 침묵 금지 · BR-U3-30 확정 의미 한 줄 설명의 축소 재도입).
+ *
+ * 무엇을 보장하나: CONFIRMED 얼굴 하단에 `itinerary-confirmed-note` 안내가 뜨고 "재생성이 유일한
+ * 탈출구"라는 핵심 어구('새로 만들어')를 담는다. 정확 문구는 구현이 상수로 소유 — 테스트는 testID
+ * 존재 + 핵심 어구 **부분 포함**만 잠근다(문구를 다듬을 여지를 남긴다). 그리고 이 안내가
+ * PLANNED(편집 얼굴)로 **새지 않는다**(확정 전용).
+ *
+ * ★ `toHaveTextContent` 는 **문자열이면 완전 일치**·**정규식이면 부분 포함**이다(RNTL 13.3.3
+ *   node_modules 실검증 · 02a §5-A). 안내는 여러 어절이라 반드시 **정규식** `/새로 만들어/` 로 잠근다.
+ */
+describe('🔴 C16 · AC-6 — 확정 이후 안내 한 줄(재생성이 유일한 탈출구)', () => {
+  it('CONFIRMED 얼굴에 itinerary-confirmed-note 가 뜨고 재생성 안내 어구를 담는다', () => {
+    // 준비 — 확정 얼굴로 연다.
+    renderScreen({ status: 'CONFIRMED' });
+
+    // 단언 — 안내가 실재하고(부재면 getByTestId 가 throw → 구현 전 red) 핵심 어구를 담는다.
+    const note = screen.getByTestId('itinerary-confirmed-note');
+    expect(note).toHaveTextContent(/새로 만들어/);
+  });
+
+  it('PLANNED(편집) 얼굴엔 itinerary-confirmed-note 가 없다 (확정 전용 안내가 안 샌다)', () => {
+    // 준비 — 편집 얼굴.
+    renderScreen({ status: 'PLANNED' });
+
+    // 단언 — 확정 전용 안내가 PLANNED 로 누출되지 않는다(회귀 가드 · 선제green).
+    expect(screen.queryByTestId('itinerary-confirmed-note')).toBeNull();
   });
 });

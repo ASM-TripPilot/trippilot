@@ -45,10 +45,7 @@ import {
   buildDraftPins,
   formatDraftDayHeader,
 } from '@/features/itinerary/model/draftView';
-import {
-  formatConfirmedDateRange,
-  type PlanDayTab,
-} from '@/features/itinerary/model/planState';
+import { type PlanDayTab } from '@/features/itinerary/model/planState';
 import type { MustVisitListItem } from '@/features/itinerary/model/mustVisitList';
 import {
   startTimeOptions,
@@ -2110,9 +2107,9 @@ const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
-  // h34 확정 읽기전용(TRIP-300) — 같은 데이터에 status=CONFIRMED 를 얹은 확정 얼굴. 확정 배너·
-  // appbar `확정 일정`·하단 비활성 2버튼을 Figma h34 와 눈으로 대조한다. 부제는 실기와 같은 조립
-  // 함수(formatConfirmedDateRange)로 만든다 — 손으로 적으면 프리뷰와 실기가 갈린다.
+  // h34 확정 읽기전용(TRIP-505 정리) — 같은 데이터에 status=CONFIRMED 를 얹은 확정 얼굴. 배너·
+  // 하단 비활성 2버튼·부제 조립은 제거됐고, 그 자리에 `itinerary-confirmed-note` 안내 한 줄이
+  // 뜬다(appbar `확정 일정`·공유 아이콘은 유지). 안내·공유 어중간한 상태를 눈으로 대조하는 자리.
   {
     key: 'itinerary-confirmed',
     label: '확정 일정 · 읽기전용(h34)',
@@ -2124,10 +2121,6 @@ const PREVIEW_STATES: PreviewState[] = [
         slots={TIMELINE_PREVIEW_SLOTS}
         activeDayIndex={0}
         status="CONFIRMED"
-        confirmedSubtitle={`${formatConfirmedDateRange(
-          '2026-06-10',
-          '2026-06-13'
-        )} · 부산 여행 · 5곳`}
         onSelectDay={noop}
         onBack={noop}
       />

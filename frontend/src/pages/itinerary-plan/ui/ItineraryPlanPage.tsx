@@ -7,7 +7,6 @@ import { useRouter } from 'expo-router';
 
 import {
   buildPlanDayTabs,
-  formatConfirmedDateRange,
   formatNightsLabel,
   isConfirmLocked,
   resolvePlanState,
@@ -119,6 +118,13 @@ export function ItineraryPlanPage({
   // boolean 으로 답하는 함수다 — 있으면 이전 화면으로, 없으면(딥링크로 직접 진입) 조용히
   // 무동작하지 않고 홈으로 `replace`(현재 화면을 히스토리에 안 남김) 한다(침묵 no-op 금지 · INV-4).
   function handleBack(): void {
+    // 확정(CONFIRMED) 얼굴은 생성/확정 흐름 스택으로 되돌아가지 않고 내 여행 목록으로 간다
+    // (TRIP-505 AC-1). `/(tabs)/itinerary` 는 `GeneratingPage.tsx` 가 이미 쓰는 typedRoutes 통과
+    // 목적지다. 그 외 얼굴은 기존 딥링크 폴백(`canGoBack()?back():replace(HOME_FALLBACK)`) 그대로.
+    if (itinerary.data?.status === 'CONFIRMED') {
+      router.replace('/(tabs)/itinerary');
+      return;
+    }
     if (router.canGoBack()) {
       router.back();
     } else {
@@ -243,13 +249,6 @@ export function ItineraryPlanPage({
     totalPlaces,
   };
 
-  // 확정 배너 부제 = `{날짜범위} · {여행 제목} · {총 N}곳`. 헤더가 이미 페이지 조립인 리포 패턴과
-  // 동형 — 화면은 이 완성 문자열만 받는다. N 은 전 일자 슬롯 합(totalPlaces).
-  const confirmedSubtitle = `${formatConfirmedDateRange(
-    trip.data?.startDate ?? '',
-    trip.data?.endDate ?? ''
-  )} · ${trip.data?.title ?? ''} · ${totalPlaces}곳`;
-
   return (
     <TimelineScreen
       header={header}
@@ -258,7 +257,6 @@ export function ItineraryPlanPage({
       activeDayIndex={activeDayIndex}
       status={itinerary.data?.status}
       confirmLocked={isConfirmLocked(itinerary.data?.generationState)}
-      confirmedSubtitle={confirmedSubtitle}
       confirmError={confirmError}
       onConfirm={handleConfirm}
       onEdit={goEdit}
