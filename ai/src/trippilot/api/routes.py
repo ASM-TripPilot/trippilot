@@ -23,6 +23,8 @@ from trippilot.api.protocols import (
     ItineraryOutcome,
 )
 from trippilot.api.schemas import (
+    AlternativesRequest,
+    AlternativesResponse,
     CandidatesSummarySchema,
     DayScheduleSchema,
     FreshnessMetaSchema,
@@ -213,3 +215,19 @@ def repair(
         )
 
     return _guarded(run)
+
+
+@router.post("/alternatives", response_model=AlternativesResponse)
+def alternatives(
+    request: AlternativesRequest,
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> AlternativesResponse:
+    """Plan-B 대안 제안 (TRIP-428) — KB 검색 + closed-set 교차 + LLM 선택(폴백: 규칙 랭킹).
+
+    응답에 시각·순서·소요시간 없음(INV-2·3) — 선택된 대안의 배치 확정은 repair 몫.
+    구형 조립(alternatives 미구현 오케스트레이터)은 503으로 명시 실패한다(INV-4).
+    """
+    handler = getattr(orchestrator, "alternatives", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(lambda: handler(request))

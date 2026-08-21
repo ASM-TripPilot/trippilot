@@ -274,3 +274,57 @@ class ErrorBody(BoundaryModel):
     error_code: str
     message: str
     retryable: bool = False
+
+
+# ── Plan-B 대안 제안 경계 (TRIP-428, 에픽 TRIP-424) ──────────────────
+
+
+class CoordSchema(BoundaryModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
+class TriggerSchema(BoundaryModel):
+    """백엔드 planb-detection(C9) 트리거의 와이어 형태 — domain TriggerParams 대응."""
+
+    kind: str = Field(min_length=1)  # WEATHER|CLOSURE|DELAY|MANUAL
+    schedule_id: str = Field(min_length=1)
+    affected_date: dt.date
+    payload: dict = Field(default_factory=dict)
+
+
+class AlternativesRequest(BoundaryModel):
+    """대안 제안 요청 — 후보 풀은 AI가 앵커 반경으로 직접 만든다(INV-1, M7 소유).
+
+    시각·순서를 받지도 내보내지도 않는다 — 선택된 대안의 확정 배치는 기존
+    repair 관문 몫이다(INV-2). budget/transport 토큰은 generate 와이어와 동일
+    어휘("중간"·"대중교통" 등 — wiring의 번역표가 흡수).
+    """
+
+    trigger: TriggerSchema
+    reason: str = "none"  # weather|closed|delay|canceled|fatigue|none
+    anchor: CoordSchema
+    dates: list[dt.date] = Field(min_length=1)  # 재계획 대상 날짜(풀 반경·영업일 필터)
+    budget_level: str | None = None
+    transport_mode: str | None = None
+    excluded_poi_ids: list[str] = Field(default_factory=list)
+    request_meta: RequestMetaSchema
+
+
+class AlternativeSchema(BoundaryModel):
+    label: str
+    poi_ids: list[str]
+    rationale: str
+
+
+class AlternativesResponse(BoundaryModel):
+    """시각·순서·소요시간 없음(INV-2·3) — 제안과 강등 상태·드롭 사유만 나간다."""
+
+    alternatives: list[AlternativeSchema]
+    is_fallback: bool
+    fallback_level: int  # 0=LLM 정상 · 1=규칙 랭킹 · 2=후보 0
+    notes: list[str]
+    retrieved: dict[str, int]
+    dropped_out_of_pool: list[str]  # closed-set 밖이라 버려진 참조 (INV-1 가시화)
+    empty_reason: str | None = None
+    pool_size: int = Field(ge=0)
