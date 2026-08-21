@@ -9,6 +9,10 @@ import com.trippilot.placedata.application.PoiCollectionService
 import com.trippilot.placedata.domain.Area
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldNotContain
+import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -69,7 +73,10 @@ class PlaceApiIT : AbstractPostgresIntegrationTest() {
         return accessTokenIssuer.issue(account.id.value.toString()).value
     }
 
-    private fun JsonNode.names() = (0 until size()).map { this[it]["nameKo"].asText() }
+    /** 응답이 `{items, nextCursor}` 객체다(TRIP-503) — 배열이 아니다. */
+    private fun JsonNode.names() = this["items"].let { arr -> (0 until arr.size()).map { arr[it]["nameKo"].asText() } }
+
+    private fun JsonNode.nextCursor(): String? = this["nextCursor"]?.takeIf { !it.isNull }?.asText()
 
     @Test
     fun `인증 없으면 401`() {
@@ -81,7 +88,7 @@ class PlaceApiIT : AbstractPostgresIntegrationTest() {
         val (status, body) = call("/api/v1/places?region=제주", newToken())
         status shouldBe 200
         body.names().contains("성산일출봉") shouldBe true
-        (0 until body.size()).all { body[it]["category"].asText().isNotBlank() } shouldBe true
+        (0 until body["items"].size()).all { body["items"][it]["category"].asText().isNotBlank() } shouldBe true
     }
 
     @Test
@@ -98,7 +105,241 @@ class PlaceApiIT : AbstractPostgresIntegrationTest() {
     fun `카테고리 필터 — 부산 맛집`() {
         collection.collect(Area("부산"))
         val body = call("/api/v1/places?region=부산&category=맛집", newToken()).second
-        (0 until body.size()).all { body[it]["category"].asText() == "맛집" } shouldBe true
+        (0 until body["items"].size()).all { body["items"][it]["category"].asText() == "맛집" } shouldBe true
         body.names().contains("자갈치시장") shouldBe true
     }
+    /**
+     * **동명이구가 섞이지 않는다**(TRIP-503).
+     *
+     * 이름(`poi.region`)으로 거르던 시절, `동구` 는 대전·대구·광주·부산에 모두 있어 네 도시가 한 목록에
+     * 섞여 나왔다(실측 118건). 사용자가 대전 동구를 골라도 부산 것이 보인다 — 상한 문제가 아니라
+     * **틀린 결과**다. 코드 접두사로 거르면 그 이름을 가진 지역들만 정확히 모인다.
+     *
+     * 실 DB 로만 확인되는 이유: 인메모리 대역은 우리가 넣은 것만 들고 있어 **섞일 다른 도시가 없다.**
+     */
+    @Test
+    fun `같은 이름의 다른 도시 장소가 섞이지 않는다`() {
+        val token = newToken()
+        val 부산동구 = seedPoi("코드검증-부산동구", 35.13, 129.05, "26170")
+        val 대구동구 = seedPoi("코드검증-대구동구", 35.88, 128.63, "27140")
+
+        try {
+            val 부산 = call("/api/v1/places?region=부산", token).second.names()
+            val 대구 = call("/api/v1/places?region=대구", token).second.names()
+
+            부산 shouldContain "코드검증-부산동구"
+            부산 shouldNotContain "코드검증-대구동구"
+            대구 shouldContain "코드검증-대구동구"
+            대구 shouldNotContain "코드검증-부산동구"
+        } finally {
+            cleanupJdbc.update("DELETE FROM poi WHERE poi_id in (?, ?)", 부산동구, 대구동구)
+        }
+    }
+
+    /**
+     * **시도를 고르면 그 안 시군구가 전부 잡힌다** — 코드 접두사라 성립한다.
+     * 이름 일치 시절에는 적재분 `region` 이 시군구명이라 광역 조회가 거의 비었다(실측 부산 8/149).
+     */
+    @Test
+    fun `시도로 조회하면 하위 시군구 장소까지 잡힌다`() {
+        val token = newToken()
+        val id = seedPoi("코드검증-해운대", 35.16, 129.16, "26350")
+
+        try {
+            call("/api/v1/places?region=부산", token).second.names() shouldContain "코드검증-해운대"
+        } finally {
+            cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", id)
+        }
+    }
+
+    /**
+     * **시군구를 고르면 그 구만이다.** 접두사 길이가 어긋나면(예: 시도 2자리로 잘라 비교) 조회가
+     * 광역 전체로 조용히 번진다 — 결과가 늘어날 뿐이라 화면만 봐서는 틀린 줄 모른다.
+     * 역검증에서 이 변이가 안 잡혀 추가했다.
+     */
+    @Test
+    fun `시군구를 고르면 같은 시도의 다른 구는 안 들어온다`() {
+        val token = newToken()
+        val 동구 = seedPoi("코드검증-부산동구", 35.13, 129.05, "26170")
+        val 해운대구 = seedPoi("코드검증-부산해운대구", 35.16, 129.16, "26350")
+
+        try {
+            val got = call("/api/v1/places?region=동구", token).second.names()
+
+            got shouldContain "코드검증-부산동구"
+            got shouldNotContain "코드검증-부산해운대구" // 같은 부산이지만 다른 구다
+        } finally {
+            cleanupJdbc.update("DELETE FROM poi WHERE poi_id in (?, ?)", 동구, 해운대구)
+        }
+    }
+
+    /**
+     * **정렬이 실제로 걸려 있다.** 결정성만 보면 행이 적을 때 우연히 통과한다(역검증에서 `ORDER BY`
+     * 제거가 안 잡혔다). 넣은 순서의 역순으로 심어, 서버가 다시 세우는지 본다.
+     *
+     * 이름은 순수 한글로 고른다 — 콜레이션과 코드포인트 순서가 갈리지 않는 구간이라
+     * 이 단정이 환경에 따라 흔들리지 않는다.
+     */
+    @Test
+    fun `이름순으로 세워서 준다`() {
+        val token = newToken()
+        val ids = listOf("코드검증다", "코드검증나", "코드검증가")
+            .map { seedPoi(it, 35.13, 129.05, "26170") } // 심는 순서 = 다,나,가
+
+        try {
+            val got = call("/api/v1/places?region=동구", token).second.names()
+                .filter { it.startsWith("코드검증") }
+
+            got shouldBe listOf("코드검증가", "코드검증나", "코드검증다")
+        } finally {
+            ids.forEach { cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", it) }
+        }
+    }
+
+    /** 모르는 이름에 전국을 돌려주면 화면이 그것을 "그 지역 장소"로 표시한다 — 없다고 말하는 편이 맞다. */
+    @Test
+    fun `모르는 지역명은 빈 목록이다`() {
+        call("/api/v1/places?region=Paris", newToken()).second.names().size shouldBe 0
+    }
+
+    /**
+     * 정렬이 결정적이어야 뒤에 붙일 페이지네이션(TRIP-502)이 성립한다 — 없으면 행이 중복·누락된다.
+     *
+     * **자바 정렬과 같은지는 묻지 않는다.** 순서의 주인은 DB 콜레이션이고 그것은 JVM 의 코드포인트
+     * 순서와 다를 수 있다(운영 glibc vs 로컬 alpine/musl). 같다고 단정하면 **로컬·CI 는 통과하고
+     * 배포 환경에서만 깨지는** 테스트가 된다 — 여기서는 "매번 같은 순서인가"만 묻는다.
+     */
+    @Test
+    fun `같은 조회는 같은 순서를 준다`() {
+        val token = newToken()
+
+        val first = call("/api/v1/places?region=제주", token).second.names()
+        val second = call("/api/v1/places?region=제주", token).second.names()
+
+        first.size shouldBeGreaterThan 1 // 순서를 논할 수 있는 규모인지 먼저 확인한다
+        first shouldBe second
+    }
+
+    /** 동명이지역(코드 여러 개)도 **한 쿼리**로 돌아 같은 정렬 권한을 쓴다 — 이름에 따라 순서가 갈리지 않는다. */
+    @Test
+    fun `동명이지역 조회도 정렬이 결정적이다`() {
+        val token = newToken()
+        val a = seedPoi("코드검증-부산동구", 35.13, 129.05, "26170")
+        val b = seedPoi("코드검증-대구동구", 35.88, 128.63, "27140")
+
+        try {
+            val first = call("/api/v1/places?region=동구", token).second.names()
+            val second = call("/api/v1/places?region=동구", token).second.names()
+
+            first shouldBe second
+            first.size shouldBeGreaterThan 1
+        } finally {
+            cleanupJdbc.update("DELETE FROM poi WHERE poi_id in (?, ?)", a, b)
+        }
+    }
+
+    /**
+     * **커서로 이어 받아도 하나도 빠지지 않는다**(TRIP-503).
+     *
+     * 이게 이 기능의 전부다. offset 이 아니라 지점(keyset)을 쓰는 이유가 여기 있는데,
+     * **인메모리 대역으로는 확인할 수 없다** — 대역은 JVM 코드포인트 순서로 정렬하고 실 DB 는
+     * 콜레이션을 쓴다. 커서 비교와 정렬이 같은 기준인지는 실 DB 에서만 드러난다.
+     */
+    @Test
+    fun `커서로 전부 이어 받으면 한 번에 받은 것과 같다`() {
+        val token = newToken()
+        val ids = (1..7).map { seedPoi("페이지검증-%02d".format(it), 35.13, 129.05, "26170") }
+
+        try {
+            val whole = call("/api/v1/places?region=동구&q=페이지검증", token).second.names()
+            whole.size shouldBe 7
+
+            val paged = mutableListOf<String>()
+            var cursor: String? = null
+            var guard = 0
+            do {
+                val url = "/api/v1/places?region=동구&q=페이지검증&limit=3" +
+                    (cursor?.let { "&cursor=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: "")
+                val body = call(url, token).second
+                paged += body.names()
+                cursor = body.nextCursor()
+                guard++
+            } while (cursor != null && guard < 10) // 3장이면 끝난다 — 남으면 커서가 안 나아간 것이다
+
+            cursor shouldBe null
+
+            paged shouldBe whole // 빠짐도 중복도 없다
+        } finally {
+            ids.forEach { cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", it) }
+        }
+    }
+
+    /** 마지막 장에는 다음 지점이 없다 — 있으면 화면이 빈 장을 한 번 더 받아 온다. */
+    @Test
+    fun `더 없으면 다음 지점을 주지 않는다`() {
+        val token = newToken()
+        val ids = (1..2).map { seedPoi("끝검증-%02d".format(it), 35.13, 129.05, "26170") }
+
+        try {
+            val body = call("/api/v1/places?region=동구&q=끝검증&limit=5", token).second
+            body.names().size shouldBe 2
+            body.nextCursor() shouldBe null
+        } finally {
+            ids.forEach { cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", it) }
+        }
+    }
+
+    /**
+     * **서버가 검색한다.** 클라가 받은 장 안에서만 거르면 뒷장에 있는 것이 "없다"로 보인다 —
+     * 상한이 걸린 목록 위의 클라 필터는 조용히 거짓말을 한다.
+     */
+    @Test
+    fun `이름 검색은 상한 너머의 것도 찾는다`() {
+        val token = newToken()
+        val ids = (1..5).map { seedPoi("검색검증-%02d".format(it), 35.13, 129.05, "26170") } +
+            seedPoi("검색검증-특이한이름", 35.13, 129.05, "26170")
+
+        try {
+            // 상한 2로 좁혀도 검색어에 맞는 것을 찾아낸다(클라 필터였다면 첫 2건에 없어 0건이 된다).
+            val got = call("/api/v1/places?region=동구&q=특이한이름&limit=2", token).second.names()
+
+            got shouldBe listOf("검색검증-특이한이름")
+        } finally {
+            ids.forEach { cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", it) }
+        }
+    }
+
+    /** LIKE 메타문자는 글자 그대로다 — `/regions` 에서 겪은 것과 같은 자리(#251). */
+    @Test
+    fun `검색어의 와일드카드는 글자 그대로 취급한다`() {
+        call("/api/v1/places?q=%25", newToken()).second.names().size shouldBe 0
+    }
+
+    /** 망가진 커서를 처음부터로 되돌리면 사용자는 목록이 리셋된 이유를 알 수 없다 — 거절한다. */
+    @Test
+    fun `망가진 커서는 400 이다`() {
+        call("/api/v1/places?cursor=!!!broken!!!", newToken()).first shouldBe 400
+    }
+
+    /** 지역을 안 골라도 전량이 나가지 않는다 — 상한은 요청하지 않아도 걸린다(fail-safe). */
+    @Test
+    fun `지역을 안 골라도 상한이 걸린다`() {
+        val body = call("/api/v1/places", newToken()).second
+
+        body.names().size shouldBeLessThanOrEqual 200
+    }
+
+    /** 지역 코드를 직접 심는다 — 수집 경로는 코드를 붙이지만 이 테스트가 보려는 것은 조회 규칙이다. */
+    private fun seedPoi(name: String, lat: Double, lng: Double, regionCode: String): java.util.UUID {
+        val id = java.util.UUID.randomUUID()
+        cleanupJdbc.update(
+            """
+            INSERT INTO poi (poi_id, name_ko, lat, lng, category, region, region_code, data_status, source)
+            VALUES (?, ?, ?, ?, '명소', '동구', ?, 'ACTIVE', 'MANUAL')
+            """.trimIndent(),
+            id, name, lat, lng, regionCode,
+        )
+        return id
+    }
+
 }

@@ -98,7 +98,9 @@ beforeEach(() => {
   clearAccessToken();
   setAccessToken('valid-access');
 
-  placesHandler = jest.fn(() => HttpResponse.json([]));
+  placesHandler = jest.fn(() =>
+    HttpResponse.json({ items: [], nextCursor: null })
+  );
   server.use(
     http.get(`${BASE}/places`, placesHandler),
     http.get(`${BASE}/saved-places`, () => HttpResponse.json(savedRows)),
@@ -145,10 +147,11 @@ function renderSeeded(
     },
   });
   if (opts.listCache !== undefined) {
-    client.setQueryData(
-      getGetPlacesQueryKey(opts.listCacheParams),
-      opts.listCache
-    );
+    // 캐시는 이제 PlaceList(`{items, nextCursor}`)를 담는다(TRIP-503) — 앞 화면이 심는 모양 그대로.
+    client.setQueryData(getGetPlacesQueryKey(opts.listCacheParams), {
+      items: opts.listCache,
+      nextCursor: null,
+    });
   }
   function wrapper({ children }: { children: ReactNode }) {
     return (

@@ -57,7 +57,7 @@ export function PlaceExplorePage(): ReactElement {
   });
   const { isSaved, save, remove, savedPoiIds } = useSavedPlaces({ isAuthed });
 
-  const visible = visiblePlaces(data ?? [], searchText);
+  const visible = visiblePlaces(data?.items ?? [], searchText);
   const listState = resolvePlaceListState({
     isPending,
     isError,

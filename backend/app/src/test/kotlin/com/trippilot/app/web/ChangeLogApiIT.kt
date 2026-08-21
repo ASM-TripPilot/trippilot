@@ -68,7 +68,7 @@ class ChangeLogApiIT : AbstractPostgresIntegrationTest() {
     }
 
     private fun poiId(token: String): String =
-        call(HttpMethod.GET, "/api/v1/places?region=제주", token).second[0]["poiId"].asText()
+        call(HttpMethod.GET, "/api/v1/places?region=제주", token).second["items"][0]["poiId"].asText()
 
     /** 하루 여행 → 생성은 2차 없이 즉시 COMPLETE 라 편집이 바로 가능하다. */
     private fun tripWithItinerary(token: String): String {

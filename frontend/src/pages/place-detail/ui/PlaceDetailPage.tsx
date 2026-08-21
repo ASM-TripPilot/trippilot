@@ -24,7 +24,7 @@ import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { getGetPlacesQueryKey } from '@/shared/api/generated/places/places';
-import type { Place } from '@/shared/api/generated/schemas';
+import type { Place, PlaceList } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
@@ -61,8 +61,8 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
 
   // 목록 캐시(필터 조합 무관 전부)를 훑어 poiId 를 찾는다 — 새 조회를 일으키지 않는다(TRIP-501).
   const cachedListPlace = queryClient
-    .getQueriesData<Place[]>({ queryKey: getGetPlacesQueryKey() })
-    .flatMap(([, data]) => data ?? [])
+    .getQueriesData<PlaceList>({ queryKey: getGetPlacesQueryKey() })
+    .flatMap(([, data]) => data?.items ?? [])
     .find((p) => p.poiId === poiId);
 
   // 스냅숏 → 목록 캐시 → 담은목록 순으로 본다 — CLOSED/UNVERIFIED 담긴 장소는 /places(ACTIVE만)엔 없다.

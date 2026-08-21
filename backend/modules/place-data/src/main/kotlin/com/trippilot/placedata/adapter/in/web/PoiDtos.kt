@@ -30,3 +30,16 @@ data class PlaceResponse(
         )
     }
 }
+
+/**
+ * 장소 목록 한 장(TRIP-503).
+ *
+ * **정본 이탈** — 티켓 AC 는 숙소처럼 `truncated` 를 요구하지만 두지 않는다. [nextCursor] 가
+ * "이것이 전부가 아니다"를 알리면서 **이어 받을 방법까지** 주므로 같은 뜻의 필드가 둘이 된다.
+ * 둘이면 화면이 어느 쪽을 볼지 갈리고, 한쪽만 갱신되는 순간 조용히 어긋난다.
+ */
+data class PlaceListResponse(
+    val items: List<PlaceResponse>,
+    /** null 이 아니면 다음 장이 있다. 그 값을 `cursor` 로 되보낸다. */
+    val nextCursor: String?,
+)

@@ -72,7 +72,9 @@ beforeEach(() => {
   clearAccessToken();
   setAccessToken('valid-access');
   server.use(
-    http.get(`${BASE}/places`, () => HttpResponse.json(PLACES)),
+    http.get(`${BASE}/places`, () =>
+      HttpResponse.json({ items: PLACES, nextCursor: null })
+    ),
     http.get(`${BASE}/saved-places`, () => HttpResponse.json([]))
   );
 });

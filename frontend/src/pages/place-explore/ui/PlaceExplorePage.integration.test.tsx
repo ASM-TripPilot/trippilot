@@ -157,11 +157,14 @@ beforeEach(() => {
   server.use(
     http.get(`${BASE}/places`, ({ request }) => {
       const category = new URL(request.url).searchParams.get('category');
-      return HttpResponse.json(
-        category === null
-          ? PLACES
-          : PLACES.filter((place) => place.category === category)
-      );
+      // 응답이 `{items, nextCursor}` 객체다(TRIP-503) — 배열이 아니다.
+      return HttpResponse.json({
+        items:
+          category === null
+            ? PLACES
+            : PLACES.filter((place) => place.category === category),
+        nextCursor: null,
+      });
     }),
     http.get(`${BASE}/saved-places`, () => HttpResponse.json(savedRows)),
     http.post(`${BASE}/saved-places`, async ({ request }) => {
