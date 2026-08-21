@@ -17,7 +17,7 @@ import ExploreRoute from '@/app/(tabs)/explore';
  * (tabs)/탐색 진입 라우트 — 죽은 껍데기가 아니라 d01 탐색 랜딩(US-EXPL-01)을 배선한다.
  *
  * 무엇을 보장하나(칸1 AC-E1~E6·E8 — TRIP-447 로 축 세그먼트 제거, AC-E7 삭제):
- *  - 🔴 헤딩·검색·lane_stay·lane_itin 자리·bridgeBar 5구획을 그린다(AC-E1) ·
+ *  - 🔴 헤딩·검색·lane_stay·lane_itin 자리·담은 곳 FAB 5구획을 그린다(AC-E1) ·
  *    nearby 는 안 그린다(AC-E8, 좌표 없음). 축 세그먼트(axisSeg)는 걷어냈다(TRIP-447 AC-1,
  *    소스 0건은 `exploreLandingAxisRemoval.test.ts` 가 별도로 잠근다).
  *  - 🔴 검색창 탭(입력 불가 진입 버튼) → `/explore/search`(d05 통합 검색, TRIP-450 되돌림 —
@@ -25,7 +25,7 @@ import ExploreRoute from '@/app/(tabs)/explore';
  *  - 🔴 lane_stay = `useStaySearch` items 를 가로 카드로, 금액은 `formatPrice` 정확 일치,
  *    "· 1박"(정확 1박가) 없음, "모두 보기" → `/stays`(AC-E3).
  *  - 🔴 lane_itin 은 준비중 자리(실카드·라우팅 0, AC-E4).
- *  - 🔴 bridgeBar: CTA 는 담은 곳(d02)으로, 담은 곳 0곳이어도 유지(AC-E5, TRIP-448).
+ *  - 🔴 담은 곳 FAB(우하단 하트): 담은 곳(d02)으로, 0곳이어도 유지(AC-E5, TRIP-494/448).
  *  - 🔴 lane_stay 쿼리 error 여도 나머지 구획은 살고 lane_stay 자리에 재시도(AC-E6, INV-4).
  *
  * 왜 이렇게 테스트하나(02a §0-1): 라우트는 router 가 렌더해 props 를 못 받으므로, 두 훅을
@@ -137,7 +137,7 @@ beforeEach(() => {
 });
 
 describe('🔴 AC-E1 · AC-E8 — 5구획 렌더 + nearby 부재', () => {
-  it('헤딩·검색·lane_stay·lane_itin·bridge 를 그리고, nearby·축 세그먼트는 안 그린다', () => {
+  it('헤딩·검색·lane_stay·lane_itin·담은 곳 FAB 5구획을 그리고, nearby·축 세그먼트는 안 그린다', () => {
     render(<ExploreRoute />);
 
     // 긍정 — 5구획이 전부 있다(축 세그먼트는 TRIP-447 로 제거).
@@ -147,7 +147,7 @@ describe('🔴 AC-E1 · AC-E8 — 5구획 렌더 + nearby 부재', () => {
       'explore-landing-search',
       'explore-lane-stay',
       'explore-lane-itin',
-      'explore-bridge-cta',
+      'explore-saved-menu-toggle',
     ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
 
     // 부정 — 축 세그먼트는 렌더되지 않는다(AC-1, 렌더 층 확인 — 소스 0건은 별도 스캔).
@@ -230,37 +230,46 @@ describe('🔴 AC-E4 — lane_itin 자리만', () => {
   });
 });
 
-describe('🔴 AC-E5 — bridgeBar CTA 는 담은 곳(d02)으로, 0곳이어도 유지 (TRIP-448)', () => {
-  it('담은 곳 ≥1 이면 "담은 곳 N곳" CTA 를 누르면 담은 곳(d02)으로 간다 — 위저드 직행 아님', () => {
+describe('🔴 AC-E5 — 담은 곳 saved-menu FAB → 장소(d02)·숙소(e04)로 펼침 (TRIP-494/448)', () => {
+  it('하트 FAB 을 펼치면 담은 장소→d02, 저장한 숙소→e04 두 미니 FAB 이 뜬다', () => {
     mockUseSavedPlaces.mockReturnValue(savedResult(['p1', 'p2']));
     render(<ExploreRoute />);
 
-    const cta = screen.getByTestId('explore-bridge-cta');
-    // 부분 포함(regex) — "담은 곳 2곳 ›" 안의 조각(★E-2, toHaveTextContent 는 exact).
-    expect(cta).toHaveTextContent(/담은 곳 2곳/);
-    // 0상태 안내(empty)는 더 이상 없다 — CTA 로 단일화됐다.
-    expect(screen.queryByTestId('explore-bridge-empty')).toBeNull();
+    // 풀폭 핑크 CTA 바에서 우하단 하트 saved-menu FAB 로 교체됐다(TRIP-494, Figma a01 3012:1731).
+    const toggle = screen.getByTestId('explore-saved-menu-toggle');
+    expect(toggle).toHaveAccessibleName(/담은 곳 2곳/);
+    // 옛 풀폭 CTA 는 더 이상 없다.
+    expect(screen.queryByTestId('explore-bridge-cta')).toBeNull();
+    // 닫힌 상태엔 미니 FAB 이 없다.
+    expect(screen.queryByTestId('explore-saved-places-fab')).toBeNull();
+    expect(screen.queryByTestId('explore-saved-stays-fab')).toBeNull();
 
-    fireEvent.press(cta);
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    // 목적지는 d02(담은 곳)다. 위저드(/trips/new)로 직행하면 red — 금지 AC.
-    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/saved-places');
+    // 펼친다 — 두 미니 FAB 이 나타난다.
+    fireEvent.press(toggle);
+    expect(mockPush).not.toHaveBeenCalled();
+
+    // 담은 장소 → d02.
+    fireEvent.press(screen.getByTestId('explore-saved-places-fab'));
+    expect(mockPush).toHaveBeenLastCalledWith('/explore/saved-places');
+
+    // 저장한 숙소 → e04(다시 펼쳐서).
+    fireEvent.press(screen.getByTestId('explore-saved-menu-toggle'));
+    fireEvent.press(screen.getByTestId('explore-saved-stays-fab'));
+    expect(mockPush).toHaveBeenLastCalledWith('/stays/saved');
   });
 
-  it('담은 곳 0 곳이어도 CTA 는 유지되고, 누르면 담은 곳(d02) 빈 상태로 간다', () => {
+  it('담은 곳 0 곳이어도 FAB 는 유지되고, 펼쳐 d02/e04 빈 상태로 갈 수 있다', () => {
     mockUseSavedPlaces.mockReturnValue(savedResult([]));
     render(<ExploreRoute />);
 
-    // CTA 가 사라지지 않는다 — 0곳 분기로 없애면 d02 빈 상태 도달 경로가 사라진다(TRIP-448).
-    const cta = screen.getByTestId('explore-bridge-cta');
-    expect(cta).toBeOnTheScreen();
-    expect(cta).toHaveTextContent(/담은 곳 0곳/);
-    // 옛 0상태 안내는 없다.
-    expect(screen.queryByTestId('explore-bridge-empty')).toBeNull();
+    // FAB 가 사라지지 않는다 — 0곳 분기로 없애면 d02/e04 빈 상태 도달 경로가 사라진다(TRIP-448).
+    const toggle = screen.getByTestId('explore-saved-menu-toggle');
+    expect(toggle).toBeOnTheScreen();
+    expect(toggle).toHaveAccessibleName(/담은 곳 0곳/);
 
-    fireEvent.press(cta);
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/saved-places');
+    fireEvent.press(toggle);
+    fireEvent.press(screen.getByTestId('explore-saved-places-fab'));
+    expect(mockPush).toHaveBeenLastCalledWith('/explore/saved-places');
   });
 });
 
@@ -275,7 +284,7 @@ describe('🔴 AC-E6 — 부분 실패 · 독립 쿼리', () => {
       'explore-landing-heading',
       'explore-landing-search',
       'explore-lane-itin',
-      'explore-bridge-cta',
+      'explore-saved-menu-toggle',
     ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
 
     // lane_stay 자리에 재시도(가시적 실패 신호).

@@ -3,6 +3,11 @@
  * 해제·게스트 판정·로딩 실패 얼굴을 여기서 모은다 — 화면(`SavedPlaceListScreen`)은 결과만
  * 그린다(props만).
  *
+ * **TRIP-494: d02 는 장소만 그린다(Figma 정본 1693:1183 — topBar+장소 list+ctaBar, 숙소 섹션
+ * 없음).** TRIP-449 가 얹었던 숙소(SavedStay) 축은 여기서 뺐다 — 저장한 숙소는 별도 화면
+ * e04(`/stays/saved`, SavedStayPage)가 진다(정본 2화면 분리). 화면(`SavedPlaceListScreen`)의
+ * 숙소 옵셔널 prop 은 미전달로 두면 섹션이 안 그려져 남겨 둔다(무회귀 additive 역).
+ *
  * **TRIP-394로 해제 동작이 뒤집혔다** — 하트를 눌러도 행이 사라지지 않고 **자리에 남아 빈 하트**가
  * 되고, 빈 하트를 다시 누르면 같은 자리에서 되돌린다(재담김). 서버는 실제로 해제/재담김되고,
  * 실패하면 배너 + 하트 원복(INV-4). 그래서 페이지가 방문 범위 상태 둘을 소유한다:
@@ -20,14 +25,9 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
 
 import type { SavedPlace } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
-import {
-  getGetSavedStaysQueryKey,
-  useDeleteSavedStaysSavedStayId,
-} from '@/shared/api/generated/saved-stays/saved-stays';
 
 import { resolvePlaceListState } from '@/features/explore/model/placeListState';
 import {
@@ -37,13 +37,8 @@ import {
 } from '@/features/explore/model/placeSaveGuard';
 import { orderSavedPlaces } from '@/features/explore/model/savedPlaceList';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
-import {
-  SavedPlaceListScreen,
-  type StayRowVM,
-} from '@/features/explore/ui/SavedPlaceListScreen';
-import { useSavedStays } from '@/features/trip/model/useSavedStays';
+import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
-import { formatStayDateRange } from '@/features/trip/model/stayDateImport';
 
 /** 실패 시 재시도가 다시 밟아야 할 마지막 조작 — 해제냐 되돌리기냐를 함께 기억한다. */
 type LastAttempt = { saved: SavedPlace; mode: 'release' | 'restore' };
@@ -89,19 +84,6 @@ export function SavedPlacesPage(): ReactElement {
   const isAuthed = getAccessToken() !== null;
   const { savedPlaces, isPending, isError, refetch, save, remove } =
     useSavedPlaces({ isAuthed });
-  // 숙소 축(TRIP-449) — 읽기는 trip 재수출(GET /saved-stays, 게스트엔 `enabled:isAuthed` 로 요청
-  // 0). 해제는 savedStayId 직접 삭제(생성 클라) + 목록 무효화 — 토글 훅 remove 는 외부키 역인덱스라
-  // 핀·수동 숙소를 못 지워 안 쓴다(brief §90).
-  const stayQuery = useSavedStays({ enabled: isAuthed });
-  const queryClient = useQueryClient();
-  const removeStay = useDeleteSavedStaysSavedStayId({
-    mutation: {
-      onSuccess: () =>
-        queryClient.invalidateQueries({
-          queryKey: getGetSavedStaysQueryKey(),
-        }),
-    },
-  });
 
   const displayList = buildDisplayList(savedPlaces, releasedPoiIds, snapshots);
   const listState = resolvePlaceListState({
@@ -111,32 +93,6 @@ export function SavedPlacesPage(): ReactElement {
     hasQuery: false,
     hasCategory: false,
   });
-
-  const stayList = stayQuery.data ?? [];
-  // 장소 축과 같은 판정 함수 재사용(숙소 수로, hasQuery·hasCategory 는 늘 false).
-  const stayState = resolvePlaceListState({
-    isPending: stayQuery.isPending,
-    isError: stayQuery.isError,
-    itemCount: stayList.length,
-    hasQuery: false,
-    hasCategory: false,
-  });
-  const stayRows: StayRowVM[] = stayList.map((stay) => ({
-    savedStayId: stay.savedStayId,
-    name: stay.name,
-    dateLabel:
-      stay.checkIn && stay.checkOut
-        ? formatStayDateRange(stay.checkIn, stay.checkOut)
-        : undefined,
-  }));
-  // 통합 빈 상태는 페이지가 파생해 내린다 — 두 축이 모두 조회 정착 + 0건일 때만(게스트·조회
-  // 중·부분 실패는 empty 가 아니다, 우선순위 guest > loading > error > results > empty).
-  const showEmpty =
-    isAuthed && listState.kind === 'empty' && stayState.kind === 'empty';
-  const removingStayIds =
-    removeStay.isPending && removeStay.variables
-      ? [removeStay.variables.savedStayId]
-      : [];
 
   // 해제 — 낙관 업데이트: 먼저 빈 하트로 바꾸고(스냅숏 보존) 서버에 DELETE. 실패면 찬 하트로 원복.
   async function attemptRelease(saved: SavedPlace): Promise<void> {
@@ -226,11 +182,6 @@ export function SavedPlacesPage(): ReactElement {
       onPressLogin={() => router.push('/(auth)/login')}
       onPressRemoveErrorAction={handlePressRemoveErrorAction}
       onBack={() => router.back()}
-      savedStays={stayRows}
-      stayState={stayState}
-      onRemoveStay={(savedStayId) => removeStay.mutate({ savedStayId })}
-      removingStayIds={removingStayIds}
-      showEmpty={showEmpty}
     />
   );
 }

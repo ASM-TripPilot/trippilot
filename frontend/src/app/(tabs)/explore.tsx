@@ -28,8 +28,9 @@ import {
  *
  * 검색창 탭 → `/explore/search`(입력 불가 진입 버튼 — 입력은 d05 에서 받아 자유 문자열이 region
  * 으로 새는 걸 막는다, TRIP-450 되돌림) · 모두 보기 → `/stays?region={레인 지역}`(첫 카드 지역을 실어 부산 폴백 회피) ·
- * bridge CTA → `/explore/saved-places`(담은 곳 d02, 0곳이어도 유지 — TRIP-448). 구획별 독립 쿼리라
- * 숙소 레인 실패가 나머지 구획을 안 죽인다(INV-4).
+ * 담은 곳 saved-menu FAB(TRIP-494) → 펼치면 담은 장소 `/explore/saved-places`(d02) · 저장한 숙소
+ * `/stays/saved`(e04), 0곳이어도 유지 — TRIP-448 계승). 구획별 독립 쿼리라 숙소 레인 실패가
+ * 나머지 구획을 안 죽인다(INV-4).
  *
  * 담기 하트(TRIP-447): `useSavedStays`(react-query)는 `QueryClientProvider` 아래서만 돈다.
  * 게스트는 훅을 아예 안 태우고 로그인 유도만 하고, 로그인 사용자만 조건부 자식
@@ -40,7 +41,7 @@ import {
 
 type LandingBase = Pick<
   ExploreLandingScreenProps,
-  'heading' | 'onPressSearch' | 'onPressPlaces' | 'placeLane' | 'bridge'
+  'heading' | 'onPressSearch' | 'onPressPlaces' | 'placeLane' | 'savedMenu'
 > & {
   stayLane: Pick<
     ExploreLandingScreenProps['stayLane'],
@@ -55,6 +56,10 @@ export default function ExploreRoute(): ReactElement {
   const isAuthed = getAccessToken() !== null;
   const { savedPoiIds } = useSavedPlaces({ isAuthed });
 
+  // 담은 곳 saved-menu 열림 상태(TRIP-494) — 순수 화면이 useState 0건이라 라우트가 소유해
+  // 화면에 내린다(sheet 열림을 페이지가 쥐는 선례와 동형).
+  const [savedMenuOpen, setSavedMenuOpen] = useState(false);
+
   // 가볼 곳 레인(TRIP-470) — 앞쪽 소수만(가로 레인이라 전량 필요 없음). 카드 press → d06.
   const placeCards: PlaceCardVM[] = (places.data ?? [])
     .slice(0, 8)
@@ -62,6 +67,7 @@ export default function ExploreRoute(): ReactElement {
       poiId: place.poiId,
       name: place.nameKo,
       region: place.region ?? '',
+      imageUrl: place.imageUrl ?? null,
     }));
 
   const items = stay.data?.items ?? [];
@@ -119,11 +125,21 @@ export default function ExploreRoute(): ReactElement {
         }
       },
     },
-    bridge: {
+    // 담은 곳 saved-menu FAB(TRIP-494) — 하트 FAB 을 누르면 두 미니 FAB 으로 펼쳐진다:
+    // 담은 장소→d02(/explore/saved-places) · 저장한 숙소→e04(/stays/saved). 미니 press 는
+    // 메뉴를 닫고 이동한다. 0곳이어도 FAB 은 유지돼 d02/e04 빈 상태로 간다(TRIP-448 계승).
+    savedMenu: {
+      open: savedMenuOpen,
       savedCount: savedPoiIds.length,
-      // 담은 곳(d02)으로 간다 — 위저드 직행이 아니다(TRIP-448). 위저드 진입은 d02 의
-      // "이 장소들로 여행 만들기" 가 이미 진다. 0곳이어도 이 CTA 는 유지돼 d02 빈 상태로 간다.
-      onPressCreateTrip: () => router.push('/explore/saved-places'),
+      onToggle: () => setSavedMenuOpen((v) => !v),
+      onPressSavedPlaces: () => {
+        setSavedMenuOpen(false);
+        router.push('/explore/saved-places');
+      },
+      onPressSavedStays: () => {
+        setSavedMenuOpen(false);
+        router.push('/stays/saved');
+      },
     },
   };
 

@@ -109,6 +109,11 @@ const FIX_FAILED_MESSAGE = '저장하지 못했어요';
 /** 404만 문구를 가른다 — **서버가 뜻을 정해 둔 사유**라(BR-U1-56) 단정이 아니다. 400·422·500은
  * `error.code`에 enum이 없어 원인을 알 수 없고, 추측해 적으면 거짓 설명이 된다(01b D5). */
 const STAY_GONE_MESSAGE = '목록에서 사라진 숙소예요';
+/** 담은 숙소가 있는데 거점을 하나도 안 지정하고 진행하면, 후보 풀 기준점(앵커)이 0이라 생성이
+ * AI 경계에서 폴백(INV-4)으로 떨어져 추천 없는 최소 일정만 나온다. 그 사실을 진행 전에 보인다
+ * (TRIP-490). Figma 프레임 부재라 문구는 발명값 — 게이트②/실기에서 정정 대상. */
+const FALLBACK_WITHOUT_BASE_NOTICE =
+  '거점 숙소를 지정하지 않으면 추천 없이 최소한의 일정만 만들어져요';
 
 const BLOCKED_REASON_TEXT: Record<BaseBlockReason, string> = {
   DATES_MISSING: ASSIGN_BLOCKED_REASON,
@@ -251,6 +256,14 @@ export function TripNewStep2Page(): ReactElement {
   const unresolved =
     coverageData !== undefined && blocked === true
       ? unresolvedDaysView(coverageData.days)
+      : undefined;
+
+  // 담은 숙소는 있는데 거점이 하나도 없으면(지정 못 했거나 안 함) 진행 결과가 폴백이 된다 —
+  // 그 사실을 경고로 보인다(TRIP-490). 담은 숙소가 애초에 0인 정당한 no-stay 사용자는
+  // `empty` 얼굴이라 이 자리(default/loading의 CtaBlock)에 도달하지 않아 경고를 안 본다.
+  const fallbackWarning =
+    savedStayList.length > 0 && assignments.length === 0
+      ? FALLBACK_WITHOUT_BASE_NOTICE
       : undefined;
 
   const sectionRows: BaseSectionRow[] = sections.map((section) => ({
@@ -522,6 +535,7 @@ export function TripNewStep2Page(): ReactElement {
       candidates={candidates}
       generateDisabled={generateDisabled}
       unresolved={unresolved}
+      fallbackWarning={fallbackWarning}
       coverageFailed={coverage.isError}
       fixSheet={fixSheet}
       onFix={openFix}
