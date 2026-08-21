@@ -22,14 +22,45 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable
 
+import re
+from typing import Callable
+
 from trippilot.domain.event import EventInfo
 from trippilot.domain.serialization import to_iso
 
+# 이름 정규화 — 실측 변형 중복(2026-08-21: "세종한글축제"/"2026 세종한글축제",
+# "감악산 꽃별여행"/"제6회 …", 「」 괄호, 후행 "공연" 등)을 흡수한다.
+_YEAR_RE = re.compile(r"20\d{2}년?")
+_NTH_RE = re.compile(r"제?\s*\d+\s*회")
+_PUNCT_RE = re.compile(r"[^\w가-힣]")  # 괄호·하이픈·특수기호 전부 제거
+_GENERIC_SUFFIXES = ("공연", "전시", "행사")  # 후행 장르어 — "축제"는 이름의 일부인 경우가 많아 제외
+
+
+def normalize_name(name: str) -> str:
+    text = _NTH_RE.sub("", _YEAR_RE.sub("", name))
+    text = _PUNCT_RE.sub("", text)
+    for suffix in _GENERIC_SUFFIXES:
+        if text.endswith(suffix) and len(text) > len(suffix) + 2:
+            text = text[: -len(suffix)]
+    return text
+
 
 def _dedup_key(event: EventInfo) -> tuple[str, str, str]:
-    """이름(공백 제거)+기간 — 여러 출처가 같은 축제를 보도해도 1건만."""
-    return ("".join(event.name.split()), event.start.isoformat(),
+    """정규화 이름+기간 — 여러 출처·표기 변형이 같은 축제를 보도해도 1건만."""
+    return (normalize_name(event.name), event.start.isoformat(),
             event.end.isoformat())
+
+
+def _same_event(key_a: tuple[str, str, str], key_b: tuple[str, str, str]) -> bool:
+    """같은 기간 + 이름 동일 또는 **포함**("한화와 함께하는 서울세계불꽃축제" ⊃
+    "서울세계불꽃축제") — 포함 판정은 오탐 방지로 6자 이상일 때만."""
+    if key_a[1:] != key_b[1:]:
+        return False
+    na, nb = key_a[0], key_b[0]
+    if na == nb:
+        return True
+    shorter = min(na, nb, key=len)
+    return len(shorter) >= 6 and (shorter in na and shorter in nb)
 
 
 class JsonEventStore:
@@ -81,7 +112,7 @@ class JsonEventStore:
         added = 0
         for event in events:
             key = _dedup_key(event)
-            if key in seen:
+            if any(_same_event(key, k) for k in seen):
                 continue
             seen.add(key)
             self._doc["events"].append(
@@ -100,6 +131,40 @@ class JsonEventStore:
             if date.fromisoformat(r["end"]) >= cutoff
         ]
         return before - len(self._doc["events"])
+
+    def sanitize(
+        self,
+        *,
+        drop_event: Callable[[str, EventInfo], bool],
+        coord_ok: Callable[[str, "object"], bool],
+    ) -> dict:
+        """기존 레코드 소급 정리 (규칙은 호출측 주입 — 저장소는 판단 규칙을 모른다).
+
+        ① drop_event=True인 레코드 삭제 (저품질 이름 등)
+        ② coord_ok=False인 좌표 제거 — 행사는 유지 (오매칭 좌표만, TRIP-421 실측)
+        ③ 변형 중복 제거 — 강화된 dedup 규칙을 기존 건에 재적용 (선입 우선)
+        반환: {"dropped": n, "coord_cleared": n, "deduped": n}
+        """
+        result = {"dropped": 0, "coord_cleared": 0, "deduped": 0}
+        kept: list[dict] = []
+        kept_keys: list[tuple[str, str, str]] = []
+        for record in self._doc["events"]:
+            event = EventInfo.from_dict(record)
+            if drop_event(record.get("region", ""), event):
+                result["dropped"] += 1
+                continue
+            key = _dedup_key(event)
+            if any(_same_event(key, k) for k in kept_keys):
+                result["deduped"] += 1
+                continue
+            if event.coord is not None and not coord_ok(record.get("region", ""),
+                                                       event.coord):
+                record = {**record, "coord": None}
+                result["coord_cleared"] += 1
+            kept_keys.append(key)
+            kept.append(record)
+        self._doc["events"] = kept
+        return result
 
     def counts(self) -> dict:
         return {"events": len(self._doc["events"]),
