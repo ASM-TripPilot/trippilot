@@ -24,6 +24,7 @@ tests/test_smoke_itinerary.py 가 fake 데이터로만 검증한다 (실 호출 
 
 환경변수:
     COLLECTED_POIS    필수 — 수집 제안 JSON 경로 (collect_pois.py 산출물)
+    SMOKE_REGION      선택 — 시군구 강제 (예: "해운대구"). 미설정이면 날짜 시드 랜덤.
     SMOKE_DATE        YYYY-MM-DD, 기본 오늘 KST 날짜 (CLI라 wall-clock 직접 호출 허용
                       — smoke_llm·collect_pois와 같은 관례)
     REHEARSAL_OUTPUT  기본 "rehearsal_result.json" — 기록용 1건 JSON
@@ -115,8 +116,14 @@ def select_rehearsal_pois(
     min_pois: int = MIN_POIS,
     max_pois: int = MAX_POIS,
     max_attempts: int = MAX_ATTEMPTS,
+    region: str | None = None,
 ) -> Selection:
     """날짜 시드 랜덤 선택 — 같은 (날짜, 데이터)는 항상 같은 결과.
+
+    `region`(SMOKE_REGION)을 주면 **그 시군구만** 시도한다 — 날짜 시드는 어느 지역이
+    걸릴지 고를 수 없어서, 특정 지역의 수집 품질을 보거나 그 지역에서 난 실패를
+    재현할 방법이 없었다(부산 2일 리허설을 돌리려고 스크립트를 임시로 고쳐야 했다).
+    반경 풀은 그대로 전체 수집분에서 뽑는다 — 강제 대상은 앵커가 서는 시군구뿐이다.
 
     ① region 목록에서 날짜 시드로 시군구 후보 순서를 뽑고(최대 max_attempts곳)
     ② 그 시군구 POI 중 앵커 1개 랜덤 → **전체 수집 POI** 중 앵커 반경 radius_km
@@ -125,17 +132,23 @@ def select_rehearsal_pois(
     반경 내가 min 미만이면 다음 시군구로 재시도, 전부 실패면 SelectionError.
     """
     by_region: dict[str, list[Poi]] = {}
-    for poi, region in entries:
-        if region:  # region 추출 실패(null)는 시군구 선택 대상에서 제외
-            by_region.setdefault(region, []).append(poi)
+    for poi, poi_region in entries:   # region 은 파라미터 — 루프 변수로 가리지 않는다
+        if poi_region:  # region 추출 실패(null)는 시군구 선택 대상에서 제외
+            by_region.setdefault(poi_region, []).append(poi)
     if not by_region:
         raise SelectionError("region 있는 제안이 0건 — 수집 JSON 확인 필요")
 
     # 시드에 들어가는 순서를 안정화 — JSON 항목 순서가 바뀌어도 같은 선택
     regions = sorted(by_region)
     all_pois = sorted((p for p, _ in entries), key=lambda p: str(p.poi_id))
-    region_rng = random.Random(smoke_date)
-    attempts = region_rng.sample(regions, min(max_attempts, len(regions)))
+    if region is not None:
+        if region not in by_region:
+            raise SelectionError(
+                f"지역 {region!r} 이 수집분에 없다 — 후보 {len(regions)}곳")
+        attempts = [region]
+    else:
+        region_rng = random.Random(smoke_date)
+        attempts = region_rng.sample(regions, min(max_attempts, len(regions)))
 
     tried: list[str] = []
     for region in attempts:
@@ -505,7 +518,8 @@ def main() -> int:
     try:
         selection = select_rehearsal_pois(
             entries, smoke_date_str,
-            min_pois=MIN_POIS * days, max_pois=MAX_POIS * days)
+            min_pois=MIN_POIS * days, max_pois=MAX_POIS * days,
+            region=_optional("SMOKE_REGION"))
     except SelectionError as e:
         print(f"[rehearsal] FAIL 선택 불가: {e}")
         return 1

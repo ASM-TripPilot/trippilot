@@ -478,3 +478,22 @@ def test_rehearsal_accepts_event_store(tmp_path):
         events=store,
     )
     assert len(result["slots"]) >= 1  # 행사 주입이 리허설을 깨지 않는다
+
+
+# ── 지역 강제 (SMOKE_REGION) ───────────────────────────────────────────
+# 날짜 시드는 어느 지역이 걸릴지 고를 수 없다 — 특정 지역의 수집 품질을 보거나
+# 그 지역 실패를 재현하려면 강제가 필요하다.
+
+def test_region_강제하면_그_시군구만_시도한다():
+    entries = tuple((p, "해운대구" if i < 8 else "기장군")
+                    for i, p in enumerate(_leg_selection(16).pois))
+    sel = select_rehearsal_pois(entries, "2026-08-21", min_pois=3, max_pois=5,
+                                region="기장군")
+    assert sel.region == "기장군"
+
+
+def test_없는_region_은_조용히_랜덤으로_넘어가지_않는다():
+    """오타가 랜덤 선택으로 흘러가면 '왜 다른 지역이 나오지'로 시간을 버린다."""
+    entries = tuple((p, "해운대구") for p in _leg_selection(8).pois)
+    with pytest.raises(SelectionError, match="수집분에 없다"):
+        select_rehearsal_pois(entries, "2026-08-21", region="없는구")
