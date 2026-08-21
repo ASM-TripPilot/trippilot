@@ -193,7 +193,10 @@ def main() -> int:
     prompts_root = Path(__file__).resolve().parents[1] / "prompts"
     worker = EventExtractionWorker(GatewayFacade(
         adapter, PromptRegistry(prompts_root), EventExtractionGate(),
-        C1Config(model_ids={ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id}),
+        # max_tokens 4096 — 기본 1024에서 행사 다수 지역(서울·경기) 출력이 잘려
+        # parse_error 재현 (2026-08-21 풀 배치 실측). 배치 전용 — 실시간 경로 무변.
+        C1Config(model_ids={ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id},
+                 max_tokens=4096),
         _StderrTrace(),
     ))
     client = NaverSearchClient(UrllibHttpClient(), client_id, client_secret, max_calls)
