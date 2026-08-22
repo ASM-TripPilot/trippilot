@@ -410,7 +410,7 @@ const DRAFT_PREVIEW_PHOTOS: (string | null)[] = [
   require('@/assets/itinerary/draft-preview-1.jpg'),
   require('@/assets/itinerary/draft-preview-2.jpg'),
   require('@/assets/itinerary/draft-preview-3.jpg'),
-].map((source) => Image.resolveAssetSource(source)?.uri ?? null);
+].map((source) => Image.resolveAssetSource?.(source)?.uri ?? null); // 웹에는 이 API 가 없다(네이티브 전용) — 옵셔널 호출로 웹은 null(사진 없는 카드)
 
 const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   {

@@ -86,10 +86,14 @@ class OrToolsSolver:
         ws, we = _mod(problem.day_window.start), _mod(problem.day_window.end)
         fixed = [fb for fb in problem.fixed_blocks if fb.window.start.date() == day]
         fixed_ids = {fb.poi_id for fb in fixed}
+        # 다른 날 고정 예약분은 오늘의 자유 후보에서 뺀다 — 안 빼면 같은 POI가
+        # 자유(오늘)+고정(그날)으로 두 번 배치된다 (2026-08-21 제주 프로브 실측).
+        reserved = {fb.poi_id for fb in problem.fixed_blocks} - fixed_ids
 
-        # 후보 수집 (사용된 것 제외) + 프리필터
+        # 후보 수집 (사용된 것·타일 고정 예약 제외) + 프리필터
         cands = [c for c in problem.candidates
-                 if c.poi_id not in used and c.poi_id in self._pois]
+                 if c.poi_id not in used and c.poi_id not in reserved
+                 and c.poi_id in self._pois]
         if len(cands) > _PREFILTER_TOP_K:
             cands.sort(key=lambda c: (-c.score, str(c.poi_id)))
             keep = [c for c in cands if c.poi_id in fixed_ids]
