@@ -16,6 +16,8 @@ import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.placedata.api.Area
 import com.trippilot.placedata.api.CandidatePoolPort
 import org.springframework.stereotype.Component
+import com.trippilot.itinerarygeneration.application.SlotKey
+import java.util.UUID
 import java.time.Clock
 import java.time.LocalTime
 
@@ -128,4 +130,14 @@ class FakeScheduleAgent(
         private const val REPLAN_LEAD_MIN = 30
         private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
     }
+    /**
+     * 결정론적 근거(TRIP-511). 실 AI 는 LLM 문장을 주지만 대역은 **슬롯마다 같은 형태**를 준다 —
+     * 문장 품질이 아니라 **근거가 슬롯에 실제로 도달하는지**가 이 대역으로 재려는 것이다.
+     *
+     * 빈 맵으로 두면 "설명 단계가 통째로 빠져도" 테스트가 통과해, 분리한 배선을 아무도 안 지킨다.
+     */
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> =
+        solution.days.flatMap { d -> d.slots.map { SlotKey.of(d.date, it.poiId) to "일정 흐름에 맞는 곳이에요" } }
+            .toMap()
+
 }

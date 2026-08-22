@@ -19,6 +19,19 @@ interface ScheduleAgentPort {
     fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult
 
     /**
+     * 추천 근거 조회(TRIP-511) — 생성에서 **떼어낸** 단계다.
+     *
+     * 설명은 LLM 이 만들고 ~10초를 쓴다. 생성에 붙여 두면 사용자가 첫 화면을 그만큼 늦게 본다.
+     * 일정(솔버)과 근거(LLM)는 서로를 기다릴 이유가 없어 나눴다.
+     *
+     * **실패는 빈 맵이다.** 근거는 부가 정보라 없다고 일정을 죽이지 않는다 — 다만 조용히 지나가지
+     * 않게 어댑터가 로그로 드러낸다(INV-4).
+     *
+     * @return `"{date}#{poiId}"` → 문장. 키 규약은 생성 응답의 `explanations` 와 같다(BR-U2-04).
+     */
+    fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String>
+
+    /**
      * 슬롯 후보 제안(DEC-U3-5) — **완전 AI·같이 고르기 공통 경계**다. 경로별로 다른 API 를 두지 않는다(BR-U3-23).
      * 후보는 closed-set(INV-1) — 백엔드가 임의 POI 를 섞지 않는다.
      */

@@ -22,6 +22,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
+import kotlin.system.measureTimeMillis
 
 /**
  * **실 AI 서비스와의 왕복** — 우리 어댑터가 상대 실물에 대해 실제로 동작하는지.
@@ -79,6 +80,44 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
         println("[LIVE-AI] generate → solveMode=${output.solveMode} isFallback=${output.isFallback} " +
             "days=${output.days.size} slots=${output.days.sumOf { it.slots.size }} " +
             "unplaced=${output.unplacedMustVisits.size} candidates=${output.candidatesSummary?.level}")
+    }
+
+    /**
+     * **설명 분리가 실제로 시간을 줄이는가**(TRIP-511).
+     *
+     * 티켓은 "첫 화면 ~6초"를 주장한다 — 그 수치는 AI 쪽 실측이라 **우리 왕복에서도 사실인지**는
+     * 재 봐야 안다. 여기서는 같은 입력을 두 번 태워 근거 포함/제외를 나란히 찍는다.
+     *
+     * 시간을 단정(assert)하지 않는다 — 실 LLM 지연은 그날 상태에 따라 흔들려서, 못 박으면
+     * 무관한 PR 이 빨개진다. 대신 **기록**을 남겨 판단 근거로 쓴다.
+     */
+    @Test
+    fun `근거를 빼면 생성이 빨라진다 — 실측 기록`() {
+        val dates = listOf(today, today.plusDays(1))
+
+        val withoutMs = measureTimeMillis { agent.generate(input(dates).copy(includeExplanations = false)) }
+        val withMs = measureTimeMillis { agent.generate(input(dates).copy(includeExplanations = true)) }
+
+        println("[LIVE-AI] generate 근거제외=${withoutMs}ms · 근거포함=${withMs}ms · 차이=${withMs - withoutMs}ms")
+    }
+
+    /** 떼어낸 근거를 실제로 받아 오는가 — 키 규약(`날짜#poiId`)이 슬롯과 맞물리는지까지 본다. */
+    @Test
+    fun `근거 조회가 슬롯 키로 문장을 돌려준다`() {
+        val generated = agent.generate(input(listOf(today)).copy(includeExplanations = false))
+        val slotKeys = generated.days.flatMap { d -> d.slots.map { "${d.date}#${it.poiId}" } }
+
+        val ms = measureTimeMillis {
+            val reasons = agent.explanations(UUID.randomUUID(), generated)
+            println("[LIVE-AI] explanations → ${reasons.size}건 · 슬롯 ${slotKeys.size}개 중 " +
+                "${slotKeys.count { it in reasons }}개 매칭")
+            // 빈 맵도 계약상 정상(부가 정보) — 그래서 개수를 단정하지 않는다. 다만 **키가 맞물려야** 한다:
+            // 받은 것이 있는데 하나도 안 맞으면 규약이 어긋난 것이라 화면에 근거가 통째로 비어 버린다.
+            if (reasons.isNotEmpty()) {
+                assertThat(reasons.keys.any { it in slotKeys }).isTrue()
+            }
+        }
+        println("[LIVE-AI] explanations 소요=${ms}ms")
     }
 
     /**
