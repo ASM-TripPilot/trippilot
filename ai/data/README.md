@@ -72,3 +72,29 @@ OPENAI_API_KEY=... \
 
 FakeEmbedding 적재는 스크립트가 거부한다 — 해시 벡터는 의미 유사도가 없어
 "적재됐는데 검색이 엉터리"인 오염 상태가 된다. 실임베딩 검증은 `scripts/smoke_vector.py`.
+
+---
+
+## `collected_events.json` — 행사 저장소 (실행 배선본)
+
+`ai-event-collect` 배치가 만드는 **행사 저장소 문서**다. POI 제안과 달리 백엔드에 넣지 않는다 —
+행사는 POI 가 아니고(INV-1), AI 가 `EventProvider` 로 **직접 읽는** 런타임 자산이다.
+
+정본은 `collect-state` 브랜치의 `collected_events.json`(배치가 매일 갱신). 여기 있는 것은
+**컨테이너에 실어 보내기 위한 동봉본**이다 — `ai/Dockerfile` 이 `COPY data ./data` 로 담고,
+compose 가 `EVENTS_STORE=data/collected_events.json` 으로 가리킨다.
+
+```bash
+# 갱신 — collect-state 정본을 그대로 떠온다 (합칠 것 없음: 배치가 누적·만료청소까지 한다)
+git fetch origin collect-state
+git show origin/collect-state:collected_events.json > ai/data/collected_events.json
+```
+
+### 알아둘 것
+
+- **기동 시 1회 읽는다**(`JsonEventStore.__init__`). 파일을 갈아끼웠으면 컨테이너를 다시 띄운다.
+- **누적본이 아니다.** 종료 +7일이 지난 행사는 배치가 물리 삭제한다(`EXPIRE_GRACE_DAYS`) —
+  "지금 유효한 행사"의 스냅샷이라 오래 묵히면 비어 간다.
+- **좌표 없는 행사가 다수다**(2026-08-22 기준 76건 중 54건이 `coord: null`). 좌표가 없으면
+  근접 POI 부착 보너스에서 제외된다(`event_affinity.py`) — 목록에는 남지만 점수에는 안 붙는다.
+- 끄려면 `.env` 에 `AI_EVENTS_STORE=` (빈 값). 미배선 = 행사 보너스 없이 기존 경로 그대로.
