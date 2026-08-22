@@ -38,7 +38,8 @@ _BACKEND_SEED = {
 _ENV_VARS = ("TRIPPILOT_WIRING", "TRIPPILOT_LLM_PROVIDER", "OPENAI_API_KEY",
              "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_API",
              "TRIPPILOT_BACKEND_BASE_URL", "TRIPPILOT_SERVICE_AUTH_TOKEN",
-             "TRIPPILOT_VECTOR_DB_URL", "TRIPPILOT_EMBEDDING_PROVIDER")
+             "TRIPPILOT_VECTOR_DB_URL", "TRIPPILOT_EMBEDDING_PROVIDER",
+             "TRIPPILOT_EMBEDDING_MODEL")
 
 
 @pytest.fixture(autouse=True)
@@ -367,3 +368,24 @@ def test_feature_models_env_parsing(monkeypatch):
     monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "NO_SUCH=m")
     with _pytest.raises(RuntimeError, match="미지 feature"):
         main_mod._feature_models_from_env()
+
+# ── local(KURE) 임베딩 분기 (팀 결정 2026-08-22: 로컬 우선) ──────────────
+
+
+def test_vector_rag_local_without_package_fails_fast(monkeypatch) -> None:
+    """provider=local + sentence-transformers 미설치 = 기동 실패 (silent fallback 금지)."""
+    import sys as _sys
+
+    monkeypatch.setenv("TRIPPILOT_VECTOR_DB_URL", "postgresql://x:x@localhost:5433/x")
+    monkeypatch.setenv("TRIPPILOT_EMBEDDING_PROVIDER", "local")
+    monkeypatch.setitem(_sys.modules, "sentence_transformers", None)  # import 시 ImportError
+    with pytest.raises(RuntimeError, match="sentence-transformers 미설치"):
+        main._vector_rag()
+
+
+def test_vector_rag_unknown_provider_lists_local(monkeypatch) -> None:
+    """미지원 값 에러가 세 갈래(openai|titan|local)를 전부 안내한다."""
+    monkeypatch.setenv("TRIPPILOT_VECTOR_DB_URL", "postgresql://x:x@localhost:5433/x")
+    monkeypatch.setenv("TRIPPILOT_EMBEDDING_PROVIDER", "voyage")
+    with pytest.raises(RuntimeError, match=r"openai\|titan\|local"):
+        main._vector_rag()
