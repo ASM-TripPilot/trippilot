@@ -860,6 +860,7 @@ class WiredItineraryOrchestrator:
                     current_slots=target_day_ids,
                 ),
                 trace_id, now,
+                timeout_sec=_deadline_budget(meta) / 1000.0,
             )
             if result.is_fallback or result.value is None:
                 # 자연어 해석 실패는 자연어 경로만의 정직 실패 — 구조화 경로 무영향

@@ -71,11 +71,17 @@ class EditTranslationWorker:
         inp: EditTranslationInput,
         trace_id: TraceId,
         now: datetime,
+        *,
+        timeout_sec: float | None = None,
     ) -> TypedResult:
+        # 호출측 예산이 게이트웨이 타임아웃까지 **관통** (TRIP-381 — 점수·설명과 동형).
+        # 미관통이면 기본 2.5s가 실호출(바닥 ~3s)을 항상 잘라 자연어 편집이 전멸한다
+        # (TRIP-431 실측: 직접 호출 성공 · 경계 호출 TRANSLATION_FAILED).
         return self._gateway.call(
             LlmFeature.EDIT_TRANSLATION,
             build_edit_translation_vars(pool, inp),
             pool,  # affectedSlots 풀 교차 대상 (INV-1)
             trace_id,
             now,
+            timeout_sec=timeout_sec,
         )
