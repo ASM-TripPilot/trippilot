@@ -9,6 +9,10 @@
 임베딩 선택 (TRIPPILOT_EMBEDDING_PROVIDER, 기본 openai):
 - openai: OPENAI_API_KEY 필수 (+ OPENAI_BASE_URL 선택)
 - titan:  boto3 설치 + AWS 자격 필요 (bedrock-runtime, AWS_REGION)
+- local:  sentence-transformers 설치 필요 (기본 KURE-v1, TRIPPILOT_EMBEDDING_MODEL 로 변경)
+
+전환 규칙(팀 결정 2026-08-22): 임베딩 모델 간 벡터 공간이 비호환이라 쿼리 단위 폴백은
+금지 — provider 를 바꾸면 이 스크립트로 **전량 재적재**한다(멱등 upsert라 안전).
 
 FakeEmbedding 적재는 지원하지 않는다 — 해시 벡터는 의미 유사도가 없어서
 "적재는 됐는데 검색이 엉터리"인 오염 상태를 만든다 (침묵 실패 금지).
@@ -50,7 +54,23 @@ def _embedding():
         from trippilot.llm_gateway.adapters.titan_embedding import TitanEmbeddingAdapter
 
         return TitanEmbeddingAdapter(boto3.client("bedrock-runtime"))
-    raise SystemExit(f"TRIPPILOT_EMBEDDING_PROVIDER 미지원 값: {provider!r} (openai|titan)")
+    if provider == "local":
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as e:  # 의존성에 없다(의도) — 복구 명령을 바로 준다
+            raise SystemExit(
+                "sentence-transformers 미설치 — `uv pip install sentence-transformers`.\n"
+                "  프로젝트 의존성이 아니라서 `uv sync` 하면 다시 지워진다 (boto3 선례)."
+            ) from e
+        from trippilot.llm_gateway.adapters.sentence_transformer_embedding import (
+            DEFAULT_MODEL,
+            SentenceTransformerEmbeddingAdapter,
+        )
+
+        model_name = os.environ.get("TRIPPILOT_EMBEDDING_MODEL") or DEFAULT_MODEL
+        print(f"임베딩 모델: {model_name} (최초 실행은 내려받느라 오래 걸린다)")
+        return SentenceTransformerEmbeddingAdapter(SentenceTransformer(model_name))
+    raise SystemExit(f"TRIPPILOT_EMBEDDING_PROVIDER 미지원 값: {provider!r} (openai|titan|local)")
 
 
 def main(argv: list[str]) -> int:
@@ -71,7 +91,8 @@ def main(argv: list[str]) -> int:
         kinds = sorted({d.kb.value for d in documents})
         print(f"{path.name}: {count}건 적재 (KB: {', '.join(kinds)})")
         total += count
-    print(f"총 {total}건 (dim={embedding.dim}, 멱등 upsert)")
+    provider = os.environ.get("TRIPPILOT_EMBEDDING_PROVIDER") or "openai"
+    print(f"총 {total}건 (dim={embedding.dim}, provider={provider}, 멱등 upsert)")
     return 0
 
 

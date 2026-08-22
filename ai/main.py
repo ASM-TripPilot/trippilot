@@ -175,7 +175,10 @@ def _vector_rag():
     "KB를 켰다"가 거짓이 된다.
 
     임베딩 선택: `TRIPPILOT_EMBEDDING_PROVIDER` = openai(기본, OPENAI_API_KEY 필수)
-    | titan(boto3 설치 + AWS 자격).
+    | titan(boto3 설치 + AWS 자격) | local(sentence-transformers 설치, 기본 KURE-v1 —
+    게이트웨이에 임베딩 배포가 없어(404, 2026-08-21 실측) 로컬이 1순위. 팀 결정 2026-08-22:
+    local 우선, 죽으면 provider 교체 + load_kb.py 재적재 — 벡터 공간 비호환이라
+    쿼리 단위 폴백은 금지, 전환은 적재 단위).
     """
     url = _env("TRIPPILOT_VECTOR_DB_URL")
     if url is None:
@@ -207,8 +210,24 @@ def _vector_rag():
         from trippilot.llm_gateway.adapters.titan_embedding import TitanEmbeddingAdapter
 
         return store, TitanEmbeddingAdapter(boto3.client("bedrock-runtime"))
+    if provider == "local":
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as e:  # 의존성에 없다(의도, boto3 선례) — 복구 명령을 바로 준다
+            raise RuntimeError(
+                "TRIPPILOT_EMBEDDING_PROVIDER=local 인데 sentence-transformers 미설치 — "
+                "`uv pip install sentence-transformers` (uv sync 하면 다시 지워진다). "
+                "silent fallback 금지: 기동 실패."
+            ) from e
+        from trippilot.llm_gateway.adapters.sentence_transformer_embedding import (
+            DEFAULT_MODEL,
+            SentenceTransformerEmbeddingAdapter,
+        )
+
+        model_name = _env("TRIPPILOT_EMBEDDING_MODEL") or DEFAULT_MODEL
+        return store, SentenceTransformerEmbeddingAdapter(SentenceTransformer(model_name))
     raise RuntimeError(
-        f"TRIPPILOT_EMBEDDING_PROVIDER 미지원 값: {provider!r} — openai|titan"
+        f"TRIPPILOT_EMBEDDING_PROVIDER 미지원 값: {provider!r} — openai|titan|local"
     )
 
 
