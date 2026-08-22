@@ -275,3 +275,40 @@ def test_vector_url_without_embedding_key_fails_startup(
         monkeypatch.setenv("OPENAI_API_KEY", key)
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         main.build_app_from_env()
+
+
+def test_env_anthropic_provider_assembles(monkeypatch):
+    """TRIPPILOT_LLM_PROVIDER=anthropic — AnthropicAdapter 조립 (TRIP-421)."""
+    import sys
+    import types
+
+    calls = {}
+
+    class _FakeAnthropicClient:
+        def __init__(self, **kwargs):
+            calls.update(kwargs)
+
+    fake_sdk = types.ModuleType("anthropic")
+    fake_sdk.Anthropic = _FakeAnthropicClient
+    monkeypatch.setitem(sys.modules, "anthropic", fake_sdk)
+    monkeypatch.setenv("TRIPPILOT_LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k-test")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "claude-x")
+
+    import main as main_mod
+    llm, model_id = main_mod._anthropic_llm_and_model()
+
+    from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
+    assert isinstance(llm, AnthropicAdapter)
+    assert model_id == "claude-x"
+    assert calls == {"api_key": "k-test", "max_retries": 0}  # 재시도 무익 정책 (TRIP-381)
+
+
+def test_env_anthropic_without_key_fails_fast(monkeypatch):
+    monkeypatch.setenv("TRIPPILOT_LLM_PROVIDER", "anthropic")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    import main as main_mod
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+        main_mod._anthropic_llm_and_model()

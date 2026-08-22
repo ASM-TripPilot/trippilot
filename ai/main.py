@@ -73,6 +73,26 @@ def _openai_llm_and_model() -> tuple[object, str]:
     return adapter, _env("OPENAI_MODEL") or "gpt-5.6-terra"
 
 
+def _anthropic_llm_and_model() -> tuple[object, str]:
+    """`TRIPPILOT_LLM_PROVIDER=anthropic` 실배선 조립 (AI-D06 — Claude 직접 호출).
+
+    smoke_llm._build_adapter의 anthropic 분기와 동형 — SDK 지연 import,
+    max_retries=0(재시도 무익 정책, TRIP-381). 키 누락은 즉시 기동 실패.
+    """
+    api_key = _env("ANTHROPIC_API_KEY")
+    if api_key is None:
+        raise RuntimeError(
+            "TRIPPILOT_LLM_PROVIDER=anthropic 인데 ANTHROPIC_API_KEY 미설정 — "
+            "실 LLM 조립 불가(빈 문자열도 미설정). silent fallback 금지: 기동 실패."
+        )
+    import anthropic
+
+    from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
+
+    client = anthropic.Anthropic(api_key=api_key, max_retries=0)
+    return AnthropicAdapter(client), _env("ANTHROPIC_MODEL") or "claude-haiku-4-5"
+
+
 def _kma_weather():
     """`WEATHER_API`(기상청 공공데이터포털 디코딩 키, TRIP-383) 설정 시 실 어댑터 조립.
 
@@ -206,12 +226,15 @@ def build_app_from_env() -> FastAPI:
         return build_dev_app(weather=weather, poi_db=poi_db, events=events,
                              vector_store=vector_store, embedding=embedding,
                              travel_port=travel)
-    if provider != "openai":
+    if provider == "openai":
+        llm, model_id = _openai_llm_and_model()
+    elif provider == "anthropic":
+        llm, model_id = _anthropic_llm_and_model()
+    else:
         raise RuntimeError(
             f"TRIPPILOT_LLM_PROVIDER 미지원 값: {provider!r} — "
-            "미설정(fake 조립) 또는 openai 만 지원"
+            "미설정(fake 조립) 또는 openai|anthropic 만 지원"
         )
-    llm, model_id = _openai_llm_and_model()
     return build_dev_app(llm=llm, model_id=model_id, weather=weather,
                          poi_db=poi_db, events=events,
                          vector_store=vector_store, embedding=embedding,
