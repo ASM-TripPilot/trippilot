@@ -84,7 +84,7 @@ class SecondPhaseGenerator(
         }
 
         try {
-            val applied = applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration, assemblyUnplaced)
+            val applied = applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration, assemblyUnplaced, sessionId)
             sessionId?.let { sessions.completed(it, applied?.isFallback ?: false, applied?.candidatesSummary?.level) }
         } catch (e: Exception) {
             // 폴백조차 반영하지 못한 경우 — 상태로 드러낸다(침묵 금지).
@@ -107,6 +107,7 @@ class SecondPhaseGenerator(
         output: ScheduleAgentOutput?,
         isRegeneration: Boolean,
         assemblyUnplaced: List<UnplacedMustVisit>,
+        sessionId: UUID?,
     ): Itinerary? {
         // 1) 현재 상태를 읽어 최종 일자 목록을 만든다(아직 쓰지 않는다).
         val current = itineraries.findByTrip(tripId).firstOrNull()
@@ -140,6 +141,15 @@ class SecondPhaseGenerator(
         )
 
         // 3) 이제 쓴다. 읽고-쓰는 사이에 재생성이 끼어들 수 있어 가드를 **다시** 본다.
+        //
+        // 취소도 **여기서 다시** 본다. 위에서 한 번 봤지만 그 뒤 근거 조회가 십수 초를 쓴다(실측 17.5초) —
+        // 그 창에서 [취소]를 누른 사용자도 일정이 완성돼 버리면 "그만두겠다고 한 뒤 화면이 바뀐다"가 된다
+        // (BR-U3-05). 확인은 쓰기 **직전**이어야 창이 남지 않는다.
+        if (sessionId != null && sessions.isCanceled(sessionId)) {
+            log.info("생성 마무리 폐기 — 근거를 받는 사이 사용자가 취소함. tripId={}", tripId)
+            return null
+        }
+
         return tx.execute {
             val latest = itineraries.findByTrip(tripId).firstOrNull()
             if (latest == null || !latest.isPendingSecondPhase(itineraryId, tripId)) return@execute null

@@ -830,6 +830,34 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         sessionRepo.rows.values.single().status shouldBe GenerationStatus.CANCELED
     }
 
+    /**
+     * **근거를 받는 사이에 취소해도 반영하지 않는다**(BR-U3-05 · TRIP-511).
+     *
+     * 근거 조회는 실측 17.5초다. 취소 확인이 그 **앞**에만 있으면 그 십수 초 동안 [취소]를 누른
+     * 사용자도 일정이 완성돼, "그만두겠다고 한 뒤 화면이 바뀐다"가 된다. 확인은 쓰기 직전이어야 한다.
+     */
+    "근거를 받는 사이에 취소해도 반영하지 않는다" {
+        val end = start.plusDays(1)
+        val sessionRepo = FakeGenerationSessions()
+        val (base, _) = emittingAgent(end)
+        val theTrip = tripId // 아래 오버라이드의 파라미터 이름이 바깥 값을 가린다
+        val agent = object : ScheduleAgentPort by base {
+            override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> {
+                // 근거를 받아 오는 **그 사이에** 사용자가 [취소]를 눌렀다.
+                sessionRepo.findRunningByTrip(theTrip)?.let { sessionRepo.save(it.canceled(now)) }
+                return emptyMap()
+            }
+        }
+        val repo = FakeItineraries()
+
+        service(agent, repo, end, sessionRepo).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val stored = repo.byTrip.getValue(tripId)
+        stored.generationState shouldBe GenerationState.PARTIAL       // 마무리가 반영되지 않았다
+        stored.days.map { it.date } shouldContainExactly listOf(start) // day1 은 남는다
+        sessionRepo.rows.values.single().status shouldBe GenerationStatus.CANCELED
+    }
+
     "그 사이 사용자가 편집·확정했으면 2차 결과를 버린다(덮어쓰기 금지)" {
         val end = start.plusDays(2)
         val (agent, _) = emittingAgent(end)

@@ -210,8 +210,6 @@ class GenerateItineraryService(
     private data class Assembled(val input: ScheduleAgentInput, val unplaced: List<UnplacedMustVisit>)
 
     /** 최초 생성이면 기준 버전(BASELINE), 재생성이면 GENERATE. */
-    private fun kindFor(previous: Itinerary?) = if (previous == null) RevisionKind.BASELINE else RevisionKind.GENERATE
-    private fun summaryFor(previous: Itinerary?) = if (previous == null) "AI가 처음 짠 일정" else "AI가 일정을 다시 짬"
 
     @Suppress("LongParameterList")
     private fun assembleInput(
