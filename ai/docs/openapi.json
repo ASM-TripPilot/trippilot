@@ -271,6 +271,181 @@
         "title": "DayScheduleSchema",
         "type": "object"
       },
+      "EditCommandSchema": {
+        "additionalProperties": false,
+        "description": "편집 명령 와이어 형태 — domain EditCommand 대응. 시각 필드 없음(INV-2·3).",
+        "properties": {
+          "affected_slots": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Slots",
+            "type": "array"
+          },
+          "op": {
+            "minLength": 1,
+            "title": "Op",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "title": "EditCommandSchema",
+        "type": "object"
+      },
+      "EditItineraryRequest": {
+        "additionalProperties": false,
+        "description": "일정 편집 요청 — `command`(구조화)와 `utterance`(자연어) 중 **정확히 하나**.\n\n두 진입은 같은 처리 로직으로 수렴한다(팀 결정 2026-08-22): 자연어는\nEDIT_TRANSLATION 워커가 EditCommand로 번역하고, 이후 경로는 동일하다.\nanchor·기간은 후보 풀 재조립용(INV-1 — 추가·교체 대상 검증). 파괴적 편집은\n1차 응답 CONFIRM_REQUIRED → 사용자 확인 후 `confirm=true` 재호출로 반영한다.",
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/CoordSchema"
+          },
+          "budget_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Level"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditCommandSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "itinerary": {
+            "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "target_date": {
+            "format": "date",
+            "title": "Target Date",
+            "type": "string"
+          },
+          "transport_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transport Mode"
+          },
+          "trip_id": {
+            "minLength": 1,
+            "title": "Trip Id",
+            "type": "string"
+          },
+          "utterance": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utterance"
+          }
+        },
+        "required": [
+          "trip_id",
+          "itinerary",
+          "target_date",
+          "anchor",
+          "request_meta"
+        ],
+        "title": "EditItineraryRequest",
+        "type": "object"
+      },
+      "EditItineraryResponse": {
+        "additionalProperties": false,
+        "description": "편집 결과 — 시각·순서는 APPLIED일 때만, 그것도 솔버 검증값만(INV-2).\n\nREJECTED는 위반 목록 또는 사유를 반드시 싣는다(침묵 거부 금지, INV-4).",
+        "properties": {
+          "apply_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apply Mode"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditCommandSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "itinerary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItineraryPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/ViolationSchema"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "EditItineraryResponse",
+        "type": "object"
+      },
       "ExplanationsRequest": {
         "additionalProperties": false,
         "description": "배치 일정의 슬롯별 설명 조회 — generate(include_explanations=false)와 짝.\n\n페르소나는 generate와 같은 trip_id 파생 참조로 해석한다(D31 자기참조,\nTRIP-333 fail-closed 유지). 시각·순서는 받기만 하고 바꾸지 않는다(INV-2).",
@@ -1125,6 +1300,48 @@
           }
         },
         "summary": "Alternatives",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/edit": {
+      "post": {
+        "description": "일정 편집 (TRIP-431) — 자연어·구조화 겸용, 단일 처리 로직 수렴.\n\n번역(자연어)·검증(closed-set)·확인 게이트·재타이밍·솔버 검증을 거쳐\n통과분만 반영한다(INV-1·2·4). 구형 조립은 503 명시 실패.",
+        "operationId": "edit_ai_v1_itinerary_edit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditItineraryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditItineraryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit",
         "tags": [
           "itinerary"
         ]
