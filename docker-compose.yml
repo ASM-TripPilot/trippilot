@@ -130,6 +130,9 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-}
       # chat|responses (기본 responses — 멘토 게이트웨이가 responses 만 라우팅한다).
       OPENAI_API: ${OPENAI_API:-}
+      # anthropic 제공자(AI_LLM_PROVIDER=anthropic)용 — openai와 택일 (TRIP-421)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
       # 미주입 앱으로 띄운다(3개 라우트 503) — 배선 문제인지 우리 문제인지 가를 때.
       TRIPPILOT_WIRING: ${AI_WIRING:-}
       # 기상청 단기예보(디코딩 키). 미설정 = 날씨 보정 없음.
