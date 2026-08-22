@@ -43,6 +43,9 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
 class C1Config:
     model_ids: Mapping[ModelTier, str]  # 주입 필수 — 하드코딩 금지 (BR-U4-08)
     tier_map: Mapping[LlmFeature, ModelTier] = field(default_factory=default_tier_map)
+    # 기능별 모델 오버라이드 (TRIP-513 — GPT·Claude 혼용). 있으면 tier 해석보다
+    # 우선한다. 벤더 선택은 모델명이 결정 — RoutingLlm이 접두어로 어댑터를 고른다.
+    feature_models: Mapping[LlmFeature, str] = field(default_factory=dict)
     # BR-U4-04 기본값 — 즉답성 feature(INTENT 등) 기준. 단계 예산이 있는 호출
     # (PREFERENCE_SCORING)은 GatewayFacade.call(timeout_sec=...)로 관통 (TRIP-376).
     timeout_sec: float = 2.5

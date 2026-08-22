@@ -212,6 +212,52 @@ def _vector_rag():
     )
 
 
+def _feature_models_from_env() -> dict:
+    """`TRIPPILOT_LLM_FEATURE_MODELS` 파싱 (TRIP-513) — "FEATURE=model,…" 콤마 목록.
+
+    미지 feature 이름은 조용히 무시하지 않고 기동 실패 — 오타가 "그 기능만 조용히
+    기본 모델"이 되는 것을 막는다.
+    """
+    from trippilot.domain.llm import LlmFeature
+
+    raw = _env("TRIPPILOT_LLM_FEATURE_MODELS")
+    if raw is None:
+        return {}
+    overrides = {}
+    for pair in raw.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        name, _, model = pair.partition("=")
+        if not model:
+            raise RuntimeError(f"TRIPPILOT_LLM_FEATURE_MODELS 형식 오류: {pair!r}")
+        try:
+            feature = LlmFeature(name.strip().upper())
+        except ValueError as e:
+            raise RuntimeError(
+                f"TRIPPILOT_LLM_FEATURE_MODELS 미지 feature: {name!r} "
+                f"(유효: {[f.value for f in LlmFeature]})"
+            ) from e
+        overrides[feature] = model.strip()
+    return overrides
+
+
+def _mixed_llm_and_model() -> tuple[object, str]:
+    """`TRIPPILOT_LLM_PROVIDER=mixed` — GPT·Claude 혼용 조립 (TRIP-513).
+
+    양쪽 클라이언트를 모두 만들고 RoutingLlm이 모델명 접두어("claude*")로
+    벤더를 고른다. 양쪽 키 모두 필수(fail-fast) — 혼용을 켰는데 한쪽이
+    없으면 그 기능들만 조용히 죽는 상태를 만들지 않는다.
+    기본 모델(티어 해석)은 OPENAI_MODEL — Claude는 feature_models로 배정.
+    """
+    from trippilot.llm_gateway.adapters.routing import RoutingLlm
+
+    openai_llm, openai_model = _openai_llm_and_model()
+    anthropic_llm, _ = _anthropic_llm_and_model()
+    return RoutingLlm(default=openai_llm,
+                      routes={"claude": anthropic_llm}), openai_model
+
+
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
     if os.environ.get("TRIPPILOT_WIRING") == "unwired":
@@ -230,15 +276,18 @@ def build_app_from_env() -> FastAPI:
         llm, model_id = _openai_llm_and_model()
     elif provider == "anthropic":
         llm, model_id = _anthropic_llm_and_model()
+    elif provider == "mixed":
+        llm, model_id = _mixed_llm_and_model()
     else:
         raise RuntimeError(
             f"TRIPPILOT_LLM_PROVIDER 미지원 값: {provider!r} — "
-            "미설정(fake 조립) 또는 openai|anthropic 만 지원"
+            "미설정(fake 조립) 또는 openai|anthropic|mixed 만 지원"
         )
     return build_dev_app(llm=llm, model_id=model_id, weather=weather,
                          poi_db=poi_db, events=events,
                          vector_store=vector_store, embedding=embedding,
-                         travel_port=travel)
+                         travel_port=travel,
+                         feature_models=_feature_models_from_env())
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.

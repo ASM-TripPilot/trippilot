@@ -312,3 +312,58 @@ def test_env_anthropic_without_key_fails_fast(monkeypatch):
     import pytest as _pytest
     with _pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         main_mod._anthropic_llm_and_model()
+
+
+def test_feature_model_override_beats_tier(monkeypatch):
+    """TRIP-513 — feature_models 오버라이드가 tier 해석보다 우선."""
+    from trippilot.llm_gateway.config import C1Config
+    from trippilot.llm_gateway.gateway import TierRouter
+    from trippilot.domain.llm import LlmFeature, ModelTier
+
+    cfg = C1Config(
+        model_ids={ModelTier.LIGHT: "gpt-l", ModelTier.HEAVY: "gpt-h"},
+        feature_models={LlmFeature.EXPLANATION: "claude-sonnet-4-5"},
+    )
+    router = TierRouter(cfg)
+    assert router.route(LlmFeature.EXPLANATION) == "claude-sonnet-4-5"  # 오버라이드
+    assert router.route(LlmFeature.INTENT) == "gpt-l"  # 미배정 — 기존 tier 해석
+
+
+def test_routing_llm_dispatches_by_model_prefix():
+    """TRIP-513 — claude* 모델은 Anthropic 어댑터로, 그 외는 기본으로."""
+    from trippilot.llm_gateway.adapters.routing import RoutingLlm
+    from trippilot.ports.llm_port import LlmRequest
+    from trippilot.domain.prompt import PromptRef
+
+    class _Port:
+        def __init__(self, tag): self.tag, self.got = tag, []
+        def invoke(self, request):
+            self.got.append(request.model_id)
+            return self.tag
+
+    gpt, claude = _Port("gpt"), _Port("claude")
+    router = RoutingLlm(default=gpt, routes={"claude": claude})
+    ref = PromptRef(prompt_id="p", version="0", feature="INTENT")
+
+    def _req(model): return LlmRequest(model_id=model, prompt="x", prompt_ref=ref,
+                                       max_tokens=10, temperature=0.0)
+    assert router.invoke(_req("Claude-Sonnet-4-5")) == "claude"  # 대소문자 무시
+    assert router.invoke(_req("gpt-5.6-terra")) == "gpt"
+    assert claude.got == ["Claude-Sonnet-4-5"] and gpt.got == ["gpt-5.6-terra"]
+
+
+def test_feature_models_env_parsing(monkeypatch):
+    """TRIP-513 — 콤마 목록 파싱, 미지 feature 는 기동 실패 (조용한 기본화 금지)."""
+    import main as main_mod
+    import pytest as _pytest
+    from trippilot.domain.llm import LlmFeature
+
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS",
+                       "EXPLANATION=claude-sonnet-4-5, reflection=claude-haiku-4-5")
+    parsed = main_mod._feature_models_from_env()
+    assert parsed == {LlmFeature.EXPLANATION: "claude-sonnet-4-5",
+                      LlmFeature.REFLECTION: "claude-haiku-4-5"}  # 소문자 허용
+
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "NO_SUCH=m")
+    with _pytest.raises(RuntimeError, match="미지 feature"):
+        main_mod._feature_models_from_env()

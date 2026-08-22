@@ -44,6 +44,9 @@ class TierRouter:
         self._cfg = config
 
     def route(self, feature: LlmFeature) -> str:
+        override = self._cfg.feature_models.get(feature)
+        if override is not None:  # 기능별 오버라이드 우선 (TRIP-513) — 결정론 유지
+            return override
         tier = self._cfg.tier_map.get(feature)
         if tier is None:
             raise ValueError(f"tier_map에 없는 feature: {feature}")

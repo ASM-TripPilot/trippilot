@@ -1171,6 +1171,7 @@ def build_dev_app(
     weather: WeatherPort | None = None,
     poi_db: object | None = None,
     travel_port: object | None = None,
+    feature_models: dict | None = None,  # 기능별 모델 오버라이드 (TRIP-513)
     events: EventPort | None = None,
     vector_store: object | None = None,
     embedding: object | None = None,
@@ -1206,7 +1207,8 @@ def build_dev_app(
             PersonaSummary(taste_tags=(), companion=CompanionType.SOLO,
                            budget=BudgetLevel.MID)
         ),
-        c1_config=C1Config(model_ids=model_ids),
+        c1_config=C1Config(model_ids=model_ids,
+                           feature_models=feature_models or {}),
         weather=weather,
         travel_port=travel_port,  # 실경로 어댑터 (TRIP-432)
         events=events,  # 행사 저장소 (TRIP-421) — None이면 무보정
