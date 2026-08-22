@@ -823,6 +823,7 @@ def build_orchestrator(
     trace: TracePort | None = None,
     prompts_root: Path | None = None,
     weather: WeatherPort | None = None,
+    travel_port: object | None = None,  # 실경로 어댑터 (TRIP-432) — None이면 하버사인
     events: "EventPort | None" = None,  # 행사 저장소 (TRIP-421) — None이면 무보정
     vector_store: object | None = None,
     embedding: object | None = None,
@@ -842,6 +843,8 @@ def build_orchestrator(
     renderer = PromptRegistry(prompts_root if prompts_root is not None else _PROMPTS_ROOT)
     resolver = ContextResolver(context_store)
     estimator = TravelEstimator(scfg)
+    # travel_port 주입 시 ChainedTravelAdapter 등 실경로 어댑터 사용 (TRIP-432)
+    travel = travel_port if travel_port is not None else estimator
     provider = ChainSolverProvider(estimator, clock, trace, scfg)
     # 수집 계층 (TRIP-406·407) — 풀·페르소나 상시, 날씨는 포트 주입 시에만 등록.
     # 페르소나 재조회도 같은 resolver — 보안 규칙의 권위 1곳 (TRIP-333·BR-U4-07).
@@ -861,6 +864,10 @@ def build_orchestrator(
     )
     if weather is not None:
         providers[ProviderKind.WEATHER] = WeatherProvider(weather)
+    # Transit Provider — travel_port 주입 여부 무관하게 항상 등록 (TRIP-432,
+    # 미주입이면 하버사인 estimator가 포트 역할)
+    from trippilot.providers.transit import TransitProvider
+    providers[ProviderKind.TRANSIT] = TransitProvider(port=travel)
     if events is not None:  # 행사 저장소 주입 시에만 등록 (TRIP-421)
         providers[ProviderKind.EVENT] = EventProvider(events)
     explainer = ExplanationWorker(
@@ -884,7 +891,7 @@ def build_orchestrator(
         config=orchestrator_config,
     )
     return WiredItineraryOrchestrator(
-        orchestrator, provider, poi_db, estimator, tz=tz,
+        orchestrator, provider, poi_db, travel, tz=tz,
         pool_builder=pool_builder, rag=rag,
         explainer=explainer, context_resolver=resolver,
     )
@@ -1017,6 +1024,7 @@ def build_dev_app(
     model_id: str | None = None,
     weather: WeatherPort | None = None,
     poi_db: object | None = None,
+    travel_port: object | None = None,
     events: EventPort | None = None,
     vector_store: object | None = None,
     embedding: object | None = None,
@@ -1032,6 +1040,8 @@ def build_dev_app(
     이면 날씨 보정 없이 기존과 동일.
     `poi_db`는 선택 주입(TRIP-408, BackendPoiDb 실연동) — 기본 None 이면 기존
     StaticPoiDb(제주 시드 4곳) 그대로(하위호환: 백엔드 없는 로컬 스모크).
+    `travel_port`는 선택 주입(TRIP-432, ChainedTravelAdapter) — 기본 None 이면
+    기존 TravelEstimator(하버사인) 그대로.
     """
     if model_id is not None:
         model_ids = {ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id}
@@ -1052,6 +1062,7 @@ def build_dev_app(
         ),
         c1_config=C1Config(model_ids=model_ids),
         weather=weather,
+        travel_port=travel_port,  # 실경로 어댑터 (TRIP-432)
         events=events,  # 행사 저장소 (TRIP-421) — None이면 무보정
         vector_store=vector_store,
         embedding=embedding,
