@@ -20,7 +20,8 @@ import java.util.UUID
 
 /**
  * 편집 이력·되돌리기 E2E(TRIP-310). 실 DB 로 `seq` 유일·단조(INV-U3-06)와 되돌리기 왕복을 본다.
- * 하루 여행을 쓰는 이유: 생성이 2차 없이 즉시 COMPLETE 라 편집·되돌리기를 바로 검증할 수 있다.
+ * 하루 여행을 쓰는 이유: 2차 생성이 없어 흐름이 짧다. 다만 근거 조회가 남아 응답 직후는 PARTIAL 이라
+ * 헬퍼가 COMPLETE 를 기다린다(TRIP-511).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ItineraryRevisionApiIT : AbstractPostgresIntegrationTest() {
@@ -55,6 +56,9 @@ class ItineraryRevisionApiIT : AbstractPostgresIntegrationTest() {
             "destinations":[{"seq":0,"region":"제주","nights":0}],"preferenceSnapshot":{}}""".trimIndent()
         val trip = call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        // **하루 여행도 마무리를 기다린다**(TRIP-511). 추천 근거가 생성에서 떨어져 나와 뒤따라오므로
+        // 응답 시점에는 아직 PARTIAL 이다 — 리비전·확정은 COMPLETE 뒤에 열린다(실제 화면도 폴링한다).
+        awaitComplete(trip, token)
         return trip
     }
 
