@@ -33,6 +33,7 @@ import type {
   CreateTripRequest,
   EditItineraryRequest,
   EditTripRequest,
+  ErrorResponse,
   GenerateItineraryRequest,
   GenerationSession,
   GetTripsTripIdChangeLogParams,
@@ -1570,7 +1571,11 @@ export function useGetTripsTripIdItinerary<
 }
 
 /**
- * 첫날(day1)만 담긴 `generationState=PARTIAL` 응답을 즉시 돌려주고, 나머지 일자는 백그라운드로 채운다. 클라이언트는 GET 으로 `COMPLETE`(전 일자 완료) 또는 `FAILED`(2차 중단) 까지 폴링한다. 여행이 하루면 2차 없이 즉시 `COMPLETE`. PARTIAL 인 동안 확정·편집은 409. 재생성(이 POST)에는 상태 제한이 없다 — 중단된 생성(PARTIAL)에서 벗어나는 탈출구이자, **확정된 일정을 다시 짜는 유일한 경로**다(확정 해제 API 없음). 확정 일정에 호출하면 확정이 풀리고 PLANNED 새 일정으로 대체되며, 동결됐던 poi_snapshot 참조는 사라진다.
+ * 첫날(day1)만 담긴 `generationState=PARTIAL` 응답을 먼저 돌려주고, 나머지 일자는 백그라운드로 채운다. 클라이언트는 GET 으로 `COMPLETE`(전 일자 완료) 또는 `FAILED`(2차 중단) 까지 폴링한다.
+ *
+ * ⏱ **응답까지, 그리고 폴링이 끝나기까지 수 분이 걸릴 수 있다.** 2026-08-21 팀 결정으로 생성 시간제약을 해제했다(TRIP-474) — AI 에 시한을 싣지 않으므로 후보 풀이 클수록 오래 걸린다. **짧은 폴링 상한을 두면 화면이 반쪽 일정에 머문 채 조용히 멈춘다.** 정말 멈춘 생성은 서버가 판정해 `FAILED` 로 내리므로(약 11분), 그보다 길게 버티면 반드시 종착 상태를 본다. 9월에 시간제약이 재도입되면 다시 수십 초대로 돌아온다(TRIP-475). 여행이 하루면 2차 없이 즉시 `COMPLETE`. PARTIAL 인 동안 확정·편집은 409. 재생성(이 POST)에는 상태 제한이 없다 — 중단된 생성(PARTIAL)에서 벗어나는 탈출구이자, **확정된 일정을 다시 짜는 유일한 경로**다(확정 해제 API 없음). 확정 일정에 호출하면 확정이 풀리고 PLANNED 새 일정으로 대체되며, 동결됐던 poi_snapshot 참조는 사라진다.
+ *
+ * **같은 여행**의 재생성에는 상태 제한이 없다(위 탈출구). 다만 **다른 여행의 생성이 진행 중이면 409** — 생성은 LLM·솔버를 쓰는 무거운 작업이라 동시 실행을 열어두면 비용·지연이 사용자 수가 아니라 연타 횟수에 비례한다(TRIP-403). 거절 응답의 `error.activeTripId` 에 진행 중인 여행이 실린다. 멈춘 생성(백그라운드 비정상 종료)은 일정 시간 뒤 제한에서 풀린다 — 규칙이 사용자를 가두지 않는다.
  * @summary AI 일정 생성 — day1 먼저 반환(2단계). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
  */
 export const postTripsTripIdItinerary = (
@@ -1588,7 +1593,7 @@ export const postTripsTripIdItinerary = (
 };
 
 export const getPostTripsTripIdItineraryMutationOptions = <
-  TError = void,
+  TError = void | ErrorResponse,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1629,12 +1634,15 @@ export type PostTripsTripIdItineraryMutationResult = NonNullable<
 >;
 export type PostTripsTripIdItineraryMutationBody =
   GenerateItineraryRequest | undefined;
-export type PostTripsTripIdItineraryMutationError = void;
+export type PostTripsTripIdItineraryMutationError = void | ErrorResponse;
 
 /**
  * @summary AI 일정 생성 — day1 먼저 반환(2단계). 시각·순서는 솔버 검증값(INV-2)·소요시간 미노출(INV-3)
  */
-export const usePostTripsTripIdItinerary = <TError = void, TContext = unknown>(
+export const usePostTripsTripIdItinerary = <
+  TError = void | ErrorResponse,
+  TContext = unknown,
+>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof postTripsTripIdItinerary>>,
@@ -2792,6 +2800,84 @@ export function useGetTripsTripIdTriggers<
   return withQueryKey(query, queryOptions.queryKey);
 }
 
+/**
+ * **본문이 없다.** 다른 신호원과 달리 날씨는 신호원이 서버 쪽(기상청)이라 클라이언트가 보낼 것이 없고, 강수확률 임계도 서버가 소유한다(G-U4-2 · BR-U4-03) — 클라이언트는 임계를 알지 못하며 알 필요도 없다.
+ * **조회 실패·임계 미만·억제는 모두 `204`** 다. 셋 다 화면이 할 일이 같기 때문이다(배너 없음). 특히 조회 실패를 "비 안 옴"으로 접지 않는다 — 확인하지 못한 것은 무발화이고, 만료된 예보로는 발화하지 않는다(BR-U4-05 · INV-U4-09 허위 알림 금지).
+ * `GET` 이 아니라 `POST` 인 이유는 판정 결과를 행으로 남기기 때문이다(조회가 아니다). 트리거는 **제안까지만** 한다 — 일정을 자동으로 바꾸지 않는다(BR-U4-09).
+ * @summary 날씨 확인 — 서버가 강수확률을 읽어 임계 초과면 트리거를 만든다
+ */
+export const weatherCheck = (tripId: string, signal?: AbortSignal) => {
+  return customInstance<Trigger | void>({
+    url: `/trips/${tripId}/triggers/weather-check`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getWeatherCheckMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof weatherCheck>>,
+    TError,
+    { tripId: string },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof weatherCheck>>,
+  TError,
+  { tripId: string },
+  TContext
+> => {
+  const mutationKey = ['weatherCheck'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof weatherCheck>>,
+    { tripId: string }
+  > = (props) => {
+    const { tripId } = props ?? {};
+
+    return weatherCheck(tripId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type WeatherCheckMutationResult = NonNullable<
+  Awaited<ReturnType<typeof weatherCheck>>
+>;
+
+export type WeatherCheckMutationError = void;
+
+/**
+ * @summary 날씨 확인 — 서버가 강수확률을 읽어 임계 초과면 트리거를 만든다
+ */
+export const useWeatherCheck = <TError = void, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof weatherCheck>>,
+      TError,
+      { tripId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof weatherCheck>>,
+  TError,
+  { tripId: string },
+  TContext
+> => {
+  return useMutation(getWeatherCheckMutationOptions(options), queryClient);
+};
 /**
  * 화면에서 배너만 감추는 동작이 아니다. 억제 레코드가 생겨 **다음 감지 때 같은 조합이 발화하지 않는다**. 슬롯을 특정한 신호면 그 슬롯만, 날짜 전체 신호면 그 날 전체를 끈다.
  * @summary 알림 끄기 — 억제 레코드를 만든다(BR-U4-15)

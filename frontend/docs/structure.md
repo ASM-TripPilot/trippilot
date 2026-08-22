@@ -82,6 +82,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `filterRegions` · `REGIONS` · `RegionCode` · `Region` | `features/explore/model/regions` | 지역 상수 6개 + 클라이언트 필터(TRIP-183) |
 | `resolveNearby` · `Coords` · `NearbyDeps` · `NearbyResult` | `features/explore/model/resolveNearby` | '내 주변' 판정 순수 함수 — 현재 위치 > 등록 숙소 > 없음 우선순위, DI 주입 방식(TRIP-183) |
 | `useSavedPlaces` · `SavedPlacesOutcome` · `SavedPlacesFailureReason` | `features/explore/model/savedPlaces` | **신규(TRIP-220) → TRIP-221이 첫 소비자 → TRIP-222가 반환값을 처음 읽음 → TRIP-223으로 재확장.** 담기 토글 훅. 낙관적 업데이트(리포 최초 패턴) + 판별 유니온 결과(`{kind:'saved'\|'removed'}`\|`{kind:'failed',reason}`, reason은 `unauthenticated`\|`saved-id-unknown`\|`not-found`\|`network` 4갈래). `savedPoiIds: string[]`는 TRIP-221 추가(CTA 개수 출처). **TRIP-222부터 `PlaceExplorePage.attemptToggle`이 이 반환을 소비**해 `SAVE_FAILURE_NOTICE[reason]`을 배너로 표면화한다(이전엔 `void`로 버려 실패가 사용자에게 안 닿았다). **TRIP-223 추가**: `savedPlaces: SavedPlace[]`(원본)·`isPending`·`isError`·`refetch` — d02가 정렬·4얼굴 판정에 쓰는 유일한 데이터 출처(전부 추가, d04 무회귀) |
+| `firstCoPickSlotKey` · `nextCoPickSlotKey` | `features/itinerary/model/coPickSlots` | **신규(TRIP-504)** — copick(h13→h14) 선형 순회의 "다음 갈 슬롯은?"을 산출하는 순수함수 쌍. 상세·함정은 `.claude/rules/layer-features-itinerary.md` |
 | `findSavedPlaceId` · `optimisticSavedPlaceId` | `features/explore/model/savedPlaceIndex` | **신규(TRIP-220)** — poiId→savedPlaceId 역인덱스(순수) + 낙관 삽입 임시 표식(`optimistic:{poiId}`) 생성 |
 | `visiblePlaces` | `features/explore/model/placeListView` | **신규(TRIP-221)** — `nameKo` 부분일치 검색 + `savedCount` 내림차순 정렬 순수 함수. 캐시 배열 제자리 정렬 금지(항상 새 배열 반환). **TRIP-222부터 그 길이가 `resolvePlaceListState`의 `itemCount`**(서버 원본 개수 아님, Seed Q2) |
 | `resolvePlaceListState` · `PlaceListState` | `features/explore/model/placeListState` | **신규(TRIP-222)** — 판별 유니온(5종, `filter-zero`는 `blame` 포함) + 판정 순수 함수(PBT 대상, numRuns 500). 우선순위 `loading>error>results>filter-zero>empty`. 화면은 이 결과를 받기만 하고 재판정하지 않는다(구조 가드 AC-G3). **TRIP-223이 d02의 판정에도 재사용**(전용 판정 함수를 새로 만들지 않음 — d02는 `hasQuery`·`hasCategory`를 늘 false로 고정 호출해 `filter-zero`는 구조적으로 도달 불가) |
@@ -104,6 +105,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `isAlreadyRegistered` | `shared/api` | **신규(TRIP-296)** — 409 판정 승격(D9). `TripNewStep1Page.tsx`가 첫 소비자, `MustVisitTimePage.tsx`가 두 번째 |
 | `isNotFound` | `shared/api` | **신규(TRIP-297)** — 404 판정(`isAlreadyRegistered`와 동형). `DraftPage.tsx`의 `handleRetry`가 유일한 소비자 |
 | `HeartFilledGlyph` · `CheckGlyph` · `SearchGlyph` · `WarningTriangleGlyph` · `BaseBadgePinGlyph` | `features/trip/ui/TripGlyphs` | **신규(TRIP-225)** — g02 전용 인라인 SVG 글리프 5종(카드 저장 표시·지정 완료 배지·empty 안내·notrip/error 경고·`거점` 배지 안 핀). 기존 `ChevronRightGlyph`·`BedGlyph`에 tone 확장도 이 파일(위 `src/features/trip/ui/` 절 TripGlyphs.tsx 행 참고) |
+| `SearchGlyph` | `features/stay/ui/StayGlyphs` | **신규(TRIP-461)** — e04 empty CTA 돋보기. ⚠️ **동명이인**: `features/trip/ui/TripGlyphs`에도 같은 이름 `SearchGlyph`가 있다(위 행, TRIP-225) — features 간 직접 import 금지라 재사용 대신 같은 벡터를 색만 흰색(`ON_PRIMARY`)으로 바꿔 새로 그렸다. grep하면 두 벌이 나오니 import 경로로 구분할 것 |
 | `useCreateTrip` | `features/trip/model` | `POST /trips` mutation 래퍼(TRIP-203) — 성공 시 `GET /trips` 목록만 무효화. `usePostTrips`(생성물)를 그대로 감싸 몸통 1줄, 반환값은 `{ data: CreateTripRequest }` 봉투를 그대로 노출 |
 | `usePreferencePrefill` | `features/trip/model` | `GET /me/preferences` 조회 훅(TRIP-203) — `useGetMePreferences` 재수출 1줄. `usePreferenceStore`(온보딩 로컬 드래프트)와 다른 물건 |
 | `fetchBootstrap` · `postSocialLogin` · `postSocialTokenLogin` · `refreshTokens` | `shared/api` | 부트스트랩 조회 · 소셜 로그인(인가코드 경로) · 소셜 로그인(**네이티브 SDK access token 경로**, TRIP-210) · 토큰 갱신. `postSocialTokenLogin`은 `postSocialLogin`과 완전히 같은 모양(무인증 `baseClient` + 기존 `normalizeSocialError` 재사용, 새 에러 매핑 0) |
@@ -129,6 +131,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `BOOTSTRAP_TIMEOUT_MS` | `features/auth/model` | 부트스트랩 타임아웃 |
 | `LoginPage` | `pages/login` | 로그인 훅↔화면 배선(구 `features/auth/containers/SocialLoginContainer`, TRIP-173 신설) |
 | `TermsPage` · `NicknamePage` · `PrefStep1Page` · `PrefStep2Page` | `pages/onboarding-{terms,nickname,pref1,pref2}` | 온보딩 각 단계 배선(구 `features/onboarding/containers/*Container`, TRIP-173 신설) |
+| `LocationPage` | `pages/onboarding-location` | **신규(TRIP-459)** — c08 위치 권한 프리프롬프트 배선. 동결 `shared/location/LocationPreprompt`(TRIP-162)의 콜백에 `expo-location` 실호출(리포 최초)을 건다. nickname→location→pref1 체인 삽입(D7 반전, `onboardingStructure.test.ts`) |
 | `SplashGate` | `app-shell` | 부트스트랩 결과 라우팅(구 `features/auth/containers/SplashGate`, TRIP-173 신설 — `src/app` 밖) |
 
 > ⚠️ **제거된 심볼**(참조하면 깨진다): `setApiAdapter` · `defaultAdapter` · `SCENARIO_LIST` · `getActiveScenarioKey`

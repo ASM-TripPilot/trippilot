@@ -37,7 +37,23 @@ data class Area(val region: String)
 interface PoiRepository {
     fun saveAll(pois: List<Poi>): List<Poi>
     fun findById(poiId: UUID): Poi?
-    fun findActive(region: String?, category: PoiCategory?): List<Poi>
+    /**
+     * ACTIVE POI 조회(INV-U1-01).
+     *
+     * @param regionCodes 지역 필터. **빈 목록 = 지역을 안 걸렀다**(전체). 값이 있으면 각 코드의
+     *   **접두사**로 매칭한다 — `26`(부산) 하나로 그 안 시군구가 전부 잡힌다.
+     *   지역명 해석은 서비스가 한다(동명이지역은 코드가 여러 개다).
+     * @param query 이름 부분일치. 빈 문자열 = 안 걸렀다.
+     * @param after 이 지점 **다음**부터. null 이면 처음부터.
+     * @param limit 최대 건수. 호출자가 상한을 정한다.
+     */
+    fun findActive(
+        regionCodes: List<String>,
+        category: PoiCategory?,
+        query: String,
+        after: PoiCursor?,
+        limit: Int,
+    ): List<Poi>
 
     /** 반경 검색 프리필터 — bounding-box 내 ACTIVE. 정밀 반경 컷은 서비스(하버사인). */
     fun findActiveInBounds(latMin: Double, latMax: Double, lngMin: Double, lngMax: Double): List<Poi>
@@ -62,3 +78,12 @@ interface PoiRepository {
 interface MapPlacePort {
     fun search(area: Area, category: PoiCategory?): List<NormalizedPlace>
 }
+
+/**
+ * 목록의 **지점**(TRIP-503) — 정렬 키 그대로다(`nameKo`, `poiId`).
+ *
+ * offset 을 쓰지 않는 이유: POI 수집이 매일 돌아 스크롤 중에 행이 **끼어든다**. offset 이면 그때
+ * 같은 장소가 두 번 나오거나 통째로 건너뛰는데, 사용자에게는 그냥 "목록이 이상하다"로 보인다.
+ * 지점 기준(keyset)은 삽입과 무관하다 — "이 이름 다음"은 언제 물어도 같은 뜻이다.
+ */
+data class PoiCursor(val nameKo: String, val poiId: java.util.UUID)

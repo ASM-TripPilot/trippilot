@@ -86,10 +86,14 @@ class OrToolsSolver:
         ws, we = _mod(problem.day_window.start), _mod(problem.day_window.end)
         fixed = [fb for fb in problem.fixed_blocks if fb.window.start.date() == day]
         fixed_ids = {fb.poi_id for fb in fixed}
+        # 다른 날 고정 예약분은 오늘의 자유 후보에서 뺀다 — 안 빼면 같은 POI가
+        # 자유(오늘)+고정(그날)으로 두 번 배치된다 (2026-08-21 제주 프로브 실측).
+        reserved = {fb.poi_id for fb in problem.fixed_blocks} - fixed_ids
 
-        # 후보 수집 (사용된 것 제외) + 프리필터
+        # 후보 수집 (사용된 것·타일 고정 예약 제외) + 프리필터
         cands = [c for c in problem.candidates
-                 if c.poi_id not in used and c.poi_id in self._pois]
+                 if c.poi_id not in used and c.poi_id not in reserved
+                 and c.poi_id in self._pois]
         if len(cands) > _PREFILTER_TOP_K:
             cands.sort(key=lambda c: (-c.score, str(c.poi_id)))
             keep = [c for c in cands if c.poi_id in fixed_ids]
@@ -166,6 +170,7 @@ class OrToolsSolver:
                            for i, n in enumerate(nodes)]
         obj_terms += self._meal_soft_terms(m, nodes, visit, start, arcs)
         obj_terms += self._rain_soft_terms(problem, day, nodes, visit)
+        obj_terms += self._event_soft_terms(problem, nodes, visit)
         m.Maximize(sum(obj_terms))
 
         # 웜스타트 힌트 = 규칙해 (벤치마크 실증 구성)
@@ -289,6 +294,24 @@ class OrToolsSolver:
                 terms.append(-penalty * visit[i])
             elif category in RAIN_INDOOR and bonus:
                 terms.append(bonus * visit[i])
+        return terms
+
+    def _event_soft_terms(self, problem, nodes, visit) -> list:
+        """행사 근접 보너스 항 (TRIP-421 — 날씨 보정(_rain_soft_terms)과 동형).
+
+        problem.event_bonus[poi_id] ∈ [0,1] × event_bonus_scale — **양수만**
+        (감점 경로 없음: 행사가 취향에 안 맞으면 보너스 0일 뿐, POI 본연의 점수는
+        불변). 하드 배제 아님 — 목적함수만 건드리므로 HC1~4 해 집합 불변.
+        """
+        bonus = problem.event_bonus
+        if not bonus:  # None·빈 맵 — 항 자체가 없다 (종전 동작과 동일)
+            return []
+        scale = self._cfg.event_bonus_scale
+        terms: list = []
+        for i, n in enumerate(nodes):
+            value = bonus.get(n["poi"].poi_id)
+            if value:
+                terms.append(int(value * scale * 1000) * visit[i])
         return terms
 
     def _day_open_window(self, poi: Poi, day) -> tuple[int, int] | None:

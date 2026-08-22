@@ -56,7 +56,9 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.observability import FallbackEvent
+from trippilot.domain.event import EventInfo
 from trippilot.domain.persona import PersonaSummary
+from trippilot.orchestrator.event_affinity import event_bonus_map
 from trippilot.domain.poi import Poi, PoiCategory
 from trippilot.ports.trace_port import TracePort
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
@@ -131,6 +133,8 @@ class GenerateItineraryRequest:
     seed: int
     fixed_blocks: tuple[FixedBlock, ...] = ()
     excluded_poi_ids: frozenset[PoiId] = frozenset()
+    # 설명 생략 요청 (TRIP-479) — 백엔드가 설명을 별도 경계로 병렬 조회할 때 false.
+    include_explanations: bool = True
     radius_override_km: float | None = None
 
     def __post_init__(self) -> None:
@@ -449,6 +453,11 @@ class ItineraryOrchestrator:
         #    수집 실패 = 무보정 + 강등 기록(침묵 금지), 미등록 = 기능 부재(무보정).
         daily_rain = self._daily_rain(request, packets, steps, trace_id, now)
 
+        # ②″ 행사 근접 보너스 (TRIP-421) — 점수 분리 설계: LLM 점수는 행사를
+        #    모르고, 보너스는 솔버 소프트 항으로만 (양수만 — 감점 경로 없음).
+        event_bonus = self._event_bonus(request, packets, pool, persona,
+                                        steps, trace_id, now)
+
         # ③ ItineraryProblem 조립 — 후보는 ①의 풀에서 나온 것만 (INV-1)
         problem = ItineraryProblem(
             schedule_id=request.schedule_id,
@@ -462,6 +471,7 @@ class ItineraryOrchestrator:
             anchor=request.anchor,
             excluded_poi_ids=request.excluded_poi_ids,  # 2단계 생성 그대로 통과
             daily_rain_prob=daily_rain,  # None = 무보정 (TRIP-383)
+            event_bonus=event_bonus,  # None = 무보정 (TRIP-421)
         )
 
         # ④ C2 solve — 솔버는 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
@@ -534,6 +544,46 @@ class ItineraryOrchestrator:
             return PersonaSummary.from_dict(packet.data["persona"])
         except Exception:  # 패킷 형식 오류 — 비가용과 동일 취급
             return None
+
+    def _event_bonus(
+        self,
+        request: GenerateItineraryRequest,
+        packets: dict[ProviderKind, InfoPacket],
+        pool: CandidatePool,
+        persona: PersonaSummary | None,
+        steps: list[Degradation],
+        trace_id: TraceId,
+        now: datetime,
+    ) -> dict[PoiId, float] | None:
+        """EVENT 패킷 → 풀 POI 보너스 맵 (event_affinity 순수 함수 조립, TRIP-421).
+
+        - Provider 미등록(패킷 없음) = 기능 부재 — 무보정, 강등 아님.
+        - 수집 실패(OK·LOW 밖 상태값) = 무보정 + Degradation (침묵 금지, INV-4).
+        - 페르소나 비가용·적합 행사 없음·빈 맵 = 무보정 (정보 없음 ≠ 실패).
+        """
+        packet = packets.get(ProviderKind.EVENT)
+        if packet is None:
+            return None
+        if packet.status not in (ProviderStatus.OK, ProviderStatus.LOW):
+            self._degrade(steps, trace_id, now, "event", "event_bonus", "no_bonus",
+                          f"event_error: {packet.data.get('reason', packet.status.value)}")
+            return None
+        try:
+            events = tuple(EventInfo.from_dict(e)
+                           for e in packet.data.get("events", ()))
+        except Exception as e:  # 패킷 형식 오류 — 비가용과 동일 취급 (기록은 남긴다)
+            self._degrade(steps, trace_id, now, "event", "event_bonus", "no_bonus",
+                          f"event_parse_error: {type(e).__name__}: {e}")
+            return None
+        if not events:
+            return None
+        bonus = event_bonus_map(
+            events, pool.pois,
+            anchor=request.anchor,
+            transport=request.transport,
+            taste_tags=persona.taste_tags if persona is not None else (),
+        )
+        return bonus or None
 
     def _daily_rain(
         self,
@@ -694,6 +744,8 @@ class ItineraryOrchestrator:
         trace_id: TraceId,
         now: datetime,
     ) -> tuple[PoiExplanation, ...]:
+        if not request.include_explanations:
+            return ()  # 요청된 생략 (TRIP-479) — 강등이 아니다 (별도 경계로 조회)
         if self._explainer is None:
             return ()  # 미배선 = 기능 부재이지 실패가 아니다 (강등으로 세지 않는다)
         if persona is None:

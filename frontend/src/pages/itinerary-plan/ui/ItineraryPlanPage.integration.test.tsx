@@ -169,19 +169,31 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // 테스트 격리 — 인플라이트 쿼리를 취소하고 캐시를 비운다. 재조회하는 케이스(I5a/I5b 409)가
+  // 발화한 invalidateQueries 재조회가 테스트 경계를 넘어 **늦게 도착**하면, 공유 카운터
+  // itineraryGetCalls 를 다음 테스트의 beforeEach 리셋 뒤 한 번 더 올려 "재조회 0" 단언
+  // (I8/I10)을 정상 코드에서도 간헐 red 로 만든다(gcTime:0 언마운트는 인플라이트를 못 죽인다).
+  await activeClient?.cancelQueries();
+  activeClient?.clear();
+  activeClient = null;
   server.resetHandlers();
   clearAccessToken();
 });
 
 afterAll(() => server.close());
 
+/** 현재 테스트의 QueryClient — afterEach 가 인플라이트 취소·캐시 배수로 테스트 간 재조회
+ * 누수를 끊기 위해 모듈 스코프에 든다(공유 카운터 오염 방지, 위 afterEach 참조). */
+let activeClient: QueryClient | null = null;
+
 /** `retry:false` — 실패를 즉시 실패로(재시도가 돌면 요청 개수 단언이 흔들린다).
  * `gcTime:0` — 기본 타이머가 테스트 종료 후에도 프로세스를 붙잡는 것 방지. */
 function renderPage() {
-  const client = new QueryClient({
+  activeClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
+  const client = activeClient;
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -222,7 +234,7 @@ describe('🔴 I3 · AC9 — 일정이 아직 없으면(404) notFound 얼굴을 
  *  - 🔴 404 는 status 불변·재조회 없음(I7 · ★5). 409(+1)와 404(불변)를 GET 실건수로 가른다.
  */
 describe('🔴 I4 · AC1 — 확정 성공(200)은 재조회 없이 읽기전용으로 전환한다 (setQueryData · US-SCHED-12)', () => {
-  it('확정 CTA press → POST /confirm 1건, GET 재조회 없이 확정 배너가 뜬다', async () => {
+  it('확정 CTA press → POST /confirm 1건, GET 재조회 없이 읽기전용(확정)으로 전환한다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => HttpResponse.json(confirmedItinerary());
 
@@ -235,12 +247,10 @@ describe('🔴 I4 · AC1 — 확정 성공(200)은 재조회 없이 읽기전용
     // 누른다 — 중간 다이얼로그 없이 곧장 POST(★9).
     fireEvent.press(cta);
 
-    // 확정 배너로 전환. 부제는 페이지 조립(날짜범위 · 제목 · 총 곳수). 곳수 = 전 일자 슬롯 합(2+1=3).
-    const banner = await screen.findByTestId('itinerary-confirmed-banner');
-    expect(banner).toHaveTextContent(/6월 10일 – 13일/);
-    expect(banner).toHaveTextContent(/제주 여행/);
-    expect(banner).toHaveTextContent(/3곳/);
-    expect(screen.getByText('확정 일정')).toBeOnTheScreen();
+    // 확정(읽기전용)으로 전환 — TRIP-505 로 배너가 제거됐으므로 상시 앱바 제목 '확정 일정' 을
+    //   전환 앵커로 쓴다(배너 앵커 파손 봉합 · 02a ★T1). 읽기전용이라 확정 CTA 가 사라진다.
+    await screen.findByText('확정 일정');
+    expect(screen.queryByTestId('itinerary-confirm-cta')).toBeNull();
 
     // ★6 — POST 1건, GET 은 **안 늘었다**(재조회 0). 응답을 캐시에 직접 주입(setQueryData)했다는
     //   유일한 설명이다. invalidate/refetch 로 성공을 반영하면 GET 이 2가 되어 여기서 죽는다.
@@ -275,7 +285,7 @@ describe('🔴 I5a · AC5 — 409 는 침묵 없이 안내 + 재조회, 서버�
 });
 
 describe('🔴 I5b · AC5 — 409 후 재조회가 CONFIRMED 면 읽기전용으로 정합한다 (INV-4 · ★2)', () => {
-  it('confirm 이 409 이고 서버가 이미 확정이면, 재조회로 확정 배너로 정합한다', async () => {
+  it('confirm 이 409 이고 서버가 이미 확정이면, 재조회로 확정 얼굴로 정합한다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => new HttpResponse(null, { status: 409 });
 
@@ -287,9 +297,10 @@ describe('🔴 I5b · AC5 — 409 후 재조회가 CONFIRMED 면 읽기전용으
     itineraryHandler = () => HttpResponse.json(confirmedItinerary());
     fireEvent.press(cta);
 
-    // 재조회로 확정 배너로 정합. ★2 — 얼굴이 읽기전용으로 바뀌면 인라인 안내는 그 리렌더에
+    // 재조회로 확정 얼굴로 정합. ★2 — 얼굴이 읽기전용으로 바뀌면 인라인 안내는 그 리렌더에
     //   지워지므로 이 케이스는 잔존 안내를 단언하지 않는다(전환과 잔존을 케이스로 갈랐다).
-    await screen.findByTestId('itinerary-confirmed-banner');
+    //   TRIP-505 로 배너가 제거돼 상시 앱바 제목 '확정 일정' 을 정합 앵커로 쓴다(02a ★T1).
+    await screen.findByText('확정 일정');
     await waitFor(() => expect(itineraryGetCalls).toBe(2));
   });
 });
@@ -313,5 +324,82 @@ describe('🔴 I7 · AC6 — 404 는 status 를 바꾸지 않고 실패를 표�
     expect(itineraryGetCalls).toBe(1);
     expect(screen.queryAllByTestId('itinerary-confirmed-banner')).toEqual([]);
     expect(screen.getByTestId('itinerary-confirm-cta')).toBeOnTheScreen();
+  });
+});
+
+/**
+ * ── TRIP-355 확정 실패 500·네트워크 재조회 사각 ────────────────────────────────
+ * 무엇을 보장하나: 확정이 **계약 밖 실패**(500·네트워크)를 뱉으면, **재조회하지 않고**
+ * 인라인 안내만 띄운다. 재조회는 409 에만 걸린다(서버 진실이 이미 CONFIRMED 일 수 있어 정합).
+ * 500·네트워크에서 재조회를 걸면, 백엔드가 넓게 죽은 outage 에서 그 재조회마저 실패해
+ * `itinerary.isError` → `failed` 전면 얼굴로 타임라인이 통째로 사라진다(INV-4 정반대).
+ *
+ * ★재조회 카운터가 핵심 심판이다 — 타임라인 present 만으론 "재조회가 성공한" 회귀를 못 잡는다.
+ * `itineraryGetCalls === 1`(재조회 0)이 유일한 뮤테이션 트립와이어다.
+ */
+describe('🔴 I8 · AC1 — 확정 500 은 재조회 없이 인라인 안내만 (INV-4 · TRIP-355)', () => {
+  it('confirm 이 500 이면 안내가 뜨고, 재조회 없이(GET 불변) 타임라인이 남는다', async () => {
+    itineraryHandler = () => HttpResponse.json(plannedItinerary());
+    confirmHandler = () => new HttpResponse(null, { status: 500 });
+
+    renderPage();
+    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    await waitFor(() => expect(itineraryGetCalls).toBe(1));
+
+    fireEvent.press(cta);
+
+    // 침묵 아님(INV-4) — 인라인 안내가 뜬다.
+    const err = await screen.findByTestId('itinerary-confirm-error');
+    expect(err).toHaveTextContent(/\S/);
+
+    // ★ 500 은 409 와 달리 재조회하지 않는다(GET 불변 1). `!isNotFound` 로 되돌리면 여기서 죽는다.
+    await waitFor(() => expect(itineraryGetCalls).toBe(1));
+
+    // 타임라인·확정 CTA 가 남고, 전면 실패 얼굴로 갈아 끼우지 않는다.
+    expect(screen.getByTestId('itinerary-view-timeline')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-confirm-cta')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId('itinerary-view-failed')).toEqual([]);
+  });
+});
+
+describe('🔴 I9 · AC2 — 확정 500 + itinerary outage 여도 전면 얼굴로 안 바뀐다 (TRIP-355)', () => {
+  it('confirm 500 직후 itinerary GET 도 넓게 죽어도, 재조회가 안 나가 타임라인이 남는다', async () => {
+    itineraryHandler = () => HttpResponse.json(plannedItinerary());
+    confirmHandler = () => new HttpResponse(null, { status: 500 });
+
+    renderPage();
+    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    await waitFor(() => expect(itineraryGetCalls).toBe(1));
+
+    // 넓게 죽은 outage 재현 — press 직전 GET 핸들러를 500 으로 오염(초기 GET 1건은 이미 성공해 listed).
+    itineraryHandler = () => new HttpResponse(null, { status: 500 });
+    fireEvent.press(cta);
+
+    // 안내는 뜨되, 옛 코드의 재조회 발화(→GET 500→isError→failed)로 타임라인이 사라지지 않는다.
+    await screen.findByTestId('itinerary-confirm-error');
+    expect(screen.getByTestId('itinerary-view-timeline')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId('itinerary-view-failed')).toEqual([]);
+    // 재조회 자체가 안 나가 outage 가 무해하다.
+    expect(itineraryGetCalls).toBe(1);
+  });
+});
+
+describe('🔴 I10 · AC3 — 확정 네트워크 오류도 재조회 없이 인라인 안내만 (INV-4 · TRIP-355)', () => {
+  it('confirm 이 네트워크 오류(응답 없음)면 안내가 뜨고, 재조회 없이 타임라인이 남는다', async () => {
+    itineraryHandler = () => HttpResponse.json(plannedItinerary());
+    confirmHandler = () => HttpResponse.error(); // 응답 자체가 없는 네트워크 실패
+
+    renderPage();
+    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    await waitFor(() => expect(itineraryGetCalls).toBe(1));
+
+    fireEvent.press(cta);
+
+    const err = await screen.findByTestId('itinerary-confirm-error');
+    expect(err).toHaveTextContent(/\S/);
+
+    // 응답이 없어 status 판정이 둘 다 false → 재조회 분기 밖(GET 불변 1).
+    await waitFor(() => expect(itineraryGetCalls).toBe(1));
+    expect(screen.getByTestId('itinerary-view-timeline')).toBeOnTheScreen();
   });
 });

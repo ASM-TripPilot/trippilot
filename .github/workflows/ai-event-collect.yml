@@ -1,0 +1,131 @@
+# 행사 웹소싱 일일 배치 (TRIP-421)
+#
+# ai-ci와 완전히 분리 — push/PR 트리거 없음 (CI 실 호출 0, D37). 실 호출은
+# 스케줄(KST 새벽 4:40 — POI 수집 4:00과 시간차) 또는 수동 실행만.
+#
+# 파이프라인: NAVER API HUB 검색(웹문서·블로그·지역) → C1 EVENT_EXTRACTION(LLM,
+# GPT-5.6) → 게이트(환각 드롭) → collected_events.json 등록·만료 청소.
+# 행사는 POI가 아니다(INV-1) — 저장소는 EventProvider가 읽는 행사 전용 문서.
+#
+# 키: Repository Secrets NAVER_SEARCH_CLIENT_ID/SECRET(검색) + AZUREAPIKEY(추출).
+# **하드캡**: NAVER_MAX_CALLS(vars, 기본 300)를 클라이언트가 호출 전 검사 — 상한
+# 초과 호출 0건 ("정확히 무료까지만" — 현재 HUB 검색은 한시 무료·월 775k 한도지만
+# 유료화 공지가 떠도 이 캡이 방어선). 키 미등록이면 생략하고 성공 종료.
+#
+# 저장소 영속: collect-state 전용 브랜치 (POI 수집 TRIP-348 선례 — plumbing 커밋,
+# 다른 파일(collect_state.json·rehearsal_log.jsonl) 보존 필수: ls-tree --full-tree).
+name: ai-event-collect
+
+on:
+  workflow_dispatch:
+    inputs:
+      regions:
+        description: '지역 쉼표 목록 (비우면 광역 17개 로테이션)'
+        required: false
+        type: string
+      regions_per_run:
+        description: '실행당 지역 수 (기본 3)'
+        required: false
+        type: string
+      max_calls:
+        description: '검색 호출 하드캡 (비우면 vars.NAVER_MAX_CALLS → 300)'
+        required: false
+        type: string
+  schedule:
+    - cron: '40 19 * * *'   # UTC 19:40 = KST 새벽 4:40
+
+concurrency: ai-event-collect
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # collect-state 브랜치 push용
+    defaults:
+      run:
+        working-directory: ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: ai/uv.lock
+      - run: uv sync --locked
+      - name: 행사 저장소 복원 (collect-state → ai/collected_events.json)
+        # 임시 파일에 받아 성공했을 때만 자리에 — 빈 파일 함정 방지 (TRIP-348 선례).
+        # 브랜치에 있었는데 지금 없으면 유실 — 조용히 처음부터 돌지 않는다.
+        run: |
+          rm -f collected_events.json collected_events.json.tmp
+          if ! git fetch origin collect-state 2>/dev/null; then
+            echo "::notice::collect-state 브랜치 없음 — 처음부터"
+          elif git show FETCH_HEAD:collected_events.json > collected_events.json.tmp 2>/dev/null; then
+            mv collected_events.json.tmp collected_events.json
+            echo "::notice::행사 저장소 복원"
+          elif [ -n "$(git rev-list -1 FETCH_HEAD -- ':(top)collected_events.json')" ]; then
+            rm -f collected_events.json.tmp
+            echo "::error::행사 저장소 유실 — collect-state에 있던 collected_events.json이 tip에 없다."
+            exit 1
+          else
+            rm -f collected_events.json.tmp
+            echo "::notice::행사 저장소 없음 (최초 실행) — 처음부터"
+          fi
+      - name: 행사 수집 (검색 → LLM 추출 → 게이트 → 저장소)
+        id: collect
+        env:
+          NAVER_SEARCH_CLIENT_ID: ${{ secrets.NAVER_SEARCH_CLIENT_ID }}
+          NAVER_SEARCH_CLIENT_SECRET: ${{ secrets.NAVER_SEARCH_CLIENT_SECRET }}
+          NAVER_MAX_CALLS: ${{ inputs.max_calls || vars.NAVER_MAX_CALLS || '300' }}
+          # TRIP-421 — 있으면 카카오 지오코딩 보강 (주소·키워드), 없으면 네이버만
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY_AI }}
+          KAKAO_MAX_CALLS: ${{ vars.KAKAO_MAX_CALLS || '300' }}
+          EVENT_REGIONS: ${{ inputs.regions || '' }}
+          EVENT_REGIONS_PER_RUN: ${{ inputs.regions_per_run || vars.EVENT_REGIONS_PER_RUN || '3' }}
+          EVENTS_STORE: collected_events.json
+          # LLM 추출 — ai-llm-smoke와 동일 조립 (GPT-5.6 v1 표면, Responses API)
+          LLM_PROVIDER: openai
+          OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
+          OPENAI_BASE_URL: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+          OPENAI_MODEL: gpt-5.6-luna   # 행사 추출은 luna 배포 사용 (사용자 지정 2026-08-21)
+          OPENAI_API: responses
+        run: |
+          if [ -z "$NAVER_SEARCH_CLIENT_ID" ]; then
+            echo "::notice::NAVER_SEARCH_CLIENT_ID 미등록 — 수집 생략"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          uv run python scripts/collect_events.py
+      - name: 잡 서머리 (지역별 추출·신규 통계)
+        if: steps.collect.outputs.skipped != 'true'
+        run: uv run python scripts/collect_events.py --summary collect_events_run.json >> "$GITHUB_STEP_SUMMARY"
+      - name: 저장소 영속 (collect-state 브랜치 — 다른 파일 보존)
+        if: steps.collect.outputs.skipped != 'true'
+        run: |
+          if [ ! -f collected_events.json ]; then
+            echo "::warning::저장소 파일 없음 — 영속 생략"
+            exit 0
+          fi
+          (
+            set -e
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            PARENT=""
+            BASE_TREE=""
+            if git fetch origin collect-state 2>/dev/null; then
+              PARENT="-p FETCH_HEAD"
+              BASE_TREE=$(git ls-tree --full-tree FETCH_HEAD | grep -v $'\tcollected_events.json$' || true)
+            fi
+            BLOB=$(git hash-object -w collected_events.json)
+            TREE=$({ [ -n "$BASE_TREE" ] && printf '%s\n' "$BASE_TREE"; \
+                     printf '100644 blob %s\tcollected_events.json\n' "$BLOB"; } | git mktree)
+            COMMIT=$(git commit-tree $TREE $PARENT -m "chore(ai): 행사 저장소 갱신 — run ${{ github.run_id }} (TRIP-421)")
+            git push origin "$COMMIT:refs/heads/collect-state"
+          ) || echo "::warning::행사 저장소 push 실패 — 내일 재수집으로 자연 복구 (수집 자체는 성공)"
+      - name: 산출물 artifact 보존 (30일)
+        if: steps.collect.outputs.skipped != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: collected-events
+          path: |
+            ai/collected_events.json
+            ai/collect_events_run.json
+          retention-days: 30

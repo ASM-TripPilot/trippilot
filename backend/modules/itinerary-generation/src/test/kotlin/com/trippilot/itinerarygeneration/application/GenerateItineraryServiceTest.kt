@@ -220,6 +220,7 @@ class GenerateItineraryServiceTest : StringSpec({
         sessionRepo: FakeGenerationSessions = FakeGenerationSessions(),
         end: LocalDate = defaultEnd,
         fixedVisits: List<FixedVisit> = listOf(FixedVisit(poi, start, LocalTime.parse("12:00"), 90)),
+        destinations: List<String> = listOf("제주"),
         clock: Clock = Clock.fixed(now, ZoneOffset.UTC),
     ): GenerateItineraryService {
         val trips = object : TripFacade {
@@ -228,7 +229,7 @@ class GenerateItineraryServiceTest : StringSpec({
             override fun findGenerationContext(accountId: UUID, tripId: UUID) =
                 if (accountId == acc) {
                     TripGenerationContext(
-                        start, end, listOf("제주"), "친구", 500_000, fixedVisits,
+                        start, end, destinations, "친구", 500_000, fixedVisits,
                     )
                 } else {
                     null
@@ -242,9 +243,9 @@ class GenerateItineraryServiceTest : StringSpec({
         }
         // 단위 테스트엔 Spring 프록시가 없어 @Async 가 걸리지 않는다 → 2차가 그 자리에서 동기 실행된다(결정론).
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다 — 인스턴스를 나누면 취소가 사라진다.
-        val sessions = genSessions(trips, sessionRepo, clock)
+        val sessions = genSessions(trips, sessionRepo, clock, defaultDeadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), NOOP_TX, clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, NOOP_TX, clock, defaultDeadlines)
     }
 
     val fullPrefs = PreferenceSnapshot(
@@ -353,7 +354,8 @@ class GenerateItineraryServiceTest : StringSpec({
         service(agent, empty, emptyList()).generate(acc, tripId, GenerationMode.FULLY_AI)
         agent.captured!!.tripContext.budgetLevel shouldBe null
         agent.captured!!.preferenceProfile.styles shouldBe emptyList()
-        agent.captured!!.anchors shouldBe emptyList()
+        // 앵커는 이 테스트의 관심사가 아니다 — 예전엔 거점이 없으면 비었는데, 지금은 목적지 중심이
+        // 채운다(TRIP-384). 취향과 무관한 단언이라 여기서 뺀다(전용 테스트가 따로 있다).
     }
 
     "생성 시 ItineraryGenerated 이벤트 발행(TRIP-230)" {
@@ -453,6 +455,37 @@ class GenerateItineraryServiceTest : StringSpec({
 
         shouldThrow<ConflictDetected> { svc.generate(acc, tripId, GenerationMode.MANUAL) }
     }
+    /**
+     * **숙소를 하나도 등록하지 않아도 앵커가 생긴다**(TRIP-384).
+     *
+     * 예전에는 거점 없는 날을 앵커에서 뺐다. 숙소가 0개면 앵커가 **전부** 비고, AI 가 요청을 422 로
+     * 거절한다("anchors 최소 1개 필요"). 백엔드는 그 실패를 폴백으로 받지만 폴백은 must_visit 만으로
+     * 일정을 만들어, 필수 방문지가 없으면 **일정이 통째로 빈 채** 201 로 나갔다.
+     *
+     * 정본은 숙소 없는 생성을 허용한다(BR-U1-40 · BR-U1-47 · US-SCHED-11).
+     */
+    "숙소가 없어도 목적지 중심이 앵커로 들어간다" {
+        val agent = CapturingAgent(now)
+        val svc = service(agent, fullPrefs, anchors = emptyList(), fixedVisits = emptyList())
+
+        svc.generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val sent = agent.captured!!
+        sent.anchors.isEmpty() shouldBe false
+        sent.anchors.all { a -> a.lat == 33.4996 && a.lng == 126.5312 } shouldBe true
+    }
+
+    /** 목적지 좌표조차 없으면 앵커를 지어내지 않는다 — 없는 것을 있다고 말하지 않는다. */
+    "목적지 좌표가 없으면 앵커도 비운다" {
+        val agent = CapturingAgent(now)
+        val svc = service(agent, fullPrefs, anchors = emptyList(), fixedVisits = emptyList(),
+                          destinations = listOf("좌표없는곳"))
+
+        svc.generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captured!!.anchors.isEmpty() shouldBe true
+    }
+
 })
 
 /** day1 조기 노출 2단계(TRIP-267) — 1차 즉시 반환(PARTIAL) · 2차 백그라운드 완료(COMPLETE). */
@@ -494,6 +527,8 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         repo: FakeItineraries,
         end: LocalDate,
         sessionRepo: FakeGenerationSessions = FakeGenerationSessions(),
+        // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
+        deadlines: ScheduleDeadlineProperties = defaultDeadlines,
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -507,9 +542,9 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
             override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
         }
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다.
-        val sessions = genSessions(trips, sessionRepo, clock)
+        val sessions = genSessions(trips, sessionRepo, clock, deadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), NOOP_TX, clock)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, NOOP_TX, clock, deadlines)
     }
 
     "추천 근거가 slotKey 로 슬롯에 붙어 영속된다(TRIP-306 · BR-U2-04)" {
@@ -624,10 +659,28 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         agent.captures[1].excludedPoiIds shouldContainExactly listOf(poiByDate.getValue(start))
     }
 
-    "1차 시한은 day1 예산(5s), 2차는 전체 예산(20s)" {
+    /**
+     * **기본은 시한을 싣지 않는다**(TRIP-474). AI 계약상 미지정 = 시간제약 없음이라,
+     * 값을 실으면 시간 때문에 규칙 폴백으로 강등되는 경로가 도로 열린다.
+     */
+    "기본 설정에서는 시한을 싣지 않는다" {
         val end = start.plusDays(2)
         val (agent, _) = emittingAgent(end)
         service(agent, FakeItineraries(), end).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        agent.captures[0].requestMeta.deadlineMs shouldBe null
+        agent.captures[1].requestMeta.deadlineMs shouldBe null
+    }
+
+    /**
+     * **재도입은 플래그 한 줄이다**(TRIP-475 9월 예정). 값을 지우지 않고 끈 이유가 이것이므로,
+     * 켰을 때 종전과 같은 값이 나가는지 지금 고정해 둔다 — 나중에 확인하면 이미 늦다.
+     */
+    "플래그를 켜면 1차 day1 예산(5s), 2차 전체 예산(20s) 그대로다" {
+        val end = start.plusDays(2)
+        val (agent, _) = emittingAgent(end)
+        service(agent, FakeItineraries(), end, deadlines = ScheduleDeadlineProperties(enforced = true))
+            .generate(acc, tripId, GenerationMode.FULLY_AI)
 
         agent.captures[0].requestMeta.deadlineMs shouldBe 5_000L
         agent.captures[1].requestMeta.deadlineMs shouldBe 20_000L
@@ -888,7 +941,7 @@ class TwoPhaseDayCoverageTest : StringSpec({
                 override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
             }
             val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), genSessions(), NOOP_TX, clock)
-            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), NOOP_TX, clock)
+            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, NOOP_TX, clock, defaultDeadlines)
                 .generate(acc, tripId, GenerationMode.FULLY_AI)
 
             // 두 호출이 요청한 일자의 합 = 여행 일자, 중복 없음
@@ -901,3 +954,14 @@ class TwoPhaseDayCoverageTest : StringSpec({
         }
     }
 })
+
+/**
+ * 지역 대표 좌표 대역 — 숙소 없는 날의 앵커(TRIP-384).
+ *
+ * 좌표를 **주는 경우와 안 주는 경우**가 둘 다 필요하다. 주면 앵커가 채워지고, 없으면 예전처럼 빈다.
+ */
+private object StubRegions : com.trippilot.placedata.api.RegionLookupFacade {
+    override fun codesOf(regionName: String): List<String> = emptyList()
+    override fun centerOf(regionName: String) =
+        if (regionName == "좌표없는곳") null else com.trippilot.placedata.api.RegionCenter(33.4996, 126.5312)
+}

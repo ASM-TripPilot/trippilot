@@ -48,6 +48,8 @@ const OPEN_CALLERS = [
   'features/stay/ui/StayRegisterScreen.tsx',
   'features/trip/ui/TripBaseFixSheet.tsx',
   'app/_dev/preview.tsx',
+  // TRIP-397 i02·i03 여행 중 지도 — 자유 탐색이라 제스처를 잠그지 않는다(viewOnly 미전달).
+  'features/execution/ui/LiveMapScreen.tsx',
 ];
 
 /** 완성·확정 일정 화면(h25/h34 · TimelineScreen). **지도 호출부가 둘이다**(TRIP-354 · Q5 정정):
@@ -242,10 +244,10 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
       expect(tags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual(tags);
     });
 
-    // ③ 열어 둘 다섯 자리 — 태그가 정확히 5개이고 그중 어느 것에도 viewOnly 가 없다.
-    //    이 넷이 잠기면 지도를 움직여 좌표를 확정할 방법이 사라진다(회귀 금지).
+    // ③ 열어 둘 자리 — 태그가 정확히 6개(좌표 확정 3화면 5태그 + TRIP-397 LiveMapScreen 1태그)이고
+    //    그중 어느 것에도 viewOnly 가 없다. 이들이 잠기면 좌표 확정·여행 중 자유 탐색이 막힌다(회귀 금지).
     const openTags = OPEN_CALLERS.flatMap((rel) => mapTagsOf(readOne(rel)));
-    expect(openTags).toHaveLength(5);
+    expect(openTags).toHaveLength(6);
     expect(openTags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual([]);
 
     // ④ 완성·확정 일정 화면 — 지도 호출부가 **둘**이다(Q5). 파일이 아니라 **태그 단위로** 잠금
@@ -287,11 +289,11 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
       ...EXPLORE_CALLERS,
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 8개 = 총 9개).
-    //    Q5 로 TimelineScreen 이 지도 태그 2개(글랜스+h26)를 가지며 둘 다 기본값이라 나머지가
-    //    6→8개로 늘었다(설계된 갱신 · AC-8).
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 9개 = 총 10개).
+    //    Q5 로 TimelineScreen 이 지도 태그 2개(글랜스+h26)를 가져 6→8, TRIP-397 LiveMapScreen 이
+    //    1개 더해 8→9로 늘었다(설계된 갱신 · AC-8).
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(8);
+    expect(defaultTags).toHaveLength(9);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);
@@ -310,7 +312,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 3필드 그대로, DraftScreenProps 는 10필드 그대로, 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 3필드 그대로, DraftScreenProps 는 15필드(TRIP-483 인라인 패널 3종 편입), 화면에 에셋 해석 지문이 0건이다', () => {
     const mapHtmlSource = readOne(MAP_HTML_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -324,7 +326,8 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       'lat',
       'lng',
     ]);
-    // 화면 계약도 그대로 — 사진을 넣으려고 프롭을 늘리면 여기서 걸린다.
+    // 화면 계약 스냅숏 — 사진을 넣으려고 프롭을 늘리면 여기서 걸린다(이 칸 TRIP-339 의 취지).
+    // 필드 추가는 **정당한 계약 변경일 때만** 이 목록을 함께 갱신해 통과시킨다(이행 체크포인트 B).
     expect(interfaceFields(screenSource, 'DraftScreenProps')).toEqual([
       'view',
       'tabs',
@@ -333,12 +336,28 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
       'dayHeader',
       'canRetry',
       // TRIP-298 이 더한 강등 스위치 `demoted` 를 TRIP-304 가 단일 폴백 배너 유니온으로 흡수했다
-      // (`fallbackNotice?: FallbackNotice | null`, 01b 결정 3). 필드 수는 그대로 10 — 사진을
-      // 넣으려고 프롭이 느는 것을 막는 이 칸(TRIP-339)의 취지는 유지된다(02a §2.2).
+      // (`fallbackNotice?: FallbackNotice | null`, 01b 결정 3).
       'fallbackNotice',
       'onSelectDay',
       'onRetry',
       'onBack',
+      // TRIP-454 — h11→h25 완성 CTA 콜백. **프로퍼티형** `onComplete?: () => void` 여야
+      // interfaceFields 가 잡는다(메서드 단축형 `onComplete?()` 는 미캡처 — 02a §5 node 실측).
+      'onComplete',
+      // TRIP-467 — h12 슬롯 교체 트리거 콜백. 비고정 슬롯 "다른 후보 ›" press → `DraftPage` 가
+      // 조건부 마운트하는 `SlotCandidatePanelContainer` 로 이어진다. **프로퍼티형**
+      // `onPressSlot?: (slotKey: string) => void` 여야 잡힌다(위와 동형).
+      'onPressSlot',
+      // TRIP-483 — h12 바텀시트→인라인 패널 이관(3종, 후방호환 옵셔널·프로퍼티형).
+      //  · expandedSlotKey?: string | null — 어느 슬롯 패널이 열렸나(null=닫힘).
+      //  · renderSlotPanel?: (slotKey: string) => ReactNode — DraftPage 가 공급, 화면은 매칭
+      //    카드 slotKey 로만 호출(패널 조립은 배선 몫). **한 줄 유지**(여러 줄이면 내부 `slotKey:`
+      //    가 2칸 들여쓰기로 오지 않게 — interfaceFields 정규식 안전, 02a §1-A).
+      //  · onManualPlan?: () => void — 「처음부터 직접」·「직접 고르기」 공통(→ manual 라우트).
+      // 이 순서 그대로(toEqual 순서 민감). 12→15 는 additive 계약 변경(B 카운터 이행분).
+      'expandedSlotKey',
+      'renderSlotPanel',
+      'onManualPlan',
     ]);
 
     // 에셋 해석은 픽스처 몫이다 — 화면이 로컬 파일을 알면 계약이 둘로 갈린다.

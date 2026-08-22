@@ -8,11 +8,59 @@ const INK = '#222222';
 const MUTED = '#6A6A6A';
 const MUTED_SOFT = '#9AA1AB';
 const PRIMARY = '#FF385C';
+const ON_PRIMARY = '#FFFFFF';
 
 type GlyphProps = {
   size?: number;
   testID?: string;
 };
+
+/** 담은 곳 saved-menu 저장한 숙소 미니 FAB — 여행 가방(분홍, 흰 원 위). Figma a01 3012:1913. */
+export function SuitcaseGlyph({ size = 26, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M5 8.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18v-8A1.5 1.5 0 0 1 5 8.5Z"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 8.5V7a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 7v1.5"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+      <Path d="M12 8.5V21" stroke={PRIMARY} strokeWidth={1.8} />
+    </Svg>
+  );
+}
+
+/** 담은 곳 saved-menu 닫기(X) — 펼친 FAB 위(분홍 원 위 흰 X). Figma a01 3012:1909. */
+export function CloseGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M6 6l12 12M18 6L6 18"
+        stroke={ON_PRIMARY}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
 
 /** 앱바 뒤로가기 셰브론. */
 export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
@@ -35,6 +83,31 @@ export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
   );
 }
 
+/** d06 갤러리 헤더 공유 — 세 점 + 잇는 선. `features/execution`의 ShareGlyph와 같은 그림이나
+ * features 간 직접 import 금지라 여기 다시 그린다(BackChevronGlyph가 StayGlyphs 셰브론을 안
+ * 가져다 쓴 것과 같은 관례). */
+export function ShareGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Circle cx={18} cy={5} r={2.4} stroke={INK} strokeWidth={1.8} />
+      <Circle cx={6} cy={12} r={2.4} stroke={INK} strokeWidth={1.8} />
+      <Circle cx={18} cy={19} r={2.4} stroke={INK} strokeWidth={1.8} />
+      <Path
+        d="M8.1 10.9L15.9 6.1M8.1 13.1L15.9 17.9"
+        stroke={INK}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 /** 검색 돋보기. */
 export function SearchGlyph({ size = 20, testID }: GlyphProps) {
   return (
@@ -52,27 +125,6 @@ export function SearchGlyph({ size = 20, testID }: GlyphProps) {
         strokeWidth={1.8}
         strokeLinecap="round"
       />
-    </Svg>
-  );
-}
-
-/** '내 주변' 위치 핀. */
-export function NearbyPinGlyph({ size = 20, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z"
-        stroke={INK}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
-      <Circle cx={12} cy={10} r={2.6} stroke={INK} strokeWidth={1.8} />
     </Svg>
   );
 }

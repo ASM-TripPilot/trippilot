@@ -229,6 +229,31 @@ describe('★7 · 정렬과 박 번호는 toBaseSections가 소유한다 (TRIP-2
   });
 });
 
+describe('TRIP-493 · 하단 CTA는 스크롤 밖에 고정된다 (step1 `[다음]`과 같은 규칙)', () => {
+  it('CtaBlock JSX가 ScrollView를 닫은 뒤에 오고, 고정 푸터(border-t) 안에 산다', () => {
+    // 무엇을 보장하나 — 렌더 단언으로는 볼 수 없는 것: `이 거점으로 일정 만들기` CTA가
+    // 숙소 후보 카드와 함께 스크롤되지 않고 화면 하단에 고정된다는 것. 승인 테스트는 전부
+    // testID(`trip-base-generate` 등)로 조회하므로 위치를 안 잰다 — CtaBlock을 다시
+    // ScrollView 안으로 돌려놓아도 96케이스가 전부 green이다. 그 회귀를 소스 순서로만 막는다.
+    const source = readOne(SCREEN_REL);
+
+    const scrollCloseIndex = source.indexOf('</ScrollView>');
+    // `<CtaBlock`는 JSX 사용부에만 있다(정의부는 `function CtaBlock`로 `<`가 없다) — 단일 매치.
+    const ctaUsageIndex = source.indexOf('<CtaBlock');
+
+    // 긍정 짝 — 둘 다 실재한다. 없으면 -1 비교가 부정 단언을 공짜로 통과시킨다.
+    expect(scrollCloseIndex).toBeGreaterThan(-1);
+    expect(ctaUsageIndex).toBeGreaterThan(-1);
+
+    // 본체 — CtaBlock이 ScrollView를 **닫은 뒤** 온다 = 스크롤 자식이 아니다.
+    expect(ctaUsageIndex).toBeGreaterThan(scrollCloseIndex);
+
+    // 고정 푸터 관례(step1 `TripWizardStep1Screen`의 `[다음]` 바) — 상단 경계선으로 스크롤
+    // 영역과 분리된다. 이 토큰이 사라지면 푸터가 아니라 그냥 떠 있는 뷰가 된다.
+    expect(source).toContain('border-t border-hairline bg-canvas');
+  });
+});
+
 describe('층 경계 · 화면은 판정하지 않는다 (README §59·§66)', () => {
   it('화면이 조회·라우팅·스토어·생성 클라이언트를 모른다', () => {
     const screenSource = readOne(SCREEN_REL);

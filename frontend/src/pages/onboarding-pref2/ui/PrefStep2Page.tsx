@@ -8,11 +8,14 @@ import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
 import { usePreferenceStore } from '@/features/onboarding/model/preferenceStore';
+import { toPreferenceInput } from '@/features/onboarding/model/preferenceInput';
 import { notifyBootstrapReeval } from '@/shared/bootstrap/bootstrapReeval';
+import { usePutMePreferences } from '@/shared/api/generated/preferences/preferences';
 import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
 
 export function PrefStep2Page(): ReactElement {
   const router = useRouter();
+  const putPreferences = usePutMePreferences();
 
   // getState()가 아니라 셀렉터로 구독해야 타일을 탭했을 때 화면이 다시 그려진다.
   const selectedBudget = usePreferenceStore((state) => state.budget);
@@ -31,9 +34,14 @@ export function PrefStep2Page(): ReactElement {
   };
 
   const handleDone = () => {
+    // TRIP-471 — 온보딩 완료 시 세션 취향을 서버에 영속한다(slug→서버 enum 번역 경유).
+    // fire-and-forget: 실패해도 온보딩 완료(재평가·replace)는 막지 않는다(INV-4 성격 — 취향은
+    // 여행 생성 시 프리필로만 쓰여 저장 실패가 흐름을 끊을 이유가 없다). 미선택 축은 null 로 간다.
+    putPreferences.mutate({
+      data: toPreferenceInput(usePreferenceStore.getState()),
+    });
     // 온보딩 완료를 useBootstrapGate로 올려 재평가시킨다(라우터 관통 없는 pub/sub, 결함 A) —
     // 없으면 destination이 옛 ONBOARDING에 갇혀 replace('/')가 약관으로 떨어진다.
-    // 스토어는 건드리지 않는다 — 서버 저장은 이번 범위 밖(잠긴 결정).
     notifyBootstrapReeval();
     router.replace('/');
   };

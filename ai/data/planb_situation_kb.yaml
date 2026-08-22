@@ -1,0 +1,52 @@
+# Plan-B 상황 KB(KB-3) seed 초안 v0.1 — 내용 검수 전 (planb-rag-design.md §2 KB-3)
+#
+# - 문서 단위: "상황 → 대안 선택 지침" 1건. text가 임베딩 대상이고 LLM(ALTERNATIVE_SELECTION)
+#   프롬프트의 검색 컨텍스트로 들어간다 — 실행 지침 문장으로 쓴다.
+# - 어휘 정렬: 검색 질의는 rag._situation_query = "{TriggerKind} {reason} 상황"이다.
+#   TriggerKind = WEATHER·CLOSURE·DELAY·MANUAL (domain/trigger.py),
+#   reason = weather·closed·delay·canceled·fatigue (agent-io-contracts §2.2).
+# - 카테고리 어휘는 경계 8종(SIGHT·FOOD·CAFE·NIGHT_VIEW·NATURE·CULTURE·ACTIVITY·SHOPPING)의
+#   한글 표현을 쓴다. POI 개별 참조 없음(poi_ref: null) — 일반 지식만.
+# - 후보 자격·제외 목록·개수 상한은 코드가 구조로 보장한다(closed_set_filter·max_alternatives)
+#   — 그런 규칙은 여기 싣지 않는다. KB는 코드가 모르는 "판단 지식"만 담는다.
+
+version: "0.1-draft"
+origin: seed
+kb: SITUATION
+source:
+  - ai/aidlc-docs/inception/application-design/planb-rag-design.md
+
+documents:
+  - doc_id: sit-weather-001
+    text: "비가 오는 우천 상황에서는 자연·야경 같은 실외 일정 대신 실내 대안을 우선한다 — 문화(박물관·미술관·전시), 카페, 쇼핑이 우천 대체의 기본 순서다."
+    metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
+  - doc_id: sit-weather-002
+    text: "우천 시 이동을 최소화한다 — 현재 위치나 숙소에서 가까운 대안을 우선하고, 도보 구간이 긴 후보는 피한다."
+    metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
+  - doc_id: sit-weather-003
+    text: "소나기처럼 짧은 강수는 전면 교체보다 순서 조정이 낫다 — 실내 일정을 앞으로 당기고 실외 일정을 강수 이후로 미루는 대안을 먼저 검토한다."
+    metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
+  - doc_id: sit-weather-004
+    text: "폭우·강풍·태풍 경보 상황에서 수상 액티비티·등산 같은 야외 활동은 대안 제시가 아니라 제외 대상이다 — 안전이 대안 선택보다 앞선다."
+    metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
+  - doc_id: sit-closure-001
+    text: "방문 예정지가 휴무·폐점으로 닫힌 상황에서는 같은 카테고리의 인접 대안을 우선한다 — 맛집이 닫혔으면 근처 맛집, 명소가 닫혔으면 근처 명소로 동선을 유지한다."
+    metadata: { trigger_kinds: [CLOSURE], reasons: [closed] }
+  - doc_id: sit-closure-002
+    text: "소규모 맛집·카페는 임시 휴업이 잦다 — 휴무 대체 후보로는 영업시간 정보가 확인된 장소를 우선한다."
+    metadata: { trigger_kinds: [CLOSURE], reasons: [closed] }
+  - doc_id: sit-delay-001
+    text: "교통 지연으로 시간이 부족한 상황에서는 남은 슬롯 수를 줄이는 방향으로 대안을 잡는다 — 체류 가치가 높은 한 곳을 지키고, 경유 성격의 슬롯을 빼는 쪽을 우선한다."
+    metadata: { trigger_kinds: [DELAY], reasons: [delay] }
+  - doc_id: sit-delay-002
+    text: "지연 이후의 대안은 다음 목적지와 같은 방향에 있는 장소를 우선한다 — 되돌아가는 역방향 이동을 만드는 대안은 피한다."
+    metadata: { trigger_kinds: [DELAY], reasons: [delay] }
+  - doc_id: sit-canceled-001
+    text: "예약 취소·입장 불가 상황에서는 같은 카테고리 대안을 먼저 찾고, 마땅한 것이 없으면 그 시간대를 인접 일정의 여유 시간으로 돌리는 편이 낫다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [canceled] }
+  - doc_id: sit-fatigue-001
+    text: "피로 신호가 있는 상황에서는 활동 강도가 낮은 대안을 고른다 — 액티비티·등산형 자연 대신 카페·야경 같은 정적인 장소를 우선하고 도보를 최소화한다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [fatigue] }
+  - doc_id: sit-fatigue-002
+    text: "피로 상황의 대안은 숙소 방향 동선에 있는 장소를 우선한다 — 하루의 마지막이 숙소에서 멀어지지 않게 한다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [fatigue] }

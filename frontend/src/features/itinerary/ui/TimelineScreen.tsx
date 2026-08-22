@@ -22,16 +22,17 @@ import {
   AlertCircleGlyph,
   BackChevronGlyph,
   CarGlyph,
-  CheckCircleGlyph,
   ChevronRightGlyph,
   ExpandGlyph,
   LockGlyph,
+  PencilGlyph,
   ShareGlyph,
   WalkGlyph,
 } from './ItineraryGlyphs';
 import { MapFallback } from './MapFallback';
 import { PinDetailSheet } from './PinDetailSheet';
 import { PoiSlotCard } from './PoiSlotCard';
+import { SlotPhotoPlaceholder } from './SlotPhotoPlaceholder';
 
 /**
  * h25/h34 완성·확정 일정 시간표 뷰 — Figma h34 `1884:1190`(TRIP-354 풀디자인 정합).
@@ -59,12 +60,9 @@ const CONFIRM_LABEL = '일정 확정하기';
 // 계열로만 잠근다(02a M4). 서버 계약(PARTIAL→409)의 예방 UX 일 뿐 — 권위는 서버(01b D2·D3).
 const CONFIRM_LOCKED_NOTE =
   '일정을 만드는 중이에요 · 다 만들어지면 확정할 수 있어요';
-// 확정 배너·읽기전용 하단 2버튼 문구(TRIP-300 · D1·D2). 비활성 버튼의 사유는 침묵 금지(INV-4).
-const BANNER_TITLE = '일정이 확정됐어요';
-const EDIT_LABEL = '일정 수정';
-const EDIT_DISABLED_REASON = '확정된 일정은 아직 수정할 수 없어요';
-const SHARE_LABEL = '공유하기';
-const SHARE_DISABLED_REASON = '공유는 곧 제공돼요';
+// 확정 이후 안내 한 줄(TRIP-505 · BR-U3-30) — 배너·하단 2버튼을 지운 자리에 "바꾸려면 재생성뿐"
+// 이라는 새 정보만 남긴다(중복 아닌 유일한 탈출구 · INV-4). 심판은 `/새로 만들어/` 부분만 잠근다.
+const CONFIRMED_NOTE = '확정된 일정이에요. 바꾸려면 새로 만들어 주세요.';
 const FIXED_CHIP = '고정';
 // 풀카드 표면 문구(TRIP-354). 영업시간 null 은 "미확인"(PoiSlotCard 선례와 동일 규율).
 const MISSING_HOURS = '미확인';
@@ -111,8 +109,6 @@ export interface TimelineScreenProps {
   onBack: () => void;
   /** 확정 상태 축(TRIP-300) — 미지정은 PLANNED 취급. appbar 제목·배너·하단 영역을 가른다. */
   status?: ItineraryStatus;
-  /** 확정 배너 부제 — 페이지가 `{범위} · {제목} · {N}곳` 으로 조립해 내려보낸다(CONFIRMED 전용). */
-  confirmedSubtitle?: string;
   /** 확정 실패 인라인 안내 — truthy 면 PLANNED 타임라인 위에 그린다. null/undefined 면 없음. */
   confirmError?: string | null;
   /** PLANNED 확정 CTA press 콜백 — 곧장 확정 요청으로 잇는다(중간 다이얼로그 없음). */
@@ -120,6 +116,9 @@ export interface TimelineScreenProps {
   /** 확정 예방 잠금(TRIP-337 · PARTIAL 생성 중) — true 면 확정 CTA 를 실제 disabled 로 두고 사유를
    * 병기한다. 페이지가 `isConfirmLocked(generationState)` 로 판정해 내린다. 미지정=잠금 없음. */
   confirmLocked?: boolean;
+  /** PLANNED(h25) 편집 진입 어포던스 press 콜백 — 페이지가 edit 라우트 push 를 여기 배선(TRIP-482).
+   * 미지정=기존 동작 불변(후방호환, `onConfirm?` 선례). CONFIRMED(h34) 얼굴엔 어포던스가 없다. */
+  onEdit?: () => void;
 }
 
 function DayTab({
@@ -250,7 +249,14 @@ function TimelineSlotCard({
           resizeMode="cover"
           className="h-[78px] w-[78px] rounded-[12px]"
         />
-      ) : null}
+      ) : (
+        // 사진 없는 슬롯(imageUrl null) — 빈 자리 대신 카테고리 틴트 플레이스홀더(TRIP-465). 사진과
+        // 상호 배타(hasImage 갈래) — 실사진을 지어내지 않는다(INV-1).
+        <SlotPhotoPlaceholder
+          category={slot.category}
+          testID={fieldId('photoplaceholder')}
+        />
+      )}
 
       <View className="flex-1 items-start gap-xs">
         <View className="flex-row flex-wrap items-center gap-xs">
@@ -372,10 +378,10 @@ export function TimelineScreen({
   onSelectDay,
   onBack,
   status,
-  confirmedSubtitle,
   confirmError,
   onConfirm,
   confirmLocked = false,
+  onEdit,
 }: TimelineScreenProps): ReactElement {
   const activeDate = days[activeDayIndex]?.date ?? '';
   // 확정 얼굴 트리거 — 미지정(undefined)은 PLANNED 취급이라 기존 호출부가 그대로 편집 얼굴이다.
@@ -452,7 +458,23 @@ export function TimelineScreen({
                 <ShareGlyph />
               </Pressable>
             </>
-          ) : null}
+          ) : (
+            // PLANNED(h25) 편집 진입 어포던스(TRIP-482) — 앱바 우측 직접 진입(리포에 메뉴 프리미티브가
+            // 없어 kebab 메뉴를 발명하지 않는다 · 01b Q1). press → onEdit(페이지가 edit 라우트 push 를
+            // 여기 배선). CONFIRMED(h34)엔 이 자리 대신 하단 비활성 [일정 수정] 버튼이 온다(status 게이트).
+            <>
+              <View className="flex-1" />
+              <Pressable
+                testID="itinerary-view-edit"
+                accessibilityRole="button"
+                accessibilityLabel="일정 편집"
+                onPress={onEdit}
+                hitSlop={8}
+              >
+                <PencilGlyph />
+              </Pressable>
+            </>
+          )}
         </View>
 
         <View
@@ -466,26 +488,6 @@ export function TimelineScreen({
             {`총 ${header.totalPlaces}곳`}
           </Text>
         </View>
-
-        {isConfirmed ? (
-          <View
-            testID="itinerary-confirmed-banner"
-            className="mx-lg mb-sm flex-row items-center gap-[10px] rounded-button bg-primary-pale px-[14px] py-md"
-          >
-            <CheckCircleGlyph size={20} />
-            <View className="flex-1 gap-[2px]">
-              <Text className="font-noto-bold text-body font-bold text-primary-text">
-                {BANNER_TITLE}
-              </Text>
-              {confirmedSubtitle === undefined ||
-              confirmedSubtitle === '' ? null : (
-                <Text className="font-noto text-caption text-primary-text">
-                  {confirmedSubtitle}
-                </Text>
-              )}
-            </View>
-          </View>
-        ) : null}
 
         {days.length === 0 ? null : (
           <View className="flex-row gap-sm px-lg pt-md">
@@ -652,36 +654,15 @@ export function TimelineScreen({
 
         <View className="w-full px-lg pb-lg pt-sm">
           {isConfirmed ? (
-            // 읽기전용 하단 2버튼 — 둘 다 비활성(실동작은 후속 티켓)이되 사유로 침묵을 깬다(INV-4).
-            // [공유하기]는 Figma 가 분홍 primary 지만 비활성이라 brand색을 쓰지 않는다(회색 fill) —
-            // 안 그러면 "눌릴 것 같은데 안 눌리는" 함정이 된다(02a ★1).
-            <View className="w-full flex-row gap-sm">
-              <Pressable
-                testID="itinerary-confirmed-edit"
-                accessibilityRole="button"
-                disabled
-                className="flex-1 items-center justify-center gap-[2px] rounded-button border border-hairline-strong bg-canvas px-md py-sm"
-              >
-                <Text className="font-noto-bold text-card-title font-bold text-ink">
-                  {EDIT_LABEL}
-                </Text>
-                <Text className="font-noto text-caption text-muted">
-                  {EDIT_DISABLED_REASON}
-                </Text>
-              </Pressable>
-              <Pressable
-                testID="itinerary-confirmed-share"
-                accessibilityRole="button"
-                disabled
-                className="flex-1 items-center justify-center gap-[2px] rounded-button bg-hairline-strong px-md py-sm"
-              >
-                <Text className="font-noto-bold text-card-title font-bold text-muted-soft">
-                  {SHARE_LABEL}
-                </Text>
-                <Text className="font-noto text-caption text-muted-soft">
-                  {SHARE_DISABLED_REASON}
-                </Text>
-              </Pressable>
+            // 배너·비활성 2버튼을 지운 자리의 슬림 안내 한 줄(TRIP-505) — 확정 이후 손댈 방법은
+            // 재생성뿐이라는 새 정보만 남긴다(침묵 금지 · INV-4). 정적 텍스트라 콜백·press 없음.
+            <View
+              testID="itinerary-confirmed-note"
+              className="w-full items-center rounded-button bg-surface-soft px-md py-sm"
+            >
+              <Text className="font-noto text-label text-muted">
+                {CONFIRMED_NOTE}
+              </Text>
             </View>
           ) : (
             <View className="w-full gap-sm">

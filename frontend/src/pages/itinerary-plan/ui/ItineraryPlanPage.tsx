@@ -7,7 +7,6 @@ import { useRouter } from 'expo-router';
 
 import {
   buildPlanDayTabs,
-  formatConfirmedDateRange,
   formatNightsLabel,
   isConfirmLocked,
   resolvePlanState,
@@ -24,6 +23,7 @@ import {
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItineraryConfirm,
 } from '@/shared/api/generated/trips/trips';
+import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 
@@ -118,6 +118,13 @@ export function ItineraryPlanPage({
   // boolean 으로 답하는 함수다 — 있으면 이전 화면으로, 없으면(딥링크로 직접 진입) 조용히
   // 무동작하지 않고 홈으로 `replace`(현재 화면을 히스토리에 안 남김) 한다(침묵 no-op 금지 · INV-4).
   function handleBack(): void {
+    // 확정(CONFIRMED) 얼굴은 생성/확정 흐름 스택으로 되돌아가지 않고 내 여행 목록으로 간다
+    // (TRIP-505 AC-1). `/(tabs)/itinerary` 는 `GeneratingPage.tsx` 가 이미 쓰는 typedRoutes 통과
+    // 목적지다. 그 외 얼굴은 기존 딥링크 폴백(`canGoBack()?back():replace(HOME_FALLBACK)`) 그대로.
+    if (itinerary.data?.status === 'CONFIRMED') {
+      router.replace('/(tabs)/itinerary');
+      return;
+    }
     if (router.canGoBack()) {
       router.back();
     } else {
@@ -130,6 +137,15 @@ export function ItineraryPlanPage({
   function goCreate(): void {
     router.push({
       pathname: '/trips/[tripId]/itinerary/method',
+      params: { tripId },
+    });
+  }
+
+  // 완성(listed) 일정 → h24 편집 진입(TRIP-482). `goCreate` 의 동적 라우트 push 관용구(객체 1인자)를
+  // 복제해 tripId 를 경로 파라미터에 싣는다. 화면(TimelineScreen)은 라우팅을 모르므로 여기서 배선한다.
+  function goEdit(): void {
+    router.push({
+      pathname: '/trips/[tripId]/itinerary/edit',
       params: { tripId },
     });
   }
@@ -154,9 +170,12 @@ export function ItineraryPlanPage({
         },
         onError: (error) => {
           setConfirmError(CONFIRM_ERROR_NOTE);
-          // 404 는 되돌아갈 서버 상태가 없어 재조회하지 않는다. 그 밖(409 등)은 서버 진실이
-          // 이미 확정일 수 있어 무효화로 재조회해 정합한다(무효화만 — data 는 보존).
-          if (!isNotFound(error)) {
+          // 재조회는 **409 에서만** 건다 — 409 는 서버 진실이 이미 확정일 수 있어 무효화로
+          // 재조회해 정합한다(무효화만 — data 는 보존). 404·500·네트워크는 재조회하지 않는다:
+          // itinerary 상태가 안 바뀌었고, 백엔드가 넓게 죽은 outage 에서 재조회마저 실패하면
+          // itinerary.isError → resolvePlanState 가 failed 로 판정해 타임라인이 통째로 사라진다
+          // (INV-4 정반대). 인라인 안내(위 setConfirmError)만으로 침묵을 깬다(TRIP-355).
+          if (isAlreadyRegistered(error)) {
             void queryClient.invalidateQueries({
               queryKey: getGetTripsTripIdItineraryQueryKey(tripId),
             });
@@ -230,13 +249,6 @@ export function ItineraryPlanPage({
     totalPlaces,
   };
 
-  // 확정 배너 부제 = `{날짜범위} · {여행 제목} · {총 N}곳`. 헤더가 이미 페이지 조립인 리포 패턴과
-  // 동형 — 화면은 이 완성 문자열만 받는다. N 은 전 일자 슬롯 합(totalPlaces).
-  const confirmedSubtitle = `${formatConfirmedDateRange(
-    trip.data?.startDate ?? '',
-    trip.data?.endDate ?? ''
-  )} · ${trip.data?.title ?? ''} · ${totalPlaces}곳`;
-
   return (
     <TimelineScreen
       header={header}
@@ -245,9 +257,9 @@ export function ItineraryPlanPage({
       activeDayIndex={activeDayIndex}
       status={itinerary.data?.status}
       confirmLocked={isConfirmLocked(itinerary.data?.generationState)}
-      confirmedSubtitle={confirmedSubtitle}
       confirmError={confirmError}
       onConfirm={handleConfirm}
+      onEdit={goEdit}
       onSelectDay={setActiveDayIndex}
       onBack={handleBack}
     />

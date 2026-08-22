@@ -44,6 +44,9 @@ class LlmFeature(Enum):
     # 알림 발송은 백엔드 notification(FCM) 소유 — c1은 문구 생성까지만 (TRIP-347).
     REFLECTION_NUDGE = "REFLECTION_NUDGE"  # U6 (TRIP-347)
     PLACE_EXTRACTION = "PLACE_EXTRACTION"  # U6 (백그라운드)
+    # 웹 검색 스니펫 → 행사(축제·공연·전시) 구조화 추출 — 웹소싱 파이프라인의
+    # 추출 단계. 행사는 POI가 아니라 후보 풀에 편입되지 않는다 (domain/event.py).
+    EVENT_EXTRACTION = "EVENT_EXTRACTION"  # TRIP-421 (백그라운드)
     # EditAgent 전속 — 편집 발화 → EditCommand 초안 번역.
     # 확정된 EDIT_SCHEDULE 의도의 세부 번역이지 라우팅 재해석이 아니다 (DL-3, BR-AF-08).
     EDIT_TRANSLATION = "EDIT_TRANSLATION"  # agent-foundation FD §1

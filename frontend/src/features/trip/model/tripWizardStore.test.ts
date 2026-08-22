@@ -73,14 +73,30 @@ describe('AC-3 · AC-4 · 여행지 목록', () => {
     useTripWizardStore.getState().addDestination('경주', 1);
     useTripWizardStore.getState().addDestination('여수', 3);
 
-    // 실행 — 가운데 하나만 제거.
-    useTripWizardStore.getState().removeDestination('경주');
+    // 실행 — 가운데(seq 2) 하나만 제거(TRIP-364 — 이름이 아니라 seq로).
+    useTripWizardStore.getState().removeDestination(2);
 
     // 단언 — 남은 둘의 지역·박수가 그대로이고, seq는 빈칸 없이 다시 1..N으로 매겨진다.
     // (seq에 구멍이 나면 서버가 방문 순서를 읽을 수 없다.)
     expect(useTripWizardStore.getState().destinations).toEqual([
       { seq: 1, region: '부산', nights: 2 },
       { seq: 2, region: '여수', nights: 3 },
+    ]);
+  });
+
+  it('TRIP-364 · 같은 지역을 두 번 담고 두 번째(seq 2)를 빼면 첫 번째만 남는다', () => {
+    // 준비 — 같은 지역 두 번(시트가 중복을 안 걸러낸다). 박수를 달리해 어느 쪽이
+    // 남았는지 구분한다.
+    useTripWizardStore.getState().addDestination('부산', 2);
+    useTripWizardStore.getState().addDestination('부산', 5);
+
+    // 실행 — 두 번째 부산(seq 2)만 제거.
+    useTripWizardStore.getState().removeDestination(2);
+
+    // 단언 — 이름이 같아도 seq로 짚어 두 번째만 사라진다. 이름으로 지우던 옛 구현은
+    // 첫 일치(2박)를 지워 여기서 red가 된다.
+    expect(useTripWizardStore.getState().destinations).toEqual([
+      { seq: 1, region: '부산', nights: 2 },
     ]);
   });
 });

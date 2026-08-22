@@ -10,21 +10,24 @@ import { formatPrice } from '@/features/stay/model/formatPrice';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useGetPlaces } from '@/shared/api/generated/places/places';
 import ExploreRoute from '@/app/(tabs)/explore';
 
 /**
  * (tabs)/탐색 진입 라우트 — 죽은 껍데기가 아니라 d01 탐색 랜딩(US-EXPL-01)을 배선한다.
  *
- * 무엇을 보장하나(칸1 AC-E1~E8):
- *  - 🔴 헤딩·검색·axisSeg·lane_stay·lane_itin 자리·bridgeBar 6구획을 그린다(AC-E1) ·
- *    nearby 는 안 그린다(AC-E8, 좌표 없음).
- *  - 🔴 검색 제출 → `/stays?region={입력}` 이동(AC-E2).
+ * 무엇을 보장하나(칸1 AC-E1~E6·E8 — TRIP-447 로 축 세그먼트 제거, AC-E7 삭제):
+ *  - 🔴 헤딩·검색·lane_stay·lane_itin 자리·담은 곳 FAB 5구획을 그린다(AC-E1) ·
+ *    nearby 는 안 그린다(AC-E8, 좌표 없음). 축 세그먼트(axisSeg)는 걷어냈다(TRIP-447 AC-1,
+ *    소스 0건은 `exploreLandingAxisRemoval.test.ts` 가 별도로 잠근다).
+ *  - 🔴 검색창 탭(입력 불가 진입 버튼) → `/explore/region?purpose=trip`(여행지 선택 정본,
+ *    TRIP-499 재배선 — 입력은 RegionPicker 에서 받아 자유 문자열이 region 으로 새지 않는다, AC-E2).
+ *    #2(submitEditing 무동작) 유지.
  *  - 🔴 lane_stay = `useStaySearch` items 를 가로 카드로, 금액은 `formatPrice` 정확 일치,
  *    "· 1박"(정확 1박가) 없음, "모두 보기" → `/stays`(AC-E3).
  *  - 🔴 lane_itin 은 준비중 자리(실카드·라우팅 0, AC-E4).
- *  - 🔴 bridgeBar: 담은 곳 ≥1 → CTA + 여행 만들기 이동 · 0 → 안내, CTA 미노출(AC-E5).
+ *  - 🔴 담은 곳 FAB(우하단 하트): 담은 곳(d02)으로, 0곳이어도 유지(AC-E5, TRIP-494/448).
  *  - 🔴 lane_stay 쿼리 error 여도 나머지 구획은 살고 lane_stay 자리에 재시도(AC-E6, INV-4).
- *  - 🔴 axisSeg 4탭, '전체'만 selected, 나머지 눌러도 무동작(AC-E7).
  *
  * 왜 이렇게 테스트하나(02a §0-1): 라우트는 router 가 렌더해 props 를 못 받으므로, 두 훅을
  * seam 으로 목한다 — `useStaySearch`(features/stay)·`useSavedPlaces`(features/explore). 조합·
@@ -47,12 +50,20 @@ jest.mock('@/features/stay/model/useStaySearch', () => ({
 jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: jest.fn(),
 }));
+// 가볼 곳 레인(TRIP-470)은 라우트가 useGetPlaces 를 문다 — 이 unit 버킷엔 QueryClientProvider 가
+// 없어 실훅이 크래시하므로 목 seam 으로 고정한다(useStaySearch·useSavedPlaces 선례와 동형).
+jest.mock('@/shared/api/generated/places/places', () => ({
+  useGetPlaces: jest.fn(),
+}));
 
 const mockUseStaySearch = useStaySearch as jest.MockedFunction<
   typeof useStaySearch
 >;
 const mockUseSavedPlaces = useSavedPlaces as jest.MockedFunction<
   typeof useSavedPlaces
+>;
+const mockUseGetPlaces = useGetPlaces as jest.MockedFunction<
+  typeof useGetPlaces
 >;
 
 function item(
@@ -106,44 +117,65 @@ function savedResult(savedPoiIds: string[]) {
   return { savedPoiIds } as unknown as ReturnType<typeof useSavedPlaces>;
 }
 
+/**
+ * 가볼 곳 레인(TRIP-470) — 라우트는 data.items·isError·refetch 만 읽는다.
+ * 응답이 `{items, nextCursor}` 객체다(TRIP-503) — 배열이 아니다.
+ */
+function placesResult() {
+  return {
+    data: { items: [], nextCursor: null },
+    isError: false,
+    refetch: jest.fn(),
+  } as unknown as ReturnType<typeof useGetPlaces>;
+}
+
 beforeEach(() => {
   mockPush.mockClear();
   mockUseStaySearch.mockReset();
   mockUseSavedPlaces.mockReset();
+  mockUseGetPlaces.mockReset();
   // 기본값: 정상 데이터. 각 테스트가 필요한 축만 덮어쓴다.
   mockUseStaySearch.mockReturnValue(stayResults([CARD_A, CARD_B]));
   mockUseSavedPlaces.mockReturnValue(savedResult(['p1']));
+  mockUseGetPlaces.mockReturnValue(placesResult());
 });
 
-describe('🔴 AC-E1 · AC-E8 — 6구획 렌더 + nearby 부재', () => {
-  it('헤딩·검색·axisSeg·lane_stay·lane_itin·bridge 를 그리고, nearby 는 안 그린다', () => {
+describe('🔴 AC-E1 · AC-E8 — 5구획 렌더 + nearby 부재', () => {
+  it('헤딩·검색·lane_stay·lane_itin·담은 곳 FAB 5구획을 그리고, nearby·축 세그먼트는 안 그린다', () => {
     render(<ExploreRoute />);
 
-    // 긍정 — 6구획이 전부 있다.
+    // 긍정 — 5구획이 전부 있다(축 세그먼트는 TRIP-447 로 제거).
     [
       'explore-landing',
       'explore-landing-heading',
       'explore-landing-search',
-      'explore-axis-all',
       'explore-lane-stay',
       'explore-lane-itin',
-      'explore-bridge-cta',
+      'explore-saved-menu-toggle',
     ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
+
+    // 부정 — 축 세그먼트는 렌더되지 않는다(AC-1, 렌더 층 확인 — 소스 0건은 별도 스캔).
+    expect(screen.queryByTestId('explore-axis-all')).toBeNull();
 
     // 부정 — 좌표 파라미터가 없어 '내 주변' 블록은 없다(AC-E8).
     expect(screen.queryByTestId('explore-nearby')).toBeNull();
   });
 });
 
-describe('🔴 AC-E2 — 검색창은 입력 불가 진입 버튼 → /explore/region (TRIP-412)', () => {
-  it('검색창을 누르면 지역 선택(/explore/region)으로 이동한다 — 자유 문자열이 region 으로 새지 않는다', () => {
+describe('🔴 AC-E2(TRIP-499) — 검색창은 입력 불가 진입 버튼 → /explore/region?purpose=trip', () => {
+  it('검색창을 누르면 여행지 선택(RegionPicker, trip)으로 이동한다 — 자유 문자열이 region 으로 새지 않는다', () => {
     render(<ExploreRoute />);
 
-    // 검색창은 이제 TextInput 이 아니라 Pressable 진입 버튼이다 — 제출이 아니라 탭이다.
+    // 검색창은 여전히 TextInput 이 아니라 Pressable 진입 버튼이다 — 제출이 아니라 탭이다.
+    // TRIP-499 로 목적지를 통합 검색(/explore/search)에서 여행지 선택 정본(/explore/region?purpose=trip)
+    // 으로 재배선한다. 입력은 RegionPicker searchBar 에서 받으므로 d01 은 여전히 문자열을 안
+    // 다룬다(TRIP-412 가드 그대로 산다). 지금 소스는 옛 목적지라 red. #2(submitEditing 무동작)는 무변경 green.
     fireEvent.press(screen.getByTestId('explore-landing-search'));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/region');
+    expect(String(mockPush.mock.calls[0][0])).toBe(
+      '/explore/region?purpose=trip'
+    );
   });
 
   it('자유 문자열이 region 으로 새지 않는다 — 제출(submitEditing)에는 반응하지 않는다', () => {
@@ -204,27 +236,46 @@ describe('🔴 AC-E4 — lane_itin 자리만', () => {
   });
 });
 
-describe('🔴 AC-E5 — bridgeBar 분기 (긍/부정 짝)', () => {
-  it('담은 곳 ≥1 이면 "담은 곳 N곳" CTA + 여행 만들기 이동, empty 는 없다', () => {
+describe('🔴 AC-E5 — 담은 곳 saved-menu FAB → 장소(d02)·숙소(e04)로 펼침 (TRIP-494/448)', () => {
+  it('하트 FAB 을 펼치면 담은 장소→d02, 저장한 숙소→e04 두 미니 FAB 이 뜬다', () => {
     mockUseSavedPlaces.mockReturnValue(savedResult(['p1', 'p2']));
     render(<ExploreRoute />);
 
-    const cta = screen.getByTestId('explore-bridge-cta');
-    // 부분 포함(regex) — "담은 곳 2곳 · 여행 만들기" 안의 조각(02a ★E-2).
-    expect(cta).toHaveTextContent(/담은 곳 2곳/);
-    expect(screen.queryByTestId('explore-bridge-empty')).toBeNull();
+    // 풀폭 핑크 CTA 바에서 우하단 하트 saved-menu FAB 로 교체됐다(TRIP-494, Figma a01 3012:1731).
+    const toggle = screen.getByTestId('explore-saved-menu-toggle');
+    expect(toggle).toHaveAccessibleName(/담은 곳 2곳/);
+    // 옛 풀폭 CTA 는 더 이상 없다.
+    expect(screen.queryByTestId('explore-bridge-cta')).toBeNull();
+    // 닫힌 상태엔 미니 FAB 이 없다.
+    expect(screen.queryByTestId('explore-saved-places-fab')).toBeNull();
+    expect(screen.queryByTestId('explore-saved-stays-fab')).toBeNull();
 
-    fireEvent.press(cta);
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(String(mockPush.mock.calls[0][0])).toContain('/trips/new');
+    // 펼친다 — 두 미니 FAB 이 나타난다.
+    fireEvent.press(toggle);
+    expect(mockPush).not.toHaveBeenCalled();
+
+    // 담은 장소 → d02.
+    fireEvent.press(screen.getByTestId('explore-saved-places-fab'));
+    expect(mockPush).toHaveBeenLastCalledWith('/explore/saved-places');
+
+    // 저장한 숙소 → e04(다시 펼쳐서).
+    fireEvent.press(screen.getByTestId('explore-saved-menu-toggle'));
+    fireEvent.press(screen.getByTestId('explore-saved-stays-fab'));
+    expect(mockPush).toHaveBeenLastCalledWith('/stays/saved');
   });
 
-  it('담은 곳 0 이면 안내(empty)만 있고 CTA 는 미노출이다', () => {
+  it('담은 곳 0 곳이어도 FAB 는 유지되고, 펼쳐 d02/e04 빈 상태로 갈 수 있다', () => {
     mockUseSavedPlaces.mockReturnValue(savedResult([]));
     render(<ExploreRoute />);
 
-    expect(screen.getByTestId('explore-bridge-empty')).toBeOnTheScreen();
-    expect(screen.queryByTestId('explore-bridge-cta')).toBeNull();
+    // FAB 가 사라지지 않는다 — 0곳 분기로 없애면 d02/e04 빈 상태 도달 경로가 사라진다(TRIP-448).
+    const toggle = screen.getByTestId('explore-saved-menu-toggle');
+    expect(toggle).toBeOnTheScreen();
+    expect(toggle).toHaveAccessibleName(/담은 곳 0곳/);
+
+    fireEvent.press(toggle);
+    fireEvent.press(screen.getByTestId('explore-saved-places-fab'));
+    expect(mockPush).toHaveBeenLastCalledWith('/explore/saved-places');
   });
 });
 
@@ -238,9 +289,8 @@ describe('🔴 AC-E6 — 부분 실패 · 독립 쿼리', () => {
     [
       'explore-landing-heading',
       'explore-landing-search',
-      'explore-axis-all',
       'explore-lane-itin',
-      'explore-bridge-cta',
+      'explore-saved-menu-toggle',
     ].forEach((id) => expect(screen.getByTestId(id)).toBeOnTheScreen());
 
     // lane_stay 자리에 재시도(가시적 실패 신호).
@@ -248,21 +298,68 @@ describe('🔴 AC-E6 — 부분 실패 · 독립 쿼리', () => {
   });
 });
 
-describe('🔴 AC-E7 — axisSeg 비활성', () => {
-  it('4탭 중 전체만 selected 이고, 비활성 탭을 눌러도 무동작이다', () => {
+// ── TRIP-453 · entry 2 d01 랜딩 → d04 장소 목록 진입점 ──────────────────────────
+describe('🔴 453-AC-2a — "가볼 곳" 구획에 장소 목록(d04) 진입점', () => {
+  it('장소 둘러보기 진입점을 누르면 /explore/places 로 이동한다', () => {
+    // d01 랜딩은 완성된 d04 장소 목록으로 가는 링크가 없었다(딥링크로만 도달). "가볼 곳" 구획에
+    // 최소 진입 링크(조회 없음, Q1=②)를 추가한다. 지금은 explore-lane-place-cta 미존재라
+    // getByTestId 가 throw → red. 배선 뒤엔 정확히 /explore/places 로 1회 push.
     render(<ExploreRoute />);
 
-    ['all', 'stay', 'place', 'itin'].forEach((k) =>
-      expect(screen.getByTestId(`explore-axis-${k}`)).toBeOnTheScreen()
-    );
-    expect(screen.getByTestId('explore-axis-all')).toBeSelected();
-    ['stay', 'place', 'itin'].forEach((k) =>
-      expect(screen.getByTestId(`explore-axis-${k}`)).not.toBeSelected()
+    const placeCta = screen.getByTestId('explore-lane-place-cta');
+    expect(placeCta).toBeOnTheScreen();
+
+    fireEvent.press(placeCta);
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/places');
+  });
+});
+
+// ── TRIP-470 · 가볼 곳 가로 레인(장소 카드) ─────────────────────────────────────
+describe('🟢 470 — 가볼 곳 레인: 장소 카드 렌더 + press → d06', () => {
+  function placesWith(list: unknown[]) {
+    return {
+      data: { items: list, nextCursor: null },
+      isError: false,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof useGetPlaces>;
+  }
+
+  it('장소가 있으면 카드를 그리고, 카드 press → /explore/places/{poiId}', () => {
+    mockUseGetPlaces.mockReturnValue(
+      placesWith([
+        { poiId: 'poi-1', nameKo: '감천문화마을', region: '사하구' },
+        { poiId: 'poi-2', nameKo: '광안리 해변', region: '수영구' },
+      ])
     );
 
-    // 비활성 탭 press → 네비 없음 + 활성 불변(A9 무동작).
-    fireEvent.press(screen.getByTestId('explore-axis-stay'));
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(screen.getByTestId('explore-axis-all')).toBeSelected();
+    render(<ExploreRoute />);
+
+    expect(screen.getByTestId('explore-place-card-poi-1')).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId('explore-place-card-poi-2'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/explore/places/poi-2');
+  });
+
+  it('장소 조회 오류면 레인 자리에 다시 시도(explore-lane-place-retry)를 그린다', () => {
+    mockUseGetPlaces.mockReturnValue({
+      data: undefined,
+      isError: true,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof useGetPlaces>);
+
+    render(<ExploreRoute />);
+
+    expect(screen.getByTestId('explore-lane-place-retry')).toBeOnTheScreen();
+  });
+
+  // TRIP-500 — 가로 레인은 개수 제한. 레인이 전량(약 2MB)을 받지 않고 limit 을 실어 필요한 개수만
+  // 요청하는지 잠근다. useGetPlaces() 로 되돌리면(인자 없음) 이 단언이 red 가 된다(뮤테이션 심판).
+  it('가볼 곳 레인은 서버에 개수 제한(limit)을 실어 전량 수신을 막는다 (TRIP-500)', () => {
+    render(<ExploreRoute />);
+
+    expect(mockUseGetPlaces).toHaveBeenCalledWith({ limit: 8 });
   });
 });

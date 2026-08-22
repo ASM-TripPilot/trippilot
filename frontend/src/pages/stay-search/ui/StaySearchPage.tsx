@@ -9,14 +9,25 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 
+import type { StayItem } from '@/shared/api/generated/schemas';
+import { getAccessToken } from '@/shared/api/tokenManager';
+
+import {
+  filterByPriceRange,
+  type PriceBucketId,
+} from '@/features/stay/model/priceRangeFilter';
+import { relaxCulpritFilter } from '@/features/stay/model/relaxCulpritFilter';
+import { useSavedStays } from '@/features/stay/model/savedStays';
 import {
   buildStayFilterOptions,
   countActiveFilters,
   toggleFilterValue,
 } from '@/features/stay/model/stayFilterOptions';
+import { stayKey } from '@/features/stay/model/stayKey';
 import { resolveStaySearchState } from '@/features/stay/model/staySearchState';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { StayFilterSheet } from '@/features/stay/ui/StayFilterSheet';
+import { StayPriceSheet } from '@/features/stay/ui/StayPriceSheet';
 import { StaySearchScreen } from '@/features/stay/ui/StaySearchScreen';
 
 /** URL은 신뢰 경계 — 같은 쿼리 키가 중복되면 배열로 온다. 계약(`GetStaysSearchParams`)은
@@ -44,27 +55,62 @@ export function StaySearchPage(): ReactElement {
   const [draftAmenity, setDraftAmenity] = useState<string[]>([]);
   const [draftStayType, setDraftStayType] = useState<string[]>([]);
 
+  // 가격대 시트(TRIP-457) — 계약(`/stays/search`)에 price 파라미터가 없어 서버 필터가 불가하므로
+  // 응답 items 를 `priceRangeFilter` 순수 함수로 클라 파생 필터한다(01b Q4 (a)). 시트 열림·선택
+  // 버킷은 이 배선이 소유(화면·시트는 useState 0건 구조 가드).
+  const [priceSheetOpen, setPriceSheetOpen] = useState(false);
+  const [priceBucket, setPriceBucket] = useState<PriceBucketId>('all');
+
   const { data, isPending, isError, refetch } = useStaySearch({
     region: resolvedRegion,
     ...(amenityList.length > 0 ? { amenity: amenityList } : {}),
     ...(stayTypeList.length > 0 ? { stayType: stayTypeList } : {}),
   });
 
+  // 저장 하트(TRIP-417). isAuthed는 렌더 시점 1회 동기 판정(PlaceExplorePage 선례 — "판정 대기"
+  // 제3 상태가 안 생긴다). 담김 목록·토글은 useSavedStays 한 곳이 소유하고, 응답 대기 키만
+  // 페이지 로컬 상태로 들어 화면이 그 하트를 disabled로 만들게 한다(연타 중복 요청 차단, AC-8).
+  const isAuthed = getAccessToken() !== null;
+  const { isSaved, save, remove, savedKeys } = useSavedStays({ isAuthed });
+  const [pendingKeys, setPendingKeys] = useState<string[]>([]);
+
+  // 이름·지역 검색어(TRIP-469) — 화면이 결과를 클라 부분일치로 좁힌다. 상태만 여기서 소유하고
+  // 좁히기·no-match 판정은 화면(순수)이 지므로 서버 판정(state)엔 안 섞는다.
+  const [nameQuery, setNameQuery] = useState('');
+
+  async function attemptToggle(item: StayItem): Promise<void> {
+    const key = stayKey(item);
+    setPendingKeys((keys) => [...keys, key]);
+    const outcome = isSaved(key) ? await remove(item) : await save(item);
+    setPendingKeys((keys) => keys.filter((k) => k !== key));
+
+    // 미인증 누름은 요청 없이 로그인으로 보낸다(BR-U1-03 · Q6, 죽은 버튼 회피).
+    if (outcome.kind === 'failed' && outcome.reason === 'unauthenticated') {
+      router.push('/(auth)/login');
+    }
+  }
+
+  // 가격대 파생 필터(TRIP-457) — 기본 `all`은 순서보존 전량이라 동결 통합테스트가 무회귀다
+  // (★F-6). 화면에 내리는 목록·개수(헤더 "N곳") 둘 다 이 파생 결과에서 나와 갈라지지 않는다.
+  const visibleItems = filterByPriceRange(data?.items ?? [], priceBucket);
+
   const state = resolveStaySearchState({
     isPending,
     isError,
-    // `data?.items ?? []` 아래와 방어 수준을 맞춘다(03b W-3) — `items`가 계약과 달리
-    // 없는 응답이 와도 `.length`에서 TypeError로 죽지 않고 0건으로 접는다(INV-4).
-    itemCount: data?.items?.length ?? 0,
+    itemCount: visibleItems.length,
     degraded: data?.degraded ?? false,
     filterZeroReasons: data?.filterZeroReasons ?? [],
   });
 
-  // 필터 칩(TRIP-415) — 지역=재선택 진입(/explore/region 재사용, 새 UI 안 만듦), 필터=시트 열기,
-  // 가격대=스텁(계약 파라미터 부재, 범위 밖이라 axis 를 무시한다).
+  // 필터 칩 — 지역=여행지 선택 진입(/explore/region?purpose=stay, TRIP-499 — 통합검색 은퇴,
+  // 지역 선택 정본으로 복귀), 필터=시트 열기, 가격대=가격대 시트 열기.
   function handlePressFilter(axis: 'price' | 'region' | 'more'): void {
     if (axis === 'region') {
-      router.push('/explore/region');
+      router.push('/explore/region?purpose=stay');
+      return;
+    }
+    if (axis === 'price') {
+      setPriceSheetOpen(true);
       return;
     }
     if (axis === 'more') {
@@ -90,7 +136,7 @@ export function StaySearchPage(): ReactElement {
     <>
       <StaySearchScreen
         region={resolvedRegion}
-        items={data?.items ?? []}
+        items={visibleItems}
         state={state}
         // 화살표로 감싼다(03b N-3) — `onRetry={refetch}`면 RN이 `onPress(누름이벤트)`로
         // 불러 그 이벤트가 `refetch`의 옵션 인자 자리로 밀려든다. 여기서 인자를 끊으면
@@ -112,6 +158,37 @@ export function StaySearchPage(): ReactElement {
         // 지역·필터 칩(TRIP-415) — 배지는 적용된 필터 개수(초안 아님).
         onPressFilter={handlePressFilter}
         activeFilterCount={countActiveFilters(amenityList, stayTypeList)}
+        // 빈 상태 카드 CTA(TRIP-416) — 화면은 라우터를 모른다(구조 가드), 배선은 이 페이지 몫.
+        // 지역 바꾸기는 필터 칩과 같은 목적지(/explore/region?purpose=stay, 여행지 선택)로 진입한다(TRIP-499).
+        onPressChangeRegion={() => router.push('/explore/region?purpose=stay')}
+        // 필터 완화(AC-2)·초기화(AC-4) 공용 — amenity/stayType 두 키만 비운다(region 은 merge 로
+        // 유지되므로 넣지 않는다, ★4). setParams 갱신 → useLocalSearchParams 갱신 → 재조회.
+        onRelaxFilters={() => router.setParams({ amenity: [], stayType: [] })}
+        // 원인 필터만 해제(AC-5) — relaxCulpritFilter 가 reason(=reasons[0])을 지금 적용된 두
+        // 배열에 매핑해 그 원인만 뺀 {amenity, stayType}를 낸다(정확히 두 키라 그대로 넘긴다).
+        onClearCulpritFilter={(reason) =>
+          router.setParams(
+            relaxCulpritFilter(reason, {
+              amenity: amenityList,
+              stayType: stayTypeList,
+            })
+          )
+        }
+        // 저장 하트(TRIP-417) — 담김 집합·대기 집합은 값으로, 누름은 콜백으로 내린다. 화면은
+        // 저장/해제·라우팅을 모른다(구조 가드) — attemptToggle이 판정·요청·로그인 이동을 전담.
+        savedKeys={savedKeys}
+        pendingKeys={pendingKeys}
+        onToggleSave={(item) => void attemptToggle(item)}
+        // 카드 탭(TRIP-457 AC-5) → 상세 라우트로 push(객체형·raw stayKey·item JSON — expo-router
+        // 자동 인코딩이라 수동 encode 안 함 ★F-3). 화면은 라우터를 모른다(구조 가드).
+        onPressCard={(item) =>
+          router.push({
+            pathname: '/stays/[stayId]',
+            params: { stayId: stayKey(item), item: JSON.stringify(item) },
+          })
+        }
+        nameQuery={nameQuery}
+        onChangeNameQuery={setNameQuery}
       />
       {sheetOpen ? (
         <StayFilterSheet
@@ -125,6 +202,13 @@ export function StaySearchPage(): ReactElement {
           }
           onApply={handleApplyFilter}
           onClose={() => setSheetOpen(false)}
+        />
+      ) : null}
+      {priceSheetOpen ? (
+        <StayPriceSheet
+          selected={priceBucket}
+          onSelect={setPriceBucket}
+          onClose={() => setPriceSheetOpen(false)}
         />
       ) : null}
     </>

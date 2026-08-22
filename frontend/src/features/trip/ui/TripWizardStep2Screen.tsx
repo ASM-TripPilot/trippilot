@@ -106,6 +106,9 @@ export interface TripWizardStep2ScreenProps {
   generateDisabled: boolean;
   /** 미해결 날짜 안내행. 없으면 안 그린다. */
   unresolved?: UnresolvedDaysView;
+  /** 거점 0으로 진행하면 결과가 폴백(INV-4)이 된다는 경고 문구. 없으면 안 그린다 —
+   * 배선이 "담은 숙소는 있는데 거점 0"일 때만 채운다(TRIP-490). */
+  fallbackWarning?: string;
   coverageFailed: boolean;
   /** 열려 있는 보완 시트. `undefined`면 시트를 **마운트하지 않는다** — 상시 마운트하면 모든
    * 렌더가 WebView를 태운다(TRIP-226). */
@@ -514,6 +517,7 @@ function CtaBlock({
   generateDisabled,
   coverageFailed,
   unresolved,
+  fallbackWarning,
   onGenerate,
   onNoStayStart,
   onRetryCoverage,
@@ -522,6 +526,7 @@ function CtaBlock({
   | 'generateDisabled'
   | 'coverageFailed'
   | 'unresolved'
+  | 'fallbackWarning'
   | 'onGenerate'
   | 'onNoStayStart'
   | 'onRetryCoverage'
@@ -530,6 +535,17 @@ function CtaBlock({
     <View className="w-full gap-md">
       {unresolved === undefined ? null : (
         <BlockedNotice unresolved={unresolved} />
+      )}
+      {fallbackWarning === undefined ? null : (
+        <View className="w-full flex-row items-start gap-sm rounded-[14px] bg-surface-soft px-lg py-md">
+          <WarningTriangleGlyph />
+          <Text
+            testID="trip-base-fallback-warning"
+            className="flex-1 font-noto text-label leading-[20px] text-muted"
+          >
+            {fallbackWarning}
+          </Text>
+        </View>
       )}
       {coverageFailed ? (
         <InlineFailure
@@ -577,6 +593,7 @@ export function TripWizardStep2Screen({
   candidates,
   generateDisabled,
   unresolved,
+  fallbackWarning,
   coverageFailed,
   fixSheet,
   onFix,
@@ -772,17 +789,26 @@ export function TripWizardStep2Screen({
                       ))}
                 </View>
               </View>
-
-              <CtaBlock
-                generateDisabled={generateDisabled}
-                coverageFailed={coverageFailed}
-                unresolved={unresolved}
-                onGenerate={onGenerate}
-                onNoStayStart={onNoStayStart}
-                onRetryCoverage={onRetryCoverage}
-              />
             </View>
           </ScrollView>
+        ) : null}
+
+        {/* TRIP-493 — 주 CTA(`이 거점으로 일정 만들기`)와 보조 CTA(`숙소 없이 시작하기`)를
+            스크롤 밖 하단에 고정한다(step1 `[다음]`과 같은 규칙). 숙소 후보 카드가 많아도
+            거점을 지정하고 다음으로 넘어가는 문이 카드 아래 파묻히지 않는다. default·loading
+            두 얼굴이 공유하고, empty·error·notrip은 각자 자기 CTA를 갖는다(여기서 안 그린다). */}
+        {variant === 'default' || loading ? (
+          <View className="border-t border-hairline bg-canvas px-lg pb-[18px] pt-md">
+            <CtaBlock
+              generateDisabled={generateDisabled}
+              coverageFailed={coverageFailed}
+              unresolved={unresolved}
+              fallbackWarning={fallbackWarning}
+              onGenerate={onGenerate}
+              onNoStayStart={onNoStayStart}
+              onRetryCoverage={onRetryCoverage}
+            />
+          </View>
         ) : null}
 
         {/* 열렸을 때만 마운트한다 — 상시 마운트하면 목록만 보는 사용자에게도 매 렌더 WebView가

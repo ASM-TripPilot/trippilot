@@ -3,10 +3,15 @@ import { useEffect, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
 
-import { filterRegions, REGIONS } from '@/features/explore/model/regions';
+import { filterRegions, useRegions } from '@/features/explore/model/regions';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { STYLE as PREFERENCE_STYLE_LABELS } from '@/features/onboarding/model/preferenceInput';
+import { toggleMulti } from '@/features/onboarding/model/preferenceSelection';
 import { postTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
-import type { CompanionType } from '@/shared/api/generated/schemas';
+import type {
+  CompanionType,
+  CreateTripRequest,
+} from '@/shared/api/generated/schemas';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { getAccessToken } from '@/shared/api/tokenManager';
 
@@ -14,10 +19,7 @@ import {
   formatBudgetAmount,
   parseBudgetAmount,
 } from '@/features/trip/model/budgetAmount';
-import {
-  buildCreateTripRequest,
-  type CreateTripInput,
-} from '@/features/trip/model/createTripRequest';
+import { buildCreateTripRequest } from '@/features/trip/model/createTripRequest';
 import {
   nightsSum,
   tripLength,
@@ -41,6 +43,8 @@ import { usePreferencePrefill } from '@/features/trip/model/usePreferencePrefill
 import { useSavedStays } from '@/features/trip/model/useSavedStays';
 import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen';
 
+import { PrefOverrideSheet } from './PrefOverrideSheet';
+
 /**
  * TRIP-205/206 g01 1/2 배선 — 스토어 ↔ 화면 ↔ 라우터 ↔ 서버를 한 줄기로 잇는다.
  *
@@ -50,9 +54,10 @@ import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen'
  *     (01b §6.3) — 앞 두 조건이 "아직 안 고름"을, 마지막이 "잘못 고름"을 가른다.
  *  2. 기준일 주입 — `baseDate` prop이 없으면 `todayIso()`로 채운다(`StayRegisterPage`
  *     선례와 동형). 프리셋 → 날짜 범위 계산(`presetRange`)도 여기서 하고 화면엔 결과만 내린다.
- *  3. `REGIONS`를 읽어 `regions` prop으로 내린다 — 화면이 `features/explore`를 직접 import하면
- *     features 간 import가 된다(리포 관례 금지). `RegionPickerPage`가 `regions={filterRegions(...)}`로
- *     내리는 형태와 같다.
+ *  3. 서버 카탈로그(`useRegions`)를 읽어 **선택 가능 지역만** `{code, name}`으로 어댑트해 `regions`
+ *     prop으로 내린다(TRIP-445) — 화면이 `features/explore`를 직접 import하면 features 간 import가
+ *     된다(리포 관례 금지). 어댑터가 서버 shape(`{regionCode,…}`)와 위저드 화면 계약(`{code,name}`)의
+ *     차이를 흡수하므로 화면·동결 테스트는 그대로다. selectable=false(도·행정구)는 걸러 시트에 안 올린다.
  *  4. **제출과 오류 매핑(TRIP-206, 01b D1·D4)** — 클라 위반은 `touched`가 켜진 축만 문구로
  *     내려보내고(§클라 오류 절), 서버 400은 알려진 형태만 인라인/다이얼로그로 골라내고
  *     **나머지 전부(미상 코드·미상 필드·응답 자체 없음)는 배너로 떨어뜨린다** — 이것이
@@ -89,6 +94,13 @@ const BUDGET_ERROR_MESSAGE = '숫자만 입력해 주세요';
  * Figma가 문구를 안 정해 준 갈래도 이 문구로 떨어진다(그 밖 갈래의 본문은 정본이 없다,
  * 브리프 §2.3) — 새 문구를 발명하는 대신 확정된 문구 하나를 재사용한다. */
 const SUBMIT_ERROR_MESSAGE = '네트워크를 확인하고 다시 시도해주세요';
+
+/** 취향 override 시트의 스타일 선택지(TRIP-484). 온보딩 slug→한국어 카탈로그(`STYLE`)를 그대로
+ * 재사용해 option testID(`trip-wizard-pref-option-{slug}`)와 토글 값(한국어 라벨)을 함께 얻는다 —
+ * 매핑을 두 벌로 복제하지 않는다(ponytail rung 2). */
+const PREF_STYLE_OPTIONS = Object.entries(PREFERENCE_STYLE_LABELS).map(
+  ([slug, label]) => ({ slug, label })
+);
 
 /** touched 게이트를 타지 않는 서버 400 → 화면 표면 갈래(01b D4 §2.4②). `overseas`만 아는
  * 코드로 걸러내고, **원인을 확신할 수 없는 나머지 전부(미상 코드·필드 오류 포함)는 배너로
@@ -167,10 +179,49 @@ export function TripNewStep1Page({
   const removeMustVisit = useTripWizardStore((state) => state.removeMustVisit);
 
   const preference = usePreferencePrefill();
-  const preferenceChips = [
-    ...(preference.data?.styles?.value ?? []),
-    ...(preference.data?.activities?.value ?? []),
-  ];
+  // 계정 취향 프리필(GET /me/preferences)은 **이미 한국어 도메인 값**이다(slug 아님) — 그대로
+  // 칩·스냅숏에 흐른다. `usePreferenceStore`(온보딩 세션 스토어)와는 다른 물건이다(그건 계정
+  // 취향 드래프트라 이 흐름에서 절대 안 건드린다 — 건드리면 "계정 취향 불변" BR-U1-38 위반).
+  const prefillStyles = preference.data?.styles?.value ?? [];
+  const prefillActivities = preference.data?.activities?.value ?? [];
+
+  // 여행 단위 취향 override(BR-U1-38 · G-U1-11) — **페이지 로컬** 상태다. `null`=override 안 함
+  // (프리필 그대로), 값=이 여행에만 적용할 덮어쓴 취향(한국어 값). override 상태는 `PreferenceInput`
+  // shape의 한국어 값을 직접 든다 — 프리필도 override도 이미 한국어라 slug 변환(`toPreferenceInput`)을
+  // 태울 필요가 없다(03 참고).
+  const [prefOverride, setPrefOverride] = useState<{
+    styles: string[];
+    activities: string[];
+  } | null>(null);
+  // 시트 열림 + 시트 안에서 편집 중인 스타일 초안(확정 전까지 override에 반영 안 됨).
+  const [prefSheetOpen, setPrefSheetOpen] = useState(false);
+  const [prefDraftStyles, setPrefDraftStyles] = useState<string[] | null>(null);
+
+  // 지금 화면·요청에 쓰는 실효 취향 — override가 있으면 그것, 없으면 프리필. 칩과 스냅숏이
+  // **같은 출처**라 "화면에 보이는 것 = 서버로 가는 것"이 저절로 맞는다(02a ★3).
+  const effectiveStyles = prefOverride?.styles ?? prefillStyles;
+  const effectiveActivities = prefOverride?.activities ?? prefillActivities;
+  const preferenceChips = [...effectiveStyles, ...effectiveActivities];
+
+  // '바꾸기' press — 지금 실효 취향을 시트 초안으로 실어 열어(프리필 프리로드, "당신 취향으로
+  // 맞췄어요 → 편집") 사용자가 그 위에서 고친다.
+  function openPrefSheet(): void {
+    setPrefDraftStyles(effectiveStyles);
+    setPrefSheetOpen(true);
+  }
+  // 시트의 스타일 토글 — 온보딩 `toggleMulti`(문자열 배열 토글, slug·한국어 무관) 재사용.
+  function togglePrefStyle(label: string): void {
+    setPrefDraftStyles((prev) => toggleMulti(prev, label));
+  }
+  // 확정 — 초안 스타일을 override로 굳히고 시트를 닫는다. 시트는 activities를 안 건드리므로
+  // 실효 activities를 그대로 이어 실어 프리필 활동이 사라지지 않게 한다.
+  function confirmPrefOverride(): void {
+    setPrefOverride({
+      styles: prefDraftStyles ?? [],
+      activities: effectiveActivities,
+    });
+    setPrefSheetOpen(false);
+  }
 
   // 예산 프리필은 **파생값**이지 스토어에 쓰는 값이 아니다(TRIP-207 01b 불변식, 02a §2-4).
   // `touched`에 `'budget'`이 없는 동안만 취향 값을 보여주고, 사용자가 한 번이라도 건드리면
@@ -214,6 +265,27 @@ export function TripNewStep1Page({
   // 않아 최소로 둔다(02a §8).
   const [destinationQuery, setDestinationQuery] = useState('');
 
+  // 서버 지역 카탈로그(TRIP-445) — 화면이 `features/explore`를 직접 import 못 하므로 조합은 여기서.
+  // 선택 가능(selectable !== false) 지역만 남기고 위저드 화면 계약 `{code, name}`으로 어댑트해
+  // 서버 shape 차이를 흡수한다(동결 화면·테스트 불변). 시트 검색은 어댑트 전 서버 목록을 좁혀야
+  // `filterRegions`의 새 시그니처(`Region` 인자)와 맞는다.
+  const regionsQuery = useRegions();
+  const selectableRegions = (regionsQuery.data ?? []).filter(
+    (region) => region.selectable !== false
+  );
+  const wizardRegions = selectableRegions.map((region) => ({
+    code: region.regionCode,
+    name: region.name,
+    poiCount: region.poiCount,
+  }));
+  const sheetRegions = filterRegions(selectableRegions, destinationQuery).map(
+    (region) => ({
+      code: region.regionCode,
+      name: region.name,
+      poiCount: region.poiCount,
+    })
+  );
+
   // 5-c N-2: 배너가 뜬 뒤 드래프트를 고치면 배너는 옛 실패를 계속 보여주면서도 [다시 시도]는
   // 새 상태 기준으로 다시 판정한다 — 화면과 배너가 서로 다른 이야기를 하게 된다. 드래프트가
   // 바뀌는 순간 배너를 걷어 그 어긋남을 없앤다. 예산 축도 같은 이유로 더한다.
@@ -235,6 +307,10 @@ export function TripNewStep1Page({
   // 연달아 들어온 두 번째 누름이 아직 옛 값을 읽는다. ref는 쓰는 즉시 보이고, 화면에
   // 그리는 값이 아니라 리렌더도 필요 없다.
   const submitLockedRef = useRef(false);
+  // 2/2 로 **넘어간 적이 있는가**. `submitLockedRef` 와 다른 축이다 — 잠금은 등록이 날아가는
+  // 중에도 켜지지만 이 값은 이동이 실제로 일어난 뒤에만 켜진다. `[다음]` 재탭을 이동으로
+  // 돌려보내는 문(`submit` 머리)이 이 값을 본다.
+  const navigatedRef = useRef(false);
 
   const createTrip = useCreateTrip();
   const savedStays = useSavedStays();
@@ -423,7 +499,9 @@ export function TripNewStep1Page({
 
     setMustVisitError(undefined);
     // 성공 — 잠금을 **풀지 않는다**. 이 화면의 일은 끝났고, 스택에 남은 step1으로 되돌아와
-    // `[다음]`을 다시 눌러도 여행이 하나 더 만들어지면 안 된다(되돌릴 수 없다).
+    // `[다음]`을 다시 눌러도 여행이 하나 더 만들어지면 안 된다(되돌릴 수 없다). 다만 그때
+    // 버튼이 죽어 보이지 않도록 이동만은 다시 하게, 여기서 이동 사실을 기록한다.
+    navigatedRef.current = true;
     router.push('/trips/new/step2');
   }
 
@@ -439,6 +517,17 @@ export function TripNewStep1Page({
     // 노출하는 값을 그대로 쓴다(01b Seed §기존 활용). 5-c W-1: `isPending`은 **생성** 요청만
     // 덮는다 — 생성이 끝나고 등록이 날아가는 창(수백 ms~수 초, 화면에 아무 변화가 없다)은
     // `submitLockedRef`가 덮는다. 그 창에서 다시 누르면 여행이 하나 더 만들어진다.
+    // 잠금은 **중복 생성**을 막으려는 것이지 버튼을 죽이려는 것이 아니다. 아래 일반 가드가
+    // 조용히 `return` 하면 활성인 `[다음]`이 아무 일도 안 해 사용자는 고장으로 읽는다
+    // (2/2 에서 뒤로 와 다시 누르는 흔한 경로 · 실측 2026-08-21). 이미 한 번 넘어간 뒤라면
+    // 새로 만들지 않고 그 여행의 2/2 로 다시 보낸다 — 생성도 등록도 타지 않으므로 "여행은
+    // 하나뿐"은 그대로다.
+    // ⚠️ 조건은 `submitLockedRef` 가 아니라 `navigatedRef` 다. 잠금은 **등록이 날아가는
+    // 중에도** 켜져 있어서(I-8), 잠금으로 열면 등록이 끝나기 전에 2/2 로 새어 나간다.
+    if (navigatedRef.current) {
+      router.push('/trips/new/step2');
+      return;
+    }
     if (!canProceed || createTrip.isPending || submitLockedRef.current) return;
 
     // 여행은 이미 만들어졌고 등록만 남았다 — 여기서 `POST /trips`를 다시 태우면 사용자에게
@@ -463,17 +552,25 @@ export function TripNewStep1Page({
     setSubmitError(undefined);
     setOverseasBlocked(false);
 
-    const input: CreateTripInput = {
+    // `CreateTripRequest`(변수)로 타이핑해야 `preferenceSnapshot`을 실을 수 있다 —
+    // `CreateTripInput`(Omit)은 그 키를 리터럴에서 막는다(02a ★8).
+    const input: CreateTripRequest = {
       startDate: startDate ?? '',
       endDate: derivedEnd ?? '',
       party,
       companionType,
       destinations,
-      // 사용자가 넣은 값만 나간다(TRIP-207 AC-2) — 취향은 이 함수에 더 이상 안 보인다.
-      // `empty`면 `undefined`라 키 자체가 안 붙는다(`buildCreateTripRequest`가 스프레드
-      // 전에 떼어내 조건부로만 다시 붙인다, ★3).
+      // 예산은 사용자가 넣은 값만 나간다(TRIP-207 AC-2). `empty`면 `undefined`라 키 자체가
+      // 안 붙는다(`buildCreateTripRequest`가 스프레드 전에 떼어내 조건부로 다시 붙인다, ★3).
       budgetTotal:
         parsedBudget.kind === 'amount' ? parsedBudget.amount : undefined,
+      // 취향 스냅숏(TRIP-484 정책 A) — 실효 취향(override 또는 프리필)을 평평한 한국어 배열로
+      // 싣는다. BE는 받은 것만 저장하고 스스로 동결하지 않으므로(TripApiIT 실측), 여기서 안
+      // 보내면 취향이 여행에 영영 안 새겨진다. 칩과 같은 출처라 화면=서버가 맞는다(★3).
+      preferenceSnapshot: {
+        styles: effectiveStyles,
+        activities: effectiveActivities,
+      },
     };
 
     // 5-c W-2: `try`의 사정거리를 요청 한 줄로 좁힌다. 성공 뒤 부작용(id 기록·라우팅)에서
@@ -521,8 +618,8 @@ export function TripNewStep1Page({
       party={party}
       companionType={companionType}
       preferenceChips={preferenceChips}
-      regions={REGIONS}
-      sheetRegions={filterRegions(destinationQuery)}
+      regions={wizardRegions}
+      sheetRegions={sheetRegions}
       destinationQuery={destinationQuery}
       onChangeDestinationQuery={setDestinationQuery}
       canProceed={canProceed}
@@ -576,7 +673,20 @@ export function TripNewStep1Page({
       baseDate={resolvedBaseDate}
       onChangeParty={setParty}
       onSelectCompanion={(type: CompanionType) => selectCompanion(type)}
-      onChangePreference={() => {}}
+      onChangePreference={openPrefSheet}
+      prefSheet={
+        // ★1 조건부 마운트 — 닫힘이면 트리에 안 넣는다(바텀시트 목이 통과형이라 무조건
+        // 마운트하면 "늘 떠 있는" 구현이 되어 열림 관찰이 공허해진다).
+        prefSheetOpen ? (
+          <PrefOverrideSheet
+            options={PREF_STYLE_OPTIONS}
+            selected={prefDraftStyles}
+            onToggle={togglePrefStyle}
+            onConfirm={confirmPrefOverride}
+            onClose={() => setPrefSheetOpen(false)}
+          />
+        ) : null
+      }
       onNext={submit}
       onRetrySubmit={submit}
       onCloseOverseasDialog={() => setOverseasBlocked(false)}

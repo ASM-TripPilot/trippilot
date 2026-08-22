@@ -11,6 +11,8 @@ import type { SlotCandidatesCandidatesItem } from './slotCandidatesCandidatesIte
 export interface SlotCandidates {
   /** 빈 목록 = 후보 0건 → 반경 확대·컨셉 변경 제안(BR-U3-25) */
   candidates: SlotCandidatesCandidatesItem[];
-  /** 실제 사용 반경. AI 가 자동 확대했을 수 있어 그대로 표시한다 */
+  /** 실제 사용 반경. 후보가 0건이면 서버가 한 번 넓혀 다시 보므로 그대로 표시한다 */
   radiusMUsed: number;
+  /** **AI 순위가 아니다**(true). 후보 집합은 정본 그대로지만 정렬이 거리순이고 근거 문구가 템플릿이며 앞뒤 슬롯과의 동선을 따지지 않았다. 화면은 "AI 추천 준비 중, 가까운 순" 을 안내한다 — 이 값이 없으면 사용자는 취향이 반영된 줄 안다(INV-4). */
+  degraded: boolean;
 }

@@ -365,3 +365,69 @@ describe('AC-8 · 저장 실패', () => {
     expect(handlers.onSave).not.toHaveBeenCalled();
   });
 });
+
+describe('TRIP-455 · 롱프레스 안내 (버그2)', () => {
+  // 버그2 근본 원인(바텀시트 제스처가 WebView 롱프레스를 삼킴)은 **네이티브 제스처**라
+  // jest가 원리적으로 못 본다 — gorhom 바텀시트 목이 통과 컴포넌트라 `enableContentPanning
+  // Gesture={false}`를 주든 안 주든 렌더가 같다(02a ★G). 그 근본 수정은 6-b 실기 몫이고,
+  // 여기서 잠그는 것은 병행 결함(디스커버러빌리티): "왜 회색 버튼인지"를 말하는 롱프레스 안내
+  // 존재/부재다(BR-U1-55 침묵 실패 금지). StayRegister의 `stay-register-pin-hint`와 동형.
+
+  it('🔴 P1 · 지도가 뜬 상태(좌표 미확정)에서 롱프레스 안내가 보인다', () => {
+    // (준비) 좌표 미확정 + 지도 표시 가능 — props() 기본이 이 상태다. beforeEach가 env 키를
+    // 세워 실물 지도가 뜬다(02a ★E, AC-7과 같은 규율).
+    render(
+      <TripBaseFixSheet
+        {...props({ coordConfirmed: false, mapUnavailable: false })}
+      />
+    );
+
+    // (단언) 앵커 — 지도가 실제로 떴다(안내가 "지도 있음" 상태에 올바로 붙었다는 전제이자
+    // env 키가 세워졌다는 증거). 이게 없으면 아래 안내 단언이 무엇 위에 서는지 알 수 없다.
+    expect(screen.getByTestId('map-webview')).toBeOnTheScreen();
+
+    // 핵심 — 오늘은 이 안내가 없어 RED. `toBeOnTheScreen`=화면에 그 요소가 붙어 있나.
+    expect(screen.getByTestId('trip-base-fixsheet-pin-hint')).toBeOnTheScreen();
+    // 문구는 컨테이너 View라 정규식으로 부분 포함을 본다(문자열이면 완전 일치라
+    // 마크업/공백에 취약, 02a ★M).
+    expect(screen.getByTestId('trip-base-fixsheet-pin-hint')).toHaveTextContent(
+      /길게 눌러/
+    );
+  });
+
+  it('🔴 P2 · 좌표가 이미 확정된 숙소에는 안내가 없다 (지도 자체 미표시)', () => {
+    // 날짜만 고치러 온 사용자에겐 지도를 아예 안 띄우므로(★7 짝), 롱프레스 안내도 없어야 한다.
+    render(
+      <TripBaseFixSheet
+        {...props({ coordConfirmed: true, checkIn: '2026-06-11' })}
+      />
+    );
+
+    // 앵커 — 시트·날짜 칩은 멀쩡하다(지도만 빠진 것이지 시트가 죽은 게 아니다, ★17 규약).
+    expect(screen.getByTestId('trip-base-fixsheet')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('trip-base-fixsheet-day-2026-06-11')
+    ).toBeOnTheScreen();
+
+    // 안내 부재. `queryByTestId`=없으면 null을 돌려준다(getByTestId는 throw).
+    expect(screen.queryByTestId('trip-base-fixsheet-pin-hint')).toBeNull();
+  });
+
+  it('🔴 P3 · 지도를 못 띄우는 상태(mapUnavailable)에도 안내가 없다', () => {
+    // 강화 잠금 — 안내는 "좌표 미확정"이 아니라 "지도가 실제로 뜬 상태"에만 붙어야 한다.
+    // 이 케이스가 없으면 "좌표 미확정이면 무조건 안내"라는 가짜 구현이 살아남아, 길게 누를
+    // 지도가 없는 실패 얼굴에도 "지도를 길게 누르라"는 거짓 안내를 띄운다(02a P3 근거).
+    render(
+      <TripBaseFixSheet
+        {...props({ coordConfirmed: false, mapUnavailable: true })}
+      />
+    );
+
+    // 앵커 — 지도 실패 얼굴이 떴고(길게 누를 지도 자체가 없다), 실물 지도는 없다.
+    expect(screen.getByTestId('trip-base-fixsheet-mapfail')).toBeOnTheScreen();
+    expect(screen.queryByTestId('map-webview')).toBeNull();
+
+    // 안내 부재.
+    expect(screen.queryByTestId('trip-base-fixsheet-pin-hint')).toBeNull();
+  });
+});

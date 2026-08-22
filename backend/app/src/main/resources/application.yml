@@ -57,6 +57,11 @@ trippilot:
   place:
     geocode:
       mode: ${PLACE_GEOCODE_MODE:stub}
+  # 숙소 콘텐츠 경로. 기본 스텁은 **제주 5곳뿐**이라 다른 지역 검색이 전부 0건이 된다.
+  # db 는 정본 테이블(stay, V2.26 + R__seed_stay.sql)을 읽는다 — 런타임 외부 호출 0회.
+  stay:
+    content:
+      mode: ${STAY_CONTENT_MODE:stub}
 
 # 통합 테스트용 — AI 서비스 위치(compose 에서 AI_URL 주입). 미설정이면 integration 이 degrade.
 ai:

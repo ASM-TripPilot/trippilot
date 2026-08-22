@@ -16,7 +16,8 @@ import { StaySearchPage } from './StaySearchPage';
  * 라우팅·시트 열기·필터 적용으로 이어지는지는 이 배선 층에서만 확인할 수 있다.
  *
  * 무엇을 보장하나:
- *  - 지역 칩 press → `/explore/region` 진입(재조회 UI 를 새로 안 만들고 재사용).
+ *  - 지역 칩 press → `/explore/region?purpose=stay` 진입(여행지 선택 정본, TRIP-499 재배선 —
+ *    통합검색 대신 지역 선택 화면 재사용).
  *  - 필터 칩 press → 시트 열림(`stay-filter-sheet`), 옵션 토글 → [적용] → 고른 조건이
  *    `router.setParams`로 나간다(그 params 가 재조회 URL 에 실리는 것은 기존 AC-8/12 가 담보).
  *
@@ -95,8 +96,8 @@ function createWrapper() {
   };
 }
 
-describe('StaySearchPage — 지역 칩 (TRIP-415)', () => {
-  it('지역 칩을 누르면 /explore/region 으로 간다', async () => {
+describe('StaySearchPage — 지역 칩 (TRIP-499 · AC-3)', () => {
+  it('지역 칩을 누르면 여행지 선택 /explore/region?purpose=stay 로 간다', async () => {
     render(<StaySearchPage />, { wrapper: createWrapper() });
     await waitFor(() =>
       expect(screen.getByText('테스트 스테이')).toBeOnTheScreen()
@@ -104,7 +105,8 @@ describe('StaySearchPage — 지역 칩 (TRIP-415)', () => {
 
     fireEvent.press(screen.getByTestId('stay-search-filter-region'));
 
-    expect(mockPush).toHaveBeenCalledWith('/explore/region');
+    // 지금 소스는 옛 목적지(/explore/search)로 push → red. stay↔trip 오타는 완전 일치가 잡는다.
+    expect(mockPush).toHaveBeenCalledWith('/explore/region?purpose=stay');
   });
 });
 

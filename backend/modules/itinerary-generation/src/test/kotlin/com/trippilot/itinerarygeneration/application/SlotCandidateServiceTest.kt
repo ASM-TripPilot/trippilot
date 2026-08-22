@@ -110,10 +110,11 @@ class SlotCandidateServiceTest : StringSpec({
         SlotCandidateService(trips, Repo(stored), agent, surfaces, pool, clock)
 
     "경계가 실패하면 503 으로 표면화한다 — 500(우리가 터졌다)이 아니다" {
-        // http 모드에서 이 경로는 아직 미개통이라 어댑터가 SLOT_CANDIDATES_NOT_WIRED 를 던진다.
         // 감싸지 않으면 RuntimeException 이라 전역 핸들러가 500 으로 떨구는데, 사실은 "지금은 못 준다"다.
+        // (예전에는 SLOT_CANDIDATES_NOT_WIRED 가 이 자리였다. 이제 http 모드는 로컬 후보로 답하므로
+        //  실제로 남는 실패는 타임아웃·연결 불가 같은 것이다 — 매핑 규칙은 그대로다.)
         val down = CapturingAgent(
-            ScheduleAgentCallFailed("SLOT_CANDIDATES_NOT_WIRED", retryable = false, message = "미개통"),
+            ScheduleAgentCallFailed("TIMEOUT", retryable = true, message = "상대가 응답하지 않음"),
         )
         val e = shouldThrow<UpstreamUnavailable> {
             service(down).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null))

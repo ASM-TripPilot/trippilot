@@ -1,6 +1,168 @@
 {
   "components": {
     "schemas": {
+      "AlternativeSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Poi Ids",
+            "type": "array"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "poi_ids",
+          "rationale"
+        ],
+        "title": "AlternativeSchema",
+        "type": "object"
+      },
+      "AlternativesRequest": {
+        "additionalProperties": false,
+        "description": "대안 제안 요청 — 후보 풀은 AI가 앵커 반경으로 직접 만든다(INV-1, M7 소유).\n\n시각·순서를 받지도 내보내지도 않는다 — 선택된 대안의 확정 배치는 기존\nrepair 관문 몫이다(INV-2). budget/transport 토큰은 generate 와이어와 동일\n어휘(\"중간\"·\"대중교통\" 등 — wiring의 번역표가 흡수).",
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/CoordSchema"
+          },
+          "budget_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Level"
+          },
+          "dates": {
+            "items": {
+              "format": "date",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Dates",
+            "type": "array"
+          },
+          "excluded_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Poi Ids",
+            "type": "array"
+          },
+          "reason": {
+            "default": "none",
+            "title": "Reason",
+            "type": "string"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "transport_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transport Mode"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/TriggerSchema"
+          }
+        },
+        "required": [
+          "trigger",
+          "anchor",
+          "dates",
+          "request_meta"
+        ],
+        "title": "AlternativesRequest",
+        "type": "object"
+      },
+      "AlternativesResponse": {
+        "additionalProperties": false,
+        "description": "시각·순서·소요시간 없음(INV-2·3) — 제안과 강등 상태·드롭 사유만 나간다.",
+        "properties": {
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/AlternativeSchema"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "dropped_out_of_pool": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dropped Out Of Pool",
+            "type": "array"
+          },
+          "empty_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Empty Reason"
+          },
+          "fallback_level": {
+            "title": "Fallback Level",
+            "type": "integer"
+          },
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "pool_size": {
+            "minimum": 0.0,
+            "title": "Pool Size",
+            "type": "integer"
+          },
+          "retrieved": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Retrieved",
+            "type": "object"
+          }
+        },
+        "required": [
+          "alternatives",
+          "is_fallback",
+          "fallback_level",
+          "notes",
+          "retrieved",
+          "dropped_out_of_pool",
+          "pool_size"
+        ],
+        "title": "AlternativesResponse",
+        "type": "object"
+      },
       "CandidatesSummarySchema": {
         "additionalProperties": false,
         "description": "후보 충분성(BR-U2-05). 판정은 AI 소유 — 백엔드는 그대로 전달한다.\n\n`pool_size`는 모르면 null로 둔다(0은 \"후보 0건\"이라는 판정으로 읽힌다).",
@@ -32,6 +194,29 @@
           "level"
         ],
         "title": "CandidatesSummarySchema",
+        "type": "object"
+      },
+      "CoordSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "lng": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lng",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lat",
+          "lng"
+        ],
+        "title": "CoordSchema",
         "type": "object"
       },
       "DayAnchorSchema": {
@@ -84,6 +269,64 @@
           "date"
         ],
         "title": "DayScheduleSchema",
+        "type": "object"
+      },
+      "ExplanationsRequest": {
+        "additionalProperties": false,
+        "description": "배치 일정의 슬롯별 설명 조회 — generate(include_explanations=false)와 짝.\n\n페르소나는 generate와 같은 trip_id 파생 참조로 해석한다(D31 자기참조,\nTRIP-333 fail-closed 유지). 시각·순서는 받기만 하고 바꾸지 않는다(INV-2).",
+        "properties": {
+          "itinerary": {
+            "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "trip_id": {
+            "minLength": 1,
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id",
+          "itinerary",
+          "request_meta"
+        ],
+        "title": "ExplanationsRequest",
+        "type": "object"
+      },
+      "ExplanationsResponse": {
+        "additionalProperties": false,
+        "description": "slot_key(BR-U2-04: \"날짜#poi_id\") → 설명 1문장. 실패는 빈 맵 + 사유(침묵 금지).",
+        "properties": {
+          "explanations": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Explanations",
+            "type": "object"
+          },
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "explanations",
+          "is_fallback"
+        ],
+        "title": "ExplanationsResponse",
         "type": "object"
       },
       "FixedBlockSchema": {
@@ -201,6 +444,11 @@
           },
           "generation_mode": {
             "$ref": "#/components/schemas/GenerationMode"
+          },
+          "include_explanations": {
+            "default": true,
+            "title": "Include Explanations",
+            "type": "boolean"
           },
           "preference_profile": {
             "$ref": "#/components/schemas/PreferenceProfileSchema"
@@ -464,12 +712,19 @@
       },
       "RequestMetaSchema": {
         "additionalProperties": false,
-        "description": "IO-1 — 지연 예산 전파. day1 5s / 전체 20s.",
+        "description": "IO-1 — 지연 예산 전파. 값은 백엔드 소유(종전 day1 5s / 전체 20s).\n\n`deadline_ms` 미지정 = **시간제약 없음** (2026-08-21 FE 연동 팀 결정, TRIP-473)\n— 예산 계단(INV-4)은 그대로 두고 시간 때문에 강등되지 않게만 한다. 제약을\n재도입하려면 백엔드가 값을 다시 싣기만 하면 된다(AI 재작업 없음).",
         "properties": {
           "deadline_ms": {
-            "exclusiveMinimum": 0.0,
-            "title": "Deadline Ms",
-            "type": "integer"
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline Ms"
           },
           "request_id": {
             "minLength": 1,
@@ -484,8 +739,7 @@
         },
         "required": [
           "request_id",
-          "requested_at",
-          "deadline_ms"
+          "requested_at"
         ],
         "title": "RequestMetaSchema",
         "type": "object"
@@ -516,6 +770,39 @@
           "end"
         ],
         "title": "TimeWindowSchema",
+        "type": "object"
+      },
+      "TriggerSchema": {
+        "additionalProperties": false,
+        "description": "백엔드 planb-detection(C9) 트리거의 와이어 형태 — domain TriggerParams 대응.",
+        "properties": {
+          "affected_date": {
+            "format": "date",
+            "title": "Affected Date",
+            "type": "string"
+          },
+          "kind": {
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "schedule_id": {
+            "minLength": 1,
+            "title": "Schedule Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "schedule_id",
+          "affected_date"
+        ],
+        "title": "TriggerSchema",
         "type": "object"
       },
       "TripContextSchema": {
@@ -799,6 +1086,90 @@
           }
         },
         "summary": "Root"
+      }
+    },
+    "/ai/v1/itinerary/alternatives": {
+      "post": {
+        "description": "Plan-B 대안 제안 (TRIP-428) — KB 검색 + closed-set 교차 + LLM 선택(폴백: 규칙 랭킹).\n\n응답에 시각·순서·소요시간 없음(INV-2·3) — 선택된 대안의 배치 확정은 repair 몫.\n구형 조립(alternatives 미구현 오케스트레이터)은 503으로 명시 실패한다(INV-4).",
+        "operationId": "alternatives_ai_v1_itinerary_alternatives_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlternativesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlternativesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Alternatives",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/explanations": {
+      "post": {
+        "description": "슬롯별 설명 조회 (TRIP-479) — generate(include_explanations=false)와 짝.\n\n설명은 부가 정보다: LLM 실패도 200 + 빈 맵 + 사유로 나간다(침묵 금지, INV-4).\n구형 조립(미구현 오케스트레이터)은 503 명시 실패.",
+        "operationId": "explanations_ai_v1_itinerary_explanations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplanationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplanationsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explanations",
+        "tags": [
+          "itinerary"
+        ]
       }
     },
     "/ai/v1/itinerary/generate": {

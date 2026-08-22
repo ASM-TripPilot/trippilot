@@ -147,6 +147,11 @@ def extract_region(address: str | None) -> str | None:
 
 # ── 영업시간 파싱 ────────────────────────────────────────────────
 _TIME_RE = re.compile(r"([01]?\d|2[0-3]):([0-5]\d)")
+# "상시 개방" 류 — 시간 표기가 없어 _TIME_RE 로는 0회 매치라 통째로 버려지던 형태.
+# 수집 8,043건 중 파싱 실패 3,475건의 절반(1,771건)이 이 한 문구였다 (공원·해변·
+# 자연관광지). 시간을 모르는 게 아니라 **항상 열려 있다**는 뜻이므로 지어내기가 아니다.
+_ALWAYS_OPEN_RE = re.compile(r"상시\s*개방|24\s*시간\s*개방|연중\s*개방")
+_ALL_DAY = (0, 24 * 60)
 _WEEKDAY_RE = re.compile(r"(월|화|수|목|금|토|일)요일")
 _WEEKDAY_INDEX = {"월": 0, "화": 1, "수": 2, "목": 3, "금": 4, "토": 5, "일": 6}
 # 주간 스케줄(OpenHour)로 표현할 수 없는 휴무 패턴 — 있으면 통째로 파싱 포기
@@ -165,17 +170,25 @@ def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenH
     """
     if not hours_raw:
         return ()
-    times = _TIME_RE.findall(hours_raw)
-    if len(times) != 2:
-        return ()
-    open_min = int(times[0][0]) * 60 + int(times[0][1])
-    close_min = int(times[1][0]) * 60 + int(times[1][1])
-    if close_min <= open_min:
-        close_min += 24 * 60  # 자정 초과 영업 (시작일 귀속)
+    always_open = _ALWAYS_OPEN_RE.search(hours_raw) is not None
+    if always_open:
+        open_min, close_min = _ALL_DAY
+    else:
+        times = _TIME_RE.findall(hours_raw)
+        if len(times) != 2:
+            return ()
+        open_min = int(times[0][0]) * 60 + int(times[0][1])
+        close_min = int(times[1][0]) * 60 + int(times[1][1])
+        if close_min <= open_min:
+            close_min += 24 * 60  # 자정 초과 영업 (시작일 귀속)
 
     closed_days = _parse_rest_days(rest_raw)
     if closed_days is None:
-        return ()
+        # 휴무를 확신 못 하면 포기 — 단 "상시 개방"은 원문이 이미 휴무 없음을
+        # 말하고 있으므로 읽히지 않는 휴무 문구(명절 안내 등)에 통째로 지지 않는다.
+        if not always_open:
+            return ()
+        closed_days = frozenset()
     return tuple(
         OpenHour(day_of_week=d, open_min=open_min, close_min=close_min)
         for d in range(7)

@@ -124,6 +124,30 @@ export function HeartOutlineGlyph({ size = 22, testID }: GlyphProps) {
   );
 }
 
+// 담은 곳 FAB 안 하트 — 흰 배경 위라 채움·선 둘 다 primary. `HeartOutlineGlyph`(사진 위 흰
+// 장식)와 경로는 같고 색만 다르다. features 간 글리프 공유가 금지(importBoundary)라
+// features/stay 의 같은 이름 글리프를 가져오지 않고 이 파일에 다시 적는다.
+export function HeartFilledGlyph({ size = 22, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 22 22"
+      fill="none"
+    >
+      <Path
+        d="M11 19C11 19 3 14 3 8.6C3 5.9 5.1 3.8 7.7 3.8C9.1 3.8 10.4 4.5 11 5.6C11.6 4.5 12.9 3.8 14.3 3.8C16.9 3.8 19 5.9 19 8.6C19 14 11 19 11 19Z"
+        fill={PRIMARY}
+        stroke={PRIMARY}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // FAB('여행 만들기') 앞 plus — bg-primary 위라 on-primary(흰색) 고정.
 export function PlusGlyph({ size = 22, testID }: GlyphProps) {
   return (
@@ -136,6 +160,75 @@ export function PlusGlyph({ size = 22, testID }: GlyphProps) {
     >
       <Path
         d="M12 4V20M4 12H20"
+        stroke={WHITE}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+// 담은 곳 saved-menu 미니 FAB 아이콘(TRIP-494 홈 확장, Figma a01 3012:1731).
+/** 담은 장소 미니 FAB — 위치 핀(분홍, 흰 원 위). 26px 확대판(hero 우상단 WHITE 핀과 색·용도 상이). */
+export function MapPinGlyph({ size = 26, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 2.5C8.4 2.5 5.5 5.4 5.5 9c0 4.6 6.5 12 6.5 12s6.5-7.4 6.5-12c0-3.6-2.9-6.5-6.5-6.5Z"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Circle cx={12} cy={9} r={2.4} stroke={PRIMARY} strokeWidth={1.8} />
+    </Svg>
+  );
+}
+
+/** 저장한 숙소 미니 FAB — 여행 가방(분홍, 흰 원 위). */
+export function SuitcaseGlyph({ size = 26, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M5 8.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18v-8A1.5 1.5 0 0 1 5 8.5Z"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 8.5V7a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 7v1.5"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+      <Path d="M12 8.5V21" stroke={PRIMARY} strokeWidth={1.8} />
+    </Svg>
+  );
+}
+
+/** saved-menu 닫기(X) — 펼친 FAB 위(분홍 원 위 흰 X). */
+export function CloseGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M6 6l12 12M18 6L6 18"
         stroke={WHITE}
         strokeWidth={2}
         strokeLinecap="round"

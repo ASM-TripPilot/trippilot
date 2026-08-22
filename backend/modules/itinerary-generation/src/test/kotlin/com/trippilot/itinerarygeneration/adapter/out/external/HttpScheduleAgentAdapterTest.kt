@@ -5,7 +5,11 @@ import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
+import com.trippilot.placedata.api.Area
+import com.trippilot.placedata.api.CandidatePoolPort
+import com.trippilot.placedata.api.GroundedPlace
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
@@ -48,7 +52,15 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .baseUrl("http://ai.test")
             .messageConverters { it.add(0, JacksonJsonHttpMessageConverter(ScheduleAgentConfiguration.boundaryMapper())) }
         val server = MockRestServiceServer.bindTo(builder).build()
-        return HttpScheduleAgentAdapter(builder.build(), clock) to server
+        // 슬롯 후보는 HTTP 를 타지 않는다(로컬 후보풀) — 실 경계만 보는 이 테스트엔 빈 풀로 충분하다.
+        val emptyPool = object : CandidatePoolPort {
+            override fun resolve(area: Area, categories: Set<String>) = emptyList<GroundedPlace>()
+            override fun ground(poiIds: List<UUID>) = emptyList<GroundedPlace>()
+        }
+        // 생성용·편집용 두 클라이언트로 나뉘었지만(read 상한만 다르다) 여기선 같은 목 서버를 본다 —
+        // 이 테스트가 보는 것은 경계 페이로드지 타임아웃이 아니다.
+        val client = builder.build()
+        return HttpScheduleAgentAdapter(client, client, LocalSlotCandidateSource(emptyPool, clock), clock) to server
     }
 
     val input = ScheduleAgentInput(
@@ -234,6 +246,31 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         result.repaired.days.single().slots.single().startAt.toString() shouldBe "11:00"
         result.changes.single() shouldBe "2번째 슬롯을 30분 뒤로"
         server.verify()
+    }
+
+    /**
+     * **슬롯 후보는 HTTP 를 타지 않는다.** AI 에 그 경로가 없어 우리 후보풀로 답하는데, 그 사실이
+     * `degraded` 로 나가지 않으면 사용자는 취향이 반영된 줄 알고 우리는 TRIP-408 을 잊는다.
+     *
+     * 상대를 부르지 않는다는 것까지 함께 본다 — 부르면 404 로 실패하거나, 더 나쁘게는 조용히
+     * 다른 경로를 두드리게 된다.
+     */
+    "http 모드의 슬롯 후보는 상대를 부르지 않고 강등을 알린다" {
+        val (adapter, server) = fixture()
+
+        val out = adapter.proposeSlotCandidates(
+            SlotCandidatesInput(
+                tripId = UUID.randomUUID(),
+                slotKey = "2026-09-01#" + UUID.randomUUID(),
+                neighborSlotKeys = emptyList(),
+                centerLat = 33.45, centerLng = 126.56,
+                radiusM = null, concept = null, excludePoiIds = emptyList(),
+                requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), 20_000L),
+            ),
+        )
+
+        out.freshness.degraded shouldBe true
+        server.verify()   // 기대한 요청이 없다 = 상대를 부르지 않았다
     }
 })
 

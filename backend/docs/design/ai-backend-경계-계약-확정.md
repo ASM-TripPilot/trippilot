@@ -18,7 +18,7 @@
 | **에러 vs 폴백 이원화** | **AI 가 200 을 주면 폴백하지 않는다.** `is_fallback=true` 여도 그것은 *AI 가 이미 폴백을 마친 결과물*이므로 그대로 쓴다. 백엔드 `MinimalItineraryFallback` 은 **유효한 200 을 받지 못한 경우만**(연결 실패·5xx·역직렬화 실패) 발동한다 |
 | **에러 바디** | `{ error_code, message, retryable }`. 파싱 실패해도 상태코드로 판정한다(바디 상한 8KB) |
 | **재시도** | **하지 않는다.** 실패 즉시 결정론 폴백(INV-4). `retryable` 은 진단용 정보로만 남긴다 |
-| **시한** | `request_meta.deadline_ms` 는 **AI 내부 계산 예산**. 백엔드 소켓 read 상한 = `max_deadline_ms + 마진`(네트워크 홉이 예산에 안 잡혀서). generate 20s · validate 3s · repair 5s |
+| **시한** | `request_meta.deadline_ms` 는 **AI 내부 계산 예산**이자 **목표치(SLO)** — 하드 제약이 아니다(아래 "시한 재정의" 절). **2026-08-21 현재 값을 싣지 않는다**(TRIP-474 — 미지정=무제한). SLO: generate 20s · validate 3s · repair 5s |
 | **day1 조기 노출** | 단일 호출 유지. 백엔드가 **2단계로 나눠 호출**한다(1차 day1 5s → 2차 나머지 20s). `excluded_poi_ids` 로 중복을 막는다(TRIP-293) |
 
 **구현**: `HttpScheduleAgentAdapter` · `ScheduleAgentConfiguration`(전용 RestClient·타임아웃) · `GenerateItineraryService`(2단계) · `SecondPhaseGenerator`.
@@ -104,3 +104,56 @@ validate/repair 와이어에 **원 이동수단·day window 가 없어** AI 가 
 - **repair**: 백엔드에 호출자가 아직 없다 → AI 에 직접 curl 로만 검증
 - **proposeSlotCandidates**: AI 쪽 경로가 없다. http 모드에서 백엔드는 `SLOT_CANDIDATES_NOT_WIRED` 로 실패하며, 이를 **503**(`UpstreamUnavailable`, `fallbackApplied=false`)으로 표면화한다 — 500 이 아니다. 후보는 지어낼 수 없고(INV-1) 빈 목록은 "주변에 없음"과 구분되지 않아 폴백하지 않는다
 - **anchors 없는 여행**(숙소 미등록): AI 가 422 → 1라운드는 숙소 등록을 전제로 진행. 처리 방식은 별도 협의
+
+## 시한 재정의 — `deadline_ms` 는 SLO 다 (2026-08-19) — **수용·구현됨**
+
+> 출처: AI 트랙 제안(PR #104 코멘트, 2026-08-15) — 실측 TRIP-373. 백엔드 수용.
+
+**무엇이 바뀌었나**: `deadline_ms` 는 **목표치(SLO)이자 권고값**이다. 초과는 **실패가 아니라 관측 대상**이다.
+
+| 항목 | 재정의 후 |
+|---|---|
+| 의미 | AI 는 `deadline_ms` 를 권고값으로 읽고 최선을 다한다. **초과해도 5xx 가 아닌 완결 응답**을 준다(기존 "타임아웃 5xx 금지"와 같은 결) |
+| SLO | day1 5s · 전체 20s · validate 3s · repair 5s — **문서·대시보드의 지향점으로 유지**(폐기 아님) |
+| 백엔드 처리 | 초과 응답도 그대로 쓴다. 폴백은 여전히 "유효한 200 을 받지 못한 경우"만(에러 vs 폴백 이원화 불변) |
+| 우리가 기다리는 시간 | 소켓 read 상한 = **대기 상한**(`waitCeilingMs`) + `read-timeout-margin-ms`(기본 2s). 시한을 걸면 `deadline.total-ms`, 안 걸면 610s 다. **파생**이라 한쪽만 올려 소켓이 먼저 끊는 절반 설정이 생기지 않는다. 편집(validate·repair)은 **별도 상한 60s** — 생성만큼 기다리면 편집이 막힌다(TRIP-474) |
+
+**왜**: 실측(TRIP-373, GPT-5.6 13회)에서 취향 점수가 후보 **건당 ~0.3초 선형**이라 실전 풀 193건이 44~78초다.
+하드 20s 안에서는 규칙 폴백이 대부분을 처리해 **실 LLM 경로의 품질을 검증할 방법이 없다** — 개발 단계에서는
+기능을 켜고 시간을 재면서 줄이는 순서가 맞다.
+
+**설정**(운영 기본값 = SLO, 개발에서만 상향):
+
+| 키 | 기본값 | env(compose) |
+|---|---|---|
+| `trippilot.ai.schedule.deadline.day1-ms` | 5000 | `AI_SCHEDULE_DAY1_DEADLINE_MS` |
+| `trippilot.ai.schedule.deadline.total-ms` | 20000 | `AI_SCHEDULE_TOTAL_DEADLINE_MS` |
+| `trippilot.ai.schedule.read-timeout-margin-ms` | 2000 | (미노출 — 파생값 마진) |
+
+- validate 3s · repair 5s 는 **어댑터 상수 그대로**다. 사용자가 화면에서 기다리는 동작이고, 실측 병목은 생성(취향 점수)이라 상향 대상이 아니다.
+- 기동 로그에 값이 찍힌다 — `일정 생성 시한(권고·SLO) = day1 …ms · 전체 …ms`. SLO 초과 설정이면 **경고**를 남긴다(과도기 값이 운영에 그대로 나가는 것을 막는다).
+- 상향 시 주의: `StalePartialSweeper` 는 5분 넘게 멈춘 PARTIAL 을 FAILED 로 내린다. 2차가 5분을 넘기면 진행 중인 생성이 잘린다 — 90s 대에서는 여유가 있다.
+
+**엄격화(하드 제약 복귀) 조건**: AI 쪽 지연 최적화(프롬프트 경량화·병렬 청킹·비동기 점수·모델 교체)로
+실측이 SLO 에 수렴하면 다시 조인다. 판단 근거는 AI 트랙의 아침 리허설 지연 추이.
+
+---
+
+### 그 뒤 — 시한 자체를 껐다 (2026-08-21, TRIP-474)
+
+SLO 재정의만으로는 실 LLM 경로가 여전히 시간에 눌렸다. FE 연동을 위해 **값을 싣지 않기로** 했다
+(AI 측 TRIP-473 에서 `deadline_ms` 를 선택 필드로 전환, 미지정=무제한).
+
+| | 값 |
+|---|---|
+| AI 에 싣는 시한 | 없음(`"deadline_ms": null` 을 명시 전송) |
+| 생성 대기 상한 | 612s (AI 백스톱 600s 보다 커야 우리가 먼저 안 끊는다) |
+| 편집(validate·repair) 대기 상한 | 62s |
+| 멈춘 생성 판정 | `max(5분, 대기 상한 + 60s)` |
+
+**되돌리는 것은 `AI_SCHEDULE_DEADLINE_ENFORCED=true` 한 줄이다**(9월 예정, TRIP-475) — 값은 지우지 않고
+껐을 뿐이고, 위 셋은 전부 파생이라 함께 돌아온다. 한쪽만 되돌리면 죽은 세션이 11분씩 사용자를 잡는다.
+
+실측(2026-08-21 실 AI 왕복): validate 20.1s · repair 20.7s — **시한 3s·5s 를 줬는데도** 그렇다.
+SLO 가 하드 제약이 아니라는 위 재정의가 실제로 그렇게 관측된다는 뜻이고, 편집 대기 상한을 60s 로 잡은 근거다.
+

@@ -59,9 +59,20 @@ jest.mock('@/shared/storage', () => ({
 // 시작하는 변수만 예외다(리포 확립 규칙).
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+// TRIP-466 — (c) onBack 가드가 `router.canGoBack()`/`router.replace(...)` 를 쓴다. `canGoBack` 은
+// 리포 신규 API 라(선례 0) 목에 없으면 press 시 `canGoBack is not a function` 으로 **거짓 red** 가
+// 난다(02a ★3, `ItineraryPlanPage.escape.integration.test.tsx` 목 셋업 선례). `replace` 도 지금까지
+// 익명이라 관찰 불가였던 것을 이름 있는 목으로 승격한다.
+const mockReplace = jest.fn();
+const mockCanGoBack = jest.fn();
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: jest.fn() }),
+  useRouter: () => ({
+    push: mockPush,
+    back: mockBack,
+    replace: mockReplace,
+    canGoBack: mockCanGoBack,
+  }),
 }));
 
 // 지도는 이 칸의 심판 대상이 아니다 — WebView 실물이 뜨지 않게만 막는다. 인라인 팩토리는
@@ -197,6 +208,10 @@ beforeEach(() => {
   itineraryGetCalls = 0;
   mockPush.mockClear();
   mockBack.mockClear();
+  mockReplace.mockClear();
+  mockCanGoBack.mockClear();
+  // 기본: 히스토리 있음. 딥링크(canGoBack=false) 케이스만 각 테스트에서 뒤집는다.
+  mockCanGoBack.mockReturnValue(true);
   itineraryScript = () =>
     itinerary({ dayCount: 3, generationState: 'COMPLETE' });
   tripScript = () => trip();
@@ -621,4 +636,166 @@ describe('🔴 I8 · AC-1·AC-2·AC-7 — solveMode·isFallback 신호가 배선
     // 부정 — solveMode 만 보고 배너를 켜면 여기서 걸린다(isFallback 게이트가 없으면 red 로 전환).
     expect(screen.queryAllByTestId(FALLBACK_BANNER)).toEqual([]);
   });
+});
+
+/* ───────────────────────── TRIP-454 · h11→h25 완성 CTA 배선 ─────────────────────────
+ * 화면(DraftScreen)은 완성 버튼을 그리고 `onComplete` 만 부른다 — **어디로 가는지**는 이 배선의
+ * 책임이자 심판이다. 기본 시나리오(COMPLETE·PLANNED·3일 = listed 얼굴)에서 CTA 를 눌러 h25 로
+ * 정확히 가는지 잰다.
+ * ─────────────────────────────────────────────────────────────────────────── */
+describe('🔴 I9 · TRIP-454 AC-5 — 완성 CTA 를 누르면 h25 로 정확히 배선된다', () => {
+  it('listed 에서 완성 버튼을 누르면 /trips/[tripId]/itinerary 로 tripId 를 실어 한 번 이동한다', async () => {
+    renderPage();
+
+    fireEvent.press(await screen.findByTestId('itinerary-draft-complete'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+
+    // ★ 여기서는 **정확 일치**다(02a ★1·★2) — `'itinerary'` 부분문자열은 draft·generating
+    //   경로에도 있어 substring 매칭이면 엉뚱한 곳으로 가도 통과한다. h25 는 접미 없는
+    //   `/trips/[tripId]/itinerary` 다. 이 단언은 객체형 push(`{pathname, params}`)를 강제한다 —
+    //   문자열 `'/trips/[tripId]/itinerary'` 는 `[tripId]` 미해결이라 깨진 형태다(리포 선례
+    //   must-visits push 동형).
+    const dest = mockPush.mock.calls[0][0] as {
+      pathname?: string;
+      params?: { tripId?: string };
+    };
+    expect(dest.pathname).toBe('/trips/[tripId]/itinerary');
+    expect(dest.params?.tripId).toBe(TRIP_ID);
+  });
+});
+
+/* ═════════════════════════ TRIP-466 · 확정 이후 유효하지 않은 액션 정리 ═════════════════════════
+ * (a) 완성 CTA 확정 가드 + (c) onBack canGoBack 가드. 배선을 실 HTTP·목 라우터로 태운다.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+describe('🔴 I10 · TRIP-466 AC-a1 — CONFIRMED 면 완성 CTA 가 잠기고 라우팅이 0 건이다', () => {
+  it('status=CONFIRMED 면 완성 버튼이 비활성이고 눌러도 router.push 가 0 건이다', async () => {
+    /**
+     * ⚠️ 확정 일정에서 완성 CTA 가 눌리면 안 되는 이유는 완성이 곧 다음 화면 이동이라, 확정 이후
+     * 흐름에서 어긋난 액션이 살아 있는 것이다(브리프 (a)). 완성 CTA 는 `router.push` 로만 이동하므로
+     * `toBeDisabled()` 와 **push 0 건**을 짝으로 잰다(회색인데 눌리는 함정 회피 · 02a ★2).
+     * 초기 로딩엔 `data===undefined` 라 canRetry 가 잠깐 true 다 → settle 대기가 필수(★7, I3 동형).
+     */
+    itineraryScript = () =>
+      itinerary({
+        dayCount: 3,
+        generationState: 'COMPLETE',
+        status: 'CONFIRMED',
+      });
+
+    renderPage();
+
+    const complete = await screen.findByTestId('itinerary-draft-complete');
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-draft-complete')).toBeDisabled()
+    );
+
+    fireEvent.press(complete);
+    await sleep(50);
+
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 I11 · TRIP-466 AC-a3 — 생성 중(PARTIAL) 은 잠기지 않는다 (선제 green · 과잉잠금 트립와이어)', () => {
+  it('generationState=PARTIAL(status PLANNED) 이면 완성 버튼이 활성이고 눌러 이동한다', async () => {
+    /**
+     * ★ canRetry 재사용의 정확성을 지키는 심판(02a ★1 · 브리프 맹점 ④). PARTIAL 은 generationState
+     * 이고 status 는 여전히 PLANNED 라 canRetry=`PLANNED !== 'CONFIRMED'`=true → 완성 CTA 활성.
+     * 지금도 green(잠금 0)이고 구현 후에도 green 이어야 한다 — 구현자가 "CONFIRMED 만"을 "생성
+     * 중도 막음"으로 넓히면(예: canRetry 에 PARTIAL 배제를 곱함) 이 케이스가 red 로 전환된다.
+     */
+    itineraryScript = () =>
+      itinerary({
+        dayCount: 1,
+        generationState: 'PARTIAL',
+        status: 'PLANNED',
+      });
+
+    renderPage();
+
+    const complete = await screen.findByTestId('itinerary-draft-complete');
+    await waitFor(() =>
+      expect(screen.getByTestId('itinerary-draft-complete')).toBeEnabled()
+    );
+
+    fireEvent.press(complete);
+
+    // 활성이라 실제로 이동한다 — 목적지 정확일치는 AC-a2(기존 I9) 소관, 여기선 "잠기지 않았다"만.
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+  });
+});
+
+/* ───────────────────────── TRIP-466 · (c) onBack canGoBack 가드 ─────────────────────────
+ * 두 뒤로가기(ZeroCandidateScreen `itinerary-draft-zero-back` · DraftScreen `itinerary-draft-back`)가
+ * 딥링크로 콜드 오픈돼 히스토리가 없으면(canGoBack()===false) 침묵 no-op 이 아니라 홈으로 replace 한다
+ * (INV-4). 히스토리가 있으면(true) 이전 화면으로 back. 얼굴은 실 HTTP 로 강제한다(훅 목킹 금지).
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/** 두 얼굴과 각 얼굴의 뒤로 버튼·얼굴 마커. zero 는 `days:[]+요약객체`(I4 FACE_ROWS 2행이 zero 임을
+ * 이미 증명), listed 는 기본 script. */
+const BACK_CASES: {
+  face: 'zero' | 'listed';
+  backTestId: string;
+  faceMarker: string;
+  script: () => Itinerary;
+}[] = [
+  {
+    face: 'zero',
+    backTestId: 'itinerary-draft-zero-back',
+    faceMarker: 'itinerary-draft-zero',
+    script: () =>
+      itinerary({
+        dayCount: 0,
+        generationState: 'COMPLETE',
+        days: [],
+        candidatesSummary: { level: 'LOW' },
+      }),
+  },
+  {
+    face: 'listed',
+    backTestId: 'itinerary-draft-back',
+    faceMarker: 'itinerary-draft-complete',
+    script: () => itinerary({ dayCount: 3, generationState: 'COMPLETE' }),
+  },
+];
+
+describe('🔴 I12 · TRIP-466 AC-c1 — 딥링크(canGoBack=false) 면 홈으로 replace 한다', () => {
+  it.each(BACK_CASES)(
+    '$face 얼굴에서 뒤로가기를 누르면 /(tabs) 로 replace 하고 back 은 0 건이다',
+    async ({ backTestId, faceMarker, script }) => {
+      itineraryScript = script;
+      mockCanGoBack.mockReturnValue(false);
+
+      renderPage();
+      await screen.findByTestId(faceMarker);
+
+      fireEvent.press(screen.getByTestId(backTestId));
+
+      // 홈 목적지 자체를 잠근다 — `/(tabs)/itinerary` 는 trips[0] 리다이렉트 함정이라 금지
+      // (`ItineraryPlanPage.escape` AC-4 동형). 침묵 no-op 도, back+replace 이중호출도 아님.
+      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      expect(mockBack).not.toHaveBeenCalled();
+    }
+  );
+});
+
+describe('I13 · TRIP-466 AC-c2 — 히스토리 있으면(canGoBack=true) 이전 화면으로 back (선제 green · 무회귀)', () => {
+  it.each(BACK_CASES)(
+    '$face 얼굴에서 뒤로가기를 누르면 router.back() 이고 replace 는 0 건이다',
+    async ({ backTestId, faceMarker, script }) => {
+      // 현행 `() => router.back()` 이 canGoBack=true 기대와 이미 일치 → 구현 전후 green(무회귀 앵커).
+      itineraryScript = script;
+      mockCanGoBack.mockReturnValue(true);
+
+      renderPage();
+      await screen.findByTestId(faceMarker);
+
+      fireEvent.press(screen.getByTestId(backTestId));
+
+      expect(mockBack).toHaveBeenCalledTimes(1);
+      expect(mockReplace).not.toHaveBeenCalled();
+    }
+  );
 });

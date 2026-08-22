@@ -3,6 +3,11 @@
  * 해제·게스트 판정·로딩 실패 얼굴을 여기서 모은다 — 화면(`SavedPlaceListScreen`)은 결과만
  * 그린다(props만).
  *
+ * **TRIP-494: d02 는 장소만 그린다(Figma 정본 1693:1183 — topBar+장소 list+ctaBar, 숙소 섹션
+ * 없음).** TRIP-449 가 얹었던 숙소(SavedStay) 축은 여기서 뺐다 — 저장한 숙소는 별도 화면
+ * e04(`/stays/saved`, SavedStayPage)가 진다(정본 2화면 분리). 화면(`SavedPlaceListScreen`)의
+ * 숙소 옵셔널 prop 은 미전달로 두면 섹션이 안 그려져 남겨 둔다(무회귀 additive 역).
+ *
  * **TRIP-394로 해제 동작이 뒤집혔다** — 하트를 눌러도 행이 사라지지 않고 **자리에 남아 빈 하트**가
  * 되고, 빈 하트를 다시 누르면 같은 자리에서 되돌린다(재담김). 서버는 실제로 해제/재담김되고,
  * 실패하면 배너 + 하트 원복(INV-4). 그래서 페이지가 방문 범위 상태 둘을 소유한다:
@@ -33,6 +38,7 @@ import {
 import { orderSavedPlaces } from '@/features/explore/model/savedPlaceList';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 /** 실패 시 재시도가 다시 밟아야 할 마지막 조작 — 해제냐 되돌리기냐를 함께 기억한다. */
 type LastAttempt = { saved: SavedPlace; mode: 'release' | 'restore' };
@@ -159,7 +165,18 @@ export function SavedPlacesPage(): ReactElement {
       releasedPoiIds={[...releasedPoiIds]}
       onPressRemove={handlePressRemove}
       onPressRestore={handlePressRestore}
-      onPressCreateTrip={() => router.push('/trips/new/step1')}
+      onPressRow={(saved) =>
+        router.push(`/explore/places/${saved.place.poiId}`)
+      }
+      onPressCreateTrip={() => {
+        // TRIP-458: d02 CTA 는 "진입"으로 친다(위저드 셸 JSDoc D3). 그런데 위저드 안 '더 담기'로
+        // d02 를 열고 돌아오면 `trips/new` 레이아웃이 스택에 살아 있어 셸 마운트의 `resetMustVisits`
+        // 가 재발화하지 않는다 → 직전에 x 로 뺀 poiId 가 `excludedMustVisitPoiIds` 에 남고, 추가 전용
+        // 재시드가 그걸 건너뛰어 '꼭 갈 곳'이 빈 채 열린다. 여기서 직접 reset 해 그 잔존 기억을 비운다
+        // (셸 재마운트라는 jest 무심판 경로에 기대지 않아 회귀를 통합 테스트로 잡을 수 있다).
+        useTripWizardStore.getState().resetMustVisits();
+        router.push('/trips/new/step1');
+      }}
       onPressBrowse={() => router.push('/explore/places')}
       onRetry={handleRetry}
       onPressLogin={() => router.push('/(auth)/login')}

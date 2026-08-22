@@ -40,6 +40,14 @@ jest.mock('expo-router', () => {
   };
 });
 
+// TRIP-471로 PrefStep2Page가 `usePutMePreferences()`(react-query useMutation)를 물게 되면서,
+// QueryClientProvider 없이 pref2 래퍼를 렌더하는 이 테스트가 `No QueryClient set`으로 크래시한다.
+// 완료 시 fire-and-forget PUT 하나뿐(렌더 중 mutate 미호출)이라, 무해 스텁으로 훅만 끊는다
+// (layer-test.md: tabsShell의 useGetTrips 스텁과 동일 계열, 라우트 렌더 관심사와 무관).
+jest.mock('@/shared/api/generated/preferences/preferences', () => ({
+  usePutMePreferences: () => ({ mutate: jest.fn() }),
+}));
+
 beforeEach(() => {
   usePreferenceStore.getState().reset();
 });

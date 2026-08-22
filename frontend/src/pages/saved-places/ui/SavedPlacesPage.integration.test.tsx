@@ -13,6 +13,7 @@ import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 import { optimisticSavedPlaceId } from '@/features/explore/model/savedPlaceIndex';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 import { SavedPlacesPage } from './SavedPlacesPage';
 
@@ -523,6 +524,34 @@ describe('S-6 · 이 장소들로 여행 만들기 (A-6 · US-SHELL-05 · BR-U1-
     fireEvent.press(screen.getByTestId('explore-saved-createtrip'));
 
     // 위저드가 담은 장소를 무엇으로 쓰는지는 TRIP-209 소관이다 — 이 칸은 이동까지다.
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
+
+  // TRIP-458 회귀: CTA 는 위저드 진입으로 쳐야 한다 — 직전 세션에 x 로 뺀 기억
+  // (`excludedMustVisitPoiIds`)을 비워야 warm 캐시로 다시 담긴다. 셸 재마운트에만 기대던
+  // 옛 배선은 '더 담기' 왕복(셸이 스택에 살아 있음)에서 reset 이 안 돌아 '꼭 갈 곳'이 빈 채
+  // 열렸다. 이 CTA 가 직접 reset 하는지를 스토어 상태로 관찰한다(셸 재마운트라는 jest 무심판
+  // 경로를 안 탄다). 준비=스토어에 잔존 excluded 를 심는다 → 실행=CTA press → 단언=비워졌다.
+  it('CTA 는 위저드 시드 잔존 기억(excluded)을 비운다 (재진입 캐리 복구)', async () => {
+    // 준비값을 **비어 있지 않게** 심는다 — reset 값(전부 빈 상태)과 달라야 세 단언이 다
+    // 판별력을 갖는다(mustVisits 도 `[]≠[한 개]` 로 실제로 검사된다). SavedPlacesPage 는 시드
+    // 재충전 효과가 없어(그건 위저드 몫) reset 뒤 다시 채워지지 않는다 — 값이 안정적이다.
+    useTripWizardStore.setState({
+      mustVisits: [{ sourcePoiId: 'poi-x', name: '남겨진 곳', imageUrl: null }],
+      mustVisitsInitialized: true,
+      excludedMustVisitPoiIds: ['poi-y'],
+    });
+
+    await renderLoaded();
+    await waitFor(() => expect(itemTestIds()).toHaveLength(4));
+
+    fireEvent.press(screen.getByTestId('explore-saved-createtrip'));
+
+    const state = useTripWizardStore.getState();
+    expect(state.excludedMustVisitPoiIds).toEqual([]);
+    expect(state.mustVisits).toEqual([]);
+    expect(state.mustVisitsInitialized).toBe(false);
+    // 이동 자체는 여전히 bare 문자열이다(동결 계약 무손상).
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
   });
 });

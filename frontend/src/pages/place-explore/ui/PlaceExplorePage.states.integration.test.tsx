@@ -149,9 +149,12 @@ beforeEach(() => {
   saveGate.release();
 
   server.use(
-    http.get(`${BASE}/places`, async () => {
+    http.get(`${BASE}/places`, async ({ request }) => {
       await placesGate.opened;
-      return HttpResponse.json(PLACES);
+      // 서버가 q(이름 부분일치)로 거른다(TRIP-502) — 검색은 서버 몫이라 이 스텁도 q 를 반영한다.
+      const q = new URL(request.url).searchParams.get('q');
+      const result = q ? PLACES.filter((p) => p.nameKo.includes(q)) : PLACES;
+      return HttpResponse.json({ items: result, nextCursor: null });
     }),
     http.get(`${BASE}/saved-places`, () => HttpResponse.json(savedRows)),
     http.post(`${BASE}/saved-places`, async ({ request }) => {
@@ -225,7 +228,11 @@ describe('S-1 · 첫 조회 중에는 스켈레톤이 뜬다 (AC-4)', () => {
 describe('S-2 · 0건이면 다른 지역으로 보낸다 (AC-5 · 01b Seed Q4)', () => {
   it('안내가 뜨고 "다른 지역 보기"가 여행 목적 지역 선택으로 보낸다', async () => {
     setAccessToken('valid-access');
-    server.use(http.get(`${BASE}/places`, () => HttpResponse.json([])));
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      )
+    );
 
     renderPage();
 
@@ -241,7 +248,7 @@ describe('S-2 · 0건이면 다른 지역으로 보낸다 (AC-5 · 01b Seed Q4)'
 });
 
 describe('S-3 · 검색어가 0건을 만들면 그 검색어를 지목한다 (AC-6 · BR-U1-16 취지)', () => {
-  it('검색어를 문구에 박고, 해제하면 목록이 되돌아오며, 서버는 다시 부르지 않는다', async () => {
+  it('검색어를 문구에 박고, 해제하면 목록이 되돌아온다 (검색은 서버가 한다 — TRIP-502)', async () => {
     setAccessToken('valid-access');
 
     await renderLoaded();
@@ -264,8 +271,8 @@ describe('S-3 · 검색어가 0건을 만들면 그 검색어를 지목한다 (A
 
     // 해제 수단이 실제로 조건을 지운다 — 문구만 있고 버튼이 아무 일도 안 하면 no-op 컨트롤이다.
     await waitFor(() => expect(cardTestIds()).toHaveLength(5));
-    // 계약에 `q` 파라미터가 없다 — 검색·해제 어느 쪽도 서버를 부르지 않는다.
-    expect(hitsOf('GET', '/api/v1/places')).toHaveLength(1);
+    // 검색·해제는 서버가 한다(q) — 각각 새 요청이 나간다(초기 + 검색 + 해제, 로드된 페이지 한정 아님).
+    expect(hitsOf('GET', '/api/v1/places').length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -278,7 +285,7 @@ describe('S-4 · 조회 실패의 재시도가 실제로 서버를 다시 부른
         attempts += 1;
         return attempts === 1
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(PLACES);
+          : HttpResponse.json({ items: PLACES, nextCursor: null });
       })
     );
 
@@ -498,8 +505,11 @@ describe('S-10 · 배너는 다음 조작 시 사라진다 (01b Seed Q5 — 타�
     await waitFor(() =>
       expect(screen.queryByTestId('explore-places-saveerror')).toBeNull()
     );
-    // 긍정 짝 — 화면이 통째로 죽어서 "없음"이 된 게 아니다.
-    expect(cardTestIds()).toEqual(['explore-places-card-p2']);
+    // 긍정 짝 — 화면이 통째로 죽어서 "없음"이 된 게 아니다. 검색은 서버가 하므로(q=광안, TRIP-502)
+    // 새 조회가 해소되면 p2 만 남는다(클라 즉시 필터 아님 — waitFor 로 서버 응답을 기다린다).
+    await waitFor(() =>
+      expect(cardTestIds()).toEqual(['explore-places-card-p2'])
+    );
   });
 });
 
@@ -516,7 +526,11 @@ describe('S-11 · 좌표 방어 배선 (01b Seed Q12 · BR-U1-02 · US-EXPL-04 �
       lat: null,
       lng: null,
     } as unknown as Place;
-    server.use(http.get(`${BASE}/places`, () => HttpResponse.json([noCoords])));
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [noCoords], nextCursor: null })
+      )
+    );
 
     await renderLoaded();
 

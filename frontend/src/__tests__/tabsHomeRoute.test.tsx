@@ -148,6 +148,20 @@ describe('🟢 370-AC-1 · "지금 뜨는 장소" 더 보기 → /explore/places
   });
 });
 
+// ── TRIP-499 · AC-1 홈 검색바 → 여행지 선택(정본) ─────────────────────────────
+describe('🔴 499-AC-1 · 검색바 → /explore/region?purpose=trip', () => {
+  it('홈 검색바를 누르면 여행지 선택(RegionPicker, trip)으로 이동한다', () => {
+    // 기본 목 = 빈 trips → discovery 얼굴. discovery 는 검색바를 그린다. 지금 소스는 옛 목적지
+    // (/explore/search)로 push 하므로 새 목적지 단언과 불일치 → red. 배선 뒤엔 정확히
+    // /explore/region?purpose=trip 한 곳으로 간다(trip↔stay 오타는 완전 일치 단언이 잡는다).
+    render(<HomeRoute />);
+
+    fireEvent.press(screen.getByTestId('home-search-bar'));
+
+    expect(mockPush.mock.calls).toEqual([['/explore/region?purpose=trip']]);
+  });
+});
+
 // ── TRIP-371 · 실데이터 판정 ───────────────────────────────────────────────────
 describe('🔴 371-AC-1 · 비-ENDED 여행이 있으면 planning 얼굴', () => {
   it('여행 얼굴(trip-hero)을 그리고 discovery 히어로는 숨긴다', () => {

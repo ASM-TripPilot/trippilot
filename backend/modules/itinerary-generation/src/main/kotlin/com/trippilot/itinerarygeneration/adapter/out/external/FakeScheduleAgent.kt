@@ -28,6 +28,7 @@ import java.time.LocalTime
 @Component
 class FakeScheduleAgent(
     private val candidatePool: CandidatePoolPort,
+    private val localCandidates: LocalSlotCandidateSource,
     private val clock: Clock,
 ) : ScheduleAgentPort {
 
@@ -78,30 +79,13 @@ class FakeScheduleAgent(
         RepairResult(solution, emptyList())
 
     /**
-     * 슬롯 후보 — **실제 반경 조회**로 ACTIVE 정본만 돌려준다(INV-1 closed-set).
-     * 후보가 0건이면 반경을 한 번 넓혀 다시 본다(h15 "반경 넓힘"을 서버가 흉내낸다) — 실 판단은 AI 몫.
-     * 근거 문구는 시각·소요시간을 언급하지 않는다(BR-U2-09).
+     * 슬롯 후보 — 공용 [LocalSlotCandidateSource] 에 위임한다. 로직이 여기 갇혀 있어서 http 모드가
+     * 같은 것을 못 쓰고 503 을 내던 자리였다(DEC-U3-5).
+     *
+     * fake 모드는 **에이전트 전체가 대역**이라 강등이 아니다 — `degraded=false`.
      */
-    override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput {
-        val excluded = input.excludePoiIds.toSet()
-        var radius = (input.radiusM ?: DEFAULT_RADIUS_M)
-        var found = search(input, radius, excluded)
-        if (found.isEmpty() && radius < WIDENED_RADIUS_M) {
-            radius = WIDENED_RADIUS_M
-            found = search(input, radius, excluded)
-        }
-        return SlotCandidatesOutput(
-            candidates = found.take(MAX_CANDIDATES).map {
-                SlotCandidate(
-                    poiId = it.poiId,
-                    distanceRange = it.distanceM?.let { m -> "약 ${"%.1f".format(java.util.Locale.ROOT, m / 1000)}km" } ?: "거리 미확인",
-                    rationale = input.concept?.let { c -> "$c 컨셉에 맞는 ${it.category}" } ?: "주변 ${it.category}",
-                )
-            },
-            radiusMUsed = radius,
-            freshness = FreshnessMeta(clock.instant(), degraded = false),
-        )
-    }
+    override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput =
+        localCandidates.propose(input, degraded = false)
 
     /**
      * 재계획 — 잠긴 슬롯은 그대로 두고 **그 뒤만** 다시 채운다(INV-U4-04).
@@ -135,18 +119,11 @@ class FakeScheduleAgent(
         )
     }
 
-    private fun search(input: SlotCandidatesInput, radiusM: Int, excluded: Set<java.util.UUID>) =
-        candidatePool.resolve(Area.Radius(input.centerLat, input.centerLng, radiusM.toDouble()), emptySet())
-            .filter { it.poiId !in excluded }
-            .sortedBy { it.distanceM ?: Double.MAX_VALUE }
 
     companion object {
         private const val PICKS_PER_DAY = 2
         private const val SLOT_GAP_HOURS = 3
         private const val DEFAULT_DWELL_MIN = 60
-        private const val DEFAULT_RADIUS_M = 3_000
-        private const val WIDENED_RADIUS_M = 12_000
-        private const val MAX_CANDIDATES = 5
         /** 지금 당장이 아니라 조금 뒤부터 — 이동 시간을 아예 0 으로 두면 화면이 비현실적으로 보인다. */
         private const val REPLAN_LEAD_MIN = 30
         private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")

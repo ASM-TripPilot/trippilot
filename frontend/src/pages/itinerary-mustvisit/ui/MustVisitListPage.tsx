@@ -11,7 +11,10 @@ import {
 } from '@/features/itinerary/model/mustVisitList';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
-import type { AddMustVisitRequest } from '@/shared/api/generated/schemas';
+import type {
+  AddMustVisitRequest,
+  GenerateItineraryRequestGenerationMode,
+} from '@/shared/api/generated/schemas';
 import {
   deleteTripsTripIdMustVisitsMustVisitId,
   getGetTripsTripIdMustVisitsQueryKey,
@@ -55,10 +58,6 @@ const DEMOTE_KEPT = '바꾸지 못했어요. 다시 시도해 주세요';
 /** 409 = 목표 상태와 결과 상태가 같다. 실패로 세지 않되 침묵하지도 않는다. */
 const DEMOTE_DUPLICATE = '이미 아무 때나로 담겨 있어요';
 
-/** 다음 단계(h09 생성 진행)가 리포에 아직 없다. 어느 프레임·문서에도 사유 문구가 없어
- * 01b D7 이 정한 **발명값**이다 — 목적지가 생기면 이 상수와 함께 사라진다. */
-const PROCEED_BLOCKED_REASON = '다음 단계는 아직 준비 중이에요';
-
 type DemoteFailure =
   /** 잃었다 — 되돌리려면 이 요청을 다시 내야 한다. */
   | { kind: 'lost'; request: AddMustVisitRequest }
@@ -67,8 +66,12 @@ type DemoteFailure =
 
 export function MustVisitListPage({
   tripId,
+  mode,
 }: {
   tripId: string;
+  /** copick 갈래 신호(TRIP-504). undefined=완전AI(기존 동작 불변, 후방호환 additive).
+   * CO_PLAN 이면 다음/건너뛰기가 CO_PLAN generating + 첫 슬롯 successRoute 로 잇는다(AC-5). */
+  mode?: GenerateItineraryRequestGenerationMode;
 }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -198,6 +201,28 @@ export function MustVisitListPage({
           ? DEMOTE_DUPLICATE
           : undefined;
 
+  // 다음/건너뛰기는 둘 다 h09(생성 중)로 간다. copick 갈래(mode=CO_PLAN)면 h04 에서 실려 온 신호를
+  // 그대로 h09 로 넘기고, successRoute 를 **첫 슬롯 경로 템플릿**으로 싣는다(01b Q3·AC-5). h05 시점엔
+  // slotKey 를 아직 모르므로 `[slotKey]` 세그먼트가 든 템플릿이고, h09 가 생성 후 실 slotKey 를
+  // 채운다(GeneratingPage). 완전AI 갈래(mode 없음)는 기존 FULLY_AI generating 그대로다(무회귀).
+  function goToGenerating(): void {
+    if (mode === 'CO_PLAN') {
+      router.push({
+        pathname: '/trips/[tripId]/itinerary/generating',
+        params: {
+          tripId,
+          mode: 'CO_PLAN',
+          successRoute: '/trips/[tripId]/itinerary/copick/[slotKey]',
+        },
+      });
+      return;
+    }
+    router.push({
+      pathname: '/trips/[tripId]/itinerary/generating',
+      params: { tripId },
+    });
+  }
+
   return (
     <MustVisitPickerScreen
       view={view}
@@ -205,10 +230,12 @@ export function MustVisitListPage({
         items,
         savedPlaces: savedPlaces.savedPlaces,
       })}
-      // h09 가 설 때까지 **항상** 막힌다. 목적지 없는 버튼을 말없이 죽여 두지 않는다(INV-4).
-      proceedBlockedReason={PROCEED_BLOCKED_REASON}
       demoteErrorText={demoteErrorText}
       onBack={() => router.back()}
+      // 다음/건너뛰기 둘 다 h09(생성 중)로 잇는다(TRIP-454 AC-2 · TRIP-504 AC-5). copick 갈래면
+      // CO_PLAN 신호+첫 슬롯 successRoute 를 싣는다(위 `goToGenerating`). 화면 계약은 무수정.
+      onProceed={goToGenerating}
+      onSkip={goToGenerating}
       onPressItem={(sourcePoiId) =>
         router.push({
           pathname: '/trips/[tripId]/itinerary/must-visits/[poiId]',

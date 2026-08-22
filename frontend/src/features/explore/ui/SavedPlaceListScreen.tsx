@@ -26,6 +26,17 @@ import {
  * 태우면 화면이 끝나지 않는 로딩이 되고, `isLoading`으로 피하면 이번엔 "담은 게 없다"는
  * 거짓말이 뜬다 — 그래서 게스트 여부를 얼굴 판정의 가장 앞에 둔다.
  */
+/**
+ * 숙소 행 뷰모델(TRIP-449). `SavedStay` 스키마엔 사진·지역·태그·상태배지가 없어(brief §61)
+ * `SavedPlace` 행(`SavedPlaceRow`)을 재사용 못 한다 — 이름과 (있으면) 날짜라벨만 나른다.
+ * 날짜라벨은 체크인/아웃이지 소요 시간이 아니다(INV-3). VM 조립은 페이지가 한다.
+ */
+export interface StayRowVM {
+  savedStayId: string;
+  name: string;
+  dateLabel?: string;
+}
+
 export interface SavedPlaceListScreenProps {
   /** 그릴 순서 그대로의 목록 — 정렬은 페이지가 끝냈다(단일 출처). */
   savedPlaces: SavedPlace[];
@@ -40,12 +51,24 @@ export interface SavedPlaceListScreenProps {
   onPressRemove: (saved: SavedPlace) => void;
   /** 빈 하트(released) 행을 누르면 되돌리기(재담기). 미지정 = 미배선(TRIP-394). */
   onPressRestore?: (saved: SavedPlace) => void;
+  /** 행 본문 탭 → d06 상세. 미지정이면 행은 눌러도 무동작(additive, 게이트① 재개봉 없음). */
+  onPressRow?: (saved: SavedPlace) => void;
   onPressCreateTrip: () => void;
   onPressBrowse: () => void;
   onRetry?: () => void;
   onPressLogin?: () => void;
   onPressRemoveErrorAction?: () => void;
   onBack?: () => void;
+  /** 담은 숙소 뷰모델 목록(TRIP-449). 미지정 = 숙소 섹션 미렌더(무회귀 — 장소 축 동결 불변). */
+  savedStays?: StayRowVM[];
+  /** 숙소 축 얼굴 — 장소와 같은 판정 함수(`resolvePlaceListState`)를 페이지가 숙소 수로 부른다. */
+  stayState?: PlaceListState;
+  /** 숙소 해제. 미지정 = 미배선. */
+  onRemoveStay?: (savedStayId: string) => void;
+  /** 해제 진행 중인 savedStayId 목록 — 그 행 해제 버튼을 비활성한다. 미지정 = []. */
+  removingStayIds?: string[];
+  /** 통합 빈 상태 판정을 페이지가 파생해 내린다(장소·숙소 둘 다 0). 미지정 = 장소 축만 보고 판정. */
+  showEmpty?: boolean;
 }
 
 type Face = 'guest' | 'loading' | 'error' | 'empty' | 'results';
@@ -99,6 +122,7 @@ function SavedPlaceRow({
   released,
   onPressRemove,
   onPressRestore,
+  onPressRow,
 }: {
   saved: SavedPlace;
   rank: number;
@@ -106,14 +130,19 @@ function SavedPlaceRow({
   released: boolean;
   onPressRemove: (saved: SavedPlace) => void;
   onPressRestore?: (saved: SavedPlace) => void;
+  onPressRow?: (saved: SavedPlace) => void;
 }): ReactElement {
   const { place } = saved;
   const badge = SAVED_PLACE_BADGE[place.dataStatus];
   const tag = place.tags[0];
 
   return (
-    <View
+    // bare Pressable(accessibilityRole 없음) — d04 카드와 같은 규율(role 을 붙이면 개수 심판이
+    // 깨질 위험 · 여기 d02 엔 role-count 가드가 없지만 대칭 유지). d02 하트는 disabled 가 없어
+    // 항상 활성이라 하트 press 는 부모로 안 샌다(RNTL Probe A, ★2) — `!pending` 가드 불필요.
+    <Pressable
       testID={`explore-saved-item-${saved.savedPlaceId}`}
+      onPress={() => onPressRow?.(saved)}
       className="w-full flex-row items-center gap-md border-b border-hairline py-md"
     >
       <View
@@ -194,7 +223,7 @@ function SavedPlaceRow({
           />
         )}
       </Pressable>
-    </View>
+    </Pressable>
   );
 }
 
@@ -203,11 +232,13 @@ function ResultsList({
   releasedPoiIds,
   onPressRemove,
   onPressRestore,
+  onPressRow,
 }: {
   savedPlaces: SavedPlace[];
   releasedPoiIds: string[];
   onPressRemove: (saved: SavedPlace) => void;
   onPressRestore?: (saved: SavedPlace) => void;
+  onPressRow?: (saved: SavedPlace) => void;
 }): ReactElement {
   return (
     <FlatList<SavedPlace>
@@ -223,6 +254,7 @@ function ResultsList({
           released={releasedPoiIds.includes(item.place.poiId)}
           onPressRemove={onPressRemove}
           onPressRestore={onPressRestore}
+          onPressRow={onPressRow}
         />
       )}
     />
@@ -400,6 +432,99 @@ function EmptyBlock({
   );
 }
 
+/** 담은 숙소 행(TRIP-449) — 자리표시 썸네일(회색, `SavedStay`엔 imageUrl 없음·INV-1) + 이름 +
+ * (있으면) 날짜라벨 + 해제 하트. 빈/찬은 색이 아니라 `saved-stay-item-*`·`saved-stay-remove-*`
+ * testID 존재/부재로 잰다(repo-trap 글리프 함정 회피 — SVG fill 은 렌더 트리에 안 남는다). */
+function StayRow({
+  stay,
+  removing,
+  onRemoveStay,
+}: {
+  stay: StayRowVM;
+  removing: boolean;
+  onRemoveStay?: (savedStayId: string) => void;
+}): ReactElement {
+  return (
+    <View
+      testID={`saved-stay-item-${stay.savedStayId}`}
+      className="w-full flex-row items-center gap-md border-b border-hairline py-md"
+    >
+      <View className="h-20 w-[104px] rounded-thumb bg-surface-strong" />
+
+      <View className="flex-1 gap-xs">
+        <Text className="font-noto-bold text-card-title font-bold text-ink">
+          {stay.name}
+        </Text>
+        {stay.dateLabel ? (
+          <View
+            testID={`saved-stay-date-${stay.savedStayId}`}
+            className="flex-row items-center gap-xs"
+          >
+            <Text className="font-noto text-caption text-muted">
+              {stay.dateLabel}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      <Pressable
+        testID={`saved-stay-remove-${stay.savedStayId}`}
+        accessibilityRole="button"
+        accessibilityState={{ selected: true, disabled: removing }}
+        disabled={removing}
+        onPress={() => onRemoveStay?.(stay.savedStayId)}
+        className="h-[38px] w-[38px] items-center justify-center"
+      >
+        <HeartFilledGlyph size={24} />
+      </Pressable>
+    </View>
+  );
+}
+
+function StaySection({
+  savedStays,
+  removingStayIds,
+  onRemoveStay,
+}: {
+  savedStays: StayRowVM[];
+  removingStayIds: string[];
+  onRemoveStay?: (savedStayId: string) => void;
+}): ReactElement {
+  return (
+    <View testID="saved-stay-section" className="w-full px-lg pt-lg">
+      <Text className="font-noto-bold text-[16px] font-bold text-ink">
+        담은 숙소
+      </Text>
+      <View className="mt-sm">
+        {savedStays.map((stay) => (
+          <StayRow
+            key={stay.savedStayId}
+            stay={stay}
+            removing={removingStayIds.includes(stay.savedStayId)}
+            onRemoveStay={onRemoveStay}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** 숙소 축 조회 실패 안내(INV-4 — 한쪽 실패를 통합 empty 로 위장하지 않는다). 장소 에러와 달리
+ * 재시도 배선은 정본 AC·Figma 부재라 두지 않는다(YAGNI, 후속 정정 대상). */
+function StayErrorNotice(): ReactElement {
+  return (
+    <View className="w-full items-center justify-center px-lg pt-xl">
+      <StateNotice
+        testID="saved-stay-error"
+        icon={<WarningTriangleGlyph size={32} />}
+        title="담은 숙소를 불러올 수 없어요"
+        description="잠시 후 다시 시도해 주세요"
+        actions={[]}
+      />
+    </View>
+  );
+}
+
 export function SavedPlaceListScreen({
   savedPlaces,
   state = { kind: 'results' },
@@ -408,14 +533,31 @@ export function SavedPlaceListScreen({
   releasedPoiIds = [],
   onPressRemove,
   onPressRestore,
+  onPressRow,
   onPressCreateTrip,
   onPressBrowse,
   onRetry,
   onPressLogin,
   onPressRemoveErrorAction,
   onBack,
+  savedStays,
+  stayState,
+  onRemoveStay,
+  removingStayIds = [],
+  showEmpty,
 }: SavedPlaceListScreenProps): ReactElement {
   const face = resolveFace(isGuest, state);
+  // 숙소 축(TRIP-449) — 장소와 독립. 통합 얼굴 규칙은 `guest > loading > error > results >
+  // empty`(01b): 게스트가 먼저, 그다음 어느 축이든 조회 중이면 로딩 하나로 접고, 그 밖에선
+  // 두 축의 error·results 를 나란히 그린다. 통합 빈 상태는 페이지가 파생한 showEmpty 로만
+  // 그린다(장소·숙소 둘 다 0). 화면 직접 렌더 경로(동결 화면 테스트)는 showEmpty 미지정이라
+  // 장소 축만 보고 판정한다.
+  const stayLoading = stayState?.kind === 'loading';
+  const stayHasResults = stayState?.kind === 'results';
+  const stayHasError = stayState?.kind === 'error';
+  const showLoading = face === 'loading' || (face !== 'guest' && stayLoading);
+  const showEmptyFace = showEmpty ?? face === 'empty';
+  const showPlaceError = face === 'error';
   // 목록이 남아 있으면(재조회 실패로 얼굴이 error 로 넘어가도) 행·CTA 는 유지한 채 에러
   // 안내를 함께 그린다 — 얼굴을 error 하나로 통째로 바꾸면 남은 목록이 사라진다(TRIP-223
   // 03b W-2, TRIP-222 03b W-1 과 같은 방향).
@@ -436,26 +578,44 @@ export function SavedPlaceListScreen({
         <AppBar subtitle={subtitle} onBack={onBack} />
 
         {face === 'guest' ? <GuestBlock onPressLogin={onPressLogin} /> : null}
-        {face === 'loading' ? <LoadingBlock /> : null}
-        {face === 'error' ? <ErrorBlock onRetry={onRetry} /> : null}
-        {face === 'empty' ? <EmptyBlock onPressBrowse={onPressBrowse} /> : null}
+        {showLoading ? <LoadingBlock /> : null}
 
-        {showResults ? (
+        {face !== 'guest' && !showLoading ? (
           <>
-            <ResultsList
-              savedPlaces={savedPlaces}
-              releasedPoiIds={releasedPoiIds}
-              onPressRemove={onPressRemove}
-              onPressRestore={onPressRestore}
-            />
-            {removeError ? (
-              <RemoveErrorBanner
-                notice={removeError}
-                onPressAction={onPressRemoveErrorAction}
+            {showPlaceError ? <ErrorBlock onRetry={onRetry} /> : null}
+
+            {showResults ? (
+              <>
+                <ResultsList
+                  savedPlaces={savedPlaces}
+                  releasedPoiIds={releasedPoiIds}
+                  onPressRemove={onPressRemove}
+                  onPressRestore={onPressRestore}
+                  onPressRow={onPressRow}
+                />
+                {removeError ? (
+                  <RemoveErrorBanner
+                    notice={removeError}
+                    onPressAction={onPressRemoveErrorAction}
+                  />
+                ) : null}
+                {activeSavedCount > 0 ? (
+                  <CtaBar onPress={onPressCreateTrip} />
+                ) : null}
+              </>
+            ) : null}
+
+            {stayHasError ? <StayErrorNotice /> : null}
+            {stayHasResults ? (
+              <StaySection
+                savedStays={savedStays ?? []}
+                removingStayIds={removingStayIds}
+                onRemoveStay={onRemoveStay}
               />
             ) : null}
-            {activeSavedCount > 0 ? (
-              <CtaBar onPress={onPressCreateTrip} />
+
+            {showEmptyFace ? (
+              <EmptyBlock onPressBrowse={onPressBrowse} />
             ) : null}
           </>
         ) : null}

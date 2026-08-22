@@ -1,280 +1,185 @@
-import { http, HttpResponse } from 'msw';
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { server } from '@/mocks/server';
+import type { Region } from '@/shared/api/generated/schemas';
+import { RegionLevel } from '@/shared/api/generated/schemas';
+
 import { RegionPickerPage } from './RegionPickerPage';
 
 /**
- * TRIP-183 — e00 진입 배선. 화면이 올려보낸 선택을 **실제 목적지**로 잇는지 본다.
+ * TRIP-445 — e00·d1b 지역 선택 배선. 화면이 올려보낸 선택을 **실제 목적지**로 잇고,
+ * 서버 카탈로그(`useRegions`)를 소비하며, 조회 실패를 실패 얼굴로 그린다.
  *
- * 프레젠테이션(카피·카드·고지 문구)은 `RegionPickerScreen.test.tsx`가 이미 본다. 여기서
- * 보는 것은 그 밖의 것 — 권한 요청 → 좌표 해석 → `GET /saved-stays` 대체 → 라우팅 파라미터.
+ * 무엇이 바뀌었나(현행 대비): '내 주변'이 사라져 `expo-location`·`@/shared/storage`·
+ * `saved-stays`(msw) 목이 전부 없어졌다. 대신 **`useRegions` 목 seam** 하나로 서버 상태를
+ * 제어한다 — `useStaySearch`/`useSavedStays` 선례의 "코드젠 경로가 흔들려도 목 대상 한 곳
+ * 고정"과 같은 자리다.
+ *
+ * ⚠️ `jest.mock` 팩토리는 최상단으로 호이스팅된다 — 팩토리가 참조하는 바깥 변수는 이름이
+ * `mock`으로 시작해야 예외를 받는다(리포 확립 규칙). 이 이름을 바꾸지 마라(★9).
  */
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'a',
-    refreshToken: 'r',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
-
-// jest.mock 팩토리는 최상단으로 호이스팅된다 — 팩토리가 참조하는 바깥 변수는 이름이 `mock`으로
-// 시작해야 예외를 받는다(TRIP-182 §5 ★10과 같은 규칙). 이 이름을 바꾸지 마라.
 const mockPush = jest.fn();
+const mockRefetch = jest.fn();
 let mockParams: { purpose?: string } = {};
+let mockRegionsResult: {
+  data: Region[] | undefined;
+  isPending: boolean;
+  isError: boolean;
+  refetch: jest.Mock;
+};
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, back: jest.fn() }),
   useLocalSearchParams: () => ({ ...mockParams }),
 }));
 
-let mockPermission: 'granted' | 'denied' = 'granted';
-let mockPositionFails = false;
-
-jest.mock('expo-location', () => ({
-  requestForegroundPermissionsAsync: async () => ({ status: mockPermission }),
-  getCurrentPositionAsync: async () => {
-    if (mockPositionFails) throw new Error('위치 확인 실패');
-    return { coords: { latitude: 33.4996, longitude: 126.5312 } };
-  },
+// useRegions 만 갈아끼우고 filterRegions·regionTint 는 실물을 쓴다(requireActual).
+jest.mock('@/features/explore/model/regions', () => ({
+  ...jest.requireActual('@/features/explore/model/regions'),
+  useRegions: () => mockRegionsResult,
 }));
 
-const BASE = 'http://localhost:8080/api/v1';
-
-/** `GET /saved-stays` 응답 고정 — SavedStay 계약의 필수 필드만 담는다. */
-type SavedStayFixture = Record<string, string | number | boolean | null>;
-
-function savedStays(body: SavedStayFixture[]) {
-  server.use(http.get(`${BASE}/saved-stays`, () => HttpResponse.json(body)));
+/** 서버 `Region` 표본 도우미. */
+function region(
+  over: Partial<Region> & Pick<Region, 'regionCode' | 'name'>
+): Region {
+  return {
+    sidoName: over.sidoName ?? '',
+    level: over.level ?? RegionLevel.SIGUNGU,
+    selectable: over.selectable ?? true,
+    poiCount: over.poiCount ?? 5,
+    ...over,
+  };
 }
 
-// MSW 수명은 파일마다 직접 관리한다(전역 setup이 없다 — 리포 관례, StaySearchPage 통합테스트와 동일).
-// onUnhandledRequest: 'error' 라 핸들러 없는 요청은 조용히 통과하지 않고 즉시 드러난다.
-beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
-});
+const BUSAN = region({ regionCode: '26', name: '부산광역시', poiCount: 12 });
+const JEJU = region({ regionCode: '50', name: '제주특별자치도', poiCount: 8 });
 
-afterEach(() => {
-  server.resetHandlers();
-});
-
-afterAll(() => server.close());
+// TRIP-499 큐레이션(AC-5/6) 픽스처 — 7개(상한 6 초과)여야 "앞 6개만"과 "전량 렌더"가 갈린다.
+// 6개면 둘 다 6개 보여 공허 통과. 배열 순서 = 서버 대표순(limitRegionsWhenEmpty 가 앞 6개 slice).
+// 이름에 공통 토큰 '시' 를 심어 AC-6 이 "7개 다 매칭되는 검색"으로 6개 상한 미적용을 증명한다.
+// 전부 selectable·poiCount>0 이라 RegionPickerScreen 이 SelectableCard(testID explore-region-{code})로 그린다.
+const SEVEN_REGIONS: Region[] = [
+  region({ regionCode: 'R01', name: '부산시' }),
+  region({ regionCode: 'R02', name: '대구시' }),
+  region({ regionCode: 'R03', name: '인천시' }),
+  region({ regionCode: 'R04', name: '광주시' }),
+  region({ regionCode: 'R05', name: '대전시' }),
+  region({ regionCode: 'R06', name: '울산시' }),
+  region({ regionCode: 'R07', name: '세종시' }),
+];
 
 beforeEach(() => {
   mockPush.mockClear();
+  mockRefetch.mockClear();
   mockParams = {};
-  mockPermission = 'granted';
-  mockPositionFails = false;
+  mockRegionsResult = {
+    data: [BUSAN, JEJU],
+    isPending: false,
+    isError: false,
+    refetch: mockRefetch,
+  };
 });
 
-describe('지역 선택 → 숙소 검색 결과 (US-STAY-01 정상)', () => {
-  it('카드를 누르면 지역명을 쿼리에 실어 /stays로 간다', () => {
+describe('AC-1/AC-4 · 서버 카탈로그를 그린다', () => {
+  it('useRegions가 준 지역을 카드로 그린다', () => {
     render(<RegionPickerPage />);
 
-    fireEvent.press(screen.getByTestId('explore-region-jeju'));
+    expect(screen.getByTestId('explore-region-26')).toBeTruthy();
+    expect(screen.getByTestId('explore-region-50')).toBeTruthy();
+  });
+});
+
+describe('지역 선택 → 목적지 라우팅', () => {
+  it('카드를 누르면 지역명을 쿼리에 실어 /stays로 간다 (stay)', () => {
+    render(<RegionPickerPage />);
+
+    fireEvent.press(screen.getByTestId('explore-region-50'));
 
     // 서버 `region`은 자유 문자열 계약이라 한글 이름을 그대로 보낸다(코드가 아니다).
-    expect(mockPush).toHaveBeenCalledWith('/stays?region=%EC%A0%9C%EC%A3%BC');
+    expect(mockPush).toHaveBeenCalledWith(
+      `/stays?region=${encodeURIComponent('제주특별자치도')}`
+    );
+  });
+
+  it("purpose='trip'이면 regionCode로 여행지 상세로 간다 (D2)", () => {
+    mockParams = { purpose: 'trip' };
+    render(<RegionPickerPage />);
+
+    fireEvent.press(screen.getByTestId('explore-region-50'));
+
+    // D2 — 목적지 상세 경로의 식별자 자리는 regionCode('50')다.
+    expect(mockPush).toHaveBeenCalledWith('/explore/destination/50');
   });
 
   it('검색으로 좁힌 뒤에도 같은 목적지로 간다', () => {
     render(<RegionPickerPage />);
 
     fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
-    fireEvent.press(screen.getByTestId('explore-region-busan'));
+    fireEvent.press(screen.getByTestId('explore-region-26'));
 
-    expect(mockPush).toHaveBeenCalledWith('/stays?region=%EB%B6%80%EC%82%B0');
-    // 좁혀졌는지도 함께 본다 — 필터가 안 걸리면 이 단언이 무의미해진다
-    expect(screen.queryByTestId('explore-region-jeju')).toBeNull();
-  });
-});
-
-describe('BR-U1-07 · 목적 분기 — 다음 목적지가 다르다', () => {
-  it("purpose='trip'이면 여행지 상세로 간다", () => {
-    mockParams = { purpose: 'trip' };
-    render(<RegionPickerPage />);
-
-    fireEvent.press(screen.getByTestId('explore-region-jeju'));
-
-    expect(mockPush).toHaveBeenCalledWith('/explore/destination/jeju');
-  });
-
-  it('알 수 없는 purpose는 stay로 떨어진다 — URL은 신뢰 경계다', () => {
-    mockParams = { purpose: '이상한값' };
-    render(<RegionPickerPage />);
-
-    expect(screen.getByText('어디서 묵을까요?')).toBeTruthy();
-  });
-});
-
-describe("'내 주변' — 권한 허용 (US-STAY-01 정상)", () => {
-  it('현재 좌표를 쿼리에 실어 /stays로 간다', async () => {
-    render(<RegionPickerPage />);
-
-    fireEvent.press(screen.getByTestId('explore-region-nearby'));
-
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/stays?lat=33.4996&lng=126.5312');
-    });
-  });
-
-  it('radiusKm을 보내지 않는다 — 반경 정책은 서버가 갖는다', async () => {
-    render(<RegionPickerPage />);
-
-    fireEvent.press(screen.getByTestId('explore-region-nearby'));
-
-    await waitFor(() => expect(mockPush).toHaveBeenCalled());
-    // 클라이언트가 정책값을 복사하면 서버 기본값이 바뀔 때 조용히 갈라진다.
-    expect(String(mockPush.mock.calls[0][0])).not.toContain('radiusKm');
-  });
-});
-
-describe("'내 주변' — 권한 거부 (BR-U1-11 대체 조회)", () => {
-  it('등록 숙소 좌표로 대체 조회하고 그 사실을 고지한다', async () => {
-    mockPermission = 'denied';
-    savedStays([
-      {
-        savedStayId: '11111111-1111-1111-1111-111111111111',
-        name: '부산 숙소',
-        lat: 35.1796,
-        lng: 129.0756,
-        coordConfirmed: true,
-        registerRoute: 'MAP_SEARCH',
-        createdAt: '2026-07-30T00:00:00Z',
-        updatedAt: '2026-07-30T00:00:00Z',
-      },
-    ]);
-    render(<RegionPickerPage />);
-
-    fireEvent.press(screen.getByTestId('explore-region-nearby'));
-
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/stays?lat=35.1796&lng=129.0756');
-    });
-    // 침묵 금지(INV-4) — 대체했다는 사실이 화면에 남는다
-    expect(
-      screen.getByText('현재 위치 대신 등록 숙소를 기준으로 찾았어요')
-    ).toBeTruthy();
-  });
-
-  it('좌표 미확정 숙소는 건너뛴다 (INV-U1-08)', async () => {
-    mockPermission = 'denied';
-    savedStays([
-      {
-        savedStayId: '22222222-2222-2222-2222-222222222222',
-        name: '좌표 미확정',
-        lat: 37.5,
-        lng: 127.0,
-        coordConfirmed: false,
-        registerRoute: 'LINK_PASTE',
-        createdAt: '2026-07-30T00:00:00Z',
-        updatedAt: '2026-07-30T00:00:00Z',
-      },
-      {
-        savedStayId: '33333333-3333-3333-3333-333333333333',
-        name: '좌표 확정',
-        lat: 35.1796,
-        lng: 129.0756,
-        coordConfirmed: true,
-        registerRoute: 'MAP_SEARCH',
-        createdAt: '2026-07-30T00:00:00Z',
-        updatedAt: '2026-07-30T00:00:00Z',
-      },
-    ]);
-    render(<RegionPickerPage />);
-
-    fireEvent.press(screen.getByTestId('explore-region-nearby'));
-
-    // 확정되지 않은 좌표를 검색 중심으로 쓰면 엉뚱한 곳의 숙소를 '내 주변'이라고 부른다.
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/stays?lat=35.1796&lng=129.0756');
-    });
-  });
-
-  it('등록 숙소가 없으면 이동하지 않고 안내한다', async () => {
-    mockPermission = 'denied';
-    savedStays([]);
-    render(<RegionPickerPage />);
-
-    fireEvent.press(screen.getByTestId('explore-region-nearby'));
-
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          '위치 권한이 꺼져 있고 등록한 숙소도 없어요. 지역을 골라 주세요'
-        )
-      ).toBeTruthy();
-    });
-    // 좌표 없이 '내 주변'을 흉내내면 전국 목록을 주변이라고 부르게 된다
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-});
-
-describe("'내 주변' — 측위 실패", () => {
-  it('권한은 있지만 좌표를 못 얻으면 등록 숙소로 대체한다', async () => {
-    mockPositionFails = true;
-    savedStays([
-      {
-        savedStayId: '44444444-4444-4444-4444-444444444444',
-        name: '부산 숙소',
-        lat: 35.1796,
-        lng: 129.0756,
-        coordConfirmed: true,
-        registerRoute: 'MAP_SEARCH',
-        createdAt: '2026-07-30T00:00:00Z',
-        updatedAt: '2026-07-30T00:00:00Z',
-      },
-    ]);
-    render(<RegionPickerPage />);
-
-    fireEvent.press(screen.getByTestId('explore-region-nearby'));
-
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/stays?lat=35.1796&lng=129.0756');
-    });
-  });
-
-  it('대체도 없으면 권한 거부와 다른 안내를 낸다', async () => {
-    mockPositionFails = true;
-    savedStays([]);
-    render(<RegionPickerPage />);
-
-    fireEvent.press(screen.getByTestId('explore-region-nearby'));
-
-    await waitFor(() => {
-      expect(
-        screen.getByText('현재 위치를 확인하지 못했어요. 지역을 골라 주세요')
-      ).toBeTruthy();
-    });
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  it('서버가 500이어도 던지지 않고 안내로 접는다', async () => {
-    mockPermission = 'denied';
-    server.use(
-      http.get(
-        `${BASE}/saved-stays`,
-        () => new HttpResponse(null, { status: 500 })
-      )
+    expect(mockPush).toHaveBeenCalledWith(
+      `/stays?region=${encodeURIComponent('부산광역시')}`
     );
+    // 좁혀졌는지도 함께 본다 — 필터가 안 걸리면 이 단언이 무의미해진다.
+    expect(screen.queryByTestId('explore-region-50')).toBeNull();
+  });
+});
+
+describe('AC-5/AC-6 · 큐레이션 (TRIP-499 · 빈 검색어면 앞 6개만, 검색 시 상한 미적용)', () => {
+  it('AC-5 · 빈 검색어면 앞 6개만 렌더하고 7번째 지역은 부재다', () => {
+    // 준비 — 대표순 7개 지역(상한 6 초과). 검색어는 입력하지 않는다(빈 문자열).
+    mockRegionsResult.data = SEVEN_REGIONS;
+
+    // 실행 — 초기 렌더 그대로(빈 검색어) 관찰.
     render(<RegionPickerPage />);
 
-    fireEvent.press(screen.getByTestId('explore-region-nearby'));
+    // 단언 — 1번째·6번째는 있고, 7번째는 없다. 지금 페이지는 상한 없이 filterRegions 결과를 전량
+    // 그리므로 7번째가 present → "부재" 단언이 실패해 red. 배선(limitRegionsWhenEmpty) 후 6개로
+    // 잘려 green. 6번째 present 는 상한이 6임을 잠근다(5로 낮아지면 red).
+    expect(screen.getByTestId('explore-region-R01')).toBeTruthy();
+    expect(screen.getByTestId('explore-region-R06')).toBeTruthy();
+    expect(screen.queryByTestId('explore-region-R07')).toBeNull();
+  });
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          '위치 권한이 꺼져 있고 등록한 숙소도 없어요. 지역을 골라 주세요'
-        )
-      ).toBeTruthy();
-    });
+  it('AC-6 · 검색어를 넣으면 매칭 지역이 6개 상한 없이 전량 렌더된다(선제 green)', () => {
+    // 준비 — 이름에 공통 토큰 '시' 를 가진 7개.
+    mockRegionsResult.data = SEVEN_REGIONS;
+    render(<RegionPickerPage />);
+
+    // 실행 — '시' 는 7개 전부에 포함되므로 filterRegions 가 7개를 다 돌려준다.
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '시');
+
+    // 단언 — 7개가 다 매칭되는데 7번째가 보이면 6개 상한이 안 걸린 것. 무조건 slice(0,6)
+    // (검색 중에도 자름) 뮤테이션이면 7번째가 잘려 red 가 된다.
+    expect(screen.getByTestId('explore-region-R01')).toBeTruthy();
+    expect(screen.getByTestId('explore-region-R07')).toBeTruthy();
+  });
+});
+
+describe('AC-6 · 조회 실패 (INV-4)', () => {
+  it('isError면 실패 얼굴을 그리고 "검색 결과가 없어요"로 뭉개지 않으며, 재시도는 refetch를 부른다', () => {
+    mockRegionsResult = {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      refetch: mockRefetch,
+    };
+    render(<RegionPickerPage />);
+
+    expect(screen.getByTestId('explore-region-error')).toBeTruthy();
+    expect(screen.queryByText('검색 결과가 없어요')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('explore-region-error-retry'));
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AC-7 · '내 주변' 배선이 렌더에 없다", () => {
+  it("purpose='stay'에서도 '내 주변' 진입이 없다", () => {
+    render(<RegionPickerPage />);
+
+    expect(screen.queryByTestId('explore-region-nearby')).toBeNull();
+    expect(screen.queryByText('내 주변')).toBeNull();
   });
 });

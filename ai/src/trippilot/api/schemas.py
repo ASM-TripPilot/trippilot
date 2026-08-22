@@ -45,11 +45,16 @@ class GenerationMode(str, Enum):
 
 
 class RequestMetaSchema(BoundaryModel):
-    """IO-1 — 지연 예산 전파. day1 5s / 전체 20s."""
+    """IO-1 — 지연 예산 전파. 값은 백엔드 소유(종전 day1 5s / 전체 20s).
+
+    `deadline_ms` 미지정 = **시간제약 없음** (2026-08-21 FE 연동 팀 결정, TRIP-473)
+    — 예산 계단(INV-4)은 그대로 두고 시간 때문에 강등되지 않게만 한다. 제약을
+    재도입하려면 백엔드가 값을 다시 싣기만 하면 된다(AI 재작업 없음).
+    """
 
     request_id: str = Field(min_length=1)
     requested_at: dt.datetime
-    deadline_ms: int = Field(gt=0)
+    deadline_ms: int | None = Field(default=None, gt=0)
 
 
 class TripContextSchema(BoundaryModel):
@@ -127,6 +132,8 @@ class GenerateItineraryRequest(BoundaryModel):
     recommendation_strength: str | None = None
     request_meta: RequestMetaSchema
     excluded_poi_ids: list[str] = Field(default_factory=list)
+    # 설명 생략 (TRIP-479) — 설명은 POST /ai/v1/itinerary/explanations로 별도 조회
+    include_explanations: bool = True
 
     @field_validator("generation_mode", mode="before")
     @classmethod
@@ -274,3 +281,80 @@ class ErrorBody(BoundaryModel):
     error_code: str
     message: str
     retryable: bool = False
+
+
+# ── Plan-B 대안 제안 경계 (TRIP-428, 에픽 TRIP-424) ──────────────────
+
+
+class CoordSchema(BoundaryModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
+class TriggerSchema(BoundaryModel):
+    """백엔드 planb-detection(C9) 트리거의 와이어 형태 — domain TriggerParams 대응."""
+
+    kind: str = Field(min_length=1)  # WEATHER|CLOSURE|DELAY|MANUAL
+    schedule_id: str = Field(min_length=1)
+    affected_date: dt.date
+    payload: dict = Field(default_factory=dict)
+
+
+class AlternativesRequest(BoundaryModel):
+    """대안 제안 요청 — 후보 풀은 AI가 앵커 반경으로 직접 만든다(INV-1, M7 소유).
+
+    시각·순서를 받지도 내보내지도 않는다 — 선택된 대안의 확정 배치는 기존
+    repair 관문 몫이다(INV-2). budget/transport 토큰은 generate 와이어와 동일
+    어휘("중간"·"대중교통" 등 — wiring의 번역표가 흡수).
+    """
+
+    trigger: TriggerSchema
+    reason: str = "none"  # weather|closed|delay|canceled|fatigue|none
+    anchor: CoordSchema
+    dates: list[dt.date] = Field(min_length=1)  # 재계획 대상 날짜(풀 반경·영업일 필터)
+    budget_level: str | None = None
+    transport_mode: str | None = None
+    excluded_poi_ids: list[str] = Field(default_factory=list)
+    request_meta: RequestMetaSchema
+
+
+class AlternativeSchema(BoundaryModel):
+    label: str
+    poi_ids: list[str]
+    rationale: str
+
+
+class AlternativesResponse(BoundaryModel):
+    """시각·순서·소요시간 없음(INV-2·3) — 제안과 강등 상태·드롭 사유만 나간다."""
+
+    alternatives: list[AlternativeSchema]
+    is_fallback: bool
+    fallback_level: int  # 0=LLM 정상 · 1=규칙 랭킹 · 2=후보 0
+    notes: list[str]
+    retrieved: dict[str, int]
+    dropped_out_of_pool: list[str]  # closed-set 밖이라 버려진 참조 (INV-1 가시화)
+    empty_reason: str | None = None
+    pool_size: int = Field(ge=0)
+
+
+# ── 설명 분리 경계 (TRIP-479) ────────────────────────────────────────
+
+
+class ExplanationsRequest(BoundaryModel):
+    """배치 일정의 슬롯별 설명 조회 — generate(include_explanations=false)와 짝.
+
+    페르소나는 generate와 같은 trip_id 파생 참조로 해석한다(D31 자기참조,
+    TRIP-333 fail-closed 유지). 시각·순서는 받기만 하고 바꾸지 않는다(INV-2).
+    """
+
+    trip_id: str = Field(min_length=1)
+    itinerary: ItineraryPayload
+    request_meta: RequestMetaSchema
+
+
+class ExplanationsResponse(BoundaryModel):
+    """slot_key(BR-U2-04: "날짜#poi_id") → 설명 1문장. 실패는 빈 맵 + 사유(침묵 금지)."""
+
+    explanations: dict[str, str]
+    is_fallback: bool
+    reason: str | None = None

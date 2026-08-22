@@ -1,5 +1,6 @@
 package com.trippilot.placedata.application
 
+import com.trippilot.placedata.FakeRegionCatalog
 import com.trippilot.placedata.InMemoryPoiRepository
 import com.trippilot.placedata.api.Area
 import com.trippilot.placedata.domain.DataStatus
@@ -42,7 +43,7 @@ class CandidatePoolPropertyTest : StringSpec({
                 Poi.reconstitute(UUID.randomUUID(), "p$i", lat, lng, PoiCategory.명소, "x", null, DataStatus.ACTIVE, PoiSource.MANUAL, 0, now, now)
             }
             repo.saveAll(pois)
-            val pool = PlaceDataCandidatePool(repo)
+            val pool = PlaceDataCandidatePool(repo, PoiQueryService(repo, RegionLookupService(FakeRegionCatalog)))
 
             val got = pool.resolve(Area.Radius(cLat, cLng, radius), emptySet())
             val expected = pois.filter { Haversine.meters(cLat, cLng, it.lat, it.lng) <= radius }

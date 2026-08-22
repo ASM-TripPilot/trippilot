@@ -281,8 +281,11 @@ const GENERATED_FILE_COUNT_FLOOR = 75;
  *      포매터를 안 돌리면 순수 포맷 차이로 어긋난다(02a ★1).
  */
 const ENDPOINT_FILE_SHA256: Record<string, string> = {
+  // TRIP-503 에서 갱신 — 다만 이 파일이 바뀐 이유는 **이 티켓이 아니다.** 역지오코딩
+  // (GET /stays/reverse-geocode)이 openapi 에 머지됐는데 재생성이 안 돼 밀려 있었다.
+  // 이 가드가 예고한 사고가 그대로 일어난 것이라, 여기서 함께 갚는다.
   'stays/stays.ts':
-    '5c2961e113d1f08e51d75031e5e46d4be73156b07c797856f92be7830c68fa15',
+    'c1f252bc4602f56e891152073f33f23d4fc844af94d1c82747eae5d5c45ea779',
   'saved-stays/saved-stays.ts':
     '79fe27571bb827aaa31a24849ed111b87ef260341bf6769bf43bea5d15a44a46',
   // TRIP-294에서 places·preferences로 넓혔다(01b Seed 확정 6). 근거는 문제로그
@@ -292,8 +295,12 @@ const ENDPOINT_FILE_SHA256: Record<string, string> = {
   //
   // ⚠️ `trips/trips.ts`에는 해시를 걸지 않는다 — 이번 재생성이 **바꾸는 대상** 파일이라
   // 자기모순이다. 그 파일은 대신 B-15(심볼 보존)가 "줄지 않았다"만 골라 잰다.
+  // TRIP-445에서 갱신: places 태그에 GET /regions 오퍼레이션이 추가돼 places.ts가
+  // 정당하게 바뀌었다(regions 전용, stays·trips 드리프트는 이 티켓에서 되돌려 섞이지 않게 했다).
+  // TRIP-503 에서 갱신: 목록 계약이 배열 → `{items, nextCursor}` 로 바뀌고
+  // q·limit·cursor 파라미터가 붙었다(정당한 계약 변경).
   'places/places.ts':
-    '7e5363ebd511f108209de46f425f93c148fe29df84cff0c6be691ac007dbe2ca',
+    '960202f0ba94183a6dcaffd70d5516d0cf7497ef312884418aa5309c8c660607',
   'preferences/preferences.ts':
     'c583726ab8b40694c99f5b3cc54d5da91a3b0bd0bd83f1b692ee9435e129a6fc',
 };

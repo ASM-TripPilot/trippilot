@@ -194,10 +194,18 @@ export interface HomeScreenProps {
    */
   /** FAB "여행 만들기" press → 여행 생성 1/2 진입 */
   onPressCreateTrip?: () => void;
-  /** 온램프 "담은 곳" press → 담은 장소 화면 */
+  /** 온램프 "담은 곳" press·saved-menu 담은 장소 미니 FAB → 담은 장소 화면(d02) */
   onPressSavedPlaces?: () => void;
+  /** saved-menu 저장한 숙소 미니 FAB → 저장한 숙소 화면(e04, TRIP-494) */
+  onPressSavedStays?: () => void;
+  /** 담은 곳 saved-menu 열림 상태(TRIP-494) — 라우트 소유(화면 useState 0건). 미지정=닫힘 */
+  savedMenuOpen?: boolean;
+  /** 담은 곳 saved-menu 하트/닫기 토글 press → 라우트가 open 을 뒤집는다 */
+  onToggleSavedMenu?: () => void;
   /** "지금 뜨는 장소" 더 보기 press → 장소 탐색 */
   onPressSpotsMore?: () => void;
   /** planning 여행 카드 주 CTA press → 그 여행의 일정 화면(목적지는 라우트가 계산, TRIP-401) */
   onPressTripHeroCta?: () => void;
+  /** 검색바 press → 통합 검색(d05, `/explore/search`, TRIP-453) */
+  onPressSearch?: () => void;
 }

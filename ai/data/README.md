@@ -52,3 +52,23 @@ cp /tmp/poi/collected_pois.json ai/data/collected_pois.json
 - 워크플로 실행 `32060590511` (2026-08-17 수집분)
 - `schema_version` 1 · `source` TOURAPI · 제안 1,104건 · 광역 17개 지역
 - 스키마 정본: `ai/src/trippilot/poi_curation/sourcing/pipeline.py` 의 `to_output_document`
+
+---
+
+## `planb_situation_kb.yaml` — Plan-B 상황 KB(KB-3) seed
+
+**초안 v0.1 — 내용 검수 전.** "상황 → 대안 선택 지침" 문서로, PlanB RAG(TRIP-424)의
+검색 컨텍스트가 된다. 구조 정본은 `agents/planb/kb_retrieval.py`의 `load_kb_documents`
+(루트 `kb` 단일 라벨 · doc_id 유일 · text 필수), 어휘 정렬 근거는 파일 머리 주석 참조.
+
+실 적재(멱등 upsert — 몇 번 실행해도 행이 늘지 않는다):
+
+```bash
+docker compose --profile full up -d ai-vectordb
+TRIPPILOT_VECTOR_DB_URL=postgresql://ai_kb:ai_kb@localhost:5433/ai_kb \
+OPENAI_API_KEY=... \
+    uv run python scripts/load_kb.py
+```
+
+FakeEmbedding 적재는 스크립트가 거부한다 — 해시 벡터는 의미 유사도가 없어
+"적재됐는데 검색이 엉터리"인 오염 상태가 된다. 실임베딩 검증은 `scripts/smoke_vector.py`.

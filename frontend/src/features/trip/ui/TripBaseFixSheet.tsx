@@ -34,6 +34,7 @@ const SAVE_LABEL = '저장';
 const CONFIRM_COORD_LABEL = '이 위치로 확인';
 const RETRY_LABEL = '다시 시도';
 const MAP_UNAVAILABLE_MESSAGE = '지도를 띄울 수 없어 위치를 확인할 수 없어요';
+const PIN_HINT_MESSAGE = '지도를 길게 눌러 위치를 지정하세요';
 
 export interface TripBaseFixSheetProps {
   savedStayId: string;
@@ -101,7 +102,12 @@ export function TripBaseFixSheet({
   }
 
   return (
-    <BottomSheet backdropComponent={renderFixSheetBackdrop}>
+    // 좌표 확정의 유일한 경로가 지도 WebView의 600ms 롱프레스라, 시트 콘텐츠 pan 제스처가
+    // 그 롱프레스를 가로채지 않도록 끈다(닫기 버튼이 있어 pan-dismiss 제거는 안전).
+    <BottomSheet
+      backdropComponent={renderFixSheetBackdrop}
+      enableContentPanningGesture={false}
+    >
       <BottomSheetView
         testID="trip-base-fixsheet"
         className="w-full gap-md px-lg pb-2xl pt-sm"
@@ -147,6 +153,16 @@ export function TripBaseFixSheet({
                     center={center}
                     onMapMessage={handleMapMessage}
                   />
+                </View>
+                {/* 롱프레스는 화면에 안 보이는 조작이라, "왜 회색 버튼인지"를 말한다
+                    (BR-U1-55 침묵 실패 금지, `stay-register-pin-hint`와 동형). */}
+                <View
+                  testID="trip-base-fixsheet-pin-hint"
+                  className="w-full flex-row items-center rounded-button border border-info-border bg-info-bg px-md py-sm"
+                >
+                  <Text className="flex-1 font-noto text-body text-info">
+                    {PIN_HINT_MESSAGE}
+                  </Text>
                 </View>
                 <Pressable
                   testID="trip-base-fixsheet-confirmcoord"

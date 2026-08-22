@@ -12,6 +12,7 @@ import {
 
 import { server } from '@/mocks/server';
 import type {
+  GenerateItineraryRequestGenerationMode,
   MustVisit,
   Place,
   SavedPlace,
@@ -189,7 +190,7 @@ afterAll(() => server.close());
  * `retry: false` — 실패를 즉시 실패로 본다(재시도가 돌면 요청 개수 단언이 흔들린다).
  * 클라이언트를 **돌려주는** 이유: 재조회를 테스트가 직접 일으키기 위해서다(I4).
  */
-function renderPage() {
+function renderPage(props?: { mode?: GenerateItineraryRequestGenerationMode }) {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
@@ -201,9 +202,10 @@ function renderPage() {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  const utils = render(<MustVisitListPage tripId={TRIP_ID} />, {
-    wrapper: Wrapper,
-  });
+  const utils = render(
+    <MustVisitListPage tripId={TRIP_ID} mode={props?.mode} />,
+    { wrapper: Wrapper }
+  );
   return { ...utils, client };
 }
 
@@ -411,9 +413,12 @@ function savedPlaceAt(
   return { ...base, place: { ...base.place, lat, lng } };
 }
 
-/** 등록 목록 조회를 한 번은 성공시키고 나서 카드를 기다린다(모든 케이스의 공통 준비). */
-async function openList(): Promise<void> {
-  renderPage();
+/** 등록 목록 조회를 한 번은 성공시키고 나서 카드를 기다린다(모든 케이스의 공통 준비).
+ * `mode` 를 넘기면 copick 갈래(CO_PLAN)로 연다 — 안 넘기면 완전AI(기존 동작 불변). */
+async function openList(
+  mode?: GenerateItineraryRequestGenerationMode
+): Promise<void> {
+  renderPage({ mode });
   await screen.findByTestId('itinerary-mustvisit-poi-a');
   await waitFor(() => expect(cardTestIds()).toHaveLength(3));
 }
@@ -651,25 +656,104 @@ describe('🔴 I12 · AC-10 duplicate — POST 409 는 실패가 아니되 침�
   });
 });
 
-describe('🔴 I13 · AC-14 — CTA·건너뛰기가 비활성이고 사유가 보이며 눌러도 안 움직인다', () => {
-  it('두 표면이 잠기고 사유가 글자로 있으며 이동·요청이 0건이다', async () => {
+describe('🔴 I13 · TRIP-454 AC-2 — CTA·건너뛰기가 활성이고 각각 h09 로 가며 사유가 없다', () => {
+  /**
+   * TRIP-326(AC-14)에서 이 두 표면은 **상시 차단·무동작**이었다 — h09(생성 중)가 리포에 없어
+   * "목적지 없는 버튼을 말없이 죽이지 않으려"(INV-4) 사유 문구를 항상 띄웠다. h09 는 이제
+   * 존재하므로 이 사이클이 그 문을 연다: 배선만 바뀌고 화면 계약은 무수정이다(브리프 part 1 ·
+   * 맹점 ①). 재작성 정당 = 새 사이클(파일 머리말 · 02a §2).
+   */
+  it('두 표면이 활성이고 각각 눌러 generating 으로 가며 사유 문구가 없고 요청이 0건이다', async () => {
     await openList();
 
     const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
     const skip = screen.getByTestId('itinerary-mustvisit-screen-skip');
 
-    expect(proceed).toBeDisabled();
-    expect(skip).toBeDisabled();
-    // 🔴 발명값이다(01b D7 — 어느 프레임·문서에도 사유 문구가 없다). 심판이 없으면 조용히
-    //    드리프트한다.
-    expect(screen.getByText(BLOCKED_REASON)).toBeOnTheScreen();
+    // ① 활성 — 회색 잠금이 풀렸다. `toBeDisabled` 단독은 "회색인데 눌리는" 구현도 통과시키므로
+    //    아래 press→이동을 짝으로 붙인다(02a ★5).
+    expect(proceed).not.toBeDisabled();
+    expect(skip).not.toBeDisabled();
+    // ② 사유 문구 부재 — 목적지가 생겼으므로 "준비 중" 안내가 사라진다(브리프 INV-4 절).
+    //    기존 I13 이 `getByText(BLOCKED_REASON)` 으로 존재를 증명했었다 — 그 null-safe 짝이다.
+    expect(screen.queryByText(BLOCKED_REASON)).toBeNull();
 
-    mockPush.mockClear();
+    // ③ 다음 CTA → h09(생성 중). 목적지 형태를 강요하지 않고 직렬화해 "어디로 갔나"만 잰다.
     fireEvent.press(proceed);
-    fireEvent.press(skip);
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    const proceedDest = mockPush.mock.calls[0][0];
+    const proceedFlat =
+      typeof proceedDest === 'string'
+        ? proceedDest
+        : JSON.stringify(proceedDest);
+    expect(proceedFlat).toContain('generating');
+    expect(proceedFlat).toContain(TRIP_ID);
+    // ★ 완전AI 갈래(mode 미전달)는 copick 신호를 얻지 않는다 — CO_PLAN·copick 이 새면 red
+    //   (TRIP-504 AC-5 회귀: 완전AI 는 기존 FULLY_AI generating 그대로).
+    expect(proceedFlat).not.toContain('CO_PLAN');
+    expect(proceedFlat).not.toContain('copick');
 
-    // "눌러도 아무 일이 없다" 는 그 자체로 위반이므로 위 사유 문구와 **세트로** 잰다.
-    expect(mockPush).not.toHaveBeenCalled();
+    // ④ 건너뛰기도 같은 목적지(h09). 앞 호출과 섞이지 않게 비우고 다시 잰다.
+    mockPush.mockClear();
+    fireEvent.press(skip);
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    const skipDest = mockPush.mock.calls[0][0];
+    const skipFlat =
+      typeof skipDest === 'string' ? skipDest : JSON.stringify(skipDest);
+    expect(skipFlat).toContain('generating');
+    expect(skipFlat).toContain(TRIP_ID);
+    expect(skipFlat).not.toContain('CO_PLAN');
+    expect(skipFlat).not.toContain('copick');
+
+    // ⑤ 전진은 요청을 만들지 않는다 — 생성 POST 는 h09 가 마운트 시 소유한다(무회귀).
+    expect(hitsFor('POST', '/must-visits')).toBe(0);
+    expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+});
+
+describe('🔴 I16 · TRIP-504 AC-5 — copick 갈래(mode=CO_PLAN)는 CO_PLAN generating + 첫 슬롯 successRoute 로 잇는다', () => {
+  /**
+   * 완전AI 갈래(I13)는 mode 없이 generating 으로만 간다. copick 갈래는 h04 에서 실려 온 `mode`
+   * 신호를 받아 CTA 목적지를 **CO_PLAN generating + successRoute=첫 슬롯 경로**로 바꾼다(01b Q3).
+   *
+   * ★ 목적지 값이 급소다(462 gate②-2). h05 시점엔 slotKey 를 아직 모르므로 successRoute 는
+   *   슬롯 라우트 **템플릿**(`copick/[slotKey]`)이고, 그 `[slotKey]` 세그먼트가 허브(`copick`)와
+   *   가른다 — mode 만 맞고 successRoute 가 허브/draft 로 새면 사용자가 엉뚱한 화면에 착지한다.
+   */
+  it('proceed·skip 둘 다 generating 으로 가되 mode=CO_PLAN 과 첫 슬롯 successRoute 를 싣고, 요청은 0건이다', async () => {
+    await openList('CO_PLAN');
+
+    const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
+    const skip = screen.getByTestId('itinerary-mustvisit-screen-skip');
+
+    // ① 다음 CTA → CO_PLAN generating. 목적지를 직렬화해 값째 잰다.
+    fireEvent.press(proceed);
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    const proceedDest = mockPush.mock.calls[0][0];
+    const proceedFlat =
+      typeof proceedDest === 'string'
+        ? proceedDest
+        : JSON.stringify(proceedDest);
+    expect(proceedFlat).toContain('generating');
+    // ★ mode 신호 — 완전AI(mode 없음)와 가르는 지점.
+    expect(proceedFlat).toContain('CO_PLAN');
+    // ★ successRoute = 첫 슬롯 경로 계열(허브 `copick` 가 아니라 슬롯 라우트 `copick/[slotKey]`).
+    //   `[slotKey]` 세그먼트가 허브와 가른다 — 허브/draft 로 새면 red.
+    expect(proceedFlat).toContain('copick/[slotKey]');
+    expect(proceedFlat).toContain(TRIP_ID);
+
+    // ② 건너뛰기도 같은 목적지(CO_PLAN generating). 앞 호출과 섞이지 않게 비우고 다시 잰다.
+    mockPush.mockClear();
+    fireEvent.press(skip);
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    const skipDest = mockPush.mock.calls[0][0];
+    const skipFlat =
+      typeof skipDest === 'string' ? skipDest : JSON.stringify(skipDest);
+    expect(skipFlat).toContain('generating');
+    expect(skipFlat).toContain('CO_PLAN');
+    expect(skipFlat).toContain('copick/[slotKey]');
+    expect(skipFlat).toContain(TRIP_ID);
+
+    // ③ 전진은 요청을 만들지 않는다(생성 POST 는 h09 소유, 무회귀).
     expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
   });

@@ -5,11 +5,20 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import { REGIONS } from '@/features/explore/model/regions';
-
 import { validateTripDraft } from '../model/tripDraft';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
+
+// TRIP-445 게이트①-2 결정 A — 삭제된 프로덕션 상수 `REGIONS`를 파일 로컬 `{code,name}[]`
+// 픽스처로 기계 교체(단언·동작 무변경, 위저드 화면 `regions` 계약과 같은 shape).
+const REGIONS: readonly { code: string; name: string }[] = [
+  { code: 'busan', name: '부산' },
+  { code: 'gyeongju', name: '경주' },
+  { code: 'seoul', name: '서울' },
+  { code: 'jeju', name: '제주' },
+  { code: 'gangneung', name: '강릉' },
+  { code: 'yeosu', name: '여수' },
+];
 
 /**
  * TRIP-205 g01 여행 만들기 1/2 — **props만 받는 프레젠테이션 화면**.
@@ -156,8 +165,10 @@ describe('AC-4 · 여행지 칩 (BR-U1-34)', () => {
 
     fireEvent.press(screen.getByTestId('trip-wizard-destination-remove-busan'));
 
-    // 서버 계약의 `region`은 한글 이름이다(코드가 아니다 — regions.ts 주석).
-    expect(onRemoveDestination).toHaveBeenCalledWith('부산');
+    // TRIP-364 — 삭제는 이름이 아니라 그 칩의 `seq`로 올라간다(목록 안 유일 식별자).
+    // 부산은 filledProps에서 seq 1이다. 이름으로 올려보내던 옛 계약은 같은 지역 중복 시
+    // "누른 그 칩"을 못 짚었다.
+    expect(onRemoveDestination).toHaveBeenCalledWith(1);
     expect(onRemoveDestination).toHaveBeenCalledTimes(1);
     // 짝 — × 버튼을 눌렀는데 칩 본체(또는 '도시 추가')까지 함께 불리지 않는다.
     expect(onAddDestination).not.toHaveBeenCalled();
@@ -226,6 +237,45 @@ describe('AC-3 · 도시 추가 시트 (REGIONS 6지역 + 박수 지정)', () =>
     expect(
       screen.getByTestId('trip-wizard-destination-sheet')
     ).toHaveTextContent(/1박/);
+  });
+});
+
+describe('TRIP-363 · POI 커버리지 배지 (poiCount 0 = "준비 중")', () => {
+  // 결정 a — poiCount 0 지역도 고를 수는 있게 두되, 고르기 전에 "준비 중"으로 알린다
+  // (INV-1 후보풀 빔 · INV-4 침묵 실패 금지). poiCount 미제공(구 {code,name})은 배지 없음.
+  const COVERAGE_REGIONS = [
+    { code: 'jeju', name: '제주', poiCount: 4 },
+    { code: 'hongcheon', name: '홍천군', poiCount: 0 },
+  ];
+
+  it('poiCount 0인 지역 칩엔 "준비 중" 배지가 뜨고, 0이 아니면 안 뜬다', () => {
+    render(<TripWizardStep1Screen {...props({ regions: COVERAGE_REGIONS })} />);
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // poiCount 0 → 배지 present.
+    expect(
+      screen.getByTestId('trip-wizard-destination-coming-soon-hongcheon')
+    ).toHaveTextContent(/준비 중/);
+    // poiCount>0 → 배지 absent(짝 — 무조건 배지를 다는 구현을 배제).
+    expect(
+      screen.queryByTestId('trip-wizard-destination-coming-soon-jeju')
+    ).toBeNull();
+  });
+
+  it('poiCount 0인 지역도 고를 수 있다 (결정 a — 배지로 경고하되 선택 자체는 막지 않는다)', () => {
+    const onAddDestination = jest.fn();
+    render(
+      <TripWizardStep1Screen
+        {...props({ regions: COVERAGE_REGIONS, onAddDestination })}
+      />
+    );
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // 준비 중 지역을 고르면 확정이 활성화된다(선택 가능).
+    fireEvent.press(
+      screen.getByTestId('trip-wizard-destination-region-hongcheon')
+    );
+    expect(screen.getByTestId('trip-wizard-destination-confirm')).toBeEnabled();
   });
 });
 
@@ -708,5 +758,38 @@ describe('TRIP-387 · 시트 안 지역 검색 (슬라이스 1)', () => {
     // 단언: 좁힌 목록에 없어도 full regions로 부산을 되찾아 담는다.
     expect(onAddDestination).toHaveBeenCalledWith('부산', 1);
     expect(onAddDestination).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('TRIP-455 · 여행지 추가 시트 스크롤 (버그1)', () => {
+  // 버그1: 서버 카탈로그(GET /regions)가 화면보다 길어지면 칩 격자가 위로 밀려 상단 광역시
+  // (서울·부산)가 화면 밖으로 나가 선택 불가였다. 근본 원인은 칩 격자가 맨 <View>(flex-wrap,
+  // 높이 상한·스크롤 없음)라는 것. 수정은 칩 격자를 스크롤 컨테이너로 감싸는 것이다.
+  //
+  // jest가 못 보는 것: 실제 스크롤·클리핑·상단 칩 도달 가능성(RN 테스트 렌더러는 레이아웃을
+  // 계산 안 한다, 02a ★S). 그래서 이 심판은 **스크롤 컨테이너 존재**라는 구조만 잠근다 —
+  // 실제 도달성은 [검증] 6-b 실기(카탈로그 긴 상태로 시트 열어 서울·부산까지 스크롤) 몫이다.
+
+  it('🔴 시트를 열면 칩 목록을 감싸는 스크롤 컨테이너가 있다', () => {
+    // (준비) 기본 드래프트로 렌더.
+    render(<TripWizardStep1Screen {...props()} />);
+
+    // (실행) 시트를 연다 — 칩·스크롤 컨테이너는 sheetOpen일 때만 렌더된다(★6).
+    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
+
+    // (단언) 앵커 — 시트가 실제로 열렸고 칩이 그려진다(스크롤 단언이 렌더 통째 죽음이나
+    // "스크롤 컨테이너가 칩을 삼켜 0개"로 공허 통과하지 않게).
+    expect(
+      screen.getByTestId('trip-wizard-destination-sheet')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('trip-wizard-destination-region-busan')
+    ).toBeOnTheScreen();
+
+    // 핵심 — 오늘은 이 컨테이너 testID가 없어 RED. 있으면 상단 칩이 화면 밖으로 영영
+    // 밀리지 않을 자리가 생긴다(실제 스크롤은 6-b).
+    expect(
+      screen.getByTestId('trip-wizard-destination-sheet-scroll')
+    ).toBeOnTheScreen();
   });
 });

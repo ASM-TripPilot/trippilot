@@ -336,6 +336,70 @@ export const handlers = [
   ),
 
   /**
+   * TRIP-445 지역 카탈로그 — `GET /regions` 기본 목. `/saved-stays`(아래)와 같은 이유로
+   * 존재한다: 위저드·지역선택 페이지가 `useRegions()`(가드 없는 무조건 조회)로 이 경로를 부르는
+   * 순간, `onUnhandledRequest:'error'`인 통합 버킷이 준비 단계에서 죽는다.
+   *
+   * ⚠️ 빈 목록이 아니라 6지역을 준다 — `/saved-stays`(빈 계정이 무해)와 달리 위저드 통합
+   * 테스트(`TripNewStep1Page.*.integration`, 동결)는 여행지를 실제로 골라야 제출 흐름이 성립한다.
+   * `regionCode`는 그 동결 테스트가 누르는 testID(`trip-wizard-destination-region-busan` 등)에
+   * 맞춰 구 슬러그를 쓴다(실서버 숫자코드와 다르지만, 오라클이 동결 심판을 살려 두는 값이다).
+   * 얼굴별 응답이 필요한 테스트는 `server.use(...)`로 덮는다.
+   */
+  http.get(`${BASE}/regions`, () =>
+    HttpResponse.json([
+      {
+        regionCode: 'busan',
+        name: '부산',
+        sidoName: '부산',
+        level: 'SIDO',
+        selectable: true,
+        poiCount: 1,
+      },
+      {
+        regionCode: 'gyeongju',
+        name: '경주',
+        sidoName: '경상북도',
+        level: 'SIGUNGU',
+        selectable: true,
+        poiCount: 1,
+      },
+      {
+        regionCode: 'seoul',
+        name: '서울',
+        sidoName: '서울',
+        level: 'SIDO',
+        selectable: true,
+        poiCount: 1,
+      },
+      {
+        regionCode: 'jeju',
+        name: '제주',
+        sidoName: '제주',
+        level: 'SIDO',
+        selectable: true,
+        poiCount: 1,
+      },
+      {
+        regionCode: 'gangneung',
+        name: '강릉',
+        sidoName: '강원특별자치도',
+        level: 'SIGUNGU',
+        selectable: true,
+        poiCount: 1,
+      },
+      {
+        regionCode: 'yeosu',
+        name: '여수',
+        sidoName: '전라남도',
+        level: 'SIGUNGU',
+        selectable: true,
+        poiCount: 1,
+      },
+    ])
+  ),
+
+  /**
    * TRIP-208 등록 숙소 날짜 연계 — 리포 최초의 `GET /saved-stays` 목이다.
    *
    * **기본값이 빈 목록인 이유**: 이 핸들러가 필요한 첫 번째 이유는 AC 심판이 아니라

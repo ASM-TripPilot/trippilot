@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   Pressable,
@@ -48,6 +49,8 @@ export interface PlaceExploreScreenProps {
   onChangeSearchText: (text: string) => void;
   /** 담김/해제 판정은 페이지가 한다 — 화면은 "이 카드가 눌렸다"만 올린다. */
   onToggleSave: (place: Place) => void;
+  /** 카드 본문 탭 → d06 상세. 미지정이면 카드는 눌러도 무동작(additive, 게이트① 재개봉 없음). */
+  onPressCard?: (place: Place) => void;
   onPressCreateTrip: () => void;
   /** 미지정이어도 화면은 그대로 동작한다(`StayRegisterScreen.tsx:62`와 같은 선택). */
   onBack?: () => void;
@@ -66,6 +69,10 @@ export interface PlaceExploreScreenProps {
   onClearFilter?: () => void;
   /** 배너 액션 버튼(재시도·로그인하기 공용) — 무엇을 하는지는 `saveError.action`이 정한다. */
   onPressSaveErrorAction?: () => void;
+  /** 목록 끝에 닿으면 다음 장을 이어 받는다(TRIP-502 무한 스크롤). 미지정이면 무동작(additive). */
+  onEndReached?: () => void;
+  /** 다음 장을 받는 중이면 목록 하단에 로딩 표시(footer). 미지정 = false. */
+  isFetchingMore?: boolean;
 }
 
 /** 칩 code는 셀렉터 전용 latin, 라벨·서버 질의값은 계약 enum 그대로(`regions.ts` 규칙 —
@@ -203,19 +210,28 @@ function PlaceCard({
   saved,
   pending,
   onToggleSave,
+  onPressCard,
 }: {
   place: Place;
   saved: boolean;
   pending: boolean;
   onToggleSave: (place: Place) => void;
+  onPressCard?: (place: Place) => void;
 }): ReactElement {
   const subtitle = place.region
     ? `${place.category} · ${place.region}`
     : place.category;
 
   return (
-    <View
+    // bare Pressable(accessibilityRole 없음) — role 을 붙이면 `states.test.tsx` 의 role=button
+    // 개수 동결(정확히 15)이 깨진다(02a ★1). bare 는 getAllByRole 에 안 잡히고 press 는 먹는다.
+    // `!pending` 가드: 대기(disabled) 하트 press 는 부모 Pressable 로 새는데(RNTL Probe C, ★2),
+    // pending 이면 카드 이동(d06)을 무효화해 그 누수를 막는다.
+    <Pressable
       testID={`explore-places-card-${place.poiId}`}
+      onPress={() => {
+        if (!pending) onPressCard?.(place);
+      }}
       className="w-[48%] gap-[7px]"
     >
       <View className="h-[132px] w-full overflow-hidden rounded-[14px] bg-surface-soft">
@@ -253,7 +269,7 @@ function PlaceCard({
         {place.nameKo}
       </Text>
       <Text className="font-noto text-[11.5px] text-muted">{subtitle}</Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -491,6 +507,7 @@ export function PlaceExploreScreen({
   onSelectCategory,
   onChangeSearchText,
   onToggleSave,
+  onPressCard,
   onPressCreateTrip,
   onBack,
   state = { kind: 'results' },
@@ -500,6 +517,8 @@ export function PlaceExploreScreen({
   onPressChangeRegion,
   onClearFilter,
   onPressSaveErrorAction,
+  onEndReached,
+  isFetchingMore = false,
 }: PlaceExploreScreenProps): ReactElement {
   const savedSet = new Set(savedPoiIds);
   const pendingSet = new Set(pendingPoiIds);
@@ -550,8 +569,21 @@ export function PlaceExploreScreen({
               saved={savedSet.has(item.poiId)}
               pending={pendingSet.has(item.poiId)}
               onToggleSave={onToggleSave}
+              onPressCard={onPressCard}
             />
           )}
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isFetchingMore ? (
+              <View
+                testID="explore-places-loading-more"
+                className="w-full items-center py-lg"
+              >
+                <ActivityIndicator />
+              </View>
+            ) : null
+          }
         />
 
         {saveError ? (

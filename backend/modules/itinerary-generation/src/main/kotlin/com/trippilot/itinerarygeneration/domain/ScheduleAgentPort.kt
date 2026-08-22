@@ -115,6 +115,12 @@ data class ScheduleAgentInput(
      * AI 측 대응: `ItineraryProblem.excluded_poi_ids`(후보 풀·프롬프트·게이트에 동일 적용).
      */
     val excludedPoiIds: List<UUID> = emptyList(),
+    /**
+     * 설명 생략 요청(TRIP-479) — false 면 AI 가 설명 LLM 단계를 건너뛰고 즉시 반환하며,
+     * 설명은 `POST /ai/v1/itinerary/explanations` 로 별도 조회한다. true(기본) = 기존 동작.
+     * 맨 뒤 배치는 기본값 파라미터 규칙(anti-patterns) — 기존 호출 전부 무변경.
+     */
+    val includeExplanations: Boolean = true,
 )
 
 data class TripContext(
@@ -146,7 +152,11 @@ data class PreferenceProfile(
 )
 
 /** 지연 예산 전파(IO-1) — day1 5s / 전체 20s. */
-data class RequestMeta(val requestId: String, val requestedAt: Instant, val deadlineMs: Long)
+/**
+ * IO-1 지연 예산. [deadlineMs] 가 **null 이면 시한을 걸지 않는다**(TRIP-473/474 — AI 계약상
+ * 미지정 = 무제한). 값을 실으면 종전과 동일하게 동작한다.
+ */
+data class RequestMeta(val requestId: String, val requestedAt: Instant, val deadlineMs: Long?)
 
 // ───────── 출력: ScheduleAgentOutput ─────────
 

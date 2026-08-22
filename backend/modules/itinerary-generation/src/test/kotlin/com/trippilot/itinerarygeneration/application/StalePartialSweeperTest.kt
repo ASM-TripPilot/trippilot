@@ -48,12 +48,17 @@ class StalePartialSweeperTest : StringSpec({
             byTrip.values.filter { it.generationState == GenerationState.PARTIAL && it.updatedAt < updatedBefore }
     }
 
-    "5분 넘게 멈춰 있던 PARTIAL 은 FAILED 로 내려 확정·편집 잠금을 푼다" {
-        val stale = partialUpdatedAt(now.minusSeconds(600))
+    /**
+     * 기준은 **기다려 주기로 한 시간에서 파생**된다(`ScheduleDeadlineProperties.staleAfter`).
+     * 상수로 고정하면 시간제약을 푼 모드(TRIP-474)에서 **살아 있는 2차를 잘라낸다** —
+     * 그 뒤 도착한 결과는 조건부 쓰기에 걸려 조용히 버려지고, 수 분어치 LLM 작업이 사라진다.
+     */
+    "기준을 넘게 멈춰 있던 PARTIAL 은 FAILED 로 내려 확정·편집 잠금을 푼다" {
+        val stale = partialUpdatedAt(now.minus(defaultDeadlines.staleAfter).minusSeconds(1))
         val repo = Repo(listOf(stale))
         val sessionRepo = FakeGenerationSessions()
-        val session = sessionRepo.save(GenerationSession.start(stale.tripId, GenerationMode.FULLY_AI, now))
-        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock).sweep()
+        val session = sessionRepo.save(GenerationSession.start(UUID.randomUUID(), stale.tripId, GenerationMode.FULLY_AI, now))
+        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock, defaultDeadlines).sweep()
 
         val swept = repo.byTrip.getValue(stale.tripId)
         swept.generationState shouldBe GenerationState.FAILED
@@ -62,12 +67,29 @@ class StalePartialSweeperTest : StringSpec({
         sessionRepo.rows.getValue(session.sessionId).status shouldBe GenerationStatus.FAILED
     }
 
-    "진행 중인 PARTIAL(2차 시한 이내)은 건드리지 않는다" {
-        val running = partialUpdatedAt(now.minusSeconds(10))
+    /**
+     * **플래그를 켜면 종전 5분 그대로다**(TRIP-475 9월 재도입 리허설). 파생식이 그 모드에서
+     * 기준을 조이지 않는다는 것을 지금 고정한다.
+     */
+    "시한을 거는 모드에서는 기준이 종전 5분이다" {
+        val enforced = ScheduleDeadlineProperties(enforced = true)
+        val stale = partialUpdatedAt(now.minusSeconds(301))
+        val repo = Repo(listOf(stale))
+        val sessionRepo = FakeGenerationSessions()
+        sessionRepo.save(GenerationSession.start(UUID.randomUUID(), stale.tripId, GenerationMode.FULLY_AI, now))
+
+        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock, deadlines = enforced), clock, enforced).sweep()
+
+        repo.byTrip.getValue(stale.tripId).generationState shouldBe GenerationState.FAILED
+    }
+
+    /** 기준 직전은 아직 도는 중으로 본다 — 경계를 못으로 박아 값이 조용히 바뀌지 않게 한다. */
+    "진행 중인 PARTIAL(기준 이내)은 건드리지 않는다" {
+        val running = partialUpdatedAt(now.minus(defaultDeadlines.staleAfter).plusSeconds(1))
         val repo = Repo(listOf(running))
         val sessionRepo = FakeGenerationSessions()
-        val session = sessionRepo.save(GenerationSession.start(running.tripId, GenerationMode.FULLY_AI, now))
-        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock).sweep()
+        val session = sessionRepo.save(GenerationSession.start(UUID.randomUUID(), running.tripId, GenerationMode.FULLY_AI, now))
+        StalePartialSweeper(repo, genSessions(repo = sessionRepo, clock = clock), clock, defaultDeadlines).sweep()
 
         repo.byTrip.getValue(running.tripId).generationState shouldBe GenerationState.PARTIAL
         sessionRepo.rows.getValue(session.sessionId).status shouldBe GenerationStatus.RUNNING

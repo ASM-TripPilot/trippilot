@@ -42,12 +42,20 @@ const mockNotifyReeval = notifyBootstrapReeval as jest.MockedFunction<
   typeof notifyBootstrapReeval
 >;
 
+// TRIP-471 — 취향 저장 PUT 훅 목. useMutation 실물은 QueryClientProvider 를 요구해 이 페이지
+// 단독 렌더가 죽으므로, mutate 만 spy 로 노출한다(완료가 서버로 취향을 보내는지 관찰).
+const mockPutMutate = jest.fn();
+jest.mock('@/shared/api/generated/preferences/preferences', () => ({
+  usePutMePreferences: () => ({ mutate: mockPutMutate }),
+}));
+
 beforeEach(() => {
   usePreferenceStore.getState().reset();
   routerMock.replace.mockClear();
   routerMock.push.mockClear();
   routerMock.back.mockClear();
   mockNotifyReeval.mockClear();
+  mockPutMutate.mockClear();
 });
 
 describe('PrefStep2Page — 복귀 시 선택값 보존 (AC2 · AC3 · 5-4)', () => {
@@ -81,7 +89,38 @@ describe('PrefStep2Page — 완료 내비게이션 (AC3 · AC-done-1 · 5-5)', (
     // 실행 — CTA 탭.
     fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
 
-    // 단언 — replace('/') (서버 미전송은 F6 6-3 구조 가드가 별도로 잠근다).
+    // 단언 — replace('/').
+    expect(routerMock.replace).toHaveBeenCalledWith('/');
+  });
+});
+
+describe('PrefStep2Page — 완료 시 서버에 취향 PUT (TRIP-471)', () => {
+  it('완료를 탭하면 slug→서버값으로 번역한 취향을 PUT 하고, 홈으로도 이동한다', () => {
+    // 준비 — 3축 선택(단일 style·budget + 동행 pet 특례).
+    usePreferenceStore.getState().toggleStyle('rest');
+    usePreferenceStore.getState().toggleBudget('low');
+    usePreferenceStore.getState().toggleCompanion('pet');
+    render(<PrefStep2Page />);
+
+    // 실행 — 완료 탭.
+    fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
+
+    // 단언 — PUT 이 번역된 바디로 정확히 1회, 완료 흐름(replace)도 그대로 진행.
+    expect(mockPutMutate).toHaveBeenCalledTimes(1);
+    const body = mockPutMutate.mock.calls[0][0].data;
+    expect(body.styles).toEqual(['휴양']);
+    expect(body.budgetTier).toBe('저가');
+    expect(body.petFlag).toBe(true); // pet 은 companionTypes 가 아니라 petFlag
+    expect(body.companionTypes).toEqual([]);
+    expect(routerMock.replace).toHaveBeenCalledWith('/');
+  });
+
+  it('아무 것도 안 고르고 완료해도 PUT 은 나가고(미선택=null) 이동한다', () => {
+    render(<PrefStep2Page />);
+    fireEvent.press(screen.getByTestId('onboarding-pref2-done'));
+
+    expect(mockPutMutate).toHaveBeenCalledTimes(1);
+    expect(mockPutMutate.mock.calls[0][0].data.styles).toBeNull();
     expect(routerMock.replace).toHaveBeenCalledWith('/');
   });
 });

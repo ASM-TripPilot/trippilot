@@ -76,6 +76,13 @@ services:
       # 공동 통합테스트에서만 AI_SCHEDULE_MODE=http 로 실 AI 컨테이너에 붙인다.
       TRIPPILOT_AI_SCHEDULE_MODE: ${AI_SCHEDULE_MODE:-fake}
       TRIPPILOT_AI_SCHEDULE_BASE_URL: ${AI_URL:-http://ai:8000}
+      # 시간제약(day1 5s / 전체 20s)을 AI 에 실을지. **기본 off** — FE 연동 기간에는 시간 때문에
+      # 규칙 폴백으로 강등되는 것을 걷어낸다(TRIP-474). 9월 재도입은 여기를 true 로(TRIP-475).
+      TRIPPILOT_AI_SCHEDULE_DEADLINE_ENFORCED: ${AI_SCHEDULE_DEADLINE_ENFORCED:-false}
+      # 시한 **값**도 통로를 연다. 켜는 순간 조정이 필요할 수 있는데(실측 TRIP-373: 취향 점수가
+      # 후보 건당 ~0.3초 선형) 통로가 없으면 코드를 고쳐야 하고, 그러면 "우리 기본값이 무엇인지"가 흐려진다.
+      TRIPPILOT_AI_SCHEDULE_DEADLINE_DAY1_MS: ${AI_SCHEDULE_DAY1_DEADLINE_MS:-5000}
+      TRIPPILOT_AI_SCHEDULE_DEADLINE_TOTAL_MS: ${AI_SCHEDULE_TOTAL_DEADLINE_MS:-20000}
       # 소셜 로그인 시크릿 — .env 에서 주입(컨테이너는 기본 프로파일이라 application-local.yml 안 읽음).
       # 미설정이면 빈 값 → 소셜 로그인 시도 시에만 실패(기동 무영향). 값은 .env.example 참고.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
@@ -87,8 +94,13 @@ services:
       # 지역 지오코딩 경계(국내강제). 기본 스텁은 시드 8개만 국내로 안다 —
       # 실 지역명으로 여행을 만들려면 kakao 로 켠다(키는 위 KAKAO_CLIENT_ID 를 그대로 쓴다).
       TRIPPILOT_PLACE_GEOCODE_MODE: ${PLACE_GEOCODE_MODE:-stub}
+      # 숙소 콘텐츠 경로. 기본 스텁은 **제주 5곳뿐**이라 다른 지역 검색이 전부 0건이 된다 —
+      # 전국 정본(stay 12,782곳)으로 돌리려면 db 로 켠다.
+      TRIPPILOT_STAY_CONTENT_MODE: ${STAY_CONTENT_MODE:-stub}
       # 서비스 간 호출(TRIP-393). 비우면 /internal 경계가 닫힌다 — AI 수집분 수신도 막힌다.
       TRIPPILOT_SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      # application.yml 은 ${SERVICE_AUTH_TOKEN:} 을 읽는다 — 접두 붙은 이름만 주면 빈 토큰이 되어 /internal 이 401 로 닫힌다(실측 2026-08-21).
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
     ports:
       - "8080:8080"
     healthcheck:
@@ -122,11 +134,17 @@ services:
       TRIPPILOT_WIRING: ${AI_WIRING:-}
       # 기상청 단기예보(디코딩 키). 미설정 = 날씨 보정 없음.
       WEATHER_API: ${WEATHER_API:-}
+      # PlanB RAG 벡터 스토어(TRIP-426) — 미설정 = 미배선(경계 개통은 TRIP-428).
+      # 컨테이너 안에서는 ai-vectordb 호스트로 해석된다.
+      TRIPPILOT_VECTOR_DB_URL: ${AI_VECTOR_DB_URL:-}
       # 후보 POI 정본 실연동(TRIP-408) — SERVICE_AUTH_TOKEN(.env, TRIP-393)이 있을 때만
       # 백엔드를 바라본다. 비우면 주소도 비어 기존 StaticPoiDb(제주 시드 4곳) 조립 —
       # 주소만 있고 토큰이 없으면 ai 가 기동 실패하므로 둘을 한 변수로 묶는다.
       TRIPPILOT_BACKEND_BASE_URL: ${SERVICE_AUTH_TOKEN:+http://backend:8080}
       TRIPPILOT_SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      # TMAP 실경로 API(TRIP-432). 설정 시 ChainedTravelAdapter 활성화 —
+      # 미설정 = 기존 하버사인 추정 그대로.
+      TMAP_API_KEY: ${TMAP_API_KEY:-}
     ports:
       - "8000:8000"
     healthcheck:
@@ -135,6 +153,30 @@ services:
       timeout: 3s
       retries: 6
       start_period: 5s
+
+  # ── AI 벡터 스토어 (PlanB RAG KB · TRIP-426) ───────────────────
+  # 백엔드 db와 분리한 전용 컨테이너 — postgres:16-alpine에는 pgvector extension이
+  # 없고, 공유 이미지를 바꾸면 백엔드 스택에 영향이 가서 격리를 택했다.
+  ai-vectordb:
+    profiles: ["full"]
+    image: pgvector/pgvector:pg16
+    container_name: trippilot-ai-vectordb
+    environment:
+      POSTGRES_DB: ai_kb
+      POSTGRES_USER: ${AI_VECTOR_DB_USER:-ai_kb}
+      POSTGRES_PASSWORD: ${AI_VECTOR_DB_PASSWORD:-ai_kb}
+      TZ: UTC
+    ports:
+      - "5433:5432"
+    volumes:
+      - trippilot-ai-vectordata:/var/lib/postgresql/data
+      - ./ai/docker/vector-init:/docker-entrypoint-initdb.d:ro   # 최초 1회: extension + kb_vectors
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AI_VECTOR_DB_USER:-ai_kb} -d ai_kb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   # ── Frontend (Expo Web 자리 · nginx 정적+프록시 스텁) ──────────
   frontend:
@@ -157,3 +199,4 @@ services:
 
 volumes:
   trippilot-pgdata:
+  trippilot-ai-vectordata:

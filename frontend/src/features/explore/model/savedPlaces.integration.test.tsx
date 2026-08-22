@@ -127,7 +127,9 @@ beforeEach(() => {
   // 요청이 에러로 죽는데, 그 성질을 그대로 쓴다 — 예상 못 한 요청이 조용히 통과하지 않는다.
   // GET /trips 는 **무효화 부정 짝의 모집단**이다(아래 probe 주석).
   server.use(
-    http.get(`${BASE}/places`, () => HttpResponse.json([PLACE_A, PLACE_B])),
+    http.get(`${BASE}/places`, () =>
+      HttpResponse.json({ items: [PLACE_A, PLACE_B], nextCursor: null })
+    ),
     http.get(`${BASE}/saved-places`, () => HttpResponse.json([SAVED_B])),
     http.get(`${BASE}/trips`, () => HttpResponse.json([]))
   );

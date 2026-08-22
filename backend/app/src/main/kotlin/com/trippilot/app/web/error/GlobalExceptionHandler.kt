@@ -4,6 +4,7 @@ import com.trippilot.app.web.CorrelationIdFilter
 import com.trippilot.core.error.AgeRequirementNotMet
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.ConflictDetected
+import java.util.UUID
 import com.trippilot.core.error.DomainException
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ModerationUnavailable
@@ -55,7 +56,10 @@ class GlobalExceptionHandler {
 
         val fields = (ex as? ValidationFailed)?.fieldErrors?.map { ErrorResponse.Field(it.field, it.reason) }
         val body = ErrorResponse(
-            ErrorResponse.Body(ex.errorCode.name, ex.message ?: "", traceId(), fields, existingProvider(ex)),
+            ErrorResponse.Body(
+                ex.errorCode.name, ex.message ?: "", traceId(), fields,
+                existingProvider(ex), activeTripId(ex),
+            ),
         )
 
         val builder = ResponseEntity.status(status)
@@ -109,6 +113,17 @@ class GlobalExceptionHandler {
     private fun existingProvider(ex: DomainException): String? {
         if (ex !is ConflictDetected || ex.errorCode != ErrorCode.SOCIAL_EMAIL_CONFLICT) return null
         return (ex.current as? List<*>)?.firstOrNull()?.toString()?.lowercase()
+    }
+
+    /**
+     * 생성 동시 실행 충돌(409)에 한해 진행 중인 여행을 계약 필드로 꺼낸다(TRIP-403).
+     *
+     * [existingProvider] 와 같은 방식이다 — `current` 를 일반 필드로 노출하면 free-form object 가 되어
+     * openapi 가 계약 노릇을 못 한다. 이것이 두 번째 사례라 아직 좁게 둔다.
+     */
+    private fun activeTripId(ex: DomainException): String? {
+        if (ex !is ConflictDetected || ex.errorCode != ErrorCode.GENERATION_IN_PROGRESS) return null
+        return (ex.current as? UUID)?.toString()
     }
 
     private fun traceId(): String? = MDC.get(CorrelationIdFilter.MDC_KEY)

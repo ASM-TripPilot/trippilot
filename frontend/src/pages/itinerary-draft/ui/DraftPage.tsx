@@ -22,6 +22,8 @@ import {
 } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
 
+import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
+
 /**
  * h11 배선(TRIP-297) — 두 조회를 잇고, 2단계 생성을 폴링으로 잇고, 재생성을 보낸다.
  *
@@ -42,6 +44,10 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [pickedDate, setPickedDate] = useState<string | null>(null);
+  // 어느 슬롯의 교체 패널이 펼쳐졌나(=그 슬롯 slotKey). null 이면 닫힘. 패널은 그 카드 **바로 아래**
+  // 스크롤 흐름에 인라인으로 뜨고(바텀시트 아님 · TRIP-483), 화면이 이 값과 일치하는 카드 자리에서만
+  // `renderSlotPanel(slotKey)` 을 불러 컨테이너를 마운트한다 — 닫힘 = 값이 null 이라 안 그려짐.
+  const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
 
   const itineraryQueryKey = getGetTripsTripIdItineraryQueryKey(tripId);
 
@@ -205,6 +211,18 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     );
   }
 
+  // 두 뒤로가기(h35 후보 0건 · h11 초안) 공통. 딥링크로 콜드 오픈돼 히스토리가 없으면
+  // (`canGoBack()===false`) 침묵 no-op 이 아니라 홈으로 replace 한다(INV-4). `/(tabs)/itinerary`
+  // 는 trips[0] 리다이렉트 함정이라 접미 없는 `/(tabs)` 로 간다. `ItineraryPlanPage.handleBack`
+  // 을 이 페이지에 지역 복제한 것이다(shared 승격 아님 — pages 간 import 금지 · YAGNI).
+  function handleBack(): void {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  }
+
   /**
    * 후보 0건은 **다른 화면**이다(h35) — 목록 화면 안의 빈 상태가 아니라, 조건을 밝히고
    * 다음 행동을 주는 별도 얼굴이다. 그래서 `DraftScreen` 을 아예 그리지 않는다.
@@ -216,7 +234,7 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
     return (
       <ZeroCandidateScreen
         shortfallCategories={view.shortfallCategories}
-        onBack={() => router.back()}
+        onBack={handleBack}
         onReduceMustVisits={() =>
           router.push({
             pathname: '/trips/[tripId]/itinerary/must-visits',
@@ -244,7 +262,38 @@ export function DraftPage({ tripId }: { tripId: string }): ReactElement {
       })}
       onSelectDay={setPickedDate}
       onRetry={() => void handleRetry()}
-      onBack={() => router.back()}
+      onBack={handleBack}
+      // h25(완성 일정) — 접미 없는 index 라우트다(draft·generating 과 달리). 객체형 push 라야
+      // `[tripId]` 가 params 로 해소된다(문자열 형태는 미해결로 깨진다 · TRIP-454 AC-5).
+      onComplete={() =>
+        router.push({
+          pathname: '/trips/[tripId]/itinerary',
+          params: { tripId },
+        })
+      }
+      // 비고정 슬롯 "다른 후보 ›" press → 그 슬롯 slotKey 를 **토글**한다(같은 슬롯 재press 는 닫힘 ·
+      // 한 번에 한 슬롯 · TRIP-483 ★C). 재대입 `setEditingSlotKey(k)` 은 같은 값이라 안 닫힌다.
+      onPressSlot={(slotKey) =>
+        setEditingSlotKey((prev) => (prev === slotKey ? null : slotKey))
+      }
+      expandedSlotKey={editingSlotKey}
+      // 패널 내용(후보 POST→선택→PUT→재조회)은 컨테이너가 소유한다 — 화면은 이 함수를 펼친 카드
+      // 아래 자리에만 불러 컨테이너를 마운트한다(TRIP-335→483 로직 재사용, 프레젠테이션만 인라인).
+      renderSlotPanel={(slotKey) => (
+        <SlotCandidatePanelContainer
+          tripId={tripId}
+          slotKey={slotKey}
+          onClose={() => setEditingSlotKey(null)}
+        />
+      )}
+      // 「처음부터 직접」·「직접 고르기」 공통 목적지 — 수동 짜기 라우트(h19). 접미 있는 라우트라
+      // 객체형 push 로 `[tripId]` 를 해소한다(onComplete 선례 · TRIP-483 AC-4).
+      onManualPlan={() =>
+        router.push({
+          pathname: '/trips/[tripId]/itinerary/manual',
+          params: { tripId },
+        })
+      }
     />
   );
 }

@@ -194,3 +194,66 @@ describe('🔴 INV-4(홈 CTA) · itinerary 미정착이면 오이동하지 않�
     expect(mockPush).not.toHaveBeenCalled();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-453 · entry 3 — 여행 카드 **본체**(home-trip-hero) 탭도 알약(home-trip-hero-cta)과 같은
+// 목적지로 이동한다(기존 onPressTripHeroCta 재사용, 신규 순수함수 0 · 맹점 ⑤).
+//
+// ⚠️ 실검증으로 드러난 함정(02a ★3·§5 a) — 여기 카드 본체 **press** 테스트들은 전부 **선제
+// green(회귀 앵커)**이지 red 가 아니다. `TripHero` 는 onPress 를 prop 으로 받는 **합성 컴포넌트**
+// 라, RNTL findEventHandler 가 home-trip-hero(순수 View)에서 위로 올라가다 TripHero 합성요소의
+// props.onPress 를 집어 **배선 여부와 무관하게** onPressTripHeroCta 를 발화시킨다(오늘도 카드
+// 본체를 누르면 목적지로 push 된다 — 공허 통과). 그래서 "카드 본체가 버튼이 됐다"는 실판정은
+// 라우트가 아니라 `HomeScreen.test.tsx` 의 AC-7 버튼-집합(role="button")이 진다. 아래 테스트는
+// **구현 후** 값을 낸다: (a) 카드 본체를 알약과 다른 잘못된 목적지·가드 없는 새 함수로 배선하면
+// red(목적지·재사용 회귀), (b) 카드 본체 승격 뒤 알약 press 가 2회로 새면 red(이중발화 회귀).
+
+describe('🟢 453-AC-3a · 카드 본체(home-trip-hero) → 알약과 같은 목적지 (구현 후 목적지 앵커)', () => {
+  it('planning + itinerary 404 카드 본체 press → method(h04) 로 1회 push(알약과 동일)', () => {
+    mockUseItinerary.mockReturnValue(itineraryNotFound);
+
+    render(<HomeRoute />);
+    fireEvent.press(screen.getByTestId('home-trip-hero'));
+
+    // 카드 본체를 알약과 **다른** 목적지로 배선하면 red(목적지 회귀). 오늘은 합성-forward 로
+    // onPressTripHeroCta 가 불려 우연히 green(공허) — 실 red 는 AC-7 role 이 낸다.
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/itinerary/method`);
+  });
+});
+
+describe('🟢 453-AC-3a(INV-4) · 카드 본체도 미정착이면 오이동 안 함 (재사용 강제 앵커)', () => {
+  // 구현 후 판정력: 카드 본체를 알약이 쓰는 가드(isPending‖비-404 오류→조기반환)가 든
+  // onPressTripHeroCta 로 **재사용**하지 않고 가드 없는 새 함수로 배선하면, 로딩에서 push 가
+  // 새어 red(맹점 ⑤ 트립와이어). 오늘은 미배선+합성-forward 로 0회(선제 green).
+  const itineraryLoading = {
+    data: undefined,
+    error: null,
+    isPending: true,
+    isError: false,
+  } as unknown as ItineraryHookResult;
+
+  it('로딩 중이면 카드 본체를 눌러도 아무 데로도 push 하지 않는다', () => {
+    mockUseItinerary.mockReturnValue(itineraryLoading);
+
+    render(<HomeRoute />);
+    fireEvent.press(screen.getByTestId('home-trip-hero'));
+
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('🟢 453-AC-3b · 카드 본체 배선 뒤에도 알약 press 는 정확히 1회 (이중발화·삼킴 없음)', () => {
+  it('planning + 404 에서 알약을 누르면 method 로 정확히 1회만 push 한다', () => {
+    // 중첩 Pressable(카드 본체 안 알약) 회귀 앵커(★3). RNTL fireEvent 는 알약(가장 가까운
+    // Pressable 합성요소)에서 핸들러를 찾고 멈춰 바깥 카드 본체로 안 번진다 → 이중발화 없음.
+    // 카드 본체 승격 뒤 알약 press 가 2회로 새면 red. 오늘·구현 후 모두 1회(선제 green, §5 a).
+    mockUseItinerary.mockReturnValue(itineraryNotFound);
+
+    render(<HomeRoute />);
+    fireEvent.press(screen.getByTestId('home-trip-hero-cta'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(`/trips/${TRIP_ID}/itinerary/method`);
+  });
+});

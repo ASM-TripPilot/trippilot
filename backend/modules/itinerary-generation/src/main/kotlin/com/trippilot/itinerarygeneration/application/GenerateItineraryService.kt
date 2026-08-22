@@ -4,6 +4,7 @@ import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
+import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
@@ -56,8 +57,11 @@ class GenerateItineraryService(
     private val secondPhase: SecondPhaseGenerator,
     private val genSessions: GenerationSessionService,
     private val revisions: ItineraryRevisionService,
+    /** 숙소 없는 날의 앵커(TRIP-384) — 지역 대표 좌표. place-data.api 만 참조(R1). */
+    private val regions: RegionLookupFacade,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
+    private val deadlines: ScheduleDeadlineProperties,
 ) {
     private val tx = TransactionTemplate(transactionManager)
 
@@ -92,7 +96,7 @@ class GenerateItineraryService(
             ctx.fixedVisits.filterNot { it.date in firstDates }.map { it.poiId }.distinct()
         }
         // 화면(h09·h10)이 단계·[취소]를 그릴 상태 원천을 연다(BR-U3-04·05).
-        val session = genSessions.start(tripId, mode)
+        val session = genSessions.start(accountId, tripId, mode)
 
         // 재생성이라면 **직전 상태로 돌아갈 지점**이 반드시 있어야 한다(INV-U3-08 · BR-U3-19).
         val previous = previousOf(tripId)
@@ -100,7 +104,7 @@ class GenerateItineraryService(
         // 1차가 터지면 세션을 닫는다 — 안 닫으면 사용자는 500 을 받고도 화면에서 영원히 "생성 중"을 본다(INV-4 침묵 금지).
         val saved = try {
             val firstAssembly = assembleInput(
-                tripId, mode, ctx, prefs, stayAnchors, firstDates, DAY1_DEADLINE_MS,
+                tripId, mode, ctx, prefs, stayAnchors, firstDates, deadlines.day1Budget(),
                 excluded = reservedForSecond,
                 carriesUndatedFixed = remainingDates.isEmpty(), // 날짜 미지정 must_visit 은 2차가 맡는다(없으면 1차)
             )
@@ -146,7 +150,7 @@ class GenerateItineraryService(
             // 1차에서 배정된 POI 는 2차 후보에서 제외(TRIP-293) — 같은 장소가 두 번 들어가지 않게.
             val assigned = saved.days.flatMap { d -> d.slots.map { it.sourcePoiId } }.distinct()
             val secondAssembly = assembleInput(
-                tripId, mode, ctx, prefs, stayAnchors, remainingDates, TOTAL_DEADLINE_MS, excluded = assigned,
+                tripId, mode, ctx, prefs, stayAnchors, remainingDates, deadlines.totalBudget(), excluded = assigned,
                 carriesUndatedFixed = true,
             )
             val secondInput = secondAssembly.input
@@ -210,7 +214,7 @@ class GenerateItineraryService(
         prefs: PreferenceSnapshot,
         stayAnchors: List<DayAnchorView>,
         dates: List<LocalDate>,
-        deadlineMs: Long,
+        deadlineMs: Long?,
         excluded: List<UUID> = emptyList(),
         carriesUndatedFixed: Boolean = true,
     ): Assembled {
@@ -239,7 +243,7 @@ class GenerateItineraryService(
             generationMode = mode,
             // budgetLevel(등급) = preference_set.budget_tier (경계 계약; trip.budget_total 아님)
             tripContext = TripContext(ctx.destinations, ctx.startDate, ctx.endDate, ctx.companionType, prefs.budgetTier),
-            anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors).filter { it.date in dates },          // 이 호출이 맡은 일자의 거점 좌표
+            anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors, ctx.destinations).filter { it.date in dates },          // 이 호출이 맡은 일자의 거점 좌표
             timeWindows = dates.map { TimeWindow(it, DEFAULT_START, DEFAULT_END) },
             // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
             // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
@@ -261,13 +265,35 @@ class GenerateItineraryService(
 
     /**
      * 계획일별 공간 앵커. 숙박일=확정 거점, 체크아웃일(endDate)=전날 거점(prev_stay).
-     * 거점 미해결(GAP/OVERLAP)일은 앵커에서 제외(부분 목록) — 솔버가 앵커 없는 날을 폴백 처리.
+     *
+     * **거점이 없는 날은 목적지 중심으로 채운다**(TRIP-384). 예전에는 그런 날을 그냥 뺐는데, 숙소를
+     * 하나도 등록하지 않은 여행은 앵커가 **전부** 비어 AI 가 요청 자체를 거절했다
+     * (422 "anchors 최소 1개 필요"). 백엔드는 그 실패를 폴백으로 받지만 폴백은 must_visit 만으로
+     * 일정을 만들므로, 필수 방문지가 없으면 **일정이 통째로 빈 채** 201 로 나갔다.
+     *
+     * 정본은 숙소 없는 생성을 허용한다(BR-U1-40 · BR-U1-47 · US-SCHED-11) — 계약이 그걸 막고 있었다.
+     *
+     * **다목적지의 날짜별 배정은 하지 않는다.** 목적지에 박수(nights)가 실려 오지 않아
+     * (`TripGenerationContext.destinations` 는 이름 목록뿐) 어느 날이 어느 도시인지 알 수 없다.
+     * 첫 목적지 중심을 쓴다 — 단일 목적지(대부분)는 정확하고, 다목적지는 거칠지만 앵커가 없는 것보다 낫다.
      */
-    private fun dayAnchors(startDate: LocalDate, endDate: LocalDate, stayAnchors: List<DayAnchorView>): List<DayAnchor> {
+    private fun dayAnchors(
+        startDate: LocalDate,
+        endDate: LocalDate,
+        stayAnchors: List<DayAnchorView>,
+        destinations: List<String>,
+    ): List<DayAnchor> {
         val byDate = stayAnchors.associateBy { it.date }
+        // 목적지 중심은 한 번만 조회한다 — 날짜마다 부르면 같은 값을 계획일 수만큼 다시 읽는다.
+        val fallback = destinations.firstNotNullOfOrNull { regions.centerOf(it) }
         return planDates(startDate, endDate).mapNotNull { d ->
-            val src = byDate[d] ?: if (d == endDate) byDate[d.minusDays(1)] else null // 체크아웃일만 전날 거점
-            src?.let { DayAnchor(d, it.lat, it.lng) }
+            val stay = byDate[d] ?: if (d == endDate) byDate[d.minusDays(1)] else null // 체크아웃일만 전날 거점
+            when {
+                stay != null -> DayAnchor(d, stay.lat, stay.lng)
+                // 목적지 좌표조차 없으면 그 날은 앵커 없이 둔다 — 지어낸 좌표를 보내지 않는다.
+                fallback != null -> DayAnchor(d, fallback.lat, fallback.lng)
+                else -> null
+            }
         }
     }
 
@@ -354,8 +380,6 @@ class GenerateItineraryService(
         private val log = LoggerFactory.getLogger(GenerateItineraryService::class.java)
         private val DEFAULT_START = LocalTime.of(9, 0)
         private val DEFAULT_END = LocalTime.of(21, 0)
-        private const val TOTAL_DEADLINE_MS = 20_000L
-        private const val DAY1_DEADLINE_MS = 5_000L // day1 조기 노출 예산(IO-1)
 
         /** 여행 "오늘"은 사용자가 있는 곳의 날짜다(서버 UTC 아님) — 재계획·감지와 같은 기준. */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")

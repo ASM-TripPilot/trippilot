@@ -14,26 +14,22 @@ import {
  *  - **사용자가 예산을 넣었으면 그대로 실리고, 안 넣었으면 `budgetTotal` 키 자체가 안 붙는다**
  *    (AC-2 · AC-3). "키 부재"와 "`null` 전송"은 서버에 다른 뜻이다 — 선례
  *    `buildStayRegisterRequest`(TRIP-198 AC-5)가 날짜에 대해 세운 규칙과 같은 성질이다.
- *  - **어떤 입력에서도 `preferenceSnapshot`을 보내지 않는다**. 생성 시점 취향 동결은 서버
- *    책임이고(BE TRIP-177 · BR-U1-38 "계정 취향은 불변"), 계약상 필수가 아니다.
+ *  - **입력이 `preferenceSnapshot`을 실었으면 결과에 그대로 통과시키고, 없으면 결과에도
+ *    없다**(TRIP-484 정책 A). 예전엔 이 함수가 스냅숏을 **런타임으로 능동 제거**했으나(생성
+ *    시점 동결을 서버 책임으로 봤다), 여행 단위 취향 override(BR-U1-38·G-U1-11)를 실으려면 FE가
+ *    보내야 한다 — BE(`TripApiIT`)는 받은 것만 저장하고 스스로 동결하지 않는다. 이 함수는
+ *    **지어내지도 지우지도 않는다**(조건부 통과) — 무엇을 실을지는 배선(page)이 정한다.
  *
- * ── ⚠️ TRIP-207에서 **성질의 주어가 바뀌었다** (02a §6-1) ──────────────────
- * TRIP-203 승인분은 "`budgetTotal` 키의 유무 = **취향의** `rawAmount`가 숫자인가"를 잠갔다.
- * 그때는 예산 입력 UI가 없어 취향 러프값을 그대로 실어 보내는 것이 유일한 경로였기 때문이다.
- * TRIP-207이 예산 입력을 붙이면서 US-TRIP-01("예산은 **선택**")이 요구하는 것이 뒤집혔다 —
- * **사용자가 비웠으면 취향에 값이 있어도 보내지 않는다**(AC-2). 그래서 성질의 주어가
- * *취향* → *입력*으로 옮겨 갔고, 이 함수는 취향을 아예 인자로 받지 않는다.
- *
- * **약화가 아니라 강화다.** ① 양자화 축에 "**키는 있는데 값이 `undefined`**"가 새로 들어왔다 —
- * 취향에서 오는 값은 그 상태가 될 수 없어 옛 성질에 아예 없던 갈래인데, 이제 배선이
- * `budgetTotal: parsed.kind === 'amount' ? amount : undefined`로 그 상태를 실제로 만든다.
- * ② 취향이 예산에 영향을 줄 경로가 **타입 단계에서 사라졌다**(인자가 없다) — 테스트로 지키는
- * 것보다 강하다. ③ `preferenceSnapshot` 성질은 그대로 두고 PBT 축에 "스냅숏을 실제로 주입한
- * 입력"을 더해 오히려 넓혔다.
+ * ── ⚠️ TRIP-484에서 **스냅숏 성질이 반전됐다** (동결 개봉, 정책 A) ──────────────
+ * 예산 성질은 TRIP-207 그대로다 — `budgetTotal` 키의 유무가 "입력의 `budgetTotal`이 숫자인가"와
+ * 정확히 일치한다(취향은 이 함수 인자에 없다). **바뀐 것은 `preferenceSnapshot` 성질뿐이다**:
+ * 예전엔 "어떤 입력에서도 안 실린다"(능동 제거)였으나, 이제 "입력에 있으면 그대로 통과, 없으면
+ * 부재"(조건부 통과)다. 계약(`preferenceSnapshot`은 자유형 jsonb)은 이미 열려 있었고, 이 함수는
+ * 그 통로를 막던 제거 로직을 걷었다.
  *
  * ── 졸업 조건 (frontend/CLAUDE.md "장치 판정 규칙") ──────────────────────
  * **A. 영구 규칙 — 유지한다.** 잠그는 것이 "무엇을 보내고 무엇을 안 보내는가"라 여행 생성
- * 화면(TRIP-208·209)이 붙어도 red를 내지 않는다. 갱신 시점은 계약이 바뀔 때뿐이다.
+ * 화면이 더 붙어도 red를 내지 않는다. 갱신 시점은 계약이 다시 바뀔 때뿐이다.
  */
 
 /** 픽스처는 파일마다 각자 갖는 것이 리포 관례다. 예산은 일부러 없다 — 선택 항목이다. */
@@ -108,33 +104,53 @@ describe('AC-2 · 예산이 없으면 키 자체가 붙지 않는다', () => {
   );
 });
 
-describe('preferenceSnapshot을 보내지 않는다 (BR-U1-38)', () => {
+describe('preferenceSnapshot을 있는 그대로 통과시킨다 (TRIP-484 정책 A)', () => {
   /**
    * ⚠️ `CreateTripInput`의 `Omit`은 **타입 선언에서만** 그 키를 지운다 — 구조적 타이핑 때문에
-   * 그 키를 실제로 가진 값(예: `CreateTripRequest` 타입 변수)을 넘기는 것 자체는 막지 못한다
-   * (TRIP-203 code-critic W-1 실측). 그래서 아래 케이스는 **일부러 값에 스냅숏을 심어** 넘긴다.
+   * 그 키를 실제로 가진 값(`CreateTripRequest` 타입 변수)을 넘기는 것 자체는 막지 못한다. 그래서
+   * 아래 케이스는 **값에 스냅숏을 심어** 넘겨 그 값이 결과까지 통과하는지 본다(★6 — `in`으로 키
+   * 존재를 따로 잠근다).
    */
-  const ALL_CASES: { name: string; input: CreateTripRequest }[] = [
+  const CARRIED_CASES: {
+    name: string;
+    input: CreateTripRequest;
+    snapshot: Record<string, unknown>;
+  }[] = [
     {
-      name: '예산 있음 + 스냅숏이 값으로 섞여 들어옴',
+      name: '예산 있음 + override 스냅숏',
       input: {
         ...BASE_FIELDS,
         budgetTotal: 1200000,
-        preferenceSnapshot: { pace: '균형있게' },
+        preferenceSnapshot: { styles: ['휴양'], pace: '균형있게' },
       },
+      snapshot: { styles: ['휴양'], pace: '균형있게' },
     },
     {
-      name: '예산 없음 + 스냅숏이 값으로 섞여 들어옴',
-      input: { ...BASE_FIELDS, preferenceSnapshot: {} },
+      name: '예산 없음 + 프리필 스냅숏',
+      input: {
+        ...BASE_FIELDS,
+        preferenceSnapshot: { styles: ['미식', '전시'] },
+      },
+      snapshot: { styles: ['미식', '전시'] },
     },
   ];
 
-  it.each(ALL_CASES)('$name → 요청 바디에 키가 없다', ({ input }) => {
-    const request = buildCreateTripRequest(input);
+  it.each(CARRIED_CASES)(
+    '$name → 요청 바디에 스냅숏이 그대로 실린다',
+    ({ input, snapshot }) => {
+      const request = buildCreateTripRequest(input);
 
-    // 긍정 짝 — 조립이 실제로 뭔가를 만들었다. 이게 없으면 빈 객체를 돌려주는 구현도
-    // "스냅숏 키 없음"을 통과한다.
-    expect(request.startDate).toBe('2026-09-01');
+      // 긍정 짝 — 조립이 실제로 뭔가를 만들었다(빈 객체 반환 구현 차단).
+      expect(request.startDate).toBe('2026-09-01');
+
+      expect('preferenceSnapshot' in request).toBe(true);
+      expect(request.preferenceSnapshot).toEqual(snapshot);
+    }
+  );
+
+  it('입력에 스냅숏이 없으면 결과에도 없다 — 함수가 지어내지 않는다', () => {
+    // 조건부 통과의 나머지 절반: page가 안 주면 이 함수는 `{}`조차 붙이지 않는다.
+    const request = buildCreateTripRequest(BASE_INPUT);
 
     expect('preferenceSnapshot' in request).toBe(false);
   });
@@ -143,13 +159,14 @@ describe('preferenceSnapshot을 보내지 않는다 (BR-U1-38)', () => {
 describe('AC-2 · AC-3 불변식 — 임의의 입력에 대해 (PBT)', () => {
   /**
    * 예시가 못 보는 구석을 훑는다: 금액이 0이든 크든, 키가 있든 없든, 값이 `null`이든
-   * `undefined`든 **규칙은 하나다** — `budgetTotal` 키의 유무가 "입력의 `budgetTotal`이
-   * 숫자인가"와 정확히 일치하고, `preferenceSnapshot`은 항상 없다.
+   * `undefined`든 **규칙은 둘이다** — ⓐ `budgetTotal` 키의 유무가 "입력의 `budgetTotal`이
+   * 숫자인가"와 정확히 일치하고, ⓑ `preferenceSnapshot` 키의 유무가 "입력이 스냅숏을 실었는가"와
+   * 정확히 일치한다(TRIP-484 정책 A — 조건부 통과).
    *
    * 축이 셋이다: ① 값(정수 | `null` | `undefined`) ② **키를 실제로 넣는지**(키 부재와
-   * `undefined` 값을 가르는 축 — 02a ★3) ③ 스냅숏이 값으로 섞여 들어오는지(★4).
+   * `undefined` 값을 가르는 축) ③ 스냅숏이 값으로 섞여 들어오는지.
    */
-  it('budgetTotal 키의 유무가 입력 값의 타입으로만 갈리고, preferenceSnapshot은 항상 없다', () => {
+  it('budgetTotal·preferenceSnapshot 키의 유무가 각자 입력 값의 유무로만 갈린다', () => {
     fc.assert(
       fc.property(
         fc.option(
@@ -176,7 +193,7 @@ describe('AC-2 · AC-3 불변식 — 임의의 입력에 대해 (PBT)', () => {
             expect(request.budgetTotal).toBe(budgetTotal);
           }
 
-          expect('preferenceSnapshot' in request).toBe(false);
+          expect('preferenceSnapshot' in request).toBe(injectSnapshot);
 
           // 나머지 입력은 어떤 조합에서도 가공되지 않는다.
           expect(request.startDate).toBe(BASE_FIELDS.startDate);

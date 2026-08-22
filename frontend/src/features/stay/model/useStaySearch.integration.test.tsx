@@ -179,4 +179,27 @@ describe('AC-5 · useStaySearch가 생성 클라이언트 경로를 경유한다
     // 확인해야 그 구멍이 막힌다.
     expect(new URL(observedUrls[0]).searchParams.get('region')).toBe('jeju');
   });
+
+  it('2번째 인자 { enabled: false } 면 요청을 아예 안 보낸다 (TRIP-450 — enabled 매핑의 실효)', async () => {
+    // 준비 — 인증은 있어도, enabled:false 면 쿼리가 애초에 안 뜬다.
+    setAccessToken('valid-access');
+
+    // 실행 — 통합 검색이 지역을 못 특정했을 때 숙소 쿼리를 끄는 그 경로.
+    const { result } = renderHook(
+      () => useStaySearch({ region: 'jeju' }, { enabled: false }),
+      { wrapper: createWrapper() }
+    );
+
+    // enabled:false → react-query 는 fetch 를 시작하지 않는다(fetchStatus 는 'idle').
+    await waitFor(() => expect(result.current.fetchStatus).toBe('idle'));
+
+    // 핵심 단언 — /stays/search 로 나간 요청이 0건이다. 도메인 훅이 `{ enabled }` 를 생성 훅의
+    // `{ query: { enabled } }` 로 제대로 매핑하지 않으면(예: `{ query: {} }` 로 키가 빠지면)
+    // 쿼리가 기본 활성이 돼 이 단언이 red 가 된다 — TRIP-450 AC-4·금지의 "지역 못 찾으면
+    // region= 헛호출 0"이 바로 이 실효에 걸려 있다(page 통합 테스트는 훅을 목해 의도만 잠근다).
+    const hitCount = observedUrls.filter(
+      (raw) => new URL(raw).pathname === '/api/v1/stays/search'
+    ).length;
+    expect(hitCount).toBe(0);
+  });
 });

@@ -1,9 +1,9 @@
 /**
- * d04 장소 탐색 배선(TRIP-221·TRIP-222 · US-EXPL-04 · US-SHELL-05). `useGetPlaces`로 `region`
- * (라우트 파라미터, 없으면 생략 — 01b Seed Q9)·`category`(카테고리 칩 선택)를 물어 서버
- * 재조회를 일으키고, 정렬·검색은 `visiblePlaces`로 클라에서 끝낸다(서버는 다시 안 부른다).
- * 카테고리·검색어 상태를 이 파일이 전부 소유한다 — `PlaceExploreScreen`은 `useState` 금지
- * (구조 가드), 판정의 단일 출처가 두 층으로 갈리면 안 된다.
+ * d04 장소 탐색 배선(TRIP-221·TRIP-222·TRIP-502 · US-EXPL-04 · US-SHELL-05). `usePlacesInfinite`로
+ * `region`(라우트 파라미터, 없으면 생략 — 01b Seed Q9)·`category`(칩 선택)·`q`(검색어)를 물어
+ * **서버**가 필터·정렬·페이지네이션을 하고, 스크롤로 다음 장을 이어 받는다(TRIP-502 — 전량 수신·
+ * 로드된 페이지 한정 검색을 없앤다). 카테고리·검색어 상태를 이 파일이 전부 소유한다 —
+ * `PlaceExploreScreen`은 `useState` 금지(구조 가드), 판정의 단일 출처가 두 층으로 갈리면 안 된다.
  *
  * `resolvePlaceListState`(TRIP-222)를 여기서만 부른다 — 화면은 `state` 판별 유니온만 받아
  * 그린다(AC-G3). `itemCount`는 화면에 실제로 그려질 개수(`visiblePlaces` 결과 길이, 01b Seed
@@ -22,7 +22,6 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import { useGetPlaces } from '@/shared/api/generated/places/places';
 import type { Place, PoiCategory } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
 
@@ -33,7 +32,7 @@ import {
   SAVE_FAILURE_NOTICE,
   type PlaceSaveNotice,
 } from '@/features/explore/model/placeSaveGuard';
-import { visiblePlaces } from '@/features/explore/model/placeListView';
+import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 
@@ -51,20 +50,35 @@ export function PlaceExplorePage(): ReactElement {
 
   const isAuthed = getAccessToken() !== null;
 
-  const { data, isPending, isError, refetch } = useGetPlaces({
+  // 검색은 서버가 한다(q) — 클라 필터는 "받아온 페이지 안에서만" 검색이라 결과가 조용히 빠진다
+  // (TRIP-502 선행 조건). 무한 스크롤은 nextCursor 로 이어 받는다(첫 장만 받고 스크롤에 따라 추가).
+  const trimmedQuery = searchText.trim();
+  const {
+    items,
+    isPending,
+    isError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = usePlacesInfinite({
     ...(rawRegion ? { region: rawRegion } : {}),
     ...(selectedCategory ? { category: selectedCategory } : {}),
+    ...(trimmedQuery ? { q: trimmedQuery } : {}),
   });
   const { isSaved, save, remove, savedPoiIds } = useSavedPlaces({ isAuthed });
 
-  const visible = visiblePlaces(data ?? [], searchText);
   const listState = resolvePlaceListState({
     isPending,
     isError,
-    itemCount: visible.length,
-    hasQuery: searchText.trim() !== '',
+    itemCount: items.length,
+    hasQuery: trimmedQuery !== '',
     hasCategory: selectedCategory !== null,
   });
+
+  function handleEndReached(): void {
+    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }
 
   async function attemptToggle(place: Place): Promise<void> {
     setSaveError(null);
@@ -132,13 +146,14 @@ export function PlaceExplorePage(): ReactElement {
 
   return (
     <PlaceExploreScreen
-      places={visible}
+      places={items}
       savedPoiIds={savedPoiIds}
       selectedCategory={selectedCategory}
       searchText={searchText}
       onSelectCategory={handleSelectCategory}
       onChangeSearchText={handleChangeSearchText}
       onToggleSave={handleToggleSave}
+      onPressCard={(place) => router.push(`/explore/places/${place.poiId}`)}
       onPressCreateTrip={() => router.push('/trips/new/step1')}
       onBack={() => router.back()}
       state={listState}
@@ -148,6 +163,8 @@ export function PlaceExplorePage(): ReactElement {
       onPressChangeRegion={() => router.push('/explore/region?purpose=trip')}
       onClearFilter={handleClearFilter}
       onPressSaveErrorAction={handlePressSaveErrorAction}
+      onEndReached={handleEndReached}
+      isFetchingMore={isFetchingNextPage}
     />
   );
 }

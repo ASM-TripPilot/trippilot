@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useRouter } from 'expo-router';
 
 import {
@@ -21,7 +22,11 @@ import { HomeScreen } from '@/features/home/ui/HomeScreen';
 interface HomeNav {
   onPressCreateTrip: () => void;
   onPressSavedPlaces: () => void;
+  onPressSavedStays: () => void;
   onPressSpotsMore: () => void;
+  onPressSearch: () => void;
+  savedMenuOpen: boolean;
+  onToggleSavedMenu: () => void;
 }
 
 // 지배 planning 여행이 있을 때만 마운트되는 자식 — 여기서만 지배 여행의 itinerary GET 을 문다.
@@ -79,10 +84,24 @@ export default function HomeRoute() {
   const isAuthed = getAccessToken() !== null;
   const { savedPoiIds } = useSavedPlaces({ isAuthed });
 
-  const nav = {
+  // 담은 곳 saved-menu 열림 상태(TRIP-494) — 순수 화면이 useState 0건이라 라우트가 소유한다
+  // (탐색 랜딩 선례와 동형). 미니 FAB press 는 메뉴를 닫고 각각 d02/e04 로 이동한다.
+  const [savedMenuOpen, setSavedMenuOpen] = useState(false);
+
+  const nav: HomeNav = {
     onPressCreateTrip: () => router.push('/trips/new/step1'),
-    onPressSavedPlaces: () => router.push('/explore/saved-places'),
+    onPressSavedPlaces: () => {
+      setSavedMenuOpen(false);
+      router.push('/explore/saved-places');
+    },
+    onPressSavedStays: () => {
+      setSavedMenuOpen(false);
+      router.push('/stays/saved');
+    },
     onPressSpotsMore: () => router.push('/explore/places'),
+    onPressSearch: () => router.push('/explore/region?purpose=trip'),
+    savedMenuOpen,
+    onToggleSavedMenu: () => setSavedMenuOpen((v) => !v),
   };
 
   // 조회 진행 중 — 섹션만 로딩 스켈레톤, phase 미전달. no-trip(discovery)으로 확정하지 않는다(INV-4).

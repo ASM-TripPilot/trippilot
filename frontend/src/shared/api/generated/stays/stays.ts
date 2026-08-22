@@ -22,8 +22,10 @@ import type {
 import type {
   GeocodeCandidate,
   GetStaysGeocodeParams,
+  GetStaysReverseGeocodeParams,
   GetStaysSearchParams,
   PlaceSearchUnavailableResponse,
+  ReverseGeocodeResult,
   StaySearchResponse,
   ValidationErrorResponse,
 } from '../schemas';
@@ -332,6 +334,169 @@ export function useGetStaysGeocode<
   queryKey: DataTag<QueryKey, TData, TError>;
 } {
   const queryOptions = getGetStaysGeocodeQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * 지도 롱프레스로 찍은 좌표의 주소를 얻는다(e05 핀 지정 탭 · BR-U1-21).
+ * **주소를 못 얻어도 등록을 막지 마라.** 등록에 필요한 것은 확정된 좌표이고(BR-U1-22), 이 탭 자체가 지도 검색이 죽었을 때의 폴백이라(BR-U1-23) 같은 벤더가 여기서도 죽어 있을 수 있다. 503 이면 "주소 미확인"으로 표시하고 숙소 이름을 직접 받아 등록을 계속한다.
+ * 응답의 `lat`·`lng` 는 **요청값 그대로**다 — 벤더 대표 좌표로 갈아끼우지 않는다(핀이 정본).
+ * @summary 핀 지정 역지오코딩(좌표 → 주소)
+ */
+export const getStaysReverseGeocode = (
+  params: GetStaysReverseGeocodeParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<ReverseGeocodeResult>({
+    url: `/stays/reverse-geocode`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetStaysReverseGeocodeQueryKey = (
+  params?: GetStaysReverseGeocodeParams
+) => {
+  return [`/stays/reverse-geocode`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetStaysReverseGeocodeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+  TError = ValidationErrorResponse | PlaceSearchUnavailableResponse,
+>(
+  params: GetStaysReverseGeocodeParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetStaysReverseGeocodeQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStaysReverseGeocode>>
+  > = ({ signal }) => getStaysReverseGeocode(params, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetStaysReverseGeocodeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStaysReverseGeocode>>
+>;
+export type GetStaysReverseGeocodeQueryError =
+  ValidationErrorResponse | PlaceSearchUnavailableResponse;
+
+export function useGetStaysReverseGeocode<
+  TData = Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+  TError = ValidationErrorResponse | PlaceSearchUnavailableResponse,
+>(
+  params: GetStaysReverseGeocodeParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+          TError,
+          Awaited<ReturnType<typeof getStaysReverseGeocode>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetStaysReverseGeocode<
+  TData = Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+  TError = ValidationErrorResponse | PlaceSearchUnavailableResponse,
+>(
+  params: GetStaysReverseGeocodeParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+          TError,
+          Awaited<ReturnType<typeof getStaysReverseGeocode>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetStaysReverseGeocode<
+  TData = Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+  TError = ValidationErrorResponse | PlaceSearchUnavailableResponse,
+>(
+  params: GetStaysReverseGeocodeParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 핀 지정 역지오코딩(좌표 → 주소)
+ */
+
+export function useGetStaysReverseGeocode<
+  TData = Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+  TError = ValidationErrorResponse | PlaceSearchUnavailableResponse,
+>(
+  params: GetStaysReverseGeocodeParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getStaysReverseGeocode>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetStaysReverseGeocodeQueryOptions(params, options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<
     TData,

@@ -130,6 +130,68 @@ def _tmap_travel():
     return ChainedTravelAdapter(primary=tmap, fallback=fallback)
 
 
+def _event_store():
+    """`EVENTS_STORE`(행사 저장소 JSON 경로, TRIP-421) 설정 시 조립.
+
+    미설정 = 미배선(None) — 행사 보너스 없이 기존 경로 그대로. 파일은 새벽 배치
+    (ai-event-collect)가 collect-state 브랜치에 쌓는 collected_events.json.
+    """
+    path = _env("EVENTS_STORE")
+    if path is None:
+        return None
+    from pathlib import Path as _Path
+
+    from trippilot.background.event_store import JsonEventStore
+
+    return JsonEventStore(_Path(path))
+
+
+def _vector_rag():
+    """`TRIPPILOT_VECTOR_DB_URL`(TRIP-428) 설정 시 Plan-B RAG 실배선 조립.
+
+    미설정(빈 문자열 포함) = 미배선 (None, None) — 대안 경계는 규칙 랭킹 강등으로
+    동작한다(INV-4 계단, notes에 사유 기록). URL만 있고 임베딩 자격이 없으면
+    **기동 실패** — 임베딩 없는 벡터 검색은 성립하지 않는데 조용히 강등하면
+    "KB를 켰다"가 거짓이 된다.
+
+    임베딩 선택: `TRIPPILOT_EMBEDDING_PROVIDER` = openai(기본, OPENAI_API_KEY 필수)
+    | titan(boto3 설치 + AWS 자격).
+    """
+    url = _env("TRIPPILOT_VECTOR_DB_URL")
+    if url is None:
+        return None, None
+    import psycopg
+
+    from trippilot.agents.adapters.pgvector_store import PgVectorStore
+
+    store = PgVectorStore(lambda: psycopg.connect(url))
+    provider = _env("TRIPPILOT_EMBEDDING_PROVIDER") or "openai"
+    if provider == "openai":
+        api_key = _env("OPENAI_API_KEY")
+        if api_key is None:
+            raise RuntimeError(
+                "TRIPPILOT_VECTOR_DB_URL 설정인데 OPENAI_API_KEY 미설정 — 임베딩 "
+                "조립 불가(빈 문자열도 미설정). silent fallback 금지: 기동 실패. "
+                "Titan은 TRIPPILOT_EMBEDDING_PROVIDER=titan."
+            )
+        import openai
+
+        from trippilot.llm_gateway.adapters.openai_embedding import OpenAiEmbeddingAdapter
+
+        client = openai.OpenAI(
+            api_key=api_key, base_url=_env("OPENAI_BASE_URL"), max_retries=0)
+        return store, OpenAiEmbeddingAdapter(client)
+    if provider == "titan":
+        import boto3
+
+        from trippilot.llm_gateway.adapters.titan_embedding import TitanEmbeddingAdapter
+
+        return store, TitanEmbeddingAdapter(boto3.client("bedrock-runtime"))
+    raise RuntimeError(
+        f"TRIPPILOT_EMBEDDING_PROVIDER 미지원 값: {provider!r} — openai|titan"
+    )
+
+
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
     if os.environ.get("TRIPPILOT_WIRING") == "unwired":
@@ -137,16 +199,23 @@ def build_app_from_env() -> FastAPI:
     weather = _kma_weather()
     poi_db = _backend_poi_db()
     travel = _tmap_travel()
+    events = _event_store()
+    vector_store, embedding = _vector_rag()
     provider = _env("TRIPPILOT_LLM_PROVIDER")
     if provider is None:
-        return build_dev_app(weather=weather, poi_db=poi_db, travel_port=travel)
+        return build_dev_app(weather=weather, poi_db=poi_db, events=events,
+                             vector_store=vector_store, embedding=embedding,
+                             travel_port=travel)
     if provider != "openai":
         raise RuntimeError(
             f"TRIPPILOT_LLM_PROVIDER 미지원 값: {provider!r} — "
             "미설정(fake 조립) 또는 openai 만 지원"
         )
     llm, model_id = _openai_llm_and_model()
-    return build_dev_app(llm=llm, model_id=model_id, weather=weather, poi_db=poi_db, travel_port=travel)
+    return build_dev_app(llm=llm, model_id=model_id, weather=weather,
+                         poi_db=poi_db, events=events,
+                         vector_store=vector_store, embedding=embedding,
+                         travel_port=travel)
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.

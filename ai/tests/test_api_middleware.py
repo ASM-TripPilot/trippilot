@@ -304,6 +304,6 @@ def test_settings_from_env_parses_and_exposes_bad_values() -> None:
     assert settings.rate_limit_rps == 2.5
     assert settings.rate_limit_burst == 7
     assert settings.timeout_margin_ms == 1234
-    assert settings.timeout_default_deadline_ms == 30000
+    assert settings.timeout_default_deadline_ms == 600000  # 행 방지 안전망 기본 (TRIP-473)
     with pytest.raises(ValueError):  # 파싱 불가 → 기동 실패로 드러난다(은폐 금지)
         MiddlewareSettings.from_env({"TRIPPILOT_RATE_LIMIT_BURST": "many"})
