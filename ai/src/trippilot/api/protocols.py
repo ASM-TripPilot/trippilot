@@ -22,6 +22,8 @@ from typing import Mapping, Protocol, Sequence
 from trippilot.api.schemas import (
     AlternativesRequest,
     AlternativesResponse,
+    EditItineraryRequest,
+    EditItineraryResponse,
     ExplanationsRequest,
     ExplanationsResponse,
     GenerateItineraryRequest,
@@ -88,3 +90,5 @@ class ItineraryOrchestrator(Protocol):
     def alternatives(self, request: AlternativesRequest) -> AlternativesResponse: ...
 
     def explanations(self, request: ExplanationsRequest) -> ExplanationsResponse: ...
+
+    def edit(self, request: EditItineraryRequest) -> EditItineraryResponse: ...

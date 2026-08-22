@@ -358,3 +358,55 @@ class ExplanationsResponse(BoundaryModel):
     explanations: dict[str, str]
     is_fallback: bool
     reason: str | None = None
+
+
+# ── 편집 경계 (TRIP-431 — 자연어·구조화 겸용, 단일 처리 로직 수렴) ────
+
+
+class EditCommandSchema(BoundaryModel):
+    """편집 명령 와이어 형태 — domain EditCommand 대응. 시각 필드 없음(INV-2·3)."""
+
+    op: str = Field(min_length=1)  # EditOp closed-set — 밖 값은 422/거부
+    params: dict = Field(default_factory=dict)
+    affected_slots: list[str] = Field(default_factory=list)
+
+
+class EditItineraryRequest(BoundaryModel):
+    """일정 편집 요청 — `command`(구조화)와 `utterance`(자연어) 중 **정확히 하나**.
+
+    두 진입은 같은 처리 로직으로 수렴한다(팀 결정 2026-08-22): 자연어는
+    EDIT_TRANSLATION 워커가 EditCommand로 번역하고, 이후 경로는 동일하다.
+    anchor·기간은 후보 풀 재조립용(INV-1 — 추가·교체 대상 검증). 파괴적 편집은
+    1차 응답 CONFIRM_REQUIRED → 사용자 확인 후 `confirm=true` 재호출로 반영한다.
+    """
+
+    trip_id: str = Field(min_length=1)
+    itinerary: ItineraryPayload
+    target_date: dt.date
+    anchor: CoordSchema
+    budget_level: str | None = None
+    transport_mode: str | None = None
+    command: EditCommandSchema | None = None
+    utterance: str | None = Field(default=None, min_length=1)
+    confirm: bool = False
+    request_meta: RequestMetaSchema
+
+    @model_validator(mode="after")
+    def _exactly_one_entry(self) -> "EditItineraryRequest":
+        if (self.command is None) == (self.utterance is None):
+            raise ValueError("command와 utterance 중 정확히 하나만 보내야 한다")
+        return self
+
+
+class EditItineraryResponse(BoundaryModel):
+    """편집 결과 — 시각·순서는 APPLIED일 때만, 그것도 솔버 검증값만(INV-2).
+
+    REJECTED는 위반 목록 또는 사유를 반드시 싣는다(침묵 거부 금지, INV-4).
+    """
+
+    status: str  # APPLIED | CONFIRM_REQUIRED | REJECTED | TRANSLATION_FAILED
+    command: EditCommandSchema | None = None
+    apply_mode: str | None = None  # AUTO_APPLY | CONFIRM_REQUIRED
+    itinerary: ItineraryPayload | None = None
+    violations: list[ViolationSchema] = Field(default_factory=list)
+    reason: str | None = None

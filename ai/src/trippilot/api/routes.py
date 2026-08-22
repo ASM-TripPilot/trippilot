@@ -25,6 +25,8 @@ from trippilot.api.protocols import (
 from trippilot.api.schemas import (
     AlternativesRequest,
     AlternativesResponse,
+    EditItineraryRequest,
+    EditItineraryResponse,
     ExplanationsRequest,
     ExplanationsResponse,
     CandidatesSummarySchema,
@@ -246,6 +248,22 @@ def explanations(
     구형 조립(미구현 오케스트레이터)은 503 명시 실패.
     """
     handler = getattr(orchestrator, "explanations", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(lambda: handler(request))
+
+
+@router.post("/edit", response_model=EditItineraryResponse)
+def edit(
+    request: EditItineraryRequest,
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> EditItineraryResponse:
+    """일정 편집 (TRIP-431) — 자연어·구조화 겸용, 단일 처리 로직 수렴.
+
+    번역(자연어)·검증(closed-set)·확인 게이트·재타이밍·솔버 검증을 거쳐
+    통과분만 반영한다(INV-1·2·4). 구형 조립은 503 명시 실패.
+    """
+    handler = getattr(orchestrator, "edit", None)
     if handler is None:
         raise orchestrator_not_wired()
     return _guarded(lambda: handler(request))

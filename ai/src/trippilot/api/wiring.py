@@ -98,7 +98,15 @@ from trippilot.domain.llm import CandidatePool, ModelTier, PoiExplanation
 from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.travel import TravelEstimate
+from trippilot.agents.edit_agent import (
+    EditRejected, RetimeContext, edited_solution, validate_command,
+)
 from trippilot.agents.planb.rag import PlanBRagPipeline, PlanBRagRequest
+from trippilot.domain.edit import ApplyMode, EditCommand, EditOp, resolve_apply_mode
+from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
+from trippilot.llm_gateway.workers.edit_translation import (
+    EditTranslationInput, EditTranslationWorker,
+)
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
@@ -599,6 +607,7 @@ class WiredItineraryOrchestrator:
         rag: PlanBRagPipeline,
         explainer: ExplanationWorker,
         context_resolver: ContextResolver,
+        edit_translator: EditTranslationWorker,
     ) -> None:
         self._orchestrator = orchestrator
         self._solvers = solver_provider
@@ -609,6 +618,7 @@ class WiredItineraryOrchestrator:
         self._rag = rag
         self._explainer = explainer
         self._resolver = context_resolver
+        self._edit_translator = edit_translator
 
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
     def generate(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
@@ -806,6 +816,137 @@ class WiredItineraryOrchestrator:
         return schemas.ExplanationsResponse(
             explanations=dict(keyed), is_fallback=False, reason=None)
 
+    def edit(
+        self, request: schemas.EditItineraryRequest
+    ) -> schemas.EditItineraryResponse:
+        """일정 편집 (TRIP-431) — 번역/검증 → 확인 게이트 → 재타이밍 → 솔버 검증.
+
+        자연어·구조화가 같은 처리 로직으로 수렴한다(팀 결정 2026-08-22). 사용자
+        노출 시각은 재타이밍 결과 중 **솔버 validate 통과분만**(INV-2), 거부는
+        위반 목록·사유와 함께(INV-4), 후보 자격은 closed-set 풀 교차(INV-1).
+        """
+        meta = request.request_meta
+        now = _tz_aware(meta.requested_at, self._tz)
+        trace_id = TraceId(meta.request_id)
+        solution, _, poi_index = self._reconstruct(request.itinerary, meta)
+        current_ids = frozenset(
+            s.poi_id for day in solution.days for s in day.slots)
+        transport = _token_or(
+            _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
+        pool = self._pool_builder.build(
+            CandidatePoolRequest(
+                anchor=GeoPoint(request.anchor.lat, request.anchor.lng),
+                dates=tuple(
+                    sorted({d.date for d in request.itinerary.days})
+                ) or (request.target_date,),
+                budget=_token_or(_BUDGET_TOKENS, request.budget_level, BudgetLevel.MID),
+                transport=transport,
+            ),
+            now=now,
+        )
+
+        # ① 명령 확보 — 자연어는 번역 워커(게이트 검증 포함), 구조화는 동등 검증
+        if request.utterance is not None:
+            target_day_ids = tuple(
+                s.poi_id
+                for day in solution.days if day.date == request.target_date
+                for s in day.slots
+            )
+            result = self._edit_translator.translate(
+                pool,
+                EditTranslationInput(
+                    utterance=request.utterance,
+                    target_date=request.target_date.isoformat(),
+                    current_slots=target_day_ids,
+                ),
+                trace_id, now,
+            )
+            if result.is_fallback or result.value is None:
+                # 자연어 해석 실패는 자연어 경로만의 정직 실패 — 구조화 경로 무영향
+                return schemas.EditItineraryResponse(
+                    status="TRANSLATION_FAILED",
+                    reason=f"편집 의도 해석 실패: {result.error}",
+                )
+            command, apply_mode = result.value.command, result.value.apply_mode
+        else:
+            try:
+                command = EditCommand(
+                    op=EditOp(request.command.op),
+                    params=dict(request.command.params),
+                    affected_slots=tuple(
+                        PoiId(x) for x in request.command.affected_slots),
+                )
+            except ValueError:
+                return schemas.EditItineraryResponse(
+                    status="REJECTED",
+                    reason=f"op가 EditOp 밖: {request.command.op!r}",
+                )
+            apply_mode = resolve_apply_mode(command)
+
+        command_schema = schemas.EditCommandSchema(
+            op=command.op.value, params=dict(command.params),
+            affected_slots=[str(x) for x in command.affected_slots],
+        )
+        try:
+            # 구조화 진입은 게이트를 안 거쳤다 — 동등 규칙을 양쪽 모두에 적용해
+            # (자연어도 재검증) 검증 권위를 한 곳으로 모은다.
+            validate_command(command, current_ids, pool)
+
+            # ② 확인 게이트 — 파괴적 편집은 사용자 확인(confirm) 전에는 반영하지 않는다
+            if apply_mode is ApplyMode.CONFIRM_REQUIRED and not request.confirm:
+                return schemas.EditItineraryResponse(
+                    status="CONFIRM_REQUIRED", command=command_schema,
+                    apply_mode=apply_mode.value,
+                    reason="파괴적·대규모 편집 — confirm=true로 재호출 시 반영",
+                )
+
+            # ③ 시퀀스 변형 + 결정론 재타이밍
+            pool_index = {p.poi_id: p for p in pool.pois}
+            merged_index = {**pool_index, **poi_index}
+            target_day_slots = next(
+                (d.slots for d in solution.days if d.date == request.target_date), ())
+            ctx = RetimeContext(
+                coords={pid: p.coord for pid, p in merged_index.items()},
+                stay_min={s.poi_id: s.stay_min for s in target_day_slots},
+                estimator=self._estimator,
+                transport=transport,
+            )
+            mutated = edited_solution(
+                solution, request.target_date, command, ctx, self._tz)
+        except EditRejected as e:
+            return schemas.EditItineraryResponse(
+                status="REJECTED", command=command_schema,
+                apply_mode=apply_mode.value, reason=str(e),
+            )
+
+        # ④ 솔버 검증 — 통과분만 노출 (INV-2)
+        facade = self._solvers.for_pool(merged_index)
+        violations = facade.validate(
+            mutated, _problem_for(mutated, self._tz),
+            _deadline_budget(meta), trace_id,
+        )
+        if violations:
+            return schemas.EditItineraryResponse(
+                status="REJECTED", command=command_schema,
+                apply_mode=apply_mode.value,
+                violations=[
+                    schemas.ViolationSchema(
+                        code=v.code,
+                        slot_ref=str(v.slot_ref) if v.slot_ref is not None else None,
+                        detail=v.detail, day_index=None, slot_index=None,
+                    )
+                    for v in violations
+                ],
+                reason="편집 결과가 하드 제약을 위반 — 반영하지 않음",
+            )
+        # 사영은 routes 소유(to_payload) — 지역 import (routes→wiring 역참조 없음, 비순환)
+        from trippilot.api.routes import to_payload
+
+        return schemas.EditItineraryResponse(
+            status="APPLIED", command=command_schema,
+            apply_mode=apply_mode.value, itinerary=to_payload(_envelope(mutated)),
+        )
+
 
 # ── 조립 함수 (composition root) ─────────────────────────────────────
 
@@ -873,6 +1014,9 @@ def build_orchestrator(
     explainer = ExplanationWorker(
         GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace)
     )
+    edit_translator = EditTranslationWorker(
+        GatewayFacade(llm, renderer, EditTranslationGate(), c1_config, trace)
+    )
     orchestrator = core.ItineraryOrchestrator(
         InfoCollector(providers),
         # 점수 캐시 (TRIP-477) — 2단계 생성(1차 day1→2차 잔여)의 중복 LLM 점수 제거.
@@ -894,6 +1038,7 @@ def build_orchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,
         pool_builder=pool_builder, rag=rag,
         explainer=explainer, context_resolver=resolver,
+        edit_translator=edit_translator,
     )
 
 
