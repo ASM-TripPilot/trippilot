@@ -150,6 +150,11 @@ services:
       # TMAP 실경로 API(TRIP-432). 설정 시 ChainedTravelAdapter 활성화 —
       # 미설정 = 기존 하버사인 추정 그대로.
       TMAP_API_KEY: ${TMAP_API_KEY:-}
+      # 행사 저장소(TRIP-421). 이미지가 data/ 를 통째로 담으므로 기본값만으로 배선된다 —
+      # 키도 네트워크도 필요 없는 로컬 파일이라 켜 두는 것이 기본이다. 끄려면 .env 에
+      # AI_EVENTS_STORE= (빈 값)  — `:-` 가 아니라 `-` 라서 빈 값이 기본값을 되살리지 않는다.
+      # 파일은 기동 시 1회 읽는다(JsonEventStore.__init__) — 새 수집분 반영은 컨테이너 재기동.
+      EVENTS_STORE: ${AI_EVENTS_STORE-data/collected_events.json}
     ports:
       - "8000:8000"
     healthcheck:

@@ -745,6 +745,7 @@ class WiredItineraryOrchestrator:
                 now=now,
                 excluded_poi_ids=frozenset(
                     PoiId(p) for p in request.excluded_poi_ids),
+                affected_reasons=dict(request.affected_reasons),
             )
         )
         return schemas.AlternativesResponse(

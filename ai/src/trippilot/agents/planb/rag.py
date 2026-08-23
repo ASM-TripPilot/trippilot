@@ -33,7 +33,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from trippilot.agents.planb.kb_retrieval import (
@@ -84,6 +84,10 @@ class PlanBRagRequest:
     trace_id: TraceId
     now: datetime
     excluded_poi_ids: frozenset[PoiId] = frozenset()  # 이미 방문·거절한 POI
+    # 대체 대상 슬롯의 원래 추천 이유 (TRIP-516 — 백엔드 visit_slot.placement_reason).
+    # **참조 텍스트**다: 후보 자격과 무관(INV-1은 closed_set_filter 소유), LLM이
+    # "원래 취지를 잇는 대안"을 고르게 하는 컨텍스트로만 쓰인다. 키는 평문 poi_id 문자열.
+    affected_reasons: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,7 +317,8 @@ class PlanBRagPipeline:
                 AlternativeSelectionInput(
                     trigger_kind=request.trigger.kind.value,
                     reason=request.reason,
-                    schedule_context=_join(context.schedule),
+                    schedule_context=_with_reasons(
+                        _join(context.schedule), request.affected_reasons),
                     situation_context=_join(context.situation),
                     persona_context=_join(context.persona),
                     max_alternatives=self._cfg.max_alternatives,
@@ -359,6 +364,20 @@ def _persona_query(request: PlanBRagRequest) -> str:
 
 def _join(hits: Sequence[KbHit]) -> str:
     return "\n".join(f"- {h.text}" for h in hits)
+
+
+def _with_reasons(schedule_context: str, reasons: Mapping[str, str]) -> str:
+    """원래 추천 이유(TRIP-516)를 일정 컨텍스트 앞에 붙인다 — 결정론(poi_id 정렬).
+
+    대안이 원래 취지("조용한 카페라 추천")를 이어가게 하는 재료. 규칙 랭킹 폴백
+    경로에는 영향 없음 — LLM 프롬프트 컨텍스트 전용.
+    """
+    if not reasons:
+        return schedule_context
+    lines = "\n".join(
+        f"- {poi_id}: {text}" for poi_id, text in sorted(reasons.items()))
+    block = f"[원래 추천 이유]\n{lines}"
+    return f"{block}\n{schedule_context}" if schedule_context else block
 
 
 # ── 랭킹·형태 검증 ──────────────────────────────────────────────────────
