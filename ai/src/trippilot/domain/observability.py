@@ -206,7 +206,7 @@ class SolverRunRecord:
     repaired: bool
     # 품질 점수 부기 (TRIP-524) — 반환 해에 부착되는 QualityScore의 사영.
     # constraint_satisfaction은 violations_found로 유도 가능해 싣지 않는다.
-    # None = 점수 미계산 경로(레거시 발행처·repair 실패 등).
+    # None = 점수 미계산 경로(레거시 직렬화본·repair 경로 등 — 부기는 solve만).
     quality_preference_fit: float | None = None
     quality_route_efficiency: float | None = None
     quality_composite: float | None = None

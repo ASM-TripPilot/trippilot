@@ -382,10 +382,14 @@ def run_rehearsal(
             f"선택 집합 밖 POI 배치 — INV-1 위반: {sorted(placed_ids - selected_ids)}"
         )
 
-    # 마지막 solve 성공 레코드의 품질 부기 — 2단계 생성이면 최종(잔여일) 해 기준
+    # 마지막 solve 성공 레코드의 품질 부기 — 2단계 생성이면 최종(잔여일) 해 기준.
+    # 세 필드 전부 있어야 채택 — 부분 부기 레코드(미래 방출처)가 출력 포맷·게이트를
+    # TypeError로 죽이지 않게 (전 지역 격리 우회 방지).
     quality = next(
         (r for r in reversed(trace.records)
-         if getattr(r, "quality_composite", None) is not None),
+         if getattr(r, "quality_composite", None) is not None
+         and r.quality_preference_fit is not None
+         and r.quality_route_efficiency is not None),
         None,
     )
 
@@ -575,6 +579,8 @@ def _check_baseline(results: list[dict], baseline: dict) -> tuple[list[str], lis
                 failures.append(f"{r['region']} {key}={q[key]:.3f} < 바닥 {floor}")
         mean = stats.get("composite_mean")
         std = stats.get("composite_std")
+        # std 0·부재 = 회귀 검사 생략 — 분산 0 기준선의 전원 경보 방지.
+        # 바닥은 floors가 계속 지킨다.
         if mean is not None and std:
             if abs(q["composite"] - mean) > 3 * std:
                 warnings.append(
@@ -755,17 +761,25 @@ def main() -> int:
     )
     print(f"[rehearsal] {len(results)}곳 기록 → {output}")
 
-    # 품질 게이트 (TRIP-524) — 기록(위 output·rehearsal_log.jsonl)이 끝난 뒤 판정
+    # 품질 게이트 (TRIP-524) — output 기록 뒤 판정. jsonl append·artifact는
+    # 워크플로 후속 스텝 — 게이트 FAIL이어도 돌도록 !cancelled() 조건이 걸려 있다.
     baseline_path = _optional("SMOKE_BASELINE_JSON")
     if baseline_path and Path(baseline_path).exists():
-        baseline = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
-        gate_failures, gate_warnings = _check_baseline(results, baseline)
-        for w in gate_warnings:
-            print(f"[rehearsal] WARNING 기준선 이탈 — {w}")
-        if gate_failures:
-            for msg in gate_failures:
-                print(f"[rehearsal] FAIL 품질 바닥 위반 — {msg}")
-            return 1
+        try:
+            baseline = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
+            gate_failures, gate_warnings = _check_baseline(results, baseline)
+        except Exception as e:
+            # 손상 기준선(비JSON·형 오류)이 조기경보 본체를 죽이면 안 된다 —
+            # 게이트만 생략하고 소리 내서 알린다 (침묵 금지, INV-4)
+            print(f"[rehearsal] WARNING 기준선 파일 손상 — 게이트 생략: "
+                  f"{type(e).__name__}: {e}")
+        else:
+            for w in gate_warnings:
+                print(f"[rehearsal] WARNING 기준선 이탈 — {w}")
+            if gate_failures:
+                for msg in gate_failures:
+                    print(f"[rehearsal] FAIL 품질 바닥 위반 — {msg}")
+                return 1
     return 0
 
 

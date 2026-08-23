@@ -175,11 +175,19 @@ jobs:
           # TRIP-524 — 있으면 품질 floors 게이트(FAIL)·3σ 회귀(WARNING), 없으면 무게이트
           SMOKE_BASELINE_JSON: rehearsal_baseline.json
         run: uv run python scripts/smoke_itinerary.py
+      # 후속 3스텝은 !cancelled() — 품질 게이트 FAIL(exit 1)로 잡이 붉어도 그날
+      # 기록·artifact는 남긴다 (TRIP-524): 회귀가 처음 발생한 날의 증빙이 가장 귀하다.
+      # 결과 파일 부재(생성 전 크래시)는 각 스텝이 개별 무해 처리.
       - name: 잡 서머리 (리허설 시각표)
-        if: steps.fetch-pois.outputs.skipped != 'true'
-        run: uv run python scripts/smoke_itinerary.py --summary rehearsal_result.json >> "$GITHUB_STEP_SUMMARY"
+        if: steps.fetch-pois.outputs.skipped != 'true' && !cancelled()
+        run: |
+          if [ -f rehearsal_result.json ]; then
+            uv run python scripts/smoke_itinerary.py --summary rehearsal_result.json >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "리허설 결과 파일 없음 — 생성 전 실패 (로그 참조)" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: 리허설 로그 영속 (collect-state 브랜치 rehearsal_log.jsonl append)
-        if: steps.fetch-pois.outputs.skipped != 'true'
+        if: steps.fetch-pois.outputs.skipped != 'true' && !cancelled()
         # ai-poi-collect의 plumbing 커밋 패턴 그대로 — 워킹트리를 건드리지 않고
         # 기존 트리(collect_state.json 등)를 **보존**한 채 rehearsal_log.jsonl만
         # 교체·추가한다. `--full-tree` 없이는 ls-tree가 현재 디렉토리(ai/) 프리픽스로
@@ -210,9 +218,10 @@ jobs:
             git push origin "$COMMIT:refs/heads/collect-state"
           ) || echo "::warning::리허설 로그 push 실패 — 기록만 유실 (리허설 자체는 성공)"
       - name: 리허설 결과 artifact 보존 (30일)
-        if: steps.fetch-pois.outputs.skipped != 'true'
+        if: steps.fetch-pois.outputs.skipped != 'true' && !cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: rehearsal-result
           path: ai/rehearsal_result.json
           retention-days: 30
+          if-no-files-found: ignore   # 생성 전 크래시 — artifact 스텝까지 붉히지 않는다
