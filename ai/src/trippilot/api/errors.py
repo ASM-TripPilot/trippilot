@@ -9,6 +9,9 @@
 | 요청 스키마·도메인 불변식 위반 | 422 | false |
 | 필수 방문지/고정블록 모순(SolverConflictError, d08) | 409 | false |
 | 컨텍스트 권한 위반(PermissionDeniedError) | 403 | false |
+| 백엔드 POI 조회에 우리가 잘못 보냄(4xx) | 422 | false |
+| 백엔드 서비스 토큰 거부(401·403) | 500 | false |
+| 백엔드 장애·연결 실패(5xx·타임아웃) | 500 | **true** |
 | 설정 버그·미분류 예외 | 500 | false |
 | 오케스트레이터 미주입(배선 전) | 503 | false |
 
@@ -23,6 +26,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from trippilot.api.schemas import ErrorBody
+from trippilot.poi_curation.adapters.backend_poi_db import BackendPoiDbError
 from trippilot.solver_engine.facade import SolverConflictError
 from trippilot.domain.context import PermissionDeniedError
 
@@ -31,6 +35,8 @@ CODE_VALIDATION = "VALIDATION_ERROR"
 CODE_DOMAIN_INVARIANT = "DOMAIN_INVARIANT_VIOLATION"
 CODE_SOLVER_CONFLICT = "SOLVER_CONFLICT"
 CODE_PERMISSION_DENIED = "PERMISSION_DENIED"
+CODE_BACKEND_AUTH = "BACKEND_AUTH_ERROR"
+CODE_BACKEND_UNAVAILABLE = "BACKEND_UNAVAILABLE"
 CODE_INTERNAL = "INTERNAL_ERROR"
 CODE_NOT_WIRED = "ORCHESTRATOR_NOT_WIRED"
 
@@ -65,6 +71,8 @@ def map_exception(exc: BaseException) -> BoundaryError:
         return exc
     if isinstance(exc, PermissionDeniedError):
         return BoundaryError(403, CODE_PERMISSION_DENIED, str(exc))
+    if isinstance(exc, BackendPoiDbError):
+        return _map_backend_poi_db(exc)
     if isinstance(exc, SolverConflictError):
         # d08 — 고정 블록/필수 방문지 모순. 재시도해도 같은 입력이면 같은 결과다.
         return BoundaryError(409, CODE_SOLVER_CONFLICT, str(exc))
@@ -73,6 +81,25 @@ def map_exception(exc: BaseException) -> BoundaryError:
         # pydantic ValidationError도 ValueError 하위라 같은 422로 수렴한다.
         return BoundaryError(422, CODE_DOMAIN_INVARIANT, str(exc))
     return BoundaryError(500, CODE_INTERNAL, f"{type(exc).__name__}: {exc}")
+
+
+def _map_backend_poi_db(exc: BackendPoiDbError) -> BoundaryError:
+    """백엔드 POI 조회 실패 → 상태코드로 책임 소재를 가른다(TRIP-436).
+
+    상태코드 없이 전부 500 이면 "상대가 고장났다"로 읽혀 호출측이 폴백·재시도·알림을
+    태운다 — 정작 고칠 쪽이 우리인 경우(잘못된 poi_id, 토큰 미설정)에도 그렇다.
+    """
+    if exc.status in (401, 403):
+        # 원인이 명확한 유일한 갈래 — 요청이 아니라 배포 설정 문제다(TRIP-393).
+        return BoundaryError(
+            500, CODE_BACKEND_AUTH,
+            f"{exc} — 서비스 간 인증 거부: AI 의 X-Service-Token 설정을 확인하라"
+            " (백엔드 공유 시크릿 불일치·미설정, TRIP-393).",
+        )
+    if exc.status is not None and 400 <= exc.status < 500:
+        # 잘못 보낸 쪽은 우리다(예: UUID 아닌 poi_id) — 상대 장애로 위장하지 않는다.
+        return BoundaryError(422, CODE_VALIDATION, str(exc))
+    return BoundaryError(500, CODE_BACKEND_UNAVAILABLE, str(exc), exc.retryable)
 
 
 def _json(err: BoundaryError) -> JSONResponse:

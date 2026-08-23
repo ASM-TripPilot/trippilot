@@ -15,13 +15,16 @@ POI 정본은 backend C7(place-data) 단일 소유(INV-1) — 본 어댑터는 S
 로 두고 지어내지 않는다(풀 빌더 ③은 정보 없음을 통과시키고 ⑤가 하위 정렬).
 
 HTTP 실패는 예외로 올린다 — 빈 풀로 수렴시키면 "후보 없음"이라는 거짓 음성이
-된다(INV-4 침묵 금지). 상위 폴백 계단은 InfoCollector 소유.
+된다(INV-4 침묵 금지). 상위 폴백 계단은 InfoCollector 소유. 다만 실패를 **한 덩어리로
+올리지는 않는다**(TRIP-436): 백엔드 응답 상태코드를 예외에 실어 경계(api/errors.py)가
+책임 소재를 가르게 한다 — 4xx 는 우리가 잘못 보낸 것, 5xx·연결 실패만 상대 장애다.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Mapping
@@ -43,7 +46,19 @@ _SOURCE_MAP = {"MANUAL": PoiSource.SEED}
 
 
 class BackendPoiDbError(RuntimeError):
-    """백엔드 POI 조회 실패 — 빈 결과로 위장하지 않는다(INV-4)."""
+    """백엔드 POI 조회 실패 — 빈 결과로 위장하지 않는다(INV-4).
+
+    `status`는 백엔드가 돌려준 HTTP 상태코드(연결 실패·응답 계약 위반이면 None).
+    경계가 이 값으로 "우리가 잘못 보냄(4xx)" 과 "상대 장애(5xx·연결 실패)" 를
+    가른다 — 뭉뚱그려 500 으로 올리면 호출측이 멀쩡한 자기 요청을 두고 상대
+    장애 폴백·재시도를 태운다(TRIP-436).
+    """
+
+    def __init__(self, message: str, *, status: int | None = None,
+                 retryable: bool = False) -> None:
+        super().__init__(message)
+        self.status = status
+        self.retryable = retryable
 
 
 class HttpJson(Protocol):
@@ -121,8 +136,15 @@ class BackendPoiDb:
                 method, f"{self._base}{path}", headers=self._headers, **kwargs,  # type: ignore[arg-type]
             )
         except Exception as e:
-            raise BackendPoiDbError(f"{method} {path} 실패: {e}") from e
+            # HTTPError 만 상태코드를 갖는다 — 연결 실패(URLError·OSError)는 None.
+            status = e.code if isinstance(e, urllib.error.HTTPError) else None
+            raise BackendPoiDbError(
+                f"{method} {path} 실패: {e}",
+                status=status,
+                retryable=status is None or status >= 500,
+            ) from e
         if not isinstance(body, list):
+            # 200 인데 계약 위반 — 재시도해도 같은 응답이다(상대 배포로만 고쳐진다).
             raise BackendPoiDbError(f"{method} {path} 응답이 배열이 아님: {type(body).__name__}")
         return body
 
