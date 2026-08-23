@@ -37,8 +37,11 @@ curl -X POST http://localhost:8080/internal/pois/proposals \
 ### 갱신
 
 `ai-poi-collect` 워크플로가 매일 KST 04:00 에 돌고 산출물을 artifact 로 남긴다(**보존 30일**).
+**자동 갱신 (TRIP-392)**: ai-poi-collect가 매일 병합본을 `chore/poi-data-sync` 브랜치 PR로 올린다
+(merge_pois_docs 멱등 병합 + 축소 가드) — 리뷰 후 머지만 하면 된다. 아래는 그 자동 경로가 막혔을 때의 수동 백업 절차다.
+
 artifact 는 **실행 한 번 분량**이고 누적본은 어디에도 없다 — 최신 실행 하나로 갈아끼우면
-앞선 실행에서만 나온 POI 가 조용히 사라진다. 그래서 살아있는 artifact 를 모두 받아 합친다:
+앞선 실행에서만 나온 POI 가 조용히 사라진다. 그래서 갈아끼우지 말고 살아있는 artifact 를 모두 받아 **합친다**:
 
 ```bash
 cd ai

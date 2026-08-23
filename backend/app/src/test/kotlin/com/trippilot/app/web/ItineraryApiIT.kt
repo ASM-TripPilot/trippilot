@@ -185,6 +185,8 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val trip = tripOneDay(token)
         val poi = poiId(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        // 하루 여행도 근거 조회가 남아 응답 직후는 PARTIAL 이다(TRIP-511) — 그 상태의 확정은 409 다.
+        awaitComplete(trip, token)
         val confirmedName = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
             .second["days"][0]["slots"][0]["nameKo"].asText()
 

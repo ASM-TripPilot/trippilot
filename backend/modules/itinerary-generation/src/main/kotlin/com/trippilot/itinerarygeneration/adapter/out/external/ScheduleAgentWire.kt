@@ -146,6 +146,22 @@ internal data class AiValidateRequest(val itinerary: AiSchedulePayload, val requ
 
 internal data class AiValidateResponse(val violations: List<AiViolation> = emptyList())
 
+/**
+ * `POST /ai/v1/itinerary/explanations` — 일정 본문을 그대로 되돌려 보내고 근거만 받는다.
+ * **실패도 200 + 빈 맵**이다(근거는 부가 정보라 상대가 5xx 로 올리지 않는다).
+ */
+internal data class AiExplanationsRequest(
+    val tripId: String,
+    val itinerary: AiSchedulePayload,
+    val requestMeta: AiRequestMeta,
+)
+
+internal data class AiExplanationsResponse(
+    val explanations: Map<String, String> = emptyMap(),
+    val isFallback: Boolean = false,
+    val reason: String? = null,
+)
+
 /** `POST /ai/v1/itinerary/repair` — 수리 불가는 오류가 아니라 `repaired=null` 이다(IO-7). */
 internal data class AiRepairRequest(
     val itinerary: AiSchedulePayload,

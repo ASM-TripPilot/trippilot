@@ -1,6 +1,11 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.DaySchedule
+import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
+import com.trippilot.itinerarygeneration.domain.FreshnessMeta
+import com.trippilot.itinerarygeneration.domain.withPlacementReason
 import com.trippilot.itinerarygeneration.domain.GenerationState
+import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.MinimalItineraryFallback
@@ -41,14 +46,20 @@ class SecondPhaseGenerator(
     private val tx = TransactionTemplate(transactionManager)
 
     /**
-     * 나머지 일자를 생성해 PARTIAL→COMPLETE 로 전이. 실패하면 FAILED 로 표시하되 1차분(day1)은 유효하게 둔다
+     * 생성을 **마무리**해 PARTIAL→COMPLETE 로 전이. 실패하면 FAILED 로 표시하되 1차분(day1)은 유효하게 둔다
      * (INV-4 침묵 금지 — 사용자에게 "왜 나머지가 안 나왔는지"가 상태로 드러나야 한다).
+     *
+     * 두 가지를 여기서 한다 — 나머지 일자 생성(있으면)과 **추천 근거 채우기**(TRIP-511).
+     * 근거를 COMPLETE **뒤에** 채우면 화면이 이미 폴링을 멈춰 영영 못 본다. 그래서 이 메서드가 끝날 때
+     * "일정도 근거도 다 들어왔다"가 되도록 순서를 묶었다.
+     *
+     * @param secondInput 나머지 일자 생성 입력. **null 이면 하루 여행**이라 2차가 없고 근거만 채운다.
      */
     @Async
     fun completeRemaining(
         tripId: UUID,
         itineraryId: UUID,
-        secondInput: ScheduleAgentInput,
+        secondInput: ScheduleAgentInput?,
         isRegeneration: Boolean,
         /** 조립 단계에서 자리를 못 찾아 보내지도 못한 필수 방문지 — AI 보고와 합쳐 최종 목록이 된다. */
         assemblyUnplaced: List<UnplacedMustVisit> = emptyList(),
@@ -57,11 +68,13 @@ class SecondPhaseGenerator(
     ) {
         // INV-4: 2차 실패도 1차와 **대칭**으로 결정론 최소 폴백(must_visit 고정블록)으로 채운다.
         // 실패를 이유로 나머지 일자를 비워두지 않되, solveMode=MINIMAL·isFallback 으로 저하를 드러낸다.
-        val output = try {
-            scheduleAgent.generate(secondInput)
-        } catch (e: Exception) {
-            log.warn("2차 생성 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
-            MinimalItineraryFallback.of(secondInput, clock.instant())
+        val output = secondInput?.let { input ->
+            try {
+                scheduleAgent.generate(input)
+            } catch (e: Exception) {
+                log.warn("2차 생성 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
+                MinimalItineraryFallback.of(input, clock.instant())
+            }
         }
 
         // 사용자가 [취소]를 눌렀으면 결과를 버린다 — 그만두겠다고 한 뒤 화면이 바뀌면 안 된다(BR-U3-05).
@@ -71,8 +84,8 @@ class SecondPhaseGenerator(
         }
 
         try {
-            applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration, assemblyUnplaced)
-            sessionId?.let { sessions.completed(it, output.isFallback, output.candidatesSummary?.level) }
+            val applied = applyOrDiscard(tripId, itineraryId, secondInput, output, isRegeneration, assemblyUnplaced, sessionId)
+            sessionId?.let { sessions.completed(it, applied?.isFallback ?: false, applied?.candidatesSummary?.level) }
         } catch (e: Exception) {
             // 폴백조차 반영하지 못한 경우 — 상태로 드러낸다(침묵 금지).
             log.error("2차 결과 반영 실패 — FAILED 표시(day1 은 유효). tripId={}", tripId, e)
@@ -81,41 +94,78 @@ class SecondPhaseGenerator(
         }
     }
 
+    /**
+     * 나머지 일자를 이어붙이고 **근거를 채운 뒤** 닫는다. 반영했으면 최종 일정, 버렸으면 null.
+     *
+     * 근거 조회는 **트랜잭션 밖**이다 — 외부 호출이라 DB 커넥션을 물면 안 되고(generate 와 동일),
+     * ~10초를 커넥션 풀에서 잡고 있으면 동시 사용자에게 그대로 번진다.
+     */
     private fun applyOrDiscard(
         tripId: UUID,
         itineraryId: UUID,
-        secondInput: ScheduleAgentInput,
-        output: ScheduleAgentOutput,
+        secondInput: ScheduleAgentInput?,
+        output: ScheduleAgentOutput?,
         isRegeneration: Boolean,
         assemblyUnplaced: List<UnplacedMustVisit>,
-    ) {
-        tx.execute {
-            val current = itineraries.findByTrip(tripId).firstOrNull() ?: return@execute null
-            if (current.itineraryId != itineraryId) { // 재생성으로 교체된 뒤 도착한 낡은 결과
-                log.info("2차 결과 폐기 — 일정이 교체됨. tripId={}", tripId)
-                return@execute null
-            }
-            if (current.generationState != GenerationState.PARTIAL) {
-                log.info("2차 결과 폐기 — 그 사이 일정이 바뀜(state={}). tripId={}", current.generationState, tripId)
-                return@execute null
-            }
-            val remaining = output.toRemainingDays(current.days.size, secondInput.timeWindows.map { it.date })
-            SlotKey.warnIfUnmatched(
-                received = output.explanations.size,
-                matched = remaining.sumOf { d -> d.slots.count { it.placementReason != null } },
-                tripId = tripId,
+        sessionId: UUID?,
+    ): Itinerary? {
+        // 1) 현재 상태를 읽어 최종 일자 목록을 만든다(아직 쓰지 않는다).
+        val current = itineraries.findByTrip(tripId).firstOrNull()
+        if (current == null || !current.isPendingSecondPhase(itineraryId, tripId)) return null
+
+        val remaining = if (output != null && secondInput != null) {
+            output.toRemainingDays(current.days.size, secondInput.timeWindows.map { it.date })
+        } else {
+            emptyList() // 하루 여행 — 2차가 없다
+        }
+        val allDays = current.days + remaining
+
+        // 2) 근거를 받아 온다. 실패는 어댑터가 빈 맵으로 접는다 — 근거가 없다고 일정을 죽이지 않는다.
+        val reasons = scheduleAgent.explanations(tripId, allDays.toOutput(current, clock.instant()))
+        val withReasons = allDays.map { d ->
+            ItineraryDay.of(
+                d.date, d.dayOrder,
+                d.slots.map { slot ->
+                    // 이미 있는 근거를 빈 값으로 덮지 않는다 — 조회가 일부만 답해도 있던 문장은 남는다.
+                    slot.withPlacementReason(
+                        BoundedText.clamp(reasons[SlotKey.of(d.date, slot.sourcePoiId)], BoundedText.PLACEMENT_REASON_MAX)
+                            ?: slot.placementReason,
+                    )
+                },
             )
-            // 1차분(day1)은 영속본 그대로 보존하고 뒤에 이어붙인다 — 이미 노출된 날을 흔들지 않는다.
-            val updated = current.completeGeneration(
-                current.days + remaining,
+        }
+        SlotKey.warnIfUnmatched(
+            received = reasons.size,
+            matched = withReasons.sumOf { d -> d.slots.count { it.placementReason != null } },
+            tripId = tripId,
+        )
+
+        // 3) 이제 쓴다. 읽고-쓰는 사이에 재생성이 끼어들 수 있어 가드를 **다시** 본다.
+        //
+        // 취소도 **여기서 다시** 본다. 위에서 한 번 봤지만 그 뒤 근거 조회가 십수 초를 쓴다(실측 17.5초) —
+        // 그 창에서 [취소]를 누른 사용자도 일정이 완성돼 버리면 "그만두겠다고 한 뒤 화면이 바뀐다"가 된다
+        // (BR-U3-05). 확인은 쓰기 **직전**이어야 창이 남지 않는다.
+        if (sessionId != null && sessions.isCanceled(sessionId)) {
+            log.info("생성 마무리 폐기 — 근거를 받는 사이 사용자가 취소함. tripId={}", tripId)
+            return null
+        }
+
+        return tx.execute {
+            val latest = itineraries.findByTrip(tripId).firstOrNull()
+            if (latest == null || !latest.isPendingSecondPhase(itineraryId, tripId)) return@execute null
+
+            val updated = latest.completeGeneration(
+                withReasons,
                 clock.instant(),
-                output.solveMode, output.isFallback, output.candidatesSummary,
+                output?.solveMode ?: latest.solveMode,
+                output?.isFallback ?: latest.isFallback,
+                output?.candidatesSummary ?: latest.candidatesSummary,
                 // 2차는 전 일자를 보고 판정하므로 그 결과가 최종이다 — 1차(day1만) 판정으로 되돌리지 않는다.
-                assemblyUnplaced + output.unplacedMustVisits,
+                assemblyUnplaced + (output?.unplacedMustVisits ?: emptyList()),
             )
             // 조건부 쓰기 — 위 가드를 읽은 뒤 재생성이 끼어들었으면 여기서 0행이 되어 아무것도 덮어쓰지 않는다.
             if (!itineraries.replaceIfCurrent(tripId, itineraryId, updated)) {
-                log.info("2차 결과 폐기 — 쓰기 직전 일정이 바뀜. tripId={}", tripId)
+                log.info("생성 마무리 폐기 — 쓰기 직전 일정이 바뀜. tripId={}", tripId)
                 return@execute null
             }
             // 되돌리기 지점은 **전 일자가 담긴 최종 상태**로 남긴다 — 1차(day1)에서 남기면 복원 시 나머지가 잘린다.
@@ -124,8 +174,30 @@ class SecondPhaseGenerator(
                 if (isRegeneration) RevisionKind.GENERATE else RevisionKind.BASELINE,
                 if (isRegeneration) "AI가 일정을 다시 짬" else "AI가 처음 짠 일정",
             )
+            updated
         }
     }
+
+    /** 아직 이 마무리가 반영될 자리인가 — 재생성으로 교체됐거나 상태가 바뀌었으면 아니다. */
+    private fun Itinerary.isPendingSecondPhase(expected: UUID, tripId: UUID): Boolean {
+        if (itineraryId != expected) {
+            log.info("생성 마무리 폐기 — 일정이 교체됨. tripId={}", tripId)
+            return false
+        }
+        if (generationState != GenerationState.PARTIAL) {
+            log.info("생성 마무리 폐기 — 그 사이 일정이 바뀜(state={}). tripId={}", generationState, tripId)
+            return false
+        }
+        return true
+    }
+
+    /** 근거 조회 입력 — 시각·순서만 담는다(INV-3: 소요시간 없음). */
+    private fun List<ItineraryDay>.toOutput(current: Itinerary, at: java.time.Instant) = ScheduleAgentOutput(
+        days = map { d -> DaySchedule(d.date, d.slots.map { VisitSlotDisplay(it.sourcePoiId, it.startAt, it.endAt, it.endsNextDay, null, it.isFixed) }) },
+        day1ReadyAt = null, explanations = emptyMap(),
+        solveMode = current.solveMode, isFallback = current.isFallback,
+        freshness = FreshnessMeta(at, degraded = false),
+    )
 
     /** 반영 실패 표시 — 이미 상태가 바뀐 일정은 건드리지 않는다. */
     private fun markFailed(tripId: UUID, itineraryId: UUID) {

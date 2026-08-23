@@ -32,6 +32,13 @@
         "additionalProperties": false,
         "description": "대안 제안 요청 — 후보 풀은 AI가 앵커 반경으로 직접 만든다(INV-1, M7 소유).\n\n시각·순서를 받지도 내보내지도 않는다 — 선택된 대안의 확정 배치는 기존\nrepair 관문 몫이다(INV-2). budget/transport 토큰은 generate 와이어와 동일\n어휘(\"중간\"·\"대중교통\" 등 — wiring의 번역표가 흡수).",
         "properties": {
+          "affected_reasons": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Affected Reasons",
+            "type": "object"
+          },
           "anchor": {
             "$ref": "#/components/schemas/CoordSchema"
           },

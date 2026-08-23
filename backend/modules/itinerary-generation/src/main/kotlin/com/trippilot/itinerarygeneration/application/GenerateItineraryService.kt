@@ -106,6 +106,8 @@ class GenerateItineraryService(
             val firstAssembly = assembleInput(
                 tripId, mode, ctx, prefs, stayAnchors, firstDates, deadlines.day1Budget(),
                 excluded = reservedForSecond,
+                // 근거는 뒤따라 받는다 — 여기 붙이면 첫 화면이 LLM 을 기다린다(TRIP-511).
+                includeExplanations = false,
                 carriesUndatedFixed = remainingDates.isEmpty(), // 날짜 미지정 must_visit 은 2차가 맡는다(없으면 1차)
             )
             val firstInput = firstAssembly.input
@@ -118,8 +120,10 @@ class GenerateItineraryService(
                 log.warn("ScheduleAgent 실패 — 결정론 최소 폴백 적용(INV-4). tripId={}", tripId, e)
                 MinimalItineraryFallback.of(firstInput, clock.instant())
             }
-            // 단일일 여행이면 1차로 끝 — 2차 없이 COMPLETE.
-            val state = if (remainingDates.isEmpty()) GenerationState.COMPLETE else GenerationState.PARTIAL
+            // **하루 여행도 PARTIAL 이다**(TRIP-511). 추천 근거가 생성에서 떨어져 나와 뒤따라오므로,
+            // 여기서 COMPLETE 로 닫으면 화면이 폴링을 멈춰 근거를 영영 못 본다.
+            // 경로를 하나로 두는 편이 "COMPLETE = 근거까지 다 들어왔다"를 항상 참으로 만든다.
+            val state = GenerationState.PARTIAL
 
             // 영속 + 생성이벤트(TRIP-230)를 한 트랜잭션으로 — confirm()과 대칭(향후 아웃박스 relay 원자성). 발행은 인프로세스.
             tx.execute {
@@ -132,10 +136,7 @@ class GenerateItineraryService(
                     isFallback = it.isFallback, candidatesLevel = it.candidatesSummary?.level,
                 )
                 // 리비전은 **생성이 끝난 상태**에서만 남긴다. 여기서 PARTIAL(day1만)을 남기면 그 스냅숏으로 되돌릴 때
-                // 2차가 채운 나머지 일자가 통째로 사라진다 — 다일 여행은 2차 완료 시점에 남긴다(SecondPhaseGenerator).
-                if (state == GenerationState.COMPLETE) {
-                    revisions.record(it, RevisionActor.AI, kindFor(previous), summaryFor(previous))
-                }
+                // 뒤따라 채워지는 것들이 통째로 사라진다 — 마무리 시점에 남긴다(SecondPhaseGenerator).
                 it
             }!!
         } catch (e: Exception) {
@@ -144,14 +145,20 @@ class GenerateItineraryService(
         }
 
         if (remainingDates.isEmpty()) {
-            // 하루 여행은 2차가 없다 — 여기서 닫지 않으면 세션이 DAY1_READY 로 영원히 남아 화면이 계속 폴링한다.
-            genSessions.completed(session.sessionId, saved.isFallback, saved.candidatesSummary?.level)
+            // 하루 여행도 마무리를 거친다 — 2차 생성은 없지만 **추천 근거는 받아야** 한다(TRIP-511).
+            // 세션을 여기서 닫지 않는다: 닫으면 화면이 폴링을 멈춰 근거가 도착해도 못 본다.
+            secondPhase.completeRemaining(
+                tripId, saved.itineraryId, secondInput = null,
+                isRegeneration = previous != null,
+                assemblyUnplaced = emptyList(),
+                sessionId = session.sessionId,
+            )
         } else {
             // 1차에서 배정된 POI 는 2차 후보에서 제외(TRIP-293) — 같은 장소가 두 번 들어가지 않게.
             val assigned = saved.days.flatMap { d -> d.slots.map { it.sourcePoiId } }.distinct()
             val secondAssembly = assembleInput(
                 tripId, mode, ctx, prefs, stayAnchors, remainingDates, deadlines.totalBudget(), excluded = assigned,
-                carriesUndatedFixed = true,
+                carriesUndatedFixed = true, includeExplanations = false,
             )
             val secondInput = secondAssembly.input
             // 2차가 고정 블록(HC3: 반드시 포함)으로 다시 싣는 POI 는 제외 목록에서 뺀다 —
@@ -203,8 +210,6 @@ class GenerateItineraryService(
     private data class Assembled(val input: ScheduleAgentInput, val unplaced: List<UnplacedMustVisit>)
 
     /** 최초 생성이면 기준 버전(BASELINE), 재생성이면 GENERATE. */
-    private fun kindFor(previous: Itinerary?) = if (previous == null) RevisionKind.BASELINE else RevisionKind.GENERATE
-    private fun summaryFor(previous: Itinerary?) = if (previous == null) "AI가 처음 짠 일정" else "AI가 일정을 다시 짬"
 
     @Suppress("LongParameterList")
     private fun assembleInput(
@@ -217,6 +222,8 @@ class GenerateItineraryService(
         deadlineMs: Long?,
         excluded: List<UUID> = emptyList(),
         carriesUndatedFixed: Boolean = true,
+        // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
+        includeExplanations: Boolean = true,
     ): Assembled {
         // ANYTIME(날짜·시각 미지정)을 여기서 **물질화**한다(계약 M1) — AI 고정 블록은 시간창이 필수라
         // null 을 담을 자리가 없고, 솔버가 날짜를 다시 고르지도 못한다. 넣을 자리가 없으면 보내지 않고
@@ -258,6 +265,7 @@ class GenerateItineraryService(
             recommendationStrength = null,
             requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs),
                 excludedPoiIds = excluded,
+                includeExplanations = includeExplanations,
             ),
             materialized.unplaced,
         )

@@ -315,6 +315,9 @@ class AlternativesRequest(BoundaryModel):
     budget_level: str | None = None
     transport_mode: str | None = None
     excluded_poi_ids: list[str] = Field(default_factory=list)
+    # 대체 대상 슬롯의 원래 추천 이유 (TRIP-516) — 백엔드 visit_slot.placement_reason.
+    # 선택 필드(하위호환): {poi_id: 문장}. LLM이 원래 취지를 잇는 대안을 고르게 한다.
+    affected_reasons: dict[str, str] = Field(default_factory=dict)
     request_meta: RequestMetaSchema
 
 

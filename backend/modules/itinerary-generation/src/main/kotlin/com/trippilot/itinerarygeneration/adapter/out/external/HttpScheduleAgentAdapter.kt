@@ -18,6 +18,7 @@ import com.trippilot.itinerarygeneration.domain.Violation
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Primary
 import org.springframework.stereotype.Component
+import org.slf4j.LoggerFactory
 import org.springframework.web.client.RestClient
 import java.time.Clock
 import java.util.UUID
@@ -93,6 +94,30 @@ class HttpScheduleAgentAdapter(
             AiValidateResponse::class.java,
             scheduleAgentBoundedRestClient,
         ).violations.map { it.toDomain() }
+
+    /**
+     * 추천 근거 조회(TRIP-511). 편집 경로와 같은 **짧게 끊는 클라이언트**를 쓴다 —
+     * 생성용 상한(시간제약 해제 시 612초)은 배경 작업이라도 과하다.
+     *
+     * **실패를 삼킨다.** 근거가 없다고 일정을 죽이면 사용자가 잃는 것이 더 크다. 대신 조용히
+     * 지나가지 않게 로그로 남긴다(INV-4) — 근거가 통째로 비는 화면은 눈에 띄지만 원인은 안 보인다.
+     */
+    override fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String> =
+        runCatching {
+            post(
+                EXPLANATIONS_PATH,
+                AiExplanationsRequest(tripId.toString(), solution.toWire(), requestMeta(null)),
+                AiExplanationsResponse::class.java,
+                scheduleAgentBoundedRestClient,
+            )
+        }.onFailure {
+            log.warn("추천 근거 조회 실패 — 근거 없이 일정을 마칩니다. tripId={}", tripId, it)
+        }.getOrNull()?.let { res ->
+            if (res.isFallback) {
+                log.info("추천 근거가 폴백입니다 — reason={} tripId={}", res.reason, tripId)
+            }
+            res.explanations
+        } ?: emptyMap()
 
     /**
      * 최소 조정 수리 — 시각·순서만 바꾸고 POI 는 불변이다(BR-U3-14).
@@ -181,9 +206,12 @@ class HttpScheduleAgentAdapter(
     }
 
     companion object {
+        private val log = LoggerFactory.getLogger(HttpScheduleAgentAdapter::class.java)
+
         private const val GENERATE_PATH = "/ai/v1/itinerary/generate"
         private const val VALIDATE_PATH = "/ai/v1/itinerary/validate"
         private const val REPAIR_PATH = "/ai/v1/itinerary/repair"
+        private const val EXPLANATIONS_PATH = "/ai/v1/itinerary/explanations"
 
         // 편집 재검증·보정은 사용자가 화면에서 기다리는 동작이라 생성(20s)보다 짧게 잡는다.
         private const val VALIDATE_DEADLINE_MS = 3_000L

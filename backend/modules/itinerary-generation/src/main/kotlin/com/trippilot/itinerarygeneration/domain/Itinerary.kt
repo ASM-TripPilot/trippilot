@@ -74,6 +74,17 @@ class VisitSlot private constructor(
     }
 }
 
+/**
+ * 추천 근거만 갈아끼운 사본(TRIP-511) — 다른 값은 건드리지 않는다.
+ *
+ * 근거는 생성과 **따로 도착한다**(설명 LLM 이 ~10초를 쓴다). 이미 확정된 시각·순서를 다시 만들지
+ * 않고 그 자리에 문장만 채우기 위한 자리다 — 재구성하면 솔버가 정한 값이 흔들릴 수 있다(INV-2).
+ */
+fun VisitSlot.withPlacementReason(reason: String?): VisitSlot = VisitSlot.of(
+    sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay,
+    distanceRange, reason, violationReason,
+)
+
 /** 하루 일정 — 날짜 + 방문 슬롯(순서 오름차순 정렬 보장). */
 class ItineraryDay private constructor(
     val date: LocalDate,
