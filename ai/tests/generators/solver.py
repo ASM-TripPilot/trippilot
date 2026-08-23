@@ -84,3 +84,69 @@ def solver_setups(draw) -> tuple[ItineraryProblem, dict[PoiId, Poi]]:
         anchor=draw(st.one_of(st.none(), st.just(_ANCHOR))),
     )
     return problem, index
+
+
+# ── TRIP-531 카테고리 다양성 항 전용 ──────────────────────────────
+# 체류 ≤75분 카테고리만 (config.STAY_DEFAULT_MIN) — 전량 배치 가능성 산정의 상한.
+_SHORT_STAY_CATS = (PoiCategory.FOOD, PoiCategory.CAFE, PoiCategory.SIGHT,
+                    PoiCategory.NIGHT_VIEW, PoiCategory.SHOPPING)
+
+
+@st.composite
+def skewed_category_setups(
+    draw, mono: bool = False
+) -> tuple[ItineraryProblem, dict[PoiId, Poi]]:
+    """TRIP-531 다양성 항 전용 — 지배 카테고리 편중 + 순서 무관 전량 배치 풀.
+
+    solver_setups와 달리 다음을 보장한다:
+    - 지배 카테고리 후보 4~6개(mono=True면 4~8개 전원) + 여행 2일 고정 →
+      일별 허용치 max(category_free_count=2, ⌈후보÷2⌉)를 실제로 초과시켜
+      새 코드 경로(폴백 재정렬·OR-Tools 페널티 항)를 반드시 태운다
+    - 체류 ≤75분 카테고리 + 좌표 ±0.001도(호핑 ≤23분, WALK 최악) + 창 09~21시
+      + anchor·고정 블록 없음 → **어떤 시도 순서로도 2일 안에 전 후보가 들어간다**
+      (일1은 말단 622분 전까지 실패 불가능 → 이월 ≤1개 → 일2가 흡수).
+      "후순위 ≠ 손실" 단언은 이 순서 무관 가해성 위에서만 정리(theorem)가 된다
+    - 점수 하한 0.05 — 0점 후보는 목적함수상 배치 무차별이라 비배제 단언의 교란
+
+    mono=True: 전원 지배 카테고리(단일 카테고리 풀 — "감점일 뿐 배제 아님" 증명용).
+    """
+    dom = draw(st.sampled_from(_SHORT_STAY_CATS))
+    cats = [dom] * draw(st.integers(min_value=4, max_value=8 if mono else 6))
+    if not mono:
+        others = [c for c in _SHORT_STAY_CATS if c is not dom]
+        cats += [draw(st.sampled_from(others))
+                 for _ in range(draw(st.integers(min_value=1, max_value=2)))]
+    pois = [
+        _poi(
+            i,
+            draw(st.floats(-0.001, 0.001, allow_nan=False, allow_infinity=False)),
+            draw(st.floats(-0.001, 0.001, allow_nan=False, allow_infinity=False)),
+            cats[i],
+        )
+        for i in range(len(cats))
+    ]
+    index = {p.poi_id: p for p in pois}
+    candidates = tuple(
+        ScoredPoi(
+            poi_id=p.poi_id,
+            score=draw(st.floats(0.05, 1, allow_nan=False, allow_infinity=False)),
+            is_llm_score=draw(st.booleans()),
+        )
+        for p in pois
+    )
+    d0 = draw(st.dates(min_value=date(2026, 8, 1), max_value=date(2026, 8, 20)))
+    problem = ItineraryProblem(
+        schedule_id=ScheduleId("s-531"),
+        days=(d0, d0 + timedelta(days=1)),
+        candidates=candidates,
+        fixed_blocks=(),
+        budget=draw(st.sampled_from(list(BudgetLevel))),
+        transport=draw(st.sampled_from(list(TransportMode))),
+        day_window=TimeWindow(
+            start=datetime(d0.year, d0.month, d0.day, 9, 0, tzinfo=_KST),
+            end=datetime(d0.year, d0.month, d0.day, 21, 0, tzinfo=_KST),
+        ),
+        seed=draw(st.integers(min_value=0, max_value=2**31)),
+        anchor=None,
+    )
+    return problem, index
