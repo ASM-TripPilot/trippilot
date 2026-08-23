@@ -8,6 +8,7 @@ problem.excluded_poi_ids는 후보 풀에서 제외 (2단계 생성 중복 방�
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timedelta
 from typing import Mapping, Sequence
 
@@ -101,6 +102,8 @@ class RuleFallbackSolver:
         days: list[DaySolution] = []
         for day in problem.days:
             slots: list[VisitSlot] = []
+            # 일별 카테고리 배치 수 (TRIP-531) — 고정 블록 포함
+            cat_count: Counter = Counter()
             # ① 고정 블록 — 시각 그대로 (HC3)
             for fb in sorted(fixed_by_day.get(day, []), key=lambda f: f.window.start):
                 if fb.poi_id in used:
@@ -114,6 +117,9 @@ class RuleFallbackSolver:
                     is_llm_score=sp.is_llm_score if sp else False,
                 ))
                 used.add(fb.poi_id)
+                fb_poi = self._pois.get(fb.poi_id)
+                if fb_poi is not None:
+                    cat_count[fb_poi.category] += 1
             # ② 점수순 말단 삽입 + 식사 시간대 보정 (TRIP-379 — OR-Tools 소프트 항의
             #    결정론 버전, HC 위반 후보는 스킵, 삽입 불가 시 비워둠).
             #    규칙: 현재 말단 시각이 아직 식사가 없는 식사 창 안이고 직전 슬롯이
@@ -124,6 +130,17 @@ class RuleFallbackSolver:
             windows = (self._cfg.lunch_window_min, self._cfg.dinner_window_min)
             meal_done = [False] * len(windows)
             remaining = self._day_ranked(problem, day, ranked, used)
+            # 일별 카테고리 허용치 (TRIP-531) — OR-Tools 항과 동일 공식:
+            # max(설정값, ⌈남은 후보 수 ÷ 남은 일수⌉) = 공정 몫 바닥.
+            # 고정 허용치만 쓰면 앞날 회피분이 마지막 날에 몰린다(청주 실측).
+            remaining_days = max(1, sum(1 for d in problem.days if d >= day))
+            day_cat_total: Counter = Counter()
+            for c in remaining:
+                p = self._pois.get(c.poi_id)
+                if p is not None:
+                    day_cat_total[p.category] += 1
+            quota = {c: max(self._cfg.category_free_count, -(-n // remaining_days))
+                     for c, n in day_cat_total.items()}
             while remaining:
                 last = slots[-1] if slots else None
                 ref = last.end_at if last is not None \
@@ -140,8 +157,18 @@ class RuleFallbackSolver:
                     p = self._pois.get(c.poi_id)
                     return p is not None and p.category is PoiCategory.FOOD
 
-                # 안정 정렬 — 선호 클래스 먼저, 클래스 안에서는 ranked 순서 유지
-                order = sorted(remaining, key=lambda c: _is_food(c) != food_first)
+                # 일별 동일 카테고리 초과 후보는 후순위 (TRIP-531 — OR-Tools 체감
+                # 페널티의 그리디판). 배제가 아니라 시도 순서만 — 초과분만 남으면
+                # 그대로 배치된다("정보 없음 ≠ 배제"와 같은 정신).
+                def _over_quota(c) -> bool:
+                    p = self._pois.get(c.poi_id)
+                    return (p is not None and cat_count[p.category]
+                            >= quota.get(p.category,
+                                         self._cfg.category_free_count))
+
+                # 안정 정렬 — 쿼터 내 먼저, 그 안에서 선호 클래스, 그 안에서 ranked 순서
+                order = sorted(remaining, key=lambda c: (
+                    _over_quota(c), _is_food(c) != food_first))
                 placed = False
                 for cand in order:
                     remaining.remove(cand)  # 실패든 성공이든 그 일자 재시도 없음
@@ -178,6 +205,7 @@ class RuleFallbackSolver:
                         is_llm_score=cand.is_llm_score,
                     ))
                     used.add(cand.poi_id)
+                    cat_count[poi.category] += 1  # TRIP-531
                     slots.sort(key=lambda s: s.start_at)
                     if poi.category is PoiCategory.FOOD:
                         s_mod = start.hour * 60 + start.minute

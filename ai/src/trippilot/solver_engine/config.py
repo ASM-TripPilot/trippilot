@@ -96,6 +96,14 @@ class SolverConfig:
     # 최대치(1.0×0.15)가 rain_indoor_bonus급 "한 단 미만" 크기: 근소 갭에서만
     # 행사 근접 POI가 유리해지고, 취향 점수 갭이 크면 서열 그대로.
     event_bonus_scale: float = 0.15
+    # ── 일별 동일 카테고리 체감 페널티 (TRIP-531 — 결정3).
+    # 편중 풀에서 같은 카테고리가 한 날에 뭉치는 것(청주 FOOD 7연속·순창 SIGHT
+    # 4연속 실측)을 억제한다. 식사 보정과 직교 — 그쪽은 시각·인접, 이쪽은 **개수**.
+    # 하드 제약 아님: 자유 허용치까지 무페널티, 초과 1개당 감점. 취향 점수 갭이
+    # 한 단(≥0.3) 이상이면 서열이 그대로 이긴다(음식 중심 페르소나의 맛집 투어
+    # 유지). 단일 카테고리만 남은 풀에서도 일정은 나온다(감점일 뿐 배제 아님).
+    category_free_count: int = 2        # 하루 같은 카테고리 이만큼까지는 무페널티
+    category_excess_penalty: float = 0.3  # 초과 1개당 감점 (점수 축 [0,1])
 
     def __post_init__(self) -> None:
         for name in ("or_tools_limit_ms", "or_tools_min_ms", "llm_stage_timeout_ms",
@@ -112,7 +120,8 @@ class SolverConfig:
                 raise ValueError(f"{name} 은 0 ≤ 시작 < 끝 ≤ 1440 분이어야 함")
         for name in ("meal_bonus", "meal_penalty",
                      "rain_outdoor_penalty", "rain_indoor_bonus",
-                     "event_bonus_scale"):
+                     "event_bonus_scale",
+                     "category_free_count", "category_excess_penalty"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
         if not 0 <= self.rain_threshold_pct <= 100:
