@@ -68,12 +68,14 @@
 
 | intent | 병렬 수집 | 필수 |
 |---|---|---|
-| GENERATE_SCHEDULE | PlaceProvider(풀) · Weather(기간) · Persona | 풀 (없으면 즉시 실패 반환) |
+| GENERATE_SCHEDULE | PlaceProvider(풀) · Weather(기간) · Persona · Event(기간×앵커 반경) | 풀 (없으면 즉시 실패 반환) |
 | REPLAN | Weather(force_refresh) · Transit(지연) · Persona · Place(반경·실내) | 풀 |
 | REFLECT | (없음) | — |
 | EDIT | Place(추가/교체 의도 시) | — |
 
 **InfoBundle**: 소형 패킷(날씨·교통·페르소나)은 직접 포함, 후보 풀(최대 5천)은 **세션 캐시 참조 키**로 (ai-data-design §6 풀 캐싱과 정합).
+
+**행사(Event)의 일정 반영 방식** (TRIP-421 — 2026-08-23 정본 반영): EventProvider는 여행 기간과 겹치고 앵커 반경(≤40km, 관대한 1차 필터) 안인 행사만 수집한다(LLM 0회; 좌표 없는 행사는 1차 필터를 통과하지만 POI 부착이 불가해 보너스 0으로 무해하다). 행사는 **후보가 아니라 소프트 가점 항**이다 — 실효 반경·POI 근접 부착·거리 감쇠 보너스 계산은 풀과 페르소나를 함께 아는 호출측(`orchestrator/event_affinity.py`) 소관이고, 결과는 선호 점수에 더해질 뿐 후보 풀에 들어가지 않으므로 **INV-1(closed-set)의 적용 대상이 아니다**. 상태값(IO-7): OK(행사 0건 포함 — "없음"은 실패가 아님) · LOW(저장소 페이지 절단 가능 — 침묵 절단 금지) · UNAVAILABLE(사유 동봉). 행사 데이터 공급은 실시간 Provider 경로가 아니라 웹소싱 새벽 배치가 채우는 event_store다(AI-D03 부기 참조).
 
 ### 3단 Agent — "판단만" (전속 도구 배타 — 본 개정의 핵심)
 
