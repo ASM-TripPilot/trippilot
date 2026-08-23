@@ -171,6 +171,7 @@ class OrToolsSolver:
         obj_terms += self._meal_soft_terms(m, nodes, visit, start, arcs)
         obj_terms += self._rain_soft_terms(problem, day, nodes, visit)
         obj_terms += self._event_soft_terms(problem, nodes, visit)
+        obj_terms += self._category_soft_terms(problem, day, m, nodes, visit)
         m.Maximize(sum(obj_terms))
 
         # 웜스타트 힌트 = 규칙해 (벤치마크 실증 구성)
@@ -208,6 +209,39 @@ class OrToolsSolver:
             ))
         slots.sort(key=lambda s: s.start_at)
         return slots
+
+    def _category_soft_terms(self, problem, day, m: cp_model.CpModel,
+                             nodes, visit) -> list:
+        """일별 동일 카테고리 체감 페널티 (TRIP-531 — 하드 제약 아님, 목적함수만).
+
+        카테고리별 방문 수가 허용치를 넘는 초과분마다 -category_excess_penalty.
+        허용치 = max(category_free_count, ⌈남은 후보 수 ÷ 남은 일수⌉) — 공정 몫
+        바닥. 고정 허용치만 쓰면 일 단위 순차 풀이에서 앞날들이 페널티를 피해
+        미룬 몫이 마지막 날에 몰린다(청주 08-12 실측: 2/5/7 캐스케이드). 공정 몫
+        바닥이면 전량 배치 상황에선 균등 분산을 유도하고, 넉넉한 풀에선 설정값이
+        그대로 작동한다 — 원칙: 솔버는 풀 비중 이상으로 증폭하지 않는다(그 이상의
+        다양성은 수집·풀 구성 책임). 식사 보정과 직교 — 그쪽은 FOOD의 시각·인접,
+        이쪽은 전 카테고리의 **개수**. 어느 항도 방문 가능성 자체를 제약하지
+        않으므로 HC1~4 충족 해 집합은 불변(검증기 무접촉). 초과 변수는 하한만
+        걸어도 Maximize가 스스로 바닥 max(0, count-허용치)에 붙는다.
+        """
+        penalty = int(self._cfg.category_excess_penalty * 1000)
+        if penalty == 0:
+            return []
+        remaining_days = max(1, sum(1 for d in problem.days if d >= day))
+        by_cat: dict[PoiCategory, list[int]] = {}
+        for i, n in enumerate(nodes):
+            by_cat.setdefault(n["poi"].category, []).append(i)
+        terms: list = []
+        for cat, idxs in sorted(by_cat.items(), key=lambda kv: kv[0].value):
+            free = max(self._cfg.category_free_count,
+                       -(-len(idxs) // remaining_days))  # ceil
+            if len(idxs) <= free:
+                continue  # 초과 불가능 — 변수 생략
+            excess = m.NewIntVar(0, len(idxs) - free, f"catx_{cat.value}")
+            m.Add(excess >= sum(visit[i] for i in idxs) - free)
+            terms.append(-penalty * excess)
+        return terms
 
     def _meal_soft_terms(self, m: cp_model.CpModel, nodes, visit, start,
                          arcs) -> list:
