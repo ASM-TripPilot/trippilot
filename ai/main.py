@@ -155,6 +155,11 @@ def _event_store():
 
     미설정 = 미배선(None) — 행사 보너스 없이 기존 경로 그대로. 파일은 새벽 배치
     (ai-event-collect)가 collect-state 브랜치에 쌓는 collected_events.json.
+
+    **경로를 줬는데 파일이 없으면 기동 실패**다(_backend_poi_db·_vector_rag 와 같은 규약).
+    JsonEventStore 는 없는 파일을 빈 문서로 삼키고, EventProvider 는 그걸 status=OK·
+    행사 0건으로 내며, 보너스 단계는 빈 목록이라 Degradation 조차 남기지 않는다 —
+    경로 오타 하나가 "배선은 살아 있는데 영구 무보정"이 된다(INV-4: 침묵 실패 금지).
     """
     path = _env("EVENTS_STORE")
     if path is None:
@@ -163,7 +168,13 @@ def _event_store():
 
     from trippilot.background.event_store import JsonEventStore
 
-    return JsonEventStore(_Path(path))
+    store_path = _Path(path)
+    if not store_path.is_file():
+        raise RuntimeError(
+            f"EVENTS_STORE={path!r} 인데 파일이 없다 — 행사 저장소 조립 불가. "
+            "silent fallback 금지: 빈 저장소로 조용히 도는 대신 기동 실패."
+        )
+    return JsonEventStore(store_path)
 
 
 def _vector_rag():

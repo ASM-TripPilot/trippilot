@@ -39,7 +39,7 @@ _ENV_VARS = ("TRIPPILOT_WIRING", "TRIPPILOT_LLM_PROVIDER", "OPENAI_API_KEY",
              "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_API",
              "TRIPPILOT_BACKEND_BASE_URL", "TRIPPILOT_SERVICE_AUTH_TOKEN",
              "TRIPPILOT_VECTOR_DB_URL", "TRIPPILOT_EMBEDDING_PROVIDER",
-             "TRIPPILOT_EMBEDDING_MODEL")
+             "TRIPPILOT_EMBEDDING_MODEL", "EVENTS_STORE")
 
 
 @pytest.fixture(autouse=True)
@@ -420,6 +420,18 @@ def test_events_store_env_wires_readable_store(monkeypatch, tmp_path) -> None:
     assert isinstance(store, JsonEventStore)
     events, truncated = store.search_events(_date(2026, 9, 2), _date(2026, 9, 5))
     assert [e.name for e in events] == ["가을축제"] and truncated is False
+
+
+def test_events_store_missing_file_fails_startup(monkeypatch, tmp_path) -> None:
+    """경로를 줬는데 파일이 없으면 기동 실패 — 빈 저장소로 조용히 도는 것을 막는다.
+
+    JsonEventStore 는 없는 파일을 빈 문서로 삼키고, 그 뒤 EventProvider 는 status=OK·
+    행사 0건을 내며 보너스 단계는 Degradation 조차 남기지 않는다. 경로 오타 하나가
+    영구 무보정이 되는 경로라 조립 단계에서 끊는다 (_vector_rag 와 같은 규약).
+    """
+    monkeypatch.setenv("EVENTS_STORE", str(tmp_path / "없는파일.json"))
+    with pytest.raises(RuntimeError, match="EVENTS_STORE"):
+        main._event_store()
 
 
 def test_shipped_events_store_is_not_empty() -> None:
