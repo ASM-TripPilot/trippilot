@@ -38,22 +38,32 @@ curl -X POST http://localhost:8080/internal/pois/proposals \
 
 `ai-poi-collect` 워크플로가 매일 KST 04:00 에 돌고 산출물을 artifact 로 남긴다(**보존 30일**).
 **자동 갱신 (TRIP-392)**: ai-poi-collect가 매일 병합본을 `chore/poi-data-sync` 브랜치 PR로 올린다
-(merge_pois_docs 멱등 병합 + 축소 가드) — 리뷰 후 머지만 하면 된다. 아래 수동 절차는 백업용.
+(merge_pois_docs 멱등 병합 + 축소 가드) — 리뷰 후 머지만 하면 된다. 아래는 그 자동 경로가 막혔을 때의 수동 백업 절차다.
 
-새 수집분으로 갈아끼우려면(수동 백업 절차 — 갈아끼우기 금지, **병합**할 것):
+artifact 는 **실행 한 번 분량**이고 누적본은 어디에도 없다 — 최신 실행 하나로 갈아끼우면
+앞선 실행에서만 나온 POI 가 조용히 사라진다. 그래서 갈아끼우지 말고 살아있는 artifact 를 모두 받아 **합친다**:
 
 ```bash
-gh run list --workflow=ai-poi-collect.yml --limit 5
-gh run download <RUN_ID> -n collected-pois -D /tmp/poi
-cp /tmp/poi/collected_pois.json ai/data/collected_pois.json
+cd ai
+for id in $(gh api repos/ASM-TripPilot/trippilot/actions/artifacts --paginate \
+              -q '.artifacts[] | select(.name=="collected-pois" and .expired==false) | .id'); do
+  gh api repos/ASM-TripPilot/trippilot/actions/artifacts/$id/zip > /tmp/poi-$id.zip
+  unzip -oq /tmp/poi-$id.zip collected_pois.json -d /tmp/poi/$id
+done
+uv run python scripts/merge_pois_docs.py -o data/collected_pois.json /tmp/poi/*/collected_pois.json
 ```
+
+같은 `content_id` 는 나중 수집분이 이긴다(재제안 = 변경 감지분). 실행별 stats 원문은
+합본의 `merged_from` 에 그대로 남는다 — 합본 `stats` 는 합본에 대해 참인 것만 담는다.
 
 `collect_state.json`(수집 커서)은 **여기 두지 않는다** — 워크플로가 전용 브랜치에 이미 영속한다.
 
 ### 이 파일의 출처
 
-- 워크플로 실행 `32060590511` (2026-08-17 수집분)
-- `schema_version` 1 · `source` TOURAPI · 제안 1,104건 · 광역 17개 지역
+- `ai-poi-collect` 실행 20회 합본 (2026-08-10 ~ 08-21 수집분 — 당시 살아있던 artifact 전부)
+- `schema_version` 1 · `source` TOURAPI · 유니크 제안 13,776건 · 광역 17개 지역
+  (실행별 내역은 문서 안 `merged_from`, 중복 포함 원 제안 수는 21,043건)
+- 사진(`provenance.image_url`) 보유 12,286건 = 89.2% — FOOD 78.2% 로 가장 낮다
 - 스키마 정본: `ai/src/trippilot/poi_curation/sourcing/pipeline.py` 의 `to_output_document`
 
 ---
