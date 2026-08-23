@@ -1,0 +1,13 @@
+{
+  "generated": "2026-08-24",
+  "source": "TRIP-524 백필 — 날짜 시드 14개(2026-08-11~24) × 지역 1곳 × 3일, gpt-5.6-terra",
+  "note": "2026-08-24 PR #327부터 행사 보너스 실경로 반영 — 이후 시계열은 조건 변화 감안",
+  "floors": {
+    "composite": 0.61,
+    "preference_fit": 0.53
+  },
+  "stats": {
+    "composite_mean": 0.7358,
+    "composite_std": 0.0661
+  }
+}
