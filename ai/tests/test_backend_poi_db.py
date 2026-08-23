@@ -7,10 +7,13 @@
      미보유 → open_hours=() (배제 아님 — 풀 빌더 ⑤ 하위 정렬), 소스 MANUAL→SEED
   ④ 빈 배열 → 빈 튜플 (NO_CANDIDATES 를 그대로 보고 — 임의 대체 금지, INV-1)
   ⑤ HTTP 실패·비배열 응답 → BackendPoiDbError (빈 결과로 위장 금지, INV-4)
+     + 백엔드 상태코드를 예외에 실어 경계가 책임 소재를 가르게 한다 (TRIP-436)
   ⑥ 계약 위반 행 1건은 스킵 — 풀 전체를 잃지 않는다
 """
 
 from __future__ import annotations
+
+import urllib.error
 
 import pytest
 
@@ -155,6 +158,45 @@ def test_non_list_response_raises() -> None:
     db, _ = _db({"error": "unexpected"})
     with pytest.raises(BackendPoiDbError, match="배열이 아님"):
         db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+
+
+# ── ⑤' 상태코드를 실어 올린다 — 4xx 는 상대 장애가 아니다 (TRIP-436) ──
+
+
+def _http_error(code: int) -> urllib.error.HTTPError:
+    """UrllibJsonClient 가 실제로 흘리는 예외 형태(urlopen 비2xx) — 실 호출 0."""
+    return urllib.error.HTTPError("http://backend:8080/x", code, "", None, None)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("code", "retryable"),
+    [(400, False), (401, False), (403, False), (404, False), (500, True), (503, True)],
+)
+def test_http_error_carries_status_and_retryability(code: int, retryable: bool) -> None:
+    """4xx 는 우리가 잘못 보낸 것 — 재시도해도 같다. 5xx 만 상대 장애라 재시도 가치가 있다."""
+    db, _ = _db(_http_error(code))
+    with pytest.raises(BackendPoiDbError) as caught:
+        db.find_by_ids(frozenset({PoiId("NOT-A-UUID")}))
+    assert caught.value.status == code
+    assert caught.value.retryable is retryable
+
+
+def test_connection_failure_has_no_status_but_is_retryable() -> None:
+    """연결 실패는 상태코드가 없다 — 상대 장애 쪽으로 수렴한다."""
+    db, _ = _db(OSError("connection refused"))
+    with pytest.raises(BackendPoiDbError) as caught:
+        db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert caught.value.status is None
+    assert caught.value.retryable is True
+
+
+def test_non_list_response_is_not_retryable() -> None:
+    """200 인데 계약 위반 — 재시도해도 같은 응답이라 재시도 신호를 켜지 않는다."""
+    db, _ = _db({"error": "unexpected"})
+    with pytest.raises(BackendPoiDbError) as caught:
+        db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert caught.value.status is None
+    assert caught.value.retryable is False
 
 
 # ── ⑥ 계약 위반 행은 스킵 — 풀 전체를 잃지 않는다 ────────────────────

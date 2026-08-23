@@ -9,6 +9,9 @@
 | 요청 스키마·도메인 불변식 위반 | 422 | false |
 | 고정블록 모순(SolverConflictError, d08) | 409 | false |
 | 컨텍스트 권한 위반(PermissionDeniedError) | 403 | false |
+| 백엔드 POI 조회 4xx(우리가 잘못 보냄) | 422 | false |
+| 백엔드 서비스 토큰 거부(401·403) | 500 | false |
+| 백엔드 장애·연결 실패 | 500 | **true** |
 | 미분류 예외 | 500 | false |
 | 오케스트레이터 미주입 | 503 | false |
 """
@@ -19,6 +22,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from trippilot.api.app import HEALTH_BODY, create_app
+from trippilot.poi_curation.adapters.backend_poi_db import BackendPoiDbError
 from trippilot.solver_engine.facade import SolverConflictError
 from trippilot.domain.context import PermissionDeniedError
 from tests.test_api_contract import BACKEND_REQUEST, FakeOrchestrator, make_outcome
@@ -70,6 +74,65 @@ def test_exception_maps_to_contract_status(exc: Exception, status: int, code: st
     with client(RaisingOrchestrator(exc)) as c:
         response = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST)
     assert_error_body(response, status, code)
+
+
+# ───────── 백엔드 POI 조회 실패 → 상태코드로 책임 소재 분기 (TRIP-436) ─────────
+
+
+def _poi_db_error(status: int | None) -> BackendPoiDbError:
+    """BackendPoiDb 가 실제로 올리는 모양 — 상태코드와 재시도 가치를 함께 싣는다."""
+    return BackendPoiDbError(
+        f"POST /internal/pois/batch-get 실패: HTTP Error {status}: ",
+        status=status,
+        retryable=status is None or status >= 500,
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "http", "code", "retryable"),
+    [
+        # 4xx = 우리가 잘못 보냄(예: UUID 아닌 fixed_blocks[].poi_id) — 상대 장애 아님
+        (400, 422, "VALIDATION_ERROR", False),
+        (404, 422, "VALIDATION_ERROR", False),
+        # 401·403 = 서비스 토큰 설정 문제 — 요청이 아니라 배포가 원인이라 500이되 재시도 무의미
+        (401, 500, "BACKEND_AUTH_ERROR", False),
+        (403, 500, "BACKEND_AUTH_ERROR", False),
+        # 5xx·연결 실패 = 진짜 상대 장애 — 재시도 가치가 있다
+        (500, 500, "BACKEND_UNAVAILABLE", True),
+        (503, 500, "BACKEND_UNAVAILABLE", True),
+        (None, 500, "BACKEND_UNAVAILABLE", True),
+    ],
+)
+def test_backend_poi_db_failure_splits_by_status(
+    status: int | None, http: int, code: str, retryable: bool
+) -> None:
+    with client(RaisingOrchestrator(_poi_db_error(status))) as c:
+        response = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST)
+    assert_error_body(response, http, code, retryable)
+
+
+def test_bad_poi_id_is_422_not_500() -> None:
+    """TRIP-436 회귀 — 잘못된 poi_id 로 백엔드가 400 을 내도 500(상대 고장)으로 승격하지
+    않는다. 500 이면 호출측이 폴백·재시도·알림을 태우는데 고칠 쪽은 우리다."""
+    with client(RaisingOrchestrator(_poi_db_error(400))) as c:
+        body = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST).json()
+    assert "/internal/pois/batch-get" in body["message"]  # 어느 호출인지 남긴다
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_service_token_hint_is_in_message(status: int) -> None:
+    """원인이 명확한 유일한 갈래 — 메시지에서 토큰 설정을 지목한다(TRIP-393)."""
+    with client(RaisingOrchestrator(_poi_db_error(status))) as c:
+        body = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST).json()
+    assert "X-Service-Token" in body["message"]
+
+
+def test_non_list_response_is_not_retryable() -> None:
+    """200 인데 계약 위반 — 재시도해도 같은 응답이라 재시도 신호를 켜지 않는다."""
+    exc = BackendPoiDbError("GET /internal/pois 응답이 배열이 아님: dict")
+    with client(RaisingOrchestrator(exc)) as c:
+        response = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST)
+    assert_error_body(response, 500, "BACKEND_UNAVAILABLE", retryable=False)
 
 
 def test_solver_conflict_precedes_generic_500() -> None:
