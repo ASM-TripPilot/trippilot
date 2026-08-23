@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import os
 import random
@@ -266,6 +267,11 @@ def run(title, store, embedding, pool, llm=None, model_id=None, excluded=frozens
 
 
 def main() -> int:
+    # LoggingTrace 가 GateDropEvent·FallbackEvent·LlmCallRecord 를 logger.info 로 낸다.
+    # basicConfig 가 없으면 한 줄도 안 찍혀서, INV-1 드롭이 실제로 일어났는지를
+    # 사람이 눈으로 확인할 방법이 없다.
+    logging.basicConfig(level=logging.INFO, format="   %(message)s")
+
     dsn = os.environ.get("TRIPPILOT_VECTOR_DB_URL")
     if not dsn:
         print("TRIPPILOT_VECTOR_DB_URL 미설정 — 스모크 불가 (사용법: 스크립트 docstring)",
@@ -279,6 +285,7 @@ def main() -> int:
     for p in pool.pois:
         print(f"  - {p.poi_id} {p.name} [{p.category.value}]")
 
+    llm_ran = False
     store = PgVectorStore(lambda: psycopg.connect(dsn))
     docs = kb_documents(pool)
     embedding = build_embedding()
@@ -288,6 +295,16 @@ def main() -> int:
         r1 = run("① 게이트웨이 미주입 → 규칙 랭킹", store, embedding, pool)
         assert r1["fallback_level"] == 1, r1
         assert "alternative_gateway_absent" in r1["notes"], r1
+        # **R 단계가 실제로 돌았는지 먼저 건다.** 아래 KB-2 단언은 pgvector 가 통째로
+        # 죽어 히트 0건이어도 통과한다 — 풀 순서(indoor 우선)와 저장 장소가 같아서
+        # _rule_ranking 이 히트 없이도 같은 상위 2개를 내기 때문이다. 검색 실패를
+        # 구분하는 건 retrieved 건수와 retrieve_*_error 노트뿐이다.
+        assert all(n.count("retrieve_") == 0 for n in r1["notes"]), (
+            f"KB 검색이 실패했다 — 실 pgvector 관통이 아니다: {r1['notes']}"
+        )
+        assert all(r1["retrieved"].get(kb, 0) > 0 for kb in ("SCHEDULE", "PERSONA", "SITUATION")), (
+            f"KB 3종 중 히트 0건인 것이 있다 — collection 배정·적재를 확인하라: {r1['retrieved']}"
+        )
         # KB-2 저장 장소 2곳이 규칙 랭킹 상위를 차지한다. 둘 사이의 순서는 고정하지
         # 않는다 — 해시 임베딩엔 의미 순위가 없어 검색 순서가 임의(결정론이되 임의)다.
         saved_ids = {
@@ -298,6 +315,7 @@ def main() -> int:
         )
 
         if os.environ.get("LLM_PROVIDER"):
+            llm_ran = True
             adapter, model_id = _build_adapter()
             r2 = run(f"② 실 LLM 선택 (model={model_id})", store, embedding, pool, adapter, model_id)
             assert r2["fallback_level"] == 0, f"실모델인데 폴백: {r2['notes']}"
@@ -308,11 +326,18 @@ def main() -> int:
         ghost = json.dumps({"selections": [{"poiId": "tourapi-000000", "reason": "환각"}]})
         r3 = run("③ 풀 밖 id 응답 → 게이트 드롭 → 규칙 랭킹", store, embedding, pool, CannedLlm(ghost))
         assert r3["fallback_level"] == 1, r3
-        assert any("alternative_fallback" in n for n in r3["notes"]), r3
+        # 사유까지 특정한다. "alternative_fallback" 만 보면 parse_error·timeout·llm_error
+        # 까지 삼켜 ④와 단언이 문자 그대로 같아진다 — 게이트 스키마가 드리프트해
+        # INV-1 출구 게이트가 무력화돼도 이 시나리오가 초록이 된다.
+        assert any("gate_dropped_all" in n for n in r3["notes"]), (
+            f"게이트가 풀 밖 id 를 드롭한 것이 아니다(다른 사유로 폴백): {r3['notes']}"
+        )
 
         r4 = run("④ LLM 장애 → 규칙 랭킹", store, embedding, pool, FailingLlm())
         assert r4["fallback_level"] == 1, r4
-        assert any("alternative_fallback" in n for n in r4["notes"]), r4
+        assert any("llm_error" in n for n in r4["notes"]), (
+            f"LLM 장애가 아닌 다른 사유로 폴백했다: {r4['notes']}"
+        )
 
         r5 = run("⑤ 후보 전량 제외 → 대안 0 + 사유", store, embedding, pool,
                  excluded=frozenset(p.poi_id for p in pool.pois))
@@ -321,7 +346,11 @@ def main() -> int:
         for doc in docs:
             store.delete(KB_COLLECTIONS[doc.kb], doc.doc_id)
 
-    print("\n✅ PlanB 리허설 통과 — INV-1·INV-2·INV-3·INV-4 위반 없음")
+    # ②를 건너뛰면 **실 LLM 산출물에 INV-1 을 건 시나리오가 0개**다(나머지는 전부
+    # 규칙 랭킹 산출이라 정의상 풀 안). 배너가 그 사실을 감추지 않게 한다.
+    ran = "5종" if llm_ran else "4종(② 생략 — LLM_PROVIDER 미설정)"
+    scope = "INV-1·INV-2·INV-3·INV-4" if llm_ran else "INV-3·INV-4 (실 LLM 산출 INV-1 미검증)"
+    print(f"\n✅ PlanB 리허설 통과 — {ran} · {scope} 위반 없음")
     return 0
 
 
