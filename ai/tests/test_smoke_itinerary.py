@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from smoke_itinerary import (  # noqa: E402
     RehearsalError,
+    _check_baseline,
     _request_body,
     Selection,
     SelectionError,
@@ -187,10 +188,15 @@ def test_rehearsal_passthrough_and_result_schema():
         selection, llm=UnwiredLlm(), model_id="dev-unwired", smoke_date=smoke_date
     )
     assert set(result) == {
-        "date", "region", "anchor", "poi_names", "slots",
+        "date", "days", "region", "anchor", "poi_names", "slots",
         "solve_mode", "is_fallback", "llm_used", "llm_calls", "llm_ok_calls",
-        "weather", "latency_ms",
+        "weather", "latency_ms", "quality",
     }
+    # 품질 부기 (TRIP-524) — 규칙 강등 경로에서도 solve 성공이면 점수가 실린다
+    assert set(result["quality"]) == {
+        "preference_fit", "route_efficiency", "composite"}
+    for v in result["quality"].values():
+        assert 0.0 <= v <= 1.0
     # UnwiredLlm 은 매번 예외 → 시도는 세고 성공은 0 (비용은 시도 기준)
     assert result["llm_calls"] >= 1 and result["llm_ok_calls"] == 0
     assert result["llm_used"] is False
@@ -209,6 +215,34 @@ def test_rehearsal_passthrough_and_result_schema():
         assert slot["poi_id"] in ids  # 슬롯 poi ⊆ 선택 집합 (INV-1 사영)
         assert slot["name"] == ids[slot["poi_id"]]
     assert "legs" not in result  # 실경로 검증은 별도 선택 단계 (TRIP-382)
+
+
+def test_check_baseline_floors_fail_stats_warn_none_skipped():
+    """⑦ 품질 게이트 (TRIP-524) — floors 위반=FAIL, 3σ 이탈=WARNING,
+    quality 없는 결과(부기 미방출)는 게이트 대상 아님."""
+    results = [
+        {"region": "저품질구", "quality": {
+            "composite": 0.30, "preference_fit": 0.20, "route_efficiency": 0.5}},
+        {"region": "정상구", "quality": {
+            "composite": 0.80, "preference_fit": 0.90, "route_efficiency": 0.5}},
+        {"region": "무점수구", "quality": None},
+    ]
+    baseline = {
+        "floors": {"composite": 0.5, "preference_fit": 0.3},
+        "stats": {"composite_mean": 0.80, "composite_std": 0.05},
+    }
+    failures, warnings = _check_baseline(results, baseline)
+    assert any("저품질구 composite" in f for f in failures)
+    assert any("저품질구 preference_fit" in f for f in failures)
+    assert not any("정상구" in f for f in failures)
+    assert any("저품질구" in w for w in warnings)  # 0.30 vs 0.80±0.05 → 3σ 이탈
+    assert not any("무점수구" in x for x in failures + warnings)
+
+
+def test_check_baseline_empty_baseline_gates_nothing():
+    results = [{"region": "A", "quality": {
+        "composite": 0.01, "preference_fit": 0.01, "route_efficiency": 0.01}}]
+    assert _check_baseline(results, {}) == ([], [])
 
 
 def test_request_body_builds_three_day_trip_without_deadline():

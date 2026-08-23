@@ -204,6 +204,12 @@ class SolverRunRecord:
     elapsed_ms: int
     violations_found: int
     repaired: bool
+    # 품질 점수 부기 (TRIP-524) — 반환 해에 부착되는 QualityScore의 사영.
+    # constraint_satisfaction은 violations_found로 유도 가능해 싣지 않는다.
+    # None = 점수 미계산 경로(레거시 발행처·repair 실패 등).
+    quality_preference_fit: float | None = None
+    quality_route_efficiency: float | None = None
+    quality_composite: float | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -214,6 +220,9 @@ class SolverRunRecord:
             "elapsed_ms": self.elapsed_ms,
             "violations_found": self.violations_found,
             "repaired": self.repaired,
+            "quality_preference_fit": self.quality_preference_fit,
+            "quality_route_efficiency": self.quality_route_efficiency,
+            "quality_composite": self.quality_composite,
         }
 
     @classmethod
@@ -226,6 +235,10 @@ class SolverRunRecord:
             elapsed_ms=d["elapsed_ms"],
             violations_found=d["violations_found"],
             repaired=d["repaired"],
+            # .get — 부기 이전(TRIP-524 전) 직렬화본과의 호환
+            quality_preference_fit=d.get("quality_preference_fit"),
+            quality_route_efficiency=d.get("quality_route_efficiency"),
+            quality_composite=d.get("quality_composite"),
         )
 
 

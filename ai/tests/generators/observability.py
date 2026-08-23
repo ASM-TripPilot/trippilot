@@ -111,6 +111,9 @@ def score_chunk_events() -> st.SearchStrategy[ScoreChunkEvent]:
 
 
 def solver_run_records() -> st.SearchStrategy[SolverRunRecord]:
+    # 품질 부기(TRIP-524)는 선택 필드 — None(미계산 경로) 포함. NaN은 왕복
+    # 동등성 비교를 깨므로 제외 (점수 정의역도 [0,1]).
+    quality = st.one_of(st.none(), st.floats(0.0, 1.0, allow_nan=False))
     return st.builds(
         SolverRunRecord,
         trace_id=st.builds(TraceId, st.text(min_size=1, max_size=12)),
@@ -120,6 +123,9 @@ def solver_run_records() -> st.SearchStrategy[SolverRunRecord]:
         elapsed_ms=st.integers(0, 30000),
         violations_found=st.integers(0, 20),
         repaired=st.booleans(),
+        quality_preference_fit=quality,
+        quality_route_efficiency=quality,
+        quality_composite=quality,
     )
 
 

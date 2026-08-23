@@ -161,6 +161,10 @@ class HybridSolverFacade:
                 self._emit_fallback(tid, stage.name, next_name,
                                     f"invalid:{len(violations)}")
                 continue
+            # 유일 수렴 반환점 — 모든 경로(OR-Tools·LLM·규칙 폴백)에 품질 점수 부착
+            # (§3.7, TRIP-261). regenerate()도 solve() 경유라 함께 커버된다.
+            # 점수를 emit 전에 계산해 레코드에도 동봉한다 (TRIP-524 — 리허설 관측).
+            score = compute_quality(result, problem, self._pois, self._est)
             self._trace.emit(SolverRunRecord(
                 trace_id=tid,
                 occurred_at=datetime.now(timezone.utc),
@@ -169,13 +173,11 @@ class HybridSolverFacade:
                 elapsed_ms=deadline_ms - remaining(),
                 violations_found=0,
                 repaired=False,
+                quality_preference_fit=score.preference_fit,
+                quality_route_efficiency=score.route_efficiency,
+                quality_composite=score.composite,
             ))
-            # 유일 수렴 반환점 — 모든 경로(OR-Tools·LLM·규칙 폴백)에 품질 점수 부착
-            # (§3.7, TRIP-261). regenerate()도 solve() 경유라 함께 커버된다.
-            return replace(
-                result,
-                score=compute_quality(result, problem, self._pois, self._est),
-            )
+            return replace(result, score=score)
         # RuleFallback이 체인에 있으면 시한과 무관하게 도달 불가(TRIP-291).
         # 도달 = 유효 해 자체가 없음(모순 입력) — "시간이 없어서"는 이유가 될 수 없다.
         raise SolverConflictError("모든 단계 실패 — 고정 블록 모순 등 입력 확인 필요")

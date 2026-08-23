@@ -137,6 +137,20 @@ jobs:
             rm -f collected_events.json.tmp
             echo "::notice::행사 저장소 없음 — 행사 보너스 없이 진행"
           fi
+      - name: 품질 기준선 복원 (collect-state → rehearsal_baseline.json, TRIP-524)
+        # 선택 단계 — 없으면 게이트 없이 리허설 진행 (기준선 부재 ≠ 실패).
+        # 기준선 파일은 백필 배치에서 도출해 collect-state에 수동 커밋한다.
+        if: steps.fetch-pois.outputs.skipped != 'true'
+        run: |
+          rm -f rehearsal_baseline.json rehearsal_baseline.json.tmp
+          if git fetch origin collect-state 2>/dev/null \
+             && git show FETCH_HEAD:rehearsal_baseline.json > rehearsal_baseline.json.tmp 2>/dev/null; then
+            mv rehearsal_baseline.json.tmp rehearsal_baseline.json
+            echo "::notice::품질 기준선 복원 — floors 게이트 활성"
+          else
+            rm -f rehearsal_baseline.json.tmp
+            echo "::notice::품질 기준선 없음 — 게이트 없이 진행"
+          fi
       - name: 일정 생성 리허설 (랜덤 지역 6~8 POI → generate 관통)
         if: steps.fetch-pois.outputs.skipped != 'true'
         env:
@@ -158,6 +172,8 @@ jobs:
           WEATHER_API: ${{ secrets.WEATHER_API }}
           # TRIP-421 — 있으면 행사 근접 보너스 주입, 없으면 무보정
           EVENTS_STORE: collected_events.json
+          # TRIP-524 — 있으면 품질 floors 게이트(FAIL)·3σ 회귀(WARNING), 없으면 무게이트
+          SMOKE_BASELINE_JSON: rehearsal_baseline.json
         run: uv run python scripts/smoke_itinerary.py
       - name: 잡 서머리 (리허설 시각표)
         if: steps.fetch-pois.outputs.skipped != 'true'
