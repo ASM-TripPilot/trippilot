@@ -7,9 +7,9 @@
   ① `build_pool`     — 지역 필터·실내 우선·상한 8·부족 시 명시 실패
   ② `kb_documents`   — doc_id 유일·kb 라벨·풀 밖 참조 1건(INV-1 음성 픽스처)
   ③ `HashEmbedding`  — 결정론·1024차원(BR-AF-09)·서로 다른 텍스트 분리
-  ④ **단언 공허성 회귀 방지** — "KB-2 저장 장소가 규칙 랭킹 상위 2순위"는 KB 검색이
-     전멸해도 통과한다(풀 상위 2 == 저장 장소이므로). 그 커플링을 여기서 못 박아,
-     누가 풀 구성이나 저장 장소 선정을 바꾸면 **테스트가 먼저 깨지게** 한다.
+  ④ **단언 공허성 회귀 방지** — 저장 장소를 풀 **하위**에서 뽑아 커플링을 끊었다.
+     풀 상위와 겹치면 "KB-2 가 상위 2순위" 단언이 KB 검색 전멸에도 통과하므로,
+     겹치지 않음을 속성으로 못 박는다. 검색이 죽으면 상위 2가 실제로 달라진다.
   ⑤ 폴백 사유 구분 — 게이트 드롭(③ 시나리오)과 LLM 장애(④ 시나리오)가 서로 다른
      노트를 남긴다. 한쪽 단언이 다른 쪽까지 삼키면 시나리오가 초록인 채 죽는다.
 
@@ -47,7 +47,8 @@ from tests.generators.poi import candidate_pools, pois
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from smoke_planb import (  # noqa: E402
+from smoke_planb import (
+    MIN_INDOOR,  # noqa: E402
     DIM,
     DOC_PREFIX,
     INDOOR,
@@ -177,11 +178,21 @@ def test_build_pool_실내는_5곳_풀은_8곳이_상한():
     ]
 
 
-def test_build_pool_실내가_부족하면_야외가_자리를_채운다():
-    pool = _pool(indoor=1, outdoor=9)
+def test_build_pool_실내가_상한_미만이면_야외가_자리를_채운다():
+    """실내가 상한(5)에 못 미치면 남은 자리를 야외가 채운다. 다만 실내는 MIN_INDOOR
+    이상이어야 한다 — 그 아래는 build_pool 이 아예 거부한다(아래 테스트)."""
+    pool = _pool(indoor=MIN_INDOOR, outdoor=9)
     assert len(pool.pois) == 8
     assert [str(p.poi_id) for p in pool.pois][0] == "in-0"
-    assert sum(1 for p in pool.pois if p.category.value in INDOOR) == 1
+    assert sum(1 for p in pool.pois if p.category.value in INDOOR) == MIN_INDOOR
+
+
+def test_build_pool_실내가_MIN_INDOOR_미만이면_거부한다():
+    """저장 장소(실내 하위 2곳)가 풀 상위 2곳과 겹치면 시나리오 ① 단언이 KB 검색 없이도
+    통과한다 — 조용히 옛 결함으로 돌아가는 경로라 풀 생성 시점에 끊는다."""
+    for n in range(MIN_INDOOR):
+        with pytest.raises(SystemExit, match="리허설이 성립하지 않는다"):
+            _pool(indoor=n, outdoor=9)
 
 
 def test_build_pool_야외가_없으면_실내만으로_5곳():
@@ -219,17 +230,35 @@ def _shuffled_entries(draw):
     return tuple(entries), tuple(draw(st.permutations(entries)))
 
 
+def _eligible(entries) -> list:
+    """build_pool 과 같은 선별 규칙 — 지역 일치 + MINIMAL 제외.
+
+    build_pool 은 실 풀 빌더(poi_curation/pool_builder.py)와 맞춰 MINIMAL 을 거른다
+    (domain/poi.py 정본: "MINIMAL 은 후보 풀에서 제외(M7 필터)"). 테스트 가드가 이 규칙을
+    같이 세지 않으면, MINIMAL 이 섞인 입력에서 build_pool 이 SystemExit 하는데 테스트는
+    풀이 만들어질 거라 기대해 깨진다.
+    """
+    return [p for p, r in entries if r == _REGION and p.quality is not DataQuality.MINIMAL]
+
+
+def _makes_pool(entries) -> bool:
+    """build_pool 이 SystemExit 없이 풀을 만드는 조건 — 적격 3곳 이상 + 실내 MIN_INDOOR 이상."""
+    here = _eligible(entries)
+    return len(here) >= 3 and sum(1 for p in here if p.category.value in INDOOR) >= MIN_INDOOR
+
+
 @settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
 @given(_shuffled_entries())
 def test_build_pool_구조_규칙은_입력_순서와_무관하다(pair):
     """PBT — 뽑히는 POI는 입력 순서에 따라 달라지지만, 구성 규칙은 불변이다.
 
-    (품질 필터는 여기 없다 — build_pool은 DataQuality.MINIMAL도 그대로 담는다.
-    리허설 풀은 M7 후보 풀이 아니다.)
+    품질 필터가 있다 — build_pool 은 MINIMAL 을 거른다(실 풀 빌더와 같은 규칙).
+    리허설 풀은 M7 후보 풀을 흉내 내야 한다: 실서비스에 못 들어올 POI 로 리허설을
+    돌면 초록이 의미를 잃는다.
     """
     entries, shuffled = pair
-    here = [p for p, r in entries if r == _REGION]
-    if len(here) < 3:
+    here = _eligible(entries)
+    if not _makes_pool(entries):
         for candidate in (entries, shuffled):
             with pytest.raises(SystemExit):
                 build_pool(candidate, _REGION)
@@ -253,8 +282,7 @@ def test_build_pool_구조_규칙은_입력_순서와_무관하다(pair):
 @given(_shuffled_entries())
 def test_build_pool_같은_입력이면_같은_풀(pair):
     entries, _ = pair
-    here = [p for p, r in entries if r == _REGION]
-    if len(here) < 3:
+    if not _makes_pool(entries):
         return
     first, second = build_pool(entries, _REGION), build_pool(entries, _REGION)
     assert [str(p.poi_id) for p in first.pois] == [str(p.poi_id) for p in second.pois]
@@ -292,28 +320,27 @@ def test_kb_documents_풀_밖_저장장소가_정확히_한_건():
     assert outside[0].poi_ref == "tourapi-000000"
 
 
-def test_저장장소는_풀_상위_2곳과_같다__스모크_시나리오1_단언의_전제():
-    """**이 등식이 깨지면 스모크 ① 단언의 전제가 바뀐 것이다.**
+def test_저장장소는_풀_상위와_겹치지_않는다__스모크_시나리오1_단언의_전제():
+    """**이 서로소 성질이 깨지면 스모크 ① 단언이 공허해진다.**
 
-    build_pool은 풀을 `indoor[:5] + outdoor[:3]` 순으로 만들고, kb_documents는 같은
-    `indoor[:2]`를 '저장 장소'로 고른다 — 즉 저장 장소 == 풀 상위 2곳이다. 그래서
-    "KB-2 저장 장소가 규칙 랭킹 상위 2순위" 단언은 KB 검색이 전멸해도 통과한다
-    (아래 test_KB_검색이_전멸해도_… 가 그 사실을 실제로 재현한다).
+    build_pool 은 풀을 `indoor[:5] + outdoor[:3]` 순으로 만든다. 저장 장소를 `indoor[:2]`
+    로 뽑으면 저장 장소 == 풀 상위 2곳이 되어, "KB-2 저장 장소가 규칙 랭킹 상위 2순위"
+    단언이 **KB 검색이 전멸해도 통과**한다(규칙 랭킹이 풀 순서로 떨어지므로).
 
-    풀 구성이나 저장 장소 선정을 바꾸려는 사람은 스모크 ①의 보조 단언(retrieved 건수·
-    retrieve_*_error 노트)도 함께 다시 봐야 한다 — 그것들이 검색 성패를 구분하는
-    유일한 신호다.
+    그래서 `saved_places` 는 `indoor[-2:]` — 풀 **하위** 실내 2곳을 고른다. 그러면 검색이
+    죽었을 때 상위 2가 실제로 달라진다(아래 test_KB_검색이_전멸하면_… 이 그것을 재현).
     """
     pool = _pool()
-    docs = kb_documents(pool)
-    assert _saved_refs(docs) == [str(p.poi_id) for p in pool.pois[:2]]
+    saved = set(_saved_refs(kb_documents(pool)))
+    top2 = {str(p.poi_id) for p in pool.pois[:2]}
+    assert saved and not (saved & top2)
 
 
-def test_실내_후보가_2곳_미만이면_저장장소_문서도_2건_미만():
-    """SMOKE_REGION 의존 — 실내가 얇은 지역에서는 스모크 ①의 '상위 2순위' 단언이
-    성립할 수 없다(비교 대상 자체가 1건). 테스트가 아니라 스모크 실행이 깨지는 지점."""
-    docs = kb_documents(_pool(indoor=1, outdoor=5))
-    assert len(_saved_refs(docs)) == 1
+def test_저장장소는_풀이_만들어졌다면_항상_2건():
+    """실내가 얇은 지역은 `build_pool` 이 거부하므로(MIN_INDOOR), 풀이 만들어진 이상
+    저장 장소는 언제나 2건이다 — 예전처럼 '1건뿐이라 단언이 성립 안 함' 상태가 없다."""
+    for n in (MIN_INDOOR, MIN_INDOOR + 1, 7):
+        assert len(_saved_refs(kb_documents(_pool(indoor=n, outdoor=3)))) == 2
 
 
 @settings(max_examples=40, suppress_health_check=[HealthCheck.too_slow])
@@ -328,15 +355,20 @@ def test_kb_documents_doc_id는_어떤_풀에서도_유일하다(pool):
 
 @settings(max_examples=40, suppress_health_check=[HealthCheck.too_slow])
 @given(_shuffled_entries())
-def test_저장장소는_항상_풀_앞에서부터_실내_2곳(pair):
-    """PBT — 위 예시 테스트(전제 고정)를 임의 입력으로 확장. 실내가 먼저 오므로
-    저장 장소는 언제나 `pool.pois[:k]` (k = min(2, 풀 안 실내 수))이다."""
+def test_저장장소는_실내가_충분하면_풀_상위와_서로소(pair):
+    """PBT — 위 예시 테스트를 임의 입력으로 확장.
+
+    `saved_places` 는 실내 목록의 **뒤에서** 2곳을 고른다. 실내가 3곳 이하면 구조적으로
+    겹치므로(n=3 은 1곳, n=2 는 완전히 같다) `build_pool` 이 `MIN_INDOOR` 로 아예 끊는다.
+    따라서 풀이 만들어졌다면 서로소는 **조건 없이** 성립한다.
+    """
     entries, _ = pair
-    if len([p for p, r in entries if r == _REGION]) < 3:
+    if not _makes_pool(entries):
         return
     pool = build_pool(entries, _REGION)
-    k = min(2, sum(1 for p in pool.pois if p.category.value in INDOOR))
-    assert _saved_refs(kb_documents(pool)) == [str(p.poi_id) for p in pool.pois[:k]]
+    saved = set(_saved_refs(kb_documents(pool)))
+    top2 = {str(p.poi_id) for p in pool.pois[:2]}
+    assert saved and not (saved & top2)
 
 
 # ── ③ HashEmbedding ─────────────────────────────────────────────────────
@@ -408,16 +440,15 @@ def test_KB_적재가_정상이면_3종_모두_히트하고_에러노트가_없�
     )
 
 
-def test_KB_검색이_전멸해도_상위2는_저장장소와_같다():
-    """**차단 결함 ①의 재현 테스트.**
+def test_KB_검색이_전멸하면_상위2가_저장장소와_달라진다():
+    """**차단 결함 ①이 고쳐졌다는 증거.**
 
-    스토어가 통째로 죽어 KB 히트가 0건이어도, 규칙 랭킹은 풀 순서를 그대로 내므로
-    상위 2개가 저장 장소와 일치한다 → "KB-2가 상위 2순위" 단언만으로는 검색 성공과
-    실패를 구분할 수 없다. 검색 실패를 잡는 신호는 `retrieved` 건수와
-    `retrieve_*_error` 노트뿐이며, 스모크 ①은 그 둘을 함께 건다.
+    스토어가 통째로 죽어 KB 히트가 0건이면 규칙 랭킹은 풀 순서를 그대로 낸다. 저장 장소가
+    풀 **하위**이므로 상위 2개는 저장 장소와 달라진다 → 스모크 ①의 "KB-2 가 상위 2순위"
+    단언이 **검색 실패를 실제로 잡는다**.
 
-    이 테스트가 깨진다면(= 검색 전멸 시 상위 2가 달라진다면) 스모크 ①의 보조 단언은
-    더 이상 '추가 안전망'이 아니라 유일한 신호가 아니게 된 것이니, 단언 구성을 다시 보라.
+    수정 전에는 저장 장소 == 풀 상위 2곳이라 검색이 전멸해도 그 단언이 통과했다.
+    이 테스트가 깨진다면 커플링이 되살아난 것이다.
     """
     pool = _pool()
     result = pipeline(_DeadStore(), HashEmbedding(), None, None).run(_request(pool))
@@ -427,8 +458,8 @@ def test_KB_검색이_전멸해도_상위2는_저장장소와_같다():
         "retrieve_schedule_error",
         "retrieve_situation_error",
     ]
-    # ↓ 검색이 전멸했는데도 통과하는 단언 — 이것이 공허했던 지점이다
-    assert {str(a.poi_ids[0]) for a in result.alternatives[:2]} == set(
+    # ↓ 검색 전멸 시 상위 2가 저장 장소와 다르다 — 단언이 더는 공허하지 않다
+    assert {str(a.poi_ids[0]) for a in result.alternatives[:2]} != set(
         _saved_refs(kb_documents(pool))
     )
 

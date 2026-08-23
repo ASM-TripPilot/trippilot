@@ -86,6 +86,10 @@ DIM = 1024  # kb_vectors DDL 고정 (docker/vector-init/01-kb-vectors.sql)
 NOW = datetime.now(timezone.utc)
 TID = TraceId("smoke-planb")
 POOL_SIZE = 8
+# saved_places 가 고르는 '실내 하위 2곳' 이 풀 상위 2곳과 겹치지 않으려면 실내 ≥ 4 여야 한다
+# (n=3 이면 1곳 겹치고, n=2 면 완전히 같다). 겹치면 시나리오 ① 단언이 KB 검색 없이도
+# 통과한다 — 조용히 옛 결함으로 돌아가는 경로라 풀 생성 시점에 끊는다.
+MIN_INDOOR = 4
 INDOOR = ("CULTURE", "CAFE", "FOOD")
 DOC_PREFIX = "smoke-planb"  # 실 collection 을 쓰므로 접두로 격리하고 끝에 지운다
 PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
@@ -184,20 +188,39 @@ def load_entries() -> tuple[tuple[Poi, str | None], ...]:
 
 def build_pool(entries, region: str) -> CandidatePool:
     """시군구 하나에서 실내 5 + 야외 3 — 폴백이 트리거를 보는지 눈에 보이게 섞는다."""
-    here = [p for p, r in entries if r == region]
+    # 품질 필터 — 실 풀 빌더(poi_curation/pool_builder.py)와 같은 규칙. domain/poi.py 정본:
+    # "MINIMAL 은 후보 풀에서 제외 (M7 필터)". 안 거르면 실서비스에 못 들어올 POI 로 리허설을 돈다.
+    here = [p for p, r in entries if r == region and p.quality is not DataQuality.MINIMAL]
     indoor = [p for p in here if p.category.value in INDOOR][:5]
     outdoor = [p for p in here if p.category.value not in INDOOR][: POOL_SIZE - len(indoor)]
     pois = tuple(indoor + outdoor)
     if len(pois) < 3:
         raise SystemExit(f"{region} POI 부족({len(pois)}곳) — SMOKE_REGION 을 바꿔라")
+    if len(indoor) < MIN_INDOOR:
+        raise SystemExit(
+            f"{region} 실내 POI {len(indoor)}곳 — 리허설이 성립하지 않는다(≥{MIN_INDOOR} 필요). "
+            "저장 장소(실내 하위 2곳)가 풀 상위와 겹쳐 시나리오 ① 단언이 공허해진다. "
+            "SMOKE_REGION 을 실내 POI 가 더 많은 곳으로."
+        )
     return CandidatePool(
         poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=NOW
     )
 
 
+def saved_places(pool: CandidatePool) -> list:
+    """KB-2 가 '저장 장소'로 가리킬 POI — **풀 하위**에서 뽑는다.
+
+    풀 상위에서 뽑으면 안 된다. 규칙 랭킹은 KB-2 히트가 0건이어도 풀 순서로 떨어지므로,
+    저장 장소가 곧 풀 상위면 "KB-2 가 순위를 바꿨다"와 "그냥 풀 순서대로 나왔다"가
+    구별되지 않는다 — 시나리오 ①의 단언이 KB-2 검색을 아예 안 해도 통과하게 된다.
+    """
+    indoor = [p for p in pool.pois if p.category.value in INDOOR]
+    return indoor[-2:]
+
+
 def kb_documents(pool: CandidatePool) -> list[KbDocument]:
     """KB 3종. KB-2 는 풀 안 2곳을 '저장 장소'로 참조 — 규칙 랭킹의 1순위 신호."""
-    saved = [p for p in pool.pois if p.category.value in INDOOR][:2]
+    saved = saved_places(pool)
     docs = [
         KbDocument(KbKind.SCHEDULE, f"{DOC_PREFIX}-sched-1",
                    "오후 야외 산책 슬롯 (고정 아님, 대체 가능)", None, {}),
@@ -307,9 +330,7 @@ def main() -> int:
         )
         # KB-2 저장 장소 2곳이 규칙 랭킹 상위를 차지한다. 둘 사이의 순서는 고정하지
         # 않는다 — 해시 임베딩엔 의미 순위가 없어 검색 순서가 임의(결정론이되 임의)다.
-        saved_ids = {
-            str(p.poi_id) for p in [p for p in pool.pois if p.category.value in INDOOR][:2]
-        }
+        saved_ids = {str(p.poi_id) for p in saved_places(pool)}
         assert {a["poi_ids"][0] for a in r1["alternatives"][:2]} == saved_ids, (
             "KB-2 저장 장소가 규칙 랭킹 상위 2순위여야 한다"
         )
