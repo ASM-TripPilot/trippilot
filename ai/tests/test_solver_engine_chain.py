@@ -156,6 +156,10 @@ def test_success_emits_solver_run_record() -> None:
     assert len(records) == 1
     assert records[0].solve_mode == result.solve_mode     # 출처 보존
     assert records[0].violations_found == 0
+    # 품질 부기(TRIP-524) — 레코드의 점수 = 반환 해에 부착된 점수 (동일 계산 1회)
+    assert records[0].quality_composite == result.score.composite
+    assert records[0].quality_preference_fit == result.score.preference_fit
+    assert records[0].quality_route_efficiency == result.score.route_efficiency
 
 
 def test_empty_chain_raises_conflict() -> None:

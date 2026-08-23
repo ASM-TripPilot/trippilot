@@ -35,9 +35,13 @@ tests/test_smoke_itinerary.py 가 fake 데이터로만 검증한다 (실 호출 
                       TMAP 실경로로 실측해 기록 JSON에 legs(추정 대 실측 오차)를
                       추가한다. 키 부재·API 실패는 검증만 생략(WARNING) — 리허설
                       성패와 분리. 실측 호출은 리허설 실행시에만 (D37 — pytest는 fake)
+    SMOKE_BASELINE_JSON 선택 (TRIP-524) — 기준선 파일. floors 위반 = FAIL(임계
+                      경보), stats 3σ 이탈 = WARNING. 파일 부재 시 게이트 없음.
+                      품질점수 시계열 자체는 rehearsal_log.jsonl(TRIP-372)에 자동 누적
 
 종료 코드: 0 = 생성 200 + 검사(슬롯≥1 · INV-1 · INV-3) 통과 — LLM 실패로 규칙 점수
-강등돼도 성공(정직한 강등, INV-4). 1 = 선택 불가·생성 실패·검사 위반 (원인 출력).
+강등돼도 성공(정직한 강등, INV-4). 1 = 선택 불가·생성 실패·검사 위반 (원인 출력),
+또는 기준선 floors 위반 (SMOKE_BASELINE_JSON 설정 시 — TRIP-524).
 """
 
 from __future__ import annotations
@@ -253,6 +257,18 @@ class RecordingWeather:
         return result
 
 
+class CollectingTrace:
+    """TracePort — SolverRunRecord의 품질 점수 부기(TRIP-524)를 in-process로
+    취득한다. 점수는 API 응답에 없으므로(INV-3 인접 — schemas.py 참조) 이 싱크가
+    유일한 취득 경로다. emit은 계약상 예외를 던지지 않는다."""
+
+    def __init__(self) -> None:
+        self.records: list = []
+
+    def emit(self, event: object) -> None:
+        self.records.append(event)
+
+
 class RehearsalError(Exception):
     """생성 실패 또는 검사(슬롯≥1 · INV-1 · INV-3) 위반."""
 
@@ -327,8 +343,10 @@ def run_rehearsal(
 
     recorder = RecordingLlm(llm)
     weather_recorder = RecordingWeather(weather) if weather is not None else None
+    trace = CollectingTrace()  # 품질 점수 취득 (TRIP-524) — 로그 싱크 대체
     orchestrator = build_orchestrator(
         llm=recorder,
+        trace=trace,
         poi_db=StaticPoiDb(selection.pois),
         context_store=StaticPersonaStore(
             PersonaSummary(taste_tags=(), companion=CompanionType.SOLO,
@@ -364,9 +382,21 @@ def run_rehearsal(
             f"선택 집합 밖 POI 배치 — INV-1 위반: {sorted(placed_ids - selected_ids)}"
         )
 
+    # 마지막 solve 성공 레코드의 품질 부기 — 2단계 생성이면 최종(잔여일) 해 기준.
+    # 세 필드 전부 있어야 채택 — 부분 부기 레코드(미래 방출처)가 출력 포맷·게이트를
+    # TypeError로 죽이지 않게 (전 지역 격리 우회 방지).
+    quality = next(
+        (r for r in reversed(trace.records)
+         if getattr(r, "quality_composite", None) is not None
+         and r.quality_preference_fit is not None
+         and r.quality_route_efficiency is not None),
+        None,
+    )
+
     names = {str(p.poi_id): p.name for p in selection.pois}
     return {
         "date": smoke_date.isoformat(),
+        "days": days,
         "region": selection.region,
         "anchor": {
             "poi_id": str(selection.anchor.poi_id),
@@ -392,6 +422,16 @@ def run_rehearsal(
         # 오케스트레이터가 실제 쓴 예보 (TRIP-409) — 미주입·조회 실패면 None
         "weather": weather_recorder.forecast if weather_recorder else None,
         "latency_ms": latency_ms,
+        # 품질 점수 (TRIP-524, 결정2) — 트레이스 부기에서 취득. None = 미방출
+        # (레코드 부기 이전 코드 경로) — 침묵하지 않고 None으로 남긴다.
+        "quality": (
+            {
+                "preference_fit": quality.quality_preference_fit,
+                "route_efficiency": quality.quality_route_efficiency,
+                "composite": quality.quality_composite,
+            }
+            if quality is not None else None
+        ),
     }
 
 
@@ -514,6 +554,40 @@ def attach_leg_verification(
 
 
 # ── CLI ──────────────────────────────────────────────────────────────
+
+
+# ── 품질 관측 (TRIP-524, 결정2) — 기준선 게이트 ──────────────────────────
+# 시계열 누적은 별도 장치가 없다: quality가 결과 dict에 실리면서 기존
+# rehearsal_log.jsonl(collect-state, TRIP-372) append에 자동으로 포함된다.
+
+
+def _check_baseline(results: list[dict], baseline: dict) -> tuple[list[str], list[str]]:
+    """(failures, warnings). floors 위반 = FAIL(임계 경보 A) —
+    바닥은 백필 분포(14 날짜 시드)에서 도출. stats 3σ 이탈 = WARNING(기준선 회귀 B).
+    quality 없는 결과(부기 미방출)는 게이트 대상 아님 — CSV에 None으로 남는 것으로 관측."""
+    floors = baseline.get("floors", {})
+    stats = baseline.get("stats", {})
+    failures: list[str] = []
+    warnings: list[str] = []
+    for r in results:
+        q = r.get("quality")
+        if q is None:
+            continue
+        for key in ("composite", "preference_fit"):
+            floor = floors.get(key)
+            if floor is not None and q[key] < floor:
+                failures.append(f"{r['region']} {key}={q[key]:.3f} < 바닥 {floor}")
+        mean = stats.get("composite_mean")
+        std = stats.get("composite_std")
+        # std 0·부재 = 회귀 검사 생략 — 분산 0 기준선의 전원 경보 방지.
+        # 바닥은 floors가 계속 지킨다.
+        if mean is not None and std:
+            if abs(q["composite"] - mean) > 3 * std:
+                warnings.append(
+                    f"{r['region']} composite={q['composite']:.3f} — "
+                    f"기준선 {mean:.3f}±{std:.3f} 3σ 이탈"
+                )
+    return failures, warnings
 
 
 def _optional(name: str) -> str | None:
@@ -664,10 +738,14 @@ def main() -> int:
             print(f"[rehearsal] 예보(강수확률%): {result['weather']}")
         attach_leg_verification(result, sel, travel, estimator)
         results.append(result)
+        q = result.get("quality")
+        quality_txt = (f" quality={q['composite']:.3f}"
+                       f"(pref {q['preference_fit']:.3f}"
+                       f"·route {q['route_efficiency']:.3f})" if q else "")
         print(f"[rehearsal] PASS {sel.region} solve_mode={result['solve_mode']} "
               f"is_fallback={result['is_fallback']} "
               f"llm={result['llm_calls']}콜(성공 {result['llm_ok_calls']}) "
-              f"latency={result['latency_ms']}ms")
+              f"latency={result['latency_ms']}ms{quality_txt}")
         for slot in result["slots"]:
             print(f"[rehearsal]   {slot['start']}–{slot['end']}  {slot['name']}")
 
@@ -682,6 +760,26 @@ def main() -> int:
         json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(f"[rehearsal] {len(results)}곳 기록 → {output}")
+
+    # 품질 게이트 (TRIP-524) — output 기록 뒤 판정. jsonl append·artifact는
+    # 워크플로 후속 스텝 — 게이트 FAIL이어도 돌도록 !cancelled() 조건이 걸려 있다.
+    baseline_path = _optional("SMOKE_BASELINE_JSON")
+    if baseline_path and Path(baseline_path).exists():
+        try:
+            baseline = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
+            gate_failures, gate_warnings = _check_baseline(results, baseline)
+        except Exception as e:
+            # 손상 기준선(비JSON·형 오류)이 조기경보 본체를 죽이면 안 된다 —
+            # 게이트만 생략하고 소리 내서 알린다 (침묵 금지, INV-4)
+            print(f"[rehearsal] WARNING 기준선 파일 손상 — 게이트 생략: "
+                  f"{type(e).__name__}: {e}")
+        else:
+            for w in gate_warnings:
+                print(f"[rehearsal] WARNING 기준선 이탈 — {w}")
+            if gate_failures:
+                for msg in gate_failures:
+                    print(f"[rehearsal] FAIL 품질 바닥 위반 — {msg}")
+                return 1
     return 0
 
 
