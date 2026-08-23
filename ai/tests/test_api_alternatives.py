@@ -97,6 +97,15 @@ def test_response_carries_no_time_or_duration_fields() -> None:
         assert banned not in raw, f"응답에 {banned} 노출 (INV-2·3)"
 
 
+def test_affected_reasons_field_accepted_backward_compatible() -> None:
+    """TRIP-516 — 선택 필드 affected_reasons 수용 (미배선 경로에서도 200, 회귀 0)."""
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        response = _post(client, affected_reasons={
+            next(iter(_SEED_IDS)): "조용한 카페라 추천했던 곳"})
+    assert response.status_code == 200
+    assert response.json()["pool_size"] > 0
+
+
 # ── ⑤ 벡터 실주입 — 상황 KB가 검색 컨텍스트로 잡힌다 ─────────────────
 
 

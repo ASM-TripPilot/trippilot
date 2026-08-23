@@ -555,3 +555,53 @@ def test_pbt_kb_types_roundtrip(doc, score) -> None:
         metadata=dict(doc.metadata),
     )
     assert KbHit.from_dict(hit.to_dict()) == hit
+
+
+# ── 원래 추천 이유 주입 (TRIP-516 — placement_reason 재사용) ────────────
+
+
+class _RecordingLlm(FakeLlm):
+    """마지막 프롬프트를 기록 — 컨텍스트 주입 검증용."""
+
+    def __init__(self, canned: str) -> None:
+        super().__init__(canned=canned)
+        self.last_prompt: str | None = None
+
+    def invoke(self, request):
+        self.last_prompt = request.prompt
+        return super().invoke(request)
+
+
+def _recording_select_gw(*pairs: tuple[str, float]) -> tuple[GatewayFacade, "_RecordingLlm"]:
+    body = {"selected": [{"poi_id": p, "score": s} for p, s in pairs]}
+    llm = _RecordingLlm(json.dumps(body))
+    return GatewayFacade(llm, _StubRenderer(), _AlternativeGate(), _CFG, InMemoryTrace()), llm
+
+
+def test_affected_reasons_reach_llm_prompt():
+    """원래 추천 이유가 LLM 프롬프트의 일정 컨텍스트에 실린다 (결정론 — poi_id 정렬)."""
+    import dataclasses
+
+    pool = _pool("p1", "p2")
+    gateway, llm = _recording_select_gw(("p1", 0.9))
+    pipeline = PlanBRagPipeline(
+        FakeEmbedding(dim=8), InMemoryVectorStore(), alternative_gateway=gateway)
+    request = dataclasses.replace(
+        _request(pool),
+        affected_reasons={"p1": "조용한 카페라 추천했던 곳"})
+    result = pipeline.run(request)
+    assert result.fallback_level == 0
+    assert llm.last_prompt is not None
+    assert "[원래 추천 이유]" in llm.last_prompt
+    assert "조용한 카페라 추천했던 곳" in llm.last_prompt
+
+
+def test_without_reasons_prompt_has_no_reason_block():
+    """미지정(기본) — 프롬프트에 이유 블록이 없다 (하위호환 회귀 가드)."""
+    pool = _pool("p1", "p2")
+    gateway, llm = _recording_select_gw(("p1", 0.9))
+    pipeline = PlanBRagPipeline(
+        FakeEmbedding(dim=8), InMemoryVectorStore(), alternative_gateway=gateway)
+    pipeline.run(_request(pool))
+    assert llm.last_prompt is not None
+    assert "[원래 추천 이유]" not in llm.last_prompt
