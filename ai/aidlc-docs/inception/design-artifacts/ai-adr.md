@@ -354,7 +354,7 @@ LLM 문장 품질은 PR마다 평가할 수 없다 (비용·시간·비결정성
 
 **부기 (2026-08-10, TRIP-340)**: 개발·검증용 OpenAI 호환 어댑터(`c1/adapters/openai_adapter.py`)가 `LlmPort` 뒤에 존재한다. Claude API 결제 승인 전에 K-2 실모델 검증을 진행하기 위한 조치로, 멘토 제공 GPT-5.6 엔드포인트를 사용한다(base_url 주입으로 OpenAI 호환 게이트웨이 대응). **프로덕션 기본은 Anthropic 유지** — 이 결정(AI-D06)을 뒤집지 않으며, Port 격리 원칙("벤더 전환 비용 = 어댑터 1개") 그대로 어댑터 계층에만 추가된다. 실 호출은 수동 스모크(`scripts/smoke_llm.py`)뿐, CI 실 호출 0건(D37)은 불변.
 
-**부기 (2026-08-23, TRIP-426·514)**: 임베딩 최종 선정 — **로컬 KURE-v1**(`nlpai-lab/KURE-v1`, 한국어 특화 bge-m3 파인튜닝, 1024차원 네이티브 → pgvector 스키마 무변경) 확정·배선 완료(2026-08-22 팀 결정, 상황 KB 의미 검색 3전 3승 실측). 본 결정의 잠정안(e5-large/BGE-M3 계열)이 실현된 것. `EmbeddingPort` 뒤에 어댑터 3종(local KURE · OpenAI 호환 · Titan)이 준비돼 있고 폴백 후보는 Voyage AI — 단 **공급자 전환은 적재 단위**(벡터 공간 비호환 — 쿼리 단위 폴백 금지, 전환 시 KB 전량 재적재)다.
+**부기 (2026-08-23, TRIP-426·514)**: 임베딩 최종 선정 — **로컬 KURE-v1**(`nlpai-lab/KURE-v1`, 한국어 특화 bge-m3 파인튜닝, 1024차원 네이티브 → pgvector 스키마 무변경) 확정·배선 완료(2026-08-22 팀 결정, 상황 KB 의미 검색 3전 3승 실측). 본 결정의 잠정안(e5-large/BGE-M3 계열)이 실현된 것. `EmbeddingPort` 뒤에 어댑터 3종(local KURE · OpenAI 호환 · Titan)이 준비돼 있고 폴백 후보는 Voyage AI — 코드 기본값은 `openai`이므로 KURE는 `TRIPPILOT_EMBEDDING_PROVIDER=local` 명시로 선택한다(확정≠기본값) — 단 **공급자 전환은 적재 단위**(벡터 공간 비호환 — 쿼리 단위 폴백 금지, 전환 시 KB 전량 재적재)다.
 
 ---
 
