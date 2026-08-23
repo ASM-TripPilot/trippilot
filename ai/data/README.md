@@ -37,7 +37,10 @@ curl -X POST http://localhost:8080/internal/pois/proposals \
 ### 갱신
 
 `ai-poi-collect` 워크플로가 매일 KST 04:00 에 돌고 산출물을 artifact 로 남긴다(**보존 30일**).
-새 수집분으로 갈아끼우려면:
+**자동 갱신 (TRIP-392)**: ai-poi-collect가 매일 병합본을 `chore/poi-data-sync` 브랜치 PR로 올린다
+(merge_pois_docs 멱등 병합 + 축소 가드) — 리뷰 후 머지만 하면 된다. 아래 수동 절차는 백업용.
+
+새 수집분으로 갈아끼우려면(수동 백업 절차 — 갈아끼우기 금지, **병합**할 것):
 
 ```bash
 gh run list --workflow=ai-poi-collect.yml --limit 5
