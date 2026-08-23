@@ -64,6 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write   # collect-state 전용 브랜치 push용 (잡 단위 최소 부여, TRIP-348)
+      pull-requests: write   # 공유본 자동 갱신 PR (TRIP-392)
     defaults:
       run:
         working-directory: ai
@@ -184,6 +185,45 @@ jobs:
             --output collected_pois.json \
             --prev-state collect_state.prev.json \
             --fail-if-stalled >> "$GITHUB_STEP_SUMMARY"
+      - name: 팀 공유본 자동 갱신 PR (TRIP-392 — 병합·축소 가드·롤링 브랜치)
+        if: steps.collect.outputs.skipped != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # 갈아끼우기가 아니라 **병합**이다 — merge_pois_docs(같은 content_id는 나중
+        # 수집분이 이김, 멱등)로 공유본+금일 산출물을 합친다. 합본이 공유본보다
+        # 작아지면 축소 사고로 보고 실패시킨다(조용한 데이터 유실 금지). PR은 롤링
+        # 브랜치 하나(chore/poi-data-sync)를 force-push — 열린 PR이 있으면 그대로
+        # 갱신되고, **머지는 리뷰 후 사람 몫**(TRIP-392 결정: PR 방식 = 리뷰 가능).
+        run: |
+          BEFORE=$(uv run python -c "import json;print(len(json.load(open('data/collected_pois.json'))['proposals']))")
+          uv run python scripts/merge_pois_docs.py -o data/collected_pois.json \
+            data/collected_pois.json collected_pois.json
+          AFTER=$(uv run python -c "import json;print(len(json.load(open('data/collected_pois.json'))['proposals']))")
+          if [ "$AFTER" -lt "$BEFORE" ]; then
+            echo "::error::합본(${AFTER}건)이 공유본(${BEFORE}건)보다 작다 — 축소 덮어쓰기 차단"
+            exit 1
+          fi
+          if git diff --quiet -- data/collected_pois.json; then
+            echo "공유본 변화 없음 — PR 생략"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B chore/poi-data-sync
+          git add data/collected_pois.json
+          git commit -m "chore(ai): 수집 공유본 병합 갱신 — ${BEFORE}→${AFTER}건 (TRIP-392)"
+          if ! git push -f origin chore/poi-data-sync; then
+            echo "::warning::공유본 브랜치 push 실패 — 수집 자체는 성공 (다음 실행이 재시도)"
+            exit 0
+          fi
+          if [ "$(gh pr list --head chore/poi-data-sync --state open --json number --jq length)" = "0" ]; then
+            gh pr create --base develop --head chore/poi-data-sync \
+              --title "chore(ai): 수집 공유본 자동 갱신 (TRIP-392)" \
+              --body "ai-poi-collect 일일 산출물을 merge_pois_docs로 공유본에 병합한 자동 PR. 같은 content_id는 나중 수집분이 이긴다(멱등)·축소 가드 통과. 백엔드가 이 파일을 POI 소스로 소비하므로 리뷰 후 머지. 매일 force-push로 이 PR이 최신으로 유지된다." \
+              || echo "::warning::PR 생성 실패 — 저장소 설정(Actions의 PR 생성 허용) 확인 필요"
+          else
+            echo "열린 동기화 PR 갱신됨 (force-push)"
+          fi
       - name: 이어가기 검증 (상태 왕복 — 다음 실행이 커서부터 재개할 수 있는가)
         if: steps.collect.outputs.skipped != 'true'
         # 이 워크플로의 실패 모드는 "빨간불"이 아니라 **초록불인 채 같은 데이터만
