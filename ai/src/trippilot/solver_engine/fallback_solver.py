@@ -139,6 +139,10 @@ class RuleFallbackSolver:
                 p = self._pois.get(c.poi_id)
                 if p is not None:
                     day_cat_total[p.category] += 1
+            # 분모에 그날 고정 블록도 합산 — OR-Tools 항의 len(idxs)(핀 노드 포함)와
+            # 동일 기준. 빼면 고정 블록 카테고리의 자유 후보가 cat_count 선점 때문에
+            # OR-Tools보다 일찍 후순위로 밀린다 (리뷰 지적).
+            day_cat_total.update(cat_count)
             quota = {c: max(self._cfg.category_free_count, -(-n // remaining_days))
                      for c, n in day_cat_total.items()}
             while remaining:
