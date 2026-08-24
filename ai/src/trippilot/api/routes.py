@@ -1,5 +1,6 @@
-"""경계 라우트 3종 — `POST /ai/v1/itinerary/{generate,validate,repair}`.
+"""경계 라우트 6종 — `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit}`.
 
+도입 티켓: alternatives=TRIP-428 · explanations=TRIP-479 · edit=TRIP-431.
 경로 정본: services.md §0 / agent-io-contracts.md §0.1 (구 표기 `/ai/generate`·`/ai/schedule` 폐기).
 
 이 파일이 하는 일은 셋뿐이다:

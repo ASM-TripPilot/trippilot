@@ -50,11 +50,20 @@ def test_openapi_snapshot_property_names_have_no_duration_inv3() -> None:
 
 
 def test_openapi_snapshot_covers_boundary_routes() -> None:
-    """계약 파일이 경계 3종 + 헬스체크를 담는다 — 빈/부분 스냅샷 커밋을 막는 안전핀."""
+    """계약 파일의 경로 == 경계 6종 + `/`·`/health` **정확 일치(전수)**.
+
+    부분집합 검사였을 때 경계가 3종→6종으로 늘어도 게이트가 침묵했다(TRIP-528).
+    경로가 추가·삭제되면 여기가 깨져 문서(README-openapi.md·services.md·
+    agent-io-contracts.md) 갱신을 강제한다.
+    """
     doc = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
-    assert {
+    assert set(doc["paths"]) == {
+        "/",
         "/ai/v1/itinerary/generate",
         "/ai/v1/itinerary/validate",
         "/ai/v1/itinerary/repair",
+        "/ai/v1/itinerary/alternatives",   # TRIP-428
+        "/ai/v1/itinerary/explanations",   # TRIP-479
+        "/ai/v1/itinerary/edit",           # TRIP-431
         "/health",
-    } <= set(doc["paths"])
+    }

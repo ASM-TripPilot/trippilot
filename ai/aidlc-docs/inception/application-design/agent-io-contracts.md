@@ -38,9 +38,14 @@
 | 포워드 | 일정 생성 (ScheduleAgent) | `POST /ai/v1/itinerary/generate` | **확정** — 구 표기 `POST /ai/generate`·`/ai/schedule` 폐기 |
 | 포워드 | 일정 검증 | `POST /ai/v1/itinerary/validate` | **확정** |
 | 포워드 | 일정 수리 | `POST /ai/v1/itinerary/repair` | **확정** |
+| 포워드 | Plan-B 대안 제안 | `POST /ai/v1/itinerary/alternatives` | **확정** — TRIP-428 |
+| 포워드 | 슬롯별 설명 조회 | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
+| 포워드 | 일정 편집 (EditAgent) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
 | 리버스 | POI 정본 read — 반경 (`find_by_radius`) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | 리버스 | POI 정본 read — 배치 (`find_by_ids`) | `POST /internal/pois/batch-get` · 요청 필드 `poi_ids` | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
-| 포워드 | AI 도우미 · Plan-B | `/ai/v1/...` 명명 규칙만 확정, 리소스명 **협의 중** | 미확정 |
+
+포워드 경계는 위 6종 + `/health`가 전부다 — 와이어 정본은 `ai/docs/openapi.json`,
+전수 일치는 `ai/tests/test_api_openapi_contract.py`가 강제한다.
 
 리버스 나머지(`nearby`·`open-window`·`closedCheck`)는 이연 — 협의 중.
 
