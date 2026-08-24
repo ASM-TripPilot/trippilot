@@ -11,8 +11,9 @@
 
 역할 경계 (팀 결정 2026-08-22, TRIP-431 코멘트):
 - LLM은 **번역만** — 시각·순서·가능 여부는 전부 코드·솔버 소유.
-- 구조화 진입은 게이트를 안 거치므로 `validate_command`가 **게이트와 동등한 규칙**을
-  적용한다(INV-1: affected ⊆ 현재 일정, `*PoiId` params ⊆ 후보 풀; 시각 키 금지).
+- 구조화 진입은 게이트를 안 거치므로 `validate_command`가 게이트와 같은 규칙을
+  적용한다(INV-1: affected ⊆ 현재 일정, `*PoiId` params ⊆ 후보 풀; 시각 키는
+  게이트 ③과 **동일 함수** `is_time_param_key` 호출 — 목록 복사로 어긋날 수 없다).
 - 재타이밍은 결정론(체류시간 보존 + 이동 추정 걷기)이고, 사용자 노출은 그 결과를
   **솔버 validate가 통과시킨 경우만**이다(INV-2) — 위반이면 REJECTED + 사유.
 - REPLAN op는 1단계 범위 밖 — 편집이 아니라 재생성이라 `generate` 재호출이 정도다.
@@ -32,11 +33,10 @@ from trippilot.domain.common import PoiId, TransportMode
 from trippilot.domain.edit import EditCommand, EditOp
 from trippilot.domain.itinerary import DaySolution, ItinerarySolution, VisitSlot
 from trippilot.domain.llm import CandidatePool
+from trippilot.llm_gateway.gates.edit_translation import is_time_param_key
 
 _DEFAULT_STAY_MIN = 60          # 그 날 기존 슬롯이 없을 때의 체류 기본값
 _EMPTY_DAY_START = time(10, 0)  # 빈 날 시작 시각 (ponytail — docstring 참조)
-# 게이트 ③과 동일한 금지 키(시각·소요시간) — 구조화 진입 방어
-_BANNED_PARAM_TOKENS = ("time", "minute", "duration", "start", "end", "hour")
 
 
 class EditStatus(Enum):
@@ -53,18 +53,18 @@ class EditRejected(ValueError):
 def validate_command(
     command: EditCommand, current_ids: frozenset[PoiId], pool: CandidatePool
 ) -> None:
-    """구조화 진입의 게이트 동등 검증 (자연어 진입은 EditTranslationGate가 이미 수행).
+    """구조화 진입 검증 (자연어 진입은 EditTranslationGate가 이미 수행).
 
     - affected_slots ⊆ 현재 일정 (없는 슬롯 편집 불가)
     - params의 `*PoiId` 값 ⊆ 후보 풀 (INV-1 — 풀 밖 POI 추가·교체 차단)
-    - params에 시각·소요시간 키 금지 (시각은 솔버 소유 — INV-2·3)
+    - params에 시각·소요시간 키 금지 (시각은 솔버 소유 — INV-2·3):
+      게이트 ③과 **동일 함수** `is_time_param_key` — 별도 목록을 두지 않는다
     """
     for poi_id in command.affected_slots:
         if poi_id not in current_ids:
             raise EditRejected(f"affected_slots의 {poi_id}가 현재 일정에 없음")
     for key, value in command.params.items():
-        lowered = key.lower()
-        if any(token in lowered for token in _BANNED_PARAM_TOKENS):
+        if is_time_param_key(key):
             raise EditRejected(f"params에 시각·소요시간 키 {key!r} — 시각은 솔버가 정함")
         if key.endswith("PoiId"):
             if not isinstance(value, str) or not pool.contains(PoiId(value)):

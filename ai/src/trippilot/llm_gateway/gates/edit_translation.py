@@ -44,7 +44,10 @@ from trippilot.domain.observability import GateDropEvent
 _TIME_KEY_TOKENS = (
     "time", "duration", "minute", "hour", "sec", "arrive", "depart", "startat", "endat",
 )
-_TIME_KEY_EXACT = frozenset({"eta"})  # 부분일치로 잡으면 metadata 등 무해한 키까지 걸린다
+# 정확일치 — 부분일치로 잡으면 무해한 키까지 걸리는 것들: eta는 metadata를,
+# start·end는 startPoiId·endPoiId 같은 POI 참조 키를 오탐한다 (구 edit_agent의
+# 맨몸 start·end 토큰이 실제로 오탐하던 범위 — 정확일치로 좁혀 커버는 유지).
+_TIME_KEY_EXACT = frozenset({"eta", "start", "end"})
 
 # POI를 가리키는 params 키 — 값은 반드시 후보 풀 안의 poiId (INV-1).
 _POI_REF_TOKEN = "poiid"
@@ -54,7 +57,14 @@ def _normalize(key: str) -> str:
     return key.lower().replace("_", "").replace("-", "").replace(" ", "")
 
 
-def _is_time_key(normalized: str) -> bool:
+def is_time_param_key(key: str) -> bool:
+    """편집 params의 시각·소요시간 키 판정 — 단일 검사기 (INV-2 시각 + INV-3).
+
+    자연어 진입(이 게이트 ③)과 구조화 진입(agents.edit_agent.validate_command)이
+    같은 이 함수를 호출한다 — 목록을 두 곳에 복사해 어긋났던 결함(edit_agent 쪽만
+    eta·arriveBy·travelSecs 통과, invariant-reviewer 재현)의 재발을 구조로 막는다.
+    """
+    normalized = _normalize(key)
     return normalized in _TIME_KEY_EXACT or any(
         token in normalized for token in _TIME_KEY_TOKENS
     )
@@ -146,7 +156,7 @@ class EditTranslationGate:
         refs: list[PoiId] = []
         for key, value in raw.items():  # JSON 객체 키는 항상 str
             normalized = _normalize(key)
-            if _is_time_key(normalized):
+            if is_time_param_key(key):
                 # 조용히 지우지 않고 명령을 거부한다 (침묵 수정 금지)
                 raise ValueError(f"params에 시각·소요시간 필드: {key!r} — 시각은 솔버가 정함")
             if isinstance(value, (dict, list)):
