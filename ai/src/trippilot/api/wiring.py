@@ -67,6 +67,17 @@ from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
+from trippilot.agents.reflect.composer import compose as reflect_compose
+from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
+from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
+from trippilot.llm_gateway.workers.reflection_nudge import (
+    FALLBACK_NUDGE_MESSAGE, ReflectionNudgeInput, ReflectionNudgeWorker,
+)
+from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
+from trippilot.domain.reflection import (
+    ReflectionKind, ReflectionRequest, SourceEventKind, TripEventRecord,
+    VisitRecord, VisitRef,
+)
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.solver_engine.config import SolverConfig
 from trippilot.solver_engine.facade import HybridSolverFacade, SolverConflictError
@@ -610,6 +621,9 @@ class WiredItineraryOrchestrator:
         explainer: ExplanationWorker,
         context_resolver: ContextResolver,
         edit_translator: EditTranslationWorker,
+        reflection_worker: "ReflectionTemplateWorker",
+        nudge_worker: "ReflectionNudgeWorker",
+        trace: TracePort,
     ) -> None:
         self._orchestrator = orchestrator
         self._solvers = solver_provider
@@ -621,6 +635,9 @@ class WiredItineraryOrchestrator:
         self._explainer = explainer
         self._resolver = context_resolver
         self._edit_translator = edit_translator
+        self._reflection_worker = reflection_worker
+        self._nudge_worker = nudge_worker
+        self._trace = trace
 
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
     def generate(self, request: schemas.GenerateItineraryRequest) -> WiredOutcome:
@@ -955,6 +972,72 @@ class WiredItineraryOrchestrator:
             apply_mode=apply_mode.value, itinerary=to_payload(_envelope(mutated)),
         )
 
+    # ── Reflect 경계 (TRIP-429 — U6 FD Phase 1) ──
+
+    def reflection_generate(
+        self, request: schemas.ReflectionGenerateRequest
+    ) -> schemas.ReflectionGenerateResponse:
+        """회고 연출 템플릿 생성 — compose 코어(agents/reflect) 위임.
+
+        전 시도 파싱 실패면 고정 폴백 템플릿 200(is_fallback=true, INV-4).
+        응답 키 = ReflectionTemplate.to_dict() (계약 §3 — 시각·duration 필드 부재).
+        """
+        meta = request.request_meta
+        now = _tz_aware(meta.requested_at, self._tz)
+        domain_request = ReflectionRequest(
+            kind=ReflectionKind(request.kind),
+            region=request.region,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            visits=tuple(
+                VisitRecord(
+                    ref=VisitRef(date=v.ref.date, poi_id=PoiId(v.ref.poi_id)),
+                    poi_name=v.poi_name,
+                    category=v.category,
+                    order_in_day=v.order_in_day,
+                    photo_count=v.photo_count,
+                )
+                for v in request.visits
+            ),
+            events=tuple(
+                TripEventRecord(
+                    kind=SourceEventKind(e.kind), date=e.date, detail=e.detail)
+                for e in request.events
+            ),
+            persona_summary=request.persona_summary,
+            weather_summary=request.weather_summary,
+        )
+        template = reflect_compose(
+            self._reflection_worker,
+            domain_request,
+            TraceId(meta.request_id),
+            now,
+            self._trace,
+            timeout_sec=_deadline_budget(meta) / 1000.0,
+        )
+        return schemas.ReflectionGenerateResponse(**template.to_dict())
+
+    def reflection_nudge(
+        self, request: schemas.ReflectionNudgeRequest
+    ) -> schemas.ReflectionNudgeResponse:
+        """회고 유도 문구 1건 — LLM 실패·드롭 시 결정론 기본 문구(INV-4, 침묵 금지)."""
+        meta = request.request_meta
+        result = self._nudge_worker.nudge(
+            ReflectionNudgeInput(
+                destination=request.destination,
+                duration_days=request.trip_days,
+                persona_summary=request.persona_summary,
+                highlight_places=tuple(request.highlight_places),
+            ),
+            TraceId(meta.request_id),
+            _tz_aware(meta.requested_at, self._tz),
+        )
+        if result.is_fallback or not result.value:
+            return schemas.ReflectionNudgeResponse(
+                message=FALLBACK_NUDGE_MESSAGE, is_fallback=True)
+        return schemas.ReflectionNudgeResponse(
+            message=str(result.value), is_fallback=False)
+
 
 # ── 조립 함수 (composition root) ─────────────────────────────────────
 
@@ -1025,6 +1108,13 @@ def build_orchestrator(
     edit_translator = EditTranslationWorker(
         GatewayFacade(llm, renderer, EditTranslationGate(), c1_config, trace)
     )
+    # Reflect 경계 (TRIP-429) — 워커별 게이트 페어링은 위 explainer·edit와 동형
+    reflection_worker = ReflectionTemplateWorker(
+        GatewayFacade(llm, renderer, ReflectionTemplateGate(), c1_config, trace)
+    )
+    nudge_worker = ReflectionNudgeWorker(
+        GatewayFacade(llm, renderer, ReflectionNudgeGate(), c1_config, trace)
+    )
     orchestrator = core.ItineraryOrchestrator(
         InfoCollector(providers),
         # 점수 캐시 (TRIP-477) — 2단계 생성(1차 day1→2차 잔여)의 중복 LLM 점수 제거.
@@ -1047,6 +1137,9 @@ def build_orchestrator(
         pool_builder=pool_builder, rag=rag,
         explainer=explainer, context_resolver=resolver,
         edit_translator=edit_translator,
+        reflection_worker=reflection_worker,
+        nudge_worker=nudge_worker,
+        trace=trace,
     )
 
 
