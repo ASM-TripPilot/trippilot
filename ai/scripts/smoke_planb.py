@@ -80,6 +80,7 @@ from trippilot.llm_gateway.gates.alternative_selection import (  # noqa: E402
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
 from trippilot.ports.llm_port import LlmResponse  # noqa: E402
+from trippilot.solver_engine.config import RAIN_OUTDOOR  # noqa: E402
 from trippilot.api.wiring import LoggingTrace  # noqa: E402
 
 DIM = 1024  # kb_vectors DDL 고정 (docker/vector-init/01-kb-vectors.sql)
@@ -262,6 +263,24 @@ def pipeline(store, embedding, llm, model_id: str | None) -> PlanBRagPipeline:
     )
 
 
+def assert_no_outdoor_on_top(result: dict, pool: CandidatePool, title: str) -> None:
+    """폴백(reason=weather)이 야외를 상위에 올리지 않는다 — TRIP-532 의 실데이터 확인.
+
+    실내 후보가 max_alternatives 이상이면 상위 전부가 비야외여야 한다. 이 검사는 픽스처
+    저장 장소에 기대지 않는다 — 규칙 랭킹의 카테고리 강등 자체를 본다.
+    """
+    cat = {str(p.poi_id): p.category for p in pool.pois}
+    indoor_count = sum(1 for p in pool.pois if p.category not in RAIN_OUTDOOR)
+    top = [cat[a["poi_ids"][0]] for a in result["alternatives"]]
+    if indoor_count >= len(top):
+        leaked = [c.value for c in top if c in RAIN_OUTDOOR]
+        assert not leaked, f"{title}: 비 사유 폴백이 야외를 상위에 올렸다 {leaked}"
+    if any(p.category in RAIN_OUTDOOR for p in pool.pois):
+        assert any("후순위" in n for n in result["notes"]), (
+            f"{title}: 야외가 풀에 있는데 강등 기록이 없다 {result['notes']}"
+        )
+
+
 def run(title, store, embedding, pool, llm=None, model_id=None, excluded=frozenset()) -> dict:
     result = pipeline(store, embedding, llm, model_id).run(
         PlanBRagRequest(
@@ -317,7 +336,8 @@ def main() -> int:
 
         r1 = run("① 게이트웨이 미주입 → 규칙 랭킹", store, embedding, pool)
         assert r1["fallback_level"] == 1, r1
-        assert "alternative_gateway_absent" in r1["notes"], r1
+        assert any("alternative_gateway_absent" in n for n in r1["notes"]), r1
+        assert_no_outdoor_on_top(r1, pool, "①")
         # **R 단계가 실제로 돌았는지 먼저 건다.** 아래 KB-2 단언은 pgvector 가 통째로
         # 죽어 히트 0건이어도 통과한다 — 풀 순서(indoor 우선)와 저장 장소가 같아서
         # _rule_ranking 이 히트 없이도 같은 상위 2개를 내기 때문이다. 검색 실패를
@@ -353,12 +373,14 @@ def main() -> int:
         assert any("gate_dropped_all" in n for n in r3["notes"]), (
             f"게이트가 풀 밖 id 를 드롭한 것이 아니다(다른 사유로 폴백): {r3['notes']}"
         )
+        assert_no_outdoor_on_top(r3, pool, "③")
 
         r4 = run("④ LLM 장애 → 규칙 랭킹", store, embedding, pool, FailingLlm())
         assert r4["fallback_level"] == 1, r4
         assert any("llm_error" in n for n in r4["notes"]), (
             f"LLM 장애가 아닌 다른 사유로 폴백했다: {r4['notes']}"
         )
+        assert_no_outdoor_on_top(r4, pool, "④")
 
         r5 = run("⑤ 후보 전량 제외 → 대안 0 + 사유", store, embedding, pool,
                  excluded=frozenset(p.poi_id for p in pool.pois))

@@ -18,7 +18,7 @@ import math
 from datetime import date, datetime, timezone
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from trippilot.agents.planb.kb_retrieval import (
@@ -36,7 +36,9 @@ from trippilot.agents.planb.rag import (
     PlanBRagPipeline,
     PlanBRagRequest,
     PlanBRagResult,
+    _DEMOTED_BY_REASON,
     _persona_query,
+    _rule_ranking,
     closed_set_filter,
 )
 from trippilot.llm_gateway.config import C1Config
@@ -48,6 +50,8 @@ from trippilot.domain.llm import CandidatePool, ModelTier, ScoredPoi
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.prompt import PromptRef
 from trippilot.domain.trigger import TriggerKind, TriggerParams
+from trippilot.solver_engine.config import RAIN_OUTDOOR
+from trippilot.solver_engine.travel import haversine_km
 
 from tests.fakes.fake_embedding import FakeEmbedding
 from tests.fakes.fake_llm import FailingLlm, FakeLlm
@@ -163,7 +167,12 @@ def _pool(*ids: str) -> CandidatePool:
     )
 
 
-def _request(pool: CandidatePool, *, excluded: frozenset[PoiId] = frozenset()) -> PlanBRagRequest:
+def _request(
+    pool: CandidatePool,
+    *,
+    excluded: frozenset[PoiId] = frozenset(),
+    reason: str = "weather",
+) -> PlanBRagRequest:
     return PlanBRagRequest(
         trigger=TriggerParams(
             kind=TriggerKind.WEATHER,
@@ -171,7 +180,7 @@ def _request(pool: CandidatePool, *, excluded: frozenset[PoiId] = frozenset()) -
             affected_date=date(2026, 8, 8),
             payload={"pop": 80},
         ),
-        reason="weather",
+        reason=reason,
         pool=pool,
         trace_id=_TID,
         now=_NOW,
@@ -325,7 +334,7 @@ def test_pipeline_without_gateway_falls_back_deterministically() -> None:
     result = pipeline.run(_request(_pool("p1", "p2", "p3", "p4")))
     assert result.is_fallback is True
     assert result.fallback_level == 1
-    assert "alternative_gateway_absent" in result.notes
+    assert any("alternative_gateway_absent" in n for n in result.notes)  # note 합성(TRIP-532) 대응
     assert [a.label for a in result.alternatives] == ["A", "B", "C"]  # max_alternatives=3
     again = pipeline.run(_request(_pool("p1", "p2", "p3", "p4")))
     assert again == result  # 결정론
@@ -605,3 +614,260 @@ def test_without_reasons_prompt_has_no_reason_block():
     pipeline.run(_request(pool))
     assert llm.last_prompt is not None
     assert "[원래 추천 이유]" not in llm.last_prompt
+
+
+# ── TRIP-532 규칙 폴백 — reason 신호 (카테고리 강등·거리 정렬) ───────────
+#
+# 정렬 키 = (야외인가[reason=weather 일 때만], 저장 장소 아닌가, 앵커까지 거리).
+# 외부 호출 0 — RAIN_OUTDOOR 상수 + KB-2 히트 + haversine 뿐이다.
+
+_ANCHOR = GeoPoint(37.50, 127.00)
+
+
+def _poi_at(pid: str, category: PoiCategory, lat_off: float) -> Poi:
+    """앵커에서 위도 오프셋만큼 떨어진 POI — 거리 순위를 정확히 조준한다."""
+    return Poi(
+        poi_id=PoiId(pid), name=pid, category=category,
+        coord=GeoPoint(_ANCHOR.lat + lat_off, _ANCHOR.lng),
+        open_hours=(), avg_cost=None, rating=None,
+        quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
+    )
+
+
+def _pool_at(*pois: Poi) -> CandidatePool:
+    return CandidatePool(
+        poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=_NOW,
+        anchor=_ANCHOR, radius_km=10.0,
+    )
+
+
+def _fallback_picks(pool: CandidatePool, reason: str) -> tuple[list[str], PlanBRagResult]:
+    """게이트웨이 미주입 → 규칙 랭킹 폴백. (선택 순열, 결과)."""
+    store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
+    result = PlanBRagPipeline(emb, store).run(_request(pool, reason=reason))
+    return [str(p) for a in result.alternatives for p in a.poi_ids], result
+
+
+def test_fallback_weather_demotes_outdoor_even_if_nearest() -> None:
+    """대조군(TRIP-532) — 비 사유 폴백에서 야외(RAIN_OUTDOOR)는 가장 가까워도 뒤로.
+
+    보완 전 코드에서는 **실패한다** (풀 순서만 봤다) — 빨강을 확인하고 구현으로 초록.
+    """
+    pool = _pool_at(
+        _poi_at("nature-0", PoiCategory.NATURE, 0.001),     # 최근접이지만 야외
+        _poi_at("act-1", PoiCategory.ACTIVITY, 0.002),      # 야외
+        _poi_at("cafe-2", PoiCategory.CAFE, 0.010),
+        _poi_at("culture-3", PoiCategory.CULTURE, 0.020),
+        _poi_at("sight-4", PoiCategory.SIGHT, 0.030),       # 중립 — 강등 대상 아님
+    )
+    picked, _ = _fallback_picks(pool, "weather")
+    assert picked == ["cafe-2", "culture-3", "sight-4"]  # max 3 — 야외 2곳은 밀려남
+
+
+def test_fallback_weather_demotes_saved_outdoor_behind_unsaved_indoor() -> None:
+    """비 + 야외면 저장 장소여도 뒤로 — ⓪(상황)이 ①(저장)보다 앞선다."""
+    pool = _pool_at(
+        _poi_at("nature-saved", PoiCategory.NATURE, 0.001),
+        _poi_at("cafe-plain", PoiCategory.CAFE, 0.030),
+    )
+    store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
+    request = _request(pool, reason="weather")
+    index_documents(
+        [_doc(KbKind.PERSONA, "saved-n", _persona_query(request), poi_ref="nature-saved")],
+        emb, store,
+    )
+    result = PlanBRagPipeline(emb, store).run(request)
+    picked = [str(p) for a in result.alternatives for p in a.poi_ids]
+    assert picked == ["cafe-plain", "nature-saved"]
+
+
+@pytest.mark.parametrize("reason", ["delay", "fatigue"])
+def test_fallback_delay_fatigue_rank_by_distance(reason: str) -> None:
+    """시간·체력 사유 → 앵커에서 가까운 순. 풀 순서·poi_id 와 무관하다."""
+    pool = _pool_at(
+        _poi_at("far-z", PoiCategory.CAFE, 0.030),
+        _poi_at("mid-a", PoiCategory.NATURE, 0.020),   # 야외지만 강등 없음 (weather 아님)
+        _poi_at("near-m", PoiCategory.CULTURE, 0.001),
+    )
+    picked, _ = _fallback_picks(pool, reason)
+    assert picked == ["near-m", "mid-a", "far-z"]
+
+
+@pytest.mark.parametrize("reason", ["closed", "canceled", "none"])
+def test_fallback_neutral_reasons_apply_no_category_demotion(reason: str) -> None:
+    """중립 사유 — 야외 강등 없음. 없는 신호로 순위를 지어내지 않는다 (거리만)."""
+    pool = _pool_at(
+        _poi_at("cafe-far", PoiCategory.CAFE, 0.020),
+        _poi_at("nature-near", PoiCategory.NATURE, 0.001),
+    )
+    picked, _ = _fallback_picks(pool, reason)
+    assert picked == ["nature-near", "cafe-far"]  # 야외가 가까우면 야외가 먼저
+
+
+def test_fallback_without_anchor_keeps_pool_order() -> None:
+    """anchor 없는 풀 — 거리 키만 생략하고 죽지 않는다 (안정 정렬 → 풀 순서 유지)."""
+    picked, _ = _fallback_picks(_pool("p2", "p1", "p3"), "delay")  # _pool 은 anchor=None
+    assert picked == ["p2", "p1", "p3"]
+
+
+def test_fallback_note_records_demotion_count() -> None:
+    """폴백이 뭘 했는지 notes 에 남는다 — 조용한 조정 금지 (INV-4)."""
+    pool = _pool_at(
+        _poi_at("nature-0", PoiCategory.NATURE, 0.001),
+        _poi_at("cafe-1", PoiCategory.CAFE, 0.010),
+    )
+    _, result = _fallback_picks(pool, "weather")
+    assert any("후순위" in n and "1건" in n for n in result.notes), result.notes
+
+
+# ── TRIP-532 규칙 폴백 PBT — RANK-P1 순열 보존(INV-1) · RANK-P2 weather 분할 · RANK-P3 결정론
+#
+# `_rule_ranking` 을 직접 친다 — 파이프라인 경유는 max_alternatives=3 으로 잘라 순열 전체가
+# 안 보인다. 순수 정렬 함수라 fake 조차 필요 없다 (외부 호출 0, D37).
+# 오라클: 정렬 키를 재계산하지 않는다 (동어반복 금지). 대신 출력에서 관찰 가능한 불변식만 —
+# "집합 보존"·"층 분할(플래그 열이 단조)"·"같은 입력 두 번 == 같은 출력" 으로 판정한다.
+
+_RANK_REASONS = st.one_of(
+    st.sampled_from(["weather", "delay", "fatigue", "closed", "canceled", "none", ""]),
+    st.text(max_size=8),  # 모르는 사유 — 없는 신호로 순위를 지어내면 안 된다
+)
+_PLACEABLE = [c for c in PoiCategory if c is not PoiCategory.STAY]  # STAY 는 후보 풀 밖(내부 전용)
+
+
+def _persona_hits_for(pool: CandidatePool) -> st.SearchStrategy[list[KbHit]]:
+    """KB-2 히트 — poi_ref 가 풀 안·풀 밖·None 섞임.
+
+    적대적 재료: 풀 밖 참조는 순위를 만들 수도, 새 id 를 낳을 수도 없어야 한다 (INV-1).
+    """
+    inside = st.sampled_from(sorted(map(str, pool.poi_ids))) if pool.poi_ids else st.nothing()
+    ref = st.one_of(st.none(), inside, st.text(min_size=1, max_size=6))
+    return st.lists(
+        st.builds(
+            KbHit,
+            kb=st.just(KbKind.PERSONA),
+            doc_id=st.text(min_size=1, max_size=6),
+            score=st.floats(-1, 1, allow_nan=False, allow_infinity=False),
+            text=st.just("저장 장소"),
+            poi_ref=ref,
+            metadata=st.just({}),
+        ),
+        max_size=6,
+    )
+
+
+@st.composite
+def _anchored_cases(draw, *, distinct_offsets: bool = False):
+    """anchor 있는 풀 + KB-2 히트 + `available` 순열. → (pool, hits, available).
+
+    위도 오프셋 0.001~0.05 (양수만 — 거리는 오프셋에 단조), 카테고리는 STAY 제외 전분포.
+    `distinct_offsets` 는 결정론 속성용 — 거리 동률이면 풀 순서가 tie-break 라 순서 독립이
+    성립하지 않으므로 동률을 미리 줄인다 (부동소수 반올림 동률은 호출 측 `assume` 으로 거른다).
+    """
+    n = draw(st.integers(min_value=1, max_value=8))
+    offsets = draw(
+        st.lists(st.floats(0.001, 0.05, allow_nan=False), min_size=n, max_size=n,
+                 unique=distinct_offsets)
+    )
+    cats = draw(st.lists(st.sampled_from(_PLACEABLE), min_size=n, max_size=n))
+    pool = _pool_at(*(_poi_at(f"p{i}", c, o) for i, (c, o) in enumerate(zip(cats, offsets))))
+    hits = draw(_persona_hits_for(pool))
+    available = tuple(draw(st.permutations([p.poi_id for p in pool.pois])))
+    return pool, hits, available
+
+
+@st.composite
+def _ranking_inputs(draw):
+    """RANK-P1 재료 — anchor 없는 전국 풀(`candidate_pools`, STAY 포함) 과 anchor 풀 양쪽.
+
+    `available` 은 풀의 임의 부분집합·임의 순서 (파이프라인의 excluded 제외분을 일반화).
+    """
+    if draw(st.booleans()):
+        pool = draw(candidate_pools())
+        ids = sorted(pool.poi_ids, key=str)
+        available = tuple(draw(st.lists(st.sampled_from(ids), unique=True))) if ids else ()
+    else:
+        pool, _, full = draw(_anchored_cases())
+        available = tuple(draw(st.lists(st.sampled_from(list(full)), unique=True)))
+    hits = draw(_persona_hits_for(pool))
+    return pool, hits, available, draw(_RANK_REASONS)
+
+
+@given(case=_ranking_inputs())
+@settings(max_examples=80, deadline=None)
+def test_pbt_rule_ranking_is_a_permutation_of_available(case) -> None:
+    """RANK-P1(INV-1): 어떤 풀·사유·KB-2 히트에도 출력은 `available` 의 순열이다.
+
+    집합 같음·길이 같음·중복 없음. 풀 밖 poi_ref 히트가 있어도 새 id 가 생기지 않는다.
+    덤으로 note 의 강등 건수는 실제 건수와 같아야 한다 — 조용한 조정도, 부풀린 기록도 금지.
+    """
+    pool, hits, available, reason = case
+    ranked, note = _rule_ranking(hits, pool, available, reason)
+
+    assert sorted(ranked) == sorted(str(p) for p in available)
+    assert len(ranked) == len(available)
+    assert len(set(ranked)) == len(ranked)
+    assert all(pool.contains(PoiId(r)) for r in ranked)
+
+    demoted = _DEMOTED_BY_REASON.get(reason, frozenset())
+    by_id = {p.poi_id: p for p in pool.pois}
+    n_demoted = sum(1 for p in available if by_id[p].category in demoted)
+    assert bool(note) == (n_demoted > 0), (note, n_demoted)
+    if note:
+        assert f"{n_demoted}건" in note
+
+
+@given(case=_anchored_cases())
+@settings(max_examples=60, deadline=None)
+def test_pbt_rule_ranking_weather_puts_every_non_outdoor_before_every_outdoor(case) -> None:
+    """RANK-P2: reason=weather 면 비야외 전원 < 야외(RAIN_OUTDOOR) 전원 — 입력 순서·저장 무관.
+
+    판정은 "야외 플래그 열이 단조(False…True)" 다. 야외가 가장 가까워도, 저장 장소여도
+    뒤로 간다 (⓪ 상황 > ① 저장). 각 층 안에서는 저장이 비저장보다 앞 (② 키 순서 보존).
+    """
+    pool, hits, available = case
+    ranked, _ = _rule_ranking(hits, pool, available, "weather")
+    by_id = {str(p.poi_id): p for p in pool.pois}
+
+    outdoor_flags = [by_id[r].category in RAIN_OUTDOOR for r in ranked]
+    assert outdoor_flags == sorted(outdoor_flags), ranked
+
+    saved = {h.poi_ref for h in hits if h.poi_ref}
+    for tier in (False, True):
+        unsaved_flags = [
+            r not in saved for r in ranked if (by_id[r].category in RAIN_OUTDOOR) is tier
+        ]
+        assert unsaved_flags == sorted(unsaved_flags), (tier, ranked)
+
+
+@given(reason=_RANK_REASONS.filter(lambda r: r not in _DEMOTED_BY_REASON))
+@settings(max_examples=40, deadline=None)
+def test_pbt_rule_ranking_non_weather_reasons_let_nearest_outdoor_come_first(reason) -> None:
+    """RANK-P2 반례: weather 아닌 사유에서는 분할이 강제되지 않는다 — 야외가 최근접이면 1위."""
+    pool = _pool_at(
+        _poi_at("nature-near", PoiCategory.NATURE, 0.001),
+        _poi_at("cafe-far", PoiCategory.CAFE, 0.020),
+    )
+    ranked, note = _rule_ranking((), pool, tuple(p.poi_id for p in pool.pois), reason)
+    assert ranked == ("nature-near", "cafe-far")
+    assert note == ""  # 강등 0건이면 기록도 없다
+
+
+@given(case=_anchored_cases(distinct_offsets=True), reason=_RANK_REASONS, data=st.data())
+@settings(max_examples=60, deadline=None)
+def test_pbt_rule_ranking_is_deterministic_and_independent_of_input_order(
+    case, reason, data
+) -> None:
+    """RANK-P3: 같은 입력 두 번 → 같은 출력. 거리가 전부 다르면 `available` 순서와 무관.
+
+    거리 동률은 안정 정렬의 풀 순서 tie-break 라 순서 독립이 성립하지 않으므로 `assume` 으로
+    거른다 — 그 경우는 RANK-P1 이 순열 보존을 따로 보장한다.
+    """
+    pool, hits, available = case
+    distances = [haversine_km(pool.anchor, p.coord) for p in pool.pois]
+    assume(len(set(distances)) == len(distances))
+    shuffled = tuple(data.draw(st.permutations(available)))
+
+    first = _rule_ranking(hits, pool, available, reason)
+    assert first == _rule_ranking(hits, pool, available, reason)
+    assert first == _rule_ranking(hits, pool, shuffled, reason)
+    assert first == _rule_ranking(hits, pool, tuple(p.poi_id for p in pool.pois), reason)
