@@ -124,7 +124,9 @@ def test_gate_drops_whole_command_when_any_slot_outside_pool() -> None:
 @pytest.mark.parametrize(
     "key",
     ["startTime", "duration_min", "travel-time", "ETA", "stayDuration", "durationSec",
-     "minutes", "startAt", "visitMinutes", "arriveBy", "departAt", "hours"],
+     "minutes", "startAt", "visitMinutes", "arriveBy", "departAt", "hours",
+     # 회귀(invariant-reviewer 재현): 구 edit_agent 목록만 통과시키던 키들
+     "eta", "arrive_by", "travelSecs", "start", "end"],
 )
 def test_gate_rejects_time_params(key: str) -> None:
     """④ 시각·소요시간은 솔버 소유 — 조용히 지우지 않고 명령을 거부한다.
@@ -139,8 +141,11 @@ def test_gate_allows_non_time_params_and_order_hint() -> None:
     """순서·위치 제안은 통과 — 워커는 제안만, 확정은 솔버 (INV-2 원문)."""
     out = _apply(_raw("MOVE_SLOT", ["p1"], params={"toIndex": 2, "note": "비 와서"}))
     assert out.error is None and out.value.command.params["toIndex"] == 2
-    # eta는 정확일치로만 막는다 — metadata 같은 무해한 키가 걸리지 않도록
+    # eta·start·end는 정확일치로만 막는다 — metadata·startPoiId·endPoiId 같은
+    # 무해한 키(POI 참조 포함)가 걸리지 않도록
     assert _apply(_raw("ADD_SLOT", ["p1"], params={"metadata": "x"})).error is None
+    ok = _apply(_raw("ADD_SLOT", ["p1"], params={"startPoiId": "p2", "endPoiId": "p1"}))
+    assert ok.error is None
 
 
 def test_gate_crosses_param_poi_refs_with_pool() -> None:

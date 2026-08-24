@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from trippilot.api.app import create_app
@@ -124,13 +125,30 @@ def test_add_outside_pool_rejected() -> None:
 # ── ④·⑤ 방어 규칙 ───────────────────────────────────────────────────
 
 
-def test_time_params_rejected() -> None:
+@pytest.mark.parametrize(
+    "key", ["startTime", "eta", "arriveBy", "travelSecs", "arrive_by"])
+def test_time_params_rejected(key: str) -> None:
+    """게이트 ③과 동일 함수로 검사 — eta·arriveBy·travelSecs는 목록 복사 시절
+    구조화 진입만 통과해 응답에 에코되던 회귀 케이스 (invariant-reviewer 재현)."""
     with _client() as client:
         response = _post(client, _body(command={
-            "op": "MOVE_SLOT", "params": {"startTime": "15:00"},
+            "op": "MOVE_SLOT", "params": {key: "15:00"},
             "affected_slots": [_PORK]}))
     body = response.json()
     assert body["status"] == "REJECTED" and "시각" in body["reason"]
+
+
+def test_poi_ref_keys_are_not_time_keys() -> None:
+    """startPoiId·endPoiId·afterPoiId는 POI 참조지 시각 키가 아니다 — 맨몸
+    start·end 토큰이 오탐하던 키들 (정확일치로 좁힌 근거의 회귀 방지)."""
+    with _client() as client:
+        response = _post(client, _body(command={
+            "op": "MOVE_SLOT",
+            "params": {"afterPoiId": _PORK, "startPoiId": _HALLASAN,
+                       "endPoiId": _PORK},
+            "affected_slots": [_HALLASAN]}))
+    body = response.json()
+    assert body["status"] == "APPLIED"
 
 
 def test_replan_rejected_with_guidance() -> None:
