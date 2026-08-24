@@ -834,6 +834,10 @@ class WiredItineraryOrchestrator:
         solution, _, poi_index = self._reconstruct(request.itinerary, meta)
         current_ids = frozenset(
             s.poi_id for day in solution.days for s in day.slots)
+        # 대상 일자의 예약(is_fixed) 슬롯 — 편집 대상 불가·재타이밍 닻 (TRIP-526)
+        fixed_ids = frozenset(
+            fb.poi_id for day in solution.days if day.date == request.target_date
+            for fb in day.fixed_blocks)
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
         pool = self._pool_builder.build(
@@ -894,7 +898,7 @@ class WiredItineraryOrchestrator:
         try:
             # 구조화 진입은 게이트를 안 거쳤다 — 동등 규칙을 양쪽 모두에 적용해
             # (자연어도 재검증) 검증 권위를 한 곳으로 모은다.
-            validate_command(command, current_ids, pool)
+            validate_command(command, current_ids, pool, fixed_ids)
 
             # ② 확인 게이트 — 파괴적 편집은 사용자 확인(confirm) 전에는 반영하지 않는다
             if apply_mode is ApplyMode.CONFIRM_REQUIRED and not request.confirm:

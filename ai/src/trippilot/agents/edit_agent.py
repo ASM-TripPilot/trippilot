@@ -17,6 +17,8 @@
 - 재타이밍은 결정론(체류시간 보존 + 이동 추정 걷기)이고, 사용자 노출은 그 결과를
   **솔버 validate가 통과시킨 경우만**이다(INV-2) — 위반이면 REJECTED + 사유.
 - REPLAN op는 1단계 범위 밖 — 편집이 아니라 재생성이라 `generate` 재호출이 정도다.
+- 예약(고정) 슬롯은 **닻**(TRIP-526) — 편집 대상이 될 수 없고, 재타이밍은 원 window를
+  그대로 둔 채 그 앞뒤로 커서를 흘린다. 앞 슬롯이 못 도착하면 밀지 않고 HC2가 거부.
 
 # ponytail: 빈 날에 추가할 때의 시작 시각은 10:00 고정 — 요청에 창이 없다.
 # 편집 요청에 day_window가 실리면 그 값으로 올린다.
@@ -51,11 +53,16 @@ class EditRejected(ValueError):
 
 
 def validate_command(
-    command: EditCommand, current_ids: frozenset[PoiId], pool: CandidatePool
+    command: EditCommand,
+    current_ids: frozenset[PoiId],
+    pool: CandidatePool,
+    fixed_ids: frozenset[PoiId],
 ) -> None:
     """구조화 진입 검증 (자연어 진입은 EditTranslationGate가 이미 수행).
 
     - affected_slots ⊆ 현재 일정 (없는 슬롯 편집 불가)
+    - affected_slots ∩ 대상 일자 예약(고정) 슬롯 = ∅ (TRIP-526 — 예약은 닻, 이동·삭제·
+      교체 대상 불가). REORDER_DAY는 슬롯 전체 순열이라 제외 — 예약 위치는 retime이 판정
     - params의 `*PoiId` 값 ⊆ 후보 풀 (INV-1 — 풀 밖 POI 추가·교체 차단)
     - params에 시각·소요시간 키 금지 (시각은 솔버 소유 — INV-2·3):
       게이트 ③과 **동일 함수** `is_time_param_key` — 별도 목록을 두지 않는다
@@ -63,6 +70,8 @@ def validate_command(
     for poi_id in command.affected_slots:
         if poi_id not in current_ids:
             raise EditRejected(f"affected_slots의 {poi_id}가 현재 일정에 없음")
+        if poi_id in fixed_ids and command.op is not EditOp.REORDER_DAY:
+            raise EditRejected(f"예약(고정) 슬롯 {poi_id}는 편집 대상이 될 수 없음")
     for key, value in command.params.items():
         if is_time_param_key(key):
             raise EditRejected(f"params에 시각·소요시간 키 {key!r} — 시각은 솔버가 정함")
@@ -129,7 +138,7 @@ def _target_poi(command: EditCommand) -> PoiId:
 class RetimeContext:
     """재타이밍 재료 — 좌표·체류시간 출처와 이동수단."""
 
-    coords: dict  # PoiId → GeoPoint (미등록 POI는 없음 → 이동 0분 취급, validate가 판정)
+    coords: dict  # PoiId → GeoPoint (미등록 POI는 없음 → 인접 편집 거부, TRIP-525)
     stay_min: dict  # PoiId → int (기존 슬롯의 체류 보존; 신규는 중앙값/기본)
     estimator: object  # TravelEstimator — estimate(a, b, mode).internal_minutes
     transport: TransportMode
@@ -141,6 +150,13 @@ def retime_day(
     """새 순서 → 결정론 재타이밍. 체류시간 보존, 이동은 추정 걷기.
 
     시작점 = 기존 첫 슬롯 시각(사용자의 하루 시작 보존), 빈 날이었으면 10:00.
+    예약(day.fixed_blocks)은 닻(TRIP-526) — 커서로 찍지 않고 원 window 그대로 두며
+    커서만 window.end로 옮긴다. 커서가 예약보다 이르면 그 사이는 대기(빈 시간),
+    늦어도 예약을 밀지 않는다 — HC2가 "이동 N분 필요, 간격 M분"으로 거부(INV-2).
+    앞 슬롯의 **시작**이 예약 시각을 지나면 시간순 슬롯 자체가 성립하지 않아 거부.
+    인접 구간 한쪽이라도 좌표가 없으면 거부(TRIP-525) — check_hc2 는 좌표 없음을
+    건너뛰므로(c2 규칙 "정보 없음은 막지 않는다") 여기서 0분을 지어내면 검증 도장을
+    달고 나간다. 예약 슬롯도 예외 없음. 그 날 슬롯이 하나뿐이면 인접이 없어 통과.
     이 시각은 제안일 뿐 — 노출 여부는 솔버 validate가 정한다(INV-2).
     """
     if not new_order:
@@ -151,25 +167,38 @@ def retime_day(
         cursor = datetime.combine(day.date, _EMPTY_DAY_START, tzinfo=tz)
     default_stay = int(median(ctx.stay_min.values())) if ctx.stay_min else _DEFAULT_STAY_MIN
     old_by_id = {s.poi_id: s for s in day.slots}
+    fixed_by_id = {fb.poi_id: fb.window for fb in day.fixed_blocks}
     slots = []
     prev: PoiId | None = None
     for poi_id in new_order:
         if prev is not None:
             a, b = ctx.coords.get(prev), ctx.coords.get(poi_id)
-            gap = ctx.estimator.estimate(a, b, ctx.transport).internal_minutes \
-                if a is not None and b is not None else 0
+            if a is None or b is None:
+                raise EditRejected(
+                    f"좌표 미상 POI {prev if a is None else poi_id} 인접 — "
+                    f"이동시간을 산출할 수 없어 편집 불가")
+            gap = ctx.estimator.estimate(a, b, ctx.transport).internal_minutes
             cursor = cursor + timedelta(minutes=gap)
-        stay = ctx.stay_min.get(poi_id, default_stay)
+        window = fixed_by_id.get(poi_id)
+        if window is not None:
+            if slots and slots[-1].start_at > window.start:
+                raise EditRejected(
+                    f"예약(고정) 슬롯 {poi_id}의 시각({window.start:%H:%M})을 "
+                    f"앞 슬롯이 이미 지남 — 그 순서로는 배치 불가")
+            start, end = window.start, window.end
+        else:
+            start = cursor
+            end = cursor + timedelta(minutes=ctx.stay_min.get(poi_id, default_stay))
         old = old_by_id.get(poi_id)
         slots.append(VisitSlot(
             poi_id=poi_id,
-            start_at=cursor,
-            end_at=cursor + timedelta(minutes=stay),
-            stay_min=stay,
+            start_at=start,
+            end_at=end,
+            stay_min=int((end - start).total_seconds() // 60),
             score=old.score if old is not None else 0.0,
             is_llm_score=old.is_llm_score if old is not None else False,
         ))
-        cursor = slots[-1].end_at
+        cursor = end
         prev = poi_id
     return replace(day, slots=tuple(slots))
 
