@@ -100,7 +100,9 @@ class FixedBlockSchema(BoundaryModel):
     poi_id: str = Field(min_length=1)
     date: dt.date
     start: dt.time
-    dwell_min: int = Field(ge=0)
+    # dwell_min 만 선택 유지 — 백엔드 MustVisitMaterializer 가 null 을 그대로 싣는다
+    # (MustVisitMaterializer.kt:70 → GenerateItineraryService.kt:226). 미지정은 wiring 이 60분 적용.
+    dwell_min: int | None = Field(default=None, ge=0)
 
 
 class PreferenceProfileSchema(BoundaryModel):

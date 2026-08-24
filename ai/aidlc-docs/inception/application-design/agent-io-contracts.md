@@ -61,7 +61,7 @@
 | a03~a09 온보딩 취향 + d02 목적·취향 | 목적 카드·취향 태그 다중 선택 | `preference_set(styles[], activities[], food_tastes[], budget_tier, companion_types[], pace)` | `preference_profile` (7축, NULL=미설정) |
 | d03 출발·위치·페이스 | 출발 시각, 출발 위치, 페이스 | `trip_base_day(saved_stay_id, resolution)` + 세션 파라미터 | `time_windows[{date, start, end}]`, `pace` |
 | (숙소 등록) | 등록 숙소 = 거점 | `saved_stay(coord, check_in/out)` | `anchor{lat, lng}` (day별 — trip_base_day 해석 결과) |
-| d05~d07 필수 방문지 | POI 선택, ANYTIME/FIXED, 시각·체류 | `must_visit(poi_snapshot_id, type, fixed_date, fixed_start, dwell_min)` | `fixed_blocks[{poi_id, date, start, dwell_min}]` — 전 필드 필수 (M1) |
+| d05~d07 필수 방문지 | POI 선택, ANYTIME/FIXED, 시각·체류 | `must_visit(poi_snapshot_id, type, fixed_date, fixed_start, dwell_min)` | `fixed_blocks[{poi_id, date, start, dwell_min?}]` — date·start 필수(M1), dwell_min 미지정은 AI가 60분 적용 |
 | b04 찜 | 저장 장소 | `saved_place(poi_id)` | (직접 입력 아님 — PersonaAgent 경유로 선호 컨텍스트에 반영) |
 | d11 추천 강도 | 추천 강도 선택 | 생성 요청 파라미터 | `generation_mode(fully_ai/co_plan)`, `recommendation_strength` |
 

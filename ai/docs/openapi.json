@@ -521,9 +521,16 @@
             "type": "string"
           },
           "dwell_min": {
-            "minimum": 0.0,
-            "title": "Dwell Min",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dwell Min"
           },
           "poi_id": {
             "minLength": 1,
@@ -539,8 +546,7 @@
         "required": [
           "poi_id",
           "date",
-          "start",
-          "dwell_min"
+          "start"
         ],
         "title": "FixedBlockSchema",
         "type": "object"
