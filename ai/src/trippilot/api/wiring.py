@@ -233,8 +233,9 @@ def _seed_from(trip_id: str) -> int:
 
 def _fixed_block(block: schemas.FixedBlockSchema, tz: timezone) -> FixedBlock:
     if block.date is None or block.start is None:
-        # 도메인 FixedBlock(HC3)은 시각 고정만 표현한다 — ANYTIME 필수방문을 조용히
-        # 떨어뜨리면 사용자 지정이 침묵 소실된다(INV-4) → 명시 실패(422)로 드러낸다.
+        # ANYTIME 물질화는 백엔드 소유(경계 계약 M1) — 스키마(FixedBlockSchema
+        # date/start 필수)가 1차 차단하고, 여기는 우회 조립 대비 백스톱이다.
+        # 조용히 떨어뜨리면 사용자 지정이 침묵 소실된다(INV-4) → 명시 실패(422).
         raise ValueError(
             f"ANYTIME 고정 블록 미지원: {block.poi_id} — "
             "시각 미지정 필수방문은 현 도메인(HC3)으로 표현 불가"
@@ -313,8 +314,9 @@ def judge_unplaced_must_visits(
       겹침이 증명될 때만**
     - `NO_FEASIBLE_SLOT`: 그 외 미배치(기간 안·겹침 없음인데 해에 없음)
 
-    ANYTIME 블록(date/start 없음)은 이 함수에 도달하지 않는다 — `_fixed_block`이
-    요청 조립 단계에서 422로 명시 실패시킨다(INV-4).
+    ANYTIME 블록(date/start 없음)은 이 함수에 도달하지 않는다 — 스키마
+    (FixedBlockSchema date/start 필수, M1)가 1차 차단하고, `_fixed_block`
+    백스톱이 요청 조립 단계에서 422로 명시 실패시킨다(INV-4).
     """
     if not request.fixed_blocks:
         return ()

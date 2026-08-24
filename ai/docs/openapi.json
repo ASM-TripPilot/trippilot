@@ -513,31 +513,17 @@
       },
       "FixedBlockSchema": {
         "additionalProperties": false,
-        "description": "시각 고정 필수방문지(HC3). ANYTIME이면 date/start/dwell_min은 null.",
+        "description": "날짜·시각이 확정된 필수방문지(HC3). ANYTIME(시각 미지정) 필수방문의\n물질화는 백엔드 소유(MustVisitMaterializer, 경계 계약 M1) — AI는 확정된 블록만 받는다.",
         "properties": {
           "date": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Date"
+            "format": "date",
+            "title": "Date",
+            "type": "string"
           },
           "dwell_min": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Dwell Min"
+            "minimum": 0.0,
+            "title": "Dwell Min",
+            "type": "integer"
           },
           "poi_id": {
             "minLength": 1,
@@ -545,20 +531,16 @@
             "type": "string"
           },
           "start": {
-            "anyOf": [
-              {
-                "format": "time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start"
+            "format": "time",
+            "title": "Start",
+            "type": "string"
           }
         },
         "required": [
-          "poi_id"
+          "poi_id",
+          "date",
+          "start",
+          "dwell_min"
         ],
         "title": "FixedBlockSchema",
         "type": "object"

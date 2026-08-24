@@ -94,12 +94,13 @@ class TimeWindowSchema(BoundaryModel):
 
 
 class FixedBlockSchema(BoundaryModel):
-    """시각 고정 필수방문지(HC3). ANYTIME이면 date/start/dwell_min은 null."""
+    """날짜·시각이 확정된 필수방문지(HC3). ANYTIME(시각 미지정) 필수방문의
+    물질화는 백엔드 소유(MustVisitMaterializer, 경계 계약 M1) — AI는 확정된 블록만 받는다."""
 
     poi_id: str = Field(min_length=1)
-    date: dt.date | None = None
-    start: dt.time | None = None
-    dwell_min: int | None = Field(default=None, ge=0)
+    date: dt.date
+    start: dt.time
+    dwell_min: int = Field(ge=0)
 
 
 class PreferenceProfileSchema(BoundaryModel):
