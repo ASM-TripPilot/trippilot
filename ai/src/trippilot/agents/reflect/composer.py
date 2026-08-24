@@ -7,7 +7,9 @@ judge)은 금지(1차, 계약 §4.2). 3회 전부 파싱 실패면 고정 폴백
 
 교체 대상 판별은 게이트 위반의 (code, scene_index, detail 라벨)로 한다 —
 detail 라벨은 게이트가 결정론으로 찍는 "cover.title:"·"scenes[i].…"·
-"hashtags:{태그}:" 접두라 재파싱 없이 위치를 특정한다.
+"hashtags[i]:" 접두라 재파싱 없이 위치를 특정한다. 해시태그 라벨은 반드시
+인덱스형이어야 한다 — 태그 문자열형은 태그 내 콜론({poi:i.name})이 파싱을
+깨뜨린다 (b1624ad에서 PBT로 실측·수정).
 """
 
 from __future__ import annotations

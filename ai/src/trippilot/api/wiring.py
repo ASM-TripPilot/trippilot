@@ -74,6 +74,7 @@ from trippilot.llm_gateway.workers.reflection_nudge import (
     FALLBACK_NUDGE_MESSAGE, ReflectionNudgeInput, ReflectionNudgeWorker,
 )
 from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
+from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.reflection import (
     ReflectionKind, ReflectionRequest, SourceEventKind, TripEventRecord,
     VisitRecord, VisitRef,
@@ -1033,6 +1034,18 @@ class WiredItineraryOrchestrator:
             _tz_aware(meta.requested_at, self._tz),
         )
         if result.is_fallback or not result.value:
+            if not result.is_fallback:
+                # 방어 분기 — 현 게이트 계약상 도달 불가(빈 문자열은 게이트가 드롭).
+                # 게이트 완화 시 계측 없는 침묵 폴백이 되지 않게 여기서 발행 (INV-4)
+                self._trace.emit(FallbackEvent(
+                    trace_id=TraceId(meta.request_id),
+                    occurred_at=_tz_aware(meta.requested_at, self._tz),
+                    component="api.wiring",
+                    stage="agent",
+                    from_mode="llm_nudge",
+                    to_mode="fixed_message",
+                    reason="nudge_empty_value_without_fallback_flag",
+                ))
             return schemas.ReflectionNudgeResponse(
                 message=FALLBACK_NUDGE_MESSAGE, is_fallback=True)
         return schemas.ReflectionNudgeResponse(
