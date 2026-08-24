@@ -138,7 +138,7 @@ def _target_poi(command: EditCommand) -> PoiId:
 class RetimeContext:
     """재타이밍 재료 — 좌표·체류시간 출처와 이동수단."""
 
-    coords: dict  # PoiId → GeoPoint (미등록 POI는 없음 → 이동 0분 취급, validate가 판정)
+    coords: dict  # PoiId → GeoPoint (미등록 POI는 없음 → 인접 편집 거부, TRIP-525)
     stay_min: dict  # PoiId → int (기존 슬롯의 체류 보존; 신규는 중앙값/기본)
     estimator: object  # TravelEstimator — estimate(a, b, mode).internal_minutes
     transport: TransportMode
@@ -154,6 +154,9 @@ def retime_day(
     커서만 window.end로 옮긴다. 커서가 예약보다 이르면 그 사이는 대기(빈 시간),
     늦어도 예약을 밀지 않는다 — HC2가 "이동 N분 필요, 간격 M분"으로 거부(INV-2).
     앞 슬롯의 **시작**이 예약 시각을 지나면 시간순 슬롯 자체가 성립하지 않아 거부.
+    인접 구간 한쪽이라도 좌표가 없으면 거부(TRIP-525) — check_hc2 는 좌표 없음을
+    건너뛰므로(c2 규칙 "정보 없음은 막지 않는다") 여기서 0분을 지어내면 검증 도장을
+    달고 나간다. 예약 슬롯도 예외 없음. 그 날 슬롯이 하나뿐이면 인접이 없어 통과.
     이 시각은 제안일 뿐 — 노출 여부는 솔버 validate가 정한다(INV-2).
     """
     if not new_order:
@@ -170,8 +173,11 @@ def retime_day(
     for poi_id in new_order:
         if prev is not None:
             a, b = ctx.coords.get(prev), ctx.coords.get(poi_id)
-            gap = ctx.estimator.estimate(a, b, ctx.transport).internal_minutes \
-                if a is not None and b is not None else 0
+            if a is None or b is None:
+                raise EditRejected(
+                    f"좌표 미상 POI {prev if a is None else poi_id} 인접 — "
+                    f"이동시간을 산출할 수 없어 편집 불가")
+            gap = ctx.estimator.estimate(a, b, ctx.transport).internal_minutes
             cursor = cursor + timedelta(minutes=gap)
         window = fixed_by_id.get(poi_id)
         if window is not None:

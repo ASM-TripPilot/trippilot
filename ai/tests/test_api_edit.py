@@ -11,6 +11,8 @@
   ⑧ 응답 원문에 duration 토큰 없음(INV-3) · 미주입 앱 503
   ⑨ 예약(is_fixed) 슬롯은 닻 — 무관한 슬롯 편집은 APPLIED + 예약 시각 불변,
      예약 자체를 대상으로 하면 REJECTED("예약"), 예약 앞에 못 도착하면 HC2 (TRIP-526)
+  ⑩ 좌표 미상 POI 와 인접하는 편집은 REJECTED("좌표 미상") — 이동 0분을 지어내지
+     않는다(예약 슬롯도 예외 없음); 그 날 유일한 슬롯이면 인접이 없어 통과 (TRIP-525)
 """
 
 from __future__ import annotations
@@ -28,6 +30,8 @@ _HALLASAN = _SEED["한라산"]
 # 앵커 반경 밖(풀 밖)이지만 poi_db 에는 있다 — 좌표는 있고 추가·교체 대상은 못 된다
 _WOLJEONG = _SEED["월정리 카페거리"]
 _DAY = "2026-09-01"
+# poi_db·풀 어디에도 없는 id — 좌표 미상 POI (test_add_outside_pool_rejected 와 같은 값)
+_UNKNOWN = "99999999-9999-4999-8999-999999999999"
 
 
 def _slot(poi_id: str, start: str, end: str, *, fixed: bool = False) -> dict:
@@ -128,7 +132,7 @@ def test_add_outside_pool_rejected() -> None:
     with _client() as client:
         response = _post(client, _body(command={
             "op": "ADD_SLOT",
-            "params": {"targetPoiId": "99999999-9999-4999-8999-999999999999"},
+            "params": {"targetPoiId": _UNKNOWN},
             "affected_slots": []}))
     body = response.json()
     assert body["status"] == "REJECTED"
@@ -243,6 +247,38 @@ def test_reorder_displacing_fixed_past_its_time_is_rejected() -> None:
             "affected_slots": [_HALLASAN, _WOLJEONG, _PORK]}, confirm=True))
     body = response.json()
     assert body["status"] == "REJECTED" and "예약" in body["reason"]
+
+
+# ── ⑩ 좌표 미상 POI 인접 = 거부 (TRIP-525) ─────────────────────────
+
+
+@pytest.mark.parametrize("fixed", [False, True], ids=["free", "fixed"])
+def test_add_next_to_unknown_coord_poi_is_rejected(fixed: bool) -> None:
+    """좌표 없는 POI 옆에 추가 — 이동시간을 산출할 수 없으니 0분을 지어내지 않고 거부.
+    수정 전엔 gap=0 으로 재타이밍하고 check_hc2 가 좌표 없음을 건너뛰어(의도된 c2 규칙)
+    검증 도장을 달고 나갔다. 예약 슬롯이어도 예외가 아니다."""
+    with _client() as client:
+        response = _post(client, _body(
+            slots=[_slot(_UNKNOWN, "10:00:00", "11:00:00", fixed=fixed)],
+            command={"op": "ADD_SLOT", "params": {"targetPoiId": _HALLASAN},
+                     "affected_slots": []}))
+    body = response.json()
+    assert body["status"] == "REJECTED" and "좌표 미상" in body["reason"]
+    assert _UNKNOWN in body["reason"]
+    assert body["itinerary"] is None
+
+
+def test_unknown_coord_poi_alone_on_day_passes() -> None:
+    """인접 구간이 없으면 좌표가 없어도 이동시간이 필요 없다 — 통과."""
+    with _client() as client:
+        response = _post(client, _body(
+            slots=[_slot(_UNKNOWN, "10:00:00", "11:00:00")],
+            command={"op": "MOVE_SLOT", "params": {}, "affected_slots": [_UNKNOWN]}))
+    body = response.json()
+    assert body["status"] == "APPLIED", body
+    [slot] = body["itinerary"]["days"][0]["slots"]
+    assert (slot["poi_id"], slot["start_at"], slot["end_at"]) == (
+        _UNKNOWN, "10:00:00", "11:00:00")
 
 
 # ── ⑦·⑧ 경계 위생 ───────────────────────────────────────────────────
