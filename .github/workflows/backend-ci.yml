@@ -8,10 +8,10 @@ name: backend-ci
 on:
   push:
     branches: [develop]
-    paths: ['backend/**', 'ai/docs/openapi.json', '.github/workflows/backend-ci.yml']
+    paths: ['backend/**', 'ai/docs/openapi.json', 'ai/data/collected_pois.json', '.github/workflows/backend-ci.yml']
   pull_request:
     branches: [develop]
-    paths: ['backend/**', 'ai/docs/openapi.json', '.github/workflows/backend-ci.yml']
+    paths: ['backend/**', 'ai/docs/openapi.json', 'ai/data/collected_pois.json', '.github/workflows/backend-ci.yml']
   workflow_dispatch:
 
 env:

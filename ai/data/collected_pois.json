@@ -28,7 +28,7 @@
   ],
   "stats": {
     "merged_runs": 2,
-    "unique_proposals": 16094
+    "unique_proposals": 16093
   },
   "merged_from": [
     {
@@ -219450,38 +219450,6 @@
         "address": "서울특별시 용산구 한남동",
         "image_url": "http://tong.visitkorea.or.kr/cms/resource/39/3467539_image2_1.jpg",
         "modified_time": "20251023143000"
-      }
-    },
-    {
-      "provisional_id": "tourapi-2946228",
-      "source": "TOURAPI",
-      "poi": {
-        "poi_id": "tourapi-2946228",
-        "name": "익선동 한옥거리",
-        "category": "ACTIVITY",
-        "coord": {
-          "lat": 37.5737675037,
-          "lng": 126.9901419773
-        },
-        "open_hours": [],
-        "avg_cost": null,
-        "rating": null,
-        "quality": "PARTIAL",
-        "source": "PLACES_API",
-        "confidence": null
-      },
-      "tags": [
-        "체험관광지",
-        "이색거리"
-      ],
-      "region": null,
-      "opening_hours_raw": null,
-      "provenance": {
-        "content_id": "2946228",
-        "content_type_id": "12",
-        "address": null,
-        "image_url": "http://tong.visitkorea.or.kr/cms/resource/22/2947522_image2_1.jpg",
-        "modified_time": "20241209121807"
       }
     },
     {

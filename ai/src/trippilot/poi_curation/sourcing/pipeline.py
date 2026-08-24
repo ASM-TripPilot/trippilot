@@ -92,6 +92,10 @@ class CollectStats:
     budget_exhausted: bool   # 한도 도달로 조기 종료했는가 (부분 성공 표시)
     # ── TRIP-348 커서 이어가기 (기본값 유지 — 상태 없는 기존 호출과 완전 호환) ──
     skipped_unchanged: int = 0                    # 기제안·modifiedtime 동일 → 상세 호출 없이 스킵
+    # 주소 없는 레코드 드롭 (TRIP-535, 게이트 전) — 백엔드 RegionResolver가
+    # provenance.address로 행정구역을 해석하므로(regionUnresolved==0 게이트)
+    # 주소 부재 제안은 소비처에서 반드시 깨진다
+    address_missing: int = 0
     resumed_from: dict[str, int] = field(default_factory=dict)  # kind → 재개 시작 pageNo (>1만)
     completed_kinds: tuple[str, ...] = ()         # 이번 실행 종료 시점 완주 상태인 kind
 
@@ -102,6 +106,7 @@ class CollectStats:
             "page_failures": self.page_failures,
             "detail_failures": self.detail_failures,
             "category_unmapped": self.category_unmapped,
+            "address_missing": self.address_missing,
             "gate_drops": dict(self.gate_drops),
             "merged": self.merged,
             "passed": self.passed,
@@ -248,10 +253,18 @@ def collect(
     # 카테고리 매핑 — 불가분은 게이트로 보내지 않고 드롭+카운트
     candidates: list[SourcingCandidate] = []
     unmapped = 0
+    address_missing = 0
     for record in listed:
         category = map_category(record.kind, record.category_codes)
         if category is None:
             unmapped += 1
+            continue
+        if not record.address:
+            # 주소 없는 레코드는 제안하지 않는다 (TRIP-535) — provenance.address가
+            # 백엔드 행정구역 해석의 유일 입력이라 부재 시 소비처 IT가 깨진다.
+            # 실측: tourapi-2946228(익선동 한옥거리, addr1 빈 값) 1건이 develop
+            # backend-ci를 적색으로 만듦. 드롭+카운트 (침묵 금지).
+            address_missing += 1
             continue
         hours = hours_by_ref.get(record.source_ref, _NO_HOURS)
         candidates.append(SourcingCandidate(
@@ -300,6 +313,7 @@ def collect(
         page_failures=page_failures,
         detail_failures=detail_failures,
         category_unmapped=unmapped,
+        address_missing=address_missing,
         gate_drops=dict(report.drops),
         merged=report.merged,
         passed=len(report.passed),
@@ -481,7 +495,8 @@ def to_multi_output_document(
     }
     totals = {
         "http_calls": 0, "listed": 0, "page_failures": 0, "detail_failures": 0,
-        "category_unmapped": 0, "merged": 0, "passed": 0, "skipped_unchanged": 0,
+        "category_unmapped": 0, "address_missing": 0,
+        "merged": 0, "passed": 0, "skipped_unchanged": 0,
     }
     gate_drops: dict[str, int] = {}
     budget_exhausted = False
@@ -497,6 +512,7 @@ def to_multi_output_document(
         totals["page_failures"] += s.page_failures
         totals["detail_failures"] += s.detail_failures
         totals["category_unmapped"] += s.category_unmapped
+        totals["address_missing"] += s.address_missing
         totals["merged"] += s.merged
         totals["passed"] += s.passed
         totals["skipped_unchanged"] += s.skipped_unchanged
