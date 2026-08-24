@@ -1,6 +1,7 @@
-"""경계 라우트 6종 — `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit}`.
+"""경계 라우트 8종 — `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit}`
++ `POST /ai/v1/reflection/{generate,nudge}`.
 
-도입 티켓: alternatives=TRIP-428 · explanations=TRIP-479 · edit=TRIP-431.
+도입 티켓: alternatives=TRIP-428 · explanations=TRIP-479 · edit=TRIP-431 · reflection=TRIP-429.
 경로 정본: services.md §0 / agent-io-contracts.md §0.1 (구 표기 `/ai/generate`·`/ai/schedule` 폐기).
 
 이 파일이 하는 일은 셋뿐이다:
@@ -35,6 +36,10 @@ from trippilot.api.schemas import (
     FreshnessMetaSchema,
     GenerateItineraryRequest,
     ItineraryPayload,
+    ReflectionGenerateRequest,
+    ReflectionGenerateResponse,
+    ReflectionNudgeRequest,
+    ReflectionNudgeResponse,
     RepairItineraryRequest,
     RepairItineraryResponse,
     UnplacedMustVisitSchema,
@@ -265,6 +270,43 @@ def edit(
     통과분만 반영한다(INV-1·2·4). 구형 조립은 503 명시 실패.
     """
     handler = getattr(orchestrator, "edit", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(lambda: handler(request))
+
+
+# ───────────────── Reflect 경계 (TRIP-429 — /ai/v1/reflection) ─────────────────
+reflection_router = APIRouter(prefix="/ai/v1/reflection", tags=["reflection"])
+
+
+@reflection_router.post("/generate", response_model=ReflectionGenerateResponse)
+def reflection_generate(
+    request: ReflectionGenerateRequest,
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> ReflectionGenerateResponse:
+    """회고 연출 템플릿 생성 (TRIP-429 — U6 FD Phase 1, 계약 §5).
+
+    N회 생성(≤3) → 결정론 랭킹 → 하드 위반 결정론 교체. 전 시도 파싱 실패면
+    고정 폴백 템플릿 200 (is_fallback=true — INV-4, 침묵 금지). 응답에
+    시각·순서·duration 필드 자체가 없다(INV-3). 구형 조립은 503 명시 실패.
+    """
+    handler = getattr(orchestrator, "reflection_generate", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(lambda: handler(request))
+
+
+@reflection_router.post("/nudge", response_model=ReflectionNudgeResponse)
+def reflection_nudge(
+    request: ReflectionNudgeRequest,
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> ReflectionNudgeResponse:
+    """회고 유도 푸시 문구 1건 (TRIP-429 — 기존 REFLECTION_NUDGE 세트 노출).
+
+    LLM 실패·게이트 드롭 시 결정론 기본 문구 200 (is_fallback=true — INV-4).
+    구형 조립은 503 명시 실패.
+    """
+    handler = getattr(orchestrator, "reflection_nudge", None)
     if handler is None:
         raise orchestrator_not_wired()
     return _guarded(lambda: handler(request))

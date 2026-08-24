@@ -416,3 +416,91 @@ class EditItineraryResponse(BoundaryModel):
     itinerary: ItineraryPayload | None = None
     violations: list[ViolationSchema] = Field(default_factory=list)
     reason: str | None = None
+
+
+# ───────────────── Reflect 경계 (TRIP-429 — U6 FD v1.0, 계약 §5) ─────────────────
+# 요청은 도메인 ReflectionRequest와 동형(백엔드가 방문·이벤트·페르소나를 조립,
+# AI stateless). 응답은 ReflectionTemplate.to_dict()와 동형 — **시각·순서·duration
+# 필드 자체가 없다** (INV-2 비적용 구조화 + INV-3).
+
+
+class VisitRefSchema(BoundaryModel):
+    date: dt.date
+    poi_id: str = Field(min_length=1)
+
+
+class VisitRecordSchema(BoundaryModel):
+    """방문 기록 1건 — 시각·체류분 필드 없음 (INV-3 원천 차단). 순서는 백엔드 실측값."""
+
+    ref: VisitRefSchema
+    poi_name: str
+    category: str
+    order_in_day: int = Field(ge=1)
+    photo_count: int = Field(ge=0)
+
+
+class TripEventRecordSchema(BoundaryModel):
+    kind: str  # SourceEventKind 값 (PLAN_B | SKIPPED) — 도메인 승격 시 검증
+    date: dt.date
+    detail: str
+
+
+class ReflectionGenerateRequest(BoundaryModel):
+    """회고 템플릿 생성 요청 — visits ≥ 1 (0건은 트리거 단에서 미발생, 이중 방어는 도메인)."""
+
+    request_meta: RequestMetaSchema
+    kind: str  # ReflectionKind 값 — 도메인 승격 시 검증
+    region: str
+    start_date: dt.date
+    end_date: dt.date
+    visits: list[VisitRecordSchema] = Field(min_length=1)
+    events: list[TripEventRecordSchema] = Field(default_factory=list)
+    persona_summary: str = ""
+    weather_summary: str = ""
+
+
+class PhotoSlotSchema(BoundaryModel):
+    visit_ref: VisitRefSchema
+
+
+class SceneSchema(BoundaryModel):
+    layout: str  # SceneLayout 값
+    caption: str
+    photo_slot: PhotoSlotSchema | None = None
+    source_event: str | None = None
+
+
+class CoverSchema(BoundaryModel):
+    title: str
+    subtitle: str
+    photo_slot: PhotoSlotSchema | None = None
+
+
+class ReflectionGenerateResponse(BoundaryModel):
+    """ReflectionTemplate.to_dict()와 동형 — is_fallback은 강등 정직 보고 (INV-4)."""
+
+    template_id: str
+    kind: str
+    format: str
+    generated_at: dt.datetime
+    is_fallback: bool
+    cover: CoverSchema
+    scenes: list[SceneSchema]
+    hashtags: list[str] = Field(default_factory=list)
+
+
+class ReflectionNudgeRequest(BoundaryModel):
+    """회고 유도 문구 요청 — duration_days는 입력 메타(문구 소재)지 표시값이 아니다."""
+
+    request_meta: RequestMetaSchema
+    destination: str
+    # 와이어 필드명에 duration 토큰 금지(INV-3 계약 가드) — 도메인 입력의
+    # duration_days(문구 소재 메타)로 승격 시 이름만 바꾼다
+    trip_days: int = Field(ge=1)
+    persona_summary: str = ""
+    highlight_places: list[str] = Field(default_factory=list, max_length=2)
+
+
+class ReflectionNudgeResponse(BoundaryModel):
+    message: str
+    is_fallback: bool

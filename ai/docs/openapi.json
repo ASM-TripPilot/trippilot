@@ -226,6 +226,35 @@
         "title": "CoordSchema",
         "type": "object"
       },
+      "CoverSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "photo_slot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhotoSlotSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subtitle": {
+            "title": "Subtitle",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "subtitle"
+        ],
+        "title": "CoverSchema",
+        "type": "object"
+      },
       "DayAnchorSchema": {
         "additionalProperties": false,
         "description": "day별 공간 앵커(등록 숙소 해석 결과 = trip_base_day).",
@@ -760,6 +789,19 @@
         "title": "ItineraryPayload",
         "type": "object"
       },
+      "PhotoSlotSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "visit_ref": {
+            "$ref": "#/components/schemas/VisitRefSchema"
+          }
+        },
+        "required": [
+          "visit_ref"
+        ],
+        "title": "PhotoSlotSchema",
+        "type": "object"
+      },
       "PreferenceProfileSchema": {
         "additionalProperties": false,
         "description": "취향 7축(preference_snapshot).",
@@ -828,6 +870,180 @@
           }
         },
         "title": "PreferenceProfileSchema",
+        "type": "object"
+      },
+      "ReflectionGenerateRequest": {
+        "additionalProperties": false,
+        "description": "회고 템플릿 생성 요청 — visits ≥ 1 (0건은 트리거 단에서 미발생, 이중 방어는 도메인).",
+        "properties": {
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/TripEventRecordSchema"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "persona_summary": {
+            "default": "",
+            "title": "Persona Summary",
+            "type": "string"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "visits": {
+            "items": {
+              "$ref": "#/components/schemas/VisitRecordSchema"
+            },
+            "minItems": 1,
+            "title": "Visits",
+            "type": "array"
+          },
+          "weather_summary": {
+            "default": "",
+            "title": "Weather Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_meta",
+          "kind",
+          "region",
+          "start_date",
+          "end_date",
+          "visits"
+        ],
+        "title": "ReflectionGenerateRequest",
+        "type": "object"
+      },
+      "ReflectionGenerateResponse": {
+        "additionalProperties": false,
+        "description": "ReflectionTemplate.to_dict()와 동형 — is_fallback은 강등 정직 보고 (INV-4).",
+        "properties": {
+          "cover": {
+            "$ref": "#/components/schemas/CoverSchema"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "hashtags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Hashtags",
+            "type": "array"
+          },
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "scenes": {
+            "items": {
+              "$ref": "#/components/schemas/SceneSchema"
+            },
+            "title": "Scenes",
+            "type": "array"
+          },
+          "template_id": {
+            "title": "Template Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template_id",
+          "kind",
+          "format",
+          "generated_at",
+          "is_fallback",
+          "cover",
+          "scenes"
+        ],
+        "title": "ReflectionGenerateResponse",
+        "type": "object"
+      },
+      "ReflectionNudgeRequest": {
+        "additionalProperties": false,
+        "description": "회고 유도 문구 요청 — duration_days는 입력 메타(문구 소재)지 표시값이 아니다.",
+        "properties": {
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "highlight_places": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2,
+            "title": "Highlight Places",
+            "type": "array"
+          },
+          "persona_summary": {
+            "default": "",
+            "title": "Persona Summary",
+            "type": "string"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "trip_days": {
+            "minimum": 1.0,
+            "title": "Trip Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_meta",
+          "destination",
+          "trip_days"
+        ],
+        "title": "ReflectionNudgeRequest",
+        "type": "object"
+      },
+      "ReflectionNudgeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "is_fallback"
+        ],
+        "title": "ReflectionNudgeResponse",
         "type": "object"
       },
       "RepairItineraryRequest": {
@@ -912,6 +1128,46 @@
           "requested_at"
         ],
         "title": "RequestMetaSchema",
+        "type": "object"
+      },
+      "SceneSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "caption": {
+            "title": "Caption",
+            "type": "string"
+          },
+          "layout": {
+            "title": "Layout",
+            "type": "string"
+          },
+          "photo_slot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhotoSlotSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Event"
+          }
+        },
+        "required": [
+          "layout",
+          "caption"
+        ],
+        "title": "SceneSchema",
         "type": "object"
       },
       "TimeWindowSchema": {
@@ -1025,6 +1281,31 @@
           "end_date"
         ],
         "title": "TripContextSchema",
+        "type": "object"
+      },
+      "TripEventRecordSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "date",
+          "detail"
+        ],
+        "title": "TripEventRecordSchema",
         "type": "object"
       },
       "UnplacedMustVisitSchema": {
@@ -1177,6 +1458,63 @@
           "code"
         ],
         "title": "ViolationSchema",
+        "type": "object"
+      },
+      "VisitRecordSchema": {
+        "additionalProperties": false,
+        "description": "방문 기록 1건 — 시각·체류분 필드 없음 (INV-3 원천 차단). 순서는 백엔드 실측값.",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "order_in_day": {
+            "minimum": 1.0,
+            "title": "Order In Day",
+            "type": "integer"
+          },
+          "photo_count": {
+            "minimum": 0.0,
+            "title": "Photo Count",
+            "type": "integer"
+          },
+          "poi_name": {
+            "title": "Poi Name",
+            "type": "string"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/VisitRefSchema"
+          }
+        },
+        "required": [
+          "ref",
+          "poi_name",
+          "category",
+          "order_in_day",
+          "photo_count"
+        ],
+        "title": "VisitRecordSchema",
+        "type": "object"
+      },
+      "VisitRefSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "poi_id"
+        ],
+        "title": "VisitRefSchema",
         "type": "object"
       },
       "VisitSlotDisplaySchema": {
@@ -1507,6 +1845,90 @@
         "summary": "Validate",
         "tags": [
           "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/reflection/generate": {
+      "post": {
+        "description": "회고 연출 템플릿 생성 (TRIP-429 — U6 FD Phase 1, 계약 §5).\n\nN회 생성(≤3) → 결정론 랭킹 → 하드 위반 결정론 교체. 전 시도 파싱 실패면\n고정 폴백 템플릿 200 (is_fallback=true — INV-4, 침묵 금지). 응답에\n시각·순서·duration 필드 자체가 없다(INV-3). 구형 조립은 503 명시 실패.",
+        "operationId": "reflection_generate_ai_v1_reflection_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReflectionGenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReflectionGenerateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reflection Generate",
+        "tags": [
+          "reflection"
+        ]
+      }
+    },
+    "/ai/v1/reflection/nudge": {
+      "post": {
+        "description": "회고 유도 푸시 문구 1건 (TRIP-429 — 기존 REFLECTION_NUDGE 세트 노출).\n\nLLM 실패·게이트 드롭 시 결정론 기본 문구 200 (is_fallback=true — INV-4).\n구형 조립은 503 명시 실패.",
+        "operationId": "reflection_nudge_ai_v1_reflection_nudge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReflectionNudgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReflectionNudgeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reflection Nudge",
+        "tags": [
+          "reflection"
         ]
       }
     },
