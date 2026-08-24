@@ -335,9 +335,11 @@ class ReflectionTemplateGate:
                     )
                 )
 
-        # 해시태그 — HASHTAG_OUT(허용 집합)은 미결 #5로 미판정, 금칙·어휘 검사만 (BR-U6R-04)
-        for tag in template.hashtags:
-            check_text(tag, None, f"hashtags:{tag}")
+        # 해시태그 — HASHTAG_OUT(허용 집합)은 미결 #5로 미판정, 금칙·어휘 검사만 (BR-U6R-04).
+        # 라벨은 인덱스형 — 태그 문자열을 라벨에 실으면 태그 내 콜론({poi:i.name}
+        # 자리표시자가 설계상 포함)이 composer의 재파싱을 깨뜨린다 (PBT 실측).
+        for i, tag in enumerate(template.hashtags):
+            check_text(tag, None, f"hashtags[{i}]")
 
         # 전역 (소프트)
         if not _SCENE_MIN <= len(template.scenes) <= _SCENE_MAX:

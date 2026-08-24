@@ -48,6 +48,7 @@ SAFE_CAPTION_BY_LAYOUT: dict[SceneLayout, str] = {
 }
 
 _DETAIL_TOKEN = re.compile(r"\{([^{}]*)\}")  # detail 말미의 {토큰} — 게이트 포맷 고정
+_HASHTAG_INDEX = re.compile(r"hashtags\[(\d+)\]")  # 게이트 라벨 인덱스형과 페어
 
 
 def rank_key(candidate: TemplateCandidate) -> tuple[int, int, int, int]:
@@ -125,13 +126,16 @@ def apply_hard_replacements(
         if not drop:
             scenes.append(scene)
 
-    # ── 해시태그 (detail "hashtags:{태그}:…") — 위반 태그만 제거 ──
-    bad_tags = {
-        v.detail.split(":", 2)[1]
-        for v in hard
-        if v.scene_index is None and v.detail.startswith("hashtags:")
-    }
-    hashtags = tuple(t for t in template.hashtags if t not in bad_tags)
+    # ── 해시태그 (detail "hashtags[i]: …") — 위반 태그만 인덱스로 제거.
+    # 태그 문자열 재파싱 금지 — 태그 내 콜론({poi:i.name})이 split을 깨뜨린다 (PBT 실측)
+    bad_idx = set()
+    for v in hard:
+        if v.scene_index is None:
+            m = _HASHTAG_INDEX.match(v.detail)
+            if m:
+                bad_idx.add(int(m.group(1)))
+    hashtags = tuple(
+        t for i, t in enumerate(template.hashtags) if i not in bad_idx)
 
     return replace(template, cover=cover, scenes=tuple(scenes), hashtags=hashtags)
 
