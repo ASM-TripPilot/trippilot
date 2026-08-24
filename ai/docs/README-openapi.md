@@ -1,7 +1,10 @@
 # `openapi.json` — AI 경계 와이어 정본
 
-`ai/docs/openapi.json`은 AI 서비스 경계(`/ai/v1/itinerary/{generate,validate,repair}` + `/health`)의
+`ai/docs/openapi.json`은 AI 서비스 경계 6종
+(`/ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit}` —
+alternatives=TRIP-428 · explanations=TRIP-479 · edit=TRIP-431) + `/health`의
 **와이어 계약 정본**이다 — PR #76 결정4("openapi 단일 정본 + 양쪽 코드젠")의 AI측 절반.
+경로 전수 일치는 `ai/tests/test_api_openapi_contract.py`가 강제한다 — 경로 추가·삭제 시 그 목록도 같이 갱신한다.
 
 - **생성 원리**: FastAPI가 `create_app()`(오케스트레이터 미주입 상태)의 `app.openapi()`로
   자동 생성한 스키마를, 정렬·들여쓰기 고정 포맷(`json.dumps(…, indent=2, ensure_ascii=False,

@@ -38,9 +38,14 @@
 | 포워드 | 일정 생성 (ScheduleAgent) | `POST /ai/v1/itinerary/generate` | **확정** — 구 표기 `POST /ai/generate`·`/ai/schedule` 폐기 |
 | 포워드 | 일정 검증 | `POST /ai/v1/itinerary/validate` | **확정** |
 | 포워드 | 일정 수리 | `POST /ai/v1/itinerary/repair` | **확정** |
+| 포워드 | Plan-B 대안 제안 | `POST /ai/v1/itinerary/alternatives` | **확정** — TRIP-428 |
+| 포워드 | 슬롯별 설명 조회 | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
+| 포워드 | 일정 편집 (EditAgent) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
 | 리버스 | POI 정본 read — 반경 (`find_by_radius`) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | 리버스 | POI 정본 read — 배치 (`find_by_ids`) | `POST /internal/pois/batch-get` · 요청 필드 `poi_ids` | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
-| 포워드 | AI 도우미 · Plan-B | `/ai/v1/...` 명명 규칙만 확정, 리소스명 **협의 중** | 미확정 |
+
+포워드 경계는 위 6종 + `/health`가 전부다 — 와이어 정본은 `ai/docs/openapi.json`,
+전수 일치는 `ai/tests/test_api_openapi_contract.py`가 강제한다.
 
 리버스 나머지(`nearby`·`open-window`·`closedCheck`)는 이연 — 협의 중.
 
@@ -56,7 +61,7 @@
 | a03~a09 온보딩 취향 + d02 목적·취향 | 목적 카드·취향 태그 다중 선택 | `preference_set(styles[], activities[], food_tastes[], budget_tier, companion_types[], pace)` | `preference_profile` (7축, NULL=미설정) |
 | d03 출발·위치·페이스 | 출발 시각, 출발 위치, 페이스 | `trip_base_day(saved_stay_id, resolution)` + 세션 파라미터 | `time_windows[{date, start, end}]`, `pace` |
 | (숙소 등록) | 등록 숙소 = 거점 | `saved_stay(coord, check_in/out)` | `anchor{lat, lng}` (day별 — trip_base_day 해석 결과) |
-| d05~d07 필수 방문지 | POI 선택, ANYTIME/FIXED, 시각·체류 | `must_visit(poi_snapshot_id, type, fixed_date, fixed_start, dwell_min)` | `fixed_blocks[{poi_id, date?, start?, dwell_min?}]` |
+| d05~d07 필수 방문지 | POI 선택, ANYTIME/FIXED, 시각·체류 | `must_visit(poi_snapshot_id, type, fixed_date, fixed_start, dwell_min)` | `fixed_blocks[{poi_id, date, start, dwell_min?}]` — date·start 필수(M1), dwell_min 미지정은 AI가 60분 적용 |
 | b04 찜 | 저장 장소 | `saved_place(poi_id)` | (직접 입력 아님 — PersonaAgent 경유로 선호 컨텍스트에 반영) |
 | d11 추천 강도 | 추천 강도 선택 | 생성 요청 파라미터 | `generation_mode(fully_ai/co_plan)`, `recommendation_strength` |
 
@@ -66,8 +71,9 @@
 > AI 는 stateless 를 유지하고, 진행 상태·재시도·노출은 백엔드가 소유한다.
 > 1차 `time_windows=[day1]`·`deadline_ms=5000` → 즉시 사용자 노출 · 2차 `time_windows=[나머지 일자]`·
 > `deadline_ms=20000`·`excluded_poi_ids=[1차 배정 POI]` → 백그라운드 완료.
-> 각 호출은 **자기가 맡은 일자의** `anchors`·`fixed_blocks` 만 받는다. 날짜 미지정(ANYTIME) `fixed_blocks` 는
-> 배치 공간이 넓은 2차에 싣는다(하루 여행이면 1차). 2차가 실패하면 백엔드가 결정론 폴백으로 채운다(INV-4).
+> 각 호출은 **자기가 맡은 일자의** `anchors`·`fixed_blocks` 만 받는다. ANYTIME(날짜·시각 미지정) 필수방문은
+> AI 로 오지 않는다 — 백엔드 `MustVisitMaterializer` 가 날짜·시각을 물질화해 확정 블록으로 보낸다(경계 계약 M1).
+> 2차가 실패하면 백엔드가 결정론 폴백으로 채운다(INV-4).
 
 ```python
 @dataclass

@@ -455,7 +455,7 @@ def test_schema_violations_return_422() -> None:
         {**base, "excluded_poi_id": ["oops"]},          # 미지 필드 — 드리프트 침묵 금지
         {**base, "time_windows": []},                   # 최소 1일
         {**base, "anchors": []},                        # 조립 불가 — 앵커 없음 (어댑터)
-        {**base, "fixed_blocks": [{"poi_id": "p9"}]},   # ANYTIME 고정 블록 미표현 (어댑터)
+        {**base, "fixed_blocks": [{"poi_id": "p9"}]},   # ANYTIME — date/start/dwell_min 필수 (스키마, M1)
     ]
     with make_client() as client:
         for payload in cases:

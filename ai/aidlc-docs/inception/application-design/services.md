@@ -15,9 +15,13 @@
 | 일정 생성 (포워드) | `POST /ai/v1/itinerary/generate` | **확정** — 구 표기 `POST /ai/generate` 폐기 |
 | 일정 검증 (포워드) | `POST /ai/v1/itinerary/validate` | **확정** |
 | 일정 수리 (포워드) | `POST /ai/v1/itinerary/repair` | **확정** |
+| Plan-B 대안 제안 (포워드) | `POST /ai/v1/itinerary/alternatives` | **확정** — TRIP-428 |
+| 슬롯별 설명 조회 (포워드) | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
+| 일정 편집 (포워드) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
 | POI 정본 read — 반경 (리버스) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | POI 정본 read — 배치 (리버스) | `POST /internal/pois/batch-get` (요청 필드 `poi_ids`) | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
-| AI 도우미 · Plan-B | `/ai/v1/...` 명명 규칙만 확정, 리소스명은 **협의 중** | 미확정 |
+
+포워드 경계는 위 6종 + `/health`가 전부다 — 전수 일치는 `ai/tests/test_api_openapi_contract.py`가 강제한다.
 
 프로토콜은 **REST/JSON over HTTP 확정**(PR #76 결정4). `/c1/*`·`/c2/*`·`/m7/*` 세분 경로
 (`../reverse-engineering/api-documentation.md`)는 PR #76 "굵은 경계 — 조각 조립 경계를 두지 않는다" 합의로
