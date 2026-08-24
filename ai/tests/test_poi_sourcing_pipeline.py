@@ -189,6 +189,22 @@ def test_collect_unmapped_category_dropped_before_gate() -> None:
     assert result.stats.passed == 0 and result.stats.gate_drops == {}
 
 
+def test_collect_address_missing_dropped_before_gate() -> None:
+    """TRIP-535 — addr1 빈 레코드는 제안하지 않는다 (provenance.address가 백엔드
+    행정구역 해석의 유일 입력 — 실측: 익선동 한옥거리 1건이 backend-ci 적색)."""
+    http = FakeTourApiHttp(pages={("12", 1): envelope(
+        [list_item("600", "익선동 한옥거리", addr1=""),
+         list_item("601", "주소 있는 곳")], 2)})
+    result = collect(_adapter(http), area_code="1",
+                     content_types=["12"], max_calls=500)
+    assert result.stats.address_missing == 1
+    assert result.stats.passed == 1  # 주소 있는 쪽만 통과
+    assert all(p.candidate.address for p in result.report.passed)
+    s = result.stats
+    assert s.passed + sum(s.gate_drops.values()) + s.merged \
+        + s.category_unmapped + s.address_missing == s.listed
+
+
 def test_collect_page_failure_logged_and_skipped() -> None:
     # 에러 코드는 **키와 무관한** 것이어야 한다 — 키 관련 코드(30 미등록·22 한도초과 등)는
     # TRIP-348 이후 "이 키로는 앞으로도 안 된다"는 신호라 다음 타입까지 멈춘다.
@@ -306,7 +322,7 @@ def test_pbt_call_budget_invariant(items, max_calls) -> None:
     stats = result.stats
     assert stats.listed == len(items)  # 1페이지 확보분은 상한과 무관하게 전부 목록화
     assert stats.passed + sum(stats.gate_drops.values()) + stats.merged \
-        + stats.category_unmapped == stats.listed
+        + stats.category_unmapped + stats.address_missing == stats.listed
 
 
 @settings(max_examples=25, deadline=None)

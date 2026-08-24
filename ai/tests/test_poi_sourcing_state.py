@@ -226,4 +226,4 @@ def test_pbt_skipped_items_absent_from_output_and_calls(pairs) -> None:
     # 통계 정합은 스킵 하에서도 유지 (기존 불변식의 확장)
     s = result.stats
     assert s.passed + sum(s.gate_drops.values()) + s.merged \
-        + s.category_unmapped == s.listed
+        + s.category_unmapped + s.address_missing == s.listed
