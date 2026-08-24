@@ -4,7 +4,7 @@
 [1] Retrieve  KB-1 일정 · KB-3 상황 · KB-2 페르소나  (kb_retrieval)
 [2] Augment   closed-set 후보 목록 + 검색 컨텍스트 조립
 [3] Generate  llm.select_alternatives — C1 GatewayFacade 경유 (L-3)
-              게이트웨이 미주입/실패 → 규칙 랭킹 폴백 (INV-4)
+              게이트웨이 미주입/실패 → 규칙 랭킹 폴백 (INV-4 — reason·거리 신호, TRIP-532)
 [4] Validate  솔버 관문 (C2) — **본 단계 범위 밖**, 아래 "남긴 이음매" 참조
 ```
 
@@ -35,6 +35,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from types import MappingProxyType
 
 from trippilot.agents.planb.kb_retrieval import (
     DEFAULT_TOP_K,
@@ -50,11 +51,22 @@ from trippilot.llm_gateway.workers.alternative_selection import (
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.kb import KbHit, KbKind
 from trippilot.domain.llm import AlternativePick, CandidatePool, ScoredPoi
+from trippilot.domain.poi import PoiCategory
 from trippilot.domain.trigger import TriggerParams
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
+from trippilot.solver_engine.config import RAIN_OUTDOOR
+from trippilot.solver_engine.travel import haversine_km
 
 _ALTERNATIVE_LABELS = ("A", "B", "C", "D", "E")
+
+# 규칙 폴백의 reason → 후순위 카테고리 (TRIP-532). 배정을 바꾸려면 여기만 고친다.
+# 분기 키는 TriggerKind 가 아니라 **reason** — MANUAL 트리거도 사유("비 와서")를 따라간다.
+# delay·fatigue 는 거리 오름차순이 곧 규칙이라 항목이 없고, closed·canceled·none 은 중립
+# (닫힌 곳은 excluded 로 이미 빠진다 — 없는 신호로 순위를 지어내지 않는다).
+_DEMOTED_BY_REASON: Mapping[str, frozenset[PoiCategory]] = MappingProxyType(
+    {"weather": RAIN_OUTDOOR}  # 솔버의 우천 판정표(TRIP-383)와 같은 기준 — 두 경로가 같은 판단
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -308,9 +320,15 @@ class PlanBRagPipeline:
         available: tuple[PoiId, ...],
     ) -> tuple[tuple[str, ...], Mapping[str, str], bool, str]:
         """반환: (참조 순열, {참조: LLM 근거}, LLM 사용 여부, 폴백 사유)."""
-        rule_ranked = _rule_ranking(context.persona, available)
+        rule_ranked, rule_note = _rule_ranking(
+            context.persona, request.pool, available, request.reason
+        )
+
+        def _why(cause: str) -> str:  # 폴백 사유 + 규칙 랭킹이 뭘 했는지 (침묵 조정 금지)
+            return f"{cause} · {rule_note}" if rule_note else cause
+
         if self._worker is None:
-            return rule_ranked, {}, False, "alternative_gateway_absent"
+            return rule_ranked, {}, False, _why("alternative_gateway_absent")
         try:
             result = self._worker.select(
                 request.pool,
@@ -328,15 +346,15 @@ class PlanBRagPipeline:
                 request.now,
             )
         except Exception as e:  # 설정 버그(프롬프트 미등록 등)도 Plan-B를 죽이지 않는다
-            return rule_ranked, {}, False, f"alternative_error: {type(e).__name__}: {e}"
+            return rule_ranked, {}, False, _why(f"alternative_error: {type(e).__name__}: {e}")
         if result.is_fallback:
-            return rule_ranked, {}, False, f"alternative_fallback: {result.error}"
+            return rule_ranked, {}, False, _why(f"alternative_fallback: {result.error}")
         picked = _as_refs(result.value)
         if picked is None:
-            return rule_ranked, {}, False, "alternative_bad_shape"
+            return rule_ranked, {}, False, _why("alternative_bad_shape")
         selected, reasons = picked
         if not selected:
-            return rule_ranked, {}, False, "alternative_empty"
+            return rule_ranked, {}, False, _why("alternative_empty")
         return selected, reasons, True, ""
 
     def _rationale(self, request: PlanBRagRequest, used_llm: bool) -> str:
@@ -383,23 +401,38 @@ def _with_reasons(schedule_context: str, reasons: Mapping[str, str]) -> str:
 # ── 랭킹·형태 검증 ──────────────────────────────────────────────────────
 
 
-def _rule_ranking(persona_hits: Sequence[KbHit], available: tuple[PoiId, ...]) -> tuple[str, ...]:
-    """규칙 폴백 랭킹 — 결정론.
+def _rule_ranking(
+    persona_hits: Sequence[KbHit],
+    pool: CandidatePool,
+    available: tuple[PoiId, ...],
+    reason: str,
+) -> tuple[tuple[str, ...], str]:
+    """규칙 폴백 랭킹 — 결정론, 외부 호출 0. 반환: (참조 순열, 조정 기록).
 
-    정본(§3 [2])의 "저장 장소가 대안 1순위"를 그대로 옮긴다: KB-2 히트가 가리키는 POI 중
-    **풀 안에 있는 것**을 검색 순서대로 앞에 두고, 나머지는 풀 순서로 뒤에 붙인다.
+    planb-rag-design §7 의 "규칙 점수(카테고리+거리+평점)" 를 가용 데이터로 옮긴 정렬 키:
+      ⓪ reason 신호 — `_DEMOTED_BY_REASON` 의 카테고리를 **뒤로** (제외 아님: 대안 0 보다
+         야외라도 제안하는 편이 낫다)
+      ① KB-2 저장 장소 우선 (§3 [2]) — 단 ⓪이 앞선다: 비 오는 날 야외는 저장이어도 뒤
+      ② 앵커까지 직선거리 오름차순 (haversine) — 풀에 anchor 가 없으면 생략
+    안정 정렬이라 동률은 풀 순서를 유지한다(결정론). 평점은 범위 밖 — `rating` 이 실
+    어댑터에서 항상 None(백엔드 미제공). 실경로(TMAP)는 장애 경로에 새 장애 모드를
+    더하므로 쓰지 않는다 — 폴백은 계산만으로 항상 돌아야 한다 (INV-4).
     페르소나 히트가 풀 자격을 만드는 게 아니라 **풀 안에서의 우선순위만** 바꾼다 (INV-1).
     """
-    in_pool = set(available)
-    ranked: list[str] = []
-    seen: set[str] = set()
-    for hit in persona_hits:
-        ref = hit.poi_ref
-        if ref and ref not in seen and PoiId(ref) in in_pool:
-            seen.add(ref)
-            ranked.append(ref)
-    ranked.extend(str(p) for p in available if str(p) not in seen)
-    return tuple(ranked)
+    demoted = _DEMOTED_BY_REASON.get(reason, frozenset())
+    poi_by_id = {p.poi_id: p for p in pool.pois}
+    saved = {h.poi_ref for h in persona_hits if h.poi_ref}
+    anchor = pool.anchor
+
+    def _key(poi_id: PoiId) -> tuple[bool, bool, float]:
+        poi = poi_by_id[poi_id]
+        distance = haversine_km(anchor, poi.coord) if anchor is not None else 0.0
+        return (poi.category in demoted, str(poi_id) not in saved, distance)
+
+    ranked = sorted(available, key=_key)
+    demoted_count = sum(1 for p in ranked if poi_by_id[p].category in demoted)
+    note = f"rule_ranking: {reason} 신호로 야외 {demoted_count}건 후순위" if demoted_count else ""
+    return tuple(str(p) for p in ranked), note
 
 
 def _as_refs(value: object) -> tuple[tuple[str, ...], Mapping[str, str]] | None:
