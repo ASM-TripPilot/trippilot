@@ -43,6 +43,10 @@ class LlmFeature(Enum):
     # 여행 종료 후 회고 유도 푸시 문구 1문장 — REFLECTION(본문 생성)과 별개 기능.
     # 알림 발송은 백엔드 notification(FCM) 소유 — c1은 문구 생성까지만 (TRIP-347).
     REFLECTION_NUDGE = "REFLECTION_NUDGE"  # U6 (TRIP-347)
+    # 회고 연출 템플릿(공유 카드뉴스 장면 시퀀스) 생성 — REFLECTION(j03 회고 초안)·
+    # REFLECTION_NUDGE(푸시 문구)와 별개 feature. 출력 계약은 reflection-template-design.md
+    # (#334), 타입은 domain/reflection.py (U6 Reflect FD).
+    REFLECTION_TEMPLATE = "REFLECTION_TEMPLATE"  # U6 (TRIP-429)
     PLACE_EXTRACTION = "PLACE_EXTRACTION"  # U6 (백그라운드)
     # 웹 검색 스니펫 → 행사(축제·공연·전시) 구조화 추출 — 웹소싱 파이프라인의
     # 추출 단계. 행사는 POI가 아니라 후보 풀에 편입되지 않는다 (domain/event.py).

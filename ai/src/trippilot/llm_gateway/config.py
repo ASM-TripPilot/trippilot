@@ -14,7 +14,7 @@ from trippilot.domain.llm import LlmFeature, ModelTier
 
 
 def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
-    """FD domain-entities §1의 기능→티어 기본 매핑 (경량 6·상위 5).
+    """FD domain-entities §1의 기능→티어 기본 매핑 (경량 6·상위 6).
 
     OFFLINE 티어는 배치·회귀 전용 — 기능 매핑에 등장하지 않는다.
     """
@@ -32,6 +32,9 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             LlmFeature.ALTERNATIVE_SELECTION: ModelTier.HEAVY,
             LlmFeature.REFLECTION: ModelTier.HEAVY,
+            # 장면 시퀀스 연출 생성 — REFLECTION과 동급 과업, 백그라운드 N회 생성 전제
+            # (TRIP-429, BR-U6R-13: 티어·모델 실체는 항상 설정값)
+            LlmFeature.REFLECTION_TEMPLATE: ModelTier.HEAVY,
             LlmFeature.PLACE_EXTRACTION: ModelTier.HEAVY,
             # 자유 텍스트 구조화 추출 — PLACE_EXTRACTION과 동급 과업 (TRIP-421)
             LlmFeature.EVENT_EXTRACTION: ModelTier.HEAVY,
