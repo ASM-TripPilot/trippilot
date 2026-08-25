@@ -2,6 +2,8 @@ package com.trippilot.trip.application
 
 import com.trippilot.trip.api.FixedVisit
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.trip.api.TripListFacade
+import com.trippilot.trip.api.TripSummaryView
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
 import com.trippilot.trip.domain.MustVisitRepository
@@ -17,7 +19,22 @@ import java.util.UUID
 class TripPeriodFacade(
     private val repo: TripRepository,
     private val mustVisits: MustVisitRepository,
-) : TripFacade {
+) : TripFacade, TripListFacade {
+    /** 기록 목록(U5)이 읽는 여행들. 삭제된 여행은 제외하고 최신순으로 [limit] 건까지. */
+    override fun findTripsOf(accountId: UUID, limit: Int): List<TripSummaryView> =
+        repo.findByAccount(accountId)
+            .filter { it.deletedAt == null }
+            .sortedByDescending { it.startDate }
+            .take(limit)
+            .map { TripSummaryView(it.tripId, it.title, it.startDate, it.endDate, it.destinations.sortedBy { d -> d.seq }.map { d -> d.region }) }
+
+    /**
+     * 상한에 걸려 비어 보이는 것과 **정말 아무것도 없는 것**을 가르려고 따로 묻는다.
+     * 목록만 주면 화면이 "오류인가 없는 건가"를 알 수 없다(INV-4 결).
+     */
+    override fun hasAnyTrip(accountId: UUID): Boolean =
+        repo.findByAccount(accountId).any { it.deletedAt == null }
+
     override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? {
         val trip = repo.findById(tripId)?.takeIf { it.deletedAt == null && it.accountId == accountId } ?: return null
         return TripPeriod(trip.startDate, trip.endDate)
