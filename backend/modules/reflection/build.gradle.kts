@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":modules:trip"))     // R1: 소유·기간 검증만 — trip.api(TripFacade)
     implementation(project(":modules:archive"))  // R1: 방문 실적 읽기만 — archive.api(ArchiveFacade)
     implementation(project(":modules:place-data")) // R1: 방문점 좌표(거리 근사) — placedata.api
+    implementation(project(":modules:profile"))  // R1: 임계 미만 미리보기의 온보딩 취향 — profile.api
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
