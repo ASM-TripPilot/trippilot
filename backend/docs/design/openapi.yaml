@@ -938,6 +938,85 @@ paths:
         '200': { description: 건너뜀, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '404': { description: 여행 없음/타 계정/기록 없음 }
         '409': { description: 이미 완료·건너뜀 }
+  /trips/{tripId}/visits/{visitCheckId}/photos:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 방문 사진 **메타** 등록 — 업로드가 아니다
+      description: >
+        **서버는 사진 바이너리를 저장하지 않는다**(INV-U5-03 · DEC-U5-9). 여기서 받는 것은 기기 로컬
+        자산 식별자·기기 id·촬영 시각·EXIF 좌표(동의 시)뿐이고, 화면은 그 식별자로 기기 자산을 직접 연다.
+        업로드 경로는 없고 만들지도 않는다 — `storage_key` 류를 한 번 만들면 다음 사이클이 채운다.
+
+
+        `exifLat`·`exifLng` 는 **위치 동의(L3 `gpsRecordingOptIn`)가 없으면 저장되지 않는다**(INV-U5-04).
+        거부가 아니라 **무시**다 — 거부로 만들면 클라이언트가 동의 상태 사본을 들고 있어야 하고,
+        그 사본이 어긋나는 순간 등록 자체가 막힌다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AddPhotoRequest' } } }
+      responses:
+        '201': { description: 등록됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitPhoto' } } } }
+        '400': { description: 입력 검증 실패 · 방문당 상한 초과 }
+        '404': { description: 여행 없음/타 계정/방문 기록 없음 }
+        '409': { description: 같은 기기의 같은 자산이 이미 붙어 있음 }
+    get:
+      tags: [trips]
+      summary: 방문 사진 메타 목록 + 개수
+      description: >
+        정렬 순서대로. `count` 를 함께 주는 이유는 **개수만 쓰는 소비자**가 있기 때문이다 —
+        AI 컨텍스트 조립이 필요로 하는 것은 사진 자체가 아니라 "몇 장 찍었나"다.
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitPhotoList' } } } }
+        '404': { description: 여행 없음/타 계정/방문 기록 없음 }
+  /trips/{tripId}/visits/{visitCheckId}/photos/order:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [trips]
+      summary: 사진 정렬 변경
+      description: >
+        그 방문의 사진 **전부**를 한 번씩 담아야 한다. 부분 목록을 받아 그것만 다시 매기면 나머지와
+        순서가 겹쳐 "어느 것이 먼저인가"가 사라진다 — 그래서 400 으로 거부한다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReorderPhotosRequest' } } }
+      responses:
+        '204': { description: 변경됨 }
+        '400': { description: 목록이 그 방문의 사진 전부가 아님 }
+        '404': { description: 여행 없음/타 계정/방문 기록 없음 }
+  /trips/{tripId}/visits/{visitCheckId}/photos/{visitPhotoMetaId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitPhotoMetaId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [trips]
+      summary: 사진 메타 삭제 — 기기의 원본 사진은 건드리지 않는다
+      responses:
+        '204': { description: 삭제됨 }
+        '404': { description: 여행 없음/타 계정/방문·사진 없음 }
+  /trips/{tripId}/visits/{visitCheckId}/memo:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [trips]
+      summary: 방문 메모 저장(upsert) — 한 방문에 한 개
+      description: >
+        한 방문에 메모는 하나뿐이라(BR-U5-13) "만들기"와 "고치기"를 나누지 않는다.
+        메모는 **사진과 무관하게 남는다**(INV-U5-05) — 자산을 못 열어도 감상은 남아야 한다.
+        조회 표면은 이 티켓에 없다(`j02` 3종 비교가 소유).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PutMemoRequest' } } }
+      responses:
+        '200': { description: 저장됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitMemo' } } } }
+        '400': { description: 입력 검증 실패 }
+        '404': { description: 여행 없음/타 계정/방문 기록 없음 }
   /trips/{tripId}/triggers:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2136,6 +2215,80 @@ components:
                 그 여행으로 이동시킨다. `existingProvider` 와 같은 방식으로 다른 에러 코드의 응답에는
                 나타나지 않는다(직렬화 생략).
 
+    AddPhotoRequest:
+      type: object
+      required: [localAssetId, deviceId]
+      properties:
+        localAssetId:
+          type: string
+          maxLength: 200
+          description: 기기 로컬 자산 식별자(iOS PHAsset localIdentifier · Android MediaStore id). 기기 안에서만 뜻이 있다.
+        deviceId: { type: string, maxLength: 64 }
+        takenAt: { type: string, format: date-time, nullable: true }
+        exifLat:
+          type: number
+          format: double
+          nullable: true
+          description: 위치 동의가 없으면 **저장되지 않는다**(INV-U5-04). 보내는 것 자체는 오류가 아니다.
+        exifLng: { type: number, format: double, nullable: true }
+        sortOrder:
+          type: integer
+          nullable: true
+          description: 생략하면 맨 뒤에 붙는다.
+
+    ReorderPhotosRequest:
+      type: object
+      required: [orderedIds]
+      properties:
+        orderedIds:
+          type: array
+          description: 그 방문의 사진 **전부**를 한 번씩. 부분 목록은 400.
+          items: { type: string, format: uuid }
+
+    PutMemoRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 2000 }
+
+    VisitPhotoList:
+      type: object
+      required: [items, count]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/VisitPhoto' }
+        count:
+          type: integer
+          description: 개수만 쓰는 소비자(AI 컨텍스트)를 위해 함께 준다.
+
+    VisitPhoto:
+      type: object
+      required: [visitPhotoMetaId, localAssetId, deviceId, sortOrder]
+      properties:
+        visitPhotoMetaId: { type: string, format: uuid }
+        localAssetId: { type: string }
+        deviceId:
+          type: string
+          description: >
+            화면이 **다른 기기에서 찍은 사진**을 구분하는 근거(BR-U5-15) — 기기가 바뀌면 자산은
+            이관되지 않고 메타만 남는다.
+        takenAt: { type: string, format: date-time, nullable: true }
+        exifLat:
+          type: number
+          format: double
+          nullable: true
+          description: 위치 동의가 없으면 null — 등록 요청이 좌표를 실어 보냈어도 그렇다.
+        exifLng: { type: number, format: double, nullable: true }
+        sortOrder: { type: integer }
+
+    VisitMemo:
+      type: object
+      required: [text, updatedAt]
+      properties:
+        text: { type: string, maxLength: 2000 }
+        updatedAt: { type: string, format: date-time }
+
   responses:
     ValidationError:
       description: 입력 검증 실패
@@ -2188,3 +2341,4 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
+
