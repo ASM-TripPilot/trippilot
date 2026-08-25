@@ -877,19 +877,27 @@ class WiredItineraryOrchestrator:
                 for day in solution.days if day.date == request.target_date
                 for s in day.slots
             )
-            result = self._edit_translator.translate(
-                pool,
-                EditTranslationInput(
-                    utterance=request.utterance,
-                    target_date=request.target_date.isoformat(),
-                    current_slots=target_day_ids,
-                    # 재구성이 이미 받아온 등록 POI 재사용 (추가 I/O 없음) — 풀 밖
-                    # 슬롯의 이름·카테고리는 여기서만 온다 (TRIP-527)
-                    slot_pois=poi_index,
-                ),
-                trace_id, now,
-                timeout_sec=_deadline_budget(meta) / 1000.0,
-            )
+            try:
+                result = self._edit_translator.translate(
+                    pool,
+                    EditTranslationInput(
+                        utterance=request.utterance,
+                        target_date=request.target_date.isoformat(),
+                        current_slots=target_day_ids,
+                        # 재구성이 이미 받아온 등록 POI 재사용 (추가 I/O 없음) — 풀 밖
+                        # 슬롯의 이름·카테고리는 여기서만 온다 (TRIP-527)
+                        slot_pois=poi_index,
+                    ),
+                    trace_id, now,
+                    timeout_sec=_deadline_budget(meta) / 1000.0,
+                )
+            except Exception as e:  # 설정 버그 등 — explanations()와 같은 정직 보고.
+                # 4xx 로 내보내면 백엔드가 MinimalItineraryFallback 을 켜 편집 한 번이
+                # 일정을 최소본으로 갈아엎는다 (errors.py "에러 vs 폴백 이원화", TRIP-527).
+                return schemas.EditItineraryResponse(
+                    status="TRANSLATION_FAILED",
+                    reason=f"편집 의도 해석 실패: {type(e).__name__}: {e}",
+                )
             if result.is_fallback or result.value is None:
                 # 자연어 해석 실패는 자연어 경로만의 정직 실패 — 구조화 경로 무영향
                 return schemas.EditItineraryResponse(

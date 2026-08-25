@@ -13,6 +13,9 @@
      예약 자체를 대상으로 하면 REJECTED("예약"), 예약 앞에 못 도착하면 HC2 (TRIP-526)
   ⑩ 좌표 미상 POI 와 인접하는 편집은 REJECTED("좌표 미상") — 이동 0분을 지어내지
      않는다(예약 슬롯도 예외 없음); 그 날 유일한 슬롯이면 인접이 없어 통과 (TRIP-525)
+  ⑪ 풀 밖 현재 슬롯(다른 조건으로 생성된 원 일정)도 자연어로 편집된다 — 422 아님,
+     정상 편집이면 APPLIED·해석 실패면 TRANSLATION_FAILED. 버튼·말 두 진입이 같은
+     입력에 같은 판정 (TRIP-527 / TRIP-431 수렴 결정)
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ from fastapi.testclient import TestClient
 
 from trippilot.api.app import create_app
 from trippilot.api.wiring import DEMO_ANCHOR, build_dev_app, demo_poi_seed
+from tests.fakes.fake_llm import FakeLlm
 
 _SEED = {p.name: str(p.poi_id) for p in demo_poi_seed()}
 # 앵커(제주 중간점) 반경 10km 안 시드 = 흑돼지거리·한라산 (wiring DEMO_ANCHOR 주석)
@@ -186,6 +190,93 @@ def test_utterance_with_unwired_llm_fails_honestly() -> None:
     assert response.status_code == 200
     assert body["status"] == "TRANSLATION_FAILED"
     assert body["reason"]  # 사유 명시 (침묵 금지)
+
+
+# ── ⑪ 풀 밖 현재 슬롯도 자연어로 편집 가능 (TRIP-527) ───────────────
+
+# 월정리(앵커 반경 밖)를 포함한 하루 — 풀은 요청마다 잘리는 조각이라 원 일정 슬롯이
+# 풀 밖인 것은 정상이다. 이 배치가 수정 전 422를 내던 재현 픽스처.
+_POOL_OUTSIDE_DAY = [_slot(_HALLASAN, "08:00:00", "09:00:00"),
+                     _slot(_WOLJEONG, "12:30:00", "13:30:00")]
+# 자연어 진입이 번역해 낼 명령 — 아래 구조화 진입과 **같은 명령**이다 (수렴 비교용)
+_MOVE_WOLJEONG = {"op": "MOVE_SLOT", "params": {}, "affected_slots": [_WOLJEONG]}
+_CANNED_MOVE = (
+    '{"editCommand": {"op": "MOVE_SLOT", "params": {},'
+    f' "affectedSlots": ["{_WOLJEONG}"]}}}}'
+)
+
+
+def _fake_llm_client(canned: str) -> TestClient:
+    """자연어 경로만 배선한 앱 — 편집은 번역 1회만 LLM을 쓴다 (실 호출 0)."""
+    return TestClient(
+        build_dev_app(llm=FakeLlm(canned=canned), model_id="m-fake"),
+        raise_server_exceptions=False,
+    )
+
+
+def test_utterance_on_pool_outside_slot_is_not_422() -> None:
+    """수정 전엔 번역 워커가 "풀 밖 = 호출측 버그"로 raise 해 422가 나갔다.
+
+    422는 백엔드의 MinimalItineraryFallback 신호라, 편집 한 번이 일정을 최소본으로
+    갈아엎는다. LLM 미배선이면 해석 실패지만 그건 200 + TRANSLATION_FAILED다.
+    """
+    with _client() as client:
+        response = _post(client, _body(slots=_POOL_OUTSIDE_DAY,
+                                       utterance="월정리를 맨 앞으로 옮겨줘"))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "TRANSLATION_FAILED" and body["reason"]
+
+
+def test_utterance_edits_pool_outside_slot_and_applies() -> None:
+    """번역만 성공하면 풀 밖 현재 슬롯도 정상 편집된다 — 게이트가 지목을 현재
+    슬롯과 교차하기 때문(TRIP-527). 이전엔 여기서 명령 전체가 드롭됐다."""
+    with _fake_llm_client(_CANNED_MOVE) as client:
+        response = _post(client, _body(slots=_POOL_OUTSIDE_DAY,
+                                       utterance="월정리를 맨 앞으로 옮겨줘"))
+    body = response.json()
+    assert body["status"] == "APPLIED", body
+    ids = [s["poi_id"] for s in body["itinerary"]["days"][0]["slots"]]
+    assert ids == [_WOLJEONG, _HALLASAN]
+
+
+def test_button_and_utterance_entries_agree_on_the_same_command() -> None:
+    """수렴 고정 (TRIP-431 팀 결정) — 같은 입력이면 두 진입의 판정·결과가 같다.
+
+    수정 전: 버튼은 APPLIED, 말은 422(워커 raise) — 같은 슬롯에 다른 규칙이었다.
+    """
+    body = _body(slots=_POOL_OUTSIDE_DAY)
+    with _client() as client:
+        button = _post(client, {**body, "command": _MOVE_WOLJEONG})
+    with _fake_llm_client(_CANNED_MOVE) as client:
+        utterance = _post(client, {**body, "utterance": "월정리를 맨 앞으로 옮겨줘"})
+    assert button.status_code == utterance.status_code == 200
+    a, b = button.json(), utterance.json()
+    assert a["status"] == b["status"] == "APPLIED"
+    assert a["command"] == b["command"] and a["apply_mode"] == b["apply_mode"]
+    assert a["itinerary"] == b["itinerary"]
+
+
+def test_new_poi_outside_pool_stays_rejected_in_both_entries() -> None:
+    """INV-1은 양쪽 그대로 — 새로 넣는 POI는 여전히 풀 안이어야 한다.
+
+    (자연어는 게이트 드롭이라 TRANSLATION_FAILED, 구조화는 REJECTED — 둘 다
+    "반영하지 않는다"로 수렴하고 사유가 실린다. 침묵 실패 없음, INV-4.)
+    """
+    add_outside = {"op": "ADD_SLOT", "params": {"targetPoiId": _WOLJEONG},
+                   "affected_slots": []}
+    canned = (
+        '{"editCommand": {"op": "ADD_SLOT",'
+        f' "params": {{"targetPoiId": "{_WOLJEONG}"}}, "affectedSlots": []}}}}'
+    )
+    with _client() as client:
+        button = _post(client, _body(command=add_outside))
+    with _fake_llm_client(canned) as client:
+        utterance = _post(client, _body(utterance="월정리 카페거리도 추가해줘"))
+    assert button.json()["status"] == "REJECTED"
+    assert "closed-set" in button.json()["reason"]
+    assert utterance.json()["status"] == "TRANSLATION_FAILED"
+    assert "closed_set_violation" in utterance.json()["reason"]
 
 
 # ── ⑨ 예약(고정) 슬롯 = 닻 (TRIP-526) ──────────────────────────────
