@@ -33,6 +33,19 @@ data class Reflection(
         return copy(editedNarrative = text.trim(), updatedAt = at)
     }
 
+    /**
+     * 초안을 다시 만든다 — **수정본은 건드리지 않는다**(INV-U5-06 · TRIP-553).
+     *
+     * INV-U5-06 은 "수정이 초안을 덮지 않는다"로 읽히지만 **반대 방향도 같은 규칙이다.**
+     * 재생성이 매번 새 행을 만들어 얹으면 `edited_narrative` 가 null 로 덮여 **사용자가 쓴 글이
+     * 사라진다.** 초안이 사라지는 것보다 나쁘다 — 초안은 다시 만들 수 있지만 사용자의 문장은
+     * 어디에도 없다.
+     *
+     * `generatedAt` 도 그대로다: "언제 처음 만들어졌나"는 재생성으로 바뀌는 사실이 아니다.
+     */
+    fun regenerate(draft: String, source: ReflectionSource, stats: ReflectionStats, at: Instant): Reflection =
+        copy(draftNarrative = draft, source = source, stats = stats, updatedAt = at)
+
     companion object {
         fun of(
             tripId: UUID,

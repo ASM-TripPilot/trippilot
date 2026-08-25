@@ -3,6 +3,7 @@ package com.trippilot.reflection.application
 import com.trippilot.archive.api.ArchiveDayView
 import com.trippilot.archive.api.ArchiveRecordFacade
 import com.trippilot.archive.api.ArchiveVisitView
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.event.DomainEvent
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.placedata.api.FrozenPoiView
@@ -14,7 +15,9 @@ import com.trippilot.reflection.domain.ReflectionRepository
 import com.trippilot.reflection.domain.ReflectionSource
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import io.kotest.property.Arb
@@ -159,6 +162,53 @@ class ReflectionPropertyTest : StringSpec({
         svc.generateDaily(acc, tripId, day)
 
         repo.stored.size shouldBe 1
+    }
+
+    // ── 초안·수정본 2열(INV-U5-06 · TRIP-553) ─────────────────────────
+    "재생성이 사용자 수정본을 지우지 않는다 — 초안만 갈아끼운다" {
+        val repo = Reflections()
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, Sink(), clock)
+        svc.generateDaily(acc, tripId, day)
+        val edited = svc.edit(acc, tripId, day, "내가 쓴 문장")
+
+        val again = svc.generateDaily(acc, tripId, day)
+
+        // 초안은 다시 만들 수 있지만 사용자의 문장은 어디에도 없다 — 그래서 이쪽이 더 나쁜 손실이다.
+        again.editedNarrative shouldBe "내가 쓴 문장"
+        again.narrative shouldBe "내가 쓴 문장"
+        again.generatedAt shouldBe edited.generatedAt
+        repo.stored.size shouldBe 1
+    }
+
+    "수정해도 초안은 남는다 — 2열 비교의 왼쪽(INV-U5-06)" {
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), Sink(), clock)
+        val draft = svc.generateDaily(acc, tripId, day).draftNarrative
+
+        val edited = svc.edit(acc, tripId, day, "고친 문장")
+
+        edited.draftNarrative shouldBe draft
+        edited.editedNarrative shouldBe "고친 문장"
+    }
+
+    "회고가 없어도 바로 쓸 수 있다 — 기본 카드 위에 얹는다(BR-U5-36)" {
+        val repo = Reflections()
+        val events = Sink()
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, events, clock)
+
+        val written = svc.edit(acc, tripId, day, "생성은 실패했지만 내가 쓴다")
+
+        written.narrative shouldBe "생성은 실패했지만 내가 쓴다"
+        written.draftNarrative.shouldNotBeBlank() // 근거 수치만으로 된 기본 카드 — 지어낸 문장이 아니다
+        repo.stored.size shouldBe 1
+        // 사용자가 글을 쓰는 순간에 "회고가 준비됐어요" 알림이 본인에게 가면 안 된다.
+        events.published.shouldBeEmpty()
+    }
+
+    "여행 기간 밖 날짜는 거부한다 — 근거 데이터가 없는 날이다" {
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), Sink(), clock)
+
+        shouldThrow<ValidationFailed> { svc.generateDaily(acc, tripId, day.minusDays(1)) }
+        shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day.plusDays(3), "여행 밖 회고") }
     }
 
     "완료 시 ReflectionReady 를 발행한다 — 알림은 U6 몫이다(BR-U5-37)" {

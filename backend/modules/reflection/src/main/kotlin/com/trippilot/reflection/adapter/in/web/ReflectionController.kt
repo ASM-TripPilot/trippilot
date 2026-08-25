@@ -66,6 +66,13 @@ data class ReflectionListResponse(val items: List<ReflectionResponse>)
  */
 data class ReflectionResponse(
     val dayDate: LocalDate,
+    /**
+     * 화면이 그대로 그리는 문장(`editedNarrative ?: draftNarrative`).
+     *
+     * 이 필드를 서버가 내는 이유는 **표시본 선택이 업무 규칙이기 때문이다**(BR-U5-35). 클라이언트가
+     * 매번 `?:` 를 다시 쓰면 조회 화면과 목록 화면이 서로 다르게 고르는 날이 온다.
+     */
+    val narrative: String,
     val draftNarrative: String,
     val editedNarrative: String?,
     val source: String,
@@ -75,7 +82,7 @@ data class ReflectionResponse(
 ) {
     companion object {
         fun from(r: Reflection) = ReflectionResponse(
-            r.dayDate, r.draftNarrative, r.editedNarrative, r.source.name,
+            r.dayDate, r.narrative, r.draftNarrative, r.editedNarrative, r.source.name,
             ReflectionStatsResponse(
                 r.stats.visitCount, r.stats.distanceKm, r.stats.distanceSource.name, r.stats.photoCount,
             ),
