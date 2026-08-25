@@ -86,6 +86,17 @@ class ConsentService(
     }
 
     /**
+     * 그 약관에 **현재** 동의 상태인가(TRIP-556).
+     *
+     * 판정은 타입별 **최신 증적**이다 — 동의 로그는 append-only 라 GRANT 뒤에 REVOKE 가 쌓일 수
+     * 있고, 존재 여부로 물으면 철회한 사용자를 동의한 것으로 읽는다. 버전은 보지 않는다:
+     * 구버전 동의도 철회가 아니고, 재동의 게이트는 [requiredReconsents] 가 따로 판정한다.
+     */
+    @Transactional(readOnly = true)
+    fun isGranted(accountId: AccountId, termsType: TermsType): Boolean =
+        ConsentFold.latestPerType(records.findByAccount(accountId))[termsType]?.isGrant ?: false
+
+    /**
      * 재동의 필요 약관 — reconsent_required 인 현행 약관 중, 계정의 최신 동의가 그 버전 GRANT 가 아닌 것.
      * 부트스트랩(TRIP-159)이 재사용한다.
      */
