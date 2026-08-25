@@ -13,6 +13,9 @@ dependencies {
     implementation(project(":common:core"))
     implementation(project(":modules:trip"))   // R1: 소유·구간 검증만 — trip.api(TripFacade)
     implementation(project(":modules:auth"))   // R1: 위치 동의(L3) 조회만 — auth.api(LocationConsentFacade)
+    implementation(project(":modules:itinerary-generation"))  // R1: 계획 슬롯 조회만 — itinerarygeneration.api(ItineraryPlanFacade)
+    implementation(project(":modules:saved-accommodation"))   // R1: 날짜별 기준 숙소만 — savedaccommodation.api(TripBaseStayFacade)
+    implementation(project(":modules:change-log"))            // R1: 변경 이력 **읽기만**(BR-U5-29) — changelog.api
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

@@ -127,6 +127,14 @@ class VisitMemoRepositoryAdapter(
         visitCheckId,
     ).firstOrNull()
 
+    override fun findVisitsWithMemo(visitCheckIds: Collection<UUID>): Set<UUID> {
+        if (visitCheckIds.isEmpty()) return emptySet()
+        return jdbc.queryForList(
+            "SELECT visit_check_id FROM visit_memo WHERE visit_check_id = ANY (?)",
+            UUID::class.java, visitCheckIds.toTypedArray(),
+        ).toSet()
+    }
+
     override fun delete(visitCheckId: UUID): Boolean =
         jdbc.update("DELETE FROM visit_memo WHERE visit_check_id = ?", visitCheckId) == 1
 }

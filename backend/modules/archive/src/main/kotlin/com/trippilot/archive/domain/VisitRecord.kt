@@ -112,5 +112,11 @@ interface VisitMemoRepository {
 
     fun find(visitCheckId: UUID): VisitMemo?
 
+    /**
+     * 메모가 **있는** 방문들. 기록 화면은 본문이 아니라 유무만 쓰므로 한 번에 묻는다 —
+     * 방문마다 따로 조회하면 하루치를 그리는 데 N번 왕복한다.
+     */
+    fun findVisitsWithMemo(visitCheckIds: Collection<UUID>): Set<UUID>
+
     fun delete(visitCheckId: UUID): Boolean
 }
