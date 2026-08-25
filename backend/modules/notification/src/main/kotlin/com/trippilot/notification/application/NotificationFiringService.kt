@@ -9,7 +9,7 @@ import java.time.Clock
 import java.time.Duration
 
 /** [NotificationFiringService.fire] 의 결과 — 로그·테스트가 "무엇이 일어났는지"를 구분해 볼 수 있게. */
-enum class FireOutcome { FIRED, CANCELED_LATE, ALREADY_TAKEN }
+enum class FireOutcome { FIRED, CANCELED_LATE, ALREADY_TAKEN, MUTED }
 
 /**
  * 예약 한 건을 알림으로 옮긴다. 예약당 트랜잭션 하나 — 한 건이 실패해도 나머지 배치는 산다.
@@ -18,6 +18,7 @@ enum class FireOutcome { FIRED, CANCELED_LATE, ALREADY_TAKEN }
 class NotificationFiringService(
     private val schedules: NotificationScheduleRepository,
     private val notifications: NotificationRepository,
+    private val toggles: NotificationToggleService,
     private val clock: Clock,
 ) {
     @Transactional
@@ -31,6 +32,10 @@ class NotificationFiringService(
         // 조건부 쓰기가 곧 멱등이다 — 다중 인스턴스가 같은 행을 집어도 UPDATE 는 하나만 성공한다.
         // 표시를 먼저 하고 적재가 실패하면 같은 트랜잭션이라 둘 다 없던 일이 된다(다음 폴링이 다시 집는다).
         if (!schedules.markFired(schedule.scheduleId, now)) return FireOutcome.ALREADY_TAKEN
+        // 사용자가 이 종류의 인앱 수신을 껐다(TRIP-548). 예약은 소비하되 알림함에는 쌓지 않는다 —
+        // 예약을 남겨 두면 다음 폴링이 계속 집어 배치를 채운다.
+        // `SYSTEM` 은 여기서 걸리지 않는다(INV-U6-03) — 보안·계정 알림은 끌 수 있는 것이 아니다.
+        if (!toggles.allowsInApp(schedule.accountId, schedule.kind)) return FireOutcome.MUTED
         // 반환값을 버려도 되는 것은 [NotificationSchedule.toNotification] 이 `sourceEventId = null` 로
         // 만들기 때문이다 — UNIQUE 가 걸리지 않아 항상 삽입된다. 거기에 원천 이벤트를 싣게 되면
         // 여기서 false 를 받고도 FIRED 를 보고하게 되므로, 그때는 이 줄을 함께 고쳐야 한다.

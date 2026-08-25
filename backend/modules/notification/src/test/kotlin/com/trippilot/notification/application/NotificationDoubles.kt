@@ -4,6 +4,8 @@ import com.trippilot.notification.domain.Notification
 import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.NotificationSchedule
 import com.trippilot.notification.domain.NotificationScheduleRepository
+import com.trippilot.notification.domain.NotificationToggle
+import com.trippilot.notification.domain.NotificationToggleRepository
 import com.trippilot.trip.api.OwnedTripPeriod
 import com.trippilot.trip.api.TripOwnerFacade
 import java.time.Instant
@@ -77,4 +79,14 @@ internal class FakeTripOwner(private val periods: MutableMap<UUID, OwnedTripPeri
     fun remove(tripId: UUID) = periods.remove(tripId)
 
     override fun findOwnedPeriod(tripId: UUID) = periods[tripId]
+}
+
+/** 토글 대역. 저장이 없으면 기본값이 적용되는지(행이 없다 ≠ 꺼짐)까지 여기서 흉내 낸다. */
+internal class FakeToggles : NotificationToggleRepository {
+    val stored = mutableListOf<NotificationToggle>()
+    override fun findByAccount(accountId: UUID) = stored.filter { it.accountId == accountId }
+    override fun upsert(toggle: NotificationToggle) = toggle.also {
+        stored.removeAll { t -> t.accountId == it.accountId && t.kind == it.kind }
+        stored += it
+    }
 }
