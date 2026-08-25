@@ -21,6 +21,7 @@ dependencies {
     implementation(project(":modules:planb-detection"))
     implementation(project(":modules:itinerary-recalculation"))
     implementation(project(":modules:change-log"))
+    implementation(project(":modules:notification"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.actuator)
