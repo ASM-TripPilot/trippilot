@@ -72,6 +72,7 @@ import {
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
+import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import {
   StayRegisterScreen,
@@ -2438,6 +2439,74 @@ const PREVIEW_STATES: PreviewState[] = [
         onPressBrowse={noop}
         onBack={noop}
       />
+    ),
+  },
+  // ── i10 재계획 요청 시트(TRIP-439) — 순수 시트를 props 로 직접 그린다. 바텀시트 실제 열림/딤은
+  //    정적 프리뷰에서도 못 보므로(통과형 목과 같은 원리) 여기서 보는 것은 칩·CTA·안내 레이아웃까지다 ──
+  {
+    key: 'planb-request',
+    label: 'i10 재계획 요청 · 수동 진입',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <ReplanRequestSheet
+          scope="PARTIAL_SLOTS"
+          selectedReasons={['WEATHER']}
+          selectedDirectives={['RELAX']}
+          freeText=""
+          onSelectScope={noop}
+          onToggleReason={noop}
+          onToggleDirective={noop}
+          onChangeFreeText={noop}
+          onSubmit={noop}
+          onManual={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'planb-request-detected',
+    label: 'i10 재계획 요청 · 감지 배너(자동 진입)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <ReplanRequestSheet
+          scope="FULL_DAY"
+          selectedReasons={[]}
+          selectedDirectives={[]}
+          freeText=""
+          onSelectScope={noop}
+          onToggleReason={noop}
+          onToggleDirective={noop}
+          onChangeFreeText={noop}
+          onSubmit={noop}
+          onManual={noop}
+          trigger={{ title: '비 예보 감지' }}
+          onSuppress={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'planb-request-out-of-scope',
+    label: 'i10 재계획 요청 · 범위 밖(표시만·제출잠금)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <ReplanRequestSheet
+          scope="PARTIAL_SLOTS"
+          selectedReasons={[]}
+          selectedDirectives={[]}
+          freeText="파리로 바꿔줘"
+          onSelectScope={noop}
+          onToggleReason={noop}
+          onToggleDirective={noop}
+          onChangeFreeText={noop}
+          onSubmit={noop}
+          onManual={noop}
+          outOfScope
+        />
+      </View>
     ),
   },
 ];

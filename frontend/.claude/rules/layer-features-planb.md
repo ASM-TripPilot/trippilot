@@ -1,0 +1,20 @@
+---
+paths:
+  - "src/features/planb/**"
+---
+# `src/features/planb/` — 재계획(Plan-B) 도메인 (TRIP-439 재신설)
+
+TRIP-173에서 빈 배럴째 디렉토리가 삭제됐다가, 선행 TRIP-438(planb-triggers, 감지·열람)이 미완료로 끝나 재신설을 못 한 채로 남아 있었다 — **TRIP-439가 이 사이클에서 처음 다시 만든다.** 선행 미완의 여파로 triggers 소비가 없어, 이번 슬라이스는 **수동 진입 경로(`triggerId=null`)** 만 짓는다(감지 배너·`[끄기]`는 `trigger?` prop이 있을 때만 조건부 렌더, 자동 진입 배선은 후속 티켓).
+
+바텀시트(i10)의 `@gorhom/bottom-sheet` 목이 열림/닫힘·딤을 원리적으로 못 보므로(repo-traps 바텀시트 절), 이 도메인은 **관측 가능한 계약**(제출 시 이 body로 POST가 나간다 / 이 라우트로 push한다)으로 심판을 세운다 — 그래서 순수 조립·순수 폼 상태·순수 시트를 배선(pages 층)과 엄격히 분리했다.
+
+| 파일 | 역할 |
+|---|---|
+| `src/features/planb/model/replanScope.ts` | 범위·사유·방향 카탈로그(순수 데이터) — `REPLAN_SCOPES`(`PARTIAL_SLOTS`·`FULL_DAY` 정확히 2종)·`DEFAULT_REPLAN_SCOPE`·`REPLAN_REASONS`(6종)·`REPLAN_DIRECTIVES`(7종), 타입 `ReplanScopeOption`·`ReplanChoice`. 와이어값은 안정 코드(ASCII key), 한글은 표시용 라벨. `@jest-environment node` 구조가드(`planbScopeStructure.test.ts`)가 소스를 직접 스캔하므로 **RN을 런타임 import하지 않는다**(`StartReplanRequestScope`는 `import type`만) |
+| `src/features/planb/model/replanRequest.ts` | 순수 조립 함수 `buildStartReplanRequest`(+ 타입 `ReplanFormValues`) — 폼 값 4개를 서버 봉투(`StartReplanRequest`, 정확히 7키)로 바꾼다. 위치 미입력이어도 **`originKind: null`을 반드시 명시**한다(생략=undefined가 아니라 값 `null` — codegen `required:[scope,originKind]`, nullable) |
+| `src/features/planb/model/replanFormStore.ts` | Zustand 폼 스토어 `useReplanFormStore`(+ `ReplanFormState`) — `scope`(단일)·`reasons`(Set)·`directives`(Set)·`freeText`·`sheetOpen` 소유. RHF는 리포 프로덕션 사용 0(`stayRegisterStructure.test.ts` 선례)이라 미도입, 페이지 로컬 `useState`(더 게으른 대안)는 시트↔페이지 상태 공유 때문에 기각 |
+| `src/features/planb/model/useStartReplan.ts` | `usePostTripsTripIdReplanSessions`(codegen)를 감싸는 얇은 래퍼 `useStartReplan` — 통합 테스트가 이 심볼을 목 seam으로 잠그므로 페이지가 codegen 훅을 직접 부르는 대안은 기각. 무효화 로직 없음(세션 열기는 무효화할 로컬 목록이 없다) |
+| `src/features/planb/ui/ReplanRequestSheet.tsx` | 순수 시트(`ReplanRequestSheet`·`ReplanRequestSheetProps`·`ReplanDetectionBanner`) — 스토어·훅·라우터를 모르고 props+콜백만(`SlotTimeSheet.tsx` 선례). 자유텍스트는 플레인 RN `TextInput`(바텀시트 목이 `BottomSheetTextInput`을 export 안 함). 감지 배너+`[끄기]`는 `trigger?` prop이 있을 때만 렌더(수동 진입 주 동선엔 미렌더) |
+| `src/features/planb/ui/OutOfScopeNotice.tsx` | `OutOfScopeNotice` — 표시 전용, 인터랙션 0. 서버 계약(`ReplanSessionStatus` enum 7종)에 `OUT_OF_SCOPE`가 없어 **라이브 발동 트리거가 없다**(`outOfScope?: boolean` 플래그로 페이지가 수동 제어하는 데까지만, 정본 공백은 옵시디언 개발로그 관측) |
+
+⚠️ `features/planb/ui/**`는 기존 구조가드 `executionDurationStructure.test.ts`(INV-3, `features/{execution,planb}/ui/**` 재귀 스캔)에 **자동 편입**된다 — 소요시간 표기(`N분`·`N시간`·`소요`) 0건 강제, raw-hex 가드는 아직 없음(참고, 후속 티켓 후보).
