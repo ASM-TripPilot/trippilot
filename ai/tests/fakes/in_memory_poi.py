@@ -10,6 +10,7 @@ from datetime import date
 
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi import OpenHour, Poi, PoiCategory
+from trippilot.ports.poi_db_port import PoiLookup, lookup_from
 
 _EARTH_KM = 6371.0088
 
@@ -38,6 +39,9 @@ class InMemoryPoi:
 
     def find_by_ids(self, ids: frozenset[PoiId]) -> tuple[Poi, ...]:
         return tuple(self._store[i] for i in sorted(ids, key=str) if i in self._store)
+
+    def lookup_by_ids(self, ids: frozenset[PoiId]) -> PoiLookup:
+        return lookup_from(self.find_by_ids(ids), ids)  # 인메모리 — 매핑 실패 없음
 
     def find_nearby(
         self, coord: GeoPoint, radius_m: int, category: PoiCategory
