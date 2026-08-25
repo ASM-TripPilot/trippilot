@@ -12,13 +12,16 @@ context_refs 재조회(D31)는 봉투 프로토콜상 EditAgent가 이미 수행
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 
+from trippilot.llm_gateway.gates.edit_translation import EditTranslationContext
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.edit import EditOp
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
+from trippilot.domain.poi import Poi
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +31,10 @@ class EditTranslationInput:
     utterance: str
     target_date: str  # 서버 확정 표시 문자열 (예: "2026-08-10")
     current_slots: tuple[PoiId, ...]  # 현재 일정 순서 (poiId만)
+    # 현재 슬롯의 표시 정보 — 호출측이 이미 들고 있는 등록 POI(백엔드 find_by_ids).
+    # 풀에서 찾지 않는 이유는 TRIP-527: 풀은 요청마다 잘리는 조각이라 현재 슬롯이
+    # 풀 밖일 수 있다. 없는 슬롯은 이름을 지어내지 않고 "(정보 없음)"으로 남는다.
+    slot_pois: Mapping[PoiId, Poi] = field(default_factory=dict)
 
 
 def build_edit_translation_vars(
@@ -35,16 +42,21 @@ def build_edit_translation_vars(
 ) -> dict[str, str]:
     """값 전부 str·결정론(후보는 poi_id 정렬)·좌표 미포함 (G181, PROMPT-P1 계열).
 
-    현재 슬롯 id가 풀 밖이면 호출측 버그다 — 게이트가 affectedSlots를 풀로 교차하므로
-    풀 밖 슬롯에 대한 편집은 어차피 전량 드롭된다 (explanation 워커와 동일한 전제).
+    현재 슬롯 렌더는 풀이 아니라 **호출측이 넘긴 슬롯 정보**를 쓴다 (TRIP-527) —
+    풀은 요청마다 잘리는 조각이라 원 일정의 슬롯이 풀 밖인 것은 정상이고, 그걸
+    호출측 버그로 보고 raise 하면 편집 경계가 422로 죽는다(백엔드는 4xx를 최소본
+    폴백 신호로 쓴다). 이름·카테고리를 모르면 지어내지 않고 "(정보 없음)".
     """
     by_id = {p.poi_id: p for p in pool.pois}
+    by_id.update(inp.slot_pois)  # 호출측 정보 우선 — 슬롯의 등록 원본
     slot_lines = []
     for order, pid in enumerate(inp.current_slots, start=1):
         poi = by_id.get(pid)
-        if poi is None:
-            raise ValueError(f"현재 슬롯 poi_id가 풀 밖: {pid} (호출측 버그)")
-        slot_lines.append(f"{order}. {poi.poi_id} | {poi.category.value} | {poi.name}")
+        slot_lines.append(
+            f"{order}. {pid} | {poi.category.value} | {poi.name}"
+            if poi is not None
+            else f"{order}. {pid} | (정보 없음)"
+        )
     in_use = set(inp.current_slots)
     candidate_lines = [
         f"- {p.poi_id} | {p.category.value} | {p.name}"
@@ -80,7 +92,11 @@ class EditTranslationWorker:
         return self._gateway.call(
             LlmFeature.EDIT_TRANSLATION,
             build_edit_translation_vars(pool, inp),
-            pool,  # affectedSlots 풀 교차 대상 (INV-1)
+            # pool 자리 = 게이트 대조 집합 2종 (TRIP-527): 새로 넣는 POI는 풀(INV-1),
+            # 기존 슬롯 지목은 현재 슬롯. 프롬프트에 렌더한 목록 그대로 넘기므로
+            # "모델이 본 슬롯"과 "게이트가 허용하는 슬롯"이 어긋날 수 없다.
+            EditTranslationContext(
+                pool=pool, current_slots=frozenset(inp.current_slots)),
             trace_id,
             now,
             timeout_sec=timeout_sec,
