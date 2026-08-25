@@ -42,10 +42,12 @@ class OutboxRelay(
     // lockAtMostFor 는 **죽은 인스턴스가 락을 영원히 붙잡는 것**을 막는 안전망이다.
     // lockAtLeastFor 는 0 이다 — cron 방식의 시계 오차 이중 실행을 막는 장치인데 여기는 fixedDelay 라
     // 같은 인스턴스가 겹쳐 돌지 않고, 0 이 아니면 **연속 호출이 조용히 건너뛰어진다**(테스트에서 겪었다).
-    @SchedulerLock(name = "outbox-relay", lockAtMostFor = "PT1M", lockAtLeastFor = "PT0S")
+    // lockAtMostFor 는 **한 번의 실행이 걸릴 수 있는 최대 시간보다 길어야** 한다. 짧으면 처리 도중에
+    // 락이 풀려 다른 인스턴스가 같은 행을 집는다 — 그 순간 락이 있는 의미가 없다.
+    // [BATCH_SIZE] × 구독자 작업(외부 호출 포함)을 넉넉히 덮는 값이다. 죽은 인스턴스가 붙잡는 시간도
+    // 이만큼이지만, 중복 배달보다 회복 지연이 낫다.
+    @SchedulerLock(name = "outbox-relay", lockAtMostFor = "PT5M", lockAtLeastFor = "PT0S")
     fun relay() {
-        if (byType.isEmpty()) return // 구독자가 없으면 행을 집지 않는다 — 집으면 발행 표시만 하고 버리는 셈이다
-
         val batch = jdbc.query(
             """
             SELECT event_id, event_type, schema_version, aggregate_type, aggregate_id,
@@ -60,11 +62,15 @@ class OutboxRelay(
         )
         if (batch.isEmpty()) return
 
+        var dropped = 0
         batch.forEach { envelope ->
             val targets = byType[envelope.eventType]
             if (targets == null) {
-                // 아무도 안 듣는 이벤트다. 계속 집어 올리면 배치가 그것으로 채워져 뒤가 밀린다.
+                // 아무도 안 듣는 이벤트다. 남겨 두면 배치가 그것으로 채워져 뒤가 밀리고,
+                // **나중에 구독자가 생겼을 때 쌓인 과거가 한꺼번에 배달된다**(오래된 알림 폭탄).
+                // 지나간 알림은 다시 보낼 값이 없으므로 여기서 닫는다.
                 markPublished(envelope.eventId)
+                dropped++
                 return@forEach
             }
             runCatching { targets.forEach { it.handle(envelope) } }
@@ -79,6 +85,8 @@ class OutboxRelay(
                     }
                 }
         }
+        // 조용히 버리지 않는다 — 구독자를 붙였는데 안 오는 상황의 첫 단서가 이 줄이다(INV-4).
+        if (dropped > 0) log.info("구독자 없는 이벤트 {}건을 닫았습니다.", dropped)
     }
 
     private fun markPublished(eventId: UUID) =

@@ -8,6 +8,7 @@ import com.trippilot.core.event.EventEnvelope
 import com.trippilot.core.event.OutboxSubscriber
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -57,6 +58,13 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
 
     private val tx by lazy { TransactionTemplate(txManager) }
 
+    /** 어떤 구독자도 등록하지 않은 타입 — 릴레이가 이것을 어떻게 처리하는지 본다. */
+    private data class Unheard(val note: String) : DomainEvent {
+        override val eventType = "test.NobodyListens"
+        override val aggregateType = "Probe"
+        override val aggregateId = note
+    }
+
     private data class Probe(val note: String) : DomainEvent {
         override val eventType = "test.RelayProbe"
         override val aggregateType = "Probe"
@@ -66,7 +74,7 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
     @AfterEach
     fun cleanUp() {
         // 싱글톤 컨테이너라 남기면 다른 IT 의 릴레이가 이 행을 집는다.
-        jdbc.update("DELETE FROM outbox_event WHERE event_type = 'test.RelayProbe'")
+        jdbc.update("DELETE FROM outbox_event WHERE event_type IN ('test.RelayProbe', 'test.NobodyListens')")
         subscriber.received.clear()
     }
 
@@ -150,4 +158,25 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
         val payload = subscriber.received.single { it.aggregateId == "본문" }.payload
         ObjectMapper().readTree(payload)["note"].asText() shouldBe "본문"
     }
+    /**
+     * **아무도 안 듣는 이벤트도 닫는다**(TRIP-539 자가 검수).
+     *
+     * 남겨 두면 두 가지가 터진다 — 미발행 행이 무한히 쌓여 배치가 그것으로 채워지고,
+     * **나중에 구독자가 생겼을 때 쌓인 과거가 한꺼번에 배달된다.** 알림이라면 오래된 푸시 폭탄이다.
+     *
+     * 프로덕션에는 아직 `OutboxSubscriber` 가 **하나도 없다** — 즉 지금 이 경로가 전부다.
+     */
+    @Test
+    fun `구독자가 없는 이벤트는 쌓이지 않고 닫힌다`() {
+        tx.execute { publisher.publish(Unheard("주인없음")) }
+
+        relay.relay()
+
+        jdbc.queryForObject(
+            "SELECT count(*) FROM outbox_event WHERE aggregate_id = '주인없음' AND published_at IS NULL",
+            Int::class.java,
+        )!! shouldBe 0
+        subscriber.received.map { it.aggregateId } shouldNotContain "주인없음"
+    }
+
 }
