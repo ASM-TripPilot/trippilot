@@ -36,8 +36,8 @@ export function RegionPickerPage(): ReactElement {
 
   function handleSelectRegion(region: Region): void {
     if (purpose === 'trip') {
-      // ⚠️ `explore/destination/[region].tsx`는 스텁이다(밴드 d 티켓 몫). BR-U1-07이 요구한
-      // 분기를 구현해 둔 것이고, 검증은 이 컨테이너 테스트가 한다.
+      // `explore/destination/[region].tsx`는 d03 목적지 상세 실화면이다(TRIP-183 스텁을
+      // 2026-08-22에 교체). BR-U1-07이 요구한 분기는 그대로 — 검증은 이 컨테이너 테스트가 한다.
       router.push(`/explore/destination/${region.regionCode}`);
       return;
     }

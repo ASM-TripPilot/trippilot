@@ -9,6 +9,7 @@ import { formatRadiusUsed } from '@/features/itinerary/model/radiusUsedLabel';
 import { parseSlotKey } from '@/features/itinerary/model/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
 import { swapSlotPoi } from '@/features/itinerary/model/swapSlotPoi';
+import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
 import { ConceptPickerScreen } from '@/features/itinerary/ui/ConceptPickerScreen';
 import { SlotFillScreen } from '@/features/itinerary/ui/SlotFillScreen';
 import type { SlotCandidatesRequest } from '@/shared/api/generated/schemas';
@@ -64,13 +65,11 @@ const MAX_RADIUS_KEY = RADIUS_STEPS[RADIUS_STEPS.length - 1].key;
 export interface SlotFillPageProps {
   tripId: string;
   slotKey: string;
-  slotContextLabel?: string;
 }
 
 export function SlotFillPage({
   tripId,
   slotKey,
-  slotContextLabel,
 }: SlotFillPageProps): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -89,6 +88,23 @@ export function SlotFillPage({
   const firedRef = useRef(false);
 
   const parsed = parseSlotKey(slotKey);
+
+  // h13 상단 문맥 줄("오후 슬롯 · △△ 다음") — 채울 슬롯의 시간대(timeBandLabel)와 그 직전
+  // 슬롯의 이름을 GET 캐시(itinerary.data, 이미 조회돼 있음)에서 그대로 읽는다. 이름 미도착
+  // (nameKo null)이면 그 구간만 접어 "N 슬롯"만 보인다 — 플레이스홀더 문구를 문맥 줄에 새지
+  // 않게 한다(INV-1 정신, SlotCandidateCard의 "이름 준비 중" 표기 함정과 동형 회피).
+  function slotContextLabel(): string | undefined {
+    if (parsed.kind !== 'ok' || itinerary.data === undefined) return undefined;
+    const day = itinerary.data.days.find((d) => d.date === parsed.date);
+    if (day === undefined) return undefined;
+    const index = day.slots.findIndex((slot) => slot.poiId === parsed.poiId);
+    if (index === -1) return undefined;
+    const band = timeBandLabel(day.slots[index].startAt);
+    const prevName = index > 0 ? day.slots[index - 1].nameKo : undefined;
+    return prevName !== null && prevName !== undefined && prevName !== ''
+      ? `${band} 슬롯 · ${prevName} 다음`
+      : `${band} 슬롯`;
+  }
 
   // slotKey + radiusM(항상) + concept(스킵이면 생략) 로 후보를 조회한다. radiusM 3단째는 null 을
   // 그대로 실어 서버가 AI 기본 반경으로 확대하게 한다(§계약).
@@ -192,7 +208,7 @@ export function SlotFillPage({
     return (
       <ConceptPickerScreen
         concepts={CONCEPTS}
-        slotContextLabel={slotContextLabel}
+        slotContextLabel={slotContextLabel()}
         onPickConcept={handlePickConcept}
         onSkip={handleSkip}
         onBack={() => router.back()}

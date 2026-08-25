@@ -38,6 +38,7 @@ import {
 import { orderSavedPlaces } from '@/features/explore/model/savedPlaceList';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
+import { seedMustVisits } from '@/features/trip/model/mustVisitSeed';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 /** 실패 시 재시도가 다시 밟아야 할 마지막 조작 — 해제냐 되돌리기냐를 함께 기억한다. */
@@ -169,12 +170,17 @@ export function SavedPlacesPage(): ReactElement {
         router.push(`/explore/places/${saved.place.poiId}`)
       }
       onPressCreateTrip={() => {
-        // TRIP-458: d02 CTA 는 "진입"으로 친다(위저드 셸 JSDoc D3). 그런데 위저드 안 '더 담기'로
-        // d02 를 열고 돌아오면 `trips/new` 레이아웃이 스택에 살아 있어 셸 마운트의 `resetMustVisits`
-        // 가 재발화하지 않는다 → 직전에 x 로 뺀 poiId 가 `excludedMustVisitPoiIds` 에 남고, 추가 전용
-        // 재시드가 그걸 건너뛰어 '꼭 갈 곳'이 빈 채 열린다. 여기서 직접 reset 해 그 잔존 기억을 비운다
-        // (셸 재마운트라는 jest 무심판 경로에 기대지 않아 회귀를 통합 테스트로 잡을 수 있다).
-        useTripWizardStore.getState().resetMustVisits();
+        // TRIP-458 → 사용자 결정으로 갱신: 위저드 진입마다 도는 자동 시드는 폐지됐지만(다른
+        // 진입점 — FAB "여행 만들기" 등 — 은 항상 빈 상태), **이 버튼은 "이 장소들로" 만들겠다는
+        // 명시적 선택**이라 여기서 직접 심는다. 지금 화면에 그려진 목록(빈 하트로 해제한 항목은
+        // 제외)을 시드로 얹고, 위저드 셸의 마운트 초기화가 그걸 지우지 않도록 표시까지 함께 켠다
+        // (`seedMustVisitsFromD02` — `tripWizardStore.ts` 참고).
+        const activePlaces = displayList.filter(
+          (saved) => !releasedPoiIds.has(saved.place.poiId)
+        );
+        useTripWizardStore
+          .getState()
+          .seedMustVisitsFromD02(seedMustVisits(activePlaces));
         router.push('/trips/new/step1');
       }}
       onPressBrowse={() => router.push('/explore/places')}

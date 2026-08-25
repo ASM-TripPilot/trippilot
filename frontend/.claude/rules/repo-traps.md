@@ -82,6 +82,7 @@
 ## 여행 만들기 위저드 (g01)
 
 - **`TripWizardStep1Screen`의 confirm은 검색으로 좁혀진 목록이 아니라 항상 원본 `regions`(6개)에서 지역을 찾아야 한다** → `confirmDestination`(~:632) 안 `regions.find(...)`를 `sheetChipRegions.find(...)`(검색 결과)로 바꾸면 confirm이 조용히 무동작(선택한 지역이 좁힌 목록을 벗어났을 때 아무것도 안 담기고 시트도 안 닫힘)한다. 재현: 시트 열기 → 검색 `부`로 부산 선택 → 검색어를 `여수`로 바꿈(부산 칩이 시트에서 사라짐, 선택 상태는 유지) → confirm. **이 성질은 `TripWizardStep1Screen.test.tsx`의 `★확정은 full regions로 지역을 되찾는다` 테스트가 잠근다**(TRIP-387 게이트①-2, 뮤테이션 실측 — 위 뮤테이션이 그 테스트를 red로 만든다). 이 파일을 재편집할 때(예: 시트·검색·박수 스테퍼) 그 테스트를 지우면 blind spot이 재개방된다. 개념: [[좁힌 목록과 원본 목록의 소비처 분리]].
+- **`TripNewStep1Page`의 poiCount→위저드 prop 어댑터 배선(TRIP-363)에 통합 회귀 심판이 없다** → 어댑터가 서버 `region.poiCount`를 위저드 `regions`/`sheetRegions` prop으로 additive 전달해 poiCount=0 지역에 "준비 중" 배지(`trip-wizard-destination-coming-soon-{code}`)를 띄운다. `TripWizardStep1Screen.test.tsx`(화면 단위, poiCount를 목 데이터로 직접 주입)만 이 배지를 잰다 — `TripNewStep1Page.test.tsx`·`.budget.test.tsx`·`.mustVisit.test.tsx`·`.stayImport.test.tsx` 어느 것도 poiCount=0 케이스로 배지 노출을 통합 검증하지 않는다(`coming-soon` grep 결과 화면 파일·화면 테스트 2개뿐). 어댑터의 poiCount 매핑을 지워도 이 무심판 지대에서는 안 걸린다 — h20 add→PUT·d06 un-save와 동형 계열(어댑터/페이지 배선 무심판).
 
 ## 지역 카탈로그 (explore/region, TRIP-445)
 
