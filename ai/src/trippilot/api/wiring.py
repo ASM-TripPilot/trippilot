@@ -883,6 +883,9 @@ class WiredItineraryOrchestrator:
                     utterance=request.utterance,
                     target_date=request.target_date.isoformat(),
                     current_slots=target_day_ids,
+                    # 재구성이 이미 받아온 등록 POI 재사용 (추가 I/O 없음) — 풀 밖
+                    # 슬롯의 이름·카테고리는 여기서만 온다 (TRIP-527)
+                    slot_pois=poi_index,
                 ),
                 trace_id, now,
                 timeout_sec=_deadline_budget(meta) / 1000.0,

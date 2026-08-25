@@ -360,13 +360,30 @@ def test_prompt_states_no_intent_reinterpretation_and_injects_op_closed_set() ->
         assert op.value in prompt  # 서버 주입 closed-set 목록
 
 
-def test_build_vars_rejects_slot_outside_pool() -> None:
-    with pytest.raises(ValueError):
-        build_edit_translation_vars(
-            _pool(),
-            EditTranslationInput(utterance="u", target_date="d",
-                                 current_slots=(PoiId("없는슬롯"),)),
-        )
+def test_build_vars_renders_slot_outside_pool_from_caller_info() -> None:
+    """풀 밖 현재 슬롯은 raise 대상이 아니다 (TRIP-527) — 호출측 정보로 렌더한다.
+
+    수정 전에는 여기서 ValueError를 던졌고, 이 함수가 gateway.call의 **인자 자리**에서
+    실행돼 폴백 밖이라 편집 경계가 422 DOMAIN_INVARIANT_VIOLATION으로 죽었다.
+    """
+    outside = PoiId("p3-풀밖")
+    poi = _poi(str(outside), "월정리 카페거리")
+    rendered = build_edit_translation_vars(
+        _pool(),
+        EditTranslationInput(utterance="u", target_date="d",
+                             current_slots=(outside,), slot_pois={outside: poi}),
+    )["slots"]
+    assert rendered == f"1. {outside} | {poi.category.value} | 월정리 카페거리"
+
+
+def test_build_vars_does_not_invent_names_for_unknown_slots() -> None:
+    """이름·카테고리를 모르면 지어내지 않는다 — 사실만 (INV-1 정신)."""
+    rendered = build_edit_translation_vars(
+        _pool(),
+        EditTranslationInput(utterance="u", target_date="d",
+                             current_slots=(PoiId("미등록"),)),
+    )["slots"]
+    assert rendered == "1. 미등록 | (정보 없음)"
 
 
 # ── 워커 e2e (실물 레지스트리·게이트) ────────────────────────
