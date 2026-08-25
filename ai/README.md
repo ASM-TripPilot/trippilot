@@ -46,7 +46,7 @@ TripPilot의 **AI 담당 설계 저장소**. 일정 생성·여행 중 변수 �
         v
 +--------------------------------------------------------------+
 |  C2 Solver — 하이브리드                                       |
-|  OR-Tools (1차 결정론) → LLM(Anthropic) (2차) → 규칙 폴백 (최후)    |
+|  OR-Tools (1차 결정론) → [LLM 2차: 미배선] → 규칙 폴백 (최후)      |
 |  모든 출력은 HC1~HC4 검증 통과 필수                           |
 +--------------------------------------------------------------+
         |
@@ -172,7 +172,7 @@ flowchart TD
 Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소/되돌리기, 정보 에이전트 단일 질의(날씨·거리·POI)
 
 - **위임 프로토콜**: 모든 위임은 `AgentTask`/`AgentResult` 표준 봉투로 — 데이터 대신 참조(`context_refs`) 전달, deadline 상속, trace_id 전파. 상세 → `aidlc-docs/inception/application-design/orchestrator-delegation-design.md`
-- **의도 파악 하이브리드**: 의도별 질문뱅크 임베딩 매칭(1차, LLM 0회) → 저신뢰 시 LLM 유사질문 생성·투표(2차) → LLM 직접 분류(3차). 상세 → `aidlc-docs/inception/application-design/intent-matching-design.md`
+- **의도 파악 하이브리드** **(미배선 — 2026-08-25 기준 프로덕션 호출자 0)**: 의도별 질문뱅크 임베딩 매칭(1차, LLM 0회) → 저신뢰 시 LLM 유사질문 생성·투표(2차) → LLM 직접 분류(3차). `IntentRouter`·질문뱅크는 구현·테스트 완료지만 `api/wiring.py` 가 import 하지 않아 어느 요청 경로에서도 실행되지 않는다 — 자연어 진입점이 열릴 때 배선된다. 상세 → `aidlc-docs/inception/application-design/intent-matching-design.md`
 
 ---
 
@@ -232,14 +232,20 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 "에이전트가 구해온 정보를 실현 가능하도록 최종 배치하는 결정론 엔진"
 
 ```
-OR-Tools (1차) → LLM(Anthropic) (2차) → 규칙 폴백 (최후)
+OR-Tools (1차) → LLM(Anthropic) (2차, 미배선) → 규칙 폴백 (최후)
 ```
 
 | 계층 | 역할 | 특성 |
 |---|---|---|
 | OR-Tools | VRPTW 결정론 최적화 (3초 제한) | 빠름, 결정론, HC 네이티브 |
-| LLM(Anthropic) | 복잡한 제약에서 창의적 배치 제안 | 유연하지만 비결정론 |
+| LLM(Anthropic) | 복잡한 제약에서 창의적 배치 제안 | 유연하지만 비결정론. **(미배선 — 2026-08-25 기준 프로덕션 호출자 0)** |
 | 규칙 폴백 | 전부 실패 시 최소 일정 보장 | INV-4 보장 |
+
+> **LLM 2차 단계 미배선 (2026-08-25)**: `solver_engine/llm_solver.py`(`LlmSolver`)는 실재하지만
+> `api/wiring.py` 가 조립하는 체인은 `stages = (OrToolsSolver, RuleFallbackSolver)` **2단**이다.
+> 사유는 소스가 적어뒀다 — **"솔버 프롬프트 정본·모델 설정이 아직 없다"**(`api/wiring.py`).
+> 따라서 실가동 체인은 `OR-Tools → 규칙 폴백` 이고, AI-D07 ①의 "잔여 ≥ 2.5s 면 2차 실행" 분기는
+> **어떤 경로(day1·백그라운드·regenerate·Plan-B)에서도 발생하지 않는다.**
 
 LLM 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
 
@@ -355,7 +361,7 @@ TripPilot_AI/
 - OPTW/TOPTW 최적화 + HC1~HC4 하드 제약 검증
 - 이동시간 추정: 어댑터 체인 (카카오 → 네이버 → 직선거리×1.3)
 - warm-start 재생성: 고정 블록 보존, 나머지만 재배치
-- 하이브리드: OR-Tools(1차) → LLM(Anthropic)(2차) → 규칙 폴백(최후)
+- 하이브리드: OR-Tools(1차) → LLM(Anthropic)(2차, **미배선** — 위 C2 절 註) → 규칙 폴백(최후)
 
 ### M7 Place Data — closed-set 후보 풀
 
@@ -363,7 +369,7 @@ AI 파이프라인의 그라운딩 토대.
 
 - 6단계 필터 파이프라인: 반경 → 예산 → 영업일 → 품질 → 인기 → 상한(5천)
 - 웹 후보 소싱: Places API(1단계) → 자유 웹(2단계) + 수집 게이트(5단 검증)
-- 엔티티 해소: 결정론 fuzzy match (edit-distance), LLM 아님
+- 엔티티 해소: 결정론 fuzzy match (edit-distance), LLM 아님 — **(미배선 — 2026-08-25 기준 프로덕션 호출자 0.** `poi_curation/entity_resolver.py` 는 구현·테스트 완료이나 호출 경로 없음)
 - 캐싱: POI 24h, 영업시간 6h, 가격 캐싱 금지
 
 ---

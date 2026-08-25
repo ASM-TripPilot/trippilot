@@ -86,6 +86,11 @@
 | Reflect | — | `db.get_visit_history` `llm.generate_reflection` | 회고 텍스트 + 통계 |
 | Edit | 풀 참조(해당 시) | `llm.parse_intent` `m7.resolve_entity` | EditCommand |
 
+> **배선 상태 (2026-08-25)**: Edit 행의 전속 도구 2종은 아직 실물 배선이 없다 — `m7.resolve_entity`에
+> 대응하는 `poi_curation/entity_resolver.py` 는 프로덕션 호출자 0이고, `llm.parse_intent`에 대응하는
+> `IntentRouter` 도 마찬가지다(intent-matching-design.md 배선 상태 註). `/edit` 경계의 현 실태는
+> 아래 '정보 요구표' 註 참조.
+
 - **금지**: Provider 직접 호출(정보는 봉투로만), 시각·순서 확정.
 - **NEED_MORE_INFO(항목, 사유)**: Orchestrator가 수집→재위임, **최대 1회**. 이후에도 부족하면 업무 폴백.
 
