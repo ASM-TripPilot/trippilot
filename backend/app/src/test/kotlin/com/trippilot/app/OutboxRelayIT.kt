@@ -88,7 +88,11 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
         tx.execute { publisher.publish(Probe("배달")) }
 
         unpublished("배달") shouldBe 1 // 아직 미발행
-        relay.relay()
+        // **한 번으로는 못 온다.** 릴레이는 오래된 것부터 배치 상한(100)만큼 집는데, 같은 컨테이너를
+        // 쓰는 다른 IT 가 남긴 미발행 이벤트가 앞에 있으면 이 행은 그 배치에 안 들어간다.
+        // 숙소 등록마다 이벤트가 나가기 시작하면서(TRIP-550) 실제로 이 형태로 깨졌다 —
+        // 횟수를 늘리는 대신 **이 행이 발행될 때까지** 상한을 두고 돌린다.
+        repeat(RELAY_TRIES) { if (unpublished("배달") > 0) relay.relay() }
 
         subscriber.received.map { it.aggregateId } shouldContain "배달"
         unpublished("배달") shouldBe 0 // 발행 표시됨
@@ -177,6 +181,12 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
             Int::class.java,
         )!! shouldBe 0
         subscriber.received.map { it.aggregateId } shouldNotContain "주인없음"
+    }
+
+
+    private companion object {
+        /** 앞에 쌓인 미발행분을 넘어가기 위한 상한. 배치 100 × 이 횟수면 충분하고, 무한 루프도 아니다. */
+        private const val RELAY_TRIES = 20
     }
 
 }
