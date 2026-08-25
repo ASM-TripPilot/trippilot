@@ -20,6 +20,14 @@ interface NotificationRepository {
     fun markRead(accountId: UUID, notificationId: UUID, at: Instant): Boolean
 
     fun exists(accountId: UUID, notificationId: UUID): Boolean
+
+    /**
+     * 푸시 발송 결과를 **기록만** 한다(BR-U6-38). 성공이면 [sentAt], 실패면 [failedReason].
+     *
+     * 이 값이 알림의 존재를 좌우하지 않는다(INV-U6-02) — 행은 이미 있고, 여기는 "그래서 푸시는
+     * 어떻게 됐나"를 남기는 칸이다. 남기지 않으면 "왜 푸시가 안 왔나"에 답할 근거가 없다.
+     */
+    fun markPushResult(notificationId: UUID, sentAt: Instant?, failedReason: String?)
 }
 
 /** 리마인드 예약 영속 포트. */

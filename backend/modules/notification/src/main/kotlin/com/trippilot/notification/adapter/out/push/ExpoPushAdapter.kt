@@ -1,0 +1,108 @@
+package com.trippilot.notification.adapter.out.push
+
+import com.trippilot.notification.domain.PushMessage
+import com.trippilot.notification.domain.PushPort
+import com.trippilot.notification.domain.PushReceipt
+import com.trippilot.notification.domain.PushStatus
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Primary
+import org.springframework.stereotype.Component
+import org.springframework.web.client.RestClient
+
+/**
+ * Expo Push Service 어댑터 — **expo 모드에서만 활성**(기본은 기록만 하는 [LoggingPushAdapter]).
+ *
+ * 한 번의 POST 로 여러 메시지를 보내고, **입력 순서 그대로** 티켓 배열을 받는다. 그 순서가 곧
+ * 토큰과 결과의 대응이라, 배열 길이가 다르면 어느 결과가 어느 기기 것인지 알 수 없다 —
+ * 그때는 전부 실패로 다룬다(잘못 대응시켜 죽지 않은 토큰을 무효화하는 것보다 낫다).
+ *
+ * `DeviceNotRegistered` 는 **여기서 판정한다**(INV-U6-07) — Expo 의 오류 코드를 도메인 상태로
+ * 옮기는 것이 어댑터의 일이다. 도메인은 Expo 를 모른다.
+ *
+ * ⚠ **CI 에서 이 빈은 뜨지 않는다.** 게이트 정책이 "외부 API 호출 0회"라 테스트 설정은 모드를
+ * 켜지 않는다. 실 왕복은 사람이 켜서 한 번 태운다.
+ */
+@Component
+@Primary
+@ConditionalOnProperty(name = ["trippilot.push.mode"], havingValue = "expo")
+class ExpoPushAdapter(
+    @param:Value("\${trippilot.push.expo.access-token:}") private val accessToken: String,
+    @param:Qualifier(ExpoPushClientConfiguration.BEAN_NAME) private val client: RestClient,
+) : PushPort {
+
+    override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> {
+        val payload = tokens.map {
+            ExpoPushRequest(to = it, title = message.title, body = message.body, data = message.data)
+        }
+        val response = client.post()
+            .uri("/--/api/v2/push/send")
+            .headers { h ->
+                // 프로젝트가 "enhanced security" 를 켰을 때만 필요하다. 비어 있으면 헤더를 아예 안 보낸다 —
+                // 빈 Bearer 를 보내면 401 이라, 안 켠 프로젝트에서 오히려 실패한다.
+                if (accessToken.isNotBlank()) h.setBearerAuth(accessToken)
+            }
+            .body(payload)
+            .retrieve()
+            .body(ExpoPushResponse::class.java)
+
+        val tickets = response?.data.orEmpty()
+        if (tickets.size != tokens.size) {
+            // 대응을 잃었다. 죽지 않은 토큰을 무효화하는 것이 더 나쁘므로 전부 FAILED 로 둔다.
+            log.warn("Expo 응답 티켓 수({})가 요청 토큰 수({})와 다릅니다.", tickets.size, tokens.size)
+            return tokens.map { PushReceipt(it, PushStatus.FAILED, "TICKET_COUNT_MISMATCH") }
+        }
+        return tokens.zip(tickets) { token, ticket -> ticket.toReceipt(token) }
+    }
+
+    private fun ExpoPushTicket.toReceipt(token: String): PushReceipt = when {
+        status == "ok" -> PushReceipt(token, PushStatus.SENT)
+        details?.error == DEVICE_NOT_REGISTERED -> PushReceipt(token, PushStatus.DEVICE_NOT_REGISTERED, DEVICE_NOT_REGISTERED)
+        else -> PushReceipt(token, PushStatus.FAILED, details?.error ?: message ?: "UNKNOWN")
+    }
+
+    private companion object {
+        /** Expo 가 죽은 토큰에 주는 코드. 이 문자열이 INV-U6-07 의 방아쇠다. */
+        private const val DEVICE_NOT_REGISTERED = "DeviceNotRegistered"
+
+        private val log = LoggerFactory.getLogger(ExpoPushAdapter::class.java)
+    }
+}
+
+/** Expo 로 보내는 메시지 한 건. 필드명은 Expo 와이어 그대로다. */
+internal data class ExpoPushRequest(
+    val to: String,
+    val title: String,
+    val body: String,
+    val data: Map<String, String>,
+)
+
+/** Expo 응답 — 판정에 쓰는 것만 받는다. */
+internal data class ExpoPushResponse(val data: List<ExpoPushTicket> = emptyList())
+
+internal data class ExpoPushTicket(
+    val status: String? = null,
+    val message: String? = null,
+    val details: ExpoPushTicketDetails? = null,
+)
+
+internal data class ExpoPushTicketDetails(val error: String? = null)
+
+/** Expo 전용 RestClient. 모드가 켜졌을 때만 만든다 — 안 쓰는 커넥션 풀을 늘 띄우지 않는다. */
+@Configuration
+@ConditionalOnProperty(name = ["trippilot.push.mode"], havingValue = "expo")
+class ExpoPushClientConfiguration {
+
+    @Bean(BEAN_NAME)
+    fun expoPushRestClient(@Value("\${trippilot.push.expo.base-url:https://exp.host}") baseUrl: String): RestClient =
+        RestClient.builder().baseUrl(baseUrl).build()
+
+    companion object {
+        /** 앱에 RestClient 빈이 여럿이라 이름으로 집는다(카카오 클라이언트 선례). */
+        const val BEAN_NAME = "expoPushRestClient"
+    }
+}

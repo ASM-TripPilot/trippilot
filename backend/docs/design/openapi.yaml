@@ -1142,6 +1142,41 @@ paths:
       responses:
         '204': { description: 삭제됨 }
         '404': { description: 없음/타 계정 }
+  /me/push-tokens:
+    post:
+      tags: [notifications]
+      summary: 푸시 토큰 등록(l02)
+      description: >
+        **멱등이라 POST 다** — 같은 토큰을 다시 보내면 새 행이 아니라 갱신이고, 클라이언트는 자기
+        토큰의 서버 id 를 모른다(토큰 자체가 키다). 앱은 포그라운드 복귀마다 다시 보내도 된다.
+
+
+        `osPermission` 을 함께 받는 이유는 **서버가 OS 권한을 알 방법이 없기** 때문이다
+        (`location_consent_state.os_permission_mirror` 와 같은 꼴의 미러). 이 값이 채널 판정에
+        들어간다 — `GRANTED` 가 아니면 쏘지 않는다. 쏴도 닿지 않고 레이트리밋만 먹는다.
+
+
+        같은 토큰이 **다른 계정**에 있으면 그 기기를 새 계정으로 옮긴다. 기기 교체·계정 전환의
+        실제 모습이고, 옮기지 않으면 남의 알림이 그 기기로 간다.
+
+
+        한 계정에 토큰이 **여러 개일 수 있다**(INV-U6-06 다기기) — 발송은 유효 토큰 전부에 한다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/RegisterPushTokenRequest' } } }
+      responses:
+        '200': { description: 등록됨, content: { application/json: { schema: { $ref: '#/components/schemas/PushTokenResponse' } } } }
+        '400': { description: 검증 실패 }
+  /me/push-tokens/{token}:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [notifications]
+      summary: 푸시 토큰 해제(로그아웃·기기 해제)
+      description: 없거나 남의 것이면 404 — 존재를 알려 주지 않는다.
+      responses:
+        '204': { description: 해제됨 }
+        '404': { description: 없음/타 계정 }
   /me/notification-settings:
     get:
       tags: [notification]
@@ -2197,6 +2232,33 @@ components:
                 거절 사유만 주면 사용자는 무엇이 끝나기를 기다려야 하는지 모른다 — 화면이 이 값으로
                 그 여행으로 이동시킨다. `existingProvider` 와 같은 방식으로 다른 에러 코드의 응답에는
                 나타나지 않는다(직렬화 생략).
+
+    RegisterPushTokenRequest:
+      type: object
+      required: [token, platform]
+      properties:
+        token: { type: string, maxLength: 255, description: Expo push token(DEC-U6-3) }
+        deviceId: { type: string, maxLength: 64, nullable: true }
+        platform: { type: string, enum: [IOS, ANDROID] }
+        osPermission:
+          type: string
+          enum: [GRANTED, DENIED, NOT_DETERMINED]
+          default: NOT_DETERMINED
+          description: 안 주면 `NOT_DETERMINED` — **모른다는 뜻이라 쏘지 않는다**.
+
+    PushTokenResponse:
+      type: object
+      required: [platform, osPermission, deliverable]
+      description: 토큰 자체는 돌려주지 않는다 — 클라이언트가 이미 갖고 있고 응답·로그에 흘릴 이유가 없다.
+      properties:
+        deviceId: { type: string, nullable: true }
+        platform: { type: string, enum: [IOS, ANDROID] }
+        osPermission: { type: string, enum: [GRANTED, DENIED, NOT_DETERMINED] }
+        deliverable:
+          type: boolean
+          description: >
+            이 기기에 **실제로 쏠 수 있는가**. 화면이 `권한 필요` 안내를 그릴 근거다 —
+            등록에 성공했다는 것과 알림이 간다는 것은 다른 말이다.
 
     NotificationToggleList:
       type: object
