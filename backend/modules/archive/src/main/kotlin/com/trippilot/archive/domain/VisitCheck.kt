@@ -1,6 +1,8 @@
 package com.trippilot.archive.domain
 
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.archive.api.VisitConflictState
+import com.trippilot.core.error.ErrorCode
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -61,7 +63,7 @@ data class VisitCheck(
      */
     fun complete(at: Instant): VisitCheck {
         val arrived = arrivedAt ?: throw ConflictDetected(message = "도착 체크 없이 완료할 수 없습니다.")
-        requireOpen()
+        requireOpen(VisitOutcome.COMPLETED)
         if (at < arrived) throw ConflictDetected(message = "완료 시각이 도착보다 앞설 수 없습니다.")
         return copy(completedAt = at, updatedAt = at)
     }
@@ -71,7 +73,7 @@ data class VisitCheck(
      * 완료와 동시에 참일 수 없다(DB CHECK 도 같은 규칙) — 둘 다 있으면 "갔나 안 갔나"가 갈린다.
      */
     fun skip(at: Instant): VisitCheck {
-        requireOpen()
+        requireOpen(VisitOutcome.SKIPPED)
         return copy(skippedAt = at, updatedAt = at)
     }
 
@@ -95,10 +97,26 @@ data class VisitCheck(
         return copy(arrivedAt = newArrived, completedAt = newCompleted, updatedAt = at)
     }
 
-    /** 아직 결과가 정해지지 않았는가(완료도 건너뜀도 아님). */
-    private fun requireOpen() {
-        if (completedAt != null) throw ConflictDetected(message = "이미 완료된 방문입니다.")
-        if (skippedAt != null) throw ConflictDetected(message = "이미 건너뛴 방문입니다.")
+    /**
+     * 아직 결과가 정해지지 않았는가(완료도 건너뜀도 아님).
+     *
+     * **왜 두 코드로 갈리나(BR-U5-20).** 오프라인 큐 재생에서 409 는 실패가 아니다 — 원하던 상태가
+     * 이미 서버에 있으면 클라이언트는 그 항목을 `SYNCED` 로 수렴시켜야 한다. 그런데 사유 없이 409 만
+     * 주면 "이미 됐다"와 "다른 결과가 기록돼 있다"를 구분할 수 없어, 클라이언트는 둘 다 충돌 화면으로
+     * 띄우거나 둘 다 조용히 성공 처리한다. 어느 쪽이든 틀린다.
+     *
+     * @param intended 지금 만들려는 결과. 이미 그 결과면 [ErrorCode.VISIT_ALREADY_RECORDED](수렴 가능),
+     *   다른 결과가 기록돼 있으면 [ErrorCode.VISIT_CONFLICT](사용자 해소 필요).
+     */
+    private fun requireOpen(intended: VisitOutcome) {
+        if (completedAt == null && skippedAt == null) return
+        val recorded = if (completedAt != null) VisitOutcome.COMPLETED else VisitOutcome.SKIPPED
+        val sameState = recorded == intended
+        throw ConflictDetected(
+            current = VisitConflictState(visitCheckId, updatedAt),
+            message = if (sameState) "이미 ${recorded.label}된 방문입니다." else "서버에는 ${recorded.label}으로 기록돼 있습니다.",
+            errorCode = if (sameState) ErrorCode.VISIT_ALREADY_RECORDED else ErrorCode.VISIT_CONFLICT,
+        )
     }
 
     /** 재계획에서 잠글 대상인가(INV-U4-04). 건너뛴 방문은 잠그지 않는다 — 안 갔으니 바꿔도 된다. */
@@ -135,3 +153,7 @@ interface VisitCheckRepository {
     /** 같은 슬롯의 실적. 중복 체크인을 막는 데 쓴다 — 둘이면 "완료됐나"가 갈린다. */
     fun findBySlot(tripId: UUID, slotKey: String): VisitCheck?
 }
+
+/** 방문의 최종 결과. 재생 시 "원하던 것"과 "기록된 것"을 견주는 데만 쓴다. */
+enum class VisitOutcome(val label: String) { COMPLETED("완료"), SKIPPED("건너뜀") }
+

@@ -77,7 +77,10 @@ class VisitCheckController(private val service: VisitCheckService) {
         @PathVariable visitCheckId: UUID,
         @RequestBody request: AdjustTimesRequest,
     ): VisitCheckResponse = VisitCheckResponse.from(
-        service.adjustTimes(principal.accountId(), tripId, visitCheckId, request.arrivedAt, request.completedAt),
+        service.adjustTimes(
+            principal.accountId(), tripId, visitCheckId,
+            request.arrivedAt, request.completedAt, request.expectedUpdatedAt,
+        ),
     )
 }
 
@@ -97,7 +100,18 @@ data class ArriveRequest(
  * 지움으로 읽으면 도착만 고치려던 요청이 완료 기록을 함께 지워, 재계획 잠금(INV-U4-04)이
  * 조용히 풀린다. 기록을 되돌리는 경로는 이 티켓 범위가 아니다.
  */
-data class AdjustTimesRequest(val arrivedAt: Instant? = null, val completedAt: Instant? = null)
+/**
+ * 실제 시각 보정 요청. `null` 은 **변경 없음**이다(지움이 아니다).
+ *
+ * [expectedUpdatedAt] 은 이 편집이 딛고 선 서버 버전이다(BR-U5-22). 오프라인 큐를 재생할 때 실어
+ * 보내면, 그 사이 서버가 바뀌었을 경우 조용히 덮어쓰는 대신 `VISIT_CONFLICT` 로 갈린다.
+ * 온라인 단일 기기 편집은 보내지 않아도 된다 — 없으면 검사하지 않는다.
+ */
+data class AdjustTimesRequest(
+    val arrivedAt: Instant? = null,
+    val completedAt: Instant? = null,
+    val expectedUpdatedAt: Instant? = null,
+)
 
 data class VisitCheckListResponse(val visits: List<VisitCheckResponse>)
 
@@ -112,6 +126,11 @@ data class VisitCheckResponse(
     val source: CheckSource,
     /** 계획에 없던 곳인가 — 화면이 '즉석 방문' 배지를 그리는 근거. */
     val spontaneous: Boolean,
+    /**
+     * 오프라인 충돌 판정의 기준(BR-U5-22). 클라이언트는 이 값을 로컬 편집의 기준 버전으로 들고 있다가
+     * 재생 시 `expectedUpdatedAt` 으로 돌려보낸다 — 그래야 "내 편집이 무엇 위에서 만들어졌나"가 성립한다.
+     */
+    val updatedAt: Instant,
 ) {
     companion object {
         /**
@@ -120,6 +139,7 @@ data class VisitCheckResponse(
          */
         fun from(v: VisitCheck) = VisitCheckResponse(
             v.visitCheckId, v.slotKey, v.poiId, v.arrivedAt, v.completedAt, v.skippedAt, v.source, v.isSpontaneous,
+            v.updatedAt,
         )
     }
 }
