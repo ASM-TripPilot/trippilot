@@ -1,5 +1,6 @@
 package com.trippilot.recalculation.application
 
+import com.trippilot.archive.api.ArchiveFacade
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
@@ -52,7 +53,7 @@ class ReplanSessionService(
     private val itineraries: ItineraryFacade,
     private val sessions: ReplanSessionRepository,
     private val origins: OriginResolver,
-    private val visits: VisitCheckService,
+    private val archive: ArchiveFacade,
     private val poiSurfaces: PoiSurfaceFacade,
     private val solver: ReplanSolver,
     private val replans: ReplanFacade,
@@ -72,7 +73,7 @@ class ReplanSessionService(
             ?: throw ResourceNotFound("생성된 일정이 없습니다.")
 
         // 마지막 완료 방문지 좌표(있으면). 정본에서 사라진 POI 면 null 이 되고 사다리가 다음 단으로 내려간다.
-        val lastVisit = visits.lastCompletedPoi(tripId)
+        val lastVisit = archive.findLastCompletedPoi(tripId)
             ?.let { poiSurfaces.findSurfaces(listOf(it))[it] }
 
         val now = clock.instant()

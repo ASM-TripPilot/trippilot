@@ -1,10 +1,10 @@
-package com.trippilot.recalculation.application
+package com.trippilot.archive.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
-import com.trippilot.recalculation.domain.CheckSource
-import com.trippilot.recalculation.domain.VisitCheck
-import com.trippilot.recalculation.domain.VisitCheckRepository
+import com.trippilot.archive.domain.CheckSource
+import com.trippilot.archive.domain.VisitCheck
+import com.trippilot.archive.domain.VisitCheckRepository
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
@@ -89,7 +89,7 @@ class VisitCheckServiceTest : StringSpec({
         val skipped = svc.arrive(acc, tripId, skippedSlot, UUID.randomUUID(), CheckSource.MANUAL)
         svc.skip(acc, tripId, skipped.visitCheckId)
 
-        svc.lockedSlotKeys(tripId) shouldContainExactly listOf(otherSlot)
+        svc.getCompletedSlots(tripId) shouldContainExactly listOf(otherSlot)
         arrivedOnly.isCompleted shouldBe false
     }
 
@@ -105,7 +105,7 @@ class VisitCheckServiceTest : StringSpec({
         VisitCheckService(trips, visits, clockAt("2026-08-11T06:00:00Z"))
             .complete(acc, tripId, second.visitCheckId)
 
-        svc.lastCompletedPoi(tripId) shouldBe laterPoi
+        svc.findLastCompletedPoi(tripId) shouldBe laterPoi
     }
 
     "하루 묶기는 여행지(KST) 날짜 — UTC 로 보면 자정 무렵이 어긋난다" {

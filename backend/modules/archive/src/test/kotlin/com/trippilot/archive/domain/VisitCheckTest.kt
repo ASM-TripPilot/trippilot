@@ -1,4 +1,4 @@
-package com.trippilot.recalculation.domain
+package com.trippilot.archive.domain
 
 import com.trippilot.core.error.ConflictDetected
 import io.kotest.assertions.throwables.shouldThrow

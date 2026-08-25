@@ -1,4 +1,4 @@
-package com.trippilot.recalculation.domain
+package com.trippilot.archive.domain
 
 import com.trippilot.core.error.ConflictDetected
 import java.time.Duration
@@ -6,15 +6,20 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * 방문 실적(C10 · 정본 §3.1 · DEC-U4-10) — `actual` 계층의 첫 조각.
+ * 방문 실적(C12 Travel Archive · U5 정본 §2 · DEC-U5-2) — `actual` 계층의 첫 조각.
+ * U4 가 최소 형태로 정의했고(DEC-U4-10 · 테이블은 V2.21 그대로) 소유만 U5 로 옮겨 왔다.
  *
  * 계획(`visit_slot`)과 **덮어쓰지 않는다.** 계획은 "가기로 한 것", 여기는 "실제로 간 것"이라
  * 둘이 달라도 그 자체가 사실이다(늦게 도착했다·건너뛰었다).
  *
  * **INV-U4-04**: 완료된 방문의 슬롯은 재계획에서 **불변**이다 — 이미 다녀온 곳의 시각을 바꾸면
- * 사용자가 겪은 사실과 어긋난다.
+ * 사용자가 겪은 사실과 어긋난다. 재계획(C10)은 그 판정을 [com.trippilot.archive.api.ArchiveFacade] 로
+ * 읽는다 — 이 모듈이 U4 를 되부르지 않아야 순환이 생기지 않는다(BR-U5-10).
  *
- * ⚠ 사진·메모는 여기 두지 않는다(G-U4-5) — U5 C12 로 이관 예정이며 확장은 U5 가 승계한다.
+ * ⚠ 사진·메모는 여기 두지 않는다 — 별도 테이블(`visit_photo_meta` · `visit_memo`)로 붙는다.
+ * (번호는 적지 않는다. 정본이 제안한 V2.28 은 그 사이 `outbox_schema_version` 이 가져갔다 —
+ * 마이그레이션 번호는 **머지 시점에 열린 PR 을 보고** 정하는 값이라 주석에 박아 두면 반드시 어긋난다.)
+ * 메모를 이 행에 매달면 메모 편집마다 [updatedAt] 이 갱신돼 오프라인 충돌 판정이 오염된다(U5 정본 §3.2).
  */
 data class VisitCheck(
     val visitCheckId: UUID,
@@ -26,7 +31,10 @@ data class VisitCheck(
     val completedAt: Instant?,
     /**
      * 건너뜀(취소). U4 정본 §3.1 최소 집합의 **확장**이다 — TRIP-118 이 "방문 완료/취소"를 요구하고,
-     * 요약 스키마 문서도 `completed`/`skipped` 를 나눈다. U5 이관 시 status enum 으로 흡수될 수 있다.
+     * 요약 스키마 문서도 `completed`/`skipped` 를 나눈다.
+     *
+     * **INV-U5-01**: 이관하면서 `status` enum 으로 흡수하지 **않는다.** 상태는 세 timestamp 에서
+     * 파생한다 — 저장하면 timestamp 와 어긋날 수 있고, 어긋난 쪽이 무엇인지 나중에 알 수 없다.
      */
     val skippedAt: Instant?,
     val source: CheckSource,

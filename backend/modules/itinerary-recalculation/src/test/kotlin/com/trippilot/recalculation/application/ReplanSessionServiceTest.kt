@@ -7,8 +7,6 @@ import com.trippilot.itinerarygeneration.api.ItineraryRef
 import com.trippilot.placedata.api.FrozenPoiView
 import com.trippilot.placedata.api.PoiSurfaceFacade
 import com.trippilot.placedata.api.PoiSurfaceView
-import com.trippilot.recalculation.domain.VisitCheck
-import com.trippilot.recalculation.domain.VisitCheckRepository
 import com.trippilot.recalculation.domain.OriginKind
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanScope
@@ -77,16 +75,7 @@ class ReplanSessionServiceTest : StringSpec({
         },
     )
 
-    /** 방문 실적·POI 표면은 사다리 3단 전용이라 여기서는 비운다(그 단은 OriginResolverTest 가 본다). */
-    class Visits(private val clock: Clock) : VisitCheckRepository {
-        val stored = mutableListOf<VisitCheck>()
-        override fun save(check: VisitCheck) = check.also { stored += it }
-        override fun findById(visitCheckId: UUID) = stored.firstOrNull { it.visitCheckId == visitCheckId }
-        override fun findByTrip(tripId: UUID) = stored.filter { it.tripId == tripId }
-        override fun findBySlot(tripId: UUID, slotKey: String) =
-            stored.firstOrNull { it.tripId == tripId && it.slotKey == slotKey }
-    }
-
+    /** POI 표면은 사다리 3단 전용이라 여기서는 비운다(그 단은 OriginResolverTest 가 본다). */
     val emptySurfaces = object : PoiSurfaceFacade {
         override fun findSurfaces(poiIds: Collection<UUID>) = emptyMap<UUID, PoiSurfaceView>()
         override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
@@ -95,8 +84,8 @@ class ReplanSessionServiceTest : StringSpec({
     fun service(sessions: Sessions, clock: Clock, hasItinerary: Boolean = true) =
         ReplanSessionService(
             trips, itineraries(hasItinerary), sessions, origins,
-            VisitCheckService(trips, Visits(clock), clock), emptySurfaces,
-            ReplanSolver(sessions, VisitCheckService(trips, Visits(clock), clock), FakeReplans(), NOOP_TX, clock),
+            FakeArchive(), emptySurfaces,
+            ReplanSolver(sessions, FakeArchive(), FakeReplans(), NOOP_TX, clock),
             FakeReplans(), CapturingReplanEvents(), clock,
         )
 

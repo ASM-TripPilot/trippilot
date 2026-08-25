@@ -1,5 +1,6 @@
 package com.trippilot.recalculation.application
 
+import com.trippilot.archive.api.ArchiveFacade
 import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanFacade
 import com.trippilot.recalculation.domain.ReplanScope
@@ -27,7 +28,7 @@ import java.util.UUID
 @Component
 class ReplanSolver(
     private val sessions: ReplanSessionRepository,
-    private val visits: VisitCheckService,
+    private val archive: ArchiveFacade,
     private val replans: ReplanFacade,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
@@ -50,7 +51,8 @@ class ReplanSolver(
                     targetDate = today,
                     fromInstant = session.fromInstant,
                     fullDay = session.scope == ReplanScope.FULL_DAY,
-                    completedSlotKeys = visits.lockedSlotKeys(session.tripId).toList(),
+                    // 잠금(INV-U4-04)의 원천은 방문 실적이고, 실적은 archive 소유다(BR-U5-10).
+                    completedSlotKeys = archive.getCompletedSlots(session.tripId).toList(),
                     originLat = session.origin.lat,
                     originLng = session.origin.lng,
                     reasons = session.reasons,
