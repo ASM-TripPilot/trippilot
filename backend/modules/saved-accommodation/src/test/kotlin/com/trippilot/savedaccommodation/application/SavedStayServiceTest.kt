@@ -17,6 +17,11 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
 
+/** 발행만 삼키는 싱크(TRIP-550). 발행 여부는 `SavedStayEventTest` 가 따로 본다. */
+private object NoEvents : com.trippilot.core.event.DomainEventPublisher {
+    override fun publish(event: com.trippilot.core.event.DomainEvent) = Unit
+}
+
 private class FakeRepo : SavedStayRepository {
     val store = mutableMapOf<UUID, SavedStay>()
     override fun save(stay: SavedStay) = stay.also { store[it.savedStayId] = it }
@@ -47,43 +52,43 @@ class SavedStayServiceTest : StringSpec({
     ) = RegisterStayCommand(name, lat, lng, coordConfirmed, checkIn, checkOut, null, null, route, null)
 
     "등록 후 소유자 조회·목록" {
-        val svc = SavedStayService(FakeRepo(), StubBases(), clock)
+        val svc = SavedStayService(FakeRepo(), StubBases(), NoEvents, clock)
         val saved = svc.register(acc, cmd())
         svc.get(acc, saved.savedStayId).name shouldBe "제주 호텔"
         svc.list(acc).size shouldBe 1
     }
 
     "타 계정 리소스는 404(존재 은닉)" {
-        val svc = SavedStayService(FakeRepo(), StubBases(), clock)
+        val svc = SavedStayService(FakeRepo(), StubBases(), NoEvents, clock)
         val saved = svc.register(acc, cmd())
         shouldThrow<ResourceNotFound> { svc.get(other, saved.savedStayId) }
         shouldThrow<ResourceNotFound> { svc.delete(other, saved.savedStayId) }
     }
 
     "체크아웃 <= 체크인은 400" {
-        val svc = SavedStayService(FakeRepo(), StubBases(), clock)
+        val svc = SavedStayService(FakeRepo(), StubBases(), NoEvents, clock)
         shouldThrow<ValidationFailed> {
             svc.register(acc, cmd(checkIn = LocalDate.parse("2026-08-02"), checkOut = LocalDate.parse("2026-08-02")))
         }
     }
 
     "좌표 한쪽만은 400" {
-        val svc = SavedStayService(FakeRepo(), StubBases(), clock)
+        val svc = SavedStayService(FakeRepo(), StubBases(), NoEvents, clock)
         shouldThrow<ValidationFailed> { svc.register(acc, cmd(lat = 33.5, lng = null, coordConfirmed = false)) }
     }
 
     "coord_confirmed인데 좌표 없으면 400(INV-U1-08)" {
-        val svc = SavedStayService(FakeRepo(), StubBases(), clock)
+        val svc = SavedStayService(FakeRepo(), StubBases(), NoEvents, clock)
         shouldThrow<ValidationFailed> { svc.register(acc, cmd(lat = null, lng = null, coordConfirmed = true)) }
     }
 
     "날짜 없이 저장 가능(거점은 나중)" {
-        val svc = SavedStayService(FakeRepo(), StubBases(), clock)
+        val svc = SavedStayService(FakeRepo(), StubBases(), NoEvents, clock)
         svc.register(acc, cmd(coordConfirmed = false, lat = null, lng = null, route = RegisterRoute.LINK_PASTE)).coordConfirmed shouldBe false
     }
 
     "편집은 가변필드 대체" {
-        val svc = SavedStayService(FakeRepo(), StubBases(), clock)
+        val svc = SavedStayService(FakeRepo(), StubBases(), NoEvents, clock)
         val saved = svc.register(acc, cmd())
         val edited = svc.edit(acc, saved.savedStayId, EditStayCommand("변경숙소", 34.0, 127.0, true, null, null, "메모"))
         edited.name shouldBe "변경숙소"
@@ -91,7 +96,7 @@ class SavedStayServiceTest : StringSpec({
     }
 
     "삭제 후 조회 404" {
-        val svc = SavedStayService(FakeRepo(), StubBases(), clock)
+        val svc = SavedStayService(FakeRepo(), StubBases(), NoEvents, clock)
         val saved = svc.register(acc, cmd())
         svc.delete(acc, saved.savedStayId)
         shouldThrow<ResourceNotFound> { svc.get(acc, saved.savedStayId) }
@@ -100,7 +105,7 @@ class SavedStayServiceTest : StringSpec({
     "거점으로 사용 중인 숙소 삭제는 409(INV-U1-08 · 500 방지)" {
         val repo = FakeRepo()
         val bases = StubBases()
-        val svc = SavedStayService(repo, bases, clock)
+        val svc = SavedStayService(repo, bases, NoEvents, clock)
         val saved = svc.register(acc, cmd())
         bases.inUse += saved.savedStayId
         shouldThrow<ConflictDetected> { svc.delete(acc, saved.savedStayId) }
@@ -109,7 +114,7 @@ class SavedStayServiceTest : StringSpec({
     "거점으로 사용 중인 숙소의 좌표 확정 해제 편집은 409(INV-U1-08)" {
         val repo = FakeRepo()
         val bases = StubBases()
-        val svc = SavedStayService(repo, bases, clock)
+        val svc = SavedStayService(repo, bases, NoEvents, clock)
         val saved = svc.register(acc, cmd())
         bases.inUse += saved.savedStayId
         shouldThrow<ConflictDetected> {
