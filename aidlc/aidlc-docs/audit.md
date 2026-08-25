@@ -1026,3 +1026,285 @@ Step 1 FD 분석 — **재서술 금지 대상 8건** 식별(무발화 BR-U4-05�
 **Selection**: 사이클 [설계] 3-a에서 관측된 정본 반영 후보 **4건 중 사용자가 2건(드리프트1·4)을 선택**했다. `aidlc/` 소관(B)은 이 2건뿐이고, 나머지 2건(드리프트2·3)은 관측만 남기고 이 파일에 쓰지 않았다.
 
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-354 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260813-trip354-timeline-full-design/01b_ouroboros_seed.md`("A. 3-a 팀 결정" 절 결정 D·Q4·Q5 · "B. 정본 반영 선택" 절) · `00_gates.md`(게이트①·② 원장, "사이클 중 정정" 절의 Q5 정정 경위) · `03_implementer_notes.md` §1(왜 이 설계인가 — 재사용 근거). 이번 항목이 손댄 `aidlc/` 파일 = `construction/u3-ai-itinerary/functional-design/frontend-components.md`(§1·§2·§3·§4, 4곳) + 이 `audit.md` append, 총 2파일(`git status aidlc/` 실측 일치). `aidlc-state.md`는 미변경(이 사이클은 Post-Inception Progress 대상 없음 — 코드 구현 소급 기록은 리포 devlog·구조 지도 소관, [기록] 별도 처리).
+
+---
+
+## CONSTRUCTION — U5 Records & Reflection · Functional Design 착수 (Step 1~4)
+**Timestamp**: 2026-08-22T05:06:43Z
+
+**User Input** (원문, 시간순):
+1. "aidlc로 u5u6 설계실체 만들려고하는데 어케함"
+2. "그럼 내가 어떻게해야할지 단계별로 알려줘"
+3. "이 세션에서 그대로 시작해도됨? Yes or No"
+4. "기존 레포에 구현된거나 결정된거있으면 그거를 무조건 따르게할거야 ㅇㅋ?"
+5. "그냥 시작해"
+
+**AI Response**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계 · 새 유닛 진입은 사용자 명시 지시 필요)를 확인하고, 입력 5가 요구하는 **U5 진입 명시 지시**로 판정해 착수했다. 유닛 순서는 U5 → U6(의존: U6 마이페이지 US-NOTIF-06~08이 U1·U5 리드). 범위 기본값은 **얇게**(FD 우선)로 잡고 계획서 Q9에서 확정하도록 부쳤다.
+
+입력 4는 **실장 우선 원칙의 명시 지시**로 받아 계획서 §"실장 우선 순위"에 정본화했다 — 순위: (1) 리포 실물 (2) 패키지 계약 정본(openapi·README·conventions) (3) 라이브 Figma (4) 기존 aidlc 산출물 (5) 인셉션 문서. 인셉션이 실물과 충돌하면 **인셉션이 지고 정정 상신 대상으로만 기록**한다. 예외 1건을 명시했다 — 실물이 INV-1~4·법정로그 append-only·요구사항과 정면 충돌할 때는 버그일 수 있어 설계로 굳히지 않고 사용자에게 올린다.
+
+Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드 `j` 대조)를 수행하고 계획서를 `construction/plans/u5-records-reflection-functional-design-plan.md`에 저장, **Q1~Q9 `[Answer]:` 대기 상태로 정지**했다.
+
+실측의 핵심 발견 3건:
+- **U5는 그린필드가 아니다** — `visit_check`(V2.21) 테이블·코드 4파일·openapi `/trips/{tripId}/visits*` **5경로**가 이미 실재하고 **US-REC-01이 백엔드 계약까지 완료**돼 있다. 다만 코드 소유 모듈이 U4 `itinerary-recalculation`이라 정본(C12)과 다르다. V2.21 주석이 *"이 테이블은 U5 C12 Travel Archive 로 이관 예정이고, 확장은 U5 가 승계한다"*로 이관을 명시적으로 U5에 남겼다 → Q1.
+- **C13(AI Reflection)의 AI 표면이 없다** — `ai/docs/openapi.json` 경로는 `/ai/v1/itinerary/{generate,validate,repair,alternatives,explanations}` **5종**뿐(루트 CLAUDE.md의 "경계 3종"은 낡은 값 — 실측 5종). 회고·요약·스타일 계열 진입점 부재 → Q2.
+- **라이브 `j03`의 회고 본문이 통계 재조합**("오늘은 광안리와 미술관 등 4곳을 방문했어요. 12km를 이동했고 사진 6장을 남겼어요.")이라 **AI 정상 생성과 실패 폴백 기본 카드가 문자열 수준에서 구분되지 않는다**(D-U5-1) — Q2의 실질 근거.
+
+밴드 `j` 관측: 행 `y=14190`, **17프레임 = 코드 7(j01~j07, 결번 없음) + 상태 변형 10**. `[보관]` 구세대 없음(단일 세대). 스크린샷 2장(`j01 default`·`j03 default`) 시각 확인, 나머지 15프레임은 노드 트리 이름 수준 매핑 — 시각 확인은 산출물 생성 단계에서 이어간다. 드리프트 **D-U5-1~10** 도출(정합 확인 1건 포함: 폴백 화면 5종이 전부 그려져 있고 소요시간 표기 0건 — ADR-0011·INV-3 준수).
+
+**Context**: CONSTRUCTION 진입 — U5 Functional Design Step 1~4(`.aidlc-rule-details/construction/functional-design.md`). 이번 항목이 손댄 파일 = `construction/plans/u5-records-reflection-functional-design-plan.md`(신규) + 이 `audit.md` append, 총 2파일. `aidlc-state.md`는 **아직 미변경** — 스테이지 완료가 아니라 착수이므로 승인 게이트 통과 후 갱신한다.
+
+---
+
+## CONSTRUCTION — U5 Functional Design · 답변 수집 및 산출물 생성 (Step 5~7)
+**Timestamp**: 2026-08-22T09:12:00Z
+
+**User Input**: "Q2는AB병행, Q5=B 나머지는 A ㄱㄱ"
+→ 해석: **Q1=A · Q2=A+B 병행 · Q3=A · Q4=A · Q5=B · Q6=A · Q7=A · Q8=A · Q9=A**
+
+**AI Response**: Q2의 "AB 병행"은 모호할 수 있어 **리포 실물 패턴을 근거로 확정 해석**하고 그 해석을 사용자에게 명시 통지한 뒤 진행했다(별도 명확화 파일 생성 없음) — backend에 이미 `AI_SCHEDULE_MODE=fake|http` 모드 스위치 선례가 있으므로, 회고 생성도 **포트 1개 + 어댑터 2개**(`ReflectionGeneratorPort` ← `LlmGatewayReflectionAdapter`(A·기본) / `AiServiceReflectionAdapter`(B·계약만 명세, 개통 이연))로 두고 `AI_REFLECTION_MODE=rule|llm|http`로 가른다(DEC-U5-5). B를 지금 개통하면 `ai/`에 회고 표면이 없어 U4 G-U4-3와 같은 외부 블로커가 생긴다.
+
+산출물 **4종**을 `construction/u5-records-reflection/functional-design/`에 생성했다:
+- `business-logic-model.md` — 3계층 소유 지도 · **DEC-U5-1~13** · 이관 집행(§3) · 회고 3단 폴백 사슬(§5) · **이동 거리 계약 공백(§6)** · 이벤트 3 · 갭 **G-U5-1~10**
+- `domain-entities.md` — 승계 1(`visit_check` 확장 없음) · 신설 5(`visit_photo_meta`·`visit_memo`·`reflection`·`trip_summary`·`style_analysis`, V2.28~V2.32 제안) · 재사용 6 · **INV-U5-01~09** · 이벤트표 · 소유 경계표
+- `business-rules.md` — **BR-U5-01~52**(+08a) · **PBT-U5-1~5** · 미결 **O-U5-2~6**
+- `frontend-components.md` — 라우트 7 · pages 7 슬라이스 · **feature 2분할**(`record`/`reflection`) · shared 변경 4 · 구조 가드 5 · testID 23 · **PBT-U5-F1~F4**
+
+**사이클 중 자기 정정 2건**(둘 다 근거 재확인으로 뒤집힘):
+1. **D-U5-3 철회** — 계획서 단계에서 노드 트리 이름만으로 "`j02`에 3종 구분·전후 장소가 없다"고 판정했으나, 스크린샷 실측에서 **계획｜실제｜변경 3탭 세그먼트 + 행별 라벨 배지 + `△△카페 → ◇◇실내카페` 전후 장소**가 모두 확인됐다. US-REC-04 요구를 충족하며 남은 미결은 3탭의 동작 축뿐이다(O-U5-3).
+2. **G-U5-6 철회 · O-U5-1 종결** — `j05`의 "평균 체류 72분"을 BR-U4-37과의 정면 충돌로 올렸으나, U4 `domain-entities.md` **INV-U4-03**이 이미 *"INV-3은 예측 소요시간의 표시 금지이고 사후 실적은 U5 기록 소관"*으로 갈라 뒀다. BR-U4-37은 **U4 화면 한정 규칙**이다 → **DEC-U5-13 · BR-U5-08a**로 확정(누적 통계 평균은 표시, 개별 방문 체류는 계속 미노출). 프런트 가드 화이트리스트 지침도 함께 정정.
+
+**U4 사후 정정 2건(승인 산출물 수정)**: `u4-in-trip-planb/functional-design/domain-entities.md`
+- §3.1 `visit_check` 이관 예고 블록 뒤 — **이관 확정** + `ArchiveFacade.getCompletedSlots` 경유 + **`VisitChecked` 발행 주체 U4→U5 변경**을 소급 기록.
+- §3.3 `actual_route_point` 각주 — "U5로 이관 예정"을 **취소선 처리하고 철회**(U4 소유 유지). 아울러 **이 테이블이 아직 실장되지 않았다는 실측**과, 그 결과 U5 stats가 `distanceSource: VISIT_LINE` 근사로 운용되다 실장 시 `ROUTE`로 승격한다는 사실을 병기.
+- 둘 다 **요구사항 근거가 아니라 U5 설계 결정의 소급 기록**이다 — 다음 사이클이 요구사항 근거로 인용하지 않도록 각 블록에 날짜·출처(DEC 번호)를 명시했다.
+
+**실측 제약(정직 표기)**: 라이브 Figma는 **5프레임만 스크린샷 확인**(`j01 default`·`j02`·`j03 default`·`j04`·`j05`). 나머지 12프레임은 **Figma MCP 호출 상한**(View seat)에 걸려 노드 트리 이름 수준 매핑에 머물렀다. 이 한계를 `frontend-components.md §10`에 명시하고, 프런트 티켓 착수 전 시각 확인을 선행 조건으로 남겼다 — 이번 사이클에 이름 기반 판정 1건이 실제로 뒤집혔기 때문이다.
+
+**Context**: CONSTRUCTION — U5 Functional Design Step 5~7. 손댄 파일 = U5 산출물 4(신규) + U4 `domain-entities.md`(사후 정정) + 이 `audit.md`, 총 6파일. `aidlc-state.md`는 **승인 게이트 통과 후** 갱신한다.
+
+---
+
+## CONSTRUCTION — U5 Functional Design 승인 · NFR 스킵 · U5 설계 단계 종료
+**Timestamp**: 2026-08-22T09:41:00Z
+
+**User Input**: "승인, NFR 스킵 기록하고 U5 종료"
+
+**AI Response**: Functional Design 승인으로 처리하고(Step 8 게이트 통과), 계획서 Q9=A와 이번 지시에 따라 **NFR Requirements·NFR Design을 SKIPPED로 기록**한 뒤 U5 설계 단계를 종료했다.
+
+**스킵 사유(기록용)**:
+- **NFR Requirements** — U0·U1·U3·U4 상속 + FD가 이미 배치까지 기술. 새 축으로 보이던 3건도 상속으로 덮인다: **사진 저장**은 로컬 참조·서버 메타만이라 스토리지 비용축이 서지 않고(DEC-U5-9), **오프라인 큐**는 기기 로컬이라 서버 인프라가 0이며(DEC-U5-10), **위치·EXIF**는 U4 LEGAL-U4-01~05와 V1.3 `gps_recording_opt_in`을 그대로 승계한다(INV-U5-04). 재개 조건 = `shared/photo` 신규 의존성이 EAS 재빌드를 요구하는 것으로 확인되거나 `ObjectStoragePort`(U7 공개 사진)가 개통될 때.
+- **NFR Design** — 룰의 CONDITIONAL("NFR Requirements was skipped → skip") 미충족. 신규 논리 컴포넌트는 테이블 5종뿐이고 `domain-entities.md §7`이 이미 기술한다.
+- **Infrastructure Design** — U0·U1·U3·U4와 동형(배포/클라우드 계획 부재).
+- **Code Generation** — SCOPE.md 범위 제외(팀 직접 개발).
+
+`aidlc-state.md`에 U5 블록을 추가했다 — 스테이지 체크박스 5종, 산출물 4종, 핵심 결정, **U4 사후 정정 2건**, **사이클 중 자기 정정 2건**(D-U5-3 · G-U5-6/O-U5-1), 후속 작업 목록(backend 모듈 2 신설·코드 이관·마이그레이션 5·openapi 확장 / ai 회고 표면 협의 / frontend 7화면·`shared/photo`·지도 확장·가드 5 / 선재 dbml 정합 / 인셉션 정정 상신 2 / U4 의존 1 / 디자인 확인 1 / **시각 미확인 12프레임**). 목록 끝줄은 `U5~U9 대기` → **`U6~U9 대기`** 로 갱신.
+
+**U5 최종 산출물**: `construction/u5-records-reflection/functional-design/` **4종**(`business-logic-model.md` · `domain-entities.md` · `business-rules.md` · `frontend-components.md`).
+
+**Context**: CONSTRUCTION — U5 Functional Design Step 8~9(승인 기록·상태 갱신) + NFR 2스테이지 SKIP 기록. 손댄 파일 = `aidlc-state.md` + 이 `audit.md`, 총 2파일. 다음 유닛(U6 Notification & Settings)은 SCOPE.md 규칙대로 **사용자 명시 지시 대기**.
+
+---
+
+## Post-Design Correction — U5 셀프 검수 (사용자 요청 "u5 셀프검수한번더")
+**Timestamp**: 2026-08-22T10:24:00Z
+
+**User Input**: "u5 셀프검수한번더 ㄱㄱ"
+
+**AI Response**: 승인된 U5 산출물 4종을 리포 실물과 재대조하고 내부 정합(번호 연속성·상호참조·모순)을 점검했다. **결함 6건을 찾아 전부 정정**했다.
+
+**실물과 어긋난 사실 2건(둘 다 존재하지 않는 이름을 썼다)**:
+1. **`trip_base` 테이블은 없다** — V2.4의 실제 테이블은 `base_assignment` + `trip_base_day`다. `domain-entities.md` 2곳 + `business-logic-model.md` §4.3을 정정.
+2. **`poi.activity_category` 컬럼은 없다** — V2.6은 컬럼 추가가 아니라 `poi_category_check` **CHECK 제약 교체**이고, 실제 컬럼은 `poi.category`(허용값 8종 `명소·맛집·카페·야경·자연·쇼핑·문화·액티비티`)다. `domain-entities.md` 재사용표 정정.
+
+**내부 정합 3건**:
+3. **상호참조 오류** — 오프라인 충돌 판정 기준을 `BR-U5-24`(오프라인 회고 규칙)로 가리켰다. 올바른 번호는 **`BR-U5-22`**. 2곳 정정.
+4. **상호참조 오류** — 스타일 분석의 계정 단위 생애주기를 `INV-U5-07`(회고 stats)로 가리켰다. 올바른 번호는 **`INV-U5-08`**.
+5. **PBT-U5-5 자기모순** — "어떤 회고 응답에도 duration 필드가 없다"로 썼는데 같은 사이클의 **DEC-U5-13이 `avgDwellMinutes` 노출을 확정**했다. 성질을 "**이동 소요시간**(travel duration) 금지 + `style_analysis.avgDwellMinutes` 단일 예외"로 좁혔다. 그대로 뒀으면 블로킹 게이트가 그린 화면을 막았을 것이다.
+
+**스토리 커버리지 누락 1건(가장 큰 결함)**:
+6. **US-REC-03(GPS 방문 기록)의 규칙이 통째로 없었다.** Q5=B로 `actual_route_point` 소유가 U4로 남으면서 **화면 동작 규칙까지 같이 빠졌다** — 소유가 U4라도 "동의 없으면 레이어 비활성", "OFF 전환 시 즉시 중단", "미실장 구간엔 방문점 연결선을 실제 동선으로 그리지 않는다"는 U5가 정해야 한다. `business-rules.md §9`를 신설해 **BR-U5-53~56**(US-REC-03 3건 + US-REC-11 재열람 1건)을 추가했다. 이 누락은 **14 스토리 전수 커버리지 표**(`business-logic-model.md §10` 신설)를 만들면서 드러났다 — 표 없이 규칙만 쓰면 "소유가 남에게 간 스토리"가 조용히 빠진다.
+
+**추가 관측 1건**: **D-U5-11** — `j05`의 카테고리 막대가 `카페·자연·**미식**·기타`인데 `poi.category` 8종에 **`미식`은 없고 `맛집`이 있다**. 표시 매핑표가 필요하고 8종→4줄 집계 규칙도 미정 → **O-U5-7** 신설(U1 G-U1-10 동반유형 매핑과 같은 종류의 갭).
+
+**확인만 하고 바꾸지 않은 것**: BR-U5-01~52 번호 **연속**(누락 0) · INV-U5-01~09 **연속** · `account`·`location_consent_state.gps_recording_opt_in`·`stay`(V2.26)·`visit_slot`(V2.7) 이름 **실재 확인** · `(tabs)/records.tsx`와 `app/records/style.tsx` 공존은 **리포에 같은 꼴 선례**(`(tabs)/explore.tsx` + `app/explore/places.tsx`)가 있어 유효 — 선례를 `frontend-components.md §1` 각주로 명시.
+
+**Context**: 승인 완료된 U5 Functional Design 산출물의 **사후 정정**(SCOPE.md 현행 범위 내). 손댄 파일 = `u5-records-reflection/functional-design/` 3종(`business-logic-model.md`·`domain-entities.md`·`business-rules.md`) + `frontend-components.md` + 이 `audit.md`, 총 5파일. 스테이지 체크박스·승인 상태는 **변동 없다**(내용 정정이지 재승인 대상 아님). `aidlc-state.md`에 검수 결과 1줄을 병기한다.
+
+---
+
+## Post-Design Correction — U5 셀프 검수 2차 (사용자 요청 "셀프검수 한번더")
+**Timestamp**: 2026-08-22T10:58:00Z
+
+**User Input**: "셀프검수 한번더 ㄱㄱ"
+
+**AI Response**: 1차 검수가 **문서 내부 정합·이름 대조**에 머물렀다고 보고, 2차는 **"설계가 전제한 코드 자산이 실제로 존재하는가"** 를 축으로 잡았다. 결함 **4건 추가 발견 · 전부 정정**. 이번 4건은 성격이 다르다 — 1차는 오타·오참조였고, 2차는 **결정의 근거가 사실이 아니었던 것**이다.
+
+1. ★ **`LlmGatewayPort`가 backend에 없다(G-U5-11).** `grep -ril "llmgateway" backend/` = **0건**. backend의 LLM 관련 자산은 `ScheduleAgentWire`·`FakeScheduleAgent`·`HttpScheduleAgentAdapter`(= `ai/` **호출** 어댑터)뿐이고 LLM 게이트웨이 실체는 **`ai/` 패키지가 소유**한다. DEC-U5-5의 어댑터 ①을 "U2 자산 재사용"으로 쓴 것은 **틀렸다** — 실제로는 **LLM 벤더 직결 신규 구축**이고, 키·비용·프롬프트가 backend에 새로 생기며 "one external API = one owning module" 규칙상 **LLM 소유 모듈이 둘로 갈린다**. 정정: 어댑터 이름을 `VendorLlmReflectionAdapter`로 바꾸고, **기본값을 `rule`로 확정**했으며, `llm` vs `http` 선택을 **O-U5-6**으로 승격(정본 정합만 보면 `http`가 낫다는 판단 근거를 병기). 포트+어댑터 구조와 모드 스위치 **패턴** 자체는 `ScheduleAgentPort` 선례로 여전히 유효하다.
+2. ★ **`ChangeLogFacade`에 조회 메서드가 없다(G-U5-12).** 실물은 **`append(command)` 단 하나**이고 읽기는 REST(`ChangeLogController.timeline` `@GetMapping`)로만 뚫려 있다. `ArchiveFacade.getRecords`가 "changelog를 조인한다"는 서술은 **경로가 없는 서술**이었다. 정정: 두 갈래(facade에 `findByTrip` 추가 / 화면이 REST 직접 호출)를 명시하고 **(a)를 기본**으로, **BR-U5-29가 성립하려면 이 확장이 선행**됨을 규칙에 각주로 박았다. U4도 쓰는 facade라 팀 확인 대상.
+3. **`VisitChecked` 이벤트가 코드에 없다(G-U5-13).** `전체-API-서피스.md` 설계 문서에만 존재하고 backend 구현 0건. 따라서 "이관으로 **발행 주체가 U4→U5로 바뀐다**"는 서술은 미실장 이벤트에 대한 설계 서술이다 — **U5가 신설**하는 것으로 정정(`domain-entities.md` 이벤트표).
+4. ★ **프런트 `features/record` → `features/execution` import는 금지돼 있다(G-U5-14).** ESLint `import/no-restricted-paths`가 "features/\* may not import another feature"를 강제하고 `src/__tests__/importBoundary.test.ts`가 그 규칙의 생존까지 잠근다. `actualDistance.ts`를 "재사용(이동 대상 아님)"으로 쓴 것은 **구조적으로 불가능**했다 — `accumulateDistanceKm`·`GeoPoint`의 **`shared/geo/` 승격**으로 정정. U4 자산을 옮기는 일이라 U4 프런트 티켓과 조율이 필요하다.
+
+**추가 미결 1건**: **O-U5-8** — 사진 EXIF 좌표 저장을 `gps_recording_opt_in`(V1.3 L3)으로 게이팅하는 것이 **개인정보 목적 범위**에 맞는가. U4의 "위치 동의 축 신설 금지" 지시를 따라 같은 축을 재사용했으나(INV-U5-04), 그 동의는 *이동 중 GPS 수집*에 대한 것이고 사진 EXIF는 수집 경로가 다르다. 축 신설 대신 **동의 고지 문구에 사진 EXIF를 포함**하는 선택지를 병기했다.
+
+**방법론 관찰(다음 유닛에 적용)**: 1차와 2차가 잡은 결함의 성격이 갈렸다 — 1차는 문서-문서 대조(오참조·자기모순·커버리지), 2차는 **문서-코드 대조("이 포트/파사드/이벤트가 실제로 있는가")**. FD 단계에서 **"설계가 이름으로 호출한 코드 자산"의 존재 확인을 체크리스트로 돌리면** 2차 결함 4건은 초안에서 걸렸다. `docs/conventions/anti-patterns.md` 후보.
+
+**Context**: 승인 완료된 U5 산출물의 사후 정정 2차(SCOPE.md 현행 범위 내). 손댄 파일 = `business-logic-model.md`·`domain-entities.md`·`business-rules.md`·`frontend-components.md` + 이 `audit.md`, 총 5파일. 스테이지 승인 상태 **변동 없음**. `aidlc-state.md`에 2차 검수 1줄 병기.
+
+---
+
+## CONSTRUCTION — U6 Notification & Settings · Functional Design 착수 (Step 1~4)
+**Timestamp**: 2026-08-23T01:20:00Z
+
+**User Input**: "u6 착수 ㄱㄱ"
+
+**AI Response**: SCOPE.md의 "새 유닛 진입은 사용자 명시 지시" 요건을 충족하는 지시로 판정하고 U6에 진입했다. 범위 기본값은 직전 합의대로 **얇게 + 알림 코어**로 잡고 Q2에서 확정하도록 부쳤다. 계획서를 `construction/plans/u6-notification-settings-functional-design-plan.md`에 저장하고 **Q1~Q9 대기 상태로 정지**했다.
+
+**절차 보강(U5 2차 검수의 교훈 적용)**: U5에서 "설계가 이름으로 부른 코드 자산이 실제로는 없던" 결함이 4건 나왔으므로, U6는 **Step 1b에서 자산 존재를 grep으로 선행 검증**했다. 계획서 자산표의 '실재' 칸은 전부 실측이며 추정으로 적은 칸이 없다.
+
+실측의 핵심 발견 4건:
+- ★ **아웃박스 구현이 없다.** `outbox_event` 테이블은 V1.0에 실재하지만(`event_id` UNIQUE·`published_at`·`attempts`·미발행 부분 인덱스) **Kotlin 구현 0건**(`*Outbox*` 파일 0 · `Outbox` 심볼 0). 인셉션은 U6를 "전 유닛 이벤트를 구독하는 순수 구독자"로 정의했는데 **구독할 인프라가 없다.** U5의 `VisitChecked`·`ReflectionReady` 미실장(G-U5-13)도 같은 뿌리다 → **Q1**(U6가 디스패처를 떠안을지, 동기 호출로 시작할지, U0 보완 티켓으로 뺄지).
+- **설정 백엔드는 이미 상당 부분 있다.** openapi `/me/*` **12경로** 실재(`/me/profile`·`/me/preferences`·`/me/location-consent`(+`/os-permission`)·`/me/deletion`·`/me/consents` 등) → US-NOTIF-09·10·11은 새 도메인 규칙이 거의 없다. **12 스토리가 "거의 다 된 것"과 "아무것도 없는 것"으로 정확히 갈린다.**
+- **`expo-notifications`가 이미 설치·플러그인 등록돼 있다**(`package.json ~0.32.17` · `app.config.ts:38`), 사용처는 0. U4의 `expo-task-manager`(신규 설치 + EAS 재빌드 1회)와 **상황이 다르다** — 재빌드 없이 배선만으로 될 가능성이 있어 Q3에서 확인 대상으로 뒀다.
+- **US-NOTIF-12(제휴 고지)는 U1에서 이미 구현됐다.** `features/stay/ui/OtaChoiceSheet.tsx`(Figma `1348:1538` · TRIP-457 · BR-U1-30)가 실재하고, 라이브 `l07`은 설정 화면이 아니라 **숙소 상세 위의 같은 시트**다(D-U6-8). U6 신규분은 "다시 보지 않기"의 저장·재활성화뿐 → Q7.
+
+밴드 `l` 관측: 행 `y=18490`, **16프레임 = 코드 7(l01~l07·결번 없음) + 상태 변형 9**. 드리프트 **D-U6-1~9** 도출(정합 확인 4건 포함 — `l02` 하단 "모든 알림을 꺼도 보안·계정 알림은 알림함에 표시" 문구가 US-NOTIF-05 예외와 정확히 일치).
+
+⚠️ **이번 사이클의 최대 취약점 — Figma 시각 확인 0프레임.** Figma MCP **호출 상한**(View seat Professional)이 U5 사이클에서 소진돼 스크린샷을 한 장도 못 떴다. 밴드 `l` 대조는 **전부 노드 트리 이름 수준 매핑**이며, U5에서 이름 기반 판정 1건(D-U5-3)이 스크린샷으로 뒤집힌 전례가 있으므로 **D-U6-1·2는 잠정**으로 표기하고 상한 해제 후 재확인을 계획에 명시했다.
+
+**Context**: CONSTRUCTION 진입 — U6 Functional Design Step 1~4(`.aidlc-rule-details/construction/functional-design.md`). 손댄 파일 = 계획서 1(신규) + 이 `audit.md`, 총 2파일. `aidlc-state.md`는 승인 게이트 통과 후 갱신한다.
+
+---
+
+## Post-Design Correction — 로컬 와이어프레임 export 대조 (U5 정정 + U6 계획서 갱신)
+**Timestamp**: 2026-08-24T02:40:00Z
+
+**User Input**: "문서 폴더에 trippilot 짬통 폴더에 와이어프레임들 넣어놨거든? 너가 본거랑 같은지 비교 ㄱㄱ"
+
+**AI Response**: `~/Documents/trippilot 짬통/TripPilot 와이어프레임 (1)/`(PNG **225장**)을 라이브 캔버스 파싱 결과(최상위 프레임 216)와 코드 단위로 대조했다. **113개 화면 코드 중 110개가 개수까지 일치**하고, 차이는 `c02`(-1)·`c09`(-1)뿐인데 그것도 `c09b-pref`가 export에서 **디렉토리로 빠진** 산출물 형식 차이지 드리프트가 아니다. **밴드 `j`(17)·`l`(16)은 완전 일치** — U5·U6 작업이 같은 세트 위에 있음을 확인했다.
+
+이 export로 **Figma MCP 호출 상한을 우회**해, 그동안 못 본 프레임을 시각 확인했다(`l01`·`l02`·`l03`·`j01 sync-conflict`). 그 결과 **잠정 판정 2건이 뒤집히고 U5 규칙 1건이 폐기**됐다.
+
+**U6 계획서 갱신(승인 전 문서 — 자유 수정)**:
+- **D-U6-1 철회** — "`l01`에 종류 구분이 없다"는 틀렸다. 각 행이 아이콘 + `숙소 · 방금`·`Plan-B · 10분 전`·`일정 · 1시간 전`·`회고 · 어제`·`시스템 · 2일 전` 라벨을 단다. 미읽음 빨간 dot, Plan-B 행에 `대안 일정 보기 ›`(US-NOTIF-03 ✅). 일정 알림 본문 `다음 일정: ○○ · 14:30 · 840m` — **거리만·소요시간 없음**(INV-3 ✅).
+- **D-U6-2 확정** — `l02`는 **7행 × 2채널(푸시·인앱) = 토글 14개**다(이름 파싱의 "14"는 행이 아니라 토글 수였다). 스토리 8종이 화면에선 7행이고 **커뮤니티 좋아요·댓글이 1행으로 병합**돼 있다. **기본값도 읽혔다** — `일정 시작 전`·`Plan-B 재계획`만 푸시 OFF·인앱 ON.
+- **D-U6-10 신설** — `l01`에 `시스템` 종류가 실재하는데 `l02` 토글엔 없다. 하단 문구("모든 알림을 꺼도 보안·계정 알림은 알림함에 표시")의 실체이며, `NotificationKind`는 **8종(토글 가능 7 + `SYSTEM`)** 이라는 뜻이다.
+- **D-U6-11 신설** ★ — `l03` 메뉴 6행 중 **3행이 U7(커뮤니티) 소관**(`내 일정 공개/공유 설정`·`내가 공유한 일정`·`숨긴 사용자 관리`). 1차 범위 밖인데 화면에 있다 → Q2 범위 결정에 직접 영향.
+- **D-U6-12 신설** ★ — `l03` 스타일 카드의 **dot 게이지 3축(여유로움·미식취향·활동성)이 U5 `style_analysis`에 없다**. US-NOTIF-08 스토리 원문("밀도·반경")과도 축이 다르다.
+- **D-U6-13 신설** — `l03` 상단 구성(프로필·취향 칩 3·여행 카운트 3구간·세그먼트·여행 카드 `숙소 미등록` 칩) 확인, US-NOTIF-07 ✅.
+- **Q8 개정** — "커뮤니티 2종을 넣나"가 아니라 **"이미 활성 토글로 그려져 있는데 U7 없는 동안 어떻게 다루나"** 로 질문을 다시 세웠다. 선택지도 그에 맞게 교체(A=만들되 행 숨김·B=화면대로 노출·C=빼고 U7에서 확장).
+- **U4 G-U4-6 미반영 확인** — "Plan-B 민감도(적게/보통/많이) UI를 `l02`에 신설"이 **실물에 없다.** `Plan-B 재계획` 행은 토글 2개뿐.
+
+**U5 사후 정정(승인 산출물)**:
+- **BR-U5-21 정정** — 충돌 해소 **단위가 방문(레코드)별**임을 명시. 화면 문구가 "항목마다 어느 버전을 유지할지 선택하세요"이고 카드가 방문마다 뜬다(`동기화 충돌 2건`), 적용은 `[선택한 버전으로 동기화]`로 일괄. 전역 일괄 선택으로 읽히던 초안을 고쳤다. **BR-U5-21a 신설**(2열 비교 항목 = 방문 시각·방문 상태·메모·사진 수, 버전 단위 라디오).
+- ★ **BR-U5-23 폐기** — "사진 메타는 충돌 대상이 아니다(합집합 병합)"는 **화면과 정면으로 어긋난다.** `j01 sync-conflict`가 `사진 2장 (대기)` vs `사진 1장`을 버전 비교 항목으로 그린다. **BR-U5-23a**로 대체(선택 버전을 따르되 **버린 쪽의 로컬 자산은 지우지 않는다** — 기기 사진은 사용자 앨범 소유).
+- **`style_analysis.trait_gauges` 신설**(`domain-entities.md`) — 3축 0~5. 산출식 미정이라 **O-U5-9**로 남겼다.
+
+**방법론 관찰**: U5 1차 검수는 문서-문서, 2차는 문서-코드였고, 이번은 **문서-화면(시각)** 이다. 세 축이 각각 다른 종류의 결함을 잡았다 — 특히 BR-U5-23은 **문서상 완결적이고 코드와도 모순이 없었는데 화면과만 어긋났다.** 이름 기반 매핑으로는 절대 안 잡혔을 항목이다. 로컬 export가 있으면 Figma 호출 상한과 무관하게 전수 시각 확인이 가능하다는 것도 이번에 확인됐다.
+
+**Context**: 손댄 파일 = `plans/u6-...-plan.md`(승인 전) · `u5-.../business-rules.md` · `u5-.../domain-entities.md` + 이 `audit.md`, 총 4파일. U5 스테이지 승인 상태 **변동 없음**. U6는 여전히 **Q1~Q9 답변 대기**.
+
+---
+
+## CONSTRUCTION — U6 Functional Design · 답변 수집 및 산출물 생성 (Step 5~7)
+**Timestamp**: 2026-08-24T03:30:00Z
+
+**User Input**: "전부 A로 ㄱㄱ" → **Q1~Q9 전부 A**
+
+**AI Response**: 모호성 없어 명확화 파일 없이 진행했다. 산출물 생성 전 **로컬 export로 밴드 `l`을 추가 시각 확인**했다(`l05 default`·`l06 default`·`l02 permission-denied` 3장 추가 → 누적 **6/16**). 이 3장이 설계를 두 군데 바꿨다:
+
+- **`l05` 실물**이 제휴 "다시 보기"를 **설정 화면의 계정 단위 토글**로 그린다 → 계획서 Q7 해설에서 권했던 **"기기 로컬 저장"을 철회**하고 **서버 저장으로 정정**했다(**DEC-U6-7a**). 설정에 있는 값이 기기마다 다르면 사용자 모델이 깨진다. 같은 화면에서 **`데이터 내보내기` 행이 실재하는데 `/me/*` 12경로에 대응 엔드포인트가 없다**는 것(G-U6-3)과, **취향 7행 중 `예산`이 `미설정`으로 그려져 U1 `G-U1-09`(예산 입력 화면 부재)의 해소 경로가 `l05`라는 것**(G-U6-6)도 확인했다.
+- **`l06` 실물**은 위치 동의를 **토글 하나**로 그리는데 백엔드는 **3층**이다(`os_permission_mirror`·`legal_consent`·`gps_recording_opt_in`, `PUT`이 L2·L3를 받는다). **DEC-U6-11**로 "토글 하나가 L2·L3를 함께 움직이고 L1은 선결 조건"으로 확정했다 — 화면이 든 용도 3가지가 전부 L3 수집을 전제하고, L2만 켜고 L3를 끈 조합에 대응하는 UI가 없기 때문이다.
+- **`l02 permission-denied`** 는 채널 판정 진리표 2행의 정본이다 — 푸시 컬럼 헤더가 `권한 필요` 칩으로 바뀌고 푸시 토글 전부 비활성, 하단 문구가 "푸시를 꺼도 인앱 알림은 알림함에 계속 누적됩니다"로 교체된다.
+
+산출물 **4종**을 `construction/u6-notification-settings/functional-design/`에 생성했다:
+- `business-logic-model.md` — **DEC-U6-1~11** · 전달 파이프라인(**인앱 적재가 푸시보다 먼저**) · 채널 판정 진리표 · catch-up · **시각 기반 알림은 이벤트가 아니다(DEC-U6-10 `notification_schedule`)** · 설정 배선표 · 갭 **G-U6-1~8** · 스토리 커버리지 12/12
+- `domain-entities.md` — 신설 4(`notification`·`notification_toggle`·`push_token`·`notification_schedule`, V2.33~V2.36) + 재사용 8 + **INV-U6-01~09** + `NotificationKind` **8종** + 구독 이벤트표
+- `business-rules.md` — **BR-U6-01~38**(번호 연속·중복 0 검증) · **PBT-U6-1~5** · 미결 **O-U6-1~6**
+- `frontend-components.md` — 라우트 6 · pages 6 · feature 2분할(`notification`/`settings`) · `shared/push` 신설 · 구조 가드 5 · testID 18 · PBT-U6-F1~F3
+
+**핵심 설계 결정**:
+- **DEC-U6-1**: 아웃박스 디스패처를 U6가 설계하되 물리 배치는 **`backend/shared/`**(U6 모듈 아님 — U7도 쓴다). 테이블이 이미 폴링 퍼블리셔 모양(`ix_outbox_unpublished` · `attempts` · `event_id` UNIQUE)이라 스키마 재설계 불필요.
+- **DEC-U6-10** ★: `TRIP_PRE`·`TRIP_DAY`·`SLOT_PRE` 셋은 **아무 일도 안 일어났는데 시각이 되어 발화**하므로 아웃박스로 못 만든다 → `notification_schedule` + 폴링 스케줄러. U4 `StalePartialSweeper` 선례라 신규 인프라 0.
+- **INV-U6-02**(= BR-U6-13): **인앱함 적재가 푸시 발송보다 먼저이고 성공 여부와 무관** — "누락 0"의 유일한 근거.
+- **INV-U6-01**: `notification.source_event_id` UNIQUE로 at-least-once 재시도가 **중복 알림이 되지 않게** DB가 보장.
+
+**정직 표기**: 밴드 `l` **16 중 6 확인 / 10 미확인**. 특히 `l05 dialog`·`l06 dialog`는 **삭제 재확인·철회 재확인 다이얼로그**로 추정되고 **BR-U6-25·30의 문안 정본**이라 구현 착수 전 확인 필요를 `frontend-components.md §10`에 명시했다. export가 로컬에 있어 Figma 상한과 무관하게 가능하다.
+
+**U6는 단독으로 완결되지 않는다**(G-U6-2): 구독할 이벤트 `StayRegistered`·`PlanBTriggered`·`ReflectionReady`·`VisitChecked`가 **전부 미실장**이다. U6는 구독 계약과 매핑을 정의하고 발행부는 각 유닛이 붙인다.
+
+**Context**: CONSTRUCTION — U6 Functional Design Step 5~7. 손댄 파일 = U6 산출물 4(신규) + 이 `audit.md`, 총 5파일. `aidlc-state.md`는 **승인 게이트 통과 후** 갱신한다.
+
+---
+
+## CONSTRUCTION — U6 Functional Design 승인 · NFR Requirements 착수 (+ FD 오진 정정)
+**Timestamp**: 2026-08-24T04:15:00Z
+
+**User Input**: "일단 문서부터 해봐"
+
+**AI Response**: 직전 완료 메시지의 승인 게이트에 대한 **승인 + 문서 트랙 계속**으로 해석해 U6 Functional Design을 승인 처리하고 `aidlc-state.md`에 U6 블록을 추가했다. 이어 **NFR Requirements Step 1~4**를 수행하고 계획서를 `plans/u6-notification-settings-nfr-requirements-plan.md`에 저장, **Q1~Q6 대기 상태로 정지**했다.
+
+**★ NFR 착수 실측에서 FD 오진 2건을 발견해 산출물을 정정했다.** 원인은 하나다 — 내가 **`backend/shared/`를 뒤졌는데 그런 디렉토리가 없다**(실제 구조는 `backend/common/{core,security,test-support}`). 없는 경로를 grep하고 "0건"을 사실로 적었다. U5 2차 검수에서 잡았던 것과 **같은 종류의 실패를 반복**한 것이다.
+
+정확한 지형(실측):
+- `common/core/event/`에 **`DomainEvent`·`DomainEventPublisher`·`EventEnvelope` 계약 + `EventEnvelopePropertyTest`(PBT)** 실재
+- `app/event/SpringDomainEventPublisher`(+테스트)로 **인프로세스 발행이 이미 배선**돼 있고, auth·itinerary-generation·saved-accommodation·itinerary-recalculation **4개 모듈이 발행자를 주입**받는다
+- **실제 발행 중인 이벤트 5종**: `auth.AccountCreated` · `auth.AccountDeletionRequested` · `auth.AccountDeletionCancelled` · `itinerary.ItineraryGenerated` · `itinerary.ItineraryConfirmed`
+- V1.0에 `outbox_event` **+ `shedlock`** 테이블 실재
+- **없는 것은 아웃박스 릴레이 하나**다. `EventEnvelope.kt` 주석이 이미 예고한다: *"아웃박스 릴레이(@Scheduled + ShedLock)는 후속 — 여기선 계약 타입만 소유한다"*
+
+정정 내용:
+- **DEC-U6-1** 배치를 `backend/shared/` → **`backend/common/core`(기존 `event/` 패키지)** 로 수정.
+- **DEC-U6-1a 신설** — 릴레이가 하는 일은 **인프로세스 발행을 at-least-once로 승격**하는 것임을 명시. 현재 `SpringDomainEventPublisher`는 같은 JVM·트랜잭션 맥락이라 "실패해도 본업이 살아야 하는" 알림 소비자에겐 부족하다.
+- **§0.1 신설**(`business-logic-model.md`) — 조각별 실재/부재 표로 초안 오진을 드러내고 정정.
+- **G-U6-1 재작성**("구현 0건" → "릴레이만 없음" + **ShedLock 라이브러리 의존성 추가 선행**), **G-U6-2 재작성**("이벤트 0" → "U6가 필요한 3종이 없음, auth 3·itinerary 2는 발행 중"), **G-U6-9 신설**(이벤트 이름 규약 `{module}.{EventName}`이 실장 정본 — 인셉션 정정 상신).
+- `domain-entities.md` 구독 이벤트표를 실장 규약 기준으로 재작성하고, **`itinerary.*` 2종은 이미 발행 중이라 리마인드 스케줄 적재를 U3 코드 수정 없이 구독만으로 붙일 수 있다**는 점(= U6에서 가장 먼저 동작시킬 수 있는 경로)을 명시. 소유 경계표에 `shedlock` 행 추가.
+
+**NFR Requirements 계획서**: 실측 9항목(스케줄러 패턴·`shedlock`·ShedLock 라이브러리 부재·actuator·**`micrometer-registry-otlp` 실재**·resilience4j 부재·`expo-notifications` 등록됨·`/me/marketing-consent`·`location_legal_log`) 기반으로 **Q1~Q6**을 세웠다 — 야간 조용시간(★ O-U6-4 승격) · 발송량 상한 · 릴레이 재시도 포기 기준 · 토큰/알림 보존 · 관측 지표 · 성능 예산. **예상 델타는 2개뿐**(ShedLock 라이브러리 · Expo Push 어댑터), 나머지는 상속·미도입.
+
+**Context**: CONSTRUCTION — U6 FD Step 8~9(승인·상태 갱신) + NFR Requirements Step 1~4. 손댄 파일 = `aidlc-state.md` · `u6-.../business-logic-model.md` · `u6-.../domain-entities.md` · `plans/u6-...-nfr-requirements-plan.md`(신규) + 이 `audit.md`, 총 5파일.
+
+---
+
+## CONSTRUCTION — U6 NFR Requirements 산출물 생성 (Step 5~7)
+**Timestamp**: 2026-08-24T05:05:00Z
+
+**User Input**: "야간 조용시간 ㅈ까고 그냥 발송해 나머지는 A" → **Q1=B · Q2~Q6=A**
+
+**AI Response**: Q1=B(야간 조용시간 미도입)를 그대로 반영하되, **성립 조건 하나를 규칙으로 박았다** — **LEGAL-U6-02: 이 경로로는 정보성(거래·서비스) 알림만 발송한다.** 광고·마케팅성은 `NotificationKind` 8종에 없고 추가하지 않으며, 마케팅 수신은 `/me/marketing-consent`(실재)를 쓰는 별도 경로다. **LEGAL-U6-03**으로 "LEGAL-U6-02가 LEGAL-U6-01의 성립 조건"임을 명시하고, **광고성 종류 추가 요구가 들어오면 조용시간 미도입 결정을 전면 재검토**하도록 재평가 트리거에 걸었다. 사용자 결정을 좁히지 않으면서 근거를 문서에 남기는 방식이다.
+
+산출물 **2종**:
+- `nfr-requirements.md` — **COST 5 · REL 6 · PERF 4 · DATA 5 · LEGAL 4 · OBS 4 · SEC 3 = 31 요구** + 상속 목록(재서술 0) + PBT는 FD의 5종을 그대로 게이트로 사용 + **재평가 트리거 6**
+- `tech-stack-decisions.md` — 상속 8 · **U6 델타 2** · 프런트 신규 의존성 **0** · 미도입 6 · 백엔드 신규 자산 요약 · 개발 중 처리 3
+
+**델타가 2개뿐인 이유(실측)**: `@Scheduled` 스케줄러 패턴 실재 · `spring-boot-starter-actuator`(`libs.versions.toml:20`)와 **`micrometer-registry-otlp`(:56) 실재**(관측 파이프라인 신규 구축 0, 카운터 4종만 얹음) · `shedlock` **테이블** 실재 · `expo-notifications` **설치 + `app.config.ts:38` 플러그인 등록 완료**.
+- **델타 1 = ShedLock 라이브러리 추가** — 테이블은 V1.0부터 있는데 `libs.versions.toml`에 라이브러리 항목이 없다. **U0 스캐폴딩 부채의 잔여분**이며 릴레이 단일 실행(REL-U6-04)의 선결 조건이다.
+- **델타 2 = `PushPort` + `ExpoPushAdapter`** — 인셉션의 포트 계약은 유지하고 어댑터만 Expo로. "one external API = one owning module = one adapter port" 규약 준수, 무료 티어 초과 시 `FcmAdapter` 교체가 포트 뒤에서 끝난다.
+- **프런트 신규 의존성 0** — U4 `expo-task-manager`(신규 설치 + EAS 재빌드 1회)와 결정적으로 다른 점. 다만 "재빌드 불필요"를 단정하지 않고 **개발 빌드에서 권한·토큰 획득을 먼저 확인**하도록 적었다.
+
+**새 축으로 인정한 것 4가지**(U0~U5 상속으로 안 덮이는 것): COST 발송량(기존 COST는 지도 쿼터·LLM 토큰뿐) · REL 내부 비동기 전달 실패(기존 복원력은 외부 포트 폴백 중심) · DATA 계정 단위 시계열 정리(기존은 여행 단위 파기) · **SEC 잠금화면 노출**(SEC-U6-01 — 푸시 본문이 잠금 상태에서 그대로 보이므로 숙소 주소 전체·이메일 금지, `l01` 실물 문안 수준이 상한). SEC-U6-02(로그아웃 시 기기 토큰 무효화 — 안 하면 **다음 사용자에게 이전 사용자 알림이 간다**)도 이 축에서 나왔다.
+
+**개발 착수 순서 제안을 문서에 남겼다**: `itinerary.ItineraryGenerated`가 **이미 발행 중**이므로, ShedLock 추가 + 릴레이 첫 배선 후 이 이벤트를 구독해 리마인드 스케줄을 적재하면 **U3 코드 수정 없이 첫 경로가 열린다**. U5·U6 설계 전체의 전제를 실증하는 최소 작업이다.
+
+**Context**: CONSTRUCTION — U6 NFR Requirements Step 5~7. 손댄 파일 = `u6-notification-settings/nfr-requirements/` 2종(신규) + 이 `audit.md`, 총 3파일. **승인 게이트 대기** — 승인 시 다음은 NFR Design 판단.
+
+---
+
+## CONSTRUCTION — U6 NFR Requirements 승인 · NFR Design SKIP · U6 종료 · 1차 유닛 전량 완료
+**Timestamp**: 2026-08-24T05:40:00Z
+
+**User Input**: "ㅇㅋ 일단 승인함"
+
+**AI Response**: 직전 완료 메시지의 승인 게이트에 대한 승인으로 처리하고, 같은 메시지에서 권고했던 **NFR Design SKIP**까지 함께 적용해 U6 설계 단계를 종료했다(사용자가 "승인, NFR Design 스킵하고 U6 종료" 한 줄을 권고받은 직후 승인했으므로 그 범위로 해석). **다르게 의도했다면 되돌릴 수 있도록 이 해석을 사용자에게 명시 통지**했다.
+
+**NFR Design SKIP 사유(기록용)**: U3·U5 선례와 동형이다. 패턴이 될 만한 것이 **이미 NFR Requirements 안에 배치까지 기술**됐다 — 릴레이 재시도(10회 지수 백오프 · `outbox_event.attempts` 사용) · ShedLock 단일 실행 · 발송량 상한 카운터 · **인앱 우선 적재**(INV-U6-02). 신규 논리 컴포넌트는 테이블 4종뿐이고 `domain-entities.md §5`가 이미 기술한다. **재개 조건** = 다중 인스턴스 운영 진입 시 REL-U6-04 락 동작 검증, 또는 WS/SSE 재검토 시.
+
+`aidlc-state.md` 갱신:
+- U6 블록의 NFR Requirements를 `[x] 승인 완료`로, NFR Design·Infrastructure를 `[~] SKIPPED`로, Code Generation을 `[~] 범위 제외`로 마감. **U6 산출물 = FD 4 + NFR-Req 2 = 6종**.
+- **`Current Stage` 헤더를 갱신했다.** 2026-08-07 이후 "U2·U3 설계 종료"로 고정돼 있어 U4·U5·U6 종료가 반영되지 않은 **낡은 앵커**였다(세션 재개의 기준점이라 방치하면 다음 세션이 잘못된 지점에서 출발한다). 새 값 = **U6 설계 종료 · 1차 핵심 여정 U0~U6 설계 문서 전량 완료 · 남은 유닛은 후속 게이트 U7~U9뿐이므로 AI-DLC 문서 트랙 사실상 종료** + 유닛별 종료일 일람.
+
+**1차 핵심 여정 완료 집계**: U0 8 · U1 8 · U2 2 · U3 6 · U4 8 · U5 4 · U6 6 = **설계 문서 44종**(계획서 별도). 스토리 기준으로는 핵심 98개 중 U0~U6 배정분 전량이 화면·규칙·엔티티로 매핑됐다.
+
+**개발 최우선 항목을 상태 파일에 명시**: **아웃박스 릴레이 배선** — ① `libs.versions.toml`에 ShedLock 추가(테이블은 V1.0부터 존재) ② `common/core/event`에 `@Scheduled`+ShedLock 릴레이 ③ **이미 발행 중인 `itinerary.ItineraryGenerated` 구독**으로 리마인드 스케줄 적재 → **U3 코드 수정 0으로 첫 경로 개통**. 이 작업이 U5·U6 설계의 핵심 가정(at-least-once · 멱등 · 단일 실행)을 한 번에 실증한다.
+
+**Context**: CONSTRUCTION — U6 NFR Requirements Step 8~9 + NFR Design SKIP 기록 + 유닛 종료. 손댄 파일 = `aidlc-state.md` + 이 `audit.md`, 총 2파일. **다음 유닛(U7~U9)은 후속 게이트로 1차 범위 밖** — 진입하려면 SCOPE.md 개정과 사용자 명시 지시가 필요하다.
