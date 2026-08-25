@@ -67,6 +67,7 @@ from trippilot.agents.planb.rag import (  # noqa: E402
     PlanBRagConfig,
     PlanBRagPipeline,
     PlanBRagRequest,
+    SavedPlace,
 )
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId  # noqa: E402
 from trippilot.domain.kb import KbDocument, KbKind  # noqa: E402
@@ -220,25 +221,30 @@ def saved_places(pool: CandidatePool) -> list:
 
 
 def kb_documents(pool: CandidatePool) -> list[KbDocument]:
-    """KB 3종. KB-2 는 풀 안 2곳을 '저장 장소'로 참조 — 규칙 랭킹의 1순위 신호."""
-    saved = saved_places(pool)
-    docs = [
+    """KB 3종 중 **벡터에 넣는 것만** — 일정(KB-1)·상황(KB-3).
+
+    KB-2(저장 장소)는 더 이상 여기서 지어내지 않는다 (TRIP-512). 프로덕션에서 저장 장소는
+    백엔드가 **요청 봉투**(`AlternativesRequest.saved_places`)로 실어 보내므로, 리허설도
+    같은 경로를 타야 한다 — 픽스처로 벡터를 채우면 프로덕션의 "데이터 0건"을 초록으로
+    가린다(anti-patterns 테스트 절).
+    """
+    return [
         KbDocument(KbKind.SCHEDULE, f"{DOC_PREFIX}-sched-1",
                    "오후 야외 산책 슬롯 (고정 아님, 대체 가능)", None, {}),
         KbDocument(KbKind.SITUATION, f"{DOC_PREFIX}-situ-1",
                    "오후 강수확률 80%, 강풍주의보 — 실외 활동 부적합", None, {}),
     ]
-    docs += [
-        KbDocument(KbKind.PERSONA, f"{DOC_PREFIX}-pref-{i}",
-                   f"저장한 장소 — {p.name}", str(p.poi_id), {"kind": "saved"})
-        for i, p in enumerate(saved)
-    ]
-    # 풀 밖을 가리키는 저장 장소 — KB 히트가 후보 자격을 만들지 않음을 확인한다 (INV-1)
-    docs.append(
-        KbDocument(KbKind.PERSONA, f"{DOC_PREFIX}-pref-out", "저장한 장소 — 풀 밖 POI",
-                   "tourapi-000000", {"kind": "saved"})
+
+
+def saved_envelope(pool: CandidatePool) -> tuple[SavedPlace, ...]:
+    """백엔드가 보낼 저장 장소 봉투를 흉내 낸다 (TRIP-512).
+
+    풀 **하위** 실내 2곳을 고른다 — 상위에서 뽑으면 규칙 랭킹이 저장 장소를 안 봐도 같은
+    순서가 나와 단언이 공허해진다(그 커플링으로 한 번 데인 자리다).
+    """
+    return tuple(
+        SavedPlace(poi_id=str(p.poi_id), name=p.name) for p in saved_places(pool)
     )
-    return docs
 
 
 # ── 실행 ────────────────────────────────────────────────────────────────
@@ -281,12 +287,14 @@ def assert_no_outdoor_on_top(result: dict, pool: CandidatePool, title: str) -> N
         )
 
 
-def run(title, store, embedding, pool, llm=None, model_id=None, excluded=frozenset()) -> dict:
+def run(title, store, embedding, pool, llm=None, model_id=None, excluded=frozenset(),
+        saved=()) -> dict:
     result = pipeline(store, embedding, llm, model_id).run(
         PlanBRagRequest(
             trigger=TriggerParams(TriggerKind.WEATHER, ScheduleId("smoke-planb-1"),
                                   date.today(), {"pop": 80}),
             reason="weather", pool=pool, trace_id=TID, now=NOW, excluded_poi_ids=excluded,
+            saved_places=saved,
         )
     )
     names = {str(p.poi_id): f"{p.name}[{p.category.value}]" for p in pool.pois}
@@ -332,9 +340,12 @@ def main() -> int:
     docs = kb_documents(pool)
     embedding = build_embedding()
     try:
-        print(f"KB 적재 {index_documents(docs, embedding, store)}건 (실 pgvector)")
+        print(f"KB 적재 {index_documents(docs, embedding, store)}건 (실 pgvector — KB-1·KB-3)")
+        saved = saved_envelope(pool)
+        print(f"저장 장소 봉투 {len(saved)}건 (TRIP-512 — 백엔드가 보낼 형태): "
+              + ", ".join(s.name for s in saved))
 
-        r1 = run("① 게이트웨이 미주입 → 규칙 랭킹", store, embedding, pool)
+        r1 = run("① 게이트웨이 미주입 → 규칙 랭킹", store, embedding, pool, saved=saved)
         assert r1["fallback_level"] == 1, r1
         assert any("alternative_gateway_absent" in n for n in r1["notes"]), r1
         assert_no_outdoor_on_top(r1, pool, "①")
@@ -345,9 +356,14 @@ def main() -> int:
         assert all(n.count("retrieve_") == 0 for n in r1["notes"]), (
             f"KB 검색이 실패했다 — 실 pgvector 관통이 아니다: {r1['notes']}"
         )
-        assert all(r1["retrieved"].get(kb, 0) > 0 for kb in ("SCHEDULE", "PERSONA", "SITUATION")), (
-            f"KB 3종 중 히트 0건인 것이 있다 — collection 배정·적재를 확인하라: {r1['retrieved']}"
+        # PERSONA(KB-2)는 제외한다 — 저장 장소는 벡터가 아니라 봉투로 온다 (TRIP-512).
+        # 벡터 KB-2 는 메모·리뷰 데이터가 생길 때를 위해 경로만 남겨 둔 상태라 0건이 정상이다.
+        assert all(r1["retrieved"].get(kb, 0) > 0 for kb in ("SCHEDULE", "SITUATION")), (
+            f"KB-1·KB-3 중 히트 0건인 것이 있다 — collection 배정·적재를 확인하라: {r1['retrieved']}"
         )
+        assert {a["poi_ids"][0] for a in r1["alternatives"][:len(saved)]} == {
+            sp.poi_id for sp in saved
+        }, f"봉투 저장 장소가 상위를 차지하지 않았다 (TRIP-512): {r1['alternatives']}"
         # KB-2 저장 장소 2곳이 규칙 랭킹 상위를 차지한다. 둘 사이의 순서는 고정하지
         # 않는다 — 해시 임베딩엔 의미 순위가 없어 검색 순서가 임의(결정론이되 임의)다.
         saved_ids = {str(p.poi_id) for p in saved_places(pool)}
@@ -365,7 +381,8 @@ def main() -> int:
             print("\n── ② 실 LLM 선택 — LLM_PROVIDER 미설정, 생략 (성공 유지)")
 
         ghost = json.dumps({"selections": [{"poiId": "tourapi-000000", "reason": "환각"}]})
-        r3 = run("③ 풀 밖 id 응답 → 게이트 드롭 → 규칙 랭킹", store, embedding, pool, CannedLlm(ghost))
+        r3 = run("③ 풀 밖 id 응답 → 게이트 드롭 → 규칙 랭킹", store, embedding, pool, CannedLlm(ghost),
+                 saved=saved)
         assert r3["fallback_level"] == 1, r3
         # 사유까지 특정한다. "alternative_fallback" 만 보면 parse_error·timeout·llm_error
         # 까지 삼켜 ④와 단언이 문자 그대로 같아진다 — 게이트 스키마가 드리프트해
@@ -375,7 +392,7 @@ def main() -> int:
         )
         assert_no_outdoor_on_top(r3, pool, "③")
 
-        r4 = run("④ LLM 장애 → 규칙 랭킹", store, embedding, pool, FailingLlm())
+        r4 = run("④ LLM 장애 → 규칙 랭킹", store, embedding, pool, FailingLlm(), saved=saved)
         assert r4["fallback_level"] == 1, r4
         assert any("llm_error" in n for n in r4["notes"]), (
             f"LLM 장애가 아닌 다른 사유로 폴백했다: {r4['notes']}"

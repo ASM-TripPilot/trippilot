@@ -84,6 +84,19 @@ class PlanBRagConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class SavedPlace:
+    """사용자가 저장한 장소 1건 (TRIP-512) — 백엔드 `saved_place` 의 봉투 표현.
+
+    **후보 자격과 무관**하다(INV-1은 `closed_set_filter` 소유). 풀 안에서의 우선순위와
+    LLM 컨텍스트에만 쓰인다. frozen 인 이유: `PlanBRagRequest` 가 frozen 이라 담기는
+    값도 해시 가능해야 한다(dict 를 담으면 결정론 비교·PBT 가 깨진다).
+    """
+
+    poi_id: str
+    name: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class PlanBRagRequest:
     """Plan-B 1회 실행 입력 (agent-io-contracts §2.2 PlanBAgentInput의 1단계 부분집합).
 
@@ -100,6 +113,11 @@ class PlanBRagRequest:
     # **참조 텍스트**다: 후보 자격과 무관(INV-1은 closed_set_filter 소유), LLM이
     # "원래 취지를 잇는 대안"을 고르게 하는 컨텍스트로만 쓰인다. 키는 평문 poi_id 문자열.
     affected_reasons: Mapping[str, str] = field(default_factory=dict)
+    # 사용자가 저장한 장소 (TRIP-512) — 백엔드가 요청 봉투에 실어 보낸다.
+    # 항목은 {"poi_id": str, "name": str}. **후보 자격과 무관**(INV-1은 closed_set_filter
+    # 소유) — 풀 안에서의 우선순위(_rule_ranking 2단)와 LLM persona_context 에만 쓰인다.
+    # KB-2 벡터 검색 결과와 합쳐지며, 같은 poi_id 면 봉투가 이긴다(백엔드가 정본).
+    saved_places: tuple["SavedPlace", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,8 +338,9 @@ class PlanBRagPipeline:
         available: tuple[PoiId, ...],
     ) -> tuple[tuple[str, ...], Mapping[str, str], bool, str]:
         """반환: (참조 순열, {참조: LLM 근거}, LLM 사용 여부, 폴백 사유)."""
+        saved_refs = _saved_refs(request.saved_places, context.persona)
         rule_ranked, rule_note = _rule_ranking(
-            context.persona, request.pool, available, request.reason
+            saved_refs, request.pool, available, request.reason
         )
 
         def _why(cause: str) -> str:  # 폴백 사유 + 규칙 랭킹이 뭘 했는지 (침묵 조정 금지)
@@ -338,7 +357,7 @@ class PlanBRagPipeline:
                     schedule_context=_with_reasons(
                         _join(context.schedule), request.affected_reasons),
                     situation_context=_join(context.situation),
-                    persona_context=_join(context.persona),
+                    persona_context=_join_persona(context.persona, request.saved_places),
                     max_alternatives=self._cfg.max_alternatives,
                     excluded_poi_ids=request.excluded_poi_ids,
                 ),
@@ -380,6 +399,43 @@ def _persona_query(request: PlanBRagRequest) -> str:
     return f"{request.reason} {request.trigger.kind.value} 대안 선호"
 
 
+def _saved_refs(
+    saved_places: Sequence["SavedPlace"], persona_hits: Sequence[KbHit]
+) -> tuple[str, ...]:
+    """저장 장소 poi_id 순열 — 봉투(TRIP-512) 우선, 뒤에 KB-2 검색 히트.
+
+    봉투는 백엔드 `saved_place` 의 정본이라 앞에 둔다. 벡터 KB-2 는 메모·리뷰 데이터가
+    생길 때를 위한 경로로 남겨 두고, 지금은 봉투가 비었을 때만 실질적으로 일한다.
+    중복은 첫 등장 순서로 접는다(결정론).
+    """
+    refs: list[str] = []
+    seen: set[str] = set()
+    for item in saved_places:
+        ref = item.poi_id
+        if ref and ref not in seen:
+            seen.add(ref)
+            refs.append(ref)
+    for hit in persona_hits:
+        if hit.poi_ref and hit.poi_ref not in seen:
+            seen.add(hit.poi_ref)
+            refs.append(hit.poi_ref)
+    return tuple(refs)
+
+
+def _join_saved(saved_places: Sequence["SavedPlace"]) -> str:
+    """봉투 저장 장소 → 프롬프트 줄. 이름이 없으면 poi_id 로 대신한다."""
+    return "\n".join(
+        f"- 저장한 장소 — {item.name or item.poi_id}"
+        for item in saved_places
+        if item.poi_id
+    )
+
+
+def _join_persona(hits: Sequence[KbHit], saved_places: Sequence["SavedPlace"]) -> str:
+    """LLM persona_context — 봉투 줄이 먼저, 그 뒤 KB-2 검색 발췌."""
+    return "\n".join(part for part in (_join_saved(saved_places), _join(hits)) if part)
+
+
 def _join(hits: Sequence[KbHit]) -> str:
     return "\n".join(f"- {h.text}" for h in hits)
 
@@ -402,7 +458,7 @@ def _with_reasons(schedule_context: str, reasons: Mapping[str, str]) -> str:
 
 
 def _rule_ranking(
-    persona_hits: Sequence[KbHit],
+    saved_refs: Sequence[str],
     pool: CandidatePool,
     available: tuple[PoiId, ...],
     reason: str,
@@ -412,7 +468,8 @@ def _rule_ranking(
     planb-rag-design §7 의 "규칙 점수(카테고리+거리+평점)" 를 가용 데이터로 옮긴 정렬 키:
       ⓪ reason 신호 — `_DEMOTED_BY_REASON` 의 카테고리를 **뒤로** (제외 아님: 대안 0 보다
          야외라도 제안하는 편이 낫다)
-      ① KB-2 저장 장소 우선 (§3 [2]) — 단 ⓪이 앞선다: 비 오는 날 야외는 저장이어도 뒤
+      ① 저장 장소 우선 (§3 [2]) — 봉투(TRIP-512) ⊕ KB-2 검색 히트.
+         단 ⓪이 앞선다: 비 오는 날 야외는 저장이어도 뒤
       ② 앵커까지 직선거리 오름차순 (haversine) — 풀에 anchor 가 없으면 생략
     안정 정렬이라 동률은 풀 순서를 유지한다(결정론). 평점은 범위 밖 — `rating` 이 실
     어댑터에서 항상 None(백엔드 미제공). 실경로(TMAP)는 장애 경로에 새 장애 모드를
@@ -421,7 +478,7 @@ def _rule_ranking(
     """
     demoted = _DEMOTED_BY_REASON.get(reason, frozenset())
     poi_by_id = {p.poi_id: p for p in pool.pois}
-    saved = {h.poi_ref for h in persona_hits if h.poi_ref}
+    saved = set(saved_refs)
     anchor = pool.anchor
 
     def _key(poi_id: PoiId) -> tuple[bool, bool, float]:

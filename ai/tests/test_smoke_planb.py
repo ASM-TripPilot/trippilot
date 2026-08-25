@@ -59,6 +59,7 @@ from smoke_planb import (
     build_embedding,
     build_pool,
     kb_documents,
+    saved_envelope,
     load_entries,
     pipeline,
 )
@@ -109,17 +110,20 @@ def _pool(indoor: int = 5, outdoor: int = 3) -> CandidatePool:
     return build_pool(_jeju_entries(indoor, outdoor), _REGION)
 
 
-def _saved_refs(docs) -> list[str]:
-    """KB-2 '저장 장소' 문서(풀 안)의 poi_ref — 풀 밖 음성 픽스처는 제외."""
-    return [
-        d.poi_ref
-        for d in docs
-        if d.doc_id.startswith(f"{DOC_PREFIX}-pref-") and not d.doc_id.endswith("-out")
-    ]
+def _saved_refs(pool) -> list[str]:
+    """저장 장소 poi_id — **요청 봉투**에서 온다 (TRIP-512).
+
+    예전에는 KB-2 벡터 문서에서 뽑았다. 프로덕션에는 그 collection 에 쓰는 경로가 없어
+    스모크만 초록이었고, 이제 백엔드가 봉투로 보내는 형태를 그대로 흉내 낸다.
+    """
+    return [item.poi_id for item in saved_envelope(pool)]
 
 
 def _request(pool: CandidatePool, excluded=frozenset()) -> PlanBRagRequest:
-    """run()이 조립하는 요청과 같은 모양 — 단 date.today() 대신 고정 날짜."""
+    """run()이 조립하는 요청과 같은 모양 — 단 date.today() 대신 고정 날짜.
+
+    저장 장소는 봉투로 싣는다 (TRIP-512) — 프로덕션 경로와 같게.
+    """
     return PlanBRagRequest(
         trigger=TriggerParams(
             TriggerKind.WEATHER, ScheduleId("smoke-planb-1"), _AFFECTED, {"pop": 80}
@@ -129,6 +133,7 @@ def _request(pool: CandidatePool, excluded=frozenset()) -> PlanBRagRequest:
         trace_id=_TID,
         now=_NOW,
         excluded_poi_ids=excluded,
+        saved_places=saved_envelope(pool),
     )
 
 
@@ -294,13 +299,12 @@ def test_build_pool_같은_입력이면_같은_풀(pair):
 
 def test_kb_documents_구성과_kb_라벨():
     docs = kb_documents(_pool())
+    # KB-2(PERSONA)는 여기 없다 — 저장 장소는 봉투로 온다 (TRIP-512).
     assert [(d.kb, d.doc_id) for d in docs] == [
         (KbKind.SCHEDULE, f"{DOC_PREFIX}-sched-1"),
         (KbKind.SITUATION, f"{DOC_PREFIX}-situ-1"),
-        (KbKind.PERSONA, f"{DOC_PREFIX}-pref-0"),
-        (KbKind.PERSONA, f"{DOC_PREFIX}-pref-1"),
-        (KbKind.PERSONA, f"{DOC_PREFIX}-pref-out"),
     ]
+    assert not any(d.kb is KbKind.PERSONA for d in docs)
     assert all(d.doc_id.startswith(DOC_PREFIX) for d in docs)  # 실 collection 격리 접두
     assert all(d.text.strip() for d in docs)
 
@@ -311,13 +315,15 @@ def test_kb_documents_저장장소_문서만_poi_ref를_가진다():
     assert all(d.metadata == {"kind": "saved"} for d in docs[2:])
 
 
-def test_kb_documents_풀_밖_저장장소가_정확히_한_건():
-    """INV-1 음성 픽스처 — KB 히트가 후보 자격을 만들지 않음을 보려면 풀 밖 참조가 필요하다."""
+def test_봉투_저장장소는_전부_풀_안이다():
+    """봉투는 백엔드 saved_place 에서 오므로 풀 밖을 담지 않는다.
+
+    풀 밖 참조가 후보가 되지 않는다는 INV-1 검사는 경계 계약 테스트가 맡는다
+    (`test_api_alternatives.py::test_saved_places_outside_pool_never_become_candidates`)
+    — 거기서 실제로 유령 poi_id 를 봉투에 넣어 확인한다.
+    """
     pool = _pool()
-    docs = kb_documents(pool)
-    outside = [d for d in docs if d.poi_ref and not pool.contains(PoiId(d.poi_ref))]
-    assert [d.doc_id for d in outside] == [f"{DOC_PREFIX}-pref-out"]
-    assert outside[0].poi_ref == "tourapi-000000"
+    assert all(pool.contains(PoiId(ref)) for ref in _saved_refs(pool))
 
 
 def test_저장장소는_풀_상위와_겹치지_않는다__스모크_시나리오1_단언의_전제():
@@ -331,7 +337,7 @@ def test_저장장소는_풀_상위와_겹치지_않는다__스모크_시나리�
     죽었을 때 상위 2가 실제로 달라진다(아래 test_KB_검색이_전멸하면_… 이 그것을 재현).
     """
     pool = _pool()
-    saved = set(_saved_refs(kb_documents(pool)))
+    saved = set(_saved_refs(pool))
     top2 = {str(p.poi_id) for p in pool.pois[:2]}
     assert saved and not (saved & top2)
 
@@ -340,7 +346,7 @@ def test_저장장소는_풀이_만들어졌다면_항상_2건():
     """실내가 얇은 지역은 `build_pool` 이 거부하므로(MIN_INDOOR), 풀이 만들어진 이상
     저장 장소는 언제나 2건이다 — 예전처럼 '1건뿐이라 단언이 성립 안 함' 상태가 없다."""
     for n in (MIN_INDOOR, MIN_INDOOR + 1, 7):
-        assert len(_saved_refs(kb_documents(_pool(indoor=n, outdoor=3)))) == 2
+        assert len(_saved_refs(_pool(indoor=n, outdoor=3))) == 2
 
 
 @settings(max_examples=40, suppress_health_check=[HealthCheck.too_slow])
@@ -366,7 +372,7 @@ def test_저장장소는_실내가_충분하면_풀_상위와_서로소(pair):
     if not _makes_pool(entries):
         return
     pool = build_pool(entries, _REGION)
-    saved = set(_saved_refs(kb_documents(pool)))
+    saved = set(_saved_refs(pool))
     top2 = {str(p.poi_id) for p in pool.pois[:2]}
     assert saved and not (saved & top2)
 
@@ -432,25 +438,26 @@ def test_KB_적재가_정상이면_3종_모두_히트하고_에러노트가_없�
     """스모크 ①의 보조 단언(=검색 성공 판정)이 정상 경로에서 실제로 통과하는지."""
     pool = _pool()
     result = pipeline(_indexed_store(pool), HashEmbedding(), None, None).run(_request(pool))
-    assert result.retrieved == {"SCHEDULE": 1, "PERSONA": 3, "SITUATION": 1}
+    # KB-2 는 더 이상 적재하지 않는다 — 저장 장소는 봉투로 온다 (TRIP-512)
+    assert result.retrieved == {"SCHEDULE": 1, "PERSONA": 0, "SITUATION": 1}
     assert not [n for n in result.notes if n.startswith("retrieve_")]
     # note 는 폴백 사유 + 규칙 랭킹 조정 기록의 합성("… · rule_ranking: …", TRIP-532) — 부분 일치
     assert any("alternative_gateway_absent" in n for n in result.notes)
     assert result.fallback_level == 1
     assert {str(a.poi_ids[0]) for a in result.alternatives[:2]} == set(
-        _saved_refs(kb_documents(pool))
+        _saved_refs(pool)
     )
 
 
-def test_KB_검색이_전멸하면_상위2가_저장장소와_달라진다():
-    """**차단 결함 ①이 고쳐졌다는 증거.**
+def test_KB_검색이_전멸해도_저장장소는_살아남는다():
+    """**TRIP-512 의 요점** — 저장 장소가 벡터가 아니라 봉투로 오므로 검색과 독립이다.
 
-    스토어가 통째로 죽어 KB 히트가 0건이면 규칙 랭킹은 풀 순서를 그대로 낸다. 저장 장소가
-    풀 **하위**이므로 상위 2개는 저장 장소와 달라진다 → 스모크 ①의 "KB-2 가 상위 2순위"
-    단언이 **검색 실패를 실제로 잡는다**.
+    스토어가 통째로 죽어 KB 히트가 0건이어도(=`retrieve_*_error` 3종) 저장 장소는
+    규칙 랭킹 상위를 그대로 차지한다. 예전에는 KB-2 벡터에 의존해서 검색이 죽으면
+    이 신호도 같이 죽었고, 프로덕션에는 그 collection 에 쓰는 경로조차 없었다.
 
-    수정 전에는 저장 장소 == 풀 상위 2곳이라 검색이 전멸해도 그 단언이 통과했다.
-    이 테스트가 깨진다면 커플링이 되살아난 것이다.
+    검색 실패 자체는 여전히 `retrieved` 건수와 `retrieve_*_error` 노트로 드러난다 —
+    조용히 넘어가지 않는다(INV-4).
     """
     pool = _pool()
     result = pipeline(_DeadStore(), HashEmbedding(), None, None).run(_request(pool))
@@ -460,10 +467,8 @@ def test_KB_검색이_전멸하면_상위2가_저장장소와_달라진다():
         "retrieve_schedule_error",
         "retrieve_situation_error",
     ]
-    # ↓ 검색 전멸 시 상위 2가 저장 장소와 다르다 — 단언이 더는 공허하지 않다
-    assert {str(a.poi_ids[0]) for a in result.alternatives[:2]} != set(
-        _saved_refs(kb_documents(pool))
-    )
+    # 검색이 전멸했는데도 저장 장소가 상위 2를 차지한다 — 봉투 경로가 살아 있다는 증거
+    assert {str(a.poi_ids[0]) for a in result.alternatives[:2]} == set(_saved_refs(pool))
 
 
 # ── ⑤ 폴백 사유 구분 (차단 결함 ②) ─────────────────────────────────────
