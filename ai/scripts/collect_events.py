@@ -156,6 +156,43 @@ def _queries(region: str, today: dt.date) -> tuple[tuple[str, str], ...]:
     )
 
 
+# 주소 꼬리 — 지오코더가 못 읽는 군더더기. "OO 일원", "A, B, C 외", "(부제)", 우편번호.
+_ADDR_TAIL_RE = re.compile(r"\s*(일원|일대|외|등)\s*$")
+_ADDR_PAREN_RE = re.compile(r"\([^)]*\)")
+_ADDR_ZIP_RE = re.compile(r"^\d{5}\s+")
+# 행정단위 접미사 — 토큰이 **전부** 이걸로 끝나야 "행정단위만 있는 주소"다.
+# (접미사를 선택으로 두면 '경기아트센터'·'레인보우힐링관광지' 까지 잡는 오탐이 난다)
+_ADMIN_SUFFIX_RE = re.compile(r"(특별자치시|특별자치도|특별시|광역시|자치시|자치구|시|군|구|도)$")
+_DETAIL_HINT_RE = re.compile(r"(읍|면|동|리|로|길|가)\s|\d")
+
+
+def clean_address(address: str) -> str:
+    """지오코더에 넣기 전 꼬리 정리. 실측 예: '레인보우힐링관광지 일원' → '레인보우힐링관광지',
+    '53281 경남 거제시 둔덕면 하둔리 644-2 둔덕가족생활체육공원 일원' → 우편번호·꼬리 제거."""
+    text = _ADDR_ZIP_RE.sub("", _ADDR_PAREN_RE.sub(" ", address)).strip()
+    text = text.split(",")[0].strip()          # "A, B, C" 나열은 첫 항목만
+    return _ADDR_TAIL_RE.sub("", text).strip()
+
+
+def is_admin_only(address: str) -> bool:
+    """'경상북도 예천군'·'울산광역시 남구' 처럼 **행정단위로만 끝나는** 주소인가.
+
+    이런 주소를 지오코딩하면 시·군·구청 대표점이 나온다 — 행사 위치가 아니다.
+    그런데 부착 반경이 1km(`event_affinity.ATTACH_RADIUS_KM`)라 **시청 주변 POI 에
+    근거 없는 보너스**를 준다. 좌표율 지표만 올리고 추천 품질은 떨어뜨리는 거래라
+    받지 않는다 (2026-08-25 실측: 좌표 보유 27건 중 8건이 이 부류였다).
+    """
+    text = clean_address(address)
+    if _DETAIL_HINT_RE.search(text):
+        return False          # 번지·도로명·읍면동이 있으면 실제 위치다
+    tokens = text.split()
+    if not tokens or len(tokens) > 3:
+        return False
+    if len(tokens) == 1 and tokens[0] in DEFAULT_REGIONS:
+        return True           # "대구" 처럼 접미사 없는 광역명 단독
+    return all(_ADMIN_SUFFIX_RE.search(t) for t in tokens)
+
+
 def _geocode(event, region: str, client: NaverSearchClient, kakao) -> object:
     """행사 좌표 확보 체인 (TRIP-421 — 실측 기반 순서).
 
@@ -167,18 +204,35 @@ def _geocode(event, region: str, client: NaverSearchClient, kakao) -> object:
         items = client.search("local", query, display=1)
         return coord_from_local_item(items[0]) if items else None
 
+    # 행정단위로만 된 주소는 아예 안 쓴다 — 시·군·구청 대표점이 나오기 때문이다.
+    # 행사명으로 실제 장소를 찾는 경로는 그대로 남는다.
+    addr = clean_address(event.address) if event.address else ""
+    if addr and is_admin_only(addr):
+        print(f"[events] 행정단위 주소 무시({region}: {addr}) — 대표점은 행사 위치가 아니다",
+              file=sys.stderr)
+        addr = ""
+
     steps = [lambda: _naver(f"{region} {event.name}")]
     if kakao is not None:
-        if event.address:
-            steps.append(lambda: kakao.address_to_coord(event.address))
+        if addr:
+            steps.append(lambda: kakao.address_to_coord(addr))
+            # 주소를 **키워드검색에도** 넘긴다. address.json 은 행정주소 파서라
+            # '경기아트센터'·'DDP'·'수원월드컵경기장' 같은 시설명에는 빈손이고,
+            # 그 시설명들이 정작 장소 DB(keyword.json)에는 있다 — 그런데 한때
+            # 키워드검색은 항상 `{지역} {행사명}` 만 받아 주소를 한 번도 못 봤다
+            # (2026-08-25 조사: 시설명 주소 17건 + 모호 주소 14건이 통째로 미시도).
+            steps.append(lambda: kakao.keyword_to_coord(f"{region} {addr}"))
         steps.append(lambda: kakao.keyword_to_coord(f"{region} {event.name}"))
-    elif event.address:
-        steps.append(lambda: _naver(event.address))
+    elif addr:
+        steps.append(lambda: _naver(addr))
     for step in steps:
         try:
             coord = step()
-        except CallBudgetExceeded:
-            return None  # 예산 소진 — 체인 종료
+        except CallBudgetExceeded as e:
+            # 침묵하면 남은 전 행사가 이유 없이 좌표를 잃는다 — 어느 클라이언트가
+            # 소진됐는지까지 남긴다 (INV-4: 침묵 실패 금지).
+            print(f"[events] 좌표 확보 중단 — 호출 예산 소진: {e}", file=sys.stderr)
+            return None
         except Exception as e:
             # 지오코딩 실패(403·타임아웃 등)는 배치를 죽이면 안 된다 — 좌표만
             # 포기하고 다음 단계로 (2026-08-21 실측: 카카오맵 미활성 403이 배치

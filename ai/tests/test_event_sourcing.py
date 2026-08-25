@@ -399,3 +399,50 @@ def test_기존_좌표는_재수집이_덮어쓰지_않는다(tmp_path) -> None:
     assert (added, backfilled) == (0, 0)
     found, _ = store.search_events(d, d)
     assert found[0].coord.lat == 35.15, "먼저 얻은 좌표가 이긴다"
+
+
+# ── 주소 정리·행정단위 판정 (좌표 품질, 2026-08-25) ────────────────────
+
+
+@pytest.mark.parametrize(("address", "expected"), [
+    # 실측 저장소에서 뽑은 실제 주소들이다
+    ("레인보우힐링관광지 일원", "레인보우힐링관광지"),
+    ("53281 경남 거제시 둔덕면 하둔리 644-2 둔덕가족생활체육공원 일원",
+     "경남 거제시 둔덕면 하둔리 644-2 둔덕가족생활체육공원"),
+    ("김대중컨벤션센터 전시장 A, B, C, 다목적홀 외", "김대중컨벤션센터 전시장 A"),
+    ("경기아트센터", "경기아트센터"),
+])
+def test_주소_꼬리를_정리한다(address, expected) -> None:
+    """지오코더가 못 읽는 군더더기(일원·나열·괄호·우편번호)를 걷어낸다."""
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    from collect_events import clean_address
+
+    assert clean_address(address) == expected
+
+
+@pytest.mark.parametrize(("address", "is_admin"), [
+    ("경상북도 예천군", True),      # 군청 대표점이 나온다 — 행사 위치가 아니다
+    ("울산광역시 남구", True),
+    ("경기도 안산시", True),
+    ("대구", True),                # 접미사 없는 광역명 단독
+    ("경기아트센터", False),        # ← 접미사를 선택으로 두면 여기서 오탐이 났었다
+    ("레인보우힐링관광지", False),
+    ("여의도 한강공원", False),
+    ("DDP", False),
+    ("세종특별자치시 다솜로 216", False),  # 번지가 있으면 실제 위치
+])
+def test_행정단위만_있는_주소를_가려낸다(address, is_admin) -> None:
+    """**좌표율을 올리려다 추천 품질을 떨어뜨리는 거래를 막는다.**
+
+    시·군·구 대표점은 부착 반경 1km(`event_affinity.ATTACH_RADIUS_KM`) 안의
+    POI 들에 근거 없는 보너스를 준다. 2026-08-25 실측에서 좌표 보유 27건 중
+    8건이 이 부류였다 — 지표만 후하고 실제로는 틀린 좌표다.
+    """
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    from collect_events import is_admin_only
+
+    assert is_admin_only(address) is is_admin
