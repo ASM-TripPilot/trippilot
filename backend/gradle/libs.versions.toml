@@ -2,6 +2,7 @@
 # 스택: JDK 25 / Gradle 9.x / Spring Boot 4.0 / Kotlin 2.2 (2026-07 확정)
 
 [versions]
+shedlock = "6.10.0"
 kotlin = "2.2.20"
 springBoot = "4.0.1"
 springDependencyManagement = "1.1.7"
@@ -31,6 +32,10 @@ flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql
 jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin" }
 jackson3-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin" }   # SB4 기본 Jackson 3 — AI 경계 매퍼
 jackson-datatype-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310" }
+
+# 아웃박스 릴레이 분산 락(TRIP-539) — shedlock 테이블은 V1.0 부터 있었고 라이브러리만 없었다.
+shedlock-spring = { module = "net.javacrumbs.shedlock:shedlock-spring", version.ref = "shedlock" }
+shedlock-jdbc = { module = "net.javacrumbs.shedlock:shedlock-provider-jdbc-template", version.ref = "shedlock" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect" }
 
 # 테스트 (Kotest + PBT + MockK)

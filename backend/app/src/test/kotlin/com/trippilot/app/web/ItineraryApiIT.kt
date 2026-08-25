@@ -17,10 +17,12 @@ import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.http.HttpMethod
@@ -45,6 +47,7 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var itineraries: ItineraryRepository
     @Autowired private lateinit var pois: PoiRepository
+    @Autowired private lateinit var jdbc: JdbcTemplate
 
     private val json = ObjectMapper()
     private val now = Instant.parse("2026-08-01T00:00:00Z")
@@ -574,4 +577,38 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val hasFixed = (0 until day0.size()).any { day0[it]["isFixed"].asBoolean() && day0[it]["poiId"].asText() == poi }
         hasFixed shouldBe true // must_visit → fixedBlock → 고정 슬롯(HC3)
     }
+    /**
+     * **실제 생성이 아웃박스에 적재한다**(TRIP-539).
+     *
+     * `OutboxRelayIT` 는 대역 이벤트로 적재·배달을 확인하지만, **업무 경로가 실제로 그 길을 타는지**는
+     * 여기서만 드러난다. 이벤트를 발행하는 코드는 그대로 두고 발행 구현만 바꿨으므로,
+     * 이 테스트가 깨지면 "U5·U6 가 받을 이벤트가 애초에 안 쌓인다"는 뜻이다.
+     *
+     * 인프로세스 발행은 그대로 유지되므로 기존 구독자는 영향이 없다 — 그 사실은 이 테스트가 아니라
+     * 기존 IT 들이 통과하는 것으로 확인된다.
+     */
+    @Test
+    fun `일정 생성이 아웃박스에 이벤트를 남긴다`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+
+        val rows = jdbc.queryForList(
+            """
+            SELECT event_type, aggregate_type, schema_version, payload::text AS payload
+              FROM outbox_event
+             WHERE event_type = 'itinerary.ItineraryGenerated'
+               AND payload ->> 'tripId' = ?
+            """.trimIndent(),
+            trip,
+        )
+
+        rows.size shouldBe 1
+        rows.single()["aggregate_type"] shouldBe "Itinerary"
+        rows.single()["schema_version"] shouldBe 1
+        // payload 가 비어 있으면 구독자가 다시 조회해야 하고, 그때는 값이 이미 바뀌어 있을 수 있다.
+        (rows.single()["payload"] as String) shouldContain "isFallback"
+    }
+
 }
