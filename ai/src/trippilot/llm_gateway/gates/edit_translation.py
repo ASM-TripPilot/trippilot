@@ -1,15 +1,24 @@
 """EDIT_TRANSLATION 출구 게이트 (정본 §2.4 + agent-foundation FD §1).
 
 번역 결과는 **명령 1건**이라 항목 격리(place_extraction 선례)가 성립하지 않는다 —
-affectedSlots 일부만 살리면 명령의 의미가 바뀌므로, 풀 밖 ID가 하나라도 있으면
+affectedSlots 일부만 살리면 명령의 의미가 바뀌므로, 대조 집합 밖 ID가 하나라도 있으면
 명령 전체를 드롭한다 (부분 반영 금지).
 
 검증 4종:
   ① op ∈ EditOp (closed-set — enum 밖 값은 명령 자체가 존재 불가)
-  ② POI 참조 ⊆ 후보 풀 (INV-1 풀 교차, explanation 게이트 선례) —
-     affectedSlots뿐 아니라 **params의 `*PoiId` 키**까지 (REPLACE_SLOT의 대상 POI가
-     params로 새는 경로 차단). POI "이름" 문자열은 교차 대상이 아니다 — 이름 해소는
-     코드(fuzzy match, AI-D04) 몫이고 그 지점에서 다시 풀 교차된다.
+  ② POI 참조 교차 — **대조 집합이 둘이다** (TRIP-527):
+     · params의 `*PoiId`(= 새로 넣는 POI) ⊆ 후보 풀 — INV-1 그대로. REPLACE_SLOT의
+       대상 POI가 params로 새는 경로를 여기서 막는다.
+     · affectedSlots(= 이미 일정에 있는 슬롯 지목) ⊆ 현재 슬롯. 고르는 행위가 아니라
+       가리키는 행위라 풀 자격을 다시 물을 대상이 아니다 — 그 POI는 생성 시 이미 풀을
+       통과했고, 편집 경로가 백엔드 find_by_ids로 실물을 받아온 등록 POI다.
+     풀은 요청마다 앵커 반경·예산·품질로 잘리는 조각이라(poi_curation.pool_builder),
+     다른 조건으로 생성된 원 일정의 슬롯이 풀 밖인 것은 정상이다. 이걸 풀로 교차하던
+     동안 그런 슬롯은 자연어로 영원히 편집 불가였다 (TRIP-527).
+     대조 집합은 구조화 진입(`agents.edit_agent.validate_command`)의 규칙과 같다 —
+     두 진입이 같은 슬롯에 다른 판정을 내지 않는다 (TRIP-431 수렴 결정).
+     POI "이름" 문자열은 교차 대상이 아니다 — 이름 해소는 코드(fuzzy match, AI-D04)
+     몫이고 그 지점에서 다시 풀 교차된다.
   ③ params에 시각·소요시간 필드 없음 (INV-3 + INV-2의 시각 측면 — 시각은 솔버 소유).
      순서·위치 제안은 허용한다: 워커는 제안만 하고 확정은 솔버라는 INV-2 원문 그대로,
      "3번째로 옮겨줘"의 위치는 사용자 요구지 확정 시각이 아니다.
@@ -24,6 +33,7 @@ affectedSlots 일부만 살리면 명령의 의미가 바뀌므로, 풀 밖 ID�
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from trippilot.llm_gateway.gates.base import GateOutcome, _load_json_object
@@ -70,34 +80,59 @@ def is_time_param_key(key: str) -> bool:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class EditTranslationContext:
+    """게이트 검증 컨텍스트 — GatewayFacade.call의 pool 자리로 관통 (reflection_template 선례).
+
+    대조 집합 2종을 **분리해** 싣는다 (TRIP-527 — 모듈 docstring ② 참조):
+    - `pool`: 새로 넣는 POI의 자격 (INV-1 닫힌 후보 풀)
+    - `current_slots`: 지목 가능한 기존 슬롯. 워커가 프롬프트에 렌더한 슬롯 목록
+      그대로라, 모델이 본 것과 게이트가 허용하는 것이 어긋날 수 없다.
+    """
+
+    pool: CandidatePool
+    current_slots: frozenset[PoiId]
+
+
 class EditTranslationGate:
     """EDIT_TRANSLATION 출구 게이트 — {"editCommand": {op, params, affectedSlots}} 강제."""
 
     def apply(
         self,
         raw_text: str,
-        pool: CandidatePool | None,
+        pool: object,  # EditTranslationContext — pool 자리로 관통 (ExitGate 계약 호환)
         *,
         feature: LlmFeature,
         trace_id: TraceId,
         now: datetime,
     ) -> GateOutcome:
-        if pool is None:
-            return GateOutcome(value=None, drop_event=None, error="gate_error: 후보 풀 없음")
+        if not isinstance(pool, EditTranslationContext):
+            # 대조 집합이 둘이라 풀만으로는 ②를 판정할 수 없다 (TRIP-527)
+            return GateOutcome(
+                value=None,
+                drop_event=None,
+                error="gate_error: EditTranslationContext 없음 (풀·현재 슬롯 대조 집합 필요)",
+            )
+        ctx = pool
         try:
             op, params, slot_ids, param_refs = self._parse(raw_text)
         except ValueError as e:
             return GateOutcome(value=None, drop_event=None, error=f"parse_error: {e}")
 
-        # ② 풀 교차 (INV-1) — 하나라도 밖이면 명령 전체 드롭. 중복은 첫 등장만 채택
+        # ② 대조 집합 2종 교차 — 하나라도 밖이면 명령 전체 드롭. 중복은 첫 등장만 채택
         #    (중복이 affected 수를 부풀려 반영 모드 판정을 흔드는 것 방지).
         unique: list[PoiId] = []
         for pid in slot_ids:
             if pid not in unique:
                 unique.append(pid)
-        checked = [*unique, *(pid for pid in param_refs if pid not in unique)]
-        outside = tuple(pid for pid in checked if not pool.contains(pid))
-        if outside:
+        unknown = tuple(pid for pid in unique if pid not in ctx.current_slots)
+        outside = tuple(pid for pid in param_refs if not ctx.pool.contains(pid))
+        if unknown or outside:
+            reasons = []
+            if unknown:
+                reasons.append(f"unknown_slot: 현재 일정에 없는 슬롯 {len(unknown)}건")
+            if outside:
+                reasons.append(f"closed_set_violation: 풀 밖 poiId {len(outside)}건")
             return GateOutcome(
                 value=None,
                 drop_event=GateDropEvent(
@@ -105,11 +140,11 @@ class EditTranslationGate:
                     occurred_at=now,
                     component="c1.gate",
                     feature=feature.value,
-                    dropped_ids=outside,
-                    total_count=len(checked),
-                    dropped_count=len(outside),
+                    dropped_ids=unknown + outside,
+                    total_count=len(unique) + len(param_refs),
+                    dropped_count=len(unknown) + len(outside),
                 ),
-                error=f"closed_set_violation: 풀 밖 poiId {len(outside)}건 — 명령 전체 드롭",
+                error=" / ".join(reasons) + " — 명령 전체 드롭",
             )
 
         command = EditCommand(op=op, params=params, affected_slots=tuple(unique))

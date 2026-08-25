@@ -2,7 +2,8 @@
 
 증명하는 것:
   ① op는 항상 EditOp closed-set 안 (밖이면 명령 자체가 만들어지지 않는다)
-  ② affectedSlots ⊆ 후보 풀 (INV-1) — 풀 밖이 섞이면 명령 전체 드롭(부분 반영 금지)
+  ② 대조 집합 2종 (TRIP-527) — params의 `*PoiId`(새 POI) ⊆ 후보 풀(INV-1),
+     affectedSlots(기존 슬롯 지목) ⊆ 현재 슬롯. 밖이 섞이면 명령 전체 드롭(부분 반영 금지)
   ③ 반영 모드는 코드가 확정 — resolve_apply_mode 재사용, LLM 제안 무시 (M16-P2)
   ④ params에 시각·소요시간 금지 (INV-2·INV-3 — 시각·순서는 솔버 소유)
   ⑤ LLM 실패 → 침묵 없이 폴백 TypedResult (INV-4, M16-P3의 워커 측 절반)
@@ -22,7 +23,10 @@ from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
+from trippilot.llm_gateway.gates.edit_translation import (
+    EditTranslationContext,
+    EditTranslationGate,
+)
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.edit_translation import (
@@ -77,9 +81,16 @@ def _raw(op: str, slots: list[str], *, params: dict | None = None,
     )
 
 
-def _apply(raw: str, pool: CandidatePool | None = None):
+def _apply(raw: str, pool: CandidatePool | None = None, current=None):
+    """현재 슬롯 기본값 = 풀 전원 — 명시하지 않은 기존 케이스의 의미를 보존한다."""
+    pool = _pool() if pool is None else pool
     return EditTranslationGate().apply(
-        raw, _pool() if pool is None else pool, feature=_FEAT, trace_id=_TID, now=_NOW
+        raw,
+        EditTranslationContext(
+            pool=pool,
+            current_slots=pool.poi_ids if current is None else frozenset(current),
+        ),
+        feature=_FEAT, trace_id=_TID, now=_NOW,
     )
 
 
@@ -111,14 +122,41 @@ def test_gate_rejects_op_outside_closed_set() -> None:
     assert out.error.startswith("parse_error:") and "EditOp 밖" in out.error
 
 
-def test_gate_drops_whole_command_when_any_slot_outside_pool() -> None:
-    """② 부분 반영 금지 — 유효 슬롯이 섞여 있어도 명령 전체를 버린다 (INV-1)."""
+def test_gate_drops_whole_command_when_any_slot_outside_current_itinerary() -> None:
+    """② 지목의 대조 집합은 **현재 슬롯** — 없는 슬롯이 섞이면 명령 전체를 버린다.
+
+    부분 반영 금지는 그대로다(유효 슬롯이 섞여 있어도 살리지 않는다).
+    """
     out = _apply(_raw("REPLACE_SLOT", ["p1", "유령장소"]))
     assert out.value is None
-    assert out.error.startswith("closed_set_violation:")
+    assert out.error.startswith("unknown_slot:")
     assert out.drop_event is not None
     assert out.drop_event.dropped_ids == (PoiId("유령장소"),)
     assert out.drop_event.total_count == 2 and out.drop_event.dropped_count == 1
+
+
+def test_gate_allows_current_slot_outside_pool() -> None:
+    """② 핵심(TRIP-527) — 풀은 요청마다 잘리는 조각이라 현재 슬롯이 풀 밖일 수 있다.
+
+    지목은 고르는 행위가 아니라 가리키는 행위 — 풀 자격을 다시 묻지 않는다.
+    이 규칙 전에는 그런 슬롯이 자연어로 영원히 편집 불가였다.
+    """
+    outside = PoiId("p3-풀밖-현재슬롯")
+    out = _apply(_raw("MOVE_SLOT", [str(outside)]), current={*_pool().poi_ids, outside})
+    assert out.error is None and out.drop_event is None
+    assert out.value.command.affected_slots == (outside,)
+
+
+def test_gate_still_crosses_new_poi_with_pool_even_if_it_is_a_current_slot() -> None:
+    """② INV-1 유지 — 새로 넣는 POI는 현재 일정에 있든 없든 풀 안이어야 한다."""
+    outside = PoiId("p3-풀밖-현재슬롯")
+    out = _apply(
+        _raw("REPLACE_SLOT", ["p1"], params={"targetPoiId": str(outside)}),
+        current={*_pool().poi_ids, outside},
+    )
+    assert out.value is None
+    assert out.error.startswith("closed_set_violation:")
+    assert out.drop_event.dropped_ids == (outside,)
 
 
 @pytest.mark.parametrize(
@@ -186,10 +224,11 @@ def test_gate_signals_untranslatable_instead_of_faking_success() -> None:
 # ── 게이트: 파싱 실패·구조 위반 ──────────────────────────────
 
 
-def test_gate_parse_failures_and_pool_guard() -> None:
-    assert EditTranslationGate().apply(
-        "{}", None, feature=_FEAT, trace_id=_TID, now=_NOW
-    ).error.startswith("gate_error:")
+def test_gate_parse_failures_and_context_guard() -> None:
+    for missing in (None, _pool()):  # 풀만으로는 지목 대조 집합이 없다 (TRIP-527)
+        assert EditTranslationGate().apply(
+            "{}", missing, feature=_FEAT, trace_id=_TID, now=_NOW
+        ).error.startswith("gate_error:")
     assert _apply("이건 JSON이 아니다").error.startswith("parse_error:")
     assert _apply(json.dumps({"command": {"op": "ADD_SLOT"}})).error.startswith("parse_error:")
     assert _apply(json.dumps({"editCommand": "ADD_SLOT"})).error is not None
@@ -237,7 +276,7 @@ def test_pbt_gate_output_is_always_closed_set_and_code_resolved(case) -> None:
     assert out.error is None
     cmd = out.value.command
     assert cmd.op in set(EditOp)
-    assert all(pool.contains(pid) for pid in cmd.affected_slots)
+    assert all(pid in pool.poi_ids for pid in cmd.affected_slots)  # = 기본 현재 슬롯
     assert out.value.apply_mode is resolve_apply_mode(cmd)
     if op in {EditOp.REMOVE_SLOT, EditOp.CLEAR_DAY, EditOp.REORDER_DAY, EditOp.REPLAN} or len(slots) > 1:
         assert out.value.apply_mode is ApplyMode.CONFIRM_REQUIRED
@@ -247,8 +286,12 @@ def test_pbt_gate_output_is_always_closed_set_and_code_resolved(case) -> None:
     _pool_and_command(),
     st.text(min_size=1, max_size=12),
 )
-def test_pbt_polluted_slot_never_survives(case, ghost: str) -> None:
-    """② 풀 밖 ID가 섞이면 어떤 경우에도 명령이 통과하지 않는다 (INV-1)."""
+def test_pbt_slot_outside_current_itinerary_never_survives(case, ghost: str) -> None:
+    """② 현재 슬롯 밖 ID가 섞이면 어떤 경우에도 명령이 통과하지 않는다.
+
+    (풀 밖이라서가 아니라 **일정에 없어서** 드롭이다 — 현재 슬롯 = 풀 전원인 기본
+    컨텍스트라 ghost는 양쪽 모두 밖이지만, 판정 근거는 현재 슬롯 집합이다.)
+    """
     pool, op, slots = case
     assume(PoiId(ghost) not in pool.poi_ids)
     out = _apply(_raw(op.value, [*(str(s) for s in slots), ghost]), pool)
@@ -359,8 +402,17 @@ def test_worker_falls_back_loudly_on_llm_failure() -> None:
 
 
 def test_worker_falls_back_when_gate_drops_command() -> None:
+    """워커가 넘긴 현재 슬롯(_input()=p1)에 없는 지목 → 드롭 (풀 멤버십과 무관)."""
     result = _worker(FakeLlm(canned=_raw("ADD_SLOT", ["유령장소"]))).translate(
         _pool(), _input(), _TID, _NOW
     )
+    assert result.is_fallback is True and result.value is None
+    assert "unknown_slot" in result.error
+
+
+def test_worker_falls_back_when_new_poi_is_outside_pool() -> None:
+    """INV-1 — 새로 넣는 POI가 풀 밖이면 워커 경로에서도 드롭된다."""
+    canned = _raw("REPLACE_SLOT", ["p1"], params={"targetPoiId": "환각카페"})
+    result = _worker(FakeLlm(canned=canned)).translate(_pool(), _input(), _TID, _NOW)
     assert result.is_fallback is True and result.value is None
     assert "closed_set_violation" in result.error

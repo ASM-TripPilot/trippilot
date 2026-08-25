@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from trippilot.llm_gateway.gates.edit_translation import EditTranslationContext
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.edit import EditOp
@@ -80,7 +81,11 @@ class EditTranslationWorker:
         return self._gateway.call(
             LlmFeature.EDIT_TRANSLATION,
             build_edit_translation_vars(pool, inp),
-            pool,  # affectedSlots 풀 교차 대상 (INV-1)
+            # pool 자리 = 게이트 대조 집합 2종 (TRIP-527): 새로 넣는 POI는 풀(INV-1),
+            # 기존 슬롯 지목은 현재 슬롯. 프롬프트에 렌더한 목록 그대로 넘기므로
+            # "모델이 본 슬롯"과 "게이트가 허용하는 슬롯"이 어긋날 수 없다.
+            EditTranslationContext(
+                pool=pool, current_slots=frozenset(inp.current_slots)),
             trace_id,
             now,
             timeout_sec=timeout_sec,
