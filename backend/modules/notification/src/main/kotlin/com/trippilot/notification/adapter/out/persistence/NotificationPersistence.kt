@@ -104,6 +104,17 @@ class NotificationRepositoryAdapter(
      * 조건부 UPDATE 다 — 읽고 검사하고 쓰면 그 사이에 다른 기기가 먼저 읽음 처리할 수 있다.
      * `read_at IS NULL` 을 조건에 넣어 **처음 읽은 시각**이 나중 호출로 덮이지 않게 한다.
      */
+    /**
+     * 기록만 하는 UPDATE 라 조건이 없다 — 재시도가 같은 값을 다시 써도 사실이 바뀌지 않는다.
+     * 알림 자체는 이미 존재하므로 대상이 없으면(0행) 그냥 아무 일도 없다.
+     */
+    override fun markPushResult(notificationId: UUID, sentAt: Instant?, failedReason: String?) {
+        jdbc.update(
+            "UPDATE notification SET push_sent_at = ?, push_failed_reason = ? WHERE notification_id = ?",
+            sentAt?.let { java.sql.Timestamp.from(it) }, failedReason, notificationId,
+        )
+    }
+
     override fun markRead(accountId: UUID, notificationId: UUID, at: Instant): Boolean =
         jdbc.update(
             "UPDATE notification SET read_at = ? WHERE notification_id = ? AND account_id = ? AND read_at IS NULL",

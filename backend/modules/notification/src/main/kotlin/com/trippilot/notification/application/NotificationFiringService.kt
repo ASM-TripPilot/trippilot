@@ -19,6 +19,7 @@ class NotificationFiringService(
     private val schedules: NotificationScheduleRepository,
     private val notifications: NotificationRepository,
     private val toggles: NotificationToggleService,
+    private val pushes: PushDispatchService,
     private val clock: Clock,
 ) {
     @Transactional
@@ -39,7 +40,11 @@ class NotificationFiringService(
         // 반환값을 버려도 되는 것은 [NotificationSchedule.toNotification] 이 `sourceEventId = null` 로
         // 만들기 때문이다 — UNIQUE 가 걸리지 않아 항상 삽입된다. 거기에 원천 이벤트를 싣게 되면
         // 여기서 false 를 받고도 FIRED 를 보고하게 되므로, 그때는 이 줄을 함께 고쳐야 한다.
-        notifications.appendIfAbsent(schedule.toNotification(now))
+        val notification = schedule.toNotification(now)
+        notifications.appendIfAbsent(notification)
+        // **적재가 먼저다**(INV-U6-02 · TRIP-549). 푸시가 실패해도 알림함 행은 남아 catch-up 이
+        // 그것을 준다 — "누락 0"의 근거는 푸시가 아니라 이 행의 영속성이다.
+        pushes.dispatch(notification)
         return FireOutcome.FIRED
     }
 

@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":modules:trip"))   // R1: 여행 소유자·기간 조회만 — trip.api(TripOwnerFacade)
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
+    implementation(libs.spring.boot.starter.validation)
     // 아웃박스 payload(JSON 문자열)를 읽는다. 트리로만 읽으므로 Kotlin 모듈은 필요 없다.
     implementation(libs.jackson.module.kotlin)
     implementation(libs.kotlin.reflect)
