@@ -4,6 +4,9 @@ import com.trippilot.archive.domain.VisitCheck
 import com.trippilot.archive.domain.VisitCheckRepository
 import com.trippilot.archive.domain.VisitMemoRepository
 import com.trippilot.archive.domain.VisitPhotoMetaRepository
+import com.trippilot.archive.api.ArchiveDayView
+import com.trippilot.archive.api.ArchiveRecordFacade
+import com.trippilot.archive.api.ArchiveVisitView
 import com.trippilot.changelog.api.ChangeLogEntryView
 import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.core.error.ResourceNotFound
@@ -36,7 +39,7 @@ class TripRecordService(
     private val memos: VisitMemoRepository,
     private val baseStays: TripBaseStayFacade,
     private val changeLog: ChangeLogFacade,
-) {
+) : ArchiveRecordFacade {
     @Transactional(readOnly = true)
     fun compare(accountId: UUID, tripId: UUID, changeLimit: Int = DEFAULT_CHANGE_LIMIT): TripRecord {
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
@@ -74,6 +77,34 @@ class TripRecordService(
             // 변경 이력은 **읽기만** 한다(BR-U5-29). 소유 판정·상한·최신순은 소유 모듈이 이미 했다.
             changes = changeLog.findTimeline(accountId, tripId, changeLimit),
         )
+    }
+
+    /**
+     * 회고(U5)가 읽는 날짜별 실적. 3종 비교와 같은 원천을 쓰되 **모듈 경계 표현**으로 낸다 —
+     * 내부 타입([ActualVisitRecord])을 계약에 실으면 화면 응답을 고칠 때 남의 모듈이 깨진다.
+     */
+    @Transactional(readOnly = true)
+    override fun findDailyVisits(tripId: UUID): List<ArchiveDayView> {
+        val all = checks.findByTrip(tripId)
+        val visitIds = all.map { it.visitCheckId }
+        val photoCounts = photos.countByVisits(visitIds)
+        val withMemo = memos.findVisitsWithMemo(visitIds)
+        return all.groupBy { it.dayOf() }.toSortedMap().map { (date, visits) ->
+            ArchiveDayView(
+                date = date,
+                visits = visits.sortedBy { it.arrivedAt ?: it.createdAt }.map {
+                    ArchiveVisitView(
+                        visitCheckId = it.visitCheckId,
+                        poiId = it.poiId,
+                        arrivedAt = it.arrivedAt,
+                        completedAt = it.completedAt,
+                        skipped = it.skippedAt != null,
+                        photoCount = photoCounts[it.visitCheckId] ?: 0,
+                        hasMemo = it.visitCheckId in withMemo,
+                    )
+                },
+            )
+        }
     }
 
     /**
