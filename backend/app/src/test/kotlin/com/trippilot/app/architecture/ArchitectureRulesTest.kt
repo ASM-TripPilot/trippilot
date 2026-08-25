@@ -1,12 +1,16 @@
 package com.trippilot.app.architecture
 
+import com.tngtech.archunit.base.DescribedPredicate.describe
 import com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage
 import com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage
+import com.tngtech.archunit.core.domain.JavaMethodCall
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
+import com.tngtech.archunit.lang.conditions.ArchConditions.callMethodWhere
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices
+import com.trippilot.changelog.api.ChangeLogFacade
 import org.junit.jupiter.api.Test
 import org.springframework.boot.autoconfigure.SpringBootApplication
 
@@ -61,6 +65,29 @@ class ArchitectureRulesTest {
         classes().that().areAnnotatedWith(SpringBootApplication::class.java)
             .should().resideInAPackage("com.trippilot.app..")
             .because("R4: 조립·컴포넌트스캔은 app 소유")
+            .allowEmptyShould(true)
+            .check(importedClasses)
+    }
+
+    /**
+     * BR-U5-29 — 기록·회고(U5)는 `change_log_entry` 를 **읽기만** 한다. 쓰기(append)는 변경을 만든 모듈
+     * (편집 U3 · Plan-B U4)이 자기 트랜잭션 안에서 남기는 것이라, 아카이브가 사후에 덧쓰면
+     * "무엇을 왜 바꿨는지"의 출처가 둘이 된다.
+     *
+     * U5 모듈은 아직 없어 지금은 vacuous 지만, 패키지가 생기는 순간 발동한다(이 파일의 기존 규칙과 같은 방식).
+     * 어댑터·엔티티 직접 접근(SQL 로 쓰는 경로)은 R1 이 막는다 — 단 U5 모듈을 그 슬라이스 목록에 함께 등록해야 한다.
+     */
+    @Test
+    fun `BR-U5-29 기록·회고(U5)는 변경 이력을 쓰지 않는다`() {
+        noClasses().that().resideInAnyPackage("com.trippilot.archive..", "com.trippilot.reflection..")
+            .should(
+                callMethodWhere(
+                    describe<JavaMethodCall>("ChangeLogFacade.append 를 호출") {
+                        it.name == "append" && it.targetOwner.isAssignableTo(ChangeLogFacade::class.java)
+                    },
+                ),
+            )
+            .because("BR-U5-29: U5 는 change_log_entry 를 읽기만 한다 — 이력 생산은 변경을 만든 모듈 소유")
             .allowEmptyShould(true)
             .check(importedClasses)
     }
