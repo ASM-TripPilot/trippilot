@@ -37,7 +37,6 @@ class NotificationRaiseService(
      * 않는다** — at-least-once 재배달이 사용자에게 두 번 울리지 않는다(INV-U6-01 · BR-U6-34).
      */
     @Transactional
-    @Suppress("LongParameterList")
     fun raise(
         accountId: UUID,
         kind: NotificationKind,
