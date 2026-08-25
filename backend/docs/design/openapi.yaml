@@ -16,6 +16,7 @@ security:
   - bearerAuth: []          # 전역 기본 = 인증 필요. 공개 엔드포인트는 security:[] 로 개별 해제.
 
 tags:
+  - name: reflection
   - name: auth
   - name: onboarding
   - name: location
@@ -1039,6 +1040,95 @@ paths:
           schema: { type: integer, default: 30, minimum: 1, maximum: 100 }
       responses:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TripRecordList' } } } }
+  /me/style:
+    get:
+      tags: [reflection]
+      summary: 여행 스타일 분석(j05)
+      description: >
+        **계정 단위**다(INV-U5-08) — 여행이 지워져도 남는다. 조회 시점에 실적을 다시 훑어 계산하고,
+        정식이면 저장한다.
+
+
+        응답이 두 모양인 이유는 **그 둘이 다른 것이기 때문이다**(BR-U5-40). 누적 방문 10곳 미만이면
+        정식 분석을 만들지 않고(`official=false`) 온보딩 취향 기반 **임시 미리보기**를 낸다 —
+        화면은 "정식 아님"을 명시해야 하고, 그 근거가 `progress`(현재 N곳 / 필요 10곳)다.
+        미리보기는 **저장하지 않는다**(BR-U5-41) — 저장하면 정식과 구분이 사라진다.
+
+
+        `categoryBreakdown[].category` 는 **`poi.category` 코드**다(`맛집`·`카페`…) — 화면 라벨이
+        아니다. 화면의 `미식` 은 `맛집` 의 표시 라벨이고 그 매핑표는 디자인 확인이 남았다(O-U5-7).
+        서버가 라벨로 저장하면 라벨이 바뀔 때 저장된 과거 분석이 전부 틀린 말이 된다.
+        상위 3 + `기타` 로 접는 것은 서버가 한다(비율 합이 1이 되는 산술).
+
+
+        `traitGauges` 3축의 **산출식은 잠정이다**(O-U5-9 미결) — 축은 화면 정본을 따르고,
+        식은 U6 마이페이지 설계와 함께 확정한다.
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/StyleAnalysisEnvelope' } } } }
+  /trips/{tripId}/summary:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [reflection]
+      summary: 여행 요약(j04)
+      description: >
+        요약은 **여행이 끝나야 생긴다**(BR-U5-39) — `trip.TripEnded` 를 아웃박스 릴레이로 받아 만든다.
+        아직 없으면 404 가 아니라 `ready=false` 로 알린다: 화면이 **공유 진입점을 비활성화**해야 하는데
+        (BR-U5-48) 404 는 "없다"와 "타 계정"을 구분하지 못해 그 판단의 근거가 되지 못한다.
+
+
+        방문 0곳 여행도 **비어 있지 않다**(PBT-U5-1) — `stats` 를 채운 기본 요약이 나온다.
+
+
+        ⚠ 릴레이는 **구독자를 붙인 시점 이후** 이벤트만 준다 — 그 전에 끝난 여행은 요약이 없다.
+        소급 배치는 이 티켓 밖이다(`trip.ended_at` 이 남아 나중에 훑을 근거는 있다).
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TripSummaryEnvelope' } } } }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/reflections:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [reflection]
+      summary: 여행의 하루 회고 목록(j03)
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReflectionList' } } } }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/reflections/{dayDate}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: dayDate, in: path, required: true, schema: { type: string, format: date } }
+    post:
+      tags: [reflection]
+      summary: 하루 회고 생성·재생성
+      description: >
+        **입력이 무엇이든 결과가 비어 있지 않다**(PBT-U5-1 · 블로킹 게이트). 방문 0곳·사진 0장이어도
+        `stats` 를 채운 기본 카드가 나온다 — 폴백 3단(AI → 규칙 → 기본) 중 어느 단에서 멈춰도
+        빈 화면을 그리지 않는다(BR-U5-32).
+
+
+        하루 한 장이라 다시 부르면 **덮어쓴다**(BR-U5-35). 사용자가 고친 문장(`editedNarrative`)은
+        재생성해도 남는다 — 초안만 갈린다.
+
+
+        ⚠ 현재 `source` 는 `RULE` 또는 `BASIC` 이다. `AI` 단은 미개통(O-U5-6) — `ai/` 에 회고 경계가
+        없고 backend 에 LLM 게이트웨이도 없다. 규칙 문장으로 먼저 열고 `source` 로 품질을 관측한다.
+      responses:
+        '200': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
+        '404': { description: 여행 없음/타 계정 }
+    put:
+      tags: [reflection]
+      summary: 회고 문장 수정 — 초안은 남는다
+      description: >
+        생성된 초안을 덮지 않고 `editedNarrative` 에 따로 쌓는다(INV-U5-06). 화면이 "생성된 것"과
+        "내가 고친 것"을 2열로 그리기 때문이다 — 하나로 합치면 그 비교가 사라진다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EditReflectionRequest' } } }
+      responses:
+        '200': { description: 수정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
+        '400': { description: 입력 검증 실패 }
+        '404': { description: 여행 없음/타 계정/회고 없음 }
   /trips/{tripId}/records:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2467,6 +2557,178 @@ components:
             여기에 타입을 박으면 모듈이 필드를 하나 늘릴 때마다 공용 계약이 흔들린다.
           items: { type: object, additionalProperties: true }
         truncated: { type: boolean }
+
+    StyleAnalysisEnvelope:
+      type: object
+      required: [official, progress]
+      properties:
+        official:
+          type: boolean
+          description: 정식 분석인가. false 면 `preview` 가 차 있고 화면은 **"정식 아님"을 명시**한다(BR-U5-40).
+        progress: { $ref: '#/components/schemas/StyleProgress' }
+        analysis:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/StyleAnalysisBody' }]
+        preview:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/StylePreview' }]
+
+    StyleProgress:
+      type: object
+      required: [current, required]
+      description: '`현재 N곳 / 필요 10곳`. 정식이어도 싣는다 — `분석에 사용된 방문 N곳`의 근거(BR-U5-42).'
+      properties:
+        current: { type: integer }
+        required: { type: integer, example: 10 }
+
+    StylePreview:
+      type: object
+      required: [descriptors]
+      description: 임계 미만의 임시 미리보기. **온보딩 취향**에서 왔다 — 실적이 아니고 저장되지도 않는다.
+      properties:
+        descriptors: { type: array, items: { type: string }, example: ['#바다', '#미식'] }
+
+    StyleAnalysisBody:
+      type: object
+      required: [descriptors, traitGauges, categoryBreakdown, avgPlacesPerDay, avgRadiusKm, sampleTripCount, updatedAt]
+      properties:
+        descriptors: { type: array, items: { type: string } }
+        traitGauges: { $ref: '#/components/schemas/TraitGauges' }
+        categoryBreakdown:
+          type: array
+          items: { $ref: '#/components/schemas/CategoryShare' }
+        avgPlacesPerDay: { type: number, format: double }
+        avgRadiusKm: { type: number, format: double }
+        avgDwellMinutes:
+          type: integer
+          nullable: true
+          description: >
+            **소요시간 노출의 유일한 예외**(BR-U5-08a · DEC-U5-13 · PBT-U5-5). 사후 실적 통계라
+            INV-3(솔버 미검증 예측 소요시간 금지)에 걸리지 않는다. 개별 방문의 체류는 계속 미노출이다.
+            잴 수 없으면 null — 0 으로 채우지 않는다.
+        sampleTripCount: { type: integer }
+        updatedAt: { type: string, format: date-time }
+
+    TraitGauges:
+      type: object
+      required: [easygoing, foodAffinity, activeness]
+      description: 'dot 게이지 3축(각 0~5). **산출식은 잠정**(O-U5-9).'
+      properties:
+        easygoing: { type: integer, minimum: 0, maximum: 5, description: 여유로움 — 하루에 적게 다닐수록 높다 }
+        foodAffinity: { type: integer, minimum: 0, maximum: 5, description: 미식취향 — 맛집·카페 비중이 높을수록 높다 }
+        activeness: { type: integer, minimum: 0, maximum: 5, description: 활동성 — 하루 이동 반경이 넓을수록 높다 }
+
+    CategoryShare:
+      type: object
+      required: [category, ratio, isOther]
+      properties:
+        category:
+          type: string
+          description: '**`poi.category` 코드**(`맛집`·`카페`·`자연`…). 표시 라벨 매핑은 화면 몫(O-U5-7).'
+        ratio: { type: number, format: double, minimum: 0, maximum: 1 }
+        isOther:
+          type: boolean
+          description: 상위 3 밖을 묶은 줄. 이 줄의 `category` 는 코드가 아니라 예약 라벨(`기타`)이다.
+
+    TripSummaryEnvelope:
+      type: object
+      required: [ready]
+      properties:
+        ready:
+          type: boolean
+          description: 요약이 만들어졌는가. false 면 화면은 **공유 진입점을 비활성화**한다(BR-U5-48).
+        summary:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/TripSummary' }]
+
+    TripSummary:
+      type: object
+      required: [narrative, highlights, stats, source, generatedAt]
+      properties:
+        narrative: { type: string, description: '**비어 있을 수 없다**(PBT-U5-1)' }
+        highlights:
+          type: array
+          items: { $ref: '#/components/schemas/DayHighlight' }
+        stats: { $ref: '#/components/schemas/TripSummaryStats' }
+        source: { type: string, enum: [AI, RULE, BASIC], description: 회고와 같은 규약(BR-U5-33) }
+        generatedAt: { type: string, format: date-time }
+
+    DayHighlight:
+      type: object
+      required: [date, dayOrder, visitCount, places]
+      properties:
+        date: { type: string, format: date }
+        dayOrder: { type: integer }
+        visitCount: { type: integer }
+        places: { type: array, items: { type: string } }
+
+    TripSummaryStats:
+      type: object
+      required: [totalVisits, totalDistanceKm, distanceSource, totalPhotos, hasLocationData]
+      description: '**소요시간 필드가 없다**(INV-3 · PBT-U5-5) — 거리만.'
+      properties:
+        totalVisits: { type: integer }
+        totalDistanceKm: { type: number, format: double }
+        distanceSource: { type: string, enum: [ROUTE, VISIT_LINE] }
+        totalPhotos: { type: integer }
+        hasLocationData:
+          type: boolean
+          description: >
+            false 면 좌표를 하나도 못 찾았다는 뜻이다 — 화면은 **지도 대신 방문 목록**을 그린다(BR-U5-39).
+            빈 지도를 띄우면 사용자는 기록이 없는 줄 안다.
+
+    ReflectionList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Reflection' }
+
+    EditReflectionRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 4000 }
+
+    Reflection:
+      type: object
+      required: [dayDate, draftNarrative, source, stats, generatedAt, updatedAt]
+      properties:
+        dayDate: { type: string, format: date }
+        draftNarrative: { type: string, description: 생성된 원문. **비어 있을 수 없다**(INV-U5-07) }
+        editedNarrative:
+          type: string
+          nullable: true
+          description: 사용자가 고친 문장. null 이면 아직 손대지 않았다 — 화면은 둘을 2열로 그린다(INV-U5-06).
+        source:
+          type: string
+          description: >
+            문장이 어느 단에서 나왔나(BR-U5-33). **항상 실린다** — 화면이 구분해 그리지 않더라도
+            규칙 문장이 몇 %인지 모르면 AI 경로를 붙일 근거가 없다. 현재 `AI` 는 미개통(O-U5-6).
+          enum: [AI, RULE, BASIC]
+        stats: { $ref: '#/components/schemas/ReflectionStats' }
+        generatedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ReflectionStats:
+      type: object
+      required: [visitCount, distanceKm, distanceSource, photoCount]
+      description: >
+        근거 수치 — **비어 있을 수 없다**(INV-U5-07). 방문 0곳이어도 0으로 채운다.
+        **이동 소요시간 필드가 없다**(INV-3 · PBT-U5-5) — 거리만 낸다.
+        개별·일별 체류 시간도 없다(BR-U5-08); 누적 평균만 예외이고 그건 스타일 분석 소관이다.
+      properties:
+        visitCount: { type: integer }
+        distanceKm: { type: number, format: double }
+        distanceSource:
+          type: string
+          description: >
+            `VISIT_LINE` 은 **방문점을 이은 직선 합**이지 도로 거리가 아니다(BR-U5-43).
+            `actual_route_point` 가 미실장이라 서버가 실제 이동 경로를 모른다 —
+            밝히지 않으면 사용자가 근사값을 실측으로 읽는다.
+          enum: [ROUTE, VISIT_LINE]
+        photoCount: { type: integer }
 
     TripRecordList:
       type: object

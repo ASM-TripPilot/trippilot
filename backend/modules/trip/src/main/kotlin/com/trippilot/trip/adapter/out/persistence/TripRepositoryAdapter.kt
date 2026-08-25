@@ -53,7 +53,7 @@ class TripRepositoryAdapter(
         tripId = tripId, accountId = accountId, title = title, startDate = startDate, endDate = endDate,
         party = party, companionType = companionType?.name, budgetTotal = budgetTotal,
         preferenceSnapshot = preferenceSnapshot.toMutableMap(), status = status.name,
-        deletedAt = deletedAt, createdAt = createdAt, updatedAt = updatedAt,
+        deletedAt = deletedAt, createdAt = createdAt, updatedAt = updatedAt, endedAt = endedAt,
     )
 
     private fun TripEntity.toDomain(): Trip {
@@ -62,7 +62,7 @@ class TripRepositoryAdapter(
             tripId = tripId, accountId = accountId, title = title, startDate = startDate, endDate = endDate,
             party = party, companionType = companionType?.let { CompanionType.valueOf(it) }, budgetTotal = budgetTotal,
             preferenceSnapshot = preferenceSnapshot, destinations = dests, status = TripStatus.valueOf(status),
-            deletedAt = deletedAt, createdAt = createdAt, updatedAt = updatedAt,
+            deletedAt = deletedAt, createdAt = createdAt, updatedAt = updatedAt, endedAt = endedAt,
         )
     }
 }
