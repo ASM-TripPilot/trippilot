@@ -29,7 +29,6 @@ import {
 import {
   mustVisitFailureNotice,
   resolveMustVisitSection,
-  seedMustVisits,
 } from '@/features/trip/model/mustVisitSeed';
 import { resolveStayImport } from '@/features/trip/model/stayDateImport';
 import {
@@ -172,10 +171,6 @@ export function TripNewStep1Page({
   );
   const createdTripId = useTripWizardStore((state) => state.createdTripId);
   const mustVisits = useTripWizardStore((state) => state.mustVisits);
-  const mustVisitsInitialized = useTripWizardStore(
-    (state) => state.mustVisitsInitialized
-  );
-  const addMustVisits = useTripWizardStore((state) => state.addMustVisits);
   const removeMustVisit = useTripWizardStore((state) => state.removeMustVisit);
 
   const preference = usePreferencePrefill();
@@ -323,26 +318,12 @@ export function TripNewStep1Page({
   const savedPlacesLoading = isAuthed && savedPlaces.isPending;
   const savedPlaceList = savedPlaces.savedPlaces;
 
-  // 시드는 담은 목록이 **늘어날 때마다** 다시 태우되 더하기만 한다(TRIP-288 D2 · D8). "이미
-  // 채웠나"로 막던 옛 가드를 풀지 않으면 더 담기로 새로 담고 돌아와도 시드에 영영 안 들어온다.
-  // 가드가 하던 두 가지 일은 다른 자리가 대신한다 — 사용자가 x로 뺀 항목은 스토어의 제외
-  // 기억이, 리렌더 루프는 `mergeMustVisitSeeds`의 참조 보존이 막는다.
-  // ⚠️ `mustVisitsInitialized`는 몸통이 읽지 않지만 **의존성으로 남긴다**: 위저드 셸
-  // (`app/trips/new/_layout.tsx`)의 진입 초기화가 이 플래그를 내리는 것이 이 효과를 다시
-  // 깨우는 유일한 신호다(React는 자식 효과를 부모보다 먼저 돌리므로, 초기화는 이 효과가 이미
-  // 한 번 돈 **뒤**에 온다). 빼면 새 진입이 시드를 비우기만 하고 사용자는 빈 목록을 본다.
-  useEffect(() => {
-    if (savedPlacesLoading || savedPlaces.isError) {
-      return;
-    }
-    addMustVisits(seedMustVisits(savedPlaceList));
-  }, [
-    mustVisitsInitialized,
-    savedPlacesLoading,
-    savedPlaces.isError,
-    savedPlaceList,
-    addMustVisits,
-  ]);
+  // 담은 곳(하트) 자동 시드는 폐지됐다(사용자 결정 — 새 여행은 "꼭 갈 곳"도 항상 빈 상태로
+  // 시작한다). 예전엔 여기서 `addMustVisits(seedMustVisits(savedPlaceList))`를 태워 담은
+  // 목록을 매 진입마다 자동으로 채웠으나, `mustVisits`가 세션 입력이 아니라 계정 전역
+  // 즐겨찾기(담은 곳)를 그대로 반영해 확정 뒤 새 여행에도 옛 하트가 계속 새는 문제가 있었다.
+  // `mustVisits`는 이제 이 화면 안에서 채우는 경로가 없다 — 사용자가 손으로 추가하는 경로가
+  // 생기기 전까지 "꼭 갈 곳" 섹션은 항상 0곳(empty 얼굴)이다.
 
   // 얼굴 판정도 실패와 별개 축이다 — 잔존 시드가 있으면 실패·로딩이 그것을 덮지 않는다.
   const mustVisitSection = resolveMustVisitSection({

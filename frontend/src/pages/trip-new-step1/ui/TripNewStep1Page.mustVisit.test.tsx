@@ -3,7 +3,6 @@ import {
   fireEvent,
   render,
   screen,
-  within,
 } from '@testing-library/react-native';
 
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
@@ -13,21 +12,22 @@ import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { TripNewStep1Page } from './TripNewStep1Page';
 
 /**
- * TRIP-209 g01 '꼭 갈 곳' 배선 — 담은 장소 조회 ↔ 시드 ↔ 화면 ↔ 라우터를 잇는다.
+ * TRIP-209 g01 '꼭 갈 곳' 배선 — 조회 ↔ 화면 ↔ 라우터를 잇는다.
+ *
+ * ⚠️ **담은 곳(하트) 자동 시드는 폐지됐다**(사용자 결정, `TripNewStep1Page.tsx` 참고) —
+ * "꼭 갈 곳"은 이제 세션 안에서 채우는 경로가 없어 항상 0곳(empty 얼굴)이다. `useSavedPlaces`
+ * 조회 자체는 여전히 살아있다(캡션의 "담은 곳 N곳"·[다음] 로딩 게이트·"더 담기" 목적지 분기가
+ * 그 값을 쓴다) — 그래서 이 파일도 조회 훅은 그대로 목킹한다.
  *
  * 무엇을 보장하나:
- *  - **AC-1 · D8** 조회 결과가 썸네일과 `담은 곳 N곳` 캡션까지 이어지고, 캡션의 N 은
- *    **서버 담은 장소 개수**라 시드를 빼도 줄지 않는다.
- *  - **AC-5** `x` 가 그 항목만 시드에서 빼고 **담기 해제를 부르지 않는다**(BR-U1-37 복사 · INV-U1-04).
  *  - **D6** 게스트는 0곳 얼굴을 본다 — 끝나지 않는 스켈레톤이 아니다.
  *  - **D5** 조회 실패 얼굴이 0곳 얼굴과 구분되고 재시도가 진짜 재조회를 부른다.
- *  - **INV-U1-04(양방향)** 담은 목록이 줄어도 이미 복사된 시드는 지워지지 않는다.
  *  - **AC-6** 점선 박스(0곳 얼굴)는 **담은 곳이 있으면** 담은 장소 화면(d02)으로, 없으면
  *    장소 탐색(d04)으로 보낸다(TRIP-367 이후 조건 분기 — 분기 키는 `savedPlaceList.length`).
  *
- * 왜 node 버킷인가: 심판 대상이 "조회 **상태 조합**이 어떤 얼굴·어떤 스토어 변화로 이어지는가"다.
- * 게스트/로딩/실패/잔존을 손으로 갈아 끼워야 하므로 훅을 모듈째 목킹한다
- * (`TripNewStep1Page.test.tsx`·`…stayImport.test.tsx` 와 같은 형태). **실제 HTTP 와 등록 요청**은
+ * 왜 node 버킷인가: 심판 대상이 "조회 **상태 조합**이 어떤 얼굴로 이어지는가"다.
+ * 게스트/로딩/실패를 손으로 갈아 끼워야 하므로 훅을 모듈째 목킹한다
+ * (`TripNewStep1Page.test.tsx`·`…stayImport.test.tsx` 와 같은 형태). **실제 HTTP**는
  * `TripNewStep1Page.mustVisit.integration.test.tsx` 가 따로 본다 — 이 파일은 제출을 태우지 않는다.
  *
  * ⚠️ 게스트의 `isPending` 은 **영원히 true** 다(`enabled: isAuthed` 라 요청 자체가 없다,
@@ -228,62 +228,6 @@ beforeEach(() => {
 
 afterEach(() => clearAccessToken());
 
-describe('N4 · 담은 장소가 시드로 이어진다 (AC-1 · 01b D8)', () => {
-  it('N4-1 썸네일과 「담은 곳 N곳」 캡션이 함께 선다', () => {
-    render(<TripNewStep1Page baseDate={BASE} />);
-
-    ['poi-1', 'poi-2', 'poi-3'].forEach((poiId) => {
-      expect(
-        screen.getByTestId(`trip-wizard-mustvisit-${poiId}`)
-      ).toBeOnTheScreen();
-    });
-    expect(
-      within(screen.getByTestId('trip-wizard-saved-place-count')).getByText(
-        '담은 곳 3곳'
-      )
-    ).toBeOnTheScreen();
-  });
-
-  it('🔴 N4-2 x 는 그 항목만 빼고, 담기 해제는 부르지 않으며, 캡션은 줄지 않는다', () => {
-    render(<TripNewStep1Page baseDate={BASE} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-remove-poi-2'));
-
-    // ① 그 항목만 사라진다(긍정 짝이 함께 있어야 "다 사라진" 구현이 안 통과한다).
-    expect(screen.queryByTestId('trip-wizard-mustvisit-poi-2')).toBeNull();
-    expect(screen.getByTestId('trip-wizard-mustvisit-poi-1')).toBeOnTheScreen();
-    expect(screen.getByTestId('trip-wizard-mustvisit-poi-3')).toBeOnTheScreen();
-
-    // ② 원본 담기는 건드리지 않는다 — 시드는 **복사본**이다(BR-U1-37 · INV-U1-04).
-    //    담기가 함께 풀리면 사용자는 탐색 화면의 ♥ 까지 잃는다.
-    expect(mockRemove).not.toHaveBeenCalled();
-
-    // ③ 캡션의 N 은 **서버 담은 장소 개수**다(01b D8) — 시드를 뺐다고 줄지 않는다.
-    expect(
-      within(screen.getByTestId('trip-wizard-saved-place-count')).getByText(
-        '담은 곳 3곳'
-      )
-    ).toBeOnTheScreen();
-  });
-
-  it('🔴 N4-6 담은 목록이 줄어도 이미 복사된 시드는 남는다 (INV-U1-04 · 양방향 독립)', () => {
-    render(<TripNewStep1Page baseDate={BASE} />);
-    expect(screen.getByTestId('trip-wizard-mustvisit-poi-3')).toBeOnTheScreen();
-
-    // 실행 — 사용자가 d04 에서 한 곳의 담기를 풀고 돌아왔다(목록이 줄어든 채로 다시 그려진다).
-    mockSavedPlaces = loaded([savedPlace('poi-1', '감천마을')]);
-    screen.rerender(<TripNewStep1Page baseDate={BASE} />);
-
-    // 단언 — 시드는 이미 **복사**된 것이라 원본이 줄어도 지워지지 않는다. 매 렌더 쿼리
-    // 결과에서 시드를 다시 만드는 구현은 여기서 죽는다.
-    ['poi-1', 'poi-2', 'poi-3'].forEach((poiId) => {
-      expect(
-        screen.getByTestId(`trip-wizard-mustvisit-${poiId}`)
-      ).toBeOnTheScreen();
-    });
-  });
-});
-
 describe('N4 · 조회 상태별 얼굴 (01b D5 · D6)', () => {
   it('🔴 N4-3 게스트는 0곳 얼굴을 본다 — 끝나지 않는 스켈레톤이 아니다', () => {
     // ⚠️ 게스트는 `enabled: isAuthed` 라 요청이 안 나가고, 그래서 `isPending` 이 **영원히
@@ -352,10 +296,11 @@ describe('N4 · 조회 상태별 얼굴 (01b D5 · D6)', () => {
 
 describe('N4 · 더 담기는 담은 곳이 있으면 담은 장소 화면으로 (TRIP-367 · AC-6)', () => {
   it('N4-7 담은 곳이 있으면 담은 장소 화면(d02)으로 간다', () => {
-    // beforeEach 가 loaded(THREE) — 담은 곳 3곳.
+    // beforeEach 가 loaded(THREE) — 담은 곳 3곳. 자동 시드가 폐지돼 얼굴은 항상 empty라
+    // (아래 -empty 참고) 그 칩을 누른다 — 목적지 분기 키는 여전히 savedPlaceList.length.
     render(<TripNewStep1Page baseDate={BASE} />);
 
-    fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-more'));
+    fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-empty'));
 
     // 이미 담아둔 것을 모아 고르는 자리가 담은 장소 화면이다 — 탐색으로 보내면 다시 찾아야 한다.
     expect(routerMock.push).toHaveBeenCalledWith('/explore/saved-places');
@@ -369,27 +314,6 @@ describe('N4 · 더 담기는 담은 곳이 있으면 담은 장소 화면으로
     fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-empty'));
 
     expect(routerMock.push).toHaveBeenCalledWith('/explore/places');
-    expect(routerMock.push).toHaveBeenCalledTimes(1);
-  });
-
-  it('🔴 N4-7c 담은 곳 3·시드 0(x로 전부 뺀 상태)이면 empty 얼굴도 담은 장소 화면(d02)으로 간다', () => {
-    // 왜 이 케이스인가: N4-7·N4-7b 는 savedPlaceList 와 mustVisits(시드)를 **항상 같은 값**으로만
-    // 줘서, 분기 키를 `savedPlaceList.length` → `mustVisits.length` 로 바꿔도 둘이 늘 함께 0/양수라
-    // 뮤테이션이 살아남았다(TRIP-375). 두 길이를 갈라놓아야 분기 키를 잠근다.
-    // beforeEach = loaded(THREE). 시드 3장을 x 로 전부 뺀다 → mustVisits 0, 담은 곳은 여전히 3.
-    render(<TripNewStep1Page baseDate={BASE} />);
-    ['poi-1', 'poi-2', 'poi-3'].forEach((poiId) => {
-      fireEvent.press(
-        screen.getByTestId(`trip-wizard-mustvisit-remove-${poiId}`)
-      );
-    });
-
-    // 시드가 비었으니 0곳 얼굴(empty)이 뜬다 — 담은 곳은 3곳 그대로다.
-    fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-empty'));
-
-    // 담은 곳이 있으므로 담은 장소 화면으로 가야 한다. 분기 키가 `mustVisits.length`(=0)로
-    // 뒤바뀌면 /explore/places 로 새 red 를 낸다.
-    expect(routerMock.push).toHaveBeenCalledWith('/explore/saved-places');
     expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
 });
@@ -448,19 +372,13 @@ describe('🔴 N4 · 담은 목록이 아직 도착 전이면 [다음]을 잠깐
 });
 
 /**
- * ─── TRIP-288 추가분 (N4-10 ~ N4-13) ───────────────────────────────────────────
+ * ─── N4-12 · N4-13 ──────────────────────────────────────────────────────────────
  *
- * 여기서 보는 것은 **재시드가 화면까지 이어지는가**다. 지금은 시드가 세션당 한 번만 채워져,
- * 더 담기로 새로 담고 돌아와도 썸네일이 그대로다 — 캡션의 숫자(서버 개수)만 늘어나 한 화면 안에서
- * 숫자와 그림이 서로 다른 말을 한다(TRIP-288 증상 B).
- *
- * ⚠️ **썸네일 상한 3**(동결 N1-6·N1-7)이 이 칸의 설계를 좁힌다 — 시드가 4건이면 4번째는 `+1` 로
- * 접혀 화면에 testID 가 아예 없다. 그래서 아래 두 케이스는 **최종 시드를 정확히 3건**으로 맞췄다.
- * 안 그러면 "안 들어왔다"와 "접혀서 안 보인다"를 구별하지 못해 거짓 red 가 난다(02a ★6).
- *
- * ⚠️ 재시드는 `mustVisitsInitialized` 가드를 **푸는** 변경이라, 그 순간 게스트·미도착에서
- * `savedPlaces.savedPlaces` 가 **매 렌더 새 빈 배열**을 내는 성질이 살아난다. N4-12 가 그 축의
- * 심판이고, 목을 **게터**로 만들어 실물 훅과 같은 모양을 재현한다(02a ★3).
+ * 담은 곳(하트) 자동 시드는 폐지됐다(사용자 결정 — 새 여행은 "꼭 갈 곳"도 항상 빈 상태로
+ * 시작한다, 위 `TripNewStep1Page.tsx`의 마운트 효과 삭제 참고). 예전엔 여기 재시드(더 담기로
+ * 새로 담고 돌아오면 시드가 늘어나는가·순서가 유지되는가)를 보는 케이스가 있었으나, 그 경로
+ * 자체가 없어져 항상 공허하게 통과하므로 삭제했다(N4-10·N4-11, git 히스토리에 남음). 아래
+ * 두 케이스는 재시드와 무관한 축(무한 루프 방지·조회 실패에도 제출 가능)이라 그대로 남는다.
  */
 
 /** 매 렌더 **새** 빈 배열을 주는 게스트 목 — 실물 `useSavedPlaces` 와 같은 모양(02a ★3). */
@@ -483,74 +401,6 @@ function thumbnailIds(): string[] {
     .queryAllByTestId(/^trip-wizard-mustvisit-poi-\d+$/)
     .map((node) => String(node.props.testID));
 }
-
-describe('🔴 N4 · 더 담기 복귀 재시드 (TRIP-288 AC-2 · AC-4)', () => {
-  it('N4-10 새로 담은 곳이 기존 시드 뒤에 붙고, 담은 목록 순서로 재정렬하지 않는다', () => {
-    // 준비 — 시드를 담은 목록과 **다른 순서**로 만들어 둔다(2 → 1).
-    mockSavedPlaces = loaded([
-      savedPlace('poi-2', '광안리'),
-      savedPlace('poi-1', '감천마을'),
-    ]);
-    render(<TripNewStep1Page baseDate={BASE} />);
-
-    // 앵커 — 재시드 전 순서. 없으면 아래 결과가 원래부터 그랬는지 구별이 안 된다.
-    expect(thumbnailIds()).toEqual([
-      'trip-wizard-mustvisit-poi-2',
-      'trip-wizard-mustvisit-poi-1',
-    ]);
-
-    // 실행 — 더 담기로 한 곳을 새로 담고 돌아왔다(서버 목록 순서는 1 → 2 → 3).
-    mockSavedPlaces = loaded([
-      savedPlace('poi-1', '감천마을'),
-      savedPlace('poi-2', '광안리'),
-      savedPlace('poi-3', '전포'),
-    ]);
-    screen.rerender(<TripNewStep1Page baseDate={BASE} />);
-
-    // 단언 — 새 것은 **맨 뒤**, 기존 둘은 순서 그대로. 담은 목록 순서로 다시 세우는 구현은
-    // 여기서 죽는다(01b D11).
-    expect(thumbnailIds()).toEqual([
-      'trip-wizard-mustvisit-poi-2',
-      'trip-wizard-mustvisit-poi-1',
-      'trip-wizard-mustvisit-poi-3',
-    ]);
-    // 캡션의 N 은 **서버 담은 장소 개수**라는 기존 계약(동결 N4-2 ③)이 그대로다.
-    expect(
-      within(screen.getByTestId('trip-wizard-saved-place-count')).getByText(
-        '담은 곳 3곳'
-      )
-    ).toBeOnTheScreen();
-  });
-
-  it('N4-11 x 로 뺀 곳은 재시드로 되살아나지 않고, 함께 온 새 곳은 들어온다', () => {
-    render(<TripNewStep1Page baseDate={BASE} />);
-
-    // 준비 — 사용자가 한 곳을 뺐다. 그 장소는 **여전히 담은 목록에 있다**(담기와 시드는 독립).
-    fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-remove-poi-2'));
-    expect(thumbnailIds()).toEqual([
-      'trip-wizard-mustvisit-poi-1',
-      'trip-wizard-mustvisit-poi-3',
-    ]);
-
-    // 실행 — 더 담기로 한 곳을 새로 담고 돌아왔다.
-    mockSavedPlaces = loaded([...THREE, savedPlace('poi-4', '해운대')]);
-    screen.rerender(<TripNewStep1Page baseDate={BASE} />);
-
-    // 부정 — 뺀 곳이 되돌아오면 사용자는 자기가 뺀 곳이 여행에 등록되는 것을 보게 된다.
-    expect(screen.queryByTestId('trip-wizard-mustvisit-poi-2')).toBeNull();
-    // 긍정 짝 — 그렇다고 아무것도 안 더하는 것은 아니다. 둘을 한 케이스에서 같이 본다.
-    expect(thumbnailIds()).toEqual([
-      'trip-wizard-mustvisit-poi-1',
-      'trip-wizard-mustvisit-poi-3',
-      'trip-wizard-mustvisit-poi-4',
-    ]);
-    expect(
-      within(screen.getByTestId('trip-wizard-saved-place-count')).getByText(
-        '담은 곳 4곳'
-      )
-    ).toBeOnTheScreen();
-  });
-});
 
 describe('N4 · 재시드가 켜져도 무해해야 하는 축 (TRIP-288 AC-5 · AC-6)', () => {
   it('N4-12 비회원은 빈 시드로 열리고, 재계산이 화면을 무한 루프로 몰지 않는다', () => {

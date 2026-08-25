@@ -2,7 +2,16 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BackChevronGlyph, ChevronRightGlyph } from './ItineraryGlyphs';
+import {
+  BackChevronGlyph,
+  CategoryBuildingGlyph,
+  CategoryCupGlyph,
+  CategoryForkKnifeGlyph,
+  CategoryImageGlyph,
+  CategoryShoppingBagGlyph,
+  CategoryTreeGlyph,
+  ChevronRightGlyph,
+} from './ItineraryGlyphs';
 
 /**
  * TRIP-335 슬라이스2 · h13 "같이 고르기" 컨셉 고르기 — 순수 화면(props + 콜백만, Figma `1885:1083`).
@@ -14,7 +23,24 @@ import { BackChevronGlyph, ChevronRightGlyph } from './ItineraryGlyphs';
  * 화면은 선택 상태를 스스로 안 든다 — 어느 컨셉을 골랐는지·조회 결과는 배선이 소유한다. 컨셉별
  * 카운트("3곳")·배지("AI 추천")는 그것을 받칠 계약이 없어(컨셉마다 미리 조회를 돌려야 나오는데 그
  * 계약이 없다) **싣지 않는다** — 지어내면 INV-1 계열의 "없는 데이터"를 표시하게 된다(3-a 결정).
+ *
+ * 아이콘은 h25 카테고리 플레이스홀더(`SlotPhotoPlaceholder.tsx`)가 이미 쓰는 글리프를 그대로
+ * 재사용한다(신규 SVG 0개) — `key`(meal/cafe/culture/outdoor/shopping)는 그 파일의 iconKey
+ * 체계와 이름이 달라 여기 별도 매핑을 둔다. 알려진 5종 밖은 이미지 아이콘 폴백(같은 파일의
+ * `FALLBACK` 관례 계승).
  */
+
+const CONCEPT_VISUALS: Record<
+  string,
+  { Icon: (props: { size?: number }) => ReactElement; tintClass: string }
+> = {
+  meal: { Icon: CategoryForkKnifeGlyph, tintClass: 'bg-primary-pale' },
+  cafe: { Icon: CategoryCupGlyph, tintClass: 'bg-surface-strong' },
+  culture: { Icon: CategoryBuildingGlyph, tintClass: 'bg-info-bg' },
+  outdoor: { Icon: CategoryTreeGlyph, tintClass: 'bg-success-bg' },
+  shopping: { Icon: CategoryShoppingBagGlyph, tintClass: 'bg-primary-pale' },
+};
+const FALLBACK_VISUAL = { Icon: CategoryImageGlyph, tintClass: 'bg-surface-soft' };
 
 const APPBAR_TITLE = '다음 활동 고르기';
 const TITLE = '다음, 뭘 할까요?';
@@ -74,25 +100,28 @@ export function ConceptPickerScreen({
           </View>
 
           <View className="w-full gap-sm">
-            {concepts.map(({ key, label }) => (
-              <Pressable
-                key={key}
-                testID={`itinerary-copick-concept-${key}`}
-                accessibilityRole="button"
-                onPress={() => onPickConcept(label)}
-                className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-md py-md"
-              >
-                <View className="h-[40px] w-[40px] items-center justify-center rounded-thumb bg-primary-pale">
-                  <Text className="font-noto-bold text-card-title font-bold text-primary-text">
-                    {label.slice(0, 1)}
+            {concepts.map(({ key, label }) => {
+              const { Icon, tintClass } = CONCEPT_VISUALS[key] ?? FALLBACK_VISUAL;
+              return (
+                <Pressable
+                  key={key}
+                  testID={`itinerary-copick-concept-${key}`}
+                  accessibilityRole="button"
+                  onPress={() => onPickConcept(label)}
+                  className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-md py-md"
+                >
+                  <View
+                    className={`h-[44px] w-[44px] items-center justify-center rounded-thumb ${tintClass}`}
+                  >
+                    <Icon size={24} />
+                  </View>
+                  <Text className="flex-1 font-noto-bold text-card-title font-bold text-ink">
+                    {label}
                   </Text>
-                </View>
-                <Text className="flex-1 font-noto-bold text-card-title font-bold text-ink">
-                  {label}
-                </Text>
-                <ChevronRightGlyph />
-              </Pressable>
-            ))}
+                  <ChevronRightGlyph />
+                </Pressable>
+              );
+            })}
           </View>
 
           <Pressable

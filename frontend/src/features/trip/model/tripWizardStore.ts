@@ -56,6 +56,10 @@ export interface TripWizardDraft {
    * **`INITIAL_DRAFT`에 있다는 것이 계약의 절반이다** — 새 진입(`reset`)이면 예전 제외가
    * 함께 비워진다. 안 그러면 새 여행에서 "담았는데 안 들어오는" 새 증상이 생긴다. */
   excludedMustVisitPoiIds: string[];
+  /** d02 CTA가 방금 `seedMustVisitsFromD02`로 심었다는 1회성 표시 — 위저드 셸이
+   * 마운트 시 이 값을 보고 `resetMustVisits()`를 건너뛴다(그 뒤 스스로 끈다). 그 외 진입은
+   * 항상 `false`라 평소대로 비워진다. */
+  preserveMustVisitsOnce: boolean;
   addDestination(regionName: string, nights: number): void;
   removeDestination(seq: number): void;
   /** `presetCode`가 `undefined`면 "어떤 칩도 선택 안 됨" — 프리셋이 아닌 출처(등록 숙소
@@ -93,6 +97,11 @@ export interface TripWizardDraft {
    * `createdTripId`도 남긴다 — 정본이 수명을 정하지 않았고, step1의 두 소비자가 화면 지역
    * 상태(`pendingMustVisits`)와 짝이라 새 마운트에서는 발화하지 않는다(02a §9-2). */
   resetMustVisits(): void;
+  /** d02 "이 장소들로 여행 만들기" 전용 시드 문 — 사용자 결정으로 신설(자동 재시드 폐지 뒤,
+   * 이 명시적 액션만은 살린다). `preserveMustVisitsOnce`를 함께 켠다 — 이 CTA는 늘 새 위저드
+   * 진입을 동반해(`router.push('/trips/new/step1')`) 셸(`app/trips/new/_layout.tsx`)이 마운트
+   * 시 `resetMustVisits()`로 방금 심은 시드를 지워 버리는데, 그 한 번만 건너뛰라는 신호다. */
+  seedMustVisitsFromD02(items: MustVisitSeedItem[]): void;
   reset(): void;
 }
 
@@ -109,6 +118,7 @@ const INITIAL_DRAFT = {
   mustVisits: [] as MustVisitSeedItem[],
   mustVisitsInitialized: false,
   excludedMustVisitPoiIds: [] as string[],
+  preserveMustVisitsOnce: false,
 };
 
 /** 이미 켜져 있으면 그대로 둔다 — 집합이지 로그가 아니다(같은 축을 여러 번 건드려도
@@ -226,6 +236,13 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
       mustVisits: INITIAL_DRAFT.mustVisits,
       mustVisitsInitialized: INITIAL_DRAFT.mustVisitsInitialized,
       excludedMustVisitPoiIds: INITIAL_DRAFT.excludedMustVisitPoiIds,
+    }),
+  seedMustVisitsFromD02: (items) =>
+    set({
+      mustVisits: items,
+      mustVisitsInitialized: true,
+      excludedMustVisitPoiIds: [],
+      preserveMustVisitsOnce: true,
     }),
   reset: () => set(INITIAL_DRAFT),
 });

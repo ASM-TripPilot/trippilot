@@ -17,6 +17,7 @@ import {
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripId,
@@ -167,6 +168,11 @@ export function ItineraryPlanPage({
             getGetTripsTripIdItineraryQueryKey(tripId),
             data
           );
+          // 이 여행의 위저드 세션은 확정으로 끝났다 — 다음 "여행 만들기"는 항상 새 세션이므로
+          // 드래프트(여행지·날짜·인원·예산·꼭 갈 곳 시드)를 여기서 전부 비운다. 위저드 진입
+          // 시점(`trips/new/_layout.tsx`)의 `resetMustVisits()`는 시드 3필드만 지워 그 외 값이
+          // 다음 여행에 새어 들어가던 것을 막는다(BR-U1-33 왕복 보존은 이 지점 이전에만 적용).
+          useTripWizardStore.getState().reset();
         },
         onError: (error) => {
           setConfirmError(CONFIRM_ERROR_NOTE);

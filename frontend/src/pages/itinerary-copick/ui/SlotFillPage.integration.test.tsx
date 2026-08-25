@@ -446,3 +446,31 @@ describe('🔴 SlotFillPage (h13→h14/h15) 배선', () => {
     expect(second.days[0].slots[1].poiId).toBe('Y');
   });
 });
+
+/**
+ * U3 소급 백필(20260824) · h13 문맥 줄 도출 회귀 심판.
+ *
+ * 무엇을 보장하나: 커밋 7cda1f5(발표용 domo, 사이클 없이 들어옴)가 문맥 줄 "{시간대} 슬롯 ·
+ * {직전 이름} 다음"을 prop 이 아니라 SlotFillPage 안 `slotContextLabel()` 로 **도출**하도록 바꿨는데
+ * 심판이 0이었다. 이 도출은 채울 슬롯의 `startAt`(→timeBandLabel)과 그 **직전** 슬롯 이름을
+ * itinerary GET 캐시(위 fixture)에서 읽는다. 직전 슬롯이 없으면(첫 슬롯) "· 다음" 구간을 접는다.
+ *
+ * fixture: day1 = [a 경복궁 09:30(오전), b (이름 없음) 13:00(점심)]. timeBandLabel 경계는
+ * 05:00·11:00·14:00·17:00(동결).
+ */
+describe('U3 · h13 문맥 줄 도출 (slotContextLabel)', () => {
+  it('첫 슬롯(a·09:30·직전 없음) → "오전 슬롯"만이고 "…다음"은 없다', async () => {
+    renderPage(SLOT_KEY); // slot a — index 0, 직전 없음
+
+    // itinerary GET 도착 후 문맥 줄이 뜬다(async).
+    expect(await screen.findByText('오전 슬롯')).toBeTruthy();
+    // 직전이 없으므로 "…다음" 꼬리는 붙지 않는다.
+    expect(screen.queryByText(/다음$/)).toBeNull();
+  });
+
+  it('둘째 슬롯(b·13:00·직전 경복궁) → "점심 슬롯 · 경복궁 다음"', async () => {
+    renderPage(buildSlotKey(DAY1, 'b')); // slot b — index 1, 직전 = a(경복궁)
+
+    expect(await screen.findByText('점심 슬롯 · 경복궁 다음')).toBeTruthy();
+  });
+});

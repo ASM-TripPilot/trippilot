@@ -527,15 +527,14 @@ describe('S-6 · 이 장소들로 여행 만들기 (A-6 · US-SHELL-05 · BR-U1-
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
   });
 
-  // TRIP-458 회귀: CTA 는 위저드 진입으로 쳐야 한다 — 직전 세션에 x 로 뺀 기억
-  // (`excludedMustVisitPoiIds`)을 비워야 warm 캐시로 다시 담긴다. 셸 재마운트에만 기대던
-  // 옛 배선은 '더 담기' 왕복(셸이 스택에 살아 있음)에서 reset 이 안 돌아 '꼭 갈 곳'이 빈 채
-  // 열렸다. 이 CTA 가 직접 reset 하는지를 스토어 상태로 관찰한다(셸 재마운트라는 jest 무심판
-  // 경로를 안 탄다). 준비=스토어에 잔존 excluded 를 심는다 → 실행=CTA press → 단언=비워졌다.
-  it('CTA 는 위저드 시드 잔존 기억(excluded)을 비운다 (재진입 캐리 복구)', async () => {
-    // 준비값을 **비어 있지 않게** 심는다 — reset 값(전부 빈 상태)과 달라야 세 단언이 다
-    // 판별력을 갖는다(mustVisits 도 `[]≠[한 개]` 로 실제로 검사된다). SavedPlacesPage 는 시드
-    // 재충전 효과가 없어(그건 위저드 몫) reset 뒤 다시 채워지지 않는다 — 값이 안정적이다.
+  // 사용자 결정으로 갱신: 위저드 진입마다 도는 자동 시드는 폐지됐지만(다른 진입점은 항상
+  // 빈 상태로 시작), **이 CTA는 "이 장소들로" 만들겠다는 명시적 선택**이라 눌리는 순간 지금
+  // 화면에 보이는 목록을 시드로 직접 심는다. 그 전에 `resetMustVisits()`로 이전 세션의 잔존
+  // 시드·제외 기억(`excludedMustVisitPoiIds`)을 먼저 비운다(TRIP-458이 잡던 함정 — 위저드 안
+  // '더 담기'로 d02를 열고 돌아오면 셸이 재마운트 안 돼 x로 뺀 기억이 남는다).
+  it('CTA 는 잔존 기억을 비우고 지금 화면의 목록으로 시드를 다시 심는다', async () => {
+    // 준비값을 **비어 있지 않게** 심는다 — reset 값과 달라야 "그냥 안 지운 것"이 아니라
+    // "지우고 다시 심었다"는 것을 판별할 수 있다.
     useTripWizardStore.setState({
       mustVisits: [{ sourcePoiId: 'poi-x', name: '남겨진 곳', imageUrl: null }],
       mustVisitsInitialized: true,
@@ -548,9 +547,17 @@ describe('S-6 · 이 장소들로 여행 만들기 (A-6 · US-SHELL-05 · BR-U1-
     fireEvent.press(screen.getByTestId('explore-saved-createtrip'));
 
     const state = useTripWizardStore.getState();
+    // ① 이전 세션의 잔존 기억은 지워진다(poi-x·poi-y 둘 다 안 남는다).
     expect(state.excludedMustVisitPoiIds).toEqual([]);
-    expect(state.mustVisits).toEqual([]);
-    expect(state.mustVisitsInitialized).toBe(false);
+    // ② 비우고 끝이 아니라 지금 화면의 4곳으로 다시 채워진다 — 이 긍정 짝이 없으면
+    //    "비우기만 하는" 구현도 ①만으로 통과한다.
+    expect(state.mustVisits.map((one) => one.sourcePoiId).sort()).toEqual([
+      'p1',
+      'p2',
+      'p3',
+      'p4',
+    ]);
+    expect(state.mustVisitsInitialized).toBe(true);
     // 이동 자체는 여전히 bare 문자열이다(동결 계약 무손상).
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
   });

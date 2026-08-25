@@ -27,6 +27,14 @@ export default function TripWizardLayout() {
   const resetMustVisits = useTripWizardStore((state) => state.resetMustVisits);
 
   useEffect(() => {
+    // d02 "이 장소들로 여행 만들기"는 이 진입을 항상 동반하는데(push('/trips/new/step1')),
+    // 그 CTA가 방금 `seedMustVisitsFromD02`로 심은 시드를 여기서 지우면 사용자가
+    // 고른 장소가 안 담긴다 — `preserveMustVisitsOnce`가 켜져 있으면 이번 한 번만 건너뛰고
+    // 스스로 끈다(다음 진입부터는 다시 평소대로 비운다).
+    if (useTripWizardStore.getState().preserveMustVisitsOnce) {
+      useTripWizardStore.setState({ preserveMustVisitsOnce: false });
+      return;
+    }
     resetMustVisits();
   }, [resetMustVisits]);
 
