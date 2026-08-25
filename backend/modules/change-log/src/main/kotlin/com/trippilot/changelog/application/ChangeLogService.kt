@@ -1,6 +1,7 @@
 package com.trippilot.changelog.application
 
 import com.trippilot.changelog.api.AppendChangeLog
+import com.trippilot.changelog.api.ChangeLogEntryView
 import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.changelog.api.DaySnapshotView
@@ -53,6 +54,22 @@ class ChangeLogService(
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         return entries.findByTrip(tripId, limit.coerceIn(1, MAX_LIMIT))
     }
+
+    /**
+     * 모듈 경계 조회(BR-U5-29 · TRIP-543) — 웹 표현과 같은 판정([timeline])을 쓰되 도메인 타입 대신
+     * api-safe 표현으로 내보낸다(R1). 아카이브(U5)가 변경 탭을 그리는 원천이다.
+     */
+    override fun findTimeline(accountId: UUID, tripId: UUID, limit: Int): List<ChangeLogEntryView> =
+        timeline(accountId, tripId, limit).map {
+            ChangeLogEntryView(
+                actor = it.actor,
+                sourceType = ChangeSourceType.valueOf(it.source.name),
+                reason = it.reason,
+                at = it.at,
+                before = it.before.toView(),
+                after = it.after.toView(),
+            )
+        }
 
     private fun ChangeSourceType.toDomain() = ChangeSource.valueOf(name)
 
