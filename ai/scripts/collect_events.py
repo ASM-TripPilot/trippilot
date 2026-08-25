@@ -23,6 +23,7 @@ import dataclasses
 import datetime as dt
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -45,6 +46,10 @@ from trippilot.domain.common import TraceId
 from trippilot.domain.llm import ModelTier
 
 KST = dt.timezone(dt.timedelta(hours=9))
+# 스니펫에 날짜가 언급됐는지 — "8월 15일", "2026-09-01", "9/1~9/3" 류를 넓게 잡는다.
+# 정밀 파싱이 아니라 **관측용 지표**다 (날짜 없는 스니펫은 추출될 수 없다).
+_DATE_HINT_RE = re.compile(r"\d{1,2}\s*월|\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}|\d{1,2}\s*일")
+
 HORIZON_DAYS = 60      # 수집 지평 — 오늘부터 이 일수 안의 행사만 노린다
 SNIPPET_CAP = 80       # 워커 입력 상한 (프롬프트 비대 방지)
 # 60 → 80 (2026-08-25). 쿼리를 5 → 9 건으로 늘리면서 함께 올린다 — 캡을 그대로 두면
@@ -209,7 +214,17 @@ def collect_region(
                     strip_tags(item.get("description", "")))
             if pair[0] and pair not in pairs:
                 pairs.append(pair)
+    raw_pairs = len(pairs)
     pairs = pairs[:SNIPPET_CAP]
+    # 왜 이 지역이 0건인지 물으면 답할 수 있어야 한다. 스니펫 **개수**만으로는
+    # 부족했다 — 대전은 개수(47~49)가 남들과 같은데 입력 토큰이 최저였다(내용이
+    # 빈약). 날짜 문자열이 없는 스니펫은 프롬프트 규칙·게이트가 원천 배제하므로
+    # 그 비율이 곧 추출 가능성이다. (2026-08-25 조사)
+    dated = sum(1 for t, d in pairs if _DATE_HINT_RE.search(f"{t} {d}"))
+    chars = sum(len(t) + len(d) for t, d in pairs)
+    print(f"[events] {region} 입력: 스니펫 {len(pairs)}"
+          + (f" (캡에 잘림, 원본 {raw_pairs})" if raw_pairs > len(pairs) else "")
+          + f" · 날짜언급 {dated} · 총 {chars:,}자", file=sys.stderr)
 
     result = worker.extract(
         region, today, today + dt.timedelta(days=HORIZON_DAYS), pairs,
@@ -236,7 +251,7 @@ def collect_region(
             event = dataclasses.replace(event, coord=coord)
         enriched.append(event)
 
-    stats["added"] = store.upsert(region, enriched, now)
+    stats["added"], stats["backfilled"] = store.upsert(region, enriched, now)
     return stats
 
 
@@ -244,14 +259,16 @@ def main() -> int:
     if len(sys.argv) >= 3 and sys.argv[1] == "--summary":
         run = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
         print("## 행사 웹소싱 배치 (NAVER API HUB × EVENT_EXTRACTION)")
+        if run.get("kakao_calls_used") is not None:
+            print(f"- 카카오 지오코딩 호출 {run['kakao_calls_used']}건")
         print(f"- 호출 {run['calls_used']}/{run['max_calls']} (하드캡) · "
               f"만료 청소 {run['purged']}건 · 저장소 총 {run['store_events']}건")
         print()
-        print("| 지역 | 스니펫 | 추출 | 좌표 | 신규 |")
-        print("|---|---|---|---|---|")
+        print("| 지역 | 스니펫 | 추출 | 좌표 | 신규 | 좌표백필 |")
+        print("|---|---|---|---|---|---|")
         for r in run["regions"]:
             print(f"| {r['region']} | {r['snippets']} | {r['extracted']} "
-                  f"| {r['geocoded']} | {r['added']} |")
+                  f"| {r['geocoded']} | {r['added']} | {r.get('backfilled', 0)} |")
         if run.get("budget_stopped"):
             print()
             print(f"- ⏸ 하드캡 도달로 조기 종료 — `{run['budget_stopped']}` 지역부터 내일 재개")
@@ -315,7 +332,8 @@ def main() -> int:
         completed += 1
         region_stats.append(stats)
         print(f"[events] {region}: 스니펫 {stats['snippets']} → 추출 {stats['extracted']} "
-              f"(좌표 {stats['geocoded']}, 신규 {stats['added']})"
+              f"(좌표 {stats['geocoded']}, 신규 {stats['added']}"
+              + (f", 좌표백필 {stats['backfilled']}" if stats.get("backfilled") else "") + ")"
               + (f" · fallback: {stats['error']}" if stats["fallback"] else ""))
 
     store.pointer = (start + completed) % len(regions)
@@ -331,6 +349,9 @@ def main() -> int:
     store.save()
 
     run = {"calls_used": client.calls_used, "max_calls": max_calls, "purged": purged,
+           # 카카오 실사용은 어디에도 안 찍혀서 상한(80,000)이 적정한지 판단할 근거가
+           # 없었다 — "정확히 무료까지만"이라는 계약을 검증할 수단부터 만든다.
+           "kakao_calls_used": getattr(kakao, "calls_used", None),
            "regions": region_stats, "budget_stopped": budget_stopped,
            "store_events": store.counts()["events"]}
     Path("collect_events_run.json").write_text(

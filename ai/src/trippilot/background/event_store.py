@@ -106,21 +106,37 @@ class JsonEventStore:
 
     def upsert(
         self, region: str, events: Iterable[EventInfo], now: datetime
-    ) -> int:
-        """dedup 등록 + 커버리지 갱신 — 신규 건수 반환. 기존 레코드 우선(재수집 무해)."""
-        seen = {_dedup_key(EventInfo.from_dict(r)) for r in self._doc["events"]}
-        added = 0
+    ) -> tuple[int, int]:
+        """dedup 등록 + 좌표 백필 + 커버리지 갱신 — (신규, 좌표백필) 건수 반환.
+
+        "기존 레코드 우선"은 재수집이 덮어쓰지 않게 하려는 규칙인데, 그게 **새로
+        얻은 좌표까지 버리고 있었다**. 2026-08-25 실측: 그날 지오코딩 57건 중 19건이
+        성공했는데 저장소 좌표는 **한 건도 늘지 않았다**(신규 10건 전부 coord=None).
+        중복분이 통째로 skip 되면서 좌표만 딸려 사라진 것이다.
+
+        좌표 없는 행사는 근접 POI 부착에서 제외되므로(`event_affinity.py`) 이건
+        "수집은 됐는데 쓰이지 않는" 상태다. 그래서 중복이어도 **기존이 비어 있고
+        새 것에 좌표가 있으면 그 칸만 채운다.** 기존 좌표는 절대 덮지 않는다 —
+        덮으면 재수집이 값을 흔드는 원래 문제로 돌아간다.
+        """
+        index: dict[tuple[str, str, str], dict] = {}
+        for record in self._doc["events"]:
+            index[_dedup_key(EventInfo.from_dict(record))] = record
+        added = backfilled = 0
         for event in events:
             key = _dedup_key(event)
-            if any(_same_event(key, k) for k in seen):
+            match = next((r for k, r in index.items() if _same_event(key, k)), None)
+            if match is not None:
+                if match.get("coord") is None and event.coord is not None:
+                    match["coord"] = event.to_dict()["coord"]
+                    backfilled += 1
                 continue
-            seen.add(key)
-            self._doc["events"].append(
-                {**event.to_dict(), "region": region, "collected_at": to_iso(now)}
-            )
+            record = {**event.to_dict(), "region": region, "collected_at": to_iso(now)}
+            index[key] = record
+            self._doc["events"].append(record)
             added += 1
         self._doc["coverage"][region] = to_iso(now)
-        return added
+        return added, backfilled
 
     def purge_expired(self, today: date) -> int:
         """종료 + 유예일 지난 행사 물리 삭제 — 삭제 건수 반환."""
