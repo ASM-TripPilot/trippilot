@@ -73,6 +73,8 @@ import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
+import { ReplanSolvingScreen } from '@/features/planb/ui/ReplanSolvingScreen';
+import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import {
   StayRegisterScreen,
@@ -2507,6 +2509,53 @@ const PREVIEW_STATES: PreviewState[] = [
           outOfScope
         />
       </View>
+    ),
+  },
+  // ── i12 재계획 로딩(TRIP-440) — 순수 화면. 진행바 흐름·체크리스트 아이콘 3상태는 정지
+  //    스크린샷 한계라 여기서 보는 것은 레이아웃·라벨·안심 노트·CTA 2개까지다 ──
+  {
+    key: 'planb-solving',
+    label: 'i12 재계획 로딩 · 진행·백그라운드·취소',
+    login: null,
+    render: () => <ReplanSolvingScreen onBackground={noop} onCancel={noop} />,
+  },
+  // ── i14 슬롯 후보 시트(TRIP-440) — 순수 인라인 패널 3얼굴(후보·강등 고지·빈 목록). slackLabel
+  //    은 slackTime.ts(model) 산출 형태를 그대로 주입한다(ui 소스엔 숫자 리터럴 0) ──
+  {
+    key: 'planb-candidates',
+    label: 'i14 슬롯 후보 · 3장',
+    login: null,
+    render: () => (
+      <ScrollView contentContainerClassName="gap-md p-lg">
+        <SlotCandidateSheet
+          candidates={SLOT_CANDIDATES_PREVIEW}
+          slackLabel="여유 1시간 20분"
+        />
+      </ScrollView>
+    ),
+  },
+  {
+    key: 'planb-candidates-degraded',
+    label: 'i14 슬롯 후보 · 강등 고지(가까운 순)',
+    login: null,
+    render: () => (
+      <ScrollView contentContainerClassName="gap-md p-lg">
+        <SlotCandidateSheet
+          candidates={SLOT_CANDIDATES_PREVIEW}
+          slackLabel="여유 40분"
+          degraded
+        />
+      </ScrollView>
+    ),
+  },
+  {
+    key: 'planb-candidates-empty',
+    label: 'i14 슬롯 후보 · 0건(반경·컨셉 제안)',
+    login: null,
+    render: () => (
+      <ScrollView contentContainerClassName="gap-md p-lg">
+        <SlotCandidateSheet candidates={[]} slackLabel="여유 1시간 20분" />
+      </ScrollView>
     ),
   },
 ];
