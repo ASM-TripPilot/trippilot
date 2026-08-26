@@ -22,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.jdbc.core.JdbcTemplate
 import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
@@ -123,7 +124,15 @@ class StyleAnalysisIT : AbstractPostgresIntegrationTest() {
             String::class.java, accountId,
         ) shouldNotBe "미식"
         // 다시 읽어도 같은 값 — 왕복이 값을 바꾸지 않는다.
-        styles.find(accountId) shouldBe a
+        //
+        // ⚠ **통째로 비교하지 않는다.** `analyze()` 가 돌려준 것은 메모리값이라 `updatedAt` 이
+        // 나노초까지 있고, 다시 읽은 것은 Postgres `timestamptz` 왕복이라 **마이크로초**다.
+        // macOS 는 시계 해상도가 마이크로초라 로컬에선 늘 통과하고 **리눅스 러너에서만** 깨진다
+        // (2026-08-26 CI 실측 · 이미 안티패턴 로그에 있는 항목이다).
+        // 그래서 시각만 떼어 절단을 명시적으로 단정하고, 나머지 필드는 그대로 정확 비교한다.
+        val reread = styles.find(accountId)!!
+        reread shouldBe a.copy(updatedAt = reread.updatedAt)
+        reread.updatedAt shouldBe a.updatedAt.truncatedTo(ChronoUnit.MICROS)
     }
 
     @Test
