@@ -26,10 +26,13 @@ class NotificationFiringServiceTest : StringSpec({
 
     fun pending() = NotificationSchedule.pending(acc, tripId, NotificationKind.TRIP_DAY, fireAt)
 
+    /** 기본값이 전부 인앱 ON 이라, 저장된 토글이 없으면 그대로 통과한다. */
+    fun allowAll(clock: Clock) = NotificationToggleService(FakeToggles(), clock)
+
     fun fixture(now: String, schedule: NotificationSchedule): Triple<NotificationFiringService, FakeSchedules, FakeNotifications> {
         val schedules = FakeSchedules().apply { stored += schedule }
         val notifications = FakeNotifications()
-        return Triple(NotificationFiringService(schedules, notifications, clockAt(now)), schedules, notifications)
+        return Triple(NotificationFiringService(schedules, notifications, allowAll(clockAt(now)), clockAt(now)), schedules, notifications)
     }
 
     "도래하면 알림이 적재되고 예약은 발화로 닫힌다" {
@@ -78,7 +81,7 @@ class NotificationFiringServiceTest : StringSpec({
     "읽음 표시는 멱등이고 처음 읽은 시각이 덮이지 않는다" {
         val notifications = FakeNotifications()
         val s = pending()
-        NotificationFiringService(FakeSchedules().apply { stored += s }, notifications, clockAt("2026-08-10T23:00:30Z")).fire(s)
+        NotificationFiringService(FakeSchedules().apply { stored += s }, notifications, allowAll(clockAt("2026-08-10T23:00:30Z")), clockAt("2026-08-10T23:00:30Z")).fire(s)
         val id = notifications.stored.single().notificationId
 
         val query = NotificationQueryService(notifications, clockAt("2026-08-11T00:00:00Z"))
@@ -92,7 +95,7 @@ class NotificationFiringServiceTest : StringSpec({
     "남의 알림은 404 로 은닉한다" {
         val notifications = FakeNotifications()
         val s = pending()
-        NotificationFiringService(FakeSchedules().apply { stored += s }, notifications, clockAt("2026-08-10T23:00:30Z")).fire(s)
+        NotificationFiringService(FakeSchedules().apply { stored += s }, notifications, allowAll(clockAt("2026-08-10T23:00:30Z")), clockAt("2026-08-10T23:00:30Z")).fire(s)
         val id = notifications.stored.single().notificationId
 
         shouldThrow<ResourceNotFound> {
@@ -104,7 +107,7 @@ class NotificationFiringServiceTest : StringSpec({
         val notifications = FakeNotifications()
         listOf("2026-08-10T23:00:30Z", "2026-08-10T23:05:30Z").forEach {
             val s = NotificationSchedule.pending(acc, tripId, NotificationKind.TRIP_DAY, Instant.parse(it))
-            NotificationFiringService(FakeSchedules().apply { stored += s }, notifications, clockAt(it)).fire(s)
+            NotificationFiringService(FakeSchedules().apply { stored += s }, notifications, allowAll(clockAt(it)), clockAt(it)).fire(s)
         }
         val query = NotificationQueryService(notifications, clockAt("2026-08-11T00:00:00Z"))
         query.markRead(acc, notifications.stored.first().notificationId)

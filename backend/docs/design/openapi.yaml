@@ -1349,6 +1349,37 @@ paths:
       responses:
         '204': { description: 삭제됨 }
         '404': { description: 없음/타 계정 }
+  /me/notification-settings:
+    get:
+      tags: [notification]
+      summary: 알림 수신 설정 목록(l02)
+      description: >
+        **항상 7종이 다 온다** — 설정한 적 없는 종류는 기본값으로 채워진다(행이 없다 ≠ 꺼짐).
+        기본값은 `SLOT_PRE`·`PLAN_B` 가 **푸시 OFF · 인앱 ON**, 나머지 5종은 둘 다 ON이다.
+
+
+        **`SYSTEM` 은 나타나지 않는다**(INV-U6-03·04) — 보안·계정 알림은 끌 수 있는 것이 아니라서
+        화면에 두면 "왜 안 꺼지지"가 된다. `COMMUNITY` 는 오지만 U7 개통 전까지 화면이 숨긴다(DEC-U6-8).
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationToggleList' } } } }
+  /me/notification-settings/{kind}:
+    parameters:
+      - name: kind
+        in: path
+        required: true
+        schema: { type: string, enum: [STAY, TRIP_PRE, TRIP_DAY, SLOT_PRE, PLAN_B, REFLECTION, COMMUNITY] }
+    patch:
+      tags: [notification]
+      summary: 알림 수신 설정 변경
+      description: >
+        `null` 은 **변경 없음**이다(끄는 뜻이 아니다) — 한쪽만 바꾸는 요청이 다른 쪽을 덮지 않는다.
+        푸시와 인앱은 따로 간다(INV-U6-02): 푸시를 꺼도 인앱은 쌓여 앱을 열면 놓친 것을 볼 수 있다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UpdateToggleRequest' } } }
+      responses:
+        '200': { description: 변경됨, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationToggle' } } } }
+        '400': { description: '`SYSTEM` 은 끌 수 없다(INV-U6-04)' }
   /me/notifications:
     get:
       tags: [notification]
@@ -2698,6 +2729,65 @@ components:
       properties:
         text: { type: string, maxLength: 2000 }
         updatedAt: { type: string, format: date-time }
+
+    NotificationList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Notification' }
+
+    Notification:
+      type: object
+      required: [notificationId, kind, title, body, occurredAt]
+      properties:
+        notificationId: { type: string, format: uuid }
+        kind:
+          type: string
+          description: >
+            알림 종류 8종. **DB CHECK 로 고정하지 않는다** — 커뮤니티(U7) 개통 때 어휘를 넓히자고
+            마이그레이션이 붙는 것을 피한다. 어휘의 주인은 서버의 `NotificationKind` 하나다.
+          enum: [STAY, TRIP_PRE, TRIP_DAY, SLOT_PRE, PLAN_B, REFLECTION, COMMUNITY, SYSTEM]
+        title: { type: string, maxLength: 120 }
+        body: { type: string, maxLength: 400 }
+        actionType:
+          type: string
+          nullable: true
+          description: 알림에서 들어갈 화면. 진입이 없으면 `actionPayload` 와 함께 null.
+          enum: [TRIP_ITINERARY]
+        actionPayload:
+          type: object
+          nullable: true
+          additionalProperties: { type: string }
+        occurredAt: { type: string, format: date-time }
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: null = 미읽음 — 목록 좌측 빨간 dot 의 근거.
+
+    NotificationToggleList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/NotificationToggle' }
+
+    NotificationToggle:
+      type: object
+      required: [kind, pushEnabled, inAppEnabled]
+      properties:
+        kind: { type: string, enum: [STAY, TRIP_PRE, TRIP_DAY, SLOT_PRE, PLAN_B, REFLECTION, COMMUNITY] }
+        pushEnabled: { type: boolean }
+        inAppEnabled: { type: boolean, description: 끄면 알림함에도 쌓이지 않는다. `SYSTEM` 은 이 설정과 무관하게 항상 적재된다 }
+
+    UpdateToggleRequest:
+      type: object
+      properties:
+        pushEnabled: { type: boolean, nullable: true, description: 보내지 않으면 그대로 둔다 }
+        inAppEnabled: { type: boolean, nullable: true, description: 보내지 않으면 그대로 둔다 }
 
     NotificationList:
       type: object

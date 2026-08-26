@@ -29,15 +29,25 @@ class NotificationSchedulePoller(
 
         var fired = 0
         var canceled = 0
+        var muted = 0
         due.forEach { schedule ->
             // 한 건이 터져도 나머지 배치는 살린다 — 예약당 트랜잭션이 따로다.
             runCatching { firing.fire(schedule) }
-                .onSuccess { if (it == FireOutcome.FIRED) fired++ else if (it == FireOutcome.CANCELED_LATE) canceled++ }
+                .onSuccess {
+                    when (it) {
+                        FireOutcome.FIRED -> fired++
+                        FireOutcome.CANCELED_LATE -> canceled++
+                        FireOutcome.MUTED -> muted++
+                        FireOutcome.ALREADY_TAKEN -> Unit
+                    }
+                }
                 .onFailure { log.warn("리마인드 발화 실패 — scheduleId={}", schedule.scheduleId, it) }
         }
         if (fired > 0) log.info("리마인드 {}건을 알림함에 적재했습니다.", fired)
         // 조용히 버리지 않는다 — 서버가 멈춰 있었다는 사실의 첫 단서가 이 줄이다(INV-4 · INV-U6-09).
         if (canceled > 0) log.warn("시각이 지나 발화하지 않고 닫은 리마인드 {}건.", canceled)
+        // 껐다는 사실도 남긴다 — "왜 안 왔나"의 첫 단서다(INV-4).
+        if (muted > 0) log.info("수신을 꺼 두어 적재하지 않은 리마인드 {}건.", muted)
     }
 
     private companion object {
