@@ -3,9 +3,11 @@ package com.trippilot.archive.application
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.archive.api.ArchiveFacade
+import com.trippilot.archive.api.event.VisitChecked
 import com.trippilot.archive.domain.CheckSource
 import com.trippilot.archive.domain.VisitCheck
 import com.trippilot.archive.domain.VisitCheckRepository
+import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.trip.api.TripFacade
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -29,6 +31,7 @@ import java.util.UUID
 class VisitCheckService(
     private val trips: TripFacade,
     private val checks: VisitCheckRepository,
+    private val events: DomainEventPublisher,
     private val clock: Clock,
 ) : ArchiveFacade {
 
@@ -43,10 +46,29 @@ class VisitCheckService(
         return checks.save(VisitCheck.arrive(tripId, slotKey, poiId, source, clock.instant()))
     }
 
-    /** 방문 완료. 이 시점부터 그 슬롯은 재계획에서 불변이다(INV-U4-04). */
+    /**
+     * 방문 완료. 이 시점부터 그 슬롯은 재계획에서 불변이다(INV-U4-04).
+     *
+     * 완료를 알리는 것도 여기다(BR-U5-09). 발행은 **같은 트랜잭션 안**이라 실적과 이벤트가 함께 커밋된다 —
+     * "이벤트는 나갔는데 방문 기록은 없다"가 원리적으로 불가능해진다. 반대(기록은 있고 배달이 늦다)는
+     * 릴레이가 나중에 따라잡는다. 둘 중 감당할 수 있는 어긋남은 이쪽뿐이다.
+     */
     @Transactional
-    fun complete(accountId: UUID, tripId: UUID, visitCheckId: UUID): VisitCheck =
-        checks.save(owned(accountId, tripId, visitCheckId).complete(clock.instant()))
+    fun complete(accountId: UUID, tripId: UUID, visitCheckId: UUID): VisitCheck {
+        val completed = checks.save(owned(accountId, tripId, visitCheckId).complete(clock.instant()))
+        events.publish(
+            VisitChecked(
+                aggregateId = completed.visitCheckId.toString(),
+                tripId = completed.tripId.toString(),
+                slotKey = completed.slotKey,
+                poiId = completed.poiId.toString(),
+                // 완료됐다면 도착도 있다 — `complete()` 가 도착 없는 완료를 409 로 막는다.
+                arrivedAt = completed.arrivedAt!!.toString(),
+                completedAt = completed.completedAt?.toString(),
+            ),
+        )
+        return completed
+    }
 
     /** 건너뜀(취소, TRIP-118). 안 갔으므로 재계획에서 잠그지 않는다. */
     @Transactional

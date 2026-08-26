@@ -52,7 +52,7 @@ class VisitCheckServiceTest : StringSpec({
     }
 
     fun service(visits: Visits, clock: Clock = clockAt("2026-08-11T03:00:00Z")) =
-        VisitCheckService(trips, visits, clock)
+        VisitCheckService(trips, visits, CapturingEvents(), clock)
 
     "도착 체크가 남는다" {
         val visits = Visits()
@@ -100,9 +100,9 @@ class VisitCheckServiceTest : StringSpec({
         svc.complete(acc, tripId, first.visitCheckId)
 
         val laterPoi = UUID.randomUUID()
-        val second = VisitCheckService(trips, visits, clockAt("2026-08-11T05:00:00Z"))
+        val second = VisitCheckService(trips, visits, CapturingEvents(), clockAt("2026-08-11T05:00:00Z"))
             .arrive(acc, tripId, "$day#$laterPoi", laterPoi, CheckSource.MANUAL)
-        VisitCheckService(trips, visits, clockAt("2026-08-11T06:00:00Z"))
+        VisitCheckService(trips, visits, CapturingEvents(), clockAt("2026-08-11T06:00:00Z"))
             .complete(acc, tripId, second.visitCheckId)
 
         svc.findLastCompletedPoi(tripId) shouldBe laterPoi
@@ -111,7 +111,7 @@ class VisitCheckServiceTest : StringSpec({
     "하루 묶기는 여행지(KST) 날짜 — UTC 로 보면 자정 무렵이 어긋난다" {
         val visits = Visits()
         // KST 08-11 01:00 = UTC 08-10 16:00
-        VisitCheckService(trips, visits, clockAt("2026-08-10T16:00:00Z"))
+        VisitCheckService(trips, visits, CapturingEvents(), clockAt("2026-08-10T16:00:00Z"))
             .arrive(acc, tripId, slot, poi, CheckSource.MANUAL)
 
         service(visits).listByDay(acc, tripId, day).size shouldBe 1
