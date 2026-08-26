@@ -999,6 +999,24 @@ paths:
       responses:
         '204': { description: 삭제됨 }
         '404': { description: 여행 없음/타 계정/방문·사진 없음 }
+  /me/records:
+    get:
+      tags: [trips]
+      summary: 지난 여행 기록 목록(j07)
+      description: >
+        재열람은 **여행 단위**로 들어간다(BR-U5-56) — 목록에서 여행을 고르고 거기서
+        계획｜실제｜변경 3종으로 갈린다(`GET /trips/{tripId}/records`).
+
+
+        **빈 상태를 값으로 알린다.** 조용히 빈 배열만 주면 화면이 "오류인가, 상한에 걸렸나,
+        정말 없나"를 구분하지 못하고 그 셋은 보여 줄 것이 전부 다르다.
+        `emptyState=NO_TRIPS` 면 새 여행 생성 진입을, `NO_RECORDS` 면 기다리라고 그린다.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 30, minimum: 1, maximum: 100 }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TripRecordList' } } } }
   /trips/{tripId}/records:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2335,6 +2353,33 @@ components:
           description: 위치 동의가 없으면 null — 등록 요청이 좌표를 실어 보냈어도 그렇다.
         exifLng: { type: number, format: double, nullable: true }
         sortOrder: { type: integer }
+
+    TripRecordList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TripRecordSummary' }
+        emptyState:
+          type: string
+          nullable: true
+          description: >
+            **`items` 가 비었을 때만** 채워진다. `NO_TRIPS` = 여행 자체가 없다(새 여행 생성 진입) ·
+            `NO_RECORDS` = 여행은 있는데 기록이 아직 없다. 둘을 뭉치면 사용자가 무엇을 해야 할지 모른다.
+          enum: [NO_TRIPS, NO_RECORDS]
+
+    TripRecordSummary:
+      type: object
+      required: [tripId, title, startDate, endDate, regions, visitCount, photoCount]
+      properties:
+        tripId: { type: string, format: uuid }
+        title: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        regions: { type: array, items: { type: string }, description: 목적지(구간 순서) }
+        visitCount: { type: integer }
+        photoCount: { type: integer, description: 사진 **메타** 개수 — 서버에 바이너리는 없다(INV-U5-03) }
 
     TripRecord:
       type: object
