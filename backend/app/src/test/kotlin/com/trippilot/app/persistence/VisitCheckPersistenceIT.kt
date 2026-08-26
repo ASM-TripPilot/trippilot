@@ -1,11 +1,11 @@
 package com.trippilot.app.persistence
 
+import com.trippilot.archive.domain.CheckSource
+import com.trippilot.archive.domain.VisitCheck
+import com.trippilot.archive.domain.VisitCheckRepository
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
-import com.trippilot.recalculation.domain.CheckSource
-import com.trippilot.recalculation.domain.VisitCheck
-import com.trippilot.recalculation.domain.VisitCheckRepository
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination

@@ -12,9 +12,11 @@ import com.trippilot.changelog.api.ChangeLogFacade
 import com.trippilot.changelog.api.DaySnapshotView
 import com.trippilot.changelog.api.ItinerarySnapshotView
 import com.trippilot.changelog.api.SlotSnapshotView
+import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import java.time.LocalDate
 import java.time.LocalTime
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -56,10 +58,13 @@ class ChangeLogApiIT : AbstractPostgresIntegrationTest() {
         return res.statusCode.value() to parsed
     }
 
-    private fun newToken(): String {
+    /** 퍼사드 조회는 계정 id 로 소유를 판정하므로 토큰만으로는 부족하다 — 같은 계정의 (id, 토큰) 을 함께 쓴다. */
+    private fun newAccount(): Pair<UUID, String> {
         val account = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, now))
-        return accessTokenIssuer.issue(account.id.value.toString()).value
+        return account.id.value to accessTokenIssuer.issue(account.id.value.toString()).value
     }
+
+    private fun newToken(): String = newAccount().second
 
     private fun newTrip(token: String): String {
         val body = """{"startDate":"2026-08-01","endDate":"2026-08-01","party":2,
@@ -153,5 +158,47 @@ class ChangeLogApiIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val trip = tripWithItinerary(token)
         call(HttpMethod.GET, "/api/v1/trips/$trip/change-log", token).second["entries"].size() shouldBe 0
+    }
+
+    /**
+     * 퍼사드 조회(BR-U5-29 · TRIP-543) — 아카이브(U5)가 읽을 진입점. HTTP 가 아니라 **모듈 경계**로 왕복한다.
+     * jsonb 보존은 실 DB 로만 확인된다 — 인메모리 대역은 이중 인코딩·형 변환을 원리적으로 못 본다.
+     */
+    @Test
+    fun `퍼사드 조회가 기록한 이력을 최신순으로 돌려주고 전후 스냅숏이 보존된다`() {
+        val (accountId, token) = newAccount()
+        val trip = tripWithItinerary(token)
+        val poi = poiId(token)
+        listOf("첫 번째", "두 번째").forEach { reason ->
+            changeLog.append(
+                AppendChangeLog(
+                    UUID.fromString(trip), "system", ChangeSourceType.PLAN_B, reason,
+                    snapshot(poi, "10:00"), snapshot(poi, "14:00"),
+                ),
+            )
+        }
+
+        val entries = changeLog.findTimeline(accountId, UUID.fromString(trip), 100)
+
+        entries.map { it.reason } shouldBe listOf("두 번째", "첫 번째") // 최신이 앞
+        val latest = entries.first()
+        latest.sourceType shouldBe ChangeSourceType.PLAN_B
+        latest.actor shouldBe "system"
+        // jsonb 왕복 — 저장 형식이 깨지면 전후가 같아 보이거나 슬롯이 통째로 사라진다
+        latest.before.days[0].slots[0].startAt shouldBe LocalTime.parse("10:00")
+        latest.after.days[0].slots[0].startAt shouldBe LocalTime.parse("14:00")
+        latest.after.days[0].slots[0].poiId shouldBe UUID.fromString(poi)
+        latest.after.days[0].date shouldBe LocalDate.parse("2026-08-01")
+    }
+
+    @Test
+    fun `퍼사드 조회 — 이력 없는 여행은 빈 목록, 타 계정은 404`() {
+        val (accountId, token) = newAccount()
+        val trip = tripWithItinerary(token)
+
+        changeLog.findTimeline(accountId, UUID.fromString(trip), 100) shouldBe emptyList()
+        shouldThrow<ResourceNotFound> {
+            changeLog.findTimeline(newAccount().first, UUID.fromString(trip), 100)
+        }
     }
 }

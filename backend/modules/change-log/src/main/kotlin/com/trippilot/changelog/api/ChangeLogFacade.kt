@@ -1,5 +1,6 @@
 package com.trippilot.changelog.api
 
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
@@ -12,7 +13,32 @@ import java.util.UUID
  */
 interface ChangeLogFacade {
     fun append(command: AppendChangeLog)
+
+    /**
+     * 소유 여행의 변경 이력 — **최신순**, 최대 [limit] 건(1..500 으로 조여진다).
+     * 전량 반환은 없다 — append-only 라 무한히 쌓이고 한 건이 전후 스냅숏 둘을 담는다.
+     *
+     * 이력이 없으면 **빈 목록**이다(오류가 아니다). 없거나 타 계정 여행이면
+     * `ResourceNotFound` — 존재 은닉 판정을 소비 모듈이 되풀이하지 않도록 소유 모듈이 낸다(HTTP 경로와 같은 판정).
+     *
+     * 소비자가 테이블을 직접 읽지 않는 이유(DEC-U5-8): `change_log_entry` 는 append-only 계약이 DB 권한으로
+     * 걸린 테이블이라, 밖에서 SQL 로 잡으면 그 계약을 지키는 자리가 흩어진다.
+     */
+    fun findTimeline(accountId: UUID, tripId: UUID, limit: Int): List<ChangeLogEntryView>
 }
+
+/**
+ * 이력 한 건(모듈 경계 표현) — 전후 장소·사유·시각이 한 줄에 함께 온다(BR-U5-30).
+ * 내부 식별자(IDENTITY)는 싣지 않는다 — 소비처가 필요로 하지 않고, 전 플랫폼 단조 증가라 편집량이 새어 나간다.
+ */
+data class ChangeLogEntryView(
+    val actor: String,
+    val sourceType: ChangeSourceType,
+    val reason: String?,
+    val at: Instant,
+    val before: ItinerarySnapshotView,
+    val after: ItinerarySnapshotView,
+)
 
 /**
  * [reason] 은 선택 — 수동 편집은 사유 없이 저장될 수 있다(Plan-B 는 트리거 사유를 싣는다).

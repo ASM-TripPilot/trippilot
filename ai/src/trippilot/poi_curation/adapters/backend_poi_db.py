@@ -14,6 +14,11 @@ POI 정본은 backend C7(place-data) 단일 소유(INV-1) — 본 어댑터는 S
 (`sourcing.mapping.parse_open_hours`)를 재사용한다 — 파싱 불가는 open_hours=()
 로 두고 지어내지 않는다(풀 빌더 ③은 정보 없음을 통과시키고 ⑤가 하위 정렬).
 
+한 행이 매핑에 실패하면 스킵하되(풀 전체를 잃지 않는다) **누락을 값으로도 낸다**
+(TRIP-537, `lookup_by_ids`): 로그만 남기면 호출자는 N건을 물어 M건을 받고도 왜
+빠졌는지 모른다. 카테고리·품질 enum 은 지금 백엔드와 1:1이지만 상대가 하나만
+추가해도 그 카테고리 POI 전부가 조용히 사라지는 자리다.
+
 HTTP 실패는 예외로 올린다 — 빈 풀로 수렴시키면 "후보 없음"이라는 거짓 음성이
 된다(INV-4 침묵 금지). 상위 폴백 계단은 InfoCollector 소유. 다만 실패를 **한 덩어리로
 올리지는 않는다**(TRIP-436): 백엔드 응답 상태코드를 예외에 실어 경계(api/errors.py)가
@@ -33,6 +38,7 @@ from typing import Protocol
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.poi_curation.sourcing.mapping import parse_open_hours
+from trippilot.ports.poi_db_port import PoiLookup, PoiMiss
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +65,30 @@ class BackendPoiDbError(RuntimeError):
         super().__init__(message)
         self.status = status
         self.retryable = retryable
+
+
+class RowMappingError(ValueError):
+    """행 매핑 실패 — **어느 필드 때문인지**를 들고 있다.
+
+    `float(None)`이 흘리는 TypeError 문구에서 필드명을 되짚는 것은 원인 필드가
+    바뀌면 조용히 틀린다. 이름을 값으로 들고 다닌다.
+    """
+
+    def __init__(self, field: str, detail: str) -> None:
+        super().__init__(f"{field}: {detail}")
+        self.field = field
+
+
+def _enum_or_raise(enum_cls: type, value: object, field: str):
+    """모르는 enum 값은 스킵이 아니라 **필드명이 붙은 실패**로 올린다(TRIP-537).
+
+    백엔드가 카테고리를 하나 추가하면 그 값의 POI 전부가 여기로 온다 — 값으로
+    드러나야 경계 응답이 "판정 못 함"으로 보고할 수 있다.
+    """
+    try:
+        return enum_cls(value)
+    except ValueError:
+        raise RowMappingError(field, f"모르는 값: {value!r}") from None
 
 
 class HttpJson(Protocol):
@@ -122,13 +152,25 @@ class BackendPoiDb:
         return self._to_pois(rows)
 
     def find_by_ids(self, ids: frozenset[PoiId]) -> tuple[Poi, ...]:
+        return self.lookup_by_ids(ids).pois
+
+    def lookup_by_ids(self, ids: frozenset[PoiId]) -> PoiLookup:
+        """find_by_ids + 요청 대비 누락 사유 (TRIP-537). 호출 수는 그대로 1회."""
         if not ids:
-            return ()
+            return PoiLookup((), ())
         rows = self._call(
             "POST", _BATCH_PATH,
             body={"poi_ids": sorted(str(i) for i in ids)},
         )
-        return self._to_pois(rows)
+        pois, failed = self._map_rows(rows)
+        # 매핑 실패한 행도 "백엔드가 돌려준" 것 — not_found 로 세면 사유가 뒤집힌다.
+        accounted = {p.poi_id for p in pois} | {m.poi_id for m in failed}
+        return PoiLookup(
+            pois,
+            failed + tuple(
+                PoiMiss(i, "not_found") for i in sorted(ids - accounted, key=str)
+            ),
+        )
 
     def _call(self, method: str, path: str, **kwargs: object) -> list:
         try:
@@ -149,26 +191,42 @@ class BackendPoiDb:
         return body
 
     def _to_pois(self, rows: list) -> tuple[Poi, ...]:
-        pois = []
+        return self._map_rows(rows)[0]
+
+    def _map_rows(self, rows: list) -> tuple[tuple[Poi, ...], tuple[PoiMiss, ...]]:
+        """행 → (매핑된 POI, 매핑 실패). 로그는 유지(운영 가시성) + 값으로도 낸다."""
+        pois: list[Poi] = []
+        failed: list[PoiMiss] = []
         for row in rows:
+            raw_id = row.get("poi_id") if isinstance(row, Mapping) else None
             try:
                 pois.append(self._to_poi(row))
             except (KeyError, ValueError, TypeError) as e:
                 # 한 행의 계약 위반으로 풀 전체를 잃지 않는다 — 스킵은 로그로 드러낸다.
-                logger.warning("POI 행 매핑 실패 — 스킵: %s (%s)", row.get("poi_id") if isinstance(row, Mapping) else row, e)
-        return tuple(pois)
+                logger.warning("POI 행 매핑 실패 — 스킵: %s (%s)", raw_id if raw_id is not None else row, e)
+                failed.append(PoiMiss(
+                    PoiId(str(raw_id)) if raw_id else PoiId("(unknown)"),
+                    "mapping_failed",
+                    e.field if isinstance(e, RowMappingError) else str(e),
+                ))
+        return tuple(pois), tuple(failed)
 
     @staticmethod
     def _to_poi(row: Mapping) -> Poi:
+        if not isinstance(row, Mapping):
+            raise RowMappingError("row", f"객체가 아님: {type(row).__name__}")
+        for field in ("poi_id", "name_ko", "lat", "lng"):
+            if row.get(field) is None:
+                raise RowMappingError(field, "값 없음")
         return Poi(
             poi_id=PoiId(str(row["poi_id"])),
             name=row["name_ko"],
-            category=PoiCategory(row["category"]),
+            category=_enum_or_raise(PoiCategory, row.get("category"), "category"),
             coord=GeoPoint(float(row["lat"]), float(row["lng"])),
             open_hours=parse_open_hours(row.get("opening_hours"), None),
             avg_cost=None,   # 백엔드 미제공 → 예산 필터 통과 (풀 빌더 ② 계약)
             rating=None,     # 백엔드 미제공 — 지어내지 않는다 (정렬은 ⑤ tie-break)
-            quality=DataQuality(row["data_quality"]),
+            quality=_enum_or_raise(DataQuality, row.get("data_quality"), "data_quality"),
             source=_SOURCE_MAP.get(row["source"], PoiSource.PLACES_API),
             confidence=None,
         )

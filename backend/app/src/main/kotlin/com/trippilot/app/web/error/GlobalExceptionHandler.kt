@@ -3,6 +3,7 @@ package com.trippilot.app.web.error
 import com.trippilot.app.web.CorrelationIdFilter
 import com.trippilot.core.error.AgeRequirementNotMet
 import com.trippilot.core.error.AuthenticationRequired
+import com.trippilot.archive.api.VisitConflictState
 import com.trippilot.core.error.ConflictDetected
 import java.util.UUID
 import com.trippilot.core.error.DomainException
@@ -59,6 +60,7 @@ class GlobalExceptionHandler {
             ErrorResponse.Body(
                 ex.errorCode.name, ex.message ?: "", traceId(), fields,
                 existingProvider(ex), activeTripId(ex),
+                visitConflict(ex)?.visitCheckId?.toString(), visitConflict(ex)?.updatedAt?.toString(),
             ),
         )
 
@@ -124,6 +126,18 @@ class GlobalExceptionHandler {
     private fun activeTripId(ex: DomainException): String? {
         if (ex !is ConflictDetected || ex.errorCode != ErrorCode.GENERATION_IN_PROGRESS) return null
         return (ex.current as? UUID)?.toString()
+    }
+
+    /**
+     * 방문 기록 충돌(409) 두 코드에 한해 서버 쪽 상태를 계약 필드로 꺼낸다(TRIP-546).
+     *
+     * [existingProvider]·[activeTripId] 와 같은 방식이다. 세 번째 사례라 일반화를 고민했으나,
+     * 일반화의 실체가 free-form object 여서 그만뒀다 — 자세한 근거는 [ErrorResponse.Body.visitCheckId].
+     */
+    private fun visitConflict(ex: DomainException): VisitConflictState? {
+        if (ex !is ConflictDetected) return null
+        if (ex.errorCode != ErrorCode.VISIT_ALREADY_RECORDED && ex.errorCode != ErrorCode.VISIT_CONFLICT) return null
+        return ex.current as? VisitConflictState
     }
 
     private fun traceId(): String? = MDC.get(CorrelationIdFilter.MDC_KEY)
