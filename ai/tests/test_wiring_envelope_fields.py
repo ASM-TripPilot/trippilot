@@ -204,3 +204,23 @@ def test_distance_ranges_skip_unknown_coords_and_anchorless_days() -> None:
     assert f"{_DAY2.isoformat()}#p1" not in rendered  # 첫 슬롯인데 앵커 좌표 미상
     for value in rendered.values():
         assert value.startswith("약 ") and "km" in value and "분" not in value
+
+
+# ── TRIP-537 — 어댑터 누락 사유 → 경계 reason_code ────────────────────
+# 인메모리 fake 는 mapping_failed 를 만들 수 없어(이미 Poi 를 들고 있다) 관통
+# 테스트로는 UNMAPPABLE 경로가 안 밟힌다 — 사영 함수를 직접 고정한다.
+
+
+def test_miss_reasons_project_to_closed_reason_codes() -> None:
+    from trippilot.api.wiring import _unverified
+    from trippilot.ports.poi_db_port import PoiMiss
+
+    rendered = _unverified((
+        PoiMiss(PoiId("a"), "not_found"),
+        PoiMiss(PoiId("b"), "mapping_failed", "category"),
+    ))
+
+    assert [(u.poi_id, u.reason_code, u.detail) for u in rendered] == [
+        ("a", "NOT_REGISTERED", ""),
+        ("b", "UNMAPPABLE", "category"),   # 어느 필드 때문인지가 경계까지 간다
+    ]

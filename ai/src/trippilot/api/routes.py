@@ -23,6 +23,7 @@ from trippilot.api.protocols import (
     CandidatesSummaryLike,
     ItineraryOrchestrator,
     ItineraryOutcome,
+    UnverifiedSlotLike,
 )
 from trippilot.api.schemas import (
     AlternativesRequest,
@@ -43,6 +44,7 @@ from trippilot.api.schemas import (
     RepairItineraryRequest,
     RepairItineraryResponse,
     UnplacedMustVisitSchema,
+    UnverifiedSlotSchema,
     ValidateItineraryRequest,
     ValidateItineraryResponse,
     ViolationSchema,
@@ -182,6 +184,15 @@ def to_violation(
     )
 
 
+def to_unverified(item: UnverifiedSlotLike) -> UnverifiedSlotSchema:
+    """미검증 슬롯 사영 (TRIP-537) — 위반이 아니라 "판정 못 함"이라 별도 목록이다."""
+    return UnverifiedSlotSchema(
+        poi_id=str(item.poi_id),
+        reason_code=item.reason_code,
+        detail=item.detail,
+    )
+
+
 # ───────────────────────── 라우트 ─────────────────────────
 
 
@@ -199,15 +210,23 @@ def validate(
     body: ValidateItineraryRequest,
     orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
 ) -> ValidateItineraryResponse:
-    """편집 재검증(HC1~4). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다."""
-    return _guarded(
-        lambda: ValidateItineraryResponse(
+    """편집 재검증(HC1~4). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다.
+
+    `unverified_slots`는 위반이 **아니다** — POI 정본을 못 찾아 HC1·HC2를 아예 못
+    본 슬롯이다(TRIP-537). 위반 0 + 이 목록 비어 있음 = 진짜 통과.
+    """
+
+    def run() -> ValidateItineraryResponse:
+        outcome = orchestrator.validate(body)
+        return ValidateItineraryResponse(
             # 위치 인덱스는 요청으로 받은 itinerary를 스캔해 계산한다(수퍼셋 발신)
             violations=[
-                to_violation(v, body.itinerary.days) for v in orchestrator.validate(body)
-            ]
+                to_violation(v, body.itinerary.days) for v in outcome.violations
+            ],
+            unverified_slots=[to_unverified(u) for u in outcome.unverified],
         )
-    )
+
+    return _guarded(run)
 
 
 @router.post("/repair", response_model=RepairItineraryResponse)
@@ -222,6 +241,7 @@ def repair(
         return RepairItineraryResponse(
             repaired=to_payload(outcome.repaired) if outcome.repaired else None,
             changes=list(outcome.changes),
+            unverified_slots=[to_unverified(u) for u in outcome.unverified],
         )
 
     return _guarded(run)
