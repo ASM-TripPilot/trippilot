@@ -28,7 +28,12 @@ _TAG_RE = re.compile(r"<[^>]+>")  # 응답 title/description의 <b> 강조 태�
 
 
 class CallBudgetExceeded(Exception):
-    """일일 호출 상한 도달 — 배치는 이를 받아 정상 종료(내일 이어감)한다."""
+    """호출 상한 도달 — 배치는 이를 받아 정상 종료(다음 실행에서 이어감)한다.
+
+    상한은 **실행당**이다 — `calls_used` 는 인스턴스 변수라 실행이 끝나면 0 으로
+    돌아간다. 스케줄이 하루 한 번이라 평소엔 실행당 = 일일이지만, 손으로 여러 번
+    돌린 날은 그 횟수만큼 곱해진다(2026-08-21 실측: 수동 7회 = 천장 7배).
+    """
 
 
 class HttpGetJson(Protocol):
@@ -96,7 +101,7 @@ class NaverSearchClient:
             raise ValueError(f"미지원 검색 종류: {kind} (지원: {sorted(_KINDS)})")
         if self.calls_used >= self._max_calls:
             raise CallBudgetExceeded(
-                f"일일 호출 상한 {self._max_calls} 도달 — 남은 수집은 내일"
+                f"실행당 호출 상한 {self._max_calls} 도달 — 남은 수집은 다음 실행에서"
             )
         self.calls_used += 1
         payload = self._http.get_json(
