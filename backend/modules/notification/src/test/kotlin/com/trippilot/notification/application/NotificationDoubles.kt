@@ -40,7 +40,37 @@ internal class FakeNotifications : NotificationRepository {
 
     override fun exists(accountId: UUID, notificationId: UUID) =
         stored.any { it.notificationId == notificationId && it.accountId == accountId }
+
+    /** 푸시 결과는 **기록만** 한다(INV-U6-02) — 알림의 존재를 좌우하지 않는다. */
+    override fun markPushResult(notificationId: UUID, sentAt: Instant?, failedReason: String?) {
+        val i = stored.indexOfFirst { it.notificationId == notificationId }
+        if (i >= 0) stored[i] = stored[i].copy(pushSentAt = sentAt, pushFailedReason = failedReason)
+    }
 }
+
+/**
+ * 쏠 기기가 없는 발송기(TRIP-549).
+ *
+ * 발화 테스트가 푸시를 함께 검증하지 않는 이유는 **묻는 것이 다르기** 때문이다 — 그쪽은
+ * "예약이 알림이 되는가", 푸시 채널 판정은 `PushDispatchPropertyTest` 가 본다. 토큰이 없으면
+ * `NO_DEVICE` 로 조용히 끝나 발화 경로에 영향을 주지 않는다.
+ */
+internal fun noPush(clock: java.time.Clock, notifications: NotificationRepository, toggles: NotificationToggleService) =
+    PushDispatchService(
+        tokens = object : com.trippilot.notification.domain.PushTokenRepository {
+            override fun register(token: com.trippilot.notification.domain.PushToken) = token
+            override fun findActive(accountId: UUID) = emptyList<com.trippilot.notification.domain.PushToken>()
+            override fun invalidate(token: String, at: Instant) = false
+            override fun remove(accountId: UUID, token: String) = false
+        },
+        notifications = notifications,
+        toggles = toggles,
+        push = object : com.trippilot.notification.domain.PushPort {
+            override fun send(tokens: List<String>, message: com.trippilot.notification.domain.PushMessage) =
+                emptyList<com.trippilot.notification.domain.PushReceipt>()
+        },
+        clock = clock,
+    )
 
 internal class FakeSchedules : NotificationScheduleRepository {
     val stored = mutableListOf<NotificationSchedule>()
