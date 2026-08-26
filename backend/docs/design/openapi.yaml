@@ -16,6 +16,7 @@ security:
   - bearerAuth: []          # 전역 기본 = 인증 필요. 공개 엔드포인트는 security:[] 로 개별 해제.
 
 tags:
+  - name: reflection
   - name: auth
   - name: onboarding
   - name: location
@@ -1038,6 +1039,50 @@ paths:
           schema: { type: integer, default: 30, minimum: 1, maximum: 100 }
       responses:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TripRecordList' } } } }
+  /trips/{tripId}/reflections:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [reflection]
+      summary: 여행의 하루 회고 목록(j03)
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReflectionList' } } } }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/reflections/{dayDate}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: dayDate, in: path, required: true, schema: { type: string, format: date } }
+    post:
+      tags: [reflection]
+      summary: 하루 회고 생성·재생성
+      description: >
+        **입력이 무엇이든 결과가 비어 있지 않다**(PBT-U5-1 · 블로킹 게이트). 방문 0곳·사진 0장이어도
+        `stats` 를 채운 기본 카드가 나온다 — 폴백 3단(AI → 규칙 → 기본) 중 어느 단에서 멈춰도
+        빈 화면을 그리지 않는다(BR-U5-32).
+
+
+        하루 한 장이라 다시 부르면 **덮어쓴다**(BR-U5-35). 사용자가 고친 문장(`editedNarrative`)은
+        재생성해도 남는다 — 초안만 갈린다.
+
+
+        ⚠ 현재 `source` 는 `RULE` 또는 `BASIC` 이다. `AI` 단은 미개통(O-U5-6) — `ai/` 에 회고 경계가
+        없고 backend 에 LLM 게이트웨이도 없다. 규칙 문장으로 먼저 열고 `source` 로 품질을 관측한다.
+      responses:
+        '200': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
+        '404': { description: 여행 없음/타 계정 }
+    put:
+      tags: [reflection]
+      summary: 회고 문장 수정 — 초안은 남는다
+      description: >
+        생성된 초안을 덮지 않고 `editedNarrative` 에 따로 쌓는다(INV-U5-06). 화면이 "생성된 것"과
+        "내가 고친 것"을 2열로 그리기 때문이다 — 하나로 합치면 그 비교가 사라진다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EditReflectionRequest' } } }
+      responses:
+        '200': { description: 수정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
+        '400': { description: 입력 검증 실패 }
+        '404': { description: 여행 없음/타 계정/회고 없음 }
   /trips/{tripId}/records:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2405,6 +2450,59 @@ components:
             여기에 타입을 박으면 모듈이 필드를 하나 늘릴 때마다 공용 계약이 흔들린다.
           items: { type: object, additionalProperties: true }
         truncated: { type: boolean }
+
+    ReflectionList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Reflection' }
+
+    EditReflectionRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 4000 }
+
+    Reflection:
+      type: object
+      required: [dayDate, draftNarrative, source, stats, generatedAt, updatedAt]
+      properties:
+        dayDate: { type: string, format: date }
+        draftNarrative: { type: string, description: 생성된 원문. **비어 있을 수 없다**(INV-U5-07) }
+        editedNarrative:
+          type: string
+          nullable: true
+          description: 사용자가 고친 문장. null 이면 아직 손대지 않았다 — 화면은 둘을 2열로 그린다(INV-U5-06).
+        source:
+          type: string
+          description: >
+            문장이 어느 단에서 나왔나(BR-U5-33). **항상 실린다** — 화면이 구분해 그리지 않더라도
+            규칙 문장이 몇 %인지 모르면 AI 경로를 붙일 근거가 없다. 현재 `AI` 는 미개통(O-U5-6).
+          enum: [AI, RULE, BASIC]
+        stats: { $ref: '#/components/schemas/ReflectionStats' }
+        generatedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ReflectionStats:
+      type: object
+      required: [visitCount, distanceKm, distanceSource, photoCount]
+      description: >
+        근거 수치 — **비어 있을 수 없다**(INV-U5-07). 방문 0곳이어도 0으로 채운다.
+        **이동 소요시간 필드가 없다**(INV-3 · PBT-U5-5) — 거리만 낸다.
+        개별·일별 체류 시간도 없다(BR-U5-08); 누적 평균만 예외이고 그건 스타일 분석 소관이다.
+      properties:
+        visitCount: { type: integer }
+        distanceKm: { type: number, format: double }
+        distanceSource:
+          type: string
+          description: >
+            `VISIT_LINE` 은 **방문점을 이은 직선 합**이지 도로 거리가 아니다(BR-U5-43).
+            `actual_route_point` 가 미실장이라 서버가 실제 이동 경로를 모른다 —
+            밝히지 않으면 사용자가 근사값을 실측으로 읽는다.
+          enum: [ROUTE, VISIT_LINE]
+        photoCount: { type: integer }
 
     TripRecordList:
       type: object
