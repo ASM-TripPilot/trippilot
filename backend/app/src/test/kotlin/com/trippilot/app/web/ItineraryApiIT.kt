@@ -257,7 +257,12 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val trip = tripOneDay(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
 
-        val itin = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second
+        // **2차 생성이 끝나기를 기다린다.** 그 단계는 `@Async` 로 돌면서 `replaceIfCurrent`
+        // (DELETE→INSERT)로 일정을 통째 교체하는데, 기다리지 않고 조회하면 그 교체 창에 걸려
+        // 슬롯이 0개인 순간을 본다 — 로컬은 빨라서 통과하고 CI 만 간헐적으로 빨개진다(실측).
+        // 같은 파일의 다른 테스트들이 이미 쓰는 대기 헬퍼이고, 그 반환값이 곧 최종 일정이라
+        // 조회를 한 번 더 하지 않는다.
+        val itin = awaitComplete(trip, token)
         val inItinerary = itin["days"][0]["slots"].let { s -> (0 until s.size()).map { s[it]["poiId"].asText() } }
         val slotKey = "2026-08-01#${inItinerary.first()}"
 

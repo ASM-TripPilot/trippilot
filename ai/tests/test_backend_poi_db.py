@@ -9,13 +9,19 @@
   ⑤ HTTP 실패·비배열 응답 → BackendPoiDbError (빈 결과로 위장 금지, INV-4)
      + 백엔드 상태코드를 예외에 실어 경계가 책임 소재를 가르게 한다 (TRIP-436)
   ⑥ 계약 위반 행 1건은 스킵 — 풀 전체를 잃지 않는다
+  ⑦ 스킵을 **값으로도 낸다** (TRIP-537, lookup_by_ids): 요청 대비 누락 id + 사유
+     (not_found=백엔드가 안 줌 / mapping_failed=줬는데 못 읽음 + 원인 필드명)
+  ⑧ 카테고리 enum 드리프트 — 백엔드 정본과 경계 코드 집합이 같다
 """
 
 from __future__ import annotations
 
+import re
 import urllib.error
 
 import pytest
+
+from pathlib import Path
 
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi import DataQuality, PoiCategory, PoiSource
@@ -208,3 +214,115 @@ def test_bad_row_skipped_others_survive(caplog: pytest.LogCaptureFixture) -> Non
         pois = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
     assert [str(p.poi_id) for p in pois] == ["ok"]
     assert any("매핑 실패" in r.message for r in caplog.records)
+
+
+# ── ⑦ 누락을 값으로 낸다 (TRIP-537) ──────────────────────────────────
+# 로그만 남기면 호출자는 N건을 물어 M건을 받고도 왜 빠졌는지 모른다. 그 조용한
+# 차집합이 검증 경계에서 "위반 0 = 통과"로 읽혔다(INV-4 침묵 실패).
+
+
+def _ids(*raw: str) -> frozenset[PoiId]:
+    return frozenset(PoiId(r) for r in raw)
+
+
+def test_all_rows_mapped_means_no_misses() -> None:
+    """전부 정상이면 누락 0 — 정상 경로가 조용한 것이 기본값이다."""
+    db, _ = _db([_row(poi_id="a"), _row(poi_id="b")])
+    lookup = db.lookup_by_ids(_ids("a", "b"))
+    assert [str(p.poi_id) for p in lookup.pois] == ["a", "b"]
+    assert lookup.misses == ()
+
+
+def test_rows_backend_never_returned_are_not_found() -> None:
+    """3건 요청 → 1건 회신: 나머지 둘이 사유와 함께 목록에 오른다."""
+    db, _ = _db([_row(poi_id="a")])
+    lookup = db.lookup_by_ids(_ids("a", "b", "c"))
+    assert [(str(m.poi_id), m.reason) for m in lookup.misses] == [
+        ("b", "not_found"), ("c", "not_found"),
+    ]
+
+
+def test_null_coordinate_row_is_mapping_failed_with_field_name() -> None:
+    """돌려줬는데 좌표가 null — not_found 가 아니다. 어느 필드인지까지 낸다."""
+    db, _ = _db([_row(poi_id="a", lat=None)])
+    (miss,) = db.lookup_by_ids(_ids("a")).misses
+    assert (str(miss.poi_id), miss.reason, miss.detail) == ("a", "mapping_failed", "lat")
+
+
+def test_unknown_category_is_mapping_failed_not_silent_skip() -> None:
+    """백엔드가 카테고리를 하나 추가하면 그 값의 POI 전부가 여기로 온다 — 소리 없이 빠지지 않는다."""
+    db, _ = _db([_row(poi_id="a", category="PET_FRIENDLY")])
+    (miss,) = db.lookup_by_ids(_ids("a")).misses
+    assert (miss.reason, miss.detail) == ("mapping_failed", "category")
+
+
+def test_unknown_data_quality_is_mapping_failed() -> None:
+    db, _ = _db([_row(poi_id="a", data_quality="UNVERIFIED")])
+    (miss,) = db.lookup_by_ids(_ids("a")).misses
+    assert (miss.reason, miss.detail) == ("mapping_failed", "data_quality")
+
+
+def test_mapping_failure_still_logs_and_keeps_other_rows(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """값으로 낸다고 로그를 걷어내지 않는다 — 운영 가시성은 그대로."""
+    db, _ = _db([_row(poi_id="bad", lat=None), _row(poi_id="ok")])
+    with caplog.at_level("WARNING"):
+        lookup = db.lookup_by_ids(_ids("bad", "ok"))
+    assert [str(p.poi_id) for p in lookup.pois] == ["ok"]
+    assert [m.reason for m in lookup.misses] == ["mapping_failed"]
+    assert any("매핑 실패" in r.message for r in caplog.records)
+
+
+def test_empty_request_makes_no_call_and_no_misses() -> None:
+    db, http = _db([])
+    lookup = db.lookup_by_ids(frozenset())
+    assert (lookup.pois, lookup.misses) == ((), ())
+    assert http.calls == []
+
+
+def test_find_by_ids_still_returns_only_pois() -> None:
+    """기존 호출자(거리 렌더·설명)는 그대로 — 반환형을 안 바꾼 이유다."""
+    db, _ = _db([_row(poi_id="a")])
+    assert [str(p.poi_id) for p in db.find_by_ids(_ids("a", "b"))] == ["a"]
+
+
+# ── ⑧ 경계 enum 드리프트 (TRIP-537) ──────────────────────────────────
+
+
+def _backend_source(rel: str) -> str:
+    """리포 안 백엔드 정본을 위로 올라가며 찾는다(모듈 위치 이동에 견딘다).
+
+    못 찾으면 skip 이 아니라 **실패**다 — 파일이 사라진 채 초록이면 게이트가 없는
+    것과 같다(백엔드 `AiBoundaryOpenApiTest.aiContractFile()` 과 같은 규약).
+    """
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / rel
+        if candidate.is_file():
+            return candidate.read_text(encoding="utf-8")
+    raise AssertionError(f"백엔드 정본을 찾지 못했습니다: {rel}")
+
+
+_POI_KT = "backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/domain/Poi.kt"
+
+
+def test_boundary_category_codes_match_backend_canon() -> None:
+    """백엔드 `PoiCategory.boundaryCode` 집합 == AI `PoiCategory` (내부 전용 STAY 제외).
+
+    상대가 카테고리를 하나 추가하면 여기서 깨진다. 안 깨지면 그 카테고리의 POI 는
+    전부 `mapping_failed` 로 떨어져 HC1·HC2 판정 밖으로 나간다 — 시끄러운 편이 낫다.
+    """
+    backend_codes = set(re.findall(r'->\s*"([A-Z_]+)"', _backend_source(_POI_KT)))
+    ai_codes = {c.value for c in PoiCategory} - {PoiCategory.STAY.value}
+    assert backend_codes == ai_codes
+
+
+def test_backend_data_quality_values_are_known_to_ai() -> None:
+    """백엔드가 내보낼 수 있는 data_quality 리터럴 ⊆ AI DataQuality (부분집합이면 족하다)."""
+    controller = _backend_source(
+        "backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/"
+        "adapter/in/web/PoiInternalController.kt"
+    )
+    line = next(ln for ln in controller.splitlines() if "dataQuality =" in ln)
+    emitted = set(re.findall(r'"([A-Z_]+)"', line))
+    assert emitted and emitted <= {q.value for q in DataQuality}

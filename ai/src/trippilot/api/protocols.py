@@ -6,7 +6,7 @@
 
 API 계층이 오케스트레이터에 기대하는 것은 딱 셋:
 - `generate(request) -> ItineraryOutcome`
-- `validate(request) -> Sequence[Violation]`   (도메인 Violation 그대로)
+- `validate(request) -> ValidationOutcome`     (위반 + 판정 못 한 슬롯, TRIP-537)
 - `repair(request) -> RepairOutcome`
 
 시각·순서·후보 판단은 전부 오케스트레이터(→ M7·C1·C2) 소유다. API는 사영만 한다(INV-2).
@@ -50,6 +50,27 @@ class UnplacedMustVisitLike(Protocol):
     reason_code: str
 
 
+class UnverifiedSlotLike(Protocol):
+    """HC 판정에서 제외된 슬롯 1건 (TRIP-537). `reason_code`는 닫힌 집합
+    (NOT_REGISTERED | UNMAPPABLE) — 스키마 Literal이 강제한다."""
+
+    poi_id: str
+    reason_code: str
+    detail: str
+
+
+class ValidationOutcome(Protocol):
+    """검증 결과 — 위반과 **판정 못 한 슬롯**을 나눠 담는다 (TRIP-537).
+
+    `Sequence[Violation]` 하나로는 "위반 0"이 통과인지 미검증인지 구분되지 않았다.
+    POI 정본을 못 찾은 슬롯은 HC1·HC2에서 제외되는데(c2 규칙 — 정보 없음은 막지
+    않는다), 그 사실이 응답에 없으면 침묵 실패다(INV-4).
+    """
+
+    violations: Sequence[Violation]
+    unverified: Sequence[UnverifiedSlotLike]
+
+
 class ItineraryOutcome(Protocol):
     """일정 산출물 + 표시에 필요한 부가 정보.
 
@@ -72,10 +93,14 @@ class ItineraryOutcome(Protocol):
 
 
 class RepairOutcome(Protocol):
-    """최소 변경 수리 결과. `repaired=None` = 수리 불가(정상 결과, IO-7)."""
+    """최소 변경 수리 결과. `repaired=None` = 수리 불가(정상 결과, IO-7).
+
+    `unverified`는 validate와 같은 의미 — 수리 결과도 그 슬롯들은 판정 밖이다.
+    """
 
     repaired: ItineraryOutcome | None
     changes: Sequence[str]
+    unverified: Sequence[UnverifiedSlotLike]
 
 
 class ItineraryOrchestrator(Protocol):
@@ -83,7 +108,7 @@ class ItineraryOrchestrator(Protocol):
 
     def generate(self, request: GenerateItineraryRequest) -> ItineraryOutcome: ...
 
-    def validate(self, request: ValidateItineraryRequest) -> Sequence[Violation]: ...
+    def validate(self, request: ValidateItineraryRequest) -> ValidationOutcome: ...
 
     def repair(self, request: RepairItineraryRequest) -> RepairOutcome: ...
 
