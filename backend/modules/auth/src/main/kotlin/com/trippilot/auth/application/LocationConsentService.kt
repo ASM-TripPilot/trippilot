@@ -1,5 +1,6 @@
 package com.trippilot.auth.application
 
+import com.trippilot.auth.api.LocationConsentFacade
 import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.consent.ConsentAction
 import com.trippilot.auth.domain.consent.ConsentChannel
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.Instant
+import java.util.UUID
 
 /**
  * 위치 동의 3층 관리(TRIP-155). L1 OS 미러 · L2 법정동의 · L3 GPS 옵트인.
@@ -33,7 +35,13 @@ class LocationConsentService(
     private val terms: TermsVersionRepository,
     private val consentRecords: ConsentRecordRepository,
     private val clock: Clock,
-) {
+) : LocationConsentFacade {
+    /**
+     * 사진 EXIF 좌표 수용 판정(INV-U5-04)의 유일한 근거. 3층 상태의 정본이 여기라 파생 없이 그대로 읽는다.
+     */
+    @Transactional(readOnly = true)
+    override fun hasGpsRecordingOptIn(accountId: UUID): Boolean = get(AccountId(accountId)).gpsRecordingOptIn
+
     /** 현재 3층 상태 — 미설정 계정은 기본값(모든 층 비활성). */
     @Transactional(readOnly = true)
     fun get(accountId: AccountId): LocationConsent =
