@@ -102,7 +102,7 @@ def _event(name: str, start: date, end: date, coord=None) -> EventInfo:
 def test_store_roundtrip_and_period_query(tmp_path) -> None:
     path = tmp_path / "events.json"
     store = JsonEventStore(path)
-    added = store.upsert("부산", (
+    added, _ = store.upsert("부산", (
         _event("불꽃축제", _TODAY, _TODAY + timedelta(days=2),
                coord=GeoPoint(35.15, 129.11)),
         _event("겨울축제", _TODAY + timedelta(days=90), _TODAY + timedelta(days=92)),
@@ -123,7 +123,7 @@ def test_store_roundtrip_and_period_query(tmp_path) -> None:
 def test_store_dedup_by_normalized_name_and_period(tmp_path) -> None:
     store = JsonEventStore(tmp_path / "events.json")
     store.upsert("부산", (_event("부산 불꽃축제", _TODAY, _TODAY),), _NOW)
-    added = store.upsert("부산", (
+    added, _ = store.upsert("부산", (
         _event("부산불꽃 축제", _TODAY, _TODAY),      # 공백 차이 — 같은 행사
         _event("부산 불꽃축제", _TODAY + timedelta(days=30),
                _TODAY + timedelta(days=30)),          # 같은 이름, 다른 기간 — 다른 행사
@@ -180,6 +180,7 @@ def test_collect_region_glue(tmp_path) -> None:
 
     assert stats == {"region": "부산", "snippets": 1, "extracted": 1,
                      "generic_dropped": 0, "geocoded": 1, "added": 1,
+                     "backfilled": 0,  # 신규 등록이라 백필 대상 아님
                      "fallback": False, "error": None}
     found, _ = store.search_events(_TODAY, _TODAY)
     assert found[0].coord == GeoPoint(35.1532, 129.1186)  # 지역 검색 좌표 부여됨
@@ -326,7 +327,7 @@ def test_dedup_absorbs_name_variants(tmp_path) -> None:
     store = JsonEventStore(tmp_path / "e.json")
     d = _TODAY + timedelta(days=10)
     store.upsert("서울", (_event("서울세계불꽃축제 2026", d, d),), _NOW)
-    added = store.upsert("서울", (
+    added, _ = store.upsert("서울", (
         _event("한화와 함께하는 서울세계불꽃축제 2026", d, d),  # 포함 변형
     ), _NOW)
     assert added == 0 and store.counts()["events"] == 1
@@ -360,3 +361,88 @@ def test_sanitize_retroactively_cleans_store(tmp_path) -> None:
     names = {e.name for e in found}
     assert "콘서트-광주" not in names and "2026 세종한글축제" not in names
     assert next(e for e in found if "맥주축제" in e.name).coord is None  # 좌표만 제거
+
+
+def test_중복이어도_좌표가_없던_레코드는_새_좌표를_받는다(tmp_path) -> None:
+    """**이 버그로 매일 지오코딩 성공분이 통째로 버려지고 있었다.**
+
+    2026-08-25 실측: 그날 57건 중 19건을 지오코딩에 성공했는데 저장소 좌표는
+    한 건도 늘지 않았다(신규 10건 전부 coord=None). dedup 이 중복분을 skip 하면서
+    좌표만 딸려 사라진 것이다. 좌표 없는 행사는 근접 POI 부착에서 제외되므로
+    (`event_affinity.py`) "수집은 됐는데 쓰이지 않는" 상태가 누적됐다.
+    """
+    store = JsonEventStore(tmp_path / "e.json")
+    d = _TODAY + timedelta(days=3)
+    added, backfilled = store.upsert("부산", (_event("좌표없는축제", d, d),), _NOW)
+    assert (added, backfilled) == (1, 0)
+
+    # 같은 행사를 좌표와 함께 다시 만난다 (다음날 재수집에서 지오코딩 성공한 경우)
+    added, backfilled = store.upsert("부산", (
+        _event("좌표없는축제", d, d, coord=GeoPoint(35.15, 129.11)),
+    ), _NOW)
+
+    assert (added, backfilled) == (0, 1), "신규는 아니지만 좌표는 채워져야 한다"
+    found, _ = store.search_events(d, d)
+    assert found[0].coord is not None and found[0].coord.lat == 35.15
+
+
+def test_기존_좌표는_재수집이_덮어쓰지_않는다(tmp_path) -> None:
+    """백필은 **빈 칸만** 채운다. 덮어쓰면 재수집이 값을 흔드는 원래 문제로 돌아간다."""
+    store = JsonEventStore(tmp_path / "e.json")
+    d = _TODAY + timedelta(days=3)
+    store.upsert("부산", (_event("축제", d, d, coord=GeoPoint(35.15, 129.11)),), _NOW)
+
+    added, backfilled = store.upsert("부산", (
+        _event("축제", d, d, coord=GeoPoint(37.50, 127.00)),  # 엉뚱한 좌표로 재수집
+    ), _NOW)
+
+    assert (added, backfilled) == (0, 0)
+    found, _ = store.search_events(d, d)
+    assert found[0].coord.lat == 35.15, "먼저 얻은 좌표가 이긴다"
+
+
+# ── 주소 정리·행정단위 판정 (좌표 품질, 2026-08-25) ────────────────────
+
+
+@pytest.mark.parametrize(("address", "expected"), [
+    # 실측 저장소에서 뽑은 실제 주소들이다
+    ("레인보우힐링관광지 일원", "레인보우힐링관광지"),
+    ("53281 경남 거제시 둔덕면 하둔리 644-2 둔덕가족생활체육공원 일원",
+     "경남 거제시 둔덕면 하둔리 644-2 둔덕가족생활체육공원"),
+    ("김대중컨벤션센터 전시장 A, B, C, 다목적홀 외", "김대중컨벤션센터 전시장 A"),
+    ("경기아트센터", "경기아트센터"),
+])
+def test_주소_꼬리를_정리한다(address, expected) -> None:
+    """지오코더가 못 읽는 군더더기(일원·나열·괄호·우편번호)를 걷어낸다."""
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    from collect_events import clean_address
+
+    assert clean_address(address) == expected
+
+
+@pytest.mark.parametrize(("address", "is_admin"), [
+    ("경상북도 예천군", True),      # 군청 대표점이 나온다 — 행사 위치가 아니다
+    ("울산광역시 남구", True),
+    ("경기도 안산시", True),
+    ("대구", True),                # 접미사 없는 광역명 단독
+    ("경기아트센터", False),        # ← 접미사를 선택으로 두면 여기서 오탐이 났었다
+    ("레인보우힐링관광지", False),
+    ("여의도 한강공원", False),
+    ("DDP", False),
+    ("세종특별자치시 다솜로 216", False),  # 번지가 있으면 실제 위치
+])
+def test_행정단위만_있는_주소를_가려낸다(address, is_admin) -> None:
+    """**좌표율을 올리려다 추천 품질을 떨어뜨리는 거래를 막는다.**
+
+    시·군·구 대표점은 부착 반경 1km(`event_affinity.ATTACH_RADIUS_KM`) 안의
+    POI 들에 근거 없는 보너스를 준다. 2026-08-25 실측에서 좌표 보유 27건 중
+    8건이 이 부류였다 — 지표만 후하고 실제로는 틀린 좌표다.
+    """
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    from collect_events import is_admin_only
+
+    assert is_admin_only(address) is is_admin

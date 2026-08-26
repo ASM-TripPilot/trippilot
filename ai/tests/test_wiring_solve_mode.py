@@ -69,7 +69,7 @@ def test_validate_absorbs_backend_solve_mode_vocabulary(
 
     assert response.status_code != 422, response.text
     assert response.status_code == 200, response.text
-    assert response.json() == {"violations": []}
+    assert response.json() == {"violations": [], "unverified_slots": []}
 
 
 # ── ② FULL_AI 일정의 repair 경로 관통 ────────────────────────────────
@@ -99,7 +99,7 @@ def test_repair_pierces_with_backend_full_ai_mode() -> None:
             "/ai/v1/itinerary/validate", json=_validate_body(body["repaired"])
         )
         assert revalidated.status_code == 200
-        assert revalidated.json() == {"violations": []}
+        assert revalidated.json() == {"violations": [], "unverified_slots": []}
 
 
 # ── ③ 미지 값은 여전히 422 (무한 관대 금지) ──────────────────────────

@@ -14,6 +14,8 @@ FastAPI TestClient + **실 오케스트레이터·실 M7·실 C1·실 C2** + fak
      200 + is_fallback=true
   ④ validate·repair 관통: 위반 일정 → 위반 목록(day_index 포함) → repair 수리 후
      재검증 위반 0, 수리 불가는 200 + repaired=null(IO-7)
+  ④-보강 미검증 보고(TRIP-537): 미등록 POI 가 낀 일정은 HC1·HC2 판정 밖인데
+     위반 0 으로만 보였다 — 이제 `unverified_slots` 에 사유와 함께 실린다(INV-4)
   ⑤ 에러 계약: 모순 고정블록 409 · 잘못된 스키마/조립 불가 입력 422
   ⑥ 로컬 스모크 조립(main.py 경로): build_dev_app이 fake만으로 200을 낸다
 """
@@ -239,7 +241,7 @@ def test_generate_pierces_http_to_solver() -> None:
             "/ai/v1/itinerary/validate", json=_validate_body(body)
         )
         assert revalidated.status_code == 200
-        assert revalidated.json() == {"violations": []}
+        assert revalidated.json() == {"violations": [], "unverified_slots": []}
 
 
 # ── ①-보강 고정 블록 is_fixed 관통 (TRIP-343) ────────────────────────
@@ -408,7 +410,7 @@ def test_repair_fixes_then_revalidates_clean() -> None:
             "/ai/v1/itinerary/validate", json=_validate_body(body["repaired"])
         )
         assert revalidated.status_code == 200
-        assert revalidated.json() == {"violations": []}
+        assert revalidated.json() == {"violations": [], "unverified_slots": []}
 
 
 def test_repair_honest_failure_when_fixed_slot_blocks_shift() -> None:
@@ -425,7 +427,66 @@ def test_repair_honest_failure_when_fixed_slot_blocks_shift() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json() == {"repaired": None, "changes": []}
+    assert response.json() == {"repaired": None, "changes": [], "unverified_slots": []}
+
+
+# ── ④-보강 미검증 보고 (TRIP-537) ────────────────────────────────────
+# c2 규칙("정보 없음은 막지 않는다")은 그대로다 — 바뀌는 것은 **알린다**는 것뿐.
+
+
+_UNREGISTERED = "zzz-not-in-poi-db"
+
+# _VIOLATING 과 같은 시각 배치인데 두 번째 POI 만 미등록 — 등록돼 있으면 HC2 위반이
+# 뜨는 간격이다. 즉 위반 0 은 "통과"가 아니라 "판정 못 함"이라는 것이 이 대조로 드러난다.
+_UNVERIFIABLE = [
+    _slot("p1", "10:00:00", "11:00:00"),
+    _slot(_UNREGISTERED, "11:05:00", "12:00:00"),
+]
+
+
+def test_unregistered_poi_is_reported_as_unverified_not_as_pass() -> None:
+    with make_client() as client:
+        response = client.post(
+            "/ai/v1/itinerary/validate", json=_validate_body(_payload(_UNVERIFIABLE))
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    # 위반은 없다 — HC2 를 아예 못 봤기 때문이다(같은 간격이 _VIOLATING 에선 HC2 다)
+    assert [v for v in body["violations"] if v["code"] in ("HC1", "HC2")] == []
+    assert body["unverified_slots"] == [
+        {"poi_id": _UNREGISTERED, "reason_code": "NOT_REGISTERED", "detail": ""}
+    ]
+    for banned in _BANNED_TOKENS:                    # INV-3 — 새 필드에도 적용
+        assert banned not in response.text, f"INV-3 위반: {banned!r}"
+
+
+def test_fully_registered_itinerary_reports_no_unverified_slots() -> None:
+    """전부 등록된 일정이면 빈 목록 = 모든 슬롯이 실제로 판정을 받았다."""
+    with make_client() as client:
+        response = client.post(
+            "/ai/v1/itinerary/validate", json=_validate_body(_payload(_VIOLATING))
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["unverified_slots"] == []
+    assert any(v["code"] == "HC2" for v in body["violations"])   # 판정은 실제로 돌았다
+
+
+def test_repair_also_reports_unverified_slots() -> None:
+    """Plan-B 는 validate 없이 repair 만 부르기도 한다 — 같은 침묵이 되돌아오면 안 된다."""
+    with make_client() as client:
+        response = client.post(
+            "/ai/v1/itinerary/repair",
+            json={"itinerary": _payload(_UNVERIFIABLE), "violations": [],
+                  "request_meta": _meta()},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["unverified_slots"] == [
+        {"poi_id": _UNREGISTERED, "reason_code": "NOT_REGISTERED", "detail": ""}
+    ]
 
 
 # ── ⑤ 에러 계약 ──────────────────────────────────────────────────────
