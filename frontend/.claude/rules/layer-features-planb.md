@@ -2,7 +2,7 @@
 paths:
   - "src/features/planb/**"
 ---
-# `src/features/planb/` — 재계획(Plan-B) 도메인 (TRIP-439 재신설, TRIP-440으로 i12·i14 추가)
+# `src/features/planb/` — 재계획(Plan-B) 도메인 (TRIP-439 재신설, TRIP-440으로 i12·i14 추가, TRIP-441로 확정/취소 래퍼·i19 추가)
 
 TRIP-173에서 빈 배럴째 디렉토리가 삭제됐다가, 선행 TRIP-438(planb-triggers, 감지·열람)이 미완료로 끝나 재신설을 못 한 채로 남아 있었다 — **TRIP-439가 이 사이클에서 처음 다시 만든다.** 선행 미완의 여파로 triggers 소비가 없어, 이번 슬라이스는 **수동 진입 경로(`triggerId=null`)** 만 짓는다(감지 배너·`[끄기]`는 `trigger?` prop이 있을 때만 조건부 렌더, 자동 진입 배선은 후속 티켓).
 
@@ -23,5 +23,10 @@ TRIP-173에서 빈 배럴째 디렉토리가 삭제됐다가, 선행 TRIP-438(pl
 | `src/features/planb/ui/PlanbGlyphs.tsx` | **신규(TRIP-440)** — 체크리스트 done/active/waiting 3종 인라인 SVG 글리프(로컬 복제 관례, 공용 글리프 아님) |
 | `src/features/planb/ui/ReplanSolvingScreen.tsx` | **신규(TRIP-440)** — i12 순수 화면(`ReplanSolvingScreen`). 진행바(고정 66% 막대, 흐름 애니메이션 없음 — 5-c로 주석 정정) + 체크리스트 4행 + 안심 노트 + `[백그라운드로]`/`[취소]` 두 CTA. 라우팅·훅을 모르고 `onBackground`·`onCancel` 콜백만 받는다 |
 | `src/features/planb/ui/SlotCandidateSheet.tsx` | **신규(TRIP-440)** — i14 순수 인라인 패널(바텀시트 라이브러리 import 0 — TRIP-483 `SlotCandidatePanel` 선례 따라 통과형 목 사각 회피, repo-traps 바텀시트 절 참고). 후보 카드마다 rationale·distanceRange·`{slackLabel}`(model이 만든 값을 변수로만 렌더, 리터럴 0) leaf. `degraded===true`만 강등 고지, `candidates=[]`면 empty. **배지 없음**(현재재계획안 없음 — ReplanSession.draft 계약 갭, i14 AC-9/10 후속) |
+| `src/features/planb/model/useApplyReplan.ts` | **신규(TRIP-441)** — codegen `usePostTripsTripIdReplanSessionsSessionIdApply`를 감싸는 유일 seam(`PlanbDiffPage.tsx` 1곳만 호출 — T1 G2/G4 구조가드로 봉인). 성공 시 `onSuccess: (_data, variables) => invalidateQueries(getGetTripsTripIdItineraryQueryKey(variables.tripId))`로 itinerary 캐시 무효화(확정=원 일정을 실제로 바꾸는 유일 지점, INV-U4-05). 무효화 correctness는 jest 사각 — T1 G3는 심볼+`invalidateQueries` 문자열 실재만 확인(맹점①, repo-traps 참고). 개념 [[계약이 못 받치면 안 그린다]] |
+| `src/features/planb/model/useCancelReplan.ts` | **신규(TRIP-441)** — codegen `usePostTripsTripIdReplanSessionsSessionIdCancel` 순수 passthrough(무효화 없음 — cancel은 세션만 CANCELED로 닫고 원 일정은 안 바꿈, INV-U4-05). ⚠️ apply와 달리 **codegen 훅 직접 호출 봉인 가드가 없다** — 형제 `pages/planb-draft/ui/PlanbSolvingPage.tsx`가 이 codegen 훅을 직접 부른다(구조 강제 비대칭, repo-traps 참고) |
+| `src/features/planb/ui/ReplanAppliedScreen.tsx` | **신규(TRIP-441)** — i19 반영완료 순수 화면(`{onBack, onContinue}` 콜백만, `ReplanSolvingScreen` 선례). 헤더·체크 아이콘(`PlanbGlyphs`)·문구·`[여행 계속하기]`만 렌더 — 지표 chip·전후 항목 배지·`[되돌리기]`는 draft(after) payload 계약 갭으로 **아예 안 그림**(자리표시 없음, S4 부재 단언). 개념 [[계약이 못 받치면 안 그린다]] |
 
 ⚠️ `features/planb/ui/**`는 기존 구조가드 `executionDurationStructure.test.ts`(INV-3, `features/{execution,planb}/ui/**` 재귀 스캔)에 **자동 편입**된다 — 소요시간 표기(`N분`·`N시간`·`소요`) 0건 강제, raw-hex 가드는 아직 없음(참고, 후속 티켓 후보). `slackTime.ts`는 `model/`이라 이 자동 편입 밖 — PBT-U4-F2가 유일 심판.
+
+`src/features/planb/ui/PlanbGlyphs.tsx`(TRIP-440 신규 행, 위 참고)는 **TRIP-441로 `AppliedBackGlyph`·`AppliedCheckGlyph`·`AppliedAlertGlyph` 3종 + `INK` 상수 추가**(체크리스트 done/active/waiting 3종 무변경) — 로컬 복제 글리프 관례(리포 `*Glyphs.tsx`) 그대로, 공용 글리프 아님.
