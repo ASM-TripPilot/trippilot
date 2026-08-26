@@ -17,6 +17,8 @@ dependencies {
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.kotlin.reflect)
+    // 아웃박스 payload(JSON 문자열)를 읽는다. 트리로만 읽으므로 Kotlin 모듈은 필요 없다.
+    implementation(libs.jackson.module.kotlin)
 
     testImplementation(project(":common:test-support"))
 }

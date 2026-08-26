@@ -1039,6 +1039,26 @@ paths:
           schema: { type: integer, default: 30, minimum: 1, maximum: 100 }
       responses:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TripRecordList' } } } }
+  /trips/{tripId}/summary:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [reflection]
+      summary: 여행 요약(j04)
+      description: >
+        요약은 **여행이 끝나야 생긴다**(BR-U5-39) — `trip.TripEnded` 를 아웃박스 릴레이로 받아 만든다.
+        아직 없으면 404 가 아니라 `ready=false` 로 알린다: 화면이 **공유 진입점을 비활성화**해야 하는데
+        (BR-U5-48) 404 는 "없다"와 "타 계정"을 구분하지 못해 그 판단의 근거가 되지 못한다.
+
+
+        방문 0곳 여행도 **비어 있지 않다**(PBT-U5-1) — `stats` 를 채운 기본 요약이 나온다.
+
+
+        ⚠ 릴레이는 **구독자를 붙인 시점 이후** 이벤트만 준다 — 그 전에 끝난 여행은 요약이 없다.
+        소급 배치는 이 티켓 밖이다(`trip.ended_at` 이 남아 나중에 훑을 근거는 있다).
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TripSummaryEnvelope' } } } }
+        '404': { description: 여행 없음/타 계정 }
   /trips/{tripId}/reflections:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2450,6 +2470,53 @@ components:
             여기에 타입을 박으면 모듈이 필드를 하나 늘릴 때마다 공용 계약이 흔들린다.
           items: { type: object, additionalProperties: true }
         truncated: { type: boolean }
+
+    TripSummaryEnvelope:
+      type: object
+      required: [ready]
+      properties:
+        ready:
+          type: boolean
+          description: 요약이 만들어졌는가. false 면 화면은 **공유 진입점을 비활성화**한다(BR-U5-48).
+        summary:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/TripSummary' }]
+
+    TripSummary:
+      type: object
+      required: [narrative, highlights, stats, source, generatedAt]
+      properties:
+        narrative: { type: string, description: '**비어 있을 수 없다**(PBT-U5-1)' }
+        highlights:
+          type: array
+          items: { $ref: '#/components/schemas/DayHighlight' }
+        stats: { $ref: '#/components/schemas/TripSummaryStats' }
+        source: { type: string, enum: [AI, RULE, BASIC], description: 회고와 같은 규약(BR-U5-33) }
+        generatedAt: { type: string, format: date-time }
+
+    DayHighlight:
+      type: object
+      required: [date, dayOrder, visitCount, places]
+      properties:
+        date: { type: string, format: date }
+        dayOrder: { type: integer }
+        visitCount: { type: integer }
+        places: { type: array, items: { type: string } }
+
+    TripSummaryStats:
+      type: object
+      required: [totalVisits, totalDistanceKm, distanceSource, totalPhotos, hasLocationData]
+      description: '**소요시간 필드가 없다**(INV-3 · PBT-U5-5) — 거리만.'
+      properties:
+        totalVisits: { type: integer }
+        totalDistanceKm: { type: number, format: double }
+        distanceSource: { type: string, enum: [ROUTE, VISIT_LINE] }
+        totalPhotos: { type: integer }
+        hasLocationData:
+          type: boolean
+          description: >
+            false 면 좌표를 하나도 못 찾았다는 뜻이다 — 화면은 **지도 대신 방문 목록**을 그린다(BR-U5-39).
+            빈 지도를 띄우면 사용자는 기록이 없는 줄 안다.
 
     ReflectionList:
       type: object
