@@ -131,7 +131,15 @@ class GatewayFacade:
         if outcome.drop_event is not None:
             self._trace.emit(outcome.drop_event)
         if outcome.error is not None or not outcome.value:
-            reason = outcome.error or "gate_dropped_all"
+            # "게이트가 전량 드롭"과 "LLM 이 애초에 0건"은 처방이 정반대인데 한때
+            # 같은 라벨(gate_dropped_all)이었다 — 행사 수집에서 대전이 6회 연속
+            # 0건일 때 게이트를 의심하느라 3단계 추론이 필요했고, 실제 원인은
+            # LLM 무결과였다(2026-08-25 실측: GateDropEvent 자체가 없었다).
+            # drop_event 는 dropped_count 가 0 이면 만들어지지 않으므로, 그 부재가
+            # 곧 "게이트는 아무것도 안 버렸다"는 증거다.
+            reason = outcome.error or (
+                "gate_dropped_all" if outcome.drop_event is not None else "llm_empty_result"
+            )
             return self._fallback(
                 feature, model_id, prompt_ref, trace_id, now, response, reason
             )
