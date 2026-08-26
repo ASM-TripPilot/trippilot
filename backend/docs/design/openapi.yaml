@@ -999,6 +999,30 @@ paths:
       responses:
         '204': { description: 삭제됨 }
         '404': { description: 여행 없음/타 계정/방문·사진 없음 }
+  /trips/{tripId}/records:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 계획｜실제｜변경 3종 비교(j02)
+      description: >
+        **아무것도 저장하지 않는다.** 미방문(`unvisitedSlotKeys`)도 숙소 귀속(`baseStayName`)도
+        조회 시점에 갈라낸 **파생값**이다 — 저장하면 계획이 바뀌거나 숙소를 바꿀 때 옛 기록이
+        따라오지 않는다(BR-U5-25·26·28).
+
+
+        계획은 실적에 덮이지 않는다(BR-U5-01) — 계획과 실제가 달라도 그 자체가 사실이라,
+        둘을 나란히 두는 것이 이 화면의 전부다.
+
+
+        ⚠ **체류 시간은 싣지 않는다**(BR-U5-08). 산출은 되지만 개별 방문의 체류로 화면에 보이지 않는다.
+      parameters:
+        - name: changeLimit
+          in: query
+          schema: { type: integer, default: 100, minimum: 1, maximum: 500 }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TripRecord' } } } }
+        '404': { description: 여행 없음/타 계정 }
   /trips/{tripId}/visits/{visitCheckId}/memo:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2312,79 +2336,68 @@ components:
         exifLng: { type: number, format: double, nullable: true }
         sortOrder: { type: integer }
 
-    VisitMemo:
+    TripRecord:
       type: object
-      required: [text, updatedAt]
+      required: [tripId, days, changes]
       properties:
-        text: { type: string, maxLength: 2000 }
-        updatedAt: { type: string, format: date-time }
-
-    AddPhotoRequest:
-      type: object
-      required: [localAssetId, deviceId]
-      properties:
-        localAssetId:
-          type: string
-          maxLength: 200
-          description: 기기 로컬 자산 식별자(iOS PHAsset localIdentifier · Android MediaStore id). 기기 안에서만 뜻이 있다.
-        deviceId: { type: string, maxLength: 64 }
-        takenAt: { type: string, format: date-time, nullable: true }
-        exifLat:
-          type: number
-          format: double
-          nullable: true
-          description: 위치 동의가 없으면 **저장되지 않는다**(INV-U5-04). 보내는 것 자체는 오류가 아니다.
-        exifLng: { type: number, format: double, nullable: true }
-        sortOrder:
-          type: integer
-          nullable: true
-          description: 생략하면 맨 뒤에 붙는다.
-
-    ReorderPhotosRequest:
-      type: object
-      required: [orderedIds]
-      properties:
-        orderedIds:
+        tripId: { type: string, format: uuid }
+        days:
           type: array
-          description: 그 방문의 사진 **전부**를 한 번씩. 부분 목록은 400.
-          items: { type: string, format: uuid }
-
-    PutMemoRequest:
-      type: object
-      required: [text]
-      properties:
-        text: { type: string, minLength: 1, maxLength: 2000 }
-
-    VisitPhotoList:
-      type: object
-      required: [items, count]
-      properties:
-        items:
+          items: { $ref: '#/components/schemas/TripRecordDay' }
+        changes:
           type: array
-          items: { $ref: '#/components/schemas/VisitPhoto' }
-        count:
-          type: integer
-          description: 개수만 쓰는 소비자(AI 컨텍스트)를 위해 함께 준다.
+          description: 변경 이력(최신순). U5 는 이 테이블을 **읽기만** 한다(BR-U5-29).
+          items: { $ref: '#/components/schemas/ChangeLogEntry' }
 
-    VisitPhoto:
+    TripRecordDay:
       type: object
-      required: [visitPhotoMetaId, localAssetId, deviceId, sortOrder]
+      required: [date, planned, actual, unvisitedSlotKeys]
       properties:
-        visitPhotoMetaId: { type: string, format: uuid }
-        localAssetId: { type: string }
-        deviceId:
+        date: { type: string, format: date }
+        baseStayId: { type: string, format: uuid, nullable: true }
+        baseStayName:
           type: string
+          nullable: true
           description: >
-            화면이 **다른 기기에서 찍은 사진**을 구분하는 근거(BR-U5-15) — 기기가 바뀌면 자산은
-            이관되지 않고 메타만 남는다.
-        takenAt: { type: string, format: date-time, nullable: true }
-        exifLat:
-          type: number
-          format: double
-          nullable: true
-          description: 위치 동의가 없으면 null — 등록 요청이 좌표를 실어 보냈어도 그렇다.
-        exifLng: { type: number, format: double, nullable: true }
-        sortOrder: { type: integer }
+            그날의 기준 숙소. **파생값이라 저장돼 있지 않다** — 숙소를 바꾸면 같은 기록의 귀속이 따라
+            바뀐다. 등록 숙소가 없거나 겹침이 미해결이면 null 이고, 그 날은 날짜만으로 묶인다(BR-U5-27).
+        planned:
+          type: array
+          items: { $ref: '#/components/schemas/PlannedSlot' }
+        actual:
+          type: array
+          items: { $ref: '#/components/schemas/ActualVisit' }
+        unvisitedSlotKeys:
+          type: array
+          description: 계획엔 있는데 실적이 없는 슬롯(BR-U5-28). **저장되지 않는 판정**이다.
+          items: { type: string }
+
+    PlannedSlot:
+      type: object
+      required: [slotKey, date, poiId, orderIndex, startAt, endAt, endsNextDay]
+      properties:
+        slotKey: { type: string, description: '경계 키 "{date}#{poiId}" — 실적과 견주는 연결 고리' }
+        date: { type: string, format: date }
+        poiId: { type: string, format: uuid }
+        orderIndex: { type: integer }
+        startAt: { type: string, example: '10:00' }
+        endAt: { type: string, example: '11:30' }
+        endsNextDay: { type: boolean, description: 자정 넘김(HC4). true 면 endAt < startAt }
+
+    ActualVisit:
+      type: object
+      required: [visitCheckId, poiId, spontaneous, photoCount, hasMemo, updatedAt]
+      properties:
+        visitCheckId: { type: string, format: uuid }
+        slotKey: { type: string, nullable: true, description: null = 즉석 방문(계획에 없던 곳) }
+        poiId: { type: string, format: uuid }
+        arrivedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        skippedAt: { type: string, format: date-time, nullable: true }
+        spontaneous: { type: boolean }
+        photoCount: { type: integer, description: 사진 **개수**만 — 메타 목록은 방문별 표면이 낸다 }
+        hasMemo: { type: boolean, description: 있는지만 — 본문은 별도 표면 }
+        updatedAt: { type: string, format: date-time, description: 오프라인 충돌 판정 기준(BR-U5-22) }
 
     VisitMemo:
       type: object
