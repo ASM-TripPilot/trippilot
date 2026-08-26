@@ -52,6 +52,32 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         }.toSet()
     }
 
+    /**
+     * `$ref: '#/components/schemas/X'` 가 **전부 풀리는가**.
+     *
+     * 왜 필요한가: 이 파일은 `components.schemas` 다음에 `components.responses` 가 온다. "스키마는 끝에
+     * 덧붙인다"를 파일 끝으로 읽으면 정의가 **responses 절에 들어가고**, 참조는 조용히 끊긴다.
+     * 위의 경로↔핸들러 대조는 그것을 **원리적으로 못 본다** — 경로는 멀쩡하기 때문이다.
+     * 실측(2026-08-26 층1~3 통합): 이렇게 끊긴 참조가 14종 쌓여 있었고 모든 게이트가 초록이었다.
+     * 끊긴 참조는 프론트 코드 생성(orval)에서 터진다.
+     */
+    @Test
+    fun `openapi 의 모든 스키마 참조가 풀린다`() {
+        val raw = ClassPathResource("static/openapi.yaml").inputStream.bufferedReader().readText()
+        @Suppress("UNCHECKED_CAST")
+        val components = Yaml().load<Map<String, Any>>(raw)["components"] as Map<String, Any>
+        @Suppress("UNCHECKED_CAST")
+        val defined = (components["schemas"] as? Map<String, Any>).orEmpty().keys
+        val referenced = Regex("#/components/schemas/(\\w+)").findAll(raw).map { it.groupValues[1] }.toSet()
+
+        val dangling = (referenced - defined).sorted()
+
+        assertTrue(dangling.isEmpty()) {
+            "components.schemas 에 없는 참조:\n  " + dangling.joinToString("\n  ") +
+                "\n(정의가 components.responses 절에 들어가지 않았는지 보라)"
+        }
+    }
+
     /** Spring 핸들러 매핑을 "METHOD 절대경로" 집합으로. 서비스 표면(base 하위)만. */
     private fun implementedApiEndpoints(): Set<String> =
         handlerMapping.handlerMethods.keys.flatMap { info ->

@@ -26,3 +26,7 @@ trippilot:
   # 컨텍스트가 오래 사는 실행에서만 나타나는 형태다.
   trip:
     end-sweep-ms: 3600000
+  # 리마인드 폴링도 같은 이유로 사실상 끈다(TRIP-547). 배경 폴링이 도래분을 먼저 집어 가면
+  # `NotificationScheduleIT` 가 세운 예약이 테스트가 보기 전에 사라져 간헐 실패가 된다.
+  notification:
+    schedule-poll-ms: 3600000

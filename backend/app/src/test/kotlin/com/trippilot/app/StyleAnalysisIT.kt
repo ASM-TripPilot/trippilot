@@ -13,6 +13,7 @@ import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
 import io.kotest.assertions.throwables.shouldThrowAny
+import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -20,9 +21,9 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.jdbc.core.JdbcTemplate
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
@@ -132,7 +133,10 @@ class StyleAnalysisIT : AbstractPostgresIntegrationTest() {
         // 그래서 시각만 떼어 절단을 명시적으로 단정하고, 나머지 필드는 그대로 정확 비교한다.
         val reread = styles.find(accountId)!!
         reread shouldBe a.copy(updatedAt = reread.updatedAt)
-        reread.updatedAt shouldBe a.updatedAt.truncatedTo(ChronoUnit.MICROS)
+        // 저장 해상도는 **마이크로초**다. `truncatedTo` 로 단정했더니 CI 가 잡았는데(실측),
+        // 드라이버가 나노초를 **버리는 게 아니라 반올림**하기 때문이다 — 절단을 가정하면
+        // 반올림이 올라간 경우에 1µs 어긋난다. 그래서 "1µs 미만 차이"로 묻는다.
+        Duration.between(a.updatedAt, reread.updatedAt).abs().toNanos() shouldBeLessThan 1_000L
     }
 
     @Test
