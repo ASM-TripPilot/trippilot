@@ -45,6 +45,14 @@ class Trip private constructor(
     val deletedAt: Instant?,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /**
+     * 여행이 끝났다고 **기록된** 시각(TRIP-554).
+     *
+     * [statusAt] 이 날짜에서 파생하는 것과 별개다 — 파생 상태로는 이벤트를 만들 수 없다. 사건에는
+     * 순간이 필요하고, 순간은 기록돼야 한다. 이 값이 채워졌다는 것은 `trip.TripEnded` 가 **한 번
+     * 발행됐다**는 뜻이다(그 조건부 쓰기가 멱등의 전부다). 기본값이 있어 기존 호출자를 깨지 않는다.
+     */
+    val endedAt: Instant? = null,
 ) {
     /**
      * 편집 가능한가 — **날짜로 판정한다**(TRIP-U1 후속).
@@ -133,9 +141,10 @@ class Trip private constructor(
             tripId: UUID, accountId: UUID, title: String, startDate: LocalDate, endDate: LocalDate,
             party: Int, companionType: CompanionType?, budgetTotal: Long?, preferenceSnapshot: Map<String, Any?>,
             destinations: List<TripDestination>, status: TripStatus, deletedAt: Instant?, createdAt: Instant, updatedAt: Instant,
+            endedAt: Instant? = null,
         ): Trip = Trip(
             tripId, accountId, title, startDate, endDate, party, companionType, budgetTotal,
-            preferenceSnapshot, destinations, status, deletedAt, createdAt, updatedAt,
+            preferenceSnapshot, destinations, status, deletedAt, createdAt, updatedAt, endedAt,
         )
 
         private fun resolveTitle(title: String?, destinations: List<TripDestination>): String =

@@ -74,6 +74,7 @@ from trippilot.llm_gateway.workers.reflection_nudge import (
     FALLBACK_NUDGE_MESSAGE, ReflectionNudgeInput, ReflectionNudgeWorker,
 )
 from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
+from trippilot.ports.poi_db_port import PoiLookup, PoiMiss, lookup_from
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.reflection import (
     ReflectionKind, ReflectionRequest, SourceEventKind, TripEventRecord,
@@ -397,6 +398,40 @@ class WiredRepairOutcome:
 
     repaired: WiredOutcome | None
     changes: tuple[str, ...]
+    unverified: tuple["WiredUnverifiedSlot", ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class WiredUnverifiedSlot:
+    """`UnverifiedSlotLike` 충족 — HC 판정에서 빠진 슬롯 1건 (TRIP-537)."""
+
+    poi_id: str
+    reason_code: str
+    detail: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class WiredValidateOutcome:
+    """`ValidationOutcome` 충족 — 위반과 미검증을 나눠 담는다 (TRIP-537)."""
+
+    violations: tuple[Violation, ...]
+    unverified: tuple[WiredUnverifiedSlot, ...] = ()
+
+
+# PoiMiss 사유 → 경계 reason_code (닫힌 집합, UnverifiedSlotSchema Literal과 일치).
+_MISS_REASON_CODES = {"not_found": "NOT_REGISTERED", "mapping_failed": "UNMAPPABLE"}
+
+
+def _unverified(misses: Sequence[PoiMiss]) -> tuple[WiredUnverifiedSlot, ...]:
+    """어댑터 누락 → 경계 보고. 사유를 모르면 지어내지 않고 UNMAPPABLE로 둔다."""
+    return tuple(
+        WiredUnverifiedSlot(
+            poi_id=str(m.poi_id),
+            reason_code=_MISS_REASON_CODES.get(m.reason, "UNMAPPABLE"),
+            detail=m.detail,
+        )
+        for m in misses
+    )
 
 
 def _keyed_explanations(
@@ -697,18 +732,21 @@ class WiredItineraryOrchestrator:
 
     def validate(
         self, request: schemas.ValidateItineraryRequest
-    ) -> Sequence[Violation]:
-        solution, problem, poi_index = self._reconstruct(
+    ) -> WiredValidateOutcome:
+        solution, problem, poi_index, unverified = self._reconstruct(
             request.itinerary, request.request_meta
         )
         facade = self._solvers.for_pool(poi_index)
-        return facade.validate(
-            solution, problem, _deadline_budget(request.request_meta),
-            TraceId(request.request_meta.request_id),
+        return WiredValidateOutcome(
+            violations=tuple(facade.validate(
+                solution, problem, _deadline_budget(request.request_meta),
+                TraceId(request.request_meta.request_id),
+            )),
+            unverified=unverified,
         )
 
     def repair(self, request: schemas.RepairItineraryRequest) -> WiredRepairOutcome:
-        solution, problem, poi_index = self._reconstruct(
+        solution, problem, poi_index, unverified = self._reconstruct(
             request.itinerary, request.request_meta
         )
         facade = self._solvers.for_pool(poi_index)
@@ -719,17 +757,24 @@ class WiredItineraryOrchestrator:
         return WiredRepairOutcome(
             repaired=_envelope(result.repaired) if result.repaired is not None else None,
             changes=tuple(_render_change(c) for c in result.changes),
+            unverified=unverified,
         )
 
     def _reconstruct(
         self, payload: schemas.ItineraryPayload, meta: schemas.RequestMetaSchema
-    ) -> tuple[ItinerarySolution, ItineraryProblem, dict[PoiId, Poi]]:
+    ) -> tuple[
+        ItinerarySolution, ItineraryProblem, dict[PoiId, Poi],
+        tuple[WiredUnverifiedSlot, ...],
+    ]:
         solution = _solution_from_payload(payload, ScheduleId(meta.request_id), self._tz)
         problem = _problem_for(solution, self._tz)
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
-        # 미등록 POI는 인덱스에 없다 → HC1·HC2 미적용("정보 없음은 막지 않는다", c2 규칙)
-        poi_index = {p.poi_id: p for p in self._poi_db.find_by_ids(ids)}
-        return solution, problem, poi_index
+        # 미등록 POI는 인덱스에 없다 → HC1·HC2 미적용("정보 없음은 막지 않는다", c2 규칙).
+        # 규칙은 그대로 두되 **무엇이 빠졌는지는 값으로 들고 나간다**(TRIP-537, INV-4) —
+        # 막지 않는 것과 알리지 않는 것은 다르다.
+        lookup = self._poi_db.lookup_by_ids(ids)
+        poi_index = {p.poi_id: p for p in lookup.pois}
+        return solution, problem, poi_index, _unverified(lookup.misses)
 
     def alternatives(
         self, request: schemas.AlternativesRequest
@@ -849,7 +894,8 @@ class WiredItineraryOrchestrator:
         meta = request.request_meta
         now = _tz_aware(meta.requested_at, self._tz)
         trace_id = TraceId(meta.request_id)
-        solution, _, poi_index = self._reconstruct(request.itinerary, meta)
+        # 편집은 확인 게이트·재타이밍이 따로 있어 미검증 목록을 소비하지 않는다
+        solution, _, poi_index, _ = self._reconstruct(request.itinerary, meta)
         current_ids = frozenset(
             s.poi_id for day in solution.days for s in day.slots)
         # 대상 일자의 예약(is_fixed) 슬롯 — 편집 대상 불가·재타이밍 닻 (TRIP-526)
@@ -1247,6 +1293,9 @@ class StaticPoiDb:
         return tuple(
             self._store[i] for i in sorted(ids, key=str) if i in self._store
         )
+
+    def lookup_by_ids(self, ids: frozenset[PoiId]) -> PoiLookup:
+        return lookup_from(self.find_by_ids(ids), ids)  # 인메모리 — 매핑 실패 없음
 
 
 # 백엔드 시드 `backend/.../db/migration/R__seed_stub_pois.sql` 미러 (TRIP-344, 감사 F2).

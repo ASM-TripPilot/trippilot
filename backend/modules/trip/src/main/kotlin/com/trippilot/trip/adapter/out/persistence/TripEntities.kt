@@ -25,6 +25,7 @@ class TripEntity(
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "preference_snapshot") var preferenceSnapshot: MutableMap<String, Any?>,
     @Column(name = "status") var status: String,
     @Column(name = "deleted_at") var deletedAt: Instant?,
+    @Column(name = "ended_at") var endedAt: Instant? = null,
     @Column(name = "created_at") var createdAt: Instant,
     @Column(name = "updated_at") var updatedAt: Instant,
 )

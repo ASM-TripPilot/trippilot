@@ -2,6 +2,8 @@ package com.trippilot.savedaccommodation.application
 
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.savedaccommodation.api.DayAnchorView
+import com.trippilot.savedaccommodation.api.DayBaseStayView
+import com.trippilot.savedaccommodation.api.TripBaseStayFacade
 import com.trippilot.savedaccommodation.domain.BaseAssignmentRepository
 import com.trippilot.savedaccommodation.domain.BaseSpan
 import com.trippilot.savedaccommodation.domain.CoverageResolver
@@ -23,7 +25,7 @@ class BaseAnchorQueryFacade(
     private val bases: BaseAssignmentRepository,
     private val stays: SavedStayRepository,
     private val baseDays: TripBaseDayRepository,
-) : BaseAnchorFacade {
+) : BaseAnchorFacade, TripBaseStayFacade {
     override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate): List<DayAnchorView> {
         val spans = bases.findByTrip(tripId).map { BaseSpan(it.savedStayId, it.dateFrom, it.dateTo) }
         val picks = baseDays.findByTrip(tripId).mapNotNull { d -> d.savedStayId?.let { d.dayDate to it } }.toMap()
@@ -33,6 +35,20 @@ class BaseAnchorQueryFacade(
             val lat = stay.lat ?: return@mapNotNull null
             val lng = stay.lng ?: return@mapNotNull null
             DayAnchorView(day.date, lat, lng)
+        }
+    }
+
+    /**
+     * 기록의 숙소 귀속(BR-U5-26). 앵커와 달리 **좌표를 요구하지 않는다** — 이름만 있어도 "그날 어디에
+     * 묵었나"는 성립한다. 좌표로 거르면 기록이 근거 없이 '숙소 없는 날'이 된다.
+     */
+    override fun findBaseStays(tripId: UUID, startDate: LocalDate, endDate: LocalDate): List<DayBaseStayView> {
+        val spans = bases.findByTrip(tripId).map { BaseSpan(it.savedStayId, it.dateFrom, it.dateTo) }
+        val picks = baseDays.findByTrip(tripId).mapNotNull { d -> d.savedStayId?.let { d.dayDate to it } }.toMap()
+        return CoverageResolver.resolve(startDate, endDate, spans, picks).mapNotNull { day ->
+            val stayId = day.savedStayId ?: return@mapNotNull null // 미해결(GAP/OVERLAP) 제외
+            val stay = stays.findById(stayId) ?: return@mapNotNull null
+            DayBaseStayView(day.date, stayId, stay.name)
         }
     }
 }

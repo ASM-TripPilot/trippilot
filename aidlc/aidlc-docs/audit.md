@@ -1308,3 +1308,22 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **개발 최우선 항목을 상태 파일에 명시**: **아웃박스 릴레이 배선** — ① `libs.versions.toml`에 ShedLock 추가(테이블은 V1.0부터 존재) ② `common/core/event`에 `@Scheduled`+ShedLock 릴레이 ③ **이미 발행 중인 `itinerary.ItineraryGenerated` 구독**으로 리마인드 스케줄 적재 → **U3 코드 수정 0으로 첫 경로 개통**. 이 작업이 U5·U6 설계의 핵심 가정(at-least-once · 멱등 · 단일 실행)을 한 번에 실증한다.
 
 **Context**: CONSTRUCTION — U6 NFR Requirements Step 8~9 + NFR Design SKIP 기록 + 유닛 종료. 손댄 파일 = `aidlc-state.md` + 이 `audit.md`, 총 2파일. **다음 유닛(U7~U9)은 후속 게이트로 1차 범위 밖** — 진입하려면 SCOPE.md 개정과 사용자 명시 지시가 필요하다.
+
+---
+
+## Post-Design Correction — U4 business-logic-model.md·frontend-components.md 위치 폴백 화면 3건 (TRIP-442 [기록] 반영)
+**Timestamp**: 2026-08-26T13:00:00Z
+
+**User Input**: TRIP-442 사이클(`20260826-trip442-live-location-fallback`) [설계] 3-a 맹점 훑기에서 정본 반영 후보가 제시됐고, 사용자가 3건을 선택했다 — ① §5 진입순서 공백 보완 ② §8 testID vs Figma 불일치 소급 기록 ③ §5(현 상태 머리말) '디렉토리 없음' 서술 갱신.
+
+**AI Response**: 승인 완료된 `u4-in-trip-planb/functional-design/{business-logic-model.md,frontend-components.md}`의 **정본 공백 관측 1건 + testID 의미 소급 기록 1건 + 낡은 현황 서술 정정 1건**. 새 스토리·새 컴포넌트 계약(엔드포인트) 신설 0건 → 스테이지 진행 아님, `aidlc-state.md` 체크박스 변동 없음.
+
+(1) **business-logic-model.md §5 — i20·i21 진입 트리거·순서 공백 관측 신설**. 기존 §5는 위치 기준점 사다리(4순위 표)만 정의하고 "언제 i20·i21로 진입하는가"는 정의하지 않았다. TRIP-442 구현이 택한 잠정 결정(진입 배선은 딥링크·`_dev/preview.tsx` 전용, 라이브 세션에서의 실제 진입·CTA 이후 항법은 후속 티켓)을 **관측 주석**으로 추가하고, 같은 공백을 §8 갭 표에 **G-U4-9**로 등재해 기존 G-U4-* 관례를 따랐다. 요구사항을 새로 창작한 것이 아니라 정본이 비워둔 자리에 "지금 코드가 잠정으로 어떻게 채웠는지"만 기록했다.
+
+(2) **frontend-components.md §8 — `live-location-use-last-visit` testID 의미 소급 기록**. §8은 애초 "[공백] 제안값 — 구현이 확정한 값이 다르면 소급 기록한다"는 조건부 절이었다. 라이브 Figma(1790:3495·1790:3549)에 "마지막 방문지 사용" 별도 버튼이 없어, 구현은 이 testID를 "건너뛰기" 어포던스 하나에 매핑하고 그 버튼이 사다리 3·4순위(마지막 방문지·등록 숙소) 위임을 함께 폴드하는 것으로 확정했다. testID 이름 자체는 유지, 의미만 소급 기록.
+
+(3) **frontend-components.md §5(현 상태 머리말) — '디렉토리 없음' 서술 정정**. "`features/execution`·`features/planb` 디렉토리 없음(이 유닛이 처음 만든다)"는 U4 설계 승인 시점(2026-08-09) 기준 서술이었으나, 이후 TRIP-395·398·439·440·441·442로 두 디렉토리가 전부 채워졌고 `app/(tabs)/itinerary.tsx`도 TRIP-468로 실배선됐다. 낡은 부정 사실을 실측대로 정정 — 요구사항 변경 아니고 현황 갱신.
+
+**미반영으로 남긴 것**: 없음 — 제시 3건 전부 선택·반영.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-442 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260826-trip442-live-location-fallback/03_implementer_notes.md`(§1-3·§1-4·§3-6)·`frontend/src/pages/live-location/ui/LiveLocationPage.tsx`·`frontend/src/app/trips/[tripId]/live/location.tsx`. 이 항목이 손댄 `aidlc/` 파일은 `construction/u4-in-trip-planb/functional-design/{business-logic-model.md,frontend-components.md}`와 이 `audit.md` append뿐이다.

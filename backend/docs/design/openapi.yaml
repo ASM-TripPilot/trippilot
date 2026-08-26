@@ -16,6 +16,7 @@ security:
   - bearerAuth: []          # 전역 기본 = 인증 필요. 공개 엔드포인트는 security:[] 로 개별 해제.
 
 tags:
+  - name: reflection
   - name: auth
   - name: onboarding
   - name: location
@@ -891,7 +892,7 @@ paths:
         '201': { description: 체크됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '400': { description: 장소·체크 방식 누락 }
         '404': { description: 여행 없음/타 계정 }
-        '409': { description: 이미 체크된 방문지 }
+        '409': { description: '이미 체크된 방문지 — `VISIT_ALREADY_RECORDED`(같은 장소, 수렴 가능) · `VISIT_CONFLICT`(다른 장소, 해소 필요)' }
   /trips/{tripId}/visits/days/{day}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -916,7 +917,7 @@ paths:
       responses:
         '200': { description: 보정됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '404': { description: 여행 없음/타 계정/기록 없음 }
-        '409': { description: 도착 없이 완료만 남기거나 순서가 뒤집힘 }
+        '409': { description: '도착 없이 완료만 남기거나 순서가 뒤집힘 · `expectedUpdatedAt` 이 낡았으면 `VISIT_CONFLICT`(BR-U5-22)' }
   /trips/{tripId}/visits/{visitCheckId}/complete:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -927,7 +928,7 @@ paths:
       responses:
         '200': { description: 완료됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '404': { description: 여행 없음/타 계정/기록 없음 }
-        '409': { description: 도착 없이 완료 · 이미 완료·건너뜀 }
+        '409': { description: '도착 없이 완료 · 이미 결과가 있다(같은 결과면 `VISIT_ALREADY_RECORDED`, 다른 결과면 `VISIT_CONFLICT`)' }
   /trips/{tripId}/visits/{visitCheckId}/skip:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -938,7 +939,213 @@ paths:
       responses:
         '200': { description: 건너뜀, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '404': { description: 여행 없음/타 계정/기록 없음 }
-        '409': { description: 이미 완료·건너뜀 }
+        '409': { description: '이미 결과가 있다 — 같은 결과면 `VISIT_ALREADY_RECORDED`, 다른 결과면 `VISIT_CONFLICT`' }
+  /trips/{tripId}/visits/{visitCheckId}/photos:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [trips]
+      summary: 방문 사진 **메타** 등록 — 업로드가 아니다
+      description: >
+        **서버는 사진 바이너리를 저장하지 않는다**(INV-U5-03 · DEC-U5-9). 여기서 받는 것은 기기 로컬
+        자산 식별자·기기 id·촬영 시각·EXIF 좌표(동의 시)뿐이고, 화면은 그 식별자로 기기 자산을 직접 연다.
+        업로드 경로는 없고 만들지도 않는다 — `storage_key` 류를 한 번 만들면 다음 사이클이 채운다.
+
+
+        `exifLat`·`exifLng` 는 **위치 동의(L3 `gpsRecordingOptIn`)가 없으면 저장되지 않는다**(INV-U5-04).
+        거부가 아니라 **무시**다 — 거부로 만들면 클라이언트가 동의 상태 사본을 들고 있어야 하고,
+        그 사본이 어긋나는 순간 등록 자체가 막힌다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AddPhotoRequest' } } }
+      responses:
+        '201': { description: 등록됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitPhoto' } } } }
+        '400': { description: 입력 검증 실패 · 방문당 상한 초과 }
+        '404': { description: 여행 없음/타 계정/방문 기록 없음 }
+        '409': { description: 같은 기기의 같은 자산이 이미 붙어 있음 }
+    get:
+      tags: [trips]
+      summary: 방문 사진 메타 목록 + 개수
+      description: >
+        정렬 순서대로. `count` 를 함께 주는 이유는 **개수만 쓰는 소비자**가 있기 때문이다 —
+        AI 컨텍스트 조립이 필요로 하는 것은 사진 자체가 아니라 "몇 장 찍었나"다.
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitPhotoList' } } } }
+        '404': { description: 여행 없음/타 계정/방문 기록 없음 }
+  /trips/{tripId}/visits/{visitCheckId}/photos/order:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [trips]
+      summary: 사진 정렬 변경
+      description: >
+        그 방문의 사진 **전부**를 한 번씩 담아야 한다. 부분 목록을 받아 그것만 다시 매기면 나머지와
+        순서가 겹쳐 "어느 것이 먼저인가"가 사라진다 — 그래서 400 으로 거부한다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReorderPhotosRequest' } } }
+      responses:
+        '204': { description: 변경됨 }
+        '400': { description: 목록이 그 방문의 사진 전부가 아님 }
+        '404': { description: 여행 없음/타 계정/방문 기록 없음 }
+  /trips/{tripId}/visits/{visitCheckId}/photos/{visitPhotoMetaId}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitPhotoMetaId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [trips]
+      summary: 사진 메타 삭제 — 기기의 원본 사진은 건드리지 않는다
+      responses:
+        '204': { description: 삭제됨 }
+        '404': { description: 여행 없음/타 계정/방문·사진 없음 }
+  /me/export:
+    get:
+      tags: [account]
+      summary: 내 데이터 내려받기(l05)
+      description: >
+        계정이 소유한 것 전부 — 프로필·취향·여행·저장 숙소·방문 기록·동의 이력. **내보내기만**이고
+        계정 삭제는 별개다(U0 유예 삭제).
+
+
+        ⚠ **사진 바이너리는 없다**(INV-U5-03) — 서버가 갖고 있지 않으므로 메타(기기 자산 식별자·
+        촬영 시각)만 나간다. append-only 로그(`consent_record`)는 **읽기만** 한다.
+
+
+        몫마다 `sectionLimit` 을 넘으면 잘라 내고 `truncatedSections` 에 이름을 싣는다 —
+        조용히 자르면 받은 파일이 전부인 줄 안다.
+      parameters:
+        - name: sectionLimit
+          in: query
+          schema: { type: integer, default: 500, minimum: 1, maximum: 2000 }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/AccountExport' } } } }
+  /me/records:
+    get:
+      tags: [trips]
+      summary: 지난 여행 기록 목록(j07)
+      description: >
+        재열람은 **여행 단위**로 들어간다(BR-U5-56) — 목록에서 여행을 고르고 거기서
+        계획｜실제｜변경 3종으로 갈린다(`GET /trips/{tripId}/records`).
+
+
+        **빈 상태를 값으로 알린다.** 조용히 빈 배열만 주면 화면이 "오류인가, 상한에 걸렸나,
+        정말 없나"를 구분하지 못하고 그 셋은 보여 줄 것이 전부 다르다.
+        `emptyState=NO_TRIPS` 면 새 여행 생성 진입을, `NO_RECORDS` 면 기다리라고 그린다.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 30, minimum: 1, maximum: 100 }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TripRecordList' } } } }
+  /trips/{tripId}/summary:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [reflection]
+      summary: 여행 요약(j04)
+      description: >
+        요약은 **여행이 끝나야 생긴다**(BR-U5-39) — `trip.TripEnded` 를 아웃박스 릴레이로 받아 만든다.
+        아직 없으면 404 가 아니라 `ready=false` 로 알린다: 화면이 **공유 진입점을 비활성화**해야 하는데
+        (BR-U5-48) 404 는 "없다"와 "타 계정"을 구분하지 못해 그 판단의 근거가 되지 못한다.
+
+
+        방문 0곳 여행도 **비어 있지 않다**(PBT-U5-1) — `stats` 를 채운 기본 요약이 나온다.
+
+
+        ⚠ 릴레이는 **구독자를 붙인 시점 이후** 이벤트만 준다 — 그 전에 끝난 여행은 요약이 없다.
+        소급 배치는 이 티켓 밖이다(`trip.ended_at` 이 남아 나중에 훑을 근거는 있다).
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TripSummaryEnvelope' } } } }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/reflections:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [reflection]
+      summary: 여행의 하루 회고 목록(j03)
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReflectionList' } } } }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/reflections/{dayDate}:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: dayDate, in: path, required: true, schema: { type: string, format: date } }
+    post:
+      tags: [reflection]
+      summary: 하루 회고 생성·재생성
+      description: >
+        **입력이 무엇이든 결과가 비어 있지 않다**(PBT-U5-1 · 블로킹 게이트). 방문 0곳·사진 0장이어도
+        `stats` 를 채운 기본 카드가 나온다 — 폴백 3단(AI → 규칙 → 기본) 중 어느 단에서 멈춰도
+        빈 화면을 그리지 않는다(BR-U5-32).
+
+
+        하루 한 장이라 다시 부르면 **덮어쓴다**(BR-U5-35). 사용자가 고친 문장(`editedNarrative`)은
+        재생성해도 남는다 — 초안만 갈린다.
+
+
+        ⚠ 현재 `source` 는 `RULE` 또는 `BASIC` 이다. `AI` 단은 미개통(O-U5-6) — `ai/` 에 회고 경계가
+        없고 backend 에 LLM 게이트웨이도 없다. 규칙 문장으로 먼저 열고 `source` 로 품질을 관측한다.
+      responses:
+        '200': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
+        '404': { description: 여행 없음/타 계정 }
+    put:
+      tags: [reflection]
+      summary: 회고 문장 수정 — 초안은 남는다
+      description: >
+        생성된 초안을 덮지 않고 `editedNarrative` 에 따로 쌓는다(INV-U5-06). 화면이 "생성된 것"과
+        "내가 고친 것"을 2열로 그리기 때문이다 — 하나로 합치면 그 비교가 사라진다.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EditReflectionRequest' } } }
+      responses:
+        '200': { description: 수정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
+        '400': { description: 입력 검증 실패 }
+        '404': { description: 여행 없음/타 계정/회고 없음 }
+  /trips/{tripId}/records:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [trips]
+      summary: 계획｜실제｜변경 3종 비교(j02)
+      description: >
+        **아무것도 저장하지 않는다.** 미방문(`unvisitedSlotKeys`)도 숙소 귀속(`baseStayName`)도
+        조회 시점에 갈라낸 **파생값**이다 — 저장하면 계획이 바뀌거나 숙소를 바꿀 때 옛 기록이
+        따라오지 않는다(BR-U5-25·26·28).
+
+
+        계획은 실적에 덮이지 않는다(BR-U5-01) — 계획과 실제가 달라도 그 자체가 사실이라,
+        둘을 나란히 두는 것이 이 화면의 전부다.
+
+
+        ⚠ **체류 시간은 싣지 않는다**(BR-U5-08). 산출은 되지만 개별 방문의 체류로 화면에 보이지 않는다.
+      parameters:
+        - name: changeLimit
+          in: query
+          schema: { type: integer, default: 100, minimum: 1, maximum: 500 }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/TripRecord' } } } }
+        '404': { description: 여행 없음/타 계정 }
+  /trips/{tripId}/visits/{visitCheckId}/memo:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: visitCheckId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [trips]
+      summary: 방문 메모 저장(upsert) — 한 방문에 한 개
+      description: >
+        한 방문에 메모는 하나뿐이라(BR-U5-13) "만들기"와 "고치기"를 나누지 않는다.
+        메모는 **사진과 무관하게 남는다**(INV-U5-05) — 자산을 못 열어도 감상은 남아야 한다.
+        조회 표면은 이 티켓에 없다(`j02` 3종 비교가 소유).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PutMemoRequest' } } }
+      responses:
+        '200': { description: 저장됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitMemo' } } } }
+        '400': { description: 입력 검증 실패 }
+        '404': { description: 여행 없음/타 계정/방문 기록 없음 }
   /trips/{tripId}/triggers:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1630,6 +1837,14 @@ components:
       properties:
         arrivedAt: { type: string, format: date-time, nullable: true, description: 보내지 않으면 그대로 둔다(지우는 뜻이 아니다) }
         completedAt: { type: string, format: date-time, nullable: true, description: 보내지 않으면 그대로 둔다. 도착 없이 완료만 남길 수 없다 }
+        expectedUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            이 편집이 딛고 선 서버 버전(BR-U5-22 · TRIP-546). 오프라인 큐를 재생할 때 실어 보내면,
+            그 사이 서버가 앞서 나간 경우 **조용히 덮어쓰는 대신** `VISIT_CONFLICT`(409)로 갈린다.
+            보내지 않으면 검사하지 않는다 — 온라인 단일 기기 편집 경로를 막지 않는다.
     VisitCheckList:
       type: object
       required: [visits]
@@ -1637,7 +1852,7 @@ components:
         visits: { type: array, items: { $ref: '#/components/schemas/VisitCheck' } }
     VisitCheck:
       type: object
-      required: [visitCheckId, poiId, source, spontaneous]
+      required: [visitCheckId, poiId, source, spontaneous, updatedAt]
       properties:
         visitCheckId: { type: string, format: uuid }
         slotKey: { type: string, nullable: true, description: null = 즉석 방문 }
@@ -1647,6 +1862,12 @@ components:
         skippedAt: { type: string, format: date-time, nullable: true, description: 건너뜀(취소). 완료와 동시에 참일 수 없다 }
         source: { type: string, enum: [AUTO_GEOFENCE, MANUAL] }
         spontaneous: { type: boolean, description: 계획에 없던 곳인가 — 화면의 '즉석 방문' 배지 근거 }
+        updatedAt:
+          type: string
+          format: date-time
+          description: >
+            오프라인 충돌 판정의 기준(BR-U5-22 · TRIP-546). 클라이언트는 이 값을 로컬 편집의 기준
+            버전으로 들고 있다가 재생 시 `expectedUpdatedAt` 으로 돌려보낸다.
     TriggerList:
       type: object
       required: [triggers]
@@ -2197,6 +2418,354 @@ components:
                 거절 사유만 주면 사용자는 무엇이 끝나기를 기다려야 하는지 모른다 — 화면이 이 값으로
                 그 여행으로 이동시킨다. `existingProvider` 와 같은 방식으로 다른 에러 코드의 응답에는
                 나타나지 않는다(직렬화 생략).
+            visitCheckId:
+              type: string
+              format: uuid
+              description: >
+                VISIT_ALREADY_RECORDED · VISIT_CONFLICT 에만 존재(TRIP-546 · BR-U5-20·21).
+                서버에 이미 있는 방문 기록. 오프라인 큐 재생에서 **409 는 실패가 아니다** —
+                `VISIT_ALREADY_RECORDED` 면 원하던 상태가 이미 있다는 뜻이라 클라이언트는 그 항목을
+                `SYNCED` 로 수렴시키고, `VISIT_CONFLICT` 면 방문 단위 해소 화면으로 간다.
+                2열 비교에 필요한 나머지(시각·상태·메모·사진 수)는 이 id 로 3종 비교 표면에서 읽는다 —
+                오류 봉투를 자료 전달 통로로 쓰지 않는다.
+            serverUpdatedAt:
+              type: string
+              format: date-time
+              description: >
+                VISIT_ALREADY_RECORDED · VISIT_CONFLICT 에만 존재. 서버 기록의 `updatedAt`(BR-U5-22) —
+                충돌 판정의 기준값이라, 클라이언트가 이것을 받아 다음 재생의 `expectedUpdatedAt` 으로 쓴다.
+
+    AddPhotoRequest:
+      type: object
+      required: [localAssetId, deviceId]
+      properties:
+        localAssetId:
+          type: string
+          maxLength: 200
+          description: 기기 로컬 자산 식별자(iOS PHAsset localIdentifier · Android MediaStore id). 기기 안에서만 뜻이 있다.
+        deviceId: { type: string, maxLength: 64 }
+        takenAt: { type: string, format: date-time, nullable: true }
+        exifLat:
+          type: number
+          format: double
+          nullable: true
+          description: 위치 동의가 없으면 **저장되지 않는다**(INV-U5-04). 보내는 것 자체는 오류가 아니다.
+        exifLng: { type: number, format: double, nullable: true }
+        sortOrder:
+          type: integer
+          nullable: true
+          description: 생략하면 맨 뒤에 붙는다.
+
+    ReorderPhotosRequest:
+      type: object
+      required: [orderedIds]
+      properties:
+        orderedIds:
+          type: array
+          description: 그 방문의 사진 **전부**를 한 번씩. 부분 목록은 400.
+          items: { type: string, format: uuid }
+
+    PutMemoRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 2000 }
+
+    VisitPhotoList:
+      type: object
+      required: [items, count]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/VisitPhoto' }
+        count:
+          type: integer
+          description: 개수만 쓰는 소비자(AI 컨텍스트)를 위해 함께 준다.
+
+    VisitPhoto:
+      type: object
+      required: [visitPhotoMetaId, localAssetId, deviceId, sortOrder]
+      properties:
+        visitPhotoMetaId: { type: string, format: uuid }
+        localAssetId: { type: string }
+        deviceId:
+          type: string
+          description: >
+            화면이 **다른 기기에서 찍은 사진**을 구분하는 근거(BR-U5-15) — 기기가 바뀌면 자산은
+            이관되지 않고 메타만 남는다.
+        takenAt: { type: string, format: date-time, nullable: true }
+        exifLat:
+          type: number
+          format: double
+          nullable: true
+          description: 위치 동의가 없으면 null — 등록 요청이 좌표를 실어 보냈어도 그렇다.
+        exifLng: { type: number, format: double, nullable: true }
+        sortOrder: { type: integer }
+
+    AccountExport:
+      type: object
+      required: [accountId, exportedAt, sectionLimit, truncatedSections, sections]
+      properties:
+        accountId: { type: string, format: uuid }
+        exportedAt: { type: string, format: date-time }
+        sectionLimit: { type: integer }
+        truncatedSections:
+          type: array
+          description: 상한에 걸려 잘린 몫들. 비어 있으면 전부 다 실렸다는 뜻이다.
+          items: { type: string }
+        sections:
+          type: array
+          items: { $ref: '#/components/schemas/ExportSection' }
+
+    ExportSection:
+      type: object
+      required: [section, items, truncated]
+      properties:
+        section:
+          type: string
+          description: 몫 이름. 모듈이 늘면 여기도 는다 — 고정 목록이 아니다.
+          example: trips
+        items:
+          type: array
+          description: >
+            **자유 형태다.** 내보내기는 자료 덤프지 클라이언트가 프로그래밍하는 계약이 아니라,
+            여기에 타입을 박으면 모듈이 필드를 하나 늘릴 때마다 공용 계약이 흔들린다.
+          items: { type: object, additionalProperties: true }
+        truncated: { type: boolean }
+
+    TripSummaryEnvelope:
+      type: object
+      required: [ready]
+      properties:
+        ready:
+          type: boolean
+          description: 요약이 만들어졌는가. false 면 화면은 **공유 진입점을 비활성화**한다(BR-U5-48).
+        summary:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/TripSummary' }]
+
+    TripSummary:
+      type: object
+      required: [narrative, highlights, stats, source, generatedAt]
+      properties:
+        narrative: { type: string, description: '**비어 있을 수 없다**(PBT-U5-1)' }
+        highlights:
+          type: array
+          items: { $ref: '#/components/schemas/DayHighlight' }
+        stats: { $ref: '#/components/schemas/TripSummaryStats' }
+        source: { type: string, enum: [AI, RULE, BASIC], description: 회고와 같은 규약(BR-U5-33) }
+        generatedAt: { type: string, format: date-time }
+
+    DayHighlight:
+      type: object
+      required: [date, dayOrder, visitCount, places]
+      properties:
+        date: { type: string, format: date }
+        dayOrder: { type: integer }
+        visitCount: { type: integer }
+        places: { type: array, items: { type: string } }
+
+    TripSummaryStats:
+      type: object
+      required: [totalVisits, totalDistanceKm, distanceSource, totalPhotos, hasLocationData]
+      description: '**소요시간 필드가 없다**(INV-3 · PBT-U5-5) — 거리만.'
+      properties:
+        totalVisits: { type: integer }
+        totalDistanceKm: { type: number, format: double }
+        distanceSource: { type: string, enum: [ROUTE, VISIT_LINE] }
+        totalPhotos: { type: integer }
+        hasLocationData:
+          type: boolean
+          description: >
+            false 면 좌표를 하나도 못 찾았다는 뜻이다 — 화면은 **지도 대신 방문 목록**을 그린다(BR-U5-39).
+            빈 지도를 띄우면 사용자는 기록이 없는 줄 안다.
+
+    ReflectionList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Reflection' }
+
+    EditReflectionRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 4000 }
+
+    Reflection:
+      type: object
+      required: [dayDate, draftNarrative, source, stats, generatedAt, updatedAt]
+      properties:
+        dayDate: { type: string, format: date }
+        draftNarrative: { type: string, description: 생성된 원문. **비어 있을 수 없다**(INV-U5-07) }
+        editedNarrative:
+          type: string
+          nullable: true
+          description: 사용자가 고친 문장. null 이면 아직 손대지 않았다 — 화면은 둘을 2열로 그린다(INV-U5-06).
+        source:
+          type: string
+          description: >
+            문장이 어느 단에서 나왔나(BR-U5-33). **항상 실린다** — 화면이 구분해 그리지 않더라도
+            규칙 문장이 몇 %인지 모르면 AI 경로를 붙일 근거가 없다. 현재 `AI` 는 미개통(O-U5-6).
+          enum: [AI, RULE, BASIC]
+        stats: { $ref: '#/components/schemas/ReflectionStats' }
+        generatedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ReflectionStats:
+      type: object
+      required: [visitCount, distanceKm, distanceSource, photoCount]
+      description: >
+        근거 수치 — **비어 있을 수 없다**(INV-U5-07). 방문 0곳이어도 0으로 채운다.
+        **이동 소요시간 필드가 없다**(INV-3 · PBT-U5-5) — 거리만 낸다.
+        개별·일별 체류 시간도 없다(BR-U5-08); 누적 평균만 예외이고 그건 스타일 분석 소관이다.
+      properties:
+        visitCount: { type: integer }
+        distanceKm: { type: number, format: double }
+        distanceSource:
+          type: string
+          description: >
+            `VISIT_LINE` 은 **방문점을 이은 직선 합**이지 도로 거리가 아니다(BR-U5-43).
+            `actual_route_point` 가 미실장이라 서버가 실제 이동 경로를 모른다 —
+            밝히지 않으면 사용자가 근사값을 실측으로 읽는다.
+          enum: [ROUTE, VISIT_LINE]
+        photoCount: { type: integer }
+
+    TripRecordList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TripRecordSummary' }
+        emptyState:
+          type: string
+          nullable: true
+          description: >
+            **`items` 가 비었을 때만** 채워진다. `NO_TRIPS` = 여행 자체가 없다(새 여행 생성 진입) ·
+            `NO_RECORDS` = 여행은 있는데 기록이 아직 없다. 둘을 뭉치면 사용자가 무엇을 해야 할지 모른다.
+          enum: [NO_TRIPS, NO_RECORDS]
+
+    TripRecordSummary:
+      type: object
+      required: [tripId, title, startDate, endDate, regions, visitCount, photoCount]
+      properties:
+        tripId: { type: string, format: uuid }
+        title: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        regions: { type: array, items: { type: string }, description: 목적지(구간 순서) }
+        visitCount: { type: integer }
+        photoCount: { type: integer, description: 사진 **메타** 개수 — 서버에 바이너리는 없다(INV-U5-03) }
+
+    TripRecord:
+      type: object
+      required: [tripId, days, changes]
+      properties:
+        tripId: { type: string, format: uuid }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/TripRecordDay' }
+        changes:
+          type: array
+          description: 변경 이력(최신순). U5 는 이 테이블을 **읽기만** 한다(BR-U5-29).
+          items: { $ref: '#/components/schemas/ChangeLogEntry' }
+
+    TripRecordDay:
+      type: object
+      required: [date, planned, actual, unvisitedSlotKeys]
+      properties:
+        date: { type: string, format: date }
+        baseStayId: { type: string, format: uuid, nullable: true }
+        baseStayName:
+          type: string
+          nullable: true
+          description: >
+            그날의 기준 숙소. **파생값이라 저장돼 있지 않다** — 숙소를 바꾸면 같은 기록의 귀속이 따라
+            바뀐다. 등록 숙소가 없거나 겹침이 미해결이면 null 이고, 그 날은 날짜만으로 묶인다(BR-U5-27).
+        planned:
+          type: array
+          items: { $ref: '#/components/schemas/PlannedSlot' }
+        actual:
+          type: array
+          items: { $ref: '#/components/schemas/ActualVisit' }
+        unvisitedSlotKeys:
+          type: array
+          description: 계획엔 있는데 실적이 없는 슬롯(BR-U5-28). **저장되지 않는 판정**이다.
+          items: { type: string }
+
+    PlannedSlot:
+      type: object
+      required: [slotKey, date, poiId, orderIndex, startAt, endAt, endsNextDay]
+      properties:
+        slotKey: { type: string, description: '경계 키 "{date}#{poiId}" — 실적과 견주는 연결 고리' }
+        date: { type: string, format: date }
+        poiId: { type: string, format: uuid }
+        orderIndex: { type: integer }
+        startAt: { type: string, example: '10:00' }
+        endAt: { type: string, example: '11:30' }
+        endsNextDay: { type: boolean, description: 자정 넘김(HC4). true 면 endAt < startAt }
+
+    ActualVisit:
+      type: object
+      required: [visitCheckId, poiId, spontaneous, photoCount, hasMemo, updatedAt]
+      properties:
+        visitCheckId: { type: string, format: uuid }
+        slotKey: { type: string, nullable: true, description: null = 즉석 방문(계획에 없던 곳) }
+        poiId: { type: string, format: uuid }
+        arrivedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        skippedAt: { type: string, format: date-time, nullable: true }
+        spontaneous: { type: boolean }
+        photoCount: { type: integer, description: 사진 **개수**만 — 메타 목록은 방문별 표면이 낸다 }
+        hasMemo: { type: boolean, description: 있는지만 — 본문은 별도 표면 }
+        updatedAt: { type: string, format: date-time, description: 오프라인 충돌 판정 기준(BR-U5-22) }
+
+    VisitMemo:
+      type: object
+      required: [text, updatedAt]
+      properties:
+        text: { type: string, maxLength: 2000 }
+        updatedAt: { type: string, format: date-time }
+
+    NotificationList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Notification' }
+
+    Notification:
+      type: object
+      required: [notificationId, kind, title, body, occurredAt]
+      properties:
+        notificationId: { type: string, format: uuid }
+        kind:
+          type: string
+          description: >
+            알림 종류 8종. **DB CHECK 로 고정하지 않는다** — 커뮤니티(U7) 개통 때 어휘를 넓히자고
+            마이그레이션이 붙는 것을 피한다. 어휘의 주인은 서버의 `NotificationKind` 하나다.
+          enum: [STAY, TRIP_PRE, TRIP_DAY, SLOT_PRE, PLAN_B, REFLECTION, COMMUNITY, SYSTEM]
+        title: { type: string, maxLength: 120 }
+        body: { type: string, maxLength: 400 }
+        actionType:
+          type: string
+          nullable: true
+          description: 알림에서 들어갈 화면. 진입이 없으면 `actionPayload` 와 함께 null.
+          enum: [TRIP_ITINERARY]
+        actionPayload:
+          type: object
+          nullable: true
+          additionalProperties: { type: string }
+        occurredAt: { type: string, format: date-time }
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: null = 미읽음 — 목록 좌측 빨간 dot 의 근거.
 
     NotificationToggleList:
       type: object

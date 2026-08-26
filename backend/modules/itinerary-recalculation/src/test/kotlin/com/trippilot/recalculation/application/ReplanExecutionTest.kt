@@ -15,8 +15,6 @@ import com.trippilot.recalculation.domain.ReplanScope
 import com.trippilot.recalculation.domain.ReplanSession
 import com.trippilot.recalculation.domain.ReplanSessionRepository
 import com.trippilot.recalculation.domain.ReplanStatus
-import com.trippilot.recalculation.domain.VisitCheck
-import com.trippilot.recalculation.domain.VisitCheckRepository
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
@@ -37,15 +35,6 @@ private class ExecSessions : ReplanSessionRepository {
     // 단일 스레드 테스트라 잠금은 의미가 없다 — 경합 자체는 실 DB IT 가 검증한다.
     override fun findByIdForUpdate(sessionId: UUID) = store[sessionId]
     override fun findOpenByTrip(tripId: UUID) = store.values.firstOrNull { it.tripId == tripId && it.isOpen }
-}
-
-private class ExecVisits : VisitCheckRepository {
-    val store = linkedMapOf<UUID, VisitCheck>()
-    override fun save(check: VisitCheck) = check.also { store[it.visitCheckId] = it }
-    override fun findById(visitCheckId: UUID) = store[visitCheckId]
-    override fun findByTrip(tripId: UUID) = store.values.filter { it.tripId == tripId }
-    override fun findBySlot(tripId: UUID, slotKey: String) =
-        store.values.firstOrNull { it.tripId == tripId && it.slotKey == slotKey }
 }
 
 /**
@@ -88,11 +77,10 @@ class ReplanExecutionTest : StringSpec({
     }
 
     fun fixture(replans: FakeReplans = FakeReplans()): Fixture = Fixture(replans).apply {
-        val visitRepo = ExecVisits()
-        val visitService = VisitCheckService(trips, visitRepo, clock)
+        val archive = FakeArchive()
         service = ReplanSessionService(
-            trips, itineraries, sessions, OriginResolver(noAnchors), visitService, surfaces,
-            ReplanSolver(sessions, visitService, replans, NOOP_TX, clock), replans, events, clock,
+            trips, itineraries, sessions, OriginResolver(noAnchors), archive, surfaces,
+            ReplanSolver(sessions, archive, replans, NOOP_TX, clock), replans, events, clock,
         )
     }
 

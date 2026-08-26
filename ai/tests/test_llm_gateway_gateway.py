@@ -55,6 +55,18 @@ class AcceptAllGate:
         return GateOutcome(value=self._value, drop_event=None, error=None)
 
 
+class EmptyResultGate:
+    """드롭 0건인데 결과가 빈 fake — **LLM 이 애초에 0건을 냈을 때**의 모양이다.
+
+    DropAllGate 와 구분해야 한다. 둘은 처방이 정반대인데(게이트 규칙 문제 vs
+    프롬프트·입력 문제) 한때 같은 라벨을 썼다 — 행사 수집에서 대전이 6회 연속
+    0건일 때 게이트를 의심하느라 3단계 추론이 필요했다(2026-08-25).
+    """
+
+    def apply(self, raw_text, pool, *, feature, trace_id, now):
+        return GateOutcome(value=(), drop_event=None, error=None)
+
+
 class DropAllGate:
     """전량 드롭 fake (GATE-P2의 폴백 분기)."""
 
@@ -150,6 +162,7 @@ def test_call_timeout_default_and_override() -> None:
         (FailingLlm(), AcceptAllGate(_scored("p1")), "llm_error:"),
         (FakeLlm(), ParseFailGate(), "parse_error:"),
         (FakeLlm(), DropAllGate(), "gate_dropped_all"),
+        (FakeLlm(), EmptyResultGate(), "llm_empty_result"),
     ],
 )
 def test_failure_paths_converge_to_fallback(llm, gate, reason_prefix) -> None:
@@ -197,3 +210,28 @@ def test_router_resolves_all_default_features_deterministically() -> None:
         first = router.route(feature)
         assert first in _CFG.model_ids.values()
         assert router.route(feature) == first
+
+
+def test_무결과와_전량드롭은_다른_사유로_기록된다() -> None:
+    """**두 라벨이 다시 뭉개지면 여기서 깨진다.**
+
+    처방이 정반대다 — gate_dropped_all 은 게이트 규칙(또는 LLM 환각)을 보라는
+    신호고, llm_empty_result 는 프롬프트·입력 스니펫을 보라는 신호다. 구분이
+    없으면 로그만으로는 어느 쪽인지 알 수 없어 매번 코드를 되짚어야 한다.
+
+    판별 근거는 GateDropEvent 의 유무다 — 게이트는 dropped_count 가 0 이면
+    이벤트를 만들지 않으므로, 그 부재가 "게이트는 아무것도 안 버렸다"는 증거다.
+    """
+    dropped_facade, dropped_trace = _facade(FakeLlm(), DropAllGate())
+    empty_facade, empty_trace = _facade(FakeLlm(), EmptyResultGate())
+
+    dropped = _call(dropped_facade)
+    empty = _call(empty_facade)
+
+    assert dropped.error == "gate_dropped_all"
+    assert empty.error == "llm_empty_result"
+    assert dropped.error != empty.error, "두 실패는 원인도 처방도 다르다"
+
+    # 라벨의 근거가 실제로 GateDropEvent 유무인지까지 고정한다
+    assert len(dropped_trace.of_type(GateDropEvent)) == 1
+    assert len(empty_trace.of_type(GateDropEvent)) == 0

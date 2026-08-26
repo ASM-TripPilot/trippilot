@@ -1,12 +1,16 @@
 package com.trippilot.app.architecture
 
+import com.tngtech.archunit.base.DescribedPredicate.describe
 import com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage
 import com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage
+import com.tngtech.archunit.core.domain.JavaMethodCall
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
+import com.tngtech.archunit.lang.conditions.ArchConditions.callMethodWhere
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices
+import com.trippilot.changelog.api.ChangeLogFacade
 import org.junit.jupiter.api.Test
 import org.springframework.boot.autoconfigure.SpringBootApplication
 
@@ -33,6 +37,8 @@ class ArchitectureRulesTest {
                 "com.trippilot.placedata..",
                 "com.trippilot.itinerarygeneration..",
                 "com.trippilot.changelog..",
+                "com.trippilot.archive..",
+                "com.trippilot.reflection..",
                 "com.trippilot.notification..",
             )
             .because("R5: 의존 방향 app→modules→common, 역방향 금지")
@@ -50,6 +56,7 @@ class ArchitectureRulesTest {
             "com.trippilot.placedata..",
             "com.trippilot.itinerarygeneration..",
             "com.trippilot.changelog..",
+            "com.trippilot.archive..",
             "com.trippilot.notification..",
         )
             .should().dependOnClassesThat().resideInAPackage("com.trippilot.app..")
@@ -67,9 +74,32 @@ class ArchitectureRulesTest {
             .check(importedClasses)
     }
 
+    /**
+     * BR-U5-29 — 기록·회고(U5)는 `change_log_entry` 를 **읽기만** 한다. 쓰기(append)는 변경을 만든 모듈
+     * (편집 U3 · Plan-B U4)이 자기 트랜잭션 안에서 남기는 것이라, 아카이브가 사후에 덧쓰면
+     * "무엇을 왜 바꿨는지"의 출처가 둘이 된다.
+     *
+     * U5 모듈은 아직 없어 지금은 vacuous 지만, 패키지가 생기는 순간 발동한다(이 파일의 기존 규칙과 같은 방식).
+     * 어댑터·엔티티 직접 접근(SQL 로 쓰는 경로)은 R1 이 막는다 — 단 U5 모듈을 그 슬라이스 목록에 함께 등록해야 한다.
+     */
+    @Test
+    fun `BR-U5-29 기록·회고(U5)는 변경 이력을 쓰지 않는다`() {
+        noClasses().that().resideInAnyPackage("com.trippilot.archive..", "com.trippilot.reflection..")
+            .should(
+                callMethodWhere(
+                    describe<JavaMethodCall>("ChangeLogFacade.append 를 호출") {
+                        it.name == "append" && it.targetOwner.isAssignableTo(ChangeLogFacade::class.java)
+                    },
+                ),
+            )
+            .because("BR-U5-29: U5 는 change_log_entry 를 읽기만 한다 — 이력 생산은 변경을 만든 모듈 소유")
+            .allowEmptyShould(true)
+            .check(importedClasses)
+    }
+
     @Test
     fun `R1 모듈 간 상호작용은 api 로만 (내부 직접참조 금지)`() {
-        slices().matching("com.trippilot.(auth|profile|moderation|accommodationsearch|savedaccommodation|trip|placedata|itinerarygeneration|changelog|recalculation|planbdetection|weathercontext|notification)..")
+        slices().matching("com.trippilot.(auth|profile|moderation|accommodationsearch|savedaccommodation|trip|placedata|itinerarygeneration|changelog|recalculation|planbdetection|weathercontext|archive|reflection|notification)..")
             .should().notDependOnEachOther()
             // 다른 모듈의 api 퍼사드 의존은 허용(architecture.md). 내부(domain·application·adapter) 참조만 금지.
             .ignoreDependency(resideInAnyPackage("com.trippilot.."), resideInAPackage("..api.."))
