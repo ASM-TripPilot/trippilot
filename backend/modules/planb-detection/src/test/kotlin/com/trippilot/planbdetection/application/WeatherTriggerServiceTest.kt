@@ -94,6 +94,7 @@ class WeatherTriggerServiceTest : StringSpec({
             object : SensitivityRepository {
                 override fun of(accountId: UUID) = Sensitivity.NORMAL
             },
+            NoEvents,
             clock,
         )
         return WeatherTriggerService(trips, weather, inner, clock)
