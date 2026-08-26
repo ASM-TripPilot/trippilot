@@ -1,5 +1,6 @@
 package com.trippilot.recalculation.application
 
+import com.trippilot.archive.api.ArchiveFacade
 import com.trippilot.core.event.DomainEvent
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.itinerarygeneration.api.ReplanCommand
@@ -48,6 +49,18 @@ internal class FakeReplans(
             ),
         )
     }
+}
+
+/**
+ * 방문 실적 대역. 실적은 `archive` 소유라 여기서는 **경계 너머의 답**만 흉내 낸다 —
+ * 잠금 대상이 완료분만인지·마지막 완료 방문지가 무엇인지는 archive 모듈 스펙이 본다.
+ */
+internal class FakeArchive(
+    private val completedSlots: Set<String> = emptySet(),
+    private val lastCompletedPoi: UUID? = null,
+) : ArchiveFacade {
+    override fun getCompletedSlots(tripId: UUID) = completedSlots
+    override fun findLastCompletedPoi(tripId: UUID) = lastCompletedPoi
 }
 
 internal class CapturingReplanEvents : DomainEventPublisher {
