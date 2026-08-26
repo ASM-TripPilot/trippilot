@@ -2319,6 +2319,80 @@ components:
         text: { type: string, maxLength: 2000 }
         updatedAt: { type: string, format: date-time }
 
+    AddPhotoRequest:
+      type: object
+      required: [localAssetId, deviceId]
+      properties:
+        localAssetId:
+          type: string
+          maxLength: 200
+          description: 기기 로컬 자산 식별자(iOS PHAsset localIdentifier · Android MediaStore id). 기기 안에서만 뜻이 있다.
+        deviceId: { type: string, maxLength: 64 }
+        takenAt: { type: string, format: date-time, nullable: true }
+        exifLat:
+          type: number
+          format: double
+          nullable: true
+          description: 위치 동의가 없으면 **저장되지 않는다**(INV-U5-04). 보내는 것 자체는 오류가 아니다.
+        exifLng: { type: number, format: double, nullable: true }
+        sortOrder:
+          type: integer
+          nullable: true
+          description: 생략하면 맨 뒤에 붙는다.
+
+    ReorderPhotosRequest:
+      type: object
+      required: [orderedIds]
+      properties:
+        orderedIds:
+          type: array
+          description: 그 방문의 사진 **전부**를 한 번씩. 부분 목록은 400.
+          items: { type: string, format: uuid }
+
+    PutMemoRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 2000 }
+
+    VisitPhotoList:
+      type: object
+      required: [items, count]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/VisitPhoto' }
+        count:
+          type: integer
+          description: 개수만 쓰는 소비자(AI 컨텍스트)를 위해 함께 준다.
+
+    VisitPhoto:
+      type: object
+      required: [visitPhotoMetaId, localAssetId, deviceId, sortOrder]
+      properties:
+        visitPhotoMetaId: { type: string, format: uuid }
+        localAssetId: { type: string }
+        deviceId:
+          type: string
+          description: >
+            화면이 **다른 기기에서 찍은 사진**을 구분하는 근거(BR-U5-15) — 기기가 바뀌면 자산은
+            이관되지 않고 메타만 남는다.
+        takenAt: { type: string, format: date-time, nullable: true }
+        exifLat:
+          type: number
+          format: double
+          nullable: true
+          description: 위치 동의가 없으면 null — 등록 요청이 좌표를 실어 보냈어도 그렇다.
+        exifLng: { type: number, format: double, nullable: true }
+        sortOrder: { type: integer }
+
+    VisitMemo:
+      type: object
+      required: [text, updatedAt]
+      properties:
+        text: { type: string, maxLength: 2000 }
+        updatedAt: { type: string, format: date-time }
+
   responses:
     ValidationError:
       description: 입력 검증 실패
