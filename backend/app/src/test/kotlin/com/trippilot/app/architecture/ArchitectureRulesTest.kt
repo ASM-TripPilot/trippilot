@@ -37,8 +37,7 @@ class ArchitectureRulesTest {
                 "com.trippilot.placedata..",
                 "com.trippilot.itinerarygeneration..",
                 "com.trippilot.changelog..",
-                "com.trippilot.reflection..",
-            "com.trippilot.archive..",
+                "com.trippilot.archive..",
                 "com.trippilot.reflection..",
             )
             .because("R5: 의존 방향 app→modules→common, 역방향 금지")
