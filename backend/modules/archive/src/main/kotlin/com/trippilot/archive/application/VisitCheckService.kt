@@ -1,9 +1,11 @@
 package com.trippilot.archive.application
 
 import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.archive.api.ArchiveFacade
 import com.trippilot.archive.api.event.VisitChecked
+import com.trippilot.archive.api.VisitConflictState
 import com.trippilot.archive.domain.CheckSource
 import com.trippilot.archive.domain.VisitCheck
 import com.trippilot.archive.domain.VisitCheckRepository
@@ -39,9 +41,19 @@ class VisitCheckService(
     @Transactional
     fun arrive(accountId: UUID, tripId: UUID, slotKey: String?, poiId: UUID, source: CheckSource): VisitCheck {
         trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
-        if (slotKey != null && checks.findBySlot(tripId, slotKey) != null) {
+        val existing = slotKey?.let { checks.findBySlot(tripId, it) }
+        if (existing != null) {
             // 지오펜스가 같은 wake 에서 두 번 깨워도(P-MOBILE-U4-1 중복 진입) 하나만 확정된다.
-            throw ConflictDetected(message = "이미 체크된 방문지입니다.")
+            //
+            // 다만 **왜 거절하는지**를 갈라 실어야 한다(BR-U5-20). 오프라인 큐를 재생하다 같은 도착을
+            // 다시 보낸 것이면 원하던 상태가 이미 서버에 있으니 클라이언트는 수렴하면 된다.
+            // 같은 슬롯에 **다른 장소**가 기록돼 있으면 그건 사용자가 풀어야 할 충돌이다.
+            val sameState = existing.poiId == poiId
+            throw ConflictDetected(
+                current = VisitConflictState(existing.visitCheckId, existing.updatedAt),
+                message = if (sameState) "이미 체크된 방문지입니다." else "그 슬롯에는 다른 장소가 기록돼 있습니다.",
+                errorCode = if (sameState) ErrorCode.VISIT_ALREADY_RECORDED else ErrorCode.VISIT_CONFLICT,
+            )
         }
         return checks.save(VisitCheck.arrive(tripId, slotKey, poiId, source, clock.instant()))
     }
@@ -86,8 +98,21 @@ class VisitCheckService(
         visitCheckId: UUID,
         arrivedAt: Instant?,
         completedAt: Instant?,
-    ): VisitCheck =
-        checks.save(owned(accountId, tripId, visitCheckId).adjustTimes(arrivedAt, completedAt, clock.instant()))
+        expectedUpdatedAt: Instant? = null,
+    ): VisitCheck {
+        val current = owned(accountId, tripId, visitCheckId)
+        // BR-U5-22 — 충돌 판정 기준은 `updated_at` 이다. 로컬 편집이 서버의 현재 상태보다 이른 것을
+        // 근거로 만들어졌으면, 그 편집을 그대로 반영하면 **서버가 이미 반영한 변경을 조용히 되돌린다.**
+        // 기준을 보내지 않으면(단일 기기·온라인 편집) 검사하지 않는다 — 있던 경로를 막지 않기 위해서다.
+        if (expectedUpdatedAt != null && current.updatedAt.isAfter(expectedUpdatedAt)) {
+            throw ConflictDetected(
+                current = VisitConflictState(current.visitCheckId, current.updatedAt),
+                message = "그 사이 서버 기록이 바뀌었습니다.",
+                errorCode = ErrorCode.VISIT_CONFLICT,
+            )
+        }
+        return checks.save(current.adjustTimes(arrivedAt, completedAt, clock.instant()))
+    }
 
     @Transactional(readOnly = true)
     fun listByDay(accountId: UUID, tripId: UUID, day: LocalDate): List<VisitCheck> {

@@ -890,7 +890,7 @@ paths:
         '201': { description: 체크됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '400': { description: 장소·체크 방식 누락 }
         '404': { description: 여행 없음/타 계정 }
-        '409': { description: 이미 체크된 방문지 }
+        '409': { description: '이미 체크된 방문지 — `VISIT_ALREADY_RECORDED`(같은 장소, 수렴 가능) · `VISIT_CONFLICT`(다른 장소, 해소 필요)' }
   /trips/{tripId}/visits/days/{day}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -915,7 +915,7 @@ paths:
       responses:
         '200': { description: 보정됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '404': { description: 여행 없음/타 계정/기록 없음 }
-        '409': { description: 도착 없이 완료만 남기거나 순서가 뒤집힘 }
+        '409': { description: '도착 없이 완료만 남기거나 순서가 뒤집힘 · `expectedUpdatedAt` 이 낡았으면 `VISIT_CONFLICT`(BR-U5-22)' }
   /trips/{tripId}/visits/{visitCheckId}/complete:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -926,7 +926,7 @@ paths:
       responses:
         '200': { description: 완료됨, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '404': { description: 여행 없음/타 계정/기록 없음 }
-        '409': { description: 도착 없이 완료 · 이미 완료·건너뜀 }
+        '409': { description: '도착 없이 완료 · 이미 결과가 있다(같은 결과면 `VISIT_ALREADY_RECORDED`, 다른 결과면 `VISIT_CONFLICT`)' }
   /trips/{tripId}/visits/{visitCheckId}/skip:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -937,7 +937,7 @@ paths:
       responses:
         '200': { description: 건너뜀, content: { application/json: { schema: { $ref: '#/components/schemas/VisitCheck' } } } }
         '404': { description: 여행 없음/타 계정/기록 없음 }
-        '409': { description: 이미 완료·건너뜀 }
+        '409': { description: '이미 결과가 있다 — 같은 결과면 `VISIT_ALREADY_RECORDED`, 다른 결과면 `VISIT_CONFLICT`' }
   /trips/{tripId}/visits/{visitCheckId}/photos:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1647,6 +1647,14 @@ components:
       properties:
         arrivedAt: { type: string, format: date-time, nullable: true, description: 보내지 않으면 그대로 둔다(지우는 뜻이 아니다) }
         completedAt: { type: string, format: date-time, nullable: true, description: 보내지 않으면 그대로 둔다. 도착 없이 완료만 남길 수 없다 }
+        expectedUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            이 편집이 딛고 선 서버 버전(BR-U5-22 · TRIP-546). 오프라인 큐를 재생할 때 실어 보내면,
+            그 사이 서버가 앞서 나간 경우 **조용히 덮어쓰는 대신** `VISIT_CONFLICT`(409)로 갈린다.
+            보내지 않으면 검사하지 않는다 — 온라인 단일 기기 편집 경로를 막지 않는다.
     VisitCheckList:
       type: object
       required: [visits]
@@ -1654,7 +1662,7 @@ components:
         visits: { type: array, items: { $ref: '#/components/schemas/VisitCheck' } }
     VisitCheck:
       type: object
-      required: [visitCheckId, poiId, source, spontaneous]
+      required: [visitCheckId, poiId, source, spontaneous, updatedAt]
       properties:
         visitCheckId: { type: string, format: uuid }
         slotKey: { type: string, nullable: true, description: null = 즉석 방문 }
@@ -1664,6 +1672,12 @@ components:
         skippedAt: { type: string, format: date-time, nullable: true, description: 건너뜀(취소). 완료와 동시에 참일 수 없다 }
         source: { type: string, enum: [AUTO_GEOFENCE, MANUAL] }
         spontaneous: { type: boolean, description: 계획에 없던 곳인가 — 화면의 '즉석 방문' 배지 근거 }
+        updatedAt:
+          type: string
+          format: date-time
+          description: >
+            오프라인 충돌 판정의 기준(BR-U5-22 · TRIP-546). 클라이언트는 이 값을 로컬 편집의 기준
+            버전으로 들고 있다가 재생 시 `expectedUpdatedAt` 으로 돌려보낸다.
     TriggerList:
       type: object
       required: [triggers]
@@ -2214,6 +2228,96 @@ components:
                 거절 사유만 주면 사용자는 무엇이 끝나기를 기다려야 하는지 모른다 — 화면이 이 값으로
                 그 여행으로 이동시킨다. `existingProvider` 와 같은 방식으로 다른 에러 코드의 응답에는
                 나타나지 않는다(직렬화 생략).
+            visitCheckId:
+              type: string
+              format: uuid
+              description: >
+                VISIT_ALREADY_RECORDED · VISIT_CONFLICT 에만 존재(TRIP-546 · BR-U5-20·21).
+                서버에 이미 있는 방문 기록. 오프라인 큐 재생에서 **409 는 실패가 아니다** —
+                `VISIT_ALREADY_RECORDED` 면 원하던 상태가 이미 있다는 뜻이라 클라이언트는 그 항목을
+                `SYNCED` 로 수렴시키고, `VISIT_CONFLICT` 면 방문 단위 해소 화면으로 간다.
+                2열 비교에 필요한 나머지(시각·상태·메모·사진 수)는 이 id 로 3종 비교 표면에서 읽는다 —
+                오류 봉투를 자료 전달 통로로 쓰지 않는다.
+            serverUpdatedAt:
+              type: string
+              format: date-time
+              description: >
+                VISIT_ALREADY_RECORDED · VISIT_CONFLICT 에만 존재. 서버 기록의 `updatedAt`(BR-U5-22) —
+                충돌 판정의 기준값이라, 클라이언트가 이것을 받아 다음 재생의 `expectedUpdatedAt` 으로 쓴다.
+
+    AddPhotoRequest:
+      type: object
+      required: [localAssetId, deviceId]
+      properties:
+        localAssetId:
+          type: string
+          maxLength: 200
+          description: 기기 로컬 자산 식별자(iOS PHAsset localIdentifier · Android MediaStore id). 기기 안에서만 뜻이 있다.
+        deviceId: { type: string, maxLength: 64 }
+        takenAt: { type: string, format: date-time, nullable: true }
+        exifLat:
+          type: number
+          format: double
+          nullable: true
+          description: 위치 동의가 없으면 **저장되지 않는다**(INV-U5-04). 보내는 것 자체는 오류가 아니다.
+        exifLng: { type: number, format: double, nullable: true }
+        sortOrder:
+          type: integer
+          nullable: true
+          description: 생략하면 맨 뒤에 붙는다.
+
+    ReorderPhotosRequest:
+      type: object
+      required: [orderedIds]
+      properties:
+        orderedIds:
+          type: array
+          description: 그 방문의 사진 **전부**를 한 번씩. 부분 목록은 400.
+          items: { type: string, format: uuid }
+
+    PutMemoRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 2000 }
+
+    VisitPhotoList:
+      type: object
+      required: [items, count]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/VisitPhoto' }
+        count:
+          type: integer
+          description: 개수만 쓰는 소비자(AI 컨텍스트)를 위해 함께 준다.
+
+    VisitPhoto:
+      type: object
+      required: [visitPhotoMetaId, localAssetId, deviceId, sortOrder]
+      properties:
+        visitPhotoMetaId: { type: string, format: uuid }
+        localAssetId: { type: string }
+        deviceId:
+          type: string
+          description: >
+            화면이 **다른 기기에서 찍은 사진**을 구분하는 근거(BR-U5-15) — 기기가 바뀌면 자산은
+            이관되지 않고 메타만 남는다.
+        takenAt: { type: string, format: date-time, nullable: true }
+        exifLat:
+          type: number
+          format: double
+          nullable: true
+          description: 위치 동의가 없으면 null — 등록 요청이 좌표를 실어 보냈어도 그렇다.
+        exifLng: { type: number, format: double, nullable: true }
+        sortOrder: { type: integer }
+
+    VisitMemo:
+      type: object
+      required: [text, updatedAt]
+      properties:
+        text: { type: string, maxLength: 2000 }
+        updatedAt: { type: string, format: date-time }
 
     AddPhotoRequest:
       type: object
