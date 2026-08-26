@@ -73,6 +73,7 @@ import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
+import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
 import { ReplanSolvingScreen } from '@/features/planb/ui/ReplanSolvingScreen';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
@@ -2557,6 +2558,14 @@ const PREVIEW_STATES: PreviewState[] = [
         <SlotCandidateSheet candidates={[]} slackLabel="여유 1시간 20분" />
       </ScrollView>
     ),
+  },
+  // ── i19 반영 완료(TRIP-441) — buildable 서브셋(헤더·체크·문구·CTA). 체크 원 크기·primary bg·
+  //    정렬은 jest 사각이라 이 키가 육안 대조 자리다(지표·전후 배지·되돌리기는 draft 부재로 없음) ──
+  {
+    key: 'planb-applied',
+    label: 'i19 반영 완료 · 체크·여행 계속하기',
+    login: null,
+    render: () => <ReplanAppliedScreen onBack={noop} onContinue={noop} />,
   },
 ];
 
