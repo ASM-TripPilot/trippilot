@@ -94,6 +94,7 @@ import {
   type TripWizardStep1ScreenProps,
 } from '@/features/trip/ui/TripWizardStep1Screen';
 import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
+import { LiveLocationPage } from '@/pages/live-location';
 import {
   TripWizardStep2Screen,
   type TripWizardStep2ScreenProps,
@@ -2566,6 +2567,24 @@ const PREVIEW_STATES: PreviewState[] = [
     label: 'i19 반영 완료 · 체크·여행 계속하기',
     login: null,
     render: () => <ReplanAppliedScreen onBack={noop} onContinue={noop} />,
+  },
+  // ── i20·i21 위치 수동 입력·권한 거부 폴백(TRIP-442) — 한 컴포넌트를 state prop 으로 두 얼굴.
+  //    지도 롱프레스 실동작·"이 위치로 계속" 핸드오프·핀 오버레이·Figma 픽셀은 jest 사각이라 이
+  //    두 키가 육안 대조 자리다(i20 `1790:3495`·i21 `1790:3549`). 자체 조회 없는 프리젠테이션이라
+  //    QueryClient 없이 렌더된다 ──
+  {
+    key: 'live-location-manual',
+    label: 'i20 수동 위치 입력 · 측위 불가',
+    login: null,
+    render: () => <LiveLocationPage tripId="preview-trip" state="manual" />,
+  },
+  {
+    key: 'live-location-denied',
+    label: 'i21 위치 권한 거부 · 등록 숙소 프리시드',
+    login: null,
+    render: () => (
+      <LiveLocationPage tripId="preview-trip" state="permission-denied" />
+    ),
   },
 ];
 
