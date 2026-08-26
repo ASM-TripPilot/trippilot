@@ -72,6 +72,10 @@ import {
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
+import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
+import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
+import { ReplanSolvingScreen } from '@/features/planb/ui/ReplanSolvingScreen';
+import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import {
   StayRegisterScreen,
@@ -90,6 +94,7 @@ import {
   type TripWizardStep1ScreenProps,
 } from '@/features/trip/ui/TripWizardStep1Screen';
 import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
+import { LiveLocationPage } from '@/pages/live-location';
 import {
   TripWizardStep2Screen,
   type TripWizardStep2ScreenProps,
@@ -2438,6 +2443,147 @@ const PREVIEW_STATES: PreviewState[] = [
         onPressBrowse={noop}
         onBack={noop}
       />
+    ),
+  },
+  // ── i10 재계획 요청 시트(TRIP-439) — 순수 시트를 props 로 직접 그린다. 바텀시트 실제 열림/딤은
+  //    정적 프리뷰에서도 못 보므로(통과형 목과 같은 원리) 여기서 보는 것은 칩·CTA·안내 레이아웃까지다 ──
+  {
+    key: 'planb-request',
+    label: 'i10 재계획 요청 · 수동 진입',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <ReplanRequestSheet
+          scope="PARTIAL_SLOTS"
+          selectedReasons={['WEATHER']}
+          selectedDirectives={['RELAX']}
+          freeText=""
+          onSelectScope={noop}
+          onToggleReason={noop}
+          onToggleDirective={noop}
+          onChangeFreeText={noop}
+          onSubmit={noop}
+          onManual={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'planb-request-detected',
+    label: 'i10 재계획 요청 · 감지 배너(자동 진입)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <ReplanRequestSheet
+          scope="FULL_DAY"
+          selectedReasons={[]}
+          selectedDirectives={[]}
+          freeText=""
+          onSelectScope={noop}
+          onToggleReason={noop}
+          onToggleDirective={noop}
+          onChangeFreeText={noop}
+          onSubmit={noop}
+          onManual={noop}
+          trigger={{ title: '비 예보 감지' }}
+          onSuppress={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'planb-request-out-of-scope',
+    label: 'i10 재계획 요청 · 범위 밖(표시만·제출잠금)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <ReplanRequestSheet
+          scope="PARTIAL_SLOTS"
+          selectedReasons={[]}
+          selectedDirectives={[]}
+          freeText="파리로 바꿔줘"
+          onSelectScope={noop}
+          onToggleReason={noop}
+          onToggleDirective={noop}
+          onChangeFreeText={noop}
+          onSubmit={noop}
+          onManual={noop}
+          outOfScope
+        />
+      </View>
+    ),
+  },
+  // ── i12 재계획 로딩(TRIP-440) — 순수 화면. 진행바 흐름·체크리스트 아이콘 3상태는 정지
+  //    스크린샷 한계라 여기서 보는 것은 레이아웃·라벨·안심 노트·CTA 2개까지다 ──
+  {
+    key: 'planb-solving',
+    label: 'i12 재계획 로딩 · 진행·백그라운드·취소',
+    login: null,
+    render: () => <ReplanSolvingScreen onBackground={noop} onCancel={noop} />,
+  },
+  // ── i14 슬롯 후보 시트(TRIP-440) — 순수 인라인 패널 3얼굴(후보·강등 고지·빈 목록). slackLabel
+  //    은 slackTime.ts(model) 산출 형태를 그대로 주입한다(ui 소스엔 숫자 리터럴 0) ──
+  {
+    key: 'planb-candidates',
+    label: 'i14 슬롯 후보 · 3장',
+    login: null,
+    render: () => (
+      <ScrollView contentContainerClassName="gap-md p-lg">
+        <SlotCandidateSheet
+          candidates={SLOT_CANDIDATES_PREVIEW}
+          slackLabel="여유 1시간 20분"
+        />
+      </ScrollView>
+    ),
+  },
+  {
+    key: 'planb-candidates-degraded',
+    label: 'i14 슬롯 후보 · 강등 고지(가까운 순)',
+    login: null,
+    render: () => (
+      <ScrollView contentContainerClassName="gap-md p-lg">
+        <SlotCandidateSheet
+          candidates={SLOT_CANDIDATES_PREVIEW}
+          slackLabel="여유 40분"
+          degraded
+        />
+      </ScrollView>
+    ),
+  },
+  {
+    key: 'planb-candidates-empty',
+    label: 'i14 슬롯 후보 · 0건(반경·컨셉 제안)',
+    login: null,
+    render: () => (
+      <ScrollView contentContainerClassName="gap-md p-lg">
+        <SlotCandidateSheet candidates={[]} slackLabel="여유 1시간 20분" />
+      </ScrollView>
+    ),
+  },
+  // ── i19 반영 완료(TRIP-441) — buildable 서브셋(헤더·체크·문구·CTA). 체크 원 크기·primary bg·
+  //    정렬은 jest 사각이라 이 키가 육안 대조 자리다(지표·전후 배지·되돌리기는 draft 부재로 없음) ──
+  {
+    key: 'planb-applied',
+    label: 'i19 반영 완료 · 체크·여행 계속하기',
+    login: null,
+    render: () => <ReplanAppliedScreen onBack={noop} onContinue={noop} />,
+  },
+  // ── i20·i21 위치 수동 입력·권한 거부 폴백(TRIP-442) — 한 컴포넌트를 state prop 으로 두 얼굴.
+  //    지도 롱프레스 실동작·"이 위치로 계속" 핸드오프·핀 오버레이·Figma 픽셀은 jest 사각이라 이
+  //    두 키가 육안 대조 자리다(i20 `1790:3495`·i21 `1790:3549`). 자체 조회 없는 프리젠테이션이라
+  //    QueryClient 없이 렌더된다 ──
+  {
+    key: 'live-location-manual',
+    label: 'i20 수동 위치 입력 · 측위 불가',
+    login: null,
+    render: () => <LiveLocationPage tripId="preview-trip" state="manual" />,
+  },
+  {
+    key: 'live-location-denied',
+    label: 'i21 위치 권한 거부 · 등록 숙소 프리시드',
+    login: null,
+    render: () => (
+      <LiveLocationPage tripId="preview-trip" state="permission-denied" />
     ),
   },
 ];
