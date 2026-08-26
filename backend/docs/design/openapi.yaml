@@ -1115,6 +1115,7 @@ paths:
         없고 backend 에 LLM 게이트웨이도 없다. 규칙 문장으로 먼저 열고 `source` 로 품질을 관측한다.
       responses:
         '200': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
+        '400': { description: 여행 기간 밖 날짜 }
         '404': { description: 여행 없음/타 계정 }
     put:
       tags: [reflection]
@@ -1122,13 +1123,21 @@ paths:
       description: >
         생성된 초안을 덮지 않고 `editedNarrative` 에 따로 쌓는다(INV-U5-06). 화면이 "생성된 것"과
         "내가 고친 것"을 2열로 그리기 때문이다 — 하나로 합치면 그 비교가 사라진다.
+
+
+        **회고가 아직 없어도 쓸 수 있다**(BR-U5-36) — 근거 수치만으로 된 기본 카드를 만들어 그 위에
+        얹는다. 404 로 막으면 화면은 "쓰려면 먼저 생성 버튼을 누르세요"가 되는데, 생성이 실패해서
+        여기 온 사용자에게 그건 답이 아니다.
+
+
+        여행 기간 밖 날짜는 400 이다 — 그 날에는 근거 데이터가 없다.
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/EditReflectionRequest' } } }
       responses:
         '200': { description: 수정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
-        '400': { description: 입력 검증 실패 }
-        '404': { description: 여행 없음/타 계정/회고 없음 }
+        '400': { description: 입력 검증 실패 · 여행 기간 밖 날짜 }
+        '404': { description: 여행 없음/타 계정 }
   /trips/{tripId}/records:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2728,9 +2737,15 @@ components:
 
     Reflection:
       type: object
-      required: [dayDate, draftNarrative, source, stats, generatedAt, updatedAt]
+      required: [dayDate, narrative, draftNarrative, source, stats, generatedAt, updatedAt]
       properties:
         dayDate: { type: string, format: date }
+        narrative:
+          type: string
+          description: >
+            화면이 그대로 그리는 문장(`editedNarrative ?? draftNarrative`). **표시본 선택은 업무
+            규칙이라 서버가 정한다**(BR-U5-35) — 클라이언트가 매번 다시 고르면 조회 화면과 목록
+            화면이 서로 다르게 고르는 날이 온다.
         draftNarrative: { type: string, description: 생성된 원문. **비어 있을 수 없다**(INV-U5-07) }
         editedNarrative:
           type: string

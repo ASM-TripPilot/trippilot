@@ -105,6 +105,34 @@ class ReflectionPersistenceIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `재생성이 수정본을 지우지 않는다 — 실 DB 왕복(INV-U5-06 · TRIP-553)`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        reflections.generateDaily(accountId, tripId, day)
+        reflections.edit(accountId, tripId, day, "내가 쓴 문장")
+
+        reflections.generateDaily(accountId, tripId, day)
+
+        // upsert 가 도메인 값을 그대로 덮으므로, 도메인이 보존해도 영속에서 날아가면 여기서 잡힌다.
+        jdbc.queryForObject(
+            "SELECT edited_narrative FROM reflection WHERE trip_id = ?", String::class.java, tripId,
+        ) shouldBe "내가 쓴 문장"
+        rows(tripId) shouldBe 1
+    }
+
+    @Test
+    fun `회고가 없어도 바로 쓸 수 있다 — 기본 카드 위에 얹는다(BR-U5-36)`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+
+        val written = reflections.edit(accountId, tripId, day, "생성 없이 바로 쓴다")
+
+        written.narrative shouldBe "생성 없이 바로 쓴다"
+        written.draftNarrative.shouldNotBeBlank()
+        rows(tripId) shouldBe 1
+    }
+
+    @Test
     fun `stats 가 jsonb 로 왕복한다 — 이중 인코딩되면 여기서 깨진다`() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
