@@ -2,6 +2,8 @@ package com.trippilot.planbdetection.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.planbdetection.api.event.PlanBTriggered
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
 import com.trippilot.planbdetection.domain.PlanBTrigger
 import com.trippilot.planbdetection.domain.PlanBTriggerRepository
@@ -51,6 +53,7 @@ class TriggerService(
     private val triggers: PlanBTriggerRepository,
     private val suppressions: SuppressionRepository,
     private val sensitivities: SensitivityRepository,
+    private val events: DomainEventPublisher,
     private val clock: Clock,
 ) {
 
@@ -109,12 +112,26 @@ class TriggerService(
             )
             return null
         }
+        // **발화한 것만 알린다**(INV-U4-01 · TRIP-550) — 억제·무영향 판정은 위에서 이미 돌아갔다.
+        // 그것까지 알리면 "끄기"를 누른 알림이 다시 울린다. 발행은 저장과 같은 트랜잭션이라,
+        // 롤백되면 트리거도 이벤트도 함께 없다.
         return triggers.save(
             PlanBTrigger.active(
                 tripId, itinerary.itineraryId, signal.kind, signal.affectedDate, signal.slotKey,
                 signal.payload, signal.scope, signal.reason, now,
             ),
-        )
+        ).also {
+            events.publish(
+                PlanBTriggered(
+                    aggregateId = it.triggerId.toString(),
+                    accountId = accountId.toString(),
+                    tripId = tripId.toString(),
+                    kind = it.kind.name,
+                    slotKey = it.slotKey,
+                    reason = it.reason,
+                ),
+            )
+        }
     }
 
     /** 화면에는 **발화 중인 것만** 나간다(INV-U4-01 — 발화하지 않기로 한 판정은 어떤 형태로도 노출되지 않는다). */

@@ -4,9 +4,12 @@ import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.savedaccommodation.domain.BaseAssignmentRepository
 import com.trippilot.savedaccommodation.domain.RegisterRoute
+import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.savedaccommodation.api.event.StayRegistered
 import com.trippilot.savedaccommodation.domain.SavedStay
 import com.trippilot.savedaccommodation.domain.SavedStayRepository
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.LocalDate
 import java.util.UUID
@@ -44,8 +47,16 @@ data class EditStayCommand(
 class SavedStayService(
     private val repo: SavedStayRepository,
     private val bases: BaseAssignmentRepository,
+    private val events: DomainEventPublisher,
     private val clock: Clock,
 ) {
+    /**
+     * 등록하고 **알린다**(TRIP-550). 발행은 **저장과 같은 트랜잭션**이다 — 밖에서 부르면 롤백된
+     * 등록에 대해 알림이 나가고, 사용자는 없는 숙소의 알림을 받는다.
+     *
+     * 소비는 U6 몫이고 이 모듈은 notification 을 모른다 — 배달은 아웃박스 릴레이가 한다(R1).
+     */
+    @Transactional
     fun register(accountId: UUID, cmd: RegisterStayCommand): SavedStay =
         repo.save(
             SavedStay.register(
@@ -53,7 +64,17 @@ class SavedStayService(
                 cmd.checkIn, cmd.checkOut, cmd.externalSource, cmd.externalId,
                 cmd.registerRoute, cmd.memo, clock.instant(),
             ),
-        )
+        ).also {
+            events.publish(
+                StayRegistered(
+                    aggregateId = it.savedStayId.toString(),
+                    accountId = accountId.toString(),
+                    name = it.name,
+                    checkIn = it.checkIn.toString(),
+                    checkOut = it.checkOut.toString(),
+                ),
+            )
+        }
 
     fun list(accountId: UUID): List<SavedStay> = repo.findByAccount(accountId)
 

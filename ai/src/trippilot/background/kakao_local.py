@@ -48,7 +48,7 @@ class KakaoLocalClient:
     def _get(self, endpoint: str, query: str) -> GeoPoint | None:
         if self.calls_used >= self._max_calls:
             raise CallBudgetExceeded(
-                f"카카오 일일 호출 상한 {self._max_calls} 도달"
+                f"카카오 실행당 호출 상한 {self._max_calls} 도달"
             )
         self.calls_used += 1
         payload = self._http.get_json(

@@ -25,6 +25,11 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
 
+/** 발행만 삼키는 싱크(TRIP-550). 발행 여부는 이벤트 테스트가 따로 본다. */
+internal object NoEvents : com.trippilot.core.event.DomainEventPublisher {
+    override fun publish(event: com.trippilot.core.event.DomainEvent) = Unit
+}
+
 /**
  * 감지·억제(C9).
  * 검증 축: **발화하지 않은 판정도 기록**(정본 §2.1) · 화면에는 발화분만(INV-U4-01) ·
@@ -79,7 +84,7 @@ class TriggerServiceTest : StringSpec({
         suppressions: Suppressions = Suppressions(),
         clock: Clock = clockAt("2026-08-11T03:00:00Z"),
         s: Sensitivity = Sensitivity.NORMAL,
-    ) = TriggerService(trips, itineraries, triggers, suppressions, sensitivity(s), clock)
+    ) = TriggerService(trips, itineraries, triggers, suppressions, sensitivity(s), NoEvents, clock)
 
     fun signal(slotKey: String? = slotA, kind: TriggerKind = TriggerKind.WEATHER) = DetectionSignal(
         kind = kind, affectedDate = day, slotKey = slotKey,
@@ -212,7 +217,7 @@ class TriggerServiceTest : StringSpec({
             override fun findCurrent(accountId: UUID, tripId: UUID) =
                 ItineraryRef(itineraryId, "PLANNED", "COMPLETE", listOf(day), listOf(past, slotA))
         }
-        val svc = TriggerService(trips, withPast, triggers, Suppressions(), sensitivity(), clockAt("2026-08-11T03:00:00Z"))
+        val svc = TriggerService(trips, withPast, triggers, Suppressions(), sensitivity(), NoEvents, clockAt("2026-08-11T03:00:00Z"))
 
         svc.evaluate(acc, tripId, signal(slotKey = past)) shouldBe null
         triggers.stored.single().state shouldBe TriggerState.EXPIRED
