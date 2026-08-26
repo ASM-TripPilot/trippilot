@@ -36,3 +36,4 @@ include(":modules:itinerary-recalculation")   // C10 재계획 세션 (TRIP-273 
 include(":modules:change-log")   // 변경 이력(changelog 계층) — US-PLANB-09 (TRIP-275)
 include(":modules:archive")   // C12 방문 실적·기록(actual 계층) — U4 에서 이관 (TRIP-540 · U5)
 include(":modules:reflection")   // C13 회고 — 하루 한 장 (TRIP-552 · U5)
+include(":modules:notification")   // C14 알림함·리마인드 스케줄 (TRIP-547 · U6)

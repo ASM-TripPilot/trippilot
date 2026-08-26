@@ -23,6 +23,7 @@ dependencies {
     implementation(project(":modules:change-log"))
     implementation(project(":modules:archive"))
     implementation(project(":modules:reflection"))
+    implementation(project(":modules:notification"))
 
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.actuator)

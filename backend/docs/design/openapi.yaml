@@ -24,6 +24,7 @@ tags:
   - name: preferences
   - name: account
   - name: bootstrap
+  - name: notification
 
 paths:
   /auth/social/{provider}:
@@ -1348,6 +1349,36 @@ paths:
       responses:
         '204': { description: 삭제됨 }
         '404': { description: 없음/타 계정 }
+  /me/notifications:
+    get:
+      tags: [notification]
+      summary: 알림함 목록
+      description: >
+        인앱 알림함(`l01`). 최신순. **푸시 성공 여부와 무관하게** 여기 다 있다(INV-U6-02) —
+        푸시를 껐거나 실패했거나 며칠 만에 앱을 켜도 이 목록이 catch-up 이 된다.
+        시각은 절대 시각(`occurredAt`)만 준다. `10분 전`·`어제` 같은 상대 표기는 기기 로케일의 몫이다.
+      parameters:
+        - name: unreadOnly
+          in: query
+          schema: { type: boolean, default: false }
+          description: 미읽음만. 뱃지 카운트용.
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationList' } } } }
+  /me/notifications/{notificationId}/read:
+    parameters:
+      - { name: notificationId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [notification]
+      summary: 알림 읽음 표시
+      description: >
+        **멱등하다** — 이미 읽은 알림을 다시 눌러도 204 다. 목록을 열 때마다 클라이언트가 재시도할 수 있고,
+        그때 409 를 내면 붉어질 이유가 없는 곳에서 화면이 붉어진다. 처음 읽은 시각은 덮이지 않는다.
+      responses:
+        '204': { description: 표시됨(이미 읽은 경우 포함) }
+        '404': { description: 없음/타 계정 }
 
 components:
   securitySchemes:
@@ -2667,6 +2698,43 @@ components:
       properties:
         text: { type: string, maxLength: 2000 }
         updatedAt: { type: string, format: date-time }
+
+    NotificationList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Notification' }
+
+    Notification:
+      type: object
+      required: [notificationId, kind, title, body, occurredAt]
+      properties:
+        notificationId: { type: string, format: uuid }
+        kind:
+          type: string
+          description: >
+            알림 종류 8종. **DB CHECK 로 고정하지 않는다** — 커뮤니티(U7) 개통 때 어휘를 넓히자고
+            마이그레이션이 붙는 것을 피한다. 어휘의 주인은 서버의 `NotificationKind` 하나다.
+          enum: [STAY, TRIP_PRE, TRIP_DAY, SLOT_PRE, PLAN_B, REFLECTION, COMMUNITY, SYSTEM]
+        title: { type: string, maxLength: 120 }
+        body: { type: string, maxLength: 400 }
+        actionType:
+          type: string
+          nullable: true
+          description: 알림에서 들어갈 화면. 진입이 없으면 `actionPayload` 와 함께 null.
+          enum: [TRIP_ITINERARY]
+        actionPayload:
+          type: object
+          nullable: true
+          additionalProperties: { type: string }
+        occurredAt: { type: string, format: date-time }
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: null = 미읽음 — 목록 좌측 빨간 dot 의 근거.
 
   responses:
     ValidationError:
