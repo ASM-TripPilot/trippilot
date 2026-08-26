@@ -1,9 +1,9 @@
-package com.trippilot.recalculation.adapter.`in`.web
+package com.trippilot.archive.adapter.`in`.web
 
 import com.trippilot.core.error.AuthenticationRequired
-import com.trippilot.recalculation.application.VisitCheckService
-import com.trippilot.recalculation.domain.CheckSource
-import com.trippilot.recalculation.domain.VisitCheck
+import com.trippilot.archive.application.VisitCheckService
+import com.trippilot.archive.domain.CheckSource
+import com.trippilot.archive.domain.VisitCheck
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
 import org.springframework.format.annotation.DateTimeFormat

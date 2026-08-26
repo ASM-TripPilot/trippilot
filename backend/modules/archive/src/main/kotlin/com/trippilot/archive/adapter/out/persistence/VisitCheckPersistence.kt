@@ -1,8 +1,8 @@
-package com.trippilot.recalculation.adapter.out.persistence
+package com.trippilot.archive.adapter.out.persistence
 
-import com.trippilot.recalculation.domain.CheckSource
-import com.trippilot.recalculation.domain.VisitCheck
-import com.trippilot.recalculation.domain.VisitCheckRepository
+import com.trippilot.archive.domain.CheckSource
+import com.trippilot.archive.domain.VisitCheck
+import com.trippilot.archive.domain.VisitCheckRepository
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id

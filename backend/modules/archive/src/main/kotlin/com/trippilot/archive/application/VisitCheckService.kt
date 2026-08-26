@@ -1,10 +1,11 @@
-package com.trippilot.recalculation.application
+package com.trippilot.archive.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
-import com.trippilot.recalculation.domain.CheckSource
-import com.trippilot.recalculation.domain.VisitCheck
-import com.trippilot.recalculation.domain.VisitCheckRepository
+import com.trippilot.archive.api.ArchiveFacade
+import com.trippilot.archive.domain.CheckSource
+import com.trippilot.archive.domain.VisitCheck
+import com.trippilot.archive.domain.VisitCheckRepository
 import com.trippilot.trip.api.TripFacade
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -14,21 +15,22 @@ import java.time.LocalDate
 import java.util.UUID
 
 /**
- * 방문 실적(LC-U4-6). 계획을 덮어쓰지 않고 **별도 계층**으로 쌓는다.
+ * 방문 실적(C12 Travel Archive · LC-U4-6 승계). 계획을 덮어쓰지 않고 **별도 계층**으로 쌓는다.
  *
  * 이 서비스가 여는 것 셋:
  * - 재계획의 **잠금 대상**(INV-U4-04) — 이미 다녀온 곳의 시각을 바꾸면 사용자가 겪은 사실과 어긋난다
  * - `DELAY` 트리거의 **체류 초과 입력**(파생 dwell)
  * - 기준점 사다리의 **마지막 완료 방문지**(BR-U4-19)
  *
- * ⚠ U5 C12 로 이관 예정이다(G-U4-5) — 사진·메모는 여기서 늘리지 않는다.
+ * 뒤의 둘은 U4 가 쓰므로 [ArchiveFacade] 로 내보낸다 — 남의 모듈이 이 클래스를 직접 들면 R1 위반이고,
+ * 여기서 U4 를 되부르면 순환이다(BR-U5-10).
  */
 @Service
 class VisitCheckService(
     private val trips: TripFacade,
     private val checks: VisitCheckRepository,
     private val clock: Clock,
-) {
+) : ArchiveFacade {
 
     /** 도착 체크. 같은 슬롯에 이미 실적이 있으면 409 — 둘이면 "완료됐나"가 갈린다. */
     @Transactional
@@ -77,12 +79,12 @@ class VisitCheckService(
      * 시각을 조정할 여지가 있다.
      */
     @Transactional(readOnly = true)
-    fun lockedSlotKeys(tripId: UUID): Set<String> =
+    override fun getCompletedSlots(tripId: UUID): Set<String> =
         checks.findByTrip(tripId).filter { it.isCompleted }.mapNotNull { it.slotKey }.toSet()
 
     /** 기준점 사다리의 **마지막 완료 방문지**(BR-U4-19). 좌표는 호출 측이 POI 정본에서 얻는다. */
     @Transactional(readOnly = true)
-    fun lastCompletedPoi(tripId: UUID): UUID? =
+    override fun findLastCompletedPoi(tripId: UUID): UUID? =
         checks.findByTrip(tripId).filter { it.isCompleted }.maxByOrNull { it.completedAt!! }?.poiId
 
     private fun owned(accountId: UUID, tripId: UUID, visitCheckId: UUID): VisitCheck {
