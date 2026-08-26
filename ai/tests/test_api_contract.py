@@ -70,15 +70,26 @@ class FakeOutcome:
 class FakeRepairOutcome:
     repaired: FakeOutcome | None
     changes: Sequence[str] = field(default_factory=list)
+    unverified: Sequence[object] = ()   # TRIP-537 — 판정 못 한 슬롯(기본 없음)
+
+
+@dataclass
+class FakeValidateOutcome:
+    """`ValidationOutcome` 충족 — 위반과 미검증을 나눠 담는다 (TRIP-537)."""
+
+    violations: Sequence[Violation]
+    unverified: Sequence[object] = ()
 
 
 class FakeOrchestrator:
     """구조적 타이핑으로만 API와 만난다 — 실 오케스트레이터(TRIP-237) import 없음."""
 
     def __init__(self, outcome: FakeOutcome,
-                 violations: Sequence[Violation] = ()) -> None:
+                 violations: Sequence[Violation] = (),
+                 unverified: Sequence[object] = ()) -> None:
         self.outcome = outcome
         self.violations = list(violations)
+        self.unverified = list(unverified)
         self.seen: list[object] = []
 
     def generate(self, request):  # noqa: ANN001 — 구조적 계약
@@ -87,7 +98,7 @@ class FakeOrchestrator:
 
     def validate(self, request):  # noqa: ANN001
         self.seen.append(request)
-        return self.violations
+        return FakeValidateOutcome(self.violations, self.unverified)
 
     def repair(self, request):  # noqa: ANN001
         self.seen.append(request)
@@ -313,7 +324,9 @@ def test_payload_round_trips_into_validate_request() -> None:
         "violations": [{
             "code": "HC2", "slot_ref": FREE_POI, "detail": "이동시간 부족",
             "day_index": 0, "slot_index": 1,
-        }]
+        }],
+        # TRIP-537 — 전부 등록된 일정이면 빈 목록(= 모든 슬롯이 판정을 받았다)
+        "unverified_slots": [],
     }
 
 
@@ -388,7 +401,7 @@ def test_repair_returns_repaired_payload_and_changes() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"repaired", "changes"}
+    assert set(body) == {"repaired", "changes", "unverified_slots"}
     assert body["repaired"] == generated
     assert body["changes"] == ["10:30 → 11:00"]
     assert "minutes" not in response.text  # INV-3 은 수리 응답에도 적용된다
@@ -410,4 +423,5 @@ def test_repair_unrepairable_is_200_with_null() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json() == {"repaired": None, "changes": []}
+    assert response.json() == {
+        "repaired": None, "changes": [], "unverified_slots": []}

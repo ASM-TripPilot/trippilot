@@ -246,6 +246,25 @@ class ViolationSchema(BoundaryModel):
     slot_index: int | None = None
 
 
+class UnverifiedSlotSchema(BoundaryModel):
+    """HC 판정에서 **제외된** 슬롯 1건 (TRIP-537) — 위반이 아니라 "판정 못 함"이다.
+
+    HC1(영업시간)·HC2(이동)는 POI 정본을 못 찾으면 그 슬롯을 건너뛴다("정보 없음은
+    막지 않는다", c2 규칙 — 그대로 유지). 그런데 스킵이 응답에 아무 흔적을 남기지
+    않아 `violations: []` 가 "전부 통과"로 읽혔다(INV-4 침묵 실패의 완곡한 형태).
+    이 목록이 "무엇을 못 봤는지"를 드러낸다 — **violations와 섞지 않는다**.
+
+    `reason_code`는 **닫힌 집합**(백엔드가 분기·화면 문구에 사용):
+    - `NOT_REGISTERED`: POI 정본(place-data)이 그 id를 안 돌려줬다 — 미등록·비ACTIVE
+    - `UNMAPPABLE`: 돌려줬으나 판정에 쓸 수 없다 — `detail`이 원인 필드명
+      (좌표 null·모르는 category/data_quality 등, 즉 경계 enum 드리프트가 여기로 온다)
+    """
+
+    poi_id: str = Field(min_length=1)
+    reason_code: Literal["NOT_REGISTERED", "UNMAPPABLE"]
+    detail: str = ""
+
+
 class ValidateItineraryRequest(BoundaryModel):
     """`POST /ai/v1/itinerary/validate` — 백엔드 포트 `validate(solution)` 대응 + IO-1."""
 
@@ -254,9 +273,15 @@ class ValidateItineraryRequest(BoundaryModel):
 
 
 class ValidateItineraryResponse(BoundaryModel):
-    """빈 목록 = 위반 없음. 상태코드는 200(위반은 정상 응답, IO-7)."""
+    """빈 목록 = 위반 없음. 상태코드는 200(위반은 정상 응답, IO-7).
+
+    `unverified_slots`(TRIP-537)는 additive — 기본 빈 리스트 = **모든 슬롯이 HC1·HC2
+    판정을 받았다**. 비어 있지 않으면 "위반 0"의 의미가 다르다: 그 슬롯들은 통과한
+    것이 아니라 검사되지 않았다. 위반 목록과 섞지 않는 이유가 그것이다.
+    """
 
     violations: list[ViolationSchema] = Field(default_factory=list)
+    unverified_slots: list[UnverifiedSlotSchema] = Field(default_factory=list)
 
 
 class RepairItineraryRequest(BoundaryModel):
@@ -268,10 +293,16 @@ class RepairItineraryRequest(BoundaryModel):
 
 
 class RepairItineraryResponse(BoundaryModel):
-    """`repaired=null` = 수리 불가(정상 응답, IO-7) — 오류가 아니다."""
+    """`repaired=null` = 수리 불가(정상 응답, IO-7) — 오류가 아니다.
+
+    `unverified_slots`는 validate와 같은 의미다(TRIP-537): 수리 결과도 그 슬롯들에
+    대해서는 HC1·HC2를 못 본 채 나온 것이라, 검증 경로에만 싣고 여기서 빼면 같은
+    침묵이 수리 경로로 되돌아온다(Plan-B는 validate 없이 repair만 부르기도 한다).
+    """
 
     repaired: ItineraryPayload | None = None
     changes: list[str] = Field(default_factory=list)
+    unverified_slots: list[UnverifiedSlotSchema] = Field(default_factory=list)
 
 
 # ───────────────────────── 오류 ─────────────────────────

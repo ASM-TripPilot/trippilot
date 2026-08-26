@@ -1073,7 +1073,7 @@
       },
       "RepairItineraryResponse": {
         "additionalProperties": false,
-        "description": "`repaired=null` = 수리 불가(정상 응답, IO-7) — 오류가 아니다.",
+        "description": "`repaired=null` = 수리 불가(정상 응답, IO-7) — 오류가 아니다.\n\n`unverified_slots`는 validate와 같은 의미다(TRIP-537): 수리 결과도 그 슬롯들에\n대해서는 HC1·HC2를 못 본 채 나온 것이라, 검증 경로에만 싣고 여기서 빼면 같은\n침묵이 수리 경로로 되돌아온다(Plan-B는 validate 없이 repair만 부르기도 한다).",
         "properties": {
           "changes": {
             "items": {
@@ -1091,6 +1091,13 @@
                 "type": "null"
               }
             ]
+          },
+          "unverified_slots": {
+            "items": {
+              "$ref": "#/components/schemas/UnverifiedSlotSchema"
+            },
+            "title": "Unverified Slots",
+            "type": "array"
           }
         },
         "title": "RepairItineraryResponse",
@@ -1334,6 +1341,36 @@
         "title": "UnplacedMustVisitSchema",
         "type": "object"
       },
+      "UnverifiedSlotSchema": {
+        "additionalProperties": false,
+        "description": "HC 판정에서 **제외된** 슬롯 1건 (TRIP-537) — 위반이 아니라 \"판정 못 함\"이다.\n\nHC1(영업시간)·HC2(이동)는 POI 정본을 못 찾으면 그 슬롯을 건너뛴다(\"정보 없음은\n막지 않는다\", c2 규칙 — 그대로 유지). 그런데 스킵이 응답에 아무 흔적을 남기지\n않아 `violations: []` 가 \"전부 통과\"로 읽혔다(INV-4 침묵 실패의 완곡한 형태).\n이 목록이 \"무엇을 못 봤는지\"를 드러낸다 — **violations와 섞지 않는다**.\n\n`reason_code`는 **닫힌 집합**(백엔드가 분기·화면 문구에 사용):\n- `NOT_REGISTERED`: POI 정본(place-data)이 그 id를 안 돌려줬다 — 미등록·비ACTIVE\n- `UNMAPPABLE`: 돌려줬으나 판정에 쓸 수 없다 — `detail`이 원인 필드명\n  (좌표 null·모르는 category/data_quality 등, 즉 경계 enum 드리프트가 여기로 온다)",
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "reason_code": {
+            "enum": [
+              "NOT_REGISTERED",
+              "UNMAPPABLE"
+            ],
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "reason_code"
+        ],
+        "title": "UnverifiedSlotSchema",
+        "type": "object"
+      },
       "ValidateItineraryRequest": {
         "additionalProperties": false,
         "description": "`POST /ai/v1/itinerary/validate` — 백엔드 포트 `validate(solution)` 대응 + IO-1.",
@@ -1354,8 +1391,15 @@
       },
       "ValidateItineraryResponse": {
         "additionalProperties": false,
-        "description": "빈 목록 = 위반 없음. 상태코드는 200(위반은 정상 응답, IO-7).",
+        "description": "빈 목록 = 위반 없음. 상태코드는 200(위반은 정상 응답, IO-7).\n\n`unverified_slots`(TRIP-537)는 additive — 기본 빈 리스트 = **모든 슬롯이 HC1·HC2\n판정을 받았다**. 비어 있지 않으면 \"위반 0\"의 의미가 다르다: 그 슬롯들은 통과한\n것이 아니라 검사되지 않았다. 위반 목록과 섞지 않는 이유가 그것이다.",
         "properties": {
+          "unverified_slots": {
+            "items": {
+              "$ref": "#/components/schemas/UnverifiedSlotSchema"
+            },
+            "title": "Unverified Slots",
+            "type": "array"
+          },
           "violations": {
             "items": {
               "$ref": "#/components/schemas/ViolationSchema"
@@ -1808,7 +1852,7 @@
     },
     "/ai/v1/itinerary/validate": {
       "post": {
-        "description": "편집 재검증(HC1~4). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다.",
+        "description": "편집 재검증(HC1~4). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다.\n\n`unverified_slots`는 위반이 **아니다** — POI 정본을 못 찾아 HC1·HC2를 아예 못\n본 슬롯이다(TRIP-537). 위반 0 + 이 목록 비어 있음 = 진짜 통과.",
         "operationId": "validate_ai_v1_itinerary_validate_post",
         "requestBody": {
           "content": {
