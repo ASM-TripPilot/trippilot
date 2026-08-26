@@ -25,6 +25,8 @@ import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.VisitSlot
+import com.trippilot.itinerarygeneration.domain.PersonalizationHints
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
@@ -59,6 +61,8 @@ class GenerateItineraryService(
     private val revisions: ItineraryRevisionService,
     /** 숙소 없는 날의 앵커(TRIP-384) — 지역 대표 좌표. place-data.api 만 참조(R1). */
     private val regions: RegionLookupFacade,
+    /** 기록 기반 개인화(TRIP-556). **포트다** — 구현은 app 이 조립한다(순환 회피, 아래 주석). */
+    private val personalization: PersonalizationPort,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
     private val deadlines: ScheduleDeadlineProperties,
@@ -95,6 +99,11 @@ class GenerateItineraryService(
         } else {
             ctx.fixedVisits.filterNot { it.date in firstDates }.map { it.poiId }.distinct()
         }
+        // 기록 기반 개인화(TRIP-556). **동의 판정은 저쪽이 한다** — 동의가 없으면 빈 힌트가 온다.
+        // 여기서 한 번만 묻는다: 2단계 생성이 같은 계정을 두 번 묻으면 그 사이에 동의가 바뀔 수 있고,
+        // 그러면 한 여행의 1일차와 나머지가 서로 다른 규칙으로 만들어진다.
+        val hints = personalization.hintsFor(accountId)
+
         // 화면(h09·h10)이 단계·[취소]를 그릴 상태 원천을 연다(BR-U3-04·05).
         val session = genSessions.start(accountId, tripId, mode)
 
@@ -104,7 +113,7 @@ class GenerateItineraryService(
         // 1차가 터지면 세션을 닫는다 — 안 닫으면 사용자는 500 을 받고도 화면에서 영원히 "생성 중"을 본다(INV-4 침묵 금지).
         val saved = try {
             val firstAssembly = assembleInput(
-                tripId, mode, ctx, prefs, stayAnchors, firstDates, deadlines.day1Budget(),
+                tripId, mode, ctx, prefs, hints, stayAnchors, firstDates, deadlines.day1Budget(),
                 excluded = reservedForSecond,
                 // 근거는 뒤따라 받는다 — 여기 붙이면 첫 화면이 LLM 을 기다린다(TRIP-511).
                 includeExplanations = false,
@@ -157,7 +166,7 @@ class GenerateItineraryService(
             // 1차에서 배정된 POI 는 2차 후보에서 제외(TRIP-293) — 같은 장소가 두 번 들어가지 않게.
             val assigned = saved.days.flatMap { d -> d.slots.map { it.sourcePoiId } }.distinct()
             val secondAssembly = assembleInput(
-                tripId, mode, ctx, prefs, stayAnchors, remainingDates, deadlines.totalBudget(), excluded = assigned,
+                tripId, mode, ctx, prefs, hints, stayAnchors, remainingDates, deadlines.totalBudget(), excluded = assigned,
                 carriesUndatedFixed = true, includeExplanations = false,
             )
             val secondInput = secondAssembly.input
@@ -217,6 +226,8 @@ class GenerateItineraryService(
         mode: GenerationMode,
         ctx: TripGenerationContext,
         prefs: PreferenceSnapshot,
+        /** 기록 기반 개인화 힌트(TRIP-556). 호출부가 **한 번만** 조회해 넘긴다 — 2단계 생성이 같은 값을 두 번 묻지 않게. */
+        hints: PersonalizationHints,
         stayAnchors: List<DayAnchorView>,
         dates: List<LocalDate>,
         deadlineMs: Long?,
@@ -261,7 +272,7 @@ class GenerateItineraryService(
             // 회신 필드(`unplaced_must_visits`)가 계약에 생겨야 성립한다(경계 계약 확정 문서 M2). 그때까지는
             // 침묵 드롭 위치가 백엔드에서 AI 로 옮겨간 상태일 뿐이다.
             fixedBlocks = materialized.fixedBlocks,
-            preferenceProfile = prefs.toProfile(),                                                            // preference_snapshot 7축
+            preferenceProfile = prefs.toProfile(hints),                        // preference_snapshot 7축 + 기록 기반 개인화(TRIP-556)
             recommendationStrength = null,
             requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), deadlineMs),
                 excludedPoiIds = excluded,
@@ -305,9 +316,28 @@ class GenerateItineraryService(
         }
     }
 
-    /** 취향 스냅숏(profile.api) → ScheduleAgent 취향 프로필(7축). 미설정 축은 빈 목록/null 그대로. */
-    private fun PreferenceSnapshot.toProfile(): PreferenceProfile =
-        PreferenceProfile(styles, activities, foodTastes, transportModes, pace, companionTypes, petFriendly, budgetTier)
+    /**
+     * 취향 스냅숏(profile.api) → ScheduleAgent 취향 프로필(7축). 미설정 축은 빈 목록/null 그대로.
+     *
+     * 기록 기반 개인화([view])는 **보태기만 한다**(TRIP-556). 사용자가 온보딩에서 고른 값이 언제나
+     * 우선이다 — 과거 행동이 명시적 선택을 뒤집으면 "왜 내가 고른 게 무시되지"가 된다.
+     *
+     * - `activities`: 합집합. 순서는 사용자가 고른 것이 앞
+     * - `pace`: 스칼라라 합칠 수 없다 → **비어 있을 때만** 채운다
+     *
+     * 동의가 없거나 근거가 모자라면 [view] 는 빈 값이라 이 함수는 아무것도 보태지 않는다.
+     */
+    private fun PreferenceSnapshot.toProfile(view: PersonalizationHints): PreferenceProfile =
+        PreferenceProfile(
+            styles = styles,
+            activities = (activities + view.activities).distinct(),
+            foodTastes = foodTastes,
+            transportModes = transportModes,
+            pace = pace ?: view.pace,
+            companionTypes = companionTypes,
+            petFriendly = petFriendly,
+            budgetTier = budgetTier,
+        )
 
     /**
      * **재생성**이 허용되는 시점인가 — 기존 일정이 있을 때만 부른다(첫 생성은 대상이 아니다).

@@ -1,5 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.PersonalizationHints
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.GenerationState
@@ -227,6 +229,8 @@ class GenerateItineraryServiceTest : StringSpec({
         fixedVisits: List<FixedVisit> = listOf(FixedVisit(poi, start, LocalTime.parse("12:00"), 90)),
         destinations: List<String> = listOf("제주"),
         clock: Clock = Clock.fixed(now, ZoneOffset.UTC),
+        // 기본값 인자는 **맨 뒤에** 둔다 — 중간에 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
+        personalization: PersonalizationPort = NoPersonalization,
     ): GenerateItineraryService {
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
@@ -250,7 +254,7 @@ class GenerateItineraryServiceTest : StringSpec({
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다 — 인스턴스를 나누면 취소가 사라진다.
         val sessions = genSessions(trips, sessionRepo, clock, defaultDeadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, NOOP_TX, clock, defaultDeadlines)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, publisher, second, sessions, genRevisions(repo, trips), StubRegions, personalization, NOOP_TX, clock, defaultDeadlines)
     }
 
     val fullPrefs = PreferenceSnapshot(
@@ -258,6 +262,66 @@ class GenerateItineraryServiceTest : StringSpec({
         transportModes = listOf("렌터카"), pace = "알차게", companionTypes = listOf("친구"),
         petFriendly = true, budgetTier = "고급",
     )
+
+    // ── 기록 기반 개인화 병합(TRIP-556 · BR-U5-44) ────────────────────
+    "동의가 없으면 추천 입력에 과거 기록이 한 건도 없다" {
+        val agent = CapturingAgent(now)
+
+        service(agent, fullPrefs, emptyList()).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        // 게이트는 개인화 쪽이 소유하고, 여기 오는 힌트는 비어 있다 — 그러면 보탤 것이 없다.
+        agent.captures.forEach {
+            it.preferenceProfile.activities shouldBe listOf("야경")
+            it.preferenceProfile.pace shouldBe "알차게"
+        }
+    }
+
+    "개인화는 보태기만 한다 — 사용자가 고른 값을 덮지 않는다" {
+        val agent = CapturingAgent(now)
+        val hinted = object : PersonalizationPort {
+            override fun hintsFor(accountId: UUID) = PersonalizationHints(listOf("카페", "자연"), "느긋하게")
+        }
+
+        service(agent, fullPrefs, emptyList(), personalization = hinted).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val profile = agent.captured!!.preferenceProfile
+        // 합집합이고 사용자가 고른 것이 앞이다.
+        profile.activities shouldContainExactly listOf("야경", "카페", "자연")
+        // 스칼라라 합칠 수 없다 → **명시 선택이 이긴다.** 과거 행동이 고른 값을 뒤집으면
+        // "왜 내가 고른 게 무시되지"가 된다.
+        profile.pace shouldBe "알차게"
+    }
+
+    "고르지 않은 축은 개인화가 채운다" {
+        val agent = CapturingAgent(now)
+        val bare = fullPrefs.copy(activities = emptyList(), pace = null)
+        val hinted = object : PersonalizationPort {
+            override fun hintsFor(accountId: UUID) = PersonalizationHints(listOf("카페"), "느긋하게")
+        }
+
+        service(agent, bare, emptyList(), personalization = hinted).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        val profile = agent.captured!!.preferenceProfile
+        profile.activities shouldContainExactly listOf("카페")
+        profile.pace shouldBe "느긋하게"
+    }
+
+    "1차와 2차가 같은 개인화 값을 쓴다 — 한 여행이 두 규칙으로 만들어지지 않는다" {
+        val agent = CapturingAgent(now)
+        var asked = 0
+        val counting = object : PersonalizationPort {
+            override fun hintsFor(accountId: UUID): PersonalizationHints {
+                asked++
+                return PersonalizationHints(listOf("카페"), null)
+            }
+        }
+
+        service(agent, fullPrefs, emptyList(), personalization = counting).generate(acc, tripId, GenerationMode.FULLY_AI)
+
+        asked shouldBe 1
+        agent.captures.size shouldBe 2
+        agent.captures.forEach { it.preferenceProfile.activities shouldContainExactly listOf("야경", "카페") }
+    }
 
     "취향 7축·budgetLevel(=budget_tier)·must_visit 고정블록 조립" {
         val agent = CapturingAgent(now)
@@ -549,7 +613,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         // 1차·2차가 **같은 세션**을 봐야 취소가 2차에 전달된다.
         val sessions = genSessions(trips, sessionRepo, clock, deadlines)
         val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), sessions, NOOP_TX, clock)
-        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, NOOP_TX, clock, deadlines)
+        return GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, sessions, genRevisions(repo, trips), StubRegions, NoPersonalization, NOOP_TX, clock, deadlines)
     }
 
     "추천 근거가 slotKey 로 슬롯에 붙어 영속된다(TRIP-306 · BR-U2-04)" {
@@ -1052,7 +1116,7 @@ class TwoPhaseDayCoverageTest : StringSpec({
                 override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
             }
             val second = SecondPhaseGenerator(agent, repo, genRevisions(repo, trips), genSessions(), NOOP_TX, clock)
-            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, NOOP_TX, clock, defaultDeadlines)
+            GenerateItineraryService(trips, preferences, baseAnchors, agent, repo, CapturingPublisher(), second, genSessions(), genRevisions(repo, trips), StubRegions, NoPersonalization, NOOP_TX, clock, defaultDeadlines)
                 .generate(acc, tripId, GenerationMode.FULLY_AI)
 
             // 두 호출이 요청한 일자의 합 = 여행 일자, 중복 없음
@@ -1071,6 +1135,14 @@ class TwoPhaseDayCoverageTest : StringSpec({
  *
  * 좌표를 **주는 경우와 안 주는 경우**가 둘 다 필요하다. 주면 앵커가 채워지고, 없으면 예전처럼 빈다.
  */
+/**
+ * 개인화 없음(TRIP-556). 기본값이 **아무것도 보태지 않는 것**이라, 대부분의 생성 테스트는 이걸 쓴다 —
+ * 동의·기록에 따른 분기는 `PersonalizationMergeTest` 가 따로 본다.
+ */
+private object NoPersonalization : PersonalizationPort {
+    override fun hintsFor(accountId: java.util.UUID) = PersonalizationHints.NONE
+}
+
 private object StubRegions : com.trippilot.placedata.api.RegionLookupFacade {
     override fun codesOf(regionName: String): List<String> = emptyList()
     override fun centerOf(regionName: String) =
