@@ -1,9 +1,4 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-} from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
