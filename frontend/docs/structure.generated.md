@@ -53,6 +53,7 @@
 - `src/__tests__/planbDiffRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbManualRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbManualStructure.test.ts`  →  (export 없음)
+- `src/__tests__/planbSafeAreaStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/regionCatalogStructure.test.ts`  →  (export 없음)
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
@@ -794,4 +795,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 526개 파일
+합계 527개 파일
