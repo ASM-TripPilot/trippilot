@@ -244,33 +244,10 @@ def _vector_rag():
 
 
 def _feature_models_from_env() -> dict:
-    """`TRIPPILOT_LLM_FEATURE_MODELS` 파싱 (TRIP-513) — "FEATURE=model,…" 콤마 목록.
+    """`TRIPPILOT_LLM_FEATURE_MODELS` 파싱 — 구현은 공용 모듈(리허설과 공유)."""
+    from trippilot.llm_gateway.feature_model_env import feature_models_from_env
 
-    미지 feature 이름은 조용히 무시하지 않고 기동 실패 — 오타가 "그 기능만 조용히
-    기본 모델"이 되는 것을 막는다.
-    """
-    from trippilot.domain.llm import LlmFeature
-
-    raw = _env("TRIPPILOT_LLM_FEATURE_MODELS")
-    if raw is None:
-        return {}
-    overrides = {}
-    for pair in raw.split(","):
-        pair = pair.strip()
-        if not pair:
-            continue
-        name, _, model = pair.partition("=")
-        if not model:
-            raise RuntimeError(f"TRIPPILOT_LLM_FEATURE_MODELS 형식 오류: {pair!r}")
-        try:
-            feature = LlmFeature(name.strip().upper())
-        except ValueError as e:
-            raise RuntimeError(
-                f"TRIPPILOT_LLM_FEATURE_MODELS 미지 feature: {name!r} "
-                f"(유효: {[f.value for f in LlmFeature]})"
-            ) from e
-        overrides[feature] = model.strip()
-    return overrides
+    return dict(feature_models_from_env())
 
 
 def _mixed_llm_and_model() -> tuple[object, str]:
