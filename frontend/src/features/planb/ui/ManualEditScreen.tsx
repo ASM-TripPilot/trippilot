@@ -21,6 +21,8 @@ export interface ManualEditScreenProps {
   days: ItineraryDaysItem[];
   activeDayIndex?: number;
   lockedSlotKeys?: string[];
+  /** 시각 직접입력이 적용된 슬롯 키(폴백 i22, 결정 b) — `{...rest}` 로 셸에 그대로 통과된다. */
+  timeConfirmedSlotKeys?: string[];
   onBack: () => void;
   onSave: () => void;
   onPressAddPlace?: () => void;

@@ -111,6 +111,7 @@ import type {
   SlotCandidatesCandidatesItem,
   StayItem,
 } from '@/shared/api/generated/schemas';
+import { ManualTimeSheet, reorderKeepingFixed } from '@/shared/itinerary-edit';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { KakaoMapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
@@ -1002,6 +1003,81 @@ function manualEditPreviewDays(aViolation: boolean): ItineraryDaysItem[] {
   ];
 }
 const MANUAL_EDIT_PREVIEW_LOCKED = [`${MANUAL_EDIT_PREVIEW_DATE}#poi-cafe`];
+
+// i15·i22 상호작용 프리뷰(TRIP-577) — PlanbManualPage 는 react-query·라우터·서버 시드가 필요해
+// QueryClient 없는 이 프리뷰에서 못 쓴다. 그래서 최소 상태(days·timeConfirmed)만 얹어 재정렬(AC-1)·
+// 시각 반영(AC-3)을 눈으로 확인한다(6-b 육안 그물 — 페이지의 handleReorder/handleApplyTime 축소판).
+function ManualEditPreview({ variant }: { variant?: 'error' }): ReactElement {
+  const [days, setDays] = useState<ItineraryDaysItem[]>(() =>
+    manualEditPreviewDays(false)
+  );
+  const [timeConfirmed, setTimeConfirmed] = useState<string[]>([]);
+  const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
+  const activeDate = days[0]?.date ?? '';
+
+  const editingSlot =
+    editingSlotKey === null
+      ? undefined
+      : days
+          .flatMap((day) =>
+            day.slots.map((slot) => ({
+              key: `${day.date}#${slot.poiId}`,
+              slot,
+            }))
+          )
+          .find((entry) => entry.key === editingSlotKey)?.slot;
+
+  return (
+    <>
+      <ManualEditScreen
+        variant={variant}
+        days={days}
+        lockedSlotKeys={MANUAL_EDIT_PREVIEW_LOCKED}
+        timeConfirmedSlotKeys={timeConfirmed}
+        onBack={noop}
+        onSave={noop}
+        onReorder={(data) =>
+          setDays((prev) =>
+            prev.map((day) =>
+              day.date === activeDate
+                ? { ...day, slots: reorderKeepingFixed(day.slots, data) }
+                : day
+            )
+          )
+        }
+        onDeleteSlot={noop}
+        onEditSlotTime={(slotKey) => setEditingSlotKey(slotKey)}
+        onPressHistory={noop}
+        onPressAddPlace={noop}
+      />
+      {editingSlot === undefined ? null : (
+        <ManualTimeSheet
+          startAt={editingSlot.startAt}
+          endAt={editingSlot.endAt}
+          onApply={(patch) => {
+            setDays((prev) =>
+              prev.map((day) => ({
+                ...day,
+                slots: day.slots.map((slot) =>
+                  `${day.date}#${slot.poiId}` === editingSlotKey
+                    ? { ...slot, ...patch }
+                    : slot
+                ),
+              }))
+            );
+            if (editingSlotKey !== null) {
+              setTimeConfirmed((prev) =>
+                prev.includes(editingSlotKey) ? prev : [...prev, editingSlotKey]
+              );
+            }
+            setEditingSlotKey(null);
+          }}
+          onCancel={() => setEditingSlotKey(null)}
+        />
+      )}
+    </>
+  );
+}
 
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
@@ -2716,43 +2792,22 @@ const PREVIEW_STATES: PreviewState[] = [
       <LiveLocationPage tripId="preview-trip" state="permission-denied" />
     ),
   },
-  // ── i15·i22 수동 편집(TRIP-443) — 한 화면(ManualEditScreen)을 variant 로 두 얼굴.
-  //    [시각 입력] 시트 실제 열림·HH:mm 반영·점선 지도 픽셀은 jest 사각(바텀시트 통과형 목)이라 이
-  //    키들이 육안 대조 자리다(i15 `2284:2106`·i22 `1790:3612`). 자체 조회 없는 프리젠테이션이라
-  //    QueryClient 없이 렌더된다 ──
+  // ── i15·i22 수동 편집(TRIP-443·TRIP-577) — 한 래퍼(ManualEditPreview)를 variant 로 두 얼굴.
+  //    TRIP-577 로 상호작용 배선: 드래그 핸들 길게눌러 재정렬(AC-1)·[시각 입력] 시트→시각 반영(AC-3)이
+  //    이 프리뷰에서 실제로 동작한다(6-b 육안 그물 복원). 시트 실제 열림·드래그 제스처·점선 지도 픽셀은
+  //    여전히 jest 사각(바텀시트·draggable 통과형 목)이라 이 키들이 육안 대조 자리다(i15 `2284:2106`·
+  //    i22 `1790:3612`). 자체 조회 없는 프리젠테이션이라 QueryClient 없이 렌더된다 ──
   {
     key: 'planb-manual-normal',
     label: 'i15 일정 편집 · 정상([직접 고르기])',
     login: null,
-    render: () => (
-      <ManualEditScreen
-        days={manualEditPreviewDays(false)}
-        lockedSlotKeys={MANUAL_EDIT_PREVIEW_LOCKED}
-        onBack={noop}
-        onSave={noop}
-        onDeleteSlot={noop}
-        onEditSlotTime={noop}
-        onPressHistory={noop}
-        onPressAddPlace={noop}
-      />
-    ),
+    render: () => <ManualEditPreview />,
   },
   {
     key: 'planb-manual-fallback',
     label: 'i22 일정 직접 수정 · 폴백(외부 API 오류)',
     login: null,
-    render: () => (
-      <ManualEditScreen
-        variant="error"
-        days={manualEditPreviewDays(false)}
-        lockedSlotKeys={MANUAL_EDIT_PREVIEW_LOCKED}
-        onBack={noop}
-        onSave={noop}
-        onDeleteSlot={noop}
-        onEditSlotTime={noop}
-        onPressAddPlace={noop}
-      />
-    ),
+    render: () => <ManualEditPreview variant="error" />,
   },
   {
     key: 'planb-manual-violation',
