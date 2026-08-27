@@ -504,6 +504,9 @@ def test_prompt_states_contract_rules() -> None:
                   "{start_date}", "{end_date}", "{poi:i.name}"):
         assert token in prompt  # PLACEHOLDER_VOCAB 전체가 프롬프트에 명시
     assert '{"template"' in prompt  # 게이트 루트 키와 동일
+    # 해시태그 허용 규칙(TRIP-558) — 프롬프트에 없으면 모델이 계속 위반해
+    # 위반 0 조기 종료가 사라지고 HEAVY 호출이 3배가 된다 (리뷰 실측)
+    assert "해시태그는 지역명이나 방문한 장소명에서 만드세요" in prompt
 
 
 def test_build_vars_stringifies_with_defaults_and_no_time_fields() -> None:

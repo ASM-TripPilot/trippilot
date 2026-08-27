@@ -39,13 +39,13 @@ class LlmFeature(Enum):
     REASON_INTERPRETATION = "REASON_INTERPRETATION"  # U5
     EXPLANATION = "EXPLANATION"  # U5
     ALTERNATIVE_SELECTION = "ALTERNATIVE_SELECTION"  # U5
-    REFLECTION = "REFLECTION"  # U6
-    # 여행 종료 후 회고 유도 푸시 문구 1문장 — REFLECTION(본문 생성)과 별개 기능.
+    # 여행 종료 후 회고 유도 푸시 문구 1문장 — 본문 생성(REFLECTION_TEMPLATE)과 별개 기능.
     # 알림 발송은 백엔드 notification(FCM) 소유 — c1은 문구 생성까지만 (TRIP-347).
     REFLECTION_NUDGE = "REFLECTION_NUDGE"  # U6 (TRIP-347)
-    # 회고 연출 템플릿(공유 카드뉴스 장면 시퀀스) 생성 — REFLECTION(j03 회고 초안)·
-    # REFLECTION_NUDGE(푸시 문구)와 별개 feature. 출력 계약은 reflection-template-design.md
-    # (#334), 타입은 domain/reflection.py (U6 Reflect FD).
+    # 회고 연출 템플릿(공유 카드뉴스 장면 시퀀스) 생성. 구 REFLECTION(j03 회고 초안)을
+    # **흡수**했다 (TRIP-558) — 계약 §3.2 "기록 화면은 이 스키마의 부분 소비"(j03 본문 =
+    # DAILY 캡션 연결). 출력 계약은 reflection-template-design.md (#334),
+    # 타입은 domain/reflection.py (U6 Reflect FD).
     REFLECTION_TEMPLATE = "REFLECTION_TEMPLATE"  # U6 (TRIP-429)
     PLACE_EXTRACTION = "PLACE_EXTRACTION"  # U6 (백그라운드)
     # 웹 검색 스니펫 → 행사(축제·공연·전시) 구조화 추출 — 웹소싱 파이프라인의
@@ -122,42 +122,6 @@ class AlternativePick:
     @classmethod
     def from_dict(cls, d: dict) -> "AlternativePick":
         return cls(poi_id=PoiId(d["poi_id"]), reason=d["reason"])
-
-
-class Mood(Enum):
-    """회고 무드 (프롬프트 정본 §2.3 OutputSchema)."""
-
-    GREAT = "GREAT"
-    GOOD = "GOOD"
-    OKAY = "OKAY"
-    TIRED = "TIRED"
-
-
-@dataclass(frozen=True, slots=True)
-class ReflectionDraft:
-    """당일 회고 초안 (프롬프트 정본 §2.3). 실패 시 FallbackCard 구성은 호출측."""
-
-    title: str
-    body: str
-    highlights: tuple[str, ...]
-    mood: Mood
-
-    def to_dict(self) -> dict:
-        return {
-            "title": self.title,
-            "body": self.body,
-            "highlights": list(self.highlights),
-            "mood": self.mood.value,
-        }
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "ReflectionDraft":
-        return cls(
-            title=d["title"],
-            body=d["body"],
-            highlights=tuple(d["highlights"]),
-            mood=Mood(d["mood"]),
-        )
 
 
 @dataclass(frozen=True, slots=True)

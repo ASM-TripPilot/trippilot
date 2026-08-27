@@ -3,7 +3,7 @@
 > **v1.0 확정 (2026-08-25, 사용자 승인)** · 방침: **FE 합의 비차단** — 정본 계약(#334)대로 선행 구현하고 FE 의견은 통합 시점에 반영한다(팀 결정 2026-08-25) — TRIP-538 · AI-DLC CONSTRUCTION Functional Design.
 > 근거 정본: `reflection-template-design.md`(#334 머지 — **출력 계약, 본 FD는 이 계약을 변경하지 않는다**),
 > `reflect-agent-design.md` §4·5(트리거·상태 머신 — 무변), `agent-structure-v2.md` §3·4(Reflect 전속 도구·솔버 관문 스킵),
-> 프롬프트 정본 §2.3(REFLECTION)·§2.7(REFLECTION_NUDGE), AI-D06, agent-foundation FD(BR-AF-07 절차).
+> 프롬프트 정본 §2.7(REFLECTION_NUDGE)·§2.8(REFLECTION_TEMPLATE — §2.3 REFLECTION은 2026-08-25 흡수·폐지), AI-D06, agent-foundation FD(BR-AF-07 절차).
 > 규칙은 U1과 동일: `frozen=True, slots=True` · tz-aware · `from_dict(to_dict(x)) == x`(U5-P10) · 컬렉션은 tuple/frozenset만.
 
 ---
@@ -19,7 +19,7 @@ U6 Reflect는 아래 기존 규격을 **소비**한다. 손대지 않는다.
 | `LlmCallRecord` `FallbackEvent` `GateDropEvent` (U1 observability) | 시도별 계측·강등 보고·closed-set 드롭 계측 |
 | `PromptRef` (U1 prompt) | 버전 없는 호출 타입상 불가능 (NFR-7.3) |
 | `AgentTask` `AgentResult` (agent-foundation delegation) | 대화형 REFLECT intent 경로의 봉투 (BR-AF-01~05) |
-| `Mood` `ReflectionDraft` (U4/U6 — 프롬프트 정본 §2.3) | 기록 화면(j03) 회고 초안 — **무변**. 장기 지위는 미결 #8 |
+| ~~`Mood` `ReflectionDraft`~~ | **제거됨** (2026-08-25, 미결 #8 확정) — j03 본문은 템플릿 캡션 연결이 대체한다(계약 §3.2) |
 | `ReflectionNudgeInput` + `FALLBACK_NUDGE_MESSAGE` (TRIP-347) | 회고 유도 푸시 — 별개 feature, 무변 |
 | `LlmPort` / `LlmResponse` (U1 ports) | 무변. 단 `LlmRequest`는 **하위호환 확장 seam의 대상** — business-logic-model §6 (기존 텍스트 호출 전부 무영향이 조건) |
 
@@ -35,7 +35,7 @@ POI 정본(백엔드 C7 단일 소유 — 정합성 점검 P1 합의)에 대한 
 | `SceneLayout` | `PHOTO_FULL / PHOTO_CAPTION / STATS / MAP / EVENT` | **닫힌 enum** (계약 §3.2) — 밖 layout = 하드 위반. 픽셀 배치는 FE 렌더러 소유 |
 | `SourceEventKind` | `PLAN_B / SKIPPED` | EVENT 장면은 입력 이벤트에 **실재할 때만** 유효 (계약 §3.2) |
 | `ViolationGrade` | `HARD / SOFT` | 계약 §4.1 등급 |
-| `ViolationCode` | `TIME_EXPR / PLACEHOLDER_OUT / VISIT_REF_OUT / EVENT_NOT_FOUND / HASHTAG_OUT`(이상 HARD) · `CAPTION_LEN / SCENE_COUNT / DUP_VISIT_REF`(이상 SOFT) | 위반 코드도 closed-set — 게이트가 이 코드만 산출 |
+| `ViolationCode` | `TIME_EXPR / PLACEHOLDER_OUT / VISIT_REF_OUT / EVENT_NOT_FOUND`(이상 HARD) · `HASHTAG_OUT / CAPTION_LEN / SCENE_COUNT / DUP_VISIT_REF`(이상 SOFT — HASHTAG_OUT은 2026-08-25 강등, 미결 #5) | 위반 코드도 closed-set — 게이트가 이 코드만 산출 |
 
 ## 2. 입력 — 경계 요청 (domain/reflection.py)
 

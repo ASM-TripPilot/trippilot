@@ -360,10 +360,10 @@ def test_feature_models_env_parsing(monkeypatch):
     from trippilot.domain.llm import LlmFeature
 
     monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS",
-                       "EXPLANATION=claude-sonnet-4-5, reflection=claude-haiku-4-5")
+                       "EXPLANATION=claude-sonnet-4-5, reflection_nudge=claude-haiku-4-5")
     parsed = main_mod._feature_models_from_env()
     assert parsed == {LlmFeature.EXPLANATION: "claude-sonnet-4-5",
-                      LlmFeature.REFLECTION: "claude-haiku-4-5"}  # 소문자 허용
+                      LlmFeature.REFLECTION_NUDGE: "claude-haiku-4-5"}  # 소문자 허용
 
     monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "NO_SUCH=m")
     with _pytest.raises(RuntimeError, match="미지 feature"):

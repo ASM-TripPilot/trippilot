@@ -65,17 +65,25 @@ LlmPort 직접 import 금지(L-3) 전부 기존 아키텍처 테스트가 자동
 - ③의 워커·게이트는 U4 7단계 파이프라인을 그대로 탄다 — GatewayFacade 변경 0.
 - ④⑤⑥은 순수 함수(입력 후보 집합 → 동일 출력) — wall-clock 직접 호출 금지, `now` 주입 (U3 pool_builder와 동일 규율).
 
-## 4. 하드 위반 교체 맵 (⑤ — 결정론, 계약 §4.1 "그 장면/필드만 폴백")
+## 4. 하드 위반 교체 맵 (⑤ — 결정론, 계약 §4.1 개정판 2026-08-25)
+
+**장면을 생략하지 않는다** (TRIP-558) — 참조를 유효한 값으로 갈아끼우고 캡션을 그 참조에
+맞는 안전 문구로 바꾼다. 안전 문구가 장소명을 부르는 layout(`PHOTO_CAPTION`)은
+**교체에 쓴 방문의 인덱스**를 캡션에 실어야 한다 — 고정 `{poi:0.name}`이면 사진은 방문 k인데
+캡션은 방문 0을 말하는 거짓이 된다(재게이트는 인덱스 범위만 보므로 잡히지 않는다).
 
 | ViolationCode | 교체 동작 |
 |---|---|
-| `TIME_EXPR` (캡션·부제·해시태그 내 시간 표현) | 해당 캡션을 layout별 고정 안전 문구로 교체 (FALLBACK_NUDGE_MESSAGE 선례 — 고정 문구 스스로 금칙 0을 테스트가 고정) |
-| `PLACEHOLDER_OUT` (어휘 밖·인덱스 범위 밖) | 해당 토큰만 제거, 문장 잔여가 공백이면 고정 문구로 교체 |
-| `VISIT_REF_OUT` (방문 기록 밖 참조) | 그 장면의 photo_slot 제거, PHOTO_* layout이면 장면 생략 (no-photo 변형 선례 — j06) |
-| `EVENT_NOT_FOUND` (source_event 미실재) | EVENT 장면 생략 |
-| `HASHTAG_OUT` (허용 집합 밖) | 그 태그만 제거 (허용 집합 실체는 미결 #5) |
+| `TIME_EXPR` (캡션·부제 내 시간 표현) | 해당 캡션을 안전 문구로 교체 (`safe_caption(layout, 현재 슬롯의 방문 인덱스)`) |
+| `PLACEHOLDER_OUT` (어휘 밖·인덱스 범위 밖) | 해당 토큰만 제거, 문장 잔여가 공백이면 안전 문구로 교체 |
+| `VISIT_REF_OUT` — 장면 | **유효 방문으로 참조 교체**(미사용 우선·소진 시 첫 방문) + 캡션을 그 방문의 안전 문구로 |
+| `VISIT_REF_OUT` — 표지 | **유효 방문으로 참조 교체** (표지 부제는 장소명을 부르지 않아 인덱스 불요) |
+| `EVENT_NOT_FOUND` — 입력 이벤트 ≥1 | **실재 이벤트로 교체**(enum 값 정렬 첫) + 캡션 안전 문구 |
+| `EVENT_NOT_FOUND` — 입력 이벤트 0건 | **레이아웃 전환**(사진 있으면 `PHOTO_CAPTION`, 없으면 `STATS`) + 캡션 안전 문구 |
+| `TIME_EXPR`·`PLACEHOLDER_OUT` — 해시태그 | 그 태그만 인덱스로 제거 (라벨 `hashtags[i]` — 태그 문자열 재파싱 금지) |
 
-소프트 위반(`CAPTION_LEN`·`SCENE_COUNT`·`DUP_VISIT_REF`)은 교체하지 않는다 — 랭킹 감점만 (계약 §4.1).
+소프트 위반(`CAPTION_LEN`·`SCENE_COUNT`·`DUP_VISIT_REF`·`HASHTAG_OUT`)은 교체하지 않는다 —
+랭킹 감점만 (계약 §4.1). `HASHTAG_OUT`은 2026-08-25 하드→소프트 (미결 #5 확정).
 
 ## 5. 사진 결합(바인딩) 규칙 — 서비스 소유, LLM 0회
 

@@ -21,6 +21,7 @@ test_llm_gateway_reflection_template.py 40건 소관 — 여기는 **조립층 �
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -31,6 +32,7 @@ from hypothesis import strategies as st
 from trippilot.agents.reflect.composer import (
     MAX_ATTEMPTS,
     SAFE_CAPTION_BY_LAYOUT,
+    safe_caption,
     apply_hard_replacements,
     compose,
     rank_key,
@@ -59,6 +61,7 @@ from trippilot.domain.reflection import (
     SourceEventKind,
     TemplateCandidate,
     TripEventRecord,
+    ViolationCode,
     ViolationGrade,
     VisitRecord,
     VisitRef,
@@ -68,6 +71,7 @@ from trippilot.ports.llm_port import LlmRequest, LlmResponse
 from tests.fakes.fake_llm import FailingLlm, FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.generators.reflection import (
+    HARD_POLLUTIONS,
     HASHTAG_COLON_POLLUTIONS,
     SOFT_POLLUTIONS,
     polluted_body_for,
@@ -131,6 +135,16 @@ def _ctx(request: ReflectionRequest) -> ReflectionTemplateContext:
         kind=request.kind,
         visit_refs=tuple(v.ref for v in request.visits),
         event_kinds=frozenset(e.kind for e in request.events),
+        region=request.region,
+        poi_names=tuple(v.poi_name for v in request.visits),
+    )
+
+
+def _replace_args(request: ReflectionRequest) -> tuple:
+    """apply_hard_replacements의 교체 소스 — compose 내부와 같은 도출 규칙."""
+    return (
+        tuple(v.ref for v in request.visits),
+        frozenset(e.kind for e in request.events),
     )
 
 
@@ -193,7 +207,7 @@ def test_rfl_p1_p2_p3_replacement_erases_all_hard_violations(case) -> None:
     request, bodies = case
     body, kinds = bodies[0]
     outcome = _gate(request, body)
-    final = apply_hard_replacements(outcome.value)
+    final = apply_hard_replacements(outcome.value, *_replace_args(request))
 
     # P1 — 최종 산출물의 참조 폐쇄성 (INV-1 사영)
     allowed = {v.ref for v in request.visits}
@@ -218,7 +232,8 @@ def test_rfl_p2_p3_hashtag_with_colon_is_still_replaced(case) -> None:
     교체 맵의 "hashtags:{태그}:" detail 라벨 split 파싱 적대 케이스."""
     request, bodies = case
     body, _ = bodies[0]
-    final = apply_hard_replacements(_gate(request, body).value)
+    final = apply_hard_replacements(
+        _gate(request, body).value, *_replace_args(request))
     assert _hard(_regate_violations(request, final)) == []
 
 
@@ -229,7 +244,8 @@ def test_rfl_p7_soft_only_candidate_adopted_unchanged(case) -> None:
     request, bodies = case
     candidate = _gate(request, bodies[0][0]).value
     assert all(v.grade is ViolationGrade.SOFT for v in candidate.violations)
-    assert apply_hard_replacements(candidate) == candidate.template
+    assert apply_hard_replacements(
+        candidate, *_replace_args(request)) == candidate.template
 
 
 # ── RFL-P4 — 랭킹·교체 결정론 (이중 호출 + 순열 불변) ─────────
@@ -246,7 +262,9 @@ def test_rfl_p4_rank_and_replace_deterministic(case, data) -> None:
     best_a = min(candidates, key=rank_key)
     best_b = min(candidates, key=rank_key)
     assert best_a == best_b  # 이중 호출 동일 채택
-    assert apply_hard_replacements(best_a) == apply_hard_replacements(best_b)
+    args = _replace_args(request)
+    assert apply_hard_replacements(best_a, *args) == apply_hard_replacements(
+        best_b, *args)
     # 사전식 비교 유일해 — attempt가 전부 달라 키가 유일 → 순열해도 같은 채택
     shuffled = data.draw(st.permutations(candidates))
     assert min(shuffled, key=rank_key) == best_a
@@ -418,3 +436,114 @@ def test_rfl_p6_template_roundtrip(template: ReflectionTemplate) -> None:
 def test_rfl_p6_candidate_roundtrip(template: ReflectionTemplate, attempt: int) -> None:
     candidate = TemplateCandidate(template=template, violations=(), attempt=attempt)
     assert TemplateCandidate.from_dict(candidate.to_dict()) == candidate
+
+
+# ── TRIP-558 — 카드 보존 교체·해시태그 소프트 (팀 결정 2026-08-25) ─────
+
+
+@given(case=polluted_reflection_cases(pool=HARD_POLLUTIONS, min_pollution=1))
+@settings(max_examples=60, deadline=None)
+def test_trip558_hard_replacement_never_drops_a_scene(case) -> None:
+    """하드 위반 교체는 **장면을 생략하지 않는다** — 잘못된 참조는 갈아끼우고
+    캡션을 안전 문구로 바꿔 카드를 살린다. 보존이 정합성을 깨지 않는 것도 함께
+    고정한다(교체 후 재게이트 하드 0)."""
+    request, bodies = case
+    candidate = _gate(request, bodies[0][0]).value
+    final = apply_hard_replacements(candidate, *_replace_args(request))
+    assert len(final.scenes) == len(candidate.template.scenes)
+    assert _hard(_regate_violations(request, final)) == []
+
+
+def test_trip558_event_scene_survives_when_input_has_no_events() -> None:
+    """입력 이벤트 0건이면 EVENT 장면의 근거가 없다 — 생략 대신 레이아웃 전환으로 보존."""
+    request = replace(_REQUEST, events=())
+    body = {
+        "cover": _CLEAN_BODY["cover"],
+        "scenes": [
+            *_CLEAN_BODY["scenes"][:2],
+            {"layout": "EVENT", "source_event": "PLAN_B", "caption": "계획이 바뀐 날"},
+        ],
+        "hashtags": ["#부산여행"],
+    }
+    candidate = _gate(request, body).value
+    assert any(v.code is ViolationCode.EVENT_NOT_FOUND for v in candidate.violations)
+
+    final = apply_hard_replacements(candidate, *_replace_args(request))
+    assert len(final.scenes) == 3  # 카드 수 유지
+    assert all(s.layout is not SceneLayout.EVENT for s in final.scenes)
+    assert _hard(_regate_violations(request, final)) == []
+
+
+def test_trip558_event_scene_reassigned_to_real_event() -> None:
+    """입력에 이벤트가 있으면 미실재 source_event를 실재 값으로 교체 (카드 유지)."""
+    body = {
+        "cover": _CLEAN_BODY["cover"],
+        "scenes": [
+            *_CLEAN_BODY["scenes"][:2],
+            {"layout": "EVENT", "source_event": "SKIPPED", "caption": "건너뛴 곳"},
+        ],
+        "hashtags": ["#부산여행"],
+    }
+    candidate = _gate(_REQUEST, body).value  # _REQUEST의 이벤트는 PLAN_B 1건
+    final = apply_hard_replacements(candidate, *_replace_args(_REQUEST))
+    event_scenes = [s for s in final.scenes if s.layout is SceneLayout.EVENT]
+    assert len(event_scenes) == 1
+    assert event_scenes[0].source_event is SourceEventKind.PLAN_B
+    assert _hard(_regate_violations(_REQUEST, final)) == []
+
+
+def test_trip558_hashtag_out_is_soft_and_survives_replacement() -> None:
+    """지역·방문지·브랜드 파생이 아닌 태그는 **소프트** 위반 — 기록만 하고 지우지 않는다.
+    지역명을 부분 포함하는 합성어('#부산여행')는 위반이 아니다."""
+    body = {**_CLEAN_BODY, "hashtags": ["#부산여행", "#감천문화마을", "#인생샷"]}
+    candidate = _gate(_REQUEST, body).value
+    outs = [v for v in candidate.violations if v.code is ViolationCode.HASHTAG_OUT]
+    assert len(outs) == 1 and outs[0].grade is ViolationGrade.SOFT
+    assert "#인생샷" in outs[0].detail
+
+    final = apply_hard_replacements(candidate, *_replace_args(_REQUEST))
+    assert final.hashtags == ("#부산여행", "#감천문화마을", "#인생샷")  # 소프트라 보존
+
+
+@given(case=polluted_reflection_cases(pool=HARD_POLLUTIONS, min_pollution=1))
+@settings(max_examples=80, deadline=None)
+def test_trip558_photo_caption_names_the_photo_it_shows(case) -> None:
+    """**교체가 거짓을 만들지 않는다** — PHOTO_CAPTION 장면의 캡션이 {poi:i.name}을
+    부르면 그 i는 반드시 **그 장면 사진(visit_ref)의 방문 인덱스**여야 한다.
+
+    고정 {poi:0.name}을 쓰면 사진은 방문 k인데 캡션은 방문 0을 말한다 —
+    재게이트는 인덱스 범위만 보므로 통과해버려서, 이 정합은 여기서만 잡힌다."""
+    request, bodies = case
+    refs = tuple(v.ref for v in request.visits)
+    final = apply_hard_replacements(
+        _gate(request, bodies[0][0]).value, refs,
+        frozenset(e.kind for e in request.events))
+
+    for scene in final.scenes:
+        m = re.search(r"\{poi:(\d+)\.name\}", scene.caption)
+        if m is None or scene.photo_slot is None:
+            continue
+        named = int(m.group(1))
+        assert refs[named] == scene.photo_slot.visit_ref, (
+            f"캡션은 방문 {named}을 부르는데 사진은 {scene.photo_slot.visit_ref}")
+
+
+def test_trip558_safe_caption_follows_replaced_visit() -> None:
+    """표지가 첫 방문을 선점하면 장면 교체는 둘째 방문을 쓰고, 캡션도 그 방문을 부른다."""
+    body = {
+        "cover": _CLEAN_BODY["cover"],  # poi-1(인덱스 0) 선점
+        "scenes": [
+            {"layout": "PHOTO_CAPTION",
+             "photo_slot": {"visit_ref": {"date": "2026-08-01", "poi_id": "없는-곳"}},
+             "caption": "가보지 않은 곳에서"},
+            *_CLEAN_BODY["scenes"][1:],
+        ],
+        "hashtags": ["#부산여행"],
+    }
+    final = apply_hard_replacements(
+        _gate(_REQUEST, body).value, (_REF1, _REF2),
+        frozenset(e.kind for e in _REQUEST.events))
+    scene = final.scenes[0]
+    assert scene.photo_slot.visit_ref == _REF2          # 미사용 방문으로 교체
+    assert scene.caption == safe_caption(SceneLayout.PHOTO_CAPTION, 1)
+    assert "{poi:1.name}" in scene.caption              # 사진과 같은 방문을 부른다

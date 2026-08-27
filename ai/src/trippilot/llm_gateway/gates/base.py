@@ -21,7 +21,7 @@ class GateOutcome:
     """파서+게이트의 단일 결과. error가 있으면 value는 비어 있다.
 
     value의 실체는 feature별 게이트가 정의 (scoring=tuple[ScoredPoi,...],
-    explanation=tuple[PoiExplanation,...], reflection=ReflectionDraft, …).
+    explanation=tuple[PoiExplanation,...], reflection_template=TemplateCandidate, …).
     - value 거짓값 + error 없음 = 전량 드롭/무결과 (게이트웨이가 폴백 전환)
     - drop_event는 드롭이 1건이라도 있을 때만 (부분 생존 포함)
     """

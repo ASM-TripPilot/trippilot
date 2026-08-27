@@ -1,6 +1,6 @@
 """U6-02(TRIP-243) — 확장 워커 3종: Explanation·Reflection·PlaceExtraction.
 
-게이트: EXPLANATION은 closed-set 교차(INV-1), REFLECTION은 스키마만,
+게이트: EXPLANATION은 closed-set 교차(INV-1),
 PLACE_EXTRACTION은 항목 단위 격리(전체 실패 아님 — 정본 §2.5 폴백 정책).
 워커: 조립 → gateway.call, 폴백 TypedResult 그대로 (BR-U4-09).
 """
@@ -18,21 +18,17 @@ from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver
 from trippilot.llm_gateway.gates.explanation import ExplanationGate
 from trippilot.llm_gateway.gates.place_extraction import PlaceExtractionGate
-from trippilot.llm_gateway.gates.reflection import ReflectionGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.place_extraction import PlaceExtractionWorker
-from trippilot.llm_gateway.workers.reflection import ReflectionInput, ReflectionWorker
 from trippilot.domain.common import BudgetLevel, TraceId
 from trippilot.domain.context import Principal, ResourceRef
 from trippilot.domain.llm import (
     CandidatePool,
     LlmFeature,
     ModelTier,
-    Mood,
     PoiExplanation,
-    ReflectionDraft,
 )
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
 from trippilot.domain.poi import ExtractedPlace
@@ -90,28 +86,6 @@ def test_explanation_gate_schema_and_pool_guard() -> None:
     bad = json.dumps({"explanations": [{"poiId": "p1", "text": "  "}]})
     assert g.apply(bad, pool, feature=_FEAT_EXP, trace_id=_TID, now=_NOW).error is not None
 
-
-# ── ReflectionGate: 스키마 강제 (풀 불필요) ──────────────────
-
-
-def test_reflection_gate_valid_and_invalid() -> None:
-    g = ReflectionGate()
-    ok = json.dumps(
-        {"title": "대전의 하루", "body": "성심당에서 빵을 먹었다. 좋았다. 또 가고 싶다.",
-         "highlights": ["성심당"], "mood": "GREAT"}
-    )
-    out = g.apply(ok, None, feature=LlmFeature.REFLECTION, trace_id=_TID, now=_NOW)
-    assert out.error is None
-    assert isinstance(out.value, ReflectionDraft) and out.value.mood is Mood.GREAT
-
-    bad_mood = json.dumps({"title": "t", "body": "b", "highlights": [], "mood": "AMAZING"})
-    assert g.apply(bad_mood, None, feature=LlmFeature.REFLECTION, trace_id=_TID, now=_NOW).error is not None
-    assert g.apply("텍스트", None, feature=LlmFeature.REFLECTION, trace_id=_TID, now=_NOW).error is not None
-
-
-def test_reflection_draft_roundtrip() -> None:
-    d = ReflectionDraft(title="t", body="b", highlights=("a", "b"), mood=Mood.TIRED)
-    assert ReflectionDraft.from_dict(d.to_dict()) == d
 
 
 # ── PlaceExtractionGate: 항목 단위 격리 ──────────────────────
@@ -176,18 +150,6 @@ def test_explanation_worker_end_to_end() -> None:
     assert isinstance(result.value[0], PoiExplanation)
 
 
-def test_reflection_worker_end_to_end_and_fallback() -> None:
-    canned = json.dumps({"title": "하루", "body": "좋은 하루였다. 많이 걸었다. 만족.",
-                         "highlights": ["성심당"], "mood": "GOOD"})
-    inp = ReflectionInput(visited=("성심당 (40분)",), distance_km=5.2, photo_count=12,
-                          planb_applied=True, weather="맑음")
-    ok = ReflectionWorker(_facade(FakeLlm(canned=canned), ReflectionGate())).reflect(inp, _TID, _NOW)
-    assert ok.is_fallback is False and ok.value.mood is Mood.GOOD
-
-    fb = ReflectionWorker(_facade(FailingLlm(), ReflectionGate())).reflect(inp, _TID, _NOW)
-    assert fb.is_fallback is True and fb.value is None  # FallbackCard는 호출측
-
-
 def test_extraction_worker_end_to_end() -> None:
     canned = json.dumps({"places": [
         {"name": "숨은 카페", "address": None, "coord": None, "hours": None,
@@ -199,12 +161,10 @@ def test_extraction_worker_end_to_end() -> None:
     assert result.is_fallback is False and result.value[0].name == "숨은 카페"
 
 
-def test_registry_loads_all_four_features() -> None:
+def test_registry_loads_registered_features() -> None:
     reg = PromptRegistry(_PROMPTS)
     for feature, variables in [
         (LlmFeature.EXPLANATION, {"taste_tags": "x", "companion": "SOLO", "slots": "1. p"}),
-        (LlmFeature.REFLECTION, {"visited": "v", "distance_km": "1.0", "photo_count": "3",
-                                 "planb": "없음", "weather": "맑음"}),
         (LlmFeature.PLACE_EXTRACTION, {"document": "d", "region": "제주", "category": "카페"}),
     ]:
         prompt, ref = reg.render(feature, variables)
