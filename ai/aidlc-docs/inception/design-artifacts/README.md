@@ -53,6 +53,16 @@ flowchart TD
 
 | 문서 (TripPilot 기획) | AI 관련 내용 |
 |---|---|
-| `../TripPilot/docs/planning/decisions.md` | ADR-0008·0009·0011·0015, D11·D25·D27·D31·D37·D38 |
-| `../TripPilot/docs/planning/architecture.md` | 모듈 경계·의존 매트릭스·포트 격리 |
-| `../TripPilot/docs/planning/nfr.md` | 성능(§1.1)·LLM 경계(§3.5)·PBT(§7) 기준 |
+| ~~`../TripPilot/docs/planning/{decisions,architecture,nfr}.md`~~ | **삭제됨 (2026-07-17)** — 아래 註 참조 |
+| `../../../../aidlc/aidlc-docs/inception/` | 제품 요구사항·스토리·컴포넌트(C1–C17)·유닛(U0–U9) 현 정본 |
+
+> **`aidlc-docs/planning/` 은 존재하지 않는다 (2026-07-17 팀 결정으로 삭제 — 루트 `CLAUDE.md` "never reference it").**
+> 코드 체계별 현 소유자 (2026-08-25, TRIP-530 정정):
+>
+> | 코드 | 현 소유자 |
+> |---|---|
+> | `ADR-####` · `US-*` · `C1`–`C17` · `U0`–`U9` · `S1`–`S6` | `../aidlc/aidlc-docs/inception/` (requirements · user-stories · application-design) |
+> | AI 축 결정 `AI-D0#` | 본 패키지 `ai-adr.md` (자체 소유) |
+> | `D##` · `G###` · `M##` · `Δ#` · `N#` | **소유자 없음 — 역사적 코드.** 삭제된 planning 파일에 대해서만 해석되며 리포 어디에도 원문이 없다(`D38`·`G106`·`D27`·`D31`·`G181` 실측 확인). 근거가 필요하면 git 이력을 볼 것 |
+>
+> 아래 표기를 **결정 근거의 소재로 신뢰하지 말 것** — 인용 맥락 보존용으로만 남긴다.

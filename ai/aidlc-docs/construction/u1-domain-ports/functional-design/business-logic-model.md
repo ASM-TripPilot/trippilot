@@ -53,7 +53,7 @@ class LlmPort(Protocol):
     def invoke(self, request: LlmRequest) -> LlmResponse: ...
 ```
 
-- 벤더 중립 (NFR-6.3). Bedrock 어댑터는 U4에서 LangChain 래핑으로 구현
+- 벤더 중립 (NFR-6.3). 실 벤더 어댑터는 U4 소유 — 벤더는 Anthropic API 직접(AI-D06, 2026-08-25 "Bedrock" 표기 정정)
 - **타임아웃 초과 → `LlmTimeoutError`** (침묵 실패 금지 — 소비 측이 FallbackEvent 발행)
 - LlmResponse의 토큰·레이턴시 메타가 `LlmCallRecord` 생성의 원천 — 계측이 구조적으로 가능
 
@@ -101,7 +101,7 @@ class CachePort(Protocol):
 class SolverPort(Protocol):
     def solve(self, problem: ItineraryProblem) -> ItinerarySolution | None: ...
 ```
-- `None` = 이 전략으로 해 없음 → 체인의 다음 전략(OR-Tools→Bedrock→규칙 폴백, U2 소유)
+- `None` = 이 전략으로 해 없음 → 체인의 다음 전략(OR-Tools→LLM 2차→규칙 폴백, U2 소유. **LLM 2차는 현재 미배선** — TRIP-529)
 
 ### 2.7 [LLMOps] TracePort — 관측 이벤트 발행 (Q1 확정: 단일 통합)
 

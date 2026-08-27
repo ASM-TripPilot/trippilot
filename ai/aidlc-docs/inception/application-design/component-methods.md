@@ -75,8 +75,15 @@
 |---|---|---|
 | INTENT | 경량 | 라우터 |
 | PREFERENCE_SCORING | 경량 | 워커 |
-| CONVERSATION / REQUERY | 경량 | 워커 |
+| ~~CONVERSATION / REQUERY~~ | 경량 | 워커 — **코드에 없는 이름** (아래 註) |
 | EXPLANATION / REFLECTION / PLACE_EXTRACTION | 상위 | 워커 |
+
+> **註 (2026-08-25, TRIP-530) — `CONVERSATION`·`REQUERY` 는 코드에 없다**: 두 이름 모두
+> `domain/llm.py::LlmFeature`(12종)의 값이 아니며, 대응 프롬프트·게이트·워커도 없다. 사유 해석에
+> 해당하는 자리에 실제로 존재하는 값은 `REASON_INTERPRETATION` 인데, 그쪽도 enum·tier_map에만 있고
+> 프롬프트·게이트·워커가 없어 **호출 경로가 없다**. **어느 이름이 맞는지는 본 註가 판정하지 않는다** —
+> 확실한 것은 **양쪽 다 미완이라 어느 쪽도 동작하지 않는다**는 사실뿐이다.
+> (실측 정본: u4-c1-gateway/functional-design/domain-entities.md §1 개정 2026-08-25)
 
 `resolve(feature) -> ModelConfig` — tier → model_name, max_tokens, temperature, timeout 반환
 
@@ -97,8 +104,8 @@
 | ExplanationWorker | EXPLANATION | 상위 | `list[SlotExplanation]` — 표시용 텍스트 |
 | ReflectionWorker | REFLECTION | 상위 | `Reflection(title, body, highlights)` |
 | PlaceExtractionWorker | PLACE_EXTRACTION | 상위 | `list[ExtractedPoi]` — 웹→구조화(AI-D03) |
-| ConversationWorker | CONVERSATION | 경량 | `ConversationResponse(text, next_action)` |
-| RequeryWorker | REQUERY | 경량 | 필터/입력값 변환 DTO |
+| ~~ConversationWorker~~ | ~~CONVERSATION~~ | 경량 | **미구현** — 코드에 이 워커도 feature 값도 없다 (§ 위 유령 feature 註) |
+| ~~RequeryWorker~~ | ~~REQUERY~~ | 경량 | **미구현** — 동일 |
 
 워커는 시각·순서를 확정하지 않음 (INV-2). 실패 시 해당 워커만 규칙 폴백.
 

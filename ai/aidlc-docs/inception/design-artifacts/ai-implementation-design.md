@@ -12,6 +12,14 @@ Python 표기. C1·C2는 각각 독립 서비스로 분리 가능한 인터페�
 
 ### 1.1 C1 LLM Gateway `[정본]`
 
+> **註 (2026-08-25, TRIP-530) — 아래 `LlmFeature` 스니펫은 인터페이스 예시이지 값 목록의 정본이 아니다.**
+> 값 목록의 구현 정본은 `src/trippilot/domain/llm.py::LlmFeature`(**12종**)이고, 티어 매핑 정본은
+> `llm_gateway/config.py::default_tier_map`(경량 6·상위 6)이다. 설계 정본은
+> `aidlc-docs/construction/u4-c1-gateway/functional-design/domain-entities.md` §1.
+> 특히 아래 `CONVERSATION`·`REQUERY` 는 **코드에 존재하지 않는다**. 사유 해석 자리에 실재하는 값은
+> `REASON_INTERPRETATION` 이지만 그쪽도 프롬프트·게이트·워커가 없어 **호출 경로가 없다** —
+> **양쪽 다 미완이라 어느 쪽도 동작하지 않는다.** 어느 이름이 맞는지는 본 註가 판정하지 않는다.
+
 ```python
 from typing import TypeVar, Generic
 from dataclasses import dataclass
@@ -23,8 +31,8 @@ class LlmFeature(Enum):
     EXPLANATION        = "explanation"           # 상위 티어 — 워커
     REFLECTION         = "reflection"            # 상위 티어 — 워커
     PLACE_EXTRACTION   = "place_extraction"     # 상위 티어 — 워커(자유 웹 텍스트 → 구조화 POI, AI-D03)
-    CONVERSATION       = "conversation"          # 경량 티어 — 워커(자유 대화 응답)
-    REQUERY            = "requery"               # 경량 티어 — 워커 (후속)
+    CONVERSATION       = "conversation"          # ⚠️ 코드에 없음 (아래 註)
+    REQUERY            = "requery"               # ⚠️ 코드에 없음 (아래 註)
 
 T = TypeVar("T")
 
@@ -489,7 +497,7 @@ def estimate_travel(from_point, to_point, mode):
 
    M11 날씨 폴링 (1시간 주기)
               |
-   강수확률 >= 60% OR 기상특보
+   강수확률 >= 80% OR 기상특보          # 2026-08-25 정정 (코드 정본: providers/weather.py)
               |
    외부 API 무응답 -> 트리거 침묵 + 실패율 계측 (허위 알림 금지)
    응답 정상   -> TriggerEvent 발행

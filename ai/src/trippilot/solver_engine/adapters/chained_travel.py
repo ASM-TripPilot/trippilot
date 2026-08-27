@@ -1,6 +1,7 @@
 """ChainedTravelAdapter — TravelPort 폴백 체인 구현 (TRIP-422).
 
-v2 설계(agent-hierarchy-design §3.3): 실경로 API → 하버사인 추정 폴백.
+v2 설계(agent-structure-v2 §2 Provider 규칙 로직): 실경로 API → 하버사인 추정 폴백.
+(구 인용 `agent-hierarchy-design §3.3`은 v2가 폐기한 v1 문서였다 — TRIP-530.)
 현재 체인: TMAP(실측, confidence=HIGH) → TravelEstimator(하버사인, confidence=LOW).
 
 TravelPort Protocol 만족 — 솔버·TransitProvider 모두 이 어댑터를 주입받으면

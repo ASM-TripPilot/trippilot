@@ -295,4 +295,4 @@ Edit       : 해석 실패 → 직접 편집 안내 / 검증 실패 → 미리�
 - 위임 프로토콜(Envelope): `orchestrator-delegation-design.md`
 - 에이전트 입출력 계약: `agent-io-contracts.md`
 - 최신성·신속도 지표: `evaluation-metrics-design.md`
-- 기획 정본: `../../../../docs/planning/architecture.md` (모듈 경계·Port 소유 규칙)
+- 기획 정본: ~~`../../../../docs/planning/architecture.md`~~ → **삭제됨 (2026-07-17)**. 현 소유자는 `../../../../aidlc/aidlc-docs/inception/application-design/` (모듈 경계·Port 소유 규칙). (2026-08-25 정정, TRIP-530)
