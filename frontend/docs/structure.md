@@ -9,9 +9,11 @@
 
 | 절 | 누가 채우나 | 어디에 |
 |---|---|---|
-| 파일 목록 · export 심볼 | 🤖 `structure-index.cjs` | `.claude/rules/layer-*.md` |
-| **용도 한 줄** · **스텁 여부** | 🧑 [기록]에서 scribe | `.claude/rules/layer-*.md` |
+| 파일 목록 · export 심볼 | 🤖 `structure-index.cjs --write` | `docs/structure.generated.md` (자동 생성 — 손대지 마라) |
+| **용도 한 줄** · **스텁 여부** · **함정** | 🧑 [기록]에서 scribe | `.claude/rules/layer-*.md` (설명할 게 있는 파일만) |
 | **재사용 공개 API** | 🧑 [기록]에서 scribe | structure.md (층 무관·재구현 방지) |
+
+> **`docs/structure.generated.md`는 기계 담당 절반이다** — `--write`가 전 소스의 파일 목록·export를 뽑아 덮어쓴다. 손으로 고치지 마라(다음 `--write`가 덮는다). `--check`는 이 파일 + `layer-*.md` + structure.md 를 합쳐 실제 파일과 대조하므로, 새 파일은 `--write` 한 번으로 '누락'이 사라진다. 사람이 쓰는 것은 **왜 있나(용도·함정·재사용 근거)**뿐 — 기계가 주는 **무엇이 있나**를 손으로 옮겨 적지 마라.
 
 - **경로는 리포 상대 전체 경로를 백틱으로 적는다** (`src/features/auth/lib/makeAuthorize.ts`). 대조 검사가 이 형태만 인식한다.
 - 갱신은 **이번 사이클이 만진 행만**(해당 층 규칙 파일에서). 전면 재작성 금지.

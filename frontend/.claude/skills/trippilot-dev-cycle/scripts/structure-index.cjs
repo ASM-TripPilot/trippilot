@@ -8,9 +8,12 @@
  *
  * 사용 (cwd 무관 — 어디서 실행해도 된다):
  *   node <리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs
- *       → 현재 소스 인벤토리 출력 (문서에 옮겨 적을 재료)
+ *       → 현재 소스 인벤토리 출력 (stdout)
+ *   node <같은 경로> --write
+ *       → docs/structure.generated.md 에 인벤토리를 생성/덮어쓴다 (기계 담당 절반).
+ *         이 파일은 손으로 고치지 않는다 — 새 파일·삭제가 여기 자동 반영된다.
  *   node <같은 경로> --check
- *       → docs/structure.md ↔ 실제 파일 대조. 어긋나면 exit 1
+ *       → docs/structure.md + layer-*.md + structure.generated.md ↔ 실제 파일 대조. 어긋나면 exit 1
  *
  * 대조가 잡는 것:
  *   - 파일은 있는데 문서에 행이 없다  → 새 파일 누락
@@ -30,6 +33,8 @@ const path = require('path');
 // scripts → trippilot-dev-cycle → skills → .claude → frontend
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const DOC = path.join(ROOT, 'docs', 'structure.md');
+// 기계 담당 절반 — `--write`가 생성하는 인벤토리. 손으로 고치지 않는다(다음 --write가 덮는다).
+const GEN_DOC = path.join(ROOT, 'docs', 'structure.generated.md');
 const SCAN_DIRS = ['src', '__mocks__'];
 
 // 옵시디언 볼트 — 개념 노트의 `설명하는코드` 유령 검사용.
@@ -93,6 +98,8 @@ function exportsOf(rel) {
 function documentedPaths() {
   const sources = [];
   if (fs.existsSync(DOC)) sources.push(fs.readFileSync(DOC, 'utf8'));
+  // 기계 담당 절반 — 파일 목록·export는 여기서 자동 충당된다(손 갱신 대상 아님).
+  if (fs.existsSync(GEN_DOC)) sources.push(fs.readFileSync(GEN_DOC, 'utf8'));
   const rulesDir = path.join(ROOT, '.claude', 'rules');
   if (fs.existsSync(rulesDir)) {
     for (const name of fs.readdirSync(rulesDir)) {
@@ -133,19 +140,36 @@ function conceptCodePaths() {
   return map;
 }
 
-function printInventory() {
-  const files = actualFiles();
+/** 파일 목록 + export 를 마크다운 문자열로 조립한다(--write·기본 출력 공용). */
+function buildInventory(files) {
+  const lines = [];
   let dir = null;
   for (const f of files) {
     const d = path.dirname(f);
     if (d !== dir) {
       dir = d;
-      console.log(`\n## ${d}/`);
+      lines.push(`\n## ${d}/`);
     }
     const ex = exportsOf(f);
-    console.log(`- \`${f}\`${ex.length ? `  →  ${ex.join(' · ')}` : '  →  (export 없음)'}`);
+    lines.push(`- \`${f}\`${ex.length ? `  →  ${ex.join(' · ')}` : '  →  (export 없음)'}`);
   }
-  console.log(`\n합계 ${files.length}개 파일`);
+  lines.push(`\n합계 ${files.length}개 파일`);
+  return lines.join('\n');
+}
+
+function printInventory() {
+  console.log(buildInventory(actualFiles()));
+}
+
+/** 인벤토리를 docs/structure.generated.md 에 생성/덮어쓴다 — 기계 담당 절반. */
+function writeInventory() {
+  const files = actualFiles();
+  const header =
+    '<!-- 자동 생성 — structure-index.cjs --write 가 만든다. 손으로 고치지 마라(다음 --write가 덮는다).\n' +
+    '     기계 담당 절반: 파일 목록·export 심볼. 용도·경고·재사용 근거 같은 사람 담당은 structure.md 에. -->\n' +
+    '# 구조 인벤토리 (자동 생성)\n';
+  fs.writeFileSync(GEN_DOC, header + buildInventory(files) + '\n');
+  console.log(`WROTE ${path.relative(ROOT, GEN_DOC)} — ${files.length}개 파일`);
 }
 
 function check() {
@@ -161,6 +185,7 @@ function check() {
   if (missing.length) {
     console.log(`\n누락 — 파일은 있는데 문서에 행이 없다 (${missing.length}):`);
     for (const f of missing) console.log(`  + ${f}`);
+    console.log(`  → 기계 담당 파일이면 \`--write\`로 인벤토리를 재생성한다(손으로 적지 마라).`);
   }
   if (ghost.length) {
     console.log(`\n유령 — 문서에 행은 있는데 파일이 없다 (${ghost.length}):`);
@@ -193,5 +218,6 @@ function check() {
   process.exit(total === 0 ? 0 : 1);
 }
 
-if (process.argv.includes('--check')) check();
+if (process.argv.includes('--write')) writeInventory();
+else if (process.argv.includes('--check')) check();
 else printInventory();
