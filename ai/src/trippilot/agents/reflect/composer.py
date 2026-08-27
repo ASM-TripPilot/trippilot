@@ -41,7 +41,9 @@ from trippilot.ports.trace_port import TracePort
 
 MAX_ATTEMPTS = 3  # 계약 §4 — N회 생성 상한 (시간 예산 수치는 BR-U6R-14 후속)
 
-# 교체용 고정 안전 문구 (계약 §4.1 — 스스로 금칙 0·자리표시자 어휘 내를 테스트가 고정)
+# 교체용 고정 안전 문구 (계약 §4.1 — 스스로 금칙 0·자리표시자 어휘 내를 테스트가 고정).
+# PHOTO_CAPTION은 장소명을 부르므로 **교체에 쓴 방문의 인덱스**를 받아야 한다 —
+# 고정 {poi:0.name}이면 사진은 방문 k인데 캡션은 방문 0을 말하는 거짓이 된다 (리뷰 지적).
 SAFE_CAPTION_BY_LAYOUT: dict[SceneLayout, str] = {
     SceneLayout.PHOTO_FULL: "오래 남겨두고 싶은 장면",
     SceneLayout.PHOTO_CAPTION: "{poi:0.name}에서의 기억",
@@ -49,6 +51,14 @@ SAFE_CAPTION_BY_LAYOUT: dict[SceneLayout, str] = {
     SceneLayout.MAP: "{region}에서 우리가 지나온 길",
     SceneLayout.EVENT: "계획이 바뀌어도 여행은 계속됐다",
 }
+
+
+def safe_caption(layout: SceneLayout, ref_index: int | None = None) -> str:
+    """레이아웃별 안전 문구. PHOTO_CAPTION은 ref_index의 장소명을 부른다 —
+    사진(visit_ref)과 캡션이 같은 방문을 가리켜야 거짓이 되지 않는다."""
+    if layout is SceneLayout.PHOTO_CAPTION and ref_index is not None:
+        return f"{{poi:{ref_index}.name}}에서의 기억"
+    return SAFE_CAPTION_BY_LAYOUT[layout]
 
 _DETAIL_TOKEN = re.compile(r"\{([^{}]*)\}")  # detail 말미의 {토큰} — 게이트 포맷 고정
 _HASHTAG_INDEX = re.compile(r"hashtags\[(\d+)\]")  # 게이트 라벨 인덱스형과 페어
@@ -68,6 +78,14 @@ def _strip_token(text: str, detail: str) -> str:
     return text.replace("{" + m.group(1) + "}", "") if m else text
 
 
+def _ref_index(scene: Scene, valid_refs: tuple) -> int | None:
+    """장면의 현재 사진 참조가 방문 목록에서 몇 번째인가 (없으면 None)."""
+    if scene.photo_slot is None:
+        return None
+    return next(
+        (i for i, r in enumerate(valid_refs) if r == scene.photo_slot.visit_ref), None)
+
+
 def _valid_ref_picker(template: ReflectionTemplate, valid_refs: tuple):
     """교체용 유효 방문 참조 공급기 — 결정론(입력 순서, 미사용 우선).
 
@@ -84,12 +102,13 @@ def _valid_ref_picker(template: ReflectionTemplate, valid_refs: tuple):
             and template.cover.photo_slot.visit_ref in allowed):
         used.add(template.cover.photo_slot.visit_ref)
 
-    def pick():
-        for ref in valid_refs:
+    def pick() -> tuple:
+        """(참조, 인덱스) — 인덱스는 캡션의 {poi:i.name}과 짝을 맞추는 데 쓴다."""
+        for i, ref in enumerate(valid_refs):
             if ref not in used:
                 used.add(ref)
-                return ref
-        return valid_refs[0]  # 전부 소진 — 재사용 (visits ≥ 1이 보장)
+                return ref, i
+        return valid_refs[0], 0  # 전부 소진 — 재사용 (visits ≥ 1이 보장)
 
     return pick
 
@@ -106,6 +125,10 @@ def apply_hard_replacements(
     함께 바꾸는 이유 — 원 캡션이 다른 장소를 서술하면 갈아끼운 사진과 어긋나
     거짓이 된다. 소프트 위반은 교체하지 않는다(랭킹 감점만). 순수 함수.
     """
+    if not valid_refs:
+        # 공개 함수 — 조용한 IndexError 대신 계약 위반을 명시한다
+        # (compose 경유 시 ReflectionRequest.visits ≥ 1이 보장해 도달 불가)
+        raise ValueError("valid_refs ≥ 1 — 교체할 유효 방문이 필요 (BR-U6R-15)")
     template = candidate.template
     hard = [v for v in candidate.violations if v.grade is ViolationGrade.HARD]
     if not hard:
@@ -119,7 +142,8 @@ def apply_hard_replacements(
             continue
         if v.code is ViolationCode.VISIT_REF_OUT:
             # 슬롯 제거 대신 유효 방문으로 교체 — 표지 사진을 잃지 않는다
-            cover = replace(cover, photo_slot=PhotoSlot(visit_ref=pick_ref()))
+            ref, _ = pick_ref()  # 표지 부제는 장소명을 부르지 않아 인덱스 불요
+            cover = replace(cover, photo_slot=PhotoSlot(visit_ref=ref))
         elif v.detail.startswith("cover.title"):
             cover = replace(
                 cover,
@@ -150,7 +174,7 @@ def apply_hard_replacements(
                     scene = replace(
                         scene,
                         source_event=sorted(valid_events, key=lambda e: e.value)[0],
-                        caption=SAFE_CAPTION_BY_LAYOUT[scene.layout],
+                        caption=safe_caption(scene.layout, _ref_index(scene, valid_refs)),
                     )
                 else:
                     # 입력에 이벤트가 0건 — EVENT 장면의 존재 근거가 없다.
@@ -158,24 +182,38 @@ def apply_hard_replacements(
                     # 사진 카드, 없으면 통계 카드 — 둘 다 source_event 불요)
                     layout = (SceneLayout.PHOTO_CAPTION
                               if scene.photo_slot is not None else SceneLayout.STATS)
+                    idx = None
+                    if scene.photo_slot is not None:
+                        # 기존 슬롯은 이 시점에 유효하다(무효였다면 VISIT_REF_OUT이
+                        # 먼저 갈아끼운다) — 그 방문의 인덱스로 캡션을 맞춘다
+                        idx = next(
+                            (i for i, r in enumerate(valid_refs)
+                             if r == scene.photo_slot.visit_ref), None)
                     scene = replace(
                         scene, layout=layout, source_event=None,
-                        caption=SAFE_CAPTION_BY_LAYOUT[layout],
+                        caption=safe_caption(layout, idx),
                     )
             elif v.code is ViolationCode.VISIT_REF_OUT:
                 # 슬롯 제거·장면 생략 대신 유효 방문으로 교체. 캡션도 함께 —
                 # 원 캡션이 다른 장소를 서술하면 갈아끼운 사진과 어긋난다
+                ref, idx = pick_ref()
                 scene = replace(
                     scene,
-                    photo_slot=PhotoSlot(visit_ref=pick_ref()),
-                    caption=SAFE_CAPTION_BY_LAYOUT[scene.layout],
+                    photo_slot=PhotoSlot(visit_ref=ref),
+                    caption=safe_caption(scene.layout, idx),
                 )
             elif v.code is ViolationCode.TIME_EXPR:
-                scene = replace(scene, caption=SAFE_CAPTION_BY_LAYOUT[scene.layout])
+                scene = replace(
+                    scene,
+                    caption=safe_caption(scene.layout, _ref_index(scene, valid_refs)),
+                )
             elif v.code is ViolationCode.PLACEHOLDER_OUT:
                 stripped = _strip_token(scene.caption, v.detail).strip()
                 scene = replace(
-                    scene, caption=stripped or SAFE_CAPTION_BY_LAYOUT[scene.layout])
+                    scene,
+                    caption=stripped or safe_caption(
+                        scene.layout, _ref_index(scene, valid_refs)),
+                )
         scenes.append(scene)  # 카드는 항상 보존 (TRIP-558)
 
     # ── 해시태그 (detail "hashtags[i]: …") — 위반 태그만 인덱스로 제거.

@@ -70,7 +70,7 @@ D31 재조회는 **정확히 한 계층에서만** 일어난다. "워커는 항�
 | `PreferenceScoringWorker` | **O** | 워커 자신 (`persona_ref`) | 호출측이 참조만 넘긴다 — 조립 지점이 워커 |
 | `ExplanationWorker` | **O** | 워커 자신 (`persona_ref`) | 동일 (취향 요약을 워커가 조립) |
 | `EditTranslationWorker` | **X** | **EditAgent (U5)** | 봉투 프로토콜상 Agent가 `context_refs`를 먼저 재조회한다 (agent-foundation FD business-logic-model §3 "Agent: context_refs 재조회(D31) → 판단"). 워커는 확정 입력(발화·대상 날짜·현재 슬롯·후보 풀)만 받고 **개인 데이터를 다시 끌어오지 않는다** |
-| `ReflectionWorker` | X | 호출측 | 입력이 서버 기록 요약값(`ReflectionInput`)이라 `ResourceRef` 자체가 없다 |
+| ~~`ReflectionWorker`~~ | — | — | **제거됨** (2026-08-25 TRIP-558 — `REFLECTION_TEMPLATE`으로 흡수). 후속 `ReflectionTemplateWorker`도 입력이 서버 조립값(`ReflectionRequest`)이라 `ResourceRef` 없음은 동일 |
 | `PlaceExtractionWorker` | X | 해당 없음 | 입력이 웹 문서 — 개인·소유 데이터가 아니다 |
 
 - 판정 기준 한 줄: **`ResourceRef`를 인자로 받으면 그 워커가 재조회 소유자, 확정값을 받으면 호출측이 소유자.**

@@ -17,9 +17,9 @@ enum 밖 · PHOTO_* 장면에 photo_slot 없음 · EVENT 장면에 source_event 
          PLACEHOLDER_OUT(자리표시자 어휘 밖·{poi:i} 인덱스 범위 밖 — closed-set) ·
          VISIT_REF_OUT(방문 기록 밖 참조, INV-1 사영 — GateDropEvent로 계측) ·
          EVENT_NOT_FOUND(source_event 미실재)
-  소프트 — CAPTION_LEN(40자 초과) · SCENE_COUNT(3~8 밖) · DUP_VISIT_REF(장면 간 중복)
-HASHTAG_OUT은 허용 집합 실체가 미결(FD 미결 #5)이라 아직 판정하지 않는다 —
-해시태그도 TIME_EXPR·PLACEHOLDER_OUT 검사는 받는다 (BR-U6R-04).
+  소프트 — CAPTION_LEN(40자 초과) · SCENE_COUNT(3~8 밖) · DUP_VISIT_REF(장면 간 중복) ·
+         HASHTAG_OUT(지역·방문지·브랜드 파생 아님 — TRIP-558로 하드에서 강등)
+해시태그도 TIME_EXPR·PLACEHOLDER_OUT 검사는 받고, 그쪽은 하드다 (BR-U6R-04).
 장면 3~8·캡션 40자는 잠정값 (FD 미결 #4 — remote config 후보).
 
 "error 있으면 value 비움" 불변식은 base.GateOutcome이 강제한다.

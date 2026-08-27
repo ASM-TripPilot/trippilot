@@ -1,7 +1,7 @@
 """ReflectionNudgeWorker — 회고 유도 푸시 문구 생성, 경량 티어 (TRIP-347).
 
 여행 종료 후 회고를 유도하는 알림 문구 1문장을 개인화 생성한다 —
-ReflectionWorker(회고 본문, 정본 §2.3)와 별개 기능. 입력(여행지·기간·페르소나
+ReflectionTemplateWorker(회고 본문·연출, 정본 §2.8)와 별개 기능. 입력(여행지·기간·페르소나
 요약·대표 방문지)은 이미 확정된 문자열 요약으로 들어온다 — 조립은 호출측 몫
 (edit_translation 워커와 같은 전제).
 

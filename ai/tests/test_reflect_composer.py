@@ -21,6 +21,7 @@ test_llm_gateway_reflection_template.py 40건 소관 — 여기는 **조립층 �
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -31,6 +32,7 @@ from hypothesis import strategies as st
 from trippilot.agents.reflect.composer import (
     MAX_ATTEMPTS,
     SAFE_CAPTION_BY_LAYOUT,
+    safe_caption,
     apply_hard_replacements,
     compose,
     rank_key,
@@ -501,3 +503,47 @@ def test_trip558_hashtag_out_is_soft_and_survives_replacement() -> None:
 
     final = apply_hard_replacements(candidate, *_replace_args(_REQUEST))
     assert final.hashtags == ("#부산여행", "#감천문화마을", "#인생샷")  # 소프트라 보존
+
+
+@given(case=polluted_reflection_cases(pool=HARD_POLLUTIONS, min_pollution=1))
+@settings(max_examples=80, deadline=None)
+def test_trip558_photo_caption_names_the_photo_it_shows(case) -> None:
+    """**교체가 거짓을 만들지 않는다** — PHOTO_CAPTION 장면의 캡션이 {poi:i.name}을
+    부르면 그 i는 반드시 **그 장면 사진(visit_ref)의 방문 인덱스**여야 한다.
+
+    고정 {poi:0.name}을 쓰면 사진은 방문 k인데 캡션은 방문 0을 말한다 —
+    재게이트는 인덱스 범위만 보므로 통과해버려서, 이 정합은 여기서만 잡힌다."""
+    request, bodies = case
+    refs = tuple(v.ref for v in request.visits)
+    final = apply_hard_replacements(
+        _gate(request, bodies[0][0]).value, refs,
+        frozenset(e.kind for e in request.events))
+
+    for scene in final.scenes:
+        m = re.search(r"\{poi:(\d+)\.name\}", scene.caption)
+        if m is None or scene.photo_slot is None:
+            continue
+        named = int(m.group(1))
+        assert refs[named] == scene.photo_slot.visit_ref, (
+            f"캡션은 방문 {named}을 부르는데 사진은 {scene.photo_slot.visit_ref}")
+
+
+def test_trip558_safe_caption_follows_replaced_visit() -> None:
+    """표지가 첫 방문을 선점하면 장면 교체는 둘째 방문을 쓰고, 캡션도 그 방문을 부른다."""
+    body = {
+        "cover": _CLEAN_BODY["cover"],  # poi-1(인덱스 0) 선점
+        "scenes": [
+            {"layout": "PHOTO_CAPTION",
+             "photo_slot": {"visit_ref": {"date": "2026-08-01", "poi_id": "없는-곳"}},
+             "caption": "가보지 않은 곳에서"},
+            *_CLEAN_BODY["scenes"][1:],
+        ],
+        "hashtags": ["#부산여행"],
+    }
+    final = apply_hard_replacements(
+        _gate(_REQUEST, body).value, (_REF1, _REF2),
+        frozenset(e.kind for e in _REQUEST.events))
+    scene = final.scenes[0]
+    assert scene.photo_slot.visit_ref == _REF2          # 미사용 방문으로 교체
+    assert scene.caption == safe_caption(SceneLayout.PHOTO_CAPTION, 1)
+    assert "{poi:1.name}" in scene.caption              # 사진과 같은 방문을 부른다
