@@ -6,12 +6,18 @@ import { LiveSlotCard } from './LiveSlotCard';
 
 /**
  * TRIP-395 · LiveSlotCard(i01) — 여행 중 한 슬롯의 카드.
+ * TRIP-396 재작성: [방문 완료] 기능화(active) · 수동 [도착](upcoming) · 사진/메모 "준비 중" 힌트 ·
+ *   active 상태줄 문구 "도착 · 방문 중"(Q6). **C5·C7 동결 개봉**(01b Q2, 선례 TRIP-401·456) —
+ *   [방문 완료]가 활성화돼 옛 "비활성 자리" 단언이 성립 불가하므로 신 계약으로 대체.
  *
- * 표면 = 상태 배지 · 계획 시각("15:00 도착 예정") · 장소명 · 영업시간 · 다음 구간 거리.
- * [방문 완료]·[사진]·[메모]는 **비활성 자리만**(BR-U4-38 — 표시하되 동작 안 함, U5 소관).
- * 각 leaf 는 값 하나만 담아 `toHaveTextContent`(완전 일치)로 읽는다(PoiSlotCard 규율 계승).
+ * 표면(상태별):
+ *  - active   = 핑크 테두리 + "진행 중" 배지 + 상태줄 "HH:mm 도착 · 방문 중"
+ *               + [방문 완료](`execution-arrive-complete`, 활성) · [사진]/[메모](press→"준비 중" 힌트).
+ *  - upcoming = "예정" 배지 + 상태줄 "HH:mm 도착 예정" + 수동 [도착](`execution-arrive-manual-{key}`).
+ *  - done     = 컴팩트(이름 + 시각범위 배지, 액션 버튼·상태 텍스트 없음).
  *
- * 3동작 뼈대: 준비=슬롯+상태 → 실행=render → 단언=필드 텍스트·비활성.
+ * 각 leaf 는 값 하나만 담아 `toHaveTextContent`(문자열=완전일치, RNTL 13.3.3)로 읽는다.
+ * 3동작 뼈대: 준비=슬롯+상태(+콜백) → 실행=render/press → 단언=필드 텍스트·버튼·힌트.
  */
 
 const DATE = '2026-08-20';
@@ -96,22 +102,6 @@ describe('LiveSlotCard', () => {
     ).toBeNull();
   });
 
-  // C5: 진행중(버튼 3개)·예정(거리+아이콘 버튼 3개) 두 상태만 액션 버튼을 갖는다(Figma).
-  // 완료(done)는 버튼이 없다 — C7 이 그 부재를 잠근다. 버튼은 여전히 비활성 자리(BR-U4-38).
-  it('C5 active·upcoming 카드의 [방문 완료]·[사진]·[메모]는 비활성 자리만이다 (BR-U4-38)', () => {
-    for (const state of ['active', 'upcoming'] as const) {
-      const { unmount } = render(
-        <LiveSlotCard slot={slot()} date={DATE} state={state} />
-      );
-      for (const role of ['visit', 'photo', 'memo']) {
-        expect(
-          screen.getByTestId(`execution-live-slot-${role}-${key()}`)
-        ).toBeDisabled();
-      }
-      unmount();
-    }
-  });
-
   it('C6 루트 testID가 slotKey 규약({date}#{poiId})을 따른다', () => {
     render(
       <LiveSlotCard slot={slot({ poiId: 'xyz' })} date={DATE} state="active" />
@@ -121,34 +111,116 @@ describe('LiveSlotCard', () => {
     ).toBeTruthy();
   });
 
-  // C7: 완료 카드는 Figma 에서 컴팩트다 — 상태 텍스트·액션 버튼이 없고 이름만 남는다.
-  // (컴팩트 높이·시계 시각범위 배지·핑크 아님 같은 픽셀은 jest 무심판 → 6-b 실기. 여기선
-  //  jest 가 볼 수 있는 구조 차이(status·버튼 부재)만 잠근다 — 게이트① 동결 결정.)
-  it('C7 done 카드는 상태 텍스트·액션 버튼 없이 이름만 그린다 (완료=컴팩트)', () => {
+  // ── TRIP-396 · AC-3: active 카드의 [방문 완료] 활성화(C5 개봉) ──
+  it('A1 active 카드는 활성 [방문 완료]를 그리고, press 는 onPressComplete 를 부른다 (AC-3)', () => {
+    const onPressComplete = jest.fn();
+    render(
+      <LiveSlotCard
+        slot={slot()}
+        date={DATE}
+        state="active"
+        onPressComplete={onPressComplete}
+      />
+    );
+
+    const complete = screen.getByTestId('execution-arrive-complete');
+    expect(complete).not.toBeDisabled();
+    fireEvent.press(complete);
+    expect(onPressComplete).toHaveBeenCalledTimes(1);
+
+    // active 는 완료 버튼이지 수동 도착이 아니다(수동은 upcoming 전용).
+    expect(screen.queryByTestId(`execution-arrive-manual-${key()}`)).toBeNull();
+  });
+
+  // ── TRIP-396 · Q6: active 상태줄 문구(계획시각 + 정성 "방문 중") ──
+  it('A2 active 상태줄은 "HH:mm 도착 · 방문 중"이다 (계획값 + 정성, Q6 · BR-U4-34)', () => {
+    render(<LiveSlotCard slot={slot()} date={DATE} state="active" />);
+    // 계획 시각 15:00(재추정 아님) + 정성 상태(숫자 없음, INV-3/executionDurationStructure 통과).
+    expect(
+      screen.getByTestId(`execution-live-slot-time-${key()}`)
+    ).toHaveTextContent('15:00 도착 · 방문 중');
+  });
+
+  // ── TRIP-396 · AC-5: 사진·메모 무해 + "준비 중" 힌트 ──
+  it('A3 active 사진/메모 press 는 오류 없이 "준비 중" 힌트를 드러낸다 (AC-5 · BR-U4-38)', () => {
+    render(<LiveSlotCard slot={slot()} date={DATE} state="active" />);
+
+    // 준비 — press 전엔 힌트가 없다(공허 통과 방지 앵커).
+    expect(screen.queryByTestId('execution-arrive-soon-hint')).toBeNull();
+
+    // 실행·단언 — [사진] press 는 던지지 않고 힌트를 띄운다.
+    fireEvent.press(screen.getByTestId('execution-arrive-photo'));
+    expect(screen.getByTestId('execution-arrive-soon-hint')).toBeTruthy();
+  });
+
+  it('A3b active [메모] press 도 같은 "준비 중" 힌트를 드러낸다 (AC-5)', () => {
+    render(<LiveSlotCard slot={slot()} date={DATE} state="active" />);
+    fireEvent.press(screen.getByTestId('execution-arrive-memo'));
+    expect(screen.getByTestId('execution-arrive-soon-hint')).toBeTruthy();
+  });
+
+  // ── TRIP-396 · AC-4: upcoming 카드의 수동 [도착] ──
+  it('A4 upcoming 카드는 수동 [도착]을 그리고, press 는 onPressManualArrive 를 부른다 (AC-4)', () => {
+    const onPressManualArrive = jest.fn();
+    render(
+      <LiveSlotCard
+        slot={slot()}
+        date={DATE}
+        state="upcoming"
+        onPressManualArrive={onPressManualArrive}
+      />
+    );
+
+    const manual = screen.getByTestId(`execution-arrive-manual-${key()}`);
+    expect(manual).not.toBeDisabled();
+    fireEvent.press(manual);
+    expect(onPressManualArrive).toHaveBeenCalledTimes(1);
+
+    // upcoming 은 아직 도착 전이라 완료 버튼이 없다.
+    expect(screen.queryByTestId('execution-arrive-complete')).toBeNull();
+  });
+
+  // ── TRIP-396 · AC-6: 화면 어디에도 실체류 시간(N분)이 표시되지 않는다 ──
+  it('A5 완료/진행 카드 어디에도 소요시간(N분·N시간·소요)이 표시되지 않는다 (AC-6 · INV-3)', () => {
+    const durationText = /\d+\s*분|\d+\s*시간|소요/;
+    for (const state of ['active', 'done'] as const) {
+      const { unmount } = render(
+        <LiveSlotCard slot={slot()} date={DATE} state={state} />
+      );
+      expect(screen.queryByText(durationText)).toBeNull();
+      unmount();
+    }
+  });
+
+  // C7 재작성(done=컴팩트): 액션 버튼(신 testID)·상태 텍스트가 없고 이름+시각범위만 남는다.
+  it('C7 done 카드는 액션 버튼·상태 텍스트 없이 이름과 시각범위만 그린다 (완료=컴팩트)', () => {
     render(<LiveSlotCard slot={slot()} date={DATE} state="done" />);
 
-    // 상태 텍스트 없음(Figma 완료 = 상태 배지 대신 시각범위 배지, 상태 텍스트 자체가 없다).
+    // 액션 부재 — 완료엔 방문/사진/메모/수동도착 자리가 없다.
+    for (const id of [
+      'execution-arrive-complete',
+      'execution-arrive-photo',
+      'execution-arrive-memo',
+      `execution-arrive-manual-${key()}`,
+    ]) {
+      expect(screen.queryByTestId(id)).toBeNull();
+    }
+    // 상태 텍스트 부재(Figma 완료 = 상태 배지 대신 시각범위 배지).
     expect(
       screen.queryByTestId(`execution-live-slot-status-${key()}`)
     ).toBeNull();
-    // 액션 버튼 없음(완료엔 방문/사진/메모 자리가 없다).
-    for (const role of ['visit', 'photo', 'memo']) {
-      expect(
-        screen.queryByTestId(`execution-live-slot-${role}-${key()}`)
-      ).toBeNull();
-    }
     // 이름은 남는다(빈 카드가 아님 — 공허 통과 방지 앵커).
     expect(
       screen.getByTestId(`execution-live-slot-name-${key()}`)
     ).toHaveTextContent('광안리 해수욕장');
-    // 시각범위 배지 값이 서버 startAt–endAt 슬라이스와 일치한다(03b 경고-1 — 무심판이던 leaf 잠금).
+    // 시각범위 배지 값이 서버 startAt–endAt 슬라이스와 일치한다.
     expect(
       screen.getByTestId(`execution-live-slot-range-${key()}`)
     ).toHaveTextContent('15:00–16:30');
   });
 
-  // ── TRIP-399 · AC-3: active 카드의 "다음 예정지" 섹션(additive 옵셔널 prop) ──
-  // 기존 C1~C7·slot() 헬퍼는 무변경. 카드는 순수 뷰 — Linking·router 를 모른다(nextNav 유틸이
+  // ── TRIP-399 · AC-3: active 카드의 "다음 예정지" 섹션(additive 옵셔널 prop) — 무변경 승계 ──
+  // 기존 slot() 헬퍼는 무변경. 카드는 순수 뷰 — Linking·router 를 모른다(nextNav 유틸이
   // 판정을 소유). state='active' + nextDest 있을 때만 거리행·CTA 를 그린다.
   const nextDest = {
     lat: 35.1,
@@ -169,7 +241,6 @@ describe('LiveSlotCard', () => {
       />
     );
 
-    // 거리 leaf 는 서버 문자열 하나만 담는다(toHaveTextContent 문자열=완전일치, RNTL 13.3.3).
     expect(
       screen.getByTestId('execution-arrive-next-distance')
     ).toHaveTextContent('약 1.2km · 도보 추정');

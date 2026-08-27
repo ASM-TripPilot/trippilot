@@ -32,6 +32,8 @@ import {
   PREVIEW_SAVED_POI_IDS,
 } from '@/features/explore/model/exploreFixtures';
 import type { PlaceDetailView } from '@/features/execution/model/placeDetailView';
+import type { ProjectedSlot } from '@/features/execution/model/slotProgress';
+import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen';
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
@@ -904,6 +906,57 @@ const LIVE_PLACE_PREVIEW_VIEW: PlaceDetailView = {
   lat: 35.15,
   lng: 129.11,
 };
+
+// i01 방문 체크(TRIP-396) — 한 타임라인에 done·active·upcoming 세 카드 상태를 동시에 세워
+// [방문 완료](활성)·상태줄 "방문 중"·수동 [도착]·완료 컴팩트를 6-b 실기/육안으로 대조하는 자리.
+// jest 는 픽셀·플렉스 폭을 못 봐(★ layer-features-execution) 이 키가 유일한 눈으로 보는 곳.
+const LIVE_ITINERARY_PREVIEW_SLOTS: ProjectedSlot[] = [
+  {
+    state: 'done',
+    slot: {
+      poiId: 'poi-done',
+      startAt: '09:30:00',
+      endAt: '10:50:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      nameKo: '감천문화마을',
+      distanceRange: null,
+      openingHours: '09:00 - 18:00',
+      tags: [],
+    },
+  },
+  {
+    state: 'active',
+    slot: {
+      poiId: 'poi-active',
+      startAt: '13:00:00',
+      endAt: '14:30:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      nameKo: '부산시립미술관',
+      distanceRange: null,
+      openingHours: '10:00 - 18:00',
+      tags: [],
+    },
+  },
+  {
+    state: 'upcoming',
+    slot: {
+      poiId: 'poi-upcoming',
+      startAt: '15:00:00',
+      endAt: '16:30:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      nameKo: '전포 카페거리',
+      distanceRange: '약 1.2km · 도보 추정',
+      openingHours: '11:00 - 22:00',
+      tags: [],
+    },
+  },
+];
 
 // i15·i22 수동 편집(TRIP-443) — A(비고정)·H(숙소 체크인 isFixed)·C(비고정, lockedSlotKeys) 3슬롯.
 // aViolation 을 켜면 A 에 위반 배지가 뜬다(mode 무관 공통 축).
@@ -2459,6 +2512,37 @@ const PREVIEW_STATES: PreviewState[] = [
           slackLabel: '미확인',
         }}
         onPressItinerary={noop}
+      />
+    ),
+  },
+  // i01 여행 중 일정(TRIP-396) — done·active·upcoming 세 카드 상태를 한 타임라인에서.
+  {
+    key: 'live-itinerary',
+    label: '여행 중 일정 i01 · 방문 체크',
+    login: null,
+    render: () => (
+      <LiveItineraryScreen
+        days={[
+          { date: '2026-08-20', slots: [] },
+          { date: '2026-08-21', slots: [] },
+        ]}
+        activeDayIndex={0}
+        slots={LIVE_ITINERARY_PREVIEW_SLOTS}
+        segment="itinerary"
+        onSelectDay={noop}
+        onSelectSegment={noop}
+        toggle="plan"
+        onToggle={noop}
+        actualRoute={{
+          enabled: false,
+          reason: '위치 권한을 켜면 기록돼요',
+          distanceKm: 0,
+        }}
+        tripTitle="부산 여행"
+        subtitle="8월 20일 목요일 · 오늘 일정"
+        onPressTab={noop}
+        onPressComplete={noop}
+        onManualArrive={noop}
       />
     ),
   },

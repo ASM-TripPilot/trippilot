@@ -61,6 +61,10 @@ export interface LiveItineraryScreenProps {
   onPressTab: (key: ShellTabKey) => void;
   /** "다음 장소 길찾기" — page 가 openNextNav(딥링크 폴백 사다리)로 배선. active 다음 첫 upcoming 을 넘긴다. */
   onPressNextNav?: (dest: NavDest) => void;
+  /** active 카드 [방문 완료] — page 가 도출한 visitCheckId 로 완료 낙관을 미리 바인딩해 넘긴다(AC-3). */
+  onPressComplete?: () => void;
+  /** upcoming 카드 수동 [도착] — page 가 poiId 로 arrive({source:MANUAL})를 배선(AC-4). */
+  onManualArrive?: (poiId: string) => void;
 }
 
 export function LiveItineraryScreen({
@@ -77,6 +81,8 @@ export function LiveItineraryScreen({
   subtitle,
   onPressTab,
   onPressNextNav,
+  onPressComplete,
+  onManualArrive,
 }: LiveItineraryScreenProps): ReactElement {
   const activeDate = days[activeDayIndex]?.date ?? '';
   // 진행 중 슬롯 다음 첫 upcoming(좌표 유한)을 다음 예정지로 도출 — active 카드에만 주입한다.
@@ -194,6 +200,14 @@ export function LiveItineraryScreen({
                   onPressNextNav={
                     projected.state === 'active' && nextDest
                       ? () => onPressNextNav?.(nextDest)
+                      : undefined
+                  }
+                  onPressComplete={
+                    projected.state === 'active' ? onPressComplete : undefined
+                  }
+                  onPressManualArrive={
+                    projected.state === 'upcoming'
+                      ? () => onManualArrive?.(projected.slot.poiId)
                       : undefined
                   }
                 />
