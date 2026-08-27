@@ -2,7 +2,7 @@
 paths:
   - "src/features/planb/**"
 ---
-# `src/features/planb/` — 재계획(Plan-B) 도메인 (TRIP-439 재신설, TRIP-440으로 i12·i14 추가, TRIP-441로 확정/취소 래퍼·i19 추가, TRIP-442로 origin 조립·판정 추가)
+# `src/features/planb/` — 재계획(Plan-B) 도메인 (TRIP-439 재신설, TRIP-440으로 i12·i14 추가, TRIP-441로 확정/취소 래퍼·i19 추가, TRIP-442로 origin 조립·판정 추가, TRIP-443으로 i15·i22 수동 편집 화면 추가)
 
 TRIP-173에서 빈 배럴째 디렉토리가 삭제됐다가, 선행 TRIP-438(planb-triggers, 감지·열람)이 미완료로 끝나 재신설을 못 한 채로 남아 있었다 — **TRIP-439가 이 사이클에서 처음 다시 만든다.** 선행 미완의 여파로 triggers 소비가 없어, 이번 슬라이스는 **수동 진입 경로(`triggerId=null`)** 만 짓는다(감지 배너·`[끄기]`는 `trigger?` prop이 있을 때만 조건부 렌더, 자동 진입 배선은 후속 티켓).
 
@@ -27,6 +27,7 @@ TRIP-173에서 빈 배럴째 디렉토리가 삭제됐다가, 선행 TRIP-438(pl
 | `src/features/planb/model/useApplyReplan.ts` | **신규(TRIP-441)** — codegen `usePostTripsTripIdReplanSessionsSessionIdApply`를 감싸는 유일 seam(`PlanbDiffPage.tsx` 1곳만 호출 — T1 G2/G4 구조가드로 봉인). 성공 시 `onSuccess: (_data, variables) => invalidateQueries(getGetTripsTripIdItineraryQueryKey(variables.tripId))`로 itinerary 캐시 무효화(확정=원 일정을 실제로 바꾸는 유일 지점, INV-U4-05). 무효화 correctness는 jest 사각 — T1 G3는 심볼+`invalidateQueries` 문자열 실재만 확인(맹점①, repo-traps 참고). 개념 [[계약이 못 받치면 안 그린다]] |
 | `src/features/planb/model/useCancelReplan.ts` | **신규(TRIP-441)** — codegen `usePostTripsTripIdReplanSessionsSessionIdCancel` 순수 passthrough(무효화 없음 — cancel은 세션만 CANCELED로 닫고 원 일정은 안 바꿈, INV-U4-05). ⚠️ apply와 달리 **codegen 훅 직접 호출 봉인 가드가 없다** — 형제 `pages/planb-draft/ui/PlanbSolvingPage.tsx`가 이 codegen 훅을 직접 부른다(구조 강제 비대칭, repo-traps 참고) |
 | `src/features/planb/ui/ReplanAppliedScreen.tsx` | **신규(TRIP-441)** — i19 반영완료 순수 화면(`{onBack, onContinue}` 콜백만, `ReplanSolvingScreen` 선례). 헤더·체크 아이콘(`PlanbGlyphs`)·문구·`[여행 계속하기]`만 렌더 — 지표 chip·전후 항목 배지·`[되돌리기]`는 draft(after) payload 계약 갭으로 **아예 안 그림**(자리표시 없음, S4 부재 단언). 개념 [[계약이 못 받치면 안 그린다]] |
+| `src/features/planb/ui/ManualEditScreen.tsx` | **신규(TRIP-443)** — i15·i22 수동 편집 얇은 파생 화면. `variant?: 'error'\|'normal'`(미지정→`'normal'`)을 `mode = variant==='error'?'fallback':'normal'`로 1:1 파생해 `<ManualEditShell mode={mode} .../>`(`@/shared/itinerary-edit`)에 나머지 props를 그대로 위임 — 렌더는 전부 셸이 진다(features 간 직접 import 금지로 `features/itinerary`(U3) 편집 기계를 못 가져다 써 `shared/itinerary-edit`를 신설하고 이 화면이 소비, U3 화면·테스트 seam은 무수정). 진입 신호가 `isFallback`/`solveMode`(MANUAL=`isFallback:false`, repo-traps 신호 겹침) 대신 라우트 파라미터 `variant`인 이유가 이 파일의 존재 이유. `executionDurationStructure.test.ts`(`features/{execution,planb}/ui/**` 재귀)에 자동 편입돼 소요시간 표기 0 강제(INV-3, shared 셸은 이 스캔 밖이라 `planbManualStructure.test.ts` G3가 별도로 잠금) |
 
 ⚠️ `features/planb/ui/**`는 기존 구조가드 `executionDurationStructure.test.ts`(INV-3, `features/{execution,planb}/ui/**` 재귀 스캔)에 **자동 편입**된다 — 소요시간 표기(`N분`·`N시간`·`소요`) 0건 강제, raw-hex 가드는 아직 없음(참고, 후속 티켓 후보). `slackTime.ts`는 `model/`이라 이 자동 편입 밖 — PBT-U4-F2가 유일 심판.
 

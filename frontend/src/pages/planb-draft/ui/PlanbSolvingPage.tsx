@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
+import { useEffect } from 'react';
 
 import { resolveReplanState } from '@/features/planb/model/replanState';
 import { useReplanSession } from '@/features/planb/model/useReplanSession';
@@ -15,8 +16,12 @@ import { usePostTripsTripIdReplanSessionsSessionIdCancel } from '@/shared/api/ge
  *    소스 스캔이 잠근다).
  *  - [백그라운드로] → `router.back()` — 세션을 살린 채 이탈(취소와 구별, D3).
  *
- * SOLVING 외(DRAFT·NO_SOLUTION·FAILED·closed·미도착)는 이번 사이클 미구현(draft 계약 갭·i16 범위
- * 밖) — null 로 접는다(정직한 미표시, AC 없음). 그 화면들은 후속 티켓.
+ * TRIP-443 · AC-5(106-A · INV-4) — FAILED(재계획 불가)면 침묵 실패 없이 수동 편집 화면으로
+ * 전환한다: `resolveReplanState` FAILED → `planb/manual?variant=error`(i22) push 1회. 진입 신호는
+ * variant(isFallback/solveMode 아님). SOLVING·기타 kind 동작은 무변경(effect 가 failed 에서만 발화).
+ *
+ * SOLVING 외(DRAFT·NO_SOLUTION·closed·미도착)는 이번 사이클 미구현(draft 계약 갭·i16 범위 밖) —
+ * null 로 접는다(정직한 미표시, AC 없음). 그 화면들은 후속 티켓.
  */
 
 export interface PlanbSolvingPageProps {
@@ -36,6 +41,18 @@ export function PlanbSolvingPage({
     session.data === undefined
       ? undefined
       : resolveReplanState(session.data.status);
+
+  // 106-A — 재계획이 FAILED 면 i22(수동 편집·error) 로 전환한다(INV-4 침묵 금지). kind 가 failed 일
+  // 때만 발화하고 폴링 재렌더로 kind 가 그대로면 재발화 없음(1회 push).
+  const failed = state?.kind === 'failed';
+  useEffect(() => {
+    if (failed) {
+      router.push({
+        pathname: '/trips/[tripId]/planb/manual',
+        params: { tripId, variant: 'error' },
+      });
+    }
+  }, [failed, tripId, router]);
 
   if (state?.kind === 'solving') {
     return (
