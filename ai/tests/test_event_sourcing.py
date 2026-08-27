@@ -174,7 +174,9 @@ def test_collect_region_glue(tmp_path) -> None:
             return _R()
 
     store = JsonEventStore(tmp_path / "events.json")
-    client = NaverSearchClient(_RoutingHttp(), "i", "s", max_calls=10)
+    # 쿼리 12건 + 지오코딩 — 쿼리 수를 늘릴 때마다 여기가 먼저 깨진다(예산 부족).
+    # 상한이 아니라 접합부를 보는 테스트라 넉넉히 준다.
+    client = NaverSearchClient(_RoutingHttp(), "i", "s", max_calls=30)
     stats = collect_region("부산", client=client, worker=_FakeWorker(),
                            store=store, today=_TODAY, now=_NOW)
 
@@ -446,3 +448,75 @@ def test_행정단위만_있는_주소를_가려낸다(address, is_admin) -> Non
     from collect_events import is_admin_only
 
     assert is_admin_only(address) is is_admin
+
+
+# ── 캡 안에 무엇을 넣는가 (2026-08-27) ─────────────────────────────────
+
+
+def test_날짜_있는_스니펫이_캡_안에_먼저_들어간다(tmp_path, monkeypatch) -> None:
+    """**토큰을 안 늘리고 실효 입력을 올리는 유일한 레버다.**
+
+    캡(80)이 도착 순서대로 자르면 뒤쪽 쿼리 결과가 통째로 버려지고, 그 80칸의
+    절반은 날짜 없는 스니펫이 차지한다(실측 평균 39/80). 날짜가 없으면 프롬프트
+    규칙("날짜 불명확 행사 제외, 추측 금지")과 게이트가 원천 배제하므로 그 칸은
+    처음부터 값을 만들 수 없다. 버리지 않고 **순서만** 바꾼다.
+    """
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    import collect_events as ce
+
+    monkeypatch.setattr(ce, "SNIPPET_CAP", 3)
+    seen: list = []
+
+    class _Worker:
+        def extract(self, region, start, end, pairs, trace_id, now, *, timeout_sec):
+            seen.extend(pairs)
+
+            class _R:
+                value = ()
+                is_fallback = False
+                error = None
+            return _R()
+
+    class _Client:
+        calls_used = 0
+
+        def search(self, kind, query, display=10):
+            # 날짜 없는 것이 **먼저** 도착한다 — 도착 순서대로면 캡이 이것들로 찬다
+            return [
+                {"title": "대전 가볼만한 곳 BEST", "description": "추천 모음"},
+                {"title": "대전 맛집 리스트", "description": "정리"},
+                {"title": "대전 0시 축제", "description": "9월 5일 개막"},
+                {"title": "대전 과학축제", "description": "10월 3일부터"},
+            ]
+
+    ce.collect_region(
+        "대전", client=_Client(), worker=_Worker(),
+        store=JsonEventStore(tmp_path / "e.json"),
+        today=_TODAY, now=_NOW,
+    )
+
+    assert len(seen) == 3, "캡만큼만 들어간다"
+    dated = [p for p in seen if ce._DATE_HINT_RE.search(f"{p[0]} {p[1]}")]
+    assert len(dated) == 2, f"날짜 있는 2건이 모두 들어가야 한다: {seen}"
+    assert seen[0][0] == "대전 0시 축제" and seen[1][0] == "대전 과학축제", (
+        f"날짜 있는 것이 앞에 와야 한다: {[p[0] for p in seen]}"
+    )
+
+
+def test_같은_입력이면_같은_순서_결정론(tmp_path) -> None:
+    """정렬이 결정론을 깨면 안 된다 — 같은 입력에 같은 프롬프트가 나가야
+    실패를 재현할 수 있다. 같은 그룹 안에서는 원래 순서가 유지된다(stable sort)."""
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "scripts"))
+    import collect_events as ce
+
+    pairs = [("a 축제", "설명"), ("b 축제", "9월 1일"), ("c 축제", "설명"),
+             ("d 축제", "10월 2일")]
+    first = sorted(pairs, key=lambda p: not ce._DATE_HINT_RE.search(f"{p[0]} {p[1]}"))
+    second = sorted(pairs, key=lambda p: not ce._DATE_HINT_RE.search(f"{p[0]} {p[1]}"))
+
+    assert first == second
+    assert [p[0] for p in first] == ["b 축제", "d 축제", "a 축제", "c 축제"]
