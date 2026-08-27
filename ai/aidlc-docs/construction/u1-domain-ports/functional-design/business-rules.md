@@ -33,7 +33,7 @@
 |---|---|---|
 | 모든 LLM 호출 완료·실패·타임아웃 | `LlmCallRecord` (success 플래그 포함) | U4 GatewayFacade |
 | 게이트에서 poi_id 드롭 발생 | `GateDropEvent` | U4 ClosedSetGate |
-| 폴백 전환 (LLM→규칙, OR-Tools→Bedrock→규칙, 라우터→기본의도, 에이전트 폴백) | `FallbackEvent` | U2/U4/U5/U6 각자 |
+| 폴백 전환 (LLM→규칙, OR-Tools→LLM 2차→규칙, 라우터→기본의도, 에이전트 폴백) | `FallbackEvent` | U2/U4/U5/U6 각자 |
 | 솔버 실행 완료 | `SolverRunRecord` | U2 SolverFacade |
 
 - `TypedResult.call_record`: U4의 call()은 성공·폴백 무관 LlmCallRecord를 결과에 첨부 — 소비 측이 계측 여부를 선택할 수 없게 함

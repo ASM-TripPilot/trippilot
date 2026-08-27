@@ -58,7 +58,7 @@ Plan-B는 **이미 있는 정보를 꺼내 와서(Retrieve) + 상황에 맞게 �
 
 | 항목 | 내용 | 용도 |
 |---|---|---|
-| 트리거 사유 | 날씨(강수 60%+), 휴무, 이동 지연, 체류 초과 | 대안 방향 결정 |
+| 트리거 사유 | 날씨(강수 **80%**+ — 2026-08-25 정정), 휴무, 이동 지연, 체류 초과 | 대안 방향 결정 |
 | 현재 위치 | GPS 좌표 | 대안 POI 반경 필터 |
 | 현재 시각 | 남은 가용 시간 계산 | 시간창(HC4) 제약 |
 | 날씨 예보 | 시간대별 강수확률·기온 | 실내/실외 필터 |
@@ -139,12 +139,17 @@ Plan-B는 **이미 있는 정보를 꺼내 와서(Retrieve) + 상황에 맞게 �
 
 ### 임베딩 모델
 
+> **해소 (2026-08-25, TRIP-530)** — 아래 표·권고는 폐기다. **임베딩 정본은 로컬 `nlpai-lab/KURE-v1`**
+> (1024차원 유지 → pgvector 스키마 무변경). AI-D06 부기(2026-08-23)·TRIP-514로 확정·배선 완료
+> (`llm_gateway/adapters/sentence_transformer_embedding.py`). `TitanEmbeddingAdapter` 는 선택적 경로로
+> 잔존하지만 기본값이 아니다(`main.py` 의 `titan|local` 선택, 기본 `local`).
+> Titan v2 는 Bedrock 전용이라 AI-D06(Anthropic 직접) 하에서는 기본 경로가 될 수 없었다.
+
 | 옵션 | 차원 | 용도 |
 |---|---|---|
-| Amazon Titan Embeddings v2 | 1024 | AWS 네이티브, Bedrock 통합 |
-| OpenAI text-embedding-3-small | 1536 | 품질 좋음, 비용 효율적 |
-
-**권고**: Bedrock 연동 고려하면 **Titan Embeddings v2**.
+| **`nlpai-lab/KURE-v1` (로컬, MIT)** | 1024 | **확정 정본** — 한국어 품질, 외부 호출 0 |
+| ~~Amazon Titan Embeddings v2~~ | 1024 | ~~AWS 네이티브, Bedrock 통합~~ — 선택적 어댑터로만 잔존 |
+| ~~OpenAI text-embedding-3-small~~ | 1536 | ~~품질 좋음, 비용 효율적~~ — 미채택 |
 
 ---
 
@@ -277,7 +282,7 @@ def get_user_preference_summary(user_id):
 | # | 항목 | 현재 | 결정 시점 |
 |---|---|---|---|
 | 1 | 벡터 스토어 확정 | pgvector 권고 | CONSTRUCTION 착수 시 |
-| 2 | 임베딩 모델 확정 | Titan v2 권고 | Bedrock 계약 시 |
+| 2 | ~~임베딩 모델 확정~~ | **해소 (2026-08-23)** — 로컬 `KURE-v1` 확정·배선 완료 (AI-D06 부기, TRIP-514) | 완료 |
 | 3 | 유사도 임계값 | 미정 | 데이터 쌓인 후 캘리브레이션 |
 | 4 | retrieve top_k | 20 (임시) | 실험 후 조정 |
 | 5 | Plan-B 최대 제안 수 | 3개 | UX 확정 시 |

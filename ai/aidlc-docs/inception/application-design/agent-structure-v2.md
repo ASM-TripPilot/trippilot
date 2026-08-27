@@ -61,7 +61,7 @@
 ### 2단 Provider — "수집만"
 - 출력 패킷 = 데이터 + `FreshnessMeta`(출처·수집시각·캐시·TTL·stale) + 상태값.
 - **실패는 예외가 아니라 상태값**: `NO_CANDIDATES` `WEATHER_UNKNOWN` `COLD_START` 등 — 3단이 보고 자기 폴백 판단 (INV-4).
-- 규칙 로직 보유 가능: 어댑터 폴백 체인(카카오→네이버→직선), 충분성 카운트, 강수 80% 임계 판정 — **LLM 판단만 없음**.
+- 규칙 로직 보유 가능: 어댑터 폴백 체인(**TMAP→하버사인 직선** 2단 — 2026-08-25 정정), 충분성 카운트, 강수 80% 임계 판정 — **LLM 판단만 없음**.
 - **웹 소싱은 Provider 소속이 아님** — 백그라운드 소싱 파이프라인(U6, AI-D03: Places API→자유 웹→LLM 추출→수집 게이트→M7 등록) 소속. 실시간 경로에서 제외되는 이유: INV-1(게이트 통과분만 후보 자격) + 지연 예산. PlaceProvider는 부족 감지 시 파이프라인에 **신호만** 보낸다.
 
 **정보 요구표** (라우팅 테이블 확장 — intent별 수집 항목):
@@ -72,6 +72,18 @@
 | REPLAN | Weather(force_refresh) · Transit(지연) · Persona · Place(반경·실내) | 풀 |
 | REFLECT | (없음) | — |
 | EDIT | Place(추가/교체 의도 시) | — |
+
+> **배선 실태 (2026-08-25, TRIP-530) — 표의 EDIT 행은 구현되지 않았다**:
+> 구현 정본 `orchestrator/info_collector.py::INFO_REQUIREMENTS` 에는 **`GENERATE_SCHEDULE`·`REPLAN` 두 키만**
+> 있다. `EDIT` 키는 없고, 실제 `/edit` 경계는 `api/wiring.py::edit()` 가 **`CandidatePoolBuilder.build()` 를
+> 직접 호출**해 풀을 얻는다 — InfoCollector를 거치지 않는다.
+> 이는 3단 Agent 규칙 **"금지: Provider 직접 호출(정보는 봉투로만)"** 의 취지와 어긋난다. 지금은 경계 어댑터가
+> 부르는 것이지 Agent가 부르는 것은 아니라 규칙 문언 위반은 아니지만, 봉투(InfoBundle)·`FreshnessMeta`·
+> 상태값(`NO_CANDIDATES` 등)이 EDIT 경로에만 없다는 **실질 격차**가 남는다.
+> `REFLECT` 행(수집 없음)은 정의상 격차가 없다.
+>
+> 해소 방향(미착수): `INFO_REQUIREMENTS` 에 `EDIT` 키를 추가하고 `wiring.edit()` 를 InfoCollector 경유로
+> 돌린다. 별도 티켓 — 본 註는 실태 기록까지다.
 
 **InfoBundle**: 소형 패킷(날씨·교통·페르소나)은 직접 포함, 후보 풀(최대 5천)은 **세션 캐시 참조 키**로 (ai-data-design §6 풀 캐싱과 정합).
 

@@ -166,7 +166,7 @@ stateDiagram-v2
     v
 [ReplanOrchestrator.generate_alternatives()]
     |
-    +-> c1.call(CONVERSATION, trigger_reason)     # 사유 해석 (경량)
+    +-> c1.call(CONVERSATION, trigger_reason)     # 사유 해석 (경량) — 미구현, 아래 註
     |       → 재계획 범위·우선순위 결정
     |
     +-> m7.get_candidate_pool(replan_request)      # 저장 장소 우선
@@ -184,6 +184,14 @@ stateDiagram-v2
     +-> c2.validate(selected_alternative)          # 확정 시점 재검증 1회
     +-> return confirmed_itinerary
 ```
+
+> **註 (2026-08-25, TRIP-530) — `CONVERSATION`·`REQUERY` 는 코드에 없다**: 두 이름 모두
+> `domain/llm.py::LlmFeature`(12종)의 값이 아니며, 대응 프롬프트·게이트·워커도 없다. 사유 해석에
+> 해당하는 자리에 실제로 존재하는 값은 `REASON_INTERPRETATION` 인데, 그쪽도 enum·tier_map에만 있고
+> 프롬프트·게이트·워커가 없어 **호출 경로가 없다**. **어느 이름이 맞는지는 본 註가 판정하지 않는다** —
+> 확실한 것은 **양쪽 다 미완이라 어느 쪽도 동작하지 않는다**는 사실뿐이다.
+> (실측 정본: u4-c1-gateway/functional-design/domain-entities.md §1 개정 2026-08-25)
+
 
 ### 3.2 에러 경로
 
@@ -247,11 +255,14 @@ C1 실패 → M7 + C2만으로 후보 생성 (설명 없이)
 | 대상 | 설정 (권고) |
 |---|---|
 | LLM API | failure_threshold=3, reset_timeout=30s |
-| 카카오모빌리티 | failure_threshold=5, reset_timeout=60s |
-| 네이버 지도 | failure_threshold=5, reset_timeout=60s |
+| TMAP 경로 API | failure_threshold=5, reset_timeout=60s |
 | Places API | failure_threshold=5, reset_timeout=120s |
 
-서킷 오픈 시 → 즉시 폴백 (LLM→규칙, 카카오→네이버→직선거리)
+서킷 오픈 시 → 즉시 폴백 (LLM→규칙, TMAP→하버사인 직선거리)
+
+> **정정 (2026-08-25)**: 이동추정 벤더는 **TMAP 단일**이다 — 카카오모빌리티·네이버 지도 행을 TMAP으로
+> 대체했다. 실제 체인은 `TMAP(실측) → 하버사인 직선거리(폴백)` 2단
+> (`solver_engine/adapters/tmap.py` · `chained_travel.py`, TRIP-382·405·422·432).
 
 ### 5.3 계측 포인트
 

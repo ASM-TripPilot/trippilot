@@ -97,8 +97,7 @@ flowchart TD
 
     subgraph External["외부 서비스"]
         LLM["Anthropic API\n(Claude)"]
-        KAKAO["카카오모빌리티\n(도로 거리)"]
-        NAVER["네이버 지도\n(폴백)"]
+        TMAP["TMAP 경로 API\n(실측 거리)"]
         PLACES["Places API\n(POI 소싱)"]
         WEATHER["기상청 API\n(날씨 트리거)"]
     end
@@ -146,8 +145,7 @@ flowchart TD
 
     %% 코어 → 외부
     C1 --> LLM
-    C2 --> KAKAO
-    C2 --> NAVER
+    C2 --> TMAP
     C2 --> LLM
     M7 --> PLACES
     KB3 --> WEATHER
@@ -219,9 +217,15 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 |---|---|---|
 | **PlaceScoutAgent** | 장소 후보 확보 (M7 조회 → 충분성 판단 → 웹 소싱 → closed-set 보장, INV-1 관문) | 1차 (MVP) |
 | **WeatherAgent** | 일 단위 기상청 API 조회·캐싱, 강수 80%↑ 트리거 판정 | 1차 (MVP) |
-| **TransitAgent** | 교통·거리 (카카오→네이버→직선 체인), 지연 30분+ 트리거 판정 | 2차 |
+| **TransitAgent** | 교통·거리 (**TMAP→하버사인 직선** 2단 체인 — 2026-08-25 정정), 지연 30분+ 트리거 판정 | 2차 |
 | **PersonaAgent** | KB-2 (저장 장소·선호 벡터·거절 이력) 조회·검색 | 2차 |
-| **EventAgent** | TourAPI 축제·행사 (M7 등록 게이트 경유) | P2 (인터페이스만) |
+| **EventAgent** | 축제·행사 — **NAVER 검색 → `EVENT_EXTRACTION` LLM 추출 → 카카오 로컬 지오코딩 → `JsonEventStore`** (2026-08-25 정정) | 가동 중 (TRIP-421) |
+
+> **정정 (2026-08-25) — 행사 소스는 TourAPI가 아니다**: 종전 표기 "TourAPI 축제·행사(M7 등록 게이트 경유)"는
+> 사실과 반대였다. **TourAPI는 POI 수집 소스**이고(`scripts/load_pois_db.py` 계열), 행사는 NAVER 검색
+> 스니펫을 `EVENT_EXTRACTION` 워커로 구조화하고 카카오 로컬로 지오코딩해 `background/event_store.py`
+> (`JsonEventStore`)에 적재하는 **새벽 배치**가 채운다. 행사는 후보 풀에 들어가지 않으므로 M7 등록 게이트를
+> 거치지 않는다 — **후보가 아니라 소프트 가점 항**이다(INV-1 비적용, agent-structure-v2 §2 행사 註).
 
 계층 규칙: 정보 에이전트는 다른 에이전트 호출 금지(깊이 2 고정), 쓰기 금지, 모든 응답에 `FreshnessMeta`(신선도 메타) 필수. 정보 도구(`m7.*`, 날씨·교통 API)는 업무 계층에서 정보 계층으로 이동 — 개정 Tool 할당표는 상세 문서 참조.
 
@@ -271,8 +275,8 @@ LLM 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
 | 솔버 | OR-Tools (1차) + LLM (2차 폴백) | 하이브리드 — 2차도 Anthropic API 경유 |
 | RAG 프레임워크 | LangChain (부분 도입) | PlanBAgent + LLM 호출에만 (`ChatAnthropic`) |
 | 벡터 스토어 | pgvector (PostgreSQL) | 1차, 추후 OpenSearch 이전 가능 |
-| 임베딩 | 로컬 오픈소스 (잠정: multilingual-e5-large 또는 BGE-M3) | 1024차원 유지 → pgvector 스키마 무변경. Titan v2는 Bedrock 전용이라 대체 (AI-D06) |
-| 테스트 | pytest + Hypothesis (PBT) | 속성 19개 (+신규 5) |
+| 임베딩 | **로컬 `nlpai-lab/KURE-v1` (MIT) 확정** | 1024차원 유지 → pgvector 스키마 무변경. Titan v2는 Bedrock 전용이라 대체 (AI-D06 부기 2026-08-23, TRIP-514 배선 완료). 종전 "잠정: multilingual-e5-large 또는 BGE-M3" 표기는 해소 |
+| 테스트 | pytest + Hypothesis (PBT) | **`@given` 170개 / 테스트 파일 41개** (2026-08-25 실측 — `grep -rc "@given" ai/tests/*.py`). 종전 "19개(+신규 5)"는 스테일 |
 | 패키지 관리 | uv | U1 FD에서 확정 |
 
 > **표기 규칙 (AI-D06)**: 본 저장소 문서의 기존 "Bedrock" 표기는 "LLM API(Anthropic)"로 읽는다. 점진 개정 중.
@@ -359,7 +363,7 @@ TripPilot_AI/
 에이전트가 구해온 정보를 실현 가능하도록 배치하는 결정론 엔진.
 
 - OPTW/TOPTW 최적화 + HC1~HC4 하드 제약 검증
-- 이동시간 추정: 어댑터 체인 (카카오 → 네이버 → 직선거리×1.3)
+- 이동시간 추정: 어댑터 체인 (**TMAP 실측 → 하버사인 직선거리×1.3**) — 2단 (TRIP-382·405·422·432)
 - warm-start 재생성: 고정 블록 보존, 나머지만 재배치
 - 하이브리드: OR-Tools(1차) → LLM(Anthropic)(2차, **미배선** — 위 C2 절 註) → 규칙 폴백(최후)
 
@@ -496,11 +500,23 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 
 ## 정본 참조 (TripPilot 기획)
 
+> **`aidlc-docs/planning/` 은 존재하지 않는다 (2026-07-17 팀 결정으로 삭제 — 루트 `CLAUDE.md` "never reference it").**
+> 코드 체계별 현 소유자 (2026-08-25, TRIP-530 정정):
+>
+> | 코드 | 현 소유자 |
+> |---|---|
+> | `ADR-####` · `US-*` · `C1`–`C17` · `U0`–`U9` · `S1`–`S6` | `../aidlc/aidlc-docs/inception/` (requirements · user-stories · application-design) |
+> | AI 축 결정 `AI-D0#` | 본 패키지 `ai-adr.md` (자체 소유) |
+> | `D##` · `G###` · `M##` · `Δ#` · `N#` | **소유자 없음 — 역사적 코드.** 삭제된 planning 파일에 대해서만 해석되며 리포 어디에도 원문이 없다(`D38`·`G106`·`D27`·`D31`·`G181` 실측 확인). 근거가 필요하면 git 이력을 볼 것 |
+>
+> 아래 표기를 **결정 근거의 소재로 신뢰하지 말 것** — 인용 맥락 보존용으로만 남긴다.
+
 | 문서 | AI 관련 내용 |
 |---|---|
-| `../TripPilot/aidlc/aidlc-docs/planning/decisions.md` | ADR-0008~0015, D11·D25·D27·D31·D37·D38 근거 전문 |
-| `../TripPilot/aidlc/aidlc-docs/planning/architecture.md` | 모듈 경계·의존 매트릭스·포트 격리 |
-| `../TripPilot/aidlc/aidlc-docs/planning/nfr.md` | 성능(§1.1)·LLM 경계(§3.5)·PBT(§7) 기준 |
+| `../aidlc/aidlc-docs/inception/requirements/requirements.md` | 제품 요구사항 정본 (`aidlc/docs/PRD/` 를 대체) |
+| `../aidlc/aidlc-docs/inception/user-stories/` | 페르소나·스토리 (`US-*`) |
+| `../aidlc/aidlc-docs/inception/application-design/` | 컴포넌트 `C1`–`C17` · 서비스 `S1`–`S6` · 유닛 `U0`–`U9` |
+| ~~`../TripPilot/aidlc/aidlc-docs/planning/{decisions,architecture,nfr}.md`~~ | **삭제됨 (2026-07-17)** — 위 註 참조 |
 
 ---
 
@@ -533,3 +549,4 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 | 2026-07-16 | MLOps/LLMOps 설계 + ML 패턴 유형화 (4유형 10후보, 학습 로그 6종) |
 | 2026-07-21 | AI-D06 — LLM 벤더 확정: Anthropic API 직접 (Bedrock 아님). 티어 라우팅 모델 제안, 임베딩 Titan → 로컬 오픈소스(잠정) |
 | 2026-08-04 | Bedrock 잔여 표기 일괄 정정 (AI-D06 반영) · `SolveMode.BEDROCK`→`LLM` 개명 (TRIP-256) |
+| 2026-08-25 | **위 2026-08-04 "일괄 정정"은 완료되지 않았다** — 문서 84건이 남아 있었다(TRIP-530 실측). 일괄 치환 대신 **읽기 규칙 註**를 각 문서에 달았다: AI-D06 표기 규칙상 기존 "Bedrock"은 "LLM API(Anthropic 직접)"로 읽는다. 결정 이력·감사 로그(`aidlc-docs/audit.md`, append-only)의 Bedrock 언급은 **역사 기록이라 고치지 않는다** |

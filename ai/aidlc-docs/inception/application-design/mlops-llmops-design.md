@@ -1,7 +1,7 @@
 # MLOps · LLMOps 설계 — 운영 체계 + ML 패턴 유형화
 
 > 두 축을 구분해 설계한다:
-> - **LLMOps** — Bedrock LLM 호출(프롬프트·평가·비용·가드레일)의 운영 체계. **MVP부터 필수** (LLM이 핵심 경로에 이미 있음)
+> - **LLMOps** — LLM 호출(프롬프트·평가·비용·가드레일)의 운영 체계. **MVP부터 필수** (LLM이 핵심 경로에 이미 있음). 벤더는 Anthropic API 직접 (AI-D06 — 2026-08-25 "Bedrock" 표기 제거)
 > - **MLOps** — 자체 학습 모델(선호 점수·체류시간 등)의 운영 체계. **지금은 "로깅 먼저", 모델은 DAU 1천 이후** (AI-D05 과설계 금지 유지)
 >
 > 공통 대전제 (AI-D05): ML/LLM은 **soft 신호에만**. 하드 제약은 솔버 결정론 유지. closed-set 게이트(INV-1)와 규칙 폴백(INV-4)은 어떤 모델로 바꿔도 그대로 적용.
@@ -53,7 +53,7 @@
 | 상관관계 | `trace_id` 전 구간 전파 (orchestrator-delegation-design.md §7) — 사용자 요청 1건 = LLM 호출·솔버 실행·에이전트 위임 전체 트리 복원 가능 |
 | LLM 호출 로그 | {trace_id, feature, prompt_version, model_id, tokens_in/out, latency, is_fallback, 파싱 성공 여부} — **전량** |
 | 본문 로깅 | 프롬프트·응답 본문은 개인정보 마스킹 후 **샘플링 저장** (디버깅·평가셋 채굴용). 위치·이름은 백엔드 개인정보 정책(append-only 로그 체계)과 정렬 — 보존 기간 별도 합의 필요 |
-| 솔버 로그 | {trace_id, solve_mode, or_tools_status, is_bedrock, HC 위반·수리 내역, elapsed} — 하이브리드 체인의 어느 층에서 해결됐는지 추적 |
+| 솔버 로그 | {trace_id, solve_mode, or_tools_status, HC 위반·수리 내역, elapsed} — 하이브리드 체인의 어느 층에서 해결됐는지 추적. **정정 (2026-08-25)**: `is_bedrock` 필드는 코드에 없고 필요도 없다 — `SolveMode`(`OR_TOOLS`·`LLM`·`RULE_FALLBACK`·`MINIMAL`, `domain/itinerary.py`)가 층을 이미 식별한다 |
 | 도구 스택 | 1차: 구조화 로그 + PostgreSQL/대시보드 자작 최소셋. 성장 시: Langfuse(LangChain 연동 자연스러움) 또는 CloudWatch + Bedrock 호출 로깅. **선정은 미확정 — 인터페이스(로그 스키마)만 고정하고 백엔드는 교체 가능하게** |
 
 ### 1.5 비용·쿼터 관리
@@ -72,7 +72,7 @@
 | 출구 게이트 | C1 closed-set 게이트(INV-1)·OutputSchema 파싱은 **코드 레벨 가드레일** — 모델·프롬프트와 독립적으로 항상 켜져 있음 |
 | 카나리 | 프롬프트·모델 변경은 트래픽 5~10%부터. 지표(폴백율·파싱 실패율·대안 수락률) 이상 시 자동 롤백 |
 | 섀도 실행 | 모델 교체(예: Claude 버전 업) 시 신모델을 섀도로 병행 호출 → 오프라인 비교 후 전환 |
-| 모델 추상화 | Bedrock Port 뒤 격리(기존) — model_id는 설정. 벤더 미확정(D 유지)이므로 로그에 model_id 항상 기록 |
+| 모델 추상화 | **`LlmPort` 뒤 격리** — model_id는 항상 설정값(BR-U4-08, 하드코딩 금지). **정정 (2026-08-25)**: "Bedrock Port"·"벤더 미확정"은 스테일 — 벤더는 **AI-D06으로 확정**(Anthropic API 직접, 2026-07-21)이고 포트는 벤더 중립이다. 로그에 model_id를 항상 기록하는 규칙은 그대로 (티어·기능별 오버라이드가 있어 실제 모델이 갈린다) |
 
 ---
 

@@ -30,7 +30,8 @@ U4는 U1이 만든 규격을 **소비**한다. 아래 타입은 손대지 않는
 | `ALTERNATIVE_SELECTION` | 상위(HEAVY) | U5 (**PlanBAgent 전속** `llm.select_alternatives` — TRIP-331) |
 | `REFLECTION_NUDGE` | 경량(LIGHT) | U6 (회고 유도 푸시 문구 — TRIP-347) |
 | `REFLECTION_TEMPLATE` | 상위(HEAVY) | U6 (회고 연출 템플릿 — TRIP-429, U6 FD v1.0 Phase 1. **ReflectAgent 전속**, BR-AF-07 절차) |
-| `PLACE_EXTRACTION` | 상위 (백그라운드) | U6 |
+| `PLACE_EXTRACTION` | 상위 (백그라운드) | U6 (**미배선** — 프로덕션 호출자 0, TRIP-529) |
+| `EVENT_EXTRACTION` | 상위(HEAVY, 백그라운드) | TRIP-421 (웹 검색 스니펫 → 행사 구조화 추출. 행사는 POI가 아니라 후보 풀 비편입 — INV-1 비적용) |
 | `EDIT_TRANSLATION` | 경량(LIGHT) | agent-foundation 스텝 ⓪ (**EditAgent 전속**) |
 
 > `EDIT_TRANSLATION` 역할: **확정된 EDIT_SCHEDULE 의도의 세부를 `EditCommand`로 번역**한다 —
@@ -42,8 +43,28 @@ U4는 U1이 만든 규격을 **소비**한다. 아래 타입은 손대지 않는
 
 > **개정 (2026-08-11, TRIP-349)**: 선구현 반영 — `ALTERNATIVE_SELECTION`을 상위 그룹 행에서 분리해
 > 구현 소재(PlanBAgent 전속, TRIP-331)를 명시하고, `REFLECTION_NUDGE`(회고 유도 푸시 문구, TRIP-347) 행을 추가했다.
-> 티어 매핑의 구현 정본은 `llm_gateway/config.py::default_tier_map`(경량 6·상위 4)이며 본 표와 일치한다.
+> ~~티어 매핑의 구현 정본은 `llm_gateway/config.py::default_tier_map`(경량 6·상위 4)이며 본 표와 일치한다.~~
 > 프롬프트 스펙은 프롬프트 정본 §2.6(ALTERNATIVE_SELECTION)·§2.7(REFLECTION_NUDGE).
+
+> **개정 (2026-08-25, TRIP-530) — 표와 단언을 코드에 맞춤**: 직전 개정의 "경량 6·상위 4" 단언은 그 시점에도
+> 자기 표와 어긋났고(표 기준 상위 5), 그 뒤 `EVENT_EXTRACTION`(TRIP-421)·`EDIT_TRANSLATION`(TRIP-315)이
+> 늘어 더 벌어졌다. **실측 정본 (2026-08-25)**:
+> - `domain/llm.py::LlmFeature` = **12종** (본 표와 일치, `EVENT_EXTRACTION` 행 추가로 해소)
+> - `llm_gateway/config.py::default_tier_map` = **12종 전량 매핑, 경량 6 · 상위 6**
+>   - 경량 6: `PREFERENCE_SCORING` `INTENT` `PARAPHRASE` `REASON_INTERPRETATION` `EDIT_TRANSLATION` `REFLECTION_NUDGE`
+>   - 상위 6: `EXPLANATION` `ALTERNATIVE_SELECTION` `REFLECTION` `REFLECTION_TEMPLATE` `PLACE_EXTRACTION` `EVENT_EXTRACTION`
+>
+> 재현: `grep -c 'LlmFeature\.' src/trippilot/llm_gateway/config.py` 및 `domain/llm.py::LlmFeature` 본문 대조.
+> **enum에 값을 늘릴 때 본 표·본 단언·`default_tier_map` 셋을 함께 고칠 것** — 이 셋이 어긋난 채로 두 번 흘렀다.
+
+> **유령 feature 註 (2026-08-25, TRIP-530) — `REASON_INTERPRETATION` 은 호출 경로가 없다**:
+> enum과 `default_tier_map`(경량)에는 있으나 **프롬프트 yaml·출구 게이트·워커가 셋 다 없다**
+> (`prompts/` 에 `reason_interpretation.yaml` 부재, `gates/`·`workers/` 에 대응 모듈 부재).
+> 즉 `LlmFeature.REASON_INTERPRETATION` 으로는 게이트웨이를 호출할 수단 자체가 없다.
+> 반대 방향의 짝은 `CONVERSATION` 이다 — `services.md` §5·`component-methods.md`·`ai-implementation-design.md` §2가
+> 전제하는 이 이름은 **코드에 존재하지 않는다**(enum 값 아님).
+> **어느 이름이 맞는지는 본 개정이 판정하지 않는다** — 확실한 것은 둘 다 미완이고 **어느 쪽도 동작하지 않는다**는
+> 사실뿐이다. 사유 해석 기능을 실제로 열 때 이름을 하나로 확정하고 5종 세트(enum·tier·프롬프트·게이트·워커)를 채울 것.
 
 ### ModelTier (StrEnum)
 

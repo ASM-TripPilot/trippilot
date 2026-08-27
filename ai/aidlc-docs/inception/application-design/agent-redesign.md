@@ -320,6 +320,17 @@ COMPLEX (에이전트 위임):
 
 ## C2 Solver — 하이브리드 전략 (OR-Tools + Bedrock 폴백)
 
+> **읽기 규칙·실태 註 (2026-08-25, TRIP-530)** — 본 절의 "Bedrock" 표기 전부(제목 포함)에 적용:
+> 1. **벤더**: AI-D06 표기 규칙에 따라 "Bedrock" = **"LLM API(Anthropic 직접)"** 로 읽는다.
+>    AWS Bedrock 경유가 아니다. `BedrockSolver`/`bedrock_port`/`_solve_with_bedrock` 같은 식별자도 같다 —
+>    실제 구현명은 `solver_engine/llm_solver.py::LlmSolver` 다.
+> 2. **`is_bedrock` 플래그는 코드에 없다**. 어느 층이 해를 냈는지는
+>    `domain/itinerary.py::SolveMode`(`OR_TOOLS`·`LLM`·`RULE_FALLBACK`·`MINIMAL`)가 기록한다 —
+>    종전 `SolveMode.BEDROCK` 은 `LLM` 로 **개명 완료**(TRIP-256).
+> 3. **2차 단계는 현재 미배선이다** (TRIP-529): 실가동 체인은 `OR-Tools → 규칙 폴백` **2단**이고,
+>    `api/wiring.py` 가 `LlmSolver` 를 조립하지 않는다("솔버 프롬프트 정본·모델 설정이 아직 없다").
+>    아래 "2차 진입 트리거"·"출력 처리" 절차는 **배선 시점의 목표 상태**다.
+
 ### 설계 원칙
 
 Solver 내부 구현을 **OR-Tools 1차 → Bedrock LLM 2차** 하이브리드로 구성한다.

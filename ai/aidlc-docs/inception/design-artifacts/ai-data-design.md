@@ -56,36 +56,55 @@ class Poi:
 
 ### 2.1 PoiCategory 택소노미
 
+> **정정 (2026-08-25, TRIP-530)**: 아래 구 택소노미(소문자 13종)는 **폐기**다. 구현·경계 정본은
+> `src/trippilot/domain/poi.py::PoiCategory` — **경계 8종 대문자 + 내부 전용 `STAY`** (TRIP-281).
+> 경계 8종은 백엔드 `/internal/pois` read 포트가 내보내는 코드와 값·집합이 **동일**하다
+> (한↔영 매핑은 백엔드가 이미 수행해 영문 코드로 내보내므로 AI 쪽에 매핑이 없다).
+
 ```python
 class PoiCategory(Enum):
-    # 음식
-    RESTAURANT = "restaurant"
-    CAFE = "cafe"
-    BAR = "bar"
+    # 경계 8종 — 백엔드 /internal/pois 와 값·집합 동일 (괄호는 백엔드 한글 정본)
+    FOOD = "FOOD"                   # 맛집
+    CAFE = "CAFE"                   # 카페
+    SIGHT = "SIGHT"                 # 명소
+    NIGHT_VIEW = "NIGHT_VIEW"       # 야경
+    NATURE = "NATURE"               # 자연
+    CULTURE = "CULTURE"             # 문화
+    ACTIVITY = "ACTIVITY"           # 액티비티
+    SHOPPING = "SHOPPING"           # 쇼핑
 
-    # 관광·문화
-    ATTRACTION = "attraction"       # 관광지·랜드마크
-    MUSEUM = "museum"
-    PARK = "park"
-    HISTORIC = "historic"
-
-    # 쇼핑
-    SHOPPING = "shopping"
-    MARKET = "market"
-
-    # 액티비티
-    ACTIVITY = "activity"           # 체험·스포츠
-    ENTERTAINMENT = "entertainment"
-
-    # 숙박 (앵커 전용 — 후보 풀 미포함)
-    ACCOMMODATION = "accommodation"
+    # 내부 전용 — 숙소 앵커·체류시간 계산. 경계 8종에 포함되지 않으며
+    # /internal/pois 응답에 등장하지 않는다 (PR #104 회신).
+    STAY = "STAY"
 ```
+
+구 13종 → 현 8종 접힘: `RESTAURANT`→`FOOD` · `BAR`→(FOOD/CULTURE 흡수) · `ATTRACTION`→`SIGHT` ·
+`MUSEUM`·`HISTORIC`→`CULTURE` · `PARK`→`NATURE` · `MARKET`→`SHOPPING` · `ENTERTAINMENT`→`ACTIVITY` ·
+`ACCOMMODATION`→`STAY`(내부 전용). 신설: `NIGHT_VIEW`(구 표에 대응 없음).
 
 ### 2.2 체류 기본값 테이블 (G51)
 
 카테고리별 기본 체류 시간. 출시 후 실측 보정 예정.
 
 > **ML 후보 2순위 (AI-D05)**: 이 정적 테이블은 **체류 시간 예측 회귀 모델**의 폴백이다. 실측(POI+유저+시간대 → 실제 체류 분)이 쌓이면 회귀로 대체해 시간 예산을 정밀화하되, 실패 시 이 테이블로 폴백(INV-4).
+
+**정정 (2026-08-25, TRIP-530)**: 아래 표는 현 8종+`STAY` 기준으로 재도출했다. 구현 정본은
+`solver_engine/config.py::STAY_DEFAULT_MIN` — `PoiCategory` **전 값을 덮어야 한다**(직접 dict 조회라
+누락 시 `KeyError`). 신규 3종의 도출 근거는 구 표(세분 택소노미)를 현 8종으로 접은 것이다.
+
+| 카테고리 | 기본 체류 (분) | 비고 |
+|---|---|---|
+| FOOD | 60 | 식사 시간 (구 RESTAURANT) |
+| CAFE | 45 | |
+| SIGHT | 75 | 구 ATTRACTION 90 → 관람 동선 기준 재조정 |
+| NIGHT_VIEW | 60 | **신규** — 구 표에 대응 없음. 전망대·야경 포인트는 조망 중심 단일 지점이라 SIGHT(75)보다 짧고 CAFE(45)보다 길다 |
+| NATURE | 90 | **신규(접힘)** — 구 PARK 60(도심 공원)이 하한이나 '자연'은 산·해변·산책로를 함께 담아 이동 반경이 넓다 → SIGHT(75) 위, 시간 고정형 ACTIVITY(120) 아래 |
+| CULTURE | 90 | **신규(접힘)** — 구 MUSEUM 120 + HISTORIC 60을 함께 담는 상위 묶음이라 그 중간값 |
+| ACTIVITY | 120 | |
+| SHOPPING | 60 | 구 MARKET 45 흡수 |
+| STAY | 30 | 내부 전용(숙소 앵커) — 경계 8종 아님 |
+
+<details><summary>구 13종 기준 원표 (폐기 — 위 8종 도출 근거로만 보존)</summary>
 
 | 카테고리 | 기본 체류 (분) | 비고 |
 |---|---|---|
@@ -99,6 +118,8 @@ class PoiCategory(Enum):
 | ACTIVITY | 120 | |
 | HISTORIC | 60 | |
 | ENTERTAINMENT | 90 | |
+
+</details>
 
 ---
 

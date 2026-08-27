@@ -56,4 +56,6 @@ class ClockPort(Protocol):
 | `FallbackEvent(stage="solver")` | 체인 단계 스킵·강등 시 발행 (침묵 실패 금지) |
 | `TravelEstimate.internal_minutes` | HC2 계산 전용 — 표시 금지 규칙은 U1이 이미 강제 (U5-P4) |
 
-> ¹ `SolveMode.BEDROCK`은 U1에서 정의된 enum 값 유지 — 실 벤더는 Anthropic API(AI-D06)이나 **enum 개명은 직렬화 호환을 위해 보류**, 표기 규칙("Bedrock = LLM API(Anthropic)로 읽는다")을 따른다. 개명은 U5 API 동결 전 일괄 검토.
+> ¹ ~~`SolveMode.BEDROCK`은 U1에서 정의된 enum 값 유지 — enum 개명은 직렬화 호환을 위해 보류.~~
+> **정정 (2026-08-25, TRIP-530)**: **개명은 완료됐다** — `SolveMode.BEDROCK` → `SolveMode.LLM`(TRIP-256, 2026-08-04).
+> 현 enum 값은 `OR_TOOLS`·`LLM`·`RULE_FALLBACK`·`MINIMAL` (`domain/itinerary.py`). 보류 상태가 아니다.
