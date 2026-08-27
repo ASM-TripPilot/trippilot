@@ -34,6 +34,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm tsc
+      # 구조 인벤토리 게이트: --write 재생성 결과가 커밋본과 다르면(=파일 추가·삭제·export 변경 후
+      # --write 미실행) 드리프트로 실패. --check 는 손-프로즈가 죽은 경로를 가리키는 '유령'을 잡는다.
+      # (볼트가 없는 CI 에선 '개념 유령' 검사는 스크립트가 자동으로 건너뛴다.)
+      - name: structure map drift gate
+        run: |
+          node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --write
+          git diff --exit-code docs/structure.generated.md
+          node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --check
       # pnpm test = test:node(--experimental-vm-modules) && test:integration(MSW 버킷)
       - run: pnpm test
 
