@@ -62,11 +62,13 @@
 | `planb-triggers` | `PlanbTriggersPage` | `useTriggerWatchlist(tripId)` → 3항목 상태 |
 | `planb-request` | `PlanbRequestPage` | RHF 폼 상태 ↔ `useStartReplan()` 뮤테이션. 서버가 `OUT_OF_SCOPE`를 주면 그대로 화면에 내린다 |
 | `planb-draft` | `PlanbSolvingPage` · `PlanbDraftPage` | `useReplanSession(sessionId)` 폴링 → **`resolveReplanState()` 판정 1회**(SOLVING·DRAFT·NO_SOLUTION·FAILED) → 로딩/초안/대안 없음. 후보 시트는 `useSlotCandidates`(U3 계약 재사용) |
-| `planb-manual` | `PlanbManualPage` | 수동 편집 스토어 ↔ `useValidateItinerary()` |
+| `planb-manual` | `PlanbManualPage` | 수동 편집 draft(1회 시드) ↔ `PUT /trips/{tripId}/itinerary`(편집 전체교체+재검증, 비차단) — 아래 소급 기록 참조 |
 | `planb-rest` | `PlanbRestPage` | 재개 시각 입력 → 재정렬 재요청 |
 | `planb-diff` | `PlanbDiffPage` | `useReplanDiff(sessionId)` + `useApplyReplan()` — **확정의 유일한 호출 지점** |
 
 > **판정은 페이지에서 1회**(`stay-search`의 `resolveStaySearchState` 선례). 화면은 재판정하지 않으며 구조 가드가 잠근다.
+
+> **[소급 기록 — TRIP-443 (기록) 반영, 2026-08-27]** 위 `planb-manual` 행이 이름 붙인 `useValidateItinerary()`는 리포에 실존하지 않는다(`grep -rn useValidateItinerary src` = 0건, develop `openapi.yaml`에도 `validate` 전용 엔드포인트가 없다). TRIP-443 구현이 확인한 실계약은 **`PUT /trips/{tripId}/itinerary`**(`EditItineraryRequest{days:[{date,slots:[{poiId,startAt,endAt,isFixed,endsNextDay}]}]}` → `Itinerary`, 슬롯별 `hasViolation`/`violationReason` **비차단** 응답) — 편집 전체교체와 재검증이 한 호출에 묶여 있다. `PlanbManualPage`는 GET으로 받은 `days`를 로컬 draft에 1회만 시드하고, `[저장]`이 그 draft를 이 PUT으로 조립해 쏜다(별도 `validate` 훅 없음). 이름과 실계약이 갈렸을 뿐 "편집 스토어 ↔ 서버 재검증"이라는 설계 의도 자체는 유지된다. 근거: `_workspace/20260826-trip443-planb-manual/03_implementer_notes.md`(§데이터·화면 흐름) · `frontend/src/pages/planb-manual/ui/PlanbManualPage.tsx` · `backend/docs/design/openapi.yaml`(`/trips/{tripId}/itinerary` PUT).
 
 ## 3. `src/features/execution/`
 

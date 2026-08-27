@@ -72,6 +72,7 @@ import {
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
+import { ManualEditScreen } from '@/features/planb/ui/ManualEditScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
 import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
 import { ReplanSolvingScreen } from '@/features/planb/ui/ReplanSolvingScreen';
@@ -903,6 +904,51 @@ const LIVE_PLACE_PREVIEW_VIEW: PlaceDetailView = {
   lat: 35.15,
   lng: 129.11,
 };
+
+// i15·i22 수동 편집(TRIP-443) — A(비고정)·H(숙소 체크인 isFixed)·C(비고정, lockedSlotKeys) 3슬롯.
+// aViolation 을 켜면 A 에 위반 배지가 뜬다(mode 무관 공통 축).
+const MANUAL_EDIT_PREVIEW_DATE = '2026-06-11';
+function manualEditPreviewDays(aViolation: boolean): ItineraryDaysItem[] {
+  return [
+    {
+      date: MANUAL_EDIT_PREVIEW_DATE,
+      slots: [
+        {
+          poiId: 'poi-a',
+          startAt: '13:00:00',
+          endAt: '14:30:00',
+          isFixed: false,
+          endsNextDay: false,
+          hasViolation: aViolation,
+          violationReason: aViolation ? '숙소 체크인과 충돌' : null,
+          nameKo: '부산시립미술관',
+          tags: ['전시', '실내'],
+        },
+        {
+          poiId: 'poi-cafe',
+          startAt: '15:00:00',
+          endAt: '16:00:00',
+          isFixed: false,
+          endsNextDay: false,
+          hasViolation: false,
+          nameKo: '전포 카페거리',
+          tags: ['카페'],
+        },
+        {
+          poiId: 'poi-hotel',
+          startAt: '17:30:00',
+          endAt: '17:30:00',
+          isFixed: true,
+          endsNextDay: false,
+          hasViolation: false,
+          nameKo: '해운대 OO호텔 체크인',
+          tags: [],
+        },
+      ],
+    },
+  ];
+}
+const MANUAL_EDIT_PREVIEW_LOCKED = [`${MANUAL_EDIT_PREVIEW_DATE}#poi-cafe`];
 
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
@@ -2584,6 +2630,61 @@ const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <LiveLocationPage tripId="preview-trip" state="permission-denied" />
+    ),
+  },
+  // ── i15·i22 수동 편집(TRIP-443) — 한 화면(ManualEditScreen)을 variant 로 두 얼굴.
+  //    [시각 입력] 시트 실제 열림·HH:mm 반영·점선 지도 픽셀은 jest 사각(바텀시트 통과형 목)이라 이
+  //    키들이 육안 대조 자리다(i15 `2284:2106`·i22 `1790:3612`). 자체 조회 없는 프리젠테이션이라
+  //    QueryClient 없이 렌더된다 ──
+  {
+    key: 'planb-manual-normal',
+    label: 'i15 일정 편집 · 정상([직접 고르기])',
+    login: null,
+    render: () => (
+      <ManualEditScreen
+        days={manualEditPreviewDays(false)}
+        lockedSlotKeys={MANUAL_EDIT_PREVIEW_LOCKED}
+        onBack={noop}
+        onSave={noop}
+        onDeleteSlot={noop}
+        onEditSlotTime={noop}
+        onPressHistory={noop}
+        onPressAddPlace={noop}
+      />
+    ),
+  },
+  {
+    key: 'planb-manual-fallback',
+    label: 'i22 일정 직접 수정 · 폴백(외부 API 오류)',
+    login: null,
+    render: () => (
+      <ManualEditScreen
+        variant="error"
+        days={manualEditPreviewDays(false)}
+        lockedSlotKeys={MANUAL_EDIT_PREVIEW_LOCKED}
+        onBack={noop}
+        onSave={noop}
+        onDeleteSlot={noop}
+        onEditSlotTime={noop}
+        onPressAddPlace={noop}
+      />
+    ),
+  },
+  {
+    key: 'planb-manual-violation',
+    label: 'i22 폴백 · 숙소 고정 충돌 위반 배지',
+    login: null,
+    render: () => (
+      <ManualEditScreen
+        variant="error"
+        days={manualEditPreviewDays(true)}
+        lockedSlotKeys={MANUAL_EDIT_PREVIEW_LOCKED}
+        onBack={noop}
+        onSave={noop}
+        onDeleteSlot={noop}
+        onEditSlotTime={noop}
+        onPressAddPlace={noop}
+      />
     ),
   },
 ];

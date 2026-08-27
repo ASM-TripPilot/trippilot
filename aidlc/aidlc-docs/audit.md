@@ -1327,3 +1327,17 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **미반영으로 남긴 것**: 없음 — 제시 3건 전부 선택·반영.
 
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-442 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260826-trip442-live-location-fallback/03_implementer_notes.md`(§1-3·§1-4·§3-6)·`frontend/src/pages/live-location/ui/LiveLocationPage.tsx`·`frontend/src/app/trips/[tripId]/live/location.tsx`. 이 항목이 손댄 `aidlc/` 파일은 `construction/u4-in-trip-planb/functional-design/{business-logic-model.md,frontend-components.md}`와 이 `audit.md` append뿐이다.
+
+
+## Post-Design Correction — U4 frontend-components.md useValidateItinerary→PUT /itinerary 실계약 정정 (TRIP-443 [기록] 반영)
+**Timestamp**: 2026-08-27T05:26:30Z
+
+**User Input**: TRIP-443 사이클(`20260826-trip443-planb-manual`) [설계] 3-a 맹점 훑기에서 정본 반영 후보(정본 드리프트 1건: `useValidateItinerary()` 배선 미실존)가 제시됐고, 사용자가 이 1건을 선택했다.
+
+**AI Response**: 승인 완료된 `u4-in-trip-planb/functional-design/frontend-components.md` §2의 `planb-manual` 배선 서술 정정 1건. 새 스토리·새 컴포넌트 계약(엔드포인트) 신설 0건 → 스테이지 진행 아님, `aidlc-state.md` 체크박스 변동 없음.
+
+**frontend-components.md §2 — `planb-manual` 행의 `useValidateItinerary()` 배선을 실계약으로 정정**. §2가 이름 붙인 `useValidateItinerary()`는 리포 전역에 실존하지 않는다(`grep -rn useValidateItinerary src` = 0건, develop `openapi.yaml`에도 `validate` 전용 엔드포인트가 없다). TRIP-443 구현이 확인한 실계약은 `PUT /trips/{tripId}/itinerary`(편집 전체교체+재검증, 슬롯별 `hasViolation`/`violationReason` 비차단 응답) 하나뿐 — 별도 validate 훅은 없고, `PlanbManualPage`가 GET으로 받은 `days`를 로컬 draft에 1회 시드한 뒤 `[저장]`이 그 draft를 이 PUT으로 조립해 쏜다. 테이블 셀을 실계약으로 바꾸고, 표 아래에 소급 기록 블록쿼트를 추가해 이름과 실계약이 갈린 경위를 남겼다(§8 testID 소급 기록과 같은 절차, TRIP-442 선례 계승). 설계 의도("편집 스토어 ↔ 서버 재검증") 자체는 변경 없음 — 이름과 세부 엔드포인트만 실측대로 정정.
+
+**미반영으로 남긴 것**: 없음 — 제시 1건 선택·반영.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-443 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260826-trip443-planb-manual/01_spec-analyst_brief.md`(§드리프트 보고)·`03_implementer_notes.md`(§데이터·화면 흐름)·`frontend/src/pages/planb-manual/ui/PlanbManualPage.tsx`·`backend/docs/design/openapi.yaml`(`/trips/{tripId}/itinerary` PUT). 이 항목이 손댄 `aidlc/` 파일은 `construction/u4-in-trip-planb/functional-design/frontend-components.md`와 이 `audit.md` append뿐이다.
