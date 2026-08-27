@@ -217,9 +217,7 @@ describe('I-1 · 조회는 나가지만 "꼭 갈 곳"은 자동으로 안 채워
 
     // ★ 예전엔 이 자리에서 썸네일(trip-wizard-mustvisit-poi-1)이 셋 다 떴다 — 자동 시드가
     // 폐지돼 이제 담은 곳이 몇 곳이든 항상 empty 얼굴이다(사용자 결정).
-    expect(
-      screen.getByTestId('trip-wizard-mustvisit-empty')
-    ).toBeOnTheScreen();
+    expect(screen.getByTestId('trip-wizard-mustvisit-empty')).toBeOnTheScreen();
     expect(screen.queryByTestId('trip-wizard-mustvisit-poi-1')).toBeNull();
     expect(savedPlaceHits('GET')).toBe(1);
   });

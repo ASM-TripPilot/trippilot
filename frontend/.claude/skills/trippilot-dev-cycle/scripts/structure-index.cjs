@@ -8,9 +8,12 @@
  *
  * 사용 (cwd 무관 — 어디서 실행해도 된다):
  *   node <리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs
- *       → 현재 소스 인벤토리 출력 (문서에 옮겨 적을 재료)
+ *       → 현재 소스 인벤토리 출력 (stdout)
+ *   node <같은 경로> --write
+ *       → docs/structure.generated.md 에 인벤토리를 생성/덮어쓴다 (기계 담당 절반).
+ *         이 파일은 손으로 고치지 않는다 — 새 파일·삭제가 여기 자동 반영된다.
  *   node <같은 경로> --check
- *       → docs/structure.md ↔ 실제 파일 대조. 어긋나면 exit 1
+ *       → docs/structure.md + layer-*.md + structure.generated.md ↔ 실제 파일 대조. 어긋나면 exit 1
  *
  * 대조가 잡는 것:
  *   - 파일은 있는데 문서에 행이 없다  → 새 파일 누락
@@ -30,6 +33,8 @@ const path = require('path');
 // scripts → trippilot-dev-cycle → skills → .claude → frontend
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const DOC = path.join(ROOT, 'docs', 'structure.md');
+// 기계 담당 절반 — `--write`가 생성하는 인벤토리. 손으로 고치지 않는다(다음 --write가 덮는다).
+const GEN_DOC = path.join(ROOT, 'docs', 'structure.generated.md');
 const SCAN_DIRS = ['src', '__mocks__'];
 
 // 옵시디언 볼트 — 개념 노트의 `설명하는코드` 유령 검사용.
@@ -93,6 +98,8 @@ function exportsOf(rel) {
 function documentedPaths() {
   const sources = [];
   if (fs.existsSync(DOC)) sources.push(fs.readFileSync(DOC, 'utf8'));
+  // 기계 담당 절반 — 파일 목록·export는 여기서 자동 충당된다(손 갱신 대상 아님).
+  if (fs.existsSync(GEN_DOC)) sources.push(fs.readFileSync(GEN_DOC, 'utf8'));
   const rulesDir = path.join(ROOT, '.claude', 'rules');
   if (fs.existsSync(rulesDir)) {
     for (const name of fs.readdirSync(rulesDir)) {
@@ -133,19 +140,36 @@ function conceptCodePaths() {
   return map;
 }
 
-function printInventory() {
-  const files = actualFiles();
+/** 파일 목록 + export 를 마크다운 문자열로 조립한다(--write·기본 출력 공용). */
+function buildInventory(files) {
+  const lines = [];
   let dir = null;
   for (const f of files) {
     const d = path.dirname(f);
     if (d !== dir) {
       dir = d;
-      console.log(`\n## ${d}/`);
+      lines.push(`\n## ${d}/`);
     }
     const ex = exportsOf(f);
-    console.log(`- \`${f}\`${ex.length ? `  →  ${ex.join(' · ')}` : '  →  (export 없음)'}`);
+    lines.push(`- \`${f}\`${ex.length ? `  →  ${ex.join(' · ')}` : '  →  (export 없음)'}`);
   }
-  console.log(`\n합계 ${files.length}개 파일`);
+  lines.push(`\n합계 ${files.length}개 파일`);
+  return lines.join('\n');
+}
+
+function printInventory() {
+  console.log(buildInventory(actualFiles()));
+}
+
+/** 인벤토리를 docs/structure.generated.md 에 생성/덮어쓴다 — 기계 담당 절반. */
+function writeInventory() {
+  const files = actualFiles();
+  const header =
+    '<!-- 자동 생성 — structure-index.cjs --write 가 만든다. 손으로 고치지 마라(다음 --write가 덮는다).\n' +
+    '     기계 담당 절반: 파일 목록·export 심볼. 용도·경고·재사용 근거 같은 사람 담당은 structure.md 에. -->\n' +
+    '# 구조 인벤토리 (자동 생성)\n';
+  fs.writeFileSync(GEN_DOC, header + buildInventory(files) + '\n');
+  console.log(`WROTE ${path.relative(ROOT, GEN_DOC)} — ${files.length}개 파일`);
 }
 
 function check() {
@@ -161,6 +185,7 @@ function check() {
   if (missing.length) {
     console.log(`\n누락 — 파일은 있는데 문서에 행이 없다 (${missing.length}):`);
     for (const f of missing) console.log(`  + ${f}`);
+    console.log(`  → 기계 담당 파일이면 \`--write\`로 인벤토리를 재생성한다(손으로 적지 마라).`);
   }
   if (ghost.length) {
     console.log(`\n유령 — 문서에 행은 있는데 파일이 없다 (${ghost.length}):`);
@@ -193,5 +218,103 @@ function check() {
   process.exit(total === 0 ? 0 : 1);
 }
 
-if (process.argv.includes('--check')) check();
+// ── --stale: 만진 폴더의 path-scoped 문서에서 낡은 심볼 참조를 찾는다 ──────────
+// 사이클 끝 [기록]에서 **바뀐 경로만** 넘겨 돌린다: 그 경로에 매칭되는 layer-*.md·traps-*.md
+// 안의 컴포넌트·훅류 백틱 심볼이 코드에 더 이상 없으면(리네임·삭제) 경고한다.
+// `--check`(파일 경로 유령)가 못 잡는 **심볼 리네임**이 사정거리다(예: SlotCandidateSheetContainer).
+
+/** 최소 glob→정규식 (`**`=경로 넘어 아무거나, `*`=슬래시 빼고). */
+function globToRe(glob) {
+  const re = glob
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*/g, ' ')
+    .replace(/\*/g, '[^/]*')
+    .replace(/ /g, '.*');
+  return new RegExp('^' + re + '$');
+}
+
+/** 규칙 문서 frontmatter의 `paths:` 목록. */
+function docFrontmatterPaths(file) {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(fs.readFileSync(file, 'utf8'));
+  if (!fm) return [];
+  return [...fm[1].matchAll(/^\s*-\s*"([^"]+)"/gm)].map((m) => m[1]);
+}
+
+/** 코드 전체(테스트 포함)를 한 덩어리로 — 심볼 존재 여부 코퍼스. */
+function allSrcText() {
+  return SCAN_DIRS.flatMap((d) => walk(path.join(ROOT, d)))
+    .filter((f) => /\.(ts|tsx)$/.test(f))
+    .map((f) => {
+      try {
+        return fs.readFileSync(path.join(ROOT, f), 'utf8');
+      } catch {
+        return '';
+      }
+    })
+    .join('\n');
+}
+
+/** 백틱 심볼 중 "코드에 있어야 마땅한" 고신호만 — 컴포넌트·훅류. testID(케밥)·클래스·한글은 자연 제외. */
+function isCodeSymbol(t) {
+  return /^(use[A-Z][A-Za-z0-9_]*|[A-Z][A-Za-z0-9_]*(Container|Screen|Page|Sheet|Panel|Glyph|Provider|View|Store|Card|Bar|Gate|Form|Modal))$/.test(
+    t
+  );
+}
+
+function stale() {
+  const i = process.argv.indexOf('--stale');
+  const changed = process.argv.slice(i + 1).filter((a) => !a.startsWith('--'));
+  const rulesDir = path.join(ROOT, '.claude', 'rules');
+  if (!fs.existsSync(rulesDir)) {
+    console.log('규칙 디렉토리 없음 — 건너뜀');
+    return;
+  }
+  const docs = fs
+    .readdirSync(rulesDir)
+    .filter((n) => /^(layer|traps)-.*\.md$/.test(n));
+  // 바뀐 경로에 매칭되는 문서만(경로 미지정이면 전체 — 정례 대조용).
+  const targets = changed.length
+    ? docs.filter((d) => {
+        const globs = docFrontmatterPaths(path.join(rulesDir, d)).map(globToRe);
+        return changed.some((c) => globs.some((re) => re.test(c)));
+      })
+    : docs;
+  if (!targets.length) {
+    console.log(
+      changed.length
+        ? '만진 경로에 매칭되는 path-scoped 문서 없음 — 낡은 심볼 검사 대상 없음'
+        : '검사할 문서 없음'
+    );
+    return;
+  }
+  const src = allSrcText();
+  let hits = 0;
+  for (const d of targets) {
+    const text = fs.readFileSync(path.join(rulesDir, d), 'utf8');
+    const seen = new Set();
+    const dead = [];
+    for (const m of text.matchAll(/`([A-Za-z][A-Za-z0-9_]*)`/g)) {
+      const t = m[1];
+      if (seen.has(t) || !isCodeSymbol(t)) continue;
+      seen.add(t);
+      // 단어 경계로 코드에 존재하는지 — 부분일치 오탐 방지.
+      if (!new RegExp(`\\b${t}\\b`).test(src)) dead.push(t);
+    }
+    if (dead.length) {
+      hits += dead.length;
+      console.log(`\n${d} — 코드에 없는 심볼 참조 (${dead.length}):`);
+      for (const t of dead) console.log(`  - ${t}`);
+    }
+  }
+  console.log(
+    hits === 0
+      ? `\nOK — 만진 폴더 문서 ${targets.length}개, 낡은 심볼 참조 0`
+      : `\n낡음 ${hits}건 (리네임·삭제된 심볼을 문서가 아직 가리킴 — 고치거나 제거하라)`
+  );
+  // 경고만 — 오탐 여지가 있어 exit 1로 막지 않는다(scribe가 판단).
+}
+
+if (process.argv.includes('--write')) writeInventory();
+else if (process.argv.includes('--check')) check();
+else if (process.argv.includes('--stale')) stale();
 else printInventory();

@@ -9,9 +9,11 @@
 
 | 절 | 누가 채우나 | 어디에 |
 |---|---|---|
-| 파일 목록 · export 심볼 | 🤖 `structure-index.cjs` | `.claude/rules/layer-*.md` |
-| **용도 한 줄** · **스텁 여부** | 🧑 [기록]에서 scribe | `.claude/rules/layer-*.md` |
+| 파일 목록 · export 심볼 | 🤖 `structure-index.cjs --write` | `docs/structure.generated.md` (자동 생성 — 손대지 마라) |
+| **용도 한 줄** · **스텁 여부** · **함정** | 🧑 [기록]에서 scribe | `.claude/rules/layer-*.md` (설명할 게 있는 파일만) |
 | **재사용 공개 API** | 🧑 [기록]에서 scribe | structure.md (층 무관·재구현 방지) |
+
+> **`docs/structure.generated.md`는 기계 담당 절반이다** — `--write`가 전 소스의 파일 목록·export를 뽑아 덮어쓴다. 손으로 고치지 마라(다음 `--write`가 덮는다). `--check`는 이 파일 + `layer-*.md` + structure.md 를 합쳐 실제 파일과 대조하므로, 새 파일은 `--write` 한 번으로 '누락'이 사라진다. 사람이 쓰는 것은 **왜 있나(용도·함정·재사용 근거)**뿐 — 기계가 주는 **무엇이 있나**를 손으로 옮겨 적지 마라.
 
 - **경로는 리포 상대 전체 경로를 백틱으로 적는다** (`src/features/auth/lib/makeAuthorize.ts`). 대조 검사가 이 형태만 인식한다.
 - 갱신은 **이번 사이클이 만진 행만**(해당 층 규칙 파일에서). 전면 재작성 금지.
@@ -80,7 +82,6 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `daysInMonth` · `firstWeekdayOfMonth` · `shiftMonth` · `nightsBetween` · `isDateInRange` · `isStayRangeValid` · `applyDatePick` · `commitDateRange` · `StayDateRange` | `features/stay/model/stayDates` | 달력·날짜 순수 함수 8개(TRIP-198, 에포크 일수 기준). **여행 기간 계산엔 재사용 불가** — 같은 날/역전을 `null`로 접는 숙소 판정과 여행(0박 합법·역전은 별도 코드)은 의미가 반대다(TRIP-204 01b D5) |
 | `stayRegisterSchema` · `resolveName` · `canSubmitStayRegister` · `buildStayRegisterRequest` · `StayRegisterFlow` · `StayRegisterTab` | `features/stay/model/stayRegisterForm` | 등록 폼 판정·조립(TRIP-198). zod는 날짜 순서 한 규칙만, 좌표 게이트는 zod보다 먼저 `if`로 |
 | `filterRegions` · `REGIONS` · `RegionCode` · `Region` | `features/explore/model/regions` | 지역 상수 6개 + 클라이언트 필터(TRIP-183) |
-| `resolveNearby` · `Coords` · `NearbyDeps` · `NearbyResult` | `features/explore/model/resolveNearby` | '내 주변' 판정 순수 함수 — 현재 위치 > 등록 숙소 > 없음 우선순위, DI 주입 방식(TRIP-183) |
 | `useSavedPlaces` · `SavedPlacesOutcome` · `SavedPlacesFailureReason` | `features/explore/model/savedPlaces` | **신규(TRIP-220) → TRIP-221이 첫 소비자 → TRIP-222가 반환값을 처음 읽음 → TRIP-223으로 재확장.** 담기 토글 훅. 낙관적 업데이트(리포 최초 패턴) + 판별 유니온 결과(`{kind:'saved'\|'removed'}`\|`{kind:'failed',reason}`, reason은 `unauthenticated`\|`saved-id-unknown`\|`not-found`\|`network` 4갈래). `savedPoiIds: string[]`는 TRIP-221 추가(CTA 개수 출처). **TRIP-222부터 `PlaceExplorePage.attemptToggle`이 이 반환을 소비**해 `SAVE_FAILURE_NOTICE[reason]`을 배너로 표면화한다(이전엔 `void`로 버려 실패가 사용자에게 안 닿았다). **TRIP-223 추가**: `savedPlaces: SavedPlace[]`(원본)·`isPending`·`isError`·`refetch` — d02가 정렬·4얼굴 판정에 쓰는 유일한 데이터 출처(전부 추가, d04 무회귀) |
 | `firstCoPickSlotKey` · `nextCoPickSlotKey` | `features/itinerary/model/coPickSlots` | **신규(TRIP-504)** — copick(h13→h14) 선형 순회의 "다음 갈 슬롯은?"을 산출하는 순수함수 쌍. 상세·함정은 `.claude/rules/layer-features-itinerary.md` |
 | `findSavedPlaceId` · `optimisticSavedPlaceId` | `features/explore/model/savedPlaceIndex` | **신규(TRIP-220)** — poiId→savedPlaceId 역인덱스(순수) + 낙관 삽입 임시 표식(`optimistic:{poiId}`) 생성 |
@@ -133,6 +134,10 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `TermsPage` · `NicknamePage` · `PrefStep1Page` · `PrefStep2Page` | `pages/onboarding-{terms,nickname,pref1,pref2}` | 온보딩 각 단계 배선(구 `features/onboarding/containers/*Container`, TRIP-173 신설) |
 | `LocationPage` | `pages/onboarding-location` | **신규(TRIP-459)** — c08 위치 권한 프리프롬프트 배선. 동결 `shared/location/LocationPreprompt`(TRIP-162)의 콜백에 `expo-location` 실호출(리포 최초)을 건다. nickname→location→pref1 체인 삽입(D7 반전, `onboardingStructure.test.ts`) |
 | `SplashGate` | `app-shell` | 부트스트랩 결과 라우팅(구 `features/auth/containers/SplashGate`, TRIP-173 신설 — `src/app` 밖) |
+| `dwellMinutes` | `features/execution/model/dwellMinutes` | **신규(TRIP-396)** — `completedAt − arrivedAt` 분 산출 순수 함수(한쪽 null→null, 역전→`Math.max(0,·)`). `liveTimeStructure` 가드 하에 `split(':')`로 산출(Date API 미사용). **소비처 0** — 서버가 dwell을 스스로 도출해 클라→서버 dwell 필드가 계약에 없다(데드코드, 상세는 `.claude/rules/repo-traps.md` "여행 중 실행" 절) |
+| `deriveVisitProgress` | `features/execution/model/visitProgress` | **신규(TRIP-396)** — `VisitCheckList → {completedPoiIds, activePoiId, visitCheckIdByPoiId}`. 완료가 진행 중보다 우선, 즉석(slotKey=null)도 도착이면 active. `projectSlotProgress`(slotProgress.ts)에 주입해 i01 active 카드를 처음 프로덕션에 띄운다 |
+| `useVisitCheck` | `features/execution/model/useVisitCheck` | **신규(TRIP-396)** — 도착(`arrive`)·완료(`complete`) 낙관 갱신 훅(imperative, `savedPlaces.ts` 동형). **롤백이 슬롯키(레코드) 단위**(통짜 스냅숏 아님 — W-2 방어, savedStays/savedPlaces 선례의 개선판) |
+| `buildGeofenceRegions` · `geofenceArriveRequest` · `registerGeofences` · `clearGeofences` | `shared/location/geofence` | **신규(TRIP-396)** — 예정 슬롯 좌표 → 지오펜스 등록/해제 계약(`registerGeofences`/`clearGeofences`) + 진입→`ArriveRequest{source:AUTO_GEOFENCE}` 순수 매핑(`geofenceArriveRequest`). 실 네이티브 발화(`startGeofencingAsync`)는 `registerGeofences`가 `armed:false` degrade 스텁으로 대신함(`useActualRoute.ts` 선례 동형) — expo-task-manager·background 권한·리빌드 선행, 4함수 전부 프로덕션 소비처 0 |
 
 > ⚠️ **제거된 심볼**(참조하면 깨진다): `setApiAdapter` · `defaultAdapter` · `SCENARIO_LIST` · `getActiveScenarioKey`
 

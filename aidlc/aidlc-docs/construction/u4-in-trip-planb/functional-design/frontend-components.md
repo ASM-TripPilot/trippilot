@@ -34,8 +34,7 @@
 | 파일 | 화면 | 배럴 |
 |---|---|---|
 | `app/(tabs)/itinerary.tsx` | 분기 — 활성 여행이 **오늘 구간 안**이면 `live`로 redirect, 아니면 U3 흐름 | `@/pages/live-itinerary` |
-| `app/trips/[tripId]/live/index.tsx` | **i01·i02·i03** 여행 중 일정 (일정｜지도, 계획｜실제) | `@/pages/live-itinerary` |
-| `app/trips/[tripId]/live/arrive/[slotKey].tsx` | **i04** 도착·방문 체크 | `@/pages/live-arrive` |
+| `app/trips/[tripId]/live/index.tsx` | **i01·i02·i03** 여행 중 일정 (일정｜지도, 계획｜실제) — **i04(도착·방문 체크)가 이 화면으로 흡수됨**(아래 소급 기록) | `@/pages/live-itinerary` |
 | `app/trips/[tripId]/live/place/[poiId].tsx` | **i05** 현재 장소 상세 | `@/pages/live-place` |
 | `app/trips/[tripId]/live/location.tsx` | **i20·i21** 수동 위치 · 권한 거부 | `@/pages/live-location` |
 | `app/trips/[tripId]/planb/triggers.tsx` | **i09** 감지된 변화 | `@/pages/planb-triggers` |
@@ -46,7 +45,7 @@
 | `app/trips/[tripId]/planb/rest.tsx` | **i17** 휴식 모드 | `@/pages/planb-rest` |
 | `app/trips/[tripId]/planb/diff.tsx` | **i18·i19** 전후 비교 · 반영 완료 | `@/pages/planb-diff` |
 
-- **`i07` 푸시 알림은 라우트가 아니다** — 지오펜스가 깨웠을 때의 로컬 알림. 탭하면 `live/arrive/[slotKey]` 또는 `planb/` 로 딥링크한다.
+- **`i07` 푸시 알림은 라우트가 아니다** — 지오펜스가 깨웠을 때의 로컬 알림. 탭하면 `live/index`(i01, 방문 체크 흡수) 또는 `planb/` 로 딥링크한다.
 - **`i08` 인앱 트리거 칩·`i01 되돌리기 토스트`도 라우트가 아니다** — `live/index` 상주 컴포넌트/토스트.
 - **`i14`는 바텀시트**라 라우트가 아니다 — `planb/draft` 안의 시트(`@gorhom/bottom-sheet`).
 - ⚠️ `trips/**`는 `(tabs)` 밖이라 `Stack.Protected` guard에 안 걸린다 — **미인증 딥링크로 열린다**(structure.md 경고). 데이터 노출은 서버 401이 막는다. **알림 딥링크가 이 경로로 들어오므로 U4에서 특히 주의**한다.
@@ -55,8 +54,7 @@
 
 | 슬라이스 | `ui/<Name>Page.tsx` | 배선 책임 |
 |---|---|---|
-| `live-itinerary` | `LiveItineraryPage` | `useLiveItinerary(tripId)` + `useActiveTriggers(tripId)` → **`resolveLiveState()` 판정 1회** → `LiveItineraryScreen`. 뷰 세그먼트·토글은 스토어 |
-| `live-arrive` | `LiveArrivePage` | `useVisitCheck()` 뮤테이션(낙관적) + 다음 슬롯 조립 |
+| `live-itinerary` | `LiveItineraryPage` | `useLiveItinerary(tripId)` + `useActiveTriggers(tripId)` → **`resolveLiveState()` 판정 1회** → `LiveItineraryScreen`. 뷰 세그먼트·토글은 스토어. **`useVisitCheck()` 뮤테이션(낙관적) + 방문 진행 도출도 이 슬라이스가 흡수**(아래 소급 기록 — 구 `live-arrive` 슬라이스는 없다) |
 | `live-place` | `LivePlacePage` | `usePlaceDetail(poiId)` + 결측 → `"미확인"` 치환은 `model/`에서 |
 | `live-location` | `LiveLocationPage` | `shared/location` 권한 상태 ↔ 수동 입력 배선. 결과를 `replan_session` 기준점으로 |
 | `planb-triggers` | `PlanbTriggersPage` | `useTriggerWatchlist(tripId)` → 3항목 상태 |
@@ -69,6 +67,8 @@
 > **판정은 페이지에서 1회**(`stay-search`의 `resolveStaySearchState` 선례). 화면은 재판정하지 않으며 구조 가드가 잠근다.
 
 > **[소급 기록 — TRIP-443 (기록) 반영, 2026-08-27]** 위 `planb-manual` 행이 이름 붙인 `useValidateItinerary()`는 리포에 실존하지 않는다(`grep -rn useValidateItinerary src` = 0건, develop `openapi.yaml`에도 `validate` 전용 엔드포인트가 없다). TRIP-443 구현이 확인한 실계약은 **`PUT /trips/{tripId}/itinerary`**(`EditItineraryRequest{days:[{date,slots:[{poiId,startAt,endAt,isFixed,endsNextDay}]}]}` → `Itinerary`, 슬롯별 `hasViolation`/`violationReason` **비차단** 응답) — 편집 전체교체와 재검증이 한 호출에 묶여 있다. `PlanbManualPage`는 GET으로 받은 `days`를 로컬 draft에 1회만 시드하고, `[저장]`이 그 draft를 이 PUT으로 조립해 쏜다(별도 `validate` 훅 없음). 이름과 실계약이 갈렸을 뿐 "편집 스토어 ↔ 서버 재검증"이라는 설계 의도 자체는 유지된다. 근거: `_workspace/20260826-trip443-planb-manual/03_implementer_notes.md`(§데이터·화면 흐름) · `frontend/src/pages/planb-manual/ui/PlanbManualPage.tsx` · `backend/docs/design/openapi.yaml`(`/trips/{tripId}/itinerary` PUT).
+
+> **[소급 기록 — TRIP-396 (기록) 반영, 2026-08-27]** 팀 결정(2026-08-19)으로 **i04 전용 도착 화면(`ArriveScreen`)은 제거되고 그 두 실동작(기능하는 [방문 완료]·[다음 장소 길찾기])이 i01(`LiveSlotCard.tsx`)로 흡수됐다.** 위 §1 라우트 표의 `app/trips/[tripId]/live/arrive/[slotKey].tsx`·§2의 `live-arrive` 슬라이스(`LiveArrivePage`)·§3의 `ArriveScreen.tsx` 행은 이 정정으로 삭제했다 — 라이브 Figma 밴드 i에도 i04 프레임이 없음을 확인(`get_metadata` 실측, 2026-08-27). `useVisitCheck()` 뮤테이션(낙관, 슬롯키 단위 롤백)·방문 진행 도출(`deriveVisitProgress`)은 `live-itinerary` 슬라이스가 흡수했다. **`-next-nav`(TRIP-399 "다음 예정지" CTA, §8 testID)는 이 정정 대상이 아니다** — 117-A 소관이라 손대지 않는다. 근거: `_workspace/20260827-trip396-visit-check/01_spec-analyst_brief.md`(§목표·§맹점 후보④) · Figma `get_metadata`(밴드 i, i04 프레임 부재) · `frontend/src/features/execution/ui/LiveSlotCard.tsx`.
 
 ## 3. `src/features/execution/`
 
@@ -93,12 +93,11 @@
 |---|---|---|
 | `ExecutionGlyphs.tsx` | — | 아이콘 |
 | `LiveItineraryScreen.tsx` | i01 | 일자 칩 · 세그먼트 · 타임라인. 변형 = `기록 없음`(**U4 기본 렌더**) · `수정 알약 열림` · `변수 감지` |
-| `LiveSlotCard.tsx` | i01 | 상태 배지 · **계획 시각**(`15:00 도착 예정`) · 영업시간 · 다음 구간 `도보 600m`. `[방문 완료]`, `[사진]`·`[메모]`는 **비활성**(BR-U4-38) |
+| `LiveSlotCard.tsx` | i01 | 상태 배지 · **계획 시각** · 영업시간 · 다음 구간 `도보 600m`. `[방문 완료]`(기능화, 구 i04의 방문 완료·다음 장소 길찾기 실동작을 흡수 — 아래 소급 기록) · `[사진]`·`[메모]`는 표시하되 무동작(BR-U4-38) |
 | `TriggerBanner.tsx` | i01 | `WEATHER`·`DELAY`·`CLOSURE` 3변형 문구 + `[대안 보기]` |
 | `TriggerChip.tsx` | i08 | 상단 상주 칩 |
 | `ReplanFab.tsx` | i01 | `일정 수정 필요` — 트리거 없어도 항상 노출(BR-U4-10) |
 | `LiveMapScreen.tsx` | i02·i03 | `shared/map` 소비. `실제 1.4km` + **"앱을 켜 둔 구간만 기록돼요"** 각주. 동의 없으면 실제 레이어 비활성 + 사유(BR-U4-42) |
-| `ArriveScreen.tsx` | i04 | `13:32 도착 · 예정보다 2분 빠르게 왔어요`(실적) · `[방문 완료]` · 다음 일정 `15:00 · 850m` · `[다음 장소 길찾기]` |
 | `PlaceDetailScreen.tsx` | i05 | 영업시간·위치·다음 일정까지 여유 · `지금 여기` |
 | `UndoToast.tsx` | i01 | 확정 직후 되돌리기 토스트 |
 

@@ -72,14 +72,12 @@ export function DestinationDetailPage(): ReactElement {
     priceText: formatPrice(item.price),
   }));
 
-  const placeCards: PlaceCardVM[] = (places.data?.items ?? []).map(
-    (place) => ({
-      poiId: place.poiId,
-      name: place.nameKo,
-      region: place.region ?? '',
-      imageUrl: place.imageUrl ?? null,
-    })
-  );
+  const placeCards: PlaceCardVM[] = (places.data?.items ?? []).map((place) => ({
+    poiId: place.poiId,
+    name: place.nameKo,
+    region: place.region ?? '',
+    imageUrl: place.imageUrl ?? null,
+  }));
 
   function pressStayCard(card: StayCardVM): void {
     const item = stayItems.find((it: StayItem) => stayKey(it) === card.key);

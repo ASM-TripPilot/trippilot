@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
@@ -16,17 +16,24 @@ import {
 /**
  * TRIP-395 · LiveSlotCard(i01) — 여행 중 한 슬롯의 카드. 상태로 구조가 갈린다(Figma i01):
  *  - `done`   = 컴팩트. 이름 + 시각 범위 배지만(상태 텍스트·액션 버튼 없음).
- *  - `active` = 핑크 테두리 + "진행 중" 배지 + 액션 버튼 3개.
- *  - `upcoming` = "예정" 배지 + 다음 구간 거리행 + 비활성 아이콘 버튼 3개.
+ *  - `active` = 핑크 테두리 + "진행 중" 배지 + 상태줄 "HH:mm 도착 · 방문 중"
+ *               + [방문 완료](활성) · [사진]/[메모](press → "준비 중" 힌트).
+ *  - `upcoming` = "예정" 배지 + 상태줄 "HH:mm 도착 예정" + 수동 [도착](지오펜스 미발화 → 유일 도착 경로).
+ *
+ * TRIP-396: [방문 완료]를 기능화(비활성 해제 + `onPressComplete`)하고, upcoming 에 수동 [도착]을
+ * 추가했다(01b Q2·Q5). [사진]·[메모]는 표시하되 눌러도 오류 없이 "준비 중"만 드러낸다(BR-U4-38,
+ * U5 소관) — 그 힌트는 **카드 로컬 state**(prop 아님, 순수 뷰의 UI-로컬 상태). 서버 호출·라우팅은
+ * 페이지가 배선하고 카드는 콜백만 부른다.
  *
  * 규율:
  *  - 계획 시각은 서버 `startAt`(HH:mm:ss)을 `slice(0,5)`로 자를 뿐 — 재추정하지 않는다(BR-U4-34).
- *  - `openingHours` null → "미확인"(빈칸 아님). `distanceRange` null → 거리 줄 부재(INV-3).
- *  - [방문 완료]·[사진]·[메모]는 표시하되 동작 안 함(BR-U4-38 — 전부 비활성, U5 소관).
+ *  - 상태줄은 계획값 + 정성 리터럴("방문 중")뿐 — 소요시간 숫자를 안 낸다(INV-3·executionDuration 가드).
+ *  - `openingHours` null → "미확인". `distanceRange` null → 거리 줄 부재(INV-3).
  *  - 각 leaf 는 값 하나만 담는다(화면 테스트가 `toHaveTextContent` 완전 일치로 읽음).
  */
 
 const MISSING_HOURS = '미확인';
+const SOON_HINT = '사진·메모는 준비 중이에요';
 
 const STATE_LABEL: Record<'active' | 'upcoming', string> = {
   active: '진행 중',
@@ -38,19 +45,7 @@ const STATE_LABEL: Record<'active' | 'upcoming', string> = {
 const buildSlotKey = (date: string, poiId: string): string =>
   `${date}#${poiId}`;
 
-// 비활성 어포던스 3종(BR-U4-38) — 눌러도 오류 없이 준비 중임이 드러난다. 기능화는 115-B/U5.
-const AFFORDANCES: {
-  role: string;
-  label: string;
-  Icon: (props: { size?: number; color?: string }) => ReactElement;
-}[] = [
-  { role: 'visit', label: '방문 완료', Icon: VisitCheckGlyph },
-  { role: 'photo', label: '사진', Icon: CameraGlyph },
-  { role: 'memo', label: '메모', Icon: MemoGlyph },
-];
-
 const MUTED = '#6A6A6A';
-const MUTED_SOFT = '#9AA1AB';
 const WHITE = '#FFFFFF';
 
 export interface LiveSlotCardProps {
@@ -62,6 +57,10 @@ export interface LiveSlotCardProps {
   nextDest?: NavDest | null;
   /** "다음 장소 길찾기" CTA press 핸들러. 카드는 이 콜백만 부르고 Linking·router 를 모른다. */
   onPressNextNav?: () => void;
+  /** active [방문 완료] press — page 가 useVisitCheck.complete(visitCheckId) 로 배선(AC-3). */
+  onPressComplete?: () => void;
+  /** upcoming 수동 [도착] press — page 가 useVisitCheck.arrive({source:MANUAL}) 로 배선(AC-4). */
+  onPressManualArrive?: () => void;
 }
 
 export function LiveSlotCard({
@@ -70,7 +69,12 @@ export function LiveSlotCard({
   state,
   nextDest,
   onPressNextNav,
+  onPressComplete,
+  onPressManualArrive,
 }: LiveSlotCardProps): ReactElement {
+  // 사진·메모 "준비 중" 인라인 힌트 — press 하면 드러난다(BR-U4-38). 순수 뷰의 UI-로컬 상태.
+  const [soonHintVisible, setSoonHintVisible] = useState(false);
+
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string =>
     `execution-live-slot-${role}-${slotKey}`;
@@ -108,6 +112,9 @@ export function LiveSlotCard({
   }
 
   const active = state === 'active';
+  const timeText = active
+    ? `${slot.startAt.slice(0, 5)} 도착 · 방문 중`
+    : `${slot.startAt.slice(0, 5)} 도착 예정`;
 
   return (
     <View
@@ -138,7 +145,7 @@ export function LiveSlotCard({
         testID={fieldId('time')}
         className="font-noto-medium text-label text-muted"
       >
-        {`${slot.startAt.slice(0, 5)} 도착 예정`}
+        {timeText}
       </Text>
 
       <Text
@@ -149,31 +156,50 @@ export function LiveSlotCard({
       </Text>
 
       {active ? (
-        <View className="flex-row gap-sm pt-[2px]">
-          {AFFORDANCES.map(({ role, label, Icon }) => {
-            const primary = role === 'visit';
-            return (
-              <Pressable
-                key={role}
-                testID={fieldId(role)}
-                disabled
-                accessibilityState={{ disabled: true }}
-                className={`flex-row items-center gap-[4px] rounded-button px-md py-[6px] ${
-                  primary ? 'bg-primary' : 'bg-surface-soft'
-                }`}
-              >
-                <Icon size={16} color={primary ? WHITE : MUTED} />
-                <Text
-                  className={`font-noto-medium text-label ${
-                    primary ? 'text-on-primary' : 'text-body'
-                  }`}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <>
+          <View className="flex-row items-center gap-sm pt-[2px]">
+            {/* [방문 완료] — 활성. Figma 는 flex-1(넓게). page 가 완료 낙관을 배선. */}
+            <Pressable
+              testID="execution-arrive-complete"
+              onPress={onPressComplete}
+              className="flex-1 flex-row items-center justify-center gap-[4px] rounded-button bg-primary px-md py-[8px]"
+            >
+              <VisitCheckGlyph size={16} color={WHITE} />
+              <Text className="font-noto-medium text-label text-on-primary">
+                방문 완료
+              </Text>
+            </Pressable>
+            {/* [사진]·[메모] — 활성처럼 보이되 press 는 "준비 중"만 드러낸다(BR-U4-38). */}
+            <Pressable
+              testID="execution-arrive-photo"
+              onPress={() => setSoonHintVisible(true)}
+              className="flex-row items-center gap-[4px] rounded-button bg-surface-soft px-md py-[8px]"
+            >
+              <CameraGlyph size={16} color={MUTED} />
+              <Text className="font-noto-medium text-label text-body">
+                사진
+              </Text>
+            </Pressable>
+            <Pressable
+              testID="execution-arrive-memo"
+              onPress={() => setSoonHintVisible(true)}
+              className="flex-row items-center gap-[4px] rounded-button bg-surface-soft px-md py-[8px]"
+            >
+              <MemoGlyph size={16} color={MUTED} />
+              <Text className="font-noto-medium text-label text-body">
+                메모
+              </Text>
+            </Pressable>
+          </View>
+          {soonHintVisible ? (
+            <Text
+              testID="execution-arrive-soon-hint"
+              className="font-noto text-caption text-muted"
+            >
+              {SOON_HINT}
+            </Text>
+          ) : null}
+        </>
       ) : (
         <View className="flex-row items-center justify-between gap-sm pt-[2px]">
           {slot.distanceRange === null || slot.distanceRange === undefined ? (
@@ -189,19 +215,17 @@ export function LiveSlotCard({
               </Text>
             </View>
           )}
-          <View className="flex-row gap-xs">
-            {AFFORDANCES.map(({ role, Icon }) => (
-              <Pressable
-                key={role}
-                testID={fieldId(role)}
-                disabled
-                accessibilityState={{ disabled: true }}
-                className="rounded-button bg-surface-soft p-sm"
-              >
-                <Icon size={15} color={MUTED_SOFT} />
-              </Pressable>
-            ))}
-          </View>
+          {/* 수동 [도착] — 지오펜스 미발화라 유일한 도착 경로(01b Q5). page 가 arrive(MANUAL) 배선. */}
+          <Pressable
+            testID={`execution-arrive-manual-${slotKey}`}
+            onPress={onPressManualArrive}
+            className="flex-row items-center gap-[4px] rounded-button bg-primary px-md py-[6px]"
+          >
+            <VisitCheckGlyph size={15} color={WHITE} />
+            <Text className="font-noto-medium text-label text-on-primary">
+              도착
+            </Text>
+          </Pressable>
         </View>
       )}
 

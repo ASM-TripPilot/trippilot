@@ -13,8 +13,13 @@ import {
 } from '@/features/execution/model/liveViewStore';
 import { projectSlotProgress } from '@/features/execution/model/slotProgress';
 import { useActualRoute } from '@/features/execution/model/useActualRoute';
+import { useVisitCheck } from '@/features/execution/model/useVisitCheck';
+import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
 import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen';
-import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
+import {
+  useGetTripsTripId,
+  useGetTripsTripIdVisitsDaysDay,
+} from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
 import { formatKoreanDate } from '@/shared/date/formatKoreanDate';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -66,6 +71,19 @@ export function LiveItineraryPage({
     // 활성 트리거(i01 배너)는 후속 칸 — 지금은 없음으로 판정한다.
     activeTriggers: [],
   });
+
+  // 방문 기록 조회·판정은 page 1회(FSD·구조가드). 훅 규칙상 조기 반환 위에서 무조건 선언한다 —
+  // active 날짜(방문 기록 조회 키)를 미리 구하되, active 가 아니면 '' 로 두어 쿼리를 끈다.
+  const liveDayIndex =
+    selectedDay ?? (state.kind === 'active' ? state.todayIndex : 0);
+  const liveDate =
+    state.kind === 'active'
+      ? (state.itinerary.days[liveDayIndex]?.date ?? '')
+      : '';
+  const visits = useGetTripsTripIdVisitsDaysDay(tripId, liveDate, {
+    query: { enabled: state.kind === 'active' && liveDate !== '' },
+  });
+  const visitCheck = useVisitCheck({ tripId, day: liveDate });
 
   if (state.kind === 'loading') {
     return (
@@ -126,11 +144,23 @@ export function LiveItineraryPage({
     );
   }
 
-  const { itinerary, todayIndex } = state;
-  const activeDayIndex = selectedDay ?? todayIndex;
-  const activeDate = itinerary.days[activeDayIndex]?.date ?? '';
+  const { itinerary } = state;
+  const activeDayIndex = liveDayIndex;
+  const activeDate = liveDate;
   const activeSlots = itinerary.days[activeDayIndex]?.slots ?? [];
-  const projected = projectSlotProgress(activeSlots);
+
+  // 방문 기록 → 진행 상태 도출 → projectSlotProgress 인자로 실제 주입(★도달성 — 빈 인자면
+  // 전 슬롯 upcoming 이라 active 카드가 프로덕션에 안 뜬다). 도출·판정은 여기 1회.
+  const progress = deriveVisitProgress(visits.data ?? { visits: [] });
+  const projected = projectSlotProgress(activeSlots, {
+    completedPoiIds: progress.completedPoiIds,
+    activePoiId: progress.activePoiId,
+  });
+  const activeVisitCheckId =
+    progress.activePoiId !== null
+      ? (progress.visitCheckIdByPoiId[progress.activePoiId] ?? null)
+      : null;
+
   const subtitle = activeDate
     ? `${formatKoreanDate(activeDate)} · 오늘 일정`
     : '오늘 일정';
@@ -149,6 +179,20 @@ export function LiveItineraryPage({
       tripTitle={trip.data?.title ?? ''}
       subtitle={subtitle}
       onPressTab={(key) => router.replace(key === 'home' ? '/' : `/${key}`)}
+      onPressComplete={
+        activeVisitCheckId !== null
+          ? () => {
+              void visitCheck.complete(activeVisitCheckId);
+            }
+          : undefined
+      }
+      onManualArrive={(poiId) => {
+        void visitCheck.arrive({
+          slotKey: `${activeDate}#${poiId}`,
+          poiId,
+          source: 'MANUAL',
+        });
+      }}
     />
   );
 }

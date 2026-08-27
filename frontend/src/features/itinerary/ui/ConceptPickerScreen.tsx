@@ -40,7 +40,10 @@ const CONCEPT_VISUALS: Record<
   outdoor: { Icon: CategoryTreeGlyph, tintClass: 'bg-success-bg' },
   shopping: { Icon: CategoryShoppingBagGlyph, tintClass: 'bg-primary-pale' },
 };
-const FALLBACK_VISUAL = { Icon: CategoryImageGlyph, tintClass: 'bg-surface-soft' };
+const FALLBACK_VISUAL = {
+  Icon: CategoryImageGlyph,
+  tintClass: 'bg-surface-soft',
+};
 
 const APPBAR_TITLE = '다음 활동 고르기';
 const TITLE = '다음, 뭘 할까요?';
@@ -101,7 +104,8 @@ export function ConceptPickerScreen({
 
           <View className="w-full gap-sm">
             {concepts.map(({ key, label }) => {
-              const { Icon, tintClass } = CONCEPT_VISUALS[key] ?? FALLBACK_VISUAL;
+              const { Icon, tintClass } =
+                CONCEPT_VISUALS[key] ?? FALLBACK_VISUAL;
               return (
                 <Pressable
                   key={key}
