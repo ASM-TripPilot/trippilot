@@ -1,6 +1,11 @@
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  NestableDraggableFlatList,
+  NestableScrollContainer,
+  type RenderItemParams,
+} from 'react-native-draggable-flatlist';
 
 import type {
   ItineraryDaysItem,
@@ -9,6 +14,7 @@ import type {
 
 import {
   BackChevronGlyph,
+  DragHandleGlyph,
   LockGlyph,
   PlusGlyph,
   TrashGlyph,
@@ -40,6 +46,11 @@ export interface ManualEditShellProps {
   activeDayIndex?: number;
   /** 잠금 슬롯 키(완료·시각고정·숙소 체크인/아웃) — 휴지통·HH:mm 입력이 안 붙는다. */
   lockedSlotKeys?: string[];
+  /**
+   * 시각 직접입력이 적용된 슬롯 키(폴백 i22 전용, 결정 b) — 이 집합에 든 비잠금 폴백 슬롯만
+   * 실제 `startAt–endAt` 을 그리고, 나머지는 `--:-- · 도착 시각 직접 입력` 유지(기본 `[]`).
+   */
+  timeConfirmedSlotKeys?: string[];
   onBack: () => void;
   onSave: () => void;
   onPressAddPlace?: () => void;
@@ -62,6 +73,8 @@ function SlotCard({
   date,
   mode,
   isLocked,
+  isTimeConfirmed,
+  drag,
   onDeleteSlot,
   onEditSlotTime,
 }: {
@@ -69,14 +82,19 @@ function SlotCard({
   date: string;
   mode: ManualEditMode;
   isLocked: boolean;
+  /** 시각 직접입력이 적용됐나(폴백 카드가 실제 시각을 그릴지 결정, 결정 b). */
+  isTimeConfirmed: boolean;
+  /** DraggableFlatList 가 준 "이 행 끌기 시작" 함수 — 비잠금 손잡이 onLongPress 에 건다. */
+  drag?: () => void;
   onDeleteSlot?: (poiId: string) => void;
   onEditSlotTime?: (slotKey: string) => void;
 }): ReactElement {
   const slotKey = `${date}#${slot.poiId}`;
   const tagLine = slot.tags.length > 0 ? `#${slot.tags.join(' · ')}` : '';
   // 폴백·비잠금 슬롯은 도착 시각이 미확인이라 사용자 입력을 유도한다(숫자 없음 → INV-3 안전).
+  // 단 [시각 입력]으로 시각을 확정하면(isTimeConfirmed) 실제 startAt–endAt 을 그린다(결정 b).
   const timeText =
-    mode === 'fallback' && !isLocked
+    mode === 'fallback' && !isLocked && !isTimeConfirmed
       ? '--:-- · 도착 시각 직접 입력'
       : `${slot.startAt.slice(0, 5)}–${
           slot.endsNextDay ? '익일 ' : ''
@@ -111,6 +129,19 @@ function SlotCard({
             : 'border-hairline bg-canvas'
         }`}
       >
+        {/* 드래그 손잡이 — 비잠금 슬롯에만(잠금은 자리 불변, BR-U4-18). 길게 눌러 끌기 시작. */}
+        {isLocked ? null : (
+          <Pressable
+            testID={`planb-manual-drag-${slotKey}`}
+            accessibilityRole="button"
+            accessibilityLabel="순서 변경"
+            onLongPress={drag}
+            hitSlop={6}
+          >
+            <DragHandleGlyph />
+          </Pressable>
+        )}
+
         {isLocked ? (
           <View className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-primary-pale">
             <LockGlyph />
@@ -173,8 +204,10 @@ export function ManualEditShell({
   days,
   activeDayIndex = 0,
   lockedSlotKeys = [],
+  timeConfirmedSlotKeys = [],
   onBack,
   onSave,
+  onReorder,
   onPressAddPlace,
   onDeleteSlot,
   onEditSlotTime,
@@ -226,7 +259,7 @@ export function ManualEditShell({
           </View>
         ) : null}
 
-        <ScrollView>
+        <NestableScrollContainer>
           <View className="gap-[14px] px-lg pb-lg pt-md">
             {/* ① 누락 배너 — fallback 만(외부 정보 실패, INV-4 침묵 금지). */}
             {mode === 'fallback' ? (
@@ -276,21 +309,35 @@ export function ManualEditShell({
               <Text className="font-noto text-label text-muted">{`${slots.length}곳`}</Text>
             </View>
 
-            {/* 슬롯 목록 — 드래그 재정렬은 후속(react-native-draggable-flatlist 미배선). */}
-            {slots.map((slot) => (
-              <SlotCard
-                key={`${activeDate}#${slot.poiId}`}
-                slot={slot}
-                date={activeDate}
-                mode={mode}
-                isLocked={
-                  slot.isFixed === true ||
-                  lockedSlotKeys.includes(`${activeDate}#${slot.poiId}`)
-                }
-                onDeleteSlot={onDeleteSlot}
-                onEditSlotTime={onEditSlotTime}
-              />
-            ))}
+            {/* 슬롯 목록 — 드래그 재정렬(react-native-draggable-flatlist). onDragEnd 가 준 새 순서를
+                onReorder 로 그대로 흘려보내고, 고정 재고정 수학은 상위 페이지가 진다(reorderKeepingFixed).
+                ScrollView 안에 넣으므로 Nestable 변형이 필요하다(선례 ItineraryEditScreen). */}
+            <NestableDraggableFlatList<ItineraryDaysItemSlotsItem>
+              testID="planb-manual-list"
+              data={slots}
+              keyExtractor={(slot) => `${activeDate}#${slot.poiId}`}
+              renderItem={({
+                item,
+                drag,
+              }: RenderItemParams<ItineraryDaysItemSlotsItem>) => {
+                const slotKey = `${activeDate}#${item.poiId}`;
+                return (
+                  <SlotCard
+                    slot={item}
+                    date={activeDate}
+                    mode={mode}
+                    isLocked={
+                      item.isFixed === true || lockedSlotKeys.includes(slotKey)
+                    }
+                    isTimeConfirmed={timeConfirmedSlotKeys.includes(slotKey)}
+                    drag={drag}
+                    onDeleteSlot={onDeleteSlot}
+                    onEditSlotTime={onEditSlotTime}
+                  />
+                );
+              }}
+              onDragEnd={({ data }) => onReorder?.(data)}
+            />
 
             <Pressable
               testID="planb-manual-add-place"
@@ -304,7 +351,7 @@ export function ManualEditShell({
               </Text>
             </Pressable>
           </View>
-        </ScrollView>
+        </NestableScrollContainer>
 
         <View className="w-full px-lg pb-lg pt-sm">
           <Pressable

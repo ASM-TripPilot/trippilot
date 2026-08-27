@@ -756,7 +756,7 @@
 - `src/shared/itinerary-edit/model/reorderKeepingFixed.ts`  →  reorderKeepingFixed
 
 ## src/shared/itinerary-edit/ui/
-- `src/shared/itinerary-edit/ui/ManualEditGlyphs.tsx`  →  BackChevronGlyph · UndoGlyph · WarningTriangleGlyph · LockGlyph · TrashGlyph · PlusGlyph
+- `src/shared/itinerary-edit/ui/ManualEditGlyphs.tsx`  →  BackChevronGlyph · UndoGlyph · WarningTriangleGlyph · LockGlyph · TrashGlyph · PlusGlyph · DragHandleGlyph
 - `src/shared/itinerary-edit/ui/ManualEditShell.tsx`  →  ManualEditMode · ManualEditShellProps · ManualEditShell
 - `src/shared/itinerary-edit/ui/ManualTimeSheet.tsx`  →  ManualTimeSheetProps · ManualTimeSheet
 

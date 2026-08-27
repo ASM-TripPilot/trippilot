@@ -1,7 +1,8 @@
-import Svg, { Path, Polyline, Rect } from 'react-native-svg';
+import Svg, { Circle, Path, Polyline, Rect } from 'react-native-svg';
 
 /**
  * TRIP-443 · 공용 편집 셸(i15·i22) 인라인 SVG 글리프 — 뒤로·되돌리기·경고삼각형·자물쇠·휴지통·플러스.
+ * TRIP-577 로 드래그 손잡이(6점) 1종 추가 — i15·i22 슬롯 재정렬 핸들.
  *
  * 색은 이 파일 안에서만 raw hex 로 고정한다 — SVG `stroke`/`fill` 은 className 을 못 받고,
  * `*Glyphs.tsx` 는 raw-hex 스캔 가드 제외 관례다(리포 전체). features 글리프와 그림이 겹쳐도
@@ -10,6 +11,7 @@ import Svg, { Path, Polyline, Rect } from 'react-native-svg';
 
 const INK = '#222222';
 const MUTED = '#6A6A6A';
+const MUTED_SOFT = '#9AA1AB';
 const PRIMARY_TEXT = '#C13515';
 
 type GlyphProps = { size?: number };
@@ -135,6 +137,20 @@ export function PlusGlyph({ size = 18 }: GlyphProps) {
         strokeWidth={2}
         strokeLinecap="round"
       />
+    </Svg>
+  );
+}
+
+// 드래그 손잡이(6점) — 비잠금 슬롯 재정렬 핸들(길게 눌러 끌기). `ItineraryGlyphs` 동명 벡터 복제.
+export function DragHandleGlyph({ size = 18 }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+      <Circle cx={6.5} cy={4.5} r={1.4} fill={MUTED_SOFT} />
+      <Circle cx={11.5} cy={4.5} r={1.4} fill={MUTED_SOFT} />
+      <Circle cx={6.5} cy={9} r={1.4} fill={MUTED_SOFT} />
+      <Circle cx={11.5} cy={9} r={1.4} fill={MUTED_SOFT} />
+      <Circle cx={6.5} cy={13.5} r={1.4} fill={MUTED_SOFT} />
+      <Circle cx={11.5} cy={13.5} r={1.4} fill={MUTED_SOFT} />
     </Svg>
   );
 }
