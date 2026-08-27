@@ -21,6 +21,7 @@ from trippilot.agents.planb.kb_retrieval import index_documents
 from trippilot.api.app import create_app
 from trippilot.api.wiring import DEMO_ANCHOR, build_dev_app, demo_poi_seed
 from trippilot.domain.kb import KbDocument, KbKind
+from trippilot.solver_engine.config import RAIN_OUTDOOR
 
 _SEED_IDS = {str(p.poi_id) for p in demo_poi_seed()}
 
@@ -134,3 +135,72 @@ def test_unwired_app_fails_loudly() -> None:
     with TestClient(create_app(), raise_server_exceptions=False) as client:
         response = _post(client)
     assert response.status_code == 503
+
+
+# ── ⑦ TRIP-512 저장 장소 봉투 — 백엔드가 실어 보내는 개인화 신호 ──────
+
+
+def test_saved_places_field_accepted_backward_compatible() -> None:
+    """선택 필드(기본 빈 목록) — 안 보내도 200. 하위호환은 계약의 전제다."""
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        assert _post(client).status_code == 200  # 필드 없이
+        response = _post(client, saved_places=[])  # 빈 목록
+    assert response.status_code == 200
+
+
+def _proposed_ids(body: dict) -> list[str]:
+    return [a["poi_ids"][0] for a in body["alternatives"]]
+
+
+def test_saved_places_rank_first_in_rule_fallback() -> None:
+    """봉투로 온 저장 장소가 규칙 랭킹 1순위로 올라온다 — TRIP-512 의 존재 이유.
+
+    **중립 사유(`closed`)로 검사한다** — `weather` 는 카테고리 강등(⓪, TRIP-532)이 저장
+    장소보다 앞서므로 두 신호가 섞인다. 여기서 보려는 것은 ①(저장 장소) 하나다.
+    비 오는 날 저장 야외가 어떻게 되는지는 아래 테스트가 따로 본다.
+
+    대상은 **실제 제안에 든 것 중 1순위가 아닌 것** — 데모 앵커 반경이 시드를 다 담지
+    않으므로 풀 밖을 고르면 저장해도 못 올라오고(INV-1), 이미 1순위면 검사가 공허하다.
+    """
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        plain = _proposed_ids(_post(client, reason="closed").json())
+        assert len(plain) >= 2, f"후보가 부족해 순위 변화를 볼 수 없다: {plain}"
+        target = plain[1]
+        with_saved = _proposed_ids(_post(
+            client, reason="closed",
+            saved_places=[{"poi_id": target, "name": "저장한 곳"}]).json())
+    assert with_saved[0] == target, f"저장 장소가 1순위로 안 왔다: {plain} → {with_saved}"
+
+
+def test_saved_outdoor_stays_demoted_on_rain() -> None:
+    """비 사유에서는 저장 장소여도 야외면 뒤로 — ⓪(상황)이 ①(저장)보다 앞선다(TRIP-532).
+
+    실내 후보가 함께 있어야 성립하는 검사다(야외만 있으면 야외가 1순위일 수밖에 없다).
+    """
+    outdoor_ids = {str(p.poi_id) for p in demo_poi_seed() if p.category in RAIN_OUTDOOR}
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        plain = _proposed_ids(_post(client).json())
+        target = next((i for i in plain if i in outdoor_ids), None)
+        if target is None or set(plain) <= outdoor_ids:
+            return  # 풀 구성상 검사가 성립하지 않는다 — 다른 테스트가 강등을 이미 검증
+        with_saved = _proposed_ids(
+            _post(client, saved_places=[{"poi_id": target, "name": "저장한 오름"}]).json())
+    assert with_saved[0] != target, f"비 오는데 저장한 야외가 1순위: {with_saved}"
+
+
+def test_saved_places_outside_pool_never_become_candidates() -> None:
+    """풀 밖 저장 장소는 후보가 되지 않는다 (INV-1) — 봉투도 후보 자격을 만들지 않는다."""
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        body = _post(client, saved_places=[{"poi_id": "ghost-not-in-pool", "name": "유령"}]).json()
+    picked = {p for a in body["alternatives"] for p in a["poi_ids"]}
+    assert "ghost-not-in-pool" not in picked
+    assert picked <= _SEED_IDS
+
+
+def test_saved_places_reach_llm_context_not_just_ranking() -> None:
+    """저장 장소가 LLM 프롬프트 컨텍스트에도 들어간다 — 랭킹 전용 신호가 아니다."""
+    from trippilot.agents.planb.rag import PlanBRagRequest, SavedPlace, _join_saved
+
+    assert "저장한 카페" in _join_saved((SavedPlace("p1", "저장한 카페"),))
+    assert _join_saved(()) == ""
+    assert "saved_places" in PlanBRagRequest.__dataclass_fields__

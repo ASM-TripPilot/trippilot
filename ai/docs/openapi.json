@@ -77,6 +77,13 @@
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"
           },
+          "saved_places": {
+            "items": {
+              "$ref": "#/components/schemas/SavedPlaceSchema"
+            },
+            "title": "Saved Places",
+            "type": "array"
+          },
           "transport_mode": {
             "anyOf": [
               {
@@ -1135,6 +1142,27 @@
           "requested_at"
         ],
         "title": "RequestMetaSchema",
+        "type": "object"
+      },
+      "SavedPlaceSchema": {
+        "additionalProperties": false,
+        "description": "사용자가 저장한 장소 1건 — 백엔드 `saved_place`(account_id, poi_id) 의 경계 표현.\n\n이름을 함께 받는 것은 LLM 컨텍스트에 \"저장한 장소 — 성산일출봉\" 처럼 실을 수 있어야\n해서다. 저장 시각·메모는 받지 않는다 — 랭킹에도 프롬프트에도 쓰지 않는다(목적 최소화,\nSECURITY-11/G181).",
+        "properties": {
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id"
+        ],
+        "title": "SavedPlaceSchema",
         "type": "object"
       },
       "SceneSchema": {

@@ -114,7 +114,7 @@ from trippilot.domain.travel import TravelEstimate
 from trippilot.agents.edit_agent import (
     EditRejected, RetimeContext, edited_solution, validate_command,
 )
-from trippilot.agents.planb.rag import PlanBRagPipeline, PlanBRagRequest
+from trippilot.agents.planb.rag import PlanBRagPipeline, PlanBRagRequest, SavedPlace
 from trippilot.domain.edit import ApplyMode, EditCommand, EditOp, resolve_apply_mode
 from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
 from trippilot.llm_gateway.workers.edit_translation import (
@@ -811,6 +811,9 @@ class WiredItineraryOrchestrator:
                 excluded_poi_ids=frozenset(
                     PoiId(p) for p in request.excluded_poi_ids),
                 affected_reasons=dict(request.affected_reasons),
+                saved_places=tuple(
+                    SavedPlace(poi_id=sp.poi_id, name=sp.name) for sp in request.saved_places
+                ),
             )
         )
         return schemas.AlternativesResponse(

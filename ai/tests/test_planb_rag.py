@@ -734,25 +734,16 @@ _RANK_REASONS = st.one_of(
 _PLACEABLE = [c for c in PoiCategory if c is not PoiCategory.STAY]  # STAY 는 후보 풀 밖(내부 전용)
 
 
-def _persona_hits_for(pool: CandidatePool) -> st.SearchStrategy[list[KbHit]]:
-    """KB-2 히트 — poi_ref 가 풀 안·풀 밖·None 섞임.
+def _saved_refs_for(pool: CandidatePool) -> st.SearchStrategy[tuple[str, ...]]:
+    """저장 장소 참조 순열 — 풀 안·풀 밖·빈 문자열이 섞인 적대적 재료.
 
-    적대적 재료: 풀 밖 참조는 순위를 만들 수도, 새 id 를 낳을 수도 없어야 한다 (INV-1).
+    `_rule_ranking` 은 이제 참조 문자열을 받는다 (TRIP-512 — 봉투 ⊕ KB-2 히트를
+    `_saved_refs` 가 미리 합쳐 넘긴다). 풀 밖 참조는 순위를 만들 수도, 새 id 를 낳을
+    수도 없어야 한다 (INV-1).
     """
     inside = st.sampled_from(sorted(map(str, pool.poi_ids))) if pool.poi_ids else st.nothing()
-    ref = st.one_of(st.none(), inside, st.text(min_size=1, max_size=6))
-    return st.lists(
-        st.builds(
-            KbHit,
-            kb=st.just(KbKind.PERSONA),
-            doc_id=st.text(min_size=1, max_size=6),
-            score=st.floats(-1, 1, allow_nan=False, allow_infinity=False),
-            text=st.just("저장 장소"),
-            poi_ref=ref,
-            metadata=st.just({}),
-        ),
-        max_size=6,
-    )
+    ref = st.one_of(inside, st.text(min_size=1, max_size=6))
+    return st.lists(ref, max_size=4).map(tuple)
 
 
 @st.composite
@@ -770,7 +761,7 @@ def _anchored_cases(draw, *, distinct_offsets: bool = False):
     )
     cats = draw(st.lists(st.sampled_from(_PLACEABLE), min_size=n, max_size=n))
     pool = _pool_at(*(_poi_at(f"p{i}", c, o) for i, (c, o) in enumerate(zip(cats, offsets))))
-    hits = draw(_persona_hits_for(pool))
+    hits = draw(_saved_refs_for(pool))
     available = tuple(draw(st.permutations([p.poi_id for p in pool.pois])))
     return pool, hits, available
 
@@ -788,16 +779,16 @@ def _ranking_inputs(draw):
     else:
         pool, _, full = draw(_anchored_cases())
         available = tuple(draw(st.lists(st.sampled_from(list(full)), unique=True)))
-    hits = draw(_persona_hits_for(pool))
+    hits = draw(_saved_refs_for(pool))
     return pool, hits, available, draw(_RANK_REASONS)
 
 
 @given(case=_ranking_inputs())
 @settings(max_examples=80, deadline=None)
 def test_pbt_rule_ranking_is_a_permutation_of_available(case) -> None:
-    """RANK-P1(INV-1): 어떤 풀·사유·KB-2 히트에도 출력은 `available` 의 순열이다.
+    """RANK-P1(INV-1): 어떤 풀·사유·저장 장소 참조에도 출력은 `available` 의 순열이다.
 
-    집합 같음·길이 같음·중복 없음. 풀 밖 poi_ref 히트가 있어도 새 id 가 생기지 않는다.
+    집합 같음·길이 같음·중복 없음. 풀 밖 참조가 있어도 새 id 가 생기지 않는다.
     덤으로 note 의 강등 건수는 실제 건수와 같아야 한다 — 조용한 조정도, 부풀린 기록도 금지.
     """
     pool, hits, available, reason = case
@@ -831,7 +822,7 @@ def test_pbt_rule_ranking_weather_puts_every_non_outdoor_before_every_outdoor(ca
     outdoor_flags = [by_id[r].category in RAIN_OUTDOOR for r in ranked]
     assert outdoor_flags == sorted(outdoor_flags), ranked
 
-    saved = {h.poi_ref for h in hits if h.poi_ref}
+    saved = {h for h in hits if h}
     for tier in (False, True):
         unsaved_flags = [
             r not in saved for r in ranked if (by_id[r].category in RAIN_OUTDOOR) is tier

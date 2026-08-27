@@ -334,6 +334,18 @@ class TriggerSchema(BoundaryModel):
     payload: dict = Field(default_factory=dict)
 
 
+class SavedPlaceSchema(BoundaryModel):
+    """사용자가 저장한 장소 1건 — 백엔드 `saved_place`(account_id, poi_id) 의 경계 표현.
+
+    이름을 함께 받는 것은 LLM 컨텍스트에 "저장한 장소 — 성산일출봉" 처럼 실을 수 있어야
+    해서다. 저장 시각·메모는 받지 않는다 — 랭킹에도 프롬프트에도 쓰지 않는다(목적 최소화,
+    SECURITY-11/G181).
+    """
+
+    poi_id: str = Field(min_length=1)
+    name: str = ""
+
+
 class AlternativesRequest(BoundaryModel):
     """대안 제안 요청 — 후보 풀은 AI가 앵커 반경으로 직접 만든다(INV-1, M7 소유).
 
@@ -352,6 +364,13 @@ class AlternativesRequest(BoundaryModel):
     # 대체 대상 슬롯의 원래 추천 이유 (TRIP-516) — 백엔드 visit_slot.placement_reason.
     # 선택 필드(하위호환): {poi_id: 문장}. LLM이 원래 취지를 잇는 대안을 고르게 한다.
     affected_reasons: dict[str, str] = Field(default_factory=dict)
+    # 사용자가 저장(찜)한 장소 (TRIP-512) — 백엔드 saved_place 에서 온다.
+    # 선택 필드(하위호환). **후보 자격을 만들지 않는다**(INV-1은 closed_set_filter 소유) —
+    # 풀 안에서의 우선순위와 LLM 컨텍스트에만 쓰인다. 벡터 KB-2 대신 봉투로 받는 이유는
+    # ① 백엔드 saved_place 에 메모·리뷰 컬럼이 없어 임베딩할 자유 텍스트가 없고
+    # ② 규칙 랭킹이 실제로 쓰는 것은 poi_id 집합뿐이며
+    # ③ 봉투는 AI 에 적재되지 않아 계정 파기 캐스케이드 부채를 만들지 않는다.
+    saved_places: list[SavedPlaceSchema] = Field(default_factory=list)
     request_meta: RequestMetaSchema
 
 
