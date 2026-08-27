@@ -29,7 +29,7 @@ keep_local() {
 case "${1:-check}" in
 check)
   want=$(rev .env.example || true); have=$(rev .env || true)
-  [ "${want:-0}" = "${have:-0}" ] && exit 0
+  [ "${want:-0}" -gt "${have:-0}" ] || exit 0
   cat <<EOF
 
   ⚠️  팀 볼트에 키 변경/추가가 있습니다 (rev ${have:-없음} → ${want:-0}). 업데이트하시겠습니까?
