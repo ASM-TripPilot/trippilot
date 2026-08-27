@@ -153,6 +153,12 @@ def _queries(region: str, today: dt.date) -> tuple[tuple[str, str], ...]:
         ("webkr", f"{region} 전시회 박람회 {today.year}년 {today.month}월"),
         ("news", f"{region} 행사 일정 안내"),
         ("blog", f"{region} 주말 가볼만한 축제"),
+        # 9 → 12 (2026-08-27). 앞선 확대로 원본이 85~90 까지 올랐지만 아직 캡(80)에
+        # 잘린다 — 어휘를 더 갈라 유니크 스니펫 자체를 늘린다. 날짜가 실린 문서가
+        # 걸리도록 **기간·정리성 표현**을 노린다(총정리·일정표·개막).
+        ("blog", f"{region} {nxt.month}월 축제 총정리"),
+        ("webkr", f"{region} 축제 일정표"),
+        ("news", f"{region} {today.month}월 개막 행사 열려"),
     )
 
 
@@ -269,6 +275,15 @@ def collect_region(
             if pair[0] and pair not in pairs:
                 pairs.append(pair)
     raw_pairs = len(pairs)
+    # **캡 안에 무엇을 넣을지**를 정한다. 도착 순서대로 자르면 뒤쪽 쿼리가 가져온
+    # 결과가 통째로 버려지고, 그 80칸의 절반은 날짜 없는 스니펫이 차지한다(실측
+    # 평균 39/80). 날짜가 없으면 프롬프트 규칙("날짜 불명확 행사 제외, 추측 금지")과
+    # 게이트가 원천 배제하므로 그 칸은 처음부터 값을 만들 수 없다.
+    # 버리는 게 아니라 **순서만** 바꾼다 — 날짜 있는 것을 앞에, 나머지가 남는 칸을
+    # 채운다. 토큰은 한 푼도 안 늘고 실효 입력만 오른다. 같은 그룹 안에서는 원래
+    # 순서를 유지한다(결정론 — 같은 입력이면 같은 프롬프트).
+    pairs.sort(key=lambda p: not _DATE_HINT_RE.search(f"{p[0]} {p[1]}"))
+    dated_total = sum(1 for t, d in pairs if _DATE_HINT_RE.search(f"{t} {d}"))
     pairs = pairs[:SNIPPET_CAP]
     # 왜 이 지역이 0건인지 물으면 답할 수 있어야 한다. 스니펫 **개수**만으로는
     # 부족했다 — 대전은 개수(47~49)가 남들과 같은데 입력 토큰이 최저였다(내용이
@@ -278,7 +293,7 @@ def collect_region(
     chars = sum(len(t) + len(d) for t, d in pairs)
     print(f"[events] {region} 입력: 스니펫 {len(pairs)}"
           + (f" (캡에 잘림, 원본 {raw_pairs})" if raw_pairs > len(pairs) else "")
-          + f" · 날짜언급 {dated} · 총 {chars:,}자", file=sys.stderr)
+          + f" · 날짜언급 {dated}/{dated_total}(원본) · 총 {chars:,}자", file=sys.stderr)
 
     result = worker.extract(
         region, today, today + dt.timedelta(days=HORIZON_DAYS), pairs,
