@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useApplyReplan } from '@/features/planb/model/useApplyReplan';
 import { useCancelReplan } from '@/features/planb/model/useCancelReplan';
@@ -56,25 +57,27 @@ export function PlanbDiffPage({
   // 재시도 시 반대로 일정을 쓰게 된다(경고-1 봉합).
   if (applyMutation.isError || cancelMutation.isError) {
     return (
-      <View className="flex-1 bg-canvas px-lg pt-2xl">
-        <StateNotice
-          testID="planb-diff-error"
-          icon={<AppliedAlertGlyph size={32} />}
-          title="변경을 반영하지 못했어요"
-          description={ERROR_NOTE}
-          actions={[
-            {
-              testID: 'planb-diff-retry',
-              label: '다시 시도',
-              variant: 'filled',
-              onPress: () =>
-                applyMutation.isError
-                  ? applyMutation.mutate(vars)
-                  : cancelMutation.mutate(vars, { onSuccess: goToLive }),
-            },
-          ]}
-        />
-      </View>
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+        <View className="flex-1 bg-canvas px-lg pt-lg">
+          <StateNotice
+            testID="planb-diff-error"
+            icon={<AppliedAlertGlyph size={32} />}
+            title="변경을 반영하지 못했어요"
+            description={ERROR_NOTE}
+            actions={[
+              {
+                testID: 'planb-diff-retry',
+                label: '다시 시도',
+                variant: 'filled',
+                onPress: () =>
+                  applyMutation.isError
+                    ? applyMutation.mutate(vars)
+                    : cancelMutation.mutate(vars, { onSuccess: goToLive }),
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -84,51 +87,55 @@ export function PlanbDiffPage({
   const busy = applyMutation.isPending || cancelMutation.isPending;
 
   return (
-    <View className="flex-1 gap-lg bg-canvas px-lg pt-2xl">
-      <View className="gap-sm">
-        <Text className="font-noto-bold text-hero font-bold text-ink">
-          변경 확정
-        </Text>
-        <Text className="font-noto text-label text-muted">{CONFIRM_NOTE}</Text>
-      </View>
+    <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <View className="flex-1 gap-lg bg-canvas px-lg pt-lg">
+        <View className="gap-sm">
+          <Text className="font-noto-bold text-hero font-bold text-ink">
+            변경 확정
+          </Text>
+          <Text className="font-noto text-label text-muted">
+            {CONFIRM_NOTE}
+          </Text>
+        </View>
 
-      <View className="gap-sm pt-sm">
-        <Pressable
-          testID="planb-diff-confirm"
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={() => applyMutation.mutate(vars)}
-          className={`items-center justify-center rounded-button py-[15px] ${
-            busy ? 'bg-surface-strong' : 'bg-primary'
-          }`}
-        >
-          <Text
-            className={`font-noto-bold text-[16px] font-bold ${
-              busy ? 'text-muted' : 'text-on-primary'
+        <View className="gap-sm pt-sm">
+          <Pressable
+            testID="planb-diff-confirm"
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={() => applyMutation.mutate(vars)}
+            className={`items-center justify-center rounded-button py-[15px] ${
+              busy ? 'bg-surface-strong' : 'bg-primary'
             }`}
           >
-            확정
-          </Text>
-        </Pressable>
+            <Text
+              className={`font-noto-bold text-[16px] font-bold ${
+                busy ? 'text-muted' : 'text-on-primary'
+              }`}
+            >
+              확정
+            </Text>
+          </Pressable>
 
-        <Pressable
-          testID="planb-diff-cancel"
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={() => cancelMutation.mutate(vars, { onSuccess: goToLive })}
-          className={`items-center justify-center rounded-button border border-hairline-strong py-[15px] ${
-            busy ? 'bg-surface-strong' : 'bg-canvas'
-          }`}
-        >
-          <Text
-            className={`font-noto-bold text-[16px] font-bold ${
-              busy ? 'text-muted' : 'text-ink'
+          <Pressable
+            testID="planb-diff-cancel"
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={() => cancelMutation.mutate(vars, { onSuccess: goToLive })}
+            className={`items-center justify-center rounded-button border border-hairline-strong py-[15px] ${
+              busy ? 'bg-surface-strong' : 'bg-canvas'
             }`}
           >
-            취소
-          </Text>
-        </Pressable>
+            <Text
+              className={`font-noto-bold text-[16px] font-bold ${
+                busy ? 'text-muted' : 'text-ink'
+              }`}
+            >
+              취소
+            </Text>
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
