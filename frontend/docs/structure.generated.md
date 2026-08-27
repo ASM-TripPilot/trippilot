@@ -87,7 +87,7 @@
 - `src/app-shell/index.ts`  →  SplashGate
 
 ## src/app-shell/ui/
-- `src/app-shell/ui/SplashGate.tsx`  →  SplashGate
+- `src/app-shell/ui/SplashGate.tsx`  →  SPLASH_MIN_VISIBLE_MS · SplashGate
 
 ## src/app/(auth)/
 - `src/app/(auth)/_layout.tsx`  →  (export 없음)
