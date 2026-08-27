@@ -291,7 +291,11 @@ jobs:
             exit 1
           fi
           echo "::notice::${NEXT}회차를 새 실행으로 띄운다 (새 러너 = 새 IP)."
-          gh workflow run ai-poi-collect.yml --ref "${{ github.ref_name }}" \
+          # -R 필수: 이 잡은 checkout 을 하지 않아 워킹디렉토리가 git 저장소가 아니다.
+          # 빼면 "failed to run git: fatal: not a git repository" 로 디스패치 직전에
+          # 죽는다 (2026-08-26 실측 — 판정·회차 계산은 맞았는데 마지막 줄에서 실패).
+          gh workflow run ai-poi-collect.yml -R "${{ github.repository }}" \
+            --ref "${{ github.ref_name }}" \
             -f attempt="$NEXT" \
             -f area_codes="${{ inputs.area_codes }}" \
             -f area_code="${{ inputs.area_code }}" \
