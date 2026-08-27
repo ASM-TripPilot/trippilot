@@ -134,7 +134,15 @@ if not validated:
 
 ---
 
-### 2.3 Reflection (상위 티어) `[설계권고]`
+### 2.3 Reflection (상위 티어) `[폐지 — REFLECTION_TEMPLATE으로 흡수, 2026-08-25 TRIP-558]`
+
+> **이 feature는 제거됐다.** 회고 본문 생성은 §2.8 REFLECTION_TEMPLATE이 대체한다 —
+> 계약(`reflection-template-design.md` §3.2)이 "기록 화면(j03 본문)은 이 스키마의 부분
+> 소비 = DAILY 캡션 연결"로 정의하므로 별도 문안 생성기가 필요 없다. 산출물 대조:
+> `title`→표지 제목 · `body`→캡션 연결 · `highlights`→장면 캡션 · `mood`→**소비처 0**
+> (U5 기록 FD에 mood 요구 없음). 제거 자산: `prompts/reflection.yaml` ·
+> `gates/reflection.py` · `workers/reflection.py` · `LlmFeature.REFLECTION` ·
+> `ReflectionDraft` · `Mood`. 아래 스펙은 이력 보존용이다.
 
 **목적**: 당일 회고 초안 자동 생성. 일자 경계 트리거.
 

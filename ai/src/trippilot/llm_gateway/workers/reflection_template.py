@@ -61,6 +61,9 @@ class ReflectionTemplateWorker:
             kind=request.kind,
             visit_refs=tuple(v.ref for v in request.visits),
             event_kinds=frozenset(e.kind for e in request.events),
+            # 해시태그 허용 판정 소스 (TRIP-558)
+            region=request.region,
+            poi_names=tuple(v.poi_name for v in request.visits),
         )
         return self._gateway.call(
             LlmFeature.REFLECTION_TEMPLATE,

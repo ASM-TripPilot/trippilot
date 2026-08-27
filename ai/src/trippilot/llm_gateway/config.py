@@ -31,7 +31,6 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             LlmFeature.REFLECTION_NUDGE: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             LlmFeature.ALTERNATIVE_SELECTION: ModelTier.HEAVY,
-            LlmFeature.REFLECTION: ModelTier.HEAVY,
             # 장면 시퀀스 연출 생성 — REFLECTION과 동급 과업, 백그라운드 N회 생성 전제
             # (TRIP-429, BR-U6R-13: 티어·모델 실체는 항상 설정값)
             LlmFeature.REFLECTION_TEMPLATE: ModelTier.HEAVY,

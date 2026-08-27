@@ -27,6 +27,7 @@ from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplate
 from trippilot.domain.common import TraceId
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.reflection import (
+    PhotoSlot,
     ReflectionRequest,
     ReflectionTemplate,
     Scene,
@@ -67,17 +68,49 @@ def _strip_token(text: str, detail: str) -> str:
     return text.replace("{" + m.group(1) + "}", "") if m else text
 
 
+def _valid_ref_picker(template: ReflectionTemplate, valid_refs: tuple):
+    """교체용 유효 방문 참조 공급기 — 결정론(입력 순서, 미사용 우선).
+
+    이미 유효하게 쓰인 참조를 먼저 소진 목록에 넣어 중복을 줄이고, 전부
+    소진되면 첫 방문을 재사용한다(중복은 소프트 위반이라 카드 보존이 우선).
+    """
+    allowed = frozenset(valid_refs)
+    used = {
+        s.photo_slot.visit_ref
+        for s in template.scenes
+        if s.photo_slot is not None and s.photo_slot.visit_ref in allowed
+    }
+    if (template.cover.photo_slot is not None
+            and template.cover.photo_slot.visit_ref in allowed):
+        used.add(template.cover.photo_slot.visit_ref)
+
+    def pick():
+        for ref in valid_refs:
+            if ref not in used:
+                used.add(ref)
+                return ref
+        return valid_refs[0]  # 전부 소진 — 재사용 (visits ≥ 1이 보장)
+
+    return pick
+
+
 def apply_hard_replacements(
     candidate: TemplateCandidate,
+    valid_refs: tuple,
+    valid_events: frozenset,
 ) -> ReflectionTemplate:
-    """⑤ 잔존 하드 위반만 계약 §4.1 교체 맵으로 결정론 교체 — 전체 드롭 없음.
+    """⑤ 잔존 하드 위반만 계약 §4.1 교체 맵으로 결정론 교체.
 
-    소프트 위반은 교체하지 않는다(랭킹 감점만). 순수 함수.
+    **장면을 생략하지 않는다** (팀 결정 2026-08-25, TRIP-558): 잘못된 참조는
+    유효한 값으로 갈아끼우고 캡션을 안전 문구로 바꿔 카드를 보존한다. 캡션을
+    함께 바꾸는 이유 — 원 캡션이 다른 장소를 서술하면 갈아끼운 사진과 어긋나
+    거짓이 된다. 소프트 위반은 교체하지 않는다(랭킹 감점만). 순수 함수.
     """
     template = candidate.template
     hard = [v for v in candidate.violations if v.grade is ViolationGrade.HARD]
     if not hard:
         return template
+    pick_ref = _valid_ref_picker(template, valid_refs)
 
     # ── 표지 (scene_index None, detail "cover.…") ──
     cover = template.cover
@@ -85,7 +118,8 @@ def apply_hard_replacements(
         if v.scene_index is not None or not v.detail.startswith("cover."):
             continue
         if v.code is ViolationCode.VISIT_REF_OUT:
-            cover = replace(cover, photo_slot=None)  # 방문 밖 참조 슬롯 제거
+            # 슬롯 제거 대신 유효 방문으로 교체 — 표지 사진을 잃지 않는다
+            cover = replace(cover, photo_slot=PhotoSlot(visit_ref=pick_ref()))
         elif v.detail.startswith("cover.title"):
             cover = replace(
                 cover,
@@ -109,24 +143,40 @@ def apply_hard_replacements(
 
     scenes: list[Scene] = []
     for i, scene in enumerate(template.scenes):
-        fixes = by_scene.get(i, [])
-        drop = False
-        for v in fixes:
+        for v in by_scene.get(i, []):
             if v.code is ViolationCode.EVENT_NOT_FOUND:
-                drop = True  # EVENT 장면 생략 (교체 맵)
-            elif v.code is ViolationCode.VISIT_REF_OUT:
-                if scene.layout in (SceneLayout.PHOTO_FULL, SceneLayout.PHOTO_CAPTION):
-                    drop = True  # PHOTO_* 는 슬롯 필수 — 장면 생략 (j06 no-photo 선례)
+                if valid_events:
+                    # 실재 이벤트로 교체 (결정론: enum 값 정렬 첫 번째)
+                    scene = replace(
+                        scene,
+                        source_event=sorted(valid_events, key=lambda e: e.value)[0],
+                        caption=SAFE_CAPTION_BY_LAYOUT[scene.layout],
+                    )
                 else:
-                    scene = replace(scene, photo_slot=None)
+                    # 입력에 이벤트가 0건 — EVENT 장면의 존재 근거가 없다.
+                    # 생략 대신 레이아웃 전환으로 카드를 살린다 (사진 있으면
+                    # 사진 카드, 없으면 통계 카드 — 둘 다 source_event 불요)
+                    layout = (SceneLayout.PHOTO_CAPTION
+                              if scene.photo_slot is not None else SceneLayout.STATS)
+                    scene = replace(
+                        scene, layout=layout, source_event=None,
+                        caption=SAFE_CAPTION_BY_LAYOUT[layout],
+                    )
+            elif v.code is ViolationCode.VISIT_REF_OUT:
+                # 슬롯 제거·장면 생략 대신 유효 방문으로 교체. 캡션도 함께 —
+                # 원 캡션이 다른 장소를 서술하면 갈아끼운 사진과 어긋난다
+                scene = replace(
+                    scene,
+                    photo_slot=PhotoSlot(visit_ref=pick_ref()),
+                    caption=SAFE_CAPTION_BY_LAYOUT[scene.layout],
+                )
             elif v.code is ViolationCode.TIME_EXPR:
                 scene = replace(scene, caption=SAFE_CAPTION_BY_LAYOUT[scene.layout])
             elif v.code is ViolationCode.PLACEHOLDER_OUT:
                 stripped = _strip_token(scene.caption, v.detail).strip()
                 scene = replace(
                     scene, caption=stripped or SAFE_CAPTION_BY_LAYOUT[scene.layout])
-        if not drop:
-            scenes.append(scene)
+        scenes.append(scene)  # 카드는 항상 보존 (TRIP-558)
 
     # ── 해시태그 (detail "hashtags[i]: …") — 위반 태그만 인덱스로 제거.
     # 태그 문자열 재파싱 금지 — 태그 내 콜론({poi:i.name})이 split을 깨뜨린다 (PBT 실측)
@@ -175,4 +225,8 @@ def compose(
         return build_fallback_template(request.kind, trace_id, now)
 
     best = min(candidates, key=rank_key)
-    return apply_hard_replacements(best)
+    return apply_hard_replacements(
+        best,
+        tuple(v.ref for v in request.visits),
+        frozenset(e.kind for e in request.events),
+    )

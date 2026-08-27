@@ -79,7 +79,7 @@ def build_prompt_vars_empty() -> dict[str, str]:
 def test_registry_rejects_unregistered_feature_and_non_str_vars() -> None:
     reg = _registry()
     with pytest.raises(ValueError):
-        reg.render(LlmFeature.REFLECTION, build_prompt_vars_empty())  # 미등록
+        reg.render(LlmFeature.REASON_INTERPRETATION, build_prompt_vars_empty())  # 미등록
     with pytest.raises(ValueError):
         reg.render(
             LlmFeature.PREFERENCE_SCORING,

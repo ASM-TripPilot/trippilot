@@ -26,7 +26,7 @@ U4는 U1이 만든 규격을 **소비**한다. 아래 타입은 손대지 않는
 |---|---|---|
 | `PREFERENCE_SCORING` | 경량 | **U4 (본 유닛)** |
 | `INTENT` / `PARAPHRASE` / `REASON_INTERPRETATION` | 경량 | U5 |
-| ~~`EXPLANATION` / `ALTERNATIVE_SELECTION` / `REFLECTION`~~ `EXPLANATION` / `REFLECTION` | 상위 | U5·U6 |
+| ~~`EXPLANATION` / `ALTERNATIVE_SELECTION` / `REFLECTION`~~ `EXPLANATION` | 상위 | U5 (`REFLECTION`은 2026-08-25 `REFLECTION_TEMPLATE`으로 흡수·제거 — TRIP-558) |
 | `ALTERNATIVE_SELECTION` | 상위(HEAVY) | U5 (**PlanBAgent 전속** `llm.select_alternatives` — TRIP-331) |
 | `REFLECTION_NUDGE` | 경량(LIGHT) | U6 (회고 유도 푸시 문구 — TRIP-347) |
 | `REFLECTION_TEMPLATE` | 상위(HEAVY) | U6 (회고 연출 템플릿 — TRIP-429, U6 FD v1.0 Phase 1. **ReflectAgent 전속**, BR-AF-07 절차) |

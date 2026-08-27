@@ -21,7 +21,7 @@ class LlmFeature(Enum):
     INTENT             = "intent"                # 경량 티어 — 라우터(의도 파악, 자연어 진입 전용)
     PREFERENCE_SCORING = "preference_scoring"   # 경량 티어 — 워커
     EXPLANATION        = "explanation"           # 상위 티어 — 워커
-    REFLECTION         = "reflection"            # 상위 티어 — 워커
+    # REFLECTION 은 REFLECTION_TEMPLATE 으로 흡수·제거 (2026-08-25, TRIP-558)
     PLACE_EXTRACTION   = "place_extraction"     # 상위 티어 — 워커(자유 웹 텍스트 → 구조화 POI, AI-D03)
     CONVERSATION       = "conversation"          # 경량 티어 — 워커(자유 대화 응답)
     REQUERY            = "requery"               # 경량 티어 — 워커 (후속)

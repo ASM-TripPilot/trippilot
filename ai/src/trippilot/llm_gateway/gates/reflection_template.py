@@ -66,6 +66,11 @@ _TIME_EXPR = re.compile(
     re.IGNORECASE,
 )
 
+# 해시태그 허용 판정 (TRIP-558 — 소프트). 지역명·방문지명을 부분 포함하거나
+# 브랜드 고정 태그면 통과. "여행" 같은 범용어를 넣으면 판정이 무의미해지므로
+# 브랜드는 정확 일치만 본다.
+_BRAND_TAGS: frozenset[str] = frozenset({"트립파일럿", "trippilot"})
+
 # 자리표시자 스캔 — 어휘 멤버십은 domain.reflection.PLACEHOLDER_VOCAB (closed-set)
 _PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
 _POI_PLACEHOLDER = re.compile(POI_PLACEHOLDER_PATTERN)
@@ -81,10 +86,27 @@ class ReflectionTemplateContext:
     kind: ReflectionKind
     visit_refs: tuple[VisitRef, ...]
     event_kinds: frozenset[SourceEventKind]
+    # 해시태그 허용 판정 소스 (TRIP-558) — 지역명·방문지명. 빈 값이면 그 축은 판정 생략
+    region: str = ""
+    poi_names: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.visit_refs:
             raise ValueError("visit_refs ≥ 1 (BR-U6R-15)")
+
+
+def _tag_allowed(tag: str, sources: tuple[str, ...]) -> bool:
+    """지역명·방문지명을 부분 포함하거나 브랜드 고정 태그면 허용.
+
+    부분 포함으로 두는 이유 — "#제주여행"처럼 지역명에 접사가 붙는 합성이
+    자연스럽고, 정확 일치만 보면 정당한 태그가 전부 위반이 된다.
+    """
+    body = tag.lstrip("#").strip()
+    if not body:
+        return True  # 빈 태그는 파서가 이미 거부 — 여기선 판정 대상 아님
+    if body.lower() in _BRAND_TAGS:
+        return True
+    return any(src.strip() and src.strip() in body for src in sources)
 
 
 class ReflectionTemplateGate:
@@ -335,11 +357,23 @@ class ReflectionTemplateGate:
                     )
                 )
 
-        # 해시태그 — HASHTAG_OUT(허용 집합)은 미결 #5로 미판정, 금칙·어휘 검사만 (BR-U6R-04).
+        # 해시태그 — 금칙·어휘 검사(하드) + 허용 집합 판정(소프트, TRIP-558).
         # 라벨은 인덱스형 — 태그 문자열을 라벨에 실으면 태그 내 콜론({poi:i.name}
         # 자리표시자가 설계상 포함)이 composer의 재파싱을 깨뜨린다 (PBT 실측).
+        sources = tuple(
+            t for t in (ctx.region, *ctx.poi_names) if t and t.strip()
+        )
         for i, tag in enumerate(template.hashtags):
             check_text(tag, None, f"hashtags[{i}]")
+            if sources and not _tag_allowed(tag, sources):
+                violations.append(
+                    TemplateViolation(
+                        grade=ViolationGrade.SOFT,
+                        code=ViolationCode.HASHTAG_OUT,
+                        scene_index=None,
+                        detail=f"hashtags[{i}]: 지역·방문지·브랜드 파생 아님 ({tag})",
+                    )
+                )
 
         # 전역 (소프트)
         if not _SCENE_MIN <= len(template.scenes) <= _SCENE_MAX:

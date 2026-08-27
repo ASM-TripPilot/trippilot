@@ -72,8 +72,8 @@ class ViolationCode(Enum):
     PLACEHOLDER_OUT = "PLACEHOLDER_OUT"  # 어휘 밖·poi 인덱스 범위 밖 자리표시자
     VISIT_REF_OUT = "VISIT_REF_OUT"  # 방문 기록 밖 참조 (INV-1 사영)
     EVENT_NOT_FOUND = "EVENT_NOT_FOUND"  # source_event 미실재
-    HASHTAG_OUT = "HASHTAG_OUT"  # 허용 집합 밖 — 집합 실체는 FD 미결 #5 (게이트 미판정)
     # SOFT
+    HASHTAG_OUT = "HASHTAG_OUT"  # 허용 집합 밖 (지역·방문지·브랜드 파생 아님, TRIP-558)
     CAPTION_LEN = "CAPTION_LEN"
     SCENE_COUNT = "SCENE_COUNT"
     DUP_VISIT_REF = "DUP_VISIT_REF"
@@ -85,7 +85,9 @@ _GRADE_BY_CODE: dict[ViolationCode, ViolationGrade] = {
     ViolationCode.PLACEHOLDER_OUT: ViolationGrade.HARD,
     ViolationCode.VISIT_REF_OUT: ViolationGrade.HARD,
     ViolationCode.EVENT_NOT_FOUND: ViolationGrade.HARD,
-    ViolationCode.HASHTAG_OUT: ViolationGrade.HARD,
+    # 소프트 — 하드로 두면 '#제주여행' 같은 정당한 합성어까지 지운다 (TRIP-558).
+    # 랭킹 감점만: 더 나은 후보가 있으면 그쪽이 뽑히고, 없으면 그대로 나간다.
+    ViolationCode.HASHTAG_OUT: ViolationGrade.SOFT,
     ViolationCode.CAPTION_LEN: ViolationGrade.SOFT,
     ViolationCode.SCENE_COUNT: ViolationGrade.SOFT,
     ViolationCode.DUP_VISIT_REF: ViolationGrade.SOFT,
