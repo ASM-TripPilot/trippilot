@@ -307,6 +307,37 @@ describe('🔴 SlotCandidatePanelContainer (h12) 배선', () => {
     expect(mockClose).toHaveBeenCalledTimes(0);
   });
 
+  it('K12 · TRIP-601 가드 b — generationState=PARTIAL 이면 후보 선택 PUT 0(생성 중 전체교체 차단)', async () => {
+    // 준비 — GET 이 PARTIAL(day1 도착)로 정착한다. day1 data 는 있으므로 콜드캐시(K9)와 달리 throw 가
+    // 안 나고, 가드가 없으면 "선택"이 그대로 day1-only 전체교체 PUT 을 쏜다(★b-2 · copick 형제와 동형).
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+        getCalls += 1;
+        return HttpResponse.json({
+          ...itinerary(),
+          generationState: 'PARTIAL',
+        });
+      })
+    );
+    renderContainer();
+    await screen.findByTestId('itinerary-candidate-select-X');
+    await waitFor(() => expect(getCalls).toBe(1));
+
+    // 실행 — 후보 "선택" 탭. 조회(POST)는 정상, 막는 건 확정(PUT)뿐이다.
+    fireEvent.press(screen.getByTestId('itinerary-candidate-select-X'));
+
+    // ★b-1 통과형 목 함정 회피 — PUT 이 나갔다면 이 대기 동안 putCalls 가 오른다. 나갈 시간을 실제로
+    // 줘야 "안 나갔다"가 거짓 green 이 아니다(K9 콜드캐시는 mutate 미호출이라 이 대기가 불필요했다).
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
+
+    // ★ PARTIAL 이면 전체교체 PUT 이 나가면 안 된다(서버 409 의 클라 사본, 심층 방어).
+    expect(putCalls).toBe(0);
+    // 막혔으니 성공 콜백의 onClose 도 없다.
+    expect(mockClose).toHaveBeenCalledTimes(0);
+  });
+
   it('K10 · AC2 — 헤더에 현 슬롯 시간대가 관통된다(09:30 → 오전)', async () => {
     renderContainer();
 

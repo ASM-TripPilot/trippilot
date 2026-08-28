@@ -27,6 +27,13 @@ export default function TripWizardLayout() {
   const resetMustVisits = useTripWizardStore((state) => state.resetMustVisits);
 
   useEffect(() => {
+    // 진짜 신규 진입(셸 마운트)이면 직전 여행이 남긴 `createdTripId`를 비운다(TRIP-601 가드 c) —
+    // 새 여행이 옛 tripId를 물어 그 일정을 이어받는 오염("기존 일정을 새로 만들겠다는 표시")을
+    // 막는다. `preserveMustVisitsOnce` 조기 반환 **앞**에 둬야 d02 시드 경로(=역시 새 여행)에서도
+    // 비워진다. 마운트 전용 효과라 step1↔step2 왕복(리렌더)에선 진행 중 만든 id가 보존된다.
+    // 정본이 `createdTripId` 수명을 정하지 않아(BR-U1-33은 사용자 입력 축만) 자율 세션 가정이다.
+    useTripWizardStore.setState({ createdTripId: undefined });
+
     // d02 "이 장소들로 여행 만들기"는 이 진입을 항상 동반하는데(push('/trips/new/step1')),
     // 그 CTA가 방금 `seedMustVisitsFromD02`로 심은 시드를 여기서 지우면 사용자가
     // 고른 장소가 안 담긴다 — `preserveMustVisitsOnce`가 켜져 있으면 이번 한 번만 건너뛰고

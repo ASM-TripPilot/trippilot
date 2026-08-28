@@ -28,11 +28,20 @@ export function ManualPlanPage({ tripId }: { tripId: string }): ReactElement {
   const itinerary = useGetTripsTripIdItinerary(tripId);
   const firedRef = useRef(false);
 
+  // 직접 고르기 진입이 기존 초안을 빈 MANUAL 로 덮어쓰지 않게 한다(TRIP-601 가드 a · BR-U3-06
+  // "방식 전환이 이미 만든 슬롯을 지우지 않는다"). 판정 축은 `days.length>0` — slots 만 빈 정상
+  // MANUAL 재진입도 보존해 재-POST 를 막는다.
+  const hasExisting = (itinerary.data?.days.length ?? 0) > 0;
+
   useEffect(() => {
     if (firedRef.current) return;
+    // GET 로딩 중엔 보류 — 도착할 기존 초안을 못 보고 쏘면 그대로 덮어쓴다(fail-safe, 서버가 재생성
+    // POST 를 안 막으므로 이 보류가 유일한 방어선 · ItineraryMethodPage 선례).
+    if (itinerary.isPending) return;
+    if (hasExisting) return;
     firedRef.current = true;
     generate.mutate({ tripId, data: { generationMode: 'MANUAL' } });
-  }, [generate, tripId]);
+  }, [generate, tripId, itinerary.isPending, hasExisting]);
 
   return (
     <ManualPlanScreen

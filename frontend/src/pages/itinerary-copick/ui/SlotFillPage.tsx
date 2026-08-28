@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
 import { nextCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
+import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { formatRadiusUsed } from '@/features/itinerary/model/radiusUsedLabel';
 import { parseSlotKey } from '@/features/itinerary/model/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
@@ -153,11 +154,14 @@ export function SlotFillPage({
 
   function handleConfirm(): void {
     // itinerary GET 미도착(data undefined)이면 조기 반환 — 빈 days 전체교체 PUT(일정 소실) 방지(E1).
+    // generationState==='PARTIAL'(2단계 생성 중, day1 만 도착)이면 확정도 잠근다 — day1-only 전체교체
+    // PUT 이 뒷날을 덮어쓰기 전에 막는다(TRIP-601 가드 b · 서버 409 의 클라 사본, 심층 방어).
     if (
       firedRef.current ||
       selectedPoiId === null ||
       parsed.kind !== 'ok' ||
-      itinerary.data === undefined
+      itinerary.data === undefined ||
+      isConfirmLocked(itinerary.data.generationState)
     ) {
       return;
     }

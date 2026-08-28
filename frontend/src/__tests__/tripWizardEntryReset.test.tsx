@@ -296,3 +296,86 @@ describe('FW · 위저드 셸 진입이 시드를 초기화한다 (AC-1 · 01b D
     expect(seedIds()).toEqual(['poi-old-2']);
   });
 });
+
+/**
+ * TRIP-601 가드 c — 새 여행이 옛 `createdTripId` 를 재사용하는 것을 막는다.
+ *
+ * 무엇을 보장하나: 위저드 셸이 **진짜 신규로 마운트**되면 직전 여행이 남긴 `createdTripId` 가
+ * `undefined` 로 비워진다(정본 공백을 자율 세션 가정으로 메움 — 01b §4 결정 2, 개발로그 명시 몫).
+ * 그래야 새 여행이 옛 tripId 를 물고 그 일정을 이어받는 오염("기존 일정을 새로 만들겠다는 표시")이
+ * 사라진다.
+ *
+ * ★ 심판 0건 위에 처음 세우는 red 다(`createdTripId`·`setCreatedTripId` 는 TRIP-206 신규, structure.md:80).
+ * ★ 클리어는 `resetMustVisits` **안이 아니라 셸에서 별도로** — d02 시드 경로(`preserveMustVisitsOnce`)는
+ *   `resetMustVisits` 를 건너뛰므로, 그 안에 넣으면 d02(=새 여행)에서 안 비워진다(GC-3 가 이 위치를 잡는다).
+ * ★ 마운트에만 — step1↔step2 왕복(리렌더, 재마운트 없음)은 진행 중 만든 id 를 보존해야 한다(GC-4 freeze).
+ *
+ * ⚠️ jest 가 못 보는 것(01b D4 · 6-b 실기 몫): (1) step1↔step2 가 실제로 셸을 재마운트 안 하는가,
+ * (2) 소비자 `TripNewStep1Page.tsx:516` 재사용 경로가 pendingMustVisits>0 상태에서 실제로 안 타는가.
+ * 여기서 잠그는 건 **store 필드 전이**(마운트=비움 / 리렌더=보존)까지다.
+ */
+describe('GC · 위저드 셸 진입이 옛 createdTripId 를 비운다 (TRIP-601 가드 c · 01b 결정 2)', () => {
+  it('🔴 GC-1 신규 진입(셸 마운트)이면 직전 여행의 createdTripId 가 undefined 로 비워진다', () => {
+    // 준비 — 직전 여행이 남긴 id. 앱을 끄지 않았으므로 이 값이 그대로 살아 있다.
+    store().setCreatedTripId('trip-A');
+    expect(store().createdTripId).toBe('trip-A');
+
+    // 실행 — 바깥에서 위저드에 새로 들어온다(셸 마운트).
+    render(<TripWizardLayout />);
+
+    // 단언 ① — 옛 id 가 비워진다(새 여행은 옛 tripId 를 물지 않는다).
+    expect(store().createdTripId).toBeUndefined();
+    // 단언 ② (짝) — 셸은 여전히 제 일(자식 스택 그리기)을 한다.
+    expect(screen.getByTestId('gate-stack')).toBeOnTheScreen();
+  });
+
+  it('🔴 GC-2 소비자 페이지가 함께 떠도 신규 진입은 옛 createdTripId 를 비운다(재사용 기제 차단)', () => {
+    // 준비 — 옛 id 가 남은 채, 소비자(step1)가 그 필드를 읽는 상황을 합성으로 만든다.
+    store().setCreatedTripId('trip-A');
+
+    // 실행 — 소비자 페이지와 셸을 함께 마운트(FW-2 와 같은 합성). 소비자 `TripNewStep1Page.tsx:516`
+    // 의 재사용 조기경로는 `createdTripId !== undefined` 를 선행조건으로 읽는다.
+    render(
+      <>
+        <TripNewStep1Page baseDate={BASE} />
+        <TripWizardLayout />
+      </>
+    );
+
+    // 단언 — 셸이 그 필드를 비우므로 재사용 선행조건이 깨진다(옛 A 로 등록하는 경로 불성립).
+    // ⚠️ pendingMustVisits>0 에서 [다음] 눌러 실제 재사용이 발화하는 end-to-end 는 6-b 실기 몫이다
+    // (그 상태는 직전 등록 실패로만 만들어지는 페이지 지역 state — jest 재현이 무겁고 거짓 green 위험).
+    expect(store().createdTripId).toBeUndefined();
+  });
+
+  it('🔴 GC-3 d02 시드 경로에서도 createdTripId 는 비워진다 — 단 d02 시드 자체는 보존된다(★c-2 우회)', () => {
+    // 준비 — d02 "이 장소들로 여행 만들기" 가 시드를 심고 preserveMustVisitsOnce 를 켠 상태 + 옛 id.
+    store().seedMustVisitsFromD02([seed('poi-1')]);
+    store().setCreatedTripId('trip-A');
+    expect(store().createdTripId).toBe('trip-A');
+
+    // 실행 — 셸 마운트. 이 경로는 resetMustVisits 를 **건너뛴다**(preserveMustVisitsOnce).
+    render(<TripWizardLayout />);
+
+    // 단언 ① — 그래도 createdTripId 는 비워진다. 클리어를 resetMustVisits 안이나 조기 반환 뒤에 두면
+    // 이 경로가 건너뛰어 'trip-A' 로 남는다 → 여기서 red 로 잡힌다.
+    expect(store().createdTripId).toBeUndefined();
+    // 단언 ② (짝) — d02 가 방금 심은 시드는 살아남는다(preserve 경로 유효 · 과잉 삭제 방지).
+    expect(seedIds()).toEqual(['poi-1']);
+  });
+
+  it('🟢 GC-4 리렌더는 진입이 아니다 — 진행 중 만든 createdTripId 는 살아남는다(재개 보존 · freeze)', () => {
+    // 준비 — 이미 진입해 셸이 마운트된 뒤(이 시점 createdTripId 는 undefined), step1 제출이 여행을
+    // 만들어 id 를 세팅한 상황.
+    render(<TripWizardLayout />);
+    store().setCreatedTripId('trip-new');
+    expect(store().createdTripId).toBe('trip-new');
+
+    // 실행 — 셸이 다시 그려진다(step1↔step2 왕복 = 리렌더, 마운트 아님).
+    screen.rerender(<TripWizardLayout />);
+
+    // 단언 — 클리어를 렌더 본문이나 의존성 있는 효과에 걸면 여기서 진행 중 id 가 날아간다(재개 파손).
+    // 마운트에만 걸려 있어야 이 값이 산다(FW-3 와 동형의 경계).
+    expect(store().createdTripId).toBe('trip-new');
+  });
+});
