@@ -22,7 +22,14 @@ from trippilot.domain.common import TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi, TypedResult
 from trippilot.domain.observability import FallbackEvent, LlmCallRecord
 from trippilot.domain.prompt import PromptRef
-from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse, LlmTimeoutError
+from trippilot.ports.llm_port import (
+    LlmImagePart,
+    LlmPort,
+    LlmRequest,
+    LlmResponse,
+    LlmTimeoutError,
+    LlmUnsupportedError,
+)
 from trippilot.ports.trace_port import TracePort
 
 _COMPONENT = "c1.gateway"
@@ -93,7 +100,12 @@ class GatewayFacade:
         now: datetime,
         *,
         timeout_sec: float | None = None,
+        images: tuple[LlmImagePart, ...] = (),
     ) -> TypedResult[tuple[ScoredPoi, ...]]:
+        """images는 멀티모달 feature 전용 후미 기본값 (TRIP-595, FD §6.1 A안) —
+        기존 텍스트 호출은 전부 무영향이고, 강등은 "같은 파이프라인, images만 비움"으로
+        표현된다. 이미지도 게이트웨이를 지나야 계측(LlmCallRecord)이 빠지지 않는다.
+        """
         # 1 feature ∈ LlmFeature — 밖이면 호출 자체가 버그 (BR-U4-05, 폴백 아님)
         if not isinstance(feature, LlmFeature):
             raise ValueError(f"LlmFeature 밖의 기능 호출: {feature!r}")
@@ -116,11 +128,19 @@ class GatewayFacade:
                     timeout_sec=(
                         self._cfg.timeout_sec if timeout_sec is None else timeout_sec
                     ),
+                    images=images,
                 )
             )
         except LlmTimeoutError as e:
             return self._fallback(
                 feature, model_id, prompt_ref, trace_id, now, None, f"timeout: {e}"
+            )
+        except LlmUnsupportedError as e:
+            # 타임아웃과 같은 자리 — 다만 사유를 가른다. 비지원은 재시도해도 같은 결과라
+            # 호출측 처방이 "이번엔 실패"가 아니라 "이 경로를 포기하고 강등"이다
+            # (BR-U6R-10 — 조용한 이미지 무시 금지, 강등은 명시 신호로).
+            return self._fallback(
+                feature, model_id, prompt_ref, trace_id, now, None, f"unsupported: {e}"
             )
         except Exception as e:  # 벤더 예외 포함 전부 폴백 신호로 (BR-U4-02)
             return self._fallback(
