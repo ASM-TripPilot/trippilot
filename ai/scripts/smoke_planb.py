@@ -38,6 +38,8 @@ pgvector 라 어댑터 왕복은 진짜로 밟는다.
     SMOKE_REGION             기본 "제주시" — 후보 풀을 뽑을 시군구
     EMBEDDING_MODEL          로컬 임베딩 모델명. 값 없으면 해시. "1" 이면 기본 KURE-v1.
                              켜려면 `uv pip install sentence-transformers` (의존성에 없음)
+    TRIPPILOT_LLM_FEATURE_MODELS  기능별 모델 오버라이드 — 운영과 같은 값을 읽는다.
+                             예: ALTERNATIVE_SELECTION=gpt-5.6-sol (PlanB 만 상위 모델)
     LLM env                  smoke_llm.py 와 동일. 미설정이면 시나리오 ②만 생략(성공 유지).
 
 종료 코드: 0 = 5종(또는 ② 생략 시 4종) 통과 / 1 = 계약 위반·실행 실패 / 2 = 사전조건 미충족
@@ -77,6 +79,10 @@ from trippilot.domain.trigger import TriggerKind, TriggerParams  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.gates.alternative_selection import (  # noqa: E402
     AlternativeSelectionGate,
+)
+from trippilot.llm_gateway.feature_model_env import (  # noqa: E402
+    ENV_VAR as FEATURE_MODELS_ENV,
+    feature_models_from_env,
 )
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
@@ -256,6 +262,9 @@ def pipeline(store, embedding, llm, model_id: str | None) -> PlanBRagPipeline:
         llm, PromptRegistry(PROMPTS), AlternativeSelectionGate(),
         C1Config(
             model_ids={ModelTier.LIGHT: mid, ModelTier.HEAVY: mid},
+            # 운영과 같은 기능별 오버라이드를 읽는다 — 리허설이 자기만의 모델을 태우면
+            # "운영은 sol, 리허설은 terra" 가 조용히 생긴다 (TRIPPILOT_LLM_FEATURE_MODELS).
+            feature_models=feature_models_from_env(),
             # 리허설은 운영 2.5s 예산이 아니라 스모크 관례(관대한 타임아웃)를 따른다
             timeout_sec=float(os.environ.get("SMOKE_TIMEOUT_SEC", "30")),
             max_tokens=int(os.environ.get("SMOKE_MAX_TOKENS", "2048")),
@@ -374,7 +383,11 @@ def main() -> int:
         if os.environ.get("LLM_PROVIDER"):
             llm_ran = True
             adapter, model_id = _build_adapter()
-            r2 = run(f"② 실 LLM 선택 (model={model_id})", store, embedding, pool, adapter, model_id)
+            from trippilot.domain.llm import LlmFeature
+
+            effective = feature_models_from_env().get(
+                LlmFeature.ALTERNATIVE_SELECTION, model_id)
+            r2 = run(f"② 실 LLM 선택 (model={effective})", store, embedding, pool, adapter, model_id)
             assert r2["fallback_level"] == 0, f"실모델인데 폴백: {r2['notes']}"
             assert all(a["rationale"].strip() for a in r2["alternatives"]), r2
         else:
