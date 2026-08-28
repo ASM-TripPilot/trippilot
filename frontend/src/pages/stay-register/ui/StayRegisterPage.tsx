@@ -163,7 +163,10 @@ export function StayRegisterPage({
 
   function handleSelectCandidate(candidate: GeocodeCandidate): void {
     setSelectedCandidate(candidate);
-    setCoordConfirmed(false);
+    // 검색 후보(GeocodeCandidate)는 lat/lng가 required라 신뢰 가능한 좌표를 이미 가진다 —
+    // 담는 순간이 곧 확정이다(TRIP-600 A안 "좌표 존재=확정"). 좌표를 다시 찍으라고 시트를
+    // 강요하지 않는다(핀 경로는 좌표를 처음 얻으므로 handlePinMessage에서 false로 남긴다).
+    setCoordConfirmed(true);
     setCoordSource('MAP_SEARCH');
     setPinAddressStatus('idle');
   }

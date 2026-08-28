@@ -867,6 +867,32 @@ const STAY_REGISTER_PREVIEW_FLOW: StayRegisterScreenProps['flow'] = {
   submitStatus: 'idle',
 };
 
+/** e05 지도검색 후보를 고른 뒤의 확정 얼굴(TRIP-600) — 좌표를 가진 후보를 선택하면
+ * `coordConfirmed:true`가 되어 "지도에서 위치를 확인해 주세요" 안내가 사라지고 등록이 열린다.
+ * jest는 안내 소멸을 testID로, POST 본문의 `coordConfirmed`를 값으로 잠그지만, 지도 미리보기와
+ * 선택적 "지도에서 위치 확인" 버튼 존치는 실기로만 본다(6-b) — 이 얼굴이 그 자리다. */
+const STAY_REGISTER_CONFIRMED_FLOW: StayRegisterScreenProps['flow'] = {
+  ...STAY_REGISTER_PREVIEW_FLOW,
+  activeTab: 'mapsearch',
+  searchStatus: 'success',
+  candidates: [
+    {
+      name: '해운대 그랜드 호텔',
+      address: '부산 해운대구 우동 1407',
+      lat: 35.1587,
+      lng: 129.1604,
+    },
+  ],
+  selectedCandidate: {
+    name: '해운대 그랜드 호텔',
+    address: '부산 해운대구 우동 1407',
+    lat: 35.1587,
+    lng: 129.1604,
+  },
+  coordSource: 'MAP_SEARCH',
+  coordConfirmed: true,
+};
+
 // h12·h18 슬롯 교체 후보(TRIP-335) — 서버 응답 3필드만(poiId·distanceRange·rationale). 이름·사진은
 // 아직 안 실려(BE 후속) 카드가 플레이스홀더로 뜨는 미확보 표기를 눈으로 대조하는 자리다.
 const SLOT_CANDIDATES_PREVIEW: SlotCandidatesCandidatesItem[] = [
@@ -1374,6 +1400,35 @@ const PREVIEW_STATES: PreviewState[] = [
         today="2026-06-15"
         minDate="2026-06-16"
         maxDate="2026-06-22"
+        onBack={noop}
+        onSelectTab={noop}
+        onChangeQuery={noop}
+        onChangeName={noop}
+        onSubmitQuery={noop}
+        onRetrySearch={noop}
+        onSelectCandidate={noop}
+        onPinMessage={noop}
+        onOpenMapSheet={noop}
+        onConfirmCoord={noop}
+        onCloseMapSheet={noop}
+        onOpenDateSheet={noop}
+        onPickDate={noop}
+        onCloseDateSheet={noop}
+        onSubmit={noop}
+      />
+    ),
+  },
+  // e05 숙소 등록(TRIP-600) — 좌표 있는 후보를 고른 뒤의 확정 얼굴. "지도에서 위치를 확인해
+  // 주세요" 안내가 사라지고 등록이 열리는 것(선택만으로)을 눈으로 대조한다. jest는 안내 소멸을
+  // testID로 잡지만, 지도 미리보기·선택적 "지도에서 위치 확인" 버튼 존치는 실기로만 본다.
+  {
+    key: 'stay-register-confirmed',
+    label: '숙소 등록 · 후보 확정',
+    login: null,
+    render: () => (
+      <StayRegisterScreen
+        flow={STAY_REGISTER_CONFIRMED_FLOW}
+        today="2026-06-15"
         onBack={noop}
         onSelectTab={noop}
         onChangeQuery={noop}
