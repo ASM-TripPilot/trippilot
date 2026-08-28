@@ -142,3 +142,95 @@ def test_photo_ref_and_consent_roundtrip_and_tz_guard() -> None:
     assert PhotoConsent.from_dict(consent.to_dict()) == consent
     with pytest.raises(ValueError, match="tz-aware"):
         PhotoRef(photo_id=PhotoId("ph-1"), taken_at=datetime(2026, 8, 28))
+
+
+# ── 동의 강제·트레이스 연결 (BR-U6R-09 — 게이트웨이 수준) ──────
+
+
+def _facade(llm, gate=None):
+    """최소 게이트웨이 — 동의 강제는 게이트 종류와 무관하다."""
+    from trippilot.llm_gateway.config import C1Config
+    from trippilot.llm_gateway.gateway import GatewayFacade
+    from trippilot.llm_gateway.prompts import PromptRegistry
+    from trippilot.domain.llm import ModelTier
+    from pathlib import Path
+
+    from tests.fakes.in_memory_trace import InMemoryTrace
+
+    from trippilot.llm_gateway.gates.photo_highlight import PhotoHighlightGate
+
+    trace = InMemoryTrace()
+    facade = GatewayFacade(
+        llm,
+        PromptRegistry(Path(__file__).resolve().parent.parent / "prompts"),
+        gate or PhotoHighlightGate(),
+        C1Config(model_ids={ModelTier.LIGHT: "m-l", ModelTier.HEAVY: "m-h"}),
+        trace,
+    )
+    return facade, trace
+
+
+def _vision_call_args():
+    """게이트웨이 호출용 (vars, context) — 프롬프트 변수 누락으로 죽지 않게 실제 빌더 사용."""
+    from trippilot.llm_gateway.gates.photo_highlight import PhotoHighlightContext
+    from trippilot.llm_gateway.workers.photo_highlight import (
+        build_photo_highlight_vars,
+    )
+
+    vision = VisionInput(
+        photos=(PhotoRef(photo_id=PhotoId("ph-1")),), consent=_consent())
+    return (
+        build_photo_highlight_vars(vision, limit=1),
+        PhotoHighlightContext(photo_ids=frozenset({PhotoId("ph-1")}), limit=1),
+    )
+
+
+def test_gateway_refuses_images_without_consent_ref() -> None:
+    """이미지가 벤더로 나가는 **유일한 통로**에서 동의 증빙을 요구한다 —
+    워커의 타입 강제를 우회해도 여기서 막힌다. 폴백이 아니라 호출 버그(ValueError)."""
+    from trippilot.domain.llm import LlmFeature
+    from trippilot.domain.common import TraceId
+
+    facade, _ = _facade(VisionSpyLlm(canned="{}"))
+    part = LlmImagePart(media_type="image/png", data=_PNG)
+    variables, context = _vision_call_args()
+
+    for bad in (None, "", "   "):
+        with pytest.raises(ValueError, match="consent_ref"):
+            facade.call(
+                LlmFeature.PHOTO_HIGHLIGHT, variables, context, TraceId("t"), _NOW,
+                images=(part,), consent_ref=bad,
+            )
+
+
+def test_consent_ref_reaches_the_call_record() -> None:
+    """법무 감사가 "이 전송은 어느 동의 근거였나"를 물으면 트레이스가 답해야 한다 —
+    성공·실패(폴백) 어느 경로든 기록에 남는다 (BR-U6R-09 후반부)."""
+    from trippilot.domain.llm import LlmFeature
+    from trippilot.domain.common import TraceId
+    from trippilot.domain.observability import LlmCallRecord
+
+    part = LlmImagePart(media_type="image/png", data=_PNG)
+
+    # 실패 경로 — 이미지 미지원 어댑터
+    facade, trace = _facade(TextOnlyLlm())
+    variables, context = _vision_call_args()
+    result = facade.call(
+        LlmFeature.PHOTO_HIGHLIGHT, variables, context, TraceId("t"), _NOW,
+        images=(part,), consent_ref="consent-9",
+    )
+    assert result.is_fallback is True
+    records = trace.of_type(LlmCallRecord)
+    assert records and all(r.consent_ref == "consent-9" for r in records)
+
+
+def test_text_calls_leave_consent_ref_empty() -> None:
+    """이미지 없는 기존 호출은 None — 기록에 없던 값이 지어내지지 않는다."""
+    from trippilot.domain.llm import LlmFeature
+    from trippilot.domain.common import TraceId
+    from trippilot.domain.observability import LlmCallRecord
+
+    facade, trace = _facade(TextOnlyLlm())
+    variables, context = _vision_call_args()
+    facade.call(LlmFeature.PHOTO_HIGHLIGHT, variables, context, TraceId("t"), _NOW)
+    assert all(r.consent_ref is None for r in trace.of_type(LlmCallRecord))

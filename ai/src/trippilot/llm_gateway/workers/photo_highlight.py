@@ -6,7 +6,8 @@ FD business-logic-model §6 ⓐ. 워커는 vars 조립 → gateway.call 1회까�
 
 **동의는 타입이 강제한다**: 입력을 `VisionInput`으로 받으므로, 미동의·증빙 없음
 상태로는 이 워커를 호출할 인자 자체를 만들 수 없다 (BR-U6R-09, VIS-P1의 전제).
-동의 검사 코드가 여기 없는 것이 누락이 아니라 설계다.
+동의 검사 코드가 여기 없는 것이 누락이 아니라 설계다. 게이트웨이도 images와
+consent_ref를 짝으로 요구하므로(TRIP-595), 타입을 우회해도 벤더로는 못 나간다.
 
 **바이트는 포트 경계에서만**: `PhotoRef`에는 바이트가 없고, 실제 이미지는 호출자가
 `images: Mapping[PhotoId, LlmImagePart]`로 따로 넘긴다. 덕분에 도메인·프롬프트 계층은
@@ -112,4 +113,7 @@ class PhotoHighlightWorker:
             now,
             timeout_sec=timeout_sec,
             images=parts,
+            # 동의 근거를 트레이스까지 잇는다 (BR-U6R-09 후반부) — 게이트웨이가
+            # 이미지와 짝으로 요구하므로 이 인자 없이는 사진이 나가지 못한다
+            consent_ref=vision.consent.consent_ref,
         )

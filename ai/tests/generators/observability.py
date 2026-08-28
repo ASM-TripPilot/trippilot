@@ -51,6 +51,8 @@ def llm_call_records() -> st.SearchStrategy[LlmCallRecord]:
         latency_ms=st.integers(0, 30000),
         success=st.booleans(),
         agent=st.one_of(st.none(), st.sampled_from(list(AgentKind))),
+        # 동의 증빙 참조 (TRIP-595) — 이미지 없는 호출은 None
+        consent_ref=st.one_of(st.none(), st.text(min_size=1, max_size=20)),
     )
 
 
