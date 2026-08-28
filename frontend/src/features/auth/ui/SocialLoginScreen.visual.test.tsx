@@ -310,16 +310,17 @@ describe('AC-L2 · error 상태에서 로고가 배너보다 먼저 온다 (DOM 
 });
 
 describe('AC-L4 · 회귀 토큰 유지 (렌더)', () => {
-  // TRIP-598: 앱아이콘 확대로 로고 박스 동결값이 h-14 w-14(56px) → h-[64px] w-[64px] 로
-  // 갱신됐다. AC-L4 는 로고 박스를 '트리에서 유일한 크기 토큰 노드'로 잡으므로, 확대 시
-  // 이 동결 토큰도 함께 갱신하지 않으면 앵커(nodesWithToken)가 0개가 되어 logoOne 이 red 다.
-  it('루트 px-2xl · 로고 h-[64px] w-[64px] · 소셜버튼 h-[52px] · 버튼 래퍼 gap-md 가 유지된다', () => {
+  // TRIP-598: 앱아이콘 확대로 로고 박스 동결값이 h-14 w-14(56px) → h-[72px] w-[72px] 로
+  // 갱신됐다(후속 회차 64→72 재확대). AC-L4 는 로고 박스를 '트리에서 유일한 크기 토큰
+  // 노드'로 잡으므로, 확대 시 이 동결 토큰도 함께 갱신하지 않으면 앵커(nodesWithToken)가
+  // 0개가 되어 logoOne 이 red 다.
+  it('루트 px-2xl · 로고 h-[72px] w-[72px] · 소셜버튼 h-[52px] · 버튼 래퍼 gap-md 가 유지된다', () => {
     // ▸준비+실행
     renderDefault();
     const rootTokens = classTokens(screen.getByTestId('auth-login-root'));
     const buttonTokens = classTokens(screen.getByTestId('auth-login-google'));
     // 로고·래퍼는 testID 가 없어 토큰으로 잡는다(트리 유일, 02a §5-4 실측).
-    const logos = nodesWithToken('h-[64px]');
+    const logos = nodesWithToken('h-[72px]');
     const wrappers = nodesWithToken('gap-md');
 
     // ▸단언 — 한 객체로 묶어 어느 회귀가 깨졌는지 한 번에 본다.
@@ -328,7 +329,7 @@ describe('AC-L4 · 회귀 토큰 유지 (렌더)', () => {
       buttonHeight: buttonTokens.includes('h-[52px]'),
       logoOne: logos.length === 1,
       logoSquare:
-        logos.length === 1 && classTokens(logos[0]).includes('w-[64px]'),
+        logos.length === 1 && classTokens(logos[0]).includes('w-[72px]'),
       wrapperOne: wrappers.length === 1,
     }).toEqual({
       rootPad: true,
@@ -367,7 +368,7 @@ describe('AC-L5 · 앱아이콘 라운드 클립 + 확대 (렌더 · 형태 가�
   it('박스 반경을 style borderRadius 로 주고 rounded-button className 은 안 쓴다 (각짐 회귀 차단)', () => {
     // ▸준비+실행 — 박스는 testID 가 없어 확대 토큰으로 잡는다(트리 유일).
     renderDefault();
-    const boxes = nodesWithToken('h-[64px]');
+    const boxes = nodesWithToken('h-[72px]');
 
     // ▸단언 — 앵커 1개 + style 에 borderRadius 존재 + className 에 rounded-button 부재.
     expect({
@@ -379,19 +380,33 @@ describe('AC-L5 · 앱아이콘 라운드 클립 + 확대 (렌더 · 형태 가�
     }).toEqual({ boxOne: true, hasStyleRadius: true, noClassNameRadius: true });
   });
 
-  it('박스가 56px 를 넘겨 확대되고 글리프가 비율 0.6(size 38)을 유지한다', () => {
+  it('박스 반경 값이 라운드 스퀘어 비율(0.2227×72≈16.03)을 지킨다 — 값 회귀 차단', () => {
+    // ▸준비+실행 — AC-L5-1 의 hasStyleRadius 는 borderRadius 가 '숫자로 존재하나'만 본다.
+    // 값이 틀려도(4=거의 각짐 · 30=거의 원) 그 가드는 green 이므로, AC-4(반경/박스=0.223)를
+    // 실제로 잠그려면 값을 못박아야 한다. 16.03 은 박스 72·글리프 43 과 한 비율 세트라,
+    // 6-b 에서 박스 크기를 바꾸면 이 값도 h-[72px]·size 43 과 함께 갱신한다.
+    renderDefault();
+    const boxes = nodesWithToken('h-[72px]');
+
+    // ▸단언 — 앵커 1개일 때만 값을 읽어, 앵커 소실 시 throw 대신 clean red 로 떨어진다.
+    expect(boxes.length === 1 ? styleBorderRadius(boxes[0]) : undefined).toBe(
+      16.03
+    );
+  });
+
+  it('박스가 56px 를 넘겨 확대되고 글리프가 비율 0.6(size 43)을 유지한다', () => {
     // ▸준비+실행 — 글리프 size 는 Svg 의 width prop 으로 렌더 트리에 남는다.
     renderDefault();
     const glyph = screen.getByTestId('auth-login-logo-glyph');
-    const boxTokens = classTokens(nodesWithToken('h-[64px]')[0]);
+    const boxTokens = classTokens(nodesWithToken('h-[72px]')[0]);
 
-    // ▸단언 — 박스 브래킷 px 확대 + 글리프 width=38(64×0.6≈38, 비율 유지).
+    // ▸단언 — 박스 브래킷 px 확대 + 글리프 width=43(72×0.6≈43, 비율 유지).
     expect({
       enlargedBox:
-        boxTokens.includes('h-[64px]') && boxTokens.includes('w-[64px]'),
+        boxTokens.includes('h-[72px]') && boxTokens.includes('w-[72px]'),
       bracketNotScale: !boxTokens.includes('h-16'), // 스케일 토큰이 아니라 브래킷 px
       glyphSize: glyph.props.width,
-    }).toEqual({ enlargedBox: true, bracketNotScale: true, glyphSize: 38 });
+    }).toEqual({ enlargedBox: true, bracketNotScale: true, glyphSize: 43 });
   });
 });
 
