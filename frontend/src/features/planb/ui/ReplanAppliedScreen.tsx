@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppliedBackGlyph, AppliedCheckGlyph } from './PlanbGlyphs';
 
@@ -31,49 +32,51 @@ export function ReplanAppliedScreen({
   onContinue,
 }: ReplanAppliedScreenProps): ReactElement {
   return (
-    <View className="flex-1 bg-canvas">
-      {/* 헤더 — 뒤로 + 제목 */}
-      <View className="flex-row items-center gap-sm px-lg pt-2xl">
-        <Pressable
-          testID="planb-applied-back"
-          accessibilityRole="button"
-          onPress={onBack}
-          hitSlop={8}
-          className="h-9 w-9 items-center justify-center"
-        >
-          <AppliedBackGlyph />
-        </Pressable>
-        <Text className="font-noto-bold text-[20px] font-bold text-ink">
-          {TITLE}
-        </Text>
-      </View>
-
-      {/* 성공 블록 — 체크 원 + 헤드라인(세로 중앙) */}
-      <View className="flex-1 items-center justify-center gap-[14px] px-lg">
-        <View
-          testID="planb-applied-check"
-          className="h-[72px] w-[72px] items-center justify-center rounded-pill bg-primary"
-        >
-          <AppliedCheckGlyph size={36} />
-        </View>
-        <Text className="text-center font-noto-bold text-hero font-bold text-ink">
-          {SUCCESS_HEADLINE}
-        </Text>
-      </View>
-
-      {/* CTA — 여행 계속하기(primary bg · rounded-button · 흰 텍스트) */}
-      <View className="px-lg pb-2xl">
-        <Pressable
-          testID="planb-applied-continue"
-          accessibilityRole="button"
-          onPress={onContinue}
-          className="items-center justify-center rounded-button bg-primary py-[15px]"
-        >
-          <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-            {CONTINUE_LABEL}
+    <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <View className="flex-1 bg-canvas">
+        {/* 헤더 — 뒤로 + 제목 */}
+        <View className="flex-row items-center gap-sm px-lg pt-lg">
+          <Pressable
+            testID="planb-applied-back"
+            accessibilityRole="button"
+            onPress={onBack}
+            hitSlop={8}
+            className="h-9 w-9 items-center justify-center"
+          >
+            <AppliedBackGlyph />
+          </Pressable>
+          <Text className="font-noto-bold text-[20px] font-bold text-ink">
+            {TITLE}
           </Text>
-        </Pressable>
+        </View>
+
+        {/* 성공 블록 — 체크 원 + 헤드라인(세로 중앙) */}
+        <View className="flex-1 items-center justify-center gap-[14px] px-lg">
+          <View
+            testID="planb-applied-check"
+            className="h-[72px] w-[72px] items-center justify-center rounded-pill bg-primary"
+          >
+            <AppliedCheckGlyph size={36} />
+          </View>
+          <Text className="text-center font-noto-bold text-hero font-bold text-ink">
+            {SUCCESS_HEADLINE}
+          </Text>
+        </View>
+
+        {/* CTA — 여행 계속하기(primary bg · rounded-button · 흰 텍스트) */}
+        <View className="px-lg pb-2xl">
+          <Pressable
+            testID="planb-applied-continue"
+            accessibilityRole="button"
+            onPress={onContinue}
+            className="items-center justify-center rounded-button bg-primary py-[15px]"
+          >
+            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+              {CONTINUE_LABEL}
+            </Text>
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }

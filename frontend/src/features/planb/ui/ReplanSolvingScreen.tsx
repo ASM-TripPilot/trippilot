@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   ChecklistActiveGlyph,
@@ -52,73 +53,75 @@ export function ReplanSolvingScreen({
   onCancel,
 }: ReplanSolvingScreenProps): ReactElement {
   return (
-    <View className="flex-1 bg-canvas">
-      <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-2xl">
-        {/* 본문 타이틀·부제 */}
-        <View className="gap-sm">
-          <Text className="font-noto-bold text-hero font-bold text-ink">
-            {TITLE}
-          </Text>
-          <Text className="font-noto text-label text-muted">{SUBTITLE}</Text>
-        </View>
+    <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <View className="flex-1 bg-canvas">
+        <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-lg">
+          {/* 본문 타이틀·부제 */}
+          <View className="gap-sm">
+            <Text className="font-noto-bold text-hero font-bold text-ink">
+              {TITLE}
+            </Text>
+            <Text className="font-noto text-label text-muted">{SUBTITLE}</Text>
+          </View>
 
-        {/* 진행바 — 트랙 surface-strong + 채움 primary 고정 66%(애니메이션 없음, testID 만 잼) */}
-        <View
-          testID="planb-solving-progress"
-          className="h-sm w-full overflow-hidden rounded-pill bg-surface-strong"
-        >
-          <View className="h-full w-2/3 rounded-pill bg-primary" />
-        </View>
+          {/* 진행바 — 트랙 surface-strong + 채움 primary 고정 66%(애니메이션 없음, testID 만 잼) */}
+          <View
+            testID="planb-solving-progress"
+            className="h-sm w-full overflow-hidden rounded-pill bg-surface-strong"
+          >
+            <View className="h-full w-2/3 rounded-pill bg-primary" />
+          </View>
 
-        {/* 체크리스트 4행 — done/active/waiting 3상태 아이콘 + 라벨 */}
-        <View className="gap-md">
-          {CHECKLIST.map((item) => (
-            <View key={item.label} className="flex-row items-center gap-md">
-              <ChecklistIcon state={item.state} />
-              <Text
-                className={`text-body ${
-                  item.state === 'waiting'
-                    ? 'font-noto text-muted-soft'
-                    : 'font-noto text-ink'
-                }`}
-              >
-                {item.label}
+          {/* 체크리스트 4행 — done/active/waiting 3상태 아이콘 + 라벨 */}
+          <View className="gap-md">
+            {CHECKLIST.map((item) => (
+              <View key={item.label} className="flex-row items-center gap-md">
+                <ChecklistIcon state={item.state} />
+                <Text
+                  className={`text-body ${
+                    item.state === 'waiting'
+                      ? 'font-noto text-muted-soft'
+                      : 'font-noto text-ink'
+                  }`}
+                >
+                  {item.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {/* 안심 노트 — 완료·고정 슬롯 불변 고지(BR-U4-18) */}
+          <View className="rounded-card bg-surface-soft p-md">
+            <Text className="font-noto text-caption text-muted">
+              {REASSURANCE}
+            </Text>
+          </View>
+
+          {/* CTA 2개(Figma 라이브엔 없음 — 계약·AC 근거) */}
+          <View className="gap-sm pt-sm">
+            <Pressable
+              testID="planb-solving-background"
+              accessibilityRole="button"
+              onPress={onBackground}
+              className="items-center justify-center rounded-button border border-hairline-strong py-[15px]"
+            >
+              <Text className="font-noto-bold text-card-title font-bold text-ink">
+                {BACKGROUND_LABEL}
               </Text>
-            </View>
-          ))}
-        </View>
-
-        {/* 안심 노트 — 완료·고정 슬롯 불변 고지(BR-U4-18) */}
-        <View className="rounded-card bg-surface-soft p-md">
-          <Text className="font-noto text-caption text-muted">
-            {REASSURANCE}
-          </Text>
-        </View>
-
-        {/* CTA 2개(Figma 라이브엔 없음 — 계약·AC 근거) */}
-        <View className="gap-sm pt-sm">
-          <Pressable
-            testID="planb-solving-background"
-            accessibilityRole="button"
-            onPress={onBackground}
-            className="items-center justify-center rounded-button border border-hairline-strong py-[15px]"
-          >
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              {BACKGROUND_LABEL}
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="planb-solving-cancel"
-            accessibilityRole="button"
-            onPress={onCancel}
-            className="items-center justify-center rounded-button py-[15px]"
-          >
-            <Text className="font-noto-bold text-card-title font-bold text-muted">
-              {CANCEL_LABEL}
-            </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </View>
+            </Pressable>
+            <Pressable
+              testID="planb-solving-cancel"
+              accessibilityRole="button"
+              onPress={onCancel}
+              className="items-center justify-center rounded-button py-[15px]"
+            >
+              <Text className="font-noto-bold text-card-title font-bold text-muted">
+                {CANCEL_LABEL}
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
