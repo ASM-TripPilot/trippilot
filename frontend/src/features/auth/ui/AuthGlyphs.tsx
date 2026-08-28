@@ -128,7 +128,11 @@ export function NaverIcon({ size = 20, testID }: GlyphProps) {
 // 에러 배너 경고 아이콘 — 형태 선례는 shared/location/LocationGlyphs.tsx 의
 // LocationInfoGlyph(원형 info, 같은 18px·strokeWidth 1.575·round cap/join, 내부 2 path).
 // 여기서는 원(info) 대신 삼각(warning) 외곽 + 세로 막대 + 하단 점 3-path.
-export function WarningTriangleGlyph({ size = 18, testID }: GlyphProps) {
+export function WarningTriangleGlyph({
+  size = 18,
+  testID,
+  color,
+}: GlyphProps & { color?: string }) {
   return (
     <Svg
       testID={testID}
@@ -139,21 +143,21 @@ export function WarningTriangleGlyph({ size = 18, testID }: GlyphProps) {
     >
       <Path
         d="M9 2.25L16.5 15H1.5L9 2.25Z"
-        stroke={AUTH_ICON_COLORS.warning}
+        stroke={color ?? AUTH_ICON_COLORS.warning}
         strokeWidth={1.575}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M9 6.75V10.5"
-        stroke={AUTH_ICON_COLORS.warning}
+        stroke={color ?? AUTH_ICON_COLORS.warning}
         strokeWidth={1.575}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M9 12.75H9.0075"
-        stroke={AUTH_ICON_COLORS.warning}
+        stroke={color ?? AUTH_ICON_COLORS.warning}
         strokeWidth={1.575}
         strokeLinecap="round"
         strokeLinejoin="round"

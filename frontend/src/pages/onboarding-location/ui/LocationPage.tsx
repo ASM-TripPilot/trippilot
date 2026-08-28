@@ -24,6 +24,9 @@ const ONBOARDING_PURPOSE =
 export function LocationPage(): ReactElement {
   const router = useRouter();
   const [state, setState] = useState<LocationPrepromptState>('default');
+  // 거부 안내 줄의 1회성 닫기 — 화면 표시 1회만(영속 없음). 컴포넌트는 무상태(D2)라 상태를
+  // 여기서 소유하고 onDismissNotice 로 올라온 × 탭에 반응해 안내 줄을 숨긴다.
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
 
   const goToPref1 = () => router.replace('/(onboarding)/pref1');
 
@@ -67,6 +70,8 @@ export function LocationPage(): ReactElement {
       onOpenSettings={() => {
         void Linking.openSettings();
       }}
+      onDismissNotice={() => setNoticeDismissed(true)}
+      noticeDismissed={noticeDismissed}
     />
   );
 }

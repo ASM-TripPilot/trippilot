@@ -319,8 +319,9 @@ describe('AC-V4 · 경고 글리프 사용 — 화면이 실제로 import·렌�
       // 호출부만 잠그면 "prop 삭제 + 기본값 변경" 으로 우회된다 → **둘 다** 잠근다.
       // 세는 범위는 이 태그 안이다: 파일 전역 `size={18}` 은 실측 1회지만, 다른 컴포넌트가
       // 나중에 `size={18}` 을 갖게 되면 전역 카운트는 이 글리프가 40 이 되어도 1 을 유지한다.
+      // TRIP-592 C안: 코랄 원 배지 안 글리프라 호출부는 size={16}(원 28px 안 여백). 값만 갱신, 잠금 유지.
       sizeAtCallSite:
-        count(sliceTag(scanned, 'WarningTriangleGlyph'), 'size={18}') === 1,
+        count(sliceTag(scanned, 'WarningTriangleGlyph'), 'size={16}') === 1,
     }).toEqual({
       imported: true,
       rendered: true,
@@ -345,8 +346,9 @@ describe('AC-V4 · 경고 글리프 색 — 상수 경유 + tailwind 토큰 일�
     });
 
     expect({
-      // 상수 경유 형태가 있다 — 경유 경로 존재.
-      viaConstant: glyphsScanned.includes('stroke={AUTH_ICON_COLORS.warning}'),
+      // 상수 경유 형태가 있다 — 경유 경로 존재. TRIP-592: 글리프에 color? prop 추가로
+      // stroke={color ?? AUTH_ICON_COLORS.warning} 형태가 됐다(기본값은 여전히 상수 경유).
+      viaConstant: glyphsScanned.includes('AUTH_ICON_COLORS.warning}'),
       // 우회 경로 차단 — tailwind 는 대문자(#C13515), Figma raw 는 소문자(#c13515)다.
       // 소문자화 후 비교해 어느 쪽으로 박아도 우회는 우회로 잡는다. 이 단언은
       // AuthGlyphs.tsx 에만 건다 — 파일 전역 raw-hex 금지는 불가능하다(이 파일은

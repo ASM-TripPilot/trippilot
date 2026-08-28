@@ -1258,12 +1258,31 @@ const PREVIEW_STATES: PreviewState[] = [
     label: '위치 · 거부',
     login: null,
     render: () => (
+      // onDismissNotice 를 주면 안내 줄에 닫기(×)가 그려진다(TRIP-592). 프리뷰는 정적이라
+      // 실제로 숨겨지진 않지만 × 버튼 자체를 눈으로 확인할 수 있다.
       <LocationPreprompt
         purposeContext="내 주변 숙소 탐색"
         state="permission-denied"
         onProceed={noop}
         onDefer={noop}
         onOpenSettings={noop}
+        onDismissNotice={noop}
+      />
+    ),
+  },
+  {
+    key: 'onboarding-location-denied-dismissed',
+    label: '위치 · 거부(안내 닫힘)',
+    login: null,
+    render: () => (
+      // 1회성 닫기 후 상태 — 안내 줄이 사라지고 denied 프레임(계속·설정)만 남는다(TRIP-592).
+      <LocationPreprompt
+        purposeContext="내 주변 숙소 탐색"
+        state="permission-denied"
+        onProceed={noop}
+        onDefer={noop}
+        onOpenSettings={noop}
+        noticeDismissed
       />
     ),
   },

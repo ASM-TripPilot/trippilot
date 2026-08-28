@@ -106,15 +106,10 @@ export function TermsScreen({
                   >
                     {item.checked ? <CheckGlyph /> : null}
                   </View>
-                  <View
-                    testID={`onboarding-terms-badge-${item.termsType}`}
-                    className={`rounded-[6px] px-sm py-[3px] ${
-                      item.required ? 'bg-primary-pale' : 'bg-surface-strong'
-                    }`}
-                  >
+                  <View testID={`onboarding-terms-badge-${item.termsType}`}>
                     <Text
-                      className={`font-noto-bold text-micro font-bold ${
-                        item.required ? 'text-primary-text' : 'text-muted'
+                      className={`font-noto-bold text-label font-bold ${
+                        item.required ? 'text-primary' : 'text-muted'
                       }`}
                     >
                       {item.required ? '필수' : '선택'}

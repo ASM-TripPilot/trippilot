@@ -210,30 +210,63 @@ describe('AC-V2 · 카카오 라벨 문구 — 한글이 뜨고 영문은 화면
 
 const ERROR_COPY = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요';
 
-describe('AC-V3 · 에러 배너가 Figma error 변형 토큰을 입는다 (렌더)', () => {
-  it('배너 컨테이너가 bg-primary-pale·rounded-button 을, 배너 텍스트가 text-primary-text·font-noto-bold·font-bold·text-label 을 갖는다', () => {
+// TRIP-592(→ C안): 파스텔 채움(bg-primary-pale + text-primary-text)을 폐기하고 'C 아이콘 리드형'
+// 으로 위계를 신호한다 — 카드(보더·캔버스채움) 없이 배경 없는 인라인 + 코랄 원 아이콘 배지(bg-primary
+// rounded-full) + ink 텍스트(문구 단일 유지). 아래 두 it 은 폐기 토큰의 '부재'와 새 폼('배경 없는
+// 인라인'·'코랄 원 배지'·ink)의 '존재'를 한 쌍으로 잠근다. 회귀가 아니라 의도된 계약 교체다 — 이 describe
+// 가 C 폼을 지키는 새 심판이다. 뮤테이션: E(아웃라인 border-primary·bg-canvas 카드)로 되돌리면
+// noOutline/noCardBg 가 깨져 red 가 된다(양방향).
+describe('AC-V3 · 에러 배너가 Figma C(아이콘 리드형) 토큰을 입는다 (렌더 · TRIP-592 계약 교체)', () => {
+  it('배너가 카드(pale·보더·캔버스채움) 없는 인라인이고, 코랄 원 아이콘 배지(bg-primary·rounded-full)를 리드로 갖는다', () => {
     // ▸준비 — overrides 로 error phase 를 연다.
     renderDefault({ phase: 'error', errorCode: 'SOCIAL_AUTH_FAILED' });
 
-    // ▸실행 — 배너 안 텍스트 노드(1개)를 잡는다.
+    // ▸실행 — 배너 컨테이너 + 그 안 코랄 원 배지 노드.
+    const banner = screen.getByTestId('auth-login-error-banner');
+    const bannerTokens = classTokens(banner);
+    const badge = within(banner).getByTestId('auth-login-error-icon-badge');
+    const badgeTokens = classTokens(badge);
+
+    // ▸단언 — C 폼: 컨테이너는 카드 채움/보더/캔버스배경/pale 전부 부재, 코랄 원 배지가 아이콘을 리드.
+    expect({
+      noPaleFill: bannerTokens.includes('bg-primary-pale'),
+      noOutline: bannerTokens.includes('border-primary'),
+      noCardBg: bannerTokens.includes('bg-canvas'),
+      circleFill: badgeTokens.includes('bg-primary'),
+      circleRadius: badgeTokens.includes('rounded-full'),
+    }).toEqual({
+      noPaleFill: false,
+      noOutline: false,
+      noCardBg: false,
+      circleFill: true,
+      circleRadius: true,
+    });
+  });
+
+  it('배너 텍스트가 text-ink 를 갖고 폐기된 text-primary-text 는 없다 (문구·웨이트·크기는 유지)', () => {
+    // ▸준비 — Q2 결정: 단일 문구(ERROR_COPY)를 유지한다(2줄 분할 금지 — 동결 toHaveTextContent 파손 방지).
+    renderDefault({ phase: 'error', errorCode: 'SOCIAL_AUTH_FAILED' });
+
+    // ▸실행 — 배너 안 텍스트 노드(1개). getByText(문자열)은 완전 일치(§D7)라 '단일 문구 유지'를 함께 잠근다.
     const banner = screen.getByTestId('auth-login-error-banner');
     const text = within(banner).getByText(ERROR_COPY);
-
-    // ▸단언 (a) — 배너 컨테이너
-    const bannerTokens = classTokens(banner);
-    expect({
-      background: bannerTokens.includes('bg-primary-pale'),
-      radius: bannerTokens.includes('rounded-button'),
-    }).toEqual({ background: true, radius: true });
-
-    // ▸단언 (b) — 배너 텍스트
     const textTokens = classTokens(text);
+
+    // ▸단언 — 뉴트럴 ink 채택 + primary-text 폐기, 웨이트/크기 회귀 방지.
+    // 'text-ink' 와 'text-primary-text' 는 서로 다른 토큰이라 겹오탐이 없다(§D5, 02a §5 실측).
     expect({
-      color: textTokens.includes('text-primary-text'),
+      color: textTokens.includes('text-ink'),
+      noPaleText: textTokens.includes('text-primary-text'),
       family: textTokens.includes('font-noto-bold'),
       weight: textTokens.includes('font-bold'),
       size: textTokens.includes('text-label'),
-    }).toEqual({ color: true, family: true, weight: true, size: true });
+    }).toEqual({
+      color: true,
+      noPaleText: false,
+      family: true,
+      weight: true,
+      size: true,
+    });
   });
 });
 

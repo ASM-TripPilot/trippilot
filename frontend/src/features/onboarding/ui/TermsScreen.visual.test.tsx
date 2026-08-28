@@ -1,5 +1,10 @@
 import type { ReactElement } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import { TermsScreen, type TermsScreenProps } from './TermsScreen';
 
@@ -88,6 +93,60 @@ describe('TermsScreen — 필수/선택 배지 (AC-T1)', () => {
     expect(
       screen.getByTestId('onboarding-terms-badge-MARKETING')
     ).toHaveTextContent('선택');
+  });
+});
+
+// 렌더된 노드의 className 을 공백으로 쪼갠 '토큰 배열'로 만든다. 배열 원소 일치(includes)로만
+// 비교한다 — 'text-primary-text'.includes('text-primary')는 문자열이면 true(오탐)지만 토큰 배열
+// ['text-primary-text']에 'text-primary'는 원소로 없다(SocialLoginScreen.visual.test.tsx §D5 와 동일
+// 근거, 02a §5 실측: ['text-primary-text'].includes('text-primary')===false).
+function classTokens(node: { props?: { className?: unknown } }): string[] {
+  const cn = node.props?.className;
+  return typeof cn === 'string' ? cn.trim().split(/\s+/).filter(Boolean) : [];
+}
+
+// TRIP-592: '필수'/'선택' 배지가 파스텔 pill 채움을 잃고 형태(solid 텍스트)로 위계를 신호한다.
+// testID(onboarding-terms-badge-{type})와 텍스트 자체는 AC-T1·동결 테스트가 이미 잠갔다 — 여기서는
+// pill 채움의 '부재'와 solid 색 토큰의 '존재'만 추가로 잠근다. testID 앵커는 절대 보존된다(01b ★2).
+describe('TermsScreen — 배지 위계 전환: pill 폐기·solid 텍스트 (AC-②-1 · AC-②-3, TRIP-592)', () => {
+  it('필수 배지가 pill 채움(bg-primary-pale) 없이 text-primary solid 텍스트(text-label)를 쓴다', () => {
+    render(<TermsScreenNext {...makeProps()} />);
+
+    // ▸실행 — testID 는 배지 래퍼(View)에, '필수' 텍스트는 그 안 Text 노드에 있다(02a §5 실측).
+    const badge = screen.getByTestId('onboarding-terms-badge-TERMS_OF_SERVICE');
+    const label = within(badge).getByText('필수');
+
+    // ▸단언 — 래퍼: pill 채움 폐기. 텍스트: 코랄 solid(text-primary) 채택 + 옛 색(text-primary-text)·
+    // 옛 크기(text-micro) 폐기. text-primary 와 text-primary-text 는 서로 다른 토큰이라 겹오탐이 없다.
+    expect({
+      wrapperNoPaleFill: classTokens(badge).includes('bg-primary-pale'),
+      textCoral: classTokens(label).includes('text-primary'),
+      textNoOldColor: classTokens(label).includes('text-primary-text'),
+      textSize: classTokens(label).includes('text-label'),
+      textNoOldSize: classTokens(label).includes('text-micro'),
+    }).toEqual({
+      wrapperNoPaleFill: false,
+      textCoral: true,
+      textNoOldColor: false,
+      textSize: true,
+      textNoOldSize: false,
+    });
+  });
+
+  it('선택 배지가 pill 채움(bg-surface-strong) 없이 text-muted solid 텍스트를 쓴다', () => {
+    render(<TermsScreenNext {...makeProps()} />);
+
+    const badge = screen.getByTestId('onboarding-terms-badge-MARKETING');
+    const label = within(badge).getByText('선택');
+
+    // ▸단언 — 래퍼: 뉴트럴 pill 채움 폐기. 텍스트: '필수'(코랄)와 일관되게 solid 뉴트럴(text-muted).
+    expect({
+      wrapperNoStrongFill: classTokens(badge).includes('bg-surface-strong'),
+      textMuted: classTokens(label).includes('text-muted'),
+    }).toEqual({
+      wrapperNoStrongFill: false,
+      textMuted: true,
+    });
   });
 });
 
