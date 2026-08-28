@@ -25,7 +25,7 @@
 ## 바텀시트 (`@gorhom/bottom-sheet`)
 
 - **딤 전면 커버·시트 실제 열림은 자동 심판이 없다** → `__mocks__/@gorhom/bottom-sheet.tsx`는 `BottomSheet`를 어떤 prop을 줘도 children을 무조건 렌더하는 통과 컴포넌트로 대체한다. 딤의 `bg-scrim/40` 색 토큰은 렌더 트리에 className으로 남아 잡히지만, 실제로 화면을 덮는 `absolute inset-0`(위치)와 시트의 실제 열림/닫힘(`snapPoints`·gorhom 런타임)은 jest가 원리적으로 못 본다 — 지도 제스처 차단(viewOnly)과 같은 함정 계열. 이 목을 공유하는 화면(로그인 시트 3종·`SlotTimeSheet`·`TripBaseFixSheet`·`PinDetailSheet`·`MustVisitTimeScreen`·`TripDateSheet`) 전부 해당, 실기 스모크가 유일한 그물.
-- **`TripBaseFixSheet`는 인터랙티브 지도를 바텀시트 안에 넣은 유일 사례라 제스처 prop 회귀가 조용히 재발할 수 있다** (TRIP-455) → 같은 통과형 목이라 `enableContentPanningGesture={false}`를 주든 안 주든 렌더 결과가 동일하다(jest가 이 prop의 유무를 원리적으로 구분 못 함). 이 prop이 "이 위치로 확인" 무반응의 **진짜 원인 수정**(콘텐츠 pan 제스처가 WebView 롱프레스를 삼키는 것을 막음)인데, 지우면 51/51 그대로 green이라 아무 심판도 못 잡는다(code-critic 경고-1 실측). 이 파일을 다시 만질 때 이 줄을 실수로 지우지 않았는지는 6-b 실기(`trip-new-step2-fixsheet-map` 프리뷰, 롱프레스→핀)로만 확인된다.
+- **`TripBaseFixSheet`는 인터랙티브 지도를 바텀시트 안에 넣은 유일 사례라 제스처 prop 회귀가 조용히 재발할 수 있다** (TRIP-455) → 같은 통과형 목이라 `enableContentPanningGesture={false}`를 주든 안 주든 렌더 결과가 동일하다(jest가 이 prop의 유무를 원리적으로 구분 못 함). 이 prop이 "이 위치로 확인" 무반응의 **진짜 원인 수정**(콘텐츠 pan 제스처가 WebView 롱프레스를 삼키는 것을 막음)인데, 지우면 51/51 그대로 green이라 아무 심판도 못 잡는다(code-critic 경고-1 실측). 이 파일을 다시 만질 때 이 줄을 실수로 지우지 않았는지는 6-b 실기(`trip-new-step2-fixsheet-map` 프리뷰, 롱프레스→핀)로만 확인된다. **두 번째 사례(TRIP-599, 2026-08-28)**: h07 `MustVisitTimeScreen`이 인터랙티브 스크롤러(`shared/ui/WheelPicker`)를 시트에 넣었다 — 같은 `enableContentPanningGesture={false}` 회귀는 jest 사각, 6-b 실기(`itinerary-mustvisit-time-default` 프리뷰, 휠 드래그→시트 딸림 여부)로만 확인된다.
 
 ## 드래그 리스트 (`react-native-draggable-flatlist`)
 
