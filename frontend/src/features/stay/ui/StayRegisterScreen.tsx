@@ -691,9 +691,10 @@ export function StayRegisterScreen({
   // 이전 후보가 풀려도(§3-2 초기화) 안내는 그대로 남아야 한다(I-5).
   const showCoordNotice = !flow.coordConfirmed;
   // 지도 확인 버튼은 확인할 좌표(후보)가 있을 때만 연다 — 없으면 시트가 아예 마운트되지 않아
-  // 눌러도 반응 없는 버튼이 된다(INV-4).
-  const showMapConfirm =
-    flow.selectedCandidate !== null && !flow.coordConfirmed;
+  // 눌러도 반응 없는 버튼이 된다(INV-4). coordConfirmed는 조건에 넣지 않는다(TRIP-600) — 검색
+  // 후보는 선택만으로 좌표가 확정되지만(coordnotice는 사라진다), 시트는 사람이 위치를 눈으로
+  // 검토하는 선택 수단이자 핀 경로에서 좌표를 처음 얻는 유일 수단으로 남는다.
+  const showMapConfirm = flow.selectedCandidate !== null;
   const showMapPreview =
     flow.selectedCandidate !== null && flow.mapSheetState === 'closed';
   // 5-c(W-9) — 이름이 비어 「등록하기」가 잠긴 이유. 예전엔 PinPanel 지역 변수였는데, 그 칸이

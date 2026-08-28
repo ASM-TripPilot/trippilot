@@ -20,7 +20,7 @@ import { StaySearchPage } from './StaySearchPage';
  *
  * 무엇을 보장하나:
  *  - **P1 (AC-1)** 미담김 하트 press → `POST /saved-stays`가 **buildSaveStayRequest 본문**(MAP_SEARCH·
- *    coordConfirmed:false)으로 나가고, 응답 전 낙관적으로 찬 하트가 되며, 성공 후 담은 목록을 다시 받는다.
+ *    좌표 보유 시 coordConfirmed:true, TRIP-600)으로 나가고, 응답 전 낙관적으로 찬 하트가 되며, 성공 후 담은 목록을 다시 받는다.
  *  - **P2 (AC-2)** 담김 하트 press → 매칭 **savedStayId**로 `DELETE /saved-stays/{id}`가 나간다(externalId 아님).
  *  - **P3 (AC-3)** 진입 시 `GET /saved-stays`와 externalSource+externalId로 매칭해 초기 채움을 그린다
  *    (외부키 null인 핀·수동 저장은 무시).
@@ -93,12 +93,12 @@ const SEARCH_RESPONSE = {
 const SAVED_ID_A = 'aaaaaaaa-1111-1111-1111-111111111111';
 const NEW_SAVED_ID = '99999999-9999-9999-9999-999999999999';
 
-/** buildSaveStayRequest(ITEM_A)가 내야 할 본문 — 정본 결정(MAP_SEARCH·coordConfirmed:false)을
- * 이 배선 층에서 리터럴로 한 번 더 못 박는다(순수 함수 단위 테스트 U9와 별개로 실배선 확인). */
+/** buildSaveStayRequest(ITEM_A)가 내야 할 본문 — 정본 결정(MAP_SEARCH·좌표 보유 시 coordConfirmed:true,
+ * TRIP-600 INV-U1-08 재정의)을 이 배선 층에서 리터럴로 한 번 더 못 박는다(순수 함수 단위 테스트 U9와 별개로 실배선 확인). */
 const EXPECTED_POST_A = {
   name: '해운대 그랜드 호텔',
   registerRoute: 'MAP_SEARCH',
-  coordConfirmed: false,
+  coordConfirmed: true,
   externalSource: 'NAVER',
   externalId: 's1',
   lat: 35.1587,
@@ -199,7 +199,7 @@ describe('P1 · 담기 — POST 본문·낙관·무효화 (AC-1)', () => {
     // 실행 — 하트 A press.
     fireEvent.press(screen.getByTestId(`stay-card-save-${KEY_A}`));
 
-    // 단언 ① — POST가 정확한 본문으로 나갔다(MAP_SEARCH·coordConfirmed:false 실배선).
+    // 단언 ① — POST가 정확한 본문으로 나갔다(MAP_SEARCH·좌표 보유 시 coordConfirmed:true 실배선, TRIP-600).
     await waitFor(() => expect(postedBodies).toHaveLength(1));
     expect(postedBodies[0]).toEqual(EXPECTED_POST_A);
 

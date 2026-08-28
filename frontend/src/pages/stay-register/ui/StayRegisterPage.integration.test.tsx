@@ -397,3 +397,52 @@ describe('I-7 · 등록 실패는 화면에 드러난다 (§3-5 · INV-4)', () =
     expect(screen.getByTestId('stay-register-candidate-0')).toBeChecked();
   });
 });
+
+/**
+ * I-8 (TRIP-600 AC-1·AC-5 — 신규) — 좌표 있는 후보는 **선택만으로** 등록이 열린다.
+ *
+ * 무엇을 보장하나: 지도 검색 후보(`GeocodeCandidate`는 `lat`/`lng`가 required라 항상 좌표를
+ * 가진다)를 탭하는 것 하나로 등록 게이트가 열린다 — "지도에서 위치 확인" 시트를 거쳐 좌표를
+ * **다시 찍는** 절차를 강요하지 않는다(사용자 구술: "좌표가 있는데 찍어야 된다 이건 말이 안
+ * 돼"). 지금 코드(`handleSelectCandidate`가 선택마다 `coordConfirmed=false`로 되돌림, :166)에서
+ * 이 두 테스트는 red다.
+ *
+ * 무엇을 안 잠그나: "지도에서 위치 확인"(`stay-register-mapconfirm`) 버튼/시트의 **존치 여부는
+ * 여기서 단언하지 않는다.** 그 시트는 핀 경로(좌표를 처음 얻는 유일 수단)에서 여전히 필요하고
+ * (지라 §결정필요 3 "시트는 존치하고 배선만 바꾸는 편이 회귀가 적다"), I-6·IP-3가 그 도달성을
+ * 이미 잠근다. 여기서 잠그는 것은 **선택만으로 열린다**는 관측 가능한 부작용뿐이다 —
+ * 등록 버튼 활성, 좌표 안내 소멸, 실제 POST 본문의 `coordConfirmed:true`(02a 부채 1 — 시트
+ * 실제 여닫힘은 jest 무심판이라 부작용으로만 잠근다).
+ */
+describe('I-8 · 좌표 있는 후보는 선택만으로 등록이 열린다 (TRIP-600 AC-1·AC-5)', () => {
+  it('후보를 탭하기만 하면(지도 확인 없이) 좌표 안내가 사라지고 등록 버튼이 열린다', async () => {
+    render(<StayRegisterPage />, { wrapper: createWrapper() });
+
+    // 준비·실행 — 후보를 '탭'하는 것 하나뿐. mapconfirm·mapsheet-confirm을 거치지 않는다.
+    searchFor('busan');
+    fireEvent.press(await screen.findByTestId('stay-register-candidate-0'));
+
+    // 단언 (c) — 등록 버튼이 활성이다(날짜 미선택이어도: isStayRangeValid(null,null)=true).
+    await waitFor(() =>
+      expect(screen.getByTestId('stay-register-submit')).toBeEnabled()
+    );
+    // 단언 (a) — "지도에서 위치를 확인해 주세요" 안내가 뜨지 않는다(좌표 재확인 강요 없음).
+    expect(screen.queryByTestId('stay-register-coordnotice')).toBeNull();
+  });
+
+  it('선택만으로 실제 등록까지 간다 — 지도 확인 없이 눌러도 coordConfirmed=true가 서버로 나간다', async () => {
+    render(<StayRegisterPage />, { wrapper: createWrapper() });
+
+    searchFor('busan');
+    fireEvent.press(await screen.findByTestId('stay-register-candidate-0'));
+    // mapconfirm/mapsheet-confirm을 건너뛰고 곧장 등록을 누른다.
+    fireEvent.press(screen.getByTestId('stay-register-submit'));
+
+    await waitFor(() => expect(postedBodies).toHaveLength(1));
+    // 관측 가능한 부작용으로만 잠근다 — 본문의 좌표 확정 도장이 true여야 g02 거점 배정이 열린다.
+    expect(postedBodies[0]).toMatchObject({
+      registerRoute: 'MAP_SEARCH',
+      coordConfirmed: true,
+    });
+  });
+});
