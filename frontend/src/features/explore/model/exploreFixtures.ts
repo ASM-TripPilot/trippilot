@@ -104,12 +104,19 @@ export const PREVIEW_SAVED_PLACES: SavedPlace[] = [
 ];
 
 /**
- * d1b·e00 지역 선택(TRIP-445) 프리뷰 표본 — 서버 `GET /regions` 응답과 같은 shape.
+ * d1b·e00 지역 선택(TRIP-445 · TRIP-597) 프리뷰 표본 — 서버 `GET /regions` 응답과 같은 shape.
  *
  * 왜 있나: results 얼굴을 실화면 딥링크로는 볼 수 없다(백엔드 401이면 항상 에러 얼굴). 프리뷰가
  * props에 이 값을 직접 넣어 세 갈래 카드를 한눈에 그린다 — 선택 가능(poiCount>0)·**준비 중**
  * (poiCount=0)·**묶음 행**(selectable=false 도/행정구)을 일부러 섞었다. `regionCode`는 서버가
  * 주는 법정동코드 앞자리(숫자문자열)라 구 슬러그('busan')와 성격이 다르다(D2, 해시 tint 표본).
+ *
+ * TRIP-597 드릴다운 표본: 빈 검색어 1단은 시/도 행으로 접힌다. 시/도 행을 누르면 2단 상세가
+ * 열린다 — 각 그룹이 드릴다운의 다른 상태를 보여준다(6-b 실기로 확인, jest 심판 밖 레이아웃):
+ *  · 인천(28) SIDO 선택 가능 + 미추홀구·연수구 → happy path('인천 전체' 선택 가능 + 구/군 카드).
+ *  · 서울·부산·제주(SIDO, 하위 없음) → '전체'만(엣지② sigungu 빈 그룹).
+ *  · 강원(51*)은 홍천군만·SIDO 행 부재 → 방어(엣지③ sido=null, '전체' 선택 행 없음).
+ *  · 충북(43, selectable=false) → '전체'가 묶음 행 + 청주시 상당구 "준비 중"(선택 불가 두 갈래).
  */
 export const PREVIEW_REGIONS: Region[] = [
   {
@@ -119,6 +126,31 @@ export const PREVIEW_REGIONS: Region[] = [
     level: RegionLevel.SIDO,
     selectable: true,
     poiCount: 128,
+  },
+  // 인천 — SIDO 선택 가능 + 하위 구/군 둘. 드릴다운 happy path 표본(TRIP-597).
+  {
+    regionCode: '28',
+    name: '인천광역시',
+    sidoName: '인천광역시',
+    level: RegionLevel.SIDO,
+    selectable: true,
+    poiCount: 52,
+  },
+  {
+    regionCode: '28177',
+    name: '미추홀구',
+    sidoName: '인천광역시',
+    level: RegionLevel.SIGUNGU,
+    selectable: true,
+    poiCount: 9,
+  },
+  {
+    regionCode: '28185',
+    name: '연수구',
+    sidoName: '인천광역시',
+    level: RegionLevel.SIGUNGU,
+    selectable: true,
+    poiCount: 6,
   },
   {
     regionCode: '26',

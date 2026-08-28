@@ -3,11 +3,7 @@ import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import type { Region } from '@/shared/api/generated/schemas';
-import {
-  filterRegions,
-  limitRegionsWhenEmpty,
-  useRegions,
-} from '@/features/explore/model/regions';
+import { filterRegions, useRegions } from '@/features/explore/model/regions';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import type { RegionPurpose } from '@/features/explore/ui/RegionPickerScreen';
 
@@ -28,11 +24,9 @@ export function RegionPickerPage(): ReactElement {
 
   const [query, setQuery] = useState('');
   const regions = useRegions();
-  // 빈 검색어면 대표 소수(앞 6개)만, 입력이 있으면 필터 전량 — 카탈로그를 통째로 쏟지 않는다(TRIP-499).
-  const visible = limitRegionsWhenEmpty(
-    filterRegions(regions.data ?? [], query),
-    query
-  );
+  // 전체 카탈로그를 화면에 내린다 — 빈 검색어 6개 상한(구 `limitRegionsWhenEmpty`)은 화면의
+  // 시/도→구/군 드릴다운 그룹 접기가 대체한다(TRIP-597). 검색어가 있으면 클라 필터로 좁힌다.
+  const visible = filterRegions(regions.data ?? [], query);
 
   function handleSelectRegion(region: Region): void {
     if (purpose === 'trip') {

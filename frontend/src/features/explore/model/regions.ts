@@ -13,6 +13,7 @@
  */
 
 import type { GetRegionsParams, Region } from '@/shared/api/generated/schemas';
+import { RegionLevel } from '@/shared/api/generated/schemas';
 
 /**
  * `GET /regions` 조회 훅. 생성 훅 `useGetRegions(params?)` 얇은 재수출이다.
@@ -62,6 +63,68 @@ export function limitRegionsWhenEmpty(
   limit = 6
 ): readonly Region[] {
   return query.trim() === '' ? regions.slice(0, limit) : regions;
+}
+
+/**
+ * 시/도별로 접힌 그룹 — 드릴다운 1단(시/도 행)·2단(그 시/도의 '전체'+구/군)의 재료(TRIP-597).
+ * 코드가 관계의 정본이고(`sidoCode`) `sidoName`은 라벨용이다.
+ */
+export interface RegionGroup {
+  /** 그룹 키 = regionCode 앞 2자리(법정동코드 시도 코드). */
+  sidoCode: string;
+  /** 묶음 표시용 상위 시도명 — 그룹 첫 멤버의 sidoName(서버가 SIDO·SIGUNGU 양쪽에 실어 준다). */
+  sidoName: string;
+  /** 이 시/도의 SIDO 행('전체' 행이 될 것). 카탈로그에 SIDO 행이 없으면 null(방어). */
+  sido: Region | null;
+  /** 이 시/도에 속한 SIGUNGU들(서버 순서 보존). */
+  sigungu: readonly Region[];
+}
+
+/**
+ * 평면 카탈로그를 시/도로 접는다 — 지역 선택 화면의 드릴다운 토대(TRIP-597).
+ *
+ * 그룹 키는 `regionCode.slice(0, 2)`(코드가 관계의 정본). 각 그룹은 자기 SIDO 행(`sido`,
+ * '전체' 행이 될 것)과 하위 SIGUNGU 목록(`sigungu`)을 나눠 갖는다. 값은 건드리지 않는다 —
+ * `poiCount`는 서버가 시도 행에 이미 합산했으므로 재계산·합산하지 않는다(계약).
+ *
+ * 순서는 서버가 준 순서를 보존한다: 그룹은 sidoCode **첫 등장 순**, 그룹 내 sigungu는 **입력 순**.
+ * 소속 SIDO 행이 목록에 없어도 SIGUNGU만으로 그룹을 만들고 `sido`는 null로 둔다(방어).
+ */
+export function groupRegionsBySido(
+  regions: readonly Region[]
+): readonly RegionGroup[] {
+  const order: string[] = [];
+  const byCode = new Map<
+    string,
+    { sidoName: string; sido: Region | null; sigungu: Region[] }
+  >();
+
+  for (const region of regions) {
+    const sidoCode = region.regionCode.slice(0, 2);
+    let group = byCode.get(sidoCode);
+    if (group === undefined) {
+      // 그룹 라벨은 첫 등장 멤버의 sidoName — SIDO 행이 없어도(방어) 라벨이 산다.
+      group = { sidoName: region.sidoName, sido: null, sigungu: [] };
+      byCode.set(sidoCode, group);
+      order.push(sidoCode);
+    }
+    if (region.level === RegionLevel.SIDO) {
+      // 그 코드의 첫 SIDO만 '전체' 행으로 잡는다(중복 SIDO 행 방어).
+      if (group.sido === null) group.sido = region;
+    } else {
+      group.sigungu.push(region);
+    }
+  }
+
+  return order.map((sidoCode) => {
+    const group = byCode.get(sidoCode)!;
+    return {
+      sidoCode,
+      sidoName: group.sidoName,
+      sido: group.sido,
+      sigungu: group.sigungu,
+    };
+  });
 }
 
 /**

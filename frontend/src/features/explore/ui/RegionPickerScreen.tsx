@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,7 +7,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { Region } from '@/shared/api/generated/schemas';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
-import { regionTint } from '../model/regions';
+import { groupRegionsBySido, regionTint } from '../model/regions';
+import type { RegionGroup } from '../model/regions';
 import {
   BackChevronGlyph,
   SearchGlyph,
@@ -24,6 +26,13 @@ import {
  *  · `selectable && poiCount===0` → "준비 중"(후보풀 빔, INV-1) — 보이되 선택 불가.
  *  · `selectable === false` → 도(道)·행정구 묶음 행 — 보이되 선택 불가.
  * 조회 실패(`isError`)는 빈 목록으로 뭉개지 않고 실패 얼굴로 그린다(INV-4).
+ *
+ * 빈 검색어에서는 **시/도→구/군 2단 드릴다운**으로 접는다(TRIP-597) — 인천광역시(시/도)와
+ * 미추홀구(구/군)가 한 평면에 뒤섞이지 않게. 세 갈래 렌더 모드:
+ *  · 검색 중(`query` 있음) → 드릴다운을 **우회**하고 페이지가 좁힌 결과를 평면 카드로.
+ *  · 빈 검색어·미드릴인 → **1단**: 시/도 행(`explore-region-sido-{code}`)만, 누르면 드릴인.
+ *  · 빈 검색어·드릴인 → **2단**: 그 시/도의 '전체' 행(SIDO Region) + 구/군 카드 + 상세 뒤로.
+ * 드릴다운 상태(`openSidoCode`)는 화면 로컬 뷰 상태다 — 프롭 시그니처는 그대로다.
  *
  * ⚠️ `@/shared/api`·쿼리 훅·`expo-location`을 **전이 의존으로라도** 물면 안 된다 —
  * dev 프리뷰가 이 화면을 정적으로 그리고 `devPreview.test.tsx`의 지뢰 목이 즉시 터진다.
@@ -156,6 +165,102 @@ function RegionCard({
   return <SelectableCard region={region} onPress={onSelect} />;
 }
 
+/** 카드 그리드 — 검색 결과·드릴다운 상세가 공유한다(세 갈래 RegionCard 를 2열로). */
+function RegionGrid({
+  regions,
+  onSelectRegion,
+}: {
+  regions: readonly Region[];
+  onSelectRegion(region: Region): void;
+}): ReactElement {
+  return (
+    <View className="flex-row flex-wrap justify-between">
+      {regions.map((region) => (
+        <RegionCard
+          key={region.regionCode}
+          region={region}
+          onSelect={() => onSelectRegion(region)}
+        />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * 1단 시/도 행 — 누르면 그 시/도로 드릴인한다(선택이 아니라 탐색, ★4). 라벨은 `sidoName`이라
+ * SIDO 행이 카탈로그에 없어도(방어) 산다. 오른쪽 셰브론은 뒤로가기 셰브론을 가로로 뒤집어 쓴다.
+ */
+function SidoRow({
+  group,
+  onOpen,
+}: {
+  group: RegionGroup;
+  onOpen(): void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID={`explore-region-sido-${group.sidoCode}`}
+      onPress={onOpen}
+      className="mb-sm flex-row items-center justify-between rounded-card border border-hairline-strong bg-canvas px-md py-3"
+    >
+      <Text className="font-noto-bold text-card-title font-bold text-ink">
+        {group.sidoName}
+      </Text>
+      <View style={{ transform: [{ scaleX: -1 }] }}>
+        <BackChevronGlyph size={18} />
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * 2단 상세 — 최상단 '전체' 행(그 시/도의 SIDO Region) + 하위 구/군 카드. '전체' 행은 기존
+ * `RegionCard` 3갈래를 그대로 탄다: selectable=true 면 선택 카드('인천 전체' 선택 가능),
+ * false 면 묶음 행(선택 불가). 상세 뒤로(`explore-region-drilldown-back`)는 1단 복귀지
+ * 라우터 이탈이 아니다(앱바 뒤로와 분리, ★3).
+ */
+function RegionDetail({
+  group,
+  onBack,
+  onSelectRegion,
+}: {
+  group: RegionGroup;
+  onBack(): void;
+  onSelectRegion(region: Region): void;
+}): ReactElement {
+  const sido = group.sido;
+  return (
+    <View>
+      <Pressable
+        testID="explore-region-drilldown-back"
+        onPress={onBack}
+        hitSlop={8}
+        className="mb-md flex-row items-center gap-xs"
+      >
+        <BackChevronGlyph size={18} />
+        <Text className="font-noto-medium text-body text-muted">지역 목록</Text>
+      </Pressable>
+
+      <Text className="mb-sm font-noto-bold text-card-title font-bold text-ink">
+        {group.sidoName} 전체
+      </Text>
+
+      <View className="flex-row flex-wrap justify-between">
+        {sido !== null && (
+          <RegionCard region={sido} onSelect={() => onSelectRegion(sido)} />
+        )}
+        {group.sigungu.map((region) => (
+          <RegionCard
+            key={region.regionCode}
+            region={region}
+            onSelect={() => onSelectRegion(region)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export function RegionPickerScreen({
   purpose,
   query,
@@ -168,6 +273,16 @@ export function RegionPickerScreen({
   onBack,
 }: RegionPickerScreenProps): ReactElement {
   const copy = COPY[purpose];
+
+  // 드릴인한 시/도 코드(뷰 상태) — null 이면 1단(시/도 행 목록). 검색 중이면 무시한다.
+  const [openSidoCode, setOpenSidoCode] = useState<string | null>(null);
+  const isSearching = query.trim() !== '';
+  const groups = isSearching ? [] : groupRegionsBySido(regions);
+  // 드릴인했지만 그 그룹이 사라졌으면(검색 등으로 목록이 바뀜) 1단으로 방어 복귀한다.
+  const detail =
+    openSidoCode === null
+      ? undefined
+      : groups.find((group) => group.sidoCode === openSidoCode);
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
@@ -238,13 +353,24 @@ export function RegionPickerScreen({
           <Text className="mt-lg text-center font-noto text-body text-muted">
             검색 결과가 없어요
           </Text>
+        ) : isSearching ? (
+          // 검색 모드: 드릴다운을 우회하고 페이지가 좁힌 결과를 평면 카드로.
+          <RegionGrid regions={regions} onSelectRegion={onSelectRegion} />
+        ) : detail !== undefined ? (
+          // 2단 상세: 그 시/도의 '전체' 행 + 구/군 카드.
+          <RegionDetail
+            group={detail}
+            onBack={() => setOpenSidoCode(null)}
+            onSelectRegion={onSelectRegion}
+          />
         ) : (
-          <View className="flex-row flex-wrap justify-between">
-            {regions.map((region) => (
-              <RegionCard
-                key={region.regionCode}
-                region={region}
-                onSelect={() => onSelectRegion(region)}
+          // 1단: 시/도 행 목록(구/군은 접힘).
+          <View>
+            {groups.map((group) => (
+              <SidoRow
+                key={group.sidoCode}
+                group={group}
+                onOpen={() => setOpenSidoCode(group.sidoCode)}
               />
             ))}
           </View>

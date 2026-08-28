@@ -6,16 +6,17 @@ import { RegionLevel } from '@/shared/api/generated/schemas';
 import { RegionPickerPage } from './RegionPickerPage';
 
 /**
- * TRIP-445 — e00·d1b 지역 선택 배선. 화면이 올려보낸 선택을 **실제 목적지**로 잇고,
- * 서버 카탈로그(`useRegions`)를 소비하며, 조회 실패를 실패 얼굴로 그린다.
+ * TRIP-597 — e00·d1b 지역 선택 배선(표면 A 드릴다운). 페이지는 전체 카탈로그를 화면에 내리고
+ * (6개 상한 `limitRegionsWhenEmpty` 제거 → 그룹 접기가 대체), 화면이 시/도→구/군 드릴다운으로
+ * 접는다. 선택은 **실제 목적지 라우팅**으로 잇고, 조회 실패를 실패 얼굴로 그린다.
  *
- * 무엇이 바뀌었나(현행 대비): '내 주변'이 사라져 `expo-location`·`@/shared/storage`·
- * `saved-stays`(msw) 목이 전부 없어졌다. 대신 **`useRegions` 목 seam** 하나로 서버 상태를
- * 제어한다 — `useStaySearch`/`useSavedStays` 선례의 "코드젠 경로가 흔들려도 목 대상 한 곳
- * 고정"과 같은 자리다.
+ * 무엇이 바뀌었나(현행 TRIP-499 대비):
+ *  · 빈 검색어 초기 뷰가 "앞 6개 카드"가 아니라 **시/도 행(그룹)**이다 — 6-cap 테스트를 그룹핑
+ *    테스트로 교체했다(02a §1). 라우팅은 초기 카드 press 가 아니라 **검색 경로·드릴다운 경로**로 한다.
  *
- * ⚠️ `jest.mock` 팩토리는 최상단으로 호이스팅된다 — 팩토리가 참조하는 바깥 변수는 이름이
- * `mock`으로 시작해야 예외를 받는다(리포 확립 규칙). 이 이름을 바꾸지 마라(★9).
+ * ⚠️ `jest.mock` 팩토리는 최상단으로 호이스팅된다 — 팩토리가 참조하는 바깥 변수는 이름이 `mock`으로
+ * 시작해야 예외를 받는다(리포 확립 규칙). 이 이름을 바꾸지 마라(★9). `useRegions`만 갈아끼우고
+ * `filterRegions`·`regionTint`·`groupRegionsBySido`는 requireActual 실물을 쓴다(순수라 안전, ★1).
  */
 
 const mockPush = jest.fn();
@@ -33,7 +34,6 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ ...mockParams }),
 }));
 
-// useRegions 만 갈아끼우고 filterRegions·regionTint 는 실물을 쓴다(requireActual).
 jest.mock('@/features/explore/model/regions', () => ({
   ...jest.requireActual('@/features/explore/model/regions'),
   useRegions: () => mockRegionsResult,
@@ -52,21 +52,89 @@ function region(
   };
 }
 
-const BUSAN = region({ regionCode: '26', name: '부산광역시', poiCount: 12 });
-const JEJU = region({ regionCode: '50', name: '제주특별자치도', poiCount: 8 });
+// 시도·시군구 혼재 카탈로그(법정동 앞자리 현실값). 인천 28(시도) / 미추홀 28177 / 연수 28185 /
+// 강원 51(시도) / 춘천 51110. 1단이 인천·강원 두 시/도로 접혀야 한다.
+//
+// ⚠️ 크기·순서 계약(TRIP-597 심판 무결성): 이 티켓의 헤드라인은 페이지가 빈 검색어 6개 상한
+// (`limitRegionsWhenEmpty`, 기본 limit=6)을 **걷고 전체 카탈로그를 내리는 것**이다. 그 상한이
+// 실수로 되살아나면 `slice(0, 6)`가 앞 6개만 남긴다 — 이를 심판이 잡으려면 **테스트가 실제로
+// 누르는 시군구가 flat 인덱스 6 이상**에 있어야 한다(5개짜리 카탈로그에선 `slice(0, 6)`가 항등이라
+// 상한 회귀를 구분조차 못 한다 — 옛 `SEVEN_REGIONS`가 7개였던 이유, code-critic 03b 차단-1).
+// 그래서 시/도 행 5개로 앞자리를 채우고 인천의 시군구(미추홀 28177·연수 28185)를 **꼬리(인덱스
+// 6·7)**로 밀었다. 상한이 되살면 두 시군구가 잘려 AC-3 드릴다운-stay(미추홀구 press)가 red 가 된다.
+const INCHEON = region({
+  regionCode: '28',
+  name: '인천광역시',
+  level: RegionLevel.SIDO,
+  sidoName: '인천광역시',
+  selectable: true,
+  poiCount: 50,
+});
+const SEOUL = region({
+  regionCode: '11',
+  name: '서울특별시',
+  level: RegionLevel.SIDO,
+  sidoName: '서울특별시',
+  selectable: true,
+  poiCount: 120,
+});
+const BUSAN = region({
+  regionCode: '26',
+  name: '부산광역시',
+  level: RegionLevel.SIDO,
+  sidoName: '부산광역시',
+  selectable: true,
+  poiCount: 80,
+});
+const DAEGU = region({
+  regionCode: '27',
+  name: '대구광역시',
+  level: RegionLevel.SIDO,
+  sidoName: '대구광역시',
+  selectable: true,
+  poiCount: 40,
+});
+const GANGWON = region({
+  regionCode: '51',
+  name: '강원특별자치도',
+  level: RegionLevel.SIDO,
+  sidoName: '강원특별자치도',
+  selectable: false,
+  poiCount: 30,
+});
+const CHUNCHEON = region({
+  regionCode: '51110',
+  name: '춘천시',
+  level: RegionLevel.SIGUNGU,
+  sidoName: '강원특별자치도',
+  poiCount: 12,
+});
+const MICHUHOL = region({
+  regionCode: '28177',
+  name: '미추홀구',
+  level: RegionLevel.SIGUNGU,
+  sidoName: '인천광역시',
+  poiCount: 8,
+});
+const YEONSU = region({
+  regionCode: '28185',
+  name: '연수구',
+  level: RegionLevel.SIGUNGU,
+  sidoName: '인천광역시',
+  poiCount: 5,
+});
 
-// TRIP-499 큐레이션(AC-5/6) 픽스처 — 7개(상한 6 초과)여야 "앞 6개만"과 "전량 렌더"가 갈린다.
-// 6개면 둘 다 6개 보여 공허 통과. 배열 순서 = 서버 대표순(limitRegionsWhenEmpty 가 앞 6개 slice).
-// 이름에 공통 토큰 '시' 를 심어 AC-6 이 "7개 다 매칭되는 검색"으로 6개 상한 미적용을 증명한다.
-// 전부 selectable·poiCount>0 이라 RegionPickerScreen 이 SelectableCard(testID explore-region-{code})로 그린다.
-const SEVEN_REGIONS: Region[] = [
-  region({ regionCode: 'R01', name: '부산시' }),
-  region({ regionCode: 'R02', name: '대구시' }),
-  region({ regionCode: 'R03', name: '인천시' }),
-  region({ regionCode: 'R04', name: '광주시' }),
-  region({ regionCode: 'R05', name: '대전시' }),
-  region({ regionCode: 'R06', name: '울산시' }),
-  region({ regionCode: 'R07', name: '세종시' }),
+// 인덱스: 0 인천 · 1 서울 · 2 부산 · 3 대구 · 4 강원 · 5 춘천 · 6 미추홀구 · 7 연수구.
+// 인천 시군구(미추홀·연수)가 인덱스 6·7 — 상한(6) 되살면 이 둘이 잘려 인천 드릴다운이 빈다.
+const CATALOG: Region[] = [
+  INCHEON,
+  SEOUL,
+  BUSAN,
+  DAEGU,
+  GANGWON,
+  CHUNCHEON,
+  MICHUHOL,
+  YEONSU,
 ];
 
 beforeEach(() => {
@@ -74,90 +142,67 @@ beforeEach(() => {
   mockRefetch.mockClear();
   mockParams = {};
   mockRegionsResult = {
-    data: [BUSAN, JEJU],
+    data: CATALOG,
     isPending: false,
     isError: false,
     refetch: mockRefetch,
   };
 });
 
-describe('AC-1/AC-4 · 서버 카탈로그를 그린다', () => {
-  it('useRegions가 준 지역을 카드로 그린다', () => {
+describe('AC-1 · 페이지가 전체 카탈로그를 내리고 화면이 시/도로 접는다 (6-cap 아님)', () => {
+  it('빈 검색어 초기 뷰는 시/도 행이고, 구/군(미추홀구)은 접혀 부재다', () => {
     render(<RegionPickerPage />);
 
-    expect(screen.getByTestId('explore-region-26')).toBeTruthy();
-    expect(screen.getByTestId('explore-region-50')).toBeTruthy();
+    // 시/도 행이 보인다 — 페이지가 6개로 자르지 않고 전량을 내려 화면이 접었다.
+    expect(screen.getByTestId('explore-region-sido-28')).toBeTruthy();
+    expect(screen.getByTestId('explore-region-sido-51')).toBeTruthy();
+    // 구/군은 시/도 안으로 접힘 — 1단에 없다(그룹 접기가 6-cap 을 대체).
+    expect(screen.queryByTestId('explore-region-28177')).toBeNull();
   });
 });
 
-describe('지역 선택 → 목적지 라우팅', () => {
-  it('카드를 누르면 지역명을 쿼리에 실어 /stays로 간다 (stay)', () => {
+describe('AC-6 · 검색 경로 → 원본 카탈로그 이름으로 라우팅 (TRIP-387 성질)', () => {
+  it('검색으로 좁힌 뒤 구/군 카드를 누르면 그 지역명을 쿼리에 실어 /stays로 간다 (stay)', () => {
     render(<RegionPickerPage />);
 
-    fireEvent.press(screen.getByTestId('explore-region-50'));
+    // 검색 — '춘천'으로 좁히면 평면 카드(드릴다운 우회).
+    fireEvent.changeText(screen.getByTestId('explore-region-search'), '춘천');
+    fireEvent.press(screen.getByTestId('explore-region-51110'));
 
-    // 서버 `region`은 자유 문자열 계약이라 한글 이름을 그대로 보낸다(코드가 아니다).
+    // 서버 `region`은 자유 문자열 계약이라 원본 카탈로그의 한글 이름을 그대로 보낸다(코드 아님).
     expect(mockPush).toHaveBeenCalledWith(
-      `/stays?region=${encodeURIComponent('제주특별자치도')}`
+      `/stays?region=${encodeURIComponent('춘천시')}`
     );
+    // 좁혀졌는지도 함께 본다 — 필터가 안 걸리면 이 단언이 무의미해진다.
+    expect(screen.queryByTestId('explore-region-28177')).toBeNull();
   });
+});
 
-  it("purpose='trip'이면 regionCode로 여행지 상세로 간다 (D2)", () => {
+describe('AC-3/AC-2 · 드릴다운 경로 → 목적지 라우팅', () => {
+  it("purpose='trip' 에서 '인천 전체'를 누르면 regionCode 로 여행지 상세로 간다", () => {
     mockParams = { purpose: 'trip' };
     render(<RegionPickerPage />);
 
-    fireEvent.press(screen.getByTestId('explore-region-50'));
+    fireEvent.press(screen.getByTestId('explore-region-sido-28')); // 인천 드릴인
+    fireEvent.press(screen.getByTestId('explore-region-28')); // '인천 전체' 행
 
-    // D2 — 목적지 상세 경로의 식별자 자리는 regionCode('50')다.
-    expect(mockPush).toHaveBeenCalledWith('/explore/destination/50');
+    // 전체(SIDO Region) 선택 → 목적지 상세 경로의 식별자 자리는 regionCode('28')다.
+    expect(mockPush).toHaveBeenCalledWith('/explore/destination/28');
   });
 
-  it('검색으로 좁힌 뒤에도 같은 목적지로 간다', () => {
+  it('드릴다운 안 구/군 카드를 누르면 그 구/군 이름으로 /stays로 간다 (stay)', () => {
     render(<RegionPickerPage />);
 
-    fireEvent.changeText(screen.getByTestId('explore-region-search'), '부산');
-    fireEvent.press(screen.getByTestId('explore-region-26'));
+    fireEvent.press(screen.getByTestId('explore-region-sido-28')); // 인천 드릴인
+    fireEvent.press(screen.getByTestId('explore-region-28177')); // 미추홀구
 
     expect(mockPush).toHaveBeenCalledWith(
-      `/stays?region=${encodeURIComponent('부산광역시')}`
+      `/stays?region=${encodeURIComponent('미추홀구')}`
     );
-    // 좁혀졌는지도 함께 본다 — 필터가 안 걸리면 이 단언이 무의미해진다.
-    expect(screen.queryByTestId('explore-region-50')).toBeNull();
   });
 });
 
-describe('AC-5/AC-6 · 큐레이션 (TRIP-499 · 빈 검색어면 앞 6개만, 검색 시 상한 미적용)', () => {
-  it('AC-5 · 빈 검색어면 앞 6개만 렌더하고 7번째 지역은 부재다', () => {
-    // 준비 — 대표순 7개 지역(상한 6 초과). 검색어는 입력하지 않는다(빈 문자열).
-    mockRegionsResult.data = SEVEN_REGIONS;
-
-    // 실행 — 초기 렌더 그대로(빈 검색어) 관찰.
-    render(<RegionPickerPage />);
-
-    // 단언 — 1번째·6번째는 있고, 7번째는 없다. 지금 페이지는 상한 없이 filterRegions 결과를 전량
-    // 그리므로 7번째가 present → "부재" 단언이 실패해 red. 배선(limitRegionsWhenEmpty) 후 6개로
-    // 잘려 green. 6번째 present 는 상한이 6임을 잠근다(5로 낮아지면 red).
-    expect(screen.getByTestId('explore-region-R01')).toBeTruthy();
-    expect(screen.getByTestId('explore-region-R06')).toBeTruthy();
-    expect(screen.queryByTestId('explore-region-R07')).toBeNull();
-  });
-
-  it('AC-6 · 검색어를 넣으면 매칭 지역이 6개 상한 없이 전량 렌더된다(선제 green)', () => {
-    // 준비 — 이름에 공통 토큰 '시' 를 가진 7개.
-    mockRegionsResult.data = SEVEN_REGIONS;
-    render(<RegionPickerPage />);
-
-    // 실행 — '시' 는 7개 전부에 포함되므로 filterRegions 가 7개를 다 돌려준다.
-    fireEvent.changeText(screen.getByTestId('explore-region-search'), '시');
-
-    // 단언 — 7개가 다 매칭되는데 7번째가 보이면 6개 상한이 안 걸린 것. 무조건 slice(0,6)
-    // (검색 중에도 자름) 뮤테이션이면 7번째가 잘려 red 가 된다.
-    expect(screen.getByTestId('explore-region-R01')).toBeTruthy();
-    expect(screen.getByTestId('explore-region-R07')).toBeTruthy();
-  });
-});
-
-describe('AC-6 · 조회 실패 (INV-4)', () => {
+describe('INV-4 · 조회 실패 (이월 유지)', () => {
   it('isError면 실패 얼굴을 그리고 "검색 결과가 없어요"로 뭉개지 않으며, 재시도는 refetch를 부른다', () => {
     mockRegionsResult = {
       data: undefined,
@@ -175,7 +220,7 @@ describe('AC-6 · 조회 실패 (INV-4)', () => {
   });
 });
 
-describe("AC-7 · '내 주변' 배선이 렌더에 없다", () => {
+describe("AC · '내 주변' 배선이 렌더에 없다 (이월 유지)", () => {
   it("purpose='stay'에서도 '내 주변' 진입이 없다", () => {
     render(<RegionPickerPage />);
 
