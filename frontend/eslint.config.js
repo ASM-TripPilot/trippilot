@@ -24,7 +24,9 @@ const featureIsolationZones = FEATURES.map((feature) => ({
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ['dist/*', '.expo/*', 'ios/*', 'android/*', 'web/*'],
+    // .claude/** = 에이전트·스킬·Workflow 스크립트(dictate.js 등). 워크플로 JS는 최상위 await/return을
+    // 쓰는 런타임 스크립트라 일반 ESM 린트 대상이 아니다(파싱 에러). 앱 소스 아님 → 린트 제외.
+    ignores: ['dist/*', '.expo/*', 'ios/*', 'android/*', 'web/*', '.claude/**'],
   },
   {
     files: ['src/**/*.{ts,tsx}'],

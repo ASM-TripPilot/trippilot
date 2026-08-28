@@ -49,15 +49,23 @@ const learner = '학습자 톤: 이 사용자는 코드 초심자다. 산출 문
 const auto = '자율 실행(dictate): 사용자가 자리에 없다. 질문이 생기면 멈추지 말고 "질문" 절에 적고 가정 하에 진행하되, 가정이 결과를 뒤집을 수 있으면 그 항목을 중단하고 사유를 반환한다.'
 
 // ---------- Phase 1: Triage ----------
-const tri = await agent(
+// args.triage 주입 시 재실행 안 함 — triage는 LLM이라 매 실행 슬러그가 달라져, resume/only가 비결정성과 싸운다. 검토·확정한 triage를 그대로 실행하려면 주입.
+const tri = args.triage || await agent(
 `${auto}
 전사문을 항목으로 자르는 triage. 역할·규칙은 ${A}/triage.md 를 따른다.
 입력: 전사문 ${TRANSCRIPT} · 리포 ${REPO} · 킷 §10 ${S}/figma-build/references/design-kit.md · 밴드 맵 ${S}/spec-perception/reference/figma-structure.md · 직전 회차 ${VAULT}/구술/ (있으면 최신 폴더의 01_triage.md)
 실행 상한 cap=${CAP}. 산출: ${D}/01_triage.md 와 전사문 아래 "## 후교정" 절. 반환은 스키마대로.`,
   { agentType: 'triage', schema: TRIAGE, label: 'triage' })
 
+// 실행 항목 override(선택) — triage 자동 레인/cap 대신 사람이 planOnly 목록을 보고 고른 것을 명시. 둘 다 없으면 기존 동작.
+const ONLY = args.only || null            // slug 화이트리스트: 있으면 이 슬러그만 실행(cap 무시, 우선순위는 사람이 고른 것)
+const LANE = args.lane || {}              // slug→lane 오버라이드: figma 스펙 있는 hold를 figma로 승격 등
+for (const it of tri.items) if (LANE[it.slug]) it.lane = LANE[it.slug]
+
 const ORDER = { figma: 0, code: 1 }   // 피그마 먼저(채택된 디자인이 코드의 입력), 그다음 코드 — 순차
-const run = PLAN_ONLY ? [] : tri.items.filter(i => i.lane === 'code' || i.lane === 'figma').slice(0, CAP).sort((a, b) => ORDER[a.lane] - ORDER[b.lane])
+const run = PLAN_ONLY ? []
+  : ONLY ? tri.items.filter(i => ONLY.includes(i.slug)).sort((a, b) => ORDER[a.lane] - ORDER[b.lane])
+  : tri.items.filter(i => i.lane === 'code' || i.lane === 'figma').slice(0, CAP).sort((a, b) => ORDER[a.lane] - ORDER[b.lane])
 const cnt = (l) => tri.items.filter(i => i.lane === l).length
 log(`triage: code ${cnt('code')} · figma ${cnt('figma')} · question ${cnt('question')} · hold ${cnt('hold')} → ${PLAN_ONLY ? '할일 목록만(planOnly)' : '실행 ' + run.length + ' (cap ' + CAP + ')'}`)
 
