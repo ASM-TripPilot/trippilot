@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
+import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { parseSlotKey } from '@/features/itinerary/model/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
 import { swapSlotPoi } from '@/features/itinerary/model/swapSlotPoi';
@@ -62,10 +63,13 @@ export function SlotCandidatePanelContainer({
   function handleSelect(candidatePoiId: string): void {
     // itinerary GET 미도착(data undefined)이면 조기 반환 — swapSlotPoi([]) 로 빈 days 전체교체 PUT
     // 이 나가 일정이 소실되는 것을 막는다(candidates POST 와 GET 은 순서 보장이 없다).
+    // generationState==='PARTIAL'(2단계 생성 중)이면 선택도 잠근다 — day1-only 전체교체 PUT 이 뒷날을
+    // 덮어쓰기 전에 막는다(TRIP-601 가드 b · copick SlotFillPage 와 동형, 서버 409 의 클라 사본).
     if (
       firedRef.current ||
       parsed.kind !== 'ok' ||
-      itinerary.data === undefined
+      itinerary.data === undefined ||
+      isConfirmLocked(itinerary.data.generationState)
     )
       return;
     firedRef.current = true;

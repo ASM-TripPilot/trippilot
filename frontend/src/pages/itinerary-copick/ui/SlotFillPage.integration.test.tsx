@@ -320,6 +320,37 @@ describe('🔴 SlotFillPage (h13→h14/h15) 배선', () => {
     expect(mockBack).toHaveBeenCalledTimes(0);
   });
 
+  it('C14 · TRIP-601 가드 b — generationState=PARTIAL 이면 확정 PUT 0(생성 중 전체교체 차단)', async () => {
+    // 준비 — GET 이 PARTIAL(day1 도착, 뒷날 생성 중)로 정착한다. day1 data 는 있으므로 콜드캐시(C9)와
+    // 달리 throw 가 안 나고, 가드가 없으면 확정이 그대로 day1-only 전체교체 PUT 을 쏜다(★b-2).
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({ ...itinerary(), generationState: 'PARTIAL' })
+      )
+    );
+    renderPage();
+    await pickConcept('culture');
+    await screen.findByTestId('itinerary-candidate-radio-X');
+
+    // 실행 — 라디오 선택 후 확정. 후보 조회(POST)는 정상 진행, 막는 건 확정(PUT)뿐이다.
+    fireEvent.press(screen.getByTestId('itinerary-candidate-radio-X'));
+    await waitFor(() => expect(postCalls).toBe(1));
+    fireEvent.press(screen.getByTestId('itinerary-copick-slotfill-confirm'));
+
+    // ★b-1 통과형 목 함정 회피 — 확정을 눌러 PUT 이 나갔다면 이 대기 동안 MSW 핸들러가 putCalls 를
+    // 올린다. "안 나갔다"를 거짓 green 없이 잠그려면 나갈 시간을 실제로 줘야 한다(콜드캐시 C9 는 mutate
+    // 자체가 호출조차 안 돼 이 대기가 불필요했다 — PARTIAL 은 호출 경로가 살아 있어 다르다).
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
+
+    // ★ PARTIAL 이면 day1-only 전체교체 PUT 이 나가면 안 된다(서버 409 의 클라 사본, 심층 방어).
+    expect(putCalls).toBe(0);
+    // 막혔으니 전진(성공 콜백의 replace)도 없다.
+    expect(mockReplace).toHaveBeenCalledTimes(0);
+    expect(mockBack).toHaveBeenCalledTimes(0);
+  });
+
   it('C10 · firedRef — 같은 틱 확정 2회 연타여도 PUT 1건', async () => {
     renderPage();
     await pickConcept('culture');
