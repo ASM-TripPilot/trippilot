@@ -54,7 +54,11 @@
 - [ ] 아키텍처 테스트: agents/reflect에 L-1~L-3 활성 · yaml→prompts 한정 · SDK→adapters 한정 · ports 순수성(stdlib만) 유지
 - [ ] `POST /ai/v1/reflection/generate`를 `ai/docs/openapi.json` 와이어 정본에 반영 (AI CI "실행 앱 스키마 == 커밋 계약" 게이트)
 - [ ] 실 API·실 이미지 호출 CI 0건 (D37) — vision 스모크는 수동 스크립트로 별도
-- [ ] Phase 2 코드 착수 조건: 백엔드 사진 업로드 API·동의 법무 로그 연동 확인 (TRIP-478 계열) + 미결 #1·#2·#6 해소
+- [x] ~~Phase 2 코드 착수 조건: 백엔드 사진 업로드 API·동의 법무 로그 연동 확인~~ →
+      **재정의 (2026-08-28)**: 백엔드(TRIP-478)를 실제로 기다려야 하는 건 **실사용자 사진
+      전달 한 조각뿐**이다. 포트 seam·어댑터·동의 타입·하이라이트 선별·프롬프트·강등 계단은
+      전부 선행 가능하고, 테스트는 D37상 어차피 fake 이미지로 한다. 먼저 만들어두면 백엔드가
+      붙일 계약이 코드로 존재한다는 이점도 있다. 미결 #1·#2·#6·#9는 전건 해소됨
 
 ## 5. 미결 목록 — **전건 확정 (2026-08-25, TRIP-558)**
 
@@ -68,7 +72,7 @@
 | #6 | **별도 feature** `REFLECTION_TEMPLATE_VISION` — TierRouter가 feature→model 결정론이라 같은 feature로는 vision 모델을 나눌 수 없다 |
 | #7 | **`is_fallback` 단일 필드로 충분** — degraded 필드 추가 없음. vision 강등은 관측 이벤트로 남는다 (필드 추가는 FE 협상 항목만 늘린다) |
 | #8 | **구 REFLECTION 흡수·제거** — 계약 §3.2가 이미 "j03 본문 = DAILY 캡션 연결" 선언. `mood`·`highlights` 소비처 0(U5 기록 FD에 mood 언급 0회). 제거: prompts/gates/workers/enum/`ReflectionDraft`/`Mood`/tier_map |
-| #9 | **총 3회 예산에 포함** — 별도 배정 시 최악 6회로 비용 2배 |
+| #9 | **총 3회 예산에 포함 (확정 2026-08-28)** — vision 시도와 텍스트 시도가 상한 3회를 공유한다. 별도 배정 시 최악 6회로 비용 2배이고, vision이 3회나 실패할 상황이면 텍스트도 잘 될 가능성이 낮다(최후 보루는 고정 템플릿) |
 
 ### 5.1 확정에 따른 설계 변경 — 하드 위반 교체는 장면을 생략하지 않는다
 

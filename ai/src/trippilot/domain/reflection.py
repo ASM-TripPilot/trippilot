@@ -21,7 +21,9 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
 
-from trippilot.domain.common import PoiId
+from typing import NewType
+
+from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.serialization import from_iso, to_iso
 
 # ── 열거형 (FD domain-entities §1) ──────────────────────────
@@ -421,4 +423,111 @@ class TemplateCandidate:
             template=ReflectionTemplate.from_dict(d["template"]),
             violations=tuple(TemplateViolation.from_dict(v) for v in d["violations"]),
             attempt=d["attempt"],
+        )
+
+
+# ── Phase 2 — 멀티모달 입력 (FD domain-entities §4) ─────────
+# **산출 타입은 하나도 늘지 않는다** — 달라지는 것은 장면 채움의 입력뿐이라
+# Phase 1/2가 같은 출력 계약을 공유한다(FE 재협상 없는 드롭인 + INV-4 강등 계단의 전제).
+
+PhotoId = NewType("PhotoId", str)
+
+
+@dataclass(frozen=True, slots=True)
+class PhotoRef:
+    """사진 1장의 메타 + 접근 참조. 바이트는 여기 담지 않는다 —
+    실제 이미지는 호출 직전에 LlmImagePart로 싣는다(포트 경계에서만 바이트 취급)."""
+
+    photo_id: PhotoId
+    visit_ref: VisitRef | None = None   # 어느 방문의 사진인지 (모르면 None)
+    taken_at: datetime | None = None    # tz-aware
+    gps: GeoPoint | None = None
+
+    def __post_init__(self) -> None:
+        if not str(self.photo_id).strip():
+            raise ValueError("photo_id 비어 있음")
+        if self.taken_at is not None and self.taken_at.tzinfo is None:
+            raise ValueError("taken_at은 tz-aware여야 함")
+
+    def to_dict(self) -> dict:
+        return {
+            "photo_id": str(self.photo_id),
+            "visit_ref": self.visit_ref.to_dict() if self.visit_ref else None,
+            "taken_at": to_iso(self.taken_at) if self.taken_at else None,
+            "gps": self.gps.to_dict() if self.gps else None,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "PhotoRef":
+        ref, taken, gps = d.get("visit_ref"), d.get("taken_at"), d.get("gps")
+        return cls(
+            photo_id=PhotoId(d["photo_id"]),
+            visit_ref=VisitRef.from_dict(ref) if ref else None,
+            taken_at=from_iso(taken) if taken else None,
+            gps=GeoPoint.from_dict(gps) if gps else None,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PhotoConsent:
+    """사진의 외부 LLM 전송 동의 증빙. **AI는 동의를 판정하지 않는다** —
+    백엔드 append-only 법무 로그(consent-log, DB 권한 수준 DELETE 불가)의
+    레코드 참조를 받아 트레이스에 연결할 뿐이다."""
+
+    granted: bool
+    consent_ref: str
+    granted_at: datetime
+
+    def __post_init__(self) -> None:
+        if self.granted_at.tzinfo is None:
+            raise ValueError("granted_at은 tz-aware여야 함")
+
+    def to_dict(self) -> dict:
+        return {
+            "granted": self.granted,
+            "consent_ref": self.consent_ref,
+            "granted_at": to_iso(self.granted_at),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "PhotoConsent":
+        return cls(
+            granted=d["granted"],
+            consent_ref=d["consent_ref"],
+            granted_at=from_iso(d["granted_at"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class VisionInput:
+    """사진을 LLM에 보내기 위한 입력 묶음.
+
+    **동의 게이트를 타입으로 강제한다** — 미동의(또는 증빙 참조 없음) 상태의
+    VisionInput은 인스턴스로 존재할 수 없다. 덕분에 "동의 없이는 이미지가
+    요청에 실리지 않는다"가 코드 경로가 아니라 타입 수준에서 성립한다
+    (U1 '검증 위치' 규칙 동형 — VIS-P1의 전제).
+    """
+
+    photos: tuple[PhotoRef, ...]
+    consent: PhotoConsent
+
+    def __post_init__(self) -> None:
+        if not self.consent.granted:
+            raise ValueError("미동의 — 사진을 외부 LLM에 보낼 수 없다 (BR-U6R-09)")
+        if not self.consent.consent_ref.strip():
+            raise ValueError("consent_ref 없음 — 동의 증빙 참조가 필요하다")
+        if not self.photos:
+            raise ValueError("photos ≥ 1")
+
+    def to_dict(self) -> dict:
+        return {
+            "photos": [p.to_dict() for p in self.photos],
+            "consent": self.consent.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "VisionInput":
+        return cls(
+            photos=tuple(PhotoRef.from_dict(p) for p in d["photos"]),
+            consent=PhotoConsent.from_dict(d["consent"]),
         )
