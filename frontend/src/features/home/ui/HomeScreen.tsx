@@ -861,13 +861,11 @@ function SavedMenuFab({
 function DiscoveryBody({
   hero,
   sections,
-  onPressSavedPlaces,
   onPressSpotsMore,
   onPressSearch,
 }: {
   hero: HomeMagazineHero;
   sections: HomeSections;
-  onPressSavedPlaces?: () => void;
   onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
 }): ReactElement {
@@ -884,7 +882,6 @@ function DiscoveryBody({
         <SpotsSection sections={sections} onMore={onPressSpotsMore} />
         <ItinerariesSection sections={sections} />
       </View>
-      <SoftNote asButton onPressCta={onPressSavedPlaces} />
     </>
   );
 }
@@ -1003,7 +1000,6 @@ function PhaseBody({
   hero,
   sections,
   phase,
-  onPressSavedPlaces,
   onPressSpotsMore,
   onPressTripHeroCta,
   onPressSearch,
@@ -1013,7 +1009,6 @@ function PhaseBody({
       <DiscoveryBody
         hero={hero}
         sections={sections}
-        onPressSavedPlaces={onPressSavedPlaces}
         onPressSpotsMore={onPressSpotsMore}
         onPressSearch={onPressSearch}
       />
@@ -1069,7 +1064,6 @@ export function HomeScreen({
             hero={hero}
             sections={sections}
             phase={phase}
-            onPressSavedPlaces={onPressSavedPlaces}
             onPressSpotsMore={onPressSpotsMore}
             onPressTripHeroCta={onPressTripHeroCta}
             onPressSearch={onPressSearch}

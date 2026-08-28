@@ -46,11 +46,13 @@ beforeEach(() => {
 
 // 딥링크 상태 키 4개 ↔ 그 상태에 나타나는 실물 홈 마커(신 프레임 재정합). 구 마커
 // (`-next-plan`·`-empty-hero`·`-taste-setup`·`-skeleton-popular`)는 재작성으로 소멸 → 신 마커
-// 로 교체. no-trip은 가정 B로 default와 렌더가 동일해 고유 마커가 없으므로(02a §4-5) 온램프
-// 마커(`home-soft-note`, AC-3 주제)를 쓴다 — 딥링크가 홈으로 조준됨을 확인하는 목적엔 충분.
+// 로 교체. no-trip은 가정 B로 default와 렌더가 동일해 고유 마커가 없으므로, 온램프 마커를 쓴다.
+// TRIP-596으로 담은 곳 배너(`home-soft-note`)가 no-trip에서 제거되어, 온램프를 승계한 하트 FAB
+// 토글(`home-saved-menu-toggle`, 닫힘 상태에서도 항상 present)로 재지정한다 — 딥링크가 홈으로
+// 조준됨을 확인하는 목적엔 충분하고, 온램프 의미도 최근접으로 잇는다.
 const HOME_DEEP_LINK_CASES = [
   { state: 'home-default', marker: 'home-collection-card-0' },
-  { state: 'home-no-trip', marker: 'home-soft-note' },
+  { state: 'home-no-trip', marker: 'home-saved-menu-toggle' },
   { state: 'home-empty', marker: 'home-collections-empty' },
   { state: 'home-loading', marker: 'home-collections-skeleton' },
 ] as const;

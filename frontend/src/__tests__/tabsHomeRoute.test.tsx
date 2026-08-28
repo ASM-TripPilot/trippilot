@@ -128,11 +128,19 @@ describe('🟢 370-AC-1 · [여행 만들기] FAB → /trips/new/step1', () => {
   });
 });
 
-describe('🟢 370-AC-1 · 온램프 [담은 곳] → /explore/saved-places', () => {
-  it('담은 곳 CTA 를 누르면 담은 장소 화면으로 이동한다', () => {
+describe('🟢 370-AC-1 재타겟 · 온램프는 하트 FAB 경유 → /explore/saved-places (TRIP-596 AC-8)', () => {
+  it('하트 FAB 를 열고 담은 장소 미니 FAB 를 누르면 담은 장소 화면으로 이동한다(토글은 push 안 함)', () => {
+    // TRIP-596 — discovery 담은 곳 배너(home-saved-places-cta)가 제거돼 press 대상이 하트 FAB
+    // 으로 재타겟된다. 라우트가 savedMenuOpen useState 를 소유하므로(index.tsx:89) 토글 press 는
+    // 재렌더로 미니 FAB 을 띄우기만 하고 push 하지 않는다 — push 는 미니 FAB press 한 번뿐이다.
+    // 라우트 로직은 무변경(하트 FAB 경로는 TRIP-494 로 이미 배선) — 이 재타겟은 배너 제거가
+    // 온램프 라우팅을 깨지 않음을 잠그는 회귀다.
     render(<HomeRoute />);
 
-    fireEvent.press(screen.getByTestId('home-saved-places-cta'));
+    // 토글 press → 메뉴 열림(재렌더) → 미니 FAB 등장. 토글 자체는 push 하지 않는다.
+    fireEvent.press(screen.getByTestId('home-saved-menu-toggle'));
+    // 미니 FAB press → /explore/saved-places 로 이동.
+    fireEvent.press(screen.getByTestId('home-saved-places-fab'));
 
     expect(mockPush.mock.calls).toEqual([['/explore/saved-places']]);
   });
