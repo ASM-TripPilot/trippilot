@@ -210,32 +210,36 @@ describe('AC-V2 · 카카오 라벨 문구 — 한글이 뜨고 영문은 화면
 
 const ERROR_COPY = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요';
 
-// TRIP-592: 파스텔 채움(bg-primary-pale + text-primary-text)을 폐기하고 '아웃라인 폼'으로 위계를
-// 신호한다 — 코랄 1px 보더 + 캔버스 배경 + ink 텍스트(01b Q2 = 최소안: 컨테이너·색만 전환, 문구
-// 단일 유지). 아래 두 it 은 폐기 토큰의 '부재'와 새 토큰의 '존재'를 한 쌍으로 잠근다. 회귀가 아니라
-// 의도된 계약 교체다(01b ★1) — 이 describe 가 아웃라인 폼을 지키는 새 심판이다. 뮤테이션 실측 근거는
-// 02a §5(pale 되돌리면 red, 원복하면 green).
-describe('AC-V3 · 에러 배너가 Figma 아웃라인 변형 토큰을 입는다 (렌더 · TRIP-592 계약 교체)', () => {
-  it('배너 컨테이너가 bg-canvas·border-primary·rounded-button 을 갖고, 폐기된 bg-primary-pale 은 없다', () => {
+// TRIP-592(→ C안): 파스텔 채움(bg-primary-pale + text-primary-text)을 폐기하고 'C 아이콘 리드형'
+// 으로 위계를 신호한다 — 카드(보더·캔버스채움) 없이 배경 없는 인라인 + 코랄 원 아이콘 배지(bg-primary
+// rounded-full) + ink 텍스트(문구 단일 유지). 아래 두 it 은 폐기 토큰의 '부재'와 새 폼('배경 없는
+// 인라인'·'코랄 원 배지'·ink)의 '존재'를 한 쌍으로 잠근다. 회귀가 아니라 의도된 계약 교체다 — 이 describe
+// 가 C 폼을 지키는 새 심판이다. 뮤테이션: E(아웃라인 border-primary·bg-canvas 카드)로 되돌리면
+// noOutline/noCardBg 가 깨져 red 가 된다(양방향).
+describe('AC-V3 · 에러 배너가 Figma C(아이콘 리드형) 토큰을 입는다 (렌더 · TRIP-592 계약 교체)', () => {
+  it('배너가 카드(pale·보더·캔버스채움) 없는 인라인이고, 코랄 원 아이콘 배지(bg-primary·rounded-full)를 리드로 갖는다', () => {
     // ▸준비 — overrides 로 error phase 를 연다.
     renderDefault({ phase: 'error', errorCode: 'SOCIAL_AUTH_FAILED' });
 
-    // ▸실행 — 배너 컨테이너 노드.
+    // ▸실행 — 배너 컨테이너 + 그 안 코랄 원 배지 노드.
     const banner = screen.getByTestId('auth-login-error-banner');
     const bannerTokens = classTokens(banner);
+    const badge = within(banner).getByTestId('auth-login-error-icon-badge');
+    const badgeTokens = classTokens(badge);
 
-    // ▸단언 — 새 토큰 존재 + 폐기 토큰(pale 채움) 부재를 한 객체로 묶어 diff 를 한눈에 본다.
-    // border-primary 는 코랄 아웃라인의 색 토큰이라 pale 채움과 서로를 배제한다.
+    // ▸단언 — C 폼: 컨테이너는 카드 채움/보더/캔버스배경/pale 전부 부재, 코랄 원 배지가 아이콘을 리드.
     expect({
-      background: bannerTokens.includes('bg-canvas'),
-      outline: bannerTokens.includes('border-primary'),
-      radius: bannerTokens.includes('rounded-button'),
       noPaleFill: bannerTokens.includes('bg-primary-pale'),
+      noOutline: bannerTokens.includes('border-primary'),
+      noCardBg: bannerTokens.includes('bg-canvas'),
+      circleFill: badgeTokens.includes('bg-primary'),
+      circleRadius: badgeTokens.includes('rounded-full'),
     }).toEqual({
-      background: true,
-      outline: true,
-      radius: true,
       noPaleFill: false,
+      noOutline: false,
+      noCardBg: false,
+      circleFill: true,
+      circleRadius: true,
     });
   });
 

@@ -12,7 +12,7 @@ import {
   NaverIcon,
   WarningTriangleGlyph,
 } from './AuthGlyphs';
-import { APP_ICON_COLORS } from '../config/gradients';
+import { APP_ICON_COLORS, AUTH_ICON_COLORS } from '../config/gradients';
 import type { SocialLoginPhase } from '../model/useSocialLogin';
 
 export interface SocialLoginScreenProps {
@@ -190,9 +190,17 @@ export function SocialLoginScreen({
       {showErrorBanner ? (
         <View
           testID="auth-login-error-banner"
-          className="w-full flex-row items-center gap-[9px] rounded-button border border-primary bg-canvas px-[14px] py-md"
+          className="w-full flex-row items-center gap-[10px]"
         >
-          <WarningTriangleGlyph size={18} />
+          <View
+            testID="auth-login-error-icon-badge"
+            className="h-7 w-7 items-center justify-center rounded-full bg-primary"
+          >
+            <WarningTriangleGlyph
+              size={16}
+              color={AUTH_ICON_COLORS.onPrimary}
+            />
+          </View>
           <Text className="flex-1 font-noto-bold text-label font-bold text-ink">
             로그인에 실패했어요. 잠시 후 다시 시도해 주세요
           </Text>
