@@ -176,6 +176,24 @@ describe('C26 · D2 — 시작 시각은 바텀시트 목록에서 고른다', (
     expect(onPickStart).toHaveBeenCalledWith('13:00');
     expect(onPickStart).toHaveBeenCalledTimes(1);
   });
+
+  /**
+   * TRIP-599(AC-2 통합) — 시작 시각이 휠 primitive 로 교체돼도 **선택 표식**이 살아남는다.
+   * 휠 자체의 선택 표식은 `WheelPicker.test.tsx` AC-2 가 잠그고, 여기서는 h07 이 그 primitive 에
+   * `selected` 를 실제로 넘겨 배선하는지를 통합 지점에서 잰다 — 안 넘기면 아무 셀도 selected 가
+   * 아니어서 red 다. (교체 전 평면 리스트도 같은 계약을 만족하므로 지금은 선제 green 이다.)
+   */
+  it('D2-b 열린 시트에서 지금 선택된 시각(13:00) 셀만 selected 다', () => {
+    renderScreen();
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
+
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-start-option-13:00')
+    ).toBeSelected();
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-start-option-09:00')
+    ).not.toBeSelected();
+  });
 });
 
 describe('C27 · AC-V4 · D4 · INV-3 — 체류는 3단계 라벨뿐이다', () => {
