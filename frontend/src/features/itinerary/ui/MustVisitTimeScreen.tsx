@@ -4,9 +4,11 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet, {
   BottomSheetBackdrop,
-  BottomSheetScrollView,
+  BottomSheetView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+
+import { WheelPicker } from '@/shared/ui/WheelPicker';
 
 import { MUST_VISIT_NAME_PLACEHOLDER } from '../model/mustVisitList';
 import {
@@ -373,10 +375,16 @@ export function MustVisitTimeScreen({
         </ScrollView>
 
         {startSheetOpen ? (
-          <BottomSheet backdropComponent={renderSheetBackdrop}>
-            <BottomSheetScrollView
+          // 휠이 자기 스크롤을 쥐므로 시트 본문은 스크롤하지 않는다(BottomSheetView).
+          // `enableContentPanningGesture={false}` 는 시트의 콘텐츠 pan 이 휠의 세로 스크롤을
+          // 삼키는 것을 막는다(`TripBaseFixSheet` TRIP-455 함정과 동형 — jest 사각·6-b 실기).
+          <BottomSheet
+            backdropComponent={renderSheetBackdrop}
+            enableContentPanningGesture={false}
+          >
+            <BottomSheetView
               testID="itinerary-mustvisit-time-start-sheet"
-              className="w-full"
+              className="w-full pb-lg"
             >
               <View className="w-full flex-row items-center gap-sm px-lg pb-sm pt-xs">
                 <Text className="flex-1 font-noto-bold text-section font-bold text-ink">
@@ -393,30 +401,19 @@ export function MustVisitTimeScreen({
                   </Text>
                 </Pressable>
               </View>
-              {startOptions.map((option) => (
-                <Pressable
-                  key={option}
-                  testID={`itinerary-mustvisit-time-start-option-${option}`}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: form.fixedStart === option }}
-                  onPress={() => {
-                    onPickStart?.(option);
-                    setStartSheetOpen(false);
-                  }}
-                  className="w-full px-lg py-md"
-                >
-                  <Text
-                    className={`text-card-title ${
-                      form.fixedStart === option
-                        ? 'font-noto-bold font-bold text-primary'
-                        : 'font-noto text-ink'
-                    }`}
-                  >
-                    {startTimeLabel(option)}
-                  </Text>
-                </Pressable>
-              ))}
-            </BottomSheetScrollView>
+              <WheelPicker
+                values={startOptions}
+                selected={form.fixedStart}
+                onSelect={(value) => {
+                  onPickStart?.(value);
+                  setStartSheetOpen(false);
+                }}
+                renderLabel={startTimeLabel}
+                testIDForValue={(value) =>
+                  `itinerary-mustvisit-time-start-option-${value}`
+                }
+              />
+            </BottomSheetView>
           </BottomSheet>
         ) : null}
       </View>

@@ -780,6 +780,7 @@
 ## src/shared/ui/
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · BottomTabBarProps · BottomTabBar
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
+- `src/shared/ui/WheelPicker.tsx`  →  WheelPickerProps · WheelPicker
 
 ## src/shared/version/
 - `src/shared/version/compareVersion.ts`  →  compareVersion
@@ -795,4 +796,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 527개 파일
+합계 528개 파일

@@ -310,3 +310,35 @@ describe('C39 · 02a ★11 — h05 화면이 지도를 배럴로 가져온다', 
     expect(source).not.toContain('@/shared/map/KakaoMapView');
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TRIP-599 추가분 — h07 시작 시각이 shared 휠 primitive 를 **실제로 소비**하는가.
+ *
+ * 왜 소스로 재나: 렌더 테스트(`MustVisitTimeScreen.test.tsx` C26)는 "48개 시각 셀이 뜨고
+ * press → onPickStart" 까지만 본다 — 그 계약은 **평면 리스트를 그대로 둬도** 통과한다. 즉 어떤
+ * 렌더 심판도 "휠로 교체가 실제로 일어났는가" 를 못 본다(휠의 스냅 자체는 jest 사각 · 6-b 실기).
+ * 그래서 최소한 "h07 이 신설 primitive 를 import·렌더한다" 만이라도 소스로 잠근다 —
+ * `StateNotice` 승격 선례(`sharedUiStructure.test.ts` "승격은 이동이지 복제가 아니다")와 동형.
+ * 휠 **내부** 구현은 지시하지 않는다(02a ★5 — 더 게으른 구현 여지). import+렌더만 계약이다.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const SHARED_WHEEL = 'shared/ui/WheelPicker.tsx';
+const TIME_SCREEN_REL = 'features/itinerary/ui/MustVisitTimeScreen.tsx';
+
+describe('C40 · TRIP-599 — h07 시작 시각이 shared 휠 primitive 를 소비한다', () => {
+  it('WheelPicker 가 shared/ui 에 실재하고, h07 화면이 그것을 import·렌더한다', () => {
+    // 긍정 — 신설 primitive 파일이 실재하고 그 컴포넌트를 내보낸다.
+    expect(existsPair(SHARED_WHEEL)).toEqual({
+      file: SHARED_WHEEL,
+      exists: true,
+    });
+    expect(readOne(SHARED_WHEEL)).toMatch(/export function WheelPicker\b/);
+
+    // 긍정(짝) — h07 화면이 shared 경로로 가져와서 **실제로 렌더**한다. `@/` 접두가 URL 오탐을
+    //   가른다(URL 에는 `@` 가 없다 · 02a §5-1). import 만 하고 안 그리는 상태(평면 리스트를 그대로
+    //   두고 컴포넌트만 미사용)를 `<WheelPicker` 렌더 단언이 막는다.
+    const screenSrc = readOne(TIME_SCREEN_REL);
+    expect(screenSrc).toContain("from '@/shared/ui/WheelPicker'");
+    expect(screenSrc).toMatch(/<WheelPicker\b/);
+  });
+});
