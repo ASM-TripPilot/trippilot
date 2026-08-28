@@ -19,7 +19,8 @@ import { HomeScreen } from './HomeScreen';
  * 라이브 Figma 2091:1357). props(hero·sections)만 받아 그리는 순수 프레젠테이션 화면.
  *
  * 무엇을 보장하나: 인사·검색바·영감 hero·섹션 3종(요즘 담는 곳/뜨는 장소/여행자 일정)·
- * 온램프(softNote+FAB)가 한 화면에 존재하고(AC-1), 섹션 카드가 픽스처 실측값대로 렌더되며
+ * 온램프(하트 FAB)가 한 화면에 존재하고(AC-1 · discovery 담은 곳 배너는 TRIP-596으로 제거),
+ * 섹션 카드가 픽스처 실측값대로 렌더되며
  * (AC-2), 상태별(ready/empty/loading)로 가용 블록은 살고 빈 섹션은 가시 플레이스홀더로
  * 드러나며(AC-4·5·INV-4), 소요시간 문자열은 어디에도 없음(AC-6·INV-3)을 잠근다.
  *
@@ -68,7 +69,8 @@ const EXPECTED_ITINERARIES = [
 const WIRED_CTA_TEST_IDS = [
   'home-create-trip-fab',
   'home-saved-menu-toggle', // TRIP-494 담은 곳 saved-menu FAB(닫힘=하트 토글)
-  'home-saved-places-cta',
+  // TRIP-596 — discovery 담은 곳 배너(home-saved-places-cta)는 제거됨. 하트 FAB이 온램프를
+  // 대체(장소→d02·숙소→e04)해 중복이라 discovery 버튼셋에서 빠진다(370-AC-4 재동결).
   'home-spots-more',
   'home-search-bar',
 ] as const;
@@ -117,13 +119,31 @@ describe('HomeScreen — 정상 렌더 존재 (AC-1)', () => {
     expect(screen.getByTestId('home-spot-card-0')).toBeOnTheScreen();
     expect(screen.getByTestId('home-itinerary-card-0')).toBeOnTheScreen();
 
-    // 온램프 — softNote + FAB.
-    expect(screen.getByTestId('home-soft-note')).toBeOnTheScreen();
+    // 온램프 — FAB(담은 곳 배너는 TRIP-596으로 제거, 하트 FAB이 대체). 배너 부재 자체는
+    // 아래 전용 describe(★V-1 앵커 짝)가 잠근다.
     const fab = screen.getByTestId('home-create-trip-fab');
     // 라벨 없는 원형 FAB(Figma 2105:1757) — 보이는 글자는 없고 접근성 이름만 남는다.
     // 텍스트를 지우면서 접근성 이름까지 같이 사라지는 것이 이 칸의 유일한 실패 경로다.
     expect(within(fab).queryByText('여행 만들기')).toBeNull();
     expect(fab).toHaveAccessibleName('여행 만들기');
+  });
+});
+
+describe('🔴 HomeScreen — discovery 담은 곳 배너 제거 (TRIP-596 AC-1)', () => {
+  it('discovery 얼굴은 그려지지만 담은 곳 배너(softNote·CTA)는 화면에 없다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    // 긍정 앵커 — discovery 본문이 실제로 그려졌음을 먼저 못박는다(★V-1). getByTestId 는 못
+    // 찾으면 throw 라, 아래 부재 단언이 "화면이 통째로 안 그려져서 통과"하는 공허 통과가 아님을
+    // 이 앵커가 보장한다. home-magazine-hero 는 DiscoveryBody 가 그리는 discovery 고유 요소다.
+    expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
+
+    // 부정 짝 — 배너 소속 testID 2개(계열 전체)를 함께 잠근다. queryByTestId 는 못 찾으면 null
+    // 을 돌려주고(throw 안 함), toBeNull 은 그 값이 null 인지 본다. 오타·컴포넌트 통삭이면 앵커가
+    // 먼저 red 를 낸다. 지우는 것은 discovery 인스턴스뿐 — SoftNote 컴포넌트와 planning 브릿지·
+    // postTrip 공유 인스턴스는 같은 testID 를 계속 쓰므로 그 얼굴 테스트는 무변경이다.
+    expect(screen.queryByTestId('home-soft-note')).toBeNull();
+    expect(screen.queryByTestId('home-saved-places-cta')).toBeNull();
   });
 });
 
@@ -175,21 +195,21 @@ describe('HomeScreen — 여행자 일정 카드 데이터 (AC-2)', () => {
   });
 });
 
-describe('HomeScreen — 첫 사용자 온램프 (AC-3 · US-SHELL-05)', () => {
-  it('no-trip에서도 softNote·담은 곳·FAB 온램프가 노출되고 피드 섹션도 유지된다', () => {
+describe('🔴 HomeScreen — no-trip 온램프는 하트 FAB (TRIP-596 AC-1/AC-6 · US-SHELL-05)', () => {
+  it('no-trip에서 담은 곳 배너는 없고 하트 FAB 토글이 온램프를 잇는다(피드 섹션은 유지)', () => {
+    // no-trip = discovery(가정 B: 신 피드는 여행 유무와 무관)라 배너가 같이 사라진다. 담은 곳
+    // 온램프는 배너 대신 하트 FAB(장소→d02·숙소→e04)이 승계한다 — US-SHELL-05의 "저장 POI 진입"
+    // 은 배너가 아니라 FAB으로 유지된다.
     render(<HomeScreen {...HOME_NO_TRIP_PROPS} />);
 
-    // 온램프 — 장소 먼저 담기 유도(가정 B: 신 피드는 여행 유무와 무관).
-    const softNote = screen.getByTestId('home-soft-note');
-    expect(
-      within(softNote).getByText('마음에 든 곳이 모이면')
-    ).toBeOnTheScreen();
-    expect(
-      within(softNote).getByText('담아둔 장소로 여행을 만들 수 있어요')
-    ).toBeOnTheScreen();
-    const savedCta = screen.getByTestId('home-saved-places-cta');
-    expect(within(savedCta).getByText('담은 곳')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-create-trip-fab')).toBeOnTheScreen();
+    // 부정 — 담은 곳 배너 계열(softNote·CTA)이 no-trip에도 없다.
+    expect(screen.queryByTestId('home-soft-note')).toBeNull();
+    expect(screen.queryByTestId('home-saved-places-cta')).toBeNull();
+
+    // 긍정(온램프 대체 겸 앵커) — 하트 FAB 토글은 닫힘 상태에서도 항상 present. 담은 곳 진입을
+    // 잇는 대체 수단이자, no-trip 화면이 실제로 그려졌음을 보장하는 앵커다(★V-1).
+    // FAB → onPressSavedPlaces 발화 자체는 TRIP-494 describe(열림 케이스)가 이미 잠근다.
+    expect(screen.getByTestId('home-saved-menu-toggle')).toBeOnTheScreen();
 
     // 피드 섹션은 no-trip에서도 그대로(가정 B).
     expect(screen.getByTestId('home-collection-card-0')).toBeOnTheScreen();
@@ -200,11 +220,10 @@ describe('HomeScreen — empty 가시 플레이스홀더 (AC-4 · INV-4)', () =>
   it('빈 섹션은 가시 플레이스홀더로 드러나고 고정 블록은 살아 있으며 실카드·스켈레톤은 없다', () => {
     render(<HomeScreen {...HOME_EMPTY_PROPS} />);
 
-    // 긍정 — 고정 블록은 침묵하지 않고 그대로 표시.
+    // 긍정 — 고정 블록은 침묵하지 않고 그대로 표시(부재 단언의 앵커 역할 겸함, ★V-1).
     expect(screen.getByText('오늘은 어디를 상상해볼까요')).toBeOnTheScreen();
     expect(screen.getByTestId('home-search-bar')).toBeOnTheScreen();
     expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-soft-note')).toBeOnTheScreen();
     expect(screen.getByTestId('home-create-trip-fab')).toBeOnTheScreen();
 
     // 긍정 — 빈 섹션 3종이 가시 플레이스홀더로 드러난다(침묵 은닉 금지).
@@ -222,9 +241,11 @@ describe('HomeScreen — empty 가시 플레이스홀더 (AC-4 · INV-4)', () =>
       /아직 보여드릴 게 없어요/
     );
 
-    // 부정 짝 — empty엔 실카드도 스켈레톤도 없다.
+    // 부정 짝 — empty엔 실카드도 스켈레톤도 없고, 담은 곳 배너(TRIP-596 제거)도 없다.
+    // empty도 DiscoveryBody 경유라 배너가 함께 사라진다(위 고정 블록 present가 앵커).
     expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
     expect(screen.queryByTestId('home-collections-skeleton')).toBeNull();
+    expect(screen.queryByTestId('home-soft-note')).toBeNull();
   });
 });
 
@@ -237,16 +258,16 @@ describe('HomeScreen — loading 스켈레톤 (AC-5 · INV-4)', () => {
     expect(screen.getByTestId('home-spots-skeleton')).toBeOnTheScreen();
     expect(screen.getByTestId('home-itineraries-skeleton')).toBeOnTheScreen();
 
-    // 긍정 — 이미 가용한 고정 블록은 로딩 중에도 정상 표시(가용 블록 우선).
+    // 긍정 — 이미 가용한 고정 블록은 로딩 중에도 정상 표시(가용 블록 우선, 부재 단언 앵커 겸함).
     expect(screen.getByText('오늘은 어디를 상상해볼까요')).toBeOnTheScreen();
     expect(screen.getByTestId('home-search-bar')).toBeOnTheScreen();
     expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-soft-note')).toBeOnTheScreen();
     expect(screen.getByTestId('home-create-trip-fab')).toBeOnTheScreen();
 
-    // 부정 짝 — loading엔 실카드도 빈 플레이스홀더도 없다.
+    // 부정 짝 — loading엔 실카드도 빈 플레이스홀더도 없고, 담은 곳 배너(TRIP-596 제거)도 없다.
     expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
     expect(screen.queryByTestId('home-collections-empty')).toBeNull();
+    expect(screen.queryByTestId('home-soft-note')).toBeNull();
   });
 });
 
@@ -283,15 +304,10 @@ describe('HomeScreen — CTA 콜백 발화·격리 (370-AC-2)', () => {
     expect(onPressSavedPlaces).not.toHaveBeenCalled();
     expect(onPressSpotsMore).not.toHaveBeenCalled();
 
-    // 담은 곳 → 담은 장소 콜백만.
+    // 뜨는 장소 더 보기 → 스팟 더보기 콜백만. (구 담은 곳 배너 CTA press 는 TRIP-596 제거 —
+    // 담은 곳 발화는 하트 FAB describe(TRIP-494 열림 케이스)가 잠근다. onPressSavedPlaces 는
+    // 계속 주입해 두어 FAB·spots-more 가 실수로 그것을 발화하지 않음을 아래에서 교차 확인한다.)
     onPressCreateTrip.mockClear();
-    fireEvent.press(screen.getByTestId('home-saved-places-cta'));
-    expect(onPressSavedPlaces).toHaveBeenCalledTimes(1);
-    expect(onPressCreateTrip).not.toHaveBeenCalled();
-    expect(onPressSpotsMore).not.toHaveBeenCalled();
-
-    // 뜨는 장소 더 보기 → 스팟 더보기 콜백만.
-    onPressSavedPlaces.mockClear();
     fireEvent.press(screen.getByTestId('home-spots-more'));
     expect(onPressSpotsMore).toHaveBeenCalledTimes(1);
     expect(onPressCreateTrip).not.toHaveBeenCalled();
