@@ -14,10 +14,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   LocationBackChevronGlyph,
+  LocationCloseGlyph,
   LocationInfoGlyph,
   LocationOffGlyph,
   LocationRadarHero,
 } from './LocationGlyphs';
+import { LOCATION_ICON_COLORS } from './lib/locationColors';
 
 export type LocationPrepromptState = 'default' | 'permission-denied';
 
@@ -29,6 +31,11 @@ export interface LocationPrepromptProps {
   onProceed: () => void;
   onDefer: () => void;
   onOpenSettings?: () => void;
+  /** denied 안내 줄 닫기(×) 콜백. 컴포넌트는 무상태(D2)라 콜백만 올려보내고, 1회성 숨김
+   * 상태는 부모가 소유한다. 미전달이면 × 를 그리지 않는다(무회귀). */
+  onDismissNotice?: () => void;
+  /** 부모가 소유한 1회성 상태 — true 면 denied 안내 줄을 그리지 않는다(기본 false = 표시). */
+  noticeDismissed?: boolean;
 }
 
 export function LocationPreprompt({
@@ -37,6 +44,8 @@ export function LocationPreprompt({
   onProceed,
   onDefer,
   onOpenSettings,
+  onDismissNotice,
+  noticeDismissed = false,
 }: LocationPrepromptProps): ReactElement {
   const denied = state === 'permission-denied';
 
@@ -60,17 +69,32 @@ export function LocationPreprompt({
                 '등록한 숙소를 기준으로 탐색·동선을 안내해 드릴게요.\n온보딩은 그대로 계속할 수 있어요.'
               }
             </Text>
-            <View className="w-full flex-row items-center gap-sm rounded-button border border-info-border bg-info-bg px-lg py-md">
-              <LocationInfoGlyph />
-              {/* D3 — 거부돼도 진행을 막지 않는다. toHaveTextContent 는 기본이 **완전 일치**라
-                  (RNTL matches() exact:true 기본값) testID 요소는 '설정에서' 조각만 감싸야 한다
-                  — 동결 테스트와 같은 앵커 패턴(원본 LocationPreprompt.tsx 의 방식을 그대로 유지). */}
-              <Text className="flex-1 font-noto text-label text-info">
-                현재 위치 기능은 언제든{' '}
-                <Text testID="onboarding-location-denied-notice">설정에서</Text>{' '}
-                켤 수 있어요
-              </Text>
-            </View>
+            {noticeDismissed ? null : (
+              // TRIP-592: 청록 pale 카드 → 상하 hairline 인라인 줄 + 뉴트럴 텍스트 + 닫기(×).
+              // 코랄 1볼티지 원칙(kit §1) 강화 — 위치 안내는 강조가 아니라 뉴트럴 신호다.
+              <View className="w-full flex-row items-center gap-sm border-t border-b border-hairline pl-lg pr-md py-md">
+                <LocationInfoGlyph color={LOCATION_ICON_COLORS.mutedSoft} />
+                {/* D3 — 거부돼도 진행을 막지 않는다. toHaveTextContent 는 기본이 **완전 일치**라
+                    (RNTL matches() exact:true 기본값) testID 요소는 '설정에서' 조각만 감싸야 한다
+                    — 동결 테스트와 같은 앵커 패턴(원본 LocationPreprompt.tsx 의 방식을 그대로 유지). */}
+                <Text className="flex-1 font-noto text-label text-muted">
+                  현재 위치 기능은 언제든{' '}
+                  <Text testID="onboarding-location-denied-notice">
+                    설정에서
+                  </Text>{' '}
+                  켤 수 있어요
+                </Text>
+                {onDismissNotice ? (
+                  <Pressable
+                    testID="onboarding-location-notice-dismiss"
+                    onPress={onDismissNotice}
+                    hitSlop={8}
+                  >
+                    <LocationCloseGlyph />
+                  </Pressable>
+                ) : null}
+              </View>
+            )}
           </View>
         ) : (
           <View className="flex-1 gap-lg px-2xl pt-xl">

@@ -119,8 +119,14 @@ export function LocationOffGlyph({ size = 34, testID }: GlyphProps) {
   );
 }
 
-// 거부 상태 안내 배너의 정보 아이콘.
-export function LocationInfoGlyph({ size = 18, testID }: GlyphProps) {
+// 안내 정보 아이콘. 색은 호출자가 정한다 — LiveLocationPage 는 기본(info 청록)을 쓰고,
+// LocationPreprompt 거부 안내는 뉴트럴(mutedSoft)로 넘긴다(TRIP-592 위계 전환). stroke prop 은
+// className 을 못 받아 값이 필요하므로 상수를 그대로 넘긴다(raw hex 아님, 가드 밖).
+export function LocationInfoGlyph({
+  size = 18,
+  testID,
+  color = LOCATION_ICON_COLORS.info,
+}: GlyphProps & { color?: string }) {
   return (
     <Svg
       testID={testID}
@@ -131,22 +137,44 @@ export function LocationInfoGlyph({ size = 18, testID }: GlyphProps) {
     >
       <Path
         d="M9 15.75C12.7279 15.75 15.75 12.7279 15.75 9C15.75 5.27208 12.7279 2.25 9 2.25C5.27208 2.25 2.25 5.27208 2.25 9C2.25 12.7279 5.27208 15.75 9 15.75Z"
-        stroke={LOCATION_ICON_COLORS.info}
+        stroke={color}
         strokeWidth={1.575}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M9 8.25V12"
-        stroke={LOCATION_ICON_COLORS.info}
+        stroke={color}
         strokeWidth={1.575}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M9 6H9.0075"
-        stroke={LOCATION_ICON_COLORS.info}
+        stroke={color}
         strokeWidth={1.575}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 거부 안내 줄의 닫기(×) 아이콘. features 3곳의 CloseGlyph 는 경계상 import 불가라(shared→features
+// 금지) 여기 신설한다 — kit §6 close SVG(6,6→18,18 / 18,6→6,18)를 뉴트럴 mutedSoft 로 그린다.
+export function LocationCloseGlyph({ size = 18, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M6 6L18 18M18 6L6 18"
+        stroke={LOCATION_ICON_COLORS.mutedSoft}
+        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

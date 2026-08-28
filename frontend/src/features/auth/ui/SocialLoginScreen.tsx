@@ -190,10 +190,10 @@ export function SocialLoginScreen({
       {showErrorBanner ? (
         <View
           testID="auth-login-error-banner"
-          className="w-full flex-row items-center gap-[9px] rounded-button bg-primary-pale px-[14px] py-md"
+          className="w-full flex-row items-center gap-[9px] rounded-button border border-primary bg-canvas px-[14px] py-md"
         >
           <WarningTriangleGlyph size={18} />
-          <Text className="flex-1 font-noto-bold text-label font-bold text-primary-text">
+          <Text className="flex-1 font-noto-bold text-label font-bold text-ink">
             로그인에 실패했어요. 잠시 후 다시 시도해 주세요
           </Text>
         </View>

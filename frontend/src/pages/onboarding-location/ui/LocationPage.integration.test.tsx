@@ -200,6 +200,32 @@ describe('LocationPage — 설정 열기 (AC-7)', () => {
   });
 });
 
+describe('LocationPage — 안내 줄 닫기 1회성 (AC-③-3 소비처 배선, TRIP-592)', () => {
+  it('denied 에서 닫기(×)를 누르면 안내 줄만 사라지고(1회성) denied 프레임은 유지된다', async () => {
+    // ▸준비 — 허용→OS denied→denied 프레임까지 몰아간다.
+    await reachDenied();
+
+    // ▸준비 확인 — 닫기 전엔 안내 앵커가 떠 있다.
+    expect(
+      screen.getByTestId('onboarding-location-denied-notice')
+    ).toBeOnTheScreen();
+
+    // ▸실행 — × 를 누르면 부모(LocationPage)가 소유한 로컬 상태가 안내 줄을 숨긴다(영속 없음 = 화면 표시 1회).
+    fireEvent.press(screen.getByTestId('onboarding-location-notice-dismiss'));
+
+    // ▸단언 — 안내 줄은 사라지되(1회성) denied 프레임 자체는 남아 진행 수단이 유지된다.
+    // '프레임 통째로 숨김'으로 가짜 통과하는 것을 continue 존재 단언이 막는다.
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId('onboarding-location-denied-notice')
+      ).toBeNull()
+    );
+    expect(
+      screen.getByTestId('onboarding-location-continue')
+    ).toBeOnTheScreen();
+  });
+});
+
 describe('LocationPage — 서버 진행 플래그 미생성 (AC-8)', () => {
   it('허용→granted→pref1 전 플로우 동안 서버로 아무 요청도 보내지 않는다', async () => {
     mockRequestForeground.mockResolvedValue(GRANTED);
