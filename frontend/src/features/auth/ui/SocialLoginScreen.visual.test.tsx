@@ -48,7 +48,7 @@ function classTokens(node: { props?: { className?: unknown } }): string[] {
 
 // toJSON 트리 노드(호스트 렌더 결과)의 최소 형태.
 type JsonNode = {
-  props?: { testID?: unknown; className?: unknown };
+  props?: { testID?: unknown; className?: unknown; style?: unknown };
   children?: (JsonNode | string)[] | null;
 };
 
@@ -310,13 +310,16 @@ describe('AC-L2 · error 상태에서 로고가 배너보다 먼저 온다 (DOM 
 });
 
 describe('AC-L4 · 회귀 토큰 유지 (렌더)', () => {
-  it('루트 px-2xl · 로고 h-14 w-14 · 소셜버튼 h-[52px] · 버튼 래퍼 gap-md 가 유지된다', () => {
+  // TRIP-598: 앱아이콘 확대로 로고 박스 동결값이 h-14 w-14(56px) → h-[64px] w-[64px] 로
+  // 갱신됐다. AC-L4 는 로고 박스를 '트리에서 유일한 크기 토큰 노드'로 잡으므로, 확대 시
+  // 이 동결 토큰도 함께 갱신하지 않으면 앵커(nodesWithToken)가 0개가 되어 logoOne 이 red 다.
+  it('루트 px-2xl · 로고 h-[64px] w-[64px] · 소셜버튼 h-[52px] · 버튼 래퍼 gap-md 가 유지된다', () => {
     // ▸준비+실행
     renderDefault();
     const rootTokens = classTokens(screen.getByTestId('auth-login-root'));
     const buttonTokens = classTokens(screen.getByTestId('auth-login-google'));
     // 로고·래퍼는 testID 가 없어 토큰으로 잡는다(트리 유일, 02a §5-4 실측).
-    const logos = nodesWithToken('h-14');
+    const logos = nodesWithToken('h-[64px]');
     const wrappers = nodesWithToken('gap-md');
 
     // ▸단언 — 한 객체로 묶어 어느 회귀가 깨졌는지 한 번에 본다.
@@ -324,7 +327,8 @@ describe('AC-L4 · 회귀 토큰 유지 (렌더)', () => {
       rootPad: rootTokens.includes('px-2xl'),
       buttonHeight: buttonTokens.includes('h-[52px]'),
       logoOne: logos.length === 1,
-      logoSquare: logos.length === 1 && classTokens(logos[0]).includes('w-14'),
+      logoSquare:
+        logos.length === 1 && classTokens(logos[0]).includes('w-[64px]'),
       wrapperOne: wrappers.length === 1,
     }).toEqual({
       rootPad: true,
@@ -333,6 +337,61 @@ describe('AC-L4 · 회귀 토큰 유지 (렌더)', () => {
       logoSquare: true,
       wrapperOne: true,
     });
+  });
+});
+
+// ── 신규(TRIP-598): 앱아이콘 라운드 클립 + 확대 형태 가드 (AC-L5) ─────────────
+// jest 사각 주의 — 그라디언트가 '실제로' 모서리에서 클립되는지·확대 픽셀이 눈에 얼마나
+// 큰지는 jest 가 원리적으로 못 본다(6-b 실기/프리뷰 몫). 아래는 그 회귀를 굳히는 '형태
+// 가드'다: ① 반경이 className(rounded-button)이 아니라 style(borderRadius)로 주어졌는가
+// — LinearGradient 는 className 반경으로 그라디언트를 클립하지 않아 각지므로, style 로 주는
+// 것이 각짐 회귀를 막는 계약이다. ② 박스가 56px 를 넘겨 확대됐고 글리프가 비율 0.6 을 유지.
+
+// 노드의 style prop 에서 borderRadius(숫자)를 뽑는다. RN style 은 단일 객체일 수도 배열일
+// 수도 있어 flat(Infinity)로 평탄화한 뒤 첫 borderRadius 를 반환한다(없으면 undefined).
+function styleBorderRadius(node: {
+  props?: { style?: unknown };
+}): number | undefined {
+  const flat = [node.props?.style].flat(Infinity) as Array<
+    Record<string, unknown> | null | undefined
+  >;
+  for (const s of flat) {
+    if (s && typeof s === 'object' && typeof s.borderRadius === 'number') {
+      return s.borderRadius;
+    }
+  }
+  return undefined;
+}
+
+describe('AC-L5 · 앱아이콘 라운드 클립 + 확대 (렌더 · 형태 가드)', () => {
+  it('박스 반경을 style borderRadius 로 주고 rounded-button className 은 안 쓴다 (각짐 회귀 차단)', () => {
+    // ▸준비+실행 — 박스는 testID 가 없어 확대 토큰으로 잡는다(트리 유일).
+    renderDefault();
+    const boxes = nodesWithToken('h-[64px]');
+
+    // ▸단언 — 앵커 1개 + style 에 borderRadius 존재 + className 에 rounded-button 부재.
+    expect({
+      boxOne: boxes.length === 1,
+      hasStyleRadius:
+        boxes.length === 1 && typeof styleBorderRadius(boxes[0]) === 'number',
+      noClassNameRadius:
+        boxes.length === 1 && !classTokens(boxes[0]).includes('rounded-button'),
+    }).toEqual({ boxOne: true, hasStyleRadius: true, noClassNameRadius: true });
+  });
+
+  it('박스가 56px 를 넘겨 확대되고 글리프가 비율 0.6(size 38)을 유지한다', () => {
+    // ▸준비+실행 — 글리프 size 는 Svg 의 width prop 으로 렌더 트리에 남는다.
+    renderDefault();
+    const glyph = screen.getByTestId('auth-login-logo-glyph');
+    const boxTokens = classTokens(nodesWithToken('h-[64px]')[0]);
+
+    // ▸단언 — 박스 브래킷 px 확대 + 글리프 width=38(64×0.6≈38, 비율 유지).
+    expect({
+      enlargedBox:
+        boxTokens.includes('h-[64px]') && boxTokens.includes('w-[64px]'),
+      bracketNotScale: !boxTokens.includes('h-16'), // 스케일 토큰이 아니라 브래킷 px
+      glyphSize: glyph.props.width,
+    }).toEqual({ enlargedBox: true, bracketNotScale: true, glyphSize: 38 });
   });
 });
 

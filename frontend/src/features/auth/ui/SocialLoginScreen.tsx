@@ -53,13 +53,18 @@ const PROVIDER_KO: Record<string, string> = {
   naver: '네이버',
 };
 
-// 앱아이콘 박스(56px) 브랜드 그림자 — 브랜드색 raw 라 토큰화하지 않고 플랫폼 그림자로 변환한다.
+// 앱아이콘 박스(64px) 스타일 — 브랜드 그림자 + 라운드 스퀘어 클립.
+// borderRadius 는 반드시 style 로 준다(className rounded-* 가 아니라): LinearGradient 는
+// className 반경으로 자기 그라디언트를 클립하지 않아 각져 보이기 때문이다(스플래시가 style
+// borderRadius 로 사는 것이 대조군). 반경/박스 비율 0.223(=Figma 12.473/56, 스플래시
+// 20.94/94 동형) → 64×0.2227≈14.25. 그림자색은 브랜드색 raw 라 토큰화 없이 플랫폼 그림자로.
 const logoShadow = {
   shadowColor: '#DB2647',
   shadowOffset: { width: 0, height: 2.5 },
   shadowOpacity: 0.28,
   shadowRadius: 6.1,
   elevation: 4,
+  borderRadius: 14.25,
 } as const;
 
 // 시트 딤(backdrop). gorhom 은 기본값으로 딤을 안 그리므로 각 <BottomSheet> 에
@@ -170,9 +175,9 @@ export function SocialLoginScreen({
         <LinearGradient
           colors={APP_ICON_COLORS}
           style={logoShadow}
-          className="h-14 w-14 items-center justify-center rounded-button"
+          className="h-[64px] w-[64px] items-center justify-center"
         >
-          <AppIconGlyph testID="auth-login-logo-glyph" size={34} />
+          <AppIconGlyph testID="auth-login-logo-glyph" size={38} />
         </LinearGradient>
         <Text className="font-noto-bold text-center text-hero font-bold text-ink">
           여행의 모든 순간을, TripPilot
