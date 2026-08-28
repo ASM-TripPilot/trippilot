@@ -761,7 +761,7 @@
 - `src/shared/itinerary-edit/ui/ManualTimeSheet.tsx`  →  ManualTimeSheetProps · ManualTimeSheet
 
 ## src/shared/location/
-- `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph
+- `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationCloseGlyph
 - `src/shared/location/LocationPreprompt.tsx`  →  LocationPrepromptState · LocationPrepromptProps · LocationPreprompt
 - `src/shared/location/geofence.ts`  →  GeofenceRegion · buildGeofenceRegions · geofenceArriveRequest · registerGeofences · clearGeofences
 
