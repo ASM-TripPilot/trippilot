@@ -24,7 +24,7 @@ build(request: CandidatePoolRequest, now: datetime) -> CandidatePool
   ③ 영업일: open_hours 비면 통과 / 여행일 중 하루라도 해당 요일 창 있으면 통과
            (is_closed_today 당일 배치는 Plan-B 소유 — batch_check_closed는 후속 연결)
   ④ 품질: quality ∈ {FULL, PARTIAL} (MINIMAL 제외)
-  ⑤ 인기: rating 내림차순(None=0) → poi_id 오름차순 (결정론 tie-break)
+  ⑤ 인기: saved_count 내림차순 → rating 내림차순(None=0) → poi_id 오름차순 (결정론 tie-break)
   ⑥ 상한: 상위 max_candidates(5천)
   → CandidatePool(poi_ids=frozenset, pois, generated_at=now, anchor, radius_km=r)
 ```

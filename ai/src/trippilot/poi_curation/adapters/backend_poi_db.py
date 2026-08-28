@@ -225,7 +225,8 @@ class BackendPoiDb:
             coord=GeoPoint(float(row["lat"]), float(row["lng"])),
             open_hours=parse_open_hours(row.get("opening_hours"), None),
             avg_cost=None,   # 백엔드 미제공 → 예산 필터 통과 (풀 빌더 ② 계약)
-            rating=None,     # 백엔드 미제공 — 지어내지 않는다 (정렬은 ⑤ tie-break)
+            rating=None,     # 별점 소스 없음 — 지어내지 않는다 (인기는 saved_count)
+            saved_count=int(row.get("saved_count") or 0),
             quality=_enum_or_raise(DataQuality, row.get("data_quality"), "data_quality"),
             source=_SOURCE_MAP.get(row["source"], PoiSource.PLACES_API),
             confidence=None,
