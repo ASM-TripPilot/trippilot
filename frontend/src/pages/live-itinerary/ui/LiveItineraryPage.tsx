@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { View } from 'react-native';
@@ -15,7 +16,17 @@ import { projectSlotProgress } from '@/features/execution/model/slotProgress';
 import { useActualRoute } from '@/features/execution/model/useActualRoute';
 import { useVisitCheck } from '@/features/execution/model/useVisitCheck';
 import { deriveVisitProgress } from '@/features/execution/model/visitProgress';
+import {
+  WarningTriangleGlyph,
+  WeatherCloudGlyph,
+} from '@/features/execution/ui/ExecutionGlyphs';
 import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen';
+import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
+import { TriggerChip } from '@/features/execution/ui/TriggerChip';
+import { triggerLabel } from '@/features/planb/model/triggerLabel';
+import { useActiveTriggers } from '@/features/planb/model/useActiveTriggers';
+import { useSuppressTrigger } from '@/features/planb/model/useSuppressTrigger';
+import type { Trigger } from '@/shared/api/generated/schemas';
 import {
   useGetTripsTripId,
   useGetTripsTripIdVisitsDaysDay,
@@ -46,6 +57,20 @@ const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
 );
 
+/** iconKey(triggerLabel) → 칩 leading 글리프. WEATHER 만 전용, 나머지는 경고삼각형 폴백(seed 미결). */
+function chipIcon(iconKey: string): ReactNode {
+  if (iconKey === 'weather') return <WeatherCloudGlyph size={24} />;
+  return <WarningTriangleGlyph size={24} />;
+}
+
+/**
+ * scope → planb 세션 범위(BR-U4-11 은 PARTIAL_SLOTS·FULL_DAY 2종뿐). FULL_DAY 는 통과,
+ * 나머지(PARTIAL_SLOTS·NONE·null·생략)는 전부 최소 침습 PARTIAL_SLOTS 로 접는다(결정 3).
+ */
+function foldScope(scope: Trigger['scope']): 'FULL_DAY' | 'PARTIAL_SLOTS' {
+  return scope === 'FULL_DAY' ? 'FULL_DAY' : 'PARTIAL_SLOTS';
+}
+
 export function LiveItineraryPage({
   tripId,
   today = new Date().toISOString().slice(0, 10),
@@ -68,9 +93,15 @@ export function LiveItineraryPage({
     isNotFound: isNotFound(query.error),
     itinerary: query.data,
     todayDate: today,
-    // 활성 트리거(i01 배너)는 후속 칸 — 지금은 없음으로 판정한다.
-    activeTriggers: [],
   });
+
+  // 발화 중 트리거 조회는 active 얼굴에서만(게이팅) — 훅 규칙상 조기 반환 위에서 무조건 선언한다.
+  // 표시 게이트는 MANUAL 필터 뒤의 목록으로 아래에서 판정한다(hasActiveTrigger 는 MANUAL 을 못
+  // 걸러 이 티켓의 3변형 필터엔 못 쓴다). 억제(dismiss) 뮤테이션도 여기서 선언한다.
+  const triggers = useActiveTriggers(tripId, {
+    enabled: state.kind === 'active',
+  });
+  const suppress = useSuppressTrigger(tripId);
 
   // 방문 기록 조회·판정은 page 1회(FSD·구조가드). 훅 규칙상 조기 반환 위에서 무조건 선언한다 —
   // active 날짜(방문 기록 조회 키)를 미리 구하되, active 가 아니면 '' 로 두어 쿼리를 끈다.
@@ -165,6 +196,49 @@ export function LiveItineraryPage({
     ? `${formatKoreanDate(activeDate)} · 오늘 일정`
     : '오늘 일정';
 
+  // MANUAL 은 표시 표면에서 숨긴다(칩·배너는 WEATHER·DELAY·CLOSURE 3변형만). triggerLabel 은
+  // 4종 매핑을 갖되(구조 완전성), 화면 표시 필터는 여기서 — 서로 다른 축이다(★8, BR-U4-01).
+  const displayTriggers = (triggers.data?.triggers ?? []).filter(
+    (trigger) => trigger.kind !== 'MANUAL'
+  );
+  // 칩은 발화 중이면 상단 상주(전체-날짜 케이스 대행) — 첫 트리거를 대표로 싣는다.
+  const chipTrigger = displayTriggers[0];
+
+  const openReplan = (trigger: Trigger) => {
+    // 세션 열기까지만(자동 변경 없음, BR-U4-09). 직접 import 아니라 라우팅으로만 planb 로 이동.
+    router.push(
+      `/trips/${tripId}/planb?scope=${foldScope(trigger.scope)}&triggerId=${trigger.triggerId}`
+    );
+  };
+
+  const triggerChip = chipTrigger ? (
+    <TriggerChip
+      // 칩 제목은 kind 요지(정적 라벨) — 상세 사유(reason)는 슬롯 배너가 진다. 요지가 칩과
+      // 배너에 둘 다 서도, 상세 reason 은 배너 한 곳에만 흘러 표면 중복이 없다(정적×동적 경계).
+      title={triggerLabel(chipTrigger.kind).label}
+      subtitle="탭하여 대안 보기"
+      icon={chipIcon(triggerLabel(chipTrigger.kind).iconKey)}
+      onPressAlternative={() => openReplan(chipTrigger)}
+      onDismiss={() =>
+        suppress.mutate({ tripId, triggerId: chipTrigger.triggerId })
+      }
+    />
+  ) : undefined;
+
+  // 배너는 slotKey 매칭 슬롯에만 — 요지(label)에 서버 reason 을 이어 완성 문구로 조립한다
+  // (정적 라벨 × 동적 reason 경계). 매칭 없으면 null(칩=상시·배너=slotKey 매칭 구분, ★9).
+  const renderSlotBanner = (slotKey: string): ReactNode => {
+    const match = displayTriggers.find(
+      (trigger) => trigger.slotKey === slotKey
+    );
+    if (!match) return null;
+    return (
+      <TriggerBanner
+        text={`${triggerLabel(match.kind).label} · ${match.reason}`}
+      />
+    );
+  };
+
   return (
     <LiveItineraryScreen
       days={itinerary.days}
@@ -193,6 +267,8 @@ export function LiveItineraryPage({
           source: 'MANUAL',
         });
       }}
+      triggerChip={triggerChip}
+      renderSlotBanner={renderSlotBanner}
     />
   );
 }
