@@ -77,7 +77,10 @@ import {
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
+import { buildSettingsSections } from '@/features/settings/model/settingsSections';
+import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog';
 import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
+import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
 import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
 import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { ManualEditScreen } from '@/features/planb/ui/ManualEditScreen';
@@ -3202,6 +3205,84 @@ const PREVIEW_STATES: PreviewState[] = [
         />
       );
     },
+  },
+  // l05 설정(TRIP-608) — 실화면 딥링크로는 미인증 리다이렉트/백엔드 부재로 온전히 못 본다. jest 가
+  // 못 보는 것(6그룹 카드 레이아웃·리딩 아이콘 12종·"준비 중" 비활성·위험/동의 pill)을 여기서 눈으로.
+  {
+    key: 'settings-default',
+    label: 'l05 설정 · 기본(active)',
+    login: null,
+    render: () => (
+      <SettingsScreen
+        groups={buildSettingsSections({
+          nickname: '여행자123',
+          email: 'trippilot@email.com',
+        })}
+        deletionState="active"
+        currentNickname="여행자123"
+        onPressBack={noop}
+        onSubmitNickname={noop}
+        onPressExport={noop}
+        onPressDeleteAccount={noop}
+        onPressCancelDeletion={noop}
+      />
+    ),
+  },
+  // 내보내기 잘림 고지(INV-4) — 상한에 걸려 잘린 몫을 조용히 삼키지 않고 표면화하는 자리.
+  {
+    key: 'settings-export-truncated',
+    label: 'l05 설정 · 내보내기 잘림 고지',
+    login: null,
+    render: () => (
+      <SettingsScreen
+        groups={buildSettingsSections({
+          nickname: '여행자123',
+          email: null,
+        })}
+        deletionState="active"
+        currentNickname="여행자123"
+        truncatedLabel="일부 항목이 잘렸어요: photos, memos"
+        onPressBack={noop}
+        onSubmitNickname={noop}
+        onPressExport={noop}
+        onPressDeleteAccount={noop}
+        onPressCancelDeletion={noop}
+      />
+    ),
+  },
+  // DELETION_PENDING 배너 — 위험 영역 행이 유예 배너로 바뀌고 purgeAt + [삭제 철회]가 뜬다.
+  {
+    key: 'settings-pending',
+    label: 'l05 설정 · 삭제 유예(pending)',
+    login: null,
+    render: () => (
+      <SettingsScreen
+        groups={buildSettingsSections({
+          nickname: '여행자123',
+          email: 'trippilot@email.com',
+        })}
+        deletionState="pending"
+        purgeAt="2026-09-13T00:00:00Z"
+        currentNickname="여행자123"
+        onPressBack={noop}
+        onSubmitNickname={noop}
+        onPressExport={noop}
+        onPressDeleteAccount={noop}
+        onPressCancelDeletion={noop}
+      />
+    ),
+  },
+  // 2단 삭제 다이얼로그 — 딤 전면 커버·2단 전이는 jest 원리적 사각(리포 Modal 선례 0). 여기서
+  // [계속]을 눌러 1단(scope 전체 고지)→2단(최종) 전이를 실기로 확인한다.
+  {
+    key: 'settings-delete-dialog',
+    label: 'l05 설정 · 삭제 다이얼로그(2단)',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill} className="bg-canvas-alt">
+        <DeleteAccountDialog onCancel={noop} onConfirmDeletion={noop} />
+      </View>
+    ),
   },
 ];
 

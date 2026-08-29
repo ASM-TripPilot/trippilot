@@ -10,6 +10,7 @@
 - `__mocks__/react-native-webview.tsx`  →  WebView
 
 ## src/__tests__/
+- `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/devPreview.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewDeepLink.test.tsx`  →  (export 없음)
@@ -38,6 +39,7 @@
 - `src/__tests__/liveTimeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/noMswInStaticGraph.test.ts`  →  (export 없음)
 - `src/__tests__/noStepCountStructure.test.ts`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
@@ -138,6 +140,9 @@
 ## src/app/
 - `src/app/force-update.tsx`  →  (export 없음)
 - `src/app/reconsent.tsx`  →  (export 없음)
+
+## src/app/settings/
+- `src/app/settings/index.tsx`  →  (export 없음)
 
 ## src/app/stays/
 - `src/app/stays/[stayId].tsx`  →  (export 없음)
@@ -314,7 +319,7 @@
 - `src/features/onboarding/model/useNickname.ts`  →  UseNickname · useNickname
 - `src/features/onboarding/model/useOnboardingProgress.ts`  →  useOnboardingProgress
 - `src/features/onboarding/model/useTermsConsent.ts`  →  UseTermsConsent · useTermsConsent
-- `src/features/onboarding/model/validateNicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
+- `src/features/onboarding/model/validateNicknameFormat.ts`  →  validateNicknameFormat · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · type NicknameFormatReason · type NicknameFormatResult
 
 ## src/features/onboarding/ui/
 - `src/features/onboarding/ui/NicknameScreen.tsx`  →  NicknameErrorReason · NicknameScreenProps · NicknameScreen
@@ -356,12 +361,21 @@
 - `src/features/planb/ui/TriggerWatchlistScreen.tsx`  →  TriggerWatchlistScreenProps · TriggerWatchlistScreen
 
 ## src/features/settings/model/
+- `src/features/settings/model/deletionScope.ts`  →  DELETION_SCOPE
+- `src/features/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
+- `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowVM · SettingsGroupVM · buildSettingsSections
 - `src/features/settings/model/tripBuckets.ts`  →  TripBucket · tripStatusBucket · bucketTrips
 
 ## src/features/settings/ui/
+- `src/features/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
+- `src/features/settings/ui/ExportRow.tsx`  →  ExportRow
 - `src/features/settings/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
+- `src/features/settings/ui/NicknameEditRow.tsx`  →  NicknameEditRow
 - `src/features/settings/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
-- `src/features/settings/ui/SettingsGlyphs.tsx`  →  ChevronRightGlyph · SettingsSunGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph
+- `src/features/settings/ui/SettingsGlyphs.tsx`  →  ChevronRightGlyph · SettingsSunGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · ExternalLinkGlyph · TrashGlyph
+- `src/features/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
+- `src/features/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow
+- `src/features/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
 - `src/features/settings/ui/TripCard.tsx`  →  TripCardVM · TripCardProps · TripCard
 - `src/features/settings/ui/TripStatusSegment.tsx`  →  TripStatusSegmentProps · TripStatusSegment
 
@@ -610,6 +624,12 @@
 
 ## src/pages/saved-places/ui/
 - `src/pages/saved-places/ui/SavedPlacesPage.tsx`  →  SavedPlacesPage
+
+## src/pages/settings/
+- `src/pages/settings/index.ts`  →  SettingsPage
+
+## src/pages/settings/ui/
+- `src/pages/settings/ui/SettingsPage.tsx`  →  SettingsPage
 
 ## src/pages/stay-detail/
 - `src/pages/stay-detail/index.ts`  →  StayDetailPage
@@ -904,6 +924,9 @@
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
 - `src/shared/ui/WheelPicker.tsx`  →  WheelPickerProps · WheelPicker
 
+## src/shared/validation/
+- `src/shared/validation/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
+
 ## src/shared/version/
 - `src/shared/version/compareVersion.ts`  →  compareVersion
 
@@ -918,4 +941,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 626개 파일
+합계 641개 파일
