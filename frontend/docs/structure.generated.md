@@ -56,6 +56,7 @@
 - `src/__tests__/planbSafeAreaStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
+- `src/__tests__/planbTriggersRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/regionCatalogStructure.test.ts`  →  (export 없음)
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
@@ -175,6 +176,7 @@
 - `src/app/trips/[tripId]/planb/index.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/planb/manual.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/planb/solving.tsx`  →  (export 없음)
+- `src/app/trips/[tripId]/planb/triggers.tsx`  →  (export 없음)
 
 ## src/app/trips/new/
 - `src/app/trips/new/_layout.tsx`  →  (export 없음)
@@ -218,7 +220,7 @@
 - `src/features/execution/model/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
 
 ## src/features/execution/ui/
-- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · ClockGlyph · VisitCheckGlyph · CameraGlyph · MemoGlyph · RouteArrowGlyph · BackArrowGlyph · ShareGlyph · WarningTriangleGlyph · WeatherCloudGlyph · ChevronRightGlyph · CloseGlyph
+- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · ClockGlyph · VisitCheckGlyph · CameraGlyph · MemoGlyph · RouteArrowGlyph · BackArrowGlyph · ShareGlyph · WarningTriangleGlyph · WeatherCloudGlyph · ChevronRightGlyph · CloseGlyph · ShieldGlyph
 - `src/features/execution/ui/LiveItineraryScreen.tsx`  →  LiveItineraryScreenProps · LiveItineraryScreen
 - `src/features/execution/ui/LiveMapScreen.tsx`  →  LiveMapScreenProps · LiveMapScreen
 - `src/features/execution/ui/LiveSlotCard.tsx`  →  LiveSlotCardProps · LiveSlotCard
@@ -318,6 +320,7 @@
 - `src/features/onboarding/ui/TermsScreen.tsx`  →  TermsItemView · TermsScreenProps · TermsScreen
 
 ## src/features/planb/model/
+- `src/features/planb/model/foldScope.ts`  →  foldScope
 - `src/features/planb/model/replanFormStore.ts`  →  ReplanFormState · useReplanFormStore
 - `src/features/planb/model/replanOrigin.ts`  →  ReplanOrigin · buildManualOrigin · isEstimatedOrigin
 - `src/features/planb/model/replanRequest.ts`  →  ReplanFormValues · buildStartReplanRequest
@@ -325,6 +328,7 @@
 - `src/features/planb/model/replanState.ts`  →  ReplanState · resolveReplanState
 - `src/features/planb/model/slackTime.ts`  →  slackTime
 - `src/features/planb/model/triggerLabel.ts`  →  TriggerLabel · TRIGGER_LABELS · triggerLabel
+- `src/features/planb/model/triggerWatchlist.ts`  →  TriggerWatchlistRow · triggerWatchlist
 - `src/features/planb/model/useActiveTriggers.ts`  →  useActiveTriggers
 - `src/features/planb/model/useApplyReplan.ts`  →  useApplyReplan
 - `src/features/planb/model/useCancelReplan.ts`  →  useCancelReplan
@@ -332,15 +336,17 @@
 - `src/features/planb/model/useSlotCandidates.ts`  →  useSlotCandidates
 - `src/features/planb/model/useStartReplan.ts`  →  useStartReplan
 - `src/features/planb/model/useSuppressTrigger.ts`  →  useSuppressTrigger
+- `src/features/planb/model/useTriggerWatchlist.ts`  →  useTriggerWatchlist
 
 ## src/features/planb/ui/
 - `src/features/planb/ui/ManualEditScreen.tsx`  →  ManualEditVariant · ManualEditScreenProps · ManualEditScreen
 - `src/features/planb/ui/OutOfScopeNotice.tsx`  →  OutOfScopeNotice
-- `src/features/planb/ui/PlanbGlyphs.tsx`  →  ChecklistDoneGlyph · ChecklistActiveGlyph · ChecklistWaitingGlyph · AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph
+- `src/features/planb/ui/PlanbGlyphs.tsx`  →  ChecklistDoneGlyph · ChecklistActiveGlyph · ChecklistWaitingGlyph · AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph · WeatherCloudGlyph · ClockGlyph · ShopGlyph
 - `src/features/planb/ui/ReplanAppliedScreen.tsx`  →  ReplanAppliedScreenProps · ReplanAppliedScreen
 - `src/features/planb/ui/ReplanRequestSheet.tsx`  →  ReplanDetectionBanner · ReplanRequestSheetProps · ReplanRequestSheet
 - `src/features/planb/ui/ReplanSolvingScreen.tsx`  →  ReplanSolvingScreenProps · ReplanSolvingScreen
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
+- `src/features/planb/ui/TriggerWatchlistScreen.tsx`  →  TriggerWatchlistScreenProps · TriggerWatchlistScreen
 
 ## src/features/stay/model/
 - `src/features/stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
@@ -561,6 +567,12 @@
 
 ## src/pages/planb-request/ui/
 - `src/pages/planb-request/ui/PlanbRequestPage.tsx`  →  PlanbRequestPageProps · PlanbRequestPage
+
+## src/pages/planb-triggers/
+- `src/pages/planb-triggers/index.ts`  →  PlanbTriggersPage
+
+## src/pages/planb-triggers/ui/
+- `src/pages/planb-triggers/ui/PlanbTriggersPage.tsx`  →  PlanbTriggersPageProps · PlanbTriggersPage
 
 ## src/pages/region-picker/
 - `src/pages/region-picker/index.ts`  →  RegionPickerPage
@@ -802,4 +814,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 534개 파일
+합계 542개 파일

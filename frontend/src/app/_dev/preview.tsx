@@ -77,11 +77,13 @@ import {
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
+import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { ManualEditScreen } from '@/features/planb/ui/ManualEditScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
 import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
 import { ReplanSolvingScreen } from '@/features/planb/ui/ReplanSolvingScreen';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
+import { TriggerWatchlistScreen } from '@/features/planb/ui/TriggerWatchlistScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
 import {
   StayRegisterScreen,
@@ -113,6 +115,7 @@ import type {
   ItineraryDaysItemSlotsItem,
   SlotCandidatesCandidatesItem,
   StayItem,
+  Trigger,
 } from '@/shared/api/generated/schemas';
 import { ManualTimeSheet, reorderKeepingFixed } from '@/shared/itinerary-edit';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
@@ -1107,6 +1110,19 @@ function ManualEditPreview({ variant }: { variant?: 'error' }): ReactElement {
     </>
   );
 }
+
+// i09 감지된 변화(TRIP-562) 발화 얼굴 프리뷰 — 날씨 1건 발화. 정상 얼굴은 빈 배열을 사영한다.
+const TRIGGER_WATCHLIST_PREVIEW_FIRED: Trigger[] = [
+  {
+    triggerId: 'preview-weather',
+    kind: 'WEATHER',
+    affectedDate: '2026-08-20',
+    slotKey: null,
+    reason: '비 예보 70%',
+    scope: 'PARTIAL_SLOTS',
+    detectedAt: '2026-08-20T09:00:00Z',
+  },
+];
 
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
@@ -2952,6 +2968,46 @@ const PREVIEW_STATES: PreviewState[] = [
         onPressAddPlace={noop}
       />
     ),
+  },
+  // ── i09 감지된 변화(TRIP-562) — 발화(날씨 활성)·정상(발화 없음) 두 얼굴. 순수 프레젠테이션이라
+  //    사영 결과(triggerWatchlist)를 직접 주입한다(페이지·QueryClient 없이). 배너 primary 테두리·활성
+  //    배지 rose·감시 행 아이콘·구분선 픽셀·진입 FAB 는 jest 사각이라 이 두 키가 육안 대조 자리다
+  //    (i09 `1790:2869`). 자율 세션이라 6-b 미실행이면 다음 세션 확인 대상 ──
+  {
+    key: 'planb-triggers-active',
+    label: 'i09 감지된 변화 · 발화(날씨 활성)',
+    login: null,
+    render: () => {
+      const { activeBanner, rows } = triggerWatchlist(
+        TRIGGER_WATCHLIST_PREVIEW_FIRED
+      );
+      return (
+        <TriggerWatchlistScreen
+          activeBanner={activeBanner}
+          rows={rows}
+          onPressAlternative={noop}
+          onPressManual={noop}
+          onBack={noop}
+        />
+      );
+    },
+  },
+  {
+    key: 'planb-triggers-normal',
+    label: 'i09 감지된 변화 · 정상(발화 없음)',
+    login: null,
+    render: () => {
+      const { activeBanner, rows } = triggerWatchlist([]);
+      return (
+        <TriggerWatchlistScreen
+          activeBanner={activeBanner}
+          rows={rows}
+          onPressAlternative={noop}
+          onPressManual={noop}
+          onBack={noop}
+        />
+      );
+    },
   },
 ];
 

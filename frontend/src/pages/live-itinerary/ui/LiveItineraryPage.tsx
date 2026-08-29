@@ -23,6 +23,7 @@ import {
 import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen';
 import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
+import { foldScope } from '@/features/planb/model/foldScope';
 import { triggerLabel } from '@/features/planb/model/triggerLabel';
 import { useActiveTriggers } from '@/features/planb/model/useActiveTriggers';
 import { useSuppressTrigger } from '@/features/planb/model/useSuppressTrigger';
@@ -61,14 +62,6 @@ const NEUTRAL_BADGE = (
 function chipIcon(iconKey: string): ReactNode {
   if (iconKey === 'weather') return <WeatherCloudGlyph size={24} />;
   return <WarningTriangleGlyph size={24} />;
-}
-
-/**
- * scope → planb 세션 범위(BR-U4-11 은 PARTIAL_SLOTS·FULL_DAY 2종뿐). FULL_DAY 는 통과,
- * 나머지(PARTIAL_SLOTS·NONE·null·생략)는 전부 최소 침습 PARTIAL_SLOTS 로 접는다(결정 3).
- */
-function foldScope(scope: Trigger['scope']): 'FULL_DAY' | 'PARTIAL_SLOTS' {
-  return scope === 'FULL_DAY' ? 'FULL_DAY' : 'PARTIAL_SLOTS';
 }
 
 export function LiveItineraryPage({
@@ -269,6 +262,8 @@ export function LiveItineraryPage({
       }}
       triggerChip={triggerChip}
       renderSlotBanner={renderSlotBanner}
+      // i09 감시 목록 진입 — 라우팅으로만(execution→planb 직접 import 없이, ★6).
+      onPressWatchlist={() => router.push(`/trips/${tripId}/planb/triggers`)}
     />
   );
 }

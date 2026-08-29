@@ -14,6 +14,7 @@ import {
   RailActiveGlyph,
   RailDoneGlyph,
   RailUpcomingGlyph,
+  ShieldGlyph,
 } from './ExecutionGlyphs';
 import { LiveMapScreen } from './LiveMapScreen';
 import { LiveSlotCard } from './LiveSlotCard';
@@ -75,6 +76,12 @@ export interface LiveItineraryScreenProps {
    * null 을 돌려준다(칩=상시·배너=slotKey 매칭 구분). additive optional(`renderSlotPanel` 선례).
    */
   renderSlotBanner?: (slotKey: string) => ReactNode;
+  /**
+   * TRIP-562 · 감시 목록(i09) 진입 FAB(하단 우측 탭바 위) — page 가 `router.push` 로 배선한다.
+   * additive optional(기본 undefined) — 프로즌 S1~S8 무회귀. FAB 는 항상 렌더(상시 진입점), press 가
+   * `onPressWatchlist?.()`(미제공이면 무해 no-op). execution→planb 직접 import 없이 콜백 prop 하나로만.
+   */
+  onPressWatchlist?: () => void;
 }
 
 export function LiveItineraryScreen({
@@ -95,6 +102,7 @@ export function LiveItineraryScreen({
   onManualArrive,
   triggerChip,
   renderSlotBanner,
+  onPressWatchlist,
 }: LiveItineraryScreenProps): ReactElement {
   const activeDate = days[activeDayIndex]?.date ?? '';
   // 진행 중 슬롯 다음 첫 upcoming(좌표 유한)을 다음 예정지로 도출 — active 카드에만 주입한다.
@@ -231,6 +239,17 @@ export function LiveItineraryScreen({
           ))}
         </ScrollView>
       )}
+
+      {/* 감시 목록(i09) 진입 FAB — 지도 세그먼트의 형제 노드(KakaoMapView 오버레이 터치 흡수 회피,
+          repo-traps). 탭바 밴드(84px) 위(bottom>84)에 앉힌다. 항상 렌더, press→콜백. */}
+      <Pressable
+        testID="execution-live-watchlist-fab"
+        accessibilityRole="button"
+        onPress={() => onPressWatchlist?.()}
+        className="absolute bottom-[100px] right-lg h-[56px] w-[56px] items-center justify-center rounded-pill bg-primary shadow-lg"
+      >
+        <ShieldGlyph size={24} />
+      </Pressable>
 
       <BottomTabBar activeKey="itinerary" onPressTab={onPressTab} />
     </SafeAreaView>
