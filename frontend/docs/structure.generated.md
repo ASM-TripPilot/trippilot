@@ -53,6 +53,7 @@
 - `src/__tests__/planbDiffRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbManualRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbManualStructure.test.ts`  →  (export 없음)
+- `src/__tests__/planbReplanDraftStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbSafeAreaStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
@@ -173,6 +174,7 @@
 
 ## src/app/trips/[tripId]/planb/
 - `src/app/trips/[tripId]/planb/diff.tsx`  →  (export 없음)
+- `src/app/trips/[tripId]/planb/draft.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/planb/index.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/planb/manual.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/planb/solving.tsx`  →  (export 없음)
@@ -340,10 +342,13 @@
 
 ## src/features/planb/ui/
 - `src/features/planb/ui/ManualEditScreen.tsx`  →  ManualEditVariant · ManualEditScreenProps · ManualEditScreen
+- `src/features/planb/ui/NoAlternativeScreen.tsx`  →  NoAlternativeScreenProps · NoAlternativeScreen
 - `src/features/planb/ui/OutOfScopeNotice.tsx`  →  OutOfScopeNotice
-- `src/features/planb/ui/PlanbGlyphs.tsx`  →  ChecklistDoneGlyph · ChecklistActiveGlyph · ChecklistWaitingGlyph · AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph · WeatherCloudGlyph · ClockGlyph · ShopGlyph
+- `src/features/planb/ui/PlanbGlyphs.tsx`  →  ChecklistDoneGlyph · ChecklistActiveGlyph · ChecklistWaitingGlyph · AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph · WeatherCloudGlyph · ClockGlyph · ShopGlyph · ChevronRightGlyph · LockGlyph
 - `src/features/planb/ui/ReplanAppliedScreen.tsx`  →  ReplanAppliedScreenProps · ReplanAppliedScreen
+- `src/features/planb/ui/ReplanDraftScreen.tsx`  →  ReplanDraftScreenProps · ReplanDraftScreen
 - `src/features/planb/ui/ReplanRequestSheet.tsx`  →  ReplanDetectionBanner · ReplanRequestSheetProps · ReplanRequestSheet
+- `src/features/planb/ui/ReplanSlotRow.tsx`  →  SlotBadgeKind · ReplanSlotVM · ReplanSlotRowProps · ReplanSlotRow
 - `src/features/planb/ui/ReplanSolvingScreen.tsx`  →  ReplanSolvingScreenProps · ReplanSolvingScreen
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
 - `src/features/planb/ui/TriggerWatchlistScreen.tsx`  →  TriggerWatchlistScreenProps · TriggerWatchlistScreen
@@ -551,9 +556,10 @@
 - `src/pages/planb-diff/ui/PlanbDiffPage.tsx`  →  PlanbDiffPageProps · PlanbDiffPage
 
 ## src/pages/planb-draft/
-- `src/pages/planb-draft/index.ts`  →  PlanbSolvingPage
+- `src/pages/planb-draft/index.ts`  →  PlanbSolvingPage · PlanbDraftPage
 
 ## src/pages/planb-draft/ui/
+- `src/pages/planb-draft/ui/PlanbDraftPage.tsx`  →  PlanbDraftPageProps · PlanbDraftPage
 - `src/pages/planb-draft/ui/PlanbSolvingPage.tsx`  →  PlanbSolvingPageProps · PlanbSolvingPage
 
 ## src/pages/planb-manual/
@@ -814,4 +820,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 542개 파일
+합계 548개 파일

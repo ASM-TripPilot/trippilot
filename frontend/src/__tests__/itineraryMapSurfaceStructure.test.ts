@@ -39,6 +39,9 @@ const ROOT = path.resolve('src');
 const LOCKED_CALLERS = [
   'features/itinerary/ui/DraftScreen.tsx',
   'features/itinerary/ui/MustVisitPickerScreen.tsx',
+  // TRIP-563 i13·i16 재계획 글랜스 지도 — h05·h11 과 같은 인라인 잠금 미리보기(viewOnly ON).
+  'features/planb/ui/NoAlternativeScreen.tsx',
+  'features/planb/ui/ReplanDraftScreen.tsx',
 ];
 
 /** 지도 고정을 **켜면 안 되는** 호출부. 앞의 넷은 지도를 움직여 좌표를 확정하는 것이 기능 자체라
@@ -292,11 +295,12 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
       ...EXPLORE_CALLERS,
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 10개 = 총 11개).
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 12개 = 총 13개).
     //    Q5 로 TimelineScreen 이 지도 태그 2개(글랜스+h26)를 가져 6→8, TRIP-397 LiveMapScreen 이
-    //    1개 더해 8→9, TRIP-442 live-location 이 1개 더해 9→10 으로 늘었다(설계된 갱신 · AC-8).
+    //    1개 더해 8→9, TRIP-442 live-location 이 1개 더해 9→10, TRIP-563 planb 2화면(i13·i16)이
+    //    2개 더해 10→12 로 늘었다(설계된 갱신 · AC-8).
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(10);
+    expect(defaultTags).toHaveLength(12);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);

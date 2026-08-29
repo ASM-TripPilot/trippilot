@@ -1,4 +1,4 @@
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 /**
  * TRIP-440 · i12 재계획 로딩 체크리스트 상태 아이콘 3종(done/active/waiting) — 인라인 SVG.
@@ -13,6 +13,9 @@ const PRIMARY = '#FF385C';
 const MUTED_SOFT = '#9AA1AB';
 const WHITE = '#FFFFFF';
 const INK = '#222222';
+// 변경됨·고정·"다른 후보 N" 텍스트색(brand red-dark, brief §토큰 스냅 raw 값). SVG stroke 은
+// className 을 못 받아 글리프 파일에서만 raw 로 고정한다(리포 *Glyphs raw-hex 면제 관례).
+const PRIMARY_TEXT = '#C13515';
 // i09 감시 행 아이콘 기본색(text-muted 토큰 raw 값, brief §토큰 스냅) — 화면이 활성 행엔 primary-text 로 덮는다.
 const MUTED = '#6A6A6A';
 
@@ -205,6 +208,52 @@ export function ShopGlyph({ size = 22, color = MUTED }: TintGlyphProps) {
         strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * TRIP-563 · i13 재계획안 슬롯 행 글리프 2종.
+ *
+ * 색은 primary-text(#C13515) raw 고정 — "다른 후보 N" 텍스트·고정 pill 텍스트와 같은 잉크.
+ * 체브론·자물쇠는 리포 곳곳에 유사 벡터가 있으나 features 간 import 금지라 planb 로컬 복제다
+ * (`ItineraryGlyphs.ChevronRightGlyph`·`ItineraryGlyphs.LockGlyph` 계열과 동형 관례).
+ */
+
+// "다른 후보 N >" 우측 체브론.
+export function ChevronRightGlyph({ size = 16 }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M9 6L15 12L9 18"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 고정 pill 자물쇠(몸통 + 걸쇠).
+export function LockGlyph({ size = 14 }: GlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect
+        x={5}
+        y={10.5}
+        width={14}
+        height={9.5}
+        rx={2.2}
+        stroke={PRIMARY_TEXT}
+        strokeWidth={1.8}
+      />
+      <Path
+        d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
+        stroke={PRIMARY_TEXT}
+        strokeWidth={1.8}
+        strokeLinecap="round"
       />
     </Svg>
   );
