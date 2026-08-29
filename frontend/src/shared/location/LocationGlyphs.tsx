@@ -160,6 +160,133 @@ export function LocationInfoGlyph({
   );
 }
 
+// l06 용도 3항목 아이콘(시계·좌우화살표·핀). 색은 호출자 주입(기본 ink) — permission-denied 는
+// 컨테이너 opacity 로 dimmed 하므로 색 상수는 하나로 족하다. hex 리터럴을 .tsx 에 직접 박으면
+// onboardingStructure.test.ts F2 가드에 걸리므로 반드시 LOCATION_ICON_COLORS 경유.
+
+// (1) 이동 지연 감지 — 시계.
+export function LocationClockGlyph({
+  size = 20,
+  testID,
+  color = LOCATION_ICON_COLORS.ink,
+}: GlyphProps & { color?: string }) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={1.8} />
+      <Path
+        d="M12 7.5V12L15 13.5"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// (2) 실시간 Plan-B 재계획 — 좌우 화살표(스왑).
+export function LocationSwapGlyph({
+  size = 20,
+  testID,
+  color = LOCATION_ICON_COLORS.ink,
+}: GlyphProps & { color?: string }) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M7 8H20M20 8L16 4M20 8L16 12"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M17 16H4M4 16L8 12M4 16L8 20"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// (3) 주변 숙소·일정 추천 — 위치 핀.
+export function LocationPinGlyph({
+  size = 20,
+  testID,
+  color = LOCATION_ICON_COLORS.ink,
+}: GlyphProps & { color?: string }) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M20 10c0 5.25-8 11-8 11s-8-5.75-8-11a8 8 0 1 1 16 0Z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx={12} cy={10} r={3} stroke={color} strokeWidth={1.8} />
+    </Svg>
+  );
+}
+
+// permission-denied 상단 배너 경고 삼각형(⚠).
+export function LocationWarningGlyph({
+  size = 20,
+  testID,
+  color = LOCATION_ICON_COLORS.ink,
+}: GlyphProps & { color?: string }) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 3.5 22 20H2L12 3.5Z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 10V14"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 17H12.01"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // 거부 안내 줄의 닫기(×) 아이콘. features 3곳의 CloseGlyph 는 경계상 import 불가라(shared→features
 // 금지) 여기 신설한다 — kit §6 close SVG(6,6→18,18 / 18,6→6,18)를 뉴트럴 mutedSoft 로 그린다.
 export function LocationCloseGlyph({ size = 18, testID }: GlyphProps) {

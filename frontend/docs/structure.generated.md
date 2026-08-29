@@ -37,6 +37,7 @@
 - `src/__tests__/liveLocationRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/liveMapStructure.test.ts`  →  (export 없음)
 - `src/__tests__/liveTimeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
@@ -143,6 +144,7 @@
 
 ## src/app/settings/
 - `src/app/settings/index.tsx`  →  (export 없음)
+- `src/app/settings/location.tsx`  →  (export 없음)
 
 ## src/app/stays/
 - `src/app/stays/[stayId].tsx`  →  (export 없음)
@@ -369,9 +371,11 @@
 ## src/features/settings/ui/
 - `src/features/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
 - `src/features/settings/ui/ExportRow.tsx`  →  ExportRow
+- `src/features/settings/ui/LocationConsentScreen.tsx`  →  LocationConsentScreenProps · LocationConsentScreen
 - `src/features/settings/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
 - `src/features/settings/ui/NicknameEditRow.tsx`  →  NicknameEditRow
 - `src/features/settings/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
+- `src/features/settings/ui/RevokeConfirmDialog.tsx`  →  RevokeConfirmDialog
 - `src/features/settings/ui/SettingsGlyphs.tsx`  →  ChevronRightGlyph · SettingsSunGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · ExternalLinkGlyph · TrashGlyph
 - `src/features/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
 - `src/features/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow
@@ -624,6 +628,12 @@
 
 ## src/pages/saved-places/ui/
 - `src/pages/saved-places/ui/SavedPlacesPage.tsx`  →  SavedPlacesPage
+
+## src/pages/settings-location/
+- `src/pages/settings-location/index.ts`  →  LocationConsentPage
+
+## src/pages/settings-location/ui/
+- `src/pages/settings-location/ui/LocationConsentPage.tsx`  →  LocationConsentPage
 
 ## src/pages/settings/
 - `src/pages/settings/index.ts`  →  SettingsPage
@@ -904,12 +914,17 @@
 - `src/shared/itinerary-edit/ui/ManualTimeSheet.tsx`  →  ManualTimeSheetProps · ManualTimeSheet
 
 ## src/shared/location/
-- `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationCloseGlyph
+- `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph · LocationCloseGlyph
 - `src/shared/location/LocationPreprompt.tsx`  →  LocationPrepromptState · LocationPrepromptProps · LocationPreprompt
+- `src/shared/location/consentPutBody.ts`  →  consentPutBody
 - `src/shared/location/geofence.ts`  →  GeofenceRegion · buildGeofenceRegions · geofenceArriveRequest · registerGeofences · clearGeofences
 
 ## src/shared/location/lib/
 - `src/shared/location/lib/locationColors.ts`  →  LOCATION_ICON_COLORS
+
+## src/shared/location/
+- `src/shared/location/revokeImpact.ts`  →  RevokeImpact · revokeImpact
+- `src/shared/location/useLocationConsent.ts`  →  LocationConsentModel · useLocationConsent
 
 ## src/shared/map/
 - `src/shared/map/KakaoMapView.tsx`  →  KakaoMapViewProps · KakaoMapView
@@ -941,4 +956,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 641개 파일
+합계 650개 파일

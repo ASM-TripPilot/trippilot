@@ -79,7 +79,9 @@ import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import { buildSettingsSections } from '@/features/settings/model/settingsSections';
 import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog';
+import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
 import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
+import { RevokeConfirmDialog } from '@/features/settings/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
 import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
 import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
@@ -127,6 +129,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { ManualTimeSheet, reorderKeepingFixed } from '@/shared/itinerary-edit';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
+import { revokeImpact } from '@/shared/location/revokeImpact';
 import { KakaoMapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
@@ -3281,6 +3284,56 @@ const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <View style={StyleSheet.absoluteFill} className="bg-canvas-alt">
         <DeleteAccountDialog onCancel={noop} onConfirmDeletion={noop} />
+      </View>
+    ),
+  },
+  // l06 위치정보 동의 — 동의 ON default. 용도 3항목·계속 배너 육안 대조(글리프 SVG·틴트는 jest 사각).
+  {
+    key: 'l06-location-consent-default',
+    label: 'l06 위치정보 동의 · 동의 ON',
+    login: null,
+    render: () => (
+      <LocationConsentScreen
+        consentOn
+        disabled={false}
+        impact={revokeImpact()}
+        onGrant={noop}
+        onRevokeConfirmed={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l06 permission-denied — 토글 회색 비활성·부제 "사용 불가"·[설정 이동] 배너·전체 dimmed.
+  {
+    key: 'l06-location-consent-denied',
+    label: 'l06 위치정보 동의 · OS 권한 거부',
+    login: null,
+    render: () => (
+      <LocationConsentScreen
+        consentOn={false}
+        disabled
+        impact={revokeImpact()}
+        onGrant={noop}
+        onRevokeConfirmed={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l06 철회 재확인 다이얼로그 — 딤 전면 커버·모달 실제 열림은 jest 사각(608 동형). 중단3·계속2 구조화
+  // 리스트(Q1 확정, Figma 산문 축약과 다름)를 실기로 확인한다.
+  {
+    key: 'l06-location-revoke-dialog',
+    label: 'l06 위치정보 동의 · 철회 다이얼로그',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill} className="bg-canvas-alt">
+        <RevokeConfirmDialog
+          impact={revokeImpact()}
+          onCancel={noop}
+          onConfirm={noop}
+        />
       </View>
     ),
   },
