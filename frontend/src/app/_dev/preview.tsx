@@ -81,7 +81,10 @@ import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { ManualEditScreen } from '@/features/planb/ui/ManualEditScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
 import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
+import { ReplanDraftScreen } from '@/features/planb/ui/ReplanDraftScreen';
 import { ReplanSolvingScreen } from '@/features/planb/ui/ReplanSolvingScreen';
+import { NoAlternativeScreen } from '@/features/planb/ui/NoAlternativeScreen';
+import type { ReplanSlotVM } from '@/features/planb/ui/ReplanSlotRow';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { TriggerWatchlistScreen } from '@/features/planb/ui/TriggerWatchlistScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';
@@ -912,6 +915,52 @@ const SLOT_CANDIDATES_PREVIEW: SlotCandidatesCandidatesItem[] = [
     poiId: 'poi-c',
     distanceRange: '1.8km',
     rationale: '자연과 예술, 조금 멀어요',
+  },
+];
+
+// i13 재계획안 슬롯(TRIP-563) — 배지 5종(방문함·진행중·변경됨·null·고정)·후보 어포던스·고정 pill 을
+// 한 화면에서 대조하는 주입 VM. 실 슬롯 데이터(사진·번호·시간대)는 draft 계약 공백이라 VM 에 없다 —
+// 배지·거리 메타·우측 어포던스만 그리는 골격을 눈으로 확인하는 자리(실 슬롯 바인딩은 BE 후속).
+const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
+  {
+    slotKey: 's1',
+    badgeKind: 'visited',
+    placeName: '감천문화마을',
+    metaText: '09:30–10:50 · 사진 2장',
+    candidateCount: 0,
+    isFixed: false,
+  },
+  {
+    slotKey: 's2',
+    badgeKind: 'inProgress',
+    placeName: '부산시립미술관',
+    metaText: '13:00 도착 · 관람 중',
+    candidateCount: 0,
+    isFixed: false,
+  },
+  {
+    slotKey: 's3',
+    badgeKind: 'changed',
+    placeName: 'F1963',
+    metaText: '#실내 · 도보 1.3km',
+    candidateCount: 4,
+    isFixed: false,
+  },
+  {
+    slotKey: 's4',
+    badgeKind: null,
+    placeName: '보수동 책방골목',
+    metaText: '도보 0.6km',
+    candidateCount: 2,
+    isFixed: false,
+  },
+  {
+    slotKey: 's5',
+    badgeKind: 'fixed',
+    placeName: '해운대 OO호텔',
+    metaText: '20:00 도착 · 변경 불가',
+    candidateCount: 0,
+    isFixed: true,
   },
 ];
 
@@ -2907,6 +2956,55 @@ const PREVIEW_STATES: PreviewState[] = [
       <ScrollView contentContainerClassName="gap-md p-lg">
         <SlotCandidateSheet candidates={[]} slackLabel="여유 1시간 20분" />
       </ScrollView>
+    ),
+  },
+  // ── i13 재계획안(TRIP-563) — 순수 화면 2얼굴. 채운 슬롯(배지 5종·후보·고정)과 빈 슬롯 degrade
+  //    (헤더 근거·이월 안내만). 지도 center 는 골격 플레이스홀더, 일차 스위치·사진·번호는 draft 계약
+  //    공백이라 없다 — 슬롯 배지·거리 메타·우측 어포던스·CTA 배치를 육안 대조하는 자리(실 지도·시트
+  //    열림은 6-b). draft 실슬롯 바인딩은 BE 후속 ──
+  {
+    key: 'planb-replan-draft',
+    label: 'i13 재계획안 · 채운 슬롯(배지 5종·후보·고정)',
+    login: null,
+    render: () => (
+      <ReplanDraftScreen
+        reasons={['비 예보를 반영해 오후 일정을 다시 짰어요']}
+        excludedPoiIds={['x1', 'x2']}
+        slots={REPLAN_DRAFT_PREVIEW_SLOTS}
+        onManualEdit={noop}
+        onApply={noop}
+        onPressCandidates={noop}
+      />
+    ),
+  },
+  {
+    key: 'planb-replan-draft-empty',
+    label: 'i13 재계획안 · 빈 슬롯 degrade(헤더·이월만)',
+    login: null,
+    render: () => (
+      <ReplanDraftScreen
+        reasons={['비 예보를 반영해 오후 일정을 다시 짰어요']}
+        excludedPoiIds={['x1', 'x2']}
+        slots={[]}
+        onManualEdit={noop}
+        onApply={noop}
+        onPressCandidates={noop}
+      />
+    ),
+  },
+  // ── i16 대안 없음(TRIP-563) — 지도·경고 삼각·문구·3버튼. 3버튼 모두 enabled, onSkip·onRestMode 는
+  //    no-op 자리표시(페이지가 실배선 결정). 실 지도·버튼 정렬은 6-b ──
+  {
+    key: 'planb-noalt',
+    label: 'i16 대안 없음 · 3버튼·경고',
+    login: null,
+    render: () => (
+      <NoAlternativeScreen
+        skipCount={1}
+        onSkip={noop}
+        onRestMode={noop}
+        onManualEdit={noop}
+      />
     ),
   },
   // ── i19 반영 완료(TRIP-441) — buildable 서브셋(헤더·체크·문구·CTA). 체크 원 크기·primary bg·
