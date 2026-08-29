@@ -33,8 +33,11 @@ import {
 } from '@/features/explore/model/exploreFixtures';
 import type { PlaceDetailView } from '@/features/execution/model/placeDetailView';
 import type { ProjectedSlot } from '@/features/execution/model/slotProgress';
+import { WeatherCloudGlyph } from '@/features/execution/ui/ExecutionGlyphs';
 import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen';
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
+import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
+import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -2696,6 +2699,53 @@ const PREVIEW_STATES: PreviewState[] = [
         onPressTab={noop}
         onPressComplete={noop}
         onManualArrive={noop}
+      />
+    ),
+  },
+  // i08 트리거 칩(상단 상주) + i01 변수감지 배너(활성 슬롯 안)(TRIP-561) — 발화 중 얼굴. jest 는
+  // 칩 상단 위치·rose 톤·아이콘·배너 슬롯 내부 정렬을 못 봐(6-b), 이 키가 유일한 육안 대조 자리다.
+  // 칩·배너는 순수 프레젠테이션이라 페이지가 조립할 문구·아이콘·콜백을 여기서 직접 얹는다.
+  {
+    key: 'live-itinerary-trigger',
+    label: '여행 중 일정 i01 · 트리거 칩+배너(발화)',
+    login: null,
+    render: () => (
+      <LiveItineraryScreen
+        days={[
+          { date: '2026-08-20', slots: [] },
+          { date: '2026-08-21', slots: [] },
+        ]}
+        activeDayIndex={0}
+        slots={LIVE_ITINERARY_PREVIEW_SLOTS}
+        segment="itinerary"
+        onSelectDay={noop}
+        onSelectSegment={noop}
+        toggle="plan"
+        onToggle={noop}
+        actualRoute={{
+          enabled: false,
+          reason: '위치 권한을 켜면 기록돼요',
+          distanceKm: 0,
+        }}
+        tripTitle="부산 여행"
+        subtitle="8월 20일 목요일 · 오늘 일정"
+        onPressTab={noop}
+        onPressComplete={noop}
+        onManualArrive={noop}
+        triggerChip={
+          <TriggerChip
+            title="비 예보"
+            subtitle="탭하여 대안 보기"
+            icon={<WeatherCloudGlyph size={24} />}
+            onPressAlternative={noop}
+            onDismiss={noop}
+          />
+        }
+        renderSlotBanner={(slotKey) =>
+          slotKey === '2026-08-20#poi-active' ? (
+            <TriggerBanner text="비 예보 · 17시 이후 비 — 실내로 바꾸거나 시간을 당길 수 있어요" />
+          ) : null
+        }
       />
     ),
   },

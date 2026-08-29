@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -65,6 +65,16 @@ export interface LiveItineraryScreenProps {
   onPressComplete?: () => void;
   /** upcoming 카드 수동 [도착] — page 가 poiId 로 arrive({source:MANUAL})를 배선(AC-4). */
   onManualArrive?: (poiId: string) => void;
+  /**
+   * TRIP-561 · 상단 상주 트리거 칩(i08) — 발화 중이면 page 가 조립해 내린다. 헤더 아래·타임라인
+   * 위에 렌더(있을 때만). additive optional(기본 undefined) — 프로즌 S1~S8 무회귀(`peek` 선례).
+   */
+  triggerChip?: ReactNode;
+  /**
+   * TRIP-561 · 슬롯별 변수감지 배너(i01) — 슬롯마다 slotKey 로 호출해 매칭이면 배너 노드, 아니면
+   * null 을 돌려준다(칩=상시·배너=slotKey 매칭 구분). additive optional(`renderSlotPanel` 선례).
+   */
+  renderSlotBanner?: (slotKey: string) => ReactNode;
 }
 
 export function LiveItineraryScreen({
@@ -83,6 +93,8 @@ export function LiveItineraryScreen({
   onPressNextNav,
   onPressComplete,
   onManualArrive,
+  triggerChip,
+  renderSlotBanner,
 }: LiveItineraryScreenProps): ReactElement {
   const activeDate = days[activeDayIndex]?.date ?? '';
   // 진행 중 슬롯 다음 첫 upcoming(좌표 유한)을 다음 예정지로 도출 — active 카드에만 주입한다.
@@ -165,6 +177,8 @@ export function LiveItineraryScreen({
         </View>
       </View>
 
+      {triggerChip}
+
       {segment === 'map' ? (
         <LiveMapScreen
           slots={slots.map((projected) => projected.slot)}
@@ -211,6 +225,7 @@ export function LiveItineraryScreen({
                       : undefined
                   }
                 />
+                {renderSlotBanner?.(`${activeDate}#${projected.slot.poiId}`)}
               </View>
             </View>
           ))}

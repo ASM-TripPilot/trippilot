@@ -55,6 +55,7 @@
 - `src/__tests__/planbManualStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbSafeAreaStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbScopeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
 - `src/__tests__/regionCatalogStructure.test.ts`  →  (export 없음)
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
@@ -217,11 +218,13 @@
 - `src/features/execution/model/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
 
 ## src/features/execution/ui/
-- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · ClockGlyph · VisitCheckGlyph · CameraGlyph · MemoGlyph · RouteArrowGlyph · BackArrowGlyph · ShareGlyph
+- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · ClockGlyph · VisitCheckGlyph · CameraGlyph · MemoGlyph · RouteArrowGlyph · BackArrowGlyph · ShareGlyph · WarningTriangleGlyph · WeatherCloudGlyph · ChevronRightGlyph · CloseGlyph
 - `src/features/execution/ui/LiveItineraryScreen.tsx`  →  LiveItineraryScreenProps · LiveItineraryScreen
 - `src/features/execution/ui/LiveMapScreen.tsx`  →  LiveMapScreenProps · LiveMapScreen
 - `src/features/execution/ui/LiveSlotCard.tsx`  →  LiveSlotCardProps · LiveSlotCard
 - `src/features/execution/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
+- `src/features/execution/ui/TriggerBanner.tsx`  →  TriggerBannerProps · TriggerBanner
+- `src/features/execution/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
 
 ## src/features/explore/model/
 - `src/features/explore/model/exploreFixtures.ts`  →  PREVIEW_PLACES · PREVIEW_SAVED_POI_IDS · PREVIEW_SAVED_PLACES · PREVIEW_REGIONS
@@ -321,11 +324,14 @@
 - `src/features/planb/model/replanScope.ts`  →  ReplanScopeOption · ReplanChoice · REPLAN_SCOPES · DEFAULT_REPLAN_SCOPE · REPLAN_REASONS · REPLAN_DIRECTIVES
 - `src/features/planb/model/replanState.ts`  →  ReplanState · resolveReplanState
 - `src/features/planb/model/slackTime.ts`  →  slackTime
+- `src/features/planb/model/triggerLabel.ts`  →  TriggerLabel · TRIGGER_LABELS · triggerLabel
+- `src/features/planb/model/useActiveTriggers.ts`  →  useActiveTriggers
 - `src/features/planb/model/useApplyReplan.ts`  →  useApplyReplan
 - `src/features/planb/model/useCancelReplan.ts`  →  useCancelReplan
 - `src/features/planb/model/useReplanSession.ts`  →  useReplanSession
 - `src/features/planb/model/useSlotCandidates.ts`  →  useSlotCandidates
 - `src/features/planb/model/useStartReplan.ts`  →  useStartReplan
+- `src/features/planb/model/useSuppressTrigger.ts`  →  useSuppressTrigger
 
 ## src/features/planb/ui/
 - `src/features/planb/ui/ManualEditScreen.tsx`  →  ManualEditVariant · ManualEditScreenProps · ManualEditScreen
@@ -796,4 +802,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 528개 파일
+합계 534개 파일

@@ -2,9 +2,9 @@
 paths:
   - "src/features/planb/**"
 ---
-# `src/features/planb/` — 재계획(Plan-B) 도메인 (TRIP-439 재신설, TRIP-440으로 i12·i14 추가, TRIP-441로 확정/취소 래퍼·i19 추가, TRIP-442로 origin 조립·판정 추가, TRIP-443으로 i15·i22 수동 편집 화면 추가)
+# `src/features/planb/` — 재계획(Plan-B) 도메인 (TRIP-439 재신설, TRIP-440으로 i12·i14 추가, TRIP-441로 확정/취소 래퍼·i19 추가, TRIP-442로 origin 조립·판정 추가, TRIP-443으로 i15·i22 수동 편집 화면 추가, TRIP-561로 i08 트리거 조회·억제 추가)
 
-TRIP-173에서 빈 배럴째 디렉토리가 삭제됐다가, 선행 TRIP-438(planb-triggers, 감지·열람)이 미완료로 끝나 재신설을 못 한 채로 남아 있었다 — **TRIP-439가 이 사이클에서 처음 다시 만든다.** 선행 미완의 여파로 triggers 소비가 없어, 이번 슬라이스는 **수동 진입 경로(`triggerId=null`)** 만 짓는다(감지 배너·`[끄기]`는 `trigger?` prop이 있을 때만 조건부 렌더, 자동 진입 배선은 후속 티켓).
+TRIP-173에서 빈 배럴째 디렉토리가 삭제됐다가, 선행 TRIP-438(planb-triggers, 감지·열람)이 미완료로 끝나 재신설을 못 한 채로 남아 있었다 — **TRIP-439가 이 사이클에서 처음 다시 만든다.** 선행 미완의 여파로 triggers 소비가 없어, 이번 슬라이스는 **수동 진입 경로(`triggerId=null`)** 만 짓는다(감지 배너·`[끄기]`는 `trigger?` prop이 있을 때만 조건부 렌더, 자동 진입 배선은 후속 티켓). **TRIP-561로 이 공백이 닫혔다** — `useActiveTriggers`(조회)·`useSuppressTrigger`(끄기)가 신설돼 `pages/live-itinerary`가 실제 발화 중인 트리거를 i08 칩·i01 배너로 표시하고 억제한다(아래 신규 3행).
 
 바텀시트(i10)의 `@gorhom/bottom-sheet` 목이 열림/닫힘·딤을 원리적으로 못 보므로(repo-traps 바텀시트 절), 이 도메인은 **관측 가능한 계약**(제출 시 이 body로 POST가 나간다 / 이 라우트로 push한다)으로 심판을 세운다 — 그래서 순수 조립·순수 폼 상태·순수 시트를 배선(pages 층)과 엄격히 분리했다.
 
@@ -29,6 +29,9 @@ TRIP-173에서 빈 배럴째 디렉토리가 삭제됐다가, 선행 TRIP-438(pl
 | `src/features/planb/ui/ReplanAppliedScreen.tsx` | **신규(TRIP-441)** — i19 반영완료 순수 화면(`{onBack, onContinue}` 콜백만, `ReplanSolvingScreen` 선례). 헤더·체크 아이콘(`PlanbGlyphs`)·문구·`[여행 계속하기]`만 렌더 — 지표 chip·전후 항목 배지·`[되돌리기]`는 draft(after) payload 계약 갭으로 **아예 안 그림**(자리표시 없음, S4 부재 단언). 개념 [[계약이 못 받치면 안 그린다]] |
 | `src/features/planb/ui/ManualEditScreen.tsx` | **신규(TRIP-443)** — i15·i22 수동 편집 얇은 파생 화면. `variant?: 'error'\|'normal'`(미지정→`'normal'`)을 `mode = variant==='error'?'fallback':'normal'`로 1:1 파생해 `<ManualEditShell mode={mode} .../>`(`@/shared/itinerary-edit`)에 나머지 props를 그대로 위임 — 렌더는 전부 셸이 진다(features 간 직접 import 금지로 `features/itinerary`(U3) 편집 기계를 못 가져다 써 `shared/itinerary-edit`를 신설하고 이 화면이 소비, U3 화면·테스트 seam은 무수정). 진입 신호가 `isFallback`/`solveMode`(MANUAL=`isFallback:false`, repo-traps 신호 겹침) 대신 라우트 파라미터 `variant`인 이유가 이 파일의 존재 이유. `executionDurationStructure.test.ts`(`features/{execution,planb}/ui/**` 재귀)에 자동 편입돼 소요시간 표기 0 강제(INV-3, shared 셸은 이 스캔 밖이라 `planbManualStructure.test.ts` G3가 별도로 잠금). **TRIP-577로 `timeConfirmedSlotKeys?: string[]` prop 선언 추가**(`{...rest}`로 셸에 그대로 통과 — 인터페이스 선언뿐, 로직 없음) |
 | `src/features/planb/ui/ManualEditScreen.reorder.test.tsx` | **신규(TRIP-577)** — 드래그 재정렬·시각 표시 렌더계약 3건(R1 핸들 부착/미부착·R2 onDragEnd→onReorder 포워딩·R3 timeConfirmedSlotKeys 표시). `__mocks__/react-native-draggable-flatlist.tsx`(node_modules 수동 목, 명시 `jest.mock` 호출 없이도 자동 적용)의 `onDragEnd`를 호스트 `<View>` prop으로 직접 발화해 배선을 누른다 |
+| `src/features/planb/model/triggerLabel.ts` | **신규(TRIP-561)** — 순수 번역표. `TRIGGER_LABELS`가 `TriggerKind` 4종(WEATHER·CLOSURE·DELAY·MANUAL)을 `{label, iconKey}`로 매핑, `triggerLabel(kind)`는 표 조회 한 줄. **정적 요지만**(상세 사유는 서버 `reason`이 동적으로 실어옴 — 라벨에 안 섞는다). node-safe(`import type`만, RN 런타임 미import) — `planbTriggerKindStructure.test.ts`가 소스를 직접 스캔해 4종 매핑·금칙어(교통·체류 초과 미발명) 확인. ⚠️ **`liveTimeStructure`·`executionDurationStructure`(둘 다 execution 전용 스캔) 밖이라 이 파일엔 INV-3 소요시간 내용 가드가 없다**(repo-traps `traps-execution.md` 참고, `slackTime.ts`와 동형 계열 — model이라 가드 사각) |
+| `src/features/planb/model/useActiveTriggers.ts` | **신규(TRIP-561)** — `useActiveTriggers(tripId, {enabled})`. `useGetTripsTripIdTriggers`(codegen) 얇은 래퍼(로직 0줄, `useLiveItinerary` 동형) — `enabled`만 받아 active 얼굴에서만 조회하게 게이팅(`useVisitCheck` 선례). 서버는 "발화 중인 것만" 반환(빈 배열=표면 없음, INV-U4-01) — 클라 필터링 없음(MANUAL 제외는 페이지 몫, 아래 `layer-pages.md` 참고) |
+| `src/features/planb/model/useSuppressTrigger.ts` | **신규(TRIP-561)** — `useSuppressTrigger(tripId)`. `usePostTripsTripIdTriggersTriggerIdDismiss`(codegen) 감싼 뮤테이션 — `onSuccess`에서 `invalidateQueries(getGetTripsTripIdTriggersQueryKey(tripId))`로 GET /triggers 재조회(억제는 서버 레코드라 무효화 없으면 "끄기 눌러도 칩이 안 사라진다" 함정 — BR-U4-15, 개념 [[invalidateQueries (쿼리 무효화)]]). `useApplyReplan.ts` 선례 동형(무효화 대상만 다름) |
 
 ⚠️ `features/planb/ui/**`는 기존 구조가드 `executionDurationStructure.test.ts`(INV-3, `features/{execution,planb}/ui/**` 재귀 스캔)에 **자동 편입**된다 — 소요시간 표기(`N분`·`N시간`·`소요`) 0건 강제, raw-hex 가드는 아직 없음(참고, 후속 티켓 후보). `slackTime.ts`는 `model/`이라 이 자동 편입 밖 — PBT-U4-F2가 유일 심판.
 
