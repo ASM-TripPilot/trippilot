@@ -77,6 +77,8 @@ import {
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
+import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
+import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
 import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { ManualEditScreen } from '@/features/planb/ui/ManualEditScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
@@ -830,6 +832,51 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
     metaLine: '8월 1일 ~ 2일 · 1박 2일 · 1명',
     badge: null,
     extra: null,
+  },
+];
+
+// l03 마이페이지 · l03(TRIP-604) — 예정 카드(D-배지)와 지난 여행 카드(회고 chevron)의 두 얼굴을
+// 한 화면에서 대조하는 픽스처. 화면은 무상태라 VM + noop 한 벌로 충분(TripCardContainer 의 조회
+// 조립은 안 태움 — 배지 pill 위치·세그먼트 활성 그림자·아바타 원은 jest 사각, 6-b 육안 몫).
+const MY_PAGE_UPCOMING_VMS: TripCardVM[] = [
+  {
+    tripId: 'busan',
+    destinationLabel: '부산',
+    dateRange: '6.10~6.12',
+    basesLabel: '숙소 1',
+    daysLabel: '일정 3일',
+    dBadge: 'D-12',
+    isEnded: false,
+  },
+  {
+    tripId: 'jeju',
+    destinationLabel: '제주',
+    dateRange: '7.1~7.4',
+    basesLabel: '숙소 미등록',
+    daysLabel: null,
+    dBadge: 'D-30',
+    isEnded: false,
+  },
+];
+
+const MY_PAGE_ENDED_VMS: TripCardVM[] = [
+  {
+    tripId: 'jeju-past',
+    destinationLabel: '제주',
+    dateRange: '5.1~5.3',
+    basesLabel: '숙소 2',
+    daysLabel: '일정 3일',
+    dBadge: null,
+    isEnded: true,
+  },
+  {
+    tripId: 'gangneung-past',
+    destinationLabel: '강릉',
+    dateRange: '4.18~4.20',
+    basesLabel: '숙소 1',
+    daysLabel: '일정 3일',
+    dBadge: null,
+    isEnded: true,
   },
 ];
 
@@ -2395,6 +2442,55 @@ const PREVIEW_STATES: PreviewState[] = [
     label: '내 여행 목록 · 스켈레톤 2장(h37)',
     login: null,
     render: () => <MyTripsListScreen mode="loading" onPressCreateTrip={noop} />,
+  },
+  // l03 마이페이지 · l03(TRIP-604) — 프로필 카드·세그먼트·예정 카드·지난 여행(회고 chevron)·설정
+  // 행을 한 화면에서 Figma l03 default(1602:2388)와 대조한다. 예정 2건 + 종료 2건(회고 진입 chevron).
+  {
+    key: 'my-page-default',
+    label: '마이페이지 · 예정+지난 여행(l03)',
+    login: null,
+    render: () => (
+      <MyPageScreen
+        nickname="여행자123"
+        email="trippilot@email.com"
+        counts={{ upcoming: 2, active: 0, ended: 2 }}
+        active="upcoming"
+        onChangeSegment={noop}
+        cards={MY_PAGE_UPCOMING_VMS.map((vm) => (
+          <TripCard key={vm.tripId} vm={vm} onPressReflection={noop} />
+        ))}
+        activeEmpty={false}
+        onPressCreateTrip={noop}
+        showPast
+        pastCards={MY_PAGE_ENDED_VMS.map((vm) => (
+          <TripCard key={vm.tripId} vm={vm} onPressReflection={noop} />
+        ))}
+        pastEmpty={false}
+      />
+    ),
+  },
+  // l03 마이페이지 · 종료 0건 엣지(AC-5) — 예정 빈 상태(새 여행 CTA) + "아직 종료된 여행이 없습니다"
+  // (회고 진입 어포던스 0). Figma empty(1603:2414)의 CTA·지난 여행 영역을 대조하되, 사진 썸네일은
+  // 계약에 필드가 없어 그리지 않는다(드리프트 ① 해소).
+  {
+    key: 'my-page-empty',
+    label: '마이페이지 · 예정 0·종료 0 엣지(l03)',
+    login: null,
+    render: () => (
+      <MyPageScreen
+        nickname="여행자123"
+        email="trippilot@email.com"
+        counts={{ upcoming: 0, active: 0, ended: 0 }}
+        active="upcoming"
+        onChangeSegment={noop}
+        cards={null}
+        activeEmpty
+        onPressCreateTrip={noop}
+        showPast
+        pastCards={null}
+        pastEmpty
+      />
+    ),
   },
   // h24 일정 편집(TRIP-302) — 시각칩·삭제·"다른 후보" 어포던스가 있는 편집 화면. 시각칩을 누르면
   // 아래 '시각 조정 시트' 가 열린다(프리뷰에선 둘을 각각 독립 진입으로 본다). 고정 슬롯(poi-b)은
