@@ -283,3 +283,25 @@ export function CloseGlyph({
     </Svg>
   );
 }
+
+// TRIP-562 · i01 감시 목록 진입 FAB 아이콘 — 방패+체크(Plan-B 가 지켜보고 있음). primary bg 위라
+// 기본 흰색. execution 로컬 신규(감시/방패 계열, 리포에 동형 없음 — grep 확인).
+export function ShieldGlyph({ size = 24, color = WHITE }: TintGlyphProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 3L19 5.5V11C19 15.5 16 19 12 21C8 19 5 15.5 5 11V5.5L12 3Z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 11.5L11 13.5L15 9.5"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
