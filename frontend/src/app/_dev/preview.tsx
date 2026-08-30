@@ -80,11 +80,13 @@ import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen
 import { buildSettingsSections } from '@/features/settings/model/settingsSections';
 import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog';
 import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
+import type { StyleCardVM } from '@/features/settings/model/styleCardModel';
 import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
 import {
   MyStaysScreen,
   type MyStayRowVM,
 } from '@/features/settings/ui/MyStaysScreen';
+import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
 import { RevokeConfirmDialog } from '@/features/settings/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
 import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
@@ -933,6 +935,21 @@ const MY_STAYS_PREVIEW_ROWS: MyStayRowVM[] = [
     baseAssignmentId: null,
   },
 ];
+
+// l03 스타일 요약 카드(TRIP-606) — 정식(칩+3축 dot 게이지+메타+상세 진입)·미달(안내 한 줄) 두 얼굴.
+// dot 채움 색·빈 dot 토큰·칩 알약은 jest 사각(글리프 fill 함정)이라 이 키가 육안 대조 자리다.
+// 정식 얼굴은 아래 my-page-default 프리뷰에 얹어 프로필↔세그먼트 사이 배치까지 함께 본다.
+const STYLE_CARD_OFFICIAL_VM: Extract<StyleCardVM, { kind: 'official' }> = {
+  kind: 'official',
+  descriptors: ['#바다', '#미식', '#느긋'],
+  gauges: [
+    { label: '여유로움', value: 4 },
+    { label: '미식 취향', value: 4 },
+    { label: '활동성', value: 3 },
+  ],
+  sampleTripCount: 6,
+  updatedAt: '2026-08-28T09:00:00Z',
+};
 
 // 탭 화면 프리뷰에 셸 탭바를 얹어 실제 앱처럼 보이게 한다(TRIP-201 오버레이 확인용).
 // BottomTabBar 루트가 absolute bottom-0라 콘텐츠 위에 떠서 겹친다 — 프리뷰에서도 오버레이
@@ -2510,6 +2527,7 @@ const PREVIEW_STATES: PreviewState[] = [
         counts={{ upcoming: 2, active: 0, ended: 2 }}
         active="upcoming"
         onChangeSegment={noop}
+        styleCard={<StyleSummaryCard vm={STYLE_CARD_OFFICIAL_VM} />}
         cards={MY_PAGE_UPCOMING_VMS.map((vm) => (
           <TripCard key={vm.tripId} vm={vm} onPressReflection={noop} />
         ))}
@@ -2544,6 +2562,20 @@ const PREVIEW_STATES: PreviewState[] = [
         pastCards={null}
         pastEmpty
       />
+    ),
+  },
+  // l03 스타일 요약 카드 · 미달 얼굴(TRIP-606) — 누적 방문 <10곳이면 게이지·칩 없이 안내 한 줄만
+  // (INV-U5-09). 실화면 딥링크로는 백엔드 없이 이 얼굴을 못 보므로 카드를 단독으로 세워 대조한다.
+  {
+    key: 'my-style-card-insufficient',
+    label: '스타일 카드 · 미달(<10곳) 안내(l03)',
+    login: null,
+    render: () => (
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <View className="flex-1 bg-canvas p-lg">
+          <StyleSummaryCard vm={{ kind: 'insufficient', current: 4 }} />
+        </View>
+      </SafeAreaView>
     ),
   },
   // l04 등록 숙소·예약 기록(TRIP-605) — 등록됨(채움 pill + "출발점 변경 ›")·미등록(점선 "출발점 지정")·

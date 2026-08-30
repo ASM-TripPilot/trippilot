@@ -5,12 +5,15 @@ import { useRouter } from 'expo-router';
 import type { Trip } from '@/shared/api/generated/schemas';
 import { useGetMe } from '@/shared/api/generated/account/account';
 import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
+import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
 import { useGetTrips } from '@/shared/api/generated/trips/trips';
+import { buildStyleCardModel } from '@/features/settings/model/styleCardModel';
 import {
   bucketTrips,
   type TripBucket,
 } from '@/features/settings/model/tripBuckets';
 import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
+import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
 
 import { TripCardContainer } from './TripCardContainer';
 
@@ -40,6 +43,7 @@ export function MyPage(): ReactElement {
   const me = useGetMe();
   const profile = useGetMeProfile();
   const trips = useGetTrips();
+  const style = useGetMeStyle();
 
   const [active, setActive] = useState<TripBucket>('upcoming');
 
@@ -66,6 +70,11 @@ export function MyPage(): ReactElement {
       counts={counts}
       active={active}
       onChangeSegment={setActive}
+      styleCard={
+        style.data ? (
+          <StyleSummaryCard vm={buildStyleCardModel(style.data)} />
+        ) : undefined
+      }
       cards={sortedActive.map((trip) => (
         <TripCardContainer key={trip.tripId} trip={trip} />
       ))}

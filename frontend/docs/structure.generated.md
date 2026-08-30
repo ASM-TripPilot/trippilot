@@ -373,6 +373,7 @@
 - `src/features/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
 - `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowVM · SettingsGroupVM · buildSettingsSections
 - `src/features/settings/model/stayTripLink.ts`  →  StayTripLink · buildStayTripLink
+- `src/features/settings/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
 - `src/features/settings/model/tripBuckets.ts`  →  TripBucket · tripStatusBucket · bucketTrips
 
 ## src/features/settings/ui/
@@ -389,6 +390,7 @@
 - `src/features/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
 - `src/features/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow
 - `src/features/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
+- `src/features/settings/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 - `src/features/settings/ui/TripCard.tsx`  →  TripCardVM · TripCardProps · TripCard
 - `src/features/settings/ui/TripStatusSegment.tsx`  →  TripStatusSegmentProps · TripStatusSegment
 
@@ -971,4 +973,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 657개 파일
+합계 659개 파일

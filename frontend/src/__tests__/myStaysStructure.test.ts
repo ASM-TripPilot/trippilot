@@ -104,14 +104,16 @@ describe('G2 · INV-3 — features/settings/ui 재귀 스캔에 소요시간 문
   });
 });
 
-describe('G3 · raw hex 0 — 신규 UI 파일(MyStays*·BaseToggle*, 글리프 제외)', () => {
-  it('신규 화면·다이얼로그가 토큰 경유로만 색을 쓴다(raw hex 없음)', () => {
+describe('G3 · raw hex 0 — 신규 UI 파일(MyStays*·BaseToggle*·StyleSummary*, 글리프 제외)', () => {
+  it('신규 화면·다이얼로그·스타일 카드가 토큰 경유로만 색을 쓴다(raw hex 없음)', () => {
     const newFiles = listUiSources(SETTINGS_UI).filter((f) =>
-      /(MyStays|BaseToggle)/.test(path.basename(f))
+      /(MyStays|BaseToggle|StyleSummary)/.test(path.basename(f))
     );
 
     // 긍정 짝 — 신규 파일이 실제로 스캔 집합에 있다.
     expect(newFiles.some((f) => f.endsWith('MyStaysScreen.tsx'))).toBe(true);
+    // 긍정 짝 — 색 카드 StyleSummaryCard.tsx 도 스캔 집합에 실재한다(필터 파손 시 red).
+    expect(newFiles.some((f) => f.endsWith('StyleSummaryCard.tsx'))).toBe(true);
 
     const offenders: string[] = [];
     for (const f of newFiles) {
