@@ -6,6 +6,8 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PrefTile } from '@/shared/ui/pref/PrefTile';
+
 import {
   ActivityGlyph,
   ArtGlyph,
@@ -64,50 +66,6 @@ function chunkPairs<T>(items: T[]): T[][] {
     rows.push(items.slice(i, i + 2));
   }
   return rows;
-}
-
-interface StyleTileProps {
-  slug: string;
-  label: string;
-  Icon: GlyphComponent;
-  selected: boolean;
-  onPress: () => void;
-}
-
-function StyleTile({
-  slug,
-  label,
-  Icon,
-  selected,
-  onPress,
-}: StyleTileProps): ReactElement {
-  return (
-    <Pressable
-      testID={`onboarding-pref1-style-${slug}`}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      className={`relative h-[104px] flex-1 items-center justify-center gap-[10px] rounded-card bg-canvas px-sm py-[14px] ${
-        selected ? 'border-[1.5px] border-primary' : 'border border-hairline'
-      }`}
-    >
-      <View
-        className={`h-12 w-12 items-center justify-center rounded-pill ${
-          selected ? 'bg-primary-pale' : 'bg-surface-strong'
-        }`}
-      >
-        <Icon size={24} selected={selected} />
-      </View>
-      <Text className="font-noto-bold text-body font-bold text-ink">
-        {label}
-      </Text>
-      {selected ? (
-        <View className="absolute right-[6.5px] top-[6.5px] h-5 w-5 items-center justify-center rounded-pill border-[1.5px] border-canvas bg-primary">
-          <CheckGlyph size={12} />
-        </View>
-      ) : null}
-    </Pressable>
-  );
 }
 
 interface PaceTileProps {
@@ -198,13 +156,15 @@ export function PrefStep1Screen({
                 className="flex-row gap-md"
               >
                 {row.map(({ slug, label, Icon }) => (
-                  <StyleTile
+                  <PrefTile
                     key={slug}
-                    slug={slug}
+                    testID={`onboarding-pref1-style-${slug}`}
                     label={label}
                     Icon={Icon}
+                    CheckIcon={CheckGlyph}
                     selected={selectedStyles?.includes(slug) ?? false}
                     onPress={() => onToggleStyle(slug)}
+                    className="h-[104px] gap-[10px] py-[14px]"
                   />
                 ))}
               </View>

@@ -130,6 +130,8 @@ import {
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
 import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
+import type { PreferenceSelection } from '@/features/settings/model/preferenceDraft';
+import { PreferencesEditView } from '@/features/settings/ui/PreferencesEditView';
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
@@ -1306,6 +1308,28 @@ const TRIGGER_WATCHLIST_PREVIEW_FIRED: Trigger[] = [
   },
 ];
 
+// l05 취향 수정 프리뷰 픽스처 — 한국어 계약값 그대로(GET View 를 initialSelection 태운 뒤의 모양).
+const SETTINGS_PREF_PREVIEW_SELECTION: PreferenceSelection = {
+  styles: ['휴양', '미식'],
+  activities: null,
+  transportModes: ['대중교통'],
+  foodTastes: ['한식'],
+  pace: '균형있게',
+  companionTypes: ['커플'],
+  petFlag: true,
+  budgetTier: '중간',
+};
+const SETTINGS_PREF_PREVIEW_EMPTY: PreferenceSelection = {
+  styles: null,
+  activities: null,
+  transportModes: null,
+  foodTastes: null,
+  pace: null,
+  companionTypes: null,
+  petFlag: false,
+  budgetTier: null,
+};
+
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
   {
@@ -1462,6 +1486,39 @@ const PREVIEW_STATES: PreviewState[] = [
         onBack={noop}
         onDone={noop}
         onSkipAll={noop}
+      />
+    ),
+  },
+  {
+    // l05 취향 전체 수정(TRIP-610) — 화면이 자족 컨테이너(GET/PUT)라 QueryClient 없는 이 프리뷰에선
+    // 순수 뷰(PreferencesEditView)에 선택 픽스처를 얹어 태운다(pref1/pref2 정적 패턴과 동형).
+    key: 'settings-preferences',
+    label: 'l05 취향 수정 · 기본',
+    login: null,
+    render: () => (
+      <PreferencesEditView
+        selection={SETTINGS_PREF_PREVIEW_SELECTION}
+        saveError={false}
+        onToggle={noop}
+        onTogglePet={noop}
+        onSave={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    // 엣지: 미설정(전 축 null) + 400 저장 실패 인라인 오류(INV-4) 동시 얼굴.
+    key: 'settings-preferences-error',
+    label: 'l05 취향 수정 · 미설정+400',
+    login: null,
+    render: () => (
+      <PreferencesEditView
+        selection={SETTINGS_PREF_PREVIEW_EMPTY}
+        saveError
+        onToggle={noop}
+        onTogglePet={noop}
+        onSave={noop}
+        onBack={noop}
       />
     ),
   },

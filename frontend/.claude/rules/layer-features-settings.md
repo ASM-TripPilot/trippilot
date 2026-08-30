@@ -2,7 +2,7 @@
 paths:
   - "src/features/settings/**"
 ---
-# `src/features/settings/` — 마이·설정·위치동의 표면 (TRIP-603·604·608·609로 신설 → TRIP-605로 l04 추가 → TRIP-606으로 스타일 카드 추가)
+# `src/features/settings/` — 마이·설정·위치동의 표면 (TRIP-603·604·608·609로 신설 → TRIP-605로 l04 추가 → TRIP-606으로 스타일 카드 추가 → TRIP-610으로 l05 취향 편집 추가)
 
 **이 파일은 TRIP-605([기록])에서 처음 만들어졌다** — `features/settings`는 TRIP-173에서 빈 배럴째 삭제된 뒤 TRIP-603/604/608/609(l03 마이페이지·설정·계정삭제·위치동의)로 재신설됐으나, 그 네 사이클 모두 이 층별 문서를 만들지 않았다(구조 지도 정비 항목이 `docs/structure.md`에서 `.claude/rules/layer-*.md`로 이관된 게 그 이후라 추정 — 사실 확인은 안 함). 그래서 아래는 **기존 파일 전수를 처음 문서화**(한 줄 식별)하고, **이번 사이클(TRIP-605) 신규·변경분만 상세**하게 적는다.
 
@@ -36,7 +36,24 @@ paths:
 | `model/styleCardModel.ts` | **신규.** l03 스타일 요약 카드 순수 뷰모델 `buildStyleCardModel(envelope: StyleAnalysisEnvelope): StyleCardVM`. `StyleCardVM`은 판별 유니온(`kind:'official'|'insufficient'`) — official이면 `descriptors`·`gauges`(라벨 매핑 `easygoing→여유로움`·`foodAffinity→미식 취향`·`activeness→활동성`, 값 0~5 서버 그대로)·`sampleTripCount`·`updatedAt`(raw ISO), insufficient면 `current`만. `envelope.preview`는 **애초에 읽지 않는다**(INV-U5-09 — 구조적 차단, 런타임 분기 아님). `categoryBreakdown`·`avgPlacesPerDay`·`avgRadiusKm`·`avgDwellMinutes`는 VM에 안 담는다(BR-U5-08a 이 카드 한정 비노출, Q2). 값 재계산 0(BR-U6-24). |
 | `ui/StyleSummaryCard.tsx` | **신규.** VM 주입 순수 프레젠테이션. testID `my-style-card`(루트)·`my-style-chip`(디스크립터 칩, official만)·`my-style-gauge`(축 행 1개당 1, 3개)·`my-style-dot-filled`/`my-style-dot-empty`(dot당 1 — **채운/빈을 서로 다른 exact testID를 단 View로 렌더**해 개수로 값을 잰다, SVG 한 장 fill 함정 회피)·`my-style-detail`(상세 분석, disabled Pressable — `records/style` 라우트 미착수라 INV-4 정직 degrade, onPress 미배선). 빈 dot 색은 토큰(`bg-hairline`) — raw hex 금지(`myStaysStructure.test.ts` G3 재귀가 이 폴더를 훑음). 메타줄 `여행 {n}개 · 갱신 {formatKoreanDate(updatedAt.slice(0,10))}`(Figma엔 없는 self 서식, `updatedAt`이 date-time이라 slice 필수 — 안 자르면 `Number()`가 NaN). 헤드라인 문장은 계약 필드 부재로 생략(Q1, TRIP-623 후속). |
 
+## 이번 사이클(TRIP-610) 신규·변경 — l05 취향 전체 수정
+
+| 파일 | 내용 |
+|---|---|
+| `model/preferenceDraft.ts` | **신규.** `PreferenceView`(축 래퍼 `{value,isNeutralDefault}`) ↔ `PreferenceInput`(평면) 역변환 순수 함수 2개 — `initialSelection(view)`(미설정 축은 null/false로 시드) · `buildPreferenceInput(view, selection)`(안 만진 축은 키 자체 omit, `arrayEq` 순서 민감 비교). openapi "생략=미변경, null=미설정 초기화" 계약과 정합(AC-2). 개념 [[역변환 함수 (View→Input)]]. |
+| `model/usePreferences.ts` | **신규.** `useGetMePreferences` 초기값 + `usePutMePreferences` 저장(`{data}`) + 400 `saveError` 노출. 자족 컨테이너 전용 훅, 격리 단위 테스트 없음(통합이 화면 관통으로 검증 — 02 §의도적 결합-회피). |
+| `ui/PreferencesEditScreen.tsx` | **신규(컨테이너).** GET/PUT 배선 + **저장 diff 기준선 baseline freeze**(`baseView` state, 시드와 같은 렌더에서 함께 굳힘 — 5-b 경고-1 lost update 봉합, 개념 [[lost update — 저장 diff 기준선은 시드 스냅숏이어야 한다]]). `usePreferences`·`@/shared/api` 체인이 **이 파일에만** 남아있다 — 순수 뷰는 별 파일로 분리됨(아래). |
+| `ui/PreferencesEditView.tsx` | **신규(순수 뷰, 03d 분리).** `PreferencesEditScreen`에서 뷰만 도려낸 파일 — `usePreferences`·`@/shared/api` import 0(프리뷰가 안전하게 태울 수 있는 이유). `EditableAxis`·`isMultiAxis`·`MULTI_AXES`/`SINGLE_AXES`도 이 파일 소유. testID `settings-pref-*`(축 세그먼트 네임스페이스, `자연`·`쇼핑`처럼 두 축이 공유하는 라벨 충돌 방지). 개념 [[모듈 로드 크래시 연쇄]] §TRIP-610. |
+
+### 온보딩 쪽 변경 (shared 승격 재배선, 회귀 0)
+
+`model/preferenceSelection.ts`(재수출 — 실체는 `shared/pref/preferenceSelection.ts`) · `ui/PrefStep1Screen.tsx`/`PrefStep2Screen.tsx`(shared `PrefTile`/`PrefChip` 소비로 재배선, −170줄, testID·props 불변) — 상세는 `.claude/rules/layer-shared.md`. 개념 [[shared 승격 — 두 화면이 한 형식 공유]] §TRIP-610.
+
+### 범위 밖 (인수인계)
+
+l05 설정 목록의 취향 7행은 여전히 `ready:false`(`settingsSections.ts`, TRIP-608 테스트가 잠금) — 진입 활성화는 **TRIP-624**(신규 발행)로 분리. 화면 자체는 `/settings/preferences` 라우트 + 프리뷰로만 도달 가능.
+
 ## 관련
 
-- 경계 가드: `src/__tests__/settingsBoundary.test.ts`(소스 재귀 스캔, eslint 무강제 — repo-traps 참고).
+- 경계 가드: `src/__tests__/settingsBoundary.test.ts`(소스 재귀 스캔, eslint 무강제 — repo-traps 참고). TRIP-610도 이 가드가 `features/onboarding` 재사용을 막아 shared 승격을 강제한 세 번째 실측.
 - 다이얼로그 게이트·오버레이 jest 사각의 리포 전역 함정 서술: `frontend/.claude/rules/repo-traps.md`.
