@@ -2,7 +2,7 @@
 paths:
   - "src/features/settings/**"
 ---
-# `src/features/settings/` — 마이·설정·위치동의 표면 (TRIP-603·604·608·609로 신설 → TRIP-605로 l04 추가 → TRIP-606으로 스타일 카드 추가 → TRIP-610으로 l05 취향 편집 추가 → TRIP-612로 l05 개인화 동의 추가)
+# `src/features/settings/` — 마이·설정·위치동의 표면 (TRIP-603·604·608·609로 신설 → TRIP-605로 l04 추가 → TRIP-606으로 스타일 카드 추가 → TRIP-610으로 l05 취향 편집 추가 → TRIP-612로 l05 개인화 동의 추가 → TRIP-618로 U6 진입점 배선)
 
 **이 파일은 TRIP-605([기록])에서 처음 만들어졌다** — `features/settings`는 TRIP-173에서 빈 배럴째 삭제된 뒤 TRIP-603/604/608/609(l03 마이페이지·설정·계정삭제·위치동의)로 재신설됐으나, 그 네 사이클 모두 이 층별 문서를 만들지 않았다(구조 지도 정비 항목이 `docs/structure.md`에서 `.claude/rules/layer-*.md`로 이관된 게 그 이후라 추정 — 사실 확인은 안 함). 그래서 아래는 **기존 파일 전수를 처음 문서화**(한 줄 식별)하고, **이번 사이클(TRIP-605) 신규·변경분만 상세**하게 적는다.
 
@@ -15,7 +15,7 @@ paths:
 | `ui/MyPageScreen.tsx` | l03 마이페이지 화면(TRIP-603). **TRIP-606에서 additive prop `styleCard?: ReactNode` 추가** — `<ProfileCard/>`↔`<TripStatusSegment/>` 사이 렌더, 기존 testID·prop 무변경. |
 | `ui/SettingsScreen.tsx` | 설정 화면(TRIP-604) |
 | `ui/ProfileCard.tsx` / `ui/TripCard.tsx` / `ui/TripStatusSegment.tsx` | l03 프로필·여행 카드 구성 요소 |
-| `ui/SettingsGroup.tsx` / `ui/SettingsRow.tsx` / `ui/ExportRow.tsx` / `ui/NicknameEditRow.tsx` | 설정 화면 행 구성 요소 |
+| `ui/SettingsGroup.tsx` / `ui/SettingsRow.tsx`(`RowBody`·`PreparingRow`·**`NavRow`**, TRIP-618 신규 export) / `ui/ExportRow.tsx` / `ui/NicknameEditRow.tsx` | 설정 화면 행 구성 요소 |
 | `ui/RevokeConfirmDialog.tsx` / `ui/DeleteAccountDialog.tsx` | 조건부 렌더 absolute 오버레이 다이얼로그 패턴 최초 선례(TRIP-608·609) — `BaseToggleDialog`(아래)가 이 형태를 그대로 따름 |
 | `ui/LocationConsentScreen.tsx` | 위치 동의 철회 게이트 화면(TRIP-609) — 로컬 `useState` 다이얼로그 게이트 패턴의 최초 선례(`MyStaysScreen`의 출발점 전환 게이트가 이 형태를 그대로 따름) |
 | `model/settingsSections.ts` / `model/tripBuckets.ts` / `model/exportSummary.ts` / `model/deletionScope.ts` | 설정 화면 순수 파생 모델(섹션 구성·여행 버킷·내보내기 요약·삭제 고지 목록 정본) |
@@ -52,6 +52,21 @@ paths:
 ### 범위 밖 (인수인계)
 
 l05 설정 목록의 취향 7행은 여전히 `ready:false`(`settingsSections.ts`, TRIP-608 테스트가 잠금) — 진입 활성화는 **TRIP-624**(신규 발행)로 분리. 화면 자체는 `/settings/preferences` 라우트 + 프리뷰로만 도달 가능.
+
+## 이번 사이클(TRIP-618) 신규·변경 — U6 진입점 배선(마이→설정→위치동의·알림)
+
+순수 라우팅 배선(신규 비주얼 0). l03 마이 하단 '설정' 행·l05 '위치정보 수집 동의'·'알림 설정' 두 행 — 지금까지 목적지 라우트가 없어 "준비 중"이던 세 스텁 행에 실제 라우트를 연결.
+
+| 파일 | 내용 |
+|---|---|
+| `model/settingsSections.ts` | `location-consent`·`notifications` 두 행 `ready:false→true` 플립. 취향 7행(TRIP-624 분리)·제휴(라우트 없음)는 `ready:false` 유지 — 근거가 다름을 주석에 분리 명시. |
+| `ui/SettingsRow.tsx` | **신규 export `NavRow`**(`RowBody`+`ChevronRightGlyph`+`onPress`, testID `settings-nav-{rowKey}`) — 리포에 press+chevron 활성 설정 행이 이전엔 0건(재사용 탐색 후 신규 소명, 03 §NavRow). `disabled`/`accessibilityState` 미부착이 `PreparingRow`(둘 다 부착)와의 구분선. |
+| `ui/SettingsScreen.tsx` | `renderRow` switch에 `case 'location-consent'`·`case 'notifications'` 추가(→`NavRow` 렌더) + `onPressLocation?`/`onPressNotifications?` optional prop. **급소**: 이 switch는 `row.key` 리터럴만 보고 `row.ready`를 읽지 않는다 — `settingsSections.ts`의 `ready` 플립과 이 switch 케이스는 **별도로 정합을 유지해야 하는 구조적 결합**(자동 교차심판 없음, 04 n=2 판단성 관찰). 개념 [[가드의 사정거리]] TRIP-618 실측. |
+| `ui/MyPageScreen.tsx` | 하단 '설정' 행에 `onPress?`/`testID?`(inner `SettingsRow`에 전달) + `onPressSettings?` prop — press면 Pressable. |
+
+**헤더 sun 아이콘(`my-header-settings`)은 이번에 무배선** — Figma l03 헤더는 sun/애스터리스크 글리프 1개(bell 아님)이고 목적지가 Figma·construction 어디에도 없다. 티켓의 "헤더 알림함→l01"은 Figma 근거 없는 드리프트(01b Q1 자율 판정). 후속 티켓([FE] l01 알림함 진입점 배선)으로 분리 — 제품/디자인이 목적지(l03 헤더인가 다른 자리인가, sun→bell 교체 여부)를 먼저 정해야 한다.
+
+l05 '등록 숙소·예약 기록'(bases) 행은 이 티켓 스코프 밖(스코프 크리프 금지, 01b Q3) — 여전히 무배선.
 
 ## 이번 사이클(TRIP-612) 신규 — l05 개인화 동의
 

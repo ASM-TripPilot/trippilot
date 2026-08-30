@@ -2,8 +2,8 @@
  * l05 설정 6그룹 뷰모델 조립 (AC-1 · AC-11) — 순수 함수.
  *
  * 정본 순서(Figma 라이브 = 화면 유일 정본): 계정 → 여행 취향 → 위치정보 → 알림 → 제휴 안내 →
- * 위험 영역. 각 행은 `ready` 로 상호작용 여부를 표시한다 — 목적지 라우트가 아직 없는 행
- * (취향 7·위치·알림·제휴)은 `ready:false` 라 화면이 "준비 중"으로 비활성 렌더한다(AC-6, INV-4).
+ * 위험 영역. 각 행은 `ready` 로 상호작용 여부를 표시한다 — 목적지 라우트가 선 행(위치·알림)은
+ * `ready:true`, 아직 없는 행(취향 7·제휴)은 `ready:false` 다(TRIP-618 진입 개통, AC-5·INV-4).
  *
  * 요약값은 닉네임만 라이브다(Q6 — email 이 null 이어도 닉네임만 표기, null/undefined 를 문자열로
  * 흘리지 않는다). 취향·위치·알림 요약값은 이 티켓 범위 밖이라 채우지 않는다(정적 placeholder = 없음).
@@ -60,13 +60,13 @@ export function buildSettingsSections(input: SettingsInput): SettingsGroupVM[] {
       key: 'location',
       label: '위치정보',
       rows: [
-        { key: 'location-consent', label: '위치정보 수집 동의', ready: false },
+        { key: 'location-consent', label: '위치정보 수집 동의', ready: true },
       ],
     },
     {
       key: 'notifications',
       label: '알림',
-      rows: [{ key: 'notifications', label: '알림 설정', ready: false }],
+      rows: [{ key: 'notifications', label: '알림 설정', ready: true }],
     },
     {
       key: 'affiliate',

@@ -8,12 +8,12 @@ import { ExportRow } from './ExportRow';
 import { NicknameEditRow } from './NicknameEditRow';
 import { ChevronLeftGlyph, TrashGlyph } from './SettingsGlyphs';
 import { SettingsGroup } from './SettingsGroup';
-import { PreparingRow, RowBody } from './SettingsRow';
+import { NavRow, PreparingRow, RowBody } from './SettingsRow';
 
 /**
- * l05 설정 화면(프레젠테이션 · props만) — 6그룹을 정본 순서로 그린다. 상호작용은 3행뿐이고
- * (닉네임·내보내기·계정 삭제) 나머지는 "준비 중" 비활성(AC-6, INV-4). 삭제는 2단 다이얼로그를
- * 거쳐야 최종 콜백이 나간다(AC-12).
+ * l05 설정 화면(프레젠테이션 · props만) — 6그룹을 정본 순서로 그린다. 상호작용 행은 닉네임·
+ * 내보내기·계정 삭제 + 위치·알림 네비 행(TRIP-618 진입 개통)이고, 남은 준비중 행(취향 7·제휴)은
+ * "준비 중" 비활성이다(AC-6, INV-4). 삭제는 2단 다이얼로그를 거쳐야 최종 콜백이 나간다(AC-12).
  *
  * 상태는 전부 위(페이지)에서 온다 — 화면은 삭제 다이얼로그의 열림만 로컬로 쥔다(딤·모달 실제 덮임은
  * jest 사각, 6-b 실기 전용 · repo-traps). 조회·판정·서버 호출은 페이지 몫이다.
@@ -31,6 +31,10 @@ export interface SettingsScreenProps {
   onPressExport: () => void;
   onPressDeleteAccount: () => void;
   onPressCancelDeletion: () => void;
+  /** 위치정보 네비 행 진입(페이지가 /settings/location 으로 주입). preview 무파손 위해 optional. */
+  onPressLocation?: () => void;
+  /** 알림 네비 행 진입(페이지가 /settings/notifications 으로 주입). */
+  onPressNotifications?: () => void;
 }
 
 export function SettingsScreen({
@@ -46,11 +50,29 @@ export function SettingsScreen({
   onPressExport,
   onPressDeleteAccount,
   onPressCancelDeletion,
+  onPressLocation,
+  onPressNotifications,
 }: SettingsScreenProps): ReactElement {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const renderRow = (row: SettingsRowVM): ReactElement => {
     switch (row.key) {
+      case 'location-consent':
+        return (
+          <NavRow
+            rowKey="location-consent"
+            label={row.label}
+            onPress={onPressLocation}
+          />
+        );
+      case 'notifications':
+        return (
+          <NavRow
+            rowKey="notifications"
+            label={row.label}
+            onPress={onPressNotifications}
+          />
+        );
       case 'nickname':
         return (
           <NicknameEditRow

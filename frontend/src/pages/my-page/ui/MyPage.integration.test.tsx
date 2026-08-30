@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import type { StyleAnalysisEnvelope } from '@/shared/api/generated/schemas';
@@ -131,5 +131,26 @@ describe('🔴 AC-I1 · 조회→모델→배치', () => {
     expect(idxProfile).toBeGreaterThanOrEqual(0);
     expect(idxStyle).toBeGreaterThan(idxProfile);
     expect(idxSegment).toBeGreaterThan(idxStyle);
+  });
+});
+
+describe('🔴 TRIP-618 AC-1 · 하단 설정 행 진입 배선', () => {
+  it('하단 "설정" 행 press → router.push("/settings") 정확히 1회', () => {
+    renderPage();
+
+    // 실행: 설정 메뉴 하단 '설정' 행을 누른다(trips=[]라 카드는 없고 설정 메뉴는 상시 렌더).
+    fireEvent.press(screen.getByTestId('my-settings-row'));
+
+    // 단언: l05 설정 라우트로, 정확히 한 번.
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/settings');
+  });
+
+  it('헤더 아이콘(my-header-settings)은 이번에 배선하지 않는다 — 존재만 유지', () => {
+    renderPage();
+
+    // 무배선(Q1 ⓒ, 후속 티켓): 헤더 sun 아이콘은 존재하되 목적지가 없다.
+    // press→push 를 단언하지 않는다(무리 배선 금지). 존재 단언만 남겨 회귀를 막는다.
+    expect(screen.getByTestId('my-header-settings')).toBeOnTheScreen();
   });
 });
