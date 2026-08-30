@@ -90,6 +90,7 @@ import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog'
 import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
 import type { StyleCardVM } from '@/features/settings/model/styleCardModel';
 import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
+import { PersonalizationScreen } from '@/features/settings/ui/PersonalizationScreen';
 import {
   MyStaysScreen,
   type MyStayRowVM,
@@ -143,6 +144,7 @@ import type {
   StayItem,
   Trigger,
 } from '@/shared/api/generated/schemas';
+import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
 import { ManualTimeSheet, reorderKeepingFixed } from '@/shared/itinerary-edit';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { revokeImpact } from '@/shared/location/revokeImpact';
@@ -3622,6 +3624,55 @@ const PREVIEW_STATES: PreviewState[] = [
           onConfirm={noop}
         />
       </View>
+    ),
+  },
+  // l05 개인화 — reason 3얼굴. 토글 상태·안내 문구·반영 목록이 reason 에서 함께 갈린다(다이얼로그 없이
+  // 즉시 토글, 01b Q3). APPLIED = 토글 ON + 목록(문구 없음).
+  {
+    key: 'l05-personalization-applied',
+    label: 'l05 개인화 · 반영 중(APPLIED)',
+    login: null,
+    render: () => (
+      <PersonalizationScreen
+        consentOn
+        reason={PersonalizationInfoReason.APPLIED}
+        sharedItems={[
+          { item: '맛집 방문 기록', purpose: '다음 여행 맛집 추천' },
+          { item: '야경 스팟 저장', purpose: '저녁 일정 배치' },
+        ]}
+        onToggle={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // CONSENT_MISSING = 토글 OFF + "동의하면…" 안내 + 빈 목록.
+  {
+    key: 'l05-personalization-consent-missing',
+    label: 'l05 개인화 · 미동의',
+    login: null,
+    render: () => (
+      <PersonalizationScreen
+        consentOn={false}
+        reason={PersonalizationInfoReason.CONSENT_MISSING}
+        sharedItems={[]}
+        onToggle={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // ★함정 얼굴: NOT_ENOUGH_RECORDS = 이미 동의(토글 ON 유지) + "기록이 더 쌓이면…", "동의하면…" 없음.
+  {
+    key: 'l05-personalization-not-enough',
+    label: 'l05 개인화 · 기록 부족(동의 유지)',
+    login: null,
+    render: () => (
+      <PersonalizationScreen
+        consentOn
+        reason={PersonalizationInfoReason.NOT_ENOUGH_RECORDS}
+        sharedItems={[]}
+        onToggle={noop}
+        onPressBack={noop}
+      />
     ),
   },
   // l01 알림함 — 기본(오늘 3·이전 2, 미읽음 dot·PLAN_B 인라인 링크). 딤·글리프 픽셀은 6-b 실기 몫.

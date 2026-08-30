@@ -111,6 +111,7 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `usePreferencePrefill` | `features/trip/model` | `GET /me/preferences` 조회 훅(TRIP-203) — `useGetMePreferences` 재수출 1줄. `usePreferenceStore`(온보딩 로컬 드래프트)와 다른 물건 |
 | `fetchBootstrap` · `postSocialLogin` · `postSocialTokenLogin` · `refreshTokens` | `shared/api` | 부트스트랩 조회 · 소셜 로그인(인가코드 경로) · 소셜 로그인(**네이티브 SDK access token 경로**, TRIP-210) · 토큰 갱신. `postSocialTokenLogin`은 `postSocialLogin`과 완전히 같은 모양(무인증 `baseClient` + 기존 `normalizeSocialError` 재사용, 새 에러 매핑 0) |
 | `fetchTerms` · `submitConsents` | `shared/api` | 약관 목록 · 동의 1회 제출(체크된 것만 GRANT) |
+| `patchConsent` | `shared/api` | **신규(TRIP-612)** — 약관 1건 단독 GRANT/REVOKE(`PATCH /me/consents/{termsType}`). `submitConsents`(POST bulk, body에 termsType 포함)와 계약 형태가 달라 — 이건 termsType이 URL 경로, body는 `{action, termsVersion}` 2필드뿐(재사용 시 `ConsentInput`을 그대로 쓰면 body에 termsType 잉여가 실린다) |
 | `fetchNicknameSuggestions` · `checkNickname` · `updateNickname` · `completeOnboarding` | `shared/api` | 후보 조회 · 서버 판정 · 저장 · 온보딩 완료 |
 | `setAccessToken` · `getAccessToken` · `clearAccessToken` · `hydrate` · `subscribeAccessToken` | `shared/api/tokenManager` | 동기 in-memory 토큰 홀더. `getAccessToken`은 **동기** 반환(인터셉터용). `subscribeAccessToken(listener)`은 토큰이 실제로 바뀔 때만 통지하고 구독 해제 함수를 반환한다(TRIP-172 신규 — 로그인 성공 후 부트스트랩 재조회의 유일한 신호) |
 | `saveTokens` · `getTokens` · `clearTokens` · `hasStoredToken` | `shared/storage` | 토큰 저장소 CRUD. **로그인 여부 판정도 `hasStoredToken`**(accessToken 단독 판정 — 위 파일별 역할 표 참고, 심판 0이라 조용히 재발할 수 있다) |

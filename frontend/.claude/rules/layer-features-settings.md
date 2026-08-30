@@ -2,7 +2,7 @@
 paths:
   - "src/features/settings/**"
 ---
-# `src/features/settings/` — 마이·설정·위치동의 표면 (TRIP-603·604·608·609로 신설 → TRIP-605로 l04 추가 → TRIP-606으로 스타일 카드 추가 → TRIP-610으로 l05 취향 편집 추가)
+# `src/features/settings/` — 마이·설정·위치동의 표면 (TRIP-603·604·608·609로 신설 → TRIP-605로 l04 추가 → TRIP-606으로 스타일 카드 추가 → TRIP-610으로 l05 취향 편집 추가 → TRIP-612로 l05 개인화 동의 추가)
 
 **이 파일은 TRIP-605([기록])에서 처음 만들어졌다** — `features/settings`는 TRIP-173에서 빈 배럴째 삭제된 뒤 TRIP-603/604/608/609(l03 마이페이지·설정·계정삭제·위치동의)로 재신설됐으나, 그 네 사이클 모두 이 층별 문서를 만들지 않았다(구조 지도 정비 항목이 `docs/structure.md`에서 `.claude/rules/layer-*.md`로 이관된 게 그 이후라 추정 — 사실 확인은 안 함). 그래서 아래는 **기존 파일 전수를 처음 문서화**(한 줄 식별)하고, **이번 사이클(TRIP-605) 신규·변경분만 상세**하게 적는다.
 
@@ -52,6 +52,16 @@ paths:
 ### 범위 밖 (인수인계)
 
 l05 설정 목록의 취향 7행은 여전히 `ready:false`(`settingsSections.ts`, TRIP-608 테스트가 잠금) — 진입 활성화는 **TRIP-624**(신규 발행)로 분리. 화면 자체는 `/settings/preferences` 라우트 + 프리뷰로만 도달 가능.
+
+## 이번 사이클(TRIP-612) 신규 — l05 개인화 동의
+
+| 파일 | 내용 |
+|---|---|
+| `model/personalizationCopy.ts` | **신규.** 순수 함수 `personalizationCopy(reason): string \| null` — `PersonalizationInfoReason` enum 3값 전수 매핑(`APPLIED`→`null`, `CONSENT_MISSING`→'동의하면 지난 기록을 반영해요', `NOT_ENOUGH_RECORDS`→'기록이 더 쌓이면 반영돼요'). **급소**: `NOT_ENOUGH_RECORDS`는 이미 동의한 사용자라 "동의하면" 문구가 나오면 BR-U5-44 위반 — 반환 문자열에 그 부분문자열이 없음을 테스트가 순수 층에서도 잠근다. |
+| `model/usePersonalization.ts` | **신규.** `useGetMePersonalization()` 조회 + `consentOn = reason !== CONSENT_MISSING`(**`applied` 필드가 아니라 `reason`에서 도출** — 두 필드가 다른 축, 섞으면 NOT_ENOUGH_RECORDS 얼굴에서 토글이 잘못 그려진다) + 토글 press → `fetchTerms()`에서 PERSONALIZATION `termsVersion` 필터 → `patchConsent('PERSONALIZATION', version, consentOn?'REVOKE':'GRANT')` → `invalidateQueries`. GET 미도착 시 `reason ?? CONSENT_MISSING`으로 degrade(개념 [[degrade 스텁 — 못 켜는 기능은 정직하게 꺼둔다]] 참고 — 이번은 미배선이 아니라 미도착 변형). **적대적 리뷰 차단-1(2026-08-31 봉합)**: 이 도출을 검증하는 유일한 심판(T3 페이지 통합)이 원래 reason 3값 중 NOT_ENOUGH_RECORDS를 프라임하지 않아, `applied` 기반 오답 도출로 뮤테이션해도 전 스위트 green이었다 — 개념 [[가드의 사정거리]] TRIP-612 실측. 급소 케이스 추가 + 뮤테이션 실측으로 봉합(implementer 재호출 없이 테스트만 강화). |
+| `ui/PersonalizationScreen.tsx` | **신규.** 무상태 프레젠테이션(props: `consentOn`·`reason`·`sharedItems`·`onToggle`·`onPressBack?`). `LocationConsentScreen.tsx` 구조 준용하되 **재확인 다이얼로그 없음**(개인화 철회는 데이터 파기가 아니라 추천 입력 제외뿐이라 BR상 게이트 불요, l06과의 유일한 차이). 토글은 `LocationConsentScreen` 선례 동형 Pressable+`accessibilityState.checked`(RN `Switch` 아님). testID `settings-personalization-{root,back,toggle,item}`. |
+
+l05 설정 목록에 개인화 진입행 없음(Figma 캐논에 개인화 그룹 자체가 없음 + `settingsSections.test.ts` 완전일치 가드 충돌, TRIP-610 `preferences` 선례와 동형 판단) — 도달 경로는 딥링크 `/settings/personalization`과 `_dev/preview.tsx` 3키(reason 3얼굴)뿐. 진입행 배선은 후속 티켓([FE] l05 설정 개인화 진입행, Figma 디자인 선행).
 
 ## 관련
 
