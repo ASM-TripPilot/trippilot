@@ -44,7 +44,9 @@
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/noMswInStaticGraph.test.ts`  →  (export 없음)
 - `src/__tests__/noStepCountStructure.test.ts`  →  (export 없음)
+- `src/__tests__/notificationDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/notificationKindGuard.test.tsx`  →  (export 없음)
+- `src/__tests__/notificationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefStructure.test.ts`  →  (export 없음)
@@ -147,6 +149,7 @@
 - `src/app/my/stays.tsx`  →  (export 없음)
 
 ## src/app/
+- `src/app/notifications.tsx`  →  (export 없음)
 - `src/app/reconsent.tsx`  →  (export 없음)
 
 ## src/app/settings/
@@ -324,10 +327,17 @@
 
 ## src/features/notification/model/
 - `src/features/notification/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
+- `src/features/notification/model/groupByDay.ts`  →  NotificationGroups · groupByDay
+- `src/features/notification/model/notificationAction.ts`  →  notificationAction
+- `src/features/notification/model/notificationKind.ts`  →  NotificationIconKind · NotificationKindMeta · notificationKind
+- `src/features/notification/model/useNotificationInbox.ts`  →  UseNotificationInboxResult · useNotificationInbox
 - `src/features/notification/model/useToggles.ts`  →  ToggleChannel · ToggleOutcome · UseTogglesResult · useToggles
 
 ## src/features/notification/ui/
 - `src/features/notification/ui/NotificationGlyphs.tsx`  →  NotifBackChevronGlyph · NotifInfoGlyph · NotifWarningGlyph
+- `src/features/notification/ui/NotificationInboxGlyphs.tsx`  →  NotificationKindIcon · NotifBellGlyph
+- `src/features/notification/ui/NotificationInboxScreen.tsx`  →  NotificationRowVM · NotificationSection · NotificationInboxScreenProps · NotificationInboxScreen
+- `src/features/notification/ui/NotificationRow.tsx`  →  NotificationRowProps · NotificationRow
 - `src/features/notification/ui/NotificationSettingsScreen.tsx`  →  ToggleValueMap · NotificationSettingsScreenProps · NotificationSettingsScreen
 - `src/features/notification/ui/PermissionBanner.tsx`  →  PermissionBanner
 - `src/features/notification/ui/ToggleRow.tsx`  →  ToggleRowProps · ToggleRow
@@ -577,6 +587,12 @@
 
 ## src/pages/my-stays/ui/
 - `src/pages/my-stays/ui/MyStaysPage.tsx`  →  MyStaysPage
+
+## src/pages/notification-inbox/
+- `src/pages/notification-inbox/index.ts`  →  NotificationInboxPage
+
+## src/pages/notification-inbox/ui/
+- `src/pages/notification-inbox/ui/NotificationInboxPage.tsx`  →  NotificationInboxPage
 
 ## src/pages/onboarding-location/
 - `src/pages/onboarding-location/index.ts`  →  LocationPage
@@ -946,6 +962,7 @@
 
 ## src/shared/date/
 - `src/shared/date/formatKoreanDate.ts`  →  formatKoreanDate
+- `src/shared/date/formatRelativeTime.ts`  →  formatRelativeTime
 
 ## src/shared/itinerary-edit/
 - `src/shared/itinerary-edit/index.ts`  →  ManualEditShell · ManualTimeSheet · mergeValidationFlags · reorderKeepingFixed
@@ -981,8 +998,9 @@
 - `src/shared/pref/preferenceSelection.ts`  →  toggleMulti · toggleSingle
 
 ## src/shared/push/
-- `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus
+- `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered
 - `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
+- `src/shared/push/register.ts`  →  toServerOsPermission · isDeviceNotRegistered · unregisterDeviceToken · registerPushToken
 
 ## src/shared/storage/
 - `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken
@@ -1013,4 +1031,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 681개 파일
+합계 695개 파일

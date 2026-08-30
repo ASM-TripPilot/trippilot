@@ -78,6 +78,10 @@ import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import {
+  NotificationInboxScreen,
+  type NotificationSection,
+} from '@/features/notification/ui/NotificationInboxScreen';
+import {
   NotificationSettingsScreen,
   type ToggleValueMap,
 } from '@/features/notification/ui/NotificationSettingsScreen';
@@ -1329,6 +1333,73 @@ const SETTINGS_PREF_PREVIEW_EMPTY: PreferenceSelection = {
   petFlag: false,
   budgetTier: null,
 };
+
+// l01 알림함(TRIP-576) — Figma 1598:2389 의 5행(오늘 3·이전 2). 화면은 VM 만 받는 순수 뷰라
+// 픽스처 한 벌로 default 를, 빈 sections + isEmpty 로 empty 를 낸다(엣지 상태 포함).
+const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
+  {
+    key: 'today',
+    label: '오늘',
+    rows: [
+      {
+        id: 'n1',
+        icon: 'home',
+        title: '○○호텔이 등록되었어요',
+        body: '',
+        meta: '숙소 · 방금',
+        unread: true,
+        route: null,
+        inlineActionLabel: null,
+      },
+      {
+        id: 'n2',
+        icon: 'swap',
+        title: "비 예보 — '○○공원' 일정이 영향받아요",
+        body: '',
+        meta: 'Plan-B · 10분 전',
+        unread: true,
+        route: '/trips/t1/planb',
+        inlineActionLabel: '대안 일정 보기 ›',
+      },
+      {
+        id: 'n3',
+        icon: 'list',
+        title: '다음 일정: ○○ · 14:30 · 840m',
+        body: '',
+        meta: '일정 · 1시간 전',
+        unread: false,
+        route: null,
+        inlineActionLabel: null,
+      },
+    ],
+  },
+  {
+    key: 'earlier',
+    label: '이전',
+    rows: [
+      {
+        id: 'n4',
+        icon: 'document',
+        title: '여행 기록이 정리되었습니다',
+        body: '',
+        meta: '회고 · 어제',
+        unread: false,
+        route: '/trips/t1/records/reflection/2026-08-29',
+        inlineActionLabel: null,
+      },
+      {
+        id: 'n5',
+        icon: 'sun',
+        title: '새 기기에서 로그인되었습니다',
+        body: '',
+        meta: '시스템 · 2일 전',
+        unread: false,
+        route: null,
+        inlineActionLabel: null,
+      },
+    ],
+  },
+];
 
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
@@ -3551,6 +3622,34 @@ const PREVIEW_STATES: PreviewState[] = [
           onConfirm={noop}
         />
       </View>
+    ),
+  },
+  // l01 알림함 — 기본(오늘 3·이전 2, 미읽음 dot·PLAN_B 인라인 링크). 딤·글리프 픽셀은 6-b 실기 몫.
+  {
+    key: 'notification-inbox-default',
+    label: 'l01 알림함 · 기본',
+    login: null,
+    render: () => (
+      <NotificationInboxScreen
+        sections={NOTIFICATION_INBOX_PREVIEW_SECTIONS}
+        isEmpty={false}
+        onNavigate={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l01 알림함 — 엣지: 빈 알림함(StateNotice 대시 종 아이콘).
+  {
+    key: 'notification-inbox-empty',
+    label: 'l01 알림함 · 빈 상태',
+    login: null,
+    render: () => (
+      <NotificationInboxScreen
+        sections={[]}
+        isEmpty
+        onNavigate={noop}
+        onPressBack={noop}
+      />
     ),
   },
 ];

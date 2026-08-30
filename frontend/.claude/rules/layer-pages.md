@@ -87,5 +87,7 @@ paths:
 | | `src/pages/settings-notifications/index.ts` | 배럴 — `NotificationSettingsPage` 재수출(신규, TRIP-607) |
 | `settings-preferences` | `src/pages/settings-preferences/ui/SettingsPreferencesPage.tsx` | **신규(TRIP-610)** — l05 취향 전체 수정 진입 배선. 얇은 배럴 경유 래퍼(추가 조회·조합 없음 — `PreferencesEditScreen`이 자족 컨테이너라 이 페이지는 배선판이 아니라 라우트↔화면 접착만). |
 | | `src/pages/settings-preferences/index.ts` | 배럴 — `SettingsPreferencesPage` 재수출(신규, TRIP-610) |
+| `notification-inbox` | `src/pages/notification-inbox/ui/NotificationInboxPage.tsx` | **신규(TRIP-576)** — l01 알림함 배선. `useNotificationInbox()`(GET) → `now=new Date()`(시계는 여기서만 읽어 순수 함수엔 주입) → `groupByDay`·`notificationKind`·`notificationAction`·`formatRelativeTime`을 각 알림에 태워 `NotificationRowVM`으로 접음 → `NotificationInboxScreen(sections, isEmpty, onNavigate=router.push, onPressBack=router.back)`. **`router.push` 인자·횟수가 정직하게 관측되는 유일한 층**(화면은 콜백까지만). ⚠️ `isError` 미소비(위 `layer-features-notification.md` `useNotificationInbox.ts` 행 참고). |
+| | `src/pages/notification-inbox/index.ts` | 배럴 — `NotificationInboxPage` 재수출(신규, TRIP-576 — qa-verifier n=1에서 미신고로 FAIL, n=2에서 정식 편입) |
 
 > **⚠️ 배럴 경유는 지금 관행일 뿐 강제되지 않는다** — 라우트 5개는 전부 배럴을 경유하지만(위반 0건), 승인 테스트(`fsdStructure.test.ts`)의 단언이 `toContain`(부분 문자열)이라 딥 임포트로 바꿔도 잡히지 않는다(code-critic 참고-1 실측). 회귀 방지는 승인 테스트 수정이 필요해 사이클 3 몫으로 이관됨. `region-picker`도 이 관행을 따른다(강제는 `fsdStructure.test.ts`의 pages 슬라이스 **7개 완전일치** 집합 단언뿐 — `PAGE_SLICES` forEach 상수 자체는 여전히 로그인·온보딩 5개만 대상, region-picker·stay-search는 그 forEach 밖).
