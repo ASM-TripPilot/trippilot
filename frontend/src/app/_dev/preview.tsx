@@ -81,6 +81,10 @@ import { buildSettingsSections } from '@/features/settings/model/settingsSection
 import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog';
 import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
 import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
+import {
+  MyStaysScreen,
+  type MyStayRowVM,
+} from '@/features/settings/ui/MyStaysScreen';
 import { RevokeConfirmDialog } from '@/features/settings/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
 import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
@@ -883,6 +887,50 @@ const MY_PAGE_ENDED_VMS: TripCardVM[] = [
     daysLabel: '일정 3일',
     dBadge: null,
     isEnded: true,
+  },
+];
+
+// l04 등록 숙소 3행 — 등록됨(연결 여행)·미등록·좌표 미확정(토글 disabled). 화면이 순수 프레젠테이션이라
+// 완성 VM 한 벌이면 세 표면을 다 본다(location 은 계약 공백이라 빈 값 — 화면이 줄을 안 그린다).
+const MY_STAYS_PREVIEW_ROWS: MyStayRowVM[] = [
+  {
+    savedStayId: 'stay-assigned',
+    name: '해운대 오션뷰',
+    location: '',
+    dateRangeLabel: '6.10 ~ 6.13',
+    sourceLabel: 'OTA 예약',
+    memoLabel: null,
+    linkedTripLabel: '연결 여행 · 부산 여행',
+    baseState: 'assigned',
+    canAssignBase: true,
+    tripId: 'busan-trip',
+    baseAssignmentId: 'ba-1',
+  },
+  {
+    savedStayId: 'stay-unassigned',
+    name: '남포동 게스트하우스',
+    location: '',
+    dateRangeLabel: null,
+    sourceLabel: '앱 저장',
+    memoLabel: '예약번호 미입력',
+    linkedTripLabel: '연결된 여행 없음',
+    baseState: 'unassigned',
+    canAssignBase: true,
+    tripId: null,
+    baseAssignmentId: null,
+  },
+  {
+    savedStayId: 'stay-nocoord',
+    name: '좌표 미확정 숙소',
+    location: '',
+    dateRangeLabel: null,
+    sourceLabel: '앱 저장',
+    memoLabel: null,
+    linkedTripLabel: '연결된 여행 없음',
+    baseState: 'unassigned',
+    canAssignBase: false,
+    tripId: null,
+    baseAssignmentId: null,
   },
 ];
 
@@ -2495,6 +2543,38 @@ const PREVIEW_STATES: PreviewState[] = [
         showPast
         pastCards={null}
         pastEmpty
+      />
+    ),
+  },
+  // l04 등록 숙소·예약 기록(TRIP-605) — 등록됨(채움 pill + "출발점 변경 ›")·미등록(점선 "출발점 지정")·
+  // 좌표 미확정(토글 disabled) 세 행을 한 화면에서 Figma l04 default(1604:2440)와 대조한다. "출발점
+  // 변경/지정" 을 누르면 BaseToggleDialog(딤+중앙 카드)가 뜨는 것도 여기서 실제로 조작해 본다.
+  {
+    key: 'my-stays-default',
+    label: '등록 숙소·예약 기록 · 3행(l04)',
+    login: null,
+    render: () => (
+      <MyStaysScreen
+        rows={MY_STAYS_PREVIEW_ROWS}
+        isEmpty={false}
+        onConfirmBaseToggle={noop}
+        onPressExplore={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l04 empty(1605:2440) — 숙소 0건 안내(침대 일러스트 + "숙소 탐색" CTA → /stays). US-NOTIF-06 예외.
+  {
+    key: 'my-stays-empty',
+    label: '등록 숙소 0건 · 탐색(l04)',
+    login: null,
+    render: () => (
+      <MyStaysScreen
+        rows={[]}
+        isEmpty
+        onConfirmBaseToggle={noop}
+        onPressExplore={noop}
+        onPressBack={noop}
       />
     ),
   },

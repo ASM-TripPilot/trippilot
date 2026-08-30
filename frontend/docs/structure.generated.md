@@ -40,6 +40,7 @@
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/noMswInStaticGraph.test.ts`  →  (export 없음)
 - `src/__tests__/noStepCountStructure.test.ts`  →  (export 없음)
@@ -140,6 +141,11 @@
 
 ## src/app/
 - `src/app/force-update.tsx`  →  (export 없음)
+
+## src/app/my/
+- `src/app/my/stays.tsx`  →  (export 없음)
+
+## src/app/
 - `src/app/reconsent.tsx`  →  (export 없음)
 
 ## src/app/settings/
@@ -366,17 +372,20 @@
 - `src/features/settings/model/deletionScope.ts`  →  DELETION_SCOPE
 - `src/features/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
 - `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowVM · SettingsGroupVM · buildSettingsSections
+- `src/features/settings/model/stayTripLink.ts`  →  StayTripLink · buildStayTripLink
 - `src/features/settings/model/tripBuckets.ts`  →  TripBucket · tripStatusBucket · bucketTrips
 
 ## src/features/settings/ui/
+- `src/features/settings/ui/BaseToggleDialog.tsx`  →  BaseToggleDialog
 - `src/features/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
 - `src/features/settings/ui/ExportRow.tsx`  →  ExportRow
 - `src/features/settings/ui/LocationConsentScreen.tsx`  →  LocationConsentScreenProps · LocationConsentScreen
 - `src/features/settings/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
+- `src/features/settings/ui/MyStaysScreen.tsx`  →  MyStayBaseState · MyStayRowVM · MyStaysScreenProps · MyStaysScreen
 - `src/features/settings/ui/NicknameEditRow.tsx`  →  NicknameEditRow
 - `src/features/settings/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
 - `src/features/settings/ui/RevokeConfirmDialog.tsx`  →  RevokeConfirmDialog
-- `src/features/settings/ui/SettingsGlyphs.tsx`  →  ChevronRightGlyph · SettingsSunGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · ExternalLinkGlyph · TrashGlyph
+- `src/features/settings/ui/SettingsGlyphs.tsx`  →  ChevronRightGlyph · SettingsSunGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · ExternalLinkGlyph · BedGlyph · TrashGlyph
 - `src/features/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
 - `src/features/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow
 - `src/features/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
@@ -543,6 +552,12 @@
 ## src/pages/my-page/ui/
 - `src/pages/my-page/ui/MyPage.tsx`  →  MyPage
 - `src/pages/my-page/ui/TripCardContainer.tsx`  →  TripCardContainerProps · TripCardContainer
+
+## src/pages/my-stays/
+- `src/pages/my-stays/index.ts`  →  MyStaysPage
+
+## src/pages/my-stays/ui/
+- `src/pages/my-stays/ui/MyStaysPage.tsx`  →  MyStaysPage
 
 ## src/pages/onboarding-location/
 - `src/pages/onboarding-location/index.ts`  →  LocationPage
@@ -956,4 +971,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 650개 파일
+합계 657개 파일

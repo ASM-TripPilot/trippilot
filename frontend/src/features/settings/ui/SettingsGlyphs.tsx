@@ -665,6 +665,55 @@ export function ExternalLinkGlyph({ size = 22, testID }: GlyphProps) {
   );
 }
 
+/**
+ * l04 등록 숙소 0건 안내(빈 상태) 일러스트 — 침대. `features/trip/ui/TripGlyphs` 에 `BedGlyph` 가
+ * 있으나 features 경계로 import 불가라 여기 새로 그린다(리포 확립 관례). muted 톤(빈 상태 배지용).
+ */
+export function BedGlyph({ size = 22, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Line
+        x1={3}
+        y1={7}
+        x2={3}
+        y2={18}
+        stroke={MUTED}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M3 11H19A2 2 0 0 1 21 13V18"
+        stroke={MUTED}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Line
+        x1={3}
+        y1={15}
+        x2={21}
+        y2={15}
+        stroke={MUTED}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M7 11V9H12V11"
+        stroke={MUTED}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** 위험 영역(계정 삭제) 행 — 휴지통. */
 export function TrashGlyph({ size = 22, testID }: GlyphProps) {
   return (
