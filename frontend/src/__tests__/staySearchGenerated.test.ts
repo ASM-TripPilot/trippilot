@@ -247,8 +247,17 @@ const GENERATED_FILES_FLOOR = [
  * 이번 확장의 `/trips/{tripId}/change-log`도 태그가 `trips`라 새 폴더를 만들지 않는다.
  */
 const GENERATED_TAG_DIRS = [
+  // TRIP-603(U6 0번 칸): account·profile·location·notification·notifications·reflection
+  // 6태그를 orval.config.ts filters.tags 에 추가 → tags-split 이 폴더를 6개 더 갈랐다.
+  // 이 갱신이 "새 태그 유입 → 폴더 집합" 가드의 의도된 상환 경로다(위 졸업 조건 ③).
+  'account',
+  'location',
+  'notification',
+  'notifications',
   'places',
   'preferences',
+  'profile',
+  'reflection',
   'saved-stays',
   'schemas',
   'stays',
@@ -661,7 +670,7 @@ describe('AC-2 ②③ · 생성 파일 인벤토리 — 하한 목록 + 개수 +
    * D4(`/change-log` 앵커 미설치)가 정한 범위와 같다 — 그 계약을 쓰는 화면이 붙는 티켓에서
    * 앵커와 함께 닫는다.
    */
-  it('하한 67경로가 하나도 사라지지 않았고, 총 개수가 줄지 않았고, 태그 폴더가 정확히 6개다', () => {
+  it('하한 67경로가 하나도 사라지지 않았고, 총 개수가 줄지 않았고, 태그 폴더가 정확히 12개다', () => {
     const files = listGeneratedFiles();
 
     // 지킴 ① — 사라진 이름을 모아 비교한다. 실패 diff에 **무엇을 잃었는지**가 그대로 찍힌다.

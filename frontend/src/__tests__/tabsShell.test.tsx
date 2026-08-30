@@ -44,8 +44,6 @@ const TabsLayout = require('@/app/(tabs)/_layout').default;
 const IndexRoute = require('@/app/(tabs)/index').default;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const RecordsRoute = require('@/app/(tabs)/records').default;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const MyRoute = require('@/app/(tabs)/my').default;
 
 // 라우트 이름 5개 → 조작 네비 상태(state.routes)에 쓸 최소 형태.
 const ROUTE_NAMES = ['index', 'explore', 'itinerary', 'records', 'my'];
@@ -152,10 +150,11 @@ describe('(tabs)/index.tsx — 홈 라우트 래퍼 (SC-1 · SC-5)', () => {
   });
 });
 
-describe('(tabs)/{records,my} — 준비 중 안내 (INV-4 · SC-5)', () => {
-  // records·my 는 TRIP-290 으로 텍스트 껍데기 → "준비 중" 상태 안내(StateNotice)로 승격.
+describe('(tabs)/records — 준비 중 안내 (INV-4 · SC-5)', () => {
+  // records 는 TRIP-290 으로 텍스트 껍데기 → "준비 중" 상태 안내(StateNotice)로 승격.
   // itinerary(TRIP-299/401)·explore(TRIP-201) 는 이미 실화면이라 각자 라우트 테스트가 잠근다.
-  // 실화면(회고·설정)은 각 화면 티켓 몫 — 이 칸은 "안 되는 상태를 안 된다고 정확히 말하게" 까지.
+  // 마이 탭(my)은 TRIP-604 로 실화면(마이페이지) 승격 — placeholder 계약이 끝났다.
+  // 새 계약(셸 교체·세그먼트·카드)은 `tabsMyRoute.test.tsx` 가 잠근다. 여기선 회고(records)만 남는다.
   // 정확한 제목("{탭} 준비 중")으로 단언한다 — 부분 정규식(/기록/)은 설명 문구와 이중 매치돼
   // getByText 가 "여러 요소" 에러를 낸다(설명에도 '기록'이 들어감).
   it('기록 탭은 빈 글자 화면이 아니라 placeholder + 탭 이름이 반영된 준비 중 안내를 그린다', () => {
@@ -166,14 +165,6 @@ describe('(tabs)/{records,my} — 준비 중 안내 (INV-4 · SC-5)', () => {
     ).toBeOnTheScreen();
     expect(screen.getByText('기록 준비 중')).toBeOnTheScreen();
     // wizard/딥링크 유도 버튼을 넣지 않는다 — 준비 중 안내는 무버튼(탭은 목록의 자리, 금지 AC).
-    expect(screen.queryByRole('button')).toBeNull();
-  });
-
-  it('마이 탭도 placeholder + 탭 이름이 반영된 준비 중 안내를 그린다', () => {
-    render(<MyRoute />);
-
-    expect(screen.getByTestId('shell-tab-placeholder-my')).toBeOnTheScreen();
-    expect(screen.getByText('마이 준비 중')).toBeOnTheScreen();
     expect(screen.queryByRole('button')).toBeNull();
   });
 });

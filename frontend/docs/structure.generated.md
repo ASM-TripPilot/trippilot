@@ -10,6 +10,7 @@
 - `__mocks__/react-native-webview.tsx`  →  WebView
 
 ## src/__tests__/
+- `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/devPreview.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewDeepLink.test.tsx`  →  (export 없음)
@@ -36,8 +37,10 @@
 - `src/__tests__/liveLocationRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/liveMapStructure.test.ts`  →  (export 없음)
 - `src/__tests__/liveTimeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/noMswInStaticGraph.test.ts`  →  (export 없음)
 - `src/__tests__/noStepCountStructure.test.ts`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
@@ -64,6 +67,7 @@
 - `src/__tests__/rootLayoutSafeArea.test.tsx`  →  (export 없음)
 - `src/__tests__/savedPlacesStructure.test.ts`  →  (export 없음)
 - `src/__tests__/savedStaysStructure.test.ts`  →  (export 없음)
+- `src/__tests__/settingsBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/sharedUiStructure.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkConfigPlugin.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
@@ -79,6 +83,7 @@
 - `src/__tests__/tabsHomeItineraryCta.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsHomeRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsItineraryRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/tabsMyRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsShell.test.tsx`  →  (export 없음)
 - `src/__tests__/tripBaseGateStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tripBudgetStructure.test.ts`  →  (export 없음)
@@ -136,6 +141,10 @@
 ## src/app/
 - `src/app/force-update.tsx`  →  (export 없음)
 - `src/app/reconsent.tsx`  →  (export 없음)
+
+## src/app/settings/
+- `src/app/settings/index.tsx`  →  (export 없음)
+- `src/app/settings/location.tsx`  →  (export 없음)
 
 ## src/app/stays/
 - `src/app/stays/[stayId].tsx`  →  (export 없음)
@@ -312,7 +321,7 @@
 - `src/features/onboarding/model/useNickname.ts`  →  UseNickname · useNickname
 - `src/features/onboarding/model/useOnboardingProgress.ts`  →  useOnboardingProgress
 - `src/features/onboarding/model/useTermsConsent.ts`  →  UseTermsConsent · useTermsConsent
-- `src/features/onboarding/model/validateNicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
+- `src/features/onboarding/model/validateNicknameFormat.ts`  →  validateNicknameFormat · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · type NicknameFormatReason · type NicknameFormatResult
 
 ## src/features/onboarding/ui/
 - `src/features/onboarding/ui/NicknameScreen.tsx`  →  NicknameErrorReason · NicknameScreenProps · NicknameScreen
@@ -352,6 +361,27 @@
 - `src/features/planb/ui/ReplanSolvingScreen.tsx`  →  ReplanSolvingScreenProps · ReplanSolvingScreen
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
 - `src/features/planb/ui/TriggerWatchlistScreen.tsx`  →  TriggerWatchlistScreenProps · TriggerWatchlistScreen
+
+## src/features/settings/model/
+- `src/features/settings/model/deletionScope.ts`  →  DELETION_SCOPE
+- `src/features/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
+- `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowVM · SettingsGroupVM · buildSettingsSections
+- `src/features/settings/model/tripBuckets.ts`  →  TripBucket · tripStatusBucket · bucketTrips
+
+## src/features/settings/ui/
+- `src/features/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
+- `src/features/settings/ui/ExportRow.tsx`  →  ExportRow
+- `src/features/settings/ui/LocationConsentScreen.tsx`  →  LocationConsentScreenProps · LocationConsentScreen
+- `src/features/settings/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
+- `src/features/settings/ui/NicknameEditRow.tsx`  →  NicknameEditRow
+- `src/features/settings/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
+- `src/features/settings/ui/RevokeConfirmDialog.tsx`  →  RevokeConfirmDialog
+- `src/features/settings/ui/SettingsGlyphs.tsx`  →  ChevronRightGlyph · SettingsSunGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · ExternalLinkGlyph · TrashGlyph
+- `src/features/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
+- `src/features/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow
+- `src/features/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
+- `src/features/settings/ui/TripCard.tsx`  →  TripCardVM · TripCardProps · TripCard
+- `src/features/settings/ui/TripStatusSegment.tsx`  →  TripStatusSegmentProps · TripStatusSegment
 
 ## src/features/stay/model/
 - `src/features/stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
@@ -507,6 +537,13 @@
 ## src/pages/login/ui/
 - `src/pages/login/ui/LoginPage.tsx`  →  LoginPage
 
+## src/pages/my-page/
+- `src/pages/my-page/index.ts`  →  MyPage
+
+## src/pages/my-page/ui/
+- `src/pages/my-page/ui/MyPage.tsx`  →  MyPage
+- `src/pages/my-page/ui/TripCardContainer.tsx`  →  TripCardContainerProps · TripCardContainer
+
 ## src/pages/onboarding-location/
 - `src/pages/onboarding-location/index.ts`  →  LocationPage
 
@@ -592,6 +629,18 @@
 ## src/pages/saved-places/ui/
 - `src/pages/saved-places/ui/SavedPlacesPage.tsx`  →  SavedPlacesPage
 
+## src/pages/settings-location/
+- `src/pages/settings-location/index.ts`  →  LocationConsentPage
+
+## src/pages/settings-location/ui/
+- `src/pages/settings-location/ui/LocationConsentPage.tsx`  →  LocationConsentPage
+
+## src/pages/settings/
+- `src/pages/settings/index.ts`  →  SettingsPage
+
+## src/pages/settings/ui/
+- `src/pages/settings/ui/SettingsPage.tsx`  →  SettingsPage
+
 ## src/pages/stay-detail/
 - `src/pages/stay-detail/index.ts`  →  StayDetailPage
 
@@ -629,22 +678,45 @@
 ## src/pages/trip-new-step2/ui/
 - `src/pages/trip-new-step2/ui/TripNewStep2Page.tsx`  →  TripNewStep2Page
 
+## src/shared/api/generated/account/
+- `src/shared/api/generated/account/account.ts`  →  getMe · getGetMeQueryKey · getGetMeQueryOptions · GetMeQueryResult · GetMeQueryError · useGetMe · postMeDeletion · getPostMeDeletionMutationOptions · PostMeDeletionMutationResult · PostMeDeletionMutationError · usePostMeDeletion · deleteMeDeletion · getDeleteMeDeletionMutationOptions · DeleteMeDeletionMutationResult · DeleteMeDeletionMutationError · useDeleteMeDeletion · getMeExport · getGetMeExportQueryKey · getGetMeExportQueryOptions · GetMeExportQueryResult · GetMeExportQueryError · useGetMeExport
+
+## src/shared/api/generated/location/
+- `src/shared/api/generated/location/location.ts`  →  getMeLocationConsent · getGetMeLocationConsentQueryKey · getGetMeLocationConsentQueryOptions · GetMeLocationConsentQueryResult · GetMeLocationConsentQueryError · useGetMeLocationConsent · putMeLocationConsent · getPutMeLocationConsentMutationOptions · PutMeLocationConsentMutationResult · PutMeLocationConsentMutationBody · PutMeLocationConsentMutationError · usePutMeLocationConsent · patchMeLocationConsentOsPermission · getPatchMeLocationConsentOsPermissionMutationOptions · PatchMeLocationConsentOsPermissionMutationResult · PatchMeLocationConsentOsPermissionMutationBody · PatchMeLocationConsentOsPermissionMutationError · usePatchMeLocationConsentOsPermission
+
+## src/shared/api/generated/notification/
+- `src/shared/api/generated/notification/notification.ts`  →  getMeNotificationSettings · getGetMeNotificationSettingsQueryKey · getGetMeNotificationSettingsQueryOptions · GetMeNotificationSettingsQueryResult · GetMeNotificationSettingsQueryError · useGetMeNotificationSettings · patchMeNotificationSettingsKind · getPatchMeNotificationSettingsKindMutationOptions · PatchMeNotificationSettingsKindMutationResult · PatchMeNotificationSettingsKindMutationBody · PatchMeNotificationSettingsKindMutationError · usePatchMeNotificationSettingsKind · getMeNotifications · getGetMeNotificationsQueryKey · getGetMeNotificationsQueryOptions · GetMeNotificationsQueryResult · GetMeNotificationsQueryError · useGetMeNotifications · postMeNotificationsNotificationIdRead · getPostMeNotificationsNotificationIdReadMutationOptions · PostMeNotificationsNotificationIdReadMutationResult · PostMeNotificationsNotificationIdReadMutationError · usePostMeNotificationsNotificationIdRead
+
+## src/shared/api/generated/notifications/
+- `src/shared/api/generated/notifications/notifications.ts`  →  postMePushTokens · getPostMePushTokensMutationOptions · PostMePushTokensMutationResult · PostMePushTokensMutationBody · PostMePushTokensMutationError · usePostMePushTokens · deleteMePushTokensToken · getDeleteMePushTokensTokenMutationOptions · DeleteMePushTokensTokenMutationResult · DeleteMePushTokensTokenMutationError · useDeleteMePushTokensToken
+
 ## src/shared/api/generated/places/
 - `src/shared/api/generated/places/places.ts`  →  getRegions · getGetRegionsQueryKey · getGetRegionsQueryOptions · GetRegionsQueryResult · GetRegionsQueryError · useGetRegions · getPlaces · getGetPlacesQueryKey · getGetPlacesQueryOptions · GetPlacesQueryResult · GetPlacesQueryError · useGetPlaces · postSavedPlaces · getPostSavedPlacesMutationOptions · PostSavedPlacesMutationResult · PostSavedPlacesMutationBody · PostSavedPlacesMutationError · usePostSavedPlaces · getSavedPlaces · getGetSavedPlacesQueryKey · getGetSavedPlacesQueryOptions · GetSavedPlacesQueryResult · GetSavedPlacesQueryError · useGetSavedPlaces · deleteSavedPlacesSavedPlaceId · getDeleteSavedPlacesSavedPlaceIdMutationOptions · DeleteSavedPlacesSavedPlaceIdMutationResult · DeleteSavedPlacesSavedPlaceIdMutationError · useDeleteSavedPlacesSavedPlaceId
 
 ## src/shared/api/generated/preferences/
 - `src/shared/api/generated/preferences/preferences.ts`  →  getMePreferences · getGetMePreferencesQueryKey · getGetMePreferencesQueryOptions · GetMePreferencesQueryResult · GetMePreferencesQueryError · useGetMePreferences · putMePreferences · getPutMePreferencesMutationOptions · PutMePreferencesMutationResult · PutMePreferencesMutationBody · PutMePreferencesMutationError · usePutMePreferences
 
+## src/shared/api/generated/profile/
+- `src/shared/api/generated/profile/profile.ts`  →  getMeProfile · getGetMeProfileQueryKey · getGetMeProfileQueryOptions · GetMeProfileQueryResult · GetMeProfileQueryError · useGetMeProfile · patchMeProfileNickname · getPatchMeProfileNicknameMutationOptions · PatchMeProfileNicknameMutationResult · PatchMeProfileNicknameMutationBody · PatchMeProfileNicknameMutationError · usePatchMeProfileNickname · postNicknameSuggestions · getPostNicknameSuggestionsMutationOptions · PostNicknameSuggestionsMutationResult · PostNicknameSuggestionsMutationError · usePostNicknameSuggestions · postNicknameCheck · getPostNicknameCheckMutationOptions · PostNicknameCheckMutationResult · PostNicknameCheckMutationBody · PostNicknameCheckMutationError · usePostNicknameCheck
+
+## src/shared/api/generated/reflection/
+- `src/shared/api/generated/reflection/reflection.ts`  →  getMePersonalization · getGetMePersonalizationQueryKey · getGetMePersonalizationQueryOptions · GetMePersonalizationQueryResult · GetMePersonalizationQueryError · useGetMePersonalization · getMeStyle · getGetMeStyleQueryKey · getGetMeStyleQueryOptions · GetMeStyleQueryResult · GetMeStyleQueryError · useGetMeStyle · getTripsTripIdSummary · getGetTripsTripIdSummaryQueryKey · getGetTripsTripIdSummaryQueryOptions · GetTripsTripIdSummaryQueryResult · GetTripsTripIdSummaryQueryError · useGetTripsTripIdSummary · getTripsTripIdReflections · getGetTripsTripIdReflectionsQueryKey · getGetTripsTripIdReflectionsQueryOptions · GetTripsTripIdReflectionsQueryResult · GetTripsTripIdReflectionsQueryError · useGetTripsTripIdReflections · postTripsTripIdReflectionsDayDate · getPostTripsTripIdReflectionsDayDateMutationOptions · PostTripsTripIdReflectionsDayDateMutationResult · PostTripsTripIdReflectionsDayDateMutationError · usePostTripsTripIdReflectionsDayDate · putTripsTripIdReflectionsDayDate · getPutTripsTripIdReflectionsDayDateMutationOptions · PutTripsTripIdReflectionsDayDateMutationResult · PutTripsTripIdReflectionsDayDateMutationBody · PutTripsTripIdReflectionsDayDateMutationError · usePutTripsTripIdReflectionsDayDate
+
 ## src/shared/api/generated/saved-stays/
 - `src/shared/api/generated/saved-stays/saved-stays.ts`  →  postSavedStays · getPostSavedStaysMutationOptions · PostSavedStaysMutationResult · PostSavedStaysMutationBody · PostSavedStaysMutationError · usePostSavedStays · getSavedStays · getGetSavedStaysQueryKey · getGetSavedStaysQueryOptions · GetSavedStaysQueryResult · GetSavedStaysQueryError · useGetSavedStays · getSavedStaysSavedStayId · getGetSavedStaysSavedStayIdQueryKey · getGetSavedStaysSavedStayIdQueryOptions · GetSavedStaysSavedStayIdQueryResult · GetSavedStaysSavedStayIdQueryError · useGetSavedStaysSavedStayId · patchSavedStaysSavedStayId · getPatchSavedStaysSavedStayIdMutationOptions · PatchSavedStaysSavedStayIdMutationResult · PatchSavedStaysSavedStayIdMutationBody · PatchSavedStaysSavedStayIdMutationError · usePatchSavedStaysSavedStayId · deleteSavedStaysSavedStayId · getDeleteSavedStaysSavedStayIdMutationOptions · DeleteSavedStaysSavedStayIdMutationResult · DeleteSavedStaysSavedStayIdMutationError · useDeleteSavedStaysSavedStayId
 
 ## src/shared/api/generated/schemas/
+- `src/shared/api/generated/schemas/accountExport.ts`  →  AccountExport
+- `src/shared/api/generated/schemas/accountSummary.ts`  →  AccountSummary
+- `src/shared/api/generated/schemas/accountSummarySocialProvidersItem.ts`  →  AccountSummarySocialProvidersItem
+- `src/shared/api/generated/schemas/accountSummaryStatus.ts`  →  AccountSummaryStatus
 - `src/shared/api/generated/schemas/addMustVisitRequest.ts`  →  AddMustVisitRequest
 - `src/shared/api/generated/schemas/adjustTimesRequest.ts`  →  AdjustTimesRequest
 - `src/shared/api/generated/schemas/arriveRequest.ts`  →  ArriveRequest
 - `src/shared/api/generated/schemas/arriveRequestSource.ts`  →  ArriveRequestSource
 - `src/shared/api/generated/schemas/assignBaseRequest.ts`  →  AssignBaseRequest
 - `src/shared/api/generated/schemas/baseAssignment.ts`  →  BaseAssignment
+- `src/shared/api/generated/schemas/categoryShare.ts`  →  CategoryShare
 - `src/shared/api/generated/schemas/changeLog.ts`  →  ChangeLog
 - `src/shared/api/generated/schemas/changeLogEntry.ts`  →  ChangeLogEntry
 - `src/shared/api/generated/schemas/changeLogEntrySourceType.ts`  →  ChangeLogEntrySourceType
@@ -655,21 +727,29 @@
 - `src/shared/api/generated/schemas/dayCoverage.ts`  →  DayCoverage
 - `src/shared/api/generated/schemas/dayCoverageResolution.ts`  →  DayCoverageResolution
 - `src/shared/api/generated/schemas/dayCoverageStatus.ts`  →  DayCoverageStatus
+- `src/shared/api/generated/schemas/dayHighlight.ts`  →  DayHighlight
+- `src/shared/api/generated/schemas/deletionResponse.ts`  →  DeletionResponse
+- `src/shared/api/generated/schemas/deletionResponseCascadeSummary.ts`  →  DeletionResponseCascadeSummary
 - `src/shared/api/generated/schemas/editItineraryRequest.ts`  →  EditItineraryRequest
 - `src/shared/api/generated/schemas/editItineraryRequestDaysItem.ts`  →  EditItineraryRequestDaysItem
 - `src/shared/api/generated/schemas/editItineraryRequestDaysItemSlotsItem.ts`  →  EditItineraryRequestDaysItemSlotsItem
+- `src/shared/api/generated/schemas/editReflectionRequest.ts`  →  EditReflectionRequest
 - `src/shared/api/generated/schemas/editSavedStayRequest.ts`  →  EditSavedStayRequest
 - `src/shared/api/generated/schemas/editTripRequest.ts`  →  EditTripRequest
 - `src/shared/api/generated/schemas/errorResponse.ts`  →  ErrorResponse
 - `src/shared/api/generated/schemas/errorResponseError.ts`  →  ErrorResponseError
 - `src/shared/api/generated/schemas/errorResponseErrorExistingProvider.ts`  →  ErrorResponseErrorExistingProvider
 - `src/shared/api/generated/schemas/errorResponseErrorFieldsItem.ts`  →  ErrorResponseErrorFieldsItem
+- `src/shared/api/generated/schemas/exportSection.ts`  →  ExportSection
+- `src/shared/api/generated/schemas/exportSectionItemsItem.ts`  →  ExportSectionItemsItem
 - `src/shared/api/generated/schemas/generateItineraryRequest.ts`  →  GenerateItineraryRequest
 - `src/shared/api/generated/schemas/generateItineraryRequestGenerationMode.ts`  →  GenerateItineraryRequestGenerationMode
 - `src/shared/api/generated/schemas/generationSession.ts`  →  GenerationSession
 - `src/shared/api/generated/schemas/generationSessionMode.ts`  →  GenerationSessionMode
 - `src/shared/api/generated/schemas/generationSessionStatus.ts`  →  GenerationSessionStatus
 - `src/shared/api/generated/schemas/geocodeCandidate.ts`  →  GeocodeCandidate
+- `src/shared/api/generated/schemas/getMeExportParams.ts`  →  GetMeExportParams
+- `src/shared/api/generated/schemas/getMeNotificationsParams.ts`  →  GetMeNotificationsParams
 - `src/shared/api/generated/schemas/getPlacesParams.ts`  →  GetPlacesParams
 - `src/shared/api/generated/schemas/getRegionsParams.ts`  →  GetRegionsParams
 - `src/shared/api/generated/schemas/getStaysGeocodeParams.ts`  →  GetStaysGeocodeParams
@@ -691,13 +771,37 @@
 - `src/shared/api/generated/schemas/itineraryStatus.ts`  →  ItineraryStatus
 - `src/shared/api/generated/schemas/itineraryUnplacedMustVisitsItem.ts`  →  ItineraryUnplacedMustVisitsItem
 - `src/shared/api/generated/schemas/itineraryUnplacedMustVisitsItemReasonCode.ts`  →  ItineraryUnplacedMustVisitsItemReasonCode
+- `src/shared/api/generated/schemas/locationConsent.ts`  →  LocationConsent
+- `src/shared/api/generated/schemas/locationConsentCapabilities.ts`  →  LocationConsentCapabilities
+- `src/shared/api/generated/schemas/locationConsentOsPermissionMirror.ts`  →  LocationConsentOsPermissionMirror
+- `src/shared/api/generated/schemas/moderationUnavailableResponse.ts`  →  ModerationUnavailableResponse
 - `src/shared/api/generated/schemas/mustVisit.ts`  →  MustVisit
 - `src/shared/api/generated/schemas/mustVisitType.ts`  →  MustVisitType
+- `src/shared/api/generated/schemas/nicknameTakenResponse.ts`  →  NicknameTakenResponse
+- `src/shared/api/generated/schemas/notFoundResponse.ts`  →  NotFoundResponse
+- `src/shared/api/generated/schemas/notification.ts`  →  Notification
+- `src/shared/api/generated/schemas/notificationActionPayload.ts`  →  NotificationActionPayload
+- `src/shared/api/generated/schemas/notificationActionType.ts`  →  NotificationActionType
+- `src/shared/api/generated/schemas/notificationKind.ts`  →  NotificationKind
+- `src/shared/api/generated/schemas/notificationList.ts`  →  NotificationList
+- `src/shared/api/generated/schemas/notificationToggle.ts`  →  NotificationToggle
+- `src/shared/api/generated/schemas/notificationToggleKind.ts`  →  NotificationToggleKind
+- `src/shared/api/generated/schemas/notificationToggleList.ts`  →  NotificationToggleList
+- `src/shared/api/generated/schemas/patchMeLocationConsentOsPermissionBody.ts`  →  PatchMeLocationConsentOsPermissionBody
+- `src/shared/api/generated/schemas/patchMeLocationConsentOsPermissionBodyOsPermission.ts`  →  PatchMeLocationConsentOsPermissionBodyOsPermission
+- `src/shared/api/generated/schemas/patchMeProfileNicknameBody.ts`  →  PatchMeProfileNicknameBody
+- `src/shared/api/generated/schemas/personalizationInfo.ts`  →  PersonalizationInfo
+- `src/shared/api/generated/schemas/personalizationInfoReason.ts`  →  PersonalizationInfoReason
+- `src/shared/api/generated/schemas/personalizationItem.ts`  →  PersonalizationItem
 - `src/shared/api/generated/schemas/place.ts`  →  Place
 - `src/shared/api/generated/schemas/placeDataStatus.ts`  →  PlaceDataStatus
 - `src/shared/api/generated/schemas/placeList.ts`  →  PlaceList
 - `src/shared/api/generated/schemas/placeSearchUnavailableResponse.ts`  →  PlaceSearchUnavailableResponse
 - `src/shared/api/generated/schemas/poiCategory.ts`  →  PoiCategory
+- `src/shared/api/generated/schemas/postNicknameCheck200.ts`  →  PostNicknameCheck200
+- `src/shared/api/generated/schemas/postNicknameCheck200Reason.ts`  →  PostNicknameCheck200Reason
+- `src/shared/api/generated/schemas/postNicknameCheckBody.ts`  →  PostNicknameCheckBody
+- `src/shared/api/generated/schemas/postNicknameSuggestions200.ts`  →  PostNicknameSuggestions200
 - `src/shared/api/generated/schemas/prefArrayAxis.ts`  →  PrefArrayAxis
 - `src/shared/api/generated/schemas/prefScalarAxis.ts`  →  PrefScalarAxis
 - `src/shared/api/generated/schemas/preferenceInput.ts`  →  PreferenceInput
@@ -711,8 +815,21 @@
 - `src/shared/api/generated/schemas/preferenceView.ts`  →  PreferenceView
 - `src/shared/api/generated/schemas/preferenceViewBudget.ts`  →  PreferenceViewBudget
 - `src/shared/api/generated/schemas/preferenceViewCompanion.ts`  →  PreferenceViewCompanion
+- `src/shared/api/generated/schemas/profile.ts`  →  Profile
+- `src/shared/api/generated/schemas/pushTokenResponse.ts`  →  PushTokenResponse
+- `src/shared/api/generated/schemas/pushTokenResponseOsPermission.ts`  →  PushTokenResponseOsPermission
+- `src/shared/api/generated/schemas/pushTokenResponsePlatform.ts`  →  PushTokenResponsePlatform
+- `src/shared/api/generated/schemas/putMeLocationConsentBody.ts`  →  PutMeLocationConsentBody
+- `src/shared/api/generated/schemas/reflection.ts`  →  Reflection
+- `src/shared/api/generated/schemas/reflectionList.ts`  →  ReflectionList
+- `src/shared/api/generated/schemas/reflectionSource.ts`  →  ReflectionSource
+- `src/shared/api/generated/schemas/reflectionStats.ts`  →  ReflectionStats
+- `src/shared/api/generated/schemas/reflectionStatsDistanceSource.ts`  →  ReflectionStatsDistanceSource
 - `src/shared/api/generated/schemas/region.ts`  →  Region
 - `src/shared/api/generated/schemas/regionLevel.ts`  →  RegionLevel
+- `src/shared/api/generated/schemas/registerPushTokenRequest.ts`  →  RegisterPushTokenRequest
+- `src/shared/api/generated/schemas/registerPushTokenRequestOsPermission.ts`  →  RegisterPushTokenRequestOsPermission
+- `src/shared/api/generated/schemas/registerPushTokenRequestPlatform.ts`  →  RegisterPushTokenRequestPlatform
 - `src/shared/api/generated/schemas/registerRoute.ts`  →  RegisterRoute
 - `src/shared/api/generated/schemas/registerSavedStayRequest.ts`  →  RegisterSavedStayRequest
 - `src/shared/api/generated/schemas/replanSession.ts`  →  ReplanSession
@@ -741,6 +858,11 @@
 - `src/shared/api/generated/schemas/stayRecommendationRequest.ts`  →  StayRecommendationRequest
 - `src/shared/api/generated/schemas/stayRecommendationRequestCandidatesItem.ts`  →  StayRecommendationRequestCandidatesItem
 - `src/shared/api/generated/schemas/staySearchResponse.ts`  →  StaySearchResponse
+- `src/shared/api/generated/schemas/styleAnalysisBody.ts`  →  StyleAnalysisBody
+- `src/shared/api/generated/schemas/styleAnalysisEnvelope.ts`  →  StyleAnalysisEnvelope
+- `src/shared/api/generated/schemas/stylePreview.ts`  →  StylePreview
+- `src/shared/api/generated/schemas/styleProgress.ts`  →  StyleProgress
+- `src/shared/api/generated/schemas/traitGauges.ts`  →  TraitGauges
 - `src/shared/api/generated/schemas/trigger.ts`  →  Trigger
 - `src/shared/api/generated/schemas/triggerKind.ts`  →  TriggerKind
 - `src/shared/api/generated/schemas/triggerList.ts`  →  TriggerList
@@ -749,6 +871,12 @@
 - `src/shared/api/generated/schemas/tripDestination.ts`  →  TripDestination
 - `src/shared/api/generated/schemas/tripPreferenceSnapshot.ts`  →  TripPreferenceSnapshot
 - `src/shared/api/generated/schemas/tripStatus.ts`  →  TripStatus
+- `src/shared/api/generated/schemas/tripSummary.ts`  →  TripSummary
+- `src/shared/api/generated/schemas/tripSummaryEnvelope.ts`  →  TripSummaryEnvelope
+- `src/shared/api/generated/schemas/tripSummarySource.ts`  →  TripSummarySource
+- `src/shared/api/generated/schemas/tripSummaryStats.ts`  →  TripSummaryStats
+- `src/shared/api/generated/schemas/tripSummaryStatsDistanceSource.ts`  →  TripSummaryStatsDistanceSource
+- `src/shared/api/generated/schemas/updateToggleRequest.ts`  →  UpdateToggleRequest
 - `src/shared/api/generated/schemas/validationErrorResponse.ts`  →  ValidationErrorResponse
 - `src/shared/api/generated/schemas/visitCheck.ts`  →  VisitCheck
 - `src/shared/api/generated/schemas/visitCheckList.ts`  →  VisitCheckList
@@ -786,12 +914,17 @@
 - `src/shared/itinerary-edit/ui/ManualTimeSheet.tsx`  →  ManualTimeSheetProps · ManualTimeSheet
 
 ## src/shared/location/
-- `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationCloseGlyph
+- `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph · LocationCloseGlyph
 - `src/shared/location/LocationPreprompt.tsx`  →  LocationPrepromptState · LocationPrepromptProps · LocationPreprompt
+- `src/shared/location/consentPutBody.ts`  →  consentPutBody
 - `src/shared/location/geofence.ts`  →  GeofenceRegion · buildGeofenceRegions · geofenceArriveRequest · registerGeofences · clearGeofences
 
 ## src/shared/location/lib/
 - `src/shared/location/lib/locationColors.ts`  →  LOCATION_ICON_COLORS
+
+## src/shared/location/
+- `src/shared/location/revokeImpact.ts`  →  RevokeImpact · revokeImpact
+- `src/shared/location/useLocationConsent.ts`  →  LocationConsentModel · useLocationConsent
 
 ## src/shared/map/
 - `src/shared/map/KakaoMapView.tsx`  →  KakaoMapViewProps · KakaoMapView
@@ -805,6 +938,9 @@
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · BottomTabBarProps · BottomTabBar
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
 - `src/shared/ui/WheelPicker.tsx`  →  WheelPickerProps · WheelPicker
+
+## src/shared/validation/
+- `src/shared/validation/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
 
 ## src/shared/version/
 - `src/shared/version/compareVersion.ts`  →  compareVersion
@@ -820,4 +956,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 548개 파일
+합계 650개 파일

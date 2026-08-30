@@ -77,6 +77,13 @@ import {
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
+import { buildSettingsSections } from '@/features/settings/model/settingsSections';
+import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog';
+import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
+import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
+import { RevokeConfirmDialog } from '@/features/settings/ui/RevokeConfirmDialog';
+import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
+import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
 import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
 import { ManualEditScreen } from '@/features/planb/ui/ManualEditScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
@@ -122,6 +129,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { ManualTimeSheet, reorderKeepingFixed } from '@/shared/itinerary-edit';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
+import { revokeImpact } from '@/shared/location/revokeImpact';
 import { KakaoMapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
@@ -830,6 +838,51 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
     metaLine: '8월 1일 ~ 2일 · 1박 2일 · 1명',
     badge: null,
     extra: null,
+  },
+];
+
+// l03 마이페이지 · l03(TRIP-604) — 예정 카드(D-배지)와 지난 여행 카드(회고 chevron)의 두 얼굴을
+// 한 화면에서 대조하는 픽스처. 화면은 무상태라 VM + noop 한 벌로 충분(TripCardContainer 의 조회
+// 조립은 안 태움 — 배지 pill 위치·세그먼트 활성 그림자·아바타 원은 jest 사각, 6-b 육안 몫).
+const MY_PAGE_UPCOMING_VMS: TripCardVM[] = [
+  {
+    tripId: 'busan',
+    destinationLabel: '부산',
+    dateRange: '6.10~6.12',
+    basesLabel: '숙소 1',
+    daysLabel: '일정 3일',
+    dBadge: 'D-12',
+    isEnded: false,
+  },
+  {
+    tripId: 'jeju',
+    destinationLabel: '제주',
+    dateRange: '7.1~7.4',
+    basesLabel: '숙소 미등록',
+    daysLabel: null,
+    dBadge: 'D-30',
+    isEnded: false,
+  },
+];
+
+const MY_PAGE_ENDED_VMS: TripCardVM[] = [
+  {
+    tripId: 'jeju-past',
+    destinationLabel: '제주',
+    dateRange: '5.1~5.3',
+    basesLabel: '숙소 2',
+    daysLabel: '일정 3일',
+    dBadge: null,
+    isEnded: true,
+  },
+  {
+    tripId: 'gangneung-past',
+    destinationLabel: '강릉',
+    dateRange: '4.18~4.20',
+    basesLabel: '숙소 1',
+    daysLabel: '일정 3일',
+    dBadge: null,
+    isEnded: true,
   },
 ];
 
@@ -2396,6 +2449,55 @@ const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => <MyTripsListScreen mode="loading" onPressCreateTrip={noop} />,
   },
+  // l03 마이페이지 · l03(TRIP-604) — 프로필 카드·세그먼트·예정 카드·지난 여행(회고 chevron)·설정
+  // 행을 한 화면에서 Figma l03 default(1602:2388)와 대조한다. 예정 2건 + 종료 2건(회고 진입 chevron).
+  {
+    key: 'my-page-default',
+    label: '마이페이지 · 예정+지난 여행(l03)',
+    login: null,
+    render: () => (
+      <MyPageScreen
+        nickname="여행자123"
+        email="trippilot@email.com"
+        counts={{ upcoming: 2, active: 0, ended: 2 }}
+        active="upcoming"
+        onChangeSegment={noop}
+        cards={MY_PAGE_UPCOMING_VMS.map((vm) => (
+          <TripCard key={vm.tripId} vm={vm} onPressReflection={noop} />
+        ))}
+        activeEmpty={false}
+        onPressCreateTrip={noop}
+        showPast
+        pastCards={MY_PAGE_ENDED_VMS.map((vm) => (
+          <TripCard key={vm.tripId} vm={vm} onPressReflection={noop} />
+        ))}
+        pastEmpty={false}
+      />
+    ),
+  },
+  // l03 마이페이지 · 종료 0건 엣지(AC-5) — 예정 빈 상태(새 여행 CTA) + "아직 종료된 여행이 없습니다"
+  // (회고 진입 어포던스 0). Figma empty(1603:2414)의 CTA·지난 여행 영역을 대조하되, 사진 썸네일은
+  // 계약에 필드가 없어 그리지 않는다(드리프트 ① 해소).
+  {
+    key: 'my-page-empty',
+    label: '마이페이지 · 예정 0·종료 0 엣지(l03)',
+    login: null,
+    render: () => (
+      <MyPageScreen
+        nickname="여행자123"
+        email="trippilot@email.com"
+        counts={{ upcoming: 0, active: 0, ended: 0 }}
+        active="upcoming"
+        onChangeSegment={noop}
+        cards={null}
+        activeEmpty
+        onPressCreateTrip={noop}
+        showPast
+        pastCards={null}
+        pastEmpty
+      />
+    ),
+  },
   // h24 일정 편집(TRIP-302) — 시각칩·삭제·"다른 후보" 어포던스가 있는 편집 화면. 시각칩을 누르면
   // 아래 '시각 조정 시트' 가 열린다(프리뷰에선 둘을 각각 독립 진입으로 본다). 고정 슬롯(poi-b)은
   // 시각칩에 onPress 가 안 붙어 조정이 안 열리는 것도 여기서 확인한다.
@@ -3106,6 +3208,134 @@ const PREVIEW_STATES: PreviewState[] = [
         />
       );
     },
+  },
+  // l05 설정(TRIP-608) — 실화면 딥링크로는 미인증 리다이렉트/백엔드 부재로 온전히 못 본다. jest 가
+  // 못 보는 것(6그룹 카드 레이아웃·리딩 아이콘 12종·"준비 중" 비활성·위험/동의 pill)을 여기서 눈으로.
+  {
+    key: 'settings-default',
+    label: 'l05 설정 · 기본(active)',
+    login: null,
+    render: () => (
+      <SettingsScreen
+        groups={buildSettingsSections({
+          nickname: '여행자123',
+          email: 'trippilot@email.com',
+        })}
+        deletionState="active"
+        currentNickname="여행자123"
+        onPressBack={noop}
+        onSubmitNickname={noop}
+        onPressExport={noop}
+        onPressDeleteAccount={noop}
+        onPressCancelDeletion={noop}
+      />
+    ),
+  },
+  // 내보내기 잘림 고지(INV-4) — 상한에 걸려 잘린 몫을 조용히 삼키지 않고 표면화하는 자리.
+  {
+    key: 'settings-export-truncated',
+    label: 'l05 설정 · 내보내기 잘림 고지',
+    login: null,
+    render: () => (
+      <SettingsScreen
+        groups={buildSettingsSections({
+          nickname: '여행자123',
+          email: null,
+        })}
+        deletionState="active"
+        currentNickname="여행자123"
+        truncatedLabel="일부 항목이 잘렸어요: photos, memos"
+        onPressBack={noop}
+        onSubmitNickname={noop}
+        onPressExport={noop}
+        onPressDeleteAccount={noop}
+        onPressCancelDeletion={noop}
+      />
+    ),
+  },
+  // DELETION_PENDING 배너 — 위험 영역 행이 유예 배너로 바뀌고 purgeAt + [삭제 철회]가 뜬다.
+  {
+    key: 'settings-pending',
+    label: 'l05 설정 · 삭제 유예(pending)',
+    login: null,
+    render: () => (
+      <SettingsScreen
+        groups={buildSettingsSections({
+          nickname: '여행자123',
+          email: 'trippilot@email.com',
+        })}
+        deletionState="pending"
+        purgeAt="2026-09-13T00:00:00Z"
+        currentNickname="여행자123"
+        onPressBack={noop}
+        onSubmitNickname={noop}
+        onPressExport={noop}
+        onPressDeleteAccount={noop}
+        onPressCancelDeletion={noop}
+      />
+    ),
+  },
+  // 2단 삭제 다이얼로그 — 딤 전면 커버·2단 전이는 jest 원리적 사각(리포 Modal 선례 0). 여기서
+  // [계속]을 눌러 1단(scope 전체 고지)→2단(최종) 전이를 실기로 확인한다.
+  {
+    key: 'settings-delete-dialog',
+    label: 'l05 설정 · 삭제 다이얼로그(2단)',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill} className="bg-canvas-alt">
+        <DeleteAccountDialog onCancel={noop} onConfirmDeletion={noop} />
+      </View>
+    ),
+  },
+  // l06 위치정보 동의 — 동의 ON default. 용도 3항목·계속 배너 육안 대조(글리프 SVG·틴트는 jest 사각).
+  {
+    key: 'l06-location-consent-default',
+    label: 'l06 위치정보 동의 · 동의 ON',
+    login: null,
+    render: () => (
+      <LocationConsentScreen
+        consentOn
+        disabled={false}
+        impact={revokeImpact()}
+        onGrant={noop}
+        onRevokeConfirmed={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l06 permission-denied — 토글 회색 비활성·부제 "사용 불가"·[설정 이동] 배너·전체 dimmed.
+  {
+    key: 'l06-location-consent-denied',
+    label: 'l06 위치정보 동의 · OS 권한 거부',
+    login: null,
+    render: () => (
+      <LocationConsentScreen
+        consentOn={false}
+        disabled
+        impact={revokeImpact()}
+        onGrant={noop}
+        onRevokeConfirmed={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l06 철회 재확인 다이얼로그 — 딤 전면 커버·모달 실제 열림은 jest 사각(608 동형). 중단3·계속2 구조화
+  // 리스트(Q1 확정, Figma 산문 축약과 다름)를 실기로 확인한다.
+  {
+    key: 'l06-location-revoke-dialog',
+    label: 'l06 위치정보 동의 · 철회 다이얼로그',
+    login: null,
+    render: () => (
+      <View style={StyleSheet.absoluteFill} className="bg-canvas-alt">
+        <RevokeConfirmDialog
+          impact={revokeImpact()}
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
+    ),
   },
 ];
 
