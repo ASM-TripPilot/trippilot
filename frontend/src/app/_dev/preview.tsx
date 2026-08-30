@@ -881,6 +881,17 @@ const MY_PAGE_UPCOMING_VMS: TripCardVM[] = [
     dBadge: 'D-30',
     isEnded: false,
   },
+  // bases 미도착(로딩·조회 실패) 엣지(TRIP-620 [604]) — basesLabel null 이라 숙소 칩 자체가 생략된다
+  // ('숙소 미등록'을 지어내지 않음). daysLabel 도 null 이라 기간 칩 하나만 뜨는 얼굴을 눈으로 대조.
+  {
+    tripId: 'sokcho',
+    destinationLabel: '속초',
+    dateRange: '8.5~8.7',
+    basesLabel: null,
+    daysLabel: null,
+    dBadge: 'D-60',
+    isEnded: false,
+  },
 ];
 
 const MY_PAGE_ENDED_VMS: TripCardVM[] = [
@@ -2669,7 +2680,7 @@ const PREVIEW_STATES: PreviewState[] = [
       <MyPageScreen
         nickname="여행자123"
         email="trippilot@email.com"
-        counts={{ upcoming: 2, active: 0, ended: 2 }}
+        counts={{ upcoming: 3, active: 0, ended: 2 }}
         active="upcoming"
         onChangeSegment={noop}
         styleCard={<StyleSummaryCard vm={STYLE_CARD_OFFICIAL_VM} />}
@@ -3534,6 +3545,29 @@ const PREVIEW_STATES: PreviewState[] = [
         deletionState="active"
         currentNickname="여행자123"
         truncatedLabel="일부 항목이 잘렸어요: photos, memos"
+        onPressBack={noop}
+        onSubmitNickname={noop}
+        onPressExport={noop}
+        onPressDeleteAccount={noop}
+        onPressCancelDeletion={noop}
+      />
+    ),
+  },
+  // 내보내기 조회 실패 안내(TRIP-620 [608], INV-4) — refetch 가 data 미도착이면 조용히 삼키지 않고
+  // 인라인 오류를 띄운다(잘림 고지와 별개 자리, 실패라 Share 핸드오프 없음).
+  {
+    key: 'settings-export-error',
+    label: 'l05 설정 · 내보내기 조회 실패',
+    login: null,
+    render: () => (
+      <SettingsScreen
+        groups={buildSettingsSections({
+          nickname: '여행자123',
+          email: null,
+        })}
+        deletionState="active"
+        currentNickname="여행자123"
+        exportError="내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요."
         onPressBack={noop}
         onSubmitNickname={noop}
         onPressExport={noop}

@@ -25,6 +25,8 @@ export interface SettingsScreenProps {
   currentNickname: string;
   nicknameError?: string | null;
   truncatedLabel?: string | null;
+  /** 내보내기 조회 실패 안내 — 있으면 ExportRow 인라인 오류로 표면화(INV-4). preview 무파손 위해 optional. */
+  exportError?: string | null;
   cancelDeletionError?: boolean;
   onPressBack: () => void;
   onSubmitNickname: (value: string) => void;
@@ -44,6 +46,7 @@ export function SettingsScreen({
   currentNickname,
   nicknameError,
   truncatedLabel,
+  exportError,
   cancelDeletionError,
   onPressBack,
   onSubmitNickname,
@@ -83,7 +86,11 @@ export function SettingsScreen({
         );
       case 'export':
         return (
-          <ExportRow onPress={onPressExport} truncatedLabel={truncatedLabel} />
+          <ExportRow
+            onPress={onPressExport}
+            truncatedLabel={truncatedLabel}
+            errorLabel={exportError}
+          />
         );
       case 'delete-account':
         return deletionState === 'pending' ? (

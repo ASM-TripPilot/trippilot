@@ -61,6 +61,24 @@ function basesResult(n: number) {
   >;
 }
 
+/** bases 미도착 — 로딩(data undefined). 컨테이너는 `bases.data` 만 읽는다(플래그는 상태 모델링용). */
+function basesPending() {
+  return {
+    data: undefined,
+    isPending: true,
+    isError: false,
+  } as unknown as ReturnType<typeof useGetTripsTripIdBases>;
+}
+
+/** bases 조회 실패 — data undefined + isError. 로딩과 같은 결과(칩 생략)여야 한다. */
+function basesError() {
+  return {
+    data: undefined,
+    isPending: false,
+    isError: true,
+  } as unknown as ReturnType<typeof useGetTripsTripIdBases>;
+}
+
 /** 일정 days일 조회 결과("일정 N일" = days.length, Q1). */
 function itineraryResult(days: number) {
   const data = {
@@ -125,6 +143,37 @@ describe('🔴 AC-3 · 등록 숙소 칩', () => {
     expect(screen.getByText('숙소 3')).toBeOnTheScreen();
     // 짝 — 미등록 문구는 없다.
     expect(screen.queryByText('숙소 미등록')).toBeNull();
+  });
+});
+
+describe('🔴 AC-1 · 미도착 bases 는 "숙소 미등록"으로 단정하지 않는다 (TRIP-620 [604])', () => {
+  /**
+   * 무엇을 보장하나: bases 조회가 아직 안 끝났거나(로딩) 실패해(data undefined) "0건"인지 알 수 없을
+   * 때, 카드는 `숙소 미등록`을 지어내지 않고 칩 자체를 생략한다(itinerary `daysLabel` 축과 대칭, INV-4).
+   * 현행 `bases.data ?? []` 는 undefined 를 length 0 으로 접어 거짓 표기 → 이 두 케이스가 red.
+   * `queryAllByText(/^숙소/)` = 없으면 빈 배열(부재 단언, 여러 매치 throw 회피) — 미등록·수 표기 둘 다 0.
+   */
+  it('bases 로딩 중(data undefined)이면 "숙소" 칩을 아예 그리지 않는다', () => {
+    // 준비: bases 미도착 주입(itinerary 는 beforeEach 기본값 유지 → 렌더 유지).
+    mockUseBases.mockReturnValue(basesPending());
+
+    // 실행
+    render(<TripCardContainer trip={trip()} />);
+
+    // 단언: 카드는 뜨되(공허 통과 방지 앵커), 숙소 칩은 미등록도 수 표기도 없다.
+    expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+    expect(screen.queryByText('숙소 미등록')).toBeNull();
+    expect(screen.queryAllByText(/^숙소/)).toHaveLength(0);
+  });
+
+  it('bases 조회 실패(data undefined · isError)여도 동일하게 칩을 생략한다', () => {
+    mockUseBases.mockReturnValue(basesError());
+
+    render(<TripCardContainer trip={trip()} />);
+
+    expect(screen.getByTestId('my-trip-card-trip-a')).toBeOnTheScreen();
+    expect(screen.queryByText('숙소 미등록')).toBeNull();
+    expect(screen.queryAllByText(/^숙소/)).toHaveLength(0);
   });
 });
 

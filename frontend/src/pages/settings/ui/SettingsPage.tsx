@@ -65,6 +65,7 @@ export function SettingsPage(): ReactElement {
   const [cancelDeletionError, setCancelDeletionError] = useState(false);
 
   const [truncatedLabel, setTruncatedLabel] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const patchNickname = usePatchMeProfileNickname({
     mutation: {
@@ -119,8 +120,17 @@ export function SettingsPage(): ReactElement {
   };
 
   const runExport = async (): Promise<void> => {
+    // refetch 는 실패해도 throw 하지 않고 { data, error } 를 resolve 한다(react-query) — data 가
+    // 없으면 조용히 삼키지 않고 인라인 오류로 표면화한다(INV-4).
     const { data } = await exportQuery.refetch();
-    if (!data) return;
+    if (!data) {
+      // 실패 시 직전 성공의 잘림 고지를 함께 비운다 — 오류 옆에 낡은 "일부 잘림" 이 남으면
+      // 인접 거짓 표면이 된다(5-b 경고-1, INV-4).
+      setTruncatedLabel(null);
+      setExportError('내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요.');
+      return;
+    }
+    setExportError(null);
     const summary = resolveExportSummary(data);
     setTruncatedLabel(summary.truncatedLabel);
 
@@ -142,6 +152,7 @@ export function SettingsPage(): ReactElement {
       nicknameError={nicknameError}
       truncatedLabel={truncatedLabel}
       cancelDeletionError={cancelDeletionError}
+      exportError={exportError}
       onPressBack={() => loadRouter()?.back()}
       onSubmitNickname={submitNickname}
       onPressExport={() => void runExport()}

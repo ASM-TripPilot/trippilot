@@ -42,7 +42,13 @@ export function TripCardContainer({
   const bases = useGetTripsTripIdBases(trip.tripId);
   const itinerary = useGetTripsTripIdItinerary(trip.tripId);
 
-  const basesCount = (bases.data ?? []).length;
+  // bases 미도착(로딩·실패로 data undefined)이면 "0건"인지 알 수 없어 칩을 생략한다 — undefined 를
+  // length 0 으로 접어 '숙소 미등록'을 지어내지 않는다(itinerary daysLabel 축과 대칭, INV-4).
+  const basesLabel = bases.data
+    ? bases.data.length === 0
+      ? '숙소 미등록'
+      : `숙소 ${bases.data.length}`
+    : null;
   const days = itinerary.data?.days;
 
   // D-배지는 예정(미래 출발) 카드에만. 오늘은 라우트가 아니라 여기서 읽되(화면 파생), 종료·진행 중은
@@ -63,7 +69,7 @@ export function TripCardContainer({
     tripId: trip.tripId,
     destinationLabel: trip.destinations.map((d) => d.region).join(' · '),
     dateRange: `${monthDay(trip.startDate)}~${monthDay(trip.endDate)}`,
-    basesLabel: basesCount === 0 ? '숙소 미등록' : `숙소 ${basesCount}`,
+    basesLabel,
     daysLabel: days ? `일정 ${days.length}일` : null,
     dBadge,
     isEnded: trip.status === 'ENDED',

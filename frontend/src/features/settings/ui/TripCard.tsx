@@ -25,8 +25,8 @@ export interface TripCardVM {
   destinationLabel: string;
   /** "6.10~6.12" (M.D~M.D, 점·물결). */
   dateRange: string;
-  /** "숙소 3" 또는 "숙소 미등록". */
-  basesLabel: string;
+  /** "숙소 3" 또는 "숙소 미등록" — bases 미도착이면 null(칩 생략, daysLabel 축과 대칭). */
+  basesLabel: string | null;
   /** "일정 2일" — itinerary 미도착이면 null(칩 생략, 지연 표시). */
   daysLabel: string | null;
   /** "D-12"·"D-DAY" — 예정(미래 출발) 카드에만, 그 외 null. */
@@ -105,7 +105,7 @@ export function TripCard({
       {/* 대표정보 칩 — 각 leaf 는 값 하나만 담는다(완전일치 계약). */}
       <View className="flex-row flex-wrap items-center gap-[6px]">
         <Chip label={dateRange} />
-        <Chip label={basesLabel} />
+        {basesLabel !== null ? <Chip label={basesLabel} /> : null}
         {daysLabel !== null ? <Chip label={daysLabel} /> : null}
       </View>
     </View>
