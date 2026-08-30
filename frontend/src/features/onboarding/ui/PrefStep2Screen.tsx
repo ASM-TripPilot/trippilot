@@ -9,6 +9,9 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PrefChip } from '@/shared/ui/pref/PrefChip';
+import { PrefTile } from '@/shared/ui/pref/PrefTile';
+
 import {
   BackChevronGlyph,
   BikeGlyph,
@@ -173,92 +176,6 @@ function BudgetTile({
   );
 }
 
-interface IconTileProps {
-  slug: string;
-  label: string;
-  Icon: GlyphComponent;
-  selected: boolean;
-  onPress: () => void;
-  testIDPrefix: string;
-}
-
-function IconTile({
-  slug,
-  label,
-  Icon,
-  selected,
-  onPress,
-  testIDPrefix,
-}: IconTileProps): ReactElement {
-  return (
-    <Pressable
-      testID={`${testIDPrefix}-${slug}`}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      className={`relative flex-1 items-center justify-center gap-sm rounded-card bg-canvas px-sm py-lg ${
-        selected ? 'border-[1.5px] border-primary' : 'border border-hairline'
-      }`}
-    >
-      <View
-        className={`h-12 w-12 items-center justify-center rounded-pill ${
-          selected ? 'bg-primary-pale' : 'bg-surface-strong'
-        }`}
-      >
-        <Icon size={24} selected={selected} />
-      </View>
-      <Text className="font-noto-bold text-body font-bold text-ink">
-        {label}
-      </Text>
-      {selected ? (
-        <View className="absolute right-[6.5px] top-[6.5px] h-5 w-5 items-center justify-center rounded-pill border-[1.5px] border-canvas bg-primary">
-          <CheckGlyph size={12} />
-        </View>
-      ) : null}
-    </Pressable>
-  );
-}
-
-interface ChipProps {
-  slug: string;
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-  testIDPrefix: string;
-}
-
-// 음식·활동 공용 칩(아이콘 없는 pill). testID prefix를 파라미터로 받아 축마다 다른 네임스페이스를
-// 준다(IconTile.testIDPrefix 선례) — 활동 칩은 food가 아니라 activity prefix를 달아야 한다.
-function Chip({
-  slug,
-  label,
-  selected,
-  onPress,
-  testIDPrefix,
-}: ChipProps): ReactElement {
-  return (
-    <Pressable
-      testID={`${testIDPrefix}-${slug}`}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      className={`items-center justify-center rounded-pill px-[15px] py-[9px] ${
-        selected ? 'bg-primary' : 'border border-hairline bg-canvas'
-      }`}
-    >
-      <Text
-        className={
-          selected
-            ? 'font-noto-bold text-[13.5px] font-bold text-on-primary'
-            : 'font-noto text-[13.5px] text-ink'
-        }
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 interface TransportTileProps {
   slug: string;
   label: string;
@@ -393,14 +310,15 @@ export function PrefStep2Screen({
                 className="flex-row gap-md"
               >
                 {row.map(({ slug, label, Icon }) => (
-                  <IconTile
+                  <PrefTile
                     key={slug}
-                    slug={slug}
+                    testID={`onboarding-pref2-companion-${slug}`}
                     label={label}
                     Icon={Icon}
+                    CheckIcon={CheckGlyph}
                     selected={selectedCompanions?.includes(slug) ?? false}
                     onPress={() => onToggleCompanion(slug)}
-                    testIDPrefix="onboarding-pref2-companion"
+                    className="gap-sm py-lg"
                   />
                 ))}
               </View>
@@ -418,13 +336,12 @@ export function PrefStep2Screen({
             </View>
             <View className="flex-row flex-wrap gap-sm">
               {ACTIVITY_OPTIONS.map(({ slug, label }) => (
-                <Chip
+                <PrefChip
                   key={slug}
-                  slug={slug}
+                  testID={`onboarding-pref2-activity-${slug}`}
                   label={label}
                   selected={selectedActivities?.includes(slug) ?? false}
                   onPress={() => onToggleActivity(slug)}
-                  testIDPrefix="onboarding-pref2-activity"
                 />
               ))}
             </View>
@@ -441,13 +358,12 @@ export function PrefStep2Screen({
             </View>
             <View className="flex-row flex-wrap gap-sm">
               {FOOD_OPTIONS.map(({ slug, label }) => (
-                <Chip
+                <PrefChip
                   key={slug}
-                  slug={slug}
+                  testID={`onboarding-pref2-food-${slug}`}
                   label={label}
                   selected={selectedFoods?.includes(slug) ?? false}
                   onPress={() => onToggleFood(slug)}
-                  testIDPrefix="onboarding-pref2-food"
                 />
               ))}
             </View>

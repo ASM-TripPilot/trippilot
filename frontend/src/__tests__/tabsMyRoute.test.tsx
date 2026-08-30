@@ -7,6 +7,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { useGetMe } from '@/shared/api/generated/account/account';
 import { useGetMeProfile } from '@/shared/api/generated/profile/profile';
+import { useGetMeStyle } from '@/shared/api/generated/reflection/reflection';
 import {
   useGetTrips,
   useGetTripsTripIdBases,
@@ -42,6 +43,9 @@ jest.mock('@/shared/api/generated/account/account', () => ({
 jest.mock('@/shared/api/generated/profile/profile', () => ({
   useGetMeProfile: jest.fn(),
 }));
+jest.mock('@/shared/api/generated/reflection/reflection', () => ({
+  useGetMeStyle: jest.fn(),
+}));
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: jest.fn(),
   useGetTripsTripIdBases: jest.fn(),
@@ -52,6 +56,7 @@ const mockUseMe = useGetMe as jest.MockedFunction<typeof useGetMe>;
 const mockUseProfile = useGetMeProfile as jest.MockedFunction<
   typeof useGetMeProfile
 >;
+const mockUseStyle = useGetMeStyle as jest.MockedFunction<typeof useGetMeStyle>;
 const mockUseTrips = useGetTrips as jest.MockedFunction<typeof useGetTrips>;
 const mockUseBases = useGetTripsTripIdBases as jest.MockedFunction<
   typeof useGetTripsTripIdBases
@@ -102,6 +107,13 @@ beforeEach(() => {
   mockPush.mockClear();
   mockUseMe.mockReturnValue(meResult());
   mockUseProfile.mockReturnValue(profileResult());
+  // TRIP-606 l03 스타일 카드 훅 — 이 라우트 스모크는 스타일 카드를 단언하지 않으므로
+  // 미달(요약 없음) 얼굴로 고정한다: `data: undefined` → styleCard 미렌더, 기존 3 it 무변.
+  mockUseStyle.mockReturnValue({
+    data: undefined,
+    isPending: false,
+    isError: false,
+  } as unknown as ReturnType<typeof useGetMeStyle>);
   mockUseTrips.mockReturnValue(tripsResult([]));
   // 카드별 N+1 훅 기본값(빈 숙소·1일 일정) — 카드가 크래시 없이 렌더된다.
   mockUseBases.mockReturnValue({

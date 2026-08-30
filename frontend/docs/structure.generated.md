@@ -40,9 +40,11 @@
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/noMswInStaticGraph.test.ts`  →  (export 없음)
 - `src/__tests__/noStepCountStructure.test.ts`  →  (export 없음)
+- `src/__tests__/notificationKindGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefStructure.test.ts`  →  (export 없음)
@@ -140,11 +142,18 @@
 
 ## src/app/
 - `src/app/force-update.tsx`  →  (export 없음)
+
+## src/app/my/
+- `src/app/my/stays.tsx`  →  (export 없음)
+
+## src/app/
 - `src/app/reconsent.tsx`  →  (export 없음)
 
 ## src/app/settings/
 - `src/app/settings/index.tsx`  →  (export 없음)
 - `src/app/settings/location.tsx`  →  (export 없음)
+- `src/app/settings/notifications.tsx`  →  (export 없음)
+- `src/app/settings/preferences.tsx`  →  (export 없음)
 
 ## src/app/stays/
 - `src/app/stays/[stayId].tsx`  →  (export 없음)
@@ -313,6 +322,16 @@
 - `src/features/itinerary/ui/TimelineScreen.tsx`  →  ItineraryHeaderData · TimelineScreenProps · TimelineScreen
 - `src/features/itinerary/ui/ZeroCandidateScreen.tsx`  →  ZeroCandidateScreenProps · ZeroCandidateScreen
 
+## src/features/notification/model/
+- `src/features/notification/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
+- `src/features/notification/model/useToggles.ts`  →  ToggleChannel · ToggleOutcome · UseTogglesResult · useToggles
+
+## src/features/notification/ui/
+- `src/features/notification/ui/NotificationGlyphs.tsx`  →  NotifBackChevronGlyph · NotifInfoGlyph · NotifWarningGlyph
+- `src/features/notification/ui/NotificationSettingsScreen.tsx`  →  ToggleValueMap · NotificationSettingsScreenProps · NotificationSettingsScreen
+- `src/features/notification/ui/PermissionBanner.tsx`  →  PermissionBanner
+- `src/features/notification/ui/ToggleRow.tsx`  →  ToggleRowProps · ToggleRow
+
 ## src/features/onboarding/model/
 - `src/features/onboarding/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · toPreferenceInput
 - `src/features/onboarding/model/preferenceSelection.ts`  →  toggleMulti · toggleSingle
@@ -365,21 +384,30 @@
 ## src/features/settings/model/
 - `src/features/settings/model/deletionScope.ts`  →  DELETION_SCOPE
 - `src/features/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
+- `src/features/settings/model/preferenceDraft.ts`  →  PreferenceSelection · initialSelection · buildPreferenceInput
 - `src/features/settings/model/settingsSections.ts`  →  SettingsInput · SettingsRowVM · SettingsGroupVM · buildSettingsSections
+- `src/features/settings/model/stayTripLink.ts`  →  StayTripLink · buildStayTripLink
+- `src/features/settings/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
 - `src/features/settings/model/tripBuckets.ts`  →  TripBucket · tripStatusBucket · bucketTrips
+- `src/features/settings/model/usePreferences.ts`  →  UsePreferencesResult · usePreferences
 
 ## src/features/settings/ui/
+- `src/features/settings/ui/BaseToggleDialog.tsx`  →  BaseToggleDialog
 - `src/features/settings/ui/DeleteAccountDialog.tsx`  →  DeleteAccountDialog
 - `src/features/settings/ui/ExportRow.tsx`  →  ExportRow
 - `src/features/settings/ui/LocationConsentScreen.tsx`  →  LocationConsentScreenProps · LocationConsentScreen
 - `src/features/settings/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
+- `src/features/settings/ui/MyStaysScreen.tsx`  →  MyStayBaseState · MyStayRowVM · MyStaysScreenProps · MyStaysScreen
 - `src/features/settings/ui/NicknameEditRow.tsx`  →  NicknameEditRow
+- `src/features/settings/ui/PreferencesEditScreen.tsx`  →  PreferencesEditScreen
+- `src/features/settings/ui/PreferencesEditView.tsx`  →  EditableAxis · isMultiAxis · PreferencesEditViewProps · PreferencesEditView
 - `src/features/settings/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
 - `src/features/settings/ui/RevokeConfirmDialog.tsx`  →  RevokeConfirmDialog
-- `src/features/settings/ui/SettingsGlyphs.tsx`  →  ChevronRightGlyph · SettingsSunGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · ExternalLinkGlyph · TrashGlyph
+- `src/features/settings/ui/SettingsGlyphs.tsx`  →  ChevronRightGlyph · SettingsSunGlyph · BookmarkGlyph · BarChartGlyph · ShareNodesGlyph · ListGlyph · EyeOffGlyph · GearGlyph · PencilGlyph · HeartGlyph · ChevronLeftGlyph · PersonGlyph · DownloadGlyph · ContrastGlyph · WonGlyph · PeopleGlyph · StarGlyph · ArrowsSwapGlyph · ForkKnifeGlyph · GaugeGlyph · PinGlyph · BellGlyph · ExternalLinkGlyph · BedGlyph · TrashGlyph
 - `src/features/settings/ui/SettingsGroup.tsx`  →  SettingsGroup
 - `src/features/settings/ui/SettingsRow.tsx`  →  RowBody · PreparingRow
 - `src/features/settings/ui/SettingsScreen.tsx`  →  SettingsScreenProps · SettingsScreen
+- `src/features/settings/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 - `src/features/settings/ui/TripCard.tsx`  →  TripCardVM · TripCardProps · TripCard
 - `src/features/settings/ui/TripStatusSegment.tsx`  →  TripStatusSegmentProps · TripStatusSegment
 
@@ -544,6 +572,12 @@
 - `src/pages/my-page/ui/MyPage.tsx`  →  MyPage
 - `src/pages/my-page/ui/TripCardContainer.tsx`  →  TripCardContainerProps · TripCardContainer
 
+## src/pages/my-stays/
+- `src/pages/my-stays/index.ts`  →  MyStaysPage
+
+## src/pages/my-stays/ui/
+- `src/pages/my-stays/ui/MyStaysPage.tsx`  →  MyStaysPage
+
 ## src/pages/onboarding-location/
 - `src/pages/onboarding-location/index.ts`  →  LocationPage
 
@@ -634,6 +668,18 @@
 
 ## src/pages/settings-location/ui/
 - `src/pages/settings-location/ui/LocationConsentPage.tsx`  →  LocationConsentPage
+
+## src/pages/settings-notifications/
+- `src/pages/settings-notifications/index.ts`  →  NotificationSettingsPage
+
+## src/pages/settings-notifications/ui/
+- `src/pages/settings-notifications/ui/NotificationSettingsPage.tsx`  →  NotificationSettingsPage
+
+## src/pages/settings-preferences/
+- `src/pages/settings-preferences/index.ts`  →  SettingsPreferencesPage
+
+## src/pages/settings-preferences/ui/
+- `src/pages/settings-preferences/ui/SettingsPreferencesPage.tsx`  →  SettingsPreferencesPage
 
 ## src/pages/settings/
 - `src/pages/settings/index.ts`  →  SettingsPage
@@ -931,6 +977,13 @@
 - `src/shared/map/index.ts`  →  KakaoMapView · type KakaoMapViewProps · REGISTERED_DOMAIN · type MapCenter · type MapPin · type KakaoMapMessage
 - `src/shared/map/mapHtml.ts`  →  MapCenter · MapPin · KakaoMapMessage · REGISTERED_DOMAIN · MAP_LOAD_FAILED_MESSAGE · buildMapHtml
 
+## src/shared/pref/
+- `src/shared/pref/preferenceSelection.ts`  →  toggleMulti · toggleSingle
+
+## src/shared/push/
+- `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus
+- `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
+
 ## src/shared/storage/
 - `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken
 
@@ -938,6 +991,10 @@
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · BottomTabBarProps · BottomTabBar
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
 - `src/shared/ui/WheelPicker.tsx`  →  WheelPickerProps · WheelPicker
+
+## src/shared/ui/pref/
+- `src/shared/ui/pref/PrefChip.tsx`  →  PrefChipProps · PrefChip
+- `src/shared/ui/pref/PrefTile.tsx`  →  PrefTileIcon · PrefTileProps · PrefTile
 
 ## src/shared/validation/
 - `src/shared/validation/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
@@ -956,4 +1013,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 650개 파일
+합계 681개 파일

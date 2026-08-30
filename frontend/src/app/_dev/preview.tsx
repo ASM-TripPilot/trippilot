@@ -77,10 +77,20 @@ import {
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
+import {
+  NotificationSettingsScreen,
+  type ToggleValueMap,
+} from '@/features/notification/ui/NotificationSettingsScreen';
 import { buildSettingsSections } from '@/features/settings/model/settingsSections';
 import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog';
 import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
+import type { StyleCardVM } from '@/features/settings/model/styleCardModel';
 import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
+import {
+  MyStaysScreen,
+  type MyStayRowVM,
+} from '@/features/settings/ui/MyStaysScreen';
+import { StyleSummaryCard } from '@/features/settings/ui/StyleSummaryCard';
 import { RevokeConfirmDialog } from '@/features/settings/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
 import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
@@ -120,6 +130,8 @@ import {
 import { PrefStep1Screen } from '@/features/onboarding/ui/PrefStep1Screen';
 import { PrefStep2Screen } from '@/features/onboarding/ui/PrefStep2Screen';
 import { TermsScreen } from '@/features/onboarding/ui/TermsScreen';
+import type { PreferenceSelection } from '@/features/settings/model/preferenceDraft';
+import { PreferencesEditView } from '@/features/settings/ui/PreferencesEditView';
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
@@ -886,6 +898,76 @@ const MY_PAGE_ENDED_VMS: TripCardVM[] = [
   },
 ];
 
+// l04 등록 숙소 3행 — 등록됨(연결 여행)·미등록·좌표 미확정(토글 disabled). 화면이 순수 프레젠테이션이라
+// 완성 VM 한 벌이면 세 표면을 다 본다(location 은 계약 공백이라 빈 값 — 화면이 줄을 안 그린다).
+const MY_STAYS_PREVIEW_ROWS: MyStayRowVM[] = [
+  {
+    savedStayId: 'stay-assigned',
+    name: '해운대 오션뷰',
+    location: '',
+    dateRangeLabel: '6.10 ~ 6.13',
+    sourceLabel: 'OTA 예약',
+    memoLabel: null,
+    linkedTripLabel: '연결 여행 · 부산 여행',
+    baseState: 'assigned',
+    canAssignBase: true,
+    tripId: 'busan-trip',
+    baseAssignmentId: 'ba-1',
+  },
+  {
+    savedStayId: 'stay-unassigned',
+    name: '남포동 게스트하우스',
+    location: '',
+    dateRangeLabel: null,
+    sourceLabel: '앱 저장',
+    memoLabel: '예약번호 미입력',
+    linkedTripLabel: '연결된 여행 없음',
+    baseState: 'unassigned',
+    canAssignBase: true,
+    tripId: null,
+    baseAssignmentId: null,
+  },
+  {
+    savedStayId: 'stay-nocoord',
+    name: '좌표 미확정 숙소',
+    location: '',
+    dateRangeLabel: null,
+    sourceLabel: '앱 저장',
+    memoLabel: null,
+    linkedTripLabel: '연결된 여행 없음',
+    baseState: 'unassigned',
+    canAssignBase: false,
+    tripId: null,
+    baseAssignmentId: null,
+  },
+];
+
+// l02 알림 설정(TRIP-607) — 6종 기본값(SLOT_PRE·PLAN_B 는 푸시 OFF·인앱 ON, 나머지 5종 둘 다 ON).
+// default·permission-denied 두 얼굴이 이 한 벌을 공유한다(권한 게이트는 pushColumnAvailable 로 가름).
+const NOTIF_PREVIEW_VALUES: ToggleValueMap = {
+  STAY: { pushEnabled: true, inAppEnabled: true },
+  TRIP_PRE: { pushEnabled: true, inAppEnabled: true },
+  TRIP_DAY: { pushEnabled: true, inAppEnabled: true },
+  SLOT_PRE: { pushEnabled: false, inAppEnabled: true },
+  PLAN_B: { pushEnabled: false, inAppEnabled: true },
+  REFLECTION: { pushEnabled: true, inAppEnabled: true },
+};
+
+// l03 스타일 요약 카드(TRIP-606) — 정식(칩+3축 dot 게이지+메타+상세 진입)·미달(안내 한 줄) 두 얼굴.
+// dot 채움 색·빈 dot 토큰·칩 알약은 jest 사각(글리프 fill 함정)이라 이 키가 육안 대조 자리다.
+// 정식 얼굴은 아래 my-page-default 프리뷰에 얹어 프로필↔세그먼트 사이 배치까지 함께 본다.
+const STYLE_CARD_OFFICIAL_VM: Extract<StyleCardVM, { kind: 'official' }> = {
+  kind: 'official',
+  descriptors: ['#바다', '#미식', '#느긋'],
+  gauges: [
+    { label: '여유로움', value: 4 },
+    { label: '미식 취향', value: 4 },
+    { label: '활동성', value: 3 },
+  ],
+  sampleTripCount: 6,
+  updatedAt: '2026-08-28T09:00:00Z',
+};
+
 // 탭 화면 프리뷰에 셸 탭바를 얹어 실제 앱처럼 보이게 한다(TRIP-201 오버레이 확인용).
 // BottomTabBar 루트가 absolute bottom-0라 콘텐츠 위에 떠서 겹친다 — 프리뷰에서도 오버레이
 // 모양이 그대로 재현된다. onPressTab은 프리뷰라 no-op(네비게이션 없음).
@@ -1226,6 +1308,28 @@ const TRIGGER_WATCHLIST_PREVIEW_FIRED: Trigger[] = [
   },
 ];
 
+// l05 취향 수정 프리뷰 픽스처 — 한국어 계약값 그대로(GET View 를 initialSelection 태운 뒤의 모양).
+const SETTINGS_PREF_PREVIEW_SELECTION: PreferenceSelection = {
+  styles: ['휴양', '미식'],
+  activities: null,
+  transportModes: ['대중교통'],
+  foodTastes: ['한식'],
+  pace: '균형있게',
+  companionTypes: ['커플'],
+  petFlag: true,
+  budgetTier: '중간',
+};
+const SETTINGS_PREF_PREVIEW_EMPTY: PreferenceSelection = {
+  styles: null,
+  activities: null,
+  transportModes: null,
+  foodTastes: null,
+  pace: null,
+  companionTypes: null,
+  petFlag: false,
+  budgetTier: null,
+};
+
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
   {
@@ -1382,6 +1486,39 @@ const PREVIEW_STATES: PreviewState[] = [
         onBack={noop}
         onDone={noop}
         onSkipAll={noop}
+      />
+    ),
+  },
+  {
+    // l05 취향 전체 수정(TRIP-610) — 화면이 자족 컨테이너(GET/PUT)라 QueryClient 없는 이 프리뷰에선
+    // 순수 뷰(PreferencesEditView)에 선택 픽스처를 얹어 태운다(pref1/pref2 정적 패턴과 동형).
+    key: 'settings-preferences',
+    label: 'l05 취향 수정 · 기본',
+    login: null,
+    render: () => (
+      <PreferencesEditView
+        selection={SETTINGS_PREF_PREVIEW_SELECTION}
+        saveError={false}
+        onToggle={noop}
+        onTogglePet={noop}
+        onSave={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    // 엣지: 미설정(전 축 null) + 400 저장 실패 인라인 오류(INV-4) 동시 얼굴.
+    key: 'settings-preferences-error',
+    label: 'l05 취향 수정 · 미설정+400',
+    login: null,
+    render: () => (
+      <PreferencesEditView
+        selection={SETTINGS_PREF_PREVIEW_EMPTY}
+        saveError
+        onToggle={noop}
+        onTogglePet={noop}
+        onSave={noop}
+        onBack={noop}
       />
     ),
   },
@@ -2462,6 +2599,7 @@ const PREVIEW_STATES: PreviewState[] = [
         counts={{ upcoming: 2, active: 0, ended: 2 }}
         active="upcoming"
         onChangeSegment={noop}
+        styleCard={<StyleSummaryCard vm={STYLE_CARD_OFFICIAL_VM} />}
         cards={MY_PAGE_UPCOMING_VMS.map((vm) => (
           <TripCard key={vm.tripId} vm={vm} onPressReflection={noop} />
         ))}
@@ -2495,6 +2633,84 @@ const PREVIEW_STATES: PreviewState[] = [
         showPast
         pastCards={null}
         pastEmpty
+      />
+    ),
+  },
+  // l03 스타일 요약 카드 · 미달 얼굴(TRIP-606) — 누적 방문 <10곳이면 게이지·칩 없이 안내 한 줄만
+  // (INV-U5-09). 실화면 딥링크로는 백엔드 없이 이 얼굴을 못 보므로 카드를 단독으로 세워 대조한다.
+  {
+    key: 'my-style-card-insufficient',
+    label: '스타일 카드 · 미달(<10곳) 안내(l03)',
+    login: null,
+    render: () => (
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <View className="flex-1 bg-canvas p-lg">
+          <StyleSummaryCard vm={{ kind: 'insufficient', current: 4 }} />
+        </View>
+      </SafeAreaView>
+    ),
+  },
+  // l04 등록 숙소·예약 기록(TRIP-605) — 등록됨(채움 pill + "출발점 변경 ›")·미등록(점선 "출발점 지정")·
+  // 좌표 미확정(토글 disabled) 세 행을 한 화면에서 Figma l04 default(1604:2440)와 대조한다. "출발점
+  // 변경/지정" 을 누르면 BaseToggleDialog(딤+중앙 카드)가 뜨는 것도 여기서 실제로 조작해 본다.
+  {
+    key: 'my-stays-default',
+    label: '등록 숙소·예약 기록 · 3행(l04)',
+    login: null,
+    render: () => (
+      <MyStaysScreen
+        rows={MY_STAYS_PREVIEW_ROWS}
+        isEmpty={false}
+        onConfirmBaseToggle={noop}
+        onPressExplore={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l04 empty(1605:2440) — 숙소 0건 안내(침대 일러스트 + "숙소 탐색" CTA → /stays). US-NOTIF-06 예외.
+  {
+    key: 'my-stays-empty',
+    label: '등록 숙소 0건 · 탐색(l04)',
+    login: null,
+    render: () => (
+      <MyStaysScreen
+        rows={[]}
+        isEmpty
+        onConfirmBaseToggle={noop}
+        onPressExplore={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l02 알림 설정 default(1600:2388) — 6행×2열(COMMUNITY 숨김)·상단 정보 배너·하단 SYSTEM 줄. 토글
+  // 빨강/회색·thumb 위치·정보 배너 틴트는 jest 사각이라 이 키가 육안 대조 자리다.
+  {
+    key: 'l02-notification-default',
+    label: '알림 설정 · 6행 default(l02)',
+    login: null,
+    render: () => (
+      <NotificationSettingsScreen
+        values={NOTIF_PREVIEW_VALUES}
+        pushColumnAvailable
+        onToggle={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l02 permission-denied(1601:2388) — 상단 대시 배너+[설정 이동]·열 헤더 "권한 필요" 칩·푸시 열
+  // 전부 회색 비활성·인앱은 정상·하단 푸시-누적 줄. 대시·칩·dimmed 는 6-b 실기 확인.
+  {
+    key: 'l02-notification-denied',
+    label: '알림 설정 · OS 권한 거부(l02)',
+    login: null,
+    render: () => (
+      <NotificationSettingsScreen
+        values={NOTIF_PREVIEW_VALUES}
+        pushColumnAvailable={false}
+        onToggle={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
       />
     ),
   },

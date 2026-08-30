@@ -27,17 +27,22 @@
 - **딤 전면 커버·시트 실제 열림은 자동 심판이 없다** → `__mocks__/@gorhom/bottom-sheet.tsx`는 `BottomSheet`를 어떤 prop을 줘도 children을 무조건 렌더하는 통과 컴포넌트로 대체한다. 딤의 `bg-scrim/40` 색 토큰은 렌더 트리에 className으로 남아 잡히지만, 실제로 화면을 덮는 `absolute inset-0`(위치)와 시트의 실제 열림/닫힘(`snapPoints`·gorhom 런타임)은 jest가 원리적으로 못 본다 — 지도 제스처 차단(viewOnly)과 같은 함정 계열. 이 목을 공유하는 화면(로그인 시트 3종·`SlotTimeSheet`·`TripBaseFixSheet`·`PinDetailSheet`·`MustVisitTimeScreen`·`TripDateSheet`) 전부 해당, 실기 스모크가 유일한 그물.
 - **`TripBaseFixSheet`는 인터랙티브 지도를 바텀시트 안에 넣은 유일 사례라 제스처 prop 회귀가 조용히 재발할 수 있다** (TRIP-455) → 같은 통과형 목이라 `enableContentPanningGesture={false}`를 주든 안 주든 렌더 결과가 동일하다(jest가 이 prop의 유무를 원리적으로 구분 못 함). 이 prop이 "이 위치로 확인" 무반응의 **진짜 원인 수정**(콘텐츠 pan 제스처가 WebView 롱프레스를 삼키는 것을 막음)인데, 지우면 51/51 그대로 green이라 아무 심판도 못 잡는다(code-critic 경고-1 실측). 이 파일을 다시 만질 때 이 줄을 실수로 지우지 않았는지는 6-b 실기(`trip-new-step2-fixsheet-map` 프리뷰, 롱프레스→핀)로만 확인된다. **두 번째 사례(TRIP-599, 2026-08-28)**: h07 `MustVisitTimeScreen`이 인터랙티브 스크롤러(`shared/ui/WheelPicker`)를 시트에 넣었다 — 같은 `enableContentPanningGesture={false}` 회귀는 jest 사각, 6-b 실기(`itinerary-mustvisit-time-default` 프리뷰, 휠 드래그→시트 딸림 여부)로만 확인된다.
 
+## 오버레이 다이얼로그 (조건부 렌더 `absolute`, 라이브러리 없음)
+
+- **딤·중앙정렬·실제 열림은 jest 원리적 사각** — `@gorhom/bottom-sheet` 목 계열과 증상은 같으나 원인이 다르다(목이 아니라 조건부 렌더 자체의 한계). `RevokeConfirmDialog`·`DeleteAccountDialog`·`LocationConsentScreen`·`BaseToggleDialog`(전부 `features/settings/ui`, 리포 Modal 선례 0)가 이 패턴을 공유한다 — 로컬 `useState`로 열고 조건부로 `absolute inset-0` 오버레이를 렌더할 뿐이라, 자동 심판이 굳히는 것은 **testID 트리 존재 + 확정 전 콜백/mutate 0회**까지다. 실제 화면이 덮이는지·중앙 정렬인지·터치가 차단되는지는 6-b 실기 전용(TRIP-605 실측, `04b_smoke_1_SKIP`). 새 확인/삭제류 다이얼로그를 이 패턴으로 또 만들면 같은 사각이 반복된다.
+
 ## 드래그 리스트 (`react-native-draggable-flatlist`)
 
 - **목이 두 사각을 함께 가진다** → (1) `__mocks__/react-native-draggable-flatlist.tsx`의 헤더 주석이 "`jest.mock('react-native-draggable-flatlist')`로 명시 호출해야 활성화된다"고 적었으나 실측은 반대다 — node_modules 수동 목이라 명시 호출 없이 **자동 적용**되고, `ManualEditScreen.test.tsx`(6/6)는 `jest.mock` 호출 0회로도 green이다(TRIP-577 `03b_code-critic_findings` 참고-1). 이 주석을 믿고 "어느 테스트가 이 목으로 보호되는지"를 판단하면 오판한다. (2) 목의 `drag`는 no-op이라 손잡이를 실제로 롱프레스해 끌리는지·순서가 실제로 바뀌는지는 jest가 원리적으로 못 본다(지도 `viewOnly`·바텀시트 실제 열림과 동형 — 통과형 목 계열). `onDragEnd` 직접 발화(테스트가 `list.props.onDragEnd({data})` 호출)로 배선은 잠기지만, 실제 제스처는 6-b 실기(`planb-manual-normal`/`-fallback` 프리뷰, 롱프레스→끌기)로만 확인된다.
 
 ## features 경계
 
-- **`features` 간 import 금지에 기계 강제가 없는 feature가 있다** → `eslint.config.js`의 `FEATURES` 배열이 `['onboarding','home']`뿐이라 `itinerary`·`trip`·`explore`는 zone 검사 밖이다. 관례(조합은 `pages` 전담)로 지켜질 뿐, 어겨도 lint는 안 걸린다.
+- **`features` 간 import 금지에 기계 강제가 없는 feature가 있다** → `eslint.config.js`의 `FEATURES` 배열이 `['onboarding','home']`뿐이라 `itinerary`·`trip`·`explore`·`settings`·`notification`은 zone 검사 밖이다(`settings`는 `settingsBoundary.test.ts` 소스 스캔이 유일한 그물, TRIP-605 실측 — `notification`은 그 스캔조차 없어 **완전 무심판**, TRIP-607 실측). 관례(조합은 `pages` 전담)로 지켜질 뿐, 어겨도 lint는 안 걸린다.
 
 ## 작업 관례
 
 - **엣지 케이스 화면을 눈으로 보려면** 목을 만들지 말고 `src/app/_dev/preview.tsx`에 상태를 추가한다.
+- **컨테이너/뷰가 한 파일에 있으면 프리뷰가 컨테이너의 import 사슬을 전이 로드한다** → `preview.tsx`가 화면의 순수 뷰만 태우려 해도, 뷰를 컨테이너 파일(`XxxScreen.tsx`)에서 가져오면 그 파일 최상단의 컨테이너 전용 import(`usePreferences` 등 `@/shared/api`로 이어지는 훅)가 모듈 평가 시점에 함께 실행돼 `devPreviewMap.test.tsx` 류의 "프리뷰는 네트워크 계층을 로드하면 안 된다" 목이 로드 시점에 throw한다(TRIP-610 실측 — 개념 [[모듈 로드 크래시 연쇄]] §TRIP-610). 새로 컨테이너+순수뷰 분리 화면을 프리뷰에 심을 때는 뷰를 처음부터 별 파일(`XxxView.tsx`, api import 0)로 두고 프리뷰가 그 파일에서만 import한다.
 - **화면 비주얼**은 `figma-screen-impl` 스킬 절차를 따른다(밴드 맵은 `spec-perception/reference/figma-structure.md`).
 
 ## 유지

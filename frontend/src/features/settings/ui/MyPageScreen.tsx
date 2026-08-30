@@ -55,6 +55,8 @@ export interface MyPageScreenProps {
   cards: ReactNode;
   /** 활성 버킷이 비었으면 빈 상태를 그린다. */
   activeEmpty: boolean;
+  /** 스타일 요약 카드(l03) — 페이지가 조회·조립해 내린다. 프로필↔세그먼트 사이에 놓인다. */
+  styleCard?: ReactNode;
   onPressCreateTrip: () => void;
   /** 지난 여행(종료) 섹션 노출 여부(활성 탭이 '종료'면 top 목록이 대신 진다). */
   showPast: boolean;
@@ -95,6 +97,7 @@ export function MyPageScreen({
   onChangeSegment,
   cards,
   activeEmpty,
+  styleCard,
   onPressCreateTrip,
   showPast,
   pastCards,
@@ -125,6 +128,8 @@ export function MyPageScreen({
             counts={counts}
             onPressEdit={onPressEdit}
           />
+
+          {styleCard}
 
           <TripStatusSegment active={active} onChange={onChangeSegment} />
 
