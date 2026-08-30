@@ -44,6 +44,7 @@
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/noMswInStaticGraph.test.ts`  →  (export 없음)
 - `src/__tests__/noStepCountStructure.test.ts`  →  (export 없음)
+- `src/__tests__/notificationKindGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingPrefStructure.test.ts`  →  (export 없음)
@@ -151,6 +152,7 @@
 ## src/app/settings/
 - `src/app/settings/index.tsx`  →  (export 없음)
 - `src/app/settings/location.tsx`  →  (export 없음)
+- `src/app/settings/notifications.tsx`  →  (export 없음)
 
 ## src/app/stays/
 - `src/app/stays/[stayId].tsx`  →  (export 없음)
@@ -318,6 +320,16 @@
 - `src/features/itinerary/ui/SlotTimeSheet.tsx`  →  SlotTimeSheetProps · SlotTimeSheet
 - `src/features/itinerary/ui/TimelineScreen.tsx`  →  ItineraryHeaderData · TimelineScreenProps · TimelineScreen
 - `src/features/itinerary/ui/ZeroCandidateScreen.tsx`  →  ZeroCandidateScreenProps · ZeroCandidateScreen
+
+## src/features/notification/model/
+- `src/features/notification/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
+- `src/features/notification/model/useToggles.ts`  →  ToggleChannel · ToggleOutcome · UseTogglesResult · useToggles
+
+## src/features/notification/ui/
+- `src/features/notification/ui/NotificationGlyphs.tsx`  →  NotifBackChevronGlyph · NotifInfoGlyph · NotifWarningGlyph
+- `src/features/notification/ui/NotificationSettingsScreen.tsx`  →  ToggleValueMap · NotificationSettingsScreenProps · NotificationSettingsScreen
+- `src/features/notification/ui/PermissionBanner.tsx`  →  PermissionBanner
+- `src/features/notification/ui/ToggleRow.tsx`  →  ToggleRowProps · ToggleRow
 
 ## src/features/onboarding/model/
 - `src/features/onboarding/model/preferenceInput.ts`  →  PreferenceDraftValues · STYLE · toPreferenceInput
@@ -652,6 +664,12 @@
 ## src/pages/settings-location/ui/
 - `src/pages/settings-location/ui/LocationConsentPage.tsx`  →  LocationConsentPage
 
+## src/pages/settings-notifications/
+- `src/pages/settings-notifications/index.ts`  →  NotificationSettingsPage
+
+## src/pages/settings-notifications/ui/
+- `src/pages/settings-notifications/ui/NotificationSettingsPage.tsx`  →  NotificationSettingsPage
+
 ## src/pages/settings/
 - `src/pages/settings/index.ts`  →  SettingsPage
 
@@ -948,6 +966,10 @@
 - `src/shared/map/index.ts`  →  KakaoMapView · type KakaoMapViewProps · REGISTERED_DOMAIN · type MapCenter · type MapPin · type KakaoMapMessage
 - `src/shared/map/mapHtml.ts`  →  MapCenter · MapPin · KakaoMapMessage · REGISTERED_DOMAIN · MAP_LOAD_FAILED_MESSAGE · buildMapHtml
 
+## src/shared/push/
+- `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus
+- `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
+
 ## src/shared/storage/
 - `src/shared/storage/index.ts`  →  TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken
 
@@ -973,4 +995,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 659개 파일
+합계 671개 파일

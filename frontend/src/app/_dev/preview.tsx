@@ -77,6 +77,10 @@ import {
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
+import {
+  NotificationSettingsScreen,
+  type ToggleValueMap,
+} from '@/features/notification/ui/NotificationSettingsScreen';
 import { buildSettingsSections } from '@/features/settings/model/settingsSections';
 import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog';
 import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
@@ -935,6 +939,17 @@ const MY_STAYS_PREVIEW_ROWS: MyStayRowVM[] = [
     baseAssignmentId: null,
   },
 ];
+
+// l02 알림 설정(TRIP-607) — 6종 기본값(SLOT_PRE·PLAN_B 는 푸시 OFF·인앱 ON, 나머지 5종 둘 다 ON).
+// default·permission-denied 두 얼굴이 이 한 벌을 공유한다(권한 게이트는 pushColumnAvailable 로 가름).
+const NOTIF_PREVIEW_VALUES: ToggleValueMap = {
+  STAY: { pushEnabled: true, inAppEnabled: true },
+  TRIP_PRE: { pushEnabled: true, inAppEnabled: true },
+  TRIP_DAY: { pushEnabled: true, inAppEnabled: true },
+  SLOT_PRE: { pushEnabled: false, inAppEnabled: true },
+  PLAN_B: { pushEnabled: false, inAppEnabled: true },
+  REFLECTION: { pushEnabled: true, inAppEnabled: true },
+};
 
 // l03 스타일 요약 카드(TRIP-606) — 정식(칩+3축 dot 게이지+메타+상세 진입)·미달(안내 한 줄) 두 얼굴.
 // dot 채움 색·빈 dot 토큰·칩 알약은 jest 사각(글리프 fill 함정)이라 이 키가 육안 대조 자리다.
@@ -2606,6 +2621,38 @@ const PREVIEW_STATES: PreviewState[] = [
         isEmpty
         onConfirmBaseToggle={noop}
         onPressExplore={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l02 알림 설정 default(1600:2388) — 6행×2열(COMMUNITY 숨김)·상단 정보 배너·하단 SYSTEM 줄. 토글
+  // 빨강/회색·thumb 위치·정보 배너 틴트는 jest 사각이라 이 키가 육안 대조 자리다.
+  {
+    key: 'l02-notification-default',
+    label: '알림 설정 · 6행 default(l02)',
+    login: null,
+    render: () => (
+      <NotificationSettingsScreen
+        values={NOTIF_PREVIEW_VALUES}
+        pushColumnAvailable
+        onToggle={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l02 permission-denied(1601:2388) — 상단 대시 배너+[설정 이동]·열 헤더 "권한 필요" 칩·푸시 열
+  // 전부 회색 비활성·인앱은 정상·하단 푸시-누적 줄. 대시·칩·dimmed 는 6-b 실기 확인.
+  {
+    key: 'l02-notification-denied',
+    label: '알림 설정 · OS 권한 거부(l02)',
+    login: null,
+    render: () => (
+      <NotificationSettingsScreen
+        values={NOTIF_PREVIEW_VALUES}
+        pushColumnAvailable={false}
+        onToggle={noop}
+        onOpenSettings={noop}
         onPressBack={noop}
       />
     ),
