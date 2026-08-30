@@ -228,7 +228,7 @@
     "8": {
       "12": {
         "next_page": 1,
-        "completed": true
+        "completed": false
       },
       "14": {
         "next_page": 1,
@@ -16983,9 +16983,9 @@
     "988466": "20250807151602",
     "998882": "20250910144924"
   },
-  "next_area": "3",
+  "next_area": "4",
   "last_run": {
-    "at": "2026-08-29T21:35:32.960880+00:00",
+    "at": "2026-08-30T21:55:04.246324+00:00",
     "area_codes": [
       "1",
       "2",
@@ -17012,7 +17012,7 @@
     ],
     "http_calls": 222,
     "passed": 0,
-    "skipped_unchanged": 16507,
+    "skipped_unchanged": 16385,
     "per_area": {
       "1": {
         "calls": 25,
@@ -17052,7 +17052,7 @@
       "8": {
         "calls": 3,
         "passed": 0,
-        "skipped": 82
+        "skipped": 60
       },
       "31": {
         "calls": 42,
@@ -17082,7 +17082,7 @@
       "36": {
         "calls": 15,
         "passed": 0,
-        "skipped": 1380
+        "skipped": 1280
       },
       "37": {
         "calls": 14,
