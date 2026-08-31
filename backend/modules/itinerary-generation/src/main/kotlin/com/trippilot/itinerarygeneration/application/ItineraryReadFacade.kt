@@ -51,6 +51,7 @@ class ItineraryReadFacade(
                     orderIndex = it.orderIndex,
                     startAt = it.startAt,
                     endAt = it.endAt,
+                    isFixed = it.isFixed,
                     endsNextDay = it.endsNextDay,
                 )
             }

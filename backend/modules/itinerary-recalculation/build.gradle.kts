@@ -21,5 +21,7 @@ dependencies {
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))
+    // 세션 서비스가 final 클래스라 상속 대역이 안 된다 — 소유 검증 규칙을 테스트가 다시 구현하지 않으려면 목이 필요하다.
+    testImplementation(libs.mockk)
     testImplementation(libs.kotest.property)
 }

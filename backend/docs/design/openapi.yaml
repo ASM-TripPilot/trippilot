@@ -1317,6 +1317,36 @@ paths:
         '200': { description: 반영됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanSession' } } } }
         '404': { description: 여행 없음/타 계정/세션 없음 }
         '409': { description: 초안 없음(산출 중·대안 없음·이미 끝남) · 그 사이 일정이 교체됨 · 확정된 일정 }
+  /trips/{tripId}/replan-sessions/{sessionId}/diff:
+    parameters:
+      - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [replan]
+      summary: 확정 전 전후 비교(i18)
+      description: >
+        **읽기만** 한다 — 확정 전까지 원 일정에는 어떤 쓰기도 없다(INV-U4-05).
+
+
+        비교를 **서버가 계산해** 내리는 이유는 판정이 업무 규칙이기 때문이다(BR-U4-29) —
+        무엇이 `MOVED` 이고 무엇이 `FIXED` 인가, 거리를 하나라도 모를 때 총합을 어떻게 다루는가.
+        화면이 그 규칙을 다시 구현하면 두 곳에 흩어지고, 한쪽만 고쳐도 아무도 모른 채
+        **사용자가 틀린 근거로 확정한다.**
+
+
+        빠진 항목은 `REMOVED` 로 반드시 실린다(BR-U4-25 제외·이월 명시) — 조용히 사라지지 않는다.
+
+
+        아직 초안이 없으면(`COLLECTING`·`SOLVING`·대안 없음) **404 가 아니라 `ready=false`** 다.
+        404 로 두면 "세션이 없다"와 "산출 중"이 같은 응답이 되어 화면이 로딩(`i12`)을 그릴지
+        오류를 그릴지 정하지 못한다.
+
+
+        ⚠ **소요시간 필드가 없다**(INV-3) — 전후 스냅숏은 시각과 순서만 다룬다.
+        `returnTimeDeltaMinutes` 는 이동 소요가 아니라 **복귀 시각이 밀린 정도**다.
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/ReplanDiff' } } } }
+        '404': { description: 여행/세션 없음 · 타 계정 }
   /trips/{tripId}/replan-sessions/{sessionId}/cancel:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2050,6 +2080,77 @@ components:
           items: { type: string, format: uuid }
           description: "'건너뛰기'가 채운다 — 재계획 시 후보에서 뺀다"
         triggerId: { type: string, format: uuid, nullable: true, description: 자동 진입이면 근거 트리거. 수동이면 null }
+    ReplanDiff:
+      type: object
+      required: [ready, status, before, after, entries]
+      properties:
+        ready:
+          type: boolean
+          description: 초안이 나왔는가. false 면 나머지는 비어 있고 화면은 진행 상태를 그린다.
+        status: { type: string, enum: [COLLECTING, SOLVING, DRAFT, APPLIED, CANCELED, FAILED, NO_SOLUTION] }
+        date: { type: string, format: date, nullable: true, description: 재계획 대상 날짜. 비교는 이 하루만 본다 }
+        before:
+          type: array
+          description: 원 일정(그 날짜분).
+          items: { $ref: '#/components/schemas/ReplanDiffSlot' }
+        after:
+          type: array
+          description: 초안. **확정 전까지 원 일정에 반영되지 않는다**(INV-U4-05).
+          items: { $ref: '#/components/schemas/ReplanDiffSlot' }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/ReplanDiffEntry' }
+        impact:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ReplanImpact' }]
+
+    ReplanDiffSlot:
+      type: object
+      required: [slotKey, startAt, endAt, isFixed, endsNextDay]
+      description: '**소요시간이 없다**(INV-3) — 시각과 순서만.'
+      properties:
+        slotKey: { type: string, description: '경계 키 `{date}#{poiId}`(BR-U2-04) — 행이 갈려도 짝이 유지된다' }
+        startAt: { type: string, example: '10:00' }
+        endAt: { type: string, example: '11:00' }
+        isFixed: { type: boolean, description: 고정이라 손대지 않은 슬롯(BR-U4-18) }
+        endsNextDay:
+          type: boolean
+          description: >
+            자정 넘김(HC4). true 면 `endAt` 이 `startAt` 보다 이르다 — 익일 시각이라는 뜻이고,
+            복귀 시각 비교도 이 값을 반영해 계산한다.
+
+    ReplanDiffEntry:
+      type: object
+      required: [slotKey, change]
+      properties:
+        slotKey: { type: string }
+        change:
+          type: string
+          enum: [ADDED, REMOVED, MOVED, FIXED, UNCHANGED]
+          description: '`REMOVED` 는 확정 전에 반드시 보여야 한다(BR-U4-25).'
+        beforeStart: { type: string, nullable: true, example: '10:00' }
+        afterStart: { type: string, nullable: true, example: '13:00' }
+
+    ReplanImpact:
+      type: object
+      required: [visitCountDelta]
+      description: 영향 지표 3종(BR-U4-29).
+      properties:
+        visitCountDelta: { type: integer, description: 방문 수 변화 }
+        returnTimeDeltaMinutes:
+          type: integer
+          format: int64
+          nullable: true
+          description: >
+            복귀(마지막 일정 종료) 시각이 밀린 정도(분). **이동 소요시간이 아니다**(INV-3).
+            비교할 슬롯이 한쪽이라도 없으면 null.
+        totalDistanceDeltaM:
+          type: integer
+          nullable: true
+          description: >
+            총 이동 거리 변화(m). **어느 한쪽이라도 거리를 모르면 null** 이다 —
+            0 으로 채우면 "거리가 줄었다"는 거짓 요약이 된다.
+
     ReplanSession:
       type: object
       required: [sessionId, tripId, itineraryId, scope, fromInstant, originKind, originEstimated, status, createdAt]

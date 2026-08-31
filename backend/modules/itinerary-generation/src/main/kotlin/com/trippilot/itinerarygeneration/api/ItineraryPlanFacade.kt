@@ -20,6 +20,8 @@ interface ItineraryPlanFacade {
  * 계획 슬롯 한 칸(api-safe).
  *
  * @property slotKey 경계 키 `"{date}#{poiId}"`(BR-U2-04) — 실적과 견주는 유일한 연결 고리다.
+ * @property isFixed 사용자가 시각을 못 박은 슬롯(BR-U4-18). **기본값을 두지 않는다** — 모르는 채
+ *   false 로 넘기면 "고정이 아니다"라는 없는 사실이 생기고, 재계획 전후 비교가 그것을 그대로 보여준다.
  * @property endsNextDay 자정을 넘기는 슬롯(HC4). true 면 [endAt] 이 [startAt] 보다 이르다.
  */
 data class PlannedSlotView(
@@ -29,5 +31,6 @@ data class PlannedSlotView(
     val orderIndex: Int,
     val startAt: LocalTime,
     val endAt: LocalTime,
+    val isFixed: Boolean,
     val endsNextDay: Boolean,
 )

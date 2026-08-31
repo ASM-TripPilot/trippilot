@@ -94,7 +94,7 @@ class TripRecordServiceTest : StringSpec({
 
     fun slot(date: LocalDate, poi: UUID, order: Int, start: String = "10:00") = PlannedSlotView(
         slotKey = "$date#$poi", date = date, poiId = poi, orderIndex = order,
-        startAt = LocalTime.parse(start), endAt = LocalTime.parse("11:30"), endsNextDay = false,
+        startAt = LocalTime.parse(start), endAt = LocalTime.parse("11:30"), isFixed = false, endsNextDay = false,
     )
 
     fun arrived(checks: Checks, date: LocalDate, poi: UUID, at: String = "03:00") = checks.save(

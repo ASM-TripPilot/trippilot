@@ -18,8 +18,14 @@ import java.time.LocalTime
  */
 class ReplanDiffTest : StringSpec({
 
-    fun slot(key: String, start: String, end: String, fixed: Boolean = false, distanceM: Int? = null) =
-        SlotView(key, LocalTime.parse(start), LocalTime.parse(end), fixed, distanceM)
+    fun slot(
+        key: String,
+        start: String,
+        end: String,
+        fixed: Boolean = false,
+        distanceM: Int? = null,
+        endsNextDay: Boolean = false,
+    ) = SlotView(key, LocalTime.parse(start), LocalTime.parse(end), fixed, endsNextDay, distanceM)
 
     val a = "2026-08-11#aaa"
     val b = "2026-08-11#bbb"
@@ -93,6 +99,24 @@ class ReplanDiffTest : StringSpec({
         ).impact
         impact.totalDistanceDeltaM shouldBe -1500
         impact.visitCountDelta shouldBe 0
+    }
+
+    "자정을 넘긴 슬롯이 마지막이다 — 시각으로만 재면 부호까지 뒤집힌다(HC4)" {
+        // 원 일정은 22:00 에 시작해 **익일** 00:30 에 끝난다. 초안은 19:00 에 끝난다 —
+        // 진짜로는 5시간 30분 당겨지는데, endsNextDay 를 빼고 재면 00:30 이 하루 중 가장 이른
+        // 시각이라 11:00 이 "마지막"으로 뽑혀 +8시간(늦어짐)이 나온다.
+        val before = listOf(slot(a, "10:00", "11:00"), slot(b, "22:00", "00:30", endsNextDay = true))
+        val after = listOf(slot(a, "10:00", "19:00"))
+
+        ReplanDiff.of(before, after).impact.returnTimeDelta shouldBe Duration.ofMinutes(-330)
+    }
+
+    "자정 넘김 여부가 달라지면 MOVED — 00:30 오늘과 00:30 익일은 다른 시점이다" {
+        val result = ReplanDiff.of(
+            listOf(slot(a, "22:00", "00:30", endsNextDay = false)),
+            listOf(slot(a, "22:00", "00:30", endsNextDay = true)),
+        )
+        result.entries.single().change shouldBe Change.MOVED
     }
 
     "빈 일정 — 비교할 대상이 없으면 복귀 시각 변화도 없다" {
