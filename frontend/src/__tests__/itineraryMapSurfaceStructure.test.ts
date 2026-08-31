@@ -47,6 +47,9 @@ const LOCKED_CALLERS = [
   // TRIP-571 j03 오늘의 회고 지도 — 방문 동선 글랜스(viewOnly ON). 실 좌표 있을 때만 렌더(계약에
   // 좌표 부재라 오늘은 placeholder 로 접힘)이나 소스에 태그가 있어 옵트인 명부에 등재.
   'features/reflection/ui/DailyReflectionScreen.tsx',
+  // TRIP-572 j04 여행 요약 지도 — 방문 순서 글랜스(viewOnly ON). DailyReflectionScreen 동형(좌표
+  // 있을 때만 렌더, 없으면 placeholder). test-designer 가 처음부터 등재(571·563·442 3번째 재발 방지).
+  'features/reflection/ui/TripSummaryScreen.tsx',
 ];
 
 /** 지도 고정을 **켜면 안 되는** 호출부. 앞의 넷은 지도를 움직여 좌표를 확정하는 것이 기능 자체라
@@ -300,13 +303,13 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
       ...EXPLORE_CALLERS,
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 13개 = 총 14개).
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 14개 = 총 15개).
     //    Q5 로 TimelineScreen 이 지도 태그 2개(글랜스+h26)를 가져 6→8, TRIP-397 LiveMapScreen 이
     //    1개 더해 8→9, TRIP-442 live-location 이 1개 더해 9→10, TRIP-563 planb 2화면(i13·i16)이
     //    2개 더해 10→12, TRIP-565 j01 방문 기록 지도가 1개 더해 12→13, TRIP-571 j03 오늘의 회고
-    //    지도가 1개 더해 13→14 로 늘었다(설계된 갱신 · AC-8).
+    //    지도가 1개 더해 13→14, TRIP-572 j04 여행 요약 지도가 1개 더해 14→15 로 늘었다(설계된 갱신 · AC-8).
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(14);
+    expect(defaultTags).toHaveLength(15);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);

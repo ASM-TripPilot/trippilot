@@ -43,6 +43,7 @@ import { SyncBadge } from '@/features/record/ui/SyncBadge';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
 import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
+import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -2259,6 +2260,103 @@ const PREVIEW_STATES: PreviewState[] = [
         onEnterEdit={noop}
         onConfirm={noop}
         onSaveEdit={noop}
+      />
+    ),
+  },
+  // j04 여행 요약 3키(TRIP-572) — 순수 뷰(`TripSummaryScreen`)를 격리 렌더한다(`@/shared/api` 값
+  // import 0 이라 프리뷰 지뢰 목 통과, 컨테이너를 별 파일로 분리해 import 사슬 전이 로드 없음).
+  // jest 는 testID·행동만 잠그고 stats 3셀·지도 히어로·날짜카드·방문목록 레이아웃·코랄 토큰·공유
+  // 비활성 톤은 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP, 이 3키가 유일한 육안 대조 자리.
+  {
+    // default(MAP) — stats 3셀 + 지도 히어로(좌표 주입) + 날짜카드 3장. 실화면은 좌표 계약 부재라 늘
+    // map-pending 으로 접히므로(share-off 키 참고) MAP 히어로 자체는 이 키가 유일한 대조 자리.
+    key: 'trip-summary-map',
+    label: 'j04 여행 요약 · default(MAP)',
+    login: null,
+    render: () => (
+      <TripSummaryScreen
+        stats={{ totalVisits: 12, distanceText: '38km', totalPhotos: 24 }}
+        distanceSourceLabel="근사"
+        view="MAP"
+        mapCenter={{ lat: 35.1531, lng: 129.1187 }}
+        mapPins={[
+          { number: 1, lat: 35.1531, lng: 129.1187 },
+          { number: 2, lat: 35.1264, lng: 129.0403 },
+          { number: 3, lat: 35.1587, lng: 129.1604 },
+        ]}
+        dayCards={[
+          {
+            key: '2026-06-11',
+            dateLabel: '6월 11일 목요일',
+            countLabel: 'Day1 · 5곳',
+            subtitle: '광안리 해변→감천문화마을',
+          },
+          {
+            key: '2026-06-12',
+            dateLabel: '6월 12일 금요일',
+            countLabel: 'Day2 · 4곳',
+            subtitle: '해운대 해변→전포 카페거리',
+          },
+          {
+            key: '2026-06-13',
+            dateLabel: '6월 13일 토요일',
+            countLabel: 'Day3 · 3곳',
+            subtitle: '감천문화마을',
+          },
+        ]}
+        orderedVisits={[]}
+        shareEnabled
+        onShare={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    // 위치 전무(VISIT_LIST) — 거리 셀 "—" + 지도 대신 순서 방문 목록(BR-U5-39). 날짜카드 없음.
+    key: 'trip-summary-visit-list',
+    label: 'j04 여행 요약 · 위치 전무(방문 목록)',
+    login: null,
+    render: () => (
+      <TripSummaryScreen
+        stats={{ totalVisits: 12, distanceText: '—', totalPhotos: 24 }}
+        distanceSourceLabel="근사"
+        view="VISIT_LIST"
+        dayCards={[]}
+        orderedVisits={[
+          { order: 1, dayLabel: 'Day1', place: '광안리 해변' },
+          { order: 2, dayLabel: 'Day1', place: '감천문화마을' },
+          { order: 3, dayLabel: 'Day2', place: '해운대 해변' },
+          { order: 4, dayLabel: 'Day3', place: '전포 카페거리' },
+        ]}
+        shareEnabled
+        onShare={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    // 엣지 — 공유 비활성(ready:false → shareEnabled:false) + 좌표 미주입 → map-pending 자리표시.
+    // 두 엣지(비활성 공유 · 지도 준비 중)를 한 화면에서 대조한다(실화면 MAP 의 실제 런타임 얼굴).
+    key: 'trip-summary-share-off',
+    label: 'j04 여행 요약 · 공유 비활성·지도 준비 중',
+    login: null,
+    render: () => (
+      <TripSummaryScreen
+        stats={{ totalVisits: 12, distanceText: '38km', totalPhotos: 24 }}
+        distanceSourceLabel="근사"
+        view="MAP"
+        dayCards={[
+          {
+            key: '2026-06-11',
+            dateLabel: '6월 11일 목요일',
+            countLabel: 'Day1 · 5곳',
+            subtitle: '광안리 해변→감천문화마을',
+          },
+        ]}
+        orderedVisits={[]}
+        shareEnabled={false}
+        onShare={noop}
+        onBack={noop}
       />
     ),
   },

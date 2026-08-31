@@ -71,6 +71,7 @@
 - `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionFallbackStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionStructure.test.ts`  →  (export 없음)
+- `src/__tests__/reflectionSummaryStructure.test.ts`  →  (export 없음)
 - `src/__tests__/regionCatalogStructure.test.ts`  →  (export 없음)
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
@@ -215,6 +216,9 @@
 
 ## src/app/trips/[tripId]/records/reflection/
 - `src/app/trips/[tripId]/records/reflection/[date].tsx`  →  (export 없음)
+
+## src/app/trips/[tripId]/records/
+- `src/app/trips/[tripId]/records/summary.tsx`  →  (export 없음)
 
 ## src/app/trips/new/
 - `src/app/trips/new/_layout.tsx`  →  (export 없음)
@@ -429,15 +433,20 @@
 - `src/features/reflection/model/missingParts.ts`  →  MissingParts · missingParts
 - `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
 - `src/features/reflection/model/statsCard.ts`  →  statsCard
+- `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
+- `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
 - `src/features/reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
+- `src/features/reflection/model/useTripSummary.ts`  →  UseTripSummaryResult · useTripSummary
 
 ## src/features/reflection/ui/
 - `src/features/reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
 - `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · DailyReflectionScreenProps · DailyReflectionScreen
+- `src/features/reflection/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
 - `src/features/reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
 - `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph
 - `src/features/reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
 - `src/features/reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
+- `src/features/reflection/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
 
 ## src/features/settings/model/
 - `src/features/settings/model/deletionScope.ts`  →  DELETION_SCOPE
@@ -809,6 +818,12 @@
 ## src/pages/trip-records/ui/
 - `src/pages/trip-records/ui/TripRecordsPage.tsx`  →  TripRecordsPageProps · TripRecordsPage
 
+## src/pages/trip-summary/
+- `src/pages/trip-summary/index.ts`  →  TripSummaryPage
+
+## src/pages/trip-summary/ui/
+- `src/pages/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
+
 ## src/shared/api/generated/account/
 - `src/shared/api/generated/account/account.ts`  →  getMe · getGetMeQueryKey · getGetMeQueryOptions · GetMeQueryResult · GetMeQueryError · useGetMe · postMeDeletion · getPostMeDeletionMutationOptions · PostMeDeletionMutationResult · PostMeDeletionMutationError · usePostMeDeletion · deleteMeDeletion · getDeleteMeDeletionMutationOptions · DeleteMeDeletionMutationResult · DeleteMeDeletionMutationError · useDeleteMeDeletion · getMeExport · getGetMeExportQueryKey · getGetMeExportQueryOptions · GetMeExportQueryResult · GetMeExportQueryError · useGetMeExport
 
@@ -1116,4 +1131,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 756개 파일
+합계 765개 파일
