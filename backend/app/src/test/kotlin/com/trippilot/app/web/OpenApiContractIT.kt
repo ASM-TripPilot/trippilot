@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.core.io.ClassPathResource
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping
+import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.Yaml
 
 /**
@@ -75,6 +76,34 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
         assertTrue(dangling.isEmpty()) {
             "components.schemas 에 없는 참조:\n  " + dangling.joinToString("\n  ") +
                 "\n(정의가 components.responses 절에 들어가지 않았는지 보라)"
+        }
+    }
+
+    /**
+     * 같은 키가 **두 번** 선언돼 있지 않은가.
+     *
+     * 왜 필요한가: YAML 은 중복 키에서 **뒤에 온 것이 이긴다.** 예외도 경고도 없다. 그래서 위의
+     * 두 게이트가 **원리적으로** 못 본다 — 경로는 멀쩡하고 참조도 풀린다. 먼저 선언한 스키마가
+     * 조용히 사라질 뿐이다.
+     *
+     * 실측: 여러 브랜치를 합치며 `Notification`·`NotificationList`·`PushTokenResponse` 등이 중복
+     * 선언됐고, 백엔드 게이트는 전부 초록인 채로 프론트 `pnpm codegen` 이 막혔다(FE PR #403 에서
+     * 손으로 지웠다). 정본 파일 하나를 여러 작업이 함께 만지는 구조라 재발이 예정돼 있다.
+     *
+     * 문서 전체를 본다 — `paths`·`components.schemas` 뿐 아니라 어느 매핑에서든 중복이면 실패다.
+     */
+    @Test
+    fun `openapi 에 중복 키가 없다 — 뒤에 온 것이 조용히 이긴다`() {
+        val strict = Yaml(LoaderOptions().apply { isAllowDuplicateKeys = false })
+
+        val failure = runCatching {
+            strict.load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
+        }.exceptionOrNull()
+
+        assertTrue(failure == null) {
+            "openapi.yaml 에 중복 키가 있다 — 먼저 선언한 쪽이 조용히 사라진다.\n" +
+                "  ${failure?.message?.replace("\n", "\n  ")}\n" +
+                "(브랜치를 합치며 스키마를 양쪽에서 덧붙이면 생긴다. 프론트 codegen 이 막힌다)"
         }
     }
 
