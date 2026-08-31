@@ -228,10 +228,10 @@ note = "PR #406 머지됨(2026-08-31)."
 id = "TRIP-536"
 ticket = "TRIP-536"
 title = "일정 IT 가 비동기 2차 생성을 기다리지 않는다 — 404 자리에 409 가 온다"
-status = "todo"
+status = "pr_open"
 migration = false
 touches = [
-  "backend/app/src/test/kotlin/com/trippilot/app/web",
+  "backend/app/src/test/kotlin/com/trippilot/app",
 ]
 note = """
 **한때 닫으려 했다가 철회한 노드다.** PR #379(ItineraryApiIT 의 awaitComplete 누락)로 해결됐다고
@@ -252,8 +252,12 @@ note = """
 테스트(ItineraryOnePerTripIT)는 남겼다 — 2.10부터 있던 제약에 확인 테스트가 없었고, 그 공백이
 오진을 가능하게 했다.
 
-처방: 일정을 만들고 곧바로 요청하는 IT 들이 생성 완료를 기다리게 한다(#379 의 awaitComplete 형태).
-어느 테스트가 그 창에 걸리는지 전수로 좁히는 것이 이 노드의 절반이다.
+처방(PR #414): 낡은 전제를 믿던 두 자리를 고쳤다 — `슬롯 키 형식이…` 에 awaitComplete 추가,
+ReplanApiIT.generate 가 마무리까지 대기. 그리고 원인의 절반이던 tripOneDay 주석을 사실로 바꿨다
+("2차 없이 즉시 COMPLETE" → TRIP-511 이후 하루 여행도 PARTIAL 이다).
+
+⚠ 재계획은 PARTIAL 을 막지 않으므로 ReplanApiIT:111 의 정확한 기전은 **단정하지 않았다.**
+전체 스위트 5회 연속 초록으로 관측되지만, 확률적 실패라 "없다"의 증명은 아니다.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
