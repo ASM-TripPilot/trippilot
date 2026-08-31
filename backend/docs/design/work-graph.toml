@@ -1,0 +1,309 @@
+# 백엔드 남은 작업 그래프 — 노드·간선 정본
+#
+# ## 왜 파일로 두나
+#
+# 착수 순서를 표로 적어 두면 **다시 계산이 안 되고, 검증했는지가 기록되지 않고, 파일 충돌을
+# 사람 기억에 의존한다.** 티켓 하나가 늘 때마다 표 전체를 손으로 다시 짜야 한다.
+# 여기 적어 두면 `backend/scripts/work_graph.py` 가 층·충돌·mermaid 를 계산해 낸다.
+#
+# ## 노드는 티켓이 아니라 **머지 가능한 최소 단위(PR 하나)** 다
+#
+# 이 리포에서 실측으로 둘 다 나왔다 — 코드는 다 됐는데 열려 있는 티켓, 티켓 없이 코드 주석에만
+# 있는 구멍. 그래서 `ticket` 은 비어 있을 수 있고, 그것이 정상이다.
+#
+# ## touches 는 **예상**이다
+#
+# 착수 전에는 실제 diff 를 모른다. 자원 배타(같은 파일·같은 마이그레이션 번호)를 기계가 잡게 하려고
+# 적어 두는 값이고, 착수해서 실제 편집 범위가 달라지면 그때 고친다.
+#
+# ## 자원 배타는 **간선이 아니다**
+#
+# 같은 파일·같은 Flyway 번호를 만지는 관계에는 순서가 없다 — 먼저 손댄 쪽이 이긴다. 그걸 간선으로
+# 적으면 없는 순서가 생겨 층이 왜곡된다. `touches` 에 적어 두면 스크립트가 층별로 파생해 준다.
+#
+# ## verified = 이 파일의 값어치
+#
+# 간선을 주장만 하고 확인하지 않은 상태가 눈에 보여야 한다. 확인 방법은 역검증과 같다 —
+# **간선을 끊고 후행을 빌드해 실제로 깨지는가.** 안 깨지면 그 간선은 상상이었으니 지운다.
+#
+# 갱신: 2026-08-31 (TRIP-559 PR #406 시점)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 착수 가능 — 선행 없음
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "TRIP-249"
+ticket = "TRIP-249"
+title = "소셜 로그인 에러 계약 정합 5건 (400 미선언·연령 403/422·미매핑 500·Apple 미지원·TokenPair 3필드)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/in/web",
+  "backend/docs/design/openapi.yaml",
+]
+
+[[nodes]]
+id = "TRIP-481"
+ticket = "TRIP-481"
+title = "슬롯 교체 후보 반경 조회가 항상 0건 — h12·h14·h18 무력화"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/SlotCandidateService.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/LocalSlotCandidateSource.kt",
+]
+note = "버그. 반경 질의가 0건을 내는 원인이 place-data 쪽인지 조회 파라미터인지 착수 시 가른다."
+
+[[nodes]]
+id = "TRIP-614"
+ticket = "TRIP-614"
+title = "제휴 고지 '다시 보지 않기' 계정 단위 저장 — account_setting (O-U6-5 · BR-U6-33)"
+status = "todo"
+migration = true
+touches = [
+  "backend/app/src/main/resources/db/migration",
+  "backend/modules/affiliate-link",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+account_setting 테이블은 **아직 없다**(실측: 마이그레이션·코드 어디에도 없음).
+팀 결정(2026-08-31): **key-value 한 테이블**로 간다. 표면마다 컬럼을 늘리면 설정이 하나 생길
+때마다 마이그레이션이 필요해지고, 그 순간 설정 추가가 스키마 변경 작업이 된다.
+이 노드가 테이블을 소유한다 — 뒤에 오는 설정 저장은 키만 늘린다.
+"""
+
+[[nodes]]
+id = "TRIP-615"
+ticket = "TRIP-615"
+title = "Notification.actionType 확장 — PLANB_REPLAN·REFLECTION_DAILY·TRIP_SUMMARY·STAY_REGISTER + payload oneOf"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/notification",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+마이그레이션 **불필요** — V2.31 의 `action_type` 이 `varchar(24)` 이고 CHECK 제약이 없다.
+새 값 최장이 REFLECTION_DAILY(16자)라 그대로 들어간다. 티켓만 보면 스키마 작업으로 오해한다.
+"""
+
+[[nodes]]
+id = "TRIP-617"
+ticket = "TRIP-617"
+title = "여행 목록 집계 필드 — Trip.baseCount·itineraryDayCount · SavedStay.linkedTripIds (BR-U6-20·22)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/trip/src/main/kotlin/com/trippilot/trip/api/TripListFacade.kt",
+  "backend/modules/trip",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+집계는 **파생**이라 컬럼을 늘리지 않는다. 다만 여행(C4)이 숙소 거점 수와 일정 일수를 알려면
+다른 두 모듈을 읽어야 하는데, 그건 R1 상 각 모듈의 `..api..` 로만 가능하다 — 필요한 퍼사드가
+이미 열려 있는지 착수 전에 확인한다(없으면 여는 작업이 이 노드에 포함된다).
+"""
+
+[[nodes]]
+id = "TRIP-361"
+ticket = "TRIP-361"
+title = "trip_destination region_code 전환 (계약 변경)"
+status = "todo"
+migration = true
+touches = [
+  "backend/app/src/main/resources/db/migration",
+  "backend/modules/trip",
+  "backend/docs/design/openapi.yaml",
+]
+note = "FE TRIP-362(지역 목록 서버 전환)가 이 계약을 소비한다 — 먼저 열려야 그쪽이 짐작하지 않는다."
+
+[[nodes]]
+id = "OPENAPI-DUPKEY-GATE"
+ticket = ""
+title = "OpenApiContractIT 에 중복 스키마·경로 키 검사 추가"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/test/kotlin/com/trippilot/app",
+]
+note = """
+**티켓이 없다.** 스택 머지에서 openapi.yaml 의 스키마 키가 중복돼(Notification·PushTokenResponse 등)
+FE `pnpm codegen` 이 막힌 적이 있고, FE PR #403 에서 손으로 지웠다. YAML 은 뒤에 온 키가 이기므로
+`$ref` 검사로는 **원리적으로** 못 잡는다.
+openapi.yaml 을 건드리는 노드가 일곱이다(스크립트가 세어 준다) — 이 가드가 먼저 있으면 그 일곱이 안전해진다.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 선행 있음
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "TRIP-616"
+ticket = "TRIP-616"
+title = "Plan-B 민감도·전역 빈도 상한 저장·적용 — /me/planb-sensitivity (O-U6-2 · G-U6-4 · BR-U4-08)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/planb-detection",
+  "backend/modules/profile",
+  "backend/docs/design/openapi.yaml",
+]
+note = "key-value 로 가기로 했으므로 이 노드는 테이블을 만들지 않고 키만 얹는다."
+
+[[nodes]]
+id = "APPLE-JWKS"
+ticket = ""
+title = "Apple 로그인 id_token 서명검증(JWKS)·aud/iss/exp — 현재 fail-closed 로 비활성"
+status = "blocked"
+migration = false
+touches = [
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/out/external",
+]
+note = """
+**티켓이 없다.** 코드 주석에만 있다(AppleOAuthClient·AbstractOAuth2Client의 TODO(SECURITY)).
+MVP 는 소셜 로그인만인데 그 중 하나가 꺼져 있는 상태다. nonce·state 검증도 같이 비어 있다.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 우리가 못 푸는 간선 — 남의 작업·일정 대기
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "IDP-REGISTER"
+ticket = ""
+title = "Apple IdP 등록(팀 키·서비스 ID)"
+status = "external"
+owner = "운영"
+migration = false
+touches = []
+
+[[nodes]]
+id = "TRIP-463"
+ticket = "TRIP-463"
+title = "[AI] 슬롯 후보 경계 개통 — copick 실연동"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+
+[[nodes]]
+id = "SLOT-CANDIDATE-OPEN"
+ticket = ""
+title = "슬롯 후보 경로 http 모드 개통 — 현재 503 으로 닫혀 있다"
+status = "blocked"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/SlotCandidateService.kt",
+]
+note = "코드 주석에 '미개통'으로 남아 있다. 상대 경로가 열리기 전에는 우리가 할 게 없다."
+
+[[nodes]]
+id = "TRIP-433"
+ticket = "TRIP-433"
+title = "[AI] ReflectAgent 구현 — 방문 기록 기반 회고 생성"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+
+[[nodes]]
+id = "TRIP-595"
+ticket = "TRIP-595"
+title = "Reflect Phase 2 기반 — LlmPort 이미지 seam·동의 타입·어댑터"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/reflection",
+]
+note = """
+회고 AI 경로는 지금 미개통이고(ReflectionModeAnnouncer 가 '규칙 문장' 모드를 로그로 알린다),
+실제 생성은 TRIP-433 이 열려야 붙는다. seam·동의 타입까지는 선행 없이 먼저 할 수 있다.
+"""
+
+[[nodes]]
+id = "TRIP-434"
+ticket = "TRIP-434"
+title = "[AI] 페르소나 저장소 실구현 — StaticPersonaStore → 백엔드 API 연동"
+status = "blocked"
+migration = false
+touches = [
+  "backend/modules/profile",
+  "backend/docs/design/openapi.yaml",
+]
+note = "우리가 어떤 표면을 열지가 AI 쪽 소비 형태에 달렸다 — 계약 합의가 선행이다."
+
+[[nodes]]
+id = "TRIP-475"
+ticket = "TRIP-475"
+title = "[예약] 일정 생성 시간제약 재도입 — 플래그 on + deadline 재전송"
+status = "deferred"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation"]
+note = "2026-10 이후로 잡혀 있다. 일정 간선이지 기술 간선이 아니다."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 티켓 부채 — 코드 현실과 Jira 가 어긋난 것
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "TRIP-559"
+ticket = "TRIP-559"
+title = "재계획 확정 전 전후 비교 (US-PLANB-08)"
+status = "pr_open"
+migration = false
+touches = ["backend/modules/itinerary-recalculation", "backend/docs/design/openapi.yaml"]
+note = "PR #406 — CI 통과, 머지 대기."
+
+[[nodes]]
+id = "TRIP-536-CLOSE"
+ticket = "TRIP-536"
+title = "ItineraryApiIT 플레이크 티켓 닫기 — 가설된 원인과 실제가 달랐다"
+status = "todo"
+migration = false
+touches = []
+note = """
+티켓은 '공유 컨테이너에서 실문서 적재 IT와의 간섭'으로 적혀 있으나, 실제 원인은 @Async
+replaceIfCurrent 의 DELETE→INSERT 창이었다. PR #379 에서 awaitComplete() 로 해결했다.
+**코드 작업이 아니라 기록 정정이다** — 그대로 두면 다음 사람이 없는 원인을 쫓는다.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 간선
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[edges]]
+from = "TRIP-614"
+to = "TRIP-616"
+kind = "계약선행"
+verified = false
+reason = "account_setting(key-value)을 614 가 만든다. 616 은 키만 얹는다 — 둘이 각자 만들면 테이블이 갈린다."
+
+[[edges]]
+from = "TRIP-249"
+to = "APPLE-JWKS"
+kind = "계약선행"
+verified = false
+reason = "249 의 'Apple 미지원' 항목이 Apple 로그인의 에러 계약을 먼저 못 박는다 — 그 뒤에 실제 검증을 붙인다."
+
+[[edges]]
+from = "IDP-REGISTER"
+to = "APPLE-JWKS"
+kind = "외부선행"
+verified = false
+reason = "JWKS 검증은 실제 등록된 팀 키·서비스 ID 없이 확인할 수 없다."
+
+[[edges]]
+from = "TRIP-463"
+to = "SLOT-CANDIDATE-OPEN"
+kind = "외부선행"
+verified = false
+reason = "copick 실연동 전에는 http 모드에서 503 이다."
+
+[[edges]]
+from = "TRIP-433"
+to = "TRIP-595"
+kind = "외부선행"
+verified = false
+reason = "seam 까지는 먼저 만들 수 있지만, 실제 회고 생성이 붙는 것은 ReflectAgent 가 열린 뒤다."
