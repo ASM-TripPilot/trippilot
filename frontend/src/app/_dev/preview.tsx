@@ -38,8 +38,14 @@ import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
+import { ConflictSheet } from '@/features/record/ui/ConflictSheet';
+import { MemoInline } from '@/features/record/ui/MemoInline';
+import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
+import { SyncBadge } from '@/features/record/ui/SyncBadge';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
+import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
+import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -2086,6 +2092,305 @@ const PREVIEW_STATES: PreviewState[] = [
           onCancel={noop}
         />
       </View>
+    ),
+  },
+  // j01 오프라인 동기화 배지(TRIP-568) — 4상태를 3표기(대기/완료/충돌)로 접는 배지의 색·모양을
+  // 한 화면에서 육안 대조하는 자리(pill 색·글자 톤은 jest 사각 — repo-traps 글리프 함정 계열).
+  {
+    key: 'records-sync-badge',
+    label: 'j01 동기화 배지 · 4상태',
+    login: null,
+    render: () => (
+      <View className="flex-1 gap-md bg-canvas px-lg pt-[80px]">
+        {(['LOCAL', 'PENDING', 'SYNCED', 'CONFLICT'] as const).map((status) => (
+          <View key={status} className="flex-row items-center gap-md">
+            <Text className="w-[80px] text-label text-muted-soft">
+              {status}
+            </Text>
+            <SyncBadge status={status} />
+          </View>
+        ))}
+      </View>
+    ),
+  },
+  // j01 동기화 충돌 해소(TRIP-568) — 전체화면 조건부 렌더 뷰(바텀시트 아님). 방문 2건을 카드 2장
+  // 으로 그려 2열 라디오·미선택 시작·적용 비활성/활성을 실기로 눌러 본다. card1=시각 축, card2=
+  // 상태 축(Figma 카드별 3필드). 선택 상태는 accessibilityState 로 잠기고 색은 무심판이라 이 키가
+  // 채움/테두리 강조를 눈으로 대조하는 유일한 자리(자율 세션 — 6-b 실기는 다음 세션 몫).
+  {
+    key: 'records-conflict',
+    label: 'j01 동기화 충돌 해소 · 2건',
+    login: null,
+    render: () => (
+      <ConflictSheet
+        conflicts={[
+          {
+            visitCheckId: 'v1',
+            nameKo: '광안리 해변',
+            rows: [
+              { label: '방문 시각', local: '14:20 체크', server: '14:05 체크' },
+              { label: '메모', local: '노을 최고', server: '-' },
+              { label: '사진', local: '2장(대기)', server: '1장' },
+            ],
+          },
+          {
+            visitCheckId: 'v2',
+            nameKo: '부산시립미술관',
+            rows: [
+              { label: '방문 상태', local: '방문 완료', server: '방문 안 함' },
+              { label: '메모', local: '-', server: '-' },
+              { label: '사진', local: '0장', server: '0장' },
+            ],
+          },
+        ]}
+        onApply={noop}
+      />
+    ),
+  },
+  // j01 사진·메모 첨부(TRIP-566) — PhotoThumbStrip 상태별 셀(available/other-device/unavailable)과 `+`
+  // 추가 타일, MemoInline(낙관값·placeholder) 두 벌을 한 화면에서 육안 대조한다. 순수 뷰(`@/shared/api`
+  // 값 import 0)라 프리뷰 지뢰 목 통과. ★네이티브 피커 미설치라 available 셀은 uri:null placeholder(실
+  // 썸네일·간격·EXIF 는 이 세션 검증 불가, 후속 티켓·6-b 몫). 상태 셀·문구는 jest 가 잠그고, 픽셀은 여기.
+  {
+    key: 'records-photo-memo',
+    label: 'j01 사진·메모 첨부 · 상태별',
+    login: null,
+    render: () => (
+      <View className="flex-1 gap-md bg-canvas px-lg pt-[80px]">
+        <PhotoThumbStrip
+          photos={[
+            { visitPhotoMetaId: 'ph-a', availability: 'available', uri: null },
+            {
+              visitPhotoMetaId: 'ph-b',
+              availability: 'other-device',
+              uri: null,
+            },
+            {
+              visitPhotoMetaId: 'ph-c',
+              availability: 'unavailable',
+              uri: null,
+            },
+          ]}
+          onPressAdd={noop}
+        />
+        <MemoInline text="바람이 좋았고 노을이 근사했다" onSubmit={noop} />
+        <MemoInline onSubmit={noop} />
+      </View>
+    ),
+  },
+  // j03 오늘의 회고 4얼굴(TRIP-571) — 순수 뷰(`DailyReflectionScreen`)를 격리 렌더한다(`@/shared/api`
+  // 값 import 0 이라 프리뷰 지뢰 목 통과). jest 는 testID·행동만 잠그고 4상태 레이아웃·코랄 토큰·
+  // 플레이스홀더 카드·error 재시도 카드·편집 입력은 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP,
+  // 이 4키가 유일한 육안 대조 자리. `editableText` 를 주면 편집 진입(헤더 "편집"/CTA "직접 회고 작성")
+  // → 입력(상한 4000)·저장/취소를 실기로 눌러 본다.
+  {
+    key: 'reflection-default',
+    label: 'j03 오늘의 회고 · default',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="default"
+        narrative="오늘은 광안리와 미술관 등 4곳을 방문했어요. 12km를 이동했고 사진 6장을 남겼어요."
+        editableText="오늘은 광안리와 미술관 등 4곳을 방문했어요. 12km를 이동했고 사진 6장을 남겼어요."
+        stats={{
+          visitCount: 4,
+          distanceKm: 12,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 6,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid={false}
+        photos={[
+          { uri: 'file://p1.jpg' },
+          { uri: 'file://p2.jpg' },
+          { uri: 'file://p3.jpg' },
+        ]}
+        changeSummary="이날 휴무로 1곳을 변경했어요"
+        mapCenter={{ lat: 35.1532, lng: 129.1187 }}
+        mapPins={[
+          { number: 1, lat: 35.1532, lng: 129.1187 },
+          { number: 2, lat: 35.1264, lng: 129.0403 },
+        ]}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  {
+    // 부분 데이터 — 방문<2(거리 "—" + 지도 자리 사유) · 사진 0장("사진 없음" 자리). BR-U5-34 실증.
+    key: 'reflection-data-insufficient',
+    label: 'j03 오늘의 회고 · 데이터 부족',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="data-insufficient"
+        narrative="메모를 기반으로 오늘 기록을 정리했어요. 위치·사진 정보가 부족해 일부 항목은 제외했어요."
+        editableText="메모를 기반으로 오늘 기록을 정리했어요."
+        stats={{
+          visitCount: 2,
+          distanceKm: 0,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 0,
+        }}
+        distanceDash
+        mapNotice="위치 기록 없음 · GPS 미동으로 지도를 만들 수 없어요"
+        hidePhotoGrid
+        photos={[]}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  {
+    // empty — 기록 없음: 빈 원 일러스트 + CTA "직접 회고 작성"(누르면 편집 입력이 열린다).
+    key: 'reflection-empty',
+    label: 'j03 오늘의 회고 · empty',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="empty"
+        narrative="방문 0곳 · 이동 0km · 사진 0장의 하루였어요."
+        editableText=""
+        stats={{
+          visitCount: 0,
+          distanceKm: 0,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 0,
+        }}
+        distanceDash
+        mapNotice={null}
+        hidePhotoGrid
+        photos={[]}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  {
+    // error — 회고 조회 실패: stats 는 채움(BASIC 카드, INV-U5-07) + 에러 카드(다시 시도) + CTA.
+    key: 'reflection-error',
+    label: 'j03 오늘의 회고 · error',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="error"
+        narrative="방문 4곳 · 이동 12km · 사진 6장의 하루였어요."
+        editableText=""
+        stats={{
+          visitCount: 4,
+          distanceKm: 12,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 6,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid
+        photos={[]}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  // j04 여행 요약 3키(TRIP-572) — 순수 뷰(`TripSummaryScreen`)를 격리 렌더한다(`@/shared/api` 값
+  // import 0 이라 프리뷰 지뢰 목 통과, 컨테이너를 별 파일로 분리해 import 사슬 전이 로드 없음).
+  // jest 는 testID·행동만 잠그고 stats 3셀·지도 히어로·날짜카드·방문목록 레이아웃·코랄 토큰·공유
+  // 비활성 톤은 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP, 이 3키가 유일한 육안 대조 자리.
+  {
+    // default(MAP) — stats 3셀 + 지도 히어로(좌표 주입) + 날짜카드 3장. 실화면은 좌표 계약 부재라 늘
+    // map-pending 으로 접히므로(share-off 키 참고) MAP 히어로 자체는 이 키가 유일한 대조 자리.
+    key: 'trip-summary-map',
+    label: 'j04 여행 요약 · default(MAP)',
+    login: null,
+    render: () => (
+      <TripSummaryScreen
+        stats={{ totalVisits: 12, distanceText: '38km', totalPhotos: 24 }}
+        distanceSourceLabel="근사"
+        view="MAP"
+        mapCenter={{ lat: 35.1531, lng: 129.1187 }}
+        mapPins={[
+          { number: 1, lat: 35.1531, lng: 129.1187 },
+          { number: 2, lat: 35.1264, lng: 129.0403 },
+          { number: 3, lat: 35.1587, lng: 129.1604 },
+        ]}
+        dayCards={[
+          {
+            key: '2026-06-11',
+            dateLabel: '6월 11일 목요일',
+            countLabel: 'Day1 · 5곳',
+            subtitle: '광안리 해변→감천문화마을',
+          },
+          {
+            key: '2026-06-12',
+            dateLabel: '6월 12일 금요일',
+            countLabel: 'Day2 · 4곳',
+            subtitle: '해운대 해변→전포 카페거리',
+          },
+          {
+            key: '2026-06-13',
+            dateLabel: '6월 13일 토요일',
+            countLabel: 'Day3 · 3곳',
+            subtitle: '감천문화마을',
+          },
+        ]}
+        orderedVisits={[]}
+        shareEnabled
+        onShare={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    // 위치 전무(VISIT_LIST) — 거리 셀 "—" + 지도 대신 순서 방문 목록(BR-U5-39). 날짜카드 없음.
+    key: 'trip-summary-visit-list',
+    label: 'j04 여행 요약 · 위치 전무(방문 목록)',
+    login: null,
+    render: () => (
+      <TripSummaryScreen
+        stats={{ totalVisits: 12, distanceText: '—', totalPhotos: 24 }}
+        distanceSourceLabel="근사"
+        view="VISIT_LIST"
+        dayCards={[]}
+        orderedVisits={[
+          { order: 1, dayLabel: 'Day1', place: '광안리 해변' },
+          { order: 2, dayLabel: 'Day1', place: '감천문화마을' },
+          { order: 3, dayLabel: 'Day2', place: '해운대 해변' },
+          { order: 4, dayLabel: 'Day3', place: '전포 카페거리' },
+        ]}
+        shareEnabled
+        onShare={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    // 엣지 — 공유 비활성(ready:false → shareEnabled:false) + 좌표 미주입 → map-pending 자리표시.
+    // 두 엣지(비활성 공유 · 지도 준비 중)를 한 화면에서 대조한다(실화면 MAP 의 실제 런타임 얼굴).
+    key: 'trip-summary-share-off',
+    label: 'j04 여행 요약 · 공유 비활성·지도 준비 중',
+    login: null,
+    render: () => (
+      <TripSummaryScreen
+        stats={{ totalVisits: 12, distanceText: '38km', totalPhotos: 24 }}
+        distanceSourceLabel="근사"
+        view="MAP"
+        dayCards={[
+          {
+            key: '2026-06-11',
+            dateLabel: '6월 11일 목요일',
+            countLabel: 'Day1 · 5곳',
+            subtitle: '광안리 해변→감천문화마을',
+          },
+        ]}
+        orderedVisits={[]}
+        shareEnabled={false}
+        onShare={noop}
+        onBack={noop}
+      />
     ),
   },
   // 탐색 2키(TRIP-221·223) — **results 얼굴 전용**이다. 실화면 딥링크로는 볼 수 없다:

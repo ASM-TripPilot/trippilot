@@ -67,8 +67,12 @@
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggersRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/recordAttributionStructure.test.ts`  →  (export 없음)
+- `src/__tests__/recordPhotoBinaryGuard.test.ts`  →  (export 없음)
 - `src/__tests__/recordsDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
+- `src/__tests__/reflectionFallbackStructure.test.ts`  →  (export 없음)
+- `src/__tests__/reflectionStructure.test.ts`  →  (export 없음)
+- `src/__tests__/reflectionSummaryStructure.test.ts`  →  (export 없음)
 - `src/__tests__/regionCatalogStructure.test.ts`  →  (export 없음)
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
@@ -83,6 +87,7 @@
 - `src/__tests__/stayRegisterStructure.test.ts`  →  (export 없음)
 - `src/__tests__/staySearchGenerated.test.ts`  →  (export 없음)
 - `src/__tests__/staySearchStructure.test.ts`  →  (export 없음)
+- `src/__tests__/syncQueueIdempotency.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarOverlay.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarVisual.test.ts`  →  (export 없음)
 - `src/__tests__/tabsExploreRoute.test.tsx`  →  (export 없음)
@@ -209,6 +214,12 @@
 
 ## src/app/trips/[tripId]/records/
 - `src/app/trips/[tripId]/records/index.tsx`  →  (export 없음)
+
+## src/app/trips/[tripId]/records/reflection/
+- `src/app/trips/[tripId]/records/reflection/[date].tsx`  →  (export 없음)
+
+## src/app/trips/[tripId]/records/
+- `src/app/trips/[tripId]/records/summary.tsx`  →  (export 없음)
 
 ## src/app/trips/new/
 - `src/app/trips/new/_layout.tsx`  →  (export 없음)
@@ -402,18 +413,46 @@
 
 ## src/features/record/model/
 - `src/features/record/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
+- `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
+- `src/features/record/model/photoAttach.ts`  →  photoAttach
+- `src/features/record/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
 - `src/features/record/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
+- `src/features/record/model/syncQueue.ts`  →  SyncStatus · SyncQueueItem · ReplayExecutor · enqueue · replayQueue
 - `src/features/record/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
 - `src/features/record/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
+- `src/features/record/model/useVisitAttachments.ts`  →  useVisitAttachments
 - `src/features/record/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
 - `src/features/record/model/visitStatus.ts`  →  VisitStatus · deriveVisitStatus
 
 ## src/features/record/ui/
+- `src/features/record/ui/ConflictSheet.tsx`  →  ConflictSheetProps · ConflictSheet
+- `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
+- `src/features/record/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
 - `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · BackArrowGlyph · HeartGlyph
 - `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
+- `src/features/record/ui/SyncBadge.tsx`  →  SYNC_BADGE_LABEL · SyncBadge
 - `src/features/record/ui/TripRecordsScreen.tsx`  →  TripRecordsDayTab · DayAttributionHeader · TripRecordsScreenProps · TripRecordsScreen
 - `src/features/record/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
 - `src/features/record/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
+
+## src/features/reflection/model/
+- `src/features/reflection/model/missingParts.ts`  →  MissingParts · missingParts
+- `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
+- `src/features/reflection/model/statsCard.ts`  →  statsCard
+- `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
+- `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
+- `src/features/reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
+- `src/features/reflection/model/useTripSummary.ts`  →  UseTripSummaryResult · useTripSummary
+
+## src/features/reflection/ui/
+- `src/features/reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
+- `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · DailyReflectionScreenProps · DailyReflectionScreen
+- `src/features/reflection/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
+- `src/features/reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
+- `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph
+- `src/features/reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
+- `src/features/reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
+- `src/features/reflection/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
 
 ## src/features/settings/model/
 - `src/features/settings/model/deletionScope.ts`  →  DELETION_SCOPE
@@ -505,6 +544,12 @@
 - `src/mocks/handlers.ts`  →  handlers
 - `src/mocks/scenarios.ts`  →  AuthOutcome · SocialServerBehavior · BootstrapBehavior · MockScenario · SCENARIOS · ScenarioKey · setScenario · getScenario · resetScenario
 - `src/mocks/server.ts`  →  server
+
+## src/pages/daily-reflection/
+- `src/pages/daily-reflection/index.ts`  →  DailyReflectionPage
+
+## src/pages/daily-reflection/ui/
+- `src/pages/daily-reflection/ui/DailyReflectionPage.tsx`  →  DailyReflectionPageProps · DailyReflectionPage
 
 ## src/pages/destination-detail/
 - `src/pages/destination-detail/index.ts`  →  DestinationDetailPage
@@ -779,6 +824,12 @@
 ## src/pages/trip-records/ui/
 - `src/pages/trip-records/ui/TripRecordsPage.tsx`  →  TripRecordsPageProps · TripRecordsPage
 
+## src/pages/trip-summary/
+- `src/pages/trip-summary/index.ts`  →  TripSummaryPage
+
+## src/pages/trip-summary/ui/
+- `src/pages/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
+
 ## src/shared/api/generated/account/
 - `src/shared/api/generated/account/account.ts`  →  getMe · getGetMeQueryKey · getGetMeQueryOptions · GetMeQueryResult · GetMeQueryError · useGetMe · postMeDeletion · getPostMeDeletionMutationOptions · PostMeDeletionMutationResult · PostMeDeletionMutationError · usePostMeDeletion · deleteMeDeletion · getDeleteMeDeletionMutationOptions · DeleteMeDeletionMutationResult · DeleteMeDeletionMutationError · useDeleteMeDeletion · getMeExport · getGetMeExportQueryKey · getGetMeExportQueryOptions · GetMeExportQueryResult · GetMeExportQueryError · useGetMeExport
 
@@ -1049,6 +1100,9 @@
 - `src/shared/map/index.ts`  →  KakaoMapView · type KakaoMapViewProps · REGISTERED_DOMAIN · type MapCenter · type MapPin · type KakaoMapMessage
 - `src/shared/map/mapHtml.ts`  →  MapCenter · MapPin · KakaoMapMessage · REGISTERED_DOMAIN · MAP_LOAD_FAILED_MESSAGE · buildMapHtml
 
+## src/shared/photo/
+- `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset
+
 ## src/shared/pref/
 - `src/shared/pref/preferenceSelection.ts`  →  toggleMulti · toggleSingle
 
@@ -1086,4 +1140,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 736개 파일
+합계 772개 파일

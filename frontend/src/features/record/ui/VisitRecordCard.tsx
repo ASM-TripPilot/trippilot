@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { deriveVisitStatus } from '../model/visitStatus';
@@ -45,6 +45,12 @@ export interface VisitRecordCardProps {
   onPressSkip?: (visitCheckId: string) => void;
   /** TRIP-613 · 시각 수정 시트 진입(옵셔널 — 미제공 시 컨트롤 부재, 565 호출자 무영향). */
   onPressEditTime?: (visitCheckId: string) => void;
+  /**
+   * TRIP-566 · 사진/메모 슬롯(옵셔널 — 미주입 시 정적 스캐폴딩 유지, 565 호출자·프리뷰 무영향).
+   * 페이지가 PhotoThumbStrip·MemoInline 을 조립해 내려주면 정적 자리 대신 그것을 surface 한다.
+   */
+  photoSlot?: ReactNode;
+  memoSlot?: ReactNode;
 }
 
 function StatusCircle({
@@ -100,6 +106,8 @@ export function VisitRecordCard({
   onPressComplete,
   onPressSkip,
   onPressEditTime,
+  photoSlot,
+  memoSlot,
 }: VisitRecordCardProps): ReactElement {
   const status = deriveVisitStatus(card);
   const canSkip = status === 'UPCOMING' || status === 'IN_PROGRESS';
@@ -145,13 +153,22 @@ export function VisitRecordCard({
         </View>
       </View>
 
-      {/* 사진/메모 정적 스캐폴딩(US-REC-02 소관 — 데이터·배선·testID 없음). */}
-      <View className="flex-row items-start gap-sm">
-        <View className="size-[66px] items-center justify-center rounded-[10px] border-[1.4px] border-dashed border-hairline-strong">
-          <PlusGlyph size={22} />
+      {/* 사진 슬롯 — 주면 PhotoThumbStrip(페이지 배선), 안 주면 정적 스캐폴딩(후방호환). */}
+      {photoSlot != null ? (
+        photoSlot
+      ) : (
+        <View className="flex-row items-start gap-sm">
+          <View className="size-[66px] items-center justify-center rounded-[10px] border-[1.4px] border-dashed border-hairline-strong">
+            <PlusGlyph size={22} />
+          </View>
         </View>
-      </View>
-      <Text className="text-label text-muted-soft">메모를 남겨보세요</Text>
+      )}
+      {/* 메모 슬롯 — 주면 MemoInline, 안 주면 정적 placeholder. */}
+      {memoSlot != null ? (
+        memoSlot
+      ) : (
+        <Text className="text-label text-muted-soft">메모를 남겨보세요</Text>
+      )}
     </View>
   );
 }
