@@ -43,7 +43,7 @@
 id = "TRIP-249"
 ticket = "TRIP-249"
 title = "소셜 로그인 에러 계약 정합 5건 (400 미선언·연령 403/422·미매핑 500·Apple 미지원·TokenPair 3필드)"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/app/src/main/kotlin/com/trippilot/app/web/error/GlobalExceptionHandler.kt",
@@ -62,7 +62,7 @@ note = """
 id = "TRIP-481"
 ticket = "TRIP-481"
 title = "슬롯 교체 후보 반경 조회가 항상 0건 — h12·h14·h18 무력화"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/LocalSlotCandidateSource.kt",
@@ -70,16 +70,23 @@ touches = [
   "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/SlotCandidateService.kt",
 ]
 note = """
-**AI 대기가 아니다.** 티켓 실측: proposeSlotCandidates 는 AI 를 부르지 않고 LocalSlotCandidateSource 로
-위임하므로 AI 로그에 요청이 안 찍히고 503 도 안 난다 — 원인은 로컬 반경 조회 구간이다.
-그래서 TRIP-463(AI 슬롯 후보 경계 개통)과 **독립**이다. 한 건 고치면 화면 넷(h12·h14·h15·h18)이 함께 산다.
+**AI 대기가 아니다.** proposeSlotCandidates 는 AI 를 부르지 않고 LocalSlotCandidateSource 로
+위임하므로 AI 로그에 요청이 안 찍히고 503 도 안 난다. TRIP-463(AI 슬롯 후보 경계 개통)과 **독립**이다.
+
+**티켓의 진단은 틀렸다(#416 실측).** "원인은 로컬 반경 조회 구간"이라 적혀 있었으나 실제 흐름으로
+재현하니 **후보가 나온다** — 제주 하루 여행도, 사흘 여행의 모든 슬롯도. 코드 사슬(SlotCandidateService
+· LocalSlotCandidateSource 3km→12km 자동확대 · PlaceDataCandidatePool · BoundingBox.around)에서
+결함을 찾지 못했다. 회귀 가드만 남기고 닫는다.
+
+신고가 본 화면은 **0건의 두 사정이 한 문구로 뭉개진 것**이었을 가능성이 크다 — #418 에서
+NO_NEARBY(넓히면 통한다)와 ALL_IN_ITINERARY(넓혀도 같다)를 갈랐다.
 """
 
 [[nodes]]
 id = "TRIP-614"
 ticket = "TRIP-614"
 title = "제휴 고지 '다시 보지 않기' 계정 단위 저장 — account_setting (O-U6-5 · BR-U6-33)"
-status = "todo"
+status = "done"
 migration = true
 touches = [
   "backend/app/src/main/resources/db/migration",
@@ -114,7 +121,7 @@ note = """
 id = "TRIP-616"
 ticket = "TRIP-616"
 title = "Plan-B 민감도·전역 빈도 상한 저장·적용 — /me/planb-sensitivity (O-U6-2 · G-U6-4 · BR-U4-08)"
-status = "todo"
+status = "done"
 migration = true
 touches = [
   "backend/app/src/main/resources/db/migration",
@@ -168,19 +175,35 @@ FE TRIP-362 가 이 계약을 소비하므로 배포 순서(서버 먼저·양�
 [[nodes]]
 id = "PERSONA-API"
 ticket = ""
-title = "AI 가 재조회할 페르소나 표면 — 내부 접근 경로 결정 (TRIP-434 의 선행)"
-status = "todo"
+title = "AI 가 재조회할 페르소나 표면 — /internal/users/{accountId}/persona (TRIP-434 의 선행)"
+status = "done"
 migration = false
 touches = [
-  "backend/modules/profile",
-  "backend/docs/design/openapi.yaml",
+  "backend/modules/profile/src/main/kotlin/com/trippilot/profile/adapter/in/web/PersonaInternalController.kt",
 ]
 note = """
 **티켓이 없다.** TRIP-434(AI) 가 "선행: 백엔드에 페르소나 API가 존재해야 함"이라고 적어 두었으므로
 막고 있는 쪽은 우리다. 처음엔 방향을 반대로 그렸다가 원문을 보고 뒤집었다.
-재료는 이미 있다 — /me/personalization(TRIP-556) · /me/preferences. 없는 것은 **AI 서비스가
-사용자 토큰 없이 부를 내부 경로**다(티켓 초안은 /internal/users/{id}/persona).
-그래서 이 노드의 실체는 신설이 아니라 인증 경계 결정이다.
+
+**이 노트의 앞선 판은 두 군데가 틀렸다(실측으로 교정).**
+
+1. "재료는 /me/personalization" — 아니다. 그것은 **사용자에게 "무엇을 넘겼는가"를 알리는 공시
+   표면**(BR-U5-45, reflection 소관)이다. 실제 재료는 profile 의 preference_set 이고
+   PreferenceFacade.findPreferences(accountId) 가 이미 api-safe 스냅숏으로 노출하고 있었다.
+2. "실체는 인증 경계 결정" — 아니다. 그 결정은 TRIP-393 에서 **이미 끝났다**. /internal 하위는
+   ServiceAuthenticationToken.ROLE 을 요구하고 사용자 JWT 로는 못 통과하며 /internal/pois 가
+   그 형태로 돌고 있었다. 실제 결정은 **응답 어휘**였다.
+
+봉투로 대체할 수 없다 — AI 의 PersonaProvider 는 BR-U4-07("프롬프트 값은 요청자 권한 하에
+재조회한 것만")에 따라 ttl_sec=0 으로 매 요청 다시 읽는다. 호출자가 준 값은 규칙이 배제한다.
+
+결정(2026-09-01): **계정 단위 + 우리 어휘 그대로.**
+어휘를 우리가 AI enum 으로 접으면(부모님→?, 럭셔리→HIGH, 동행 다중→단일) 그 판단을 백엔드가
+떠안고 AI enum 이 바뀔 때마다 따라 고쳐야 한다. generate 봉투의 preference_profile 이 이미
+우리 어휘를 그대로 싣는 관례라 필드 이름도 그 스키마에 맞췄다.
+
+남은 것은 AI 쪽 작업이다(TRIP-434) — ContextStore 실구현체가 이 경로를 부르고 PersonaSummary
+로 변환한다. 이 노드는 그 선행만 푼다.
 """
 
 [[nodes]]
@@ -320,3 +343,27 @@ to = "TRIP-434"
 kind = "계약선행"
 verified = false
 reason = "TRIP-434 본문 「선행」: 백엔드에 페르소나 API가 존재해야 함."
+
+[[nodes]]
+id = "UUID-PATH-400"
+ticket = ""
+title = "UUID 경로변수가 잘못된 값에 500 — 전역 타입변환 실패를 400 으로"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/main/kotlin/com/trippilot/app/web/error/GlobalExceptionHandler.kt",
+]
+note = """
+**실측(2026-09-01)**: `GET /api/v1/trips/not-a-uuid` → `500 INTERNAL`. Spring 의 경로변수 타입변환
+실패는 MethodArgumentTypeMismatchException 인데 전역 핸들러가 그것을 모르고 Exception 갈래로
+떨어진다. UUID 경로변수를 쓰는 **모든** 엔드포인트가 같다.
+
+TRIP-249 3번(미매핑 경로 500)과 **같은 실패 형태**다 — 클라 입력 오류를 서버 장애로 알리면
+프론트·AI 의 재시도·폴백이 5xx 기준으로 갈려 잘못된 갈래를 탄다.
+
+PERSONA-API 는 이 구멍을 국소 회피했다(경로변수를 String 으로 받아 직접 파싱). 이 노드가 전역에서
+잡으면 `PersonaInternalController.parseAccountId` 는 지우고 UUID 를 직접 받아도 된다.
+
+주의: 기존 엔드포인트 다수의 응답 코드가 500→400 으로 바뀐다. 계약(openapi)의 400 선언 유무를
+함께 훑어야 한다.
+"""
