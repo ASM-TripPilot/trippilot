@@ -38,9 +38,11 @@ import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
+import type { CompareRow } from '@/features/record/model/compareRows';
 import { ConflictSheet } from '@/features/record/ui/ConflictSheet';
 import { MemoInline } from '@/features/record/ui/MemoInline';
 import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
+import { RecordsCompareScreen } from '@/features/record/ui/RecordsCompareScreen';
 import { SyncBadge } from '@/features/record/ui/SyncBadge';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
@@ -4254,6 +4256,61 @@ const PREVIEW_STATES: PreviewState[] = [
         isEmpty
         onNavigate={noop}
         onPressBack={noop}
+      />
+    ),
+  },
+  // j02 기록 비교 1키(TRIP-570) — 순수 뷰(`RecordsCompareScreen`)를 격리 렌더한다(`@/shared/api`·
+  // `@/shared/map` 값 import 0 이라 프리뷰 지뢰 목 통과). 세그 3탭·kind별 배지(실제/계획/변경)·
+  // 미방문·휴무 pill·코랄 점선 변경 카드·귀속 헤더·지도 degrade 자리표시를 한 화면에서 육안 대조하는
+  // 자리. 지도 3레이어·사진 핀은 좌표 계약 부재라 이번 사이클 제외(degrade) — 실제 렌더는 후속 몫.
+  // 세그 활성 탭 하이라이트는 고정('실제', noop) — 리스트는 탭 무관 전체라 필터 전환 대조는 불필요.
+  {
+    key: 'records-compare',
+    label: 'j02 기록 비교 · 3종(실제·미방문·변경)',
+    login: null,
+    render: () => (
+      <RecordsCompareScreen
+        activeTab="actual"
+        onSelectTab={noop}
+        attribution={{ dayLabel: '6월 11일', stayName: '해운대 A호텔' }}
+        rows={
+          [
+            {
+              kind: 'actual',
+              key: 'a1',
+              date: '2026-06-11',
+              poiId: 'poi1',
+              placeLabel: '광안리 해변',
+              timeLabel: '14:20',
+            },
+            {
+              kind: 'actual',
+              key: 'a2',
+              date: '2026-06-11',
+              poiId: 'poi2',
+              placeLabel: '부산시립미술관',
+              timeLabel: '15:40',
+            },
+            {
+              kind: 'unvisited',
+              key: 'u1',
+              date: '2026-06-11',
+              poiId: 'poi9',
+              placeLabel: '○○ 전망대',
+            },
+            {
+              kind: 'change',
+              key: 'c1',
+              date: '2026-06-11',
+              beforeLabel: '△△ 카페',
+              afterLabel: '◇◇ 실내카페',
+              reason: '휴무',
+              timeLabel: '15:40',
+              sourceType: 'PLAN_B',
+            },
+          ] satisfies CompareRow[]
+        }
+        onBack={noop}
       />
     ),
   },
