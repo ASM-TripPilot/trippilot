@@ -1,10 +1,12 @@
 package com.trippilot.itinerarygeneration.adapter.out.external
 
+import com.trippilot.itinerarygeneration.application.SlotKey
 import com.trippilot.placedata.api.Area
 import com.trippilot.placedata.api.CandidatePoolPort
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.SlotCandidate
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import org.springframework.stereotype.Component
 import java.time.Clock
@@ -36,14 +38,18 @@ class LocalSlotCandidateSource(
      */
     fun propose(input: SlotCandidatesInput, degraded: Boolean): SlotCandidatesOutput {
         val excluded = input.excludePoiIds.toSet()
+        // 교체 대상 자신은 언제나 반경 0m 에 있다 — "주변에 뭔가 있다"의 근거로 삼으면 안 된다.
+        val self = SlotKey.parse(input.slotKey)?.second
 
         // 0건이면 반경을 한 번 넓혀 다시 본다 — h15 "반경 넓힘"을 서버가 대신한다.
         // 실제 사용한 반경을 그대로 돌려줘야 화면이 "3km 안에는 없어 12km 로 넓혔어요" 를 말할 수 있다.
         var radius = input.radiusM ?: DEFAULT_RADIUS_M
-        var found = search(input, radius, excluded)
+        var nearby = search(input, radius, self)
+        var found = nearby.filterNot { it.poiId in excluded }
         if (found.isEmpty() && radius < WIDENED_RADIUS_M) {
             radius = WIDENED_RADIUS_M
-            found = search(input, radius, excluded)
+            nearby = search(input, radius, self)
+            found = nearby.filterNot { it.poiId in excluded }
         }
 
         return SlotCandidatesOutput(
@@ -59,12 +65,21 @@ class LocalSlotCandidateSource(
             },
             radiusMUsed = radius,
             freshness = FreshnessMeta(clock.instant(), degraded = degraded),
+            // 0건의 **이유**를 가른다. 넓힌 반경 안이 비었으면 넓히기가 통하고(NO_NEARBY),
+            // 있는데 전부 일정에 들어 있으면 넓혀도 같은 결과다(ALL_IN_ITINERARY).
+            // 뭉뚱그리면 사용자가 반경만 계속 넓히며 헛돈다.
+            emptyReason = when {
+                found.isNotEmpty() -> null
+                nearby.isEmpty() -> SlotCandidatesEmptyReason.NO_NEARBY
+                else -> SlotCandidatesEmptyReason.ALL_IN_ITINERARY
+            },
         )
     }
 
-    private fun search(input: SlotCandidatesInput, radiusM: Int, excluded: Set<UUID>) =
+    /** 반경 안의 후보(자기 자신 제외). 제외 목록은 여기서 적용하지 않는다 — 0건 사유를 가르려면 둘을 나눠 봐야 한다. */
+    private fun search(input: SlotCandidatesInput, radiusM: Int, self: UUID?) =
         candidatePool.resolve(Area.Radius(input.centerLat, input.centerLng, radiusM.toDouble()), emptySet())
-            .filter { it.poiId !in excluded }
+            .filterNot { it.poiId == self }
             .sortedBy { it.distanceM ?: Double.MAX_VALUE }
 
     private companion object {

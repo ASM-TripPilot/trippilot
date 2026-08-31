@@ -1,6 +1,7 @@
 package com.trippilot.itinerarygeneration.adapter.out.external
 
 import com.trippilot.itinerarygeneration.domain.RequestMeta
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.placedata.api.Area
 import com.trippilot.placedata.api.CandidatePoolPort
@@ -27,6 +28,12 @@ class LocalSlotCandidateSourceTest : StringSpec({
     val far = UUID.randomUUID()
     val excluded = UUID.randomUUID()
 
+    /**
+     * **교체 대상 슬롯의 장소**. 후보와 같은 id 로 두면 안 된다 — 실제 흐름에서 이 장소는 언제나
+     * 현재 일정에 있으므로 후보가 될 수 없고, 섞어 두면 "자기 자신을 자기 대체로 제안"하는 실수를 못 잡는다.
+     */
+    val target = UUID.randomUUID()
+
     /** 반경이 넓어져야만 [far] 가 보이는 풀 — "넓히기"가 실제로 도는지 보려면 이 구분이 필요하다. */
     class Pool(private val wideOnly: UUID? = null, private val nearIds: List<Pair<UUID, Double>> = emptyList()) :
         CandidatePoolPort {
@@ -41,7 +48,7 @@ class LocalSlotCandidateSourceTest : StringSpec({
 
     fun input(exclude: List<UUID> = emptyList(), radiusM: Int? = null) = SlotCandidatesInput(
         tripId = UUID.randomUUID(),
-        slotKey = "2026-09-01#$near",
+        slotKey = "2026-09-01#$target",
         neighborSlotKeys = emptyList(),
         centerLat = 33.45, centerLng = 126.56,
         radiusM = radiusM, concept = null, excludePoiIds = exclude,
@@ -61,6 +68,39 @@ class LocalSlotCandidateSourceTest : StringSpec({
             .propose(input(exclude = listOf(excluded)), degraded = true)
 
         out.candidates.map { it.poiId } shouldBe listOf(near)
+    }
+
+    "교체 대상 자신은 후보가 아니다 — 자기 자리를 자기로 바꾸라고 제안하지 않는다" {
+        val out = LocalSlotCandidateSource(Pool(nearIds = listOf(target to 0.0, near to 300.0)), clock)
+            .propose(input(), degraded = true)
+
+        out.candidates.map { it.poiId } shouldBe listOf(near)
+    }
+
+    /**
+     * 0건의 **이유**가 갈려야 화면이 다른 말을 한다. 뭉뚱그리면 사용자가 반경만 계속 넓히며 헛돈다.
+     */
+    "주변이 비면 NO_NEARBY — 넓히기가 통한다는 뜻이다" {
+        val out = LocalSlotCandidateSource(Pool(), clock).propose(input(), degraded = true)
+
+        out.candidates shouldBe emptyList()
+        out.emptyReason shouldBe SlotCandidatesEmptyReason.NO_NEARBY
+    }
+
+    "주변이 전부 일정에 있으면 ALL_IN_ITINERARY — 넓혀도 같은 결과다" {
+        val out = LocalSlotCandidateSource(Pool(nearIds = listOf(excluded to 400.0)), clock)
+            .propose(input(exclude = listOf(excluded)), degraded = true)
+
+        out.candidates shouldBe emptyList()
+        // 같은 0건이지만 사용자가 할 일이 정반대다.
+        out.emptyReason shouldBe SlotCandidatesEmptyReason.ALL_IN_ITINERARY
+    }
+
+    "후보가 있으면 사유는 없다" {
+        val out = LocalSlotCandidateSource(Pool(nearIds = listOf(near to 300.0)), clock)
+            .propose(input(), degraded = true)
+
+        out.emptyReason shouldBe null
     }
 
     /** 0건일 때 조용히 빈 목록을 주면 사용자가 반경을 넓혀도 왜 0건인지 알 수 없다(h15). */

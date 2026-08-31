@@ -92,6 +92,7 @@ class SlotCandidateServiceTest : StringSpec({
                 listOf(SlotCandidate(UUID.randomUUID(), "약 1.1km", "주변 카페")),
                 radiusMUsed = 12_000,
                 freshness = FreshnessMeta(Instant.parse("2026-08-06T00:00:00Z"), false),
+                emptyReason = null, // 후보가 있다 — 0건 사유는 없는 것이 맞다
             )
         }
     }

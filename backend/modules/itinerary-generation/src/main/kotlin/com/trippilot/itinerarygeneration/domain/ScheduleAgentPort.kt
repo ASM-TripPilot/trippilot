@@ -295,12 +295,39 @@ data class SlotCandidatesInput(
     val requestMeta: RequestMeta,
 )
 
-/** [candidates] 빈 목록 = 후보 0건(h15 반경 확대 유도). [radiusMUsed] 는 **실제 사용 반경**(AI 가 자동 확대했을 수 있다). */
+/**
+ * [candidates] 빈 목록 = 후보 0건(h15 반경 확대 유도). [radiusMUsed] 는 **실제 사용 반경**(AI 가 자동 확대했을 수 있다).
+ *
+ * [emptyReason] 은 0건일 때만 채워진다 — 아래 [SlotCandidatesEmptyReason] 참고.
+ * **기본값을 두지 않는다.** 두면 빈 목록을 내는 새 구현이 그것을 물려받아 "0건인데 이유 없음"이
+ * 조용히 나가고, 이 필드를 넣은 이유가 사라진다.
+ */
 data class SlotCandidatesOutput(
     val candidates: List<SlotCandidate>,
     val radiusMUsed: Int,
     val freshness: FreshnessMeta,
+    val emptyReason: SlotCandidatesEmptyReason?,
 )
+
+/**
+ * 후보가 0건인 **이유**.
+ *
+ * ## 왜 구분하나
+ *
+ * 0건은 두 가지 전혀 다른 사정을 한 화면으로 만든다 — **주변에 아무것도 없다**와 **주변에 있지만
+ * 이미 그 일정에 다 넣었다**. 사용자가 할 일이 정반대다: 앞은 반경을 넓히거나 컨셉을 바꿔야 하고,
+ * 뒤는 넓혀도 소용없고 다른 슬롯을 빼야 한다.
+ *
+ * 구분하지 않으면 화면이 "근처에서 바꿀 만한 후보를 찾지 못했어요" 하나로 뭉뚱그리고, 사용자는
+ * 반경을 계속 넓히며 헛돈다(TRIP-481 조사에서 이 형태가 의심됐다).
+ */
+enum class SlotCandidatesEmptyReason {
+    /** 넓힌 반경 안에 후보 자체가 없다 — 반경 확대·컨셉 변경이 통한다(BR-U3-25). */
+    NO_NEARBY,
+
+    /** 주변에 있으나 **전부 이미 이 일정에 들어 있다**(BR-U3-24) — 넓혀도 같은 결과다. */
+    ALL_IN_ITINERARY,
+}
 
 /** [distanceRange] 거리만(INV-3). [rationale] 은 closed-set 근거 — 시각·소요시간 언급 금지(BR-U2-09). */
 data class SlotCandidate(val poiId: UUID, val distanceRange: String, val rationale: String)

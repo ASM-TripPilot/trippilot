@@ -2,6 +2,7 @@ package com.trippilot.itinerarygeneration.adapter.`in`.web
 
 import com.trippilot.itinerarygeneration.application.RequestSlotCandidates
 import com.trippilot.itinerarygeneration.application.SlotCandidateService
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Positive
@@ -66,12 +67,24 @@ data class SlotCandidatesResponse(
      * 이 값을 안 내보내면 사용자는 취향이 반영된 줄 알고, 우리는 폴백이 임시라는 사실을 잊는다(INV-4).
      */
     val degraded: Boolean,
+    /**
+     * 후보가 **0건인 이유**. 후보가 있으면 null 이다.
+     *
+     * `NO_NEARBY` 는 넓힌 반경 안에 후보 자체가 없다는 뜻이라 **반경 확대·컨셉 변경이 통한다**(BR-U3-25).
+     * `ALL_IN_ITINERARY` 는 주변에 있으나 전부 이미 이 일정에 들어 있다는 뜻이라(BR-U3-24)
+     * **넓혀도 같은 결과**이고, 사용자가 할 일은 다른 슬롯을 빼는 것이다.
+     *
+     * 둘을 뭉뚱그리면 화면이 "근처에서 바꿀 만한 후보를 찾지 못했어요" 하나로 말하고,
+     * 사용자는 반경만 계속 넓히며 헛돈다.
+     */
+    val emptyReason: SlotCandidatesEmptyReason?,
 ) {
     companion object {
         fun from(o: SlotCandidatesOutput) = SlotCandidatesResponse(
             o.candidates.map { SlotCandidateResponse(it.poiId, it.distanceRange, it.rationale) },
             o.radiusMUsed,
             o.freshness.degraded,
+            o.emptyReason,
         )
     }
 }

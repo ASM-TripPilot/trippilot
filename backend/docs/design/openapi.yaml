@@ -2239,6 +2239,23 @@ components:
             **AI 순위가 아니다**(true). 후보 집합은 정본 그대로지만 정렬이 거리순이고 근거 문구가
             템플릿이며 앞뒤 슬롯과의 동선을 따지지 않았다. 화면은 "AI 추천 준비 중, 가까운 순" 을
             안내한다 — 이 값이 없으면 사용자는 취향이 반영된 줄 안다(INV-4).
+        emptyReason:
+          type: string
+          nullable: true
+          enum: [NO_NEARBY, ALL_IN_ITINERARY]
+          description: >
+            후보가 **0건인 이유**. 후보가 있으면 null 이다.
+
+
+            `NO_NEARBY` — 넓힌 반경 안에 후보 자체가 없다. 반경 확대·컨셉 변경이 통한다(BR-U3-25).
+
+
+            `ALL_IN_ITINERARY` — 주변에 있으나 **전부 이미 이 일정에 들어 있다**(BR-U3-24).
+            넓혀도 같은 결과이고, 사용자가 할 일은 다른 슬롯을 빼는 것이다.
+
+
+            둘을 뭉뚱그리면 화면이 "근처에서 바꿀 만한 후보를 찾지 못했어요" 하나로 말하고
+            사용자는 반경만 계속 넓히며 헛돈다.
     RevisionList:
       type: object
       required: [revisions]
