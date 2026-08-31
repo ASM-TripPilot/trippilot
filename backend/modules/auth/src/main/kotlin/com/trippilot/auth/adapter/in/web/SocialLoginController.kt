@@ -26,11 +26,7 @@ class SocialLoginController(
         @Valid @RequestBody request: SocialLoginRequest,
     ): SocialLoginResponse {
         val result = authenticate.authenticate(request.toCommand(parseProvider(provider)))
-        return SocialLoginResponse(
-            accessToken = result.accessToken,
-            refreshToken = result.refreshToken,
-            isNewUser = result.isNewUser,
-        )
+        return SocialLoginResponse.from(result)
     }
 
     /** 네이티브 SDK 토큰 로그인 — 앱이 카카오·네이버 SDK로 받은 access token 전달(code 교환 없음). */
@@ -40,11 +36,7 @@ class SocialLoginController(
         @Valid @RequestBody request: SocialTokenLoginRequest,
     ): SocialLoginResponse {
         val result = authenticate.authenticateWithAccessToken(request.toCommand(parseProvider(provider)))
-        return SocialLoginResponse(
-            accessToken = result.accessToken,
-            refreshToken = result.refreshToken,
-            isNewUser = result.isNewUser,
-        )
+        return SocialLoginResponse.from(result)
     }
 
     private fun parseProvider(raw: String): Provider =

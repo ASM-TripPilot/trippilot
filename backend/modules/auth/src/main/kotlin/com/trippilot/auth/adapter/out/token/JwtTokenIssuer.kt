@@ -1,6 +1,7 @@
 package com.trippilot.auth.adapter.out.token
 
 import com.trippilot.auth.domain.AccountId
+import com.trippilot.auth.domain.port.IssuedAccessToken
 import com.trippilot.auth.domain.port.TokenIssuer
 import com.trippilot.security.AccessTokenIssuer
 import org.springframework.stereotype.Component
@@ -13,6 +14,8 @@ import org.springframework.stereotype.Component
 class JwtTokenIssuer(
     private val accessTokenIssuer: AccessTokenIssuer,
 ) : TokenIssuer {
-    override fun issue(accountId: AccountId): String =
-        accessTokenIssuer.issue(accountId.value.toString()).value
+    override fun issue(accountId: AccountId): IssuedAccessToken {
+        val issued = accessTokenIssuer.issue(accountId.value.toString())
+        return IssuedAccessToken(value = issued.value, expiresAt = issued.expiresAt)
+    }
 }
