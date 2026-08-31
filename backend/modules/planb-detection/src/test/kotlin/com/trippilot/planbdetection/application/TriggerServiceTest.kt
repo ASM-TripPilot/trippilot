@@ -77,6 +77,9 @@ class TriggerServiceTest : StringSpec({
 
     fun sensitivity(s: Sensitivity = Sensitivity.NORMAL) = object : SensitivityRepository {
         override fun of(accountId: UUID) = s
+
+        /** 이 대역은 읽기만 흉내 낸다 — 쓰기는 이 테스트의 관심이 아니다. */
+        override fun set(accountId: UUID, sensitivity: Sensitivity) = error("쓰기를 쓰지 않는 대역입니다.")
     }
 
     fun service(

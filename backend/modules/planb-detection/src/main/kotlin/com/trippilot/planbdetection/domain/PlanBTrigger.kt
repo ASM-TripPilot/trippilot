@@ -134,4 +134,7 @@ interface SuppressionRepository {
 interface SensitivityRepository {
     /** 없으면 [Sensitivity.NORMAL] — 설정이 없다고 알림이 멈추면 안 된다. */
     fun of(accountId: UUID): Sensitivity
+
+    /** 계정당 1행 upsert. 되돌릴 수 있어야 하므로 단방향이 아니다. */
+    fun set(accountId: UUID, sensitivity: Sensitivity): Sensitivity
 }
