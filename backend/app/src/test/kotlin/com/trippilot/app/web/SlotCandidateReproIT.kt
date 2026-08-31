@@ -8,6 +8,7 @@ import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -44,6 +45,38 @@ class SlotCandidateReproIT : AbstractPostgresIntegrationTest() {
 
     private val json = ObjectMapper()
     private val now = Instant.parse("2026-07-26T00:00:00Z")
+
+    /**
+     * 이 테스트가 닫은 POI. **되돌리지 않으면 같은 컨테이너를 쓰는 다른 테스트가 빈 후보풀을 본다** —
+     * 시드는 전역이고 HTTP 호출은 별도 트랜잭션이라 롤백으로는 못 지운다.
+     * (이 파일이 처음엔 그것을 안 지켜 스스로를 오염시켰다.)
+     */
+    private val closedByThisTest = mutableListOf<String>()
+
+    @AfterEach
+    fun restoreSeed() {
+        if (closedByThisTest.isEmpty()) return
+        jdbc.update(
+            "UPDATE poi SET data_status = 'ACTIVE' WHERE poi_id = ANY (?::uuid[])",
+            closedByThisTest.joinToString(",", "{", "}"),
+        )
+        closedByThisTest.clear()
+    }
+
+    /** ACTIVE 중 [keep] 밖을 닫는다 — 닫은 것만 기억해 뒤에서 정확히 되돌린다. */
+    private fun closeActiveExcept(keep: Collection<String>) {
+        val ids = jdbc.queryForList(
+            "SELECT poi_id FROM poi WHERE data_status = 'ACTIVE' AND poi_id <> ALL (?::uuid[])",
+            String::class.java,
+            keep.joinToString(",", "{", "}"),
+        )
+        if (ids.isEmpty()) return
+        closedByThisTest += ids
+        jdbc.update(
+            "UPDATE poi SET data_status = 'CLOSED' WHERE poi_id = ANY (?::uuid[])",
+            ids.joinToString(",", "{", "}"),
+        )
+    }
 
     private fun call(method: HttpMethod, path: String, bearer: String?, body: String? = null): Pair<Int, JsonNode> {
         val spec = RestClient.builder()
@@ -123,6 +156,72 @@ class SlotCandidateReproIT : AbstractPostgresIntegrationTest() {
         }
     }
 
+    @Test
+    fun `주변에 아무것도 없으면 NO_NEARBY — 반경을 넓히라는 뜻이다`() {
+        val token = newToken()
+        val trip = jejuTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        val itinerary = awaitComplete(token, trip)
+        val day = itinerary["days"][0]
+        val poi = day["slots"][0]["poiId"].asText()
+
+        // 그 슬롯만 남기고 **다른 ACTIVE 를 전부 비활성**으로 돌린다 — 주변이 진짜 비는 상황.
+        closeActiveExcept(listOf(poi))
+
+        val (rc, body) = call(
+            HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token,
+            """{"slotKey":"${day["date"].asText()}#$poi"}""",
+        )
+
+        rc shouldBe 200
+        body["candidates"].size() shouldBe 0
+        body["emptyReason"].asText() shouldBe "NO_NEARBY"
+        // 넓히기를 시도했다는 사실이 반경에 남는다(BR-U3-25).
+        body["radiusMUsed"].asInt() shouldBe 12_000
+    }
+
+    @Test
+    fun `주변이 전부 일정에 있으면 ALL_IN_ITINERARY — 넓혀도 소용없다는 뜻이다`() {
+        val token = newToken()
+        val trip = jejuTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        val itinerary = awaitComplete(token, trip)
+        val day = itinerary["days"][0]
+        val poi = day["slots"][0]["poiId"].asText()
+        val inItinerary = itinerary["days"].flatMap { d -> d["slots"].map { it["poiId"].asText() } }
+
+        // 일정에 든 것만 ACTIVE 로 남긴다 — 주변에 **있긴 한데 전부 이미 쓴** 상황.
+        // 일정이 슬롯 하나뿐이면 "주변에 있는데 전부 일정"을 만들 수 없다 — 그때는 이 시나리오가 성립하지 않는다.
+        closeActiveExcept(inItinerary)
+
+        val (rc, body) = call(
+            HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token,
+            """{"slotKey":"${day["date"].asText()}#$poi"}""",
+        )
+
+        rc shouldBe 200
+        body["candidates"].size() shouldBe 0
+        // 같은 0건이지만 사용자가 할 일이 정반대다 — 넓히기가 아니라 다른 슬롯을 빼는 것.
+        body["emptyReason"].asText() shouldBe "ALL_IN_ITINERARY"
+    }
+
+    @Test
+    fun `후보가 있으면 사유가 없다 — null 이 정상이다`() {
+        val token = newToken()
+        val trip = jejuTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        val itinerary = awaitComplete(token, trip)
+        val day = itinerary["days"][0]
+
+        val body = call(
+            HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token,
+            """{"slotKey":"${day["date"].asText()}#${day["slots"][0]["poiId"].asText()}"}""",
+        ).second
+
+        (body["candidates"].size() > 0) shouldBe true
+        body["emptyReason"].isNull shouldBe true
+    }
+
     /** 진단용 — 그 슬롯 중심에서 가까운 ACTIVE POI 와 거리(m). 0건일 때 이유가 보이게 한다. */
     private fun nearbyActive(poiId: String): List<Map<String, Any?>> = jdbc.queryForList(
         """
@@ -133,10 +232,10 @@ class SlotCandidateReproIT : AbstractPostgresIntegrationTest() {
                  power(sin(radians(p.lng - c.lng) / 2), 2)
                )))::numeric) AS m
           FROM poi p, (SELECT lat, lng FROM poi WHERE poi_id = ?::uuid) c
-         WHERE p.data_status = 'ACTIVE'
+         WHERE p.data_status = 'ACTIVE' AND p.poi_id <> ?::uuid
          ORDER BY m LIMIT 6
         """.trimIndent(),
-        poiId,
+        poiId, poiId,
     )
 
 }
