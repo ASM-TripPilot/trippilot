@@ -408,6 +408,33 @@ paths:
         '200': { description: 저장 완료 }
         '400': { $ref: '#/components/responses/ValidationError' }
 
+  /me/settings:
+    get:
+      tags: [profile]
+      summary: 계정 단위 앱 설정 조회 (l05)
+      description: >
+        저장한 적 없으면 **기본값**으로 온다 — 404 가 아니다. 첫 진입에서 화면이 설정을 그려야 한다.
+
+
+        취향(`/me/preferences`)과 **자리를 나눈다** — 취향은 여행 생성 시 `preferenceSnapshot` 으로
+        동결되므로, 앱 설정을 섞으면 "제휴 안내 다시 안 보기"가 여행 이력에 박힌다(O-U6-5).
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/AccountSettings' } } } }
+        '401': { description: 인증 필요 }
+    patch:
+      tags: [profile]
+      summary: 계정 단위 앱 설정 변경 (l05)
+      description: >
+        **준 것만** 바꾼다. 생략한 필드는 그대로다 — null 을 "끄기"로 읽으면 화면이 한 토글을 만질 때
+        다른 토글이 조용히 꺼진다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAccountSettingsRequest' }
+      responses:
+        '200': { description: 변경됨, content: { application/json: { schema: { $ref: '#/components/schemas/AccountSettings' } } } }
+        '401': { description: 인증 필요 }
   /me/deletion:
     post:
       tags: [account]
@@ -1537,6 +1564,23 @@ components:
       bearerFormat: JWT
 
   schemas:
+    AccountSettings:
+      type: object
+      required: [affiliateNoticeDismissed]
+      properties:
+        affiliateNoticeDismissed:
+          type: boolean
+          description: >
+            true 면 외부 이동 시 제휴 안내를 띄우지 않는다(BR-U6-33). **계정 단위**라 기기가 달라도
+            같은 값이다 — 설정에 있는 값이 기기마다 다르면 사용자 모델이 깨진다(DEC-U6-7a).
+            `l05` 의 `외부 이동 시 제휴 안내 다시 보기` 토글로 되돌린다.
+
+    UpdateAccountSettingsRequest:
+      type: object
+      description: 생략한 필드는 **변경하지 않는다**.
+      properties:
+        affiliateNoticeDismissed: { type: boolean, nullable: true, description: 생략 = 변경 없음 }
+
     PoiCategory:
       type: string
       enum: [명소, 맛집, 카페, 야경, 자연, 쇼핑, 문화]
