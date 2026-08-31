@@ -80,6 +80,7 @@
 - `src/__tests__/savedPlacesStructure.test.ts`  →  (export 없음)
 - `src/__tests__/savedStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/settingsBoundary.test.ts`  →  (export 없음)
+- `src/__tests__/shareCardStructure.test.ts`  →  (export 없음)
 - `src/__tests__/sharedUiStructure.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkConfigPlugin.test.ts`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
@@ -219,6 +220,7 @@
 - `src/app/trips/[tripId]/records/reflection/[date].tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/records/
+- `src/app/trips/[tripId]/records/share.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/records/summary.tsx`  →  (export 없음)
 
 ## src/app/trips/new/
@@ -438,6 +440,7 @@
 ## src/features/reflection/model/
 - `src/features/reflection/model/missingParts.ts`  →  MissingParts · missingParts
 - `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
+- `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags · captureShareImage
 - `src/features/reflection/model/statsCard.ts`  →  statsCard
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
@@ -448,10 +451,14 @@
 - `src/features/reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
 - `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · DailyReflectionScreenProps · DailyReflectionScreen
 - `src/features/reflection/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
+- `src/features/reflection/ui/FormatSegment.tsx`  →  FormatSegmentProps · FormatSegment
 - `src/features/reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
-- `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph
+- `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · ShareGlyph
 - `src/features/reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
 - `src/features/reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
+- `src/features/reflection/ui/ShareCardGlyphs.tsx`  →  DownloadGlyph · ShareGlyph · WatermarkLogoGlyph
+- `src/features/reflection/ui/ShareCardPreview.tsx`  →  ShareCardPreviewProps · ShareCardPreview
+- `src/features/reflection/ui/ShareCardScreen.tsx`  →  ShareCardScreenProps · ShareCardScreen
 - `src/features/reflection/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
 
 ## src/features/settings/model/
@@ -780,6 +787,12 @@
 
 ## src/pages/settings/ui/
 - `src/pages/settings/ui/SettingsPage.tsx`  →  SettingsPage
+
+## src/pages/share-card/
+- `src/pages/share-card/index.ts`  →  ShareCardPage
+
+## src/pages/share-card/ui/
+- `src/pages/share-card/ui/ShareCardPage.tsx`  →  ShareCardPageProps · ShareCardPage
 
 ## src/pages/stay-detail/
 - `src/pages/stay-detail/index.ts`  →  StayDetailPage
@@ -1140,4 +1153,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 772개 파일
+합계 781개 파일

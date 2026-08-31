@@ -44,7 +44,9 @@ import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
 import { SyncBadge } from '@/features/record/ui/SyncBadge';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
+import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
 import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
+import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
@@ -2389,6 +2391,73 @@ const PREVIEW_STATES: PreviewState[] = [
         orderedVisits={[]}
         shareEnabled={false}
         onShare={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  // j06 공유 카드 2키(TRIP-574) — 순수 뷰(`ShareCardScreen`)를 격리 렌더한다(`@/shared/api` 값 import 0
+  // 이라 프리뷰 지뢰 목 통과 — 컨테이너 `ShareCardPage` 는 별 파일이라 import 사슬 전이 로드 없음).
+  // 라이브 지도·view-shot 미설치라 카드는 지도 없이 동선 목록·워터마크·하단 그라디언트로 degrade 조립.
+  // 저장/공유 press 는 armed:false → "준비 중" 안내만(가짜 성공 금지). 포맷 전환(aspect)·워터마크·그라디언트
+  // 오버레이 정렬·no-photo 안내 레이아웃은 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP, 이 2키가 유일한
+  // 육안 대조 자리(포맷 세그를 눌러 9:16→1:1→4:5 종횡비가 바뀌는 것도 여기서 확인).
+  {
+    key: 'share-card-default',
+    label: 'j06 공유 카드 · default(사진 있음)',
+    login: null,
+    render: () => (
+      <ShareCardScreen
+        card={{
+          title: '부산 여행',
+          periodText: '6월 10일 수요일 ~ 6월 12일 금요일',
+          regionText: '부산 · 경주',
+          statsCells: {
+            totalVisits: 12,
+            distanceText: '38km',
+            totalPhotos: 24,
+          },
+          distanceSourceLabel: '근사',
+          orderedVisits: [
+            { order: 1, dayLabel: 'Day1', place: '광안리 해변' },
+            { order: 2, dayLabel: 'Day1', place: '감천문화마을' },
+            { order: 3, dayLabel: 'Day2', place: '해운대 해변' },
+            { order: 4, dayLabel: 'Day2', place: '전포 카페거리' },
+          ],
+          mode: 'default',
+          watermark: 'TripPilot',
+          aspectRatio: 9 / 16,
+        }}
+        formats={SHARE_FORMATS}
+        caption="광안리에서 보낸 사흘, 그리고 경주의 밤"
+        hashtagText="#부산여행 #광안리 #감천문화마을"
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'share-card-no-photo',
+    label: 'j06 공유 카드 · no-photo(사진 없음)',
+    login: null,
+    render: () => (
+      <ShareCardScreen
+        card={{
+          title: '경주 여행',
+          periodText: '6월 1일 월요일 ~ 6월 3일 수요일',
+          regionText: '경주',
+          statsCells: { totalVisits: 9, distanceText: '22km', totalPhotos: 0 },
+          distanceSourceLabel: '근사',
+          orderedVisits: [
+            { order: 1, dayLabel: 'Day1', place: '불국사' },
+            { order: 2, dayLabel: 'Day1', place: '석굴암' },
+            { order: 3, dayLabel: 'Day2', place: '첨성대' },
+          ],
+          mode: 'no-photo',
+          watermark: 'TripPilot',
+          aspectRatio: 9 / 16,
+        }}
+        formats={SHARE_FORMATS}
+        caption="사진은 없지만 동선만으로도 충분한 사흘"
+        hashtagText="#경주여행 #불국사"
         onBack={noop}
       />
     ),
