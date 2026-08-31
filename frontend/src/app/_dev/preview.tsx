@@ -1957,6 +1957,7 @@ const PREVIEW_STATES: PreviewState[] = [
         ]}
         activeDay="2026-08-21"
         onSelectDay={noop}
+        attribution={{ stayName: '해운대 그랜드 호텔', dayLabel: '2일차' }}
         mapCenter={{ lat: 35.1532, lng: 129.1187 }}
         mapPins={[
           { number: 1, lat: 35.1532, lng: 129.1187 },
@@ -2002,6 +2003,44 @@ const PREVIEW_STATES: PreviewState[] = [
             completedAt: null,
             skippedAt: '2026-08-21T16:12:00',
             arrivedLabel: '16:10',
+          },
+        ]}
+        onPressComplete={noop}
+        onPressSkip={noop}
+        onPressSpontaneous={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+      />
+    ),
+  },
+  // j01 방문 기록 · 숙소 없는 날(당일치기·이동일, TRIP-569) — 귀속 헤더가 `-stay` 가 아니라
+  // `-date`(날짜만)로 갈리는 엣지. 헤더 testID 분기를 육안 대조하는 자리(jest 는 testID 존재만,
+  // 실제 배치는 6-b 실기).
+  {
+    key: 'records-attribution-dateonly',
+    label: 'j01 방문 기록 · 숙소 없는 날(날짜만 귀속)',
+    login: null,
+    render: () => (
+      <TripRecordsScreen
+        dayTabs={[
+          { day: '2026-08-20', label: 'Day1' },
+          { day: '2026-08-21', label: 'Day2' },
+        ]}
+        activeDay="2026-08-21"
+        onSelectDay={noop}
+        attribution={{ stayName: null, dayLabel: '2일차' }}
+        mapCenter={{ lat: 37.5665, lng: 126.978 }}
+        mapPins={[]}
+        cards={[
+          {
+            visitCheckId: 'd1',
+            slotKey: '2026-08-21#p1',
+            poiId: 'p1',
+            nameKo: '경복궁',
+            arrivedAt: '2026-08-21T10:10:00',
+            completedAt: '2026-08-21T11:20:00',
+            skippedAt: null,
+            arrivedLabel: '10:10',
           },
         ]}
         onPressComplete={noop}

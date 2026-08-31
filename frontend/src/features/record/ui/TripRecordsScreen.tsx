@@ -26,6 +26,15 @@ export interface TripRecordsDayTab {
   label: string;
 }
 
+/**
+ * TRIP-569 — 활성 일자의 귀속 헤더 완성값(라벨 조립은 페이지 몫). `stayName` 이 있으면 숙소명
+ * 헤더, null/undefined 면 날짜만 헤더로 갈린다.
+ */
+export interface DayAttributionHeader {
+  dayLabel: string;
+  stayName?: string | null;
+}
+
 export interface TripRecordsScreenProps {
   dayTabs: TripRecordsDayTab[];
   activeDay: string;
@@ -33,6 +42,8 @@ export interface TripRecordsScreenProps {
   mapCenter: MapCenter;
   mapPins?: MapPin[];
   cards: VisitRecordCardVM[];
+  /** TRIP-569 — 활성 일자의 숙소·날짜 귀속 헤더(없으면 미표시, 후방호환 optional). */
+  attribution?: DayAttributionHeader;
   onPressComplete: (visitCheckId: string) => void;
   onPressSkip: (visitCheckId: string) => void;
   onPressSpontaneous: () => void;
@@ -47,6 +58,7 @@ export function TripRecordsScreen({
   mapCenter,
   mapPins,
   cards,
+  attribution,
   onPressComplete,
   onPressSkip,
   onPressSpontaneous,
@@ -103,6 +115,30 @@ export function TripRecordsScreen({
         className="flex-1"
         contentContainerClassName="gap-md px-lg pb-[120px] pt-[14px]"
       >
+        {/* TRIP-569 일자별 귀속 헤더 — "숙소 있음/없음"을 색이 아니라 상호배타 testID 로 가른다
+            (SVG fill 사각 회피, repo 관례). 숙소명·날짜 라벨은 각자 별 Text leaf 다. */}
+        {attribution ? (
+          attribution.stayName ? (
+            <View
+              testID="record-trip-attribution-stay"
+              className="w-full flex-row items-center gap-sm"
+            >
+              <Text className="font-noto-bold text-body text-ink">
+                {attribution.stayName}
+              </Text>
+              <Text className="text-label text-muted">
+                {attribution.dayLabel}
+              </Text>
+            </View>
+          ) : (
+            <View testID="record-trip-attribution-date" className="w-full">
+              <Text className="text-label text-muted">
+                {attribution.dayLabel}
+              </Text>
+            </View>
+          )
+        ) : null}
+
         <Text className="w-full text-label text-muted">
           오늘의 동선 · 방문한 곳을 사진과 메모로 남겨요
         </Text>

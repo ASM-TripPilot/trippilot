@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
 
-import { useTripRecords } from '@/features/record/model/useTripRecords';
+import { deriveStayAttribution } from '@/features/record/model/stayAttribution';
+import {
+  useRecordBases,
+  useRecordSavedStays,
+  useTripRecords,
+} from '@/features/record/model/useTripRecords';
 import { useVisitCheck } from '@/features/record/model/useVisitCheck';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import type { VisitRecordCardVM } from '@/features/record/ui/VisitRecordCard';
@@ -40,12 +45,32 @@ export function TripRecordsPage({
   const activeDay = selectedDay ?? day ?? days[0]?.date ?? '';
 
   const records = useTripRecords(tripId, activeDay);
+  const bases = useRecordBases(tripId);
+  const savedStays = useRecordSavedStays();
   const visitCheck = useVisitCheck({ tripId, day: activeDay });
 
   const dayTabs = days.map((d, index) => ({
     day: d.date,
     label: `Day${index + 1}`,
   }));
+
+  // TRIP-569 귀속 파생 — 활성 일자를 덮는 base 를 찾아 숙소명을 해소한다(저장 안 함, 매 렌더
+  // bases 로 다시 계산 = BR-U5-25). dayLabel('N일차') 조립은 페이지 몫(stayAttribution 은
+  // 날짜·숙소만 준다). 활성 일자가 없거나 방문이 없으면 헤더를 안 내린다.
+  const attributionGroups = deriveStayAttribution({
+    visits: records.data?.visits ?? [],
+    bases: bases.data ?? [],
+    savedStays: savedStays.data ?? [],
+  });
+  const activeIndex = days.findIndex((d) => d.date === activeDay);
+  const activeGroup = attributionGroups.find((g) => g.date === activeDay);
+  const attribution =
+    activeIndex >= 0
+      ? {
+          dayLabel: `${activeIndex + 1}일차`,
+          stayName: activeGroup?.baseStay?.name ?? null,
+        }
+      : undefined;
 
   // 장소명 조인 — VisitCheck 엔 poiId 만 있어 itinerary 슬롯에서 이름을 가져온다(즉석 방문은
   // 계획에 없어 poiId 로 폴백).
@@ -87,6 +112,7 @@ export function TripRecordsPage({
       mapCenter={mapCenter}
       mapPins={pins}
       cards={cards}
+      attribution={attribution}
       onPressComplete={(id) => {
         void visitCheck.complete(id);
       }}
