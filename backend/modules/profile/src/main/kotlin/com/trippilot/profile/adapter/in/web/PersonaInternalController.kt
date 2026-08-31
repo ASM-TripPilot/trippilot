@@ -49,8 +49,10 @@ class PersonaInternalController(
      * 소프트 가중치·중립 처리는 AI 지능이 소유한다(판단/검증 분리, INV-2).
      *
      * ⚠ **"계정 없음"과 "취향 미설정"을 구분하지 못한다.** [PreferenceFacade] 가 미설정 계정에도
-     * 빈 스냅숏을 돌려주는 계약이라 그렇다. 오타 난 UUID 는 오류가 아니라 중립 페르소나로 보인다.
-     * 구분하려면 auth 에 계정 존재 퍼사드를 새로 열어야 해서 이 노드 범위 밖으로 뒀다.
+     * 빈 스냅숏을 돌려주는 계약이라 그렇다. **형식이 맞지만 존재하지 않는** UUID 는 404 가 아니라
+     * 빈 스냅숏 200 으로 보인다. 구분하려면 auth 에 계정 존재 퍼사드를 새로 열어야 해서 범위 밖으로 뒀다.
+     *
+     * (형식 자체가 틀린 UUID 는 전역 핸들러가 400 으로 낸다 — UUID-PATH-400. 그 둘은 다른 사정이다.)
      */
     @GetMapping("/{accountId}/persona")
     fun persona(@PathVariable accountId: UUID): PersonaResponse =

@@ -372,3 +372,30 @@ PERSONA-API 의 국소 회피(경로변수를 String 으로 받아 직접 파싱
 계약: 경로별 400 을 39곳에 흩뿌리지 않고 openapi info.description 에 횡단 규약으로 적었다 —
 형식 오류까지 중복 선언하면 무엇이 그 엔드포인트 고유의 업무 검증인지 안 보인다.
 """
+
+[[nodes]]
+id = "FLAKY-HEALTHPING"
+ticket = ""
+title = "IntegrationHealthPingTimeoutTest 가 전체 빌드 부하에서만 간헐 실패"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/test/kotlin/com/trippilot/app/web/IntegrationHealthPingTimeoutTest.kt",
+]
+note = """
+**실측(2026-09-01, UUID-PATH-400 작업 중)**: 전체 빌드에서 1회 실패.
+`SocketException: Connection reset is of type ... but expected SocketTimeoutException`
+(`thrown.cause.shouldBeInstanceOf<SocketTimeoutException>()`, 45행)
+
+- 격리 실행 `--rerun-tasks` 3회 **전부 통과**
+- 같은 코드로 직전 전체 빌드는 통과 — 회귀가 아니다
+- 이 노드를 만든 변경(전역 예외 핸들러)과 무관한 영역이다
+
+**원인은 아직 단정하지 못했다.** 테스트는 `ServerSocket(0)` 을 열고 별도 스레드가 accept 만 하며
+한 바이트도 쓰지 않는 상황을 만든다. 부하가 걸리면 클라이언트 연결과 accepter 스레드 기동이
+경합하는 구조인데, 그것이 RST 로 이어지는 경로를 실제로 재현하지는 못했다.
+
+단정하지 말 것: 재현 없이 "타임아웃도 허용"으로 단언을 넓히면 **연결 거부와 타임아웃을 가르는
+이 테스트의 목적 자체가 사라진다**(주석 44행이 그 구분을 명시한다). accepter 준비를 래치로
+동기화한 뒤 부하를 흉내 내 재현하는 것이 먼저다.
+"""
