@@ -19,7 +19,8 @@ from pathlib import Path
 
 GRAPH = Path(__file__).resolve().parent.parent / "docs" / "design" / "work-graph.toml"
 
-# 이 상태의 노드는 우리가 착수할 수 없다 — 층 계산에서 빼고 따로 보고한다.
+# 남의 몫. **층 계산에서 빼지 않는다** — 빼면 그것을 기다리는 우리 노드가 선행을 잃고 층 0 으로
+# 올라와 "지금 착수 가능"처럼 보인다. 남겨 두고 표시에서만 구분한다.
 NOT_OURS = {"external", "deferred"}
 
 
@@ -55,20 +56,20 @@ def layers(nodes, edges):
     return out
 
 
-def collisions(nodes, level_ids):
+def collisions(nodes, ids):
     """
-    같은 층에서 같은 파일을 건드리는 노드들. **논리 의존이 아니라 병렬성 제약이다** —
+    같은 파일을 건드리는 노드들. **논리 의존이 아니라 병렬성 제약이다** —
     그래서 간선이 아니라 여기서 파생한다. 간선으로 넣으면 순서가 없는 것에 순서가 생겨 층이 왜곡된다.
 
-    쌍이 아니라 **경로별로 묶는다.** openapi.yaml 처럼 여섯이 함께 만지는 파일은 쌍으로 늘어놓으면
-    같은 말이 열다섯 줄이 되어 정작 드문 충돌이 묻힌다.
+    쌍이 아니라 **경로별로 묶는다.** openapi.yaml 처럼 여덟이 함께 만지는 파일을 쌍으로 늘어놓으면
+    같은 말이 스물여덟 줄이 되어 정작 드문 충돌이 묻힌다.
     """
     by_path = defaultdict(list)
-    for i in level_ids:
+    for i in ids:
         for t in nodes[i].get("touches", []):
             by_path[t].append(i)
     hits = sorted((p, sorted(ids)) for p, ids in by_path.items() if len(ids) > 1)
-    mig = sorted(i for i in level_ids if nodes[i].get("migration"))
+    mig = sorted(i for i in ids if nodes[i].get("migration"))
     return hits, mig
 
 
@@ -83,23 +84,31 @@ def main():
             print(f'  {f} -->|{e["kind"]}| {t}')
         return
 
-    ours = {i: n for i, n in nodes.items() if n.get("status") not in NOT_OURS}
-    ours_edges = [e for e in edges if e["from"] in ours and e["to"] in ours]
-
+    ours = [i for i, n in nodes.items() if n.get("status") not in NOT_OURS]
     print(f"노드 {len(nodes)} (우리 몫 {len(ours)}) · 간선 {len(edges)}\n")
 
-    for name, ids in layers(ours, ours_edges):
+    for name, ids in layers(nodes, edges):
+        # 남의 몫만 있는 층은 굳이 층으로 그리지 않는다 — 아래 별도 절에서 보여 준다.
+        mine = [i for i in ids if i in ours]
+        if not mine:
+            continue
         print(f"── {name} ──")
-        for i in ids:
+        for i in mine:
             n = nodes[i]
             mark = " [마이그레이션]" if n.get("migration") else ""
             print(f"  {i:<22} {n['status']:<9} {n['title'][:62]}{mark}")
-        hits, mig = collisions(nodes, ids)
+        print()
+
+    # 충돌은 **층과 무관하게** 본다. 층이 다르다고 동시에 작업하지 않는 것이 아니다 —
+    # 층은 논리적 선행일 뿐이고, 같은 파일을 만지면 언제 하든 서로의 diff 를 밟는다.
+    hits, mig = collisions(nodes, ours)
+    if hits or len(mig) > 1:
+        print("── 공유 자원(병렬성 제약) ──")
         for path, who in hits:
-            print(f"  ⚠ 공유 자원 {path}")
+            print(f"  ⚠ {path}")
             print(f"      {len(who)}개가 함께 만진다: {', '.join(who)}")
         if len(mig) > 1:
-            print(f"  ⚠ 같은 층 마이그레이션 번호 경합: {', '.join(mig)} — 착수 전에 번호를 못 박는다")
+            print(f"  ⚠ Flyway 번호 경합: {', '.join(mig)} — 동시에 열려면 번호를 먼저 못 박는다")
         print()
 
     blocked = sorted(i for i, n in nodes.items() if n.get("status") in NOT_OURS)
