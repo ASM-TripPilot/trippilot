@@ -3,6 +3,8 @@ package com.trippilot.recalculation.adapter.`in`.web
 import com.trippilot.core.error.AuthenticationRequired
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.recalculation.application.ReplanDiffService
+import com.trippilot.recalculation.application.ReplanDiffView
 import com.trippilot.recalculation.application.ReplanSessionService
 import com.trippilot.recalculation.application.StartReplan
 import com.trippilot.recalculation.domain.OriginKind
@@ -23,6 +25,8 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.security.Principal
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -33,7 +37,10 @@ import java.util.UUID
  */
 @RestController
 @RequestMapping("/api/v1/trips/{tripId}/replan-sessions")
-class ReplanController(private val service: ReplanSessionService) {
+class ReplanController(
+    private val service: ReplanSessionService,
+    private val diffs: ReplanDiffService,
+) {
 
     /** 진입. 이미 열린 세션이 있으면 **그것을 취소하고** 새로 연다(INV-U4-06) — 막지 않는다. */
     @PostMapping
@@ -65,6 +72,22 @@ class ReplanController(private val service: ReplanSessionService) {
         @PathVariable sessionId: UUID,
     ): ReplanSessionResponse =
         ReplanSessionResponse.from(service.apply(principal.accountId(), tripId, sessionId))
+
+    /**
+     * `i18` 전후 비교(US-PLANB-08 · BR-U4-25·29). **읽기만** 한다 — 원 일정은 확정 전까지 그대로다.
+     *
+     * 비교를 서버가 계산해 내리는 이유는 판정이 업무 규칙이기 때문이다(무엇이 `MOVED`·`FIXED` 인가,
+     * 거리를 하나라도 모를 때 총합을 어떻게 다루는가). 화면이 다시 구현하면 규칙이 두 곳에 흩어진다.
+     *
+     * 아직 초안이 없으면 404 가 아니라 `ready=false` 다 — "세션이 없다"와 "산출 중"이 같은 응답이면
+     * 화면이 로딩(`i12`)을 그릴지 오류를 그릴지 못 정한다.
+     */
+    @GetMapping("/{sessionId}/diff")
+    fun diff(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @PathVariable sessionId: UUID,
+    ): ReplanDiffResponse = ReplanDiffResponse.from(diffs.diff(principal.accountId(), tripId, sessionId))
 
     @PostMapping("/{sessionId}/cancel")
     fun cancel(
@@ -148,3 +171,72 @@ data class ReplanSessionResponse(
 /** 토큰 sub → 계정 id. UUID 가 아니면 인증 실패로 다룬다(형식 오류를 500 으로 흘리지 않는다). */
 private fun Principal.accountId(): UUID =
     runCatching { UUID.fromString(name) }.getOrElse { throw AuthenticationRequired() }
+
+/**
+ * 전후 비교 응답(`i18`).
+ *
+ * **소요시간 필드가 없다**(INV-3) — 전후 스냅숏은 시각과 순서만 다루고, 이동은 거리로만 말한다.
+ * [ReplanImpactResponse.returnTimeDeltaMinutes] 는 이동 소요가 아니라 **복귀 시각이 얼마나
+ * 밀렸는가**이고, 그것은 BR-U4-29 가 요구하는 지표다.
+ *
+ * @property ready false 면 아직 초안이 없다(`COLLECTING`·`SOLVING`·대안 없음). 나머지는 비어 있다.
+ */
+data class ReplanDiffResponse(
+    val ready: Boolean,
+    val status: String,
+    val date: LocalDate?,
+    val before: List<ReplanDiffSlotResponse>,
+    val after: List<ReplanDiffSlotResponse>,
+    val entries: List<ReplanDiffEntryResponse>,
+    val impact: ReplanImpactResponse?,
+) {
+    companion object {
+        fun from(v: ReplanDiffView) = ReplanDiffResponse(
+            ready = v.ready,
+            status = v.status.name,
+            date = v.date,
+            before = v.before.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed) },
+            after = v.after.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed) },
+            entries = v.result?.entries.orEmpty()
+                .map { ReplanDiffEntryResponse(it.slotKey, it.change.name, it.beforeStart, it.afterStart) },
+            impact = v.result?.impact?.let {
+                ReplanImpactResponse(
+                    visitCountDelta = it.visitCountDelta,
+                    // 분으로 낸다 — 화면이 "30분 늦어져요"로 그린다. null 은 비교할 슬롯이 없다는 뜻이다.
+                    returnTimeDeltaMinutes = it.returnTimeDelta?.toMinutes(),
+                    totalDistanceDeltaM = it.totalDistanceDeltaM,
+                )
+            },
+        )
+    }
+}
+
+/** 비교 대상 슬롯 한 칸. 짝은 **경계 키**로 맞춘다(BR-U2-04). */
+data class ReplanDiffSlotResponse(
+    val slotKey: String,
+    val startAt: LocalTime,
+    val endAt: LocalTime,
+    val isFixed: Boolean,
+)
+
+/**
+ * 항목별 변화. `REMOVED` 는 **조용히 사라지지 않게** 뒤에 모아 싣는다(BR-U4-25 제외·이월 명시).
+ */
+data class ReplanDiffEntryResponse(
+    val slotKey: String,
+    val change: String,
+    val beforeStart: LocalTime?,
+    val afterStart: LocalTime?,
+)
+
+/**
+ * 영향 지표 3종(BR-U4-29).
+ *
+ * @property totalDistanceDeltaM **어느 한쪽이라도 거리를 모르면 null** 이다. 0 으로 채우면
+ *   "거리가 줄었다"는 거짓 요약이 된다.
+ */
+data class ReplanImpactResponse(
+    val visitCountDelta: Int,
+    val returnTimeDeltaMinutes: Long?,
+    val totalDistanceDeltaM: Int?,
+)
