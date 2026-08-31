@@ -10,6 +10,7 @@ import com.trippilot.notification.application.FireOutcome
 import com.trippilot.notification.application.NotificationFiringService
 import com.trippilot.notification.application.NotificationScheduleService
 import com.trippilot.notification.domain.Notification
+import com.trippilot.notification.domain.NotificationAction
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.NotificationSchedule
@@ -90,7 +91,7 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
             title = "비 예보 — 일정이 영향받아요",
             body = "대안 일정을 확인해 보세요.",
             occurredAt = now,
-            actionType = NotificationSchedule.ACTION_TRIP_ITINERARY,
+            actionType = NotificationAction.TRIP_ITINERARY,
             actionPayload = mapOf("tripId" to UUID.randomUUID().toString(), "slotKey" to "2036-08-10#x"),
             sourceEventId = eventId,
         )
@@ -120,7 +121,7 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
         notifications.appendIfAbsent(
             Notification.raise(
                 accountId, NotificationKind.PLAN_B, "제목", "본문", now,
-                actionType = NotificationSchedule.ACTION_TRIP_ITINERARY, actionPayload = payload,
+                actionType = NotificationAction.TRIP_ITINERARY, actionPayload = payload,
                 sourceEventId = UUID.randomUUID(),
             ),
         ) shouldBe true

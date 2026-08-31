@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.core.event.OutboxSubscriber
 import com.trippilot.notification.application.NotificationRaiseService
+import com.trippilot.notification.domain.NotificationAction
 import com.trippilot.notification.domain.NotificationKind
 import org.springframework.stereotype.Component
 import java.util.UUID
@@ -46,14 +47,11 @@ class StayRegisteredSubscriber(
             sourceEventId = envelope.eventId,
             // 같은 숙소를 다시 등록하는 일은 없지만(행이 새로 생긴다), 억제 판정의 재료는 남긴다.
             dedupKey = "STAY#${envelope.aggregateId}",
-            actionType = ACTION_STAY_DETAIL,
+            actionType = NotificationAction.STAY_DETAIL,
             actionPayload = mapOf("savedStayId" to envelope.aggregateId),
         )
     }
 
-    private companion object {
-        private const val ACTION_STAY_DETAIL = "STAY_DETAIL"
-    }
 }
 
 /**
@@ -86,16 +84,13 @@ class PlanBTriggeredSubscriber(
             dedupKey = "PLAN_B#$tripId#${payload.text("slotKey").orEmpty()}",
             // 일정 화면이 아니라 **재계획 진입**이다(BR-U6-08 '대안 일정 보기'). 일정만 열어 주면
             // 사용자가 알림을 읽고도 무엇을 하라는 것인지 다시 찾아야 한다.
-            actionType = ACTION_PLANB_REPLAN,
+            actionType = NotificationAction.PLANB_REPLAN,
             // 어느 트리거로 열린 재계획인지 실어야 화면이 사유를 다시 물어보지 않는다.
             // 세션 id 는 아직 없다 — 세션은 사용자가 진입할 때 열린다.
             actionPayload = mapOf("tripId" to tripId, "triggerId" to envelope.aggregateId),
         )
     }
 
-    private companion object {
-        private const val ACTION_PLANB_REPLAN = "PLANB_REPLAN"
-    }
 }
 
 /**
@@ -145,8 +140,8 @@ class ReflectionReadySubscriber(
             dedupKey = "REFLECTION#$tripId#${dayDate.orEmpty()}",
             actionType = when {
                 empty -> null
-                summary -> ACTION_TRIP_SUMMARY
-                else -> ACTION_REFLECTION_DAILY
+                summary -> NotificationAction.TRIP_SUMMARY
+                else -> NotificationAction.REFLECTION_DAILY
             },
             // 하루 회고는 **어느 날짜**인지까지 실어야 화면이 여러 장 중 하나를 고를 수 있다.
             actionPayload = when {
@@ -160,8 +155,6 @@ class ReflectionReadySubscriber(
     private companion object {
         private const val KIND_SUMMARY = "SUMMARY"
         private const val SOURCE_BASIC = "BASIC"
-        private const val ACTION_REFLECTION_DAILY = "REFLECTION_DAILY"
-        private const val ACTION_TRIP_SUMMARY = "TRIP_SUMMARY"
     }
 }
 
