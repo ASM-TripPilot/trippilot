@@ -23,6 +23,10 @@ GRAPH = Path(__file__).resolve().parent.parent / "docs" / "design" / "work-graph
 # 올라와 "지금 착수 가능"처럼 보인다. 남겨 두고 표시에서만 구분한다.
 NOT_OURS = {"external", "deferred"}
 
+# 끝난 것. 층에서 빼되 **지우지는 않는다** — 지우면 그 노드가 무엇을 막고 있었는지,
+# 왜 그렇게 갈랐는지가 함께 사라진다. 간선의 선행이 충족됐는지 판정에도 필요하다.
+DONE = {"done"}
+
 
 def load():
     data = tomllib.loads(GRAPH.read_text(encoding="utf-8"))
@@ -84,8 +88,12 @@ def main():
             print(f'  {f} -->|{e["kind"]}| {t}')
         return
 
-    ours = [i for i, n in nodes.items() if n.get("status") not in NOT_OURS]
-    print(f"노드 {len(nodes)} (우리 몫 {len(ours)}) · 간선 {len(edges)}\n")
+    ours = [i for i, n in nodes.items() if n.get("status") not in NOT_OURS | DONE]
+    done = sorted(i for i, n in nodes.items() if n.get("status") in DONE)
+    print(f"노드 {len(nodes)} (남은 우리 몫 {len(ours)} · 완료 {len(done)}) · 간선 {len(edges)}")
+    if done:
+        print(f"완료: {', '.join(done)}")
+    print()
 
     for name, ids in layers(nodes, edges):
         # 남의 몫만 있는 층은 굳이 층으로 그리지 않는다 — 아래 별도 절에서 보여 준다.
