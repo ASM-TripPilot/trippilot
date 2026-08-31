@@ -75,6 +75,7 @@
 
 - **Kotlin 주석(특히 KDoc `/** */`) 안에 `/api/v1/**` 같은 `/*` 시퀀스를 넣지 말 것.** Kotlin은 블록주석이 **중첩**돼서, 경로 글로브의 `/`+`*`가 중첩주석을 열고 KDoc의 `*/`가 그 중첩분만 닫아 **파일 전체가 미완결 주석**이 된다("Unclosed comment" + 뒤이어 import·참조 전부 unresolved 연쇄). 주석에선 글로브를 "(base 하위)"처럼 풀어쓰거나 백틱/코드블록으로. (PR #44 OpenApiContractIT)
 - **기본값이 있는 파라미터를 시그니처 가운데에 끼우지 말 것 → 맨 뒤에 붙인다.** `NormalizedPlace`·`Poi.reconstitute` 에 새 필드를 관련 필드 옆(가독성)에 넣었더니 **위치 인자로 조립하던 어댑터·테스트가 전부** 깨졌다. 타입이 달라 컴파일이 잡아 줬을 뿐이고, 인접 필드가 같은 타입이었다면(여기선 `String?` 이 연달아 있다) 조용히 값이 한 칸씩 밀린다. 가독성을 위한 배치는 KDoc 으로, 순서는 호환성으로 정한다. (TRIP-359, PR #230)
+- **`@PathVariable` 로 `UUID` 를 직접 받지 말 것 → 문자열로 받아 파싱하거나, 전역에서 타입변환 실패를 400 으로 잡을 것.** Spring 의 경로변수 타입변환 실패는 `MethodArgumentTypeMismatchException` 인데 `GlobalExceptionHandler` 가 그것을 모른다 — 실측으로 `GET /api/v1/trips/not-a-uuid` 가 **500 `INTERNAL`** 을 냈다(2026-09-01). 이 리포의 UUID 경로변수 엔드포인트 **전부**가 같다. 호출자가 이상한 값을 보낸 것을 서버 장애로 알리면 프론트·AI 가 자기 버그를 우리 장애로 읽고, 5xx 기준으로 갈리는 재시도·폴백이 **잘못된 갈래를 탄다**(TRIP-249 3번과 같은 실패 형태다). (PERSONA-API 작업 중 실측)
 - **Spring MVC의 `RequestMappingHandlerMapping` 은 `..mvc.method.annotation` 패키지다**(`..mvc.method` 아님). 또 컨텍스트에 매핑 빈이 여럿이라 주입 시 `@Qualifier("requestMappingHandlerMapping")`로 MVC 것을 지정(actuator 매핑과 구분). (PR #44)
 
 ## 테스트
