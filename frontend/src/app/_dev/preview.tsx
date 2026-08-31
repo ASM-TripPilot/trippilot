@@ -39,6 +39,8 @@ import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { ConflictSheet } from '@/features/record/ui/ConflictSheet';
+import { MemoInline } from '@/features/record/ui/MemoInline';
+import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
 import { SyncBadge } from '@/features/record/ui/SyncBadge';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
@@ -2143,6 +2145,37 @@ const PREVIEW_STATES: PreviewState[] = [
         ]}
         onApply={noop}
       />
+    ),
+  },
+  // j01 사진·메모 첨부(TRIP-566) — PhotoThumbStrip 상태별 셀(available/other-device/unavailable)과 `+`
+  // 추가 타일, MemoInline(낙관값·placeholder) 두 벌을 한 화면에서 육안 대조한다. 순수 뷰(`@/shared/api`
+  // 값 import 0)라 프리뷰 지뢰 목 통과. ★네이티브 피커 미설치라 available 셀은 uri:null placeholder(실
+  // 썸네일·간격·EXIF 는 이 세션 검증 불가, 후속 티켓·6-b 몫). 상태 셀·문구는 jest 가 잠그고, 픽셀은 여기.
+  {
+    key: 'records-photo-memo',
+    label: 'j01 사진·메모 첨부 · 상태별',
+    login: null,
+    render: () => (
+      <View className="flex-1 gap-md bg-canvas px-lg pt-[80px]">
+        <PhotoThumbStrip
+          photos={[
+            { visitPhotoMetaId: 'ph-a', availability: 'available', uri: null },
+            {
+              visitPhotoMetaId: 'ph-b',
+              availability: 'other-device',
+              uri: null,
+            },
+            {
+              visitPhotoMetaId: 'ph-c',
+              availability: 'unavailable',
+              uri: null,
+            },
+          ]}
+          onPressAdd={noop}
+        />
+        <MemoInline text="바람이 좋았고 노을이 근사했다" onSubmit={noop} />
+        <MemoInline onSubmit={noop} />
+      </View>
     ),
   },
   // j03 오늘의 회고 4얼굴(TRIP-571) — 순수 뷰(`DailyReflectionScreen`)를 격리 렌더한다(`@/shared/api`

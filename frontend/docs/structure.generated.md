@@ -67,6 +67,7 @@
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggersRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/recordAttributionStructure.test.ts`  →  (export 없음)
+- `src/__tests__/recordPhotoBinaryGuard.test.ts`  →  (export 없음)
 - `src/__tests__/recordsDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
 - `src/__tests__/reflectionFallbackStructure.test.ts`  →  (export 없음)
@@ -413,15 +414,20 @@
 ## src/features/record/model/
 - `src/features/record/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
 - `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
+- `src/features/record/model/photoAttach.ts`  →  photoAttach
+- `src/features/record/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
 - `src/features/record/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
 - `src/features/record/model/syncQueue.ts`  →  SyncStatus · SyncQueueItem · ReplayExecutor · enqueue · replayQueue
 - `src/features/record/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
 - `src/features/record/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
+- `src/features/record/model/useVisitAttachments.ts`  →  useVisitAttachments
 - `src/features/record/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
 - `src/features/record/model/visitStatus.ts`  →  VisitStatus · deriveVisitStatus
 
 ## src/features/record/ui/
 - `src/features/record/ui/ConflictSheet.tsx`  →  ConflictSheetProps · ConflictSheet
+- `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
+- `src/features/record/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
 - `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · BackArrowGlyph · HeartGlyph
 - `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
 - `src/features/record/ui/SyncBadge.tsx`  →  SYNC_BADGE_LABEL · SyncBadge
@@ -1094,6 +1100,9 @@
 - `src/shared/map/index.ts`  →  KakaoMapView · type KakaoMapViewProps · REGISTERED_DOMAIN · type MapCenter · type MapPin · type KakaoMapMessage
 - `src/shared/map/mapHtml.ts`  →  MapCenter · MapPin · KakaoMapMessage · REGISTERED_DOMAIN · MAP_LOAD_FAILED_MESSAGE · buildMapHtml
 
+## src/shared/photo/
+- `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset
+
 ## src/shared/pref/
 - `src/shared/pref/preferenceSelection.ts`  →  toggleMulti · toggleSingle
 
@@ -1131,4 +1140,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 765개 파일
+합계 772개 파일
