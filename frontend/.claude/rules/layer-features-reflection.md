@@ -56,7 +56,26 @@ paths:
 
 j03·j04 진입점 배선: `pages/daily-reflection/ui/DailyReflectionPage.tsx`·`pages/trip-summary/ui/TripSummaryPage.tsx`가 각각 `router.push('/trips/{tripId}/records/share')`로 실체화(`TripSummaryPage.onShare`는 기존 no-op 스텁이었음). 조회·조립 단일 출처는 `pages/share-card/ui/ShareCardPage.tsx`(`layer-pages.md` 참고).
 
+### j05 여행 스타일 분석 (TRIP-573)
+
+**계정 단위**(`/me/style`, tripId 없음, INV-U5-08) — 지금까지 j 밴드 전부가 여행 단위였던 것과 다르다. **판정 한 곳, 화면은 얼굴만**(j03·j04 교훈 계승) — 승격 권위는 서버 `official` 플래그뿐, `progress.current`는 표시용으로만 읽고 승격 판정엔 **아예 관여시키지 않는다**(PBT-U5-F4, CI 차단 게이트).
+
+| 파일 | 역할 |
+|---|---|
+| `model/styleThreshold.ts` | **신규.** `resolveStyleFace(envelope): 'official'\|'insufficient'` — `official===true && analysis!=null`만 official, 그 외(9↔10 경계 포함) 전부 insufficient. `progress.current`를 아예 안 읽어 자체 승격 합성을 구조적으로 차단(fast-check 500회 PBT로 잠금). `categoryLabel(share)` — 집계(상위3+기타)는 서버(`isOther`)가 이미 함, 클라 몫은 표시 라벨 변환 하나(`맛집→미식`, 나머지 항등, `isOther→'기타'`). [[반쪽 방어 (half-applied guard)]] 방어: envelope/progress/analysis 중첩 결측에도 크래시 0·항상 insufficient. |
+| `model/styleThreshold.test.ts` | PBT-U5-F4 fast-check property 3종(numRuns 500) + 9↔10 경계 예제 + 반쪽 방어 케이스 + `categoryLabel` 매핑. |
+| `model/useStyleAnalysis.ts` | **신규.** `useGetMeStyle`(orval, `/me/style`) 얇은 래퍼(조회 전용, mutation 0). 반환 타입 애너테이션은 명세 제안(`ReturnType<typeof useGetMeStyle>`)이 오버로드 마지막 시그니처를 집어 `.data`를 뭉개는 tsc 충돌이 나 **뺐다**(직접 호출 추론이 `StyleAnalysisEnvelope\|undefined`로 정확 — MyPage 선례). |
+| `ui/TravelStyleScreen.tsx` | **신규.** `face`로만 두 얼굴 분기(재판정 없음). official=서브타이틀·지도 placeholder(`reflection-style-map`)·`CategoryBarList`·`StatTile`×2·`EvidenceLink` / insufficient=진행 게이지(`reflection-style-progress`)·"정식 아님"·`preview.descriptors` 칩. **INV-3 예외를 값 인터폴레이션으로 통과**(★핵심 기법) — `StatTile`이 숫자·단위를 `{value}{unit}` 한 Text로 조립해 소스에 리터럴 `72분` 문자열을 안 둔다. 기존 INV-3 가드 2개(`reflectionStructure.test.ts` G6·`reflectionSummaryStructure.test.ts` AC-4)가 `\d+\s*분` 정규식으로 소스만 훑기 때문에 인터폴레이션 형태는 **미매치**(렌더 출력 `72분`은 이 스캔이 원리적으로 못 봄) → 화이트리스트 추가 없이 두 가드가 무수정으로 통과했다(BR-U5-08a 예외 허용, 실검증 완료 — 04 리포트). `avgDwellMinutes==null`이면 dwell 타일 자체를 안 그린다(0 채움 금지). 텍스트 충돌 회피로 지도 placeholder 문구를 "지도 표시 예정"(EvidenceLink press 후 "준비 중"과 겹침 방지)으로, 정식 얼굴은 descriptors를 안 그린다(임시 얼굴 칩과 `getByText` 매치 겹침 방지). **5-c**: `monthDay(analysis.updatedAt)`이 [[반쪽 방어 (half-applied guard)]] 여섯 번째 변형이었다 — `categoryBreakdown`은 `?? []`로 degrade하는데 서브타이틀 날짜만 무방비(`iso.slice`)였던 비대칭을 nullish 가드로 봉합. |
+| `ui/TravelStyleScreen.test.tsx` | AC-2(official 렌더)·AC-3(insufficient 렌더, 상호배타)·AC-5(72분 표시/null degrade). |
+| `ui/CategoryBarList.tsx` | **신규.** testID `reflection-style-bar`(행당 1개, exact testID View — SVG 한 장 fill 함정 회피, `StyleSummaryCard` dot 게이지 패턴 계승). 최상위(max) 막대만 primary 색(jest 무심판, [검증] 픽셀 대조). `categories ?? []` 반쪽 방어. |
+| `ui/StatTile.tsx` | **신규.** testID `reflection-style-stat-places`·`reflection-style-stat-dwell`. `{value}{unit}` 값 인터폴레이션 강제(위 INV-3 절 참고). |
+| `ui/EvidenceLink.tsx` | **신규.** testID `reflection-style-evidence`. 목적지 라우트 정본 부재(계정 단위, 단일 여행 없음) → press는 로컬 "준비 중" degrade만(가짜 이동 0, INV-4). 목적지 정의는 Follow-up E(신규 티켓 후보). |
+
+지도 히어로는 **계약 좌표 공백**(`StyleAnalysisBody`에 avgRadiusKm 스칼라만, lat/lng 없음)이라 `KakaoMapView` import 자체가 0건 — `itineraryMapSurfaceStructure.test.ts`의 `LOCKED_CALLERS` 등재가 불필요하다(j02·j04 관례 계승, [[degrade 스텁 — 못 켜는 기능은 정직하게 꺼둔다]]). 실 반경 원 렌더는 좌표 계약 확장 + `shared/map` 확장 선행(Blocker D, 신규 티켓 후보).
+
+진입점 배선: `features/settings/ui/StyleSummaryCard.tsx`의 `my-style-detail`이 `onPressDetail?` prop-gated로 활성화(`disabled={onPressDetail==null}`, 미주입 시 여전히 disabled — backward-compat)됐고 `MyPage.tsx`가 `router.push('/records/style')`를 주입한다(`layer-features-settings.md` 참고). 라우트·페이지는 `app/records/style.tsx`·`pages/travel-style/`(`layer-app.md`·`layer-pages.md` 참고).
+
 ## 관련
 
 - 개념: [[회고 폴백 3단 (방어층 — 서버가 표시본 결정)]] · [[옵셔널 체이닝은 매 단계 필요]] · [[degrade 스텁 — 못 켜는 기능은 정직하게 꺼둔다]] · [[가드의 사정거리 (opt-in 등재는 넓히되 기존 사각은 그대로다)]] · [[소스 스캔 가드의 폴더 전수와 자동 편입]] · [[반쪽 방어 (half-applied guard)]] · [[페이지 조립은 jest 무심판]]
-- 개발로그: [[2026-08-31 20260831-trip571-daily-reflection]] · [[2026-09-01 20260831-trip572-trip-summary]] · [[2026-09-01 20260831-trip574-share-card]]
+- 개발로그: [[2026-08-31 20260831-trip571-daily-reflection]] · [[2026-09-01 20260831-trip572-trip-summary]] · [[2026-09-01 20260831-trip574-share-card]] · [[2026-09-01 20260901-trip573-travel-style]]

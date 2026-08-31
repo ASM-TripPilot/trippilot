@@ -49,6 +49,7 @@ import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
 import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
 import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
 import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
+import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
@@ -2460,6 +2461,82 @@ const PREVIEW_STATES: PreviewState[] = [
         formats={SHARE_FORMATS}
         caption="사진은 없지만 동선만으로도 충분한 사흘"
         hashtagText="#경주여행 #불국사"
+        onBack={noop}
+      />
+    ),
+  },
+  // j05 여행 스타일 3키(TRIP-573) — 순수 뷰(`TravelStyleScreen`)를 격리 렌더한다(`@/shared/api` 값
+  // import 0 이라 프리뷰 지뢰 목 통과 — 컨테이너 `TravelStylePage` 는 별 파일이라 import 사슬 전이
+  // 로드 없음). 지도는 좌표 계약 공백이라 늘 placeholder degrade(가짜 지도 금지). 코랄 막대·StatTile
+  // 카드·진행 게이지·미리보기 칩·EvidenceLink press "준비 중" degrade 는 픽셀·상호작용이라 6-b/육안 몫
+  // — 자율/야간이라 6-b SKIP, 이 3키가 유일한 육안 대조 자리(정식·avgDwell null degrade·임시 3얼굴).
+  {
+    key: 'travel-style-official',
+    label: 'j05 여행 스타일 · 정식(default)',
+    login: null,
+    render: () => (
+      <TravelStyleScreen
+        face="official"
+        progress={{ current: 14, required: 10 }}
+        analysis={{
+          descriptors: ['#바다', '#미식'],
+          traitGauges: { easygoing: 4, foodAffinity: 4, activeness: 3 },
+          categoryBreakdown: [
+            { category: '카페', ratio: 0.4, isOther: false },
+            { category: '자연', ratio: 0.25, isOther: false },
+            { category: '맛집', ratio: 0.2, isOther: false },
+            { category: '상위3밖', ratio: 0.15, isOther: true },
+          ],
+          avgPlacesPerDay: 4,
+          avgRadiusKm: 1.2,
+          avgDwellMinutes: 72,
+          sampleTripCount: 3,
+          updatedAt: '2026-06-13T09:00:00Z',
+        }}
+        preview={null}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    // 엣지 — avgDwellMinutes:null → 평균 체류 타일이 사라진다(0 으로 안 채움, BR-U5-08a degrade).
+    key: 'travel-style-no-dwell',
+    label: 'j05 여행 스타일 · 정식(체류 미측정)',
+    login: null,
+    render: () => (
+      <TravelStyleScreen
+        face="official"
+        progress={{ current: 11, required: 10 }}
+        analysis={{
+          descriptors: ['#느긋'],
+          traitGauges: { easygoing: 5, foodAffinity: 2, activeness: 2 },
+          categoryBreakdown: [
+            { category: '자연', ratio: 0.55, isOther: false },
+            { category: '카페', ratio: 0.3, isOther: false },
+            { category: '상위3밖', ratio: 0.15, isOther: true },
+          ],
+          avgPlacesPerDay: 3,
+          avgRadiusKm: 0.8,
+          avgDwellMinutes: null,
+          sampleTripCount: 2,
+          updatedAt: '2026-06-13T09:00:00Z',
+        }}
+        preview={null}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    // 임시 — official:false. 진행 게이지 + "정식 아님" + 온보딩 취향 미리보기 칩(Figma 목업엔 없으나 BR 우선).
+    key: 'travel-style-insufficient',
+    label: 'j05 여행 스타일 · 임시(부족)',
+    login: null,
+    render: () => (
+      <TravelStyleScreen
+        face="insufficient"
+        progress={{ current: 6, required: 10 }}
+        analysis={null}
+        preview={{ descriptors: ['느긋한 여행', '바다 선호', '미식 탐험'] }}
         onBack={noop}
       />
     ),

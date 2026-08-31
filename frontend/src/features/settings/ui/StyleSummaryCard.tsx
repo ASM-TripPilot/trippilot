@@ -19,6 +19,12 @@ import type { StyleCardVM, StyleGauge } from '../model/styleCardModel';
 
 export interface StyleSummaryCardProps {
   vm: StyleCardVM;
+  /**
+   * 상세 진입 콜백(TRIP-573, prop-gated). 미주입이면 상세 진입은 real `disabled`(라우트가 없던
+   * 시절의 정직 degrade 계약 — `StyleSummaryCard.test.tsx` AC-S6 무회귀). `records/style` 라우트가
+   * 생긴 지금은 `MyPage` 가 `router.push('/records/style')` 를 주입해 활성화한다.
+   */
+  onPressDetail?: () => void;
 }
 
 const GAUGE_MAX = 5;
@@ -49,7 +55,10 @@ function GaugeRow({ label, value }: StyleGauge): ReactElement {
   );
 }
 
-export function StyleSummaryCard({ vm }: StyleSummaryCardProps): ReactElement {
+export function StyleSummaryCard({
+  vm,
+  onPressDetail,
+}: StyleSummaryCardProps): ReactElement {
   if (vm.kind === 'insufficient') {
     return (
       <View
@@ -71,12 +80,17 @@ export function StyleSummaryCard({ vm }: StyleSummaryCardProps): ReactElement {
       testID="my-style-card"
       className="gap-md rounded-card border border-hairline bg-canvas p-lg"
     >
-      {/* 헤더 — 제목 + 상세 진입(라우트 records/style 미존재 → real disabled, INV-4). */}
+      {/* 헤더 — 제목 + 상세 진입(prop-gated: onPressDetail 미주입이면 real disabled, INV-4). */}
       <View className="flex-row items-center justify-between">
         <Text className="font-noto-bold text-[16px] font-bold text-ink">
           내 여행 스타일
         </Text>
-        <Pressable testID="my-style-detail" accessibilityRole="button" disabled>
+        <Pressable
+          testID="my-style-detail"
+          accessibilityRole="button"
+          disabled={onPressDetail == null}
+          onPress={onPressDetail}
+        >
           <Text className="font-noto text-label text-primary">상세 분석 ›</Text>
         </Pressable>
       </View>
