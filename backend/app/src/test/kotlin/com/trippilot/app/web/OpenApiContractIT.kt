@@ -100,10 +100,13 @@ class OpenApiContractIT : AbstractPostgresIntegrationTest() {
             strict.load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
         }.exceptionOrNull()
 
+        // 메시지에서 원인을 **단정하지 않는다.** 이 자리는 중복 키 말고 문법 오류로도 실패할 수 있고,
+        // "중복이다"라고 못 박으면 다음 사람이 없는 원인을 뒤진다. 실제 사유는 아래 줄에 그대로 싣는다.
         assertTrue(failure == null) {
-            "openapi.yaml 에 중복 키가 있다 — 먼저 선언한 쪽이 조용히 사라진다.\n" +
+            "openapi.yaml 을 엄격 모드로 읽지 못했다 — 사유는 아래 그대로다.\n" +
                 "  ${failure?.message?.replace("\n", "\n  ")}\n" +
-                "(브랜치를 합치며 스키마를 양쪽에서 덧붙이면 생긴다. 프론트 codegen 이 막힌다)"
+                "(중복 키라면 먼저 선언한 쪽이 조용히 사라진다. 브랜치를 합치며 스키마를 양쪽에서 " +
+                "덧붙이면 생기고, 프론트 codegen 이 막힌다)"
         }
     }
 
