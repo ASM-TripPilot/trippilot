@@ -118,9 +118,10 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
 
+        val triggerId = UUID.randomUUID().toString()
         events.publish(
             PlanBTriggered(
-                UUID.randomUUID().toString(), accountId.toString(), tripId.toString(),
+                triggerId, accountId.toString(), tripId.toString(),
                 "WEATHER", "2026-08-11#${UUID.randomUUID()}", "비 예보로 실내 대안이 필요해요",
             ),
         )
@@ -128,8 +129,30 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
 
         val notification = notificationsOf(accountId, NotificationKind.PLAN_B).single()
         notification.body shouldBe "비 예보로 실내 대안이 필요해요"
-        // 알림에서 그 여행으로 들어간다 — 진입이 없으면 사용자가 읽고도 갈 곳이 없다.
+        // 일정 화면이 아니라 **재계획 진입**이다(BR-U6-08 '대안 일정 보기'). 일정만 열면
+        // 사용자가 알림을 읽고도 무엇을 하라는 것인지 다시 찾아야 한다.
+        notification.actionType shouldBe "PLANB_REPLAN"
         notification.actionPayload?.get("tripId") shouldBe tripId.toString()
+        // 어느 트리거로 열린 재계획인지 실어야 화면이 사유를 다시 묻지 않는다.
+        notification.actionPayload?.get("triggerId") shouldBe triggerId
+    }
+
+    @Test
+    fun `회고에 쓸 데이터가 없으면 액션이 없다 — 빈 화면으로 보내지 않는다(BR-U6-12)`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+
+        // source=BASIC 이 "근거가 하나도 없어 기본 카드로 떨어졌다"는 신호다.
+        events.publish(
+            ReflectionReadyEvent(UUID.randomUUID().toString(), tripId.toString(), "2026-08-11", "DAILY", "BASIC"),
+        )
+        deliver()
+
+        val notification = notificationsOf(accountId, NotificationKind.REFLECTION).single()
+        notification.body shouldBe "기록할 활동이 없어 회고를 생성하지 못했습니다"
+        // 액션 있는 척 그리면 사용자가 빈 화면에 도착한다(INV-4).
+        notification.actionType shouldBe null
+        notification.actionPayload shouldBe null
     }
 
     @Test
@@ -143,7 +166,11 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         )
         deliver()
 
-        notificationsOf(accountId, NotificationKind.REFLECTION).single().title shouldBe "오늘의 회고가 준비됐어요"
+        val notification = notificationsOf(accountId, NotificationKind.REFLECTION).single()
+        notification.title shouldBe "오늘의 회고가 준비됐어요"
+        notification.actionType shouldBe "REFLECTION_DAILY"
+        // 여행 하나에 하루 회고가 여러 장이라 날짜가 없으면 어느 것을 열지 정할 수 없다.
+        notification.actionPayload?.get("dayDate") shouldBe "2026-08-11"
     }
 
     @Test
@@ -154,7 +181,11 @@ class DomainNotificationIT : AbstractPostgresIntegrationTest() {
         events.publish(ReflectionReadyEvent(UUID.randomUUID().toString(), tripId.toString(), null, "SUMMARY", "RULE"))
         deliver()
 
-        notificationsOf(accountId, NotificationKind.REFLECTION).single().title shouldBe "여행 요약이 준비됐어요"
+        val notification = notificationsOf(accountId, NotificationKind.REFLECTION).single()
+        notification.title shouldBe "여행 요약이 준비됐어요"
+        // 요약은 여행 하나로 열린다 — 하루 회고와 액션이 갈려야 화면이 다른 곳으로 간다.
+        notification.actionType shouldBe "TRIP_SUMMARY"
+        notification.actionPayload?.get("dayDate") shouldBe null
     }
 
     @Test

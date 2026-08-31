@@ -45,7 +45,7 @@ data class NotificationSchedule(
         body = body(),
         occurredAt = now,
         // 알림에서 그 여행의 일정으로 들어간다. 진입이 없으면 사용자가 알림을 읽고도 갈 곳이 없다.
-        actionType = ACTION_TRIP_ITINERARY,
+        actionType = NotificationAction.TRIP_ITINERARY,
         actionPayload = mapOf("tripId" to tripId.toString()),
         // 원천 사건이 없다(시각이 되어 발화했다) — 멱등은 fired_at 조건부 쓰기가 담당한다.
         sourceEventId = null,
@@ -66,8 +66,6 @@ data class NotificationSchedule(
     }
 
     companion object {
-        /** 화면 진입 종류. 지금은 하나뿐이라 상수로 둔다. */
-        const val ACTION_TRIP_ITINERARY = "TRIP_ITINERARY"
 
         /** 아직 발화도 취소도 되지 않은 예약 — 재계산·폴링의 대상이 정확히 이 집합이다. */
         fun pending(
