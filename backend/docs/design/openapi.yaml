@@ -61,6 +61,7 @@ paths:
         '409': { $ref: '#/components/responses/SocialEmailConflict' }
         '422': { $ref: '#/components/responses/AgeNotMet' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '501': { description: 그 제공자를 **아직** 지원하지 않는다(PROVIDER_NOT_SUPPORTED). 401 과 갈린다 — 재시도로 풀리지 않는다 }
 
   /auth/social/{provider}/token:
     post:
@@ -97,6 +98,7 @@ paths:
         '409': { $ref: '#/components/responses/SocialEmailConflict' }
         '422': { $ref: '#/components/responses/AgeNotMet' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '501': { description: 그 제공자를 **아직** 지원하지 않는다(PROVIDER_NOT_SUPPORTED). 401 과 갈린다 — 재시도로 풀리지 않는다 }
 
   /auth/token/refresh:
     post:

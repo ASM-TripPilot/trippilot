@@ -1,5 +1,6 @@
 package com.trippilot.auth.adapter.out.external
 
+import com.trippilot.core.error.ProviderNotSupported
 import com.fasterxml.jackson.databind.JsonNode
 import com.trippilot.auth.domain.Provider
 import com.trippilot.auth.domain.SocialProfile
@@ -30,14 +31,15 @@ class AppleOAuthClient(
     private val restClient = restClientBuilder.build()
 
     override fun fetchProfile(authorizationCode: String, codeVerifier: String, redirectUri: String): SocialProfile {
-        throw UnsupportedOperationException(
-            "Apple 로그인은 id_token 서명검증(JWKS) 구현 전까지 비활성화되어 있습니다",
-        )
+        // **미지원**이지 인증 실패가 아니다(TRIP-249). 401 로 뭉개면 앱이 "다시 시도"를 권하고
+        // 사용자는 같은 실패를 반복한다 — 재시도로 풀리지 않는 상태다.
+        // 노출하는 것은 가용성뿐, 왜 미지원인지는 싣지 않는다(SECURITY-15).
+        throw ProviderNotSupported("애플 로그인은 아직 준비 중이에요.")
     }
 
     override fun fetchProfileByAccessToken(accessToken: String): SocialProfile {
         // Apple 은 userinfo 엔드포인트가 없다(신원은 id_token 안에) — access token 흐름 미지원.
-        throw UnsupportedOperationException("Apple 은 access token userinfo 흐름을 지원하지 않습니다")
+        throw ProviderNotSupported("애플 로그인은 아직 준비 중이에요.")
     }
 
     /** 토큰 교환 + id_token 파싱(무검증). JWKS 서명검증 추가 전까지 미사용(fail-closed). */
