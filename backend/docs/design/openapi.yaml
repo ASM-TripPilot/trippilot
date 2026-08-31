@@ -2106,13 +2106,18 @@ components:
 
     ReplanDiffSlot:
       type: object
-      required: [slotKey, startAt, endAt, isFixed]
+      required: [slotKey, startAt, endAt, isFixed, endsNextDay]
       description: '**소요시간이 없다**(INV-3) — 시각과 순서만.'
       properties:
         slotKey: { type: string, description: '경계 키 `{date}#{poiId}`(BR-U2-04) — 행이 갈려도 짝이 유지된다' }
         startAt: { type: string, example: '10:00' }
         endAt: { type: string, example: '11:00' }
         isFixed: { type: boolean, description: 고정이라 손대지 않은 슬롯(BR-U4-18) }
+        endsNextDay:
+          type: boolean
+          description: >
+            자정 넘김(HC4). true 면 `endAt` 이 `startAt` 보다 이르다 — 익일 시각이라는 뜻이고,
+            복귀 시각 비교도 이 값을 반영해 계산한다.
 
     ReplanDiffEntry:
       type: object

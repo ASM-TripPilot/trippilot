@@ -20,6 +20,7 @@ import io.mockk.mockk
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -44,15 +45,24 @@ class ReplanDiffServiceTest : StringSpec({
 
     fun slotKey(poi: UUID) = "$day#$poi"
 
-    fun planned(poi: UUID, start: String, end: String, order: Int) = PlannedSlotView(
+    fun planned(
+        poi: UUID,
+        start: String,
+        end: String,
+        order: Int,
+        fixed: Boolean = false,
+        endsNextDay: Boolean = false,
+    ) = PlannedSlotView(
         slotKey = slotKey(poi), date = day, poiId = poi, orderIndex = order,
-        startAt = LocalTime.parse(start), endAt = LocalTime.parse(end), endsNextDay = false,
+        startAt = LocalTime.parse(start), endAt = LocalTime.parse(end),
+        isFixed = fixed, endsNextDay = endsNextDay,
     )
 
-    fun draftSlot(poi: UUID, start: String, end: String, fixed: Boolean = false) = ReplanSlot(
-        poiId = poi, startAt = LocalTime.parse(start), endAt = LocalTime.parse(end),
-        isFixed = fixed, endsNextDay = false, distanceRange = "가까움", placementReason = null,
-    )
+    fun draftSlot(poi: UUID, start: String, end: String, fixed: Boolean = false, endsNextDay: Boolean = false) =
+        ReplanSlot(
+            poiId = poi, startAt = LocalTime.parse(start), endAt = LocalTime.parse(end),
+            isFixed = fixed, endsNextDay = endsNextDay, distanceRange = "가까움", placementReason = null,
+        )
 
 
     /**
@@ -182,6 +192,37 @@ class ReplanDiffServiceTest : StringSpec({
         view.before.all { it.distanceM == null } shouldBe true
         view.after.all { it.distanceM == null } shouldBe true
         view.result!!.impact.totalDistanceDeltaM shouldBe null
+    }
+
+    "원 일정의 고정 여부를 지어내지 않는다 — 계획이 아는 값을 그대로 싣는다" {
+        val proposal = ReplanProposal(UUID.randomUUID(), day, listOf(draftSlot(kept, "10:00", "11:00")))
+        val svc = ReplanDiffService(
+            sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
+            plansOf(planned(kept, "10:00", "11:00", 0, fixed = true)),
+        )
+
+        // false 로 박아 두면 사용자가 못 박아 둔 슬롯이 "고정 아님"으로 보인다 — 거리 null 과 같은 규칙이다.
+        svc.diff(acc, tripId, UUID.randomUUID()).before.single().isFixed shouldBe true
+    }
+
+    "자정 넘김이 양쪽 다 실린다 — 빠지면 복귀 시각 변화의 부호가 뒤집힌다(HC4)" {
+        val proposal = ReplanProposal(
+            UUID.randomUUID(), day,
+            listOf(draftSlot(kept, "10:00", "19:00")),
+        )
+        val svc = ReplanDiffService(
+            sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
+            // 원 일정은 익일 00:30 에 끝난다 — 진짜로는 5시간 30분 당겨진다.
+            plansOf(
+                planned(kept, "10:00", "11:00", 0),
+                planned(added, "22:00", "00:30", 1, endsNextDay = true),
+            ),
+        )
+
+        val view = svc.diff(acc, tripId, UUID.randomUUID())
+
+        view.before.single { it.slotKey == slotKey(added) }.endsNextDay shouldBe true
+        view.result!!.impact.returnTimeDelta shouldBe Duration.ofMinutes(-330)
     }
 
     "INV-3 응답 어디에도 소요시간 필드가 없다" {

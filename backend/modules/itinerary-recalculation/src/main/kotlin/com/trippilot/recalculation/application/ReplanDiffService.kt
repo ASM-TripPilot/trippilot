@@ -46,6 +46,9 @@ class ReplanDiffService(
                 startAt = it.startAt,
                 endAt = it.endAt,
                 isFixed = it.isFixed,
+                // 자정 넘김은 버리지 않는다 — 빠뜨리면 새벽 종료가 하루 중 가장 이른 시각으로 취급돼
+                // 복귀 시각 변화의 부호가 뒤집힌다(HC4).
+                endsNextDay = it.endsNextDay,
                 // 초안은 거리를 **구간 문구**로만 들고 있다(`distanceRange`) — 미터를 모른다.
                 // 0 으로 채우면 "거리가 줄었다"는 거짓 요약이 나오므로 모른다고 둔다(ReplanDiff 규약).
                 distanceM = null,
@@ -55,7 +58,16 @@ class ReplanDiffService(
         // 지표(방문 수·복귀 시각)가 여행 전체 값이 되어 화면이 과장된 변화를 보인다.
         val before = plans.findPlanSlots(accountId, tripId)
             .filter { it.date == proposal.date }
-            .map { ReplanDiff.SlotView(it.slotKey, it.startAt, it.endAt, isFixed = false, distanceM = null) }
+            .map {
+                ReplanDiff.SlotView(
+                    slotKey = it.slotKey,
+                    startAt = it.startAt,
+                    endAt = it.endAt,
+                    isFixed = it.isFixed,
+                    endsNextDay = it.endsNextDay,
+                    distanceM = null,
+                )
+            }
 
         return ReplanDiffView(
             ready = true,

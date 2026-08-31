@@ -16,6 +16,8 @@ object ReplanDiff {
     /**
      * 비교 대상 슬롯. 재계획으로 슬롯 행이 갈리므로 **경계 키**로 짝을 맞춘다(BR-U2-04).
      *
+     * @param endsNextDay 자정을 넘기는 슬롯(HC4). true 면 [endAt] 이 [startAt] 보다 **이르다** —
+     *   이 값을 빼고 시각만 비교하면 새벽 종료가 하루 중 가장 이른 시각으로 취급돼 복귀 시각이 뒤집힌다.
      * @param distanceM 직전 지점에서 이 슬롯까지의 거리. **모르면 null** — 0 으로 채우지 않는다.
      *   0 은 "붙어 있다"는 사실이고 null 은 "모른다"라, 섞으면 영향 지표가 거짓이 된다.
      */
@@ -24,6 +26,7 @@ object ReplanDiff {
         val startAt: LocalTime,
         val endAt: LocalTime,
         val isFixed: Boolean,
+        val endsNextDay: Boolean = false,
         val distanceM: Int? = null,
     )
 
@@ -77,7 +80,8 @@ object ReplanDiff {
                 val change = when {
                     b == null -> Change.ADDED
                     a.isFixed -> Change.FIXED // 고정은 시각이 같아야 정상이며, 달라도 고정으로 표시해 눈에 띄게 한다
-                    b.startAt != a.startAt || b.endAt != a.endAt -> Change.MOVED
+                    // 자정 넘김 여부도 시각의 일부다 — 00:30 오늘과 00:30 익일은 다른 시점이다.
+                    b.startAt != a.startAt || b.endAt != a.endAt || b.endsNextDay != a.endsNextDay -> Change.MOVED
                     else -> Change.UNCHANGED
                 }
                 add(Entry(a.slotKey, change, b?.startAt, a.startAt))
@@ -96,12 +100,22 @@ object ReplanDiff {
         totalDistanceDeltaM = distanceDelta(before, after),
     )
 
-    /** 마지막 일정 종료 시각의 변화. 한쪽이 비어 있으면 비교할 대상이 없다. */
+    /**
+     * 마지막 일정 종료 시각의 변화. 한쪽이 비어 있으면 비교할 대상이 없다.
+     *
+     * **하루 시작부터의 경과로 재고 `LocalTime` 으로 재지 않는다.** 자정을 넘긴 슬롯은 `endAt` 이
+     * 새벽 시각이라, 시각으로 최대를 고르면 22시에 끝나는 슬롯이 "마지막"으로 뽑힌다. 실측으로
+     * 5시간 30분 당겨진 재계획이 8시간 늦어진 것으로 나왔다 — 부호까지 뒤집힌 값이 확정 화면에 나간다.
+     */
     private fun returnDelta(before: List<SlotView>, after: List<SlotView>): Duration? {
-        val b = before.maxByOrNull { it.endAt }?.endAt ?: return null
-        val a = after.maxByOrNull { it.endAt }?.endAt ?: return null
-        return Duration.between(b, a)
+        val b = before.maxOfOrNull { it.endOffset() } ?: return null
+        val a = after.maxOfOrNull { it.endOffset() } ?: return null
+        return a - b
     }
+
+    /** 그 날 0시부터 종료까지의 경과. 자정을 넘겼으면 하루를 더한다(HC4). */
+    private fun SlotView.endOffset(): Duration =
+        Duration.ofSeconds(endAt.toSecondOfDay().toLong()) + if (endsNextDay) Duration.ofDays(1) else Duration.ZERO
 
     /**
      * 총 이동 거리의 변화. **어느 한쪽이라도 모르는 거리가 있으면 null** 이다.

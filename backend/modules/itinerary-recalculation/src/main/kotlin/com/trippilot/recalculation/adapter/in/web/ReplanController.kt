@@ -195,8 +195,8 @@ data class ReplanDiffResponse(
             ready = v.ready,
             status = v.status.name,
             date = v.date,
-            before = v.before.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed) },
-            after = v.after.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed) },
+            before = v.before.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed, it.endsNextDay) },
+            after = v.after.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed, it.endsNextDay) },
             entries = v.result?.entries.orEmpty()
                 .map { ReplanDiffEntryResponse(it.slotKey, it.change.name, it.beforeStart, it.afterStart) },
             impact = v.result?.impact?.let {
@@ -211,12 +211,18 @@ data class ReplanDiffResponse(
     }
 }
 
-/** 비교 대상 슬롯 한 칸. 짝은 **경계 키**로 맞춘다(BR-U2-04). */
+/**
+ * 비교 대상 슬롯 한 칸. 짝은 **경계 키**로 맞춘다(BR-U2-04).
+ *
+ * @property endsNextDay 자정 넘김(HC4). 이 값이 없으면 `22:00–00:30` 이 하루 안에서 거꾸로 가는
+ *   시각처럼 보인다 — 화면이 종료를 익일로 그리려면 필요하다.
+ */
 data class ReplanDiffSlotResponse(
     val slotKey: String,
     val startAt: LocalTime,
     val endAt: LocalTime,
     val isFixed: Boolean,
+    val endsNextDay: Boolean,
 )
 
 /**
