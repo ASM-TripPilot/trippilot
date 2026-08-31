@@ -10,6 +10,7 @@ import com.trippilot.core.error.DomainException
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ModerationUnavailable
 import com.trippilot.core.error.PermissionDenied
+import com.trippilot.core.error.ProviderNotSupported
 import com.trippilot.core.error.RateLimited
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.UpstreamUnavailable
@@ -23,6 +24,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.servlet.resource.NoResourceFoundException
 
 /**
  * 전역 예외 → 에러 봉투 변환(U1-내부아키텍처 §4.2 — 매핑 1곳 집중).
@@ -48,6 +50,8 @@ class GlobalExceptionHandler {
             is UpstreamUnavailable -> HttpStatus.SERVICE_UNAVAILABLE
             is ModerationUnavailable -> HttpStatus.SERVICE_UNAVAILABLE
             is RateLimited -> HttpStatus.TOO_MANY_REQUESTS
+            // 501 — 요청은 유효하고 서버가 아직 그 기능을 안 한다. 401 이면 앱이 재시도를 권해 사용자가 헛돈다.
+            is ProviderNotSupported -> HttpStatus.NOT_IMPLEMENTED
         }
         if (status.is5xxServerError) {
             log.error("도메인 예외(5xx): {}", ex.errorCode, ex)
@@ -90,6 +94,27 @@ class GlobalExceptionHandler {
             ErrorResponse.Body(ErrorCode.VALIDATION_ERROR.name, "요청 본문을 해석할 수 없습니다.", traceId(), null),
         )
         return ResponseEntity.badRequest().body(body)
+    }
+
+    /**
+     * 매핑 없는 경로 → **404**.
+     *
+     * 이 핸들러가 없으면 아래 `Exception` 핸들러가 삼켜 **500** 이 나간다(ADR-0011 봉투는 맞지만
+     * 분류가 틀렸다). 이 advice 는 `ResponseEntityExceptionHandler` 를 상속하지 않아 스프링 기본
+     * 처리도 받지 못하고, `ExceptionHandlerExceptionResolver` 가 기본 리졸버보다 먼저 돌아 이쪽이 이긴다.
+     *
+     * 왜 중요한가: 클라이언트가 오타·미배포 경로를 "서버 장애"로 오인한다. 재시도·폴백 판단이
+     * 5xx 기준으로 갈리므로 **잘못된 갈래를 탄다.**
+     *
+     * 로그는 warn 이다 — 정상적인 클라이언트 오류를 error 로 남기면 장애 알림이 오염된다.
+     */
+    @ExceptionHandler(NoResourceFoundException::class)
+    fun handleNoResource(ex: NoResourceFoundException): ResponseEntity<ErrorResponse> {
+        log.warn("매핑 없는 경로: {}", ex.resourcePath)
+        val body = ErrorResponse(
+            ErrorResponse.Body(ErrorCode.RESOURCE_NOT_FOUND.name, "요청한 경로를 찾을 수 없습니다.", traceId(), null),
+        )
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body)
     }
 
     /** 미처리 예외 — 침묵 금지: 로깅 + 일반화 봉투(내부 정보 비노출). */

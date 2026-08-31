@@ -20,6 +20,20 @@ class AuthenticationRequired(
     cause: Throwable? = null,
 ) : DomainException(errorCode, message, cause)
 
+/**
+ * 그 제공자를 **아직** 지원하지 않는다 — 501.
+ *
+ * 자격 증명 실패(401)와 갈라야 하는 이유: 401 이면 앱이 "다시 시도"를 권하고 사용자는 같은 실패를
+ * 반복한다. 사실은 **서버가 아직 그 기능을 안 하는 것**이라 재시도로 풀리지 않는다(INV-4 침묵 실패 금지).
+ *
+ * 400 도 아니다 — 클라이언트 요청에는 잘못이 없다.
+ *
+ * 노출하는 것은 **가용성뿐**이다. 왜 미지원인지(JWKS 미구현 등)는 싣지 않는다(SECURITY-15).
+ */
+class ProviderNotSupported(
+    message: String,
+) : DomainException(ErrorCode.PROVIDER_NOT_SUPPORTED, message)
+
 /** 만 14세 미만 등 연령 요건 미충족으로 가입·이용 거부(403, INV-A). */
 class AgeRequirementNotMet(
     message: String = "연령 요건을 충족하지 않습니다.",

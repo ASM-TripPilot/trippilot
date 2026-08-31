@@ -16,6 +16,8 @@ enum class ErrorCode {
 
     // 도메인별 코드(전역 카탈로그) — 상태는 대응 DomainException 타입이 결정
     SOCIAL_AUTH_FAILED,
+    /** 그 제공자를 **아직** 지원하지 않는다(501). 자격 증명 실패와 구분해야 화면이 "준비 중"을 말할 수 있다. */
+    PROVIDER_NOT_SUPPORTED,
     SOCIAL_EMAIL_CONFLICT,
     REFRESH_TOKEN_INVALID,   // 리프레시 토큰 미존재·만료·폐기(401)
     REFRESH_REUSE_DETECTED,  // 소진된 리프레시 토큰 재제시 → 체인 폐기(401, INV-R2)
