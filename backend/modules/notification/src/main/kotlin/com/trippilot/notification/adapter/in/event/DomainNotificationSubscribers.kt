@@ -84,13 +84,17 @@ class PlanBTriggeredSubscriber(
             sourceEventId = envelope.eventId,
             // 같은 여행·같은 슬롯의 반복 발화를 억제 판정이 볼 수 있게 한다(BR-U6-34 재료).
             dedupKey = "PLAN_B#$tripId#${payload.text("slotKey").orEmpty()}",
-            actionType = ACTION_TRIP_ITINERARY,
-            actionPayload = mapOf("tripId" to tripId),
+            // 일정 화면이 아니라 **재계획 진입**이다(BR-U6-08 '대안 일정 보기'). 일정만 열어 주면
+            // 사용자가 알림을 읽고도 무엇을 하라는 것인지 다시 찾아야 한다.
+            actionType = ACTION_PLANB_REPLAN,
+            // 어느 트리거로 열린 재계획인지 실어야 화면이 사유를 다시 물어보지 않는다.
+            // 세션 id 는 아직 없다 — 세션은 사용자가 진입할 때 열린다.
+            actionPayload = mapOf("tripId" to tripId, "triggerId" to envelope.aggregateId),
         )
     }
 
     private companion object {
-        private const val ACTION_TRIP_ITINERARY = "TRIP_ITINERARY"
+        private const val ACTION_PLANB_REPLAN = "PLANB_REPLAN"
     }
 }
 
@@ -116,22 +120,48 @@ class ReflectionReadySubscriber(
         val accountId = notifications.ownerOfTrip(UUID.fromString(tripId))
             ?: error("ReflectionReady 의 여행 소유자를 찾지 못했습니다. tripId=$tripId eventId=${envelope.eventId}")
         val summary = payload.text("kind") == KIND_SUMMARY
+        // 근거가 하나도 없어 **기본 카드**로 떨어진 회고다(BR-U6-12). 열어도 볼 것이 없으므로
+        // 액션을 주지 않는다 — 액션 없는 알림을 "있는 척" 그리게 하면 사용자가 빈 화면에 도착한다(INV-4).
+        val empty = payload.text("source") == SOURCE_BASIC
+        val dayDate = payload.text("dayDate")
+        if (!summary && dayDate == null) {
+            error("ReflectionReady(DAILY) 에 dayDate 가 없습니다. eventId=${envelope.eventId}")
+        }
         notifications.raise(
             accountId = accountId,
             kind = NotificationKind.REFLECTION,
-            title = if (summary) "여행 요약이 준비됐어요" else "오늘의 회고가 준비됐어요",
-            body = if (summary) "다녀온 곳을 한 장으로 모았어요" else "오늘 다녀온 곳을 정리했어요",
+            title = when {
+                empty -> "회고를 만들지 못했어요"
+                summary -> "여행 요약이 준비됐어요"
+                else -> "오늘의 회고가 준비됐어요"
+            },
+            body = when {
+                empty -> "기록할 활동이 없어 회고를 생성하지 못했습니다"
+                summary -> "다녀온 곳을 한 장으로 모았어요"
+                else -> "오늘 다녀온 곳을 정리했어요"
+            },
             sourceEventId = envelope.eventId,
             // 하루 회고는 날짜까지 넣어야 여행 하나에 여러 장이 구분된다.
-            dedupKey = "REFLECTION#$tripId#${payload.text("dayDate").orEmpty()}",
-            actionType = ACTION_TRIP_REFLECTION,
-            actionPayload = mapOf("tripId" to tripId),
+            dedupKey = "REFLECTION#$tripId#${dayDate.orEmpty()}",
+            actionType = when {
+                empty -> null
+                summary -> ACTION_TRIP_SUMMARY
+                else -> ACTION_REFLECTION_DAILY
+            },
+            // 하루 회고는 **어느 날짜**인지까지 실어야 화면이 여러 장 중 하나를 고를 수 있다.
+            actionPayload = when {
+                empty -> null
+                summary -> mapOf("tripId" to tripId)
+                else -> mapOf("tripId" to tripId, "dayDate" to dayDate!!)
+            },
         )
     }
 
     private companion object {
         private const val KIND_SUMMARY = "SUMMARY"
-        private const val ACTION_TRIP_REFLECTION = "TRIP_REFLECTION"
+        private const val SOURCE_BASIC = "BASIC"
+        private const val ACTION_REFLECTION_DAILY = "REFLECTION_DAILY"
+        private const val ACTION_TRIP_SUMMARY = "TRIP_SUMMARY"
     }
 }
 

@@ -3044,18 +3044,70 @@ components:
         actionType:
           type: string
           nullable: true
-          description: 알림에서 들어갈 화면. 진입이 없으면 `actionPayload` 와 함께 null.
-          enum: [TRIP_ITINERARY]
+          description: >
+            알림에서 들어갈 화면. 진입이 없으면 `actionPayload` 와 함께 **둘 다 null** 이다 —
+            액션 없는 알림을 "액션 있는 척" 그리지 않는다(INV-4). 회고에 쓸 데이터가 없어
+            만들지 못한 알림이 그 경우다(BR-U6-12).
+
+
+            `PLANB_REPLAN` 은 일정 화면이 아니라 **재계획 진입**이다(BR-U6-08 '대안 일정 보기').
+          enum: [TRIP_ITINERARY, PLANB_REPLAN, REFLECTION_DAILY, TRIP_SUMMARY, STAY_DETAIL]
         actionPayload:
-          type: object
           nullable: true
-          additionalProperties: { type: string }
+          description: >
+            `actionType` 별로 모양이 다르다. 네 갈래는 **필수 필드가 서로 달라** 하나만 맞는다.
+
+
+            ⚠ `TRIP_ITINERARY` 와 `TRIP_SUMMARY` 는 같은 모양(`tripId` 하나)이라 스키마를 나누지
+            않았다 — 나누면 두 갈래가 동시에 맞아 `oneOf` 가 성립하지 않는다.
+          oneOf:
+            - $ref: '#/components/schemas/NotificationTripAction'
+            - $ref: '#/components/schemas/NotificationPlanBAction'
+            - $ref: '#/components/schemas/NotificationReflectionAction'
+            - $ref: '#/components/schemas/NotificationStayAction'
         occurredAt: { type: string, format: date-time }
         readAt:
           type: string
           format: date-time
           nullable: true
           description: null = 미읽음 — 목록 좌측 빨간 dot 의 근거.
+
+    NotificationTripAction:
+      type: object
+      required: [tripId]
+      additionalProperties: false
+      description: '`TRIP_ITINERARY`(일정 리마인드) · `TRIP_SUMMARY`(여행 요약) — 여행 하나만 있으면 화면을 연다.'
+      properties:
+        tripId: { type: string, format: uuid }
+
+    NotificationPlanBAction:
+      type: object
+      required: [tripId, triggerId]
+      additionalProperties: false
+      description: >
+        `PLANB_REPLAN`. `triggerId` 를 실어야 화면이 "왜 다시 짜라는지"를 다시 묻지 않는다.
+        `replanSessionId` 는 대개 없다 — 세션은 사용자가 진입할 때 열린다.
+      properties:
+        tripId: { type: string, format: uuid }
+        triggerId: { type: string, format: uuid }
+        replanSessionId: { type: string, format: uuid }
+
+    NotificationReflectionAction:
+      type: object
+      required: [tripId, dayDate]
+      additionalProperties: false
+      description: '`REFLECTION_DAILY`. 여행 하나에 하루 회고가 여러 장이라 날짜가 있어야 고를 수 있다.'
+      properties:
+        tripId: { type: string, format: uuid }
+        dayDate: { type: string, format: date }
+
+    NotificationStayAction:
+      type: object
+      required: [savedStayId]
+      additionalProperties: false
+      description: '`STAY_DETAIL`. 등록된 숙소 상세로 들어간다.'
+      properties:
+        savedStayId: { type: string, format: uuid }
 
     NotificationToggleList:
       type: object
