@@ -1,6 +1,8 @@
 package com.trippilot.trip.adapter.`in`.web
 
+import com.trippilot.trip.application.TripCountsService
 import com.trippilot.trip.application.TripService
+import com.trippilot.trip.domain.TripCounts
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -24,23 +26,42 @@ import java.util.UUID
 class TripController(
     private val clock: Clock,
     private val service: TripService,
+    private val countsService: TripCountsService,
 ) {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     fun create(principal: Principal, @Valid @RequestBody request: CreateTripRequest): TripResponse =
-        TripResponse.from(service.create(principal.accountId(), request.toCommand()), today())
+        // 갓 만든 여행은 거점도 일정도 없다 — 물어볼 것이 없어 0 이다.
+        TripResponse.from(service.create(principal.accountId(), request.toCommand()), today(), TripCounts.NONE)
 
     @GetMapping
-    fun list(principal: Principal): List<TripResponse> =
-        service.list(principal.accountId()).let { trips -> val d = today(); trips.map { TripResponse.from(it, d) } }
+    fun list(principal: Principal): List<TripResponse> {
+        val accountId = principal.accountId()
+        val trips = service.list(accountId)
+        // 여행마다 따로 묻지 않는다 — 화면이 걷어내려던 N+1 이 서버 안으로 옮겨 올 뿐이다(BR-U6-22).
+        val counts = countsService.of(accountId, trips)
+        val d = today()
+        return trips.map { TripResponse.from(it, d, counts[it.tripId] ?: TripCounts.NONE) }
+    }
 
     @GetMapping("/{tripId}")
-    fun get(principal: Principal, @PathVariable tripId: UUID): TripResponse =
-        TripResponse.from(service.get(principal.accountId(), tripId), today())
+    fun get(principal: Principal, @PathVariable tripId: UUID): TripResponse {
+        val accountId = principal.accountId()
+        val trip = service.get(accountId, tripId)
+        return TripResponse.from(trip, today(), countsService.of(accountId, listOf(trip))[tripId] ?: TripCounts.NONE)
+    }
 
     @PatchMapping("/{tripId}")
-    fun edit(principal: Principal, @PathVariable tripId: UUID, @Valid @RequestBody request: EditTripRequest): TripResponse =
-        TripResponse.from(service.edit(principal.accountId(), tripId, request.toCommand()), today())
+    fun edit(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @Valid @RequestBody request: EditTripRequest,
+    ): TripResponse {
+        val accountId = principal.accountId()
+        val trip = service.edit(accountId, tripId, request.toCommand())
+        // 수정 응답에도 실제 값을 싣는다 — 0 을 보내면 화면이 그것으로 캐시를 갱신해 카드가 비어 보인다.
+        return TripResponse.from(trip, today(), countsService.of(accountId, listOf(trip))[tripId] ?: TripCounts.NONE)
+    }
 
     @DeleteMapping("/{tripId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
