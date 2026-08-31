@@ -1657,13 +1657,23 @@ components:
 
     SavedStay:
       type: object
-      required: [savedStayId, name, coordConfirmed, registerRoute, createdAt, updatedAt]
+      required: [savedStayId, name, coordConfirmed, registerRoute, createdAt, updatedAt, linkedTripIds]
       properties:
         savedStayId: { type: string, format: uuid }
         name: { type: string }
         lat: { type: number, format: double, nullable: true }
         lng: { type: number, format: double, nullable: true }
         coordConfirmed: { type: boolean, description: false면 거점 배정 불가(INV-U1-08) }
+        linkedTripIds:
+          type: array
+          items: { type: string, format: uuid }
+          description: >
+            이 숙소가 **거점인 여행**들(BR-U6-20). 비어 있으면 화면이 `연결된 여행 없음` 을 그린다.
+
+
+            삭제된 여행은 빠진다 — 배정 행은 소프트 삭제 뒤에도 남으므로 거르지 않으면
+            열 수 없는 여행이 숙소 행에 붙어 사용자가 막다른 길로 간다.
+            한 여행에 구간이 여럿이어도 여행 id 는 한 번만 나온다.
         checkIn: { type: string, format: date, nullable: true }
         checkOut: { type: string, format: date, nullable: true }
         externalSource: { type: string, nullable: true }

@@ -14,6 +14,12 @@ interface SavedStayRepository {
 interface BaseAssignmentRepository {
     fun save(base: BaseAssignment): BaseAssignment
     fun findByTrip(tripId: UUID): List<BaseAssignment>
+
+    /**
+     * 숙소 → 그 숙소가 거점인 여행들(BR-U6-20 역참조). 숙소마다 따로 묻지 않는다 —
+     * 목록이 그렇게 하면 화면의 N+1 을 서버 안으로 옮겨 올 뿐이다.
+     */
+    fun findTripIdsByStays(savedStayIds: Collection<UUID>): Map<UUID, List<UUID>>
     fun findById(baseAssignmentId: UUID): BaseAssignment?
     fun delete(base: BaseAssignment)
 

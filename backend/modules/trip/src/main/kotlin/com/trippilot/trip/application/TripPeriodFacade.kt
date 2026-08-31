@@ -4,6 +4,7 @@ import com.trippilot.trip.api.FixedVisit
 import com.trippilot.trip.api.OwnedTripPeriod
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripListFacade
+import com.trippilot.trip.api.TripLivenessFacade
 import com.trippilot.trip.api.TripSummaryView
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripOwnerFacade
@@ -23,10 +24,23 @@ import java.util.UUID
 class TripPeriodFacade(
     private val repo: TripRepository,
     private val mustVisits: MustVisitRepository,
-) : TripFacade, TripOwnerFacade, TripListFacade {
+) : TripFacade, TripOwnerFacade, TripListFacade, TripLivenessFacade {
     override fun findOwnedPeriod(tripId: UUID): OwnedTripPeriod? {
         val trip = repo.findById(tripId)?.takeIf { it.deletedAt == null } ?: return null
         return OwnedTripPeriod(trip.accountId, trip.startDate, trip.endDate)
+    }
+
+    /**
+     * 주어진 id 중 살아 있는 것만(U6 `l04` 연결 여행). **상한을 두지 않는다** —
+     * "최신 N건"으로 거르면 상한 밖의 연결이 조용히 사라져 "연결된 여행 없음"으로 보인다.
+     */
+    override fun filterLiveTrips(accountId: UUID, tripIds: Collection<UUID>): Set<UUID> {
+        if (tripIds.isEmpty()) return emptySet()
+        val wanted = tripIds.toSet()
+        return repo.findByAccount(accountId)
+            .filter { it.deletedAt == null && it.tripId in wanted }
+            .map { it.tripId }
+            .toSet()
     }
 
     /** 기록 목록(U5)이 읽는 여행들. 삭제된 여행은 제외하고 최신순으로 [limit] 건까지. */

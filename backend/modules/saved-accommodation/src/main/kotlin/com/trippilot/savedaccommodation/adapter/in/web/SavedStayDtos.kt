@@ -60,13 +60,24 @@ data class SavedStayResponse(
     val memo: String?,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /**
+     * 이 숙소가 거점인 여행들(BR-U6-20). 비어 있으면 화면이 `연결된 여행 없음` 을 그린다.
+     * 삭제된 여행은 빠진다 — 열 수 없는 여행을 붙여 두면 사용자가 막다른 길로 간다.
+     */
+    val linkedTripIds: List<UUID>,
 ) {
     companion object {
-        fun from(s: SavedStay) = SavedStayResponse(
+        /**
+         * [linkedTripIds] 에 **기본값을 두지 않는다.** 기본값을 두면 새 표면이 그것을 물려받아
+         * 거점으로 쓰이는 숙소에 빈 목록을 실어 보낸다 — 화면이 그 응답으로 캐시를 갱신하면
+         * `연결된 여행 없음` 이 된다. 부르는 쪽이 매번 무엇인지 말하게 한다.
+         */
+        fun from(s: SavedStay, linkedTripIds: List<UUID>) = SavedStayResponse(
             savedStayId = s.savedStayId, name = s.name, lat = s.lat, lng = s.lng,
             coordConfirmed = s.coordConfirmed, checkIn = s.checkIn, checkOut = s.checkOut,
             externalSource = s.externalSource, externalId = s.externalId,
             registerRoute = s.registerRoute, memo = s.memo, createdAt = s.createdAt, updatedAt = s.updatedAt,
+            linkedTripIds = linkedTripIds,
         )
     }
 }
