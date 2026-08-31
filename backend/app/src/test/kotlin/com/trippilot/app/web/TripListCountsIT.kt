@@ -25,6 +25,7 @@ import org.springframework.web.client.RestClient
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -49,6 +50,9 @@ class TripListCountsIT : AbstractPostgresIntegrationTest() {
     private val json = ObjectMapper()
     private val now = Instant.parse("2026-07-26T00:00:00Z")
 
+    /** 서버가 "오늘"을 재는 존과 같은 값을 쓴다 — 러너 기본(UTC)으로 재면 하루가 어긋난다. */
+    private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
+
     private fun call(method: HttpMethod, path: String, bearer: String?, body: String? = null): Pair<Int, JsonNode> {
         val spec = RestClient.builder()
             .requestFactory(JdkClientHttpRequestFactory())
@@ -71,6 +75,14 @@ class TripListCountsIT : AbstractPostgresIntegrationTest() {
     private fun newTrip(token: String): String {
         val body = """
             {"startDate":"2026-08-01","endDate":"2026-08-04","party":2,
+             "destinations":[{"seq":0,"region":"제주","nights":3}],"preferenceSnapshot":{}}
+        """.trimIndent()
+        return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
+    }
+
+    private fun newTripBetween(token: String, start: LocalDate, end: LocalDate): String {
+        val body = """
+            {"startDate":"$start","endDate":"$end","party":2,
              "destinations":[{"seq":0,"region":"제주","nights":3}],"preferenceSnapshot":{}}
         """.trimIndent()
         return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
@@ -159,6 +171,29 @@ class TripListCountsIT : AbstractPostgresIntegrationTest() {
         val card = tripCard(mine, myTrip)
         card["baseCount"].asInt() shouldBe 0
         card["itineraryDayCount"].asInt() shouldBe 0
+    }
+
+    @Test
+    fun `수정 응답에도 실제 집계가 실린다 — 0 을 보내면 화면 캐시가 비어 버린다`() {
+        val token = newToken()
+        // **끝난 여행은 수정이 막힌다**(409). 다른 테스트는 고정 날짜로 충분하지만 이 칸만은
+        // 오늘 이후여야 한다 — 고정 날짜로 두면 그 날이 지나는 순간 조용히 빨개진다.
+        val start = LocalDate.now(TRAVEL_ZONE).plusDays(7)
+        val end = start.plusDays(3)
+        val trip = newTripBetween(token, start, end)
+        assignBase(token, trip, newStay(token, "제주숙소"), "$start", "$end")
+        giveItinerary(trip, "$start", "${start.plusDays(1)}")
+
+        // 제목만 고친다 — 숙소·일정은 그대로다.
+        val (rc, body) = call(
+            HttpMethod.PATCH, "/api/v1/trips/$trip", token,
+            """{"title":"이름만 바꾼 여행","startDate":"$start","endDate":"$end","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":3}]}""",
+        )
+
+        rc shouldBe 200
+        body["baseCount"].asInt() shouldBe 1
+        body["itineraryDayCount"].asInt() shouldBe 2
     }
 
     @Test

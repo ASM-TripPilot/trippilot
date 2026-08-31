@@ -70,7 +70,12 @@ data class TripResponse(
     val itineraryDayCount: Int,
 ) {
     companion object {
-        fun from(t: Trip, today: LocalDate, counts: TripCounts = TripCounts.NONE) = TripResponse(
+        /**
+         * [counts] 에 **기본값을 두지 않는다.** 기본값을 두면 새 표면이 그것을 물려받아 실제로는
+         * 숙소·일정이 있는 여행에 0 을 실어 보낸다 — 화면은 그 응답으로 캐시를 갱신하고 카드가
+         * `숙소 미등록` 이 된다. 부르는 쪽이 매번 무엇인지 말하게 한다.
+         */
+        fun from(t: Trip, today: LocalDate, counts: TripCounts) = TripResponse(
             tripId = t.tripId, title = t.title, startDate = t.startDate, endDate = t.endDate,
             party = t.party, companionType = t.companionType, budgetTotal = t.budgetTotal,
             preferenceSnapshot = t.preferenceSnapshot, destinations = t.destinations.map { DestinationDto.from(it) },

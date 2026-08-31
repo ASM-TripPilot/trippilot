@@ -31,7 +31,8 @@ class TripController(
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     fun create(principal: Principal, @Valid @RequestBody request: CreateTripRequest): TripResponse =
-        TripResponse.from(service.create(principal.accountId(), request.toCommand()), today())
+        // 갓 만든 여행은 거점도 일정도 없다 — 물어볼 것이 없어 0 이다.
+        TripResponse.from(service.create(principal.accountId(), request.toCommand()), today(), TripCounts.NONE)
 
     @GetMapping
     fun list(principal: Principal): List<TripResponse> {
@@ -51,8 +52,16 @@ class TripController(
     }
 
     @PatchMapping("/{tripId}")
-    fun edit(principal: Principal, @PathVariable tripId: UUID, @Valid @RequestBody request: EditTripRequest): TripResponse =
-        TripResponse.from(service.edit(principal.accountId(), tripId, request.toCommand()), today())
+    fun edit(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @Valid @RequestBody request: EditTripRequest,
+    ): TripResponse {
+        val accountId = principal.accountId()
+        val trip = service.edit(accountId, tripId, request.toCommand())
+        // 수정 응답에도 실제 값을 싣는다 — 0 을 보내면 화면이 그것으로 캐시를 갱신해 카드가 비어 보인다.
+        return TripResponse.from(trip, today(), countsService.of(accountId, listOf(trip))[tripId] ?: TripCounts.NONE)
+    }
 
     @DeleteMapping("/{tripId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
