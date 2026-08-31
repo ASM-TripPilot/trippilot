@@ -348,7 +348,7 @@ reason = "TRIP-434 본문 「선행」: 백엔드에 페르소나 API가 존재�
 id = "UUID-PATH-400"
 ticket = ""
 title = "UUID 경로변수가 잘못된 값에 500 — 전역 타입변환 실패를 400 으로"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/app/src/main/kotlin/com/trippilot/app/web/error/GlobalExceptionHandler.kt",
@@ -361,9 +361,41 @@ note = """
 TRIP-249 3번(미매핑 경로 500)과 **같은 실패 형태**다 — 클라 입력 오류를 서버 장애로 알리면
 프론트·AI 의 재시도·폴백이 5xx 기준으로 갈려 잘못된 갈래를 탄다.
 
-PERSONA-API 는 이 구멍을 국소 회피했다(경로변수를 String 으로 받아 직접 파싱). 이 노드가 전역에서
-잡으면 `PersonaInternalController.parseAccountId` 는 지우고 UUID 를 직접 받아도 된다.
+**착수 후 실측으로 범위가 넓어졌다** — 타입 불일치만이 아니라 **필수 쿼리 누락**도 500 이었다
+(`/internal/pois` 에서 radiusKm 을 빼면 500). 둘 다 스프링의 파라미터 바인딩 단계 예외라
+같은 자리에서 함께 잡았다.
 
-주의: 기존 엔드포인트 다수의 응답 코드가 500→400 으로 바뀐다. 계약(openapi)의 400 선언 유무를
-함께 훑어야 한다.
+PERSONA-API 의 국소 회피(경로변수를 String 으로 받아 직접 파싱)는 이 노드에서 걷어냈다 —
+전역이 잡으므로 중복이다. 역검증에서 전역 핸들러를 빼면 PersonaInternalApiIT 의 400 테스트가
+함께 깨져 실제로 전역에 의존함이 확인된다.
+
+계약: 경로별 400 을 39곳에 흩뿌리지 않고 openapi info.description 에 횡단 규약으로 적었다 —
+형식 오류까지 중복 선언하면 무엇이 그 엔드포인트 고유의 업무 검증인지 안 보인다.
+"""
+
+[[nodes]]
+id = "FLAKY-HEALTHPING"
+ticket = ""
+title = "IntegrationHealthPingTimeoutTest 가 전체 빌드 부하에서만 간헐 실패"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/test/kotlin/com/trippilot/app/web/IntegrationHealthPingTimeoutTest.kt",
+]
+note = """
+**실측(2026-09-01, UUID-PATH-400 작업 중)**: 전체 빌드에서 1회 실패.
+`SocketException: Connection reset is of type ... but expected SocketTimeoutException`
+(`thrown.cause.shouldBeInstanceOf<SocketTimeoutException>()`, 45행)
+
+- 격리 실행 `--rerun-tasks` 3회 **전부 통과**
+- 같은 코드로 직전 전체 빌드는 통과 — 회귀가 아니다
+- 이 노드를 만든 변경(전역 예외 핸들러)과 무관한 영역이다
+
+**원인은 아직 단정하지 못했다.** 테스트는 `ServerSocket(0)` 을 열고 별도 스레드가 accept 만 하며
+한 바이트도 쓰지 않는 상황을 만든다. 부하가 걸리면 클라이언트 연결과 accepter 스레드 기동이
+경합하는 구조인데, 그것이 RST 로 이어지는 경로를 실제로 재현하지는 못했다.
+
+단정하지 말 것: 재현 없이 "타임아웃도 허용"으로 단언을 넓히면 **연결 거부와 타임아웃을 가르는
+이 테스트의 목적 자체가 사라진다**(주석 44행이 그 구분을 명시한다). accepter 준비를 래치로
+동기화한 뒤 부하를 흉내 내 재현하는 것이 먼저다.
 """

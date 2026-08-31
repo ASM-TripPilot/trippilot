@@ -2,8 +2,6 @@ package com.trippilot.profile.adapter.`in`.web
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies
 import com.fasterxml.jackson.databind.annotation.JsonNaming
-import com.trippilot.core.error.FieldError
-import com.trippilot.core.error.ValidationFailed
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
 import org.springframework.web.bind.annotation.GetMapping
@@ -51,21 +49,14 @@ class PersonaInternalController(
      * 소프트 가중치·중립 처리는 AI 지능이 소유한다(판단/검증 분리, INV-2).
      *
      * ⚠ **"계정 없음"과 "취향 미설정"을 구분하지 못한다.** [PreferenceFacade] 가 미설정 계정에도
-     * 빈 스냅숏을 돌려주는 계약이라 그렇다. 오타 난 UUID 는 오류가 아니라 중립 페르소나로 보인다.
-     * 구분하려면 auth 에 계정 존재 퍼사드를 새로 열어야 해서 이 노드 범위 밖으로 뒀다.
+     * 빈 스냅숏을 돌려주는 계약이라 그렇다. **형식이 맞지만 존재하지 않는** UUID 는 404 가 아니라
+     * 빈 스냅숏 200 으로 보인다. 구분하려면 auth 에 계정 존재 퍼사드를 새로 열어야 해서 범위 밖으로 뒀다.
+     *
+     * (형식 자체가 틀린 UUID 는 전역 핸들러가 400 으로 낸다 — UUID-PATH-400. 그 둘은 다른 사정이다.)
      */
     @GetMapping("/{accountId}/persona")
-    fun persona(@PathVariable accountId: String): PersonaResponse =
-        PersonaResponse.from(preferences.findPreferences(parseAccountId(accountId)))
-
-    /**
-     * UUID 를 직접 받지 않고 문자열로 받아 파싱한다 — Spring 의 타입 변환 실패는
-     * `MethodArgumentTypeMismatchException` 이고 전역 핸들러가 그것을 모른다(=500).
-     * 호출자가 이상한 값을 보낸 것을 서버 장애로 알리면 AI 쪽이 자기 버그를 우리 장애로 읽는다.
-     */
-    private fun parseAccountId(raw: String): UUID =
-        runCatching { UUID.fromString(raw) }
-            .getOrElse { throw ValidationFailed(listOf(FieldError("accountId", "UUID 형식이 아닙니다"))) }
+    fun persona(@PathVariable accountId: UUID): PersonaResponse =
+        PersonaResponse.from(preferences.findPreferences(accountId))
 }
 
 /**

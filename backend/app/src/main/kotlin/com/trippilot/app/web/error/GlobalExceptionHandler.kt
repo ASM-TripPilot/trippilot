@@ -22,8 +22,10 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
+import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 
 /**
@@ -92,6 +94,47 @@ class GlobalExceptionHandler {
         log.warn("요청 본문 파싱 실패: {}", ex.mostSpecificCause.message)
         val body = ErrorResponse(
             ErrorResponse.Body(ErrorCode.VALIDATION_ERROR.name, "요청 본문을 해석할 수 없습니다.", traceId(), null),
+        )
+        return ResponseEntity.badRequest().body(body)
+    }
+
+    /**
+     * 경로변수·쿼리 파라미터 **타입 변환 실패** → 400.
+     *
+     * 이 핸들러가 없으면 아래 `Exception` 갈래로 떨어져 **500 INTERNAL** 이 나갔다. 실측(2026-09-01):
+     * `GET /api/v1/trips/not-a-uuid` → 500, `GET /internal/pois?centerLat=abc…` → 500.
+     * UUID·숫자·enum 을 받는 **모든** 경로변수·쿼리가 같았다.
+     *
+     * 클라이언트가 보낸 값이 틀린 것을 서버 장애로 알리면 프론트·AI 의 재시도·폴백 판단이 5xx 기준으로
+     * 갈려 **잘못된 갈래를 탄다** — 위 404 핸들러(TRIP-249 3번)와 같은 실패 형태다.
+     *
+     * 값 자체는 응답에 싣지 않는다. 어느 파라미터가 문제인지만 알리면 클라이언트는 고칠 수 있고,
+     * 임의 문자열을 되비추지 않는다(SECURITY-15).
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException::class)
+    fun handleTypeMismatch(ex: MethodArgumentTypeMismatchException): ResponseEntity<ErrorResponse> {
+        log.warn("파라미터 타입 불일치: {} (기대 타입 {})", ex.name, ex.requiredType?.simpleName)
+        val body = ErrorResponse(
+            ErrorResponse.Body(
+                ErrorCode.VALIDATION_ERROR.name, "입력값이 유효하지 않습니다.", traceId(),
+                listOf(ErrorResponse.Field(ex.name, "형식이 올바르지 않습니다")),
+            ),
+        )
+        return ResponseEntity.badRequest().body(body)
+    }
+
+    /**
+     * 필수 쿼리 파라미터 누락 → 400. 위와 같은 이유로 500 이었다(실측: `/internal/pois` 에서
+     * `radiusKm` 을 빼면 500 INTERNAL).
+     */
+    @ExceptionHandler(MissingServletRequestParameterException::class)
+    fun handleMissingParam(ex: MissingServletRequestParameterException): ResponseEntity<ErrorResponse> {
+        log.warn("필수 파라미터 누락: {}", ex.parameterName)
+        val body = ErrorResponse(
+            ErrorResponse.Body(
+                ErrorCode.VALIDATION_ERROR.name, "입력값이 유효하지 않습니다.", traceId(),
+                listOf(ErrorResponse.Field(ex.parameterName, "필수 값입니다")),
+            ),
         )
         return ResponseEntity.badRequest().body(body)
     }
