@@ -134,6 +134,37 @@ class SavedStayLinkedTripsIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `단건 조회에도 연결이 실린다 — 목록만 채우면 상세가 비어 보인다`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        val stay = newStay(token, "제주숙소")
+        assignBase(token, trip, stay, "2026-08-01", "2026-08-04")
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/saved-stays/$stay", token)
+
+        rc shouldBe 200
+        body["linkedTripIds"].map { it.asText() } shouldBe listOf(trip)
+    }
+
+    @Test
+    fun `수정 응답에도 실제 연결이 실린다 — 빈 목록을 보내면 화면 캐시가 지워진다`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        val stay = newStay(token, "제주숙소")
+        assignBase(token, trip, stay, "2026-08-01", "2026-08-04")
+
+        // 메모만 고친다 — 거점 관계는 그대로다.
+        val (rc, body) = call(
+            HttpMethod.PATCH, "/api/v1/saved-stays/$stay", token,
+            // 좌표 확정 숙소는 수정할 때도 좌표를 함께 실어야 한다(INV-U1-08).
+            """{"name":"제주숙소","lat":33.5,"lng":126.5,"coordConfirmed":true,"memo":"주차 가능"}""",
+        )
+
+        rc shouldBe 200
+        body["linkedTripIds"].map { it.asText() } shouldBe listOf(trip)
+    }
+
+    @Test
     fun `남의 여행은 실리지 않는다`() {
         val mine = newToken()
         val stay = newStay(mine, "내숙소")

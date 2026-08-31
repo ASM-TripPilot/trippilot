@@ -67,7 +67,12 @@ data class SavedStayResponse(
     val linkedTripIds: List<UUID>,
 ) {
     companion object {
-        fun from(s: SavedStay, linkedTripIds: List<UUID> = emptyList()) = SavedStayResponse(
+        /**
+         * [linkedTripIds] 에 **기본값을 두지 않는다.** 기본값을 두면 새 표면이 그것을 물려받아
+         * 거점으로 쓰이는 숙소에 빈 목록을 실어 보낸다 — 화면이 그 응답으로 캐시를 갱신하면
+         * `연결된 여행 없음` 이 된다. 부르는 쪽이 매번 무엇인지 말하게 한다.
+         */
+        fun from(s: SavedStay, linkedTripIds: List<UUID>) = SavedStayResponse(
             savedStayId = s.savedStayId, name = s.name, lat = s.lat, lng = s.lng,
             coordConfirmed = s.coordConfirmed, checkIn = s.checkIn, checkOut = s.checkOut,
             externalSource = s.externalSource, externalId = s.externalId,

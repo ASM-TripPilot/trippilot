@@ -26,7 +26,8 @@ class SavedStayController(
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     fun register(principal: Principal, @Valid @RequestBody request: RegisterSavedStayRequest): SavedStayResponse =
-        SavedStayResponse.from(service.register(principal.accountId(), request.toCommand()))
+        // 갓 등록한 숙소는 아직 어느 여행의 거점도 아니다 — 물어볼 것이 없어 빈 목록이다.
+        SavedStayResponse.from(service.register(principal.accountId(), request.toCommand()), emptyList())
 
     @GetMapping
     fun list(principal: Principal): List<SavedStayResponse> {
@@ -49,8 +50,13 @@ class SavedStayController(
         principal: Principal,
         @PathVariable savedStayId: UUID,
         @Valid @RequestBody request: EditSavedStayRequest,
-    ): SavedStayResponse =
-        SavedStayResponse.from(service.edit(principal.accountId(), savedStayId, request.toCommand()))
+    ): SavedStayResponse {
+        val accountId = principal.accountId()
+        val stay = service.edit(accountId, savedStayId, request.toCommand())
+        // 수정 응답에도 실제 연결을 싣는다 — 빈 목록을 보내면 화면이 그것으로 캐시를 갱신해
+        // 거점으로 쓰이는 숙소가 `연결된 여행 없음` 으로 보인다.
+        return SavedStayResponse.from(stay, linkedTrips.of(accountId, listOf(stay))[savedStayId].orEmpty())
+    }
 
     @DeleteMapping("/{savedStayId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
