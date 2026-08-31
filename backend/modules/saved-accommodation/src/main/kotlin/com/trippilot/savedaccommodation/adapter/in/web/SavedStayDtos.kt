@@ -60,13 +60,19 @@ data class SavedStayResponse(
     val memo: String?,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /**
+     * 이 숙소가 거점인 여행들(BR-U6-20). 비어 있으면 화면이 `연결된 여행 없음` 을 그린다.
+     * 삭제된 여행은 빠진다 — 열 수 없는 여행을 붙여 두면 사용자가 막다른 길로 간다.
+     */
+    val linkedTripIds: List<UUID>,
 ) {
     companion object {
-        fun from(s: SavedStay) = SavedStayResponse(
+        fun from(s: SavedStay, linkedTripIds: List<UUID> = emptyList()) = SavedStayResponse(
             savedStayId = s.savedStayId, name = s.name, lat = s.lat, lng = s.lng,
             coordConfirmed = s.coordConfirmed, checkIn = s.checkIn, checkOut = s.checkOut,
             externalSource = s.externalSource, externalId = s.externalId,
             registerRoute = s.registerRoute, memo = s.memo, createdAt = s.createdAt, updatedAt = s.updatedAt,
+            linkedTripIds = linkedTripIds,
         )
     }
 }

@@ -1,5 +1,6 @@
 package com.trippilot.savedaccommodation.adapter.`in`.web
 
+import com.trippilot.savedaccommodation.application.LinkedTripService
 import com.trippilot.savedaccommodation.application.SavedStayService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -20,6 +21,7 @@ import java.util.UUID
 @RequestMapping("/api/v1/saved-stays")
 class SavedStayController(
     private val service: SavedStayService,
+    private val linkedTrips: LinkedTripService,
 ) {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -27,12 +29,20 @@ class SavedStayController(
         SavedStayResponse.from(service.register(principal.accountId(), request.toCommand()))
 
     @GetMapping
-    fun list(principal: Principal): List<SavedStayResponse> =
-        service.list(principal.accountId()).map { SavedStayResponse.from(it) }
+    fun list(principal: Principal): List<SavedStayResponse> {
+        val accountId = principal.accountId()
+        val stays = service.list(accountId)
+        // 숙소마다 따로 묻지 않는다 — 목록에서 N+1 을 만들면 이 필드를 넣은 이유가 사라진다.
+        val linked = linkedTrips.of(accountId, stays)
+        return stays.map { SavedStayResponse.from(it, linked[it.savedStayId].orEmpty()) }
+    }
 
     @GetMapping("/{savedStayId}")
-    fun get(principal: Principal, @PathVariable savedStayId: UUID): SavedStayResponse =
-        SavedStayResponse.from(service.get(principal.accountId(), savedStayId))
+    fun get(principal: Principal, @PathVariable savedStayId: UUID): SavedStayResponse {
+        val accountId = principal.accountId()
+        val stay = service.get(accountId, savedStayId)
+        return SavedStayResponse.from(stay, linkedTrips.of(accountId, listOf(stay))[savedStayId].orEmpty())
+    }
 
     @PatchMapping("/{savedStayId}")
     fun edit(

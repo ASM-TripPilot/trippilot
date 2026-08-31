@@ -27,6 +27,7 @@ class BaseAssignmentEntity(
 interface BaseAssignmentJpaRepository : JpaRepository<BaseAssignmentEntity, UUID> {
     fun findByTripId(tripId: UUID): List<BaseAssignmentEntity>
     fun existsBySavedStayId(savedStayId: UUID): Boolean
+    fun findBySavedStayIdIn(savedStayIds: Collection<UUID>): List<BaseAssignmentEntity>
 }
 
 @Component
@@ -38,6 +39,14 @@ class BaseAssignmentRepositoryAdapter(
 
     override fun findByTrip(tripId: UUID): List<BaseAssignment> =
         jpa.findByTripId(tripId).map { it.toDomain() }
+
+    /** 같은 여행에 여러 구간이 배정되면 행이 여럿이다 — 여행 id 는 중복을 뺀다. */
+    override fun findTripIdsByStays(savedStayIds: Collection<UUID>): Map<UUID, List<UUID>> {
+        if (savedStayIds.isEmpty()) return emptyMap()
+        return jpa.findBySavedStayIdIn(savedStayIds)
+            .groupBy { it.savedStayId }
+            .mapValues { (_, rows) -> rows.map { it.tripId }.distinct() }
+    }
 
     override fun findById(baseAssignmentId: UUID): BaseAssignment? =
         jpa.findById(baseAssignmentId).orElse(null)?.toDomain()

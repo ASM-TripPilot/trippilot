@@ -29,6 +29,10 @@ private class FakeBases : BaseAssignmentRepository {
     override fun findById(baseAssignmentId: UUID) = store[baseAssignmentId]
     override fun delete(base: BaseAssignment) { store.remove(base.baseAssignmentId) }
     override fun existsByStayId(savedStayId: UUID) = store.values.any { it.savedStayId == savedStayId }
+    override fun findTripIdsByStays(savedStayIds: Collection<UUID>) =
+        store.values.filter { it.savedStayId in savedStayIds }
+            .groupBy { it.savedStayId }
+            .mapValues { (_, rows) -> rows.map { r -> r.tripId }.distinct() }
 }
 
 private class FakeStays : SavedStayRepository {
