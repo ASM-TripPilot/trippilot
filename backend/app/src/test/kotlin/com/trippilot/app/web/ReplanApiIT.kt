@@ -87,7 +87,16 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
         return rc
     }
 
-    /** 2차 생성 마무리 대기 — `ItineraryApiIT` 의 같은 헬퍼와 같은 규약이다. */
+    /**
+     * 2차 생성 마무리 대기.
+     *
+     * `ItineraryApiIT` 에 같은 동작의 헬퍼가 있고 값(20초·50ms)도 같지만 **인자 순서가 반대다**
+     * — 이쪽은 파일 관례를 따라 `(token, tripId)`, 저쪽은 `(trip, token)`이다. 둘 다 String 이라
+     * 호출을 옮겨 붙이면 조용히 뒤바뀐다. 옮길 때 순서를 보라.
+     *
+     * 같은 헬퍼가 두 벌이라는 것 자체가 위험이다 — 이번 결함이 바로 테스트 쪽 전제가 낡아서 났다.
+     * 셋째가 필요해지면 그때 공용으로 뽑는 편이 낫다.
+     */
     private fun awaitComplete(token: String, tripId: String) {
         val deadline = System.nanoTime() + AWAIT_TIMEOUT_NANOS
         var last = ""
@@ -309,7 +318,7 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
     }
 
     private companion object {
-        private const val POLL_INTERVAL_MS = 100L
+        private const val POLL_INTERVAL_MS = 50L
         private val AWAIT_TIMEOUT_NANOS = java.time.Duration.ofSeconds(20).toNanos()
     }
 }
