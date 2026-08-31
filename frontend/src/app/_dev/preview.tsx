@@ -38,6 +38,8 @@ import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
+import { ConflictSheet } from '@/features/record/ui/ConflictSheet';
+import { SyncBadge } from '@/features/record/ui/SyncBadge';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
@@ -2086,6 +2088,59 @@ const PREVIEW_STATES: PreviewState[] = [
           onCancel={noop}
         />
       </View>
+    ),
+  },
+  // j01 오프라인 동기화 배지(TRIP-568) — 4상태를 3표기(대기/완료/충돌)로 접는 배지의 색·모양을
+  // 한 화면에서 육안 대조하는 자리(pill 색·글자 톤은 jest 사각 — repo-traps 글리프 함정 계열).
+  {
+    key: 'records-sync-badge',
+    label: 'j01 동기화 배지 · 4상태',
+    login: null,
+    render: () => (
+      <View className="flex-1 gap-md bg-canvas px-lg pt-[80px]">
+        {(['LOCAL', 'PENDING', 'SYNCED', 'CONFLICT'] as const).map((status) => (
+          <View key={status} className="flex-row items-center gap-md">
+            <Text className="w-[80px] text-label text-muted-soft">
+              {status}
+            </Text>
+            <SyncBadge status={status} />
+          </View>
+        ))}
+      </View>
+    ),
+  },
+  // j01 동기화 충돌 해소(TRIP-568) — 전체화면 조건부 렌더 뷰(바텀시트 아님). 방문 2건을 카드 2장
+  // 으로 그려 2열 라디오·미선택 시작·적용 비활성/활성을 실기로 눌러 본다. card1=시각 축, card2=
+  // 상태 축(Figma 카드별 3필드). 선택 상태는 accessibilityState 로 잠기고 색은 무심판이라 이 키가
+  // 채움/테두리 강조를 눈으로 대조하는 유일한 자리(자율 세션 — 6-b 실기는 다음 세션 몫).
+  {
+    key: 'records-conflict',
+    label: 'j01 동기화 충돌 해소 · 2건',
+    login: null,
+    render: () => (
+      <ConflictSheet
+        conflicts={[
+          {
+            visitCheckId: 'v1',
+            nameKo: '광안리 해변',
+            rows: [
+              { label: '방문 시각', local: '14:20 체크', server: '14:05 체크' },
+              { label: '메모', local: '노을 최고', server: '-' },
+              { label: '사진', local: '2장(대기)', server: '1장' },
+            ],
+          },
+          {
+            visitCheckId: 'v2',
+            nameKo: '부산시립미술관',
+            rows: [
+              { label: '방문 상태', local: '방문 완료', server: '방문 안 함' },
+              { label: '메모', local: '-', server: '-' },
+              { label: '사진', local: '0장', server: '0장' },
+            ],
+          },
+        ]}
+        onApply={noop}
+      />
     ),
   },
   // 탐색 2키(TRIP-221·223) — **results 얼굴 전용**이다. 실화면 딥링크로는 볼 수 없다:
