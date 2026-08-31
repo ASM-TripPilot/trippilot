@@ -4,6 +4,7 @@ import com.trippilot.trip.application.CreateTripCommand
 import com.trippilot.trip.application.EditTripCommand
 import com.trippilot.trip.domain.CompanionType
 import com.trippilot.trip.domain.Trip
+import com.trippilot.trip.domain.TripCounts
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripStatus
 import jakarta.validation.constraints.NotNull
@@ -63,13 +64,18 @@ data class TripResponse(
     val status: TripStatus,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** 등록 숙소 **수**(BR-U6-22). 0 이면 화면이 `숙소 미등록` 칩을 그린다. */
+    val baseCount: Int,
+    /** 일정이 있는 **일수**. 0 = 아직 생성되지 않음. 개수이지 시간이 아니다(INV-3). */
+    val itineraryDayCount: Int,
 ) {
     companion object {
-        fun from(t: Trip, today: LocalDate) = TripResponse(
+        fun from(t: Trip, today: LocalDate, counts: TripCounts = TripCounts.NONE) = TripResponse(
             tripId = t.tripId, title = t.title, startDate = t.startDate, endDate = t.endDate,
             party = t.party, companionType = t.companionType, budgetTotal = t.budgetTotal,
             preferenceSnapshot = t.preferenceSnapshot, destinations = t.destinations.map { DestinationDto.from(it) },
             status = t.statusAt(today), createdAt = t.createdAt, updatedAt = t.updatedAt,
+            baseCount = counts.baseCount, itineraryDayCount = counts.itineraryDayCount,
         )
     }
 }

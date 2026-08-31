@@ -1738,7 +1738,7 @@ components:
 
     Trip:
       type: object
-      required: [tripId, title, startDate, endDate, party, preferenceSnapshot, destinations, status, createdAt, updatedAt]
+      required: [tripId, title, startDate, endDate, party, preferenceSnapshot, destinations, status, createdAt, updatedAt, baseCount, itineraryDayCount]
       properties:
         tripId: { type: string, format: uuid }
         title: { type: string }
@@ -1752,6 +1752,19 @@ components:
         status: { $ref: '#/components/schemas/TripStatus' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        baseCount:
+          type: integer
+          description: >
+            등록 숙소 **수**(BR-U6-22). 배정 구간 수가 아니라 서로 다른 숙소의 수라 한 숙소가
+            사흘을 덮어도 1이다. 0 이면 화면이 `숙소 미등록` 칩을 그린다.
+
+
+            조회 시 집계하는 **파생값**이다 — 저장하지 않는다. 숙소를 지우면 그 순간 줄어야 한다.
+        itineraryDayCount:
+          type: integer
+          description: >
+            일정이 **있는 일수**. 0 = 아직 생성되지 않음. ⚠ 개수이지 시간이 아니다 —
+            소요시간은 어디에도 싣지 않는다(INV-3).
 
     CreateTripRequest:
       type: object
