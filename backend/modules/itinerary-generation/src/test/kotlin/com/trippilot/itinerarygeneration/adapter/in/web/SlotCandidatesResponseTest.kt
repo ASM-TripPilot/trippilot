@@ -20,6 +20,7 @@ class SlotCandidatesResponseTest : StringSpec({
         candidates = listOf(SlotCandidate(UUID.randomUUID(), "약 0.3km", "주변 카페")),
         radiusMUsed = 3_000,
         freshness = FreshnessMeta(Instant.parse("2026-08-20T03:00:00Z"), degraded = degraded),
+        emptyReason = null, // 후보가 있다 — 0건 사유는 없는 것이 맞다
     )
 
     "강등이면 응답에 그대로 실린다" {

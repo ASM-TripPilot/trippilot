@@ -299,12 +299,14 @@ data class SlotCandidatesInput(
  * [candidates] 빈 목록 = 후보 0건(h15 반경 확대 유도). [radiusMUsed] 는 **실제 사용 반경**(AI 가 자동 확대했을 수 있다).
  *
  * [emptyReason] 은 0건일 때만 채워진다 — 아래 [SlotCandidatesEmptyReason] 참고.
+ * **기본값을 두지 않는다.** 두면 빈 목록을 내는 새 구현이 그것을 물려받아 "0건인데 이유 없음"이
+ * 조용히 나가고, 이 필드를 넣은 이유가 사라진다.
  */
 data class SlotCandidatesOutput(
     val candidates: List<SlotCandidate>,
     val radiusMUsed: Int,
     val freshness: FreshnessMeta,
-    val emptyReason: SlotCandidatesEmptyReason? = null,
+    val emptyReason: SlotCandidatesEmptyReason?,
 )
 
 /**

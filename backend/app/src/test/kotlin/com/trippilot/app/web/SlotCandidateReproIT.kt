@@ -191,7 +191,11 @@ class SlotCandidateReproIT : AbstractPostgresIntegrationTest() {
         val inItinerary = itinerary["days"].flatMap { d -> d["slots"].map { it["poiId"].asText() } }
 
         // 일정에 든 것만 ACTIVE 로 남긴다 — 주변에 **있긴 한데 전부 이미 쓴** 상황.
-        // 일정이 슬롯 하나뿐이면 "주변에 있는데 전부 일정"을 만들 수 없다 — 그때는 이 시나리오가 성립하지 않는다.
+        // 슬롯이 하나뿐이면 자기 자신을 뺀 주변이 비어 NO_NEARBY 가 된다 — 그건 이 시나리오가 아니다.
+        // 픽스처가 바뀌어 슬롯이 줄면 **여기서 먼저 멈춰** 원인을 알려 준다(조용히 다른 것을 재지 않게).
+        withClue("이 시나리오는 일정 슬롯이 둘 이상이어야 성립한다(현재 ${inItinerary.size}개)") {
+            (inItinerary.size > 1) shouldBe true
+        }
         closeActiveExcept(inItinerary)
 
         val (rc, body) = call(
