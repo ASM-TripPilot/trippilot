@@ -33,7 +33,7 @@
 # 간선을 주장만 하고 확인하지 않은 상태가 눈에 보여야 한다. 확인 방법은 역검증과 같다 —
 # **간선을 끊고 후행을 빌드해 실제로 깨지는가.** 안 깨지면 그 간선은 상상이었으니 지운다.
 #
-# 갱신: 2026-08-31 · 노드·간선을 Jira 티켓 원문과 대조해 정정한 판
+# 갱신: 2026-09-01 · TRIP-536 을 '닫을 것'에서 '고칠 것'으로 되돌리고, 그 원인 진단을 한 번 정정했다
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 우리 몫
@@ -99,7 +99,7 @@ account_setting 테이블은 **아직 없다**(실측: 마이그레이션·코�
 id = "TRIP-615"
 ticket = "TRIP-615"
 title = "Notification.actionType 확장 — PLANB_REPLAN·REFLECTION_DAILY·TRIP_SUMMARY·STAY_REGISTER + payload oneOf"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/notification",
@@ -133,7 +133,7 @@ note = """
 id = "TRIP-617"
 ticket = "TRIP-617"
 title = "여행 목록 집계 필드 — Trip.baseCount·itineraryDayCount · SavedStay.linkedTripIds (BR-U6-20·22)"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/trip",
@@ -203,7 +203,7 @@ TRIP-249 와 같은 디렉토리를 만진다(자원 배타) — 스크립트가
 id = "OPENAPI-DUPKEY-GATE"
 ticket = ""
 title = "OpenApiContractIT 에 중복 스키마·경로 키 검사 추가"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/app/src/test/kotlin/com/trippilot/app",
@@ -219,22 +219,45 @@ openapi.yaml 을 건드리는 노드가 대부분이다(스크립트의 「공�
 id = "TRIP-559"
 ticket = "TRIP-559"
 title = "재계획 확정 전 전후 비교 (US-PLANB-08)"
-status = "pr_open"
+status = "done"
 migration = false
 touches = ["backend/modules/itinerary-recalculation", "backend/docs/design/openapi.yaml"]
-note = "PR #406 — CI 통과, 머지 대기."
+note = "PR #406 머지됨(2026-08-31)."
 
 [[nodes]]
-id = "TRIP-536-CLOSE"
+id = "TRIP-536"
 ticket = "TRIP-536"
-title = "ItineraryApiIT 플레이크 티켓 닫기 — 가설된 원인과 실제가 달랐다"
-status = "todo"
+title = "일정 IT 가 비동기 2차 생성을 기다리지 않는다 — 404 자리에 409 가 온다"
+status = "pr_open"
 migration = false
-touches = []
+touches = [
+  "backend/app/src/test/kotlin/com/trippilot/app",
+]
 note = """
-티켓은 '공유 컨테이너에서 실문서 적재 IT와의 간섭'으로 적혀 있으나, 실제 원인은 @Async
-replaceIfCurrent 의 DELETE→INSERT 창이었다. PR #379 에서 awaitComplete() 로 해결했다.
-**코드 작업이 아니라 기록 정정이다** — 그대로 두면 다음 사람이 없는 원인을 쫓는다.
+**한때 닫으려 했다가 철회한 노드다.** PR #379(ItineraryApiIT 의 awaitComplete 누락)로 해결됐다고
+봤는데, 그건 한 자리였고 같은 형태가 남아 있다.
+
+관측(2026-08-31~09-01): 현재 develop **같은 커밋에서 1회 통과 / 2회 실패**. 희생자가 실행마다
+바뀐다 — CI 는 ReplanApiIT:111, 로컬은 ItineraryApiIT(없는 슬롯에 404 대신 **409**).
+단독 실행은 통과하고 전체 스위트에서만 깨진다. TZ·시각은 배제했다(같은 UTC·같은 시각에 단독 실행
+통과, 결과 XML 로 실제 실행 확인).
+
+원인: `SlotCandidateService:61` 이 `generationState == PARTIAL` 이면 409 "일정 생성이 진행
+중입니다"를 던진다. 비동기 2차 생성이 끝나기 전에 테스트가 요청하면 404 를 기대한 자리에 409 가 온다.
+
+⚠ **한 번 오진했다.** "itinerary 에 여행당 1행 제약이 없어 조회가 아무거나 집는다"고 적었으나
+`V2.10__itinerary_trip_unique.sql` 이 `uq_itinerary_trip UNIQUE (trip_id)` 를 이미 걸어 두고
+있었다(TRIP-267). V2.7 의 일반 인덱스만 보고 단정한 결과다 — **마이그레이션은 전수로 확인한다.**
+그때 넣었던 중복 유니크(V2.42)와 findByTrip 정렬은 되돌렸다. 대신 제약의 존재를 직접 묻는
+테스트(ItineraryOnePerTripIT)는 남겼다 — 2.10부터 있던 제약에 확인 테스트가 없었고, 그 공백이
+오진을 가능하게 했다.
+
+처방(PR #414): 낡은 전제를 믿던 두 자리를 고쳤다 — `슬롯 키 형식이…` 에 awaitComplete 추가,
+ReplanApiIT.generate 가 마무리까지 대기. 그리고 원인의 절반이던 tripOneDay 주석을 사실로 바꿨다
+("2차 없이 즉시 COMPLETE" → TRIP-511 이후 하루 여행도 PARTIAL 이다).
+
+⚠ 재계획은 PARTIAL 을 막지 않으므로 ReplanApiIT:111 의 정확한 기전은 **단정하지 않았다.**
+전체 스위트 5회 연속 초록으로 관측되지만, 확률적 실패라 "없다"의 증명은 아니다.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
