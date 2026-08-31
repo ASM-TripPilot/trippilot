@@ -24,6 +24,7 @@ import type {
 
 import type {
   AddMustVisitRequest,
+  AddPhotoRequest,
   AdjustTimesRequest,
   ArriveRequest,
   AssignBaseRequest,
@@ -36,10 +37,14 @@ import type {
   ErrorResponse,
   GenerateItineraryRequest,
   GenerationSession,
+  GetMeRecordsParams,
   GetTripsTripIdChangeLogParams,
   GetTripsTripIdItineraryRevisionsParams,
+  GetTripsTripIdRecordsParams,
   Itinerary,
   MustVisit,
+  PutMemoRequest,
+  ReorderPhotosRequest,
   ReplanSession,
   ResolveCoverageDayRequest,
   RevisionList,
@@ -51,9 +56,14 @@ import type {
   Trigger,
   TriggerList,
   Trip,
+  TripRecord,
+  TripRecordList,
   ValidationErrorResponse,
   VisitCheck,
   VisitCheckList,
+  VisitMemo,
+  VisitPhoto,
+  VisitPhotoList,
 } from '../schemas';
 
 import { customInstance } from '../../mutator';
@@ -2635,6 +2645,898 @@ export const usePostTripsTripIdVisitsVisitCheckIdSkip = <
 > => {
   return useMutation(
     getPostTripsTripIdVisitsVisitCheckIdSkipMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * **서버는 사진 바이너리를 저장하지 않는다**(INV-U5-03 · DEC-U5-9). 여기서 받는 것은 기기 로컬 자산 식별자·기기 id·촬영 시각·EXIF 좌표(동의 시)뿐이고, 화면은 그 식별자로 기기 자산을 직접 연다. 업로드 경로는 없고 만들지도 않는다 — `storage_key` 류를 한 번 만들면 다음 사이클이 채운다.
+ *
+ * `exifLat`·`exifLng` 는 **위치 동의(L3 `gpsRecordingOptIn`)가 없으면 저장되지 않는다**(INV-U5-04). 거부가 아니라 **무시**다 — 거부로 만들면 클라이언트가 동의 상태 사본을 들고 있어야 하고, 그 사본이 어긋나는 순간 등록 자체가 막힌다.
+ * @summary 방문 사진 **메타** 등록 — 업로드가 아니다
+ */
+export const postTripsTripIdVisitsVisitCheckIdPhotos = (
+  tripId: string,
+  visitCheckId: string,
+  addPhotoRequest: AddPhotoRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<VisitPhoto>({
+    url: `/trips/${tripId}/visits/${visitCheckId}/photos`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data: addPhotoRequest,
+    signal,
+  });
+};
+
+export const getPostTripsTripIdVisitsVisitCheckIdPhotosMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdPhotos>>,
+    TError,
+    { tripId: string; visitCheckId: string; data: AddPhotoRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdPhotos>>,
+  TError,
+  { tripId: string; visitCheckId: string; data: AddPhotoRequest },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdVisitsVisitCheckIdPhotos'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdPhotos>>,
+    { tripId: string; visitCheckId: string; data: AddPhotoRequest }
+  > = (props) => {
+    const { tripId, visitCheckId, data } = props ?? {};
+
+    return postTripsTripIdVisitsVisitCheckIdPhotos(tripId, visitCheckId, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdVisitsVisitCheckIdPhotosMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdPhotos>>
+>;
+export type PostTripsTripIdVisitsVisitCheckIdPhotosMutationBody =
+  AddPhotoRequest;
+export type PostTripsTripIdVisitsVisitCheckIdPhotosMutationError = void;
+
+/**
+ * @summary 방문 사진 **메타** 등록 — 업로드가 아니다
+ */
+export const usePostTripsTripIdVisitsVisitCheckIdPhotos = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdPhotos>>,
+      TError,
+      { tripId: string; visitCheckId: string; data: AddPhotoRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdVisitsVisitCheckIdPhotos>>,
+  TError,
+  { tripId: string; visitCheckId: string; data: AddPhotoRequest },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdVisitsVisitCheckIdPhotosMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * 정렬 순서대로. `count` 를 함께 주는 이유는 **개수만 쓰는 소비자**가 있기 때문이다 — AI 컨텍스트 조립이 필요로 하는 것은 사진 자체가 아니라 "몇 장 찍었나"다.
+ * @summary 방문 사진 메타 목록 + 개수
+ */
+export const getTripsTripIdVisitsVisitCheckIdPhotos = (
+  tripId: string,
+  visitCheckId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<VisitPhotoList>({
+    url: `/trips/${tripId}/visits/${visitCheckId}/photos`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey = (
+  tripId: string,
+  visitCheckId: string
+) => {
+  return [`/trips/${tripId}/visits/${visitCheckId}/photos`] as const;
+};
+
+export const getGetTripsTripIdVisitsVisitCheckIdPhotosQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+  TError = void,
+>(
+  tripId: string,
+  visitCheckId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey(tripId, visitCheckId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>
+  > = ({ signal }) =>
+    getTripsTripIdVisitsVisitCheckIdPhotos(tripId, visitCheckId, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled:
+      tripId !== null &&
+      tripId !== undefined &&
+      visitCheckId !== null &&
+      visitCheckId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdVisitsVisitCheckIdPhotosQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>
+>;
+export type GetTripsTripIdVisitsVisitCheckIdPhotosQueryError = void;
+
+export function useGetTripsTripIdVisitsVisitCheckIdPhotos<
+  TData = Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+  TError = void,
+>(
+  tripId: string,
+  visitCheckId: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdVisitsVisitCheckIdPhotos<
+  TData = Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+  TError = void,
+>(
+  tripId: string,
+  visitCheckId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdVisitsVisitCheckIdPhotos<
+  TData = Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+  TError = void,
+>(
+  tripId: string,
+  visitCheckId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 방문 사진 메타 목록 + 개수
+ */
+
+export function useGetTripsTripIdVisitsVisitCheckIdPhotos<
+  TData = Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+  TError = void,
+>(
+  tripId: string,
+  visitCheckId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdVisitsVisitCheckIdPhotos>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdVisitsVisitCheckIdPhotosQueryOptions(
+    tripId,
+    visitCheckId,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * 그 방문의 사진 **전부**를 한 번씩 담아야 한다. 부분 목록을 받아 그것만 다시 매기면 나머지와 순서가 겹쳐 "어느 것이 먼저인가"가 사라진다 — 그래서 400 으로 거부한다.
+ * @summary 사진 정렬 변경
+ */
+export const putTripsTripIdVisitsVisitCheckIdPhotosOrder = (
+  tripId: string,
+  visitCheckId: string,
+  reorderPhotosRequest: ReorderPhotosRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>({
+    url: `/trips/${tripId}/visits/${visitCheckId}/photos/order`,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    data: reorderPhotosRequest,
+    signal,
+  });
+};
+
+export const getPutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdPhotosOrder>>,
+    TError,
+    { tripId: string; visitCheckId: string; data: ReorderPhotosRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdPhotosOrder>>,
+  TError,
+  { tripId: string; visitCheckId: string; data: ReorderPhotosRequest },
+  TContext
+> => {
+  const mutationKey = ['putTripsTripIdVisitsVisitCheckIdPhotosOrder'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdPhotosOrder>>,
+    { tripId: string; visitCheckId: string; data: ReorderPhotosRequest }
+  > = (props) => {
+    const { tripId, visitCheckId, data } = props ?? {};
+
+    return putTripsTripIdVisitsVisitCheckIdPhotosOrder(
+      tripId,
+      visitCheckId,
+      data
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationResult =
+  NonNullable<
+    Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdPhotosOrder>>
+  >;
+export type PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationBody =
+  ReorderPhotosRequest;
+export type PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationError = void;
+
+/**
+ * @summary 사진 정렬 변경
+ */
+export const usePutTripsTripIdVisitsVisitCheckIdPhotosOrder = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdPhotosOrder>>,
+      TError,
+      { tripId: string; visitCheckId: string; data: ReorderPhotosRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdPhotosOrder>>,
+  TError,
+  { tripId: string; visitCheckId: string; data: ReorderPhotosRequest },
+  TContext
+> => {
+  return useMutation(
+    getPutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * @summary 사진 메타 삭제 — 기기의 원본 사진은 건드리지 않는다
+ */
+export const deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId = (
+  tripId: string,
+  visitCheckId: string,
+  visitPhotoMetaId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<void>({
+    url: `/trips/${tripId}/visits/${visitCheckId}/photos/${visitPhotoMetaId}`,
+    method: 'DELETE',
+    signal,
+  });
+};
+
+export const getDeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationOptions =
+  <TError = void, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<
+      Awaited<
+        ReturnType<
+          typeof deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId
+        >
+      >,
+      TError,
+      { tripId: string; visitCheckId: string; visitPhotoMetaId: string },
+      TContext
+    >;
+  }): UseMutationOptions<
+    Awaited<
+      ReturnType<
+        typeof deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId
+      >
+    >,
+    TError,
+    { tripId: string; visitCheckId: string; visitPhotoMetaId: string },
+    TContext
+  > => {
+    const mutationKey = [
+      'deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId',
+    ];
+    const { mutation: mutationOptions } = options
+      ? options.mutation &&
+        'mutationKey' in options.mutation &&
+        options.mutation.mutationKey
+        ? options
+        : { ...options, mutation: { ...options.mutation, mutationKey } }
+      : { mutation: { mutationKey } };
+
+    const mutationFn: MutationFunction<
+      Awaited<
+        ReturnType<
+          typeof deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId
+        >
+      >,
+      { tripId: string; visitCheckId: string; visitPhotoMetaId: string }
+    > = (props) => {
+      const { tripId, visitCheckId, visitPhotoMetaId } = props ?? {};
+
+      return deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId(
+        tripId,
+        visitCheckId,
+        visitPhotoMetaId
+      );
+    };
+
+    return { mutationFn, ...mutationOptions };
+  };
+
+export type DeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationResult =
+  NonNullable<
+    Awaited<
+      ReturnType<
+        typeof deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId
+      >
+    >
+  >;
+
+export type DeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationError =
+  void;
+
+/**
+ * @summary 사진 메타 삭제 — 기기의 원본 사진은 건드리지 않는다
+ */
+export const useDeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<
+        ReturnType<
+          typeof deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId
+        >
+      >,
+      TError,
+      { tripId: string; visitCheckId: string; visitPhotoMetaId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<
+    ReturnType<typeof deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId>
+  >,
+  TError,
+  { tripId: string; visitCheckId: string; visitPhotoMetaId: string },
+  TContext
+> => {
+  return useMutation(
+    getDeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationOptions(
+      options
+    ),
+    queryClient
+  );
+};
+/**
+ * 재열람은 **여행 단위**로 들어간다(BR-U5-56) — 목록에서 여행을 고르고 거기서 계획｜실제｜변경 3종으로 갈린다(`GET /trips/{tripId}/records`).
+ *
+ * **빈 상태를 값으로 알린다.** 조용히 빈 배열만 주면 화면이 "오류인가, 상한에 걸렸나, 정말 없나"를 구분하지 못하고 그 셋은 보여 줄 것이 전부 다르다. `emptyState=NO_TRIPS` 면 새 여행 생성 진입을, `NO_RECORDS` 면 기다리라고 그린다.
+ * @summary 지난 여행 기록 목록(j07)
+ */
+export const getMeRecords = (
+  params?: GetMeRecordsParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<TripRecordList>({
+    url: `/me/records`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetMeRecordsQueryKey = (params?: GetMeRecordsParams) => {
+  return [`/me/records`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetMeRecordsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMeRecords>>,
+  TError = unknown,
+>(
+  params?: GetMeRecordsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getMeRecords>>, TError, TData>
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMeRecordsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeRecords>>> = ({
+    signal,
+  }) => getMeRecords(params, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMeRecords>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetMeRecordsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMeRecords>>
+>;
+export type GetMeRecordsQueryError = unknown;
+
+export function useGetMeRecords<
+  TData = Awaited<ReturnType<typeof getMeRecords>>,
+  TError = unknown,
+>(
+  params: undefined | GetMeRecordsParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getMeRecords>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMeRecords>>,
+          TError,
+          Awaited<ReturnType<typeof getMeRecords>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetMeRecords<
+  TData = Awaited<ReturnType<typeof getMeRecords>>,
+  TError = unknown,
+>(
+  params?: GetMeRecordsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getMeRecords>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMeRecords>>,
+          TError,
+          Awaited<ReturnType<typeof getMeRecords>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetMeRecords<
+  TData = Awaited<ReturnType<typeof getMeRecords>>,
+  TError = unknown,
+>(
+  params?: GetMeRecordsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getMeRecords>>, TError, TData>
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 지난 여행 기록 목록(j07)
+ */
+
+export function useGetMeRecords<
+  TData = Awaited<ReturnType<typeof getMeRecords>>,
+  TError = unknown,
+>(
+  params?: GetMeRecordsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getMeRecords>>, TError, TData>
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetMeRecordsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * **아무것도 저장하지 않는다.** 미방문(`unvisitedSlotKeys`)도 숙소 귀속(`baseStayName`)도 조회 시점에 갈라낸 **파생값**이다 — 저장하면 계획이 바뀌거나 숙소를 바꿀 때 옛 기록이 따라오지 않는다(BR-U5-25·26·28).
+ *
+ * 계획은 실적에 덮이지 않는다(BR-U5-01) — 계획과 실제가 달라도 그 자체가 사실이라, 둘을 나란히 두는 것이 이 화면의 전부다.
+ *
+ * ⚠ **체류 시간은 싣지 않는다**(BR-U5-08). 산출은 되지만 개별 방문의 체류로 화면에 보이지 않는다.
+ * @summary 계획｜실제｜변경 3종 비교(j02)
+ */
+export const getTripsTripIdRecords = (
+  tripId: string,
+  params?: GetTripsTripIdRecordsParams,
+  signal?: AbortSignal
+) => {
+  return customInstance<TripRecord>({
+    url: `/trips/${tripId}/records`,
+    method: 'GET',
+    params,
+    signal,
+  });
+};
+
+export const getGetTripsTripIdRecordsQueryKey = (
+  tripId: string,
+  params?: GetTripsTripIdRecordsParams
+) => {
+  return [`/trips/${tripId}/records`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetTripsTripIdRecordsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdRecordsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+        TError,
+        TData
+      >
+    >;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTripsTripIdRecordsQueryKey(tripId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTripsTripIdRecords>>
+  > = ({ signal }) => getTripsTripIdRecords(tripId, params, signal);
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: tripId !== null && tripId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTripsTripIdRecordsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTripsTripIdRecords>>
+>;
+export type GetTripsTripIdRecordsQueryError = void;
+
+export function useGetTripsTripIdRecords<
+  TData = Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+  TError = void,
+>(
+  tripId: string,
+  params: undefined | GetTripsTripIdRecordsParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdRecords>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdRecords<
+  TData = Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdRecordsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+          TError,
+          Awaited<ReturnType<typeof getTripsTripIdRecords>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTripsTripIdRecords<
+  TData = Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdRecordsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary 계획｜실제｜변경 3종 비교(j02)
+ */
+
+export function useGetTripsTripIdRecords<
+  TData = Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+  TError = void,
+>(
+  tripId: string,
+  params?: GetTripsTripIdRecordsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getTripsTripIdRecords>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTripsTripIdRecordsQueryOptions(
+    tripId,
+    params,
+    options
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * 한 방문에 메모는 하나뿐이라(BR-U5-13) "만들기"와 "고치기"를 나누지 않는다. 메모는 **사진과 무관하게 남는다**(INV-U5-05) — 자산을 못 열어도 감상은 남아야 한다. 조회 표면은 이 티켓에 없다(`j02` 3종 비교가 소유).
+ * @summary 방문 메모 저장(upsert) — 한 방문에 한 개
+ */
+export const putTripsTripIdVisitsVisitCheckIdMemo = (
+  tripId: string,
+  visitCheckId: string,
+  putMemoRequest: PutMemoRequest,
+  signal?: AbortSignal
+) => {
+  return customInstance<VisitMemo>({
+    url: `/trips/${tripId}/visits/${visitCheckId}/memo`,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    data: putMemoRequest,
+    signal,
+  });
+};
+
+export const getPutTripsTripIdVisitsVisitCheckIdMemoMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdMemo>>,
+    TError,
+    { tripId: string; visitCheckId: string; data: PutMemoRequest },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdMemo>>,
+  TError,
+  { tripId: string; visitCheckId: string; data: PutMemoRequest },
+  TContext
+> => {
+  const mutationKey = ['putTripsTripIdVisitsVisitCheckIdMemo'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdMemo>>,
+    { tripId: string; visitCheckId: string; data: PutMemoRequest }
+  > = (props) => {
+    const { tripId, visitCheckId, data } = props ?? {};
+
+    return putTripsTripIdVisitsVisitCheckIdMemo(tripId, visitCheckId, data);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PutTripsTripIdVisitsVisitCheckIdMemoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdMemo>>
+>;
+export type PutTripsTripIdVisitsVisitCheckIdMemoMutationBody = PutMemoRequest;
+export type PutTripsTripIdVisitsVisitCheckIdMemoMutationError = void;
+
+/**
+ * @summary 방문 메모 저장(upsert) — 한 방문에 한 개
+ */
+export const usePutTripsTripIdVisitsVisitCheckIdMemo = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdMemo>>,
+      TError,
+      { tripId: string; visitCheckId: string; data: PutMemoRequest },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof putTripsTripIdVisitsVisitCheckIdMemo>>,
+  TError,
+  { tripId: string; visitCheckId: string; data: PutMemoRequest },
+  TContext
+> => {
+  return useMutation(
+    getPutTripsTripIdVisitsVisitCheckIdMemoMutationOptions(options),
     queryClient
   );
 };

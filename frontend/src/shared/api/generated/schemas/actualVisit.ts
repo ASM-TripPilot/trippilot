@@ -6,20 +6,20 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
-import type { VisitCheckSource } from './visitCheckSource';
 
-export interface VisitCheck {
+export interface ActualVisit {
   visitCheckId: string;
-  /** null = 즉석 방문 */
+  /** null = 즉석 방문(계획에 없던 곳) */
   slotKey?: string | null;
   poiId: string;
   arrivedAt?: string | null;
   completedAt?: string | null;
-  /** 건너뜀(취소). 완료와 동시에 참일 수 없다 */
   skippedAt?: string | null;
-  source: VisitCheckSource;
-  /** 계획에 없던 곳인가 — 화면의 '즉석 방문' 배지 근거 */
   spontaneous: boolean;
-  /** 오프라인 충돌 판정의 기준(BR-U5-22 · TRIP-546). 클라이언트는 이 값을 로컬 편집의 기준 버전으로 들고 있다가 재생 시 `expectedUpdatedAt` 으로 돌려보낸다. */
+  /** 사진 **개수**만 — 메타 목록은 방문별 표면이 낸다 */
+  photoCount: number;
+  /** 있는지만 — 본문은 별도 표면 */
+  hasMemo: boolean;
+  /** 오프라인 충돌 판정 기준(BR-U5-22) */
   updatedAt: string;
 }
