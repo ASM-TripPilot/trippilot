@@ -19,6 +19,7 @@ import com.trippilot.core.event.DomainEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.Duration
 import java.time.LocalDate
 
 /**
@@ -105,11 +106,28 @@ class AuthenticateWithSocialUseCase(
             isNewUser = true
         }
 
+        // 만료(초)는 발급 **직전** 시각을 기준으로 잰다. 발급 후 시각으로 재면 경과분만큼 짧아져
+        // 초 절삭에서 TTL-1(3599)이 나갈 수 있다 — 클라가 매번 만료 직전에 갱신하게 된다.
+        val beforeIssue = clock.instant()
         val refresh = refreshTokenService.issueFor(account.id, deviceId)
+        val access = tokenIssuer.issue(account.id)
         return SocialLoginResult(
-            accessToken = tokenIssuer.issue(account.id),
+            accessToken = access.value,
+            expiresIn = Duration.between(beforeIssue, access.expiresAt).seconds,
             refreshToken = refresh.rawToken,
+            refreshExpiresIn = Duration.between(beforeIssue, refresh.expiresAt).seconds,
             isNewUser = isNewUser,
+            account = AccountSummary(
+                accountId = account.id.value,
+                status = account.status,
+                email = account.email,
+                // 신규 분기는 방금 연결한 하나뿐이다. 재조회하면 같은 트랜잭션의 flush 순서에 기대게 된다.
+                socialProviders = if (isNewUser) {
+                    listOf(profile.provider)
+                } else {
+                    socialIdentityRepository.findByAccountId(account.id).map { it.provider }
+                },
+            ),
         )
     }
 

@@ -14,8 +14,10 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
+import org.springframework.core.io.ClassPathResource
 import org.springframework.http.MediaType
 import org.springframework.web.client.RestClient
+import org.yaml.snakeyaml.Yaml
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
@@ -143,6 +145,61 @@ class SocialLoginControllerIT : AbstractPostgresIntegrationTest() {
         status shouldBe 400
         body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
         body["error"].has("existingProvider") shouldBe false
+    }
+
+    // ── 응답 모양 게이트(TRIP-249 5번) ────────────────────────────────────────────
+    // OpenApiContractIT 는 **경로**가 맞는지만 본다. 응답 **본문 필드**는 아무도 안 봤고,
+    // 그래서 TokenPair 가 7필드를 선언하는 동안 서버는 3필드만 내보내도 전부 초록이었다.
+    // 아래 둘이 그 구멍을 막는다 — 계약이 선언한 키 집합과 실제 응답 키 집합을 정확히 대조한다.
+
+    /** openapi 정본에서 스키마 하나의 property 이름 집합을 읽는다. */
+    private fun schemaProperties(name: String): Set<String> {
+        @Suppress("UNCHECKED_CAST")
+        val spec = Yaml().load<Map<String, Any>>(ClassPathResource("static/openapi.yaml").inputStream)
+        @Suppress("UNCHECKED_CAST")
+        val schemas = (spec["components"] as Map<String, Any>)["schemas"] as Map<String, Map<String, Any>>
+        val schema = requireNotNull(schemas[name]) { "openapi.yaml 에 $name 스키마가 없다" }
+        @Suppress("UNCHECKED_CAST")
+        return (schema["properties"] as Map<String, Any>).keys.toSet()
+    }
+
+    private fun JsonNode.keys(): Set<String> = fieldNames().asSequence().toSet()
+
+    @Test
+    fun `소셜 로그인 응답 키가 계약의 TokenPair 와 정확히 일치한다`() {
+        val (status, body) = post(
+            "/api/v1/auth/social/kakao",
+            """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth","ageConfirmation":{"method":"SELF_DECLARED"}}""",
+        )
+
+        status shouldBe 200
+        body.keys() shouldBe schemaProperties("TokenPair")
+        body["account"].keys() shouldBe schemaProperties("AccountSummary")
+
+        // 값도 함께 본다 — 키만 있고 0 이면 클라의 갱신 판단은 여전히 불가능하다.
+        body["tokenType"].asText() shouldBe "Bearer"
+        (body["expiresIn"].asLong() > 0) shouldBe true
+        (body["refreshExpiresIn"].asLong() > body["expiresIn"].asLong()) shouldBe true
+        body["account"]["status"].asText() shouldBe "ACTIVE"
+        body["account"]["socialProviders"].map { it.asText() } shouldBe listOf("KAKAO")
+    }
+
+    @Test
+    fun `갱신 응답 키가 계약의 RefreshedTokenPair 와 정확히 일치한다`() {
+        val login = post(
+            "/api/v1/auth/social/kakao",
+            """{"authorizationCode":"code","codeVerifier":"verifier","redirectUri":"trippilot://auth","ageConfirmation":{"method":"SELF_DECLARED"}}""",
+        ).second
+
+        val (status, body) = post(
+            "/api/v1/auth/token/refresh",
+            """{"refreshToken":"${login["refreshToken"].asText()}"}""",
+        )
+
+        status shouldBe 200
+        // 갱신에는 isNewUser·account 가 없다 — 있으면 매 갱신마다 계정 조회를 강요하게 된다.
+        body.keys() shouldBe schemaProperties("RefreshedTokenPair")
+        (body["expiresIn"].asLong() > 0) shouldBe true
     }
 
     companion object {

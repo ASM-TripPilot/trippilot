@@ -24,7 +24,13 @@ class TokenController(
     @PostMapping("/token/refresh")
     fun refresh(@Valid @RequestBody request: RefreshTokenRequest): RefreshTokenResponse {
         val result = refreshAccessToken.refresh(request.refreshToken)
-        return RefreshTokenResponse(accessToken = result.accessToken, refreshToken = result.refreshToken)
+        return RefreshTokenResponse(
+            accessToken = result.accessToken,
+            tokenType = BEARER,
+            expiresIn = result.expiresIn,
+            refreshToken = result.refreshToken,
+            refreshExpiresIn = result.refreshExpiresIn,
+        )
     }
 
     /** 로그아웃 — 리프레시 세션 폐기. 멱등(이미 폐기·미존재여도 204). */
@@ -39,9 +45,17 @@ data class RefreshTokenRequest(
     @field:NotBlank val refreshToken: String,
 )
 
+/**
+ * 갱신 응답(계약의 RefreshedTokenPair). 소셜 로그인의 TokenPair 와 달리 `isNewUser`·`account` 가 없다 —
+ * 갱신에서 "신규 가입"은 언제나 거짓이고, 계정 요약을 실으려면 갱신마다 계정을 한 번 더 조회해야 한다.
+ * 계정 상태는 `GET /me` 가 소유한다.
+ */
 data class RefreshTokenResponse(
     val accessToken: String,
+    val tokenType: String,
+    val expiresIn: Long,
     val refreshToken: String,
+    val refreshExpiresIn: Long,
 )
 
 data class LogoutRequest(

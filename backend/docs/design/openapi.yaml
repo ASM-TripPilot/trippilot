@@ -116,10 +116,10 @@ paths:
                 refreshToken: { type: string }
       responses:
         '200':
-          description: 새 TokenPair
+          description: 회전된 토큰 쌍(isNewUser·account 없음 — 계정 요약은 GET /me 소관)
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TokenPair' }
+              schema: { $ref: '#/components/schemas/RefreshedTokenPair' }
         '401':
           description: 무효·만료 또는 회전 토큰 재사용(체인 무효화)
           content:
@@ -2557,6 +2557,15 @@ components:
           description: 신규 가입 시 필수, 기존 로그인 시 무시
         deviceId: { type: string, nullable: true, description: 미제공 시 서버가 임의 부여(기기별 세션) }
 
+    RefreshedTokenPair:
+      type: object
+      properties:
+        accessToken: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresIn: { type: integer, example: 3600 }
+        refreshToken: { type: string }
+        refreshExpiresIn: { type: integer, example: 7776000 }
+
     TokenPair:
       type: object
       properties:
@@ -2577,7 +2586,6 @@ components:
         socialProviders:
           type: array
           items: { type: string, enum: [GOOGLE, APPLE, KAKAO, NAVER] }
-        onboardingCompleted: { type: boolean }
 
     TermsVersion:
       type: object
