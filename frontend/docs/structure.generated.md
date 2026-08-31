@@ -66,6 +66,7 @@
 - `src/__tests__/planbScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggersRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
 - `src/__tests__/regionCatalogStructure.test.ts`  →  (export 없음)
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
@@ -202,6 +203,9 @@
 - `src/app/trips/[tripId]/planb/manual.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/planb/solving.tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/planb/triggers.tsx`  →  (export 없음)
+
+## src/app/trips/[tripId]/records/
+- `src/app/trips/[tripId]/records/index.tsx`  →  (export 없음)
 
 ## src/app/trips/new/
 - `src/app/trips/new/_layout.tsx`  →  (export 없음)
@@ -392,6 +396,17 @@
 - `src/features/planb/ui/ReplanSolvingScreen.tsx`  →  ReplanSolvingScreenProps · ReplanSolvingScreen
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
 - `src/features/planb/ui/TriggerWatchlistScreen.tsx`  →  TriggerWatchlistScreenProps · TriggerWatchlistScreen
+
+## src/features/record/model/
+- `src/features/record/model/useTripRecords.ts`  →  useTripRecords
+- `src/features/record/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
+- `src/features/record/model/visitStatus.ts`  →  VisitStatus · deriveVisitStatus
+
+## src/features/record/ui/
+- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · BackArrowGlyph · HeartGlyph
+- `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
+- `src/features/record/ui/TripRecordsScreen.tsx`  →  TripRecordsDayTab · TripRecordsScreenProps · TripRecordsScreen
+- `src/features/record/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
 
 ## src/features/settings/model/
 - `src/features/settings/model/deletionScope.ts`  →  DELETION_SCOPE
@@ -751,6 +766,12 @@
 ## src/pages/trip-new-step2/ui/
 - `src/pages/trip-new-step2/ui/TripNewStep2Page.tsx`  →  TripNewStep2Page
 
+## src/pages/trip-records/
+- `src/pages/trip-records/index.ts`  →  TripRecordsPage
+
+## src/pages/trip-records/ui/
+- `src/pages/trip-records/ui/TripRecordsPage.tsx`  →  TripRecordsPageProps · TripRecordsPage
+
 ## src/shared/api/generated/account/
 - `src/shared/api/generated/account/account.ts`  →  getMe · getGetMeQueryKey · getGetMeQueryOptions · GetMeQueryResult · GetMeQueryError · useGetMe · postMeDeletion · getPostMeDeletionMutationOptions · PostMeDeletionMutationResult · PostMeDeletionMutationError · usePostMeDeletion · deleteMeDeletion · getDeleteMeDeletionMutationOptions · DeleteMeDeletionMutationResult · DeleteMeDeletionMutationError · useDeleteMeDeletion · getMeExport · getGetMeExportQueryKey · getGetMeExportQueryOptions · GetMeExportQueryResult · GetMeExportQueryError · useGetMeExport
 
@@ -1042,4 +1063,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 702개 파일
+합계 713개 파일

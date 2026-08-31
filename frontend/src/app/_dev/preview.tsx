@@ -38,6 +38,7 @@ import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
+import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -1941,6 +1942,74 @@ const PREVIEW_STATES: PreviewState[] = [
     label: '지도 · 기본',
     login: null,
     render: () => <KakaoMapView center={{ lat: 37.5665, lng: 126.978 }} />,
+  },
+  {
+    key: 'records-default',
+    label: 'j01 방문 기록 · default',
+    login: null,
+    render: () => (
+      <TripRecordsScreen
+        dayTabs={[
+          { day: '2026-08-20', label: 'Day1' },
+          { day: '2026-08-21', label: 'Day2' },
+          { day: '2026-08-22', label: 'Day3' },
+        ]}
+        activeDay="2026-08-21"
+        onSelectDay={noop}
+        mapCenter={{ lat: 35.1532, lng: 129.1187 }}
+        mapPins={[
+          { number: 1, lat: 35.1532, lng: 129.1187 },
+          { number: 2, lat: 35.1264, lng: 129.0403 },
+        ]}
+        cards={[
+          {
+            visitCheckId: 'r1',
+            slotKey: '2026-08-21#p1',
+            poiId: 'p1',
+            nameKo: '광안리 해변',
+            arrivedAt: '2026-08-21T14:20:00',
+            completedAt: '2026-08-21T15:20:00',
+            skippedAt: null,
+            arrivedLabel: '14:20',
+          },
+          {
+            visitCheckId: 'r2',
+            slotKey: '2026-08-21#p2',
+            poiId: 'p2',
+            nameKo: '부산시립미술관',
+            arrivedAt: '2026-08-21T15:40:00',
+            completedAt: null,
+            skippedAt: null,
+            arrivedLabel: '15:40',
+          },
+          {
+            visitCheckId: 'r3',
+            slotKey: '2026-08-21#p3',
+            poiId: 'p3',
+            nameKo: '○○ 카페',
+            arrivedAt: null,
+            completedAt: null,
+            skippedAt: null,
+            arrivedLabel: null,
+          },
+          {
+            visitCheckId: 'r4',
+            slotKey: '2026-08-21#p4',
+            poiId: 'p4',
+            nameKo: '건너뛴 전망대',
+            arrivedAt: '2026-08-21T16:10:00',
+            completedAt: null,
+            skippedAt: '2026-08-21T16:12:00',
+            arrivedLabel: '16:10',
+          },
+        ]}
+        onPressComplete={noop}
+        onPressSkip={noop}
+        onPressSpontaneous={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+      />
+    ),
   },
   // 탐색 2키(TRIP-221·223) — **results 얼굴 전용**이다. 실화면 딥링크로는 볼 수 없다:
   // 백엔드가 401 이면 d04 는 항상 error, 세션이 없으면 d02 는 항상 게스트 안내로 떨어진다.
