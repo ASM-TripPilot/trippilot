@@ -1,0 +1,299 @@
+# 백엔드 남은 작업 그래프 — 노드·간선 정본
+#
+# ## 왜 파일로 두나
+#
+# 착수 순서를 표로 적어 두면 **다시 계산이 안 되고, 검증했는지가 기록되지 않고, 파일 충돌을
+# 사람 기억에 의존한다.** 티켓 하나가 늘 때마다 표 전체를 손으로 다시 짜야 한다.
+# 여기 적어 두면 `backend/scripts/work_graph.py` 가 층·충돌·mermaid 를 계산해 낸다.
+#
+# ## 노드는 티켓이 아니라 **머지 가능한 최소 단위(PR 하나)** 다
+#
+# 이 리포에서 실측으로 둘 다 나왔다 — 코드는 다 됐는데 열려 있는 티켓, 티켓 없이 코드 주석에만
+# 있는 구멍. 그래서 `ticket` 은 비어 있을 수 있고, 그것이 정상이다(지금 넷이 그렇다).
+#
+# ## 간선은 **티켓 원문으로 확인한 것만** 싣는다
+#
+# 첫 판에서 "둘 다 계정 설정이니 저장소를 다투겠지" 같은 추측으로 간선을 그었다가, 티켓 원문에
+# `선행조건: 없음` 이 박혀 있는 것을 보고 지웠다. **모듈이 가깝다는 것은 선행의 근거가 아니다.**
+# 남은 간선이 둘뿐인 것이 이 그래프의 결론이다 — 대부분 독립이고, 진짜 제약은 공유 자원이다.
+#
+# ## 자원 배타는 간선이 아니다
+#
+# 같은 파일·같은 Flyway 번호를 만지는 관계에는 순서가 없다 — 먼저 손댄 쪽이 이긴다. 그걸 간선으로
+# 적으면 없는 순서가 생겨 층이 왜곡된다(실제로 TRIP-361 이 근거 없이 층 1로 밀렸다).
+# `touches` 에 적어 두면 스크립트가 층별로 파생해 준다.
+#
+# ## touches 는 **예상**이다
+#
+# 착수 전에는 실제 diff 를 모른다. 자원 배타를 기계가 잡게 하려고 적어 두는 값이고, 착수해서
+# 실제 편집 범위가 달라지면 그때 고친다. 티켓이 「관련 파일」을 적어 둔 것은 그대로 옮겼다.
+#
+# ## verified = 이 파일의 값어치
+#
+# 간선을 주장만 하고 확인하지 않은 상태가 눈에 보여야 한다. 확인 방법은 역검증과 같다 —
+# **간선을 끊고 후행을 빌드해 실제로 깨지는가.** 안 깨지면 그 간선은 상상이었으니 지운다.
+#
+# 갱신: 2026-08-31 · 노드·간선을 Jira 티켓 원문과 대조해 정정한 판
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 우리 몫
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "TRIP-249"
+ticket = "TRIP-249"
+title = "소셜 로그인 에러 계약 정합 5건 (400 미선언·연령 403/422·미매핑 500·Apple 미지원·TokenPair 3필드)"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/main/kotlin/com/trippilot/app/web/error/GlobalExceptionHandler.kt",
+  "backend/common/core/src/main/kotlin/com/trippilot/core/error/DomainException.kt",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/in/web",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/out/external",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+티켓이 다섯을 한 칸으로 묶은 이유가 곧 자원 배타다 — "파일이 겹쳐 나눠 머지하면 서로의 diff 를 밟는다".
+착수 전 결정 3건이 티켓에 적혀 있다(연령 422 vs 403 · TokenPair 채움 vs 축소 · Apple 구분 형태).
+**Apple 로그인을 살리지는 않는다** — "안 되는 상태를 안 된다고 정확히 말하게" 까지다.
+"""
+
+[[nodes]]
+id = "TRIP-481"
+ticket = "TRIP-481"
+title = "슬롯 교체 후보 반경 조회가 항상 0건 — h12·h14·h18 무력화"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/LocalSlotCandidateSource.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/SlotCandidateService.kt",
+]
+note = """
+**AI 대기가 아니다.** 티켓 실측: proposeSlotCandidates 는 AI 를 부르지 않고 LocalSlotCandidateSource 로
+위임하므로 AI 로그에 요청이 안 찍히고 503 도 안 난다 — 원인은 로컬 반경 조회 구간이다.
+그래서 TRIP-463(AI 슬롯 후보 경계 개통)과 **독립**이다. 한 건 고치면 화면 넷(h12·h14·h15·h18)이 함께 산다.
+"""
+
+[[nodes]]
+id = "TRIP-614"
+ticket = "TRIP-614"
+title = "제휴 고지 '다시 보지 않기' 계정 단위 저장 — account_setting (O-U6-5 · BR-U6-33)"
+status = "todo"
+migration = true
+touches = [
+  "backend/app/src/main/resources/db/migration",
+  "backend/modules/affiliate-link",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+account_setting 테이블은 **아직 없다**(실측: 마이그레이션·코드 어디에도 없음). 티켓의 O-U6-5 는
+/me/preferences 확장 vs 신설이 미결이었고 신설을 권장한다 — PreferenceInput 은 여행 취향 축으로
+좁게 정의돼 있어 앱 설정을 섞으면 U3 취향 동결 스냅숏(preferenceSnapshot)에 딸려 들어간다.
+
+팀 결정(2026-08-31): **key-value 한 테이블**. 표면마다 컬럼을 늘리면 설정이 하나 생길 때마다
+스키마 변경이 필요해진다. AC 에 "계정 파기 시 함께 지워진다"가 있으니 파기 경로에 포함시킨다.
+"""
+
+[[nodes]]
+id = "TRIP-615"
+ticket = "TRIP-615"
+title = "Notification.actionType 확장 — PLANB_REPLAN·REFLECTION_DAILY·TRIP_SUMMARY·STAY_REGISTER + payload oneOf"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/notification",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+마이그레이션 **불필요** — V2.31 의 `action_type` 이 `varchar(24)` 이고 CHECK 제약이 없다.
+새 값 최장이 REFLECTION_DAILY(16자)라 그대로 들어간다. 티켓만 보면 스키마 작업으로 오해한다.
+"""
+
+[[nodes]]
+id = "TRIP-616"
+ticket = "TRIP-616"
+title = "Plan-B 민감도·전역 빈도 상한 저장·적용 — /me/planb-sensitivity (O-U6-2 · G-U6-4 · BR-U4-08)"
+status = "todo"
+migration = true
+touches = [
+  "backend/app/src/main/resources/db/migration",
+  "backend/modules/planb-detection",
+  "backend/modules/profile",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+티켓 명시: **선행조건 없음**. TRIP-614 와 묶으려 했다가 지웠다 — 저장 표면이 다르고(자체 경로 +
+자체 마이그레이션) "같은 계정 설정"이라는 것은 선행의 근거가 아니었다.
+감지 PBT 에 sensitivity 축이 붙는다: LOW 발화 집합 ⊆ NORMAL ⊆ HIGH (단조) — CI 차단 게이트.
+클라는 임계값을 모른다(BR-U4-03) — 응답에 임계값 필드를 싣지 않는다.
+"""
+
+[[nodes]]
+id = "TRIP-617"
+ticket = "TRIP-617"
+title = "여행 목록 집계 필드 — Trip.baseCount·itineraryDayCount · SavedStay.linkedTripIds (BR-U6-20·22)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/trip",
+  "backend/modules/saved-accommodation",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+티켓 명시: 선행조건 없음. 집계는 **읽기 전용 파생**이라 컬럼을 늘리지 않는다.
+linkedTripIds 는 base_assignment 역참조라 saved-accommodation 도 함께 움직인다.
+여행(C4)이 거점 수·일정 일수를 알려면 남의 모듈 `..api..` 를 통해야 한다(R1) — 필요한 퍼사드가
+없으면 여는 작업이 이 노드에 포함된다. 지금 FE 는 여행 5개에 11요청(N+1)을 쏘고 있다.
+"""
+
+[[nodes]]
+id = "TRIP-361"
+ticket = "TRIP-361"
+title = "trip_destination region_code 전환 (계약 변경)"
+status = "todo"
+migration = true
+touches = [
+  "backend/app/src/main/resources/db/migration",
+  "backend/modules/trip",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+티켓의 선행조건은 '1번 칸(행정구역 카탈로그)'인데 **이미 있다** — V2.24__region_catalog.sql ·
+R__seed_region_catalog.sql 실측. 그래서 선행 간선이 없다.
+FE TRIP-362 가 이 계약을 소비하므로 배포 순서(서버 먼저·양쪽 수용 기간)를 착수 시 정한다.
+미확인 1건: 스테이징·공유 DB 에 기존 데이터가 있으면 문자열 → 코드 백필이 이 칸에 포함된다.
+"""
+
+[[nodes]]
+id = "PERSONA-API"
+ticket = ""
+title = "AI 가 재조회할 페르소나 표면 — 내부 접근 경로 결정 (TRIP-434 의 선행)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/profile",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+**티켓이 없다.** TRIP-434(AI) 가 "선행: 백엔드에 페르소나 API가 존재해야 함"이라고 적어 두었으므로
+막고 있는 쪽은 우리다. 처음엔 방향을 반대로 그렸다가 원문을 보고 뒤집었다.
+재료는 이미 있다 — /me/personalization(TRIP-556) · /me/preferences. 없는 것은 **AI 서비스가
+사용자 토큰 없이 부를 내부 경로**다(티켓 초안은 /internal/users/{id}/persona).
+그래서 이 노드의 실체는 신설이 아니라 인증 경계 결정이다.
+"""
+
+[[nodes]]
+id = "APPLE-JWKS"
+ticket = ""
+title = "Apple 로그인 id_token 서명검증(JWKS)·aud/iss/exp — 현재 fail-closed 로 비활성"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/out/external",
+]
+note = """
+**티켓이 없다.** 코드 주석에만 있다(AppleOAuthClient·AbstractOAuth2Client 의 TODO(SECURITY)).
+MVP 는 소셜 로그인만인데 그 중 하나가 꺼져 있다. nonce·state 검증도 함께 비어 있다.
+SEC-06 이 여는 조건의 정본이다 — 서명·iss·aud·exp(·nonce) + p8 키 ES256 client_secret 동적 서명.
+TRIP-249 와 같은 디렉토리를 만진다(자원 배타) — 스크립트가 층에서 잡아 준다.
+"""
+
+[[nodes]]
+id = "OPENAPI-DUPKEY-GATE"
+ticket = ""
+title = "OpenApiContractIT 에 중복 스키마·경로 키 검사 추가"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/test/kotlin/com/trippilot/app",
+]
+note = """
+**티켓이 없다.** 스택 머지에서 openapi.yaml 의 스키마 키가 중복돼(Notification·PushTokenResponse 등)
+FE `pnpm codegen` 이 막힌 적이 있고, FE PR #403 에서 손으로 지웠다. YAML 은 뒤에 온 키가 이기므로
+`$ref` 검사로는 **원리적으로** 못 잡는다.
+openapi.yaml 을 건드리는 노드가 대부분이다(스크립트의 「공유 자원」 절이 세어 준다) — 이 가드가 먼저 있으면 그들이 안전해진다.
+"""
+
+[[nodes]]
+id = "TRIP-559"
+ticket = "TRIP-559"
+title = "재계획 확정 전 전후 비교 (US-PLANB-08)"
+status = "pr_open"
+migration = false
+touches = ["backend/modules/itinerary-recalculation", "backend/docs/design/openapi.yaml"]
+note = "PR #406 — CI 통과, 머지 대기."
+
+[[nodes]]
+id = "TRIP-536-CLOSE"
+ticket = "TRIP-536"
+title = "ItineraryApiIT 플레이크 티켓 닫기 — 가설된 원인과 실제가 달랐다"
+status = "todo"
+migration = false
+touches = []
+note = """
+티켓은 '공유 컨테이너에서 실문서 적재 IT와의 간섭'으로 적혀 있으나, 실제 원인은 @Async
+replaceIfCurrent 의 DELETE→INSERT 창이었다. PR #379 에서 awaitComplete() 로 해결했다.
+**코드 작업이 아니라 기록 정정이다** — 그대로 두면 다음 사람이 없는 원인을 쫓는다.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 남의 몫 — 우리가 못 푸는 노드
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "IDP-REGISTER"
+ticket = ""
+title = "Apple IdP 등록(팀 키·서비스 ID)"
+status = "external"
+owner = "운영"
+migration = false
+touches = []
+
+[[nodes]]
+id = "TRIP-434"
+ticket = "TRIP-434"
+title = "[AI] 페르소나 저장소 실구현 — StaticPersonaStore 를 백엔드 API 로"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = "우리 PERSONA-API 를 기다린다 — 이 그래프에서 **우리가 남을 막고 있는 유일한 자리**다."
+
+[[nodes]]
+id = "TRIP-463"
+ticket = "TRIP-463"
+title = "[AI] 슬롯 후보 경계 개통 — copick 실연동"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = "TRIP-481 과 무관하다(그쪽은 로컬 위임 경로 버그). 이 노드가 열리면 AI 위임 경로가 추가로 생긴다."
+
+[[nodes]]
+id = "TRIP-475"
+ticket = "TRIP-475"
+title = "[예약] 일정 생성 시간제약 재도입 — 플래그 on + deadline 재전송"
+status = "deferred"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation"]
+note = "2026-10 이후로 잡혀 있다. 일정 제약이지 기술 선행이 아니다."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 간선 — 티켓 원문으로 확인한 것만
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[edges]]
+from = "IDP-REGISTER"
+to = "APPLE-JWKS"
+kind = "외부선행"
+verified = false
+reason = "JWKS 검증·client_secret ES256 서명은 실제 등록된 팀 키·서비스 ID 없이 확인할 수 없다(SEC-06)."
+
+[[edges]]
+from = "PERSONA-API"
+to = "TRIP-434"
+kind = "계약선행"
+verified = false
+reason = "TRIP-434 본문 「선행」: 백엔드에 페르소나 API가 존재해야 함."
