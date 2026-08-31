@@ -158,7 +158,7 @@ linkedTripIds 는 base_assignment 역참조라 saved-accommodation 도 함께 �
 id = "TRIP-361"
 ticket = "TRIP-361"
 title = "trip_destination region_code 전환 (계약 변경)"
-status = "todo"
+status = "done"
 migration = true
 touches = [
   "backend/app/src/main/resources/db/migration",
@@ -168,8 +168,27 @@ touches = [
 note = """
 티켓의 선행조건은 '1번 칸(행정구역 카탈로그)'인데 **이미 있다** — V2.24__region_catalog.sql ·
 R__seed_region_catalog.sql 실측. 그래서 선행 간선이 없다.
-FE TRIP-362 가 이 계약을 소비하므로 배포 순서(서버 먼저·양쪽 수용 기간)를 착수 시 정한다.
-미확인 1건: 스테이징·공유 DB 에 기존 데이터가 있으면 문자열 → 코드 백필이 이 칸에 포함된다.
+
+**착수 시 실측 3건(2026-09-01):**
+
+1. **티켓이 '완료'인데 백엔드는 미구현이었다.** trip_destination 은 V2.3 이후 한 번도 안 건드려졌고
+   region varchar(60) 자유 문자열 그대로였다. 형제(357·358·359·360·363·364)가 전부 실제 완료라
+   에픽 자식을 일괄로 닫으며 함께 닫힌 것으로 보인다.
+2. **티켓의 주된 근거가 이미 다른 방법으로 해소돼 있었다.** "부산 하나를 지우려다 부산 전부를
+   잃는다"는 TRIP-364 가 `seq` 로 고쳤다(tripWizardStore.ts 주석). 코드 전환이 아니었다.
+3. **경계에서 코드를 버리고 있었다.** GET /regions 는 이미 regionCode 를 주는데 POST /trips 는
+   이름만 받는다. 그래서 RegionLookupService.centerOf 가 findExact(name).firstNotNullOfOrNull 로
+   동명이지역 중 하나를 임의로 집는다 — 부산 중구를 고르면 서울 중구 좌표가 앵커가 될 수 있다.
+
+**결정(2026-09-01): 내부 정규화만. 계약은 안 바꾼다.** openapi·FE codegen·승인된 테스트가 안 움직인다.
+카탈로그 조인과 표기 정규화 이득은 지금 가져가고, 계약 전환은 FE 가 준비될 때 별건으로.
+
+**정본 이탈**: 티켓 AC 는 "region_code 가 NULL 인 행이 남지 않는다"인데 NULL 을 허용했다.
+이름만 받는 동안에는 동명이지역(selectable 237개 중 7개 이름·26개 지역 — 중구5·동구5·서구4·
+남구4·북구4·강서구2·고성군2)을 원리적으로 해소할 수 없다. 사유는 마이그레이션 주석·도메인 KDoc·
+PR 본문 세 곳에 남겼다.
+
+**남은 구멍**: 위 3번(centerOf 임의 선택)은 이 칸이 못 고친다 — 계약이 코드를 받아야 닫힌다.
 """
 
 [[nodes]]
@@ -398,4 +417,28 @@ note = """
 단정하지 말 것: 재현 없이 "타임아웃도 허용"으로 단언을 넓히면 **연결 거부와 타임아웃을 가르는
 이 테스트의 목적 자체가 사라진다**(주석 44행이 그 구분을 명시한다). accepter 준비를 래치로
 동기화한 뒤 부하를 흉내 내 재현하는 것이 먼저다.
+"""
+
+[[nodes]]
+id = "TRIP-361-CONTRACT"
+ticket = ""
+title = "목적지 계약을 코드로 전환 — 동명이지역 임의 선택 해소 (TRIP-361 후속)"
+status = "todo"
+migration = false
+touches = [
+  "backend/docs/design/openapi.yaml",
+  "backend/modules/trip/src/main/kotlin/com/trippilot/trip/adapter/in/web/TripDtos.kt",
+  "backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/application/RegionLookupService.kt",
+]
+note = """
+TRIP-361 이 내부 정규화까지만 하고 남긴 몫이다.
+
+**지금 조용히 틀리는 자리**: RegionLookupService.centerOf 가 `findExact(name).firstNotNullOfOrNull`
+로 동명이지역 중 하나를 집는다. 부산 중구를 고른 사용자의 일정 앵커가 서울 중구 중심이 될 수 있고,
+아무 데도 기록이 남지 않는다. 이름만 받는 한 서버가 풀 방법이 없다.
+
+**FE 는 이미 코드를 쥐고 있다** — GET /regions 응답에 regionCode 가 있다. 계약이 안 받을 뿐이다.
+
+할 일: TripDestination 에 regionCode 를 싣고(양쪽 수용 기간), 카탈로그 밖 코드 거절, 응답에 표시명
+동반. FE 짝은 TRIP-362(해야 할 일). 배포 순서(서버 먼저)를 정해야 한다.
 """

@@ -38,7 +38,9 @@ class TripRepositoryAdapter(
         trips.save(trip.toEntity())
         destinations.deleteByTripId(trip.tripId)          // 목적지 전체 교체(생성·편집 공통)
         trip.destinations.forEach {
-            destinations.save(TripDestinationEntity(UUID.randomUUID(), trip.tripId, it.seq, it.region, it.nights))
+            destinations.save(
+                TripDestinationEntity(UUID.randomUUID(), trip.tripId, it.seq, it.region, it.nights, it.regionCode),
+            )
         }
         return trip
     }
@@ -57,7 +59,7 @@ class TripRepositoryAdapter(
     )
 
     private fun TripEntity.toDomain(): Trip {
-        val dests = destinations.findByTripIdOrderBySeqAsc(tripId).map { TripDestination(it.seq, it.region, it.nights) }
+        val dests = destinations.findByTripIdOrderBySeqAsc(tripId).map { TripDestination(it.seq, it.region, it.nights, it.regionCode) }
         return Trip.reconstitute(
             tripId = tripId, accountId = accountId, title = title, startDate = startDate, endDate = endDate,
             party = party, companionType = companionType?.let { CompanionType.valueOf(it) }, budgetTotal = budgetTotal,
