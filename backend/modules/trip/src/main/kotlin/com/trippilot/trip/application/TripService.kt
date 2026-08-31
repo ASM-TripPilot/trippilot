@@ -5,6 +5,7 @@ import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.placedata.api.DestinationCheck
 import com.trippilot.placedata.api.DestinationFacade
+import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.trip.domain.CompanionType
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
@@ -42,6 +43,7 @@ data class EditTripCommand(
 class TripService(
     private val repo: TripRepository,
     private val destinations: DestinationFacade,
+    private val regions: RegionLookupFacade,
     private val clock: Clock,
 ) {
     fun create(accountId: UUID, cmd: CreateTripCommand): Trip {
@@ -49,7 +51,7 @@ class TripService(
         return repo.save(
             Trip.create(
                 accountId, cmd.title, cmd.startDate, cmd.endDate, cmd.party, cmd.companionType,
-                cmd.budgetTotal, cmd.preferenceSnapshot, cmd.destinations, clock.instant(),
+                cmd.budgetTotal, cmd.preferenceSnapshot, withRegionCodes(cmd.destinations), clock.instant(),
             ),
         )
     }
@@ -76,6 +78,20 @@ class TripService(
         if (rejected.isNotEmpty()) throw ValidationFailed(rejected)
     }
 
+    /**
+     * 목적지에 행정구역 표준코드를 채운다(TRIP-361). 생성·편집 **양쪽**이 이 하나를 지난다 —
+     * 한쪽만 채우면 여행을 편집하는 순간 코드가 조용히 사라진다.
+     *
+     * **`singleOrNull` 이 이 함수의 전부다.** [RegionLookupFacade.codesOf] 는 동명이지역 때문에
+     * 여러 개를 돌려준다(중구 5곳 등). `firstOrNull` 로 하나를 집으면 부산 중구를 고른 사용자에게
+     * 서울 중구가 박히고, 아무도 그것을 알아채지 못한다 — 확정되지 않으면 비워 둔다.
+     *
+     * 클라이언트는 이름만 보내므로 이름이 애매하면 여기서 풀 방법이 없다. 그 구멍은 계약이
+     * 코드를 받게 될 때 닫힌다.
+     */
+    private fun withRegionCodes(destinations: List<TripDestination>): List<TripDestination> =
+        destinations.map { it.copy(regionCode = regions.codesOf(it.region).singleOrNull()) }
+
     fun list(accountId: UUID): List<Trip> = repo.findByAccount(accountId).filter { it.deletedAt == null }
 
     fun get(accountId: UUID, tripId: UUID): Trip = ownedOrNotFound(accountId, tripId)
@@ -85,7 +101,7 @@ class TripService(
         return repo.save(
             trip.edit(
                 cmd.title, cmd.startDate, cmd.endDate, cmd.party, cmd.companionType,
-                cmd.budgetTotal, cmd.destinations, clock.instant(),
+                cmd.budgetTotal, withRegionCodes(cmd.destinations), clock.instant(),
             ),
         )
     }

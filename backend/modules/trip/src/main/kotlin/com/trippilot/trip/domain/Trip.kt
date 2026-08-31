@@ -19,8 +19,23 @@ enum class TripStatus {
 /** 동반 유형(g01). 온보딩 '커플' → '연인' 매핑은 클라이언트/프리필 담당. */
 enum class CompanionType { 혼자, 친구, 연인, 가족 }
 
-/** 다도시 목적지(G-U1-08). seq=표시순서, nights=박수. */
-data class TripDestination(val seq: Int, val region: String, val nights: Int)
+/**
+ * 다도시 목적지(G-U1-08). seq=표시순서, nights=박수.
+ *
+ * [regionCode] 는 행정구역 표준코드(TRIP-361). **서버가 채운다** — 클라이언트는 지금도 이름만
+ * 보내고, 애플리케이션이 카탈로그로 해석해 넣는다. 그래서 기본값이 `null` 이고, 그 null 은
+ * "아직 해석 안 됨"이 아니라 **"이름으로 확정할 수 없음"** 도 뜻한다(동명이지역: 중구·동구·서구·
+ * 남구·북구·강서구·고성군 — 실측 26개 지역). 확정 못 한 것을 임의로 하나 집으면 부산 중구를
+ * 고른 사용자에게 서울 중구가 박힌다.
+ *
+ * 표시는 [region] 이 계속 담당한다 — 이 칸은 계약을 바꾸지 않는다.
+ */
+data class TripDestination(
+    val seq: Int,
+    val region: String,
+    val nights: Int,
+    val regionCode: String? = null,
+)
 
 /**
  * 여행(C6). 앱 소유. 생성 시 취향 동결(preferenceSnapshot).

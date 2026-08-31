@@ -39,4 +39,6 @@ class TripDestinationEntity(
     @Column(name = "seq") var seq: Int,
     @Column(name = "region") var region: String,
     @Column(name = "nights") var nights: Int,
+    /** 행정구역 표준코드(V2.43). NULL = 이름으로 확정 못 함(동명이지역) — 표시는 [region] 이 한다. */
+    @Column(name = "region_code") var regionCode: String? = null,
 )
