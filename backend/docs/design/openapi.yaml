@@ -435,6 +435,38 @@ paths:
       responses:
         '200': { description: 변경됨, content: { application/json: { schema: { $ref: '#/components/schemas/AccountSettings' } } } }
         '401': { description: 인증 필요 }
+  /me/planb-sensitivity:
+    get:
+      tags: [planb]
+      summary: Plan-B 알림 민감도 조회 (l02)
+      description: >
+        설정한 적 없으면 `NORMAL` 이 온다 — 404 가 아니다. 설정이 없다고 알림이 멈추면 안 된다.
+
+
+        ⚠ **상한 수치를 내보내지 않는다**(BR-U4-03). 클라가 임계를 알면 자체 판단으로 배너를 띄우게
+        되고 판정이 두 곳에 흩어진다. 사용자에게 필요한 것은 "적게/보통/많이"이지 숫자가 아니다.
+      responses:
+        '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/PlanBSensitivity' } } } }
+        '401': { description: 인증 필요 }
+    put:
+      tags: [planb]
+      summary: Plan-B 알림 민감도 변경 (l02)
+      description: >
+        값이 하나뿐이라 **PUT** 이다 — 부분 갱신 규약을 흉내 내면 빈 본문이 무엇을 뜻하는지 애매해진다.
+
+
+        빈도 상한은 이 민감도에서 **파생**된다(감지 단계 적용 · BR-U4-08). 티켓(TRIP-616)은 별도
+        `hourlyCap` 을 요구했으나 실장을 유지했다 — 시간당 상한은 하루 총량보다 약한 보장이고
+        (매시 1건이면 하루 24건), 노브가 둘이면 `HIGH` 인데 상한 1 같은 모순 조합이 생긴다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePlanBSensitivityRequest' }
+      responses:
+        '200': { description: 변경됨, content: { application/json: { schema: { $ref: '#/components/schemas/PlanBSensitivity' } } } }
+        '400': { description: 어휘 밖 값 — 조용히 NORMAL 로 떨어뜨리지 않는다 }
+        '401': { description: 인증 필요 }
   /me/deletion:
     post:
       tags: [account]
@@ -1564,6 +1596,22 @@ components:
       bearerFormat: JWT
 
   schemas:
+    PlanBSensitivity:
+      type: object
+      required: [sensitivity]
+      properties:
+        sensitivity:
+          type: string
+          enum: [LOW, NORMAL, HIGH]
+          description: >
+            감지 발화의 세기. 하루 발화 총량이 여기서 파생된다(BR-U4-08) — **수치는 서버만 안다**(BR-U4-03).
+
+    UpdatePlanBSensitivityRequest:
+      type: object
+      required: [sensitivity]
+      properties:
+        sensitivity: { type: string, enum: [LOW, NORMAL, HIGH] }
+
     AccountSettings:
       type: object
       required: [affiliateNoticeDismissed]

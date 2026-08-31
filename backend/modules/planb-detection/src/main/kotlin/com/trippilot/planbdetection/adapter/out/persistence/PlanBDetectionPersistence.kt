@@ -20,6 +20,7 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Component
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -157,7 +158,15 @@ class SensitivityEntity(
 interface SensitivityJpaRepository : JpaRepository<SensitivityEntity, UUID>
 
 @Component
-class SensitivityPersistence(private val jpa: SensitivityJpaRepository) : SensitivityRepository {
+class SensitivityPersistence(
+    private val jpa: SensitivityJpaRepository,
+    private val clock: Clock,
+) : SensitivityRepository {
     override fun of(accountId: UUID): Sensitivity =
         jpa.findById(accountId).orElse(null)?.let { Sensitivity.valueOf(it.sensitivity) } ?: Sensitivity.NORMAL
+
+    override fun set(accountId: UUID, sensitivity: Sensitivity): Sensitivity {
+        jpa.save(SensitivityEntity(accountId, sensitivity.name, clock.instant()))
+        return sensitivity
+    }
 }
