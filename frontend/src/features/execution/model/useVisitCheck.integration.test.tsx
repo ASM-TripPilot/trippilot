@@ -44,6 +44,9 @@ const TRIP = 'trip-1';
 const DAY = '2026-08-20';
 const T = '2026-08-20T13:00:00';
 const T2 = '2026-08-20T13:45:00';
+// 서버가 준 방문 기록의 버전 시각(오프라인 충돌 판정 기준, BR-U5-22 · openapi:1953).
+// 도착 시각 T 와 구별되는 값 — U5 가 "이 값이 캐시에 그대로 보관되나"를 잰다.
+const UPDATED = '2026-08-20T13:00:05Z';
 
 /** 방문 기록 하나. arrivedAt/completedAt 만 케이스가 바꾼다. */
 const vc = (
@@ -55,6 +58,7 @@ const vc = (
   skippedAt: null,
   source: 'MANUAL',
   spontaneous: false,
+  updatedAt: UPDATED,
   ...over,
 });
 
@@ -143,6 +147,14 @@ const cacheCompleted = (
   (visits.data?.visits ?? []).some(
     (v) => v.visitCheckId === visitCheckId && v.completedAt != null
   );
+
+/** 지금 캐시에서 그 visitCheckId 레코드의 updatedAt(기준버전). 없으면 undefined. */
+const cacheUpdatedAt = (
+  visits: { data?: { visits: VisitCheck[] } },
+  visitCheckId: string
+): string | null | undefined =>
+  (visits.data?.visits ?? []).find((v) => v.visitCheckId === visitCheckId)
+    ?.updatedAt;
 
 describe('AC-3 · 방문 완료 — 응답 전 낙관 + 성공 후 재조회 (U1)', () => {
   it('U1 서버가 답하기 전에 완료로 보이고, 성공 후 그 날 방문 기록을 다시 받아온다', async () => {
@@ -315,6 +327,51 @@ describe('AC-4 · ★ W-2 — 동시 두 도착 중 한쪽 실패가 다른 쪽�
     gateB.release();
     await act(async () => {
       await pB;
+    });
+  });
+});
+
+describe('AC-3 · updatedAt 보관 — 서버 기준버전이 캐시에 살아 있다 (U5 · TRIP-619)', () => {
+  it('U5 GET 응답의 updatedAt 이 캐시에 그대로 보관되고, 낙관 완료 패치가 그 기준버전을 덮어쓰지 않는다', async () => {
+    const gate = createGate();
+    const { result } = await renderProbeReady([
+      vc({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T }),
+    ]);
+    server.use(
+      http.post(
+        `${BASE}/trips/:tripId/visits/:visitCheckId/complete`,
+        async () => {
+          await gate.opened;
+          return HttpResponse.json(
+            vc({
+              visitCheckId: 'v1',
+              poiId: 'p1',
+              arrivedAt: T,
+              completedAt: T2,
+            })
+          );
+        }
+      )
+    );
+
+    // 단언 ① — GET 응답의 updatedAt(서버 버전)이 캐시에 그대로 보관됐다(= 로컬 편집 기준버전).
+    expect(cacheUpdatedAt(result.current.visits, 'v1')).toBe(UPDATED);
+
+    // 실행 — 완료를 발사만(gate 앞이라 서버 응답 전 낙관 상태를 관찰).
+    let pending!: Promise<VisitCheckOutcome>;
+    await act(async () => {
+      pending = result.current.vc.complete('v1');
+    });
+
+    // 단언 ② — 서버가 답하기 전, 낙관 완료 패치({...v, completedAt})가 updatedAt 를 보존한다
+    // (버전 시각을 덮어쓰거나 지우면 다음 재생의 기준버전을 잃는다 — 스프레드 보존 회귀 가드).
+    expect(cacheCompleted(result.current.visits, 'v1')).toBe(true);
+    expect(cacheUpdatedAt(result.current.visits, 'v1')).toBe(UPDATED);
+
+    // 정리 — 문 열고 마무리.
+    gate.release();
+    await act(async () => {
+      await pending;
     });
   });
 });

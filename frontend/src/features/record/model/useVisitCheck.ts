@@ -82,6 +82,8 @@ export function useVisitCheck(deps: { tripId: string; day: string }) {
       skippedAt: null,
       source: input.source,
       spontaneous: input.slotKey == null,
+      // 서버가 아직 이 레코드의 버전을 모른다 — 성공 시 응답 레코드(실 updatedAt)로 통째 교체된다.
+      updatedAt: optimisticAt,
     };
     // 낙관 삽입 — 현재 캐시에 append(다른 진행 중 낙관을 지우지 않는다).
     patchCache((visits) => [...visits, optimistic]);

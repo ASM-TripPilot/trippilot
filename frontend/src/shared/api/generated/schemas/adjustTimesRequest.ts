@@ -12,4 +12,6 @@ export interface AdjustTimesRequest {
   arrivedAt?: string | null;
   /** 보내지 않으면 그대로 둔다. 도착 없이 완료만 남길 수 없다 */
   completedAt?: string | null;
+  /** 이 편집이 딛고 선 서버 버전(BR-U5-22 · TRIP-546). 오프라인 큐를 재생할 때 실어 보내면, 그 사이 서버가 앞서 나간 경우 **조용히 덮어쓰는 대신** `VISIT_CONFLICT`(409)로 갈린다. 보내지 않으면 검사하지 않는다 — 온라인 단일 기기 편집 경로를 막지 않는다. */
+  expectedUpdatedAt?: string | null;
 }

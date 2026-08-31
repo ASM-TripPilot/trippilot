@@ -19,4 +19,8 @@ export type ErrorResponseError = {
   existingProvider?: ErrorResponseErrorExistingProvider;
   /** GENERATION_IN_PROGRESS 에만 존재(TRIP-403). 지금 일정을 생성 중인 여행. 거절 사유만 주면 사용자는 무엇이 끝나기를 기다려야 하는지 모른다 — 화면이 이 값으로 그 여행으로 이동시킨다. `existingProvider` 와 같은 방식으로 다른 에러 코드의 응답에는 나타나지 않는다(직렬화 생략). */
   activeTripId?: string;
+  /** VISIT_ALREADY_RECORDED · VISIT_CONFLICT 에만 존재(TRIP-546 · BR-U5-20·21). 서버에 이미 있는 방문 기록. 오프라인 큐 재생에서 **409 는 실패가 아니다** — `VISIT_ALREADY_RECORDED` 면 원하던 상태가 이미 있다는 뜻이라 클라이언트는 그 항목을 `SYNCED` 로 수렴시키고, `VISIT_CONFLICT` 면 방문 단위 해소 화면으로 간다. 2열 비교에 필요한 나머지(시각·상태·메모·사진 수)는 이 id 로 3종 비교 표면에서 읽는다 — 오류 봉투를 자료 전달 통로로 쓰지 않는다. */
+  visitCheckId?: string;
+  /** VISIT_ALREADY_RECORDED · VISIT_CONFLICT 에만 존재. 서버 기록의 `updatedAt`(BR-U5-22) — 충돌 판정의 기준값이라, 클라이언트가 이것을 받아 다음 재생의 `expectedUpdatedAt` 으로 쓴다. */
+  serverUpdatedAt?: string;
 };

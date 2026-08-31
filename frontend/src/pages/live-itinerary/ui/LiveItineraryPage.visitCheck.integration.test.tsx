@@ -111,6 +111,8 @@ const vc = (
   skippedAt: null,
   source: 'MANUAL',
   spontaneous: false,
+  // 서버 버전 시각(BR-U5-22 · openapi:1953) — codegen 후 required 라 픽스처가 미리 채운다(TRIP-619).
+  updatedAt: '2026-08-20T13:00:05Z',
   ...over,
 });
 
