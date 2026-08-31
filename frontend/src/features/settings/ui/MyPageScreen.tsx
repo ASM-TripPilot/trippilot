@@ -27,7 +27,8 @@ import { TripStatusSegment } from './TripStatusSegment';
  * 종료 여행이 0건이면 "아직 종료된 여행이 없습니다"만 뜨고 회고 진입 어포던스는 하나도 없다
  * (AC-5, empty Figma 의 상시 '지난 여행' 영역 근거).
  *
- * 설정 행·헤더 아이콘·회고 하트는 목적지 라우트가 아직 없어 onPress 미배선(Q6, 정직한 스텁).
+ * 하단 '설정' 행은 /settings 로 배선(TRIP-618, onPressSettings). 헤더 sun 아이콘·회고 하트는
+ * 목적지 라우트가 아직 없어 onPress 미배선(Q6, 정직한 스텁).
  */
 
 const SETTINGS_ROWS: { key: string; label: string; icon: ReactElement }[] = [
@@ -64,28 +65,43 @@ export interface MyPageScreenProps {
   /** 종료 0건 → "아직 종료된 여행이 없습니다"만. */
   pastEmpty: boolean;
   onPressEdit?: () => void;
+  /** 하단 '설정' 행 진입(페이지가 /settings 로 주입). preview 무파손 위해 optional. */
+  onPressSettings?: () => void;
 }
 
-/** 설정 메뉴 한 행 — 아이콘 + 라벨 + chevron. onPress 미배선(Q6, 정직한 스텁). */
+/**
+ * 설정 메뉴 한 행 — 아이콘 + 라벨 + chevron. 목적지 라우트가 선 행(설정)만 `onPress`·`testID` 를
+ * 받아 Pressable 로 그려지고, 나머지는 아직 미배선이라 정적 View 다(Q6, 정직한 스텁).
+ */
 function SettingsRow({
   label,
   icon,
   last,
+  onPress,
+  testID,
 }: {
   label: string;
   icon: ReactElement;
   last: boolean;
+  onPress?: () => void;
+  testID?: string;
 }): ReactElement {
-  return (
-    <View
-      className={`flex-row items-center gap-md py-[14px] ${
-        last ? '' : 'border-b border-hairline'
-      }`}
-    >
+  const className = `flex-row items-center gap-md py-[14px] ${
+    last ? '' : 'border-b border-hairline'
+  }`;
+  const content = (
+    <>
       {icon}
       <Text className="flex-1 font-noto text-label text-body">{label}</Text>
       <ChevronRightGlyph size={18} />
-    </View>
+    </>
+  );
+  return onPress ? (
+    <Pressable testID={testID} onPress={onPress} className={className}>
+      {content}
+    </Pressable>
+  ) : (
+    <View className={className}>{content}</View>
   );
 }
 
@@ -103,6 +119,7 @@ export function MyPageScreen({
   pastCards,
   pastEmpty,
   onPressEdit,
+  onPressSettings,
 }: MyPageScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -185,6 +202,8 @@ export function MyPageScreen({
                 label={row.label}
                 icon={row.icon}
                 last={i === SETTINGS_ROWS.length - 1}
+                onPress={row.key === 'settings' ? onPressSettings : undefined}
+                testID={row.key === 'settings' ? 'my-settings-row' : undefined}
               />
             ))}
           </View>

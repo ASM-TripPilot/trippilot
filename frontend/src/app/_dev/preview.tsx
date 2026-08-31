@@ -78,6 +78,10 @@ import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
 import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import {
+  NotificationInboxScreen,
+  type NotificationSection,
+} from '@/features/notification/ui/NotificationInboxScreen';
+import {
   NotificationSettingsScreen,
   type ToggleValueMap,
 } from '@/features/notification/ui/NotificationSettingsScreen';
@@ -86,6 +90,7 @@ import { DeleteAccountDialog } from '@/features/settings/ui/DeleteAccountDialog'
 import { LocationConsentScreen } from '@/features/settings/ui/LocationConsentScreen';
 import type { StyleCardVM } from '@/features/settings/model/styleCardModel';
 import { MyPageScreen } from '@/features/settings/ui/MyPageScreen';
+import { PersonalizationScreen } from '@/features/settings/ui/PersonalizationScreen';
 import {
   MyStaysScreen,
   type MyStayRowVM,
@@ -139,6 +144,7 @@ import type {
   StayItem,
   Trigger,
 } from '@/shared/api/generated/schemas';
+import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
 import { ManualTimeSheet, reorderKeepingFixed } from '@/shared/itinerary-edit';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { revokeImpact } from '@/shared/location/revokeImpact';
@@ -875,6 +881,17 @@ const MY_PAGE_UPCOMING_VMS: TripCardVM[] = [
     dBadge: 'D-30',
     isEnded: false,
   },
+  // bases 미도착(로딩·조회 실패) 엣지(TRIP-620 [604]) — basesLabel null 이라 숙소 칩 자체가 생략된다
+  // ('숙소 미등록'을 지어내지 않음). daysLabel 도 null 이라 기간 칩 하나만 뜨는 얼굴을 눈으로 대조.
+  {
+    tripId: 'sokcho',
+    destinationLabel: '속초',
+    dateRange: '8.5~8.7',
+    basesLabel: null,
+    daysLabel: null,
+    dBadge: 'D-60',
+    isEnded: false,
+  },
 ];
 
 const MY_PAGE_ENDED_VMS: TripCardVM[] = [
@@ -1329,6 +1346,73 @@ const SETTINGS_PREF_PREVIEW_EMPTY: PreferenceSelection = {
   petFlag: false,
   budgetTier: null,
 };
+
+// l01 알림함(TRIP-576) — Figma 1598:2389 의 5행(오늘 3·이전 2). 화면은 VM 만 받는 순수 뷰라
+// 픽스처 한 벌로 default 를, 빈 sections + isEmpty 로 empty 를 낸다(엣지 상태 포함).
+const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
+  {
+    key: 'today',
+    label: '오늘',
+    rows: [
+      {
+        id: 'n1',
+        icon: 'home',
+        title: '○○호텔이 등록되었어요',
+        body: '',
+        meta: '숙소 · 방금',
+        unread: true,
+        route: null,
+        inlineActionLabel: null,
+      },
+      {
+        id: 'n2',
+        icon: 'swap',
+        title: "비 예보 — '○○공원' 일정이 영향받아요",
+        body: '',
+        meta: 'Plan-B · 10분 전',
+        unread: true,
+        route: '/trips/t1/planb',
+        inlineActionLabel: '대안 일정 보기 ›',
+      },
+      {
+        id: 'n3',
+        icon: 'list',
+        title: '다음 일정: ○○ · 14:30 · 840m',
+        body: '',
+        meta: '일정 · 1시간 전',
+        unread: false,
+        route: null,
+        inlineActionLabel: null,
+      },
+    ],
+  },
+  {
+    key: 'earlier',
+    label: '이전',
+    rows: [
+      {
+        id: 'n4',
+        icon: 'document',
+        title: '여행 기록이 정리되었습니다',
+        body: '',
+        meta: '회고 · 어제',
+        unread: false,
+        route: '/trips/t1/records/reflection/2026-08-29',
+        inlineActionLabel: null,
+      },
+      {
+        id: 'n5',
+        icon: 'sun',
+        title: '새 기기에서 로그인되었습니다',
+        body: '',
+        meta: '시스템 · 2일 전',
+        unread: false,
+        route: null,
+        inlineActionLabel: null,
+      },
+    ],
+  },
+];
 
 const PREVIEW_STATES: PreviewState[] = [
   { key: 'splash', label: '스플래시', login: null },
@@ -2596,7 +2680,7 @@ const PREVIEW_STATES: PreviewState[] = [
       <MyPageScreen
         nickname="여행자123"
         email="trippilot@email.com"
-        counts={{ upcoming: 2, active: 0, ended: 2 }}
+        counts={{ upcoming: 3, active: 0, ended: 2 }}
         active="upcoming"
         onChangeSegment={noop}
         styleCard={<StyleSummaryCard vm={STYLE_CARD_OFFICIAL_VM} />}
@@ -3469,6 +3553,29 @@ const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // 내보내기 조회 실패 안내(TRIP-620 [608], INV-4) — refetch 가 data 미도착이면 조용히 삼키지 않고
+  // 인라인 오류를 띄운다(잘림 고지와 별개 자리, 실패라 Share 핸드오프 없음).
+  {
+    key: 'settings-export-error',
+    label: 'l05 설정 · 내보내기 조회 실패',
+    login: null,
+    render: () => (
+      <SettingsScreen
+        groups={buildSettingsSections({
+          nickname: '여행자123',
+          email: null,
+        })}
+        deletionState="active"
+        currentNickname="여행자123"
+        exportError="내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요."
+        onPressBack={noop}
+        onSubmitNickname={noop}
+        onPressExport={noop}
+        onPressDeleteAccount={noop}
+        onPressCancelDeletion={noop}
+      />
+    ),
+  },
   // DELETION_PENDING 배너 — 위험 영역 행이 유예 배너로 바뀌고 purgeAt + [삭제 철회]가 뜬다.
   {
     key: 'settings-pending',
@@ -3551,6 +3658,83 @@ const PREVIEW_STATES: PreviewState[] = [
           onConfirm={noop}
         />
       </View>
+    ),
+  },
+  // l05 개인화 — reason 3얼굴. 토글 상태·안내 문구·반영 목록이 reason 에서 함께 갈린다(다이얼로그 없이
+  // 즉시 토글, 01b Q3). APPLIED = 토글 ON + 목록(문구 없음).
+  {
+    key: 'l05-personalization-applied',
+    label: 'l05 개인화 · 반영 중(APPLIED)',
+    login: null,
+    render: () => (
+      <PersonalizationScreen
+        consentOn
+        reason={PersonalizationInfoReason.APPLIED}
+        sharedItems={[
+          { item: '맛집 방문 기록', purpose: '다음 여행 맛집 추천' },
+          { item: '야경 스팟 저장', purpose: '저녁 일정 배치' },
+        ]}
+        onToggle={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // CONSENT_MISSING = 토글 OFF + "동의하면…" 안내 + 빈 목록.
+  {
+    key: 'l05-personalization-consent-missing',
+    label: 'l05 개인화 · 미동의',
+    login: null,
+    render: () => (
+      <PersonalizationScreen
+        consentOn={false}
+        reason={PersonalizationInfoReason.CONSENT_MISSING}
+        sharedItems={[]}
+        onToggle={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // ★함정 얼굴: NOT_ENOUGH_RECORDS = 이미 동의(토글 ON 유지) + "기록이 더 쌓이면…", "동의하면…" 없음.
+  {
+    key: 'l05-personalization-not-enough',
+    label: 'l05 개인화 · 기록 부족(동의 유지)',
+    login: null,
+    render: () => (
+      <PersonalizationScreen
+        consentOn
+        reason={PersonalizationInfoReason.NOT_ENOUGH_RECORDS}
+        sharedItems={[]}
+        onToggle={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l01 알림함 — 기본(오늘 3·이전 2, 미읽음 dot·PLAN_B 인라인 링크). 딤·글리프 픽셀은 6-b 실기 몫.
+  {
+    key: 'notification-inbox-default',
+    label: 'l01 알림함 · 기본',
+    login: null,
+    render: () => (
+      <NotificationInboxScreen
+        sections={NOTIFICATION_INBOX_PREVIEW_SECTIONS}
+        isEmpty={false}
+        onNavigate={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l01 알림함 — 엣지: 빈 알림함(StateNotice 대시 종 아이콘).
+  {
+    key: 'notification-inbox-empty',
+    label: 'l01 알림함 · 빈 상태',
+    login: null,
+    render: () => (
+      <NotificationInboxScreen
+        sections={[]}
+        isEmpty
+        onNavigate={noop}
+        onPressBack={noop}
+      />
     ),
   },
 ];

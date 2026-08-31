@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import {
   ArrowsSwapGlyph,
   BellGlyph,
+  ChevronRightGlyph,
   ContrastGlyph,
   DownloadGlyph,
   ExternalLinkGlyph,
@@ -90,6 +91,32 @@ export function PreparingRow({
         right={
           <Text className="font-noto text-micro text-muted-soft">준비 중</Text>
         }
+      />
+    </Pressable>
+  );
+}
+
+/**
+ * 네비 행(목적지 라우트가 선 활성 행) — `PreparingRow` 의 형제. RowBody + 우향 chevron 어포던스 +
+ * onPress. testID 는 `settings-nav-{rowKey}` 로 `PreparingRow` 의 공통 `settings-row`(준비중)와
+ * 구분된다 — 이 승격이 곧 심판이다(`ready` 플래그가 아니라 렌더가 물린다, 02a ★1). `disabled`·
+ * `accessibilityState` 를 걸지 않아 `not.toBeDisabled()`. onPress 라우트는 페이지가 주입한다.
+ */
+export function NavRow({
+  rowKey,
+  label,
+  onPress,
+}: {
+  rowKey: string;
+  label: string;
+  onPress?: () => void;
+}): ReactElement {
+  return (
+    <Pressable testID={`settings-nav-${rowKey}`} onPress={onPress}>
+      <RowBody
+        rowKey={rowKey}
+        label={label}
+        right={<ChevronRightGlyph size={18} />}
       />
     </Pressable>
   );

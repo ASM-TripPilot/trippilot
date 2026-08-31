@@ -37,7 +37,7 @@
 
 ## features 경계
 
-- **`features` 간 import 금지에 기계 강제가 없는 feature가 있다** → `eslint.config.js`의 `FEATURES` 배열이 `['onboarding','home']`뿐이라 `itinerary`·`trip`·`explore`·`settings`·`notification`은 zone 검사 밖이다(`settings`는 `settingsBoundary.test.ts` 소스 스캔이 유일한 그물, TRIP-605 실측 — `notification`은 그 스캔조차 없어 **완전 무심판**, TRIP-607 실측). 관례(조합은 `pages` 전담)로 지켜질 뿐, 어겨도 lint는 안 걸린다.
+- **`features` 간 import 금지에 기계 강제가 없는 feature가 있다** → `eslint.config.js`의 `FEATURES` 배열이 `['onboarding','home']`뿐이라 `itinerary`·`trip`·`explore`·`settings`·`notification`은 여전히 zone 검사 밖이다. `settings`는 `settingsBoundary.test.ts`(TRIP-605), `notification`은 `notificationStructure.test.ts`(TRIP-576, l01 알림함 신설과 함께 도입 — TRIP-607 시점의 "완전 무심판"은 이제 stale)로 각각 소스 스캔이 유일한 그물이다. 관례(조합은 `pages` 전담)로 지켜질 뿐, eslint `FEATURES` 배열 자체는 어느 쪽도 등재 안 돼 어겨도 lint는 안 걸린다.
 
 ## 작업 관례
 

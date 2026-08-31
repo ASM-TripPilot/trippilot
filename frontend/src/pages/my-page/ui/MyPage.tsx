@@ -80,6 +80,7 @@ export function MyPage(): ReactElement {
       ))}
       activeEmpty={sortedActive.length === 0}
       onPressCreateTrip={onPressCreateTrip}
+      onPressSettings={() => router.push('/settings')}
       showPast={showPast}
       pastCards={sortedEnded.map((trip) => (
         <TripCardContainer key={trip.tripId} trip={trip} />

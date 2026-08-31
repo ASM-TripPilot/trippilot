@@ -381,6 +381,31 @@ describe('TRIP-608 · 내보내기 (AC-5 · INV-4)', () => {
     shareSpy.mockRestore();
   });
 
+  it('TRIP-620 [608]: 조회 실패(refetch data undefined)면 인라인 오류를 띄우고 Share 로 안 넘긴다', async () => {
+    // 준비: refetch 는 실패해도 throw 하지 않고 { data: undefined } 를 resolve 한다(react-query) —
+    // 그래서 페이지의 `if(!data)` 분기가 실행 경로다(목도 reject 아닌 mockResolvedValue).
+    const shareSpy = jest.spyOn(Share, 'share').mockResolvedValue({
+      action: 'sharedAction',
+    } as never);
+    mockUseGetMeExport.mockReturnValue({
+      refetch: jest.fn().mockResolvedValue({ data: undefined }),
+    });
+    render(<SettingsPage />);
+
+    // 실행: 내보내기 행을 누른다(지연 조회 → 실패 분기).
+    fireEvent.press(screen.getByTestId('settings-export-row'));
+
+    // 단언(급소): 조용히 삼키지 않고 인라인 오류를 표면화한다(INV-4).
+    await waitFor(() =>
+      expect(screen.getByTestId('settings-export-error')).toBeOnTheScreen()
+    );
+    // 짝: 실패라 잘림 고지도 없고 Share 핸드오프도 없다(쓰레기 데이터 미전달).
+    expect(screen.queryByTestId('settings-export-truncated')).toBeNull();
+    expect(shareSpy).not.toHaveBeenCalled();
+
+    shareSpy.mockRestore();
+  });
+
   it('잘린 항목이 없으면 잘림 고지 미표시(성공만)', async () => {
     const shareSpy = jest.spyOn(Share, 'share').mockResolvedValue({
       action: 'sharedAction',

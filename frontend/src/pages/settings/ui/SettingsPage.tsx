@@ -18,18 +18,23 @@ import {
 import { validateNicknameFormat } from '@/shared/validation/nicknameFormat';
 
 /**
- * 뒤로가기 — `expo-router` 를 **정적 import 하지 않는다.** 그러면 이 파일의 node-버킷 테스트
- * (`SettingsPage.test.tsx`, expo-router 를 목하지 않음)가 `@react-navigation` ESM 로드로 깨진다.
- * `preview.tsx` 선례대로 require 를 모듈 로드 시점에 try/catch 로 늦춰, 목/실물이 없으면(테스트)
- * no-op 으로 폴백한다. 실기에선 require 가 성공해 `router.back()` 이 배선된다.
+ * 라우팅 — `expo-router` 를 **정적 import 하지 않는다.** 정적 import 면 이 파일의 node-버킷 테스트
+ * (`SettingsPage.test.tsx`, expo-router 미목)가 `@react-navigation` ESM 로드로 깨진다. require 를
+ * **호출 시점까지** 늦춘다(모듈 로드가 아니라) — 목/실물이 없으면(미목 테스트) throw → catch → no-op.
+ *
+ * ⚠️ 호출 시점 require 인 이유(모듈 로드가 아니라): `SettingsPage.nav.test.tsx` 의 목
+ * `jest.mock('expo-router', () => ({ router: { push: mockPush, ... } }))` 팩토리는 **첫 require 때**
+ * 평가된다. 모듈 로드에서 당기면 그 첫 require 가 `const mockPush = jest.fn()` 배정 전에 돌아
+ * `router.push` 가 undefined 로 굳는다(press 때 "not a function"). require 를 press 시점으로 늦추면
+ * mockPush 배정 뒤 팩토리가 돌아 싱글턴 `router.push` 가 mockPush 를 받는다.
  */
-let goBack: () => void;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { router } = require('expo-router') as typeof import('expo-router');
-  goBack = () => router.back();
-} catch {
-  goBack = () => {};
+function loadRouter(): typeof import('expo-router').router | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return (require('expo-router') as typeof import('expo-router')).router;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -60,6 +65,7 @@ export function SettingsPage(): ReactElement {
   const [cancelDeletionError, setCancelDeletionError] = useState(false);
 
   const [truncatedLabel, setTruncatedLabel] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const patchNickname = usePatchMeProfileNickname({
     mutation: {
@@ -114,8 +120,17 @@ export function SettingsPage(): ReactElement {
   };
 
   const runExport = async (): Promise<void> => {
+    // refetch 는 실패해도 throw 하지 않고 { data, error } 를 resolve 한다(react-query) — data 가
+    // 없으면 조용히 삼키지 않고 인라인 오류로 표면화한다(INV-4).
     const { data } = await exportQuery.refetch();
-    if (!data) return;
+    if (!data) {
+      // 실패 시 직전 성공의 잘림 고지를 함께 비운다 — 오류 옆에 낡은 "일부 잘림" 이 남으면
+      // 인접 거짓 표면이 된다(5-b 경고-1, INV-4).
+      setTruncatedLabel(null);
+      setExportError('내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요.');
+      return;
+    }
+    setExportError(null);
     const summary = resolveExportSummary(data);
     setTruncatedLabel(summary.truncatedLabel);
 
@@ -137,11 +152,14 @@ export function SettingsPage(): ReactElement {
       nicknameError={nicknameError}
       truncatedLabel={truncatedLabel}
       cancelDeletionError={cancelDeletionError}
-      onPressBack={() => goBack()}
+      exportError={exportError}
+      onPressBack={() => loadRouter()?.back()}
       onSubmitNickname={submitNickname}
       onPressExport={() => void runExport()}
       onPressDeleteAccount={() => postDeletion.mutate()}
       onPressCancelDeletion={() => cancelDeletion.mutate()}
+      onPressLocation={() => loadRouter()?.push('/settings/location')}
+      onPressNotifications={() => loadRouter()?.push('/settings/notifications')}
     />
   );
 }

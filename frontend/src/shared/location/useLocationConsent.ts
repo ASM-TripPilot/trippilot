@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
 
 import {
@@ -14,7 +14,7 @@ import { consentPutBody } from './consentPutBody';
 export interface LocationConsentModel {
   /** 현재 토글값(GET legalConsent, 미도착이면 false). */
   consentOn: boolean;
-  /** OS 권한 거부(서버 미러) — true 면 토글 비활성. */
+  /** 토글 비활성 — 서버 미러 DENIED **이면서** 단말 실권한도 미허용일 때만. */
   disabled: boolean;
   /** 승낙(OFF→ON) — 재확인 게이트 없이 곧장. */
   grant: () => void;
@@ -39,6 +39,10 @@ export function useLocationConsent(): LocationConsentModel {
   const put = usePutMeLocationConsent();
   const patch = usePatchMeLocationConsentOsPermission();
 
+  // 단말 실권한 — 마운트 시 1회 읽어 저장한다(초기 null). 서버 미러가 stale DENIED 여도 단말이
+  // granted 면 토글을 풀어 같은 진입에서 자가치유한다(BR-U6-31).
+  const [deviceStatus, setDeviceStatus] = useState<string | null>(null);
+
   // 진입 미러 보고 1회 — 리렌더로 재발화하지 않도록 ref 로 잠근다(GeneratingPage firedRef 선례).
   const mirroredRef = useRef(false);
   useEffect(() => {
@@ -47,6 +51,7 @@ export function useLocationConsent(): LocationConsentModel {
     void (async () => {
       try {
         const perm = await Location.getForegroundPermissionsAsync();
+        setDeviceStatus(perm.status);
         patch.mutate({ data: { osPermission: toOsPermission(perm.status) } });
       } catch {
         // 권한 조회 실패는 미러 보고를 건너뛴다(온보딩 LocationPage 선례) — 화면은 계속 동작.
@@ -56,7 +61,9 @@ export function useLocationConsent(): LocationConsentModel {
 
   return {
     consentOn: consent.data?.legalConsent ?? false,
-    disabled: consent.data?.osPermissionMirror === 'DENIED',
+    disabled:
+      consent.data?.osPermissionMirror === 'DENIED' &&
+      deviceStatus !== 'granted',
     grant: () => put.mutate({ data: consentPutBody(true) }),
     revoke: () => put.mutate({ data: consentPutBody(false) }),
   };

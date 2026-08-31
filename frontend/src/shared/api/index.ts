@@ -309,6 +309,22 @@ export async function submitConsents(consents: ConsentInput[]): Promise<void> {
   await authedClient.post('/me/consents', { consents });
 }
 
+/**
+ * 단건 약관 동의 상태 변경(PATCH) — 개인화 동의 토글(TRIP-612) 등. `termsType` 은 **URL 경로**에만 들어가고,
+ * body 는 `{ action, termsVersion }` 두 필드뿐이다(openapi `PATCH /me/consents/{termsType}`).
+ * ⚠️ body 에 `termsType` 을 실으면 계약 위반이다(D5 — `submitConsents` 의 `ConsentInput` 을 재사용하지 않는 이유).
+ */
+export async function patchConsent(
+  termsType: string,
+  termsVersion: string,
+  action: ConsentAction
+): Promise<void> {
+  await authedClient.patch(`/me/consents/${termsType}`, {
+    action,
+    termsVersion,
+  });
+}
+
 export async function fetchNicknameSuggestions(): Promise<string[]> {
   const response = await authedClient.post<{ suggestions: string[] }>(
     '/nickname/suggestions'

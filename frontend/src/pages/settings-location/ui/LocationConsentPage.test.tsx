@@ -200,6 +200,28 @@ describe('TRIP-609 · OS 권한 DENIED(AC-3)', () => {
     expect(mockOpenSettings).toHaveBeenCalledTimes(1);
   });
 
+  it('TRIP-620 [609]: 미러가 stale DENIED 여도 단말 OS 권한이 granted 면 토글이 활성이다', async () => {
+    // 준비: 서버 미러는 옛 DENIED 로 남았지만 단말 실권한은 granted(세션 중 허용). legalConsent:false.
+    primeConsent({ osPermissionMirror: 'DENIED', legalConsent: false });
+    mockGetForeground.mockResolvedValue(GRANTED);
+
+    // 실행
+    render(<LocationConsentPage />);
+
+    // 단언(급소): 마운트 effect(async)가 단말 granted 를 읽어 deviceStatus 를 세팅하면 토글이 풀린다.
+    // 초기 렌더는 deviceStatus=null 이라 잠시 비활성일 수 있으므로 정착을 waitFor 로 기다린다.
+    await waitFor(() =>
+      expect(screen.getByTestId('settings-location-toggle')).not.toBeDisabled()
+    );
+
+    // 활성 실증(짝): 가짜 disabled 가 아니라 실제로 눌려 승낙 PUT 가 1회 나간다(다이얼로그 없음).
+    fireEvent.press(screen.getByTestId('settings-location-toggle'));
+    expect(putSpy).toHaveBeenCalledTimes(1);
+    expect(putSpy).toHaveBeenCalledWith({
+      data: { legalConsent: true, gpsRecordingOptIn: true },
+    });
+  });
+
   it('짝: 허용이면 토글이 비활성이 아니다', async () => {
     primeConsent({ osPermissionMirror: 'GRANTED', legalConsent: true });
     mockGetForeground.mockResolvedValue(GRANTED);
