@@ -2,8 +2,6 @@ package com.trippilot.profile.adapter.`in`.web
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies
 import com.fasterxml.jackson.databind.annotation.JsonNaming
-import com.trippilot.core.error.FieldError
-import com.trippilot.core.error.ValidationFailed
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
 import org.springframework.web.bind.annotation.GetMapping
@@ -55,17 +53,8 @@ class PersonaInternalController(
      * 구분하려면 auth 에 계정 존재 퍼사드를 새로 열어야 해서 이 노드 범위 밖으로 뒀다.
      */
     @GetMapping("/{accountId}/persona")
-    fun persona(@PathVariable accountId: String): PersonaResponse =
-        PersonaResponse.from(preferences.findPreferences(parseAccountId(accountId)))
-
-    /**
-     * UUID 를 직접 받지 않고 문자열로 받아 파싱한다 — Spring 의 타입 변환 실패는
-     * `MethodArgumentTypeMismatchException` 이고 전역 핸들러가 그것을 모른다(=500).
-     * 호출자가 이상한 값을 보낸 것을 서버 장애로 알리면 AI 쪽이 자기 버그를 우리 장애로 읽는다.
-     */
-    private fun parseAccountId(raw: String): UUID =
-        runCatching { UUID.fromString(raw) }
-            .getOrElse { throw ValidationFailed(listOf(FieldError("accountId", "UUID 형식이 아닙니다"))) }
+    fun persona(@PathVariable accountId: UUID): PersonaResponse =
+        PersonaResponse.from(preferences.findPreferences(accountId))
 }
 
 /**
