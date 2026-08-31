@@ -66,6 +66,7 @@
 - `src/__tests__/planbScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggerKindStructure.test.ts`  →  (export 없음)
 - `src/__tests__/planbTriggersRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/recordsDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
 - `src/__tests__/regionCatalogStructure.test.ts`  →  (export 없음)
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
@@ -247,7 +248,6 @@
 - `src/features/execution/model/useLiveItinerary.ts`  →  useLiveItinerary
 - `src/features/execution/model/usePlaceDetail.ts`  →  usePlaceDetail
 - `src/features/execution/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
-- `src/features/execution/model/visitConflict.ts`  →  VISIT_CONFLICT_CODES · VisitConflictKind · resolveVisitConflict
 - `src/features/execution/model/visitProgress.ts`  →  VisitProgress · deriveVisitProgress
 
 ## src/features/execution/ui/
@@ -400,6 +400,8 @@
 - `src/features/planb/ui/TriggerWatchlistScreen.tsx`  →  TriggerWatchlistScreenProps · TriggerWatchlistScreen
 
 ## src/features/record/model/
+- `src/features/record/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
+- `src/features/record/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
 - `src/features/record/model/useTripRecords.ts`  →  useTripRecords
 - `src/features/record/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
 - `src/features/record/model/visitStatus.ts`  →  VisitStatus · deriveVisitStatus
@@ -409,6 +411,7 @@
 - `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
 - `src/features/record/ui/TripRecordsScreen.tsx`  →  TripRecordsDayTab · TripRecordsScreenProps · TripRecordsScreen
 - `src/features/record/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
+- `src/features/record/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
 
 ## src/features/settings/model/
 - `src/features/settings/model/deletionScope.ts`  →  DELETION_SCOPE
@@ -1005,6 +1008,7 @@
 - `src/shared/api/isNotFound.ts`  →  isNotFound
 - `src/shared/api/mutator.ts`  →  customInstance
 - `src/shared/api/tokenManager.ts`  →  getAccessToken · setAccessToken · clearAccessToken · hydrate · subscribeAccessToken
+- `src/shared/api/visitConflict.ts`  →  VISIT_CONFLICT_CODES · VisitConflictKind · resolveVisitConflict
 
 ## src/shared/bootstrap/
 - `src/shared/bootstrap/bootstrapReeval.ts`  →  subscribeBootstrapReeval · notifyBootstrapReeval
@@ -1080,4 +1084,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 730개 파일
+합계 734개 파일

@@ -149,3 +149,60 @@ describe('skip(라이트) — [건너뜀] 발화', () => {
     expect(onPressSkip).toHaveBeenCalledWith('v1');
   });
 });
+
+/**
+ * 🔴 TRIP-613 · AC-8 — [시각 수정] 진입(옵셔널 콜백, 무회귀).
+ *
+ * 카드에 `onPressEditTime?` 를 additive 로 더한다(565 `onPressComplete?`·`onPressSkip?` 동형 후방호환).
+ * 위 565 describe 5블록이 **무변경 존치**하는 것이 "기존 계약 무회귀"의 증거다 — 여기선 진입만 잠근다.
+ * 진입 testID 는 카드 다중이라 `-{visitCheckId}` 접미(recordsStructure G4식 "소스=접두 / 렌더=접미").
+ */
+describe('🔴 AC-8 · [시각 수정] 진입', () => {
+  it('A8a · onPressEditTime 제공 → 진입 present + press 시 onPressEditTime(id) 1회', () => {
+    const onPressEditTime = jest.fn();
+    render(
+      <VisitRecordCard
+        card={baseCard({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T })}
+        onPressEditTime={onPressEditTime}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('record-trip-visit-time-edit-v1'));
+
+    expect(onPressEditTime).toHaveBeenCalledTimes(1);
+    expect(onPressEditTime).toHaveBeenCalledWith('v1');
+  });
+
+  it('A8b · onPressEditTime 미제공 → 진입 부재(기존 호출자·프리뷰 무영향)', () => {
+    render(
+      <VisitRecordCard
+        card={baseCard({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T })}
+      />
+    );
+
+    expect(screen.queryByTestId('record-trip-visit-time-edit-v1')).toBeNull();
+  });
+
+  it('A8c · additive 무간섭 — 진입과 완료 컨트롤이 독립으로 발화(기존 배선 안 깸)', () => {
+    const onPressComplete = jest.fn();
+    const onPressEditTime = jest.fn();
+    render(
+      <VisitRecordCard
+        card={baseCard({ visitCheckId: 'v1', poiId: 'p1', arrivedAt: T })}
+        onPressComplete={onPressComplete}
+        onPressEditTime={onPressEditTime}
+      />
+    );
+
+    // 둘 다 존재 — 진입을 더해도 완료 발화 Pressable 이 그대로 있다.
+    const edit = screen.getByTestId('record-trip-visit-time-edit-v1');
+    const complete = screen.getByTestId('record-visit-check-active-v1');
+
+    fireEvent.press(edit);
+    expect(onPressEditTime).toHaveBeenCalledTimes(1);
+    expect(onPressComplete).not.toHaveBeenCalled();
+
+    fireEvent.press(complete);
+    expect(onPressComplete).toHaveBeenCalledTimes(1);
+  });
+});

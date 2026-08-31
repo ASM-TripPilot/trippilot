@@ -43,6 +43,8 @@ export interface VisitRecordCardProps {
   card: VisitRecordCardVM;
   onPressComplete?: (visitCheckId: string) => void;
   onPressSkip?: (visitCheckId: string) => void;
+  /** TRIP-613 · 시각 수정 시트 진입(옵셔널 — 미제공 시 컨트롤 부재, 565 호출자 무영향). */
+  onPressEditTime?: (visitCheckId: string) => void;
 }
 
 function StatusCircle({
@@ -97,6 +99,7 @@ export function VisitRecordCard({
   card,
   onPressComplete,
   onPressSkip,
+  onPressEditTime,
 }: VisitRecordCardProps): ReactElement {
   const status = deriveVisitStatus(card);
   const canSkip = status === 'UPCOMING' || status === 'IN_PROGRESS';
@@ -120,6 +123,15 @@ export function VisitRecordCard({
         <View className="flex-row items-center gap-md">
           {card.arrivedLabel != null && card.arrivedLabel !== '' ? (
             <Text className="text-label text-muted">{card.arrivedLabel}</Text>
+          ) : null}
+          {onPressEditTime != null ? (
+            <Pressable
+              testID={`record-trip-visit-time-edit-${card.visitCheckId}`}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={() => onPressEditTime(card.visitCheckId)}
+            >
+              <Text className="text-label text-muted-soft">시각 수정</Text>
+            </Pressable>
           ) : null}
           {canSkip ? (
             <Pressable

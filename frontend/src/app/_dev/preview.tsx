@@ -39,6 +39,7 @@ import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
+import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -2009,6 +2010,43 @@ const PREVIEW_STATES: PreviewState[] = [
         onPressBack={noop}
         onPressTab={noop}
       />
+    ),
+  },
+  // j01 방문 시각 수정 시트(TRIP-613) — 셀-press 시각 편집. 통과형 목이라 정적 프리뷰도 실제 열림/
+  // 딤은 못 본다(6-b 실기 전용) — 셀 트리·도착/완료 컬럼·저장/취소 레이아웃 육안 대조 자리.
+  {
+    key: 'records-visit-time-sheet',
+    label: 'j01 방문 시각 수정 시트 · 도착·완료',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <VisitTimeSheet
+          visitCheckId="r1"
+          arrivedAt="2026-08-21T14:20:00"
+          completedAt="2026-08-21T15:20:00"
+          now="2026-08-21T20:00:00"
+          onSave={noop}
+          onCancel={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    // 엣지 — 도착 없는 방문: 완료 컬럼이 비활성(opacity-40 + accessibilityState.disabled).
+    key: 'records-visit-time-sheet-no-arrival',
+    label: 'j01 방문 시각 수정 시트 · 도착 없음(완료 비활성)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <VisitTimeSheet
+          visitCheckId="r3"
+          arrivedAt={null}
+          completedAt={null}
+          now="2026-08-21T20:00:00"
+          onSave={noop}
+          onCancel={noop}
+        />
+      </View>
     ),
   },
   // 탐색 2키(TRIP-221·223) — **results 얼굴 전용**이다. 실화면 딥링크로는 볼 수 없다:
