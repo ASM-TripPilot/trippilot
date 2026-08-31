@@ -103,7 +103,16 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         error("2차 생성이 기한 내 끝나지 않았습니다. 마지막 상태=$last")
     }
 
-    /** 하루 여행 — 생성이 2차 없이 즉시 COMPLETE 라 확정·편집을 바로 검증할 수 있다. */
+    /**
+     * 하루 여행.
+     *
+     * ⚠ **즉시 COMPLETE 가 아니다.** TRIP-511 이후 하루 여행도 `PARTIAL` 로 시작한다 — 추천 근거가
+     * 생성에서 떨어져 나와 뒤따라오기 때문이다(`GenerateItineraryService`: "하루 여행도 PARTIAL 이다").
+     * 그래서 생성 직후에 편집·슬롯교체·되돌리기를 부르면 **409("일정 생성이 진행 중입니다")** 가
+     * 날아온다. 그 표면을 검증하려면 [awaitComplete] 로 마무리를 기다린다.
+     *
+     * 이 주석이 한때 "2차 없이 즉시 COMPLETE"라고 적혀 있었고, 그 낡은 전제가 간헐적 실패의 원인이었다.
+     */
     private fun tripOneDay(token: String): String {
         val body = """{"startDate":"2026-08-01","endDate":"2026-08-01","party":2,
             "destinations":[{"seq":0,"region":"제주","nights":0}],"preferenceSnapshot":{}}""".trimIndent()
@@ -287,6 +296,8 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val trip = tripOneDay(token)
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token).first shouldBe 201
+        // 마무리를 기다리지 않으면 PARTIAL 이라 400·404 자리에 409 가 온다(실측으로 겪었다).
+        awaitComplete(trip, token)
 
         call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/slot-candidates", token, """{"slotKey":"이상한키"}""").first shouldBe 400
         call(

@@ -71,8 +71,38 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
         return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
     }
 
-    private fun generate(token: String, tripId: String): Int =
-        call(HttpMethod.POST, "/api/v1/trips/$tripId/itinerary?mode=FULLY_AI", token).first
+    /**
+     * 일정을 만들고 **마무리까지 기다린다.**
+     *
+     * 기다리지 않으면 재계획이 `PARTIAL`(day1 만 있는) 일정 위에서 돌아 산출이 갈린다 —
+     * 세션이 종단 상태로 떨어지면 다음 진입이 그것을 "열린 세션"으로 보지 않아 취소하지 않고,
+     * 이전 세션이 CANCELED 라는 단언이 간헐적으로 깨진다(실측: CI 에서 두 번).
+     *
+     * 재계획이 PARTIAL 자체를 막지는 않는다. 다만 이 테스트들이 재려는 것은 **완성된 일정을
+     * 다시 짜는 것**이라, 전제를 결정적으로 만드는 편이 맞다.
+     */
+    private fun generate(token: String, tripId: String): Int {
+        val rc = call(HttpMethod.POST, "/api/v1/trips/$tripId/itinerary?mode=FULLY_AI", token).first
+        if (rc == 201) awaitComplete(token, tripId)
+        return rc
+    }
+
+    /** 2차 생성 마무리 대기 — `ItineraryApiIT` 의 같은 헬퍼와 같은 규약이다. */
+    private fun awaitComplete(token: String, tripId: String) {
+        val deadline = System.nanoTime() + AWAIT_TIMEOUT_NANOS
+        var last = ""
+        while (System.nanoTime() < deadline) {
+            val body = call(HttpMethod.GET, "/api/v1/trips/$tripId/itinerary", token).second
+            last = body["generationState"]?.asText().orEmpty()
+            when (last) {
+                "PARTIAL" -> Thread.sleep(POLL_INTERVAL_MS)
+                // FAILED 를 통과시키면 뒤따르는 재계획이 조용히 "실패한 일정" 위에서 돈다.
+                "COMPLETE" -> return
+                else -> error("2차 생성이 완료되지 않았습니다. 상태=$last")
+            }
+        }
+        error("2차 생성이 기한 내 끝나지 않았습니다. 마지막 상태=$last")
+    }
 
     private val startBody = """
         {"scope":"PARTIAL_SLOTS","originKind":"GPS","originLat":33.45,"originLng":126.56,
@@ -276,5 +306,10 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `인증 없으면 401`() {
         call(HttpMethod.POST, "/api/v1/trips/${UUID.randomUUID()}/replan-sessions", null, startBody).first shouldBe 401
+    }
+
+    private companion object {
+        private const val POLL_INTERVAL_MS = 100L
+        private val AWAIT_TIMEOUT_NANOS = java.time.Duration.ofSeconds(20).toNanos()
     }
 }
