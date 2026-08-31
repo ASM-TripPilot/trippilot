@@ -69,6 +69,8 @@
 - `src/__tests__/recordAttributionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
+- `src/__tests__/reflectionFallbackStructure.test.ts`  →  (export 없음)
+- `src/__tests__/reflectionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/regionCatalogStructure.test.ts`  →  (export 없음)
 - `src/__tests__/rootLayout.test.tsx`  →  (export 없음)
 - `src/__tests__/rootLayoutQueryProvider.test.tsx`  →  (export 없음)
@@ -210,6 +212,9 @@
 
 ## src/app/trips/[tripId]/records/
 - `src/app/trips/[tripId]/records/index.tsx`  →  (export 없음)
+
+## src/app/trips/[tripId]/records/reflection/
+- `src/app/trips/[tripId]/records/reflection/[date].tsx`  →  (export 없음)
 
 ## src/app/trips/new/
 - `src/app/trips/new/_layout.tsx`  →  (export 없음)
@@ -420,6 +425,20 @@
 - `src/features/record/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
 - `src/features/record/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
 
+## src/features/reflection/model/
+- `src/features/reflection/model/missingParts.ts`  →  MissingParts · missingParts
+- `src/features/reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative
+- `src/features/reflection/model/statsCard.ts`  →  statsCard
+- `src/features/reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
+
+## src/features/reflection/ui/
+- `src/features/reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
+- `src/features/reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · DailyReflectionScreenProps · DailyReflectionScreen
+- `src/features/reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
+- `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  BackArrowGlyph · LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph
+- `src/features/reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
+- `src/features/reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
+
 ## src/features/settings/model/
 - `src/features/settings/model/deletionScope.ts`  →  DELETION_SCOPE
 - `src/features/settings/model/exportSummary.ts`  →  ExportSummary · resolveExportSummary
@@ -510,6 +529,12 @@
 - `src/mocks/handlers.ts`  →  handlers
 - `src/mocks/scenarios.ts`  →  AuthOutcome · SocialServerBehavior · BootstrapBehavior · MockScenario · SCENARIOS · ScenarioKey · setScenario · getScenario · resetScenario
 - `src/mocks/server.ts`  →  server
+
+## src/pages/daily-reflection/
+- `src/pages/daily-reflection/index.ts`  →  DailyReflectionPage
+
+## src/pages/daily-reflection/ui/
+- `src/pages/daily-reflection/ui/DailyReflectionPage.tsx`  →  DailyReflectionPageProps · DailyReflectionPage
 
 ## src/pages/destination-detail/
 - `src/pages/destination-detail/index.ts`  →  DestinationDetailPage
@@ -1091,4 +1116,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 741개 파일
+합계 756개 파일

@@ -42,6 +42,7 @@ import { ConflictSheet } from '@/features/record/ui/ConflictSheet';
 import { SyncBadge } from '@/features/record/ui/SyncBadge';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
+import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -2140,6 +2141,124 @@ const PREVIEW_STATES: PreviewState[] = [
           },
         ]}
         onApply={noop}
+      />
+    ),
+  },
+  // j03 오늘의 회고 4얼굴(TRIP-571) — 순수 뷰(`DailyReflectionScreen`)를 격리 렌더한다(`@/shared/api`
+  // 값 import 0 이라 프리뷰 지뢰 목 통과). jest 는 testID·행동만 잠그고 4상태 레이아웃·코랄 토큰·
+  // 플레이스홀더 카드·error 재시도 카드·편집 입력은 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP,
+  // 이 4키가 유일한 육안 대조 자리. `editableText` 를 주면 편집 진입(헤더 "편집"/CTA "직접 회고 작성")
+  // → 입력(상한 4000)·저장/취소를 실기로 눌러 본다.
+  {
+    key: 'reflection-default',
+    label: 'j03 오늘의 회고 · default',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="default"
+        narrative="오늘은 광안리와 미술관 등 4곳을 방문했어요. 12km를 이동했고 사진 6장을 남겼어요."
+        editableText="오늘은 광안리와 미술관 등 4곳을 방문했어요. 12km를 이동했고 사진 6장을 남겼어요."
+        stats={{
+          visitCount: 4,
+          distanceKm: 12,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 6,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid={false}
+        photos={[
+          { uri: 'file://p1.jpg' },
+          { uri: 'file://p2.jpg' },
+          { uri: 'file://p3.jpg' },
+        ]}
+        changeSummary="이날 휴무로 1곳을 변경했어요"
+        mapCenter={{ lat: 35.1532, lng: 129.1187 }}
+        mapPins={[
+          { number: 1, lat: 35.1532, lng: 129.1187 },
+          { number: 2, lat: 35.1264, lng: 129.0403 },
+        ]}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  {
+    // 부분 데이터 — 방문<2(거리 "—" + 지도 자리 사유) · 사진 0장("사진 없음" 자리). BR-U5-34 실증.
+    key: 'reflection-data-insufficient',
+    label: 'j03 오늘의 회고 · 데이터 부족',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="data-insufficient"
+        narrative="메모를 기반으로 오늘 기록을 정리했어요. 위치·사진 정보가 부족해 일부 항목은 제외했어요."
+        editableText="메모를 기반으로 오늘 기록을 정리했어요."
+        stats={{
+          visitCount: 2,
+          distanceKm: 0,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 0,
+        }}
+        distanceDash
+        mapNotice="위치 기록 없음 · GPS 미동으로 지도를 만들 수 없어요"
+        hidePhotoGrid
+        photos={[]}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  {
+    // empty — 기록 없음: 빈 원 일러스트 + CTA "직접 회고 작성"(누르면 편집 입력이 열린다).
+    key: 'reflection-empty',
+    label: 'j03 오늘의 회고 · empty',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="empty"
+        narrative="방문 0곳 · 이동 0km · 사진 0장의 하루였어요."
+        editableText=""
+        stats={{
+          visitCount: 0,
+          distanceKm: 0,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 0,
+        }}
+        distanceDash
+        mapNotice={null}
+        hidePhotoGrid
+        photos={[]}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  {
+    // error — 회고 조회 실패: stats 는 채움(BASIC 카드, INV-U5-07) + 에러 카드(다시 시도) + CTA.
+    key: 'reflection-error',
+    label: 'j03 오늘의 회고 · error',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="error"
+        narrative="방문 4곳 · 이동 12km · 사진 6장의 하루였어요."
+        editableText=""
+        stats={{
+          visitCount: 4,
+          distanceKm: 12,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 6,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid
+        photos={[]}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
       />
     ),
   },

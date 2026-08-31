@@ -37,7 +37,7 @@
 
 ## features 경계
 
-- **`features` 간 import 금지에 기계 강제가 없는 feature가 있다** → `eslint.config.js`의 `FEATURES` 배열이 `['onboarding','home']`뿐이라 `itinerary`·`trip`·`explore`·`settings`·`notification`·`record`는 여전히 zone 검사 밖이다. `settings`는 `settingsBoundary.test.ts`(TRIP-605), `notification`은 `notificationStructure.test.ts`(TRIP-576), `record`는 `recordsStructure.test.ts`(TRIP-565, G2 — 특히 `execution`의 동명 `useVisitCheck` import를 막는 유일한 그물)로 각각 소스 스캔이 유일한 그물이다. 관례(조합은 `pages` 전담)로 지켜질 뿐, eslint `FEATURES` 배열 자체는 어느 쪽도 등재 안 돼 어겨도 lint는 안 걸린다.
+- **`features` 간 import 금지에 기계 강제가 없는 feature가 있다** → `eslint.config.js`의 `FEATURES` 배열이 `['onboarding','home']`뿐이라 `itinerary`·`trip`·`explore`·`settings`·`notification`·`record`·`reflection`는 여전히 zone 검사 밖이다. `settings`는 `settingsBoundary.test.ts`(TRIP-605), `notification`은 `notificationStructure.test.ts`(TRIP-576), `record`는 `recordsStructure.test.ts`(TRIP-565, G2 — 특히 `execution`의 동명 `useVisitCheck` import를 막는 유일한 그물), `reflection`은 `reflectionStructure.test.ts`(TRIP-571, G2 — record↔reflection 상호 import를 막는 유일한 그물)로 각각 소스 스캔이 유일한 그물이다. 관례(조합은 `pages` 전담)로 지켜질 뿐, eslint `FEATURES` 배열 자체는 어느 쪽도 등재 안 돼 어겨도 lint는 안 걸린다.
 
 ## 작업 관례
 
