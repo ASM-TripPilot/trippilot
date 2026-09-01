@@ -172,6 +172,7 @@ def _request(
     *,
     excluded: frozenset[PoiId] = frozenset(),
     reason: str = "weather",
+    deadline_ms: int | None = None,
 ) -> PlanBRagRequest:
     return PlanBRagRequest(
         trigger=TriggerParams(
@@ -185,6 +186,7 @@ def _request(
         trace_id=_TID,
         now=_NOW,
         excluded_poi_ids=excluded,
+        deadline_ms=deadline_ms,
     )
 
 
@@ -880,3 +882,36 @@ def test_situation_query_translates_reason_to_korean() -> None:
         assert _REASON_KO[reason] in query
     # 미지 reason 은 원문 통과 — 계약이 넓어져도 질의가 비지 않는다 (INV-4).
     assert "unknown" in _situation_query(_request(pool, reason="unknown"))
+
+
+def test_llm_timeout_derives_from_request_deadline() -> None:
+    """게이트웨이 기본 2.5s 는 즉답성 feature 기준이라 상위 티어에 짧다 (2026-09-01).
+
+    컨테이너 실측: `gpt-5.6-sol` 5.1s → 기본값으로는 ALTERNATIVE_SELECTION 이
+    **100%** 타임아웃해 Plan-B 가 항상 규칙 폴백으로 떨어졌다. 모델을 올린 효과가
+    0이 되는데 **응답은 200 이라 증상이 안 보인다** — 그래서 예산 관통을 못 박는다.
+    """
+    pool = _pool("p1")
+    pipeline = PlanBRagPipeline(FakeEmbedding(), InMemoryVectorStore())
+
+    # 예산 20초 → LLM 몫 10초 (기본 share 0.5)
+    assert pipeline._llm_timeout(_request(pool, deadline_ms=20_000)) == 10.0
+    # 예산 없음 → 게이트웨이 기본에 맡긴다 (None)
+    assert pipeline._llm_timeout(_request(pool)) is None
+    assert pipeline._llm_timeout(_request(pool, deadline_ms=0)) is None
+
+
+def test_llm_budget_share_is_validated() -> None:
+    """몫이 0 이하·1 초과면 예산 계산이 무의미해진다 — 설정 버그로 즉시 막는다."""
+    for bad in (0.0, -0.1, 1.5):
+        with pytest.raises(ValueError, match="llm_budget_share"):
+            PlanBRagConfig(llm_budget_share=bad)
+
+
+def test_alternative_worker_accepts_timeout() -> None:
+    """워커 7종이 이미 갖고 있던 통로가 alternative_selection 에만 없었다."""
+    import inspect
+
+    from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
+
+    assert "timeout_sec" in inspect.signature(AlternativeSelectionWorker.select).parameters

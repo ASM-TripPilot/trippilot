@@ -265,8 +265,12 @@ def pipeline(store, embedding, llm, model_id: str | None) -> PlanBRagPipeline:
             # 운영과 같은 기능별 오버라이드를 읽는다 — 리허설이 자기만의 모델을 태우면
             # "운영은 sol, 리허설은 terra" 가 조용히 생긴다 (TRIPPILOT_LLM_FEATURE_MODELS).
             feature_models=feature_models_from_env(),
-            # 리허설은 운영 2.5s 예산이 아니라 스모크 관례(관대한 타임아웃)를 따른다
-            timeout_sec=float(os.environ.get("SMOKE_TIMEOUT_SEC", "30")),
+            # **운영 기본을 그대로 쓴다.** 종전엔 30s 로 덮어썼는데, 그래서 운영에서
+            # 100% 타임아웃하던 gpt-5.6-sol(5.1s)이 리허설에선 늘 통과했다 —
+            # 리허설 통과가 컨테이너 동작의 증거가 아니게 만든 원인이다.
+            # ALTERNATIVE_SELECTION 은 아래 SMOKE_DEADLINE_MS 에서 유도한 마감이
+            # 이 기본값을 덮으므로(운영과 같은 경로), 이 값은 다른 feature 용이다.
+            timeout_sec=float(os.environ.get("SMOKE_TIMEOUT_SEC", "2.5")),
             max_tokens=int(os.environ.get("SMOKE_MAX_TOKENS", "2048")),
             temperature=float(os.environ.get("SMOKE_TEMPERATURE", "1.0")),
         ),
@@ -304,6 +308,10 @@ def run(title, store, embedding, pool, llm=None, model_id=None, excluded=frozens
                                   date.today(), {"pop": 80}),
             reason="weather", pool=pool, trace_id=TID, now=NOW, excluded_poi_ids=excluded,
             saved_places=saved,
+            # 운영과 같은 예산 관통 — 백엔드가 request_meta.deadline_ms 로 보내는 값을
+            # 그대로 흉내낸다. 이게 없으면 게이트웨이 기본(2.5s)이 걸려, 상위 티어
+            # 모델을 쓰는 리허설이 운영과 다른 결과를 낸다.
+            deadline_ms=int(os.environ.get("SMOKE_DEADLINE_MS", "20000")),
         )
     )
     names = {str(p.poi_id): f"{p.name}[{p.category.value}]" for p in pool.pois}

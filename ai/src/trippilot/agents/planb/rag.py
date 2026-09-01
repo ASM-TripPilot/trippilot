@@ -79,10 +79,15 @@ class PlanBRagConfig:
 
     top_k: int = DEFAULT_TOP_K
     max_alternatives: int = 3  # 미결 #5 — UX 확정 시 조정
+    # 요청 예산 중 LLM 호출에 줄 몫 (BR-U4-04 "요청 예산의 절반 이하").
+    # 나머지는 검색·풀 조립·직렬화 몫이다.
+    llm_budget_share: float = 0.5
 
     def __post_init__(self) -> None:
         if self.top_k < 1:
             raise ValueError("top_k ≥ 1")
+        if not 0.0 < self.llm_budget_share <= 1.0:
+            raise ValueError("llm_budget_share ∈ (0, 1]")
         if not 1 <= self.max_alternatives <= len(_ALTERNATIVE_LABELS):
             raise ValueError(f"max_alternatives ∈ [1, {len(_ALTERNATIVE_LABELS)}]")
 
@@ -122,6 +127,10 @@ class PlanBRagRequest:
     # 소유) — 풀 안에서의 우선순위(_rule_ranking 2단)와 LLM persona_context 에만 쓰인다.
     # KB-2 벡터 검색 결과와 합쳐지며, 같은 poi_id 면 봉투가 이긴다(백엔드가 정본).
     saved_places: tuple["SavedPlace", ...] = ()
+    # 이 요청의 시간 예산 (RequestMetaSchema.deadline_ms). LLM 호출 마감을 여기서
+    # 유도한다 — 게이트웨이 기본 2.5s 는 즉답성 feature 기준이라 상위 티어에는 짧다
+    # (실측 gpt-5.6-sol 5.1s → 100% 타임아웃). None 이면 게이트웨이 기본.
+    deadline_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,6 +376,7 @@ class PlanBRagPipeline:
                 ),
                 request.trace_id,
                 request.now,
+                timeout_sec=self._llm_timeout(request),
             )
         except Exception as e:  # 설정 버그(프롬프트 미등록 등)도 Plan-B를 죽이지 않는다
             return rule_ranked, {}, False, _why(f"alternative_error: {type(e).__name__}: {e}")
@@ -379,6 +389,18 @@ class PlanBRagPipeline:
         if not selected:
             return rule_ranked, {}, False, _why("alternative_empty")
         return selected, reasons, True, ""
+
+    def _llm_timeout(self, request: PlanBRagRequest) -> float | None:
+        """요청 예산 → LLM 호출 마감. 예산이 없으면 게이트웨이 기본에 맡긴다.
+
+        게이트웨이 기본(2.5s)은 즉답성 feature 기준이라 ALTERNATIVE_SELECTION 이
+        쓰는 상위 티어에는 짧다 — 실측 `gpt-5.6-sol` 5.1s. 그대로 두면 LLM 경로가
+        **항상** 타임아웃해 규칙 폴백만 나가고, 모델을 올린 효과가 0이 된다.
+        응답은 200 이라 증상이 안 보인다.
+        """
+        if not request.deadline_ms or request.deadline_ms <= 0:
+            return None
+        return request.deadline_ms / 1000.0 * self._cfg.llm_budget_share
 
     def _rationale(self, request: PlanBRagRequest, used_llm: bool) -> str:
         source = "llm_select_alternatives" if used_llm else "rule_ranking"
