@@ -84,6 +84,11 @@ class ExpoPushAdapter(
     /**
      * Android 에 닿는 유일한 신호다(위 사유로 채널을 못 쓰는 동안). `high` 는 잠든 기기를 깨울 수 있어
      * 시간 민감에만 쓴다 — 남발하면 배터리 영향이 있고 사용자가 앱 알림을 통째로 끈다.
+     *
+     * ⚠ **안드로이드에서는 3단이 아니라 2단이다.** Expo 의 `default` 는 플랫폼별로 해석되는데
+     * Android 에서는 `normal` 과 같다 — 즉 [PushUrgency.ACTIVE] 와 [PushUrgency.PASSIVE] 가
+     * 그 기기에서 **구분되지 않는다.** iOS 는 `interruptionLevel` 로 셋이 갈린다.
+     * 안드로이드에서 셋을 가르려면 채널이 필요하고, 그건 프론트가 채널을 만든 뒤의 일이다.
      */
     private fun PushUrgency.expoPriority(): String = when (this) {
         PushUrgency.TIME_SENSITIVE -> "high"
