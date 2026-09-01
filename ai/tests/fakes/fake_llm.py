@@ -75,3 +75,63 @@ class TextOnlyLlm:
             raw_text="{}", input_tokens=1, output_tokens=1,
             latency_ms=0, model_id=request.model_id,
         )
+
+
+class ScriptedVisionLlm:
+    """호출 순서대로 대본을 실행하는 LlmPort — 항목이 str이면 canned 응답,
+    Exception 인스턴스면 raise (대본 소진 시 마지막 항목 반복). 결정론 (D37).
+
+    호출별 images 튜플·프롬프트를 기록한다 — compose_vision 예산 공유(#9)의
+    "vision이 k번째에 죽으면 이후 이미지 실린 호출 0 ∧ 템플릿 생성 호출 총합
+    ≤ MAX_ATTEMPTS"를 호출 단위로 관측하는 계수 스파이 (TRIP-595).
+    """
+
+    def __init__(self, *script: str | Exception) -> None:
+        if not script:
+            raise ValueError("대본 ≥ 1 — 빈 대본은 응답을 지어내야 한다")
+        self._script = script
+        self.calls = 0
+        self.seen_images: list[tuple] = []  # 호출별 images 튜플
+        self.prompts: list[str] = []
+
+    def invoke(self, request: LlmRequest) -> LlmResponse:
+        step = self._script[min(self.calls, len(self._script) - 1)]
+        self.calls += 1
+        self.seen_images.append(request.images)
+        self.prompts.append(request.prompt)
+        if isinstance(step, Exception):
+            raise step
+        return LlmResponse(
+            raw_text=step, input_tokens=len(request.prompt),
+            output_tokens=len(step), latency_ms=0, model_id=request.model_id,
+        )
+
+
+class SplitVisionLlm:
+    """images 유무로 행동이 갈리는 LlmPort — vision 호출(images ≠ ())은 on_vision,
+    텍스트 호출은 on_text (str=canned 응답, Exception 인스턴스=raise). 결정론 (D37).
+
+    용도: "vision만 죽고 텍스트는 사는" 강등 계단 대역 (VIS-P3 드롭인 스윕 —
+    타임아웃·비지원·벤더 예외·파싱 실패를 실 어댑터 없이 재현). 호출 순서가
+    아니라 이미지 유무로 가르므로 구현의 호출 순서 변경에도 강건하다.
+    seen_images로 "텍스트 강등 후 호출엔 images == ()"를 관측한다 (VIS-P1 사영).
+    """
+
+    def __init__(self, *, on_vision: str | Exception, on_text: str | Exception) -> None:
+        self._on_vision = on_vision
+        self._on_text = on_text
+        self.calls = 0
+        self.seen_images: list[tuple] = []
+        self.prompts: list[str] = []
+
+    def invoke(self, request: LlmRequest) -> LlmResponse:
+        self.calls += 1
+        self.seen_images.append(request.images)
+        self.prompts.append(request.prompt)
+        step = self._on_vision if request.images else self._on_text
+        if isinstance(step, Exception):
+            raise step
+        return LlmResponse(
+            raw_text=step, input_tokens=len(request.prompt),
+            output_tokens=len(step), latency_ms=0, model_id=request.model_id,
+        )

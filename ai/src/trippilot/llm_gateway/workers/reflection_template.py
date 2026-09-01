@@ -104,9 +104,18 @@ class ReflectionTemplateWorker:
             region=request.region,
             poi_names=tuple(v.poi_name for v in request.visits),
         )
-        parts = tuple(
-            images[p.photo_id] for p in vision.photos if p.photo_id in images
-        )
+        # images 키 = vision.photos id 집합 — photo_highlight 워커와 같은 계약.
+        # 조용한 필터링은 두 가지를 숨긴다: 동의 밖 바이트 유입(BR-U6R-09)과
+        # 바이트 결손으로 인한 "이미지 0장 vision 호출"(설계가 금지한 조용한
+        # 이미지 무시, BR-U6R-10). 어긋나면 폴백이 아니라 호출 버그다.
+        consented = frozenset(p.photo_id for p in vision.photos)
+        if frozenset(images) != consented:
+            extra = sorted(str(p) for p in frozenset(images) - consented)
+            missing = sorted(str(p) for p in consented - frozenset(images))
+            raise ValueError(
+                f"images 키가 동의 사진 집합과 불일치 — 초과 {extra}, 결손 {missing}"
+            )
+        parts = tuple(images[p.photo_id] for p in vision.photos)
         return self._gateway.call(
             LlmFeature.REFLECTION_TEMPLATE_VISION,
             variables,
