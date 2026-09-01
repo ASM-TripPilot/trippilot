@@ -220,3 +220,42 @@ def test_llm_gateway_does_not_import_solver_engine_or_poi_curation() -> None:
         if bad:
             offenders[str(py.relative_to(_SRC))] = bad
     assert not offenders, f"llm_gateway가 solver_engine/poi_curation을 import함(경계 위반): {offenders}"
+
+
+def test_langchain_only_imported_in_agents_adapters() -> None:
+    """LangChain 부분 도입(TRIP-522) 격리 — `agents/adapters/` 한정.
+
+    정본이 정한 적용 범위가 "PlanBAgent RAG 검색·벡터·임베딩까지"다(README §LangChain
+    적용 범위). Orchestrator·Solver·워커·게이트로 새면 그 선이 무너지고, 네 불변식을
+    강제하는 자리(closed_set_filter·게이트·규칙 폴백)가 프레임워크 안으로 숨는다.
+    numpy 도 같이 묶는다 — MMR 계산 말고는 쓸 데가 없다.
+    """
+    offenders = []
+    for py in _SRC.rglob("*.py"):
+        if "adapters" in py.parts:
+            continue
+        external = _external_imports(py)
+        if {"langchain_core", "langchain", "numpy"} & external:
+            offenders.append(str(py.relative_to(_SRC)))
+    assert not offenders, f"adapters 밖에서 langchain/numpy import: {offenders}"
+
+
+def test_langchain_is_not_a_runtime_dependency() -> None:
+    """PlanB 기본 경로는 langchain 없이 돌아야 한다 (TRIP-522).
+
+    `search_type` 기본값이 "similarity" 이고 mmr 경로만 lazy import 한다. 이게 깨지면
+    langchain 미설치 환경(운영 이미지·다른 패키지 CI)에서 PlanB 가 통째로 죽는다 —
+    그래서 런타임 의존성 목록에 들어갔는지를 못 박는다.
+    """
+    import tomllib
+
+    pyproject = tomllib.loads((_SRC.parent.parent / "pyproject.toml").read_text(encoding="utf-8"))
+    runtime = " ".join(pyproject["project"]["dependencies"])
+    assert "langchain" not in runtime, f"langchain 이 런타임 의존성에 들어갔다: {runtime}"
+
+    # 검색기 미주입이 기본 — 주입해야만 langchain 경로가 열린다.
+    import inspect
+
+    from trippilot.agents.planb.rag import PlanBRagPipeline
+
+    assert inspect.signature(PlanBRagPipeline.__init__).parameters["retriever"].default is None

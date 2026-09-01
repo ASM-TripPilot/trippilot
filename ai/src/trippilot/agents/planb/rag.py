@@ -54,6 +54,7 @@ from trippilot.domain.llm import AlternativePick, CandidatePool, ScoredPoi
 from trippilot.domain.poi import PoiCategory
 from trippilot.domain.trigger import TriggerParams
 from trippilot.ports.embedding_port import EmbeddingPort
+from trippilot.ports.kb_retriever_port import KbRetrieverPort
 from trippilot.ports.vector_store_port import VectorStorePort
 from trippilot.solver_engine.config import RAIN_OUTDOOR
 from trippilot.solver_engine.travel import haversine_km
@@ -79,7 +80,6 @@ class PlanBRagConfig:
 
     top_k: int = DEFAULT_TOP_K
     max_alternatives: int = 3  # 미결 #5 — UX 확정 시 조정
-
     def __post_init__(self) -> None:
         if self.top_k < 1:
             raise ValueError("top_k ≥ 1")
@@ -223,6 +223,7 @@ class PlanBRagPipeline:
         *,
         alternative_gateway: GatewayFacade | None = None,
         config: PlanBRagConfig | None = None,
+        retriever: KbRetrieverPort | None = None,
     ) -> None:
         self._embedding = embedding
         self._store = store
@@ -233,6 +234,9 @@ class PlanBRagPipeline:
             else None
         )
         self._cfg = config or PlanBRagConfig()
+        # 검색 전략(TRIP-522). 미주입이면 기존 직접 검색 그대로 — 동작 무변경.
+        # 어댑터를 여기서 import 하지 않는 이유: agents 형제 상호 import 금지(L-2).
+        self._retriever = retriever
 
     # ── 공개 API ────────────────────────────────────────────────────────
 
@@ -329,7 +333,14 @@ class PlanBRagPipeline:
         )
 
     def _safe_retrieve(self, fn, query: str, kb: KbKind) -> tuple[tuple[KbHit, ...], str]:
+        """검색기가 주입돼 있으면 그쪽, 아니면 기존 직접 검색 (TRIP-522).
+
+        어느 쪽이든 실패는 노트로 잡고 나머지 KB 로 진행한다 — 검색 전략을 바꿨다고
+        Plan-B 가 통째로 죽으면 안 된다 (INV-4).
+        """
         try:
+            if self._retriever is not None:
+                return self._retriever.retrieve(kb, query, self._cfg.top_k), ""
             return fn(query, self._embedding, self._store, top_k=self._cfg.top_k), ""
         except Exception as e:
             return (), f"retrieve_{kb.value.lower()}_error: {type(e).__name__}: {e}"
