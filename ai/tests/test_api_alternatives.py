@@ -114,8 +114,12 @@ def test_injected_vector_store_feeds_situation_retrieval() -> None:
     embedding, store = FakeEmbedding(dim=32), InMemoryVectorStore()
     index_documents(
         (
+            # 텍스트 = 검색 질의 그대로. FakeEmbedding 은 의미 유사도가 없어서
+            # (해시→가우시안) 다른 문구를 쓰면 코사인이 난수가 되고 실제로 **음수**가
+            # 나온다(-0.36 실측) — 유사도 하한에 걸려 이 테스트의 전제가 무너진다.
+            # 동일 텍스트만이 결정론적으로 1.0 을 준다.
             KbDocument(kb=KbKind.SITUATION, doc_id="sit-1",
-                       text="우천 시 실내 대안 우선", poi_ref=None, metadata={}),
+                       text="WEATHER 날씨 악화 상황", poi_ref=None, metadata={}),
         ),
         embedding, store,
     )

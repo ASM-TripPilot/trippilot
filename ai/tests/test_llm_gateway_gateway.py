@@ -151,8 +151,12 @@ class _RecordingLlm:
 
 
 def test_call_timeout_default_and_override() -> None:
-    """timeout_sec 미지정이면 설정 기본(2.5s — INTENT 등 즉답성 feature 불변),
-    지정하면 그 값이 LlmRequest까지 관통한다 (TRIP-376)."""
+    """timeout_sec 미지정이면 설정 기본, 지정하면 그 값이 LlmRequest까지 관통 (TRIP-376).
+
+    기본값은 **안전망**이라 관통 여부가 본질이고 숫자 자체는 아니다 — 다만 조용히
+    바뀌면 예산 없는 경로(REFLECTION_NUDGE 등)의 동작이 통째로 달라지므로 값도 못 박는다.
+    2.5 → 10.0 (2026-09-01): 상위 티어 모델이 붙으면서 2.5 가 폴백을 강제하는 값이 됐다.
+    """
     llm = _RecordingLlm()
     facade, _ = _facade(llm, AcceptAllGate(_scored("p1")))
 
@@ -163,7 +167,7 @@ def test_call_timeout_default_and_override() -> None:
     )
 
     assert [r.timeout_sec for r in llm.requests] == [_CFG.timeout_sec, 14.0]
-    assert _CFG.timeout_sec == 2.5
+    assert _CFG.timeout_sec == 10.0
 
 
 # ── GW-P1: 실패 경로 전부 동일 형태로 수렴 ──────────────────

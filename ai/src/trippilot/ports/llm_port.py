@@ -64,7 +64,9 @@ class LlmRequest:
     prompt_ref: PromptRef  # 버전 없는 호출은 타입상 불가능 (NFR-7.3)
     max_tokens: int
     temperature: float
-    timeout_sec: float = 2.5  # NFR-1.2 기본값
+    timeout_sec: float = 10.0  # C1Config.timeout_sec 과 같은 값을 유지한다
+    # (게이트웨이가 항상 명시 전달하므로 실질 사문이지만, 어긋나면 다음 사람이
+    #  둘 중 어느 게 정본인지 모른다. NFR-1.2 의 2.5 에서 상향 — config.py 주석 참조)
     # 멀티모달 입력 (TRIP-595) — 후미 기본값이라 기존 호출 전부 무영향.
     # 비어있지 않은데 어댑터가 이미지를 못 받으면 LlmUnsupportedError.
     images: tuple[LlmImagePart, ...] = ()

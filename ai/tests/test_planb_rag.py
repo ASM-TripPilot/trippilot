@@ -357,7 +357,12 @@ def test_pipeline_ranks_persona_hits_first_but_only_inside_pool() -> None:
         emb,
         store,
     )
-    result = PlanBRagPipeline(emb, store).run(request)
+    # 이 테스트의 관심사는 **랭킹**이지 유사도 컷이 아니다. FakeEmbedding 은 의미
+    # 유사도가 없어(해시→가우시안) 서로 다른 텍스트의 코사인이 사실상 난수라
+    # — 여기선 `query + " 카페"` 가 -0.39 다 — 기본 컷이 걸리면 랭킹을 보기도 전에
+    # 히트가 사라진다. 컷은 전용 테스트에서 `_ScriptedEmbedding` 으로 검증한다.
+    no_cut = PlanBRagConfig(min_score_ratio=0.0, min_score=-1.0)
+    result = PlanBRagPipeline(emb, store, config=no_cut).run(request)
     picked = [str(p) for a in result.alternatives for p in a.poi_ids]
     # 저장 장소 p3가 1순위로 올라오고, 풀 밖 ghost는 아예 등장하지 않는다
     assert picked == ["p3", "p1", "p2"]
@@ -915,3 +920,110 @@ def test_alternative_worker_accepts_timeout() -> None:
     from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
 
     assert "timeout_sec" in inspect.signature(AlternativeSelectionWorker.select).parameters
+
+
+# ── 유사도 하한 (planb-rag-design §9 미결 #3) ─────────────────────────
+#
+# **FakeEmbedding 으로 짜면 안 된다.** 의미 유사도가 없어(해시→가우시안) 무관 텍스트의
+# 코사인이 난수이고 실제로 음수가 나온다 — 실전에서 유효한 어떤 임계도 fake 에서는
+# "전건 컷"이 된다. 각도를 지정하는 `_ScriptedEmbedding` 만이 임계를 조준할 수 있다.
+
+
+def _cut_pipeline(**cfg) -> tuple[PlanBRagPipeline, InMemoryVectorStore, object]:
+    """질의(각도 0) 기준 코사인이 1.00 / 0.87 / 0.50 인 문서 3종."""
+    angles = {"질의": 0.0, "높음": 0.0, "중간": math.acos(0.87), "낮음": math.acos(0.50)}
+    emb = _ScriptedEmbedding(angles)
+    store = InMemoryVectorStore()
+    index_documents(
+        [
+            _doc(KbKind.SITUATION, "높음", "높음"),
+            _doc(KbKind.SITUATION, "중간", "중간"),
+            _doc(KbKind.SITUATION, "낮음", "낮음"),
+        ],
+        emb,
+        store,
+    )
+    return PlanBRagPipeline(emb, store, config=PlanBRagConfig(**cfg)), store, emb
+
+
+def test_score_cut_keeps_only_hits_near_the_top() -> None:
+    """비율 컷 — 최고점 대비 얼마나 닮았는지로 자른다 (모델이 바뀌어도 유효)."""
+    pipeline, _, _ = _cut_pipeline(min_score_ratio=0.85)
+    hits, note = pipeline._cut(
+        retrieve_situation("질의", pipeline._embedding, pipeline._store, top_k=3),
+        KbKind.SITUATION,
+    )
+    # 하한 = 1.00 × 0.85 = 0.85 → 0.87 은 살고 0.50 은 잘린다
+    assert [h.doc_id for h in hits] == ["높음", "중간"]
+    assert "kb_score_cut_situation" in note and "1/3건" in note
+
+
+def test_score_cut_note_is_not_an_error_prefix() -> None:
+    """컷은 정상 동작이다 — 검색이 터진 경우(`retrieve_*_error`)와 접두어가 겹치면
+    소비 측이 장애로 읽는다. 백엔드는 notes 를 로그로 받는다."""
+    pipeline, _, _ = _cut_pipeline(min_score_ratio=0.85)
+    _, note = pipeline._cut(
+        retrieve_situation("질의", pipeline._embedding, pipeline._store, top_k=3),
+        KbKind.SITUATION,
+    )
+    assert note and not note.startswith("retrieve_") and "retrieve" not in note
+
+
+def test_score_cut_is_silent_when_nothing_is_dropped() -> None:
+    """전건 통과면 노트를 만들지 않는다 — 정상 경로에 잡음을 남기지 않는다."""
+    pipeline, _, _ = _cut_pipeline(min_score_ratio=0.4)
+    hits, note = pipeline._cut(
+        retrieve_situation("질의", pipeline._embedding, pipeline._store, top_k=3),
+        KbKind.SITUATION,
+    )
+    assert len(hits) == 3 and note == ""
+
+
+def test_absolute_floor_covers_the_ratio_hole() -> None:
+    """최고점 자체가 낮은 질의(= 아무것도 안 닮음)에서는 비율만으로 못 자른다.
+
+    비율은 항상 최고점 대비라, 전부 0.2 인 잡음 뭉치도 '상위'는 통과시킨다.
+    절대 바닥이 그 구멍을 막는다.
+    """
+    angles = {"질의": 0.0, "잡음1": math.acos(0.20), "잡음2": math.acos(0.18)}
+    emb = _ScriptedEmbedding(angles)
+    store = InMemoryVectorStore()
+    index_documents(
+        [_doc(KbKind.SITUATION, "잡음1", "잡음1"), _doc(KbKind.SITUATION, "잡음2", "잡음2")],
+        emb, store,
+    )
+    ratio_only = PlanBRagPipeline(emb, store, config=PlanBRagConfig(min_score_ratio=0.85))
+    kept, _ = ratio_only._cut(
+        retrieve_situation("질의", emb, store, top_k=2), KbKind.SITUATION)
+    assert len(kept) == 2, "비율만으로는 잡음 뭉치를 못 자른다"
+
+    with_floor = PlanBRagPipeline(
+        emb, store, config=PlanBRagConfig(min_score_ratio=0.85, min_score=0.3))
+    kept, note = with_floor._cut(
+        retrieve_situation("질의", emb, store, top_k=2), KbKind.SITUATION)
+    assert kept == () and "2/2건" in note
+
+
+def test_cut_can_be_disabled() -> None:
+    """`min_score_ratio=0` 은 '비율 컷 없음'이어야 한다.
+
+    `top × 0 = 0` 을 하한으로 쓰면 최고점과 무관하게 음수 코사인이 잘려, 끄려던 것이
+    안 꺼진다 — 실제로 그 버그를 냈다가 잡았다.
+    """
+    angles = {"질의": 0.0, "반대": math.pi}  # 코사인 -1.0
+    emb = _ScriptedEmbedding(angles)
+    store = InMemoryVectorStore()
+    index_documents([_doc(KbKind.SITUATION, "반대", "반대")], emb, store)
+    off = PlanBRagPipeline(emb, store, config=PlanBRagConfig(min_score_ratio=0.0, min_score=-1.0))
+    kept, note = off._cut(retrieve_situation("질의", emb, store, top_k=1), KbKind.SITUATION)
+    assert len(kept) == 1 and note == ""
+
+
+@pytest.mark.parametrize(
+    "cfg", [{"min_score": 1.5}, {"min_score": -1.5}, {"min_score_ratio": -0.1},
+            {"min_score_ratio": 1.1}]
+)
+def test_cut_params_are_validated(cfg: dict) -> None:
+    """코사인 범위는 [-1, 1] — 음수가 실제로 난다. [0,1] 로 검증하면 유효한 설정을 막는다."""
+    with pytest.raises(ValueError):
+        PlanBRagConfig(**cfg)

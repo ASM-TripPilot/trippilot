@@ -808,7 +808,10 @@ class WiredItineraryOrchestrator:
                 pool=pool,
                 trace_id=TraceId(request.request_meta.request_id),
                 now=now,
-                deadline_ms=request.request_meta.deadline_ms,
+                # 미지정이면 '시간제약 없음'(TRIP-473) — 다른 경로와 같은 규칙을 쓴다.
+                # 원값을 그대로 넘기면 None 이 되어 LLM 마감이 게이트웨이 기본으로
+                # 되돌아간다(= 예산 관통이 무력화). 그 구멍을 여기서 닫는다.
+                deadline_ms=_deadline_budget(request.request_meta),
                 excluded_poi_ids=frozenset(
                     PoiId(p) for p in request.excluded_poi_ids),
                 affected_reasons=dict(request.affected_reasons),

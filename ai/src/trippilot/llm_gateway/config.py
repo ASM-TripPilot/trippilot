@@ -1,7 +1,7 @@
 """C1Config — 게이트웨이 설정 컨테이너 (U4 FD business-logic-model §1).
 
 model_id는 항상 설정값 주입 (BR-U4-08) — 코드에 모델 문자열 하드코딩 금지.
-temperature=0.0 기본 (결정론 지향), timeout 2.5s (요청 예산 5초의 절반 이하, BR-U4-04).
+temperature=0.0 기본 (결정론 지향), timeout 기본 10s (안전망 — 예산 있는 호출은 관통).
 """
 
 from __future__ import annotations
@@ -126,9 +126,17 @@ class C1Config:
     fallback_modes: Mapping[LlmFeature, tuple[str, str]] = field(
         default_factory=default_fallback_modes
     )
-    # BR-U4-04 기본값 — 즉답성 feature(INTENT 등) 기준. 단계 예산이 있는 호출
-    # (PREFERENCE_SCORING)은 GatewayFacade.call(timeout_sec=...)로 관통 (TRIP-376).
-    timeout_sec: float = 2.5
+    # **안전망**이지 설계값이 아니다 — 예산이 있는 호출은 전부
+    # `GatewayFacade.call(timeout_sec=...)` 로 관통한다(TRIP-376 선례). 이 값이 실제로
+    # 쓰이는 프로덕션 경로는 REFLECTION_NUDGE(오버라이드 없음)와, deadline 을 안 실은
+    # ALTERNATIVE_SELECTION 뿐이다 — 둘 다 사용자 대기 화면이 아니다.
+    #
+    # 2.5 → 10.0 (2026-09-01). BR-U4-04·NFR-1.2 는 2.5 를 "요청 예산 5초의 절반"으로
+    # 정당화했는데, 그 5초는 generate day1 예산이고 **정작 이 기본값을 쓰는 feature 는
+    # 그 예산과 무관**하다. 그 사이 상위 티어 모델이 붙으면서(gpt-5.6-sol 실측 5.1s)
+    # 2.5 는 "폴백을 강제하는 값"이 됐다 — PlanB 가 컨테이너에서 100% 타임아웃했다.
+    # 요청 단위 상한은 `TimeoutBackstopMiddleware`(deadline+margin → 504)가 따로 쥔다.
+    timeout_sec: float = 10.0
     max_tokens: int = 1024
     temperature: float = 0.0  # 결정론 지향
     # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 청크 크기는 고정 상수가 아니라

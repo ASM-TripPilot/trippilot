@@ -283,8 +283,8 @@ def get_user_preference_summary(user_id):
 |---|---|---|---|
 | 1 | 벡터 스토어 확정 | pgvector 권고 | CONSTRUCTION 착수 시 |
 | 2 | ~~임베딩 모델 확정~~ | **해소 (2026-08-23)** — 로컬 `KURE-v1` 확정·배선 완료 (AI-D06 부기, TRIP-514) | 완료 |
-| 3 | 유사도 임계값 | 미정 | 데이터 쌓인 후 캘리브레이션 |
-| 4 | retrieve top_k | 20 (임시) | 실험 후 조정 |
+| 3 | ~~유사도 임계값~~ | **해소 (2026-09-01)** — 비율 컷 `min_score_ratio=0.85`(최고점 대비) + 절대 바닥 `min_score=0.0`. 절대값만 쓰면 임베딩 모델 전환 시 조용히 잘못 자른다 (TRIP-522) | 완료 |
+| 4 | ~~retrieve top_k~~ | **해소 (2026-09-01)** — `DEFAULT_TOP_K=4`. 20 은 KB 총량보다 커서 한 건도 안 거르는 no-op 이었다. 재현: `ai/scripts/measure_kb_topk.py` (TRIP-508) | 완료 |
 | 5 | Plan-B 최대 제안 수 | 3개 | UX 확정 시 |
 
 ---
