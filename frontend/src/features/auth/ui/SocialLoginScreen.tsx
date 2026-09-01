@@ -58,7 +58,15 @@ const PROVIDER_KO: Record<string, string> = {
 // borderRadius 로 사는 것이 대조군). 반경/박스 비율 0.223(=Figma 12.473/56, 스플래시
 // 20.94/94 동형) → 72×0.2227≈16.03. 그림자색은 브랜드색 raw 라 토큰화 없이 플랫폼 그림자로.
 // TRIP-598 후속: 사용자가 "너무 작아 뭔지 모르겠다"를 거듭 강조 → 64→72px 재확대(비율 동결).
+// TRIP-648: 크기·정렬도 style 로 준다 — className 의 h-[72px]/w-[72px]/items-center 는
+// expo-linear-gradient 에 안 먹어(NativeWind 미개입) 박스가 글리프 크기(43px)로 접혀 종이비행기가
+// 가장자리에 붙어 짤린 것처럼 보였다(실측: 코랄 박스 ~41pt, 72pt 아님). borderRadius 가 안 먹는 것과
+// 같은 원인(트랩 참고) — 반경뿐 아니라 레이아웃 전부 style 경유여야 한다.
 const logoShadow = {
+  width: 72,
+  height: 72,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
   shadowColor: '#DB2647',
   shadowOffset: { width: 0, height: 2.5 },
   shadowOpacity: 0.28,
@@ -173,9 +181,9 @@ export function SocialLoginScreen({
         className="items-center gap-[18px] pb-[34px] pt-[64px]"
       >
         <LinearGradient
+          testID="auth-login-logo-box"
           colors={APP_ICON_COLORS}
           style={logoShadow}
-          className="h-[72px] w-[72px] items-center justify-center"
         >
           <AppIconGlyph testID="auth-login-logo-glyph" size={43} />
         </LinearGradient>
