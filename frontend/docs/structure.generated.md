@@ -13,6 +13,7 @@
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/devPreview.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewBandNav.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewDeepLink.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewDraft.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewExplore.test.tsx`  →  (export 없음)
@@ -139,7 +140,7 @@
 - `src/app/(tabs)/records.tsx`  →  (export 없음)
 
 ## src/app/_dev/
-- `src/app/_dev/preview.tsx`  →  (export 없음)
+- `src/app/_dev/preview.tsx`  →  PREVIEW_STATES
 
 ## src/app/
 - `src/app/_layout.tsx`  →  (export 없음)
@@ -1196,4 +1197,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 810개 파일
+합계 811개 파일

@@ -321,9 +321,15 @@ type LoginState = Pick<
   'phase' | 'errorCode' | 'conflictProvider'
 >;
 
+// Figma 밴드 분류(first-cut 9) + 프레임·코드 둘 다 없는 발명 화면용 '기타'(TRIP-641).
+// 파트 2 네비가 이 값으로 165개 상태를 그룹핑한다 — figma-structure.md 밴드 표가 근거.
+type Band = 'a' | 'c' | 'd' | 'e' | 'g' | 'h' | 'i' | 'j' | 'l' | '기타';
+
 interface PreviewState {
   key: string;
   label: string;
+  // 이 상태가 속한 Figma 밴드(그룹핑 축). 165개 엔트리 전부 명시(파생 아님 — 위치 불규칙로 취약).
+  band: Band;
   // null 이면 로그인 화면이 아니라 스플래시를 그린다.
   login: LoginState | null;
   // 로그인/스플래시가 아닌 화면(온보딩 등)은 여기서 직접 그린다.
@@ -1429,27 +1435,32 @@ const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
   },
 ];
 
-const PREVIEW_STATES: PreviewState[] = [
-  { key: 'splash', label: '스플래시', login: null },
+// AC-6 데이터 무결성 테스트(devPreviewBandNav)가 이 배열을 순수 데이터로 import 한다 → named export.
+export const PREVIEW_STATES: PreviewState[] = [
+  { key: 'splash', band: 'c', label: '스플래시', login: null },
   {
     key: 'splash-loading',
+    band: 'c',
     label: '스플래시 · 로딩',
     login: null,
     render: () => <SplashScreen loading />,
   },
   {
     key: 'login-idle',
+    band: 'c',
     label: '로그인 · 평상시',
     login: { phase: 'idle', errorCode: null, conflictProvider: null },
   },
   {
     key: 'login-cancelled',
-    label: '로그인 취소',
+    band: 'c',
+    label: '로그인 · 취소',
     login: { phase: 'cancelled', errorCode: null, conflictProvider: null },
   },
   {
     key: 'login-error-banner',
-    label: '에러 배너',
+    band: 'c',
+    label: '로그인 · 에러 배너',
     login: {
       phase: 'error',
       errorCode: 'SOCIAL_AUTH_FAILED',
@@ -1458,7 +1469,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'login-conflict-sheet',
-    label: '이메일 충돌 시트',
+    band: 'c',
+    label: '로그인 · 이메일 충돌 시트',
     login: {
       phase: 'error',
       errorCode: 'SOCIAL_EMAIL_CONFLICT',
@@ -1467,17 +1479,20 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'login-age-sheet',
-    label: '연령 확인 시트',
+    band: 'c',
+    label: '로그인 · 연령 확인 시트',
     login: { phase: 'needs-age', errorCode: null, conflictProvider: null },
   },
   {
     key: 'login-age-restriction',
-    label: '연령 미달 안내',
+    band: 'c',
+    label: '로그인 · 연령 미달',
     login: { phase: 'error', errorCode: 'AGE_NOT_MET', conflictProvider: null },
   },
   // ── 온보딩 (TRIP-162) — 순수 프레젠테이션 화면을 값으로 그린다 ──
   {
     key: 'onboarding-terms-default',
+    band: 'c',
     label: '약관 · 기본',
     login: null,
     render: () => (
@@ -1496,6 +1511,7 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'onboarding-terms-agreed',
+    band: 'c',
     label: '약관 · 동의완료',
     login: null,
     render: () => (
@@ -1514,7 +1530,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'onboarding-nickname-default',
-    label: '닉네임 · 기본',
+    band: 'c',
+    label: 'c07 · 기본',
     login: null,
     render: () => (
       <NicknameScreen
@@ -1534,7 +1551,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'onboarding-nickname-taken',
-    label: '닉네임 · 중복오류',
+    band: 'c',
+    label: 'c07 · 중복오류',
     login: null,
     render: () => (
       <NicknameScreen
@@ -1553,7 +1571,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // (인터뷰5 — 가드 우회가 아니라 기존 9키와 같은 "정적 프레젠테이션" 패턴 그대로).
   {
     key: 'pref1',
-    label: '취향 1/2 · 기본',
+    band: 'c',
+    label: 'c09 · 취향 1/2',
     login: null,
     render: () => (
       <PrefStep1Screen
@@ -1568,7 +1587,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'pref2',
-    label: '취향 2/2 · 기본',
+    band: 'c',
+    label: 'c09b · 취향 2/2',
     login: null,
     render: () => (
       <PrefStep2Screen
@@ -1592,7 +1612,8 @@ const PREVIEW_STATES: PreviewState[] = [
     // l05 취향 전체 수정(TRIP-610) — 화면이 자족 컨테이너(GET/PUT)라 QueryClient 없는 이 프리뷰에선
     // 순수 뷰(PreferencesEditView)에 선택 픽스처를 얹어 태운다(pref1/pref2 정적 패턴과 동형).
     key: 'settings-preferences',
-    label: 'l05 취향 수정 · 기본',
+    band: 'l',
+    label: 'l05 · 취향 수정 기본',
     login: null,
     render: () => (
       <PreferencesEditView
@@ -1608,7 +1629,8 @@ const PREVIEW_STATES: PreviewState[] = [
   {
     // 엣지: 미설정(전 축 null) + 400 저장 실패 인라인 오류(INV-4) 동시 얼굴.
     key: 'settings-preferences-error',
-    label: 'l05 취향 수정 · 미설정+400',
+    band: 'l',
+    label: 'l05 · 취향 수정 미설정+400',
     login: null,
     render: () => (
       <PreferencesEditView
@@ -1623,7 +1645,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'onboarding-location-default',
-    label: '위치 · 프리프롬프트',
+    band: 'c',
+    label: 'c08 · 프리프롬프트',
     login: null,
     render: () => (
       // c08 이 온보딩 체인에서 실제로 주입하는 Figma 목적 문구(TRIP-459) — 프리뷰도 정본과 맞춘다.
@@ -1638,7 +1661,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'onboarding-location-denied',
-    label: '위치 · 거부',
+    band: 'c',
+    label: 'c08 · 거부',
     login: null,
     render: () => (
       // onDismissNotice 를 주면 안내 줄에 닫기(×)가 그려진다(TRIP-592). 프리뷰는 정적이라
@@ -1655,7 +1679,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'onboarding-location-denied-dismissed',
-    label: '위치 · 거부(안내 닫힘)',
+    band: 'c',
+    label: 'c08 · 거부(안내 닫힘)',
     login: null,
     render: () => (
       // 1회성 닫기 후 상태 — 안내 줄이 사라지고 denied 프레임(계속·설정)만 남는다(TRIP-592).
@@ -1678,7 +1703,8 @@ const PREVIEW_STATES: PreviewState[] = [
   //    (엣지 표본은 `PREVIEW_REGIONS` 주석 참조: 인천 happy path·강원 sido=null·충북 묶음).
   {
     key: 'stay-region-default',
-    label: '지역 선택 · 숙소',
+    band: 'e',
+    label: 'e00 · 지역 선택 숙소',
     login: null,
     render: () => (
       <RegionPickerScreen
@@ -1696,7 +1722,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'stay-region-trip',
-    label: '지역 선택 · 여행지',
+    band: 'd',
+    label: 'd1b · 지역 선택 여행지',
     login: null,
     render: () => (
       // BR-U1-07 확인용 — 같은 컴포넌트에서 카피만 바뀌고 '내 주변'이 사라진다
@@ -1716,7 +1743,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // e05 숙소 등록(TRIP-369) — 세 표면 수정을 한 화면에서 대조(핀 탭·핀 찍기 전).
   {
     key: 'stay-register-pin',
-    label: '숙소 등록 · 핀 지정',
+    band: 'e',
+    label: 'e05 · 등록 핀 지정',
     login: null,
     render: () => (
       <StayRegisterScreen
@@ -1746,7 +1774,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 18이 범위(bg-primary-pale)로 그려지고, 여행 기간 밖(16 이전·22 이후)은 회색 disabled다.
   {
     key: 'stay-register-calendar',
-    label: '숙소 등록 · 달력 범위',
+    band: 'e',
+    label: 'e05 · 등록 달력 범위',
     login: null,
     render: () => (
       <StayRegisterScreen
@@ -1783,7 +1812,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // testID로 잡지만, 지도 미리보기·선택적 "지도에서 위치 확인" 버튼 존치는 실기로만 본다.
   {
     key: 'stay-register-confirmed',
-    label: '숙소 등록 · 후보 확정',
+    band: 'e',
+    label: 'e05 · 등록 후보 확정',
     login: null,
     render: () => (
       <StayRegisterScreen
@@ -1811,7 +1841,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // jest 는 색을 못 봐(AC-V1) 이 진입점이 분홍 채움을 눈으로 확인하는 유일한 자리다.
   {
     key: 'stay-search-saved',
-    label: '숙소 검색 · 저장 하트',
+    band: 'e',
+    label: 'e02 · 검색 저장 하트',
     login: null,
     render: () => (
       <StaySearchScreen
@@ -1826,7 +1857,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // e03 숙소 상세(TRIP-457) — 몰입 화면(탭바 없음). default 는 편의시설 4칩·가격·미니맵·CTA 2종.
   {
     key: 'stay-detail-default',
-    label: '숙소 상세 · 기본(e03)',
+    band: 'e',
+    label: 'e03 · 상세 기본',
     login: null,
     render: () => (
       <StayDetailScreen
@@ -1842,7 +1874,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 담김(찬 하트 분홍) + "일정에 추가" 안내 표시 + 편의시설 결측("미확인") 엣지를 한 화면에.
   {
     key: 'stay-detail-saved',
-    label: '숙소 상세 · 담김+안내+편의시설 결측',
+    band: 'e',
+    label: 'e03 · 상세 담김+결측',
     login: null,
     render: () => (
       <StayDetailScreen
@@ -1859,7 +1892,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 파싱 실패/부재 얼굴(INV-4) — item=null.
   {
     key: 'stay-detail-notfound',
-    label: '숙소 상세 · 불러오기 실패(notFound)',
+    band: 'e',
+    label: 'e03 · 상세 불러오기 실패',
     login: null,
     render: () => (
       <StayDetailScreen
@@ -1874,7 +1908,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 제휴 고지 시트(BR-U1-30) — book press 시 뜨는 시트. gorhom 이라 실 슬라이드는 실기 몫.
   {
     key: 'stay-ota-sheet',
-    label: '제휴 고지 시트 · e03(TRIP-457)',
+    band: 'e',
+    label: 'e03 · 제휴 고지 시트',
     login: null,
     render: () => (
       <View className="flex-1 justify-end bg-scrim/40">
@@ -1889,7 +1924,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // e02 가격대 필터 시트(TRIP-457) — 프리셋 버킷 4개 라디오.
   {
     key: 'stay-price-sheet',
-    label: '가격대 필터 시트 · e02(TRIP-457)',
+    band: 'e',
+    label: 'e02 · 가격대 필터 시트',
     login: null,
     render: () => (
       <View className="flex-1 justify-end bg-scrim/40">
@@ -1900,24 +1936,28 @@ const PREVIEW_STATES: PreviewState[] = [
   // ── 홈 대시보드 4상태(TRIP-170) — 프레젠테이션 전용, 고정 픽스처로 그린다 ──
   {
     key: 'home-default',
+    band: 'a',
     label: '홈 · 기본',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_DEFAULT_PROPS} />),
   },
   {
     key: 'home-no-trip',
+    band: 'a',
     label: '홈 · 첫 사용자',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_NO_TRIP_PROPS} />),
   },
   {
     key: 'home-empty',
+    band: 'a',
     label: '홈 · 취향 부족',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_EMPTY_PROPS} />),
   },
   {
     key: 'home-loading',
+    band: 'a',
     label: '홈 · 로딩',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_LOADING_PROPS} />),
@@ -1925,24 +1965,28 @@ const PREVIEW_STATES: PreviewState[] = [
   // ── 홈 여행 단계 얼굴 4종(TRIP-317) — 실기 판정 전용 진입점 ──
   {
     key: 'home-collecting',
+    band: 'a',
     label: '홈 · 담는 중',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_COLLECTING_PROPS} />),
   },
   {
     key: 'home-planning',
+    band: 'a',
     label: '홈 · 계획 중',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_PLANNING_PROPS} />),
   },
   {
     key: 'home-upcoming',
+    band: 'a',
     label: '홈 · 출발 전',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_UPCOMING_PROPS} />),
   },
   {
     key: 'home-post-trip',
+    band: 'a',
     label: '홈 · 여행 후',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_POST_TRIP_PROPS} />),
@@ -1953,13 +1997,15 @@ const PREVIEW_STATES: PreviewState[] = [
   // 재기동해 확인한다).
   {
     key: 'map-default',
-    label: '지도 · 기본',
+    band: '기타',
+    label: '기타 · 지도(map-default)',
     login: null,
     render: () => <KakaoMapView center={{ lat: 37.5665, lng: 126.978 }} />,
   },
   {
     key: 'records-default',
-    label: 'j01 방문 기록 · default',
+    band: 'j',
+    label: 'j01 · 방문 기록 기본',
     login: null,
     render: () => (
       <TripRecordsScreen
@@ -2031,7 +2077,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 실제 배치는 6-b 실기).
   {
     key: 'records-attribution-dateonly',
-    label: 'j01 방문 기록 · 숙소 없는 날(날짜만 귀속)',
+    band: 'j',
+    label: 'j01 · 날짜만 귀속',
     login: null,
     render: () => (
       <TripRecordsScreen
@@ -2068,7 +2115,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 딤은 못 본다(6-b 실기 전용) — 셀 트리·도착/완료 컬럼·저장/취소 레이아웃 육안 대조 자리.
   {
     key: 'records-visit-time-sheet',
-    label: 'j01 방문 시각 수정 시트 · 도착·완료',
+    band: 'j',
+    label: 'j01 · 방문 시각 시트',
     login: null,
     render: () => (
       <View className="flex-1">
@@ -2086,7 +2134,8 @@ const PREVIEW_STATES: PreviewState[] = [
   {
     // 엣지 — 도착 없는 방문: 완료 컬럼이 비활성(opacity-40 + accessibilityState.disabled).
     key: 'records-visit-time-sheet-no-arrival',
-    label: 'j01 방문 시각 수정 시트 · 도착 없음(완료 비활성)',
+    band: 'j',
+    label: 'j01 · 방문 시각 시트 도착없음',
     login: null,
     render: () => (
       <View className="flex-1">
@@ -2105,7 +2154,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 한 화면에서 육안 대조하는 자리(pill 색·글자 톤은 jest 사각 — repo-traps 글리프 함정 계열).
   {
     key: 'records-sync-badge',
-    label: 'j01 동기화 배지 · 4상태',
+    band: 'j',
+    label: 'j01 · 동기화 배지',
     login: null,
     render: () => (
       <View className="flex-1 gap-md bg-canvas px-lg pt-[80px]">
@@ -2126,7 +2176,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 채움/테두리 강조를 눈으로 대조하는 유일한 자리(자율 세션 — 6-b 실기는 다음 세션 몫).
   {
     key: 'records-conflict',
-    label: 'j01 동기화 충돌 해소 · 2건',
+    band: 'j',
+    label: 'j01 · 동기화 충돌',
     login: null,
     render: () => (
       <ConflictSheet
@@ -2160,7 +2211,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 썸네일·간격·EXIF 는 이 세션 검증 불가, 후속 티켓·6-b 몫). 상태 셀·문구는 jest 가 잠그고, 픽셀은 여기.
   {
     key: 'records-photo-memo',
-    label: 'j01 사진·메모 첨부 · 상태별',
+    band: 'j',
+    label: 'j01 · 사진·메모',
     login: null,
     render: () => (
       <View className="flex-1 gap-md bg-canvas px-lg pt-[80px]">
@@ -2192,7 +2244,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // → 입력(상한 4000)·저장/취소를 실기로 눌러 본다.
   {
     key: 'reflection-default',
-    label: 'j03 오늘의 회고 · default',
+    band: 'j',
+    label: 'j03 · 회고 기본',
     login: null,
     render: () => (
       <DailyReflectionScreen
@@ -2228,7 +2281,8 @@ const PREVIEW_STATES: PreviewState[] = [
   {
     // 부분 데이터 — 방문<2(거리 "—" + 지도 자리 사유) · 사진 0장("사진 없음" 자리). BR-U5-34 실증.
     key: 'reflection-data-insufficient',
-    label: 'j03 오늘의 회고 · 데이터 부족',
+    band: 'j',
+    label: 'j03 · 회고 데이터 부족',
     login: null,
     render: () => (
       <DailyReflectionScreen
@@ -2254,7 +2308,8 @@ const PREVIEW_STATES: PreviewState[] = [
   {
     // empty — 기록 없음: 빈 원 일러스트 + CTA "직접 회고 작성"(누르면 편집 입력이 열린다).
     key: 'reflection-empty',
-    label: 'j03 오늘의 회고 · empty',
+    band: 'j',
+    label: 'j03 · 회고 빈 상태',
     login: null,
     render: () => (
       <DailyReflectionScreen
@@ -2280,7 +2335,8 @@ const PREVIEW_STATES: PreviewState[] = [
   {
     // error — 회고 조회 실패: stats 는 채움(BASIC 카드, INV-U5-07) + 에러 카드(다시 시도) + CTA.
     key: 'reflection-error',
-    label: 'j03 오늘의 회고 · error',
+    band: 'j',
+    label: 'j03 · 회고 실패',
     login: null,
     render: () => (
       <DailyReflectionScreen
@@ -2311,7 +2367,8 @@ const PREVIEW_STATES: PreviewState[] = [
     // default(MAP) — stats 3셀 + 지도 히어로(좌표 주입) + 날짜카드 3장. 실화면은 좌표 계약 부재라 늘
     // map-pending 으로 접히므로(share-off 키 참고) MAP 히어로 자체는 이 키가 유일한 대조 자리.
     key: 'trip-summary-map',
-    label: 'j04 여행 요약 · default(MAP)',
+    band: 'j',
+    label: 'j04 · 요약 지도',
     login: null,
     render: () => (
       <TripSummaryScreen
@@ -2354,7 +2411,8 @@ const PREVIEW_STATES: PreviewState[] = [
   {
     // 위치 전무(VISIT_LIST) — 거리 셀 "—" + 지도 대신 순서 방문 목록(BR-U5-39). 날짜카드 없음.
     key: 'trip-summary-visit-list',
-    label: 'j04 여행 요약 · 위치 전무(방문 목록)',
+    band: 'j',
+    label: 'j04 · 요약 방문목록',
     login: null,
     render: () => (
       <TripSummaryScreen
@@ -2378,7 +2436,8 @@ const PREVIEW_STATES: PreviewState[] = [
     // 엣지 — 공유 비활성(ready:false → shareEnabled:false) + 좌표 미주입 → map-pending 자리표시.
     // 두 엣지(비활성 공유 · 지도 준비 중)를 한 화면에서 대조한다(실화면 MAP 의 실제 런타임 얼굴).
     key: 'trip-summary-share-off',
-    label: 'j04 여행 요약 · 공유 비활성·지도 준비 중',
+    band: 'j',
+    label: 'j04 · 요약 공유 비활성',
     login: null,
     render: () => (
       <TripSummaryScreen
@@ -2408,7 +2467,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 육안 대조 자리(포맷 세그를 눌러 9:16→1:1→4:5 종횡비가 바뀌는 것도 여기서 확인).
   {
     key: 'share-card-default',
-    label: 'j06 공유 카드 · default(사진 있음)',
+    band: 'j',
+    label: 'j06 · 공유 카드 사진',
     login: null,
     render: () => (
       <ShareCardScreen
@@ -2441,7 +2501,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'share-card-no-photo',
-    label: 'j06 공유 카드 · no-photo(사진 없음)',
+    band: 'j',
+    label: 'j06 · 공유 카드 사진없음',
     login: null,
     render: () => (
       <ShareCardScreen
@@ -2474,7 +2535,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // — 자율/야간이라 6-b SKIP, 이 3키가 유일한 육안 대조 자리(정식·avgDwell null degrade·임시 3얼굴).
   {
     key: 'travel-style-official',
-    label: 'j05 여행 스타일 · 정식(default)',
+    band: 'j',
+    label: 'j05 · 스타일 정식',
     login: null,
     render: () => (
       <TravelStyleScreen
@@ -2503,7 +2565,8 @@ const PREVIEW_STATES: PreviewState[] = [
   {
     // 엣지 — avgDwellMinutes:null → 평균 체류 타일이 사라진다(0 으로 안 채움, BR-U5-08a degrade).
     key: 'travel-style-no-dwell',
-    label: 'j05 여행 스타일 · 정식(체류 미측정)',
+    band: 'j',
+    label: 'j05 · 스타일 체류 미측정',
     login: null,
     render: () => (
       <TravelStyleScreen
@@ -2531,7 +2594,8 @@ const PREVIEW_STATES: PreviewState[] = [
   {
     // 임시 — official:false. 진행 게이지 + "정식 아님" + 온보딩 취향 미리보기 칩(Figma 목업엔 없으나 BR 우선).
     key: 'travel-style-insufficient',
-    label: 'j05 여행 스타일 · 임시(부족)',
+    band: 'j',
+    label: 'j05 · 스타일 임시',
     login: null,
     render: () => (
       <TravelStyleScreen
@@ -2549,7 +2613,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 여기 키를 늘리지 않는다.
   {
     key: 'places-results',
-    label: '장소 탐색 · 결과',
+    band: 'd',
+    label: 'd04 · 장소 탐색 결과',
     login: null,
     render: () => (
       <PlaceExploreScreen
@@ -2566,7 +2631,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'saved-places-results',
-    label: '담은 장소 · 결과',
+    band: 'd',
+    label: 'd02 · 담은 장소 결과',
     login: null,
     render: () => (
       <SavedPlaceListScreen
@@ -2581,7 +2647,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 나머지는 찬 하트로 남는다(같은 목록에서 빈/찬을 대조). jest 는 색을 못 봐 실기 전용 자리.
   {
     key: 'saved-places-released',
-    label: '담은 장소 · 해제(빈 하트)',
+    band: 'd',
+    label: 'd02 · 담은 장소 해제',
     login: null,
     render: () => (
       <SavedPlaceListScreen
@@ -2597,7 +2664,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // d01 탐색 랜딩(TRIP-201) — 3얼굴: 담은 곳 CTA / 담은 곳 0 안내 / 숙소 레인 실패 재시도.
   {
     key: 'explore-landing-default',
-    label: '탐색 랜딩 · 담은 곳 CTA',
+    band: 'd',
+    label: 'd01 · 랜딩 담은 곳 CTA',
     login: null,
     render: () => (
       <ExploreLandingScreen
@@ -2620,7 +2688,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'explore-landing-empty-bridge',
-    label: '탐색 랜딩 · 담은 곳 0',
+    band: 'd',
+    label: 'd01 · 랜딩 담은 곳 0',
     login: null,
     render: () => (
       <ExploreLandingScreen
@@ -2643,7 +2712,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'explore-landing-stay-error',
-    label: '탐색 랜딩 · 숙소 레인 실패',
+    band: 'd',
+    label: 'd01 · 랜딩 숙소 레인 실패',
     login: null,
     render: () => (
       <ExploreLandingScreen
@@ -2663,7 +2733,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 회선을 늦추거나 끊으면 실화면에서 그대로 재현되므로 여기 키를 늘리지 않는다.
   {
     key: 'trip-new-step1-seeded',
-    label: '여행 만들기 1/2 · 꼭 갈 곳',
+    band: 'g',
+    label: 'g01 · 만들기 1/2 꼭 갈 곳',
     login: null,
     render: () => (
       <TripWizardStep1Screen
@@ -2681,7 +2752,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'trip-new-step1-no-saved',
-    label: '여행 만들기 1/2 · 담은 곳 0',
+    band: 'g',
+    label: 'g01 · 만들기 1/2 담은 곳 0',
     login: null,
     render: () => (
       <TripWizardStep1Screen
@@ -2697,7 +2769,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 있어야 문구가 뜬다 — 빈 검색어면 전체가 보인다.
   {
     key: 'trip-new-step1-search-empty',
-    label: '여행 만들기 1/2 · 지역 검색 불일치',
+    band: 'g',
+    label: 'g01 · 만들기 1/2 검색 불일치',
     login: null,
     render: () => (
       <TripWizardStep1Screen
@@ -2713,7 +2786,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 자리다. base가 출발일(2026-06-10)을 이미 들어 그 셀이 선택돼 열리고 확정이 활성이다.
   {
     key: 'trip-new-step1-datesheet',
-    label: '여행 만들기 1/2 · 출발일 시트',
+    band: 'g',
+    label: 'g01 · 만들기 1/2 출발일 시트',
     login: null,
     render: () => (
       <TripWizardStep1Screen
@@ -2730,7 +2804,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // '미식'을 선택 상태로 열어 선택/비선택 칩을 한 화면에서 대조한다.
   {
     key: 'trip-new-step1-prefsheet',
-    label: '여행 만들기 1/2 · 취향 바꾸기 시트',
+    band: 'g',
+    label: 'g01 · 만들기 1/2 취향 시트',
     login: null,
     render: () => (
       <TripWizardStep1Screen
@@ -2753,13 +2828,15 @@ const PREVIEW_STATES: PreviewState[] = [
   // 상태를 추가한다"). blocked 는 default 에 unresolved + generateDisabled 만 얹은 것이다.
   {
     key: 'trip-new-step2-default',
-    label: '거점 숙소 2/2 · 기본',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/2 기본',
     login: null,
     render: () => <TripWizardStep2Screen {...TRIP_BASE_SCREEN} />,
   },
   {
     key: 'trip-new-step2-blocked',
-    label: '거점 숙소 2/2 · 차단',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/2 차단',
     login: null,
     render: () => (
       <TripWizardStep2Screen
@@ -2777,7 +2854,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'trip-new-step2-coverage-failed',
-    label: '거점 숙소 2/2 · 커버리지 실패',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/2 커버리지 실패',
     login: null,
     render: () => (
       <TripWizardStep2Screen
@@ -2793,7 +2871,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 아래 `mapfail` 과 같은 화면이 된다(그 판정이 실기에서 맞는지 보는 것이 이 상태의 목적).
   {
     key: 'trip-new-step2-gate',
-    label: '거점 숙소 2/2 · 전제 게이트',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/2 전제 게이트',
     login: null,
     render: () => (
       <TripWizardStep2Screen
@@ -2842,7 +2921,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'trip-new-step2-fixsheet-map',
-    label: '거점 숙소 2/2 · 보완 시트(지도)',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/2 보완 시트 지도',
     login: null,
     render: () => (
       <TripWizardStep2Screen
@@ -2853,7 +2933,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'trip-new-step2-fixsheet-mapfail',
-    label: '거점 숙소 2/2 · 보완 시트(지도 불가)',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/2 보완 시트 지도 불가',
     login: null,
     render: () => (
       <TripWizardStep2Screen
@@ -2864,7 +2945,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'trip-new-step2-fixsheet-error',
-    label: '거점 숙소 2/2 · 보완 시트(저장 실패)',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/2 보완 시트 저장 실패',
     login: null,
     render: () => (
       <TripWizardStep2Screen
@@ -2882,7 +2964,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'trip-new-step2-loading',
-    label: '거점 숙소 2/2 · 로딩',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/2 로딩',
     login: null,
     render: () => (
       <TripWizardStep2Screen
@@ -2896,7 +2979,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'trip-new-step2-empty',
-    label: '거점 숙소 2/2 · 저장 숙소 0',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/2 저장 숙소 0',
     login: null,
     render: () => (
       <TripWizardStep2Screen
@@ -2909,7 +2993,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'trip-new-step2-error',
-    label: '거점 숙소 2/2 · 조회 실패',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/2 조회 실패',
     login: null,
     render: () => (
       <TripWizardStep2Screen
@@ -2923,7 +3008,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'trip-new-step2-notrip',
-    label: '거점 숙소 2/2 · 여행 없음',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/2 여행 없음',
     login: null,
     render: () => (
       <TripWizardStep2Screen
@@ -2938,7 +3024,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // h05·h07 필수 방문지 (TRIP-296) — Figma 대조용 격리 렌더.
   {
     key: 'itinerary-mustvisit-default',
-    label: '필수 방문지 h05',
+    band: 'h',
+    label: 'h05 · 필수 방문지',
     login: null,
     render: () => (
       <MustVisitPickerScreen
@@ -2956,7 +3043,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'itinerary-mustvisit-time-default',
-    label: '방문 시각 지정 h07',
+    band: 'h',
+    label: 'h07 · 방문 시각 지정',
     login: null,
     render: () => (
       <MustVisitTimeScreen
@@ -2986,7 +3074,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // `tripId` 와 서버의 2단계 생성 응답이 있어야 하는데 백엔드 없이는 안 생긴다.
   {
     key: 'itinerary-draft-default',
-    label: '추천안 초안 h11',
+    band: 'h',
+    label: 'h11 · 추천안 초안',
     login: null,
     render: () => <DraftScreen {...DRAFT_PREVIEW_BASE} />,
   },
@@ -2994,6 +3083,7 @@ const PREVIEW_STATES: PreviewState[] = [
     // h10 "만드는 중"(TRIP-337) — 같은 픽스처에 generating 만 얹는다. 게이지 3상태(day1 완성 /
     // day2 생성 중 / day3 대기)와 스켈레톤은 tabs 에서 도출돼 손으로 적을 값이 없다.
     key: 'itinerary-draft-generating',
+    band: 'h',
     label: 'h10 · 만드는 중',
     login: null,
     render: () => (
@@ -3010,6 +3100,7 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'itinerary-draft-stale-failed',
+    band: 'h',
     label: 'h11 · 부분 실패',
     login: null,
     render: () => (
@@ -3021,6 +3112,7 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'itinerary-draft-loading',
+    band: 'h',
     label: 'h11 · 로딩',
     login: null,
     render: () => (
@@ -3033,6 +3125,7 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'itinerary-draft-empty',
+    band: 'h',
     label: 'h11 · 빈 화면',
     login: null,
     render: () => (
@@ -3041,6 +3134,7 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'itinerary-draft-nopins',
+    band: 'h',
     label: 'h11 · 좌표 없는 날',
     login: null,
     render: () => (
@@ -3060,7 +3154,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 곁에 붙으며, MINIMAL 만 배너 안에 [다시 시도]를 갖는다.
   {
     key: 'itinerary-draft-fallback-deterministic',
-    label: 'h11 · 폴백(기본 모드)',
+    band: 'h',
+    label: 'h11 · 폴백 기본 모드',
     login: null,
     render: () => (
       <DraftScreen
@@ -3071,7 +3166,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'itinerary-draft-fallback-minimal',
-    label: 'h11 · 폴백(최소 일정)',
+    band: 'h',
+    label: 'h11 · 폴백 최소 일정',
     login: null,
     render: () => (
       <DraftScreen
@@ -3082,6 +3178,7 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'itinerary-draft-fallback-demoted',
+    band: 'h',
     label: 'h11 · 후보 강등',
     login: null,
     render: () => (
@@ -3096,6 +3193,7 @@ const PREVIEW_STATES: PreviewState[] = [
   // 값 그대로이고, 실기에서는 **서버가 준 문자열이 그대로** 들어온다(01b D8).
   {
     key: 'itinerary-draft-zero',
+    band: 'h',
     label: 'h35 · 후보 0건',
     login: null,
     render: () => (
@@ -3110,6 +3208,7 @@ const PREVIEW_STATES: PreviewState[] = [
   // 생성 선행조건(거점 커버리지·겹침) 게이트는 h04 에 없다 — 그 판단은 여행 생성 2/2(g02)가 소유한다.
   {
     key: 'itinerary-method',
+    band: 'h',
     label: 'h04 · 시작 방법',
     login: null,
     render: () => <MethodPickerScreen onBack={noop} onPressFullAi={noop} />,
@@ -3118,6 +3217,7 @@ const PREVIEW_STATES: PreviewState[] = [
   // 실화면에선 조회로 판정해 켜지는 얼굴이라, 여기서 상태만 얹어(`showRegenerateConfirm`) 육안 대조한다.
   {
     key: 'itinerary-method-regenerate',
+    band: 'h',
     label: 'h04 · 재생성 확인',
     login: null,
     render: () => (
@@ -3137,6 +3237,7 @@ const PREVIEW_STATES: PreviewState[] = [
   // 잠깐만 스치는 얼굴이라(성공 즉시 draft 로 replace) 여기가 이 화면을 오래 보는 유일한 자리다.
   {
     key: 'itinerary-generating',
+    band: 'h',
     label: 'h09 · 생성 중',
     login: null,
     render: () => (
@@ -3146,6 +3247,7 @@ const PREVIEW_STATES: PreviewState[] = [
   // h09 생성 실패(AC-6·INV-4) — POST 오류 시 침묵하지 않고 실패 표면 + [다시 시도]를 낸다.
   {
     key: 'itinerary-generating-failed',
+    band: 'h',
     label: 'h09 · 생성 실패',
     login: null,
     render: () => (
@@ -3162,7 +3264,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 배선 없이 얼굴이 그대로 나온다.
   {
     key: 'itinerary-timeline',
-    label: '완성 일정 · 시간표(h25)',
+    band: 'h',
+    label: 'h25 · 완성 일정 시간표',
     login: null,
     render: () => (
       <TimelineScreen
@@ -3181,7 +3284,8 @@ const PREVIEW_STATES: PreviewState[] = [
   {
     // 확정 예방 잠금(TRIP-337 · AC-4) — PARTIAL 이면 확정 CTA 가 회색 disabled + 사유 병기.
     key: 'itinerary-timeline-confirm-locked',
-    label: '완성 일정 · 확정 잠김(h25 PARTIAL)',
+    band: 'h',
+    label: 'h25 · 확정 잠김 PARTIAL',
     login: null,
     render: () => (
       <TimelineScreen
@@ -3202,7 +3306,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 좌표 부재 슬롯(자갈치)이 섞여 핀 결번 ①②④ + "지도 미표시" 배지도 한 화면에서 확인된다.
   {
     key: 'itinerary-map',
-    label: '완성 일정 · 풀카드+인라인지도(h25/h34)',
+    band: 'h',
+    label: 'h25 · 풀카드+인라인지도',
     login: null,
     render: () => (
       <TimelineScreen
@@ -3221,7 +3326,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 과 대조한다(전부 imageUrl null). 픽셀·아이콘 fill 은 jest 사각이라 이 프리뷰가 유일한 육안 그물.
   {
     key: 'itinerary-timeline-placeholder',
-    label: '완성 일정 · 사진 없는 카테고리 플레이스홀더(h25)',
+    band: 'h',
+    label: 'h25 · 카테고리 플레이스홀더',
     login: null,
     render: () => (
       <TimelineScreen
@@ -3247,7 +3353,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // Figma h37 2971:1656 과 대조한다. 배지 pill·resume 오버레이·사진 자리는 jest 사각(6-b 전용).
   {
     key: 'my-trips-list',
-    label: '내 여행 목록 · 완성/작성중/미도착(h37)',
+    band: 'h',
+    label: 'h37 · 내 여행 목록',
     login: null,
     render: () => (
       <MyTripsListScreen
@@ -3261,13 +3368,15 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'my-trips-empty',
-    label: '내 여행 목록 · empty(h37)',
+    band: 'h',
+    label: 'h37 · 내 여행 empty',
     login: null,
     render: () => <MyTripsListScreen mode="empty" onPressCreateTrip={noop} />,
   },
   {
     key: 'my-trips-loading',
-    label: '내 여행 목록 · 스켈레톤 2장(h37)',
+    band: 'h',
+    label: 'h37 · 내 여행 스켈레톤',
     login: null,
     render: () => <MyTripsListScreen mode="loading" onPressCreateTrip={noop} />,
   },
@@ -3275,7 +3384,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 행을 한 화면에서 Figma l03 default(1602:2388)와 대조한다. 예정 2건 + 종료 2건(회고 진입 chevron).
   {
     key: 'my-page-default',
-    label: '마이페이지 · 예정+지난 여행(l03)',
+    band: 'l',
+    label: 'l03 · 예정+지난 여행',
     login: null,
     render: () => (
       <MyPageScreen
@@ -3303,7 +3413,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 계약에 필드가 없어 그리지 않는다(드리프트 ① 해소).
   {
     key: 'my-page-empty',
-    label: '마이페이지 · 예정 0·종료 0 엣지(l03)',
+    band: 'l',
+    label: 'l03 · 예정 0·종료 0',
     login: null,
     render: () => (
       <MyPageScreen
@@ -3325,7 +3436,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // (INV-U5-09). 실화면 딥링크로는 백엔드 없이 이 얼굴을 못 보므로 카드를 단독으로 세워 대조한다.
   {
     key: 'my-style-card-insufficient',
-    label: '스타일 카드 · 미달(<10곳) 안내(l03)',
+    band: 'l',
+    label: 'l03 · 스타일 카드 미달',
     login: null,
     render: () => (
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -3340,7 +3452,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 변경/지정" 을 누르면 BaseToggleDialog(딤+중앙 카드)가 뜨는 것도 여기서 실제로 조작해 본다.
   {
     key: 'my-stays-default',
-    label: '등록 숙소·예약 기록 · 3행(l04)',
+    band: 'l',
+    label: 'l04 · 등록 숙소 3행',
     login: null,
     render: () => (
       <MyStaysScreen
@@ -3355,7 +3468,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // l04 empty(1605:2440) — 숙소 0건 안내(침대 일러스트 + "숙소 탐색" CTA → /stays). US-NOTIF-06 예외.
   {
     key: 'my-stays-empty',
-    label: '등록 숙소 0건 · 탐색(l04)',
+    band: 'l',
+    label: 'l04 · 등록 숙소 0건',
     login: null,
     render: () => (
       <MyStaysScreen
@@ -3371,7 +3485,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 빨강/회색·thumb 위치·정보 배너 틴트는 jest 사각이라 이 키가 육안 대조 자리다.
   {
     key: 'l02-notification-default',
-    label: '알림 설정 · 6행 default(l02)',
+    band: 'l',
+    label: 'l02 · 알림 설정 기본',
     login: null,
     render: () => (
       <NotificationSettingsScreen
@@ -3387,7 +3502,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 전부 회색 비활성·인앱은 정상·하단 푸시-누적 줄. 대시·칩·dimmed 는 6-b 실기 확인.
   {
     key: 'l02-notification-denied',
-    label: '알림 설정 · OS 권한 거부(l02)',
+    band: 'l',
+    label: 'l02 · 알림 설정 권한 거부',
     login: null,
     render: () => (
       <NotificationSettingsScreen
@@ -3404,7 +3520,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 시각칩에 onPress 가 안 붙어 조정이 안 열리는 것도 여기서 확인한다.
   {
     key: 'itinerary-edit',
-    label: '일정 편집 · h24(TRIP-302)',
+    band: 'h',
+    label: 'h24 · 일정 편집',
     login: null,
     render: () => (
       <ItineraryEditScreen
@@ -3422,7 +3539,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'itinerary-edit-time-sheet',
-    label: '시각 조정 시트 · h24(TRIP-302)',
+    band: 'h',
+    label: 'h24 · 시각 조정 시트',
     login: null,
     render: () => (
       <View className="flex-1">
@@ -3440,7 +3558,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 뜬다(appbar `확정 일정`·공유 아이콘은 유지). 안내·공유 어중간한 상태를 눈으로 대조하는 자리.
   {
     key: 'itinerary-confirmed',
-    label: '확정 일정 · 읽기전용(h34)',
+    band: 'h',
+    label: 'h34 · 확정 읽기전용',
     login: null,
     render: () => (
       <TimelineScreen
@@ -3460,7 +3579,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 안 생긴다). 인라인 패널이라 오버레이 없이 스크롤 흐름 안에서 그리고, 헤더에 시간대(오후)를 얹는다.
   {
     key: 'slot-candidate-panel',
-    label: '다른 후보로 바꾸기 · 인라인 패널(h12)',
+    band: 'h',
+    label: 'h12 · 다른 후보 인라인 패널',
     login: null,
     render: () => (
       <ScrollView contentContainerClassName="gap-md p-lg">
@@ -3478,7 +3598,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'slot-candidate-panel-pending',
-    label: '다른 후보로 바꾸기 · 교체 중(h12)',
+    band: 'h',
+    label: 'h12 · 다른 후보 교체 중',
     login: null,
     render: () => (
       <ScrollView contentContainerClassName="gap-md p-lg">
@@ -3496,7 +3617,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'slot-candidate-panel-degraded',
-    label: '다른 후보로 바꾸기 · 강등 고지(h12)',
+    band: 'h',
+    label: 'h12 · 다른 후보 강등 고지',
     login: null,
     render: () => (
       <ScrollView contentContainerClassName="gap-md p-lg">
@@ -3515,7 +3637,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'slot-candidate-panel-empty',
-    label: '다른 후보로 바꾸기 · 0건(h12)',
+    band: 'h',
+    label: 'h12 · 다른 후보 0건',
     login: null,
     render: () => (
       <ScrollView contentContainerClassName="gap-md p-lg">
@@ -3533,7 +3656,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'slot-candidate-panel-error',
-    label: '다른 후보로 바꾸기 · 실패(h12)',
+    band: 'h',
+    label: 'h12 · 다른 후보 실패',
     login: null,
     render: () => (
       <ScrollView contentContainerClassName="gap-md p-lg">
@@ -3552,7 +3676,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'option-swap',
-    label: '옵션 교체 · 화면(h18)',
+    band: 'h',
+    label: 'h18 · 옵션 교체 화면',
     login: null,
     render: () => (
       <OptionSwapScreen
@@ -3569,7 +3694,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'option-swap-selected',
-    label: '옵션 교체 · 선택 후 실패(h18)',
+    band: 'h',
+    label: 'h18 · 옵션 교체 선택 후 실패',
     login: null,
     render: () => (
       <OptionSwapScreen
@@ -3587,7 +3713,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'option-swap-empty',
-    label: '옵션 교체 · 0건(h18)',
+    band: 'h',
+    label: 'h18 · 옵션 교체 0건',
     login: null,
     render: () => (
       <OptionSwapScreen
@@ -3607,7 +3734,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 확인 자리다(6-b 실기 스모크 진입점). 빈 상태·슬롯 채움+위반·검색을 세 얼굴로 대조한다.
   {
     key: 'manual-empty',
-    label: '직접 짜기 · 빈 일정(h19)',
+    band: 'h',
+    label: 'h19 · 직접 짜기 빈 일정',
     login: null,
     render: () => (
       <ManualPlanScreen
@@ -3621,7 +3749,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'manual-filled',
-    label: '직접 짜기 · 슬롯 채움+위반(h19)',
+    band: 'h',
+    label: 'h19 · 직접 짜기 슬롯 채움+위반',
     login: null,
     render: () => (
       <ManualPlanScreen
@@ -3671,7 +3800,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'place-add',
-    label: '장소 추가·검색(h20)',
+    band: 'h',
+    label: 'h20 · 장소 추가·검색',
     login: null,
     render: () => (
       <PlaceAddScreen
@@ -3690,7 +3820,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'place-add-notready',
-    label: '장소 추가·일정 미도착(h20)',
+    band: 'h',
+    label: 'h20 · 장소 추가 일정 미도착',
     login: null,
     render: () => (
       <PlaceAddScreen
@@ -3712,7 +3843,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 유일하게 눈으로 보는 곳. 결측 얼굴은 model 결측 스위치를 켠 뷰를 그대로 얹는다.
   {
     key: 'live-place-default',
-    label: '현재 장소 상세 i05',
+    band: 'i',
+    label: 'i05 · 현재 장소 상세',
     login: null,
     render: () => (
       <PlaceDetailScreen
@@ -3723,7 +3855,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'live-place-unknown',
-    label: '현재 장소 상세 i05 · 결측(미확인·확인 필요)',
+    band: 'i',
+    label: 'i05 · 현재 장소 상세 결측',
     login: null,
     render: () => (
       <PlaceDetailScreen
@@ -3742,7 +3875,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // i01 여행 중 일정(TRIP-396) — done·active·upcoming 세 카드 상태를 한 타임라인에서.
   {
     key: 'live-itinerary',
-    label: '여행 중 일정 i01 · 방문 체크',
+    band: 'i',
+    label: 'i01 · 여행 중 일정 방문 체크',
     login: null,
     render: () => (
       <LiveItineraryScreen
@@ -3775,7 +3909,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 칩·배너는 순수 프레젠테이션이라 페이지가 조립할 문구·아이콘·콜백을 여기서 직접 얹는다.
   {
     key: 'live-itinerary-trigger',
-    label: '여행 중 일정 i01 · 트리거 칩+배너(발화)',
+    band: 'i',
+    label: 'i08 · 트리거 칩+배너',
     login: null,
     render: () => (
       <LiveItineraryScreen
@@ -3821,7 +3956,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 자리가 카드 그림자·거점 지정 하단 버튼·empty 콜라주·돋보기 CTA 를 눈으로 대조하는 곳이다.
   {
     key: 'saved-stays-default',
-    label: '저장한 숙소 e04 · 목록',
+    band: 'e',
+    label: 'e04 · 저장한 숙소 목록',
     login: null,
     render: () => (
       <SavedStayListScreen
@@ -3835,7 +3971,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'saved-stays-empty',
-    label: '저장한 숙소 e04 · 빈 상태',
+    band: 'e',
+    label: 'e04 · 저장한 숙소 빈 상태',
     login: null,
     render: () => (
       <SavedStayListScreen
@@ -3850,7 +3987,8 @@ const PREVIEW_STATES: PreviewState[] = [
   //    정적 프리뷰에서도 못 보므로(통과형 목과 같은 원리) 여기서 보는 것은 칩·CTA·안내 레이아웃까지다 ──
   {
     key: 'planb-request',
-    label: 'i10 재계획 요청 · 수동 진입',
+    band: 'i',
+    label: 'i10 · 재계획 요청 수동',
     login: null,
     render: () => (
       <View className="flex-1">
@@ -3871,7 +4009,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'planb-request-detected',
-    label: 'i10 재계획 요청 · 감지 배너(자동 진입)',
+    band: 'i',
+    label: 'i10 · 재계획 요청 감지 배너',
     login: null,
     render: () => (
       <View className="flex-1">
@@ -3894,7 +4033,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'planb-request-out-of-scope',
-    label: 'i10 재계획 요청 · 범위 밖(표시만·제출잠금)',
+    band: 'i',
+    label: 'i10 · 재계획 요청 범위 밖',
     login: null,
     render: () => (
       <View className="flex-1">
@@ -3918,7 +4058,8 @@ const PREVIEW_STATES: PreviewState[] = [
   //    스크린샷 한계라 여기서 보는 것은 레이아웃·라벨·안심 노트·CTA 2개까지다 ──
   {
     key: 'planb-solving',
-    label: 'i12 재계획 로딩 · 진행·백그라운드·취소',
+    band: 'i',
+    label: 'i12 · 재계획 로딩',
     login: null,
     render: () => <ReplanSolvingScreen onBackground={noop} onCancel={noop} />,
   },
@@ -3926,7 +4067,8 @@ const PREVIEW_STATES: PreviewState[] = [
   //    은 slackTime.ts(model) 산출 형태를 그대로 주입한다(ui 소스엔 숫자 리터럴 0) ──
   {
     key: 'planb-candidates',
-    label: 'i14 슬롯 후보 · 3장',
+    band: 'i',
+    label: 'i14 · 슬롯 후보 3장',
     login: null,
     render: () => (
       <ScrollView contentContainerClassName="gap-md p-lg">
@@ -3939,7 +4081,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'planb-candidates-degraded',
-    label: 'i14 슬롯 후보 · 강등 고지(가까운 순)',
+    band: 'i',
+    label: 'i14 · 슬롯 후보 강등',
     login: null,
     render: () => (
       <ScrollView contentContainerClassName="gap-md p-lg">
@@ -3953,7 +4096,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'planb-candidates-empty',
-    label: 'i14 슬롯 후보 · 0건(반경·컨셉 제안)',
+    band: 'i',
+    label: 'i14 · 슬롯 후보 0건',
     login: null,
     render: () => (
       <ScrollView contentContainerClassName="gap-md p-lg">
@@ -3967,7 +4111,8 @@ const PREVIEW_STATES: PreviewState[] = [
   //    열림은 6-b). draft 실슬롯 바인딩은 BE 후속 ──
   {
     key: 'planb-replan-draft',
-    label: 'i13 재계획안 · 채운 슬롯(배지 5종·후보·고정)',
+    band: 'i',
+    label: 'i13 · 재계획안 채운 슬롯',
     login: null,
     render: () => (
       <ReplanDraftScreen
@@ -3982,7 +4127,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'planb-replan-draft-empty',
-    label: 'i13 재계획안 · 빈 슬롯 degrade(헤더·이월만)',
+    band: 'i',
+    label: 'i13 · 재계획안 빈 슬롯',
     login: null,
     render: () => (
       <ReplanDraftScreen
@@ -3999,7 +4145,8 @@ const PREVIEW_STATES: PreviewState[] = [
   //    no-op 자리표시(페이지가 실배선 결정). 실 지도·버튼 정렬은 6-b ──
   {
     key: 'planb-noalt',
-    label: 'i16 대안 없음 · 3버튼·경고',
+    band: 'i',
+    label: 'i16 · 대안 없음',
     login: null,
     render: () => (
       <NoAlternativeScreen
@@ -4014,7 +4161,8 @@ const PREVIEW_STATES: PreviewState[] = [
   //    정렬은 jest 사각이라 이 키가 육안 대조 자리다(지표·전후 배지·되돌리기는 draft 부재로 없음) ──
   {
     key: 'planb-applied',
-    label: 'i19 반영 완료 · 체크·여행 계속하기',
+    band: 'i',
+    label: 'i19 · 반영 완료',
     login: null,
     render: () => <ReplanAppliedScreen onBack={noop} onContinue={noop} />,
   },
@@ -4024,13 +4172,15 @@ const PREVIEW_STATES: PreviewState[] = [
   //    QueryClient 없이 렌더된다 ──
   {
     key: 'live-location-manual',
-    label: 'i20 수동 위치 입력 · 측위 불가',
+    band: 'i',
+    label: 'i20 · 수동 위치 입력',
     login: null,
     render: () => <LiveLocationPage tripId="preview-trip" state="manual" />,
   },
   {
     key: 'live-location-denied',
-    label: 'i21 위치 권한 거부 · 등록 숙소 프리시드',
+    band: 'i',
+    label: 'i21 · 위치 권한 거부',
     login: null,
     render: () => (
       <LiveLocationPage tripId="preview-trip" state="permission-denied" />
@@ -4043,19 +4193,22 @@ const PREVIEW_STATES: PreviewState[] = [
   //    i22 `1790:3612`). 자체 조회 없는 프리젠테이션이라 QueryClient 없이 렌더된다 ──
   {
     key: 'planb-manual-normal',
-    label: 'i15 일정 편집 · 정상([직접 고르기])',
+    band: 'i',
+    label: 'i15 · 일정 편집 정상',
     login: null,
     render: () => <ManualEditPreview />,
   },
   {
     key: 'planb-manual-fallback',
-    label: 'i22 일정 직접 수정 · 폴백(외부 API 오류)',
+    band: 'i',
+    label: 'i22 · 일정 직접 수정 폴백',
     login: null,
     render: () => <ManualEditPreview variant="error" />,
   },
   {
     key: 'planb-manual-violation',
-    label: 'i22 폴백 · 숙소 고정 충돌 위반 배지',
+    band: 'i',
+    label: 'i22 · 폴백 위반 배지',
     login: null,
     render: () => (
       <ManualEditScreen
@@ -4076,7 +4229,8 @@ const PREVIEW_STATES: PreviewState[] = [
   //    (i09 `1790:2869`). 자율 세션이라 6-b 미실행이면 다음 세션 확인 대상 ──
   {
     key: 'planb-triggers-active',
-    label: 'i09 감지된 변화 · 발화(날씨 활성)',
+    band: 'i',
+    label: 'i09 · 감지된 변화 발화',
     login: null,
     render: () => {
       const { activeBanner, rows } = triggerWatchlist(
@@ -4095,7 +4249,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'planb-triggers-normal',
-    label: 'i09 감지된 변화 · 정상(발화 없음)',
+    band: 'i',
+    label: 'i09 · 감지된 변화 정상',
     login: null,
     render: () => {
       const { activeBanner, rows } = triggerWatchlist([]);
@@ -4114,7 +4269,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 못 보는 것(6그룹 카드 레이아웃·리딩 아이콘 12종·"준비 중" 비활성·위험/동의 pill)을 여기서 눈으로.
   {
     key: 'settings-default',
-    label: 'l05 설정 · 기본(active)',
+    band: 'l',
+    label: 'l05 · 설정 기본',
     login: null,
     render: () => (
       <SettingsScreen
@@ -4135,7 +4291,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 내보내기 잘림 고지(INV-4) — 상한에 걸려 잘린 몫을 조용히 삼키지 않고 표면화하는 자리.
   {
     key: 'settings-export-truncated',
-    label: 'l05 설정 · 내보내기 잘림 고지',
+    band: 'l',
+    label: 'l05 · 내보내기 잘림',
     login: null,
     render: () => (
       <SettingsScreen
@@ -4158,7 +4315,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 인라인 오류를 띄운다(잘림 고지와 별개 자리, 실패라 Share 핸드오프 없음).
   {
     key: 'settings-export-error',
-    label: 'l05 설정 · 내보내기 조회 실패',
+    band: 'l',
+    label: 'l05 · 내보내기 실패',
     login: null,
     render: () => (
       <SettingsScreen
@@ -4180,7 +4338,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // DELETION_PENDING 배너 — 위험 영역 행이 유예 배너로 바뀌고 purgeAt + [삭제 철회]가 뜬다.
   {
     key: 'settings-pending',
-    label: 'l05 설정 · 삭제 유예(pending)',
+    band: 'l',
+    label: 'l05 · 삭제 유예',
     login: null,
     render: () => (
       <SettingsScreen
@@ -4203,7 +4362,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // [계속]을 눌러 1단(scope 전체 고지)→2단(최종) 전이를 실기로 확인한다.
   {
     key: 'settings-delete-dialog',
-    label: 'l05 설정 · 삭제 다이얼로그(2단)',
+    band: 'l',
+    label: 'l05 · 삭제 다이얼로그',
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill} className="bg-canvas-alt">
@@ -4214,7 +4374,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // l06 위치정보 동의 — 동의 ON default. 용도 3항목·계속 배너 육안 대조(글리프 SVG·틴트는 jest 사각).
   {
     key: 'l06-location-consent-default',
-    label: 'l06 위치정보 동의 · 동의 ON',
+    band: 'l',
+    label: 'l06 · 위치 동의 ON',
     login: null,
     render: () => (
       <LocationConsentScreen
@@ -4231,7 +4392,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // l06 permission-denied — 토글 회색 비활성·부제 "사용 불가"·[설정 이동] 배너·전체 dimmed.
   {
     key: 'l06-location-consent-denied',
-    label: 'l06 위치정보 동의 · OS 권한 거부',
+    band: 'l',
+    label: 'l06 · 위치 동의 거부',
     login: null,
     render: () => (
       <LocationConsentScreen
@@ -4249,7 +4411,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 리스트(Q1 확정, Figma 산문 축약과 다름)를 실기로 확인한다.
   {
     key: 'l06-location-revoke-dialog',
-    label: 'l06 위치정보 동의 · 철회 다이얼로그',
+    band: 'l',
+    label: 'l06 · 철회 다이얼로그',
     login: null,
     render: () => (
       <View style={StyleSheet.absoluteFill} className="bg-canvas-alt">
@@ -4265,7 +4428,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 즉시 토글, 01b Q3). APPLIED = 토글 ON + 목록(문구 없음).
   {
     key: 'l05-personalization-applied',
-    label: 'l05 개인화 · 반영 중(APPLIED)',
+    band: 'l',
+    label: 'l05 · 개인화 반영중',
     login: null,
     render: () => (
       <PersonalizationScreen
@@ -4283,7 +4447,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // CONSENT_MISSING = 토글 OFF + "동의하면…" 안내 + 빈 목록.
   {
     key: 'l05-personalization-consent-missing',
-    label: 'l05 개인화 · 미동의',
+    band: 'l',
+    label: 'l05 · 개인화 미동의',
     login: null,
     render: () => (
       <PersonalizationScreen
@@ -4298,7 +4463,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // ★함정 얼굴: NOT_ENOUGH_RECORDS = 이미 동의(토글 ON 유지) + "기록이 더 쌓이면…", "동의하면…" 없음.
   {
     key: 'l05-personalization-not-enough',
-    label: 'l05 개인화 · 기록 부족(동의 유지)',
+    band: 'l',
+    label: 'l05 · 개인화 기록부족',
     login: null,
     render: () => (
       <PersonalizationScreen
@@ -4313,7 +4479,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // l01 알림함 — 기본(오늘 3·이전 2, 미읽음 dot·PLAN_B 인라인 링크). 딤·글리프 픽셀은 6-b 실기 몫.
   {
     key: 'notification-inbox-default',
-    label: 'l01 알림함 · 기본',
+    band: 'l',
+    label: 'l01 · 알림함 기본',
     login: null,
     render: () => (
       <NotificationInboxScreen
@@ -4327,7 +4494,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // l01 알림함 — 엣지: 빈 알림함(StateNotice 대시 종 아이콘).
   {
     key: 'notification-inbox-empty',
-    label: 'l01 알림함 · 빈 상태',
+    band: 'l',
+    label: 'l01 · 알림함 빈 상태',
     login: null,
     render: () => (
       <NotificationInboxScreen
@@ -4345,7 +4513,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // 세그 활성 탭 하이라이트는 고정('실제', noop) — 리스트는 탭 무관 전체라 필터 전환 대조는 불필요.
   {
     key: 'records-compare',
-    label: 'j02 기록 비교 · 3종(실제·미방문·변경)',
+    band: 'j',
+    label: 'j02 · 기록 비교',
     login: null,
     render: () => (
       <RecordsCompareScreen
@@ -4400,7 +4569,8 @@ const PREVIEW_STATES: PreviewState[] = [
   // jest 사각이라 이 키가 유일한 육안 그물(자율 세션이라 6-b 미실행 — 다음 세션 확인 대상).
   {
     key: 'records-calendar-default',
-    label: 'j07 기록 캘린더 · 마킹·지난 여행',
+    band: 'j',
+    label: 'j07 · 캘린더 마킹',
     login: null,
     render: () => (
       <RecordsCalendarScreen
@@ -4451,7 +4621,8 @@ const PREVIEW_STATES: PreviewState[] = [
   },
   {
     key: 'records-calendar-empty',
-    label: 'j07 기록 캘린더 · 빈 상태',
+    band: 'j',
+    label: 'j07 · 캘린더 빈 상태',
     login: null,
     render: () => (
       <RecordsCalendarScreen
@@ -4486,6 +4657,17 @@ function resolveInitialStateKey(
   return rawState;
 }
 
+// first-cut 9밴드 고정 순서(figma-structure.md) — 밴드 버튼 줄이 이 순서대로 선다. '기타'는
+// 해당 상태가 있을 때만 뒤에 붙인다(map-default 하나뿐이지만 하드코딩 대신 데이터에서 파생).
+const FIRST_CUT_BANDS: Band[] = ['a', 'c', 'd', 'e', 'g', 'h', 'i', 'j', 'l'];
+
+// 해석된 상태 키의 밴드를 돌려준다 — AC-3 초기 selectedBand 는 이 결과 위에 얹힌다.
+// resolveInitialStateKey 가 늘 존재하는 키(또는 splash)를 주므로 find 는 항상 잡히지만,
+// 타입상 undefined 가능이라 '기타' 로 방어한다(도달 불가 경로).
+function bandOfKey(key: string): Band {
+  return PREVIEW_STATES.find((state) => state.key === key)?.band ?? '기타';
+}
+
 export default function DevPreviewScreen() {
   // useLocalSearchParams: expo-router 훅 — 현재 화면 URL 의 쿼리 문자열을 객체로 돌려준다.
   // 라우터 컨텍스트가 없어도(동결 devPreview.test) 빈 객체를 돌려주도록 expo-router 가
@@ -4500,6 +4682,17 @@ export default function DevPreviewScreen() {
   const active =
     PREVIEW_STATES.find((state) => state.key === activeKey) ??
     PREVIEW_STATES[0];
+  // 밴드 초기 선택 = 초기 활성 상태의 밴드(딥링크면 그 화면의 밴드가 자동 선택된다, AC-3).
+  // activeKey 와 같은 지연 초기화자(최초 마운트 1회) 위에 얹는다 — 딥링크 1회성 계약 그대로.
+  const [selectedBand, setSelectedBand] = useState<Band>(() =>
+    bandOfKey(resolveInitialStateKey(rawState))
+  );
+  // '기타' 밴드 상태가 하나라도 있을 때만 버튼 줄 끝에 '기타' 를 붙인다(데이터에서 파생).
+  const bandButtons: Band[] = PREVIEW_STATES.some(
+    (state) => state.band === '기타'
+  )
+    ? [...FIRST_CUT_BANDS, '기타']
+    : FIRST_CUT_BANDS;
 
   return (
     <View testID="dev-preview-root" className="flex-1 bg-white">
@@ -4528,6 +4721,9 @@ export default function DevPreviewScreen() {
         style={StyleSheet.absoluteFill}
         className="justify-start"
       >
+        {/*
+         * 1단 — 밴드 버튼 줄(first-cut 9 + '기타'). 누르면 그 밴드 그룹만 펼친다(setSelectedBand).
+         */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -4535,21 +4731,71 @@ export default function DevPreviewScreen() {
           style={{ flexGrow: 0 }}
           contentContainerStyle={{ gap: 8, padding: 12, alignItems: 'center' }}
         >
-          {PREVIEW_STATES.map((state) => {
-            const selected = state.key === active.key;
+          {bandButtons.map((band) => {
+            const selected = band === selectedBand;
             return (
               <Pressable
-                key={state.key}
-                testID={`dev-preview-state-${state.key}`}
-                onPress={() => setActiveKey(state.key)}
+                key={band}
+                testID={`dev-preview-band-${band}`}
+                onPress={() => setSelectedBand(band)}
                 className={`rounded-lg px-3 py-2 ${
                   selected ? 'bg-blue-600' : 'bg-gray-700'
                 }`}
               >
-                <Text className="text-xs text-white">{state.label}</Text>
+                <Text className="text-xs font-bold text-white">{band}</Text>
               </Pressable>
             );
           })}
+        </ScrollView>
+        {/*
+         * 2단 — 밴드별 칩 그룹. ★ show-not-mount: 모든 칩은 항상 트리에 남고, 비선택 밴드
+         * 그룹만 인라인 style 로 시각적으로 접는다({width:0,height:0,overflow:'hidden'}).
+         * display:'none'·조건부 언마운트 금지 — RNTL v13 은 display:'none' 만 쿼리에서 제외하고
+         * width/height/overflow 는 findable 로 남기므로, 접힌 밴드 칩도 동결 7스위트의
+         * getByTestId/press 가 그대로 통과한다(AC-4). 그룹 래퍼는 className 없는 plain View 라
+         * props.style 이 내가 넣은 인라인 값 그대로(NativeWind 무오염) → toHaveStyle 로 관찰된다.
+         */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={{ gap: 8, padding: 12, alignItems: 'center' }}
+        >
+          {bandButtons.map((band) => (
+            <View
+              key={band}
+              testID={`dev-preview-band-group-${band}`}
+              style={
+                band === selectedBand
+                  ? undefined
+                  : { width: 0, height: 0, overflow: 'hidden' }
+              }
+            >
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+              >
+                {PREVIEW_STATES.filter((state) => state.band === band).map(
+                  (state) => {
+                    const selected = state.key === active.key;
+                    return (
+                      <Pressable
+                        key={state.key}
+                        testID={`dev-preview-state-${state.key}`}
+                        onPress={() => setActiveKey(state.key)}
+                        className={`rounded-lg px-3 py-2 ${
+                          selected ? 'bg-blue-600' : 'bg-gray-700'
+                        }`}
+                      >
+                        <Text className="text-xs text-white">
+                          {state.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  }
+                )}
+              </View>
+            </View>
+          ))}
         </ScrollView>
       </SafeAreaView>
     </View>
