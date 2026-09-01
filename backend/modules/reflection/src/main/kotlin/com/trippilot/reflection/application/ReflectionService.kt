@@ -12,8 +12,13 @@ import com.trippilot.reflection.api.event.ReflectionReady
 import com.trippilot.reflection.domain.DistanceSource
 import com.trippilot.reflection.domain.Reflection
 import com.trippilot.reflection.domain.ReflectionRepository
+import com.trippilot.reflection.domain.ReflectionSource
 import com.trippilot.reflection.domain.ReflectionStats
+import com.trippilot.reflection.domain.port.ReflectionAgentInput
+import com.trippilot.reflection.domain.port.ReflectionAgentPort
+import com.trippilot.reflection.domain.port.ReflectionVisit
 import com.trippilot.trip.api.TripFacade
+import org.slf4j.LoggerFactory
 import com.trippilot.trip.api.TripPeriod
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -41,6 +46,7 @@ class ReflectionService(
     private val poiSurfaces: PoiSurfaceFacade,
     private val reflections: ReflectionRepository,
     private val cards: ReflectionCardCodec,
+    private val agent: ReflectionAgentPort,
     private val events: DomainEventPublisher,
     private val clock: Clock,
 ) {
@@ -57,7 +63,7 @@ class ReflectionService(
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         requireWithinTrip(period, dayDate)
 
-        val saved = reflections.upsert(draftFor(tripId, dayDate))
+        val saved = reflections.upsert(draftFor(accountId, tripId, dayDate))
         events.publish(
             ReflectionReady(
                 aggregateId = saved.reflectionId.toString(),
@@ -94,7 +100,7 @@ class ReflectionService(
     fun edit(accountId: UUID, tripId: UUID, dayDate: LocalDate, cardPayload: String): Reflection {
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         requireWithinTrip(period, dayDate)
-        val current = reflections.find(tripId, dayDate) ?: draftFor(tripId, dayDate)
+        val current = reflections.find(tripId, dayDate) ?: draftFor(accountId, tripId, dayDate)
         return reflections.upsert(current.edit(cards.read(cardPayload), clock.instant()))
     }
 
@@ -104,18 +110,81 @@ class ReflectionService(
      * 발행은 여기서 하지 않는다. 수정 경로가 이 함수를 쓰기 때문이다 — 사용자가 글을 쓰는 순간에
      * `ReflectionReady` 가 나가면 "회고가 준비됐어요" 알림이 본인에게 간다.
      */
-    private fun draftFor(tripId: UUID, dayDate: LocalDate): Reflection {
+    private fun draftFor(accountId: UUID, tripId: UUID, dayDate: LocalDate): Reflection {
         val visits = archive.findDailyVisits(tripId).firstOrNull { it.date == dayDate }?.visits.orEmpty()
         val surfaces = poiSurfaces.findSurfaces(visits.map { it.poiId })
         val stats = statsOf(visits, surfaces)
         // 근거 안에서만 쓴다(BR-U5-31) — 이름을 못 찾은 방문은 문장에 넣지 않는다.
         val placeNames = visits.filter { !it.skipped }.mapNotNull { surfaces[it.poiId]?.nameKo }
-        val draft = ReflectionNarrator.dailyCard(placeNames, stats)
-        val source = ReflectionNarrator.sourceFor(stats)
+        // 폴백 3단(BR-U5-32): AI 카드 → 규칙 카드 → 기본 카드.
+        // 포트는 못 만들면 null 을 준다(예외 아님) — 판단이 두 곳에 흩어지지 않게.
+        val aiCard = aiCardOrNull(accountId, tripId, dayDate, visits, surfaces)
+        val draft = aiCard ?: ReflectionNarrator.dailyCard(placeNames, stats)
+        val source = if (aiCard != null) ReflectionSource.AI else ReflectionNarrator.sourceFor(stats)
         val now = clock.instant()
         return reflections.find(tripId, dayDate)?.regenerate(draft, source, stats, now)
             ?: Reflection.of(tripId, dayDate, draft, source, stats, now)
     }
+
+    /**
+     * AI 단 시도. **무엇이 잘못돼도 `null` 이다** — 여기서 예외가 새면 폴백(BR-U5-32)이 통째로 무력화된다.
+     *
+     * 왜 카드를 [ReflectionCardCodec] 에 다시 태우나: 포트가 준 [com.trippilot.reflection.domain.ReflectionCard] 는
+     * 제목·원문이 비었는지만 검사받았고 **`payload` 가 유효 JSON 인지는 아무도 안 봤다.** 깨진 채로 두면
+     * 저장 시점(`readValue`)에서 500 으로 터진다 — 원인에서 먼 자리이고, 그때는 규칙 카드로 내려갈 기회도 없다.
+     * 사용자 수정본과 **같은 문을 지나게** 해서 그 구멍을 막는다.
+     *
+     * 꺼져 있으면 입력도 만들지 않는다 — region 조회가 항상 null 을 줄 호출을 위해 돈다.
+     */
+    private fun aiCardOrNull(
+        accountId: UUID,
+        tripId: UUID,
+        dayDate: LocalDate,
+        visits: List<ArchiveVisitView>,
+        surfaces: Map<UUID, PoiSurfaceView>,
+    ) = if (!agent.enabled) {
+        null
+    } else {
+        runCatching { agent.generate(agentInput(accountId, tripId, dayDate, visits, surfaces))?.let { cards.read(it.payload) } }
+            // 침묵하지 않는다(INV-4) — 규칙 카드로 내려간 사실과 사유가 남아야 원인이 보인다.
+            .onFailure { log.warn("회고 AI 카드를 쓸 수 없어 규칙 카드로 갑니다. tripId={} date={}", tripId, dayDate, it) }
+            .getOrNull()
+    }
+
+    /**
+     * 경계 입력 조립 — **근거 안에서만**(BR-U5-31). 건너뛴 방문은 싣지 않는다: 안 간 곳이
+     * 카드 장면이 되면 안 된다.
+     *
+     * `region` 이 없으면 그대로 넘긴다(빈 문자열이 아니라 목적지 없음). 상대는 `region` 을 필수로
+     * 요구하므로 그 경우 호출이 422 로 거절되고 우리는 규칙 카드로 내려간다 — 지어내지 않는다.
+     */
+    private fun agentInput(
+        accountId: UUID,
+        tripId: UUID,
+        dayDate: LocalDate,
+        visits: List<ArchiveVisitView>,
+        surfaces: Map<UUID, PoiSurfaceView>,
+    ) = ReflectionAgentInput(
+        kind = "DAILY",
+        region = regionOf(accountId, tripId),
+        startDate = dayDate,
+        endDate = dayDate,
+        visits = visits.filterNot { it.skipped }.mapIndexedNotNull { index, v ->
+            surfaces[v.poiId]?.let { poi ->
+                ReflectionVisit(v.poiId, dayDate, poi.nameKo, poi.category, index + 1, v.photoCount)
+            }
+        },
+        personaSummary = null,
+        weatherSummary = null,
+    )
+
+    /**
+     * 목적지 이름 — 표시 순서 첫 번째다. 여행이 목적지를 안 들고 있으면 빈 문자열이고, 그 호출은
+     * 상대가 `region` 필수로 거절한다(그러면 규칙 카드로 내려간다). **지어내지 않는다.**
+     */
+    private fun regionOf(accountId: UUID, tripId: UUID): String =
+        trips.findGenerationContext(accountId, tripId)?.destinations?.firstOrNull().orEmpty()
+
 
     /**
      * 여행 기간 밖 날짜는 거부한다.
@@ -158,6 +227,8 @@ class ReflectionService(
     }
 
     companion object {
+        private val log = LoggerFactory.getLogger(ReflectionService::class.java)
+
         const val KIND_DAILY = "DAILY"
 
         private const val EARTH_RADIUS_KM = 6371.0
