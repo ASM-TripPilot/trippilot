@@ -7,6 +7,7 @@ budget_fit = 예산 소프트 가중 (U5-P6 단조성 대상, 하드 제약 아�
 
 from __future__ import annotations
 
+import math
 import zlib
 
 from trippilot.solver_engine.travel import haversine_km
@@ -51,6 +52,16 @@ def budget_fit(avg_cost: int | None, budget: BudgetLevel) -> float:
     return 0.15  # HIGH — 비용 무관 균등
 
 
+# 인기 포화점 — 저장 수가 이만큼이면 인기 항이 만점. 별점(0~5)이 차지하던 0~0.5 폭을
+# 그대로 쓰므로 다른 항(카테고리·예산·거리)과의 상대 비중은 변하지 않는다.
+_POPULARITY_FULL = 1000
+
+
+def _popularity_norm(saved_count: int) -> float:
+    """인앱 저장 수 → 0~0.5. 상한 없는 카운트라 log 로 눌러 상위 소수가 독식하지 않게."""
+    return min(math.log1p(saved_count) / math.log1p(_POPULARITY_FULL), 1.0) * 0.5
+
+
 def build_rule_score(
     poi: Poi,
     budget: BudgetLevel,
@@ -58,11 +69,11 @@ def build_rule_score(
     seed: int,
 ) -> float:
     """LLM 점수 부재 시의 결정론 점수 (동일 입력 → 동일 출력, U5-P3)."""
-    rating_norm = (poi.rating / 5.0 * 0.5) if poi.rating is not None else 0.2
+    popularity_norm = _popularity_norm(poi.saved_count)
     dist_penalty = 0.0
     if anchor is not None:
         dist_penalty = min(haversine_km(anchor, poi.coord) * 0.02, 0.5)
     # 시드 기반 미세 tie-break (crc32 — 파이썬 hash와 달리 실행 간 안정)
     jitter = (zlib.crc32(f"{seed}:{poi.poi_id}".encode()) % 1000) / 1e7
-    return (CATEGORY_WEIGHT[poi.category] + rating_norm
+    return (CATEGORY_WEIGHT[poi.category] + popularity_norm
             + budget_fit(poi.avg_cost, budget) - dist_penalty + jitter)

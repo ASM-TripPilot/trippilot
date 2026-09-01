@@ -105,7 +105,7 @@ def test_pool_with_anchor_roundtrip(pois, request) -> None:
 # 배제(필터)가 아니라 **순위 강등**이다. 아래 테스트들이 그 경계를 고정한다:
 # 순서(P5) / 상한 절단 시 생존 우선권 / 기존 정렬 성질 회귀 없음(P6) / 필터 아님.
 
-def _poi(pid: str, *, open_hours=(), rating=None, coord=_ANCHOR) -> Poi:
+def _poi(pid: str, *, open_hours=(), rating=None, coord=_ANCHOR, saved_count=0) -> Poi:
     return Poi(
         poi_id=PoiId(pid),
         name=pid,
@@ -117,6 +117,7 @@ def _poi(pid: str, *, open_hours=(), rating=None, coord=_ANCHOR) -> Poi:
         quality=DataQuality.FULL,
         source=PoiSource.SEED,
         confidence=None,
+        saved_count=saved_count,
     )
 
 
@@ -191,3 +192,28 @@ def test_open_hours_signal_never_excludes(pois, request) -> None:
     stripped = [replace(p, open_hours=()) for p in pois]
     always_open = [replace(p, open_hours=_ALL_WEEK) for p in pois]
     assert _build(stripped, request).poi_ids == _build(always_open, request).poi_ids
+
+
+# ── 인기 정렬 = saved_count (TRIP-280 잔여 해소) ──────────────────────────────
+
+def test_saved_count_desc_orders_within_same_open_hours_group() -> None:
+    """같은 영업시간 보유 상태 안에서는 저장 수가 많은 쪽이 앞선다 (poi_id 역순으로 배치)."""
+    pool = _build([_poi("a-cold", saved_count=0),
+                   _poi("b-hot", saved_count=120),
+                   _poi("c-mid", saved_count=7)], _request())
+    assert [str(p.poi_id) for p in pool.pois] == ["b-hot", "c-mid", "a-cold"]
+
+
+def test_open_hours_still_outranks_saved_count() -> None:
+    """인기는 2순위 — 영업시간 보유 신호(TRIP-326)를 뒤집지 않는다."""
+    pool = _build([_poi("z-open", open_hours=_ALL_WEEK, saved_count=0),
+                   _poi("a-hot", saved_count=999)], _request())
+    assert [str(p.poi_id) for p in pool.pois] == ["z-open", "a-hot"]
+
+
+def test_rule_score_increases_with_saved_count() -> None:
+    """규칙 점수의 인기 항도 같은 신호를 쓴다 — 죽은 rating 항 대체."""
+    from trippilot.solver_engine.scorer import build_rule_score
+
+    cold, hot = _poi("p", saved_count=0), _poi("p", saved_count=500)
+    assert build_rule_score(hot, BudgetLevel.HIGH, None, 7) > build_rule_score(cold, BudgetLevel.HIGH, None, 7)

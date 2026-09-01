@@ -96,6 +96,7 @@ class Poi:
     quality: DataQuality
     source: PoiSource
     confidence: float | None
+    saved_count: int = 0  # 인앱 저장(좋아요) 수 = 인기 신호. 별점(rating)과 별개 소스
 
     def __post_init__(self) -> None:
         if not self.poi_id:
@@ -104,6 +105,8 @@ class Poi:
             raise ValueError("WEB 소스는 confidence 필수 (INV-1 수집 게이트)")
         if self.avg_cost is not None and self.avg_cost < 0:
             raise ValueError(f"avg_cost 음수: {self.avg_cost}")
+        if self.saved_count < 0:
+            raise ValueError(f"saved_count 음수: {self.saved_count}")
 
     def to_dict(self) -> dict:
         return {
@@ -114,6 +117,7 @@ class Poi:
             "open_hours": [oh.to_dict() for oh in self.open_hours],
             "avg_cost": self.avg_cost,
             "rating": self.rating,
+            "saved_count": self.saved_count,
             "quality": self.quality.value,
             "source": self.source.value,
             "confidence": self.confidence,
@@ -129,6 +133,7 @@ class Poi:
             open_hours=tuple(OpenHour.from_dict(x) for x in d["open_hours"]),
             avg_cost=d["avg_cost"],
             rating=d["rating"],
+            saved_count=d.get("saved_count", 0),  # 구 캐시 호환
             quality=DataQuality(d["quality"]),
             source=PoiSource(d["source"]),
             confidence=d["confidence"],

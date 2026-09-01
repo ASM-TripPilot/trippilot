@@ -118,6 +118,15 @@ def test_row_maps_to_domain_poi() -> None:
     assert poi.quality is DataQuality.FULL
     assert poi.source is PoiSource.PLACES_API  # TOURAPI → 벤더 수집분
     assert poi.avg_cost is None and poi.rating is None and poi.confidence is None
+    assert poi.saved_count == 12  # 인기 신호 — 별점 대신 이걸 쓴다
+
+
+def test_missing_saved_count_defaults_to_zero_not_error() -> None:
+    """구 백엔드 응답(필드 없음)에서도 행을 잃지 않는다 — 인기 0으로 취급."""
+    row = _row(); del row["saved_count"]
+    db, _ = _db([row])
+    (poi,) = db.find_by_radius(GeoPoint(37.5, 127.0), 5.0)
+    assert poi.saved_count == 0
 
 
 def test_opening_hours_raw_string_parsed_to_week() -> None:
