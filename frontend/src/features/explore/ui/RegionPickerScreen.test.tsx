@@ -117,7 +117,7 @@ describe('BR-U1-07 · 목적 파라미터 분기 — 같은 컴포넌트, 카피
 
     expect(screen.getByText('지역 선택')).toBeTruthy();
     expect(screen.getByText('어디서 묵을까요?')).toBeTruthy();
-    expect(screen.getByText('지역별 숙소')).toBeTruthy();
+    expect(screen.getByText('인기 지역')).toBeTruthy(); // TRIP-650 인기 스트립 헤더(stay)
   });
 
   it("purpose='trip'은 여행지 카피를 쓴다 (Figma d1b)", () => {
@@ -137,7 +137,8 @@ describe('AC-1 · 평면 해소 — 빈 검색어는 시/도 행만, 구/군은 
     // 시/도 행이 보인다(드릴다운 어포던스 — 선택 카드와 다른 testID).
     expect(screen.getByTestId('explore-region-sido-28')).toBeTruthy();
     expect(screen.getByTestId('explore-region-sido-51')).toBeTruthy();
-    expect(screen.getByText('인천광역시')).toBeTruthy();
+    // 인천광역시는 인기 스트립 카드와 시/도 행 두 곳에 뜰 수 있다(TRIP-650 featured+전체 패턴) — ≥1.
+    expect(screen.getAllByText('인천광역시').length).toBeGreaterThanOrEqual(1);
 
     // 구/군은 접혀 있다 — 미추홀구는 1단에 없다(★ AC-1 핵심).
     expect(screen.queryByTestId('explore-region-28177')).toBeNull();
@@ -145,6 +146,23 @@ describe('AC-1 · 평면 해소 — 빈 검색어는 시/도 행만, 구/군은 
 
     // 1단의 인천은 '시/도 행'일 뿐 '선택 카드'가 아니다 — 선택 카드 testID 는 상세에서만 뜬다(★4).
     expect(screen.queryByTestId('explore-region-28')).toBeNull();
+  });
+});
+
+describe('AC-1b · 인기 여행지 가로 스트립 (TRIP-650)', () => {
+  it('인기 스트립이 시/도 카드를 그리고, 카드 press → 그 시/도 상세로 드릴인한다', () => {
+    render(<RegionPickerScreen {...props({ query: '' })} />);
+
+    // 인기 스트립 + 시/도 카드(구/군 아님 — 드릴다운 불변식 유지). 인기 카드는 -popular- testID 라
+    // 1단 시/도 행/선택 카드와 구분된다.
+    expect(screen.getByTestId('explore-region-popular-strip')).toBeOnTheScreen();
+    const card = screen.getByTestId('explore-region-popular-28'); // 인천광역시
+    expect(card).toBeOnTheScreen();
+
+    // press → 그 시/도로 드릴인(하단 SidoRow 와 동일). 드릴인 전엔 접혀 있던 구/군(미추홀구)이 상세에 뜬다.
+    expect(screen.queryByText('미추홀구')).toBeNull();
+    fireEvent.press(card);
+    expect(screen.getByText('미추홀구')).toBeOnTheScreen();
   });
 });
 

@@ -55,7 +55,14 @@ export function ReplanSolvingScreen({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View className="flex-1 bg-canvas">
-        <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-lg">
+        {/* TRIP-652: 로딩 콘텐츠 세로 중앙 정렬 — 최상단 정렬이라 헤더가 상태바에 붙던 것을 세로
+            중앙으로. ScrollView 본체가 flex-1 로 부모 높이를 채워야(리포 래핑 ScrollView 6/6 관례)
+            contentContainer 의 grow+justify-center 가 실제로 중앙정렬한다. 콘텐츠가 뷰포트보다 길면
+            grow/justify-center 는 no-op 이 되고 그대로 스크롤(무손실). */}
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="grow justify-center gap-lg px-lg pb-2xl pt-lg"
+        >
           {/* 본문 타이틀·부제 */}
           <View className="gap-sm">
             <Text className="font-noto-bold text-hero font-bold text-ink">

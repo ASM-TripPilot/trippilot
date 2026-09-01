@@ -563,7 +563,7 @@ describe('HomeScreen — collecting 얼굴 (AC-1 · US-SHELL-05)', () => {
 });
 
 describe('HomeScreen — planning 얼굴 (AC-2 · US-SHELL-02)', () => {
-  it('tripHero "계획 중"·D-day·「일정 이어서 짜기」 CTA·브릿지행을 그리고 hero·grid는 숨긴다', () => {
+  it('tripHero "계획 중"·D-day·CTA + 영감 스와이프 캐러셀 + 발견 섹션을 함께 그린다 (TRIP-647)', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
 
     // greet(여행명+D-day).
@@ -584,16 +584,16 @@ describe('HomeScreen — planning 얼굴 (AC-2 · US-SHELL-02)', () => {
     // 메타는 리프가 쪼개질 수 있어 정규식 부분 매치(자손 텍스트 합침).
     expect(hero).toHaveTextContent(/3박 4일 · 2명/);
 
-    // 브릿지행(softNote 슬롯 재사용) — 담은 곳이 일정에 없다는 잇기 카피 + "일정에 추가".
-    const bridge = screen.getByTestId('home-soft-note');
-    expect(
-      within(bridge).getByText(/담은 곳 3곳이 아직 일정에 없어요/)
-    ).toBeOnTheScreen();
-    expect(within(bridge).getByText('일정에 추가')).toBeOnTheScreen();
+    // TRIP-647 — 상단 스와이프 캐러셀(일정 카드 ↔ 영감)과 발견 섹션이 함께 뜬다(생성 후에도 유지).
+    expect(screen.getByTestId('home-hero-carousel')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-hero-dot-0')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-hero-dot-1')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen(); // 영감 페이지
+    expect(screen.getByTestId('home-spot-card-0')).toBeOnTheScreen(); // 발견: 지금 뜨는 장소
+    expect(screen.getByTestId('home-collection-card-0')).toBeOnTheScreen(); // 발견: 요즘 담는 곳
 
-    // 부정 짝 — planning은 magazineHero·"지금 뜨는 장소" grid 숨김(§3-B).
-    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
-    expect(screen.queryByTestId('home-spot-card-0')).toBeNull();
+    // 브릿지행(softNote)은 여전히 없다(TRIP-646 제거).
+    expect(screen.queryByTestId('home-soft-note')).toBeNull();
 
     // INV-3.
     expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
@@ -601,7 +601,7 @@ describe('HomeScreen — planning 얼굴 (AC-2 · US-SHELL-02)', () => {
 });
 
 describe('HomeScreen — upcoming 얼굴 (AC-3 · US-SHELL-02)', () => {
-  it('이름 greet·tripHero 출발전·스탯타일 2·가장 먼저 갈 곳·지난 여행을 그리고 searchBar 등은 부재하며 소요시간은 0이다', () => {
+  it('이름 greet·tripHero 출발전·가장 먼저 갈 곳·지난 여행을 그리고 searchBar·스탯타일 등은 부재하며 소요시간은 0이다', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={UPCOMING_PHASE} />);
 
     // greet — 유일하게 사용자 이름 사용(개인화).
@@ -616,11 +616,9 @@ describe('HomeScreen — upcoming 얼굴 (AC-3 · US-SHELL-02)', () => {
       '오늘 일정 보기'
     );
 
-    // 스탯 타일 2 — 일정 진행률·등록 숙소(US-SHELL-02).
-    expect(screen.getByTestId('home-dash-itinerary')).toHaveTextContent(
-      /9곳 완성/
-    );
-    expect(screen.getByTestId('home-dash-stay')).toHaveTextContent(/3\/3/);
+    // 스탯 타일 2블록은 TRIP-646으로 제거됐다(부정 짝은 아래 부재 단언에).
+    expect(screen.queryByTestId('home-dash-itinerary')).toBeNull();
+    expect(screen.queryByTestId('home-dash-stay')).toBeNull();
 
     // ★ INV-3 최상위 함정 — nextCard는 시각(09:30)·영업시간(24시간 개방)·거리(950m)를 그린다.
     // 이들은 전부 렌더되어야 하고(허용), 그럼에도 소요시간 정규식은 0을 반환해야 한다.
@@ -651,7 +649,7 @@ describe('HomeScreen — upcoming 얼굴 (AC-3 · US-SHELL-02)', () => {
 });
 
 describe('HomeScreen — postTrip 얼굴 (AC-4 · US-SHELL-02)', () => {
-  it('"잘 다녀오셨어요" greet·회고 보기 카드·공유행·추천·지난 여행을 그리고 hero·grid는 숨긴다', () => {
+  it('"잘 다녀오셨어요" greet·회고 보기 카드·추천·지난 여행을 그리고 공유행·hero·grid는 숨긴다', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
 
     expect(screen.getByTestId('home-greeting')).toHaveTextContent(
@@ -663,10 +661,8 @@ describe('HomeScreen — postTrip 얼굴 (AC-4 · US-SHELL-02)', () => {
     expect(within(recap).getByText('부산 여행 회고 보기')).toBeOnTheScreen();
     expect(recap).toHaveTextContent(/4곳 방문 · 12km · 사진 6장/);
 
-    // 공유행(softNote 슬롯 재사용).
-    const share = screen.getByTestId('home-soft-note');
-    expect(within(share).getByText(/공유 카드로 남기기/)).toBeOnTheScreen();
-    expect(within(share).getByText('공유 카드 만들기')).toBeOnTheScreen();
+    // 공유행(softNote)은 TRIP-646으로 제거됐다.
+    expect(screen.queryByTestId('home-soft-note')).toBeNull();
 
     // 추천 섹션 + 지난 여행.
     expect(screen.getByText('다음엔 여기 어때요')).toBeOnTheScreen();
@@ -690,25 +686,21 @@ describe('HomeScreen — phase 미도출·주입 (AC-5 금지 · TRIP-206 S-6)',
     expect(screen.queryByTestId('home-trip-hero')).toBeNull();
     view.unmount();
 
-    // (2) 같은 화면에 phase=planning 주입 → tripHero로 스위치. discovery로 폴백하지 않는다.
+    // (2) 같은 화면에 phase=planning 주입 → tripHero+캐러셀로 스위치. discovery로 폴백하지 않는다.
+    // (TRIP-647: 영감 캐러셀은 planning 전용 — discovery 얼굴엔 없어 판별자로 쓴다.)
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
     expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
-    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
+    expect(screen.getByTestId('home-hero-carousel')).toBeOnTheScreen();
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRIP-401 — planning 얼굴의 버튼 역할 집합 + 브릿지 CTA de-button.
+// TRIP-401 — planning 얼굴의 버튼 역할 집합. (TRIP-646: 브릿지 CTA de-button 짝은 브릿지
+// 블록 자체가 제거되며 함께 삭제 — 남은 것은 아래 버튼-집합 동치 하나다.)
 //
 // 무엇을 보장하나: planning 얼굴에서 접근성 트리에 버튼으로 읽히는 것은 **배선된 CTA 뿐**이다
-// (여행 카드 CTA `home-trip-hero-cta` + FAB). 목적지 없는 브릿지 CTA "일정에 추가"
-// (`home-saved-places-cta`, 기능 이연 BR-U3-15)는 렌더는 되지만 버튼 역할이 아니다(죽은 버튼 금지).
-//
-// 왜 discovery 짝이 필요한가(02a §4-★4): 기존 370-AC-4(discovery 버튼 집합, 위)는 온램프
-// `home-saved-places-cta` 가 **콜백 미주입 상태로도** 버튼일 것을 요구한다. 아래 planning 테스트는
-// 같은 testID 의 브릿지가 non-button 일 것을 요구한다. 둘을 동시에 만족하는 유일한 형태는 role 을
-// `onPressCta` 유무로 파생하지 않고 **명시 `asButton` prop** 으로 굳히는 것(discovery=true·
-// planning=false). 두 테스트가 "콜백 유무 파생" 안티패턴을 협공한다.
+// (여행 카드 CTA `home-trip-hero-cta` + 검색바 + FAB). 콜백을 주입하지 않고도 이 집합이 유지돼야
+// role 이 콜백 유무 파생이 아니라 구조임을 강제한다(★4).
 
 // planning 얼굴에서 목적지가 있어 버튼이어야 하는 것(구조로 굳힘 — 콜백 미주입에도 버튼).
 // TRIP-453 — entry 1 검색바(항해 /explore/search)·entry 3 여행 카드 본체(항해=알약과 동일)가
@@ -720,6 +712,7 @@ const PLANNING_WIRED_CTA_TEST_IDS = [
   'home-trip-hero-cta',
   'home-search-bar',
   'home-trip-hero',
+  'home-spots-more', // TRIP-647 — 발견 섹션 "지금 뜨는 장소 더보기"(배선 CTA, planning에도 노출)
 ] as const;
 
 describe('🔴 HomeScreen — planning 버튼 역할 집합 == 배선 CTA 집합 (AC-7 · 370-AC-4 확장)', () => {
@@ -734,23 +727,6 @@ describe('🔴 HomeScreen — planning 버튼 역할 집합 == 배선 CTA 집합
 
     // 집합 동치 — 브릿지 CTA 가 안 벗겨지거나(현행) 배선 CTA 가 벗겨지면 red.
     expect(buttonIds).toEqual([...PLANNING_WIRED_CTA_TEST_IDS].sort());
-  });
-});
-
-describe('🔴 HomeScreen — planning 브릿지 CTA 죽은 버튼 금지 (AC-6)', () => {
-  it('브릿지 "일정에 추가"는 렌더되지만 accessibilityRole="button"으로 노출되지 않는다', () => {
-    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
-
-    // 긍정 — 브릿지 카드·라벨은 그대로 뜬다(카피를 지우는 게 아니라 버튼 역할만 뗀다).
-    const bridge = screen.getByTestId('home-soft-note');
-    expect(within(bridge).getByText('일정에 추가')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-saved-places-cta')).toBeOnTheScreen();
-
-    // 부정 — 접근성 버튼 집합에 브릿지 CTA 는 없다(목적지 없는 죽은 버튼 제거).
-    const buttonIds = screen
-      .queryAllByRole('button')
-      .map((node) => node.props.testID);
-    expect(buttonIds).not.toContain('home-saved-places-cta');
   });
 });
 

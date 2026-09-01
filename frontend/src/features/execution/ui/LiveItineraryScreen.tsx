@@ -201,12 +201,12 @@ export function LiveItineraryScreen({
       ) : (
         <ScrollView contentContainerClassName="gap-md px-lg pb-[112px] pt-xs">
           {slots.map((projected) => (
-            <View key={projected.slot.poiId} className="flex-row">
-              <View className="w-[52px] flex-row">
-                <Text className="w-[36px] pt-[6px] text-right font-noto-medium text-caption text-body">
+            <View key={projected.slot.poiId} className="flex-row gap-md">
+              <View className="w-[58px] flex-row gap-[4px]">
+                <Text className="w-[32px] pt-[6px] text-right font-noto-medium text-caption text-body">
                   {projected.slot.startAt.slice(0, 5)}
                 </Text>
-                <View className="w-[16px] items-center">
+                <View className="w-[22px] items-center">
                   <View className="absolute bottom-0 top-0 w-[2px] bg-hairline-strong" />
                   <View className="mt-[4px] rounded-full bg-canvas-alt p-[1px]">
                     <RailDot state={projected.state} />

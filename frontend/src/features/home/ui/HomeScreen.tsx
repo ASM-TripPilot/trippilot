@@ -14,8 +14,15 @@
  * softNote·미니맵 카드 등)을 단계 데이터로 파라미터화해 조립한다. INV-3(소요시간 미표시)는
  * 어떤 얼굴에도 소요시간 문자열·필드를 두지 않는다 — 시각(09:30)·거리(950m)만 표시한다.
  */
-import type { ReactElement } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState, type ReactElement } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -38,9 +45,7 @@ import type {
   HomePhase,
   HomeScreenProps,
   HomeSections,
-  HomeSoftNote,
   HomeSpotCard,
-  HomeStatTile,
   NextStop,
   PastTrip,
   TripHeroData,
@@ -75,9 +80,6 @@ const fabShadow = {
   shadowRadius: 16,
   elevation: 8,
 } as const;
-
-// upcoming 스탯 타일 2칸의 고정 testID(순서 고정 — 배열 위치로 잠근다).
-const STAT_TEST_IDS = ['home-dash-itinerary', 'home-dash-stay'] as const;
 
 // ── 인사 헤더 ───────────────────────────────────────────────────────────
 // discovery는 고정 카피, 단계 얼굴은 greetTitle/greetSubtitle/greetName을 주입받는다.
@@ -488,52 +490,6 @@ function ItinerariesSection({
   );
 }
 
-// ── softNote(장소 온램프 · US-SHELL-05 · 단계별 브릿지/공유행) ──────────
-// 배경 #fff7f8은 Figma가 변수 아닌 raw fill로 쓴 값 → 임의 raw 유지(가정 D). D-3 13색 밖이라
-// 자동 심판 사각지대이므로 [검증] 스크린샷 대조가 유일한 그물. note 미전달이면 discovery 온램프,
-// 전달되면 그 카피(planning 브릿지행 · postTrip 공유행)를 같은 슬롯에 그린다.
-// asButton은 CTA의 role(버튼으로 읽히는가)을 구조로 굳힌다 — 목적지가 배선된 discovery 온램프만
-// 버튼이고, 목적지 없는 슬롯(planning 브릿지·postTrip 공유, 기능 이연 BR-U3-15)은 role을 뗀다
-// (죽은 버튼 금지, TRIP-401). role을 콜백 유무로 파생하지 않는다(370-AC-4는 콜백 미주입에도 버튼).
-function SoftNote({
-  note,
-  onPressCta,
-  asButton = false,
-}: {
-  note?: HomeSoftNote;
-  onPressCta?: () => void;
-  asButton?: boolean;
-}): ReactElement {
-  const title = note?.title ?? '마음에 든 곳이 모이면';
-  const subtitle = note?.subtitle ?? '담아둔 장소로 여행을 만들 수 있어요';
-  const ctaLabel = note?.ctaLabel ?? '담은 곳';
-  return (
-    <View className="w-full px-lg pb-[24px] pt-[22px]">
-      <View
-        testID="home-soft-note"
-        className="w-full flex-row items-center gap-[10px] rounded-card bg-[#fff7f8] px-lg py-[14px]"
-      >
-        <View className="flex-1 gap-[2px]">
-          <Text className="font-noto-bold text-[13.5px] font-bold text-ink">
-            {title}
-          </Text>
-          <Text className="font-noto text-[11.5px] text-muted">{subtitle}</Text>
-        </View>
-        <Pressable
-          testID="home-saved-places-cta"
-          accessibilityRole={asButton ? 'button' : undefined}
-          onPress={onPressCta}
-          className="rounded-pill border-[1.4px] border-primary bg-canvas px-md py-sm"
-        >
-          <Text className="font-noto-bold text-caption font-bold text-primary-text">
-            {ctaLabel}
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 // ── tripHero(planning·upcoming 공용 여행 히어로 · 브리프 §3-C) ───────────
 // 사진+스크림 · 좌상단 단계 pill · 우상단 대형 D-day · 좌하단 primary CTA + 여행명 + 기간 메타.
 // TRIP-453: 카드 본체(home-trip-hero)를 Pressable 로 승격해 알약(home-trip-hero-cta)과 **같은
@@ -599,31 +555,6 @@ function TripHero({
           </View>
         </View>
       </Pressable>
-    </View>
-  );
-}
-
-// ── dashRow(upcoming 스탯 타일 2 · 일정 진행률·등록 숙소 · US-SHELL-02) ──
-function DashRow({ stats }: { stats: readonly HomeStatTile[] }): ReactElement {
-  return (
-    <View className="mx-lg flex-row gap-md">
-      {stats.map((tile, index) => (
-        <View
-          key={tile.label}
-          testID={STAT_TEST_IDS[index]}
-          className="flex-1 gap-[4px] rounded-card border border-primary bg-canvas px-md py-lg"
-        >
-          <Text className="font-noto text-label text-muted">{tile.label}</Text>
-          <Text className="font-noto-bold text-card-title font-bold text-ink">
-            {tile.value}
-          </Text>
-          {tile.caption ? (
-            <Text className="font-noto text-micro text-muted">
-              {tile.caption}
-            </Text>
-          ) : null}
-        </View>
-      ))}
     </View>
   );
 }
@@ -916,23 +847,85 @@ function CollectingBody({
   );
 }
 
-// ── planning 얼굴(계획 중) ──────────────────────────────────────────────
-// greet 여행명+D-day · tripHero(계획 중) · 브릿지행(softNote 슬롯) · magazineHero·grid·lane 숨김.
+// ── heroCarousel(일정 카드 ↔ 영감/매거진 가로 스와이프 · TRIP-647) ──────────
+// 생성 후 홈에서 상단 슬롯을 좌우 스와이프로 전환한다: page0=여행 카드(tripHero), page1=영감
+// (magazineHero). pagingEnabled 로 한 페이지씩 넘어가고, 아래 점 인디케이터가 현재 위치를 표시한다.
+// 실제 스와이프 제스처·페이지 전환은 jest 원리적 사각(6-b 실기) — 구조(두 페이지·점 2개)만 잠근다.
+function HeroCarousel({
+  trip,
+  hero,
+  onPressTripCta,
+}: {
+  trip: TripHeroData;
+  hero: HomeMagazineHero;
+  onPressTripCta?: () => void;
+}): ReactElement {
+  const { width } = useWindowDimensions();
+  const [page, setPage] = useState(0);
+  return (
+    <View testID="home-hero-carousel" className="w-full">
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) =>
+          setPage(Math.round(e.nativeEvent.contentOffset.x / width))
+        }
+      >
+        <View style={{ width }}>
+          <TripHero trip={trip} onPress={onPressTripCta} />
+        </View>
+        <View style={{ width }}>
+          <MagazineHero hero={hero} />
+        </View>
+      </ScrollView>
+      <View className="w-full flex-row justify-center gap-[6px] pt-[10px]">
+        {[0, 1].map((i) => (
+          <View
+            key={i}
+            testID={`home-hero-dot-${i}`}
+            className={`h-[6px] w-[6px] rounded-full ${
+              page === i ? 'bg-primary' : 'bg-hairline-strong'
+            }`}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// ── planning 얼굴(계획 중 · TRIP-647로 발견 콘텐츠 + 영감/일정 스와이프 추가) ──
+// greet 여행명+D-day · 상단 스와이프 캐러셀(일정 카드 ↔ 영감) · 발견 3섹션(요즘 담는 곳·지금 뜨는
+// 장소·여행자 일정) — 일정 생성 후에도 발견 콘텐츠가 사라지지 않는다(사용자 요구).
 function PlanningBody({
   phase,
+  hero,
+  sections,
   onPressTripHeroCta,
+  onPressSpotsMore,
   onPressSearch,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
+  hero: HomeMagazineHero;
+  sections: HomeSections;
   onPressTripHeroCta?: () => void;
+  onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
 }): ReactElement {
   return (
     <>
       <GreetingHeader title={phase.greetTitle} />
       <SearchBarBlock onPress={onPressSearch} />
-      <TripHero trip={phase.trip} onPress={onPressTripHeroCta} />
-      <SoftNote note={phase.bridge} />
+      <HeroCarousel
+        trip={phase.trip}
+        hero={hero}
+        onPressTripCta={onPressTripHeroCta}
+      />
+      <View className="w-full gap-[24px] pb-sm pt-[22px]">
+        <CollectionsSection sections={sections} />
+        <SpotsSection sections={sections} onMore={onPressSpotsMore} />
+        <ItinerariesSection sections={sections} />
+      </View>
     </>
   );
 }
@@ -950,7 +943,6 @@ function UpcomingBody({
       <GreetingHeader name={phase.greetName} title={phase.greetTitle} />
       <TripHero trip={phase.trip} />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
-        <DashRow stats={phase.stats} />
         <NextStopCard nextStop={phase.nextStop} />
         <MiniMapCard
           testID="home-nearby-card"
@@ -990,7 +982,6 @@ function PostTripBody({
         />
         <PastTripsSection trips={phase.pastTrips} />
       </View>
-      <SoftNote note={phase.share} />
     </>
   );
 }
@@ -1028,7 +1019,10 @@ function PhaseBody({
       return (
         <PlanningBody
           phase={phase}
+          hero={hero}
+          sections={sections}
           onPressTripHeroCta={onPressTripHeroCta}
+          onPressSpotsMore={onPressSpotsMore}
           onPressSearch={onPressSearch}
         />
       );

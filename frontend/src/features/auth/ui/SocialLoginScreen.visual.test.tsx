@@ -210,36 +210,32 @@ describe('AC-V2 · 카카오 라벨 문구 — 한글이 뜨고 영문은 화면
 
 const ERROR_COPY = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요';
 
-// TRIP-592(→ C안): 파스텔 채움(bg-primary-pale + text-primary-text)을 폐기하고 'C 아이콘 리드형'
-// 으로 위계를 신호한다 — 카드(보더·캔버스채움) 없이 배경 없는 인라인 + 코랄 원 아이콘 배지(bg-primary
-// rounded-full) + ink 텍스트(문구 단일 유지). 아래 두 it 은 폐기 토큰의 '부재'와 새 폼('배경 없는
-// 인라인'·'코랄 원 배지'·ink)의 '존재'를 한 쌍으로 잠근다. 회귀가 아니라 의도된 계약 교체다 — 이 describe
-// 가 C 폼을 지키는 새 심판이다. 뮤테이션: E(아웃라인 border-primary·bg-canvas 카드)로 되돌리면
-// noOutline/noCardBg 가 깨져 red 가 된다(양방향).
-describe('AC-V3 · 에러 배너가 Figma C(아이콘 리드형) 토큰을 입는다 (렌더 · TRIP-592 계약 교체)', () => {
-  it('배너가 카드(pale·보더·캔버스채움) 없는 인라인이고, 코랄 원 아이콘 배지(bg-primary·rounded-full)를 리드로 갖는다', () => {
+// TRIP-592(→ C안)은 파스텔 채움(bg-primary-pale)을 폐기하고 카드 없는 배경 없는 인라인으로 갔다.
+// **TRIP-648 계약 교체**: 그 폼의 '코랄 원 아이콘 배지(⚠)'까지 제거한다 — 사용자 실기 관측 + Figma
+// 대조로 에러 배너는 아이콘 없는 텍스트-온리 인라인이 정본이 됐다. 아래 두 it 은 폐기 토큰의 '부재'
+// (pale·보더·캔버스채움 카드) + 아이콘 배지의 '부재' + ink 텍스트의 '존재'를 잠근다. 뮤테이션:
+// 배지(auth-login-error-icon-badge)를 되살리면 noIconBadge 가 깨져 red(아이콘 재등장 트립와이어).
+describe('AC-V3 · 에러 배너가 카드·아이콘 없는 텍스트 인라인이다 (렌더 · TRIP-648 계약 교체)', () => {
+  it('배너가 카드(pale·보더·캔버스채움) 없는 인라인이고, 경고 아이콘 배지가 없다', () => {
     // ▸준비 — overrides 로 error phase 를 연다.
     renderDefault({ phase: 'error', errorCode: 'SOCIAL_AUTH_FAILED' });
 
-    // ▸실행 — 배너 컨테이너 + 그 안 코랄 원 배지 노드.
+    // ▸실행 — 배너 컨테이너(앵커) + 그 안에서 아이콘 배지를 queryBy 로 찾는다(부재는 queryBy — getBy 는 못 찾으면 throw).
     const banner = screen.getByTestId('auth-login-error-banner');
     const bannerTokens = classTokens(banner);
-    const badge = within(banner).getByTestId('auth-login-error-icon-badge');
-    const badgeTokens = classTokens(badge);
 
-    // ▸단언 — C 폼: 컨테이너는 카드 채움/보더/캔버스배경/pale 전부 부재, 코랄 원 배지가 아이콘을 리드.
+    // ▸단언 — 카드 토큰 3종 부재 + 아이콘 배지 부재. 배너 자체는 앵커로 존재(공허 통과 차단).
     expect({
       noPaleFill: bannerTokens.includes('bg-primary-pale'),
       noOutline: bannerTokens.includes('border-primary'),
       noCardBg: bannerTokens.includes('bg-canvas'),
-      circleFill: badgeTokens.includes('bg-primary'),
-      circleRadius: badgeTokens.includes('rounded-full'),
+      noIconBadge:
+        within(banner).queryByTestId('auth-login-error-icon-badge') !== null,
     }).toEqual({
       noPaleFill: false,
       noOutline: false,
       noCardBg: false,
-      circleFill: true,
-      circleRadius: true,
+      noIconBadge: false,
     });
   });
 
@@ -314,28 +310,28 @@ describe('AC-L4 · 회귀 토큰 유지 (렌더)', () => {
   // 갱신됐다(후속 회차 64→72 재확대). AC-L4 는 로고 박스를 '트리에서 유일한 크기 토큰
   // 노드'로 잡으므로, 확대 시 이 동결 토큰도 함께 갱신하지 않으면 앵커(nodesWithToken)가
   // 0개가 되어 logoOne 이 red 다.
-  it('루트 px-2xl · 로고 h-[72px] w-[72px] · 소셜버튼 h-[52px] · 버튼 래퍼 gap-md 가 유지된다', () => {
+  it('루트 px-2xl · 로고 박스 72×72(style) · 소셜버튼 h-[52px] · 버튼 래퍼 gap-md 가 유지된다', () => {
     // ▸준비+실행
     renderDefault();
     const rootTokens = classTokens(screen.getByTestId('auth-login-root'));
     const buttonTokens = classTokens(screen.getByTestId('auth-login-google'));
-    // 로고·래퍼는 testID 가 없어 토큰으로 잡는다(트리 유일, 02a §5-4 실측).
-    const logos = nodesWithToken('h-[72px]');
+    // 로고 박스는 testID 로 잡고 크기는 style width/height 로 잰다 — LinearGradient 는 className
+    // 크기를 안 먹어 박스가 글리프(43px)로 접혔던 회귀(TRIP-648)를 style 값으로 못박는다.
+    const logoBox = screen.getByTestId('auth-login-logo-box');
     const wrappers = nodesWithToken('gap-md');
 
     // ▸단언 — 한 객체로 묶어 어느 회귀가 깨졌는지 한 번에 본다.
     expect({
       rootPad: rootTokens.includes('px-2xl'),
       buttonHeight: buttonTokens.includes('h-[52px]'),
-      logoOne: logos.length === 1,
-      logoSquare:
-        logos.length === 1 && classTokens(logos[0]).includes('w-[72px]'),
+      logoWidth: styleNumber(logoBox, 'width'),
+      logoHeight: styleNumber(logoBox, 'height'),
       wrapperOne: wrappers.length === 1,
     }).toEqual({
       rootPad: true,
       buttonHeight: true,
-      logoOne: true,
-      logoSquare: true,
+      logoWidth: 72,
+      logoHeight: 72,
       wrapperOne: true,
     });
   });
@@ -348,36 +344,42 @@ describe('AC-L4 · 회귀 토큰 유지 (렌더)', () => {
 // — LinearGradient 는 className 반경으로 그라디언트를 클립하지 않아 각지므로, style 로 주는
 // 것이 각짐 회귀를 막는 계약이다. ② 박스가 56px 를 넘겨 확대됐고 글리프가 비율 0.6 을 유지.
 
-// 노드의 style prop 에서 borderRadius(숫자)를 뽑는다. RN style 은 단일 객체일 수도 배열일
-// 수도 있어 flat(Infinity)로 평탄화한 뒤 첫 borderRadius 를 반환한다(없으면 undefined).
-function styleBorderRadius(node: {
-  props?: { style?: unknown };
-}): number | undefined {
+// 노드의 style prop 에서 숫자 필드를 뽑는다. RN style 은 단일 객체일 수도 배열일 수도 있어
+// flat(Infinity)로 평탄화한 뒤 첫 매치를 반환한다(없으면 undefined). 로고 박스 크기·반경이
+// className 이 아니라 style 로 굳는 것을 검증하는 데 쓴다(TRIP-648 — LinearGradient 는
+// NativeWind className 크기를 안 먹어 style 이 유일한 실제 계약).
+function styleNumber(
+  node: { props?: { style?: unknown } },
+  key: string
+): number | undefined {
   const flat = [node.props?.style].flat(Infinity) as Array<
     Record<string, unknown> | null | undefined
   >;
   for (const s of flat) {
-    if (s && typeof s === 'object' && typeof s.borderRadius === 'number') {
-      return s.borderRadius;
+    if (s && typeof s === 'object' && typeof s[key] === 'number') {
+      return s[key] as number;
     }
   }
   return undefined;
 }
 
+function styleBorderRadius(node: {
+  props?: { style?: unknown };
+}): number | undefined {
+  return styleNumber(node, 'borderRadius');
+}
+
 describe('AC-L5 · 앱아이콘 라운드 클립 + 확대 (렌더 · 형태 가드)', () => {
   it('박스 반경을 style borderRadius 로 주고 rounded-button className 은 안 쓴다 (각짐 회귀 차단)', () => {
-    // ▸준비+실행 — 박스는 testID 가 없어 확대 토큰으로 잡는다(트리 유일).
+    // ▸준비+실행 — 박스는 testID 로 잡는다(TRIP-648).
     renderDefault();
-    const boxes = nodesWithToken('h-[72px]');
+    const box = screen.getByTestId('auth-login-logo-box');
 
-    // ▸단언 — 앵커 1개 + style 에 borderRadius 존재 + className 에 rounded-button 부재.
+    // ▸단언 — style 에 borderRadius 존재 + className 에 rounded-button 부재.
     expect({
-      boxOne: boxes.length === 1,
-      hasStyleRadius:
-        boxes.length === 1 && typeof styleBorderRadius(boxes[0]) === 'number',
-      noClassNameRadius:
-        boxes.length === 1 && !classTokens(boxes[0]).includes('rounded-button'),
-    }).toEqual({ boxOne: true, hasStyleRadius: true, noClassNameRadius: true });
+      hasStyleRadius: typeof styleBorderRadius(box) === 'number',
+      noClassNameRadius: !classTokens(box).includes('rounded-button'),
+    }).toEqual({ hasStyleRadius: true, noClassNameRadius: true });
   });
 
   it('박스 반경 값이 라운드 스퀘어 비율(0.2227×72≈16.03)을 지킨다 — 값 회귀 차단', () => {
@@ -386,27 +388,23 @@ describe('AC-L5 · 앱아이콘 라운드 클립 + 확대 (렌더 · 형태 가�
     // 실제로 잠그려면 값을 못박아야 한다. 16.03 은 박스 72·글리프 43 과 한 비율 세트라,
     // 6-b 에서 박스 크기를 바꾸면 이 값도 h-[72px]·size 43 과 함께 갱신한다.
     renderDefault();
-    const boxes = nodesWithToken('h-[72px]');
+    const box = screen.getByTestId('auth-login-logo-box');
 
-    // ▸단언 — 앵커 1개일 때만 값을 읽어, 앵커 소실 시 throw 대신 clean red 로 떨어진다.
-    expect(boxes.length === 1 ? styleBorderRadius(boxes[0]) : undefined).toBe(
-      16.03
-    );
+    expect(styleBorderRadius(box)).toBe(16.03);
   });
 
   it('박스가 56px 를 넘겨 확대되고 글리프가 비율 0.6(size 43)을 유지한다', () => {
-    // ▸준비+실행 — 글리프 size 는 Svg 의 width prop 으로 렌더 트리에 남는다.
+    // ▸준비+실행 — 글리프 size 는 Svg width prop, 박스 크기는 style width 로 렌더 트리에 남는다.
     renderDefault();
     const glyph = screen.getByTestId('auth-login-logo-glyph');
-    const boxTokens = classTokens(nodesWithToken('h-[72px]')[0]);
+    const box = screen.getByTestId('auth-login-logo-box');
 
-    // ▸단언 — 박스 브래킷 px 확대 + 글리프 width=43(72×0.6≈43, 비율 유지).
+    // ▸단언 — 박스 style 72px 확대(56 초과) + 글리프 width=43(72×0.6≈43, 비율 유지).
     expect({
-      enlargedBox:
-        boxTokens.includes('h-[72px]') && boxTokens.includes('w-[72px]'),
-      bracketNotScale: !boxTokens.includes('h-16'), // 스케일 토큰이 아니라 브래킷 px
+      boxWidth: styleNumber(box, 'width'),
+      enlargedOver56: (styleNumber(box, 'width') ?? 0) > 56,
       glyphSize: glyph.props.width,
-    }).toEqual({ enlargedBox: true, bracketNotScale: true, glyphSize: 43 });
+    }).toEqual({ boxWidth: 72, enlargedOver56: true, glyphSize: 43 });
   });
 });
 

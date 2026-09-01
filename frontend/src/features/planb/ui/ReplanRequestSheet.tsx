@@ -160,7 +160,7 @@ export function ReplanRequestSheet({
     <BottomSheet backdropComponent={renderBackdrop}>
       <BottomSheetScrollView
         testID="planb-request-sheet"
-        className="w-full gap-lg px-lg pb-2xl pt-sm"
+        contentContainerClassName="w-full gap-lg px-lg pb-2xl pt-sm"
       >
         {/* 헤더 */}
         <View className="gap-xs">
