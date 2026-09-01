@@ -27,6 +27,7 @@ from trippilot.llm_gateway.workers.event_extraction import (
 from trippilot.domain.common import TraceId
 from trippilot.domain.event import EventInfo, EventType
 from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.observability import FallbackEvent, GateDropEvent
 from tests.fakes.fake_llm import FailingLlm, FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 
@@ -48,8 +49,10 @@ _CTX = EventExtractionContext(
 )
 
 
-def _facade(llm, gate):
-    return GatewayFacade(llm, PromptRegistry(_PROMPTS), gate, _CFG, InMemoryTrace())
+def _facade(llm, gate, trace=None):
+    return GatewayFacade(
+        llm, PromptRegistry(_PROMPTS), gate, _CFG, trace or InMemoryTrace()
+    )
 
 
 def _event(**overrides) -> dict:
@@ -170,16 +173,40 @@ def test_worker_end_to_end() -> None:
     assert result.call_record is not None and result.call_record.success is True
 
 
-def test_worker_fallback_on_llm_failure_and_all_dropped() -> None:
+def test_worker_fallback_on_llm_failure() -> None:
     worker_fail = EventExtractionWorker(_facade(FailingLlm(), EventExtractionGate()))
     fb = worker_fail.extract("부산", *_PERIOD, _SNIPPETS, _TID, _NOW)
     assert fb.is_fallback is True and fb.value is None  # 폴백 실행은 호출측 (BR-U4-09)
 
-    # 전량 드롭(지어낸 행사만) → 폴백 신호 (침묵 실패 금지, INV-4)
+
+def test_worker_zero_events_is_success_not_fallback() -> None:
+    """행사 0건은 **정상 결과**다 — 입력이 검색 스니펫이라 "그 기간 그 지역에
+    행사가 없음"이 흔하다. 실패로 뒤집던 동안 대전 6회 연속 0건의 원인을 찾는 데
+    3단계 추론이 필요했다(2026-08-25). 대체 추출 경로도 없어 폴백이 바꿀 게 없다.
+    """
+    trace = InMemoryTrace()
+    worker = EventExtractionWorker(
+        _facade(FakeLlm(canned=json.dumps({"events": []})), EventExtractionGate(), trace)
+    )
+    empty = worker.extract("부산", *_PERIOD, _SNIPPETS, _TID, _NOW)
+    assert empty.is_fallback is False and empty.error is None
+    assert empty.value == ()  # 0건이라는 사실이 남는다
+    assert trace.of_type(FallbackEvent) == []
+
+
+def test_worker_all_dropped_is_zero_events_with_drop_event() -> None:
+    """전량 드롭(지어낸 행사만)도 산출은 0건 — 침묵은 아니다: 환각 증빙은
+    GateDropEvent 가 싣는다 (폴백으로 뒤집으면 그 0건마저 value=None 이 된다).
+    """
+    trace = InMemoryTrace()
     canned = json.dumps({"events": [_event(name="가짜페스티벌")]})
-    worker_drop = EventExtractionWorker(_facade(FakeLlm(canned=canned), EventExtractionGate()))
+    worker_drop = EventExtractionWorker(
+        _facade(FakeLlm(canned=canned), EventExtractionGate(), trace)
+    )
     dropped = worker_drop.extract("부산", *_PERIOD, _SNIPPETS, _TID, _NOW)
-    assert dropped.is_fallback is True and dropped.value is None
+    assert dropped.is_fallback is False and dropped.value == ()
+    drops = trace.of_type(GateDropEvent)
+    assert len(drops) == 1 and drops[0].dropped_count == 1
 
 
 def test_registry_renders_event_extraction_prompt() -> None:

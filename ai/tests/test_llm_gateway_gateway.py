@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 import pytest
 
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.base import GateOutcome
+from trippilot.llm_gateway.gates.base import GateOutcome, empty_result_error
 from trippilot.llm_gateway.gateway import GatewayFacade, TierRouter
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import LlmFeature, ModelTier, ScoredPoi
@@ -58,9 +58,23 @@ class AcceptAllGate:
 class EmptyResultGate:
     """드롭 0건인데 결과가 빈 fake — **LLM 이 애초에 0건을 냈을 때**의 모양이다.
 
-    DropAllGate 와 구분해야 한다. 둘은 처방이 정반대인데(게이트 규칙 문제 vs
-    프롬프트·입력 문제) 한때 같은 라벨을 썼다 — 행사 수집에서 대전이 6회 연속
-    0건일 때 게이트를 의심하느라 3단계 추론이 필요했다(2026-08-25).
+    빈 결과가 **실패**인 feature(scoring 등)의 게이트를 흉내낸다: 정책이 게이트
+    소유라 error 도 게이트가 싣는다 (TRIP-260 #5). DropAllGate 와 구분해야 한다 —
+    둘은 처방이 정반대인데(게이트 규칙 문제 vs 프롬프트·입력 문제) 한때 같은
+    라벨을 썼다. 행사 수집에서 대전이 6회 연속 0건일 때 게이트를 의심하느라
+    3단계 추론이 필요했다(2026-08-25).
+    """
+
+    def apply(self, raw_text, pool, *, feature, trace_id, now):
+        return GateOutcome(
+            value=(), drop_event=None, error=empty_result_error((), None)
+        )
+
+
+class EmptySuccessGate:
+    """빈 결과가 **정상**인 feature(추출 계열)의 게이트 fake — error 를 안 싣는다.
+
+    "그 기간 그 지역에 행사가 없음"은 성공·0건이다 (TRIP-260 #5).
     """
 
     def apply(self, raw_text, pool, *, feature, trace_id, now):
@@ -71,19 +85,19 @@ class DropAllGate:
     """전량 드롭 fake (GATE-P2의 폴백 분기)."""
 
     def apply(self, raw_text, pool, *, feature, trace_id, now):
-        dropped = (PoiId("hallucinated-1"),)
+        drop_event = GateDropEvent(
+            trace_id=trace_id,
+            occurred_at=now,
+            component="c1.gate",
+            feature=feature.value,
+            dropped_ids=(PoiId("hallucinated-1"),),
+            total_count=1,
+            dropped_count=1,
+        )
         return GateOutcome(
             value=(),
-            drop_event=GateDropEvent(
-                trace_id=trace_id,
-                occurred_at=now,
-                component="c1.gate",
-                feature=feature.value,
-                dropped_ids=dropped,
-                total_count=1,
-                dropped_count=1,
-            ),
-            error=None,
+            drop_event=drop_event,
+            error=empty_result_error((), drop_event),  # 정책은 게이트 소유 (#5)
         )
 
 
@@ -291,3 +305,39 @@ def test_unmapped_feature_falls_back_visibly_not_plausibly() -> None:
     facade.call(LlmFeature.PREFERENCE_SCORING, {"k": "v"}, None, _TRACE_ID, _NOW)
 
     assert trace.of_type(FallbackEvent)[0].to_mode == "unmapped_feature"
+
+
+# ── TRIP-260 #5: "빈 결과가 실패인가"는 게이트가 정한다 ──
+
+
+def test_empty_result_is_success_when_the_gate_says_so() -> None:
+    """추출 계열의 0건 — "그 기간 그 지역에 행사가 없음"은 정상 결과다.
+
+    게이트웨이가 `not outcome.value` 로 함께 판정하던 동안 이 정상 결과가 폴백으로
+    뒤집혔고, 대전 6회 연속 0건의 원인을 찾는 데 3단계 추론이 필요했다(2026-08-25).
+    """
+    facade, trace = _facade(FakeLlm(), EmptySuccessGate())
+    result = facade.call(
+        LlmFeature.EVENT_EXTRACTION, {"k": "v"}, None, _TRACE_ID, _NOW
+    )
+
+    assert result.is_fallback is False and result.error is None
+    assert result.value == ()  # 0건이라는 사실이 살아 있다 (value=None 이 아니다)
+    assert trace.of_type(FallbackEvent) == []  # 없는 폴백을 지어내지 않는다
+    assert result.call_record is not None and result.call_record.success is True
+
+
+@pytest.mark.parametrize(
+    ("gate", "expected"),
+    [
+        (EmptyResultGate(), "llm_empty_result"),
+        (DropAllGate(), "gate_dropped_all"),
+    ],
+)
+def test_empty_result_still_falls_back_when_the_gate_says_so(gate, expected) -> None:
+    """정책 후퇴 방지 — scoring 계열의 0건은 여전히 폴백이고 사유도 그대로다."""
+    facade, trace = _facade(FakeLlm(), gate)
+    result = _call(facade)
+
+    assert result.is_fallback is True and result.error == expected
+    assert len(trace.of_type(FallbackEvent)) == 1

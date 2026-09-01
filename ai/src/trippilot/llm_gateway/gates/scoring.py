@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from trippilot.llm_gateway.gates.base import GateOutcome
+from trippilot.llm_gateway.gates.base import GateOutcome, empty_result_error
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi
 from trippilot.domain.observability import GateDropEvent
@@ -62,6 +62,10 @@ class ClosedSetGate:
 
     파서 통과분을 풀과 교차: 풀 밖 poi_id 드롭 + GateDropEvent 재료화.
     중복 poiId는 첫 등장만 채택 (결정론). 드롭/생존 판정은 pool.contains O(1).
+
+    **빈 결과 = 실패** (TRIP-260 #5): 점수 0건으로는 선호 정렬을 할 수 없고,
+    호출측에는 규칙 점수라는 온전한 대체 경로가 있다(BR-U4-09). 전량 드롭도
+    LLM 무결과도 같은 처방(규칙 점수)이지만 원인이 달라 라벨은 나눈다.
     """
 
     def apply(
@@ -113,4 +117,8 @@ class ClosedSetGate:
             if dropped
             else None
         )
-        return GateOutcome(value=tuple(survivors), drop_event=drop_event, error=None)
+        return GateOutcome(
+            value=tuple(survivors),
+            drop_event=drop_event,
+            error=empty_result_error(survivors, drop_event),
+        )

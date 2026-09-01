@@ -94,7 +94,9 @@ def test_gate_passes_valid_message_stripped() -> None:
 )
 def test_gate_drops_unsafe_message_with_event(message: str) -> None:
     out = _apply(_raw(message))
-    assert out.value is None and out.error is None  # 드롭은 error가 아니다
+    # 보낼 문구가 없으면 알림을 못 만든다 — 게이트가 사유를 직접 싣는다 (TRIP-260 #5).
+    # 파싱 실패(parse_error)와는 라벨로 구분된다.
+    assert out.value is None and out.error == "gate_dropped_all"
     assert out.drop_event is not None
     assert out.drop_event.total_count == 1 and out.drop_event.dropped_count == 1
     assert out.drop_event.dropped_ids == ()  # 문구 드롭은 풀 ID가 아님

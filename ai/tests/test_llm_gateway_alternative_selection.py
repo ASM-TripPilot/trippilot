@@ -106,10 +106,15 @@ def test_gate_dedups_by_first_occurrence() -> None:
     assert out.value[0].reason == "첫 근거"
 
 
-def test_gate_empty_selections_is_signal_not_error() -> None:
-    """"적합 후보 없음"은 오류가 아니다 — 게이트웨이가 폴백으로 전환한다 (지어내기 금지)."""
+def test_gate_empty_selections_is_a_fallback_signal_from_the_gate() -> None:
+    """"적합 후보 없음"은 지어내기 금지의 결과지 사용자에게 줄 대안이 아니다.
+
+    빈 결과가 실패인지는 게이트가 정한다 (TRIP-260 #5) — 여기선 규칙 랭킹이라는
+    온전한 대체 경로가 있으므로 실패다. 파싱 실패와는 사유 라벨로 구분된다.
+    """
     out = _apply(_raw())
-    assert out.value == () and out.error is None and out.drop_event is None
+    assert out.value == () and out.drop_event is None
+    assert out.error == "llm_empty_result"
 
 
 # ── 게이트: 오염 (closed-set, INV-1) ─────────────────────────
@@ -127,7 +132,8 @@ def test_gate_drops_only_out_of_pool_items_and_records_event() -> None:
 
 def test_gate_all_dropped_returns_empty_with_event() -> None:
     out = _apply(_raw(("g1", "r"), ("g2", "r")))
-    assert out.value == () and out.error is None
+    assert out.value == ()
+    assert out.error == "gate_dropped_all"  # 무결과와 다른 처방 — 라벨을 나눈다
     assert out.drop_event is not None and out.drop_event.dropped_count == 2
 
 
@@ -184,7 +190,8 @@ def test_pbt_gate_survivors_always_inside_pool(case, reason: str) -> None:
     """① 어떤 참조 조합이 와도 통과분은 전부 풀 안, 풀 밖은 전부 드롭 이벤트에 남는다."""
     pool, refs, ghosts = case
     out = _apply(_raw(*((r, reason) for r in refs)), pool)
-    assert out.error is None
+    # 빈 결과가 실패인 게이트의 불변식: error 유무 ⇔ 생존 0건 (TRIP-260 #5)
+    assert (out.error is None) == bool(out.value)
     assert all(pool.contains(p.poi_id) for p in out.value)
     assert len({p.poi_id for p in out.value}) == len(out.value)  # 중복 없음
     if ghosts:

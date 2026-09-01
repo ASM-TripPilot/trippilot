@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from trippilot.llm_gateway.gates.base import GateOutcome, _load_json_object
+from trippilot.llm_gateway.gates.base import (
+    GateOutcome,
+    _load_json_object,
+    empty_result_error,
+)
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import AlternativePick, CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
@@ -17,7 +21,10 @@ class AlternativeSelectionGate:
     풀 밖 항목만 드롭(항목 격리)하고 생존분은 LLM이 낸 선호 순서 그대로 통과 —
     이 순서는 제안일 뿐, 배치·시각 확정은 솔버 몫이다 (INV-2).
     스키마에 시각·소요시간 자리가 아예 없다 (INV-3).
-    빈 selections는 오류가 아니라 "적합 후보 없음" 신호 — 게이트웨이가 폴백 전환.
+    **빈 결과 = 실패** (TRIP-260 #5): "적합 후보 없음"은 지어내기 금지의 결과지
+    사용자에게 줄 대안이 아니다 — 호출측(planb rag `_select`)에 규칙 랭킹이라는
+    온전한 대체 경로가 있으므로 폴백 신호를 낸다. 파싱 실패가 아니라 무결과라는
+    구분은 사유 라벨(llm_empty_result)이 유지한다.
     """
 
     def apply(
@@ -68,4 +75,8 @@ class AlternativeSelectionGate:
             )
             if dropped else None
         )
-        return GateOutcome(value=tuple(survivors), drop_event=drop_event, error=None)
+        return GateOutcome(
+            value=tuple(survivors),
+            drop_event=drop_event,
+            error=empty_result_error(survivors, drop_event),
+        )
