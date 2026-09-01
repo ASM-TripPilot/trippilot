@@ -25,3 +25,10 @@ dependencies {
 
     testImplementation(project(":common:test-support"))
 }
+
+// AI 경계 계약 정본(`ai/docs/openapi.json`)은 이 모듈 밖 — 리포 루트에 있다(ReflectionBoundaryOpenApiTest).
+// 입력으로 선언하지 않으면 상대가 계약을 바꿔도 Gradle 이 테스트를 UP-TO-DATE 로 건너뛴다 —
+// 로컬에서 게이트가 조용히 꺼진 채 초록이 된다(#435 역검증에서 실측: 계약을 흔들어도 태스크가 안 돌았다).
+tasks.test {
+    inputs.files(rootProject.file("../ai/docs/openapi.json"))
+}
