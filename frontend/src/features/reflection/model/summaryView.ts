@@ -39,7 +39,7 @@ export function resolveSummaryView(
 export function toOrderedVisitList(highlights: DayHighlight[]): OrderedVisit[] {
   const out: OrderedVisit[] = [];
   for (const day of highlights) {
-    for (const place of day.places) {
+    for (const place of day.places ?? []) {
       out.push({
         order: out.length + 1,
         dayLabel: `Day${day.dayOrder}`,

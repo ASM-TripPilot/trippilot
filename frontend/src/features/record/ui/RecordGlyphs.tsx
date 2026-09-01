@@ -106,6 +106,51 @@ export function BackArrowGlyph({ size = 24 }: GlyphProps): ReactElement {
   );
 }
 
+/** › 카드 우측 진입 chevron(지난 여행 카드). features 경계로 trip/itinerary 글리프 재사용 불가라 로컬 미러. */
+export function ChevronRightGlyph({
+  size = 20,
+  color = CIRCLE_UPCOMING,
+}: GlyphProps & { color?: string }): ReactElement {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Path
+        d="M7.5 5L12.5 10L7.5 15"
+        stroke={color}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** 📅 빈 상태 안내 아이콘(캘린더 아웃라인). StateNotice 아이콘 슬롯용. */
+export function CalendarGlyph({ size = 32 }: GlyphProps): ReactElement {
+  const s = size / 32;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <Path
+        d="M6 8.5C6 7.4 6.9 6.5 8 6.5H24C25.1 6.5 26 7.4 26 8.5V24C26 25.1 25.1 26 24 26H8C6.9 26 6 25.1 6 24V8.5Z"
+        stroke={CORAL}
+        strokeWidth={2 * s}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M6 12.5H26"
+        stroke={CORAL}
+        strokeWidth={2 * s}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M11 4V9M21 4V9"
+        stroke={CORAL}
+        strokeWidth={2 * s}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 /** ♥ 저장 FAB. */
 export function HeartGlyph({ size = 26 }: GlyphProps): ReactElement {
   return (

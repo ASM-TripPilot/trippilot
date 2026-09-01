@@ -14,6 +14,7 @@ import {
   LocationOffGlyph,
   PhotoOffGlyph,
   RetryGlyph,
+  ShareGlyph,
 } from './ReflectionGlyphs';
 import { ReflectionPhotoGrid } from './ReflectionPhotoGrid';
 import { ReflectionStatsRow } from './ReflectionStatsRow';
@@ -57,6 +58,10 @@ export interface DailyReflectionScreenProps {
   changeSummary?: string | null;
   mapCenter?: MapCenter;
   mapPins?: MapPin[];
+  /** TRIP-574(additive) — 종료·요약된 여행이면 헤더 공유 아이콘 활성(BR-U5-48). */
+  canShare?: boolean;
+  /** TRIP-574(additive) — 지정되면 헤더에 공유 아이콘을 그린다(미지정=기존 화면 무회귀). */
+  onShare?: () => void;
   onEnterEdit: () => void;
   onConfirm: () => void;
   onSaveEdit: (text: string) => void;
@@ -74,6 +79,8 @@ export function DailyReflectionScreen({
   changeSummary,
   mapCenter,
   mapPins,
+  canShare = false,
+  onShare,
   onEnterEdit,
   onConfirm,
   onSaveEdit,
@@ -90,6 +97,11 @@ export function DailyReflectionScreen({
   };
   const handleCancel = () => {
     setEditing(false);
+  };
+  // disabled 는 fireEvent.press 를 항상 막지 않으므로(RNTL) 콜백 게이트가 실질 그물이다(571 저장버튼 동형).
+  const handleShare = () => {
+    if (!canShare) return;
+    onShare?.();
   };
   const handleSave = () => {
     if (!canSave) return;
@@ -117,6 +129,19 @@ export function DailyReflectionScreen({
             <Text className="font-noto-bold text-body font-bold text-primary">
               편집
             </Text>
+          </Pressable>
+        ) : null}
+        {/* 공유 진입점(j06) — onShare 지정 시에만 렌더(additive), 종료·요약 전이면 비활성(BR-U5-48). */}
+        {onShare ? (
+          <Pressable
+            testID="reflection-daily-share"
+            disabled={!canShare}
+            accessibilityState={{ disabled: !canShare }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            onPress={handleShare}
+            className="pl-md"
+          >
+            <ShareGlyph size={22} muted={!canShare} />
           </Pressable>
         ) : null}
       </View>

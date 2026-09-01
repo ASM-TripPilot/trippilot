@@ -38,13 +38,19 @@ import { LiveItineraryScreen } from '@/features/execution/ui/LiveItineraryScreen
 import { PlaceDetailScreen } from '@/features/execution/ui/PlaceDetailScreen';
 import { TriggerBanner } from '@/features/execution/ui/TriggerBanner';
 import { TriggerChip } from '@/features/execution/ui/TriggerChip';
+import type { CompareRow } from '@/features/record/model/compareRows';
 import { ConflictSheet } from '@/features/record/ui/ConflictSheet';
 import { MemoInline } from '@/features/record/ui/MemoInline';
 import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
+import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
+import { RecordsCompareScreen } from '@/features/record/ui/RecordsCompareScreen';
 import { SyncBadge } from '@/features/record/ui/SyncBadge';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
 import { VisitTimeSheet } from '@/features/record/ui/VisitTimeSheet';
+import { SHARE_FORMATS } from '@/features/reflection/model/shareCard';
 import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionScreen';
+import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
+import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
@@ -153,6 +159,7 @@ import type {
   Trigger,
 } from '@/shared/api/generated/schemas';
 import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
+import { buildMonthGrid } from '@/shared/date/monthGrid';
 import { ManualTimeSheet, reorderKeepingFixed } from '@/shared/itinerary-edit';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { revokeImpact } from '@/shared/location/revokeImpact';
@@ -2393,6 +2400,149 @@ const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // j06 공유 카드 2키(TRIP-574) — 순수 뷰(`ShareCardScreen`)를 격리 렌더한다(`@/shared/api` 값 import 0
+  // 이라 프리뷰 지뢰 목 통과 — 컨테이너 `ShareCardPage` 는 별 파일이라 import 사슬 전이 로드 없음).
+  // 라이브 지도·view-shot 미설치라 카드는 지도 없이 동선 목록·워터마크·하단 그라디언트로 degrade 조립.
+  // 저장/공유 press 는 armed:false → "준비 중" 안내만(가짜 성공 금지). 포맷 전환(aspect)·워터마크·그라디언트
+  // 오버레이 정렬·no-photo 안내 레이아웃은 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP, 이 2키가 유일한
+  // 육안 대조 자리(포맷 세그를 눌러 9:16→1:1→4:5 종횡비가 바뀌는 것도 여기서 확인).
+  {
+    key: 'share-card-default',
+    label: 'j06 공유 카드 · default(사진 있음)',
+    login: null,
+    render: () => (
+      <ShareCardScreen
+        card={{
+          title: '부산 여행',
+          periodText: '6월 10일 수요일 ~ 6월 12일 금요일',
+          regionText: '부산 · 경주',
+          statsCells: {
+            totalVisits: 12,
+            distanceText: '38km',
+            totalPhotos: 24,
+          },
+          distanceSourceLabel: '근사',
+          orderedVisits: [
+            { order: 1, dayLabel: 'Day1', place: '광안리 해변' },
+            { order: 2, dayLabel: 'Day1', place: '감천문화마을' },
+            { order: 3, dayLabel: 'Day2', place: '해운대 해변' },
+            { order: 4, dayLabel: 'Day2', place: '전포 카페거리' },
+          ],
+          mode: 'default',
+          watermark: 'TripPilot',
+          aspectRatio: 9 / 16,
+        }}
+        formats={SHARE_FORMATS}
+        caption="광안리에서 보낸 사흘, 그리고 경주의 밤"
+        hashtagText="#부산여행 #광안리 #감천문화마을"
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'share-card-no-photo',
+    label: 'j06 공유 카드 · no-photo(사진 없음)',
+    login: null,
+    render: () => (
+      <ShareCardScreen
+        card={{
+          title: '경주 여행',
+          periodText: '6월 1일 월요일 ~ 6월 3일 수요일',
+          regionText: '경주',
+          statsCells: { totalVisits: 9, distanceText: '22km', totalPhotos: 0 },
+          distanceSourceLabel: '근사',
+          orderedVisits: [
+            { order: 1, dayLabel: 'Day1', place: '불국사' },
+            { order: 2, dayLabel: 'Day1', place: '석굴암' },
+            { order: 3, dayLabel: 'Day2', place: '첨성대' },
+          ],
+          mode: 'no-photo',
+          watermark: 'TripPilot',
+          aspectRatio: 9 / 16,
+        }}
+        formats={SHARE_FORMATS}
+        caption="사진은 없지만 동선만으로도 충분한 사흘"
+        hashtagText="#경주여행 #불국사"
+        onBack={noop}
+      />
+    ),
+  },
+  // j05 여행 스타일 3키(TRIP-573) — 순수 뷰(`TravelStyleScreen`)를 격리 렌더한다(`@/shared/api` 값
+  // import 0 이라 프리뷰 지뢰 목 통과 — 컨테이너 `TravelStylePage` 는 별 파일이라 import 사슬 전이
+  // 로드 없음). 지도는 좌표 계약 공백이라 늘 placeholder degrade(가짜 지도 금지). 코랄 막대·StatTile
+  // 카드·진행 게이지·미리보기 칩·EvidenceLink press "준비 중" degrade 는 픽셀·상호작용이라 6-b/육안 몫
+  // — 자율/야간이라 6-b SKIP, 이 3키가 유일한 육안 대조 자리(정식·avgDwell null degrade·임시 3얼굴).
+  {
+    key: 'travel-style-official',
+    label: 'j05 여행 스타일 · 정식(default)',
+    login: null,
+    render: () => (
+      <TravelStyleScreen
+        face="official"
+        progress={{ current: 14, required: 10 }}
+        analysis={{
+          descriptors: ['#바다', '#미식'],
+          traitGauges: { easygoing: 4, foodAffinity: 4, activeness: 3 },
+          categoryBreakdown: [
+            { category: '카페', ratio: 0.4, isOther: false },
+            { category: '자연', ratio: 0.25, isOther: false },
+            { category: '맛집', ratio: 0.2, isOther: false },
+            { category: '상위3밖', ratio: 0.15, isOther: true },
+          ],
+          avgPlacesPerDay: 4,
+          avgRadiusKm: 1.2,
+          avgDwellMinutes: 72,
+          sampleTripCount: 3,
+          updatedAt: '2026-06-13T09:00:00Z',
+        }}
+        preview={null}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    // 엣지 — avgDwellMinutes:null → 평균 체류 타일이 사라진다(0 으로 안 채움, BR-U5-08a degrade).
+    key: 'travel-style-no-dwell',
+    label: 'j05 여행 스타일 · 정식(체류 미측정)',
+    login: null,
+    render: () => (
+      <TravelStyleScreen
+        face="official"
+        progress={{ current: 11, required: 10 }}
+        analysis={{
+          descriptors: ['#느긋'],
+          traitGauges: { easygoing: 5, foodAffinity: 2, activeness: 2 },
+          categoryBreakdown: [
+            { category: '자연', ratio: 0.55, isOther: false },
+            { category: '카페', ratio: 0.3, isOther: false },
+            { category: '상위3밖', ratio: 0.15, isOther: true },
+          ],
+          avgPlacesPerDay: 3,
+          avgRadiusKm: 0.8,
+          avgDwellMinutes: null,
+          sampleTripCount: 2,
+          updatedAt: '2026-06-13T09:00:00Z',
+        }}
+        preview={null}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    // 임시 — official:false. 진행 게이지 + "정식 아님" + 온보딩 취향 미리보기 칩(Figma 목업엔 없으나 BR 우선).
+    key: 'travel-style-insufficient',
+    label: 'j05 여행 스타일 · 임시(부족)',
+    login: null,
+    render: () => (
+      <TravelStyleScreen
+        face="insufficient"
+        progress={{ current: 6, required: 10 }}
+        analysis={null}
+        preview={{ descriptors: ['느긋한 여행', '바다 선호', '미식 탐험'] }}
+        onBack={noop}
+      />
+    ),
+  },
   // 탐색 2키(TRIP-221·223) — **results 얼굴 전용**이다. 실화면 딥링크로는 볼 수 없다:
   // 백엔드가 401 이면 d04 는 항상 error, 세션이 없으면 d02 는 항상 게스트 안내로 떨어진다.
   // 나머지 얼굴(loading·empty·filter-zero·error·게스트)은 실화면에서 그대로 재현되므로
@@ -4185,6 +4335,135 @@ const PREVIEW_STATES: PreviewState[] = [
         isEmpty
         onNavigate={noop}
         onPressBack={noop}
+      />
+    ),
+  },
+  // j02 기록 비교 1키(TRIP-570) — 순수 뷰(`RecordsCompareScreen`)를 격리 렌더한다(`@/shared/api`·
+  // `@/shared/map` 값 import 0 이라 프리뷰 지뢰 목 통과). 세그 3탭·kind별 배지(실제/계획/변경)·
+  // 미방문·휴무 pill·코랄 점선 변경 카드·귀속 헤더·지도 degrade 자리표시를 한 화면에서 육안 대조하는
+  // 자리. 지도 3레이어·사진 핀은 좌표 계약 부재라 이번 사이클 제외(degrade) — 실제 렌더는 후속 몫.
+  // 세그 활성 탭 하이라이트는 고정('실제', noop) — 리스트는 탭 무관 전체라 필터 전환 대조는 불필요.
+  {
+    key: 'records-compare',
+    label: 'j02 기록 비교 · 3종(실제·미방문·변경)',
+    login: null,
+    render: () => (
+      <RecordsCompareScreen
+        activeTab="actual"
+        onSelectTab={noop}
+        attribution={{ dayLabel: '6월 11일', stayName: '해운대 A호텔' }}
+        rows={
+          [
+            {
+              kind: 'actual',
+              key: 'a1',
+              date: '2026-06-11',
+              poiId: 'poi1',
+              placeLabel: '광안리 해변',
+              timeLabel: '14:20',
+            },
+            {
+              kind: 'actual',
+              key: 'a2',
+              date: '2026-06-11',
+              poiId: 'poi2',
+              placeLabel: '부산시립미술관',
+              timeLabel: '15:40',
+            },
+            {
+              kind: 'unvisited',
+              key: 'u1',
+              date: '2026-06-11',
+              poiId: 'poi9',
+              placeLabel: '○○ 전망대',
+            },
+            {
+              kind: 'change',
+              key: 'c1',
+              date: '2026-06-11',
+              beforeLabel: '△△ 카페',
+              afterLabel: '◇◇ 실내카페',
+              reason: '휴무',
+              timeLabel: '15:40',
+              sourceType: 'PLAN_B',
+            },
+          ] satisfies CompareRow[]
+        }
+        onBack={noop}
+      />
+    ),
+  },
+  // j07 기록 탭 허브 2키(TRIP-575) — 순수 뷰(`RecordsCalendarScreen`)를 격리 렌더한다(`@/shared/api`·
+  // `@/features/*` 값 import 0 이라 프리뷰 지뢰 목 통과). `-default`는 커스텀 월 그리드·코랄 pill 마킹
+  // (연속 구간 양 끝 둥글림)·legend·지난 여행 카드(제목·기간·박수만, 사진·통계 없음 — Q2 degrade)를,
+  // `-empty`는 저장 여행 0건 안내 + 새 여행 버튼을 한 화면에서 육안 대조한다. 코랄 pill 색·정렬 픽셀은
+  // jest 사각이라 이 키가 유일한 육안 그물(자율 세션이라 6-b 미실행 — 다음 세션 확인 대상).
+  {
+    key: 'records-calendar-default',
+    label: 'j07 기록 캘린더 · 마킹·지난 여행',
+    login: null,
+    render: () => (
+      <RecordsCalendarScreen
+        monthLabel="2026년 6월"
+        grid={buildMonthGrid('2026-06')}
+        markedDays={[
+          '2026-06-10',
+          '2026-06-11',
+          '2026-06-12',
+          '2026-06-20',
+          '2026-06-21',
+        ]}
+        monthLegends={[
+          {
+            tripId: 't-busan',
+            title: '부산 여행',
+            dateRangeLabel: '2026.6.10–6.12',
+            nightsLabel: '2박 3일',
+          },
+        ]}
+        pastTrips={[
+          {
+            tripId: 't-jeju',
+            title: '제주 여행',
+            dateRangeLabel: '2026.5.1–5.3',
+            nightsLabel: '2박 3일',
+          },
+          {
+            tripId: 't-gangneung',
+            title: '강릉 여행',
+            dateRangeLabel: '2026.4.18–4.20',
+            nightsLabel: '2박 3일',
+          },
+          {
+            tripId: 't-weekend',
+            title: '주말 나들이',
+            dateRangeLabel: null,
+            nightsLabel: null,
+          },
+        ]}
+        isEmpty={false}
+        onPressPrevMonth={noop}
+        onPressNextMonth={noop}
+        onSelectTrip={noop}
+        onPressCreateTrip={noop}
+      />
+    ),
+  },
+  {
+    key: 'records-calendar-empty',
+    label: 'j07 기록 캘린더 · 빈 상태',
+    login: null,
+    render: () => (
+      <RecordsCalendarScreen
+        monthLabel="2026년 6월"
+        grid={[]}
+        markedDays={[]}
+        pastTrips={[]}
+        isEmpty
+        onPressPrevMonth={noop}
+        onPressNextMonth={noop}
+        onSelectTrip={noop}
+        onPressCreateTrip={noop}
       />
     ),
   },

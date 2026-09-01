@@ -78,6 +78,14 @@ l05 '등록 숙소·예약 기록'(bases) 행은 이 티켓 스코프 밖(스코
 
 l05 설정 목록에 개인화 진입행 없음(Figma 캐논에 개인화 그룹 자체가 없음 + `settingsSections.test.ts` 완전일치 가드 충돌, TRIP-610 `preferences` 선례와 동형 판단) — 도달 경로는 딥링크 `/settings/personalization`과 `_dev/preview.tsx` 3키(reason 3얼굴)뿐. 진입행 배선은 후속 티켓([FE] l05 설정 개인화 진입행, Figma 디자인 선행).
 
+## 이번 사이클(TRIP-573) 변경 — StyleSummaryCard 상세진입 활성화
+
+j05(여행 스타일 분석, `features/reflection`)가 `records/style` 라우트를 신설하면서, TRIP-606에서 disabled로 남아있던 상세진입 Pressable을 이 사이클이 활성화했다.
+
+| 파일 | 내용 |
+|---|---|
+| `ui/StyleSummaryCard.tsx` | **변경(additive) — `my-style-detail` prop-gated 활성화.** `onPressDetail?: () => void` prop 추가, `disabled={onPressDetail == null}`·`onPress={onPressDetail}`. prop 미주입 시 여전히 `disabled`(기존 `StyleSummaryCard.test.tsx` AC-S6의 `toBeDisabled()` 무회귀 — 이게 backward-compat 증거). 실제 배선은 `pages/my-page/ui/MyPage.tsx`가 `onPressDetail={() => router.push('/records/style')}`를 주입(`layer-pages.md` `my-page` 행 참고). |
+
 ## 관련
 
 - 경계 가드: `src/__tests__/settingsBoundary.test.ts`(소스 재귀 스캔, eslint 무강제 — repo-traps 참고). TRIP-610도 이 가드가 `features/onboarding` 재사용을 막아 shared 승격을 강제한 세 번째 실측.

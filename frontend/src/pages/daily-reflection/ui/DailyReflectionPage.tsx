@@ -9,6 +9,7 @@ import {
   DailyReflectionScreen,
   type ReflectionFace,
 } from '@/features/reflection/ui/DailyReflectionScreen';
+import { useGetTripsTripId } from '@/shared/api/generated/trips/trips';
 
 /**
  * TRIP-571 · daily-reflection 페이지 — 조회·표시본 조립·배선의 단일 출처(FSD).
@@ -37,6 +38,11 @@ export function DailyReflectionPage({
 }: DailyReflectionPageProps): ReactElement {
   const daily = useDailyReflection(tripId, date);
   const res = daily.reflection;
+
+  // j03 은 여행 "중" 화면이라 공유는 종료·요약된 여행에서만 열린다(BR-U5-48). 회고 계약엔 종료 신호가
+  // 없어 추가 조회로 status 를 판정한다(01b Q3) — 화면에 canShare/onShare 로 내린다.
+  const trip = useGetTripsTripId(tripId);
+  const canShare = trip.data?.status === 'ENDED';
 
   const stats = statsCard(res?.stats);
   const missing = missingParts(stats);
@@ -70,6 +76,8 @@ export function DailyReflectionPage({
       mapNotice={missing.mapNotice}
       hidePhotoGrid={missing.hidePhotoGrid}
       photos={[]}
+      canShare={canShare}
+      onShare={() => router.push(`/trips/${tripId}/records/share`)}
       onEnterEdit={() => {
         // 편집 열림은 화면이 로컬로 진다. 생성 없이 PUT 경로(BR-U5-36)라 여기서 별도 조치 없음.
       }}
