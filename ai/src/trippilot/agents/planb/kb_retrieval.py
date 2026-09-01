@@ -36,7 +36,22 @@ KB_COLLECTIONS: Mapping[KbKind, str] = MappingProxyType(
     }
 )
 
-DEFAULT_TOP_K = 20  # planb-rag-design §9 미결 #4 — "20 (임시), 실험 후 조정"
+# planb-rag-design §9 미결 #4 "20 (임시), 실험 후 조정" — 2026-09-01 실측으로 확정.
+# 20 은 KB 총량(24건)보다 커서 **정렬만 하고 한 건도 거르지 않는 no-op** 이었다.
+#
+# KB-3 24건 · 질의 6종 실측 (재현: `scripts/measure_kb_topk.py`):
+#     top_k |  2     3     4     5     6     8    20
+#     정밀도 | 1.000 0.833 0.708 0.600 0.528 0.438 0.208
+#     길이   | 149   224   292   369   443   579  1398 자  (프롬프트 골격 630자 대비)
+# 4 를 고른 이유: reason 버킷이 비대칭이라(weather 10건 ↔ delay·none 2건) 한 값이
+# 모두를 만족시킬 수 없는데, 4 는 가장 큰 "전건이 필요한" 버킷(fatigue 4건)을 정확히
+# 덮으면서 컨텍스트를 골격의 46% 로 유지한다. 6 이면 컨텍스트의 절반이 무관 문서다.
+#
+# **측정 범위는 KB-3(SITUATION) 뿐이다.** `PlanBRagPipeline._safe_retrieve` 가 세 KB 에
+# 같은 값을 넘기므로 KB-1·KB-2 에도 걸리지만, 둘은 아직 적재 0건이라 측정 대상이
+# 없었다 — 데이터가 붙으면 그때 KB별로 나눌지 판단한다(지금 나누면 근거 없는 상수가
+# 둘 더 생긴다).
+DEFAULT_TOP_K = 4
 
 
 class KbIndexError(ValueError):

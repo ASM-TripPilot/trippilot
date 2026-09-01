@@ -862,3 +862,21 @@ def test_pbt_rule_ranking_is_deterministic_and_independent_of_input_order(
     assert first == _rule_ranking(hits, pool, available, reason)
     assert first == _rule_ranking(hits, pool, shuffled, reason)
     assert first == _rule_ranking(hits, pool, tuple(p.poi_id for p in pool.pois), reason)
+
+
+def test_situation_query_translates_reason_to_korean() -> None:
+    """영문 reason 이 질의에 남으면 한국어 KB 문서와 붙지 않는다 (2026-09-01 실측).
+
+    특히 `none` 은 임베딩상 빈 토큰이라 MANUAL/none 질의가 자기 문서를 top6 안에
+    한 건도 못 올렸다. 매핑이 빠져도 예외 없이 조용히 검색 품질만 떨어지는
+    무증상 회귀라, 질의 문자열 자체를 못 박는다.
+    """
+    from trippilot.agents.planb.rag import _REASON_KO, _situation_query
+
+    pool = _pool()
+    for reason in ("weather", "closed", "delay", "canceled", "fatigue", "none"):
+        query = _situation_query(_request(pool, reason=reason))
+        assert reason not in query, f"{reason}: 영문 reason 이 질의에 남았다"
+        assert _REASON_KO[reason] in query
+    # 미지 reason 은 원문 통과 — 계약이 넓어져도 질의가 비지 않는다 (INV-4).
+    assert "unknown" in _situation_query(_request(pool, reason="unknown"))
