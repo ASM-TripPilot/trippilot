@@ -35,10 +35,13 @@ on:
   workflow_dispatch:
     inputs:
       provider:
-        description: 'LLM 제공자 (v1 표면 = openai)'
+        # 기본은 운영과 같은 mixed — 수동 실행에도 이 기본값이 채워지므로,
+        # 여기가 openai 면 아래 `inputs.provider || 'mixed'` 폴백이 스케줄에서만
+        # 먹어 "수동은 openai, 스케줄은 mixed" 로 갈라진다(실측: run 33523506956).
+        description: 'LLM 제공자 (운영과 동일한 mixed 권장 · v1 표면 = openai)'
         type: choice
-        options: [openai, azure]
-        default: openai
+        options: [mixed, openai, azure]
+        default: mixed
       endpoint:
         description: 'base_url — /openai/v1 까지만, /responses 등 경로 제외 (비우면 repo Variable AZURE_OPENAI_ENDPOINT)'
         required: false
