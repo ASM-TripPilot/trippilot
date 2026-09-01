@@ -42,39 +42,68 @@ class ReflectionController(private val service: ReflectionService) {
         @PathVariable tripId: UUID,
         @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) dayDate: LocalDate,
         @RequestBody request: EditReflectionRequest,
-    ): ReflectionResponse = ReflectionResponse.from(service.edit(principal.accountId(), tripId, dayDate, request.text))
+    ): ReflectionResponse = ReflectionResponse.from(service.edit(principal.accountId(), tripId, dayDate, request.card))
 }
 
 /** 토큰 sub → 계정 id. UUID 가 아니면 인증 실패로 다룬다(형식 오류를 500 으로 흘리지 않는다). */
 private fun Principal.accountId(): UUID =
     runCatching { UUID.fromString(name) }.getOrElse { throw AuthenticationRequired() }
 
+/**
+ * 수정본은 **카드 통째**다(BR-U5-35 · 2026-09-01). 장면·캡션 단위 편집은 화면이 정해진 뒤에 정한다 —
+ * 지금 쪼개면 근거 없이 계약을 좁힌다.
+ *
+ * [card] 는 카드 원문(JSON 문자열)이다. 상한은 문장 시절 4000자보다 넉넉히 잡는다 — 장면이 여럿이면
+ * 원문이 그만큼 길어진다. 형식·`cover.title` 검사는 [ReflectionCardCodec] 이 400 으로 낸다.
+ */
 data class EditReflectionRequest(
-    @field:NotBlank @field:Size(max = 4000) val text: String,
+    @field:NotBlank @field:Size(max = 20000) val card: String,
 )
 
 data class ReflectionListResponse(val items: List<ReflectionResponse>)
 
 /**
+ * 카드 한 장. [title]·[subtitle] 은 **목록이 쓰는 짧은 문구**라 따로 낸다 — 클라가 매번
+ * `payload` 를 파싱해 꺼내면 목록 화면이 느려지고, 꺼내는 규칙이 클라마다 갈린다.
+ *
+ * [payload] 는 카드 원문(JSON)이다. 서버는 `cover` 밖을 해석하지 않는다(DEC-U5-14).
+ */
+data class ReflectionCardResponse(
+    val templateId: String,
+    val format: String,
+    val title: String,
+    val subtitle: String,
+    val payload: String,
+) {
+    companion object {
+        fun from(c: com.trippilot.reflection.domain.ReflectionCard) =
+            ReflectionCardResponse(c.templateId, c.format, c.title, c.subtitle, c.payload)
+    }
+}
+
+/**
  * 회고 한 장의 웹 표현.
  *
- * [draftNarrative] 와 [editedNarrative] 를 **둘 다** 준다(INV-U5-06) — 화면이 "생성된 것"과
+ * [draftCard] 와 [editedCard] 를 **둘 다** 준다(INV-U5-06) — 화면이 "생성된 것"과
  * "내가 고친 것"을 2열로 그린다. 하나로 합치면 그 비교가 사라진다.
  *
- * [source] 는 **항상** 실린다(BR-U5-33). 화면이 구분해 그리지 않더라도, 규칙 문장이 몇 %인지
- * 모르면 AI 경로를 붙일 근거가 없다.
+ * [source] 는 **항상** 실린다(BR-U5-33). 화면이 구분해 그리지 않더라도, 규칙 카드가 몇 %인지
+ * 모르면 AI 경로의 값을 잴 근거가 없다.
+ *
+ * 카드 본문은 **원문 그대로** 내보낸다 — 백엔드가 재조립하면 상대 템플릿이 늘 때마다 우리가
+ * 따라 고쳐야 한다(DEC-U5-14). 화면은 `templateId` 로 그리는 법을 고른다.
  */
 data class ReflectionResponse(
     val dayDate: LocalDate,
     /**
-     * 화면이 그대로 그리는 문장(`editedNarrative ?: draftNarrative`).
+     * 화면이 그대로 그리는 카드(`editedCard ?: draftCard`).
      *
      * 이 필드를 서버가 내는 이유는 **표시본 선택이 업무 규칙이기 때문이다**(BR-U5-35). 클라이언트가
      * 매번 `?:` 를 다시 쓰면 조회 화면과 목록 화면이 서로 다르게 고르는 날이 온다.
      */
-    val narrative: String,
-    val draftNarrative: String,
-    val editedNarrative: String?,
+    val card: ReflectionCardResponse,
+    val draftCard: ReflectionCardResponse,
+    val editedCard: ReflectionCardResponse?,
     val source: String,
     val stats: ReflectionStatsResponse,
     val generatedAt: Instant,
@@ -82,7 +111,8 @@ data class ReflectionResponse(
 ) {
     companion object {
         fun from(r: Reflection) = ReflectionResponse(
-            r.dayDate, r.narrative, r.draftNarrative, r.editedNarrative, r.source.name,
+            r.dayDate, ReflectionCardResponse.from(r.card), ReflectionCardResponse.from(r.draftCard),
+            r.editedCard?.let(ReflectionCardResponse::from), r.source.name,
             ReflectionStatsResponse(
                 r.stats.visitCount, r.stats.distanceKm, r.stats.distanceSource.name, r.stats.photoCount,
             ),

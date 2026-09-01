@@ -92,8 +92,15 @@ class ReflectionPropertyTest : StringSpec({
         ) to if (hasCoord) (33.0 + Arb.int(0, 100).bind() / 100.0) to (126.0 + Arb.int(0, 100).bind() / 100.0) else null
     }
 
+    /** 사용자가 보내는 카드 원문 — 편집 단위는 카드 통째다(BR-U5-35). */
+    fun userCard(title: String) =
+        """{"template_id":"user.edit.v1","format":"CARD","cover":{"title":"$title","subtitle":""},"scenes":[]}"""
+
     fun service(visits: List<ArchiveVisitView>, coords: Map<UUID, Pair<Double, Double>>, events: Sink = Sink()) =
-        ReflectionService(trips, archiveOf(visits), surfacesOf(coords), Reflections(), events, clock)
+        ReflectionService(
+            trips, archiveOf(visits), surfacesOf(coords), Reflections(),
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), events, clock,
+        )
 
     // ── PBT-U5-1 (블로킹) ──────────────────────────────────────────────
     "PBT-U5-1 입력이 무엇이든 회고가 비어 있지 않다" {
@@ -103,8 +110,11 @@ class ReflectionPropertyTest : StringSpec({
 
             val r = service(visits, coords).generateDaily(acc, tripId, day)
 
-            r.draftNarrative.shouldNotBeBlank()
-            r.narrative.shouldNotBeBlank()
+            // PBT-U5-F1 — 표시본 카드가 비어 있지 않다. **장면 개수는 조건이 아니다**:
+            // 방문 0곳이면 근거가 없어 장면을 만들 수 없고, 요구하면 지어내야 한다(BR-U5-31).
+            r.draftCard.title.shouldNotBeBlank()
+            r.card.title.shouldNotBeBlank()
+            r.draftCard.payload.shouldNotBeBlank()
             // stats 는 비어 있을 수 없다(INV-U5-07) — 기본 카드가 이 값만으로 그려진다.
             (r.stats.visitCount >= 0) shouldBe true
             (r.stats.photoCount >= 0) shouldBe true
@@ -116,7 +126,8 @@ class ReflectionPropertyTest : StringSpec({
         val r = service(emptyList(), emptyMap()).generateDaily(acc, tripId, day)
 
         r.source shouldBe ReflectionSource.BASIC
-        r.draftNarrative shouldBe ReflectionNarrator.BASIC_DAILY
+        r.draftCard.templateId shouldBe ReflectionNarrator.BASIC_TEMPLATE
+        r.draftCard.subtitle shouldBe ReflectionNarrator.BASIC_DAILY
         r.stats.visitCount shouldBe 0
         r.stats.photoCount shouldBe 0
     }
@@ -156,7 +167,7 @@ class ReflectionPropertyTest : StringSpec({
             ArchiveVisitView(UUID.randomUUID(), poi, Instant.parse("2026-08-11T03:00:00Z"), null, false, 1, false),
         )
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(visits), surfacesOf(mapOf(poi to (33.4 to 126.5))), repo, Sink(), clock)
+        val svc = ReflectionService(trips, archiveOf(visits), surfacesOf(mapOf(poi to (33.4 to 126.5))), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), Sink(), clock)
 
         svc.generateDaily(acc, tripId, day)
         svc.generateDaily(acc, tripId, day)
@@ -167,45 +178,49 @@ class ReflectionPropertyTest : StringSpec({
     // ── 초안·수정본 2열(INV-U5-06 · TRIP-553) ─────────────────────────
     "재생성이 사용자 수정본을 지우지 않는다 — 초안만 갈아끼운다" {
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, Sink(), clock)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), Sink(), clock)
         svc.generateDaily(acc, tripId, day)
-        val edited = svc.edit(acc, tripId, day, "내가 쓴 문장")
+        val edited = svc.edit(acc, tripId, day, userCard("내가 쓴 제목"))
 
         val again = svc.generateDaily(acc, tripId, day)
 
-        // 초안은 다시 만들 수 있지만 사용자의 문장은 어디에도 없다 — 그래서 이쪽이 더 나쁜 손실이다.
-        again.editedNarrative shouldBe "내가 쓴 문장"
-        again.narrative shouldBe "내가 쓴 문장"
+        // 초안은 다시 만들 수 있지만 사용자가 고친 카드는 어디에도 없다 — 그래서 이쪽이 더 나쁜 손실이다.
+        again.editedCard?.title shouldBe "내가 쓴 제목"
+        again.card.title shouldBe "내가 쓴 제목"
         again.generatedAt shouldBe edited.generatedAt
         repo.stored.size shouldBe 1
     }
 
     "수정해도 초안은 남는다 — 2열 비교의 왼쪽(INV-U5-06)" {
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), Sink(), clock)
-        val draft = svc.generateDaily(acc, tripId, day).draftNarrative
+        val svc = ReflectionService(
+            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), Sink(), clock,
+        )
+        val draft = svc.generateDaily(acc, tripId, day).draftCard.title
 
-        val edited = svc.edit(acc, tripId, day, "고친 문장")
+        val edited = svc.edit(acc, tripId, day, userCard("고친 제목"))
 
-        edited.draftNarrative shouldBe draft
-        edited.editedNarrative shouldBe "고친 문장"
+        edited.draftCard.title shouldBe draft
+        edited.editedCard?.title shouldBe "고친 제목"
     }
 
     "회고가 없어도 바로 쓸 수 있다 — 기본 카드 위에 얹는다(BR-U5-36)" {
         val repo = Reflections()
         val events = Sink()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, events, clock)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), events, clock)
 
-        val written = svc.edit(acc, tripId, day, "생성은 실패했지만 내가 쓴다")
+        val written = svc.edit(acc, tripId, day, userCard("생성은 실패했지만 내가 쓴다"))
 
-        written.narrative shouldBe "생성은 실패했지만 내가 쓴다"
-        written.draftNarrative.shouldNotBeBlank() // 근거 수치만으로 된 기본 카드 — 지어낸 문장이 아니다
+        written.card.title shouldBe "생성은 실패했지만 내가 쓴다"
+        written.draftCard.title.shouldNotBeBlank() // 근거 수치만으로 된 기본 카드 — 지어낸 문장이 아니다
         repo.stored.size shouldBe 1
         // 사용자가 글을 쓰는 순간에 "회고가 준비됐어요" 알림이 본인에게 가면 안 된다.
         events.published.shouldBeEmpty()
     }
 
     "여행 기간 밖 날짜는 거부한다 — 근거 데이터가 없는 날이다" {
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), Sink(), clock)
+        val svc = ReflectionService(
+            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), Sink(), clock,
+        )
 
         shouldThrow<ValidationFailed> { svc.generateDaily(acc, tripId, day.minusDays(1)) }
         shouldThrow<ValidationFailed> { svc.edit(acc, tripId, day.plusDays(3), "여행 밖 회고") }

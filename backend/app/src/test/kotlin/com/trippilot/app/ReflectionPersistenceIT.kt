@@ -57,8 +57,40 @@ class ReflectionPersistenceIT : AbstractPostgresIntegrationTest() {
         ),
     ).tripId
 
+    /** 사용자가 보내는 카드 원문. 편집 단위는 카드 통째다(BR-U5-35). */
+    private fun card(title: String) =
+        """{"template_id":"user.edit.v1","format":"CARD","cover":{"title":"$title","subtitle":""},"scenes":[]}"""
+
     private fun rows(tripId: UUID) =
         jdbc.queryForObject("SELECT count(*) FROM reflection WHERE trip_id = ?", Int::class.java, tripId)
+
+    /**
+     * 마이그레이션이 **끝까지** 갔는가(V2.44).
+     *
+     * 컬럼만 더하고 옛 컬럼을 안 지우면 두 출처가 남아 편집이 한쪽에만 반영되는 날이 온다.
+     * NOT NULL 을 안 걸면 카드 없는 회고가 저장돼 목록에 빈 줄이 그려진다.
+     *
+     * ⚠ **행 이관(백필)은 이 스위트가 못 잰다.** Testcontainers 는 빈 DB 로 시작해 UPDATE 가
+     * 0행을 훑고 끝난다. 게다가 이 마이그레이션은 옛 컬럼을 **지우므로** TRIP-361 처럼 픽스처를
+     * 넣어 재현할 수도 없다(넣을 컬럼이 이미 없다). 이관 semantics 는 데이터가 있는 환경에서만
+     * 실행된다 — 그 사실을 여기 적어 둔다.
+     */
+    @Test
+    fun `카드 컬럼이 서고 문장 컬럼은 사라졌다 — 두 출처를 남기지 않는다 — V2_44`() {
+        val cols = jdbc.queryForList(
+            """
+            SELECT column_name, is_nullable FROM information_schema.columns
+            WHERE table_name = 'reflection'
+            """.trimIndent(),
+        ).associate { it["column_name"] as String to it["is_nullable"] as String }
+
+        cols["draft_card"] shouldBe "NO"
+        cols["template_id"] shouldBe "NO"
+        cols["card_format"] shouldBe "NO"
+        cols["edited_card"] shouldBe "YES"   // 안 고쳤으면 null 이다(INV-U5-06)
+        cols.containsKey("draft_narrative") shouldBe false
+        cols.containsKey("edited_narrative") shouldBe false
+    }
 
     @Test
     fun `방문 0곳이어도 기본 카드가 저장된다 — 빈 화면을 그리지 않는다(PBT-U5-1)`() {
@@ -67,7 +99,7 @@ class ReflectionPersistenceIT : AbstractPostgresIntegrationTest() {
 
         val r = reflections.generateDaily(accountId, tripId, day)
 
-        r.draftNarrative.shouldNotBeBlank()
+        r.draftCard.title.shouldNotBeBlank()
         r.source shouldBe ReflectionSource.BASIC
         r.stats.visitCount shouldBe 0
         rows(tripId) shouldBe 1
@@ -91,17 +123,37 @@ class ReflectionPersistenceIT : AbstractPostgresIntegrationTest() {
         ) shouldBe firstGeneratedAt
     }
 
+    /**
+     * 수정본이 **자기 템플릿을 지킨다.**
+     *
+     * `template_id` 컬럼에는 초안 것만 담긴다. 읽을 때 그 값을 두 카드에 다 붙이면, 사용자가 고친
+     * 카드가 왕복 한 번에 서버가 만든 것처럼 둔갑한다 — "누가 만든 카드인가"를 답하려고 둔 필드가
+     * 정확히 거짓이 되고, 같은 객체가 자기 payload 와 어긋난다.
+     */
+    @Test
+    fun `수정본은 왕복해도 자기 템플릿을 지킨다 — 초안 것으로 둔갑하지 않는다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        val draftTemplate = reflections.generateDaily(accountId, tripId, day).draftCard.templateId
+
+        reflections.edit(accountId, tripId, day, card("내가 고친 제목"))
+        val reloaded = reflections.find(accountId, tripId, day)!!
+
+        reloaded.editedCard?.templateId shouldBe "user.edit.v1"
+        reloaded.draftCard.templateId shouldBe draftTemplate
+    }
+
     @Test
     fun `수정해도 초안은 남는다(INV-U5-06)`() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
-        val draft = reflections.generateDaily(accountId, tripId, day).draftNarrative
+        val draft = reflections.generateDaily(accountId, tripId, day).draftCard.title
 
-        val edited = reflections.edit(accountId, tripId, day, "내가 고친 문장")
+        val edited = reflections.edit(accountId, tripId, day, card("내가 고친 제목"))
 
-        edited.draftNarrative shouldBe draft
-        edited.editedNarrative shouldBe "내가 고친 문장"
-        edited.narrative shouldBe "내가 고친 문장"
+        edited.draftCard.title shouldBe draft
+        edited.editedCard?.title shouldBe "내가 고친 제목"
+        edited.card.title shouldBe "내가 고친 제목"
     }
 
     @Test
@@ -109,14 +161,14 @@ class ReflectionPersistenceIT : AbstractPostgresIntegrationTest() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
         reflections.generateDaily(accountId, tripId, day)
-        reflections.edit(accountId, tripId, day, "내가 쓴 문장")
+        reflections.edit(accountId, tripId, day, card("내가 쓴 제목"))
 
         reflections.generateDaily(accountId, tripId, day)
 
         // upsert 가 도메인 값을 그대로 덮으므로, 도메인이 보존해도 영속에서 날아가면 여기서 잡힌다.
         jdbc.queryForObject(
-            "SELECT edited_narrative FROM reflection WHERE trip_id = ?", String::class.java, tripId,
-        ) shouldBe "내가 쓴 문장"
+            "SELECT edited_card->'cover'->>'title' FROM reflection WHERE trip_id = ?", String::class.java, tripId,
+        ) shouldBe "내가 쓴 제목"
         rows(tripId) shouldBe 1
     }
 
@@ -125,10 +177,10 @@ class ReflectionPersistenceIT : AbstractPostgresIntegrationTest() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
 
-        val written = reflections.edit(accountId, tripId, day, "생성 없이 바로 쓴다")
+        val written = reflections.edit(accountId, tripId, day, card("생성 없이 바로 쓴다"))
 
-        written.narrative shouldBe "생성 없이 바로 쓴다"
-        written.draftNarrative.shouldNotBeBlank()
+        written.card.title shouldBe "생성 없이 바로 쓴다"
+        written.draftCard.title.shouldNotBeBlank()
         rows(tripId) shouldBe 1
     }
 
