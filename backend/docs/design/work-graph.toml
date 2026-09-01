@@ -501,3 +501,58 @@ note = """
 **우리 openapi 에 대응 표면이 없다.** 화면·문구·확인 흐름이 정해져야 계약을 열 수 있으므로
 제품 결정이 선행이다. 기술 선행은 없다(경계는 이미 열려 있다).
 """
+
+[[nodes]]
+id = "REFLECTION-AI"
+ticket = ""
+title = "회고 AI 개통 — 문장에서 카드로(정본·저장·경계·개통 4칸)"
+status = "done"
+migration = true
+touches = [
+  "aidlc/aidlc-docs/construction/u5-records-reflection/functional-design",
+  "backend/modules/reflection",
+  "backend/app/src/main/resources/db/migration/V2.44__reflection_card.sql",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+**착수하려다 두 팀 정본이 갈린 것을 발견해 멈췄고, 사용자가 카드 전환을 선택했다**(2026-09-01).
+
+정본 §5.3 은 애초에 "표면 계약 **초안**(개통 이연 · G-U5-4)"이었고 협의 결과가 초안과 달랐다 —
+2경로(generate·nudge)이고 산출물이 문장이 아니라 **카드**(template_id·cover·scenes·hashtags).
+
+네 칸으로 갈랐다: 정본(#437) → 저장·규칙 카드·공개계약(#438) → 경계(#439) → 개통(#440).
+중간 상태가 안전한 순서다 — 기본 모드가 `rule` 이라 어느 칸에서 멈춰도 사용자에게 보이는 것이
+바뀌지 않는다.
+
+전환 시점의 근거: 프런트에 회고 화면이 **없었다**(features/reflection 부재, narrative 를 그리는
+.tsx 0건). 계약을 깨도 깨질 소비자가 없는 최저 비용 시점이었다.
+
+**남은 것 3건**
+- **실 왕복 미검증** — 로컬 develop 이미지(2026-08-22)가 회고 경계보다 낡아 404 였고, GHCR pull 이
+  403(토큰 스코프)이라 최신 이미지를 못 받았다. 최신 이미지가 있는 환경에서 한 번 태워야 한다.
+  LiveReflectionRoundTripIT 에 선행 단정이 있어 그 상황이 "이미지를 올리세요"로 보인다
+- **trip_summary 는 문장 그대로** — 상대 kind 가 SUMMARY 도 덮지만 요약은 highlights 등 우리 고유
+  필드가 있어 판단이 별건이다(O-U5-10)
+- **회고 testID 미확정** — 화면(j03)이 없어 새 이름을 짓지 않았다. 지금 지으면 근거 없이 계약을 좁힌다
+"""
+
+[[nodes]]
+id = "REFLECTION-LIVE-CHECK"
+ticket = ""
+title = "회고 AI 실 왕복 1회 — 최신 AI 이미지 필요"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/test/kotlin/com/trippilot/app/LiveReflectionRoundTripIT.kt",
+]
+note = """
+이름 게이트는 필드 **이름**을 지키지 `minItems` 같은 **제약**이나 업무 규칙 위반은 못 본다 —
+일정 경계에서 이름이 전부 맞는 상태로 422·409 가 연달아 난 전례가 있다.
+
+막고 있는 것은 코드가 아니라 **환경**이다(2026-09-01 실측): 로컬 이미지 2026-08-22 < 계약 2026-08-27,
+GHCR pull 403. 최신 이미지를 받을 수 있으면 아래 한 줄이면 끝난다.
+
+    docker compose --profile full up -d ai
+    LIVE_AI=1 ./gradlew :app:test --tests "*LiveReflectionRoundTripIT*" --rerun-tasks
+    docker compose stop ai
+"""
