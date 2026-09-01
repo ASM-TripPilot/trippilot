@@ -1,7 +1,10 @@
 package com.trippilot.itinerarygeneration.contract
 
 import com.trippilot.itinerarygeneration.adapter.out.external.AiDay
+import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsRequest
+import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiFreshness
+import com.trippilot.itinerarygeneration.adapter.out.external.AiRequestMeta
 import com.trippilot.itinerarygeneration.adapter.out.external.AiScheduleResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSlot
 import com.trippilot.itinerarygeneration.adapter.out.external.AiUnplacedMustVisit
@@ -67,13 +70,32 @@ class AiBoundaryOpenApiTest : StringSpec({
 
     // ───────────────────────── 경로 ─────────────────────────
 
-    "우리가 부르는 세 경로가 계약에 실재한다" {
+    /**
+     * **넷이다.** 오래도록 `explanations` 가 이 목록에서 빠져 있었다 — 어댑터는 부르는데
+     * 이름 게이트는 셋만 봤다(2026-09-01 실측). 상대가 그 경로의 필드를 바꿔도 우리는
+     * 런타임에서야 안다. `explanations` 는 실패를 삼키고 빈 맵을 돌려주므로(부가 정보라)
+     * **드리프트가 화면의 근거 공백으로만 나타나 원인이 안 보인다.**
+     */
+    "우리가 부르는 네 경로가 계약에 실재한다" {
         val paths = requireNotNull(contract["paths"]).propertyNames()
         listOf(
             "/ai/v1/itinerary/generate",
             "/ai/v1/itinerary/validate",
             "/ai/v1/itinerary/repair",
+            "/ai/v1/itinerary/explanations",
         ).forEach { paths shouldContain it }
+    }
+
+    "explanations 요청 키가 계약과 정확히 일치한다" {
+        wireKeys(sampleExplanationsRequest) shouldContainExactly props("ExplanationsRequest")
+    }
+
+    /**
+     * 응답도 본다. 상대가 필드를 개명하면 우리 기본값(빈 맵·false)이 조용히 이깁니다 —
+     * 예외도 로그도 없이 "근거가 없는 일정"이 된다.
+     */
+    "explanations 응답 키가 계약과 정확히 일치한다" {
+        wireKeys(sampleExplanationsResponse) shouldContainExactly props("ExplanationsResponse")
     }
 
     // ───────────────────────── 요청(우리가 보낸다) ─────────────────────────
@@ -194,5 +216,15 @@ private val samplePayload = AiScheduleResponse(
     freshness = AiFreshness("kakao", Instant.parse("2026-08-01T00:00:00Z"), cacheHit = true, ttlSec = 600, stale = false),
     unplacedMustVisits = listOf(AiUnplacedMustVisit(UUID.randomUUID().toString(), "NO_FEASIBLE_SLOT")),
 )
+
+private val sampleRequestMeta =
+    AiRequestMeta(UUID.randomUUID().toString(), Instant.parse("2026-08-01T00:00:00Z"), 20_000L)
+
+private val sampleExplanationsRequest =
+    AiExplanationsRequest(UUID.randomUUID().toString(), samplePayload, sampleRequestMeta)
+
+/** 모든 필드를 채운다 — 비우면 그 키가 직렬화에서 빠져 비교가 헐거워진다. */
+private val sampleExplanationsResponse =
+    AiExplanationsResponse(mapOf("2026-08-01#poi" to "근거"), isFallback = true, reason = "LLM_TIMEOUT")
 
 private val sampleViolation = AiViolation("HC1", slotRef = "2026-08-01#poi", detail = "영업시간 밖", dayIndex = 0, slotIndex = 1)
