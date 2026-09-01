@@ -122,6 +122,19 @@ def test_openai_only_imported_in_llm_gateway_adapters() -> None:
     assert not offenders, f"adapters 밖에서 openai import: {offenders}"
 
 
+def test_langsmith_only_imported_in_intent_router() -> None:
+    """TRIP-653: 관측 SDK(langsmith)는 orchestrator/intent_router.py 한 파일 한정 — 임계값 튜닝용
+    계측이지 TracePort(ports/trace_port.py)의 대체가 아니다. 다른 계층으로 번지면 관측 백엔드
+    선정(mlops-llmops-design §도구 스택, 미확정)을 코드가 먼저 해 버리는 셈이 된다."""
+    offenders = []
+    for py in _SRC.rglob("*.py"):
+        if py.relative_to(_SRC).as_posix() == "orchestrator/intent_router.py":
+            continue
+        if "langsmith" in _external_imports(py):
+            offenders.append(str(py.relative_to(_SRC)))
+    assert not offenders, f"intent_router.py 밖에서 langsmith import: {offenders}"
+
+
 def test_yaml_only_imported_in_llm_gateway_prompts() -> None:
     """yaml 파서 의존은 PromptRegistry(llm_gateway/prompts.py) 한정 — ortools→solver_engine과 같은 격리 패턴."""
     offenders = []
