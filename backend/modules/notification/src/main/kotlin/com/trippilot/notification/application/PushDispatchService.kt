@@ -101,6 +101,8 @@ class PushDispatchService(
             actionType?.let { put("actionType", it) }
             actionPayload?.forEach { (k, v) -> put(k, v) }
         },
+        // 종류가 긴급도를 정한다 — 발송 지점이 따로 판단하지 않는다(어휘의 주인은 NotificationKind 하나다).
+        urgency = kind.urgency,
     )
 
     private companion object {

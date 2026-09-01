@@ -32,6 +32,24 @@ enum class NotificationKind {
     SYSTEM,
     ;
 
+    /**
+     * OS 에게 "이 알림이 **지금** 울려야 하는가"를 말한다.
+     *
+     * **왜 필요한가**: 이 값이 없으면 모든 푸시가 같은 등급으로 나가, 사용자가 취침 집중 모드를 켰을 때
+     * [SLOT_PRE](일정 5분 전)와 [REFLECTION](어제 회고)이 **함께** 막힌다. 서버 로그에는 `SENT` 로
+     * 남으므로 그 사실이 어디에도 안 보인다.
+     *
+     * **판단 기준은 "시각이 의미를 갖는가"다.** 사용자가 그 시각에 일정을 넣었으면 그 시각에 울려야 한다.
+     */
+    val urgency: PushUrgency
+        get() = when (this) {
+            // 시각이 곧 내용이다. 집중 모드를 뚫지 못하면 기능이 죽는다.
+            SLOT_PRE, PLAN_B -> PushUrgency.TIME_SENSITIVE
+            // 급하지 않다 — 요약에 모여 있어도 사용자가 잃는 것이 없다.
+            REFLECTION, COMMUNITY -> PushUrgency.PASSIVE
+            STAY, TRIP_PRE, TRIP_DAY, SYSTEM -> PushUrgency.ACTIVE
+        }
+
     companion object {
         /**
          * 시각이 되어 발화하는 종류 — `notification_schedule` 이 담을 수 있는 전부다(정본 §2.4).

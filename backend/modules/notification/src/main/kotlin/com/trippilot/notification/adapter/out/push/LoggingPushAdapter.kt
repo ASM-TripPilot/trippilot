@@ -23,7 +23,12 @@ class LoggingPushAdapter : PushPort {
 
     override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> {
         // 토큰 자체는 남기지 않는다 — 기기 식별자라 로그에 흘리지 않는다.
-        log.info("푸시(미발송 모드): 기기 {}대 · 제목='{}'", tokens.size, message.title)
+        // 긴급도를 함께 남긴다 — 종류마다 다르게 나가는 것이 이 경계의 전부인데, 기본 모드가 이것이라
+        // 여기서 안 보이면 "왜 이 알림은 조용했나"에 답할 근거가 로컬에 없다.
+        log.info(
+            "푸시(미발송 모드): 기기 {}대 · 긴급도={} · 제목='{}'",
+            tokens.size, message.urgency, message.title,
+        )
         return tokens.map { PushReceipt(it, PushStatus.SENT) }
     }
 

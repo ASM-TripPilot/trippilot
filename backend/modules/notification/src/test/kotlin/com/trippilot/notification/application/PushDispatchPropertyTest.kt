@@ -78,8 +78,13 @@ class PushDispatchPropertyTest : StringSpec({
     /** 토큰마다 결과를 정해 주는 발송기. 호출된 토큰 목록을 남겨 "전부에 보냈나"를 볼 수 있게 한다. */
     class Sender(private val outcome: (String) -> PushStatus = { PushStatus.SENT }) : PushPort {
         val calls = mutableListOf<List<String>>()
+
+        /** 나간 메시지 자체를 붙든다 — 긴급도가 실제로 실렸는지는 본문을 봐야 안다. */
+        val messages = mutableListOf<PushMessage>()
+
         override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> {
             calls += tokens
+            messages += message
             return tokens.map { PushReceipt(it, outcome(it), if (outcome(it) == PushStatus.SENT) null else outcome(it).name) }
         }
     }
@@ -94,8 +99,26 @@ class PushDispatchPropertyTest : StringSpec({
     fun notification(kind: NotificationKind = NotificationKind.TRIP_DAY) =
         Notification.raise(acc, kind, "제목", "본문", clock.instant())
 
+
     fun serviceOf(tokens: Tokens, sender: PushPort, notifications: Notifications, pushOn: Boolean = true) =
         PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, clock)
+
+    /**
+     * 발송 지점이 **종류의 긴급도를 그대로 싣는가**.
+     *
+     * 타입만으로는 부족하다 — 아무 값이나 넣어도 컴파일된다. 역검증에서 이 배선을 지웠을 때
+     * 처음엔 아무 테스트도 안 깨졌다(당시 기본값이 있었다). 기본값을 없애 컴파일로 막았고,
+     * **어느 값을 싣는지**는 이 단정이 지킨다.
+     */
+    "발송 본문의 긴급도는 알림 종류가 정한다" {
+        NotificationKind.entries.forEach { kind ->
+            val sender = Sender()
+            val tokens = Tokens(listOf(token(deliverable = true)))
+            serviceOf(tokens, sender, Notifications()).dispatch(notification(kind))
+
+            sender.messages.single().urgency shouldBe kind.urgency
+        }
+    }
 
     "INV-U6-06 쏠 수 있는 기기 전부에 보낸다 — 하나만 울리면 다른 기기를 보던 사용자가 놓친다" {
         checkAll(PropTestConfig(iterations = 40), Arb.list(Arb.boolean(), 0..5), Arb.list(Arb.boolean(), 0..3)) { live, dead ->
