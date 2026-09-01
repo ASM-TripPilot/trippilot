@@ -1437,30 +1437,30 @@ const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
 
 // AC-6 데이터 무결성 테스트(devPreviewBandNav)가 이 배열을 순수 데이터로 import 한다 → named export.
 export const PREVIEW_STATES: PreviewState[] = [
-  { key: 'splash', band: 'c', label: '스플래시', login: null },
+  { key: 'splash', band: 'c', label: 'c01 · 스플래시', login: null },
   {
     key: 'splash-loading',
     band: 'c',
-    label: '스플래시 · 로딩',
+    label: 'c01 · 스플래시 로딩',
     login: null,
     render: () => <SplashScreen loading />,
   },
   {
     key: 'login-idle',
     band: 'c',
-    label: '로그인 · 평상시',
+    label: 'c02 · 평상시',
     login: { phase: 'idle', errorCode: null, conflictProvider: null },
   },
   {
     key: 'login-cancelled',
     band: 'c',
-    label: '로그인 · 취소',
+    label: 'c02 · 취소',
     login: { phase: 'cancelled', errorCode: null, conflictProvider: null },
   },
   {
     key: 'login-error-banner',
     band: 'c',
-    label: '로그인 · 에러 배너',
+    label: 'c02 · 에러 배너',
     login: {
       phase: 'error',
       errorCode: 'SOCIAL_AUTH_FAILED',
@@ -1470,7 +1470,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'login-conflict-sheet',
     band: 'c',
-    label: '로그인 · 이메일 충돌 시트',
+    label: 'c02 · 이메일 충돌 시트',
     login: {
       phase: 'error',
       errorCode: 'SOCIAL_EMAIL_CONFLICT',
@@ -1480,20 +1480,20 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'login-age-sheet',
     band: 'c',
-    label: '로그인 · 연령 확인 시트',
+    label: 'c02 · 연령 확인 시트',
     login: { phase: 'needs-age', errorCode: null, conflictProvider: null },
   },
   {
     key: 'login-age-restriction',
     band: 'c',
-    label: '로그인 · 연령 미달',
+    label: 'c02 · 연령 미달',
     login: { phase: 'error', errorCode: 'AGE_NOT_MET', conflictProvider: null },
   },
   // ── 온보딩 (TRIP-162) — 순수 프레젠테이션 화면을 값으로 그린다 ──
   {
     key: 'onboarding-terms-default',
     band: 'c',
-    label: '약관 · 기본',
+    label: 'c06 · 기본',
     login: null,
     render: () => (
       <TermsScreen
@@ -1512,7 +1512,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'onboarding-terms-agreed',
     band: 'c',
-    label: '약관 · 동의완료',
+    label: 'c06 · 동의완료',
     login: null,
     render: () => (
       <TermsScreen
@@ -1703,8 +1703,8 @@ export const PREVIEW_STATES: PreviewState[] = [
   //    (엣지 표본은 `PREVIEW_REGIONS` 주석 참조: 인천 happy path·강원 sido=null·충북 묶음).
   {
     key: 'stay-region-default',
-    band: 'e',
-    label: 'e00 · 지역 선택 숙소',
+    band: 'd',
+    label: 'd03 · 지역 선택 숙소',
     login: null,
     render: () => (
       <RegionPickerScreen
@@ -1723,7 +1723,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'stay-region-trip',
     band: 'd',
-    label: 'd1b · 지역 선택 여행지',
+    label: 'd03 · 지역 선택 여행지',
     login: null,
     render: () => (
       // BR-U1-07 확인용 — 같은 컴포넌트에서 카피만 바뀌고 '내 주변'이 사라진다
@@ -1937,28 +1937,28 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'home-default',
     band: 'a',
-    label: '홈 · 기본',
+    label: 'a01 · 기본',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_DEFAULT_PROPS} />),
   },
   {
     key: 'home-no-trip',
     band: 'a',
-    label: '홈 · 첫 사용자',
+    label: 'a01 · 첫 사용자',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_NO_TRIP_PROPS} />),
   },
   {
     key: 'home-empty',
     band: 'a',
-    label: '홈 · 취향 부족',
+    label: 'a01 · 취향 부족',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_EMPTY_PROPS} />),
   },
   {
     key: 'home-loading',
     band: 'a',
-    label: '홈 · 로딩',
+    label: 'a01 · 로딩',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_LOADING_PROPS} />),
   },
@@ -1966,28 +1966,28 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'home-collecting',
     band: 'a',
-    label: '홈 · 담는 중',
+    label: 'a01 · 담는 중',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_COLLECTING_PROPS} />),
   },
   {
     key: 'home-planning',
     band: 'a',
-    label: '홈 · 계획 중',
+    label: 'a01 · 계획 중',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_PLANNING_PROPS} />),
   },
   {
     key: 'home-upcoming',
     band: 'a',
-    label: '홈 · 출발 전',
+    label: 'a01 · 출발 전',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_UPCOMING_PROPS} />),
   },
   {
     key: 'home-post-trip',
     band: 'a',
-    label: '홈 · 여행 후',
+    label: 'a01 · 여행 후',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_POST_TRIP_PROPS} />),
   },
