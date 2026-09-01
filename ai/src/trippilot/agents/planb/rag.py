@@ -79,6 +79,20 @@ class PlanBRagConfig:
 
     top_k: int = DEFAULT_TOP_K
     max_alternatives: int = 3  # 미결 #5 — UX 확정 시 조정
+    # 유사도 하한 (planb-rag-design §9 미결 #3 "데이터 쌓인 후 캘리브레이션").
+    # top_k 는 "몇 건까지"이고 이건 "얼마나 닮아야"다 — 버킷이 작으면(delay·none 은
+    # KB 에 2건뿐) top_k 를 채우려 무관 문서를 긁어오는데, 그걸 막는다.
+    #
+    # **비율 컷을 기본으로 쓴다.** 절대값은 임베딩 모델에 종속이라(코사인 분포가 모델마다
+    # 다르다) 모델을 바꾸면 조용히 잘못 자른다 — 팀은 provider 전환을 전제하고 있다
+    # (2026-08-22 "provider 를 바꾸면 전량 재적재"). 비율은 그 전환에도 유효하다.
+    # 절대 하한은 비율의 구멍을 막는 바닥이다: 최고점 자체가 낮은(= 아무것도 안 닮은)
+    # 질의에서 비율만 쓰면 잡음을 그대로 통과시킨다.
+    #
+    # 실측(KB 24건 × 질의 6종, KURE-v1): 컷 없음 정밀도 0.708·무관 7건
+    #   → 비율 0.85 = 0.944·무관 1건 / 절대 0.50 = 1.000·무관 0건(단 모델 종속)
+    min_score_ratio: float = 0.85  # 최고점 대비. 1.0 = 최고점만, 0.0 = 컷 없음
+    min_score: float = 0.0  # 절대 바닥. 코사인은 음수가 나므로 0 은 "음수 컷"을 뜻한다
     # 요청 예산 중 LLM 호출에 줄 몫 (BR-U4-04 "요청 예산의 절반 이하").
     # 나머지는 검색·풀 조립·직렬화 몫이다.
     llm_budget_share: float = 0.5
@@ -88,6 +102,11 @@ class PlanBRagConfig:
             raise ValueError("top_k ≥ 1")
         if not 0.0 < self.llm_budget_share <= 1.0:
             raise ValueError("llm_budget_share ∈ (0, 1]")
+        # 코사인 범위는 [-1, 1] — 음수가 실제로 난다(intent_router 가 max(score, 0) 로 흡수).
+        if not -1.0 <= self.min_score <= 1.0:
+            raise ValueError("min_score ∈ [-1, 1]")
+        if not 0.0 <= self.min_score_ratio <= 1.0:
+            raise ValueError("min_score_ratio ∈ [0, 1]")
         if not 1 <= self.max_alternatives <= len(_ALTERNATIVE_LABELS):
             raise ValueError(f"max_alternatives ∈ [1, {len(_ALTERNATIVE_LABELS)}]")
 
@@ -339,9 +358,38 @@ class PlanBRagPipeline:
 
     def _safe_retrieve(self, fn, query: str, kb: KbKind) -> tuple[tuple[KbHit, ...], str]:
         try:
-            return fn(query, self._embedding, self._store, top_k=self._cfg.top_k), ""
+            hits = fn(query, self._embedding, self._store, top_k=self._cfg.top_k)
         except Exception as e:
             return (), f"retrieve_{kb.value.lower()}_error: {type(e).__name__}: {e}"
+        return self._cut(hits, kb)
+
+    def _cut(self, hits: Sequence[KbHit], kb: KbKind) -> tuple[tuple[KbHit, ...], str]:
+        """유사도 하한 미달을 버리고, 버린 건수를 노트로 남긴다.
+
+        **노트가 이 기구의 절반이다.** 컷 결과가 0건이면 `retrieved` 숫자만 줄고
+        아무 흔적이 안 남는데, 백엔드는 `retrieved=0` 을 "KB 미적재"로 읽기로 돼 있다
+        (ai-backend-alternatives-연동-설계 §3). 그러면 "적재 안 됨"·"질의 무매칭"·
+        "임계 미달"이 한 숫자로 뭉개진다. 응답 스키마를 안 바꾸고 셋을 가르는 길은
+        `notes` 뿐이라 여기에 싣는다.
+
+        노트 접두어를 `retrieve_` 로 쓰지 않는다 — 그건 검색이 **터진** 경우의 접두어이고
+        (`retrieve_*_error`), 정상 동작인 컷과 섞이면 소비 측이 장애로 읽는다.
+        """
+        if not hits:
+            return (), ""
+        # ratio 0 은 "비율 컷 없음"이다. `top * 0 = 0` 을 그대로 쓰면 최고점과 무관하게
+        # 0 이 하한이 돼 음수 코사인을 자른다 — 끄려던 것이 안 꺼진다.
+        relative = (
+            hits[0].score * self._cfg.min_score_ratio
+            if self._cfg.min_score_ratio > 0
+            else float("-inf")
+        )
+        floor = max(relative, self._cfg.min_score)
+        kept = tuple(h for h in hits if h.score >= floor)
+        dropped = len(hits) - len(kept)
+        if not dropped:
+            return kept, ""
+        return kept, f"kb_score_cut_{kb.value.lower()}: {dropped}/{len(hits)}건 (하한 {floor:.3f})"
 
     # [3] Generate — LLM 선택. 미주입·실패·형태 이상은 전부 규칙 랭킹으로 (INV-4)
     def _select(
