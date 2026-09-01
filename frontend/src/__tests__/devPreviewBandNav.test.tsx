@@ -71,10 +71,10 @@ beforeEach(() => {
 });
 
 describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
-  it('165개 엔트리가 전부 10종 밴드 중 하나를 갖고, 그룹핑해도 하나도 드롭되지 않는다', () => {
+  it('166개 엔트리가 전부 10종 밴드 중 하나를 갖고, 그룹핑해도 하나도 드롭되지 않는다', () => {
     // 준비 — 렌더 없이 모듈의 PREVIEW_STATES 배열을 그대로 읽는다.
-    // 단언 ① — 대규모 기계 편집에서 엔트리가 하나도 안 빠졌다(실측 165개).
-    expect(PREVIEW_STATES).toHaveLength(165);
+    // 단언 ① — 대규모 기계 편집에서 엔트리가 하나도 안 빠졌다(실측 166개, TRIP-649로 saved-places-empty +1).
+    expect(PREVIEW_STATES).toHaveLength(166);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

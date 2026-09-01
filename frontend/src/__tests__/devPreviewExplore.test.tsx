@@ -63,4 +63,16 @@ describe('dev 프리뷰 탐색 2키 — results 얼굴 진입점', () => {
       screen.getAllByTestId(/^explore-saved-item-/).length
     ).toBeGreaterThan(0);
   });
+
+  it('state=saved-places-empty 로 열면 d02 빈 얼굴(삽화·CTA)이 그려지고 순번 항목은 없다', () => {
+    // TRIP-649 — 빈 상태 진입점. state={kind:'empty'} 를 주입해 얼굴이 results 로 새지 않는지도 함께 잠근다.
+    mockSearchParams.state = 'saved-places-empty';
+
+    render(<DevPreview />);
+
+    // 긍정 — 빈 얼굴 블록이 떠야 한다(results/게스트로 새면 이 testID 가 없어 throw → red).
+    expect(screen.getByTestId('explore-saved-empty')).toBeOnTheScreen();
+    // 부정 짝 — 항목이 0장이어야 empty 얼굴이 맞다(빈 배열인데 results 로 접히지 않았음).
+    expect(screen.queryAllByTestId(/^explore-saved-item-/)).toHaveLength(0);
+  });
 });

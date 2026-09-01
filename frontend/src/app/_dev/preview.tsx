@@ -322,13 +322,13 @@ type LoginState = Pick<
 >;
 
 // Figma 밴드 분류(first-cut 9) + 프레임·코드 둘 다 없는 발명 화면용 '기타'(TRIP-641).
-// 파트 2 네비가 이 값으로 165개 상태를 그룹핑한다 — figma-structure.md 밴드 표가 근거.
+// 파트 2 네비가 이 값으로 166개 상태를 그룹핑한다 — figma-structure.md 밴드 표가 근거.
 type Band = 'a' | 'c' | 'd' | 'e' | 'g' | 'h' | 'i' | 'j' | 'l' | '기타';
 
 interface PreviewState {
   key: string;
   label: string;
-  // 이 상태가 속한 Figma 밴드(그룹핑 축). 165개 엔트리 전부 명시(파생 아님 — 위치 불규칙로 취약).
+  // 이 상태가 속한 Figma 밴드(그룹핑 축). 166개 엔트리 전부 명시(파생 아님 — 위치 불규칙로 취약).
   band: Band;
   // null 이면 로그인 화면이 아니라 스플래시를 그린다.
   login: LoginState | null;
@@ -2661,6 +2661,23 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-649 — 담은 장소 empty 얼굴. 결과 픽스처를 0곳으로(savedPlaces=[]) + 얼굴 판정 state를
+  // empty 로 주입(얼굴은 배열 길이가 아니라 state.kind 로 갈린다). 삽화·"둘러보기" CTA 육안 자리.
+  {
+    key: 'saved-places-empty',
+    band: 'd',
+    label: 'd02 · 담은 장소 0',
+    login: null,
+    render: () => (
+      <SavedPlaceListScreen
+        savedPlaces={[]}
+        state={{ kind: 'empty' }}
+        onPressRemove={noop}
+        onPressCreateTrip={noop}
+        onPressBrowse={noop}
+      />
+    ),
+  },
   // d01 탐색 랜딩(TRIP-201) — 3얼굴: 담은 곳 CTA / 담은 곳 0 안내 / 숙소 레인 실패 재시도.
   {
     key: 'explore-landing-default',
@@ -4668,7 +4685,7 @@ function bandOfKey(key: string): Band {
   return PREVIEW_STATES.find((state) => state.key === key)?.band ?? '기타';
 }
 
-// 밴드 그룹 안 정렬 키 — 라벨의 ' · ' 앞 코드 토큰(예 'h11'). 165코드가 전부 2자리 zero-pad라
+// 밴드 그룹 안 정렬 키 — 라벨의 ' · ' 앞 코드 토큰(예 'h11'). 166코드가 전부 2자리 zero-pad라
 // 사전순 문자열 비교가 곧 번호순이다(숫자 파싱 불필요). 파일 국소 헬퍼(export 안 함).
 const codeOf = (state: PreviewState): string => state.label.split(' · ')[0];
 
