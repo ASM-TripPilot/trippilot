@@ -19,7 +19,10 @@ from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateCo
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import LlmFeature, TypedResult
-from trippilot.domain.reflection import ReflectionRequest
+from collections.abc import Mapping
+
+from trippilot.domain.reflection import PhotoId, ReflectionRequest, VisionInput
+from trippilot.ports.llm_port import LlmImagePart
 
 
 def build_reflection_template_vars(request: ReflectionRequest) -> dict[str, str]:
@@ -72,4 +75,45 @@ class ReflectionTemplateWorker:
             trace_id,
             now,
             timeout_sec=timeout_sec,
+        )
+
+    def generate_vision(
+        self,
+        request: ReflectionRequest,
+        vision: "VisionInput",
+        images: "Mapping[PhotoId, LlmImagePart]",
+        highlight_ids: "tuple[PhotoId, ...]",
+        trace_id: TraceId,
+        now: datetime,
+        *,
+        timeout_sec: float | None = None,
+    ) -> TypedResult:
+        """사진 동봉 생성 (Phase 2 ⓑ — TRIP-595). 출력 계약·게이트는 텍스트판과
+        동일(드롭인 강등의 전제) — 다른 건 feature(모델 분리, 미결 #6)와 입력뿐.
+
+        동의는 VisionInput 타입이 강제하고, 게이트웨이가 images·consent_ref 짝을
+        재차 요구한다. vision.photos 순서대로 이미지를 싣는다(결정론).
+        """
+        variables = dict(build_reflection_template_vars(request))
+        variables["highlights"] = "\n".join(
+            f"- {photo_id}" for photo_id in highlight_ids) or "(대표 사진 없음)"
+        context = ReflectionTemplateContext(
+            kind=request.kind,
+            visit_refs=tuple(v.ref for v in request.visits),
+            event_kinds=frozenset(e.kind for e in request.events),
+            region=request.region,
+            poi_names=tuple(v.poi_name for v in request.visits),
+        )
+        parts = tuple(
+            images[p.photo_id] for p in vision.photos if p.photo_id in images
+        )
+        return self._gateway.call(
+            LlmFeature.REFLECTION_TEMPLATE_VISION,
+            variables,
+            context,
+            trace_id,
+            now,
+            timeout_sec=timeout_sec,
+            images=parts,
+            consent_ref=vision.consent.consent_ref,
         )

@@ -42,6 +42,8 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # 이 feature는 LlmUnsupportedError → 메타 규칙 폴백으로만 돈다.
             # 프로바이더·모델 선정은 TRIP-515 런북 소관 (BR-U6R-13: 실체는 설정값).
             LlmFeature.PHOTO_HIGHLIGHT: ModelTier.HEAVY,
+            # vision 장면·캡션 생성 — 텍스트 템플릿과 같은 출력 계약, 모델만 분리(미결 #6)
+            LlmFeature.REFLECTION_TEMPLATE_VISION: ModelTier.HEAVY,
             LlmFeature.PLACE_EXTRACTION: ModelTier.HEAVY,
             # 자유 텍스트 구조화 추출 — PLACE_EXTRACTION과 동급 과업 (TRIP-421)
             LlmFeature.EVENT_EXTRACTION: ModelTier.HEAVY,
@@ -90,8 +92,11 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # 넘긴다(대체 추출 경로 없음).
             LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
             # agents/reflect/highlight_rule.py — 방문당 1장·시간 분산 결정론 선별.
-            # 실행 배선은 composer vision 단계(후속) — 모드 쌍은 그 폴백의 실체다.
+            # composer vision 단계(compose_vision)가 실행한다.
             LlmFeature.PHOTO_HIGHLIGHT: ("llm_highlight", "rule_highlight"),
+            # agents/reflect/composer.py compose_vision — vision 시도 실패 시 같은
+            # 3회 예산 안에서 텍스트 템플릿으로 강등(#9 확정: 예산 공유, 최악 3회).
+            LlmFeature.REFLECTION_TEMPLATE_VISION: ("vision_template", "text_template"),
             # PLACE_EXTRACTION은 프로덕션 호출측이 아직 없다(워커·테스트뿐) —
             # 워커 docstring("게이트 전 원시까지")과 EVENT_EXTRACTION 선례에서
             # 유추한 값이다. 호출측이 생기면 그때 실측으로 확정한다.

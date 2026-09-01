@@ -268,6 +268,8 @@ _EXPECTED_MODES = {
     LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
     # 규칙 하이라이트 폴백(agents/reflect/highlight_rule.py) — TRIP-595
     LlmFeature.PHOTO_HIGHLIGHT: ("llm_highlight", "rule_highlight"),
+    # composer compose_vision — 3회 공유 예산 안에서 텍스트로 강등(#9) — TRIP-595
+    LlmFeature.REFLECTION_TEMPLATE_VISION: ("vision_template", "text_template"),
     LlmFeature.PLACE_EXTRACTION: ("llm_extract", "(none)"),
     LlmFeature.REASON_INTERPRETATION: ("llm_reason_interpretation", "unknown"),
 }

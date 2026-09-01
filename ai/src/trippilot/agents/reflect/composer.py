@@ -18,18 +18,25 @@ import re
 from dataclasses import replace
 from datetime import datetime
 
+from trippilot.agents.reflect.highlight_rule import select_highlights
 from trippilot.agents.reflect.fallback import (
     FALLBACK_COVER_SUBTITLE,
     FALLBACK_COVER_TITLE,
     build_fallback_template,
 )
+from collections.abc import Mapping
+
+from trippilot.llm_gateway.gates.photo_highlight import DEFAULT_HIGHLIGHT_LIMIT
+from trippilot.llm_gateway.workers.photo_highlight import PhotoHighlightWorker
 from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
 from trippilot.domain.common import TraceId
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.reflection import (
+    PhotoId,
     PhotoSlot,
     ReflectionRequest,
     ReflectionTemplate,
+    VisionInput,
     Scene,
     SceneLayout,
     TemplateCandidate,
@@ -230,6 +237,33 @@ def apply_hard_replacements(
     return replace(template, cover=cover, scenes=tuple(scenes), hashtags=hashtags)
 
 
+def _finalize(
+    candidates: list[TemplateCandidate],
+    request: ReflectionRequest,
+    trace_id: TraceId,
+    now: datetime,
+    trace: TracePort,
+) -> ReflectionTemplate:
+    """④⑤⑥ 공통 마무리 — 후보 0건이면 고정 폴백 (INV-4, 침묵 금지)."""
+    if not candidates:
+        trace.emit(FallbackEvent(
+            trace_id=trace_id,
+            occurred_at=now,
+            component="agents.reflect",
+            stage="agent",
+            from_mode="llm_template",
+            to_mode="fixed_template",
+            reason=f"reflection_all_attempts_failed:{MAX_ATTEMPTS}",
+        ))
+        return build_fallback_template(request.kind, trace_id, now)
+    best = min(candidates, key=rank_key)
+    return apply_hard_replacements(
+        best,
+        tuple(v.ref for v in request.visits),
+        frozenset(e.kind for e in request.events),
+    )
+
+
 def compose(
     worker: ReflectionTemplateWorker,
     request: ReflectionRequest,
@@ -249,22 +283,82 @@ def compose(
             candidates.append(candidate)
             if not candidate.violations:
                 break
+    return _finalize(candidates, request, trace_id, now, trace)
 
-    if not candidates:  # 전 시도 파싱 실패 — 고정 폴백 (INV-4, 침묵 금지)
+
+def compose_vision(
+    worker: ReflectionTemplateWorker,
+    highlight_worker: PhotoHighlightWorker,
+    request: ReflectionRequest,
+    vision: VisionInput,
+    # 값 타입은 LlmImagePart — L-3(agents ↛ ports.llm_port)라 이름을 import하지
+    # 않는다. composer는 이미지를 열어보지 않고 워커로 전달만 하며(불투명 payload),
+    # 실타입 강제는 워커 시그니처와 게이트웨이(images·consent_ref 짝 요구)의 몫이다.
+    images: Mapping[PhotoId, object],
+    trace_id: TraceId,
+    now: datetime,
+    trace: TracePort,
+    *,
+    timeout_sec: float | None = None,
+) -> ReflectionTemplate:
+    """Phase 2 파이프라인 (FD §6 ⓐⓑⓒ — TRIP-595).
+
+    ⓐ 대표 사진 선별 1회 — 실패하면 결정론 규칙(highlight_rule)로 강등 + FallbackEvent
+    ⓑ vision 생성 — **텍스트 시도와 총 3회 예산 공유** (#9 확정 2026-08-28: 별도
+       배정이면 최악 6회 비용 2배, vision이 3회나 실패할 상황이면 텍스트도 잘 될
+       가능성이 낮다). vision 실패 시 같은 루프 안에서 텍스트로 강등하고
+       FallbackEvent(stage="vision")를 발행 — 조용한 강등 금지 (BR-U6R-10)
+    ⓒ 랭킹·교체·봉투는 Phase 1과 동일(_finalize) — **출력 스키마 동일** (VIS-P3,
+       FE 재협상 없는 드롭인)
+
+    동의는 VisionInput 타입 + 게이트웨이 consent_ref 짝 요구의 이중 강제.
+    """
+    # ⓐ 대표 사진 — LLM 1회, 실패 시 결정론 규칙 (모드 쌍은 config 폴백 대장과 동일)
+    highlight_result = highlight_worker.select(
+        vision, images, trace_id, now, timeout_sec=timeout_sec)
+    if highlight_result.value is not None:
+        highlight_ids = highlight_result.value
+    else:
+        highlight_ids = select_highlights(
+            vision.photos, limit=DEFAULT_HIGHLIGHT_LIMIT)
         trace.emit(FallbackEvent(
             trace_id=trace_id,
             occurred_at=now,
             component="agents.reflect",
-            stage="agent",
-            from_mode="llm_template",
-            to_mode="fixed_template",
-            reason=f"reflection_all_attempts_failed:{MAX_ATTEMPTS}",
+            stage="vision",
+            from_mode="llm_highlight",
+            to_mode="rule_highlight",
+            reason=highlight_result.error or "highlight_failed",
         ))
-        return build_fallback_template(request.kind, trace_id, now)
 
-    best = min(candidates, key=rank_key)
-    return apply_hard_replacements(
-        best,
-        tuple(v.ref for v in request.visits),
-        frozenset(e.kind for e in request.events),
-    )
+    # ⓑ 생성 — 공유 예산 (#9): 시도 1회 = LLM 호출 1회. vision 실패도 예산을
+    # 소진한다(같은 반복에서 텍스트를 또 부르면 최악 4회가 돼 상한 3회가 깨진다).
+    candidates: list[TemplateCandidate] = []
+    vision_alive = True
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        if vision_alive:
+            result = worker.generate_vision(
+                request, vision, images, highlight_ids, trace_id, now,
+                timeout_sec=timeout_sec)
+            if result.value is None:
+                # vision 경로 포기 — 남은 예산은 텍스트가 쓴다. vision을 재시도하지
+                # 않는 이유: 미지원·타임아웃은 다시 불러도 같고, 예산만 탄다
+                vision_alive = False
+                trace.emit(FallbackEvent(
+                    trace_id=trace_id,
+                    occurred_at=now,
+                    component="agents.reflect",
+                    stage="vision",
+                    from_mode="vision_template",
+                    to_mode="text_template",
+                    reason=result.error or "vision_failed",
+                ))
+                continue  # 이 시도는 vision 실패로 소진 (#9)
+        else:
+            result = worker.generate(request, trace_id, now, timeout_sec=timeout_sec)
+        if result.value is not None:
+            candidate = replace(result.value, attempt=attempt)
+            candidates.append(candidate)
+            if not candidate.violations:
+                break
+    return _finalize(candidates, request, trace_id, now, trace)
