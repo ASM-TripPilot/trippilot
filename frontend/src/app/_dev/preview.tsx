@@ -4088,12 +4088,14 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'i14 · 슬롯 후보 3장',
     login: null,
     render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidateSheet
-          candidates={SLOT_CANDIDATES_PREVIEW}
-          slackLabel="여유 1시간 20분"
-        />
-      </ScrollView>
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <ScrollView contentContainerClassName="gap-md p-lg">
+          <SlotCandidateSheet
+            candidates={SLOT_CANDIDATES_PREVIEW}
+            slackLabel="여유 1시간 20분"
+          />
+        </ScrollView>
+      </SafeAreaView>
     ),
   },
   {
@@ -4102,13 +4104,15 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'i14 · 슬롯 후보 강등',
     login: null,
     render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidateSheet
-          candidates={SLOT_CANDIDATES_PREVIEW}
-          slackLabel="여유 40분"
-          degraded
-        />
-      </ScrollView>
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <ScrollView contentContainerClassName="gap-md p-lg">
+          <SlotCandidateSheet
+            candidates={SLOT_CANDIDATES_PREVIEW}
+            slackLabel="여유 40분"
+            degraded
+          />
+        </ScrollView>
+      </SafeAreaView>
     ),
   },
   {
@@ -4117,9 +4121,11 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'i14 · 슬롯 후보 0건',
     login: null,
     render: () => (
-      <ScrollView contentContainerClassName="gap-md p-lg">
-        <SlotCandidateSheet candidates={[]} slackLabel="여유 1시간 20분" />
-      </ScrollView>
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <ScrollView contentContainerClassName="gap-md p-lg">
+          <SlotCandidateSheet candidates={[]} slackLabel="여유 1시간 20분" />
+        </ScrollView>
+      </SafeAreaView>
     ),
   },
   // ── i13 재계획안(TRIP-563) — 순수 화면 2얼굴. 채운 슬롯(배지 5종·후보·고정)과 빈 슬롯 degrade
