@@ -8,7 +8,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from trippilot.llm_gateway.gates.base import GateOutcome, _load_json_object
+from trippilot.llm_gateway.gates.base import (
+    GateOutcome,
+    _load_json_object,
+    empty_result_error,
+)
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, PoiExplanation
 from trippilot.domain.observability import GateDropEvent
@@ -18,6 +22,10 @@ class ExplanationGate:
     """EXPLANATION 출구 게이트 (정본 §2.2) — poiId ⊆ 풀 교차 (INV-1).
 
     {"explanations": [{"poiId": str, "text": str}]} 강제. 중복 첫 등장 채택.
+
+    **빈 결과 = 실패** (TRIP-260 #5): 설명 0건은 "설명 없음"과 같아 보이지만,
+    호출측(orchestrator `_explain`·wiring `explanations`)은 그 둘을 다르게 보고한다
+    — 폴백 사유를 실어야 사용자에게 "왜 설명이 없는지"가 남는다 (INV-4).
     """
 
     def apply(
@@ -68,4 +76,8 @@ class ExplanationGate:
             )
             if dropped else None
         )
-        return GateOutcome(value=tuple(survivors), drop_event=drop_event, error=None)
+        return GateOutcome(
+            value=tuple(survivors),
+            drop_event=drop_event,
+            error=empty_result_error(survivors, drop_event),
+        )

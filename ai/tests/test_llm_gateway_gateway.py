@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 import pytest
 
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.base import GateOutcome
+from trippilot.llm_gateway.gates.base import GateOutcome, empty_result_error
 from trippilot.llm_gateway.gateway import GatewayFacade, TierRouter
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import LlmFeature, ModelTier, ScoredPoi
@@ -58,9 +58,23 @@ class AcceptAllGate:
 class EmptyResultGate:
     """드롭 0건인데 결과가 빈 fake — **LLM 이 애초에 0건을 냈을 때**의 모양이다.
 
-    DropAllGate 와 구분해야 한다. 둘은 처방이 정반대인데(게이트 규칙 문제 vs
-    프롬프트·입력 문제) 한때 같은 라벨을 썼다 — 행사 수집에서 대전이 6회 연속
-    0건일 때 게이트를 의심하느라 3단계 추론이 필요했다(2026-08-25).
+    빈 결과가 **실패**인 feature(scoring 등)의 게이트를 흉내낸다: 정책이 게이트
+    소유라 error 도 게이트가 싣는다 (TRIP-260 #5). DropAllGate 와 구분해야 한다 —
+    둘은 처방이 정반대인데(게이트 규칙 문제 vs 프롬프트·입력 문제) 한때 같은
+    라벨을 썼다. 행사 수집에서 대전이 6회 연속 0건일 때 게이트를 의심하느라
+    3단계 추론이 필요했다(2026-08-25).
+    """
+
+    def apply(self, raw_text, pool, *, feature, trace_id, now):
+        return GateOutcome(
+            value=(), drop_event=None, error=empty_result_error((), None)
+        )
+
+
+class EmptySuccessGate:
+    """빈 결과가 **정상**인 feature(추출 계열)의 게이트 fake — error 를 안 싣는다.
+
+    "그 기간 그 지역에 행사가 없음"은 성공·0건이다 (TRIP-260 #5).
     """
 
     def apply(self, raw_text, pool, *, feature, trace_id, now):
@@ -71,19 +85,19 @@ class DropAllGate:
     """전량 드롭 fake (GATE-P2의 폴백 분기)."""
 
     def apply(self, raw_text, pool, *, feature, trace_id, now):
-        dropped = (PoiId("hallucinated-1"),)
+        drop_event = GateDropEvent(
+            trace_id=trace_id,
+            occurred_at=now,
+            component="c1.gate",
+            feature=feature.value,
+            dropped_ids=(PoiId("hallucinated-1"),),
+            total_count=1,
+            dropped_count=1,
+        )
         return GateOutcome(
             value=(),
-            drop_event=GateDropEvent(
-                trace_id=trace_id,
-                occurred_at=now,
-                component="c1.gate",
-                feature=feature.value,
-                dropped_ids=dropped,
-                total_count=1,
-                dropped_count=1,
-            ),
-            error=None,
+            drop_event=drop_event,
+            error=empty_result_error((), drop_event),  # 정책은 게이트 소유 (#5)
         )
 
 
@@ -235,3 +249,95 @@ def test_무결과와_전량드롭은_다른_사유로_기록된다() -> None:
     # 라벨의 근거가 실제로 GateDropEvent 유무인지까지 고정한다
     assert len(dropped_trace.of_type(GateDropEvent)) == 1
     assert len(empty_trace.of_type(GateDropEvent)) == 0
+
+
+# ── TRIP-260 #4: FallbackEvent가 feature별 **실제** 폴백을 싣는다 ──
+
+
+# 값의 근거는 호출측 코드다 (config.default_fallback_modes 항목별 주석 참조) —
+# 여기서는 그 표가 이벤트까지 그대로 도달하는지만 고정한다.
+_EXPECTED_MODES = {
+    LlmFeature.PREFERENCE_SCORING: ("llm_score", "rule_score"),
+    LlmFeature.EXPLANATION: ("llm_explain", "(none)"),
+    LlmFeature.ALTERNATIVE_SELECTION: ("llm_select_alternatives", "rule_ranking"),
+    LlmFeature.REFLECTION_TEMPLATE: ("llm_template", "fixed_template"),
+    LlmFeature.REFLECTION_NUDGE: ("llm_nudge", "fixed_message"),
+    LlmFeature.INTENT: ("llm_intent", "out_of_scope"),
+    LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
+    LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),
+    LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
+    LlmFeature.PLACE_EXTRACTION: ("llm_extract", "(none)"),
+    LlmFeature.REASON_INTERPRETATION: ("llm_reason_interpretation", "unknown"),
+}
+
+
+@pytest.mark.parametrize("feature", sorted(_EXPECTED_MODES, key=lambda f: f.value))
+def test_fallback_event_carries_feature_specific_modes(feature: LlmFeature) -> None:
+    """전 feature가 `llm_score → rule_score`를 찍던 동안 증빙 대부분이 거짓이었다.
+
+    INV-4가 요구하는 것은 "폴백이 이벤트로 드러난다"가 아니라 "그 이벤트가 사실이다".
+    """
+    facade, trace = _facade(FakeLlm(), ParseFailGate())
+    facade.call(feature, {"k": "v"}, None, _TRACE_ID, _NOW)
+
+    events = trace.of_type(FallbackEvent)
+    assert len(events) == 1
+    assert (events[0].from_mode, events[0].to_mode) == _EXPECTED_MODES[feature]
+
+
+def test_fallback_modes_are_not_all_the_same() -> None:
+    """하드코딩 회귀 방지 — 값이 다시 한 종류로 수렴하면 여기서 깨진다."""
+    assert len(set(_EXPECTED_MODES.values())) >= 4
+
+
+def test_every_llm_feature_has_fallback_modes() -> None:
+    """enum이 늘면 여기서 먼저 깨진다 — 새 feature의 폴백 실체를 확인하라는 신호."""
+    assert set(_CFG.fallback_modes) == set(LlmFeature)
+    assert _EXPECTED_MODES.keys() == set(LlmFeature)
+
+
+def test_unmapped_feature_falls_back_visibly_not_plausibly() -> None:
+    """매핑 누락은 KeyError로 죽지도, 그럴듯한 거짓말을 찍지도 않는다."""
+    cfg = C1Config(model_ids=dict(_CFG.model_ids), fallback_modes={})
+    trace = InMemoryTrace()
+    facade = GatewayFacade(FakeLlm(), EchoRenderer(), ParseFailGate(), cfg, trace)
+
+    facade.call(LlmFeature.PREFERENCE_SCORING, {"k": "v"}, None, _TRACE_ID, _NOW)
+
+    assert trace.of_type(FallbackEvent)[0].to_mode == "unmapped_feature"
+
+
+# ── TRIP-260 #5: "빈 결과가 실패인가"는 게이트가 정한다 ──
+
+
+def test_empty_result_is_success_when_the_gate_says_so() -> None:
+    """추출 계열의 0건 — "그 기간 그 지역에 행사가 없음"은 정상 결과다.
+
+    게이트웨이가 `not outcome.value` 로 함께 판정하던 동안 이 정상 결과가 폴백으로
+    뒤집혔고, 대전 6회 연속 0건의 원인을 찾는 데 3단계 추론이 필요했다(2026-08-25).
+    """
+    facade, trace = _facade(FakeLlm(), EmptySuccessGate())
+    result = facade.call(
+        LlmFeature.EVENT_EXTRACTION, {"k": "v"}, None, _TRACE_ID, _NOW
+    )
+
+    assert result.is_fallback is False and result.error is None
+    assert result.value == ()  # 0건이라는 사실이 살아 있다 (value=None 이 아니다)
+    assert trace.of_type(FallbackEvent) == []  # 없는 폴백을 지어내지 않는다
+    assert result.call_record is not None and result.call_record.success is True
+
+
+@pytest.mark.parametrize(
+    ("gate", "expected"),
+    [
+        (EmptyResultGate(), "llm_empty_result"),
+        (DropAllGate(), "gate_dropped_all"),
+    ],
+)
+def test_empty_result_still_falls_back_when_the_gate_says_so(gate, expected) -> None:
+    """정책 후퇴 방지 — scoring 계열의 0건은 여전히 폴백이고 사유도 그대로다."""
+    facade, trace = _facade(FakeLlm(), gate)
+    result = _call(facade)
+
+    assert result.is_fallback is True and result.error == expected
+    assert len(trace.of_type(FallbackEvent)) == 1

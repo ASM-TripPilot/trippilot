@@ -71,7 +71,8 @@ def test_gate_p1_no_hallucination_survives(case) -> None:
     pool, valid_ids, polluted_ids, entries = case
     out = _apply(_payload(entries), pool)
 
-    assert out.error is None
+    # 빈 결과가 실패인 게이트의 불변식: error 유무 ⇔ 생존 0건 (TRIP-260 #5)
+    assert (out.error is None) == bool(out.value)
     survivor_ids = {str(s.poi_id) for s in out.value}
     assert survivor_ids <= {str(i) for i in pool.poi_ids}  # 환각 0 (INV-1)
     assert survivor_ids == valid_ids  # 정상분은 전원 생존
@@ -83,8 +84,9 @@ def test_gate_p1_no_hallucination_survives(case) -> None:
         assert {str(i) for i in out.drop_event.dropped_ids} == polluted_ids
     else:
         assert out.drop_event is None
-    if not valid_ids:  # 전량 드롭/빈 출력 → scored 비움 (GATE-P2 폴백 재료)
+    if not valid_ids:  # 전량 드롭/빈 출력 → scored 비움 + 폴백 사유 (GATE-P2)
         assert out.value == ()
+        assert out.error == ("gate_dropped_all" if polluted_ids else "llm_empty_result")
 
 
 # ── 승격 규칙: 클램프·중복·풀 부재 ──────────────────────────
