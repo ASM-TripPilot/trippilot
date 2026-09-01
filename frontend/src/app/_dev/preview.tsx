@@ -4668,6 +4668,18 @@ function bandOfKey(key: string): Band {
   return PREVIEW_STATES.find((state) => state.key === key)?.band ?? '기타';
 }
 
+// 밴드 그룹 안 정렬 키 — 라벨의 ' · ' 앞 코드 토큰(예 'h11'). 165코드가 전부 2자리 zero-pad라
+// 사전순 문자열 비교가 곧 번호순이다(숫자 파싱 불필요). 파일 국소 헬퍼(export 안 함).
+const codeOf = (state: PreviewState): string => state.label.split(' · ')[0];
+
+// 코드 토큰만 1차 키로 비교한다 — 같은 코드의 여러 얼굴은 sort 가 안정(ES2019+/Hermes)이라
+// 배열 삽입 순서가 그대로 보존된다(라벨 전체로 비교하면 얼굴명이 2차 키로 새어 의미 순서가 깨진다).
+const byBandCode = (a: PreviewState, b: PreviewState): number => {
+  const ca = codeOf(a);
+  const cb = codeOf(b);
+  return ca < cb ? -1 : ca > cb ? 1 : 0;
+};
+
 export default function DevPreviewScreen() {
   // useLocalSearchParams: expo-router 훅 — 현재 화면 URL 의 쿼리 문자열을 객체로 돌려준다.
   // 라우터 컨텍스트가 없어도(동결 devPreview.test) 빈 객체를 돌려주도록 expo-router 가
@@ -4774,8 +4786,9 @@ export default function DevPreviewScreen() {
               <View
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
               >
-                {PREVIEW_STATES.filter((state) => state.band === band).map(
-                  (state) => {
+                {PREVIEW_STATES.filter((state) => state.band === band)
+                  .sort(byBandCode)
+                  .map((state) => {
                     const selected = state.key === active.key;
                     return (
                       <Pressable
@@ -4791,8 +4804,7 @@ export default function DevPreviewScreen() {
                         </Text>
                       </Pressable>
                     );
-                  }
-                )}
+                  })}
               </View>
             </View>
           ))}
