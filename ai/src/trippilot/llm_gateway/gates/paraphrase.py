@@ -11,14 +11,21 @@ poi 선택이 없어 후보 풀과 무관하고, 스키마만 강제한다 (refl
   ② 중복 제거 (첫 등장 유지) — 같은 변형이 두 표를 행사하면 가중 투표가 부풀려진다
   ③ 개수 상한 `_MAX_QUESTIONS` — 모델이 요청 개수를 무시하고 쏟아내도 투표 가중치가
      한쪽으로 쏠리지 않게 자른다. 최종 개수 판정은 라우터(`n_paraphrase`)가 다시 한다.
-전량 소멸이면 `value=()` + `error=None` — 게이트웨이가 폴백으로 전환한다 (INV-4).
+**빈 결과 = 실패** (TRIP-260 #5): 변형 0개면 2차 투표 자체가 성립하지 않는다.
+호출측(intent_router `_vote`)은 이 신호로 3차 LLM 직접 분류로 승급한다 — 폴백이
+"더 나쁜 답"이 아니라 다음 단계라서, 신호가 없으면 투표가 원문 1표로 조용히
+왜곡된다 (INV-4).
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from trippilot.llm_gateway.gates.base import GateOutcome, _load_json_object
+from trippilot.llm_gateway.gates.base import (
+    GateOutcome,
+    _load_json_object,
+    empty_result_error,
+)
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
@@ -72,4 +79,8 @@ class ParaphraseGate:
             if dropped_count
             else None
         )
-        return GateOutcome(value=tuple(survivors), drop_event=drop_event, error=None)
+        return GateOutcome(
+            value=tuple(survivors),
+            drop_event=drop_event,
+            error=empty_result_error(survivors, drop_event),
+        )

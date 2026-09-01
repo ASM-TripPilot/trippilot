@@ -41,6 +41,63 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
     )
 
 
+def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
+    """기능 → (from_mode, to_mode) — FallbackEvent가 싣는 **실제** 폴백 (TRIP-260 #4).
+
+    c1은 신호만 내고 실행은 호출측이지만(BR-U4-09), 이벤트가 싣는 모드는 그 호출측이
+    실제로 하는 일이어야 한다. 전부 `llm_score → rule_score`로 하드코딩돼 있던 동안
+    4개 중 3개의 증빙이 거짓이었다 — INV-4가 요구하는 증빙 자체가 틀린 값을 실으면
+    침묵 실패보다 나쁘다(잘못된 곳을 보게 만든다).
+
+    값은 전부 **호출측 코드에서 확인한** 문자열이다 — 항목별 주석이 그 근거다.
+    """
+    return MappingProxyType(
+        {
+            # orchestrator/itinerary_orchestrator.py `_score` — 폴백이면
+            # `_rule_scores()` 실행 + ScoringMode.RULE. 같은 두 문자열을 그쪽
+            # `_degrade(..., "llm_score", "rule_score", ...)`도 쓴다.
+            LlmFeature.PREFERENCE_SCORING: ("llm_score", "rule_score"),
+            # orchestrator `_explain` — 대체 설명이 없다. 빈 설명으로 일정만 나간다.
+            # 그쪽 `_degrade(..., "llm_explain", "(none)", ...)`의 문자열 그대로.
+            LlmFeature.EXPLANATION: ("llm_explain", "(none)"),
+            # agents/planb/rag.py `_select`→`_rationale` — used_llm=False면 규칙 랭킹
+            # ("llm_select_alternatives" / "rule_ranking"도 그 함수의 문자열 그대로).
+            LlmFeature.ALTERNATIVE_SELECTION: ("llm_select_alternatives", "rule_ranking"),
+            # agents/reflect/composer.py `compose` — 전 시도 실패면 고정 폴백 템플릿
+            # (그쪽이 직접 내는 FallbackEvent와 같은 모드 쌍).
+            LlmFeature.REFLECTION_TEMPLATE: ("llm_template", "fixed_template"),
+            # api/wiring.py `reflection_nudge` — 결정론 기본 문구(FALLBACK_NUDGE_MESSAGE).
+            # 그쪽 방어 분기의 FallbackEvent와 같은 모드 쌍.
+            LlmFeature.REFLECTION_NUDGE: ("llm_nudge", "fixed_message"),
+            # orchestrator/intent_router.py `_classify` → `_fallback()` —
+            # Intent.OUT_OF_SCOPE + MatchRoute.FALLBACK로 수렴한다.
+            LlmFeature.INTENT: ("llm_intent", "out_of_scope"),
+            # intent_router `_vote` — 유사질문이 없으면 투표를 접고 3차(LLM 직접
+            # 분류)로 **승급**한다. 규칙으로 내려가는 강등이 아니다.
+            LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
+            # api/wiring.py `edit` — 자연어 번역 실패는 TRANSLATION_FAILED 정직 보고.
+            # 편집은 적용되지 않고, 구조화 진입은 무영향이다.
+            LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),
+            # scripts/collect_events.py `collect_region` — 추출 0건으로 그 회차를
+            # 넘긴다(대체 추출 경로 없음).
+            LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
+            # PLACE_EXTRACTION은 프로덕션 호출측이 아직 없다(워커·테스트뿐) —
+            # 워커 docstring("게이트 전 원시까지")과 EVENT_EXTRACTION 선례에서
+            # 유추한 값이다. 호출측이 생기면 그때 실측으로 확정한다.
+            LlmFeature.PLACE_EXTRACTION: ("llm_extract", "(none)"),
+            # 유령 feature (TRIP-530) — 프롬프트·게이트·워커가 전부 없어 이 값이
+            # 발행될 경로 자체가 없다. 지어내지 않고 unknown으로 둔다.
+            LlmFeature.REASON_INTERPRETATION: ("llm_reason_interpretation", "unknown"),
+        }
+    )
+
+
+# 매핑에 없는 feature의 안전 기본 — KeyError로 죽지 않되 **그 사실이 이벤트에
+# 드러난다**. 조용히 그럴듯한 값을 찍으면 #4를 다시 만드는 셈이다.
+# enum이 늘면 테스트(전 feature 스윕)가 먼저 깨진다.
+UNMAPPED_FALLBACK_MODES = ("llm", "unmapped_feature")
+
+
 @dataclass(frozen=True)
 class C1Config:
     model_ids: Mapping[ModelTier, str]  # 주입 필수 — 하드코딩 금지 (BR-U4-08)
@@ -48,6 +105,11 @@ class C1Config:
     # 기능별 모델 오버라이드 (TRIP-513 — GPT·Claude 혼용). 있으면 tier 해석보다
     # 우선한다. 벤더 선택은 모델명이 결정 — RoutingLlm이 접두어로 어댑터를 고른다.
     feature_models: Mapping[LlmFeature, str] = field(default_factory=dict)
+    # 기능별 폴백 모드 (TRIP-260 #4) — FallbackEvent의 from_mode/to_mode.
+    # 실체는 호출측이 하는 일이라 feature마다 다르다 (default_fallback_modes 주석).
+    fallback_modes: Mapping[LlmFeature, tuple[str, str]] = field(
+        default_factory=default_fallback_modes
+    )
     # BR-U4-04 기본값 — 즉답성 feature(INTENT 등) 기준. 단계 예산이 있는 호출
     # (PREFERENCE_SCORING)은 GatewayFacade.call(timeout_sec=...)로 관통 (TRIP-376).
     timeout_sec: float = 2.5

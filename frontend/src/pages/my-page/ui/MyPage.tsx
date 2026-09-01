@@ -72,7 +72,10 @@ export function MyPage(): ReactElement {
       onChangeSegment={setActive}
       styleCard={
         style.data ? (
-          <StyleSummaryCard vm={buildStyleCardModel(style.data)} />
+          <StyleSummaryCard
+            vm={buildStyleCardModel(style.data)}
+            onPressDetail={() => router.push('/records/style')}
+          />
         ) : undefined
       }
       cards={sortedActive.map((trip) => (

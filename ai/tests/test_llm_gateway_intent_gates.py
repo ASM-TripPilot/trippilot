@@ -178,11 +178,22 @@ def test_paraphrase_gate_parse_failures_keep_value_empty(raw: str, needle: str) 
     assert not outcome.value
 
 
-def test_paraphrase_gate_all_dropped_is_no_result_not_error() -> None:
-    """전량 소멸은 파싱 실패가 아니라 '무결과' — 게이트웨이가 폴백으로 전환한다."""
+def test_paraphrase_gate_all_dropped_is_dropped_not_parse_error() -> None:
+    """전량 소멸은 파싱 실패가 아니라 '전량 드롭' — 사유 라벨이 그 둘을 가른다.
+
+    변형 0개면 2차 투표가 성립하지 않으므로 실패다(TRIP-260 #5) — 라우터는 이
+    신호로 3차 LLM 직접 분류로 승급한다.
+    """
     outcome = _paraphrase(json.dumps({"questions": ["", "  ", 1]}))
-    assert outcome.value == () and outcome.error is None
+    assert outcome.value == () and outcome.error == "gate_dropped_all"
     assert outcome.drop_event.dropped_count == 3
+
+
+def test_paraphrase_gate_empty_list_is_llm_empty_result() -> None:
+    """드롭 0건인데 결과가 비면 프롬프트·입력을 보라는 신호다 (2026-08-25 회귀)."""
+    outcome = _paraphrase(json.dumps({"questions": []}))
+    assert outcome.value == () and outcome.error == "llm_empty_result"
+    assert outcome.drop_event is None
 
 
 # ── 게이트웨이 e2e (실물 레지스트리·게이트, LLM만 fake) ─────────────────

@@ -1,11 +1,13 @@
 """TierRouter + GatewayFacade — LLM 호출 파이프라인의 유일한 관문 (U4 FD §2).
 
 7단계: feature 검증 → 라우팅 → 렌더 → LlmPort.invoke → 파서 → 게이트 → TypedResult 조립.
-실패 경로(타임아웃·벤더 예외·파싱 실패·전량 드롭)는 전부 동일 형태로 수렴:
+실패 경로(타임아웃·벤더 예외·게이트가 error 를 설정한 경우)는 전부 동일 형태로 수렴:
 TypedResult(is_fallback=True) + FallbackEvent + LlmCallRecord(success=False).
 예외를 위로 던지지 않고 폴백 신호로 변환하는 것이 게이트웨이의 책임 (INV-4, BR-U4-02).
 
-규칙 점수 폴백의 실행은 호출측 몫 (BR-U4-09) — c1은 신호만 낸다.
+폴백의 **실행**은 호출측 몫 (BR-U4-09) — c1은 신호만 낸다. 다만 그 신호가 싣는
+from_mode/to_mode는 호출측이 실제로 하는 일이어야 한다: feature마다 다르므로
+C1Config.fallback_modes에서 읽는다 (TRIP-260 #4).
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Protocol
 
-from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.config import C1Config, UNMAPPED_FALLBACK_MODES
 from trippilot.llm_gateway.gates.base import ExitGate
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi, TypedResult
@@ -130,18 +132,14 @@ class GatewayFacade:
         )
         if outcome.drop_event is not None:
             self._trace.emit(outcome.drop_event)
-        if outcome.error is not None or not outcome.value:
-            # "게이트가 전량 드롭"과 "LLM 이 애초에 0건"은 처방이 정반대인데 한때
-            # 같은 라벨(gate_dropped_all)이었다 — 행사 수집에서 대전이 6회 연속
-            # 0건일 때 게이트를 의심하느라 3단계 추론이 필요했고, 실제 원인은
-            # LLM 무결과였다(2026-08-25 실측: GateDropEvent 자체가 없었다).
-            # drop_event 는 dropped_count 가 0 이면 만들어지지 않으므로, 그 부재가
-            # 곧 "게이트는 아무것도 안 버렸다"는 증거다.
-            reason = outcome.error or (
-                "gate_dropped_all" if outcome.drop_event is not None else "llm_empty_result"
-            )
+        if outcome.error is not None:
+            # "빈 결과가 실패인가"는 feature 의미론이라 게이트가 정한다 (TRIP-260 #5).
+            # 여기서 `not outcome.value` 를 함께 보던 동안, 추출 계열이 내는
+            # **성공·0건**(그 기간 그 지역에 행사가 없음)이 폴백으로 뒤집혔다.
+            # 사유 라벨 2종(gate_dropped_all / llm_empty_result)은 게이트의
+            # `empty_result_error` 가 그대로 유지한다 — 2026-08-25 사고의 산물이다.
             return self._fallback(
-                feature, model_id, prompt_ref, trace_id, now, response, reason
+                feature, model_id, prompt_ref, trace_id, now, response, outcome.error
             )
         # 7 성공 조립 + 계측 (BR-U4-03)
         record = self._record(
@@ -166,14 +164,18 @@ class GatewayFacade:
             feature, model_id, prompt_ref, trace_id, now, response, success=False
         )
         self._trace.emit(record)
+        # 폴백 모드는 feature별 실체 — 매핑에 없으면 지어내지 않고 unmapped로 드러낸다
+        from_mode, to_mode = self._cfg.fallback_modes.get(
+            feature, UNMAPPED_FALLBACK_MODES
+        )
         self._trace.emit(
             FallbackEvent(
                 trace_id=trace_id,
                 occurred_at=now,
                 component=_COMPONENT,
                 stage="llm",
-                from_mode="llm_score",
-                to_mode="rule_score",  # 실행은 호출측 (BR-U4-09)
+                from_mode=from_mode,
+                to_mode=to_mode,  # 실행은 호출측 (BR-U4-09) — 여기는 그 실체를 싣는다
                 reason=reason,
             )
         )

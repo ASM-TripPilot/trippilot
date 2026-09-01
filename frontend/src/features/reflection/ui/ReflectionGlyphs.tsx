@@ -125,3 +125,27 @@ export function RetryGlyph({
     </Svg>
   );
 }
+
+/** ⤴ 공유(j03 헤더, TRIP-574) — 종료·요약된 여행에서만 활성(코랄), 아니면 muted. */
+export function ShareGlyph({
+  size = 22,
+  muted = false,
+}: {
+  size?: number;
+  muted?: boolean;
+}): ReactElement {
+  const color = muted ? MUTED : CORAL;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 22 22" fill="none">
+      <Circle cx={6} cy={11} r={2.4} stroke={color} strokeWidth={1.9} />
+      <Circle cx={16} cy={5.5} r={2.4} stroke={color} strokeWidth={1.9} />
+      <Circle cx={16} cy={16.5} r={2.4} stroke={color} strokeWidth={1.9} />
+      <Path
+        d="M8.1 9.9L13.9 6.6M8.1 12.1L13.9 15.4"
+        stroke={color}
+        strokeWidth={1.9}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}

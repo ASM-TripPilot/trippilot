@@ -26,6 +26,8 @@ affectedSlots 일부만 살리면 명령의 의미가 바뀌므로, 대조 집�
 그리고 apply_mode는 LLM 제안을 버리고 코드가 확정한다 (하이브리드 AI-D02):
 `domain.edit.resolve_apply_mode` 재사용 — 게이트는 판정 로직을 새로 만들지 않는다.
 번역 불가(`{"editCommand": null}`)는 성공으로 위장하지 않고 폴백 신호로 낸다 (INV-4).
+산출이 **명령 1건**이라 "빈 결과"라는 상태가 없다 — 성립하거나 error다
+(TRIP-260 #5의 empty 정책이 적용될 자리가 아니다).
 
 출력 타입 `EditTranslation`은 `domain/edit.py` 소유다 — 게이트를 통과한 값만 도메인
 타입으로 승격한다는 u4 FD domain-entities §4 규칙 그대로 (게이트는 생성만 한다).

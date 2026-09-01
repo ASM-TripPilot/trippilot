@@ -22,7 +22,10 @@ class GateOutcome:
 
     value의 실체는 feature별 게이트가 정의 (scoring=tuple[ScoredPoi,...],
     explanation=tuple[PoiExplanation,...], reflection_template=TemplateCandidate, …).
-    - value 거짓값 + error 없음 = 전량 드롭/무결과 (게이트웨이가 폴백 전환)
+    - value 거짓값 + error 없음 = **성공·0건**. 빈 결과가 정상인 feature(추출 계열)의
+      모양이다 — 게이트웨이는 error 유무만 보므로 폴백으로 뒤집지 않는다 (TRIP-260 #5).
+    - 빈 결과가 실패인 feature는 게이트가 **스스로** error를 설정한다
+      (`empty_result_error`) — "empty가 실패인가"는 feature 의미론이라 게이트 소유다.
     - drop_event는 드롭이 1건이라도 있을 때만 (부분 생존 포함)
     """
 
@@ -33,6 +36,25 @@ class GateOutcome:
     def __post_init__(self) -> None:
         if self.error is not None and self.value:
             raise ValueError("error가 있으면 value는 비어야 함 (검증 실패 = 결과 없음)")
+
+
+def empty_result_error(value: object, drop_event: GateDropEvent | None) -> str | None:
+    """빈 결과가 **실패**인 게이트의 공통 사유 라벨 (TRIP-260 #5).
+
+    이 함수를 부르는 게이트 = "0건은 쓸 수 없다"는 feature (scoring·explanation·
+    alternative_selection·paraphrase·reflection_nudge). 추출 계열(place·event)은
+    부르지 않는다 — "그 기간 그 지역에 행사가 없음"이 정상 결과다.
+
+    라벨 2종 구분은 보존한다 (2026-08-25 사고): `gate_dropped_all`은 게이트 규칙·LLM
+    환각을 보라는 신호고, `llm_empty_result`는 프롬프트·입력을 보라는 신호다. 한때
+    같은 라벨이라 행사 수집에서 대전이 6회 연속 0건일 때 게이트를 의심하느라 3단계
+    추론이 필요했고 실제 원인은 LLM 무결과였다. 판별 근거는 GateDropEvent 유무 —
+    게이트는 dropped_count가 0이면 이벤트를 만들지 않으므로, 그 부재가 곧 "게이트는
+    아무것도 안 버렸다"는 증거다.
+    """
+    if value:
+        return None
+    return "gate_dropped_all" if drop_event is not None else "llm_empty_result"
 
 
 class ExitGate(Protocol):

@@ -112,9 +112,7 @@ export function TripSummaryPage({
       dayCards={dayCards}
       orderedVisits={toOrderedVisitList(data.highlights)}
       shareEnabled={shareEnabled(envelope)}
-      onShare={() => {
-        // 공유 진입점(BR-U5-48) — 공유 시트/딥링크 배선은 후속 티켓(범위 밖).
-      }}
+      onShare={() => router.push(`/trips/${tripId}/records/share`)}
       onBack={handleBack}
     />
   );

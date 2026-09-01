@@ -22,7 +22,9 @@ enum 밖 · PHOTO_* 장면에 photo_slot 없음 · EVENT 장면에 source_event 
 해시태그도 TIME_EXPR·PLACEHOLDER_OUT 검사는 받고, 그쪽은 하드다 (BR-U6R-04).
 장면 3~8·캡션 40자는 잠정값 (FD 미결 #4 — remote config 후보).
 
-"error 있으면 value 비움" 불변식은 base.GateOutcome이 강제한다.
+"error 있으면 value 비움" 불변식은 base.GateOutcome이 강제한다. 산출이 **후보 1건**
+이라 "빈 결과"라는 상태가 없다 — TemplateCandidate가 성립하거나 error다
+(TRIP-260 #5의 empty 정책이 적용될 자리가 아니다).
 """
 
 from __future__ import annotations
