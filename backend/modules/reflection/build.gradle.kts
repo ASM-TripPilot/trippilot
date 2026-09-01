@@ -21,6 +21,7 @@ dependencies {
     implementation(libs.kotlin.reflect)
     // 아웃박스 payload(JSON 문자열)를 읽는다. 트리로만 읽으므로 Kotlin 모듈은 필요 없다.
     implementation(libs.jackson.module.kotlin)
+    implementation(libs.jackson3.module.kotlin)         // AI 경계 매퍼(Jackson 3 = SB4 기본) — 일정 경계와 같은 관례
 
     testImplementation(project(":common:test-support"))
 }
