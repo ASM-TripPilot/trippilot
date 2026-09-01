@@ -90,15 +90,30 @@
 | `reflection_id` | uuid PK | |
 | `trip_id` | uuid FK → `trip` | CASCADE |
 | `day_date` | date | 여행지 기준 날짜 |
-| `draft_narrative` | text | **원본 초안**(생성물) |
-| `edited_narrative` | text? | 사용자 수정본 |
+| `draft_card` | jsonb | **원본 초안**(생성물). 카드 그대로 보관한다 — 아래 "카드로 바뀐 이유" |
+| `edited_card` | jsonb? | 사용자 수정본. **카드 통째**가 편집 단위다 |
+| `template_id` · `card_format` | varchar | 카드 버전 키. 상대가 템플릿을 늘려도 우리 스키마가 안 움직인다. **와이어의 `format` 을 `card_format` 으로 받는다** — `format` 은 컬럼명으로 너무 일반적이다 |
 | `source` | varchar(8) | `AI` \| `RULE` \| `BASIC` (DEC-U5-5a) |
 | `stats` | jsonb | `{visitCount, distanceKm, distanceSource, photoCount}` |
 | `generated_at` · `updated_at` | timestamptz | |
 
 - 유니크: `(trip_id, day_date)` — 하루 하나.
 
-**INV-U5-06** — **초안과 수정본을 각각 보관한다**(US-REC-07: "원본 초안과 별도로 저장하고 수정본을 최종 표시본으로 쓴다"). 표시본 = `edited_narrative ?? draft_narrative`. 수정이 초안을 덮으면 "AI가 뭐라고 했었나"가 사라진다.
+**INV-U5-06** — **초안과 수정본을 각각 보관한다**(US-REC-07: "원본 초안과 별도로 저장하고 수정본을 최종 표시본으로 쓴다"). 표시본 = `edited_card ?? draft_card`. 수정이 초안을 덮으면 "AI가 뭐라고 했었나"가 사라진다.
+
+> **카드로 바뀐 이유(2026-09-01 · G-U5-4 해소)** — 초안 계약은 산출물을 문장(`draft_narrative`/`edited_narrative`)으로
+> 적었다. AI 팀과의 협의 결과 실계약은 **카드**다(`template_id`·`cover`·`scenes[]`·`hashtags[]` — business-logic-model §5.3).
+> `scenes[].photo_slot`·`source_event` 는 **사용자 사진을 특정 장면에 묶는 장치**라 문장 하나로는 표현할 수 없고,
+> `j03` 이 사진을 붙이는 화면인 이상 카드가 실제 산출물이다.
+>
+> **불변식 자체는 그대로다** — 보관 단위만 문장에서 카드로 바뀐다. 편집 단위는 **카드 통째**로 둔다:
+> 장면·캡션 단위 편집은 화면이 정해진 뒤에 정해도 늦지 않고, 지금 쪼개면 근거 없이 계약을 좁힌다.
+>
+> **백엔드는 카드를 모델링하지 않는다**(**DEC-U5-14**). `cover`/`scenes` 안쪽을 재검증하지 않으므로
+> 상대 템플릿 추가가 우리 마이그레이션이 되지 않는다. 목록 화면이 필요한 짧은 문구는 `cover.title`·`subtitle` 이 준다.
+>
+> ⚠ **`trip_summary.narrative`(§4.2)는 이 개정에서 손대지 않았다.** 상대 `generate` 의 `kind` 가 SUMMARY 도 덮으므로
+> 같은 갈림이 반복될 수 있다 — 다만 요약은 `highlights[]` 등 우리 고유 필드가 있어 판단이 별건이다(**O-U5-10**).
 
 **INV-U5-07** — `stats`는 **비어 있을 수 없다**. 방문이 0곳이어도 `{0,0,…}`을 채운다 — 기본 카드(폴백 ③)가 이 값만으로 그려지기 때문이다(PBT-U5-1).
 

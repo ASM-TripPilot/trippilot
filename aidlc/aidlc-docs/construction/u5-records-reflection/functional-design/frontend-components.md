@@ -128,7 +128,7 @@
 |---|---|---|
 | 메모 | 2000자 상한·공백만이면 저장 안 함 | `visit_memo.text` |
 | 시각 보정 | 도착 ≤ 완료 · 미래 시각 경고 | BR-U5-05(409) |
-| 회고 수정 | 빈 문자열이면 초안 복원 | BR-U5-35 |
+| 회고 수정 | 수정본을 비우면 초안 카드로 복원 | BR-U5-35 |
 | 캡션·해시태그 | 길이·해시태그 개수 | 서버 저장 없음(온디바이스) |
 
 ---
@@ -137,13 +137,18 @@
 
 `record-trip-day-tab` · `record-trip-visit-card` · `record-trip-photo-add` · `record-trip-memo-input` · `record-trip-spontaneous-add` · `record-trip-sync-badge` · `record-conflict-choice-local` · `record-conflict-choice-server` · `record-compare-segment` · `record-compare-row` · `record-calendar-month` · `record-calendar-past-trip` · `reflection-daily-narrative` · `reflection-daily-edit` · `reflection-daily-stats` · `reflection-daily-photo-grid` · `reflection-summary-stats` · `reflection-summary-day-card` · `reflection-style-bar` · `reflection-style-evidence` · `reflection-share-format-seg` · `reflection-share-save` · `reflection-share-export`
 
+> ⚠ **2026-09-01 — 위 회고 testID 는 문장 모델 전제다.** 산출물이 카드로 확정되면서(G-U5-4 해소 ·
+> business-logic-model §5.3) `reflection-daily-narrative` 는 장면 단위(`cover`/`scenes[]`)로 갈릴 자리다.
+> **여기서 새 이름을 짓지 않는다** — `j03` 화면이 아직 없어(실측: 프런트에 `features/reflection` 부재)
+> 지금 지으면 근거 없이 계약을 좁힌다. 화면 설계와 함께 정한다.
+
 ---
 
 ## 9. PBT (`model/` 순수 함수 · fast-check)
 
 | ID | 성질 |
 |---|---|
-| **PBT-U5-F1** | 임의의 회고 응답(초안·수정본·통계 결측 조합)에 대해 **표시본이 항상 비어 있지 않다** |
+| **PBT-U5-F1** | 임의의 회고 응답(초안·수정본·통계 결측 조합)에 대해 **표시본 카드가 항상 비어 있지 않다** — `cover.title` 이 비어 있지 않다. *(`scenes` 개수는 조건이 아니다: 방문 0곳인 기본 카드는 근거가 없어 장면을 만들 수 없고, 그걸 요구하면 규칙 생성기가 장면을 **지어내야** 해 BR-U5-31 환각 금지와 충돌한다.)* |
 | **PBT-U5-F2** | 임의의 큐 시퀀스를 두 번 재생해도 **결과 상태가 같다**(멱등) |
 | **PBT-U5-F3** | 위치 동의가 없으면 어떤 입력에도 **EXIF 좌표가 전송 페이로드에 실리지 않는다** |
 | **PBT-U5-F4** | `sampleVisitCount` 9↔10 경계에서 임시 미리보기가 **정식 분석으로 승격되지 않는다** |
