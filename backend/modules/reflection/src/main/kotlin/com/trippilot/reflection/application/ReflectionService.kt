@@ -40,6 +40,7 @@ class ReflectionService(
     private val archive: ArchiveRecordFacade,
     private val poiSurfaces: PoiSurfaceFacade,
     private val reflections: ReflectionRepository,
+    private val cards: ReflectionCardCodec,
     private val events: DomainEventPublisher,
     private val clock: Clock,
 ) {
@@ -90,11 +91,11 @@ class ReflectionService(
      * 기본 카드라 **지어낸 문장이 아니다**(BR-U5-31).
      */
     @Transactional
-    fun edit(accountId: UUID, tripId: UUID, dayDate: LocalDate, text: String): Reflection {
+    fun edit(accountId: UUID, tripId: UUID, dayDate: LocalDate, cardPayload: String): Reflection {
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         requireWithinTrip(period, dayDate)
         val current = reflections.find(tripId, dayDate) ?: draftFor(tripId, dayDate)
-        return reflections.upsert(current.edit(text, clock.instant()))
+        return reflections.upsert(current.edit(cards.read(cardPayload), clock.instant()))
     }
 
     /**
@@ -109,7 +110,7 @@ class ReflectionService(
         val stats = statsOf(visits, surfaces)
         // 근거 안에서만 쓴다(BR-U5-31) — 이름을 못 찾은 방문은 문장에 넣지 않는다.
         val placeNames = visits.filter { !it.skipped }.mapNotNull { surfaces[it.poiId]?.nameKo }
-        val draft = ReflectionNarrator.daily(placeNames, stats)
+        val draft = ReflectionNarrator.dailyCard(placeNames, stats)
         val source = ReflectionNarrator.sourceFor(stats)
         val now = clock.instant()
         return reflections.find(tripId, dayDate)?.regenerate(draft, source, stats, now)

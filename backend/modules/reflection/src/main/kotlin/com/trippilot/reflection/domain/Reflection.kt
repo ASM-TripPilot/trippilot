@@ -5,52 +5,74 @@ import java.time.LocalDate
 import java.util.UUID
 
 /**
+ * 회고 카드 한 장(**DEC-U5-14**).
+ *
+ * **백엔드는 카드 내부를 모델링하지 않는다.** [payload] 는 상대가 만든 카드 원문(JSON)이고 우리는
+ * 해석하지 않는다 — 우리가 `cover`/`scenes` 안쪽을 재검증하면 상대가 템플릿을 하나 늘릴 때마다
+ * 우리 마이그레이션이 된다. [templateId]·[format] 이 그 버전 키다.
+ *
+ * 우리가 아는 것은 [title]·[subtitle] 뿐이다 — 목록 화면이 짧은 문구를 필요로 하기 때문이다.
+ * 값은 어댑터가 `cover` 에서 뽑아 넣는다(도메인은 JSON 을 파싱하지 않는다 — 프레임워크 무의존, R2).
+ */
+data class ReflectionCard(
+    val templateId: String,
+    val format: String,
+    val title: String,
+    val subtitle: String,
+    val payload: String,
+) {
+    init {
+        // PBT-U5-F1 — 표시본 카드는 비어 있을 수 없다. **장면 개수는 조건이 아니다**:
+        // 방문 0곳인 기본 카드는 근거가 없어 장면을 만들 수 없고, 요구하면 지어내야 한다(BR-U5-31 환각 금지).
+        require(title.isNotBlank()) { "회고 카드 제목은 비어 있을 수 없습니다(PBT-U5-F1)." }
+        require(payload.isNotBlank()) { "회고 카드 원문은 비어 있을 수 없습니다(INV-U5-07)." }
+    }
+}
+
+/**
  * 회고 한 장(U5 정본 §4.1) — 하루 하나(BR-U5-35).
  *
- * **초안과 수정본을 나눠 둔다**(INV-U5-06). 사용자가 고친 문장으로 초안을 덮으면 "무엇이 생성됐고
+ * **초안과 수정본을 나눠 둔다**(INV-U5-06). 사용자가 고친 카드로 초안을 덮으면 "무엇이 생성됐고
  * 무엇을 사람이 바꿨나"가 사라지고, 화면의 2열 비교가 성립하지 않는다.
+ * 편집 단위는 **카드 통째**다(BR-U5-35 · 2026-09-01) — 장면·캡션 단위는 화면이 정해진 뒤에 정한다.
  */
 data class Reflection(
     val reflectionId: UUID,
     val tripId: UUID,
     val dayDate: LocalDate,
-    val draftNarrative: String,
-    val editedNarrative: String?,
+    val draftCard: ReflectionCard,
+    val editedCard: ReflectionCard?,
     val source: ReflectionSource,
     val stats: ReflectionStats,
     val generatedAt: Instant,
     val updatedAt: Instant,
 ) {
-    init {
-        require(draftNarrative.isNotBlank()) { "회고 본문은 비어 있을 수 없습니다(INV-U5-07)." }
-    }
+    /** 화면이 보여 줄 카드 — 고친 것이 있으면 그것, 없으면 초안. */
+    val card: ReflectionCard get() = editedCard ?: draftCard
 
-    /** 화면이 보여 줄 문장 — 고친 것이 있으면 그것, 없으면 초안. */
-    val narrative: String get() = editedNarrative ?: draftNarrative
+    fun edit(card: ReflectionCard, at: Instant): Reflection = copy(editedCard = card, updatedAt = at)
 
-    fun edit(text: String, at: Instant): Reflection {
-        require(text.isNotBlank()) { "수정본은 비어 있을 수 없습니다." }
-        return copy(editedNarrative = text.trim(), updatedAt = at)
-    }
+    /** 수정본을 비우면 초안 카드로 돌아간다(frontend-components §검증 — BR-U5-35). */
+    fun clearEdit(at: Instant): Reflection = copy(editedCard = null, updatedAt = at)
 
     /**
      * 초안을 다시 만든다 — **수정본은 건드리지 않는다**(INV-U5-06 · TRIP-553).
      *
      * INV-U5-06 은 "수정이 초안을 덮지 않는다"로 읽히지만 **반대 방향도 같은 규칙이다.**
-     * 재생성이 매번 새 행을 만들어 얹으면 `edited_narrative` 가 null 로 덮여 **사용자가 쓴 글이
-     * 사라진다.** 초안이 사라지는 것보다 나쁘다 — 초안은 다시 만들 수 있지만 사용자의 문장은
+     * 재생성이 매번 새 행을 만들어 얹으면 `edited_card` 가 null 로 덮여 **사용자가 쓴 것이
+     * 사라진다.** 초안이 사라지는 것보다 나쁘다 — 초안은 다시 만들 수 있지만 사용자가 고친 카드는
      * 어디에도 없다.
      *
      * `generatedAt` 도 그대로다: "언제 처음 만들어졌나"는 재생성으로 바뀌는 사실이 아니다.
      */
-    fun regenerate(draft: String, source: ReflectionSource, stats: ReflectionStats, at: Instant): Reflection =
-        copy(draftNarrative = draft, source = source, stats = stats, updatedAt = at)
+    fun regenerate(draft: ReflectionCard, source: ReflectionSource, stats: ReflectionStats, at: Instant): Reflection =
+        copy(draftCard = draft, source = source, stats = stats, updatedAt = at)
 
     companion object {
         fun of(
             tripId: UUID,
             dayDate: LocalDate,
-            draft: String,
+            draft: ReflectionCard,
             source: ReflectionSource,
             stats: ReflectionStats,
             at: Instant,

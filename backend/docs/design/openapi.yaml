@@ -1195,22 +1195,26 @@ paths:
         빈 화면을 그리지 않는다(BR-U5-32).
 
 
-        하루 한 장이라 다시 부르면 **덮어쓴다**(BR-U5-35). 사용자가 고친 문장(`editedNarrative`)은
+        하루 한 장이라 다시 부르면 **덮어쓴다**(BR-U5-35). 사용자가 고친 카드(`editedCard`)는
         재생성해도 남는다 — 초안만 갈린다.
 
 
-        ⚠ 현재 `source` 는 `RULE` 또는 `BASIC` 이다. `AI` 단은 미개통(O-U5-6) — `ai/` 에 회고 경계가
-        없고 backend 에 LLM 게이트웨이도 없다. 규칙 문장으로 먼저 열고 `source` 로 품질을 관측한다.
+        ⚠ 현재 `source` 는 `RULE` 또는 `BASIC` 이다. `AI` 단은 아직 배선 전이다 — 상대 경계는
+        실재하고(`POST /ai/v1/reflection/generate`) O-U5-6 이 `http` 로 확정됐다. 규칙 카드로 먼저
+        열고 `source` 로 품질을 관측한 뒤 켠다(BR-U5-33).
       responses:
         '200': { description: 생성됨, content: { application/json: { schema: { $ref: '#/components/schemas/Reflection' } } } }
         '400': { description: 여행 기간 밖 날짜 }
         '404': { description: 여행 없음/타 계정 }
     put:
       tags: [reflection]
-      summary: 회고 문장 수정 — 초안은 남는다
+      summary: 회고 카드 수정 — 초안은 남는다
       description: >
-        생성된 초안을 덮지 않고 `editedNarrative` 에 따로 쌓는다(INV-U5-06). 화면이 "생성된 것"과
+        생성된 초안을 덮지 않고 `editedCard` 에 따로 쌓는다(INV-U5-06). 화면이 "생성된 것"과
         "내가 고친 것"을 2열로 그리기 때문이다 — 하나로 합치면 그 비교가 사라진다.
+
+
+        수정 단위는 **카드 통째**다(BR-U5-35). 장면·캡션 단위 편집은 화면이 정해진 뒤에 정한다.
 
 
         **회고가 아직 없어도 쓸 수 있다**(BR-U5-36) — 근거 수치만으로 된 기본 카드를 만들어 그 위에
@@ -3024,31 +3028,54 @@ components:
 
     EditReflectionRequest:
       type: object
-      required: [text]
+      required: [card]
+      description: >
+        수정 단위는 **카드 통째**다(BR-U5-35). 장면·캡션 단위 편집은 화면이 정해진 뒤에 정한다.
       properties:
-        text: { type: string, minLength: 1, maxLength: 4000 }
+        card:
+          type: string
+          minLength: 1
+          maxLength: 20000
+          description: >
+            카드 원문(JSON 문자열). `cover.title` 이 비면 400 이다(PBT-U5-F1) — 통과시키면 목록에
+            빈 줄이 그려지고 어디서 비었는지 추적할 근거가 사라진다.
+
+    ReflectionCard:
+      type: object
+      required: [templateId, format, title, subtitle, payload]
+      description: >
+        회고 카드 한 장. 서버는 `cover` 밖을 **해석하지 않는다**(DEC-U5-14) — 재검증하면 AI 가
+        템플릿을 하나 늘릴 때마다 서버 마이그레이션이 된다. 화면은 `templateId` 로 그리는 법을 고른다.
+      properties:
+        templateId: { type: string, description: '카드를 만든 주체·판(예: backend.rule.daily.v1)' }
+        format: { type: string }
+        title: { type: string, description: '`cover.title`. **목록이 쓰는 짧은 문구**라 따로 낸다 — 클라가 매번 payload 를 파싱하지 않게' }
+        subtitle: { type: string }
+        payload: { type: string, description: '카드 원문(JSON 문자열). 서버가 재조립하지 않고 그대로 낸다' }
 
     Reflection:
       type: object
-      required: [dayDate, narrative, draftNarrative, source, stats, generatedAt, updatedAt]
+      required: [dayDate, card, draftCard, source, stats, generatedAt, updatedAt]
       properties:
         dayDate: { type: string, format: date }
-        narrative:
-          type: string
+        card:
+          allOf: [{ $ref: '#/components/schemas/ReflectionCard' }]
           description: >
-            화면이 그대로 그리는 문장(`editedNarrative ?? draftNarrative`). **표시본 선택은 업무
-            규칙이라 서버가 정한다**(BR-U5-35) — 클라이언트가 매번 다시 고르면 조회 화면과 목록
-            화면이 서로 다르게 고르는 날이 온다.
-        draftNarrative: { type: string, description: 생성된 원문. **비어 있을 수 없다**(INV-U5-07) }
-        editedNarrative:
-          type: string
+            화면이 그대로 그리는 카드(`editedCard ?? draftCard`). **표시본 선택은 업무 규칙이라
+            서버가 정한다**(BR-U5-35) — 클라이언트가 매번 다시 고르면 조회 화면과 목록 화면이
+            서로 다르게 고르는 날이 온다.
+        draftCard:
+          allOf: [{ $ref: '#/components/schemas/ReflectionCard' }]
+          description: 생성된 원본 카드. **비어 있을 수 없다**(INV-U5-07)
+        editedCard:
+          allOf: [{ $ref: '#/components/schemas/ReflectionCard' }]
           nullable: true
-          description: 사용자가 고친 문장. null 이면 아직 손대지 않았다 — 화면은 둘을 2열로 그린다(INV-U5-06).
+          description: 사용자가 고친 카드. null 이면 아직 손대지 않았다 — 화면은 둘을 2열로 그린다(INV-U5-06).
         source:
           type: string
           description: >
-            문장이 어느 단에서 나왔나(BR-U5-33). **항상 실린다** — 화면이 구분해 그리지 않더라도
-            규칙 문장이 몇 %인지 모르면 AI 경로를 붙일 근거가 없다. 현재 `AI` 는 미개통(O-U5-6).
+            카드가 어느 단에서 나왔나(BR-U5-33). **항상 실린다** — 화면이 구분해 그리지 않더라도
+            규칙 카드가 몇 %인지 모르면 AI 경로의 값을 잴 근거가 없다. `AI` 는 칸 2·3 에서 개통한다.
           enum: [AI, RULE, BASIC]
         stats: { $ref: '#/components/schemas/ReflectionStats' }
         generatedAt: { type: string, format: date-time }
