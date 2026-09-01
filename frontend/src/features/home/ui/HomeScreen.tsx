@@ -38,9 +38,7 @@ import type {
   HomePhase,
   HomeScreenProps,
   HomeSections,
-  HomeSoftNote,
   HomeSpotCard,
-  HomeStatTile,
   NextStop,
   PastTrip,
   TripHeroData,
@@ -75,9 +73,6 @@ const fabShadow = {
   shadowRadius: 16,
   elevation: 8,
 } as const;
-
-// upcoming 스탯 타일 2칸의 고정 testID(순서 고정 — 배열 위치로 잠근다).
-const STAT_TEST_IDS = ['home-dash-itinerary', 'home-dash-stay'] as const;
 
 // ── 인사 헤더 ───────────────────────────────────────────────────────────
 // discovery는 고정 카피, 단계 얼굴은 greetTitle/greetSubtitle/greetName을 주입받는다.
@@ -488,52 +483,6 @@ function ItinerariesSection({
   );
 }
 
-// ── softNote(장소 온램프 · US-SHELL-05 · 단계별 브릿지/공유행) ──────────
-// 배경 #fff7f8은 Figma가 변수 아닌 raw fill로 쓴 값 → 임의 raw 유지(가정 D). D-3 13색 밖이라
-// 자동 심판 사각지대이므로 [검증] 스크린샷 대조가 유일한 그물. note 미전달이면 discovery 온램프,
-// 전달되면 그 카피(planning 브릿지행 · postTrip 공유행)를 같은 슬롯에 그린다.
-// asButton은 CTA의 role(버튼으로 읽히는가)을 구조로 굳힌다 — 목적지가 배선된 discovery 온램프만
-// 버튼이고, 목적지 없는 슬롯(planning 브릿지·postTrip 공유, 기능 이연 BR-U3-15)은 role을 뗀다
-// (죽은 버튼 금지, TRIP-401). role을 콜백 유무로 파생하지 않는다(370-AC-4는 콜백 미주입에도 버튼).
-function SoftNote({
-  note,
-  onPressCta,
-  asButton = false,
-}: {
-  note?: HomeSoftNote;
-  onPressCta?: () => void;
-  asButton?: boolean;
-}): ReactElement {
-  const title = note?.title ?? '마음에 든 곳이 모이면';
-  const subtitle = note?.subtitle ?? '담아둔 장소로 여행을 만들 수 있어요';
-  const ctaLabel = note?.ctaLabel ?? '담은 곳';
-  return (
-    <View className="w-full px-lg pb-[24px] pt-[22px]">
-      <View
-        testID="home-soft-note"
-        className="w-full flex-row items-center gap-[10px] rounded-card bg-[#fff7f8] px-lg py-[14px]"
-      >
-        <View className="flex-1 gap-[2px]">
-          <Text className="font-noto-bold text-[13.5px] font-bold text-ink">
-            {title}
-          </Text>
-          <Text className="font-noto text-[11.5px] text-muted">{subtitle}</Text>
-        </View>
-        <Pressable
-          testID="home-saved-places-cta"
-          accessibilityRole={asButton ? 'button' : undefined}
-          onPress={onPressCta}
-          className="rounded-pill border-[1.4px] border-primary bg-canvas px-md py-sm"
-        >
-          <Text className="font-noto-bold text-caption font-bold text-primary-text">
-            {ctaLabel}
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 // ── tripHero(planning·upcoming 공용 여행 히어로 · 브리프 §3-C) ───────────
 // 사진+스크림 · 좌상단 단계 pill · 우상단 대형 D-day · 좌하단 primary CTA + 여행명 + 기간 메타.
 // TRIP-453: 카드 본체(home-trip-hero)를 Pressable 로 승격해 알약(home-trip-hero-cta)과 **같은
@@ -599,31 +548,6 @@ function TripHero({
           </View>
         </View>
       </Pressable>
-    </View>
-  );
-}
-
-// ── dashRow(upcoming 스탯 타일 2 · 일정 진행률·등록 숙소 · US-SHELL-02) ──
-function DashRow({ stats }: { stats: readonly HomeStatTile[] }): ReactElement {
-  return (
-    <View className="mx-lg flex-row gap-md">
-      {stats.map((tile, index) => (
-        <View
-          key={tile.label}
-          testID={STAT_TEST_IDS[index]}
-          className="flex-1 gap-[4px] rounded-card border border-primary bg-canvas px-md py-lg"
-        >
-          <Text className="font-noto text-label text-muted">{tile.label}</Text>
-          <Text className="font-noto-bold text-card-title font-bold text-ink">
-            {tile.value}
-          </Text>
-          {tile.caption ? (
-            <Text className="font-noto text-micro text-muted">
-              {tile.caption}
-            </Text>
-          ) : null}
-        </View>
-      ))}
     </View>
   );
 }
@@ -932,7 +856,6 @@ function PlanningBody({
       <GreetingHeader title={phase.greetTitle} />
       <SearchBarBlock onPress={onPressSearch} />
       <TripHero trip={phase.trip} onPress={onPressTripHeroCta} />
-      <SoftNote note={phase.bridge} />
     </>
   );
 }
@@ -950,7 +873,6 @@ function UpcomingBody({
       <GreetingHeader name={phase.greetName} title={phase.greetTitle} />
       <TripHero trip={phase.trip} />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
-        <DashRow stats={phase.stats} />
         <NextStopCard nextStop={phase.nextStop} />
         <MiniMapCard
           testID="home-nearby-card"
@@ -990,7 +912,6 @@ function PostTripBody({
         />
         <PastTripsSection trips={phase.pastTrips} />
       </View>
-      <SoftNote note={phase.share} />
     </>
   );
 }

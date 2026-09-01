@@ -271,10 +271,10 @@ describe('단계 얼굴 단일 파일 강제 (TRIP-317 · 브리프 §8-7)', () 
 
     // 긍정 짝 — 단계 얼굴 스위치·신 testID가 이 한 파일에 실재해야 한다(구현 전엔 red).
     const src = sources[0].source;
+    // home-dash-itinerary 는 TRIP-646으로 upcoming 스탯 블록과 함께 제거됐다.
     [
       'home-trip-hero',
       'home-next-stop',
-      'home-dash-itinerary',
       'home-recap-card',
       'home-saved-count-chip',
     ].forEach((id) => expect(src).toContain(id));
