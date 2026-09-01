@@ -77,9 +77,13 @@ def _optional(name: str) -> str | None:
     return os.environ.get(name) or None
 
 
-def _build_adapter() -> tuple[LlmPort, str]:
-    """제공자 선택 + 어댑터 조립. 반환: (어댑터, model_id)."""
-    provider = os.environ.get("LLM_PROVIDER", "openai")
+def _build_adapter(provider: str | None = None) -> tuple[LlmPort, str]:
+    """제공자 선택 + 어댑터 조립. 반환: (어댑터, model_id).
+
+    provider 를 넘기면 환경변수 대신 그 값을 쓴다 — mixed 분기가 양쪽 어댑터를
+    조립할 때 os.environ 을 갈아끼우지 않기 위해서다(예외가 나면 되돌지 못한다).
+    """
+    provider = provider or os.environ.get("LLM_PROVIDER", "openai")
     if provider == "azure":
         import openai
 
@@ -110,6 +114,17 @@ def _build_adapter() -> tuple[LlmPort, str]:
         )
         adapter = OpenAIAdapter(client, api=_optional("OPENAI_API") or "chat")
         return adapter, _optional("OPENAI_MODEL") or "gpt-5.6"
+    if provider == "mixed":
+        # 운영과 같은 혼용 조립 (TRIP-513) — main._mixed_llm_and_model 과 동형.
+        # 리허설이 mixed 를 못 돌리면 "운영은 mixed, 리허설은 openai" 로 갈라져
+        # 리허설 통과가 운영 동작의 증거가 되지 못한다.
+        from trippilot.llm_gateway.adapters.routing import RoutingLlm
+
+        openai_adapter, openai_model = _build_adapter("openai")
+        anthropic_adapter, _ = _build_adapter("anthropic")
+        # 기본 모델(티어 해석)은 OPENAI_MODEL — claude 는 feature_models 로 배정된다.
+        return RoutingLlm(default=openai_adapter,
+                          routes={"claude": anthropic_adapter}), openai_model
     if provider == "anthropic":
         import anthropic
 
@@ -123,7 +138,7 @@ def _build_adapter() -> tuple[LlmPort, str]:
         return AnthropicAdapter(client), os.environ.get(
             "ANTHROPIC_MODEL", "claude-haiku-4-5"
         )
-    raise SystemExit(f"LLM_PROVIDER는 azure|openai|anthropic 중 하나: {provider!r}")
+    raise SystemExit(f"LLM_PROVIDER는 azure|openai|anthropic|mixed 중 하나: {provider!r}")
 
 
 def main() -> int:
