@@ -37,6 +37,11 @@ class LlmCallRecord:
     latency_ms: int
     success: bool
     agent: AgentKind | None
+    # 사진을 실어 보낸 호출의 **동의 증빙 참조** (BR-U6R-09 — TRIP-595).
+    # 백엔드 append-only 법무 로그의 레코드 키. 법무 감사가 "이 전송은 어느 동의
+    # 근거였나"를 물을 때 AI 트레이스가 답할 수 있어야 한다.
+    # 이미지 없는 호출은 None (기존 발행처 전부 무영향 — 후미 기본값).
+    consent_ref: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -51,6 +56,7 @@ class LlmCallRecord:
             "latency_ms": self.latency_ms,
             "success": self.success,
             "agent": self.agent.value if self.agent is not None else None,
+            "consent_ref": self.consent_ref,
         }
 
     @classmethod
@@ -67,6 +73,7 @@ class LlmCallRecord:
             latency_ms=d["latency_ms"],
             success=d["success"],
             agent=AgentKind(d["agent"]) if d["agent"] is not None else None,
+            consent_ref=d.get("consent_ref"),  # 부기 이전 직렬화본 호환
         )
 
 
@@ -77,7 +84,7 @@ class FallbackEvent:
     trace_id: TraceId
     occurred_at: datetime
     component: str
-    stage: str  # llm / solver / router / agent
+    stage: str  # llm / solver / router / agent / vision (TRIP-595)
     from_mode: str
     to_mode: str
     reason: str

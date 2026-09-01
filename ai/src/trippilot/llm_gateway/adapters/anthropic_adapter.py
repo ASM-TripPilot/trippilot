@@ -14,7 +14,9 @@ import time
 
 import anthropic
 
-from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError
+from trippilot.ports.llm_port import (
+    LlmRequest, LlmResponse, LlmTimeoutError, LlmUnsupportedError,
+)
 
 
 class AnthropicAdapter:
@@ -24,6 +26,11 @@ class AnthropicAdapter:
         self._client = client
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
+        if request.images:
+            # 이미지 변환 미구현 — 조용히 떨구지 않고 명시 실패시킨다 (TRIP-595).
+            # 구현 시 messages content에 image 블록(base64 source)을 넣으면 된다.
+            raise LlmUnsupportedError(
+                "Anthropic 어댑터는 아직 이미지 입력을 지원하지 않는다")
         started = time.monotonic()
         try:
             resp = self._client.messages.create(

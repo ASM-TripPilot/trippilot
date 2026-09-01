@@ -34,6 +34,16 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # 장면 시퀀스 연출 생성 — 회고 본문 생성의 정본(구 REFLECTION 흡수), 백그라운드 N회 생성 전제
             # (TRIP-429, BR-U6R-13: 티어·모델 실체는 항상 설정값)
             LlmFeature.REFLECTION_TEMPLATE: ModelTier.HEAVY,
+            # 사진 대표 선별 — 이미지 판독이 필요한 상위 과업이라 HEAVY (TRIP-595).
+            # **티어는 vision 가용성을 보장하지 않는다**: 이미지 수용 여부는 어댑터와
+            # 모델이 정하고(anthropic 어댑터는 무조건 미지원, openai는 responses 표면만),
+            # 실배선은 두 티어에 같은 모델을 넣기도 한다(api/wiring.py). 따라서 vision
+            # 모델 지정은 `feature_models` 오버라이드(TRIP-513) 몫이고, 그게 없으면
+            # 이 feature는 LlmUnsupportedError → 메타 규칙 폴백으로만 돈다.
+            # 프로바이더·모델 선정은 TRIP-515 런북 소관 (BR-U6R-13: 실체는 설정값).
+            LlmFeature.PHOTO_HIGHLIGHT: ModelTier.HEAVY,
+            # vision 장면·캡션 생성 — 텍스트 템플릿과 같은 출력 계약, 모델만 분리(미결 #6)
+            LlmFeature.REFLECTION_TEMPLATE_VISION: ModelTier.HEAVY,
             LlmFeature.PLACE_EXTRACTION: ModelTier.HEAVY,
             # 자유 텍스트 구조화 추출 — PLACE_EXTRACTION과 동급 과업 (TRIP-421)
             LlmFeature.EVENT_EXTRACTION: ModelTier.HEAVY,
@@ -81,6 +91,12 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # scripts/collect_events.py `collect_region` — 추출 0건으로 그 회차를
             # 넘긴다(대체 추출 경로 없음).
             LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
+            # agents/reflect/highlight_rule.py — 방문당 1장·시간 분산 결정론 선별.
+            # composer vision 단계(compose_vision)가 실행한다.
+            LlmFeature.PHOTO_HIGHLIGHT: ("llm_highlight", "rule_highlight"),
+            # agents/reflect/composer.py compose_vision — vision 시도 실패 시 같은
+            # 3회 예산 안에서 텍스트 템플릿으로 강등(#9 확정: 예산 공유, 최악 3회).
+            LlmFeature.REFLECTION_TEMPLATE_VISION: ("vision_template", "text_template"),
             # PLACE_EXTRACTION은 프로덕션 호출측이 아직 없다(워커·테스트뿐) —
             # 워커 docstring("게이트 전 원시까지")과 EVENT_EXTRACTION 선례에서
             # 유추한 값이다. 호출측이 생기면 그때 실측으로 확정한다.

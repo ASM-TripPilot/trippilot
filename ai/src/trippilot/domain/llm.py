@@ -47,6 +47,14 @@ class LlmFeature(Enum):
     # DAILY 캡션 연결). 출력 계약은 reflection-template-design.md (#334),
     # 타입은 domain/reflection.py (U6 Reflect FD).
     REFLECTION_TEMPLATE = "REFLECTION_TEMPLATE"  # U6 (TRIP-429)
+    # 동의된 사진 목록 → 대표 N장 선별 (Reflect Phase 2). 이미지 파트를 실어 보내는
+    # 첫 feature라 vision 지원 모델이 필요하다. 산출은 photo_id 튜플뿐 — 시각 서술을
+    # 받지 않는다(BR-U6R-11: 게이트가 사실성을 판정할 수 없으므로 애초에 요구하지 않는다).
+    PHOTO_HIGHLIGHT = "PHOTO_HIGHLIGHT"  # U6 Phase 2 (TRIP-595)
+    # 사진을 직접 보며 장면·캡션 생성 (U6 Phase 2, TRIP-595) — REFLECTION_TEMPLATE과
+    # **같은 출력 계약**(드롭인 강등의 전제). 별도 feature인 이유: TierRouter가
+    # feature→model 결정론이라 같은 이름으로는 vision 모델을 분리 지정할 수 없다(미결 #6).
+    REFLECTION_TEMPLATE_VISION = "REFLECTION_TEMPLATE_VISION"  # U6 Phase 2 (TRIP-595)
     PLACE_EXTRACTION = "PLACE_EXTRACTION"  # U6 (백그라운드)
     # 웹 검색 스니펫 → 행사(축제·공연·전시) 구조화 추출 — 웹소싱 파이프라인의
     # 추출 단계. 행사는 POI가 아니라 후보 풀에 편입되지 않는다 (domain/event.py).

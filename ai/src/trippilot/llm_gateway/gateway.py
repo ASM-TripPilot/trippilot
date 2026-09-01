@@ -22,7 +22,14 @@ from trippilot.domain.common import TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi, TypedResult
 from trippilot.domain.observability import FallbackEvent, LlmCallRecord
 from trippilot.domain.prompt import PromptRef
-from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse, LlmTimeoutError
+from trippilot.ports.llm_port import (
+    LlmImagePart,
+    LlmPort,
+    LlmRequest,
+    LlmResponse,
+    LlmTimeoutError,
+    LlmUnsupportedError,
+)
 from trippilot.ports.trace_port import TracePort
 
 _COMPONENT = "c1.gateway"
@@ -93,10 +100,26 @@ class GatewayFacade:
         now: datetime,
         *,
         timeout_sec: float | None = None,
+        images: tuple[LlmImagePart, ...] = (),
+        consent_ref: str | None = None,
     ) -> TypedResult[tuple[ScoredPoi, ...]]:
+        """images는 멀티모달 feature 전용 후미 기본값 (TRIP-595, FD §6.1 A안) —
+        기존 텍스트 호출은 전부 무영향이고, 강등은 "같은 파이프라인, images만 비움"으로
+        표현된다. 이미지도 게이트웨이를 지나야 계측(LlmCallRecord)이 빠지지 않는다.
+
+        **사진은 동의 증빙과 짝으로만 나간다** (BR-U6R-09): images가 있는데
+        consent_ref가 없으면 호출 자체가 버그다 — 폴백이 아니라 ValueError.
+        타입 강제(VisionInput)는 워커 안의 관례라 다른 워커가 우회할 수 있지만,
+        이미지는 이 게이트웨이 경유로만 벤더에 나간다(규약 — LlmRequest에
+        images를 싣는 곳은 여기뿐이며, 게이트웨이 밖 탑재는 시각 seam 테스트가
+        스캔으로 막는다). 여기서 막으면 우회로가 없다.
+        """
         # 1 feature ∈ LlmFeature — 밖이면 호출 자체가 버그 (BR-U4-05, 폴백 아님)
         if not isinstance(feature, LlmFeature):
             raise ValueError(f"LlmFeature 밖의 기능 호출: {feature!r}")
+        if images and not (consent_ref or "").strip():
+            raise ValueError(
+                "동의 증빙 없이 이미지를 보낼 수 없다 — consent_ref 필요 (BR-U6R-09)")
         # 2 라우팅 (설정 버그면 ValueError 그대로)
         model_id = self._router.route(feature)
         # 3 렌더
@@ -116,15 +139,26 @@ class GatewayFacade:
                     timeout_sec=(
                         self._cfg.timeout_sec if timeout_sec is None else timeout_sec
                     ),
+                    images=images,
                 )
             )
         except LlmTimeoutError as e:
             return self._fallback(
-                feature, model_id, prompt_ref, trace_id, now, None, f"timeout: {e}"
+                feature, model_id, prompt_ref, trace_id, now, None, f"timeout: {e}",
+                consent_ref=consent_ref,
+            )
+        except LlmUnsupportedError as e:
+            # 타임아웃과 같은 자리 — 다만 사유를 가른다. 비지원은 재시도해도 같은 결과라
+            # 호출측 처방이 "이번엔 실패"가 아니라 "이 경로를 포기하고 강등"이다
+            # (BR-U6R-10 — 조용한 이미지 무시 금지, 강등은 명시 신호로).
+            return self._fallback(
+                feature, model_id, prompt_ref, trace_id, now, None, f"unsupported: {e}",
+                consent_ref=consent_ref,
             )
         except Exception as e:  # 벤더 예외 포함 전부 폴백 신호로 (BR-U4-02)
             return self._fallback(
-                feature, model_id, prompt_ref, trace_id, now, None, f"llm_error: {e}"
+                feature, model_id, prompt_ref, trace_id, now, None, f"llm_error: {e}",
+                consent_ref=consent_ref,
             )
         # 5·6 파서 + closed-set 게이트 (INV-1)
         outcome = self._gate.apply(
@@ -139,11 +173,13 @@ class GatewayFacade:
             # 사유 라벨 2종(gate_dropped_all / llm_empty_result)은 게이트의
             # `empty_result_error` 가 그대로 유지한다 — 2026-08-25 사고의 산물이다.
             return self._fallback(
-                feature, model_id, prompt_ref, trace_id, now, response, outcome.error
+                feature, model_id, prompt_ref, trace_id, now, response, outcome.error,
+                consent_ref=consent_ref,
             )
         # 7 성공 조립 + 계측 (BR-U4-03)
         record = self._record(
-            feature, model_id, prompt_ref, trace_id, now, response, success=True
+            feature, model_id, prompt_ref, trace_id, now, response, success=True,
+            consent_ref=consent_ref,
         )
         self._trace.emit(record)
         return TypedResult(
@@ -159,9 +195,11 @@ class GatewayFacade:
         now: datetime,
         response: LlmResponse | None,
         reason: str,
+        consent_ref: str | None = None,
     ) -> TypedResult[tuple[ScoredPoi, ...]]:
         record = self._record(
-            feature, model_id, prompt_ref, trace_id, now, response, success=False
+            feature, model_id, prompt_ref, trace_id, now, response, success=False,
+            consent_ref=consent_ref,
         )
         self._trace.emit(record)
         # 폴백 모드는 feature별 실체 — 매핑에 없으면 지어내지 않고 unmapped로 드러낸다
@@ -191,6 +229,7 @@ class GatewayFacade:
         response: LlmResponse | None,
         *,
         success: bool,
+        consent_ref: str | None = None,
     ) -> LlmCallRecord:
         return LlmCallRecord(
             trace_id=trace_id,
@@ -204,4 +243,5 @@ class GatewayFacade:
             latency_ms=response.latency_ms if response else 0,
             success=success,
             agent=None,
+            consent_ref=consent_ref,  # 이미지 호출의 동의 근거 (BR-U6R-09)
         )
