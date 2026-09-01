@@ -1,11 +1,13 @@
 """TripPilot AI 서비스 진입점 — FastAPI 경계 (U5-03·05, TRIP-239·241).
 
-`POST /ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit}`
-(alternatives=TRIP-428 · explanations=TRIP-479 · edit=TRIP-431) + `/health`.
+경계 라우트는 `trippilot.api.routes` 가 소유한다(itinerary·reflection 라우터 2개) —
+경로 목록을 여기 다시 나열하지 않는다(나열이 먼저 낡는다). 와이어 정본은
+`ai/docs/openapi.json` 이고, 앱과의 전수 일치는 `ai/tests/test_api_openapi_contract.py`
+가 강제한다. 경계 밖 `/`·`/health` 는 `trippilot.api.app` 소유.
 조립은 `trippilot.api.wiring` 소유 — main은 env 해석 + 얇은 스위치만 갖는다.
 
 env 스위치 (TRIP-344):
-- `TRIPPILOT_WIRING=unwired` — 미주입 앱(경계 라우트 6종 503, 배선 문제 격리용). 최우선.
+- `TRIPPILOT_WIRING=unwired` — 미주입 앱(**경계 라우트 전부** 503, 배선 문제 격리용). 최우선.
 - `TRIPPILOT_LLM_PROVIDER` 미설정 — 기존 그대로 in-memory fake 조립(스모크·로컬
   개발용 — 실 LLM·실 DB 호출 0, D37): LLM은 명시적 미배선(UnwiredLlm)이라 점수는
   규칙 폴백, 일정은 OR-Tools가 낸다.

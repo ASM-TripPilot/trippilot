@@ -1,17 +1,17 @@
 # AI-DLC State Tracking
 
 ## Project Information
-- **Project Type**: Brownfield (설계 문서 존재, 소스 코드 미작성)
+- **Project Type**: Brownfield (설계 문서 + 가동 중인 소스 코드)
 - **Start Date**: 2026-07-12T00:00:00Z
-- **Current Stage**: INCEPTION - Application Design Complete
+- **Current Stage**: CONSTRUCTION (INCEPTION 은 2026-07-12 완료). 유닛별 진행 상태는 `../claude.md` §Current Status
 
 ## Workspace State
-- **Existing Code**: No (소스 코드 없음)
+- **Existing Code**: Yes (워크스페이스 루트 `src/trippilot/` — FastAPI 서비스 가동 중)
 - **Existing Design Documents**: Yes (ai-architecture.md, ai-implementation-design.md, ai-data-design.md, ai-prompt-design.md, ai-testing-guide.md, ai-adr.md)
-- **Programming Languages**: Python (설계 대상)
-- **Build System**: 미확정 (uv/poetry 권고)
+- **Programming Languages**: Python
+- **Build System**: uv (워크스페이스 루트 `pyproject.toml` — `build-backend = "uv_build"` · `uv.lock`)
 - **Project Structure**: Multi-component AI Service (C1 LLM Gateway + C2 Solver Engine + M7 Place Data)
-- **Workspace Root**: /Users/juna/dev/TripPilot_AI
+- **Workspace Root**: 모노레포 `ai/` (종전 값 `/Users/juna/dev/TripPilot_AI` 는 모노레포 이관 전 단독 리포 경로)
 
 ## Code Location Rules
 - **Application Code**: Workspace root (NEVER in aidlc-docs/)
@@ -42,21 +42,20 @@
 - [x] Units Generation - Completed on 2026-07-12T00:25:00Z
 
 ### CONSTRUCTION PHASE (per-unit)
-- [ ] Functional Design - EXECUTE (per-unit)
+- [x] Functional Design - EXECUTE (per-unit) — `construction/<unit>/functional-design/`. 유닛 목록은 여기 적지 말고 그 디렉토리를 볼 것 (U5 Orchestration&API 는 FD 없이 코드로 진행됐다)
 - [ ] NFR Requirements - EXECUTE
 - [ ] NFR Design - SKIP
 - [ ] Infrastructure Design - SKIP
-- [ ] Code Generation - EXECUTE (per-unit)
-- [ ] Build and Test - EXECUTE
+- [x] Code Generation - EXECUTE (per-unit) — 코드는 워크스페이스 루트 `src/trippilot/` 에 있다 (위 Code Location Rules)
+- [x] Build and Test - EXECUTE — `.github/workflows/ai-ci.yml` 이 상시 게이트 (실행 앱 스키마 == 커밋된 `docs/openapi.json`, 외부 API 실 호출 0)
 
 ### OPERATIONS PHASE
 - [ ] Operations - PLACEHOLDER
 
 ## Current Status
 - **Lifecycle Phase**: CONSTRUCTION
-- **Current Stage**: U4 C1 LLM Gateway — FD 작성 완료, 승인 대기
-- **Next Stage**: U4 코드 생성 (승인 후). U3 잔여(실 PostgreSQL 어댑터·batch_check_closed 연결)는 후속 백로그
-- **Status**:
+- **Current Stage / Next Stage 는 이 파일에서 관리하지 않는다** — 유닛별 진행 상태 정본은 `../claude.md` §Current Status 와 `construction/<unit>/functional-design/` 실물이다. 2026-08-03 U4 머지 이후 이 파일 갱신이 끊겨 스테일이 됐기 때문이다(종전 표기: "U4 C1 LLM Gateway — FD 작성 완료, 승인 대기" / "Next Stage: U4 코드 생성 (승인 후)" — U4 는 이미 머지됐고 이후 U5·U6 까지 나갔다).
+- **Status** (아래 U1~U3 은 2026-07~08 시점 기록으로 남긴다 — 현재 상태가 아니다):
   - U1 완료 (2026-07-23): 도메인 12모듈·Port 7종·Fake 9종·PBT 52 green, 4대 불변식 타입 강제, CI 테스트 게이트. PR #25 리뷰 대기 (develop), Jira TRIP-164 In Review.
   - U2 코어 완료 (2026-07-29): 벤치마크 게이트 통과(미결 #3 종결 — OR-Tools 확정), c2 8모듈(체인·HC·OR-Tools·LLM2차·repair·폴백·scorer), 76 tests green. PBT가 중복 고정블록 실버그 검출·수정. 잔여 경미 3건(oracle 대조·품질미달 트리거·2-opt)은 광택 백로그. Jira TRIP-165 In Review.
   - U3 코어 완료 (2026-07-29): FD 3종 + m7 4모듈(6단계 필터·자모 fuzzy 해소·TTL 캐시 래퍼), 테스트 91 green (POOL-P1~4·RES-P1/P2·CACHE-P1/P2). 가격 캐싱 금지 구조+테스트 이중 강제.

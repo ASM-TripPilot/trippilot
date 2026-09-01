@@ -2,8 +2,8 @@
 
 > ⚠ **지위 강등 (2026-08-07, TRIP-282).** 아래 `/c1/*`·`/c2/*`·`/m7/*` **세분 경로는 폐기 방향**이다.
 > PR #76 "굵은 경계 — 조각 조립 경계(백엔드가 M7·C1·C2를 직접 지휘)는 두지 않는다" 합의에 따라
-> 실제 백엔드↔AI 경계는 **딱 두 개**뿐이다:
-> - 포워드 `POST /ai/v1/itinerary/{generate|validate|repair}`
+> 실제 백엔드↔AI 경계는 포워드·리버스 **두 방향**뿐이다:
+> - 포워드 — 열린 경로 목록의 정본은 `ai/docs/openapi.json`(일정 `/ai/v1/itinerary/*` · 회고 `/ai/v1/reflection/*`)
 > - 리버스 `GET /internal/pois?centerLat&centerLng&radiusKm` · `POST /internal/pois/batch-get`(필드 `poi_ids`)
 >
 > 경로·필드의 **정본은 `../application-design/agent-io-contracts.md` 0.1**이다.

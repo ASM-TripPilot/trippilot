@@ -4,7 +4,7 @@
 > `orchestrator/intent_router.py`(`IntentRouter`)·`orchestrator/question_bank.py`·
 > `data/intent_question_bank.yaml`·프롬프트 `intent.yaml`/`paraphrase.yaml`·게이트 2종은 실재하고
 > 테스트도 green 이지만, **프로덕션 호출자가 0이다** — `api/wiring.py` 는 `IntentRouter` 를 import 하지
-> 않고, 열려 있는 경계 3종(`/ai/v1/itinerary/{generate,validate,repair}`)은 의도를 인자로 받지 않는다.
+> 않고, 열려 있는 경계(목록 정본 `ai/docs/openapi.json` — 일정·회고 경로 전부)는 의도를 인자로 받지 않는다.
 > 즉 아래 3단 파이프라인은 **어느 요청 경로에서도 실행되지 않는다.**
 > 자연어 진입점(도우미 대화 경계)이 열릴 때 배선된다. `agents/planb/kb_retrieval.py`·`agents/planb/rag.py`
 > 의 `IntentRouter`·`question_bank` 언급은 **구조를 본떴다는 주석 인용**이지 호출이 아니다.

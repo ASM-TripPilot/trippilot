@@ -29,7 +29,7 @@
 
 | 항목 | 정책 |
 |---|---|
-| 저장 | 프롬프트는 코드가 아니라 **버전 있는 리소스** — `prompts/{feature}/{version}.yaml` (git 관리, ai-prompt-design.md의 template_id·version 체계 계승) |
+| 저장 | 프롬프트는 코드가 아니라 **버전 있는 리소스** — `ai/prompts/{feature}.yaml` **평면 배치**, 버전은 파일 안 `version:`(semver) 필드 (git 관리, ai-prompt-design.md의 template_id·version 체계 계승). 레이아웃·목록 정본은 `ai/prompts/` 와 로더 `ai/src/trippilot/llm_gateway/prompts.py` |
 | 식별 | C1 호출 계약에 이미 있는 `prompt{version, template_id}` 필드를 전 호출에 강제 — 로그에서 어떤 버전이 어떤 결과를 냈는지 조인 가능 |
 | 변경 절차 | 프롬프트 수정 = PR → 오프라인 평가셋 자동 실행 → 회귀 없으면 머지 → 카나리 |
 | 롤백 | version 필드만 되돌리면 즉시 롤백 (배포 없이 설정 전환 가능하게) |

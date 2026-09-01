@@ -19,7 +19,7 @@
 
 | 타입 | 필드 | 불변식 |
 |---|---|---|
-| `PoiCategory` | Enum: `FOOD / CAFE / SIGHT / ACTIVITY / SHOPPING / STAY / ETC` | — |
+| `PoiCategory` | Enum: 경계 8종 `FOOD / CAFE / SIGHT / NIGHT_VIEW / NATURE / CULTURE / ACTIVITY / SHOPPING` + 내부 전용 `STAY` — 정본 `ai/src/trippilot/domain/poi.py` | **정정**: `ETC` 폐기(TRIP-278 #93), 경계 3종 추가(TRIP-281 #113). 앞 8종은 백엔드 `/internal/pois` read 포트가 내보내는 경계 코드와 값·집합이 동일하다(한↔영 매핑은 백엔드가 수행) |
 | `DataQuality` | Enum: `FULL / PARTIAL / MINIMAL` | MINIMAL은 후보 풀 제외 (M7 필터) |
 | `PoiSource` | Enum: `SEED / PLACES_API / WEB` | WEB은 confidence 필수 |
 | `OpenHour` | `day_of_week: int(0~6), open_min: int, close_min: int` | `0≤open_min<close_min≤1440+α` (자정 초과 허용, 시작일 귀속) |
@@ -35,7 +35,7 @@
 | `DaySolution` | `date: date, slots: tuple[VisitSlot,...], fixed_blocks: tuple[FixedBlock,...]` | slots 시간순 정렬 |
 | `ItineraryProblem` | `schedule_id, days: tuple[date,...], candidates: tuple[ScoredPoi,...], fixed_blocks, budget: BudgetLevel, transport: TransportMode, day_window: TimeWindow, seed: int` | `candidates ⊆ CandidatePool` (INV-1). `seed` 고정 → 결정론(INV-4) |
 | `ItinerarySolution` | `schedule_id, days: tuple[DaySolution,...], is_fallback: bool, solve_mode: SolveMode, solver_run: SolverRunRecord \| None` | 반환 전 HC1~HC4 통과 필수 (INV-2) |
-| `SolveMode` | Enum: `OR_TOOLS / BEDROCK / RULE_FALLBACK / MINIMAL` | BEDROCK이라도 HC 검증 후에만 반환 |
+| `SolveMode` | Enum: `OR_TOOLS / LLM / RULE_FALLBACK / MINIMAL` (정본 `ai/src/trippilot/domain/itinerary.py`) | LLM 이라도 HC 검증 후에만 반환(코드 docstring 과 같은 표현). **정정**: 구 `BEDROCK` → `LLM` 개명 완료 (TRIP-256 #71, 2026-08-04 — 벤더 중립 AI-D06) |
 | `Violation` | `code: str(HC1~HC4), slot_ref: PoiId \| None, detail: str` | 빈 리스트 = 유효 |
 
 ## 3. Travel (domain/travel.py)

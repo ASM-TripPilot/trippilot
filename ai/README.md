@@ -1,6 +1,6 @@
-# TripPilot AI — 설계 저장소
+# TripPilot AI — 서비스 · 설계 저장소
 
-TripPilot의 **AI 담당 설계 저장소**. 일정 생성·여행 중 변수 대응·회고 기능의 AI 아키텍처를 소유한다.
+TripPilot의 **AI 서비스(FastAPI)와 그 설계 저장소**. 일정 생성·여행 중 변수 대응·회고 기능의 AI 아키텍처를 소유하고, 구현은 `src/trippilot/` 에 있다.
 
 ---
 
@@ -276,7 +276,7 @@ LLM 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
 | RAG 프레임워크 | LangChain (부분 도입) | PlanBAgent + LLM 호출에만 (`ChatAnthropic`) |
 | 벡터 스토어 | pgvector (PostgreSQL) | 1차, 추후 OpenSearch 이전 가능 |
 | 임베딩 | **로컬 `nlpai-lab/KURE-v1` (MIT) 확정** | 1024차원 유지 → pgvector 스키마 무변경. Titan v2는 Bedrock 전용이라 대체 (AI-D06 부기 2026-08-23, TRIP-514 배선 완료). 종전 "잠정: multilingual-e5-large 또는 BGE-M3" 표기는 해소 |
-| 테스트 | pytest + Hypothesis (PBT) | **`@given` 170개 / 테스트 파일 41개** (2026-08-25 실측 — `grep -rc "@given" ai/tests/*.py`). 종전 "19개(+신규 5)"는 스테일 |
+| 테스트 | pytest + Hypothesis (PBT) | 속성 수는 여기 박지 않는다 — 세려면 `grep -rc "@given" ai/tests/*.py` (`ai-ci.yml` 주석과 같은 규칙, TRIP-530). 종전 "19개(+신규 5)"·"170개/41개" 표기는 모두 스테일이었다 |
 | 패키지 관리 | uv | U1 FD에서 확정 |
 
 > **표기 규칙 (AI-D06)**: 본 저장소 문서의 기존 "Bedrock" 표기는 "LLM API(Anthropic)"로 읽는다. 점진 개정 중.
@@ -342,7 +342,10 @@ TripPilot_AI/
 │   │   │   ├── langchain-adoption.md          ← LangChain 부분 도입
 │   │   │   └── ...
 │   │   └── units/
-│   └── construction/        ← (미착수)
+│   └── construction/        ← 유닛별 기능 설계(FD). 실물 목록은 디렉토리를 볼 것
+├── src/trippilot/           ← 서비스 구현 (api·agents·orchestrator·solver_engine·llm_gateway)
+├── tests/                   ← pytest + Hypothesis
+└── docs/openapi.json        ← 와이어 정본 (ai-ci 가 실행 앱 스키마와 일치를 강제)
 ```
 
 ---
@@ -505,7 +508,9 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 >
 > | 코드 | 현 소유자 |
 > |---|---|
-> | `ADR-####` · `US-*` · `C1`–`C17` · `U0`–`U9` · `S1`–`S6` | `../aidlc/aidlc-docs/inception/` (requirements · user-stories · application-design) |
+> | `ADR-####` · `US-*` · `C1`–`C17` · `S1`–`S6` | `../aidlc/aidlc-docs/inception/` (requirements · user-stories · application-design) |
+> | `U0`–`U9` (제품 유닛) | `../aidlc/aidlc-docs/inception/application-design/unit-of-work.md` |
+> | `U1`–`U6` (AI 트랙 유닛) | 본 패키지 `aidlc-docs/inception/units/unit-of-work.md` — **같은 기호, 다른 체계.** 문서에서 U 번호를 볼 때 어느 쪽인지 먼저 확인할 것 |
 > | AI 축 결정 `AI-D0#` | 본 패키지 `ai-adr.md` (자체 소유) |
 > | `D##` · `G###` · `M##` · `Δ#` · `N#` | **소유자 없음 — 역사적 코드.** 삭제된 planning 파일에 대해서만 해석되며 리포 어디에도 원문이 없다(`D38`·`G106`·`D27`·`D31`·`G181` 실측 확인). 근거가 필요하면 git 이력을 볼 것 |
 >
@@ -522,9 +527,8 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 
 ## 현재 상태
 
-- **INCEPTION 완료** — 설계·요구사항·계획 수립 끝
-- **멘토 피드백 반영 중** — 에이전트 업무 기준 재설계, RAG, LangChain 부분 도입, Solver 하이브리드
-- **다음**: CONSTRUCTION Phase (U1 Domain & Ports부터)
+- **U1~U6 구축·가동 중** — FastAPI 경계가 열려 있고 백엔드가 실제로 왕복 호출한다. INCEPTION(설계·요구사항·계획)과 멘토 피드백 반영(에이전트 업무 기준 재설계, RAG, Solver 하이브리드)은 그 앞 단계로 끝났다.
+- **진행 상태 정본은 `claude.md` §Current Status**, **와이어 정본은 `docs/openapi.json`** — 유닛·경로 목록을 여기에 다시 박지 않는다(산문에 박으면 늘 때마다 스테일이 된다).
 
 ---
 

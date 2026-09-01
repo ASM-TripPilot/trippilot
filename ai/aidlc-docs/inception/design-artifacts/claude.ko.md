@@ -20,5 +20,5 @@
 ## 주의
 
 - 이 문서들은 **정본**입니다. 수정 시 변경 이력을 기록하세요.
-- 에이전트 구조는 `agent-redesign.md`(application-design/)가 최신입니다.
-  이 폴더의 ai-implementation-design.md §3.4(워커 구조)는 **구 설계**이며 agent-redesign.md로 대체됩니다.
+- 에이전트 구조의 최신 정본은 `agent-structure-v2.md`(application-design/, 2026-08-02 도구 배타 원칙 개정)입니다.
+  이 폴더의 ai-implementation-design.md §3.4(워커 구조)는 **구 설계**이며 `agent-redesign.md` → `agent-hierarchy-design.md` → `agent-structure-v2.md` 순으로 대체됐습니다.

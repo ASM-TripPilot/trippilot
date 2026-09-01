@@ -44,7 +44,7 @@
 | 리버스 | POI 정본 read — 반경 (`find_by_radius`) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | 리버스 | POI 정본 read — 배치 (`find_by_ids`) | `POST /internal/pois/batch-get` · 요청 필드 `poi_ids` | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
 
-포워드 경계는 위 6종 + `/health`가 전부다 — 와이어 정본은 `ai/docs/openapi.json`,
+위 표는 일정(`itinerary`) 경계만 담는다. 회고 경계 `POST /ai/v1/reflection/{generate,nudge}`(TRIP-429)도 열려 있다 — **열린 경로 전체의 정본은 `ai/docs/openapi.json`**이고,
 전수 일치는 `ai/tests/test_api_openapi_contract.py`가 강제한다.
 
 리버스 나머지(`nearby`·`open-window`·`closedCheck`)는 이연 — 협의 중.
@@ -69,8 +69,8 @@
 
 > **day1 조기노출 = 백엔드가 같은 엔드포인트를 2번 동기 호출한다**(AI 역제안 채택 · TRIP-267).
 > AI 는 stateless 를 유지하고, 진행 상태·재시도·노출은 백엔드가 소유한다.
-> 1차 `time_windows=[day1]`·`deadline_ms=5000` → 즉시 사용자 노출 · 2차 `time_windows=[나머지 일자]`·
-> `deadline_ms=20000`·`excluded_poi_ids=[1차 배정 POI]` → 백그라운드 완료.
+> 1차 `time_windows=[day1]` → 즉시 사용자 노출 · 2차 `time_windows=[나머지 일자]`·
+> `excluded_poi_ids=[1차 배정 POI]` → 백그라운드 완료. 시한은 2026-08-21 이후 싣지 않는다(TRIP-473/474) — 백엔드가 `ScheduleDeadlineProperties.enforced=true` 로 복원하면 각각 `deadline_ms=5000`·`20000` 이 실린다.
 > 각 호출은 **자기가 맡은 일자의** `anchors`·`fixed_blocks` 만 받는다. ANYTIME(날짜·시각 미지정) 필수방문은
 > AI 로 오지 않는다 — 백엔드 `MustVisitMaterializer` 가 날짜·시각을 물질화해 확정 블록으로 보낸다(경계 계약 M1).
 > 2차가 실패하면 백엔드가 결정론 폴백으로 채운다(INV-4).
@@ -94,10 +94,10 @@ class ScheduleAgentOutput:
     days: list[DaySchedule]               # day별 slots (솔버 검증값, INV-2)
     day1_ready_at: str | None             # day1 우선 반환 시각 (5초 정책)
     explanations: dict[str, str]          # slot_id → 추천 이유 (시간·소요시간 언급 금지)
-    solve_mode: str                       # FULL_AI | DETERMINISTIC | MINIMAL
+    solve_mode: str                       # AI 4값(OR_TOOLS|LLM|RULE_FALLBACK|MINIMAL)을 그대로 전송 — 백엔드 3값 접기는 `ScheduleAgentWire.kt`(OR_TOOLS·LLM→FULL_AI · RULE_FALLBACK→DETERMINISTIC · MINIMAL→MINIMAL)
     is_fallback: bool
     freshness: FreshnessMeta              # 사용한 데이터 신선도 집계 (→ evaluation-metrics-design.md)
-    candidates_summary: SufficiencyReport # PlaceScout 충분성 보고 (LOW면 UI에 안내 가능)
+    candidates_summary: CandidatesSummary # 후보 충분성 — `level`·`pool_size`·`shortfall_categories`. 와이어 정본 `ai/docs/openapi.json::CandidatesSummarySchema` (LOW면 UI에 안내 가능)
 ```
 
 ### 1.3 출력 대응표 — 에이전트 출력 → DB → 화면
@@ -340,7 +340,7 @@ class EventInfo:
 
 | # | 규약 | 근거 |
 |---|---|---|
-| IO-1 | 모든 AgentInput에 `request_meta{request_id, requested_at, deadline_ms}` — 지연 예산(day1 5s/전체 20s/Plan-B 10s/도우미 첫응답 3s) 전파 | D38, nfr §1.1 |
+| IO-1 | 모든 AgentInput에 `request_meta{request_id, requested_at, deadline_ms}`. `deadline_ms` 는 **선택 필드**이고 미지정 = 시간제약 없음(TRIP-473 — `api/schemas.py::RequestMetaSchema`); 2026-08-21 이후 백엔드는 값을 싣지 않는다(TRIP-474). 괄호 안 day1 5s/전체 20s/Plan-B 10s/도우미 첫응답 3s 는 **SLO 지향점**이지 하드 예산이 아니다 | D38, nfr §1.1, 경계 계약 "시한 재정의" |
 | IO-2 | 모든 AgentOutput에 `is_fallback` + (해당 시) `solve_mode` — 침묵 실패 금지 | INV-4 |
 | IO-3 | 사용자 표시 슬롯은 `VisitSlotDisplay`만 — `internal_*` 필드 정적 배제 | INV-3, U5-P4 |
 | IO-4 | 시각·순서 필드(`start_at/end_at`)는 `solver.solve/validate` 통과값만 담는다 | INV-2 |
@@ -355,8 +355,9 @@ class EventInfo:
 | 항목 | 상태 | 후속 |
 |---|---|---|
 | Kotlin↔Python 프로토콜 (REST vs gRPC) | **확정 — REST/JSON over HTTP** (PR #76 결정4, 2026-08-04. AI-D01 종결. gRPC는 보류) | 단일 `openapi.yaml`을 정본으로 양쪽 코드젠 (경로는 0.1) |
-| AI 도우미·Plan-B 경계 경로 리소스명 | 협의 중 (명명 규칙 `/ai/v1/...`만 확정) | 확정 시 0.1 표 갱신 |
-| SolveMode 4↔3 매핑 · `explanations` 키 의미 · `candidates_summary` 대응 · `FreshnessMeta` 집계형 · `Violation` 스키마 | 협의 중 (TRIP-282) | 백엔드 회신 후 본 계약 갱신 |
+| AI 도우미·Plan-B 경계 경로 리소스명 | **확정** — Plan-B `POST /ai/v1/itinerary/alternatives`(TRIP-428) · 편집·도우미 `POST /ai/v1/itinerary/edit`(TRIP-431) | §0.1 표 반영 완료 — 후속 없음 |
+| `FreshnessMeta` 집계형 · `Violation` 스키마 | 협의 중 (TRIP-282) | 백엔드 회신 후 본 계약 갱신 |
+| ~~SolveMode 4↔3 매핑 · `explanations` 키 의미 · `candidates_summary` 대응~~ | **해소** — SolveMode 매핑은 `ScheduleAgentWire.kt` 구현 완료(OR_TOOLS·LLM→FULL_AI · RULE_FALLBACK→DETERMINISTIC · MINIMAL→MINIMAL), `explanations` 키는 `{date}#{poi_id}`(BR-U2-04), `candidates_summary` 형태는 `ai/docs/openapi.json::CandidatesSummarySchema`(`level`·`pool_size`·`shortfall_categories`) 확정 — 백엔드 `AiBoundaryOpenApiTest` 가 키를 대조한다 | — |
 | `dataQuality` 등급 수 (AI 3등급 MINIMAL/PARTIAL/FULL ↔ 백엔드 2등급) | AI가 **MINIMAL 추가 요청**, 백엔드 회신 대기 | 회신 후 리버스 read 응답 스키마 확정 |
 | day1 조기노출 방식 | **확정 — AI 역제안(2단계 동기 호출) 채택, 백엔드 구현 완료(TRIP-267)**. 아래 §1.2-A 참조 | `day1_ready_at` 은 미사용(백엔드가 `generation_state` 로 노출) |
 | AI 도우미 채팅 화면 | 와이어프레임에 부재 (M16, 타 팀 담당) | 자연어 입력의 진입점은 당분간 구조화 UI + EditAgent 자연어 편집. → `intent-matching-design.md`는 M16 합류 시 그대로 적용 |

@@ -87,7 +87,7 @@ solve(problem, deadline_ms):
 ② LlmPort.invoke (timeout = llm_stage_timeout_ms, model = 경로별: sonnet-5/opus-4-8 — AI-D07 ④, 설정값)
 ③ 파싱 → LlmDayProposal (실패 슬롯 드롭)
 ④ closed-set 필터: poi_id ∉ candidates → 드롭 + GateDropEvent (INV-1)
-⑤ ItinerarySolution(solve_mode=BEDROCK) 조립 → check_all → 위반 시 repair 1회 → 재검증
+⑤ ItinerarySolution(solve_mode=LLM) 조립 → check_all → 위반 시 repair 1회 → 재검증   # 구 BEDROCK 개명 완료 (TRIP-256 #71)
 ⑥ 통과 시에만 반환, 아니면 None (체인 다음으로)
 ```
 

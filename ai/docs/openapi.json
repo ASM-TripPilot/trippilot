@@ -1640,7 +1640,7 @@
     }
   },
   "info": {
-    "description": "일정 생성·검증·수리 경계 (U5). 와이어는 snake_case.",
+    "description": "일정·회고 경계 (U5·U6). 와이어는 snake_case.",
     "title": "TripPilot AI",
     "version": "0.1.0"
   },
