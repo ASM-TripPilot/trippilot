@@ -22,6 +22,13 @@ closed-set 밖 라벨이 실린 엔트리는 매칭에서 제외한다 (뱅크 �
 
 **INV-4**: `route`는 예외를 밖으로 던지지 않는다. 어떤 실패든 폴백 `IntentMatch`로 수렴하고,
 `reason`에 어느 단계에서 왜 떨어졌는지가 남는다 (침묵 실패 금지).
+
+**관측 (TRIP-653)**: 단계 함수마다 LangSmith `@traceable` — `LANGSMITH_TRACING=true` 일 때만
+발화 1건 = 트리 1개(1차 top-k 점수 · 2차 유사질문/득표율 · 3차 판정, 루트 metadata 에 임계값
+3종)가 전송된다. 미설정이면 데코레이터는 함수를 그대로 통과시킨다(CI 외부 호출 0). 라우터는
+아직 엔드포인트에 배선돼 있지 않으므로(TRIP-529) 발화는 `scripts/trace_intents.py` 가 넣어 준다.
+트리에는 발화 **원문**과 LLM 변형이 그대로 실린다 — 배선 후 배포 환경에서 켜려면 마스킹·샘플링
+(mlops-llmops-design §1.4)을 먼저 붙여야 한다. TracePort 를 대체하는 것이 아니라 튜닝용 병행이다.
 """
 
 from __future__ import annotations
@@ -31,6 +38,8 @@ import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
+
+from langsmith import traceable
 
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
@@ -130,12 +139,22 @@ class IntentRouter:
     def route(self, utterance: str, trace_id: TraceId, now: datetime) -> IntentMatch:
         """자연어 → 의도·슬롯·신뢰도·매칭경로. 예외를 던지지 않는다 (INV-4)."""
         try:
-            return self._route(utterance, trace_id, now)
+            return self._route(
+                utterance, trace_id, now,
+                # 임계값을 루트 run 의 metadata 로 — LangSmith 에서 값별로 트리를 필터·비교한다.
+                # 트레이싱이 꺼져 있으면 데코레이터가 이 인자를 삼키고 그대로 통과시킨다.
+                langsmith_extra={"metadata": {
+                    "t_high": self._cfg.t_high,
+                    "t_mid": self._cfg.t_mid,
+                    "vote_ratio": self._cfg.vote_ratio,
+                }},
+            )
         except Exception as e:  # 임베딩·스토어·게이트웨이 어디가 터져도 폴백으로 수렴
             return _fallback(f"router_error: {type(e).__name__}: {e}")
 
     # ── 3단 파이프라인 ──────────────────────────────────────────────────
 
+    @traceable(name="intent.route")
     def _route(self, utterance: str, trace_id: TraceId, now: datetime) -> IntentMatch:
         text = normalize(utterance)
         if not text:
@@ -162,6 +181,7 @@ class IntentRouter:
         return self._llm_direct(text, f"below_t_mid({top.score:.3f})", trace_id, now)
 
     # 1차 — 질문뱅크 임베딩 매칭 (LLM 0회)
+    @traceable(name="intent.bank")
     def _match_bank(self, text: str) -> tuple[_Hit, ...]:
         vector = self._embedding.embed(text)
         raw_hits = self._store.search(self._cfg.collection, vector, self._cfg.top_k)
@@ -183,6 +203,7 @@ class IntentRouter:
         return tuple(hits)
 
     # 2차 — 유사질문 생성 + 재매칭 가중 투표 (AMBIGUOUS 전용)
+    @traceable(name="intent.vote")
     def _vote(
         self, text: str, trace_id: TraceId, now: datetime
     ) -> tuple[IntentMatch | None, str]:
@@ -218,6 +239,7 @@ class IntentRouter:
             "",
         )
 
+    @traceable(name="intent.paraphrase")
     def _paraphrase(
         self, text: str, trace_id: TraceId, now: datetime
     ) -> tuple[tuple[str, ...] | None, str]:
@@ -244,6 +266,7 @@ class IntentRouter:
         return variants[: self._cfg.n_paraphrase], ""
 
     # 3차 — LLM 직접 분류 (UNKNOWN / 투표 실패)
+    @traceable(name="intent.llm_direct")
     def _llm_direct(
         self, text: str, escalated_from: str, trace_id: TraceId, now: datetime
     ) -> IntentMatch:
