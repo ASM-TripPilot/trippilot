@@ -127,3 +127,21 @@ describe('G5 · ★1 — 세 파일 어디에도 useSafeAreaInsets 훅이 없다
     }
   });
 });
+
+describe('🔴 G6 · i12 ReplanSolvingScreen — 로딩 콘텐츠 세로 중앙 정렬 (TRIP-652)', () => {
+  it('ScrollView contentContainer 가 grow+justify-center 로 중앙 정렬한다(실제 정렬 픽셀은 6-b 몫)', () => {
+    // 무엇을 보장하나: 로딩 콘텐츠가 최상단 정렬이 아니라 세로 중앙에 오도록 컨테이너에 정렬 토큰이
+    // 실재한다. jest 는 className 문자열만 볼 뿐 실제 배치는 못 보므로(지도 viewOnly 함정과 동형),
+    // 이 가드는 "의도 토큰이 지워지지 않았나"만 잠근다 — 실제 중앙 배치는 6-b 실기 육안 몫.
+    const source = readOne(I12_REL);
+
+    // 앵커 — 올바른 파일을 비어 있지 않게 읽었다(경로 오타 공허 통과 방지).
+    expect(source).toContain('planb-solving-progress');
+
+    // 중앙 정렬 의도 — ScrollView 콘텐츠 컨테이너에 grow(flex-grow)+justify-center.
+    // 뮤테이션: 둘 중 하나라도 지우면 red(최상단 정렬 회귀 트립와이어).
+    const content = /contentContainerClassName="[^"]*"/.exec(source)?.[0] ?? '';
+    expect(content).toContain('grow');
+    expect(content).toContain('justify-center');
+  });
+});
