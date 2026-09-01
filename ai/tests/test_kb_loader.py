@@ -99,7 +99,12 @@ def test_seed_document_retrievable_by_own_text() -> None:
 
 
 def test_seed_covers_all_trigger_reasons() -> None:
-    """대응 지식이 없는 reason은 검색 컨텍스트가 비어 LLM이 일반론만 하게 된다."""
+    """대응 지식이 없는 reason은 검색 컨텍스트가 비어 LLM이 일반론만 하게 된다.
+
+    `none` 이 빠져 있었다(2026-09-01 보강). `AlternativesRequest.reason` 의 **기본값**이
+    `"none"` 이라 실제로 가장 자주 타는 경로인데, 그 문서가 전부 지워져도 이 가드는
+    초록이었다. 계약(`rag.PlanBRagRequest.reason`)의 6종을 전부 건다.
+    """
     docs = load_kb_file(_SEED, yaml.safe_load)
     covered = {r for d in docs for r in d.metadata.get("reasons", ())}
-    assert {"weather", "closed", "delay", "canceled", "fatigue"} <= covered
+    assert {"weather", "closed", "delay", "canceled", "fatigue", "none"} <= covered

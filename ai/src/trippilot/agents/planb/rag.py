@@ -71,7 +71,11 @@ _DEMOTED_BY_REASON: Mapping[str, frozenset[PoiCategory]] = MappingProxyType(
 
 @dataclass(frozen=True, slots=True)
 class PlanBRagConfig:
-    """검색·제안 파라미터 (planb-rag-design §9 미결 #4·#5의 잠정값 — 하드코딩 금지)."""
+    """검색·제안 파라미터 (하드코딩 금지).
+
+    `top_k` 는 planb-rag-design §9 미결 #4 — 2026-09-01 실측으로 확정(근거는
+    `kb_retrieval.DEFAULT_TOP_K`). `max_alternatives` 는 미결 #5, 아직 잠정값이다.
+    """
 
     top_k: int = DEFAULT_TOP_K
     max_alternatives: int = 3  # 미결 #5 — UX 확정 시 조정
@@ -391,12 +395,32 @@ def _schedule_query(request: PlanBRagRequest) -> str:
     )
 
 
+# reason 은 영문 enum 값이라 한국어 KB 문서와 임베딩 공간에서 잘 붙지 않는다. 특히
+# "none" 은 사실상 빈 토큰이라 MANUAL/none 질의가 자기 문서를 top6 안에 1건도
+# 못 올렸다 — 한국어로 치환하면 3건. 6개 질의 전체 정밀도 0.750 → 0.833
+# (2026-09-01 실측, KB 49건 × KURE-v1. 악화된 질의는 없다).
+_REASON_KO: Mapping[str, str] = MappingProxyType(
+    {
+        "weather": "날씨 악화",
+        "closed": "휴무·폐점",
+        "delay": "지연",
+        "canceled": "예약 취소",
+        "fatigue": "피로",
+        "none": "사용자 요청 교체",
+    }
+)
+
+
 def _situation_query(request: PlanBRagRequest) -> str:
-    return f"{request.trigger.kind.value} {request.reason} 상황"
+    reason = _REASON_KO.get(request.reason, request.reason)
+    return f"{request.trigger.kind.value} {reason} 상황"
 
 
 def _persona_query(request: PlanBRagRequest) -> str:
-    return f"{request.reason} {request.trigger.kind.value} 대안 선호"
+    # KB-2 도 같은 매핑을 쓴다 — 오늘은 저장 장소가 봉투(TRIP-512)로 오고 이 검색이
+    # 보조라 체감이 없지만, 한국어 메모·리뷰가 적재되는 순간 KB-3 과 같은 증상이 난다.
+    reason = _REASON_KO.get(request.reason, request.reason)
+    return f"{reason} {request.trigger.kind.value} 대안 선호"
 
 
 def _saved_refs(
