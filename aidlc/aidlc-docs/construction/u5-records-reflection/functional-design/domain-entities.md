@@ -92,7 +92,7 @@
 | `day_date` | date | 여행지 기준 날짜 |
 | `draft_card` | jsonb | **원본 초안**(생성물). 카드 그대로 보관한다 — 아래 "카드로 바뀐 이유" |
 | `edited_card` | jsonb? | 사용자 수정본. **카드 통째**가 편집 단위다 |
-| `template_id` · `card_format` | varchar | 카드 버전 키. 상대가 템플릿을 늘려도 우리 스키마가 안 움직인다 |
+| `template_id` · `card_format` | varchar | 카드 버전 키. 상대가 템플릿을 늘려도 우리 스키마가 안 움직인다. **와이어의 `format` 을 `card_format` 으로 받는다** — `format` 은 컬럼명으로 너무 일반적이다 |
 | `source` | varchar(8) | `AI` \| `RULE` \| `BASIC` (DEC-U5-5a) |
 | `stats` | jsonb | `{visitCount, distanceKm, distanceSource, photoCount}` |
 | `generated_at` · `updated_at` | timestamptz | |

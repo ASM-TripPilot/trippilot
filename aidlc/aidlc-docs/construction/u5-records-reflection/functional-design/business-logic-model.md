@@ -180,7 +180,7 @@ POST /ai/v1/reflection/nudge     { request_meta, destination, trip_days, highlig
   표현할 수 없고, `j03` 이 사진을 붙이는 화면인 이상 카드가 실제 산출물이다.
 - 그래서 **폴백도 카드여야 한다**(BR-U5-32). 규칙 단이 문장을 내면 AI 가 죽는 날 화면 모양 자체가
   달라진다 — 폴백의 뜻이 "같은 화면을 근거만 줄여 그린다"인데 그것이 성립하지 않는다.
-- 백엔드는 **카드를 모델링하지 않고 보관·중계한다**(**DEC-U5-14**). `template_id`·`format` 이 버전 키고,
+- 백엔드는 **카드를 모델링하지 않고 보관·중계한다**(**DEC-U5-14**). 와이어의 `template_id`·`format` 이 버전 키고(컬럼은 `template_id`·`card_format`),
   `cover`/`scenes` 안쪽은 재검증하지 않는다 — 우리가 깊이 검증하면 상대 템플릿 추가가 곧 우리
   마이그레이션이 된다.
 

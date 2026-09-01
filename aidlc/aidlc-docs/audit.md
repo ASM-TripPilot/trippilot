@@ -1376,3 +1376,5 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 - **회고 testID 목록** — `reflection-daily-narrative` 등이 문장 전제이나 **새 이름을 짓지 않았다.** `j03` 화면이 아직 없어 지금 지으면 근거 없이 계약을 좁힌다. 경고만 달고 화면 설계와 함께 정한다.
 
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 개정**. TRIP-443 선례(Post-Design Correction)와 같은 절차. 이 항목이 손댄 `aidlc/` 파일은 `construction/u5-records-reflection/functional-design/` 4개와 이 `audit.md` append 뿐이다. 코드 변경 0 — 스키마·경계·개통은 후속 칸(칸 1~3)에서 팀이 `backend/` 에서 직접 수행한다.
+
+**3차 검수 추가 정정(같은 항목 내)**: (a) 와이어 `format` 과 컬럼 `card_format` 의 관계를 두 문서에 명시 — 이름이 갈린 채였다. (b) **PBT-U5-F1 을 완화**했다. "`scenes` 가 0개가 아니다"로 조였는데, 방문 0곳인 기본 카드는 근거가 없어 장면을 만들 수 없다 — 그대로면 규칙 생성기가 장면을 **지어내야** 하고 **BR-U5-31(환각 금지)과 정면충돌**한다. 조건을 `cover.title` 비어 있지 않음으로 바꿨다.
