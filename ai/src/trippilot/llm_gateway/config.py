@@ -89,6 +89,9 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # scripts/collect_events.py `collect_region` — 추출 0건으로 그 회차를
             # 넘긴다(대체 추출 경로 없음).
             LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
+            # agents/reflect/highlight_rule.py — 방문당 1장·시간 분산 결정론 선별.
+            # 실행 배선은 composer vision 단계(후속) — 모드 쌍은 그 폴백의 실체다.
+            LlmFeature.PHOTO_HIGHLIGHT: ("llm_highlight", "rule_highlight"),
             # PLACE_EXTRACTION은 프로덕션 호출측이 아직 없다(워커·테스트뿐) —
             # 워커 docstring("게이트 전 원시까지")과 EVENT_EXTRACTION 선례에서
             # 유추한 값이다. 호출측이 생기면 그때 실측으로 확정한다.

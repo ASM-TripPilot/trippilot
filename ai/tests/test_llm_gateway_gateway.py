@@ -266,6 +266,8 @@ _EXPECTED_MODES = {
     LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
     LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),
     LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
+    # 규칙 하이라이트 폴백(agents/reflect/highlight_rule.py) — TRIP-595
+    LlmFeature.PHOTO_HIGHLIGHT: ("llm_highlight", "rule_highlight"),
     LlmFeature.PLACE_EXTRACTION: ("llm_extract", "(none)"),
     LlmFeature.REASON_INTERPRETATION: ("llm_reason_interpretation", "unknown"),
 }

@@ -144,11 +144,21 @@ def test_gate_truncates_to_limit_without_metering_it() -> None:
     assert out.drop_event is None and out.error is None
 
 
-def test_gate_all_outside_is_empty_result_not_error() -> None:
-    """전량 밖이면 error가 아니라 빈 튜플 — 게이트웨이가 gate_dropped_all로 가른다."""
+def test_gate_all_outside_is_gate_dropped_all() -> None:
+    """전량 밖이면 게이트가 직접 gate_dropped_all — 대표 사진 0장은 쓸 수 없어서
+    빈 결과의 의미가 '실패'인 feature다 (TRIP-260 #5: 의미론은 게이트 소유.
+    라벨 구분: drop_event 있음 = 게이트가 버림 → 환각을 보라는 신호)."""
     out = _apply(_raw(["ph-x", "ph-y"]), _ctx(_vision()))
-    assert out.value == () and out.error is None
+    assert out.value == () and out.error == "gate_dropped_all"
     assert out.drop_event is not None and out.drop_event.dropped_count == 2
+
+
+def test_gate_empty_selection_is_llm_empty_result() -> None:
+    """모델이 아무것도 안 골랐으면 llm_empty_result — 프롬프트·입력을 보라는 신호
+    (drop_event 부재 = 게이트는 아무것도 안 버렸다는 증거)."""
+    out = _apply(_raw([]), _ctx(_vision()))
+    assert out.value == () and out.error == "llm_empty_result"
+    assert out.drop_event is None
 
 
 # ── 게이트: 파싱 실패만 error (②) ────────────────────────────

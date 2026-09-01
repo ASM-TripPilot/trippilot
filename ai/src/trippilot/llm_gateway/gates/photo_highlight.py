@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from trippilot.llm_gateway.gates.base import GateOutcome, _load_json_object
+from trippilot.llm_gateway.gates.base import GateOutcome, empty_result_error, _load_json_object
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import LlmFeature
 from trippilot.domain.observability import GateDropEvent
@@ -116,4 +116,9 @@ class PhotoHighlightGate:
             if dropped
             else None
         )
-        return GateOutcome(value=selected, drop_event=drop_event, error=None)
+        # 대표 사진 0장은 쓸 수 없다 — 규칙 선별(highlight_rule) 폴백으로 (TRIP-260 #5:
+        # 빈 결과의 의미는 게이트 소유. 추출 계열과 달리 여기서 0건은 정상이 아니다)
+        return GateOutcome(
+            value=selected, drop_event=drop_event,
+            error=empty_result_error(selected, drop_event),
+        )
