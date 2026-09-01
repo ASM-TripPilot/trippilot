@@ -64,6 +64,7 @@ const COPY: Record<
     title: string;
     subtitle: string;
     placeholder: string;
+    popular: string;
     section: string;
   }
 > = {
@@ -72,14 +73,16 @@ const COPY: Record<
     title: '어디서 묵을까요?',
     subtitle: '지역을 고르면 숙소를 모아 보여드려요',
     placeholder: '지역·숙소 이름 검색',
-    section: '지역별 숙소',
+    popular: '인기 지역',
+    section: '지역별 둘러보기',
   },
   trip: {
     appBar: '여행지 선택',
     title: '어디로 떠날까요?',
     subtitle: '가고 싶은 도시를 먼저 골라요',
     placeholder: '도시·지역 검색',
-    section: '인기 여행지',
+    popular: '인기 여행지',
+    section: '지역별 둘러보기',
   },
 };
 
@@ -261,6 +264,53 @@ function RegionDetail({
   );
 }
 
+/** 인기 여행지 가로 스트립(TRIP-650) — 시/도(여행지) 단위를 가로 스크롤 카드로 보여준다. 집계·사진은
+ *  계약 부재라 tint 그라디언트+이름만(SelectableCard 규율 계승). 서버 순서 그대로 앞 8개(정렬 금지 —
+ *  `regionCatalogStructure` 가드). ★시/도 단위라 드릴다운 불변식("1단은 시/도만, 구/군 접힘")을 안 깬다.
+ *  누르면 그 시/도로 드릴인(하단 목록의 SidoRow 와 동일 동작). 기본(1단·비검색·정상) 뷰 상단 전용. */
+function PopularStrip({
+  groups,
+  onOpenSido,
+}: {
+  groups: readonly RegionGroup[];
+  onOpenSido(sidoCode: string): void;
+}): ReactElement | null {
+  const popular = groups.slice(0, 8);
+  if (popular.length === 0) {
+    return null;
+  }
+  return (
+    <ScrollView
+      testID="explore-region-popular-strip"
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ gap: 12, paddingRight: 8 }}
+    >
+      {popular.map((group) => {
+        const [from, to] = regionTint(group.sidoCode);
+        return (
+          <Pressable
+            key={group.sidoCode}
+            testID={`explore-region-popular-${group.sidoCode}`}
+            onPress={() => onOpenSido(group.sidoCode)}
+            className="w-[140px] overflow-hidden rounded-card bg-canvas"
+          >
+            <LinearGradient
+              colors={[from, to]}
+              style={{ height: 100, width: '100%' }}
+            />
+            <View className="px-sm py-sm">
+              <Text className="font-noto-bold text-card-title font-bold text-ink">
+                {group.sidoName}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
 export function RegionPickerScreen({
   purpose,
   query,
@@ -317,6 +367,16 @@ export function RegionPickerScreen({
             className="flex-1 font-noto text-body text-ink"
           />
         </View>
+
+        {/* 인기 여행지 가로 스트립 — 기본(1단·비검색·정상) 뷰 상단 전용(TRIP-650). */}
+        {!isSearching && detail === undefined && !isError && !isLoading ? (
+          <>
+            <Text className="mb-md mt-2xl font-noto-bold text-section font-bold text-ink">
+              {copy.popular}
+            </Text>
+            <PopularStrip groups={groups} onOpenSido={setOpenSidoCode} />
+          </>
+        ) : null}
 
         <Text className="mb-md mt-2xl font-noto-bold text-section font-bold text-ink">
           {copy.section}
