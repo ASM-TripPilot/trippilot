@@ -14,8 +14,15 @@
  * softNote·미니맵 카드 등)을 단계 데이터로 파라미터화해 조립한다. INV-3(소요시간 미표시)는
  * 어떤 얼굴에도 소요시간 문자열·필드를 두지 않는다 — 시각(09:30)·거리(950m)만 표시한다.
  */
-import type { ReactElement } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState, type ReactElement } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -840,22 +847,85 @@ function CollectingBody({
   );
 }
 
-// ── planning 얼굴(계획 중) ──────────────────────────────────────────────
-// greet 여행명+D-day · tripHero(계획 중) · 브릿지행(softNote 슬롯) · magazineHero·grid·lane 숨김.
+// ── heroCarousel(일정 카드 ↔ 영감/매거진 가로 스와이프 · TRIP-647) ──────────
+// 생성 후 홈에서 상단 슬롯을 좌우 스와이프로 전환한다: page0=여행 카드(tripHero), page1=영감
+// (magazineHero). pagingEnabled 로 한 페이지씩 넘어가고, 아래 점 인디케이터가 현재 위치를 표시한다.
+// 실제 스와이프 제스처·페이지 전환은 jest 원리적 사각(6-b 실기) — 구조(두 페이지·점 2개)만 잠근다.
+function HeroCarousel({
+  trip,
+  hero,
+  onPressTripCta,
+}: {
+  trip: TripHeroData;
+  hero: HomeMagazineHero;
+  onPressTripCta?: () => void;
+}): ReactElement {
+  const { width } = useWindowDimensions();
+  const [page, setPage] = useState(0);
+  return (
+    <View testID="home-hero-carousel" className="w-full">
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) =>
+          setPage(Math.round(e.nativeEvent.contentOffset.x / width))
+        }
+      >
+        <View style={{ width }}>
+          <TripHero trip={trip} onPress={onPressTripCta} />
+        </View>
+        <View style={{ width }}>
+          <MagazineHero hero={hero} />
+        </View>
+      </ScrollView>
+      <View className="w-full flex-row justify-center gap-[6px] pt-[10px]">
+        {[0, 1].map((i) => (
+          <View
+            key={i}
+            testID={`home-hero-dot-${i}`}
+            className={`h-[6px] w-[6px] rounded-full ${
+              page === i ? 'bg-primary' : 'bg-hairline-strong'
+            }`}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// ── planning 얼굴(계획 중 · TRIP-647로 발견 콘텐츠 + 영감/일정 스와이프 추가) ──
+// greet 여행명+D-day · 상단 스와이프 캐러셀(일정 카드 ↔ 영감) · 발견 3섹션(요즘 담는 곳·지금 뜨는
+// 장소·여행자 일정) — 일정 생성 후에도 발견 콘텐츠가 사라지지 않는다(사용자 요구).
 function PlanningBody({
   phase,
+  hero,
+  sections,
   onPressTripHeroCta,
+  onPressSpotsMore,
   onPressSearch,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
+  hero: HomeMagazineHero;
+  sections: HomeSections;
   onPressTripHeroCta?: () => void;
+  onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
 }): ReactElement {
   return (
     <>
       <GreetingHeader title={phase.greetTitle} />
       <SearchBarBlock onPress={onPressSearch} />
-      <TripHero trip={phase.trip} onPress={onPressTripHeroCta} />
+      <HeroCarousel
+        trip={phase.trip}
+        hero={hero}
+        onPressTripCta={onPressTripHeroCta}
+      />
+      <View className="w-full gap-[24px] pb-sm pt-[22px]">
+        <CollectionsSection sections={sections} />
+        <SpotsSection sections={sections} onMore={onPressSpotsMore} />
+        <ItinerariesSection sections={sections} />
+      </View>
     </>
   );
 }
@@ -949,7 +1019,10 @@ function PhaseBody({
       return (
         <PlanningBody
           phase={phase}
+          hero={hero}
+          sections={sections}
           onPressTripHeroCta={onPressTripHeroCta}
+          onPressSpotsMore={onPressSpotsMore}
           onPressSearch={onPressSearch}
         />
       );

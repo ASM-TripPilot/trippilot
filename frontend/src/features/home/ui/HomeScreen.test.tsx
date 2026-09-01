@@ -563,7 +563,7 @@ describe('HomeScreen — collecting 얼굴 (AC-1 · US-SHELL-05)', () => {
 });
 
 describe('HomeScreen — planning 얼굴 (AC-2 · US-SHELL-02)', () => {
-  it('tripHero "계획 중"·D-day·「일정 이어서 짜기」 CTA를 그리고 hero·grid는 숨긴다', () => {
+  it('tripHero "계획 중"·D-day·CTA + 영감 스와이프 캐러셀 + 발견 섹션을 함께 그린다 (TRIP-647)', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
 
     // greet(여행명+D-day).
@@ -584,10 +584,16 @@ describe('HomeScreen — planning 얼굴 (AC-2 · US-SHELL-02)', () => {
     // 메타는 리프가 쪼개질 수 있어 정규식 부분 매치(자손 텍스트 합침).
     expect(hero).toHaveTextContent(/3박 4일 · 2명/);
 
-    // 부정 짝 — planning은 브릿지행(softNote)·magazineHero·"지금 뜨는 장소" grid 숨김(TRIP-646 제거·§3-B).
+    // TRIP-647 — 상단 스와이프 캐러셀(일정 카드 ↔ 영감)과 발견 섹션이 함께 뜬다(생성 후에도 유지).
+    expect(screen.getByTestId('home-hero-carousel')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-hero-dot-0')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-hero-dot-1')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen(); // 영감 페이지
+    expect(screen.getByTestId('home-spot-card-0')).toBeOnTheScreen(); // 발견: 지금 뜨는 장소
+    expect(screen.getByTestId('home-collection-card-0')).toBeOnTheScreen(); // 발견: 요즘 담는 곳
+
+    // 브릿지행(softNote)은 여전히 없다(TRIP-646 제거).
     expect(screen.queryByTestId('home-soft-note')).toBeNull();
-    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
-    expect(screen.queryByTestId('home-spot-card-0')).toBeNull();
 
     // INV-3.
     expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
@@ -680,10 +686,11 @@ describe('HomeScreen — phase 미도출·주입 (AC-5 금지 · TRIP-206 S-6)',
     expect(screen.queryByTestId('home-trip-hero')).toBeNull();
     view.unmount();
 
-    // (2) 같은 화면에 phase=planning 주입 → tripHero로 스위치. discovery로 폴백하지 않는다.
+    // (2) 같은 화면에 phase=planning 주입 → tripHero+캐러셀로 스위치. discovery로 폴백하지 않는다.
+    // (TRIP-647: 영감 캐러셀은 planning 전용 — discovery 얼굴엔 없어 판별자로 쓴다.)
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
     expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
-    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
+    expect(screen.getByTestId('home-hero-carousel')).toBeOnTheScreen();
   });
 });
 
@@ -705,6 +712,7 @@ const PLANNING_WIRED_CTA_TEST_IDS = [
   'home-trip-hero-cta',
   'home-search-bar',
   'home-trip-hero',
+  'home-spots-more', // TRIP-647 — 발견 섹션 "지금 뜨는 장소 더보기"(배선 CTA, planning에도 노출)
 ] as const;
 
 describe('🔴 HomeScreen — planning 버튼 역할 집합 == 배선 CTA 집합 (AC-7 · 370-AC-4 확장)', () => {

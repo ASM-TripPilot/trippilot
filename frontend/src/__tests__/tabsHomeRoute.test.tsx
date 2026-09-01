@@ -179,9 +179,10 @@ describe('🔴 371-AC-1 · 비-ENDED 여행이 있으면 planning 얼굴', () =>
     // 실행 — 라우트를 통째로 렌더.
     render(<HomeRoute />);
 
-    // 단언 — 여행 얼굴 present ↔ discovery 히어로 absent(§6 상호배타 짝).
+    // 단언 — planning 얼굴로 착지(trip-hero + 영감 스와이프 캐러셀). discovery 폴백이 아니다.
+    // (TRIP-647: magazine 은 이제 planning 캐러셀 2페이지라 판별자로 못 씀 — 캐러셀은 planning 전용.)
     expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
-    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
+    expect(screen.getByTestId('home-hero-carousel')).toBeOnTheScreen();
   });
 });
 
@@ -233,9 +234,10 @@ describe('🔴 371-AC-2 · 카드 제목·기간이 실 Trip 값(픽스처 아�
     expect(hero).toHaveTextContent(/3박 4일/); // formatNightsLabel(실 날짜)
     expect(hero).toHaveTextContent(/2명/); // 실 party
 
-    // 부정 짝 — 픽스처 PLANNING 상수(`부산 여행`)나 discovery 카드(`감천문화마을`)가 아니다.
+    // 부정 짝 — 트립 카드가 픽스처 PLANNING 상수(`부산 여행`)가 아니라 실 Trip 값을 쓴다.
+    // (TRIP-647: 발견 섹션이 planning 에도 뜨고 discovery API 부재로 픽스처를 그리므로 `감천문화마을`은
+    //  이제 정상 존재 — 부정 단언에서 제거. 트립 카드 실데이터는 위 231~234·237이 잠근다.)
     expect(screen.queryByText('부산 여행')).toBeNull();
-    expect(screen.queryByText('감천문화마을')).toBeNull();
   });
 });
 
