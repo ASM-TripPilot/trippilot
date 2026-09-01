@@ -150,21 +150,19 @@ describe('(tabs)/index.tsx — 홈 라우트 래퍼 (SC-1 · SC-5)', () => {
   });
 });
 
-describe('(tabs)/records — 준비 중 안내 (INV-4 · SC-5)', () => {
-  // records 는 TRIP-290 으로 텍스트 껍데기 → "준비 중" 상태 안내(StateNotice)로 승격.
-  // itinerary(TRIP-299/401)·explore(TRIP-201) 는 이미 실화면이라 각자 라우트 테스트가 잠근다.
-  // 마이 탭(my)은 TRIP-604 로 실화면(마이페이지) 승격 — placeholder 계약이 끝났다.
-  // 새 계약(셸 교체·세그먼트·카드)은 `tabsMyRoute.test.tsx` 가 잠근다. 여기선 회고(records)만 남는다.
-  // 정확한 제목("{탭} 준비 중")으로 단언한다 — 부분 정규식(/기록/)은 설명 문구와 이중 매치돼
-  // getByText 가 "여러 요소" 에러를 낸다(설명에도 '기록'이 들어감).
-  it('기록 탭은 빈 글자 화면이 아니라 placeholder + 탭 이름이 반영된 준비 중 안내를 그린다', () => {
+describe('(tabs)/records — 기록 탭 허브 (AC-1 · 셸 교체)', () => {
+  // records 는 TRIP-575 로 "준비 중" 자리표시자(StateNotice) → 여행 캘린더 허브로 승격.
+  // placeholder 계약이 끝났다(my 탭 TRIP-604 승격 선례). itinerary(TRIP-299/401)·
+  // explore(TRIP-201)·my(TRIP-604) 는 이미 실화면이라 각자 라우트 테스트가 잠근다.
+  // 크래시 스텁은 이미 존재한다 — 상단 전역 jest.mock('@/shared/api/generated/trips/trips')
+  // 가 빈 목록을 주므로 허브가 '빈 상태' 얼굴(record-calendar-empty)로 렌더돼 QueryClient
+  // 부재 크래시가 안 난다(TRIP-371 선례 — 새 목 추가 불필요).
+  // 여기선 "자리표시자가 사라지고 허브가 뜬다"만 잠근다 — 마킹·목록·항법은 각각
+  // recordsCalendar 모델·RecordsCalendarScreen·tabsRecordsRoute 가 잠근다.
+  it('기록 탭은 placeholder 가 아니라 여행 캘린더 허브(빈 상태)를 그린다', () => {
     render(<RecordsRoute />);
 
-    expect(
-      screen.getByTestId('shell-tab-placeholder-records')
-    ).toBeOnTheScreen();
-    expect(screen.getByText('기록 준비 중')).toBeOnTheScreen();
-    // wizard/딥링크 유도 버튼을 넣지 않는다 — 준비 중 안내는 무버튼(탭은 목록의 자리, 금지 AC).
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByTestId('shell-tab-placeholder-records')).toBeNull();
+    expect(screen.getByTestId('record-calendar-empty')).toBeOnTheScreen();
   });
 });

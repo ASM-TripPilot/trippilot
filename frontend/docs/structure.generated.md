@@ -68,6 +68,7 @@
 - `src/__tests__/planbTriggersRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/recordAttributionStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordPhotoBinaryGuard.test.ts`  →  (export 없음)
+- `src/__tests__/recordsCalendarStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsCompareStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/recordsStructure.test.ts`  →  (export 없음)
@@ -99,6 +100,7 @@
 - `src/__tests__/tabsHomeRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsItineraryRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsMyRoute.test.tsx`  →  (export 없음)
+- `src/__tests__/tabsRecordsRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsShell.test.tsx`  →  (export 없음)
 - `src/__tests__/travelStyleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tripBaseGateStructure.test.ts`  →  (export 없음)
@@ -425,10 +427,12 @@
 - `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
 - `src/features/record/model/photoAttach.ts`  →  photoAttach
 - `src/features/record/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
+- `src/features/record/model/recordsCalendar.ts`  →  PastTripCardVM · markedDaysOfMonth · buildPastTripCards · formatTripDateRange · nightsLabel
 - `src/features/record/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
 - `src/features/record/model/syncQueue.ts`  →  SyncStatus · SyncQueueItem · ReplayExecutor · enqueue · replayQueue
 - `src/features/record/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
 - `src/features/record/model/useCompareRecords.ts`  →  useCompareRecords
+- `src/features/record/model/useRecordsCalendar.ts`  →  useRecordsCalendar
 - `src/features/record/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
 - `src/features/record/model/useVisitAttachments.ts`  →  useVisitAttachments
 - `src/features/record/model/useVisitCheck.ts`  →  VisitCheckOutcome · useVisitCheck
@@ -439,11 +443,14 @@
 - `src/features/record/ui/CompareSegment.tsx`  →  CompareSegmentProps · CompareSegment
 - `src/features/record/ui/ConflictSheet.tsx`  →  ConflictSheetProps · ConflictSheet
 - `src/features/record/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
+- `src/features/record/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
 - `src/features/record/ui/PhotoThumbStrip.tsx`  →  PhotoThumbVM · PhotoThumbStripProps · PhotoThumbStrip
-- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · BackArrowGlyph · HeartGlyph
+- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · PlusGlyph · BackArrowGlyph · ChevronRightGlyph · CalendarGlyph · HeartGlyph
+- `src/features/record/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
 - `src/features/record/ui/RecordsCompareScreen.tsx`  →  RecordsCompareScreenProps · RecordsCompareScreen
 - `src/features/record/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
 - `src/features/record/ui/SyncBadge.tsx`  →  SYNC_BADGE_LABEL · SyncBadge
+- `src/features/record/ui/TripCalendarMonth.tsx`  →  TripCalendarMonthProps · TripCalendarMonth
 - `src/features/record/ui/TripRecordsScreen.tsx`  →  TripRecordsDayTab · DayAttributionHeader · TripRecordsScreenProps · TripRecordsScreen
 - `src/features/record/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard
 - `src/features/record/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
@@ -762,6 +769,12 @@
 
 ## src/pages/planb-triggers/ui/
 - `src/pages/planb-triggers/ui/PlanbTriggersPage.tsx`  →  PlanbTriggersPageProps · PlanbTriggersPage
+
+## src/pages/records-calendar/
+- `src/pages/records-calendar/index.ts`  →  RecordsCalendarPage
+
+## src/pages/records-calendar/ui/
+- `src/pages/records-calendar/ui/RecordsCalendarPage.tsx`  →  RecordsCalendarPage
 
 ## src/pages/records-compare/
 - `src/pages/records-compare/index.ts`  →  RecordsComparePage
@@ -1111,6 +1124,7 @@
 ## src/shared/date/
 - `src/shared/date/formatKoreanDate.ts`  →  formatKoreanDate
 - `src/shared/date/formatRelativeTime.ts`  →  formatRelativeTime
+- `src/shared/date/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
 
 ## src/shared/itinerary-edit/
 - `src/shared/itinerary-edit/index.ts`  →  ManualEditShell · ManualTimeSheet · mergeValidationFlags · reorderKeepingFixed
@@ -1182,4 +1196,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 800개 파일
+합계 810개 파일

@@ -42,6 +42,7 @@ import type { CompareRow } from '@/features/record/model/compareRows';
 import { ConflictSheet } from '@/features/record/ui/ConflictSheet';
 import { MemoInline } from '@/features/record/ui/MemoInline';
 import { PhotoThumbStrip } from '@/features/record/ui/PhotoThumbStrip';
+import { RecordsCalendarScreen } from '@/features/record/ui/RecordsCalendarScreen';
 import { RecordsCompareScreen } from '@/features/record/ui/RecordsCompareScreen';
 import { SyncBadge } from '@/features/record/ui/SyncBadge';
 import { TripRecordsScreen } from '@/features/record/ui/TripRecordsScreen';
@@ -158,6 +159,7 @@ import type {
   Trigger,
 } from '@/shared/api/generated/schemas';
 import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
+import { buildMonthGrid } from '@/shared/date/monthGrid';
 import { ManualTimeSheet, reorderKeepingFixed } from '@/shared/itinerary-edit';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { revokeImpact } from '@/shared/location/revokeImpact';
@@ -4388,6 +4390,80 @@ const PREVIEW_STATES: PreviewState[] = [
           ] satisfies CompareRow[]
         }
         onBack={noop}
+      />
+    ),
+  },
+  // j07 기록 탭 허브 2키(TRIP-575) — 순수 뷰(`RecordsCalendarScreen`)를 격리 렌더한다(`@/shared/api`·
+  // `@/features/*` 값 import 0 이라 프리뷰 지뢰 목 통과). `-default`는 커스텀 월 그리드·코랄 pill 마킹
+  // (연속 구간 양 끝 둥글림)·legend·지난 여행 카드(제목·기간·박수만, 사진·통계 없음 — Q2 degrade)를,
+  // `-empty`는 저장 여행 0건 안내 + 새 여행 버튼을 한 화면에서 육안 대조한다. 코랄 pill 색·정렬 픽셀은
+  // jest 사각이라 이 키가 유일한 육안 그물(자율 세션이라 6-b 미실행 — 다음 세션 확인 대상).
+  {
+    key: 'records-calendar-default',
+    label: 'j07 기록 캘린더 · 마킹·지난 여행',
+    login: null,
+    render: () => (
+      <RecordsCalendarScreen
+        monthLabel="2026년 6월"
+        grid={buildMonthGrid('2026-06')}
+        markedDays={[
+          '2026-06-10',
+          '2026-06-11',
+          '2026-06-12',
+          '2026-06-20',
+          '2026-06-21',
+        ]}
+        monthLegends={[
+          {
+            tripId: 't-busan',
+            title: '부산 여행',
+            dateRangeLabel: '2026.6.10–6.12',
+            nightsLabel: '2박 3일',
+          },
+        ]}
+        pastTrips={[
+          {
+            tripId: 't-jeju',
+            title: '제주 여행',
+            dateRangeLabel: '2026.5.1–5.3',
+            nightsLabel: '2박 3일',
+          },
+          {
+            tripId: 't-gangneung',
+            title: '강릉 여행',
+            dateRangeLabel: '2026.4.18–4.20',
+            nightsLabel: '2박 3일',
+          },
+          {
+            tripId: 't-weekend',
+            title: '주말 나들이',
+            dateRangeLabel: null,
+            nightsLabel: null,
+          },
+        ]}
+        isEmpty={false}
+        onPressPrevMonth={noop}
+        onPressNextMonth={noop}
+        onSelectTrip={noop}
+        onPressCreateTrip={noop}
+      />
+    ),
+  },
+  {
+    key: 'records-calendar-empty',
+    label: 'j07 기록 캘린더 · 빈 상태',
+    login: null,
+    render: () => (
+      <RecordsCalendarScreen
+        monthLabel="2026년 6월"
+        grid={[]}
+        markedDays={[]}
+        pastTrips={[]}
+        isEmpty
+        onPressPrevMonth={noop}
+        onPressNextMonth={noop}
+        onSelectTrip={noop}
+        onPressCreateTrip={noop}
       />
     ),
   },
