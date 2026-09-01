@@ -5,7 +5,9 @@
 TypedResult(is_fallback=True) + FallbackEvent + LlmCallRecord(success=False).
 예외를 위로 던지지 않고 폴백 신호로 변환하는 것이 게이트웨이의 책임 (INV-4, BR-U4-02).
 
-규칙 점수 폴백의 실행은 호출측 몫 (BR-U4-09) — c1은 신호만 낸다.
+폴백의 **실행**은 호출측 몫 (BR-U4-09) — c1은 신호만 낸다. 다만 그 신호가 싣는
+from_mode/to_mode는 호출측이 실제로 하는 일이어야 한다: feature마다 다르므로
+C1Config.fallback_modes에서 읽는다 (TRIP-260 #4).
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Protocol
 
-from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.config import C1Config, UNMAPPED_FALLBACK_MODES
 from trippilot.llm_gateway.gates.base import ExitGate
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi, TypedResult
@@ -166,14 +168,18 @@ class GatewayFacade:
             feature, model_id, prompt_ref, trace_id, now, response, success=False
         )
         self._trace.emit(record)
+        # 폴백 모드는 feature별 실체 — 매핑에 없으면 지어내지 않고 unmapped로 드러낸다
+        from_mode, to_mode = self._cfg.fallback_modes.get(
+            feature, UNMAPPED_FALLBACK_MODES
+        )
         self._trace.emit(
             FallbackEvent(
                 trace_id=trace_id,
                 occurred_at=now,
                 component=_COMPONENT,
                 stage="llm",
-                from_mode="llm_score",
-                to_mode="rule_score",  # 실행은 호출측 (BR-U4-09)
+                from_mode=from_mode,
+                to_mode=to_mode,  # 실행은 호출측 (BR-U4-09) — 여기는 그 실체를 싣는다
                 reason=reason,
             )
         )

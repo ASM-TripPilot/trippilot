@@ -235,3 +235,59 @@ def test_무결과와_전량드롭은_다른_사유로_기록된다() -> None:
     # 라벨의 근거가 실제로 GateDropEvent 유무인지까지 고정한다
     assert len(dropped_trace.of_type(GateDropEvent)) == 1
     assert len(empty_trace.of_type(GateDropEvent)) == 0
+
+
+# ── TRIP-260 #4: FallbackEvent가 feature별 **실제** 폴백을 싣는다 ──
+
+
+# 값의 근거는 호출측 코드다 (config.default_fallback_modes 항목별 주석 참조) —
+# 여기서는 그 표가 이벤트까지 그대로 도달하는지만 고정한다.
+_EXPECTED_MODES = {
+    LlmFeature.PREFERENCE_SCORING: ("llm_score", "rule_score"),
+    LlmFeature.EXPLANATION: ("llm_explain", "(none)"),
+    LlmFeature.ALTERNATIVE_SELECTION: ("llm_select_alternatives", "rule_ranking"),
+    LlmFeature.REFLECTION_TEMPLATE: ("llm_template", "fixed_template"),
+    LlmFeature.REFLECTION_NUDGE: ("llm_nudge", "fixed_message"),
+    LlmFeature.INTENT: ("llm_intent", "out_of_scope"),
+    LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
+    LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),
+    LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
+    LlmFeature.PLACE_EXTRACTION: ("llm_extract", "(none)"),
+    LlmFeature.REASON_INTERPRETATION: ("llm_reason_interpretation", "unknown"),
+}
+
+
+@pytest.mark.parametrize("feature", sorted(_EXPECTED_MODES, key=lambda f: f.value))
+def test_fallback_event_carries_feature_specific_modes(feature: LlmFeature) -> None:
+    """전 feature가 `llm_score → rule_score`를 찍던 동안 증빙 대부분이 거짓이었다.
+
+    INV-4가 요구하는 것은 "폴백이 이벤트로 드러난다"가 아니라 "그 이벤트가 사실이다".
+    """
+    facade, trace = _facade(FakeLlm(), ParseFailGate())
+    facade.call(feature, {"k": "v"}, None, _TRACE_ID, _NOW)
+
+    events = trace.of_type(FallbackEvent)
+    assert len(events) == 1
+    assert (events[0].from_mode, events[0].to_mode) == _EXPECTED_MODES[feature]
+
+
+def test_fallback_modes_are_not_all_the_same() -> None:
+    """하드코딩 회귀 방지 — 값이 다시 한 종류로 수렴하면 여기서 깨진다."""
+    assert len(set(_EXPECTED_MODES.values())) >= 4
+
+
+def test_every_llm_feature_has_fallback_modes() -> None:
+    """enum이 늘면 여기서 먼저 깨진다 — 새 feature의 폴백 실체를 확인하라는 신호."""
+    assert set(_CFG.fallback_modes) == set(LlmFeature)
+    assert _EXPECTED_MODES.keys() == set(LlmFeature)
+
+
+def test_unmapped_feature_falls_back_visibly_not_plausibly() -> None:
+    """매핑 누락은 KeyError로 죽지도, 그럴듯한 거짓말을 찍지도 않는다."""
+    cfg = C1Config(model_ids=dict(_CFG.model_ids), fallback_modes={})
+    trace = InMemoryTrace()
+    facade = GatewayFacade(FakeLlm(), EchoRenderer(), ParseFailGate(), cfg, trace)
+
+    facade.call(LlmFeature.PREFERENCE_SCORING, {"k": "v"}, None, _TRACE_ID, _NOW)
+
+    assert trace.of_type(FallbackEvent)[0].to_mode == "unmapped_feature"
