@@ -149,6 +149,12 @@ services:
       # local 로 켜려면 이미지에 sentence-transformers + 모델이 있어야 한다(TRIP-517).
       TRIPPILOT_EMBEDDING_PROVIDER: ${AI_EMBEDDING_PROVIDER:-}
       TRIPPILOT_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-}
+      # provider=http 일 때의 임베딩 서비스 주소 (TRIP-517). 컨테이너 안에서는
+      # 서비스명으로 해석된다. **`depends_on` 을 걸지 않는다** — AI 는 임베딩 없이도
+      # 돌아야 하고(UnwiredEmbedding 계약), 결합을 걸면 임베딩 컨테이너의 재시작
+      # 루프가 일정 생성·회고까지 기동 실패로 끌고 간다.
+      TRIPPILOT_EMBEDDING_BASE_URL: ${AI_EMBEDDING_BASE_URL:-}
+      TRIPPILOT_EMBEDDING_TIMEOUT_SEC: ${AI_EMBEDDING_TIMEOUT_SEC:-}
       # 후보 POI 정본 실연동(TRIP-408) — SERVICE_AUTH_TOKEN(.env, TRIP-393)이 있을 때만
       # 백엔드를 바라본다. 비우면 주소도 비어 기존 StaticPoiDb(제주 시드 4곳) 조립 —
       # 주소만 있고 토큰이 없으면 ai 가 기동 실패하므로 둘을 한 변수로 묶는다.
@@ -170,6 +176,30 @@ services:
       timeout: 3s
       retries: 6
       start_period: 5s
+
+  # ── 임베딩 서비스 (TRIP-517) ───────────────────────────────────
+  # ai 본체에서 분리한 이유: 모델이 1.1GB(fp16)라 FastAPI 경계 한 줄 고칠 때마다
+  # 그걸 다시 굽게 된다. 그리고 안 넣었더니 KB 검색 3종이 컨테이너에서 404 로
+  # 죽어 있었다(2026-09-01 발견) — 넣기도 안 넣기도 애매한 크기가 분리의 이유다.
+  # 모델은 볼륨이 아니라 **이미지에 굽는다** — `down -v` 가 볼륨을 지우는 팀 리셋
+  # 절차와 싸우지 않기 위해서다.
+  ai-embedding:
+    profiles: ["full"]
+    image: ghcr.io/asm-trippilot/trippilot-embedding:${TAG:-develop}
+    build:
+      context: ./ai/embedding
+    container_name: trippilot-ai-embedding
+    ports:
+      - "8100:8100"
+    healthcheck:
+      # 모델 로드 완료를 기다리지 않는다 — 프로세스 생존만 본다(app.py /health 주석).
+      # **운영자 관측용이지 다른 서비스의 depends_on 대상이 아니다.**
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s   # 첫 요청 때 모델을 읽는다 — ai(5s)보다 넉넉히
 
   # ── AI 벡터 스토어 (PlanB RAG KB · TRIP-426) ───────────────────
   # 백엔드 db와 분리한 전용 컨테이너 — postgres:16-alpine에는 pgvector extension이

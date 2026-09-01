@@ -187,6 +187,7 @@ def _vector_rag():
     "KB를 켰다"가 거짓이 된다.
 
     임베딩 선택: `TRIPPILOT_EMBEDDING_PROVIDER` = openai(기본, OPENAI_API_KEY 필수)
+    | http(TRIPPILOT_EMBEDDING_BASE_URL 필수 — 별도 임베딩 컨테이너, TRIP-517)
     | titan(boto3 설치 + AWS 자격) | local(sentence-transformers 설치, 기본 KURE-v1 —
     게이트웨이에 임베딩 배포가 없어(404, 2026-08-21 실측) 로컬이 1순위. 팀 결정 2026-08-22:
     local 우선, 죽으면 provider 교체 + load_kb.py 재적재 — 벡터 공간 비호환이라
@@ -238,8 +239,13 @@ def _vector_rag():
 
         model_name = _env("TRIPPILOT_EMBEDDING_MODEL") or DEFAULT_MODEL
         return store, SentenceTransformerEmbeddingAdapter(SentenceTransformer(model_name))
+    if provider == "http":
+        from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
+        from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
+
+        return store, http_embedding(RuntimeError, lambda t: UrllibJsonClient(timeout_sec=t))
     raise RuntimeError(
-        f"TRIPPILOT_EMBEDDING_PROVIDER 미지원 값: {provider!r} — openai|titan|local"
+        f"TRIPPILOT_EMBEDDING_PROVIDER 미지원 값: {provider!r} — openai|titan|local|http"
     )
 
 
