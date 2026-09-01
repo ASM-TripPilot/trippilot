@@ -12,6 +12,6 @@ dependencies = [
     "sentence-transformers>=3.0",
 ]
 
-[build-system]
-requires = ["uv_build>=0.11.30,<0.12.0"]
-build-backend = "uv_build"
+# **패키지가 아니다** — app.py 하나짜리 서비스라 build-system 을 두지 않는다.
+# 두면 `uv run` 이 프로젝트 모드로 들어가 src/ 레이아웃을 찾다 빌드가 깨진다.
+# Dockerfile 은 venv 바이너리를 직접 호출한다.
