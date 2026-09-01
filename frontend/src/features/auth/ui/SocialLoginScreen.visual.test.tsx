@@ -210,36 +210,32 @@ describe('AC-V2 · 카카오 라벨 문구 — 한글이 뜨고 영문은 화면
 
 const ERROR_COPY = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요';
 
-// TRIP-592(→ C안): 파스텔 채움(bg-primary-pale + text-primary-text)을 폐기하고 'C 아이콘 리드형'
-// 으로 위계를 신호한다 — 카드(보더·캔버스채움) 없이 배경 없는 인라인 + 코랄 원 아이콘 배지(bg-primary
-// rounded-full) + ink 텍스트(문구 단일 유지). 아래 두 it 은 폐기 토큰의 '부재'와 새 폼('배경 없는
-// 인라인'·'코랄 원 배지'·ink)의 '존재'를 한 쌍으로 잠근다. 회귀가 아니라 의도된 계약 교체다 — 이 describe
-// 가 C 폼을 지키는 새 심판이다. 뮤테이션: E(아웃라인 border-primary·bg-canvas 카드)로 되돌리면
-// noOutline/noCardBg 가 깨져 red 가 된다(양방향).
-describe('AC-V3 · 에러 배너가 Figma C(아이콘 리드형) 토큰을 입는다 (렌더 · TRIP-592 계약 교체)', () => {
-  it('배너가 카드(pale·보더·캔버스채움) 없는 인라인이고, 코랄 원 아이콘 배지(bg-primary·rounded-full)를 리드로 갖는다', () => {
+// TRIP-592(→ C안)은 파스텔 채움(bg-primary-pale)을 폐기하고 카드 없는 배경 없는 인라인으로 갔다.
+// **TRIP-648 계약 교체**: 그 폼의 '코랄 원 아이콘 배지(⚠)'까지 제거한다 — 사용자 실기 관측 + Figma
+// 대조로 에러 배너는 아이콘 없는 텍스트-온리 인라인이 정본이 됐다. 아래 두 it 은 폐기 토큰의 '부재'
+// (pale·보더·캔버스채움 카드) + 아이콘 배지의 '부재' + ink 텍스트의 '존재'를 잠근다. 뮤테이션:
+// 배지(auth-login-error-icon-badge)를 되살리면 noIconBadge 가 깨져 red(아이콘 재등장 트립와이어).
+describe('AC-V3 · 에러 배너가 카드·아이콘 없는 텍스트 인라인이다 (렌더 · TRIP-648 계약 교체)', () => {
+  it('배너가 카드(pale·보더·캔버스채움) 없는 인라인이고, 경고 아이콘 배지가 없다', () => {
     // ▸준비 — overrides 로 error phase 를 연다.
     renderDefault({ phase: 'error', errorCode: 'SOCIAL_AUTH_FAILED' });
 
-    // ▸실행 — 배너 컨테이너 + 그 안 코랄 원 배지 노드.
+    // ▸실행 — 배너 컨테이너(앵커) + 그 안에서 아이콘 배지를 queryBy 로 찾는다(부재는 queryBy — getBy 는 못 찾으면 throw).
     const banner = screen.getByTestId('auth-login-error-banner');
     const bannerTokens = classTokens(banner);
-    const badge = within(banner).getByTestId('auth-login-error-icon-badge');
-    const badgeTokens = classTokens(badge);
 
-    // ▸단언 — C 폼: 컨테이너는 카드 채움/보더/캔버스배경/pale 전부 부재, 코랄 원 배지가 아이콘을 리드.
+    // ▸단언 — 카드 토큰 3종 부재 + 아이콘 배지 부재. 배너 자체는 앵커로 존재(공허 통과 차단).
     expect({
       noPaleFill: bannerTokens.includes('bg-primary-pale'),
       noOutline: bannerTokens.includes('border-primary'),
       noCardBg: bannerTokens.includes('bg-canvas'),
-      circleFill: badgeTokens.includes('bg-primary'),
-      circleRadius: badgeTokens.includes('rounded-full'),
+      noIconBadge:
+        within(banner).queryByTestId('auth-login-error-icon-badge') !== null,
     }).toEqual({
       noPaleFill: false,
       noOutline: false,
       noCardBg: false,
-      circleFill: true,
-      circleRadius: true,
+      noIconBadge: false,
     });
   });
 

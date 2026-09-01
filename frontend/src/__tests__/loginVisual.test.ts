@@ -296,10 +296,11 @@ describe('AC-V4 · 경고 글리프 정의 — Figma 좌표계·선굵기·렌�
   });
 });
 
-describe('AC-V4 · 경고 글리프 사용 — 화면이 실제로 import·렌더한다 (소스 스캔)', () => {
-  it('SocialLoginScreen.tsx 가 WarningTriangleGlyph 를 import 하고 렌더한다', () => {
+describe('AC-V4 · 에러 배너 경고 글리프 미사용 — 화면이 import·렌더하지 않는다 (소스 스캔 · TRIP-648)', () => {
+  it('SocialLoginScreen.tsx 는 에러 배너를 그리되 WarningTriangleGlyph 를 import·렌더하지 않는다', () => {
     const scanned = readScannedSource(SCREEN_FILE);
 
+    // 앵커 — 배너 자체는 여전히 존재해야 한다(배너 통째 삭제로 인한 공허 통과 차단).
     expect({
       file: path.relative(ROOT, SCREEN_FILE),
       isScreen: /export function SocialLoginScreen\b/.test(scanned),
@@ -310,22 +311,14 @@ describe('AC-V4 · 경고 글리프 사용 — 화면이 실제로 import·렌�
       hasBannerTestId: true,
     });
 
-    // imported ≥ 2 = import 구문 1회 + 사용 1회 이상. 정의만 하고 안 쓰는 상태를 막는
-    // 것이 이 it 의 전부다 — "배너 안"인지는 보지 않는다(AC 문구 밖, 스크린샷 대조 몫).
+    // TRIP-648: 경고 아이콘 제거 — 화면 소스에서 글리프 import·렌더 태그가 0 이어야 한다
+    // (아이콘 재등장 트립와이어). AuthGlyphs.tsx 의 글리프 '정의'는 위 AC-V4 정의 it 이 계속 잠근다.
     expect({
-      imported: count(scanned, 'WarningTriangleGlyph') >= 2,
-      rendered: count(scanned, '<WarningTriangleGlyph') >= 1,
-      // 렌더 크기 잠금 ③/③ — 호출부(02b W-3). 기본값만 잠그면 `size={40}` 로 우회되고,
-      // 호출부만 잠그면 "prop 삭제 + 기본값 변경" 으로 우회된다 → **둘 다** 잠근다.
-      // 세는 범위는 이 태그 안이다: 파일 전역 `size={18}` 은 실측 1회지만, 다른 컴포넌트가
-      // 나중에 `size={18}` 을 갖게 되면 전역 카운트는 이 글리프가 40 이 되어도 1 을 유지한다.
-      // TRIP-592 C안: 코랄 원 배지 안 글리프라 호출부는 size={16}(원 28px 안 여백). 값만 갱신, 잠금 유지.
-      sizeAtCallSite:
-        count(sliceTag(scanned, 'WarningTriangleGlyph'), 'size={16}') === 1,
+      imported: count(scanned, 'WarningTriangleGlyph'),
+      rendered: count(scanned, '<WarningTriangleGlyph'),
     }).toEqual({
-      imported: true,
-      rendered: true,
-      sizeAtCallSite: true,
+      imported: 0,
+      rendered: 0,
     });
   });
 });
