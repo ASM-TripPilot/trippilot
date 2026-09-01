@@ -808,6 +808,7 @@ class WiredItineraryOrchestrator:
                 pool=pool,
                 trace_id=TraceId(request.request_meta.request_id),
                 now=now,
+                deadline_ms=request.request_meta.deadline_ms,
                 excluded_poi_ids=frozenset(
                     PoiId(p) for p in request.excluded_poi_ids),
                 affected_reasons=dict(request.affected_reasons),

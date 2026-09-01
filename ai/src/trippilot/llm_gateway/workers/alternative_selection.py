@@ -72,11 +72,21 @@ class AlternativeSelectionWorker:
         inp: AlternativeSelectionInput,
         trace_id: TraceId,
         now: datetime,
+        *,
+        timeout_sec: float | None = None,
     ) -> TypedResult:
+        """`timeout_sec` 미지정이면 게이트웨이 기본(C1Config.timeout_sec = 2.5s).
+
+        그 기본은 즉답성 feature(INTENT 등) 기준이라 **상위 티어 모델에는 짧다** —
+        실측(2026-09-01, 컨테이너) `gpt-5.6-sol` 이 5.1s 라 기본값으로는 100%
+        타임아웃해 Plan-B 가 항상 규칙 폴백으로 떨어졌다. 호출측이 요청 예산에서
+        몫을 떼 넘긴다(BR-U4-04 "요청 예산의 절반 이하", TRIP-376 과 같은 관통).
+        """
         return self._gateway.call(
             LlmFeature.ALTERNATIVE_SELECTION,
             build_alternative_selection_vars(pool, inp),
             pool,  # selections 풀 교차 대상 (INV-1)
             trace_id,
             now,
+            timeout_sec=timeout_sec,
         )

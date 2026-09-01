@@ -142,6 +142,13 @@ services:
       # PlanB RAG 벡터 스토어(TRIP-426) — 미설정 = 미배선(경계 개통은 TRIP-428).
       # 컨테이너 안에서는 ai-vectordb 호스트로 해석된다.
       TRIPPILOT_VECTOR_DB_URL: ${AI_VECTOR_DB_URL:-}
+      # 임베딩 공급자 — openai(기본) | titan | local. **이 통로가 없어서** 컨테이너가
+      # 늘 openai 로 떨어졌고, 멘토 Azure 엔드포인트에는 임베딩 배포가 없어 KB 검색
+      # 3종이 전부 404(DeploymentNotFound)로 죽었다(2026-09-01 실측). 규칙 폴백이
+      # 대신 답해 200 이 나가는 바람에 증상이 안 보였다 — TRIP-513 통로 누락과 같은 종류.
+      # local 로 켜려면 이미지에 sentence-transformers + 모델이 있어야 한다(TRIP-517).
+      TRIPPILOT_EMBEDDING_PROVIDER: ${AI_EMBEDDING_PROVIDER:-}
+      TRIPPILOT_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-}
       # 후보 POI 정본 실연동(TRIP-408) — SERVICE_AUTH_TOKEN(.env, TRIP-393)이 있을 때만
       # 백엔드를 바라본다. 비우면 주소도 비어 기존 StaticPoiDb(제주 시드 4곳) 조립 —
       # 주소만 있고 토큰이 없으면 ai 가 기동 실패하므로 둘을 한 변수로 묶는다.
