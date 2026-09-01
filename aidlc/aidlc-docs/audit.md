@@ -1341,3 +1341,38 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **미반영으로 남긴 것**: 없음 — 제시 1건 선택·반영.
 
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. 정정 실행 주체: TRIP-443 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260826-trip443-planb-manual/01_spec-analyst_brief.md`(§드리프트 보고)·`03_implementer_notes.md`(§데이터·화면 흐름)·`frontend/src/pages/planb-manual/ui/PlanbManualPage.tsx`·`backend/docs/design/openapi.yaml`(`/trips/{tripId}/itinerary` PUT). 이 항목이 손댄 `aidlc/` 파일은 `construction/u4-in-trip-planb/functional-design/frontend-components.md`와 이 `audit.md` append뿐이다.
+
+---
+
+## Post-Design Correction — U5 회고 산출물을 문장에서 카드로 (G-U5-4 해소 · O-U5-6 확정)
+**Timestamp**: 2026-09-01T00:00:00Z
+
+**User Input**: 백엔드 남은작업 루프 중 회고 AI 경로 개통을 착수하려다 **두 팀 정본이 갈린 것**을 발견해 사용자에게 제기했다. 선택지 3개(보류하고 AI팀에 제기 / 백엔드 정본 유지하고 문장 응답 요청 / 카드로 전환하는 큰 칸을 연다) 중 사용자가 **"카드로 전환하는 큰 칸을 연다"** 를 선택했고, 이어 **"문서까지 다 해"** 로 정본 개정을 포함하도록 지시했다.
+
+**AI Response**: 승인 완료된 `u5-records-reflection/functional-design/` 4개 문서의 사후 개정. **새 스토리·새 유닛 진입 없음** → 스테이지 진행 아님, `aidlc-state.md` 체크박스 변동 없음.
+
+**개정의 성격 — 결정을 뒤집은 것이 아니라 열려 있던 것을 실측으로 닫았다.** §5.3 은 애초에 "`ai/` 표면 계약 **초안** (개통 이연 · G-U5-4)"이었고 G-U5-4 가 "AI팀 협의 선행"이라 열어 뒀다. 그 협의 결과가 초안과 다르게 나왔다.
+
+**실측 근거**(2026-09-01): `ai/docs/openapi.json` 에 `POST /ai/v1/reflection/{generate,nudge}` 실재. TRIP-429(라우트·wiring 개통)·TRIP-430(wire 계약 합의) 모두 완료. 초안이 상정한 `daily`·`summary`·`style` 3경로·`{narrative, source}` 응답과 달리 **2경로**이고 응답이 **카드**다(`template_id`·`format`·`cover{title,subtitle,photo_slot}`·`scenes[]{layout,caption,photo_slot,source_event}`·`hashtags[]`·`is_fallback`).
+
+**개정 항목**
+
+- `business-logic-model.md` §5.2 `http` 행 — 개통 조건 충족으로 갱신. §5.3 — 초안을 **실계약으로 교체**하고 초안 원문을 블록쿼트로 보존(무엇이 어떻게 달라졌는지 남긴다). §8 갭 표 — **G-U5-4 해소** 처리, **G-U5-15**(AI 에 `style` 경로 없음 → 스타일 분석은 계속 백엔드 로컬)·**G-U5-16**(`nudge` 소비처 없음) 신설. 결정 표 — **DEC-U5-14** 신설.
+- `business-rules.md` — **O-U5-6 을 `http` 로 확정**(사용자 결정). **BR-U5-32** 폴백 3단의 가운데 단을 "규칙 문장"에서 **"규칙 카드"** 로. **BR-U5-35** 표시본 단위를 카드 통째로.
+- `domain-entities.md` §4.1 — `draft_narrative`/`edited_narrative` → `draft_card`/`edited_card`(jsonb) + `template_id`·`card_format`. **INV-U5-06 은 유지**하고 보관 단위만 카드로(근거 블록쿼트 추가).
+- `frontend-components.md` — 회고 수정 규칙·PBT-U5-F1 을 카드 단위로. **testID 는 고치지 않고 경고만 달았다.**
+
+**판단 근거 — 왜 카드가 이기는가**: `scenes[].photo_slot`·`source_event` 는 사용자 사진을 특정 장면에 묶는 장치라 문장 하나로 표현할 수 없고, `j03` 이 사진을 붙이는 화면인 이상 카드가 실제 산출물이다. 전환 비용도 지금이 최저다 — 프런트에 회고 화면이 **없다**(실측: `features/reflection` 부재, `narrative` 를 그리는 `.tsx` 0건). 화면을 짓고 나서 바꾸면 몇 배가 된다.
+
+**셀프 검수 2회에서 잡은 것**
+
+1. **`DEC-U5-5a` 를 잘못 귀속했다.** 개정문 2곳이 "DEC-U5-5a 개정"이라 적었는데, 그 결정은 *"`source` 를 항상 싣는다"* 이지 *"산출물이 문장"* 이 아니다 — **카드 전환과 무관하고 바뀌지 않는다**. 새 결정 **DEC-U5-14** 로 분리하고 DEC-U5-5a 유지를 명시했다.
+2. **갭 번호 충돌.** 신설 갭에 G-U5-13·14 를 붙였는데 둘 다 이미 쓰이고 있었다 → **G-U5-15·16** 으로 교정. `O-U5-14` 도 번호가 떠서 **O-U5-10** 으로 당겼다.
+3. 문서끼리가 아니라 **실물과 대조**했다 — §5.3 에 적은 4개 스키마의 필드가 `ai/docs/openapi.json` 과 **누락 없이 일치**함을 스크립트로 확인.
+
+**미반영으로 남긴 것**
+
+- **`trip_summary.narrative`(§4.2)** — 상대 `generate` 의 `kind` 가 SUMMARY 도 덮어 같은 갈림이 반복될 수 있으나, 요약은 `highlights[]` 등 우리 고유 필드가 있어 판단이 별건이다 → **O-U5-10** 으로 올렸다.
+- **회고 testID 목록** — `reflection-daily-narrative` 등이 문장 전제이나 **새 이름을 짓지 않았다.** `j03` 화면이 아직 없어 지금 지으면 근거 없이 계약을 좁힌다. 경고만 달고 화면 설계와 함께 정한다.
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 개정**. TRIP-443 선례(Post-Design Correction)와 같은 절차. 이 항목이 손댄 `aidlc/` 파일은 `construction/u5-records-reflection/functional-design/` 4개와 이 `audit.md` append 뿐이다. 코드 변경 0 — 스키마·경계·개통은 후속 칸(칸 1~3)에서 팀이 `backend/` 에서 직접 수행한다.

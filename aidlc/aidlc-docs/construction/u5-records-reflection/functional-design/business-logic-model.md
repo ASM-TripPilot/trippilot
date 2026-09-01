@@ -51,6 +51,7 @@ U3·U4는 백엔드가 통째 신규였다. U5는 아니다.
 | **DEC-U5-11** | 스타일 분석은 **U5가 산출·소유**하고 개인화 소비 계약만 정의한다. U3는 정정하지 않고 갭으로 남긴다(Q7=A) | U3 설계 종료 — 재개는 별도 지시 |
 | **DEC-U5-12** | 회고·요약의 **이동 거리는 서버가 산출하지 않는다**(§6 참조). 1차 산출 주체는 클라이언트다 | Q5=B의 파생 결과 — §6에서 전개 |
 | **DEC-U5-13** | **누적 통계의 평균 체류 시간은 표시할 수 있다**(`j05` `평균 체류 72분`). 단 **개별 방문의 체류 시간은 U4·U5 화면 모두에서 노출하지 않는다** — 두 층을 가르는 선이 여기다 | **INV-U4-03**이 명시: "INV-3은 *예측 소요시간*의 표시 금지이고 사후 실적은 **U5 기록 소관**". INV-3(`ai/README.md`: "소요시간 미표시 — 거리만")은 솔버 미검증 *예측치*를 막는 규칙이지, 사후 실적 통계를 막는 규칙이 아니다 |
+| **DEC-U5-14** ★ | **회고 산출물은 카드이고, 백엔드는 그것을 모델링하지 않고 보관·중계한다**(2026-09-01 사용자 결정). `draft_card`/`edited_card` 를 jsonb 로 두고 `template_id`·`card_format` 을 버전 키로 쓴다. `cover`/`scenes` 안쪽은 **재검증하지 않는다** | G-U5-4 해소로 실계약이 카드로 확인됐다(§5.3). 우리가 카드를 모델링하면 상대 템플릿 추가가 곧 우리 마이그레이션이 된다 — 그때는 문장 모델이 차라리 낫다. **`DEC-U5-5a`(source 를 항상 싣는다)는 바뀌지 않는다** — 3단 폴백의 관측 근거라 카드에서도 그대로 필요하다 |
 
 ---
 
@@ -150,18 +151,46 @@ U3·U4는 백엔드가 통째 신규였다. U5는 아니다.
 |---|---|---|
 | `rule` | 템플릿만. AI 호출 0 | ✅ **기본값** — 즉시 가능, 외부 의존 0. `j03` 라이브 문안이 이 형태다(D-U5-1) |
 | `llm` | **LLM 벤더 직결 신규 포트**(backend 소유 프롬프트·키·비용) | ⚠ **신규 구축**이다. `LlmGatewayPort`는 backend에 **없다**(2차 검수 실측). LLM 소유 모듈이 `ai/`와 둘로 갈리는 대가가 있다 |
-| `http` | `ai/` `POST /ai/v1/reflection/{daily,summary,style}` | **계약 명세만**(§5.3). LLM 게이트웨이가 이미 `ai/`에 있어 **정본 정합은 이쪽이 낫다**. 개통은 AI팀 협의 후(G-U5-4) |
+| `http` | `ai/` `POST /ai/v1/reflection/{generate,nudge}` | ✅ **개통 대상으로 확정**(2026-09-01 사용자 결정, O-U5-6 해소). 상대 표면이 실재한다(G-U5-4 해소) — 계약은 §5.3 |
 
-### 5.3 `ai/` 표면 계약 초안 (개통 이연 · G-U5-4)
+### 5.3 `ai/` 표면 실계약 (2026-09-01 실측으로 초안 교체 · G-U5-4 해소)
+
+> **초안과 실물이 다르다.** 아래 세 줄이 원래 초안이었다:
+> `daily`·`summary`·`style` 세 경로가 각각 `{ narrative, source }` 를 돌려주는 형태.
+> **AI 팀이 실제로 연 것은 두 경로이고 산출물이 문장이 아니라 카드다**(TRIP-429·430 완료).
+> 정본이 틀린 게 아니라 초안이었고(G-U5-4 가 "AI팀 협의 선행"이라 열어 뒀다), 협의 결과가 이것이다.
 
 ```
-POST /ai/v1/reflection/daily     { tripId, date, visits[], photoCount, changeLog[] } → { narrative, source }
-POST /ai/v1/reflection/summary   { tripId, days[], stats }                          → { narrative, highlights[], source }
-POST /ai/v1/reflection/style     { accountId, visitCategories[], sampleTripCount }  → { descriptors[], breakdown[], source }
+POST /ai/v1/reflection/generate  { request_meta, kind, region, start_date, end_date, visits[],
+                                   persona_summary?, events?, weather_summary? }
+                                 → { template_id, kind, format, generated_at, is_fallback,
+                                     cover{title, subtitle, photo_slot?}, scenes[]{layout, caption,
+                                     photo_slot?, source_event?}, hashtags[]? }
+POST /ai/v1/reflection/nudge     { request_meta, destination, trip_days, highlight_places?,
+                                   persona_summary? } → { message, is_fallback }
 ```
+
+정본 = `ai/docs/openapi.json`(AI CI 가 실행 앱과 일치를 강제한다). 위는 그 시점 사본이다.
+
+`persona_summary` 는 **이미 채울 수 있다** — 백엔드가 `GET /internal/users/{accountId}/persona` 를 열어 뒀다(2026-09-01). 그 표면은 계정 취향 스냅숏을 우리 어휘 그대로 낸다.
+
+**산출물이 카드인 것의 파급 — 이 유닛이 지는 값이다.**
+
+- `cover`·`scenes[].photo_slot`·`source_event` 는 **사용자 사진을 특정 장면에 묶는 장치**다. 문장 하나로는
+  표현할 수 없고, `j03` 이 사진을 붙이는 화면인 이상 카드가 실제 산출물이다.
+- 그래서 **폴백도 카드여야 한다**(BR-U5-32). 규칙 단이 문장을 내면 AI 가 죽는 날 화면 모양 자체가
+  달라진다 — 폴백의 뜻이 "같은 화면을 근거만 줄여 그린다"인데 그것이 성립하지 않는다.
+- 백엔드는 **카드를 모델링하지 않고 보관·중계한다**(**DEC-U5-14**). `template_id`·`format` 이 버전 키고,
+  `cover`/`scenes` 안쪽은 재검증하지 않는다 — 우리가 깊이 검증하면 상대 템플릿 추가가 곧 우리
+  마이그레이션이 된다.
 
 - **INV-1 무관**(후보 선택이 아니라 서술 생성) · **INV-2 무관**(시각·순서를 만들지 않는다) · **INV-3 준수**(소요시간 필드 없음).
 - 근거 데이터를 입력으로 받고 **환각 금지** — 입력에 없는 장소·수치를 서술에 넣지 않는다(BR-U5-31).
+
+**초안 대비 남은 공백 2건**(닫지 않고 갭으로 올린다):
+
+- `style` 경로가 **없다**. 스타일 분석(`j05`)은 계속 백엔드 로컬 산출이다 → **G-U5-15**
+- `nudge` 는 **소비처가 없다**. 여행 전 넛지 화면이 U5 범위 밖이다 → **G-U5-16**
 
 ### 5.4 여행 요약 · 스타일 분석
 
@@ -212,7 +241,7 @@ POST /ai/v1/reflection/style     { accountId, visitCategories[], sampleTripCount
 | **G-U5-1** | 인셉션 `components.md` C12의 "plan/actual/changelog 소유" 표기 | **열람 책임**으로 정정 상신(DEC-U5-1) |
 | **G-U5-2** | U4 `domain-entities.md §3.1·§3.3` 각주 "소유는 U5로 이관 예정" | ✅ **반영 완료(2026-08-22)** — 두 각주에 U5 결정 블록을 소급 기록했다. `visit_check`는 이관(Q1=A), `actual_route_point`는 U4 유지(Q5=B)로 **갈렸다**는 사실과, 후자가 **미실장**이라 U5 stats가 근사로 운용된다는 점을 §3.3에 병기 |
 | **G-U5-3** | 선재 `backend/docs/design/전체-최소-스키마.dbml`이 U5 실장과 다르다 — `visit_record`(vs 실장 `visit_check`) · `photo.storage_key`(S3 전제 vs 로컬 참조) · `gps_track.steps`(**INV-U4-08이 걸음 수 저장·표시를 금지**) | backend 패키지 소유 문서 — 팀 협의로 정합. U1 G-U1-\* 파생과 같은 종류 |
-| **G-U5-4** | `ai/`에 회고 표면 부재 → `http` 모드 개통 불가 | AI팀 협의 선행. 계약 초안은 §5.3 |
+| ~~**G-U5-4**~~ | ~~`ai/`에 회고 표면 부재 → `http` 모드 개통 불가~~ | ✅ **해소(2026-09-01)** — AI 팀이 `POST /ai/v1/reflection/{generate,nudge}` 를 열었다(TRIP-429·430 완료, `ai/docs/openapi.json` 실측). 협의 결과가 초안과 다르다: **산출물이 문장이 아니라 카드**다. §5.3 을 실계약으로 교체했고 그 파급(폴백도 카드여야 한다)을 DEC-U5-5a·INV-U5-06·BR-U5-32·35 에 반영했다 |
 | **G-U5-5** ★ | 실제 이동 거리의 산출 근거 부재(`actual_route_point` 미실장 + 클라 수집 미배선) | DEC-U5-12로 근사 운용. U4 실장 시 `ROUTE` 승격 |
 | ~~**G-U5-6**~~ | ~~`j05`의 "평균 체류 72분"이 BR-U4-37과 충돌~~ | **철회(2026-08-22)** — U4 `domain-entities.md` **INV-U4-03**이 이미 정리해 뒀다: *"INV-3은 예측 소요시간의 표시 금지이고 **사후 실적은 U5 기록 소관**이나, U4 화면에서는 노출하지 않아 경계를 흐리지 않는다."* BR-U4-37은 **U4 화면에 한정된 규칙**이지 U5를 막는 규칙이 아니다. → **DEC-U5-13** |
 | **G-U5-7** | US-REC-10(개인화) 소비처 U3가 설계 종료 상태 | 계약만 정의, 인셉션 정정 상신(Q7=A) |
@@ -223,6 +252,8 @@ POST /ai/v1/reflection/style     { accountId, visitCategories[], sampleTripCount
 | **G-U5-12** ★ | **`ChangeLogFacade`에 조회 메서드가 없다**(`append` 하나뿐) — 모듈 간 changelog 읽기 진입점 부재 | `findByTrip` 추가(기본안) 또는 화면이 REST 직접 호출. **U4도 쓰는 facade**라 팀 확인 필요 |
 | **G-U5-13** | **`VisitChecked` 이벤트가 코드에 없다** — 설계 문서(`전체-API-서피스.md`)에만 존재하고 backend 구현은 0건 | "발행 주체 U4→U5 변경"은 **미실장 이벤트에 대한 설계 서술**이다. 이관 시점에 U5가 **신설**한다 |
 | **G-U5-14** ★ | **프런트 `features/record` → `features/execution` import가 ESLint로 금지**된다(`import/no-restricted-paths` · `importBoundary.test.ts`가 잠근다) — `actualDistance.ts` "재사용" 서술이 구조적으로 불가 | `shared/`로 **승격**해야 한다(U4 자산 이동 → U4 프런트 티켓과 조율) |
+| **G-U5-15** | **AI 에 `style` 경로가 없다** — §5.3 초안은 `POST /ai/v1/reflection/style` 을 상정했으나 실계약에 없다(실측) | 스타일 분석(`j05`)은 계속 **백엔드 로컬 산출**이다. AI 개통은 상대 작업 선행 |
+| **G-U5-16** | **`nudge` 에 소비처가 없다** — 상대는 `POST /ai/v1/reflection/nudge` 를 열었으나 여행 전 넛지 화면이 U5 범위 밖이다 | 경계만 열려 있고 우리가 안 부른다. 화면이 정해질 때 U6 와 조율 |
 
 ---
 
