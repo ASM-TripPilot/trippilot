@@ -84,7 +84,7 @@ class FallbackEvent:
     trace_id: TraceId
     occurred_at: datetime
     component: str
-    stage: str  # llm / solver / router / agent
+    stage: str  # llm / solver / router / agent / vision (TRIP-595)
     from_mode: str
     to_mode: str
     reason: str

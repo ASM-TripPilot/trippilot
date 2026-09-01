@@ -24,7 +24,7 @@
 | BR-U6R-07 | 3회 전부 파싱 실패 → 고정 폴백 템플릿(`is_fallback=true`) — 폴백 스스로 하드 위반 0을 테스트가 고정 (FALLBACK_NUDGE 선례) | INV-4, 계약 §4.3 |
 | BR-U6R-08 | 사진 바이너리는 Phase 1 요청에 절대 미포함 — "어느 방문에 몇 장" 수량 메타만. 방문·이벤트·페르소나는 백엔드가 조립 (AI stateless). 트리거·상태 머신은 정본 §4·5 무변(백엔드 소유) | 계약 §5 |
 | BR-U6R-09 | [P2] 사용자 사진의 외부 LLM 전송은 **명시 동의 필수** — `VisionInput`은 유효한 `consent_ref` 없이 타입상 생성 불가. 동의 기록은 백엔드 append-only 법무 로그 체계 준용(consent-log — 앱 롤 DELETE 불가), AI는 consent_ref를 트레이스에 연결만 | SECURITY 계열, 법무 로그 선례 |
-| BR-U6R-10 | [P2] 미동의·이미지 호출 실패·비지원 어댑터·게이트 드롭 → **Phase 1 텍스트 경로로 강등** + FallbackEvent(stage="vision") — 침묵 금지. 강등 결과의 출력 스키마는 Phase 1과 동일(드롭인). 조용한 이미지 무시 금지 — 비지원 어댑터는 명시 실패 | INV-4 |
+| BR-U6R-10 | [P2] 이미지 호출 실패·비지원 어댑터·게이트 드롭 → **Phase 1 텍스트 경로로 강등** + FallbackEvent(stage="vision") — 침묵 금지. **미동의는 강등이 아니라 기본 경로다** — VisionInput이 타입상 생성 불가라 이벤트를 낼 지점 자체가 없다(§6 정합, 2026-09-01 정리). 강등 결과의 출력 스키마는 Phase 1과 동일(드롭인). 조용한 이미지 무시 금지 — 비지원 어댑터는 명시 실패 | INV-4 |
 | BR-U6R-11 | [P2] 시각 환각 불신 — 게이트는 검증 가능한 것만 강제(photo_id 멤버십·스키마·길이·금칙어). 시각 서술의 사실성 게이트는 두지 않고 캡션을 저위험(사용자 수정 가능 초안)으로 분류. 근거 실측(2026-08-25): responses 표면 `input_image` 라우팅 200 확인, 1×1 투명 PNG에 "64×17 연초록" 환각 | 검증 가능성 원칙 |
 | BR-U6R-12 | 신규 LlmFeature(`REFLECTION_TEMPLATE` 등)는 BR-AF-07 5종 세트(FD 개정+tier_map+yaml+ROUTE-P1+audit) — 코드 단독 enum 확장 금지 | BR-AF-07 |
 | BR-U6R-13 | 모델·티어 실체는 C1Config 설정값(하드코딩 금지) — 멀티모달 지원 프로바이더·모델 선정은 **TRIP-515 런북 소관**, 본 FD는 확정하지 않는다 | BR-U4-08, AI-D06 |

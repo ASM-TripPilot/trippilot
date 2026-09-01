@@ -110,7 +110,9 @@ class GatewayFacade:
         **사진은 동의 증빙과 짝으로만 나간다** (BR-U6R-09): images가 있는데
         consent_ref가 없으면 호출 자체가 버그다 — 폴백이 아니라 ValueError.
         타입 강제(VisionInput)는 워커 안의 관례라 다른 워커가 우회할 수 있지만,
-        이미지가 벤더로 나가는 **유일한 통로**인 여기서 막으면 우회로가 없다.
+        이미지는 이 게이트웨이 경유로만 벤더에 나간다(규약 — LlmRequest에
+        images를 싣는 곳은 여기뿐이며, 게이트웨이 밖 탑재는 시각 seam 테스트가
+        스캔으로 막는다). 여기서 막으면 우회로가 없다.
         """
         # 1 feature ∈ LlmFeature — 밖이면 호출 자체가 버그 (BR-U4-05, 폴백 아님)
         if not isinstance(feature, LlmFeature):

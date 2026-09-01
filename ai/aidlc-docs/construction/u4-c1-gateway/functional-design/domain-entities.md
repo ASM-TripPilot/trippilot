@@ -31,7 +31,7 @@ U4는 U1이 만든 규격을 **소비**한다. 아래 타입은 손대지 않는
 | `REFLECTION_NUDGE` | 경량(LIGHT) | U6 (회고 유도 푸시 문구 — TRIP-347) |
 | `REFLECTION_TEMPLATE` | 상위(HEAVY) | U6 (회고 연출 템플릿 — TRIP-429, U6 FD v1.0 Phase 1. **ReflectAgent 전속**, BR-AF-07 절차) |
 | `REFLECTION_TEMPLATE_VISION` | 상위(HEAVY, **vision**) | U6 Phase 2 (사진 동봉 장면·캡션 생성 — TRIP-595. 텍스트판과 **같은 출력 계약·같은 게이트**, feature 분리는 모델 라우팅 때문(미결 #6 확정). 폴백: compose_vision이 3회 공유 예산(#9) 안에서 텍스트로 강등) |
-| `PHOTO_HIGHLIGHT` | 상위(HEAVY, **vision**) | U6 Phase 2 (동의된 사진 → 대표 N장 — TRIP-595. 이미지 파트를 싣는 첫 feature. 산출은 `photo_id` 튜플뿐 — 시각 서술은 받지 않는다, BR-U6R-11. **미배선** — 프로덕션 호출자 0, composer 통합은 후속) |
+| `PHOTO_HIGHLIGHT` `REFLECTION_TEMPLATE_VISION` | 상위(HEAVY, **vision**) | U6 Phase 2 (동의된 사진 → 대표 N장 — TRIP-595. 이미지 파트를 싣는 첫 feature. 산출은 `photo_id` 튜플뿐 — 시각 서술은 받지 않는다, BR-U6R-11. composer 통합 완료(compose_vision — 같은 브랜치 e46a7347). **API 배선만 후속**(TRIP-478 실사진 전달 시점)) |
 | `PLACE_EXTRACTION` | 상위 (백그라운드) | U6 (**미배선** — 프로덕션 호출자 0, TRIP-529) |
 | `EVENT_EXTRACTION` | 상위(HEAVY, 백그라운드) | TRIP-421 (웹 검색 스니펫 → 행사 구조화 추출. 행사는 POI가 아니라 후보 풀 비편입 — INV-1 비적용) |
 | `EDIT_TRANSLATION` | 경량(LIGHT) | agent-foundation 스텝 ⓪ (**EditAgent 전속**) |
@@ -51,20 +51,20 @@ U4는 U1이 만든 규격을 **소비**한다. 아래 타입은 손대지 않는
 > **개정 (2026-08-25, TRIP-530) — 표와 단언을 코드에 맞춤**: 직전 개정의 "경량 6·상위 4" 단언은 그 시점에도
 > 자기 표와 어긋났고(표 기준 상위 5), 그 뒤 `EVENT_EXTRACTION`(TRIP-421)·`EDIT_TRANSLATION`(TRIP-315)이
 > 늘어 더 벌어졌다. **실측 정본 (2026-08-25)**:
-> - `domain/llm.py::LlmFeature` = **12종** (본 표와 일치, `EVENT_EXTRACTION` 행 추가로 해소)
-> - `llm_gateway/config.py::default_tier_map` = **12종 전량 매핑, 경량 6 · 상위 6**
+> - `domain/llm.py::LlmFeature` = **13종** (본 표와 일치, `EVENT_EXTRACTION` 행 추가로 해소)
+> - `llm_gateway/config.py::default_tier_map` = **13종 전량 매핑, 경량 6 · 상위 7**
 >   - 경량 6: `PREFERENCE_SCORING` `INTENT` `PARAPHRASE` `REASON_INTERPRETATION` `EDIT_TRANSLATION` `REFLECTION_NUDGE`
->   - 상위 6: `EXPLANATION` `ALTERNATIVE_SELECTION` `REFLECTION` `REFLECTION_TEMPLATE` `PLACE_EXTRACTION` `EVENT_EXTRACTION`
+>   - 상위 7: `EXPLANATION` `ALTERNATIVE_SELECTION` `REFLECTION` `REFLECTION_TEMPLATE` `PLACE_EXTRACTION` `EVENT_EXTRACTION`
 >
 > 재현: `grep -c 'LlmFeature\.' src/trippilot/llm_gateway/config.py` 및 `domain/llm.py::LlmFeature` 본문 대조.
 > **enum에 값을 늘릴 때 본 표·본 단언·`default_tier_map` 셋을 함께 고칠 것** — 이 셋이 어긋난 채로 두 번 흘렀다.
 
-> **개정 (2026-08-28, TRIP-595) — 위 단언 갱신**: `PHOTO_HIGHLIGHT` 추가에 따라 **상위 6**의 목록이 바뀐다.
+> **개정 (2026-08-28, TRIP-595) — 위 단언 갱신**: `PHOTO_HIGHLIGHT` 추가에 따라 **상위 7**의 목록이 바뀐다.
 > 종전 목록의 `REFLECTION`은 2026-08-25(TRIP-558)에 이미 제거됐는데 위 단언에는 남아 있었다.
 > - 경량 6: 무변
-> - **상위 6: `EXPLANATION` `ALTERNATIVE_SELECTION` `REFLECTION_TEMPLATE` `PHOTO_HIGHLIGHT` `PLACE_EXTRACTION` `EVENT_EXTRACTION`**
+> - **상위 7: `EXPLANATION` `ALTERNATIVE_SELECTION` `REFLECTION_TEMPLATE` `PHOTO_HIGHLIGHT` `PLACE_EXTRACTION` `EVENT_EXTRACTION`**
 >
-> **합계(12종·경량 6·상위 6)는 종전과 같다** — `REFLECTION` 제거와 `PHOTO_HIGHLIGHT` 추가가 상쇄됐기 때문이다.
+> **합계(13종·경량 6·상위 7)는 종전과 같다** — `REFLECTION` 제거와 `PHOTO_HIGHLIGHT` 추가가 상쇄됐기 때문이다.
 > 위 재현 명령은 개수만 세므로 **이번 표류를 잡지 못한다**(개수가 우연히 맞는다). 목록 대조가 필요하다:
 > `grep -oE 'LlmFeature\.[A-Z_]+: ModelTier\.HEAVY' src/trippilot/llm_gateway/config.py`.
 

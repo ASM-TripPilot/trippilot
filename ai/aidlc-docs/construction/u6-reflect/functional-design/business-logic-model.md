@@ -106,8 +106,9 @@ request.vision 있음 (VisionInput = 동의 증빙 없이는 타입상 생성 �
   ⓐ PHOTO_HIGHLIGHT 호출     사진 → 대표 N장 (출력 photo_id ⊆ 입력 집합 — 게이트 강제)
                               실패 → highlight_rule.py 메타 규칙 폴백(방문당 1장·시간 분산, 결정론) + FallbackEvent
   ⓑ 장면·캡션 생성            REFLECTION_TEMPLATE_VISION(이미지 파트 동봉, 미결 #6) — 시도 예산은 총 3회 공유(미결 #9)
+                              (#9 확정 2026-08-28: 템플릿 생성 호출만 3회 공유 — ⓐ 하이라이트 1회는 예산 밖, 최악 총 LLM 4회)
                               실패(타임아웃·비지원 어댑터·파싱 실패) → REFLECTION_TEMPLATE(텍스트, Phase 1 ③)로 강등
-                              + FallbackEvent(stage="vision", from="vision", to="meta_only") — 침묵 금지 (BR-U6R-10)
+                              + FallbackEvent(stage="vision", from_mode="vision_template", to_mode="text_template" — config 폴백 대장과 동일 쌍) — 침묵 금지 (BR-U6R-10)
   ⓒ 이후 랭킹·교체·조립·관측  Phase 1 ④~⑦ 과 동일 — 출력 스키마 동일 (드롭인)
 ```
 
