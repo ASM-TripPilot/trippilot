@@ -384,10 +384,24 @@ def test_vector_rag_local_without_package_fails_fast(monkeypatch) -> None:
 
 
 def test_vector_rag_unknown_provider_lists_local(monkeypatch) -> None:
-    """미지원 값 에러가 세 갈래(openai|titan|local)를 전부 안내한다."""
+    """미지원 값 에러가 네 갈래(openai|titan|local|http)를 전부 안내한다."""
     monkeypatch.setenv("TRIPPILOT_VECTOR_DB_URL", "postgresql://x:x@localhost:5433/x")
     monkeypatch.setenv("TRIPPILOT_EMBEDDING_PROVIDER", "voyage")
-    with pytest.raises(RuntimeError, match=r"openai\|titan\|local"):
+    with pytest.raises(RuntimeError, match=r"openai\|titan\|local\|http"):
+        main._vector_rag()
+
+
+def test_vector_rag_http_without_base_url_fails_fast(monkeypatch) -> None:
+    """provider 를 골라놓고 주소를 안 준 건 **설정 버그**다 (TRIP-517).
+
+    조용히 다른 provider 로 폴백하면 "HTTP 임베딩으로 테스트했다"가 거짓이 된다 —
+    `TRIPPILOT_LLM_PROVIDER=openai` 인데 키가 없을 때와 같은 판단(main.py 선례).
+    런타임 실패(상대가 안 뜸·모델 불일치)는 이것과 다르게 강등으로 간다.
+    """
+    monkeypatch.setenv("TRIPPILOT_VECTOR_DB_URL", "postgresql://x:x@localhost:5433/x")
+    monkeypatch.setenv("TRIPPILOT_EMBEDDING_PROVIDER", "http")
+    monkeypatch.delenv("TRIPPILOT_EMBEDDING_BASE_URL", raising=False)
+    with pytest.raises(RuntimeError, match="TRIPPILOT_EMBEDDING_BASE_URL"):
         main._vector_rag()
 
 

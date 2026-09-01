@@ -10,6 +10,9 @@
 - openai: OPENAI_API_KEY 필수 (+ OPENAI_BASE_URL 선택)
 - titan:  boto3 설치 + AWS 자격 필요 (bedrock-runtime, AWS_REGION)
 - local:  sentence-transformers 설치 필요 (기본 KURE-v1, TRIPPILOT_EMBEDDING_MODEL 로 변경)
+- http:   별도 임베딩 서비스 (TRIPPILOT_EMBEDDING_BASE_URL 필수, TRIP-517)
+          **서비스를 http 로 돌리면 적재도 http 로 해야 한다** — 안 그러면 적재와
+          질의가 다른 모델 인스턴스를 타고, 모델이 같아도 검증할 방법이 없다.
 
 전환 규칙(팀 결정 2026-08-22): 임베딩 모델 간 벡터 공간이 비호환이라 쿼리 단위 폴백은
 금지 — provider 를 바꾸면 이 스크립트로 **전량 재적재**한다(멱등 upsert라 안전).
@@ -70,7 +73,17 @@ def _embedding():
         model_name = os.environ.get("TRIPPILOT_EMBEDDING_MODEL") or DEFAULT_MODEL
         print(f"임베딩 모델: {model_name} (최초 실행은 내려받느라 오래 걸린다)")
         return SentenceTransformerEmbeddingAdapter(SentenceTransformer(model_name))
-    raise SystemExit(f"TRIPPILOT_EMBEDDING_PROVIDER 미지원 값: {provider!r} (openai|titan|local)")
+    if provider == "http":
+        # **main.py 와 같은 함수를 쓴다.** 여기서 복사하면 서비스는 HTTP 로, 적재는
+        # 로컬 모델로 임베딩하게 되고 두 벡터 공간이 조용히 섞인다 — 둘 다 1024
+        # 차원이라 DDL 도 어댑터 검증도 못 잡는다 (TRIP-517 조사에서 드러난 함정).
+        from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
+        from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
+
+        return http_embedding(SystemExit, lambda t: UrllibJsonClient(timeout_sec=t))
+    raise SystemExit(
+        f"TRIPPILOT_EMBEDDING_PROVIDER 미지원 값: {provider!r} (openai|titan|local|http)"
+    )
 
 
 def main(argv: list[str]) -> int:
