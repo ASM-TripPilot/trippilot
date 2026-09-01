@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import sys
 from pathlib import Path
 
@@ -34,6 +35,7 @@ from smoke_itinerary import (  # noqa: E402
     SelectionError,
     attach_leg_verification,
     build_leg_pairs,
+    entries_with_fallback,
     load_proposals,
     measure_legs,
     run_rehearsal,
@@ -588,3 +590,39 @@ def test_전부_선택_불가면_실패한다():
     with pytest.raises(SelectionError, match="전부 선택 불가"):
         select_rehearsal_batch(entries, "2026-08-21", count=2,
                                min_pois=3, max_pois=5)
+
+
+# ── ⑧ 일일 델타 0건 → 팀 공유본 폴백 (TRIP-642) ──────────────────
+
+
+def test_fallback_to_shared_file_when_daily_delta_is_empty(tmp_path):
+    """전국 수집 완주로 일일 산출물이 0건이면(정상 상태) 공유본으로 소리 내서 전환 —
+    수집이 안정될수록 리허설이 죽는 결함의 수습."""
+    shared = tmp_path / "collected_pois.json"
+    shared.write_text(json.dumps(_doc(list(_TWO_REGIONS))), encoding="utf-8")
+
+    entries, note = entries_with_fallback(_doc([]), shared)
+    assert len(entries) == len(_TWO_REGIONS)
+    assert note and "팀 공유본 폴백" in note and str(shared) in note
+
+
+def test_no_fallback_when_daily_output_is_usable(tmp_path):
+    """일일 산출물에 region 제안이 있으면 그대로 쓴다 — 공유본을 읽지도 않는다."""
+    shared = tmp_path / "no-such.json"  # 존재하지 않아도 접근 안 하므로 무해
+    entries, note = entries_with_fallback(_doc(list(_TWO_REGIONS)), shared)
+    assert len(entries) == len(_TWO_REGIONS) and note is None
+
+
+def test_fallback_unusable_keeps_original_and_explicit_fail_path(tmp_path):
+    """폴백까지 못 쓰면(부재·역시 0건) 원본을 돌려줘 기존 명시 FAIL 경로를 탄다 —
+    조용한 성공으로 위장하지 않는다."""
+    entries, note = entries_with_fallback(_doc([]), tmp_path / "missing.json")
+    assert entries == () and note is None
+
+    empty_shared = tmp_path / "empty.json"
+    empty_shared.write_text(json.dumps(_doc([])), encoding="utf-8")
+    entries2, note2 = entries_with_fallback(_doc([]), empty_shared)
+    assert entries2 == () and note2 is None
+
+    with pytest.raises(SelectionError):
+        select_rehearsal_pois(entries2, "2026-08-14")

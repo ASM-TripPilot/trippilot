@@ -24,6 +24,9 @@ tests/test_smoke_itinerary.py 가 fake 데이터로만 검증한다 (실 호출 
 
 환경변수:
     COLLECTED_POIS    필수 — 수집 제안 JSON 경로 (collect_pois.py 산출물)
+    COLLECTED_POIS_FALLBACK 선택 (TRIP-642) — 일일 산출물에 region 제안이 0건일 때
+                      쓸 팀 공유본 경로. 기본 "data/collected_pois.json" (워크플로
+                      작업 디렉토리 ai/ 기준 — 체크아웃에 이미 있어 워크플로 변경 불요)
     SMOKE_REGION      선택 — 시군구 강제 (예: "해운대구"). 설정 시 그 한 곳만.
     SMOKE_REGIONS     선택 — 실행당 지역 수 (기본 3). SMOKE_REGION 설정 시 무시.
     SMOKE_DATE        YYYY-MM-DD, 기본 오늘 KST 날짜 (CLI라 wall-clock 직접 호출 허용
@@ -590,6 +593,32 @@ def _check_baseline(results: list[dict], baseline: dict) -> tuple[list[str], lis
     return failures, warnings
 
 
+def entries_with_fallback(
+    doc: dict, fallback_path: Path | None
+) -> tuple[tuple[tuple[Poi, str | None], ...], str | None]:
+    """(entries, 폴백 안내문|None) — 일일 산출물이 못 쓰는 상태면 팀 공유본으로.
+
+    전국 수집이 **완주**되면 일일 델타가 0건이 되는 게 정상인데(TRIP-642 —
+    skipped_unchanged만 쌓이고 신규 제안 없음), 리허설이 일일 산출물에서만
+    고르면 수집이 안정될수록 리허설이 죽는다. region 있는 제안이 하나도 없으면
+    팀 공유본(수집 누적본)으로 소리 내서 전환한다 — 침묵 전환 금지.
+    폴백도 못 쓰면 원본 entries를 그대로 돌려줘 기존 명시 FAIL 경로를 탄다.
+    """
+    entries = load_proposals(doc)
+    if any(region for _, region in entries):
+        return entries, None
+    if fallback_path is None or not fallback_path.exists():
+        return entries, None
+    fallback_doc = json.loads(fallback_path.read_text(encoding="utf-8"))
+    fallback_entries = load_proposals(fallback_doc)
+    if not any(region for _, region in fallback_entries):
+        return entries, None
+    return fallback_entries, (
+        f"일일 산출물에 region 제안 0건 (수집 완주·무변경의 정상 상태) — "
+        f"팀 공유본 폴백: {fallback_path} ({len(fallback_entries)}건)"
+    )
+
+
 def _optional(name: str) -> str | None:
     """빈 문자열도 미설정으로 취급 — GH Actions는 비운 input을 ''로 주입한다."""
     return os.environ.get(name) or None
@@ -653,7 +682,11 @@ def main() -> int:
     output = _optional("REHEARSAL_OUTPUT") or "rehearsal_result.json"
 
     doc = json.loads(Path(pois_path).read_text(encoding="utf-8"))
-    entries = load_proposals(doc)
+    fallback_path = Path(
+        _optional("COLLECTED_POIS_FALLBACK") or "data/collected_pois.json")
+    entries, fallback_note = entries_with_fallback(doc, fallback_path)
+    if fallback_note:
+        print(f"[rehearsal] {fallback_note}")
     days = int(_optional("SMOKE_DAYS") or REHEARSAL_DAYS)
     print(f"[rehearsal] 수집 POI {len(entries)}건 로드 — 날짜 시드 {smoke_date_str} · {days}일 일정")
     forced = _optional("SMOKE_REGION")
