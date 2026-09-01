@@ -208,10 +208,17 @@ class HttpScheduleAgentAdapter(
     companion object {
         private val log = LoggerFactory.getLogger(HttpScheduleAgentAdapter::class.java)
 
-        private const val GENERATE_PATH = "/ai/v1/itinerary/generate"
-        private const val VALIDATE_PATH = "/ai/v1/itinerary/validate"
-        private const val REPAIR_PATH = "/ai/v1/itinerary/repair"
-        private const val EXPLANATIONS_PATH = "/ai/v1/itinerary/explanations"
+        internal const val GENERATE_PATH = "/ai/v1/itinerary/generate"
+        internal const val VALIDATE_PATH = "/ai/v1/itinerary/validate"
+        internal const val REPAIR_PATH = "/ai/v1/itinerary/repair"
+        internal const val EXPLANATIONS_PATH = "/ai/v1/itinerary/explanations"
+
+        /**
+         * **이 목록이 계약 게이트의 입력이다.** 손으로 관리하는 목록을 테스트가 따로 또 들고 있으면
+         * 둘이 갈라진다 — 실제로 그래서 explanations 가 게이트 밖에 있었다(2026-09-01). 경로를
+         * 하나 늘리면 여기에 넣게 되고, 그러면 게이트가 저절로 따라온다.
+         */
+        internal val CALLED_PATHS = listOf(GENERATE_PATH, VALIDATE_PATH, REPAIR_PATH, EXPLANATIONS_PATH)
 
         // 편집 재검증·보정은 사용자가 화면에서 기다리는 동작이라 생성(20s)보다 짧게 잡는다.
         private const val VALIDATE_DEADLINE_MS = 3_000L

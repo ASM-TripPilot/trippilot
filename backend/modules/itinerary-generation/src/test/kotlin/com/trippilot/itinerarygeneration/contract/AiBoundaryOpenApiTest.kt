@@ -1,11 +1,15 @@
 package com.trippilot.itinerarygeneration.contract
 
 import com.trippilot.itinerarygeneration.adapter.out.external.AiDay
+import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsRequest
+import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiFreshness
+import com.trippilot.itinerarygeneration.adapter.out.external.AiRequestMeta
 import com.trippilot.itinerarygeneration.adapter.out.external.AiScheduleResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSlot
 import com.trippilot.itinerarygeneration.adapter.out.external.AiUnplacedMustVisit
 import com.trippilot.itinerarygeneration.adapter.out.external.AiViolation
+import com.trippilot.itinerarygeneration.adapter.out.external.HttpScheduleAgentAdapter
 import com.trippilot.itinerarygeneration.adapter.out.external.ScheduleAgentConfiguration
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
@@ -67,13 +71,15 @@ class AiBoundaryOpenApiTest : StringSpec({
 
     // ───────────────────────── 경로 ─────────────────────────
 
-    "우리가 부르는 세 경로가 계약에 실재한다" {
+    /**
+     * **목록을 여기서 다시 쓰지 않는다.** 어댑터가 실제로 부르는 상수([HttpScheduleAgentAdapter.CALLED_PATHS])를
+     * 그대로 돌린다 — 손으로 관리하는 목록이 둘이면 갈라지고, 실제로 그렇게 `explanations` 가
+     * 오래도록 게이트 밖에 있었다(2026-09-01 실측). 어댑터가 부르는데 이름 게이트가 안 보면,
+     * 상대가 필드를 바꿔도 런타임에서야 안다.
+     */
+    "우리가 부르는 경로가 전부 계약에 실재한다" {
         val paths = requireNotNull(contract["paths"]).propertyNames()
-        listOf(
-            "/ai/v1/itinerary/generate",
-            "/ai/v1/itinerary/validate",
-            "/ai/v1/itinerary/repair",
-        ).forEach { paths shouldContain it }
+        HttpScheduleAgentAdapter.CALLED_PATHS.forEach { paths shouldContain it }
     }
 
     // ───────────────────────── 요청(우리가 보낸다) ─────────────────────────
@@ -98,6 +104,10 @@ class AiBoundaryOpenApiTest : StringSpec({
         wireKeys(sampleInput.fixedBlocks.single()) shouldContainExactly props("FixedBlockSchema")
         wireKeys(sampleInput.preferenceProfile) shouldContainExactly props("PreferenceProfileSchema")
         wireKeys(sampleInput.requestMeta) shouldContainExactly props("RequestMetaSchema")
+    }
+
+    "explanations 요청 키가 계약과 정확히 일치한다" {
+        wireKeys(sampleExplanationsRequest) shouldContainExactly props("ExplanationsRequest")
     }
 
     /**
@@ -129,6 +139,14 @@ class AiBoundaryOpenApiTest : StringSpec({
 
     "위반 키가 계약과 정확히 일치한다 — day_index·slot_index 수퍼셋 포함(PR #138)" {
         wireKeys(sampleViolation) shouldContainExactly props("ViolationSchema")
+    }
+
+    /**
+     * 응답도 본다. 상대가 필드를 개명하면 우리 기본값(빈 맵·false)이 조용히 이긴다 —
+     * 예외도 로그도 없이 "근거가 없는 일정"이 된다.
+     */
+    "explanations 응답 키가 계약과 정확히 일치한다" {
+        wireKeys(sampleExplanationsResponse) shouldContainExactly props("ExplanationsResponse")
     }
 
     /**
@@ -194,5 +212,15 @@ private val samplePayload = AiScheduleResponse(
     freshness = AiFreshness("kakao", Instant.parse("2026-08-01T00:00:00Z"), cacheHit = true, ttlSec = 600, stale = false),
     unplacedMustVisits = listOf(AiUnplacedMustVisit(UUID.randomUUID().toString(), "NO_FEASIBLE_SLOT")),
 )
+
+private val sampleRequestMeta =
+    AiRequestMeta(UUID.randomUUID().toString(), Instant.parse("2026-08-01T00:00:00Z"), 20_000L)
+
+private val sampleExplanationsRequest =
+    AiExplanationsRequest(UUID.randomUUID().toString(), samplePayload, sampleRequestMeta)
+
+/** 모든 필드를 채운다 — 비우면 그 키가 직렬화에서 빠져 비교가 헐거워진다. */
+private val sampleExplanationsResponse =
+    AiExplanationsResponse(mapOf("2026-08-01#poi" to "근거"), isFallback = true, reason = "LLM_TIMEOUT")
 
 private val sampleViolation = AiViolation("HC1", slotRef = "2026-08-01#poi", detail = "영업시간 밖", dayIndex = 0, slotIndex = 1)
