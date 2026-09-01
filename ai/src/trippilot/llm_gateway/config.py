@@ -36,10 +36,10 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             LlmFeature.REFLECTION_TEMPLATE: ModelTier.HEAVY,
             # 사진 대표 선별 — 이미지 판독이 필요한 상위 과업이라 HEAVY (TRIP-595).
             # **티어는 vision 가용성을 보장하지 않는다**: 이미지 수용 여부는 어댑터와
-            # 모델이 정하고(anthropic 어댑터는 무조건 미지원, openai는 responses 표면만),
-            # 실배선은 두 티어에 같은 모델을 넣기도 한다(api/wiring.py). 따라서 vision
-            # 모델 지정은 `feature_models` 오버라이드(TRIP-513) 몫이고, 그게 없으면
-            # 이 feature는 LlmUnsupportedError → 메타 규칙 폴백으로만 돈다.
+            # 모델이 정한다 — anthropic·openai(responses 표면) 어댑터 모두 이미지 변환
+            # 구현(2026-09-01, 팀 결정: vision 기능은 Claude 배정). chat.completions
+            # 경로만 미지원. vision 모델 지정은 `feature_models` 오버라이드(TRIP-513)
+            # 몫이고, 미지원 조합이면 LlmUnsupportedError → 폴백으로 강등된다.
             # 프로바이더·모델 선정은 TRIP-515 런북 소관 (BR-U6R-13: 실체는 설정값).
             LlmFeature.PHOTO_HIGHLIGHT: ModelTier.HEAVY,
             # vision 장면·캡션 생성 — 텍스트 템플릿과 같은 출력 계약, 모델만 분리(미결 #6)

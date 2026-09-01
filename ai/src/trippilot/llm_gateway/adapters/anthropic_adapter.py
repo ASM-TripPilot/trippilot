@@ -10,13 +10,37 @@ SDK 타임아웃은 LlmTimeoutError로 변환, 그 외 예외는 그대로 —
 
 from __future__ import annotations
 
+import base64
 import time
 
 import anthropic
 
-from trippilot.ports.llm_port import (
-    LlmRequest, LlmResponse, LlmTimeoutError, LlmUnsupportedError,
-)
+from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmTimeoutError
+
+
+def _content(request: LlmRequest):
+    """messages content 조립 — 이미지 없으면 종전과 **같은 문자열**을 준다
+    (기존 텍스트 호출의 와이어 모양 불변 — openai 어댑터 _responses_input과 동형).
+
+    이미지가 있으면 블록 배열: image 블록(base64 source)들 뒤에 text 블록 —
+    Anthropic 권장 순서(이미지 먼저)를 따른다. 사용자 결정(2026-09-01)으로
+    vision 기능을 Claude에 배정하기 위해 미지원 명시 실패를 실제 변환으로 대체.
+    """
+    if not request.images:
+        return request.prompt
+    blocks: list = [
+        {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": image.media_type,
+                "data": base64.b64encode(image.data).decode(),
+            },
+        }
+        for image in request.images
+    ]
+    blocks.append({"type": "text", "text": request.prompt})
+    return blocks
 
 
 class AnthropicAdapter:
@@ -26,11 +50,6 @@ class AnthropicAdapter:
         self._client = client
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
-        if request.images:
-            # 이미지 변환 미구현 — 조용히 떨구지 않고 명시 실패시킨다 (TRIP-595).
-            # 구현 시 messages content에 image 블록(base64 source)을 넣으면 된다.
-            raise LlmUnsupportedError(
-                "Anthropic 어댑터는 아직 이미지 입력을 지원하지 않는다")
         started = time.monotonic()
         try:
             resp = self._client.messages.create(
@@ -38,7 +57,7 @@ class AnthropicAdapter:
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 timeout=request.timeout_sec,
-                messages=[{"role": "user", "content": request.prompt}],
+                messages=[{"role": "user", "content": _content(request)}],
             )
         except anthropic.APITimeoutError as e:
             raise LlmTimeoutError(f"timeout > {request.timeout_sec}s: {e}") from e

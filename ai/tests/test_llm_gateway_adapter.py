@@ -102,3 +102,34 @@ def test_other_api_errors_propagate_for_gateway_to_convert() -> None:
     # LlmTimeoutError로 둔갑시키지 않고 그대로 — 게이트웨이가 llm_error 폴백으로 수렴
     with pytest.raises(anthropic.APIConnectionError):
         AnthropicAdapter(BrokenClient()).invoke(_REQUEST)
+
+
+# ── 이미지 입력 (2026-09-01 — vision 기능 Claude 배정에 따른 변환 구현) ─────
+
+
+def test_no_images_keeps_plain_string_content() -> None:
+    """이미지 없는 기존 호출의 와이어 모양 불변 — content는 종전처럼 문자열."""
+    client = RecordingClient()
+    AnthropicAdapter(client).invoke(_REQUEST)
+    assert client.kwargs["messages"][0]["content"] == "점수를 매겨라"
+
+
+def test_images_become_base64_blocks_before_text() -> None:
+    """이미지는 base64 source 블록으로, 텍스트 앞에(권장 순서). 바이트 왕복 무손실."""
+    import base64
+    from dataclasses import replace as dc_replace
+
+    from trippilot.ports.llm_port import LlmImagePart
+
+    data = b"\x89PNG fake-bytes"
+    part = LlmImagePart(media_type="image/png", data=data)
+    client = RecordingClient()
+    AnthropicAdapter(client).invoke(dc_replace(_REQUEST, images=(part, part)))
+
+    content = client.kwargs["messages"][0]["content"]
+    assert [b["type"] for b in content] == ["image", "image", "text"]
+    for block in content[:2]:
+        assert block["source"]["type"] == "base64"
+        assert block["source"]["media_type"] == "image/png"
+        assert base64.b64decode(block["source"]["data"]) == data
+    assert content[2] == {"type": "text", "text": "점수를 매겨라"}
