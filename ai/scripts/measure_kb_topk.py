@@ -55,7 +55,8 @@ def _embedding():
     )
 
     model = os.environ.get("TRIPPILOT_EMBEDDING_MODEL") or "nlpai-lab/KURE-v1"
-    return SentenceTransformerEmbeddingAdapter(SentenceTransformer(model))
+    # 적재와 같은 collection 을 봐야 측정이 성립한다 — model_id 필수 (TRIP-519 ①).
+    return SentenceTransformerEmbeddingAdapter(SentenceTransformer(model), model_id=model)
 
 
 def main() -> None:

@@ -91,7 +91,11 @@ def _embedding():
 
         model_name = os.environ.get("TRIPPILOT_EMBEDDING_MODEL") or DEFAULT_MODEL
         print(f"임베딩 모델: {model_name} (최초 실행은 내려받느라 오래 걸린다)")
-        return SentenceTransformerEmbeddingAdapter(SentenceTransformer(model_name))
+        # `model_id` 없이 만들면 어댑터 기본값(KURE-v1)을 쓴다 — 다른 모델을
+        # 지정했을 때 엉뚱한 collection 을 보게 된다 (TRIP-519 ①).
+        return SentenceTransformerEmbeddingAdapter(
+            SentenceTransformer(model_name), model_id=model_name
+        )
     if provider == "http":
         # **main.py 와 같은 함수를 쓴다.** 여기서 복사하면 서비스는 HTTP 로, 적재는
         # 로컬 모델로 임베딩하게 되고 두 벡터 공간이 조용히 섞인다 — 둘 다 1024

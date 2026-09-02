@@ -121,9 +121,36 @@ class HashEmbedding:
 
 
 def build_embedding():
-    """EMBEDDING_MODEL 있으면 로컬 실모델, 없으면 해시. 모델 로드는 여기(조립 진입점)만."""
+    """임베딩 조립. **프로덕션과 같은 환경변수를 먼저 본다** (TRIP-519 ②).
+
+    우선순위:
+      1. `TRIPPILOT_EMBEDDING_PROVIDER=http` → 별도 임베딩 서비스 (프로덕션 경로)
+      2. `EMBEDDING_MODEL` → 로컬 실모델 (호스트에서 모델을 직접 로드)
+      3. 둘 다 없으면 → 해시 (의미 유사도 없음, 배선 점검용)
+
+    **1번이 이 함수의 존재 이유다.** 종전에는 2·3 뿐이라 리허설이 프로덕션 경로를
+    영영 못 탔다 — 그래서 컨테이너에서 KB 검색 3종이 임베딩 404 로 죽어 있는 걸
+    몇 주 못 봤다(리허설은 로컬 모델로 잘 돌았으니까). 같은 종류의 사각이
+    `SMOKE_TIMEOUT_SEC` 30초 vs 운영 2.5초 에서도 났다(anti-patterns 등재).
+
+    **호스트에서 도는 점을 주의**: 컨테이너 주소(`http://ai-embedding:8100`)는 호스트에서
+    안 풀린다. 그 명령에만 `TRIPPILOT_EMBEDDING_BASE_URL=http://localhost:8100` 을 넘긴다.
+    """
+    provider = os.environ.get("TRIPPILOT_EMBEDDING_PROVIDER")
+    if provider == "http":
+        from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
+        from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
+
+        # main.py·load_kb.py 와 **같은 조립 함수**다. 여기서 따로 만들면 리허설만
+        # 다른 규칙으로 붙어 이 변경의 의미가 없어진다.
+        embedding = http_embedding(SystemExit, lambda t: UrllibJsonClient(timeout_sec=t))
+        print(f"임베딩: http → {os.environ.get('TRIPPILOT_EMBEDDING_BASE_URL')} "
+              f"(model={embedding.model_id}) — 프로덕션과 같은 경로")
+        return embedding
+
     name = os.environ.get("EMBEDDING_MODEL")
     if not name:
+        print("임베딩: 해시 (의미 유사도 없음 — 검색 품질은 검증되지 않는다)")
         return HashEmbedding()
     try:
         from sentence_transformers import SentenceTransformer
@@ -131,7 +158,8 @@ def build_embedding():
         raise SystemExit(
             "sentence-transformers 미설치 — `uv pip install sentence-transformers`.\n"
             "  프로젝트 의존성이 아니라서 `uv sync` 하면 다시 지워진다 (boto3 선례).\n"
-            "  EMBEDDING_MODEL 을 비우면 해시 임베딩으로 계속 돌아간다."
+            "  EMBEDDING_MODEL 을 비우면 해시 임베딩으로 계속 돌아간다.\n"
+            "  또는 TRIPPILOT_EMBEDDING_PROVIDER=http 로 임베딩 컨테이너를 쓴다."
         ) from e
 
     from trippilot.llm_gateway.adapters.sentence_transformer_embedding import (
@@ -140,8 +168,12 @@ def build_embedding():
     )
 
     model_name = DEFAULT_MODEL if name == "1" else name
-    print(f"임베딩 모델 로드: {model_name} (최초 실행은 내려받느라 오래 걸린다)")
-    return SentenceTransformerEmbeddingAdapter(SentenceTransformer(model_name))
+    print(f"임베딩: 로컬 {model_name} (최초 실행은 내려받느라 오래 걸린다)")
+    # `model_id` 를 넘기는 게 중요하다 — 안 넘기면 어댑터 기본값(KURE-v1)을 쓰고,
+    # 다른 모델을 지정했을 때 **엉뚱한 collection 에 적재·질의**한다 (TRIP-519 ①).
+    return SentenceTransformerEmbeddingAdapter(
+        SentenceTransformer(model_name), model_id=model_name
+    )
 
 
 class CannedLlm:
