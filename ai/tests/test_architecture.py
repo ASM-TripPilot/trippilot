@@ -233,3 +233,36 @@ def test_llm_gateway_does_not_import_assembly_engine_or_poi_curation() -> None:
         if bad:
             offenders[str(py.relative_to(_SRC))] = bad
     assert not offenders, f"llm_gateway가 assembly_engine/poi_curation을 import함(경계 위반): {offenders}"
+
+
+def test_kb_collection_name_always_goes_through_collection_for() -> None:
+    """collection 이름은 `collection_for` 만 만든다 — 원시 `KB_COLLECTIONS[...]` 금지.
+
+    실제 사고: `smoke_planb.py` 가 적재는 `collection_for`(모델명이 붙은 이름)로,
+    정리는 `KB_COLLECTIONS[...]`(모델명 없는 옛 이름)로 해서 **삭제가 조용한 no-op**
+    이 됐다. 스모크 문서가 실서비스가 질의하는 collection 에 그대로 쌓였고,
+    실패하지 않으니 아무도 몰랐다 (TRIP-519 후속).
+
+    `KB_COLLECTIONS` 는 배정표이지 collection 이름이 아니다. 이름을 만드는 지점은
+    `collection_for` 한 곳뿐이어야 모델 각인이 새는 경로가 생기지 않는다.
+    """
+    allowed = {"kb_retrieval.py"}  # collection_for 를 정의하는 곳
+    scanned = list(_SRC.rglob("*.py")) + list(
+        (_SRC.parent.parent / "scripts").rglob("*.py")
+    )
+    offenders = []
+    for py in scanned:
+        if py.name in allowed:
+            continue
+        tree = ast.parse(py.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Subscript)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "KB_COLLECTIONS"
+            ):
+                offenders.append(f"{py.name}:{node.lineno}")
+    assert not offenders, (
+        f"collection 이름을 KB_COLLECTIONS 로 직접 만든 곳: {offenders} "
+        "— collection_for(kb, model_id) 를 써라"
+    )
