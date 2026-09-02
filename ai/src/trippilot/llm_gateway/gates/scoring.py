@@ -8,7 +8,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from trippilot.llm_gateway.gates.base import GateOutcome, empty_result_error
+from trippilot.llm_gateway.gates.base import (
+    GateOutcome,
+    _strip_code_fence,
+    empty_result_error,
+)
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi
 from trippilot.domain.observability import GateDropEvent
@@ -35,7 +39,8 @@ def _parse_scores(raw_text: str) -> tuple[RawScore, ...]:
     무시한다(관용). score의 0.0~1.0 클램프는 승격 시(§3) — 파서는 형태만 본다.
     """
     try:
-        data = json.loads(raw_text)
+        # Claude 계열이 ```json 펜스로 감싸 보낸다(2026-09-02 실측) — 공용 제거 후 전체 검증
+        data = json.loads(_strip_code_fence(raw_text))
     except json.JSONDecodeError as e:
         raise ValueError(f"JSON 아님: {e.msg}") from e
     if not isinstance(data, dict) or not isinstance(data.get("scores"), list):

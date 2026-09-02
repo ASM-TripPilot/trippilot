@@ -67,7 +67,10 @@ class IntentRouterConfig:
     """판정 파라미터 (intent-matching-design §5 초기값 — 하드코딩 금지, 평가셋으로 튜닝)."""
 
     top_k: int = 5  # k
-    t_high: float = 0.88  # 1차 즉시 확정 임계
+    # 1차 즉시 확정 임계. 0.88 → 0.82 (2026-09-02, 라벨 발화 30건 실측 — KURE-v1 기준
+    # top1 ≥ 0.80 인 in-scope 발화는 전건 정답, 0.82 전환으로 LLM 호출 -30%·정확도 손실 0.
+    # 관측된 최고점 오분류(범위 밖 발화가 뱅크 경계 문장에 0.783)와 여유 0.037 — 뱅크 검수 전 하한.
+    t_high: float = 0.82
     t_mid: float = 0.75  # 2차 진입 하한
     n_paraphrase: int = 3  # 유사 질문 생성 수
     vote_ratio: float = 0.60  # 가중 투표 확정 임계

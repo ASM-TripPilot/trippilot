@@ -145,6 +145,17 @@ def test_parse_error_over_valid_pool(pool: CandidatePool) -> None:
 
 
 @given(candidate_pools().filter(lambda p: bool(p.poi_ids)))
+def test_fenced_json_is_unwrapped_not_parse_error(pool: CandidatePool) -> None:
+    """Claude 계열 실측 — 응답이 ```json 펜스로 온다. 공용 `_strip_code_fence` 경유 검증
+    (IntentGate 와 같은 우회 버그, 2026-09-02). 포장 제거 뒤 내용은 여전히 전체 검증된다."""
+    poi_id = sorted(pool.poi_ids, key=str)[0]
+    raw = "```json\n" + _payload([(str(poi_id), 0.5)]) + "\n```"
+    out = _apply(raw, pool)
+    assert out.error is None
+    assert [str(s.poi_id) for s in out.value] == [str(poi_id)]
+
+
+@given(candidate_pools().filter(lambda p: bool(p.poi_ids)))
 def test_stray_reason_is_ignored_not_error(pool: CandidatePool) -> None:
     """TRIP-374: reason은 계약에서 제거 — 구모델·전환기 응답에 섞여 와도 무시.
 
