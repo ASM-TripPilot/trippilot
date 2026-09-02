@@ -4,7 +4,8 @@
 동형이다 — 같은 패턴을 쓰면 소비 측이 두 번 배우지 않는다.
 
 **collection 분리**: KB마다 전용 collection을 쓰고, 그 배정은 `KB_COLLECTIONS` 한 곳에서만
-정해진다. `persona`는 agent-foundation FD가 지정한 초기 3종 중 하나를 그대로 재사용하고
+정해진다. 실제 이름에는 **임베딩 모델이 붙는다**(`collection_for`) — 모델이 바뀌면 다른
+collection 이 되어 옛 색인을 새 모델로 질의하는 사고가 0건으로 드러난다 (TRIP-519). `persona`는 agent-foundation FD가 지정한 초기 3종 중 하나를 그대로 재사용하고
 (`intent_bank`·`persona`·`poi_desc`), KB-1·KB-3은 정본에 collection 이름이 없어
 `planb_` 접두로 신설한다.
 
@@ -62,8 +63,34 @@ class KbLoadError(ValueError):
     """KB seed 파일 구조 위반 — question_bank.BankLoadError와 동형(데이터 버그, 폴백 아님)."""
 
 
-def collection_for(kb: KbKind) -> str:
-    return KB_COLLECTIONS[kb]
+def model_slug(model_id: str) -> str:
+    """모델 식별자 → collection 이름에 쓸 수 있는 조각.
+
+    이름을 **버리지 않고** 안전한 문자로만 바꾼다 — 해시로 줄이면 DB 를 열어 봤을 때
+    어느 모델로 색인했는지 알 수 없다. `nlpai-lab/KURE-v1` → `nlpai_lab_kure_v1`.
+    """
+    slug = "".join(c if c.isalnum() else "_" for c in model_id.lower())
+    while "__" in slug:  # 연속 구분자는 하나로 — 서로 다른 이름이 같은 슬러그가 되지 않게
+        slug = slug.replace("__", "_")
+    return slug.strip("_")
+
+
+def collection_for(kb: KbKind, model_id: str) -> str:
+    """KB × 임베딩 모델 → collection 이름.
+
+    **모델을 이름에 넣는 것이 이 함수의 요점이다** (TRIP-519). 벡터 공간은 모델마다
+    다르므로 다른 모델로 색인한 벡터를 섞어 검색하면 순위가 조용히 무의미해진다.
+    차원이 같으면(우리는 전부 1024) DDL 도 어댑터의 BR-AF-09 검증도 이걸 못 잡는다.
+
+    어댑터의 런타임 대조(`HttpEmbeddingAdapter` 가 서비스 응답의 model 을 확인)는
+    **질의 쪽만** 본다 — 적재를 B 로, 질의를 A 로 했는데 양쪽이 각자 정합이면 통과한다.
+    collection 을 갈라 두면 그 경우 옛 collection 질의가 **0건**으로 떨어져 시끄럽게
+    드러난다. 둘은 보완 관계다.
+
+    모델을 바꾸면 새 collection 이 비어 있으므로 **재적재가 강제된다** — 팀 결정
+    (2026-08-22 "provider 를 바꾸면 전량 재적재")이 여기서 구조로 지켜진다.
+    """
+    return f"{KB_COLLECTIONS[kb]}__{model_slug(model_id)}"
 
 
 def load_kb_documents(data: object) -> tuple[KbDocument, ...]:
@@ -142,7 +169,9 @@ def index_documents(
         seen.add(key)
         if len(vector) != embedding.dim:
             raise KbIndexError(f"{doc.doc_id}: 임베딩 차원 {len(vector)} != {embedding.dim}")
-        store.upsert(collection_for(doc.kb), doc.doc_id, vector, doc.payload())
+        store.upsert(
+            collection_for(doc.kb, embedding.model_id), doc.doc_id, vector, doc.payload()
+        )
     return len(documents)
 
 
@@ -164,7 +193,7 @@ def retrieve(
     if top_k <= 0 or not query.strip():
         return ()
     vector = embedding.embed(query)
-    raw_hits = store.search(collection_for(kb), vector, top_k)
+    raw_hits = store.search(collection_for(kb, embedding.model_id), vector, top_k)
     hits: list[KbHit] = []
     for hit in raw_hits:
         payload = hit.payload if isinstance(hit.payload, Mapping) else {}

@@ -1250,6 +1250,9 @@ class UnwiredEmbedding:
     """
 
     dim = 1024  # AI-D06
+    # 어차피 embed 가 즉시 터지므로 collection 이름은 안 쓰이지만, Protocol 을
+    # 만족시켜야 타입이 맞는다. "미배선"임이 이름에도 드러나게 둔다.
+    model_id = "unwired"
 
     def embed(self, text: str) -> tuple[float, ...]:
         raise RuntimeError("실 임베딩 미배선 — KB 검색 생략(빈 컨텍스트 강등)")

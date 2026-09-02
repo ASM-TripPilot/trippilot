@@ -20,6 +20,8 @@ from collections.abc import Sequence
 class FakeEmbedding:
     """EmbeddingPort Protocol 만족. 같은 텍스트 → 같은 벡터 (결정론)."""
 
+    model_id = "fake-hash"  # collection 이름에 들어간다 — 실모델과 절대 안 섞이게
+
     def __init__(self, dim: int = 1024) -> None:
         self.dim = dim
 

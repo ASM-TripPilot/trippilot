@@ -21,6 +21,7 @@ class OpenAiEmbeddingAdapter:
     def __init__(self, client, model: str = _DEFAULT_MODEL, dim: int = 1024) -> None:
         self._client = client
         self._model = model
+        self.model_id = model  # collection 이름에 들어간다 (TRIP-519)
         self.dim = dim
 
     def embed(self, text: str) -> tuple[float, ...]:

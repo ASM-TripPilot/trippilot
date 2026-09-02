@@ -23,6 +23,7 @@ from hypothesis import strategies as st
 
 from trippilot.agents.planb.kb_retrieval import (
     KB_COLLECTIONS,
+    model_slug,
     KbIndexError,
     collection_for,
     index_documents,
@@ -72,6 +73,7 @@ class _ScriptedEmbedding:
     """각도 → 2차원 단위벡터. 코사인 = 두 각도 차의 cos — 순위를 정확히 조준한다."""
 
     dim = 2
+    model_id = "scripted-angles"  # 실모델과 collection 이 갈리게
     _FAR = 3.0
 
     def __init__(self, angles: dict[str, float]) -> None:
@@ -205,10 +207,63 @@ def test_kb_document_rejects_empty_id_and_text() -> None:
 
 
 def test_kb_collections_cover_three_kinds_and_are_distinct() -> None:
-    """KB 3종 ↔ collection 1:1. `persona`는 FD 지정 초기 collection을 재사용한다."""
+    """KB 3종 ↔ 기본 이름 1:1. `persona`는 FD 지정 초기 collection을 재사용한다."""
     assert set(KB_COLLECTIONS) == set(KbKind)
     assert len(set(KB_COLLECTIONS.values())) == 3
-    assert collection_for(KbKind.PERSONA) == "persona"
+    assert collection_for(KbKind.PERSONA, "m").startswith("persona__")
+
+
+# ── 모델별 collection 분리 (TRIP-519) ───────────────────────────────────
+#
+# 벡터 공간은 모델마다 다르다. 다른 모델로 색인한 벡터를 섞어 검색하면 순위가
+# **조용히** 무의미해지는데, 차원이 같으면(우리는 전부 1024) DDL 도 어댑터의
+# BR-AF-09 검증도 이걸 못 잡는다. collection 을 갈라 그 사고를 0건으로 드러낸다.
+
+
+def test_different_models_get_different_collections() -> None:
+    a = collection_for(KbKind.SITUATION, "nlpai-lab/KURE-v1")
+    b = collection_for(KbKind.SITUATION, "intfloat/multilingual-e5-large")
+    assert a != b
+    assert a == "planb_situation__nlpai_lab_kure_v1"  # DB 를 열어 봤을 때 읽히는 이름
+
+
+def test_same_model_is_stable() -> None:
+    """이름이 흔들리면 재기동마다 새 collection 이 생겨 색인을 잃는다."""
+    assert collection_for(KbKind.SITUATION, "nlpai-lab/KURE-v1") == collection_for(
+        KbKind.SITUATION, "nlpai-lab/KURE-v1"
+    )
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [("a-b", "a_b"), ("a/b", "a.b"), ("A-B", "a_b")],
+)
+def test_slug_collapses_separators_the_same_way(left: str, right: str) -> None:
+    """구분자만 다른 이름은 같은 collection 이 된다 — 같은 모델의 표기 차이일 뿐이다.
+
+    서로 **다른 모델**이 같은 슬러그가 되는 건 이름 자체가 다르므로 일어나지 않는다.
+    """
+    assert model_slug(left) == model_slug(right)
+
+
+def test_slug_keeps_the_name_readable() -> None:
+    """해시로 줄이지 않는다 — DB 를 열어 봤을 때 어느 모델인지 알아야 한다."""
+    assert model_slug("nlpai-lab/KURE-v1") == "nlpai_lab_kure_v1"
+
+
+def test_index_and_retrieve_agree_on_collection() -> None:
+    """적재와 질의가 같은 모델이면 붙고, 다르면 **0건**이다 (엉터리 결과가 아니라).
+
+    이게 이 기구의 전부다. 종전에는 두 벡터 공간이 섞여도 순위만 조용히 망가졌다.
+    """
+    store = InMemoryVectorStore()
+    indexed = FakeEmbedding(dim=_SMALL)
+    index_documents([_doc(KbKind.SITUATION, "d1", "우천 실내")], indexed, store)
+    assert len(retrieve_situation("우천 실내", indexed, store)) == 1
+
+    other = FakeEmbedding(dim=_SMALL)
+    other.model_id = "some-other-model"
+    assert retrieve_situation("우천 실내", other, store) == ()
 
 
 # ── 적재 ────────────────────────────────────────────────────────────────
@@ -306,7 +361,7 @@ def test_retrieve_drops_payload_from_another_kb() -> None:
     store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
     vector = emb.embed("오염")
     store.upsert(
-        collection_for(KbKind.PERSONA),
+        collection_for(KbKind.PERSONA, emb.model_id),
         "bad",
         vector,
         {"kb": KbKind.SCHEDULE.value, "text": "오염", "poi_ref": "poi-x", "metadata": {}},

@@ -26,10 +26,16 @@ DEFAULT_MODEL = "nlpai-lab/KURE-v1"
 
 
 class SentenceTransformerEmbeddingAdapter:
-    """EmbeddingPort Protocol 만족. `model`은 sentence_transformers.SentenceTransformer 호환."""
+    """EmbeddingPort Protocol 만족. `model`은 sentence_transformers.SentenceTransformer 호환.
 
-    def __init__(self, model, dim: int = 1024) -> None:
+    `model_id` 는 **조립하는 쪽이 넘긴다** — 로드된 객체에서 모델 이름을 되찾는
+    안정된 방법이 없고(내부 속성은 라이브러리 버전에 따라 바뀐다), 이 값이
+    collection 이름에 들어가므로 추측으로 채우면 안 된다(TRIP-519).
+    """
+
+    def __init__(self, model, dim: int = 1024, model_id: str = DEFAULT_MODEL) -> None:
         self._model = model
+        self.model_id = model_id
         self.dim = dim
 
     def embed(self, text: str) -> tuple[float, ...]:

@@ -23,6 +23,7 @@ class TitanEmbeddingAdapter:
     def __init__(self, client, model_id: str = _DEFAULT_MODEL_ID, dim: int = 1024) -> None:
         self._client = client
         self._model_id = model_id
+        self.model_id = model_id  # collection 이름에 들어간다 (TRIP-519)
         self.dim = dim
 
     def embed(self, text: str) -> tuple[float, ...]:

@@ -1,4 +1,4 @@
-"""KB seed → 실 벡터 스토어 적재 (TRIP-427) — CI 밖 수동 실행 전용 (D37).
+r"""KB seed → 실 벡터 스토어 적재 (TRIP-427) — CI 밖 수동 실행 전용 (D37).
 
 실행:
     docker compose --profile full up -d ai-vectordb
@@ -16,6 +16,25 @@
 
 전환 규칙(팀 결정 2026-08-22): 임베딩 모델 간 벡터 공간이 비호환이라 쿼리 단위 폴백은
 금지 — provider 를 바꾸면 이 스크립트로 **전량 재적재**한다(멱등 upsert라 안전).
+
+**이 규칙은 이제 구조로 강제된다** (TRIP-519): collection 이름에 모델이 들어간다
+(`planb_situation__nlpai_lab_kure_v1`). 모델을 바꾸면 새 collection 이 비어 있어
+재적재를 안 하면 검색이 **0건**으로 떨어진다 — 옛 벡터를 새 모델로 뒤져 엉터리
+순위를 내는 일이 원천적으로 안 생긴다.
+
+**기존 색인 이전** (모델 없는 옛 이름 → 새 이름). 둘 중 하나를 쓴다:
+
+  1) 그냥 다시 적재한다 (권장 — 24건 규모라 몇 초다)
+       uv run python scripts/load_kb.py
+     그리고 옛 collection 을 지운다:
+       DELETE FROM kb_vectors WHERE collection NOT LIKE '%\_\_%';
+
+  2) 이름만 바꾼다 (재임베딩 없이. **적재에 쓴 모델을 확실히 알 때만**)
+       UPDATE kb_vectors SET collection = collection || '__nlpai_lab_kure_v1'
+        WHERE collection IN ('planb_situation', 'planb_schedule', 'persona');
+
+  2)는 "그 색인이 정말 그 모델로 만들어졌나"를 사람이 보증하는 것이다 — 확신이
+  없으면 1)을 쓴다. 그 불확실성이 이 변경을 하게 된 이유다.
 
 FakeEmbedding 적재는 지원하지 않는다 — 해시 벡터는 의미 유사도가 없어서
 "적재는 됐는데 검색이 엉터리"인 오염 상태를 만든다 (침묵 실패 금지).

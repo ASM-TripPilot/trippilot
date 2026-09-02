@@ -254,6 +254,7 @@ _ANGLES = {"애매한 질문": 0.32, "생소한 질문": 2.50, "날씨 변형A":
 
 class _ScriptedEmbedding:
     dim = 2
+    model_id = "scripted-angles"  # 실모델과 collection 이 갈리게
 
     def embed(self, text: str) -> tuple[float, ...]:
         theta = _ANGLES.get(text, 2.5)

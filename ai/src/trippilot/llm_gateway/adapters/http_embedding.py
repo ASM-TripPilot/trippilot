@@ -94,6 +94,7 @@ class HttpEmbeddingAdapter:
         self._http = http
         self._base = base_url.rstrip("/")
         self._model = model
+        self.model_id = model  # collection 이름에 들어간다 (TRIP-519)
         self.dim = dim
 
     def embed(self, text: str) -> tuple[float, ...]:
