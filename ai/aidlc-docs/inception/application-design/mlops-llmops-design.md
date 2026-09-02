@@ -53,7 +53,7 @@
 | 상관관계 | `trace_id` 전 구간 전파 (orchestrator-delegation-design.md §7) — 사용자 요청 1건 = LLM 호출·어셈블리 실행·에이전트 위임 전체 트리 복원 가능 |
 | LLM 호출 로그 | {trace_id, feature, prompt_version, model_id, tokens_in/out, latency, is_fallback, 파싱 성공 여부} — **전량** |
 | 본문 로깅 | 프롬프트·응답 본문은 개인정보 마스킹 후 **샘플링 저장** (디버깅·평가셋 채굴용). 위치·이름은 백엔드 개인정보 정책(append-only 로그 체계)과 정렬 — 보존 기간 별도 합의 필요 |
-| 솔버 로그 | {trace_id, solve_mode, or_tools_status, HC 위반·수리 내역, elapsed} — 하이브리드 체인의 어느 층에서 해결됐는지 추적. **정정 (2026-08-25)**: `is_bedrock` 필드는 코드에 없고 필요도 없다 — `SolveMode`(`OR_TOOLS`·`LLM`·`RULE_FALLBACK`·`MINIMAL`, `domain/itinerary.py`)가 층을 이미 식별한다 |
+| 어셈블리 로그 | {trace_id, solve_mode, or_tools_status, HC 위반·수리 내역, elapsed} — 하이브리드 체인의 어느 층에서 해결됐는지 추적. **정정 (2026-08-25)**: `is_bedrock` 필드는 코드에 없고 필요도 없다 — `SolveMode`(`OR_TOOLS`·`LLM`·`RULE_FALLBACK`·`MINIMAL`, `domain/itinerary.py`)가 층을 이미 식별한다 |
 | 도구 스택 | 1차: 구조화 로그 + PostgreSQL/대시보드 자작 최소셋. 성장 시: Langfuse(LangChain 연동 자연스러움) 또는 CloudWatch + Bedrock 호출 로깅. **선정은 미확정 — 인터페이스(로그 스키마)만 고정하고 백엔드는 교체 가능하게** |
 
 ### 1.5 비용·쿼터 관리
