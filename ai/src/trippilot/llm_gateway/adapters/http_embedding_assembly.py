@@ -13,7 +13,20 @@ import os
 from typing import Callable
 
 _DEFAULT_MODEL = "nlpai-lab/KURE-v1"
-_DEFAULT_TIMEOUT_SEC = 3.0
+# 요청 경로는 임베딩을 **직렬 3회** 부른다(SCHEDULE·SITUATION·PERSONA, 각 단건).
+# 이 값 × 3 이 검색 단계의 최악 소요이고, 그 위에 LLM 몫(요청 예산의 절반)이 더 붙는다.
+#
+# 3.0 → 5.0 (2026-09-02). 3초는 **콜드스타트를 못 덮었다** — 모델 로드가 3.5초라
+# 기동 직후 첫 요청이 검색 하나를 잃었다(실측:
+# `retrieve_schedule_error: EmbeddingUnreachable: TimeoutError`). #448 의 기동 워밍이
+# 그 창을 좁혔지만, 로드 중에 요청이 오면 락에서 대기하다 여전히 넘길 수 있다.
+#
+# **상한이 5초인 이유**: 3회 직렬이라 5초면 검색 최악 15초다. 요청 예산 20초에서
+# LLM 몫 10초가 따로 계산되므로 합이 25초가 되어 이미 예산을 넘는다(백스톱 504).
+# 10초로 올리면 검색만 30초라 예산을 훨씬 넘는다 — 그래서 5초가 실질 상한이다.
+# 정상 경로(모델 워밍 후)의 임베딩은 수백 ms 라, 이 값은 콜드스타트 보험이지
+# 상시 비용이 아니다.
+_DEFAULT_TIMEOUT_SEC = 5.0
 
 
 def http_embedding(fail: Callable[[str], BaseException], http_factory):
