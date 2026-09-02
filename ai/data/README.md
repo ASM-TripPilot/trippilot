@@ -60,11 +60,24 @@ uv run python scripts/merge_pois_docs.py -o data/collected_pois.json /tmp/poi/*/
 
 ### 이 파일의 출처
 
-- `ai-poi-collect` 실행 20회 합본 (2026-08-10 ~ 08-21 수집분 — 당시 살아있던 artifact 전부)
-- `schema_version` 1 · `source` TOURAPI · 유니크 제안 13,776건 · 광역 17개 지역
-  (실행별 내역은 문서 안 `merged_from`, 중복 포함 원 제안 수는 21,043건)
-- 사진(`provenance.image_url`) 보유 12,286건 = 89.2% — FOOD 78.2% 로 가장 낮다
+- `ai-poi-collect` 실행분의 **누적 병합본**이다 — 위 「갱신」의 TRIP-392 자동 PR 이 매일 병합해 올린다.
+  병합하면 이전 합본이 `merged_from` 에서 1건으로 접히므로 "실행 N회 합본"으로는 세지 않는다
+- **건수·비율은 여기 적지 않는다** — 매일 갱신되므로 산문에 박으면 반드시 낡는다(PR #388 규칙).
+  정본은 파일 자신이고, 실행별 내역은 그 안의 `merged_from` 이다
+- 사진(`provenance.image_url`) 보유율은 카테고리마다 다르고 **FOOD 가 가장 낮다**. 사진 없음은 탈락 사유가 아니라
+  `quality` 를 PARTIAL 로 낮출 뿐이다(`collection_gate.py` 4·5단) — 편차는 수집 결과이지 게이트 결함이 아니다
 - 스키마 정본: `ai/src/trippilot/poi_curation/sourcing/pipeline.py` 의 `to_output_document`
+
+세려면:
+
+```bash
+# 규모·수집 시각·지역 수
+jq '{schema_version, source, collected_at, stats, areas: (.area_codes|length)}' ai/data/collected_pois.json
+
+# 카테고리별 사진 보유율
+jq -r '.proposals[] | [.poi.category, (.provenance.image_url // "")] | @tsv' ai/data/collected_pois.json \
+  | awk -F'\t' '{n[$1]++; if($2!="")w[$1]++} END{for(c in n) printf "%s %d %.1f%%\n", c, n[c], 100*w[c]/n[c]}'
+```
 
 ---
 

@@ -8,7 +8,7 @@ TripPilot AI는 **LLM + 최적화 솔버 하이브리드** 아키텍처다. 독�
 
 ```mermaid
 flowchart TD
-    subgraph Client["클라이언트 (Flutter/React)"]
+    subgraph Client["클라이언트 (React Native + Expo)"]
         UI["일정 UI\n버튼/드래그/DB선택"]
         CHAT["AI 도우미\n사이드 패널"]
         LOC["위치/시간 Tick\n포그라운드"]

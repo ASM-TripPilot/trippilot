@@ -32,7 +32,7 @@
 | DL-3 | 잔여 시간은 **ClockPort.monotonic_ms()로만** 계산 — `time.monotonic()` 직접 호출 금지 (테스트 결정론, G116) |
 | DL-4 | 단계에 잔여를 전파 — OR-Tools time limit = `min(config 한도, 잔여)` |
 | DL-5 | 스킵·강등은 반드시 FallbackEvent — 침묵 스킵 금지 |
-| DL-6 | 경로별 deadline은 호출자 소유: day1 5,000ms(D38 무변경) · Plan-B 10,000ms · 백그라운드/regenerate 관대(예: 60,000ms) — U2는 값을 모르고 파라미터로만 받는다 |
+| DL-6 | 경로별 deadline은 호출자 소유 — U2는 값을 모르고 파라미터로만 받는다(이 규칙 자체는 불변). **정정 (TRIP-473/474, 2026-08-21)**: 경계 `request_meta.deadline_ms` 는 **선택 필드**가 됐고 백엔드는 값을 싣지 않는다(미지정=시간제약 없음 → `api/wiring.py::UNBOUNDED_DEADLINE_MS` 가 계단에 대입된다). 종전의 day1 5,000ms · Plan-B 10,000ms 는 SLO 지향점 + 백엔드 설정값(`ScheduleDeadlineProperties`, 기본 `enforced=false`)으로만 남아 있다. 재도입은 플래그 한 줄(`AI_SCHEDULE_DEADLINE_ENFORCED=true`, TRIP-475)이고, 시점·조건의 정본은 `backend/docs/design/ai-backend-경계-계약-확정.md` §"시한 재정의"다 |
 
 ## 4. 결정론 규칙 (INV-4·U5-P3)
 

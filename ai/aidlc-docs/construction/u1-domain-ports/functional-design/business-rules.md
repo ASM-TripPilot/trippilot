@@ -23,7 +23,7 @@
 | **시간** | tz-aware datetime만. naive datetime은 생성자에서 `ValueError`. 타임존 = 여행지 로컬 (1차 출시: `Asia/Seoul` 고정, 필드는 오프셋 보존) |
 | **검증 위치** | 범위·정합 검증은 `__post_init__`에서 — 유효하지 않은 인스턴스는 존재 자체가 불가능 |
 | **ID** | `NewType` 문자열. 교차 대입(PoiId ↔ ScheduleId)은 타입 체커가 차단 |
-| **도메인 순수성** | domain·ports는 외부 패키지 import 금지 (표준 라이브러리만). CI에서 import-linter로 검증 (U1 Build and Test) |
+| **도메인 순수성** | domain·ports는 외부 패키지 import 금지 (표준 라이브러리만). **검증 정본은 `ai/tests/test_architecture.py`** — import-linter 도구는 도입하지 않았고(리포에 의존성·계약 파일 없음), 추가 의존성 없이 stdlib AST 검사로 같은 의도를 구현해 `ai-ci` 의 pytest 게이트가 매 실행 강제한다. 도구를 교체하면 이 행의 경로만 바꾼다 |
 
 ## 3. [LLMOps] 관측 이벤트 발행 규칙 — NFR-7.1/7.2
 

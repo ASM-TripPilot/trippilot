@@ -136,7 +136,7 @@ if not validated:
 
 ### 2.3 Reflection (상위 티어) `[폐지 — REFLECTION_TEMPLATE으로 흡수, 2026-08-25 TRIP-558]`
 
-> **이 feature는 제거됐다.** 회고 본문 생성은 §2.8 REFLECTION_TEMPLATE이 대체한다 —
+> **이 feature는 제거됐다.** 회고 본문 생성은 `ai/prompts/reflection_template.yaml`(feature `REFLECTION_TEMPLATE`)이 대체한다 —
 > 계약(`reflection-template-design.md` §3.2)이 "기록 화면(j03 본문)은 이 스키마의 부분
 > 소비 = DAILY 캡션 연결"로 정의하므로 별도 문안 생성기가 필요 없다. 산출물 대조:
 > `title`→표지 제목 · `body`→캡션 연결 · `highlights`→장면 캡션 · `mood`→**소비처 0**
@@ -230,7 +230,7 @@ if not validated:
 ### 2.5 PlaceExtraction — 워커 (상위 티어) `[설계권고]` — 자유 웹 소싱(AI-D03)
 
 > **(미배선 — 2026-08-25 기준 프로덕션 호출자 0)**: 워커·게이트·프롬프트 yaml 은 실재하나 호출 경로가 없다.
-> 현행 POI 소싱은 TourAPI 단일 소스이고, 실제 가동 중인 LLM 추출은 §2.8 `EVENT_EXTRACTION`(행사 전용)뿐이다.
+> 현행 POI 소싱은 TourAPI 단일 소스이고, 실제 가동 중인 LLM 추출은 `ai/prompts/event_extraction.yaml`(feature `EVENT_EXTRACTION`, 행사 전용)뿐이다 — 본 문서에 전용 절은 아직 없다.
 
 **목적**: 자유 웹 텍스트(검색 결과·블로그·페이지)에서 **구조화된 POI**를 추출. Places API로 못 채운 후보 보강 시에만 동작. 강한 검증 전제.
 
@@ -391,21 +391,22 @@ if not validated:
 | 폴백 발생률 | ≤ 5% | `isFallback=true` 비율 |
 | 근거 없는 내용 생성 | 0건 | 수동 샘플링 검토 |
 
-### 3.3 few-shot 예시 관리
+### 3.3 프롬프트 파일 레이아웃 · few-shot 예시 관리
 
-few-shot 예시는 프롬프트에 하드코딩하지 않고 **별도 파일로 관리**한다.
+**레이아웃 정본은 `ai/prompts/` 디렉토리와 로더 `ai/src/trippilot/llm_gateway/prompts.py`.**
+feature 1개 = `.yaml` 파일 1개의 **평면 배치**이고, 버전은 디렉토리가 아니라 파일 안
+`version:` 필드(semver, 따옴표 필수 — yaml 암묵 타입 변환 방지)로 관리한다. 로더가
+`root.glob("*.yaml")` 로 1뎁스만 훑으므로 **하위 디렉토리를 파면 로드되지 않는다.**
 
 ```
-ai-prompts/
-  preference-scoring/
-    v1/
-      system.txt
-      few-shot-examples.json   <- 예시 입출력 쌍
-  reflection/
-    v1/
-      system.txt
-      few-shot-examples.json
+ai/prompts/
+  preference_scoring.yaml     # feature: PREFERENCE_SCORING / version: "0.2.0" / template: |
+  alternative_selection.yaml
+  ...                          # 목록 정본은 `ls ai/prompts`
 ```
+
+few-shot 예시는 아직 별도 파일로 분리하지 않았다 — 현재는 `template:` 본문에 들어간다
+(§4 미결 #2 참조). 분리할 때도 위 평면 규약을 깨지 않는다.
 
 ---
 
@@ -417,5 +418,5 @@ ai-prompts/
 | 2 | PreferenceScoring few-shot 예시 | 실제 POI 데이터로 작성 필요 |
 | 3 | 취향 7축 택소노미 태그 목록 | 온보딩 설계와 연동 |
 | 4 | INTENT 라우터 의도·편집 op 목록 | AI 도우미(M16) 착수 시 확정 |
-| 5 | 프롬프트 파일 저장 위치 (코드 내 vs 외부 스토어) | 배포 전략과 연동 |
+| 5 | ~~프롬프트 파일 저장 위치 (코드 내 vs 외부 스토어)~~ | **해소 — 저장소 내 `ai/prompts/*.yaml` 평면 + 파일 내 semver 로 확정**(`llm_gateway/prompts.py` `PromptRegistry`, §3.3). 외부 스토어 이전은 재논의 시 새 항목으로 |
 | 6 | PlaceExtraction 검증 임계(confidence·dup 반경) | AI-D03 게이트 캘리브레이션 |

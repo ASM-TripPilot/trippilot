@@ -1,13 +1,15 @@
 """오케스트레이터 경계 — **구조적 타이핑(Protocol)만** 선언한다.
 
-`trippilot.orchestrator`의 실 구현(TRIP-237)은 별도 브랜치에서 만들어지는 중이라
-여기서 import하지 않는다. Protocol은 구조적이므로, 실 구현이 아래 이름·형태를
-만족하면 배선 시 어댑터 없이 그대로 주입된다(배선은 두 브랜치 머지 후 별도 작업).
+`trippilot.orchestrator`의 실 구현(TRIP-237)은 머지돼 있고, `api/wiring.py`가 그것을
+조립해 `WiredItineraryOrchestrator`로 감싸 주입한다. 그래도 여기서 import하지 않는다 —
+Protocol은 구조적이라 이름·형태만 맞으면 어댑터 없이 그대로 꽂히고, API 계층은 구현
+타입을 몰라도 된다.
 
-API 계층이 오케스트레이터에 기대하는 것은 딱 셋:
-- `generate(request) -> ItineraryOutcome`
-- `validate(request) -> ValidationOutcome`     (위반 + 판정 못 한 슬롯, TRIP-537)
-- `repair(request) -> RepairOutcome`
+API 계층이 오케스트레이터에 기대하는 것은 아래 `ItineraryOrchestrator` Protocol 본문이
+정본이다 — 메서드를 여기 다시 나열하지 않는다(나열이 먼저 낡는다).
+회고 2종(`reflection_generate`·`reflection_nudge`, TRIP-429)은 **Protocol 밖**이고
+`routes.py`가 `getattr`로 찾아 없으면 503으로 명시 실패한다 — 구형 조립 호환을 위해
+선택적으로 둔 것이다(INV-4: 없으면 조용히 넘어가지 않고 크게 드러낸다).
 
 시각·순서·후보 판단은 전부 오케스트레이터(→ M7·C1·C2) 소유다. API는 사영만 한다(INV-2).
 `request`는 검증을 마친 경계 스키마 객체 — 도메인 타입 조립(ItineraryProblem 등)은

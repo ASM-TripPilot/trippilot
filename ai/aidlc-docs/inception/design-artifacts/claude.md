@@ -20,5 +20,5 @@ The ai-*.md files that used to live at the root have been organized here.
 ## Caution
 
 - These documents are the **canon**. Record a change history when modifying them.
-- For agent structure, `agent-redesign.md` (application-design/) is the latest.
-  §3.4 (worker structure) of ai-implementation-design.md in this folder is the **old design** and is superseded by agent-redesign.md.
+- For agent structure, the latest canon is `agent-structure-v2.md` (application-design/, 2026-08-02 tool-exclusivity revision).
+  §3.4 (worker structure) of ai-implementation-design.md in this folder is the **old design**, superseded along the chain `agent-redesign.md` → `agent-hierarchy-design.md` → `agent-structure-v2.md`.

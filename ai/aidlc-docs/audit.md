@@ -274,3 +274,22 @@
 - 도메인 보강: LlmFeature/ModelTier(llm.py), PersonaSummary·TasteTag 7축(persona.py — 미결 #3 해소), Principal/ResourceRef/PermissionDeniedError(context.py — D31)
 - 어댑터: AnthropicAdapter는 client 주입식, 실 스모크 K-1 유보 (D37 CI 실 API 0 유지)
 - PBT 계획 8속성: GATE-P1/P2(U5-P5 승계) · GW-P1/P2 · ROUTE-P1 · CTX-P1 · PROMPT-P1 · SER-P1
+
+## 2026-09-02 — BR-AF-07 소급 기록: 2026-08-02 이후 추가된 LlmFeature
+- 이 로그는 `## 2026-08-02 — U4 C1 LLM Gateway 착수 (FD)` 에서 멈춰 있었다. 그 사이 코드에 들어간 feature 를 소급 기록해 BR-AF-07(FD 개정 + tier_map + 프롬프트 yaml + ROUTE-P1 + **audit**) 의 audit 칸을 채운다 — 나머지 4칸은 각 티켓에서 이미 이행됐고 audit 만 누락돼 있었다. 즉 규칙이 깨진 게 아니라 **기록만 밀렸다**
+- `EDIT_TRANSLATION` — EditAgent 전속, 확정된 EDIT_SCHEDULE 의 세부 번역(라우팅 재해석 아님). enum 선등록은 TRIP-286(#96), 잔여 세트(FD 티어 표·타입 승격·컨텍스트 경계)는 TRIP-315(#134). 정의 정본 = agent-foundation FD domain-entities §1
+- `REFLECTION_NUDGE` (TRIP-347, #180) — 회고 유도 푸시 문구 1문장. 발송은 백엔드 notification 소유, c1 은 문구 생성까지
+- `EVENT_EXTRACTION` (TRIP-421, #268) — 웹 검색 스니펫 → 행사 구조화 추출(백그라운드). 행사는 POI 가 아니라 후보 풀 비편입(INV-1 비적용)
+- `REFLECTION_TEMPLATE` (TRIP-429, #350) — 회고 연출 템플릿. 구 `REFLECTION` 을 TRIP-558(#386)에서 흡수·폐지
+- `PHOTO_HIGHLIGHT` (TRIP-595, #436) — 동의된 사진 → 대표 N장 선별(Reflect Phase 2). 이미지 파트를 싣는 첫 feature
+- `REFLECTION_TEMPLATE_VISION` (TRIP-595, #436) — 텍스트판과 같은 출력 계약, 모델 라우팅 때문에 feature 분리
+- **개수·전체 목록은 여기 적지 않는다** — 정본은 `ai/src/trippilot/domain/llm.py::LlmFeature`, 티어 매핑은 `ai/src/trippilot/llm_gateway/config.py::default_tier_map`, 프롬프트는 `ai/prompts/`
+- u6-reflect FD `business-rules.md` §4 DoD 의 "신규 LlmFeature 5종 세트 완료 (BR-AF-07)" 체크는 Reflect Phase 2 소유자에게 남긴다 — audit 칸은 본 항목으로 채워졌다
+
+## 2026-09-02 — AI-DLC 상태 문서 스테일 정정 (코드 변경 없음)
+**Timestamp**: 2026-09-02
+**변경**: 코드보다 낡아 사실과 어긋나던 안내 문장을 교체. 문서만 수정, `src/` 무변경.
+- `aidlc-state.md`: "Existing Code: No" → Yes(`src/trippilot/` 가동), Project Type·Build System(uv)·Workspace Root(모노레포 `ai/`) 갱신, CONSTRUCTION 체크박스 3종(Functional Design·Code Generation·Build and Test) 체크. Current/Next Stage("U4 FD 승인 대기")는 2026-08-03 U4 머지 이후 갱신이 끊겨 스테일이었으므로 값을 다시 박지 않고 `../claude.md` §Current Status 로 위임. U1~U3 Status 서술은 시점 기록으로 보존.
+- `construction/claude.md`·`claude.ko.md`: "Not Yet Started / 아직 미착수" → 현재 상태. 계획 트리는 "최초 계획"으로 강등하고, `code/` 부재(Code Location Rules)와 U5 FD 부재(TRIP-237/238/239/241/242 코드 선행)를 결정으로 명시.
+- `inception/reverse-engineering/code-structure.md`·`code-quality-assessment.md`: 본문 보존 + "2026-07-12 시점 관측" 배너 삽입.
+- `inception/claude.md`·`claude.ko.md`·`inception/design-artifacts/claude.md`·`claude.ko.md`: 에이전트 구조 최신 문서 지목을 `agent-redesign.md` → `agent-structure-v2.md`(2026-08-02 도구 배타 원칙 개정)로 정정. `application-design/claude.md` 의 지목과 일치시킴.

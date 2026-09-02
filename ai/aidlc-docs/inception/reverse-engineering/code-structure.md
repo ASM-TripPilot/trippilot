@@ -1,5 +1,7 @@
 # Code Structure
 
+> **역사 기록 — 2026-07-12 리버스 엔지니어링 시점의 관측이다.** 그 뒤 U1~U6 이 구현돼 아래 서술(특히 "소스 코드 미작성 상태. 설계 문서만 존재.", 빌드 시스템 "미확정")은 현재와 다르다. 현재 코드 구조는 `ai/src/trippilot/`, 빌드는 uv(`ai/pyproject.toml`), 진행 상태 정본은 `../../../claude.md` §Current Status.
+
 ## Build System
 - **Type**: 미확정 (Python — pip/poetry/uv 중 선정 필요)
 - **Configuration**: 소스 코드 미작성 상태. 설계 문서만 존재.

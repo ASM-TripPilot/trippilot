@@ -64,8 +64,9 @@ OR-Tools (1차 결정론) → LLM (2차 창의적 제안) → 규칙 폴백 (최
 - Python 3.11+ / Anthropic API 직접 (Claude — AI-D06) / OR-Tools / FastAPI
 - pgvector + **로컬 `nlpai-lab/KURE-v1` 임베딩** (AI-D06 부기 2026-08-23, TRIP-514
   배선 완료). Titan은 폴백 어댑터이고 Bedrock 전용이다.
-- pytest + Hypothesis — **`@given` 속성 170개 / 테스트 파일 41개** (2026-08-25 실측,
-  `grep -rc "@given" ai/tests/*.py`로 셈). 종전 "19"·"52" 표기는 스테일이었다.
+- pytest + Hypothesis — 속성 개수는 문서에 박지 않는다(늘 때마다 스테일이 된다, TRIP-530).
+  세려면 `grep -rc "@given" ai/tests/*.py`. 종전 "19"·"52"·"170개/41개" 표기는
+  모두 스테일이었다.
 - LangChain: **선언만 있고 쓰지 않는다** — `pyproject.toml`에 의존성이 없고 `src/`에
   import 0건. RAG는 psycopg + pgvector로 직접 구현했다 (철회 기록은 TRIP-522).
 

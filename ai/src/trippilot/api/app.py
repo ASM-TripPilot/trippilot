@@ -1,8 +1,10 @@
 """FastAPI 앱 조립 — 경계 라우트 + 오류 핸들러 + 헬스체크.
 
-오케스트레이터는 **주입**받는다(`create_app(orchestrator=...)`). 실 구현(TRIP-237)이
-머지되기 전까지 기본값은 None이고, 그 상태에서 3개 라우트는 503 + `ORCHESTRATOR_NOT_WIRED`
-로 명시 실패한다 — 빈 일정을 200으로 내보내면 백엔드가 그것을 정상 결과로 믿는다(INV-4).
+오케스트레이터는 **주입**받는다(`create_app(orchestrator=...)`). 기본값은 None이고, 그
+상태에서는 **경계 라우트 전부**가 503 + `ORCHESTRATOR_NOT_WIRED`로 명시 실패한다
+(`routes.get_orchestrator`) — 빈 일정을 200으로 내보내면 백엔드가 그것을 정상 결과로
+믿는다(INV-4). 실 조립은 `api/wiring.py`(`build_dev_app`), 라우트 목록의 정본은
+`api/routes.py`, 와이어 정본은 `ai/docs/openapi.json`.
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ def create_app(
     app = FastAPI(
         title="TripPilot AI",
         version="0.1.0",
-        description="일정 생성·검증·수리 경계 (U5). 와이어는 snake_case.",
+        description="일정·회고 경계 (U5·U6). 와이어는 snake_case.",
     )
     app.state.orchestrator = orchestrator
     install_error_handlers(app)

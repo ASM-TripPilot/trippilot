@@ -1,7 +1,7 @@
 # TripPilot AI 구현 설계
 
 > 짝 문서: [ai-architecture.md](./ai-architecture.md)(전략·원칙). 본 문서는 그 위의 **구현 설계(HOW)** 다 — 인터페이스 계약·시퀀스·알고리즘·테스트 DoD.
-> 출처: TripPilot 기획 정본(../TripPilot/aidlc/aidlc-docs/inception/application-design/component-methods.md·components.md·services.md, construction/u5-itinerary)에서 2026-07-07 종합.
+> 출처: TripPilot 기획 정본(../aidlc/aidlc-docs/inception/application-design/component-methods.md·components.md·services.md, construction/u3-ai-itinerary)에서 2026-07-07 종합. (구 표기 `construction/u5-itinerary` 는 유닛 재번호 이전 경로 — 현재 존재하지 않는다)
 > 표기: `[정본]` = TripPilot 문서에 명시된 계약 · `[설계권고]` = 문서에 없어 본 문서가 제안하는 구현 방식(착수 시 확정 대상).
 
 ---
@@ -331,10 +331,11 @@ from dataclasses import dataclass
 from datetime import date, time
 from enum import Enum
 
-class SolveMode(Enum):
-    FULL_AI       = "full_ai"
-    DETERMINISTIC = "deterministic"
-    MINIMAL       = "minimal"
+class SolveMode(Enum):        # 정본: ai/src/trippilot/domain/itinerary.py
+    OR_TOOLS      = "OR_TOOLS"
+    LLM           = "LLM"     # 구 BEDROCK — 개명 완료 (TRIP-256 #71, 2026-08-04, 벤더 중립 AI-D06)
+    RULE_FALLBACK = "RULE_FALLBACK"
+    MINIMAL       = "MINIMAL"
 
 @dataclass(frozen=True)
 class ItineraryProblem:
@@ -349,7 +350,7 @@ class ItineraryProblem:
 class ItinerarySolution:
     days: list[DaySolution]
     is_fallback: bool               # 규칙 점수 폴백 여부
-    solve_mode: SolveMode           # FULL_AI | DETERMINISTIC | MINIMAL
+    solve_mode: SolveMode           # OR_TOOLS | LLM | RULE_FALLBACK | MINIMAL
 
 @dataclass(frozen=True)
 class DaySolution:
@@ -497,7 +498,8 @@ def estimate_travel(from_point, to_point, mode):
 
    M11 날씨 폴링 (1시간 주기)
               |
-   강수확률 >= 80% OR 기상특보          # 2026-08-25 정정 (코드 정본: providers/weather.py)
+   강수확률 >= 60% OR 기상특보          # 발화 정본: backend planb-detection WeatherTriggerService
+                                       # (ai providers/weather.py 의 80 은 InfoPacket 후보 표시 — 다른 층, ai-architecture §5.1 註)
               |
    외부 API 무응답 -> 트리거 침묵 + 실패율 계측 (허위 알림 금지)
    응답 정상   -> TriggerEvent 발행

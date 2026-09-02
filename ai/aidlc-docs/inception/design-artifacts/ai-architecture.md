@@ -9,7 +9,12 @@
 
 모듈 경계·의존 매트릭스·포트 격리 같은 **구조적 상세는 architecture.md가**, 결정의 근거 전문은 decisions.md가, 성능·보안·테스트 기준은 nfr.md가 소유하며, 본 문서는 그것들을 AI 축으로 재구성하고 참조한다(정본 1소유자 원칙 — 중복 정의하지 않는다).
 
-**적용 범위**: 1차 출시 AI 전반(일정 생성 U5·Plan-B 재계획 U6·회고/스타일 분석 U7·**AI 도우미 M16**, AI-D02). 후속 AI 기능은 §10 확장 여지.
+**적용 범위**: 1차 출시 AI 전반(일정 생성·Plan-B 재계획·회고/스타일 분석·**AI 도우미 M16**, AI-D02). 후속 AI 기능은 §10 확장 여지.
+
+> ⚠️ **본 문서가 쓰던 U5·U6·U7 은 2026-07-07 당시 기획(planning) 유닛 번호이며 현행 어느 체계와도 맞지 않는다.**
+> 제품 유닛 정본은 `../aidlc/aidlc-docs/inception/application-design/unit-of-work.md`(일정 생성=U3 · Plan-B=U4 · 회고=U5),
+> AI 트랙 유닛 정본은 `../units/unit-of-work.md`(U5=Orchestration & API · U6=Extended Features).
+> **같은 기호가 두 체계에서 다른 것을 가리킨다** — 번호는 어느 쪽도 여기 다시 박지 않는다. 두 정본을 볼 것.
 
 ---
 
@@ -21,9 +26,9 @@ TripPilot의 AI는 '예약 다음'을 잇는 제품의 **중심축**이다. 세 
 
 | # | 임무 | 담당 |
 |---|---|---|
-| 1 | 등록 숙소를 출발점으로 **실행 가능한 날짜별 일정**을 만든다 | 일정 생성 (U5 / M8) |
-| 2 | 여행 중 변수(날씨·휴무·지연·체력)에 **Plan-B**를 제시한다 | 재계획 (U6 / M9·M10·M11) |
-| 3 | 여행 후 기록을 **회고·스타일 분석**으로 남긴다 | 회고 (U7 / M13) |
+| 1 | 등록 숙소를 출발점으로 **실행 가능한 날짜별 일정**을 만든다 | 일정 생성 (M8) |
+| 2 | 여행 중 변수(날씨·휴무·지연·체력)에 **Plan-B**를 제시한다 | 재계획 (M9·M10·M11) |
+| 3 | 여행 후 기록을 **회고·스타일 분석**으로 남긴다 | 회고 (M13) |
 
 여기에 **막힐 때 대화로 돕는** AI 도우미(M16)가 1차부터 얹힌다(§6.4, AI-D02).
 
@@ -77,7 +82,7 @@ flowchart LR
 
 ## 2. AI 시스템 지도
 
-AI는 두 공통 컴포넌트(C1·C2)와 이를 소비하는 기능 모듈로 구성된다. C1·C2·M7은 **어떤 기능 모듈에도 의존하지 않는 최하위 계층**이며, 그래서 여러 유닛(U5~U7, 후속 U9)이 재사용할 수 있다.
+AI는 두 공통 컴포넌트(C1·C2)와 이를 소비하는 기능 모듈로 구성된다. C1·C2·M7은 **어떤 기능 모듈에도 의존하지 않는 최하위 계층**이며, 그래서 일정 생성·Plan-B·회고(그리고 후속 AI 도우미)가 모두 재사용할 수 있다.
 
 | ID | 컴포넌트 | AI에서의 역할 | 소비처 |
 |---|---|---|---|
@@ -228,14 +233,18 @@ AI 코어(C1 LLM 게이트웨이 + C2 솔버)는 **독립 Python AI 서비스**�
 | 행사 근접 | TRIP-421 | 행사 적합도×거리감쇠 `[0,1]` 에 스케일을 곱해 가점. **양수만 — 감점 경로 없음** | scale 0.15 |
 | 일별 동일 카테고리 체감 | TRIP-531 | 하루 같은 카테고리 `category_free_count` 개까지 무페널티, 초과 1개당 감점 (편중 풀의 FOOD 7연속류 억제). 식사 보정과 직교 — 그쪽은 시각·인접, 이쪽은 **개수** | free 2 / 초과당 0.3 |
 
-> ⚠️ **강수 임계 80 vs 60 — 다른 개념이다(혼동 주의)**:
-> - **80** = Plan-B **트리거** 임계 (§6.2 (a)). "여행자에게 대안을 제안할 만큼 비가 확실한가"를 묻는다.
->   코드 정본은 `providers/weather.py::PRECIPITATION_TRIGGER_THRESHOLD = 80`.
-> - **60** = 위 표 우천 보정의 **목적함수 임계** (`solver_engine/config.py::rain_threshold_pct = 60`).
+> ⚠️ **강수 임계는 세 층에 따로 산다(혼동 주의)**:
+> - **60 — 발화(감지)**: Plan-B 트리거. "여행자에게 배너를 띄울 만큼 비가 확실한가"를 묻는다.
+>   정본은 `backend/modules/planb-detection/.../WeatherTriggerService.kt::RAIN_THRESHOLD_PCT`
+>   (인셉션 `stories.md` US-PLANB-02 "강수확률 60%+" 값). **사용자에게 알림이 나가는 유일한 경로다.**
+> - **80 — 후보 표시**: `ai/src/trippilot/providers/weather.py::PRECIPITATION_TRIGGER_THRESHOLD`.
+>   생성 파이프라인의 InfoCollector 가 InfoPacket `data["triggers"]` 에 담는 값이고,
+>   **ai 안에 프로덕션 소비자가 없다**(2026-09-02 실측 — 참조는 자기 자신과 테스트뿐).
+> - **60 — 목적함수**: 위 표 우천 보정 임계 (`solver_engine/config.py::rain_threshold_pct`).
 >   "이 날 실내를 조금 더 선호할 것인가"를 묻는다. 알림을 띄우지 않고 배치 선호만 기울인다.
 >
-> 트리거보다 낮게 잡힌 것이 의도다 — 알릴 정도는 아니지만 기울일 만한 구간(60~80%)을 목적함수가 흡수한다.
-> **한쪽을 다른 쪽 값으로 맞추지 말 것.**
+> **한쪽을 다른 쪽 값으로 맞추지 말 것 — 세 값의 정본은 각각 위 코드다.** 발화 임계를 바꾸려면
+> 백엔드 코드 + 인셉션 스토리를 함께 고쳐야 한다. ai 문서만 고치면 또 어긋난다.
 
 ### 5.2 하드 제약 4종 (위반 배치는 해에서 구조적으로 배제)
 
@@ -265,7 +274,7 @@ C2는 **결정론 코어**다 — 동일 입력이 동일 출력을 낸다. LLM 
 
 ## 6. 기능별 AI 파이프라인
 
-### 6.1 일정 생성 (U5 / M8) — 제품의 심장
+### 6.1 일정 생성 (M8) — 제품의 심장
 
 **파이프라인**: 컨텍스트 로드 → M7 closed-set 후보 풀(부족 시 웹 소싱 백그라운드 보강, AI-D03) → **C1 LLM 선호 점수(경량 티어, 전 일자 1회)** → **C2 솔버 배치(day별)** → 첫 1일 우선 반환 → 백그라운드 잔여 일자.
 
@@ -278,15 +287,16 @@ C2는 **결정론 코어**다 — 동일 입력이 동일 출력을 낸다. LLM 
 | 숙소 나중 등록 | 동선 무게중심으로 숙소 권역 추천(무숙소 초안→등록→재정렬) | US-E5-11 |
 | 후보 부족 보강 | Places API 우선→부족 시 자유 웹 워커, 수집 게이트 경유 M7 등록, **백그라운드**(생성 미차단) | AI-D03 |
 
-상세 플로우(FLOW-1~5)·예외는 `../TripPilot/aidlc/aidlc-docs/construction/u5-itinerary/functional-design/business-logic-model.md` 참조.
+상세 플로우(FLOW-1~5)·예외는 `../aidlc/aidlc-docs/construction/u3-ai-itinerary/functional-design/business-logic-model.md` 참조.
+(구 표기 `construction/u5-itinerary/` 는 존재하지 않는다 — 유닛 재번호 이전 경로.)
 
-### 6.2 Plan-B 재계획 (U6 / M9·M10·M11)
+### 6.2 Plan-B 재계획 (M9·M10·M11)
 
 **감지(M9)**: 자동 트리거 4종을 하이브리드로 감지(D27)하되, **제안만** 한다(자동 변경 없음).
 
 | 트리거 | 감지 방식 | 임계(기본, remote config) |
 |---|---|---|
-| (a) 날씨 | 서버 폴링(M11, 1시간) | 강수확률 **80%**↑ 또는 기상특보 (2026-08-25 정정 — 코드 정본 `providers/weather.py::PRECIPITATION_TRIGGER_THRESHOLD = 80`) |
+| (a) 날씨 | 서버 폴링(1시간) — **백엔드 planb-detection 소유** | 강수확률 **60%**↑ 또는 기상특보. 발화 임계 정본은 `backend/modules/planb-detection/.../WeatherTriggerService.kt::RAIN_THRESHOLD_PCT`(인셉션 US-PLANB-02 값). ai 의 `providers/weather.py::PRECIPITATION_TRIGGER_THRESHOLD = 80` 은 **다른 층**이다 — §5.1 註 참조 |
 | (b) 휴무·영업시간 | 서버 배치(M7, 당일 아침) | 변경 감지 |
 | (c) 이동 지연 | 클라이언트 포그라운드 | 계획 대비 **30분 초과**(추정 오차 마진 위, G106) |
 | (d) 체류 초과 | 클라이언트 포그라운드 | 20분 초과로 고정 일정 위협 |
@@ -296,7 +306,7 @@ C2는 **결정론 코어**다 — 동일 입력이 동일 출력을 낸다. LLM 
 
 **재계획(M10)**: 사유 해석(C1) → 후보 소싱(M7, 저장 장소 우선·RAG 그라운딩) → **C2 하드 제약 검증** → 후보 2~3개(10초 목표) → 전/후 비교 → 확정 시점 **솔버 재검증 1회** → current 갱신. 등록 숙소는 항상 불변 고정 제약(Plan-B는 예약 변경이 아니라 실행 보조 — ADR-0006). 워크로드 등급은 High(수동 수정 폴백 존재, nfr §2.1).
 
-### 6.3 회고·스타일 분석 (U7 / M13)
+### 6.3 회고·스타일 분석 (M13)
 
 - **당일 회고**: 일자 경계 트리거, 방문 수·이동 거리·사진·변경 이력 기반 초안 자동 생성(**상위 티어** C1). 수정본은 원본과 별도 저장.
 - **전체 요약**: 여행 종료 트리거, 지도 히어로 + 통계 + 날짜별 하이라이트.
@@ -476,9 +486,11 @@ C1을 별도 파이썬 서비스로 분리하는 시점은 다음 중 하나가 
 >
 > | 코드 | 현 소유자 |
 > |---|---|
-> | `ADR-####` · `US-*` · `C1`–`C17` · `U0`–`U9` · `S1`–`S6` | `../aidlc/aidlc-docs/inception/` (requirements · user-stories · application-design) |
+> | `ADR-####` · `US-*` · `C1`–`C17` · `S1`–`S6` | `../aidlc/aidlc-docs/inception/` (requirements · user-stories · application-design) |
+> | `U0`–`U9` (제품 유닛) | `../aidlc/aidlc-docs/inception/application-design/unit-of-work.md` |
+> | `U1`–`U6` (AI 트랙 유닛) | 본 패키지 `../units/unit-of-work.md` — **같은 기호, 다른 체계.** 문서에서 U 번호를 볼 때 어느 쪽인지 먼저 확인할 것 |
 > | AI 축 결정 `AI-D0#` | 본 패키지 `ai-adr.md` (자체 소유) |
 > | `D##` · `G###` · `M##` · `Δ#` · `N#` | **소유자 없음 — 역사적 코드.** 삭제된 planning 파일에 대해서만 해석되며 리포 어디에도 원문이 없다(`D38`·`G106`·`D27`·`D31`·`G181` 실측 확인). 근거가 필요하면 git 이력을 볼 것 |
 >
 > 아래 표기를 **결정 근거의 소재로 신뢰하지 말 것** — 인용 맥락 보존용으로만 남긴다.
-| ../TripPilot/aidlc/.../u5-itinerary/functional-design/business-logic-model.md | 일정 생성 FLOW-1~5·PBT 속성 상세 |
+| ../aidlc/aidlc-docs/construction/u3-ai-itinerary/functional-design/business-logic-model.md | 일정 생성 FLOW-1~5·PBT 속성 상세 |

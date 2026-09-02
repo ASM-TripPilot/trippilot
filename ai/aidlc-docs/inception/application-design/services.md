@@ -21,7 +21,7 @@
 | POI 정본 read — 반경 (리버스) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | POI 정본 read — 배치 (리버스) | `POST /internal/pois/batch-get` (요청 필드 `poi_ids`) | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
 
-포워드 경계는 위 6종 + `/health`가 전부다 — 전수 일치는 `ai/tests/test_api_openapi_contract.py`가 강제한다.
+위 표는 일정(`itinerary`) 경계만 담는다. 회고 경계 `POST /ai/v1/reflection/{generate,nudge}`(TRIP-429)도 열려 있다 — **열린 경로 전체의 정본은 `ai/docs/openapi.json`**이고, 전수 일치는 `ai/tests/test_api_openapi_contract.py`가 강제한다.
 
 프로토콜은 **REST/JSON over HTTP 확정**(PR #76 결정4). `/c1/*`·`/c2/*`·`/m7/*` 세분 경로
 (`../reverse-engineering/api-documentation.md`)는 PR #76 "굵은 경계 — 조각 조립 경계를 두지 않는다" 합의로
@@ -109,8 +109,8 @@ stateDiagram-v2
 [사용자 자연어] "비 와서 실내로 바꿔줘"
     |
     v
-[API Layer] POST /ai/v1/... (AI 도우미)         # 구 표기 /ai/route 폐기.
-    |                                            # 명명 규칙만 확정, 리소스명 협의 중 (§0)
+[API Layer] POST /ai/v1/itinerary/edit (AI 도우미)  # 구 표기 /ai/route 폐기.
+    |                                            # 경로 확정 — §0 (TRIP-431)
     v
 [AssistantOrchestrator.handle()]
     |
@@ -161,8 +161,8 @@ stateDiagram-v2
 [Kotlin M10] start_replan(trigger_context)
     |
     v
-[API Layer] POST /ai/v1/... (Plan-B)            # 구 표기 /ai/replan 폐기.
-    |                                            # 명명 규칙만 확정, 리소스명 협의 중 (§0)
+[API Layer] POST /ai/v1/itinerary/alternatives (Plan-B)  # 구 표기 /ai/replan 폐기.
+    |                                            # 경로 확정 — §0 (TRIP-428)
     v
 [ReplanOrchestrator.generate_alternatives()]
     |
