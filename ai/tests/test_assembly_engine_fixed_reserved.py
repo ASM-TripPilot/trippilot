@@ -4,7 +4,7 @@ fixed_blocks 로 2일차에 예약된 POI 가 1일차 자유 슬롯으로도 배
 두 번 나왔다(OR-Tools). 규칙 폴백은 더 나쁘다 — 1일차 자유 배치가 선점하면
 2일차 고정 배치를 used 방어가 건너뛰어 HC3 가 깨진다.
 
-수정: 각 솔버의 자유 후보 선정에서 (타일) 고정 예약 poi_id 를 제외한다.
+수정: 각 어셈블리의 자유 후보 선정에서 (타일) 고정 예약 poi_id 를 제외한다.
 고정 배치 자체는 기존 경로(오늘 fixed_ids 후보 유지 / fixed_by_day) 그대로.
 """
 
@@ -12,11 +12,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.constraints import check_all
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.ortools_solver import OrToolsSolver
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.constraints import check_all
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -29,7 +29,7 @@ from trippilot.domain.llm import ScoredPoi
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 _KST = timezone(timedelta(hours=9))
-_CFG = SolverConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
+_CFG = AssemblyConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
 _EST = TravelEstimator(_CFG)
 
 
@@ -83,12 +83,12 @@ def _assert_fixed_placed_once(result, problem, index, fb) -> None:
 
 def test_ortools_reserved_fixed_poi_not_free_placed_on_other_day() -> None:
     problem, index, fb = _two_day_problem()
-    result = OrToolsSolver(index, _EST, _CFG).solve(problem, remaining_ms=2000)
+    result = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=2000)
     assert result is not None
     _assert_fixed_placed_once(result, problem, index, fb)
 
 
 def test_fallback_reserved_fixed_poi_not_free_placed_on_other_day() -> None:
     problem, index, fb = _two_day_problem()
-    result = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    result = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     _assert_fixed_placed_once(result, problem, index, fb)

@@ -10,7 +10,7 @@
 ### 1차: A — 단순 LLM Generation
 
 방문 기록을 DB에서 가져와서 프롬프트에 넣고 Bedrock 1회 호출.
-가장 단순하고 비용 낮음. RAG·솔버 불필요.
+가장 단순하고 비용 낮음. RAG·어셈블리 불필요.
 
 ### 추후 확장: C — Multi-step Generation
 
@@ -179,7 +179,7 @@ class FallbackCard:
 
 | 항목 | ScheduleAgent | PlanBAgent | ReflectAgent |
 |---|---|---|---|
-| 솔버 사용 | O | O | **X** |
+| 어셈블리 사용 | O | O | **X** |
 | RAG/벡터 검색 | X | O | **X** |
 | LLM 호출 | 2회 (점수+설명) | 1회 (대안 선택) | **1회** (서술 생성) |
 | 시간 압박 | 20초 | 10초 | **여유** (백그라운드) |

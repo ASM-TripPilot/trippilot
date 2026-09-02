@@ -1,4 +1,4 @@
-"""HybridSolverFacade — 시한 인지 하이브리드 체인 (AI-D07, U2 FD §2.1).
+"""HybridAssemblyFacade — 시한 인지 하이브리드 체인 (AI-D07, U2 FD §2.1).
 
 체인은 하나, 경로별로 다른 것은 deadline뿐:
   각 단계는 진입 전 잔여 시간을 확인(DL-2) → 부족하면 스킵+FallbackEvent(DL-5)
@@ -21,10 +21,10 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Mapping, Protocol, Sequence
 
-from trippilot.solver_engine.constraints import check_all
-from trippilot.solver_engine.quality import compute_quality
-from trippilot.solver_engine.repair import MinimalChangePolicy, RepairResult
-from trippilot.solver_engine.repair import repair as _repair_engine
+from trippilot.assembly_engine.constraints import check_all
+from trippilot.assembly_engine.quality import compute_quality
+from trippilot.assembly_engine.repair import MinimalChangePolicy, RepairResult
+from trippilot.assembly_engine.repair import repair as _repair_engine
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.itinerary import (
     FixedBlock,
@@ -34,7 +34,7 @@ from trippilot.domain.itinerary import (
     Violation,
     VisitSlot,
 )
-from trippilot.domain.observability import FallbackEvent, SolverRunRecord
+from trippilot.domain.observability import FallbackEvent, AssemblyRunRecord
 from trippilot.domain.poi import Poi
 
 
@@ -48,14 +48,14 @@ class ChainStage(Protocol):
               remaining_ms: int) -> ItinerarySolution | None: ...
 
 
-class SolverConflictError(Exception):
+class AssemblyConflictError(Exception):
     """모든 단계가 유효 해를 못 냈을 때 (예: 모순된 고정 블록).
 
     d08(필수 방문지 충돌) 흐름으로 위임될 예외 — U5에서 API 에러로 매핑.
     """
 
 
-class HybridSolverFacade:
+class HybridAssemblyFacade:
     def __init__(self, stages: Sequence[ChainStage],
                  poi_index: Mapping[PoiId, Poi],
                  estimator, clock, trace) -> None:
@@ -75,7 +75,7 @@ class HybridSolverFacade:
         따라서 시한이 이미 소진됐어도 검증은 수행하고, 소진·초과 사실만
         FallbackEvent로 남긴다 (DL-5 침묵 금지). 이 메서드는 예외를 던지지 않는다.
         """
-        tid = trace_id if trace_id is not None else TraceId("solver")
+        tid = trace_id if trace_id is not None else TraceId("assembly")
         t0 = self._clock.monotonic_ms()
         if deadline_ms <= 0:  # 진입 시점에 이미 소진 — 그래도 검증은 한다 (INV-2 우선)
             self._emit_fallback(tid, "validate", "validate",
@@ -93,7 +93,7 @@ class HybridSolverFacade:
         """HC 위반 해를 최소 변경으로 수리한다. 수리 불가면 `repaired=None`.
 
         poi_index·estimator는 퍼사드가 보유한 것을 주입한다 — 호출자(백엔드·U5)가
-        솔버 내부 자료를 알 필요가 없게 하는 것이 이 승격의 목적이다.
+        어셈블리 내부 자료를 알 필요가 없게 하는 것이 이 승격의 목적이다.
 
         시한(DL-2): 잔여가 없으면 **실행 없이** 수리 불가로 반환 + FallbackEvent.
         수리는 최선 노력이라 스킵해도 계약(repaired=None)이 성립한다 — solve()와
@@ -103,7 +103,7 @@ class HybridSolverFacade:
         repaired=None으로 강등한다 (INV-2 — 미검증 해 반환 경로 없음).
         통과분에는 solve()와 동일하게 QualityScore를 부착한다 (TRIP-261).
         """
-        tid = trace_id if trace_id is not None else TraceId("solver")
+        tid = trace_id if trace_id is not None else TraceId("assembly")
         t0 = self._clock.monotonic_ms()
         if deadline_ms <= 0:  # DL-2: 진입 전 잔여 확인 — 침묵 스킵 금지 (DL-5)
             self._emit_fallback(tid, "repair", "(unrepaired)", "deadline")
@@ -137,7 +137,7 @@ class HybridSolverFacade:
         def remaining() -> int:
             return deadline_ms - (self._clock.monotonic_ms() - t0)
 
-        tid = trace_id if trace_id is not None else TraceId("solver")
+        tid = trace_id if trace_id is not None else TraceId("assembly")
         for idx, stage in enumerate(self._stages):
             next_name = (self._stages[idx + 1].name
                          if idx + 1 < len(self._stages) else "(end)")
@@ -165,7 +165,7 @@ class HybridSolverFacade:
             # (§3.7, TRIP-261). regenerate()도 solve() 경유라 함께 커버된다.
             # 점수를 emit 전에 계산해 레코드에도 동봉한다 (TRIP-524 — 리허설 관측).
             score = compute_quality(result, problem, self._pois, self._est)
-            self._trace.emit(SolverRunRecord(
+            self._trace.emit(AssemblyRunRecord(
                 trace_id=tid,
                 occurred_at=datetime.now(timezone.utc),
                 component="c2_facade",
@@ -180,7 +180,7 @@ class HybridSolverFacade:
             return replace(result, score=score)
         # RuleFallback이 체인에 있으면 시한과 무관하게 도달 불가(TRIP-291).
         # 도달 = 유효 해 자체가 없음(모순 입력) — "시간이 없어서"는 이유가 될 수 없다.
-        raise SolverConflictError("모든 단계 실패 — 고정 블록 모순 등 입력 확인 필요")
+        raise AssemblyConflictError("모든 단계 실패 — 고정 블록 모순 등 입력 확인 필요")
 
     # ── warm-start 재생성 (U5-P2 멱등, 정본 §4.3) ──
     def regenerate(self, problem: ItineraryProblem,
@@ -219,7 +219,7 @@ class HybridSolverFacade:
         if reason is not None:  # 수리 실패·강등도 관측 대상 (INV-4)
             self._emit_fallback(tid, "repair", "(unrepaired)", reason)
         elapsed = self._clock.monotonic_ms() - t0
-        self._trace.emit(SolverRunRecord(
+        self._trace.emit(AssemblyRunRecord(
             trace_id=tid,
             occurred_at=datetime.now(timezone.utc),
             component="c2_facade",
@@ -238,7 +238,7 @@ class HybridSolverFacade:
             trace_id=tid,
             occurred_at=datetime.now(timezone.utc),
             component="c2_facade",
-            stage="solver",
+            stage="assembly",
             from_mode=from_,
             to_mode=to,
             reason=reason,

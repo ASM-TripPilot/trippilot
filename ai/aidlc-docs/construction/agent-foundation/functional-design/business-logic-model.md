@@ -48,7 +48,7 @@ EDIT_TRANSLATION)는 EditAgent 전속 번역 도구. 전자는 의도 라벨+라
 Orchestrator: 의도 파악 → 정보 요구표 조회 → Provider 병렬 수집(InfoBundle) → AgentTask 발행
 Agent:        context_refs 재조회(D31) → 판단(전속 도구) → Proposal → AgentResult 회신
               정보 부족 → status=NEED_MORE_INFO (재수집·재위임 최대 1회 — 초과 시 업무 폴백)
-Solver 관문:  시각·순서 있는 Proposal만 통과 (Reflect 스킵) — 봉투 프로토콜 대상 아님 (delegation-design §8 [v2 보강])
+Assembly 관문:  시각·순서 있는 Proposal만 통과 (Reflect 스킵) — 봉투 프로토콜 대상 아님 (delegation-design §8 [v2 보강])
 ```
 
 - `context_refs` 재조회는 **Agent 소유**다 — 그래서 EditAgent가 호출하는 C1 워커(`EDIT_TRANSLATION`)는 ContextResolver를 거치지 않고 확정 입력만 받는다 (이중 재조회 금지, 워커별 소유 표는 u4 FD business-logic-model §3.1).
@@ -90,7 +90,7 @@ class VectorStorePort(Protocol):
 | 봉투 | AgentTask/AgentResult **재사용** (DL-1) — 재시도 1회 허용(delegation-design §6 background 정책 기존 그대로) |
 | LLM | 허용하되 LlmFeature closed-set 한정 (현행 `PLACE_EXTRACTION` 1종. 추가는 §1 개정 절차 — 상한은 미결 #5) |
 | INV-1 | 소싱 게이트 5단 경유 후 M7 등록분만 후보 자격 (v2 §2 그대로) |
-| INV-2 | 해당 없음 — 사용자 표시 시각·순서를 만들지 않는다. 만들게 되는 순간 Solver 관문 필수로 승격 |
+| INV-2 | 해당 없음 — 사용자 표시 시각·순서를 만들지 않는다. 만들게 되는 순간 Assembly 관문 필수로 승격 |
 | 패키지 | `src/trippilot/background/` — agents/와 분리 (라우팅 대상 아님을 구조로 표현) |
 
 ## 6. agents/ 패키지 경계 규칙 + 아키텍처 테스트 추가

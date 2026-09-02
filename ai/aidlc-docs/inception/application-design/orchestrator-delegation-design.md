@@ -113,7 +113,7 @@ class AgentResult:
    5. context_refs 재조회 (requester 권한, D31)
    6. 필요 시 정보 에이전트에 재위임
         - 동일한 AgentTask 봉투 (parent_task_id 설정, deadline 차감)
-   7. 업무 수행 (LLM/솔버 도구 조합)
+   7. 업무 수행 (LLM/어셈블리 도구 조합)
    8. AgentResult 회신
    |
    v
@@ -197,7 +197,7 @@ AgentTask(
 
 ## 7. 관측 연결 (→ mlops-llmops-design.md)
 
-- `trace_id`는 Orchestrator → 업무 → 정보 → C1/C2 호출까지 전 구간 전파. LLM 호출 로그·솔버 로그·평가 지표가 모두 이 ID로 조인된다.
+- `trace_id`는 Orchestrator → 업무 → 정보 → C1/C2 호출까지 전 구간 전파. LLM 호출 로그·어셈블리 로그·평가 지표가 모두 이 ID로 조인된다.
 - `AgentResult.metrics`(elapsed_ms, llm_calls, tokens)는 **신속도 지표의 원천 데이터**, `freshness`는 **최신성 지표의 원천 데이터**다 (→ `evaluation-metrics-design.md`).
 - 봉투 발행·회신은 전량 구조화 로그로 남긴다 (프롬프트·응답 본문은 LLMOps 로깅 정책에 따름).
 
@@ -209,4 +209,4 @@ AgentTask(
 - **AgentTask 확장**: `info: InfoBundle` 필드 — 소형 패킷(날씨·교통·페르소나) 직접 + 후보 풀은 세션 캐시 참조 키. inline_context 규칙과 별개의 정식 필드
 - **AgentResult 확장**: status에 `NEED_MORE_INFO` 추가 — payload에 {요청 항목, 사유}. Orchestrator가 수집 후 재위임 (최대 1회, 재요청 초과 시 업무 폴백)
 - **라우팅 유일 기준**: 에이전트 선택은 라우팅 테이블만 사용 — 도구 목록 기반 판단 금지 (도구 겹침 혼선 원천 차단)
-- Solver는 위임 대상이 아니라 위임 결과(Proposal)가 통과하는 공통 관문 — 봉투 프로토콜 대상 아님
+- Assembly는 위임 대상이 아니라 위임 결과(Proposal)가 통과하는 공통 관문 — 봉투 프로토콜 대상 아님

@@ -28,7 +28,7 @@
 - 에이전트 = 특정 일에 특화된 end-to-end 비서
 - 에이전트별 Tool 제한 (토큰 절감)
 - 각 에이전트가 자기 폴백 계단 소유 (INV-4)
-- C2 Solver는 여전히 에이전트가 아님 — 시각·순서 확정은 결정론 컴포넌트 (INV-2)
+- C2 Assembly는 여전히 에이전트가 아님 — 시각·순서 확정은 결정론 컴포넌트 (INV-2)
 
 ---
 
@@ -65,7 +65,7 @@
         v
 +-----------------------------------------------------------+
 | [코어/인프라 — 에이전트 아님]                                 |
-| C1 LLM Gateway | C2 Solver | M7 Place Data | pgvector       |
+| C1 LLM Gateway | C2 Assembly | M7 Place Data | pgvector       |
 | 외부 API 어댑터 (기상청, 카카오모빌리티, 네이버, TourAPI)      |
 +-----------------------------------------------------------+
 ```
@@ -76,7 +76,7 @@
 |---|---|---|
 | H-1 | 업무 에이전트는 정보 에이전트를 **agent-as-tool**로 호출한다 (도구 목록에 정보 에이전트가 함수처럼 등록) | 기존 Tool 제한(토큰 절감) 체계를 그대로 재사용 |
 | H-2 | 정보 에이전트는 **다른 에이전트를 호출하지 않는다** (계층 최하단, 코어/외부 API만 접근) | 순환 위임 금지, 깊이 2 고정 → 지연 상한 예측 가능 |
-| H-3 | 정보 에이전트는 **쓰기(일정 변경)를 하지 않는다** — 읽기·수집·정제·판정만 | 상태 변경 권한은 업무 계층+솔버 경유로 일원화 (INV-2) |
+| H-3 | 정보 에이전트는 **쓰기(일정 변경)를 하지 않는다** — 읽기·수집·정제·판정만 | 상태 변경 권한은 업무 계층+어셈블리 경유로 일원화 (INV-2) |
 | H-4 | Orchestrator는 Fast Path에서 정보 에이전트를 **1개까지** 직접 호출 가능. 2개 이상 조합이 필요하면 업무 에이전트로 위임 | Fast Path의 "도구 1~2개" 기준 유지 |
 | H-5 | 정보 에이전트의 모든 응답에는 `freshness` 메타(수집 시각, 캐시 여부, 출처)가 필수 | 최신성 지표 측정 기반 (→ evaluation-metrics-design.md) |
 | H-6 | 같은 외부 API는 하나의 정보 에이전트만 소유 ("1 외부 API = 1 소유 에이전트") | 기획 정본의 Port/Adapter 소유 규칙(architecture.md)과 정렬 |
@@ -115,12 +115,12 @@
 | 항목 | 내용 |
 |---|---|
 | **업무** | 지점 간 이동 정보(도로 거리·경로)를 제공하고, 이동 지연 트리거를 감지하는 것 |
-| **호출자** | PlanBAgent(지연 상황 파악·대안 거리 비교), Orchestrator Fast Path("다음 장소까지 얼마나 걸려?"→ **거리로 응답**, INV-3), 트리거 스케줄러(위치 Tick 기반 지연 감지). **C2 Solver는 호출자가 아님** — 아래 경계 참조 |
+| **호출자** | PlanBAgent(지연 상황 파악·대안 거리 비교), Orchestrator Fast Path("다음 장소까지 얼마나 걸려?"→ **거리로 응답**, INV-3), 트리거 스케줄러(위치 Tick 기반 지연 감지). **C2 Assembly는 호출자가 아님** — 아래 경계 참조 |
 | **end-to-end 흐름** | ① 출발·도착(또는 현재 위치+다음 슬롯) 확정 → ② 캐시 확인 → ③ 어댑터 체인 조회(카카오모빌리티 → 네이버 → 직선거리×1.3) → ④ 거리·경로 정규화 → ⑤ 지연 판정(예정 대비 30분+ 지연) → ⑥ TransitInfo + 트리거 신호 반환 |
 | **할당 Tool** | `transit.get_route`(어댑터 체인), `transit.get_distance_matrix`, `transit.check_delay` |
 | **판단하는 것** | 어댑터 폴백 전환 시점, 지연 트리거 충족 여부, 매트릭스 조회 시 API 호출 수 절약(캐시 조합) |
 | **폴백** | 카카오 실패 → 네이버 → 직선거리×1.3 (항상 값 반환, 신뢰도 등급만 하락: `HIGH/MID/LOW`) |
-| **⚠ C2와의 경계** | 솔버가 배치 계산 중 쓰는 이동시간 추정은 **기존대로 C2 내부의 `solver.estimate_travel`(동일 어댑터 체인)** 을 사용한다. TransitAgent는 같은 `TravelEstimatePort` 인프라를 **공유**하되, 소비 목적이 다르다 — C2는 "배치 계산용", TransitAgent는 "정보 제공·트리거 감지용". 사용자에게 보이는 시각·순서는 여전히 솔버 검증값만 (INV-2). 사용자 표시용 응답은 **거리만** 노출 (INV-3) |
+| **⚠ C2와의 경계** | 어셈블리가 배치 계산 중 쓰는 이동시간 추정은 **기존대로 C2 내부의 `assembly.estimate_travel`(동일 어댑터 체인)** 을 사용한다. TransitAgent는 같은 `TravelEstimatePort` 인프라를 **공유**하되, 소비 목적이 다르다 — C2는 "배치 계산용", TransitAgent는 "정보 제공·트리거 감지용". 사용자에게 보이는 시각·순서는 여전히 어셈블리 검증값만 (INV-2). 사용자 표시용 응답은 **거리만** 노출 (INV-3) |
 
 ### 3.4 PersonaAgent — "페르소나 비서"
 
@@ -169,9 +169,9 @@
 | `llm.parse_intent` | - | - | - | O | - |
 | `kb.retrieve_schedule` | - | O | - | - | - |
 | `kb.retrieve_situation` | - | O | - | - | - |
-| `solver.solve` | O | O | - | - | - |
-| `solver.validate` | O | O | - | O | O (Fast Path) |
-| `solver.repair` | - | - | - | O | - |
+| `assembly.solve` | O | O | - | - | - |
+| `assembly.validate` | O | O | - | O | O (Fast Path) |
+| `assembly.repair` | - | - | - | O | - |
 | `db.get_visit_history` | - | - | O | - | - |
 | `db.get_current_schedule` | - | - | - | - | O (Fast Path) |
 
@@ -215,7 +215,7 @@ ScheduleAgent
         + agent.persona(user, 목적=점수컨텍스트)
   [대기] 완료
   [순차] llm.score_preferences(후보, 페르소나 컨텍스트)
-  [순차] solver.solve(day별 배치)    ← 이동시간은 C2 내부 추정 사용
+  [순차] assembly.solve(day별 배치)    ← 이동시간은 C2 내부 추정 사용
   [순차] llm.explain_slot(배치 결과)
   [조립] 응답 (day1 5초 우선 반환 정책 유지)
 ```
@@ -231,7 +231,7 @@ PlanBAgent
         + agent.place_scout(현위치 반경, 실내 필터, 방문 제외)
   [대기] 완료 → Augment(프롬프트 조립, closed-set)
   [순차] llm.select_alternatives(A/B/C)
-  [병렬] solver.solve(A) + solver.solve(B) + solver.solve(C)
+  [병렬] assembly.solve(A) + assembly.solve(B) + assembly.solve(C)
   [조립] HC 통과 대안만 + 전/후 비교 → 제안 (자동 변경 없음)
 ```
 
@@ -259,7 +259,7 @@ Event      : API 실패 → 행사 없음으로 진행
 
 [업무 계층 폴백 — 기존 유지]
 Schedule   : LLM 실패 → 규칙 점수 / 전체 실패 → 최소 일정
-PlanB      : 후보 0 → 휴식모드 / 솔버 전멸 → 수동 편집 안내
+PlanB      : 후보 0 → 휴식모드 / 어셈블리 전멸 → 수동 편집 안내
 Reflect    : LLM 실패 → FallbackCard(통계)
 Edit       : 해석 실패 → 직접 편집 안내 / 검증 실패 → 미리보기 강등
 ```
@@ -273,7 +273,7 @@ Edit       : 해석 실패 → 직접 편집 안내 / 검증 실패 → 미리�
 | 불변식 | 2계층 구조에서 유지 방법 |
 |---|---|
 | INV-1 (closed-set) | 후보 공급 경로가 PlaceScoutAgent로 **단일화** — 오히려 강화. 웹 소싱·수집 게이트·M7 등록이 한 에이전트 안에서 순서 보장. EventAgent도 M7 등록 게이트 경유 필수 |
-| INV-2 (솔버 검증값만) | 정보 에이전트는 쓰기 금지(H-3). 시각·순서는 여전히 C2만 확정. TransitAgent 정보는 "참고 데이터"이지 사용자 표시 시각이 아님 |
+| INV-2 (어셈블리 검증값만) | 정보 에이전트는 쓰기 금지(H-3). 시각·순서는 여전히 C2만 확정. TransitAgent 정보는 "참고 데이터"이지 사용자 표시 시각이 아님 |
 | INV-3 (거리만 표시) | TransitAgent의 사용자 표시용 응답 스키마에 `duration` 필드 없음 (내부 트리거 판정용 시간값은 `internal_` 접두 + Display 타입에서 제외) |
 | INV-4 (결정론 폴백) | 폴백 계단이 계층별로 분리 소유 — 각 정보 에이전트가 자기 도메인 폴백 + 상태값 반환, 업무 에이전트가 업무 폴백 |
 

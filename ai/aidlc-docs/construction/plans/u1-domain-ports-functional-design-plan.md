@@ -24,7 +24,7 @@
 | **관측 도메인 타입** — LLM 호출 기록(토큰·레이턴시·비용), 폴백 이벤트, 게이트 드롭 이벤트 | NFR-5.1~5.4 (LLM 비용·쿼터·실패율·폴백률 계측)의 타입 기반. U4/U5에서 계측 심을 때 필요 |
 | **TracePort** (관측 이벤트 발행 추상) | 모든 컴포넌트가 의존할 계측 인터페이스. fake(InMemoryTrace)로 테스트 시 이벤트 검증 가능 |
 | **프롬프트 버전 참조 타입** — PromptRef(prompt_id, version) | 프롬프트 버저닝 → eval 회귀의 연결 고리. LLM 호출 기록에 어떤 프롬프트 버전이 쓰였는지 남김 |
-| **Eval 도메인 타입** — EvalCase / EvalRun / EvalScore | 골든 데이터셋 기반 회귀 eval 파이프라인의 타입 기반 (INV-1 환각률, 솔버 통과율, RAG 품질 등) |
+| **Eval 도메인 타입** — EvalCase / EvalRun / EvalScore | 골든 데이터셋 기반 회귀 eval 파이프라인의 타입 기반 (INV-1 환각률, 어셈블리 통과율, RAG 품질 등) |
 
 ---
 
@@ -38,14 +38,14 @@
   - [ ] edit: EditCommand, ApplyMode, Dispatch
   - [ ] llm 결과: TypedResult[T], ScoredPoi, CandidatePool
   - [ ] 에이전트 실행: ExecutionPlan, ExecutionStep, AgentCall (agent-redesign.md 반영)
-  - [ ] **[LLMOps] observability: LlmCallRecord, FallbackEvent, GateDropEvent, SolverRunRecord**
+  - [ ] **[LLMOps] observability: LlmCallRecord, FallbackEvent, GateDropEvent, AssemblyRunRecord**
   - [ ] **[LLMOps] prompt: PromptRef(prompt_id, version, feature)**
   - [ ] **[LLMOps] eval: EvalCase, EvalRun, EvalScore**
 - [ ] Step B. Port 인터페이스 설계 — `business-logic-model.md`
   - [ ] LlmPort — invoke() 반환에 사용 토큰·레이턴시 메타 포함 (계측 가능 구조)
   - [ ] TravelPort, PlacesPort, PoiDbPort, CachePort
   - [ ] **[LLMOps] TracePort — emit(event) 이벤트 발행 추상**
-  - [ ] SolverPort (하이브리드 체인용 — agent-redesign.md)
+  - [ ] AssemblyPort (하이브리드 체인용 — agent-redesign.md)
 - [ ] Step C. 비즈니스 규칙·불변식 명세 — `business-rules.md`
   - [ ] 4대 불변식(INV-1~4)의 타입 수준 강제 지점 명세
   - [ ] frozen·직렬화 규칙, ID 규칙, 시간대 규칙
@@ -103,7 +103,7 @@ agent-redesign.md의 Orchestrator 실행 계획 타입을 U1에서 정의할까�
 ### Q8. 시간 표현 규칙
 - (a) **timezone-aware datetime (여행지 로컬 타임존 명시)** — 안전 (권장)
 - (b) naive datetime + 별도 timezone 필드
-- (c) date + 분 단위 int (예: 540 = 09:00) — 솔버 연산 친화
+- (c) date + 분 단위 int (예: 540 = 09:00) — 어셈블리 연산 친화
 
 [Answer]: (a) timezone-aware datetime (여행지 로컬 타임존) — 확정
 ### Q9. LLMOps 요구사항의 공식 등록

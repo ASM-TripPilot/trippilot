@@ -1,11 +1,11 @@
-"""U1 — itinerary + 솔버 계약 절편 PBT (INV-2).
+"""U1 — itinerary + 어셈블리 계약 절편 PBT (INV-2).
 
 증명하는 것:
   ① 직렬화 왕복 (U5-P10): TimeWindow·VisitSlot·DaySolution·ItineraryProblem·
                           ItinerarySolution·Violation 모두 왕복 동일
   ② 시각 정합         : TimeWindow/VisitSlot start<end, DaySolution 슬롯 시간순 강제
   ③ INV-2 출처 정합    : is_fallback=True인데 폴백 모드가 아니면 생성 거부
-  ④ SolverPort 체인    : None(해 없음) → 다음 전략 → 성공 해의 solve_mode(출처) 보존
+  ④ AssemblyPort 체인    : None(해 없음) → 다음 전략 → 성공 해의 solve_mode(출처) 보존
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 
-from tests.fakes.fake_solver import FixedSolver, NoSolutionSolver
+from tests.fakes.fake_assembler import FixedAssembler, NoSolutionAssembler
 from tests.generators.itinerary import (
     day_solutions,
     fixed_blocks,
@@ -115,13 +115,13 @@ def test_solution_rejects_dishonest_fallback() -> None:
             days=(),
             is_fallback=True,
             solve_mode=SolveMode.OR_TOOLS,  # 폴백인데 정상 모드 → 거짓말
-            solver_run=None,
+            assembly_run=None,
         )
 
 
-# ④ SolverPort 체인 — None이면 다음 전략, 성공 해의 출처(solve_mode) 보존
+# ④ AssemblyPort 체인 — None이면 다음 전략, 성공 해의 출처(solve_mode) 보존
 def _solve_chain(strategies, problem):
-    """U2 HybridSolverFacade 축소 대역: 첫 non-None 해 반환."""
+    """U2 HybridAssemblyFacade 축소 대역: 첫 non-None 해 반환."""
     for s in strategies:
         result = s.solve(problem)
         if result is not None:
@@ -130,9 +130,9 @@ def _solve_chain(strategies, problem):
 
 
 @given(sol=itinerary_solutions())
-def test_solver_chain_skips_none_and_keeps_provenance(sol: ItinerarySolution) -> None:
+def test_assembly_chain_skips_none_and_keeps_provenance(sol: ItinerarySolution) -> None:
     problem = _dummy_problem()
-    chain = [NoSolutionSolver(), NoSolutionSolver(), FixedSolver(sol)]
+    chain = [NoSolutionAssembler(), NoSolutionAssembler(), FixedAssembler(sol)]
 
     result = _solve_chain(chain, problem)
 

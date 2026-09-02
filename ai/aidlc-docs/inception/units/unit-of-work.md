@@ -17,16 +17,16 @@
 
 ---
 
-## U2. C2 Solver Core
+## U2. C2 Assembly Core
 
 | 항목 | 내용 |
 |---|---|
-| **범위** | SolverFacade + Optimizer + ConstraintChecker + TravelEstimator + FallbackScorer + RepairEngine |
+| **범위** | AssemblyFacade + Optimizer + ConstraintChecker + TravelEstimator + FallbackScorer + RepairEngine |
 | **모듈** | `c2/` 전체 |
 | **산출물** | solve(), validate(), repair(), estimate_travel(), regenerate() 구현. 하드 제약 4종. 휴리스틱+지역탐색. 결정론 모드 |
 | **성공 기준** | U5-P1(HC PBT+oracle), U5-P2(warm-start 멱등), U5-P3(결정론 동일출력), U5-P4(이동추정 결정성+INV-3), U5-P6(예산 단조) 전부 통과. day1 ≤ 3초(후보 50개 기준) |
 | **예상 소요** | 5~7일 |
-| **리스크** | 중간 — 솔버 라이브러리 선정(OR-Tools vs 자체), 5초 게이트 달성 불확실 |
+| **리스크** | 중간 — 어셈블리 라이브러리 선정(OR-Tools vs 자체), 5초 게이트 달성 불확실 |
 
 ---
 
@@ -76,7 +76,7 @@
 | **범위** | IntentRouter + 추가 워커(Explanation·Reflection·PlaceExtraction·Conversation) + 웹 후보 소싱(sourcing/+ingest_gate) + 편집 명령 번역 |
 | **모듈** | `c1/router`, `c1/workers/` (나머지 5종), `m7/sourcing/`, `m7/ingest_gate` |
 | **산출물** | route() 의도 라우팅, 워커 5종, 수집 게이트 5단, 웹 소싱 파이프라인(비동기), EditCommand 번역 |
-| **성공 기준** | M16-P1~P3(편집 솔버 경유·파괴적 확인·폴백) 통과. SRC-P1~P3(게이트 결손·실재·웹실패 격리) 통과. 라우터 실패 시 default_fallback |
+| **성공 기준** | M16-P1~P3(편집 어셈블리 경유·파괴적 확인·폴백) 통과. SRC-P1~P3(게이트 결손·실재·웹실패 격리) 통과. 라우터 실패 시 default_fallback |
 | **예상 소요** | 5~7일 |
 | **리스크** | 중간 — Places API 벤더 미확정, 자유 웹 추출 프롬프트 튜닝 필요 |
 
@@ -87,7 +87,7 @@
 | Unit | 이름 | 소요 | 우선순위 |
 |---|---|---|---|
 | U1 | Domain & Ports | 2~3일 | P0 (선행 조건) |
-| U2 | C2 Solver Core | 5~7일 | P0 |
+| U2 | C2 Assembly Core | 5~7일 | P0 |
 | U3 | M7 Place Data Core | 3~5일 | P0 |
 | U4 | C1 LLM Gateway | 4~5일 | P0 |
 | U5 | Orchestration & API | 3~4일 | P0 |

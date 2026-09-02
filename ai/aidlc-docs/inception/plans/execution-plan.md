@@ -10,7 +10,7 @@
 
 ### Transformation Scope
 - **Transformation Type**: Greenfield implementation (설계 완료, 코드 미작성)
-- **Primary Changes**: Python AI 서비스 전체 구현 (C1 LLM Gateway + C2 Solver + M7 Place Data + API)
+- **Primary Changes**: Python AI 서비스 전체 구현 (C1 LLM Gateway + C2 Assembly + M7 Place Data + API)
 - **Related Components**: Kotlin 백엔드 (M8~M16) — 본 저장소 범위 밖, API 계약만 정의
 
 ### Change Impact Assessment
@@ -22,8 +22,8 @@
 
 ### Risk Assessment
 - **Risk Level**: Medium-High
-- **주요 리스크**: LLM 벤더 미확정, 솔버 5초 게이트 달성 불확실, 외부 API 약관 미검토
-- **완화 전략**: Port 격리 + fake로 벤더 독립 개발, 솔버 벤치마크 우선 실행
+- **주요 리스크**: LLM 벤더 미확정, 어셈블리 5초 게이트 달성 불확실, 외부 API 약관 미검토
+- **완화 전략**: Port 격리 + fake로 벤더 독립 개발, 어셈블리 벤치마크 우선 실행
 - **Rollback Complexity**: Low (신규 서비스, 기존 시스템 무영향)
 
 ---
@@ -99,7 +99,7 @@ flowchart TD
 
 ### CONSTRUCTION PHASE
 - [ ] **Functional Design — EXECUTE** (per-unit)
-  - **Rationale**: 각 유닛별로 비즈니스 로직 상세 설계 필요 (솔버 알고리즘, 게이트 로직, 파이프라인 흐름)
+  - **Rationale**: 각 유닛별로 비즈니스 로직 상세 설계 필요 (어셈블리 알고리즘, 게이트 로직, 파이프라인 흐름)
 - [ ] **NFR Requirements — EXECUTE**
   - **Rationale**: 성능(5초 게이트)·보안(권한 경계)·복원력(서킷 브레이커) 기술 선택 필요
 - [ ] NFR Design — **SKIP**
@@ -120,7 +120,7 @@ flowchart TD
 | Unit | 이름 | 내용 | 의존 |
 |---|---|---|---|
 | U1 | **Domain & Ports** | 도메인 모델 (Poi, ItineraryProblem/Solution, VisitSlot 등) + Port 인터페이스 (LlmPort, TravelPort 등) | 없음 |
-| U2 | **C2 Solver Core** | 하드 제약 검증(HC1~HC4) + 휴리스틱 최적화 + 이동추정 + 결정론 폴백 | U1 |
+| U2 | **C2 Assembly Core** | 하드 제약 검증(HC1~HC4) + 휴리스틱 최적화 + 이동추정 + 결정론 폴백 | U1 |
 | U3 | **M7 Place Data Core** | POI 정본 + closed-set 후보 풀 생성 + 캐싱 | U1 |
 | U4 | **C1 LLM Gateway** | LLM 호출 + closed-set 게이트 + 티어 라우팅 + PreferenceScoring 워커 | U1, U3 |
 | U5 | **AI Orchestration & API** | score→solve 파이프라인 + 폴백 계단 + HTTP 엔드포인트 | U2, U3, U4 |
@@ -131,7 +131,7 @@ flowchart TD
 ```
 U1 (Domain & Ports)
  |
- +---> U2 (C2 Solver) ----+
+ +---> U2 (C2 Assembly) ----+
  |                         |
  +---> U3 (M7 Place Data) -+--> U5 (Orchestration & API)
  |                         |
@@ -152,7 +152,7 @@ U1 (Domain & Ports)
 | Unit | 예상 소요 | 비고 |
 |---|---|---|
 | U1 Domain & Ports | 2~3일 | 스키마·인터페이스만, PBT generators 포함 |
-| U2 C2 Solver Core | 5~7일 | 알고리즘 + PBT 5속성 + oracle |
+| U2 C2 Assembly Core | 5~7일 | 알고리즘 + PBT 5속성 + oracle |
 | U3 M7 Place Data | 3~5일 | 필터 파이프라인 + 캐싱 |
 | U4 C1 LLM Gateway | 4~5일 | 게이트 + fake + PBT 2속성 |
 | U5 Orchestration & API | 3~4일 | 통합 + HTTP + 폴백 계단 |
@@ -165,7 +165,7 @@ U1 (Domain & Ports)
 
 - **Primary Goal**: TripPilot Python AI 서비스 1차 출시 범위 구현 완료
 - **Key Deliverables**:
-  - C2 Solver: 하드 제약 4종 100% 보장, day1 ≤ 3초
+  - C2 Assembly: 하드 제약 4종 100% 보장, day1 ≤ 3초
   - C1 Gateway: closed-set 환각 0, 폴백 동작
   - M7 Place Data: 후보 풀 생성 정상, 커버리지 게이트 통과
   - API Layer: Kotlin 백엔드 연동 가능한 엔드포인트
@@ -185,18 +185,18 @@ U1 (Domain & Ports)
 | 항목 | 난이도 | 비고 |
 |---|---|---|
 | 도메인 모델 (dataclass) | 낮음 | Poi, ItineraryProblem/Solution, VisitSlot 등 |
-| Port 인터페이스 (Protocol) | 낮음 | LlmPort, TravelPort, SolverPort 등 |
+| Port 인터페이스 (Protocol) | 낮음 | LlmPort, TravelPort, AssemblyPort 등 |
 | PBT Generators | 낮음 | Hypothesis strategies |
 | Fake 어댑터 | 낮음 | FakeLlm, FakeTravel, InMemoryPoi |
 
-### U2 C2 Solver Core — 직접 구현 (핵심 난이도)
+### U2 C2 Assembly Core — 직접 구현 (핵심 난이도)
 | 항목 | 난이도 | 비고 |
 |---|---|---|
 | OR-Tools VRPTW 구현 | **높음** | RoutingModel + TimeWindows + Disjunction |
 | HC1~HC4 검증 | 중간 | 순수 함수 4종 |
 | 이동시간 추정 체인 | 중간 | 카카오→네이버→직선거리 어댑터 |
 | 결정론 폴백 (규칙 점수) | 낮음 | 시드 고정 점수 계산 |
-| Bedrock Solver (2차) | 중간 | LangChain ChatBedrock 래핑 + HC 검증 연결 |
+| Bedrock Assembly (2차) | 중간 | LangChain ChatBedrock 래핑 + HC 검증 연결 |
 | repair 알고리즘 | 중간 | 시각·순서 최소 조정 |
 
 ### U3 M7 Place Data — 직접 구현

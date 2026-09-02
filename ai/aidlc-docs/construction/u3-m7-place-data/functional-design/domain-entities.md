@@ -32,7 +32,7 @@
 
 ## 4. M7 설정 (m7 계층 내 — domain 아님)
 
-`M7Config`: `radius_km {WALK:2, PUBLIC:10, CAR:20}` · `multi_day_factor 0.7` · `budget_limit {LOW:15_000, MID:40_000, HIGH:None}` · `max_candidates 5_000(G142)` · `ttl {poi:24h, hours:6h, price:금지}` · `match_auto 0.85 / match_confirm 0.60` — 전부 remote config 초기값, 주입 컨테이너 (SolverConfig 패턴).
+`M7Config`: `radius_km {WALK:2, PUBLIC:10, CAR:20}` · `multi_day_factor 0.7` · `budget_limit {LOW:15_000, MID:40_000, HIGH:None}` · `max_candidates 5_000(G142)` · `ttl {poi:24h, hours:6h, price:금지}` · `match_auto 0.85 / match_confirm 0.60` — 전부 remote config 초기값, 주입 컨테이너 (AssemblyConfig 패턴).
 
 ## 5. U1 타입 활용 확인
 

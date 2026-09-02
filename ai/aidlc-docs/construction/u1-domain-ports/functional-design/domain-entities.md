@@ -30,11 +30,11 @@
 | 타입 | 필드 | 불변식 |
 |---|---|---|
 | `TimeWindow` | `start: datetime, end: datetime` | tz-aware. `start < end`. 기본 day window 09:00~21:00 |
-| `FixedBlock` | `poi_id, window: TimeWindow, reason: str` | HC3: 솔버가 시각 변경 불가 |
+| `FixedBlock` | `poi_id, window: TimeWindow, reason: str` | HC3: 어셈블리가 시각 변경 불가 |
 | `VisitSlot` | `poi_id, start_at: datetime, end_at: datetime, stay_min: int, score: float, is_llm_score: bool` | HC1/HC4 대상. tz-aware |
 | `DaySolution` | `date: date, slots: tuple[VisitSlot,...], fixed_blocks: tuple[FixedBlock,...]` | slots 시간순 정렬 |
 | `ItineraryProblem` | `schedule_id, days: tuple[date,...], candidates: tuple[ScoredPoi,...], fixed_blocks, budget: BudgetLevel, transport: TransportMode, day_window: TimeWindow, seed: int` | `candidates ⊆ CandidatePool` (INV-1). `seed` 고정 → 결정론(INV-4) |
-| `ItinerarySolution` | `schedule_id, days: tuple[DaySolution,...], is_fallback: bool, solve_mode: SolveMode, solver_run: SolverRunRecord \| None` | 반환 전 HC1~HC4 통과 필수 (INV-2) |
+| `ItinerarySolution` | `schedule_id, days: tuple[DaySolution,...], is_fallback: bool, solve_mode: SolveMode, assembly_run: AssemblyRunRecord \| None` | 반환 전 HC1~HC4 통과 필수 (INV-2) |
 | `SolveMode` | Enum: `OR_TOOLS / LLM / RULE_FALLBACK / MINIMAL` (정본 `ai/src/trippilot/domain/itinerary.py`) | LLM 이라도 HC 검증 후에만 반환(코드 docstring 과 같은 표현). **정정**: 구 `BEDROCK` → `LLM` 개명 완료 (TRIP-256 #71, 2026-08-04 — 벤더 중립 AI-D06) |
 | `Violation` | `code: str(HC1~HC4), slot_ref: PoiId \| None, detail: str` | 빈 리스트 = 유효 |
 
@@ -86,10 +86,10 @@
 | 타입 | 고유 필드 | 용도 |
 |---|---|---|
 | `LlmCallRecord` | `feature: str, model_id: str, prompt_ref: PromptRef, input_tokens: int, output_tokens: int, latency_ms: int, success: bool, agent: AgentKind \| None` | NFR-5.1 비용 계측. 비용 계산은 소비 측(토큰×단가) — 단가는 도메인에 안 둠 |
-| `FallbackEvent` | `stage: str(llm/solver/router/agent), from_mode: str, to_mode: str, reason: str` | NFR-5.4 폴백률. INV-4 침묵 실패 금지 증빙 |
+| `FallbackEvent` | `stage: str(llm/assembly/router/agent), from_mode: str, to_mode: str, reason: str` | NFR-5.4 폴백률. INV-4 침묵 실패 금지 증빙 |
 | `GateDropEvent` | `feature: str, dropped_ids: tuple[PoiId,...], total_count: int, dropped_count: int` | INV-1 환각률 = dropped/total 지표화 |
-| `SolverRunRecord` | `solve_mode: SolveMode, elapsed_ms: int, violations_found: int, repaired: bool` | 솔버 통과율·5초 게이트 계측 |
-| `TraceEvent` | = `LlmCallRecord \| FallbackEvent \| GateDropEvent \| SolverRunRecord` (Union) | TracePort.emit() 인자 타입 |
+| `AssemblyRunRecord` | `solve_mode: SolveMode, elapsed_ms: int, violations_found: int, repaired: bool` | 어셈블리 통과율·5초 게이트 계측 |
+| `TraceEvent` | = `LlmCallRecord \| FallbackEvent \| GateDropEvent \| AssemblyRunRecord` (Union) | TracePort.emit() 인자 타입 |
 
 ## 9. [LLMOps] 프롬프트 (domain/prompt.py) — NFR-7.3
 

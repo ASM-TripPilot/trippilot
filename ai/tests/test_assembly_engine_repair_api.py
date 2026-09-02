@@ -8,7 +8,7 @@
                    작업이 시한을 넘기면 deadline_exceeded 관측 (DL-5 침묵 금지)
   ④ 시한(validate): 시한이 소진돼도 검증을 생략하지 않되(INV-2) 흔적을 남긴다
   ⑤ regenerate   : excluded_poi_ids가 warm-start 경로에서도 보존 (필드 나열 재구성 소실 회귀)
-  ⑥ 무회귀       : llm_solver의 내부 repair 경로(모듈 함수 직접 호출)는 그대로
+  ⑥ 무회귀       : llm_assembler의 내부 repair 경로(모듈 함수 직접 호출)는 그대로
 """
 
 from __future__ import annotations
@@ -17,13 +17,13 @@ import json
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.facade import HybridSolverFacade
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.llm_solver import LlmSolver
-from trippilot.solver_engine.repair import MinimalChangePolicy
-from trippilot.solver_engine.repair import repair as repair_engine
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.facade import HybridAssemblyFacade
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.llm_assembler import LlmAssembler
+from trippilot.assembly_engine.repair import MinimalChangePolicy
+from trippilot.assembly_engine.repair import repair as repair_engine
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -41,7 +41,7 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.observability import FallbackEvent, SolverRunRecord
+from trippilot.domain.observability import FallbackEvent, AssemblyRunRecord
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.prompt import PromptRef
 
@@ -50,10 +50,10 @@ from tests.fakes.fake_llm import FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 
 _KST = timezone(timedelta(hours=9))
-_CFG = SolverConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
+_CFG = AssemblyConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
 _EST = TravelEstimator(_CFG)
 _DAY = date(2026, 8, 5)
-_REF = PromptRef("prompts/solver_secondary.yaml", "0.1.0", "solver_secondary")
+_REF = PromptRef("prompts/assembly_secondary.yaml", "0.1.0", "assembly_secondary")
 
 
 class TickingClock:
@@ -99,11 +99,11 @@ def _sol(*slots: VisitSlot) -> ItinerarySolution:
     return ItinerarySolution(
         schedule_id=ScheduleId("s"),
         days=(DaySolution(date=_DAY, slots=slots, fixed_blocks=()),),
-        is_fallback=False, solve_mode=SolveMode.LLM, solver_run=None)
+        is_fallback=False, solve_mode=SolveMode.LLM, assembly_run=None)
 
 
 def _facade(index, clock=None, trace=None, chain=()):
-    return HybridSolverFacade(list(chain), index, _EST,
+    return HybridAssemblyFacade(list(chain), index, _EST,
                               clock or FakeClock(), trace or InMemoryTrace())
 
 
@@ -127,7 +127,7 @@ def test_repair_public_resolves_hc2_violation() -> None:
     assert facade.validate(result.repaired, problem, deadline_ms=1000) == []
     assert _placed(result.repaired) == [PoiId("a"), PoiId("b")]  # POI·순서 불변
     assert [c.poi_id for c in result.changes] == [PoiId("b")]    # 최소 변경
-    records = trace.of_type(SolverRunRecord)
+    records = trace.of_type(AssemblyRunRecord)
     assert len(records) == 1
     assert records[0].repaired is True and records[0].violations_found == 0
     assert records[0].solve_mode == SolveMode.LLM  # 출처 보존
@@ -173,7 +173,7 @@ def test_repair_returns_none_when_shift_breaks_day_window() -> None:
     assert result.repaired is None and result.changes == ()
     reasons = [e.reason for e in trace.of_type(FallbackEvent)]
     assert "unrepairable" in reasons  # 침묵 실패 금지 (INV-4)
-    records = trace.of_type(SolverRunRecord)
+    records = trace.of_type(AssemblyRunRecord)
     assert len(records) == 1
     assert records[0].repaired is False and records[0].violations_found > 0
 
@@ -204,8 +204,8 @@ def test_repair_skips_without_budget_and_is_observed() -> None:
     assert result.repaired is None and result.changes == ()
     events = trace.of_type(FallbackEvent)
     assert [e.reason for e in events] == ["deadline"]   # 스킵이 관측됨 (침묵 금지)
-    assert events[0].from_mode == "repair" and events[0].stage == "solver"
-    assert trace.of_type(SolverRunRecord) == []          # 실행 자체가 없었음
+    assert events[0].from_mode == "repair" and events[0].stage == "assembly"
+    assert trace.of_type(AssemblyRunRecord) == []          # 실행 자체가 없었음
 
 
 def test_repair_overrun_is_observed() -> None:
@@ -267,7 +267,7 @@ def test_regenerate_preserves_excluded_poi_ids() -> None:
     """
     problem, index = _setup()
     excluded = frozenset({PoiId("a")})
-    facade = _facade(index, chain=[RuleFallbackSolver(index, _EST, _CFG)])
+    facade = _facade(index, chain=[RuleFallbackAssembler(index, _EST, _CFG)])
 
     result = facade.regenerate(replace(problem, excluded_poi_ids=excluded),
                                locked_slots=(), deadline_ms=5000)
@@ -280,7 +280,7 @@ def test_regenerate_preserves_excluded_poi_ids() -> None:
 def test_regenerate_preserves_excluded_with_locked_slots() -> None:
     problem, index = _setup()
     excluded = frozenset({PoiId("a")})
-    facade = _facade(index, chain=[RuleFallbackSolver(index, _EST, _CFG)])
+    facade = _facade(index, chain=[RuleFallbackAssembler(index, _EST, _CFG)])
     p = replace(problem, excluded_poi_ids=excluded)
 
     first = facade.regenerate(p, locked_slots=(), deadline_ms=5000)
@@ -328,10 +328,10 @@ def test_repair_engine_noop_preserves_quality_score() -> None:
     assert result.repaired.score == score
 
 
-# ── ⑥ llm_solver 내부 repair 경로 무회귀 ─────────────────────
+# ── ⑥ llm_assembler 내부 repair 경로 무회귀 ─────────────────────
 
 def test_llm_internal_repair_path_unchanged() -> None:
-    """2차 솔버는 여전히 모듈 함수 repair()를 직접 쓴다 — 퍼사드 승격과 무관."""
+    """2차 어셈블리는 여전히 모듈 함수 repair()를 직접 쓴다 — 퍼사드 승격과 무관."""
     problem, index = _setup()
     trace = InMemoryTrace()
     canned = json.dumps({"days": [{"date": "2026-08-05", "slots": [
@@ -339,7 +339,7 @@ def test_llm_internal_repair_path_unchanged() -> None:
          "end": "2026-08-05T11:15:00+09:00"},
         {"poi_id": "b", "start": "2026-08-05T11:20:00+09:00",
          "end": "2026-08-05T12:20:00+09:00"}]}]})
-    stage = LlmSolver(FakeLlm(canned=canned), index, _EST, _CFG, trace, _REF,
+    stage = LlmAssembler(FakeLlm(canned=canned), index, _EST, _CFG, trace, _REF,
                       "claude-sonnet-5")
 
     result = stage.solve(problem, remaining_ms=5000)
@@ -347,4 +347,4 @@ def test_llm_internal_repair_path_unchanged() -> None:
     assert result is not None and result.solve_mode == SolveMode.LLM
     assert _placed(result) == [PoiId("a"), PoiId("b")]  # 수리 후 채택
     # 내부 경로는 퍼사드 관측을 발행하지 않는다 (기존 이벤트 구성 유지)
-    assert trace.of_type(SolverRunRecord) == []
+    assert trace.of_type(AssemblyRunRecord) == []

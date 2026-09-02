@@ -5,7 +5,7 @@
 [2] Augment   closed-set 후보 목록 + 검색 컨텍스트 조립
 [3] Generate  llm.select_alternatives — C1 GatewayFacade 경유 (L-3)
               게이트웨이 미주입/실패 → 규칙 랭킹 폴백 (INV-4 — reason·거리 신호, TRIP-532)
-[4] Validate  솔버 관문 (C2) — **본 단계 범위 밖**, 아래 "남긴 이음매" 참조
+[4] Validate  어셈블리 관문 (C2) — **본 단계 범위 밖**, 아래 "남긴 이음매" 참조
 ```
 
 **INV-1 (closed-set)** — 구조로 막는다:
@@ -14,20 +14,20 @@
   `CandidatePool` 인자 없이는 호출 자체가 불가능하다. 풀 밖 참조는 조용히 사라지지 않고
   `dropped_out_of_pool`로 결과에 실린다 (INV-4 — 침묵 실패 금지).
 
-**INV-2 (솔버 검증값만)** — 본 파이프라인의 출력 `Alternative`에는 시각·순서 필드가 아예
-없다. 제안(Proposal)만 만들고 배치·시각 확정은 4단 솔버 관문 몫 (agent-structure-v2 §2).
+**INV-2 (어셈블리 검증값만)** — 본 파이프라인의 출력 `Alternative`에는 시각·순서 필드가 아예
+없다. 제안(Proposal)만 만들고 배치·시각 확정은 4단 어셈블리 관문 몫 (agent-structure-v2 §2).
 
 **INV-3** — 출력 계열 어디에도 소요시간 필드가 없다 (거리도 본 단계에서는 미산출).
 
 **INV-4** — `run`은 예외를 밖으로 던지지 않는다. 어떤 실패든 결정론 폴백 결과로 수렴하고
 `notes`에 어느 단계에서 왜 떨어졌는지가 남는다 (`IntentRouter`와 같은 계약).
 
-**남긴 이음매 (실 pgvector·솔버 배선용)**
+**남긴 이음매 (실 pgvector·어셈블리 배선용)**
 - 벡터 소스: `VectorStorePort`/`EmbeddingPort` 주입 — pgvector 어댑터로 교체해도 본 파일 무변.
 - LLM: `alternative_gateway`는 `GatewayFacade | None`. 주입되면
   `AlternativeSelectionWorker`(TRIP-331 — 프롬프트 yaml·`AlternativeSelectionGate`와
   4종 세트)를 경유해 호출하고, 미주입·실패 시 규칙 랭킹으로 돈다 (INV-4).
-- 솔버: `Alternative`를 그대로 `solve` 입력으로 넘기면 되도록 poi_id 목록만 담았다.
+- 어셈블리: `Alternative`를 그대로 `solve` 입력으로 넘기면 되도록 poi_id 목록만 담았다.
 """
 
 from __future__ import annotations
@@ -55,8 +55,8 @@ from trippilot.domain.poi import PoiCategory
 from trippilot.domain.trigger import TriggerParams
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
-from trippilot.solver_engine.config import RAIN_OUTDOOR
-from trippilot.solver_engine.travel import haversine_km
+from trippilot.assembly_engine.config import RAIN_OUTDOOR
+from trippilot.assembly_engine.travel import haversine_km
 
 _ALTERNATIVE_LABELS = ("A", "B", "C", "D", "E")
 
@@ -65,7 +65,7 @@ _ALTERNATIVE_LABELS = ("A", "B", "C", "D", "E")
 # delay·fatigue 는 거리 오름차순이 곧 규칙이라 항목이 없고, closed·canceled·none 은 중립
 # (닫힌 곳은 excluded 로 이미 빠진다 — 없는 신호로 순위를 지어내지 않는다).
 _DEMOTED_BY_REASON: Mapping[str, frozenset[PoiCategory]] = MappingProxyType(
-    {"weather": RAIN_OUTDOOR}  # 솔버의 우천 판정표(TRIP-383)와 같은 기준 — 두 경로가 같은 판단
+    {"weather": RAIN_OUTDOOR}  # 어셈블리의 우천 판정표(TRIP-383)와 같은 기준 — 두 경로가 같은 판단
 )
 
 

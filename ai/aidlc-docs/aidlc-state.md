@@ -10,7 +10,7 @@
 - **Existing Design Documents**: Yes (ai-architecture.md, ai-implementation-design.md, ai-data-design.md, ai-prompt-design.md, ai-testing-guide.md, ai-adr.md)
 - **Programming Languages**: Python
 - **Build System**: uv (워크스페이스 루트 `pyproject.toml` — `build-backend = "uv_build"` · `uv.lock`)
-- **Project Structure**: Multi-component AI Service (C1 LLM Gateway + C2 Solver Engine + M7 Place Data)
+- **Project Structure**: Multi-component AI Service (C1 LLM Gateway + C2 Assembly Engine + M7 Place Data)
 - **Workspace Root**: 모노레포 `ai/` (종전 값 `/Users/juna/dev/TripPilot_AI` 는 모노레포 이관 전 단독 리포 경로)
 
 ## Code Location Rules
@@ -28,7 +28,7 @@
 ## Execution Plan Summary
 - **Total Stages to Execute**: 8 (Application Design, Units Generation, Functional Design, NFR Requirements, Code Generation x6, Build and Test)
 - **Stages to Skip**: NFR Design (설계 문서에 패턴 이미 정의), Infrastructure Design (AI Engineer 범위 밖, 출시 직전 결정)
-- **Proposed Units**: 6 (Domain&Ports, C2 Solver, M7 PlaceData, C1 Gateway, Orchestration&API, Extended Features)
+- **Proposed Units**: 6 (Domain&Ports, C2 Assembly, M7 PlaceData, C1 Gateway, Orchestration&API, Extended Features)
 - **Estimated Duration**: 22~31일 (1인 AI Engineer)
 
 ## Stage Progress

@@ -143,13 +143,13 @@ def _tmap_travel():
     app_key = _env("TMAP_API_KEY")
     if app_key is None:
         return None
-    from trippilot.solver_engine.adapters.chained_travel import ChainedTravelAdapter
-    from trippilot.solver_engine.adapters.tmap import TmapRouteAdapter, UrllibHttpClient
-    from trippilot.solver_engine.config import SolverConfig
-    from trippilot.solver_engine.travel import TravelEstimator
+    from trippilot.assembly_engine.adapters.chained_travel import ChainedTravelAdapter
+    from trippilot.assembly_engine.adapters.tmap import TmapRouteAdapter, UrllibHttpClient
+    from trippilot.assembly_engine.config import AssemblyConfig
+    from trippilot.assembly_engine.travel import TravelEstimator
 
     tmap = TmapRouteAdapter(UrllibHttpClient(), app_key)
-    fallback = TravelEstimator(SolverConfig())
+    fallback = TravelEstimator(AssemblyConfig())
     return ChainedTravelAdapter(primary=tmap, fallback=fallback)
 
 

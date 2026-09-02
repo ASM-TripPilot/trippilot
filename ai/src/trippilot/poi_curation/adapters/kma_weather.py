@@ -2,7 +2,7 @@
 
 위치 판단: 외부 공공데이터포털(apis.data.go.kr) 어댑터의 기존 선례(TourAPI —
 `poi_curation/sourcing/tourapi.py`)가 이 패키지에 있고, 그 HTTP 콘센트
-(HttpGetJson·UrllibHttpClient)를 그대로 재사용한다. solver_engine/adapters는
+(HttpGetJson·UrllibHttpClient)를 그대로 재사용한다. assembly_engine/adapters는
 이동 API 소관, llm_gateway/adapters는 벤더 SDK 한정(BR-U4-10) — 날씨 어댑터는
 여기가 기존 관례와의 어긋남이 가장 작다.
 

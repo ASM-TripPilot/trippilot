@@ -1,8 +1,8 @@
 """U5-P1·U5-P3 확장 (TRIP-531) — 일별 동일 카테고리 체감 페널티는 배제가 아니다.
 
 기본 가중(0.3)에서의 HC 보존·결정론은 기존 게이트가 이미 커버한다
-(test_solver_engine_solver.py ①②·test_solver_engine_ortools.py ①② — 기본
-SolverConfig에 다양성 항이 켜져 있다). 이 파일은 그 위의 구멍만 메운다:
+(test_assembly_engine_fallback.py ①②·test_assembly_engine_ortools.py ①② — 기본
+AssemblyConfig에 다양성 항이 켜져 있다). 이 파일은 그 위의 구멍만 메운다:
 편중 풀 + 과장 가중(5.0)이라는 적대적 구도에서 소프트 항이 배제·손실·비결정으로
 번지지 않음을 증명한다.
 
@@ -21,7 +21,7 @@ SolverConfig에 다양성 항이 켜져 있다). 이 파일은 그 위의 구멍
      게이트 소관 — 여기는 과장 가중 구멍만)
   ⑥ config: 신규 2필드 음수 거부
 
-실 API 호출 0 (D37) — 솔버·거리 추정 전부 로컬 결정론.
+실 API 호출 0 (D37) — 어셈블리·거리 추정 전부 로컬 결정론.
 """
 
 from __future__ import annotations
@@ -31,29 +31,29 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from hypothesis import given, settings
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.constraints import check_all
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.ortools_solver import OrToolsSolver
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.constraints import check_all
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, ScheduleId, TransportMode
 from trippilot.domain.itinerary import ItineraryProblem, TimeWindow
 from trippilot.domain.llm import ScoredPoi
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 
-from tests.generators.solver import skewed_category_setups
+from tests.generators.assembly import skewed_category_setups
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)
 _DAY2 = date(2026, 8, 6)
-# 소규모(≤8 노드)는 수 초 안에 OPTIMAL 도달 — 기존 솔버 테스트와 동일한 관례
-_CFG = SolverConfig(or_tools_limit_ms=2000, or_tools_min_ms=50)
+# 소규모(≤8 노드)는 수 초 안에 OPTIMAL 도달 — 기존 어셈블리 테스트와 동일한 관례
+_CFG = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50)
 # 항 무발동 = 허용치를 후보 수 위로 올린다 — OR-Tools는 항 생략, 폴백은 재정렬
 # 없음. (category_excess_penalty=0은 OR-Tools만 끄고 폴백 쿼터는 남아 반쪽이다.)
-_CFG_OFF = SolverConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
+_CFG_OFF = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
                         category_free_count=10_000)
 # 과장 가중 — 점수 축 [0,1]의 5배. 페널티가 항상 점수를 이기는 적대 구도.
-_CFG_EXTREME = SolverConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
+_CFG_EXTREME = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
                             category_excess_penalty=5.0)
 # 카테고리 항 격리판 (식사 항 0) — 단일 카테고리 FOOD 풀에서는 기존 식사 항
 # (TRIP-379 ③ FOOD·FOOD 인접 -0.2)이 저점수(<0.2) FOOD를 어느 날에 놓아도 순손실로
@@ -61,10 +61,10 @@ _CFG_EXTREME = SolverConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
 # "카테고리 항 **단독**은 배치를 잃지 않는다(마지막 날 무페널티 흡수)"를 정리로
 # 증명하려면 그 기존 항과 분리해야 한다 — 격리 없이 총량 동등을 걸면 식사 항의
 # 기존 동작을 이 티켓의 회귀로 오인한다.
-_CFG_EXTREME_ISO = SolverConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
+_CFG_EXTREME_ISO = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
                                 category_excess_penalty=5.0,
                                 meal_bonus=0.0, meal_penalty=0.0)
-_CFG_OFF_ISO = SolverConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
+_CFG_OFF_ISO = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
                             category_free_count=10_000,
                             meal_bonus=0.0, meal_penalty=0.0)
 _EST = TravelEstimator(_CFG)
@@ -112,8 +112,8 @@ def test_mono_pool_ortools_places_all_despite_extreme_penalty() -> None:
     배치를 잃지 않는다 (식사 항 격리 — _CFG_*_ISO 주석)."""
     problem, index = _problem(_POOL_MONO, days=(_DAY, _DAY2))
     est = TravelEstimator(_CFG_EXTREME_ISO)
-    on = OrToolsSolver(index, est, _CFG_EXTREME_ISO).solve(problem, 3000)
-    off = OrToolsSolver(index, TravelEstimator(_CFG_OFF_ISO),
+    on = OrToolsAssembler(index, est, _CFG_EXTREME_ISO).solve(problem, 3000)
+    off = OrToolsAssembler(index, TravelEstimator(_CFG_OFF_ISO),
                         _CFG_OFF_ISO).solve(problem, 3000)
     assert on is not None and off is not None
     assert check_all(on, problem, index, est) == []
@@ -129,7 +129,7 @@ def test_mono_pool_ortools_places_all_despite_extreme_penalty() -> None:
 def test_pbt_mono_pool_ortools_never_excluded(setup) -> None:
     problem, index = setup
     est = TravelEstimator(_CFG_EXTREME_ISO)
-    result = OrToolsSolver(index, est, _CFG_EXTREME_ISO).solve(problem, 1500)
+    result = OrToolsAssembler(index, est, _CFG_EXTREME_ISO).solve(problem, 1500)
     assert result is not None  # 가해 풀(생성기 보장) — 해가 있어야 한다
     assert check_all(result, problem, index, est) == []
     # 순서 무관 가해 풀 — 마지막 날 무페널티 흡수로 전량 배치가 최적
@@ -142,8 +142,8 @@ def test_pbt_mono_pool_fallback_identical_to_no_penalty(setup) -> None:
     """폴백은 시도 순서만 바꾼다 — 단일 카테고리면 순서 키가 상수라 재정렬
     자체가 무의미해지고, 해는 항 무발동 config와 완전히 같아야 한다."""
     problem, index = setup
-    on = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
-    off = RuleFallbackSolver(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem)
+    on = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
+    off = RuleFallbackAssembler(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem)
     assert on == off
     assert any(d.slots for d in on.days)  # 배제 아님 — 일정은 나온다
     assert check_all(on, problem, index, _EST) == []
@@ -158,8 +158,8 @@ def test_pbt_fallback_reorder_never_loses_placements(setup) -> None:
     """재정렬은 배치 실패를 만들지 않는다 — 슬롯 수가 항 무발동과 동일하고,
     순서 무관 가해 풀(생성기 보장)에서는 전량 배치다."""
     problem, index = setup
-    on = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
-    off = RuleFallbackSolver(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem)
+    on = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
+    off = RuleFallbackAssembler(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem)
     assert _total_slots(on) == _total_slots(off) == len(problem.candidates)
     assert check_all(on, problem, index, _EST) == []
 
@@ -172,15 +172,15 @@ def test_pbt_fallback_reorder_never_loses_placements(setup) -> None:
 def test_pbt_category_penalty_keeps_determinism(setup) -> None:
     problem, index = setup
     est = TravelEstimator(_CFG_EXTREME)
-    solver = OrToolsSolver(index, est, _CFG_EXTREME)
-    assert solver.solve(problem, 1500) == solver.solve(problem, 1500)
-    fb = RuleFallbackSolver(index, est, _CFG_EXTREME)
+    assembly = OrToolsAssembler(index, est, _CFG_EXTREME)
+    assert assembly.solve(problem, 1500) == assembly.solve(problem, 1500)
+    fb = RuleFallbackAssembler(index, est, _CFG_EXTREME)
     assert fb.solve(problem) == fb.solve(problem)
 
 
 # ── ④ 허용치 공식 — 1일 여행이면 허용치 = 후보 수 (무발동과 동등) ──
 # 후보 7 > category_free_count 2지만 남은 일수 1 → ⌈7÷1⌉ = 7 = 후보 수.
-# "솔버는 풀 비중 이상으로 증폭하지 않는다"의 사영: 마지막 날 전량 배치는
+# "어셈블리는 풀 비중 이상으로 증폭하지 않는다"의 사영: 마지막 날 전량 배치는
 # 페널티가 아무리 커도 막히지 않는다.
 
 _POOL_LAST_DAY = [(f"f{i}", PoiCategory.FOOD, .90 - .05 * i) for i in range(7)]
@@ -189,8 +189,8 @@ _POOL_LAST_DAY = [(f"f{i}", PoiCategory.FOOD, .90 - .05 * i) for i in range(7)]
 def test_single_day_quota_equals_pool_size_ortools() -> None:
     problem, index = _problem(_POOL_LAST_DAY, days=(_DAY,))
     est = TravelEstimator(_CFG_EXTREME)
-    on = OrToolsSolver(index, est, _CFG_EXTREME).solve(problem, 3000)
-    off = OrToolsSolver(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 3000)
+    on = OrToolsAssembler(index, est, _CFG_EXTREME).solve(problem, 3000)
+    off = OrToolsAssembler(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 3000)
     assert on is not None
     assert on == off  # 허용치 = 후보 수 → 항 자체가 생기지 않는다 (모델 동일)
     assert _total_slots(on) == len(problem.candidates)
@@ -199,8 +199,8 @@ def test_single_day_quota_equals_pool_size_ortools() -> None:
 def test_single_day_quota_equals_pool_size_fallback() -> None:
     problem, index = _problem(_POOL_LAST_DAY, days=(_DAY,))
     est = TravelEstimator(_CFG_EXTREME)
-    on = RuleFallbackSolver(index, est, _CFG_EXTREME).solve(problem)
-    off = RuleFallbackSolver(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem)
+    on = RuleFallbackAssembler(index, est, _CFG_EXTREME).solve(problem)
+    off = RuleFallbackAssembler(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem)
     assert on == off  # 쿼터 = 후보 수 → 재정렬 무발동
     assert _total_slots(on) == len(problem.candidates)
 
@@ -215,10 +215,10 @@ def test_single_day_quota_equals_pool_size_fallback() -> None:
 def test_pbt_extreme_category_penalty_never_violates_hard_constraints(setup) -> None:
     problem, index = setup
     est = TravelEstimator(_CFG_EXTREME)
-    result = OrToolsSolver(index, est, _CFG_EXTREME).solve(problem, 1500)
+    result = OrToolsAssembler(index, est, _CFG_EXTREME).solve(problem, 1500)
     if result is not None:
         assert check_all(result, problem, index, est) == []
-    fb = RuleFallbackSolver(index, est, _CFG_EXTREME).solve(problem)
+    fb = RuleFallbackAssembler(index, est, _CFG_EXTREME).solve(problem)
     assert check_all(fb, problem, index, est) == []
 
 
@@ -227,9 +227,9 @@ def test_pbt_extreme_category_penalty_never_violates_hard_constraints(setup) -> 
 
 def test_config_rejects_negative_category_free_count() -> None:
     with pytest.raises(ValueError, match="category_free_count"):
-        SolverConfig(category_free_count=-1)
+        AssemblyConfig(category_free_count=-1)
 
 
 def test_config_rejects_negative_category_excess_penalty() -> None:
     with pytest.raises(ValueError, match="category_excess_penalty"):
-        SolverConfig(category_excess_penalty=-0.1)
+        AssemblyConfig(category_excess_penalty=-0.1)

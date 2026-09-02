@@ -20,24 +20,24 @@ from datetime import date, datetime, timedelta, timezone
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.solver_engine.config import RAIN_INDOOR, RAIN_OUTDOOR, SolverConfig
-from trippilot.solver_engine.constraints import check_all
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.ortools_solver import OrToolsSolver
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import RAIN_INDOOR, RAIN_OUTDOOR, AssemblyConfig
+from trippilot.assembly_engine.constraints import check_all
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, ScheduleId, TransportMode
 from trippilot.domain.itinerary import ItineraryProblem, TimeWindow
 from trippilot.domain.llm import ScoredPoi
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 
-from tests.generators.solver import solver_setups
+from tests.generators.assembly import assembly_setups
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)
 _DAY2 = date(2026, 8, 6)
-# 소규모(≤8 노드)는 수 초 안에 OPTIMAL 도달 — 기존 솔버 테스트와 동일한 관례
-_CFG = SolverConfig(or_tools_limit_ms=2000, or_tools_min_ms=50)
-_CFG_EXTREME = SolverConfig(or_tools_limit_ms=1000, or_tools_min_ms=50,
+# 소규모(≤8 노드)는 수 초 안에 OPTIMAL 도달 — 기존 어셈블리 테스트와 동일한 관례
+_CFG = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50)
+_CFG_EXTREME = AssemblyConfig(or_tools_limit_ms=1000, or_tools_min_ms=50,
                             rain_outdoor_penalty=5.0, rain_indoor_bonus=5.0)
 _EST = TravelEstimator(_CFG)
 _RAINY = {_DAY: 80}  # 임계(기본 60) 이상 — 우천일
@@ -97,8 +97,8 @@ _POOL_OUTDOOR_ONLY = [(f"n{i}", PoiCategory.NATURE, .80 - .02 * i)
 def test_rainy_day_shifts_ortools_selection_indoor() -> None:
     on_problem, index = _problem(_POOL, rain=_RAINY)
     off_problem, _ = _problem(_POOL, rain=None)
-    on = OrToolsSolver(index, _EST, _CFG).solve(on_problem, 3000)
-    off = OrToolsSolver(index, _EST, _CFG).solve(off_problem, 3000)
+    on = OrToolsAssembler(index, _EST, _CFG).solve(on_problem, 3000)
+    off = OrToolsAssembler(index, _EST, _CFG).solve(off_problem, 3000)
     assert on is not None and off is not None
     assert check_all(on, on_problem, index, _EST) == []
     out_on, in_on = _category_counts(on, index)
@@ -115,9 +115,9 @@ def test_rainy_day_shifts_ortools_selection_indoor() -> None:
 def test_below_threshold_pop_equals_no_adjust() -> None:
     below, index = _problem(_POOL, rain={_DAY: 50})  # 임계(60) 미만
     none, _ = _problem(_POOL, rain=None)
-    solver = OrToolsSolver(index, _EST, _CFG)
-    assert solver.solve(below, 3000) == solver.solve(none, 3000)
-    fb = RuleFallbackSolver(index, _EST, _CFG)
+    assembly = OrToolsAssembler(index, _EST, _CFG)
+    assert assembly.solve(below, 3000) == assembly.solve(none, 3000)
+    fb = RuleFallbackAssembler(index, _EST, _CFG)
     assert fb.solve(below) == fb.solve(none)
 
 
@@ -125,8 +125,8 @@ def test_unknown_date_pop_equals_no_adjust() -> None:
     # 예보가 다른 날짜에만 있다 — 이 일자는 정보 없음 = 무보정 (0% 지어내기 금지)
     other, index = _problem(_POOL, rain={_DAY2: 90})
     none, _ = _problem(_POOL, rain=None)
-    solver = OrToolsSolver(index, _EST, _CFG)
-    assert solver.solve(other, 3000) == solver.solve(none, 3000)
+    assembly = OrToolsAssembler(index, _EST, _CFG)
+    assert assembly.solve(other, 3000) == assembly.solve(none, 3000)
 
 
 # ── ③ 폴백 경로 — 같은 규칙의 결정론 버전 ────────────────────────────
@@ -135,7 +135,7 @@ def test_unknown_date_pop_equals_no_adjust() -> None:
 def test_fallback_rainy_day_prefers_indoor() -> None:
     on_problem, index = _problem(_POOL, rain=_RAINY)
     off_problem, _ = _problem(_POOL, rain=None)
-    fb = RuleFallbackSolver(index, _EST, _CFG)
+    fb = RuleFallbackAssembler(index, _EST, _CFG)
     on, off = fb.solve(on_problem), fb.solve(off_problem)
     assert check_all(on, on_problem, index, _EST) == []
     out_on, in_on = _category_counts(on, index)
@@ -153,11 +153,11 @@ def test_fallback_rainy_day_prefers_indoor() -> None:
 
 def test_outdoor_only_pool_still_generates_on_rainy_day() -> None:
     problem, index = _problem(_POOL_OUTDOOR_ONLY, rain=_RAINY)
-    on = OrToolsSolver(index, _EST, _CFG).solve(problem, 3000)
+    on = OrToolsAssembler(index, _EST, _CFG).solve(problem, 3000)
     assert on is not None
     assert any(d.slots for d in on.days)  # 비가 와도 실외 배치 가능 (배제 아님)
     assert check_all(on, problem, index, _EST) == []
-    fb = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    fb = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     assert any(d.slots for d in fb.days)
 
 
@@ -167,7 +167,7 @@ def test_outdoor_only_pool_still_generates_on_rainy_day() -> None:
 def test_multi_day_only_rainy_day_shifts_indoor() -> None:
     # day1만 비 — 실내는 day1에, 실외는 day2에 몰리는 것이 기대 배치
     problem, index = _problem(_POOL, days=(_DAY, _DAY2), rain={_DAY: 90})
-    fb = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    fb = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     out_d1, in_d1 = _category_counts(fb, index, day=_DAY)
     out_d2, in_d2 = _category_counts(fb, index, day=_DAY2)
     assert in_d1 > 0            # 우천일에 실내 배치
@@ -181,16 +181,16 @@ def test_multi_day_only_rainy_day_shifts_indoor() -> None:
 def test_no_adjust_paths_are_identical() -> None:
     none, index = _problem(_POOL, rain=None)
     empty, _ = _problem(_POOL, rain={})
-    solver = OrToolsSolver(index, _EST, _CFG)
-    base = solver.solve(none, 3000)
-    assert base == solver.solve(empty, 3000)
+    assembly = OrToolsAssembler(index, _EST, _CFG)
+    base = assembly.solve(none, 3000)
+    assert base == assembly.solve(empty, 3000)
     # 가중 0 = 우천일이어도 항이 전부 0 — 무보정과 동일
-    zero_cfg = SolverConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
+    zero_cfg = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
                             rain_outdoor_penalty=0.0, rain_indoor_bonus=0.0)
     rainy, _ = _problem(_POOL, rain=_RAINY)
-    assert OrToolsSolver(index, TravelEstimator(zero_cfg), zero_cfg) \
+    assert OrToolsAssembler(index, TravelEstimator(zero_cfg), zero_cfg) \
         .solve(rainy, 3000) == base
-    fb = RuleFallbackSolver(index, _EST, _CFG)
+    fb = RuleFallbackAssembler(index, _EST, _CFG)
     assert fb.solve(none) == fb.solve(empty)
 
 
@@ -214,7 +214,7 @@ def test_daily_rain_prob_serialization_roundtrip() -> None:
 
 @st.composite
 def rainy_setups(draw):
-    problem, index = draw(solver_setups())
+    problem, index = draw(assembly_setups())
     rain = {
         d: draw(st.integers(min_value=0, max_value=100))
         for d in problem.days
@@ -228,10 +228,10 @@ def rainy_setups(draw):
 def test_pbt_extreme_rain_weights_never_violate_hard_constraints(setup) -> None:
     problem, index = setup
     est = TravelEstimator(_CFG_EXTREME)
-    result = OrToolsSolver(index, est, _CFG_EXTREME).solve(problem, 1500)
+    result = OrToolsAssembler(index, est, _CFG_EXTREME).solve(problem, 1500)
     if result is not None:
         assert check_all(result, problem, index, est) == []
-    fb = RuleFallbackSolver(index, est, _CFG_EXTREME).solve(problem)
+    fb = RuleFallbackAssembler(index, est, _CFG_EXTREME).solve(problem)
     assert check_all(fb, problem, index, est) == []
 
 
@@ -240,26 +240,26 @@ def test_pbt_extreme_rain_weights_never_violate_hard_constraints(setup) -> None:
 def test_pbt_rain_correction_keeps_determinism(setup) -> None:
     problem, index = setup
     est = TravelEstimator(_CFG_EXTREME)
-    solver = OrToolsSolver(index, est, _CFG_EXTREME)
-    assert solver.solve(problem, 1500) == solver.solve(problem, 1500)
-    fb = RuleFallbackSolver(index, est, _CFG_EXTREME)
+    assembly = OrToolsAssembler(index, est, _CFG_EXTREME)
+    assert assembly.solve(problem, 1500) == assembly.solve(problem, 1500)
+    fb = RuleFallbackAssembler(index, est, _CFG_EXTREME)
     assert fb.solve(problem) == fb.solve(problem)
 
 
 @settings(max_examples=10, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_pbt_rain_free_problem_is_unaffected_by_rain_config(setup) -> None:
     """daily_rain_prob=None인 문제는 날씨 가중이 아무리 커도 해가 변하지 않는다."""
     problem, index = setup
     # 비교 기준은 날씨 가중만 다른 동일 설정 (시간 한도가 다르면 해 자체가 갈릴 수 있다)
-    base_cfg = SolverConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
-    on = OrToolsSolver(index, TravelEstimator(_CFG_EXTREME), _CFG_EXTREME) \
+    base_cfg = AssemblyConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
+    on = OrToolsAssembler(index, TravelEstimator(_CFG_EXTREME), _CFG_EXTREME) \
         .solve(problem, 1500)
-    off = OrToolsSolver(index, TravelEstimator(base_cfg), base_cfg) \
+    off = OrToolsAssembler(index, TravelEstimator(base_cfg), base_cfg) \
         .solve(problem, 1500)
     assert on == off
-    fb_on = RuleFallbackSolver(index, TravelEstimator(_CFG_EXTREME), _CFG_EXTREME) \
+    fb_on = RuleFallbackAssembler(index, TravelEstimator(_CFG_EXTREME), _CFG_EXTREME) \
         .solve(problem)
-    fb_off = RuleFallbackSolver(index, TravelEstimator(base_cfg), base_cfg) \
+    fb_off = RuleFallbackAssembler(index, TravelEstimator(base_cfg), base_cfg) \
         .solve(problem)
     assert fb_on == fb_off

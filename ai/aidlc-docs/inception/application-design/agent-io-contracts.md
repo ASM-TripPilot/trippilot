@@ -91,7 +91,7 @@ class ScheduleAgentInput:
 
 @dataclass
 class ScheduleAgentOutput:
-    days: list[DaySchedule]               # day별 slots (솔버 검증값, INV-2)
+    days: list[DaySchedule]               # day별 slots (어셈블리 검증값, INV-2)
     day1_ready_at: str | None             # day1 우선 반환 시각 (5초 정책)
     explanations: dict[str, str]          # slot_id → 추천 이유 (시간·소요시간 언급 금지)
     solve_mode: str                       # AI 4값(OR_TOOLS|LLM|RULE_FALLBACK|MINIMAL)을 그대로 전송 — 백엔드 3값 접기는 `ScheduleAgentWire.kt`(OR_TOOLS·LLM→FULL_AI · RULE_FALLBACK→DETERMINISTIC · MINIMAL→MINIMAL)
@@ -109,7 +109,7 @@ class ScheduleAgentOutput:
 | `explanations` | slot 부가 필드 또는 세션 | 동일 | d11 카드 추천 이유 텍스트 |
 | `solve_mode=MINIMAL` / `is_fallback` | `generation_session.status` | `POST /itineraries/{id}/regenerate` 유도 | d08 충돌 안내, 재생성/조건 완화 UI |
 | 슬롯 교체 후보 | (PlaceScout 재조회) | `GET /itineraries/{id}/slots/{slotId}/candidates?radius=` | d12 슬롯 교체, d14/d15 반경 후보 |
-| 표시 시각·거리 | `VisitSlotDisplay{poi_id, start_at, end_at, distance_range, is_fixed}` | 모든 조회 응답 | 시각=솔버값만(INV-2), 거리만(INV-3) |
+| 표시 시각·거리 | `VisitSlotDisplay{poi_id, start_at, end_at, distance_range, is_fixed}` | 모든 조회 응답 | 시각=어셈블리값만(INV-2), 거리만(INV-3) |
 
 ---
 
@@ -152,7 +152,7 @@ class PlanBAgentOutput:
 @dataclass
 class Alternative:
     label: str                            # "A" | "B" | "C"
-    slots: list[VisitSlotDisplay]         # 솔버 검증값만 (INV-2), distance_range만 (INV-3)
+    slots: list[VisitSlotDisplay]         # 어셈블리 검증값만 (INV-2), distance_range만 (INV-3)
     delta: DeltaSummary                   # 추가/제거/이동 슬롯, 거리 변화
     rationale: str                        # 선택 이유 (closed-set 근거)
 ```
@@ -211,7 +211,7 @@ class ReflectAgentOutput:
 
 ## 4. 편집 플로우 (d24 등 ↔ EditAgent)
 
-드래그·버튼 편집(구조화 입력)은 백엔드가 직접 처리하고 `solver.validate`만 경유한다(Fast Path 또는 M8 직접). **EditAgent는 자연어 편집 요청에만 관여한다.**
+드래그·버튼 편집(구조화 입력)은 백엔드가 직접 처리하고 `assembly.validate`만 경유한다(Fast Path 또는 M8 직접). **EditAgent는 자연어 편집 요청에만 관여한다.**
 
 ```python
 @dataclass
@@ -343,7 +343,7 @@ class EventInfo:
 | IO-1 | 모든 AgentInput에 `request_meta{request_id, requested_at, deadline_ms}`. `deadline_ms` 는 **선택 필드**이고 미지정 = 시간제약 없음(TRIP-473 — `api/schemas.py::RequestMetaSchema`); 2026-08-21 이후 백엔드는 값을 싣지 않는다(TRIP-474). 괄호 안 day1 5s/전체 20s/Plan-B 10s/도우미 첫응답 3s 는 **SLO 지향점**이지 하드 예산이 아니다 | D38, nfr §1.1, 경계 계약 "시한 재정의" |
 | IO-2 | 모든 AgentOutput에 `is_fallback` + (해당 시) `solve_mode` — 침묵 실패 금지 | INV-4 |
 | IO-3 | 사용자 표시 슬롯은 `VisitSlotDisplay`만 — `internal_*` 필드 정적 배제 | INV-3, U5-P4 |
-| IO-4 | 시각·순서 필드(`start_at/end_at`)는 `solver.solve/validate` 통과값만 담는다 | INV-2 |
+| IO-4 | 시각·순서 필드(`start_at/end_at`)는 `assembly.solve/validate` 통과값만 담는다 | INV-2 |
 | IO-5 | POI 참조는 `poi_id`(M7 정본) — 확정 시 백엔드가 `poi_snapshot_id`로 동결. AI 서비스는 스냅샷을 만들지 않는다 | 백엔드 4계층 모델 |
 | IO-6 | 정보 에이전트 응답은 `FreshnessMeta` 필수 | 최신성 지표 (H-5) |
 | IO-7 | 실패 상태값(`NO_CANDIDATES`/`WEATHER_UNKNOWN`/`COLD_START`)은 예외가 아니라 정상 응답 | 폴백 계단 |

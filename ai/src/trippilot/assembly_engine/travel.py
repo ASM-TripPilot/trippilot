@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 
-from trippilot.solver_engine.config import SolverConfig
+from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.travel import TravelEstimate
 
@@ -34,7 +34,7 @@ def haversine_km(a: GeoPoint, b: GeoPoint) -> float:
 class TravelEstimator:
     """TravelPort Protocol 만족."""
 
-    def __init__(self, config: SolverConfig) -> None:
+    def __init__(self, config: AssemblyConfig) -> None:
         self._cfg = config
 
     def estimate(

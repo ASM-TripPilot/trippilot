@@ -13,7 +13,7 @@
 | Epic | 이름 | 유래 | 소요 | 상태 | 의존 |
 |---|---|---|---|---|---|
 | EP-1 | Domain & Ports | U1 | 2~3일 | 🔄 FD 승인 대기 | — |
-| EP-2 | C2 Solver Core | U2 | 5~7일 | ⬜ | EP-1 |
+| EP-2 | C2 Assembly Core | U2 | 5~7일 | ⬜ | EP-1 |
 | EP-3 | M7 Place Data Core | U3 | 3~5일 | ⬜ | EP-1 |
 | EP-4 | C1 LLM Gateway | U4 | 4~5일 | ⬜ | EP-1, EP-3 |
 | EP-5 | Orchestration & API | U5 | 3~4일 | ⬜ | EP-2·3·4 |
@@ -50,7 +50,7 @@ EP-1 ──┬── EP-2 ──┐
 
 ---
 
-## EP-2. C2 Solver Core (U2)
+## EP-2. C2 Assembly Core (U2)
 
 | ID | Story | 완료 조건 |
 |---|---|---|
@@ -59,7 +59,7 @@ EP-1 ──┬── EP-2 ──┐
 | S2.3 | TravelEstimator 어댑터 체인 (카카오→네이버→직선×1.3) | U5-P4 (결정성 + INV-3) |
 | S2.4 | FallbackScorer (규칙 점수) + MINIMAL 모드 | INV-4 — 어떤 입력에도 해 반환 |
 | S2.5 | RepairEngine (최소 변경 수리) + warm-start 재생성 | U5-P2 (warm-start 멱등) |
-| S2.6 🔑 | Bedrock 2차 솔버 (LangChain) + HC 검증·수리 경유 — 체인 연결·HC 검증은 fake로 개발, **실모델 배치 품질 실험만 승인 후** | Bedrock 출력이 검증 없이 반환되는 경로 0 (INV-2). U2 완성 자체는 1차 OR-Tools + 규칙 폴백만으로 가능 |
+| S2.6 🔑 | Bedrock 2차 어셈블리 (LangChain) + HC 검증·수리 경유 — 체인 연결·HC 검증은 fake로 개발, **실모델 배치 품질 실험만 승인 후** | Bedrock 출력이 검증 없이 반환되는 경로 0 (INV-2). U2 완성 자체는 1차 OR-Tools + 규칙 폴백만으로 가능 |
 
 ---
 
@@ -93,7 +93,7 @@ EP-1 ──┬── EP-2 ──┐
 |---|---|---|
 | S5.1 | Orchestrator 3모드 (Fast Path / Delegate / Fallback) + 복잡도 판단 | Fast Path p95 ≤ 500ms (LLM 0회) |
 | S5.2 | **(개정)** ExecutionPlan + AgentTask 봉투 발행·회신 — context_refs 참조 전달, deadline 상속, trace_id 전 구간 전파, PARTIAL 조립 | delegation-design §4 시퀀스 재현, SPEED-P1 통과 |
-| S5.3 | ScheduleAgent end-to-end (후보→점수→솔버→설명) + 폴백 계단 | fake 기반 E2E, 폴백 전 단계 트리거 가능 |
+| S5.3 | ScheduleAgent end-to-end (후보→점수→어셈블리→설명) + 폴백 계단 | fake 기반 E2E, 폴백 전 단계 트리거 가능 |
 | S5.4 | day1 우선 반환 (5초, 독립 TX) + 전체 20초 타임아웃 | 지연 예산 SLO 계측과 연동 |
 | S5.5 | FastAPI 엔드포인트 + 스키마 검증 + rate-limit + 헬스체크 | Kotlin 연동 가능 계약 (agent-io-contracts 기준) |
 
@@ -139,7 +139,7 @@ EP-1 ──┬── EP-2 ──┐
 
 | ID | Story | 완료 조건 |
 |---|---|---|
-| S9.1 | LLM 호출 전량 구조화 로깅 (trace_id·prompt_version·tokens·latency·is_fallback) + 솔버 로그 | 요청 1건의 전체 호출 트리 복원 가능 |
+| S9.1 | LLM 호출 전량 구조화 로깅 (trace_id·prompt_version·tokens·latency·is_fallback) + 어셈블리 로그 | 요청 1건의 전체 호출 트리 복원 가능 |
 | S9.2 | 최신성 집계 — F1(도메인별 age/TTL) + F2 체크리스트(CUR-1~6, CUR-2·4는 hard 승격) | stale_serve_rate < 5% 측정 가능 |
 | S9.3 | 신속도 집계 — 업무별 SLO + budget_burn + stage_breakdown | day1 5s / 전체 20s / Plan-B 10s 위반율 대시보드 |
 | S9.4 | 신규 PBT 5속성 (FRESH-P1·P2, CUR-P1·P2, SPEED-P1) CI 편입 | 기존 19속성 + 5 = 24속성 통과 |
@@ -159,7 +159,7 @@ EP-1 ──┬── EP-2 ──┐
 | K-2 | 프롬프트 6종 실모델 튜닝 (score/explain/select/reflect/parse/paraphrase) | S4.6, EP-6 | 프롬프트 yaml 전부 작성 + golden 기대응답 정의 (FakeLlm golden 모드와 공유) |
 | ~~K-3~~ | ~~실벡터 일괄 재색인~~ → **해소 (AI-D06)**: 임베딩이 로컬 오픈소스(multilingual-e5-large/BGE-M3, 1024차원)로 확정되어 **승인 없이 즉시 가능**. S6.1·S8.1 본문으로 이동 | S6.1, S8.1 | — |
 | K-4 | 질문뱅크 LLM 증강 (500~1,000개) + 검수 | S8.5 | seed 수기 작성 + 검수 절차 문서화 |
-| K-5 | LLM 2차 솔버 실모델 배치 품질 실험 (Anthropic API 경유) | S2.6 | 체인·HC 검증 연결은 fake로 완성 (실험은 품질 비교만) |
+| K-5 | LLM 2차 어셈블리 실모델 배치 품질 실험 (Anthropic API 경유) | S2.6 | 체인·HC 검증 연결은 fake로 완성 (실험은 품질 비교만) |
 | K-6 | LLM-as-judge 평가 배치 (L3) | EP-9 | 채점 프롬프트 작성 + 평가셋 구축 |
 | K-7 | 비용 실측 (ai-cost-estimation 추정 대비) | S9.6 | 토큰 집계 계측 코드 선행 (fake 호출에도 동작) |
 

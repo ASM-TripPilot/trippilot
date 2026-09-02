@@ -1,11 +1,11 @@
 """일정 도메인 타입 (domain-entities.md §2).
 
-INV-2(솔버 검증값만)의 U1 책임 (business-rules.md §1):
-- 강제: ItinerarySolution이 solve_mode·solver_run으로 "어떻게 나온 해인지" 출처를 기록
-- 준비: Violation 타입 + SolverPort 계약 (None=해 없음 → 체인 진행)
-- 실제 HC1~HC4 검증은 U2 솔버 소유
+INV-2(어셈블리 검증값만)의 U1 책임 (business-rules.md §1):
+- 강제: ItinerarySolution이 solve_mode·assembly_run으로 "어떻게 나온 해인지" 출처를 기록
+- 준비: Violation 타입 + AssemblyPort 계약 (None=해 없음 → 체인 진행)
+- 실제 HC1~HC4 검증은 U2 어셈블리 소유
 
-순환 import 방지: ScoredPoi(llm)·SolverRunRecord(observability)는 타입 힌트 전용
+순환 import 방지: ScoredPoi(llm)·AssemblyRunRecord(observability)는 타입 힌트 전용
 (from __future__ import annotations로 문자열 처리) + from_dict 내부 지역 import.
 """
 
@@ -27,11 +27,11 @@ from trippilot.domain.serialization import from_iso, to_iso
 
 if TYPE_CHECKING:
     from trippilot.domain.llm import ScoredPoi
-    from trippilot.domain.observability import SolverRunRecord
+    from trippilot.domain.observability import AssemblyRunRecord
 
 
 class SolveMode(Enum):
-    """솔버가 어느 계층으로 해를 냈는지. LLM이라도 HC 검증 후에만 반환 (벤더 중립 — AI-D06)."""
+    """어셈블리가 어느 계층으로 해를 냈는지. LLM이라도 HC 검증 후에만 반환 (벤더 중립 — AI-D06)."""
 
     OR_TOOLS = "OR_TOOLS"
     LLM = "LLM"
@@ -89,7 +89,7 @@ class TimeWindow:
 
 @dataclass(frozen=True, slots=True)
 class FixedBlock:
-    """시각 고정 방문지 (HC3: 솔버가 시각 변경 불가)."""
+    """시각 고정 방문지 (HC3: 어셈블리가 시각 변경 불가)."""
 
     poi_id: PoiId
     window: TimeWindow
@@ -183,7 +183,7 @@ class DaySolution:
 
 @dataclass(frozen=True, slots=True)
 class ItineraryProblem:
-    """솔버 입력. candidates ⊆ CandidatePool (INV-1). seed 고정 → 결정론(INV-4).
+    """어셈블리 입력. candidates ⊆ CandidatePool (INV-1). seed 고정 → 결정론(INV-4).
 
     excluded_poi_ids: 이미 다른 호출에서 배정된 POI (day1 2단계 생성 — TRIP-293).
     1차 `days=[day1]`로 solve → 배정된 poi_id를 2차 `days=[나머지]`의 제외 목록으로
@@ -194,7 +194,7 @@ class ItineraryProblem:
 
     daily_rain_prob: 날짜별 강수확률%(POP, 0~100) — 날씨 소프트 보정 입력(TRIP-383).
     기본 None = 무보정(기존 생성자 호출 전부 무영향). 부분 매핑이다 — 예보 지평 밖
-    날짜는 키 없음(정보 없음을 0%로 지어내지 않는다). 하드 제약이 아니라 솔버
+    날짜는 키 없음(정보 없음을 0%로 지어내지 않는다). 하드 제약이 아니라 어셈블리
     목적함수의 소프트 항에만 쓰인다 — 비가 와도 실외 배치는 가능하다.
     """
 
@@ -285,10 +285,10 @@ class ItineraryProblem:
 
 @dataclass(frozen=True, slots=True)
 class QualityScore:
-    """솔버 산출물 품질 점수 (정본 components.md §3.7 · FR-SOLVER-02).
+    """어셈블리 산출물 품질 점수 (정본 components.md §3.7 · FR-SOLVER-02).
 
     성분 4개 전부 [0, 1] 무차원 비율 — duration/minutes 필드 없음(INV-3).
-    composite는 2차 솔버(LLM) 엔진 교체 판정의 관측 지표(프로젝트 수준 결정, AI-D06).
+    composite는 2차 어셈블리(LLM) 엔진 교체 판정의 관측 지표(프로젝트 수준 결정, AI-D06).
     산식·가중치·임계값은 CONSTRUCTION·운영 결정(O-SOLVER) — 계산은 c2/quality.py.
     """
 
@@ -324,7 +324,7 @@ class QualityScore:
 
 @dataclass(frozen=True, slots=True)
 class ItinerarySolution:
-    """솔버 출력. 반환 전 HC1~HC4 통과 필수 (INV-2, 검증은 U2).
+    """어셈블리 출력. 반환 전 HC1~HC4 통과 필수 (INV-2, 검증은 U2).
 
     U1 강제: 출처 정합 — 폴백 해(is_fallback)는 폴백 모드여야 한다
     (solve_mode·is_fallback이 서로 거짓말하지 못하게. INV-2/INV-4 정합).
@@ -334,7 +334,7 @@ class ItinerarySolution:
     days: tuple[DaySolution, ...]
     is_fallback: bool
     solve_mode: SolveMode
-    solver_run: "SolverRunRecord | None"
+    assembly_run: "AssemblyRunRecord | None"
     score: QualityScore | None = None  # 품질 점수 부착 지점 (§3.7) — 하위호환 기본 None
 
     def __post_init__(self) -> None:
@@ -349,23 +349,23 @@ class ItinerarySolution:
             "days": [d.to_dict() for d in self.days],
             "is_fallback": self.is_fallback,
             "solve_mode": self.solve_mode.value,
-            "solver_run": self.solver_run.to_dict() if self.solver_run else None,
+            "assembly_run": self.assembly_run.to_dict() if self.assembly_run else None,
             "score": self.score.to_dict() if self.score else None,
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "ItinerarySolution":
-        from trippilot.domain.observability import SolverRunRecord  # 지역 import
+        from trippilot.domain.observability import AssemblyRunRecord  # 지역 import
 
+        # solver_run: 개명(solver→assembly) 전 직렬화본의 옛 키 — 둘 다 받는다 (하위호환)
+        run = d.get("assembly_run", d.get("solver_run"))
         return cls(
             schedule_id=ScheduleId(d["schedule_id"]),
             days=tuple(DaySolution.from_dict(x) for x in d["days"]),
             is_fallback=d["is_fallback"],
             solve_mode=SolveMode(d["solve_mode"]),
-            solver_run=(
-                SolverRunRecord.from_dict(d["solver_run"])
-                if d["solver_run"] is not None
-                else None
+            assembly_run=(
+                AssemblyRunRecord.from_dict(run) if run is not None else None
             ),
             # d.get: score 키가 없는 기존 직렬화본도 그대로 읽힌다 (하위호환)
             score=(

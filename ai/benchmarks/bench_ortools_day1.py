@@ -12,7 +12,7 @@
   - 결정론: random_seed 고정 · num_search_workers=1
 
 설계 메모: 후보 > 60이면 점수 상위 60으로 프리필터 후 최적화
-(이동 행렬 O(N²) 폭발 방지 — 구성 휴리스틱과 같은 취지의 솔버 전처리.
+(이동 행렬 O(N²) 폭발 방지 — 구성 휴리스틱과 같은 취지의 어셈블리 전처리.
  하루 방문 슬롯은 물리적으로 ~8개라 상위 60이면 해 품질 손실 무시 가능).
 """
 
@@ -65,7 +65,7 @@ def gen_candidates(n: int, seed: int):
 
 
 def greedy_day1(cands, fixed_idx, t):
-    """구성 휴리스틱: 고정 블록 → 점수순 삽입 (RuleFallbackSolver의 원형).
+    """구성 휴리스틱: 고정 블록 → 점수순 삽입 (RuleFallbackAssembler의 원형).
     반환: {cand_idx: start_min} — CP-SAT 힌트용."""
     plan = {}
     for order, i in enumerate(fixed_idx):
@@ -88,7 +88,7 @@ def greedy_day1(cands, fixed_idx, t):
 
 
 def solve_day1(cands, fixed_idx: list[int], seed: int):
-    """CP-SAT day1 배치. 반환: (선택 수, 목적값, solver status)."""
+    """CP-SAT day1 배치. 반환: (선택 수, 목적값, CP-SAT status)."""
     # 프리필터 — 고정 블록은 무조건 포함
     if len(cands) > PREFILTER_TOP_K:
         fixed_set = set(fixed_idx)
@@ -146,14 +146,14 @@ def solve_day1(cands, fixed_idx: list[int], seed: int):
         if i in hint:
             m.AddHint(start[i], hint[i])
 
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = TIME_LIMIT_S
-    solver.parameters.random_seed = seed
-    solver.parameters.num_search_workers = 1  # 결정론 (FD §4) — 힌트로 초기해 보장
-    status = solver.Solve(m)
-    picked = [i for i in range(k) if solver.Value(visit[i])] \
+    cp_solver = cp_model.CpSolver()
+    cp_solver.parameters.max_time_in_seconds = TIME_LIMIT_S
+    cp_solver.parameters.random_seed = seed
+    cp_solver.parameters.num_search_workers = 1  # 결정론 (FD §4) — 힌트로 초기해 보장
+    status = cp_solver.Solve(m)
+    picked = [i for i in range(k) if cp_solver.Value(visit[i])] \
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE) else []
-    return picked, solver.ObjectiveValue() if picked else 0, solver.StatusName(status)
+    return picked, cp_solver.ObjectiveValue() if picked else 0, cp_solver.StatusName(status)
 
 
 def bench(n: int, fixed: int, seed: int = SEED):

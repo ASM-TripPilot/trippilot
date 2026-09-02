@@ -15,7 +15,7 @@
 | Unit | 이름 | 소요 |
 |---|---|---|
 | U1 | Domain & Ports | 2~3일 |
-| U2 | C2 Solver Core | 5~7일 |
+| U2 | C2 Assembly Core | 5~7일 |
 | U3 | M7 Place Data Core | 3~5일 |
 | U4 | C1 LLM Gateway | 4~5일 |
 | U5 | Orchestration & API | 3~4일 |

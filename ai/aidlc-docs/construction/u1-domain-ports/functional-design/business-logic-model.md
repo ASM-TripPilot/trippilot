@@ -16,7 +16,7 @@ trippilot/
 │   └── serialization.py   # to_dict/from_dict 공통 헬퍼
 ├── ports/           # Protocol만 — 구현 없음
 │   ├── llm_port.py  travel_port.py  places_port.py
-│   ├── poi_db_port.py  cache_port.py  solver_port.py
+│   ├── poi_db_port.py  cache_port.py  assembly_port.py
 │   └── trace_port.py                                    # [LLMOps]
 └── tests/
     ├── generators/  # Hypothesis strategies
@@ -95,10 +95,10 @@ class CachePort(Protocol):
 ```
 - value는 직렬화된 dict만 (도메인 타입은 to_dict 후 저장). **가격 필드 저장 금지는 정책 규칙** (business-rules.md §4)
 
-### 2.6 SolverPort — 하이브리드 체인용 (agent-redesign.md)
+### 2.6 AssemblyPort — 하이브리드 체인용 (agent-redesign.md)
 
 ```python
-class SolverPort(Protocol):
+class AssemblyPort(Protocol):
     def solve(self, problem: ItineraryProblem) -> ItinerarySolution | None: ...
 ```
 - `None` = 이 전략으로 해 없음 → 체인의 다음 전략(OR-Tools→LLM 2차→규칙 폴백, U2 소유. **LLM 2차는 현재 미배선** — TRIP-529)
@@ -109,7 +109,7 @@ class SolverPort(Protocol):
 class TracePort(Protocol):
     def emit(self, event: TraceEvent) -> None: ...
 ```
-- `TraceEvent = LlmCallRecord | FallbackEvent | GateDropEvent | SolverRunRecord`
+- `TraceEvent = LlmCallRecord | FallbackEvent | GateDropEvent | AssemblyRunRecord`
 - **emit은 절대 예외를 밖으로 던지지 않음** — 계측 실패가 비즈니스 로직을 막으면 안 됨 (NFR-2.4와 동일 원리)
 - 실 구현(U5): 구조화 로그 → CloudWatch/OTel. 테스트: InMemoryTrace
 

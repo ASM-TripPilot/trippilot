@@ -6,7 +6,7 @@
 
 이 파일이 하는 일은 셋뿐이다:
 1. 검증된 요청을 오케스트레이터에 그대로 넘긴다(판단 위임 — 여기서 후보·시각을 만들지 않는다)
-2. 도메인 결과를 표시 스키마로 **사영**한다 — 시각은 솔버 검증값(VisitSlot)에서만 온다(INV-2),
+2. 도메인 결과를 표시 스키마로 **사영**한다 — 시각은 어셈블리 검증값(VisitSlot)에서만 온다(INV-2),
    소요시간은 어느 경로로도 나가지 않는다(INV-3)
 3. 예외를 경계 오류 바디로 번역한다(errors.map_exception)
 """
@@ -110,8 +110,8 @@ def _candidates_summary(
 def to_payload(outcome: ItineraryOutcome) -> ItineraryPayload:
     """`ItineraryOutcome` → 와이어 산출물.
 
-    - 시각: `VisitSlot.start_at/end_at`(솔버 검증값)의 시각 성분만 사영(INV-2)
-    - `ends_next_day`: 종료가 그 날짜를 넘겼는가 — 솔버 값에서 파생(HC4 표현)
+    - 시각: `VisitSlot.start_at/end_at`(어셈블리 검증값)의 시각 성분만 사영(INV-2)
+    - `ends_next_day`: 종료가 그 날짜를 넘겼는가 — 어셈블리 값에서 파생(HC4 표현)
     - `is_fixed`: 그 날의 고정 블록(HC3)에 POI가 있는가 — 지어내지 않고 해에서 읽는다
     - `stay_min`·`score`는 **사영하지 않는다**(INV-3 / IO-3)
     """
@@ -286,7 +286,7 @@ def edit(
 ) -> EditItineraryResponse:
     """일정 편집 (TRIP-431) — 자연어·구조화 겸용, 단일 처리 로직 수렴.
 
-    번역(자연어)·검증(closed-set)·확인 게이트·재타이밍·솔버 검증을 거쳐
+    번역(자연어)·검증(closed-set)·확인 게이트·재타이밍·어셈블리 검증을 거쳐
     통과분만 반영한다(INV-1·2·4). 구형 조립은 503 명시 실패.
     """
     handler = getattr(orchestrator, "edit", None)

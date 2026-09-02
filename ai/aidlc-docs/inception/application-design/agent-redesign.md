@@ -27,9 +27,9 @@
 ### 핵심 원칙
 
 1. **에이전트 = 업무 전담 비서** — "일정 추천해줘", "Plan-B 만들어줘" 같은 업무를 맡으면 필요한 도구를 스스로 조합해서 end-to-end로 처리
-2. **에이전트는 여러 도구를 사용** — LLM 호출, M7 조회, 솔버 검증, 웹 소싱 등을 필요에 따라 조합
+2. **에이전트는 여러 도구를 사용** — LLM 호출, M7 조회, 어셈블리 검증, 웹 소싱 등을 필요에 따라 조합
 3. **에이전트는 판단한다** — 폴백 시점, 추가 정보 필요 여부, 사용자 확인 필요 여부를 스스로 결정
-4. **솔버(C2)는 여전히 에이전트가 아니다** — 시각·순서 확정은 결정론 컴포넌트 (INV-2 유지)
+4. **어셈블리(C2)는 여전히 에이전트가 아니다** — 시각·순서 확정은 결정론 컴포넌트 (INV-2 유지)
 
 ---
 
@@ -64,7 +64,7 @@
 | [도구풀]                                                   |
 | - LLM(점수매기기, 설명생성, 사유해석, 텍스트추출)          |
 | - M7(후보조회, 엔티티해소, 웹소싱)                         |
-| - C2 Solver(배치, 검증, 수리)                             |
+| - C2 Assembly(배치, 검증, 수리)                             |
 | - 외부API(날씨, 지도)                                      |
 +-----------------------------------------------------------+
 ```
@@ -82,7 +82,7 @@ Orchestrator는 실행 계획을 세울 때 **의존 관계가 없는 작업은 
 ScheduleAgent가 내부적으로:
   [병렬] LLM 선호점수 매기기 + M7 웹소싱(부족 시)
   [대기] 둘 다 완료
-  [순차] C2 솔버 배치 (점수 필요)
+  [순차] C2 어셈블리 배치 (점수 필요)
   [순차] LLM 설명 생성 (배치 결과 필요)
 ```
 
@@ -98,7 +98,7 @@ Orchestrator 실행 계획:
 ```
 PlanBAgent가 내부적으로:
   [순차] 사유 해석 (영향 범위 파악 필요)
-  [병렬] 대안 A 솔버 배치 + 대안 B 솔버 배치 + 대안 C 솔버 배치
+  [병렬] 대안 A 어셈블리 배치 + 대안 B 어셈블리 배치 + 대안 C 어셈블리 배치
   [대기] 전부 완료 (또는 10초 초과 시 완료된 것만)
   [순차] 전/후 비교 조립
 ```
@@ -152,8 +152,8 @@ plan = ExecutionPlan(steps=[
 |---|---|
 | **업무** | 여행 일정을 처음부터 끝까지 만들어주는 것 |
 | **트리거** | "일정 만들어줘", "여행 계획 짜줘", 일정 생성 버튼 |
-| **end-to-end 흐름** | ① 여행 조건 파악 → ② M7에서 후보 풀 가져오기 → ③ 후보 부족하면 웹 소싱 판단 → ④ LLM으로 선호 점수 매기기 → ⑤ 솔버에 배치 요청 → ⑥ 결과 설명 생성 → ⑦ 응답 조립 |
-| **할당 Tool** | `m7.get_candidates`, `m7.source_web`, `llm.score_preferences`, `llm.explain_slot`, `solver.solve`, `solver.validate` |
+| **end-to-end 흐름** | ① 여행 조건 파악 → ② M7에서 후보 풀 가져오기 → ③ 후보 부족하면 웹 소싱 판단 → ④ LLM으로 선호 점수 매기기 → ⑤ 어셈블리에 배치 요청 → ⑥ 결과 설명 생성 → ⑦ 응답 조립 |
+| **할당 Tool** | `m7.get_candidates`, `m7.source_web`, `llm.score_preferences`, `llm.explain_slot`, `assembly.solve`, `assembly.validate` |
 | **미할당 Tool** | `llm.generate_reflection`, `llm.interpret_reason`, `kb.retrieve_*` (RAG 계열) |
 | **판단하는 것** | 후보 충분한지, LLM 실패 시 규칙 폴백 전환, 시간 예산 내 설명 생략 여부 |
 | **폴백** | LLM 실패→규칙점수, 전체 실패→최소일정. 침묵 실패 금지 |
@@ -165,10 +165,10 @@ plan = ExecutionPlan(steps=[
 | **업무** | 여행 중 변수(날씨·휴무·지연)에 대한 대안 일정을 만들어주는 것 |
 | **트리거** | Plan-B 제안 수락, "비 와서 실내로 바꿔줘", 자동 트리거(날씨·지연) |
 | **패턴** | **RAG** — Retrieve(기존 일정+페르소나+상황) → Augment → Generate → Validate |
-| **할당 Tool** | `kb.retrieve_schedule`, `kb.retrieve_persona`, `kb.retrieve_situation`, `m7.get_candidates`, `llm.select_alternatives`, `solver.solve`, `solver.validate` |
+| **할당 Tool** | `kb.retrieve_schedule`, `kb.retrieve_persona`, `kb.retrieve_situation`, `m7.get_candidates`, `llm.select_alternatives`, `assembly.solve`, `assembly.validate` |
 | **미할당 Tool** | `llm.score_preferences`, `llm.explain_slot`, `llm.generate_reflection`, `m7.source_web`, `m7.resolve_entity` |
 | **판단하는 것** | 재계획 범위(전체 날 vs 일부 슬롯), 후보 0개 시 휴식모드 제안, 확인 필요 여부 |
-| **폴백** | 벡터검색 실패→M7 필터만, LLM 실패→규칙점수, 솔버 전멸→휴식모드/수동편집 |
+| **폴백** | 벡터검색 실패→M7 필터만, LLM 실패→규칙점수, 어셈블리 전멸→휴식모드/수동편집 |
 | **상세 설계** | → `planb-rag-design.md` 참조 |
 
 ### 3. ReflectAgent — "회고 비서" (1차: 단순 LLM Generation, 추후: Multi-step 확장)
@@ -182,7 +182,7 @@ plan = ExecutionPlan(steps=[
 | **1차 흐름** | ① 방문 기록 DB 조회 → ② 충분성 판단(0건→스킵) → ③ LLM 회고 생성(Bedrock 1회) → ④ 결과 반환 |
 | **1차 할당 Tool** | `db.get_visit_history`, `llm.generate_reflection` **(2개만 — 가장 가벼운 에이전트)** |
 | **추후 추가 Tool** | `llm.analyze_style` (C 확장 시, 7축 택소노미 분류) |
-| **미할당 Tool** | `solver.*` 전부, `m7.*` 전부, `kb.*` 전부, `llm.score_preferences`, `llm.parse_intent` |
+| **미할당 Tool** | `assembly.*` 전부, `m7.*` 전부, `kb.*` 전부, `llm.score_preferences`, `llm.parse_intent` |
 | **판단하는 것** | 방문 기록 충분한지(0건→스킵), 재생성 시 덮어쓰기 확인 |
 | **폴백** | LLM 실패 → FallbackCard(통계 기본 카드: 방문 N곳·이동 Nkm·사진 N장) |
 | **상세 설계** | → `reflect-agent-design.md` 참조 |
@@ -193,8 +193,8 @@ plan = ExecutionPlan(steps=[
 |---|---|
 | **업무** | 사용자의 일정 수정 요청을 해석하고 실행하는 것 |
 | **트리거** | "저녁 맛집 하나 넣어줘", "이 POI 빼줘", "순서 바꿔줘" |
-| **end-to-end 흐름** | ① 편집 의도 해석(추가/삭제/이동/교체) → ② 엔티티 해소(POI명 매칭) → ③ 편집 명령 구성 → ④ 솔버 검증 → ⑤ 반영 모드 결정(자동/확인) → ⑥ 적용 또는 미리보기 |
-| **할당 Tool** | `llm.parse_intent`, `m7.resolve_entity`, `m7.get_candidates`, `solver.validate`, `solver.repair` |
+| **end-to-end 흐름** | ① 편집 의도 해석(추가/삭제/이동/교체) → ② 엔티티 해소(POI명 매칭) → ③ 편집 명령 구성 → ④ 어셈블리 검증 → ⑤ 반영 모드 결정(자동/확인) → ⑥ 적용 또는 미리보기 |
+| **할당 Tool** | `llm.parse_intent`, `m7.resolve_entity`, `m7.get_candidates`, `assembly.validate`, `assembly.repair` |
 | **미할당 Tool** | `llm.generate_reflection`, `llm.score_preferences`, `kb.retrieve_*`, `m7.source_web` |
 | **판단하는 것** | 파괴적 편집 여부(삭제·대규모→확인 필수), 엔티티 애매하면 확인 요청, 검증 실패 시 미리보기 강등 |
 | **폴백** | 의도 해석 실패→"직접 편집으로 진행" 안내, 검증 실패→위반 사유+미리보기 |
@@ -217,9 +217,9 @@ plan = ExecutionPlan(steps=[
 | `kb.retrieve_schedule` | - | O | - | - | - |
 | `kb.retrieve_persona` | - | O | - | - | - |
 | `kb.retrieve_situation` | - | O | - | - | - |
-| `solver.solve` | O | O | - | - | - |
-| `solver.validate` | O | O | - | O | O (Fast Path) |
-| `solver.repair` | - | - | - | O | - |
+| `assembly.solve` | O | O | - | - | - |
+| `assembly.validate` | O | O | - | O | O (Fast Path) |
+| `assembly.repair` | - | - | - | O | - |
 | `db.get_visit_history` | - | - | O | - | - |
 | `db.get_current_schedule` | - | - | - | - | O (Fast Path) |
 
@@ -292,7 +292,7 @@ COMPLEX (에이전트 위임):
 | 불변식 | 유지 방법 |
 |---|---|
 | INV-1 (closed-set) | 모든 에이전트가 M7 화이트리스트 + C1 게이트 경유 (도구 레벨에서 강제) |
-| INV-2 (솔버 검증값만) | 모든 에이전트의 최종 출력은 C2.validate() 통과 필수 (에이전트 공통 규칙) |
+| INV-2 (어셈블리 검증값만) | 모든 에이전트의 최종 출력은 C2.validate() 통과 필수 (에이전트 공통 규칙) |
 | INV-3 (소요시간 미표시) | VisitSlotDisplay 타입 레벨 보장 (에이전트와 무관) |
 | INV-4 (결정론 폴백) | 각 에이전트가 자기 폴백 계단 소유 + 침묵 실패 금지 |
 
@@ -311,35 +311,35 @@ COMPLEX (에이전트 위임):
 | `m7.get_candidates` | closed-set 후보 풀 조회 | M7 |
 | `m7.resolve_entity` | 엔티티 해소 (fuzzy match) | M7 |
 | `m7.source_web` | 웹 후보 소싱 + 수집 게이트 | M7 |
-| `solver.solve` | OPTW 배치 최적화 | C2 |
-| `solver.validate` | 하드 제약 검증 | C2 |
-| `solver.repair` | 최소 변경 수리 | C2 |
-| `solver.estimate_travel` | 이동시간 추정 (내부용) | C2 |
+| `assembly.solve` | OPTW 배치 최적화 | C2 |
+| `assembly.validate` | 하드 제약 검증 | C2 |
+| `assembly.repair` | 최소 변경 수리 | C2 |
+| `assembly.estimate_travel` | 이동시간 추정 (내부용) | C2 |
 
 ---
 
-## C2 Solver — 하이브리드 전략 (OR-Tools + Bedrock 폴백)
+## C2 Assembly — 하이브리드 전략 (OR-Tools + Bedrock 폴백)
 
 > **읽기 규칙·실태 註 (2026-08-25, TRIP-530)** — 본 절의 "Bedrock" 표기 전부(제목 포함)에 적용:
 > 1. **벤더**: AI-D06 표기 규칙에 따라 "Bedrock" = **"LLM API(Anthropic 직접)"** 로 읽는다.
->    AWS Bedrock 경유가 아니다. `BedrockSolver`/`bedrock_port`/`_solve_with_bedrock` 같은 식별자도 같다 —
->    실제 구현명은 `solver_engine/llm_solver.py::LlmSolver` 다.
+>    AWS Bedrock 경유가 아니다. `BedrockAssembler`/`bedrock_port`/`_solve_with_bedrock` 같은 식별자도 같다 —
+>    실제 구현명은 `assembly_engine/llm_assembler.py::LlmAssembler` 다.
 > 2. **`is_bedrock` 플래그는 코드에 없다**. 어느 층이 해를 냈는지는
 >    `domain/itinerary.py::SolveMode`(`OR_TOOLS`·`LLM`·`RULE_FALLBACK`·`MINIMAL`)가 기록한다 —
 >    종전 `SolveMode.BEDROCK` 은 `LLM` 로 **개명 완료**(TRIP-256).
 > 3. **2차 단계는 현재 미배선이다** (TRIP-529): 실가동 체인은 `OR-Tools → 규칙 폴백` **2단**이고,
->    `api/wiring.py` 가 `LlmSolver` 를 조립하지 않는다("솔버 프롬프트 정본·모델 설정이 아직 없다").
+>    `api/wiring.py` 가 `LlmAssembler` 를 조립하지 않는다("어셈블리 프롬프트 정본·모델 설정이 아직 없다").
 >    아래 "2차 진입 트리거"·"출력 처리" 절차는 **배선 시점의 목표 상태**다.
 
 ### 설계 원칙
 
-Solver 내부 구현을 **OR-Tools 1차 → Bedrock LLM 2차** 하이브리드로 구성한다.
-에이전트는 `SolverFacade` 인터페이스만 보므로 내부 전략 변경에 무영향.
+Assembly 내부 구현을 **OR-Tools 1차 → Bedrock LLM 2차** 하이브리드로 구성한다.
+에이전트는 `AssemblyFacade` 인터페이스만 보므로 내부 전략 변경에 무영향.
 
 ### 실행 흐름
 
 ```
-에이전트 → SolverFacade.solve(problem)
+에이전트 → AssemblyFacade.solve(problem)
                 |
                 v
         +---------------+
@@ -415,29 +415,29 @@ def _solve_with_bedrock(self, problem: ItineraryProblem) -> ItinerarySolution | 
 
 | 불변식 | 하이브리드에서 유지 방법 |
 |---|---|
-| INV-2 (솔버 검증값만) | Bedrock 출력이라도 반드시 ConstraintChecker 통과 후에만 반환 |
+| INV-2 (어셈블리 검증값만) | Bedrock 출력이라도 반드시 ConstraintChecker 통과 후에만 반환 |
 | INV-4 (결정론 폴백) | OR-Tools 실패 + Bedrock 실패 → 규칙 폴백으로 최소 일정 보장 |
 | 결정론 | OR-Tools 단독 성공 시 결정론 유지. Bedrock 경유 시 `is_bedrock=True` 플래그 |
 
 ### Port 인터페이스
 
 ```python
-class SolverPort(Protocol):
-    """Solver 내부 전략을 교체 가능하게 하는 Port"""
+class AssemblyPort(Protocol):
+    """Assembly 내부 전략을 교체 가능하게 하는 Port"""
     def solve(self, problem: ItineraryProblem) -> ItinerarySolution | None: ...
 
-class OrToolsSolver(SolverPort): ...     # 1차
-class BedrockSolver(SolverPort): ...     # 2차
-class RuleFallbackSolver(SolverPort): ... # 최후
+class OrToolsAssembler(AssemblyPort): ...     # 1차
+class BedrockAssembler(AssemblyPort): ...     # 2차
+class RuleFallbackAssembler(AssemblyPort): ... # 최후
 
-class HybridSolverFacade:
+class HybridAssemblyFacade:
     """OR-Tools → Bedrock → 규칙 폴백 체인"""
-    def __init__(self, solvers: list[SolverPort]):
-        self._chain = solvers  # [OrTools, Bedrock, RuleFallback]
+    def __init__(self, assemblers: list[AssemblyPort]):
+        self._chain = assemblers  # [OrTools, Bedrock, RuleFallback]
 
     def solve(self, problem: ItineraryProblem) -> ItinerarySolution:
-        for solver in self._chain:
-            result = solver.solve(problem)
+        for assembly in self._chain:
+            result = assembly.solve(problem)
             if result and self._quality_ok(result):
                 return result
         # 여기 도달 불가 — RuleFallback은 항상 해를 반환 (INV-4)

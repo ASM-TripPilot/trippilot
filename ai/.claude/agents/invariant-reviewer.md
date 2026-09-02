@@ -14,11 +14,11 @@ tools: Read, Grep, Glob, Bash
 1. **4대 불변식**
    - INV-1: LLM 경유 출력이 ClosedSetGate류 출구 게이트 없이 도메인/후속 단계로 새는 경로.
      웹 소싱 결과가 수집 게이트 없이 후보가 되는 경로.
-   - INV-2: 솔버 검증을 거치지 않은 시각·순서가 반환 타입에 실리는 경로.
+   - INV-2: 어셈블리 검증을 거치지 않은 시각·순서가 반환 타입에 실리는 경로.
    - INV-3: 공개 직렬화(to_public_dict·표시 DTO)에 duration/minutes류 필드 노출.
    - INV-4: 예외를 삼키거나(silent except) FallbackEvent 없이 폴백하는 경로.
 2. **아키텍처 경계** — `tests/test_architecture.py`의 규칙과 대조:
-   llm_gateway ↛ solver_engine·poi_curation / ortools→solver_engine 한정 / yaml→llm_gateway/prompts.py 한정 / anthropic→llm_gateway/adapters 한정 /
+   llm_gateway ↛ assembly_engine·poi_curation / ortools→assembly_engine 한정 / yaml→llm_gateway/prompts.py 한정 / anthropic→llm_gateway/adapters 한정 /
    domain ↛ ports / domain·ports·m7·c1 외부 패키지 0.
 3. **결정론** — datetime.now()·시드 없는 random·정렬 없는 set 순회가 출력에 영향 주는 곳.
 4. **BR 규칙** — 해당 유닛 FD `business-rules.md`의 BR-*-NN 각 항목 대조.

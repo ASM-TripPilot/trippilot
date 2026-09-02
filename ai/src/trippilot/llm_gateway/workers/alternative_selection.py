@@ -7,7 +7,7 @@ ContextResolver 재조회가 아니라 **KB-2 검색 결과 발췌**로 들어�
 
 실패·게이트 드롭이면 폴백 TypedResult를 그대로 반환 (BR-U4-09) — 규칙 랭킹
 폴백의 실행은 호출측(PlanBAgent) 몫이고, 침묵 실패는 없다 (INV-4).
-선택 순서는 제안일 뿐, 배치·시각 확정은 솔버 소유 (INV-2).
+선택 순서는 제안일 뿐, 배치·시각 확정은 어셈블리 소유 (INV-2).
 """
 
 from __future__ import annotations

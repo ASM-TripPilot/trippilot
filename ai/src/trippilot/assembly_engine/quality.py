@@ -1,4 +1,4 @@
-"""QualityScore 계산 — 솔버 산출물 품질 지표 (정본 components.md §3.7, FR-SOLVER-02).
+"""QualityScore 계산 — 어셈블리 산출물 품질 지표 (정본 components.md §3.7, FR-SOLVER-02).
 
 초기 공식 — 가중치·감점 계수·거리 스케일의 캘리브레이션은 후속(운영 결정 O-SOLVER).
 전부 순수 함수: I/O 없음, 같은 입력 → 같은 출력 (estimator가 결정론이면 전체 결정론).
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Mapping
 
-from trippilot.solver_engine.constraints import check_all
+from trippilot.assembly_engine.constraints import check_all
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     ItineraryProblem,
@@ -89,7 +89,7 @@ def compute_quality(
     poi_index: Mapping[PoiId, Poi],
     estimator,
 ) -> QualityScore:
-    """솔버 해의 QualityScore 계산 (부착은 호출측 몫 — 이 함수는 순수 계산만).
+    """어셈블리 해의 QualityScore 계산 (부착은 호출측 몫 — 이 함수는 순수 계산만).
 
     composite = 0.4·preference_fit + 0.4·constraint_satisfaction + 0.2·route_efficiency.
     초기 공식 — 캘리브레이션은 후속 (O-SOLVER).

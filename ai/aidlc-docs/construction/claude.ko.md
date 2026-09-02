@@ -13,7 +13,7 @@ construction/
 ├── u1-domain-ports/
 │   ├── functional-design/
 │   └── code/
-├── u2-solver/
+├── u2-assembly/
 │   ├── functional-design/
 │   ├── nfr-requirements/
 │   └── code/

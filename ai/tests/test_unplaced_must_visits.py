@@ -102,7 +102,7 @@ def _solution(days: tuple[date, ...], slots: tuple[VisitSlot, ...]) -> Itinerary
         ),
         is_fallback=False,
         solve_mode=SolveMode.OR_TOOLS,
-        solver_run=None,
+        assembly_run=None,
     )
 
 
@@ -251,7 +251,7 @@ def test_contradictory_fixed_blocks_still_409_not_partial_success() -> None:
         )
 
     assert response.status_code == 409, response.text
-    assert response.json()["error_code"] == "SOLVER_CONFLICT"
+    assert response.json()["error_code"] == "ASSEMBLY_CONFLICT"
     assert "unplaced_must_visits" not in response.text  # 오류 바디는 무변경
 
 
@@ -304,7 +304,7 @@ def test_pbt_every_block_in_exactly_one_category(case: tuple) -> None:
     """
     period, requested, blocks = case
     trip_start, trip_end = period[0], period[-1]
-    # '배치'는 요청된 일자에서만 성립한다(솔버는 요청 일자만 푼다)
+    # '배치'는 요청된 일자에서만 성립한다(어셈블리는 요청 일자만 푼다)
     placed = tuple(
         b for b, try_place in blocks
         if try_place and date.fromisoformat(b["date"]) in set(requested)

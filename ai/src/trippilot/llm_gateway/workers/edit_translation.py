@@ -7,7 +7,7 @@ context_refs 재조회(D31)는 봉투 프로토콜상 EditAgent가 이미 수행
 
 실패·게이트 드롭이면 폴백 TypedResult를 그대로 반환 (BR-U4-09) — 수동 편집 안내 등
 후속 처리는 호출측(EditAgent) 몫이고, 침묵 실패는 없다 (INV-4).
-실제 반영·솔버 검증은 이 티켓 범위 밖 (INV-2 — 시각·순서는 솔버가 확정).
+실제 반영·어셈블리 검증은 이 티켓 범위 밖 (INV-2 — 시각·순서는 어셈블리가 확정).
 """
 
 from __future__ import annotations

@@ -5,11 +5,11 @@
   ② 대조 집합 2종 (TRIP-527) — params의 `*PoiId`(새 POI) ⊆ 후보 풀(INV-1),
      affectedSlots(기존 슬롯 지목) ⊆ 현재 슬롯. 밖이 섞이면 명령 전체 드롭(부분 반영 금지)
   ③ 반영 모드는 코드가 확정 — resolve_apply_mode 재사용, LLM 제안 무시 (M16-P2)
-  ④ params에 시각·소요시간 금지 (INV-2·INV-3 — 시각·순서는 솔버 소유)
+  ④ params에 시각·소요시간 금지 (INV-2·INV-3 — 시각·순서는 어셈블리 소유)
   ⑤ LLM 실패 → 침묵 없이 폴백 TypedResult (INV-4, M16-P3의 워커 측 절반)
   ⑥ 프롬프트 렌더 결정론 + 좌표 미포함(G181) + "의도 재해석 금지" 문구 존재 (DL-3)
 
-범위 밖: 편집의 실제 반영·솔버 검증(M16-P1)은 EditAgent/U5 소관.
+범위 밖: 편집의 실제 반영·어셈블리 검증(M16-P1)은 EditAgent/U5 소관.
 """
 
 from __future__ import annotations
@@ -167,16 +167,16 @@ def test_gate_still_crosses_new_poi_with_pool_even_if_it_is_a_current_slot() -> 
      "eta", "arrive_by", "travelSecs", "start", "end"],
 )
 def test_gate_rejects_time_params(key: str) -> None:
-    """④ 시각·소요시간은 솔버 소유 — 조용히 지우지 않고 명령을 거부한다.
+    """④ 시각·소요시간은 어셈블리 소유 — 조용히 지우지 않고 명령을 거부한다.
 
     정확 키 목록은 변형(durationSec·visitMinutes…)에 뚫리므로 토큰 부분일치로 막는다.
     """
     out = _apply(_raw("ADD_SLOT", ["p1"], params={key: 10}))
-    assert out.value is None and "솔버" in out.error
+    assert out.value is None and "어셈블리" in out.error
 
 
 def test_gate_allows_non_time_params_and_order_hint() -> None:
-    """순서·위치 제안은 통과 — 워커는 제안만, 확정은 솔버 (INV-2 원문)."""
+    """순서·위치 제안은 통과 — 워커는 제안만, 확정은 어셈블리 (INV-2 원문)."""
     out = _apply(_raw("MOVE_SLOT", ["p1"], params={"toIndex": 2, "note": "비 와서"}))
     assert out.error is None and out.value.command.params["toIndex"] == 2
     # eta·start·end는 정확일치로만 막는다 — metadata·startPoiId·endPoiId 같은

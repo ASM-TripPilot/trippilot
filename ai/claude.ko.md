@@ -4,7 +4,7 @@
 
 ## 프로젝트 개요
 
-TripPilot AI는 LLM + 최적화 솔버 하이브리드 아키텍처로 여행 일정을 생성·재계획·회고하는 **독립 Python AI 서비스**입니다.
+TripPilot AI는 LLM + 최적화 어셈블리 하이브리드 아키텍처로 여행 일정을 생성·재계획·회고하는 **독립 Python AI 서비스**입니다.
 
 ## 핵심 구조
 
@@ -15,7 +15,7 @@ TripPilot AI는 LLM + 최적화 솔버 하이브리드 아키텍처로 여행 �
 ## 4대 불변식
 
 1. **INV-1**: LLM은 closed-set 후보 안에서만 선택 (환각 0)
-2. **INV-2**: 사용자에게 보이는 시각·순서는 솔버 검증값만
+2. **INV-2**: 사용자에게 보이는 시각·순서는 어셈블리 검증값만
 3. **INV-3**: 소요시간 미표시 — 거리만
 4. **INV-4**: AI 실패 시 결정론 폴백 (침묵 실패 금지)
 
@@ -31,7 +31,7 @@ TripPilot AI는 LLM + 최적화 솔버 하이브리드 아키텍처로 여행 �
 - **ScheduleAgent**: 일정 생성 (Generation 패턴)
 - **PlanBAgent**: 변수 대응 (RAG 패턴, KB 3종 + pgvector)
 - **ReflectAgent**: 회고 생성 (1차: 단순 LLM Generation. 추후 Multi-step 확장)
-- **EditAgent**: 일정 편집 (의도 해석 → 솔버 검증 → 반영)
+- **EditAgent**: 일정 편집 (의도 해석 → 어셈블리 검증 → 반영)
 
 **정보원** (v2 — `orchestrator/info_collector.py` + `providers/`):
 Place · Weather · Transit · Persona · Event Provider. Orchestrator가
@@ -49,13 +49,13 @@ Provider를 직접 부르지 않는다. 각 Provider는 `ProviderStatus`
 - 의도 파악: `intent-matching-design.md` / 평가 지표(최신성·신속도): `evaluation-metrics-design.md`
 - MLOps/LLMOps + ML 유형화: `mlops-llmops-design.md`
 
-## Solver 하이브리드 전략
+## Assembly 하이브리드 전략
 
 OR-Tools (1차 결정론) → LLM (2차 창의적 제안) → 규칙 폴백 (최후 보장)
 모든 출력은 HC1~HC4 검증 통과 필수.
 
 ⚠️ **LLM 2차 단계는 미배선이다** (TRIP-529, 2026-08-25). `api/wiring.py`가
-`stages = (OrToolsSolver, RuleFallbackSolver)`로 조립한다 — 솔버 프롬프트 정본과 모델
+`stages = (OrToolsAssembler, RuleFallbackAssembler)`로 조립한다 — 어셈블리 프롬프트 정본과 모델
 설정이 아직 없기 때문이다. 따라서 AI-D07의 "잔여 ≥ 2.5s면 2차 실행" 분기는 **어떤
 경로에서도 발생할 수 없다**.
 

@@ -27,7 +27,7 @@
 ## 적용 원칙
 
 - LangChain은 **LLM 연동 보일러플레이트 제거 도구**로만 사용
-- 결정론 로직(솔버, DB 조회, 라우팅)에는 적용하지 않음
+- 결정론 로직(어셈블리, DB 조회, 라우팅)에는 적용하지 않음
 - 성능 민감 구간(3초 제한)에는 적용하지 않음
 
 ---
@@ -49,11 +49,11 @@
 | 미적용 부분 | 미적용 이유 |
 |---|---|
 | **Orchestrator (라우팅·디스패치)** | 우리만의 Fast Path + 복잡도 판단 + 에이전트 선택 로직. LangGraph에 끼우면 억지 맞춤이 됨 |
-| **Solver (OR-Tools)** | LLM이 아닌 결정론 알고리즘. LangChain이 관여할 부분 없음 |
-| **Solver (LLM 2차)** | 솔버 폴백 체인은 자체 HybridSolverFacade로 제어. LangChain Agent로 감쌀 이유 없음 |
+| **Assembly (OR-Tools)** | LLM이 아닌 결정론 알고리즘. LangChain이 관여할 부분 없음 |
+| **Assembly (LLM 2차)** | 어셈블리 폴백 체인은 자체 HybridAssemblyFacade로 제어. LangChain Agent로 감쌀 이유 없음 |
 | **M7 후보 풀 생성** | 단순 DB 쿼리 + 필터 파이프라인. LangChain Retriever로 감싸면 오히려 복잡도 증가 |
 | **ScheduleAgent** | LLM 호출 자체는 ChatAnthropic을 쓰되, 에이전트 로직(판단·폴백·병렬)은 직접 구현. LangChain Agent의 ReAct 패턴이 우리 흐름과 안 맞음 |
-| **EditAgent** | 엔티티 해소 + 솔버 검증이 핵심. LLM은 의도 파싱 한 번뿐이라 LangChain Agent로 감쌀 가치 없음 |
+| **EditAgent** | 엔티티 해소 + 어셈블리 검증이 핵심. LLM은 의도 파싱 한 번뿐이라 LangChain Agent로 감쌀 가치 없음 |
 | **HC1~HC4 검증** | 순수 함수. LangChain과 무관 |
 | **에이전트 병렬 실행** | asyncio.gather로 직접 제어. LangGraph 없이도 단순 |
 
@@ -130,8 +130,8 @@ class ScheduleAgent:
         # LLM 호출 (ChatAnthropic 사용)
         scores = await self.llm.ainvoke(self._build_score_prompt(candidates))
 
-        # 솔버 호출 (LangChain 아님)
-        solution = await toolbox.solver.solve(problem)
+        # 어셈블리 호출 (LangChain 아님)
+        solution = await toolbox.assembly.solve(problem)
 
         return solution
 ```
@@ -161,6 +161,6 @@ LangChain 적용 영역:
   pgvector 연동 ← 임베딩 저장·검색 연결 코드 추상화
 
 직접 구현 영역:
-  Orchestrator, Solver, M7, 에이전트 로직, 병렬 실행, HC 검증
+  Orchestrator, Assembly, M7, 에이전트 로직, 병렬 실행, HC 검증
   → LLM이 아닌 부분 / 성능 민감 / 커스텀 로직이 핵심인 부분
 ```

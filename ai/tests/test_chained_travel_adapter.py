@@ -15,7 +15,7 @@ import pytest
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.travel import TravelEstimate
 from trippilot.ports.travel_time_port import MeasuredTravel, TravelTimeError
-from trippilot.solver_engine.adapters.chained_travel import ChainedTravelAdapter
+from trippilot.assembly_engine.adapters.chained_travel import ChainedTravelAdapter
 
 _JEJU_A = GeoPoint(33.450, 126.570)
 _JEJU_B = GeoPoint(33.460, 126.580)

@@ -4,7 +4,7 @@ EventProvider가 수집해 InfoPacket.data에 싣는 단위 — JSON-safe 직렬
 갖춘다 (InfoPacket data 계약). 행사는 **기간 달린 정보이지 POI가 아니다** —
 후보 풀에 들어가지 않고(INV-1), 풀 안 POI에 근접 보너스로만 반영된다
 (orchestrator/event_affinity.py). 시각(시·분)은 다루지 않는다 — 기간(일 단위)
-겹침 판정용이고, 사용자 표시 시각·순서는 언제나 솔버 몫이다 (INV-2).
+겹침 판정용이고, 사용자 표시 시각·순서는 언제나 어셈블리 몫이다 (INV-2).
 """
 
 from __future__ import annotations

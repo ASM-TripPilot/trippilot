@@ -70,7 +70,7 @@
 - **Request**: `{"requester": {...}, "refs": [...]}`
 - **Response**: `{"injected_context": {...}}` or `PermissionDeniedError`
 
-### C2 Solver Engine API
+### C2 Assembly Engine API
 
 #### solve — 일정 배치 최적화
 - **Method**: POST
@@ -116,7 +116,7 @@
 #### estimate_travel — 이동시간 추정 (내부 전용)
 - **Method**: POST
 - **Path**: `/c2/estimate-travel`
-- **Purpose**: 두 지점 간 이동시간 추정 (솔버 내부용, DTO 미노출)
+- **Purpose**: 두 지점 간 이동시간 추정 (어셈블리 내부용, DTO 미노출)
 - **Request**: `{"from": {"lat": ..., "lng": ...}, "to": {...}, "mode": "public"}`
 - **Response**: `{"distance_range": "약 2.1km", "internal_minutes": 25, "is_estimated": true}`
 

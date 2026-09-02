@@ -1,4 +1,4 @@
-"""C2 솔버 설정 (U2 FD domain-entities §1 — AI-D07·G106·G51 확정 초기값).
+"""C2 어셈블리 설정 (U2 FD domain-entities §1 — AI-D07·G106·G51 확정 초기값).
 
 실체는 remote config — 이 타입은 주입 컨테이너. 하드코딩 사용 금지(항상 주입).
 """
@@ -55,12 +55,12 @@ RAIN_INDOOR: frozenset[PoiCategory] = frozenset(
 
 
 @dataclass(frozen=True, slots=True)
-class SolverConfig:
+class AssemblyConfig:
     or_tools_limit_ms: int = 3000
     or_tools_min_ms: int = 500          # 이보다 잔여가 적으면 OR-Tools 단계 스킵 (DL-2)
     llm_stage_timeout_ms: int = 2500    # LLM 2차 요구 시간 (DL-2)
     local_search_min_remaining_ms: int = 3000
-    buffer_min: int = 15                # G106 솔버 내부 버퍼
+    buffer_min: int = 15                # G106 어셈블리 내부 버퍼
     detour_factor: float = 1.3          # 직선거리 우회계수
     # 대중교통 요청이라도 이 거리(직선, km) 이하는 걷는다 — 계산상 대중교통이 빨라도.
     # 정류장까지 걸어가 기다리고 갈아타는 수고는 buffer_min 하나로 다 담기지 않고,

@@ -25,7 +25,7 @@ tools: Read, Grep, Glob, Write
 
 ## 불변 규칙
 
-- 4대 불변식(INV-1 closed-set / INV-2 솔버 검증값만 / INV-3 duration 미표시 / INV-4 결정론 폴백)에
+- 4대 불변식(INV-1 closed-set / INV-2 어셈블리 검증값만 / INV-3 duration 미표시 / INV-4 결정론 폴백)에
   어긋나는 설계는 제안 자체가 금지. 상충이 보이면 설계를 멈추고 상충 지점을 보고하라.
 - 아키텍처 경계: c1 ↛ c2·m7, 외부 SDK는 adapters 한정, yaml은 prompts.py 한정, 외부 API는 Port 뒤로.
 - **경계 소유권은 확정됐다 (PR #76 합의 · 2026-08-06 재감사에서 반영, TRIP-283)**: POI 정본은

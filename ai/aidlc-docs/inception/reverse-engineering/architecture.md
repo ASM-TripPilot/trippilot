@@ -2,7 +2,7 @@
 
 ## System Overview
 
-TripPilot AI는 **LLM + 최적화 솔버 하이브리드** 아키텍처다. 독립 Python AI 서비스(C1 LLM Gateway + C2 Solver Engine + M7 Place Data)를 중심으로, Kotlin 백엔드가 기능별 오케스트레이션(M8·M9·M10·M13·M16)을 수행한다. 4대 불변식(INV-1~4)이 LLM과 솔버의 역할 경계를 구조적으로 강제한다.
+TripPilot AI는 **LLM + 최적화 어셈블리 하이브리드** 아키텍처다. 독립 Python AI 서비스(C1 LLM Gateway + C2 Assembly Engine + M7 Place Data)를 중심으로, Kotlin 백엔드가 기능별 오케스트레이션(M8·M9·M10·M13·M16)을 수행한다. 4대 불변식(INV-1~4)이 LLM과 어셈블리의 역할 경계를 구조적으로 강제한다.
 
 ## Architecture Diagram
 
@@ -25,7 +25,7 @@ flowchart TD
 
     subgraph PythonAI["Python AI 서비스 (독립 배포)"]
         C1["C1 LLM Gateway\n라우터 + 워커 + 검증 게이트"]
-        C2["C2 Solver Engine\nOPTW + HC1~HC4 + 이동추정"]
+        C2["C2 Assembly Engine\nOPTW + HC1~HC4 + 이동추정"]
         M7["M7 Place Data\nclosed-set 풀 + 수집 게이트"]
     end
 
@@ -79,7 +79,7 @@ flowchart TD
 - **Dependencies**: LLM API, Secrets Manager, M7 (closed-set 화이트리스트)
 - **Type**: Application (AI Core)
 
-### C2 Solver Engine
+### C2 Assembly Engine
 - **Purpose**: 선택·순서·시각 보장 계층 (최적화 + 하드 제약 검증)
 - **Responsibilities**: OPTW/TOPTW 최적화, HC1~HC4 검증, 이동시간 추정(카카오→네이버→직선거리), 결정론 폴백, repair, warm-start
 - **Dependencies**: 카카오모빌리티 API, 네이버 지도 API (이동시간 추정용)
@@ -129,7 +129,7 @@ sequenceDiagram
     participant KB as Kotlin 백엔드 (M8)
     participant M7 as M7 PlaceData
     participant C1 as C1 LLM Gateway
-    participant C2 as C2 Solver Engine
+    participant C2 as C2 Assembly Engine
     participant LLM as LLM API
 
     U->>KB: generate_itinerary(trip_id, FULL_AUTO)

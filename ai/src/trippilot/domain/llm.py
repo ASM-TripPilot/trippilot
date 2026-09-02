@@ -117,7 +117,7 @@ class AlternativePick:
     """Plan-B 대체지 선택 1건 (planb-rag-design §6 — 선택 + 이유).
 
     poi_id ∈ pool (게이트가 강제, INV-1). 선호 순서는 튜플 내 위치가 표현한다 —
-    배치·시각 확정은 솔버 몫 (INV-2). reason은 사용자 표시 한국어 1문장이며
+    배치·시각 확정은 어셈블리 몫 (INV-2). reason은 사용자 표시 한국어 1문장이며
     시각·소요시간 필드는 스키마에 자리 자체가 없다 (INV-3).
     """
 

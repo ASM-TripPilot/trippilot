@@ -1,8 +1,8 @@
-"""수집 POI 일정 생성 리허설 — 실데이터 × 실LLM × 솔버 일일 스모크 (TRIP-372).
+"""수집 POI 일정 생성 리허설 — 실데이터 × 실LLM × 어셈블리 일일 스모크 (TRIP-372).
 
 수집 배치(ai-poi-collect)가 남긴 등록 제안 JSON에서 시군구 하나를 날짜 시드로
 골라, 앵커 반경 안 POI 6~8개로 실제 일정 생성을 관통시킨다 — 수집 데이터 품질
-(좌표·카테고리·밀도)의 조기 경보이자 전 구간(어댑터→오케스트레이터→솔버) 리허설.
+(좌표·카테고리·밀도)의 조기 경보이자 전 구간(어댑터→오케스트레이터→어셈블리) 리허설.
 
 **pytest 대상이 아니다** — CI 실 호출 0건(D37)은 그대로 유지되고, 실 LLM 호출은
 사람이 손으로 실행하거나 스케줄 워크플로(ai-llm-smoke.yml)가 실행할 때만.
@@ -67,8 +67,8 @@ from trippilot.api.wiring import (
 )
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.feature_model_env import feature_models_from_env
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.travel import TravelEstimator, haversine_km
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import BudgetLevel, TransportMode
 from trippilot.domain.llm import ModelTier
 from trippilot.domain.persona import CompanionType, PersonaSummary
@@ -262,7 +262,7 @@ class RecordingWeather:
 
 
 class CollectingTrace:
-    """TracePort — SolverRunRecord의 품질 점수 부기(TRIP-524)를 in-process로
+    """TracePort — AssemblyRunRecord의 품질 점수 부기(TRIP-524)를 in-process로
     취득한다. 점수는 API 응답에 없으므로(INV-3 인접 — schemas.py 참조) 이 싱크가
     유일한 취득 경로다. emit은 계약상 예외를 던지지 않는다."""
 
@@ -448,7 +448,7 @@ def run_rehearsal(
 # 실측 상한 — 1일 일정(슬롯 4~6) 기준 앵커→첫 슬롯 포함 인접 쌍 ~6건이면 전량,
 # 그 이상은 API 한도 아끼기로 절단한다.
 MAX_LEGS = 6
-# 리허설 요청은 transport_modes=["대중교통"] — 솔버 PUBLIC 모드.
+# 리허설 요청은 transport_modes=["대중교통"] — 어셈블리 PUBLIC 모드.
 # 실측 검증은 대중교통 우선 시도 → 403(상품 미구독 등) 시 자동차 → 보행 순 폴백.
 LEG_MODE_CHAIN: list[TransportMode] = [
     TransportMode.PUBLIC,
@@ -490,7 +490,7 @@ def measure_legs(
     estimator: TravelEstimator,
     mode: TransportMode | None = None,
 ) -> tuple[list[dict], str | None]:
-    """쌍별 (솔버 추정 est_min, 실측 real_min, 오차 err_pct) — 오차 축적용 legs.
+    """쌍별 (어셈블리 추정 est_min, 실측 real_min, 오차 err_pct) — 오차 축적용 legs.
 
     mode가 None이면 LEG_MODE_CHAIN을 쓴다 — 403(상품 미구독·키 권한)이 나오면
     **같은 쌍을 다음 수단으로 재시도**해 수단을 확정한다. 별도 프로빙 호출은 하지
@@ -645,7 +645,7 @@ def _print_summary(json_path: str) -> int:
 
 
 def _print_one(result: dict) -> None:
-    print("## 일정 생성 리허설 (수집 POI × 실 LLM × 솔버)")
+    print("## 일정 생성 리허설 (수집 POI × 실 LLM × 어셈블리)")
     print(f"- 날짜 {result['date']} · 지역 **{result['region']}** · "
           f"앵커 {result['anchor']['name']}")
     calls = result.get("llm_calls")
@@ -748,15 +748,15 @@ def main() -> int:
     tmap_key = _optional("TMAP_API_KEY")
     travel = None
     if tmap_key:
-        from trippilot.solver_engine.adapters.tmap import (
+        from trippilot.assembly_engine.adapters.tmap import (
             TmapRouteAdapter,
             UrllibHttpClient,
         )
 
         travel = TmapRouteAdapter(UrllibHttpClient(), tmap_key)
-    # wiring 기본 조립(build_orchestrator의 SolverConfig() 기본값)과 동일한 추정기 —
+    # wiring 기본 조립(build_orchestrator의 AssemblyConfig() 기본값)과 동일한 추정기 —
     # 리허설 응답에 실제로 쓰인 추정과 같은 값이어야 오차 축적이 유효하다
-    estimator = TravelEstimator(SolverConfig())
+    estimator = TravelEstimator(AssemblyConfig())
 
     # 지역 하나가 실패해도 나머지는 돌린다 — 한 지역의 데이터 문제로 그날 검증을
     # 통째로 잃으면, 정작 그 지역이 문제라는 사실도 못 남는다. 전부 실패해야 FAIL.

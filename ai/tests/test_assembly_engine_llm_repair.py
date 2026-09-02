@@ -1,4 +1,4 @@
-"""U2 — LLM 2차 솔버 · RepairEngine · warm-start.
+"""U2 — LLM 2차 어셈블리 · RepairEngine · warm-start.
 
 증명하는 것:
   ① golden      : 유효 제안 → LLM 해 채택 + LlmCallRecord 계측
@@ -15,12 +15,12 @@ from datetime import date, datetime, timedelta, timezone
 
 from hypothesis import given, settings
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.facade import HybridSolverFacade
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.llm_solver import LlmSolver
-from trippilot.solver_engine.ortools_solver import OrToolsSolver
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.facade import HybridAssemblyFacade
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.llm_assembler import LlmAssembler
+from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -37,12 +37,12 @@ from trippilot.domain.prompt import PromptRef
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_llm import FakeLlm, SlowLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
-from tests.generators.solver import solver_setups
+from tests.generators.assembly import assembly_setups
 
 _KST = timezone(timedelta(hours=9))
-_CFG = SolverConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
+_CFG = AssemblyConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
 _EST = TravelEstimator(_CFG)
-_REF = PromptRef("prompts/solver_secondary.yaml", "0.1.0", "solver_secondary")
+_REF = PromptRef("prompts/assembly_secondary.yaml", "0.1.0", "assembly_secondary")
 
 
 def _poi(pid: str, lat: float, lng: float) -> Poi:
@@ -67,7 +67,7 @@ def _canned(slots: list[dict]) -> str:
 
 
 def _llm_stage(llm, index, trace):
-    return LlmSolver(llm, index, _EST, _CFG, trace, _REF, "claude-sonnet-5")
+    return LlmAssembler(llm, index, _EST, _CFG, trace, _REF, "claude-sonnet-5")
 
 
 # ① golden — 유효 제안 채택 + 계측
@@ -113,8 +113,8 @@ def test_broken_json_falls_back_through_chain() -> None:
     problem, index = _setup()
     trace = InMemoryTrace()
     chain = [_llm_stage(FakeLlm(canned="이건 JSON이 아님"), index, trace),
-             RuleFallbackSolver(index, _EST, _CFG)]
-    facade = HybridSolverFacade(chain, index, _EST, FakeClock(), trace)
+             RuleFallbackAssembler(index, _EST, _CFG)]
+    facade = HybridAssemblyFacade(chain, index, _EST, FakeClock(), trace)
 
     result = facade.solve(problem, deadline_ms=10_000)
 
@@ -153,18 +153,18 @@ def test_hc2_violating_proposal_is_repaired() -> None:
                            problem.transport).internal_minutes
     gap = int((slots[1].start_at - slots[0].end_at).total_seconds() // 60)
     assert gap >= travel  # 수리로 HC2 충족
-    facade = HybridSolverFacade([], index, _EST, FakeClock(), trace)
+    facade = HybridAssemblyFacade([], index, _EST, FakeClock(), trace)
     assert facade.validate(result, problem, deadline_ms=1000) == []
 
 
 # ⑤ U5-P2 — warm-start: locked 보존 + 멱등
 @settings(max_examples=10, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_regenerate_preserves_locked_and_is_idempotent(setup) -> None:
     problem, index = setup
     trace = InMemoryTrace()
-    chain = [OrToolsSolver(index, _EST, _CFG), RuleFallbackSolver(index, _EST, _CFG)]
-    facade = HybridSolverFacade(chain, index, _EST, FakeClock(), trace)
+    chain = [OrToolsAssembler(index, _EST, _CFG), RuleFallbackAssembler(index, _EST, _CFG)]
+    facade = HybridAssemblyFacade(chain, index, _EST, FakeClock(), trace)
 
     first = facade.solve(problem, deadline_ms=5000)
     locked = [s for d in first.days for s in d.slots][:1]  # 첫 슬롯을 잠금

@@ -21,7 +21,7 @@ from trippilot.agents.planb.kb_retrieval import index_documents
 from trippilot.api.app import create_app
 from trippilot.api.wiring import DEMO_ANCHOR, build_dev_app, demo_poi_seed
 from trippilot.domain.kb import KbDocument, KbKind
-from trippilot.solver_engine.config import RAIN_OUTDOOR
+from trippilot.assembly_engine.config import RAIN_OUTDOOR
 
 _SEED_IDS = {str(p.poi_id) for p in demo_poi_seed()}
 

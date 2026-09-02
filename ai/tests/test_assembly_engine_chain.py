@@ -4,12 +4,12 @@
   ① DL-P2: 잔여 < 단계 요구 시간 → 그 단계 미실행 + FallbackEvent(reason=deadline)
   ② DL-P1: 체인 소비 시간 ≤ deadline (FakeClock 시나리오)
   ③ INV-2: 유효하지 않은 해(HC 위반)는 단계가 내놔도 반환되지 않음 → 다음 단계로
-  ④ 관측: 성공 시 SolverRunRecord 발행, 강등마다 FallbackEvent (침묵 없음)
-  ⑤ 모순 입력에서 SolverConflictError (전 단계 실패)
+  ④ 관측: 성공 시 AssemblyRunRecord 발행, 강등마다 FallbackEvent (침묵 없음)
+  ⑤ 모순 입력에서 AssemblyConflictError (전 단계 실패)
   ⑥ TRIP-261: solve()의 모든 반환 경로(폴백 강등 포함)에 QualityScore 부착
      — 성분 [0,1] + 결정론(같은 입력 2회 → 같은 score)
   ⑦ TRIP-291: 시한이 완전히 소진(잔여 ≤ 0)돼도 required_ms=0 최후 보루는 실행되어
-     solve()가 SolverConflictError 없이 결정론 폴백을 반환(INV-4) — 임의 deadline PBT 포함
+     solve()가 AssemblyConflictError 없이 결정론 폴백을 반환(INV-4) — 임의 deadline PBT 포함
 """
 
 from __future__ import annotations
@@ -19,10 +19,10 @@ from datetime import date, datetime, timedelta, timezone
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.facade import HybridSolverFacade, SolverConflictError
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConflictError
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -40,15 +40,15 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.observability import FallbackEvent, SolverRunRecord
+from trippilot.domain.observability import FallbackEvent, AssemblyRunRecord
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.in_memory_trace import InMemoryTrace
-from tests.generators.solver import solver_setups
+from tests.generators.assembly import assembly_setups
 
 _KST = timezone(timedelta(hours=9))
-_CFG = SolverConfig()
+_CFG = AssemblyConfig()
 _EST = TravelEstimator(_CFG)
 
 
@@ -110,7 +110,7 @@ class InvalidResultStage:
         return ItinerarySolution(
             schedule_id=ScheduleId("s"),
             days=(DaySolution(date(2026, 8, 5), (bad_slot,), ()),),
-            is_fallback=False, solve_mode=SolveMode.OR_TOOLS, solver_run=None)
+            is_fallback=False, solve_mode=SolveMode.OR_TOOLS, assembly_run=None)
 
 
 def test_dl2_stage_skipped_when_budget_short_and_dl1_deadline_kept() -> None:
@@ -118,8 +118,8 @@ def test_dl2_stage_skipped_when_budget_short_and_dl1_deadline_kept() -> None:
     clock, trace = FakeClock(), InMemoryTrace()
     slow = SlowNoSolutionStage(clock, consume_ms=4600)   # 4.6초 소모 후 해 없음
     llm = ExpensiveStage()                               # 요구 2.5초 — 잔여 0.4초라 스킵돼야
-    chain = [slow, llm, RuleFallbackSolver(index, _EST, _CFG)]
-    facade = HybridSolverFacade(chain, index, _EST, clock, trace)
+    chain = [slow, llm, RuleFallbackAssembler(index, _EST, _CFG)]
+    facade = HybridAssemblyFacade(chain, index, _EST, clock, trace)
 
     t0 = clock.monotonic_ms()
     result = facade.solve(problem, deadline_ms=5000)
@@ -134,8 +134,8 @@ def test_dl2_stage_skipped_when_budget_short_and_dl1_deadline_kept() -> None:
 def test_invalid_stage_result_is_rejected_inv2() -> None:
     problem, index = _setup()
     clock, trace = FakeClock(), InMemoryTrace()
-    chain = [InvalidResultStage(), RuleFallbackSolver(index, _EST, _CFG)]
-    facade = HybridSolverFacade(chain, index, _EST, clock, trace)
+    chain = [InvalidResultStage(), RuleFallbackAssembler(index, _EST, _CFG)]
+    facade = HybridAssemblyFacade(chain, index, _EST, clock, trace)
 
     result = facade.solve(problem, deadline_ms=5000)
 
@@ -144,15 +144,15 @@ def test_invalid_stage_result_is_rejected_inv2() -> None:
     assert any(e.reason.startswith("invalid") for e in trace.of_type(FallbackEvent))
 
 
-def test_success_emits_solver_run_record() -> None:
+def test_success_emits_assembly_run_record() -> None:
     problem, index = _setup()
     clock, trace = FakeClock(), InMemoryTrace()
-    facade = HybridSolverFacade(
-        [RuleFallbackSolver(index, _EST, _CFG)], index, _EST, clock, trace)
+    facade = HybridAssemblyFacade(
+        [RuleFallbackAssembler(index, _EST, _CFG)], index, _EST, clock, trace)
 
     result = facade.solve(problem, deadline_ms=5000)
 
-    records = trace.of_type(SolverRunRecord)
+    records = trace.of_type(AssemblyRunRecord)
     assert len(records) == 1
     assert records[0].solve_mode == result.solve_mode     # 출처 보존
     assert records[0].violations_found == 0
@@ -164,11 +164,11 @@ def test_success_emits_solver_run_record() -> None:
 
 def test_empty_chain_raises_conflict() -> None:
     problem, index = _setup()
-    facade = HybridSolverFacade([], index, _EST, FakeClock(), InMemoryTrace())
+    facade = HybridAssemblyFacade([], index, _EST, FakeClock(), InMemoryTrace())
     try:
         facade.solve(problem, deadline_ms=5000)
-        assert False, "SolverConflictError가 나야 함"
-    except SolverConflictError:
+        assert False, "AssemblyConflictError가 나야 함"
+    except AssemblyConflictError:
         pass
 
 
@@ -176,8 +176,8 @@ def test_empty_chain_raises_conflict() -> None:
 
 def test_solve_attaches_quality_score_with_unit_range_components() -> None:
     problem, index = _setup()
-    facade = HybridSolverFacade(
-        [RuleFallbackSolver(index, _EST, _CFG)], index, _EST,
+    facade = HybridAssemblyFacade(
+        [RuleFallbackAssembler(index, _EST, _CFG)], index, _EST,
         FakeClock(), InMemoryTrace())
 
     result = facade.solve(problem, deadline_ms=5000)
@@ -192,8 +192,8 @@ def test_solve_quality_score_is_deterministic() -> None:
     problem, index = _setup()
 
     def run() -> ItinerarySolution:
-        facade = HybridSolverFacade(
-            [RuleFallbackSolver(index, _EST, _CFG)], index, _EST,
+        facade = HybridAssemblyFacade(
+            [RuleFallbackAssembler(index, _EST, _CFG)], index, _EST,
             FakeClock(), InMemoryTrace())
         return facade.solve(problem, deadline_ms=5000)
 
@@ -203,8 +203,8 @@ def test_solve_quality_score_is_deterministic() -> None:
 def test_degraded_fallback_path_also_gets_quality_score() -> None:
     """강등 끝의 RULE_FALLBACK 해에도 score 부착 (INV-4: 폴백도 동급 산출물)."""
     problem, index = _setup()
-    chain = [InvalidResultStage(), RuleFallbackSolver(index, _EST, _CFG)]
-    facade = HybridSolverFacade(chain, index, _EST, FakeClock(), InMemoryTrace())
+    chain = [InvalidResultStage(), RuleFallbackAssembler(index, _EST, _CFG)]
+    facade = HybridAssemblyFacade(chain, index, _EST, FakeClock(), InMemoryTrace())
 
     result = facade.solve(problem, deadline_ms=5000)
 
@@ -221,10 +221,10 @@ def test_last_resort_runs_even_when_deadline_fully_exhausted() -> None:
     clock, trace = FakeClock(), InMemoryTrace()
     slow = SlowNoSolutionStage(clock, consume_ms=8000)   # 5초 예산을 3초 초과 소모
     llm = ExpensiveStage()                               # 요구 2.5초 — 잔여 음수라 스킵
-    chain = [slow, llm, RuleFallbackSolver(index, _EST, _CFG)]
-    facade = HybridSolverFacade(chain, index, _EST, clock, trace)
+    chain = [slow, llm, RuleFallbackAssembler(index, _EST, _CFG)]
+    facade = HybridAssemblyFacade(chain, index, _EST, clock, trace)
 
-    result = facade.solve(problem, deadline_ms=5000)     # SolverConflictError 금지
+    result = facade.solve(problem, deadline_ms=5000)     # AssemblyConflictError 금지
 
     assert result.is_fallback is True
     assert result.solve_mode in {SolveMode.RULE_FALLBACK, SolveMode.MINIMAL}
@@ -239,8 +239,8 @@ def test_negative_deadline_still_returns_deterministic_fallback() -> None:
     """호출자가 이미 시한을 다 쓴 상태(음수 deadline)로 들어와도 해를 낸다."""
     problem, index = _setup()
     trace = InMemoryTrace()
-    facade = HybridSolverFacade(
-        [RuleFallbackSolver(index, _EST, _CFG)], index, _EST, FakeClock(), trace)
+    facade = HybridAssemblyFacade(
+        [RuleFallbackAssembler(index, _EST, _CFG)], index, _EST, FakeClock(), trace)
 
     result = facade.solve(problem, deadline_ms=-1)
 
@@ -252,22 +252,22 @@ def test_negative_deadline_still_returns_deterministic_fallback() -> None:
 
 
 @settings(max_examples=60, deadline=None)
-@given(setup=solver_setups(),
+@given(setup=assembly_setups(),
        budget_ms=st.integers(min_value=-10_000, max_value=10_000),
        consume_ms=st.integers(min_value=0, max_value=20_000))
 def test_pbt_solve_never_raises_conflict_for_any_deadline(
         setup, budget_ms: int, consume_ms: int) -> None:
     """DL-P3(신규): 임의 (문제, deadline, 소모시간)에서 solve()는 빈손으로 끝나지 않는다.
 
-    체인에 RuleFallback이 있으면 시한이 아무리 부족해도 SolverConflictError는 없다 —
+    체인에 RuleFallback이 있으면 시한이 아무리 부족해도 AssemblyConflictError는 없다 —
     예외는 '입력 모순'만의 신호로 남는다 (INV-4).
     """
     problem, index = setup
     clock, trace = FakeClock(), InMemoryTrace()
     chain = [SlowNoSolutionStage(clock, consume_ms=consume_ms),
              ExpensiveStage(),
-             RuleFallbackSolver(index, _EST, _CFG)]
-    facade = HybridSolverFacade(chain, index, _EST, clock, trace)
+             RuleFallbackAssembler(index, _EST, _CFG)]
+    facade = HybridAssemblyFacade(chain, index, _EST, clock, trace)
 
     result = facade.solve(problem, deadline_ms=budget_ms)   # 예외 발생 = 실패
 
@@ -278,7 +278,7 @@ def test_pbt_solve_never_raises_conflict_for_any_deadline(
 
 
 def test_contradictory_fixed_blocks_still_raise_conflict() -> None:
-    """시한이 넉넉해도 모순 입력(겹치는 고정 블록)은 여전히 SolverConflictError (d08 보존)."""
+    """시한이 넉넉해도 모순 입력(겹치는 고정 블록)은 여전히 AssemblyConflictError (d08 보존)."""
     a = Poi(PoiId("a"), "A", PoiCategory.SIGHT, GeoPoint(37.75, 128.87),
             (), None, None, DataQuality.FULL, PoiSource.SEED, None)
     b = Poi(PoiId("b"), "B", PoiCategory.SIGHT, GeoPoint(37.20, 127.10),  # 멀리
@@ -303,12 +303,12 @@ def test_contradictory_fixed_blocks_still_raise_conflict() -> None:
         day_window=TimeWindow(datetime(2026, 8, 5, 9, 0, tzinfo=_KST),
                               datetime(2026, 8, 5, 21, 0, tzinfo=_KST)),
         seed=7)
-    facade = HybridSolverFacade(
-        [RuleFallbackSolver(index, _EST, _CFG)], index, _EST,
+    facade = HybridAssemblyFacade(
+        [RuleFallbackAssembler(index, _EST, _CFG)], index, _EST,
         FakeClock(), InMemoryTrace())
 
     try:
         facade.solve(problem, deadline_ms=60_000)         # 시한은 충분
-        assert False, "모순 입력에는 SolverConflictError가 나야 함"
-    except SolverConflictError:
+        assert False, "모순 입력에는 AssemblyConflictError가 나야 함"
+    except AssemblyConflictError:
         pass

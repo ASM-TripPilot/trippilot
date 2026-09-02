@@ -114,7 +114,7 @@ LLM raw JSON의 중간 표현 `RawScore(poi_id_str, score, reason)`는 `c1/gate.
 
 | 타입 | 실제 모듈 | 지위 |
 |---|---|---|
-| `EditTranslation` (`command: EditCommand` · `apply_mode: ApplyMode` + `to_dict`/`from_dict`) | `domain/edit.py` (U1 FD §5 Edit 인벤토리에 합류) | EDIT_TRANSLATION 게이트 **통과 후에만** 생성되는 도메인 타입. `apply_mode`는 LLM 제안이 아니라 `resolve_apply_mode`가 재계산한 값이고(AI-D02 하이브리드), 솔버 검증·실제 반영은 EditAgent(U5) 몫이라 이 타입은 **초안까지**다 (INV-2) |
+| `EditTranslation` (`command: EditCommand` · `apply_mode: ApplyMode` + `to_dict`/`from_dict`) | `domain/edit.py` (U1 FD §5 Edit 인벤토리에 합류) | EDIT_TRANSLATION 게이트 **통과 후에만** 생성되는 도메인 타입. `apply_mode`는 LLM 제안이 아니라 `resolve_apply_mode`가 재계산한 값이고(AI-D02 하이브리드), 어셈블리 검증·실제 반영은 EditAgent(U5) 몫이라 이 타입은 **초안까지**다 (INV-2) |
 
 - 배치 근거: 게이트 파일에 두면 "검증 전/후" 경계가 c1 내부 타입(`RawScore`)과 시각적으로 구분되지 않고,
   EditAgent(U5, agents 계층)가 소비할 때 `c1.gates` 모듈을 import해야 해 계층 규칙 L-3의 취지(하위 구현 세부 비노출)와 어긋난다.

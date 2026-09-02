@@ -5,7 +5,7 @@
   환각률 = ΣGateDropEvent.dropped / total
   폴백률 = FallbackEvent 빈도 / 요청 수
   LLM 비용 = Σ(tokens × 단가)   ← 단가는 소비 측, 도메인엔 안 둠
-  솔버 통과율 = SolverRunRecord.violations_found=0 비율
+  어셈블리 통과율 = AssemblyRunRecord.violations_found=0 비율
 
 공통 필드: trace_id · occurred_at(tz-aware) · component
 """
@@ -84,7 +84,7 @@ class FallbackEvent:
     trace_id: TraceId
     occurred_at: datetime
     component: str
-    stage: str  # llm / solver / router / agent / vision (TRIP-595)
+    stage: str  # llm / assembly / router / agent / vision (TRIP-595)
     from_mode: str
     to_mode: str
     reason: str
@@ -201,8 +201,8 @@ class ScoreChunkEvent:
 
 
 @dataclass(frozen=True, slots=True)
-class SolverRunRecord:
-    """솔버 실행 완료 시 발행 (의무: U2 SolverFacade). 5초 게이트·통과율 계측."""
+class AssemblyRunRecord:
+    """어셈블리 실행 완료 시 발행 (의무: U2 AssemblyFacade). 5초 게이트·통과율 계측."""
 
     trace_id: TraceId
     occurred_at: datetime
@@ -233,7 +233,7 @@ class SolverRunRecord:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "SolverRunRecord":
+    def from_dict(cls, d: dict) -> "AssemblyRunRecord":
         return cls(
             trace_id=TraceId(d["trace_id"]),
             occurred_at=from_iso(d["occurred_at"]),
@@ -251,5 +251,5 @@ class SolverRunRecord:
 
 # TracePort.emit()의 인자 타입 (domain-entities.md §8)
 TraceEvent = (
-    LlmCallRecord | FallbackEvent | GateDropEvent | ScoreChunkEvent | SolverRunRecord
+    LlmCallRecord | FallbackEvent | GateDropEvent | ScoreChunkEvent | AssemblyRunRecord
 )

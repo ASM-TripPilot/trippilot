@@ -8,7 +8,7 @@
   ⑤ PlanB 파이프라인 연결: gateway 주입 시 실물 4종 세트로 LLM 선택 + 근거 채택,
      LLM 실패·오염은 규칙 랭킹 폴백으로 수렴하고 산출은 언제나 closed-set 안 (INV-1·INV-4)
 
-범위 밖: 대안의 솔버 배치·시각 확정(INV-2)은 U5 Validate 단계 소관 — 산출물에
+범위 밖: 대안의 어셈블리 배치·시각 확정(INV-2)은 U5 Validate 단계 소관 — 산출물에
 시각·소요시간 필드 자리 자체가 없음은 test_planb_rag가 이미 고정한다.
 """
 
@@ -231,7 +231,7 @@ def test_prompt_states_closed_set_and_no_duration_rules() -> None:
         _FEAT, build_alternative_selection_vars(_pool(), _input())
     )
     assert "목록 밖 ID 생성 금지" in prompt
-    assert "소요시간" in prompt and "시각은 솔버가 정합니다" in prompt
+    assert "소요시간" in prompt and "시각은 어셈블리가 정합니다" in prompt
     assert "지어내기 금지" in prompt
     assert "최대 3개" in prompt  # max_alternatives 주입
 
