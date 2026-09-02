@@ -89,6 +89,30 @@ class EmbedResponse(BaseModel):
 app = FastAPI(title="TripPilot Embedding", version="1.0.0")
 
 
+@app.on_event("startup")
+def _warm() -> None:
+    """기동 직후 백그라운드로 모델을 읽어 둔다 — **첫 요청이 손해 보지 않게.**
+
+    실측(2026-09-02): 워밍 없이 띄우면 첫 alternatives 요청이 콜드스타트 3.5초를
+    물어 임베딩 상한(3초)을 넘기고, KB 검색 하나가 `EmbeddingUnreachable: timed out`
+    으로 강등됐다. 폴백이 받아 200 은 나가지만 **첫 사용자만 이유 없이 나쁜 답**을 본다.
+
+    스레드로 도는 이유: 여기서 동기로 읽으면 컨테이너가 3.5초간 응답을 못 하고,
+    그 사이 healthcheck 가 먼저 실패한다. `/health` 의 `loaded` 로 진행 상황이 보인다.
+    실패해도 서비스는 뜬다 — 그때는 첫 요청이 다시 시도하고, 거기서도 실패하면
+    호출측이 강등한다(INV-4). 여기서 기동을 죽이면 임베딩이 없어도 돌아야 하는
+    AI 쪽 계약과 어긋난다.
+    """
+
+    def _run() -> None:
+        try:
+            _load()
+        except Exception:  # noqa: BLE001 — 기동을 막지 않는다
+            logger.exception("모델 워밍 실패 — 첫 요청에서 다시 시도한다")
+
+    threading.Thread(target=_run, name="embedding-warmup", daemon=True).start()
+
+
 @app.get("/health")
 def health() -> dict:
     """**모델 로드 완료를 기다리지 않는다** — 프로세스가 살아있는지만 본다.
