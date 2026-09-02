@@ -66,6 +66,7 @@ from trippilot.api.wiring import (
     build_orchestrator,
 )
 from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.feature_model_env import feature_models_from_env
 from trippilot.solver_engine.config import SolverConfig
 from trippilot.solver_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import BudgetLevel, TransportMode
@@ -356,7 +357,11 @@ def run_rehearsal(
                            budget=BudgetLevel.MID)
         ),
         c1_config=C1Config(
-            model_ids={ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id}
+            model_ids={ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id},
+            # 운영과 같은 기능별 배정을 태운다 — 없으면 리허설만 전부 OPENAI_MODEL 로
+            # 돌아 "운영은 sol/claude, 리허설은 terra" 가 조용히 생긴다
+            # (feature_model_env 독스트링, smoke_planb.py:267 과 같은 패턴).
+            feature_models=feature_models_from_env(),
         ),
         weather=weather_recorder,  # 선택 주입 (TRIP-409) — None이면 무보정
         events=events,  # 선택 주입 (TRIP-421) — None이면 행사 보너스 없음

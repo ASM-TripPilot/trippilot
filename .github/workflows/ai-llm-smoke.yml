@@ -35,10 +35,13 @@ on:
   workflow_dispatch:
     inputs:
       provider:
-        description: 'LLM 제공자 (v1 표면 = openai)'
+        # 기본은 운영과 같은 mixed — 수동 실행에도 이 기본값이 채워지므로,
+        # 여기가 openai 면 아래 `inputs.provider || 'mixed'` 폴백이 스케줄에서만
+        # 먹어 "수동은 openai, 스케줄은 mixed" 로 갈라진다(실측: run 33523506956).
+        description: 'LLM 제공자 (운영과 동일한 mixed 권장 · v1 표면 = openai)'
         type: choice
-        options: [openai, azure]
-        default: openai
+        options: [mixed, openai, azure]
+        default: mixed
       endpoint:
         description: 'base_url — /openai/v1 까지만, /responses 등 경로 제외 (비우면 repo Variable AZURE_OPENAI_ENDPOINT)'
         required: false
@@ -79,10 +82,21 @@ jobs:
           enable-cache: true
           cache-dependency-glob: ai/uv.lock
       - run: uv sync --locked
+      # 모델 배정의 정본은 .env.example 한 곳 — 여기에 값을 복사해 두면
+      # "운영은 sol/claude, 리허설은 terra" 가 조용히 갈라진다(실제로 갈라져 있었다).
+      # working-directory 가 ai/ 라 정본은 상위에 있다.
+      - name: 기능별 모델 배정 로드 (.env.example = 정본)
+        run: |
+          v=$(sed -n 's/^AI_LLM_FEATURE_MODELS=//p' ../.env.example | head -1)
+          [ -n "$v" ] || { echo "::error::.env.example 에 AI_LLM_FEATURE_MODELS 가 비어 있다"; exit 1; }
+          echo "TRIPPILOT_LLM_FEATURE_MODELS=$v" >> "$GITHUB_ENV"
+          echo "::notice::리허설 모델 배정 = $v"
       - name: 실모델 스모크 1건 (프롬프트 렌더 → 호출 → 게이트 파싱)
         env:
           # schedule 실행에선 inputs.*가 전부 빈 값 — || 기본값이 성립해야 한다
-          LLM_PROVIDER: ${{ inputs.provider || 'openai' }}
+          LLM_PROVIDER: ${{ inputs.provider || 'mixed' }}
+          # mixed 는 양쪽 키가 다 필요하다(fail-fast). CI 전용 키 — 개인·팀 볼트 키와 별개.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # 같은 시크릿을 두 이름으로 노출 — 제공자 선택에 따라 스크립트가 맞는 쪽을 읽는다
           AZURE_OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
@@ -155,7 +169,9 @@ jobs:
         if: steps.fetch-pois.outputs.skipped != 'true'
         env:
           # LLM env는 위 INTENT 스모크 스텝과 동일 매핑
-          LLM_PROVIDER: ${{ inputs.provider || 'openai' }}
+          LLM_PROVIDER: ${{ inputs.provider || 'mixed' }}
+          # mixed 는 양쪽 키가 다 필요하다(fail-fast). CI 전용 키 — 개인·팀 볼트 키와 별개.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AZURE_OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           AZURE_OPENAI_ENDPOINT: ${{ inputs.endpoint || vars.AZURE_OPENAI_ENDPOINT }}
