@@ -64,7 +64,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # smoke_llm·smoke_iti
 from smoke_itinerary import load_proposals  # noqa: E402
 from smoke_llm import _build_adapter  # noqa: E402
 from trippilot.agents.adapters.pgvector_store import PgVectorStore  # noqa: E402
-from trippilot.agents.planb.kb_retrieval import KB_COLLECTIONS, index_documents  # noqa: E402
+from trippilot.agents.planb.kb_retrieval import collection_for, index_documents  # noqa: E402
 from trippilot.agents.planb.rag import (  # noqa: E402
     PlanBRagConfig,
     PlanBRagPipeline,
@@ -459,7 +459,7 @@ def main() -> int:
         assert r5["alternatives"] == [] and r5["empty_reason"] == "no_candidates", r5
     finally:  # 실 collection(persona 등)에 스모크 문서를 남기지 않는다
         for doc in docs:
-            store.delete(KB_COLLECTIONS[doc.kb], doc.doc_id)
+            store.delete(collection_for(doc.kb, embedding.model_id), doc.doc_id)
 
     # ②를 건너뛰면 **실 LLM 산출물에 INV-1 을 건 시나리오가 0개**다(나머지는 전부
     # 규칙 랭킹 산출이라 정의상 풀 안). 배너가 그 사실을 감추지 않게 한다.
