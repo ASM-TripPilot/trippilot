@@ -77,7 +77,7 @@ def _embedding():
     )
 
     model = os.environ.get("TRIPPILOT_EMBEDDING_MODEL") or DEFAULT_MODEL
-    return SentenceTransformerEmbeddingAdapter(SentenceTransformer(model))
+    return SentenceTransformerEmbeddingAdapter(SentenceTransformer(model), model_id=model)
 
 
 def _parse_args() -> argparse.Namespace:
