@@ -75,12 +75,16 @@ class AlternativeSelectionWorker:
         *,
         timeout_sec: float | None = None,
     ) -> TypedResult:
-        """`timeout_sec` 미지정이면 게이트웨이 기본(C1Config.timeout_sec = 2.5s).
+        """`timeout_sec` 미지정이면 게이트웨이 기본(`C1Config.timeout_sec`, 현재 10s).
 
-        그 기본은 즉답성 feature(INTENT 등) 기준이라 **상위 티어 모델에는 짧다** —
-        실측(2026-09-01, 컨테이너) `gpt-5.6-sol` 이 5.1s 라 기본값으로는 100%
-        타임아웃해 Plan-B 가 항상 규칙 폴백으로 떨어졌다. 호출측이 요청 예산에서
-        몫을 떼 넘긴다(BR-U4-04 "요청 예산의 절반 이하", TRIP-376 과 같은 관통).
+        **호출측이 요청 예산에서 몫을 떼 넘기는 것이 정상 경로다** — `PlanBRagPipeline`
+        이 `deadline_ms × llm_budget_share` 로 계산해 준다(BR-U4-04 "요청 예산의 절반
+        이하", TRIP-376 과 같은 관통 방식). 기본값은 예산이 없을 때의 안전망이다.
+
+        이 통로가 없던 시절(~2026-09-01) 기본값은 2.5s 였고, `gpt-5.6-sol` 실측이
+        5.1s 라 **컨테이너에서 100% 타임아웃해 Plan-B 가 항상 규칙 폴백으로 떨어졌다.**
+        응답은 200 이라 증상이 안 보였다 — 폴백이 답을 채우기 때문이다. 그래서
+        마감을 판단할 때는 성공/실패가 아니라 `fallback_level` 을 본다.
         """
         return self._gateway.call(
             LlmFeature.ALTERNATIVE_SELECTION,
