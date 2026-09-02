@@ -107,6 +107,8 @@ class HashEmbedding:
     """결정론 해시 임베딩 — 같은 텍스트 → 같은 벡터. **의미 유사도 없음**(위 docstring)."""
 
     dim = DIM
+    # collection 이름에 들어간다 — 해시 벡터가 실모델 색인과 절대 안 섞이게 (TRIP-519)
+    model_id = "smoke-hash"
 
     def embed(self, text: str) -> tuple[float, ...]:
         rng = random.Random(int.from_bytes(hashlib.sha256(text.encode()).digest(), "big"))

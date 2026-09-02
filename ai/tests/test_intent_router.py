@@ -71,6 +71,7 @@ class _ScriptedEmbedding:
     """각도 → 2차원 단위벡터. 코사인 유사도 = 두 각도 차의 cos — 임계값을 정확히 조준한다."""
 
     dim = 2
+    model_id = "scripted-angles"  # 실모델과 collection 이 갈리게
     _FAR = 2.5  # 대본에 없는 텍스트는 뱅크에서 멀리 (rad)
 
     def __init__(self, angles: dict[str, float]) -> None:
