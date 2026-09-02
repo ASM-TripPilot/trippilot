@@ -189,6 +189,12 @@ services:
     build:
       context: ./ai/embedding
     container_name: trippilot-ai-embedding
+    # 실측(2026-09-02): 워밍 직후 4.29GiB · 배치 상한 256건 인코딩 후 4.37GiB — 정점이
+    # 상주와 거의 같다(fp32 가중치 2.27GB + torch 런타임·토크나이저·할당기). 5g 는
+    # 관측 정점 대비 15% 여유. 넘으면 이 컨테이너만 OOM 으로 죽고 AI 는 강등으로 돈다
+    # (depends_on 없음, UnwiredEmbedding 계약). 한도가 없으면 호스트 전체를 압박한다.
+    # 워커를 늘리면(Dockerfile CMD --workers) 프로세스당 이 크기다 — 같이 계산할 것.
+    mem_limit: 5g
     ports:
       - "8100:8100"
     healthcheck:
