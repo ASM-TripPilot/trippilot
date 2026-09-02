@@ -4,6 +4,7 @@ import com.trippilot.notification.domain.PushMessage
 import com.trippilot.notification.domain.PushPort
 import com.trippilot.notification.domain.PushReceipt
 import com.trippilot.notification.domain.PushStatus
+import com.trippilot.notification.domain.PushUrgency
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
@@ -37,7 +38,11 @@ class ExpoPushAdapter(
 
     override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> {
         val payload = tokens.map {
-            ExpoPushRequest(to = it, title = message.title, body = message.body, data = message.data)
+            ExpoPushRequest(
+                to = it, title = message.title, body = message.body, data = message.data,
+                interruptionLevel = message.urgency.expoInterruptionLevel(),
+                priority = message.urgency.expoPriority(),
+            )
         }
         val response = client.post()
             .uri("/--/api/v2/push/send")
@@ -65,6 +70,32 @@ class ExpoPushAdapter(
         else -> PushReceipt(token, PushStatus.FAILED, details?.error ?: message ?: "UNKNOWN")
     }
 
+    /**
+     * iOS 전용. Android 는 이 값을 무시하고 **채널 중요도**로 같은 일을 하는데, 채널은 앱이 먼저
+     * 만들어야 한다 — 없는 `channelId` 를 실어 보내면 안드로이드에서 **알림이 아예 표시되지 않는다.**
+     * 프론트에 `setNotificationChannelAsync` 가 아직 없어(2026-09-02 실측) `channelId` 는 싣지 않는다.
+     */
+    private fun PushUrgency.expoInterruptionLevel(): String = when (this) {
+        PushUrgency.PASSIVE -> "passive"
+        PushUrgency.ACTIVE -> "active"
+        PushUrgency.TIME_SENSITIVE -> "time-sensitive"
+    }
+
+    /**
+     * Android 에 닿는 유일한 신호다(위 사유로 채널을 못 쓰는 동안). `high` 는 잠든 기기를 깨울 수 있어
+     * 시간 민감에만 쓴다 — 남발하면 배터리 영향이 있고 사용자가 앱 알림을 통째로 끈다.
+     *
+     * ⚠ **안드로이드에서는 3단이 아니라 2단이다.** Expo 의 `default` 는 플랫폼별로 해석되는데
+     * Android 에서는 `normal` 과 같다 — 즉 [PushUrgency.ACTIVE] 와 [PushUrgency.PASSIVE] 가
+     * 그 기기에서 **구분되지 않는다.** iOS 는 `interruptionLevel` 로 셋이 갈린다.
+     * 안드로이드에서 셋을 가르려면 채널이 필요하고, 그건 프론트가 채널을 만든 뒤의 일이다.
+     */
+    private fun PushUrgency.expoPriority(): String = when (this) {
+        PushUrgency.TIME_SENSITIVE -> "high"
+        PushUrgency.ACTIVE -> "default"
+        PushUrgency.PASSIVE -> "normal"
+    }
+
     private companion object {
         /** Expo 가 죽은 토큰에 주는 코드. 이 문자열이 INV-U6-07 의 방아쇠다. */
         private const val DEVICE_NOT_REGISTERED = "DeviceNotRegistered"
@@ -79,6 +110,10 @@ internal data class ExpoPushRequest(
     val title: String,
     val body: String,
     val data: Map<String, String>,
+    /** iOS `UNNotificationInterruptionLevel`. 집중 모드를 뚫는지가 여기서 갈린다. */
+    val interruptionLevel: String,
+    /** `default | normal | high`. Android 에서 잠든 기기를 깨울지가 여기서 갈린다. */
+    val priority: String,
 )
 
 /** Expo 응답 — 판정에 쓰는 것만 받는다. */

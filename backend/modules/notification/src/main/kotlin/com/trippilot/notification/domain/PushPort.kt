@@ -23,6 +23,14 @@ data class PushMessage(
     val body: String,
     /** 탭했을 때 어디로 갈지. 알림함 행의 `actionType`·`actionPayload` 를 그대로 싣는다. */
     val data: Map<String, String> = emptyMap(),
+    /**
+     * 이 알림이 지금 울려야 하는가([NotificationKind.urgency]).
+     *
+     * **기본값을 두지 않는다.** 처음엔 `ACTIVE` 를 기본으로 뒀는데, 역검증에서 발송 지점이 이 값을
+     * 안 실어도 아무 테스트가 깨지지 않았다 — 기본값이 "말하지 않은 것"과 "보통이라고 말한 것"을
+     * 같게 만든 것이다. 이 리포가 세 번 겪은 형태라(anti-patterns: 기본값이 거짓말한다) 지웠다.
+     */
+    val urgency: PushUrgency,
 )
 
 /** 토큰 한 건의 결과. */
