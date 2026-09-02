@@ -33,10 +33,10 @@ from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.facade import HybridSolverFacade
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.facade import HybridAssemblyFacade
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -81,8 +81,8 @@ _NOW = datetime(2026, 8, 5, 8, 0, tzinfo=_KST)
 _DAY1 = date(2026, 8, 5)
 _TRACE_ID = TraceId("t-u5")
 _ANCHOR = GeoPoint(37.751, 128.876)
-_SCFG = SolverConfig()
-_EST = TravelEstimator(_SCFG)
+_ACFG = AssemblyConfig()
+_EST = TravelEstimator(_ACFG)
 _C1CFG = C1Config(model_ids={ModelTier.LIGHT: "m-light", ModelTier.HEAVY: "m-heavy"})
 _PERSONA = PersonaSummary(
     taste_tags=(TasteTag.NATURE,), companion=CompanionType.SOLO, budget=BudgetLevel.MID
@@ -168,7 +168,7 @@ class _PrimaryStage:
     required_ms = 0
 
     def __init__(self, poi_index) -> None:
-        self._inner = RuleFallbackSolver(poi_index, _EST, _SCFG)
+        self._inner = RuleFallbackAssembler(poi_index, _EST, _ACFG)
 
     def solve(self, problem, remaining_ms):
         solution = self._inner.solve(problem, remaining_ms)
@@ -195,8 +195,8 @@ class _RecordingFacade:
         return self._inner.solve(problem, deadline_ms, trace_id)
 
 
-class _Solvers:
-    """SolverProvider — 요청 스코프로 퍼사드를 조립 (풀이 매 요청 다르므로)."""
+class _AssemblyProvider:
+    """AssemblyProvider — 요청 스코프로 퍼사드를 조립 (풀이 매 요청 다르므로)."""
 
     def __init__(self, trace, sink: _Sink, *, primary: bool) -> None:
         self._trace, self._sink, self._primary = trace, sink, primary
@@ -205,9 +205,9 @@ class _Solvers:
         stages = []
         if self._primary:
             stages.append(_PrimaryStage(poi_index))
-        stages.append(RuleFallbackSolver(poi_index, _EST, _SCFG))
+        stages.append(RuleFallbackAssembler(poi_index, _EST, _ACFG))
         return _RecordingFacade(
-            HybridSolverFacade(stages, poi_index, _EST, FakeClock(), self._trace),
+            HybridAssemblyFacade(stages, poi_index, _EST, FakeClock(), self._trace),
             self._sink,
         )
 
@@ -279,7 +279,7 @@ def _build(
     orchestrator = ItineraryOrchestrator(
         InfoCollector(providers),
         PreferenceScoringWorker(gateway),
-        _Solvers(trace, sink, primary=primary),
+        _AssemblyProvider(trace, sink, primary=primary),
         clock if clock is not None else FakeClock(),
         trace,
         context_resolver=resolver,  # 소유 검증(fail-closed, TRIP-333)도 같은 resolver
@@ -439,7 +439,7 @@ def test_explanation_failure_keeps_itinerary() -> None:
 # ── ③ 이중 폴백 금지 ────────────────────────────────────────────────
 
 
-def test_solver_degradation_recorded_without_duplicate_event() -> None:
+def test_assembly_degradation_recorded_without_duplicate_event() -> None:
     """C2 체인 강등은 C2가 이미 관측했다 — 조립은 결과에만 싣고 재발행하지 않는다."""
     orchestrator, trace, sink = _build(primary=False)  # 규칙 폴백만 남긴 체인
 
@@ -449,11 +449,11 @@ def test_solver_degradation_recorded_without_duplicate_event() -> None:
     assert outcome.solution is not None
     assert outcome.solution.solve_mode is SolveMode.RULE_FALLBACK
     assert any(
-        d.stage == "solver" and d.reason.startswith("solver_degraded")
+        d.stage == "assembly" and d.reason.startswith("assembly_degraded")
         for d in outcome.degradations
     )
-    # 조립은 solver 단계 이벤트를 하나도 내지 않았다 (폴백률 이중 계수 방지)
-    assert [e for e in _orchestrator_events(trace) if e.stage == "solver"] == []
+    # 조립은 assembly 단계 이벤트를 하나도 내지 않았다 (폴백률 이중 계수 방지)
+    assert [e for e in _orchestrator_events(trace) if e.stage == "assembly"] == []
     assert len(sink.problems) == 1                     # 재시도 없음 — solve 호출 1회
 
 
@@ -461,10 +461,10 @@ def test_solver_degradation_recorded_without_duplicate_event() -> None:
 
 
 def test_allocate_day1_and_full_budgets() -> None:
-    """상한(M7·C1) + 솔버 바닥 — 1차 상한은 기존값 유지, 2차 점수 상한 14s (TRIP-376).
+    """상한(M7·C1) + 어셈블리 바닥 — 1차 상한은 기존값 유지, 2차 점수 상한 14s (TRIP-376).
 
-    m7_ms·c1_ms는 단계 **상한**, c2_reserved_ms는 솔버 **최소 보장 바닥**이다 —
-    실제 솔버 예산은 solve 시점 잔여 전부(아래 잔여 테스트들이 증명).
+    m7_ms·c1_ms는 단계 **상한**, c2_reserved_ms는 어셈블리 **최소 보장 바닥**이다 —
+    실제 어셈블리 예산은 solve 시점 잔여 전부(아래 잔여 테스트들이 증명).
     """
     cfg = OrchestratorConfig()
 
@@ -528,8 +528,8 @@ def test_day1_score_call_timeout_stays_within_stage_cap() -> None:
     assert [r.timeout_sec for r in llm.requests] == [1.75]
 
 
-def test_solver_receives_full_remaining_when_upstream_finishes_early() -> None:
-    """2차: 상류가 일찍 끝나면 솔버는 바닥(5,000)이 아니라 잔여 전부를 받는다."""
+def test_assembly_receives_full_remaining_when_upstream_finishes_early() -> None:
+    """2차: 상류가 일찍 끝나면 어셈블리는 바닥(5,000)이 아니라 잔여 전부를 받는다."""
     orchestrator, _, sink = _build(clock=_BurningClock(step_ms=1_000))
 
     outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
@@ -538,8 +538,8 @@ def test_solver_receives_full_remaining_when_upstream_finishes_early() -> None:
     assert sink.deadlines[0] >= 15_000  # 고정 분할이었다면 여기서 5,000에 묶인다
 
 
-def test_solver_floor_guaranteed_when_score_exhausts_its_cap() -> None:
-    """2차: 상류가 상한을 소진해도 솔버는 바닥 5,000ms 아래로 내려가지 않는다."""
+def test_assembly_floor_guaranteed_when_score_exhausts_its_cap() -> None:
+    """2차: 상류가 상한을 소진해도 어셈블리는 바닥 5,000ms 아래로 내려가지 않는다."""
     orchestrator, _, sink = _build(clock=_BurningClock(step_ms=5_000))
 
     outcome = orchestrator.generate(_request(), 20_000, _TRACE_ID, _NOW)
@@ -548,8 +548,8 @@ def test_solver_floor_guaranteed_when_score_exhausts_its_cap() -> None:
     assert sink.deadlines[0] == 5_000  # = total − 상한 합 (구조가 담보하는 바닥)
 
 
-def test_day1_solver_gets_more_than_old_fixed_slice_on_rule_path() -> None:
-    """1차: 규칙 점수로 즉시 끝나면 솔버가 종전 고정 2,500을 넘는 잔여를 받는다."""
+def test_day1_assembly_gets_more_than_old_fixed_slice_on_rule_path() -> None:
+    """1차: 규칙 점수로 즉시 끝나면 어셈블리가 종전 고정 2,500을 넘는 잔여를 받는다."""
     orchestrator, _, sink = _build(score_llm=FailingLlm())
 
     outcome = orchestrator.generate(_request(), 5_000, _TRACE_ID, _NOW)
@@ -623,7 +623,7 @@ def test_permission_violation_fails_instead_of_silently_degrading() -> None:
     assert outcome.solution is None
     assert outcome.error is not None
     assert outcome.error.startswith("permission_denied")
-    assert sink.problems == []                             # 솔버까지 가지 않았다
+    assert sink.problems == []                             # 어셈블리까지 가지 않았다
     assert any(
         e.reason.startswith("permission_denied") for e in _orchestrator_events(trace)
     )
@@ -648,7 +648,7 @@ def test_short_deadline_with_foreign_persona_still_fails_403() -> None:
     assert outcome.error is not None
     assert outcome.error.startswith("permission_denied")
     assert outcome.scoring_mode is not ScoringMode.LLM
-    assert sink.problems == []                             # 솔버까지 가지 않았다
+    assert sink.problems == []                             # 어셈블리까지 가지 않았다
     assert any(
         e.reason.startswith("permission_denied") for e in _orchestrator_events(trace)
     )
@@ -675,7 +675,7 @@ def test_pbt_foreign_persona_always_403_regardless_of_deadline(
     assert outcome.solution is None
     assert outcome.error is not None
     assert outcome.error.startswith("permission_denied")
-    assert sink.problems == []                             # 어떤 시한에서도 솔버 미도달
+    assert sink.problems == []                             # 어떤 시한에서도 어셈블리 미도달
 
 
 def test_contradictory_fixed_blocks_return_explicit_failure() -> None:
@@ -706,9 +706,9 @@ def test_contradictory_fixed_blocks_return_explicit_failure() -> None:
 
     assert outcome.status is GenerationStatus.FAILED
     assert outcome.error is not None
-    assert outcome.error.startswith("solver_conflict")
+    assert outcome.error.startswith("assembly_conflict")
     assert any(
-        e.reason.startswith("solver_conflict") for e in _orchestrator_events(trace)
+        e.reason.startswith("assembly_conflict") for e in _orchestrator_events(trace)
     )
 
 
@@ -852,7 +852,7 @@ def test_solved_at_derives_from_injected_now_not_wall_clock() -> None:
     assert outcome.solved_at == _NOW                   # wall-clock 미개입 (DL-3)
 
 
-def test_solver_conflict_failure_keeps_pool_facts_but_no_solved_at() -> None:
+def test_assembly_conflict_failure_keeps_pool_facts_but_no_solved_at() -> None:
     """모순 고정 블록 FAILED — 해가 없으니 solved_at=None, 풀 실측 보고는 유지."""
     conflicting = (
         FixedBlock(

@@ -99,7 +99,7 @@ PR #104(`backend/docs/design/ai-backend-경계-계약-확정.md`) 회신으로 *
 | P1 | POI 정본·INV-1 이중 소유 | 확정 | 연동 차단 | `backend/.../PoiCollectionGate.kt:5` ↔ `ai/.../ai-architecture.md:83` |
 | P2 | 후보풀 필터 로직 불일치 | 확정 | 연동 차단 | `ai/.../poi_curation/pool_builder.py:25-56` ↔ `backend/.../PlaceDataCandidatePool.kt:23-45` |
 | P3 | 카테고리 enum 불일치 | 확정 | 연동 차단 | `backend/.../Poi.kt:9` ↔ `ai/.../domain/poi.py:15-23` |
-| P4 | SolverPort 계약 형태·계층 | 확정(뉘앙스) | 혼동 유발 | `aidlc/.../component-methods.md:72-102` ↔ `ai/.../ports/solver_port.py:14-15` |
+| P4 | SolverPort 계약 형태·계층 | 확정(뉘앙스) | 혼동 유발 | `aidlc/.../component-methods.md:72-102` ↔ `ai/.../ports/assembly_port.py:14-15` |
 | P5 | QualityScore 미구현 | 확정 | 혼동/정리 | `aidlc/.../components.md:179-182` ↔ ai grep 0건 |
 | P6 | 별도 `solver/` 디렉토리 잔존 | 확정 | 문서 정리 | `aidlc/.../unit-of-work.md:53-69` ↔ 실제 `ai/` 통합 |
 | P7 | CandidatePoolPort/GroundedPlace 드리프트 | 확정 | 문서 정리 | `aidlc/.../component-methods.md:130-133,32-36` ↔ `backend/.../api/CandidatePoolPort.kt:9-26` |
@@ -152,7 +152,7 @@ PR #104(`backend/docs/design/ai-backend-경계-계약-확정.md`) 회신으로 *
 
 - 정본 `component-methods.md:72-102`: C8/C10 소유 경계 계약, 4메서드(generate/recalculate/validate/proposeSlotCandidates)
   + `Result<>` + `FallbackMode`.
-- 실제 `ai/.../ports/solver_port.py:14-15`: `solve(problem) -> ItinerarySolution | None`, "체인 로직은 U2 소유" =
+- 실제 `ai/.../ports/assembly_port.py:14-15`: `solve(problem) -> ItinerarySolution | None`, "체인 로직은 U2 소유" =
   하이브리드 체인 내부 전략 포트(다른 계층).
 - backend엔 SolverPort 정의 없음. 실제 서비스 경계는 `POST /ai/generate`(HTTP).
 - 정확한 표현: "정본 경계 계약 미실현 + 동일 이름 재사용".
@@ -169,12 +169,12 @@ PR #104(`backend/docs/design/ai-backend-경계-계약-확정.md`) 회신으로 *
 
 - 정본 `component-methods.md:59-61`, `components.md:179-182`: composite로 2차 솔버 교체 판정하는 핵심 자료구조.
 - ai 전체 grep(`QualityScore|composite|preferenceFit|routeEfficiency`) 0건.
-- 근접물 `observability.py:146 SolverRunRecord`는 `elapsed_ms·violations_found·repaired` 텔레메트리일 뿐, 산출물 부착 품질점수 아님.
+- 근접물 `observability.py:146 AssemblyRunRecord`는 `elapsed_ms·violations_found·repaired` 텔레메트리일 뿐, 산출물 부착 품질점수 아님.
 
 > **2026-08-06 현황 — 해소.** TRIP-259(도메인 타입·계산)·TRIP-261(C2 facade 배선) 완료:
 > `ai/src/trippilot/domain/itinerary.py:233` `QualityScore`(preference_fit·constraint_satisfaction·
-> route_efficiency·composite, 전 성분 [0,1]), `ai/src/trippilot/solver_engine/quality.py:86-105` `compute_quality`,
-> facade 모든 반환 경로 부착(`ai/src/trippilot/solver_engine/facade.py:101`).
+> route_efficiency·composite, 전 성분 [0,1]), `ai/src/trippilot/assembly_engine/quality.py:86-105` `compute_quality`,
+> facade 모든 반환 경로 부착(`ai/src/trippilot/assembly_engine/facade.py:101`).
 
 ### P6 — 별도 `solver/` 디렉토리 잔존 (문서 정리)
 
@@ -240,7 +240,7 @@ PR #104(`backend/docs/design/ai-backend-경계-계약-확정.md`) 회신으로 *
 - **INV-3 (duration 미표시)**: ai(`travel.py:55-60` public에서 internal_minutes 제외)·
   backend(`openapi.yaml:417,453`, `PoiDtos.kt:9`, `CandidatePoolPort.kt:17`) 양쪽 일관 준수.
   - **2026-08-06 실측 재확인 — 양쪽 통과.** ai: `domain/travel.py:1-7`(직렬화 경로 분리로 구조적 강제),
-    `solver_engine/quality.py:8`(품질 계산조차 internal_minutes 미사용), `QualityScore` 전 성분 무차원 [0,1].
+    `assembly_engine/quality.py:8`(품질 계산조차 internal_minutes 미사용), `QualityScore` 전 성분 무차원 [0,1].
     backend: `ScheduleAgentPort.kt:84` `VisitSlotDisplay` "duration 필드 없음(INV-3) — 거리만",
     `openapi.yaml:417,453` 유효.
 - **이벤트 소유**: AI 문서가 발행 주체를 backend(KB)로 올바로 귀속(`ai-implementation-design.md:117,154`,

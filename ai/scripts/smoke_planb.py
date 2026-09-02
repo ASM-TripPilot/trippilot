@@ -87,7 +87,7 @@ from trippilot.llm_gateway.feature_model_env import (  # noqa: E402
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
 from trippilot.ports.llm_port import LlmResponse  # noqa: E402
-from trippilot.solver_engine.config import RAIN_OUTDOOR  # noqa: E402
+from trippilot.assembly_engine.config import RAIN_OUTDOOR  # noqa: E402
 from trippilot.api.wiring import LoggingTrace  # noqa: E402
 
 DIM = 1024  # kb_vectors DDL 고정 (docker/vector-init/01-kb-vectors.sql)

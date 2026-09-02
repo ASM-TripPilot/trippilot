@@ -15,7 +15,7 @@ Documents defining the implementation units, broken down into 6 units.
 | Unit | Name | Effort |
 |---|---|---|
 | U1 | Domain & Ports | 2–3 days |
-| U2 | C2 Solver Core | 5–7 days |
+| U2 | C2 Assembly Core | 5–7 days |
 | U3 | M7 Place Data Core | 3–5 days |
 | U4 | C1 LLM Gateway | 4–5 days |
 | U5 | Orchestration & API | 3–4 days |

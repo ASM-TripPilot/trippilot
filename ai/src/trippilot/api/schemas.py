@@ -10,7 +10,7 @@
 - **INV-3**: 표시 슬롯에 소요시간류(`duration`·`*_minutes`·`stay_min`) 필드를 두지 않는다.
   거리 문자열(`distance_range`)만 노출한다. 백엔드 계약 테스트가 `shouldNotContain "minutes"`
   로 이 규약을 검사하므로, 필드를 늘릴 때 이름부터 확인할 것.
-- **INV-2**: 시각(`start_at`/`end_at`)은 솔버 검증값을 사영한 것만 담는다 (routes 변환부 참조).
+- **INV-2**: 시각(`start_at`/`end_at`)은 어셈블리 검증값을 사영한 것만 담는다 (routes 변환부 참조).
 - `extra="forbid"`: 모르는 필드는 **조용히 무시하지 않고 422로 드러낸다**. 계약 드리프트를
   침묵으로 흡수하면(예: `excluded_poi_ids` 오타) 기능이 조용히 무력화된다 — 백엔드가 미지
   `solve_mode`를 실패시키는 것과 같은 방향(INV-4 침묵 실패 금지).
@@ -149,7 +149,7 @@ class GenerateItineraryRequest(BoundaryModel):
 
 
 class VisitSlotDisplaySchema(BoundaryModel):
-    """표시용 방문 슬롯 — 솔버 검증 시각·순서만(INV-2), 거리만(INV-3).
+    """표시용 방문 슬롯 — 어셈블리 검증 시각·순서만(INV-2), 거리만(INV-3).
 
     **소요시간 필드를 추가하지 말 것**: 도메인 `VisitSlot.stay_min`·`score`는
     내부값이라 이 사영에서 의도적으로 제외한다(IO-3).
@@ -455,7 +455,7 @@ class EditItineraryRequest(BoundaryModel):
 
 
 class EditItineraryResponse(BoundaryModel):
-    """편집 결과 — 시각·순서는 APPLIED일 때만, 그것도 솔버 검증값만(INV-2).
+    """편집 결과 — 시각·순서는 APPLIED일 때만, 그것도 어셈블리 검증값만(INV-2).
 
     REJECTED는 위반 목록 또는 사유를 반드시 싣는다(침묵 거부 금지, INV-4).
     """

@@ -5,9 +5,9 @@
 
 ---
 
-## 1. C2 Solver Engine
+## 1. C2 Assembly Engine
 
-### 1.1 SolverFacade — 공개 퍼사드
+### 1.1 AssemblyFacade — 공개 퍼사드
 
 | 메서드 | 유형 | 시그니처 | 비즈니스 규칙 |
 |---|---|---|---|

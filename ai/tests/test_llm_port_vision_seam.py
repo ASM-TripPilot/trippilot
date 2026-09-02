@@ -238,7 +238,7 @@ def test_text_calls_leave_consent_ref_empty() -> None:
 
 def test_images_are_loaded_onto_llm_request_only_inside_the_gateway() -> None:
     """동의 검사·consent_ref 계측의 우회로 차단 — LlmRequest에 images를 싣는 곳은
-    게이트웨이뿐이어야 한다. 다른 곳(예: solver_engine/llm_solver)이 직접 실으면
+    게이트웨이뿐이어야 한다. 다른 곳(예: assembly_engine/llm_assembler)이 직접 실으면
     동의 없이 사진이 나갈 수 있다. 위반 시: 그 코드를 게이트웨이 경유로 바꿀 것."""
     from pathlib import Path
     import re

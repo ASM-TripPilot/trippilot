@@ -2,7 +2,7 @@
 
 > **v1.0 확정 (2026-08-25, 사용자 승인)** · 방침: **FE 합의 비차단** — 정본 계약(#334)대로 선행 구현하고 FE 의견은 통합 시점에 반영한다(팀 결정 2026-08-25) — TRIP-538 · AI-DLC CONSTRUCTION Functional Design.
 > 근거 정본: `reflection-template-design.md`(#334 머지 — **출력 계약, 본 FD는 이 계약을 변경하지 않는다**),
-> `reflect-agent-design.md` §4·5(트리거·상태 머신 — 무변), `agent-structure-v2.md` §3·4(Reflect 전속 도구·솔버 관문 스킵),
+> `reflect-agent-design.md` §4·5(트리거·상태 머신 — 무변), `agent-structure-v2.md` §3·4(Reflect 전속 도구·어셈블리 관문 스킵),
 > 프롬프트 정본 §2.7(REFLECTION_NUDGE)·§2.8(REFLECTION_TEMPLATE — §2.3 REFLECTION은 2026-08-25 흡수·폐지), AI-D06, agent-foundation FD(BR-AF-07 절차).
 > 규칙은 U1과 동일: `frozen=True, slots=True` · tz-aware · `from_dict(to_dict(x)) == x`(U5-P10) · 컬렉션은 tuple/frozenset만.
 

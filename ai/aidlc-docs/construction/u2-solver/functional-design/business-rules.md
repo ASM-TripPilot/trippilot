@@ -8,10 +8,10 @@
 
 | 불변식 | U2에서의 강제 |
 |---|---|
-| **INV-1** | LLM 2차 제안의 `poi_id ∉ candidates` → 드롭+GateDropEvent. 솔버 출력 POI ⊆ 후보 풀 |
+| **INV-1** | LLM 2차 제안의 `poi_id ∉ candidates` → 드롭+GateDropEvent. 어셈블리 출력 POI ⊆ 후보 풀 |
 | **INV-2** | **모든 반환 해는 check_all 통과 후에만** — LLM 2차 포함, 검증 우회 반환 경로 없음. solve_mode로 출처 기록(U1 정합 규칙과 결합) |
 | **INV-3** | HC2 계산은 `internal_minutes` 사용하되 표시 경로 없음 — U1 `to_public_dict`가 이미 차단, U2는 신규 노출 경로를 만들지 않는다 |
-| **INV-4** | 체인 최후의 RuleFallbackSolver는 `required_ms()=0`·항상 해 반환 — solve()가 예외·빈손으로 끝나는 경로 없음. 모든 강등은 FallbackEvent로 관측 |
+| **INV-4** | 체인 최후의 RuleFallbackAssembler는 `required_ms()=0`·항상 해 반환 — solve()가 예외·빈손으로 끝나는 경로 없음. 모든 강등은 FallbackEvent로 관측 |
 
 ## 2. 하드 제약 (정본 §4.2 — 게이트 G114: CI 100% 통과)
 
@@ -51,7 +51,7 @@
 | U5-P6 | 예산 가중치 단조성: budget↑ ⇒ 저비용 카테고리 보상 단조 | U2 신규 |
 | **DL-P1** | 임의 (problem, deadline, clock 시나리오)에서 반환 시각 ≤ deadline | **U2 신규 (AI-D07)** |
 | **DL-P2** | 잔여 < 단계 요구 시간 ⇒ 그 단계 미실행 + FallbackEvent 발행 | **U2 신규 (AI-D07)** |
-| GATE-P (U5-P5 계열) | 적대적 LLM 제안(후보 밖 id) ⇒ 반환 해에 미포함 + GateDropEvent | U2 신규 (2차 솔버 경로) |
+| GATE-P (U5-P5 계열) | 적대적 LLM 제안(후보 밖 id) ⇒ 반환 해에 미포함 + GateDropEvent | U2 신규 (2차 어셈블리 경로) |
 
 ## 6. 벤치마크 게이트 (미결 #3 해소 — U2 첫 절편)
 

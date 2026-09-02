@@ -1,6 +1,6 @@
 """TRIP-379 — 식사 시간대 소프트 보정 (점심 11:00~14:00 · 저녁 17:00~20:00).
 
-배경(실측 2회, TRIP-373 코멘트): 솔버가 카테고리-시간대 적합성을 몰라 점수 분포에
+배경(실측 2회, TRIP-373 코멘트): 어셈블리가 카테고리-시간대 적합성을 몰라 점수 분포에
 따라 ① 오전 식당 연속 배치 또는 ② 하루 식사 0곳 양극단이 발생했다. 정본에는 기존
 규칙이 없어(ai-data-design.md §2.2는 RESTAURANT 체류 60분만 정의) 이 티켓이 신설.
 
@@ -22,25 +22,25 @@ from datetime import date, datetime, timedelta, timezone
 
 from hypothesis import given, settings
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.constraints import check_all
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.ortools_solver import OrToolsSolver
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.constraints import check_all
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, ScheduleId, TransportMode
 from trippilot.domain.itinerary import ItineraryProblem, SolveMode, TimeWindow
 from trippilot.domain.llm import ScoredPoi
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 
-from tests.generators.solver import solver_setups
+from tests.generators.assembly import assembly_setups
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)
 # 소규모(≤8 노드)는 수 초 안에 OPTIMAL 도달 — 기존 ortools 테스트와 동일한 관례
-_CFG = SolverConfig(or_tools_limit_ms=2000, or_tools_min_ms=50)
-_CFG_OFF = SolverConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
+_CFG = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50)
+_CFG_OFF = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50,
                         meal_bonus=0.0, meal_penalty=0.0)   # 보정 끔 = 종전 동작
-_CFG_EXTREME = SolverConfig(or_tools_limit_ms=1000, or_tools_min_ms=50,
+_CFG_EXTREME = AssemblyConfig(or_tools_limit_ms=1000, or_tools_min_ms=50,
                             meal_bonus=5.0, meal_penalty=5.0)  # 과장 가중 (PBT용)
 _EST = TravelEstimator(_CFG)
 
@@ -80,7 +80,7 @@ def _fully_in(slot, window: tuple[int, int]) -> bool:
     return _mod(slot.start_at) >= lo and _mod(slot.end_at) <= hi
 
 
-def _out_of_window_food(solution, index, cfg: SolverConfig) -> int:
+def _out_of_window_food(solution, index, cfg: AssemblyConfig) -> int:
     return sum(1 for s in _food_slots(solution, index)
                if not (_fully_in(s, cfg.lunch_window_min)
                        or _fully_in(s, cfg.dinner_window_min)))
@@ -115,8 +115,8 @@ _POOL_NO_FOOD = [(f"s{i}", PoiCategory.SIGHT, .70 - .02 * i) for i in range(3)] 
 
 def test_case_a_food_heavy_pool_suppresses_out_of_window_food_runs() -> None:
     problem, index = _problem(_POOL_A)
-    on = OrToolsSolver(index, _EST, _CFG).solve(problem, 3000)
-    off = OrToolsSolver(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 3000)
+    on = OrToolsAssembler(index, _EST, _CFG).solve(problem, 3000)
+    off = OrToolsAssembler(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 3000)
     assert on is not None and off is not None
     assert check_all(on, problem, index, _EST) == []
     # 창 밖 FOOD·FOOD 연속 모두 무보정 대비 늘지 않고, 합계는 엄격히 줄어든다
@@ -136,8 +136,8 @@ def test_case_a_food_heavy_pool_suppresses_out_of_window_food_runs() -> None:
 
 def test_case_b_nature_heavy_pool_gets_lunch_food() -> None:
     problem, index = _problem(_POOL_B)
-    on = OrToolsSolver(index, _EST, _CFG).solve(problem, 3000)
-    off = OrToolsSolver(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 3000)
+    on = OrToolsAssembler(index, _EST, _CFG).solve(problem, 3000)
+    off = OrToolsAssembler(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 3000)
     assert on is not None and off is not None
     assert check_all(on, problem, index, _EST) == []
     # 무보정 재현: 점심 창 FOOD 0 (실측 — FOOD가 09:00 아침에 배치됨)
@@ -152,14 +152,14 @@ def test_case_b_nature_heavy_pool_gets_lunch_food() -> None:
 
 def test_no_food_pool_still_generates_itinerary() -> None:
     problem, index = _problem(_POOL_NO_FOOD)
-    on = OrToolsSolver(index, _EST, _CFG).solve(problem, 3000)
+    on = OrToolsAssembler(index, _EST, _CFG).solve(problem, 3000)
     assert on is not None                        # 실패 조건화 금지
     assert any(d.slots for d in on.days)
     assert check_all(on, problem, index, _EST) == []
     # FOOD가 없으면 보정 항이 모델에 아예 없다 — 무보정 해와 완전 동일
-    off = OrToolsSolver(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 3000)
+    off = OrToolsAssembler(index, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 3000)
     assert on == off
-    fb = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    fb = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     assert fb.solve_mode is SolveMode.RULE_FALLBACK
     assert any(d.slots for d in fb.days)
 
@@ -169,7 +169,7 @@ def test_no_food_pool_still_generates_itinerary() -> None:
 
 def test_fallback_case_a_no_morning_food_and_lunch_food() -> None:
     problem, index = _problem(_POOL_A)
-    fb = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    fb = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     assert check_all(fb, problem, index, _EST) == []
     foods = _food_slots(fb, index)
     assert foods, "식당 우위 풀 — FOOD가 배치되어야 함"
@@ -181,7 +181,7 @@ def test_fallback_case_a_no_morning_food_and_lunch_food() -> None:
 
 def test_fallback_case_b_lunch_window_gets_food() -> None:
     problem, index = _problem(_POOL_B)
-    fb = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    fb = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     assert check_all(fb, problem, index, _EST) == []
     assert any(_fully_in(s, _CFG.lunch_window_min)
                for s in _food_slots(fb, index))
@@ -193,30 +193,30 @@ def test_fallback_case_b_lunch_window_gets_food() -> None:
 
 
 @settings(max_examples=15, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_pbt_extreme_meal_weights_never_violate_hard_constraints(setup) -> None:
     problem, index = setup
     est = TravelEstimator(_CFG_EXTREME)
-    result = OrToolsSolver(index, est, _CFG_EXTREME).solve(problem, 1500)
+    result = OrToolsAssembler(index, est, _CFG_EXTREME).solve(problem, 1500)
     if result is not None:
         assert check_all(result, problem, index, est) == []
-    fb = RuleFallbackSolver(index, est, _CFG_EXTREME).solve(problem)
+    fb = RuleFallbackAssembler(index, est, _CFG_EXTREME).solve(problem)
     assert check_all(fb, problem, index, est) == []
 
 
 @settings(max_examples=8, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_pbt_meal_correction_keeps_determinism(setup) -> None:
     problem, index = setup
     est = TravelEstimator(_CFG_EXTREME)
-    solver = OrToolsSolver(index, est, _CFG_EXTREME)
-    assert solver.solve(problem, 1500) == solver.solve(problem, 1500)
-    fb = RuleFallbackSolver(index, est, _CFG_EXTREME)
+    assembly = OrToolsAssembler(index, est, _CFG_EXTREME)
+    assert assembly.solve(problem, 1500) == assembly.solve(problem, 1500)
+    fb = RuleFallbackAssembler(index, est, _CFG_EXTREME)
     assert fb.solve(problem) == fb.solve(problem)
 
 
 @settings(max_examples=10, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_pbt_food_free_pool_is_unaffected_by_correction(setup) -> None:
     """FOOD 없는 풀에서는 보정 유무가 해에 어떤 영향도 주지 않는다."""
     problem, index = setup
@@ -224,9 +224,9 @@ def test_pbt_food_free_pool_is_unaffected_by_correction(setup) -> None:
     index2 = {pid: (replace(p, category=PoiCategory.SIGHT)
                     if p.category is PoiCategory.FOOD else p)
               for pid, p in index.items()}
-    on = OrToolsSolver(index2, _EST, _CFG).solve(problem, 1500)
-    off = OrToolsSolver(index2, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 1500)
+    on = OrToolsAssembler(index2, _EST, _CFG).solve(problem, 1500)
+    off = OrToolsAssembler(index2, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem, 1500)
     assert on == off
-    fb_on = RuleFallbackSolver(index2, _EST, _CFG).solve(problem)
-    fb_off = RuleFallbackSolver(index2, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem)
+    fb_on = RuleFallbackAssembler(index2, _EST, _CFG).solve(problem)
+    fb_off = RuleFallbackAssembler(index2, TravelEstimator(_CFG_OFF), _CFG_OFF).solve(problem)
     assert fb_on == fb_off

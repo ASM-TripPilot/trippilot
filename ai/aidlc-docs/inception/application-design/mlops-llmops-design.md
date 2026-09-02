@@ -4,7 +4,7 @@
 > - **LLMOps** — LLM 호출(프롬프트·평가·비용·가드레일)의 운영 체계. **MVP부터 필수** (LLM이 핵심 경로에 이미 있음). 벤더는 Anthropic API 직접 (AI-D06 — 2026-08-25 "Bedrock" 표기 제거)
 > - **MLOps** — 자체 학습 모델(선호 점수·체류시간 등)의 운영 체계. **지금은 "로깅 먼저", 모델은 DAU 1천 이후** (AI-D05 과설계 금지 유지)
 >
-> 공통 대전제 (AI-D05): ML/LLM은 **soft 신호에만**. 하드 제약은 솔버 결정론 유지. closed-set 게이트(INV-1)와 규칙 폴백(INV-4)은 어떤 모델로 바꿔도 그대로 적용.
+> 공통 대전제 (AI-D05): ML/LLM은 **soft 신호에만**. 하드 제약은 어셈블리 결정론 유지. closed-set 게이트(INV-1)와 규칙 폴백(INV-4)은 어떤 모델로 바꿔도 그대로 적용.
 
 ---
 
@@ -33,7 +33,7 @@
 | 식별 | C1 호출 계약에 이미 있는 `prompt{version, template_id}` 필드를 전 호출에 강제 — 로그에서 어떤 버전이 어떤 결과를 냈는지 조인 가능 |
 | 변경 절차 | 프롬프트 수정 = PR → 오프라인 평가셋 자동 실행 → 회귀 없으면 머지 → 카나리 |
 | 롤백 | version 필드만 되돌리면 즉시 롤백 (배포 없이 설정 전환 가능하게) |
-| 대상 | feature별 전부: score_preferences, explain_slot, select_alternatives, generate_reflection, parse_intent, paraphrase_query(신규), extract_places, Bedrock 솔버 프롬프트 |
+| 대상 | feature별 전부: score_preferences, explain_slot, select_alternatives, generate_reflection, parse_intent, paraphrase_query(신규), extract_places, Bedrock 어셈블리 프롬프트 |
 
 ### 1.3 평가 체계 (Evaluation)
 
@@ -50,7 +50,7 @@
 
 | 항목 | 정책 |
 |---|---|
-| 상관관계 | `trace_id` 전 구간 전파 (orchestrator-delegation-design.md §7) — 사용자 요청 1건 = LLM 호출·솔버 실행·에이전트 위임 전체 트리 복원 가능 |
+| 상관관계 | `trace_id` 전 구간 전파 (orchestrator-delegation-design.md §7) — 사용자 요청 1건 = LLM 호출·어셈블리 실행·에이전트 위임 전체 트리 복원 가능 |
 | LLM 호출 로그 | {trace_id, feature, prompt_version, model_id, tokens_in/out, latency, is_fallback, 파싱 성공 여부} — **전량** |
 | 본문 로깅 | 프롬프트·응답 본문은 개인정보 마스킹 후 **샘플링 저장** (디버깅·평가셋 채굴용). 위치·이름은 백엔드 개인정보 정책(append-only 로그 체계)과 정렬 — 보존 기간 별도 합의 필요 |
 | 솔버 로그 | {trace_id, solve_mode, or_tools_status, HC 위반·수리 내역, elapsed} — 하이브리드 체인의 어느 층에서 해결됐는지 추적. **정정 (2026-08-25)**: `is_bedrock` 필드는 코드에 없고 필요도 없다 — `SolveMode`(`OR_TOOLS`·`LLM`·`RULE_FALLBACK`·`MINIMAL`, `domain/itinerary.py`)가 층을 이미 식별한다 |
@@ -84,7 +84,7 @@
 |---|---|---|
 | **Phase L (지금, MVP)** | 코드 착수부터 | **학습 데이터가 될 로그를 스키마 갖춰 쌓기** — 모델 없이. 이것을 안 하면 DAU 1천이 되어도 학습 불가 |
 | **Phase M1** | DAU 1천 / 데이터 축적 후 | 첫 모델 1~2개 (선호 점수 LTR, 체류시간 회귀) 오프라인 학습 → 섀도 평가 |
-| **Phase M2** | M1 검증 후 | SageMaker 엔드포인트 서빙 → C1/솔버 어댑터 뒤 스왑 (기존 계획) → 정기 재학습 파이프라인 |
+| **Phase M2** | M1 검증 후 | SageMaker 엔드포인트 서빙 → C1/어셈블리 어댑터 뒤 스왑 (기존 계획) → 정기 재학습 파이프라인 |
 
 ### 2.2 Phase L — 지금 설계에 넣는 학습 로그 스키마
 
@@ -123,7 +123,7 @@
 
 1. **반복 구조** — 같은 형태의 입력→출력이 대량 반복되는가
 2. **자동 라벨** — 정답이 사용자 행동·실측에서 공짜로 생기는가
-3. **soft 신호** — 틀려도 품질 저하일 뿐, 제약 위반이 아닌가 (hard는 솔버 영역 — ML 금지)
+3. **soft 신호** — 틀려도 품질 저하일 뿐, 제약 위반이 아닌가 (hard는 어셈블리 영역 — ML 금지)
 
 ### 유형 A. 점수·랭킹 (Learning-to-Rank / 분류)
 
@@ -159,7 +159,7 @@
 
 | 영역 | 이유 |
 |---|---|
-| HC1~HC4 검증, 시각·순서 확정 | INV-2 — 솔버 결정론 전용 |
+| HC1~HC4 검증, 시각·순서 확정 | INV-2 — 어셈블리 결정론 전용 |
 | closed-set 게이트 | INV-1 — 확률 모델로 화이트리스트를 흐리면 환각 방어 붕괴 |
 | 수집 게이트 최종 판정 | 데이터 정합성 게이트 — A-3은 보조 점수까지만 |
 | 폴백 발동 判定 | INV-4 — 결정론 조건이어야 폴백을 신뢰 가능 |

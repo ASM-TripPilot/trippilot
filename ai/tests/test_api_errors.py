@@ -7,7 +7,7 @@
 | 상황 | HTTP | retryable |
 |---|---|---|
 | 요청 스키마·도메인 불변식 위반 | 422 | false |
-| 고정블록 모순(SolverConflictError, d08) | 409 | false |
+| 고정블록 모순(AssemblyConflictError, d08) | 409 | false |
 | 컨텍스트 권한 위반(PermissionDeniedError) | 403 | false |
 | 백엔드 POI 조회 4xx(우리가 잘못 보냄) | 422 | false |
 | 백엔드 서비스 토큰 거부(401·403) | 500 | false |
@@ -23,7 +23,7 @@ from fastapi.testclient import TestClient
 
 from trippilot.api.app import HEALTH_BODY, create_app
 from trippilot.poi_curation.adapters.backend_poi_db import BackendPoiDbError
-from trippilot.solver_engine.facade import SolverConflictError
+from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.domain.context import PermissionDeniedError
 from tests.test_api_contract import BACKEND_REQUEST, FakeOrchestrator, make_outcome
 
@@ -65,7 +65,7 @@ def assert_error_body(response, status: int, code: str, retryable: bool = False)
     ("exc", "status", "code"),
     [
         (ValueError("start < end 위반"), 422, "DOMAIN_INVARIANT_VIOLATION"),
-        (SolverConflictError("고정 블록 모순"), 409, "SOLVER_CONFLICT"),
+        (AssemblyConflictError("고정 블록 모순"), 409, "ASSEMBLY_CONFLICT"),
         (PermissionDeniedError("타인 리소스 참조"), 403, "PERMISSION_DENIED"),
         (RuntimeError("설정 버그"), 500, "INTERNAL_ERROR"),
     ],
@@ -135,9 +135,9 @@ def test_non_list_response_is_not_retryable() -> None:
     assert_error_body(response, 500, "BACKEND_UNAVAILABLE", retryable=False)
 
 
-def test_solver_conflict_precedes_generic_500() -> None:
+def test_assembly_conflict_precedes_generic_500() -> None:
     """d08 흐름은 500으로 뭉개지지 않는다 — 백엔드가 충돌 안내 UI로 분기하는 근거."""
-    with client(RaisingOrchestrator(SolverConflictError("모든 단계 실패"))) as c:
+    with client(RaisingOrchestrator(AssemblyConflictError("모든 단계 실패"))) as c:
         body = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST).json()
     assert body["message"] == "모든 단계 실패"
 

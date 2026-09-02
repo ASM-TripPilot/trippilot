@@ -21,8 +21,8 @@ import re
 from datetime import date, datetime, timedelta, timezone
 
 from trippilot.api.wiring import _distance_ranges
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TransportMode
 from trippilot.domain.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
 
@@ -181,7 +181,7 @@ def test_distance_ranges_skip_unknown_coords_and_anchorless_days() -> None:
                        fixed_blocks=())
     solution = ItinerarySolution(
         schedule_id=ScheduleId("s-1"), days=(day1, day2), is_fallback=False,
-        solve_mode=SolveMode.OR_TOOLS, solver_run=None,
+        solve_mode=SolveMode.OR_TOOLS, assembly_run=None,
     )
     coords: dict[PoiId, GeoPoint] = {
         PoiId("p1"): GeoPoint(_ANCHOR.lat + 0.01, _ANCHOR.lng),
@@ -190,7 +190,7 @@ def test_distance_ranges_skip_unknown_coords_and_anchorless_days() -> None:
     anchors: dict[date, GeoPoint] = {_DAY1: _ANCHOR}  # DAY2는 앵커 없음
 
     rendered = _distance_ranges(
-        solution, anchors, coords, TravelEstimator(SolverConfig()),
+        solution, anchors, coords, TravelEstimator(AssemblyConfig()),
         TransportMode.PUBLIC,
     )
 

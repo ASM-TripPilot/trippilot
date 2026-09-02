@@ -77,7 +77,7 @@ class ItineraryOutcome(Protocol):
     """일정 산출물 + 표시에 필요한 부가 정보.
 
     `ItinerarySolution` 하나로는 경계 계약을 채울 수 없다(설명·거리·신선도·충분성은
-    솔버 소관이 아니다) — 그 차이를 이 봉투가 메운다.
+    어셈블리 소관이 아니다) — 그 차이를 이 봉투가 메운다.
 
     - `explanations` / `distance_ranges` 키 규약 = `"{date}#{poi_id}"` (BR-U2-04)
     - `distance_ranges` 값은 표시 문자열("약 1.2km · 도보 추정")이며 **시간을 담지 않는다**(INV-3)

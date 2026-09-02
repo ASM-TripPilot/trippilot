@@ -1,4 +1,4 @@
-"""U2 솔버용 generator — (problem, poi_index) 정합 세트 (U2 FD §3).
+"""U2 어셈블리용 generator — (problem, poi_index) 정합 세트 (U2 FD §3).
 
 가해성(solvable) 보장 방침:
 - POI 영업정보 없음(open_hours=()) → HC1 미적용, 좌표는 앵커 ±0.03도
@@ -36,7 +36,7 @@ def _poi(i: int, lat_off: float, lng_off: float, category: PoiCategory) -> Poi:
 
 
 @st.composite
-def solver_setups(draw) -> tuple[ItineraryProblem, dict[PoiId, Poi]]:
+def assembly_setups(draw) -> tuple[ItineraryProblem, dict[PoiId, Poi]]:
     n = draw(st.integers(min_value=1, max_value=8))
     pois = [
         _poi(
@@ -98,7 +98,7 @@ def skewed_category_setups(
 ) -> tuple[ItineraryProblem, dict[PoiId, Poi]]:
     """TRIP-531 다양성 항 전용 — 지배 카테고리 편중 + 순서 무관 전량 배치 풀.
 
-    solver_setups와 달리 다음을 보장한다:
+    assembly_setups와 달리 다음을 보장한다:
     - 지배 카테고리 후보 4~6개(mono=True면 4~8개 전원) + 여행 2일 고정 →
       일별 허용치 max(category_free_count=2, ⌈후보÷2⌉)를 실제로 초과시켜
       새 코드 경로(폴백 재정렬·OR-Tools 페널티 항)를 반드시 태운다

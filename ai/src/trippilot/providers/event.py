@@ -35,7 +35,7 @@ MAX_RADIUS_KM = 40.0
 
 
 def _haversine_km(a: GeoPoint, b: GeoPoint) -> float:
-    """대원거리 — c2(solver_engine.travel)와 동일 공식의 지역 사본.
+    """대원거리 — c2(assembly_engine.travel)와 동일 공식의 지역 사본.
 
     providers는 설비 계층(c2)을 import하지 않는다 — 6줄 중복이 계층 위반보다 싸다.
     """

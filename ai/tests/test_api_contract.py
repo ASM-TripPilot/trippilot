@@ -138,7 +138,7 @@ def make_solution() -> ItinerarySolution:
         days=(DaySolution(date=DAY, slots=slots, fixed_blocks=(fixed,)),),
         is_fallback=False,
         solve_mode=SolveMode.OR_TOOLS,
-        solver_run=None,
+        assembly_run=None,
     )
 
 
@@ -268,8 +268,8 @@ def test_generate_response_matches_backend_wire_fields() -> None:
     }
 
 
-def test_slot_projection_uses_solver_values_only() -> None:
-    """INV-2: 시각·순서는 솔버 검증값(VisitSlot) 사영. is_fixed·ends_next_day도 해에서 파생."""
+def test_slot_projection_uses_assembly_values_only() -> None:
+    """INV-2: 시각·순서는 어셈블리 검증값(VisitSlot) 사영. is_fixed·ends_next_day도 해에서 파생."""
     with client(FakeOrchestrator(make_outcome())) as c:
         slots = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST).json()["days"][0]["slots"]
 

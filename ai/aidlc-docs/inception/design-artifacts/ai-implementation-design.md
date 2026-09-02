@@ -64,10 +64,10 @@ class C1LlmGateway(Protocol):
 
 **핵심**: 호출자는 데이터를 넘기지 않고 **참조 ID(`ResourceRef`)만** 넘긴다. C1이 `resolve_context`로 요청자 권한 하에 재조회해 주입한다(D31·SECURITY-11).
 
-### 1.2 C2 Solver Engine `[정본]`
+### 1.2 C2 Assembly Engine `[정본]`
 
 ```python
-class C2SolverEngine(Protocol):
+class C2AssemblyEngine(Protocol):
     def solve(
         self,
         problem: ItineraryProblem,
@@ -117,7 +117,7 @@ class C2SolverEngine(Protocol):
 
 ## 2. 일정 생성 시퀀스 (제품의 심장)
 
-M8이 오케스트레이션하고, LLM 점수(C1)→솔버 배치(C2)로 이어진다. **LLM은 전 일자 1회만**, 솔버는 day별로 돈다.
+M8이 오케스트레이션하고, LLM 점수(C1)→어셈블리 배치(C2)로 이어진다. **LLM은 전 일자 1회만**, 어셈블리는 day별로 돈다.
 
 ```mermaid
 sequenceDiagram
@@ -126,7 +126,7 @@ sequenceDiagram
     participant M7 as M7 PlaceData
     participant AI as Python AI 서비스
     participant C1 as C1 LLM Gateway
-    participant C2 as C2 Solver Engine
+    participant C2 as C2 Assembly Engine
 
     U->>KB: generate_itinerary(trip_id, mode)
     KB->>M7: get_candidate_pool(trip_id)
@@ -194,7 +194,7 @@ def source_candidates(region, category, needed: int) -> list[SourcedPoi]:
 **수집 게이트 — 5단 (웹 원본 직접 후보화 금지)**:
 ```python
 def ingest_gate(poi: SourcedPoi) -> IngestResult:
-    # 1. 스키마 검증 — 솔버 필수 필드
+    # 1. 스키마 검증 — 어셈블리 필수 필드
     if poi.coord is None or poi.hours is None or poi.category is None:
         return IngestResult.quarantine("missing_required_field")     # 후보 제외
     # 2. 실재 검증 — 지오코딩 + 가능하면 Places API 교차확인
@@ -258,7 +258,7 @@ sequenceDiagram
     participant R as C1 라우터(INTENT)
     participant W as 특화 워커
     participant M8 as M8/M10 편집
-    participant C2 as C2 솔버
+    participant C2 as C2 어셈블리
     U->>R: "비 와서 실내로 바꿔줘"
     R-->>R: 의도 분류 + 슬롯 추출<br/>{intent: REPLAN, slot: 실내}
     R->>W: 디스패치(ReplanAgent + PreferenceAgent)
@@ -291,7 +291,7 @@ def resolve_entities(slots: Slots) -> ResolvedSlots:
 의도·자유문장 오타는 라우터 LLM이 흡수하므로 **별도 교정 단계 없음**(D11). `unresolved` 엔티티는 AI-D03 웹 소싱으로 넘겨 후보를 확보한다.
 
 **핵심 계약**:
-- 워커·라우터는 `EditCommand`(의도 표현)만 만들고, **시각·순서·검증은 M8/M10 → C2**가 한다. 새 반영 경로를 만들지 않고 버튼·드래그가 쓰는 `validate_edit`/`apply_edit`(§1.3)를 재사용한다 — AI는 "무엇을", 솔버가 "몇 시에·어떤 순서로"(INV-2).
+- 워커·라우터는 `EditCommand`(의도 표현)만 만들고, **시각·순서·검증은 M8/M10 → C2**가 한다. 새 반영 경로를 만들지 않고 버튼·드래그가 쓰는 `validate_edit`/`apply_edit`(§1.3)를 재사용한다 — AI는 "무엇을", 어셈블리가 "몇 시에·어떤 순서로"(INV-2).
 - **반영 정책(하이브리드)** — 편집 명령의 성격으로 반영 모드를 코드가 강제한다:
 
 ```python
@@ -308,14 +308,14 @@ def resolve_apply_mode(cmd: EditCommand) -> ApplyMode:
     return ApplyMode.AUTO_APPLY             # 추가·경미 -> 자동반영
 ```
 
-- 자동반영이라도 **반드시 솔버 검증을 거치므로 불가능한 일정은 나오지 않는다**. 검증 실패(`Violation`) 시 자동반영을 취소하고 미리보기로 강등한다.
+- 자동반영이라도 **반드시 어셈블리 검증을 거치므로 불가능한 일정은 나오지 않는다**. 검증 실패(`Violation`) 시 자동반영을 취소하고 미리보기로 강등한다.
 - **가드레일(ADR-0015)**: 미검증 수치 생성 금지, 역할 변경·지시 유출·유해 요청 거절, 모든 응답에 다음 행동 1개(dead-end 금지).
 
 **폴백 계단**:
 ```
 라우터 실패(의도 분류 불가/타임아웃) -> 기본 의도(일정 생성) 또는 "직접 편집으로 진행" 안내
-워커 부분 실패                       -> 그 워커 몫만 규칙 기반 폴백(나머지 워커·솔버 정상)
-편집 명령 솔버 검증 실패(Violation)  -> 자동반영 취소·미리보기로 강등, 위반 사유 한 줄
+워커 부분 실패                       -> 그 워커 몫만 규칙 기반 폴백(나머지 워커·어셈블리 정상)
+편집 명령 어셈블리 검증 실패(Violation)  -> 자동반영 취소·미리보기로 강등, 위반 사유 한 줄
 ```
 
 ---
@@ -446,7 +446,7 @@ def build_rule_score(
 | 옵션 | 장점 | 단점 | 권고 조건 |
 |---|---|---|---|
 | 자체 구현 (Python) | 제약 커스텀 자유, 코어 통합 용이 | 구현 공수·성능 튜닝 부담 | 팀 알고리즘 역량 충분 시 |
-| OR-Tools (Python) | 검증된 CP-SAT/라우팅 솔버, `ortools` pip 네이티브(바인딩 불요) | 제약 DSL 학습 | 빠른 MVP·성능 필요 시 |
+| OR-Tools (Python) | 검증된 CP-SAT/라우팅 어셈블리, `ortools` pip 네이티브(바인딩 불요) | 제약 DSL 학습 | 빠른 MVP·성능 필요 시 |
 | Timefold (Python) | 제약 스트리밍 DSL, OptaPlanner 후속의 Python SDK | 상대적 신생 | 제약 변경 빈도 높을 시 |
 
 ### 4.4 이동시간 추정 `[정본]`
@@ -693,7 +693,7 @@ M8 생성 계단(가장 깊음)을 상태로 구현한다. 각 단계는 사용�
 
 AI 코어의 완료 기준은 **속성 테스트 존재·통과**다. U5 식별 12속성(C2:5·C1:2·M8:5)을 구현 DoD로 삼는다.
 
-- **계층 분리(D37)**: PR CI = 솔버·closed-set **실코드** + 외부 LLM·거리 API만 fake. **실 LLM 회귀 평가는 릴리스 파이프라인만**.
+- **계층 분리(D37)**: PR CI = 어셈블리·closed-set **실코드** + 외부 LLM·거리 API만 fake. **실 LLM 회귀 평가는 릴리스 파이프라인만**.
 - **oracle**: C2 소규모 인스턴스 무차별 대입 이중 확인(부당 통과 0·부당 배제 0, U5-P1).
 - **필수 속성 체크리스트**: U5-P1(하드 제약)·P2(warm-start 멱등)·P3(폴백 결정성)·P4(이동 추정·소요시간 게이트)·P5(closed-set 환각 0)·P6(예산 단조)·P7~P10(plan 불변·current 분리·상태 전이·직렬화)·P11(반경)·P12(클라↔서버 규칙 동치).
 - **프레임워크**: Python pytest + Hypothesis (서버 PBT) · fast-check (클라 JS), 시드 로깅·수축 필수(PBT-08).
@@ -702,7 +702,7 @@ AI 코어의 완료 기준은 **속성 테스트 존재·통과**다. U5 식별 
 
 ## 9. 배포·운영
 
-- **AI 서비스(C1+C2) = 독립 Python 서비스**: LLM 게이트웨이(C1)와 솔버(C2)를 하나의 Python 서비스로 구축하고, Kotlin 백엔드(M8·M9·M10)가 API로 호출한다. **D11 대비 분기** — D11 원안은 C2를 Kotlin 인프로세스로 규정했으나 AI 전면 Python 결정으로 갈라진다([ai-adr.md](./ai-adr.md) AI-D01). 결과: M8→C2가 서비스 간 호출이 되므로 C2 앞에도 타임아웃·서킷 브레이커를 두고, 지연 예산(day1 5초·전체 20초)에 네트워크 홉을 반영한다.
+- **AI 서비스(C1+C2) = 독립 Python 서비스**: LLM 게이트웨이(C1)와 어셈블리(C2)를 하나의 Python 서비스로 구축하고, Kotlin 백엔드(M8·M9·M10)가 API로 호출한다. **D11 대비 분기** — D11 원안은 C2를 Kotlin 인프로세스로 규정했으나 AI 전면 Python 결정으로 갈라진다([ai-adr.md](./ai-adr.md) AI-D01). 결과: M8→C2가 서비스 간 호출이 되므로 C2 앞에도 타임아웃·서킷 브레이커를 두고, 지연 예산(day1 5초·전체 20초)에 네트워크 홉을 반영한다.
 - **시크릿**: LLM API 키 = Secrets Manager(U5 확정). 국외 벤더 시 국외 이전·처리위탁 고지(P6·G181).
 - **rate-limit**: 사용자별 상한(전역 레이트리미터 재사용, nfr §3.2).
 - **관측**: LLM 비용 계측 메트릭 + 외부 API 쿼터 80% 알람(A11) + 어댑터 실패율/서킷(A12) + 침묵 실패 계측(nfr §4). CloudWatch `ops` 대시보드 확장 슬롯.
@@ -715,7 +715,7 @@ AI 코어의 완료 기준은 **속성 테스트 존재·통과**다. U5 식별 
 | # | 항목 | 현재 상태 | 확정 방법 |
 |---|---|---|---|
 | 1 | LLM 벤더·모델(경량/상위 실체) | 미확정 — §3.1 플레이스홀더 | 벤더 계약 후 `{light-model}` / `{heavy-model}` 치환. 후보: GPT-4o-mini(경량) / GPT-4o(상위) 또는 Claude Haiku/Sonnet |
-| 2 | 솔버 알고리즘 구현 방식 | §4.3 권고(휴리스틱+지역탐색) | 자체 구현 vs OR-Tools(Python)/Timefold 라이브러리 벤치마크. day1 5초 게이트 통과 여부로 결정 |
+| 2 | 어셈블리 알고리즘 구현 방식 | §4.3 권고(휴리스틱+지역탐색) | 자체 구현 vs OR-Tools(Python)/Timefold 라이브러리 벤치마크. day1 5초 게이트 통과 여부로 결정 |
 | 3 | 프롬프트·OutputSchema 실체 | feature별 미작성 | `ai-prompt-design.md` 참조. U5 착수 시 closed-set 검증과 함께 확정 |
 | 4 | 이동 파라미터 초기값 캘리브레이션 | G106 기본값(remote config) | 출시 전 서울 샘플 구간 20개 실측 → 안전계수 보정. `ai-testing-guide.md` §5 참조 |
 | 5 | 취향 7축 택소노미 실체 | M13 스타일 분석용 미정의 | 온보딩 UX팀과 협의. 예: 자연/도시·활동/휴식·맛집/관광·혼자/함께·아침형/저녁형·절약/여유·계획/즉흥 |

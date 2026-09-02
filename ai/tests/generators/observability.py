@@ -17,7 +17,7 @@ from trippilot.domain.observability import (
     GateDropEvent,
     LlmCallRecord,
     ScoreChunkEvent,
-    SolverRunRecord,
+    AssemblyRunRecord,
 )
 from trippilot.domain.prompt import PromptRef
 
@@ -62,7 +62,7 @@ def fallback_events() -> st.SearchStrategy[FallbackEvent]:
         trace_id=st.builds(TraceId, st.text(min_size=1, max_size=12)),
         occurred_at=_datetimes(),
         component=st.text(min_size=1, max_size=15),
-        stage=st.sampled_from(["llm", "solver", "router", "agent"]),
+        stage=st.sampled_from(["llm", "assembly", "router", "agent"]),
         from_mode=st.text(min_size=1, max_size=15),
         to_mode=st.text(min_size=1, max_size=15),
         reason=st.text(max_size=40),
@@ -112,12 +112,12 @@ def score_chunk_events() -> st.SearchStrategy[ScoreChunkEvent]:
     return _build()
 
 
-def solver_run_records() -> st.SearchStrategy[SolverRunRecord]:
+def assembly_run_records() -> st.SearchStrategy[AssemblyRunRecord]:
     # 품질 부기(TRIP-524)는 선택 필드 — None(미계산 경로) 포함. NaN은 왕복
     # 동등성 비교를 깨므로 제외 (점수 정의역도 [0,1]).
     quality = st.one_of(st.none(), st.floats(0.0, 1.0, allow_nan=False))
     return st.builds(
-        SolverRunRecord,
+        AssemblyRunRecord,
         trace_id=st.builds(TraceId, st.text(min_size=1, max_size=12)),
         occurred_at=_datetimes(),
         component=st.text(min_size=1, max_size=15),
@@ -137,5 +137,5 @@ def trace_events() -> st.SearchStrategy:
         fallback_events(),
         gate_drop_events(),
         score_chunk_events(),
-        solver_run_records(),
+        assembly_run_records(),
     )

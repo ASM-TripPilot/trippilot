@@ -49,7 +49,7 @@
     |       타임아웃 2.5초. 전 일자 공용.
     |       성공 → ScoredCandidates(is_fallback=false)
     |
-    +-> for day in trip.days:                    # ③ day별 솔버 배치
+    +-> for day in trip.days:                    # ③ day별 어셈블리 배치
     |       c2.solve(day_problem)
     |       → DaySolution (HC1~HC4 검증 완료)
     |
@@ -124,7 +124,7 @@ stateDiagram-v2
     +-> _translate_to_edit_command(dispatch, worker_results)  # ③ 편집 명령 변환
     |       → EditCommand(op=reorder_day, params={filter:indoor}, affected=3)
     |
-    +-> c2.validate(current_itinerary + edit)     # ④ 솔버 검증
+    +-> c2.validate(current_itinerary + edit)     # ④ 어셈블리 검증
     |       위반 없음 → 반영 가능
     |
     +-> dispatch.apply_mode?
@@ -142,10 +142,10 @@ stateDiagram-v2
 
 워커 부분 실패 (예: Explanation만 죽음)
     → 해당 워커 결과 = None
-    → 나머지 워커·솔버 정상 진행
+    → 나머지 워커·어셈블리 정상 진행
     → 해당 항목만 "기본 모드" 표기
 
-솔버 검증 실패 (Violation)
+어셈블리 검증 실패 (Violation)
     → AUTO_APPLY였어도 자동반영 취소
     → CONFIRM_REQUIRED로 강등
     → 위반 사유 한 줄 + 미리보기
@@ -262,7 +262,7 @@ C1 실패 → M7 + C2만으로 후보 생성 (설명 없이)
 
 > **정정 (2026-08-25)**: 이동추정 벤더는 **TMAP 단일**이다 — 카카오모빌리티·네이버 지도 행을 TMAP으로
 > 대체했다. 실제 체인은 `TMAP(실측) → 하버사인 직선거리(폴백)` 2단
-> (`solver_engine/adapters/tmap.py` · `chained_travel.py`, TRIP-382·405·422·432).
+> (`assembly_engine/adapters/tmap.py` · `chained_travel.py`, TRIP-382·405·422·432).
 
 ### 5.3 계측 포인트
 
@@ -271,7 +271,7 @@ C1 실패 → M7 + C2만으로 후보 생성 (설명 없이)
 | llm_call_duration | GatewayFacade.call | 지연 모니터링 |
 | llm_fallback_rate | GatewayFacade.call | 품질 추적 |
 | gate_drop_count | ClosedSetGate.validate | 환각 시도 감지 |
-| solver_duration | SolverFacade.solve | 5초 게이트 감시 |
+| assembly_duration | AssemblyFacade.solve | 5초 게이트 감시 |
 | travel_adapter_failures | TravelEstimator | 서킷 건강도 |
 | ingest_gate_quarantine_rate | IngestGate | 소싱 품질 |
 | replan_alternatives_count | ReplanOrchestrator | Plan-B 성능 |

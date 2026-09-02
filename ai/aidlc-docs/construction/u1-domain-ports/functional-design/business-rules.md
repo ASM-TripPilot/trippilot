@@ -10,7 +10,7 @@
 | 불변식 | U1에서 강제 | 상위 유닛에 준비 |
 |---|---|---|
 | **INV-1** (closed-set) | `CandidatePool.poi_ids` frozenset — 생성 시 `poi_ids == {p.poi_id for p in pois}` post-init 검증 | `GateDropEvent` 타입 — U4 게이트가 드롭 계측에 사용. `polluted_scored_pois` generator — U5-P5 적대적 PBT 재료 |
-| **INV-2** (솔버 검증값만) | `ItinerarySolution.solver_run` 필드 — 어느 solve_mode를 거쳤는지 기록 | `Violation` 타입 + SolverPort 계약 (None=해 없음, 체인 진행) |
+| **INV-2** (어셈블리 검증값만) | `ItinerarySolution.assembly_run` 필드 — 어느 solve_mode를 거쳤는지 기록 | `Violation` 타입 + AssemblyPort 계약 (None=해 없음, 체인 진행) |
 | **INV-3** (소요시간 미표시) | **`TravelEstimate.to_public_dict()`가 `internal_minutes`를 구조적으로 제외** — 직렬화 경로가 분리되어 있어 실수로 노출 불가 | U5 API 스키마는 to_public_dict만 사용 (U5-P4에서 PBT 검증) |
 | **INV-4** (결정론 폴백) | `ItineraryProblem.seed` 필수 필드. `TypedResult`: `is_fallback=True → value=None` post-init 검증 | `FallbackEvent` 타입 — 모든 폴백 전환은 이벤트 발행 의무 (§3) |
 
@@ -34,12 +34,12 @@
 | 모든 LLM 호출 완료·실패·타임아웃 | `LlmCallRecord` (success 플래그 포함) | U4 GatewayFacade |
 | 게이트에서 poi_id 드롭 발생 | `GateDropEvent` | U4 ClosedSetGate |
 | 폴백 전환 (LLM→규칙, OR-Tools→LLM 2차→규칙, 라우터→기본의도, 에이전트 폴백) | `FallbackEvent` | U2/U4/U5/U6 각자 |
-| 솔버 실행 완료 | `SolverRunRecord` | U2 SolverFacade |
+| 어셈블리 실행 완료 | `AssemblyRunRecord` | U2 AssemblyFacade |
 
 - `TypedResult.call_record`: U4의 call()은 성공·폴백 무관 LlmCallRecord를 결과에 첨부 — 소비 측이 계측 여부를 선택할 수 없게 함
 - `TracePort.emit()`은 예외를 전파하지 않음 — 계측 실패 ≠ 비즈니스 실패
 - 동일 요청 흐름의 모든 이벤트는 같은 `trace_id` 공유 (`ExecutionPlan.trace_id`에서 전파)
-- **파생 지표 정의**: 환각률 = ΣGateDropEvent.dropped/total · 폴백률 = FallbackEvent 빈도/요청 수 · LLM 비용 = Σ(tokens×단가) · 솔버 통과율 = SolverRunRecord.violations_found=0 비율
+- **파생 지표 정의**: 환각률 = ΣGateDropEvent.dropped/total · 폴백률 = FallbackEvent 빈도/요청 수 · LLM 비용 = Σ(tokens×단가) · 어셈블리 통과율 = AssemblyRunRecord.violations_found=0 비율
 
 ## 4. [LLMOps] 프롬프트 버저닝 규칙 — NFR-7.3
 
@@ -55,7 +55,7 @@
 | 규칙 | 내용 |
 |---|---|
 | 골든 케이스 | `EvalCase.expected`는 결정론 비교 가능 형태 (정확 일치 또는 메트릭 임계값) |
-| 1차 메트릭 4종 | `hallucination_rate`(INV-1, 목표 0) · `hc_pass_rate`(솔버 검증 통과율) · `fallback_rate`(INV-4) · `retrieval_relevance`(PlanB RAG, 해당 시) |
+| 1차 메트릭 4종 | `hallucination_rate`(INV-1, 목표 0) · `hc_pass_rate`(어셈블리 검증 통과율) · `fallback_rate`(INV-4) · `retrieval_relevance`(PlanB RAG, 해당 시) |
 | 실행 시점 | PR CI에서 실 LLM 호출 0 (NFR-4.5 준수) — eval 실행은 릴리스 전 게이트. U1은 타입만 제공 |
 
 ## 6. 기존 도메인 규칙 (component-methods.md에서 타입으로 승격)

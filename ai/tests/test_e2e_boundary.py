@@ -4,7 +4,7 @@ FastAPI TestClient + **실 오케스트레이터·실 M7·실 C1·실 C2** + fak
 페르소나 저장소·시계·트레이스)로 전 구간을 관통한다 — 실 LLM·외부 API 호출 0 (D37).
 
     HTTP 요청(백엔드 Jackson 형태) → routes → wiring 어댑터 → ItineraryOrchestrator
-    → M7 후보풀 → C1 점수·설명 → C2 솔버 → 응답 JSON
+    → M7 후보풀 → C1 점수·설명 → C2 어셈블리 → 응답 JSON
 
 증명하는 것:
   ① 생성 관통: 200 + 유효 일정(슬롯 ⊆ 후보풀 INV-1 · 시간순 INV-2 · INV-3 필드 부재),
@@ -31,7 +31,7 @@ from fastapi.testclient import TestClient
 from trippilot.api.app import create_app
 from trippilot.api.wiring import build_dev_app, build_orchestrator, DEMO_ANCHOR
 from trippilot.llm_gateway.config import C1Config
-from trippilot.solver_engine.config import SolverConfig
+from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.domain.common import BudgetLevel, GeoPoint
 from trippilot.domain.llm import ModelTier
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
@@ -120,7 +120,7 @@ def make_client(
     *,
     llm: object | None = None,
     pois: tuple[Poi, ...] = _POIS,
-    solver_config: SolverConfig | None = None,
+    assembly_config: AssemblyConfig | None = None,
 ) -> TestClient:
     """실 조립(build_orchestrator) + fake 어댑터 — 테스트 공용 진입점."""
     ids = tuple(str(p.poi_id) for p in pois)
@@ -130,7 +130,7 @@ def make_client(
         poi_db=InMemoryPoi(pois),
         context_store=_PersonaStore(),
         c1_config=_C1CFG,
-        solver_config=solver_config,
+        assembly_config=assembly_config,
         clock=FakeClock(),
         trace=InMemoryTrace(),
     )
@@ -202,7 +202,7 @@ def _validate_body(itinerary: dict, deadline_ms: int = 20_000) -> dict:
 # ── ① 생성 관통 ──────────────────────────────────────────────────────
 
 
-def test_generate_pierces_http_to_solver() -> None:
+def test_generate_pierces_http_to_assembly() -> None:
     """HTTP → 라우트 → 오케스트레이터 → M7 → C1 → C2 → 응답 JSON 전 구간."""
     with make_client() as client:
         response = client.post("/ai/v1/itinerary/generate", json=_request())
@@ -221,7 +221,7 @@ def test_generate_pierces_http_to_solver() -> None:
         # INV-1: 배치된 슬롯 전부 후보 풀 안
         placed = _slot_ids(body)
         assert placed and set(placed) <= _POOL_IDS
-        # INV-2: 시각은 솔버 검증값 — 일자 안에서 시간순·비중첩
+        # INV-2: 시각은 어셈블리 검증값 — 일자 안에서 시간순·비중첩
         for day in body["days"]:
             times = [(s["start_at"], s["end_at"]) for s in day["slots"]]
             assert times == sorted(times)
@@ -245,7 +245,7 @@ def test_generate_pierces_http_to_solver() -> None:
 
 
 # ── ①-보강 고정 블록 is_fixed 관통 (TRIP-343) ────────────────────────
-# 회귀: 솔버가 DaySolution.fixed_blocks를 비워 응답 is_fixed가 상시 false였다 —
+# 회귀: 어셈블리가 DaySolution.fixed_blocks를 비워 응답 is_fixed가 상시 false였다 —
 # 백엔드가 false를 저장·왕복하면 validate/repair의 HC3 검증 집합이 비어 버린다.
 
 
@@ -273,8 +273,8 @@ def test_generate_fixed_block_slot_is_fixed_true() -> None:
 
 def test_generate_fixed_block_is_fixed_true_on_rule_fallback_path() -> None:
     """최후 보루(규칙 폴백) 경로에서도 is_fixed=true — INV-4 폴백이라고 잃지 않는다."""
-    starved = SolverConfig(or_tools_min_ms=10**9)   # DL-2: 1차 단계 상시 스킵
-    with make_client(llm=FailingLlm(), solver_config=starved) as client:
+    starved = AssemblyConfig(or_tools_min_ms=10**9)   # DL-2: 1차 단계 상시 스킵
+    with make_client(llm=FailingLlm(), assembly_config=starved) as client:
         response = client.post(
             "/ai/v1/itinerary/generate", json=_request(fixed_blocks=_FIXED_P1)
         )
@@ -330,10 +330,10 @@ def test_llm_failure_still_returns_valid_itinerary_200() -> None:
     assert "error_code" not in body                 # 오류 바디 아님 — 폴백은 200
 
 
-def test_llm_and_primary_solver_down_falls_back_to_rule_chain() -> None:
+def test_llm_and_primary_assembly_down_falls_back_to_rule_chain() -> None:
     """LLM 실패 + OR-Tools 단계 진입 불가(시한 요구 초과) → 최후 보루가 200을 낸다."""
-    starved = SolverConfig(or_tools_min_ms=10**9)   # DL-2: 1차 단계 상시 스킵
-    with make_client(llm=FailingLlm(), solver_config=starved) as client:
+    starved = AssemblyConfig(or_tools_min_ms=10**9)   # DL-2: 1차 단계 상시 스킵
+    with make_client(llm=FailingLlm(), assembly_config=starved) as client:
         response = client.post("/ai/v1/itinerary/generate", json=_request())
 
     assert response.status_code == 200, response.text
@@ -493,7 +493,7 @@ def test_repair_also_reports_unverified_slots() -> None:
 
 
 def test_contradictory_fixed_blocks_return_409() -> None:
-    """같은 POI를 다른 시각에 이중 고정 → 모든 솔버 단계 실패 → 409 (d08, 500 아님)."""
+    """같은 POI를 다른 시각에 이중 고정 → 모든 어셈블리 단계 실패 → 409 (d08, 500 아님)."""
     conflicting = (
         {"poi_id": "p1", "date": _DAY1.isoformat(), "start": "10:00", "dwell_min": 60},
         {"poi_id": "p1", "date": _DAY1.isoformat(), "start": "13:00", "dwell_min": 60},
@@ -505,7 +505,7 @@ def test_contradictory_fixed_blocks_return_409() -> None:
 
     assert response.status_code == 409, response.text
     body = response.json()
-    assert body["error_code"] == "SOLVER_CONFLICT"
+    assert body["error_code"] == "ASSEMBLY_CONFLICT"
     assert body["retryable"] is False
     assert body["message"]
 

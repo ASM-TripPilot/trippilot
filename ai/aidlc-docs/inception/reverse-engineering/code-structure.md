@@ -43,8 +43,8 @@ tripilot-ai/                        # Python AI 서비스 루트
 |   |   |   +-- context.py          # 서버 재조회 컨텍스트 주입
 |   |   |   +-- prompts/            # feature별 프롬프트 템플릿
 |   |   |   +-- schemas/            # OutputSchema 정의
-|   |   +-- c2/                     # C2 Solver Engine
-|   |   |   +-- solver.py           # C2SolverEngine 구현
+|   |   +-- c2/                     # C2 Assembly Engine
+|   |   |   +-- assembly.py           # C2AssemblyEngine 구현
 |   |   |   +-- optimizer.py        # OPTW/TOPTW 최적화 (휴리스틱 + 지역탐색)
 |   |   |   +-- constraints.py      # HC1~HC4 하드 제약
 |   |   |   +-- travel.py           # 이동시간 추정 (어댑터 순서)
@@ -82,7 +82,7 @@ tripilot-ai/                        # Python AI 서비스 루트
 |   |   +-- fake_travel.py
 |   +-- test_c2_constraints.py      # U5-P1: 하드 제약 PBT
 |   +-- test_c1_gate.py             # U5-P5: closed-set 게이트 PBT
-|   +-- test_solver_determinism.py  # U5-P3: 결정론 폴백
+|   +-- test_assembly_determinism.py  # U5-P3: 결정론 폴백
 |   +-- test_m8_state.py            # U5-P7~P10: 일정 상태머신
 |   +-- test_m16_assistant.py       # M16-P1~P3: AI 도우미
 |   +-- test_sourcing_gate.py       # SRC-P1~P3: 수집 게이트
@@ -99,13 +99,13 @@ tripilot-ai/                        # Python AI 서비스 루트
 - **Implementation**: `ports/` 디렉토리에 Protocol 정의, 실 어댑터와 fake 어댑터를 DI로 주입
 
 ### Chain of Responsibility (폴백 계단)
-- **Location**: C1 게이트웨이, C2 솔버, M7 소싱
+- **Location**: C1 게이트웨이, C2 어셈블리, M7 소싱
 - **Purpose**: 각 실패 지점마다 다음 단계로 우아하게 성능 저하 (INV-4)
 - **Implementation**: 카카오→네이버→직선거리, LLM→규칙점수→최소일정
 
 ### Strategy Pattern (알고리즘 스왑)
-- **Location**: C2 솔버 (라이브러리 선택), C1 (LLM 벤더 교체)
-- **Purpose**: 솔버 알고리즘·LLM 벤더를 소비 모듈 무영향으로 교체
+- **Location**: C2 어셈블리 (라이브러리 선택), C1 (LLM 벤더 교체)
+- **Purpose**: 어셈블리 알고리즘·LLM 벤더를 소비 모듈 무영향으로 교체
 - **Implementation**: Port 인터페이스 + 설정 기반 어댑터 선택
 
 ### State Machine
@@ -120,7 +120,7 @@ tripilot-ai/                        # Python AI 서비스 루트
 - **Usage**: C1 전체 feature (경량: INTENT·PreferenceScoring·Conversation·Requery / 상위: Explanation·Reflection·PlaceExtraction)
 - **Purpose**: 취향 해석·의도 분류·설명 생성·회고·웹 텍스트 구조화
 
-### 솔버 라이브러리 (미확정)
+### 어셈블리 라이브러리 (미확정)
 - **Candidates**: OR-Tools (Python) / Timefold (Python) / 자체 구현
 - **Usage**: C2 OPTW/TOPTW 최적화
 - **Purpose**: day1 5초 게이트 통과하는 일정 배치 최적화

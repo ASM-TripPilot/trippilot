@@ -24,7 +24,7 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.llm import ScoredPoi
 
 from tests.generators.geo import geo_points
-from tests.generators.observability import solver_run_records
+from tests.generators.observability import assembly_run_records
 
 _KST = timezone(timedelta(hours=9))
 _MIN_DATE = date(2026, 1, 1)
@@ -148,5 +148,5 @@ def itinerary_solutions(draw) -> ItinerarySolution:
         days=tuple(draw(st.lists(day_solutions(), max_size=3))),
         is_fallback=is_fallback,
         solve_mode=mode,
-        solver_run=draw(st.one_of(st.none(), solver_run_records())),
+        assembly_run=draw(st.one_of(st.none(), assembly_run_records())),
     )

@@ -6,16 +6,16 @@
                                                             ├→ 확인 게이트(파괴적=CONFIRM_REQUIRED)
                                                             ├→ 시퀀스 변형(apply_command)
                                                             ├→ 결정론 재타이밍(retime_day)
-                                                            └→ 솔버 validate → 통과분만 노출 (INV-2)
+                                                            └→ 어셈블리 validate → 통과분만 노출 (INV-2)
 ```
 
 역할 경계 (팀 결정 2026-08-22, TRIP-431 코멘트):
-- LLM은 **번역만** — 시각·순서·가능 여부는 전부 코드·솔버 소유.
+- LLM은 **번역만** — 시각·순서·가능 여부는 전부 코드·어셈블리 소유.
 - 구조화 진입은 게이트를 안 거치므로 `validate_command`가 게이트와 같은 규칙을
   적용한다(INV-1: affected ⊆ 현재 일정, `*PoiId` params ⊆ 후보 풀; 시각 키는
   게이트 ③과 **동일 함수** `is_time_param_key` 호출 — 목록 복사로 어긋날 수 없다).
 - 재타이밍은 결정론(체류시간 보존 + 이동 추정 걷기)이고, 사용자 노출은 그 결과를
-  **솔버 validate가 통과시킨 경우만**이다(INV-2) — 위반이면 REJECTED + 사유.
+  **어셈블리 validate가 통과시킨 경우만**이다(INV-2) — 위반이면 REJECTED + 사유.
 - REPLAN op는 1단계 범위 밖 — 편집이 아니라 재생성이라 `generate` 재호출이 정도다.
 - 예약(고정) 슬롯은 **닻**(TRIP-526) — 편집 대상이 될 수 없고, 재타이밍은 원 window를
   그대로 둔 채 그 앞뒤로 커서를 흘린다. 앞 슬롯이 못 도착하면 밀지 않고 HC2가 거부.
@@ -64,7 +64,7 @@ def validate_command(
     - affected_slots ∩ 대상 일자 예약(고정) 슬롯 = ∅ (TRIP-526 — 예약은 닻, 이동·삭제·
       교체 대상 불가). REORDER_DAY는 슬롯 전체 순열이라 제외 — 예약 위치는 retime이 판정
     - params의 `*PoiId` 값 ⊆ 후보 풀 (INV-1 — 풀 밖 POI 추가·교체 차단)
-    - params에 시각·소요시간 키 금지 (시각은 솔버 소유 — INV-2·3):
+    - params에 시각·소요시간 키 금지 (시각은 어셈블리 소유 — INV-2·3):
       게이트 ③과 **동일 함수** `is_time_param_key` — 별도 목록을 두지 않는다
     """
     for poi_id in command.affected_slots:
@@ -74,7 +74,7 @@ def validate_command(
             raise EditRejected(f"예약(고정) 슬롯 {poi_id}는 편집 대상이 될 수 없음")
     for key, value in command.params.items():
         if is_time_param_key(key):
-            raise EditRejected(f"params에 시각·소요시간 키 {key!r} — 시각은 솔버가 정함")
+            raise EditRejected(f"params에 시각·소요시간 키 {key!r} — 시각은 어셈블리가 정함")
         if key.endswith("PoiId"):
             if not isinstance(value, str) or not pool.contains(PoiId(value)):
                 raise EditRejected(
@@ -157,7 +157,7 @@ def retime_day(
     인접 구간 한쪽이라도 좌표가 없으면 거부(TRIP-525) — check_hc2 는 좌표 없음을
     건너뛰므로(c2 규칙 "정보 없음은 막지 않는다") 여기서 0분을 지어내면 검증 도장을
     달고 나간다. 예약 슬롯도 예외 없음. 그 날 슬롯이 하나뿐이면 인접이 없어 통과.
-    이 시각은 제안일 뿐 — 노출 여부는 솔버 validate가 정한다(INV-2).
+    이 시각은 제안일 뿐 — 노출 여부는 어셈블리 validate가 정한다(INV-2).
     """
     if not new_order:
         return replace(day, slots=())

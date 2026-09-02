@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.solver_engine.travel import haversine_km
+from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, TransportMode
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
@@ -213,7 +213,7 @@ def test_open_hours_still_outranks_saved_count() -> None:
 
 def test_rule_score_increases_with_saved_count() -> None:
     """규칙 점수의 인기 항도 같은 신호를 쓴다 — 죽은 rating 항 대체."""
-    from trippilot.solver_engine.scorer import build_rule_score
+    from trippilot.assembly_engine.scorer import build_rule_score
 
     cold, hot = _poi("p", saved_count=0), _poi("p", saved_count=500)
     assert build_rule_score(hot, BudgetLevel.HIGH, None, 7) > build_rule_score(cold, BudgetLevel.HIGH, None, 7)

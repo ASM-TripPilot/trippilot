@@ -24,8 +24,8 @@ flowchart TD
         TIER["tier_router\n경량/상위 분기"]
     end
 
-    subgraph C2["c2 — Solver Engine"]
-        SOLVER["solver\nC2 퍼사드"]
+    subgraph C2["c2 — Assembly Engine"]
+        ASSEMBLY["assembly\nC2 퍼사드"]
         OPT["optimizer\nOPTW 휴리스틱+지역탐색"]
         CONST["constraints\nHC1~HC4 검증"]
         TRAVEL["travel\n이동시간 추정 체인"]
@@ -112,11 +112,11 @@ route(utterance, refs, requester)
 
 ---
 
-## 3. C2 Solver Engine — 내부 모듈
+## 3. C2 Assembly Engine — 내부 모듈
 
 | 모듈 | 책임 | 주요 협력 |
 |---|---|---|
-| **solver** | C2 공개 퍼사드. `solve()` · `validate()` · `repair()` · `estimate_travel()` 진입점 | optimizer, constraints, travel, fallback |
+| **assembly** | C2 공개 퍼사드. `solve()` · `validate()` · `repair()` · `estimate_travel()` 진입점 | optimizer, constraints, travel, fallback |
 | **optimizer** | OPTW/TOPTW 최적화. 구성 휴리스틱(초기해) + 지역탐색(2-opt/or-opt 개선) | constraints(검증), travel(이동시간) |
 | **constraints** | HC1~HC4 하드 제약 검증 로직. `check_all(solution) -> list[Violation]` | domain.itinerary |
 | **travel** | 이동시간 추정 체인. 어댑터 순서: 카카오→네이버→직선거리. 안전계수·버퍼 적용 | travel_port, settings(G106) |
@@ -217,7 +217,7 @@ source_and_ingest(region, category, needed)
 
 | 모듈 | 책임 | 주요 협력 |
 |---|---|---|
-| **routes** | HTTP 엔드포인트 정의. C1/C2/M7 퍼사드 호출 | c1.gateway, c2.solver, m7.candidate_pool |
+| **routes** | HTTP 엔드포인트 정의. C1/C2/M7 퍼사드 호출 | c1.gateway, c2.assembly, m7.candidate_pool |
 | **schemas** | pydantic 기반 요청/응답 DTO. 직렬화·검증 | domain |
 | **middleware** | rate-limit(사용자별), 인증 토큰 검증, 요청 로깅, 에러 핸들링 | settings |
 | **health** | 헬스체크·레디니스 엔드포인트. 외부 의존 상태 확인 | ports |
@@ -249,7 +249,7 @@ ports → (없음)             (인터페이스만 — 구현 없음)
 ```
 
 ### 금지된 의존
-- c1 → c2 (직접 호출 금지 — 솔버는 오케스트레이션 계층에서만 호출)
+- c1 → c2 (직접 호출 금지 — 어셈블리는 오케스트레이션 계층에서만 호출)
 - c2 → c1 (직접 호출 금지)
 - domain → ports, c1, c2, m7 (역의존 금지)
 - 어떤 컴포넌트도 api를 참조하지 않음

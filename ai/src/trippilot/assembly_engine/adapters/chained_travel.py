@@ -4,7 +4,7 @@ v2 설계(agent-structure-v2 §2 Provider 규칙 로직): 실경로 API → 하�
 (구 인용 `agent-hierarchy-design §3.3`은 v2가 폐기한 v1 문서였다 — TRIP-530.)
 현재 체인: TMAP(실측, confidence=HIGH) → TravelEstimator(하버사인, confidence=LOW).
 
-TravelPort Protocol 만족 — 솔버·TransitProvider 모두 이 어댑터를 주입받으면
+TravelPort Protocol 만족 — 어셈블리·TransitProvider 모두 이 어댑터를 주입받으면
 별도 코드 변경 없이 실경로 정확도를 얻는다.
 
 동작:

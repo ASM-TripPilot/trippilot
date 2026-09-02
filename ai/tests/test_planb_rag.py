@@ -51,8 +51,8 @@ from trippilot.domain.llm import CandidatePool, ModelTier, ScoredPoi
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.prompt import PromptRef
 from trippilot.domain.trigger import TriggerKind, TriggerParams
-from trippilot.solver_engine.config import RAIN_OUTDOOR
-from trippilot.solver_engine.travel import haversine_km
+from trippilot.assembly_engine.config import RAIN_OUTDOOR
+from trippilot.assembly_engine.travel import haversine_km
 
 from tests.fakes.fake_embedding import FakeEmbedding
 from tests.fakes.fake_llm import FailingLlm, FakeLlm

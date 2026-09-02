@@ -166,7 +166,7 @@ def _normalize_name(name: str) -> str:
 
 
 def _haversine_m(a: GeoPoint, b: GeoPoint) -> float:
-    """근접 판정 전용 — solver_engine.travel과 독립 (하위 계층이 형제 계층 미참조)."""
+    """근접 판정 전용 — assembly_engine.travel과 독립 (하위 계층이 형제 계층 미참조)."""
     lat1, lng1, lat2, lng2 = map(math.radians, (a.lat, a.lng, b.lat, b.lng))
     h = (math.sin((lat2 - lat1) / 2) ** 2
          + math.cos(lat1) * math.cos(lat2) * math.sin((lng2 - lng1) / 2) ** 2)

@@ -39,19 +39,19 @@ TripPilot의 **AI 서비스(FastAPI)와 그 설계 저장소**. 일정 생성·�
         v
 +--------------------------------------------------------------+
 | [도구풀 — 에이전트별 제한 할당]                                |
-| LLM 호출 (Anthropic) | M7 후보 조회 | Solver 배치/검증          |
+| LLM 호출 (Anthropic) | M7 후보 조회 | Assembly 배치/검증        |
 | 벡터 검색 (RAG)    | 엔티티 해소  | 외부 API (날씨, 지도)    |
 +--------------------------------------------------------------+
         |
         v
 +--------------------------------------------------------------+
-|  C2 Solver — 하이브리드                                       |
+|  C2 Assembly — 하이브리드                                     |
 |  OR-Tools (1차 결정론) → [LLM 2차: 미배선] → 규칙 폴백 (최후)      |
 |  모든 출력은 HC1~HC4 검증 통과 필수                           |
 +--------------------------------------------------------------+
         |
         v
-  사용자에게 보이는 일정 (솔버 검증값만)
+  사용자에게 보이는 일정 (어셈블리 검증값만)
 ```
 
 ---
@@ -82,7 +82,7 @@ flowchart TD
 
         subgraph Core["AI 코어 (도구풀)"]
             C1["C1 LLM Gateway\nclosed-set 게이트\n티어 라우팅"]
-            C2["C2 Solver\nOR-Tools → LLM → 규칙폴백\nHC1~HC4 검증"]
+            C2["C2 Assembly\nOR-Tools → LLM → 규칙폴백\nHC1~HC4 검증"]
             M7["M7 Place Data\nclosed-set 후보 풀\n엔티티 해소"]
         end
 
@@ -179,14 +179,14 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 ### ScheduleAgent — 일정 생성 비서
 
 - **패턴**: Generation (백지에서 새로 만들기)
-- **흐름**: 후보 풀 조회 → LLM 선호 점수 → 솔버 배치 → 설명 생성
-- **할당 Tool**: `m7.get_candidates`, `m7.source_web`, `llm.score_preferences`, `llm.explain_slot`, `solver.solve`, `solver.validate`
+- **흐름**: 후보 풀 조회 → LLM 선호 점수 → 어셈블리 배치 → 설명 생성
+- **할당 Tool**: `m7.get_candidates`, `m7.source_web`, `llm.score_preferences`, `llm.explain_slot`, `assembly.solve`, `assembly.validate`
 
 ### PlanBAgent — 변수 대응 비서 (RAG 기반)
 
 - **패턴**: RAG (기존 정보를 꺼내서 + 상황에 맞게 재구성)
-- **흐름**: KB에서 Retrieve(기존 일정 + 페르소나 + 상황) → Augment(프롬프트 조립) → Generate(LLM 대안 선택) → Validate(솔버 검증)
-- **할당 Tool**: `kb.retrieve_schedule`, `kb.retrieve_persona`, `kb.retrieve_situation`, `m7.get_candidates`, `llm.select_alternatives`, `solver.solve`, `solver.validate`
+- **흐름**: KB에서 Retrieve(기존 일정 + 페르소나 + 상황) → Augment(프롬프트 조립) → Generate(LLM 대안 선택) → Validate(어셈블리 검증)
+- **할당 Tool**: `kb.retrieve_schedule`, `kb.retrieve_persona`, `kb.retrieve_situation`, `m7.get_candidates`, `llm.select_alternatives`, `assembly.solve`, `assembly.validate`
 - **벡터 스토어**: pgvector (저장 장소 메모, 방문 리뷰, POI 설명)
 - **상세 설계**: `aidlc-docs/inception/application-design/planb-rag-design.md`
 
@@ -202,14 +202,14 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 ### EditAgent — 편집 비서
 
 - **패턴**: 의도 해석 → 검증 → 반영
-- **흐름**: 편집 의도 해석 → 엔티티 해소 → 솔버 검증 → 반영 모드 결정
-- **할당 Tool**: `llm.parse_intent`, `m7.resolve_entity`, `m7.get_candidates`, `solver.validate`, `solver.repair`
+- **흐름**: 편집 의도 해석 → 엔티티 해소 → 어셈블리 검증 → 반영 모드 결정
+- **할당 Tool**: `llm.parse_intent`, `m7.resolve_entity`, `m7.get_candidates`, `assembly.validate`, `assembly.repair`
 
 ---
 
 ## 구조 개정 (2026-08-02): 4상자 파이프라인 — 도구 겹침 0
 
-멘토 피드백(도구 겹침 금지) 반영. **Orchestrator(지휘) → Provider 5종(수집, LLM 0회) → Agent 4종(LLM 판단, 전속 도구 배타) → Solver 공통 관문(확정)**. 정보 수집은 Orchestrator 전속(InfoCollector), 정보 '에이전트'는 **Provider로 개명**, Solver는 도구가 아닌 공통 관문. 상세 → `aidlc-docs/inception/application-design/agent-structure-v2.md`
+멘토 피드백(도구 겹침 금지) 반영. **Orchestrator(지휘) → Provider 5종(수집, LLM 0회) → Agent 4종(LLM 판단, 전속 도구 배타) → Assembly 공통 관문(확정)**. 정보 수집은 Orchestrator 전속(InfoCollector), 정보 '에이전트'는 **Provider로 개명**, Assembly는 도구가 아닌 공통 관문. 상세 → `aidlc-docs/inception/application-design/agent-structure-v2.md`
 
 ### (구) 정보 계층 5종 — Provider로 개명됨
 
@@ -231,7 +231,7 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 
 ---
 
-## C2 Solver — 하이브리드 전략
+## C2 Assembly — 하이브리드 전략
 
 "에이전트가 구해온 정보를 실현 가능하도록 최종 배치하는 결정론 엔진"
 
@@ -245,9 +245,9 @@ OR-Tools (1차) → LLM(Anthropic) (2차, 미배선) → 규칙 폴백 (최후)
 | LLM(Anthropic) | 복잡한 제약에서 창의적 배치 제안 | 유연하지만 비결정론. **(미배선 — 2026-08-25 기준 프로덕션 호출자 0)** |
 | 규칙 폴백 | 전부 실패 시 최소 일정 보장 | INV-4 보장 |
 
-> **LLM 2차 단계 미배선 (2026-08-25)**: `solver_engine/llm_solver.py`(`LlmSolver`)는 실재하지만
-> `api/wiring.py` 가 조립하는 체인은 `stages = (OrToolsSolver, RuleFallbackSolver)` **2단**이다.
-> 사유는 소스가 적어뒀다 — **"솔버 프롬프트 정본·모델 설정이 아직 없다"**(`api/wiring.py`).
+> **LLM 2차 단계 미배선 (2026-08-25)**: `assembly_engine/llm_assembler.py`(`LlmAssembler`)는 실재하지만
+> `api/wiring.py` 가 조립하는 체인은 `stages = (OrToolsAssembler, RuleFallbackAssembler)` **2단**이다.
+> 사유는 소스가 적어뒀다 — **"어셈블리 프롬프트 정본·모델 설정이 아직 없다"**(`api/wiring.py`).
 > 따라서 실가동 체인은 `OR-Tools → 규칙 폴백` 이고, AI-D07 ①의 "잔여 ≥ 2.5s 면 2차 실행" 분기는
 > **어떤 경로(day1·백그라운드·regenerate·Plan-B)에서도 발생하지 않는다.**
 
@@ -260,7 +260,7 @@ LLM 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
 | # | 불변식 | 검증 방법 |
 |---|---|---|
 | INV-1 | LLM은 closed-set 후보 안에서만 선택 (환각 0) | C1 출구 게이트 + PBT |
-| INV-2 | 사용자에게 보이는 시각·순서는 솔버 검증값만 | 에이전트 공통 규칙 + PBT |
+| INV-2 | 사용자에게 보이는 시각·순서는 어셈블리 검증값만 | 에이전트 공통 규칙 + PBT |
 | INV-3 | 소요시간 미표시 — 거리만 | VisitSlotDisplay 타입 정적 보장 |
 | INV-4 | AI 실패 시 결정론 폴백 (침묵 실패 금지) | 에이전트별 폴백 계단 + PBT |
 
@@ -272,7 +272,7 @@ LLM 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
 |---|---|---|
 | 언어 | Python 3.11+ | AI 서비스 전체 |
 | LLM | **Anthropic API 직접** (Claude) | **AI-D06 확정 (2026-07-21)** — Bedrock 아님. 티어: 경량 haiku-4-5 / 상위 sonnet-5 / 오프라인 opus-4-8 (설정값) |
-| 솔버 | OR-Tools (1차) + LLM (2차 폴백) | 하이브리드 — 2차도 Anthropic API 경유 |
+| 어셈블리 | OR-Tools (1차) + LLM (2차 폴백) | 하이브리드 — 2차도 Anthropic API 경유 |
 | RAG 프레임워크 | LangChain (부분 도입) | PlanBAgent + LLM 호출에만 (`ChatAnthropic`) |
 | 벡터 스토어 | pgvector (PostgreSQL) | 1차, 추후 OpenSearch 이전 가능 |
 | 임베딩 | **로컬 `nlpai-lab/KURE-v1` (MIT) 확정** | 1024차원 유지 → pgvector 스키마 무변경. Titan v2는 Bedrock 전용이라 대체 (AI-D06 부기 2026-08-23, TRIP-514 배선 완료). 종전 "잠정: multilingual-e5-large 또는 BGE-M3" 표기는 해소 |
@@ -286,7 +286,7 @@ LLM 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
 | 적용 O | 적용 X (직접 구현) |
 |---|---|
 | PlanBAgent RAG 파이프라인 | Orchestrator |
-| LLM(Anthropic) 호출 | Solver (OR-Tools) |
+| LLM(Anthropic) 호출 | Assembly (OR-Tools) |
 | pgvector 벡터 스토어 연동 | M7 후보 풀 생성 |
 | 임베딩 생성 | ScheduleAgent, EditAgent 로직 |
 | | HC1~HC4 검증, 에이전트 병렬 실행 |
@@ -310,9 +310,9 @@ LLM 출력도 반드시 HC1~HC4 검증 통과 후에만 사용자에게 반환.
 | `llm.analyze_style` | - | - | (추후) | - | - |
 | `llm.parse_intent` | - | - | - | O | - |
 | `kb.retrieve_*` | - | O | - | - | - |
-| `solver.solve` | O | O | - | - | - |
-| `solver.validate` | O | O | - | O | O |
-| `solver.repair` | - | - | - | O | - |
+| `assembly.solve` | O | O | - | - | - |
+| `assembly.validate` | O | O | - | O | O |
+| `assembly.repair` | - | - | - | O | - |
 
 ---
 
@@ -343,7 +343,7 @@ TripPilot_AI/
 │   │   │   └── ...
 │   │   └── units/
 │   └── construction/        ← 유닛별 기능 설계(FD). 실물 목록은 디렉토리를 볼 것
-├── src/trippilot/           ← 서비스 구현 (api·agents·orchestrator·solver_engine·llm_gateway)
+├── src/trippilot/           ← 서비스 구현 (api·agents·orchestrator·assembly_engine·llm_gateway)
 ├── tests/                   ← pytest + Hypothesis
 └── docs/openapi.json        ← 와이어 정본 (ai-ci 가 실행 앱 스키마와 일치를 강제)
 ```
@@ -361,7 +361,7 @@ TripPilot_AI/
 - 서버 재조회 컨텍스트 주입: 요청자 권한으로 ResourceRef 재조회 (D31)
 - 폴백: 타임아웃(2.5s)/파싱 실패 → FallbackSignal 발행
 
-### C2 Solver Engine — 선택·순서·시각 보장
+### C2 Assembly Engine — 선택·순서·시각 보장
 
 에이전트가 구해온 정보를 실현 가능하도록 배치하는 결정론 엔진.
 
@@ -422,10 +422,10 @@ AI 파이프라인의 그라운딩 토대.
         "이 후보 중 상황에 맞는 대안 A/B/C 선택" (closed-set, INV-1)
         |
         v
-[5. Validate — 솔버 검증 (병렬)]
-        +→ solver.solve(대안 A)
-        +→ solver.solve(대안 B)  ← 동시 실행
-        +→ solver.solve(대안 C)
+[5. Validate — 어셈블리 검증 (병렬)]
+        +→ assembly.solve(대안 A)
+        +→ assembly.solve(대안 B)  ← 동시 실행
+        +→ assembly.solve(대안 C)
         |
         HC1~HC4 통과한 것만 생존
         |
@@ -433,7 +433,7 @@ AI 파이프라인의 그라운딩 토대.
 [6. Return — 제안]
         대안 2~3개 + 전/후 비교 → 사용자에게 제안 (자동 변경 없음)
         |
-        사용자 선택 → solver.validate(재검증) → 확정 반영
+        사용자 선택 → assembly.validate(재검증) → 확정 반영
 ```
 
 ### Plan-B 3가지 Knowledge Base
@@ -450,7 +450,7 @@ AI 파이프라인의 그라운딩 토대.
 저장 장소 0개 → M7 일반 후보로 진행
 벡터 검색 실패 → M7 카테고리 필터만
 LLM 타임아웃 → 규칙 점수 (카테고리+거리+평점)
-솔버 전멸 → 건너뛰기 / 휴식 모드 제안
+어셈블리 전멸 → 건너뛰기 / 휴식 모드 제안
 전체 실패 → "수동으로 수정하세요" + 수동 편집 화면
 ```
 
@@ -458,7 +458,7 @@ LLM 타임아웃 → 규칙 점수 (카테고리+거리+평점)
 
 ## ML 도입 전략 (AI-D05)
 
-ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검증은 솔버 결정론 유지.
+ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검증은 어셈블리 결정론 유지.
 
 | 후보 | 역할 | 현재 상태 | 폴백 |
 |---|---|---|---|
@@ -467,7 +467,7 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 | **이동시간 보정 — 회귀** | 고정 안전계수 → 시간·지역별 보정 | 후순위 | G106 고정값 |
 
 - 도입 시점: 유저 피드백 충분히 쌓인 후 (DAU 1천, 과설계 금지)
-- 호스팅: SageMaker 엔드포인트 → C1/솔버 어댑터 뒤에 스왑
+- 호스팅: SageMaker 엔드포인트 → C1/어셈블리 어댑터 뒤에 스왑
 - closed-set 게이트(INV-1)는 ML 선호점수에도 그대로 적용
 - 규칙 폴백 유지 (INV-4): ML 실패 → 기존 규칙 버전으로
 
@@ -480,7 +480,7 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 
 ### 평가 지표 — 최신성 · 신속도 (핵심 2축)
 
-솔버 HC 검증(hard gate) 위에 품질 평가 축 2개:
+어셈블리 HC 검증(hard gate) 위에 품질 평가 축 2개:
 
 - **최신성**: F1 데이터 신선도(도메인별 age/TTL, `FreshnessMeta` 기반) + F2 결과물 현행성(트리거 이후 데이터·현재 시각 실행 가능·영업 중·폐업 배제 등 체크리스트)
 - **신속도**: 지연 예산의 SLO 승격 (day1 5s / 전체 20s / Plan-B 10s / 도우미 3s / Fast Path 500ms) + 구간 분해 측정
@@ -527,7 +527,7 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 
 ## 현재 상태
 
-- **U1~U6 구축·가동 중** — FastAPI 경계가 열려 있고 백엔드가 실제로 왕복 호출한다. INCEPTION(설계·요구사항·계획)과 멘토 피드백 반영(에이전트 업무 기준 재설계, RAG, Solver 하이브리드)은 그 앞 단계로 끝났다.
+- **U1~U6 구축·가동 중** — FastAPI 경계가 열려 있고 백엔드가 실제로 왕복 호출한다. INCEPTION(설계·요구사항·계획)과 멘토 피드백 반영(에이전트 업무 기준 재설계, RAG, Assembly 하이브리드)은 그 앞 단계로 끝났다.
 - **진행 상태 정본은 `claude.md` §Current Status**, **와이어 정본은 `docs/openapi.json`** — 유닛·경로 목록을 여기에 다시 박지 않는다(산문에 박으면 늘 때마다 스테일이 된다).
 
 ---
@@ -554,3 +554,4 @@ ML은 **soft 신호(추정·점수·개인화)에만** 적용. 하드 제약 검
 | 2026-07-21 | AI-D06 — LLM 벤더 확정: Anthropic API 직접 (Bedrock 아님). 티어 라우팅 모델 제안, 임베딩 Titan → 로컬 오픈소스(잠정) |
 | 2026-08-04 | Bedrock 잔여 표기 일괄 정정 (AI-D06 반영) · `SolveMode.BEDROCK`→`LLM` 개명 (TRIP-256) |
 | 2026-08-25 | **위 2026-08-04 "일괄 정정"은 완료되지 않았다** — 문서 84건이 남아 있었다(TRIP-530 실측). 일괄 치환 대신 **읽기 규칙 註**를 각 문서에 달았다: AI-D06 표기 규칙상 기존 "Bedrock"은 "LLM API(Anthropic 직접)"로 읽는다. 결정 이력·감사 로그(`aidlc-docs/audit.md`, append-only)의 Bedrock 언급은 **역사 기록이라 고치지 않는다** |
+| 2026-09-02 | `solver` → `assembly` 개명 (`solver_engine/` → `assembly_engine/`, 체인 3단계 → `OrToolsAssembler`·`LlmAssembler`·`RuleFallbackAssembler`, 한국어 "솔버" → "어셈블리", 409 `error_code` → `ASSEMBLY_CONFLICT`). 유지: `solve()`·와이어 `solve_mode`, `FR-SOLVER-*`·`O-SOLVER`·`u2-solver/` 정본 코드, 감사 로그·안티패턴 실측값 등 과거 기록, 미개명 `aidlc/` 정본을 인용한 문장 |

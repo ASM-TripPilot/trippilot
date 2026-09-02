@@ -7,7 +7,7 @@
 | 상황 | HTTP | retryable |
 |---|---|---|
 | 요청 스키마·도메인 불변식 위반 | 422 | false |
-| 필수 방문지/고정블록 모순(SolverConflictError, d08) | 409 | false |
+| 필수 방문지/고정블록 모순(AssemblyConflictError, d08) | 409 | false |
 | 컨텍스트 권한 위반(PermissionDeniedError) | 403 | false |
 | 백엔드 POI 조회에 우리가 잘못 보냄(4xx) | 422 | false |
 | 백엔드 서비스 토큰 거부(401·403) | 500 | false |
@@ -27,13 +27,13 @@ from fastapi.responses import JSONResponse
 
 from trippilot.api.schemas import ErrorBody
 from trippilot.poi_curation.adapters.backend_poi_db import BackendPoiDbError
-from trippilot.solver_engine.facade import SolverConflictError
+from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.domain.context import PermissionDeniedError
 
 # 오류 코드 — 백엔드 로그·분류의 키(문자열 안정성 유지).
 CODE_VALIDATION = "VALIDATION_ERROR"
 CODE_DOMAIN_INVARIANT = "DOMAIN_INVARIANT_VIOLATION"
-CODE_SOLVER_CONFLICT = "SOLVER_CONFLICT"
+CODE_ASSEMBLY_CONFLICT = "ASSEMBLY_CONFLICT"
 CODE_PERMISSION_DENIED = "PERMISSION_DENIED"
 CODE_BACKEND_AUTH = "BACKEND_AUTH_ERROR"
 CODE_BACKEND_UNAVAILABLE = "BACKEND_UNAVAILABLE"
@@ -73,9 +73,9 @@ def map_exception(exc: BaseException) -> BoundaryError:
         return BoundaryError(403, CODE_PERMISSION_DENIED, str(exc))
     if isinstance(exc, BackendPoiDbError):
         return _map_backend_poi_db(exc)
-    if isinstance(exc, SolverConflictError):
+    if isinstance(exc, AssemblyConflictError):
         # d08 — 고정 블록/필수 방문지 모순. 재시도해도 같은 입력이면 같은 결과다.
-        return BoundaryError(409, CODE_SOLVER_CONFLICT, str(exc))
+        return BoundaryError(409, CODE_ASSEMBLY_CONFLICT, str(exc))
     if isinstance(exc, ValueError):
         # 도메인 불변식은 전부 ValueError로 던진다(business-rules §2 — __post_init__).
         # pydantic ValidationError도 ValueError 하위라 같은 422로 수렴한다.

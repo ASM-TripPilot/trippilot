@@ -2,7 +2,7 @@
 
 증명하는 것:
   ① 직렬화     : excluded_poi_ids 왕복 + 키 없는 기존 payload 하위호환 (U5-P10 계열)
-  ② 무회귀     : 제외가 비면 솔버 3종 결과가 기존과 완전히 동일
+  ② 무회귀     : 제외가 비면 어셈블리 3종 결과가 기존과 완전히 동일
   ③ 제외 존중  : 제외된 POI는 어느 일자에도 없음 (OR-Tools · 규칙 폴백 · LLM 2차)
   ④ PBT       : 임의 problem × 임의 제외 부분집합 → 배치 ∩ 제외 = ∅ (고정 블록 제외)
                  이면서 여전히 HC1~HC4 통과
@@ -19,13 +19,13 @@ from datetime import date, datetime, timedelta, timezone
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.constraints import check_all
-from trippilot.solver_engine.facade import HybridSolverFacade
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.llm_solver import LlmSolver
-from trippilot.solver_engine.ortools_solver import OrToolsSolver
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.constraints import check_all
+from trippilot.assembly_engine.facade import HybridAssemblyFacade
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.llm_assembler import LlmAssembler
+from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -42,12 +42,12 @@ from trippilot.ports.llm_port import LlmRequest, LlmResponse
 
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.in_memory_trace import InMemoryTrace
-from tests.generators.solver import solver_setups
+from tests.generators.assembly import assembly_setups
 
 _KST = timezone(timedelta(hours=9))
-_CFG = SolverConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
+_CFG = AssemblyConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
 _EST = TravelEstimator(_CFG)
-_REF = PromptRef("prompts/solver_secondary.yaml", "0.1.0", "solver_secondary")
+_REF = PromptRef("prompts/assembly_secondary.yaml", "0.1.0", "assembly_secondary")
 
 
 # ── 픽스처 ────────────────────────────────────────────────
@@ -93,8 +93,8 @@ def _canned(slots: list[dict], day: str = "2026-08-05") -> str:
     return json.dumps({"days": [{"date": day, "slots": slots}]})
 
 
-def _llm_stage(llm, index, trace) -> LlmSolver:
-    return LlmSolver(llm, index, _EST, _CFG, trace, _REF, "claude-sonnet-5")
+def _llm_stage(llm, index, trace) -> LlmAssembler:
+    return LlmAssembler(llm, index, _EST, _CFG, trace, _REF, "claude-sonnet-5")
 
 
 # ① 직렬화 왕복 + 하위호환 ────────────────────────────────
@@ -117,14 +117,14 @@ def test_excluded_defaults_to_empty_and_old_payload_still_reads() -> None:
 
 # ② 무회귀 — 제외가 비면 기존 동작과 동일 ────────────────
 @settings(max_examples=15, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_empty_exclusion_is_identical_to_before(setup) -> None:
     problem, index = setup
     empty = replace(problem, excluded_poi_ids=frozenset())
 
-    assert (RuleFallbackSolver(index, _EST, _CFG).solve(problem)
-            == RuleFallbackSolver(index, _EST, _CFG).solve(empty))
-    ort = OrToolsSolver(index, _EST, _CFG)
+    assert (RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
+            == RuleFallbackAssembler(index, _EST, _CFG).solve(empty))
+    ort = OrToolsAssembler(index, _EST, _CFG)
     assert ort.solve(problem, 1500) == ort.solve(empty, 1500)
 
 
@@ -141,11 +141,11 @@ def test_empty_exclusion_keeps_llm_prompt_and_gate_unchanged() -> None:
     assert base_llm.last_prompt == empty_llm.last_prompt
 
 
-# ③ 제외 존중 — 솔버 3종 ─────────────────────────────────
+# ③ 제외 존중 — 어셈블리 3종 ─────────────────────────────────
 def test_rule_fallback_never_places_excluded_poi() -> None:
     problem, index = _fixture()
     excluded = frozenset({PoiId("a")})
-    solution = RuleFallbackSolver(index, _EST, _CFG).solve(
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(
         replace(problem, excluded_poi_ids=excluded))
 
     assert PoiId("a") not in _placed(solution)
@@ -155,7 +155,7 @@ def test_rule_fallback_never_places_excluded_poi() -> None:
 def test_ortools_never_places_excluded_poi() -> None:
     problem, index = _fixture()
     excluded = frozenset({PoiId("a"), PoiId("b")})
-    solution = OrToolsSolver(index, _EST, _CFG).solve(
+    solution = OrToolsAssembler(index, _EST, _CFG).solve(
         replace(problem, excluded_poi_ids=excluded), remaining_ms=1500)
 
     assert solution is not None
@@ -163,7 +163,7 @@ def test_ortools_never_places_excluded_poi() -> None:
     assert PoiId("c") in _placed(solution)
 
 
-def test_llm_solver_never_places_excluded_poi() -> None:
+def test_llm_assembler_never_places_excluded_poi() -> None:
     problem, index = _fixture()
     trace = InMemoryTrace()
     # LLM이 제외된 a를 제안해도 반환 해에 남으면 안 된다
@@ -219,24 +219,24 @@ def _fixed_ids(problem) -> set[PoiId]:
 
 
 @settings(max_examples=60, deadline=None)
-@given(setup=solver_setups(), data=st.data())
+@given(setup=assembly_setups(), data=st.data())
 def test_pbt_rule_fallback_respects_exclusion_and_stays_valid(setup, data) -> None:
     problem, index = setup
     p = replace(problem, excluded_poi_ids=_draw_excluded(data, problem))
 
-    solution = RuleFallbackSolver(index, _EST, _CFG).solve(p)
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(p)
 
     assert set(_placed(solution)) & p.excluded_poi_ids <= _fixed_ids(p)
     assert check_all(solution, p, index, _EST) == []  # HC1~HC4 유지
 
 
 @settings(max_examples=25, deadline=None)
-@given(setup=solver_setups(), data=st.data())
+@given(setup=assembly_setups(), data=st.data())
 def test_pbt_ortools_respects_exclusion_and_stays_valid(setup, data) -> None:
     problem, index = setup
     p = replace(problem, excluded_poi_ids=_draw_excluded(data, problem))
 
-    solution = OrToolsSolver(index, _EST, _CFG).solve(p, remaining_ms=1500)
+    solution = OrToolsAssembler(index, _EST, _CFG).solve(p, remaining_ms=1500)
     if solution is None:  # 시간창 불가 등 — 체인이 처리할 영역
         return
 
@@ -247,8 +247,8 @@ def test_pbt_ortools_respects_exclusion_and_stays_valid(setup, data) -> None:
 # ⑤ 2단계 생성 시뮬레이션 — 호출 간 POI 중복 0 ───────────
 def test_two_phase_generation_has_no_duplicate_poi() -> None:
     problem, index = _fixture(days=(date(2026, 8, 5), date(2026, 8, 6)))
-    facade = HybridSolverFacade(
-        [OrToolsSolver(index, _EST, _CFG), RuleFallbackSolver(index, _EST, _CFG)],
+    facade = HybridAssemblyFacade(
+        [OrToolsAssembler(index, _EST, _CFG), RuleFallbackAssembler(index, _EST, _CFG)],
         index, _EST, FakeClock(), InMemoryTrace())
 
     # 1차: day1만 (deadline 5,000ms — D38)
@@ -269,12 +269,12 @@ def test_two_phase_generation_has_no_duplicate_poi() -> None:
 
 
 @settings(max_examples=25, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_pbt_two_phase_matches_single_call_uniqueness(setup) -> None:
     problem, index = setup
     assume(len(problem.days) >= 2)
-    chain = [OrToolsSolver(index, _EST, _CFG), RuleFallbackSolver(index, _EST, _CFG)]
-    facade = HybridSolverFacade(chain, index, _EST, FakeClock(), InMemoryTrace())
+    chain = [OrToolsAssembler(index, _EST, _CFG), RuleFallbackAssembler(index, _EST, _CFG)]
+    facade = HybridAssemblyFacade(chain, index, _EST, FakeClock(), InMemoryTrace())
 
     p1 = replace(problem, days=problem.days[:1])
     phase1 = facade.solve(p1, deadline_ms=5000)
@@ -291,7 +291,7 @@ def test_pbt_two_phase_matches_single_call_uniqueness(setup) -> None:
 def test_two_phase_solve_mode_is_still_honest() -> None:
     """제외를 주더라도 출처 태깅(INV-2/INV-4)은 그대로."""
     problem, index = _fixture()
-    solution = OrToolsSolver(index, _EST, _CFG).solve(
+    solution = OrToolsAssembler(index, _EST, _CFG).solve(
         replace(problem, excluded_poi_ids=frozenset({PoiId("a")})), 1500)
     assert solution is not None
     assert solution.solve_mode == SolveMode.OR_TOOLS and solution.is_fallback is False

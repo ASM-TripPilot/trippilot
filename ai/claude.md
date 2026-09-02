@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-TripPilot AI is an **independent Python AI service** that generates, replans, and reflects on travel itineraries with an LLM + optimization-solver hybrid architecture.
+TripPilot AI is an **independent Python AI service** that generates, replans, and reflects on travel itineraries with an LLM + optimization/assembly hybrid architecture.
 
 ## Core Structure
 
@@ -15,7 +15,7 @@ TripPilot AI is an **independent Python AI service** that generates, replans, an
 ## Four Invariants
 
 1. **INV-1**: The LLM selects only from within the closed-set candidates (zero hallucination)
-2. **INV-2**: User-visible times and order come only from solver-verified values
+2. **INV-2**: User-visible times and order come only from assembly-verified values
 3. **INV-3**: Duration is never displayed — distance only
 4. **INV-4**: On AI failure, fall back deterministically (silent failure is forbidden)
 
@@ -31,7 +31,7 @@ TripPilot AI is an **independent Python AI service** that generates, replans, an
 - **ScheduleAgent**: itinerary generation (Generation pattern)
 - **PlanBAgent**: contingency handling (RAG pattern, 3 KBs + pgvector)
 - **ReflectAgent**: reflection generation (phase 1: simple LLM Generation; Multi-step expansion later)
-- **EditAgent**: itinerary editing (intent interpretation → solver verification → apply)
+- **EditAgent**: itinerary editing (intent interpretation → assembly verification → apply)
 
 **Information sources** (v2 — `orchestrator/info_collector.py` + `providers/`):
 Place · Weather · Transit · Persona · Event Providers. The Orchestrator collects
@@ -49,13 +49,13 @@ Orchestrator's intent detection above is design, not running code (TRIP-529).
 - Intent matching: `intent-matching-design.md` / evaluation metrics (freshness·responsiveness): `evaluation-metrics-design.md`
 - MLOps/LLMOps + ML pattern typology: `mlops-llmops-design.md`
 
-## Solver Hybrid Strategy
+## Assembly Hybrid Strategy
 
 OR-Tools (1st: deterministic) → LLM (2nd: creative proposals) → rule-based fallback (final guarantee)
 All output must pass HC1~HC4 verification.
 
 ⚠️ **The LLM 2nd stage is not wired** (TRIP-529, 2026-08-25): `api/wiring.py` builds
-`stages = (OrToolsSolver, RuleFallbackSolver)` because the solver prompt canon and
+`stages = (OrToolsAssembler, RuleFallbackAssembler)` because the assembly prompt canon and
 model settings do not exist yet. AI-D07's "run the 2nd stage if ≥ 2.5s remains"
 branch therefore cannot fire on any path.
 

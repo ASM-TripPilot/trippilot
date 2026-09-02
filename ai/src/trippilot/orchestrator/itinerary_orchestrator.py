@@ -1,6 +1,6 @@
 """ItineraryOrchestrator — score→solve 조립 + 폴백 계단 (services.md §1, TRIP-237·238).
 
-부품(M7 후보풀 · C1 선호점수 · C2 솔버 체인)은 각각 완성돼 있고, 이 모듈은 **조립**만 한다.
+부품(M7 후보풀 · C1 선호점수 · C2 어셈블리 체인)은 각각 완성돼 있고, 이 모듈은 **조립**만 한다.
 
 ```
 요청 → ⓪ 소유 검증 (fail-closed)   남의 persona_ref → 항상 403 (TRIP-333, 시한 무관)
@@ -36,8 +36,8 @@ from typing import Mapping, Protocol
 
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
-from trippilot.solver_engine.facade import SolverConflictError
-from trippilot.solver_engine.scorer import build_rule_score
+from trippilot.assembly_engine.facade import AssemblyConflictError
+from trippilot.assembly_engine.scorer import build_rule_score
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -88,7 +88,7 @@ class OwnershipVerifier(Protocol):
     ) -> None: ...
 
 
-class SolverFacade(Protocol):
+class AssemblyFacade(Protocol):
     """C2 공개 경계 중 이 조립이 쓰는 한 갈래 (TRIP-292의 solve)."""
 
     def solve(
@@ -99,7 +99,7 @@ class SolverFacade(Protocol):
     ) -> ItinerarySolution: ...
 
 
-class SolverProvider(Protocol):
+class AssemblyProvider(Protocol):
     """후보 풀이 요청마다 다르므로 `poi_index`도 요청 스코프 — 퍼사드를 풀에 맞춰 조립한다.
 
     고정 블록 POI가 풀 밖(반경·예산 필터에서 탈락)일 수 있다. 그 경우 인덱스에 없어
@@ -107,7 +107,7 @@ class SolverProvider(Protocol):
     인덱스를 보강하고 싶으면 이 provider 구현에서 하면 된다(조립은 관여하지 않는다).
     """
 
-    def for_pool(self, poi_index: Mapping[PoiId, Poi]) -> SolverFacade: ...
+    def for_pool(self, poi_index: Mapping[PoiId, Poi]) -> AssemblyFacade: ...
 
 
 # ── 입출력 타입 (도메인 타입 조합 — HTTP 스키마는 경계 어댑터 소관) ──
@@ -146,14 +146,14 @@ class GenerateItineraryRequest:
 class OrchestratorConfig:
     """시한 배분 파라미터 (services.md §5.1 타임아웃 정책의 주입 컨테이너).
 
-    배분 방식은 **단계별 상한 + 솔버는 잔여 전부** (TRIP-376, 고정 분할 폐기):
-    상류(M7·C1)는 상한까지만 쓰고, 솔버는 solve 시점 잔여를 전부 받는다.
+    배분 방식은 **단계별 상한 + 어셈블리는 잔여 전부** (TRIP-376, 고정 분할 폐기):
+    상류(M7·C1)는 상한까지만 쓰고, 어셈블리는 solve 시점 잔여를 전부 받는다.
     day1 5초·전체 20초 양쪽에서 성립해야 하므로 **고정 ms가 아니라 비율+상한**이다.
     """
 
-    c2_min_share: float = 0.5     # 전체 예산 중 솔버 바닥이 가져가는 몫 (소예산용)
-    c2_floor_ms: int = 1_000      # 솔버 바닥 절대 하한 (전체가 더 작으면 전체까지만)
-    # 솔버 바닥 상한 — 솔버는 어차피 solve 시점 잔여를 **전부** 받으므로(④) 바닥을
+    c2_min_share: float = 0.5     # 전체 예산 중 어셈블리 바닥이 가져가는 몫 (소예산용)
+    c2_floor_ms: int = 1_000      # 어셈블리 바닥 절대 하한 (전체가 더 작으면 전체까지만)
+    # 어셈블리 바닥 상한 — 어셈블리는 어차피 solve 시점 잔여를 **전부** 받으므로(④) 바닥을
     # 키울 이유가 없고, 바닥이 크면 C1 상한이 그만큼 줄어든다. OR-Tools 실측
     # 3.0~3.1s(193건, TRIP-373) + 여유 = 5s (TRIP-376).
     c2_cap_ms: int = 5_000
@@ -180,11 +180,11 @@ class OrchestratorConfig:
 
 @dataclass(frozen=True, slots=True)
 class DeadlineBudget:
-    """단계별 시한 배분 결과 — **상류는 상한, 솔버는 잔여 전부** (TRIP-376).
+    """단계별 시한 배분 결과 — **상류는 상한, 어셈블리는 잔여 전부** (TRIP-376).
 
     `m7_ms`·`c1_ms`는 각 단계의 **상한**(C1은 게이트웨이 호출 타임아웃으로 관통
-    강제)이고, `c2_reserved_ms`는 솔버의 **최소 보장 바닥**이다. 솔버의 실제 예산은
-    solve 시점 잔여 전부(≥ 바닥) — 앞 단계가 일찍 끝나면 그만큼 솔버가 더 받는다.
+    강제)이고, `c2_reserved_ms`는 어셈블리의 **최소 보장 바닥**이다. 어셈블리의 실제 예산은
+    solve 시점 잔여 전부(≥ 바닥) — 앞 단계가 일찍 끝나면 그만큼 어셈블리가 더 받는다.
 
     불변식(구조 강제): 상한 합 + 바닥 ≤ total (상한 합이 바닥을 침범할 수 없다 —
     상한을 다 써도 바닥은 남는다), 전체 예산이 양수인 한 **바닥은 0보다 크다**.
@@ -201,9 +201,9 @@ class DeadlineBudget:
         if min(self.m7_ms, self.c1_ms, self.c2_reserved_ms) < 0:
             raise ValueError("배분은 음수가 될 수 없음")
         if self.m7_ms + self.c1_ms + self.c2_reserved_ms > max(0, self.total_ms):
-            raise ValueError("상한 합이 솔버 바닥을 침범함")
+            raise ValueError("상한 합이 어셈블리 바닥을 침범함")
         if self.total_ms > 0 and self.c2_reserved_ms <= 0:
-            raise ValueError("솔버 바닥이 0 이하 — 배분 규칙 위반")
+            raise ValueError("어셈블리 바닥이 0 이하 — 배분 규칙 위반")
 
 
 class ScoringMode(Enum):
@@ -223,7 +223,7 @@ class GenerationStatus(Enum):
 class Degradation:
     """밟은 폴백 계단 1칸. 결과에 실려 호출자(백엔드)가 고지 문구를 고른다."""
 
-    stage: str  # pool / llm / solver / explanation
+    stage: str  # pool / llm / assembly / explanation
     reason: str
 
 
@@ -275,7 +275,7 @@ class GenerationOutcome:
     `candidates_summary`·`solved_at`은 **기본값 없음** — 생성 지점이 채움을 잊으면
     TypeError로 드러난다 (anti-patterns "전이 진입점에 기본값 금지").
     - `candidates_summary`: M7 풀 실측 보고. 풀을 만들기 전에 실패하면 None(모름).
-    - `solved_at`: 솔버 검증 완료 시각 = 주입된 `now` + 단조시계 경과 (wall-clock
+    - `solved_at`: 어셈블리 검증 완료 시각 = 주입된 `now` + 단조시계 경과 (wall-clock
       직접 호출 없음, DL-3). 해가 없으면(FAILED) None.
     """
 
@@ -312,10 +312,10 @@ _ZERO_BUDGET = DeadlineBudget(total_ms=0, m7_ms=0, c1_ms=0, c2_reserved_ms=0)
 
 
 def allocate(total_ms: int, config: OrchestratorConfig) -> DeadlineBudget:
-    """전체 예산 → 단계별 상한 배분. 솔버 바닥을 **먼저 떼고** 남은 것이 상류 상한이다.
+    """전체 예산 → 단계별 상한 배분. 어셈블리 바닥을 **먼저 떼고** 남은 것이 상류 상한이다.
 
     바닥을 나중에 계산하면 상류가 다 써버렸을 때 0 이하가 된다 — 순서가 곧 보장이다.
-    솔버의 실제 예산은 이 바닥이 아니라 solve 시점 잔여 전부다(_generate ④).
+    어셈블리의 실제 예산은 이 바닥이 아니라 solve 시점 잔여 전부다(_generate ④).
     - 5,000ms(day1): 바닥 2,500 / M7 상한 750 / C1 상한 1,750 (즉답 목적 —
       실호출 바닥 ~3s > 상한이라 규칙 점수 유지가 의도)
     - 20,000ms(전체): 바닥 5,000 / M7 상한 1,000 / C1 상한 14,000 (TRIP-376 —
@@ -339,7 +339,7 @@ class ItineraryOrchestrator:
         self,
         info: InfoCollector,
         scoring_worker: PreferenceScoringWorker,
-        solver_provider: SolverProvider,
+        assembly_provider: AssemblyProvider,
         clock: Clock,
         trace: TracePort,
         *,
@@ -351,7 +351,7 @@ class ItineraryOrchestrator:
         # 날씨(WEATHER)·페르소나(PERSONA)는 미등록 시 기능 부재로 동작.
         self._info = info
         self._scoring = scoring_worker
-        self._solvers = solver_provider
+        self._assembly_provider = assembly_provider
         self._clock = clock
         self._trace = trace
         self._resolver = context_resolver  # 소유 검증 갈래만 쓴다 (TRIP-333)
@@ -454,7 +454,7 @@ class ItineraryOrchestrator:
         daily_rain = self._daily_rain(request, packets, steps, trace_id, now)
 
         # ②″ 행사 근접 보너스 (TRIP-421) — 점수 분리 설계: LLM 점수는 행사를
-        #    모르고, 보너스는 솔버 소프트 항으로만 (양수만 — 감점 경로 없음).
+        #    모르고, 보너스는 어셈블리 소프트 항으로만 (양수만 — 감점 경로 없음).
         event_bonus = self._event_bonus(request, packets, pool, persona,
                                         steps, trace_id, now)
 
@@ -474,8 +474,8 @@ class ItineraryOrchestrator:
             event_bonus=event_bonus,  # None = 무보정 (TRIP-421)
         )
 
-        # ④ C2 solve — 솔버는 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
-        #    앞 단계가 일찍 끝나면 그만큼 더 받고(2차에서 점수 4s면 솔버 ~15s),
+        # ④ C2 solve — 어셈블리는 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
+        #    앞 단계가 일찍 끝나면 그만큼 더 받고(2차에서 점수 4s면 어셈블리 ~15s),
         #    상한 밖 소모(m7 초과 등)가 있어도 바닥 아래로는 내려가지 않는다.
         #    OR-Tools는 anytime — 잔여 시간이 곧 최적성이고 해 자체는 나온다.
         #    체인 폴백(OR-Tools→LLM→규칙→최소)은 C2가 이미 갖고 있다. 여기서
@@ -483,23 +483,23 @@ class ItineraryOrchestrator:
         c2_ms = max(
             budget.c2_reserved_ms, budget.total_ms - (self._clock.monotonic_ms() - t0)
         )
-        solver = self._solvers.for_pool({p.poi_id: p for p in pool.pois})
+        assembly = self._assembly_provider.for_pool({p.poi_id: p for p in pool.pois})
         try:
-            solution = solver.solve(problem, c2_ms, trace_id)
-        except SolverConflictError as e:
+            solution = assembly.solve(problem, c2_ms, trace_id)
+        except AssemblyConflictError as e:
             # 모순 입력(겹치는 고정 블록 등) — 시한 문제가 아니라 d08 흐름. 명시적 실패.
-            self._observe(trace_id, now, "solver", "solver", "(none)",
-                          f"solver_conflict: {e}")
-            return self._failed(budget, f"solver_conflict: {e}", trace_id, now,
+            self._observe(trace_id, now, "assembly", "assembly", "(none)",
+                          f"assembly_conflict: {e}")
+            return self._failed(budget, f"assembly_conflict: {e}", trace_id, now,
                                 emit=False, scoring_mode=mode,
                                 candidate_count=len(candidates),
                                 candidates_summary=summary)
-        # 솔버 검증 완료 시각 — 주입된 now + 단조시계 경과 (wall-clock 직접 호출 금지).
+        # 어셈블리 검증 완료 시각 — 주입된 now + 단조시계 경과 (wall-clock 직접 호출 금지).
         solved_at = now + timedelta(milliseconds=self._clock.monotonic_ms() - t0)
         if solution.is_fallback:
             # C2 퍼사드가 강등 사유를 이미 FallbackEvent로 남겼다 — 결과에만 싣는다.
             steps.append(Degradation(
-                stage="solver", reason=f"solver_degraded:{solution.solve_mode.value}"
+                stage="assembly", reason=f"assembly_degraded:{solution.solve_mode.value}"
             ))
 
         # ⑤ (선택) 설명 부착 — 실패해도 일정은 그대로 나간다
@@ -601,7 +601,7 @@ class ItineraryOrchestrator:
         - **수집 실패(OK 아닌 상태값)**: 무보정 + Degradation + FallbackEvent
           (침묵 금지, INV-4 — 날씨 실패가 생성 실패가 되면 안 된다).
         - 반환은 요청 날짜로 한정한다(예보 지평 밖·무관 날짜는 problem에 싣지 않음).
-          유효 예보가 없으면 None — 솔버 무보정 경로와 동일.
+          유효 예보가 없으면 None — 어셈블리 무보정 경로와 동일.
         """
         packet = packets.get(ProviderKind.WEATHER)
         if packet is None:  # Provider 미등록 — 기능 부재
@@ -661,7 +661,7 @@ class ItineraryOrchestrator:
         try:
             # 단계 상한이 게이트웨이 호출 타임아웃까지 **관통**한다 (TRIP-376) —
             # 상한만 늘리고 호출 시한이 고정 2.5s로 남으면 실호출(바닥 ~3s,
-            # TRIP-373 실측)이 먼저 잘려 상향이 무의미하다. c2 llm_solver와 같은
+            # TRIP-373 실측)이 먼저 잘려 상향이 무의미하다. c2 llm_assembler와 같은
             # min(상한, 잔여) 패턴.
             result = self._scoring.score(
                 pool, persona, trace_id, now,
@@ -757,7 +757,7 @@ class ItineraryOrchestrator:
         seen: set[PoiId] = set()
         ordered: list[PoiId] = []
         for day in solution.days:
-            for slot in day.slots:  # 솔버가 정한 순서 그대로 (INV-2)
+            for slot in day.slots:  # 어셈블리가 정한 순서 그대로 (INV-2)
                 if slot.poi_id in seen or not pool.contains(slot.poi_id):
                     continue  # 풀 밖(고정 블록 유래)은 설명 대상에서 제외
                 seen.add(slot.poi_id)

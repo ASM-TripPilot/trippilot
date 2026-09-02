@@ -17,10 +17,10 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.quality import compute_quality, constraint_satisfaction
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.quality import compute_quality, constraint_satisfaction
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.itinerary import (
     FixedBlock,
     ItinerarySolution,
@@ -29,10 +29,10 @@ from trippilot.domain.itinerary import (
 )
 
 from tests.generators.itinerary import itinerary_solutions
-from tests.generators.solver import solver_setups
+from tests.generators.assembly import assembly_setups
 
 _KST = timezone(timedelta(hours=9))
-_CFG = SolverConfig()
+_CFG = AssemblyConfig()
 _EST = TravelEstimator(_CFG)
 
 _UNIT = st.floats(0, 1, allow_nan=False, allow_infinity=False)
@@ -93,20 +93,20 @@ def test_solution_from_dict_without_score_key(sol: ItinerarySolution) -> None:
 
 # ③ 결정론 — 같은 입력 2회, 같은 출력
 @settings(max_examples=40)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_compute_quality_deterministic(setup) -> None:
     problem, index = setup
-    solution = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     assert (compute_quality(solution, problem, index, _EST)
             == compute_quality(solution, problem, index, _EST))
 
 
 # ③′ 성분 전부 [0,1] (QualityScore __post_init__가 재검증하지만 명시 확인)
 @settings(max_examples=40)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_compute_quality_components_in_range(setup) -> None:
     problem, index = setup
-    solution = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     qs = compute_quality(solution, problem, index, _EST)
     for f in _FIELDS:
         assert 0.0 <= getattr(qs, f) <= 1.0
@@ -126,10 +126,10 @@ def test_constraint_satisfaction_monotone(n: int, k: int) -> None:
 
 # ④′ 통합 — 실제 HC3 위반이 있는 문제에서 점수가 실제로 내려간다
 @settings(max_examples=20)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_real_violation_lowers_constraint_satisfaction(setup) -> None:
     problem, index = setup
-    solution = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     clean = compute_quality(solution, problem, index, _EST)
     # 새벽 5시 고정 블록 — day window(09~21시) 해에는 절대 없음 → HC3 위반 1건
     d0 = problem.days[0]

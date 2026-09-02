@@ -1,4 +1,4 @@
-"""RuleFallbackSolver — 체인 최후 단계 (정본 §4.3 구성 휴리스틱, U2 FD §2.5).
+"""RuleFallbackAssembler — 체인 최후 단계 (정본 §4.3 구성 휴리스틱, U2 FD §2.5).
 
 항상 해를 반환한다 (INV-4 구조 보장): 최악 = 고정 블록만(또는 빈 일자).
 problem.excluded_poi_ids는 후보 풀에서 제외 (2단계 생성 중복 방지 — TRIP-293).
@@ -12,11 +12,11 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Mapping, Sequence
 
-from trippilot.solver_engine.config import (
+from trippilot.assembly_engine.config import (
     RAIN_INDOOR,
     RAIN_OUTDOOR,
     STAY_DEFAULT_MIN,
-    SolverConfig,
+    AssemblyConfig,
 )
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
@@ -70,14 +70,14 @@ def _open_ok(poi: Poi, start: datetime, end: datetime) -> bool:
     return any(oh.open_min <= s and e <= oh.close_min for oh in todays)
 
 
-class RuleFallbackSolver:
+class RuleFallbackAssembler:
     """ChainStage: required_ms=0, 항상 해 반환."""
 
     name = "rule_fallback"
     required_ms = 0
 
     def __init__(self, poi_index: Mapping[PoiId, Poi],
-                 estimator, config: SolverConfig) -> None:
+                 estimator, config: AssemblyConfig) -> None:
         self._pois = poi_index
         self._est = estimator
         self._cfg = config
@@ -231,7 +231,7 @@ class RuleFallbackSolver:
             days=tuple(days),
             is_fallback=True,
             solve_mode=SolveMode.RULE_FALLBACK if placed_any else SolveMode.MINIMAL,
-            solver_run=None,
+            assembly_run=None,
         )
 
     def _day_ranked(self, problem: ItineraryProblem, day,

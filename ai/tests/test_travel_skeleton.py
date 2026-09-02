@@ -12,8 +12,8 @@ from hypothesis import given
 
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.travel import TravelEstimate
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.travel import TravelEstimator
 
 from tests.fakes.fake_travel import FakeTravel
 from tests.generators.geo import geo_points, transport_modes
@@ -53,7 +53,7 @@ def test_fake_travel_is_deterministic(a, b, mode) -> None:
 
 def _est(km: float, mode: TransportMode) -> TravelEstimate:
     """위도 1도 ≈ 111.19km — 원하는 직선거리를 만드는 두 점."""
-    cfg = SolverConfig()
+    cfg = AssemblyConfig()
     return TravelEstimator(cfg).estimate(
         GeoPoint(35.0, 129.0), GeoPoint(35.0 + km / 111.19, 129.0), mode)
 
@@ -71,7 +71,7 @@ def test_대중교통_먼_구간은_그대로_대중교통() -> None:
 
 def test_도보_치환은_대중교통보다_느려지지_않는다() -> None:
     """min() 이므로 어떤 거리에서도 기존 대중교통 추정보다 크면 안 된다."""
-    cfg = SolverConfig()
+    cfg = AssemblyConfig()
     for km in (0.05, 0.2, 0.5, 0.7, 0.9, 1.2, 2.0, 5.0, 20.0):
         road = km * cfg.detour_factor
         transit_only = int(round(
@@ -82,9 +82,9 @@ def test_도보_치환은_대중교통보다_느려지지_않는다() -> None:
 
 def test_600m_이하는_계산상_대중교통이_빨라도_걷는다() -> None:
     """사람은 600m 를 버스로 가지 않는다 — 속도 상수가 바뀌어도 이 바닥은 유지된다."""
-    cfg = SolverConfig()
+    cfg = AssemblyConfig()
     # 도보를 일부러 느리게 만들어 min() 만으로는 대중교통이 이기게 한다
-    slow = SolverConfig(speeds_kmph={**cfg.speeds_kmph, TransportMode.WALK: 0.5})
+    slow = AssemblyConfig(speeds_kmph={**cfg.speeds_kmph, TransportMode.WALK: 0.5})
     km = cfg.public_walk_max_km - 0.05
     e = TravelEstimator(slow).estimate(
         GeoPoint(35.0, 129.0), GeoPoint(35.0 + km / 111.19, 129.0), TransportMode.PUBLIC)
@@ -92,8 +92,8 @@ def test_600m_이하는_계산상_대중교통이_빨라도_걷는다() -> None:
 
 
 def test_600m_바로_위는_빠른_쪽을_따른다() -> None:
-    cfg = SolverConfig()
-    slow = SolverConfig(speeds_kmph={**cfg.speeds_kmph, TransportMode.WALK: 0.5})
+    cfg = AssemblyConfig()
+    slow = AssemblyConfig(speeds_kmph={**cfg.speeds_kmph, TransportMode.WALK: 0.5})
     km = cfg.public_walk_max_km + 0.05
     e = TravelEstimator(slow).estimate(
         GeoPoint(35.0, 129.0), GeoPoint(35.0 + km / 111.19, 129.0), TransportMode.PUBLIC)

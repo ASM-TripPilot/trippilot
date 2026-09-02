@@ -89,7 +89,7 @@ class PoiCategory(Enum):
 > **ML 후보 2순위 (AI-D05)**: 이 정적 테이블은 **체류 시간 예측 회귀 모델**의 폴백이다. 실측(POI+유저+시간대 → 실제 체류 분)이 쌓이면 회귀로 대체해 시간 예산을 정밀화하되, 실패 시 이 테이블로 폴백(INV-4).
 
 **정정 (2026-08-25, TRIP-530)**: 아래 표는 현 8종+`STAY` 기준으로 재도출했다. 구현 정본은
-`solver_engine/config.py::STAY_DEFAULT_MIN` — `PoiCategory` **전 값을 덮어야 한다**(직접 dict 조회라
+`assembly_engine/config.py::STAY_DEFAULT_MIN` — `PoiCategory` **전 값을 덮어야 한다**(직접 dict 조회라
 누락 시 `KeyError`). 신규 3종의 도출 근거는 구 표(세분 택소노미)를 현 8종으로 접은 것이다.
 
 | 카테고리 | 기본 체류 (분) | 비고 |
@@ -193,7 +193,7 @@ ALLOWED_QUALITY = {DataQuality.FULL, DataQuality.PARTIAL}
 @dataclass(frozen=True)
 class CandidatePool:
     poi_ids: frozenset[str]        # C1 closed-set 화이트리스트
-    pois: list[Poi]                # C2 솔버용 상세 데이터
+    pois: list[Poi]                # C2 어셈블리용 상세 데이터
     generated_at: datetime
     anchor: GeoPoint
     radius_km: float

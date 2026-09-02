@@ -4,7 +4,7 @@
 > 핵심 패턴: **RAG (Retrieval-Augmented Generation)**
 
 > **개정 (2026-08-11, TRIP-332)** — 도구 소유권은 `agent-structure-v2.md`를 정본으로 채택 (근거: 최신 정본 + 도구 겹침 0 원칙). 결정 3항:
-> ① PlanBAgent **전속 도구는 `kb.retrieve_schedule` + `llm.select_alternatives` 2개** — §10의 7개 할당표는 구판(이력 참고용). persona·situation 정보는 Provider→InfoBundle 봉투로 수령하고, 후보 풀·솔버는 각각 PlaceProvider(봉투 내 풀 참조)·4단 공통 관문 소속.
+> ① PlanBAgent **전속 도구는 `kb.retrieve_schedule` + `llm.select_alternatives` 2개** — §10의 7개 할당표는 구판(이력 참고용). persona·situation 정보는 Provider→InfoBundle 봉투로 수령하고, 후보 풀·어셈블리는 각각 PlaceProvider(봉투 내 풀 참조)·4단 공통 관문 소속.
 > ② KB-2(PERSONA)·KB-3(SITUATION)의 Provider 봉투 전환은 **InfoBundle 배선 후속 작업** — 그때까지 현행 retrieve 3종 구현(`ai/src/trippilot/agents/planb/kb_retrieval.py`)은 유지한다 (`KbHit` 이음매 덕에 전환 시 파이프라인 무영향).
 > ③ KB-1 구조화 DB 조회·KB-3 실시간 API로의 실소스 전환은 실데이터 연동 시점에 수행 (1단계는 세 KB 모두 `VectorStorePort` 동형).
 > §1~§9의 KB-1~3 구분·RAG 파이프라인·폴백 계단은 유효하다 — 바뀐 것은 "누가 그 정보를 가져오는가"(도구 소유권)뿐.
@@ -102,10 +102,10 @@ Plan-B는 **이미 있는 정보를 꺼내 와서(Retrieve) + 상황에 맞게 �
     (closed-set 안에서만 선택 — INV-1 유지)
     |
     v
-[5. Validate — 솔버 검증]
-    +→ solver.solve(대안 A) — 병렬
-    +→ solver.solve(대안 B) — 병렬
-    +→ solver.solve(대안 C) — 병렬
+[5. Validate — 어셈블리 검증]
+    +→ assembly.solve(대안 A) — 병렬
+    +→ assembly.solve(대안 B) — 병렬
+    +→ assembly.solve(대안 C) — 병렬
     |
     HC1~HC4 통과한 것만 생존
     |
@@ -255,7 +255,7 @@ def get_user_preference_summary(user_id):
 | 저장 장소 검색 | 저장 장소 0개 | M7 일반 후보로 진행 |
 | 벡터 검색 | 유사 POI 0개 or 벡터 스토어 장애 | M7 카테고리 필터만으로 |
 | LLM 점수 매기기 | 타임아웃 / 파싱 실패 | 규칙 점수 (카테고리+거리+평점) |
-| 솔버 배치 | 3개 대안 모두 HC 위반 | 남은 슬롯 건너뛰기 + 휴식 모드 제안 |
+| 어셈블리 배치 | 3개 대안 모두 HC 위반 | 남은 슬롯 건너뛰기 + 휴식 모드 제안 |
 | 전체 실패 | 위 모두 실패 | "수동으로 일정을 수정하세요" + 수동 편집 화면 |
 
 **원칙**: 어떤 경로든 반드시 응답. 침묵 실패 금지 (INV-4).
@@ -268,11 +268,11 @@ def get_user_preference_summary(user_id):
 |---|---|---|
 | Retrieve 패턴 | M7 후보 풀 (넓게) | RAG: 기존 일정 + 페르소나 + 상황 (좁게, 맥락 있게) |
 | LLM 역할 | 선호 점수 (처음부터 매기기) | 상황 맞는 대안 선택 (이미 있는 정보 기반) |
-| 솔버 역할 | 전체 일정 최적화 | 부분 재배치 (남은 슬롯만) |
+| 어셈블리 역할 | 전체 일정 최적화 | 부분 재배치 (남은 슬롯만) |
 | 벡터 스토어 | 사용 안 함 | 사용 (페르소나 유사도) |
 | 시간 예산 | 20초 | 10초 (급함) |
 
-**공유하는 도구**: M7 후보 조회, solver.solve/validate, LLM 호출
+**공유하는 도구**: M7 후보 조회, assembly.solve/validate, LLM 호출
 **공유하지 않는 것**: RAG 파이프라인, 벡터 스토어, 프롬프트 구조, 판단 기준
 
 ---
@@ -292,7 +292,7 @@ def get_user_preference_summary(user_id):
 ## 10. PlanBAgent 전용 Tool 정의
 
 > ⚠️ **[구판 — agent-structure-v2 §3으로 대체됨 (2026-08-11, TRIP-332)]**
-> 전속 도구는 `kb.retrieve_schedule` · `llm.select_alternatives` **2개**. `kb.retrieve_persona`·`kb.retrieve_situation` → Provider→InfoBundle 봉투 수령, `m7.get_candidates` → PlaceProvider(봉투 내 풀 참조), `solver.solve`·`solver.validate` → 4단 공통 관문. 아래 표·시그니처는 이력 참고용 (전환 일정은 문서 상단 개정 기록 참조).
+> 전속 도구는 `kb.retrieve_schedule` · `llm.select_alternatives` **2개**. `kb.retrieve_persona`·`kb.retrieve_situation` → Provider→InfoBundle 봉투 수령, `m7.get_candidates` → PlaceProvider(봉투 내 풀 참조), `assembly.solve`·`assembly.validate` → 4단 공통 관문. 아래 표·시그니처는 이력 참고용 (전환 일정은 문서 상단 개정 기록 참조).
 
 PlanBAgent의 LLM에는 아래 tool만 할당한다. 토큰 절감 + 역할 경계 강제.
 
@@ -305,8 +305,8 @@ PlanBAgent의 LLM에는 아래 tool만 할당한다. 토큰 절감 + 역할 경�
 | `kb.retrieve_situation` | 트리거 사유 + 현재 위치 + 시각 + 날씨 + POI 상태 조회 | KB-3 Retrieve |
 | `m7.get_candidates` | 현재 위치 반경 내 대안 POI 후보 조회 (closed-set) | 대안 소싱 |
 | `llm.select_alternatives` | 후보 중 상황에 맞는 대안 선택 + 점수 + 이유 (closed-set 안에서만) | Generate 단계 |
-| `solver.solve` | 대안 배치 최적화 (부분 재배치, 남은 슬롯만) | Validate 단계 |
-| `solver.validate` | 대안 배치의 HC1~HC4 검증 | Validate 단계 |
+| `assembly.solve` | 대안 배치 최적화 (부분 재배치, 남은 슬롯만) | Validate 단계 |
+| `assembly.validate` | 대안 배치의 HC1~HC4 검증 | Validate 단계 |
 
 ### 미할당 Tool (나머지 전부)
 
@@ -318,7 +318,7 @@ PlanBAgent의 LLM에는 아래 tool만 할당한다. 토큰 절감 + 역할 경�
 | `llm.parse_intent` | 의도 파악은 Orchestrator 업무 |
 | `m7.source_web` | 여행 중 10초 제한에 웹 소싱은 부적합 |
 | `m7.resolve_entity` | Plan-B는 엔티티 해소 불필요 (시스템 트리거 기반) |
-| `solver.repair` | Plan-B는 새로 배치하지 기존 수리가 아님 |
+| `assembly.repair` | Plan-B는 새로 배치하지 기존 수리가 아님 |
 
 ### Tool 시그니처
 
@@ -357,15 +357,15 @@ def llm_select_alternatives(
     반환: [{selected_pois, order, reason}] — closed-set 안에서만 (INV-1)
     """
 
-# --- Solver Tools ---
+# --- Assembly Tools ---
 
-def solver_solve(problem: PartialItineraryProblem) -> ItinerarySolution | None:
+def assembly_solve(problem: PartialItineraryProblem) -> ItinerarySolution | None:
     """
     남은 슬롯만 대상으로 부분 재배치.
     고정 블록은 불변 (HC3).
     시간 제한: 3초.
     """
 
-def solver_validate(itinerary: ItineraryLike) -> list[Violation]:
+def assembly_validate(itinerary: ItineraryLike) -> list[Violation]:
     """HC1~HC4 검증. 빈 리스트 = 유효."""
 ```

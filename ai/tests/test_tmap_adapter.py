@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from trippilot.solver_engine.adapters.tmap import TmapRouteAdapter
+from trippilot.assembly_engine.adapters.tmap import TmapRouteAdapter
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.ports.travel_time_port import TravelTimeError
 

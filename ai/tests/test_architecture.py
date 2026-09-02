@@ -68,15 +68,15 @@ def test_domain_does_not_import_ports() -> None:
     assert not offenders, f"domain이 ports를 import함(레이어 위반): {offenders}"
 
 
-def test_ortools_only_imported_in_solver_engine() -> None:
-    """U2 DoD: ortools 의존은 solver_engine(C2) 계층에만 (다른 계층 유입 자동 차단)."""
+def test_ortools_only_imported_in_assembly_engine() -> None:
+    """U2 DoD: ortools 의존은 assembly_engine(C2) 계층에만 (다른 계층 유입 자동 차단)."""
     offenders = []
     for py in _SRC.rglob("*.py"):
-        if "solver_engine" in py.parts:
+        if "assembly_engine" in py.parts:
             continue
         if "ortools" in _external_imports(py):
             offenders.append(str(py.relative_to(_SRC)))
-    assert not offenders, f"solver_engine 밖에서 ortools import: {offenders}"
+    assert not offenders, f"assembly_engine 밖에서 ortools import: {offenders}"
 
 
 def test_poi_curation_imports_only_stdlib_and_internal() -> None:
@@ -136,7 +136,7 @@ def test_langsmith_only_imported_in_intent_router() -> None:
 
 
 def test_yaml_only_imported_in_llm_gateway_prompts() -> None:
-    """yaml 파서 의존은 PromptRegistry(llm_gateway/prompts.py) 한정 — ortools→solver_engine과 같은 격리 패턴."""
+    """yaml 파서 의존은 PromptRegistry(llm_gateway/prompts.py) 한정 — ortools→assembly_engine과 같은 격리 패턴."""
     offenders = []
     for py in _SRC.rglob("*.py"):
         if py.parent.name == "llm_gateway" and py.name == "prompts.py":
@@ -170,7 +170,7 @@ _AGENT_LAYER_PREFIXES = (
 def test_lower_layers_do_not_import_agent_layer() -> None:
     """L-1 (BR-AF-10): 하위 계층은 상위(agents·orchestrator·providers·background)를 모른다."""
     offenders: dict[str, set[str]] = {}
-    for subdir in ("domain", "ports", "llm_gateway", "solver_engine", "poi_curation"):
+    for subdir in ("domain", "ports", "llm_gateway", "assembly_engine", "poi_curation"):
         for py in (_SRC / subdir).rglob("*.py"):
             bad = {
                 m
@@ -217,9 +217,9 @@ def test_agents_do_not_import_llm_port() -> None:
     assert not offenders, f"agents가 LlmPort를 직접 import함(L-3 위반): {offenders}"
 
 
-def test_llm_gateway_does_not_import_solver_engine_or_poi_curation() -> None:
+def test_llm_gateway_does_not_import_assembly_engine_or_poi_curation() -> None:
     """BR-U4-09: llm_gateway(C1)는 판단 재료 제공자 — 규칙 점수 폴백 실행은 호출측 몫이라
-    solver_engine(C2)·poi_curation(구 M7) 참조 금지."""
+    assembly_engine(C2)·poi_curation(구 M7) 참조 금지."""
     offenders: dict[str, set[str]] = {}
     for py in (_SRC / "llm_gateway").rglob("*.py"):
         tree = ast.parse(py.read_text(encoding="utf-8"))
@@ -228,8 +228,8 @@ def test_llm_gateway_does_not_import_solver_engine_or_poi_curation() -> None:
             for node in ast.walk(tree)
             if isinstance(node, ast.ImportFrom)
             and node.module
-            and node.module.startswith(("trippilot.solver_engine", "trippilot.poi_curation"))
+            and node.module.startswith(("trippilot.assembly_engine", "trippilot.poi_curation"))
         }
         if bad:
             offenders[str(py.relative_to(_SRC))] = bad
-    assert not offenders, f"llm_gateway가 solver_engine/poi_curation을 import함(경계 위반): {offenders}"
+    assert not offenders, f"llm_gateway가 assembly_engine/poi_curation을 import함(경계 위반): {offenders}"

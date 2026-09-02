@@ -1,10 +1,10 @@
 """TRIP-431 — 편집 경계 (`POST /ai/v1/itinerary/edit`), 자연어·구조화 겸용.
 
 증명하는 것 (실 LLM 0 — UnwiredLlm·데모 시드):
-  ① 비파괴 구조화 명령(MOVE) → APPLIED — 순서 반영 + 시각은 재타이밍·솔버 통과분(INV-2)
+  ① 비파괴 구조화 명령(MOVE) → APPLIED — 순서 반영 + 시각은 재타이밍·어셈블리 통과분(INV-2)
   ② 파괴적 명령(REMOVE) → confirm 없으면 CONFIRM_REQUIRED(명령 에코), confirm=true면 APPLIED
   ③ ADD — 풀 안 POI는 추가되고, 풀 밖 POI는 REJECTED (closed-set, INV-1)
-  ④ 시각 키 params → REJECTED (시각은 솔버 소유)
+  ④ 시각 키 params → REJECTED (시각은 어셈블리 소유)
   ⑤ REPLAN → REJECTED + generate 안내 (1단계 범위 밖)
   ⑥ 자연어 + LLM 미배선 → TRANSLATION_FAILED (자연어 경로만 정직 실패, INV-4)
   ⑦ command·utterance 동시/무송신 → 422
@@ -88,7 +88,7 @@ def _client() -> TestClient:
 # ── ① 비파괴 구조화 → APPLIED ────────────────────────────────────────
 
 
-def test_move_slot_applies_with_solver_passed_times() -> None:
+def test_move_slot_applies_with_assembly_passed_times() -> None:
     with _client() as client:
         response = _post(client, _body(command={
             "op": "MOVE_SLOT", "params": {}, "affected_slots": [_HALLASAN]}))
@@ -98,7 +98,7 @@ def test_move_slot_applies_with_solver_passed_times() -> None:
     slots = body["itinerary"]["days"][0]["slots"]
     assert [s["poi_id"] for s in slots] == [_HALLASAN, _PORK]  # 맨 앞으로 이동
     starts = [s["start_at"] for s in slots]
-    assert starts == sorted(starts)  # 재타이밍 결과 시간순 (솔버 validate 통과분)
+    assert starts == sorted(starts)  # 재타이밍 결과 시간순 (어셈블리 validate 통과분)
 
 
 # ── ② 파괴적 → 확인 게이트 ──────────────────────────────────────────

@@ -14,7 +14,7 @@ flowchart TD
 
     subgraph Core["AI 코어 (Python)"]
         C1["C1 LLM Gateway"]
-        C2["C2 Solver Engine"]
+        C2["C2 Assembly Engine"]
         M7["M7 Place Data"]
     end
 
@@ -43,7 +43,7 @@ flowchart TD
 
 ### M8 depends on C1, C2, M7
 - **Type**: Runtime (서비스 간 API 호출)
-- **Reason**: 일정 생성 오케스트레이션 — 선호 점수(C1) → 솔버 배치(C2) → 후보 풀(M7)
+- **Reason**: 일정 생성 오케스트레이션 — 선호 점수(C1) → 어셈블리 배치(C2) → 후보 풀(M7)
 
 ### M10 depends on C1, C2, M7
 - **Type**: Runtime (서비스 간 API 호출)

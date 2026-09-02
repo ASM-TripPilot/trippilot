@@ -427,7 +427,7 @@
       },
       "EditItineraryResponse": {
         "additionalProperties": false,
-        "description": "편집 결과 — 시각·순서는 APPLIED일 때만, 그것도 솔버 검증값만(INV-2).\n\nREJECTED는 위반 목록 또는 사유를 반드시 싣는다(침묵 거부 금지, INV-4).",
+        "description": "편집 결과 — 시각·순서는 APPLIED일 때만, 그것도 어셈블리 검증값만(INV-2).\n\nREJECTED는 위반 목록 또는 사유를 반드시 싣는다(침묵 거부 금지, INV-4).",
         "properties": {
           "apply_mode": {
             "anyOf": [
@@ -1591,7 +1591,7 @@
       },
       "VisitSlotDisplaySchema": {
         "additionalProperties": false,
-        "description": "표시용 방문 슬롯 — 솔버 검증 시각·순서만(INV-2), 거리만(INV-3).\n\n**소요시간 필드를 추가하지 말 것**: 도메인 `VisitSlot.stay_min`·`score`는\n내부값이라 이 사영에서 의도적으로 제외한다(IO-3).",
+        "description": "표시용 방문 슬롯 — 어셈블리 검증 시각·순서만(INV-2), 거리만(INV-3).\n\n**소요시간 필드를 추가하지 말 것**: 도메인 `VisitSlot.stay_min`·`score`는\n내부값이라 이 사영에서 의도적으로 제외한다(IO-3).",
         "properties": {
           "distance_range": {
             "anyOf": [
@@ -1712,7 +1712,7 @@
     },
     "/ai/v1/itinerary/edit": {
       "post": {
-        "description": "일정 편집 (TRIP-431) — 자연어·구조화 겸용, 단일 처리 로직 수렴.\n\n번역(자연어)·검증(closed-set)·확인 게이트·재타이밍·솔버 검증을 거쳐\n통과분만 반영한다(INV-1·2·4). 구형 조립은 503 명시 실패.",
+        "description": "일정 편집 (TRIP-431) — 자연어·구조화 겸용, 단일 처리 로직 수렴.\n\n번역(자연어)·검증(closed-set)·확인 게이트·재타이밍·어셈블리 검증을 거쳐\n통과분만 반영한다(INV-1·2·4). 구형 조립은 503 명시 실패.",
         "operationId": "edit_ai_v1_itinerary_edit_post",
         "requestBody": {
           "content": {

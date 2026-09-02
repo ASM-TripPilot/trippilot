@@ -8,7 +8,7 @@
   ③ 실효 반경 공식 — 이동수단 기본 × 취향 계수, clamp [3,40]
   ④ 적합 조견표 — 교집합 있으면 1.0, OTHER·무취향은 0 (보너스 없음)
   ⑤ 보너스 맵 — 선형 감쇠, 다중 행사는 max 채택, 좌표 없는 행사 건너뜀, 양수만
-  [솔버]
+  [어셈블리]
   ⑥ 근소 갭에서 보너스 POI가 선택된다 (OR-Tools·폴백 동일 규칙), 큰 갭은 서열 유지
   ⑦ 무보정 회귀: event_bonus=None ↔ 빈 맵 동일 해 + 직렬화 왕복·하위호환
 """
@@ -19,10 +19,10 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.ortools_solver import OrToolsSolver
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -170,9 +170,9 @@ def test_bonus_map_skips_unfit_far_and_coordless_events() -> None:
                            taste_tags=(TasteTag.ACTIVITY,)) == {}  # 좌표 없음
 
 
-# ── ⑥·⑦ 솔버 — 근소 갭 재배치·무보정 회귀 ───────────────────────────
+# ── ⑥·⑦ 어셈블리 — 근소 갭 재배치·무보정 회귀 ───────────────────────────
 
-_CFG = SolverConfig(or_tools_limit_ms=2000, or_tools_min_ms=50)
+_CFG = AssemblyConfig(or_tools_limit_ms=2000, or_tools_min_ms=50)
 _EST = TravelEstimator(_CFG)
 
 
@@ -196,24 +196,24 @@ def _picked(solution) -> set[str]:
     return {str(s.poi_id) for d in solution.days for s in d.slots}
 
 
-@pytest.mark.parametrize("solver_cls", [OrToolsSolver, RuleFallbackSolver])
-def test_bonus_flips_near_tie_but_not_big_gap(solver_cls) -> None:
+@pytest.mark.parametrize("assembly_cls", [OrToolsAssembler, RuleFallbackAssembler])
+def test_bonus_flips_near_tie_but_not_big_gap(assembly_cls) -> None:
     bonus = {PoiId("b"): 1.0}  # 열세 후보에 행사 보너스 (스케일 0.15 > 갭 0.05)
     problem, index = _problem(bonus)
-    solver = solver_cls(index, _EST, _CFG)
-    assert _picked(solver.solve(problem, 2000)) == {"b"}
+    assembly = assembly_cls(index, _EST, _CFG)
+    assert _picked(assembly.solve(problem, 2000)) == {"b"}
 
     # 갭이 한 단(0.3) 이상이면 서열 유지 — 보너스가 취향을 압도하지 않는다
     problem_big, index = _problem(bonus, gap=0.4)
-    assert _picked(solver_cls(index, _EST, _CFG).solve(problem_big, 2000)) == {"a"}
+    assert _picked(assembly_cls(index, _EST, _CFG).solve(problem_big, 2000)) == {"a"}
 
 
-@pytest.mark.parametrize("solver_cls", [OrToolsSolver, RuleFallbackSolver])
-def test_none_and_empty_bonus_are_identical(solver_cls) -> None:
+@pytest.mark.parametrize("assembly_cls", [OrToolsAssembler, RuleFallbackAssembler])
+def test_none_and_empty_bonus_are_identical(assembly_cls) -> None:
     p_none, index = _problem(None)
     p_empty, _ = _problem({})
-    solver = solver_cls(index, _EST, _CFG)
-    assert solver.solve(p_none, 2000) == solver.solve(p_empty, 2000)
+    assembly = assembly_cls(index, _EST, _CFG)
+    assert assembly.solve(p_none, 2000) == assembly.solve(p_empty, 2000)
 
 
 def test_problem_serialization_roundtrip_and_backward_compat() -> None:

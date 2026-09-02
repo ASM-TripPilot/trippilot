@@ -71,7 +71,7 @@ class EditTranslation:
     """번역 결과 = 명령 초안 + **코드가 확정한** 반영 모드 (u4 FD domain-entities §4).
 
     LLM이 제안한 applyMode는 여기 도달하지 못한다 (게이트가 버리고 재계산).
-    솔버 검증·실제 반영은 EditAgent(U5) 몫 — 이 타입은 초안까지다 (INV-2).
+    어셈블리 검증·실제 반영은 EditAgent(U5) 몫 — 이 타입은 초안까지다 (INV-2).
     """
 
     command: EditCommand

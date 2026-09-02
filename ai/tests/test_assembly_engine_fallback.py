@@ -1,7 +1,7 @@
-"""U2 — HC 검증기 + 규칙 폴백 솔버 PBT.
+"""U2 — HC 검증기 + 규칙 폴백 어셈블리 PBT.
 
 증명하는 것:
-  ① U5-P1(그리디판): 임의 problem에서 RuleFallbackSolver 출력은 HC1~4 위반 0
+  ① U5-P1(그리디판): 임의 problem에서 RuleFallbackAssembler 출력은 HC1~4 위반 0
   ② U5-P3        : 동일 입력 → 동일 출력 (결정론)
   ③ HC 검증기     : 위반을 실제로 잡는다 (4종 각각 음성 케이스)
   ④ INV-4        : 폴백 해는 폴백 모드로 정직하게 태깅됨 (U1 정합 규칙과 결합)
@@ -14,10 +14,10 @@ from datetime import date, datetime, timedelta, timezone
 
 from hypothesis import given, settings
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.constraints import check_all, check_hc1, check_hc2, check_hc3, check_hc4
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.constraints import check_all, check_hc1, check_hc2, check_hc3, check_hc4
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -36,37 +36,37 @@ from trippilot.domain.itinerary import (
 )
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
-from tests.generators.solver import solver_setups
+from tests.generators.assembly import assembly_setups
 
 _KST = timezone(timedelta(hours=9))
-_CFG = SolverConfig()
+_CFG = AssemblyConfig()
 _EST = TravelEstimator(_CFG)
 
 
-# ① 폴백 솔버 출력은 항상 HC 통과 (U5-P1 그리디판)
+# ① 폴백 어셈블리 출력은 항상 HC 통과 (U5-P1 그리디판)
 @settings(max_examples=60)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_fallback_solution_passes_all_hard_constraints(setup) -> None:
     problem, index = setup
-    solution = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     assert check_all(solution, problem, index, _EST) == []
 
 
 # ② 결정론 (U5-P3)
 @settings(max_examples=30)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_fallback_is_deterministic(setup) -> None:
     problem, index = setup
-    solver = RuleFallbackSolver(index, _EST, _CFG)
-    assert solver.solve(problem) == solver.solve(problem)
+    assembly = RuleFallbackAssembler(index, _EST, _CFG)
+    assert assembly.solve(problem) == assembly.solve(problem)
 
 
 # ④ 폴백 정직성 — is_fallback=True + 폴백 모드 (U1 출처 정합과 맞물림)
 @settings(max_examples=30)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_fallback_mode_is_honest(setup) -> None:
     problem, index = setup
-    solution = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     assert solution.is_fallback is True
     assert solution.solve_mode in (SolveMode.RULE_FALLBACK, SolveMode.MINIMAL)
 
@@ -100,7 +100,7 @@ def _solution(*slots):
     return ItinerarySolution(
         schedule_id=ScheduleId("s"),
         days=(DaySolution(date(2026, 8, 5), tuple(slots), ()),),
-        is_fallback=True, solve_mode=SolveMode.RULE_FALLBACK, solver_run=None)
+        is_fallback=True, solve_mode=SolveMode.RULE_FALLBACK, assembly_run=None)
 
 
 def test_hc1_catches_out_of_hours() -> None:
@@ -150,7 +150,7 @@ def _fixed(poi_id, h1, m1, h2, m2):
 def test_fallback_populates_placed_fixed_blocks() -> None:
     d, poi_a, _, problem, index = _fixture()
     fb = _fixed(poi_a.poi_id, 10, 0, 11, 0)  # poi_a 영업(10~18시) 안
-    solution = RuleFallbackSolver(index, _EST, _CFG).solve(
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(
         replace(problem, fixed_blocks=(fb,))
     )
     (day,) = solution.days
@@ -170,7 +170,7 @@ def test_fallback_unplaced_fixed_block_is_not_exposed() -> None:
                      TimeWindow(datetime(2026, 8, 6, 10, 0, tzinfo=_KST),
                                 datetime(2026, 8, 6, 11, 0, tzinfo=_KST)),
                      "user_fixed")
-    solution = RuleFallbackSolver(index, _EST, _CFG).solve(
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(
         replace(problem, days=(d, date(2026, 8, 6)), fixed_blocks=(fb1, fb2))
     )
     day1, day2 = solution.days
@@ -181,10 +181,10 @@ def test_fallback_unplaced_fixed_block_is_not_exposed() -> None:
 
 # TRIP-343 PBT — fixed_blocks는 "그 일자에 정확히 배치된 문제 고정 블록"과 일치
 @settings(max_examples=60)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_fallback_fixed_blocks_mirror_placed_slots(setup) -> None:
     problem, index = setup
-    solution = RuleFallbackSolver(index, _EST, _CFG).solve(problem)
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
     for day in solution.days:
         placed = {(s.poi_id, s.start_at, s.end_at) for s in day.slots}
         # 건전성: 노출된 블록은 전부 문제의 고정 블록이고 실제 배치돼 있다

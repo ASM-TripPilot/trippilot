@@ -1,7 +1,7 @@
 """오케스트레이터 실배선 — 조립 전용 모듈 (U5-05, TRIP-241).
 
 역할은 둘뿐이다:
-1. 실 구성요소(M7 CandidatePoolBuilder · C1 게이트웨이+워커 · C2 HybridSolverFacade)로
+1. 실 구성요소(M7 CandidatePoolBuilder · C1 게이트웨이+워커 · C2 HybridAssemblyFacade)로
    `ItineraryOrchestrator`(TRIP-237)를 조립한다. **외부 의존(LLM·POI DB·컨텍스트 저장소)은
    전부 인자**다 — 지금은 fake를 꽂고, 실 어댑터가 생기면 그 인자만 바뀐다.
 2. API Protocol(`api/protocols.py`)과 실 오케스트레이터의 간극을 어댑터로 메운다.
@@ -14,7 +14,7 @@ Protocol ↔ 실 오케스트레이터 간극과 어댑트 방식:
 - 반환형: `GenerationOutcome` ↔ `ItineraryOutcome` 봉투 → `WiredOutcome`으로 감싼다.
   FAILED는 봉투가 아니라 **예외**로 승격한다(errors.map_exception이 409/403/500으로
   번역 — 200으로 위장하면 백엔드가 폴백하지 않는다, PR #104).
-- validate/repair: 실 오케스트레이터에 없다 → C2 공개 경계(`HybridSolverFacade`)로
+- validate/repair: 실 오케스트레이터에 없다 → C2 공개 경계(`HybridAssemblyFacade`)로
   직접 배선한다. 와이어 일정(ItineraryPayload)을 도메인 해로 복원해 검증·수리한다.
 - `RepairResult.changes`는 `RepairChange` 구조체 → 표시 문자열로 렌더한다(시각만,
   소요시간 미언급 — INV-3).
@@ -29,7 +29,7 @@ generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아
   표시 문자열(BR-U2-08, "약 1.2km · 도보 추정"). 거리만 — 소요시간류 절대 미포함(INV-3).
   좌표를 모르는 구간(미등록 POI·앵커 없는 날)은 산출하지 않는다.
 - `unplaced_must_visits`(TRIP-350): 요청 fixed_blocks **대 응답 해 대조**로만 판정한다
-  (솔버 내부 무수정 — judge_unplaced_must_visits 참조). 침묵 드롭(TRIP-328) 해소:
+  (어셈블리 내부 무수정 — judge_unplaced_must_visits 참조). 침묵 드롭(TRIP-328) 해소:
   기간 밖 블록은 HC3가 스킵해 200에서 조용히 사라졌었다 — 이제 사유와 함께 회신된다.
   409(해소 불가 모순) 경로는 그대로다 — 이 필드는 200 부분 성공의 보고 채널일 뿐이다.
 
@@ -81,12 +81,12 @@ from trippilot.domain.reflection import (
     VisitRecord, VisitRef,
 )
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.facade import HybridSolverFacade, SolverConflictError
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.ortools_solver import OrToolsSolver
-from trippilot.solver_engine.repair import RepairChange
-from trippilot.solver_engine.travel import TravelEstimator, haversine_km
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.facade import HybridAssemblyFacade, AssemblyConflictError
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+from trippilot.assembly_engine.repair import RepairChange
+from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -316,7 +316,7 @@ def judge_unplaced_must_visits(
 ) -> tuple[UnplacedMustVisit, ...]:
     """generate 응답의 `unplaced_must_visits` 판정 — 증명 가능한 것만 보고한다.
 
-    판정은 **요청(fixed_blocks) 대비 응답(해)** 대조뿐이다(솔버 내부 무수정):
+    판정은 **요청(fixed_blocks) 대비 응답(해)** 대조뿐이다(어셈블리 내부 무수정):
     - 배치됨: 해당 일자에 poi·시각 정확 일치 슬롯 존재(HC3와 동일 기준) → 보고 제외
     - `OUT_OF_RANGE`: 블록 날짜가 여행 기간(trip_context.start~end) 밖 —
       요청 시점에 확정 판정 가능(어느 호출도 배치할 수 없다)
@@ -528,10 +528,10 @@ def _failure_exception(error: str) -> Exception:
     """FAILED(GenerationOutcome) → 경계 예외. errors.map_exception이 상태코드로 번역.
 
     오케스트레이터는 예외를 삼켜 문자열로 수렴시키므로(INV-4), 어댑터가 접두사로
-    원 유형을 복원한다 — solver_conflict→409(d08), permission_denied→403, 나머지 500.
+    원 유형을 복원한다 — assembly_conflict→409(d08), permission_denied→403, 나머지 500.
     """
-    if error.startswith("solver_conflict"):
-        return SolverConflictError(error)
+    if error.startswith("assembly_conflict"):
+        return AssemblyConflictError(error)
     if error.startswith("permission_denied"):
         return PermissionDeniedError(error)
     return RuntimeError(error)
@@ -579,7 +579,7 @@ def _solution_from_payload(
         days=tuple(days),
         is_fallback=payload.is_fallback,
         solve_mode=_solve_mode_from(payload.solve_mode),
-        solver_run=None,
+        assembly_run=None,
     )
 
 
@@ -615,27 +615,27 @@ def _problem_for(solution: ItinerarySolution, tz: timezone) -> ItineraryProblem:
 # ── C2 체인 조립 (요청 스코프) ───────────────────────────────────────
 
 
-class ChainSolverProvider:
-    """SolverProvider — 풀이 요청마다 다르므로 퍼사드를 요청 스코프로 조립한다.
+class ChainAssemblyProvider:
+    """AssemblyProvider — 풀이 요청마다 다르므로 퍼사드를 요청 스코프로 조립한다.
 
     체인 = OR-Tools(1차) → 규칙 폴백(최후 보루, required_ms=0 — INV-4 구조 보장).
-    LLM 2차 단계(LlmSolver)는 미배선: 솔버 프롬프트 정본·모델 설정이 아직 없다 —
+    LLM 2차 단계(LlmAssembler)는 미배선: 어셈블리 프롬프트 정본·모델 설정이 아직 없다 —
     실 LLM 어댑터와 함께 붙인다(빠진 단계는 체인 강등이 아니라 기능 부재).
     """
 
     def __init__(self, estimator: TravelEstimator, clock: core.Clock,
-                 trace: TracePort, config: SolverConfig) -> None:
+                 trace: TracePort, config: AssemblyConfig) -> None:
         self._est = estimator
         self._clock = clock
         self._trace = trace
         self._cfg = config
 
-    def for_pool(self, poi_index: Mapping[PoiId, Poi]) -> HybridSolverFacade:
+    def for_pool(self, poi_index: Mapping[PoiId, Poi]) -> HybridAssemblyFacade:
         stages = (
-            OrToolsSolver(poi_index, self._est, self._cfg),
-            RuleFallbackSolver(poi_index, self._est, self._cfg),
+            OrToolsAssembler(poi_index, self._est, self._cfg),
+            RuleFallbackAssembler(poi_index, self._est, self._cfg),
         )
-        return HybridSolverFacade(stages, poi_index, self._est, self._clock, self._trace)
+        return HybridAssemblyFacade(stages, poi_index, self._est, self._clock, self._trace)
 
 
 # ── 경계 어댑터 (api/protocols.ItineraryOrchestrator 충족) ───────────
@@ -647,7 +647,7 @@ class WiredItineraryOrchestrator:
     def __init__(
         self,
         orchestrator: core.ItineraryOrchestrator,
-        solver_provider: ChainSolverProvider,
+        assembly_provider: ChainAssemblyProvider,
         poi_db: object,
         estimator: TravelEstimator,
         tz: timezone = KST,
@@ -662,7 +662,7 @@ class WiredItineraryOrchestrator:
         trace: TracePort,
     ) -> None:
         self._orchestrator = orchestrator
-        self._solvers = solver_provider
+        self._assembly_provider = assembly_provider
         self._poi_db = poi_db
         self._estimator = estimator
         self._tz = tz
@@ -736,7 +736,7 @@ class WiredItineraryOrchestrator:
         solution, problem, poi_index, unverified = self._reconstruct(
             request.itinerary, request.request_meta
         )
-        facade = self._solvers.for_pool(poi_index)
+        facade = self._assembly_provider.for_pool(poi_index)
         return WiredValidateOutcome(
             violations=tuple(facade.validate(
                 solution, problem, _deadline_budget(request.request_meta),
@@ -749,7 +749,7 @@ class WiredItineraryOrchestrator:
         solution, problem, poi_index, unverified = self._reconstruct(
             request.itinerary, request.request_meta
         )
-        facade = self._solvers.for_pool(poi_index)
+        facade = self._assembly_provider.for_pool(poi_index)
         result = facade.repair(
             solution, problem, _deadline_budget(request.request_meta),
             TraceId(request.request_meta.request_id),
@@ -892,10 +892,10 @@ class WiredItineraryOrchestrator:
     def edit(
         self, request: schemas.EditItineraryRequest
     ) -> schemas.EditItineraryResponse:
-        """일정 편집 (TRIP-431) — 번역/검증 → 확인 게이트 → 재타이밍 → 솔버 검증.
+        """일정 편집 (TRIP-431) — 번역/검증 → 확인 게이트 → 재타이밍 → 어셈블리 검증.
 
         자연어·구조화가 같은 처리 로직으로 수렴한다(팀 결정 2026-08-22). 사용자
-        노출 시각은 재타이밍 결과 중 **솔버 validate 통과분만**(INV-2), 거부는
+        노출 시각은 재타이밍 결과 중 **어셈블리 validate 통과분만**(INV-2), 거부는
         위반 목록·사유와 함께(INV-4), 후보 자격은 closed-set 풀 교차(INV-1).
         """
         meta = request.request_meta
@@ -1009,8 +1009,8 @@ class WiredItineraryOrchestrator:
                 apply_mode=apply_mode.value, reason=str(e),
             )
 
-        # ④ 솔버 검증 — 통과분만 노출 (INV-2)
-        facade = self._solvers.for_pool(merged_index)
+        # ④ 어셈블리 검증 — 통과분만 노출 (INV-2)
+        facade = self._assembly_provider.for_pool(merged_index)
         violations = facade.validate(
             mutated, _problem_for(mutated, self._tz),
             _deadline_budget(meta), trace_id,
@@ -1126,7 +1126,7 @@ def build_orchestrator(
     context_store: ContextStore,
     c1_config: C1Config,
     m7_config: M7Config | None = None,
-    solver_config: SolverConfig | None = None,
+    assembly_config: AssemblyConfig | None = None,
     orchestrator_config: core.OrchestratorConfig | None = None,
     clock: core.Clock | None = None,
     trace: TracePort | None = None,
@@ -1148,13 +1148,13 @@ def build_orchestrator(
     """
     clock = clock if clock is not None else MonotonicClock()
     trace = trace if trace is not None else LoggingTrace()
-    scfg = solver_config if solver_config is not None else SolverConfig()
+    acfg = assembly_config if assembly_config is not None else AssemblyConfig()
     renderer = PromptRegistry(prompts_root if prompts_root is not None else _PROMPTS_ROOT)
     resolver = ContextResolver(context_store)
-    estimator = TravelEstimator(scfg)
+    estimator = TravelEstimator(acfg)
     # travel_port 주입 시 ChainedTravelAdapter 등 실경로 어댑터 사용 (TRIP-432)
     travel = travel_port if travel_port is not None else estimator
-    provider = ChainSolverProvider(estimator, clock, trace, scfg)
+    provider = ChainAssemblyProvider(estimator, clock, trace, acfg)
     # 수집 계층 (TRIP-406·407) — 풀·페르소나 상시, 날씨는 포트 주입 시에만 등록.
     # 페르소나 재조회도 같은 resolver — 보안 규칙의 권위 1곳 (TRIP-333·BR-U4-07).
     pool_builder = CandidatePoolBuilder(

@@ -1,4 +1,4 @@
-"""U2 — OrToolsSolver 정식판 + 예산 단조(U5-P6).
+"""U2 — OrToolsAssembler 정식판 + 예산 단조(U5-P6).
 
 증명하는 것:
   ① OR-Tools 출력도 HC1~4 위반 0 (U5-P1 — 1차 단계 판)
@@ -17,13 +17,13 @@ from unittest.mock import patch
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.constraints import check_all
-from trippilot.solver_engine.facade import HybridSolverFacade
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver
-from trippilot.solver_engine.ortools_solver import OrToolsSolver
-from trippilot.solver_engine.scorer import budget_fit
-from trippilot.solver_engine.travel import TravelEstimator
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.constraints import check_all
+from trippilot.assembly_engine.facade import HybridAssemblyFacade
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
+from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+from trippilot.assembly_engine.scorer import budget_fit
+from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -42,20 +42,20 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.in_memory_trace import InMemoryTrace
-from tests.generators.solver import solver_setups
+from tests.generators.assembly import assembly_setups
 
 # 테스트용 짧은 리밋 — 소규모(≤8 노드)는 수십 ms에 OPTIMAL 도달
-_CFG = SolverConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
+_CFG = AssemblyConfig(or_tools_limit_ms=1000, or_tools_min_ms=50)
 _EST = TravelEstimator(_CFG)
 _KST = timezone(timedelta(hours=9))
 
 
 # ① 출력 유효성 (U5-P1 — OR-Tools 판)
 @settings(max_examples=15, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_ortools_output_passes_all_hard_constraints(setup) -> None:
     problem, index = setup
-    result = OrToolsSolver(index, _EST, _CFG).solve(problem, remaining_ms=1500)
+    result = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=1500)
     if result is None:  # 시간창 불가 등 — 체인이 처리할 영역
         return
     assert check_all(result, problem, index, _EST) == []
@@ -65,21 +65,21 @@ def test_ortools_output_passes_all_hard_constraints(setup) -> None:
 
 # ② 결정론 (U5-P3)
 @settings(max_examples=8, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_ortools_is_deterministic(setup) -> None:
     problem, index = setup
-    solver = OrToolsSolver(index, _EST, _CFG)
-    assert solver.solve(problem, 1500) == solver.solve(problem, 1500)
+    assembly = OrToolsAssembler(index, _EST, _CFG)
+    assert assembly.solve(problem, 1500) == assembly.solve(problem, 1500)
 
 
 # ③ 체인 통합 — OR-Tools가 해를 내면 그것이 선택됨 (출처 보존)
 @settings(max_examples=8, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_chain_prefers_ortools_when_feasible(setup) -> None:
     problem, index = setup
-    chain = [OrToolsSolver(index, _EST, _CFG),
-             RuleFallbackSolver(index, _EST, _CFG)]
-    facade = HybridSolverFacade(chain, index, _EST, FakeClock(), InMemoryTrace())
+    chain = [OrToolsAssembler(index, _EST, _CFG),
+             RuleFallbackAssembler(index, _EST, _CFG)]
+    facade = HybridAssemblyFacade(chain, index, _EST, FakeClock(), InMemoryTrace())
     result = facade.solve(problem, deadline_ms=5000)
     # OR-Tools가 유효 해를 내면 OR_TOOLS, 아니면 폴백 — 어느 쪽이든 유효해야 함
     assert facade.validate(result, problem, deadline_ms=1000) == []
@@ -118,18 +118,18 @@ _NARROWED_BY_GREEDY_HINT = {"days", "candidates", "fixed_blocks"}
 
 
 @settings(max_examples=10, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_greedy_hint_subproblem_carries_over_untouched_fields(setup) -> None:
     problem, index = setup
     captured: list = []
-    original = RuleFallbackSolver.solve
+    original = RuleFallbackAssembler.solve
 
     def capturing(self, sub, *args, **kwargs):
         captured.append(sub)
         return original(self, sub, *args, **kwargs)
 
-    with patch.object(RuleFallbackSolver, "solve", capturing):
-        OrToolsSolver(index, _EST, _CFG)._greedy_hint(problem, problem.days[0], set())
+    with patch.object(RuleFallbackAssembler, "solve", capturing):
+        OrToolsAssembler(index, _EST, _CFG)._greedy_hint(problem, problem.days[0], set())
 
     assert len(captured) == 1
     sub = captured[0]
@@ -174,7 +174,7 @@ def _fixed_setup():
 
 def test_ortools_populates_placed_fixed_blocks() -> None:
     problem, index, fb = _fixed_setup()
-    result = OrToolsSolver(index, _EST, _CFG).solve(problem, remaining_ms=1500)
+    result = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=1500)
     assert result is not None  # 소형 가해 문제 — 해가 있어야 한다
     (day,) = result.days
     assert day.fixed_blocks == (fb,)  # 회귀: 상시 () 결함 (TRIP-343)
@@ -185,10 +185,10 @@ def test_ortools_populates_placed_fixed_blocks() -> None:
 
 # TRIP-343 PBT — fixed_blocks는 "그 일자에 정확히 배치된 문제 고정 블록"과 일치
 @settings(max_examples=15, deadline=None)
-@given(setup=solver_setups())
+@given(setup=assembly_setups())
 def test_ortools_fixed_blocks_mirror_placed_slots(setup) -> None:
     problem, index = setup
-    result = OrToolsSolver(index, _EST, _CFG).solve(problem, remaining_ms=1500)
+    result = OrToolsAssembler(index, _EST, _CFG).solve(problem, remaining_ms=1500)
     if result is None:  # 시간창 불가 등 — 체인이 처리할 영역
         return
     for day in result.days:

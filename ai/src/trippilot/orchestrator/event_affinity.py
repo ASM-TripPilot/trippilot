@@ -2,7 +2,7 @@
 
 설계 확정(대화 2026-08-20):
 - **점수 분리**: POI 선호 점수는 행사를 모른다(프롬프트 무접촉 — 취향 오염 방지).
-  행사는 여기서 계산한 보너스 맵으로 솔버 소프트 항에만 들어간다.
+  행사는 여기서 계산한 보너스 맵으로 어셈블리 소프트 항에만 들어간다.
 - **양수만**: 행사가 취향에 맞으면 근처 POI에 보너스, 안 맞으면 0 — 감점 경로
   없음("행사 싫어도 광안리는 간다").
 - **거리 감쇠**: 행사에 가까운 POI일수록 큰 보너스 — 선형 (1 − 거리/부착반경).
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
-from trippilot.solver_engine.travel import haversine_km
+from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId, TransportMode
 from trippilot.domain.event import EventInfo, EventType
 from trippilot.domain.persona import TasteTag
@@ -72,7 +72,7 @@ def event_bonus_map(
     transport: TransportMode,
     taste_tags: tuple[TasteTag, ...],
 ) -> dict[PoiId, float]:
-    """행사 → 근접 POI 보너스 맵 [0,1]. 스케일링(한 단 미만 크기)은 솔버 config 몫.
+    """행사 → 근접 POI 보너스 맵 [0,1]. 스케일링(한 단 미만 크기)은 어셈블리 config 몫.
 
     같은 POI에 행사가 여럿 걸리면 최대값 채택 — 합산하면 밀집 지역이 인플레된다.
     좌표 없는 행사는 부착 불가로 건너뛴다 (목록 자체는 패킷에 남아 있다).

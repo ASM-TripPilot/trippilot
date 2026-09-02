@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import zlib
 
-from trippilot.solver_engine.travel import haversine_km
+from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import BudgetLevel, GeoPoint
 from trippilot.domain.poi import Poi, PoiCategory
 

@@ -1,7 +1,7 @@
-"""OrToolsSolver — 체인 1차 단계 (CP-SAT, 미결 #3 확정 · 벤치마크 모델의 정식판).
+"""OrToolsAssembler — 체인 1차 단계 (CP-SAT, 미결 #3 확정 · 벤치마크 모델의 정식판).
 
 벤치마크에서 실증된 구성 그대로:
-- 그리디(RuleFallbackSolver) 해를 웜스타트 힌트로 → 단일 워커에서도 즉시 가능해
+- 그리디(RuleFallbackAssembler) 해를 웜스타트 힌트로 → 단일 워커에서도 즉시 가능해
 - 단일 워커 + 시드 고정 = 결정론 (다중 워커는 결정론 붕괴 — audit 2026-07-29 교훈)
 - 후보 > 60은 점수 상위 60 프리필터 (이동행렬 O(N²) 방지)
 
@@ -19,13 +19,13 @@ from typing import Mapping
 
 from ortools.sat.python import cp_model
 
-from trippilot.solver_engine.config import (
+from trippilot.assembly_engine.config import (
     RAIN_INDOOR,
     RAIN_OUTDOOR,
     STAY_DEFAULT_MIN,
-    SolverConfig,
+    AssemblyConfig,
 )
-from trippilot.solver_engine.fallback_solver import RuleFallbackSolver, placed_fixed_blocks
+from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler, placed_fixed_blocks
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -44,13 +44,13 @@ def _mod(dt: datetime) -> int:
     return dt.hour * 60 + dt.minute
 
 
-class OrToolsSolver:
+class OrToolsAssembler:
     """ChainStage. required_ms = config.or_tools_min_ms."""
 
     name = "or_tools"
 
     def __init__(self, poi_index: Mapping[PoiId, Poi],
-                 estimator, config: SolverConfig) -> None:
+                 estimator, config: AssemblyConfig) -> None:
         self._pois = poi_index
         self._est = estimator
         self._cfg = config
@@ -76,7 +76,7 @@ class OrToolsSolver:
             days=tuple(days_out),
             is_fallback=False,
             solve_mode=SolveMode.OR_TOOLS,
-            solver_run=None,
+            assembly_run=None,
         )
 
     # ── 일자 단위 CP-SAT ──────────────────────────────────────
@@ -184,21 +184,21 @@ class OrToolsSolver:
                 m.AddHint(start[i], min(max(start_min, nodes[i]["lo"]),
                                         max(nodes[i]["lo"], nodes[i]["hi"])))
 
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = min(
+        cp_solver = cp_model.CpSolver()
+        cp_solver.parameters.max_time_in_seconds = min(
             self._cfg.or_tools_limit_ms, budget_ms) / 1000.0
-        solver.parameters.random_seed = problem.seed % (2**31)
-        solver.parameters.num_search_workers = 1  # 결정론 (FD §4)
-        status = solver.Solve(m)
+        cp_solver.parameters.random_seed = problem.seed % (2**31)
+        cp_solver.parameters.num_search_workers = 1  # 결정론 (FD §4)
+        status = cp_solver.Solve(m)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             return None
 
         slots = []
         base = datetime(day.year, day.month, day.day, tzinfo=tz)
         for i, n in enumerate(nodes):
-            if not solver.Value(visit[i]):
+            if not cp_solver.Value(visit[i]):
                 continue
-            s_min = solver.Value(start[i])
+            s_min = cp_solver.Value(start[i])
             slots.append(VisitSlot(
                 poi_id=n["poi"].poi_id,
                 start_at=base + timedelta(minutes=s_min),
@@ -219,7 +219,7 @@ class OrToolsSolver:
         바닥. 고정 허용치만 쓰면 일 단위 순차 풀이에서 앞날들이 페널티를 피해
         미룬 몫이 마지막 날에 몰린다(청주 08-12 실측: 2/5/7 캐스케이드). 공정 몫
         바닥이면 전량 배치 상황에선 균등 분산을 유도하고, 넉넉한 풀에선 설정값이
-        그대로 작동한다 — 원칙: 솔버는 풀 비중 이상으로 증폭하지 않는다(그 이상의
+        그대로 작동한다 — 원칙: 어셈블리는 풀 비중 이상으로 증폭하지 않는다(그 이상의
         다양성은 수집·풀 구성 책임). 식사 보정과 직교 — 그쪽은 FOOD의 시각·인접,
         이쪽은 전 카테고리의 **개수**. 어느 항도 방문 가능성 자체를 제약하지
         않으므로 HC1~4 충족 해 집합은 불변(검증기 무접촉). 초과 변수는 하한만
@@ -247,7 +247,7 @@ class OrToolsSolver:
                          arcs) -> list:
         """식사 시간대 소프트 보정 항 (TRIP-379 — 하드 제약 아님, 목적함수만).
 
-        규칙(폴백 솔버와 동일 의미):
+        규칙(폴백 어셈블리와 동일 의미):
           ① 각 식사 창(점심·저녁)에 FOOD 슬롯이 1개 배치되면 창당 +meal_bonus
           ② 창 밖 FOOD 배치는 건당 -meal_penalty
           ③ FOOD→FOOD 연속 배치(인접 아크)는 건당 -meal_penalty
@@ -275,7 +275,7 @@ class OrToolsSolver:
                     continue  # 이 창 안 배치가 시간창상 불가능 — 변수 생략
                 b = m.NewBoolVar(f"meal{w_idx}_{i}")
                 # b ⇒ (방문 ∧ 슬롯이 창 안에 완전 포함). 역방향 함의는 불필요 —
-                # b=1이 보상·감면으로만 작용하므로 유리하면 솔버가 스스로 세운다.
+                # b=1이 보상·감면으로만 작용하므로 유리하면 어셈블리가 스스로 세운다.
                 m.AddImplication(b, visit[i])
                 m.Add(start[i] >= lo).OnlyEnforceIf(b)
                 m.Add(start[i] + n["stay"] <= hi).OnlyEnforceIf(b)
@@ -302,7 +302,7 @@ class OrToolsSolver:
     def _rain_soft_terms(self, problem, day, nodes, visit) -> list:
         """날씨 소프트 보정 항 (TRIP-383 — 식사 보정(_meal_soft_terms)과 동형).
 
-        규칙(폴백 솔버와 동일 의미): 그 일자 강수확률 ≥ rain_threshold_pct이면
+        규칙(폴백 어셈블리와 동일 의미): 그 일자 강수확률 ≥ rain_threshold_pct이면
           ① 실외(NATURE·NIGHT_VIEW·ACTIVITY) 방문 건당 -rain_outdoor_penalty
           ② 실내(CULTURE·CAFE·SHOPPING) 방문 건당 +rain_indoor_bonus
 
@@ -371,5 +371,5 @@ class OrToolsSolver:
             fixed_blocks=tuple(fb for fb in problem.fixed_blocks
                                if fb.window.start.date() == day),
         )
-        greedy = RuleFallbackSolver(self._pois, self._est, self._cfg).solve(sub)
+        greedy = RuleFallbackAssembler(self._pois, self._est, self._cfg).solve(sub)
         return {s.poi_id: _mod(s.start_at) for d in greedy.days for s in d.slots}

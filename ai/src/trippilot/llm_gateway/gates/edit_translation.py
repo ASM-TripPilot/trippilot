@@ -19,8 +19,8 @@ affectedSlots 일부만 살리면 명령의 의미가 바뀌므로, 대조 집�
      두 진입이 같은 슬롯에 다른 판정을 내지 않는다 (TRIP-431 수렴 결정).
      POI "이름" 문자열은 교차 대상이 아니다 — 이름 해소는 코드(fuzzy match, AI-D04)
      몫이고 그 지점에서 다시 풀 교차된다.
-  ③ params에 시각·소요시간 필드 없음 (INV-3 + INV-2의 시각 측면 — 시각은 솔버 소유).
-     순서·위치 제안은 허용한다: 워커는 제안만 하고 확정은 솔버라는 INV-2 원문 그대로,
+  ③ params에 시각·소요시간 필드 없음 (INV-3 + INV-2의 시각 측면 — 시각은 어셈블리 소유).
+     순서·위치 제안은 허용한다: 워커는 제안만 하고 확정은 어셈블리라는 INV-2 원문 그대로,
      "3번째로 옮겨줘"의 위치는 사용자 요구지 확정 시각이 아니다.
   ④ params는 평면 객체 (중첩 dict·list 금지) — 중첩으로 ②③ 검사를 우회하지 못한다.
 그리고 apply_mode는 LLM 제안을 버리고 코드가 확정한다 (하이브리드 AI-D02):
@@ -49,7 +49,7 @@ from trippilot.domain.edit import (
 from trippilot.domain.llm import CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
 
-# INV-2(시각)·INV-3 방어 — 편집 명령은 "무엇을"만 표현한다 (시각·소요시간은 솔버 소유).
+# INV-2(시각)·INV-3 방어 — 편집 명령은 "무엇을"만 표현한다 (시각·소요시간은 어셈블리 소유).
 # 키 목록이 아니라 **부분 문자열 토큰**으로 본다: 정확 목록은 durationSec·visitMinutes·
 # startAt 같은 변형에 항상 뚫린다 (denylist 완전성은 불가능하므로 넓게 잡고, 과잉 거부는
 # 폴백=결정론 경로로 안전하게 수렴시킨다).
@@ -195,7 +195,7 @@ class EditTranslationGate:
             normalized = _normalize(key)
             if is_time_param_key(key):
                 # 조용히 지우지 않고 명령을 거부한다 (침묵 수정 금지)
-                raise ValueError(f"params에 시각·소요시간 필드: {key!r} — 시각은 솔버가 정함")
+                raise ValueError(f"params에 시각·소요시간 필드: {key!r} — 시각은 어셈블리가 정함")
             if isinstance(value, (dict, list)):
                 raise ValueError(f"params가 평면이 아님: {key!r} (중첩 검사 우회 차단)")
             if _POI_REF_TOKEN in normalized:

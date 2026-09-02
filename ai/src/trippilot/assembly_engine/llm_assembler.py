@@ -1,4 +1,4 @@
-"""LlmSolver — 체인 2차 단계 (U2 FD §2.4, AI-D06/D07).
+"""LlmAssembler — 체인 2차 단계 (U2 FD §2.4, AI-D06/D07).
 
 흐름: 프롬프트 조립 → LlmPort 호출 → 파싱 → closed-set 필터(INV-1)
      (closed set = candidates − excluded_poi_ids — 프롬프트·게이트 양쪽에 동일 적용)
@@ -15,10 +15,10 @@ import json
 from datetime import datetime, timezone
 from typing import Mapping
 
-from trippilot.solver_engine.config import SolverConfig
-from trippilot.solver_engine.constraints import check_all
-from trippilot.solver_engine.fallback_solver import placed_fixed_blocks
-from trippilot.solver_engine.repair import repair
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.constraints import check_all
+from trippilot.assembly_engine.fallback_assembler import placed_fixed_blocks
+from trippilot.assembly_engine.repair import repair
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.itinerary import (
     DaySolution,
@@ -32,16 +32,16 @@ from trippilot.domain.poi import Poi
 from trippilot.domain.prompt import PromptRef
 from trippilot.ports.llm_port import LlmPort, LlmRequest
 
-_TRACE_ID = TraceId("solver")  # U5에서 실제 trace_id 배선 — U2는 고정 태그
+_TRACE_ID = TraceId("assembly")  # U5에서 실제 trace_id 배선 — U2는 고정 태그
 
 
-class LlmSolver:
+class LlmAssembler:
     """ChainStage. required_ms = config.llm_stage_timeout_ms."""
 
     name = "llm_secondary"
 
     def __init__(self, llm: LlmPort, poi_index: Mapping[PoiId, Poi],
-                 estimator, config: SolverConfig, trace,
+                 estimator, config: AssemblyConfig, trace,
                  prompt_ref: PromptRef, model_id: str) -> None:
         self._llm = llm
         self._pois = poi_index
@@ -74,7 +74,7 @@ class LlmSolver:
         if parsed is None:
             return None
 
-        # closed-set 필터 (INV-1 — 솔버 경로의 게이트).
+        # closed-set 필터 (INV-1 — 어셈블리 경로의 게이트).
         # 이 호출의 closed set = candidates − excluded_poi_ids (TRIP-293):
         # 프롬프트에 준 목록과 동일하므로, 제외 POI 제안도 정당한 게이트 드롭이다.
         whitelist = {c.poi_id for c in self._effective_candidates(problem)}
@@ -105,7 +105,7 @@ class LlmSolver:
         if dropped:
             self._trace.emit(GateDropEvent(
                 trace_id=_TRACE_ID, occurred_at=datetime.now(timezone.utc),
-                component="c2_llm_solver", feature="solver_secondary",
+                component="c2_llm_assembler", feature="assembly_secondary",
                 dropped_ids=tuple(dropped), total_count=total,
                 dropped_count=len(dropped)))
 
@@ -118,7 +118,7 @@ class LlmSolver:
             ))
         candidate = ItinerarySolution(
             schedule_id=problem.schedule_id, days=tuple(days),
-            is_fallback=False, solve_mode=SolveMode.LLM, solver_run=None)
+            is_fallback=False, solve_mode=SolveMode.LLM, assembly_run=None)
 
         # 검증 → 1회 수리 → 재검증 (INV-2: 통과분만 반환)
         if check_all(candidate, problem, self._pois, self._est) == []:
@@ -166,7 +166,7 @@ class LlmSolver:
     def _emit_call(self, success: bool, in_tok: int, out_tok: int, latency: int) -> None:
         self._trace.emit(LlmCallRecord(
             trace_id=_TRACE_ID, occurred_at=datetime.now(timezone.utc),
-            component="c2_llm_solver", feature="solver_secondary",
+            component="c2_llm_assembler", feature="assembly_secondary",
             model_id=self._model_id, prompt_ref=self._prompt_ref,
             input_tokens=in_tok, output_tokens=out_tok, latency_ms=latency,
             success=success, agent=None))

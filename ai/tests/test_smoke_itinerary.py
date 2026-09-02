@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from trippilot.api.wiring import UnwiredLlm
-from trippilot.solver_engine.travel import haversine_km
+from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 
@@ -296,14 +296,14 @@ def test_rehearsal_rejects_empty_days():
 
 # ── ⑥ 인접 슬롯 실경로 검증 (TRIP-382) — fake만, 실 호출 0 ────────────
 
-from trippilot.solver_engine.config import SolverConfig  # noqa: E402
-from trippilot.solver_engine.travel import TravelEstimator  # noqa: E402
+from trippilot.assembly_engine.config import AssemblyConfig  # noqa: E402
+from trippilot.assembly_engine.travel import TravelEstimator  # noqa: E402
 from trippilot.ports.travel_time_port import (  # noqa: E402
     MeasuredTravel,
     TravelTimeError,
 )
 
-_ESTIMATOR = TravelEstimator(SolverConfig())
+_ESTIMATOR = TravelEstimator(AssemblyConfig())
 
 
 class FakeTravel:
