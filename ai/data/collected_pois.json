@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "TOURAPI",
-  "collected_at": "2026-08-31T23:11:27.994955+00:00",
+  "collected_at": "2026-09-04T21:20:59.270863+00:00",
   "area_codes": [
     "1",
     "2",
@@ -32,7 +32,7 @@
   },
   "merged_from": [
     {
-      "collected_at": "2026-08-23T19:51:49.134255+00:00",
+      "collected_at": "2026-08-31T23:11:27.994955+00:00",
       "proposals": 16093,
       "stats": {
         "merged_runs": 2,
@@ -40,18 +40,18 @@
       }
     },
     {
-      "collected_at": "2026-08-31T23:11:27.994955+00:00",
+      "collected_at": "2026-09-04T21:20:59.270863+00:00",
       "proposals": 0,
       "stats": {
-        "http_calls": 222,
+        "http_calls": 219,
         "listed": 31,
-        "page_failures": 1,
-        "detail_failures": 0,
+        "page_failures": 0,
+        "detail_failures": 1,
         "category_unmapped": 0,
         "address_missing": 1,
         "merged": 0,
         "passed": 0,
-        "skipped_unchanged": 16343,
+        "skipped_unchanged": 16272,
         "gate_drops": {
           "existence_out_of_service_region": 30
         },
@@ -60,27 +60,27 @@
           "1": {
             "calls": 25,
             "passed": 0,
-            "skipped": 1592
+            "skipped": 1584
           },
           "2": {
             "calls": 9,
             "passed": 0,
-            "skipped": 492
+            "skipped": 480
           },
           "3": {
             "calls": 5,
             "passed": 0,
-            "skipped": 227
+            "skipped": 224
           },
           "4": {
             "calls": 5,
             "passed": 0,
-            "skipped": 419
+            "skipped": 416
           },
           "5": {
             "calls": 3,
             "passed": 0,
-            "skipped": 177
+            "skipped": 176
           },
           "6": {
             "calls": 8,
@@ -90,7 +90,7 @@
           "7": {
             "calls": 5,
             "passed": 0,
-            "skipped": 225
+            "skipped": 224
           },
           "8": {
             "calls": 3,
@@ -100,47 +100,47 @@
           "31": {
             "calls": 42,
             "passed": 0,
-            "skipped": 3397
+            "skipped": 3468
           },
           "32": {
-            "calls": 22,
+            "calls": 21,
             "passed": 0,
-            "skipped": 1718
+            "skipped": 1705
           },
           "33": {
             "calls": 11,
             "passed": 0,
-            "skipped": 854
+            "skipped": 842
           },
           "34": {
-            "calls": 14,
+            "calls": 12,
             "passed": 0,
-            "skipped": 1061
+            "skipped": 1047
           },
           "35": {
             "calls": 15,
             "passed": 0,
-            "skipped": 1245
+            "skipped": 1230
           },
           "36": {
             "calls": 15,
             "passed": 0,
-            "skipped": 1376
+            "skipped": 1373
           },
           "37": {
             "calls": 14,
             "passed": 0,
-            "skipped": 1000
+            "skipped": 992
           },
           "38": {
             "calls": 15,
             "passed": 0,
-            "skipped": 1123
+            "skipped": 1092
           },
           "39": {
             "calls": 11,
             "passed": 0,
-            "skipped": 852
+            "skipped": 834
           }
         }
       }
