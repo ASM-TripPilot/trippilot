@@ -9,9 +9,10 @@
 # (deploy/BUILD.bazel · MODULE.bazel 의 otel_javaagent).
 
 APP    := "trippilot-backend"
-API    := "http://localhost:8081"
+# host 는 just/k8s.just 에 있다 — 기본 localhost, TRIPPILOT_HOST 로 서버 IP 를 줄 수 있다.
+API    := "http://" + host + ":8081"
 # 8080 은 frontend 가 쓰므로 SigNoz UI 는 8083 이다(TRIP-325).
-SIGNOZ := "http://localhost:8083"
+SIGNOZ := "http://" + host + ":8083"
 
 # SigNoz UI 주소 안내 (port-forward 불필요 — NodePort 30083 → 호스트 8083)
 signoz:
@@ -43,6 +44,29 @@ smoke:
 load interval="2" count="0":
     #!/usr/bin/env bash
     set -uo pipefail
+
+    # just 는 이름있는 인자를 지원하지 않는다. `just load interval=1` 로 부르면
+    # "interval=1" 이라는 문자열이 값으로 그대로 들어온다. 그대로 두면 아래
+    # 산술 비교가 bash 의 "integer expression expected" 로 죽는데, 그 메시지만
+    # 보고는 원인을 알 수 없다 — 여기서 먼저 잡아 올바른 사용법을 보여준다.
+    # (`just --list` 가 기본값을 `interval="2"` 로 표시하는 탓에 그대로 따라
+    #  치기 쉽다.)
+    case "{{ interval }}" in
+      ''|*[!0-9.]*) BAD="{{ interval }}" ;;
+      *)            BAD="" ;;
+    esac
+    case "{{ count }}" in
+      ''|*[!0-9]*)  BAD="{{ count }}" ;;
+    esac
+    if [ -n "${BAD}" ]; then
+      echo "인자는 숫자만 받습니다 (받은 값: '${BAD}')." >&2
+      echo >&2
+      echo "  just load          # 2초 간격, 무한" >&2
+      echo "  just load 1        # 1초 간격, 무한" >&2
+      echo "  just load 0.5 60   # 0.5초 간격, 60회" >&2
+      exit 2
+    fi
+
     RUN=$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c6)
     echo "실행 ID: ${RUN}   간격: {{ interval }}초   횟수: $([ "{{ count }}" = "0" ] && echo 무한 || echo {{ count }})"
     echo "SigNoz 필터:  traceId CONTAINS \"loadtest-${RUN}\""
