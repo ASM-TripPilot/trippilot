@@ -630,3 +630,27 @@ note = """
 권고: **관측 후 결정.** 푸시 로그로 야간 발송이 실제로 얼마나 있는지 센 뒤 정한다 —
 지금 정하면 근거가 관측이 아니라 추측이다. 정본도 O-U6-2 에서 같은 판단을 했다.
 """
+
+[[nodes]]
+id = "DELETION-NOTICE"
+ticket = ""
+title = "삭제 고지 목록이 U1 에 동결 — BR-U6-25 로 갱신 + 스키마 추종 게이트"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/domain/DeletionSchedule.kt",
+  "backend/app/src/test/kotlin/com/trippilot/app/persistence/DeletionCascadeNoticeIT.kt",
+]
+note = """
+**U5·U6 정본↔코드 대조(2026-09-06)에서 발견.** CascadeSummary.forAccount() 가 U1 5범주에
+동결된 채 다섯 유닛이 지났다 — 코드 주석 스스로 "새 유닛에서 개인정보 테이블을 추가하면 반드시
+반영할 것(파기 고지 누락=법적 리스크)"이라 경고해 뒀는데 아무도 못 봤다.
+
+BR-U6-25(목록은 U6 소유·유닛마다 갱신) 열거대로 22범주로 갱신했고, 사람 기억 대신
+**DeletionCascadeNoticeIT 가 pg_constraint 를 훑어** account 직결 CASCADE 테이블이 고지에
+빠지면 그 마이그레이션을 넣은 PR 이 빨개지게 했다. 고지 제외는 사유 필수(EXCLUDED —
+refresh_session 은 즉시 폐기라 예약 파기가 아니고, deletion_schedule 은 절차 자체의 행).
+
+곁가지 확인: BR-U6-27 의 "내보내기 엔드포인트 없음(G-U6-3)"은 낡았다 — /me/export 실재.
+정본 각주 정정은 별건.
+"""
