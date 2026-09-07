@@ -140,7 +140,6 @@ import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
 } from '@/features/trip/ui/TripWizardStep1Screen';
-import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
 import { LiveLocationPage } from '@/pages/live-location';
 import {
   TripWizardStep2Screen,
@@ -644,43 +643,30 @@ const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
  * 외부 URL을 지어내는 것은 INV-1이 막는다(`exploreFixtures.ts` 머리말과 같은 사정).
  * 구현 실패가 아니다.
  */
-/** 취향 override 시트(TRIP-484) 선택지 표본 — 온보딩 스타일 7종(slug→한국어)과 같은 목록. */
-const PREF_OVERRIDE_OPTIONS = [
-  { slug: 'rest', label: '휴양' },
-  { slug: 'gourmet', label: '미식' },
-  { slug: 'nature', label: '자연' },
-  { slug: 'art', label: '문화예술' },
-  { slug: 'activity', label: '액티비티' },
-  { slug: 'sightseeing', label: '관광' },
-  { slug: 'shopping', label: '쇼핑' },
-];
-
+/** g01 신 default(TRIP-665, Figma `3742:2068`) — 온보딩 반영이 다 채워진 요약 5행 완성형 문자열
+ * (페이지 `tripSummary` 셀렉터가 낼 실제 값과 같은 형태 · en dash·미들닷 그대로). 요일은 실제
+ * 달력값 (수)(토)다. 스트립은 키마다 `mustVisits` 만 갈아 끼운다. */
 const TRIP_WIZARD_BASE: TripWizardStep1ScreenProps = {
-  destinations: [{ seq: 1, region: '부산', nights: 3 }],
-  startDate: '2026-06-10',
-  endDate: '2026-06-13',
-  presetCode: '3n4d',
-  party: 2,
-  companionType: '친구',
-  preferenceChips: ['감성 골목', '야경'],
-  // 위저드 화면 계약은 `{code, name}[]`이다(서버 `Region`이 아니라) — 페이지 `wizardRegions`와
-  // 같은 어댑트(selectable 만 남기고 regionCode→code)로 프리뷰 표본을 맞춘다.
-  regions: PREVIEW_REGIONS.filter((region) => region.selectable !== false).map(
-    (region) => ({ code: region.regionCode, name: region.name })
-  ),
+  summaryDestinations: '부산 2박 · 경주 1박',
+  summaryPeriod: '6월 10일(수) – 13일(토) · 3박 4일',
+  summaryCompanion: '친구 2명',
+  summaryPreferences: '미식 · 전시 · 야경 + 온보딩',
+  summaryBudget: '120만원 · 1인 총액 · 중간',
+  onPressSummaryDestination: noop,
+  onPressSummaryPeriod: noop,
+  onPressSummaryCompanion: noop,
+  onPressSummaryPreference: noop,
+  onPressSummaryBudget: noop,
+  mustVisits: [],
+  onPressMore: noop,
+  onPressSeeAll: noop,
   canProceed: true,
-  onBack: noop,
-  onAddDestination: noop,
-  onRemoveDestination: noop,
-  onSelectPreset: noop,
-  onPressPeriod: noop,
-  onChangeParty: noop,
-  onSelectCompanion: noop,
-  onChangePreference: noop,
   onNext: noop,
+  onBack: noop,
 };
 
-/** Figma `1737:1083` 실측과 같은 구성 — 썸네일 3장 + `+2`(외 2곳) + 점선 `더 담기`. */
+/** 꼭 갈 곳 스트립 시드 3장(`MustVisitSeedItem[]`) — `imageUrl` 은 프로덕션에서 전부 `null`(회색
+ * 자리)이라 프리뷰도 null 로 둔다(INV-1 · 외부 URL 발명 금지). 카드는 이름만 그린다(지역명 계약 공백). */
 const MUST_VISIT_THUMBNAILS = [
   { sourcePoiId: 'poi-1', name: '감천문화마을', imageUrl: null },
   { sourcePoiId: 'poi-2', name: '광안리해수욕장', imageUrl: null },
@@ -2746,8 +2732,10 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g01 '꼭 갈 곳' 2키(TRIP-209) — 시드 얼굴과 0곳 얼굴. 나머지 두 얼굴(자리표시·조회 실패)은
-  // 회선을 늦추거나 끊으면 실화면에서 그대로 재현되므로 여기 키를 늘리지 않는다.
+  // g01 신 default(TRIP-665, Figma `3742:2068`) 2키 — 꼭 갈 곳 시드 얼굴과 0곳 얼굴. 요약 5행은
+  // 두 키 다 채워진 상태(`TRIP_WIZARD_BASE`)이고, 스트립의 `mustVisits` 만 갈아 끼운다. jest 는
+  // 요약 카드 그림자·스트립 카드 픽셀·진행바 색을 못 보므로 이 두 키가 3742:2068 육안 대조 자리다.
+  // 자리표시·조회 실패 얼굴은 회선을 늦추면 실화면에서 재현되므로 여기 키를 늘리지 않는다.
   {
     key: 'trip-new-step1-seeded',
     band: 'g',
@@ -2756,14 +2744,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <TripWizardStep1Screen
         {...TRIP_WIZARD_BASE}
-        savedPlaceCount={5}
-        mustVisitSection={{
-          kind: 'seeded',
-          thumbnails: MUST_VISIT_THUMBNAILS,
-          overflowCount: 2,
-        }}
-        onRemoveMustVisit={noop}
-        onPressMoreMustVisits={noop}
+        mustVisits={MUST_VISIT_THUMBNAILS}
       />
     ),
   },
@@ -2773,70 +2754,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'g01 · 만들기 1/2 담은 곳 0',
     login: null,
     render: () => (
-      <TripWizardStep1Screen
-        {...TRIP_WIZARD_BASE}
-        mustVisitSection={{ kind: 'empty' }}
-        onPressMoreMustVisits={noop}
-      />
-    ),
-  },
-  // 여행지 시트 검색 불일치 얼굴(TRIP-387) — jest는 픽셀·레이아웃을 못 보므로 "0개 + 없어요"
-  // 배치를 눈으로 대조하는 유일한 자리다. `[도시 추가]`를 눌러 시트를 연 뒤 확인한다(시트 열림은
-  // 화면 로컬 state라 정적 prop으로는 못 연다). `sheetRegions:[]`(불일치 결과) + 검색어가 함께
-  // 있어야 문구가 뜬다 — 빈 검색어면 전체가 보인다.
-  {
-    key: 'trip-new-step1-search-empty',
-    band: 'g',
-    label: 'g01 · 만들기 1/2 검색 불일치',
-    login: null,
-    render: () => (
-      <TripWizardStep1Screen
-        {...TRIP_WIZARD_BASE}
-        sheetRegions={[]}
-        destinationQuery="없는지역"
-        onChangeDestinationQuery={noop}
-      />
-    ),
-  },
-  // 출발일 선택 시트 열림(TRIP-389) — 달력이 단일 선택으로 바뀐 자리다. jest는 바텀시트 실개폐·
-  // 단일 셀 하이라이트 픽셀을 못 보므로(repo-traps 바텀시트 통과 목) 이 화면을 눈으로 보는 유일한
-  // 자리다. base가 출발일(2026-06-10)을 이미 들어 그 셀이 선택돼 열리고 확정이 활성이다.
-  {
-    key: 'trip-new-step1-datesheet',
-    band: 'g',
-    label: 'g01 · 만들기 1/2 출발일 시트',
-    login: null,
-    render: () => (
-      <TripWizardStep1Screen
-        {...TRIP_WIZARD_BASE}
-        dateSheetOpen
-        baseDate="2026-06-10"
-        onCloseDateSheet={noop}
-        onConfirmDates={noop}
-      />
-    ),
-  },
-  // 취향 '바꾸기' 시트 열림(TRIP-484) — Figma 프레임 부재라 발명 레이아웃이다. jest는 바텀시트
-  // 실개폐를 못 보므로(통과 목) 시트 문구·칩 선택 하이라이트를 눈으로 보는 유일한 자리다.
-  // '미식'을 선택 상태로 열어 선택/비선택 칩을 한 화면에서 대조한다.
-  {
-    key: 'trip-new-step1-prefsheet',
-    band: 'g',
-    label: 'g01 · 만들기 1/2 취향 시트',
-    login: null,
-    render: () => (
-      <TripWizardStep1Screen
-        {...TRIP_WIZARD_BASE}
-        prefSheet={
-          <PrefOverrideSheet
-            options={PREF_OVERRIDE_OPTIONS}
-            selected={['미식']}
-            onToggle={noop}
-            onConfirm={noop}
-            onClose={noop}
-          />
-        }
-      />
+      <TripWizardStep1Screen {...TRIP_WIZARD_BASE} mustVisits={[]} />
     ),
   },
   // g02 5변형(TRIP-225). 화면이 완성된 문자열·불리언만 받는 프레젠테이션이라, 배선 없이
