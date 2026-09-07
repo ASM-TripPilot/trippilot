@@ -81,14 +81,17 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-function fromEpochDay(epochDay: number): string {
+/** 에포크 일수 → 'YYYY-MM-DD'. TRIP-664가 같은 feature의 `baseSections.toNightlyBases`에서
+ *  재사용(4벌째 civil_from_days 재구현 회피, rung2). */
+export function fromEpochDay(epochDay: number): string {
   const { year, month, day } = epochDayToDate(epochDay);
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
 /** 기준일 에포크의 요일(0=일요일 … 6=토요일). 에포크 0(1970-01-01)이 목요일이라는 사실
- * 하나로 `new Date().getDay()` 없이 요일을 얻는다. */
-function dayOfWeek(epochDay: number): number {
+ * 하나로 `new Date().getDay()` 없이 요일을 얻는다. TRIP-664 `tripSummary`가 요일 삽입에
+ * 재사용(base 0=목 실측이 실제 달력과 일치 — 4벌째 요일 계산기 재구현 회피, rung2). */
+export function dayOfWeek(epochDay: number): number {
   return ((epochDay % 7) + 7 + 4) % 7;
 }
 

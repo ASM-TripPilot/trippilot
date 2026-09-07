@@ -551,14 +551,15 @@
 ## src/features/trip/model/
 - `src/features/trip/model/baseGate.ts`  →  BaseBlockReason · StayGateInput · TripPeriod · StayDateDraft · baseBlockReason · canSaveStayFix · isOutsideTripPeriod · extendedTripPeriod · tripDayOptions · applyDayPick
 - `src/features/trip/model/baseScreen.ts`  →  formatSectionRange · formatTripRange · UnresolvedDaysView · unresolvedDaysView
-- `src/features/trip/model/baseSections.ts`  →  BaseSection · toBaseSections
+- `src/features/trip/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBase · toNightlyBases
 - `src/features/trip/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount
 - `src/features/trip/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
 - `src/features/trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
 - `src/features/trip/model/stayDateImport.ts`  →  StayImportView · StayImportInput · formatStayDateRange · resolveStayImport
 - `src/features/trip/model/tripDatePicker.ts`  →  daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · dateCell
 - `src/features/trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · nightsSum · validateTripDraft · toCompanionType
-- `src/features/trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · presetRange · deriveEndDate · formatDateRange
+- `src/features/trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences · summaryBudget
+- `src/features/trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · dayOfWeek · presetRange · deriveEndDate · formatDateRange
 - `src/features/trip/model/tripWizardStore.ts`  →  TripWizardField · TripWizardDraft · useTripWizardStore
 - `src/features/trip/model/useBaseFix.ts`  →  useFixSavedStay · useExtendTripPeriod
 - `src/features/trip/model/useCreateTrip.ts`  →  useCreateTrip
@@ -1198,4 +1199,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 812개 파일
+합계 813개 파일

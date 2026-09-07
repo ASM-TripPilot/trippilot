@@ -4,6 +4,11 @@ import type {
   Trip,
 } from '@/shared/api/generated/schemas';
 
+// 에포크 일수 → 'YYYY-MM-DD' 역변환. 같은 feature(`features/trip/model`)에 이미 있는 순수
+// 정수 산술(`new Date` 미사용, civil_from_days)이라 22줄 재구현 대신 재사용한다 — 이 파일이
+// 정변환 `toEpochDay`는 사본을 갖지만(표준 규칙), 역변환은 사소하지 않아 공유가 더 단순하다.
+import { fromEpochDay } from './tripWizardStep1';
+
 /**
  * g02 거점 구간 행 — 배정·저장 숙소·여행을 화면이 그릴 행으로 합치는 순수 함수
  * (TRIP-224 · US-TRIP-07 · BR-U1-28). 네트워크·시계·저장소를 건드리지 않는다.
@@ -92,4 +97,41 @@ export function toBaseSections(
         a.dateFrom < b.dateFrom ? -1 : a.dateFrom > b.dateFrom ? 1 : 0
       )
   );
+}
+
+/**
+ * g02 박별(1박=1행) 거점 행 — 다박=1행인 `BaseSection[]`을 밤 단위로 펼친다
+ * (TRIP-664 · US-TRIP-07). 원 `toBaseSections`는 불변(BR-U1-28의 "N박 체류" 묶음 표시).
+ * 이쪽은 신 g02 카드가 요구하는 반대 방향(밤별 개별 카드, 사전 확정 결정 D6).
+ *
+ * `nightNumber`는 방출된 행의 1-기반 통번호다 — `nightLabel`(여행 시작일 고정 기준, 공백에
+ * 번호 건너뜀)과 다른 축이다. `nights ≤ 0` 구간은 0행을 낳고, 동일 숙소 여러 날 중복을 허용한다
+ * (dedup 없음). 입력은 이미 `dateFrom` 오름차순(`toBaseSections` 출력)이라고 본다.
+ */
+export interface NightlyBase {
+  date: string;
+  stayName: string;
+  nightNumber: number;
+}
+
+export function toNightlyBases(sections: BaseSection[]): NightlyBase[] {
+  const rows: NightlyBase[] = [];
+  let nightNumber = 0;
+
+  for (const section of sections) {
+    // `nights ≤ 0` 구간은 이 루프가 0번 돌아 0행을 낸다 — 거르는 게 아니라 산식상 비는 것이다
+    // (INV-2 · D6). 통번호는 방출한 행에서만 증가하므로 0박 구간은 번호를 소비하지 않는다.
+    const from = toEpochDay(section.dateFrom);
+    for (let night = 0; night < section.nights; night += 1) {
+      nightNumber += 1;
+      // 필드 셋만 담는다(INV-3) — `{ ...section, … }` 스프레드면 BaseSection의 7필드가 새 나온다.
+      rows.push({
+        date: fromEpochDay(from + night),
+        stayName: section.stayName,
+        nightNumber,
+      });
+    }
+  }
+
+  return rows;
 }
