@@ -29,6 +29,7 @@ import {
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { useCreateTrip } from '@/features/trip/model/useCreateTrip';
 import { usePreferencePrefill } from '@/features/trip/model/usePreferencePrefill';
+import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen';
 
 /**
@@ -114,6 +115,12 @@ export function TripNewStep1Page(_props: TripNewStep1PageProps): ReactElement {
   const setCreatedTripId = useTripWizardStore(
     (state) => state.setCreatedTripId
   );
+  // 여행지 편집 시트(TRIP-666)가 즉시 스토어에 쓰는 두 액션(D3 즉시반영) — 시트는 스토어를
+  // 모르고, 페이지가 이 둘을 콜백으로 배선해 "적용 없이도 바로 반영"이 성립한다.
+  const setNights = useTripWizardStore((state) => state.setNights);
+  const removeDestination = useTripWizardStore(
+    (state) => state.removeDestination
+  );
 
   const preference = usePreferencePrefill();
   // 계정 취향 프리필(GET /me/preferences)은 이미 한국어 도메인 값이다(slug 아님) — 그대로 요약·
@@ -144,6 +151,9 @@ export function TripNewStep1Page(_props: TripNewStep1PageProps): ReactElement {
   const [overseasBlocked, setOverseasBlocked] = useState(false);
   const [mustVisitError, setMustVisitError] = useState<string>();
   const [pendingMustVisits, setPendingMustVisits] = useState<string[]>([]);
+  // 여행지 편집 시트 개폐(TRIP-666) — 배선이 소유한다(화면은 무상태 D5). 시트는 화면의 형제로
+  // 조건부 마운트한다(화면 슬롯 금지 — 화면 단독 렌더에서 시트/도시추가가 안 떠야 하는 프리즈 2건).
+  const [destinationSheetOpen, setDestinationSheetOpen] = useState(false);
 
   // 제출 경로 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
   // 않게). 두 뜻을 겸한다: ① 등록 요청이 날아가는 중 ② 이미 성공해 이 화면의 일이 끝남.
@@ -303,41 +313,54 @@ export function TripNewStep1Page(_props: TripNewStep1PageProps): ReactElement {
     );
   }
 
-  // 요약 행 편집 시트(여행지·기간·동행·취향·예산)는 S2~S6 스텁이다 — 지금은 오픈 신호만 받는다.
+  // 여행지 외 4행(기간·동행·취향·예산) 편집 시트는 S3~S6 스텁이다 — 지금은 오픈 신호만 받는다.
   const openEditSheet = (): void => {};
 
   return (
-    <TripWizardStep1Screen
-      summaryDestinations={summaryDestinationsValue}
-      summaryPeriod={summaryPeriodValue}
-      summaryCompanion={summaryCompanionValue}
-      summaryPreferences={summaryPreferencesValue}
-      summaryBudget={summaryBudgetValue}
-      onPressSummaryDestination={openEditSheet}
-      onPressSummaryPeriod={openEditSheet}
-      onPressSummaryCompanion={openEditSheet}
-      onPressSummaryPreference={openEditSheet}
-      onPressSummaryBudget={openEditSheet}
-      mustVisits={mustVisits}
-      onPressMore={() =>
-        // 담은 곳이 있으면 담은 장소 화면(d02)으로, 없으면 새로 담을 탐색으로 보낸다(TRIP-367).
-        router.push(
-          savedPlaceList.length > 0
-            ? '/explore/saved-places'
-            : '/explore/places'
-        )
-      }
-      onPressSeeAll={() => router.push('/explore/saved-places')}
-      canProceed={canProceed}
-      onNext={submit}
-      onBack={() => router.back()}
-      submitError={submitError}
-      onRetrySubmit={submit}
-      mustVisitError={mustVisitError}
-      onRetryMustVisits={retryMustVisits}
-      overseasBlocked={overseasBlocked}
-      onCloseOverseasDialog={() => setOverseasBlocked(false)}
-      onPickDomesticRegion={() => setOverseasBlocked(false)}
-    />
+    <>
+      <TripWizardStep1Screen
+        summaryDestinations={summaryDestinationsValue}
+        summaryPeriod={summaryPeriodValue}
+        summaryCompanion={summaryCompanionValue}
+        summaryPreferences={summaryPreferencesValue}
+        summaryBudget={summaryBudgetValue}
+        onPressSummaryDestination={() => setDestinationSheetOpen(true)}
+        onPressSummaryPeriod={openEditSheet}
+        onPressSummaryCompanion={openEditSheet}
+        onPressSummaryPreference={openEditSheet}
+        onPressSummaryBudget={openEditSheet}
+        mustVisits={mustVisits}
+        onPressMore={() =>
+          // 담은 곳이 있으면 담은 장소 화면(d02)으로, 없으면 새로 담을 탐색으로 보낸다(TRIP-367).
+          router.push(
+            savedPlaceList.length > 0
+              ? '/explore/saved-places'
+              : '/explore/places'
+          )
+        }
+        onPressSeeAll={() => router.push('/explore/saved-places')}
+        canProceed={canProceed}
+        onNext={submit}
+        onBack={() => router.back()}
+        submitError={submitError}
+        onRetrySubmit={submit}
+        mustVisitError={mustVisitError}
+        onRetryMustVisits={retryMustVisits}
+        overseasBlocked={overseasBlocked}
+        onCloseOverseasDialog={() => setOverseasBlocked(false)}
+        onPickDomesticRegion={() => setOverseasBlocked(false)}
+      />
+      {/* 시트는 화면의 형제로 조건부 마운트 — 스테퍼·삭제는 스토어에 즉시 쓰고(D3), "적용"은
+          닫기뿐이다(재커밋 없음). 도시 추가는 지역 카탈로그 라우트로 이탈한다. */}
+      {destinationSheetOpen ? (
+        <DestinationEditSheet
+          destinations={destinations}
+          onChangeNights={setNights}
+          onRemove={removeDestination}
+          onAddCity={() => router.push('/explore/region?purpose=trip')}
+          onApply={() => setDestinationSheetOpen(false)}
+        />
+      ) : null}
+    </>
   );
 }

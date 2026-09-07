@@ -62,6 +62,9 @@ export interface TripWizardDraft {
   preserveMustVisitsOnce: boolean;
   addDestination(regionName: string, nights: number): void;
   removeDestination(seq: number): void;
+  /** 해당 seq destination 의 nights 를 교체(하한 1 클램프). seq 미일치면 no-op. add/remove 는
+   * 무변경 재사용(TRIP-666 여행지 편집 시트). */
+  setNights(seq: number, nights: number): void;
   /** `presetCode`가 `undefined`면 "어떤 칩도 선택 안 됨" — 프리셋이 아닌 출처(등록 숙소
    * 날짜, TRIP-208)로 기간을 채우는 경로다. 상태 필드가 이미 `presetCode?`(초기 `undefined`)라
    * 새 코드값이나 별도 액션을 만들지 않는다(01b D10 — 새 코드값은 `PERIOD_PRESETS`가 곧
@@ -160,6 +163,16 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
         state.destinations.filter((one) => one.seq !== seq)
       ),
       touched: withTouched(state.touched, 'destinations'),
+    })),
+  setNights: (seq, nights) =>
+    set((state) => ({
+      // 해당 seq의 nights만 갈아 끼운다 — `map`이 seq 미일치 항목은 원본 그대로 되돌려주므로
+      // 못 찾는 seq는 저절로 no-op이다(seq 재번호는 nights만 바뀌어 필요 없다). 하한 1은
+      // `Math.max(1, …)` 하나로 접는다 — 상한은 없다(도시=최소 1박, 01b D1). renumberSeq는
+      // 여기서 안 부른다: 목록 길이·순서가 그대로라 seq도 그대로다.
+      destinations: state.destinations.map((one) =>
+        one.seq === seq ? { ...one, nights: Math.max(1, nights) } : one
+      ),
     })),
   setPeriod: (presetCode, startDate, endDate) =>
     set((state) => ({

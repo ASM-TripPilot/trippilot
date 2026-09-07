@@ -71,12 +71,13 @@ beforeEach(() => {
 });
 
 describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
-  it('163개 엔트리가 전부 10종 밴드 중 하나를 갖고, 그룹핑해도 하나도 드롭되지 않는다', () => {
+  it('164개 엔트리가 전부 10종 밴드 중 하나를 갖고, 그룹핑해도 하나도 드롭되지 않는다', () => {
     // 준비 — 렌더 없이 모듈의 PREVIEW_STATES 배열을 그대로 읽는다.
     // 단언 ① — 대규모 기계 편집에서 엔트리가 하나도 안 빠졌다(실측 166개, TRIP-649로 saved-places-empty +1).
     // ⚠️ TRIP-665: 신 default 재작성으로 제거된 화면 prop 을 쓰던 g01 프리뷰 키 3개
     //    (`trip-new-step1-search-empty`·`-datesheet`·`-prefsheet`)를 삭제해 166→163.
-    expect(PREVIEW_STATES).toHaveLength(163);
+    // ⚠️ TRIP-666: 여행지 편집 시트 프리뷰 키(`trip-new-step1-destination-sheet`) 추가로 163→164.
+    expect(PREVIEW_STATES).toHaveLength(164);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

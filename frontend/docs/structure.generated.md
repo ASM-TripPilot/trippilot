@@ -12,6 +12,7 @@
 ## src/__tests__/
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
+- `src/__tests__/destinationEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/devPreview.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewBandNav.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewBandSort.test.tsx`  →  (export 없음)
@@ -568,6 +569,7 @@
 - `src/features/trip/model/useTripBases.ts`  →  useTripBases · useTripCoverage · useAssignBase · useUnassignBase
 
 ## src/features/trip/ui/
+- `src/features/trip/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
 - `src/features/trip/ui/TripBaseFixSheet.tsx`  →  TripBaseFixSheetProps · TripBaseFixSheet
 - `src/features/trip/ui/TripDateSheet.tsx`  →  TripDateSheetProps · TripDateSheet
 - `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · BackChevronGlyph · PinGlyph · RemoveGlyph · ThumbRemoveGlyph · PlusGlyph · CalendarGlyph · ChevronDownGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · SparkleGlyph · AlertCircleGlyph · GlobeGlyph · BedTone · BedGlyph · ChevronRightGlyph · BaseBadgePinGlyph · HeartFilledGlyph · CheckGlyph · SearchGlyph · WarningTriangleGlyph
@@ -1199,4 +1201,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 813개 파일
+합계 815개 파일

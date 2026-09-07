@@ -140,6 +140,7 @@ import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
 } from '@/features/trip/ui/TripWizardStep1Screen';
+import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { LiveLocationPage } from '@/pages/live-location';
 import {
   TripWizardStep2Screen,
@@ -2755,6 +2756,28 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <TripWizardStep1Screen {...TRIP_WIZARD_BASE} mustVisits={[]} />
+    ),
+  },
+  // g01 여행지 편집 시트(TRIP-666, Figma `3626:2070`) — 시트 열린 상태. `DestinationEditSheet`은
+  // props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정 없이 그대로 태운다.
+  // jest 는 스테퍼 원·점선 추가 버튼·시트 딤/개폐를 못 봐(바텀시트 통과형 목) 이 키가 유일한
+  // 6-b 육안 대조 자리다. seq 1=부산 2박, seq 2=경주 1박(경주는 nights 1이라 − 가 비활성).
+  {
+    key: 'trip-new-step1-destination-sheet',
+    band: 'g',
+    label: 'g01 · 여행지 편집 시트',
+    login: null,
+    render: () => (
+      <DestinationEditSheet
+        destinations={[
+          { seq: 1, region: '부산', nights: 2 },
+          { seq: 2, region: '경주', nights: 1 },
+        ]}
+        onChangeNights={noop}
+        onRemove={noop}
+        onAddCity={noop}
+        onApply={noop}
+      />
     ),
   },
   // g02 5변형(TRIP-225). 화면이 완성된 문자열·불리언만 받는 프레젠테이션이라, 배선 없이
