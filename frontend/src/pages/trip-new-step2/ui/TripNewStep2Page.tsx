@@ -90,6 +90,9 @@ export function TripNewStep2Page(): ReactElement {
     if (tripId === undefined) return 'notrip';
     if (loadFailed) return 'error';
     if (loading) return 'loading';
+    // 저장 숙소 0 → empty(D1). ⚠️ loading 뒤에 둔다 — 조회 중엔 savedStayList 가 [] 라도 empty 가
+    // 아니라 loading 이어야 한다(순서 급소, §3). savedStays 가 축이라 배정 수는 안 본다.
+    if (savedStayList.length === 0) return 'empty';
     return 'default';
   }
 
@@ -147,6 +150,7 @@ export function TripNewStep2Page(): ReactElement {
         onPressCard={openSheet}
         onGenerate={goToMethod}
         onNoStayStart={goToMethod}
+        onBrowseStays={() => router.push('/stays')}
         onBack={() => router.back()}
         onRetryAll={() => {
           void savedStays.refetch();

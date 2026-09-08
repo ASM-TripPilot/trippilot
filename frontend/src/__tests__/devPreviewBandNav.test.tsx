@@ -91,7 +91,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    제거된 화면 prop 이 사라지면서 총계가 준다.
     // ⚠️ TRIP-673: g02 숙소 선택 시트 프리뷰 키(`trip-new-step2-staysheet`, band `g`) 추가로
     //    164→165. TRIP-666~671 시트 키 추가와 동형 — 신 프리뷰 키 1개가 총계를 1 늘린다.
-    expect(PREVIEW_STATES).toHaveLength(165);
+    // ⚠️ TRIP-674: g02 empty 얼굴 신설로 `trip-new-step2-empty`(band `g`) 1키 추가 165→166.
+    //    `-loading` 은 신 스켈레톤으로 정합될 뿐(키 이미 존재)이라 총계 불변 — empty 만 +1.
+    //    test-designer 선반영(D4) — implementer 는 preview.tsx 에 `-empty` 키만 추가하고 이 가드는
+    //    안 만진다(추가 전엔 165개라 이 단언이 red).
+    expect(PREVIEW_STATES).toHaveLength(166);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

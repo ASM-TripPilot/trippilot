@@ -11,13 +11,17 @@ import { TripNewStep2Page } from './TripNewStep2Page';
 
 /**
  * TRIP-672 g02 거점 숙소 2/4 — **배선(재작성).** 두 조회 · 스토어 · 라우터를 잇는다.
+ * TRIP-674 · S10 — 그 위에 **empty 얼굴**을 얹는다(D1). 배선은 얼굴 판정에 empty 를 삽입할 뿐이다.
  *
  * 무엇을 보장하나 — 화면은 이 중 어느 것도 모른다:
- *  - **변형 판정(옵션 A)** `createdTripId` 부재→notrip · 조회 실패→error · 진행 중→loading · 그 밖→default.
- *    **empty 없음** — 목적지가 있으면 배정이 0이어도 Σnights 카드가 전부 "숙소 미정"으로 뜬다(★4).
+ *  - **변형 판정(얼굴 순서 notrip>error>loading>empty>default)** `createdTripId` 부재→notrip ·
+ *    조회 실패→error · 진행 중→loading · **저장 숙소 0→empty**(신, D1, `savedStayList.length === 0`) ·
+ *    그 밖→default. ⚠️ loading 이 empty 를 이긴다 — 조회 중엔 savedStayList 가 [] 라도 loading 얼굴이다.
  *  - **박별 카드 파생** `toBaseSections` → `nightlyBaseCards`로 배정된 밤은 숙소명, 미배정 밤은 "숙소 미정".
+ *  - **empty 배선(신)** 저장 숙소 0 → empty 얼굴. 보조 CTA "숙소 둘러보기"→`router.push('/stays')`,
+ *    주 CTA "숙소 없이 계속"→goToMethod(default nostay 와 같은 동작).
  *  - **제거(D2)** 후보 하트·연박 묶음·coverage/blocked·fixSheet·fallback 경고가 렌더에서 사라진다.
- *  - **CTA 목적지** 두 CTA 다 게이트 없이 활성이고 h04 method 로 replace 이동한다(AC-5).
+ *  - **CTA 목적지** default·loading 의 두 CTA 다 게이트 없이 활성이고 h04 method 로 replace 이동한다(AC-5).
  *
  * 카드 탭(→S9 오픈 신호)은 여기서 재지 않는다 — 배선의 onPressCard 는 S9 미착수 no-op stub 이라
  * 관측 대상이 없다. 그 계약은 화면 층(`TripWizardStep2Screen.test.tsx`)이 nightNumber 로 잠근다.
@@ -164,7 +168,7 @@ beforeEach(() => {
   mockCoverageResult = loaded({ blocked: false, days: [] });
 });
 
-describe('변형 판정 (옵션 A — empty 없음)', () => {
+describe('변형 판정 (얼굴 순서 notrip>error>loading>empty>default)', () => {
   it('★10 · createdTripId 가 없으면 조회를 끄고 notrip 을 그린다', () => {
     // `trips/new/**`는 Stack.Protected 밖이라 딥링크로 tripId 없이 열릴 수 있다.
     useTripWizardStore.getState().reset();
@@ -203,6 +207,21 @@ describe('변형 판정 (옵션 A — empty 없음)', () => {
       screen.getAllByTestId(/^trip-base-skeleton-night-/).length
     ).toBeGreaterThan(0);
   });
+
+  it('★ loading 이 empty 를 이긴다 — savedStays 가 진행 중이면(밤 0) 스켈레톤을 그리고 empty 로 새지 않는다', () => {
+    // savedStays 진행 중 → savedStayList = undefined ?? [] = 길이 0. empty 를 loading 보다 앞에 두면
+    // 조회 중에 empty 로 새는 순서 뮤턴트가 된다 — loading 얼굴을 단언해 그 뮤턴트를 잡는다(★4·§3).
+    mockSavedStaysResult = pending();
+    render(<TripNewStep2Page />);
+
+    // 긍정 짝 — loading 얼굴(스켈레톤)이다.
+    expect(
+      screen.getAllByTestId(/^trip-base-skeleton-night-/).length
+    ).toBeGreaterThan(0);
+    // 부정 짝 — empty 얼굴 마커(둘러보기·미정 행)로 새지 않았다.
+    expect(screen.queryByTestId('trip-base-browse')).toBeNull();
+    expect(screen.queryAllByTestId(/^trip-base-empty-night-/)).toHaveLength(0);
+  });
 });
 
 describe('박별 카드 배선 — toBaseSections → nightlyBaseCards', () => {
@@ -223,15 +242,48 @@ describe('박별 카드 배선 — toBaseSections → nightlyBaseCards', () => {
     expect(card3).toHaveTextContent(/경주/);
     expect(card3).toHaveTextContent(/숙소 미정/);
   });
+});
 
-  it('★4 · 담은 숙소·배정이 0이어도 default 로 밤 수만큼 카드가 뜬다 (empty 얼굴 없음)', () => {
+// TRIP-674 · S10 — savedStays 0 은 이제 empty 얼굴이다(구 옵션 A 의 "전부 숙소 미정 default" 를 대체,
+// D1). ⚠️ grep sweep: 여기 있던 구 ★4("savedStays 0 → default·empty 없음")가 신 계약과 정면 충돌해
+// empty 얼굴 단언으로 교체됐다(02a ★1).
+describe('empty 얼굴 (D1) — 저장 숙소 0', () => {
+  beforeEach(() => {
+    // beforeEach 기본값(savedStays 길이 1)을 0 으로 덮어 empty 를 강제한다. bases 도 0(무배정).
     mockSavedStaysResult = loaded([]);
     mockBasesResult = loaded([]);
+  });
+
+  it('박별 미정 행 + 둘러보기 CTA 를 그리고, default 카드·generate 는 없다', () => {
     render(<TripNewStep2Page />);
 
-    // 옵션 A — 목적지 3밤이 전부 "숙소 미정" 카드로. empty 얼굴로 새지 않는다.
-    expect(screen.getAllByTestId(/^trip-base-night-card-/)).toHaveLength(3);
-    expect(screen.queryByTestId('trip-base-empty')).toBeNull();
+    // 긍정 짝 — empty 전용 미정 행 3개(밤 수 = Σnights).
+    expect(screen.getAllByTestId(/^trip-base-empty-night-/)).toHaveLength(3);
+    // empty CTAs.
+    expect(screen.getByTestId('trip-base-browse')).toBeOnTheScreen();
+    expect(screen.getByText('숙소 없이 계속')).toBeOnTheScreen();
+
+    // ★2 부정 짝(같은 it) — default 카드·주 CTA 로 새지 않는다.
+    expect(screen.queryAllByTestId(/^trip-base-night-card-/)).toHaveLength(0);
+    expect(screen.queryByTestId('trip-base-generate')).toBeNull();
+  });
+
+  it('둘러보기를 누르면 /stays 로 push 한다 (S9·SavedStayPage 선례)', () => {
+    render(<TripNewStep2Page />);
+
+    fireEvent.press(screen.getByTestId('trip-base-browse'));
+
+    expect(routerMock.push).toHaveBeenCalledTimes(1);
+    expect(routerMock.push).toHaveBeenCalledWith('/stays');
+  });
+
+  it('주 CTA "숙소 없이 계속"은 default nostay 와 같은 동작 — h04 method 로 replace 한다', () => {
+    render(<TripNewStep2Page />);
+
+    fireEvent.press(screen.getByTestId('trip-base-nostay-start'));
+
+    expect(routerMock.replace).toHaveBeenCalledWith(METHOD_ROUTE);
+    expect(routerMock.push).not.toHaveBeenCalled();
   });
 });
 

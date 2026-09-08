@@ -46,7 +46,7 @@ export interface NightlyBaseCardVM {
   stayName?: string;
 }
 
-export type Step2Variant = 'default' | 'loading' | 'error' | 'notrip';
+export type Step2Variant = 'default' | 'loading' | 'error' | 'empty' | 'notrip';
 
 export interface TripWizardStep2ScreenProps {
   variant: Step2Variant;
@@ -55,8 +55,10 @@ export interface TripWizardStep2ScreenProps {
   onPressCard: (nightNumber: number) => void;
   /** "이 거점으로 일정 만들기". */
   onGenerate: () => void;
-  /** "숙소 없이 시작하기". */
+  /** "숙소 없이 시작하기"(default·loading) / "숙소 없이 계속"(empty) — 같은 no-stay 진행(goToMethod). */
   onNoStayStart: () => void;
+  /** empty 얼굴 보조 CTA "숙소 둘러보기" → `/stays`. */
+  onBrowseStays: () => void;
   onBack: () => void;
   /** error 얼굴 재시도. */
   onRetryAll: () => void;
@@ -127,15 +129,50 @@ function NightCard({
   );
 }
 
-/** 로딩 중 박별 행 자리표시자 — 옛 후보 카드 스켈레톤이 아니라 카드 한 줄 크기의 회색 바다. */
+/** empty 얼굴(저장 숙소 0)의 박별 미정 행 — 메타 한 줄 + 셰브런만(숙소명/"숙소 미정" 둘째 줄 없음).
+ * `NightCard`가 항상 그리는 둘째 줄과 충돌해 재사용 못 하므로 별도 행 컴포넌트다. 탭은 default 미배정
+ * 행과 똑같이 그 밤 번호로 S9 시트 오픈 신호를 낸다. 카드 크롬(rounded-card·hairline)은 default 와
+ * 같게 둔다 — 얼굴이 갈려도 카드 모양은 앱 안에서 한 결이다. */
+function EmptyNightRow({
+  card,
+  onPressCard,
+}: {
+  card: NightlyBaseCardVM;
+  onPressCard: (nightNumber: number) => void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID={`trip-base-empty-night-${card.nightNumber}`}
+      accessibilityRole="button"
+      onPress={() => onPressCard(card.nightNumber)}
+      className="w-full flex-row items-center rounded-card border border-hairline bg-canvas px-lg py-[14px]"
+    >
+      <Text className="flex-1 font-noto text-caption text-muted">
+        {`${card.nightNumber}박 · ${card.dateLabel} · ${card.region}`}
+      </Text>
+      <ChevronRightGlyph size={20} tone="muted" />
+    </Pressable>
+  );
+}
+
+/** 로딩 중 박별 행 자리표시자(TRIP-674 재작성, Figma `3718:2068`) — 상단 메타 바 하나 + 아래 48px
+ * 정사각 썸네일 + 세로 2바(제목·서브)로, 실제 박별 카드의 뼈대를 회색으로 흉내낸다(썸네일+3바).
+ * 자매 g01(S7) 스켈레톤과 같은 토큰(`bg-surface-strong`·`rounded-[6px]`). 색·크기·정렬은 jest 사각
+ * (className 만 트리에 남음)이라 6-b 실기가 유일한 육안 그물. */
 function NightSkeleton({ index }: { index: number }): ReactElement {
   return (
     <View
       testID={`trip-base-skeleton-night-${index}`}
-      className="w-full gap-[8px] rounded-card border border-hairline bg-canvas px-lg py-[14px]"
+      className="w-full gap-md rounded-card border border-hairline bg-canvas px-lg py-[14px]"
     >
-      <View className="h-[12px] w-[160px] rounded-[6px] bg-surface-strong" />
-      <View className="h-[16px] w-[200px] rounded-[6px] bg-hairline" />
+      <View className="h-[14px] w-[92px] rounded-[6px] bg-surface-strong" />
+      <View className="w-full flex-row items-center gap-md">
+        <View className="h-[48px] w-[48px] rounded-thumb bg-surface-strong" />
+        <View className="flex-1 gap-sm">
+          <View className="h-[14px] w-[150px] rounded-[6px] bg-hairline" />
+          <View className="h-[12px] w-[104px] rounded-[6px] bg-surface-strong" />
+        </View>
+      </View>
     </View>
   );
 }
@@ -158,11 +195,13 @@ export function TripWizardStep2Screen({
   onPressCard,
   onGenerate,
   onNoStayStart,
+  onBrowseStays,
   onBack,
   onRetryAll,
   onRestart,
 }: TripWizardStep2ScreenProps): ReactElement {
   const loading = variant === 'loading';
+  const empty = variant === 'empty';
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -213,29 +252,52 @@ export function TripWizardStep2Screen({
           </View>
         ) : null}
 
-        {variant === 'default' || loading ? (
+        {variant === 'default' || loading || empty ? (
           <>
             <ScrollView
               className="flex-1"
               contentContainerStyle={{ paddingBottom: 26 }}
             >
               <View className="w-full gap-xl px-lg pt-md">
-                <Text className="font-noto-bold text-display font-bold text-ink">
-                  어디서 묵을까요?
-                </Text>
+                {/* 타이틀 + 얼굴별 부제 — default 는 부제 없음, loading·empty 만 한 줄 붙는다(맹점②,
+                    색 토큰이 갈린다: loading=muted-soft·empty=muted). */}
+                <View className="w-full gap-xs">
+                  <Text className="font-noto-bold text-display font-bold text-ink">
+                    어디서 묵을까요?
+                  </Text>
+                  {loading ? (
+                    <Text className="font-noto text-label text-muted-soft">
+                      거점을 불러오는 중
+                    </Text>
+                  ) : null}
+                  {empty ? (
+                    <Text className="font-noto text-label text-muted">
+                      저장한 숙소가 없어요 · 밤마다 골라도 되고 나중에 정해도
+                      돼요
+                    </Text>
+                  ) : null}
+                </View>
 
                 <View className="w-full gap-md">
                   {loading
                     ? [0, 1, 2].map((index) => (
                         <NightSkeleton key={index} index={index} />
                       ))
-                    : cards.map((card) => (
-                        <NightCard
-                          key={card.nightNumber}
-                          card={card}
-                          onPressCard={onPressCard}
-                        />
-                      ))}
+                    : empty
+                      ? cards.map((card) => (
+                          <EmptyNightRow
+                            key={card.nightNumber}
+                            card={card}
+                            onPressCard={onPressCard}
+                          />
+                        ))
+                      : cards.map((card) => (
+                          <NightCard
+                            key={card.nightNumber}
+                            card={card}
+                            onPressCard={onPressCard}
+                          />
+                        ))}
                 </View>
 
                 <GuideRow />
@@ -243,28 +305,57 @@ export function TripWizardStep2Screen({
             </ScrollView>
 
             {/* TRIP-493 — 두 CTA를 스크롤 밖 하단에 고정한다(step1 `[다음]`과 같은 규칙). 카드가
-                많아도 진행하는 문이 카드 아래 파묻히지 않는다. 게이트가 없어 둘 다 항상 활성이다. */}
+                많아도 진행하는 문이 카드 아래 파묻히지 않는다. 게이트가 없어 둘 다 항상 활성이다.
+                empty 는 주 CTA 가 "숙소 없이 계속"(generate 자리를 대신, testID 는 nostay-start 로
+                default 링크와 공유·같은 동작) + 보조 "숙소 둘러보기"(trip-base-browse)라 generate 가 없다. */}
             <View className="border-t border-hairline bg-canvas px-lg pb-[18px] pt-md gap-md">
-              <Pressable
-                testID="trip-base-generate"
-                accessibilityRole="button"
-                onPress={onGenerate}
-                className="w-full items-center justify-center rounded-button bg-primary p-lg"
-              >
-                <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                  이 거점으로 일정 만들기
-                </Text>
-              </Pressable>
-              <Pressable
-                testID="trip-base-nostay-start"
-                accessibilityRole="button"
-                onPress={onNoStayStart}
-                className="w-full items-center justify-center py-xs"
-              >
-                <Text className="font-noto-bold text-body font-bold text-muted">
-                  숙소 없이 시작하기
-                </Text>
-              </Pressable>
+              {empty ? (
+                <>
+                  <Pressable
+                    testID="trip-base-nostay-start"
+                    accessibilityRole="button"
+                    onPress={onNoStayStart}
+                    className="w-full items-center justify-center rounded-button bg-primary p-lg"
+                  >
+                    <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+                      숙소 없이 계속
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    testID="trip-base-browse"
+                    accessibilityRole="button"
+                    onPress={onBrowseStays}
+                    className="w-full items-center justify-center py-xs"
+                  >
+                    <Text className="font-noto-bold text-body font-bold text-muted">
+                      숙소 둘러보기
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Pressable
+                    testID="trip-base-generate"
+                    accessibilityRole="button"
+                    onPress={onGenerate}
+                    className="w-full items-center justify-center rounded-button bg-primary p-lg"
+                  >
+                    <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+                      이 거점으로 일정 만들기
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    testID="trip-base-nostay-start"
+                    accessibilityRole="button"
+                    onPress={onNoStayStart}
+                    className="w-full items-center justify-center py-xs"
+                  >
+                    <Text className="font-noto-bold text-body font-bold text-muted">
+                      숙소 없이 시작하기
+                    </Text>
+                  </Pressable>
+                </>
+              )}
             </View>
           </>
         ) : null}

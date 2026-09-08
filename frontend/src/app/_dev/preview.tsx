@@ -566,6 +566,7 @@ const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
   onPressCard: noop,
   onGenerate: noop,
   onNoStayStart: noop,
+  onBrowseStays: noop,
   onBack: noop,
   onRetryAll: noop,
   onRestart: noop,
@@ -2879,6 +2880,26 @@ export const PREVIEW_STATES: PreviewState[] = [
         {...TRIP_BASE_SCREEN}
         variant="notrip"
         cards={[]}
+      />
+    ),
+  },
+  // g02 empty 얼굴(TRIP-674, Figma `3665:2068`) — 저장 숙소 0. 박별 미정 행(메타+chevron, 숙소명 없음)
+  // + "저장한 숙소가 없어요…" 부제 + "숙소 없이 계속"/"숙소 둘러보기" CTA. 부제 색(muted)·행 크롬은 jest
+  // 사각이라 이 키가 유일한 6-b 육안 대조 자리(-loading 신 스켈레톤도 같이 여기서 눈으로 본다).
+  {
+    key: 'trip-new-step2-empty',
+    band: 'g',
+    label: 'g02 · 거점 숙소 2/4 저장 숙소 0',
+    login: null,
+    render: () => (
+      <TripWizardStep2Screen
+        {...TRIP_BASE_SCREEN}
+        variant="empty"
+        cards={[
+          { nightNumber: 1, dateLabel: '6/10(수)', region: '부산' },
+          { nightNumber: 2, dateLabel: '6/11(목)', region: '부산' },
+          { nightNumber: 3, dateLabel: '6/12(금)', region: '경주' },
+        ]}
       />
     ),
   },
