@@ -4,8 +4,8 @@
   ① 정상 경로 e2e: M7 풀 → C1 점수 → C2 solve 가 fake만으로 끝까지 흐른다
   ② 폴백 계단 각 칸 (INV-4): C1 실패/워커 예외/시한 부족/전량 드롭 → **규칙 점수**,
      C2 강등 → 결과에 표시. 어느 칸도 조용히 넘어가지 않는다
-  ③ 이중 폴백 금지: C2 체인 강등은 C2가 이미 관측했으므로 오케스트레이터는
-     이벤트를 재발행하지 않는다 (폴백률 지표 이중 계수 방지)
+  ③ 이중 폴백 금지: 어셈블리 체인 강등은 어셈블리가 이미 관측했으므로 오케스트레이터·
+     ScheduleAgent 는 이벤트를 재발행하지 않는다 (폴백률 지표 이중 계수 방지)
   ④ 시한 배분: day1 5초·전체 20초 양쪽에서 C2 예산 > 0, 상류가 다 태워도 예약분 보장
   ⑤ day1 2단계(TRIP-293): days 부분집합 + excluded_poi_ids 가 그대로 통과
   ⑥ INV-1: 게이트를 우회한 풀 밖 poi_id는 후보로도 슬롯으로도 들어가지 못한다
@@ -61,6 +61,7 @@ from trippilot.providers.persona import PersonaProvider
 from trippilot.providers.place import PlaceProvider
 from trippilot.providers.weather import WeatherProvider
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
+from trippilot.agents.schedule.agent import ScheduleAgent
 from trippilot.orchestrator.itinerary_orchestrator import (
     GenerateItineraryRequest,
     GenerationOutcome,
@@ -276,14 +277,21 @@ def _build(
         providers[ProviderKind.WEATHER] = WeatherProvider(weather)
     if events is not None:  # 행사 저장소 fake (TRIP-421)
         providers[ProviderKind.EVENT] = EventProvider(events)
-    orchestrator = ItineraryOrchestrator(
-        InfoCollector(providers),
+    clock = clock if clock is not None else FakeClock()
+    agent = ScheduleAgent(
         PreferenceScoringWorker(gateway),
         _AssemblyProvider(trace, sink, primary=primary),
-        clock if clock is not None else FakeClock(),
+        clock,
+        trace,
+        explanation_worker=explainer,
+        config=config,
+    )
+    orchestrator = ItineraryOrchestrator(
+        InfoCollector(providers),
+        agent,
+        clock,
         trace,
         context_resolver=resolver,  # 소유 검증(fail-closed, TRIP-333)도 같은 resolver
-        explanation_worker=explainer,
         config=config,
     )
     return orchestrator, trace, sink
@@ -316,11 +324,16 @@ def _slot_ids(outcome: GenerationOutcome) -> set[PoiId]:
     return {s.poi_id for d in outcome.solution.days for s in d.slots}
 
 
+# 생성 파이프라인이 자기 이름으로 내는 이벤트 — 오케스트레이터(수집·소화 단계)와
+# ScheduleAgent(점수·어셈블리·설명 단계) 둘 다. 하류(게이트웨이·어셈블리 퍼사드)는 제외.
+_PIPELINE_COMPONENTS = frozenset({"orchestrator.itinerary", "agents.schedule"})
+
+
 def _orchestrator_events(trace) -> list[FallbackEvent]:
     return [
         e
         for e in trace.of_type(FallbackEvent)
-        if e.component == "orchestrator.itinerary"
+        if e.component in _PIPELINE_COMPONENTS
     ]
 
 
@@ -397,9 +410,10 @@ def test_persona_unavailable_degrades_to_rule_scores() -> None:
 
     assert outcome.scoring_mode is ScoringMode.RULE
     assert outcome.solution is not None
-    events = _orchestrator_events(trace)
-    assert any(e.reason.startswith("persona_unavailable") for e in events)
-    assert any(e.to_mode == "rule_score" for e in events)
+    events = [e for e in _orchestrator_events(trace)
+              if e.stage == "llm" and e.reason.startswith("persona_unavailable")]
+    assert [e.component for e in events] == ["agents.schedule"]  # 정확히 1건, 에이전트 이름
+    assert events[0].to_mode == "rule_score"
 
 
 def test_gate_dropped_all_falls_back_to_rule_scores() -> None:
@@ -974,10 +988,9 @@ def test_explanation_skipped_below_threshold_without_llm_call() -> None:
         d.stage == "explanation" and d.reason.startswith("deadline:remaining=")
         for d in outcome.degradations
     )
-    assert any(
-        e.stage == "explanation" and e.reason.startswith("deadline:remaining=")
-        for e in _orchestrator_events(trace)
-    )
+    events = [e for e in _orchestrator_events(trace)
+              if e.stage == "explanation" and e.reason.startswith("deadline:remaining=")]
+    assert [e.component for e in events] == ["agents.schedule"]  # 정확히 1건 — 재발행 금지
 
 
 def test_llm_omission_backfilled_with_rule_scores_on_single_call_path() -> None:

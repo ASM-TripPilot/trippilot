@@ -17,8 +17,9 @@ src/trippilot/
     vector_store_port.py  VectorStorePort + VectorHit (본 스텝)
   agents/              ← 신규 상위 계층 (본 스텝: __init__ + base.py Protocol만. 구현은 각 유닛)
     base.py            Agent Protocol: handle(task: AgentTask) → AgentResult
-    edit/ planb/ reflect/ schedule/     (각 유닛에서 추가 — 상호 import 금지)
-  orchestrator/        (U5 예약 — InfoCollector 포함)
+    edit_agent.py planb/ reflect/ schedule/   (각 유닛에서 추가 — 상호 import 금지. schedule/ 은 2026-09-09 실체화:
+                                            ScheduleAgent.run(ScheduleTask) — 오케스트레이터가 수집·소화한 재료를 봉투로 받는다)
+  orchestrator/        ItineraryOrchestrator(소유 검증·시한 배분·수집·소화·위임) · InfoCollector · IntentRouter(미배선)
   providers/           (U5·U6 예약 — LLM 0회 계층)
   background/          (U6 예약 — 소싱 파이프라인·자율 트리거형, §5)
 tests/fakes/
@@ -105,11 +106,12 @@ agents는 c1·c2·m7·domain·ports를 모두 조립할 수 있는 유일한 상
 | L-3 | agents → `trippilot.ports.llm_port` 직접 import 금지 | LLM은 C1 게이트웨이 경유만 — 4겹 장치 우회 차단 |
 | L-4 | agents → providers import 금지 | 정보는 InfoBundle 봉투로만 (v2 §3 "Provider 직접 호출 금지") |
 | L-5 | providers → `trippilot.llm_gateway`·`ports.llm_port` import 금지 | Provider LLM 0회를 구조로 강제 (v2 §1) |
+| L-6 | agents → `trippilot.orchestrator` import 금지 | 에이전트는 호출받는 쪽 — 재료는 봉투(ScheduleTask 등)로만, 수집기·라우터로 역참조 금지 |
 
 `tests/test_architecture.py` 보강 (기존 AST 검사 패턴 재사용):
 `test_lower_layers_do_not_import_agent_layer`(L-1) · `test_agents_do_not_cross_import`(L-2) ·
 `test_agents_do_not_import_llm_port`(L-3) · `test_agents_do_not_import_providers`(L-4) ·
-`test_providers_do_not_import_llm`(L-5). 규칙 번호는 본 문서가 정본.
+`test_providers_do_not_import_llm`(L-5) · `test_agents_do_not_import_orchestrator`(L-6). 규칙 번호는 본 문서가 정본.
 기존 규칙(ortools→c2 한정, anthropic→c1/adapters 한정, yaml→c1/prompts 한정)은 rglob 기반이라 agents에도 자동 적용된다.
 
 ## 7. 테스트 전략

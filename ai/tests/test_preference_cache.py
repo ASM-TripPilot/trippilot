@@ -200,5 +200,5 @@ def test_build_orchestrator_wraps_scoring_with_cache() -> None:
         c1_config=C1Config(model_ids={ModelTier.LIGHT: "m", ModelTier.HEAVY: "m"}),
     )
     assert isinstance(
-        orchestrator._orchestrator._scoring, CachingScoringWorker  # noqa: SLF001
+        orchestrator._orchestrator._agent._scoring, CachingScoringWorker  # noqa: SLF001
     )

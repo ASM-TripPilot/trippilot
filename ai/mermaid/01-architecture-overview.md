@@ -16,6 +16,7 @@ graph TB
     end
 
     subgraph Agents["agents/ (Agent Protocol · base.py)"]
+        SA["ScheduleAgent<br/>(schedule/agent.py)"]
         PA["PlanBRagPipeline<br/>(planb/rag.py)"]
         RA["Reflect composer<br/>(reflect/composer.py · compose)"]
         EA["EditAgent 함수군<br/>(edit_agent.py · apply_command 등)"]
@@ -77,18 +78,17 @@ graph TB
 
     utterance --> IR
     IR --> |IntentMatch| IO
-    IO --> |AgentTask 봉투| Agents
-    Agents --> |AgentResult 봉투| IO
+    IO --> |ScheduleTask| SA
+    SA --> |GenerationOutcome| IO
 
+    SA --> GF
+    SA --> SF
     PA --> GF
     RA --> GF
     EA --> GF
 
     IO --> IC
     IC --> Providers
-    IO --> PB
-    IO --> GF
-    IO --> SF
 
     GF --> TR
     GF --> Workers

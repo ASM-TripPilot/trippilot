@@ -244,6 +244,18 @@ def test_agents_do_not_import_providers() -> None:
     assert not offenders, f"agents가 providers를 직접 import함(L-4 위반): {offenders}"
 
 
+def test_agents_do_not_import_orchestrator() -> None:
+    """L-6 (BR-AF-10): agents → orchestrator import 금지 — 에이전트는 호출받는 쪽이다.
+    재료는 오케스트레이터가 봉투(ScheduleTask 등)에 담아 넘긴다. 에이전트가 수집기
+    (InfoCollector)·라우터·행사 보너스 조립으로 손을 뻗으면 계층이 뒤집힌다."""
+    offenders: dict[str, set[str]] = {}
+    for py in (_SRC / "agents").rglob("*.py"):
+        bad = {m for m in _internal_imports(py) if m.startswith("trippilot.orchestrator")}
+        if bad:
+            offenders[str(py.relative_to(_SRC))] = bad
+    assert not offenders, f"agents가 orchestrator를 import함(L-6 위반): {offenders}"
+
+
 def test_providers_do_not_import_llm() -> None:
     """L-5 (BR-AF-10): providers의 LLM 경로 import 금지 — Provider LLM 0회를 구조로 강제.
     게이트웨이(llm_gateway)든 포트(LlmPort)든 둘 다 막는다 (L-3와 같은 이유: 우회 차단)."""
