@@ -45,6 +45,7 @@
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/mustVisitListStructure.test.ts`  →  (export 없음)
 - `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/noMswInStaticGraph.test.ts`  →  (export 없음)
@@ -240,6 +241,7 @@
 
 ## src/app/trips/new/
 - `src/app/trips/new/_layout.tsx`  →  (export 없음)
+- `src/app/trips/new/must-visits.tsx`  →  (export 없음)
 - `src/app/trips/new/step1.tsx`  →  (export 없음)
 - `src/app/trips/new/step2.tsx`  →  (export 없음)
 
@@ -575,6 +577,7 @@
 ## src/features/trip/ui/
 - `src/features/trip/ui/CompanionEditSheet.tsx`  →  CompanionEditSheetProps · CompanionEditSheet
 - `src/features/trip/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
+- `src/features/trip/ui/MustVisitListScreen.tsx`  →  MustVisitListScreenProps · MustVisitListScreen
 - `src/features/trip/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
 - `src/features/trip/ui/StaySelectSheet.tsx`  →  StaySelectSheetProps · StaySelectSheet
 - `src/features/trip/ui/TripBaseFixSheet.tsx`  →  TripBaseFixSheetProps · TripBaseFixSheet
@@ -871,6 +874,12 @@
 
 ## src/pages/travel-style/ui/
 - `src/pages/travel-style/ui/TravelStylePage.tsx`  →  TravelStylePage
+
+## src/pages/trip-new-mustvisit/
+- `src/pages/trip-new-mustvisit/index.ts`  →  MustVisitListPage
+
+## src/pages/trip-new-mustvisit/ui/
+- `src/pages/trip-new-mustvisit/ui/MustVisitListPage.tsx`  →  MustVisitListPage
 
 ## src/pages/trip-new-step1/
 - `src/pages/trip-new-step1/index.ts`  →  TripNewStep1Page
@@ -1209,4 +1218,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 823개 파일
+합계 828개 파일

@@ -142,6 +142,7 @@ import {
 } from '@/features/trip/ui/TripWizardStep1Screen';
 import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
+import { MustVisitListScreen } from '@/features/trip/ui/MustVisitListScreen';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationPage } from '@/pages/live-location';
@@ -2942,6 +2943,38 @@ export const PREVIEW_STATES: PreviewState[] = [
         onSelect={noop}
         onBrowse={noop}
         onAssign={noop}
+      />
+    ),
+  },
+  // S12 꼭 갈 곳 전용 목록(TRIP-676) — g01 요약 스트립 "전체 보기"가 여는 화면. 순수 뷰
+  // `MustVisitListScreen` 을 그대로 태운다(페이지 import 하면 api 사슬 전이 로드로 프리뷰가 죽는다).
+  // `MUST_VISIT_THUMBNAILS`(imageUrl 전부 null → 회색 자리)로 시드 얼굴을, [] 로 empty 얼굴을 그린다.
+  // jest 는 카드 간격·썸네일 크기·회색 톤을 못 봐 이 두 키가 FG-3 전까지 육안 대조 자리다.
+  {
+    key: 'trip-new-mustvisit-list',
+    band: 'g',
+    label: 'g03 · 꼭 갈 곳 목록',
+    login: null,
+    render: () => (
+      <MustVisitListScreen
+        items={MUST_VISIT_THUMBNAILS}
+        onRemove={noop}
+        onAddMore={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-mustvisit-empty',
+    band: 'g',
+    label: 'g03 · 꼭 갈 곳 목록 0곳',
+    login: null,
+    render: () => (
+      <MustVisitListScreen
+        items={[]}
+        onRemove={noop}
+        onAddMore={noop}
+        onBack={noop}
       />
     ),
   },

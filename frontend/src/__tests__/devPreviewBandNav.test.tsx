@@ -95,7 +95,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    `-loading` 은 신 스켈레톤으로 정합될 뿐(키 이미 존재)이라 총계 불변 — empty 만 +1.
     //    test-designer 선반영(D4) — implementer 는 preview.tsx 에 `-empty` 키만 추가하고 이 가드는
     //    안 만진다(추가 전엔 165개라 이 단언이 red).
-    expect(PREVIEW_STATES).toHaveLength(166);
+    // ⚠️ TRIP-676: S12 꼭 갈 곳 전용 목록 프리뷰 키 2개(`trip-new-mustvisit-list`·`-empty`, band `g`)
+    //    추가로 166→168. test-designer 선반영(S8·S9 놓침 재발 방지 관례) — implementer 는 preview.tsx 에
+    //    두 키(render: <MustVisitListScreen …/>, 순수 뷰 import)만 추가하고 이 가드는 안 만진다
+    //    (추가 전엔 166개라 이 단언이 red).
+    expect(PREVIEW_STATES).toHaveLength(168);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

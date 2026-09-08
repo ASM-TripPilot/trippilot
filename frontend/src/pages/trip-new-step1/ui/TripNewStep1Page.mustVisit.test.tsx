@@ -218,3 +218,19 @@ describe('더 담기 목적지 분기 (TRIP-367 보존)', () => {
     expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('전체 보기 재배선 (TRIP-676 · AC-5)', () => {
+  // ⚠️ 이 목적지를 잠그는 기존 테스트는 없었다 — 화면 테스트 2개는 `onPressSeeAll` 콜백 발화만
+  //    보고(목적지 무관), 이 페이지 테스트는 see-all 을 한 번도 press 안 했다(더 담기만 press).
+  //    그래서 "갱신"이 아니라 신규 red 다: 구 목적지(/explore/saved-places)에 대해 red 로 선다(02a ★2).
+  //    더 담기(-more)와 목적지가 겹칠 수 있어(둘 다 d02 가능) see-all testID 를 정확히 눌러 가른다(02a ★3).
+  it('전체 보기 press → /trips/new/must-visits 로 간다(구 /explore/saved-places 아님)', () => {
+    mockSavedPlaces = loaded(THREE);
+    render(<TripNewStep1Page baseDate={BASE} />);
+
+    fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-see-all'));
+
+    expect(routerMock.push).toHaveBeenCalledWith('/trips/new/must-visits');
+    expect(routerMock.push).toHaveBeenCalledTimes(1);
+  });
+});
