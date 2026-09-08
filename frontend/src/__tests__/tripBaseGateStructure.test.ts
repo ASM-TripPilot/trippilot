@@ -47,6 +47,12 @@ import { join, resolve } from 'node:path';
  * 제거). 정당한 작업이 이 파일 때문에 red를 낸 것이 **2회 누적**되면
  * 즉시 `baseGate.ts`의 import 0건(★17)만 남기고 나머지 심볼 단언을 뗀다 —
  * 그 하나만 영구 규칙(순수성)이고 나머지는 이번 배치의 사진이다.
+ *
+ * ⚠️ TRIP-673(S9) 갱신: 지정 축이 재연결됐다 — useAssignBase 를 아래 REMOVED_WIRING 에서만 뺐다.
+ * 이것이 이 파일이 낸 2번째 정당 red 지만, 리네임/전면제거가 아니라 **단일 검사(useAssignBase)
+ * 타깃 플립**이고 나머지 9 needle 은 페이지 실측 0건으로 teeth 유지다. frontend/CLAUDE.md
+ * "판정 단위는 '절'이 아니라 '검사 하나'" 원칙상 실적 있는 검사를 절 단위로 딸려 떼면 안 되므로
+ * ★17-only 졸업은 **트리거하지 않는다**(오케 최종 확인 대기 — 카운터는 실질 1건 유지로 본다).
  */
 
 const SRC_ROOT = resolve(__dirname, '..');
@@ -222,9 +228,11 @@ describe('배선이 새 카드 파생을 지고, 옛 게이트·보완 배선과
     // (`baseGate.ts`·`useBaseFix.ts`·`useTripBases`의 `useTripCoverage`)은 orphan으로 남아
     // 자기 테스트는 계속 green이지만, 배선이 그 심볼을 **다시 import하면** 여기서 red 다.
     // 이 부재를 소스로 잠그는 것이 유일한 그물이다 — 렌더엔 "막힘" 상태가 원리적으로 없다.
+    // ⚠️ TRIP-673(S9): useAssignBase 만 이 목록에서 뺐다 — S9 정의가 지정 축을 페이지에 다시
+    // 잇는다(밤별 거점 지정 = POST bases). 나머지 9 needle 은 S9 도 안 써 페이지 실측 0건이라
+    // 여전히 금지로 잠근다("지정만 재허용, 옛 coverage·fix·기간보완 게이트는 그대로 금지").
     const REMOVED_WIRING = [
       'useTripCoverage',
-      'useAssignBase',
       'useUnassignBase',
       'baseGate',
       'useBaseFix',

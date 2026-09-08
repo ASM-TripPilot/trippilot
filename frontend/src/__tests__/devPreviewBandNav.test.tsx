@@ -89,7 +89,9 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    키 11개를 신 계약 5개(`trip-new-step2-{default,no-stay,loading,error,notrip}`)로 줄여
     //    170→164. TRIP-665(g01 default 재작성으로 키 3개 삭제 166→163)와 동형 — 프리뷰 키에서
     //    제거된 화면 prop 이 사라지면서 총계가 준다.
-    expect(PREVIEW_STATES).toHaveLength(164);
+    // ⚠️ TRIP-673: g02 숙소 선택 시트 프리뷰 키(`trip-new-step2-staysheet`, band `g`) 추가로
+    //    164→165. TRIP-666~671 시트 키 추가와 동형 — 신 프리뷰 키 1개가 총계를 1 늘린다.
+    expect(PREVIEW_STATES).toHaveLength(165);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

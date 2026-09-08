@@ -143,6 +143,7 @@ import {
 import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
+import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationPage } from '@/pages/live-location';
 import { BudgetEditSheet } from '@/pages/trip-new-step1/ui/BudgetEditSheet';
 import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
@@ -2878,6 +2879,48 @@ export const PREVIEW_STATES: PreviewState[] = [
         {...TRIP_BASE_SCREEN}
         variant="notrip"
         cards={[]}
+      />
+    ),
+  },
+  // g02 숙소 선택 시트(TRIP-673 S9, Figma `3669:2068`) — 밤2 열림·해운대 선택 상태. `StaySelectSheet`은
+  // props-only 순수 뷰(스토어·라우터·조회 미참조)라 배선 없이 props 만 갈아 끼우면 얼굴이 그대로 나온다.
+  // stay-b(감천)는 날짜 없음 후보(→"날짜 없음" 서브라인). jest 는 딤·실개폐·사진 placeholder 회색·선택
+  // 테두리 분홍을 못 봐(바텀시트 통과형 목) 이 키가 유일한 6-b 육안 대조 자리다.
+  {
+    key: 'trip-new-step2-staysheet',
+    band: 'g',
+    label: 'g02 · 숙소 선택 시트',
+    login: null,
+    render: () => (
+      <StaySelectSheet
+        title="2박 · 부산"
+        dateLabel="6/11(목)"
+        candidates={[
+          {
+            savedStayId: 'stay-a',
+            name: '해운대 오션 호텔',
+            coordConfirmed: true,
+            checkIn: '2026-06-10',
+            checkOut: '2026-06-13',
+            registerRoute: 'MAP_SEARCH',
+            createdAt: '2026-08-01T00:00:00Z',
+            updatedAt: '2026-08-01T00:00:00Z',
+          },
+          {
+            savedStayId: 'stay-b',
+            name: '감천문화마을 게스트하우스',
+            coordConfirmed: false,
+            checkIn: null,
+            checkOut: null,
+            registerRoute: 'MAP_SEARCH',
+            createdAt: '2026-08-01T00:00:00Z',
+            updatedAt: '2026-08-01T00:00:00Z',
+          },
+        ]}
+        selectedSavedStayId="stay-a"
+        onSelect={noop}
+        onBrowse={noop}
+        onAssign={noop}
       />
     ),
   },

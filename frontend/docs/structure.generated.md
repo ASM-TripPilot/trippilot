@@ -96,6 +96,7 @@
 - `src/__tests__/stayRegisterStructure.test.ts`  →  (export 없음)
 - `src/__tests__/staySearchGenerated.test.ts`  →  (export 없음)
 - `src/__tests__/staySearchStructure.test.ts`  →  (export 없음)
+- `src/__tests__/staySelectSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/syncQueueIdempotency.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarOverlay.test.ts`  →  (export 없음)
 - `src/__tests__/tabbarVisual.test.ts`  →  (export 없음)
@@ -575,6 +576,7 @@
 - `src/features/trip/ui/CompanionEditSheet.tsx`  →  CompanionEditSheetProps · CompanionEditSheet
 - `src/features/trip/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
 - `src/features/trip/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
+- `src/features/trip/ui/StaySelectSheet.tsx`  →  StaySelectSheetProps · StaySelectSheet
 - `src/features/trip/ui/TripBaseFixSheet.tsx`  →  TripBaseFixSheetProps · TripBaseFixSheet
 - `src/features/trip/ui/TripDateSheet.tsx`  →  TripDateSheetProps · TripDateSheet
 - `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · BackChevronGlyph · PinGlyph · RemoveGlyph · ThumbRemoveGlyph · PlusGlyph · CalendarGlyph · ChevronDownGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · SparkleGlyph · AlertCircleGlyph · GlobeGlyph · BedTone · BedGlyph · ChevronRightGlyph · BaseBadgePinGlyph · HeartFilledGlyph · CheckGlyph · SearchGlyph · WarningTriangleGlyph
@@ -1207,4 +1209,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 821개 파일
+합계 823개 파일

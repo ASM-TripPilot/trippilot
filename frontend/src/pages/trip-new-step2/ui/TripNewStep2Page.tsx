@@ -1,13 +1,18 @@
-import type { ReactElement } from 'react';
+import { type ReactElement, useState } from 'react';
 import { useRouter } from 'expo-router';
 
 import {
   nightlyBaseCards,
   toBaseSections,
 } from '@/features/trip/model/baseSections';
+import { deriveEndDate } from '@/features/trip/model/tripWizardStep1';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { useSavedStays } from '@/features/trip/model/useSavedStays';
-import { useTripBases } from '@/features/trip/model/useTripBases';
+import {
+  useAssignBase,
+  useTripBases,
+} from '@/features/trip/model/useTripBases';
+import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
 import {
   TripWizardStep2Screen,
   type Step2Variant,
@@ -26,11 +31,21 @@ import {
  *  3. **조회 껐다 켜기** — 위저드는 `Stack.Protected` 밖이라 딥링크로 tripId 없이 열린다.
  *     `enabled: tripId !== undefined`로 그때 요청을 아예 안 보낸다.
  *
- * 옛 후보 하트 배정 모델(coverage 차단 게이트·연박 묶음·fixSheet·assign/unassign)은 통째로
- * 걷혔다(D2). 카드 탭은 S9(숙소 선택 시트) 미착수라 오픈 신호를 받을 대상이 없어 no-op이다 —
- * 그 계약을 재는 곳은 화면 층(`nightNumber`)이다. 두 CTA는 게이트 없이 h04(방식 선택)로
- * `replace`한다(브리프 AC-5, 현 `goToMethod` 계승 — 여행은 이미 서버에 만들어져 위저드로
- * 되돌아갈 이유가 없으므로 `push`가 아니라 `replace`로 파괴된 위저드 화면을 스택에서 걷는다).
+ * 옛 후보 하트 배정 모델(coverage 차단 게이트·연박 묶음·fixSheet)은 통째로 걷혔다(D2). 두 CTA는
+ * 게이트 없이 h04(방식 선택)로 `replace`한다(브리프 AC-5, 현 `goToMethod` 계승 — 여행은 이미
+ * 서버에 만들어져 위저드로 되돌아갈 이유가 없으므로 `push`가 아니라 `replace`로 파괴된 위저드
+ * 화면을 스택에서 걷는다).
+ *
+ * S9(TRIP-673) 재연결 — S8이 no-op stub으로 둔 카드 탭을 숙소 선택 시트 오픈으로 잇는다:
+ *  1. **카드 탭 → 시트 오픈** — `onPressCard(nightNumber)`가 `openNight`을 세우고, 그 밤 카드가
+ *     있으면 `<StaySelectSheet>`를 화면의 형제로 조건부 마운트한다(자매 시트 관례).
+ *  2. **드래프트·구간은 배선 소유** — 시트는 무상태다. 선택 savedStayId·시트 열림·실패 플래그를
+ *     이 페이지가 `useState`로 지고, 지정 시 밤 ISO를 파생해 POST 인자를 만든다.
+ *  3. **밤 구간 파생**(★1) — `NightlyBaseCard`엔 밤 ISO가 없어 `startDate + (nightNumber-1)일`로
+ *     파생한다(`deriveEndDate` 재사용). `dateFrom`=밤 ISO, `dateTo`=밤+1일(체크아웃 배타).
+ *  4. **지정 커밋** — `useAssignBase().mutate({tripId, data:{savedStayId,dateFrom,dateTo}}, {onSuccess,
+ *     onError})`. 성공→시트 닫기(+선택 초기화), 실패→시트 유지 + 인라인 오류(INV-4). 무효화는
+ *     `useAssignBase` 내부 부작용이라 배선이 직접 안 부른다(01b §7-1).
  */
 export function TripNewStep2Page(): ReactElement {
   const router = useRouter();
@@ -42,6 +57,15 @@ export function TripNewStep2Page(): ReactElement {
 
   const savedStays = useSavedStays({ enabled: tripId !== undefined });
   const bases = useTripBases(tripId);
+  const assignBase = useAssignBase();
+
+  // 시트 드래프트는 배선이 소유한다(시트는 무상태) — 어느 밤이 열렸나·무엇을 골랐나·직전 지정이
+  // 실패했나.
+  const [openNight, setOpenNight] = useState<number | null>(null);
+  const [selectedSavedStayId, setSelectedSavedStayId] = useState<string | null>(
+    null
+  );
+  const [assignFailed, setAssignFailed] = useState(false);
 
   const savedStayList = savedStays.data ?? [];
   const assignments = bases.data ?? [];
@@ -79,20 +103,69 @@ export function TripNewStep2Page(): ReactElement {
     });
   }
 
+  /** 카드 탭 → 그 밤의 시트를 연다. 새로 여는 밤마다 선택·실패를 비워 깨끗이 시작한다. */
+  function openSheet(nightNumber: number): void {
+    setOpenNight(nightNumber);
+    setSelectedSavedStayId(null);
+    setAssignFailed(false);
+  }
+
+  function closeSheet(): void {
+    setOpenNight(null);
+    setSelectedSavedStayId(null);
+    setAssignFailed(false);
+  }
+
+  /** 지정 커밋 — 밤 ISO를 파생(★1)해 POST 인자를 만든다. 밤 ISO는 `NightlyBaseCard`에 없어
+   * `startDate + (nightNumber-1)일`로 구한다(★계약②). `dateTo`는 체크아웃 배타라 밤+1일이다. */
+  function handleAssign(): void {
+    if (
+      tripId === undefined ||
+      startDate === undefined ||
+      openNight === null ||
+      selectedSavedStayId === null
+    ) {
+      return;
+    }
+    const dateFrom = deriveEndDate(startDate, openNight - 1);
+    const dateTo = deriveEndDate(startDate, openNight);
+    assignBase.mutate(
+      { tripId, data: { savedStayId: selectedSavedStayId, dateFrom, dateTo } },
+      { onSuccess: closeSheet, onError: () => setAssignFailed(true) }
+    );
+  }
+
+  // 그 밤 카드가 있을 때만 시트를 마운트한다(`openNight`이 null이면 find가 undefined). 제목은
+  // 카드 메타처럼 `{박수}박 · {지역}`, 날짜 라벨은 카드가 이미 요일을 붙여 낸 값을 그대로 쓴다.
+  const openCard = cards.find((card) => card.nightNumber === openNight);
+
   return (
-    <TripWizardStep2Screen
-      variant={resolveVariant()}
-      cards={cards}
-      // S9(숙소 선택 시트) 미착수 — 오픈 신호를 받을 대상이 아직 없다(no-op stub).
-      onPressCard={() => {}}
-      onGenerate={goToMethod}
-      onNoStayStart={goToMethod}
-      onBack={() => router.back()}
-      onRetryAll={() => {
-        void savedStays.refetch();
-        void bases.refetch();
-      }}
-      onRestart={() => router.push('/trips/new/step1')}
-    />
+    <>
+      <TripWizardStep2Screen
+        variant={resolveVariant()}
+        cards={cards}
+        onPressCard={openSheet}
+        onGenerate={goToMethod}
+        onNoStayStart={goToMethod}
+        onBack={() => router.back()}
+        onRetryAll={() => {
+          void savedStays.refetch();
+          void bases.refetch();
+        }}
+        onRestart={() => router.push('/trips/new/step1')}
+      />
+      {openCard !== undefined ? (
+        <StaySelectSheet
+          title={`${openCard.nightNumber}박 · ${openCard.region}`}
+          dateLabel={openCard.dateLabel}
+          candidates={savedStayList}
+          selectedSavedStayId={selectedSavedStayId}
+          onSelect={(savedStayId) => setSelectedSavedStayId(savedStayId)}
+          onBrowse={() => router.push('/stays')}
+          onAssign={handleAssign}
+          assignFailed={assignFailed}
+        />
+      ) : null}
+    </>
   );
 }

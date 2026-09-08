@@ -138,7 +138,7 @@ describe('d-층 파일이 실재하고 각자의 심볼을 갖는다', () => {
   });
 });
 
-describe('AC-3 · 배선에서 커버리지·게이트·fix·지정 축이 통째로 빠진다 (D2)', () => {
+describe('AC-3 · 배선에서 커버리지·게이트·fix 축이 통째로 빠진다 (D2 · 지정은 TRIP-673/S9로 재연결)', () => {
   it('배선은 박별 카드 파생을 쓰고, 제거된 훅·게이트를 더는 import 하지 않는다', () => {
     const pageSource = readOne(PAGE_REL);
 
@@ -150,10 +150,13 @@ describe('AC-3 · 배선에서 커버리지·게이트·fix·지정 축이 통�
 
     // 부정 — 제거 계약(D2). 하나라도 남으면 "대규모 재작성 제거"가 새는 것이다. 파일 자체는
     // 삭제하지 않으므로(orphan) 이 소스 스캔이 "배선이 안 쓴다"의 유일한 그물이다(★7).
+    // ⚠️ TRIP-673(S9): '지정' 축만 재허용됐다 — S9 정의가 useAssignBase 를 페이지에 다시 잇는다
+    // (밤별 거점 지정 = POST bases). 그래서 useAssignBase 를 이 목록에서만 뺀다. 나머지 6 needle
+    // (coverage·unassign·baseGate·baseFix·fixSaved·extendPeriod)은 S9 도 안 써 페이지 실측 0건
+    // — 여전히 금지로 잠근다("지정만 재허용, 옛 게이트·기간보완은 그대로 금지").
     const page = read([PAGE_REL]);
     [
       'useTripCoverage',
-      'useAssignBase',
       'useUnassignBase',
       'baseGate',
       'useBaseFix',
