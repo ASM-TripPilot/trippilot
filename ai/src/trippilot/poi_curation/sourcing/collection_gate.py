@@ -7,8 +7,9 @@ ai측 게이트 코드가 부재해(백엔드 C7 `PoiCollectionGate`만 실재) 
 단계별 조정 (TourAPI = 정형 공공데이터 특성):
 1. 스키마 — 이름·좌표 필수 (GeoPoint 생성 = 범위 검증). 영업시간은 필수 아님:
    "정보 없음 ≠ 배제" 원칙 + dataQuality PARTIAL로 표시 (TRIP-326 합의와 동형).
-2. 실재 — 좌표가 서비스 권역(한국 bbox) 안인지 결정론 검사. 설계의 Places API
-   교차확인은 교차 어댑터 부재로 이연 (정형 공공데이터라 웹 추출 대비 위험 낮음).
+2. 실재 — 좌표가 서비스 권역(한국 bbox) 안인지 + **폐업이 아닌지**(인허가 대조,
+   `closed_refs` 주입 시). 설계의 Places API 교차확인은 교차 어댑터 부재로 이연
+   (정형 공공데이터라 웹 추출 대비 위험 낮음).
 3. 중복 — source_ref 동일 또는 (동일 카테고리 + 정규화 이름 동일 + 50m 이내) 병합.
    병합은 먼저 온 레코드를 지키되 결측 필드(영업시간)만 보충 — 조용한 덮어쓰기 금지.
 4. 신뢰 — 출처 태깅: 정형 API이므로 PoiSource.PLACES_API (WEB 아님 — confidence
@@ -37,6 +38,7 @@ _DUP_RADIUS_M = 50.0
 DROP_SCHEMA_NAME = "schema_missing_name"
 DROP_SCHEMA_COORD = "schema_missing_or_invalid_coord"
 DROP_EXISTENCE = "existence_out_of_service_region"
+DROP_EXISTENCE_CLOSED = "existence_closed_business"
 DROP_POLICY_PRICE = "policy_priced"
 
 
@@ -74,7 +76,19 @@ class GateReport:
 
 
 class CollectionGate:
-    """5단 수집 게이트. 입력 순서 보존 — 같은 입력이면 같은 출력 (결정론)."""
+    """5단 수집 게이트. 입력 순서 보존 — 같은 입력이면 같은 출력 (결정론).
+
+    `closed_refs` 를 주면 2단(실재)에서 **폐업 업소를 드롭**한다. 미주입이면 기존
+    동작 그대로다 — 조회원이 없다고 조용히 통과시키는 게 아니라, 애초에 판정 근거가
+    없는 것이라 "모름"으로 두는 것이다(있는 근거만 쓴다).
+
+    왜 2단인가: 좌표 범위와 같은 "이 장소가 실재하는가" 질문이다. 문 닫은 가게는
+    좌표가 멀쩡해도 실재하지 않는다. 2026-09-08 실측 — 수집분의 음식점·카페
+    7,837건 중 **210건(2.7%)이 폐업**이었고 그중에는 8년 전에 닫은 곳도 있었다.
+    """
+
+    def __init__(self, closed_refs: frozenset[str] | None = None) -> None:
+        self._closed = closed_refs or frozenset()
 
     def apply(self, candidates: Sequence[SourcingCandidate]) -> GateReport:
         drops: dict[str, int] = {}
@@ -99,6 +113,9 @@ class CollectionGate:
             if not (_KR_LAT[0] <= coord.lat <= _KR_LAT[1]
                     and _KR_LNG[0] <= coord.lng <= _KR_LNG[1]):
                 drop(DROP_EXISTENCE)
+                continue
+            if c.source_ref in self._closed:
+                drop(DROP_EXISTENCE_CLOSED)
                 continue
             verified.append((c, coord))
 

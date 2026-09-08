@@ -336,3 +336,31 @@ def test_pbt_output_is_deterministic(items) -> None:
         return to_output_document(result, area_code="39", content_types=["12"],
                                   collected_at=_NOW)
     assert json.dumps(run(), ensure_ascii=False) == json.dumps(run(), ensure_ascii=False)
+
+
+# ── 폐업 필터 (2단 실재, TRIP-280) ─────────────────────────────────────
+
+
+def test_폐업_업소는_실재_단계에서_드롭된다() -> None:
+    """**문 닫은 가게를 추천 후보에 넣는 것이 지금 실제로 일어나고 있었다.**
+
+    2026-09-08 실측: 수집분의 음식점·카페 7,837건을 LOCALDATA 인허가와 대조하니
+    210건(2.7%)이 폐업이었고, 그중 8년 전에 닫은 곳도 있었다. 좌표가 멀쩡해도
+    실재하지 않으므로 2단(실재)에서 거른다.
+    """
+    from trippilot.poi_curation.sourcing.collection_gate import DROP_EXISTENCE_CLOSED
+
+    gate = CollectionGate(closed_refs=frozenset({"closed-1"}))
+    report = gate.apply([_candidate("open-1"), _candidate("closed-1", name="문닫은집")])
+
+    assert [p.poi.name for p in report.passed] == ["성산일출봉"], "폐업분만 빠진다"
+    assert len(report.passed) == 1
+    assert report.drops.get(DROP_EXISTENCE_CLOSED) == 1
+
+
+def test_폐업_목록_미주입이면_기존_동작_그대로() -> None:
+    """근거가 없으면 판정하지 않는다 — 없다고 전부 통과시키는 것도, 막는 것도 아니다."""
+    report = CollectionGate().apply([_candidate("a"), _candidate("b", name="다른집")])
+
+    assert len(report.passed) == 2
+    assert "existence_closed_business" not in report.drops
