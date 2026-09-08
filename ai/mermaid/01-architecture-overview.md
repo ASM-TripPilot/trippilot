@@ -17,9 +17,9 @@ graph TB
 
     subgraph Agents["agents/ (Agent Protocol · base.py)"]
         SA["ScheduleAgent<br/>(schedule/agent.py)"]
-        PA["PlanBRagPipeline<br/>(planb/rag.py)"]
-        RA["Reflect composer<br/>(reflect/composer.py · compose)"]
-        EA["EditAgent 함수군<br/>(edit_agent.py · apply_command 등)"]
+        PA["PlanBRagPipeline<br/>(planb/rag.py · run)"]
+        RA["ReflectAgent<br/>(reflect/agent.py · run)"]
+        EA["EditAgent<br/>(edit/agent.py · run)"]
     end
 
     subgraph Providers["providers/ (Provider Protocol · base.py)"]

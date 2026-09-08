@@ -29,12 +29,12 @@ from pathlib import Path
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
 from trippilot.agents.reflect.composer import (
     MAX_ATTEMPTS,
     SAFE_CAPTION_BY_LAYOUT,
     safe_caption,
     apply_hard_replacements,
-    compose,
     rank_key,
 )
 from trippilot.agents.reflect.fallback import (
@@ -313,7 +313,7 @@ def test_rfl_p7_soft_heavy_beats_single_hard_example() -> None:
 def test_rfl_p5_all_attempts_failed_yields_fixed_fallback_and_events() -> None:
     for llm in (FailingLlm(), FakeLlm(canned="회고: JSON이 아닌 산문")):
         worker, trace = _compose_env(llm)
-        template = compose(worker, _REQUEST, _TID, _NOW, trace)
+        template = ReflectAgent(worker, trace).run(ReflectTask(_REQUEST, _TID, _NOW))
         assert template.is_fallback is True
         # 결정론 — 같은 (kind, trace_id, now)의 고정 폴백과 완전 동일
         assert template == build_fallback_template(_REQUEST.kind, _TID, _NOW)
@@ -331,7 +331,7 @@ def test_rfl_p5_pbt_compose_never_raises_never_silent(raw: str) -> None:
     """어떤 쓰레기 텍스트에도: 예외 없음 ∧ 폴백이면 고정 템플릿+FallbackEvent,
     아니면 후보 채택 경로(호출 계측 존재) — 침묵 실패 없음 (INV-4)."""
     worker, trace = _compose_env(FakeLlm(canned=raw))
-    template = compose(worker, _REQUEST, _TID, _NOW, trace)
+    template = ReflectAgent(worker, trace).run(ReflectTask(_REQUEST, _TID, _NOW))
     assert isinstance(template, ReflectionTemplate)
     if template.is_fallback:
         assert template == build_fallback_template(_REQUEST.kind, _TID, _NOW)
@@ -345,7 +345,7 @@ def test_rfl_p5_pbt_compose_never_raises_never_silent(raw: str) -> None:
 def test_zero_violation_candidate_short_circuits_after_one_call() -> None:
     llm = ScriptedLlm(_raw(_CLEAN_BODY))
     worker, trace = _compose_env(llm)
-    template = compose(worker, _REQUEST, _TID, _NOW, trace)
+    template = ReflectAgent(worker, trace).run(ReflectTask(_REQUEST, _TID, _NOW))
     assert llm.calls == 1  # 위반 0 → 조기 종료
     assert template.is_fallback is False
     assert len(template.scenes) == 3
@@ -354,7 +354,7 @@ def test_zero_violation_candidate_short_circuits_after_one_call() -> None:
 def test_violating_candidate_exhausts_all_attempts() -> None:
     llm = ScriptedLlm(_raw(_VIOLATING_BODY))
     worker, trace = _compose_env(llm)
-    template = compose(worker, _REQUEST, _TID, _NOW, trace)
+    template = ReflectAgent(worker, trace).run(ReflectTask(_REQUEST, _TID, _NOW))
     assert llm.calls == MAX_ATTEMPTS  # 위반이 남는 한 조기 종료 없음
     assert template.is_fallback is False
     assert _hard(_regate_violations(_REQUEST, template)) == []  # 교체는 그래도 수행
@@ -364,7 +364,7 @@ def test_parse_fail_then_clean_recovers_without_fallback() -> None:
     """1차 파싱 실패 후 2차 위반 0 — 폴백이 아니라 2차 채택 + 조기 종료."""
     llm = ScriptedLlm("산문 응답 (파싱 불가)", _raw(_CLEAN_BODY))
     worker, trace = _compose_env(llm)
-    template = compose(worker, _REQUEST, _TID, _NOW, trace)
+    template = ReflectAgent(worker, trace).run(ReflectTask(_REQUEST, _TID, _NOW))
     assert llm.calls == 2
     assert template.is_fallback is False
     assert [e for e in trace.of_type(FallbackEvent) if e.component == "agents.reflect"] == []
@@ -375,7 +375,7 @@ def test_compose_is_deterministic_for_same_inputs() -> None:
     results = []
     for _ in range(2):
         worker, trace = _compose_env(FakeLlm(canned=_raw(_VIOLATING_BODY)))
-        results.append(compose(worker, _REQUEST, _TID, _NOW, trace))
+        results.append(ReflectAgent(worker, trace).run(ReflectTask(_REQUEST, _TID, _NOW)))
     assert results[0] == results[1]
 
 

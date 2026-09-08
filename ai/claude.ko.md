@@ -31,9 +31,13 @@ TripPilot AI는 LLM + 최적화 어셈블리 하이브리드 아키텍처로 여
 - **ScheduleAgent**: 일정 생성 (Generation 패턴) — **배선됨** (2026-09-09): `agents/schedule/agent.py`
   `ScheduleAgent.run(ScheduleTask)`. `ItineraryOrchestrator` 가 소유 검증·시한 배분·정보 수집·소화 후
   위임한다. 어셈블리 엔진은 독립 층 그대로 — 에이전트는 `solve()` 를 부를 뿐
-- **PlanBAgent**: 변수 대응 (RAG 패턴, KB 3종 + pgvector)
-- **ReflectAgent**: 회고 생성 (1차: 단순 LLM Generation. 추후 Multi-step 확장)
-- **EditAgent**: 일정 편집 (의도 해석 → 어셈블리 검증 → 반영)
+- **PlanBAgent**: 변수 대응 (RAG 패턴, KB 3종 + pgvector) — `agents/planb/rag.py` `PlanBRagPipeline.run(PlanBRagRequest)`
+- **ReflectAgent**: 회고 생성 — `agents/reflect/agent.py` `ReflectAgent.run(ReflectTask)`. 텍스트·vision(Phase 2)이 `ReflectTask.vision` 유무로 한 진입점
+- **EditAgent**: 일정 편집 (번역 → 검증 → 확인 게이트 → 재타이밍 → 어셈블리 검증) — `agents/edit/agent.py` `EditAgent.run(EditTask) -> EditOutcome`
+
+> **네 에이전트 모두 게이트웨이 워커를 감싸는 객체다** (2026-09-09): 생성자 주입, `run(<Task>) -> <Outcome>`
+> 단일 진입, 경계 밖으로 예외를 던지지 않는다(DL-5). 문자 그대로의 `Agent.handle(AgentTask) -> AgentResult`
+> 봉투는 넷 다 아직 미구현 — IntentRouter 배선과 함께 온다(business-rules 미결 #8).
 
 **정보원** (v2 — `orchestrator/info_collector.py` + `providers/`):
 Place · Weather · Transit · Persona · Event Provider. Orchestrator가

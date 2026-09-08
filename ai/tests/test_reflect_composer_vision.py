@@ -1,4 +1,4 @@
-"""VIS-P1(사영)·VIS-P3 + #9 예산 공유: compose_vision Phase 2 강등 계단 — 조립층 몫 (TRIP-595).
+"""VIS-P1(사영)·VIS-P3 + #9 예산 공유: ReflectAgent vision Phase 2 강등 계단 (TRIP-595).
 
 게이트·워커 단위(VIS-P2 전체·VIS-P4·동의 경계·이미지 전송 순서)는
 test_llm_gateway_photo_highlight.py 소관, 텍스트 조립층(RFL-P1~P7)은
@@ -18,7 +18,7 @@ composer 통합"으로 유예했던 조각만 증명한다:
                  운영자가 stage로 필터하면 잡힌다 (유예 항목 해소). 모드 쌍은
                  config 폴백 대장과 일치 (TRIP-260 #4·BR-AF-07). 텍스트 전용
                  경로(compose)에서는 stage="vision" 이벤트 0
-  VIS-P1 사영     compose_vision 경유 시 이미지가 실리는 호출은 vision feature뿐 —
+  VIS-P1 사영     vision 경로에서 이미지가 실리는 호출은 vision feature뿐 —
                  텍스트 강등 후 호출·Phase 1 compose 호출은 전부 images == ()
   BR-U6R-05      vision 1차 위반 0이면 템플릿 생성 1회로 조기 종료
   결정론          같은 입력 2회 → 같은 산출 (성공·강등·전실패 세 경로 전부)
@@ -37,10 +37,9 @@ from pathlib import Path
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
 from trippilot.agents.reflect.composer import (
     MAX_ATTEMPTS,
-    compose,
-    compose_vision,
 )
 from trippilot.agents.reflect.fallback import build_fallback_template
 from trippilot.agents.reflect.highlight_rule import select_highlights
@@ -177,9 +176,9 @@ def _env(template_llm, highlight_llm):
 
 def _run_vision(template_llm, highlight_llm, request: ReflectionRequest = _REQUEST):
     worker, highlight_worker, trace = _env(template_llm, highlight_llm)
-    template = compose_vision(
-        worker, highlight_worker, request, _VISION, _images(_VISION),
-        _TID, _NOW, trace)
+    agent = ReflectAgent(worker, trace, highlight_worker=highlight_worker)
+    template = agent.run(ReflectTask(
+        request, _TID, _NOW, vision=_VISION, images=_images(_VISION)))
     return template, trace
 
 
@@ -187,7 +186,7 @@ def _run_phase1(llm, request: ReflectionRequest = _REQUEST):
     trace = InMemoryTrace()
     worker = ReflectionTemplateWorker(GatewayFacade(
         llm, PromptRegistry(_PROMPTS), ReflectionTemplateGate(), _CFG, trace))
-    return compose(worker, request, _TID, _NOW, trace), trace
+    return ReflectAgent(worker, trace).run(ReflectTask(request, _TID, _NOW)), trace
 
 
 def _vision_events(trace: InMemoryTrace) -> list[FallbackEvent]:
@@ -347,8 +346,9 @@ def test_vis_p1_projection_images_ride_only_vision_calls_in_photos_order() -> No
     highlight_spy = VisionSpyLlm(canned=_HL_RAW)
     worker, highlight_worker, trace = _env(spy, highlight_spy)
     images = _images(_VISION)
-    template = compose_vision(
-        worker, highlight_worker, _REQUEST, _VISION, images, _TID, _NOW, trace)
+    agent = ReflectAgent(worker, trace, highlight_worker=highlight_worker)
+    template = agent.run(ReflectTask(
+        _REQUEST, _TID, _NOW, vision=_VISION, images=images))
 
     assert template.is_fallback is False
     # vision 생성 호출 — vision.photos 순서 그대로 (워커 docstring의 결정론 계약)
@@ -430,3 +430,28 @@ def test_generate_vision_rejects_mismatched_image_keys() -> None:
     extra[PhotoId("ph-동의밖")] = LlmImagePart(media_type="image/png", data=_PNG)
     with pytest.raises(ValueError, match="불일치"):
         worker.generate_vision(_REQUEST, _VISION, extra, (), _TID, _NOW)
+
+
+# ── 객체화로 생긴 분기: vision 요청 + 하이라이트 워커 미주입 ──────────
+
+
+def test_vision_without_highlight_worker_falls_back_to_text_path() -> None:
+    """Phase 2 미배선 = **기능 부재**이지 실패가 아니다 (설명 워커 선례와 동일).
+
+    `run()` 이 진입점 하나로 합쳐지며 생긴 분기다 — 종전에는 경계가 compose 와
+    compose_vision 중 무엇을 부를지 알아야 했다. 하이라이트 워커가 없으면 vision 을
+    요청받아도 텍스트로 처리하고, **이미지는 어떤 호출에도 실리지 않으며**(VIS-P1 사영)
+    강등 신호도 내지 않는다(부재는 강등이 아니다).
+    """
+    spy = VisionSpyLlm(canned=_raw(_CLEAN_BODY))
+    trace = InMemoryTrace()
+    worker = ReflectionTemplateWorker(GatewayFacade(
+        spy, PromptRegistry(_PROMPTS), ReflectionTemplateGate(), _CFG, trace))
+    agent = ReflectAgent(worker, trace)  # highlight_worker 미주입
+
+    template = agent.run(ReflectTask(
+        _REQUEST, _TID, _NOW, vision=_VISION, images=_images(_VISION)))
+
+    assert template.is_fallback is False
+    assert [bool(i) for i in spy.seen_images] == [False]  # 텍스트 1회, 이미지 0
+    assert _vision_events(trace) == []                    # 부재 ≠ 강등

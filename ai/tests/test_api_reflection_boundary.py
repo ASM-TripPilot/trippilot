@@ -1,6 +1,6 @@
 """RFL 경계 관통 (TRIP-429): /ai/v1/reflection/{generate,nudge} — 계약 §3·§5 + INV-3·INV-4.
 
-TestClient + build_dev_app 실조립(경계→wiring→compose 코어→게이트웨이) 관통 —
+TestClient + build_dev_app 실조립(경계→wiring→ReflectAgent→게이트웨이) 관통 —
 실 LLM·외부 API 호출 0 (D37, e2e boundary ⑥ 선례). 증명하는 것:
 
   ① UnwiredLlm(기본 조립): generate 3회 전부 실패 → **200 + is_fallback=true**

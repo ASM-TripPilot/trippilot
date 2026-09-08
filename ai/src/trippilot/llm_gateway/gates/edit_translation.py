@@ -15,7 +15,7 @@ affectedSlots 일부만 살리면 명령의 의미가 바뀌므로, 대조 집�
      풀은 요청마다 앵커 반경·예산·품질로 잘리는 조각이라(poi_curation.pool_builder),
      다른 조건으로 생성된 원 일정의 슬롯이 풀 밖인 것은 정상이다. 이걸 풀로 교차하던
      동안 그런 슬롯은 자연어로 영원히 편집 불가였다 (TRIP-527).
-     대조 집합은 구조화 진입(`agents.edit_agent.validate_command`)의 규칙과 같다 —
+     대조 집합은 구조화 진입(`agents.edit.commands.validate_command`)의 규칙과 같다 —
      두 진입이 같은 슬롯에 다른 판정을 내지 않는다 (TRIP-431 수렴 결정).
      POI "이름" 문자열은 교차 대상이 아니다 — 이름 해소는 코드(fuzzy match, AI-D04)
      몫이고 그 지점에서 다시 풀 교차된다.
@@ -57,7 +57,7 @@ _TIME_KEY_TOKENS = (
     "time", "duration", "minute", "hour", "sec", "arrive", "depart", "startat", "endat",
 )
 # 정확일치 — 부분일치로 잡으면 무해한 키까지 걸리는 것들: eta는 metadata를,
-# start·end는 startPoiId·endPoiId 같은 POI 참조 키를 오탐한다 (구 edit_agent의
+# start·end는 startPoiId·endPoiId 같은 POI 참조 키를 오탐한다 (구 편집 코어의
 # 맨몸 start·end 토큰이 실제로 오탐하던 범위 — 정확일치로 좁혀 커버는 유지).
 _TIME_KEY_EXACT = frozenset({"eta", "start", "end"})
 
@@ -72,8 +72,8 @@ def _normalize(key: str) -> str:
 def is_time_param_key(key: str) -> bool:
     """편집 params의 시각·소요시간 키 판정 — 단일 검사기 (INV-2 시각 + INV-3).
 
-    자연어 진입(이 게이트 ③)과 구조화 진입(agents.edit_agent.validate_command)이
-    같은 이 함수를 호출한다 — 목록을 두 곳에 복사해 어긋났던 결함(edit_agent 쪽만
+    자연어 진입(이 게이트 ③)과 구조화 진입(agents.edit.commands.validate_command)이
+    같은 이 함수를 호출한다 — 목록을 두 곳에 복사해 어긋났던 결함(편집 코어 쪽만
     eta·arriveBy·travelSecs 통과, invariant-reviewer 재현)의 재발을 구조로 막는다.
     """
     normalized = _normalize(key)
