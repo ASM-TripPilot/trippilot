@@ -121,6 +121,17 @@ class C1Config:
     # 기능별 모델 오버라이드 (TRIP-513 — GPT·Claude 혼용). 있으면 tier 해석보다
     # 우선한다. 벤더 선택은 모델명이 결정 — RoutingLlm이 접두어로 어댑터를 고른다.
     feature_models: Mapping[LlmFeature, str] = field(default_factory=dict)
+    # 기능별 **타임아웃 재시도 모델** (TRIP-522 2단 폴백). 1차 모델이 타임아웃하면
+    # 규칙 폴백으로 내려가기 전에 이 모델로 한 번 더 부른다 — 호출측이
+    # `call(retry_timeout_sec=...)` 로 예산을 줄 때만. 매핑에 없는 feature 는 종전
+    # 그대로 1회 시도다.
+    #
+    # 타임아웃에만 쓴다. `unsupported` 는 재시도해도 같고(TRIP-595), 벤더 오류는
+    # 사유가 갈려 여기서 덮으면 안 보인다. 실측(2026-09-08, 실 PlanB 프롬프트 5회):
+    # sol 중앙값 5.0s · terra 5.2s · opus 7.6s(편차 1.2s) — **더 빠른 모델은 없다.**
+    # 이 값의 효용은 속도가 아니라 벤더 독립이다: sol 의 꼬리(최대 21s)는 벤더 쪽
+    # 사건이라 같은 벤더의 terra 로 가면 같은 꼬리를 밟기 쉽다.
+    retry_models: Mapping[LlmFeature, str] = field(default_factory=dict)
     # 기능별 폴백 모드 (TRIP-260 #4) — FallbackEvent의 from_mode/to_mode.
     # 실체는 호출측이 하는 일이라 feature마다 다르다 (default_fallback_modes 주석).
     fallback_modes: Mapping[LlmFeature, tuple[str, str]] = field(

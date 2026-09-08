@@ -36,9 +36,10 @@ from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId
 from trippilot.domain.llm import AlternativePick, CandidatePool, LlmFeature, ModelTier
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.trigger import TriggerKind, TriggerParams
+from trippilot.domain.observability import FallbackEvent, LlmCallRecord
 
 from tests.fakes.fake_embedding import FakeEmbedding
-from tests.fakes.fake_llm import FailingLlm, FakeLlm
+from tests.fakes.fake_llm import FailingLlm, FakeLlm, TimeoutForModelsLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.fakes.in_memory_vector_store import InMemoryVectorStore
 from tests.generators.poi import candidate_pools
@@ -291,6 +292,89 @@ def test_worker_falls_back_when_gate_drops_all_picks() -> None:
     )
     assert result.is_fallback is True and result.value is None
     assert "gate_dropped_all" in result.error
+
+
+# ── 2단 폴백: 1차 타임아웃 → 재시도 모델 (TRIP-522) ─────────
+#
+# 실측(2026-09-08, 실 PlanB 프롬프트)에서 sol 보다 빠른 모델은 없었다 — 재시도의 효용은
+# 속도가 아니라 **벤더 독립**(sol 의 꼬리는 벤더 쪽 사건). 그래서 테스트도 "빠르다"가
+# 아니라 "1차가 죽어도 2차 답이 사용자에게 간다 + 그 전환이 실제 모델명으로 남는다"를 본다.
+
+_RETRY_CFG = C1Config(
+    model_ids={ModelTier.LIGHT: "m-l", ModelTier.HEAVY: "m-h"},
+    feature_models={_FEAT: "sol"}, retry_models={_FEAT: "opus"},
+)
+
+
+def _retry_worker(llm, cfg: C1Config = _RETRY_CFG) -> tuple[AlternativeSelectionWorker, InMemoryTrace]:
+    trace = InMemoryTrace()
+    gateway = GatewayFacade(llm, PromptRegistry(_PROMPTS), AlternativeSelectionGate(), cfg, trace)
+    return AlternativeSelectionWorker(gateway), trace
+
+
+def test_timeout_retries_on_configured_model_and_records_the_switch() -> None:
+    """정상: sol 타임아웃 → opus 로 한 번 더 → LLM 답(폴백 아님). 전환은 실체로 기록."""
+    llm = TimeoutForModelsLlm(_raw(("p2", "실내 전시")), "sol")
+    worker, trace = _retry_worker(llm)
+    result = worker.select(_pool(), _input(), _TID, _NOW, timeout_sec=10.0, retry_timeout_sec=7.0)
+
+    assert result.is_fallback is False
+    assert [str(p.poi_id) for p in result.value] == ["p2"]
+    assert result.call_record.model_id == "opus" and result.call_record.success is True
+    # 두 번 불렀고, 재시도는 재시도 예산으로
+    assert [(r.model_id, r.timeout_sec) for r in llm.requests] == [("sol", 10.0), ("opus", 7.0)]
+    # 1차 실패 기록 + 모델 전환 이벤트 + 2차 성공 기록 — 침묵 전환 없음 (INV-4)
+    records = trace.of_type(LlmCallRecord)
+    assert [(r.model_id, r.success) for r in records] == [("sol", False), ("opus", True)]
+    (switch,) = trace.of_type(FallbackEvent)
+    assert (switch.from_mode, switch.to_mode) == ("llm:sol", "llm:opus")
+    assert switch.reason.startswith("timeout")
+
+
+def test_no_retry_without_model_or_budget() -> None:
+    """경계: 재시도 모델이 없거나 예산이 없으면 종전 그대로 1회 후 폴백."""
+    for cfg, kwargs in (
+        (C1Config(model_ids={ModelTier.LIGHT: "m-l", ModelTier.HEAVY: "m-h"},
+                  feature_models={_FEAT: "sol"}), dict(timeout_sec=10.0, retry_timeout_sec=7.0)),
+        (_RETRY_CFG, dict(timeout_sec=10.0)),
+        (_RETRY_CFG, dict(timeout_sec=10.0, retry_timeout_sec=None)),
+    ):
+        llm = TimeoutForModelsLlm(_raw(("p2", "r")), "sol")
+        worker, trace = _retry_worker(llm, cfg)
+        result = worker.select(_pool(), _input(), _TID, _NOW, **kwargs)
+        assert result.is_fallback is True and "timeout" in result.error
+        assert [r.model_id for r in llm.requests] == ["sol"]
+        (fb,) = trace.of_type(FallbackEvent)
+        assert fb.to_mode != "llm:opus"  # 규칙 폴백 신호지 모델 전환이 아니다
+
+
+def test_retry_timeout_falls_back_with_retry_model_in_record() -> None:
+    """경계: 재시도도 타임아웃 → 폴백. 실패 기록은 두 모델 모두, 사유는 2차 모델."""
+    llm = TimeoutForModelsLlm(_raw(("p2", "r")), "sol", "opus")
+    worker, trace = _retry_worker(llm)
+    result = worker.select(_pool(), _input(), _TID, _NOW, timeout_sec=10.0, retry_timeout_sec=7.0)
+    assert result.is_fallback is True and "opus" in result.error
+    assert result.call_record.model_id == "opus"
+    assert [(r.model_id, r.success) for r in trace.of_type(LlmCallRecord)] == [
+        ("sol", False), ("opus", False)]
+    assert [e.to_mode for e in trace.of_type(FallbackEvent)][0] == "llm:opus"
+
+
+def test_non_timeout_failures_do_not_retry() -> None:
+    """경계: 벤더 오류·비지원은 재시도해도 같다 — 모델 전환 없이 바로 폴백."""
+    worker, trace = _retry_worker(FailingLlm())
+    result = worker.select(_pool(), _input(), _TID, _NOW, timeout_sec=10.0, retry_timeout_sec=7.0)
+    assert result.is_fallback is True and result.error.startswith("llm_error")
+    assert len(trace.of_type(LlmCallRecord)) == 1
+    assert trace.of_type(FallbackEvent)[0].to_mode != "llm:opus"
+
+
+def test_retry_answer_still_passes_closed_set_gate() -> None:
+    """불변식: 2차 모델의 답도 게이트를 지난다 (INV-1) — 풀 밖 id 는 재시도라도 못 나간다."""
+    llm = TimeoutForModelsLlm(_raw(("유령", "r")), "sol")
+    worker, _ = _retry_worker(llm)
+    result = worker.select(_pool(), _input(), _TID, _NOW, timeout_sec=10.0, retry_timeout_sec=7.0)
+    assert result.is_fallback is True and "gate_dropped_all" in result.error
 
 
 # ── PlanB 연결 (⑤ — 실물 4종 세트로 파이프라인 통과) ─────────

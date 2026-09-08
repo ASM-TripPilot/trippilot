@@ -258,6 +258,13 @@ def _feature_models_from_env() -> dict:
     return dict(feature_models_from_env())
 
 
+def _retry_models_from_env() -> dict:
+    """`TRIPPILOT_LLM_RETRY_MODELS` — 같은 파서, 다른 변수 (2단 폴백)."""
+    from trippilot.llm_gateway.feature_model_env import RETRY_ENV_VAR, feature_models_from_env
+
+    return dict(feature_models_from_env(env_var=RETRY_ENV_VAR))
+
+
 def _mixed_llm_and_model() -> tuple[object, str]:
     """`TRIPPILOT_LLM_PROVIDER=mixed` — GPT·Claude 혼용 조립 (TRIP-513).
 
@@ -303,7 +310,8 @@ def build_app_from_env() -> FastAPI:
                          poi_db=poi_db, events=events,
                          vector_store=vector_store, embedding=embedding,
                          travel_port=travel,
-                         feature_models=_feature_models_from_env())
+                         feature_models=_feature_models_from_env(),
+                         retry_models=_retry_models_from_env())
 
 
 # ASGI 진입점 — `uvicorn main:app` 으로도 기동 가능.
