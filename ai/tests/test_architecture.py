@@ -233,6 +233,32 @@ def test_agents_do_not_import_llm_port() -> None:
     assert not offenders, f"agents가 LlmPort를 직접 import함(L-3 위반): {offenders}"
 
 
+def test_agents_do_not_import_providers() -> None:
+    """L-4 (BR-AF-10): agents의 Provider 직접 import 금지 — 정보는 InfoBundle 봉투로만
+    (Orchestrator가 INFO_REQUIREMENTS에 따라 수집해 넘긴다)."""
+    offenders: dict[str, set[str]] = {}
+    for py in (_SRC / "agents").rglob("*.py"):
+        bad = {m for m in _internal_imports(py) if m.startswith("trippilot.providers")}
+        if bad:
+            offenders[str(py.relative_to(_SRC))] = bad
+    assert not offenders, f"agents가 providers를 직접 import함(L-4 위반): {offenders}"
+
+
+def test_providers_do_not_import_llm() -> None:
+    """L-5 (BR-AF-10): providers의 LLM 경로 import 금지 — Provider LLM 0회를 구조로 강제.
+    게이트웨이(llm_gateway)든 포트(LlmPort)든 둘 다 막는다 (L-3와 같은 이유: 우회 차단)."""
+    offenders: dict[str, set[str]] = {}
+    for py in (_SRC / "providers").rglob("*.py"):
+        bad = {
+            m
+            for m in _internal_imports(py)
+            if m.startswith(("trippilot.llm_gateway", "trippilot.ports.llm_port"))
+        }
+        if bad:
+            offenders[str(py.relative_to(_SRC))] = bad
+    assert not offenders, f"providers가 LLM 경로를 import함(L-5 위반): {offenders}"
+
+
 def test_llm_gateway_does_not_import_assembly_engine_or_poi_curation() -> None:
     """BR-U4-09: llm_gateway(C1)는 판단 재료 제공자 — 규칙 점수 폴백 실행은 호출측 몫이라
     assembly_engine(C2)·poi_curation(구 M7) 참조 금지."""
