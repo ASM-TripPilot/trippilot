@@ -43,6 +43,20 @@ LlmPort 직접 import 금지(L-3) 전부 기존 아키텍처 테스트가 자동
   시간제약 재도입(2026-10 예정) 시 deadline 값·체인 스킵 조건은 **후속 결정** (BR-U6R-14).
 - 대화형 REFLECT intent(라우팅 테이블 — 수집 항목 없음) 경로는 AgentTask 봉투로 같은 compose 코어에 수렴 (BR-AF-01~05).
 
+### 2.1 `reflection_nudge` — 워커 직행이 **정식 패턴**이다 (2026-09-09 결정, Reflect 소유 세션)
+
+`POST /ai/v1/reflection/nudge` 는 `ReflectAgent` 를 경유하지 않고 경계(`api/wiring.py`)가
+`reflection_nudge` 워커를 직접 부른다. 예외가 아니라 **패턴이다**:
+
+- **기준**: 후보 선택·다단 구성·예산 계단·하드 교체 중 **아무것도 쓰지 않는 "판단 없는 단발 변환"**
+  (프롬프트 1회 + 게이트 + 정적 폴백)은 경계→워커 직행으로 배선한다. 에이전트는 그중 하나라도
+  소유할 때만 만든다 — 껍데기 위임 메서드는 대칭 말고 얻는 게 없다(#482 객체화 때 4종 통일 후
+  nudge 만 남긴 근거의 명문화. v2 구분: 워커=게이트웨이 계층 feature, 에이전트=다단 구성 소유자).
+- **관측 규칙**: 직행 경로의 방어 폴백 이벤트는 `component="api.wiring"` 으로 발행한다 — 이벤트
+  component 는 발행 주체 기준이고, 직행 패턴에선 경계가 발행 주체다. 에이전트 이름을 지어 붙이면
+  거짓 관측이다. 폴백률 집계는 stage·to_mode 축으로 썬다.
+- **적용 선례**: U6 알림(REMINDER_COPY) 워커도 같은 패턴으로 올린다(스케줄·로컬LLM 트랙 합의).
+
 ## 3. Phase 1 파이프라인 — `ReflectAgent.run(ReflectTask)` (구 `compose(request, trace_id, now)`)
 
 ```

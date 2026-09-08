@@ -38,6 +38,7 @@ TripPilot AI는 LLM + 최적화 어셈블리 하이브리드 아키텍처로 여
 > **네 에이전트 모두 게이트웨이 워커를 감싸는 객체다** (2026-09-09): 생성자 주입, `run(<Task>) -> <Outcome>`
 > 단일 진입, 경계 밖으로 예외를 던지지 않는다(DL-5). 문자 그대로의 `Agent.handle(AgentTask) -> AgentResult`
 > 봉투는 넷 다 아직 미구현 — IntentRouter 배선과 함께 온다(business-rules 미결 #8).
+> 단, **판단 없는 단발 변환은 경계→워커 직행이 정식 패턴**(`reflection_nudge` — u6-reflect FD §2.1, 2026-09-09).
 
 **정보원** (v2 — `orchestrator/info_collector.py` + `providers/`):
 Place · Weather · Transit · Persona · Event Provider. Orchestrator가
