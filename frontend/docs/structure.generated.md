@@ -10,6 +10,7 @@
 - `__mocks__/react-native-webview.tsx`  →  WebView
 
 ## src/__tests__/
+- `src/__tests__/budgetEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/companionEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
@@ -873,6 +874,7 @@
 - `src/pages/trip-new-step1/index.ts`  →  TripNewStep1Page
 
 ## src/pages/trip-new-step1/ui/
+- `src/pages/trip-new-step1/ui/BudgetEditSheet.tsx`  →  BudgetEditSheetProps · BudgetEditSheet
 - `src/pages/trip-new-step1/ui/PrefOverrideSheet.tsx`  →  PrefOverrideSheetProps · PrefOverrideSheet
 - `src/pages/trip-new-step1/ui/TripNewStep1Page.tsx`  →  TripNewStep1PageProps · TripNewStep1Page
 
@@ -1205,4 +1207,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 819개 파일
+합계 821개 파일

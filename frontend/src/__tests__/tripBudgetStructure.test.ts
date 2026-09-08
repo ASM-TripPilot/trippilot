@@ -46,6 +46,16 @@ const PAGE = join(
   'ui',
   'TripNewStep1Page.tsx'
 );
+// TRIP-670 — 신규 예산 편집 시트를 canonical 로케일 가드에 편입한다(시드 "신규 시트 편입 확인").
+// 시트는 amountText(배선이 formatBudgetAmount 로 포맷한 값)를 표시만 하므로 toLocaleString 을
+// 쓸 일이 없지만, budgetAmount 규칙(node/Hermes 로케일 갈림)을 이 시트로도 blanket 하게 잠근다.
+const SHEET = join(
+  SRC_ROOT,
+  'pages',
+  'trip-new-step1',
+  'ui',
+  'BudgetEditSheet.tsx'
+);
 
 /** 로케일 서식 API — 이 이름들이 **코드에** 있으면 안 된다. */
 const FORBIDDEN_LOCALE_APIS = ['toLocaleString', 'Intl.'];
@@ -101,8 +111,8 @@ describe('탐지기 자가검사 — 이게 통과해야 아래 단언이 의미
 });
 
 describe('AC-5 · 천단위 구분을 로케일 API로 찍지 않는다', () => {
-  it('예산 모듈·화면·배선 어디에도 toLocaleString / Intl 이 없다', () => {
-    [BUDGET_MODULE, SCREEN, PAGE].forEach((file) => {
+  it('예산 모듈·화면·배선·편집 시트 어디에도 toLocaleString / Intl 이 없다', () => {
+    [BUDGET_MODULE, SCREEN, PAGE, SHEET].forEach((file) => {
       // 긍정 짝 ① — 파일이 없으면 아래 읽기가 예외로 죽어 "무엇이 없는가"를 읽을 수 없다.
       expect(existsPair(file)).toEqual({ file, exists: true });
 

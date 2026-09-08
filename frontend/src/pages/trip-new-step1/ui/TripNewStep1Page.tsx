@@ -43,6 +43,7 @@ import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen';
 
+import { BudgetEditSheet } from './BudgetEditSheet';
 import { PrefOverrideSheet } from './PrefOverrideSheet';
 
 /**
@@ -164,6 +165,10 @@ export function TripNewStep1Page({
   const setPrefStyleOverride = useTripWizardStore(
     (state) => state.setPrefStyleOverride
   );
+  // 예산 편집 시트(TRIP-670)가 "적용"에서 쓰는 커밋 액션 + 사용자 입력 원문(제출 복원의 재료).
+  // S1 이 인라인 예산 블록을 지우며 고아가 된 축을 S6 이 첫 소비한다.
+  const storeBudgetText = useTripWizardStore((state) => state.budgetText);
+  const setBudgetText = useTripWizardStore((state) => state.setBudgetText);
 
   const preference = usePreferencePrefill();
   // 계정 취향 프리필(GET /me/preferences)은 이미 한국어 도메인 값이다(slug 아님) — 그대로 요약·
@@ -182,8 +187,16 @@ export function TripNewStep1Page({
   const rawAmount = preference.data?.budget?.rawAmount;
   const tierLabel = preference.data?.budget?.tier ?? undefined;
   const canPrefillBudget = isPrefillableBudget(rawAmount);
-  const budgetText = canPrefillBudget ? formatBudgetAmount(rawAmount) : '';
-  const parsedBudget = parseBudgetAmount(budgetText);
+  const prefillBudgetText = canPrefillBudget
+    ? formatBudgetAmount(rawAmount)
+    : '';
+  // 제출 복원(TRIP-670 D3) — 사용자가 시트에서 편집한 스토어 값이 유효하면 그것, 아니면 프리필.
+  // TRIP-207 "사용자 입력 우선"을 S1(프리필-only)이 되돌린 것을 S6 이 되살린다.
+  const effectiveBudgetText =
+    parseBudgetAmount(storeBudgetText).kind === 'amount'
+      ? storeBudgetText
+      : prefillBudgetText;
+  const parsedBudget = parseBudgetAmount(effectiveBudgetText);
 
   // 요약 5행 도출 — 미선택은 셀렉터가 `null` 을 낸다(화면이 플레이스홀더로 그린다).
   const summaryDestinationsValue = summaryDestinations(destinations);
@@ -194,9 +207,12 @@ export function TripNewStep1Page({
     preferenceChips,
     !hasOverride
   );
-  const summaryBudgetValue = canPrefillBudget
-    ? summaryBudget(rawAmount, tierLabel)
-    : null;
+  // 요약 예산 행은 effective(편집값 우선, 아니면 프리필)를 쓴다 — 자매 4행과 정합.
+  // rawAmount(프리필)만 쓰면 시트에서 바꿔도 요약이 안 바뀌어 "편집이 안 먹는" 것처럼 보인다(TRIP-670 5-c).
+  const summaryBudgetValue =
+    parsedBudget.kind === 'amount'
+      ? summaryBudget(parsedBudget.amount, tierLabel)
+      : null;
 
   const [submitError, setSubmitError] = useState<string>();
   const [overseasBlocked, setOverseasBlocked] = useState(false);
@@ -224,6 +240,12 @@ export function TripNewStep1Page({
   // (적용 전 store 불변) — "적용"에서만 `setPrefStyleOverride` 로 커밋한다.
   const [prefSheetOpen, setPrefSheetOpen] = useState(false);
   const [prefDraftStyles, setPrefDraftStyles] = useState<string[]>([]);
+  // 예산 편집 시트(TRIP-670) — 시트가 무상태(D4)라 개폐·편집 드래프트를 배선이 소유한다.
+  // 열 때 effective 예산 문자열·프리필 tier 에서 초기화하고, 금액/tier press 는 이 드래프트만
+  // 갱신한다(적용 전 store 불변) — "적용"에서만 `setBudgetText` 로 커밋한다(tier 는 커밋 안 함).
+  const [budgetSheetOpen, setBudgetSheetOpen] = useState(false);
+  const [draftAmountText, setDraftAmountText] = useState('');
+  const [draftTier, setDraftTier] = useState<string>();
 
   // 제출 경로 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
   // 않게). 두 뜻을 겸한다: ① 등록 요청이 날아가는 중 ② 이미 성공해 이 화면의 일이 끝남.
@@ -342,8 +364,8 @@ export function TripNewStep1Page({
       party,
       companionType,
       destinations,
-      // 예산은 프리필 값만 나간다(사용자 입력은 S6). `empty` 면 `undefined` 라 키가 안 붙는다
-      // (`buildCreateTripRequest` 가 스프레드 전에 떼어 조건부로 다시 붙인다).
+      // 예산은 effective(사용자 입력 우선, 미입력 시 프리필)로 나간다(TRIP-670 D3 복원). `empty`·
+      // `invalid` 면 `undefined` 라 키가 안 붙는다(`buildCreateTripRequest` 가 조건부로 다시 붙인다).
       budgetTotal:
         parsedBudget.kind === 'amount' ? parsedBudget.amount : undefined,
       // 취향 스냅숏(정책 A) — 실효 취향(오버라이드 ?? 프리필)을 평평한 한국어 배열로 싣는다
@@ -384,8 +406,26 @@ export function TripNewStep1Page({
     );
   }
 
-  // 취향·예산 2행 편집 시트는 S5~S6 스텁이다 — 지금은 오픈 신호만 받는다(기간은 S3, 동행은 S4로 배선됨).
-  const openEditSheet = (): void => {};
+  /** 예산 시트 열기 — 드래프트를 effective 예산 문자열(스토어 유효 ? 스토어 : 프리필)·프리필 tier 에서
+   * 초기화한다(D3). 스토어는 `getState()`로 여는 순간 값을 읽고(`openCompanionSheet` 선례), 프리필은
+   * render 클로저값(react-query 라 store 를 안 타 클로저가 곧 최신값). */
+  function openBudgetSheet(): void {
+    const currentBudgetText = useTripWizardStore.getState().budgetText;
+    setDraftAmountText(
+      parseBudgetAmount(currentBudgetText).kind === 'amount'
+        ? currentBudgetText
+        : prefillBudgetText
+    );
+    setDraftTier(tierLabel);
+    setBudgetSheetOpen(true);
+  }
+
+  /** "적용" — 드래프트 금액을 store 에 커밋(`setBudgetText`) + 닫기. tier 는 커밋 대상이 아니다
+   * (honest — 스토어·요청 어디에도 안 감, 표시·프리필 축 전용). */
+  function applyBudget(): void {
+    setBudgetText(draftAmountText);
+    setBudgetSheetOpen(false);
+  }
 
   /** 동행 시트 열기 — 드래프트를 store 현재값에서 초기화한다(D3 프리필). 렌더 클로저가 아니라
    * `getState()`로 **여는 순간의** store 값을 읽는다(구독 재렌더 타이밍과 무관, `submit()`과 동형). */
@@ -452,7 +492,7 @@ export function TripNewStep1Page({
         onPressSummaryPeriod={() => setPeriodSheetOpen(true)}
         onPressSummaryCompanion={openCompanionSheet}
         onPressSummaryPreference={openPrefSheet}
-        onPressSummaryBudget={openEditSheet}
+        onPressSummaryBudget={openBudgetSheet}
         mustVisits={mustVisits}
         onPressMore={() =>
           // 담은 곳이 있으면 담은 장소 화면(d02)으로, 없으면 새로 담을 탐색으로 보낸다(TRIP-367).
@@ -522,6 +562,18 @@ export function TripNewStep1Page({
           selected={prefDraftStyles}
           onToggle={togglePrefStyle}
           onApply={applyPrefSheet}
+        />
+      ) : null}
+      {/* 예산 편집 시트도 화면의 형제로 조건부 마운트 — tier·금액 press 는 드래프트만 바꾸고
+          (적용 전 store 불변), "적용"에서만 `setBudgetText` 로 커밋한다(커밋-온-어플라이). tier 는
+          어디에도 커밋/전송 안 한다(honest — 표시·프리필 축 전용). */}
+      {budgetSheetOpen ? (
+        <BudgetEditSheet
+          amountText={draftAmountText}
+          tier={draftTier}
+          onChangeAmount={setDraftAmountText}
+          onSelectTier={setDraftTier}
+          onApply={applyBudget}
         />
       ) : null}
     </>
