@@ -135,6 +135,22 @@ def test_langsmith_only_imported_in_intent_router() -> None:
     assert not offenders, f"intent_router.py 밖에서 langsmith import: {offenders}"
 
 
+def test_assembly_engine_imports_llm_gateway_only_for_fence_helper() -> None:
+    """TRIP-658 경계 결정의 고정: C2(assembly_engine) → C1(llm_gateway) 간선은 LLM 원문
+    파싱 헬퍼(gates.base 의 strip_code_fence) **하나로 한정**한다. 역방향은 기존 규칙이
+    금지하고, 이 간선이 넓어지면(설정·게이트·게이트웨이 유입) 재설계 신호다."""
+    allowed = {"trippilot.llm_gateway.gates.base"}
+    offenders: dict[str, set[str]] = {}
+    for py in (_SRC / "assembly_engine").rglob("*.py"):
+        gateway_imports = {
+            m for m in _internal_imports(py) if m.startswith("trippilot.llm_gateway")
+        }
+        bad = gateway_imports - allowed
+        if bad:
+            offenders[str(py.relative_to(_SRC))] = bad
+    assert not offenders, f"assembly_engine 의 llm_gateway import 허용 밖: {offenders}"
+
+
 def test_yaml_only_imported_in_llm_gateway_prompts() -> None:
     """yaml 파서 의존은 PromptRegistry(llm_gateway/prompts.py) 한정 — ortools→assembly_engine과 같은 격리 패턴."""
     offenders = []

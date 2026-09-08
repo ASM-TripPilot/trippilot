@@ -223,12 +223,12 @@ def test_registry_renders_event_extraction_prompt() -> None:
 
 
 def test_fenced_json_is_unwrapped_before_parse() -> None:
-    from trippilot.llm_gateway.gates.base import _strip_code_fence
+    from trippilot.llm_gateway.gates.base import strip_code_fence
 
     body = '{"events": []}'
-    assert _strip_code_fence(f"```json\n{body}\n```") == body
-    assert _strip_code_fence(f"```\n{body}\n```") == body
-    assert _strip_code_fence(body) == body  # 펜스 없으면 무변
+    assert strip_code_fence(f"```json\n{body}\n```") == body
+    assert strip_code_fence(f"```\n{body}\n```") == body
+    assert strip_code_fence(body) == body  # 펜스 없으면 무변
     # 펜스를 벗겨도 JSON이 아니면 여전히 실패 — 관대화가 아니라 포장 제거
     import pytest as _pytest
     from trippilot.llm_gateway.gates.base import _load_json_object

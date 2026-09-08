@@ -30,7 +30,7 @@ import json
 import math
 from datetime import datetime
 
-from trippilot.llm_gateway.gates.base import GateOutcome, _strip_code_fence
+from trippilot.llm_gateway.gates.base import GateOutcome, strip_code_fence
 from trippilot.domain.common import TraceId
 from trippilot.domain.intent import Intent, IntentDraft
 from trippilot.domain.llm import CandidatePool, LlmFeature
@@ -64,7 +64,7 @@ class IntentGate:
         try:
             # Claude(haiku-4-5)가 정답을 ```json 펜스로 감싸 보낸다(2026-09-02 smoke_llm 실측)
             # — 공용 제거 후 전체 검증. 이 한 줄이 없어서 "정답인데 전패"였다.
-            data = json.loads(_strip_code_fence(raw_text))
+            data = json.loads(strip_code_fence(raw_text))
         except json.JSONDecodeError as e:
             raise ValueError(f"JSON 아님: {e.msg}") from e
         if not isinstance(data, dict):
