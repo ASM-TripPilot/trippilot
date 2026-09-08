@@ -30,6 +30,7 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.observability import GateDropEvent, LlmCallRecord
 from trippilot.domain.poi import Poi
 from trippilot.domain.prompt import PromptRef
+from trippilot.llm_gateway.gates.base import strip_code_fence
 from trippilot.ports.llm_port import LlmPort, LlmRequest
 
 _TRACE_ID = TraceId("assembly")  # U5에서 실제 trace_id 배선 — U2는 고정 태그
@@ -153,9 +154,16 @@ class LlmAssembler:
         return json.dumps(payload, ensure_ascii=False)
 
     def _parse(self, raw: str) -> dict | None:
-        """{date_str: [slot_dict, ...]} 형태로 정규화. 실패 시 None."""
+        """{date_str: [slot_dict, ...]} 형태로 정규화. 실패 시 None.
+
+        펜스 제거는 게이트 2곳과 같은 실측 근거(TRIP-658) — Claude 계열이 정답을
+        ```json 펜스로 감싸 보내면 "정답인데 항상 규칙 폴백"이 된다. 포장만 벗기고
+        내용 검증(closed-set·HC)은 그대로다. 헬퍼는 llm_gateway 가 공개로 승격한
+        strip_code_fence 를 쓴다 — LLM 원문 파싱이라는 같은 관심사라 한 원본을 공유한다
+        (assembly_engine → llm_gateway 의존은 이 함수 1개, 역방향은 아키텍처 테스트가 금지).
+        """
         try:
-            data = json.loads(raw)
+            data = json.loads(strip_code_fence(raw))
             out: dict = {}
             for day in data["days"]:
                 out[day["date"]] = list(day.get("slots", []))

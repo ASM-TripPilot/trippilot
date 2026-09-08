@@ -112,7 +112,7 @@ def test_intent_gate_allows_absent_slots_and_confidence() -> None:
 def test_intent_gate_strips_code_fence() -> None:
     """Claude(haiku-4-5) 실측 — 정답을 ```json 펜스로 감싸 보낸다 (2026-09-02 smoke_llm).
 
-    공용 `_strip_code_fence`(base.py, GPT-5.6 실측으로 기존재)를 IntentGate 만 우회해
+    공용 `strip_code_fence`(base.py, GPT-5.6 실측으로 기존재)를 IntentGate 만 우회해
     "정답인데 전패"가 났다. 포장 제거는 관대화가 아니다 — 내용은 여전히 전체 검증된다.
     """
     outcome = _intent(

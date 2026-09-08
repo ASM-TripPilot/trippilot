@@ -10,7 +10,7 @@ from typing import Protocol
 
 from trippilot.llm_gateway.gates.base import (
     GateOutcome,
-    _strip_code_fence,
+    strip_code_fence,
     empty_result_error,
 )
 from trippilot.domain.common import PoiId, TraceId
@@ -40,7 +40,7 @@ def _parse_scores(raw_text: str) -> tuple[RawScore, ...]:
     """
     try:
         # Claude 계열이 ```json 펜스로 감싸 보낸다(2026-09-02 실측) — 공용 제거 후 전체 검증
-        data = json.loads(_strip_code_fence(raw_text))
+        data = json.loads(strip_code_fence(raw_text))
     except json.JSONDecodeError as e:
         raise ValueError(f"JSON 아님: {e.msg}") from e
     if not isinstance(data, dict) or not isinstance(data.get("scores"), list):

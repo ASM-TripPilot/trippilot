@@ -88,6 +88,23 @@ def test_golden_proposal_accepted_as_llm() -> None:
     assert records[0].model_id == "claude-sonnet-5"  # AI-D07 ④ 경로별 모델
 
 
+# ①' golden 의 펜스 포장판 — Claude 계열 실측 응답 형태 (TRIP-658)
+def test_fenced_golden_proposal_is_unwrapped_and_accepted() -> None:
+    """Claude 는 정답 JSON 을 ```json 펜스로 감싸 보낸다(게이트 2곳과 같은 실측).
+    포장만 벗기고 내용 검증(closed-set·HC)은 그대로 — 벗긴 뒤가 golden 과 동일해야 한다."""
+    problem, index = _setup()
+    trace = InMemoryTrace()
+    llm = FakeLlm(canned="```json\n" + _canned([
+        {"poi_id": "a", "start": "2026-08-05T10:00:00+09:00",
+         "end": "2026-08-05T11:15:00+09:00"}]) + "\n```")
+    stage = _llm_stage(llm, index, trace)
+
+    result = stage.solve(problem, remaining_ms=5000)
+
+    assert result is not None and result.solve_mode == SolveMode.LLM
+    assert [str(s.poi_id) for d in result.days for s in d.slots] == ["a"]
+
+
 # ② INV-1 — 유령 id 드롭 + GateDropEvent
 def test_ghost_poi_dropped_with_gate_event() -> None:
     problem, index = _setup()
