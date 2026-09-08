@@ -175,8 +175,11 @@ def test_broken_regex_pattern_does_not_break_routing() -> None:
 
 
 def test_mixed_top2_triggers_vote_and_confirms() -> None:
+    # 투표 경로 자체를 검증한다 — 임계는 §5 설정값(기본 0.80, TRIP-678)이므로 대본 득표율 0.75 가
+    # 확정되도록 명시한다. 기본값 아래에서는 같은 대본이 3차로 승격한다(아래 테스트).
     router = _scripted_router(
-        paraphrase_gateway=_paraphrase_gw("유사질문-날씨A", "유사질문-날씨B", "유사질문-거리A")
+        paraphrase_gateway=_paraphrase_gw("유사질문-날씨A", "유사질문-날씨B", "유사질문-거리A"),
+        config=IntentRouterConfig(vote_ratio=0.60),
     )
     match = router.route("애매한 질문", _TID, _NOW)
     # 가중 투표: WEATHER 0.9998+1+1 = 2.9998 / DISTANCE 1.0 → 득표율 0.75 ≥ 0.60
@@ -185,13 +188,25 @@ def test_mixed_top2_triggers_vote_and_confirms() -> None:
     assert math.isclose(match.confidence, 0.75, abs_tol=1e-3)
 
 
+def test_default_vote_ratio_sends_two_way_tie_to_llm_direct() -> None:
+    """기본 vote_ratio 0.80 고정(TRIP-678 실측): 0.75 동률대 대본은 기본 설정에서 3차로 승격한다.
+    누가 기본값을 0.60 으로 되돌리면 이 테스트가 잡는다."""
+    router = _scripted_router(
+        paraphrase_gateway=_paraphrase_gw("유사질문-날씨A", "유사질문-날씨B", "유사질문-거리A"),
+        intent_gateway=_intent_gw("GET_WEATHER"),
+    )
+    match = router.route("애매한 질문", _TID, _NOW)
+    assert match.match_route is MatchRoute.LLM_DIRECT
+    assert "vote_ratio(0.750)" in match.reason
+
+
 def test_vote_below_ratio_escalates_to_llm_direct() -> None:
     router = _scripted_router(
         paraphrase_gateway=_paraphrase_gw("유사질문-거리A", "유사질문-거리B", "유사질문-날씨A"),
         intent_gateway=_intent_gw("EDIT_SCHEDULE", {"target": "저녁"}, 0.71),
     )
     match = router.route("애매한 질문", _TID, _NOW)
-    # DISTANCE 2.0 / WEATHER 1.9998 → 득표율 0.500 < 0.60 → 3차로
+    # DISTANCE 2.0 / WEATHER 1.9998 → 득표율 0.500 < vote_ratio(기본 0.80) → 3차로
     assert match.match_route is MatchRoute.LLM_DIRECT
     assert match.intent is Intent.EDIT_SCHEDULE
     assert match.slots == {"target": "저녁"}
@@ -349,8 +364,8 @@ def _load_seed():
 def test_seed_bank_covers_closed_set_and_matches_routing_table() -> None:
     entries = _load_seed()
     assert {e.intent for e in entries} == ROUTABLE_INTENTS  # 13종 전부, 그 밖은 없음
-    assert len(entries) == 121  # v0.2-draft (yaml 헤더 명시)
-    assert all(e.bank_version == "0.2-draft" and e.origin == "seed" for e in entries)
+    assert len(entries) == 121  # v0.3-draft (yaml 헤더 명시 — TRIP-678 기계 검수 1차, 추가 없음)
+    assert all(e.bank_version == "0.3-draft" and e.origin == "seed" for e in entries)
     assert all(not e.reviewed for e in entries)  # 아직 검수 전
 
 
