@@ -39,6 +39,8 @@ TripPilot AI is an **independent Python AI service** that generates, replans, an
 > `run(<Task>) -> <Outcome>` entry, no exceptions across the boundary (DL-5). The literal
 > `Agent.handle(AgentTask) -> AgentResult` envelope is still unimplemented for all four —
 > it lands with IntentRouter wiring (business-rules 미결 #8).
+> One codified exception: **judgment-free single-shot transforms are wired boundary→worker directly**
+> (`reflection_nudge` — u6-reflect FD §2.1, decided 2026-09-09).
 
 **Information sources** (v2 — `orchestrator/info_collector.py` + `providers/`):
 Place · Weather · Transit · Persona · Event Providers. The Orchestrator collects
