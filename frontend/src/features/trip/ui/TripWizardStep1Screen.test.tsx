@@ -29,8 +29,8 @@ import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
  * 픽셀 충실도([검증] 스크린샷).
  *
  * ⚠️ 매처 함정(02a §5-2 실측): RNTL `toHaveTextContent('문자열')` = **완전 일치**(정규화 후 `===`),
- * `toHaveTextContent(/정규식/)` = 부분/패턴 일치. `getByText('문자열')` 도 완전 일치라 라벨("여행지")과
- * 플레이스홀더("여행지 선택")를 자동으로 갈라 준다.
+ * `toHaveTextContent(/정규식/)` = 부분/패턴 일치. `getByText('문자열')` 도 완전 일치라 라벨("동행")과
+ * 플레이스홀더("동행 선택")를 자동으로 갈라 준다.
  *
  * 3동작 뼈대: 준비=props 조립 → 실행=render(+press) → 단언=보이는 것 / 불린 콜백.
  */
@@ -178,34 +178,39 @@ describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
     ]);
   });
 
-  it('값이 null 이면 muted 플레이스홀더 "{라벨} 선택"을 그린다 (D2)', () => {
+  it('값이 null 일 때 행별 카피 — 여행지·기간 신 카피, 나머지 "{라벨} 선택" (TRIP-671)', () => {
     render(<TripWizardStep1Screen {...props()} />);
 
-    const rows: [string, string][] = [
-      ['trip-wizard-summary-destination', '여행지 선택'],
-      ['trip-wizard-summary-period', '기간 선택'],
+    // 여행지 null → 신 카피 "어디로 갈까요?"(옛 "여행지 선택" 전역 대체, TRIP-671 D1).
+    const dest = screen.getByTestId('trip-wizard-summary-destination');
+    expect(within(dest).getByText('어디로 갈까요?')).toBeOnTheScreen();
+    expect(within(dest).queryByText('여행지 선택')).toBeNull();
+
+    // 기간 null → 값 줄 없음(옛 "기간 선택" 제거). 라벨 "기간"은 생존.
+    const period = screen.getByTestId('trip-wizard-summary-period');
+    expect(within(period).queryByText('기간 선택')).toBeNull();
+    expect(within(period).getByText('기간')).toBeOnTheScreen();
+
+    // 나머지 3행은 "{라벨} 선택" 유지 + muted(값이 채워지면 ink 로 바뀐다).
+    const kept: [string, string][] = [
       ['trip-wizard-summary-companion', '동행 선택'],
       ['trip-wizard-summary-preference', '취향 선택'],
       ['trip-wizard-summary-budget', '예산 선택'],
     ];
-    rows.forEach(([testID, placeholder]) => {
-      // getByText 완전 일치라 라벨(예 "여행지")과 플레이스홀더("여행지 선택")가 자동으로 갈린다.
+    kept.forEach(([testID, placeholder]) => {
       const text = within(screen.getByTestId(testID)).getByText(placeholder);
-      // 플레이스홀더는 muted 색이다(값이 채워지면 ink 로 바뀐다).
       expect(String(text.props.className ?? '').split(/\s+/)).toContain(
         'text-muted'
       );
     });
   });
 
-  it('짝 — 값이 있으면 그 행에 플레이스홀더가 없다', () => {
+  it('짝 — 여행지 값이 있으면 그 행에 신 카피 플레이스홀더가 없다', () => {
     render(<TripWizardStep1Screen {...filledProps()} />);
 
-    expect(
-      within(screen.getByTestId('trip-wizard-summary-destination')).queryByText(
-        '여행지 선택'
-      )
-    ).toBeNull();
+    const dest = screen.getByTestId('trip-wizard-summary-destination');
+    expect(within(dest).getByText(DESTINATION_VALUE)).toBeOnTheScreen();
+    expect(within(dest).queryByText('어디로 갈까요?')).toBeNull();
   });
 });
 

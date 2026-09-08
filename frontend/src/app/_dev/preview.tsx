@@ -2762,6 +2762,32 @@ export const PREVIEW_STATES: PreviewState[] = [
       <TripWizardStep1Screen {...TRIP_WIZARD_BASE} mustVisits={[]} />
     ),
   },
+  // g01 empty·loading 두 상태 얼굴(TRIP-671, Figma empty `3652:2068`·loading `3712:2068`). empty 는
+  // fresh 진입(여행지·기간 null → 신 카피/빈 줄, 동행·취향·예산은 프리필 채움, [다음] 비활성),
+  // loading 은 `isLoading=true`(요약 5행·꼭 갈 곳 스켈레톤 + 로딩 부제 + [다음] 비활성). jest 는 회색바
+  // 색·크기·"어디로 갈까요?" 진한 톤을 못 봐 이 두 키가 3652:2068·3712:2068 육안 대조 자리다.
+  {
+    key: 'trip-new-step1-empty',
+    band: 'g',
+    label: 'g01 · 만들기 1/2 empty',
+    login: null,
+    render: () => (
+      <TripWizardStep1Screen
+        {...TRIP_WIZARD_BASE}
+        summaryDestinations={null}
+        summaryPeriod={null}
+        mustVisits={[]}
+        canProceed={false}
+      />
+    ),
+  },
+  {
+    key: 'trip-new-step1-loading',
+    band: 'g',
+    label: 'g01 · 만들기 1/2 loading',
+    login: null,
+    render: () => <TripWizardStep1Screen {...TRIP_WIZARD_BASE} isLoading />,
+  },
   // g01 여행지 편집 시트(TRIP-666, Figma `3626:2070`) — 시트 열린 상태. `DestinationEditSheet`은
   // props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정 없이 그대로 태운다.
   // jest 는 스테퍼 원·점선 추가 버튼·시트 딤/개폐를 못 봐(바텀시트 통과형 목) 이 키가 유일한

@@ -262,6 +262,11 @@ export function TripNewStep1Page({
   const savedPlacesLoading = isAuthed && savedPlaces.isPending;
   const savedPlaceList = savedPlaces.savedPlaces;
 
+  // loading 얼굴 신호(TRIP-671 D4) — 프리필·담은목록 중 하나라도 조회 중이면 화면을 스켈레톤으로
+  // 갈아 끼운다(combined, Figma 가 단일 "불러오는 중" 부제라 두 조회를 한 플래그로 접는다). 게스트는
+  // `savedPlacesLoading` 가 이미 접혀 있어(위 참조) 담은목록 축이 영구 pending 으로 새지 않는다.
+  const isLoading = preference.isPending || savedPlacesLoading;
+
   const draft: TripDraft = {
     destinations,
     startDate: startDate ?? '',
@@ -506,6 +511,7 @@ export function TripNewStep1Page({
         canProceed={canProceed}
         onNext={submit}
         onBack={() => router.back()}
+        isLoading={isLoading}
         submitError={submitError}
         onRetrySubmit={submit}
         mustVisitError={mustVisitError}

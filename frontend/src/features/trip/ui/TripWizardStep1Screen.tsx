@@ -62,6 +62,11 @@ export interface TripWizardStep1ScreenProps {
   onNext(): void;
   onBack(): void;
 
+  /** loading 얼굴(TRIP-671 D4) — `true` 면 요약 5행·꼭 갈 곳을 스켈레톤으로 갈고, 부제를 로딩 문구로
+   * 바꾸고, `canProceed` 가 참이어도 `[다음]`을 강제 비활성한다. 미지정/`false` 면 default·empty(현행).
+   * additive optional 이라 기존 호출부·동결 테스트 무회귀. */
+  isLoading?: boolean;
+
   /** 제출 실패 배너 본문(완성형). 제목·버튼 라벨은 Figma 고정 문구라 화면이 갖는다. */
   submitError?: string;
   onRetrySubmit?(): void;
@@ -88,20 +93,35 @@ const SUMMARY_CARD_SHADOW = {
 } as const;
 
 /**
- * 요약 카드 한 행 — 라벨 + 값(있으면 ink) 또는 muted 플레이스홀더 "{라벨} 선택"(없으면) + 우측
- * chevron. 행 전체가 Pressable 이라 탭하면 편집 시트 오픈 콜백을 부른다(값 조립은 페이지 몫이라
- * 화면은 받은 문자열을 그대로 그린다).
+ * 요약 카드 한 행 — 라벨 + 값(있으면 ink) 또는 플레이스홀더(없으면) + 우측 chevron. 행 전체가
+ * Pressable 이라 탭하면 편집 시트 오픈 콜백을 부른다(값 조립은 페이지 몫이라 화면은 받은 문자열을
+ * 그대로 그린다).
+ *
+ * 플레이스홀더는 **행별**이다(TRIP-671 D1): 여행지 null → "어디로 갈까요?"(진한 값 톤), 기간 null →
+ * 값 줄 자체 없음(`placeholder=null`), 나머지 → muted "{라벨} 선택". `isLoading` 이면 값 자리를 회색
+ * 스켈레톤 바로 갈아 실값·플레이스홀더를 가린다(loading 얼굴).
  */
 function SummaryRow({
   testID,
   label,
   value,
+  placeholder,
+  placeholderTone,
   onPress,
+  isLoading,
+  skeletonTestID,
 }: {
   testID: string;
   label: string;
   value: string | null;
+  /** value 가 null 일 때 그릴 카피. `null` 이면 값 줄 자체를 안 그린다(기간 행). */
+  placeholder: string | null;
+  /** 플레이스홀더 색 톤 — 여행지만 'ink'(Figma empty 진한 값 톤), 나머지는 'muted'. */
+  placeholderTone: 'ink' | 'muted';
   onPress(): void;
+  /** loading 얼굴 — 값 자리에 회색 스켈레톤 바(라벨은 유지). */
+  isLoading?: boolean;
+  skeletonTestID: string;
 }): ReactElement {
   return (
     <Pressable
@@ -112,10 +132,23 @@ function SummaryRow({
     >
       <View className="flex-1 gap-[6px]">
         <Text className="font-noto text-caption text-muted">{label}</Text>
-        {value === null ? (
-          <Text className="font-noto text-card-title text-muted">
-            {`${label} 선택`}
-          </Text>
+        {isLoading ? (
+          <View
+            testID={skeletonTestID}
+            className="h-[16px] w-[148px] rounded-[6px] bg-surface-strong"
+          />
+        ) : value === null ? (
+          placeholder === null ? null : (
+            <Text
+              className={
+                placeholderTone === 'ink'
+                  ? 'font-noto-bold text-card-title font-bold text-ink'
+                  : 'font-noto text-card-title text-muted'
+              }
+            >
+              {placeholder}
+            </Text>
+          )
         ) : (
           <Text className="font-noto-bold text-card-title font-bold text-ink">
             {value}
@@ -209,6 +242,42 @@ function MustVisitStrip({
   );
 }
 
+/**
+ * 꼭 갈 곳 로딩 스켈레톤(TRIP-671 loading 얼굴) — 헤더는 숫자 없는 "꼭 갈 곳" + 캡션, 스트립 자리에
+ * 회색 카드 4장(점선 "+ 더 담기" 박스 없음). 회색바 토큰은 `TripWizardStep2Screen` 스켈레톤 미러
+ * (`bg-surface-strong`·`rounded-[14px]`·`rounded-[6px]`, raw hex 0) — 색·크기·정렬은 jest 사각(6-b).
+ */
+function MustVisitSkeleton(): ReactElement {
+  return (
+    <View className="gap-[10px]">
+      <View className="gap-[2px]">
+        <Text className="font-noto-bold text-section font-bold text-ink">
+          꼭 갈 곳
+        </Text>
+        <Text className="font-noto text-label text-muted">
+          담아 둔 곳을 불러오는 중이에요
+        </Text>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 10 }}
+      >
+        {[1, 2, 3, 4].map((n) => (
+          <View
+            key={n}
+            testID={`trip-wizard-mustvisit-skeleton-${n}`}
+            className="w-[112px] gap-[6px]"
+          >
+            <View className="h-[88px] w-[112px] rounded-[14px] bg-surface-strong" />
+            <View className="h-[14px] w-[80px] rounded-[6px] bg-surface-strong" />
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 export function TripWizardStep1Screen({
   summaryDestinations,
   summaryPeriod,
@@ -226,6 +295,7 @@ export function TripWizardStep1Screen({
   canProceed,
   onNext,
   onBack,
+  isLoading,
   submitError,
   onRetrySubmit,
   mustVisitError,
@@ -234,6 +304,8 @@ export function TripWizardStep1Screen({
   onCloseOverseasDialog,
   onPickDomesticRegion,
 }: TripWizardStep1ScreenProps): ReactElement {
+  // loading 이면 게이트가 참이어도 [다음]을 막는다(TRIP-671 D4) — 화면이 isLoading 을 next 에 물린다.
+  const nextDisabled = !canProceed || Boolean(isLoading);
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="trip-wizard-step1-root" className="flex-1 bg-canvas">
@@ -277,8 +349,9 @@ export function TripWizardStep1Screen({
                 어디로 떠날까요?
               </Text>
               <Text className="font-noto text-label text-muted">
-                온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수
-                있어요
+                {isLoading
+                  ? '여행 정보를 불러오는 중이에요'
+                  : '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'}
               </Text>
             </View>
 
@@ -291,44 +364,68 @@ export function TripWizardStep1Screen({
                 testID="trip-wizard-summary-destination"
                 label="여행지"
                 value={summaryDestinations}
+                placeholder="어디로 갈까요?"
+                placeholderTone="ink"
                 onPress={onPressSummaryDestination}
+                isLoading={isLoading}
+                skeletonTestID="trip-wizard-summary-skeleton-1"
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
                 testID="trip-wizard-summary-period"
                 label="기간"
                 value={summaryPeriod}
+                placeholder={null}
+                placeholderTone="muted"
                 onPress={onPressSummaryPeriod}
+                isLoading={isLoading}
+                skeletonTestID="trip-wizard-summary-skeleton-2"
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
                 testID="trip-wizard-summary-companion"
                 label="동행"
                 value={summaryCompanion}
+                placeholder="동행 선택"
+                placeholderTone="muted"
                 onPress={onPressSummaryCompanion}
+                isLoading={isLoading}
+                skeletonTestID="trip-wizard-summary-skeleton-3"
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
                 testID="trip-wizard-summary-preference"
                 label="취향"
                 value={summaryPreferences}
+                placeholder="취향 선택"
+                placeholderTone="muted"
                 onPress={onPressSummaryPreference}
+                isLoading={isLoading}
+                skeletonTestID="trip-wizard-summary-skeleton-4"
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
                 testID="trip-wizard-summary-budget"
                 label="예산"
                 value={summaryBudget}
+                placeholder="예산 선택"
+                placeholderTone="muted"
                 onPress={onPressSummaryBudget}
+                isLoading={isLoading}
+                skeletonTestID="trip-wizard-summary-skeleton-5"
               />
             </View>
 
-            {/* 꼭 갈 곳 스트립 */}
-            <MustVisitStrip
-              mustVisits={mustVisits}
-              onPressMore={onPressMore}
-              onPressSeeAll={onPressSeeAll}
-            />
+            {/* 꼭 갈 곳 — loading 이면 스켈레톤 카드, 아니면 실제 스트립 */}
+            {isLoading ? (
+              <MustVisitSkeleton />
+            ) : (
+              <MustVisitStrip
+                mustVisits={mustVisits}
+                onPressMore={onPressMore}
+                onPressSeeAll={onPressSeeAll}
+              />
+            )}
           </View>
         </ScrollView>
 
@@ -385,10 +482,10 @@ export function TripWizardStep1Screen({
           <Pressable
             testID="trip-wizard-step1-next"
             accessibilityRole="button"
-            disabled={!canProceed}
+            disabled={nextDisabled}
             onPress={onNext}
             className={`w-full flex-row items-center justify-center gap-sm rounded-button bg-primary py-[15px] ${
-              canProceed ? '' : 'opacity-40'
+              nextDisabled ? 'opacity-40' : ''
             }`}
           >
             <Text className="text-[16px] font-noto-bold font-bold text-on-primary">

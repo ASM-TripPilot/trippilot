@@ -99,19 +99,19 @@ beforeEach(() => {
 });
 
 describe('진입 직후 — 빈 스토어면 플레이스홀더 + 게이트 닫힘 (맹점①)', () => {
-  it('요약 5행이 플레이스홀더이고 [다음]이 비활성이다', () => {
+  it('빈 스토어 = empty 얼굴 — 여행지 신 카피 · 기간 값 줄 없음 · [다음] 비활성 (TRIP-671)', () => {
     render(<TripNewStep1Page baseDate={BASE} />);
 
+    // 여행지 null → 신 카피 "어디로 갈까요?"(옛 "여행지 선택" 대체, TRIP-671 D1).
     expect(
       within(screen.getByTestId('trip-wizard-summary-destination')).getByText(
-        '여행지 선택'
+        '어디로 갈까요?'
       )
     ).toBeOnTheScreen();
-    expect(
-      within(screen.getByTestId('trip-wizard-summary-period')).getByText(
-        '기간 선택'
-      )
-    ).toBeOnTheScreen();
+    // 기간 null → 값 줄 없음(옛 "기간 선택" 제거), 라벨은 생존.
+    const period = screen.getByTestId('trip-wizard-summary-period');
+    expect(within(period).queryByText('기간 선택')).toBeNull();
+    expect(within(period).getByText('기간')).toBeOnTheScreen();
     // 편집 시트가 S2~S6 스텁이라 빈 진입에선 게이트가 절대 안 열린다("다음 비활성"은 결함 아님).
     expect(next()).toBeDisabled();
   });
@@ -199,7 +199,7 @@ describe('재진입 보존 (BR-U1-33)', () => {
     ).toHaveTextContent(/부산 2박/);
   });
 
-  it('짝 — reset 뒤에 다시 올리면 플레이스홀더로 돌아온다', () => {
+  it('짝 — reset 뒤에 다시 올리면 여행지 행이 신 카피로 돌아온다', () => {
     const store = useTripWizardStore.getState();
     store.addDestination('부산', 2);
     const first = render(<TripNewStep1Page baseDate={BASE} />);
@@ -210,7 +210,7 @@ describe('재진입 보존 (BR-U1-33)', () => {
 
     expect(
       within(screen.getByTestId('trip-wizard-summary-destination')).getByText(
-        '여행지 선택'
+        '어디로 갈까요?'
       )
     ).toBeOnTheScreen();
     expect(next()).toBeDisabled();
