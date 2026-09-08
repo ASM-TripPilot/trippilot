@@ -11,6 +11,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { getAccessToken } from '@/shared/api/tokenManager';
+import { toggleMulti } from '@/shared/pref/preferenceSelection';
 
 import {
   formatBudgetAmount,
@@ -41,6 +42,8 @@ import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen';
+
+import { PrefOverrideSheet } from './PrefOverrideSheet';
 
 /**
  * TRIP-665 g01 1/2 배선(신 default) — 스토어 ↔ 요약 셀렉터 ↔ 화면 ↔ 라우터 ↔ 서버를 잇는다.
@@ -153,6 +156,14 @@ export function TripNewStep1Page({
   // 드래프트는 아래 `draftParty`/`draftCompanion`(배선 소유)에 쌓이고 여기서만 스토어에 반영된다.
   const setParty = useTripWizardStore((state) => state.setParty);
   const selectCompanion = useTripWizardStore((state) => state.selectCompanion);
+  // 취향 편집 시트(TRIP-669)가 "적용"에서 쓰는 커밋 액션 + 현재 오버라이드(요약·제출의 실효
+  // 취향을 정하는 단일 값). 시트는 무상태(D3)라 드래프트는 아래 `prefDraftStyles`가 소유한다.
+  const prefStyleOverride = useTripWizardStore(
+    (state) => state.prefStyleOverride
+  );
+  const setPrefStyleOverride = useTripWizardStore(
+    (state) => state.setPrefStyleOverride
+  );
 
   const preference = usePreferencePrefill();
   // 계정 취향 프리필(GET /me/preferences)은 이미 한국어 도메인 값이다(slug 아님) — 그대로 요약·
@@ -160,7 +171,11 @@ export function TripNewStep1Page({
   // 취향은 항상 프리필이고 온보딩 상속이다(`fromOnboarding = true`).
   const prefillStyles = preference.data?.styles?.value ?? [];
   const prefillActivities = preference.data?.activities?.value ?? [];
-  const preferenceChips = [...prefillStyles, ...prefillActivities];
+  // 실효 취향(TRIP-669 D2) — 오버라이드가 있으면(빈 `[]` 포함) 그것, 없으면(undefined) 프리필.
+  // 요약 취향 행·제출 스냅숏 styles 의 단일 출처다. activities 는 시트가 안 건드려 프리필 원본 유지(D5).
+  const effectiveStyles = prefStyleOverride ?? prefillStyles;
+  const hasOverride = prefStyleOverride !== undefined;
+  const preferenceChips = [...effectiveStyles, ...prefillActivities];
 
   // 예산은 프리필에서만 온다(인라인 입력은 S6 으로 이연). 신뢰 경계(0 이상 정수)를 통과한 값만
   // 콤마 포맷 → 파싱해 제출 바디의 `budgetTotal` 로 쓴다(`budgetAmount` 순수 함수, 로케일 API 미사용).
@@ -174,7 +189,11 @@ export function TripNewStep1Page({
   const summaryDestinationsValue = summaryDestinations(destinations);
   const summaryPeriodValue = summaryPeriod(startDate, endDate);
   const summaryCompanionValue = summaryCompanion(companionType, party);
-  const summaryPreferencesValue = summaryPreferences(preferenceChips, true);
+  // 오버라이드가 있으면 "+ 온보딩" 접미를 뗀다(D4 — 바꿨는데 "온보딩" 표식이 남으면 거짓).
+  const summaryPreferencesValue = summaryPreferences(
+    preferenceChips,
+    !hasOverride
+  );
   const summaryBudgetValue = canPrefillBudget
     ? summaryBudget(rawAmount, tierLabel)
     : null;
@@ -200,6 +219,11 @@ export function TripNewStep1Page({
   const [companionSheetOpen, setCompanionSheetOpen] = useState(false);
   const [draftParty, setDraftParty] = useState(1);
   const [draftCompanion, setDraftCompanion] = useState<CompanionType>();
+  // 취향 편집 시트(TRIP-669) — 시트가 무상태(D3)라 개폐·편집 드래프트를 배선이 소유한다.
+  // 열 때 실효 취향(오버라이드 ?? 프리필)에서 초기화하고, 칩 press 는 이 드래프트만 전이시킨다
+  // (적용 전 store 불변) — "적용"에서만 `setPrefStyleOverride` 로 커밋한다.
+  const [prefSheetOpen, setPrefSheetOpen] = useState(false);
+  const [prefDraftStyles, setPrefDraftStyles] = useState<string[]>([]);
 
   // 제출 경로 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
   // 않게). 두 뜻을 겸한다: ① 등록 요청이 날아가는 중 ② 이미 성공해 이 화면의 일이 끝남.
@@ -322,10 +346,11 @@ export function TripNewStep1Page({
       // (`buildCreateTripRequest` 가 스프레드 전에 떼어 조건부로 다시 붙인다).
       budgetTotal:
         parsedBudget.kind === 'amount' ? parsedBudget.amount : undefined,
-      // 취향 스냅숏(정책 A) — 프리필 실효 취향을 평평한 한국어 배열로 싣는다(BE 는 받은 것만
-      // 저장하고 스스로 동결하지 않는다). 요약 취향 행과 같은 출처라 화면=서버가 맞는다.
+      // 취향 스냅숏(정책 A) — 실효 취향(오버라이드 ?? 프리필)을 평평한 한국어 배열로 싣는다
+      // (BE 는 받은 것만 저장하고 스스로 동결하지 않는다). 요약 취향 행과 같은 출처라 화면=서버가
+      // 맞는다. activities 는 시트가 안 건드려 프리필 원본을 그대로 싣는다(D5).
       preferenceSnapshot: {
-        styles: prefillStyles,
+        styles: effectiveStyles,
         activities: prefillActivities,
       },
     };
@@ -385,6 +410,27 @@ export function TripNewStep1Page({
     setCompanionSheetOpen(false);
   }
 
+  /** 취향 시트 열기 — 드래프트를 실효 취향에서 초기화한다(effective = 오버라이드 ?? 프리필, AC-2).
+   * 오버라이드는 `getState()`로 여는 순간 값을 읽고(store 직접 세팅 직후 press 대비, `openCompanionSheet`
+   * 선례), 프리필은 render 클로저값(react-query 라 store 를 안 타 클로저가 곧 최신값이다). */
+  function openPrefSheet(): void {
+    const override = useTripWizardStore.getState().prefStyleOverride;
+    setPrefDraftStyles([...(override ?? prefillStyles)]);
+    setPrefSheetOpen(true);
+  }
+
+  /** 칩 토글 — `toggleMulti` 의 전해제 `null` 을 `[]` 로 매핑한다(★ null-vs-empty, D2). 안 하면
+   * 드래프트가 null 이 되고 적용 시 `effectiveStyles = null ?? prefill` 로 프리필로 되돌아간다. */
+  function togglePrefStyle(label: string): void {
+    setPrefDraftStyles((current) => toggleMulti(current, label) ?? []);
+  }
+
+  /** "적용" — 드래프트를 오버라이드로 커밋(빈 `[]` 도 그대로) + 닫기. */
+  function applyPrefSheet(): void {
+    setPrefStyleOverride(prefDraftStyles);
+    setPrefSheetOpen(false);
+  }
+
   /** "적용" — 범위가 완성됐을 때만 커밋한다(시트가 미완성이면 버튼이 진짜 disabled 라 여긴 안전
    * 이중 방어 겸 TS 좁히기). `setPeriod`가 프리셋 없이(undefined) start·end 를 저장하고 시트를 닫는다. */
   function applyPeriod(): void {
@@ -405,7 +451,7 @@ export function TripNewStep1Page({
         onPressSummaryDestination={() => setDestinationSheetOpen(true)}
         onPressSummaryPeriod={() => setPeriodSheetOpen(true)}
         onPressSummaryCompanion={openCompanionSheet}
-        onPressSummaryPreference={openEditSheet}
+        onPressSummaryPreference={openPrefSheet}
         onPressSummaryBudget={openEditSheet}
         mustVisits={mustVisits}
         onPressMore={() =>
@@ -467,6 +513,15 @@ export function TripNewStep1Page({
           onChangeParty={(next) => setDraftParty(Math.max(1, next))}
           onSelectCompanion={pickCompanion}
           onApply={applyCompanion}
+        />
+      ) : null}
+      {/* 취향 편집 시트도 화면의 형제로 조건부 마운트 — 칩 press 는 배선의 `toggleMulti`(null→[])로
+          드래프트만 전이시키고, "적용"에서만 오버라이드로 커밋한다(동행 시트와 같은 커밋-온-어플라이). */}
+      {prefSheetOpen ? (
+        <PrefOverrideSheet
+          selected={prefDraftStyles}
+          onToggle={togglePrefStyle}
+          onApply={applyPrefSheet}
         />
       ) : null}
     </>

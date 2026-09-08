@@ -144,6 +144,7 @@ import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { LiveLocationPage } from '@/pages/live-location';
+import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
 import {
   TripWizardStep2Screen,
   type TripWizardStep2ScreenProps,
@@ -2819,6 +2820,23 @@ export const PREVIEW_STATES: PreviewState[] = [
         companionType="친구"
         onChangeParty={noop}
         onSelectCompanion={noop}
+        onApply={noop}
+      />
+    ),
+  },
+  // g01 취향 편집 시트(TRIP-669, Figma `3644:2068`) — 미식·자연 선택된 열린 상태. `PrefOverrideSheet`은
+  // props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정 없이 그대로 태운다. jest 는
+  // 칩 활성 분홍 배경·글리프 색·안내문·시트 딤/개폐를 못 봐(바텀시트 통과형 목) 이 키가 유일한
+  // 6-b 육안 대조 자리다. 활성 칩 아이콘 색(흰색 여부)도 여기서만 보인다.
+  {
+    key: 'trip-new-step1-pref-sheet',
+    band: 'g',
+    label: 'g01 · 취향 편집 시트',
+    login: null,
+    render: () => (
+      <PrefOverrideSheet
+        selected={['미식', '자연']}
+        onToggle={noop}
         onApply={noop}
       />
     ),

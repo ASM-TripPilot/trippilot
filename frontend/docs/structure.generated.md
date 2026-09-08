@@ -873,7 +873,7 @@
 - `src/pages/trip-new-step1/index.ts`  →  TripNewStep1Page
 
 ## src/pages/trip-new-step1/ui/
-- `src/pages/trip-new-step1/ui/PrefOverrideSheet.tsx`  →  PrefStyleOption · PrefOverrideSheetProps · PrefOverrideSheet
+- `src/pages/trip-new-step1/ui/PrefOverrideSheet.tsx`  →  PrefOverrideSheetProps · PrefOverrideSheet
 - `src/pages/trip-new-step1/ui/TripNewStep1Page.tsx`  →  TripNewStep1PageProps · TripNewStep1Page
 
 ## src/pages/trip-new-step2/

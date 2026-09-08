@@ -41,6 +41,11 @@ export interface TripWizardDraft {
    * 없다(01b 불변식 — 프리필이 `setBudgetText`를 타면 touched가 켜져 자기 자신을 잠근다,
    * TRIP-207 02a §2-2). */
   budgetText: string;
+  /** 여행 단위 취향 오버라이드(TRIP-669 D1) — `undefined`=오버라이드 없음(프리필 사용),
+   * 배열(빈 `[]` 포함)=오버라이드. 전해제도 `[]`로 담아 프리필로 되돌아가지 않게 한다
+   * (null-vs-empty — 배선이 `toggleMulti`의 `null`을 `[]`로 매핑). 계정 취향은 안 건드린다
+   * (BR-U1-38 — 여기 담는 건 여행 로컬 값이다). */
+  prefStyleOverride?: string[];
   /** 아직 소비자가 없다(문구를 안 그리므로) — TRIP-206이 이 값을 읽어 오류 문구를 건다. */
   touched: TripWizardField[];
   /** 제출 성공 응답이 준 `tripId`(01b D7). 라우트(`/trips/new/step2`)가 id를 안 나르므로
@@ -80,6 +85,9 @@ export interface TripWizardDraft {
   /** 사람 경로 — 원문을 판단 없이 담고 `touched`에 `'budget'`을 켠다. **빈 문자열을 넣는
    * 것도 "건드린 것"이다**(01b D6 ③) — 그래야 지운 상태가 재진입에도 보존된다(AC-1c). */
   setBudgetText(next: string): void;
+  /** 여행 단위 취향 오버라이드 커밋(TRIP-669) — 빈 배열도 그대로 저장한다(최소 0 허용).
+   * `undefined`(오버라이드 없음)와 `[]`(전해제한 오버라이드)를 서로 다른 상태로 남긴다. */
+  setPrefStyleOverride(styles: string[]): void;
   setCreatedTripId(tripId: string): void;
   /** **첫 호출만** 반영한다 — 재조회·리렌더마다 다시 채우면 사용자가 x로 뺀 항목이
    * 되살아나고, 자기가 뺀 곳이 여행에 등록되는 것을 보게 된다. */
@@ -116,6 +124,8 @@ const INITIAL_DRAFT = {
   party: 1,
   companionType: undefined as CompanionType | undefined,
   budgetText: '',
+  // `undefined`=오버라이드 없음. `INITIAL_DRAFT`에 이 키를 둬야 병합형 `reset()`이 지운다(SO-4).
+  prefStyleOverride: undefined as string[] | undefined,
   touched: [] as TripWizardField[],
   createdTripId: undefined as string | undefined,
   mustVisits: [] as MustVisitSeedItem[],
@@ -196,6 +206,7 @@ const createTripWizardDraft: StateCreator<TripWizardDraft> = (set) => ({
       budgetText: next,
       touched: withTouched(state.touched, 'budget'),
     })),
+  setPrefStyleOverride: (styles) => set({ prefStyleOverride: styles }),
   setCreatedTripId: (tripId) => set({ createdTripId: tripId }),
   initMustVisits: (items) =>
     set((state) =>
