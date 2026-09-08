@@ -140,6 +140,7 @@ import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
 } from '@/features/trip/ui/TripWizardStep1Screen';
+import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { LiveLocationPage } from '@/pages/live-location';
@@ -2798,6 +2799,26 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPickDate={noop}
         onPrevMonth={noop}
         onNextMonth={noop}
+        onApply={noop}
+      />
+    ),
+  },
+  // g01 동행 편집 시트(TRIP-668, Figma `3642:2068`) — 친구 선택·인원 2명 열린 상태.
+  // `CompanionEditSheet`은 props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정
+  // 없이 그대로 태운다. jest 는 칩 활성 분홍 배경·글리프 흰색·스테퍼 원·시트 딤/개폐를 못 봐
+  // (바텀시트 통과형 목) 이 키가 유일한 6-b 육안 대조 자리다. 혼자를 골랐을 때의 스테퍼 회색·
+  // 값 1명 고정은 배선(TripNewStep1Page)이 지는 값 고정이라 이 정적 프리뷰로는 안 보인다.
+  {
+    key: 'trip-new-step1-companion-sheet',
+    band: 'g',
+    label: 'g01 · 동행 편집 시트',
+    login: null,
+    render: () => (
+      <CompanionEditSheet
+        party={2}
+        companionType="친구"
+        onChangeParty={noop}
+        onSelectCompanion={noop}
         onApply={noop}
       />
     ),

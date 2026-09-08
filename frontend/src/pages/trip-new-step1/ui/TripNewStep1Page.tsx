@@ -5,7 +5,10 @@ import { useRouter } from 'expo-router';
 
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { postTripsTripIdMustVisits } from '@/shared/api/generated/trips/trips';
-import type { CreateTripRequest } from '@/shared/api/generated/schemas';
+import type {
+  CompanionType,
+  CreateTripRequest,
+} from '@/shared/api/generated/schemas';
 import { isAlreadyRegistered } from '@/shared/api/isAlreadyRegistered';
 import { getAccessToken } from '@/shared/api/tokenManager';
 
@@ -34,6 +37,7 @@ import {
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { useCreateTrip } from '@/features/trip/model/useCreateTrip';
 import { usePreferencePrefill } from '@/features/trip/model/usePreferencePrefill';
+import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen';
@@ -145,6 +149,10 @@ export function TripNewStep1Page({
   // 기간 편집 시트(TRIP-667)가 "적용"에서 쓰는 커밋 액션. 시트는 스토어를 모르고(무상태 D5),
   // 페이지가 이 액션을 콜백으로 배선한다 — 여행지 시트의 즉시반영과 달리 **적용에서만** 커밋한다(D6).
   const setPeriod = useTripWizardStore((state) => state.setPeriod);
+  // 동행 편집 시트(TRIP-668)가 "적용"에서 쓰는 두 커밋 액션. 기간 시트와 같은 커밋-온-어플라이 —
+  // 드래프트는 아래 `draftParty`/`draftCompanion`(배선 소유)에 쌓이고 여기서만 스토어에 반영된다.
+  const setParty = useTripWizardStore((state) => state.setParty);
+  const selectCompanion = useTripWizardStore((state) => state.selectCompanion);
 
   const preference = usePreferencePrefill();
   // 계정 취향 프리필(GET /me/preferences)은 이미 한국어 도메인 값이다(slug 아님) — 그대로 요약·
@@ -186,6 +194,12 @@ export function TripNewStep1Page({
     resolvedToday.slice(0, 7)
   );
   const [periodRange, setPeriodRange] = useState<TripDateRange>({});
+  // 동행 편집 시트(TRIP-668) — 시트가 무상태(D4)라 개폐·편집 드래프트를 배선이 소유한다.
+  // 열 때 store 현재값에서 초기화하고(D3 프리필), 스테퍼·칩 press 는 이 드래프트만 갱신한다
+  // (적용 전 store 불변) — "적용"에서만 `setParty`+`selectCompanion` 으로 커밋한다.
+  const [companionSheetOpen, setCompanionSheetOpen] = useState(false);
+  const [draftParty, setDraftParty] = useState(1);
+  const [draftCompanion, setDraftCompanion] = useState<CompanionType>();
 
   // 제출 경로 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
   // 않게). 두 뜻을 겸한다: ① 등록 요청이 날아가는 중 ② 이미 성공해 이 화면의 일이 끝남.
@@ -345,8 +359,31 @@ export function TripNewStep1Page({
     );
   }
 
-  // 동행·취향·예산 3행 편집 시트는 S4~S6 스텁이다 — 지금은 오픈 신호만 받는다(기간은 S3로 배선됨).
+  // 취향·예산 2행 편집 시트는 S5~S6 스텁이다 — 지금은 오픈 신호만 받는다(기간은 S3, 동행은 S4로 배선됨).
   const openEditSheet = (): void => {};
+
+  /** 동행 시트 열기 — 드래프트를 store 현재값에서 초기화한다(D3 프리필). 렌더 클로저가 아니라
+   * `getState()`로 **여는 순간의** store 값을 읽는다(구독 재렌더 타이밍과 무관, `submit()`과 동형). */
+  function openCompanionSheet(): void {
+    const state = useTripWizardStore.getState();
+    setDraftParty(state.party);
+    setDraftCompanion(state.companionType);
+    setCompanionSheetOpen(true);
+  }
+
+  /** 혼자 선택 시 draftParty 를 1 로 고정(D2 — 시트는 `disabled` 파생만, 값 고정은 배선). */
+  function pickCompanion(type: CompanionType): void {
+    setDraftCompanion(type);
+    if (type === '혼자') setDraftParty(1);
+  }
+
+  /** "적용" — 드래프트를 store 에 커밋(각 1회) + 닫기. 동행 미선택이면 `selectCompanion` 은
+   * 안 부른다(companionType 이 optional, 타입 좁히기 겸 발명 회피 — 02a §8-3). */
+  function applyCompanion(): void {
+    setParty(draftParty);
+    if (draftCompanion !== undefined) selectCompanion(draftCompanion);
+    setCompanionSheetOpen(false);
+  }
 
   /** "적용" — 범위가 완성됐을 때만 커밋한다(시트가 미완성이면 버튼이 진짜 disabled 라 여긴 안전
    * 이중 방어 겸 TS 좁히기). `setPeriod`가 프리셋 없이(undefined) start·end 를 저장하고 시트를 닫는다. */
@@ -367,7 +404,7 @@ export function TripNewStep1Page({
         summaryBudget={summaryBudgetValue}
         onPressSummaryDestination={() => setDestinationSheetOpen(true)}
         onPressSummaryPeriod={() => setPeriodSheetOpen(true)}
-        onPressSummaryCompanion={openEditSheet}
+        onPressSummaryCompanion={openCompanionSheet}
         onPressSummaryPreference={openEditSheet}
         onPressSummaryBudget={openEditSheet}
         mustVisits={mustVisits}
@@ -419,6 +456,17 @@ export function TripNewStep1Page({
             setPeriodMonth((current) => shiftMonth(current, 1))
           }
           onApply={applyPeriod}
+        />
+      ) : null}
+      {/* 동행 편집 시트도 화면의 형제로 조건부 마운트 — 스테퍼·칩 press 는 드래프트만 바꾸고
+          (적용 전 store 불변), "적용"에서만 커밋한다(기간 시트와 같은 커밋-온-어플라이, D1). */}
+      {companionSheetOpen ? (
+        <CompanionEditSheet
+          party={draftParty}
+          companionType={draftCompanion}
+          onChangeParty={(next) => setDraftParty(Math.max(1, next))}
+          onSelectCompanion={pickCompanion}
+          onApply={applyCompanion}
         />
       ) : null}
     </>

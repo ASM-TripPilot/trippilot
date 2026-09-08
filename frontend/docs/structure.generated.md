@@ -10,6 +10,7 @@
 - `__mocks__/react-native-webview.tsx`  →  WebView
 
 ## src/__tests__/
+- `src/__tests__/companionEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/design-tokens.test.ts`  →  (export 없음)
 - `src/__tests__/destinationEditSheetStructure.test.ts`  →  (export 없음)
@@ -570,6 +571,7 @@
 - `src/features/trip/model/useTripBases.ts`  →  useTripBases · useTripCoverage · useAssignBase · useUnassignBase
 
 ## src/features/trip/ui/
+- `src/features/trip/ui/CompanionEditSheet.tsx`  →  CompanionEditSheetProps · CompanionEditSheet
 - `src/features/trip/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
 - `src/features/trip/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
 - `src/features/trip/ui/TripBaseFixSheet.tsx`  →  TripBaseFixSheetProps · TripBaseFixSheet
@@ -1203,4 +1205,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 817개 파일
+합계 819개 파일
