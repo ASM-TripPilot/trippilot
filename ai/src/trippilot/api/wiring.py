@@ -67,7 +67,7 @@ from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
-from trippilot.agents.reflect.composer import compose as reflect_compose
+from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
 from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
 from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
 from trippilot.llm_gateway.workers.reflection_nudge import (
@@ -111,16 +111,13 @@ from trippilot.domain.llm import CandidatePool, ModelTier, PoiExplanation
 from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.travel import TravelEstimate
-from trippilot.agents.edit_agent import (
-    EditRejected, RetimeContext, edited_solution, validate_command,
-)
+from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
+from trippilot.agents.edit.commands import EditStatus
 from trippilot.agents.planb.rag import PlanBRagPipeline, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent
-from trippilot.domain.edit import ApplyMode, EditCommand, EditOp, resolve_apply_mode
+from trippilot.domain.edit import EditCommand, EditOp
 from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
-from trippilot.llm_gateway.workers.edit_translation import (
-    EditTranslationInput, EditTranslationWorker,
-)
+from trippilot.llm_gateway.workers.edit_translation import EditTranslationWorker
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
@@ -657,8 +654,8 @@ class WiredItineraryOrchestrator:
         rag: PlanBRagPipeline,
         explainer: ExplanationWorker,
         context_resolver: ContextResolver,
-        edit_translator: EditTranslationWorker,
-        reflection_worker: "ReflectionTemplateWorker",
+        edit_agent: EditAgent,
+        reflect_agent: ReflectAgent,
         nudge_worker: "ReflectionNudgeWorker",
         trace: TracePort,
     ) -> None:
@@ -671,8 +668,8 @@ class WiredItineraryOrchestrator:
         self._rag = rag
         self._explainer = explainer
         self._resolver = context_resolver
-        self._edit_translator = edit_translator
-        self._reflection_worker = reflection_worker
+        self._edit_agent = edit_agent
+        self._reflect_agent = reflect_agent
         self._nudge_worker = nudge_worker
         self._trace = trace
 
@@ -893,23 +890,15 @@ class WiredItineraryOrchestrator:
     def edit(
         self, request: schemas.EditItineraryRequest
     ) -> schemas.EditItineraryResponse:
-        """일정 편집 (TRIP-431) — 번역/검증 → 확인 게이트 → 재타이밍 → 어셈블리 검증.
+        """일정 편집 (TRIP-431) — EditAgent 위임 (agents/edit/agent.py).
 
-        자연어·구조화가 같은 처리 로직으로 수렴한다(팀 결정 2026-08-22). 사용자
-        노출 시각은 재타이밍 결과 중 **어셈블리 validate 통과분만**(INV-2), 거부는
-        위반 목록·사유와 함께(INV-4), 후보 자격은 closed-set 풀 교차(INV-1).
+        경계가 하는 일은 와이어 몫뿐이다: 일정 재구성 · 후보 풀 조립 · 스키마 파싱 ·
+        결과 사영. 해석(번역)·검증·확인 게이트·재타이밍·어셈블리 검증은 에이전트 소유.
         """
         meta = request.request_meta
         now = _tz_aware(meta.requested_at, self._tz)
-        trace_id = TraceId(meta.request_id)
         # 편집은 확인 게이트·재타이밍이 따로 있어 미검증 목록을 소비하지 않는다
         solution, _, poi_index, _ = self._reconstruct(request.itinerary, meta)
-        current_ids = frozenset(
-            s.poi_id for day in solution.days for s in day.slots)
-        # 대상 일자의 예약(is_fixed) 슬롯 — 편집 대상 불가·재타이밍 닻 (TRIP-526)
-        fixed_ids = frozenset(
-            fb.poi_id for day in solution.days if day.date == request.target_date
-            for fb in day.fixed_blocks)
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
         pool = self._pool_builder.build(
@@ -924,42 +913,10 @@ class WiredItineraryOrchestrator:
             now=now,
         )
 
-        # ① 명령 확보 — 자연어는 번역 워커(게이트 검증 포함), 구조화는 동등 검증
-        if request.utterance is not None:
-            target_day_ids = tuple(
-                s.poi_id
-                for day in solution.days if day.date == request.target_date
-                for s in day.slots
-            )
-            try:
-                result = self._edit_translator.translate(
-                    pool,
-                    EditTranslationInput(
-                        utterance=request.utterance,
-                        target_date=request.target_date.isoformat(),
-                        current_slots=target_day_ids,
-                        # 재구성이 이미 받아온 등록 POI 재사용 (추가 I/O 없음) — 풀 밖
-                        # 슬롯의 이름·카테고리는 여기서만 온다 (TRIP-527)
-                        slot_pois=poi_index,
-                    ),
-                    trace_id, now,
-                    timeout_sec=_deadline_budget(meta) / 1000.0,
-                )
-            except Exception as e:  # 설정 버그 등 — explanations()와 같은 정직 보고.
-                # 4xx 로 내보내면 백엔드가 MinimalItineraryFallback 을 켜 편집 한 번이
-                # 일정을 최소본으로 갈아엎는다 (errors.py "에러 vs 폴백 이원화", TRIP-527).
-                return schemas.EditItineraryResponse(
-                    status="TRANSLATION_FAILED",
-                    reason=f"편집 의도 해석 실패: {type(e).__name__}: {e}",
-                )
-            if result.is_fallback or result.value is None:
-                # 자연어 해석 실패는 자연어 경로만의 정직 실패 — 구조화 경로 무영향
-                return schemas.EditItineraryResponse(
-                    status="TRANSLATION_FAILED",
-                    reason=f"편집 의도 해석 실패: {result.error}",
-                )
-            command, apply_mode = result.value.command, result.value.apply_mode
-        else:
+        # 구조화 진입의 와이어 파싱은 경계 몫 — op 문자열이 EditOp 밖이면 여기서 거른다
+        # (편집 규칙 위반이 아니라 형식 오류다). 자연어는 에이전트가 번역한다.
+        command = None
+        if request.utterance is None:
             try:
                 command = EditCommand(
                     op=EditOp(request.command.op),
@@ -969,81 +926,65 @@ class WiredItineraryOrchestrator:
                 )
             except ValueError:
                 return schemas.EditItineraryResponse(
-                    status="REJECTED",
+                    status=EditStatus.REJECTED.value,
                     reason=f"op가 EditOp 밖: {request.command.op!r}",
                 )
-            apply_mode = resolve_apply_mode(command)
 
-        command_schema = schemas.EditCommandSchema(
-            op=command.op.value, params=dict(command.params),
-            affected_slots=[str(x) for x in command.affected_slots],
-        )
-        try:
-            # 구조화 진입은 게이트를 안 거쳤다 — 동등 규칙을 양쪽 모두에 적용해
-            # (자연어도 재검증) 검증 권위를 한 곳으로 모은다.
-            validate_command(command, current_ids, pool, fixed_ids)
+        outcome = self._edit_agent.run(EditTask(
+            solution=solution,
+            target_date=request.target_date,
+            pool=pool,
+            poi_index=poi_index,
+            transport=transport,
+            trace_id=TraceId(meta.request_id),
+            now=now,
+            deadline_ms=_deadline_budget(meta),
+            utterance=request.utterance,
+            command=command,
+            confirm=request.confirm,
+        ))
+        return self._edit_response(outcome)
 
-            # ② 확인 게이트 — 파괴적 편집은 사용자 확인(confirm) 전에는 반영하지 않는다
-            if apply_mode is ApplyMode.CONFIRM_REQUIRED and not request.confirm:
-                return schemas.EditItineraryResponse(
-                    status="CONFIRM_REQUIRED", command=command_schema,
-                    apply_mode=apply_mode.value,
-                    reason="파괴적·대규모 편집 — confirm=true로 재호출 시 반영",
-                )
-
-            # ③ 시퀀스 변형 + 결정론 재타이밍
-            pool_index = {p.poi_id: p for p in pool.pois}
-            merged_index = {**pool_index, **poi_index}
-            target_day_slots = next(
-                (d.slots for d in solution.days if d.date == request.target_date), ())
-            ctx = RetimeContext(
-                coords={pid: p.coord for pid, p in merged_index.items()},
-                stay_min={s.poi_id: s.stay_min for s in target_day_slots},
-                estimator=self._estimator,
-                transport=transport,
+    def _edit_response(
+        self, outcome: EditOutcome
+    ) -> schemas.EditItineraryResponse:
+        """EditOutcome → 와이어. 상태값 사영뿐 — 판단은 이미 에이전트가 끝냈다."""
+        command_schema = None
+        if outcome.command is not None:
+            command_schema = schemas.EditCommandSchema(
+                op=outcome.command.op.value, params=dict(outcome.command.params),
+                affected_slots=[str(x) for x in outcome.command.affected_slots],
             )
-            mutated = edited_solution(
-                solution, request.target_date, command, ctx, self._tz)
-        except EditRejected as e:
+        apply_mode = (
+            outcome.apply_mode.value if outcome.apply_mode is not None else None)
+        if outcome.status is EditStatus.APPLIED:
+            assert outcome.solution is not None  # 불변식이 보장 (APPLIED ⇔ solution)
+            # 사영은 routes 소유(to_payload) — 지역 import (routes→wiring 역참조 없음, 비순환)
+            from trippilot.api.routes import to_payload
+
             return schemas.EditItineraryResponse(
-                status="REJECTED", command=command_schema,
-                apply_mode=apply_mode.value, reason=str(e),
+                status=outcome.status.value, command=command_schema,
+                apply_mode=apply_mode,
+                itinerary=to_payload(_envelope(outcome.solution)),
             )
-
-        # ④ 어셈블리 검증 — 통과분만 노출 (INV-2)
-        facade = self._assembly_provider.for_pool(merged_index)
-        violations = facade.validate(
-            mutated, _problem_for(mutated, self._tz),
-            _deadline_budget(meta), trace_id,
-        )
-        if violations:
-            return schemas.EditItineraryResponse(
-                status="REJECTED", command=command_schema,
-                apply_mode=apply_mode.value,
-                violations=[
-                    schemas.ViolationSchema(
-                        code=v.code,
-                        slot_ref=str(v.slot_ref) if v.slot_ref is not None else None,
-                        detail=v.detail, day_index=None, slot_index=None,
-                    )
-                    for v in violations
-                ],
-                reason="편집 결과가 하드 제약을 위반 — 반영하지 않음",
-            )
-        # 사영은 routes 소유(to_payload) — 지역 import (routes→wiring 역참조 없음, 비순환)
-        from trippilot.api.routes import to_payload
-
         return schemas.EditItineraryResponse(
-            status="APPLIED", command=command_schema,
-            apply_mode=apply_mode.value, itinerary=to_payload(_envelope(mutated)),
+            status=outcome.status.value, command=command_schema,
+            apply_mode=apply_mode,
+            violations=[
+                schemas.ViolationSchema(
+                    code=v.code,
+                    slot_ref=str(v.slot_ref) if v.slot_ref is not None else None,
+                    detail=v.detail, day_index=None, slot_index=None,
+                )
+                for v in outcome.violations
+            ],
+            reason=outcome.reason,
         )
-
-    # ── Reflect 경계 (TRIP-429 — U6 FD Phase 1) ──
 
     def reflection_generate(
         self, request: schemas.ReflectionGenerateRequest
     ) -> schemas.ReflectionGenerateResponse:
-        """회고 연출 템플릿 생성 — compose 코어(agents/reflect) 위임.
+        """회고 연출 템플릿 생성 — ReflectAgent 위임 (agents/reflect/agent.py).
 
         전 시도 파싱 실패면 고정 폴백 템플릿 200(is_fallback=true, INV-4).
         응답 키 = ReflectionTemplate.to_dict() (계약 §3 — 시각·duration 필드 부재).
@@ -1073,14 +1014,12 @@ class WiredItineraryOrchestrator:
             persona_summary=request.persona_summary,
             weather_summary=request.weather_summary,
         )
-        template = reflect_compose(
-            self._reflection_worker,
-            domain_request,
-            TraceId(meta.request_id),
-            now,
-            self._trace,
+        template = self._reflect_agent.run(ReflectTask(
+            request=domain_request,
+            trace_id=TraceId(meta.request_id),
+            now=now,
             timeout_sec=_deadline_budget(meta) / 1000.0,
-        )
+        ))
         return schemas.ReflectionGenerateResponse(**template.to_dict())
 
     def reflection_nudge(
@@ -1183,12 +1122,23 @@ def build_orchestrator(
     explainer = ExplanationWorker(
         GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace)
     )
-    edit_translator = EditTranslationWorker(
-        GatewayFacade(llm, renderer, EditTranslationGate(), c1_config, trace)
+    # EditAgent — 번역 워커를 감싼다. 어셈블리 검증까지 에이전트가 소유(INV-2).
+    edit_agent = EditAgent(
+        EditTranslationWorker(
+            GatewayFacade(llm, renderer, EditTranslationGate(), c1_config, trace)
+        ),
+        provider,
+        estimator,
+        lambda solution: _problem_for(solution, tz),
+        tz=tz,
     )
     # Reflect 경계 (TRIP-429) — 워커별 게이트 페어링은 위 explainer·edit와 동형
-    reflection_worker = ReflectionTemplateWorker(
-        GatewayFacade(llm, renderer, ReflectionTemplateGate(), c1_config, trace)
+    # ReflectAgent — 템플릿 워커를 감싼다. Phase 2(vision) 하이라이트 워커는 후속 배선.
+    reflect_agent = ReflectAgent(
+        ReflectionTemplateWorker(
+            GatewayFacade(llm, renderer, ReflectionTemplateGate(), c1_config, trace)
+        ),
+        trace,
     )
     nudge_worker = ReflectionNudgeWorker(
         GatewayFacade(llm, renderer, ReflectionNudgeGate(), c1_config, trace)
@@ -1222,8 +1172,8 @@ def build_orchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,
         pool_builder=pool_builder, rag=rag,
         explainer=explainer, context_resolver=resolver,
-        edit_translator=edit_translator,
-        reflection_worker=reflection_worker,
+        edit_agent=edit_agent,
+        reflect_agent=reflect_agent,
         nudge_worker=nudge_worker,
         trace=trace,
     )

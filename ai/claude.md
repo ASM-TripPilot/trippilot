@@ -31,9 +31,14 @@ TripPilot AI is an **independent Python AI service** that generates, replans, an
 - **ScheduleAgent**: itinerary generation (Generation pattern) — **wired** (2026-09-09): `agents/schedule/agent.py`
   `ScheduleAgent.run(ScheduleTask)`; `ItineraryOrchestrator` verifies ownership, allocates the deadline,
   collects/digests info and delegates. The assembly engine stays its own layer — the agent only calls `solve()`
-- **PlanBAgent**: contingency handling (RAG pattern, 3 KBs + pgvector)
-- **ReflectAgent**: reflection generation (phase 1: simple LLM Generation; Multi-step expansion later)
-- **EditAgent**: itinerary editing (intent interpretation → assembly verification → apply)
+- **PlanBAgent**: contingency handling (RAG pattern, 3 KBs + pgvector) — `agents/planb/rag.py` `PlanBRagPipeline.run(PlanBRagRequest)`
+- **ReflectAgent**: reflection generation — `agents/reflect/agent.py` `ReflectAgent.run(ReflectTask)`; text and vision (Phase 2) share one entry via `ReflectTask.vision`
+- **EditAgent**: itinerary editing (translate → validate → confirm gate → retime → assembly validate) — `agents/edit/agent.py` `EditAgent.run(EditTask) -> EditOutcome`
+
+> **All four agents are objects that wrap their gateway workers** (2026-09-09): constructor DI, one
+> `run(<Task>) -> <Outcome>` entry, no exceptions across the boundary (DL-5). The literal
+> `Agent.handle(AgentTask) -> AgentResult` envelope is still unimplemented for all four —
+> it lands with IntentRouter wiring (business-rules 미결 #8).
 
 **Information sources** (v2 — `orchestrator/info_collector.py` + `providers/`):
 Place · Weather · Transit · Persona · Event Providers. The Orchestrator collects

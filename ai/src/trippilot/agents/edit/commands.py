@@ -1,4 +1,7 @@
-"""EditAgent 코어 (TRIP-431) — 자연어·구조화 겸용 편집의 공통 처리 로직.
+"""편집 명령의 **순수 단계** — 검증·시퀀스 변형·결정론 재타이밍 (TRIP-431).
+
+번역(LLM)·확인 게이트·어셈블리 검증까지 묶는 파이프라인은 `agent.py`의 `EditAgent`가
+소유한다. 여기 있는 것은 워커도 시계도 모르는 결정론 함수뿐이다.
 
 ```
 자연어 utterance → EDIT_TRANSLATION 워커(LLM) → EditCommand ─┐
@@ -42,6 +45,8 @@ _EMPTY_DAY_START = time(10, 0)  # 빈 날 시작 시각 (ponytail — docstring 
 
 
 class EditStatus(Enum):
+    """편집 결과 상태 — `agent.EditOutcome.status` 이자 와이어 `status` 값 그대로."""
+
     APPLIED = "APPLIED"
     CONFIRM_REQUIRED = "CONFIRM_REQUIRED"
     REJECTED = "REJECTED"

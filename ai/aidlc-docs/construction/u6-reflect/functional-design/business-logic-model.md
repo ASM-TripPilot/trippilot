@@ -43,7 +43,7 @@ LlmPort 직접 import 금지(L-3) 전부 기존 아키텍처 테스트가 자동
   시간제약 재도입(2026-10 예정) 시 deadline 값·체인 스킵 조건은 **후속 결정** (BR-U6R-14).
 - 대화형 REFLECT intent(라우팅 테이블 — 수집 항목 없음) 경로는 AgentTask 봉투로 같은 compose 코어에 수렴 (BR-AF-01~05).
 
-## 3. Phase 1 파이프라인 — compose(request, trace_id, now)
+## 3. Phase 1 파이프라인 — `ReflectAgent.run(ReflectTask)` (구 `compose(request, trace_id, now)`)
 
 ```
 ① 입력 검증        visits ≥ 1 (post-init) — 0건은 진입 불가 (BR-U6R-15)

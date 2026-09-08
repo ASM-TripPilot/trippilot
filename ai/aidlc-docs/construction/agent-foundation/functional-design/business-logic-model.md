@@ -17,8 +17,9 @@ src/trippilot/
     vector_store_port.py  VectorStorePort + VectorHit (본 스텝)
   agents/              ← 신규 상위 계층 (본 스텝: __init__ + base.py Protocol만. 구현은 각 유닛)
     base.py            Agent Protocol: handle(task: AgentTask) → AgentResult
-    edit_agent.py planb/ reflect/ schedule/   (각 유닛에서 추가 — 상호 import 금지. schedule/ 은 2026-09-09 실체화:
-                                            ScheduleAgent.run(ScheduleTask) — 오케스트레이터가 수집·소화한 재료를 봉투로 받는다)
+    edit/ planb/ reflect/ schedule/     (각 유닛에서 추가 — 상호 import 금지)
+                       2026-09-09 넷 다 **워커를 감싸는 객체**로 통일: `run(<Task>) -> <Outcome>`.
+                       edit/ 는 최상위 모듈에서 패키지로 승격(L-2 형제 검사 대상이 된다).
   orchestrator/        ItineraryOrchestrator(소유 검증·시한 배분·수집·소화·위임) · InfoCollector · IntentRouter(미배선)
   providers/           (U5·U6 예약 — LLM 0회 계층)
   background/          (U6 예약 — 소싱 파이프라인·자율 트리거형, §5)
