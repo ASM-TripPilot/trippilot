@@ -59,7 +59,8 @@ data class SlotCandidatesResponse(
     val candidates: List<SlotCandidateResponse>,
     val radiusMUsed: Int,
     /**
-     * **AI 순위가 아니다**(TRIP-408 전까지 true).
+     * **AI 가 LLM 랭킹을 못 냈을 때 true** — AI 폴백 응답(`fallback_level >= 1`)이거나 미도달 폴백이다.
+     * fake 모드는 항상 false(에이전트 전체가 대역이라 강등이 아니다).
      *
      * true 면 후보 집합은 정본 그대로지만 **정렬이 거리순**이고 근거 문구가 템플릿이며, 앞뒤 슬롯과의
      * 동선을 따지지 않았다. 화면이 "AI 추천 준비 중, 가까운 순으로 보여드려요" 를 말할 근거다.

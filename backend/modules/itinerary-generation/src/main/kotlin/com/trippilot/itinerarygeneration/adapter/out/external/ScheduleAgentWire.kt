@@ -3,16 +3,23 @@ package com.trippilot.itinerarygeneration.adapter.out.external
 import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import tools.jackson.databind.JsonNode
 import com.trippilot.itinerarygeneration.domain.DaySchedule
+import com.trippilot.itinerarygeneration.application.SlotKey
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.domain.SlotCandidate
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
+import com.trippilot.placedata.api.GroundedPlace
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.util.Locale
 import java.util.UUID
 
 /**
@@ -206,3 +213,163 @@ internal fun ScheduleAgentOutput.toWire(): AiSchedulePayload = AiSchedulePayload
     isFallback = isFallback,
     freshness = null, // 되돌려 보낼 때 신선도는 의미가 없다(우리가 만든 값이 아니다)
 )
+
+// ───────── 슬롯 후보(alternatives) — TRIP-463 · 연동 설계 §2·§3 ─────────
+
+/**
+ * `POST /ai/v1/itinerary/alternatives` 요청. **계약을 한 글자도 안 바꾸고** 우리 입력을 상대 어휘로
+ * 옮긴다 — 자리가 없는 값(`radiusM`·`concept`·`neighborSlotKeys`)은 백엔드가 응답 후처리에서
+ * 소화하거나 버린다(설계 §2 "자리가 없는 것 3개").
+ */
+internal data class AiTrigger(
+    val kind: String,
+    val scheduleId: String,
+    val affectedDate: LocalDate,
+    val payload: Map<String, String> = emptyMap(),
+)
+
+internal data class AiCoord(val lat: Double, val lng: Double)
+
+internal data class AiAlternativesRequest(
+    val trigger: AiTrigger,
+    val reason: String,
+    val anchor: AiCoord,
+    val dates: List<LocalDate>,
+    val budgetLevel: String?,
+    val transportMode: String?,
+    val excludedPoiIds: List<String>,
+    val affectedReasons: Map<String, String>,
+    val savedPlaces: List<String>,
+    val requestMeta: AiRequestMeta,
+)
+
+/**
+ * 응답의 대안 1건. **필수 필드에 기본값을 주지 않는다** — 계약 드리프트를 역직렬화 실패로 드러내기
+ * 위한 이 파일의 관행이다(`AiSlot.poiId` 등과 같은 이유).
+ */
+internal data class AiAlternative(
+    val label: String,
+    val poiIds: List<String>,
+    val rationale: String,
+)
+
+internal data class AiAlternativesResponse(
+    val alternatives: List<AiAlternative> = emptyList(),
+    val isFallback: Boolean,
+    val fallbackLevel: Int,
+    val notes: List<String> = emptyList(),
+    /** KB 3종 검색 건수 — 로그 진단값이라 모양을 고정하지 않는다(candidatesSummary 선례). */
+    val retrieved: JsonNode? = null,
+    val droppedOutOfPool: List<String> = emptyList(),
+    val emptyReason: String? = null,
+    val poolSize: Int,
+)
+
+/** 우리 입력 → 상대 요청(설계 §2 매핑표 그대로). */
+internal fun SlotCandidatesInput.toAlternativesRequest(): AiAlternativesRequest {
+    val (date, targetPoiId) = requireNotNull(SlotKey.parse(slotKey)) {
+        "slotKey 형식 위반: $slotKey — 서비스 검증을 지나온 값이라 여기 오면 버그다"
+    }
+    return AiAlternativesRequest(
+        // kind 는 **지어내는 값**이다(설계 §2) — h12/h18 은 사용자가 직접 "다른 후보"를 누른 흐름이고,
+        // 입력에 트리거 정보가 없어 다른 값을 실을 방법 자체가 없다.
+        trigger = AiTrigger(kind = "MANUAL", scheduleId = tripId.toString(), affectedDate = date),
+        // 어휘 6값 중 하나만 쓴다 — 계약상 enum 이 아니라 오타가 422 로 안 잡히고 KB 질의만 오염된다.
+        reason = "none",
+        anchor = AiCoord(centerLat, centerLng),
+        dates = listOf(date),
+        budgetLevel = null,     // 채우려면 profile 의존이 생긴다(R1 확대) — replan 과 같은 판단
+        transportMode = null,   // AI 기본 PUBLIC → 풀 반경 10km. §3 반경 컷 상한의 근거
+        excludedPoiIds = excludePoiIds.map { it.toString() },
+        affectedReasons = placementReason?.let { mapOf(targetPoiId.toString() to it) } ?: emptyMap(),
+        savedPlaces = emptyList(), // place-data 에 api 파사드가 없다 — 신설은 별건(설계 §2)
+        requestMeta = AiRequestMeta(requestMeta.requestId, requestMeta.requestedAt, requestMeta.deadlineMs),
+    )
+}
+
+/**
+ * 상대 응답 → 완결된 [SlotCandidatesOutput](설계 §3 · D-5가).
+ *
+ * **AI 응답에 없는 값(거리·반경·시각)은 여기서 백엔드 데이터로 채운다.** 거리는 `ground()` 가 준
+ * 좌표와 탐색 중심의 하버사인 — 표시값의 주인이 백엔드 정본(place-data) 좌표여야 두 정본이 안 생긴다.
+ */
+internal fun AiAlternativesResponse.toDomain(
+    input: SlotCandidatesInput,
+    grounded: List<GroundedPlace>,
+    receivedAt: Instant,
+): SlotCandidatesOutput {
+    val degraded = fallbackLevel >= 1
+    val byId = grounded.associateBy { it.poiId }
+
+    // flatten — 대안 1개 = POI 1개(DEC-U4-1)지만 계약상 배열이라 2개 이상이 와도 전부 편다.
+    data class Ranked(val place: GroundedPlace, val rationale: String, val distanceM: Double)
+    val ranked = alternatives.flatMap { alt ->
+        alt.poiIds.mapNotNull { raw ->
+            val id = runCatching { UUID.fromString(raw) }.getOrNull() ?: return@mapNotNull null
+            byId[id]?.let { place ->
+                Ranked(place, alt.rationale, haversineM(input.centerLat, input.centerLng, place.lat, place.lng))
+            }
+        }
+    }
+
+    // 반경 컷(설계 §2) — AI 풀 상한(PUBLIC 10km)을 넘는 반경을 표시하면 "본 적 없는 범위를 넓혀
+    // 봤다"는 거짓말이 된다. 컷 결과 0건이면 상한으로 한 번 넓혀 재컷(h15 를 서버가 대신한다).
+    val requestedCut = minOf(input.radiusM ?: DEFAULT_CUT_M, AI_POOL_RADIUS_M)
+    var radiusUsed = requestedCut
+    var within = ranked.filter { it.distanceM <= requestedCut }
+    if (within.isEmpty() && ranked.isNotEmpty() && requestedCut < AI_POOL_RADIUS_M) {
+        radiusUsed = AI_POOL_RADIUS_M
+        within = ranked.filter { it.distanceM <= AI_POOL_RADIUS_M }
+    }
+
+    // 정렬(D-3a): AI 랭킹이 살아 있으면 그 순서가 이 티켓이 사려던 것이고,
+    // 강등이면 거리 오름차순 — FE 고지 문구('가까운 순')가 사실이어야 한다.
+    val ordered = if (degraded) within.sortedBy { it.distanceM } else within
+
+    val candidates = ordered.map { r ->
+        SlotCandidate(
+            poiId = r.place.poiId,
+            // 거리만 — 소요시간은 어떤 이유로도 내보내지 않는다(INV-3).
+            distanceRange = "약 ${"%.1f".format(Locale.ROOT, r.distanceM / 1000)}km",
+            // 폴백 rationale 은 기계 문자열("MANUAL/none · rule_ranking")이라 사용자에게 새면 안 된다 —
+            // 로컬 경로와 같은 템플릿으로 되돌린다(설계 §3).
+            rationale = if (degraded) {
+                input.concept?.let { c -> "$c 컨셉에 맞는 ${r.place.category}" } ?: "주변 ${r.place.category}"
+            } else {
+                r.rationale
+            },
+        )
+    }
+
+    return SlotCandidatesOutput(
+        candidates = candidates,
+        radiusMUsed = radiusUsed,
+        freshness = FreshnessMeta(receivedAt, degraded = degraded),
+        emptyReason = when {
+            candidates.isNotEmpty() -> null
+            // AI 가 후보를 줬는데 반경 컷·ground 탈락으로 비었다 — 주변엔 있으니 넓히기·컨셉 변경이 통한다.
+            ranked.isNotEmpty() || alternatives.isNotEmpty() -> SlotCandidatesEmptyReason.NO_NEARBY
+            // AI 풀이 비었거나 전부 제외됐다(설계 §3 매핑) — 넓혀도 같은 결과다.
+            emptyReason == "no_candidates" || emptyReason == "all_excluded" -> SlotCandidatesEmptyReason.ALL_IN_ITINERARY
+            // 모르는 사유는 NO_NEARBY 로 떨어뜨린다 — 원문은 어댑터가 WARN 으로 남긴다(침묵 금지).
+            else -> SlotCandidatesEmptyReason.NO_NEARBY
+        },
+    )
+}
+
+/** place-data `domain` 은 R1 위반이라 못 쓰고 `StayOnramp.distanceM` 은 private — 그래서 여기 새로 둔다(설계 §6-2). */
+private fun haversineM(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLng = Math.toRadians(lng2 - lng1)
+    val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
+    return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a))
+}
+
+private const val EARTH_RADIUS_M = 6_371_000.0
+
+/** AI 풀 반경 상한(PUBLIC 10km) — transport_mode 를 안 보내므로 상대는 항상 이 풀에서 골랐다. */
+private const val AI_POOL_RADIUS_M = 10_000
+
+/** 로컬 경로의 기본 반경과 같은 값 — 두 경로의 기본 동작이 갈리지 않게. */
+private const val DEFAULT_CUT_M = 3_000

@@ -14,6 +14,7 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
+import com.trippilot.placedata.api.CandidatePoolPort
 import com.trippilot.itinerarygeneration.domain.Violation
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Primary
@@ -41,6 +42,8 @@ class HttpScheduleAgentAdapter(
     /** 편집 경로 전용 — 생성만큼 오래 기다리지 않는다(설정 주석 참고). */
     private val scheduleAgentBoundedRestClient: RestClient,
     private val localCandidates: LocalSlotCandidateSource,
+    /** 슬롯 후보의 INV-1 게이트 + 거리 계산 좌표(D-5가) — AI 응답에 거리 필드가 없어 우리가 채운다. */
+    private val candidatePool: CandidatePoolPort,
     private val clock: Clock,
 ) : ScheduleAgentPort {
 
@@ -180,20 +183,35 @@ class HttpScheduleAgentAdapter(
     }
 
     /**
-     * AI 에 슬롯 후보 경로가 없다(generate·validate·repair 3종뿐). **우리 후보풀로 답한다.**
+     * 슬롯 후보 — `POST /ai/v1/itinerary/alternatives` 실호출(TRIP-463 · 연동 설계 정본:
+     * `backend/docs/design/ai-backend-alternatives-연동-설계.md`).
      *
-     * 예전에는 503 을 던졌다 — "빈 목록은 후보 0건과 구분되지 않는다" 는 이유였고 그 판단은 옳았다.
-     * 다만 그때 선택지는 "빈 목록 vs 503" 둘뿐이었다. **실제 후보를 주되 순위가 덜 똑똑한** 세 번째 길이
-     * 있었고, 그 코드는 이미 [LocalSlotCandidateSource] 에 있었다(fake 경로가 쓰던 것).
+     * AI 가 더하는 것은 **순위와 이유**다(집합의 주인은 C7·INV-1). 응답에 없는 값 — 거리·반경·시각 —
+     * 은 [toDomain] 이 백엔드 데이터로 채운다. `degraded` 는 이제 리터럴이 아니라
+     * **`fallback_level >= 1`**(AI 가 LLM 랭킹을 못 냈을 때만 true)이다.
      *
-     * generate 로 우회할 수는 없다 — 나머지 슬롯을 고정하고 태워 봤으나 대체 후보가 나오지 않았고,
-     * AI 응답 슬롯에는 `rationale` 필드 자체가 없다(2026-08-20 실 AI 실측).
-     *
-     * 강등 사실을 결과에 실어 보낸다(`degraded=true`) — 화면이 "AI 추천 준비 중, 거리순" 을 말할 수
-     * 있어야 사용자가 오해하지 않고, 이 폴백이 조용히 영구화되지 않는다(INV-4 · TRIP-408 이 본선).
+     * AI 미도달이면 로컬 후보풀로 폴백한다(D-4가) — 오늘까지의 http 모드 동작과 같아 가용성 회귀가 0 이다.
+     * **재시도 없음**(선언 정책). 사용자가 화면에서 기다리는 동작이라 bounded 클라이언트를 쓴다.
      */
-    override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput =
+    override fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput = try {
+        val res = post(ALTERNATIVES_PATH, input.toAlternativesRequest(), AiAlternativesResponse::class.java, scheduleAgentBoundedRestClient)
+        // 진단값은 로그로만 — 사용자 문구가 아니다(설계 §3). dropped 는 우리 ground() 탈락과 나란히
+        // 봐야 INV-1 경로 전체가 보이므로 WARN 으로 올린다.
+        if (res.notes.isNotEmpty()) log.info("alternatives notes: {}", res.notes)
+        if (res.droppedOutOfPool.isNotEmpty()) log.warn("AI 가 자기 풀 기준으로 버린 참조: {}", res.droppedOutOfPool)
+        if (res.emptyReason != null && res.emptyReason != "no_candidates" && res.emptyReason != "all_excluded") {
+            log.warn("모르는 empty_reason '{}' — NO_NEARBY 로 떨어뜨립니다.", res.emptyReason)
+        }
+        val ids = res.alternatives.flatMap { it.poiIds }.mapNotNull { raw -> runCatching { UUID.fromString(raw) }.getOrNull() }
+        // INV-1 게이트 — 상대가 뭐라 답했든 실재 확인(ACTIVE)된 것만 후보가 된다.
+        val grounded = if (ids.isEmpty()) emptyList() else candidatePool.ground(ids)
+        if (grounded.size < ids.size) log.warn("ground() 탈락 {}건 — AI 응답 {}건 중", ids.size - grounded.size, ids.size)
+        res.toDomain(input, grounded, clock.instant())
+    } catch (e: ScheduleAgentCallFailed) {
+        // D-4(가): 미도달은 로컬 폴백 — 조용히 넘어가지 않는다(INV-4).
+        log.warn("AI alternatives 미도달 — 로컬 후보풀로 폴백합니다: {}", e.message)
         localCandidates.propose(input, degraded = true)
+    }
 
     /** 에러 응답 → 도메인 실패. 바디 `{error_code, message, retryable}`(계약) 파싱 실패해도 상태코드로 판정. */
     private fun callFailed(status: Int, body: ByteArray): ScheduleAgentCallFailed {
@@ -212,13 +230,14 @@ class HttpScheduleAgentAdapter(
         internal const val VALIDATE_PATH = "/ai/v1/itinerary/validate"
         internal const val REPAIR_PATH = "/ai/v1/itinerary/repair"
         internal const val EXPLANATIONS_PATH = "/ai/v1/itinerary/explanations"
+        internal const val ALTERNATIVES_PATH = "/ai/v1/itinerary/alternatives"
 
         /**
          * **이 목록이 계약 게이트의 입력이다.** 손으로 관리하는 목록을 테스트가 따로 또 들고 있으면
          * 둘이 갈라진다 — 실제로 그래서 explanations 가 게이트 밖에 있었다(2026-09-01). 경로를
          * 하나 늘리면 여기에 넣게 되고, 그러면 게이트가 저절로 따라온다.
          */
-        internal val CALLED_PATHS = listOf(GENERATE_PATH, VALIDATE_PATH, REPAIR_PATH, EXPLANATIONS_PATH)
+        internal val CALLED_PATHS = listOf(GENERATE_PATH, VALIDATE_PATH, REPAIR_PATH, EXPLANATIONS_PATH, ALTERNATIVES_PATH)
 
         // 편집 재검증·보정은 사용자가 화면에서 기다리는 동작이라 생성(20s)보다 짧게 잡는다.
         private const val VALIDATE_DEADLINE_MS = 3_000L

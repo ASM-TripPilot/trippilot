@@ -1,5 +1,9 @@
 package com.trippilot.itinerarygeneration.contract
 
+import com.trippilot.itinerarygeneration.adapter.out.external.AiAlternative
+import com.trippilot.itinerarygeneration.adapter.out.external.AiAlternativesRequest
+import com.trippilot.itinerarygeneration.adapter.out.external.AiAlternativesResponse
+import com.trippilot.itinerarygeneration.adapter.out.external.AiCoord
 import com.trippilot.itinerarygeneration.adapter.out.external.AiDay
 import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsResponse
@@ -7,6 +11,7 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiFreshness
 import com.trippilot.itinerarygeneration.adapter.out.external.AiRequestMeta
 import com.trippilot.itinerarygeneration.adapter.out.external.AiScheduleResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSlot
+import com.trippilot.itinerarygeneration.adapter.out.external.AiTrigger
 import com.trippilot.itinerarygeneration.adapter.out.external.AiUnplacedMustVisit
 import com.trippilot.itinerarygeneration.adapter.out.external.AiViolation
 import com.trippilot.itinerarygeneration.adapter.out.external.HttpScheduleAgentAdapter
@@ -104,6 +109,27 @@ class AiBoundaryOpenApiTest : StringSpec({
         wireKeys(sampleInput.fixedBlocks.single()) shouldContainExactly props("FixedBlockSchema")
         wireKeys(sampleInput.preferenceProfile) shouldContainExactly props("PreferenceProfileSchema")
         wireKeys(sampleInput.requestMeta) shouldContainExactly props("RequestMetaSchema")
+    }
+
+    "alternatives 요청 키가 계약과 정확히 일치한다 — 슬롯 후보의 실 와이어다(TRIP-463)" {
+        wireKeys(sampleAlternativesRequest) shouldContainExactly props("AlternativesRequest")
+        wireKeys(sampleAlternativesRequest.trigger) shouldContainExactly props("TriggerSchema")
+        wireKeys(sampleAlternativesRequest.anchor) shouldContainExactly props("CoordSchema")
+    }
+
+    "alternatives 요청이 계약 필수 필드를 하나도 빠뜨리지 않는다" {
+        val required = requireNotNull(schemas["AlternativesRequest"])["required"].map { it.asString() }
+        val sent = wireKeys(sampleAlternativesRequest)
+        required.forEach { sent shouldContain it }
+    }
+
+    /**
+     * 응답도 본다 — 상대가 `fallback_level` 을 개명하면 degraded 판정이 조용히 항상 false 가 되고,
+     * 화면은 규칙 랭킹을 AI 랭킹인 척 보여주게 된다.
+     */
+    "alternatives 응답 키가 계약과 정확히 일치한다" {
+        wireKeys(sampleAlternativesResponse) shouldContainExactly props("AlternativesResponse")
+        wireKeys(sampleAlternativesResponse.alternatives.single()) shouldContainExactly props("AlternativeSchema")
     }
 
     "explanations 요청 키가 계약과 정확히 일치한다" {
@@ -211,6 +237,31 @@ private val samplePayload = AiScheduleResponse(
     isFallback = false,
     freshness = AiFreshness("kakao", Instant.parse("2026-08-01T00:00:00Z"), cacheHit = true, ttlSec = 600, stale = false),
     unplacedMustVisits = listOf(AiUnplacedMustVisit(UUID.randomUUID().toString(), "NO_FEASIBLE_SLOT")),
+)
+
+/** 모든 필드를 채운다 — null·빈 값이면 그 키가 직렬화에서 빠져 비교가 헐거워진다. */
+private val sampleAlternativesRequest = AiAlternativesRequest(
+    trigger = AiTrigger("MANUAL", UUID.randomUUID().toString(), LocalDate.parse("2026-09-01"), mapOf("k" to "v")),
+    reason = "none",
+    anchor = AiCoord(33.45, 126.56),
+    dates = listOf(LocalDate.parse("2026-09-01")),
+    budgetLevel = "MID",
+    transportMode = "PUBLIC",
+    excludedPoiIds = listOf(UUID.randomUUID().toString()),
+    affectedReasons = mapOf(UUID.randomUUID().toString() to "일몰 명소"),
+    savedPlaces = listOf(UUID.randomUUID().toString()),
+    requestMeta = AiRequestMeta(UUID.randomUUID().toString(), Instant.parse("2026-09-01T00:00:00Z"), 25_000L),
+)
+
+private val sampleAlternativesResponse = AiAlternativesResponse(
+    alternatives = listOf(AiAlternative("B", listOf(UUID.randomUUID().toString()), "근거")),
+    isFallback = true,
+    fallbackLevel = 1,
+    notes = listOf("alternative_gateway_absent"),
+    retrieved = ScheduleAgentConfiguration.boundaryMapper().readTree("""{"kb":0}"""),
+    droppedOutOfPool = listOf(UUID.randomUUID().toString()),
+    emptyReason = "no_candidates",
+    poolSize = 7,
 )
 
 private val sampleRequestMeta =

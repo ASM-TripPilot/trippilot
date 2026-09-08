@@ -81,7 +81,8 @@ class SlotCandidateService(
         val inItinerary = itinerary.days.flatMap { d -> d.slots.map { it.sourcePoiId } }.distinct()
 
         // 경계 실패를 그대로 흘리면 RuntimeException 이라 전역 핸들러가 500 으로 떨군다 —
-        // "우리가 터졌다"가 아니라 "지금은 못 준다"가 사실이다(http 모드에서 이 경로는 아직 미개통).
+        // "우리가 터졌다"가 아니라 "지금은 못 준다"가 사실이다(AI 미도달 시 어댑터가 로컬 폴백까지
+        // 마친 뒤라, 여기까지 예외가 오면 로컬 풀 조회조차 실패한 것이다).
         // openapi 도 이 오퍼레이션에 5xx 를 약속한 적이 없다. 503 + 폴백 없음으로 표면화한다(RESILIENCY-10).
         val proposed = try {
             scheduleAgent.proposeSlotCandidates(
@@ -98,6 +99,7 @@ class SlotCandidateService(
                     radiusM = request.radiusM,
                     concept = request.concept,
                     excludePoiIds = inItinerary,
+                    placementReason = matches.single().value.placementReason,
                     requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), CANDIDATES_DEADLINE_MS),
                 ),
             )
@@ -146,8 +148,8 @@ class SlotCandidateService(
          * 온다 — 그쪽이 더 크므로 이 상수만 올려도 끊기지 않는다. 그 관계가 뒤집히면 여기 값이
          * 조용히 무효가 되니 같이 본다.
          *
-         * 이 경로가 AI `alternatives` 를 실제로 부르게 되는 건 TRIP-463 구현 이후다 — 지금은
-         * `HttpScheduleAgentAdapter.proposeSlotCandidates` 가 로컬로 우회한다.
+         * http 모드에서 이 값은 `request_meta.deadline_ms` 로 AI `alternatives` 에 실려 나간다 —
+         * AI 미도달 시에만 `HttpScheduleAgentAdapter` 가 로컬 풀로 폴백한다(D-4가).
          */
         private const val CANDIDATES_DEADLINE_MS = 25_000L
 
