@@ -1,12 +1,17 @@
-# 초안 v0.2 — 1차 검수 반영(경계 5·중복 2 수정, 커버리지 17 추가), 최종 검수 전 (intent-matching-design §seed 규격)
+# 초안 v0.3 — 기계 검수 1차(TRIP-678, 2026-09-08): 의도 간 ≥0.90 위반 0 확인(scripts/check_intent_bank.py,
+#   경계 후보 0.80~0.90 은 v0.2 23건 → v0.3 17건). 경계 문장 3개 개작 — entry_id 는 로더와 같은 0-based:
+#   EDIT_SCHEDULE#00 (개발용 발화 "오늘 저녁 뭐 먹지"를 0.783 으로 흡입) ·
+#   SHOW_SCHEDULE#07 (TRIP_SUMMARY 문장과 0.867) · GENERATE_REFLECTION#01 (요약 5문장과 0.80+ 허브).
+#   문장 추가는 없음 — 평가셋(intent_eval_set.yaml)을 근거로 뱅크를 보강하면 §6 게이트가 무력화된다.
+#   여전히 최종(사람) 검수 전 — reviewed: false 유지 (intent-matching-design §seed 규격)
 #
 # - 의도 라벨: orchestrator-delegation-design.md §5 라우팅 테이블의 closed-set 13종
 #   (CONFIRM/CANCEL/UNDO는 버튼형 상태 전이라 질문뱅크 대상에서 제외 — §3.2의 "13종"과 일치)
-# - 의도당 9~10문장, 총 121문장. origin은 전부 seed (수기 작성 — v0.2에서 1차 검수 반영).
+# - 의도당 9~10문장, 총 121문장. origin은 전부 seed (수기 작성).
 # - 특정 지역명·POI명은 슬롯 자리로 일반화: {장소} {지역} {날짜} {기간}
 # - 검수·편입 절차와 평가셋 분리 원칙은 ai/data/README.md 참조.
 
-version: "0.2-draft"
+version: "0.3-draft"
 origin: seed
 source:
   - ai/aidlc-docs/inception/application-design/intent-matching-design.md
@@ -81,7 +86,7 @@ intents:
     reviewed: false
     questions:
       - "오늘 하루 회고 써줘"
-      - "오늘 여행 어땠는지 정리해줄래?"
+      - "오늘 하루 어땠는지 회고로 남겨줄래?"
       - "오늘 다닌 곳들로 회고 만들어주세요"
       - "하루 마무리 기록 남기고 싶어"
       - "오늘의 여행 일기 작성해줘"
@@ -125,7 +130,7 @@ intents:
     mode: Delegate
     reviewed: false
     questions:
-      - "저녁에 맛집 하나 넣어줘"
+      - "저녁 일정에 식당 한 곳 추가해줘"
       - "{장소} 일정에서 빼줘"
       - "이 두 곳 순서 바꿔줄래?"
       - "{장소}를 {날짜} 오전으로 옮겨주세요"
@@ -163,7 +168,7 @@ intents:
       - "전체 일정 한번 보여줄래?"
       - "지금 계획이 어떻게 되어 있지?"
       - "일정표 열어줘"
-      - "이번 여행 스케줄 정리된 거 보여주세요"
+      - "이번 여행 일정표 보여주세요"
       - "오늘 남은 일정만 보여줘"
 
   - intent: GET_WEATHER

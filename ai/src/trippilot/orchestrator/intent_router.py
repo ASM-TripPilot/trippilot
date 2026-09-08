@@ -98,7 +98,10 @@ class IntentRouterConfig:
     t_high: float = 0.82
     t_mid: float = 0.75  # 2차 진입 하한
     n_paraphrase: int = 3  # 유사 질문 생성 수
-    vote_ratio: float = 0.60  # 가중 투표 확정 임계
+    # 가중 투표 확정 임계. 0.60 → 0.80 (2026-09-08, 평가셋 88건 × 운영 배정 실측 — TRIP-678):
+    # 득표율 분포가 1.0 / 0.73~0.76 양봉이고, 0.73~0.76 동률대의 투표 정답률은 3/5 인 반면 3차 LLM 은
+    # 승격분 전건 정답. 0.80 이면 동률대가 전부 3차로 가 88/88(0.60 은 86/88), 비용은 LLM 호출 +16%.
+    vote_ratio: float = 0.80
     collection: str = BANK_COLLECTION
     llm_direct_confidence: float = 0.5  # 3차 산출물에 confidence가 없을 때의 값
 

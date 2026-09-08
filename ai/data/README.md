@@ -1,9 +1,15 @@
 # ai/data — 의도 매칭 질문뱅크 데이터
 
-`intent_question_bank.yaml`은 **최종 검수 전 seed 초안(v0.2 — 1차 검수 반영)**이다 — 검수 완료 전에는 임베딩·뱅크 편입 금지 (`reviewed: false` 유지).
+`intent_question_bank.yaml`은 **최종 검수 전 seed 초안(v0.3-draft — 기계 검수 1차 반영)**이다 — 검수 완료 전에는 임베딩·뱅크 편입 금지 (`reviewed: false` 유지).
 검수 절차: 의도별 문장을 사람이 확인 → 의도 간 경계 문장 제거 → 뱅크 편입 시 타 의도 엔트리와 유사도 ≥ 0.90 중복 검사 통과 필수 (intent-matching-design §3.3).
 평가셋과는 **완전 분리**한다: 여기 실린 문장(및 그 augment 변형)은 평가셋에 절대 재사용하지 않는다 — leak 금지 (intent-matching-design §6).
 의도 라벨 정본은 `orchestrator-delegation-design.md` §5 라우팅 테이블 (closed-set 13종, CONFIRM/CANCEL/UNDO 제외).
+
+**검수 도구·기록**
+- 기계 검사: `uv run python scripts/check_intent_bank.py` — 의도 간 유사도 ≥ 0.90 위반(§3.3)과 0.80~0.90 경계 후보를 뽑는다(임베딩만, LLM 0).
+- 평가셋: `intent_eval_set.yaml`(라벨 발화, 뱅크와 분리) — `scripts/trace_intents.py --eval` 이 §6 지표를 채점하고, 평가 문장이 뱅크(원문 + `{장소}` 등 자리표시자를 채운 변형)와 ≥ 0.90 이면 leak 로 경고한다.
+- **평가셋으로 뱅크를 보강하지 않는다** — 평가 발화의 일반화형을 뱅크에 넣으면 그 항목의 회귀 판정이 무력화된다(§6). 뱅크 보강 근거는 개발용 발화(계측 30건 등)에서만 취한다.
+- 2026-09-08 기계 검수 1차(TRIP-678): v0.2 기준 위반 0·경계 후보 23 → 경계 문장 3개 개작(추가 없음) → v0.3-draft 위반 0·경계 후보 17. `reviewed` 전환은 사람 확인 후.
 
 ---
 
