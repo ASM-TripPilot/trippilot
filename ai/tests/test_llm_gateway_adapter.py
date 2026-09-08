@@ -58,7 +58,8 @@ def test_request_mapping_is_faithful() -> None:
     assert client.kwargs is not None
     assert client.kwargs["model"] == "model-under-test"
     assert client.kwargs["max_tokens"] == 1024
-    assert client.kwargs["temperature"] == 0.0
+    # temperature 미전달 — Claude 5 계열이 0.0 을 400 으로 거부 (2026-09-08, TRIP-377 과 같은 처방)
+    assert "temperature" not in client.kwargs
     assert client.kwargs["timeout"] == 2.5  # BR-U4-04 타임아웃 전달
     assert client.kwargs["messages"] == [{"role": "user", "content": "점수를 매겨라"}]
 

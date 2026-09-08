@@ -6,6 +6,14 @@ client는 생성자 주입 — 테스트는 fake client 객체로 요청/응답 
 타임아웃 계약을 3배로 왜곡, 조립 지점 책임).
 SDK 타임아웃은 LlmTimeoutError로 변환, 그 외 예외는 그대로 —
 게이트웨이가 폴백 신호로 수렴시킨다 (BR-U4-02).
+
+**temperature 는 보내지 않는다** (2026-09-08). Claude 5 계열(opus-5·sonnet-5)이
+`temperature=0.0` 을 400 으로 거부한다(`temperature is deprecated for this model`) —
+haiku-4-5 는 받는다. 게이트웨이 기본이 0.0 이라 운영 조립에서 sonnet-5·opus-5 로
+가는 feature 전부(EXPLANATION·REFLECTION_TEMPLATE·PHOTO_HIGHLIGHT·_VISION)가 매번
+400 → 규칙 폴백이었다. 응답은 200 이라 안 보인다. OpenAI 어댑터가 GPT-5 에서 같은
+이유로 이미 뺐다(TRIP-377, #208) — 같은 처방: 결정론 의도(0.0)는 이 벤더에서
+실현 불가하고, 모델 기본값에 맡긴다.
 """
 
 from __future__ import annotations
@@ -55,7 +63,7 @@ class AnthropicAdapter:
             resp = self._client.messages.create(
                 model=request.model_id,
                 max_tokens=request.max_tokens,
-                temperature=request.temperature,
+                # temperature 미전달 — Claude 5 계열이 파라미터째 거부(400). 모듈 docstring.
                 timeout=request.timeout_sec,
                 messages=[{"role": "user", "content": _content(request)}],
             )
