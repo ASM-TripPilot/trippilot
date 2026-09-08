@@ -49,6 +49,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from trippilot.poi_curation.sourcing.collection_gate import CollectionGate
 from trippilot.poi_curation.sourcing.pipeline import (
     AREA_NAMES,
     collect_areas,
@@ -114,6 +115,37 @@ def _print_summary(json_path: str) -> int:
     return 0
 
 
+_BIZ_STATUS = Path(__file__).resolve().parents[1] / "data" / "poi_business_status.json"
+
+
+def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[str]:
+    """폐업 확인된 content_id 집합. 파일이 없으면 빈 집합(= 필터 없음).
+
+    근거 파일은 사람이 공공데이터포털 CSV(862MB)를 받아 `match_business_status.py`
+    로 만든다 — 자동 수집 경로가 없다(localdata.go.kr 은 TCP 차단, data.go.kr 파일
+    다운로드는 로그인 필요). **없다고 실패시키지 않는다**: 근거가 없으면 판정을
+    안 하는 것이 맞고, 이 배치의 본업(수집)은 그와 무관하게 돌아야 한다.
+    다만 조용히 지나가지는 않는다 — 없으면 notice 를 남긴다(INV-4 정신).
+    """
+    if not path.exists():
+        print(f"[collect] NOTICE 폐업 목록 없음({path.name}) — 폐업 필터 없이 진행",
+              file=sys.stderr)
+        return frozenset()
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        closed = frozenset(
+            ref for ref, v in doc.get("status", {}).items()
+            if v.get("state") == "CLOSED"
+        )
+    except (OSError, json.JSONDecodeError, AttributeError) as e:
+        print(f"[collect] WARNING 폐업 목록을 못 읽었다({type(e).__name__}) — 필터 없이 진행",
+              file=sys.stderr)
+        return frozenset()
+    print(f"[collect] 폐업 필터 {len(closed):,}건 (기준 {doc.get('generated_at', '?')})",
+          file=sys.stderr)
+    return closed
+
+
 def main() -> int:
     if len(sys.argv) >= 3 and sys.argv[1] == "--summary":
         return _print_summary(sys.argv[2])
@@ -148,6 +180,7 @@ def main() -> int:
         content_types=content_types,
         max_calls=max_calls,
         state=load_state(state_path),   # 없거나 손상 → 빈 상태 + WARNING (state.py)
+        gate=CollectionGate(closed_refs=load_closed_refs()),
     )
     collected_at = datetime.now(UTC)    # CLI 스크립트만 wall-clock 직접 호출 허용
     doc = to_multi_output_document(
