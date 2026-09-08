@@ -136,6 +136,12 @@ class SlotCandidateService(
          * 15s × 0.7 = 10.5s — sol 중앙값의 1.5배. 꼬리(최대 21s)는 여전히 폴백이 받는다.
          * "시간 부족으로 sol 을 못 타는 경우가 없게" 가 우선이라 필요하면 더 올린다.
          *
+         * 15s → 25s (2026-09-08, 2단 폴백). AI 가 1차 타임아웃 시 다른 벤더 모델로 한 번 더 부르게
+         * 되면서 예산을 셋으로 나눈다 — 1차 50%(12.5s, sol 실측 최대 7.8s 에 여유) · 재시도 35%
+         * (8.75s, claude-opus-5 실측 최대 7.8s) · 검색·직렬화 15%. 실측에서 sol 보다 빠른 모델은
+         * 없었으므로(terra 5.2s·opus 7.6s vs sol 5.0s) 재시도 예산은 줄일 수 없고, 1차 몫을 줄이면
+         * sol 이 못 탄다 — 그래서 총액이 오른다. 정상 경로(sol 성공)의 대기는 그대로 ~5s 다.
+         *
          * HTTP 읽기 타임아웃은 이 값과 무관하게 `ScheduleDeadlineProperties.editWaitMs`(기본 60s)에서
          * 온다 — 그쪽이 더 크므로 이 상수만 올려도 끊기지 않는다. 그 관계가 뒤집히면 여기 값이
          * 조용히 무효가 되니 같이 본다.
@@ -143,7 +149,7 @@ class SlotCandidateService(
          * 이 경로가 AI `alternatives` 를 실제로 부르게 되는 건 TRIP-463 구현 이후다 — 지금은
          * `HttpScheduleAgentAdapter.proposeSlotCandidates` 가 로컬로 우회한다.
          */
-        private const val CANDIDATES_DEADLINE_MS = 15_000L
+        private const val CANDIDATES_DEADLINE_MS = 25_000L
 
         /** place-data 반경 조회 상한과 같은 값 — 전 DB 스캔 차단. */
         const val MAX_RADIUS_M = 50_000
