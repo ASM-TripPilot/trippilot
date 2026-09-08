@@ -162,6 +162,10 @@ describe('AC-3 · 배선에서 커버리지·게이트·fix 축이 통째로 빠
       'useBaseFix',
       'useFixSavedStay',
       'useExtendTripPeriod',
+      // TRIP-675(S11): tripBaseGateStructure.test.ts 통째 삭제로 잃은 유일한 생존-파일 그물.
+      // setPeriod 는 살아있는 tripWizardStore 액션이라 tsc 사각 — step2 가 기간(step1 소관)을
+      // 변형하는 층 역행을 막는 needle 을 이 목록으로 이관한다(code-critic 경고-1).
+      'setPeriod',
     ].forEach((needle) => expect(offenders(page, needle)).toEqual([]));
   });
 });

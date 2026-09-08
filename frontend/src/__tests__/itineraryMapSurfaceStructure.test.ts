@@ -57,7 +57,6 @@ const LOCKED_CALLERS = [
  * (사용자 결정 2026-08-10 — 고정 안 함). */
 const OPEN_CALLERS = [
   'features/stay/ui/StayRegisterScreen.tsx',
-  'features/trip/ui/TripBaseFixSheet.tsx',
   'app/_dev/preview.tsx',
   // TRIP-397 i02·i03 여행 중 지도 — 자유 탐색이라 제스처를 잠그지 않는다(viewOnly 미전달).
   'features/execution/ui/LiveMapScreen.tsx',
@@ -257,11 +256,11 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
       expect(tags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual(tags);
     });
 
-    // ③ 열어 둘 자리 — 태그가 정확히 7개(좌표 확정 3화면 5태그 + TRIP-397 LiveMapScreen 1태그 +
+    // ③ 열어 둘 자리 — 태그가 정확히 6개(좌표 확정 2화면 4태그 + TRIP-397 LiveMapScreen 1태그 +
     //    TRIP-442 live-location 1태그)이고 그중 어느 것에도 viewOnly 가 없다. 이들이 잠기면 좌표
-    //    확정·여행 중 자유 탐색이 막힌다(회귀 금지).
+    //    확정·여행 중 자유 탐색이 막힌다(회귀 금지). TRIP-675 로 TripBaseFixSheet(1태그) 삭제 7→6.
     const openTags = OPEN_CALLERS.flatMap((rel) => mapTagsOf(readOne(rel)));
-    expect(openTags).toHaveLength(7);
+    expect(openTags).toHaveLength(6);
     expect(openTags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual([]);
 
     // ④ 완성·확정 일정 화면 — 지도 호출부가 **둘**이다(Q5). 파일이 아니라 **태그 단위로** 잠금
@@ -303,13 +302,14 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
       ...EXPLORE_CALLERS,
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 14개 = 총 15개).
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 13개 = 총 14개).
     //    Q5 로 TimelineScreen 이 지도 태그 2개(글랜스+h26)를 가져 6→8, TRIP-397 LiveMapScreen 이
     //    1개 더해 8→9, TRIP-442 live-location 이 1개 더해 9→10, TRIP-563 planb 2화면(i13·i16)이
     //    2개 더해 10→12, TRIP-565 j01 방문 기록 지도가 1개 더해 12→13, TRIP-571 j03 오늘의 회고
-    //    지도가 1개 더해 13→14, TRIP-572 j04 여행 요약 지도가 1개 더해 14→15 로 늘었다(설계된 갱신 · AC-8).
+    //    지도가 1개 더해 13→14, TRIP-572 j04 여행 요약 지도가 1개 더해 14→15 로 늘었고,
+    //    TRIP-675 로 TripBaseFixSheet(OPEN, 1태그) 삭제로 15→14 로 줄었다(설계된 갱신 · AC-8).
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(15);
+    expect(defaultTags).toHaveLength(14);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);

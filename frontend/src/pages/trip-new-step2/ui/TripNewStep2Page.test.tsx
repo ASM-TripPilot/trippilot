@@ -1,10 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type {
-  BaseAssignment,
-  Coverage,
-  SavedStay,
-} from '@/shared/api/generated/schemas';
+import type { BaseAssignment, SavedStay } from '@/shared/api/generated/schemas';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
 import { TripNewStep2Page } from './TripNewStep2Page';
@@ -28,8 +24,8 @@ import { TripNewStep2Page } from './TripNewStep2Page';
  *
  * ⚠️ `jest.mock` 팩토리는 최상단으로 끌어올려진다. 팩토리가 참조하는 바깥 변수는 이름이 `mock`으로
  * 시작해야 예외를 받는다 — **아래 변수 이름을 바꾸지 마라**(리포 확립 규칙).
- * ⚠️ 옛 배선이 아직 import 하던 훅 목(useTripCoverage·useAssignBase·useUnassignBase·useBaseFix)을
- * 남겨 둔다 — red 를 렌더 크래시가 아니라 단언 실패로 내기 위한 것이다(02a ★12). 재작성 후엔 미사용(무해).
+ * ⚠️ `useAssignBase` 목은 S9 카드 탭 지정 배선이 실제로 물어 남긴다(옛 clean-red 스텁 아님).
+ * TRIP-675 로 고아가 된 useTripCoverage·useUnassignBase·useBaseFix 목은 제거됐다.
  */
 
 jest.mock('expo-router', () => {
@@ -64,7 +60,6 @@ interface QueryStub<T> {
 
 let mockSavedStaysResult: QueryStub<SavedStay[]>;
 let mockBasesResult: QueryStub<BaseAssignment[]>;
-let mockCoverageResult: QueryStub<Coverage>;
 
 jest.mock('@/features/trip/model/useSavedStays', () => ({
   useSavedStays: (...args: unknown[]) => {
@@ -78,20 +73,10 @@ jest.mock('@/features/trip/model/useTripBases', () => ({
     mockUseTripBases(...args);
     return mockBasesResult;
   },
-  // 아래 셋은 재작성 후 배선이 안 쓴다 — clean-red 용 옛 배선 호환 스텁(★12).
-  useTripCoverage: () => mockCoverageResult,
+  // S9 카드 탭 지정 배선이 useAssignBase 를 실제로 문다(고아 아님).
   useAssignBase: () => ({
     mutateAsync: jest.fn().mockResolvedValue(undefined),
   }),
-  useUnassignBase: () => ({
-    mutateAsync: jest.fn().mockResolvedValue(undefined),
-  }),
-}));
-
-// 옛 배선 호환 — useQueryClient 를 무조건 부르던 훅이라 목이 없으면 red 가 크래시로 흐려진다(★12).
-jest.mock('@/features/trip/model/useBaseFix', () => ({
-  useFixSavedStay: () => ({ mutateAsync: jest.fn() }),
-  useExtendTripPeriod: () => ({ mutateAsync: jest.fn() }),
 }));
 
 const TRIP_ID = 'trip-1';
@@ -165,7 +150,6 @@ beforeEach(() => {
 
   mockSavedStaysResult = loaded([stay()]);
   mockBasesResult = loaded([assignment()]);
-  mockCoverageResult = loaded({ blocked: false, days: [] });
 });
 
 describe('변형 판정 (얼굴 순서 notrip>error>loading>empty>default)', () => {

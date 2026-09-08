@@ -111,7 +111,6 @@
 - `src/__tests__/tabsRecordsRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsShell.test.tsx`  →  (export 없음)
 - `src/__tests__/travelStyleStructure.test.ts`  →  (export 없음)
-- `src/__tests__/tripBaseGateStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tripBudgetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/tripDraftBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/tripWizardEntryReset.test.tsx`  →  (export 없음)
@@ -556,9 +555,8 @@
 - `src/features/stay/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
 
 ## src/features/trip/model/
-- `src/features/trip/model/baseGate.ts`  →  BaseBlockReason · StayGateInput · TripPeriod · StayDateDraft · baseBlockReason · canSaveStayFix · isOutsideTripPeriod · extendedTripPeriod · tripDayOptions · applyDayPick
 - `src/features/trip/model/baseScreen.ts`  →  formatSectionRange · formatTripRange · UnresolvedDaysView · unresolvedDaysView
-- `src/features/trip/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBase · toNightlyBases · NightlyBaseCard · nightlyBaseCards
+- `src/features/trip/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
 - `src/features/trip/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount
 - `src/features/trip/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
 - `src/features/trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
@@ -568,11 +566,10 @@
 - `src/features/trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences · summaryBudget
 - `src/features/trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · dayOfWeek · presetRange · deriveEndDate · formatDateRange
 - `src/features/trip/model/tripWizardStore.ts`  →  TripWizardField · TripWizardDraft · useTripWizardStore
-- `src/features/trip/model/useBaseFix.ts`  →  useFixSavedStay · useExtendTripPeriod
 - `src/features/trip/model/useCreateTrip.ts`  →  useCreateTrip
 - `src/features/trip/model/usePreferencePrefill.ts`  →  usePreferencePrefill
 - `src/features/trip/model/useSavedStays.ts`  →  useSavedStays
-- `src/features/trip/model/useTripBases.ts`  →  useTripBases · useTripCoverage · useAssignBase · useUnassignBase
+- `src/features/trip/model/useTripBases.ts`  →  useTripBases · useAssignBase
 
 ## src/features/trip/ui/
 - `src/features/trip/ui/CompanionEditSheet.tsx`  →  CompanionEditSheetProps · CompanionEditSheet
@@ -580,8 +577,6 @@
 - `src/features/trip/ui/MustVisitListScreen.tsx`  →  MustVisitListScreenProps · MustVisitListScreen
 - `src/features/trip/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
 - `src/features/trip/ui/StaySelectSheet.tsx`  →  StaySelectSheetProps · StaySelectSheet
-- `src/features/trip/ui/TripBaseFixSheet.tsx`  →  TripBaseFixSheetProps · TripBaseFixSheet
-- `src/features/trip/ui/TripDateSheet.tsx`  →  TripDateSheetProps · TripDateSheet
 - `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · BackChevronGlyph · PinGlyph · RemoveGlyph · ThumbRemoveGlyph · PlusGlyph · CalendarGlyph · ChevronDownGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · SparkleGlyph · AlertCircleGlyph · GlobeGlyph · BedTone · BedGlyph · ChevronRightGlyph · BaseBadgePinGlyph · HeartFilledGlyph · CheckGlyph · SearchGlyph · WarningTriangleGlyph
 - `src/features/trip/ui/TripWizardStep1Screen.tsx`  →  TripWizardStep1ScreenProps · TripWizardStep1Screen
 - `src/features/trip/ui/TripWizardStep2Screen.tsx`  →  NightlyBaseCardVM · Step2Variant · TripWizardStep2ScreenProps · TripWizardStep2Screen
@@ -1218,4 +1213,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 828개 파일
+합계 823개 파일

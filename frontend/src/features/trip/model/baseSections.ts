@@ -100,43 +100,6 @@ export function toBaseSections(
   );
 }
 
-/**
- * g02 박별(1박=1행) 거점 행 — 다박=1행인 `BaseSection[]`을 밤 단위로 펼친다
- * (TRIP-664 · US-TRIP-07). 원 `toBaseSections`는 불변(BR-U1-28의 "N박 체류" 묶음 표시).
- * 이쪽은 신 g02 카드가 요구하는 반대 방향(밤별 개별 카드, 사전 확정 결정 D6).
- *
- * `nightNumber`는 방출된 행의 1-기반 통번호다 — `nightLabel`(여행 시작일 고정 기준, 공백에
- * 번호 건너뜀)과 다른 축이다. `nights ≤ 0` 구간은 0행을 낳고, 동일 숙소 여러 날 중복을 허용한다
- * (dedup 없음). 입력은 이미 `dateFrom` 오름차순(`toBaseSections` 출력)이라고 본다.
- */
-export interface NightlyBase {
-  date: string;
-  stayName: string;
-  nightNumber: number;
-}
-
-export function toNightlyBases(sections: BaseSection[]): NightlyBase[] {
-  const rows: NightlyBase[] = [];
-  let nightNumber = 0;
-
-  for (const section of sections) {
-    // `nights ≤ 0` 구간은 이 루프가 0번 돌아 0행을 낸다 — 거르는 게 아니라 산식상 비는 것이다
-    // (INV-2 · D6). 통번호는 방출한 행에서만 증가하므로 0박 구간은 번호를 소비하지 않는다.
-    const from = toEpochDay(section.dateFrom);
-    for (let night = 0; night < section.nights; night += 1) {
-      nightNumber += 1;
-      // 필드 셋만 담는다(INV-3) — `{ ...section, … }` 스프레드면 BaseSection의 7필드가 새 나온다.
-      rows.push({
-        date: fromEpochDay(from + night),
-        stayName: section.stayName,
-        nightNumber,
-      });
-    }
-  }
-
-  return rows;
-}
-
 /** 0=일 … 6=토 → 한글 요일 한 글자. `dayOfWeek`(tripWizardStep1)의 반환 인덱스와 짝이다
  * (에포크 0 = 목요일 기준이라 `new Date().getUTCDay()`와 같은 순서). `tripSummary.ts`가 같은
  * 배열을 내부 전용으로 쓰지만 export 하지 않는 관례라 이 파일이 사본을 둔다 — 요일 배열

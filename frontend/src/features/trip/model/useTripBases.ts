@@ -2,12 +2,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 
 import {
-  deleteTripsTripIdBasesBaseAssignmentId,
   getGetTripsTripIdBasesQueryKey,
   getGetTripsTripIdCoverageQueryKey,
   postTripsTripIdBases,
   useGetTripsTripIdBases,
-  useGetTripsTripIdCoverage,
 } from '@/shared/api/generated/trips/trips';
 import type { AssignBaseRequest } from '@/shared/api/generated/schemas';
 
@@ -38,12 +36,6 @@ function isAlreadyAssigned(error: unknown): boolean {
 
 export function useTripBases(tripId: string | undefined) {
   return useGetTripsTripIdBases(tripId ?? '', {
-    query: { enabled: tripId !== undefined },
-  });
-}
-
-export function useTripCoverage(tripId: string | undefined) {
-  return useGetTripsTripIdCoverage(tripId ?? '', {
     query: { enabled: tripId !== undefined },
   });
 }
@@ -79,19 +71,6 @@ export function useAssignBase() {
         if (!isAlreadyAssigned(error)) throw error;
       }
     },
-    onSuccess: (_result, variables) => invalidate(variables.tripId),
-  });
-}
-
-export function useUnassignBase() {
-  const invalidate = useInvalidateBases();
-
-  return useMutation({
-    mutationFn: (variables: { tripId: string; baseAssignmentId: string }) =>
-      deleteTripsTripIdBasesBaseAssignmentId(
-        variables.tripId,
-        variables.baseAssignmentId
-      ),
     onSuccess: (_result, variables) => invalidate(variables.tripId),
   });
 }
