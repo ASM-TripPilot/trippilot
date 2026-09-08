@@ -42,7 +42,7 @@ _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 _TEXT = "내일 비 온다는데 일정 어떡하지"
 
 
-def _ambiguous_router() -> IntentRouter:
+def _ambiguous_router(router_cls: type = IntentRouter) -> IntentRouter:
     """같은 문장이 두 의도에 실린 뱅크 → 1차 top1·top2 의도 불일치 → 2차 투표로 간다.
 
     두 엔트리의 벡터가 동일하니 어떤 질의든 동점 → item_id 사전순으로 "a" 가 항상 top1
@@ -61,7 +61,7 @@ def _ambiguous_router() -> IntentRouter:
         _CFG,
         InMemoryTrace(),
     )
-    return IntentRouter(embedding, store, paraphrase_gateway=paraphrase)
+    return router_cls(embedding, store, paraphrase_gateway=paraphrase)
 
 
 def _route_under_local_tracing(router: IntentRouter, text: str):
@@ -103,6 +103,35 @@ def test_route_leaves_one_tree_with_stage_runs_and_threshold_metadata() -> None:
     assert [c.name for c in vote.child_runs] == [
         "intent.paraphrase", "intent.bank", "intent.bank", "intent.bank", "intent.bank",
     ]
+
+
+def test_router_works_without_langsmith_installed(monkeypatch) -> None:
+    """운영 이미지(uv sync --no-dev — langsmith 미설치) 시뮬레이션 (TRIP-656).
+
+    sys.modules 차단 + 모듈 reload 로 ImportError 경로를 태운다. no-op 대역은
+    (1) 라우팅 결과가 설치 상태와 동일해야 하고, (2) route() 가 넘기는
+    `langsmith_extra` 를 흡수해야 한다(새면 `_route()` TypeError — 도입 리뷰가 지적한 함정).
+    """
+    import importlib
+    import sys
+
+    import trippilot.orchestrator.intent_router as ir
+
+    expected = _ambiguous_router().route(_TEXT, _TID, _NOW)  # langsmith 설치 상태 기준값
+    monkeypatch.setitem(sys.modules, "langsmith", None)  # import langsmith → ImportError
+    try:
+        reloaded = importlib.reload(ir)
+        match = _ambiguous_router(reloaded.IntentRouter).route(_TEXT, _TID, _NOW)
+
+        @reloaded.traceable  # 베어 형태도 실물과 동형이어야 한다 (리뷰 경고 — 침묵 오동작 방지)
+        def _bare(x: int) -> int:
+            return x + 1
+
+        assert _bare(1) == 2
+    finally:
+        monkeypatch.undo()
+        importlib.reload(ir)  # 실제 데코레이터로 복원 — 뒤 테스트에 영향 없게
+    assert match == expected
 
 
 def test_stage_exception_is_recorded_on_the_run_and_route_still_falls_back() -> None:

@@ -27,19 +27,44 @@ closed-set 밖 라벨이 실린 엔트리는 매칭에서 제외한다 (뱅크 �
 발화 1건 = 트리 1개(1차 top-k 점수 · 2차 유사질문/득표율 · 3차 판정, 루트 metadata 에 임계값
 3종)가 전송된다. 미설정이면 데코레이터는 함수를 그대로 통과시킨다(CI 외부 호출 0). 라우터는
 아직 엔드포인트에 배선돼 있지 않으므로(TRIP-529) 발화는 `scripts/trace_intents.py` 가 넣어 준다.
-트리에는 발화 **원문**과 LLM 변형이 그대로 실린다 — 배선 후 배포 환경에서 켜려면 마스킹·샘플링
-(mlops-llmops-design §1.4)을 먼저 붙여야 한다. TracePort 를 대체하는 것이 아니라 튜닝용 병행이다.
+트리에는 발화 **원문**과 LLM 변형이 그대로 실린다 — langsmith 는 **dev 그룹**이라 운영
+이미지(`uv sync --no-dev`)에는 없고, 그 경우 아래 no-op 대역이 붙어 배포 환경에서는
+트레이싱이 구조적으로 불가능하다(TRIP-656 — 발화 유출 가드를 의존성 부재로 보장).
+배선 후 운영 관측이 필요해지면 의존성 승격 + 마스킹·샘플링(mlops-llmops-design §1.4)을
+함께 결정한다. TracePort 를 대체하는 것이 아니라 튜닝용 병행이다.
 """
 
 from __future__ import annotations
 
+import functools
 import re
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
-from langsmith import traceable
+try:
+    from langsmith import traceable
+except ImportError:  # 운영 이미지(uv sync --no-dev)에는 langsmith 가 없다 (TRIP-656)
+
+    def traceable(*_args, **_kwargs):  # type: ignore[misc] — langsmith.traceable no-op 대역
+        """데코레이터 팩토리 계약 + `langsmith_extra` kwarg 흡수만 유지한다.
+
+        흡수가 빠지면 route() 가 넘기는 langsmith_extra 가 `_route()` 로 새어
+        TypeError — 계측 도입 리뷰가 지적한 함정. 계측은 개발·튜닝 전용(dev 그룹)이고,
+        운영에서는 이 대역 덕에 트레이싱이 구조적으로 불가능하다(발화 유출 가드).
+        """
+
+        def _decorate(fn):
+            @functools.wraps(fn)
+            def _inner(*args, langsmith_extra=None, **kwargs):
+                return fn(*args, **kwargs)
+
+            return _inner
+
+        if _args and callable(_args[0]) and not _kwargs:  # 베어 @traceable — 실물과 동형 지원
+            return _decorate(_args[0])
+        return _decorate
 
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
