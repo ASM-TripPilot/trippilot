@@ -82,6 +82,7 @@ from trippilot.llm_gateway.gates.alternative_selection import (  # noqa: E402
 )
 from trippilot.llm_gateway.feature_model_env import (  # noqa: E402
     ENV_VAR as FEATURE_MODELS_ENV,
+    RETRY_ENV_VAR,
     feature_models_from_env,
 )
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
@@ -299,6 +300,7 @@ def pipeline(store, embedding, llm, model_id: str | None) -> PlanBRagPipeline:
             # 운영과 같은 기능별 오버라이드를 읽는다 — 리허설이 자기만의 모델을 태우면
             # "운영은 sol, 리허설은 terra" 가 조용히 생긴다 (TRIPPILOT_LLM_FEATURE_MODELS).
             feature_models=feature_models_from_env(),
+            retry_models=feature_models_from_env(env_var=RETRY_ENV_VAR),
             # **운영 기본을 그대로 쓴다.** 종전엔 30s 로 덮어썼는데, 그래서 운영에서
             # 100% 타임아웃하던 gpt-5.6-sol(5.1s)이 리허설에선 늘 통과했다 —
             # 리허설 통과가 컨테이너 동작의 증거가 아니게 만든 원인이다.

@@ -74,8 +74,11 @@ class AlternativeSelectionWorker:
         now: datetime,
         *,
         timeout_sec: float | None = None,
+        retry_timeout_sec: float | None = None,
     ) -> TypedResult:
         """`timeout_sec` 미지정이면 게이트웨이 기본(`C1Config.timeout_sec`, 현재 10s).
+        `retry_timeout_sec` 는 1차 타임아웃 시 재시도 모델(`C1Config.retry_models`)의
+        예산 — 없으면 재시도 없이 폴백 신호다(TRIP-522 2단 폴백).
 
         **호출측이 요청 예산에서 몫을 떼 넘기는 것이 정상 경로다** — `PlanBRagPipeline`
         이 `deadline_ms × llm_budget_share` 로 계산해 준다(BR-U4-04 "요청 예산의 절반
@@ -93,4 +96,5 @@ class AlternativeSelectionWorker:
             trace_id,
             now,
             timeout_sec=timeout_sec,
+            retry_timeout_sec=retry_timeout_sec,
         )

@@ -4,6 +4,7 @@ FakeLlm  : seed 기반 결정론 응답. 토큰 수는 문자열 길이 비례�
            → call_record 파이프라인까지 테스트 가능.
 FailingLlm: 항상 실패 (폴백 경로·FallbackEvent 발행 테스트용).
 SlowLlm  : 항상 타임아웃 유발 (LlmTimeoutError).
+TimeoutForModelsLlm: 지정 모델만 타임아웃, 나머지는 canned 응답 — 2단 폴백(모델 전환) 테스트용.
 """
 
 from __future__ import annotations
@@ -39,6 +40,24 @@ class FailingLlm:
 class SlowLlm:
     def invoke(self, request: LlmRequest) -> LlmResponse:
         raise LlmTimeoutError(f"timeout > {request.timeout_sec}s (fake)")
+
+
+class TimeoutForModelsLlm:
+    """`timeout_models` 에 든 모델은 타임아웃, 나머지는 canned. 받은 요청을 기록한다."""
+
+    def __init__(self, canned: str, *timeout_models: str) -> None:
+        self._canned = canned
+        self._timeout_models = frozenset(timeout_models)
+        self.requests: list[LlmRequest] = []
+
+    def invoke(self, request: LlmRequest) -> LlmResponse:
+        self.requests.append(request)
+        if request.model_id in self._timeout_models:
+            raise LlmTimeoutError(f"timeout > {request.timeout_sec}s (fake, {request.model_id})")
+        return LlmResponse(
+            raw_text=self._canned, input_tokens=1, output_tokens=1, latency_ms=0,
+            model_id=request.model_id,
+        )
 
 
 class VisionSpyLlm:

@@ -100,10 +100,16 @@ class GatewayFacade:
         now: datetime,
         *,
         timeout_sec: float | None = None,
+        retry_timeout_sec: float | None = None,
         images: tuple[LlmImagePart, ...] = (),
         consent_ref: str | None = None,
     ) -> TypedResult[tuple[ScoredPoi, ...]]:
-        """images는 멀티모달 feature 전용 후미 기본값 (TRIP-595, FD §6.1 A안) —
+        """`retry_timeout_sec` 가 있고 feature 에 `C1Config.retry_models` 가 있으면
+        1차 **타임아웃** 시 그 모델로 한 번 더 부른다(TRIP-522 2단 폴백). 두 조건 중
+        하나라도 없으면 종전 그대로 1회 시도 후 폴백 신호다. 재시도의 실패 기록·
+        모델 전환 이벤트는 실제 모델명을 싣는다(TRIP-260 #4 — 지어낸 실체 금지).
+
+        images는 멀티모달 feature 전용 후미 기본값 (TRIP-595, FD §6.1 A안) —
         기존 텍스트 호출은 전부 무영향이고, 강등은 "같은 파이프라인, images만 비움"으로
         표현된다. 이미지도 게이트웨이를 지나야 계측(LlmCallRecord)이 빠지지 않는다.
 
@@ -125,39 +131,34 @@ class GatewayFacade:
         # 3 렌더
         prompt, prompt_ref = self._renderer.render(feature, prompt_vars)
         # 4 호출 — SDK가 닿는 유일한 지점
-        try:
-            response = self._llm.invoke(
-                LlmRequest(
-                    model_id=model_id,
-                    prompt=prompt,
-                    prompt_ref=prompt_ref,
-                    max_tokens=self._cfg.max_tokens,
-                    temperature=self._cfg.temperature,
-                    # 호출측 단계 예산 override (TRIP-376) — PREFERENCE_SCORING처럼
-                    # 단계 상한이 있는 호출이 넘긴다. 미지정이면 설정 기본
-                    # (INTENT 등 즉답성 feature는 그대로 2.5s).
-                    timeout_sec=(
-                        self._cfg.timeout_sec if timeout_sec is None else timeout_sec
-                    ),
-                    images=images,
-                )
-            )
-        except LlmTimeoutError as e:
-            return self._fallback(
-                feature, model_id, prompt_ref, trace_id, now, None, f"timeout: {e}",
+        # 호출측 단계 예산 override (TRIP-376) — PREFERENCE_SCORING처럼 단계 상한이
+        # 있는 호출이 넘긴다. 미지정이면 설정 기본.
+        response, reason = self._invoke(
+            model_id, prompt, prompt_ref,
+            self._cfg.timeout_sec if timeout_sec is None else timeout_sec, images,
+        )
+        retry_model = self._cfg.retry_models.get(feature)
+        if (
+            response is None and reason.startswith("timeout")
+            and retry_model is not None and retry_timeout_sec
+        ):
+            # 2단 폴백 — 1차 실패는 기록으로, 모델 전환은 이벤트로 남기고 한 번 더.
+            # 여기서 만드는 것은 여전히 LLM 답이지 대체 계산이 아니다(BR-U4-09).
+            self._trace.emit(self._record(
+                feature, model_id, prompt_ref, trace_id, now, None, success=False,
                 consent_ref=consent_ref,
+            ))
+            self._trace.emit(FallbackEvent(
+                trace_id=trace_id, occurred_at=now, component=_COMPONENT, stage="llm",
+                from_mode=f"llm:{model_id}", to_mode=f"llm:{retry_model}", reason=reason,
+            ))
+            model_id = retry_model
+            response, reason = self._invoke(
+                model_id, prompt, prompt_ref, retry_timeout_sec, images,
             )
-        except LlmUnsupportedError as e:
-            # 타임아웃과 같은 자리 — 다만 사유를 가른다. 비지원은 재시도해도 같은 결과라
-            # 호출측 처방이 "이번엔 실패"가 아니라 "이 경로를 포기하고 강등"이다
-            # (BR-U6R-10 — 조용한 이미지 무시 금지, 강등은 명시 신호로).
+        if response is None:
             return self._fallback(
-                feature, model_id, prompt_ref, trace_id, now, None, f"unsupported: {e}",
-                consent_ref=consent_ref,
-            )
-        except Exception as e:  # 벤더 예외 포함 전부 폴백 신호로 (BR-U4-02)
-            return self._fallback(
-                feature, model_id, prompt_ref, trace_id, now, None, f"llm_error: {e}",
+                feature, model_id, prompt_ref, trace_id, now, None, reason,
                 consent_ref=consent_ref,
             )
         # 5·6 파서 + closed-set 게이트 (INV-1)
@@ -185,6 +186,38 @@ class GatewayFacade:
         return TypedResult(
             value=outcome.value, is_fallback=False, error=None, call_record=record
         )
+
+    def _invoke(
+        self,
+        model_id: str,
+        prompt: str,
+        prompt_ref: PromptRef,
+        timeout_sec: float,
+        images: tuple[LlmImagePart, ...],
+    ) -> tuple[LlmResponse, None] | tuple[None, str]:
+        """벤더 호출 1회 → (응답, None) 또는 (None, 폴백 사유). 예외를 위로 던지지 않는다."""
+        try:
+            response = self._llm.invoke(
+                LlmRequest(
+                    model_id=model_id,
+                    prompt=prompt,
+                    prompt_ref=prompt_ref,
+                    max_tokens=self._cfg.max_tokens,
+                    temperature=self._cfg.temperature,
+                    timeout_sec=timeout_sec,
+                    images=images,
+                )
+            )
+        except LlmTimeoutError as e:
+            return None, f"timeout: {e}"
+        except LlmUnsupportedError as e:
+            # 타임아웃과 같은 자리 — 다만 사유를 가른다. 비지원은 재시도해도 같은 결과라
+            # 호출측 처방이 "이번엔 실패"가 아니라 "이 경로를 포기하고 강등"이다
+            # (BR-U6R-10 — 조용한 이미지 무시 금지, 강등은 명시 신호로).
+            return None, f"unsupported: {e}"
+        except Exception as e:  # 벤더 예외 포함 전부 폴백 신호로 (BR-U4-02)
+            return None, f"llm_error: {e}"
+        return response, None
 
     def _fallback(
         self,

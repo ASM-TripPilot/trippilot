@@ -93,27 +93,40 @@ class PlanBRagConfig:
     #   → 비율 0.85 = 0.944·무관 1건 / 절대 0.50 = 1.000·무관 0건(단 모델 종속)
     min_score_ratio: float = 0.85  # 최고점 대비. 1.0 = 최고점만, 0.0 = 컷 없음
     min_score: float = 0.0  # 절대 바닥. 코사인은 음수가 나므로 0 은 "음수 컷"을 뜻한다
-    # 요청 예산 중 LLM 호출에 줄 몫. 나머지는 검색·풀 조립·직렬화 몫이다.
+    # 요청 예산 중 LLM 1차 호출에 줄 몫. 나머지는 재시도·검색·풀 조립·직렬화 몫이다.
     #
     # 0.5 → 0.7 (2026-09-02, 예산 재설계). BR-U4-04 의 "절반 이하"는 즉답성 feature
     # 기준인데 PlanB 는 상위 티어 모델이 주 경로다. 실측 `gpt-5.6-sol` 중앙값 6.8초 —
     # 0.5 면 20초 예산에서도 10초라 중앙값 근처에서 오락가락하고, 백엔드가 보낼
     # 슬롯 후보 예산에서는 LLM 이 사실상 못 탄다.
     #
-    # 0.7 이 상한인 이유: 검색이 임베딩을 직렬 3회 부르고(워밍 후 각 수백 ms, 콜드
-    # 스타트 시 최대 5초) 그 뒤 풀 조립·게이트·직렬화가 온다. 30% 를 남겨야 정상
-    # 경로에서 백스톱(deadline+margin → 504)에 안 걸린다.
+    # 0.7 → 0.5 (2026-09-08, 2단 폴백). 백엔드 슬롯 후보 예산이 15 → 25초로 오르면서
+    # 절대값은 10.5 → 12.5초로 **늘었다**(sol 실측 중앙값 5.0·최대 7.8초에 여유).
+    # 줄어든 몫은 아래 `llm_retry_share` 가 가져간다.
     #
-    # 이 값이 꼬리는 못 덮는다 — sol 최대 21초는 어떤 몫으로도 안 들어간다.
-    # 꼬리는 폴백(규칙 랭킹)이 받는다. 꼬리까지 LLM 으로 받으려면 모델을 바꾸거나
-    # (terra 최대 3.9초) 타임아웃 시 경량 모델로 한 번 더 시도하는 2단 폴백이 필요하다.
-    llm_budget_share: float = 0.7
+    # 두 몫의 합이 0.85 를 못 넘는 이유: 검색이 임베딩을 직렬 3회 부르고(워밍 후 각
+    # 수백 ms, 콜드 스타트 시 최대 5초) 그 뒤 풀 조립·게이트·직렬화가 온다. 15% 를
+    # 남겨야 정상 경로에서 백스톱(deadline+margin → 504)에 안 걸린다. 콜드 스타트와
+    # 2회 타임아웃이 겹치면 넘는다 — 그건 백스톱이 받고 백엔드가 로컬 풀로 강등한다.
+    llm_budget_share: float = 0.5
+    # 1차 타임아웃 시 재시도 모델(`C1Config.retry_models`)에 줄 몫. 0 이면 재시도 없음.
+    #
+    # 이 몫이 sol 의 꼬리(최대 21초)를 받는다. 실측(2026-09-08, 실 프롬프트)에서
+    # 더 빠른 모델은 없었다 — sol 5.0 · terra 5.2 · opus 7.6(편차 1.2) — 그래서
+    # 재시도 모델은 속도가 아니라 **벤더 독립**으로 고른다(config.py 주석). 25초
+    # 예산에서 8.75초 — opus 최대 7.8초에 1초 여유. 얇다. 재시도까지 실패하면
+    # 규칙 랭킹이 받으니 손해는 대기 시간뿐이다.
+    llm_retry_share: float = 0.35
 
     def __post_init__(self) -> None:
         if self.top_k < 1:
             raise ValueError("top_k ≥ 1")
         if not 0.0 < self.llm_budget_share <= 1.0:
             raise ValueError("llm_budget_share ∈ (0, 1]")
+        if not 0.0 <= self.llm_retry_share <= 1.0:
+            raise ValueError("llm_retry_share ∈ [0, 1]")
+        if self.llm_budget_share + self.llm_retry_share > 0.85:
+            raise ValueError("llm_budget_share + llm_retry_share ≤ 0.85 — 검색·직렬화 몫")
         # 코사인 범위는 [-1, 1] — 음수가 실제로 난다(intent_router 가 max(score, 0) 로 흡수).
         if not -1.0 <= self.min_score <= 1.0:
             raise ValueError("min_score ∈ [-1, 1]")
@@ -437,6 +450,7 @@ class PlanBRagPipeline:
                 request.trace_id,
                 request.now,
                 timeout_sec=self._llm_timeout(request),
+                retry_timeout_sec=self._llm_timeout(request, self._cfg.llm_retry_share),
             )
         except Exception as e:  # 설정 버그(프롬프트 미등록 등)도 Plan-B를 죽이지 않는다
             return rule_ranked, {}, False, _why(f"alternative_error: {type(e).__name__}: {e}")
@@ -450,8 +464,11 @@ class PlanBRagPipeline:
             return rule_ranked, {}, False, _why("alternative_empty")
         return selected, reasons, True, ""
 
-    def _llm_timeout(self, request: PlanBRagRequest) -> float | None:
-        """요청 예산 → LLM 호출 마감. 예산이 없으면 게이트웨이 기본에 맡긴다.
+    def _llm_timeout(
+        self, request: PlanBRagRequest, share: float | None = None
+    ) -> float | None:
+        """요청 예산 × 몫 → LLM 호출 마감. 예산이 없거나 몫이 0 이면 None —
+        1차는 게이트웨이 기본에 맡기고, 재시도는 하지 않는다.
 
         게이트웨이 기본(2.5s)은 즉답성 feature 기준이라 ALTERNATIVE_SELECTION 이
         쓰는 상위 티어에는 짧다 — 실측 `gpt-5.6-sol` 5.1s. 그대로 두면 LLM 경로가
@@ -460,7 +477,8 @@ class PlanBRagPipeline:
         """
         if not request.deadline_ms or request.deadline_ms <= 0:
             return None
-        return request.deadline_ms / 1000.0 * self._cfg.llm_budget_share
+        share = self._cfg.llm_budget_share if share is None else share
+        return request.deadline_ms / 1000.0 * share or None
 
     def _rationale(self, request: PlanBRagRequest, used_llm: bool) -> str:
         source = "llm_select_alternatives" if used_llm else "rule_ranking"

@@ -7,6 +7,10 @@
 형식: `"FEATURE=model,FEATURE=model"` (예: `ALTERNATIVE_SELECTION=gpt-5.6-sol`).
 미지 feature 이름은 조용히 무시하지 않고 즉시 실패한다 — 오타가 "그 기능만 몰래 기본
 모델"이 되는 것을 막는다(BR-U4-08 하드코딩 금지의 취지).
+
+`TRIPPILOT_LLM_RETRY_MODELS` 도 같은 형식·같은 파서다 — 1차 모델이 **타임아웃**했을 때
+한 번 더 부를 모델(`C1Config.retry_models`). 두 변수가 파서를 공유해야 "운영은 재시도
+있음, 리허설은 없음" 같은 어긋남이 안 생긴다.
 """
 
 from __future__ import annotations
@@ -17,12 +21,15 @@ from collections.abc import Mapping
 from trippilot.domain.llm import LlmFeature
 
 ENV_VAR = "TRIPPILOT_LLM_FEATURE_MODELS"
+RETRY_ENV_VAR = "TRIPPILOT_LLM_RETRY_MODELS"
 
 
-def feature_models_from_env(raw: str | None = None) -> Mapping[LlmFeature, str]:
+def feature_models_from_env(
+    raw: str | None = None, *, env_var: str = ENV_VAR
+) -> Mapping[LlmFeature, str]:
     """env(또는 주어진 문자열) → {LlmFeature: model_id}. 미설정이면 빈 매핑."""
     if raw is None:
-        raw = os.environ.get(ENV_VAR) or None
+        raw = os.environ.get(env_var) or None
     if raw is None:
         return {}
     overrides: dict[LlmFeature, str] = {}
@@ -32,12 +39,12 @@ def feature_models_from_env(raw: str | None = None) -> Mapping[LlmFeature, str]:
             continue
         name, _, model = pair.partition("=")
         if not model.strip():
-            raise RuntimeError(f"{ENV_VAR} 형식 오류: {pair!r} — FEATURE=model 이어야 한다")
+            raise RuntimeError(f"{env_var} 형식 오류: {pair!r} — FEATURE=model 이어야 한다")
         try:
             feature = LlmFeature(name.strip().upper())
         except ValueError as e:
             raise RuntimeError(
-                f"{ENV_VAR} 미지 feature: {name.strip()!r} "
+                f"{env_var} 미지 feature: {name.strip()!r} "
                 f"(유효: {[f.value for f in LlmFeature]})"
             ) from e
         overrides[feature] = model.strip()

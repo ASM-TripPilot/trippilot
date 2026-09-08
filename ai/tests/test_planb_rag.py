@@ -954,18 +954,30 @@ def test_llm_timeout_derives_from_request_deadline() -> None:
     pool = _pool("p1")
     pipeline = PlanBRagPipeline(FakeEmbedding(), InMemoryVectorStore())
 
-    # 예산 20초 → LLM 몫 14초 (기본 share 0.7 — sol 중앙값 6.8초의 2배 여유)
-    assert pipeline._llm_timeout(_request(pool, deadline_ms=20_000)) == pytest.approx(14.0)
-    # 예산 없음 → 게이트웨이 기본에 맡긴다 (None)
+    # 예산 20초 → 1차 몫 10초 (share 0.5) + 재시도 몫 7초 (retry_share 0.35)
+    assert pipeline._llm_timeout(_request(pool, deadline_ms=20_000)) == pytest.approx(10.0)
+    assert pipeline._llm_timeout(
+        _request(pool, deadline_ms=20_000), pipeline._cfg.llm_retry_share
+    ) == pytest.approx(7.0)
+    # 예산 없음 → 게이트웨이 기본에 맡긴다 (None) — 재시도도 없음
     assert pipeline._llm_timeout(_request(pool)) is None
     assert pipeline._llm_timeout(_request(pool, deadline_ms=0)) is None
+    # 재시도 몫 0 → None (게이트웨이가 "재시도 없음"으로 읽는다)
+    assert pipeline._llm_timeout(_request(pool, deadline_ms=20_000), 0.0) is None
 
 
 def test_llm_budget_share_is_validated() -> None:
     """몫이 0 이하·1 초과면 예산 계산이 무의미해진다 — 설정 버그로 즉시 막는다."""
     for bad in (0.0, -0.1, 1.5):
         with pytest.raises(ValueError, match="llm_budget_share"):
-            PlanBRagConfig(llm_budget_share=bad)
+            PlanBRagConfig(llm_budget_share=bad, llm_retry_share=0.0)
+    for bad in (-0.1, 1.5):
+        with pytest.raises(ValueError, match="llm_retry_share"):
+            PlanBRagConfig(llm_retry_share=bad)
+    # 합이 0.85 를 넘으면 검색·직렬화 몫이 없어 백스톱에 걸린다
+    with pytest.raises(ValueError, match="0.85"):
+        PlanBRagConfig(llm_budget_share=0.7, llm_retry_share=0.35)
+    PlanBRagConfig(llm_budget_share=0.5, llm_retry_share=0.35)  # 기본 조합은 통과
 
 
 def test_alternative_worker_accepts_timeout() -> None:
