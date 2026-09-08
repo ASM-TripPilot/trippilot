@@ -65,7 +65,7 @@ AI 응답의 대안 1건(`AlternativeSchema`)은 `{label, poi_ids[], rationale}`
 | `excluded_poi_ids` | | `excludePoiIds.map { it.toString() }` | 서버가 현재 일정에서 유도한 목록 그대로(BR-U3-24) |
 | `affected_reasons` | | `{targetPoiId: placementReason}` (없으면 `{}`) | 교체 대상 슬롯의 `VisitSlot.placementReason` 이 이미 손에 있다(`matches.single().value`). LLM 이 "원래 취지를 잇는 대안"을 고르게 하는 컨텍스트 |
 | `saved_places` | | `[]` | `place-data` 에 `SavedPlaceService` 는 있으나 `..api..` 파사드가 **없다**. 파사드 신설은 별건 |
-| `request_meta` | ✔ | `RequestMeta` 그대로 (`deadlineMs = 3_000`) | `deadline_ms` 는 `exclusiveMinimum: 0` — 3000 통과 |
+| `request_meta` | ✔ | `RequestMeta` 그대로 (`deadlineMs = 15_000` — 2026-09-08 3s→15s, sol 중앙값 6.8s 가 3s×0.7 에 못 들어갔다) | `deadline_ms` 는 `exclusiveMinimum: 0` — 15000 통과 |
 
 ### 자리가 없는 것 3개 — 처리 방침
 
@@ -185,7 +185,7 @@ TRIPPILOT_BACKEND_BASE_URL: ${SERVICE_AUTH_TOKEN:+http://backend:8080}
 |---|---|---|
 | 1 | `backend/modules/itinerary-generation/.../adapter/out/external/ScheduleAgentWire.kt` | **와이어 타입 추가**(새 파일 만들지 않는다 — 기존 패턴). `AiAlternativesRequest`·`AiTrigger`·`AiCoord`·`AiAlternativesResponse`·`AiAlternative`. 응답형의 **컬렉션·선택 필드에만 기본값**을 준다 — `alternatives: List<AiAlternative> = emptyList()`, `notes = emptyList()`, `emptyReason: String? = null` 처럼. 실제 선례는 타입이 아니라 **필드**다(`AiScheduleResponse.unplacedMustVisits: List<AiUnplacedMustVisit> = emptyList()`); `AiUnplacedMustVisit` 자체는 기본값이 0개다. 정정(2026-09-01 감사) — 초판의 "전 필드에 기본값"은 이 파일의 관행과 **반대**다: `AiScheduleResponse.solveMode`·`AiSlot.poiId/startAt/endAt`·`AiDay.date`·`AiViolation.code` 는 필수 필드 누락을 역직렬화 실패로 드러내려고 **일부러** 기본값이 없다. `AiAlternative.poiIds`·`rationale` 도 같은 이유로 기본값 없이 둔다. `AiRequestMeta` 는 이미 있다. snake_case 는 경계 매퍼가 자동 변환하므로 camelCase 필드명만 계약과 맞추면 된다 |
 | 2 | 같은 파일 | **`toDomain` 확장 함수** — `AiAlternativesResponse.toDomain(input, grounded, receivedAt): SlotCandidatesOutput`. flatten → ground 교차 → 거리 계산 → 반경 컷 → (degraded 면) 정렬·템플릿 → `radiusMUsed` 확정. 하버사인은 이 모듈 안 private 상수/함수(`EARTH_RADIUS_M = 6_371_000.0` — `StayOnramp` 와 같은 이유로 place-data `domain` 을 못 쓴다) |
-| 3 | `.../adapter/out/external/HttpScheduleAgentAdapter.kt` | `ALTERNATIVES_PATH = "/ai/v1/itinerary/alternatives"` 상수 추가(기존 4개 경로 상수 옆). `proposeSlotCandidates` 를 공통 `post(...)` 실호출로 교체 — **`scheduleAgentBoundedRestClient`** 를 쓴다(사용자가 화면에서 기다리는 동작). 마감은 `SlotCandidateService.CANDIDATES_DEADLINE_MS = 3_000L` — **서비스 companion 소속**이라 어댑터가 그 값을 다시 정의하지 말고 `input` 을 통해 받거나 서비스 상수를 참조한다(어댑터에는 `VALIDATE_DEADLINE_MS`·`REPAIR_DEADLINE_MS` 만 있다). 생성자에 `CandidatePoolPort` 추가(D-5가). `ScheduleAgentCallFailed` → `localCandidates` 폴백 + WARN(D-4가). 스키마 드리프트(`IllegalArgumentException`)는 기존 3경로와 같이 `ScheduleAgentCallFailed` 로 승격. **재시도 없음**(선언 정책) |
+| 3 | `.../adapter/out/external/HttpScheduleAgentAdapter.kt` | `ALTERNATIVES_PATH = "/ai/v1/itinerary/alternatives"` 상수 추가(기존 4개 경로 상수 옆). `proposeSlotCandidates` 를 공통 `post(...)` 실호출로 교체 — **`scheduleAgentBoundedRestClient`** 를 쓴다(사용자가 화면에서 기다리는 동작). 마감은 `SlotCandidateService.CANDIDATES_DEADLINE_MS = 15_000L`(2026-09-08 상향) — **서비스 companion 소속**이라 어댑터가 그 값을 다시 정의하지 말고 `input` 을 통해 받거나 서비스 상수를 참조한다(어댑터에는 `VALIDATE_DEADLINE_MS`·`REPAIR_DEADLINE_MS` 만 있다). 생성자에 `CandidatePoolPort` 추가(D-5가). `ScheduleAgentCallFailed` → `localCandidates` 폴백 + WARN(D-4가). 스키마 드리프트(`IllegalArgumentException`)는 기존 3경로와 같이 `ScheduleAgentCallFailed` 로 승격. **재시도 없음**(선언 정책) |
 | 4 | `.../contract/AiBoundaryOpenApiTest.kt` | 경로 목록에 `"/ai/v1/itinerary/alternatives"` 추가. `wireKeys(sampleAlternativesRequest) shouldContainExactly props("AlternativesRequest")` + `TriggerSchema`·`CoordSchema`·`RequestMetaSchema` 중첩 검사 + 필수 필드(`anchor·dates·request_meta·trigger`) 누락 검사 + 응답측 `AlternativesResponse`·`AlternativeSchema` 키 일치. **이걸 빼면 새 경계만 게이트 밖에 남는다** |
 | 5 | `.../adapter/out/external/HttpScheduleAgentAdapterTest.kt` | §7 케이스 추가. `fixture()` 의 `emptyPool` 을 채워 쓰는 변형 픽스처 하나 |
 | 6 | `backend/app/src/test/kotlin/com/trippilot/app/LiveAiRoundTripIT.kt` | §7 의 왕복 케이스 2건 |
@@ -206,7 +206,7 @@ TRIPPILOT_BACKEND_BASE_URL: ${SERVICE_AUTH_TOKEN:+http://backend:8080}
 
 요청측:
 - `requestTo("/ai/v1/itinerary/alternatives")` · `method(POST)`
-- `jsonPath("$.trigger.kind").value("MANUAL")` · `$.trigger.affected_date` · `$.dates[0]` · `$.anchor.lat` · `$.excluded_poi_ids` · `$.request_meta.deadline_ms` (3000)
+- `jsonPath("$.trigger.kind").value("MANUAL")` · `$.trigger.affected_date` · `$.dates[0]` · `$.anchor.lat` · `$.excluded_poi_ids` · `$.request_meta.deadline_ms` (15000)
 - `$.affected_reasons` 에 대상 슬롯 `placementReason` 이 실린다 / 없으면 빈 객체
 
 응답측:

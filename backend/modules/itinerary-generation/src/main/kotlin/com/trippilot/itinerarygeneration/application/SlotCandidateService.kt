@@ -127,8 +127,23 @@ class SlotCandidateService(
     private val log = org.slf4j.LoggerFactory.getLogger(SlotCandidateService::class.java)
 
     companion object {
-        /** 사용자가 화면에서 기다리는 동작이라 생성(20s)보다 훨씬 짧게 잡는다. */
-        private const val CANDIDATES_DEADLINE_MS = 3_000L
+        /**
+         * 3s → 15s (2026-09-08, 팀 결정). 사용자가 화면에서 기다리는 동작이라 처음엔 생성(20s)보다
+         * 훨씬 짧게 잡았는데, 그 예산에서는 AI 가 이 경로에 배정한 상위 티어 모델(`gpt-5.6-sol`)이
+         * **사실상 못 탄다** — 실측 중앙값 6.8s 인데 AI 가 예산의 70% 를 LLM 몫으로 떼면 3s × 0.7 =
+         * 2.1s 라 매번 규칙 폴백으로 떨어진다. 응답은 200 이라 증상이 안 보인다.
+         *
+         * 15s × 0.7 = 10.5s — sol 중앙값의 1.5배. 꼬리(최대 21s)는 여전히 폴백이 받는다.
+         * "시간 부족으로 sol 을 못 타는 경우가 없게" 가 우선이라 필요하면 더 올린다.
+         *
+         * HTTP 읽기 타임아웃은 이 값과 무관하게 `ScheduleDeadlineProperties.editWaitMs`(기본 60s)에서
+         * 온다 — 그쪽이 더 크므로 이 상수만 올려도 끊기지 않는다. 그 관계가 뒤집히면 여기 값이
+         * 조용히 무효가 되니 같이 본다.
+         *
+         * 이 경로가 AI `alternatives` 를 실제로 부르게 되는 건 TRIP-463 구현 이후다 — 지금은
+         * `HttpScheduleAgentAdapter.proposeSlotCandidates` 가 로컬로 우회한다.
+         */
+        private const val CANDIDATES_DEADLINE_MS = 15_000L
 
         /** place-data 반경 조회 상한과 같은 값 — 전 DB 스캔 차단. */
         const val MAX_RADIUS_M = 50_000
