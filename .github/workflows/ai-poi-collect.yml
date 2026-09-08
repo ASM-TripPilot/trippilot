@@ -72,7 +72,7 @@ jobs:
       run:
         working-directory: ai
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -182,7 +182,7 @@ jobs:
           ) || echo "::warning::수집 상태 push 실패 — 다음 실행은 이어가기 없이 처음부터 (수집 자체는 성공)"
       - name: 등록 제안 artifact 보존 (30일 — 상태 파일 동봉, 디버깅용)
         if: steps.collect.outputs.skipped != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: collected-pois
           path: |
