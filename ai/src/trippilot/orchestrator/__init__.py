@@ -3,8 +3,8 @@
 현재 채워진 갈래:
 - `question_bank`: 의도별 질문뱅크 yaml 적재 (검수 게이트 포함, U6-01/TRIP-242)
 - `intent_router`: 3단 매칭(질문뱅크 → 유사질문 투표 → LLM 직접 분류) + 결정론 폴백
-- `itinerary_orchestrator`: M7 후보풀 → C1 선호점수 → C2 어셈블리 조립 + 폴백 계단
-  (U5-01/02, TRIP-237·238)
+- `itinerary_orchestrator`: 소유 검증 → 시한 배분 → 정보 수집·소화 → `ScheduleAgent` 위임
+  (U5-01/02, TRIP-237·238). 생성 파이프라인(점수·어셈블리 solve·설명)은 `agents/schedule/` 소유
 
 - `info_collector`: intent별 정보 요구표 → Provider 호출·상태 수렴 (TRIP-406·407·421·432).
   실배선(`api/wiring.py`) 등록 현황: PLACE·PERSONA·TRANSIT **상시**, WEATHER·EVENT는

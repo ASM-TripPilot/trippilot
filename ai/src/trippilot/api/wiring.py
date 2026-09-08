@@ -115,6 +115,7 @@ from trippilot.agents.edit_agent import (
     EditRejected, RetimeContext, edited_solution, validate_command,
 )
 from trippilot.agents.planb.rag import PlanBRagPipeline, PlanBRagRequest, SavedPlace
+from trippilot.agents.schedule.agent import ScheduleAgent
 from trippilot.domain.edit import ApplyMode, EditCommand, EditOp, resolve_apply_mode
 from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
 from trippilot.llm_gateway.workers.edit_translation import (
@@ -1192,8 +1193,9 @@ def build_orchestrator(
     nudge_worker = ReflectionNudgeWorker(
         GatewayFacade(llm, renderer, ReflectionNudgeGate(), c1_config, trace)
     )
-    orchestrator = core.ItineraryOrchestrator(
-        InfoCollector(providers),
+    # ScheduleAgent — 게이트웨이 점수 → 어셈블리 solve → 설명 (agents/schedule/agent.py).
+    # PlanB·Reflect 와 같은 조립 단위: 워커는 게이트웨이 계층 소속이고 에이전트가 부른다.
+    schedule_agent = ScheduleAgent(
         # 점수 캐시 (TRIP-477) — 2단계 생성(1차 day1→2차 잔여)의 중복 LLM 점수 제거.
         # 폴백은 캐시하지 않으므로 UnwiredLlm·강등 경로 동작은 기존과 동일.
         CachingScoringWorker(
@@ -1204,9 +1206,16 @@ def build_orchestrator(
         provider,
         clock,
         trace,
+        explanation_worker=explainer,
+        config=orchestrator_config,
+    )
+    orchestrator = core.ItineraryOrchestrator(
+        InfoCollector(providers),
+        schedule_agent,
+        clock,
+        trace,
         # 소유 검증(fail-closed, TRIP-333)도 같은 resolver — 보안 규칙의 권위 1곳.
         context_resolver=resolver,
-        explanation_worker=explainer,
         config=orchestrator_config,
     )
     return WiredItineraryOrchestrator(

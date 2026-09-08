@@ -13,7 +13,7 @@
 | BR-AF-07 | `LlmFeature` 값 추가는 FD 개정 + tier_map + 프롬프트 yaml + ROUTE-P1 + audit 5종 세트 동반 — 코드 단독 enum 확장 금지 | BR-U4-05 정합 |
 | BR-AF-08 | `llm.parse_intent`(INTENT)는 **Orchestrator 전용**, `llm.translate_edit`(EDIT_TRANSLATION)는 **EditAgent 전속** — 도구·feature 겹침 0 유지 | v2 도구 배타 |
 | BR-AF-09 | 임베딩 차원 1024 고정 (`EmbeddingPort.dim`) — 반환 벡터 길이 ≠ dim은 위반. FakeEmbedding은 결정론(같은 텍스트 → 같은 벡터) | AI-D06, D37 |
-| BR-AF-10 | agents는 c1·c2·m7을 조립할 수 있는 유일한 상위 계층 — 하위 계층의 agents(·orchestrator·providers·background) import 금지, agents 형제 간 상호 import 금지, agents의 LlmPort 직접 import 금지 (L-1~L-5) | 계층 규칙 |
+| BR-AF-10 | agents는 c1·c2·m7을 조립할 수 있는 유일한 상위 계층 — 하위 계층의 agents(·orchestrator·providers·background) import 금지, agents 형제 간 상호 import 금지, agents의 LlmPort 직접 import 금지, agents의 orchestrator import 금지 (L-1~L-6) | 계층 규칙 |
 | BR-AF-11 | "Agent 4종" 제한은 라우팅 테이블의 대화형 위임 대상에 한정 — Background(자율 트리거형)는 별도 범주: 라우팅 밖, 봉투 재사용(priority=BACKGROUND), INV-1은 소싱 게이트로, 사용자 표시 시각 생성 금지 | v2 §1 재해석 |
 | BR-AF-12 | 봉투·신선도 타입 전부 `from_dict(to_dict(x)) == x` — dict 필드는 JSON 원시 타입만, datetime은 tz-aware만 | U5-P10 |
 | BR-AF-13 | 대형 데이터는 참조로 — 후보 풀은 `InfoBundle.pool_ref`(세션 캐시 키)만, inline_context는 휘발 데이터 한정 (위반은 리뷰 반려) | DL-2, D31 |
@@ -62,3 +62,4 @@
 | 미결 #5 | Background의 LlmFeature 사용 상한 (현행 PLACE_EXTRACTION 1종 외 추가 여부) | U6 FD |
 | 미결 #6 | TripReadiness·FreshnessCurator 요구사항 정본 부재 (로드맵 유래 명칭만 존재) | 해당 기능 인셉션 문서화 |
 | 미결 #7 | 집계형 FreshnessMeta — `ScheduleAgentOutput.freshness`는 "사용 데이터 신선도 집계"(agent-io-contracts)인데 집계 스키마 미정의. 본 FD FreshnessMeta는 패킷 단일 source용 | 경계 계약 개정 (TRIP-282) |
+| 미결 #8 | **BR-AF-01·03 현행 갭** — 에이전트 4종 전부 `AgentTask`/`spawn` 봉투 밖 호출: ScheduleAgent 는 `ScheduleTask`(budget+started_ms) → `GenerationOutcome`(`orchestrator/itinerary_orchestrator.py` 가 위임, 2026-09-09), planb·reflect·edit 는 `api/wiring.py` 직접 호출. 시한은 `spawn`(잔여 ≤ 0 → 발행 불가)이 아니라 어셈블리 바닥 `max(c2_reserved_ms, total−elapsed)` 보장(TRIP-376) — **봉투 이관 시 이 바닥을 없애면 안 된다**. mermaid/05 註 참조 | AgentTask 이관 후속 (IntentRouter 배선과 함께) |

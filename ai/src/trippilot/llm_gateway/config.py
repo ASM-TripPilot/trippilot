@@ -63,11 +63,11 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
     """
     return MappingProxyType(
         {
-            # orchestrator/itinerary_orchestrator.py `_score` — 폴백이면
+            # agents/schedule/agent.py `ScheduleAgent._score` — 폴백이면
             # `_rule_scores()` 실행 + ScoringMode.RULE. 같은 두 문자열을 그쪽
             # `_degrade(..., "llm_score", "rule_score", ...)`도 쓴다.
             LlmFeature.PREFERENCE_SCORING: ("llm_score", "rule_score"),
-            # orchestrator `_explain` — 대체 설명이 없다. 빈 설명으로 일정만 나간다.
+            # ScheduleAgent `_explain` — 대체 설명이 없다. 빈 설명으로 일정만 나간다.
             # 그쪽 `_degrade(..., "llm_explain", "(none)", ...)`의 문자열 그대로.
             LlmFeature.EXPLANATION: ("llm_explain", "(none)"),
             # agents/planb/rag.py `_select`→`_rationale` — used_llm=False면 규칙 랭킹

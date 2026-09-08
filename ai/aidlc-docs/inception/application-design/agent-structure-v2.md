@@ -102,6 +102,13 @@
 > 대응하는 `poi_curation/entity_resolver.py` 는 프로덕션 호출자 0이고, `llm.parse_intent`에 대응하는
 > `IntentRouter` 도 마찬가지다(intent-matching-design.md 배선 상태 註). `/edit` 경계의 현 실태는
 > 아래 '정보 요구표' 註 참조.
+>
+> **배선 실태 (2026-09-09) — Schedule 행의 "배치 안 함"은 구현되지 않았다**: `agents/schedule/agent.py::ScheduleAgent.run`
+> 이 4단 관문 `solve` 를 직접 호출하고(생성 경로에서 유일한 solve 호출자) 검증된 `ItinerarySolution` 을
+> `GenerationOutcome` 으로 돌려준다. 전속 도구(`score_preferences`·`explain_slot`)와 INV-2(시각은 solve 반환값만)는
+> 지켜지나, §4 "Agent 출력 타입이 Proposal 이라 시각을 만들 수 없다"는 Schedule 에는 해당하지 않는다 — 설명(`explain_slot`)이
+> 배치 결과를 필요로 해 Proposal 단계 분리는 solve 뒤 2차 호출 프로토콜이 정해질 때까지 미착수. construction FD
+> agent-foundation §6("agents 는 c1·c2·m7 을 조립하는 유일한 상위 계층")이 현 절단선의 근거다.
 
 - **금지**: Provider 직접 호출(정보는 봉투로만), 시각·순서 확정.
 - **NEED_MORE_INFO(항목, 사유)**: Orchestrator가 수집→재위임, **최대 1회**. 이후에도 부족하면 업무 폴백.
