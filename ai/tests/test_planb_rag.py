@@ -954,8 +954,8 @@ def test_llm_timeout_derives_from_request_deadline() -> None:
     pool = _pool("p1")
     pipeline = PlanBRagPipeline(FakeEmbedding(), InMemoryVectorStore())
 
-    # 예산 20초 → LLM 몫 10초 (기본 share 0.5)
-    assert pipeline._llm_timeout(_request(pool, deadline_ms=20_000)) == 10.0
+    # 예산 20초 → LLM 몫 14초 (기본 share 0.7 — sol 중앙값 6.8초의 2배 여유)
+    assert pipeline._llm_timeout(_request(pool, deadline_ms=20_000)) == pytest.approx(14.0)
     # 예산 없음 → 게이트웨이 기본에 맡긴다 (None)
     assert pipeline._llm_timeout(_request(pool)) is None
     assert pipeline._llm_timeout(_request(pool, deadline_ms=0)) is None
