@@ -141,6 +141,7 @@ import {
   type TripWizardStep1ScreenProps,
 } from '@/features/trip/ui/TripWizardStep1Screen';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
+import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { LiveLocationPage } from '@/pages/live-location';
 import {
   TripWizardStep2Screen,
@@ -2776,6 +2777,27 @@ export const PREVIEW_STATES: PreviewState[] = [
         onChangeNights={noop}
         onRemove={noop}
         onAddCity={noop}
+        onApply={noop}
+      />
+    ),
+  },
+  // g01 기간 편집 시트(TRIP-667, Figma `3627:2068`) — 완성 범위(6/10~6/13) 열린 상태. `PeriodEditSheet`은
+  // props-only 순수 뷰(스토어·라우터·시계 미참조)라 컨테이너 import 사슬 함정 없이 그대로 태운다. jest 는
+  // 시작/종료 분홍 원·사이 연장 배경·요일 색·시트 딤/개폐를 못 봐(바텀시트 통과형 목) 이 키가 유일한
+  // 6-b 육안 대조 자리다. today=6/1 이라 과거 셀 없음, prev 는 6월이 today 달이라 비활성.
+  {
+    key: 'trip-new-step1-period-sheet',
+    band: 'g',
+    label: 'g01 · 기간 편집 시트',
+    login: null,
+    render: () => (
+      <PeriodEditSheet
+        today="2026-06-01"
+        month="2026-06"
+        range={{ start: '2026-06-10', end: '2026-06-13' }}
+        onPickDate={noop}
+        onPrevMonth={noop}
+        onNextMonth={noop}
         onApply={noop}
       />
     ),

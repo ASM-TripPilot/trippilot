@@ -56,6 +56,7 @@
 - `src/__tests__/onboardingStructure.test.ts`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
 - `src/__tests__/pagesLayerStructure.test.ts`  →  (export 없음)
+- `src/__tests__/periodEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/personalizationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/placeDetailStubRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/placeExploreStateStructure.test.ts`  →  (export 없음)
@@ -557,7 +558,7 @@
 - `src/features/trip/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
 - `src/features/trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
 - `src/features/trip/model/stayDateImport.ts`  →  StayImportView · StayImportInput · formatStayDateRange · resolveStayImport
-- `src/features/trip/model/tripDatePicker.ts`  →  daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · dateCell
+- `src/features/trip/model/tripDatePicker.ts`  →  daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · dateCell · TripDateRange · applyRangePick
 - `src/features/trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · nightsSum · validateTripDraft · toCompanionType
 - `src/features/trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences · summaryBudget
 - `src/features/trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · dayOfWeek · presetRange · deriveEndDate · formatDateRange
@@ -570,6 +571,7 @@
 
 ## src/features/trip/ui/
 - `src/features/trip/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
+- `src/features/trip/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
 - `src/features/trip/ui/TripBaseFixSheet.tsx`  →  TripBaseFixSheetProps · TripBaseFixSheet
 - `src/features/trip/ui/TripDateSheet.tsx`  →  TripDateSheetProps · TripDateSheet
 - `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · BackChevronGlyph · PinGlyph · RemoveGlyph · ThumbRemoveGlyph · PlusGlyph · CalendarGlyph · ChevronDownGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · SparkleGlyph · AlertCircleGlyph · GlobeGlyph · BedTone · BedGlyph · ChevronRightGlyph · BaseBadgePinGlyph · HeartFilledGlyph · CheckGlyph · SearchGlyph · WarningTriangleGlyph
@@ -1201,4 +1203,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 815개 파일
+합계 817개 파일

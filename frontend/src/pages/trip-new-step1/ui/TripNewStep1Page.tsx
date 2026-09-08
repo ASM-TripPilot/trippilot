@@ -15,6 +15,11 @@ import {
 } from '@/features/trip/model/budgetAmount';
 import { buildCreateTripRequest } from '@/features/trip/model/createTripRequest';
 import {
+  applyRangePick,
+  shiftMonth,
+  type TripDateRange,
+} from '@/features/trip/model/tripDatePicker';
+import {
   validateTripDraft,
   type TripDraft,
 } from '@/features/trip/model/tripDraft';
@@ -30,6 +35,7 @@ import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { useCreateTrip } from '@/features/trip/model/useCreateTrip';
 import { usePreferencePrefill } from '@/features/trip/model/usePreferencePrefill';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
+import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { TripWizardStep1Screen } from '@/features/trip/ui/TripWizardStep1Screen';
 
 /**
@@ -94,14 +100,29 @@ function isPrefillableBudget(
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
+/** 오늘 날짜 'YYYY-MM-DD'(실시계). `baseDate` 미주입 시의 프로덕션 폴백 — 페이지(배선)라 시계를
+ * 읽어도 되지만(화면·순수 함수만 시계 금지, `tripWizardStep1Boundary.test.ts` 스캔 밖), 이 폴백
+ * 반환값은 심판이 없다(라우트가 `baseDate`를 안 나름, 02a §3 선재 갭 · `StayRegisterPage` 선례). */
+function todayIso(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export interface TripNewStep1PageProps {
-  /** 프리셋 계산 기준일('YYYY-MM-DD'). 신 default 는 프리셋·달력이 없어(편집은 S3 시트로 이연)
-   * 지금은 소비처가 없다 — 날짜 편집 시트(S3)가 붙을 때 다시 쓰인다. 계약은 유지한다. */
+  /** 달력 기준 '오늘' 주입점('YYYY-MM-DD') — 기간 편집 시트(S3)의 과거 셀 비활성·이전 달 하한
+   * 기준이다. 테스트가 이 값을 주입해 결정론이 된다. 미지정이면 실시계(`todayIso()`)로 폴백한다
+   * (프로덕션 경로, `StayRegisterPage` 선례). */
   baseDate?: string;
 }
 
-export function TripNewStep1Page(_props: TripNewStep1PageProps): ReactElement {
+export function TripNewStep1Page({
+  baseDate,
+}: TripNewStep1PageProps): ReactElement {
   const router = useRouter();
+  const resolvedToday = baseDate ?? todayIso();
 
   // 스토어 드래프트 — 요약 도출·게이트 판정의 재료(읽기 전용 구독). 액션은 편집 시트(S2~S6)가
   // 물므로 default 페이지는 상태만 읽는다.
@@ -121,6 +142,9 @@ export function TripNewStep1Page(_props: TripNewStep1PageProps): ReactElement {
   const removeDestination = useTripWizardStore(
     (state) => state.removeDestination
   );
+  // 기간 편집 시트(TRIP-667)가 "적용"에서 쓰는 커밋 액션. 시트는 스토어를 모르고(무상태 D5),
+  // 페이지가 이 액션을 콜백으로 배선한다 — 여행지 시트의 즉시반영과 달리 **적용에서만** 커밋한다(D6).
+  const setPeriod = useTripWizardStore((state) => state.setPeriod);
 
   const preference = usePreferencePrefill();
   // 계정 취향 프리필(GET /me/preferences)은 이미 한국어 도메인 값이다(slug 아님) — 그대로 요약·
@@ -154,6 +178,14 @@ export function TripNewStep1Page(_props: TripNewStep1PageProps): ReactElement {
   // 여행지 편집 시트 개폐(TRIP-666) — 배선이 소유한다(화면은 무상태 D5). 시트는 화면의 형제로
   // 조건부 마운트한다(화면 슬롯 금지 — 화면 단독 렌더에서 시트/도시추가가 안 떠야 하는 프리즈 2건).
   const [destinationSheetOpen, setDestinationSheetOpen] = useState(false);
+  // 기간 편집 시트(TRIP-667) — 시트가 무상태(★1)라 개폐·보는 달·고른 범위를 전부 배선이 소유한다.
+  // `periodMonth`는 today 의 달로 시작하고(달 초기값은 마운트 1회), 셀 탭은 `applyRangePick`으로
+  // `periodRange`를 전이시켜 시트를 재렌더한다(전이가 여기서만 일어난다).
+  const [periodSheetOpen, setPeriodSheetOpen] = useState(false);
+  const [periodMonth, setPeriodMonth] = useState(() =>
+    resolvedToday.slice(0, 7)
+  );
+  const [periodRange, setPeriodRange] = useState<TripDateRange>({});
 
   // 제출 경로 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
   // 않게). 두 뜻을 겸한다: ① 등록 요청이 날아가는 중 ② 이미 성공해 이 화면의 일이 끝남.
@@ -313,8 +345,17 @@ export function TripNewStep1Page(_props: TripNewStep1PageProps): ReactElement {
     );
   }
 
-  // 여행지 외 4행(기간·동행·취향·예산) 편집 시트는 S3~S6 스텁이다 — 지금은 오픈 신호만 받는다.
+  // 동행·취향·예산 3행 편집 시트는 S4~S6 스텁이다 — 지금은 오픈 신호만 받는다(기간은 S3로 배선됨).
   const openEditSheet = (): void => {};
+
+  /** "적용" — 범위가 완성됐을 때만 커밋한다(시트가 미완성이면 버튼이 진짜 disabled 라 여긴 안전
+   * 이중 방어 겸 TS 좁히기). `setPeriod`가 프리셋 없이(undefined) start·end 를 저장하고 시트를 닫는다. */
+  function applyPeriod(): void {
+    if (periodRange.start === undefined || periodRange.end === undefined)
+      return;
+    setPeriod(undefined, periodRange.start, periodRange.end);
+    setPeriodSheetOpen(false);
+  }
 
   return (
     <>
@@ -325,7 +366,7 @@ export function TripNewStep1Page(_props: TripNewStep1PageProps): ReactElement {
         summaryPreferences={summaryPreferencesValue}
         summaryBudget={summaryBudgetValue}
         onPressSummaryDestination={() => setDestinationSheetOpen(true)}
-        onPressSummaryPeriod={openEditSheet}
+        onPressSummaryPeriod={() => setPeriodSheetOpen(true)}
         onPressSummaryCompanion={openEditSheet}
         onPressSummaryPreference={openEditSheet}
         onPressSummaryBudget={openEditSheet}
@@ -359,6 +400,25 @@ export function TripNewStep1Page(_props: TripNewStep1PageProps): ReactElement {
           onRemove={removeDestination}
           onAddCity={() => router.push('/explore/region?purpose=trip')}
           onApply={() => setDestinationSheetOpen(false)}
+        />
+      ) : null}
+      {/* 기간 편집 시트도 화면의 형제로 조건부 마운트 — 셀 탭은 배선의 `applyRangePick`으로 범위를
+          전이시키고, "적용"에서만 스토어에 커밋한다(여행지 시트의 즉시반영과 반대, D6). */}
+      {periodSheetOpen ? (
+        <PeriodEditSheet
+          today={resolvedToday}
+          month={periodMonth}
+          range={periodRange}
+          onPickDate={(date) =>
+            setPeriodRange((current) => applyRangePick(current, date))
+          }
+          onPrevMonth={() =>
+            setPeriodMonth((current) => shiftMonth(current, -1))
+          }
+          onNextMonth={() =>
+            setPeriodMonth((current) => shiftMonth(current, 1))
+          }
+          onApply={applyPeriod}
         />
       ) : null}
     </>
