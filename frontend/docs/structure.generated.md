@@ -555,7 +555,7 @@
 ## src/features/trip/model/
 - `src/features/trip/model/baseGate.ts`  →  BaseBlockReason · StayGateInput · TripPeriod · StayDateDraft · baseBlockReason · canSaveStayFix · isOutsideTripPeriod · extendedTripPeriod · tripDayOptions · applyDayPick
 - `src/features/trip/model/baseScreen.ts`  →  formatSectionRange · formatTripRange · UnresolvedDaysView · unresolvedDaysView
-- `src/features/trip/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBase · toNightlyBases
+- `src/features/trip/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBase · toNightlyBases · NightlyBaseCard · nightlyBaseCards
 - `src/features/trip/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount
 - `src/features/trip/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
 - `src/features/trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
@@ -579,7 +579,7 @@
 - `src/features/trip/ui/TripDateSheet.tsx`  →  TripDateSheetProps · TripDateSheet
 - `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · BackChevronGlyph · PinGlyph · RemoveGlyph · ThumbRemoveGlyph · PlusGlyph · CalendarGlyph · ChevronDownGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · SparkleGlyph · AlertCircleGlyph · GlobeGlyph · BedTone · BedGlyph · ChevronRightGlyph · BaseBadgePinGlyph · HeartFilledGlyph · CheckGlyph · SearchGlyph · WarningTriangleGlyph
 - `src/features/trip/ui/TripWizardStep1Screen.tsx`  →  TripWizardStep1ScreenProps · TripWizardStep1Screen
-- `src/features/trip/ui/TripWizardStep2Screen.tsx`  →  BaseSectionRow · BaseCandidateRow · Step2Variant · TripWizardStep2ScreenProps · TripWizardStep2Screen
+- `src/features/trip/ui/TripWizardStep2Screen.tsx`  →  NightlyBaseCardVM · Step2Variant · TripWizardStep2ScreenProps · TripWizardStep2Screen
 
 ## src/mocks/
 - `src/mocks/handlers.ts`  →  handlers

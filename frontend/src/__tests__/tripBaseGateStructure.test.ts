@@ -33,9 +33,18 @@ import { join, resolve } from 'node:path';
  * 가짜 통과 방지 규약(리포 확립 관례): 모든 "없어야 한다" 단언은 "있어야 한다" 단언과 같은
  * it 안에서 짝을 이룬다. 헬퍼는 공용화하지 않고 파일마다 각자 갖는다.
  *
+ * ── TRIP-672 (D2) 갱신 ─────────────────────────────────────────────────
+ * g02 default가 후보 하트 배정 모델(fixSheet 포함)에서 **박별 거점 카드**로 재작성되며
+ * 화면·배선에서 fixSheet 층 배선이 통째로 걷혔다. 그래서 두 describe를 **부재 잠금으로
+ * 뒤집었다**: 「AC-G3 화면 순수」는 이제 `TripBaseFixSheet`·`nightlyBaseCards` **부재**를,
+ * 「배선…」은 옛 게이트·보완 배선(coverage/assign/baseGate/useBaseFix/…) **부재**를 잠근다
+ * (신 배선 긍정 짝과 함께). 시트·훅·게이트 세 파일은 **orphan으로 존치**하므로 §3-3·★15·★17은
+ * 그대로 그 파일들의 내부 불변식을 감사한다(모델 파일 실삭제는 후속 티켓).
+ *
  * ── 졸업 조건 (frontend/CLAUDE.md "장치 판정 규칙") ──────────────────────
  * **한시적 이행 체크포인트.** 잠그는 것이 이번 칸의 층 계약 스냅숏이라 정당한 리네임에
- * red를 낸다. **카운터 = 0.** 정당한 작업이 이 파일 때문에 red를 낸 것이 **2회 누적**되면
+ * red를 낸다. **카운터 = 1** (TRIP-672 D2가 정당한 red 1회 — 리네임이 아니라 층 배치 자체를
+ * 제거). 정당한 작업이 이 파일 때문에 red를 낸 것이 **2회 누적**되면
  * 즉시 `baseGate.ts`의 import 0건(★17)만 남기고 나머지 심볼 단언을 뗀다 —
  * 그 하나만 영구 규칙(순수성)이고 나머지는 이번 배치의 사진이다.
  */
@@ -130,16 +139,16 @@ describe('다섯 파일이 실재한다 (아래 읽기가 의미를 갖는 전�
 });
 
 describe('AC-G3 · 화면은 여전히 순수 진열대다 (독립 재확인)', () => {
-  it('화면이 시트를 가리키되, 조회·라우팅·스토어·생성 클라이언트를 여전히 모른다', () => {
+  it('화면이 조회·라우팅·스토어·생성 클라이언트를 모르고, TRIP-672(D2)로 fixSheet·파생도 안 문다', () => {
     // 동결된 `tripWizardStep2Structure.test.ts`가 같은 목록을 이미 잰다. 여기서 **다시** 재는
     // 이유는 이 칸의 배치 결정이 그 가드에 **얹혀 있기** 때문이다 — 그 파일이 나중에 어떤
     // 이유로든 완화되면 이 칸의 근거가 조용히 사라진다. 심판은 자기 근거를 자기가 들어야 한다.
     const screenSource = readOne(SCREEN_REL);
 
-    // 긍정 짝 — 읽은 것이 정말 그 화면이고, 시트를 **실제로 렌더한다**. 없으면 아래 금칙
-    // 0건을 "시트를 안 만든" 구현도 통과한다.
+    // 긍정 짝 — 읽은 것이 정말 그 화면이다. 없으면 아래 금칙 0건을 빈 파일도 통과한다.
+    // (TRIP-672 전엔 `TripBaseFixSheet` 렌더를 긍정 짝으로 요구했으나, D2가 화면에서 시트
+    //  배선을 걷어 그 요구는 아래 금칙으로 뒤집혔다.)
     expect(screenSource).toMatch(/export function TripWizardStep2Screen\b/);
-    expect(screenSource).toContain('TripBaseFixSheet');
 
     const FORBIDDEN = [
       'expo-router',
@@ -150,9 +159,14 @@ describe('AC-G3 · 화면은 여전히 순수 진열대다 (독립 재확인)', 
       'useTripWizardStore',
       '@/shared/api/generated',
       'toBaseSections',
-      // 이 칸이 더하는 두 줄 — 게이트 판정과 네트워크가 화면으로 새어 들면 AC-G3가 깨진다.
+      // 게이트 판정과 네트워크가 화면으로 새어 들면 AC-G3가 깨진다.
       'useFixSavedStay',
       'baseBlockReason',
+      // TRIP-672(D2) — 옛 fixSheet 배선과 카드 파생은 화면에서 걷혔다. 화면이 다시 시트를
+      // 렌더하거나(`TripBaseFixSheet`) 파생을 부르면(`nightlyBaseCards` — 파생이 두 곳에
+      // 산다) 여기서 red.
+      'TripBaseFixSheet',
+      'nightlyBaseCards',
     ];
     expect(present(screenSource, FORBIDDEN)).toEqual([]);
   });
@@ -192,22 +206,38 @@ describe('§3-3 · 시트는 지도만 알고 상태를 갖지 않는다', () =>
   });
 });
 
-describe('배선이 네트워크를 지고, 지도를 모른다', () => {
-  it('두 PATCH 훅과 게이트 판정을 물되 KakaoMapView는 안 문다', () => {
+describe('배선이 새 카드 파생을 지고, 옛 게이트·보완 배선과 지도를 모른다 (TRIP-672 D2)', () => {
+  it('두 조회·정렬·박별 파생을 물되, coverage/gate/fix 배선과 KakaoMapView는 0건이다', () => {
     const pageSource = readOne(PAGE_REL);
 
-    // 긍정 짝 — 배선이 실제로 이 칸의 세 부품을 쓴다.
-    expect(pageSource).toContain('useFixSavedStay');
-    expect(pageSource).toContain('useExtendTripPeriod');
-    // 판정을 순수 모듈에서 가져다 쓴다 — 배선이 조건식을 다시 짜면 `baseGate.test.ts`의
-    // 32조합 전수 심판이 배선에는 안 걸린다.
-    expect(pageSource).toContain('baseBlockReason');
-    expect(pageSource).toContain('isOutsideTripPeriod');
-    // 기간을 늘렸으면 스토어도 갱신해야 한다(맹점 ④) — 렌더 심판은 ★12가 따로 잰다.
-    expect(pageSource).toContain('setPeriod');
+    // 긍정 짝 — 배선이 실제로 신 계약의 네 부품을 쓴다. 없으면 아래 부재 0건을 빈 파일도
+    // 통과한다(D2 재작성 전엔 이 자리가 useFixSavedStay·useExtendTripPeriod·baseBlockReason·
+    // isOutsideTripPeriod·setPeriod를 긍정으로 요구했으나, 그 배선이 통째로 걷혀 뒤집혔다).
+    expect(pageSource).toContain('nightlyBaseCards');
+    expect(pageSource).toContain('useTripBases');
+    expect(pageSource).toContain('toBaseSections');
+    expect(pageSource).toContain('useSavedStays');
 
-    // 부정 — 지도는 시트의 것이다. 배선이 WebView를 직접 쥐면 배선 테스트가 전부 env 키에
-    // 묶인다(02a §2-a 실측: 키가 없으면 `map-webview`가 아예 없다).
+    // 부정 짝 — 옛 후보 하트 배정 모델의 배선이 페이지에서 0건이다(D2). 모델 파일
+    // (`baseGate.ts`·`useBaseFix.ts`·`useTripBases`의 `useTripCoverage`)은 orphan으로 남아
+    // 자기 테스트는 계속 green이지만, 배선이 그 심볼을 **다시 import하면** 여기서 red 다.
+    // 이 부재를 소스로 잠그는 것이 유일한 그물이다 — 렌더엔 "막힘" 상태가 원리적으로 없다.
+    const REMOVED_WIRING = [
+      'useTripCoverage',
+      'useAssignBase',
+      'useUnassignBase',
+      'baseGate',
+      'useBaseFix',
+      'useFixSavedStay',
+      'useExtendTripPeriod',
+      'baseBlockReason',
+      'isOutsideTripPeriod',
+      'setPeriod',
+    ];
+    expect(present(pageSource, REMOVED_WIRING)).toEqual([]);
+
+    // 부정 — 지도는 (옛) 시트의 것이었다. 배선이 WebView를 직접 쥐면 배선 테스트가 전부 env
+    // 키에 묶인다(02a §2-a 실측). 재작성 전부터 0건이던 불변식을 그대로 잇는다.
     expect(present(pageSource, ['KakaoMapView', '@/shared/map'])).toEqual([]);
   });
 });

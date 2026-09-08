@@ -85,7 +85,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    band `g`) 추가로 168→170.
     //    test-designer 선반영(브리프 맹점④ — S2~S5 implementer 4연속 손편집 종료). implementer 는
     //    `preview.tsx` 에 그 키들을 추가할 뿐 이 가드는 만지지 않는다(추가 전엔 168개라 이 단언이 red).
-    expect(PREVIEW_STATES).toHaveLength(170);
+    // ⚠️ TRIP-672: g02 default 재작성으로 옛 개념(후보/coverage/blocked/fixSheet)을 쓰던 프리뷰
+    //    키 11개를 신 계약 5개(`trip-new-step2-{default,no-stay,loading,error,notrip}`)로 줄여
+    //    170→164. TRIP-665(g01 default 재작성으로 키 3개 삭제 166→163)와 동형 — 프리뷰 키에서
+    //    제거된 화면 prop 이 사라지면서 총계가 준다.
+    expect(PREVIEW_STATES).toHaveLength(164);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
