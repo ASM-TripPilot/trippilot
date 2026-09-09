@@ -370,9 +370,13 @@ export function TripNewStep1Page({
       companionType,
       destinations,
       // 예산은 effective(사용자 입력 우선, 미입력 시 프리필)로 나간다(TRIP-670 D3 복원). `empty`·
-      // `invalid` 면 `undefined` 라 키가 안 붙는다(`buildCreateTripRequest` 가 조건부로 다시 붙인다).
+      // `invalid`·**0** 이면 `undefined` 라 키가 안 붙는다. `>0` 로 좁혀 요약(`summaryBudget` 은
+      // `amount<=0`→null="예산 선택")과 제출을 같은 규칙에 맞춘다(S6D 표시=제출 대칭). 0 이 파싱
+      // 성질로는 유효값이라도 표시가 미선택이면 제출도 미전송이어야 둘이 안 갈라진다.
       budgetTotal:
-        parsedBudget.kind === 'amount' ? parsedBudget.amount : undefined,
+        parsedBudget.kind === 'amount' && parsedBudget.amount > 0
+          ? parsedBudget.amount
+          : undefined,
       // 취향 스냅숏(정책 A) — 실효 취향(오버라이드 ?? 프리필)을 평평한 한국어 배열로 싣는다
       // (BE 는 받은 것만 저장하고 스스로 동결하지 않는다). 요약 취향 행과 같은 출처라 화면=서버가
       // 맞는다. activities 는 시트가 안 건드려 프리필 원본을 그대로 싣는다(D5).
@@ -415,6 +419,9 @@ export function TripNewStep1Page({
    * 초기화한다(D3). 스토어는 `getState()`로 여는 순간 값을 읽고(`openCompanionSheet` 선례), 프리필은
    * render 클로저값(react-query 라 store 를 안 타 클로저가 곧 최신값). */
   function openBudgetSheet(): void {
+    // 프리필 미도착이면 열지 않는다(S6G) — 빈 드래프트로 열리는 것을 막아 취향 시트와 결을 맞춘다.
+    // 신호는 preference.isPending(≠isLoading — 담은목록 축이 섞이면 게스트를 오차단, ★3).
+    if (preference.isPending) return;
     const currentBudgetText = useTripWizardStore.getState().budgetText;
     setDraftAmountText(
       parseBudgetAmount(currentBudgetText).kind === 'amount'
@@ -426,8 +433,10 @@ export function TripNewStep1Page({
   }
 
   /** "적용" — 드래프트 금액을 store 에 커밋(`setBudgetText`) + 닫기. tier 는 커밋 대상이 아니다
-   * (honest — 스토어·요청 어디에도 안 감, 표시·프리필 축 전용). */
+   * (honest — 스토어·요청 어디에도 안 감, 표시·프리필 축 전용). invalid(비숫자) 면 커밋·닫기를
+   * 건너뛴다(S6E — 조용한 소멸 방지: 안 그러면 잘못된 입력이 오류 없이 사라진다). */
   function applyBudget(): void {
+    if (parseBudgetAmount(draftAmountText).kind === 'invalid') return;
     setBudgetText(draftAmountText);
     setBudgetSheetOpen(false);
   }
@@ -459,6 +468,10 @@ export function TripNewStep1Page({
    * 오버라이드는 `getState()`로 여는 순간 값을 읽고(store 직접 세팅 직후 press 대비, `openCompanionSheet`
    * 선례), 프리필은 render 클로저값(react-query 라 store 를 안 타 클로저가 곧 최신값이다). */
   function openPrefSheet(): void {
+    // 프리필 미도착이면 열지 않는다(S5G — 데이터 손실 봉합). GET /me/preferences 도착 전 열면
+    // 드래프트가 빈 []로 열리고, 적용 시 `[] ?? prefill`(빈 배열은 값이라 ?? 폴백 안 함)로 온보딩
+    // 취향이 영구 유실된다. 신호는 preference.isPending(예산 시트와 동일, ★3).
+    if (preference.isPending) return;
     const override = useTripWizardStore.getState().prefStyleOverride;
     setPrefDraftStyles([...(override ?? prefillStyles)]);
     setPrefSheetOpen(true);
@@ -581,6 +594,13 @@ export function TripNewStep1Page({
         <BudgetEditSheet
           amountText={draftAmountText}
           tier={draftTier}
+          budgetError={
+            // 페이지가 드래프트 파싱 오류를 도출해 시트 슬롯에 내린다(S6E — 시트는 props-only 라
+            // amountText 로 스스로 오류를 도출하지 않는다). 카피는 오케 확정값.
+            parseBudgetAmount(draftAmountText).kind === 'invalid'
+              ? '숫자만 입력해 주세요'
+              : undefined
+          }
           onChangeAmount={setDraftAmountText}
           onSelectTier={setDraftTier}
           onApply={applyBudget}

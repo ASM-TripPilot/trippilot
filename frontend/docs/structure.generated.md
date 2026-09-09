@@ -872,10 +872,10 @@
 - `src/pages/travel-style/ui/TravelStylePage.tsx`  →  TravelStylePage
 
 ## src/pages/trip-new-mustvisit/
-- `src/pages/trip-new-mustvisit/index.ts`  →  MustVisitListPage
+- `src/pages/trip-new-mustvisit/index.ts`  →  TripMustVisitsPage
 
 ## src/pages/trip-new-mustvisit/ui/
-- `src/pages/trip-new-mustvisit/ui/MustVisitListPage.tsx`  →  MustVisitListPage
+- `src/pages/trip-new-mustvisit/ui/MustVisitListPage.tsx`  →  TripMustVisitsPage
 
 ## src/pages/trip-new-step1/
 - `src/pages/trip-new-step1/index.ts`  →  TripNewStep1Page

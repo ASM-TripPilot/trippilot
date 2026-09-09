@@ -338,3 +338,35 @@ describe('PI-7 · ★ D4 hasOverride → 요약 "+ 온보딩" 제거', () => {
     expect(summaryPreferenceRow()).not.toHaveTextContent(/온보딩/);
   });
 });
+
+/**
+ * TRIP-677 · S5G — 프리필 async 갭(취향 데이터 손실 봉합). `GET /me/preferences` 도착 전이면
+ * `prefillStyles=[]` 라 시트가 빈 [] 드래프트로 열리고, 적용하면 `effectiveStyles=[] ?? prefill=[]`
+ * (★2 `??` 는 빈 배열을 값으로 지켜 프리필로 안 돌아감)로 **온보딩 취향이 영구 유실**된다.
+ *
+ * 봉합: `openPrefSheet` 진입 가드 `if (preference.isPending) return;` — 미도착이면 시트를 아예 안 연다.
+ * 신호는 `preference.isPending`(≠`isLoading`, ★3). 이 테스트는 그 커밋 경로를 **시트 미개봉**으로 차단한다.
+ *
+ * ⚠️ deferred(비해결) 프리필로 pending 을 재현한다(★1) — 응답을 영영 안 주는 msw 핸들러(02a §5-A 실검증).
+ * `SummaryRow` 는 isLoading 이어도 onPress 가 살아 있다(값만 스켈레톤, S7 착시 — 02a §5-C).
+ */
+describe('PI-8 · ★ AC-S5G-1 프리필 미해결 중 취향 행 탭은 시트를 안 연다', () => {
+  it('preference 쿼리가 pending 이면 취향 요약 행을 눌러도 PrefOverrideSheet 가 안 열린다', () => {
+    // 비해결 프리필 — 도착 전 상태를 영구 고정(deferred, 리포 pending 재현 idiom).
+    server.use(http.get(`${BASE}/me/preferences`, () => new Promise(() => {})));
+
+    renderPage();
+
+    // pending 확증 — 로딩 얼굴이라 취향 값 자리가 스켈레톤이다(가드 신호 preference.isPending 활성).
+    expect(
+      screen.getByTestId('trip-wizard-summary-skeleton-4')
+    ).toBeOnTheScreen();
+
+    // 값이 스켈레톤이어도 SummaryRow 의 onPress 는 살아 있다(S7 착시 — isLoading 은 값만 가림).
+    fireEvent.press(summaryPreferenceRow());
+
+    // 현행(결함): 가드가 없어 빈 [] 드래프트로 시트가 열린다 → 적용 시 온보딩 취향 유실.
+    // 가드(if preference.isPending return) 후엔 시트가 안 열린다.
+    expect(screen.queryByTestId('trip-wizard-pref-sheet')).toBeNull();
+  });
+});

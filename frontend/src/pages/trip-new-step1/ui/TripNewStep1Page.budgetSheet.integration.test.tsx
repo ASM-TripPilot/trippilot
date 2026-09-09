@@ -297,3 +297,127 @@ describe('B-summary · ★ 편집이 요약 "예산" 행에 반영된다(자매 
     ).not.toHaveTextContent(/80만원/);
   });
 });
+
+/**
+ * TRIP-677 · S6G — 프리필 async 갭(예산). 취향(S5G)과 대칭 — `openBudgetSheet` 진입 가드
+ * `if (preference.isPending) return;`. 예산은 자가치유(빈 적용→프리필 재도출)라 손실은 없으나,
+ * 빈 드래프트로 여는 것을 막아 결을 맞춘다(01b 구현). 신호는 preference.isPending(★3).
+ * deferred(비해결) 프리필로 pending 재현(★1, 02a §5-A).
+ */
+describe('B-guard · ★ AC-S6G-1 프리필 미해결 중 예산 행 탭은 시트를 안 연다', () => {
+  it('preference 쿼리가 pending 이면 예산 요약 행을 눌러도 BudgetEditSheet 가 안 열린다', () => {
+    server.use(http.get(`${BASE}/me/preferences`, () => new Promise(() => {})));
+
+    renderPage();
+
+    // pending 확증 — 예산 값 자리가 스켈레톤(가드 신호 활성).
+    expect(
+      screen.getByTestId('trip-wizard-summary-skeleton-5')
+    ).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('trip-wizard-summary-budget'));
+
+    // 현행(결함): 가드 부재 → 빈 드래프트로 시트가 열린다. 가드 후엔 안 열린다.
+    expect(screen.queryByTestId('trip-wizard-budget-sheet')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-677 · S6D — 예산 표시↔제출 대칭(★4·★6). 현행은 프리필 rawAmount=0 이면 요약은 "예산 선택"
+ * (summaryBudget(0)=null)인데 제출은 `budgetTotal:0` 을 보낸다 — **표시=미선택, 제출=0** 의 비대칭.
+ * 봉합: 제출 삼항을 `kind==='amount' && amount>0 ? amount : undefined` 로 좁혀 요약 규칙과 맞춘다.
+ * AC-S6D-1(0=키 부재)과 AC-S6D-2(양수=전송)를 짝으로 둬 방향이 뒤집히는 뮤턴트를 잡는다.
+ */
+describe('S6D · ★ 표시=제출 대칭 (예산 0 / 양수)', () => {
+  it('AC-S6D-1 · rawAmount=0·미입력이면 제출 바디에 budgetTotal 키가 없고 요약은 "예산 선택"이다', async () => {
+    // rawAmount=0 프리필. 예산 요약이 안 바뀌므로 프리필 도착은 취향(미식)으로 잰다.
+    server.use(
+      http.get(`${BASE}/me/preferences`, () =>
+        HttpResponse.json({
+          pace: { value: '균형있게', isNeutralDefault: false },
+          budget: { tier: '저가', rawAmount: 0, isNeutralDefault: false },
+          styles: { value: ['미식'] },
+          activities: { value: [] },
+        })
+      )
+    );
+    seedValidDraft();
+    renderPage();
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('trip-wizard-summary-preference')
+      ).toHaveTextContent(/미식/)
+    );
+
+    // 요약은 미선택 — summaryBudget(0)=null → "예산 선택"(표시축은 이미 맞다).
+    expect(screen.getByTestId('trip-wizard-summary-budget')).toHaveTextContent(
+      /예산 선택/
+    );
+
+    fireEvent.press(next());
+
+    await waitFor(() => expect(createHits()).toBe(1));
+    // 현행(결함): budgetTotal:0 을 보낸다 → 키가 있어 red. `>0` 가드 후엔 키 자체가 없다.
+    expect(Object.keys(postedBodies[0])).not.toContain('budgetTotal');
+  });
+
+  it('AC-S6D-2 · 양수 프리필(1,200,000)은 budgetTotal:1200000 을 보내고 요약에 표시한다 (무회귀)', async () => {
+    server.use(
+      http.get(`${BASE}/me/preferences`, () =>
+        HttpResponse.json({
+          pace: { value: '균형있게', isNeutralDefault: false },
+          budget: { tier: '고급', rawAmount: 1200000, isNeutralDefault: false },
+          styles: { value: ['미식'] },
+          activities: { value: [] },
+        })
+      )
+    );
+    seedValidDraft();
+    renderPage();
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('trip-wizard-summary-budget')
+      ).toHaveTextContent(/120만원/)
+    );
+
+    fireEvent.press(next());
+
+    await waitFor(() => expect(createHits()).toBe(1));
+    // 양수는 여전히 전송 — `>0` 가드가 정상 경로를 막지 않는다(★8 회귀 방어).
+    expect(postedBodies[0]).toMatchObject({ budgetTotal: 1200000 });
+  });
+});
+
+/**
+ * TRIP-677 · S6E — budgetError 배선(신규 생산자) + applyBudget invalid 무커밋. `BudgetEditSheet` 는
+ * `budgetError` 슬롯을 이미 가졌으나(props-only) 페이지가 이 prop 을 안 내려준다(생산자 부재). 봉합:
+ * 페이지가 `parseBudgetAmount(draftAmountText).kind==='invalid'` 를 도출해 시트에 내리고, applyBudget 이
+ * invalid 면 커밋·닫기를 건너뛴다(조용한 소멸 방지). 카피는 오케 확정값 '숫자만 입력해 주세요'.
+ */
+describe('S6E · ★ budgetError 배선 + applyBudget invalid 무커밋', () => {
+  it('AC-S6E-1 · 시트에 invalid("abc")를 입력하면 오류 노드(trip-wizard-error-budget)가 렌더된다', async () => {
+    renderPage();
+    await waitForPrefill();
+    await openSheet();
+
+    fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), 'abc');
+
+    // 현행(결함): 페이지가 budgetError 를 도출·전달 안 해 오류 노드가 없다 → red.
+    // 가드(page 도출→시트 슬롯) 후엔 렌더된다.
+    expect(screen.getByTestId('trip-wizard-error-budget')).toBeOnTheScreen();
+  });
+
+  it('AC-S6E-2 · invalid 상태에서 "적용"을 눌러도 커밋되지 않고 시트가 닫히지 않는다 (조용한 소멸 방지)', async () => {
+    renderPage();
+    await waitForPrefill();
+    await openSheet();
+
+    fireEvent.changeText(screen.getByTestId('trip-wizard-budget-input'), 'abc');
+    fireEvent.press(screen.getByTestId('trip-wizard-budget-apply'));
+
+    // 현행(결함): applyBudget 이 무조건 setBudgetText+닫기 → 시트 닫힘 & store 'abc' 커밋 → red.
+    // 가드(invalid 면 커밋·닫기 skip) 후엔 시트 유지 + store 불변.
+    expect(screen.getByTestId('trip-wizard-budget-sheet')).toBeOnTheScreen();
+    expect(useTripWizardStore.getState().budgetText).toBe('');
+  });
+});

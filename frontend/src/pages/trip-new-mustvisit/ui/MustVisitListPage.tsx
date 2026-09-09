@@ -15,7 +15,7 @@ import { getAccessToken } from '@/shared/api/tokenManager';
  * 더 담기 목적지는 g01 스트립의 삼항을 그대로 재사용한다(TRIP-367) — 담은 곳이 있으면
  * 담은 장소 화면(d02), 없으면 장소 탐색(d04). 뒤로는 `router.back()`.
  */
-export function MustVisitListPage() {
+export function TripMustVisitsPage() {
   const router = useRouter();
   const mustVisits = useTripWizardStore((state) => state.mustVisits);
   const removeMustVisit = useTripWizardStore((state) => state.removeMustVisit);

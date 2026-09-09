@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { MustVisitSeedItem } from '@/features/trip/model/mustVisitSeed';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 
-import { MustVisitListPage } from './MustVisitListPage';
+import { TripMustVisitsPage } from './MustVisitListPage';
 
 /**
  * TRIP-676 · S12 배선 — store ↔ 화면 ↔ 라우터를 잇는 유일한 자리.
@@ -69,7 +69,7 @@ beforeEach(() => {
 describe('PG-1 · store mustVisits → 화면 items', () => {
   it('store 에 앉힌 시드가 카드로 그려진다', () => {
     seedStore(TWO);
-    render(<MustVisitListPage />);
+    render(<TripMustVisitsPage />);
 
     expect(
       screen.getByTestId('trip-mustvisit-list-card-poi-1')
@@ -83,7 +83,7 @@ describe('PG-1 · store mustVisits → 화면 items', () => {
 describe('PG-2 · 제거 → removeMustVisit + 카운트 동기 (AC-2·AC-3)', () => {
   it('× 누르면 화면·store 에서 사라지고 excluded 에 적힌다(단일 출처)', () => {
     seedStore(TWO);
-    render(<MustVisitListPage />);
+    render(<TripMustVisitsPage />);
 
     fireEvent.press(screen.getByTestId('trip-mustvisit-list-remove-poi-1'));
 
@@ -104,7 +104,7 @@ describe('PG-3 · 더 담기 삼항 — 담은 곳 ≥1 → d02 (TRIP-367 재사
   it('담은 장소가 있으면 담은 장소 화면(/explore/saved-places)으로 간다', () => {
     seedStore(TWO);
     mockSavedPlaces = { savedPlaces: [{}, {}, {}] };
-    render(<MustVisitListPage />);
+    render(<TripMustVisitsPage />);
 
     fireEvent.press(screen.getByTestId('trip-mustvisit-list-more'));
 
@@ -117,7 +117,7 @@ describe('PG-4 · 더 담기 삼항 — 담은 곳 0 → d04', () => {
   it('담은 장소가 0곳이면 장소 탐색(/explore/places)으로 간다', () => {
     seedStore(TWO);
     mockSavedPlaces = { savedPlaces: [] };
-    render(<MustVisitListPage />);
+    render(<TripMustVisitsPage />);
 
     fireEvent.press(screen.getByTestId('trip-mustvisit-list-more'));
 
@@ -129,7 +129,7 @@ describe('PG-4 · 더 담기 삼항 — 담은 곳 0 → d04', () => {
 describe('PG-5 · 뒤로 → router.back', () => {
   it('뒤로 누르면 router.back 이 1회 불린다', () => {
     seedStore(TWO);
-    render(<MustVisitListPage />);
+    render(<TripMustVisitsPage />);
 
     fireEvent.press(screen.getByTestId('trip-mustvisit-list-back'));
 

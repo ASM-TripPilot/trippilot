@@ -1,1 +1,1 @@
-export { MustVisitListPage } from './ui/MustVisitListPage';
+export { TripMustVisitsPage } from './ui/MustVisitListPage';

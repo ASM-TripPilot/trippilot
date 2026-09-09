@@ -118,8 +118,8 @@ describe('S2 · 라우트 얇은 위임', () => {
 });
 
 describe('S3 · 배럴 재수출', () => {
-  it('배럴이 MustVisitListPage 를 재수출한다', () => {
-    expect(readStripped(BARREL)).toContain('MustVisitListPage');
+  it('배럴이 TripMustVisitsPage 를 재수출한다 (S12 개명 — itinerary 축 동명 심볼과 분리)', () => {
+    expect(readStripped(BARREL)).toContain('TripMustVisitsPage');
   });
 });
 

@@ -51,6 +51,8 @@ export interface StaySelectSheetProps {
   onBrowse: () => void;
   /** "이 밤 거점으로 지정" → 배선이 밤 구간을 계산해 POST. */
   onAssign: () => void;
+  /** 지정 POST 진행 중(assignBase.isPending) → 지정 버튼 disable(렌더 후 재탭까지 차단, S9). */
+  assignPending?: boolean;
   /** POST 실패 → 인라인 오류(INV-4). 성공/미시도면 미렌더. */
   assignFailed?: boolean;
   /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
@@ -114,10 +116,13 @@ export function StaySelectSheet({
   onSelect,
   onBrowse,
   onAssign,
+  assignPending,
   assignFailed,
   onClose,
 }: StaySelectSheetProps): ReactElement {
   const empty = candidates.length === 0;
+  // 미선택이거나 지정이 진행 중이면 버튼을 진짜 disable 한다(색만 흐린 가짜는 press 가 발화).
+  const assignDisabled = selectedSavedStayId === null || assignPending === true;
 
   return (
     <BottomSheet
@@ -193,10 +198,10 @@ export function StaySelectSheet({
           <Pressable
             testID="trip-base-staysheet-assign"
             accessibilityRole="button"
-            disabled={selectedSavedStayId === null}
+            disabled={assignDisabled}
             onPress={onAssign}
             className={`h-[52px] w-full items-center justify-center rounded-button bg-primary ${
-              selectedSavedStayId === null ? 'opacity-40' : ''
+              assignDisabled ? 'opacity-40' : ''
             }`}
           >
             <Text className="text-[16px] font-noto-bold font-bold text-on-primary">

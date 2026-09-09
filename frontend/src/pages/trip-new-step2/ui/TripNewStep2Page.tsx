@@ -1,4 +1,4 @@
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 
 import {
@@ -66,6 +66,10 @@ export function TripNewStep2Page(): ReactElement {
     null
   );
   const [assignFailed, setAssignFailed] = useState(false);
+  // in-flight 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다). 지정 요청이 날아가 응답을
+  // 기다리는 동안 재탭이 잉여 POST 를 만들지 않게 한다. `isPending` 은 다음 렌더에야 반영돼
+  // 같은 틱 이중탭을 못 막으므로, 그 창을 이 ref 가 닫는다(S8 재작성에서 드롭된 잠금 복원).
+  const assignLockRef = useRef(false);
 
   const savedStayList = savedStays.data ?? [];
   const assignments = bases.data ?? [];
@@ -90,9 +94,10 @@ export function TripNewStep2Page(): ReactElement {
     if (tripId === undefined) return 'notrip';
     if (loadFailed) return 'error';
     if (loading) return 'loading';
-    // 저장 숙소 0 → empty(D1). ⚠️ loading 뒤에 둔다 — 조회 중엔 savedStayList 가 [] 라도 empty 가
-    // 아니라 loading 이어야 한다(순서 급소, §3). savedStays 가 축이라 배정 수는 안 본다.
-    if (savedStayList.length === 0) return 'empty';
+    // 저장 숙소 0 **그리고** 배정 0 일 때만 empty(S10). ⚠️ loading 뒤에 둔다 — 조회 중엔
+    // savedStayList 가 [] 라도 empty 가 아니라 loading 이어야 한다(순서 급소, §3). 배정이 남아
+    // 있으면(지정 후 저장 해제) empty 로 가리지 않고 박별 카드(default)를 그린다.
+    if (savedStayList.length === 0 && assignments.length === 0) return 'empty';
     return 'default';
   }
 
@@ -106,14 +111,16 @@ export function TripNewStep2Page(): ReactElement {
     });
   }
 
-  /** 카드 탭 → 그 밤의 시트를 연다. 새로 여는 밤마다 선택·실패를 비워 깨끗이 시작한다. */
+  /** 카드 탭 → 그 밤의 시트를 연다. 새로 여는 밤마다 선택·실패·잠금을 비워 깨끗이 시작한다. */
   function openSheet(nightNumber: number): void {
+    assignLockRef.current = false;
     setOpenNight(nightNumber);
     setSelectedSavedStayId(null);
     setAssignFailed(false);
   }
 
   function closeSheet(): void {
+    assignLockRef.current = false;
     setOpenNight(null);
     setSelectedSavedStayId(null);
     setAssignFailed(false);
@@ -130,11 +137,21 @@ export function TripNewStep2Page(): ReactElement {
     ) {
       return;
     }
+    // 이미 지정이 날아가는 중이면 즉시 되돌린다(같은 틱 이중탭 차단). 성공은 closeSheet 가
+    // 잠금까지 푼다. 실패는 시트를 유지해야 해 여기서 직접 푼다 — 안 풀면 실패 후 영구 잠김.
+    if (assignLockRef.current) return;
+    assignLockRef.current = true;
     const dateFrom = deriveEndDate(startDate, openNight - 1);
     const dateTo = deriveEndDate(startDate, openNight);
     assignBase.mutate(
       { tripId, data: { savedStayId: selectedSavedStayId, dateFrom, dateTo } },
-      { onSuccess: closeSheet, onError: () => setAssignFailed(true) }
+      {
+        onSuccess: closeSheet,
+        onError: () => {
+          assignLockRef.current = false;
+          setAssignFailed(true);
+        },
+      }
     );
   }
 
@@ -167,6 +184,7 @@ export function TripNewStep2Page(): ReactElement {
           onSelect={(savedStayId) => setSelectedSavedStayId(savedStayId)}
           onBrowse={() => router.push('/stays')}
           onAssign={handleAssign}
+          assignPending={assignBase.isPending}
           assignFailed={assignFailed}
           onClose={closeSheet}
         />

@@ -178,3 +178,26 @@ describe('AC-4 · 적용 → onApply 만 (편집 콜백 없음)', () => {
     expect(spies.onSelectTier).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * TRIP-677 · S6E budgetError 슬롯 계약(선제green 앵커). 시트는 props-only 라 `amountText` 로 오류를
+ * **도출하지 않는다** — 페이지가 `parseBudgetAmount(draft).kind==='invalid'` 를 도출해 `budgetError` 로
+ * 내려주면 그것을 그릴 뿐이다(도출 red 는 페이지 통합 `budgetSheet.integration` 의 AC-S6E-1 에 있다).
+ * 이 컴포넌트 테스트는 페이지가 의존하는 그 슬롯 계약을 못 박는다 — 슬롯이 이미 있어 지금도 green.
+ */
+describe('AC-S6E-1(슬롯) · budgetError prop 을 받으면 오류 노드를 그리고, 없으면 안 그린다', () => {
+  it('budgetError 가 있으면 trip-wizard-error-budget 에 문구를 그린다', () => {
+    renderSheet({ budgetError: '숫자만 입력해 주세요' });
+
+    const node = screen.getByTestId('trip-wizard-error-budget');
+    expect(node).toBeOnTheScreen();
+    // 노드 전체 내용이 곧 이 문구라 완전일치 안전(02a §5-E, RNTL 완전일치 함정 회피).
+    expect(node).toHaveTextContent('숫자만 입력해 주세요');
+  });
+
+  it('budgetError 가 없으면 오류 노드를 그리지 않는다 (부정 짝)', () => {
+    renderSheet();
+
+    expect(screen.queryByTestId('trip-wizard-error-budget')).toBeNull();
+  });
+});

@@ -206,6 +206,23 @@ describe('변형 판정 (얼굴 순서 notrip>error>loading>empty>default)', () 
     expect(screen.queryByTestId('trip-base-browse')).toBeNull();
     expect(screen.queryAllByTestId(/^trip-base-empty-night-/)).toHaveLength(0);
   });
+
+  it('★ 두 조회가 모두 진행 중이면(둘 다 빈 배열) empty 가 아니라 loading 이다 (S10 순서 급소)', () => {
+    // S10 이 empty 조건에 `&& assignments.length === 0` 을 더한 뒤로는, savedStays 진행 중 단독
+    // 케이스(위)는 beforeEach 기본 bases(길이 1)로 돌아 empty 조건 자체가 false 라 순서 뮤턴트를
+    // 못 잡는다. 두 조회를 모두 pending 으로 두면 savedStayList=[]·assignments=[] 라 empty 조건이
+    // true 가 되어, empty 를 loading 앞에 두는 뮤턴트만이 여기서 empty 얼굴을 그린다(code-critic
+    // 경고-1 복원 — loading 우선 순서가 유일한 방벽임을 이 케이스가 다시 잠근다).
+    mockSavedStaysResult = pending();
+    mockBasesResult = pending();
+    render(<TripNewStep2Page />);
+
+    expect(
+      screen.getAllByTestId(/^trip-base-skeleton-night-/).length
+    ).toBeGreaterThan(0);
+    expect(screen.queryByTestId('trip-base-browse')).toBeNull();
+    expect(screen.queryAllByTestId(/^trip-base-empty-night-/)).toHaveLength(0);
+  });
 });
 
 describe('박별 카드 배선 — toBaseSections → nightlyBaseCards', () => {
@@ -268,6 +285,26 @@ describe('empty 얼굴 (D1) — 저장 숙소 0', () => {
 
     expect(routerMock.replace).toHaveBeenCalledWith(METHOD_ROUTE);
     expect(routerMock.push).not.toHaveBeenCalled();
+  });
+});
+
+// TRIP-677 · S10 — empty 판정 축을 savedStays 단독에서 (savedStays==0 AND assignments==0) 로 좁힌다.
+// 지정 후 그 숙소를 저장 해제하면 savedStayList 는 0 이지만 서버 배정은 남는다 — empty 로 가리면 표시 불일치.
+describe('S10 empty 조건 좁히기 (AC-S10-2) — 저장 0 이지만 배정 ≥1 은 default', () => {
+  beforeEach(() => {
+    // 저장 숙소 0 (지정 후 저장 해제 시나리오) · 배정 1 (서버엔 거점이 남아 있다).
+    mockSavedStaysResult = loaded([]);
+    mockBasesResult = loaded([assignment()]);
+  });
+
+  it('배정이 남아 있으면 empty 가 아니라 박별 카드(default)를 그린다', () => {
+    render(<TripNewStep2Page />);
+
+    // 긍정 짝 — default 얼굴(박별 카드 3장 = Σnights). 현행 empty 단독 판정이면 0장이라 red.
+    expect(screen.queryAllByTestId(/^trip-base-night-card-/)).toHaveLength(3);
+    // 부정 짝 — empty 로 새지 않았다(미정 행·둘러보기 부재).
+    expect(screen.queryAllByTestId(/^trip-base-empty-night-/)).toHaveLength(0);
+    expect(screen.queryByTestId('trip-base-browse')).toBeNull();
   });
 });
 
