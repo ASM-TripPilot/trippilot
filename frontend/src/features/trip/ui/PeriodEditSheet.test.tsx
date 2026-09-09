@@ -30,6 +30,7 @@ function renderSheet(overrides: Partial<PeriodEditSheetPropsForTest> = {}) {
     onPrevMonth: jest.fn(),
     onNextMonth: jest.fn(),
     onApply: jest.fn(),
+    onClose: jest.fn(), // TRIP-683: 딤 바깥 탭 닫힘 콜백(필수 prop 화)
   };
   const props: PeriodEditSheetPropsForTest = {
     today: '2026-06-01',
@@ -50,6 +51,7 @@ interface PeriodEditSheetPropsForTest {
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onApply: () => void;
+  onClose: () => void;
 }
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];

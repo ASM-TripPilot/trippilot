@@ -23,7 +23,11 @@
  */
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 
 import { STYLE } from '@/features/onboarding/model/preferenceInput';
 import {
@@ -44,6 +48,15 @@ export interface PrefOverrideSheetProps {
   onToggle: (label: string) => void;
   /** "적용" press → 배선: `setPrefStyleOverride(draft)` 커밋 + 닫기(커밋은 배선 몫). */
   onApply: () => void;
+  /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
+  onClose: () => void;
+}
+
+/** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). */
+function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
+  return (
+    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
+  );
 }
 
 /** slug → 글리프. `STYLE`은 slug→한국어 라벨만 갖고 아이콘은 안 담으므로 여기서 잇는다. */
@@ -64,9 +77,15 @@ export function PrefOverrideSheet({
   selected,
   onToggle,
   onApply,
+  onClose,
 }: PrefOverrideSheetProps): ReactElement {
   return (
-    <BottomSheet>
+    <BottomSheet
+      index={0}
+      enablePanDownToClose
+      onClose={onClose}
+      backdropComponent={renderBackdrop}
+    >
       <BottomSheetView
         testID="trip-wizard-pref-sheet"
         className="gap-lg px-xl pb-[34px] pt-[10px]"

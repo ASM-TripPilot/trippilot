@@ -529,6 +529,7 @@ export function TripNewStep1Page({
           onRemove={removeDestination}
           onAddCity={() => router.push('/explore/region?purpose=trip')}
           onApply={() => setDestinationSheetOpen(false)}
+          onClose={() => setDestinationSheetOpen(false)}
         />
       ) : null}
       {/* 기간 편집 시트도 화면의 형제로 조건부 마운트 — 셀 탭은 배선의 `applyRangePick`으로 범위를
@@ -548,6 +549,7 @@ export function TripNewStep1Page({
             setPeriodMonth((current) => shiftMonth(current, 1))
           }
           onApply={applyPeriod}
+          onClose={() => setPeriodSheetOpen(false)}
         />
       ) : null}
       {/* 동행 편집 시트도 화면의 형제로 조건부 마운트 — 스테퍼·칩 press 는 드래프트만 바꾸고
@@ -559,6 +561,7 @@ export function TripNewStep1Page({
           onChangeParty={(next) => setDraftParty(Math.max(1, next))}
           onSelectCompanion={pickCompanion}
           onApply={applyCompanion}
+          onClose={() => setCompanionSheetOpen(false)}
         />
       ) : null}
       {/* 취향 편집 시트도 화면의 형제로 조건부 마운트 — 칩 press 는 배선의 `toggleMulti`(null→[])로
@@ -568,6 +571,7 @@ export function TripNewStep1Page({
           selected={prefDraftStyles}
           onToggle={togglePrefStyle}
           onApply={applyPrefSheet}
+          onClose={() => setPrefSheetOpen(false)}
         />
       ) : null}
       {/* 예산 편집 시트도 화면의 형제로 조건부 마운트 — tier·금액 press 는 드래프트만 바꾸고
@@ -580,6 +584,7 @@ export function TripNewStep1Page({
           onChangeAmount={setDraftAmountText}
           onSelectTier={setDraftTier}
           onApply={applyBudget}
+          onClose={() => setBudgetSheetOpen(false)}
         />
       ) : null}
     </>

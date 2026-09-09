@@ -24,7 +24,11 @@
  */
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 
 import type { SavedStay } from '@/shared/api/generated/schemas';
 
@@ -49,6 +53,15 @@ export interface StaySelectSheetProps {
   onAssign: () => void;
   /** POST 실패 → 인라인 오류(INV-4). 성공/미시도면 미렌더. */
   assignFailed?: boolean;
+  /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
+  onClose: () => void;
+}
+
+/** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). */
+function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
+  return (
+    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
+  );
 }
 
 const EMPTY_MESSAGE = '저장한 숙소가 아직 없어요';
@@ -102,11 +115,17 @@ export function StaySelectSheet({
   onBrowse,
   onAssign,
   assignFailed,
+  onClose,
 }: StaySelectSheetProps): ReactElement {
   const empty = candidates.length === 0;
 
   return (
-    <BottomSheet>
+    <BottomSheet
+      index={0}
+      enablePanDownToClose
+      onClose={onClose}
+      backdropComponent={renderBackdrop}
+    >
       <BottomSheetView
         testID="trip-base-staysheet"
         className="gap-lg px-xl pb-[34px] pt-[10px]"

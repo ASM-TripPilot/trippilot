@@ -20,7 +20,9 @@ import { RegionPickerPage } from './RegionPickerPage';
  */
 
 const mockPush = jest.fn();
+const mockBack = jest.fn();
 const mockRefetch = jest.fn();
+const mockAddDestination = jest.fn();
 let mockParams: { purpose?: string } = {};
 let mockRegionsResult: {
   data: Region[] | undefined;
@@ -30,13 +32,21 @@ let mockRegionsResult: {
 };
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn() }),
+  useRouter: () => ({ push: mockPush, back: mockBack }),
   useLocalSearchParams: () => ({ ...mockParams }),
 }));
 
 jest.mock('@/features/explore/model/regions', () => ({
   ...jest.requireActual('@/features/explore/model/regions'),
   useRegions: () => mockRegionsResult,
+}));
+
+// TRIP-683 AC-1 — trip 분기가 스토어에 담는다. 셀렉터 형태(`useTripWizardStore((s)=>s.addDestination)`)를
+// 그대로 받아 스파이를 돌려준다(호출 관측). 변수명은 팩토리 호이스팅 예외라 `mock`으로 시작해야 한다(★9).
+jest.mock('@/features/trip/model/tripWizardStore', () => ({
+  useTripWizardStore: (
+    selector: (s: { addDestination: jest.Mock }) => unknown
+  ) => selector({ addDestination: mockAddDestination }),
 }));
 
 /** 서버 `Region` 표본 도우미. */
@@ -139,7 +149,9 @@ const CATALOG: Region[] = [
 
 beforeEach(() => {
   mockPush.mockClear();
+  mockBack.mockClear();
   mockRefetch.mockClear();
+  mockAddDestination.mockClear();
   mockParams = {};
   mockRegionsResult = {
     data: CATALOG,
@@ -178,18 +190,27 @@ describe('AC-6 · 검색 경로 → 원본 카탈로그 이름으로 라우팅 (
   });
 });
 
-describe('AC-3/AC-2 · 드릴다운 경로 → 목적지 라우팅', () => {
-  it("purpose='trip' 에서 '인천 전체'를 누르면 regionCode 로 여행지 상세로 간다", () => {
+describe('AC-1 · 여행지 담기 재배선 (trip 분기 — TRIP-683)', () => {
+  it("purpose='trip' 에서 지역을 고르면 addDestination(name,1)+router.back, /explore/destination push 0회", () => {
+    // 준비: trip 목적으로 진입해 인천을 드릴인(기존 파일의 검증된 경로).
     mockParams = { purpose: 'trip' };
     render(<RegionPickerPage />);
-
     fireEvent.press(screen.getByTestId('explore-region-sido-28')); // 인천 드릴인
-    fireEvent.press(screen.getByTestId('explore-region-28')); // '인천 전체' 행
 
-    // 전체(SIDO Region) 선택 → 목적지 상세 경로의 식별자 자리는 regionCode('28')다.
-    expect(mockPush).toHaveBeenCalledWith('/explore/destination/28');
+    // 실행: '인천 전체' 행 press = trip 목적 지역 선택.
+    fireEvent.press(screen.getByTestId('explore-region-28'));
+
+    // 단언: 지역 '이름'(코드 아님)으로 1박 담고(★5), 위저드로 복귀하며, d03(탐색)로 이탈하지 않는다.
+    expect(mockAddDestination).toHaveBeenCalledTimes(1);
+    expect(mockAddDestination).toHaveBeenCalledWith('인천광역시', 1);
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockPush).not.toHaveBeenCalledWith(
+      expect.stringContaining('/explore/destination')
+    );
   });
+});
 
+describe('AC-4 · stay 분기 회귀 (드릴다운 → /stays, TRIP-683 무변경 ★4)', () => {
   it('드릴다운 안 구/군 카드를 누르면 그 구/군 이름으로 /stays로 간다 (stay)', () => {
     render(<RegionPickerPage />);
 

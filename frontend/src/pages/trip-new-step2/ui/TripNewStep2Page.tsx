@@ -168,6 +168,7 @@ export function TripNewStep2Page(): ReactElement {
           onBrowse={() => router.push('/stays')}
           onAssign={handleAssign}
           assignFailed={assignFailed}
+          onClose={closeSheet}
         />
       ) : null}
     </>

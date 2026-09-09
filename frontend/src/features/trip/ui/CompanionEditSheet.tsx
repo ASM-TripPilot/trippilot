@@ -28,7 +28,11 @@
  */
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 
 import type { CompanionType } from '@/shared/api/generated/schemas';
 
@@ -58,6 +62,15 @@ export interface CompanionEditSheetProps {
   onSelectCompanion: (type: CompanionType) => void;
   /** "적용" → 배선이 `setParty`+`selectCompanion` 커밋 + 닫기(값은 배선이 자기 draft 에서 읽음). */
   onApply: () => void;
+  /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
+  onClose: () => void;
+}
+
+/** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). */
+function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
+  return (
+    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
+  );
 }
 
 /** 칩 코드 → 글리프. `COMPANION_OPTIONS` 는 code·type 만 갖고 글리프는 안 담으므로 여기서 잇는다. */
@@ -102,6 +115,7 @@ export function CompanionEditSheet({
   onChangeParty,
   onSelectCompanion,
   onApply,
+  onClose,
 }: CompanionEditSheetProps): ReactElement {
   // 혼자면 인원이 1 로 고정돼 −·+ 둘 다 잠긴다(값 고정은 배선). 그 외에는 하한 1 에서 − 만 잠긴다.
   const isSolo = companionType === '혼자';
@@ -109,7 +123,12 @@ export function CompanionEditSheet({
   const incDisabled = isSolo;
 
   return (
-    <BottomSheet>
+    <BottomSheet
+      index={0}
+      enablePanDownToClose
+      onClose={onClose}
+      backdropComponent={renderBackdrop}
+    >
       <BottomSheetView
         testID="trip-wizard-companion-sheet"
         className="gap-lg px-xl pb-[34px] pt-[10px]"

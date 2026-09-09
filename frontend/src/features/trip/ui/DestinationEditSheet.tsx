@@ -23,7 +23,11 @@
  */
 import { Fragment, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 
 import type { TripDestination } from '@/shared/api/generated/schemas';
 
@@ -45,6 +49,16 @@ export interface DestinationEditSheetProps {
   onAddCity: () => void;
   /** "적용" → 배선: 시트 닫기(즉시반영이라 별도 커밋 없음). */
   onApply: () => void;
+  /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(배선의 open 상태를 false 로, TRIP-683 AC-2·AC-3). */
+  onClose: () => void;
+}
+
+/** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). 시트가 명시해야 딤이 그려진다(라이브러리
+ * 기본은 딤 없음). appearsOnIndex=0·disappearsOnIndex=-1 로 열림에서만 덮는다. */
+function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
+  return (
+    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
+  );
 }
 
 /** 스테퍼 원버튼(흰 배경 · #ddd 테두리 · pill · 36×36) — 비활성이면 opacity로 죽인다. */
@@ -131,9 +145,15 @@ export function DestinationEditSheet({
   onRemove,
   onAddCity,
   onApply,
+  onClose,
 }: DestinationEditSheetProps): ReactElement {
   return (
-    <BottomSheet>
+    <BottomSheet
+      index={0}
+      enablePanDownToClose
+      onClose={onClose}
+      backdropComponent={renderBackdrop}
+    >
       <BottomSheetView
         testID="trip-wizard-destination-sheet"
         className="gap-lg px-xl pb-[34px] pt-[10px]"

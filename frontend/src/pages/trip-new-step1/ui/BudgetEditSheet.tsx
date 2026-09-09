@@ -31,7 +31,11 @@
  */
 import { type ReactElement, useRef } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 
 export interface BudgetEditSheetProps {
   /** 드래프트 금액 원문(배선 소유) — TextInput 표시값(formatBudgetAmount 로 포맷된 콤마 문자열). */
@@ -50,6 +54,15 @@ export interface BudgetEditSheetProps {
   onPressEdit?: () => void;
   /** "적용" press → 배선: setBudgetText 커밋 + 닫기(커밋은 배선 몫). */
   onApply: () => void;
+  /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
+  onClose: () => void;
+}
+
+/** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). */
+function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
+  return (
+    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
+  );
 }
 
 /** tier 세그 — 코드(영문 슬러그, testID·BUDGET 카탈로그 정합)·라벨(한국어, 프리필값·콜백값)·
@@ -70,6 +83,7 @@ export function BudgetEditSheet({
   onSelectTier,
   onPressEdit,
   onApply,
+  onClose,
 }: BudgetEditSheetProps): ReactElement {
   // "수정" 이 금액 입력에 포커스를 준다 — 로컬 imperative(상태 아님, jest 무심판).
   const inputRef = useRef<TextInput>(null);
@@ -85,7 +99,12 @@ export function BudgetEditSheet({
     : '온보딩에서 고른 범위로 채웠어요';
 
   return (
-    <BottomSheet>
+    <BottomSheet
+      index={0}
+      enablePanDownToClose
+      onClose={onClose}
+      backdropComponent={renderBackdrop}
+    >
       <BottomSheetView
         testID="trip-wizard-budget-sheet"
         className="gap-lg px-xl pb-[34px] pt-[10px]"

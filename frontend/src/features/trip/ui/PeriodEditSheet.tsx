@@ -25,7 +25,11 @@
  */
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 
 import {
   dateCell,
@@ -54,6 +58,15 @@ export interface PeriodEditSheetProps {
   onNextMonth: () => void;
   /** "적용" → 배선이 `setPeriod(undefined, start, end)` + 닫기(값은 배선이 자기 state 에서 읽음). */
   onApply: () => void;
+  /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
+  onClose: () => void;
+}
+
+/** 딤(backdrop) — 리포 표준 idiom(OtaChoiceSheet 선례). */
+function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
+  return (
+    <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
+  );
 }
 
 /** 셀 하나의 범위 상태. start·end 를 먼저 가르므로 `between`은 자연히 양 끝을 뺀 사이만이 된다. */
@@ -141,6 +154,7 @@ export function PeriodEditSheet({
   onPrevMonth,
   onNextMonth,
   onApply,
+  onClose,
 }: PeriodEditSheetProps): ReactElement {
   const [year, monthNum] = month.split('-').map(Number);
   const totalDays = daysInMonth(year, monthNum);
@@ -155,7 +169,12 @@ export function PeriodEditSheet({
   const summary = summaryPeriod(range.start, range.end);
 
   return (
-    <BottomSheet>
+    <BottomSheet
+      index={0}
+      enablePanDownToClose
+      onClose={onClose}
+      backdropComponent={renderBackdrop}
+    >
       <BottomSheetView
         testID="trip-wizard-period-sheet"
         className="gap-lg px-xl pb-[34px] pt-[10px]"

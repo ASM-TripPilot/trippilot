@@ -33,6 +33,7 @@ interface SheetPropsForTest {
   onSelectTier: (tier: string) => void;
   onPressEdit: () => void;
   onApply: () => void;
+  onClose: () => void;
 }
 
 function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
@@ -42,6 +43,7 @@ function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
     onSelectTier: jest.fn(),
     onPressEdit: jest.fn(),
     onApply: jest.fn(),
+    onClose: jest.fn(), // TRIP-683: 딤 바깥 탭 닫힘 콜백(필수 prop 화)
   };
   const props: SheetPropsForTest = {
     amountText: '800,000',
@@ -127,6 +129,7 @@ describe('AC-2b · 안내 range 가 활성 tier 를 따라 갱신된다 (하드�
         onSelectTier={jest.fn()}
         onPressEdit={jest.fn()}
         onApply={jest.fn()}
+        onClose={jest.fn()}
       />
     );
     const note = screen.getByTestId('trip-wizard-budget-note');

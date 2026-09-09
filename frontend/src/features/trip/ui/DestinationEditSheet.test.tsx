@@ -39,6 +39,7 @@ function renderSheet(destinations: TripDestination[]) {
     onRemove: jest.fn(),
     onAddCity: jest.fn(),
     onApply: jest.fn(),
+    onClose: jest.fn(), // TRIP-683: 딤 바깥 탭 닫힘 콜백(필수 prop 화)
   };
   render(<DestinationEditSheet destinations={destinations} {...spies} />);
   return spies;

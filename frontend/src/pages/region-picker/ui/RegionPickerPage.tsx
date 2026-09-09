@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import type { Region } from '@/shared/api/generated/schemas';
 import { filterRegions, useRegions } from '@/features/explore/model/regions';
+import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import type { RegionPurpose } from '@/features/explore/ui/RegionPickerScreen';
 
@@ -23,6 +24,9 @@ export function RegionPickerPage(): ReactElement {
   const purpose: RegionPurpose = rawPurpose === 'trip' ? 'trip' : 'stay';
 
   const [query, setQuery] = useState('');
+  // TRIP-683 AC-1 — trip 분기가 이 orphan 액션을 다시 문다(g 밴드 이전 때 옛 인라인 시트의
+  // confirmDestination 이 사라지며 배선을 잃었다). 셀렉터로 액션만 구독(리렌더 최소).
+  const addDestination = useTripWizardStore((s) => s.addDestination);
   const regions = useRegions();
   // 전체 카탈로그를 화면에 내린다 — 빈 검색어 6개 상한(구 `limitRegionsWhenEmpty`)은 화면의
   // 시/도→구/군 드릴다운 그룹 접기가 대체한다(TRIP-597). 검색어가 있으면 클라 필터로 좁힌다.
@@ -30,9 +34,12 @@ export function RegionPickerPage(): ReactElement {
 
   function handleSelectRegion(region: Region): void {
     if (purpose === 'trip') {
-      // `explore/destination/[region].tsx`는 d03 목적지 상세 실화면이다(TRIP-183 스텁을
-      // 2026-08-22에 교체). BR-U1-07이 요구한 분기는 그대로 — 검증은 이 컨테이너 테스트가 한다.
-      router.push(`/explore/destination/${region.regionCode}`);
+      // TRIP-683 AC-1 — 여행지 편집 시트의 "도시 추가"에서 왔다. 그 지역을 1박으로 담고
+      // 위저드로 복귀한다(사용자 확정). 스토어는 코드가 아니라 한글 **이름**을 받는다(destinations
+      // 행이 이름을 그린다 — code 를 넘기면 화면에 코드가 뜬다). 옛 `/explore/destination/{code}`
+      // 이탈(d03)은 담기 배선을 잃은 결함이었다.
+      addDestination(region.name, 1);
+      router.back();
       return;
     }
     // 서버 `region`은 자유 문자열 계약이라 코드가 아니라 한글 이름을 보낸다.

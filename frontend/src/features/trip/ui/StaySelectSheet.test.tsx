@@ -58,6 +58,7 @@ function renderSheet(
     onSelect: jest.fn(),
     onBrowse: jest.fn(),
     onAssign: jest.fn(),
+    onClose: jest.fn(), // TRIP-683: 딤 바깥 탭 닫힘 콜백(필수 prop 화)
     ...over,
   };
   render(<StaySelectSheet {...props} />);

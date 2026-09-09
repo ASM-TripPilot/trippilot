@@ -2742,6 +2742,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onRemove={noop}
         onAddCity={noop}
         onApply={noop}
+        onClose={noop}
       />
     ),
   },
@@ -2763,6 +2764,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPrevMonth={noop}
         onNextMonth={noop}
         onApply={noop}
+        onClose={noop}
       />
     ),
   },
@@ -2783,6 +2785,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onChangeParty={noop}
         onSelectCompanion={noop}
         onApply={noop}
+        onClose={noop}
       />
     ),
   },
@@ -2800,6 +2803,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         selected={['미식', '자연']}
         onToggle={noop}
         onApply={noop}
+        onClose={noop}
       />
     ),
   },
@@ -2819,6 +2823,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onChangeAmount={noop}
         onSelectTier={noop}
         onApply={noop}
+        onClose={noop}
       />
     ),
   },
@@ -2943,6 +2948,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onSelect={noop}
         onBrowse={noop}
         onAssign={noop}
+        onClose={noop}
       />
     ),
   },

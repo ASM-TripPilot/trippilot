@@ -33,6 +33,7 @@ interface SheetPropsForTest {
   onChangeParty: (next: number) => void;
   onSelectCompanion: (type: CompanionType) => void;
   onApply: () => void;
+  onClose: () => void;
 }
 
 function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
@@ -40,6 +41,7 @@ function renderSheet(overrides: Partial<SheetPropsForTest> = {}) {
     onChangeParty: jest.fn(),
     onSelectCompanion: jest.fn(),
     onApply: jest.fn(),
+    onClose: jest.fn(), // TRIP-683: 딤 바깥 탭 닫힘 콜백(필수 prop 화)
   };
   const props: SheetPropsForTest = {
     party: 2,
