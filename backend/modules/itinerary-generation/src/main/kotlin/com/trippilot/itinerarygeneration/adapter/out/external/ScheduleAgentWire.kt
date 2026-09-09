@@ -230,6 +230,16 @@ internal data class AiTrigger(
 
 internal data class AiCoord(val lat: Double, val lng: Double)
 
+/**
+ * 계약 `SavedPlaceSchema` — `saved_places` 항목은 문자열이 아니라 **객체**다(`poi_id` 필수·`name`).
+ * 지금은 항상 빈 목록을 보내지만(§2 — place-data api 파사드 신설은 별건), 타입을 문자열로 뒀다가
+ * 나중에 채우는 순간 422 가 나는 함정을 남기지 않는다.
+ */
+internal data class AiSavedPlace(
+    val poiId: String,
+    val name: String,
+)
+
 internal data class AiAlternativesRequest(
     val trigger: AiTrigger,
     val reason: String,
@@ -239,7 +249,7 @@ internal data class AiAlternativesRequest(
     val transportMode: String?,
     val excludedPoiIds: List<String>,
     val affectedReasons: Map<String, String>,
-    val savedPlaces: List<String>,
+    val savedPlaces: List<AiSavedPlace>,
     val requestMeta: AiRequestMeta,
 )
 

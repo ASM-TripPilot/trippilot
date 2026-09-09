@@ -9,6 +9,7 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsRequ
 import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiFreshness
 import com.trippilot.itinerarygeneration.adapter.out.external.AiRequestMeta
+import com.trippilot.itinerarygeneration.adapter.out.external.AiSavedPlace
 import com.trippilot.itinerarygeneration.adapter.out.external.AiScheduleResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSlot
 import com.trippilot.itinerarygeneration.adapter.out.external.AiTrigger
@@ -115,6 +116,8 @@ class AiBoundaryOpenApiTest : StringSpec({
         wireKeys(sampleAlternativesRequest) shouldContainExactly props("AlternativesRequest")
         wireKeys(sampleAlternativesRequest.trigger) shouldContainExactly props("TriggerSchema")
         wireKeys(sampleAlternativesRequest.anchor) shouldContainExactly props("CoordSchema")
+        // saved_places 항목은 객체다 — 키 집합 검사는 배열 안까지 못 보므로 명시적으로 짚는다.
+        wireKeys(sampleAlternativesRequest.savedPlaces.single()) shouldContainExactly props("SavedPlaceSchema")
     }
 
     "alternatives 요청이 계약 필수 필드를 하나도 빠뜨리지 않는다" {
@@ -249,7 +252,7 @@ private val sampleAlternativesRequest = AiAlternativesRequest(
     transportMode = "PUBLIC",
     excludedPoiIds = listOf(UUID.randomUUID().toString()),
     affectedReasons = mapOf(UUID.randomUUID().toString() to "일몰 명소"),
-    savedPlaces = listOf(UUID.randomUUID().toString()),
+    savedPlaces = listOf(AiSavedPlace(UUID.randomUUID().toString(), "성산일출봉")),
     requestMeta = AiRequestMeta(UUID.randomUUID().toString(), Instant.parse("2026-09-01T00:00:00Z"), 25_000L),
 )
 

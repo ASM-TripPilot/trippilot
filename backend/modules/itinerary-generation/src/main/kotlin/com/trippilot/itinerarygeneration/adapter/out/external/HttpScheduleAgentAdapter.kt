@@ -202,7 +202,10 @@ class HttpScheduleAgentAdapter(
         if (res.emptyReason != null && res.emptyReason != "no_candidates" && res.emptyReason != "all_excluded") {
             log.warn("모르는 empty_reason '{}' — NO_NEARBY 로 떨어뜨립니다.", res.emptyReason)
         }
-        val ids = res.alternatives.flatMap { it.poiIds }.mapNotNull { raw -> runCatching { UUID.fromString(raw) }.getOrNull() }
+        val rawIds = res.alternatives.flatMap { it.poiIds }
+        val ids = rawIds.mapNotNull { raw -> runCatching { UUID.fromString(raw) }.getOrNull() }
+        // UUID 형식이 아닌 참조(환각)도 조용히 사라지면 안 된다 — ground 탈락 WARN 은 파싱 통과분만 센다.
+        if (ids.size < rawIds.size) log.warn("UUID 형식이 아닌 poi_id {}건 폐기 — 원문 {}", rawIds.size - ids.size, rawIds.filter { raw -> runCatching { UUID.fromString(raw) }.getOrNull() == null })
         // INV-1 게이트 — 상대가 뭐라 답했든 실재 확인(ACTIVE)된 것만 후보가 된다.
         val grounded = if (ids.isEmpty()) emptyList() else candidatePool.ground(ids)
         if (grounded.size < ids.size) log.warn("ground() 탈락 {}건 — AI 응답 {}건 중", ids.size - grounded.size, ids.size)
