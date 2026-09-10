@@ -42,6 +42,8 @@ export interface SavedPlaceListScreenProps {
   savedPlaces: SavedPlace[];
   /** 화면 얼굴. 미지정 = `{ kind: 'results' }`. d02에서 `filter-zero`는 구조적으로 도달 불가. */
   state?: PlaceListState;
+  /** 여행 지역 필터로 0건일 때(TRIP-689) — 기본 empty 대신 구분 안내를 그린다. 미지정 = false. */
+  regionFilterEmpty?: boolean;
   /** 해제 실패 배너. 미지정·null = 안 그린다. 위치는 CTA 바 위. */
   removeError?: PlaceSaveNotice | null;
   /** 미로그인 — 목록·빈 상태 대신 로그인 안내만 그린다. 미지정 = false. */
@@ -432,6 +434,33 @@ function EmptyBlock({
   );
 }
 
+/** 여행 지역 필터로 0건일 때(TRIP-689 AC-5) — "담은 곳 없음"(거짓)이 아니라 이 여행 지역에
+ * 담은 곳이 없다는 별도 안내. 기본 empty(`explore-saved-empty`)와 상호배타다. */
+function RegionEmptyBlock({
+  onPressBrowse,
+}: {
+  onPressBrowse: () => void;
+}): ReactElement {
+  return (
+    <View className="w-full flex-1 items-center justify-center px-2xl">
+      <StateNotice
+        testID="explore-saved-region-empty"
+        illustration={<EmptyCollage />}
+        title="이 여행 지역에 담은 곳이 없어요"
+        description="다른 지역에 담아둔 장소는 여기에 안 보여요. 여행 지역의 장소를 둘러보고 담아 보세요"
+        actions={[
+          {
+            testID: 'explore-saved-region-empty-browse',
+            label: '장소 둘러보기',
+            variant: 'filled',
+            onPress: onPressBrowse,
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
 /** 담은 숙소 행(TRIP-449) — 자리표시 썸네일(회색, `SavedStay`엔 imageUrl 없음·INV-1) + 이름 +
  * (있으면) 날짜라벨 + 해제 하트. 빈/찬은 색이 아니라 `saved-stay-item-*`·`saved-stay-remove-*`
  * testID 존재/부재로 잰다(repo-trap 글리프 함정 회피 — SVG fill 은 렌더 트리에 안 남는다). */
@@ -528,6 +557,7 @@ function StayErrorNotice(): ReactElement {
 export function SavedPlaceListScreen({
   savedPlaces,
   state = { kind: 'results' },
+  regionFilterEmpty = false,
   removeError,
   isGuest = false,
   releasedPoiIds = [],
@@ -556,8 +586,10 @@ export function SavedPlaceListScreen({
   const stayHasResults = stayState?.kind === 'results';
   const stayHasError = stayState?.kind === 'error';
   const showLoading = face === 'loading' || (face !== 'guest' && stayLoading);
-  const showEmptyFace = showEmpty ?? face === 'empty';
   const showPlaceError = face === 'error';
+  // 지역 필터 0건은 기본 empty 를 이긴다(상호배타). 에러·로딩 중엔 그 얼굴이 먼저다(INV-4).
+  const showRegionEmpty = regionFilterEmpty && !showPlaceError;
+  const showEmptyFace = !showRegionEmpty && (showEmpty ?? face === 'empty');
   // 목록이 남아 있으면(재조회 실패로 얼굴이 error 로 넘어가도) 행·CTA 는 유지한 채 에러
   // 안내를 함께 그린다 — 얼굴을 error 하나로 통째로 바꾸면 남은 목록이 사라진다(TRIP-223
   // 03b W-2, TRIP-222 03b W-1 과 같은 방향).
@@ -614,6 +646,9 @@ export function SavedPlaceListScreen({
               />
             ) : null}
 
+            {showRegionEmpty ? (
+              <RegionEmptyBlock onPressBrowse={onPressBrowse} />
+            ) : null}
             {showEmptyFace ? (
               <EmptyBlock onPressBrowse={onPressBrowse} />
             ) : null}

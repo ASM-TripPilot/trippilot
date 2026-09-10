@@ -197,14 +197,23 @@ describe('canProceed 담은목록 게이트 (03b W-5 보존)', () => {
   });
 });
 
-describe('더 담기 목적지 분기 (TRIP-367 보존)', () => {
-  it('담은 곳이 있으면 담은 장소 화면(d02)으로 간다', () => {
+describe('더 담기 목적지 분기 (TRIP-367 보존 · TRIP-689 d02 계약 플립)', () => {
+  it('담은 곳이 있으면 담은 장소 화면(d02)으로 가되, 여행 지역을 region 파라미터로 싣는다', () => {
+    // TRIP-689: d02 갈래도 평문 '/explore/saved-places' → 객체형({pathname, params:{region}})으로
+    // 바뀐다(d04 갈래와 완전 동형, 표준명 원문·순서 그대로). 저장목록 화면이 이 지역으로 클라 필터한다.
+    // ⚠️ router.push 객체 인자는 재귀 완전 일치 비교라 region 배열 순서·여분 키까지 잠긴다.
+    const store = useTripWizardStore.getState();
+    store.addDestination('부산광역시', 2);
+    store.addDestination('경주시', 1);
     mockSavedPlaces = loaded(THREE);
     render(<TripNewStep1Page baseDate={BASE} />);
 
     fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-more'));
 
-    expect(routerMock.push).toHaveBeenCalledWith('/explore/saved-places');
+    expect(routerMock.push).toHaveBeenCalledWith({
+      pathname: '/explore/saved-places',
+      params: { region: ['부산광역시', '경주시'] },
+    });
     expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
 

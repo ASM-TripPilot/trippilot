@@ -292,6 +292,7 @@
 
 ## src/features/explore/model/
 - `src/features/explore/model/exploreFixtures.ts`  →  PREVIEW_PLACES · PREVIEW_SAVED_POI_IDS · PREVIEW_SAVED_PLACES · PREVIEW_REGIONS
+- `src/features/explore/model/filterSavedPlacesByTripRegions.ts`  →  filterSavedPlacesByTripRegions
 - `src/features/explore/model/mergePlaces.ts`  →  mergePlacesByPoiId
 - `src/features/explore/model/placeListState.ts`  →  PlaceListState · resolvePlaceListState
 - `src/features/explore/model/placeListView.ts`  →  visiblePlaces
@@ -1216,4 +1217,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 826개 파일
+합계 827개 파일

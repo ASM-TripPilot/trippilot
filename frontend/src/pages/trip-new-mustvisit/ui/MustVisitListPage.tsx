@@ -29,11 +29,15 @@ export function TripMustVisitsPage() {
       items={mustVisits}
       onRemove={removeMustVisit}
       onAddMore={() =>
-        // d04(탐색)로 갈 때 여행에 담은 지역들을 라우트 파라미터로 실어 보낸다(TRIP-687) —
-        // g01 스트립(TripNewStep1Page)과 같은 계약. 목적지 0곳이면 빈 배열이라 전국 전체.
+        // 두 갈래 모두 여행에 담은 지역들을 라우트 파라미터로 실어 보낸다 — d04는 TRIP-687,
+        // d02는 TRIP-689(담은 장소 화면이 이 지역으로 클라 필터). g01 스트립(TripNewStep1Page)과
+        // 같은 계약. 목적지 0곳이면 빈 배열이라 전국 전체.
         router.push(
           savedPlaces.length > 0
-            ? '/explore/saved-places'
+            ? {
+                pathname: '/explore/saved-places',
+                params: { region: destinations.map((d) => d.region) },
+              }
             : {
                 pathname: '/explore/places',
                 params: { region: destinations.map((d) => d.region) },

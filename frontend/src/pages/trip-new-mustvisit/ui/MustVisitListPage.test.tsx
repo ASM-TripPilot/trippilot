@@ -101,15 +101,24 @@ describe('PG-2 · 제거 → removeMustVisit + 카운트 동기 (AC-2·AC-3)', (
   });
 });
 
-describe('PG-3 · 더 담기 삼항 — 담은 곳 ≥1 → d02 (TRIP-367 재사용)', () => {
-  it('담은 장소가 있으면 담은 장소 화면(/explore/saved-places)으로 간다', () => {
+describe('PG-3 · 더 담기 삼항 — 담은 곳 ≥1 → d02 (TRIP-367 재사용 · TRIP-689 계약 플립)', () => {
+  it('담은 장소가 있으면 담은 장소 화면(d02)으로 가되, 여행 지역을 region 파라미터로 싣는다', () => {
+    // TRIP-689: 두 배선 자리(g01 onPressMore · 이 페이지 onAddMore)가 같은 계약을 지킨다 —
+    // d02 갈래도 평문 '/explore/saved-places' → 객체형으로 바뀐다(d04 갈래와 동형).
+    // ⚠️ router.push 객체는 재귀 완전 일치 비교.
+    const store = useTripWizardStore.getState();
+    store.addDestination('부산광역시', 2);
+    store.addDestination('경주시', 1);
     seedStore(TWO);
     mockSavedPlaces = { savedPlaces: [{}, {}, {}] };
     render(<TripMustVisitsPage />);
 
     fireEvent.press(screen.getByTestId('trip-mustvisit-list-more'));
 
-    expect(routerMock.push).toHaveBeenCalledWith('/explore/saved-places');
+    expect(routerMock.push).toHaveBeenCalledWith({
+      pathname: '/explore/saved-places',
+      params: { region: ['부산광역시', '경주시'] },
+    });
     expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
 });
