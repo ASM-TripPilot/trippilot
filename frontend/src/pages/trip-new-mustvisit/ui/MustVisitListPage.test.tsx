@@ -42,7 +42,8 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
 }));
 
 function seed(sourcePoiId: string, name: string): MustVisitSeedItem {
-  return { sourcePoiId, name, imageUrl: null };
+  // region 은 이 파일 단언과 무관(sourcePoiId 매핑) — 필수 필드(TRIP-685) 컴파일 유지용 null.
+  return { sourcePoiId, name, imageUrl: null, region: null };
 }
 
 const TWO: MustVisitSeedItem[] = [

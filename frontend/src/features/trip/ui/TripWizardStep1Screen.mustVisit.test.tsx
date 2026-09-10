@@ -32,9 +32,10 @@ import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
 function seed(
   sourcePoiId: string,
   name: string,
-  imageUrl: string | null = null
+  imageUrl: string | null = null,
+  region: string | null = null
 ): MustVisitSeedItem {
-  return { sourcePoiId, name, imageUrl };
+  return { sourcePoiId, name, imageUrl, region };
 }
 
 const THREE = [
@@ -164,5 +165,70 @@ describe('N3 · 0곳도 스트립을 감추지 않는다 (S7 empty 일러스트 
       0
     );
     expect(screen.queryByTestId('trip-wizard-mustvisit-empty')).toBeNull();
+  });
+});
+
+/**
+ * ─── TRIP-685 지역선 ───────────────────────────────────────────────────────────
+ *
+ * 무엇을 보장하나: 담은 장소가 가진 `region`(예 "수영구")이 시드에 실려 오면 스트립 카드가 이름
+ * **아래에 지역 한 줄**을 그리고(testID `trip-wizard-mustvisit-region-{sourcePoiId}`), 값을 서버 원문
+ * **그대로**(무가공) 보여준다. `null`·`''`이면 지역 요소를 **아예 안 만든다**(빈 줄도 없음 — degrade 유지).
+ *
+ * ⚠️ 매처: `getByTestId(id)` 는 요소가 없으면 throw 라 **존재 단언**을 겸하고, 이어 붙인
+ * `.toHaveTextContent('수영구')` 는 RNTL 완전 일치(정규화 후 ===)라 지역 Text 의 전체 내용이 딱 그
+ * 문자열임을 잰다(02a ★4·§5, 문제로그 RNTL toHaveTextContent 완전 일치). 부재는 `queryByTestId(...).toBeNull()`.
+ *
+ * ⚠️ present·absent 를 **한 배열**에 섞는다 — "항상 그린다"와 "절대 안 그린다" 뮤턴트를 한 테스트로
+ * 동시에 잡는다. 섞인 배열에서 absent 는 **특정 testID**(poi-3)로 본다(정규식은 present 카드를 매치).
+ */
+describe('N3 · 지역선 — 값 있으면 이름 아래 한 줄, null/빈값이면 미표시 (TRIP-685)', () => {
+  it('region 이 있는 카드엔 지역선을 원문 그대로 그리고, null 인 카드엔 안 그린다 (present/absent 짝)', () => {
+    render(
+      <TripWizardStep1Screen
+        {...props({
+          mustVisits: [
+            seed('poi-1', '감천마을', null, '수영구'),
+            seed('poi-2', '광안리', null, '부산 해운대구'),
+            seed('poi-3', '전포', null, null),
+          ],
+        })}
+      />
+    );
+
+    // present — 짧은 값·긴 값 모두 place.region 을 무가공으로. 포맷터를 끼우면 이 완전 일치가 깨진다(★4).
+    expect(
+      screen.getByTestId('trip-wizard-mustvisit-region-poi-1')
+    ).toHaveTextContent('수영구');
+    expect(
+      screen.getByTestId('trip-wizard-mustvisit-region-poi-2')
+    ).toHaveTextContent('부산 해운대구');
+
+    // absent — region 이 null 인 카드는 지역선을 만들지 않는다.
+    expect(
+      screen.queryByTestId('trip-wizard-mustvisit-region-poi-3')
+    ).toBeNull();
+
+    // 짝(긍정) — 카드·이름은 정상(카드 자체가 안 떠서 공짜 통과하는 것을 막는다).
+    expect(
+      within(screen.getByTestId('trip-wizard-mustvisit-poi-1')).getByText(
+        '감천마을'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it("region 이 빈 문자열('')이어도 접는다 (빈 값 falsy — 빈 줄 방지, 01b Q3)", () => {
+    render(
+      <TripWizardStep1Screen
+        {...props({ mustVisits: [seed('poi-1', '감천마을', null, '')] })}
+      />
+    );
+
+    // 카드·이름은 정상(짝).
+    expect(screen.getByTestId('trip-wizard-mustvisit-poi-1')).toBeOnTheScreen();
+    // 빈 문자열은 지역선을 만들지 않는다.
+    expect(
+      screen.queryByTestId('trip-wizard-mustvisit-region-poi-1')
+    ).toBeNull();
   });
 });

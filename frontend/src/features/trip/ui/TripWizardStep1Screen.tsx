@@ -162,8 +162,8 @@ function SummaryRow({
 
 /**
  * 꼭 갈 곳 가로 스트립 — 헤더("꼭 갈 곳 {N}" + 전체 보기) + 스크롤 행([더 담기 첫 위치] + 담은
- * 곳 카드들). 카드는 이미지 자리 + 이름만이다(지역명은 계약 공백, D3). 이미지는 `imageUrl` 이
- * 있을 때만 그린다 — 없으면 회색 자리로 두고 기본 이미지를 지어내지 않는다(INV-1).
+ * 곳 카드들). 카드는 이미지 자리 + 이름 + (region 있으면) 지역 한 줄이다(TRIP-685). 이미지는
+ * `imageUrl` 이 있을 때만 그린다 — 없으면 회색 자리로 두고 기본 이미지를 지어내지 않는다(INV-1).
  * 0곳도 스트립을 감추지 않는다(empty 일러스트 얼굴은 S7).
  */
 function MustVisitStrip({
@@ -235,6 +235,15 @@ function MustVisitStrip({
             >
               {item.name}
             </Text>
+            {item.region ? (
+              <Text
+                testID={`trip-wizard-mustvisit-region-${item.sourcePoiId}`}
+                numberOfLines={1}
+                className="font-noto text-caption text-muted"
+              >
+                {item.region}
+              </Text>
+            ) : null}
           </View>
         ))}
       </ScrollView>

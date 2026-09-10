@@ -606,11 +606,27 @@ const TRIP_WIZARD_BASE: TripWizardStep1ScreenProps = {
 };
 
 /** 꼭 갈 곳 스트립 시드 3장(`MustVisitSeedItem[]`) — `imageUrl` 은 프로덕션에서 전부 `null`(회색
- * 자리)이라 프리뷰도 null 로 둔다(INV-1 · 외부 URL 발명 금지). 카드는 이름만 그린다(지역명 계약 공백). */
+ * 자리)이라 프리뷰도 null 로 둔다(INV-1 · 외부 URL 발명 금지). `region` 은 이름 아래 지역선이
+ * 눈에 보이게 채운다(TRIP-685 6-b 대조용 — 서버 원문 형식을 흉내낸 그럴듯한 값). */
 const MUST_VISIT_THUMBNAILS = [
-  { sourcePoiId: 'poi-1', name: '감천문화마을', imageUrl: null },
-  { sourcePoiId: 'poi-2', name: '광안리해수욕장', imageUrl: null },
-  { sourcePoiId: 'poi-3', name: '전포카페거리', imageUrl: null },
+  {
+    sourcePoiId: 'poi-1',
+    name: '감천문화마을',
+    imageUrl: null,
+    region: '사하구',
+  },
+  {
+    sourcePoiId: 'poi-2',
+    name: '광안리해수욕장',
+    imageUrl: null,
+    region: '수영구',
+  },
+  {
+    sourcePoiId: 'poi-3',
+    name: '전포카페거리',
+    imageUrl: null,
+    region: '부산진구',
+  },
 ];
 
 /**

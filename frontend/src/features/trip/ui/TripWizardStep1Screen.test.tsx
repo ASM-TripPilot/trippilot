@@ -46,9 +46,10 @@ const BUDGET_VALUE = '120만원 · 1인 총액 · 중간';
 function seed(
   sourcePoiId: string,
   name: string,
-  imageUrl: string | null = null
+  imageUrl: string | null = null,
+  region: string | null = null
 ): MustVisitSeedItem {
-  return { sourcePoiId, name, imageUrl };
+  return { sourcePoiId, name, imageUrl, region };
 }
 
 /** 초기(빈) 상태 — 요약 5행이 전부 null(플레이스홀더), 스트립 0곳, 게이트 닫힘. */

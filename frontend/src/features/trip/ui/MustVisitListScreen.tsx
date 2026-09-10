@@ -17,7 +17,7 @@ import { BackChevronGlyph, PlusGlyph, ThumbRemoveGlyph } from './TripGlyphs';
  * 픽셀 확정은 FG-3 후속.
  *
  * `imageUrl` 이 `null` 이면 회색 자리로 두고 기본 이미지를 지어내지 않는다(INV-1). 지역(region)은
- * `MustVisitSeedItem` 계약에 없어 그리지 않는다(계약 공백 — 발명 금지).
+ * 값이 있으면 이름 아래 한 줄로 서버 원문 그대로 그리고, `null`/빈값이면 요소를 안 만든다(TRIP-685).
  */
 
 const SCREEN_TITLE = '꼭 갈 곳';
@@ -32,7 +32,7 @@ export interface MustVisitListScreenProps {
   onBack(): void;
 }
 
-/** 카드 한 장 — 썸네일(있으면 이미지·없으면 회색 자리) + 이름 + 제거 ×. 지역은 안 그린다. */
+/** 카드 한 장 — 썸네일(있으면 이미지·없으면 회색 자리) + 이름(있으면 지역 한 줄) + 제거 ×. */
 function MustVisitListCard({
   item,
   onRemove,
@@ -60,12 +60,23 @@ function MustVisitListCard({
           />
         </View>
       )}
-      <Text
-        numberOfLines={1}
-        className="flex-1 font-noto-bold text-card-title font-bold text-ink"
-      >
-        {item.name}
-      </Text>
+      <View className="flex-1 gap-[2px]">
+        <Text
+          numberOfLines={1}
+          className="font-noto-bold text-card-title font-bold text-ink"
+        >
+          {item.name}
+        </Text>
+        {item.region ? (
+          <Text
+            testID={`trip-mustvisit-list-region-${item.sourcePoiId}`}
+            numberOfLines={1}
+            className="font-noto text-caption text-muted"
+          >
+            {item.region}
+          </Text>
+        ) : null}
+      </View>
       <Pressable
         testID={`trip-mustvisit-list-remove-${item.sourcePoiId}`}
         accessibilityRole="button"

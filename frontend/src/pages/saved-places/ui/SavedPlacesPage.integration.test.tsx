@@ -536,7 +536,14 @@ describe('S-6 · 이 장소들로 여행 만들기 (A-6 · US-SHELL-05 · BR-U1-
     // 준비값을 **비어 있지 않게** 심는다 — reset 값과 달라야 "그냥 안 지운 것"이 아니라
     // "지우고 다시 심었다"는 것을 판별할 수 있다.
     useTripWizardStore.setState({
-      mustVisits: [{ sourcePoiId: 'poi-x', name: '남겨진 곳', imageUrl: null }],
+      mustVisits: [
+        {
+          sourcePoiId: 'poi-x',
+          name: '남겨진 곳',
+          imageUrl: null,
+          region: null,
+        },
+      ],
       mustVisitsInitialized: true,
       excludedMustVisitPoiIds: ['poi-y'],
     });

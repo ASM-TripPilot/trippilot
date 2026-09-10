@@ -45,9 +45,10 @@ const BUDGET_VALUE = '120만원 · 1인 총액 · 중간';
 function seed(
   sourcePoiId: string,
   name: string,
-  imageUrl: string | null = null
+  imageUrl: string | null = null,
+  region: string | null = null
 ): MustVisitSeedItem {
-  return { sourcePoiId, name, imageUrl };
+  return { sourcePoiId, name, imageUrl, region };
 }
 
 function baseProps(over: Partial<StatesProps> = {}): StatesProps {
