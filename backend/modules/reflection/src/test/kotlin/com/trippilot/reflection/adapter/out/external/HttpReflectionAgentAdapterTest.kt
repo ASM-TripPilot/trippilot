@@ -104,8 +104,8 @@ class HttpReflectionAgentAdapterTest : StringSpec({
             .andExpect(jsonPath("$.start_date").value("2026-08-01"))
             .andExpect(jsonPath("$.visits[0].poi_name").value("성산일출봉"))
             .andExpect(jsonPath("$.visits[0].ref.poi_id").exists())
-            // 8s 였을 때 상대 1차 LLM 예산(마감의 절반)이 실 지연보다 작아 매번 재시도 사슬로
-            // 백스톱 경계에 걸렸다(2026-09-11 실측) — 이 값이 다시 줄면 그 회귀다.
+            // 8s 였을 때 시도 1회가 온전히 못 끝나 재시도가 이어지며 백스톱 경계에 걸렸다
+            // (2026-09-11 실측, 상세는 ReflectionAgentProperties) — 이 값이 다시 줄면 그 회귀다.
             .andExpect(jsonPath("$.request_meta.deadline_ms").value(15000))
             .andRespond(withSuccess(okBody, MediaType.APPLICATION_JSON))
 
