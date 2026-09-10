@@ -103,13 +103,16 @@ describe('AC-1(모델) · regions.ts 가 새 API 를 노출하고 구 상수를 
   });
 });
 
-describe('AC-4 · 두 소비처가 같은 useRegions 출처를 문다', () => {
-  it('RegionPickerPage 와 TripNewStep1Page 둘 다 useRegions 를 참조하고 REGIONS 를 안 문다', () => {
+describe('AC-4 · 지역 소비처가 useRegions 출처를 문다', () => {
+  it('RegionPickerPage 가 useRegions 를 참조하고, 두 페이지 모두 REGIONS 상수를 안 문다', () => {
     const page = read(PAGE_REL);
     const wizard = read(WIZARD_PAGE_REL);
 
+    // RegionPicker 는 서버 카탈로그를 직접 소비한다(서버 전환 앵커, AC-1 union 과 함께 이중 확인).
     expect(page).toContain('useRegions');
-    expect(wizard).toContain('useRegions');
+    // ⚠️ TRIP-665: 위저드 default 는 여행지 편집(도시 추가 시트)을 S2 로 이연했다 — 페이지가 지역
+    //    카탈로그를 더는 **직접 소비하지 않는다**. useRegions 소비 재확인은 S2(여행지 편집 시트)로 이관.
+    //    구 상수(REGIONS) 부활 금지 가드는 두 페이지 모두 유지한다.
     expect(/\bREGIONS\b/.test(page)).toBe(false);
     expect(/\bREGIONS\b/.test(wizard)).toBe(false);
   });

@@ -126,7 +126,13 @@ const store = () => useTripWizardStore.getState();
 const seedIds = () => store().mustVisits.map((one) => one.sourcePoiId);
 
 function seed(sourcePoiId: string): MustVisitSeedItem {
-  return { sourcePoiId, name: `장소-${sourcePoiId}`, imageUrl: null };
+  // region 은 이 파일 단언과 무관(seedIds 매핑) — 필수 필드(TRIP-685) 컴파일 유지용 null.
+  return {
+    sourcePoiId,
+    name: `장소-${sourcePoiId}`,
+    imageUrl: null,
+    region: null,
+  };
 }
 
 /** 계약 `Place.required` 를 그대로 채운다(상상해서 만들지 않는다). */

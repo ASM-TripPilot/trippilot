@@ -2,7 +2,13 @@ import type {
   BaseAssignment,
   SavedStay,
   Trip,
+  TripDestination,
 } from '@/shared/api/generated/schemas';
+
+// 에포크 일수 → 'YYYY-MM-DD' 역변환 + 요일. 같은 feature(`features/trip/model`)에 이미 있는 순수
+// 정수 산술(`new Date` 미사용, civil_from_days)이라 재구현 대신 재사용한다 — `dayOfWeek`도
+// 같은 파일이 export 하는 순수 요일 계산기다(TRIP-664 `tripSummary`가 이미 재사용).
+import { dayOfWeek, fromEpochDay } from './tripWizardStep1';
 
 /**
  * g02 거점 구간 행 — 배정·저장 숙소·여행을 화면이 그릴 행으로 합치는 순수 함수
@@ -92,4 +98,86 @@ export function toBaseSections(
         a.dateFrom < b.dateFrom ? -1 : a.dateFrom > b.dateFrom ? 1 : 0
       )
   );
+}
+
+/** 0=일 … 6=토 → 한글 요일 한 글자. `dayOfWeek`(tripWizardStep1)의 반환 인덱스와 짝이다
+ * (에포크 0 = 목요일 기준이라 `new Date().getUTCDay()`와 같은 순서). `tripSummary.ts`가 같은
+ * 배열을 내부 전용으로 쓰지만 export 하지 않는 관례라 이 파일이 사본을 둔다 — 요일 배열
+ * 리터럴은 고유 판정이 아니라 표준 대응표일 뿐이다. */
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
+
+/**
+ * g02 신 default 얼굴이 그릴 **박별(1박=1행) 거점 카드**(TRIP-672 · D1). 원 `toBaseSections`·
+ * `toNightlyBases`는 불변 — 이쪽은 신 화면이 요구하는 다른 방향의 파생이다(밤 목록·지역은
+ * `destinations`에서, 숙소명은 `sections`를 날짜로 조인).
+ *
+ * 세 파생을 이 함수 하나가 소유한다:
+ *  1. **밤 목록·지역** — `destinations`를 seq 순서로 nights만큼 펼친 타임라인. 트립 전체 밤
+ *     (옵션 A)이라 배정이 하나도 없어도 카드는 Σnights 장이 뜬다(전부 stayName 없음 →
+ *     화면이 "숙소 미정"으로 그린다).
+ *  2. **날짜 라벨** — `startDate`부터 하루씩 더한 `"M/D(요일)"`(예 `6/10(수)`). 요일은
+ *     `dayOfWeek`(에포크 산술)로 구해 시계를 안 읽는다.
+ *  3. **숙소명** — `sections`(toBaseSections 출력)를 그 밤 날짜로 조인. 그 날짜를 덮는 배정이
+ *     있고 이름이 비어 있지 않으면 그 이름, 아니면 `stayName` 키를 아예 안 단다(미배정).
+ *     날짜 조인이라 배정 공백에도 밤↔숙소가 어긋나지 않는다.
+ *
+ * 출력 필드는 `{ nightNumber, dateLabel, region, stayName? }` 정확히 이 넷(INV-3 — 소요시간·거리 없음).
+ */
+export interface NightlyBaseCard {
+  nightNumber: number;
+  dateLabel: string;
+  region: string;
+  stayName?: string;
+}
+
+/** 그 밤 날짜를 덮는 배정의 숙소명. `dateTo`는 체크아웃(배타)이라 `[dateFrom, dateTo)` 안이면
+ * 덮는다. 빈 이름은 미부착으로 본다 — `toBaseSections`가 짝 없는 저장 숙소에 빈 문자열을 낸다. */
+function stayNameForNight(
+  sections: BaseSection[],
+  nightEpoch: number
+): string | undefined {
+  for (const section of sections) {
+    const from = toEpochDay(section.dateFrom);
+    const to = toEpochDay(section.dateTo);
+    if (from <= nightEpoch && nightEpoch < to) {
+      return section.stayName === '' ? undefined : section.stayName;
+    }
+  }
+  return undefined;
+}
+
+export function nightlyBaseCards({
+  destinations,
+  startDate,
+  sections,
+}: {
+  destinations: TripDestination[];
+  startDate: string;
+  sections: BaseSection[];
+}): NightlyBaseCard[] {
+  // destinations를 seq 순서로 nights만큼 펼쳐 밤별 지역 타임라인을 만든다. 입력을 안 뒤집으려
+  // 사본을 정렬한다 — 정렬 소유는 이 model 파일 몫이다(화면·배선 소스엔 `.sort(` 0건, ★7).
+  const regionByNight: string[] = [];
+  [...destinations]
+    .sort((a, b) => a.seq - b.seq)
+    .forEach((destination) => {
+      for (let night = 0; night < destination.nights; night += 1) {
+        regionByNight.push(destination.region);
+      }
+    });
+
+  const startEpoch = toEpochDay(startDate);
+  return regionByNight.map((region, index) => {
+    const nightEpoch = startEpoch + index;
+    const [, month, day] = fromEpochDay(nightEpoch).split('-').map(Number);
+    const card: NightlyBaseCard = {
+      nightNumber: index + 1,
+      dateLabel: `${month}/${day}(${WEEKDAYS[dayOfWeek(nightEpoch)]})`,
+      region,
+    };
+    // 미배정 밤은 `stayName` 키 자체를 안 단다 — N5가 `Object.keys`로 3키/4키를 가른다.
+    const stayName = stayNameForNight(sections, nightEpoch);
+    if (stayName !== undefined) card.stayName = stayName;
+    return card;
+  });
 }

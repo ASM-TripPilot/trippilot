@@ -23,6 +23,8 @@ export interface MustVisitSeedItem {
   name: string;
   /** 값이 없으면 `null` — 기본 이미지를 지어내지 않는다(`Place.imageUrl` 계약 주석). */
   imageUrl: string | null;
+  /** 담은 장소의 지역(서버 원문 무가공). 값이 없으면 `null` — `imageUrl`과 동형(발명 금지). */
+  region: string | null;
 }
 
 /** 썸네일 상한(게이트① 확정 — 특례 없음). 4건이면 3장 + `+1`이다. */
@@ -34,7 +36,7 @@ export function seedMustVisits(savedPlaces: SavedPlace[]): MustVisitSeedItem[] {
   const seeds: MustVisitSeedItem[] = [];
 
   for (const entry of savedPlaces) {
-    const { poiId, nameKo, imageUrl } = entry.place;
+    const { poiId, nameKo, imageUrl, region } = entry.place;
     if (seen.has(poiId)) {
       continue;
     }
@@ -43,6 +45,7 @@ export function seedMustVisits(savedPlaces: SavedPlace[]): MustVisitSeedItem[] {
       sourcePoiId: poiId,
       name: nameKo,
       imageUrl: imageUrl ?? null,
+      region: region ?? null,
     });
   }
 

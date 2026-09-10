@@ -24,11 +24,12 @@
  */
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import type { SavedPlace } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
 
+import { filterSavedPlacesByTripRegions } from '@/features/explore/model/filterSavedPlacesByTripRegions';
 import { resolvePlaceListState } from '@/features/explore/model/placeListState';
 import {
   REMOVE_FAILURE_NOTICE,
@@ -82,11 +83,24 @@ export function SavedPlacesPage(): ReactElement {
     () => new Map()
   );
 
+  // 여행 지역 필터(TRIP-689) — g01·꼭 갈 곳의 '더 담기'가 d02로 올 때 실어 보낸 region.
+  // expo-router는 1원소 배열 파라미터를 문자열로 되돌릴 수 있어(단일 목적지 여행) 배열로 정규화한다.
+  const { region } = useLocalSearchParams<{ region?: string | string[] }>();
+  const regions = Array.isArray(region) ? region : region ? [region] : [];
+
   const isAuthed = getAccessToken() !== null;
   const { savedPlaces, isPending, isError, refetch, save, remove } =
     useSavedPlaces({ isAuthed });
 
-  const displayList = buildDisplayList(savedPlaces, releasedPoiIds, snapshots);
+  const orderedList = buildDisplayList(savedPlaces, releasedPoiIds, snapshots);
+  // region 파라미터가 있으면 여행 지역 안 저장만 남긴다(fail-open은 순수함수가 진다). 없으면 전체.
+  const displayList =
+    regions.length > 0
+      ? filterSavedPlacesByTripRegions(orderedList, regions)
+      : orderedList;
+  // 저장은 있는데 지역 필터로 0건이면 "담은 곳 없음"이 아니라 구분 안내를 그린다(AC-5).
+  const regionFilterEmpty =
+    regions.length > 0 && orderedList.length > 0 && displayList.length === 0;
   const listState = resolvePlaceListState({
     isPending,
     isError,
@@ -161,6 +175,7 @@ export function SavedPlacesPage(): ReactElement {
     <SavedPlaceListScreen
       savedPlaces={displayList}
       state={listState}
+      regionFilterEmpty={regionFilterEmpty}
       removeError={removeError}
       isGuest={!isAuthed}
       releasedPoiIds={[...releasedPoiIds]}

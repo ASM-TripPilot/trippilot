@@ -76,7 +76,7 @@ function savedPlace(
 }
 
 function seedItem(sourcePoiId: string, name = `장소-${sourcePoiId}`) {
-  return { sourcePoiId, name, imageUrl: null };
+  return { sourcePoiId, name, imageUrl: null, region: null };
 }
 
 /** 값 스냅숏 — 호출 전후 비교용(참조가 아니라 **값**이 그대로인지 본다). */
@@ -85,9 +85,9 @@ function snapshot(value: unknown): string {
 }
 
 describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
-  it('N1-1 담은 장소를 시드 항목으로 옮기고, 사진이 없으면 null 을 그대로 둔다', () => {
+  it('N1-1 담은 장소를 시드 항목으로 옮기고, 사진이 없으면 null, 지역은 원문 그대로 나른다 (TRIP-685)', () => {
     // 준비 — 사진이 있는 것과 없는 것을 섞는다. 프로덕션 데이터는 현재 전부 null 이라
-    // (exploreFixtures 주석) null 쪽이 늘 타는 경로다.
+    // (exploreFixtures 주석) null 쪽이 늘 타는 경로다. region 은 makePlace 기본값 '수영구'.
     const given: SavedPlace[] = [
       savedPlace('sp-1', 'poi-1', {
         nameKo: '감천마을',
@@ -102,14 +102,38 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
 
     // 단언 — 이름은 `nameKo`, 식별자는 `poiId`(등록 요청의 poiId 이자 testID 꼬리),
     // 사진은 있으면 그 값 없으면 null. **기본 이미지를 지어내지 않는다**(계약 주석 명시).
+    // 지역(TRIP-685)은 `place.region` 을 무가공으로 나른다 — 입력 픽스처가 이미 '수영구'라
+    // 기대 객체에 region 을 안 더하면 관통 구현 후 `toEqual`(정확 일치)이 red (02a ★2 계약 플립 #1).
     expect(seeds).toEqual([
       {
         sourcePoiId: 'poi-1',
         name: '감천마을',
         imageUrl: 'https://cdn.example.com/a.jpg',
+        region: '수영구',
       },
-      { sourcePoiId: 'poi-2', name: '광안리', imageUrl: null },
-      { sourcePoiId: 'poi-3', name: '전포', imageUrl: null },
+      {
+        sourcePoiId: 'poi-2',
+        name: '광안리',
+        imageUrl: null,
+        region: '수영구',
+      },
+      { sourcePoiId: 'poi-3', name: '전포', imageUrl: null, region: '수영구' },
+    ]);
+  });
+
+  it('N1-1b 지역이 null·undefined 면 시드 region 도 null 이다 (region ?? null — imageUrl 과 동형)', () => {
+    // 준비 — 계약상 `Place.region?: string | null` 이라 null 도 undefined 도 가능하다.
+    const given: SavedPlace[] = [
+      savedPlace('sp-1', 'poi-1', { nameKo: '감천마을', region: null }),
+      savedPlace('sp-2', 'poi-2', { nameKo: '광안리', region: undefined }),
+    ];
+
+    const seeds = seedMustVisits(given);
+
+    // 값이 없으면 지어내지 않고 null — INV-1(발명 금지) 정신을 region 에 적용(브리프 AC-1).
+    expect(seeds).toEqual([
+      { sourcePoiId: 'poi-1', name: '감천마을', imageUrl: null, region: null },
+      { sourcePoiId: 'poi-2', name: '광안리', imageUrl: null, region: null },
     ]);
   });
 

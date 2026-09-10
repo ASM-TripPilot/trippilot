@@ -587,14 +587,27 @@ export function BedGlyph({
 
 // CTA 바 chevron-right(18, 흰색) — g01. `primaryText`는 g02(TRIP-225)의 인라인 링크 셰브런
 // (`1861:2331` 변경 · `1866:2348` 거점으로 지정 — 16px `#C13515`)이다. 같은 도형인데 획이 더
-// 가늘어(실측 1.46667@16 = 1.65@18) 색과 함께 실측값을 담는다. `MapPinGlyph`의 tone 선례대로
-// 좁은 유니온이고, 범용 색상표는 만들지 않는다.
+// 가늘어(실측 1.46667@16 = 1.65@18) 색과 함께 실측값을 담는다. `muted`는 g01 재설계(TRIP-665,
+// `3742:2068`)의 요약 행·전체 보기 셰브런 — 흰 카드 위 회색(#6A6A6A)이라 두 기존 톤 어느 쪽도
+// 안 맞아 실측값을 더한다. `ink`는 g01 기간 편집 시트(TRIP-667, `3627:2068`)의 다음 달 셰브런 —
+// `BackChevronGlyph`(이전 달, ink 고정)와 좌우 대칭 쌍이라 같은 #222 로 맞춘다(1.65@18 획이
+// `BackChevronGlyph` 2.2@24 와 렌더 두께가 정비례). `MapPinGlyph`의 tone 선례대로 좁은 유니온이고,
+// 범용 색상표는 안 만든다.
+const CHEVRON_STROKE: Record<
+  'onPrimary' | 'primaryText' | 'muted' | 'ink',
+  string
+> = {
+  onPrimary: ON_PRIMARY,
+  primaryText: PRIMARY_TEXT,
+  muted: MUTED,
+  ink: INK,
+};
+
 export function ChevronRightGlyph({
   size = 18,
   tone = 'onPrimary',
   testID,
-}: GlyphProps & { tone?: 'onPrimary' | 'primaryText' }) {
-  const onPrimary = tone === 'onPrimary';
+}: GlyphProps & { tone?: 'onPrimary' | 'primaryText' | 'muted' | 'ink' }) {
   return (
     <Svg
       testID={testID}
@@ -605,8 +618,8 @@ export function ChevronRightGlyph({
     >
       <Path
         d="M6.75 4.5L11.25 9L6.75 13.5"
-        stroke={onPrimary ? ON_PRIMARY : PRIMARY_TEXT}
-        strokeWidth={onPrimary ? 2.2 : 1.65}
+        stroke={CHEVRON_STROKE[tone]}
+        strokeWidth={tone === 'onPrimary' ? 2.2 : 1.65}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

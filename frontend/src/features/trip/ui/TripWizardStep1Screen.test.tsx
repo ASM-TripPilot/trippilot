@@ -5,791 +5,323 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import { validateTripDraft } from '../model/tripDraft';
+import type { MustVisitSeedItem } from '../model/mustVisitSeed';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
 
-// TRIP-445 게이트①-2 결정 A — 삭제된 프로덕션 상수 `REGIONS`를 파일 로컬 `{code,name}[]`
-// 픽스처로 기계 교체(단언·동작 무변경, 위저드 화면 `regions` 계약과 같은 shape).
-const REGIONS: readonly { code: string; name: string }[] = [
-  { code: 'busan', name: '부산' },
-  { code: 'gyeongju', name: '경주' },
-  { code: 'seoul', name: '서울' },
-  { code: 'jeju', name: '제주' },
-  { code: 'gangneung', name: '강릉' },
-  { code: 'yeosu', name: '여수' },
-];
-
 /**
- * TRIP-205 g01 여행 만들기 1/2 — **props만 받는 프레젠테이션 화면**.
+ * TRIP-665 g01 여행 만들기 default 재작성 — **props만 받는 프레젠테이션 화면**(Figma `3742:2068`).
  *
- * 무엇을 보장하나: 위저드 셸(앱바·진행 표시·하단 고정 CTA)과 입력 블록 5개가 정본 문구대로
- * 그려지고, 모든 상호작용이 **판단하지 않고 그대로 위로 올려보내며**, `[다음]`의 활성 여부가
- * 받은 `canProceed` 하나로만 갈린다. 그리고 **초기 상태에서 오류 문구가 하나도 안 보인다**
- * (AC-10c — 이 파일의 심판 핵심, 아래 `describe('AC-10c …')` 참조).
+ * 무엇을 보장하나: 신 default 골격이 정본대로 선다 — 앱바(back + 진행바 4칸 + "1 / 4") · 타이틀/부제 ·
+ * **요약 카드 5행**(여행지→기간→동행→취향→예산, 각 값 or muted 플레이스홀더 + chevron, 탭 시 오픈 콜백) ·
+ * 꼭 갈 곳 스트립 · 하단 [다음](canProceed 게이트). 그리고 **옛 인라인 컨트롤(프리셋·스테퍼·칩·예산 입력·
+ * 날짜 카드·등록숙소 행·취향 카드·여행지 시트)이 default 에서 전량 사라졌다**(AC-5).
  *
- * 왜 props만 받는가: 이 화면이 쿼리 훅·라우터·`expo-location`을 **전이 의존으로라도** 물면
- * dev 프리뷰가 터지고 테스트가 네트워크에 묶인다(`RegionPickerScreen` 머리말과 같은 제약).
- * 그 제약 자체는 렌더로 관찰할 수 없어 `src/__tests__/tripWizardStep1Boundary.test.ts`가
- * 소스 층에서 따로 잠근다(AC-14).
+ * 왜 재작성인가: 옛 default 는 인라인 전개 폼이었고, 신 default 는 온보딩 요약 + 편집 시트 오픈 신호까지다
+ * (편집 시트 본체는 S2~S6). 옛 인라인 컨트롤 잠금은 걷어내고(그 대응물이 신 default 에 없다), 신 계약으로
+ * 다시 짠다(01b 재작성 전략).
  *
- * 커버하지 않는 것: 서버 제출·오류 문구 표시(TRIP-206) · 예산 UI(TRIP-207) · 등록 숙소 날짜
- * 연계(TRIP-208) · '꼭 갈 곳'(TRIP-209) · 날짜 피커 캘린더(Figma 부재 — D4에 따라 진입점만).
- * 픽셀 충실도(간격·그림자·색)는 이 계약이 잠그지 않는다 — [검증] 스크린샷 대조 몫이다.
+ * 화면은 여전히 props-only 다 — 쿼리 훅·라우터·타 feature import 0(그 제약은 렌더로 못 봐
+ * `src/__tests__/tripWizardStep1Boundary.test.ts` 가 소스 층에서 잠근다, AC-7).
+ *
+ * 커버하지 않는 것: 편집 시트 본체(S2~S6) · 스트립 카드 상세(`…mustVisit.test.tsx`) · 실패 배너·overseas
+ * (`…errors.test.tsx`) · 요약 문자열 **도출**(페이지 `tripSummary` 셀렉터 배선, `TripNewStep1Page.test.tsx`) ·
+ * 픽셀 충실도([검증] 스크린샷).
+ *
+ * ⚠️ 매처 함정(02a §5-2 실측): RNTL `toHaveTextContent('문자열')` = **완전 일치**(정규화 후 `===`),
+ * `toHaveTextContent(/정규식/)` = 부분/패턴 일치. `getByText('문자열')` 도 완전 일치라 라벨("동행")과
+ * 플레이스홀더("동행 선택")를 자동으로 갈라 준다.
  *
  * 3동작 뼈대: 준비=props 조립 → 실행=render(+press) → 단언=보이는 것 / 불린 콜백.
  */
 
-/** 기준일 2026-06-10에서 `3박 4일` 프리셋이 만드는 범위 — Figma 날짜 카드 실측값과 같다. */
-const START = '2026-06-10';
-const END = '2026-06-13';
+/** Figma `3742:2068` 요약 셀렉터 실제 출력(tripSummary.ts 에서 그대로 복사 — en dash U+2013·미들닷 U+00B7).
+ * 화면은 이 문자열을 만들지 않고 받아 그릴 뿐이라(페이지가 셀렉터로 도출), 테스트가 값을 직접 주입한다. */
+const DESTINATION_VALUE = '부산 2박 · 경주 1박';
+const PERIOD_VALUE = '6월 10일(수) – 13일(토) · 3박 4일';
+const COMPANION_VALUE = '친구 2명';
+const PREFERENCE_VALUE = '미식 · 전시 · 야경 + 온보딩';
+const BUDGET_VALUE = '120만원 · 1인 총액 · 중간';
 
-/** 초기(빈) 드래프트 상태. 아무것도 안 고른 사용자가 보는 화면이다. */
+function seed(
+  sourcePoiId: string,
+  name: string,
+  imageUrl: string | null = null,
+  region: string | null = null
+): MustVisitSeedItem {
+  return { sourcePoiId, name, imageUrl, region };
+}
+
+/** 초기(빈) 상태 — 요약 5행이 전부 null(플레이스홀더), 스트립 0곳, 게이트 닫힘. */
 function props(
   over: Partial<TripWizardStep1ScreenProps> = {}
 ): TripWizardStep1ScreenProps {
   return {
-    destinations: [],
-    startDate: undefined,
-    endDate: undefined,
-    presetCode: undefined,
-    party: 1,
-    companionType: undefined,
-    preferenceChips: [],
-    regions: REGIONS,
+    summaryDestinations: null,
+    summaryPeriod: null,
+    summaryCompanion: null,
+    summaryPreferences: null,
+    summaryBudget: null,
+    onPressSummaryDestination: jest.fn(),
+    onPressSummaryPeriod: jest.fn(),
+    onPressSummaryCompanion: jest.fn(),
+    onPressSummaryPreference: jest.fn(),
+    onPressSummaryBudget: jest.fn(),
+    mustVisits: [],
+    onPressMore: jest.fn(),
+    onPressSeeAll: jest.fn(),
     canProceed: false,
-    onBack: jest.fn(),
-    onAddDestination: jest.fn(),
-    onRemoveDestination: jest.fn(),
-    onSelectPreset: jest.fn(),
-    onPressPeriod: jest.fn(),
-    onChangeParty: jest.fn(),
-    onSelectCompanion: jest.fn(),
-    onChangePreference: jest.fn(),
     onNext: jest.fn(),
+    onBack: jest.fn(),
     ...over,
   };
 }
 
-/** 정상적으로 다 채운 드래프트 — 부산 2박 + 경주 1박 = 3박, 기간도 3박이라 통과 상태다. */
+/** 온보딩 반영이 다 채워진 상태 — 5행 값 present, 게이트 열림. */
 function filledProps(
   over: Partial<TripWizardStep1ScreenProps> = {}
 ): TripWizardStep1ScreenProps {
   return props({
-    destinations: [
-      { seq: 1, region: '부산', nights: 2 },
-      { seq: 2, region: '경주', nights: 1 },
-    ],
-    startDate: START,
-    endDate: END,
-    presetCode: '3n4d',
-    party: 2,
-    companionType: '친구',
-    preferenceChips: ['미식', '전시', '야경'],
+    summaryDestinations: DESTINATION_VALUE,
+    summaryPeriod: PERIOD_VALUE,
+    summaryCompanion: COMPANION_VALUE,
+    summaryPreferences: PREFERENCE_VALUE,
+    summaryBudget: BUDGET_VALUE,
     canProceed: true,
     ...over,
   });
 }
 
-/** 화면 전체 텍스트를 한 덩어리로 훑는 앵커. 깊은 하위 텍스트까지 합쳐 준다. */
 function root() {
   return screen.getByTestId('trip-wizard-step1-root');
 }
 
-describe('AC-1 · 위저드 셸 (BR-U1-33)', () => {
-  it('앱바 제목과 진행 표시 1 / 2, 하단 고정 CTA "다음"이 있다', () => {
+/** className 은 NativeWind 가 렌더 트리에 평문 prop 으로 남긴다(02a §5-3 · loginVisual 선례).
+ * 공백으로 쪼갠 토큰 배열로 본다 — 부분 문자열 오탐을 막는다. */
+function classes(testID: string): string[] {
+  return String(screen.getByTestId(testID).props.className ?? '').split(/\s+/);
+}
+
+describe('AC-1 · 앱바 + 진행바 4칸 + "1 / 4"', () => {
+  it('진행바가 4칸이고 첫 칸만 활성(primary)·나머지는 비활성(hairline-strong)이다', () => {
     render(<TripWizardStep1Screen {...props()} />);
 
-    expect(screen.getByText('여행 만들기')).toBeTruthy();
-    expect(screen.getByText('1 / 2')).toBeTruthy();
+    // 4칸이 다 있다.
+    [1, 2, 3, 4].forEach((n) => {
+      expect(
+        screen.getByTestId(`trip-wizard-progress-seg-${n}`)
+      ).toBeOnTheScreen();
+    });
 
-    const next = screen.getByTestId('trip-wizard-step1-next');
-    // CTA 안의 라벨까지 본다 — testID만 보면 빈 버튼도 통과한다.
-    expect(next).toHaveTextContent(/다음/);
+    // 색은 className 토큰으로 본다(★4) — 옛 화면의 raw hex `bg-[#E0E0E0]` 회귀를 잡는다.
+    expect(classes('trip-wizard-progress-seg-1')).toContain('bg-primary');
+    [2, 3, 4].forEach((n) => {
+      expect(classes(`trip-wizard-progress-seg-${n}`)).toContain(
+        'bg-hairline-strong'
+      );
+    });
+
+    // "1 / 2"(옛)가 아니라 "1 / 4"(formatWizardStep(1) 소비).
+    expect(screen.getByText('1 / 4')).toBeOnTheScreen();
+    expect(root()).not.toHaveTextContent(/1 \/ 2/);
   });
 
-  it('뒤로가기를 누르면 콜백이 불린다', () => {
+  it('제목 · 부제가 정본대로이고, 뒤로가기가 콜백을 부른다', () => {
     const onBack = jest.fn();
     render(<TripWizardStep1Screen {...props({ onBack })} />);
 
-    fireEvent.press(screen.getByTestId('trip-wizard-step1-back'));
+    expect(screen.getByText('어디로 떠날까요?')).toBeOnTheScreen();
+    // 부제는 길고 미들닷이 섞여 부분 정규식으로 본다.
+    expect(root()).toHaveTextContent(/온보딩에서 고른 취향/);
 
+    fireEvent.press(screen.getByTestId('trip-wizard-step1-back'));
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('AC-2 · 큰 제목 (01b D1 — 라이브 g01·no-saved-places가 정본)', () => {
-  it('제목이 「어디로 갈까요?」다', () => {
-    render(<TripWizardStep1Screen {...props()} />);
+describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
+  it('다섯 행이 대응 값을 순서대로(여행지→기간→동행→취향→예산) 그린다', () => {
+    render(<TripWizardStep1Screen {...filledProps()} />);
 
-    expect(screen.getByText('어디로 갈까요?')).toBeTruthy();
+    // 각 값이 제 행 안에 있다 — 화면 어딘가에 있기만 한 것과 다르다.
+    expect(
+      within(screen.getByTestId('trip-wizard-summary-destination')).getByText(
+        DESTINATION_VALUE
+      )
+    ).toBeOnTheScreen();
+    // 기간·취향·예산 값은 특수문자(en dash·미들닷)를 포함해 부분 정규식으로 본다.
+    expect(screen.getByTestId('trip-wizard-summary-period')).toHaveTextContent(
+      /6월 10일\(수\) – 13일\(토\)/
+    );
+    expect(
+      within(screen.getByTestId('trip-wizard-summary-companion')).getByText(
+        COMPANION_VALUE
+      )
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('trip-wizard-summary-preference')
+    ).toHaveTextContent(/미식 · 전시 · 야경/);
+    expect(screen.getByTestId('trip-wizard-summary-budget')).toHaveTextContent(
+      /120만원/
+    );
+
+    // *(개념)* `getAllByTestId(/re/)` 는 매칭 요소를 **트리 순서(pre-order)** 로 돌려준다 —
+    // "무엇이 먼저 그려지는가"를 배열 비교 한 줄로 잠근다(★3).
+    const order = screen
+      .getAllByTestId(/^trip-wizard-summary-/)
+      .map((el) => el.props.testID);
+    expect(order).toEqual([
+      'trip-wizard-summary-destination',
+      'trip-wizard-summary-period',
+      'trip-wizard-summary-companion',
+      'trip-wizard-summary-preference',
+      'trip-wizard-summary-budget',
+    ]);
   });
 
-  it('짝 — 티켓이 발명했던 문구도, default 변형 문구도 쓰지 않는다', () => {
+  it('값이 null 일 때 행별 카피 — 여행지·기간 신 카피, 나머지 "{라벨} 선택" (TRIP-671)', () => {
     render(<TripWizardStep1Screen {...props()} />);
 
-    // "새 여행 만들기"는 Figma에 담은 곳 0 변형이 없던 동안의 임시값이었다(01b D1).
-    // "담은 곳으로 여행 만들기"는 담은 곳이 실제로 있을 때의 문구라 TRIP-209 몫이다.
-    expect(root()).not.toHaveTextContent(/새 여행 만들기/);
-    expect(root()).not.toHaveTextContent(/담은 곳으로 여행 만들기/);
+    // 여행지 null → 신 카피 "어디로 갈까요?"(옛 "여행지 선택" 전역 대체, TRIP-671 D1).
+    const dest = screen.getByTestId('trip-wizard-summary-destination');
+    expect(within(dest).getByText('어디로 갈까요?')).toBeOnTheScreen();
+    expect(within(dest).queryByText('여행지 선택')).toBeNull();
+
+    // 기간 null → 값 줄 없음(옛 "기간 선택" 제거). 라벨 "기간"은 생존.
+    const period = screen.getByTestId('trip-wizard-summary-period');
+    expect(within(period).queryByText('기간 선택')).toBeNull();
+    expect(within(period).getByText('기간')).toBeOnTheScreen();
+
+    // 나머지 3행은 "{라벨} 선택" 유지 + muted(값이 채워지면 ink 로 바뀐다).
+    const kept: [string, string][] = [
+      ['trip-wizard-summary-companion', '동행 선택'],
+      ['trip-wizard-summary-preference', '취향 선택'],
+      ['trip-wizard-summary-budget', '예산 선택'],
+    ];
+    kept.forEach(([testID, placeholder]) => {
+      const text = within(screen.getByTestId(testID)).getByText(placeholder);
+      expect(String(text.props.className ?? '').split(/\s+/)).toContain(
+        'text-muted'
+      );
+    });
+  });
+
+  it('짝 — 여행지 값이 있으면 그 행에 신 카피 플레이스홀더가 없다', () => {
+    render(<TripWizardStep1Screen {...filledProps()} />);
+
+    const dest = screen.getByTestId('trip-wizard-summary-destination');
+    expect(within(dest).getByText(DESTINATION_VALUE)).toBeOnTheScreen();
+    expect(within(dest).queryByText('어디로 갈까요?')).toBeNull();
   });
 });
 
-describe('AC-4 · 여행지 칩 (BR-U1-34)', () => {
-  it('각 칩에 지역명과 박수가 있고 "도시 추가" 칩이 함께 보인다', () => {
-    render(<TripWizardStep1Screen {...filledProps()} />);
+describe('AC-3 · 요약 행 탭 → 편집 시트 오픈 콜백 (S2~S6 는 스텁)', () => {
+  it('각 행을 누르면 대응 오픈 콜백만 불린다', () => {
+    const handlers = {
+      onPressSummaryDestination: jest.fn(),
+      onPressSummaryPeriod: jest.fn(),
+      onPressSummaryCompanion: jest.fn(),
+      onPressSummaryPreference: jest.fn(),
+      onPressSummaryBudget: jest.fn(),
+    };
+    render(<TripWizardStep1Screen {...filledProps(handlers)} />);
 
-    const busan = screen.getByTestId('trip-wizard-destination-busan');
-    const gyeongju = screen.getByTestId('trip-wizard-destination-gyeongju');
+    const cases: [string, jest.Mock][] = [
+      ['trip-wizard-summary-destination', handlers.onPressSummaryDestination],
+      ['trip-wizard-summary-period', handlers.onPressSummaryPeriod],
+      ['trip-wizard-summary-companion', handlers.onPressSummaryCompanion],
+      ['trip-wizard-summary-preference', handlers.onPressSummaryPreference],
+      ['trip-wizard-summary-budget', handlers.onPressSummaryBudget],
+    ];
+    cases.forEach(([testID, handler]) => {
+      fireEvent.press(screen.getByTestId(testID));
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
 
-    // ⚠️ 문자열이 아니라 **정규식**으로 본다. `toHaveTextContent('2박')`은 부분 포함이
-    // 아니라 완전 일치라 `부산 · 2박`에서 실패한다(02a ★3 실측). 정규식이면 지역명과
-    // 박수를 한 Text에 넣든 나눠 넣든 둘 다 통과해 마크업 형태에 안 묶인다.
-    expect(busan).toHaveTextContent(/부산/);
-    expect(busan).toHaveTextContent(/2박/);
-    expect(gyeongju).toHaveTextContent(/경주/);
-    expect(gyeongju).toHaveTextContent(/1박/);
-
-    // 칩이 있어도 '도시 추가'는 계속 보인다 — 다중 도시가 기본 흐름이다.
-    expect(screen.getByTestId('trip-wizard-destination-add')).toBeTruthy();
+    // 짝(부정) — 여행지 행을 눌렀다고 예산 오픈이 딸려 불리지 않는다(각 1회씩만 위에서 확인).
+    expect(handlers.onPressSummaryDestination).toHaveBeenCalledTimes(1);
+    expect(handlers.onPressSummaryBudget).toHaveBeenCalledTimes(1);
   });
+});
 
-  it('칩의 제거 버튼을 누르면 그 지역만 올려보낸다', () => {
-    const onRemoveDestination = jest.fn();
-    const onAddDestination = jest.fn();
+describe('AC-4 · 꼭 갈 곳 스트립 (경량 존재 — 상세는 mustVisit.test)', () => {
+  it('스트립 블록과 "더 담기" · "전체 보기" 가 선다', () => {
     render(
       <TripWizardStep1Screen
-        {...filledProps({ onRemoveDestination, onAddDestination })}
+        {...filledProps({ mustVisits: [seed('poi-1', '감천마을')] })}
       />
     );
 
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-remove-busan'));
-
-    // TRIP-364 — 삭제는 이름이 아니라 그 칩의 `seq`로 올라간다(목록 안 유일 식별자).
-    // 부산은 filledProps에서 seq 1이다. 이름으로 올려보내던 옛 계약은 같은 지역 중복 시
-    // "누른 그 칩"을 못 짚었다.
-    expect(onRemoveDestination).toHaveBeenCalledWith(1);
-    expect(onRemoveDestination).toHaveBeenCalledTimes(1);
-    // 짝 — × 버튼을 눌렀는데 칩 본체(또는 '도시 추가')까지 함께 불리지 않는다.
-    expect(onAddDestination).not.toHaveBeenCalled();
-  });
-});
-
-describe('AC-3 · 도시 추가 시트 (REGIONS 6지역 + 박수 지정)', () => {
-  it('열기 전에는 시트가 없고, "도시 추가"를 누르면 6지역이 보인다', () => {
-    render(<TripWizardStep1Screen {...props()} />);
-
-    // 짝(부정) — 처음부터 열려 있으면 아래 긍정 단언이 무의미해진다.
-    expect(screen.queryByTestId('trip-wizard-destination-sheet')).toBeNull();
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-
-    expect(screen.getByTestId('trip-wizard-destination-sheet')).toBeTruthy();
-    REGIONS.forEach((region) => {
-      expect(
-        screen.getByTestId(`trip-wizard-destination-region-${region.code}`)
-      ).toBeTruthy();
-    });
-  });
-
-  it('지역을 고르고 박수를 올린 뒤 확정하면 그 값이 올라가고 시트가 닫힌다', () => {
-    const onAddDestination = jest.fn();
-    render(<TripWizardStep1Screen {...props({ onAddDestination })} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-region-busan'));
-    // 박수 기본값 1 → +1 = 2박.
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-inc'));
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-confirm'));
-
-    expect(onAddDestination).toHaveBeenCalledWith('부산', 2);
-    expect(onAddDestination).toHaveBeenCalledTimes(1);
-    expect(screen.queryByTestId('trip-wizard-destination-sheet')).toBeNull();
-  });
-
-  it('지역을 안 고르면 확정할 수 없다', () => {
-    const onAddDestination = jest.fn();
-    render(<TripWizardStep1Screen {...props({ onAddDestination })} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-    const confirm = screen.getByTestId('trip-wizard-destination-confirm');
-
-    // ⚠️ 두 단언이 **둘 다** 필요하다. `toBeDisabled()`는 접근성 상태만 보므로
-    // `accessibilityState`만 회색으로 칠하고 실제로는 눌리는 버튼도 통과한다(02a ★1 실측).
-    expect(confirm).toBeDisabled();
-    fireEvent.press(confirm);
-    expect(onAddDestination).not.toHaveBeenCalled();
-
-    // 짝 — 지역을 고르면 열린다. 이게 없으면 "영원히 비활성"인 구현도 통과한다.
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-region-jeju'));
-    expect(screen.getByTestId('trip-wizard-destination-confirm')).toBeEnabled();
-  });
-
-  it('시트의 박수는 1박 아래로 내려가지 않는다', () => {
-    render(<TripWizardStep1Screen {...props()} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-dec'));
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-nights-dec'));
-
-    // 0박·음수 박은 서버 계약상 의미가 없다. 시트 안으로 범위를 좁혀 본다 —
-    // 화면 다른 곳의 '박' 표기와 섞이지 않게.
+    expect(screen.getByTestId('trip-wizard-mustvisit-block')).toBeOnTheScreen();
+    expect(screen.getByTestId('trip-wizard-mustvisit-more')).toBeOnTheScreen();
     expect(
-      screen.getByTestId('trip-wizard-destination-sheet')
-    ).toHaveTextContent(/1박/);
+      screen.getByTestId('trip-wizard-mustvisit-see-all')
+    ).toBeOnTheScreen();
   });
 });
 
-describe('TRIP-363 · POI 커버리지 배지 (poiCount 0 = "준비 중")', () => {
-  // 결정 a — poiCount 0 지역도 고를 수는 있게 두되, 고르기 전에 "준비 중"으로 알린다
-  // (INV-1 후보풀 빔 · INV-4 침묵 실패 금지). poiCount 미제공(구 {code,name})은 배지 없음.
-  const COVERAGE_REGIONS = [
-    { code: 'jeju', name: '제주', poiCount: 4 },
-    { code: 'hongcheon', name: '홍천군', poiCount: 0 },
-  ];
-
-  it('poiCount 0인 지역 칩엔 "준비 중" 배지가 뜨고, 0이 아니면 안 뜬다', () => {
-    render(<TripWizardStep1Screen {...props({ regions: COVERAGE_REGIONS })} />);
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-
-    // poiCount 0 → 배지 present.
-    expect(
-      screen.getByTestId('trip-wizard-destination-coming-soon-hongcheon')
-    ).toHaveTextContent(/준비 중/);
-    // poiCount>0 → 배지 absent(짝 — 무조건 배지를 다는 구현을 배제).
-    expect(
-      screen.queryByTestId('trip-wizard-destination-coming-soon-jeju')
-    ).toBeNull();
-  });
-
-  it('poiCount 0인 지역도 고를 수 있다 (결정 a — 배지로 경고하되 선택 자체는 막지 않는다)', () => {
-    const onAddDestination = jest.fn();
-    render(
-      <TripWizardStep1Screen
-        {...props({ regions: COVERAGE_REGIONS, onAddDestination })}
-      />
-    );
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-
-    // 준비 중 지역을 고르면 확정이 활성화된다(선택 가능).
-    fireEvent.press(
-      screen.getByTestId('trip-wizard-destination-region-hongcheon')
-    );
-    expect(screen.getByTestId('trip-wizard-destination-confirm')).toBeEnabled();
-  });
-});
-
-describe('AC-닫기 · 도시 추가 시트 닫기 어포던스 (TRIP-386)', () => {
-  // 이 시트는 gorhom 바텀시트가 아니라 절대배치 View라, 자매 TripDateSheet와 달리
-  // jest가 press·언마운트를 실제로 관측한다(바텀시트 목 사각 밖).
-
-  it('시트를 열면 눈에 보이는 "닫기" 컨트롤이 있다', () => {
-    render(<TripWizardStep1Screen {...props()} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-
-    // 준비→실행(오픈)→단언: 닫기 컨트롤이 존재하고 라벨이 '닫기'다.
-    const close = screen.getByTestId('trip-wizard-destination-close');
-    expect(close).toBeTruthy();
-    expect(close).toHaveTextContent(/닫기/);
-  });
-
-  it('"닫기"를 누르면 시트가 닫히고 아무것도 추가되지 않는다', () => {
-    const onAddDestination = jest.fn();
-    render(<TripWizardStep1Screen {...props({ onAddDestination })} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-close'));
-
-    // 사라짐은 queryBy+toBeNull로만 잴 수 있다(getBy는 부재 시 throw).
-    expect(screen.queryByTestId('trip-wizard-destination-sheet')).toBeNull();
-    // 화면은 목록을 props로 받으므로, 목록 불변을 "추가 콜백 미호출"로 대리 증명한다.
-    expect(onAddDestination).not.toHaveBeenCalled();
-  });
-
-  it('회귀 — 배경(딤)을 누르면 지금처럼 닫히고 아무것도 추가되지 않는다', () => {
-    const onAddDestination = jest.fn();
-    render(<TripWizardStep1Screen {...props({ onAddDestination })} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-    fireEvent.press(
-      screen.getByTestId('trip-wizard-destination-sheet-backdrop')
-    );
-
-    // 백드롭이 화면을 실제로 덮는지(픽셀)는 jest가 못 본다 —
-    // 여기서 잠그는 것은 "press → 언마운트" 상태 전이뿐이며 그것으로 충분하다.
-    expect(screen.queryByTestId('trip-wizard-destination-sheet')).toBeNull();
-    expect(onAddDestination).not.toHaveBeenCalled();
-  });
-});
-
-describe('AC-5 · 기간 프리셋과 날짜 카드 (BR-U1-36)', () => {
-  it('선택된 프리셋만 선택 상태이고 날짜 카드에 범위가 보인다', () => {
-    render(<TripWizardStep1Screen {...filledProps()} />);
-
-    // *(개념)* `toBeSelected()` = 그 요소의 접근성 상태가 "선택됨"인지 보는 matcher.
-    // 색만 바꾸면 눈에는 보여도 이 단언은 통과하지 않는다(PrefStep1Screen 선례).
-    expect(screen.getByTestId('trip-wizard-period-preset-3n4d')).toBeSelected();
-    ['this-weekend', 'next-weekend', '1n2d'].forEach((code) => {
-      expect(
-        screen.getByTestId(`trip-wizard-period-preset-${code}`)
-      ).not.toBeSelected();
-    });
-
-    // 구분자는 en dash(–, U+2013)다. 하이픈으로 쓰면 조용히 어긋난다(02a ★7).
-    expect(screen.getByTestId('trip-wizard-date-field')).toHaveTextContent(
-      /6월 10일 – 6월 13일/
-    );
-  });
-
-  it('프리셋을 누르면 코드만 올려보낸다 — 날짜는 화면이 계산하지 않는다', () => {
-    const onSelectPreset = jest.fn();
-    render(<TripWizardStep1Screen {...props({ onSelectPreset })} />);
-
-    fireEvent.press(
-      screen.getByTestId('trip-wizard-period-preset-this-weekend')
-    );
-
-    // 기준일이 화면 밖에 있으므로(01b D5) 화면은 어느 날짜인지 알 수 없고, 알 필요도 없다.
-    expect(onSelectPreset).toHaveBeenCalledWith('this-weekend');
-    expect(onSelectPreset).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('AC-6 · 날짜 직접 수정 진입점 (01b D4)', () => {
-  it('날짜 카드를 누르면 onPressPeriod가 불린다', () => {
-    const onPressPeriod = jest.fn();
-    render(<TripWizardStep1Screen {...filledProps({ onPressPeriod })} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-date-field'));
-
-    // 실제 캘린더 UI는 Figma에 프레임이 없어 이 칸 밖이다 — 진입점만 잠근다.
-    expect(onPressPeriod).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('AC-7 · 인원 스테퍼 (BR-U1-39 · 하한 1)', () => {
-  it('기본 1명이고, 1에서 −는 눌리지 않는다', () => {
-    const onChangeParty = jest.fn();
-    render(<TripWizardStep1Screen {...props({ party: 1, onChangeParty })} />);
-
-    expect(screen.getByTestId('trip-wizard-party-stepper')).toHaveTextContent(
-      /1명/
-    );
-
-    const dec = screen.getByTestId('trip-wizard-party-stepper-dec');
-    // ★1과 같은 이유로 두 단언을 함께 건다.
-    expect(dec).toBeDisabled();
-    fireEvent.press(dec);
-    expect(onChangeParty).not.toHaveBeenCalled();
-  });
-
-  it('짝 — +는 다음 값을 올려보내고, 2명부터는 −가 열린다', () => {
-    const onChangeParty = jest.fn();
-    const { rerender } = render(
-      <TripWizardStep1Screen {...props({ party: 1, onChangeParty })} />
-    );
-
-    fireEvent.press(screen.getByTestId('trip-wizard-party-stepper-inc'));
-    expect(onChangeParty).toHaveBeenCalledWith(2);
-
-    rerender(<TripWizardStep1Screen {...props({ party: 2, onChangeParty })} />);
-    expect(screen.getByTestId('trip-wizard-party-stepper')).toHaveTextContent(
-      /2명/
-    );
-    expect(screen.getByTestId('trip-wizard-party-stepper-dec')).toBeEnabled();
-  });
-});
-
-describe('AC-8 · 동반 유형 칩 (BR-U1-39 · 단일 선택)', () => {
-  it('고른 칩 하나만 선택 상태다', () => {
-    render(
-      <TripWizardStep1Screen {...filledProps({ companionType: '친구' })} />
-    );
-
-    expect(screen.getByTestId('trip-wizard-companion-friend')).toBeSelected();
-    ['alone', 'partner', 'family'].forEach((code) => {
-      expect(
-        screen.getByTestId(`trip-wizard-companion-${code}`)
-      ).not.toBeSelected();
-    });
-  });
-
-  it('칩을 누르면 ASCII 코드가 아니라 서버 enum을 올려보낸다', () => {
-    const onSelectCompanion = jest.fn();
-    render(<TripWizardStep1Screen {...props({ onSelectCompanion })} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-companion-partner'));
-
-    // testID의 `partner`는 셀렉터용 ASCII고(01b D7), 스토어·서버가 받는 값은 enum '연인'이다.
-    // 둘을 섞으면 서버가 거부한다.
-    expect(onSelectCompanion).toHaveBeenCalledWith('연인');
-  });
-});
-
-describe('AC-9 · 취향 프리필 카드 (BR-U1-38)', () => {
-  it('취향이 있으면 문구와 칩과 [바꾸기]가 보인다', () => {
-    render(<TripWizardStep1Screen {...filledProps()} />);
-
-    expect(screen.getByText('당신 취향으로 맞췄어요')).toBeTruthy();
-    ['미식', '전시', '야경'].forEach((chip) => {
-      expect(screen.getByText(chip)).toBeTruthy();
-    });
-    expect(
-      screen.getByText('온보딩에서 고른 취향을 그대로 반영했어요')
-    ).toBeTruthy();
-    expect(screen.getByTestId('trip-wizard-pref-change')).toBeTruthy();
-  });
-
-  it('[바꾸기]를 누르면 콜백이 불린다', () => {
-    const onChangePreference = jest.fn();
-    render(<TripWizardStep1Screen {...filledProps({ onChangePreference })} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-pref-change'));
-
-    expect(onChangePreference).toHaveBeenCalledTimes(1);
-  });
-
-  it('취향이 비어도 화면이 죽지 않는다 — 카드는 있고 칩만 없다', () => {
-    // 취향 조회가 아직 안 끝났거나 계정에 취향이 없는 경계. Figma에 그 변형이 없어
-    // "카드는 유지하고 값만 생략한다"는 리포 확립 규칙(US-EXPL-02 예외항)을 따른다.
-    render(<TripWizardStep1Screen {...filledProps({ preferenceChips: [] })} />);
-
-    const card = screen.getByTestId('trip-wizard-pref-card');
-    expect(card).toHaveTextContent(/당신 취향으로 맞췄어요/);
-    ['미식', '전시', '야경'].forEach((chip) => {
-      expect(within(card).queryByText(chip)).toBeNull();
-    });
-  });
-});
-
-describe('AC-10a · AC-10b · [다음] 게이트', () => {
-  it('canProceed가 참이면 눌리고 콜백이 불린다', () => {
+describe('AC-보존 · [다음] 게이트는 canProceed 하나로만 갈린다', () => {
+  it('canProceed 가 참이면 눌리고 콜백이 불린다', () => {
     const onNext = jest.fn();
     render(<TripWizardStep1Screen {...filledProps({ onNext })} />);
 
     const next = screen.getByTestId('trip-wizard-step1-next');
     expect(next).toBeEnabled();
-
     fireEvent.press(next);
     expect(onNext).toHaveBeenCalledTimes(1);
   });
 
-  it('canProceed가 거짓이면 회색이기만 한 게 아니라 실제로 눌리지 않는다', () => {
+  it('canProceed 가 거짓이면 회색이기만 한 게 아니라 실제로 눌리지 않는다', () => {
     const onNext = jest.fn();
     render(<TripWizardStep1Screen {...props({ canProceed: false, onNext })} />);
 
     const next = screen.getByTestId('trip-wizard-step1-next');
-
-    // ⚠️ 이 두 줄이 이 파일에서 가장 자주 반쪽만 쓰이는 짝이다. `toBeDisabled()`는
-    // `accessibilityState.disabled`만 읽으므로, 접근성 상태만 켜고 `disabled` prop을
-    // 빠뜨린 버튼은 **매처를 통과하면서 그대로 눌린다**(02a ★1 실측).
+    // ⚠️ 두 단언이 짝이다(★5). `toBeDisabled()` 는 접근성 상태만 읽어, 상태만 켜고 실제 disabled
+    // prop 을 뺀 버튼이 매처를 통과하며 눌린다(리포 3회 실측).
     expect(next).toBeDisabled();
     fireEvent.press(next);
     expect(onNext).not.toHaveBeenCalled();
   });
 });
 
-describe('AC-10c · 초기 상태에 오류 문구가 하나도 없다 (이 사이클의 심판)', () => {
-  it('검증은 빈 드래프트에 위반 3개를 내지만, 화면에는 그 흔적이 없다', () => {
-    // ① 먼저 **현실을 기록한다**. `validateTripDraft`는 페일클로즈라(TRIP-204) 날짜가
-    //    비어 있으면 읽을 수 없는 값으로 보고 위반으로 잡는다. 옳은 판정이다.
-    const violations = validateTripDraft({
-      destinations: [],
-      startDate: '',
-      endDate: '',
-      party: 1,
+describe('AC-5 · 옛 인라인 컨트롤이 default 에서 전량 사라졌다', () => {
+  it('프리셋·스테퍼·칩·예산 입력·날짜 카드·등록숙소 행·취향 카드·여행지 시트가 없다', () => {
+    // filledProps 로 화면을 꽉 채워 렌더한다 — 그래도 인라인 컨트롤은 없어야 한다.
+    render(<TripWizardStep1Screen {...filledProps()} />);
+
+    [
+      'trip-wizard-period-preset-3n4d',
+      'trip-wizard-party-stepper',
+      'trip-wizard-companion-friend',
+      'trip-wizard-budget-input',
+      'trip-wizard-budget-block',
+      'trip-wizard-date-field',
+      'trip-wizard-stayimport-block',
+      'trip-wizard-pref-card',
+      'trip-wizard-destination-add',
+    ].forEach((testID) => {
+      expect(screen.queryByTestId(testID)).toBeNull();
     });
-    expect([...violations].sort()).toEqual(
-      ['END_BEFORE_START', 'NIGHTS_EXCEED_PERIOD', 'NO_DESTINATION'].sort()
-    );
 
-    // ② 그런데 아무것도 안 고른 사용자가 보는 화면에는 그 셋이 하나도 없어야 한다.
-    render(<TripWizardStep1Screen {...props()} />);
-
-    // 위반 코드가 그대로 새어 나온 경우.
-    expect(root()).not.toHaveTextContent(
-      /NO_DESTINATION|END_BEFORE_START|NIGHTS_EXCEED_PERIOD|PARTY_BELOW_ONE/
-    );
-    // 코드를 사람 말로 옮겨 그린 경우 — Figma `g01 · error`(2226:1929)가 확정해 둔 문구다.
-    expect(root()).not.toHaveTextContent(/빨라요|많아요|다시 확인해주세요/);
-
-    // ③ 짝(긍정) — **이게 없으면 아무것도 안 그리는 화면이 ②를 공짜로 통과한다**(02a ★2 실측:
-    //    빈 루트에 부정 단언을 걸면 PASS가 난다). 화면이 실제로 그려졌음을 먼저 못박는다.
-    expect(root()).toHaveTextContent(/어디로 갈까요\?/);
-    expect(root()).toHaveTextContent(/다음/);
-    // 그리고 게이트는 닫혀 있다 — "문구가 없다"가 "검사를 안 한다"는 뜻이 아니다.
-    expect(screen.getByTestId('trip-wizard-step1-next')).toBeDisabled();
-  });
-
-  it('위반이 실재하는 상태에서도 이 칸은 문구를 그리지 않는다 (01b D3)', () => {
-    // 부산 5박인데 기간은 3박 — `NIGHTS_EXCEED_PERIOD`가 실제로 서는 상태다.
-    render(
-      <TripWizardStep1Screen
-        {...filledProps({
-          destinations: [{ seq: 1, region: '부산', nights: 5 }],
-          canProceed: false,
-        })}
-      />
-    );
-
-    // 이 칸의 계약은 "판정만 하고 표시는 TRIP-206"이다. 문구를 미리 그려 넣으면
-    // 그 티켓의 AC와 섞여 TRIP-81 종료 판정에서 구분되지 않는다.
-    expect(root()).not.toHaveTextContent(
-      /NO_DESTINATION|END_BEFORE_START|NIGHTS_EXCEED_PERIOD|PARTY_BELOW_ONE/
-    );
-    expect(root()).not.toHaveTextContent(/빨라요|많아요|다시 확인해주세요/);
-
-    // 짝 — 대신 게이트가 닫힌다. 이것이 이 칸이 지는 몫이다.
-    expect(screen.getByTestId('trip-wizard-step1-next')).toBeDisabled();
-    expect(root()).toHaveTextContent(/부산/);
+    // 짝(긍정, ★7) — **이게 없으면 아무것도 안 그리는 화면이 위 부재 단언을 공짜로 통과한다.**
+    // 화면은 실제로 그려졌고, 인라인이 요약 행으로 대체됐다.
+    expect(
+      screen.getByTestId('trip-wizard-summary-destination')
+    ).toBeOnTheScreen();
+    expect(root()).toHaveTextContent(/어디로 떠날까요\?/);
+    expect(screen.getByTestId('trip-wizard-step1-next')).toBeOnTheScreen();
   });
 });
 
-describe('AC-12 · INV-3 — 소요 시간 미표시 (BR-U1-54)', () => {
-  it('어떤 상태에서도 소요 시간 문자열이 나타나지 않는다', () => {
+describe('AC-INV-3 · 소요 시간 미표시 (BR-U1-54)', () => {
+  it('어떤 값을 넣어도 소요 시간 문자열이 나타나지 않는다', () => {
     render(<TripWizardStep1Screen {...filledProps()} />);
 
     expect(root()).not.toHaveTextContent(/소요/);
     expect(root()).not.toHaveTextContent(/\d+\s*분/);
     expect(root()).not.toHaveTextContent(/\d+\s*시간/);
 
-    // 짝(긍정) — 스캔이 실제로 텍스트를 봤다는 증거이자, 위 정규식이 이 화면의 정상
-    // 표기(박·일·명)를 오탐하지 않는다는 확인이다(02a ★6 실측).
+    // 짝(긍정) — 스캔이 실제로 텍스트를 봤고, 위 정규식이 정상 표기(박·일)를 오탐하지 않는다.
     expect(root()).toHaveTextContent(/3박 4일/);
-    expect(root()).toHaveTextContent(/2명/);
-  });
-});
-
-describe('AC-13 · 범위 — 다음 칸 것들을 미리 그리지 않는다 (01b D2)', () => {
-  it('예산·등록 숙소·꼭 갈 곳 블록이 각자 자리에 있다', () => {
-    render(<TripWizardStep1Screen {...filledProps()} />);
-
-    // 라이브 Figma에는 셋 다 그려져 있지만 각자 티켓이 있다(TRIP-207 · 208 · 209).
-    // 이 칸이 삼키면 티켓별 AC 충족 여부가 섞여 구분되지 않는다.
-    //
-    // ⚠️ **TRIP-207에서 예산 두 줄(`/예산/`·`/₩/`)을, TRIP-208에서 `/가져오기/` 한 줄을,
-    // TRIP-209에서 마지막 한 줄(`/꼭 갈 곳/`)을 걷어냈다**(각 사이클 02a §6). 걷어낸 줄들은
-    // "그 티켓이 올 때까지 미리 그리지 마라"는 칸막이였고 해당 티켓이 도착해 임무가 끝났다.
-    // 이제 이 it은 "세 블록이 각자 자리에 있다"는 앵커만 진다.
-    //
-    // 칸막이를 걷은 자리를 반대 방향으로 다시 잠근다 — 안 그러면 "그 블록이 있어도 없어도
-    // 통과"가 된다. 각 블록의 내용은 `…budget.test.tsx`·`…stayImport.test.tsx`·
-    // `…mustVisit.test.tsx`가 본다.
-    expect(screen.getByTestId('trip-wizard-budget-block')).toBeTruthy();
-    expect(screen.getByTestId('trip-wizard-stayimport-block')).toBeTruthy();
-    expect(screen.getByTestId('trip-wizard-mustvisit-block')).toBeTruthy();
-
-    // 짝(긍정) — 이 칸 소관 블록은 그대로 있다. 없으면 위 부정 단언이 공허해진다.
-    expect(root()).toHaveTextContent(/여행지/);
-    expect(root()).toHaveTextContent(/언제 가세요\?/);
-    expect(root()).toHaveTextContent(/누구랑 가세요\?/);
-    expect(root()).toHaveTextContent(/당신 취향으로 맞췄어요/);
-  });
-
-  it('몰입 화면이라 하단 탭바를 그리지 않는다 (BR-U0-29)', () => {
-    render(<TripWizardStep1Screen {...filledProps()} />);
-
-    // 라우트가 (tabs) 밖이라 구조적으로 충족되지만, 화면이 스스로 탭바를 끌어오는
-    // 회귀를 막는다.
-    expect(screen.queryByTestId('shell-tabbar-root')).toBeNull();
-  });
-});
-
-describe('TRIP-387 · 시트 안 지역 검색 (슬라이스 1)', () => {
-  // 이 시트의 지역 목록은 두 갈래로 온다:
-  //  · sheetRegions(신규 optional) — 페이지가 filterRegions(query)로 이미 좁혀 내린 목록
-  //  · 미제공이면 regions(full 6개)로 폴백 — 기존 27케이스가 이 폴백에 얹혀 무손상이다
-  // 화면은 검색을 스스로 하지 않는다(features 간 import 금지) — 좁힌 결과만 받아 그린다.
-
-  /** 페이지가 '부'로 좁혀 부산 하나만 내려보낸 상태. */
-  const busanOnly = [{ code: 'busan', name: '부산' }];
-  const OTHER_CODES = ['gyeongju', 'seoul', 'jeju', 'gangneung', 'yeosu'];
-
-  it('AC-1 · sheetRegions로 좁힌 목록만 칩으로 그린다', () => {
-    render(
-      <TripWizardStep1Screen
-        {...props({ sheetRegions: busanOnly, destinationQuery: '부' })}
-      />
-    );
-
-    // 실행: 시트를 연다(칩·검색·문구는 sheetOpen일 때만 렌더된다, 02a ★6).
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-
-    // 단언: 부산 칩만 있고 나머지 5개 지역 칩은 없다.
-    expect(
-      screen.getByTestId('trip-wizard-destination-region-busan')
-    ).toBeTruthy();
-    OTHER_CODES.forEach((code) => {
-      expect(
-        screen.queryByTestId(`trip-wizard-destination-region-${code}`)
-      ).toBeNull();
-    });
-    // 칩 총수 1 — 정규식 testID 쿼리는 매칭 전부를 돌려준다(02a §5 실측).
-    expect(
-      screen.queryAllByTestId(/^trip-wizard-destination-region-/)
-    ).toHaveLength(1);
-  });
-
-  it('시트 안에 검색 입력이 있고, 제어 입력이라 친 문자열을 그대로 위로 올린다', () => {
-    // *(개념)* 제어 입력(controlled input): 화면에 보이는 값은 내부 상태가 아니라
-    // prop(destinationQuery)이 정한다. 사용자가 쳐도 화면은 스스로 안 바꾸고, 바뀐
-    // 문자열을 onChangeText로 위로 보고만 한다 — 예산 입력과 같은 규율이다.
-    const onChangeDestinationQuery = jest.fn();
-    render(
-      <TripWizardStep1Screen
-        {...props({ destinationQuery: '부', onChangeDestinationQuery })}
-      />
-    );
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-    const input = screen.getByTestId('trip-wizard-destination-search');
-
-    // 받은 값을 그대로 보여준다(제어 입력).
-    expect(input).toHaveDisplayValue('부');
-
-    // 실행: '경'으로 바꿔 친다.
-    fireEvent.changeText(input, '경');
-
-    // 단언: 가공 없이 그대로 올라간다. fireEvent.changeText는 editable !== false인
-    // 입력에만 흐르므로, 이 호출이 곧 "편집 가능"의 증거이기도 하다(budget 선례, 02a ★4).
-    expect(onChangeDestinationQuery).toHaveBeenCalledWith('경');
-    expect(onChangeDestinationQuery).toHaveBeenCalledTimes(1);
-  });
-
-  it('AC-2 · 불일치면 칩 0개 + "일치하는 지역이 없어요", 전체로 되돌아가지 않는다', () => {
-    // ⚠️ 이 사이클의 핵심 함정(02a ★1). 페이지가 불일치 검색어로 좁히면 sheetRegions는
-    // **빈 배열**이다. 화면은 (sheetRegions ?? regions)로 폴백하는데, nullish ??는
-    // null·undefined에만 폴백한다 — [] ?? regions === [](02a §5 실측). truthy 검사
-    // (sheetRegions?.length ? … : regions)를 쓰면 빈 배열이 full로 되돌아가 조용히 깨진다.
-    render(
-      <TripWizardStep1Screen
-        {...props({ sheetRegions: [], destinationQuery: '없는지역' })}
-      />
-    );
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-
-    // 칩이 하나도 없다 — 빈 배열이 full로 되돌아가지 않았다는 증거다.
-    expect(
-      screen.queryAllByTestId(/^trip-wizard-destination-region-/)
-    ).toHaveLength(0);
-
-    // 그리고 "없다"고 말한다(정규식 — 문자열이면 완전 일치라 마크업에 취약, 02a ★3).
-    const empty = screen.getByTestId('trip-wizard-destination-search-empty');
-    expect(empty).toHaveTextContent(/일치하는 지역이 없어요/);
-  });
-
-  it('AC-2 짝 · 검색어가 비어 있으면(전체 표시) "없어요" 문구를 그리지 않는다', () => {
-    // "입력 안 함"과 "일치 없음"은 다르다 — 빈 검색어에서 empty 문구가 뜨면 처음 시트를
-    // 연 사용자가 "지역이 없다"는 거짓말을 본다. 조건은 길이 0 && 검색어 !== '' 둘 다여야 한다.
-    render(
-      <TripWizardStep1Screen
-        {...props({ sheetRegions: REGIONS, destinationQuery: '' })}
-      />
-    );
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-
-    // 6개가 다 보이고, empty 문구는 없다.
-    expect(
-      screen.queryAllByTestId(/^trip-wizard-destination-region-/)
-    ).toHaveLength(REGIONS.length);
-    expect(
-      screen.queryByTestId('trip-wizard-destination-search-empty')
-    ).toBeNull();
-  });
-
-  it('AC-4 폴백 · sheetRegions 미제공이면 기존처럼 6개 전부 + empty 문구 없음', () => {
-    // 하위호환: 신규 prop을 하나도 안 주면 옛 경로 그대로다. 기존 props() 헬퍼가 이 상태라,
-    // 이 파일의 다른 27케이스가 통째로 이 폴백에 얹혀 있다(회귀 그물, 02a ★7).
-    render(<TripWizardStep1Screen {...props()} />);
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-
-    REGIONS.forEach((region) => {
-      expect(
-        screen.getByTestId(`trip-wizard-destination-region-${region.code}`)
-      ).toBeTruthy();
-    });
-    expect(
-      screen.queryByTestId('trip-wizard-destination-search-empty')
-    ).toBeNull();
-  });
-
-  it('★확정은 full regions로 지역을 되찾는다 — 고른 뒤 검색어가 바뀌어 그 지역이 시트에서 사라져도 담긴다', () => {
-    // 함정(code-critic 경고-1, 도달 가능): '부'로 부산을 고른 뒤 검색어를 '제주'로 바꾸면
-    // 부산은 좁힌 목록(sheetRegions)에서 사라지지만, 사용자가 이미 고른 선택(sheetRegionCode)은
-    // 리셋되지 않는다. 이때 확정하면 부산이 담겨야 한다 — 확정 resolution이 좁힌 목록이 아니라
-    // **full `regions`**를 봐야만 성립한다(01b 함정 ③). 이 성질을 잠그는 심판이 없어 신설한다.
-    const onAddDestination = jest.fn();
-    const { rerender } = render(
-      <TripWizardStep1Screen
-        {...props({
-          onAddDestination,
-          sheetRegions: [{ code: 'busan', name: '부산' }],
-          destinationQuery: '부',
-        })}
-      />
-    );
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-    // 준비: 좁힌 목록에 있는 부산을 고른다(내부 sheetRegionCode='busan').
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-region-busan'));
-
-    // 실행: 검색어가 '제주'로 바뀌어 페이지가 부산을 제외한 목록을 다시 내려보낸다.
-    // (rerender는 같은 컴포넌트 인스턴스라 내부 상태 sheetRegionCode='busan'이 유지된다.)
-    rerender(
-      <TripWizardStep1Screen
-        {...props({
-          onAddDestination,
-          sheetRegions: [{ code: 'jeju', name: '제주' }],
-          destinationQuery: '제주',
-        })}
-      />
-    );
-    // 부산 칩은 이제 시트에서 사라졌다(짝 — 이 전제가 있어야 함정이 성립).
-    expect(
-      screen.queryByTestId('trip-wizard-destination-region-busan')
-    ).toBeNull();
-
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-confirm'));
-
-    // 단언: 좁힌 목록에 없어도 full regions로 부산을 되찾아 담는다.
-    expect(onAddDestination).toHaveBeenCalledWith('부산', 1);
-    expect(onAddDestination).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('TRIP-455 · 여행지 추가 시트 스크롤 (버그1)', () => {
-  // 버그1: 서버 카탈로그(GET /regions)가 화면보다 길어지면 칩 격자가 위로 밀려 상단 광역시
-  // (서울·부산)가 화면 밖으로 나가 선택 불가였다. 근본 원인은 칩 격자가 맨 <View>(flex-wrap,
-  // 높이 상한·스크롤 없음)라는 것. 수정은 칩 격자를 스크롤 컨테이너로 감싸는 것이다.
-  //
-  // jest가 못 보는 것: 실제 스크롤·클리핑·상단 칩 도달 가능성(RN 테스트 렌더러는 레이아웃을
-  // 계산 안 한다, 02a ★S). 그래서 이 심판은 **스크롤 컨테이너 존재**라는 구조만 잠근다 —
-  // 실제 도달성은 [검증] 6-b 실기(카탈로그 긴 상태로 시트 열어 서울·부산까지 스크롤) 몫이다.
-
-  it('🔴 시트를 열면 칩 목록을 감싸는 스크롤 컨테이너가 있다', () => {
-    // (준비) 기본 드래프트로 렌더.
-    render(<TripWizardStep1Screen {...props()} />);
-
-    // (실행) 시트를 연다 — 칩·스크롤 컨테이너는 sheetOpen일 때만 렌더된다(★6).
-    fireEvent.press(screen.getByTestId('trip-wizard-destination-add'));
-
-    // (단언) 앵커 — 시트가 실제로 열렸고 칩이 그려진다(스크롤 단언이 렌더 통째 죽음이나
-    // "스크롤 컨테이너가 칩을 삼켜 0개"로 공허 통과하지 않게).
-    expect(
-      screen.getByTestId('trip-wizard-destination-sheet')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('trip-wizard-destination-region-busan')
-    ).toBeOnTheScreen();
-
-    // 핵심 — 오늘은 이 컨테이너 testID가 없어 RED. 있으면 상단 칩이 화면 밖으로 영영
-    // 밀리지 않을 자리가 생긴다(실제 스크롤은 6-b).
-    expect(
-      screen.getByTestId('trip-wizard-destination-sheet-scroll')
-    ).toBeOnTheScreen();
   });
 });

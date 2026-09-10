@@ -6,7 +6,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
  * TRIP-641 파트 2 — dev 정적 프리뷰(`_dev/preview.tsx`)의 밴드 2단 네비.
  *
  * 무엇을 보장하나:
- *  (1) AC-6 — 165개 프리뷰 상태가 전부 Figma 밴드(10종) 하나로 분류되고, 그룹핑해도 하나도
+ *  (1) AC-6 — 170개 프리뷰 상태가 전부 Figma 밴드(10종) 하나로 분류되고, 그룹핑해도 하나도
  *      드롭되지 않는다(대규모 기계 편집의 누락 위험을 순수 데이터로 잠근다),
  *  (2) AC-1 — 상단에 first-cut 9개 밴드 버튼이 서고, 밴드를 누르면 그 밴드 칩 그룹만 "보이고"
  *      나머지 밴드 그룹은 "접힌다"(시각적 필터),
@@ -71,10 +71,35 @@ beforeEach(() => {
 });
 
 describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
-  it('166개 엔트리가 전부 10종 밴드 중 하나를 갖고, 그룹핑해도 하나도 드롭되지 않는다', () => {
+  it('170개 엔트리가 전부 10종 밴드 중 하나를 갖고, 그룹핑해도 하나도 드롭되지 않는다', () => {
     // 준비 — 렌더 없이 모듈의 PREVIEW_STATES 배열을 그대로 읽는다.
     // 단언 ① — 대규모 기계 편집에서 엔트리가 하나도 안 빠졌다(실측 166개, TRIP-649로 saved-places-empty +1).
-    expect(PREVIEW_STATES).toHaveLength(166);
+    // ⚠️ TRIP-665: 신 default 재작성으로 제거된 화면 prop 을 쓰던 g01 프리뷰 키 3개
+    //    (`trip-new-step1-search-empty`·`-datesheet`·`-prefsheet`)를 삭제해 166→163.
+    // ⚠️ TRIP-666: 여행지 편집 시트 프리뷰 키(`trip-new-step1-destination-sheet`) 추가로 163→164.
+    // ⚠️ TRIP-667: 기간 편집 시트 프리뷰 키(`trip-new-step1-period-sheet`) 추가로 164→165.
+    // ⚠️ TRIP-668: 동행 편집 시트 프리뷰 키(`trip-new-step1-companion-sheet`) 추가로 165→166.
+    // ⚠️ TRIP-669: 취향 편집 시트 프리뷰 키(`trip-new-step1-pref-sheet`) 추가로 166→167.
+    // ⚠️ TRIP-670: 예산 편집 시트 프리뷰 키(`trip-new-step1-budget-sheet`, band `g`) 추가로 167→168.
+    // ⚠️ TRIP-671: g01 empty·loading 프리뷰 키 2개(`trip-new-step1-empty`·`trip-new-step1-loading`,
+    //    band `g`) 추가로 168→170.
+    //    test-designer 선반영(브리프 맹점④ — S2~S5 implementer 4연속 손편집 종료). implementer 는
+    //    `preview.tsx` 에 그 키들을 추가할 뿐 이 가드는 만지지 않는다(추가 전엔 168개라 이 단언이 red).
+    // ⚠️ TRIP-672: g02 default 재작성으로 옛 개념(후보/coverage/blocked/fixSheet)을 쓰던 프리뷰
+    //    키 11개를 신 계약 5개(`trip-new-step2-{default,no-stay,loading,error,notrip}`)로 줄여
+    //    170→164. TRIP-665(g01 default 재작성으로 키 3개 삭제 166→163)와 동형 — 프리뷰 키에서
+    //    제거된 화면 prop 이 사라지면서 총계가 준다.
+    // ⚠️ TRIP-673: g02 숙소 선택 시트 프리뷰 키(`trip-new-step2-staysheet`, band `g`) 추가로
+    //    164→165. TRIP-666~671 시트 키 추가와 동형 — 신 프리뷰 키 1개가 총계를 1 늘린다.
+    // ⚠️ TRIP-674: g02 empty 얼굴 신설로 `trip-new-step2-empty`(band `g`) 1키 추가 165→166.
+    //    `-loading` 은 신 스켈레톤으로 정합될 뿐(키 이미 존재)이라 총계 불변 — empty 만 +1.
+    //    test-designer 선반영(D4) — implementer 는 preview.tsx 에 `-empty` 키만 추가하고 이 가드는
+    //    안 만진다(추가 전엔 165개라 이 단언이 red).
+    // ⚠️ TRIP-676: S12 꼭 갈 곳 전용 목록 프리뷰 키 2개(`trip-new-mustvisit-list`·`-empty`, band `g`)
+    //    추가로 166→168. test-designer 선반영(S8·S9 놓침 재발 방지 관례) — implementer 는 preview.tsx 에
+    //    두 키(render: <MustVisitListScreen …/>, 순수 뷰 import)만 추가하고 이 가드는 안 만진다
+    //    (추가 전엔 166개라 이 단언이 red).
+    expect(PREVIEW_STATES).toHaveLength(168);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
