@@ -16,6 +16,10 @@ RUN uv sync --locked --no-dev
 COPY main.py ./
 COPY prompts ./prompts
 COPY data ./data
+# 단가표(api/cost.py) — 이게 빠지면 TRIPPILOT_LLM_PRICE_FILE 을 꽂는 순간
+# 파일 없음 → PriceConfigError → 기동 실패다(설정 오류를 은폐하지 않는 쪽 설계).
+# `/app/config/llm-prices.json` = 로컬 스크립트가 `ai/` 에서 보는 것과 같은 상대경로.
+COPY config ./config
 
 EXPOSE 8000
 CMD ["uv", "run", "--no-sync", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
