@@ -19,6 +19,7 @@ export function TripMustVisitsPage() {
   const router = useRouter();
   const mustVisits = useTripWizardStore((state) => state.mustVisits);
   const removeMustVisit = useTripWizardStore((state) => state.removeMustVisit);
+  const destinations = useTripWizardStore((state) => state.destinations);
   const { savedPlaces } = useSavedPlaces({
     isAuthed: getAccessToken() !== null,
   });
@@ -28,8 +29,15 @@ export function TripMustVisitsPage() {
       items={mustVisits}
       onRemove={removeMustVisit}
       onAddMore={() =>
+        // d04(탐색)로 갈 때 여행에 담은 지역들을 라우트 파라미터로 실어 보낸다(TRIP-687) —
+        // g01 스트립(TripNewStep1Page)과 같은 계약. 목적지 0곳이면 빈 배열이라 전국 전체.
         router.push(
-          savedPlaces.length > 0 ? '/explore/saved-places' : '/explore/places'
+          savedPlaces.length > 0
+            ? '/explore/saved-places'
+            : {
+                pathname: '/explore/places',
+                params: { region: destinations.map((d) => d.region) },
+              }
         )
       }
       onBack={() => router.back()}

@@ -17,7 +17,10 @@ import type { GetPlacesParams, Place } from '@/shared/api/generated/schemas';
  * 이 키가 `['/places', {…}]` 접두사라 d06 상세가 이 캐시를 훑어 단건을 찾는다(TRIP-501). 단, 무한쿼리는
  * `InfiniteData<PlaceList>`(=`{pages, pageParams}`)를 담으므로 상세는 그 모양도 읽도록 적응돼 있다.
  */
-export function usePlacesInfinite(params: GetPlacesParams) {
+export function usePlacesInfinite(
+  params: GetPlacesParams,
+  options?: { enabled?: boolean }
+) {
   const query = useInfiniteQuery({
     queryKey: getGetPlacesQueryKey(params),
     queryFn: ({ pageParam, signal }) =>
@@ -27,6 +30,9 @@ export function usePlacesInfinite(params: GetPlacesParams) {
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    // 다지역 병합 경로가 켜지면 이 단발 조회는 헛조회를 막으려 꺼진다(PlaceExplorePage 분기).
+    // 기본 true 라 기존 호출부(h20 등)는 영향 없음.
+    enabled: options?.enabled ?? true,
   });
 
   // 도착한 모든 장을 하나의 목록으로 평탄화 — 화면은 이 배열만 그린다.

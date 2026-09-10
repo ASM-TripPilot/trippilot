@@ -292,6 +292,7 @@
 
 ## src/features/explore/model/
 - `src/features/explore/model/exploreFixtures.ts`  →  PREVIEW_PLACES · PREVIEW_SAVED_POI_IDS · PREVIEW_SAVED_PLACES · PREVIEW_REGIONS
+- `src/features/explore/model/mergePlaces.ts`  →  mergePlacesByPoiId
 - `src/features/explore/model/placeListState.ts`  →  PlaceListState · resolvePlaceListState
 - `src/features/explore/model/placeListView.ts`  →  visiblePlaces
 - `src/features/explore/model/placeSaveGuard.ts`  →  PlaceSaveNotice · hasUsableCoords · SAVE_FAILURE_NOTICE · COORD_BLOCKED_NOTICE · REMOVE_FAILURE_NOTICE
@@ -299,6 +300,7 @@
 - `src/features/explore/model/savedPlaceIndex.ts`  →  findSavedPlaceId · optimisticSavedPlaceId
 - `src/features/explore/model/savedPlaceList.ts`  →  orderSavedPlaces · SAVED_PLACE_BADGE
 - `src/features/explore/model/savedPlaces.ts`  →  SavedPlacesFailureReason · SavedPlacesOutcome · useSavedPlaces
+- `src/features/explore/model/useMultiRegionPlaces.ts`  →  useMultiRegionPlaces
 - `src/features/explore/model/usePlacesInfinite.ts`  →  usePlacesInfinite
 
 ## src/features/explore/ui/
@@ -1214,4 +1216,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 824개 파일
+합계 826개 파일

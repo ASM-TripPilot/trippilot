@@ -33,12 +33,17 @@ import {
   type PlaceSaveNotice,
 } from '@/features/explore/model/placeSaveGuard';
 import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
+import { useMultiRegionPlaces } from '@/features/explore/model/useMultiRegionPlaces';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 
 export function PlaceExplorePage(): ReactElement {
-  const { region } = useLocalSearchParams<{ region?: string }>();
-  const rawRegion = Array.isArray(region) ? region[0] : region;
+  const { region } = useLocalSearchParams<{ region?: string | string[] }>();
+  // '더 담기'가 여행 지역들을 배열로 실어 보낸다(TRIP-687, 같은 키 반복 → 배열). 0/1지역은 기존
+  // 무한스크롤 경로를, 2+지역은 지역별 병렬 조회 후 병합 경로를 탄다(어느 쪽이 그려지는지는 6-b 실기).
+  const regions = Array.isArray(region) ? region : region ? [region] : [];
+  const isMultiRegion = regions.length >= 2;
+  const singleRegion = regions.length <= 1 ? regions[0] : undefined;
 
   const [selectedCategory, setSelectedCategory] = useState<PoiCategory | null>(
     null
@@ -53,6 +58,20 @@ export function PlaceExplorePage(): ReactElement {
   // 검색은 서버가 한다(q) — 클라 필터는 "받아온 페이지 안에서만" 검색이라 결과가 조용히 빠진다
   // (TRIP-502 선행 조건). 무한 스크롤은 nextCursor 로 이어 받는다(첫 장만 받고 스크롤에 따라 추가).
   const trimmedQuery = searchText.trim();
+  // 두 훅 모두 무조건 호출하고 enabled 로 게이팅한다(훅 규칙) — 다지역이면 단발 조회를 꺼
+  // 헛조회를 막고, 단일/0지역이면 병합 조회를 끈다.
+  const infinite = usePlacesInfinite(
+    {
+      ...(singleRegion ? { region: singleRegion } : {}),
+      ...(selectedCategory ? { category: selectedCategory } : {}),
+      ...(trimmedQuery ? { q: trimmedQuery } : {}),
+    },
+    { enabled: !isMultiRegion }
+  );
+  const multi = useMultiRegionPlaces(regions, {
+    category: selectedCategory,
+    q: trimmedQuery,
+  });
   const {
     items,
     isPending,
@@ -61,11 +80,7 @@ export function PlaceExplorePage(): ReactElement {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = usePlacesInfinite({
-    ...(rawRegion ? { region: rawRegion } : {}),
-    ...(selectedCategory ? { category: selectedCategory } : {}),
-    ...(trimmedQuery ? { q: trimmedQuery } : {}),
-  });
+  } = isMultiRegion ? multi : infinite;
   const { isSaved, save, remove, savedPoiIds } = useSavedPlaces({ isAuthed });
 
   const listState = resolvePlaceListState({

@@ -28,6 +28,8 @@ import { PlaceExplorePage } from './PlaceExplorePage';
  *  - **P-6 (AC-6)** CTA 는 여행 생성 1/2 로 보낸다.
  *  - **P-7 (Seed Q1·BR-U1-03)** 게스트는 담은 목록 조회조차 보내지 않는다.
  *  - **P-8 (TRIP-502)** 목록 끝에 닿으면 `nextCursor` 로 다음 장을 이어 받는다(무한 스크롤).
+ *  - **P-9 (TRIP-687)** 라우트 `region` 이 2곳 이상이면 지역별로 `getPlaces` 를 각 1회 부르고
+ *    (fan-out) 병합 결과를 한 목록에 함께 그린다 — 단일지역 경로(P-2)의 무한 스크롤은 안 탄다.
  *
  * 왜 통합 버킷인가: 심판 대상이 "**실제로 나간 요청**"이다. 직렬화가 끝난 최종 URL·재요청
  * 횟수·나간 경로의 id 는 msw 만 관찰할 수 있다(`savedPlaces.integration.test.tsx` 계승).
@@ -51,7 +53,9 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 const mockPush = jest.fn();
-let mockParams: { region?: string } = {};
+// region 은 '더 담기'가 여행지 여러 곳을 같은 키로 반복해 실으면 배열이 된다(expo-router 규약) —
+// P-9(다지역)를 위해 배열도 허용한다(단일지역 케이스 P-2 는 string 그대로 유효).
+let mockParams: { region?: string | string[] } = {};
 
 // 정적 `router` 싱글턴과 `useRouter()` 훅을 **둘 다** 같은 목으로 준다 — 배선이 어느 쪽을
 // 쓰든 이 파일의 단언은 같다(리포에 두 선례가 공존한다: StaySearchPage vs TripNewStep1Page).
@@ -445,5 +449,58 @@ describe('P-8 · 모두 보기는 커서로 이어 받는다 (무한 스크롤 �
     expect(new URL(hits[hits.length - 1].url).searchParams.get('cursor')).toBe(
       'CURSOR_2'
     );
+  });
+});
+
+describe('P-9 · 다지역이면 지역별로 조회해 한 목록에 합쳐 그린다 (TRIP-687 · code-critic 경고-1 봉합)', () => {
+  // 부산·경주 각각 다른 장소를 준다 — poiId 가 안 겹쳐 병합 후에도 4장이 모두 남는다.
+  const BUSAN: Place[] = [
+    makePlace('b1', '감천문화마을', '명소', '부산광역시', 12),
+    makePlace('b2', '광안리 해변', '야경', '부산광역시', 30),
+  ];
+  const GYEONGJU: Place[] = [
+    makePlace('g1', '불국사', '명소', '경주시', 40),
+    makePlace('g2', '첨성대', '명소', '경주시', 15),
+  ];
+
+  it('getPlaces 가 지역마다 한 번씩(2회) 나가고, 부산·경주 장소가 한 목록에 함께 그려진다', async () => {
+    setAccessToken('valid-access');
+    // 라우트가 여행지 2곳을 배열로 실어 보낸다 → PlaceExplorePage 가 다지역 병합 경로로 갈린다.
+    mockParams = { region: ['부산광역시', '경주시'] };
+    // region 파라미터로 갈라 지역별 응답을 준다(P-8 의 server.use 오버라이드 선례와 동형).
+    // region 이 없는 헛조회가 새면 빈 목록이 오고, 아래 "정확히 2회" 단언이 그것을 red 로 잡는다.
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region');
+        if (region === '부산광역시')
+          return HttpResponse.json({ items: BUSAN, nextCursor: null });
+        if (region === '경주시')
+          return HttpResponse.json({ items: GYEONGJU, nextCursor: null });
+        return HttpResponse.json({ items: [], nextCursor: null });
+      })
+    );
+
+    await renderPage();
+
+    // ① fan-out — 지역당 정확히 1회씩, 총 2회. 다지역인데 usePlacesInfinite 가 enabled 게이팅이
+    //    깨져 전국을 헛조회하면 3회, regions.map 이 둘째 지역을 빠뜨리면 1회가 되어 둘 다 red.
+    const hits = hitsOf('GET', '/api/v1/places');
+    expect(hits).toHaveLength(2);
+
+    // ② 나간 두 요청의 region 이 부산·경주 각각이다(발사 순서는 안 굳힌다 — 두 값의 존재만 본다).
+    const regionsCalled = hits.map((hit) =>
+      new URL(hit.url).searchParams.get('region')
+    );
+    expect(regionsCalled).toContain('부산광역시');
+    expect(regionsCalled).toContain('경주시');
+
+    // ③ 병합 결과 — 부산 2곳 + 경주 2곳이 한 목록에 함께 뜬다(입력 순서 보존 = 부산 먼저).
+    //    둘째 지역 누락 뮤턴트면 경주 카드(g1·g2)가 없어 red.
+    expect(cardTestIds()).toEqual([
+      'explore-places-card-b1',
+      'explore-places-card-b2',
+      'explore-places-card-g1',
+      'explore-places-card-g2',
+    ]);
   });
 });

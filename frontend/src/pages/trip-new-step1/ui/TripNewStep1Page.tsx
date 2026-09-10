@@ -514,10 +514,15 @@ export function TripNewStep1Page({
         mustVisits={mustVisits}
         onPressMore={() =>
           // 담은 곳이 있으면 담은 장소 화면(d02)으로, 없으면 새로 담을 탐색으로 보낸다(TRIP-367).
+          // d04(탐색)로 갈 때는 여행에 담은 지역들을 라우트 파라미터로 실어 보낸다(TRIP-687) —
+          // 표준명 원문·순서 그대로, 목적지가 없으면 빈 배열이라 전국 전체가 뜬다.
           router.push(
             savedPlaceList.length > 0
               ? '/explore/saved-places'
-              : '/explore/places'
+              : {
+                  pathname: '/explore/places',
+                  params: { region: destinations.map((d) => d.region) },
+                }
           )
         }
         onPressSeeAll={() => router.push('/trips/new/must-visits')}

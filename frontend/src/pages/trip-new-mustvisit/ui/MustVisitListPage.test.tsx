@@ -113,15 +113,57 @@ describe('PG-3 · 더 담기 삼항 — 담은 곳 ≥1 → d02 (TRIP-367 재사
   });
 });
 
-describe('PG-4 · 더 담기 삼항 — 담은 곳 0 → d04', () => {
-  it('담은 장소가 0곳이면 장소 탐색(/explore/places)으로 간다', () => {
+describe('PG-4 · 더 담기 삼항 — 담은 곳 0 → d04 (목적지 없음 → region 빈 배열, TRIP-687 AC-3)', () => {
+  it('담은 장소가 0곳이면 장소 탐색으로 가되, 목적지가 없으면 region 파라미터가 빈 배열이다', () => {
+    // seedStore 는 mustVisits 만 심고 destinations 는 안 심는다 → 0지역 폴백 케이스(AC-3).
+    // TRIP-687 로 d04 push 가 평문 `/explore/places` → 객체형으로 바뀐다. 0지역이면 region:[] 라
+    // 전국 전체가 그대로 뜬다(현행 동작 보존).
     seedStore(TWO);
     mockSavedPlaces = { savedPlaces: [] };
     render(<TripMustVisitsPage />);
 
     fireEvent.press(screen.getByTestId('trip-mustvisit-list-more'));
 
-    expect(routerMock.push).toHaveBeenCalledWith('/explore/places');
+    expect(routerMock.push).toHaveBeenCalledWith({
+      pathname: '/explore/places',
+      params: { region: [] },
+    });
+    expect(routerMock.push).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PG-6 · 더 담기 → d04 지역 필터 파라미터 (TRIP-687)', () => {
+  // 더 담기가 d04(전체 탐색)로 갈 때, 여행에 담은 지역들을 라우트 파라미터로 실어 보낸다(AC-5).
+  // 두 배선 자리(g01 onPressMore · 이 페이지 onAddMore)가 같은 계약을 지켜야 한다.
+  // d04 갈래는 담은 곳 0곳일 때만 타므로 savedPlaces=[] 로 둔다. ⚠️ push 객체는 재귀 완전 일치 비교.
+
+  it('AC-5·AC-6 · 2지역이면 두 표준명이 순서대로 region 파라미터에 실린다(원문 무변형)', () => {
+    const store = useTripWizardStore.getState();
+    store.addDestination('부산광역시', 2);
+    store.addDestination('경주시', 1);
+    mockSavedPlaces = { savedPlaces: [] };
+    render(<TripMustVisitsPage />);
+
+    fireEvent.press(screen.getByTestId('trip-mustvisit-list-more'));
+
+    expect(routerMock.push).toHaveBeenCalledWith({
+      pathname: '/explore/places',
+      params: { region: ['부산광역시', '경주시'] },
+    });
+    expect(routerMock.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC-4(배선) · 1지역이면 그 지역 하나만 region 파라미터에 실린다', () => {
+    useTripWizardStore.getState().addDestination('부산광역시', 3);
+    mockSavedPlaces = { savedPlaces: [] };
+    render(<TripMustVisitsPage />);
+
+    fireEvent.press(screen.getByTestId('trip-mustvisit-list-more'));
+
+    expect(routerMock.push).toHaveBeenCalledWith({
+      pathname: '/explore/places',
+      params: { region: ['부산광역시'] },
+    });
     expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
 });
