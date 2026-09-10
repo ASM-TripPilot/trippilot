@@ -28,6 +28,7 @@ import {
   SearchGlyph,
   WarningTriangleGlyph,
 } from './ExploreGlyphs';
+import { PartialFailureBanner } from './PartialFailureBanner';
 
 /**
  * d04 장소 탐색 default(Figma `1692:1183`) — **프레젠테이션 화면**. props 8개(TRIP-221 확정)
@@ -73,6 +74,9 @@ export interface PlaceExploreScreenProps {
   onEndReached?: () => void;
   /** 다음 장을 받는 중이면 목록 하단에 로딩 표시(footer). 미지정 = false. */
   isFetchingMore?: boolean;
+  /** 다지역 부분 실패면 true — 성공 목록 위(헤더)에 partial-failure 배너를 얹는다(TRIP-692,
+   * INV-4). 미지정 = false(단일/0지역·전부성공·전부실패는 배너 없음). */
+  degraded?: boolean;
 }
 
 /** 칩 code는 셀렉터 전용 latin, 라벨·서버 질의값은 계약 enum 그대로(`regions.ts` 규칙 —
@@ -519,6 +523,7 @@ export function PlaceExploreScreen({
   onPressSaveErrorAction,
   onEndReached,
   isFetchingMore = false,
+  degraded = false,
 }: PlaceExploreScreenProps): ReactElement {
   const savedSet = new Set(savedPoiIds);
   const pendingSet = new Set(pendingPoiIds);
@@ -552,6 +557,7 @@ export function PlaceExploreScreen({
               {state.kind === 'error' ? (
                 <ErrorNotice onRetry={onRetry} />
               ) : null}
+              {degraded ? <PartialFailureBanner onRetry={onRetry} /> : null}
             </View>
           }
           ListEmptyComponent={

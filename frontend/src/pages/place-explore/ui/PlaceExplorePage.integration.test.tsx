@@ -267,6 +267,10 @@ describe('P-2 · region 라우트 파라미터 (01b Seed Q9)', () => {
     const hits = hitsOf('GET', '/api/v1/places');
     expect(hits).toHaveLength(1);
     expect(new URL(hits[0].url).searchParams.get('region')).toBe('jeju');
+
+    // TRIP-692 AC-4 — 단일/0지역은 usePlacesInfinite 경로라 degraded 개념이 없다
+    // (페이지가 항상 false 전달) → 배너 없음. 선제 green 회귀 앵커.
+    expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
   });
 });
 
@@ -502,6 +506,10 @@ describe('P-9 · 다지역이면 지역별로 조회해 한 목록에 합쳐 그
       'explore-places-card-g1',
       'explore-places-card-g2',
     ]);
+
+    // TRIP-692 AC-3 — 전부 성공이면 degraded 가 false 라 배너가 없다(회귀 앵커: 배너가
+    // 잘못 뜨면 red). 부재 단언이라 구현 전에도 통과하는 선제 green.
+    expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
   });
 });
 
@@ -555,5 +563,76 @@ describe('P-10 · 다지역 부분 성공 — 한 지역이 실패해도 나머�
       expect(screen.getByTestId('explore-places-error')).toBeTruthy()
     );
     expect(screen.queryByTestId('explore-places-card-b1')).toBeNull();
+
+    // TRIP-692 AC-2 — 전부 실패는 훅이 throw(lists.length===0) → error 얼굴이지 degraded 가
+    // 아니다. degraded 배너와 error 얼굴이 섞이지 않음을 잠근다(기존 throw 경로 무변경 회귀 앵커).
+    expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
+  });
+});
+
+describe('P-11 · 다지역 부분 실패면 degraded 배너를 얹고 다시 시도가 실제 재조회한다 (TRIP-692 · AC-1 · AC-6)', () => {
+  // 부산은 응답, 경주는 500. Promise.allSettled 라 부산은 병합돼 뜨고, 경주 실패로 degraded 가
+  // 참이 된다 — 그때 성공 목록 위에 배너가 얹힌다. degraded 는 서버 필드가 아니라 이 성공/실패
+  // 개수에서 클라가 파생한다(brief §맹점① — /places 응답엔 degraded 필드가 없어 아래 핸들러도
+  // {items,nextCursor} 만 준다).
+  const BUSAN: Place[] = [
+    makePlace('b1', '감천문화마을', '명소', '부산광역시', 12),
+    makePlace('b2', '광안리 해변', '야경', '부산광역시', 30),
+  ];
+
+  function usePartialFailureHandler() {
+    mockParams = { region: ['부산광역시', '경주시'] };
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region');
+        if (region === '부산광역시')
+          return HttpResponse.json({ items: BUSAN, nextCursor: null });
+        // 경주는 실패 — allSettled 가 부분 실패로 접어 degraded=true.
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
+  }
+
+  it('부분 실패면 부산 카드는 그대로 뜨고 그 위에 배너가 얹힌다 — error 얼굴이 아니다 (AC-1)', async () => {
+    setAccessToken('valid-access');
+    usePartialFailureHandler();
+
+    render(<PlaceExplorePage />, { wrapper: createWrapper() });
+
+    // 배너가 뜬다(성공분은 살아 있고 부분 실패만 알린다).
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('explore-places-partialfailure')
+      ).toBeOnTheScreen()
+    );
+    // 부산 두 장은 그대로 — degraded 는 목록을 지우지 않고 표식만 얹는다.
+    expect(screen.getByTestId('explore-places-card-b1')).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-places-card-b2')).toBeOnTheScreen();
+    // 부분 실패는 전부 실패(error 얼굴)와 구분된다.
+    expect(screen.queryByTestId('explore-places-error')).toBeNull();
+  });
+
+  it('배너의 "다시 시도"를 누르면 지역별 재조회가 실제로 다시 나간다 (AC-6, 스텁 금지)', async () => {
+    setAccessToken('valid-access');
+    usePartialFailureHandler();
+
+    render(<PlaceExplorePage />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('explore-places-partialfailure')
+      ).toBeOnTheScreen()
+    );
+
+    // 누르기 전 앵커 — 다지역 fan-out 은 지역당 1건씩 정확히 2건(P-9 가 이미 실행으로 확정).
+    // 이게 없으면 아래 "4건"이 재요청인지 최초 2번인지 구분이 안 된다.
+    expect(hitsOf('GET', '/api/v1/places')).toHaveLength(2);
+
+    fireEvent.press(screen.getByTestId('explore-places-partialfailure-retry'));
+
+    // refetch 1회 = queryFn 1회 재실행 = allSettled 가 지역당 1건씩 = +2 → 총 4건.
+    // onRetry 가 refetch 에 실제로 물려 있어야만(스텁이면) 새 요청이 나간다.
+    await waitFor(() =>
+      expect(hitsOf('GET', '/api/v1/places')).toHaveLength(4)
+    );
   });
 });

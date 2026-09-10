@@ -180,6 +180,7 @@ export function PlaceExplorePage(): ReactElement {
       onPressSaveErrorAction={handlePressSaveErrorAction}
       onEndReached={handleEndReached}
       isFetchingMore={isFetchingNextPage}
+      degraded={isMultiRegion && !isError ? multi.degraded : false}
     />
   );
 }

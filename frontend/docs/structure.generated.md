@@ -308,6 +308,7 @@
 - `src/features/explore/ui/DestinationDetailScreen.tsx`  →  DestinationDetailScreenProps · DestinationDetailScreen
 - `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · InfoGlyph
 - `src/features/explore/ui/ExploreLandingScreen.tsx`  →  StayCardVM · PlaceCardVM · ExploreLandingScreenProps · ExploreLandingScreen
+- `src/features/explore/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
 - `src/features/explore/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
 - `src/features/explore/ui/PlaceExploreScreen.tsx`  →  PlaceExploreScreenProps · PlaceExploreScreen
 - `src/features/explore/ui/RegionPickerScreen.tsx`  →  RegionPurpose · RegionPickerScreenProps · RegionPickerScreen
@@ -1217,4 +1218,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 827개 파일
+합계 828개 파일

@@ -8,13 +8,15 @@ import { mergePlacesByPoiId } from './mergePlaces';
 /**
  * 다지역 '꼭 갈 곳 더 담기'(2개 이상 지역)의 병렬 조회 훅(TRIP-687).
  *
- * 지역당 단발 `getPlaces`(한 장 최대 `limit`)를 `Promise.all` 로 병렬 조회해
+ * 지역당 단발 `getPlaces`(한 장 최대 `limit`)를 `Promise.allSettled` 로 병렬 조회해(TRIP-691)
  * `mergePlacesByPoiId` 로 합친다 — 여행 지역 수가 적어(보통 1~3) 지역당 한 장이면 실용상 충분하다.
+ * 한 지역이 실패해도 나머지는 살리고(부분 성공), 전부 실패면 throw(전부 성공/부분 실패만 통과).
  * 무한 스크롤은 포기하므로(단일지역 경로가 담당) `fetchNextPage`/`hasNextPage` 는 no-op·false 다.
  *
  * `enabled: regions.length >= 2` — 0/1지역은 `usePlacesInfinite`(무한 스크롤 보존)가 맡고,
- * 이 훅은 화면에서 무조건 호출되되 게이팅으로만 꺼진다(React 훅 규칙 준수). 반환 모양은
- * `usePlacesInfinite` 와 같은 필드 집합이라 `PlaceExplorePage` 가 둘 중 하나를 골라 그대로 소비한다.
+ * 이 훅은 화면에서 무조건 호출되되 게이팅으로만 꺼진다(React 훅 규칙 준수). 반환은
+ * `usePlacesInfinite` 필드 집합에 **`degraded`(부분 실패 표식, TRIP-692)를 더한 모양**이라
+ * `PlaceExplorePage` 가 둘 중 하나를 골라 소비하되 degraded 는 다지역 경로에서만 참이 된다.
  */
 
 // 지역당 한 장의 최대 건수(서버 상한과 동일 — `GetPlacesParams.limit` 은 미지정·초과도 200 으로 맞춘다).
@@ -51,13 +53,20 @@ export function useMultiRegionPlaces(
           results.find((r) => r.status === 'rejected') as PromiseRejectedResult
         ).reason;
       }
-      return mergePlacesByPoiId(lists);
+      // 여기 도달 = 최소 한 지역 성공(lists.length>0). 한 지역이라도 실패했으면 부분 실패다 —
+      // degraded 는 서버 응답 필드가 아니라 이 성공/실패 개수에서 파생한다(TRIP-692, brief §맹점①).
+      return {
+        items: mergePlacesByPoiId(lists),
+        degraded: results.some((result) => result.status === 'rejected'),
+      };
     },
     enabled: regions.length >= 2,
   });
 
   return {
-    items: query.data ?? [],
+    items: query.data?.items ?? [],
+    // 부분 실패 표식(성공 목록 위에 배너를 얹는 근거). data 미도착·전부 실패면 false.
+    degraded: query.data?.degraded ?? false,
     isPending: query.isPending,
     isError: query.isError,
     refetch: query.refetch,
