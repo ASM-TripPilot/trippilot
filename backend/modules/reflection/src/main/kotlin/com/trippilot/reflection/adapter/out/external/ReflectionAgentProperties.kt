@@ -20,7 +20,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  *
  * [readTimeoutMs] 는 **상대 백스톱(마감+5s)보다 커야 한다.** 같으면(예전처럼 한 속성이 겸하면)
  * 상대가 마감을 넘겨 정리하는 동안 우리가 소켓을 먼저 끊어, 성공 직전 응답도 규칙 카드로 강등된다.
- * 관계가 뒤집히는 설정은 기동에서 막는다(아래 require).
+ * 관계가 뒤집히는 설정은 기동에서 막는다(아래 require). 대가: AI 가 행에 빠지는 최악 경우의 대기
+ * 상한이 8s → ~20s(백스톱)로 늘었다 — 정상 경로가 실제로 성공하는 값이 우선이고, 실패 시 규칙
+ * 카드 즉시 폴백은 그대로다.
  */
 @ConfigurationProperties(prefix = "trippilot.ai.reflection")
 data class ReflectionAgentProperties(
