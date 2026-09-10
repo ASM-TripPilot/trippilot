@@ -33,8 +33,8 @@ def http_embedding(fail: Callable[[str], BaseException], http_factory):
     """`fail` 은 실패 예외 팩토리 — main 은 RuntimeError, 스크립트는 SystemExit.
 
     호출 규모: 요청 경로는 임베딩을 **직렬 3회** 부른다(SCHEDULE·SITUATION·PERSONA,
-    각 단건). 하나당 상한을 크게 잡으면 3배가 그대로 요청 예산을 먹으므로 기본 3초로
-    둔다 — 참고로 tmap 어댑터의 10초를 그대로 쓰면 최악 30초다.
+    각 단건). 하나당 상한이 3배로 요청 예산을 먹는다 — 기본 `_DEFAULT_TIMEOUT_SEC`(5초)
+    가 실질 상한인 이유는 위 모듈 주석에 있다.
     """
     from trippilot.llm_gateway.adapters.http_embedding import HttpEmbeddingAdapter
 
