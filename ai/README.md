@@ -185,7 +185,7 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 ### PlanBAgent — 변수 대응 비서 (RAG 기반)
 
 - **패턴**: RAG (기존 정보를 꺼내서 + 상황에 맞게 재구성)
-- **코드**: `agents/planb/rag.py` — `PlanBRagPipeline.run(PlanBRagRequest) → PlanBRagResult`
+- **코드**: `agents/planb/rag.py` — `PlanBAgent.run(PlanBRagRequest) → PlanBRagResult`
 - **흐름**: KB에서 Retrieve(기존 일정 + 페르소나 + 상황) → Augment(프롬프트 조립) → Generate(LLM 대안 선택) → Validate(어셈블리 검증)
 - **할당 Tool**: `kb.retrieve_schedule`, `kb.retrieve_persona`, `kb.retrieve_situation`, `m7.get_candidates`, `llm.select_alternatives`, `assembly.solve`, `assembly.validate`
 - **벡터 스토어**: pgvector (저장 장소 메모, 방문 리뷰, POI 설명)

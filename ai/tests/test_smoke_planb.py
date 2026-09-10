@@ -442,7 +442,7 @@ def test_KB_적재가_정상이면_3종_모두_히트하고_에러노트가_없�
     assert result.retrieved == {"SCHEDULE": 1, "PERSONA": 0, "SITUATION": 1}
     assert not [n for n in result.notes if n.startswith("retrieve_")]
     # note 는 폴백 사유 + 규칙 랭킹 조정 기록의 합성("… · rule_ranking: …", TRIP-532) — 부분 일치
-    assert any("alternative_gateway_absent" in n for n in result.notes)
+    assert any("alternative_worker_absent" in n for n in result.notes)
     assert result.fallback_level == 1
     assert {str(a.poi_ids[0]) for a in result.alternatives[:2]} == set(
         _saved_refs(pool)

@@ -34,7 +34,7 @@ from trippilot.agents.planb.kb_retrieval import (
 from trippilot.agents.planb.rag import (
     Alternative,
     PlanBRagConfig,
-    PlanBRagPipeline,
+    PlanBAgent,
     PlanBRagRequest,
     PlanBRagResult,
     _DEMOTED_BY_REASON,
@@ -45,6 +45,7 @@ from trippilot.agents.planb.rag import (
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import GateOutcome
 from trippilot.llm_gateway.gateway import GatewayFacade
+from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId
 from trippilot.domain.kb import KbDocument, KbHit, KbKind
 from trippilot.domain.llm import CandidatePool, ModelTier, ScoredPoi
@@ -387,11 +388,11 @@ def test_closed_set_filter_partitions_by_pool_and_excluded() -> None:
 def test_pipeline_without_gateway_falls_back_deterministically() -> None:
     """게이트웨이 미주입 → 단계 스킵 + 규칙 랭킹 (INV-4, 사유 명시)."""
     store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
-    pipeline = PlanBRagPipeline(emb, store)
+    pipeline = PlanBAgent(emb, store)
     result = pipeline.run(_request(_pool("p1", "p2", "p3", "p4")))
     assert result.is_fallback is True
     assert result.fallback_level == 1
-    assert any("alternative_gateway_absent" in n for n in result.notes)  # note 합성(TRIP-532) 대응
+    assert any("alternative_worker_absent" in n for n in result.notes)  # note 합성(TRIP-532) 대응
     assert [a.label for a in result.alternatives] == ["A", "B", "C"]  # max_alternatives=3
     again = pipeline.run(_request(_pool("p1", "p2", "p3", "p4")))
     assert again == result  # 결정론
@@ -417,7 +418,7 @@ def test_pipeline_ranks_persona_hits_first_but_only_inside_pool() -> None:
     # — 여기선 `query + " 카페"` 가 -0.39 다 — 기본 컷이 걸리면 랭킹을 보기도 전에
     # 히트가 사라진다. 컷은 전용 테스트에서 `_ScriptedEmbedding` 으로 검증한다.
     no_cut = PlanBRagConfig(min_score_ratio=0.0, min_score=-1.0)
-    result = PlanBRagPipeline(emb, store, config=no_cut).run(request)
+    result = PlanBAgent(emb, store, config=no_cut).run(request)
     picked = [str(p) for a in result.alternatives for p in a.poi_ids]
     # 저장 장소 p3가 1순위로 올라오고, 풀 밖 ghost는 아예 등장하지 않는다
     assert picked == ["p3", "p1", "p2"]
@@ -428,8 +429,8 @@ def test_pipeline_ranks_persona_hits_first_but_only_inside_pool() -> None:
 def test_pipeline_with_gateway_uses_llm_selection() -> None:
     store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
     pool = _pool("p1", "p2", "p3")
-    pipeline = PlanBRagPipeline(
-        emb, store, alternative_gateway=_select_gw(("p3", 0.9), ("p1", 0.5))
+    pipeline = PlanBAgent(
+        emb, store, alternative_worker=AlternativeSelectionWorker(_select_gw(("p3", 0.9), ("p1", 0.5)))
     )
     result = pipeline.run(_request(pool))
     assert result.is_fallback is False
@@ -442,8 +443,8 @@ def test_pipeline_drops_llm_selection_outside_pool() -> None:
     """게이트 대역이 오염 산출물을 통과시켜도 파이프라인 관문이 잡는다 (INV-1)."""
     store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
     pool = _pool("p1", "p2")
-    pipeline = PlanBRagPipeline(
-        emb, store, alternative_gateway=_select_gw(("ghost", 0.9), ("p2", 0.4))
+    pipeline = PlanBAgent(
+        emb, store, alternative_worker=AlternativeSelectionWorker(_select_gw(("ghost", 0.9), ("p2", 0.4)))
     )
     result = pipeline.run(_request(pool))
     assert result.dropped_out_of_pool == ("ghost",)
@@ -453,8 +454,8 @@ def test_pipeline_drops_llm_selection_outside_pool() -> None:
 
 def test_pipeline_falls_back_when_all_llm_picks_dropped() -> None:
     store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
-    pipeline = PlanBRagPipeline(
-        emb, store, alternative_gateway=_select_gw(("ghost1", 0.9), ("ghost2", 0.4))
+    pipeline = PlanBAgent(
+        emb, store, alternative_worker=AlternativeSelectionWorker(_select_gw(("ghost1", 0.9), ("ghost2", 0.4)))
     )
     result = pipeline.run(_request(_pool("p1", "p2")))
     assert result.is_fallback is True
@@ -468,19 +469,19 @@ def test_pipeline_falls_back_on_llm_failure_and_bad_shape() -> None:
     failing = GatewayFacade(
         FailingLlm(), _StubRenderer(), _AlternativeGate(), _CFG, InMemoryTrace()
     )
-    result = PlanBRagPipeline(emb, store, alternative_gateway=failing).run(_request(pool))
+    result = PlanBAgent(emb, store, alternative_worker=AlternativeSelectionWorker(failing)).run(_request(pool))
     assert result.is_fallback is True
     assert any(n.startswith("alternative_fallback") for n in result.notes)
 
     shaped = _gateway("{}", _ShapeGate())
-    result2 = PlanBRagPipeline(emb, store, alternative_gateway=shaped).run(_request(pool))
+    result2 = PlanBAgent(emb, store, alternative_worker=AlternativeSelectionWorker(shaped)).run(_request(pool))
     assert "alternative_bad_shape" in result2.notes
     assert [str(p) for a in result2.alternatives for p in a.poi_ids] == ["p1"]
 
 
 def test_pipeline_empty_pool_reports_no_candidates() -> None:
     store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
-    result = PlanBRagPipeline(emb, store).run(_request(_pool()))
+    result = PlanBAgent(emb, store).run(_request(_pool()))
     assert result.alternatives == ()
     assert result.empty_reason == "no_candidates"
     assert result.fallback_level == 2
@@ -488,7 +489,7 @@ def test_pipeline_empty_pool_reports_no_candidates() -> None:
 
 def test_pipeline_excluded_pois_are_not_candidates() -> None:
     store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
-    result = PlanBRagPipeline(emb, store).run(
+    result = PlanBAgent(emb, store).run(
         _request(_pool("p1", "p2"), excluded=frozenset({PoiId("p1")}))
     )
     assert [str(p) for a in result.alternatives for p in a.poi_ids] == ["p2"]
@@ -496,7 +497,7 @@ def test_pipeline_excluded_pois_are_not_candidates() -> None:
 
 def test_pipeline_never_raises_on_store_failure() -> None:
     """INV-4 — 어떤 실패든 결과 상태값으로 수렴하고 사유가 남는다."""
-    result = PlanBRagPipeline(FakeEmbedding(dim=_SMALL), _BrokenStore()).run(
+    result = PlanBAgent(FakeEmbedding(dim=_SMALL), _BrokenStore()).run(
         _request(_pool("p1"))
     )
     # retrieve는 KB별로 감싸져 있어 파이프라인 자체는 계속 진행한다
@@ -507,7 +508,7 @@ def test_pipeline_never_raises_on_store_failure() -> None:
 def test_result_serialization_has_no_time_or_duration_fields() -> None:
     """INV-2(시각 없음) · INV-3(소요시간 미표시) — 출력 스키마에 자리 자체가 없다."""
     store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
-    payload = PlanBRagPipeline(emb, store).run(_request(_pool("p1", "p2"))).to_dict()
+    payload = PlanBAgent(emb, store).run(_request(_pool("p1", "p2"))).to_dict()
     blob = json.dumps(payload, ensure_ascii=False)
     for forbidden in ("duration", "start_at", "end_at", "start_time", "end_time"):
         assert forbidden not in blob
@@ -595,7 +596,7 @@ def test_pbt_pipeline_output_always_inside_pool(pool, documents) -> None:
     """KB-P3(INV-1): 어떤 KB 내용이 들어와도 산출 대안의 POI는 전부 closed-set 안이다."""
     store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
     index_documents(documents, emb, store)
-    result = PlanBRagPipeline(emb, store).run(_request(pool))
+    result = PlanBAgent(emb, store).run(_request(pool))
     picked = [p for a in result.alternatives for p in a.poi_ids]
     assert all(pool.contains(p) for p in picked)
     assert len(result.alternatives) <= PlanBRagConfig().max_alternatives
@@ -655,8 +656,9 @@ def test_affected_reasons_reach_llm_prompt():
 
     pool = _pool("p1", "p2")
     gateway, llm = _recording_select_gw(("p1", 0.9))
-    pipeline = PlanBRagPipeline(
-        FakeEmbedding(dim=8), InMemoryVectorStore(), alternative_gateway=gateway)
+    pipeline = PlanBAgent(
+        FakeEmbedding(dim=8), InMemoryVectorStore(),
+        alternative_worker=AlternativeSelectionWorker(gateway))
     request = dataclasses.replace(
         _request(pool),
         affected_reasons={"p1": "조용한 카페라 추천했던 곳"})
@@ -671,8 +673,9 @@ def test_without_reasons_prompt_has_no_reason_block():
     """미지정(기본) — 프롬프트에 이유 블록이 없다 (하위호환 회귀 가드)."""
     pool = _pool("p1", "p2")
     gateway, llm = _recording_select_gw(("p1", 0.9))
-    pipeline = PlanBRagPipeline(
-        FakeEmbedding(dim=8), InMemoryVectorStore(), alternative_gateway=gateway)
+    pipeline = PlanBAgent(
+        FakeEmbedding(dim=8), InMemoryVectorStore(),
+        alternative_worker=AlternativeSelectionWorker(gateway))
     pipeline.run(_request(pool))
     assert llm.last_prompt is not None
     assert "[원래 추천 이유]" not in llm.last_prompt
@@ -706,7 +709,7 @@ def _pool_at(*pois: Poi) -> CandidatePool:
 def _fallback_picks(pool: CandidatePool, reason: str) -> tuple[list[str], PlanBRagResult]:
     """게이트웨이 미주입 → 규칙 랭킹 폴백. (선택 순열, 결과)."""
     store, emb = InMemoryVectorStore(), FakeEmbedding(dim=_SMALL)
-    result = PlanBRagPipeline(emb, store).run(_request(pool, reason=reason))
+    result = PlanBAgent(emb, store).run(_request(pool, reason=reason))
     return [str(p) for a in result.alternatives for p in a.poi_ids], result
 
 
@@ -738,7 +741,7 @@ def test_fallback_weather_demotes_saved_outdoor_behind_unsaved_indoor() -> None:
         [_doc(KbKind.PERSONA, "saved-n", _persona_query(request), poi_ref="nature-saved")],
         emb, store,
     )
-    result = PlanBRagPipeline(emb, store).run(request)
+    result = PlanBAgent(emb, store).run(request)
     picked = [str(p) for a in result.alternatives for p in a.poi_ids]
     assert picked == ["cafe-plain", "nature-saved"]
 
@@ -952,7 +955,7 @@ def test_llm_timeout_derives_from_request_deadline() -> None:
     0이 되는데 **응답은 200 이라 증상이 안 보인다** — 그래서 예산 관통을 못 박는다.
     """
     pool = _pool("p1")
-    pipeline = PlanBRagPipeline(FakeEmbedding(), InMemoryVectorStore())
+    pipeline = PlanBAgent(FakeEmbedding(), InMemoryVectorStore())
 
     # 예산 20초 → 1차 몫 10초 (share 0.5) + 재시도 몫 7초 (retry_share 0.35)
     assert pipeline._llm_timeout(_request(pool, deadline_ms=20_000)) == pytest.approx(10.0)
@@ -996,7 +999,7 @@ def test_alternative_worker_accepts_timeout() -> None:
 # "전건 컷"이 된다. 각도를 지정하는 `_ScriptedEmbedding` 만이 임계를 조준할 수 있다.
 
 
-def _cut_pipeline(**cfg) -> tuple[PlanBRagPipeline, InMemoryVectorStore, object]:
+def _cut_pipeline(**cfg) -> tuple[PlanBAgent, InMemoryVectorStore, object]:
     """질의(각도 0) 기준 코사인이 1.00 / 0.87 / 0.50 인 문서 3종."""
     angles = {"질의": 0.0, "높음": 0.0, "중간": math.acos(0.87), "낮음": math.acos(0.50)}
     emb = _ScriptedEmbedding(angles)
@@ -1010,7 +1013,7 @@ def _cut_pipeline(**cfg) -> tuple[PlanBRagPipeline, InMemoryVectorStore, object]
         emb,
         store,
     )
-    return PlanBRagPipeline(emb, store, config=PlanBRagConfig(**cfg)), store, emb
+    return PlanBAgent(emb, store, config=PlanBRagConfig(**cfg)), store, emb
 
 
 def test_score_cut_keeps_only_hits_near_the_top() -> None:
@@ -1059,12 +1062,12 @@ def test_absolute_floor_covers_the_ratio_hole() -> None:
         [_doc(KbKind.SITUATION, "잡음1", "잡음1"), _doc(KbKind.SITUATION, "잡음2", "잡음2")],
         emb, store,
     )
-    ratio_only = PlanBRagPipeline(emb, store, config=PlanBRagConfig(min_score_ratio=0.85))
+    ratio_only = PlanBAgent(emb, store, config=PlanBRagConfig(min_score_ratio=0.85))
     kept, _ = ratio_only._cut(
         retrieve_situation("질의", emb, store, top_k=2), KbKind.SITUATION)
     assert len(kept) == 2, "비율만으로는 잡음 뭉치를 못 자른다"
 
-    with_floor = PlanBRagPipeline(
+    with_floor = PlanBAgent(
         emb, store, config=PlanBRagConfig(min_score_ratio=0.85, min_score=0.3))
     kept, note = with_floor._cut(
         retrieve_situation("질의", emb, store, top_k=2), KbKind.SITUATION)
@@ -1081,7 +1084,7 @@ def test_cut_can_be_disabled() -> None:
     emb = _ScriptedEmbedding(angles)
     store = InMemoryVectorStore()
     index_documents([_doc(KbKind.SITUATION, "반대", "반대")], emb, store)
-    off = PlanBRagPipeline(emb, store, config=PlanBRagConfig(min_score_ratio=0.0, min_score=-1.0))
+    off = PlanBAgent(emb, store, config=PlanBRagConfig(min_score_ratio=0.0, min_score=-1.0))
     kept, note = off._cut(retrieve_situation("질의", emb, store, top_k=1), KbKind.SITUATION)
     assert len(kept) == 1 and note == ""
 

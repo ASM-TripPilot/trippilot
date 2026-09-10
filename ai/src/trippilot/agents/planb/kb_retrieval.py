@@ -48,7 +48,7 @@ KB_COLLECTIONS: Mapping[KbKind, str] = MappingProxyType(
 # 모두를 만족시킬 수 없는데, 4 는 가장 큰 "전건이 필요한" 버킷(fatigue 4건)을 정확히
 # 덮으면서 컨텍스트를 골격의 46% 로 유지한다. 6 이면 컨텍스트의 절반이 무관 문서다.
 #
-# **측정 범위는 KB-3(SITUATION) 뿐이다.** `PlanBRagPipeline._safe_retrieve` 가 세 KB 에
+# **측정 범위는 KB-3(SITUATION) 뿐이다.** `PlanBAgent._safe_retrieve` 가 세 KB 에
 # 같은 값을 넘기므로 KB-1·KB-2 에도 걸리지만, 둘은 아직 적재 0건이라 측정 대상이
 # 없었다 — 데이터가 붙으면 그때 KB별로 나눌지 판단한다(지금 나누면 근거 없는 상수가
 # 둘 더 생긴다).

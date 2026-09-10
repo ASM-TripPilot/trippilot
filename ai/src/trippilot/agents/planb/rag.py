@@ -24,9 +24,9 @@
 
 **남긴 이음매 (실 pgvector·어셈블리 배선용)**
 - 벡터 소스: `VectorStorePort`/`EmbeddingPort` 주입 — pgvector 어댑터로 교체해도 본 파일 무변.
-- LLM: `alternative_gateway`는 `GatewayFacade | None`. 주입되면
-  `AlternativeSelectionWorker`(TRIP-331 — 프롬프트 yaml·`AlternativeSelectionGate`와
-  4종 세트)를 경유해 호출하고, 미주입·실패 시 규칙 랭킹으로 돈다 (INV-4).
+- LLM: `alternative_worker`는 `AlternativeSelectionWorker | None`(TRIP-331 — 프롬프트
+  yaml·`AlternativeSelectionGate`와 4종 세트). 다른 에이전트 셋과 같이 **조립(wiring)이
+  워커를 완성해 넘긴다** — 미주입·실패 시 규칙 랭킹으로 돈다 (INV-4).
 - 어셈블리: `Alternative`를 그대로 `solve` 입력으로 넘기면 되도록 poi_id 목록만 담았다.
 """
 
@@ -43,7 +43,6 @@ from trippilot.agents.planb.kb_retrieval import (
     retrieve_schedule,
     retrieve_situation,
 )
-from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.workers.alternative_selection import (
     AlternativeSelectionInput,
     AlternativeSelectionWorker,
@@ -268,23 +267,20 @@ def closed_set_filter(
     return tuple(kept), tuple(dropped)
 
 
-class PlanBRagPipeline:
+class PlanBAgent:
     def __init__(
         self,
         embedding: EmbeddingPort,
         store: VectorStorePort,
         *,
-        alternative_gateway: GatewayFacade | None = None,
+        alternative_worker: AlternativeSelectionWorker | None = None,
         config: PlanBRagConfig | None = None,
     ) -> None:
         self._embedding = embedding
         self._store = store
-        # gateway 주입 = LLM 단계 활성화 — 워커(4종 세트) 경유로만 호출한다 (TRIP-331)
-        self._worker = (
-            AlternativeSelectionWorker(alternative_gateway)
-            if alternative_gateway is not None
-            else None
-        )
+        # 워커 주입 = LLM 단계 활성화 — 게이트웨이 직접 호출 없음 (TRIP-331). 워커를
+        # 안에서 만들지 않는 건 Schedule·Reflect·Edit 와 같은 모양이기 위해서다.
+        self._worker = alternative_worker
         self._cfg = config or PlanBRagConfig()
 
     # ── 공개 API ────────────────────────────────────────────────────────
@@ -433,7 +429,7 @@ class PlanBRagPipeline:
             return f"{cause} · {rule_note}" if rule_note else cause
 
         if self._worker is None:
-            return rule_ranked, {}, False, _why("alternative_gateway_absent")
+            return rule_ranked, {}, False, _why("alternative_worker_absent")
         try:
             result = self._worker.select(
                 request.pool,
