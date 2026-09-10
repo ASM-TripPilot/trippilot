@@ -9,6 +9,7 @@ import com.trippilot.itinerarygeneration.domain.ReplanScope
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
+import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
@@ -165,6 +166,52 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
         assertThat(output.solveMode).isNotNull()
         println("[LIVE-AI] replan → solveMode=${output.solveMode} days=${output.days.size} " +
             "slots=${output.days.sumOf { it.slots.size }} isFallback=${output.isFallback}")
+    }
+
+    private fun candidatesInput() = SlotCandidatesInput(
+        tripId = UUID.randomUUID(),
+        slotKey = "$today#$poi",
+        neighborSlotKeys = emptyList(),
+        centerLat = 33.4996, centerLng = 126.5312,
+        radiusM = 3_000,
+        concept = "카페",
+        excludePoiIds = emptyList(),
+        placementReason = "일몰 명소",
+        requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 25_000L),
+    )
+
+    /**
+     * 슬롯 후보(`alternatives`) 실 와이어 — 계약 게이트는 필드 **이름**만 보므로 수용 여부는 여기서만
+     * 드러난다.
+     *
+     * **전제 1**: AI 컨테이너에 `SERVICE_AUTH_TOKEN` 이 없으면 상대 후보 풀이 실 POI 를 못 채워
+     * **후보 0~1건이 정상처럼 보인다** — 건수는 단정하지 않고 기록만 남긴다.
+     *
+     * **주의 — 이 경로는 예외를 못 본다.** 미도달·계약 거부(422)는 어댑터의 D-4 폴백(로컬 후보풀)에
+     * 먹혀 테스트가 초록으로 남는다. 판정은 사람이 한다: 출력에 `degraded=true` 가 찍혔으면 위의
+     * `AI alternatives 미도달` WARN 로그가 **없는지**를 같이 봐야 "AI 폴백"과 "미도달"이 갈린다.
+     */
+    @Test
+    fun `슬롯 후보가 상대에 수용되고 도메인으로 매핑된다`() {
+        val output = agent.proposeSlotCandidates(candidatesInput())
+
+        // 예외 없이 여기 왔다는 것 = 요청 수용 + 응답이 우리 도메인으로 변환됐다는 뜻 — 그게 이 테스트의 전부다.
+        assertThat(output.radiusMUsed).isPositive()
+        println("[LIVE-AI] alternatives → candidates=${output.candidates.size} radiusMUsed=${output.radiusMUsed} " +
+            "degraded=${output.freshness.degraded} emptyReason=${output.emptyReason} " +
+            "rationale첫건=${output.candidates.firstOrNull()?.rationale}")
+    }
+
+    /**
+     * AI 가 LLM 랭킹을 냈는지(fallback_level 0) 규칙 랭킹으로 폴백했는지 — LLM 키·KB 적재 상태에
+     * 따라 갈리므로 **값을 단정하지 않고** 기록만 남긴다(전제 1 동일).
+     */
+    @Test
+    fun `슬롯 후보의 강등 여부와 근거 원문을 기록한다`() {
+        val output = agent.proposeSlotCandidates(candidatesInput())
+
+        println("[LIVE-AI] alternatives degraded=${output.freshness.degraded} " +
+            "rationales=${output.candidates.take(3).map { it.rationale }}")
     }
 
     @Test

@@ -292,6 +292,12 @@ data class SlotCandidatesInput(
     /** h13 컨셉(테마) — null 허용. */
     val concept: String?,
     val excludePoiIds: List<UUID>,
+    /**
+     * 교체 대상 슬롯이 **원래 왜 배치됐는가**(`VisitSlot.placementReason`) — AI 가 "원래 취지를 잇는
+     * 대안"을 고르게 하는 컨텍스트다(연동 설계 §2 `affected_reasons`). 원본 일정에 없으면 null.
+     * 기본값을 두지 않는다 — 조립 지점이 값을 말하지 않고 조용히 빠지는 것을 컴파일이 막는다.
+     */
+    val placementReason: String?,
     val requestMeta: RequestMeta,
 )
 

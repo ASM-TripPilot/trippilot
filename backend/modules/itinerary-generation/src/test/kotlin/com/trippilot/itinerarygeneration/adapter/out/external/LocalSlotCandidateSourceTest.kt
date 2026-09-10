@@ -52,6 +52,7 @@ class LocalSlotCandidateSourceTest : StringSpec({
         neighborSlotKeys = emptyList(),
         centerLat = 33.45, centerLng = 126.56,
         radiusM = radiusM, concept = null, excludePoiIds = exclude,
+        placementReason = null,
         requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), 20_000L),
     )
 

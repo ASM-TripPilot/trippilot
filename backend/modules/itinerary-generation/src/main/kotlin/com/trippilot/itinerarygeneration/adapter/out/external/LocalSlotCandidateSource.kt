@@ -34,7 +34,7 @@ class LocalSlotCandidateSource(
 ) {
 
     /**
-     * @param degraded AI 순위가 아님을 결과에 실을지. 실 AI 경로가 없어 이걸로 대신할 때 true.
+     * @param degraded AI 순위가 아님을 결과에 실을지. AI 미도달로 이 로컬 풀이 대신할 때 true(D-4가 폴백).
      */
     fun propose(input: SlotCandidatesInput, degraded: Boolean): SlotCandidatesOutput {
         val excluded = input.excludePoiIds.toSet()
