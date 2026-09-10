@@ -442,6 +442,27 @@ def test_routing_table_and_enum_stay_in_sync() -> None:
     assert Intent.OUT_OF_SCOPE not in ROUTABLE_INTENTS
 
 
+def test_delegate_handlers_name_real_agent_classes() -> None:
+    """DELEGATE 행의 handler 문자열은 `agents/` 에 실재하는 클래스여야 한다.
+
+    ScheduleAgent(#480)·PlanBAgent(개명 전 PlanBRagPipeline)는 표가 먼저 이름을 적고
+    코드가 뒤따랐다 — 라우터가 배선되기 전까지는 아무도 안 읽어서 어긋나도 증상이 없다.
+    FAST_PATH 의 Weather/Transit/PlaceScout 는 v2 에서 Provider 라 이 검사 밖이다.
+    """
+    import importlib
+
+    delegated = {e.handler for e in ROUTING_TABLE.values() if e.mode is RoutingMode.DELEGATE}
+    assert delegated == {"ScheduleAgent", "PlanBAgent", "ReflectAgent", "EditAgent"}
+    modules = {
+        "ScheduleAgent": "trippilot.agents.schedule.agent",
+        "PlanBAgent": "trippilot.agents.planb.rag",
+        "ReflectAgent": "trippilot.agents.reflect.agent",
+        "EditAgent": "trippilot.agents.edit.agent",
+    }
+    for name in delegated:
+        assert isinstance(getattr(importlib.import_module(modules[name]), name), type), name
+
+
 # ── PBT ─────────────────────────────────────────────────────────────────
 
 

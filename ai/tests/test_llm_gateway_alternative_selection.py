@@ -22,7 +22,7 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from trippilot.agents.planb.rag import PlanBRagPipeline, PlanBRagRequest
+from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.gateway import GatewayFacade
@@ -386,9 +386,10 @@ def _rag_gateway(llm) -> GatewayFacade:
     )
 
 
-def _pipeline(llm) -> PlanBRagPipeline:
-    return PlanBRagPipeline(
-        FakeEmbedding(dim=8), InMemoryVectorStore(), alternative_gateway=_rag_gateway(llm)
+def _pipeline(llm) -> PlanBAgent:
+    return PlanBAgent(
+        FakeEmbedding(dim=8), InMemoryVectorStore(),
+        alternative_worker=AlternativeSelectionWorker(_rag_gateway(llm)),
     )
 
 

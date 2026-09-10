@@ -67,7 +67,7 @@ from trippilot.agents.adapters.pgvector_store import PgVectorStore  # noqa: E402
 from trippilot.agents.planb.kb_retrieval import collection_for, index_documents  # noqa: E402
 from trippilot.agents.planb.rag import (  # noqa: E402
     PlanBRagConfig,
-    PlanBRagPipeline,
+    PlanBAgent,
     PlanBRagRequest,
     SavedPlace,
 )
@@ -86,6 +86,7 @@ from trippilot.llm_gateway.feature_model_env import (  # noqa: E402
     feature_models_from_env,
 )
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
+from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker  # noqa: E402
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
 from trippilot.ports.llm_port import LlmResponse  # noqa: E402
 from trippilot.assembly_engine.config import RAIN_OUTDOOR  # noqa: E402
@@ -291,7 +292,7 @@ def saved_envelope(pool: CandidatePool) -> tuple[SavedPlace, ...]:
 # ── 실행 ────────────────────────────────────────────────────────────────
 
 
-def pipeline(store, embedding, llm, model_id: str | None) -> PlanBRagPipeline:
+def pipeline(store, embedding, llm, model_id: str | None) -> PlanBAgent:
     mid = model_id or "unused"
     gateway = None if llm is None else GatewayFacade(
         llm, PromptRegistry(PROMPTS), AlternativeSelectionGate(),
@@ -312,8 +313,9 @@ def pipeline(store, embedding, llm, model_id: str | None) -> PlanBRagPipeline:
         ),
         LoggingTrace(),
     )
-    return PlanBRagPipeline(
-        embedding, store, alternative_gateway=gateway,
+    return PlanBAgent(
+        embedding, store,
+        alternative_worker=None if gateway is None else AlternativeSelectionWorker(gateway),
         config=PlanBRagConfig(max_alternatives=3),
     )
 
@@ -400,7 +402,7 @@ def main() -> int:
 
         r1 = run("① 게이트웨이 미주입 → 규칙 랭킹", store, embedding, pool, saved=saved)
         assert r1["fallback_level"] == 1, r1
-        assert any("alternative_gateway_absent" in n for n in r1["notes"]), r1
+        assert any("alternative_worker_absent" in n for n in r1["notes"]), r1
         assert_no_outdoor_on_top(r1, pool, "①")
         # **R 단계가 실제로 돌았는지 먼저 건다.** 아래 KB-2 단언은 pgvector 가 통째로
         # 죽어 히트 0건이어도 통과한다 — 풀 순서(indoor 우선)와 저장 장소가 같아서

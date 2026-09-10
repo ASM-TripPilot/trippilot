@@ -18,7 +18,7 @@ HTTP 클라이언트는 주입받는다 — `BackendPoiDb`(TRIP-408)와 같은 s
 - `EmbeddingModelMismatch` 응답 model 이 기대와 다름 — **영구적, 재시도 무가치**
 - `EmbeddingDimMismatch`   벡터 길이 ≠ dim — BR-AF-09 위반
 
-세 예외 모두 호출측(`PlanBRagPipeline._safe_retrieve`)이 잡아 노트로 남기고 규칙
+세 예외 모두 호출측(`PlanBAgent._safe_retrieve`)이 잡아 노트로 남기고 규칙
 랭킹으로 강등한다(INV-4). **여기서 0벡터나 빈 결과를 돌려주면 안 된다** — 그게
 정확히 "조용한 실패"이고, 오염된 벡터가 검색 결과로 둔갑한다.
 """

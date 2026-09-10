@@ -66,6 +66,7 @@ from trippilot.llm_gateway.gates.explanation import ExplanationGate
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
+from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
 from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
@@ -113,7 +114,7 @@ from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.travel import TravelEstimate
 from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask
 from trippilot.agents.edit.commands import EditStatus
-from trippilot.agents.planb.rag import PlanBRagPipeline, PlanBRagRequest, SavedPlace
+from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent
 from trippilot.domain.edit import EditCommand, EditOp
 from trippilot.llm_gateway.gates.edit_translation import EditTranslationGate
@@ -651,7 +652,7 @@ class WiredItineraryOrchestrator:
         tz: timezone = KST,
         *,
         pool_builder: CandidatePoolBuilder,
-        rag: PlanBRagPipeline,
+        rag: PlanBAgent,
         explainer: ExplanationWorker,
         context_resolver: ContextResolver,
         edit_agent: EditAgent,
@@ -1105,11 +1106,11 @@ def build_orchestrator(
     }
     # Plan-B RAG (TRIP-428) — 벡터·임베딩 미주입이면 Unwired 스텁: 파이프라인이
     # 검색 실패를 notes로 남기고 빈 컨텍스트 + 규칙 랭킹으로 강등한다(INV-4).
-    rag = PlanBRagPipeline(
+    rag = PlanBAgent(
         embedding if embedding is not None else UnwiredEmbedding(),
         vector_store if vector_store is not None else UnwiredVectorStore(),
-        alternative_gateway=GatewayFacade(
-            llm, renderer, AlternativeSelectionGate(), c1_config, trace),
+        alternative_worker=AlternativeSelectionWorker(GatewayFacade(
+            llm, renderer, AlternativeSelectionGate(), c1_config, trace)),
     )
     if weather is not None:
         providers[ProviderKind.WEATHER] = WeatherProvider(weather)
