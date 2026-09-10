@@ -504,3 +504,56 @@ describe('P-9 · 다지역이면 지역별로 조회해 한 목록에 합쳐 그
     ]);
   });
 });
+
+describe('P-10 · 다지역 부분 성공 — 한 지역이 실패해도 나머지는 뜬다 (TRIP-691 · RESILIENCY · INV-4)', () => {
+  // 부산은 응답, 경주는 500 으로 실패시킨다. Promise.all 이면 한쪽 실패가 전체를 error 로 접어
+  // 부산 장소도 안 뜬다(부분 성공 없음). Promise.allSettled 로 바꾸면 성공한 부산만 병합돼 뜬다.
+  const BUSAN: Place[] = [
+    makePlace('b1', '감천문화마을', '명소', '부산광역시', 12),
+    makePlace('b2', '광안리 해변', '야경', '부산광역시', 30),
+  ];
+
+  it('경주 조회가 실패해도 부산 장소는 그대로 뜬다 (부분 성공, AC-1)', async () => {
+    setAccessToken('valid-access');
+    // 준비(Arrange) — 여행지 2곳, 경주만 서버 500.
+    mockParams = { region: ['부산광역시', '경주시'] };
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region');
+        if (region === '부산광역시')
+          return HttpResponse.json({ items: BUSAN, nextCursor: null });
+        // 경주는 실패 — allSettled 면 조용히 탈락, all 이면 전체가 error 로 접힌다.
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
+
+    // 실행(Act) — 화면을 그린다.
+    render(<PlaceExplorePage />, { wrapper: createWrapper() });
+
+    // 단언(Assert) — 부산 두 장이 뜨고(부분 성공), 경주는 없다, error 얼굴도 아니다.
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-card-b1')).toBeTruthy()
+    );
+    expect(screen.getByTestId('explore-places-card-b2')).toBeTruthy();
+    expect(screen.queryByTestId('explore-places-card-g1')).toBeNull();
+    expect(screen.queryByTestId('explore-places-error')).toBeNull();
+  });
+
+  it('모든 지역이 실패하면 error 얼굴을 보인다 — 빈 목록을 성공으로 위장하지 않는다 (AC-2, INV-4)', async () => {
+    setAccessToken('valid-access');
+    // 준비 — 두 지역 다 500. allSettled 라도 "전부 실패면 throw" 가드가 없으면 빈 목록을
+    // 성공으로 위장해 error 가 안 뜬다. 이 케이스가 그 가드를 강제한다.
+    mockParams = { region: ['부산광역시', '경주시'] };
+    server.use(
+      http.get(`${BASE}/places`, () => new HttpResponse(null, { status: 500 }))
+    );
+
+    render(<PlaceExplorePage />, { wrapper: createWrapper() });
+
+    // 단언 — 조회 실패 안내(다시 시도)가 뜨고 카드는 없다.
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-error')).toBeTruthy()
+    );
+    expect(screen.queryByTestId('explore-places-card-b1')).toBeNull();
+  });
+});

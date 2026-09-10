@@ -30,7 +30,9 @@ export function useMultiRegionPlaces(
   const query = useQuery({
     queryKey: ['/places/multi', regions, category ?? null, q ?? ''] as const,
     queryFn: async () => {
-      const lists = await Promise.all(
+      // 지역별 조회를 병렬로 하되 한 지역이 실패해도 나머지는 살린다(부분 성공, TRIP-691).
+      // Promise.all 은 하나만 실패해도 전체를 reject 해 다른 지역 장소까지 error 로 접었다.
+      const results = await Promise.allSettled(
         regions.map((region) =>
           getPlaces({
             region,
@@ -40,7 +42,16 @@ export function useMultiRegionPlaces(
           })
         )
       );
-      return mergePlacesByPoiId(lists.map((list) => list.items));
+      const lists = results.flatMap((result) =>
+        result.status === 'fulfilled' ? [result.value.items] : []
+      );
+      // 전부 실패면 빈 목록을 성공으로 위장하지 않고 error 를 낸다(INV-4 — 침묵 실패 금지).
+      if (lists.length === 0) {
+        throw (
+          results.find((r) => r.status === 'rejected') as PromiseRejectedResult
+        ).reason;
+      }
+      return mergePlacesByPoiId(lists);
     },
     enabled: regions.length >= 2,
   });
