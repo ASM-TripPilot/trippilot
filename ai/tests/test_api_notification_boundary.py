@@ -4,6 +4,8 @@
   ① 구형 조립(핸들러 없음)은 503 명시 실패
   ② 응답 스키마에 시각·duration 필드가 없다 (INV-3)
   ③ 배선된 조립 + 성공 LLM → 200 + copies 실제 생성 (경계→wiring→워커 관통 확인)
+  ④ 일부 항목만 실패 → degraded=true + 성공분만 copies (INV-4, 침묵 금지)
+  ⑤ 전부 실패 → 200 + 빈 copies + fallback_mode="backend_constant"
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from fastapi.testclient import TestClient
 from trippilot.api.app import create_app
 from trippilot.api.wiring import build_dev_app
 
-from tests.fakes.fake_llm import FakeLlm
+from tests.fakes.fake_llm import FailingLlm, FakeLlm, ScriptedVisionLlm
 
 URL = "/ai/v1/notification/copies"
 
@@ -64,3 +66,61 @@ def test_wired_app_returns_generated_copy() -> None:
                 "body": "오늘은 성산일출봉 방문일이에요",
             }
         ]
+
+
+TWO_ITEM_REQUEST = {
+    "request_meta": {"request_id": "r-2", "requested_at": "2026-09-12T09:00:00Z", "deadline_ms": 8000},
+    "trip_title": "제주 3일",
+    "items": [
+        {
+            "schedule_key": "k1",
+            "kind": "TRIP_DAY",
+            "date": "2026-09-13",
+            "slots": [{"name": "성산일출봉", "category": "관광지"}],
+        },
+        {
+            "schedule_key": "k2",
+            "kind": "TRIP_DAY",
+            "date": "2026-09-14",
+            "slots": [{"name": "우도", "category": "관광지"}],
+        },
+    ],
+}
+
+
+def test_wired_app_partial_failure_reports_degraded_with_only_successful_copies() -> None:
+    """일부 항목 게이트 드롭 → 성공분만 copies + degraded=true (INV-4 매핑 검증).
+
+    카운팅(dropped 수)은 워커 유닛 테스트가 이미 증명한다 — 여기서 증명하는 건 그
+    카운트를 경계 응답(copies·degraded·fallback_mode)으로 옮기는 이 핸들러의 매핑이다.
+    """
+    ok_json = (
+        '{"title": "성산일출봉 다녀오기", "body": "오늘은 성산일출봉 방문일이에요", '
+        '"places": ["성산일출봉"]}'
+    )
+    app = build_dev_app(llm=ScriptedVisionLlm(ok_json, "이건 JSON이 아니다"), model_id="m-fake")
+    with TestClient(app) as client:
+        res = client.post(URL, json=TWO_ITEM_REQUEST)
+        assert res.status_code == 200
+        body = res.json()
+        assert body["copies"] == [
+            {
+                "schedule_key": "k1",
+                "title": "성산일출봉 다녀오기",
+                "body": "오늘은 성산일출봉 방문일이에요",
+            }
+        ]
+        assert body["degraded"] is True
+        assert body["fallback_mode"] == "backend_constant"
+
+
+def test_wired_app_all_failures_returns_empty_copies_with_backend_constant() -> None:
+    """전부 실패해도 5xx 아닌 200 + 빈 copies — 백엔드가 기존 상수로 채운다(INV-4)."""
+    app = build_dev_app(llm=FailingLlm(), model_id="m-fake")
+    with TestClient(app) as client:
+        res = client.post(URL, json=REQUEST)
+        assert res.status_code == 200
+        body = res.json()
+        assert body["copies"] == []
+        assert body["degraded"] is True
+        assert body["fallback_mode"] == "backend_constant"

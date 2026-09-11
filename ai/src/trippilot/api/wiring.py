@@ -1098,6 +1098,7 @@ class WiredItineraryOrchestrator:
                         kind=item.kind,
                         date_label=item.date.isoformat(),
                         slot_names=tuple(s.name for s in item.slots),
+                        slot_categories=tuple(s.category for s in item.slots),
                     )
                     for item in request.items
                 ),

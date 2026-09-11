@@ -35,12 +35,19 @@ _KIND_LABELS = {
 
 @dataclass(frozen=True, slots=True)
 class ReminderCopyItem:
-    """예약 1건 = 문구 1건. slot_names 순서는 호출측(백엔드)이 확정한 방문 순서."""
+    """예약 1건 = 문구 1건. slot_names 순서는 호출측(백엔드)이 확정한 방문 순서.
+
+    slot_categories 는 slot_names 와 같은 순서·길이로 짝을 이루는 표시용 보조 필드다
+    (호출측이 맞춰 채운다). **게이트의 allowed 대조는 여전히 slot_names 만** 본다 —
+    카테고리를 섞으면 부분 문자열 대조(INV-1)가 깨진다. 프롬프트 렌더링
+    (build_reminder_copy_vars)에서만 합쳐 쓴다.
+    """
 
     schedule_key: str
     kind: str  # "TRIP_DAY" | "TRIP_PRE"
     date_label: str  # 표시용 날짜 문자열 (시각 아님 — INV-3)
     slot_names: tuple[str, ...]
+    slot_categories: tuple[str, ...] = ()  # 미지정(과거 호출)이면 전부 빈 문자열 취급
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,13 +63,25 @@ class ReminderCopyResult:
     body: str
 
 
+def _slot_line(name: str, category: str) -> str:
+    """빈 카테고리는 구분자 없이 이름만 — 대롱거리는 " · " 방지."""
+    return f"{name} · {category}" if category else name
+
+
 def build_reminder_copy_vars(item: ReminderCopyItem, trip_title: str) -> dict[str, str]:
-    """값 전부 str·결정론 — 좌표·시각 미포함."""
+    """값 전부 str·결정론 — 좌표·시각 미포함.
+
+    slot_categories 가 없으면(과거 호출) 전부 빈 카테고리로 취급해 이름만 렌더한다.
+    """
+    categories = item.slot_categories or ("",) * len(item.slot_names)
+    slot_list = " / ".join(
+        _slot_line(name, category) for name, category in zip(item.slot_names, categories)
+    )
     return {
         "kind_label": _KIND_LABELS.get(item.kind, "여행 알림"),
         "trip_title": trip_title.strip() or "이번 여행",
         "date_label": item.date_label,
-        "slot_names": " / ".join(item.slot_names) or "(일정 없음)",
+        "slot_list": slot_list or "(일정 없음)",
     }
 
 
