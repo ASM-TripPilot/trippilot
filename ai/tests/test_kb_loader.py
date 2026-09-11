@@ -98,6 +98,57 @@ def test_seed_document_retrievable_by_own_text() -> None:
     assert hits[0].text == target.text  # payload 왕복 보존
 
 
+# 모델이 후보 줄(`poi_id | 카테고리 | 상호명`)로 판별할 수 **없는** 축. seed 가 이런 축으로
+# 고르라고 하면 모델은 상호명 기억으로 지어내고, 그 창작이 게이트 없는 `rationale` 로
+# 사용자에게 나간다(seed 헤더 작성 기준 (2)).
+#
+# **완전한 목록은 불가능하다** — 넓게 잡고 과잉 거부를 감수한다(`edit_translation` 게이트의
+# `_TIME_KEY_TOKENS` 와 같은 판단). 여기 걸리면 문서를 카테고리 축으로 고쳐 쓰면 되고,
+# 그 비용은 조용히 지어낸 rationale 이 나가는 것보다 훨씬 싸다.
+_UNJUDGEABLE_AXES = {
+    "거리·좌표": ("가까운 대안", "가까운 곳", "근처 ", "도보 구간", "같은 방향",
+                "역방향", "동선", "숙소 방향", "인접 일정", "반경", "km", "미터"),
+    # 배치·시각은 어셈블리 소유다 (INV-2) — 워커는 후보만 고른다.
+    "시각·순서": ("앞으로 당기", "뒤로 미루", "순서 조정", "시간대를", "여유 시간으로",
+                "시 이후로", "분 이내", "먼저 방문"),
+    # 풀 영업일 필터가 이미 판다 (기준 1).
+    "영업시간": ("영업시간", "오픈 시간", "라스트오더", "마감 시간"),
+    # 슬롯 수·체류는 솔버 소유.
+    "슬롯·체류": ("슬롯 수를", "체류 시간을", "머무는 시간을"),
+    # 프롬프트에 없는 값들.
+    "기타": ("입장료", "가격대", "혼잡도", "좌석 수", "대기 시간", "평점", "리뷰 수"),
+}
+
+
+def test_seed_documents_only_use_axes_the_model_can_see() -> None:
+    """seed 가 **모델이 볼 수 없는 축**으로 고르라고 하면 안 된다 (작성 기준 2).
+
+    2026-09-12 실측: 25건 중 9건이 거리·시각·슬롯 수·영업시간을 지시하고 있었다. seed 가
+    작성 기준보다 먼저 쓰였기 때문이다(TRIP-427 → 기준 TRIP-508). 규칙을 문서로만 두면
+    또 어긋나므로 여기서 강제한다.
+
+    거리·동선은 **이중으로** 걸린다 — 모델이 판별 못 하고, 규칙 랭킹이 이미 코드로
+    집행한다(`_rule_ranking` 앵커 정렬 · 지시 사전의 `enforced_by: RANKING`).
+    """
+    docs = load_kb_file(_SEED, yaml.safe_load)
+    offenders = [
+        (d.doc_id, axis, word)
+        for d in docs
+        for axis, words in _UNJUDGEABLE_AXES.items()
+        for word in words
+        if word in d.text
+    ]
+    assert not offenders, "\n".join(
+        f"{doc_id}: {axis} 축 — {word!r}" for doc_id, axis, word in offenders)
+
+
+def test_unjudgeable_axis_guard_actually_catches_something() -> None:
+    """가드가 무력해지지 않았는지 — 위반 문서를 넣으면 실제로 걸려야 한다."""
+    bad = "휴무 상황에서는 현재 위치에서 가까운 곳을 우선한다."
+    assert any(
+        w in bad for words in _UNJUDGEABLE_AXES.values() for w in words)
+
+
 def test_seed_covers_all_trigger_reasons() -> None:
     """대응 지식이 없는 reason은 검색 컨텍스트가 비어 LLM이 일반론만 하게 된다.
 
