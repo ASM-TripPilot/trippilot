@@ -28,6 +28,9 @@
 - **Modal 계정** — 4단계(서빙) 직전에 준비.
 - 이 저장소를 클론한 상태에서 `ai/` 아래 명령을 실행한다. `python` 이 아니라
   **`uv run python`** 이다 — 이 리포에는 맨 `python` 커맨드가 없다.
+- 아래 명령들이 만드는 `scenarios*.json`·`dataset.jsonl`·`ft_data/`·`adapters/`·
+  `merged/`·`*.jsonl` 은 전부 이 파이프라인의 스크래치 산출물이다. `.gitignore` 에
+  없으니 커밋하지 않도록 직접 챙긴다(`git status` 로 확인).
 
 ## 1. 데이터 생성 (교사, OpenRouter ~$5)
 
@@ -116,16 +119,32 @@ uv run pytest tests/test_finetune_reminder_filter.py -v
 
 ## 2. 학습 (Mac, MLX LoRA)
 
+`mlx-lm` 은 `ai/` 의 uv 프로젝트 의존성이 **아니다** — 학습은 별도 Python 환경(또는
+시스템 pip)에서 돈다. 먼저 1단계 산출물(`dataset.jsonl`)을 `train.jsonl`·
+`valid.jsonl` 로 9:1 분할한다 — 형식은 이미 MLX 가 먹는 `{"messages": [...]}` 채팅
+포맷과 같아서 줄만 쪼개면 된다. **`ai/ft_data/` 를 쓴다 — `ai/data/` 가 아니다**:
+그 이름은 이미 의도매칭 질문뱅크용으로 쓰이는 트래킹된 디렉토리라(`ai/data/README.md`),
+여기 학습 스크래치를 섞으면 안 된다.
+
+```bash
+cd ai
+uv run python -c '
+import random
+from pathlib import Path
+lines = Path("dataset.jsonl").read_text().splitlines()
+random.Random(42).shuffle(lines)
+cut = int(len(lines) * 0.9)
+Path("ft_data").mkdir(exist_ok=True)
+Path("ft_data/train.jsonl").write_text("\n".join(lines[:cut]) + "\n")
+Path("ft_data/valid.jsonl").write_text("\n".join(lines[cut:]) + "\n")
+'
+```
+
 ```bash
 pip install mlx-lm
 mlx_lm.lora --model Qwen/Qwen3-4B-Instruct-2507 --train \
-    --data ./data --batch-size 4 --iters 800 --adapter-path ./adapters
+    --data ./ft_data --batch-size 4 --iters 800 --adapter-path ./adapters
 ```
-
-`mlx-lm` 은 `ai/` 의 uv 프로젝트 의존성이 **아니다** — 학습은 별도 Python 환경(또는
-시스템 pip)에서 돈다. `./data` 디렉토리에 1단계 산출물을 `train.jsonl`·`valid.jsonl`
-로 9:1 분할해 넣는다(`dataset.jsonl` 을 그대로 쪼개면 된다 — 형식은 이미 MLX 가 먹는
-`{"messages": [...]}` 채팅 포맷과 같다).
 
 ## 3. 변환 (vLLM 서빙 형식)
 
@@ -242,8 +261,8 @@ with open("baseline.jsonl", "w") as out:
 ```
 
 **teacher.jsonl** — `scenarios_eval.json` 을 1단계와 같은 방식으로 `--per-scenario 1`
-돌려 얻은 `dataset.jsonl` 은 학습용 채팅 포맷(`{"messages": [...]}`)이라 그대로는 못
-쓴다 — 평평한 형식으로 한 번 더 접는다:
+돌려 얻는다. 그 출력은 학습용 채팅 포맷(`{"messages": [...]}`)이라 그대로는 못 쓴다
+— 평평한 형식으로 한 번 더 접는다:
 
 ```bash
 cd ai
