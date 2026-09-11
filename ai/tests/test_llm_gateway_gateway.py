@@ -276,6 +276,10 @@ _EXPECTED_MODES = {
     LlmFeature.REFLECTION_TEMPLATE_VISION: ("vision_template", "text_template"),
     LlmFeature.PLACE_EXTRACTION: ("llm_extract", "(none)"),
     LlmFeature.REASON_INTERPRETATION: ("llm_reason_interpretation", "unknown"),
+    # 실패해도 재계획은 돈다 — 칩 선택분과 사유가 살아 있고 자유 입력 해석만 빠진다.
+    # 그래서 to_mode 가 "실패"가 아니라 "칩만"이다 (재계획 연동 설계 §3).
+    LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: (
+        "llm_directive_translation", "chips_only"),
 }
 
 

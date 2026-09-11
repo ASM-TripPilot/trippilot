@@ -27,6 +27,9 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # INTENT·PARAPHRASE와 동급 과업 — LIGHT 확정 여부는 K-2 실모델 검증 대기
             # (agent-foundation FD 미결 #4)
             LlmFeature.EDIT_TRANSLATION: ModelTier.LIGHT,
+            # 자유 발화 → 닫힌 키 번역. EDIT_TRANSLATION 과 동급 과업이고, 1차
+            # 임베딩 매칭이 걸러낸 나머지만 오므로 호출 빈도도 낮다.
+            LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: ModelTier.LIGHT,
             # 푸시 문구 1문장 — 저비용 모델로 충분 (TRIP-347)
             LlmFeature.REFLECTION_NUDGE: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
@@ -88,6 +91,10 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # api/wiring.py `edit` — 자연어 번역 실패는 TRANSLATION_FAILED 정직 보고.
             # 편집은 적용되지 않고, 구조화 진입은 무영향이다.
             LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),
+            # 실패해도 재계획은 돈다 — 칩 선택분과 사유가 그대로 살아 있고, 자유 입력
+            # 해석만 빠진다. 그래서 to_mode 가 "실패"가 아니라 "칩만"이다.
+            LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: (
+                "llm_directive_translation", "chips_only"),
             # scripts/collect_events.py `collect_region` — 추출 0건으로 그 회차를
             # 넘긴다(대체 추출 경로 없음).
             LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
