@@ -62,6 +62,10 @@ class LlmFeature(Enum):
     # EditAgent 전속 — 편집 발화 → EditCommand 초안 번역.
     # 확정된 EDIT_SCHEDULE 의도의 세부 번역이지 라우팅 재해석이 아니다 (DL-3, BR-AF-08).
     EDIT_TRANSLATION = "EDIT_TRANSLATION"  # agent-foundation FD §1
+    # PlanBAgent 전속 — 재계획 자유 입력 → 지시 키(KB-4) 번역. **임베딩 매칭이 놓친
+    # 발화만** 받는다(1차는 `agents/planb/directives.match_free_text`, 임계 0.74).
+    # 지시 목록은 서버가 주입해 사전이 늘어도 프롬프트가 안 바뀐다 (EDIT_TRANSLATION 선례).
+    REPLAN_DIRECTIVE_TRANSLATION = "REPLAN_DIRECTIVE_TRANSLATION"  # 재계획 연동 설계 §3
 
 
 class ModelTier(Enum):
