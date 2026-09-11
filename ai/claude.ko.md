@@ -81,7 +81,8 @@ OR-Tools (1차 결정론) → LLM (2차 창의적 제안) → 규칙 폴백 (최
 
 **U1~U6 구축·가동 중** (2026-08-25 기준). FastAPI 경계가 열려 있고 백엔드가 실제로
 왕복 호출한다: `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,
-explanations,edit}` + `/health` + `POST /ai/v1/reflection/{generate,nudge}`.
+explanations,edit}` + `/health` + `POST /ai/v1/reflection/{generate,nudge}`
++ `POST /ai/v1/notification/copies`(TRIP-836 — 리마인드 문구).
 CI(`ai-ci`)가 "실행 앱 스키마 == 커밋된 `docs/openapi.json`"을 강제하고 외부 API는
 전부 fake다(실호출 0). develop 푸시에서 GHCR 이미지가 발행된다.
 

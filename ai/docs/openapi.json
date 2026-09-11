@@ -1053,6 +1053,152 @@
         "title": "ReflectionNudgeResponse",
         "type": "object"
       },
+      "ReminderCopyItemSchema": {
+        "additionalProperties": false,
+        "description": "예약 1건 = 문구 1건. schedule_key 는 백엔드 예약 행 식별자(불투명 문자열).",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "TRIP_DAY",
+              "TRIP_PRE"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "schedule_key": {
+            "minLength": 1,
+            "title": "Schedule Key",
+            "type": "string"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/ReminderSlotSchema"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schedule_key",
+          "kind",
+          "date"
+        ],
+        "title": "ReminderCopyItemSchema",
+        "type": "object"
+      },
+      "ReminderCopyRequest": {
+        "additionalProperties": false,
+        "description": "여행 1건의 예약 여러 행을 한 번에. 예산은 request_meta.deadline_ms 를 쓴다.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReminderCopyItemSchema"
+            },
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "trip_title": {
+            "default": "",
+            "title": "Trip Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_meta",
+          "items"
+        ],
+        "title": "ReminderCopyRequest",
+        "type": "object"
+      },
+      "ReminderCopyResponse": {
+        "additionalProperties": false,
+        "description": "빠진 항목은 백엔드가 기존 상수로 채운다 — degraded 가 그 사실의 증빙(INV-4).",
+        "properties": {
+          "copies": {
+            "items": {
+              "$ref": "#/components/schemas/ReminderCopySchema"
+            },
+            "title": "Copies",
+            "type": "array"
+          },
+          "degraded": {
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "fallback_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Mode"
+          }
+        },
+        "required": [
+          "copies",
+          "degraded"
+        ],
+        "title": "ReminderCopyResponse",
+        "type": "object"
+      },
+      "ReminderCopySchema": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "schedule_key": {
+            "title": "Schedule Key",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schedule_key",
+          "title",
+          "body"
+        ],
+        "title": "ReminderCopySchema",
+        "type": "object"
+      },
+      "ReminderSlotSchema": {
+        "additionalProperties": false,
+        "description": "그날 일정의 장소 1건 — 문구가 말해도 되는 대상. 좌표·시각은 싣지 않는다.",
+        "properties": {
+          "category": {
+            "default": "",
+            "title": "Category",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ReminderSlotSchema",
+        "type": "object"
+      },
       "RepairItineraryRequest": {
         "additionalProperties": false,
         "description": "`POST /ai/v1/itinerary/repair` — 백엔드 포트 `repair(solution, violations)` 대응 + IO-1.",
@@ -1917,6 +2063,48 @@
         "summary": "Validate",
         "tags": [
           "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/notification/copies": {
+      "post": {
+        "description": "리마인드 알림 문구 배치 생성 (설계: specs/2026-09-08-reminder-copy-local-llm-design.md).\n\n생성 실패·게이트 드롭 항목은 copies 에서 빠지고 degraded=true 로 알린다 —\n그 자리는 백엔드가 기존 하드코딩 상수로 채운다(INV-4, 침묵 금지).\n구형 조립은 503 명시 실패.",
+        "operationId": "notification_copies_ai_v1_notification_copies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReminderCopyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderCopyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Notification Copies",
+        "tags": [
+          "notification"
         ]
       }
     },

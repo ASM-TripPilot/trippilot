@@ -554,3 +554,44 @@ class ReflectionNudgeRequest(BoundaryModel):
 class ReflectionNudgeResponse(BoundaryModel):
     message: str
     is_fallback: bool
+
+
+# ───────────────────── 리마인드 알림 문구 (notification) ─────────────────────
+
+
+class ReminderSlotSchema(BoundaryModel):
+    """그날 일정의 장소 1건 — 문구가 말해도 되는 대상. 좌표·시각은 싣지 않는다."""
+
+    name: str = Field(min_length=1)
+    category: str = ""
+
+
+class ReminderCopyItemSchema(BoundaryModel):
+    """예약 1건 = 문구 1건. schedule_key 는 백엔드 예약 행 식별자(불투명 문자열)."""
+
+    schedule_key: str = Field(min_length=1)
+    kind: Literal["TRIP_DAY", "TRIP_PRE"]
+    date: dt.date
+    slots: list[ReminderSlotSchema] = Field(default_factory=list)
+
+
+class ReminderCopyRequest(BoundaryModel):
+    """여행 1건의 예약 여러 행을 한 번에. 예산은 request_meta.deadline_ms 를 쓴다."""
+
+    request_meta: RequestMetaSchema
+    trip_title: str = ""
+    items: list[ReminderCopyItemSchema] = Field(min_length=1, max_length=30)
+
+
+class ReminderCopySchema(BoundaryModel):
+    schedule_key: str
+    title: str
+    body: str
+
+
+class ReminderCopyResponse(BoundaryModel):
+    """빠진 항목은 백엔드가 기존 상수로 채운다 — degraded 가 그 사실의 증빙(INV-4)."""
+
+    copies: list[ReminderCopySchema]
+    degraded: bool
+    fallback_mode: str | None = None

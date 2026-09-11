@@ -1,7 +1,9 @@
-"""경계 라우트 8종 — `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit}`
-+ `POST /ai/v1/reflection/{generate,nudge}`.
+"""경계 라우트 9종 — `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit}`
++ `POST /ai/v1/reflection/{generate,nudge}`
++ `POST /ai/v1/notification/copies`.
 
-도입 티켓: alternatives=TRIP-428 · explanations=TRIP-479 · edit=TRIP-431 · reflection=TRIP-429.
+도입 티켓: alternatives=TRIP-428 · explanations=TRIP-479 · edit=TRIP-431 · reflection=TRIP-429 ·
+notification=TRIP-836.
 경로 정본: services.md §0 / agent-io-contracts.md §0.1 (구 표기 `/ai/generate`·`/ai/schedule` 폐기).
 
 이 파일이 하는 일은 셋뿐이다:
@@ -41,6 +43,8 @@ from trippilot.api.schemas import (
     ReflectionGenerateResponse,
     ReflectionNudgeRequest,
     ReflectionNudgeResponse,
+    ReminderCopyRequest,
+    ReminderCopyResponse,
     RepairItineraryRequest,
     RepairItineraryResponse,
     UnplacedMustVisitSchema,
@@ -327,6 +331,27 @@ def reflection_nudge(
     구형 조립은 503 명시 실패.
     """
     handler = getattr(orchestrator, "reflection_nudge", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(lambda: handler(request))
+
+
+# ───────────── 리마인드 알림 문구 경계 (TRIP-836 — /ai/v1/notification) ─────────────
+notification_router = APIRouter(prefix="/ai/v1/notification", tags=["notification"])
+
+
+@notification_router.post("/copies", response_model=ReminderCopyResponse)
+def notification_copies(
+    request: ReminderCopyRequest,
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> ReminderCopyResponse:
+    """리마인드 알림 문구 배치 생성 (설계: specs/2026-09-08-reminder-copy-local-llm-design.md).
+
+    생성 실패·게이트 드롭 항목은 copies 에서 빠지고 degraded=true 로 알린다 —
+    그 자리는 백엔드가 기존 하드코딩 상수로 채운다(INV-4, 침묵 금지).
+    구형 조립은 503 명시 실패.
+    """
+    handler = getattr(orchestrator, "reminder_copy", None)
     if handler is None:
         raise orchestrator_not_wired()
     return _guarded(lambda: handler(request))
