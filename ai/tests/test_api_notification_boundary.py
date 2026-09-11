@@ -6,6 +6,8 @@
   ③ 배선된 조립 + 성공 LLM → 200 + copies 실제 생성 (경계→wiring→워커 관통 확인)
   ④ 일부 항목만 실패 → degraded=true + 성공분만 copies (INV-4, 침묵 금지)
   ⑤ 전부 실패 → 200 + 빈 copies + fallback_mode="backend_constant"
+  ⑥ 드롭 발생 시 FallbackEvent(component="api.wiring")가 **배치당 1회** 발행된다 —
+     응답 바디와 별개인 관측 신호(드롭률 계측의 유일한 소스, INV-4)
 """
 
 from __future__ import annotations
@@ -14,8 +16,10 @@ from fastapi.testclient import TestClient
 
 from trippilot.api.app import create_app
 from trippilot.api.wiring import build_dev_app
+from trippilot.domain.observability import FallbackEvent
 
 from tests.fakes.fake_llm import FailingLlm, FakeLlm, ScriptedVisionLlm
+from tests.fakes.in_memory_trace import InMemoryTrace
 
 URL = "/ai/v1/notification/copies"
 
@@ -124,3 +128,25 @@ def test_wired_app_all_failures_returns_empty_copies_with_backend_constant() -> 
         assert body["copies"] == []
         assert body["degraded"] is True
         assert body["fallback_mode"] == "backend_constant"
+
+
+def test_dropped_items_emit_one_fallback_event_per_batch_not_per_item() -> None:
+    """드롭 발생 시 FallbackEvent(component="api.wiring")가 배치당 정확히 1건 —
+    응답 바디(copies/degraded/fallback_mode) 검증과는 독립적인 관측 신호 검증이다.
+    삭제해도 전체 스위트가 초록일 수 있는 emit(...) 호출이라 별도로 관측한다.
+    """
+    trace = InMemoryTrace()
+    # 2항목 모두 드롭 — "배치당 1회"를 "드롭 건수만큼"과 구별하려면 드롭이 2건 이상이어야 한다.
+    app = build_dev_app(llm=FailingLlm(), model_id="m-fake", trace=trace)
+    with TestClient(app) as client:
+        res = client.post(URL, json=TWO_ITEM_REQUEST)
+        assert res.status_code == 200
+        assert res.json()["degraded"] is True
+
+    wiring_events = [
+        e for e in trace.of_type(FallbackEvent) if e.component == "api.wiring"
+    ]
+    assert len(wiring_events) == 1  # 항목 2건 다 드롭됐어도 배치당 1건
+    event = wiring_events[0]
+    assert event.from_mode == "llm_reminder_copy"
+    assert event.to_mode == "backend_constant"

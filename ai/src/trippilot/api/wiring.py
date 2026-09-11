@@ -1395,6 +1395,7 @@ def build_dev_app(
     events: EventPort | None = None,
     vector_store: object | None = None,
     embedding: object | None = None,
+    trace: TracePort | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -1409,6 +1410,8 @@ def build_dev_app(
     StaticPoiDb(제주 시드 4곳) 그대로(하위호환: 백엔드 없는 로컬 스모크).
     `travel_port`는 선택 주입(TRIP-432, ChainedTravelAdapter) — 기본 None 이면
     기존 TravelEstimator(하버사인) 그대로.
+    `trace`는 선택 주입(관측 스파이용, 예: InMemoryTrace) — 기본 None 이면
+    build_orchestrator 기본값(LoggingTrace) 그대로.
     """
     if model_id is not None:
         model_ids = {ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id}
@@ -1435,5 +1438,6 @@ def build_dev_app(
         events=events,  # 행사 저장소 (TRIP-421) — None이면 무보정
         vector_store=vector_store,
         embedding=embedding,
+        trace=trace,
     )
     return create_app(orchestrator)
