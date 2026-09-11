@@ -54,14 +54,17 @@ ItineraryGenerated → 예약 재적재(plan/reload)
     {"schedule_key": "...", "kind": "TRIP_DAY", "date": "2026-09-10",
      "slots": [{"name": "성산일출봉", "category": "관광지"}, ...]}
   ],
-  "budget_ms": 8000,
-  "trace_id": "..."
+  "request_meta": {"request_id": "...", "requested_at": "...", "deadline_ms": 8000}
 }
 ```
 
+예산·추적 식별자는 **기존 `request_meta` 규약을 그대로 쓴다**(계획 단계 정정 2026-09-12 —
+새 `budget_ms`·`trace_id` 필드를 만들지 않는다). `deadline_ms` 미지정 = 시간 제약 없음
+(TRIP-473 팀 결정)이고, 그때는 게이트웨이 기본 타임아웃이 안전망으로 남는다.
+
 **응답**: `{"copies": [{"schedule_key", "title", "body"}], "fallback_mode": null|"backend_constant", "degraded": bool}` — 게이트 탈락·LLM 실패 항목은 copies 에서 빠지고, 빠진 게 있으면 `degraded=true`. 백엔드는 받은 것만 저장한다.
 
-- **타임아웃 관통**: 워커 마감은 `budget_ms` 에서 유도(TRIP-522 PlanB 선례). 게이트웨이 기본 2.5s 에 얹혀 가는 실수(넛지 워커 전례) 금지 — 계약 테스트로 고정.
+- **타임아웃 관통**: 워커 마감은 `request_meta.deadline_ms` 에서 유도(TRIP-522 PlanB 선례). 남은 예산을 남은 항목 수로 나눠 항목마다 배분하고, 최소 호출 시간도 못 주면 부르지 않고 드롭으로 보고한다(확정 타임아웃을 지불하지 않는다). 게이트웨이 기본 2.5s 에 얹혀 가는 실수(넛지 워커 전례) 금지 — 계약 테스트로 고정.
 - **게이트(결정론, 항목별)**: 넛지 게이트 상속 — title ≤20자·body ≤60자 1문장, '분/시간/시각/duration' 토큰 포함 시 드롭(INV-3) — **+ 신규: body 가 언급하는 장소명 ⊆ 그날 slots 의 name 집합**(closed-set, INV-1 정신. 부분 문자열 아닌 형태소 수준 포함 판정은 과설계 — 요청 slots name 의 부분열 매칭으로 시작).
 - **폴백 라벨**: 이 feature 의 폴백은 AI 안이 아니라 백엔드 상수다. `fallback_modes` 관측(#426)에 `backend_constant` 로 잡혀 소마 신뢰도 지표(생성 문구 적중률)가 된다.
 - **4곳 동시 갱신**: `api/routes.py` · `scripts/export_openapi.py` 재생성(`docs/openapi.json` 손편집 금지) · 계약 테스트 전수(정확일치) 목록 · `claude.md`/`claude.ko.md` 경계 목록 + 백엔드 `CALLED_PATHS`.
@@ -70,7 +73,8 @@ ItineraryGenerated → 예약 재적재(plan/reload)
 
 - **어댑터 신규 0**: 로컬 서버는 OpenAI 호환 API. `main.py` 에 두 번째 `OpenAIAdapter`(base_url=`TRIPPILOT_LOCAL_LLM_BASE_URL`, `api=chat`, 더미 키) 생성, `RoutingLlm` 라우트에 `"local"` 접두어 등록.
 - 모델 문자열 `local-reminder-qwen3-4b-v1` 을 `TRIPPILOT_LLM_FEATURE_MODELS` 로 `REMINDER_COPY` 에만 배정. **접두어 문자열이 그대로 `model=` 로 서버에 나가므로 vLLM `--served-model-name local-reminder-qwen3-4b-v1` 일치 필수.**
-- provider 열거(`openai|anthropic|mixed`)에 local 조합 반영, `smoke_llm.py` 에 REMINDER_COPY 실스택 스모크 추가.
+- provider 열거(`openai|anthropic|mixed`)는 **건드리지 않는다**(계획 단계 정정 2026-09-12): local 은 provider 가 아니라 **라우트 한 겹**이다 — 선택된 provider 위에 `RoutingLlm(default=llm, routes={"local": ...})` 를 씌운다. mixed 면 라우터가 중첩되지만 접두어가 겹치지 않아 순서 의존이 없고, 기존 분기 3종을 손대지 않는 가장 작은 변경이다.
+- 실스택 스모크는 `scripts/smoke_reminder_copy.py` 신규(수동·cron 전용). `smoke_llm.py` 는 INTENT 전용 하드코딩이라 건드리지 않는다.
 - **compose**: 서비스명 `ai-llm`, env 2겹 — `.env` 별칭 `AI_LOCAL_LLM_BASE_URL` → compose `TRIPPILOT_LOCAL_LLM_BASE_URL: ${AI_LOCAL_LLM_BASE_URL:-}` → 앱은 `TRIPPILOT_*` 만. **compose 통로 누락 = 조용한 기본값 사고 — 양쪽 다 정의.** `depends_on` 금지.
 - **미설정 2분법**: REMINDER_COPY 를 local 로 배정했는데 base_url 미설정이면 **기동 실패**(설정 버그). 런타임 연결 실패는 **명시 강등**(첫 검출 ERROR + 카운트, 응답은 copies 축소 + degraded).
 - **서빙 = Modal 서버리스 GPU, 개인 계정**(Starter 무료 크레딧 $30/월, T4 ≈ 월 50 GPU시간). 콜드스타트는 §2 근거로 무관. 키·엔드포인트는 키·시크릿 세션(볼트) 흐름.
