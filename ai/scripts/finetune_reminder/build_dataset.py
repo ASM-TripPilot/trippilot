@@ -103,11 +103,13 @@ def main() -> int:
     prompts_dir = Path(__file__).resolve().parents[2] / "prompts"
     registry = PromptRegistry(prompts_dir)
     scenarios = json.loads(Path(args.scenarios).read_text(encoding="utf-8"))
-    
-    kept_count = 0
-    dropped_count = 0
+
+    total_attempts = 0
+    gate_dropped = 0
+    duplicate_dropped = 0
+    written = 0
     seen: set[tuple[str, str]] = set()
-    
+
     with Path(args.out).open("w", encoding="utf-8") as f:
         for scenario in scenarios:
             item = ReminderCopyItem(
@@ -119,8 +121,9 @@ def main() -> int:
             )
             vars_dict = build_reminder_copy_vars(item, scenario.get("trip_title", ""))
             prompt, _ref = registry.render(LlmFeature.REMINDER_COPY, vars_dict)
-            
+
             for _ in range(args.per_scenario):
+                total_attempts += 1
                 try:
                     response_text = _call_teacher(client, prompt, args.temperature)
                     parsed = json.loads(response_text)
@@ -131,7 +134,7 @@ def main() -> int:
                     # 네트워크 오류 등 API 호출 실패 — 이 샘플을 스킵하고 계속
                     print(f"skip call: {type(e).__name__}: {e}", file=sys.stderr)
                     continue
-                
+
                 sample = {
                     "prompt": prompt,
                     "slot_names": list(scenario["slot_names"]),
@@ -140,19 +143,20 @@ def main() -> int:
                     "body": parsed.get("body", ""),
                     "places": parsed.get("places", []),
                 }
-                
+
                 # 게이트로 필터링
                 kept, stats = filter_samples([sample])
                 if not kept:
-                    dropped_count += 1
+                    gate_dropped += 1
                     continue
-                
+
                 # 중복 제거 후 저장
                 key = (sample["title"], sample["body"])
                 if key in seen:
+                    duplicate_dropped += 1
                     continue
                 seen.add(key)
-                
+
                 record = {
                     "messages": [
                         {"role": "user", "content": prompt},
@@ -170,9 +174,9 @@ def main() -> int:
                     ]
                 }
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
-                kept_count += 1
-    
-    print(f"통과 {kept_count} · 탈락 {dropped_count} · 중복제거 후 {len(seen)}")
+                written += 1
+
+    print(f"시도 {total_attempts} · 게이트탈락 {gate_dropped} · 중복탈락 {duplicate_dropped} · 저장 {written}")
     return 0
 
 

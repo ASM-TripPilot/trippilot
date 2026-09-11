@@ -75,3 +75,16 @@ def test_body_too_long_dropped() -> None:
     assert len(long_body) > 60  # 71 chars
     kept, stats = filter_samples([_sample(long_body, ["우도"])])
     assert kept == [] and stats["dropped"] == 1
+
+
+def test_filter_samples_counter_tracking() -> None:
+    """필터 통과와 탈락을 정확히 구분한다."""
+    samples = [
+        _sample("성산일출봉에서 시작하는 하루예요", ["성산일출봉"]),  # 통과
+        _sample("30분이면 도착해요", []),  # 게이트 탈락 (금지 토큰)
+        _sample("한라산이 보이네요", []),  # 게이트 탈락 (forbidden place)
+    ]
+    kept, stats = filter_samples(samples)
+    assert len(kept) == 1  # 1개 통과
+    assert stats["kept"] == 1
+    assert stats["dropped"] == 2  # 2개 탈락
