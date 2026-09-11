@@ -42,7 +42,7 @@ class HttpReflectionAgentAdapter(
 
     private fun call(input: ReflectionAgentInput): ReflectionCard? {
         val body = AiReflectionGenerateRequest(
-            requestMeta = AiReflectionRequestMeta(UUID.randomUUID().toString(), clock.instant(), properties.readTimeoutMs),
+            requestMeta = AiReflectionRequestMeta(UUID.randomUUID().toString(), clock.instant(), properties.deadlineMs),
             kind = input.kind,
             region = input.region,
             startDate = input.startDate,

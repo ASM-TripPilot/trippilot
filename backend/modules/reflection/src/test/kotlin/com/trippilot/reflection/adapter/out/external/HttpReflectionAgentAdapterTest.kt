@@ -2,6 +2,7 @@ package com.trippilot.reflection.adapter.out.external
 
 import com.trippilot.reflection.domain.port.ReflectionAgentInput
 import com.trippilot.reflection.domain.port.ReflectionVisit
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -26,6 +27,14 @@ import java.util.UUID
  * 여기서 잰다: 부르지 말아야 할 때 안 부르는가 · 실패가 값으로 낮아지는가 · 원문이 보존되는가.
  */
 class HttpReflectionAgentAdapterTest : StringSpec({
+
+    "readTimeout 이 마감+백스톱보다 작은 설정은 기동에서 거부된다" {
+        // 관계가 뒤집히면 상대가 마감을 넘겨 정리하는 응답을 우리가 먼저 끊는다 — 조용한 강등이라 기동에서 막는다.
+        shouldThrow<IllegalArgumentException> {
+            ReflectionAgentProperties(deadlineMs = 15_000, readTimeoutMs = 19_999)
+        }
+        ReflectionAgentProperties(deadlineMs = 15_000, readTimeoutMs = 20_000) // 경계값은 통과
+    }
 
     val clock = Clock.fixed(Instant.parse("2026-08-01T00:00:00Z"), ZoneOffset.UTC)
     val day = LocalDate.parse("2026-08-01")
@@ -95,6 +104,9 @@ class HttpReflectionAgentAdapterTest : StringSpec({
             .andExpect(jsonPath("$.start_date").value("2026-08-01"))
             .andExpect(jsonPath("$.visits[0].poi_name").value("성산일출봉"))
             .andExpect(jsonPath("$.visits[0].ref.poi_id").exists())
+            // 8s 였을 때 시도 1회가 온전히 못 끝나 재시도가 이어지며 백스톱 경계에 걸렸다
+            // (2026-09-11 실측, 상세는 ReflectionAgentProperties) — 이 값이 다시 줄면 그 회귀다.
+            .andExpect(jsonPath("$.request_meta.deadline_ms").value(15000))
             .andRespond(withSuccess(okBody, MediaType.APPLICATION_JSON))
 
         adapter.generate(input())

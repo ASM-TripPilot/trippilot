@@ -326,14 +326,40 @@ touches = []
 note = "우리 PERSONA-API 를 기다린다 — 이 그래프에서 **우리가 남을 막고 있는 유일한 자리**다."
 
 [[nodes]]
+id = "BACKEND-AI-AUTH"
+ticket = ""
+title = "백엔드→AI 호출에 서비스 토큰 붙이기 (역방향 TRIP-393)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation",
+  "backend/modules/reflection",
+  "docker-compose.yml",
+]
+note = """
+잠긴 것은 AI→백엔드(`/internal/**`, fail-closed)뿐이고 **백엔드→AI 는 무인증**이다 —
+`ScheduleAgentConfiguration.client()` 는 Authorization 헤더를 달지 않는다(회고 클라이언트도 동일).
+`ai-backend-alternatives-연동-설계.md` §5 전제 2 가 범위 밖으로 명시하며 별건으로 끊자고 제안한 것.
+붙일 때 fail-closed 로 가면 토큰 미설정 환경에서 generate 까지 죽는다 — 전환 순서 설계가 본체다.
+SECURITY 계열.
+"""
+
+[[nodes]]
 id = "TRIP-463"
 ticket = "TRIP-463"
 title = "[AI] 슬롯 후보 경계 개통 — copick 실연동"
-status = "external"
+status = "done"
 owner = "ai"
 migration = false
 touches = []
-note = "TRIP-481 과 무관하다(그쪽은 로컬 위임 경로 버그). 이 노드가 열리면 AI 위임 경로가 추가로 생긴다."
+note = """
+TRIP-481 과 무관하다(그쪽은 로컬 위임 경로 버그).
+
+**양쪽 다 끝났다(2026-09-11).** AI 가 `/ai/v1/itinerary/alternatives` 를 열었고, 백엔드 배선은
+#485(설계 정본 `ai-backend-alternatives-연동-설계.md`). 실 왕복 실측: LLM 랭킹(fallback_level=0)으로
+후보 2건, `placementReason`("일몰 명소") 컨텍스트가 rationale 에 실제 반영됨. degraded 는 이제
+리터럴이 아니라 `fallback_level >= 1` 조건부다.
+"""
 
 [[nodes]]
 id = "TRIP-475"
@@ -481,6 +507,11 @@ AlternativeSchema{label, poi_ids, rationale} + pool_size·empty_reason·fallback
 우리가 #418 에서 로컬로 만든 '0건 사유 구분'을 상대가 이미 갖고 있다.
 
 **착수 전 정할 것**: 동작하는 경로를 교체할 값이 있는가. 교체하면 재계획 회귀 범위가 넓다.
+
+**갱신(2026-09-11)**: 이 경로의 첫 소비자가 생겼다 — 슬롯 후보(#485)가 실호출한다. 실 왕복은
+LLM 랭킹까지 확인됐다(TRIP-463 노드 참조). 남은 것은 이 노드의 원래 질문 하나 — **재계획을**
+generate 우회에서 alternatives 로 갈아탈 가치가 있는가. 슬롯 후보 배선(와이어·매퍼·INV-1 게이트)을
+재사용할 수 있어 착수 비용은 내려갔지만, 교체 회귀 범위가 넓다는 판단은 그대로다.
 """
 
 [[nodes]]
@@ -540,7 +571,7 @@ note = """
 id = "REFLECTION-LIVE-CHECK"
 ticket = ""
 title = "회고 AI 실 왕복 1회 — 최신 AI 이미지 필요"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/app/src/test/kotlin/com/trippilot/app/LiveReflectionRoundTripIT.kt",
@@ -555,6 +586,13 @@ GHCR pull 403. 최신 이미지를 받을 수 있으면 아래 한 줄이면 끝
     docker compose --profile full up -d ai
     LIVE_AI=1 ./gradlew :app:test --tests "*LiveReflectionRoundTripIT*" --rerun-tasks
     docker compose stop ai
+
+**완료(2026-09-11).** GHCR 은 필요 없었다 — compose 의 `build: ./ai` 로 로컬 빌드하면 계약과
+이미지가 정의상 일치한다. 실측 결과: 경로 개통 확인 · `visits` 0건은 minItems=1 로 **거절(422)**
+쪽 기록 · **결함 1건 발견**: 마감 8s 는 시도당 타임아웃으로 관통돼(최대 3회, 총량 상한 아님)
+시도 1회(웜 5.1~6.5s)가 빠듯하게 잘리고 재시도 사슬(11.8s+)→백스톱(13s) 경계 flaky.
+마감 15s/읽기 21s 분리로 수정,
+재실행 3/3 초록. 예언("이름 게이트가 못 보는 제약 위반")이 그대로 적중한 사례.
 """
 
 [[nodes]]
