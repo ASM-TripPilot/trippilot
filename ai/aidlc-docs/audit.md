@@ -293,3 +293,14 @@
 - `construction/claude.md`·`claude.ko.md`: "Not Yet Started / 아직 미착수" → 현재 상태. 계획 트리는 "최초 계획"으로 강등하고, `code/` 부재(Code Location Rules)와 U5 FD 부재(TRIP-237/238/239/241/242 코드 선행)를 결정으로 명시.
 - `inception/reverse-engineering/code-structure.md`·`code-quality-assessment.md`: 본문 보존 + "2026-07-12 시점 관측" 배너 삽입.
 - `inception/claude.md`·`claude.ko.md`·`inception/design-artifacts/claude.md`·`claude.ko.md`: 에이전트 구조 최신 문서 지목을 `agent-redesign.md` → `agent-structure-v2.md`(2026-08-02 도구 배타 원칙 개정)로 정정. `application-design/claude.md` 의 지목과 일치시킴.
+
+## 2026-09-12 — 신규 LlmFeature `SHARE_CARD_COPY` (BR-AF-07 5종 세트)
+**Timestamp**: 2026-09-12 · TRIP-429 후속 (j06 공유 카드)
+- **무엇**: 공유 카드 이미지 아래 붙는 SNS 캡션·해시태그를 LLM 카피로 생성한다. 종전엔 클라이언트가 기계 문자열로 조립했다(`ShareCardPage.tsx` — 캡션은 여행 제목 시드, 해시태그는 목적지마다 `#{지역}여행`). 카드 이미지(통계·동선 목록·워터마크)는 서비스가 조립하는 사실 영역이라 범위 밖
+- **5종 세트 이행**: ① FD 개정 — `construction/u4-c1-gateway/functional-design/domain-entities.md` §1 표에 행 추가 ② tier_map — `llm_gateway/config.py::default_tier_map` LIGHT ③ 프롬프트 yaml — `prompts/share_card_copy.yaml` v0.1.0 ④ ROUTE-P1 — 전 feature 스윕(`tests/test_llm_gateway_gateway.py`)이 자동 커버, 폴백 모드 이중 대장(`_EXPECTED_MODES`)도 갱신 ⑤ audit — 본 항목
+- **설계 결정**: 에이전트를 만들지 않는다 — u6-reflect FD §2.1 **워커 직행 패턴**의 적용 대상(`reflection_nudge` 와 동형). 후보 선택·다단 구성·예산 계단·하드 교체를 하나도 쓰지 않는 "판단 없는 단발 변환"이라 껍데기 위임 메서드는 대칭 말고 얻는 게 없다. 방어 폴백 이벤트는 `component="api.wiring"`(발행 주체 = 경계)
+- **게이트 등급 이탈(의도적)**: 판정 로직은 `gates/reflection_template.py` 재사용(`_TIME_EXPR`·`_tag_allowed`·`_PLACEHOLDER`)이지만 `CAPTION_LEN`·`HASHTAG_OUT` 의 **등급이 다르다** — 그쪽은 "N회 생성 → 최선 채택"이라 SOFT 감점을 적용할 랭킹 자리가 있고, 여기는 단발 1건이라 그 자리가 없다(통과 아니면 전량 드롭 → 정적 폴백). 그래서 **과잉 드롭이 실질 위험**이고, 게이트가 검사하는 규칙을 프롬프트에 빠짐없이 싣는 것이 방어선이다(정합 테스트가 고정)
+- **경계 추가**: `POST /ai/v1/reflection/share-card` — 요청은 `ReflectionGenerateRequest` 재사용(회고와 같은 재료), 응답은 `ShareCardCopy`. 기존 `/generate`·`/nudge` 스키마 무변경(openapi diff 삭제 0줄)
+- **미결로 남긴 것**: ⓐ 캡션의 자리표시자(`{region}`·`{visit_count}` 등) **바인딩 주체가 아직 없다** — 백엔드·FE 어디에도 치환 코드가 없어 붙는 순간 리터럴이 노출된다. `REFLECTION_TEMPLATE` 도 같은 상태이므로 이 feature 가 새로 만든 결함은 아니지만, 공유 캡션은 SNS 로 바로 나가는 자리라 노출 경로가 더 짧다 ⓑ 폴백이 FE 종전 문구를 재현하지 못한다 — `ReflectionRequest` 에 여행 제목·목적지 목록이 없어 지역 1개로 접힌다(요청 스키마 확장 협의 필요)
+- **선행 기록 누락 1건**: `REPLAN_DIRECTIVE_TRANSLATION`(재계획 연동 설계 §3) 은 위 2026-09-02 소급 기록 이후에 들어와 FD 표·audit 양쪽에 없다 — 본 항목과 별개로 그 티켓 소유자가 채울 몫으로 남긴다(여기서 대신 적으면 근거 없는 기록이 된다)
+

@@ -77,6 +77,10 @@ from trippilot.llm_gateway.workers.reflection_nudge import (
     FALLBACK_NUDGE_MESSAGE, ReflectionNudgeInput, ReflectionNudgeWorker,
 )
 from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
+from trippilot.llm_gateway.gates.share_card_copy import ShareCardCopyGate
+from trippilot.llm_gateway.workers.share_card_copy import (
+    ShareCardCopyWorker, fallback_share_card_copy,
+)
 from trippilot.ports.poi_db_port import PoiLookup, PoiMiss, lookup_from
 from trippilot.domain.observability import FallbackEvent, LlmCallRecord
 from trippilot.domain.reflection import (
@@ -224,6 +228,39 @@ def _deadline_budget(meta: schemas.RequestMetaSchema) -> int:
 
 def _tz_aware(value: datetime, tz: timezone) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=tz)
+
+
+def _domain_reflection_request(
+    request: schemas.ReflectionGenerateRequest,
+) -> ReflectionRequest:
+    """회고 요청 와이어 → 도메인. `/generate`와 `/share-card`가 **같은 재료**를 받는다
+    (요청 스키마 재사용) — 변환을 두 벌 두면 한쪽만 고쳐져 조용히 갈라진다.
+
+    enum·날짜 승격은 여기서 한 번만: 값이 enum 밖이면 ValueError가 올라가고
+    `_guarded`가 경계 오류로 번역한다 (조용한 흡수 금지).
+    """
+    return ReflectionRequest(
+        kind=ReflectionKind(request.kind),
+        region=request.region,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        visits=tuple(
+            VisitRecord(
+                ref=VisitRef(date=v.ref.date, poi_id=PoiId(v.ref.poi_id)),
+                poi_name=v.poi_name,
+                category=v.category,
+                order_in_day=v.order_in_day,
+                photo_count=v.photo_count,
+            )
+            for v in request.visits
+        ),
+        events=tuple(
+            TripEventRecord(kind=SourceEventKind(e.kind), date=e.date, detail=e.detail)
+            for e in request.events
+        ),
+        persona_summary=request.persona_summary,
+        weather_summary=request.weather_summary,
+    )
 
 
 def _budget_from(request: schemas.GenerateItineraryRequest) -> BudgetLevel:
@@ -673,6 +710,7 @@ class WiredItineraryOrchestrator:
         edit_agent: EditAgent,
         reflect_agent: ReflectAgent,
         nudge_worker: "ReflectionNudgeWorker",
+        share_card_worker: "ShareCardCopyWorker",
         trace: TracePort,
     ) -> None:
         self._orchestrator = orchestrator
@@ -687,6 +725,7 @@ class WiredItineraryOrchestrator:
         self._edit_agent = edit_agent
         self._reflect_agent = reflect_agent
         self._nudge_worker = nudge_worker
+        self._share_card_worker = share_card_worker
         self._trace = trace
 
     # Protocol: generate(request) — deadline·trace·now는 request_meta(IO-1)에서.
@@ -1007,29 +1046,7 @@ class WiredItineraryOrchestrator:
         """
         meta = request.request_meta
         now = _tz_aware(meta.requested_at, self._tz)
-        domain_request = ReflectionRequest(
-            kind=ReflectionKind(request.kind),
-            region=request.region,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            visits=tuple(
-                VisitRecord(
-                    ref=VisitRef(date=v.ref.date, poi_id=PoiId(v.ref.poi_id)),
-                    poi_name=v.poi_name,
-                    category=v.category,
-                    order_in_day=v.order_in_day,
-                    photo_count=v.photo_count,
-                )
-                for v in request.visits
-            ),
-            events=tuple(
-                TripEventRecord(
-                    kind=SourceEventKind(e.kind), date=e.date, detail=e.detail)
-                for e in request.events
-            ),
-            persona_summary=request.persona_summary,
-            weather_summary=request.weather_summary,
-        )
+        domain_request = _domain_reflection_request(request)
         template = self._reflect_agent.run(ReflectTask(
             request=domain_request,
             trace_id=TraceId(meta.request_id),
@@ -1070,6 +1087,44 @@ class WiredItineraryOrchestrator:
                 message=FALLBACK_NUDGE_MESSAGE, is_fallback=True)
         return schemas.ReflectionNudgeResponse(
             message=str(result.value), is_fallback=False)
+
+    def reflection_share_card(
+        self, request: schemas.ReflectionGenerateRequest
+    ) -> schemas.ShareCardCopyResponse:
+        """j06 공유 카드 문구 — 워커 직행 (U6 Reflect FD §2.1, TRIP-429 후속).
+
+        에이전트를 경유하지 않는다: 후보 선택·다단 구성·예산 계단·하드 교체가 하나도
+        없는 단발 변환이라 껍데기 위임 메서드는 대칭 말고 얻는 게 없다. 실패·게이트
+        전량 탈락이면 결정론 정적 조립으로 수렴한다 (INV-4, 침묵 금지).
+        """
+        meta = request.request_meta
+        now = _tz_aware(meta.requested_at, self._tz)
+        domain_request = _domain_reflection_request(request)
+        result = self._share_card_worker.generate(
+            domain_request,
+            TraceId(meta.request_id),
+            now,
+            # 같은 요청 스키마의 같은 필드를 한 경계는 쓰고 한 경계는 버리면
+            # 예산이 실리는 순간 여기만 기본 타임아웃으로 돈다 (`reflection_generate` 대칭)
+            timeout_sec=_deadline_budget(meta) / 1000.0,
+        )
+        if result.is_fallback or not result.value:
+            if not result.is_fallback:
+                # 방어 분기 — 현 게이트 계약상 도달 불가(빈 캡션은 게이트가 error로 낸다).
+                # 게이트 완화 시 계측 없는 침묵 폴백이 되지 않게 여기서 발행한다.
+                # 직행 패턴의 발행 주체는 경계다 — component="api.wiring" (FD §2.1 관측 규칙).
+                self._trace.emit(FallbackEvent(
+                    trace_id=TraceId(meta.request_id),
+                    occurred_at=now,
+                    component="api.wiring",
+                    stage="agent",
+                    from_mode="llm_share_card",
+                    to_mode="static_copy",
+                    reason="share_card_empty_value_without_fallback_flag",
+                ))
+            return schemas.ShareCardCopyResponse(
+                **fallback_share_card_copy(domain_request).to_dict())
+        return schemas.ShareCardCopyResponse(**result.value.to_dict())
 
 
 # ── 조립 함수 (composition root) ─────────────────────────────────────
@@ -1162,6 +1217,10 @@ def build_orchestrator(
     nudge_worker = ReflectionNudgeWorker(
         GatewayFacade(llm, renderer, ReflectionNudgeGate(), c1_config, trace)
     )
+    # 공유 카드 문구도 같은 직행 배선 (TRIP-429 후속 — 에이전트 없음)
+    share_card_worker = ShareCardCopyWorker(
+        GatewayFacade(llm, renderer, ShareCardCopyGate(), c1_config, trace)
+    )
     # ScheduleAgent — 게이트웨이 점수 → 어셈블리 solve → 설명 (agents/schedule/agent.py).
     # PlanB·Reflect 와 같은 조립 단위: 워커는 게이트웨이 계층 소속이고 에이전트가 부른다.
     schedule_agent = ScheduleAgent(
@@ -1194,6 +1253,7 @@ def build_orchestrator(
         edit_agent=edit_agent,
         reflect_agent=reflect_agent,
         nudge_worker=nudge_worker,
+        share_card_worker=share_card_worker,
         trace=trace,
     )
 

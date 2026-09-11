@@ -1,5 +1,5 @@
-"""경계 라우트 8종 — `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit}`
-+ `POST /ai/v1/reflection/{generate,nudge}`.
+"""경계 라우트 9종 — `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit}`
++ `POST /ai/v1/reflection/{generate,nudge,share-card}`.
 
 도입 티켓: alternatives=TRIP-428 · explanations=TRIP-479 · edit=TRIP-431 · reflection=TRIP-429.
 경로 정본: services.md §0 / agent-io-contracts.md §0.1 (구 표기 `/ai/generate`·`/ai/schedule` 폐기).
@@ -43,6 +43,7 @@ from trippilot.api.schemas import (
     ReflectionNudgeResponse,
     RepairItineraryRequest,
     RepairItineraryResponse,
+    ShareCardCopyResponse,
     UnplacedMustVisitSchema,
     UnverifiedSlotSchema,
     ValidateItineraryRequest,
@@ -327,6 +328,24 @@ def reflection_nudge(
     구형 조립은 503 명시 실패.
     """
     handler = getattr(orchestrator, "reflection_nudge", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(lambda: handler(request))
+
+
+@reflection_router.post("/share-card", response_model=ShareCardCopyResponse)
+def reflection_share_card(
+    request: ReflectionGenerateRequest,
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> ShareCardCopyResponse:
+    """j06 공유 카드 문구 — 캡션 1문단 + 해시태그 (TRIP-429 후속).
+
+    요청 스키마는 `/generate`와 동일(회고와 같은 재료). 경계가 워커를 직접 부른다
+    (U6 Reflect FD §2.1 워커 직행 — 판단 없는 단발 변환이라 에이전트를 두지 않는다).
+    LLM 실패·게이트 전량 탈락 시 결정론 정적 조립 200 (is_fallback=true — INV-4).
+    카드 이미지(통계·동선·워터마크)는 이 경계 밖이다. 구형 조립은 503 명시 실패.
+    """
+    handler = getattr(orchestrator, "reflection_share_card", None)
     if handler is None:
         raise orchestrator_not_wired()
     return _guarded(lambda: handler(request))

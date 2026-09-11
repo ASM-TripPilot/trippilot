@@ -44,7 +44,7 @@
 | 리버스 | POI 정본 read — 반경 (`find_by_radius`) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | 리버스 | POI 정본 read — 배치 (`find_by_ids`) | `POST /internal/pois/batch-get` · 요청 필드 `poi_ids` | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
 
-위 표는 일정(`itinerary`) 경계만 담는다. 회고 경계 `POST /ai/v1/reflection/{generate,nudge}`(TRIP-429)도 열려 있다 — **열린 경로 전체의 정본은 `ai/docs/openapi.json`**이고,
+위 표는 일정(`itinerary`) 경계만 담는다. 회고 경계 `POST /ai/v1/reflection/{generate,nudge,share-card}`(TRIP-429 +후속)도 열려 있다 — **열린 경로 전체의 정본은 `ai/docs/openapi.json`**이고,
 전수 일치는 `ai/tests/test_api_openapi_contract.py`가 강제한다.
 
 리버스 나머지(`nearby`·`open-window`·`closedCheck`)는 이연 — 협의 중.

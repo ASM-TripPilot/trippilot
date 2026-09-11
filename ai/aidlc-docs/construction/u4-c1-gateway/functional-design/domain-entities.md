@@ -32,6 +32,7 @@ U4는 U1이 만든 규격을 **소비**한다. 아래 타입은 손대지 않는
 | `REFLECTION_TEMPLATE` | 상위(HEAVY) | U6 (회고 연출 템플릿 — TRIP-429, U6 FD v1.0 Phase 1. **ReflectAgent 전속**, BR-AF-07 절차) |
 | `REFLECTION_TEMPLATE_VISION` | 상위(HEAVY, **vision**) | U6 Phase 2 (사진 동봉 장면·캡션 생성 — TRIP-595. 텍스트판과 **같은 출력 계약·같은 게이트**, feature 분리는 모델 라우팅 때문(미결 #6 확정). 폴백: compose_vision이 3회 공유 예산(#9) 안에서 텍스트로 강등) |
 | `PHOTO_HIGHLIGHT` `REFLECTION_TEMPLATE_VISION` | 상위(HEAVY, **vision**) | U6 Phase 2 (동의된 사진 → 대표 N장 — TRIP-595. 이미지 파트를 싣는 첫 feature. 산출은 `photo_id` 튜플뿐 — 시각 서술은 받지 않는다, BR-U6R-11. composer 통합 완료(compose_vision — 같은 브랜치 e46a7347). **API 배선만 후속**(TRIP-478 실사진 전달 시점)) |
+| `SHARE_CARD_COPY` | 경량(LIGHT) | U6 (j06 공유 카드 캡션·해시태그 — TRIP-429 후속. **에이전트 없음**: 경계→워커 직행(u6-reflect FD §2.1) — 후보 선택·다단 구성·예산 계단·하드 교체를 하나도 쓰지 않는 단발 변환. 게이트는 `reflection_template` 판정 재사용이되 **등급은 전량 드롭**(단발 1건이라 SOFT 감점을 적용할 랭킹 자리가 없다). 폴백: 경계가 결정론 정적 조립) |
 | `PLACE_EXTRACTION` | 상위 (백그라운드) | U6 (**미배선** — 프로덕션 호출자 0, TRIP-529) |
 | `EVENT_EXTRACTION` | 상위(HEAVY, 백그라운드) | TRIP-421 (웹 검색 스니펫 → 행사 구조화 추출. 행사는 POI가 아니라 후보 풀 비편입 — INV-1 비적용) |
 | `EDIT_TRANSLATION` | 경량(LIGHT) | agent-foundation 스텝 ⓪ (**EditAgent 전속**) |
