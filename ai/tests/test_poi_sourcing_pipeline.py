@@ -350,7 +350,7 @@ def test_폐업_업소는_실재_단계에서_드롭된다() -> None:
     """
     from trippilot.poi_curation.sourcing.collection_gate import DROP_EXISTENCE_CLOSED
 
-    gate = CollectionGate(closed_refs=frozenset({"closed-1"}))
+    gate = CollectionGate(closed_refs=frozenset({("tourapi", "closed-1")}))
     report = gate.apply([_candidate("open-1"), _candidate("closed-1", name="문닫은집")])
 
     assert [p.poi.name for p in report.passed] == ["성산일출봉"], "폐업분만 빠진다"
