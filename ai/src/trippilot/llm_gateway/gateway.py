@@ -203,7 +203,6 @@ class GatewayFacade:
                     prompt=prompt,
                     prompt_ref=prompt_ref,
                     max_tokens=self._cfg.max_tokens,
-                    temperature=self._cfg.temperature,
                     timeout_sec=timeout_sec,
                     images=images,
                 )

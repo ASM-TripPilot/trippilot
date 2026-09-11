@@ -309,7 +309,6 @@ def pipeline(store, embedding, llm, model_id: str | None) -> PlanBAgent:
             # 이 기본값을 덮으므로(운영과 같은 경로), 이 값은 다른 feature 용이다.
             timeout_sec=float(os.environ.get("SMOKE_TIMEOUT_SEC", "2.5")),
             max_tokens=int(os.environ.get("SMOKE_MAX_TOKENS", "2048")),
-            temperature=float(os.environ.get("SMOKE_TEMPERATURE", "1.0")),
         ),
         LoggingTrace(),
     )

@@ -484,7 +484,6 @@ def _llm_request() -> LlmRequest:
             feature="ALTERNATIVE_SELECTION",
         ),
         max_tokens=128,
-        temperature=1.0,
     )
 
 

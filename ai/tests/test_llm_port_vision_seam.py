@@ -46,7 +46,7 @@ _PNG = b"\x89PNG\r\n\x1a\n fake bytes"
 def _request(images: tuple = ()) -> LlmRequest:
     return LlmRequest(
         model_id="m", prompt="본문", prompt_ref=_REF,
-        max_tokens=100, temperature=1.0, images=images,
+        max_tokens=100, images=images,
     )
 
 

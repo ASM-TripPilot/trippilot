@@ -68,8 +68,8 @@ class OpenAIAdapter:
                     f"이미지 입력은 responses 표면에서만 지원 (현재: {self._api})")
             if self._api == "responses":
                 # temperature 미전달 — GPT-5 계열은 파라미터째 거부(400,
-                # "Unsupported parameter: 'temperature'"). 결정론 의도(0.0)는 이
-                # 벤더에서 실현 불가 — 모델 기본값에 맡긴다 (TRIP-377).
+                # "Unsupported parameter: 'temperature'"). 결정론 의도는 이 벤더에서
+                # 실현 불가 — 모델 기본값에 맡긴다 (TRIP-377). 요청 필드도 없앴다.
                 resp = self._client.responses.create(
                     model=request.model_id,
                     max_output_tokens=request.max_tokens,

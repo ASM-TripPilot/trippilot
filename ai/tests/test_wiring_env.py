@@ -347,7 +347,7 @@ def test_routing_llm_dispatches_by_model_prefix():
     ref = PromptRef(prompt_id="p", version="0", feature="INTENT")
 
     def _req(model): return LlmRequest(model_id=model, prompt="x", prompt_ref=ref,
-                                       max_tokens=10, temperature=0.0)
+                                       max_tokens=10)
     assert router.invoke(_req("Claude-Sonnet-4-5")) == "claude"  # 대소문자 무시
     assert router.invoke(_req("gpt-5.6-terra")) == "gpt"
     assert claude.got == ["Claude-Sonnet-4-5"] and gpt.got == ["gpt-5.6-terra"]

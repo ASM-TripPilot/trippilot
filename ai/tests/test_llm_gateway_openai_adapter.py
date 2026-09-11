@@ -24,7 +24,6 @@ _REQUEST = LlmRequest(
         prompt_id="prompts/test.yaml", version="0.0.1", feature="PREFERENCE_SCORING"
     ),
     max_tokens=1024,
-    temperature=0.0,
     timeout_sec=2.5,
 )
 
