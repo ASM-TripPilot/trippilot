@@ -2,6 +2,8 @@
 
 §2(파일 하단) 는 **교차 출처 동일성 판정**(TRIP-682) 재료다 — 같은 가게가 출처마다
 다르게 적히는 상호·주소 표기 변형을 조립한다.
+§3 은 **지도 실재 확인**(TRIP-683) 재료다 — 조회 1건과, "없음"으로 읽히면 안 되는
+형식 밖 응답들.
 """
 
 from __future__ import annotations
@@ -13,6 +15,9 @@ from hypothesis import strategies as st
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, TransportMode
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.ports.place_existence_port import ExistenceQuery
+
+from tests.generators.geo import geo_points
 
 _ANCHOR = GeoPoint(37.751, 128.876)
 
@@ -188,3 +193,72 @@ def distinct_store_name_pairs(draw) -> tuple[str, str]:
 def unresolvable_addresses() -> st.SearchStrategy[str | None]:
     """addr_key 가 None 인 주소 — 동일성 근거로 써서는 안 되는 입력."""
     return st.sampled_from(_UNRESOLVABLE_ADDRESSES)
+
+
+# ── §3 실재 확인 재료 (TRIP-683 · PlaceExistencePort) ─────────────────
+# 지도 실재 검사(폐업·유령 POI 걸러내기)를 자극하는 입력 두 종류:
+#   existence_queries — 조회 1건 (상호는 §2 실측 어휘 재사용, 무작위 유니코드 금지)
+#   malformed_payloads — 카카오 응답 **형식 밖** payload. 이것들이 "없음"으로
+#       수렴하면 벤더 응답 한 번 바뀔 때 전 POI 가 폐업이 된다.
+
+
+@st.composite
+def existence_queries(draw) -> ExistenceQuery:
+    """실재 확인 조회 1건. poi_id 는 유일, 좌표는 한국 bbox 안."""
+    i = draw(st.integers(min_value=0, max_value=10**9))
+    base = draw(st.sampled_from(_STORE_NAMES))
+    branch = draw(st.sampled_from(("",) + _BRANCH_LABELS))
+    return ExistenceQuery(
+        poi_id=PoiId(f"e{i}"),
+        name=f"{base} {branch}".strip(),
+        coord=draw(geo_points()),
+    )
+
+
+# `documents` 가 리스트로 오지 않는 응답들 — 전부 "모른다"여야 한다.
+# 실측·문서 기반 형태: 카카오 오류 봉투(errorType/message), 필드 개명·오타,
+# 봉투 한 겹 추가, 그리고 **파싱 안 된 원문 문자열**(클라이언트가 text 를 그대로
+# 돌려주는 사고 — 내용은 정상 응답이라 눈으로는 구분이 안 된다).
+_MALFORMED_BODIES: tuple[object, ...] = (
+    None,
+    True,
+    False,
+    0,
+    1,
+    -1,
+    3.14,
+    "",
+    "documents",
+    '{"documents": [{"place_name": "고집돌우럭"}]}',   # 파싱 전 원문
+    [],
+    [{"place_name": "우진해장국"}],
+    (),
+    {},
+    {"x": 1},
+    {"errorType": "AccessDeniedError", "message": "app disabled"},
+    {"errorType": "RequestThrottled", "message": "quota exceeded"},
+    {"meta": {"total_count": 0}},                      # documents 누락
+    {"documents": None},
+    {"documents": {}},
+    {"documents": "없음"},
+    {"documents": 0},
+    {"documents": ()},                                  # 튜플 — 리스트 아님
+    {"document": []},                                   # 필드 오타/개명
+    {"result": {"documents": []}},                      # 봉투 한 겹
+    {"body": {"items": []}},                            # 다른 벤더 봉투
+)
+
+
+def malformed_payloads() -> st.SearchStrategy[object]:
+    """`documents: list` 가 없는 응답. 어떤 것도 NOT_FOUND 로 읽히면 안 된다."""
+    return st.sampled_from(_MALFORMED_BODIES)
+
+
+def kakao_documents(n: int) -> dict:
+    """정상 응답 봉투 — n 건의 검색 결과. n=0 이면 진짜 "없음"(NOT_FOUND)."""
+    return {
+        "meta": {"total_count": n, "is_end": True},
+        "documents": [
+            {"place_name": f"가게{k}", "x": "126.5", "y": "33.5"} for k in range(n)
+        ],
+    }
