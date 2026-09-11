@@ -316,14 +316,23 @@ def test_exist_p4_budget_overflow_is_unverified_not_not_found(
 @given(batches=st.lists(st.lists(existence_queries(), min_size=1, max_size=4),
                         min_size=2, max_size=4),
        max_calls=st.integers(1, 6))
-def test_exist_p4_budget_spans_multiple_verify_calls(batches, max_calls) -> None:
-    """예산은 어댑터 수명 전체에 걸린다 — verify 를 나눠 불러도 총합이 상한 이하."""
+def test_exist_p4_budget_is_per_verify_call(batches, max_calls) -> None:
+    """예산은 **verify 1회당**이다 — 매 호출이 자기 몫을 새로 받는다.
+
+    누적이면 앱 수명 동안 사는 `CandidatePoolBuilder` 에 꽂혔을 때 상한 소진 후
+    영구히 전부 UNVERIFIED 가 되어 강등이 조용히 죽는다. 한 생성 요청 = 한 실행
+    = 한 벌의 예산이다(배치용 `KakaoLocalClient` 의 "실행당 상한"과 같은 뜻).
+    """
     http = FakeHttpGetJson(default=kakao_documents(1))
     a = _adapter(http, max_calls=max_calls)
     for b in batches:
+        before = len(http.calls)
         a.verify(tuple(b), deadline_ms=100_000)
-    assert a.calls_used <= max_calls
-    assert len(http.calls) <= max_calls
+        # 이번 호출이 쓴 몫만 센다 — 앞 호출이 소진했어도 새로 받는다
+        assert a.calls_used == len(http.calls) - before
+        assert a.calls_used <= max_calls
+    # 누적은 상한을 넘어도 된다(넘는 것이 정상) — 몫이 매번 갱신되므로
+    assert len(http.calls) <= max_calls * len(batches)
 
 
 # ── EXIST-P5: 마감 준수 ─────────────────────────────────────────────

@@ -1089,6 +1089,7 @@ def build_orchestrator(
     prompts_root: Path | None = None,
     weather: WeatherPort | None = None,
     travel_port: object | None = None,  # 실경로 어댑터 (TRIP-432) — None이면 하버사인
+    existence: object | None = None,    # 지도 실재 검증 (TRIP-683) — None이면 강등 없음
     events: "EventPort | None" = None,  # 행사 저장소 (TRIP-421) — None이면 무보정
     vector_store: object | None = None,
     embedding: object | None = None,
@@ -1113,8 +1114,10 @@ def build_orchestrator(
     provider = ChainAssemblyProvider(estimator, clock, trace, acfg)
     # 수집 계층 (TRIP-406·407) — 풀·페르소나 상시, 날씨는 포트 주입 시에만 등록.
     # 페르소나 재조회도 같은 resolver — 보안 규칙의 권위 1곳 (TRIP-333·BR-U4-07).
+    # existence 미주입이면 강등 없이 기존과 동일 (TRIP-683 — 근거 없으면 판정 안 함)
     pool_builder = CandidatePoolBuilder(
-        poi_db, m7_config if m7_config is not None else M7Config())
+        poi_db, m7_config if m7_config is not None else M7Config(),
+        existence=existence)
     providers: dict[ProviderKind, object] = {
         ProviderKind.PLACE: PlaceProvider(pool_builder),
         ProviderKind.PERSONA: PersonaProvider(resolver),
@@ -1329,6 +1332,7 @@ def build_dev_app(
     weather: WeatherPort | None = None,
     poi_db: object | None = None,
     travel_port: object | None = None,
+    existence: object | None = None,   # PlaceExistencePort (TRIP-683)
     feature_models: dict | None = None,  # 기능별 모델 오버라이드 (TRIP-513)
     retry_models: dict | None = None,  # 타임아웃 재시도 모델 (TRIP-522 2단 폴백)
     events: EventPort | None = None,
@@ -1360,6 +1364,7 @@ def build_dev_app(
                 "TRIPPILOT_MODEL_ID_HEAVY", "dev-unwired-heavy"),
         }
     orchestrator = build_orchestrator(
+        existence=existence,
         llm=llm if llm is not None else UnwiredLlm(),
         poi_db=poi_db if poi_db is not None else StaticPoiDb(demo_poi_seed()),
         context_store=StaticPersonaStore(

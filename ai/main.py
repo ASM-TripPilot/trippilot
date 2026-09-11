@@ -111,6 +111,37 @@ def _kma_weather():
     return KmaWeatherAdapter(UrllibHttpClient(), key)
 
 
+def _place_existence():
+    """`KAKAO_REST_API_KEY` 설정 시 지도 실재 검증 어댑터 조립 (TRIP-683).
+
+    미설정(빈 문자열 포함) = 미배선(None) — 순위 강등 없이 기존 경로 그대로.
+
+    **배제가 아니라 강등이다.** 실측(`ai-existence-probe`, 반경 300m, 무리별
+    200건): 영업 중의 4.0% 가 검색에 안 나오고(오탐), 폐업의 48.5% 만 걸린다.
+    7,837건 환산 시 잡는 폐업 ≈102건 vs 잘못 버리는 영업 중 ≈305건이라
+    배제하면 손해다. 못 찾은 것은 뒤로 밀릴 뿐 후보에서 사라지지 않는다.
+
+    호출 상한은 `verify()` 1회당이고 어댑터는 앱 수명 동안 산다 — 인스턴스
+    누적 예산이면 소진 후 영구히 무동작이 되므로 매 호출 갱신된다.
+    """
+    key = _env("KAKAO_REST_API_KEY")
+    if key is None:
+        return None
+    import time
+
+    from trippilot.background.naver_search import UrllibHttpClient
+    from trippilot.poi_curation.adapters.kakao_existence import (
+        KakaoExistenceAdapter,
+    )
+
+    return KakaoExistenceAdapter(
+        UrllibHttpClient(), key,
+        # 상한은 검증 대상 상위 N(기본 50) 보다 넉넉히 — 실질 제한은 마감이다
+        max_calls=int(os.environ.get("EXISTENCE_MAX_CALLS", "60")),
+        monotonic_ms=lambda: int(time.monotonic() * 1000),
+    )
+
+
 def _backend_poi_db():
     """`TRIPPILOT_BACKEND_BASE_URL`(TRIP-408) 설정 시 백엔드 POI 정본 어댑터 조립.
 
@@ -289,12 +320,13 @@ def build_app_from_env() -> FastAPI:
     poi_db = _backend_poi_db()
     travel = _tmap_travel()
     events = _event_store()
+    existence = _place_existence()
     vector_store, embedding = _vector_rag()
     provider = _env("TRIPPILOT_LLM_PROVIDER")
     if provider is None:
         return build_dev_app(weather=weather, poi_db=poi_db, events=events,
                              vector_store=vector_store, embedding=embedding,
-                             travel_port=travel)
+                             travel_port=travel, existence=existence)
     if provider == "openai":
         llm, model_id = _openai_llm_and_model()
     elif provider == "anthropic":
@@ -309,7 +341,7 @@ def build_app_from_env() -> FastAPI:
     return build_dev_app(llm=llm, model_id=model_id, weather=weather,
                          poi_db=poi_db, events=events,
                          vector_store=vector_store, embedding=embedding,
-                         travel_port=travel,
+                         travel_port=travel, existence=existence,
                          feature_models=_feature_models_from_env(),
                          retry_models=_retry_models_from_env())
 
