@@ -45,26 +45,34 @@ ItineraryGenerated → 예약 재적재(plan/reload)
 
 에이전트 없이 **경계→워커 직행**이다. 설계 근거는 u6-reflect FD §2.1(PR #484): "후보 선택·다단 구성·예산 계단·하드 교체를 하나도 안 쓰는 판단 없는 단발 변환(프롬프트 1회+게이트+정적 폴백)은 경계→워커 직행" — 적용 선례로 이 트랙이 명시돼 있다. 직행 경로의 방어 폴백 이벤트는 `component="api.wiring"`(발행 주체 기준, 넛지와 동일).
 
-**요청** (여행 1건의 예약 여러 행을 배치 1회로):
+**요청** (여행 1건의 예약 여러 행을 배치 1회로. `trip` 중첩 객체가 아니라 **평평한
+`trip_title`** — 아래가 `BoundaryModel`(`additionalProperties: false`)이 실제로
+받는 모양이다. `trip` 객체로 보내면 422):
 
 ```json
 {
-  "trip": {"trip_id": "...", "title": "...", "start_date": "...", "end_date": "..."},
+  "request_meta": {"request_id": "...", "requested_at": "..."},
+  "trip_title": "...",
   "items": [
     {"schedule_key": "...", "kind": "TRIP_DAY", "date": "2026-09-10",
      "slots": [{"name": "성산일출봉", "category": "관광지"}, ...]}
-  ],
-  "request_meta": {"request_id": "...", "requested_at": "...", "deadline_ms": 8000}
+  ]
 }
 ```
 
+`items[].slots` 는 **순서가 있다** — 조립(assembly)이 검증한 방문 순서 그대로
+채워야 한다(INV-2). 프롬프트가 이 순서를 그대로 문구에 나열하므로, 정렬 없이(예:
+DB 조회에 `ORDER BY` 누락) 채우면 조립이 확인한 적 없는 순서 주장이 사용자에게
+노출된다.
+
 예산·추적 식별자는 **기존 `request_meta` 규약을 그대로 쓴다**(계획 단계 정정 2026-09-12 —
 새 `budget_ms`·`trace_id` 필드를 만들지 않는다). `deadline_ms` 미지정 = 시간 제약 없음
-(TRIP-473 팀 결정)이고, 그때는 게이트웨이 기본 타임아웃이 안전망으로 남는다.
+(TRIP-473 팀 결정)이고, 그때는 게이트웨이 기본 타임아웃이 안전망으로 남는다. **이
+경계에서는 `deadline_ms` 를 생략하라** — §4 하단 "타임아웃 관통" 항목 참고.
 
 **응답**: `{"copies": [{"schedule_key", "title", "body"}], "fallback_mode": null|"backend_constant", "degraded": bool}` — 게이트 탈락·LLM 실패 항목은 copies 에서 빠지고, 빠진 게 있으면 `degraded=true`. 백엔드는 받은 것만 저장한다.
 
-- **타임아웃 관통**: 워커 마감은 `request_meta.deadline_ms` 에서 유도(TRIP-522 PlanB 선례). 남은 예산을 남은 항목 수로 나눠 항목마다 배분하고, 최소 호출 시간도 못 주면 부르지 않고 드롭으로 보고한다(확정 타임아웃을 지불하지 않는다). 게이트웨이 기본 2.5s 에 얹혀 가는 실수(넛지 워커 전례) 금지 — 계약 테스트로 고정.
+- **타임아웃 관통, 그리고 이 경계에서는 `deadline_ms` 를 생략하라**: 워커 마감은 `request_meta.deadline_ms` 에서 유도(TRIP-522 PlanB 선례)하고, 남은 예산을 남은 항목 수로 나눠 항목마다 배분한다(순차 호출이라 **비용이 `len(items)` 에 비례**한다 — 다른 경계의 배치 1회 호출과 다르다). 최소 호출 시간도 못 주면 부르지 않고 드롭으로 보고한다(확정 타임아웃을 지불하지 않는다). 인터랙티브 경계(생성·수정 등)의 5~20s 예산을 그대로 재사용하면 항목 수가 조금만 늘어도 매 항목이 타임아웃한다 — **이 경계는 `deadline_ms` 를 생략**해서 게이트웨이 기본 타임아웃(`C1Config.timeout_sec`, 현재 10.0s, env 로 못 바꿈)이 항목마다 안전망으로 남게 한다. 그래도 항목당 상한은 여전히 ~10초다 — 서빙이 콜드스타트가 있는 서버리스 타깃(§5)이면 **콜드스타트 직후 첫 배치는 드롭되는 게 정상**이다(§2 의 "콜드스타트 무관" 서술은 이 워커 자체의 지연 예산 얘기지, 콜드스타트 중 도착한 첫 호출이 안전하다는 뜻이 아니다). 게이트웨이 기본에 얹혀 가는 것 자체는 실수가 아니다(넛지 워커 선례) — 실수는 `deadline_ms` 를 지정해 그 안전망을 걷어내는 쪽이다. 계약 테스트로 고정.
 - **게이트(결정론, 항목별)**: 넛지 게이트 상속 — title ≤20자·body ≤60자 1문장, '분/시간/시각/duration' 토큰 포함 시 드롭(INV-3) — **+ 신규: body 가 언급하는 장소명 ⊆ 그날 slots 의 name 집합**(closed-set, INV-1 정신. 부분 문자열 아닌 형태소 수준 포함 판정은 과설계 — 요청 slots name 의 부분열 매칭으로 시작).
 - **폴백 라벨**: 이 feature 의 폴백은 AI 안이 아니라 백엔드 상수다. `fallback_modes` 관측(#426)에 `backend_constant` 로 잡혀 소마 신뢰도 지표(생성 문구 적중률)가 된다.
 - **4곳 동시 갱신**: `api/routes.py` · `scripts/export_openapi.py` 재생성(`docs/openapi.json` 손편집 금지) · 계약 테스트 전수(정확일치) 목록 · `claude.md`/`claude.ko.md` 경계 목록 + 백엔드 `CALLED_PATHS`.

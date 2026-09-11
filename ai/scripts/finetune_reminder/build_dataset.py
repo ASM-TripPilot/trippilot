@@ -105,6 +105,7 @@ def main() -> int:
     scenarios = json.loads(Path(args.scenarios).read_text(encoding="utf-8"))
 
     total_attempts = 0
+    call_failed = 0
     gate_dropped = 0
     duplicate_dropped = 0
     written = 0
@@ -128,10 +129,12 @@ def main() -> int:
                     response_text = _call_teacher(client, prompt, args.temperature)
                     parsed = json.loads(response_text)
                 except (ValueError, KeyError, json.JSONDecodeError) as e:
+                    call_failed += 1
                     print(f"skip: {e}", file=sys.stderr)
                     continue
                 except Exception as e:
                     # 네트워크 오류 등 API 호출 실패 — 이 샘플을 스킵하고 계속
+                    call_failed += 1
                     print(f"skip call: {type(e).__name__}: {e}", file=sys.stderr)
                     continue
 
@@ -176,7 +179,10 @@ def main() -> int:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
                 written += 1
 
-    print(f"시도 {total_attempts} · 게이트탈락 {gate_dropped} · 중복탈락 {duplicate_dropped} · 저장 {written}")
+    print(
+        f"시도 {total_attempts} · 호출실패 {call_failed} · 게이트탈락 {gate_dropped} · "
+        f"중복탈락 {duplicate_dropped} · 저장 {written}"
+    )
     return 0
 
 

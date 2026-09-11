@@ -1055,7 +1055,7 @@
       },
       "ReminderCopyItemSchema": {
         "additionalProperties": false,
-        "description": "예약 1건 = 문구 1건. schedule_key 는 백엔드 예약 행 식별자(불투명 문자열).",
+        "description": "예약 1건 = 문구 1건. schedule_key 는 백엔드 예약 행 식별자(불투명 문자열).\n\n**slots 는 순서가 있다** — 조립(assembly)이 검증한 방문 순서 그대로 담아야 한다\n(INV-2). 프롬프트가 이 순서를 그대로 나열해 문구에 실리므로, 정렬 없이(예: DB\n조회에 ORDER BY 누락) 채우면 조립이 확인한 적 없는 순서 주장이 사용자에게 노출된다.",
         "properties": {
           "date": {
             "format": "date",
@@ -2068,7 +2068,7 @@
     },
     "/ai/v1/notification/copies": {
       "post": {
-        "description": "리마인드 알림 문구 배치 생성 (설계: specs/2026-09-08-reminder-copy-local-llm-design.md).\n\n생성 실패·게이트 드롭 항목은 copies 에서 빠지고 degraded=true 로 알린다 —\n그 자리는 백엔드가 기존 하드코딩 상수로 채운다(INV-4, 침묵 금지).\n구형 조립은 503 명시 실패.",
+        "description": "리마인드 알림 문구 배치 생성 (설계: specs/2026-09-08-reminder-copy-local-llm-design.md).\n\n생성 실패·게이트 드롭 항목은 copies 에서 빠지고 degraded=true 로 알린다 —\n그 자리는 백엔드가 기존 하드코딩 상수로 채운다(INV-4, 침묵 금지).\n구형 조립은 503 명시 실패.\n\n**예산 안내(`request_meta.deadline_ms`)**: 항목별로 순차 호출하므로 비용이\n`len(items)` 에 비례한다 — **이 경계에서는 `deadline_ms` 를 생략**해서 다른\n인터랙티브 경계의 5~20s 예산을 재사용하지 말 것(항목 수가 조금만 늘어도 매\n항목이 타임아웃한다). 생략하면 게이트웨이 기본 타임아웃(~10s)이 항목마다\n안전망으로 남는다 — 다만 그 상한도 항목당이라, 서빙이 콜드스타트 있는 서버리스\n타깃이면 콜드스타트 직후 첫 배치가 드롭되는 것은 정상 동작이다.",
         "operationId": "notification_copies_ai_v1_notification_copies_post",
         "requestBody": {
           "content": {

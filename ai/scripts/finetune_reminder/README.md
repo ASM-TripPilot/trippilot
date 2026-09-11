@@ -61,7 +61,7 @@ uv run python scripts/finetune_reminder/build_dataset.py \
   {
     "schedule_key": "day_1",
     "kind": "TRIP_DAY",
-    "date": "1월 1일",
+    "date": "2026-09-13",
     "trip_title": "제주 여행",
     "slot_names": ["성산일출봉", "우도"],
     "slot_categories": ["관광지", "섬"],
@@ -73,7 +73,9 @@ uv run python scripts/finetune_reminder/build_dataset.py \
 필드:
 - `schedule_key`: 예약 ID (출력에는 안 쓰이지만 시나리오 구분용)
 - `kind`: `TRIP_DAY`(당일 아침) 또는 `TRIP_PRE`(D-1)
-- `date`: 표시용 날짜 문자열 (시각 아님 — INV-3)
+- `date`: 표시용 날짜 문자열 (시각 아님 — INV-3). 서빙은 `item.date.isoformat()`
+  (예 `"2026-09-13"`)을 그대로 채운다 — 시나리오도 이 ISO 형식으로 써야 학생이
+  실제로 받을 입력 분포를 배운다("1월 1일" 같은 한글 표기는 서빙이 절대 보내지 않는다)
 - `trip_title`: 여행 제목
 - `slot_names`: 그날 방문 장소명, **순서 = 방문 순서**
 - `slot_categories`: `slot_names` 와 같은 길이의 카테고리 (선택, 기본값 빈 튜플).
@@ -85,15 +87,19 @@ uv run python scripts/finetune_reminder/build_dataset.py \
 `ReminderCopyGate`** 로 걸러 통과분만 즉시 파일에 이어 쓴다(중간에 죽어도 그때까지
 결과는 남는다). 개별 API 호출 실패·JSON 파싱 실패는 그 샘플만 건너뛰고 계속 진행한다.
 
-끝나면 4가지 카운터를 출력한다:
+끝나면 5가지 카운터를 출력한다 — `시도` 는 총 시도 횟수, 나머지 네 버킷(호출실패·
+게이트탈락·중복탈락·저장)의 합이 항상 `시도` 와 같다:
 
 ```
-시도 450 · 게이트탈락 88 · 중복탈락 12 · 저장 350
+시도 450 · 호출실패 20 · 게이트탈락 88 · 중복탈락 12 · 저장 330
 ```
 
-목표는 **저장 2,500~3,000건**. `저장 / 시도` 비율이 60% 아래면 프롬프트
-(`prompts/reminder_copy.yaml`)를 손본다 — 게이트탈락이 크면 규칙 위반(길이·금지
-토큰·장소 대조)이 잦다는 뜻이고, 중복탈락이 크면 temperature 를 더 올린다.
+목표는 **저장 2,500~3,000건**. 비율을 볼 때는 **호출실패를 분모에서 뺀다** —
+`저장 / (시도 − 호출실패)` 가 60% 아래면 프롬프트(`prompts/reminder_copy.yaml`)를
+손본다: 게이트탈락이 크면 규칙 위반(길이·금지 토큰·장소 대조)이 잦다는 뜻이고,
+중복탈락이 크면 temperature 를 더 올린다. 호출실패(네트워크 오류·응답 JSON 파싱
+실패)는 프롬프트 품질과 무관하다 — 분모에 그대로 두면 API 플레이키니스를 프롬프트
+탓으로 오판하게 된다.
 
 ### 게이트가 거부하는 것
 
@@ -227,7 +233,19 @@ AI_LLM_FEATURE_MODELS=PARAPHRASE=claude-haiku-4-5,ALTERNATIVE_SELECTION=gpt-5.6-
 Anthropic/OpenAI 기본 벤더로 새는 것을 막으려는 의도된 fail-fast 다
 (`main.py::_local_route`).
 
-배포 직후, 프롬프트·게이트까지 실제로 통과하는지 실스택 스모크로 확인한다:
+**`AI_LLM_PROVIDER` 도 반드시 설정한다** — 위 두 변수만 채우고 이 값을
+비워 두면 `main.py::build_app_from_env` 가 `_feature_models_from_env()`/
+`_local_route()` 를 부르기 **전에** 기존 fake 조립을 그대로 반환한다. 즉 방금 설명한
+fail-fast 자체가 발동하지 않고, 로컬 라우트가 붙었는지 아닌지 아무 신호도 없이
+조용히 안 붙는다. `AI_LLM_PROVIDER` 를 `openai`·`anthropic`·`mixed` 중 하나로 채워야
+이 절의 나머지가 의미를 가진다.
+
+배포 직후, 프롬프트·게이트까지 실제로 통과하는지 실스택 스모크로 확인한다.
+**단, 아래 스모크가 통과해도 배포된 앱 자체가 로컬 라우트로 붙었다는 증명은
+아니다** — `smoke_reminder_copy.py` 는 앱을 거치지 않고 자체 `OpenAIAdapter` 를
+직접 만들어 호출한다(위 `AI_LLM_PROVIDER` 미설정 실수를 이 스모크는 잡아내지
+못한다). 앱 자체의 라우팅은 `AI_LLM_PROVIDER` 설정을 직접 확인하거나 실제 앱
+경로(`/ai/v1/notification/copies`)로 별도 확인한다.
 
 ```bash
 export TRIPPILOT_LOCAL_LLM_BASE_URL=https://<modal-앱>.modal.run/v1

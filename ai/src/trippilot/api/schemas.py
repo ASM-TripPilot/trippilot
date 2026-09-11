@@ -567,7 +567,12 @@ class ReminderSlotSchema(BoundaryModel):
 
 
 class ReminderCopyItemSchema(BoundaryModel):
-    """예약 1건 = 문구 1건. schedule_key 는 백엔드 예약 행 식별자(불투명 문자열)."""
+    """예약 1건 = 문구 1건. schedule_key 는 백엔드 예약 행 식별자(불투명 문자열).
+
+    **slots 는 순서가 있다** — 조립(assembly)이 검증한 방문 순서 그대로 담아야 한다
+    (INV-2). 프롬프트가 이 순서를 그대로 나열해 문구에 실리므로, 정렬 없이(예: DB
+    조회에 ORDER BY 누락) 채우면 조립이 확인한 적 없는 순서 주장이 사용자에게 노출된다.
+    """
 
     schedule_key: str = Field(min_length=1)
     kind: Literal["TRIP_DAY", "TRIP_PRE"]

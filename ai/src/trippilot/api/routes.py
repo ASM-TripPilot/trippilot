@@ -350,6 +350,13 @@ def notification_copies(
     생성 실패·게이트 드롭 항목은 copies 에서 빠지고 degraded=true 로 알린다 —
     그 자리는 백엔드가 기존 하드코딩 상수로 채운다(INV-4, 침묵 금지).
     구형 조립은 503 명시 실패.
+
+    **예산 안내(`request_meta.deadline_ms`)**: 항목별로 순차 호출하므로 비용이
+    `len(items)` 에 비례한다 — **이 경계에서는 `deadline_ms` 를 생략**해서 다른
+    인터랙티브 경계의 5~20s 예산을 재사용하지 말 것(항목 수가 조금만 늘어도 매
+    항목이 타임아웃한다). 생략하면 게이트웨이 기본 타임아웃(~10s)이 항목마다
+    안전망으로 남는다 — 다만 그 상한도 항목당이라, 서빙이 콜드스타트 있는 서버리스
+    타깃이면 콜드스타트 직후 첫 배치가 드롭되는 것은 정상 동작이다.
     """
     handler = getattr(orchestrator, "reminder_copy", None)
     if handler is None:
