@@ -128,7 +128,15 @@ class ReminderCopyWorker:
 
     @staticmethod
     def _context(items: tuple[ReminderCopyItem, ...], index: int) -> ReminderCopyContext:
-        """그날 장소 = allowed, 같은 여행의 다른 날 장소 = forbidden (중복은 allowed 우선)."""
+        """그날 장소 = allowed, 같은 여행의 다른 날 장소 = forbidden (중복은 allowed 우선).
+
+        다른 날 이름이 오늘 이름의 **부분 문자열**이면(한라산 ⊂ 한라산 1100고지,
+        성산 ⊂ 성산일출봉처럼 한국어 지명은 이렇게 자주 겹친다) forbidden 에서 뺀다.
+        게이트(reminder_copy.py)의 forbidden 대조가 부분 문자열 매칭이라, 안 빼면
+        오늘 장소만 말한 정상 문구도 다른 날 이름을 "포함"한다는 이유로 매번 드롭된다
+        (한쪽 날짜가 매 재시도 영구 드롭). allowed 의 exact-match 로직은 그대로 둔다 —
+        그 방향은 이미 맞다.
+        """
         allowed = items[index].slot_names
         allowed_set = set(allowed)
         forbidden = tuple(
@@ -137,7 +145,7 @@ class ReminderCopyWorker:
                 for other_index, other in enumerate(items)
                 if other_index != index
                 for name in other.slot_names
-                if name not in allowed_set
+                if name not in allowed_set and not any(name in today for today in allowed_set)
             )
         )
         return ReminderCopyContext(allowed=allowed, forbidden=forbidden)

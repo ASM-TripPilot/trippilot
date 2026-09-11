@@ -142,6 +142,62 @@ def test_other_day_places_become_forbidden() -> None:
     assert "한라산" in ctx.forbidden
 
 
+def test_context_excludes_forbidden_name_nested_in_todays_allowed_name() -> None:
+    """다른 날 이름이 오늘 이름의 부분 문자열이면(우도 ⊂ 우도 서빈백사) forbidden 에서
+    빠진다 — 안 빠지면 오늘 장소만 말한 정상 문구가 매번(영구) 드롭된다(F1)."""
+    items = (
+        ReminderCopyItem(
+            schedule_key="d1", kind="TRIP_DAY", date_label="2026-09-13",
+            slot_names=("우도", "성산일출봉"),
+        ),
+        ReminderCopyItem(
+            schedule_key="d2", kind="TRIP_DAY", date_label="2026-09-14",
+            slot_names=("우도 서빈백사", "하고수동해변"),
+        ),
+    )
+    ctx = ReminderCopyWorker._context(items, 1)
+    assert ctx.allowed == ("우도 서빈백사", "하고수동해변")
+    assert "우도" not in ctx.forbidden  # 부분 문자열이라 제외
+
+    # Day 2 의 정상 문구(오늘 장소만 언급) — 이제는 게이트를 통과해야 한다.
+    outcome = ReminderCopyGate().apply(
+        json.dumps(
+            {"title": "제주 여행 2일차", "body": "우도 서빈백사에서 하루를 시작해요",
+             "places": ["우도 서빈백사"]},
+            ensure_ascii=False,
+        ),
+        ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
+    )
+    assert outcome.error is None and outcome.value is not None
+
+
+def test_context_still_forbids_genuinely_other_day_name() -> None:
+    """부분 문자열 관계가 없는 진짜 다른 날 장소는 여전히 forbidden 이고 드롭된다."""
+    items = (
+        ReminderCopyItem(
+            schedule_key="d1", kind="TRIP_DAY", date_label="2026-09-13",
+            slot_names=("우도", "성산일출봉"),
+        ),
+        ReminderCopyItem(
+            schedule_key="d2", kind="TRIP_DAY", date_label="2026-09-14",
+            slot_names=("우도 서빈백사", "하고수동해변"),
+        ),
+    )
+    ctx = ReminderCopyWorker._context(items, 1)
+    assert "성산일출봉" in ctx.forbidden  # 부분 문자열 관계 없음 — 여전히 금지
+
+    outcome = ReminderCopyGate().apply(
+        json.dumps(
+            {"title": "제주 여행 2일차",
+             "body": "성산일출봉도 잠깐 들렀다가 하고수동해변으로 가요",
+             "places": ["하고수동해변"]},
+            ensure_ascii=False,
+        ),
+        ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
+    )
+    assert outcome.value is None and outcome.drop_event is not None
+
+
 def test_empty_items_returns_empty_without_gateway_call() -> None:
     gw = FakeGateway([])
     copies, dropped = ReminderCopyWorker(gw).generate(
