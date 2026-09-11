@@ -262,3 +262,35 @@ def kakao_documents(n: int) -> dict:
             {"place_name": f"가게{k}", "x": "126.5", "y": "33.5"} for k in range(n)
         ],
     }
+
+
+# ── §4 지도 미검출 강등 재료 (TRIP-683 · pool_builder ⑤) ─────────────
+# 필터(①~④)를 **전부 통과하도록 고정한** POI 다 — 좌표는 앵커, 예산 미확인(None),
+# 품질 FULL·PARTIAL, 영업요일은 있으면 전 요일. 흔드는 것은 ⑤ 정렬 키 4종
+# (영업시간 보유·saved_count·rating·poi_id)뿐이다.
+# 필터 탈락이 섞이면 "순서가 왜 이런가"가 두 원인으로 갈려 반례를 못 읽는다.
+
+_ALL_WEEK = tuple(OpenHour(d, 540, 1260) for d in range(7))
+
+
+@st.composite
+def sortable_pois(draw) -> Poi:
+    """⑤ 정렬만 자극하는 POI. saved_count·rating 은 **동률이 잦게** 좁은 분포다.
+
+    동률이 있어야 새 키(지도 미검출)가 실제로 순서를 가르는 자리가 생긴다 —
+    전부 유일값이면 saved_count 하나로 순서가 결정돼 신규 키가 무동작이 된다.
+    """
+    i = draw(st.integers(min_value=0, max_value=10**6))
+    return Poi(
+        poi_id=PoiId(f"s{i:07d}"),
+        name=draw(st.sampled_from(_STORE_NAMES)),
+        category=draw(st.sampled_from(list(PoiCategory))),
+        coord=_ANCHOR,
+        open_hours=_ALL_WEEK if draw(st.booleans()) else (),
+        avg_cost=None,
+        rating=draw(st.sampled_from([None, 0.0, 3.5, 5.0])),
+        quality=draw(st.sampled_from([DataQuality.FULL, DataQuality.PARTIAL])),
+        source=PoiSource.SEED,
+        confidence=None,
+        saved_count=draw(st.integers(min_value=0, max_value=3)),
+    )
