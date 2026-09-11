@@ -136,6 +136,15 @@ services:
       # 기능별 벤더 혼용 (TRIP-513, AI_LLM_PROVIDER=mixed) — "FEATURE=model,…"
       TRIPPILOT_LLM_FEATURE_MODELS: ${AI_LLM_FEATURE_MODELS:-}
       TRIPPILOT_LLM_RETRY_MODELS: ${AI_LLM_RETRY_MODELS:-}
+      # LLM 요청당 비용 집계(#486)의 단가표 경로. **이 통로가 없어서** 컨테이너에서
+      # 집계가 통째로 꺼져 있었다 — load_prices 가 None 을 돌려주면 llm_cost 로그 자체가
+      # 안 나간다. 기능이 죽는 게 아니라 "얼마 썼는지 안 보이는" 형태라 증상이 없다
+      # (바로 아래 임베딩 통로 누락과 같은 종류).
+      # 기본값은 이미지에 구운 경로(Dockerfile `COPY config ./config`, WORKDIR /app) —
+      # 단가는 비밀이 아니라 공시가라 커밋돼 있으므로 기본으로 켠다.
+      # ⚠️ 경로를 줬는데 파일을 못 읽으면 PriceConfigError 로 **기동 실패**한다(의도).
+      #    config/ 가 없던 옛 이미지를 캐시로 들고 있으면 `docker compose pull` 로 갱신할 것.
+      TRIPPILOT_LLM_PRICE_FILE: ${AI_LLM_PRICE_FILE:-/app/config/llm-prices.json}
       # 미주입 앱으로 띄운다(3개 라우트 503) — 배선 문제인지 우리 문제인지 가를 때.
       TRIPPILOT_WIRING: ${AI_WIRING:-}
       # 기상청 단기예보(디코딩 키). 미설정 = 날씨 보정 없음.
