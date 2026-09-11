@@ -128,9 +128,13 @@ class C1Config:
     #
     # 타임아웃에만 쓴다. `unsupported` 는 재시도해도 같고(TRIP-595), 벤더 오류는
     # 사유가 갈려 여기서 덮으면 안 보인다. 실측(2026-09-08, 실 PlanB 프롬프트 5회):
-    # sol 중앙값 5.0s · terra 5.2s · opus 7.6s(편차 1.2s) — **더 빠른 모델은 없다.**
-    # 이 값의 효용은 속도가 아니라 벤더 독립이다: sol 의 꼬리(최대 21s)는 벤더 쪽
-    # 사건이라 같은 벤더의 terra 로 가면 같은 꼬리를 밟기 쉽다.
+    # sol 중앙값 5.0s · terra 5.2s · opus 7.6s(편차 1.2s) — **1차보다 빠른 모델은 없다.**
+    #
+    # 그래서 이 값은 두 축 중 하나를 고르는 문제다 — **여유**(빠른 모델로 예산 확보)
+    # 대 **벤더 독립**(1차 벤더가 통째로 느려진 경우를 피함). 2026-09-12 팀 결정은
+    # 여유 쪽(`gpt-5.6-terra`, `.env.example`): 재시도 몫 8.75초 대비 여유가 1초(opus)
+    # 에서 3.5초(terra)로 늘어난다. 벤더 상관 가설은 재현하지 못했으므로 운영
+    # 트레이스의 2차 성공률로 판정한다 — 낮으면 그게 증거이고 `.env` 한 줄로 되돌린다.
     retry_models: Mapping[LlmFeature, str] = field(default_factory=dict)
     # 기능별 폴백 모드 (TRIP-260 #4) — FallbackEvent의 from_mode/to_mode.
     # 실체는 호출측이 하는 일이라 feature마다 다르다 (default_fallback_modes 주석).
