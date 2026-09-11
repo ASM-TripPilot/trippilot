@@ -149,6 +149,17 @@ services:
       TRIPPILOT_WIRING: ${AI_WIRING:-}
       # 기상청 단기예보(디코딩 키). 미설정 = 날씨 보정 없음.
       WEATHER_API: ${WEATHER_API:-}
+      # 카카오 로컬 REST 키 — 후보 POI 의 지도 실재 검증(TRIP-683). 미설정 = 검증 없음
+      # (순위 강등이 일어나지 않고 기존 경로 그대로). 못 찾은 POI 는 **배제가 아니라
+      # 강등**이다 — 실측상 영업 중의 4.0% 가 검색에 안 나오는데 폐업은 48.5% 만
+      # 걸려서, 배제하면 멀쩡한 가게를 3배 더 버린다.
+      # 행사 지오코딩 배치가 쓰는 KAKAO_REST_API_KEY_AI 시크릿과 같은 키를 써도 된다
+      # (쿼터 무료 10만/일 대비 요청당 최대 50콜). 백엔드 소셜 로그인용
+      # KAKAO_CLIENT_ID 와는 **다른 키**다.
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
+      # verify() 1회당 호출 상한. 검증 대상 상위 50건보다 넉넉히(기본 60) —
+      # 실질 제한은 마감 1.5s 다.
+      EXISTENCE_MAX_CALLS: ${EXISTENCE_MAX_CALLS:-}
       # PlanB RAG 벡터 스토어(TRIP-426) — 미설정 = 미배선(경계 개통은 TRIP-428).
       # 컨테이너 안에서는 ai-vectordb 호스트로 해석된다.
       TRIPPILOT_VECTOR_DB_URL: ${AI_VECTOR_DB_URL:-}
