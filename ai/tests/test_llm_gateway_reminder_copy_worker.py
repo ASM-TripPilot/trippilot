@@ -132,3 +132,13 @@ def test_other_day_places_become_forbidden() -> None:
     assert isinstance(ctx, ReminderCopyContext)
     assert ctx.allowed == ("성산일출봉", "우도")
     assert "한라산" in ctx.forbidden
+
+
+def test_empty_items_returns_empty_without_gateway_call() -> None:
+    gw = FakeGateway([])
+    copies, dropped = ReminderCopyWorker(gw).generate(
+        ReminderCopyInput(trip_title="제주 3일", items=()), TRACE, NOW, budget_sec=8.0
+    )
+    # 항목이 없으면 게이트웨이를 부르지 않고 바로 ((), 0)을 반환한다
+    assert copies == () and dropped == 0
+    assert len(gw.calls) == 0

@@ -81,6 +81,8 @@ class ReminderCopyWorker:
         copies: list[ReminderCopyResult] = []
         dropped = 0
         total = len(inp.items)
+        if total == 0:
+            return (), 0
         per_item = None if budget_sec is None else budget_sec / total
         # 항목의 몫이 최소값도 못 주면 한 건도 부르지 않고 전부 드롭으로 보고한다.
         if per_item is not None and per_item < MIN_CALL_SEC:
