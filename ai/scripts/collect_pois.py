@@ -118,8 +118,12 @@ def _print_summary(json_path: str) -> int:
 _BIZ_STATUS = Path(__file__).resolve().parents[1] / "data" / "poi_business_status.json"
 
 
-def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[str]:
-    """폐업 확인된 content_id 집합. 파일이 없으면 빈 집합(= 필터 없음).
+def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[tuple[str, str]]:
+    """폐업 확인된 `(출처, ref)` 집합. 파일이 없으면 빈 집합(= 필터 없음).
+
+    출처를 붙여서 낸다 — 파일의 키는 TourAPI `contentid` 인데 벤더 번호라
+    출처 안에서만 유일하다. 맨 문자열로 주면 다른 출처의 같은 번호가 폐업으로
+    드롭된다(`SourcingCandidate.ref` 주석 참조).
 
     근거 파일은 사람이 공공데이터포털 CSV(862MB)를 받아 `match_business_status.py`
     로 만든다 — 자동 수집 경로가 없다(localdata.go.kr 은 TCP 차단, data.go.kr 파일
@@ -134,7 +138,7 @@ def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[str]:
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
         closed = frozenset(
-            ref for ref, v in doc.get("status", {}).items()
+            ("tourapi", ref) for ref, v in doc.get("status", {}).items()
             if v.get("state") == "CLOSED"
         )
     except (OSError, json.JSONDecodeError, AttributeError) as e:
