@@ -1,0 +1,10 @@
+{
+  "_note": "LLM 단가표 — api/cost.py 가 읽는다(TRIPPILOT_LLM_PRICE_FILE). 단가는 100만 토큰당, 키는 LlmCallRecord.model_id 와 정확히 같은 문자열(= C1Config 의 model_ids/feature_models/retry_models). 비밀이 아니라 공시 가격이므로 커밋한다 — env 로만 두면 각자 다른 값을 들고 있어도 아무도 모른다(AI_LLM_FEATURE_MODELS 를 .env.example 에 둔 것과 같은 판단, #445). gpt-5.6-* 는 일부러 없다: 멘토 제공 게이트웨이라 우리가 지불하지 않는다 — 단가를 지어내면 우리 청구서에 없는 돈이 집계에 섞인다. 빠져 있으면 unpriced_calls 로 드러나고 request_cost 는 하한이 된다. 프롬프트 캐시는 이 2필드로 표현할 수 없다(읽기 0.1x·쓰기 1.25x) — 캐시를 켜면 이 표부터 손봐야 한다.",
+  "_source": "platform.claude.com/docs/en/about-claude/pricing · 확인 2026-09-10",
+  "currency": "USD",
+  "models": {
+    "claude-opus-5": {"input": 5.0, "output": 25.0},
+    "claude-sonnet-5": {"input": 2.0, "output": 10.0},
+    "claude-haiku-4-5": {"input": 1.0, "output": 5.0}
+  }
+}

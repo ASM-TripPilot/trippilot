@@ -47,6 +47,7 @@ generate 봉투 부가 필드 산출 규칙(TRIP-341 — 코드가 실제로 아
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -60,6 +61,7 @@ from fastapi import FastAPI
 
 from trippilot.api import schemas
 from trippilot.api.app import create_app
+from trippilot.api.cost import CostLedger
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
 from trippilot.llm_gateway.gates.explanation import ExplanationGate
@@ -76,7 +78,7 @@ from trippilot.llm_gateway.workers.reflection_nudge import (
 )
 from trippilot.llm_gateway.workers.reflection_template import ReflectionTemplateWorker
 from trippilot.ports.poi_db_port import PoiLookup, PoiMiss, lookup_from
-from trippilot.domain.observability import FallbackEvent
+from trippilot.domain.observability import FallbackEvent, LlmCallRecord
 from trippilot.domain.reflection import (
     ReflectionKind, ReflectionRequest, SourceEventKind, TripEventRecord,
     VisitRecord, VisitRef,
@@ -190,11 +192,24 @@ class LoggingTrace:
     """TracePort — 구조화 로그 발행(실 OTel/CloudWatch 어댑터 전 단계).
 
     emit은 절대 예외를 밖으로 던지지 않는다(계측 실패 ≠ 비즈니스 실패).
+
+    `LlmCallRecord` 에는 비용 줄(`llm_cost`)을 덧붙인다 — 도메인은 토큰만 싣고
+    단가는 소비 측이 설정에서 읽는다(`api/cost.py`). 단가 미설정이면 ledger 가
+    None 이라 종전과 완전히 같다(비용 0 을 지어내지 않는다).
     """
+
+    def __init__(self, ledger: CostLedger | None = None) -> None:
+        # 설정이 깨졌으면 여기서 예외 → 기동 실패 (설정 오류 은폐 금지, main._env 동형)
+        self._ledger = ledger if ledger is not None else CostLedger.from_env()
 
     def emit(self, event: object) -> None:
         try:
             _logger.info("trace_event %s", event)
+            if self._ledger is not None and isinstance(event, LlmCallRecord):
+                _logger.info(
+                    "llm_cost %s",
+                    json.dumps(self._ledger.add(event), ensure_ascii=False),
+                )
         except Exception:
             pass
 
