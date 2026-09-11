@@ -1,7 +1,8 @@
 """C1Config — 게이트웨이 설정 컨테이너 (U4 FD business-logic-model §1).
 
 model_id는 항상 설정값 주입 (BR-U4-08) — 코드에 모델 문자열 하드코딩 금지.
-temperature=0.0 기본 (결정론 지향), timeout 기본 10s (안전망 — 예산 있는 호출은 관통).
+timeout 기본 10s (안전망 — 예산 있는 호출은 관통).
+temperature 는 **설정 자체가 없다** — 두 벤더 모두 파라미터를 거부한다(adapters 참조).
 """
 
 from __future__ import annotations
@@ -160,7 +161,6 @@ class C1Config:
     # 요청 단위 상한은 `TimeoutBackstopMiddleware`(deadline+margin → 504)가 따로 쥔다.
     timeout_sec: float = 10.0
     max_tokens: int = 1024
-    temperature: float = 0.0  # 결정론 지향
     # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 청크 크기는 고정 상수가 아니라
     # 단계 예산에서 유도한다 (TRIP-380 적응형 공식, workers/preference.py
     # adaptive_chunk_size). 종전 score_chunk_size=20 상수는 공식이 대체 — 예산

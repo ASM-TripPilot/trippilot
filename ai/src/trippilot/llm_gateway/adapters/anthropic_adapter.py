@@ -9,11 +9,14 @@ SDK 타임아웃은 LlmTimeoutError로 변환, 그 외 예외는 그대로 —
 
 **temperature 는 보내지 않는다** (2026-09-08). Claude 5 계열(opus-5·sonnet-5)이
 `temperature=0.0` 을 400 으로 거부한다(`temperature is deprecated for this model`) —
-haiku-4-5 는 받는다. 게이트웨이 기본이 0.0 이라 운영 조립에서 sonnet-5·opus-5 로
-가는 feature 전부(EXPLANATION·REFLECTION_TEMPLATE·PHOTO_HIGHLIGHT·_VISION)가 매번
+haiku-4-5 는 받는다. 당시 게이트웨이 기본이 0.0 이라 운영 조립에서 sonnet-5·opus-5
+로 가는 feature 전부(EXPLANATION·REFLECTION_TEMPLATE·PHOTO_HIGHLIGHT·_VISION)가 매번
 400 → 규칙 폴백이었다. 응답은 200 이라 안 보인다. OpenAI 어댑터가 GPT-5 에서 같은
-이유로 이미 뺐다(TRIP-377, #208) — 같은 처방: 결정론 의도(0.0)는 이 벤더에서
-실현 불가하고, 모델 기본값에 맡긴다.
+이유로 이미 뺐다(TRIP-377, #208) — 같은 처방: 결정론 의도는 이 벤더에서 실현
+불가하고, 모델 기본값에 맡긴다.
+
+그 뒤 **설정·요청 필드 자체를 걷어냈다** — 두 벤더 다 거부해 아무도 읽지 않는
+값인데 살아 있는 것처럼 보여서, 결정론이 필요해지면 여기를 다시 손대게 된다.
 """
 
 from __future__ import annotations

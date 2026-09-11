@@ -60,7 +60,6 @@ class LlmAssembler:
             prompt=self._build_prompt(problem),
             prompt_ref=self._prompt_ref,
             max_tokens=1024,
-            temperature=0.0,
             timeout_sec=min(self._cfg.llm_stage_timeout_ms, remaining_ms) / 1000.0,
         )
         try:
