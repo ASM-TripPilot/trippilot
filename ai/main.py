@@ -31,11 +31,13 @@ env 스위치 (TRIP-344):
 """
 
 import os
+from collections.abc import Mapping
 
 from fastapi import FastAPI
 
 from trippilot.api.app import create_app
 from trippilot.api.wiring import build_dev_app
+from trippilot.domain.llm import LlmFeature
 
 PORT = 8000
 
@@ -281,6 +283,40 @@ def _mixed_llm_and_model() -> tuple[object, str]:
                       routes={"claude": anthropic_llm}), openai_model
 
 
+_LOCAL_PREFIX = "local"
+
+
+def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
+    """`local*` 모델이 배정돼 있으면 로컬 서버 어댑터 라우트를 만든다.
+
+    로컬 서버는 OpenAI 호환(vLLM·MLX)이라 어댑터 신규 구현이 없다 — 기존
+    OpenAIAdapter 에 base_url 만 갈아끼운다. `api="chat"` 고정: responses 표면은
+    OpenAI 전용이다.
+
+    **배정됐는데 주소가 없으면 기동 실패다**(설정 버그). 조용히 기본 벤더로 나가면
+    파인튜닝 모델이 안 붙은 채 정상처럼 보인다 — 그 침묵이 이 분기의 존재 이유다.
+    런타임 연결 실패는 다른 이야기고, 그쪽은 폴백 계단이 받는다(INV-4).
+    """
+    if not any(str(m).lower().startswith(_LOCAL_PREFIX) for m in feature_models.values()):
+        return {}
+    base_url = _env("TRIPPILOT_LOCAL_LLM_BASE_URL")
+    if not base_url:
+        raise RuntimeError(
+            "local* 모델이 TRIPPILOT_LLM_FEATURE_MODELS 에 배정됐는데 "
+            "TRIPPILOT_LOCAL_LLM_BASE_URL 미설정 — 기본 벤더로 조용히 나가지 않는다"
+        )
+    import openai
+
+    from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
+
+    client = openai.OpenAI(
+        api_key=_env("TRIPPILOT_LOCAL_LLM_API_KEY") or "local",  # 로컬 서버는 키를 안 본다
+        base_url=base_url,
+        max_retries=0,
+    )
+    return {_LOCAL_PREFIX: OpenAIAdapter(client, api="chat")}
+
+
 def build_app_from_env() -> FastAPI:
     """env → 앱 조립 스위치. 미설정 경로는 기존과 동일(회귀 없음)."""
     if os.environ.get("TRIPPILOT_WIRING") == "unwired":
@@ -306,11 +342,19 @@ def build_app_from_env() -> FastAPI:
             f"TRIPPILOT_LLM_PROVIDER 미지원 값: {provider!r} — "
             "미설정(fake 조립) 또는 openai|anthropic|mixed 만 지원"
         )
+    feature_models = _feature_models_from_env()
+    local_routes = _local_route(feature_models)
+    if local_routes:
+        from trippilot.llm_gateway.adapters.routing import RoutingLlm
+
+        # mixed 면 이미 RoutingLlm 이다 — 바깥에서 local 접두어만 가로채고 나머지는
+        # 안쪽 라우터에 위임한다(합성). 접두어가 겹치지 않으므로 순서 의존이 없다.
+        llm = RoutingLlm(default=llm, routes=local_routes)
     return build_dev_app(llm=llm, model_id=model_id, weather=weather,
                          poi_db=poi_db, events=events,
                          vector_store=vector_store, embedding=embedding,
                          travel_port=travel,
-                         feature_models=_feature_models_from_env(),
+                         feature_models=feature_models,
                          retry_models=_retry_models_from_env())
 
 
