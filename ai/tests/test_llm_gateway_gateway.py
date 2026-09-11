@@ -266,6 +266,8 @@ _EXPECTED_MODES = {
     LlmFeature.ALTERNATIVE_SELECTION: ("llm_select_alternatives", "rule_ranking"),
     LlmFeature.REFLECTION_TEMPLATE: ("llm_template", "fixed_template"),
     LlmFeature.REFLECTION_NUDGE: ("llm_nudge", "fixed_message"),
+    # j06 공유 카드 — 경계(api.wiring)가 정적 조립으로 수렴 (TRIP-429 후속)
+    LlmFeature.SHARE_CARD_COPY: ("llm_share_card", "static_copy"),
     LlmFeature.INTENT: ("llm_intent", "out_of_scope"),
     LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
     LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),

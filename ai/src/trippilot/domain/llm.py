@@ -55,6 +55,11 @@ class LlmFeature(Enum):
     # **같은 출력 계약**(드롭인 강등의 전제). 별도 feature인 이유: TierRouter가
     # feature→model 결정론이라 같은 이름으로는 vision 모델을 분리 지정할 수 없다(미결 #6).
     REFLECTION_TEMPLATE_VISION = "REFLECTION_TEMPLATE_VISION"  # U6 Phase 2 (TRIP-595)
+    # j06 공유 카드의 캡션·해시태그 (U6, TRIP-429 후속). 회고 본문(REFLECTION_TEMPLATE)과
+    # **다른 산출물**이다 — 카드 이미지(통계·동선·워터마크)는 서비스가 기계 조립하고,
+    # 그 아래 붙는 SNS 문구 두 자리만 LLM이 쓴다. 종전엔 클라이언트가 기계 문자열로
+    # 조립했다(`{여행제목} 여행의 기록` · `#{지역}여행`) — 그 자리를 대체한다.
+    SHARE_CARD_COPY = "SHARE_CARD_COPY"  # U6 (TRIP-429 후속 — j06)
     PLACE_EXTRACTION = "PLACE_EXTRACTION"  # U6 (백그라운드)
     # 웹 검색 스니펫 → 행사(축제·공연·전시) 구조화 추출 — 웹소싱 파이프라인의
     # 추출 단계. 행사는 POI가 아니라 후보 풀에 편입되지 않는다 (domain/event.py).

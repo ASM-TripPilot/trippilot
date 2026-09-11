@@ -32,6 +32,10 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: ModelTier.LIGHT,
             # 푸시 문구 1문장 — 저비용 모델로 충분 (TRIP-347)
             LlmFeature.REFLECTION_NUDGE: ModelTier.LIGHT,
+            # 공유 카드 캡션 1문단 + 해시태그 — 후보 선택도 다단 구성도 없는 단발 변환이고
+            # 재료(방문 상호명·기간·지역)가 이미 확정 문자열로 들어온다. REFLECTION_NUDGE와
+            # 같은 급의 짧은 카피 1회라 LIGHT (TRIP-429 후속 — j06).
+            LlmFeature.SHARE_CARD_COPY: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             LlmFeature.ALTERNATIVE_SELECTION: ModelTier.HEAVY,
             # 장면 시퀀스 연출 생성 — 회고 본문 생성의 정본(구 REFLECTION 흡수), 백그라운드 N회 생성 전제
@@ -82,6 +86,10 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # api/wiring.py `reflection_nudge` — 결정론 기본 문구(FALLBACK_NUDGE_MESSAGE).
             # 그쪽 방어 분기의 FallbackEvent와 같은 모드 쌍.
             LlmFeature.REFLECTION_NUDGE: ("llm_nudge", "fixed_message"),
+            # api/wiring.py `reflection_share_card` — 결정론 정적 조립
+            # (workers.share_card_copy.fallback_share_card_copy: `{지역} 여행의 기록` ·
+            # `#{지역}여행`). 워커 직행 패턴이라 발행 주체는 경계다 (FD §2.1).
+            LlmFeature.SHARE_CARD_COPY: ("llm_share_card", "static_copy"),
             # orchestrator/intent_router.py `_classify` → `_fallback()` —
             # Intent.OUT_OF_SCOPE + MatchRoute.FALLBACK로 수렴한다.
             LlmFeature.INTENT: ("llm_intent", "out_of_scope"),

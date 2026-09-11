@@ -426,6 +426,42 @@ class TemplateCandidate:
         )
 
 
+# ── 산출 — 공유 카드 문구 (j06, TRIP-429 후속) ──────────────
+
+
+@dataclass(frozen=True, slots=True)
+class ShareCardCopy:
+    """공유 카드 아래에 붙는 SNS 문구 — 캡션 + 해시태그. `to_dict()`가 곧 경계 응답 본문.
+
+    **카드 이미지는 이 타입 밖이다** (통계·동선 목록·워터마크는 서비스가 기계 조립하는
+    사실 영역). 종전에 클라이언트가 기계 문자열로 만들던 두 자리
+    (`{여행제목} 여행의 기록` · `#{지역}여행`)만 LLM 카피로 대체한다.
+
+    숫자는 여기에도 직접 실리지 않는다 — 필요하면 `PLACEHOLDER_VOCAB` 자리표시자로만
+    담고 실측값 바인딩은 렌더 시 서버가 한다 (ReflectionTemplate과 같은 규약, 계약 §2).
+    시각·소요시간 필드는 자리 자체가 없다 (INV-3).
+    """
+
+    caption: str
+    hashtags: tuple[str, ...]
+    is_fallback: bool = False
+
+    def to_dict(self) -> dict:
+        return {
+            "caption": self.caption,
+            "hashtags": list(self.hashtags),
+            "is_fallback": self.is_fallback,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ShareCardCopy":
+        return cls(
+            caption=d["caption"],
+            hashtags=tuple(d["hashtags"]),
+            is_fallback=d["is_fallback"],
+        )
+
+
 # ── Phase 2 — 멀티모달 입력 (FD domain-entities §4) ─────────
 # **산출 타입은 하나도 늘지 않는다** — 달라지는 것은 장면 채움의 입력뿐이라
 # Phase 1/2가 같은 출력 계약을 공유한다(FE 재협상 없는 드롭인 + INV-4 강등 계단의 전제).

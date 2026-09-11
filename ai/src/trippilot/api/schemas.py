@@ -554,3 +554,17 @@ class ReflectionNudgeRequest(BoundaryModel):
 class ReflectionNudgeResponse(BoundaryModel):
     message: str
     is_fallback: bool
+
+
+class ShareCardCopyResponse(BoundaryModel):
+    """j06 공유 카드 문구 — `ShareCardCopy.to_dict()`와 동형 (TRIP-429 후속).
+
+    요청은 `ReflectionGenerateRequest` 재사용(회고 생성과 같은 재료) — 새 요청 타입을
+    두지 않는다. 카드 이미지(통계·동선·워터마크)는 이 응답 밖이다: 서비스가 기계
+    조립하는 사실 영역이고, 여기 담는 것은 그 아래 붙는 두 자리뿐이다.
+    `is_fallback`은 정적 조립으로의 강등 정직 보고 (INV-4).
+    """
+
+    caption: str
+    hashtags: list[str] = Field(default_factory=list)
+    is_fallback: bool
