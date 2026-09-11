@@ -34,6 +34,7 @@ KB_COLLECTIONS: Mapping[KbKind, str] = MappingProxyType(
         KbKind.SCHEDULE: "planb_schedule",
         KbKind.PERSONA: "persona",  # FD 지정 초기 collection 3종 중 하나 (KB-2)
         KbKind.SITUATION: "planb_situation",
+        KbKind.DIRECTIVE: "planb_directive",  # KB-4 (재계획 연동 설계 §3)
     }
 )
 
