@@ -9,9 +9,10 @@
 채운다(INV-4) — 그래서 이 워커에는 폴백 문구 상수가 없다. 빠진 건수는 호출측이
 `degraded` 로 노출한다(침묵 금지).
 
-예산은 게이트웨이 기본 타임아웃에 얹히지 않고 **관통**한다(TRIP-376 선례). 남은
-예산을 남은 항목 수로 나눠 항목마다 배분하고, 최소 호출 시간(`MIN_CALL_SEC`)도 못
-주는 상황이면 부르지 않고 드롭으로 보고한다 — 어차피 타임아웃할 호출을 하지 않는다.
+예산은 게이트웨이 기본 타임아웃에 얹히지 않고 **관통**한다(TRIP-376 선례). 요청 예산을
+항목 수로 나눠 항목마다 균등 배분하고, 항목의 몫이 최소 호출 시간(`MIN_CALL_SEC`)도
+못 주는 상황이면 한 건도 부르지 않고 전체를 드롭으로 보고한다 — 어차피 타임아웃할
+호출을 하지 않는다.
 """
 
 from __future__ import annotations
@@ -79,14 +80,12 @@ class ReminderCopyWorker:
     ) -> tuple[tuple[ReminderCopyResult, ...], int]:
         copies: list[ReminderCopyResult] = []
         dropped = 0
-        remaining = budget_sec
         total = len(inp.items)
+        per_item = None if budget_sec is None else budget_sec / total
+        # 항목의 몫이 최소값도 못 주면 한 건도 부르지 않고 전부 드롭으로 보고한다.
+        if per_item is not None and per_item < MIN_CALL_SEC:
+            return (), total
         for index, item in enumerate(inp.items):
-            left = total - index
-            per_item = None if remaining is None else remaining / left
-            if per_item is not None and per_item < MIN_CALL_SEC:
-                dropped += left  # 남은 전부를 드롭으로 보고하고 끝낸다
-                break
             result = self._gateway.call(
                 LlmFeature.REMINDER_COPY,
                 build_reminder_copy_vars(item, inp.trip_title),
@@ -95,8 +94,6 @@ class ReminderCopyWorker:
                 now,
                 timeout_sec=per_item,
             )
-            if remaining is not None and per_item is not None:
-                remaining -= per_item
             draft = result.value
             if result.is_fallback or not isinstance(draft, ReminderCopyDraft):
                 dropped += 1

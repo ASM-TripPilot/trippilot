@@ -78,12 +78,38 @@ def test_partial_failure_is_reported_not_silent() -> None:
     assert dropped == 1
 
 
-def test_budget_is_passed_through_to_gateway() -> None:
+def test_budget_is_split_equally_across_items() -> None:
     gw = FakeGateway([_ok("제목1", "본문1"), _ok("제목2", "본문2")])
     ReminderCopyWorker(gw).generate(
         ReminderCopyInput(trip_title="제주 3일", items=ITEMS), TRACE, NOW, budget_sec=8.0
     )
-    assert all(c["timeout_sec"] is not None and c["timeout_sec"] > 0 for c in gw.calls)
+    # 8.0초를 2항목으로 균등 분배: [4.0, 4.0]
+    assert [c["timeout_sec"] for c in gw.calls] == [4.0, 4.0]
+
+
+def test_budget_split_equally_across_three_items() -> None:
+    items = (
+        ReminderCopyItem(
+            schedule_key="k1", kind="TRIP_DAY", date_label="2026-09-13",
+            slot_names=("성산일출봉",),
+        ),
+        ReminderCopyItem(
+            schedule_key="k2", kind="TRIP_DAY", date_label="2026-09-14",
+            slot_names=("한라산",),
+        ),
+        ReminderCopyItem(
+            schedule_key="k3", kind="TRIP_DAY", date_label="2026-09-15",
+            slot_names=("중문관광단지",),
+        ),
+    )
+    gw = FakeGateway([_ok("제목1", "본문1"), _ok("제목2", "본문2"), _ok("제목3", "본문3")])
+    ReminderCopyWorker(gw).generate(
+        ReminderCopyInput(trip_title="제주 3일", items=items), TRACE, NOW, budget_sec=6.0
+    )
+    # 6.0초를 3항목으로 균등 분배: [2.0, 2.0, 2.0]
+    timeouts = [c["timeout_sec"] for c in gw.calls]
+    assert timeouts == [2.0, 2.0, 2.0]
+    assert sum(timeouts) == 6.0
 
 
 def test_exhausted_budget_skips_remaining_items() -> None:
@@ -91,8 +117,10 @@ def test_exhausted_budget_skips_remaining_items() -> None:
     copies, dropped = ReminderCopyWorker(gw).generate(
         ReminderCopyInput(trip_title="제주 3일", items=ITEMS), TRACE, NOW, budget_sec=0.4
     )
-    # 예산이 최소 호출 시간보다 작으면 한 건도 부르지 않고 전부 드롭으로 보고한다
-    assert copies == () and dropped == 2 and gw.calls == []
+    # 0.4초를 2항목으로 나누면 0.2초/항목 < 0.5초(MIN_CALL_SEC)
+    # 따라서 한 건도 부르지 않고 전부 드롭으로 보고한다
+    assert copies == () and dropped == 2
+    assert len(gw.calls) == 0  # 게이트웨이를 전혀 부르지 않았다
 
 
 def test_other_day_places_become_forbidden() -> None:
