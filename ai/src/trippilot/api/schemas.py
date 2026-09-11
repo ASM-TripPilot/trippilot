@@ -355,7 +355,7 @@ class AlternativesRequest(BoundaryModel):
     """
 
     trigger: TriggerSchema
-    reason: str = "none"  # weather|closed|delay|canceled|fatigue|none
+    reason: str = "none"  # weather|closed|delay|canceled|fully_booked|fatigue|none
     anchor: CoordSchema
     dates: list[dt.date] = Field(min_length=1)  # 재계획 대상 날짜(풀 반경·영업일 필터)
     budget_level: str | None = None

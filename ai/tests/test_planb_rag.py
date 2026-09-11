@@ -758,7 +758,7 @@ def test_fallback_delay_fatigue_rank_by_distance(reason: str) -> None:
     assert picked == ["near-m", "mid-a", "far-z"]
 
 
-@pytest.mark.parametrize("reason", ["closed", "canceled", "none"])
+@pytest.mark.parametrize("reason", ["closed", "canceled", "fully_booked", "none"])
 def test_fallback_neutral_reasons_apply_no_category_demotion(reason: str) -> None:
     """중립 사유 — 야외 강등 없음. 없는 신호로 순위를 지어내지 않는다 (거리만)."""
     pool = _pool_at(
@@ -793,7 +793,8 @@ def test_fallback_note_records_demotion_count() -> None:
 # "집합 보존"·"층 분할(플래그 열이 단조)"·"같은 입력 두 번 == 같은 출력" 으로 판정한다.
 
 _RANK_REASONS = st.one_of(
-    st.sampled_from(["weather", "delay", "fatigue", "closed", "canceled", "none", ""]),
+    st.sampled_from(
+        ["weather", "delay", "fatigue", "closed", "canceled", "fully_booked", "none", ""]),
     st.text(max_size=8),  # 모르는 사유 — 없는 신호로 순위를 지어내면 안 된다
 )
 _PLACEABLE = [c for c in PoiCategory if c is not PoiCategory.STAY]  # STAY 는 후보 풀 밖(내부 전용)
@@ -939,7 +940,7 @@ def test_situation_query_translates_reason_to_korean() -> None:
     from trippilot.agents.planb.rag import _REASON_KO, _situation_query
 
     pool = _pool()
-    for reason in ("weather", "closed", "delay", "canceled", "fatigue", "none"):
+    for reason in ("weather", "closed", "delay", "canceled", "fully_booked", "fatigue", "none"):
         query = _situation_query(_request(pool, reason=reason))
         assert reason not in query, f"{reason}: 영문 reason 이 질의에 남았다"
         assert _REASON_KO[reason] in query

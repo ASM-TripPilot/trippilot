@@ -7,7 +7,9 @@
 # ## 어휘 정렬
 # 검색 질의는 `rag._situation_query` = `"{TriggerKind} {한국어 reason} 상황"` 이다.
 #   TriggerKind = WEATHER·CLOSURE·DELAY·MANUAL (domain/trigger.py)
-#   reason      = weather·closed·delay·canceled·fatigue·none (agent-io-contracts §2.2)
+#   reason      = weather·closed·delay·canceled·fully_booked·fatigue·none (agent-io-contracts §2.2)
+#   **예약 마감(fully_booked)은 예약 취소(canceled)와 다른 사유다** (2026-09-12) —
+#   "자리가 다 찼다" 이지 "잡아둔 예약이 없어졌다" 가 아니다.
 # **reason 은 한국어로 치환해서 질의에 들어간다** — 매핑 정본은 `rag._REASON_KO`.
 # 영문 enum 값을 그대로 쓰면 한국어 문서와 임베딩 공간에서 안 붙는다(특히 `none`).
 # 카테고리 어휘는 경계 8종(SIGHT·FOOD·CAFE·NIGHT_VIEW·NATURE·CULTURE·ACTIVITY·SHOPPING)의
@@ -38,8 +40,9 @@ kb: SITUATION
 source:
   - ai/aidlc-docs/inception/application-design/planb-rag-design.md
 
-# 문서 24건. reason 태그별: weather 10 · closed 4 · fatigue 4 · canceled 3 · delay 2 · none 2
-# (합이 24를 넘는 건 sit-closure-004 가 closed·canceled 두 reason 을 달았기 때문)
+# 문서 25건. reason 태그별: weather 10 · closed 4 · fatigue 4 · canceled 3 · fully_booked 3 ·
+# delay 2 · none 2 (합이 25를 넘는 건 문서 셋이 reason 을 둘씩 달았기 때문 —
+# sit-closure-004 는 closed·canceled, sit-canceled-001·002 는 canceled·fully_booked)
 documents:
   - doc_id: sit-weather-001
     text: "비가 오는 우천 상황에서는 자연·야경 같은 실외 일정 대신 실내 대안을 우선한다 — 문화(박물관·미술관·전시), 카페, 쇼핑이 우천 대체의 기본 순서다."
@@ -90,11 +93,14 @@ documents:
     text: "지연 이후의 대안은 다음 목적지와 같은 방향에 있는 장소를 우선한다 — 되돌아가는 역방향 이동을 만드는 대안은 피한다."
     metadata: { trigger_kinds: [DELAY], reasons: [delay] }
   - doc_id: sit-canceled-001
-    text: "예약 취소·입장 불가 상황에서는 같은 카테고리 대안을 먼저 찾고, 마땅한 것이 없으면 그 시간대를 인접 일정의 여유 시간으로 돌리는 편이 낫다."
-    metadata: { trigger_kinds: [MANUAL], reasons: [canceled] }
+    text: "예약 취소·예약 마감·입장 불가 상황에서는 같은 카테고리 대안을 먼저 찾고, 마땅한 것이 없으면 그 시간대를 인접 일정의 여유 시간으로 돌리는 편이 낫다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [canceled, fully_booked] }
   - doc_id: sit-canceled-002
-    text: "예약 취소로 그날의 하이라이트가 빠진 상황에서는 대표성 있는 명소나 야경으로 대체해 하루의 인상을 지킨다."
-    metadata: { trigger_kinds: [MANUAL], reasons: [canceled] }
+    text: "예약 취소나 마감으로 그날의 하이라이트가 빠진 상황에서는 대표성 있는 명소나 야경으로 대체해 하루의 인상을 지킨다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [canceled, fully_booked] }
+  - doc_id: sit-fullybooked-001
+    text: "예약 마감 상황에서는 예약 없이 당일 방문이 되는 성격의 장소를 우선한다 — 명소·자연·카페·쇼핑은 대체로 그냥 갈 수 있고, 액티비티는 같은 이유로 다시 막힐 수 있다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [fully_booked] }
   - doc_id: sit-fatigue-001
     text: "피로 신호가 있는 상황에서는 활동 강도가 낮은 대안을 고른다 — 액티비티·등산형 자연 대신 카페·야경 같은 정적인 장소를 우선하고 도보를 최소화한다."
     metadata: { trigger_kinds: [MANUAL], reasons: [fatigue] }

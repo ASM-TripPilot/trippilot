@@ -61,7 +61,8 @@ _ALTERNATIVE_LABELS = ("A", "B", "C", "D", "E")
 
 # 규칙 폴백의 reason → 후순위 카테고리 (TRIP-532). 배정을 바꾸려면 여기만 고친다.
 # 분기 키는 TriggerKind 가 아니라 **reason** — MANUAL 트리거도 사유("비 와서")를 따라간다.
-# delay·fatigue 는 거리 오름차순이 곧 규칙이라 항목이 없고, closed·canceled·none 은 중립
+# delay·fatigue 는 거리 오름차순이 곧 규칙이라 항목이 없고, closed·canceled·fully_booked·none 은
+# 중립이다 — 예약 마감은 "그 장소만 못 간다"라서 대안의 카테고리 방향과 무관하다
 # (닫힌 곳은 excluded 로 이미 빠진다 — 없는 신호로 순위를 지어내지 않는다).
 _DEMOTED_BY_REASON: Mapping[str, frozenset[PoiCategory]] = MappingProxyType(
     {"weather": RAIN_OUTDOOR}  # 어셈블리의 우천 판정표(TRIP-383)와 같은 기준 — 두 경로가 같은 판단
@@ -156,7 +157,7 @@ class PlanBRagRequest:
     """
 
     trigger: TriggerParams
-    reason: str  # weather|closed|delay|canceled|fatigue|none
+    reason: str  # weather|closed|delay|canceled|fully_booked|fatigue|none
     pool: CandidatePool
     trace_id: TraceId
     now: datetime
@@ -501,6 +502,11 @@ _REASON_KO: Mapping[str, str] = MappingProxyType(
         "closed": "휴무·폐점",
         "delay": "지연",
         "canceled": "예약 취소",
+        # 예약 **마감**은 취소와 다른 사유다 (2026-09-12) — "자리가 다 찼다"이지
+        # "잡아둔 예약이 없어졌다"가 아니다. FE 는 처음부터 `FULLY_BOOKED` 칩으로
+        # 갈라 놨는데 AI·정본만 둘을 묶고 있었다. 백엔드가 FE 어휘를 여기로 번역한다
+        # (ai-backend-replan-연동-설계.md §3).
+        "fully_booked": "예약 마감",
         "fatigue": "피로",
         "none": "사용자 요청 교체",
     }

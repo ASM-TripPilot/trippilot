@@ -36,6 +36,7 @@ QUERIES = [
     ("CLOSURE", "closed"),
     ("DELAY", "delay"),
     ("MANUAL", "canceled"),
+    ("MANUAL", "fully_booked"),
     ("MANUAL", "fatigue"),
     ("MANUAL", "none"),
 ]
