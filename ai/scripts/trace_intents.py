@@ -16,6 +16,13 @@ IntentRouter 는 아직 엔드포인트에 배선돼 있지 않다(TRIP-529) —
 된다 — 그래서 자리표시자를 대표 실명으로 채운 변형도 같이 색인해 **둘 중 큰 값**으로 판정한다
 (TRIP-678 리뷰에서 평가 발화의 일반화형이 0.96 으로 숨어 있던 실측).
 
+`--fill-bank N`(TRIP-840 실험 A): 자리표시자 문장을 대표 실명 N 세트로 채운 변형까지 뱅크에 색인한다.
+**실측 결과 효과 없음**(2026-09-12, 평가셋 88 × 운영 배정 · KURE-v1): 1차 미달 32건이 N=0/1/3 에서 전부 32,
+채운 변형이 top1 인 발화 3/88, 원문 대비 이득 +0.003~0.04. 미달 22건(범위 밖 10 제외)의 원인은 자리표시자가
+아니라 **어휘·구조 차이**("몇 시까지 열어" ↔ "영업시간 알려줘", "싹 다 다시 만들어줘" ↔ "통째로 다시 짜주면
+안 돼?") — 해법은 설계 §3.2 ② Augment(seed 변형 확장)이지 정규화가 아니다. 옵션은 임베딩 모델을 바꿨을 때
+재검증용으로만 남긴다.
+
 질문뱅크(reviewed: false)는 **메모리 스토어에만** 올린다 — 검수 전 뱅크의 실 DB 편입 금지
 (ai/data/README.md)를 건드리지 않는다. 실행마다 다시 임베딩한다(local KURE 로 수 초).
 
@@ -86,15 +93,39 @@ _BANK = _AI_ROOT / "data" / "intent_question_bank.yaml"
 _PROMPTS = _AI_ROOT / "prompts"
 _LEAK_THRESHOLD = 0.90  # intent-matching-design §3.3 중복 판정과 같은 값 — 평가셋 leak 판정에도 쓴다
 _FILLED_COLLECTION = "intent_bank_filled"  # leak 검사 전용 — 자리표시자를 채운 뱅크 변형
-# 자리표시자 대표값 — 평가셋에 쓰인 실명·기간·날짜와 일부러 다르게 고른다(같은 토큰이면 그것만으로
+# 자리표시자 대표값 세트 — 평가셋에 쓰인 실명·기간·날짜와 일부러 다르게 고른다(같은 토큰이면 그것만으로
 # 점수가 올라 구조 유사도가 아니라 이름 일치를 재게 된다). 평가셋에 새 실명을 넣을 때 여기와 겹치지 않게.
-_FILLS = {"{장소}": "경복궁", "{지역}": "여수", "{날짜}": "글피", "{기간}": "4박 5일"}
+# 첫 세트는 leak 검사용, `--fill-bank N` 은 앞 N 세트로 뱅크를 확장 색인한다(TRIP-840 실험 A).
+_FILL_SETS = (
+    {"{장소}": "경복궁", "{지역}": "여수", "{날짜}": "글피", "{기간}": "4박 5일"},
+    {"{장소}": "불국사", "{지역}": "통영", "{날짜}": "다음 주 화요일", "{기간}": "나흘"},
+    {"{장소}": "남이섬", "{지역}": "안동", "{날짜}": "이번 달 말", "{기간}": "일주일"},
+)
+_FILLS = _FILL_SETS[0]
 
 
-def _fill(text: str) -> str:
-    for key, value in _FILLS.items():
+def _fill(text: str, fills: dict[str, str] = _FILLS) -> str:
+    for key, value in fills.items():
         text = text.replace(key, value)
     return text
+
+
+def _expand_bank(entries, embedding, store, n_sets: int) -> int:
+    """자리표시자 문장을 대표 실명 세트로 채운 변형을 **라우팅 컬렉션에** 추가 색인 (실험 A).
+
+    가설: 실명 발화가 자리표시자 원문과는 0.5~0.7 대, 채운 변형과는 0.9 대로 붙는다(TRIP-678 leak 검사에서
+    구조가 같은 문장끼리 관측). **실측으로 기각됨** — 모듈 docstring 참조. 구조까지 같아야 0.9 가 나오고,
+    평가셋 미달은 구조가 다른 문장들이었다. payload(intent·slot_pattern)는 원문 것 그대로. 반환: 추가 건수.
+    """
+    added = 0
+    for e in entries:
+        for i, fills in enumerate(_FILL_SETS[:n_sets]):
+            filled = _fill(e.question, fills)
+            if filled == e.question:
+                break  # 자리표시자 없는 문장은 세트를 바꿔도 같다 — 한 번만 판단
+            store.upsert(BANK_COLLECTION, f"{e.entry_id}~f{i}", embedding.embed(filled), e.payload())
+            added += 1
+    return added
 
 
 def _build_llm(provider: str):
@@ -164,6 +195,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--eval", type=Path, help="라벨 평가셋 yaml — §6 지표를 채점한다")
     p.add_argument("--leak-only", action="store_true",
                    help="--eval 의 leak 검사만 하고 라우팅(LLM 호출)은 하지 않는다 — 평가셋 작성 중 반복용")
+    p.add_argument("--fill-bank", type=int, default=0, metavar="N",
+                   help="자리표시자 문장을 대표 실명 N 세트로 채운 변형까지 뱅크에 색인 (TRIP-840 실험 A, 0=끔)")
     p.add_argument("--t-high", type=float, default=default.t_high)
     p.add_argument("--t-mid", type=float, default=default.t_mid)
     p.add_argument("--vote-ratio", type=float, default=default.vote_ratio)
@@ -192,6 +225,7 @@ def main() -> int:
     entries = load_bank_file(_BANK, yaml.safe_load)
     bank_size = index_bank(entries, embedding, store,
                            allow_unreviewed=True)  # 평가 목적 — 메모리에만, 실 DB 편입 아님
+    expanded = _expand_bank(entries, embedding, store, args.fill_bank) if args.fill_bank else 0
     if args.eval and args.leak_only:  # 임베딩만 — LLM 키 없이도 평가셋 작성 중 반복할 수 있게
         return 1 if _leak_check(labeled, entries, embedding, store) else 0
     provider = os.environ.get("LLM_PROVIDER", "openai")
@@ -218,10 +252,12 @@ def main() -> int:
         "embedding_model": embedding.model_id,
         "bank_version": entries[0].bank_version if entries else "?",
         "bank_sha": hashlib.sha256(_BANK.read_bytes()).hexdigest()[:12],
+        "bank_fill_sets": args.fill_bank,
         "eval_version": eval_version or "-",
     }
     # 이 한 줄이 재현 정보다 — 실측을 어디에 적든 이 줄을 그대로 옮긴다
-    print(f"뱅크 {bank_size}문장 v{run_meta['bank_version']}({run_meta['bank_sha']}) · provider {provider} · "
+    print(f"뱅크 {bank_size}문장 v{run_meta['bank_version']}({run_meta['bank_sha']})"
+          f"{f' +확장 {expanded}(세트 {args.fill_bank})' if expanded else ''} · provider {provider} · "
           f"INTENT {run_meta['llm_intent']} · PARAPHRASE {run_meta['llm_paraphrase']} "
           f"(배정 출처 {assignment_source}) · openai_api {run_meta['openai_api']} · "
           f"embedding {run_meta['embedding_model']} · eval v{run_meta['eval_version']} · "
