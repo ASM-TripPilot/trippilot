@@ -50,7 +50,14 @@ _RADIUS_M = 300
 
 
 class KakaoExistenceAdapter:
-    """조회 1건 = HTTP 1건 = 예산 1 소모. 재시도 없음 (마감이 빠듯하다)."""
+    """조회 1건 = HTTP 1건 = 예산 1 소모. 재시도 없음 (마감이 빠듯하다).
+
+    **`max_calls` 는 `verify()` 1회당 상한**이다(인스턴스 수명 전체가 아니다).
+    이 어댑터는 앱 수명 동안 살아 있는 `CandidatePoolBuilder` 에 꽂히므로,
+    누적 예산이면 상한 소진 후 **영구히 전부 UNVERIFIED** 가 되어 강등이
+    조용히 죽는다. 배치용 `KakaoLocalClient` 가 "실행당 상한"인 것과 같은
+    뜻이고, 여기서는 한 생성 요청이 곧 한 실행이다.
+    """
 
     def __init__(
         self,
@@ -75,6 +82,7 @@ class KakaoExistenceAdapter:
         self, queries: tuple[ExistenceQuery, ...], *, deadline_ms: int
     ) -> tuple[ExistenceVerdict, ...]:
         started = self._monotonic_ms()
+        self.calls_used = 0          # 요청 1건 = 예산 1벌 (위 주석)
         out: list[ExistenceVerdict] = []
         for i, q in enumerate(queries):
             if self._monotonic_ms() - started >= deadline_ms:
