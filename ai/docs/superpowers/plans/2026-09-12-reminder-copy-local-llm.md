@@ -62,7 +62,7 @@
 
 - [ ] **Step 1: 스윕 테스트를 먼저 돌려 현재 초록임을 확인**
 
-Run: `cd ai && python -m pytest tests/test_llm_gateway_gateway.py -q`
+Run: `cd ai && uv run pytest tests/test_llm_gateway_gateway.py -q`
 Expected: PASS (기준선)
 
 - [ ] **Step 2: enum 에 feature 추가**
@@ -99,7 +99,7 @@ Expected: PASS (기준선)
 
 - [ ] **Step 5: 스윕 테스트 재실행**
 
-Run: `cd ai && python -m pytest tests/test_llm_gateway_gateway.py tests/test_reflect_composer_vision.py -q`
+Run: `cd ai && uv run pytest tests/test_llm_gateway_gateway.py tests/test_reflect_composer_vision.py -q`
 Expected: PASS — 새 feature 가 매핑에 있으므로 `UNMAPPED_FALLBACK_MODES` 로 새지 않는다.
 
 - [ ] **Step 6: 커밋**
@@ -259,7 +259,7 @@ def test_pbt_arbitrary_text_never_raises(raw: str) -> None:
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `cd ai && python -m pytest tests/test_llm_gateway_reminder_copy.py -q`
+Run: `cd ai && uv run pytest tests/test_llm_gateway_reminder_copy.py -q`
 Expected: FAIL — `ModuleNotFoundError: trippilot.llm_gateway.gates.reminder_copy`
 
 - [ ] **Step 3: 게이트를 구현한다**
@@ -395,7 +395,7 @@ class ReminderCopyGate:
 
 - [ ] **Step 4: 테스트 통과 확인**
 
-Run: `cd ai && python -m pytest tests/test_llm_gateway_reminder_copy.py -q`
+Run: `cd ai && uv run pytest tests/test_llm_gateway_reminder_copy.py -q`
 Expected: PASS (PBT 2건 포함)
 
 - [ ] **Step 5: 커밋**
@@ -568,7 +568,7 @@ def test_other_day_places_become_forbidden() -> None:
 
 - [ ] **Step 3: 실패를 확인한다**
 
-Run: `cd ai && python -m pytest tests/test_llm_gateway_reminder_copy_worker.py -q`
+Run: `cd ai && uv run pytest tests/test_llm_gateway_reminder_copy_worker.py -q`
 Expected: FAIL — `ModuleNotFoundError: trippilot.llm_gateway.workers.reminder_copy`
 
 - [ ] **Step 4: 워커를 구현한다**
@@ -705,7 +705,7 @@ class ReminderCopyWorker:
 
 - [ ] **Step 5: 테스트 통과 확인**
 
-Run: `cd ai && python -m pytest tests/test_llm_gateway_reminder_copy_worker.py -q`
+Run: `cd ai && uv run pytest tests/test_llm_gateway_reminder_copy_worker.py -q`
 Expected: PASS
 
 - [ ] **Step 6: 프롬프트가 실제로 렌더되는지 확인한다**
@@ -715,7 +715,7 @@ Expected: PASS
 yaml 의 `$` 변수가 어긋나지 않는지 직접 확인한다:
 
 ```bash
-cd ai && python -c "
+cd ai && uv run python -c "
 from pathlib import Path
 from trippilot.domain.llm import LlmFeature
 from trippilot.llm_gateway.prompts import PromptRegistry
@@ -809,7 +809,7 @@ def test_response_has_no_time_fields() -> None:
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `cd ai && python -m pytest tests/test_api_notification_boundary.py -q`
+Run: `cd ai && uv run pytest tests/test_api_notification_boundary.py -q`
 Expected: FAIL — 라우트가 없어 404(503 아님), 스키마 import 실패
 
 - [ ] **Step 3: 경계 스키마를 추가한다**
@@ -987,13 +987,13 @@ import 에 `notification_router` 추가.
 - [ ] **Step 8: openapi 를 재생성한다**
 
 ```bash
-cd ai && python scripts/export_openapi.py
+cd ai && uv run python scripts/export_openapi.py
 ```
 Expected: `docs/openapi.json` 이 갱신된다. **손으로 고치지 않는다.**
 
 - [ ] **Step 9: 테스트 전체를 돌린다**
 
-Run: `cd ai && python -m pytest -q`
+Run: `cd ai && uv run pytest -q`
 Expected: PASS — 신규 경계 테스트 포함 전부 초록. 계약 테스트가 깨지면 8단계 재생성을 빠뜨린 것이다.
 
 - [ ] **Step 10: 문서 2종을 갱신한다**
@@ -1046,7 +1046,7 @@ def test_no_local_model_means_no_local_route(monkeypatch) -> None:
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `cd ai && python -m pytest tests/test_wiring_env.py -q -k local`
+Run: `cd ai && uv run pytest tests/test_wiring_env.py -q -k local`
 Expected: FAIL — `AttributeError: module 'main' has no attribute '_local_route'`
 
 - [ ] **Step 3: main.py 에 로컬 라우트를 추가한다**
@@ -1109,7 +1109,7 @@ def _local_route(feature_models: Mapping[LlmFeature, str]) -> dict[str, object]:
 
 - [ ] **Step 5: 테스트 통과 확인**
 
-Run: `cd ai && python -m pytest tests/test_wiring_env.py -q`
+Run: `cd ai && uv run pytest tests/test_wiring_env.py -q`
 Expected: PASS
 
 - [ ] **Step 6: compose 통로를 뚫는다**
@@ -1241,12 +1241,12 @@ if __name__ == "__main__":
 
 - [ ] **Step 8: 스크립트가 로드되는지 확인**
 
-Run: `cd ai && python -m py_compile scripts/smoke_reminder_copy.py && echo OK`
+Run: `cd ai && uv run python -m py_compile scripts/smoke_reminder_copy.py && echo OK`
 Expected: `OK` (실행은 서빙 모델이 뜬 뒤 — Task 7 §4)
 
 - [ ] **Step 9: 전체 테스트**
 
-Run: `cd ai && python -m pytest -q`
+Run: `cd ai && uv run pytest -q`
 Expected: PASS
 
 - [ ] **Step 10: 커밋**
@@ -1318,7 +1318,7 @@ def test_other_day_place_dropped() -> None:
 
 - [ ] **Step 2: 실패를 확인한다**
 
-Run: `cd ai && python -m pytest tests/test_finetune_reminder_filter.py -q`
+Run: `cd ai && uv run pytest tests/test_finetune_reminder_filter.py -q`
 Expected: FAIL — `ModuleNotFoundError: build_dataset`
 
 - [ ] **Step 3: 데이터 생성 스크립트를 만든다**
@@ -1496,7 +1496,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: 테스트 통과 확인**
 
-Run: `cd ai && python -m pytest tests/test_finetune_reminder_filter.py -q`
+Run: `cd ai && uv run pytest tests/test_finetune_reminder_filter.py -q`
 Expected: PASS
 
 - [ ] **Step 5: 커밋**
@@ -1678,12 +1678,12 @@ if __name__ == "__main__":
 
 - [ ] **Step 3: 스크립트가 구문 오류 없이 로드되는지 확인**
 
-Run: `cd ai && python -m py_compile scripts/finetune_reminder/build_dataset.py scripts/finetune_reminder/evaluate.py && echo OK`
+Run: `cd ai && uv run python -m py_compile scripts/finetune_reminder/build_dataset.py scripts/finetune_reminder/evaluate.py && echo OK`
 Expected: `OK`
 
 - [ ] **Step 4: 전체 테스트 최종 확인**
 
-Run: `cd ai && python -m pytest -q`
+Run: `cd ai && uv run pytest -q`
 Expected: PASS
 
 - [ ] **Step 5: 커밋**

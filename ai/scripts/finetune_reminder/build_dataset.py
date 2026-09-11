@@ -30,6 +30,7 @@ from trippilot.llm_gateway.gates.reminder_copy import (  # noqa: E402
     ReminderCopyContext,
     ReminderCopyGate,
 )
+from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
 
 TEACHER_MODEL = "qwen/qwen3-235b-a22b-instruct"  # 오픈 웨이트(Apache-2.0)
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
@@ -99,32 +100,39 @@ def main() -> int:
     )
 
     client = openai.OpenAI(api_key=api_key, base_url=OPENROUTER_URL)
-    template = (Path(__file__).resolve().parents[2] / "prompts" / "reminder_copy.yaml").read_text(
-        encoding="utf-8"
-    )
-    body = template.split("template: |", 1)[1]
-
+    prompts_dir = Path(__file__).resolve().parents[2] / "prompts"
+    registry = PromptRegistry(prompts_dir)
     scenarios = json.loads(Path(args.scenarios).read_text(encoding="utf-8"))
-    raw: list[dict] = []
-    for scenario in scenarios:
-        item = ReminderCopyItem(
-            schedule_key=scenario["schedule_key"],
-            kind=scenario["kind"],
-            date_label=scenario["date"],
-            slot_names=tuple(scenario["slot_names"]),
-            slot_categories=tuple(scenario.get("slot_categories", ())),
-        )
-        prompt = body
-        for key, value in build_reminder_copy_vars(item, scenario.get("trip_title", "")).items():
-            prompt = prompt.replace(f"${key}", value)
-        for _ in range(args.per_scenario):
-            try:
-                parsed = json.loads(_call_teacher(client, prompt, args.temperature))
-            except (ValueError, KeyError) as e:
-                print(f"skip: {e}", file=sys.stderr)
-                continue
-            raw.append(
-                {
+    
+    kept_count = 0
+    dropped_count = 0
+    seen: set[tuple[str, str]] = set()
+    
+    with Path(args.out).open("w", encoding="utf-8") as f:
+        for scenario in scenarios:
+            item = ReminderCopyItem(
+                schedule_key=scenario["schedule_key"],
+                kind=scenario["kind"],
+                date_label=scenario["date"],
+                slot_names=tuple(scenario["slot_names"]),
+                slot_categories=tuple(scenario.get("slot_categories", ())),
+            )
+            vars_dict = build_reminder_copy_vars(item, scenario.get("trip_title", ""))
+            prompt, _ref = registry.render(LlmFeature.REMINDER_COPY, vars_dict)
+            
+            for _ in range(args.per_scenario):
+                try:
+                    response_text = _call_teacher(client, prompt, args.temperature)
+                    parsed = json.loads(response_text)
+                except (ValueError, KeyError, json.JSONDecodeError) as e:
+                    print(f"skip: {e}", file=sys.stderr)
+                    continue
+                except Exception as e:
+                    # 네트워크 오류 등 API 호출 실패 — 이 샘플을 스킵하고 계속
+                    print(f"skip call: {type(e).__name__}: {e}", file=sys.stderr)
+                    continue
+                
+                sample = {
                     "prompt": prompt,
                     "slot_names": list(scenario["slot_names"]),
                     "other_names": list(scenario.get("other_names", [])),
@@ -132,34 +140,39 @@ def main() -> int:
                     "body": parsed.get("body", ""),
                     "places": parsed.get("places", []),
                 }
-            )
-
-    kept, stats = filter_samples(raw)
-    seen: set[tuple[str, str]] = set()
-    with Path(args.out).open("w", encoding="utf-8") as f:
-        for sample in kept:
-            key = (sample["title"], sample["body"])
-            if key in seen:  # 같은 문구 반복은 학습 분포를 망친다
-                continue
-            seen.add(key)
-            record = {
-                "messages": [
-                    {"role": "user", "content": sample["prompt"]},
-                    {
-                        "role": "assistant",
-                        "content": json.dumps(
-                            {
-                                "title": sample["title"],
-                                "body": sample["body"],
-                                "places": sample["places"],
-                            },
-                            ensure_ascii=False,
-                        ),
-                    },
-                ]
-            }
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    print(f"원본 {len(raw)} → 통과 {stats['kept']} · 탈락 {stats['dropped']} · 중복제거 후 {len(seen)}")
+                
+                # 게이트로 필터링
+                kept, stats = filter_samples([sample])
+                if not kept:
+                    dropped_count += 1
+                    continue
+                
+                # 중복 제거 후 저장
+                key = (sample["title"], sample["body"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                
+                record = {
+                    "messages": [
+                        {"role": "user", "content": prompt},
+                        {
+                            "role": "assistant",
+                            "content": json.dumps(
+                                {
+                                    "title": sample["title"],
+                                    "body": sample["body"],
+                                    "places": sample["places"],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                    ]
+                }
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                kept_count += 1
+    
+    print(f"통과 {kept_count} · 탈락 {dropped_count} · 중복제거 후 {len(seen)}")
     return 0
 
 
