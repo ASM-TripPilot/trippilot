@@ -25,7 +25,7 @@ class AlternativeSelectionInput:
     """선택 입력 — 컨텍스트 3종은 KB 검색 발췌(줄 단위 텍스트), 조립은 호출측 몫."""
 
     trigger_kind: str  # TriggerKind.value (예: "WEATHER")
-    reason: str  # weather|closed|delay|canceled|fatigue|none
+    reason: str  # weather|closed|delay|canceled|fully_booked|fatigue|none
     schedule_context: str  # KB-1 발췌 — 영향 슬롯·일정
     situation_context: str  # KB-3 발췌 — 상황 대응 지식
     persona_context: str  # KB-2 발췌 — 선호·저장 장소

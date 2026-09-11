@@ -107,4 +107,5 @@ def test_seed_covers_all_trigger_reasons() -> None:
     """
     docs = load_kb_file(_SEED, yaml.safe_load)
     covered = {r for d in docs for r in d.metadata.get("reasons", ())}
-    assert {"weather", "closed", "delay", "canceled", "fatigue", "none"} <= covered
+    assert {"weather", "closed", "delay", "canceled", "fully_booked",
+            "fatigue", "none"} <= covered
