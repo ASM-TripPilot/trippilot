@@ -1,0 +1,59 @@
+# 실재 검증 오탐률 실측 (TRIP-683)
+#
+# 지도 검색에 안 나오는 POI 를 후보에서 **배제**하려면 먼저 "멀쩡한 가게가 얼마나
+# 안 나오는가"를 알아야 한다. 모르고 켜면 문 연 가게를 일정에서 빼게 된다.
+#
+# `pool_builder` ⑤ 정렬 주석에 전례가 있다(TRIP-326 · PR #104) — 팀이 영업시간
+# 없는 POI 배제를 넣었다가 "희소 지역에서 후보가 사라진다"는 이유로 순위 강등으로
+# 후퇴했다. 그래서 전국 평균 오탐률뿐 아니라 **지역 쏠림**도 같이 본다.
+#
+# 수동 실행 전용이다. 정기 배치가 아니라 정책을 정하거나 반경을 바꿀 때 돌린다 —
+# 실 API 를 쓰므로 머지 게이트에 얹지 않는다(리포 규약: CI 는 외부 호출 0).
+name: ai-existence-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample:
+        description: '무리별 표본 크기 (영업중 N건 + 폐업 N건)'
+        required: false
+        default: '200'
+        type: string
+      radius:
+        description: '좌표 반경 m — 좁히면 오탐↑, 넓히면 미검출↑ (기본 300)'
+        required: false
+        default: '300'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 표본 실측
+        working-directory: ai
+        env:
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY_AI }}
+        run: |
+          uv run python scripts/probe_poi_existence.py \
+            --sample "${{ inputs.sample }}" \
+            --radius "${{ inputs.radius }}" \
+            --out probe.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 결과 보존
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: existence-probe-r${{ inputs.radius }}
+          path: ai/probe.json
+          if-no-files-found: warn
+          retention-days: 30
