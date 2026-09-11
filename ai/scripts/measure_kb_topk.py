@@ -21,6 +21,7 @@ KB 가 바뀐 뒤엔 검증할 방법이 없다.
 from __future__ import annotations
 
 import os
+import time
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -71,9 +72,16 @@ def main() -> None:
     max_k = max(CANDIDATE_K)
 
     per_query = {}
+    elapsed_ms: list[float] = []
     for kind, reason in QUERIES:
         query = f"{kind} {_REASON_KO.get(reason, reason)} 상황"
+        # 검색 소요를 같이 잰다 — HNSW 도입 시점(TRIP-838 조건 ②)을 감이 아니라
+        # 그래프로 정하려면 "몇 건부터 느려지는지"의 기준선이 필요하다. 지금은
+        # 벡터 인덱스가 아예 없어(PK btree 뿐) 매 질의가 전건 스캔이다.
+        # **임베딩 왕복이 포함된 값**이다 — 스캔만 분리하려면 SQL 을 직접 재야 한다.
+        t0 = time.perf_counter()
         hits = retrieve(KbKind.SITUATION, query, embedding, store, top_k=max_k)
+        elapsed_ms.append((time.perf_counter() - t0) * 1000)
         relevant = [reason in (h.metadata or {}).get("reasons", ()) for h in hits]
         per_query[query] = (hits, relevant)
         first_bad = next((i + 1 for i, r in enumerate(relevant) if not r), None)
@@ -98,6 +106,14 @@ def main() -> None:
         avg_len = sum(lengths) / len(lengths)
         print(f"| {k} | {sum(precisions)/len(precisions):.3f} | {avg_len:.0f}자 | "
               f"{avg_len / PROMPT_SKELETON_CHARS:.0%} |")
+
+    # HNSW 판정용 기준선 (TRIP-838)
+    ordered = sorted(elapsed_ms)
+    print("\n## 검색 소요 (임베딩 왕복 포함, 인덱스 없음 = 전건 스캔)\n")
+    print(f"질의 {len(ordered)}건 · 중앙값 {ordered[len(ordered) // 2]:.0f}ms · "
+          f"최소 {ordered[0]:.0f} · 최대 {ordered[-1]:.0f}ms")
+    print("검색 몫은 요청 예산의 15%(25초 기준 3.75초)다 — 그 조각을 유의미하게 "
+          "먹기 시작하면 HNSW 를 본다.")
 
 
 if __name__ == "__main__":

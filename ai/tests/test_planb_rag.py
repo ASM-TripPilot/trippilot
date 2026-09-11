@@ -207,10 +207,15 @@ def test_kb_document_rejects_empty_id_and_text() -> None:
         _doc(KbKind.PERSONA, "d1", "   ")
 
 
-def test_kb_collections_cover_three_kinds_and_are_distinct() -> None:
-    """KB 3종 ↔ 기본 이름 1:1. `persona`는 FD 지정 초기 collection을 재사용한다."""
+def test_kb_collections_cover_every_kind_and_are_distinct() -> None:
+    """KB 종류 ↔ 기본 이름 **1:1**. 개수를 세지 않는다 — 종류가 늘 때마다 스테일이 된다.
+
+    둘이 갈리면 두 KB 가 한 collection 을 공유해 검색이 서로를 오염시킨다. `persona` 는
+    FD 지정 초기 collection(`intent_bank`·`persona`·`poi_desc`) 중 하나를 재사용하고,
+    나머지는 `planb_` 접두로 신설한다(KB-4 `planb_directive` 포함).
+    """
     assert set(KB_COLLECTIONS) == set(KbKind)
-    assert len(set(KB_COLLECTIONS.values())) == 3
+    assert len(set(KB_COLLECTIONS.values())) == len(KbKind)
     assert collection_for(KbKind.PERSONA, "m").startswith("persona__")
 
 
