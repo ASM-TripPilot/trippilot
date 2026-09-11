@@ -40,18 +40,37 @@ kb: SITUATION
 source:
   - ai/aidlc-docs/inception/application-design/planb-rag-design.md
 
-# 문서 25건. reason 태그별: weather 10 · closed 4 · fatigue 4 · canceled 3 · fully_booked 3 ·
-# delay 2 · none 2 (합이 25를 넘는 건 문서 셋이 reason 을 둘씩 달았기 때문 —
+# 문서 38건. reason 태그별: weather 14 · fatigue 7 · closed 5 · canceled 4 · delay 4 ·
+# fully_booked 4 · none 3 (합이 문서 수를 넘는 건 문서 넷이 reason 을 둘씩 달았기 때문 —
 # sit-closure-004 는 closed·canceled, sit-canceled-001·002 는 canceled·fully_booked)
+#
+# ## 2026-09-12 — 정정 9건 + 확장 (A-5)
+#
+# **정정**: seed 는 아래 작성 기준이 생기기 전에 쓰였다(TRIP-427 → 기준 TRIP-508). 그래서
+# 거리("가까운"·"동선")·시각("앞으로 당기고")·슬롯 수·영업시간처럼 **모델이 볼 수 없는
+# 축**을 지시하는 문서가 9건 남아 있었다. 이중으로 걸리는 것들이다 — 모델이 판별 못 하고
+# (기준 2), 거리·동선은 규칙 랭킹이 이미 코드로 집행한다(기준 1 — `_rule_ranking` 앵커
+# 정렬 + 지시 사전의 `enforced_by: RANKING`).
+#   카테고리 축으로 정정 5건 / 삭제 4건:
+#     weather-003(순서 조정 — INV-2 어셈블리 소유) · closure-002(영업시간 — 풀 필터 소유)
+#     delay-002(진행 방향 — 좌표) · fatigue-002(숙소 방향 — RANKING 소유)
+#
+# **확장**: 사유 세분화 4건 + **사유 × 지시 충돌 10건**(`sit-mix-*`). 충돌 문서가 이번
+# 확장의 핵심이다 — "비인데 야외를 원한다"처럼 **사유와 지시가 반대 방향을 가리킬 때**의
+# 해소는 사유 문서에도 지시 사전에도 없는 지식이다. 반대로 둘이 같은 방향이면
+# (휴무 + 맛집 추가) 쓸 것이 없어 안 썼다.
+#
+# 격자를 다 채우지 않은 이유: 사유 7종 × 지시 20종 = 140 조합이지만, 작성 기준을 지키면
+# **쓸 지식이 있는 것은 충돌 조합뿐**이다. 나머지는 사전의 `prefer_categories` 가 이미
+# 하는 말이라 기준 (1) 에 걸린다.
+#
+# 가드: `test_kb_loader.py::test_seed_documents_only_use_axes_the_model_can_see`
 documents:
   - doc_id: sit-weather-001
     text: "비가 오는 우천 상황에서는 자연·야경 같은 실외 일정 대신 실내 대안을 우선한다 — 문화(박물관·미술관·전시), 카페, 쇼핑이 우천 대체의 기본 순서다."
     metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
   - doc_id: sit-weather-002
-    text: "우천 시 이동을 최소화한다 — 현재 위치나 숙소에서 가까운 대안을 우선하고, 도보 구간이 긴 후보는 피한다."
-    metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
-  - doc_id: sit-weather-003
-    text: "소나기처럼 짧은 강수는 전면 교체보다 순서 조정이 낫다 — 실내 일정을 앞으로 당기고 실외 일정을 강수 이후로 미루는 대안을 먼저 검토한다."
+    text: "우천에는 한 건물 안에서 오래 머무를 수 있는 문화·카페를 우선한다 — 여러 지점을 돌아야 성립하는 쇼핑·명소는 같은 실내라도 후순위다."
     metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
   - doc_id: sit-weather-004
     text: "폭우·강풍·태풍 경보 상황에서 수상 액티비티·등산 같은 야외 활동은 대안 제시가 아니라 제외 대상이다 — 안전이 대안 선택보다 앞선다."
@@ -72,50 +91,92 @@ documents:
     text: "강풍 상황에서는 야경·자연처럼 개방된 장소를 문화·쇼핑 같은 실내 대안으로 바꾼다."
     metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
   - doc_id: sit-weather-010
-    text: "실내 시설이 드문 외곽 지역의 기상 악화에서는 카테고리 유지를 고집하지 말고, 맛집·카페처럼 어디에나 있는 카테고리로 폭넓게 대체한다."
+    text: "실내 시설이 드문 외곽 지역의 기상 악화에서는 카테고리 유지를 고집하지 말고, 맛집·카페처럼 어디에나 있는 실내 성격으로 넓힌다."
     metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
   - doc_id: sit-closure-001
-    text: "방문 예정지가 휴무·폐점으로 닫힌 상황에서는 같은 카테고리의 인접 대안을 우선한다 — 맛집이 닫혔으면 근처 맛집, 명소가 닫혔으면 근처 명소로 동선을 유지한다."
-    metadata: { trigger_kinds: [CLOSURE], reasons: [closed] }
-  - doc_id: sit-closure-002
-    text: "소규모 맛집·카페는 임시 휴업이 잦다 — 휴무 대체 후보로는 영업시간 정보가 확인된 장소를 우선한다."
-    metadata: { trigger_kinds: [CLOSURE], reasons: [closed] }
+    text: "방문 예정지가 휴무·폐점으로 닫힌 상황에서는 같은 카테고리 대안을 우선한다 — 맛집이 닫혔으면 맛집으로, 명소가 닫혔으면 명소로 일정의 성격을 유지한다."
+    metadata: { trigger_kinds: [CLOSURE, MANUAL], reasons: [closed] }
   - doc_id: sit-closure-003
-    text: "명절 연휴에는 개인이 운영하는 맛집·카페가 넓은 범위로 함께 닫힌다 — 연휴 기간의 대체는 상시 운영하는 명소·자연·쇼핑을 우선한다."
-    metadata: { trigger_kinds: [CLOSURE], reasons: [closed] }
+    text: "명절 연휴에는 개인이 운영하는 맛집·카페가 넓은 범위로 함께 닫힌다 — 연휴 기간의 대체는 상시 운영하는 성격인 명소·자연·쇼핑 쪽으로 넓히는 편이 낫다."
+    metadata: { trigger_kinds: [CLOSURE, MANUAL], reasons: [closed] }
   - doc_id: sit-closure-004
     text: "같은 카테고리에 쓸 만한 후보가 목록에 없으면 성격이 가까운 카테고리로 옮긴다 — 맛집은 카페, 문화는 명소, 액티비티는 자연 순으로 넓힌다."
     metadata: { trigger_kinds: [CLOSURE, MANUAL], reasons: [closed, canceled] }
+  - doc_id: sit-closure-005
+    text: "공사·리모델링으로 닫힌 경우는 임시 휴무와 달리 재개 시점이 멀다 — 같은 장소를 다른 날로 미루는 전제를 두지 말고 대체 후보로 채운다."
+    metadata: { trigger_kinds: [CLOSURE, MANUAL], reasons: [closed] }
   - doc_id: sit-delay-001
-    text: "교통 지연으로 시간이 부족한 상황에서는 남은 슬롯 수를 줄이는 방향으로 대안을 잡는다 — 체류 가치가 높은 한 곳을 지키고, 경유 성격의 슬롯을 빼는 쪽을 우선한다."
+    text: "지연으로 시간이 부족한 상황에서는 짧게 보고도 인상이 남는 카페·명소를 우선한다 — 긴 관람이나 예약 단위 참여가 전제인 문화·액티비티는 후순위다."
     metadata: { trigger_kinds: [DELAY], reasons: [delay] }
-  - doc_id: sit-delay-002
-    text: "지연 이후의 대안은 다음 목적지와 같은 방향에 있는 장소를 우선한다 — 되돌아가는 역방향 이동을 만드는 대안은 피한다."
+  - doc_id: sit-delay-003
+    text: "대중교통 지연처럼 도착 시점이 불확실한 상황에서는 입장 마감이 있는 성격보다 아무 때나 들어갈 수 있는 카페·쇼핑·명소를 우선한다."
+    metadata: { trigger_kinds: [DELAY], reasons: [delay] }
+  - doc_id: sit-delay-004
+    text: "지연 상황에서 액티비티는 대체로 정해진 회차에 묶여 있다 — 시간이 밀린 상태에서는 회차 개념이 없는 카테고리로 바꾸는 편이 안전하다."
     metadata: { trigger_kinds: [DELAY], reasons: [delay] }
   - doc_id: sit-canceled-001
-    text: "예약 취소·예약 마감·입장 불가 상황에서는 같은 카테고리 대안을 먼저 찾고, 마땅한 것이 없으면 그 시간대를 인접 일정의 여유 시간으로 돌리는 편이 낫다."
+    text: "예약 취소·예약 마감·입장 불가 상황에서는 같은 카테고리 대안을 먼저 찾는다 — 하려던 경험의 성격을 유지하는 쪽이 기본이다."
     metadata: { trigger_kinds: [MANUAL], reasons: [canceled, fully_booked] }
   - doc_id: sit-canceled-002
     text: "예약 취소나 마감으로 그날의 하이라이트가 빠진 상황에서는 대표성 있는 명소나 야경으로 대체해 하루의 인상을 지킨다."
     metadata: { trigger_kinds: [MANUAL], reasons: [canceled, fully_booked] }
+  - doc_id: sit-canceled-003
+    text: "주최측 사정으로 행사·공연이 취소된 상황에서는 같은 날 같은 성격을 찾기 어렵다 — 문화·명소처럼 상시 운영하는 카테고리로 방향을 트는 편이 낫다."
+    metadata: { trigger_kinds: [MANUAL, CLOSURE], reasons: [canceled] }
   - doc_id: sit-fullybooked-001
     text: "예약 마감 상황에서는 예약 없이 당일 방문이 되는 성격의 장소를 우선한다 — 명소·자연·카페·쇼핑은 대체로 그냥 갈 수 있고, 액티비티는 같은 이유로 다시 막힐 수 있다."
     metadata: { trigger_kinds: [MANUAL], reasons: [fully_booked] }
+  - doc_id: sit-fullybooked-002
+    text: "인기 있는 곳이 마감됐다면 같은 급의 다른 인기 장소도 같은 이유로 막혀 있을 수 있다 — 대체는 한 칸 덜 붐비는 성격인 카페·쇼핑 쪽으로 넓혀 둔다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [fully_booked] }
   - doc_id: sit-fatigue-001
-    text: "피로 신호가 있는 상황에서는 활동 강도가 낮은 대안을 고른다 — 액티비티·등산형 자연 대신 카페·야경 같은 정적인 장소를 우선하고 도보를 최소화한다."
-    metadata: { trigger_kinds: [MANUAL], reasons: [fatigue] }
-  - doc_id: sit-fatigue-002
-    text: "피로 상황의 대안은 숙소 방향 동선에 있는 장소를 우선한다 — 하루의 마지막이 숙소에서 멀어지지 않게 한다."
+    text: "피로 신호가 있는 상황에서는 활동 강도가 낮은 대안을 고른다 — 액티비티·등산형 자연 대신 카페·야경 같은 정적인 장소를 우선한다."
     metadata: { trigger_kinds: [MANUAL], reasons: [fatigue] }
   - doc_id: sit-fatigue-003
-    text: "체력이 소진된 상황에서는 앉아서 쉴 수 있는 카페·문화를 우선하고, 서서 둘러보는 명소·쇼핑은 뒤로 미룬다."
+    text: "체력이 소진된 상황에서는 앉아서 쉴 수 있는 카페·문화를 우선하고, 서서 둘러보는 명소·쇼핑은 후순위로 둔다."
     metadata: { trigger_kinds: [MANUAL], reasons: [fatigue] }
   - doc_id: sit-fatigue-004
-    text: "체력 저하 상황에서는 한 자리에 머무는 카페·문화를 우선하고, 여러 지점을 옮겨 다니는 자연·쇼핑은 피한다."
+    text: "체력 저하 상황에서는 한 자리에 머무는 카페·문화를 우선하고, 여러 지점을 옮겨 다니는 자연·쇼핑은 뒤로 미룬다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [fatigue] }
+  - doc_id: sit-fatigue-005
+    text: "피로 상황에서 남은 일정이 하나뿐이라면 강도를 낮추기보다 아예 정적인 카페·문화 한 곳으로 마무리하는 편이 낫다."
     metadata: { trigger_kinds: [MANUAL], reasons: [fatigue] }
   - doc_id: sit-manual-001
-    text: "사용자가 사유 없이 다른 곳을 원할 때는 같은 카테고리·같은 동선의 대안을 먼저 제시한다 — 일정의 성격을 바꾸지 않는 교체를 기본으로 한다."
+    text: "사용자가 사유 없이 다른 곳을 원할 때는 같은 카테고리의 대안을 먼저 제시한다 — 일정의 성격을 바꾸지 않는 교체를 기본으로 한다."
     metadata: { trigger_kinds: [MANUAL], reasons: [none] }
   - doc_id: sit-manual-002
     text: "사용자 요청 교체에서는 저장·선호한 카테고리 비중이 높은 후보를 우선하고, 선호에 없는 카테고리는 뒤로 미룬다."
     metadata: { trigger_kinds: [MANUAL], reasons: [none] }
+  - doc_id: sit-manual-003
+    text: "사유 없는 교체가 같은 카테고리에서 반복될 때는 그 카테고리 자체가 안 맞는 신호로 본다 — 성격이 가까운 이웃 카테고리로 한 칸 옮겨 제시한다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [none] }
+  - doc_id: sit-mix-weather-outdoor
+    text: "비가 오는데 야외를 원하는 요청에서는 요청을 무시하지 말고 지붕이나 실내 전망이 있는 문화·카페로 옮긴다 — 바깥 느낌을 남기되 비를 맞지 않는 쪽이다."
+    metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
+  - doc_id: sit-mix-weather-nightview
+    text: "우천에 야경을 원하는 요청에서는 개방형 전망대 대신 실내에서 바깥이 보이는 문화·카페를 우선한다."
+    metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
+  - doc_id: sit-mix-weather-activity
+    text: "우천에 체험을 원하는 요청에서는 실내에서 이루어지는 문화 쪽 체험으로 옮긴다 — 야외 액티비티를 그대로 두지 않는다."
+    metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
+  - doc_id: sit-mix-weather-nature
+    text: "우천에 자연을 원하는 요청에서는 실내에서 자연을 보는 성격의 문화로 대신한다 — 수족관·식물원처럼 지붕이 있는 곳이 그 자리를 메운다."
+    metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
+  - doc_id: sit-mix-weather-food
+    text: "우천에 맛집을 원하는 요청은 충돌이 아니다 — 맛집·카페는 그대로 두고, 함께 묶이는 야외 성격만 실내로 바꾼다."
+    metadata: { trigger_kinds: [WEATHER], reasons: [weather] }
+  - doc_id: sit-mix-fatigue-activity
+    text: "지쳤는데 체험을 원하는 요청에서는 앉아서 하거나 짧게 끝나는 성격으로 좁힌다 — 강도 높은 액티비티는 요청이 있어도 후순위다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [fatigue] }
+  - doc_id: sit-mix-fatigue-sight
+    text: "지쳤는데 명소를 원하는 요청에서는 걸어 다니며 보는 명소보다 앉아 쉴 수 있는 카페·문화를 곁들이는 쪽으로 제시한다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [fatigue] }
+  - doc_id: sit-mix-fatigue-shopping
+    text: "지쳤는데 쇼핑을 원하는 요청에서는 넓게 도는 시장형보다 한곳에서 끝나는 성격의 쇼핑을 우선한다."
+    metadata: { trigger_kinds: [MANUAL], reasons: [fatigue] }
+  - doc_id: sit-mix-delay-food
+    text: "시간이 밀렸는데 먹을 곳을 원하는 요청에서는 오래 앉는 맛집보다 짧게 들르는 카페 쪽을 먼저 본다."
+    metadata: { trigger_kinds: [DELAY], reasons: [delay] }
+  - doc_id: sit-mix-closed-samecat
+    text: "닫힌 곳과 같은 카테고리를 원하는 요청은 그대로 따른다 — 휴무는 그 장소만의 문제라 카테고리를 바꿀 이유가 없다."
+    metadata: { trigger_kinds: [CLOSURE], reasons: [closed] }

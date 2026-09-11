@@ -46,10 +46,22 @@ PROMPT_SKELETON_CHARS = 630  # prompts/alternative_selection.yaml 의 변수 제
 
 
 def _embedding():
-    """`load_kb.py._embedding` 과 같은 규칙 — 적재와 다른 모델로 재면 무의미하다."""
+    """`load_kb.py._embedding` 과 같은 규칙 — 적재와 다른 모델로 재면 무의미하다.
+
+    `http` 를 받는다 (2026-09-12). 임베딩 컨테이너 분리(TRIP-517) 전에 쓰인 스크립트라
+    `local` 만 허용했는데, 적재가 `http` 로 넘어간 뒤로는 **측정을 아예 돌릴 수 없었다** —
+    운영과 같은 경로로 재라는 규칙이 운영 경로를 막고 있었던 셈이다. 둘 다 같은 KURE-v1
+    이라 벡터 공간은 같고, collection 도 `model_id` 로 같은 이름이 된다.
+    """
     provider = os.environ.get("TRIPPILOT_EMBEDDING_PROVIDER") or "local"
+    if provider == "http":
+        from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
+        from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
+
+        return http_embedding(SystemExit, lambda t: UrllibJsonClient(timeout_sec=t))
     if provider != "local":
-        raise SystemExit(f"측정은 적재와 같은 모델이어야 한다 (provider={provider})")
+        raise SystemExit(
+            f"측정은 적재와 같은 모델이어야 한다 (provider={provider}) — http 또는 local")
     from sentence_transformers import SentenceTransformer
 
     from trippilot.llm_gateway.adapters.sentence_transformer_embedding import (
