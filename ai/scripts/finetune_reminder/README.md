@@ -146,6 +146,11 @@ mlx_lm.lora --model Qwen/Qwen3-4B-Instruct-2507 --train \
     --data ./ft_data --batch-size 4 --iters 800 --adapter-path ./adapters
 ```
 
+**확인**: `./adapters/` 에 `adapter_config.json` 과 `.safetensors` 어댑터 파일이
+생겼는지 본다(`ls ./adapters`). 둘 다 없으면 학습이 끝까지 못 간 것이다 — iters 를
+줄여 짧게 재시도하거나 로그를 본다. (이 명령 자체는 Apple Silicon Mac 이 있어야
+돌아간다 — 이 런북 작성 시점에 실행 검증하지 못했다.)
+
 ## 3. 변환 (vLLM 서빙 형식)
 
 ```bash
@@ -153,10 +158,16 @@ mlx_lm.fuse --model Qwen/Qwen3-4B-Instruct-2507 \
     --adapter-path ./adapters --save-path ./merged
 ```
 
+**확인**: `./merged/` 에 가중치(`*.safetensors`) 와 토크나이저·설정 파일
+(`config.json`·`tokenizer.json`·`tokenizer_config.json` 등)이 **함께** 있어야
+vLLM 이 로드할 수 있다(`ls ./merged`). 가중치만 있고 설정 파일이 없거나 그
+반대면 `fuse` 가 중간에 실패한 것이다 — 다음 절로 넘어가지 말 것.
+
 MLX LoRA 산출물(어댑터)은 그대로 vLLM 에 안 올라간다 — `fuse` 로 베이스 모델에 합쳐
-HF safetensors 형식으로 떨군다. **여기서 막히면** 같은 `dataset.jsonl` 로 Colab
+위 형식으로 떨군다. **여기서 막히면** 같은 `dataset.jsonl` 로 Colab
 (표준 PEFT + `transformers`)에서 다시 학습한다 — 데이터가 자산이고 학습 실행은
-소모품이다. Mac 학습 결과를 버려도 되는 이유는 이것 하나다.
+소모품이다. Mac 학습 결과를 버려도 되는 이유는 이것 하나다. (이 명령도 §2 와 같은
+이유로 이 런북 작성 시점에 실행 검증하지 못했다.)
 
 ## 4. 서빙 (Modal 서버리스)
 
@@ -165,6 +176,14 @@ HF safetensors 형식으로 떨군다. **여기서 막히면** 같은 `dataset.j
 과금되며, AI 서비스는 이미 외부 LLM 을 HTTPS 로 부르고 있어 같은 리전 배치가 오늘
 당장 얻는 이득이 없다. 실운영 전환·팀 상시 운영 시점에는 재검토 대상이다(서빙 주소가
 env 변수 하나라 전환 비용은 실질적으로 0).
+
+**아래 `vllm serve` 명령은 서버를 직접 띄우는 경우다** — 로컬 Mac, 아니면 GPU 가
+있는 아무 호스트든 이 명령 그대로 돈다. **Modal 서버리스에 그대로 얹을 수는
+없다** — Modal 은 이 명령을 쉘에서 실행하는 게 아니라 별도의 Modal 앱(컨테이너
+이미지·GPU 타입·엔드포인트를 선언하는 Python 파일, `modal deploy` 로 배포)이
+필요하고, **그 앱은 아직 작성되지 않았다.** 즉 서빙 전 남은 일이 하나 더 있다:
+이 vLLM 서빙을 감싸는 Modal 앱을 새로 쓰는 것 — 이번 런북 작업 범위 밖이라 여기
+없다. 그때까지는 아래 명령으로 로컬/직접 관리 호스트에서 검증한다.
 
 ```bash
 vllm serve ./merged --served-model-name local-reminder-qwen3-4b-v1
@@ -176,17 +195,35 @@ vllm serve ./merged --served-model-name local-reminder-qwen3-4b-v1
 `--served-model-name` 과 정확히 일치해야 한다. 이름이 다르면 서버가 모델을 못
 찾았다며 요청을 거부한다.
 
-배포 후 (docker-compose 로 `ai` 컨테이너를 띄운다면) 저장소 루트 `.env` 에:
+배포 후 (docker-compose 로 `ai` 컨테이너를 띄운다면) 저장소 루트 `.env` 에서
+`AI_LOCAL_LLM_BASE_URL` 을 채우고, **`AI_LLM_FEATURE_MODELS` 는 새 줄로 추가하지
+말고 기존 값 끝에 콤마로 이어 붙인다.** 그 키는 이미 PARAPHRASE·EXPLANATION·
+REFLECTION_TEMPLATE 등 살아 있는 배정을 한 줄에 콤마로 이어 붙인 **단일 값**이고
+(`.env.example` 참고, `ai-llm-smoke` 워크플로가 이 줄을 그대로 읽는 정본이다) —
+`.env`/compose 파싱은 같은 키가 두 줄이면 **마지막 줄이 이긴다.** 둘째
+`AI_LLM_FEATURE_MODELS=` 줄을 추가하면 첫 줄의 배정 전부가 조용히 사라지고
+PARAPHRASE·EXPLANATION 등 이미 돌던 기능이 전부 기본 모델로 폴백한다 — 리마인드
+문구 하나 붙이려다 다른 기능들을 깨는 사고다.
 
-```bash
-AI_LOCAL_LLM_BASE_URL=https://<modal-앱>.modal.run/v1
-AI_LLM_FEATURE_MODELS=REMINDER_COPY=local-reminder-qwen3-4b-v1
 ```
+# 변경 전 (실제 .env 에 이미 배정이 있는 경우의 예)
+AI_LOCAL_LLM_BASE_URL=
+AI_LLM_FEATURE_MODELS=PARAPHRASE=claude-haiku-4-5,ALTERNATIVE_SELECTION=gpt-5.6-sol,EXPLANATION=claude-sonnet-5
+
+# 변경 후 — 같은 줄 끝에 이어 붙인다
+AI_LOCAL_LLM_BASE_URL=https://<modal-앱>.modal.run/v1
+AI_LLM_FEATURE_MODELS=PARAPHRASE=claude-haiku-4-5,ALTERNATIVE_SELECTION=gpt-5.6-sol,EXPLANATION=claude-sonnet-5,REMINDER_COPY=local-reminder-qwen3-4b-v1
+```
+
+`AI_LLM_FEATURE_MODELS` 자체가 아직 없는 빈 개발 `.env` 라면(다른 기능 배정이
+하나도 없는 경우만) 새로 한 줄 추가해도 된다:
+`AI_LLM_FEATURE_MODELS=REMINDER_COPY=local-reminder-qwen3-4b-v1`.
 
 이 두 `AI_*` 변수는 `docker-compose.yml` 이 각각 `TRIPPILOT_LOCAL_LLM_BASE_URL` ·
 `TRIPPILOT_LLM_FEATURE_MODELS` 로 컨테이너에 넘긴다 — 앱 코드 자신은 `AI_*` 를 모르고
 `TRIPPILOT_*` 만 읽는다. docker-compose 없이 `ai/` 를 직접 띄운다면 `TRIPPILOT_*` 쪽을
-바로 export 한다. **배정은 됐는데 주소가 비어 있으면 기동이 실패한다** — 조용히
+바로 export 한다(이때도 같은 규칙 — 기존 `TRIPPILOT_LLM_FEATURE_MODELS` 값이 있으면
+새 값을 이어 붙인다). **배정은 됐는데 주소가 비어 있으면 기동이 실패한다** — 조용히
 Anthropic/OpenAI 기본 벤더로 새는 것을 막으려는 의도된 fail-fast 다
 (`main.py::_local_route`).
 
