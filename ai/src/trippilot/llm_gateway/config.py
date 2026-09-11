@@ -29,6 +29,9 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             LlmFeature.EDIT_TRANSLATION: ModelTier.LIGHT,
             # 푸시 문구 1문장 — 저비용 모델로 충분 (TRIP-347)
             LlmFeature.REFLECTION_NUDGE: ModelTier.LIGHT,
+            # 알림 문구 2줄 — 넛지와 동급 과업이라 LIGHT. 실제로는 feature_models
+            # 오버라이드로 로컬 파인튜닝 모델이 배정된다(티어 해석보다 우선).
+            LlmFeature.REMINDER_COPY: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             LlmFeature.ALTERNATIVE_SELECTION: ModelTier.HEAVY,
             # 장면 시퀀스 연출 생성 — 회고 본문 생성의 정본(구 REFLECTION 흡수), 백그라운드 N회 생성 전제
@@ -79,6 +82,10 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # api/wiring.py `reflection_nudge` — 결정론 기본 문구(FALLBACK_NUDGE_MESSAGE).
             # 그쪽 방어 분기의 FallbackEvent와 같은 모드 쌍.
             LlmFeature.REFLECTION_NUDGE: ("llm_nudge", "fixed_message"),
+            # api/wiring.py `reminder_copy` — 문구를 못 만들면 그 항목을 응답에서 빼고,
+            # 백엔드가 기존 하드코딩 상수(NotificationSchedule.title()/body())로 보낸다.
+            # to_mode 가 "backend_constant" 인 이유: 폴백 실행 주체가 백엔드다.
+            LlmFeature.REMINDER_COPY: ("llm_reminder_copy", "backend_constant"),
             # orchestrator/intent_router.py `_classify` → `_fallback()` —
             # Intent.OUT_OF_SCOPE + MatchRoute.FALLBACK로 수렴한다.
             LlmFeature.INTENT: ("llm_intent", "out_of_scope"),

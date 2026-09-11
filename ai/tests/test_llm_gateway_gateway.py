@@ -266,6 +266,7 @@ _EXPECTED_MODES = {
     LlmFeature.ALTERNATIVE_SELECTION: ("llm_select_alternatives", "rule_ranking"),
     LlmFeature.REFLECTION_TEMPLATE: ("llm_template", "fixed_template"),
     LlmFeature.REFLECTION_NUDGE: ("llm_nudge", "fixed_message"),
+    LlmFeature.REMINDER_COPY: ("llm_reminder_copy", "backend_constant"),
     LlmFeature.INTENT: ("llm_intent", "out_of_scope"),
     LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
     LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),

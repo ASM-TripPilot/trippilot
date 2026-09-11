@@ -42,6 +42,10 @@ class LlmFeature(Enum):
     # 여행 종료 후 회고 유도 푸시 문구 1문장 — 본문 생성(REFLECTION_TEMPLATE)과 별개 기능.
     # 알림 발송은 백엔드 notification(FCM) 소유 — c1은 문구 생성까지만 (TRIP-347).
     REFLECTION_NUDGE = "REFLECTION_NUDGE"  # U6 (TRIP-347)
+    # 여행 리마인드 알림 문구(당일 아침·D-1) — 회고 유도 문구(REFLECTION_NUDGE)와 별개 기능.
+    # 별도 feature 인 이유: 파인튜닝 로컬 모델 배정을 feature 단위로만 가를 수 있다.
+    # 알림 발송·폴백 사용은 백엔드 notification 소유 — 여기는 문구 생성까지만.
+    REMINDER_COPY = "REMINDER_COPY"  # U6 (설계: specs/2026-09-08-reminder-copy-local-llm-design.md)
     # 회고 연출 템플릿(공유 카드뉴스 장면 시퀀스) 생성. 구 REFLECTION(j03 회고 초안)을
     # **흡수**했다 (TRIP-558) — 계약 §3.2 "기록 화면은 이 스키마의 부분 소비"(j03 본문 =
     # DAILY 캡션 연결). 출력 계약은 reflection-template-design.md (#334),
