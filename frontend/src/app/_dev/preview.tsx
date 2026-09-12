@@ -82,7 +82,7 @@ import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen
 import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
 import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
-import { SlotTimeSheet } from '@/features/itinerary/ui/SlotTimeSheet';
+import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
 import {
   MyTripCard,
@@ -114,7 +114,7 @@ import { RevokeConfirmDialog } from '@/features/settings/ui/RevokeConfirmDialog'
 import { SettingsScreen } from '@/features/settings/ui/SettingsScreen';
 import { TripCard, type TripCardVM } from '@/features/settings/ui/TripCard';
 import { triggerWatchlist } from '@/features/planb/model/triggerWatchlist';
-import { ManualEditScreen } from '@/features/planb/ui/ManualEditScreen';
+import { ManualEditScreen } from '@/pages/planb-manual/ui/ManualEditScreen';
 import { ReplanRequestSheet } from '@/features/planb/ui/ReplanRequestSheet';
 import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
 import { ReplanDraftScreen } from '@/features/planb/ui/ReplanDraftScreen';
@@ -166,7 +166,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 import { PersonalizationInfoReason } from '@/shared/api/generated/schemas';
 import { buildMonthGrid } from '@/shared/date/monthGrid';
-import { ManualTimeSheet, reorderKeepingFixed } from '@/shared/itinerary-edit';
+import { reorderKeepingFixed } from '@/widgets/itinerary-edit';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { revokeImpact } from '@/shared/location/revokeImpact';
 import { KakaoMapView, type MapPin } from '@/shared/map';
@@ -1247,7 +1247,10 @@ function ManualEditPreview({ variant }: { variant?: 'error' }): ReactElement {
         onPressAddPlace={noop}
       />
       {editingSlot === undefined ? null : (
-        <ManualTimeSheet
+        <TimeSheet
+          testIDPrefix="planb-manual-time"
+          labels={{ start: '도착', end: '출발' }}
+          title="시각 입력"
           startAt={editingSlot.startAt}
           endAt={editingSlot.endAt}
           onApply={(patch) => {
@@ -3523,7 +3526,9 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <View className="flex-1">
-        <SlotTimeSheet
+        <TimeSheet
+          testIDPrefix="itinerary-edit-time"
+          labels={{ start: '시작', end: '종료' }}
           startAt="10:15:00"
           endAt="11:45:00"
           onApply={noop}

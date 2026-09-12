@@ -120,6 +120,7 @@
 - `src/__tests__/tripWizardStep1Boundary.test.ts`  →  (export 없음)
 - `src/__tests__/tripWizardStep2Structure.test.ts`  →  (export 없음)
 - `src/__tests__/visitCheckGenerated.test.ts`  →  (export 없음)
+- `src/__tests__/widgetsStructure.test.ts`  →  (export 없음)
 
 ## src/app-shell/
 - `src/app-shell/index.ts`  →  SplashGate
@@ -366,7 +367,6 @@
 - `src/features/itinerary/ui/SlotCandidatePanel.tsx`  →  SlotCandidatePanelProps · SlotCandidatePanel
 - `src/features/itinerary/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
 - `src/features/itinerary/ui/SlotPhotoPlaceholder.tsx`  →  SlotPhotoPlaceholderProps · SlotPhotoPlaceholder
-- `src/features/itinerary/ui/SlotTimeSheet.tsx`  →  SlotTimeSheetProps · SlotTimeSheet
 - `src/features/itinerary/ui/TimelineScreen.tsx`  →  ItineraryHeaderData · TimelineScreenProps · TimelineScreen
 - `src/features/itinerary/ui/ZeroCandidateScreen.tsx`  →  ZeroCandidateScreenProps · ZeroCandidateScreen
 
@@ -424,7 +424,6 @@
 - `src/features/planb/model/useTriggerWatchlist.ts`  →  useTriggerWatchlist
 
 ## src/features/planb/ui/
-- `src/features/planb/ui/ManualEditScreen.tsx`  →  ManualEditVariant · ManualEditScreenProps · ManualEditScreen
 - `src/features/planb/ui/NoAlternativeScreen.tsx`  →  NoAlternativeScreenProps · NoAlternativeScreen
 - `src/features/planb/ui/OutOfScopeNotice.tsx`  →  OutOfScopeNotice
 - `src/features/planb/ui/PlanbGlyphs.tsx`  →  ChecklistDoneGlyph · ChecklistActiveGlyph · ChecklistWaitingGlyph · AppliedBackGlyph · AppliedCheckGlyph · AppliedAlertGlyph · WeatherCloudGlyph · ClockGlyph · ShopGlyph · ChevronRightGlyph · LockGlyph
@@ -773,6 +772,7 @@
 - `src/pages/planb-manual/index.ts`  →  PlanbManualPage
 
 ## src/pages/planb-manual/ui/
+- `src/pages/planb-manual/ui/ManualEditScreen.tsx`  →  ManualEditVariant · ManualEditScreenProps · ManualEditScreen
 - `src/pages/planb-manual/ui/PlanbManualPage.tsx`  →  PlanbManualPageProps · PlanbManualPage
 
 ## src/pages/planb-request/
@@ -1150,18 +1150,6 @@
 - `src/shared/date/formatRelativeTime.ts`  →  formatRelativeTime
 - `src/shared/date/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
 
-## src/shared/itinerary-edit/
-- `src/shared/itinerary-edit/index.ts`  →  ManualEditShell · ManualTimeSheet · mergeValidationFlags · reorderKeepingFixed
-
-## src/shared/itinerary-edit/model/
-- `src/shared/itinerary-edit/model/mergeValidationFlags.ts`  →  mergeValidationFlags
-- `src/shared/itinerary-edit/model/reorderKeepingFixed.ts`  →  reorderKeepingFixed
-
-## src/shared/itinerary-edit/ui/
-- `src/shared/itinerary-edit/ui/ManualEditGlyphs.tsx`  →  BackChevronGlyph · UndoGlyph · WarningTriangleGlyph · LockGlyph · TrashGlyph · PlusGlyph · DragHandleGlyph
-- `src/shared/itinerary-edit/ui/ManualEditShell.tsx`  →  ManualEditMode · ManualEditShellProps · ManualEditShell
-- `src/shared/itinerary-edit/ui/ManualTimeSheet.tsx`  →  ManualTimeSheetProps · ManualTimeSheet
-
 ## src/shared/location/
 - `src/shared/location/LocationGlyphs.tsx`  →  LocationBackChevronGlyph · LocationRadarHero · LocationOffGlyph · LocationInfoGlyph · LocationClockGlyph · LocationSwapGlyph · LocationPinGlyph · LocationWarningGlyph · LocationCloseGlyph
 - `src/shared/location/LocationPreprompt.tsx`  →  LocationPrepromptState · LocationPrepromptProps · LocationPreprompt
@@ -1219,5 +1207,19 @@
 - `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
+
+## src/widgets/itinerary-edit/
+- `src/widgets/itinerary-edit/index.ts`  →  ManualEditShell · mergeValidationFlags · reorderKeepingFixed
+
+## src/widgets/itinerary-edit/model/
+- `src/widgets/itinerary-edit/model/mergeValidationFlags.ts`  →  mergeValidationFlags
+- `src/widgets/itinerary-edit/model/reorderKeepingFixed.ts`  →  reorderKeepingFixed
+
+## src/widgets/itinerary-edit/ui/
+- `src/widgets/itinerary-edit/ui/ManualEditGlyphs.tsx`  →  BackChevronGlyph · UndoGlyph · WarningTriangleGlyph · LockGlyph · TrashGlyph · PlusGlyph · DragHandleGlyph
+- `src/widgets/itinerary-edit/ui/ManualEditShell.tsx`  →  ManualEditMode · ManualEditShellProps · ManualEditShell
+
+## src/widgets/time-sheet/ui/
+- `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
 합계 830개 파일

@@ -14,6 +14,7 @@ import path from 'path';
 const ROOT = path.resolve('src');
 const FEATURES_DIR = path.join(ROOT, 'features');
 const PAGES_DIR = path.join(ROOT, 'pages');
+const WIDGETS_DIR = path.join(ROOT, 'widgets');
 const SHARED_DIR = path.join(ROOT, 'shared');
 
 // src 직계 허용목록(11) — widgets·entities 는 아직 빈 층(D2)이라 포함하되 실존은 강제하지 않는다.
@@ -125,10 +126,11 @@ describe('AC-4(a) · src 직계 디렉토리는 허용목록의 부분집합이�
   });
 });
 
-describe('AC-4(b) · features/pages 각 슬라이스 세그먼트는 {ui,model,lib,config} 뿐이다', () => {
-  it('옛 칸 부활 0 (부정) + 슬라이스 수 앵커 (긍정 짝)', () => {
+describe('AC-4(b) · features/pages/widgets 각 슬라이스 세그먼트는 {ui,model,lib,config} 뿐이다', () => {
+  it('옛 칸 부활 0 (부정) + 슬라이스 수 앵커 (긍정 짝, widgets 편입 TRIP-805)', () => {
     const featureSlices = listDirNames(FEATURES_DIR);
     const pageSlices = listDirNames(PAGES_DIR);
+    const widgetSlices = listDirNames(WIDGETS_DIR);
 
     // 긍정 짝 — 모집단이 비면 부정이 공허 통과한다.
     expect(featureSlices.length).toBeGreaterThanOrEqual(13);
@@ -137,10 +139,18 @@ describe('AC-4(b) · features/pages 각 슬라이스 세그먼트는 {ui,model,l
     );
     expect(pageSlices.length).toBeGreaterThanOrEqual(1);
 
+    // widgets 는 이 사이클에 처음 채워진다(TRIP-805) — 2슬라이스 이상 + 대표 이름 앵커(빈 층이면 red).
+    // (fab-stack 은 features→widgets 상향 참조 문제로 이번 범위에서 빠졌다 — page 층 소비로 후속.)
+    expect(widgetSlices.length).toBeGreaterThanOrEqual(2);
+    expect(widgetSlices).toEqual(
+      expect.arrayContaining(['itinerary-edit', 'time-sheet'])
+    );
+
     // 부정 — 각 슬라이스의 직계 하위 디렉토리가 세그먼트 허용목록 밖이면 offender.
     const scan: [layer: string, slice: string][] = [
       ...featureSlices.map((slice) => ['features', slice] as [string, string]),
       ...pageSlices.map((slice) => ['pages', slice] as [string, string]),
+      ...widgetSlices.map((slice) => ['widgets', slice] as [string, string]),
     ];
     const offenders = scan.flatMap(([layer, slice]) =>
       listDirNames(path.join(ROOT, layer, slice))

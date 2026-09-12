@@ -22,10 +22,13 @@ const REAL_PAGE = '@/pages/place-explore/ui/PlaceExplorePage';
 const REAL_SHARED = '@/shared/ui/BottomTabBar';
 const REAL_APP_SHELL = '@/app-shell';
 
-// widgets·entities 는 이번 사이클에 디렉토리를 만들지 않는 빈 층(D2)이라 실대상이 없다.
-// filePath 로는 탐침 가능하지만, import 대상으로 쓰면 no-unresolved 가 뜬다(아래 허용 프로브 참고).
+// entities 는 여전히 빈 층이라 실대상이 없다 — import 대상으로 쓰면 no-unresolved 가 뜬다(아래 허용 프로브).
 const EMPTY_ENTITIES = '@/entities/__probe__/model/x';
-const EMPTY_WIDGETS = '@/widgets/__probe__/ui/x';
+
+// widgets 는 이 사이클에 처음 채워진다(TRIP-805 · D9 승격) — itinerary-edit 슬라이스가 실파일이라
+// 이 딥 경로가 해석된다. 배럴(@/widgets/itinerary-edit)이 아니라 딥 파일을 쓰는 이유는 importBoundary
+// 선례(배럴 해석 회피)와 같다 — no-unresolved 를 확실히 끊어 "경계 위반 vs 해석 실패"를 가른다(02a ★9).
+const REAL_WIDGET = '@/widgets/itinerary-edit/ui/ManualEditShell';
 
 const BOUNDARY_RULE = 'import/no-restricted-paths';
 const UNRESOLVED_RULE = 'import/no-unresolved';
@@ -152,6 +155,17 @@ describe('AC-3 · 나머지 층 방향 탐침 — 상위 층 참조 금지', () 
     expect(ruleIds).toContain(BOUNDARY_RULE);
     expect(ruleIds).not.toContain(UNRESOLVED_RULE);
   });
+
+  // 🔴 D9 — features/<x> 는 widgets(위층)를 역참조 못 한다. 실대상이라 red(미해석) → green(경계 발화).
+  it('features/** 가 @/widgets 를 import 하면 경계 위반', async () => {
+    const ruleIds = await lint(
+      `import '${REAL_WIDGET}';\n`,
+      'src/features/home/__layer_probe__.ts'
+    );
+
+    expect(ruleIds).toContain(BOUNDARY_RULE);
+    expect(ruleIds).not.toContain(UNRESOLVED_RULE);
+  });
 });
 
 describe('AC-3 · 허용 방향은 경계 룰이 침묵한다', () => {
@@ -196,12 +210,13 @@ describe('AC-3 · 허용 방향은 경계 룰이 침묵한다', () => {
     expect(ruleIds).not.toContain(BOUNDARY_RULE);
   });
 
-  it('pages/** → @/widgets 는 경계 룰이 막지 않는다', async () => {
+  // 🔴 D9 승격 — widgets 가 실파일이라 이제 error 0 을 단언한다(구 EMPTY_WIDGETS "경계 미발화"보다 강함).
+  it('pages/** → @/widgets 는 위반 0 (해석 가능한 실대상)', async () => {
     const ruleIds = await lint(
-      `import '${EMPTY_WIDGETS}';\n`,
+      `import '${REAL_WIDGET}';\n`,
       'src/pages/__probe__/x.ts'
     );
 
-    expect(ruleIds).not.toContain(BOUNDARY_RULE);
+    expect(ruleIds).toEqual([]);
   });
 });

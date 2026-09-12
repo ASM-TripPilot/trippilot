@@ -149,6 +149,10 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `notificationAction` | `features/notification/model/notificationAction` | **신규(TRIP-576)** — 알림 1건(kind·actionType·actionPayload)을 딥링크 경로 문자열 또는 `null`로 접는 라우팅 사영. 계약 `actionType`이 `TRIP_ITINERARY` 1종뿐이라 **actionType을 무시하고 kind+payload로만 결정**(서버가 actionType을 확장하면 이 함수만 고치면 됨) |
 | `groupByDay` | `features/notification/model/groupByDay` | **신규(TRIP-576)** — 알림 목록을 로컬 오늘/이전 2구간으로 가르는 순수 함수(입력 순서 보존, 유실·중복 0) |
 | `useNotificationInbox` | `features/notification/model/useNotificationInbox` | **신규(TRIP-576)** — `useGetMeNotifications`를 얇게 감싼 조회 훅. ⚠️ `isError`를 소비하지 않으면(현재 `NotificationInboxPage`가 그렇다) 조회 실패가 빈 배열로 접혀 "알림 없음"으로 오표시된다(후속 티켓 후보) |
+| `TimeSheet` · `TimeSheetProps` | `widgets/time-sheet/ui/TimeSheet` | **신규(TRIP-805, widgets 층)** — 공용 시각 조정 시트(h24 `SlotTimeSheet`·i15/i22 `ManualTimeSheet` 쌍둥이 통일). `testIDPrefix`·`labels:{start,end}`·`title?`만 소비처가 주입, props 계약(`startAt,endAt,onApply,onCancel`)은 무변경. 새 시각 시트를 또 만들지 말고 이 위젯에 접두·라벨을 넣어 쓴다 |
+| `ManualEditShell` · `mergeValidationFlags` · `reorderKeepingFixed` · `ManualEditShellProps` · `ManualEditMode` | `widgets/itinerary-edit` | **TRIP-805로 `shared/itinerary-edit`에서 승격 이동(배럴 유지).** 공용 일정 편집 셸(`mode:'normal'\|'fallback'`) + 순수 로직(방어 머지·고정 재고정). `pages/planb-manual`이 소비. `ManualTimeSheet`은 `TimeSheet` 위젯에 흡수돼 배럴에서 빠졌다 |
+
+> ⚠️ **재사용 API 의 위젯 행(위 2건)은 "화면·컨테이너 제외" 규칙의 예외다** — `widgets/` 층은 여러 화면이 공유하는 조립 단위를 두는 자리라 재구현 방지 색인에 싣는 것이 오히려 목적에 맞는다(TRIP-805).
 
 > ⚠️ **제거된 심볼**(참조하면 깨진다): `setApiAdapter` · `defaultAdapter` · `SCENARIO_LIST` · `getActiveScenarioKey`
 

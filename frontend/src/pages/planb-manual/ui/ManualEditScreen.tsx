@@ -4,13 +4,14 @@ import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
 } from '@/shared/api/generated/schemas';
-import { ManualEditShell } from '@/shared/itinerary-edit';
+import { ManualEditShell } from '@/widgets/itinerary-edit';
 
 /**
- * TRIP-443 · i15·i22 수동 편집 화면(features/planb) — 라우트 파라미터 `variant`를 mode로 파생해
- * 공용 셸을 소비한다: `variant==='error' → 'fallback'`(i22 폴백), else `'normal'`(i15 정상).
- * mode 파생 외의 렌더는 전부 `@/shared/itinerary-edit`의 `ManualEditShell`이 진다(shared 승격 —
- * planb는 U3(features/itinerary) 직접 import 금지라 공용 셸이 유일한 다리다).
+ * TRIP-443 신설 → TRIP-805로 features/planb → pages/planb-manual 이관. i15·i22 수동 편집 화면 —
+ * 라우트 파라미터 `variant`를 mode로 파생해 공용 셸을 소비한다: `variant==='error' → 'fallback'`
+ * (i22 폴백), else `'normal'`(i15 정상). mode 파생 외의 렌더는 전부 `@/widgets/itinerary-edit`의
+ * `ManualEditShell`이 진다(TRIP-805로 shared→widgets 승격 — 이 화면이 features 에 있으면
+ * features→widgets 층 린트가 막으므로 pages 로 올렸다, 브리프 맹점①).
  */
 
 export type ManualEditVariant = 'error' | 'normal';
