@@ -27,9 +27,11 @@
 - `src/__tests__/editSheetBackdropStructure.test.ts`  →  (export 없음)
 - `src/__tests__/executionDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/exploreLandingAxisRemoval.test.ts`  →  (export 없음)
+- `src/__tests__/fsdLayerStructure.test.ts`  →  (export 없음)
 - `src/__tests__/fsdStructure.test.ts`  →  (export 없음)
 - `src/__tests__/homeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/importBoundary.test.ts`  →  (export 없음)
+- `src/__tests__/importBoundaryLayers.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryCoPickStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryDraftStructure.test.ts`  →  (export 없음)
 - `src/__tests__/itineraryEditSheetStructure.test.ts`  →  (export 없음)
@@ -1218,4 +1220,4 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/splashGateMock.tsx`  →  SplashGate
 
-합계 828개 파일
+합계 830개 파일

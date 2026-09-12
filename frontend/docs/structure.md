@@ -41,7 +41,9 @@ frontend/
 │   ├── app/          Expo Router 라우트 (파일 = 화면)
 │   ├── app-shell/    src/app **밖**의 루트 셸 조립 (TRIP-173 신설 — SplashGate)
 │   ├── pages/        FSD pages 층 — 화면별 배선 (TRIP-173 신설, 구 `features/*/containers` 5개가 이주)
+│   ├── widgets/      FSD widgets 층 — 여러 화면이 쓰는 화면 조각 (TRIP-804 규칙 신설, 빈 층 — 첫 입주 TRIP-805)
 │   ├── features/     도메인 기능 (auth·onboarding 실구현, 나머지 9개 빈 스텁)
+│   ├── entities/     FSD entities 층 — 여러 feature가 쓰는 도메인 단위 (TRIP-804 규칙 신설, 빈 층 — 첫 입주 TRIP-806~809)
 │   ├── shared/       도메인 무관 공용
 │   ├── mocks/        테스트 오라클 전용 msw/node (앱 런타임 목 아님)
 │   ├── test-support/ 테스트 전용 목·헬퍼
@@ -51,7 +53,7 @@ frontend/
           jest.config.js · jest.integration.config.js · metro.config.js · tailwind.config.js
 ```
 
-**FSD 층 방향 규칙 — 아직 0개(TRIP-173 사이클 1 기준).** `app-shell`·`pages`가 신설됐지만 이번 사이클은 폴더 배치만 바꿨고, "하위 층이 상위 층을 참조하면 안 된다" 같은 방향 규칙은 eslint·테스트 어디에도 없다(사이클 4에서 도입 예정, code-critic 경고-1 실측 — `features` → `pages` 역참조를 lint 0 error로 통과시킴). 지금 이 규칙이 이미 있다고 가정하고 작업하지 마라.
+**FSD 층 방향 규칙 — 도입됨(TRIP-804).** `app → pages → widgets → features → entities → shared` 6층 방향을 `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제한다 — 역방향(하위→상위), features 간 직접 import, 하위 층의 상위 층 참조 상한을 잡는다. `src/__tests__/importBoundaryLayers.test.ts`가 13개 feature 전부에서 형제 feature·역방향 import가 경계 룰로 잡히는지 뮤테이션으로 실측하고, `fsdLayerStructure.test.ts`가 src 직계·세그먼트 허용목록·shared 방향을 굳힌다. **전방 `app → features` 제한은 아직 미도입** — app이 features를 직접 import하는 곳이 많아(라우트·프리뷰) 소급 이동 없이 못 켜므로 pages 이주 후 별도 티켓에서 켠다(app·app-shell은 이번 zone에서 target 아님).
 ## `src/features/` — 아직 시작 안 한 도메인
 
 TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개를 `git rm`으로 전부 삭제했다. 그중 8개(`archive`·`execution`·`itinerary`·`notification`·`planb`·`settings`·`stay`·`trip`)는 그 배럴이 디렉토리 안의 유일한 파일이라 **디렉토리째 사라졌다** — `stay`는 위 절대로 TRIP-179로 재등장(데이터 계층만), `itinerary`는 위 절대로 TRIP-295로 재등장(순수 함수만). 지금 `src/features/`에는 `auth`·`home`·`onboarding`·`stay`·`explore`·`trip`·`itinerary` 7개다.

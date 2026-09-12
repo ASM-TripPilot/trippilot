@@ -33,11 +33,13 @@ frontend/ 루트가 곧 Expo 프로젝트이며(모노레포 구조는 inception
 ```text
 frontend/
   src/
-    app/          # Expo Router 라우트 — 얇은 래퍼만. 화면 구현은 features/에서 import
-    features/     # 기능 10개 (에픽·서버 모듈 경계에 대응)
-      onboarding/ home/ stay/ trip/ itinerary/
-      execution/ planb/ archive/ notification/ settings/
-    shared/       # 횡단 6개
+    app/          # Expo Router 라우트 — 얇은 래퍼만. 화면 구현은 하위 층에서 import
+    app-shell/    # src/app 밖의 루트 셸 조립 (SplashGate 등 — docs/structure.md 참조)
+    pages/        # 화면별 배선 — 라우트가 꽂는 컨테이너
+    widgets/      # 여러 화면이 쓰는 화면 조각 (빈 층 — 첫 입주 티켓 대기)
+    features/     # 도메인 기능 (목록·수 정본: src/features 디렉토리 · docs/structure.generated.md)
+    entities/     # 여러 feature가 쓰는 도메인 단위 (빈 층 — 첫 입주 티켓 대기)
+    shared/       # 도메인 무관 공용 (세그먼트 정본: docs/structure.generated.md)
       api/        # 서버 클라이언트 단일 계층 — orval 생성물 + axios 인스턴스(토큰 회전)
                   # + 부트스트랩 + 모든 API 실패를 표준 오류 타입으로 정규화
       ui/         # 디자인 시스템·공용 탭바(5탭)·빈 상태/로딩/오류 표준 패턴·접근성 기준
@@ -51,14 +53,16 @@ frontend/
   docs/                            # 화면 IO 카탈로그
 ```
 
-feature 내부 관례: `screens/ components/ containers/ hooks/ store/ model/ lib/` — 화면·상태·도메인 로직을 feature 안에 응집. (`containers/`=훅↔화면을 잇는 접착 컨테이너 — `screens/`는 props만 받는 프레젠테이션으로 유지. `lib/`=순수함수가 아닌 팩토리·유틸(예: env 토글로 fake/real을 고르는 `makeAuthorize`). 모든 폴더가 필수는 아니며 넣을 것이 생길 때 만든다.)
+슬라이스(feature·page) 내부 세그먼트는 `ui/ model/ lib/ config/` 넷뿐이다 — `ui/`=props를 받는 프레젠테이션 화면·컴포넌트 / `model/`=상태·도메인 타입·업무 규칙 / `lib/`=순수 헬퍼·포맷터·어댑터 팩토리(예: env 토글로 fake/real을 고르는 `makeAuthorize`) / `config/`=상수·라벨·환경값. **`api/` 세그먼트는 두지 않는다**(서버 통신은 orval 단일 계층 `shared/api`가 전담). 모든 세그먼트가 필수는 아니며 넣을 것이 생길 때 만든다. (옛 칸 `screens/ containers/ hooks/ store/`는 폐기 — 화면은 `ui/`, 접착 컨테이너는 `pages/` 층으로.)
 
 ### import 경계 규칙 (ESLint로 강제)
 
-- 의존 방향: `app/` → `features/` / `shared/`, `features/` → `shared/`. (`app/`은 레이아웃·프로바이더 구성을 위해 shared를 직접 import할 수 있다)
-- **features 간 직접 import 금지.** 기능 간 화면 이동은 라우팅으로, 데이터 공유는 `shared/api` 훅으로 해결된다.
-- **승격 규칙**: 두 개 이상의 feature가 쓰게 된 컴포넌트·로직은 `shared/`로 승격한다. 예: 일정 지도 뷰(순서 핀·동선)는 itinerary와 execution이 함께 쓰므로 처음부터 `shared/map` 소유.
-- `shared/`는 `features/`를 모른다.
+- **6층 방향**: `app → pages → widgets → features → entities → shared`. **하위 층은 상위 층을 모른다** — 각 층은 자기보다 아래 층만 import한다. 즉 `shared`는 아무 상위 층도 못 보고, `entities`는 `shared`만, `features`는 `entities·shared`만(다른 feature는 못 봄), `widgets`는 `features` 이하, `pages`는 `widgets` 이하를 참조한다. `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제하고, 13개 feature zone은 `src/features` 디렉토리를 읽어 생성한다(새 feature 자동 편입).
+- **세그먼트**: 슬라이스(feature·page) 내부는 `ui`(프레젠테이션) / `model`(상태·도메인 타입·업무 규칙) / `lib`(순수 헬퍼·포맷터·어댑터 팩토리) / `config`(상수·라벨·환경값) 넷뿐이다. **`api` 세그먼트는 만들지 않는다** — 서버 통신은 orval 단일 계층 `shared/api`가 전담한다.
+- **배럴(index.ts) 미도입**: 팀 표준은 딥 임포트(`@/features/home/model/homeFixtures`)다. 재수출할 공개 API가 실제로 생겼을 때만 배럴을 만든다.
+- **적용 시점**: 신규·재작성 파일부터. **빅뱅 이주는 없다**(TRIP-803) — 규칙을 세우되 기존 코드를 소급 이동하지 않는다.
+- **승격 규칙**: 두 곳 이상이 쓰게 된 것을 올린다 — 도메인 카드·타입은 `entities`로, 여러 화면이 쓰는 화면 조각(지도+시트 셸 등)은 `widgets`로, **도메인과 무관한 원시 부품만** `shared`로. (예: 일정 지도 뷰는 itinerary·execution이 함께 쓰므로 `shared/map` 소유.)
+- **전방 `app → features` 제한은 아직 두지 않는다** — 목표 방향은 `app`이 `pages·widgets·shared`만 보는 것이지만, 현재 `app`이 features를 직접 import하는 곳이 많아(라우트·프리뷰) 소급 이동 없이는 켤 수 없다. `pages` 이주가 진행돼 이 참조가 줄어든 뒤 별도 후속 티켓에서 켠다.
 - 절대 경로 별칭 `@/` = `src/` (tsconfig paths — `@/features/...`, `@/shared/...`).
 
 ### 상태 관리 규칙
