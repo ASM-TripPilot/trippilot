@@ -81,11 +81,19 @@ class ReplanFacadeService(
         // **요청한 날짜만** 받는다. 다른 날을 돌려줬을 때 그것을 오늘 초안으로 삼으면, 확정 순간
         // 오늘 일정이 엉뚱한 날의 계획으로 덮인다(생성 경로에도 같은 취지의 가드가 있다).
         val day = output.days.firstOrNull { it.date == command.targetDate }
+        // 잠긴 슬롯은 재해결 대상이 아니다 — 원본의 위반 표시(BR-U3-13)가 현실에 그대로 남으므로
+        // 이어받는다(TRIP-839). 판정은 상대 에코(isFixed)가 아니라 **우리 잠금 집합**으로 한다 —
+        // 잠금 규칙의 주인이 이쪽이다. 재배치된 슬롯은 어셈블리를 새로 통과했으니 위반 없음이 정당하다.
+        // 같은 장소가 하루에 두 번 잠기면 첫 슬롯 값을 쓴다(slotKey 규약상 어차피 구분 불가).
+        val lockedByPoi = lockedSlots(current, command).groupBy { it.sourcePoiId }.mapValues { (_, v) -> v.first() }
         val slots = day?.slots.orEmpty().map {
+            val locked = lockedByPoi[it.poiId]
             ReplanSlot(
                 poiId = it.poiId, startAt = it.startAt, endAt = it.endAt, isFixed = it.isFixed,
                 endsNextDay = it.endsNextDay, distanceRange = it.distanceRange,
                 placementReason = output.explanations["${command.targetDate}#${it.poiId}"],
+                hasViolation = locked?.hasViolation ?: false,
+                violationReason = locked?.takeIf { l -> l.hasViolation }?.violationReason,
             )
         }
         // 빈 초안은 "해 없음"이다 — 빈 하루를 초안이라고 보여 주면 사용자가 그걸 확정한다.
@@ -117,18 +125,21 @@ class ReplanFacadeService(
      *
      * 잠금을 빠뜨리면 이미 다녀온 곳이 일정에서 사라지거나 예약 시각이 밀린다.
      */
-    private fun lockedBlocks(current: Itinerary, command: ReplanCommand): List<FixedBlock> {
+    private fun lockedBlocks(current: Itinerary, command: ReplanCommand): List<FixedBlock> =
+        // 시각을 함께 싣는다 — 시각 없는 고정 블록은 상대가 거부한다(계약 M1).
+        lockedSlots(current, command)
+            .map { FixedBlock(it.sourcePoiId, command.targetDate, it.startAt, dwellMinutes(it.startAt, it.endAt)) }
+
+    /** 잠금 판정의 단일 지점 — 요청 블록과 위반 상속(TRIP-839)이 같은 집합을 봐야 한다. */
+    private fun lockedSlots(current: Itinerary, command: ReplanCommand): List<VisitSlot> {
         val day = current.days.firstOrNull { it.date == command.targetDate } ?: return emptyList()
         val now = LocalTime.ofInstant(command.fromInstant, TRAVEL_ZONE)
         val completed = command.completedSlotKeys.toSet()
-        return day.slots
-            .filter {
-                it.isFixed ||
-                    (!command.fullDay && it.startAt < now) ||
-                    "${command.targetDate}#${it.sourcePoiId}" in completed
-            }
-            // 시각을 함께 싣는다 — 시각 없는 고정 블록은 상대가 거부한다(계약 M1).
-            .map { FixedBlock(it.sourcePoiId, command.targetDate, it.startAt, dwellMinutes(it.startAt, it.endAt)) }
+        return day.slots.filter {
+            it.isFixed ||
+                (!command.fullDay && it.startAt < now) ||
+                "${command.targetDate}#${it.sourcePoiId}" in completed
+        }
     }
 
     /** 체류 분 — 자정 넘김이면 하루를 더한다(HC4). */
@@ -199,6 +210,7 @@ class ReplanFacadeService(
             sourcePoiId = s.poiId, poiSnapshotId = null, orderIndex = i,
             startAt = s.startAt, endAt = s.endAt, isFixed = s.isFixed, endsNextDay = s.endsNextDay,
             distanceRange = s.distanceRange, placementReason = s.placementReason,
+            hasViolation = s.hasViolation, violationReason = s.violationReason,
         )
     }
 
