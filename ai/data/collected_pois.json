@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "TOURAPI",
-  "collected_at": "2026-09-11T15:50:36.565945+00:00",
+  "collected_at": "2026-09-12T21:28:18.715504+00:00",
   "area_codes": [
     "1",
     "2",
@@ -30,119 +30,119 @@
   ],
   "stats": {
     "merged_runs": 2,
-    "unique_proposals": 18607
+    "unique_proposals": 18609
   },
   "merged_from": [
     {
-      "collected_at": "2026-08-31T23:11:27.994955+00:00",
-      "proposals": 16093,
+      "collected_at": "2026-09-11T15:50:36.565945+00:00",
+      "proposals": 18607,
       "stats": {
         "merged_runs": 2,
-        "unique_proposals": 16093
+        "unique_proposals": 18607
       }
     },
     {
-      "collected_at": "2026-09-11T15:50:36.565945+00:00",
-      "proposals": 2514,
+      "collected_at": "2026-09-12T21:28:18.715504+00:00",
+      "proposals": 639,
       "stats": {
-        "http_calls": 2773,
-        "listed": 2547,
-        "page_failures": 0,
-        "detail_failures": 652,
+        "http_calls": 904,
+        "listed": 672,
+        "page_failures": 1,
+        "detail_failures": 1,
         "category_unmapped": 0,
         "address_missing": 1,
         "merged": 0,
-        "passed": 2514,
-        "skipped_unchanged": 16021,
+        "passed": 639,
+        "skipped_unchanged": 17790,
         "gate_drops": {
           "existence_out_of_service_region": 32
         },
         "budget_exhausted": false,
         "per_area": {
           "1": {
-            "calls": 220,
-            "passed": 191,
-            "skipped": 1572
+            "calls": 29,
+            "passed": 0,
+            "skipped": 1762
           },
           "2": {
-            "calls": 105,
-            "passed": 94,
-            "skipped": 478
+            "calls": 11,
+            "passed": 0,
+            "skipped": 572
           },
           "3": {
-            "calls": 30,
-            "passed": 23,
-            "skipped": 220
+            "calls": 7,
+            "passed": 0,
+            "skipped": 239
           },
           "4": {
-            "calls": 63,
-            "passed": 56,
-            "skipped": 408
+            "calls": 7,
+            "passed": 0,
+            "skipped": 464
           },
           "5": {
-            "calls": 16,
-            "passed": 11,
-            "skipped": 176
+            "calls": 5,
+            "passed": 0,
+            "skipped": 186
           },
           "6": {
-            "calls": 86,
-            "passed": 76,
-            "skipped": 500
+            "calls": 10,
+            "passed": 0,
+            "skipped": 564
           },
           "7": {
-            "calls": 30,
-            "passed": 24,
-            "skipped": 221
+            "calls": 6,
+            "passed": 0,
+            "skipped": 242
           },
           "8": {
-            "calls": 9,
-            "passed": 4,
-            "skipped": 81
+            "calls": 5,
+            "passed": 0,
+            "skipped": 85
           },
           "31": {
-            "calls": 698,
-            "passed": 649,
-            "skipped": 3446
+            "calls": 49,
+            "passed": 0,
+            "skipped": 3987
           },
           "32": {
-            "calls": 425,
-            "passed": 399,
-            "skipped": 1680
+            "calls": 115,
+            "passed": 89,
+            "skipped": 1980
           },
           "33": {
             "calls": 162,
             "passed": 149,
-            "skipped": 832
+            "skipped": 821
           },
           "34": {
-            "calls": 241,
-            "passed": 226,
-            "skipped": 1037
+            "calls": 239,
+            "passed": 224,
+            "skipped": 1036
           },
           "35": {
             "calls": 188,
             "passed": 170,
-            "skipped": 1215
+            "skipped": 1214
           },
           "36": {
-            "calls": 146,
-            "passed": 134,
-            "skipped": 1325
+            "calls": 25,
+            "passed": 7,
+            "skipped": 1507
           },
           "37": {
-            "calls": 153,
-            "passed": 136,
-            "skipped": 974
+            "calls": 17,
+            "passed": 0,
+            "skipped": 1106
           },
           "38": {
-            "calls": 131,
-            "passed": 114,
-            "skipped": 1063
+            "calls": 17,
+            "passed": 0,
+            "skipped": 1176
           },
           "39": {
-            "calls": 70,
-            "passed": 58,
-            "skipped": 793
+            "calls": 12,
+            "passed": 0,
+            "skipped": 849
           }
         }
       }
@@ -608748,11 +608748,47 @@
           "lat": 35.4922711532,
           "lng": 128.7564200958
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 0,
+            "close_min": 1440
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -608760,7 +608796,7 @@
         "육상 레포츠"
       ],
       "region": "밀양시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "상시 개방",
       "provenance": {
         "content_id": "2713079",
         "content_type_id": "28",
@@ -670348,11 +670384,47 @@
           "lat": 37.3351971683,
           "lng": 128.0117034554
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 0,
+            "close_min": 1440
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -670360,7 +670432,7 @@
         "육상 레포츠"
       ],
       "region": "원주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "상시 개방",
       "provenance": {
         "content_id": "2778061",
         "content_type_id": "28",
@@ -670508,11 +670580,47 @@
           "lat": 38.3806733748,
           "lng": 128.4678859929
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 0,
+            "close_min": 1440
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -670520,7 +670628,7 @@
         "육상 레포츠"
       ],
       "region": "고성군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "상시 개방",
       "provenance": {
         "content_id": "2748089",
         "content_type_id": "28",
@@ -670540,11 +670648,47 @@
           "lat": 37.5457782263,
           "lng": 128.4448442743
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 0,
+            "close_min": 1440
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -670552,7 +670696,7 @@
         "육상 레포츠"
       ],
       "region": "평창군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "상시 개방",
       "provenance": {
         "content_id": "2701989",
         "content_type_id": "28",
@@ -670585,7 +670729,7 @@
         "5일장"
       ],
       "region": "고성군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132783",
         "content_type_id": "38",
@@ -670605,11 +670749,47 @@
           "lat": 37.7367152805,
           "lng": 128.9182652483
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -670618,7 +670798,7 @@
         "상설시장"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "1756581",
         "content_type_id": "38",
@@ -670651,7 +670831,7 @@
         "상설시장"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "06:00~23:00<br>※ 점포별 상이함",
       "provenance": {
         "content_id": "132772",
         "content_type_id": "38",
@@ -670683,7 +670863,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "10:00~22:30",
       "provenance": {
         "content_id": "2930360",
         "content_type_id": "38",
@@ -670703,7 +670883,43 @@
           "lat": 37.7626808654,
           "lng": 128.8743350687
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 480,
+            "close_min": 1320
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -670715,7 +670931,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~22:00",
       "provenance": {
         "content_id": "3544636",
         "content_type_id": "38",
@@ -670735,7 +670951,43 @@
           "lat": 37.7435365545,
           "lng": 128.9100991063
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -670747,7 +670999,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "3540291",
         "content_type_id": "38",
@@ -670780,7 +671032,7 @@
         "전문매장/상가"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "2775527",
         "content_type_id": "38",
@@ -670800,7 +671052,43 @@
           "lat": 37.8902707345,
           "lng": 128.8274603439
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 420,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 420,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 420,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 420,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 420,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 420,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 420,
+            "close_min": 1260
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -670812,7 +671100,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "07:00~21:00",
       "provenance": {
         "content_id": "3540175",
         "content_type_id": "38",
@@ -670865,7 +671153,43 @@
           "lat": 37.891262304,
           "lng": 128.8283630094
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -670878,7 +671202,7 @@
         "전문매장/상가"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "3539434",
         "content_type_id": "38",
@@ -670910,7 +671234,7 @@
         "쇼핑"
       ],
       "region": "고성군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "[하절기 (3월~10월)] 09:00~18:00<br>[동절기 (11월~2월)] 09:00~17:00<br> ※ 입장 마감 관람 시간 1시간 전까지",
       "provenance": {
         "content_id": "1911421",
         "content_type_id": "38",
@@ -670943,7 +671267,7 @@
         "상설시장"
       ],
       "region": "정선군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "2777909",
         "content_type_id": "38",
@@ -670963,7 +671287,43 @@
           "lat": 37.7529102374,
           "lng": 128.8981415598
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -670975,7 +671335,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "3539614",
         "content_type_id": "38",
@@ -671007,7 +671367,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~22:00",
       "provenance": {
         "content_id": "3544739",
         "content_type_id": "38",
@@ -671027,7 +671387,43 @@
           "lat": 37.7422972456,
           "lng": 128.8811795266
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 600,
+            "close_min": 1500
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 600,
+            "close_min": 1500
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 600,
+            "close_min": 1500
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 600,
+            "close_min": 1500
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 600,
+            "close_min": 1500
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 600,
+            "close_min": 1500
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 600,
+            "close_min": 1500
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -671039,7 +671435,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "10:00~01:00",
       "provenance": {
         "content_id": "3544518",
         "content_type_id": "38",
@@ -671072,7 +671468,7 @@
         "상설시장"
       ],
       "region": "고성군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "2776851",
         "content_type_id": "38",
@@ -671138,7 +671534,7 @@
         "5일장"
       ],
       "region": "철원군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132270",
         "content_type_id": "38",
@@ -671171,7 +671567,7 @@
         "전문매장/상가"
       ],
       "region": "동해시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "- 4월~10월 05:00~20:30 <br>- 11월~3월 06:00~19:30<br>",
       "provenance": {
         "content_id": "2776854",
         "content_type_id": "38",
@@ -671204,7 +671600,7 @@
         "5일장"
       ],
       "region": "원주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~22:00<br>※ 점포별 영업시간 상이",
       "provenance": {
         "content_id": "132268",
         "content_type_id": "38",
@@ -671237,7 +671633,7 @@
         "전문매장/상가"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "2776856",
         "content_type_id": "38",
@@ -671257,7 +671653,38 @@
           "lat": 37.758401298,
           "lng": 128.8996329222
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 570,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 570,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 570,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 570,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 570,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 570,
+            "close_min": 1200
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -671270,7 +671697,7 @@
         "전문매장/상가"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:30~20:00",
       "provenance": {
         "content_id": "3540459",
         "content_type_id": "38",
@@ -671303,7 +671730,7 @@
         "전문매장/상가"
       ],
       "region": "고성군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2776844",
         "content_type_id": "38",
@@ -671336,7 +671763,7 @@
         "5일장"
       ],
       "region": "동해시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132780",
         "content_type_id": "38",
@@ -671369,7 +671796,7 @@
         "상설시장"
       ],
       "region": "정선군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "2777889",
         "content_type_id": "38",
@@ -671389,7 +671816,38 @@
           "lat": 37.7570459797,
           "lng": 128.9037631476
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -671401,7 +671859,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00 ~ 18:00",
       "provenance": {
         "content_id": "3547611",
         "content_type_id": "38",
@@ -671434,7 +671892,7 @@
         "상설시장"
       ],
       "region": "삼척시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "매장마다 상이",
       "provenance": {
         "content_id": "132763",
         "content_type_id": "38",
@@ -671467,7 +671925,7 @@
         "5일장"
       ],
       "region": "삼척시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132762",
         "content_type_id": "38",
@@ -671500,7 +671958,7 @@
         "5일장"
       ],
       "region": "춘천시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이함",
       "provenance": {
         "content_id": "2787564",
         "content_type_id": "38",
@@ -671520,7 +671978,43 @@
           "lat": 37.7645363166,
           "lng": 128.8799900575
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 570,
+            "close_min": 1190
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 570,
+            "close_min": 1190
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 570,
+            "close_min": 1190
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 570,
+            "close_min": 1190
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 570,
+            "close_min": 1190
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 570,
+            "close_min": 1190
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 570,
+            "close_min": 1190
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -671533,7 +672027,7 @@
         "전문매장/상가"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:30~19:50",
       "provenance": {
         "content_id": "3539350",
         "content_type_id": "38",
@@ -671553,7 +672047,43 @@
           "lat": 37.8465762113,
           "lng": 128.7058837858
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 480,
+            "close_min": 1200
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -671565,7 +672095,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~20:00",
       "provenance": {
         "content_id": "3540270",
         "content_type_id": "38",
@@ -671598,7 +672128,7 @@
         "상설시장"
       ],
       "region": "태백시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "2610087",
         "content_type_id": "38",
@@ -671631,7 +672161,7 @@
         "전문매장/상가"
       ],
       "region": "속초시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "[하절기(3월~10월)]<br>10:00~20:30<br>[동절기(11월~2월)]<br>10:00~20:00",
       "provenance": {
         "content_id": "132395",
         "content_type_id": "38",
@@ -671651,7 +672181,43 @@
           "lat": 37.7404169309,
           "lng": 128.8823850316
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 720,
+            "close_min": 2160
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 720,
+            "close_min": 2160
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 720,
+            "close_min": 2160
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 720,
+            "close_min": 2160
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 720,
+            "close_min": 2160
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 720,
+            "close_min": 2160
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 720,
+            "close_min": 2160
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -671664,7 +672230,7 @@
         "전문매장/상가"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "12:00~12:00",
       "provenance": {
         "content_id": "3544731",
         "content_type_id": "38",
@@ -671684,11 +672250,47 @@
           "lat": 38.1069378024,
           "lng": 127.9906379341
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -671696,7 +672298,7 @@
         "쇼핑"
       ],
       "region": "양구군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "132583",
         "content_type_id": "38",
@@ -671716,7 +672318,43 @@
           "lat": 37.8948980383,
           "lng": 128.8306404689
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 360,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 360,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 360,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 360,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 360,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 360,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 360,
+            "close_min": 1440
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -671728,7 +672366,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "06:00~00:00",
       "provenance": {
         "content_id": "3539984",
         "content_type_id": "38",
@@ -671761,7 +672399,7 @@
         "상설시장"
       ],
       "region": "영월군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2778079",
         "content_type_id": "38",
@@ -671781,11 +672419,42 @@
           "lat": 37.1416164777,
           "lng": 128.5905432481
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 1,
+            "open_min": 600,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 600,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 600,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 600,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 600,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 600,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -671794,7 +672463,7 @@
         "전문매장/상가"
       ],
       "region": "영월군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "10:00~18:00",
       "provenance": {
         "content_id": "2782864",
         "content_type_id": "38",
@@ -671827,7 +672496,7 @@
         "5일장"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "매월 4, 9일",
       "provenance": {
         "content_id": "3532396",
         "content_type_id": "38",
@@ -671847,7 +672516,38 @@
           "lat": 37.7636729511,
           "lng": 128.9017270149
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 570,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 570,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 570,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 570,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 570,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 570,
+            "close_min": 1140
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -671860,7 +672560,7 @@
         "전문매장/상가"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:30~19:00",
       "provenance": {
         "content_id": "3544682",
         "content_type_id": "38",
@@ -671893,7 +672593,7 @@
         "상설시장"
       ],
       "region": "원주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~21:00<br>※ 점포 별로 상이할 수 있음",
       "provenance": {
         "content_id": "132766",
         "content_type_id": "38",
@@ -671926,7 +672626,7 @@
         "상설시장"
       ],
       "region": "원주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "- 하절기(5월~10월) 18:00~경매 종료 시<br>- 동절기(11월~익년 4월) 17:00~경매 종료 시<br>※ 일반 소매거래는 홈페이지에서 별도 문의 필요",
       "provenance": {
         "content_id": "132754",
         "content_type_id": "38",
@@ -671992,7 +672692,7 @@
         "상설시장"
       ],
       "region": "원주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132768",
         "content_type_id": "38",
@@ -672025,7 +672725,7 @@
         "상설시장"
       ],
       "region": "원주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132755",
         "content_type_id": "38",
@@ -672058,7 +672758,7 @@
         "상설시장"
       ],
       "region": "원주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132256",
         "content_type_id": "38",
@@ -672091,7 +672791,7 @@
         "상설시장"
       ],
       "region": "원주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132765",
         "content_type_id": "38",
@@ -672111,11 +672811,47 @@
           "lat": 38.0578818807,
           "lng": 127.6672216868
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 480,
+            "close_min": 1140
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -672124,7 +672860,7 @@
         "전문매장/상가"
       ],
       "region": "화천군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~19:00",
       "provenance": {
         "content_id": "2712630",
         "content_type_id": "38",
@@ -672157,7 +672893,7 @@
         "5일장"
       ],
       "region": "인제군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132425",
         "content_type_id": "38",
@@ -672177,7 +672913,43 @@
           "lat": 37.7843874886,
           "lng": 128.9153973642
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1320
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -672189,7 +672961,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~22:00",
       "provenance": {
         "content_id": "3539750",
         "content_type_id": "38",
@@ -672242,7 +673014,43 @@
           "lat": 37.7574875327,
           "lng": 128.9005356469
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 0,
+            "close_min": 240
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 0,
+            "close_min": 240
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 0,
+            "close_min": 240
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 0,
+            "close_min": 240
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 0,
+            "close_min": 240
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 0,
+            "close_min": 240
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 0,
+            "close_min": 240
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -672254,7 +673062,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "00:00~24:00",
       "provenance": {
         "content_id": "3544744",
         "content_type_id": "38",
@@ -672287,7 +673095,7 @@
         "공예/공방"
       ],
       "region": "정선군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132446",
         "content_type_id": "38",
@@ -672307,7 +673115,43 @@
           "lat": 37.7541934153,
           "lng": 128.8977748864
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 560,
+            "close_min": 1170
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 560,
+            "close_min": 1170
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 560,
+            "close_min": 1170
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 560,
+            "close_min": 1170
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 560,
+            "close_min": 1170
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 560,
+            "close_min": 1170
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 560,
+            "close_min": 1170
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -672320,7 +673164,7 @@
         "전문매장/상가"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:20~19:30",
       "provenance": {
         "content_id": "3539451",
         "content_type_id": "38",
@@ -672340,7 +673184,43 @@
           "lat": 37.8813884076,
           "lng": 128.8262718384
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 510,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 510,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 510,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 510,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 510,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 510,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 510,
+            "close_min": 1260
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -672353,7 +673233,7 @@
         "대형마트"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:30~21:00",
       "provenance": {
         "content_id": "3540485",
         "content_type_id": "38",
@@ -672373,7 +673253,43 @@
           "lat": 37.8880876272,
           "lng": 128.8260772034
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 510,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 510,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 510,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 510,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 510,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 510,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 510,
+            "close_min": 1320
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -672385,7 +673301,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:30~22:00",
       "provenance": {
         "content_id": "3539784",
         "content_type_id": "38",
@@ -672418,7 +673334,7 @@
         "5일장"
       ],
       "region": "평창군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132533",
         "content_type_id": "38",
@@ -672438,7 +673354,43 @@
           "lat": 37.7710167147,
           "lng": 128.9103648985
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 510,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 510,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 510,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 510,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 510,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 510,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 510,
+            "close_min": 1200
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -672451,7 +673403,7 @@
         "전문매장/상가"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:30~20:00",
       "provenance": {
         "content_id": "3539544",
         "content_type_id": "38",
@@ -672471,7 +673423,43 @@
           "lat": 37.8910928796,
           "lng": 128.8283907906
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 360,
+            "close_min": 480
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 360,
+            "close_min": 480
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 360,
+            "close_min": 480
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 360,
+            "close_min": 480
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 360,
+            "close_min": 480
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 360,
+            "close_min": 480
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 360,
+            "close_min": 480
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -672483,7 +673471,7 @@
         "쇼핑"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "06:00~08:00",
       "provenance": {
         "content_id": "3539789",
         "content_type_id": "38",
@@ -672503,11 +673491,47 @@
           "lat": 37.7794540334,
           "lng": 128.879920158
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -672516,7 +673540,7 @@
         "공예/공방"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "2792910",
         "content_type_id": "38",
@@ -672549,7 +673573,7 @@
         "상설시장"
       ],
       "region": "춘천시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132751",
         "content_type_id": "38",
@@ -672582,7 +673606,7 @@
         "상설시장"
       ],
       "region": "춘천시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132750",
         "content_type_id": "38",
@@ -672615,7 +673639,7 @@
         "상설시장"
       ],
       "region": "춘천시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132749",
         "content_type_id": "38",
@@ -672635,11 +673659,47 @@
           "lat": 37.1684997127,
           "lng": 129.0363803567
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 480,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 480,
+            "close_min": 1320
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -672648,7 +673708,7 @@
         "5일장"
       ],
       "region": "태백시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~22:00",
       "provenance": {
         "content_id": "132759",
         "content_type_id": "38",
@@ -672668,11 +673728,37 @@
           "lat": 37.7603787408,
           "lng": 128.894169464
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 2,
+            "open_min": 660,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 660,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 660,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 660,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 660,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -672681,7 +673767,7 @@
         "전문매장/상가"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "11:00~18:00",
       "provenance": {
         "content_id": "2775517",
         "content_type_id": "38",
@@ -672714,7 +673800,7 @@
         "5일장"
       ],
       "region": "평창군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "07:00~20:00",
       "provenance": {
         "content_id": "132253",
         "content_type_id": "38",
@@ -672734,7 +673820,43 @@
           "lat": 37.7650531166,
           "lng": 128.8898919271
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1320
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -672747,7 +673869,7 @@
         "대형마트"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~22:00",
       "provenance": {
         "content_id": "3540260",
         "content_type_id": "38",
@@ -672812,7 +673934,7 @@
         "전문매장/상가"
       ],
       "region": "강릉시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "3544733",
         "content_type_id": "38",
@@ -672845,7 +673967,7 @@
         "5일장"
       ],
       "region": "홍천군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132272",
         "content_type_id": "38",
@@ -672878,7 +674000,7 @@
         "상설시장"
       ],
       "region": "화천군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "※ 점포별 상이함",
       "provenance": {
         "content_id": "132397",
         "content_type_id": "38",
@@ -672911,7 +674033,7 @@
         "상설시장"
       ],
       "region": "태백시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132396",
         "content_type_id": "38",
@@ -672944,7 +674066,7 @@
         "상설시장"
       ],
       "region": "철원군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "10:00~17:30",
       "provenance": {
         "content_id": "2773998",
         "content_type_id": "38",
@@ -673424,7 +674546,7 @@
         "육상 레포츠"
       ],
       "region": "단양군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "[하절기] (3월~10월)<br>- 09:00~18:00 <br>[동절기] (11월~2월)<br>- 09:00~17:00",
       "provenance": {
         "content_id": "1012493",
         "content_type_id": "28",
@@ -676016,7 +677138,7 @@
         "육상 레포츠"
       ],
       "region": "괴산군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "131470",
         "content_type_id": "28",
@@ -676836,11 +677958,47 @@
           "lat": 36.4700675593,
           "lng": 127.7914756407
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 0,
+            "close_min": 1440
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -676848,7 +678006,7 @@
         "육상 레포츠"
       ],
       "region": "보은군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "상시 개방",
       "provenance": {
         "content_id": "2417956",
         "content_type_id": "28",
@@ -676945,7 +678103,7 @@
         "5일장"
       ],
       "region": "진천군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "06:00~18:00 (점포별로 상이함)",
       "provenance": {
         "content_id": "132022",
         "content_type_id": "38",
@@ -676978,7 +678136,7 @@
         "5일장"
       ],
       "region": "괴산군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "07:00~19:00 <br>※ 점포별로 상이함",
       "provenance": {
         "content_id": "132010",
         "content_type_id": "38",
@@ -676998,11 +678156,42 @@
           "lat": 36.9835584314,
           "lng": 127.9313236403
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 600,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 600,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 600,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 600,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 600,
+            "close_min": 1260
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 600,
+            "close_min": 1260
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -677011,7 +678200,7 @@
         "공예/공방"
       ],
       "region": "충주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "10:00~21:00",
       "provenance": {
         "content_id": "132571",
         "content_type_id": "38",
@@ -677043,7 +678232,7 @@
         "쇼핑"
       ],
       "region": "청주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "- 평일 11:00~15:00<br>- 주말 12:00~16:00",
       "provenance": {
         "content_id": "3354446",
         "content_type_id": "38",
@@ -677076,7 +678265,7 @@
         "5일장"
       ],
       "region": "보은군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "132013",
         "content_type_id": "38",
@@ -677109,7 +678298,7 @@
         "상설시장"
       ],
       "region": "청주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "10:00~20:00<br>※ 점포별로 상이함",
       "provenance": {
         "content_id": "2769733",
         "content_type_id": "38",
@@ -677175,7 +678364,7 @@
         "상설시장"
       ],
       "region": "청주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "2769734",
         "content_type_id": "38",
@@ -677208,7 +678397,7 @@
         "공예/공방"
       ],
       "region": "충주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:30~17:30",
       "provenance": {
         "content_id": "1960904",
         "content_type_id": "38",
@@ -677241,7 +678430,7 @@
         "5일장"
       ],
       "region": "영동군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "07:00~24:00<br>※ 점포별로 상이함",
       "provenance": {
         "content_id": "132015",
         "content_type_id": "38",
@@ -677274,7 +678463,7 @@
         "5일장"
       ],
       "region": "청주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "※ 점포별로 상이함",
       "provenance": {
         "content_id": "132611",
         "content_type_id": "38",
@@ -677294,11 +678483,47 @@
           "lat": 36.3024271529,
           "lng": 127.5682085205
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 420,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 420,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 420,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 420,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 420,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 420,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 420,
+            "close_min": 1200
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -677307,7 +678532,7 @@
         "5일장"
       ],
       "region": "옥천군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "07:00~20:00",
       "provenance": {
         "content_id": "132016",
         "content_type_id": "38",
@@ -677340,7 +678565,7 @@
         "공예/공방"
       ],
       "region": "영동군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "※ 전화 문의",
       "provenance": {
         "content_id": "1945196",
         "content_type_id": "38",
@@ -677373,7 +678598,7 @@
         "5일장"
       ],
       "region": "음성군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "132020",
         "content_type_id": "38",
@@ -677406,7 +678631,7 @@
         "전문매장/상가"
       ],
       "region": "음성군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:30~20:00 <br>※ 업체별 영업시간 상이",
       "provenance": {
         "content_id": "2770098",
         "content_type_id": "38",
@@ -677439,7 +678664,7 @@
         "상설시장"
       ],
       "region": "제천시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00 ~ 22:00 <br>※ 상가별 상이",
       "provenance": {
         "content_id": "132120",
         "content_type_id": "38",
@@ -677472,7 +678697,7 @@
         "상설시장"
       ],
       "region": "증평군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~22:00 <br>※ 점포별 상이",
       "provenance": {
         "content_id": "250539",
         "content_type_id": "38",
@@ -677505,7 +678730,7 @@
         "상설시장"
       ],
       "region": "진천군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "07:00~18:00<br>※ 점포별로 상이함",
       "provenance": {
         "content_id": "132746",
         "content_type_id": "38",
@@ -677537,7 +678762,7 @@
         "쇼핑"
       ],
       "region": "청주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "매장별로 상이함",
       "provenance": {
         "content_id": "1967801",
         "content_type_id": "38",
@@ -677570,7 +678795,7 @@
         "상설시장"
       ],
       "region": "청주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~22:00<br>※ 매장별 영업시간 상이",
       "provenance": {
         "content_id": "132548",
         "content_type_id": "38",
@@ -677590,11 +678815,47 @@
           "lat": 36.6433883738,
           "lng": 127.4278534005
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 600,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 600,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 600,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 600,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 600,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 600,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 600,
+            "close_min": 1320
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -677603,7 +678864,7 @@
         "전문매장/상가"
       ],
       "region": "청주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "10:00~22:00<br>※ 영화관은 자체 상영 시간 기준으로 영업",
       "provenance": {
         "content_id": "2372445",
         "content_type_id": "38",
@@ -677636,7 +678897,7 @@
         "상설시장"
       ],
       "region": "청주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "10:00~20:00 <br>※ 점포별로 상이함",
       "provenance": {
         "content_id": "2769738",
         "content_type_id": "38",
@@ -677669,7 +678930,7 @@
         "5일장"
       ],
       "region": "영동군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "※ 점포별로 상이함",
       "provenance": {
         "content_id": "132405",
         "content_type_id": "38",
@@ -677702,7 +678963,7 @@
         "상설시장"
       ],
       "region": "충주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~20:00<br>※ 상점별로 상이함",
       "provenance": {
         "content_id": "1906815",
         "content_type_id": "38",
@@ -677735,7 +678996,7 @@
         "상설시장"
       ],
       "region": "충주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "2755956",
         "content_type_id": "38",
@@ -678075,11 +679336,47 @@
           "lat": 36.8858667134,
           "lng": 126.1983272967
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 0,
+            "close_min": 1440
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -678087,7 +679384,7 @@
         "육상 레포츠"
       ],
       "region": "태안군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "상시 개방",
       "provenance": {
         "content_id": "2414848",
         "content_type_id": "28",
@@ -678395,11 +679692,47 @@
           "lat": 36.5026132972,
           "lng": 126.3381997069
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 510,
+            "close_min": 1110
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 510,
+            "close_min": 1110
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 510,
+            "close_min": 1110
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 510,
+            "close_min": 1110
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 510,
+            "close_min": 1110
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 510,
+            "close_min": 1110
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 510,
+            "close_min": 1110
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -678407,7 +679740,7 @@
         "육상 레포츠"
       ],
       "region": "태안군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:30~18:30",
       "provenance": {
         "content_id": "2769838",
         "content_type_id": "28",
@@ -678427,11 +679760,47 @@
           "lat": 36.8612592247,
           "lng": 127.1984346924
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 420,
+            "close_min": 1380
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 420,
+            "close_min": 1380
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 420,
+            "close_min": 1380
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 420,
+            "close_min": 1380
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 420,
+            "close_min": 1380
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 420,
+            "close_min": 1380
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 420,
+            "close_min": 1380
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -678439,7 +679808,7 @@
         "수상 레포츠"
       ],
       "region": "천안시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "07:00~23:00",
       "provenance": {
         "content_id": "2758134",
         "content_type_id": "28",
@@ -679003,11 +680372,42 @@
           "lat": 36.7773972648,
           "lng": 127.2326089252
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 1,
+            "open_min": 840,
+            "close_min": 2220
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 840,
+            "close_min": 2220
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 840,
+            "close_min": 2220
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 840,
+            "close_min": 2220
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 840,
+            "close_min": 2220
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 840,
+            "close_min": 2220
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -679015,7 +680415,7 @@
         "육상 레포츠"
       ],
       "region": "천안시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "- 입실 14:00<br>- 퇴실 13:00",
       "provenance": {
         "content_id": "131464",
         "content_type_id": "28",
@@ -680283,11 +681683,47 @@
           "lat": 36.7257612477,
           "lng": 127.0595870325
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 600,
+            "close_min": 2040
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 600,
+            "close_min": 2040
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 600,
+            "close_min": 2040
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 600,
+            "close_min": 2040
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 600,
+            "close_min": 2040
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 600,
+            "close_min": 2040
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 600,
+            "close_min": 2040
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -680295,7 +681731,7 @@
         "수상 레포츠"
       ],
       "region": "아산시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "10:00~익일 10:00",
       "provenance": {
         "content_id": "2769763",
         "content_type_id": "28",
@@ -680519,7 +681955,7 @@
         "육상 레포츠"
       ],
       "region": "서천군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "[하절기(4월~10월)]<br>- 09:00~18:00<br>- 야간 평일 18:00~22:00<br>[동절기(11월~3월)]<br>- 09:00~17:00<br>- 야간 평일 17:00~21:00",
       "provenance": {
         "content_id": "2539535",
         "content_type_id": "28",
@@ -681159,7 +682595,7 @@
         "육상 레포츠"
       ],
       "region": "논산시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "2770228",
         "content_type_id": "28",
@@ -683784,7 +685220,7 @@
         "5일장"
       ],
       "region": "논산시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이",
       "provenance": {
         "content_id": "2913835",
         "content_type_id": "38",
@@ -683804,11 +685240,47 @@
           "lat": 36.1597837058,
           "lng": 127.0153645321
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 480,
+            "close_min": 1200
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 480,
+            "close_min": 1200
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -683817,7 +685289,7 @@
         "상설시장"
       ],
       "region": "논산시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~20:00",
       "provenance": {
         "content_id": "132519",
         "content_type_id": "38",
@@ -683850,7 +685322,7 @@
         "상설시장"
       ],
       "region": "공주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2613453",
         "content_type_id": "38",
@@ -683883,7 +685355,7 @@
         "5일장"
       ],
       "region": "홍성군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "※ 점포마다 상이함",
       "provenance": {
         "content_id": "132042",
         "content_type_id": "38",
@@ -683916,7 +685388,7 @@
         "상설시장"
       ],
       "region": "금산군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "상점별로 상이함",
       "provenance": {
         "content_id": "731865",
         "content_type_id": "38",
@@ -683949,7 +685421,7 @@
         "상설시장"
       ],
       "region": "논산시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "2770357",
         "content_type_id": "38",
@@ -683982,7 +685454,7 @@
         "전문매장/상가"
       ],
       "region": "청양군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "[평일]<br>- 11:00~17:00 <br>- 마지막 주문 16:00<br>[주말]<br>- 11:00~20:00<br>- 준비시간 15:30~17:00<br>- 마지막 주문 19:00",
       "provenance": {
         "content_id": "2523267",
         "content_type_id": "38",
@@ -684015,7 +685487,7 @@
         "전문매장/상가"
       ],
       "region": "당진시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "- 평일 09:00~20:00<br>- 주말 09:00~21:00",
       "provenance": {
         "content_id": "2037022",
         "content_type_id": "38",
@@ -684048,7 +685520,7 @@
         "상설시장"
       ],
       "region": "보령시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~21:00",
       "provenance": {
         "content_id": "2750901",
         "content_type_id": "38",
@@ -684113,7 +685585,7 @@
         "전문매장/상가"
       ],
       "region": "태안군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~21:00<br>※ 매장별로 상이함",
       "provenance": {
         "content_id": "2791419",
         "content_type_id": "38",
@@ -684146,7 +685618,7 @@
         "전문매장/상가"
       ],
       "region": "태안군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "2753654",
         "content_type_id": "38",
@@ -684179,7 +685651,7 @@
         "상설시장"
       ],
       "region": "태안군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이함",
       "provenance": {
         "content_id": "2736398",
         "content_type_id": "38",
@@ -684212,7 +685684,7 @@
         "전문매장/상가"
       ],
       "region": "논산시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "13:00~익일 12:00",
       "provenance": {
         "content_id": "3035159",
         "content_type_id": "38",
@@ -684245,7 +685717,7 @@
         "5일장"
       ],
       "region": "보령시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "2750915",
         "content_type_id": "38",
@@ -684278,7 +685750,7 @@
         "상설시장"
       ],
       "region": "부여군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "1792845",
         "content_type_id": "38",
@@ -684311,7 +685783,7 @@
         "5일장"
       ],
       "region": "부여군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132031",
         "content_type_id": "38",
@@ -684331,11 +685803,47 @@
           "lat": 37.0044879178,
           "lng": 126.4523038477
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -684344,7 +685852,7 @@
         "상설시장"
       ],
       "region": "서산시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "2750375",
         "content_type_id": "38",
@@ -684364,11 +685872,42 @@
           "lat": 36.8885855614,
           "lng": 126.8238705388
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1320
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -684377,7 +685916,7 @@
         "상설시장"
       ],
       "region": "당진시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~22:00<br>※ 점포 별로 상이할 수 있음",
       "provenance": {
         "content_id": "2746228",
         "content_type_id": "38",
@@ -684410,7 +685949,7 @@
         "상설시장"
       ],
       "region": "서산시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~19:00",
       "provenance": {
         "content_id": "2489840",
         "content_type_id": "38",
@@ -684443,7 +685982,7 @@
         "5일장"
       ],
       "region": "천안시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "132553",
         "content_type_id": "38",
@@ -684476,7 +686015,7 @@
         "상설시장"
       ],
       "region": "태안군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~18:00<br>※ 점포별로 상이함",
       "provenance": {
         "content_id": "2783126",
         "content_type_id": "38",
@@ -684496,11 +686035,47 @@
           "lat": 36.5164035099,
           "lng": 126.346018085
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1320
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -684509,7 +686084,7 @@
         "상설시장"
       ],
       "region": "태안군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~22:00",
       "provenance": {
         "content_id": "2783133",
         "content_type_id": "38",
@@ -684542,7 +686117,7 @@
         "5일장"
       ],
       "region": "예산군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132260",
         "content_type_id": "38",
@@ -684575,7 +686150,7 @@
         "5일장"
       ],
       "region": "아산시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~20:00 <br>※ 점포별로 상이함",
       "provenance": {
         "content_id": "132495",
         "content_type_id": "38",
@@ -684608,7 +686183,7 @@
         "5일장"
       ],
       "region": "서천군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "250490",
         "content_type_id": "38",
@@ -684641,7 +686216,7 @@
         "공예/공방"
       ],
       "region": "예산군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:30~17:30 (휴게시간 12:00~13:00)",
       "provenance": {
         "content_id": "132452",
         "content_type_id": "38",
@@ -684674,7 +686249,7 @@
         "5일장"
       ],
       "region": "청양군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "※ 점포 별로 상이함",
       "provenance": {
         "content_id": "132039",
         "content_type_id": "38",
@@ -684707,7 +686282,7 @@
         "상설시장"
       ],
       "region": "천안시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "2361452",
         "content_type_id": "38",
@@ -684740,7 +686315,7 @@
         "상설시장"
       ],
       "region": "천안시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "06:00~19:00",
       "provenance": {
         "content_id": "2775628",
         "content_type_id": "38",
@@ -684773,7 +686348,7 @@
         "상설시장"
       ],
       "region": "천안시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2762950",
         "content_type_id": "38",
@@ -684806,7 +686381,7 @@
         "5일장"
       ],
       "region": "청양군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "132262",
         "content_type_id": "38",
@@ -684839,7 +686414,7 @@
         "상설시장"
       ],
       "region": "태안군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "※ 점포별로 상이함",
       "provenance": {
         "content_id": "1906813",
         "content_type_id": "38",
@@ -684872,7 +686447,7 @@
         "상설시장"
       ],
       "region": "태안군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2762850",
         "content_type_id": "38",
@@ -684905,7 +686480,7 @@
         "5일장"
       ],
       "region": "서천군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "132263",
         "content_type_id": "38",
@@ -684938,7 +686513,7 @@
         "5일장"
       ],
       "region": "당진시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~18:00 <br>※ 점포별로 상이함",
       "provenance": {
         "content_id": "132485",
         "content_type_id": "38",
@@ -685260,7 +686835,7 @@
         "육상 레포츠"
       ],
       "region": "경주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "- 평일 09:00~22:00<br>- 주말 09:00~18:00",
       "provenance": {
         "content_id": "131885",
         "content_type_id": "28",
@@ -685292,7 +686867,7 @@
         "육상 레포츠"
       ],
       "region": "경주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "홈페이지 참조",
       "provenance": {
         "content_id": "131702",
         "content_type_id": "28",
@@ -685856,11 +687431,42 @@
           "lat": 35.9717869769,
           "lng": 128.4852001181
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 1,
+            "open_min": 600,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 600,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 600,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 600,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 600,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 600,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -685868,7 +687474,7 @@
         "육상 레포츠"
       ],
       "region": "칠곡군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "10:00~18:00",
       "provenance": {
         "content_id": "3510366",
         "content_type_id": "28",
@@ -685984,11 +687590,47 @@
           "lat": 37.078564792,
           "lng": 129.281752875
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 0,
+            "close_min": 1440
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 0,
+            "close_min": 1440
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -685996,7 +687638,7 @@
         "육상 레포츠"
       ],
       "region": "울진군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "상시 개방",
       "provenance": {
         "content_id": "802388",
         "content_type_id": "28",
@@ -686156,7 +687798,7 @@
         "육상 레포츠"
       ],
       "region": "경주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "홈페이지 확인 및 전화 문의 요망",
       "provenance": {
         "content_id": "131760",
         "content_type_id": "28",
@@ -686240,11 +687882,47 @@
           "lat": 36.6432761437,
           "lng": 128.1299822185
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1080
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1080
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -686252,7 +687930,7 @@
         "육상 레포츠"
       ],
       "region": "문경시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "131789",
         "content_type_id": "28",
@@ -686540,7 +688218,7 @@
         "육상 레포츠"
       ],
       "region": "영천시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "[3월~10월]<br>- 09:30~17:00 (점심시간 12:00~13:00)<br>[11월~2월]<br>- 09:30~16:30 (점심시간 12:00~13:00)",
       "provenance": {
         "content_id": "2606234",
         "content_type_id": "28",
@@ -687904,11 +689582,47 @@
           "lat": 37.5053516683,
           "lng": 130.913955771
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 480,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 480,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 480,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 480,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 480,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 480,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 480,
+            "close_min": 1020
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -687916,7 +689630,7 @@
         "수상 레포츠"
       ],
       "region": "울릉군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~17:00",
       "provenance": {
         "content_id": "1200671",
         "content_type_id": "28",
@@ -689101,7 +690815,7 @@
         "5일장"
       ],
       "region": "경주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2756602",
         "content_type_id": "38",
@@ -689134,7 +690848,7 @@
         "5일장"
       ],
       "region": "영덕군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132114",
         "content_type_id": "38",
@@ -689167,7 +690881,7 @@
         "상설시장"
       ],
       "region": "경주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "990539",
         "content_type_id": "38",
@@ -689200,7 +690914,7 @@
         "상설시장"
       ],
       "region": "구미시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "05:00~18:00",
       "provenance": {
         "content_id": "2736735",
         "content_type_id": "38",
@@ -689233,7 +690947,7 @@
         "상설시장"
       ],
       "region": "구미시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "※ 점포 별로 상이함",
       "provenance": {
         "content_id": "132103",
         "content_type_id": "38",
@@ -689266,7 +690980,7 @@
         "상설시장"
       ],
       "region": "구미시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "※ 점포 별로 상이함",
       "provenance": {
         "content_id": "2762718",
         "content_type_id": "38",
@@ -689299,7 +691013,7 @@
         "상설시장"
       ],
       "region": "포항시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "2762552",
         "content_type_id": "38",
@@ -689332,7 +691046,7 @@
         "5일장"
       ],
       "region": "청도군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132360",
         "content_type_id": "38",
@@ -689365,7 +691079,7 @@
         "상설시장"
       ],
       "region": "영덕군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2770991",
         "content_type_id": "38",
@@ -689397,7 +691111,7 @@
         "쇼핑"
       ],
       "region": "문경시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00",
       "provenance": {
         "content_id": "1963169",
         "content_type_id": "38",
@@ -689430,7 +691144,7 @@
         "상설시장"
       ],
       "region": "포항시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "2762556",
         "content_type_id": "38",
@@ -689450,11 +691164,47 @@
           "lat": 36.4161036345,
           "lng": 128.2126257201
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 480,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 480,
+            "close_min": 1140
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -689462,7 +691212,7 @@
         "쇼핑"
       ],
       "region": "상주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "08:00~19:00",
       "provenance": {
         "content_id": "1972429",
         "content_type_id": "38",
@@ -689495,7 +691245,7 @@
         "5일장"
       ],
       "region": "상주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~19:00 (상점 별 상이)",
       "provenance": {
         "content_id": "132280",
         "content_type_id": "38",
@@ -689528,7 +691278,7 @@
         "5일장"
       ],
       "region": "구미시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~18:00 <br>※ 재료 소진시 마감",
       "provenance": {
         "content_id": "132355",
         "content_type_id": "38",
@@ -689561,7 +691311,7 @@
         "상설시장"
       ],
       "region": "구미시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2736732",
         "content_type_id": "38",
@@ -689594,7 +691344,7 @@
         "전문매장/상가"
       ],
       "region": "경주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "2753446",
         "content_type_id": "38",
@@ -689627,7 +691377,7 @@
         "5일장"
       ],
       "region": "영천시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132117",
         "content_type_id": "38",
@@ -689647,11 +691397,47 @@
           "lat": 36.5635463469,
           "lng": 128.724964862
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 540,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 540,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 540,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 540,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 540,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 540,
+            "close_min": 1140
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 540,
+            "close_min": 1140
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -689659,7 +691445,7 @@
         "쇼핑"
       ],
       "region": "안동시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "09:00~19:00",
       "provenance": {
         "content_id": "1980980",
         "content_type_id": "38",
@@ -689692,7 +691478,7 @@
         "5일장"
       ],
       "region": "칠곡군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "132122",
         "content_type_id": "38",
@@ -689725,7 +691511,7 @@
         "상설시장"
       ],
       "region": "포항시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "2762716",
         "content_type_id": "38",
@@ -689745,7 +691531,43 @@
           "lat": 36.9363128713,
           "lng": 128.9138704602
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 0,
+            "open_min": 420,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 1,
+            "open_min": 420,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 420,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 3,
+            "open_min": 420,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 420,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 420,
+            "close_min": 1020
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 420,
+            "close_min": 1020
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
@@ -689758,7 +691580,7 @@
         "5일장"
       ],
       "region": "봉화군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "07:00~17:00 (점포별 상이함)",
       "provenance": {
         "content_id": "132173",
         "content_type_id": "38",
@@ -689791,7 +691613,7 @@
         "5일장"
       ],
       "region": "영덕군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132283",
         "content_type_id": "38",
@@ -689824,7 +691646,7 @@
         "5일장"
       ],
       "region": "영양군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이함",
       "provenance": {
         "content_id": "132284",
         "content_type_id": "38",
@@ -689844,11 +691666,37 @@
           "lat": 36.0395569145,
           "lng": 129.3655901454
         },
-        "open_hours": [],
+        "open_hours": [
+          {
+            "day_of_week": 1,
+            "open_min": 1080,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 2,
+            "open_min": 1080,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 4,
+            "open_min": 1080,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 5,
+            "open_min": 1080,
+            "close_min": 1320
+          },
+          {
+            "day_of_week": 6,
+            "open_min": 1080,
+            "close_min": 1320
+          }
+        ],
         "avg_cost": null,
         "rating": null,
         "saved_count": 0,
-        "quality": "PARTIAL",
+        "quality": "FULL",
         "source": "PLACES_API",
         "confidence": null
       },
@@ -689857,7 +691705,7 @@
         "상설시장"
       ],
       "region": "포항시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "금요일~일요일 18:00~22:00<br>※ 매년 8월 중순~9월 말까지 개장",
       "provenance": {
         "content_id": "2738035",
         "content_type_id": "38",
@@ -689890,7 +691738,7 @@
         "5일장"
       ],
       "region": "영천시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "07:00~21:00<br>※ 단, 점포 별로 상이할 수 있음",
       "provenance": {
         "content_id": "2756110",
         "content_type_id": "38",
@@ -689923,7 +691771,7 @@
         "상설시장"
       ],
       "region": "예천군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2737990",
         "content_type_id": "38",
@@ -689956,7 +691804,7 @@
         "5일장"
       ],
       "region": "칠곡군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132123",
         "content_type_id": "38",
@@ -690022,7 +691870,7 @@
         "5일장"
       ],
       "region": "울진군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2772341",
         "content_type_id": "38",
@@ -690055,7 +691903,7 @@
         "5일장"
       ],
       "region": "의성군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132286",
         "content_type_id": "38",
@@ -690088,7 +691936,7 @@
         "5일장"
       ],
       "region": "포항시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "132367",
         "content_type_id": "38",
@@ -690121,7 +691969,7 @@
         "5일장"
       ],
       "region": "구미시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "- 상설시장 09:00~20:00 <br>- 오일장 06:00~14:00<br>※ 점포별 상이함",
       "provenance": {
         "content_id": "132356",
         "content_type_id": "38",
@@ -690154,7 +692002,7 @@
         "5일장"
       ],
       "region": "문경시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별 상이",
       "provenance": {
         "content_id": "2912191",
         "content_type_id": "38",
@@ -690187,7 +692035,7 @@
         "상설시장"
       ],
       "region": "울진군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2737989",
         "content_type_id": "38",
@@ -690220,7 +692068,7 @@
         "5일장"
       ],
       "region": "청도군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132358",
         "content_type_id": "38",
@@ -690253,7 +692101,7 @@
         "5일장"
       ],
       "region": "청송군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "132287",
         "content_type_id": "38",
@@ -690286,7 +692134,7 @@
         "5일장"
       ],
       "region": "포항시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132371",
         "content_type_id": "38",
@@ -690319,7 +692167,7 @@
         "상설시장"
       ],
       "region": "포항시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "2762562",
         "content_type_id": "38",
@@ -690352,7 +692200,7 @@
         "상설시장"
       ],
       "region": "포항시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "2913013",
         "content_type_id": "38",
@@ -690385,7 +692233,7 @@
         "5일장"
       ],
       "region": "청도군",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포별로 상이함",
       "provenance": {
         "content_id": "132359",
         "content_type_id": "38",
@@ -690418,7 +692266,7 @@
         "5일장"
       ],
       "region": "영주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132118",
         "content_type_id": "38",
@@ -690451,7 +692299,7 @@
         "5일장"
       ],
       "region": "상주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132108",
         "content_type_id": "38",
@@ -690484,13 +692332,77 @@
         "5일장"
       ],
       "region": "상주시",
-      "opening_hours_raw": null,
+      "opening_hours_raw": "점포 별로 상이함",
       "provenance": {
         "content_id": "132110",
         "content_type_id": "38",
         "address": "경상북도 상주시 화서면 화령남6길 7",
         "image_url": "http://tong.visitkorea.or.kr/cms/resource/37/3567437_image2_1.jpg",
         "modified_time": "20251117131021"
+      }
+    },
+    {
+      "provisional_id": "tourapi-2729547",
+      "source": "TOURAPI",
+      "poi": {
+        "poi_id": "tourapi-2729547",
+        "name": "오션포레",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.0571522988,
+          "lng": 128.3907888244
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null
+      },
+      "tags": [
+        "육상 레포츠"
+      ],
+      "region": "고성군",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "2729547",
+        "content_type_id": "28",
+        "address": "경상남도 고성군 회화면 회진로 321",
+        "image_url": "http://tong.visitkorea.or.kr/cms/resource/59/2729359_image2_1.JPG",
+        "modified_time": "20250102145528"
+      }
+    },
+    {
+      "provisional_id": "tourapi-2731139",
+      "source": "TOURAPI",
+      "poi": {
+        "poi_id": "tourapi-2731139",
+        "name": "옥샘캠프촌",
+        "category": "ACTIVITY",
+        "coord": {
+          "lat": 35.5788903357,
+          "lng": 128.9693907207
+        },
+        "open_hours": [],
+        "avg_cost": null,
+        "rating": null,
+        "saved_count": 0,
+        "quality": "PARTIAL",
+        "source": "PLACES_API",
+        "confidence": null
+      },
+      "tags": [
+        "육상 레포츠"
+      ],
+      "region": "밀양시",
+      "opening_hours_raw": null,
+      "provenance": {
+        "content_id": "2731139",
+        "content_type_id": "28",
+        "address": "경상남도 밀양시 산내면 얼음골옛길 197-4",
+        "image_url": "http://tong.visitkorea.or.kr/cms/resource/58/2731458_image2_1.jpg",
+        "modified_time": "20250902092843"
       }
     }
   ]
