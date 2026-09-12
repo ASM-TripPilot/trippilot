@@ -25,6 +25,11 @@ import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.ReplanCurrentSlot
+import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
+import com.trippilot.placedata.api.SavedPlaceLookupFacade
+import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
@@ -49,6 +54,9 @@ class ReplanFacadeService(
     private val baseAnchors: BaseAnchorFacade,
     private val revisions: ItineraryRevisionService,
     private val changeLogs: ChangeLogFacade,
+    private val preferences: PreferenceFacade,
+    private val personalization: PersonalizationPort,
+    private val savedPlaces: SavedPlaceLookupFacade,
     private val clock: Clock,
 ) : ReplanFacade {
 
@@ -60,6 +68,12 @@ class ReplanFacadeService(
         val ctx = trips.findGenerationContext(command.accountId, command.tripId) ?: throw ResourceNotFound()
         // 기준점이 없으면 상대가 후보 풀을 매달 곳이 없다 — 숙소 앵커로 채운다(BR-U4-19 사다리의 마지막 단).
         val origin = groundingPoint(command, ctx)
+        // 취향은 생성 경로와 **같은 척도**로 만든다(PreferenceProfiles KDoc) — §2 이탈 2건은 의도다:
+        // 원천을 trip.preference_snapshot(클라이언트 자유 맵, 타입 보증 없음) 대신 계정 스냅숏+개인화로,
+        // 예산 등급을 trip.budget_total 변환 대신 preference_set.budget_tier(경계 계약 어휘)로.
+        // 두 경로가 다른 취향으로 돌면 "원래 자리보다 나은 것만 바꾼다"(§4) 비교가 성립하지 않는다.
+        val prefs = preferences.findPreferences(command.accountId)
+        val profile = prefs.toProfile(personalization.hintsFor(command.accountId))
         val output = scheduleAgent.replan(
             ReplanInput(
                 tripId = command.tripId,
@@ -75,6 +89,14 @@ class ReplanFacadeService(
                 directives = command.directives,
                 freeText = command.freeText,
                 excludedPoiIds = command.excludedPoiIds,
+                companionType = ctx.companionType,
+                budgetLevel = prefs.budgetTier,
+                preferenceProfile = profile,
+                // 원 일정 슬롯 — KB-1 컨텍스트이자 후보 풀 합류 대상(§4). 대상 일자만.
+                currentSlots = current.days.firstOrNull { it.date == command.targetDate }?.slots.orEmpty().map {
+                    ReplanCurrentSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.placementReason)
+                },
+                savedPlaces = this.savedPlaces.findSaved(command.accountId).map { SavedPlaceRef(it.poiId, it.nameKo) },
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), REPLAN_DEADLINE_MS),
             ),
         )

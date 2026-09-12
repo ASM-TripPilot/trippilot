@@ -159,6 +159,11 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
                 originLat = 33.45, originLng = 126.56, lockedBlocks = listOf(FixedBlock(poi, today, LocalTime.parse("09:00"), 60)),
                 reasons = listOf("비가 와요"), directives = listOf("실내로"), freeText = null,
                 excludedPoiIds = emptyList(),
+                companionType = "친구", budgetLevel = "MID",
+                preferenceProfile = PreferenceProfile(
+                    listOf("미식"), listOf("야경"), listOf("한식"), listOf("렌터카"), "알차게", listOf("친구"), false, "표준",
+                ),
+                currentSlots = emptyList(), savedPlaces = emptyList(),
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 10_000L),
             ),
         )

@@ -13,11 +13,18 @@ import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
+import com.trippilot.itinerarygeneration.domain.PersonalizationHints
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.placedata.api.SavedPlaceItem
+import com.trippilot.placedata.api.SavedPlaceLookupFacade
+import com.trippilot.profile.api.PreferenceFacade
+import com.trippilot.profile.api.PreferenceSnapshot
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.itinerarygeneration.domain.ReplanInput
+import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -123,6 +130,23 @@ class ReplanFacadeServiceTest : StringSpec({
         override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = emptyList<DayAnchorView>()
     }
 
+    // 취향은 **중립이 아닌 값**으로 둔다 — "중립으로 덮지 않는다"(B-1)를 단정하려면 구분되는 값이 필요하다.
+    val prefs = PreferenceSnapshot(
+        styles = listOf("미식"), activities = listOf("야경"), foodTastes = listOf("한식"),
+        transportModes = listOf("렌터카"), pace = "알차게", companionTypes = listOf("친구"),
+        petFriendly = false, budgetTier = "MID",
+    )
+    val preferences = object : PreferenceFacade {
+        override fun findPreferences(accountId: UUID) = prefs
+    }
+    val noHints = object : PersonalizationPort {
+        override fun hintsFor(accountId: UUID) = PersonalizationHints.NONE
+    }
+    val savedPoi = UUID.randomUUID()
+    val savedStub = object : SavedPlaceLookupFacade {
+        override fun findSaved(accountId: UUID) = listOf(SavedPlaceItem(savedPoi, "성산일출봉"))
+    }
+
     /** 리비전 서비스를 **한 번만** 만들어 공유한다 — 다시 만들면 다른 저장소를 보게 되어 비교가 어긋난다. */
     class Fx(
         val svc: ReplanFacadeService,
@@ -135,7 +159,7 @@ class ReplanFacadeServiceTest : StringSpec({
         repo.byTrip[trip] = itinerary()
         val revisions = genRevisions(repo, replanTrips, clock)
         val changeLogs = CapturingChangeLogs()
-        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, changeLogs, clock), repo, revisions, changeLogs)
+        return Fx(ReplanFacadeService(replanTrips, repo, agent, noAnchors, revisions, changeLogs, preferences, noHints, savedStub, clock), repo, revisions, changeLogs)
     }
 
     fun command(fullDay: Boolean = false, completed: List<String> = emptyList()) = ReplanCommand(
@@ -293,6 +317,23 @@ class ReplanFacadeServiceTest : StringSpec({
         )
 
         ReplanProposal.fromMap(original.toMap()) shouldBe original
+    }
+
+    "재계획 요청이 실제 취향·동반·예산·원 일정·담은 장소를 싣는다 — 중립으로 덮지 않는다(B-1)" {
+        val agent = Agent(proposal(replacement))
+        val svc = fixture(agent).svc
+
+        svc.propose(command())
+
+        val sent = agent.inputs.single()
+        sent.preferenceProfile.styles shouldBe listOf("미식")
+        sent.preferenceProfile.budgetTier shouldBe "MID"
+        sent.companionType shouldBe "친구"
+        sent.budgetLevel shouldBe "MID"
+        // 원 일정은 대상 일자 전체 — KB-1 컨텍스트이자 후보 풀 합류 대상(설계 §4).
+        sent.currentSlots.map { it.poiId } shouldBe listOf(morning, fixedNoon, evening)
+        sent.currentSlots.first { it.poiId == fixedNoon }.isFixed shouldBe true
+        sent.savedPlaces shouldBe listOf(SavedPlaceRef(savedPoi, "성산일출봉"))
     }
 
     "잠근 채 이어받은 슬롯만 원본의 위반 표시를 상속한다 — 재배치 슬롯은 새로 푼 것이다" {
