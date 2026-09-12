@@ -5,6 +5,7 @@ paths:
 ---
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.
 (전역 불변식 INV-3 "소요시간 비표시, 거리만"은 코어 `repo-traps.md`에 남아 무조건 로드된다.)
+⚠️ 이 파일의 `h09`·`h10`·`h11`·`h12`·`h20`·`h25`·`h37` 같은 h 코드는 **코드 라우트·프리뷰 키가 쓰는 옛 Figma 코드**다. 라이브 Figma h 밴드는 2026-09-11에 h01~h17로 재번호됐다 — 대조는 `spec-perception/reference/figma-structure.md`의 매핑 포인터로.
 
 ## itinerary
 
