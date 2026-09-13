@@ -1,5 +1,14 @@
 import type { CompanionType } from '@/shared/api/generated/schemas';
 
+// TRIP-808 — dayOfWeek·formatDateRange 본체는 entities/trip/lib 로 바이트 이관됐다(807 formatPrice
+// 선례). dayOfWeek 는 아래 daysUntilSaturday(presetRange)가 쓰므로 import 로 끌어와 재수출까지 겸하고,
+// formatDateRange 는 재수출만 한다 — 옛 경로를 무는 무수정 소비처·테스트(tripWizardStep1.test·baseSections)가
+// 그대로 green.
+import {
+  dayOfWeek,
+  formatDateRange,
+} from '@/entities/trip/lib/formatTripPeriod';
+
 /**
  * 위저드 1/2 화면이 쓰는 순수 함수 — 기간 프리셋 → 날짜 범위 계산, 날짜 표시 포맷,
  * 프리셋·동반 유형 코드표(TRIP-205). 화면·스토어·서버를 모른다.
@@ -10,6 +19,9 @@ import type { CompanionType } from '@/shared/api/generated/schemas';
  * 프리셋 계산 규칙 자체는 정본에 없다(BR-U1-36은 "자동 채우되 수정 가능"만 말한다) — 아래
  * 규칙은 이 칸이 정한 것이고, 게이트①에서 뒤집히면 이 파일의 계산만 바꾸면 된다(02a §2.3).
  */
+
+// 이관된 두 함수를 옛 경로로 계속 내준다(dayOfWeek 는 내부 daysUntilSaturday 도 이 바인딩을 쓴다).
+export { dayOfWeek, formatDateRange };
 
 export type PeriodPresetCode =
   'this-weekend' | 'next-weekend' | '1n2d' | '3n4d';
@@ -88,13 +100,6 @@ export function fromEpochDay(epochDay: number): string {
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
-/** 기준일 에포크의 요일(0=일요일 … 6=토요일). 에포크 0(1970-01-01)이 목요일이라는 사실
- * 하나로 `new Date().getDay()` 없이 요일을 얻는다. TRIP-664 `tripSummary`가 요일 삽입에
- * 재사용(base 0=목 실측이 실제 달력과 일치 — 4벌째 요일 계산기 재구현 회피, rung2). */
-export function dayOfWeek(epochDay: number): number {
-  return ((epochDay % 7) + 7 + 4) % 7;
-}
-
 /** 기준일 당일부터 이번 주 토요일까지 남은 일수. 토요일 당일이면 0. */
 function daysUntilSaturday(epochDay: number): number {
   return (6 - dayOfWeek(epochDay) + 7) % 7;
@@ -135,20 +140,4 @@ export function presetRange(
  */
 export function deriveEndDate(startDate: string, nights: number): string {
   return fromEpochDay(toEpochDay(startDate) + nights);
-}
-
-function formatMonthDay(date: string): string {
-  const [, month, day] = date.split('-').map(Number);
-  return `${month}월 ${day}일`;
-}
-
-/** '6월 10일 – 6월 13일'(en dash, U+2013 — Figma `dateF` 실측 그대로, 하이픈이 아니다).
- * 한쪽이라도 없으면 화면이 자리표시 문구를 그릴 수 있도록 `null`을 돌려준다(빈 문자열이
- * 아니다 — "미선택"과 "빈 문자열"은 다른 뜻이다). */
-export function formatDateRange(
-  startDate?: string,
-  endDate?: string
-): string | null {
-  if (startDate === undefined || endDate === undefined) return null;
-  return `${formatMonthDay(startDate)} – ${formatMonthDay(endDate)}`;
 }

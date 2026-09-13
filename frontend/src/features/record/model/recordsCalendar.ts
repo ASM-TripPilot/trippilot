@@ -1,11 +1,14 @@
 import type { Trip } from '@/shared/api/generated/schemas';
 import { buildMonthGrid, isDateInRange } from '@/shared/date/monthGrid';
+import { formatTripDateRange } from '@/entities/trip/lib/formatTripPeriod';
+import { nightsLabel } from '@/entities/trip/lib/formatNights';
+import type { PastTripCardVM } from '@/entities/trip/model';
 
 /**
  * TRIP-575 · j07 여행 캘린더 도메인 순수 함수. `useGetTrips()`가 준 `Trip[]`을 화면 재료로 접는다:
  *  1) 그 달에 마킹할 날 집합(복수 여행 모두, BR-U5-49),
  *  2) 지난 여행 카드 목록(status ENDED 또는 endDate<오늘, endDate 최신순, US-REC-14),
- *  3) 카드 라벨(날짜범위 + 박수).
+ *  3) 카드 라벨(날짜범위 + 박수 — TRIP-808 로 entities/trip/lib 에 바이트 이관, 여기선 위임·재수출).
  * 시계·네트워크·화면을 모른다 — 오늘 날짜는 문자열로 주입받는다. 월 그리드 수학은 재구현하지 않고
  * `@/shared/date`(monthGrid)를 경유한다(맹점② — stay/trip 두 벌 직접 import 금지, 세 벌째 금지).
  *
@@ -14,21 +17,10 @@ import { buildMonthGrid, isDateInRange } from '@/shared/date/monthGrid';
  * (가짜 "0박"·가짜 날짜 금지).
  */
 
-const MS_PER_DAY = 86_400_000;
-/** 카드 라벨 구분자 — en dash(U+2013, 리포 `baseScreen`·`baseSections` 관례). */
-const DASH = '–';
-
-export interface PastTripCardVM {
-  tripId: string;
-  title: string;
-  dateRangeLabel: string | null;
-  nightsLabel: string | null;
-}
-
-function epochDay(date: string): number {
-  const [year, month, day] = date.split('-').map(Number);
-  return Math.round(Date.UTC(year, month - 1, day) / MS_PER_DAY);
-}
+// 이관된 카드 라벨 포맷터·뷰모델 재수출(807 formatPrice 선례) — frozen recordsCalendar.test·PastTripList 가
+// 옛 경로로 계속 가져다 쓰고, buildPastTripCards 도 이 로컬 바인딩을 그대로 호출한다.
+export { formatTripDateRange, nightsLabel };
+export type { PastTripCardVM };
 
 /** 안전한 배열로 접는다(null/undefined → []). */
 function safeList(trips: readonly (Trip | null)[] | null | undefined): Trip[] {
@@ -82,32 +74,4 @@ export function buildPastTripCards(
       ),
       nightsLabel: nightsLabel(trip.startDate ?? null, trip.endDate ?? null),
     }));
-}
-
-/**
- * 카드 날짜범위 라벨. 같은 달/같은 해는 뒤쪽 연(·월)을 접고, 다른 해면 양쪽 다 표기한다.
- *  같은 달  '2026.5.1–5.3' · 같은 해 '2026.5.30–6.2' · 다른 해 '2026.12.30–2027.1.2'.
- * 한쪽이라도 null 이면 못 만들어 null(가짜 날짜 금지).
- */
-export function formatTripDateRange(
-  start: string | null,
-  end: string | null
-): string | null {
-  if (start === null || end === null) return null;
-  const [sy, sm, sd] = start.split('-').map(Number);
-  const [ey, em, ed] = end.split('-').map(Number);
-  const head = `${sy}.${sm}.${sd}`;
-  if (sy !== ey) return `${head}${DASH}${ey}.${em}.${ed}`;
-  return `${head}${DASH}${em}.${ed}`;
-}
-
-/** 'N박 M일' 라벨. nights<=0(같은날·역전)이거나 null 이면 null(가짜 "0박" 금지). */
-export function nightsLabel(
-  start: string | null,
-  end: string | null
-): string | null {
-  if (start === null || end === null) return null;
-  const nights = epochDay(end) - epochDay(start);
-  if (nights <= 0) return null;
-  return `${nights}박 ${nights + 1}일`;
 }

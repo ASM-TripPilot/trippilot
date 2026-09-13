@@ -13,9 +13,13 @@ import type { DayCoverage } from '@/shared/api/generated/schemas';
  * 비는 것과 진행을 막는 것은 별개다 — 막을 권위는 `Coverage.blocked` 하나다(D16-b · INV-2).
  */
 
-/** 구간 라벨 구분자 — **en dash U+2013**. `baseSections.ts`가 박수 라벨에 쓰는 것과 같은
- * 문자이고, 하이픈과 눈으로 구분되지 않아 여기서도 상수로 이름을 붙인다. */
-const EN_DASH = '–';
+// TRIP-808 재수출 shim — formatSectionRange·formatTripRange 본체는 entities/trip/lib 로 바이트 이관됐다
+// (807 formatPrice 선례). 옛 경로(`@/features/trip/model/baseScreen`)를 무는 무수정 소비처·테스트
+// (baseScreen.test·(tabs)/index)가 그대로 green 이 되게 한 줄만 남긴다. unresolvedDaysView 는 여기 존치.
+export {
+  formatSectionRange,
+  formatTripRange,
+} from '@/entities/trip/lib/formatTripPeriod';
 
 /** 나열 상한(01b D16) — `blockedNotice`가 1줄 고정이라 넘치면 CTA를 밀어낸다. */
 const UNRESOLVED_LIMIT = 2;
@@ -24,23 +28,6 @@ const UNRESOLVED_LIMIT = 2;
 function monthDay(date: string): string {
   const [, month, day] = date.split('-');
   return `${Number(month)}/${Number(day)}`;
-}
-
-/** 구간 행 날짜 — `6/10–6/12`. */
-export function formatSectionRange(dateFrom: string, dateTo: string): string {
-  return `${monthDay(dateFrom)}${EN_DASH}${monthDay(dateTo)}`;
-}
-
-/** 섹션 부제 — `6월 10일–13일`. 같은 달이면 둘째 월을 생략한다(Figma 실측). 달을 넘는
- * 갈래(`6월 30일–7월 2일`)는 Figma가 그리지 않아 이 칸의 결정이다(02a §5-6 I-6). */
-export function formatTripRange(startDate: string, endDate: string): string {
-  const [, startMonth, startDay] = startDate.split('-');
-  const [, endMonth, endDay] = endDate.split('-');
-  const tail =
-    startMonth === endMonth
-      ? `${Number(endDay)}일`
-      : `${Number(endMonth)}월 ${Number(endDay)}일`;
-  return `${Number(startMonth)}월 ${Number(startDay)}일${EN_DASH}${tail}`;
 }
 
 export interface UnresolvedDaysView {

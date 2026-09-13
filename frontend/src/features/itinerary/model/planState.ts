@@ -14,7 +14,11 @@ import type {
  * 무해하지만 UTC-x(CI)에선 하루가 밀린다.
  */
 
-const MS_PER_DAY = 86_400_000;
+// TRIP-808 재수출 shim — formatNightsLabel·formatConfirmedDateRange 본체는 entities/trip/lib 로 바이트
+// 이관됐다(807 formatPrice 선례). 옛 경로(`@/features/itinerary/model/planState`)를 무는 무수정 소비처·
+// 테스트(planState.test·TripCardContainer·(tabs)/index)가 그대로 green 이 되게 한 줄씩만 남긴다.
+export { formatNightsLabel } from '@/entities/trip/lib/formatNights';
+export { formatConfirmedDateRange } from '@/entities/trip/lib/formatTripPeriod';
 
 export type PlanState =
   | { kind: 'loading' }
@@ -26,13 +30,6 @@ export interface PlanDayTab {
   dayIndex: number;
   date: string;
   count: number;
-}
-
-/** `'YYYY-MM-DD'` → UTC 자정의 밀리초. 형식이 아니면 `NaN` — 호출부가 빈 결과로 갈라낸다. */
-function utcDayTime(date: string): number {
-  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (parts === null) return Number.NaN;
-  return Date.UTC(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
 }
 
 /**
@@ -122,43 +119,6 @@ export function itineraryDestinationHref(
     case 'plan':
       return `/trips/${tripId}/itinerary`;
   }
-}
-
-/** `'YYYY-MM-DD'` 두 개 → `'N박 M일'`. 형식이 아니거나 끝이 시작보다 앞서면 빈 문자열. */
-export function formatNightsLabel(startDate: string, endDate: string): string {
-  const start = utcDayTime(startDate);
-  const end = utcDayTime(endDate);
-  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return '';
-
-  const nights = Math.round((end - start) / MS_PER_DAY);
-  return `${nights}박 ${nights + 1}일`;
-}
-
-/**
- * `'YYYY-MM-DD'` 두 개 → 확정 배너 날짜범위(TRIP-300 · D3). 같은 달이면 끝 날짜의 월을 빼
- * `'6월 10일 – 13일'`, 달이 바뀌면 양쪽 월을 넣어 `'6월 30일 – 7월 2일'`. 연도는 표기하지 않는다.
- * 구분자는 en-dash `–`(U+2013) 앞뒤 공백. 형식이 아니거나 역방향이면 `formatNightsLabel` 과 같은
- * 가드로 빈 문자열이다. 월·일은 `getUTC*` 로 읽는다 — `utcDayTime` 이 UTC 자정이라 UTC-x(CI)에서도
- * 안 밀린다.
- */
-export function formatConfirmedDateRange(
-  startDate: string,
-  endDate: string
-): string {
-  const start = utcDayTime(startDate);
-  const end = utcDayTime(endDate);
-  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return '';
-
-  const startAt = new Date(start);
-  const endAt = new Date(end);
-  const startMonth = startAt.getUTCMonth() + 1;
-  const endMonth = endAt.getUTCMonth() + 1;
-  const head = `${startMonth}월 ${startAt.getUTCDate()}일`;
-  const tail =
-    startMonth === endMonth
-      ? `${endAt.getUTCDate()}일`
-      : `${endMonth}월 ${endAt.getUTCDate()}일`;
-  return `${head} – ${tail}`;
 }
 
 /** 날짜탭 메타 — `dayIndex` 는 1부터, `count` 는 각 날의 슬롯 수. */

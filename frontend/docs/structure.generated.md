@@ -29,6 +29,8 @@
 - `src/__tests__/entitiesPlaceStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesStayConsumers.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesStayStructure.test.ts`  →  (export 없음)
+- `src/__tests__/entitiesTripConsumers.test.ts`  →  (export 없음)
+- `src/__tests__/entitiesTripStructure.test.ts`  →  (export 없음)
 - `src/__tests__/executionDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/exploreLandingAxisRemoval.test.ts`  →  (export 없음)
 - `src/__tests__/fsdLayerStructure.test.ts`  →  (export 없음)
@@ -275,6 +277,18 @@
 - `src/entities/stay/ui/SavedStayCard.tsx`  →  SavedStayCardProps · SavedStayCard
 - `src/entities/stay/ui/StaySearchCard.tsx`  →  StaySearchCardSave · StaySearchCardProps · StaySearchCard
 
+## src/entities/trip/lib/
+- `src/entities/trip/lib/formatNights.ts`  →  formatNightsLabel · nightsLabel · nightsCountLabel
+- `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatDateRangeWithDow
+
+## src/entities/trip/model/
+- `src/entities/trip/model/index.ts`  →  MyTripBadge · MyTripCardVM · PastTripCardVM
+
+## src/entities/trip/ui/
+- `src/entities/trip/ui/PastTripRow.tsx`  →  PastTripRowProps · PastTripRow
+- `src/entities/trip/ui/TripCard.tsx`  →  TripCardProps · TripCard
+- `src/entities/trip/ui/TripGlyphs.tsx`  →  ChevronRightGlyph
+
 ## src/features/auth/config/
 - `src/features/auth/config/gradients.ts`  →  SPLASH_BACKGROUND_COLORS · SPLASH_BACKGROUND_LOCATIONS · APP_ICON_COLORS · AUTH_ICON_COLORS
 - `src/features/auth/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
@@ -363,7 +377,7 @@
 - `src/features/itinerary/model/legDistance.ts`  →  legDistance
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · buildMustVisitPins · resolveMustVisitListView
 - `src/features/itinerary/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest
-- `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · formatNightsLabel · formatConfirmedDateRange · buildPlanDayTabs
+- `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs · formatNightsLabel · formatConfirmedDateRange
 - `src/features/itinerary/model/radiusUsedLabel.ts`  →  formatRadiusUsed
 - `src/features/itinerary/model/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
 - `src/features/itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
@@ -383,7 +397,7 @@
 - `src/features/itinerary/ui/MethodPickerScreen.tsx`  →  ActiveGeneration · MethodPickerScreenProps · MethodPickerScreen
 - `src/features/itinerary/ui/MustVisitPickerScreen.tsx`  →  MustVisitPickerScreenProps · MustVisitPickerScreen
 - `src/features/itinerary/ui/MustVisitTimeScreen.tsx`  →  MustVisitTimeScreenProps · MustVisitTimeScreen
-- `src/features/itinerary/ui/MyTripCard.tsx`  →  MyTripBadge · MyTripCardVM · MyTripCardProps · MyTripCard
+- `src/features/itinerary/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
 - `src/features/itinerary/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
 - `src/features/itinerary/ui/OptionSwapScreen.tsx`  →  OptionSwapScreenProps · OptionSwapScreen
 - `src/features/itinerary/ui/PinDetailSheet.tsx`  →  PinDetailSheetProps · PinDetailSheet
@@ -468,7 +482,7 @@
 - `src/features/record/model/conflict.ts`  →  ConflictChoice · ConflictSelection · ConflictRow · ConflictVisitVM · isVisitConflict
 - `src/features/record/model/photoAttach.ts`  →  photoAttach
 - `src/features/record/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
-- `src/features/record/model/recordsCalendar.ts`  →  PastTripCardVM · markedDaysOfMonth · buildPastTripCards · formatTripDateRange · nightsLabel
+- `src/features/record/model/recordsCalendar.ts`  →  markedDaysOfMonth · buildPastTripCards · formatTripDateRange · nightsLabel
 - `src/features/record/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
 - `src/features/record/model/syncQueue.ts`  →  SyncStatus · SyncQueueItem · ReplayExecutor · enqueue · replayQueue
 - `src/features/record/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
@@ -588,7 +602,7 @@
 - `src/features/stay/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
 
 ## src/features/trip/model/
-- `src/features/trip/model/baseScreen.ts`  →  formatSectionRange · formatTripRange · UnresolvedDaysView · unresolvedDaysView
+- `src/features/trip/model/baseScreen.ts`  →  UnresolvedDaysView · unresolvedDaysView · formatSectionRange · formatTripRange
 - `src/features/trip/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
 - `src/features/trip/model/budgetAmount.ts`  →  BudgetAmount · parseBudgetAmount · formatBudgetAmount
 - `src/features/trip/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest
@@ -597,7 +611,7 @@
 - `src/features/trip/model/tripDatePicker.ts`  →  daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · dateCell · TripDateRange · applyRangePick
 - `src/features/trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · nightsSum · validateTripDraft · toCompanionType
 - `src/features/trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences · summaryBudget
-- `src/features/trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · dayOfWeek · presetRange · deriveEndDate · formatDateRange
+- `src/features/trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · presetRange · deriveEndDate · dayOfWeek · formatDateRange
 - `src/features/trip/model/tripWizardStore.ts`  →  TripWizardField · TripWizardDraft · useTripWizardStore
 - `src/features/trip/model/useCreateTrip.ts`  →  useCreateTrip
 - `src/features/trip/model/usePreferencePrefill.ts`  →  usePreferencePrefill
@@ -1250,4 +1264,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 846개 파일
+합계 854개 파일
