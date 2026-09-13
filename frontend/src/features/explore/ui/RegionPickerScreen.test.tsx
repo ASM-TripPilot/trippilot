@@ -155,7 +155,9 @@ describe('AC-1b · 인기 여행지 가로 스트립 (TRIP-650)', () => {
 
     // 인기 스트립 + 시/도 카드(구/군 아님 — 드릴다운 불변식 유지). 인기 카드는 -popular- testID 라
     // 1단 시/도 행/선택 카드와 구분된다.
-    expect(screen.getByTestId('explore-region-popular-strip')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('explore-region-popular-strip')
+    ).toBeOnTheScreen();
     const card = screen.getByTestId('explore-region-popular-28'); // 인천광역시
     expect(card).toBeOnTheScreen();
 
