@@ -57,20 +57,6 @@
    "collected_at": "2026-08-21T14:21:54.532857+09:00"
   },
   {
-   "event_id": "evx-9112eec2313e2dc6",
-   "name": "무안황토갯벌축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-08-29",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 35.103524,
-    "lng": 126.3342858
-   },
-   "address": "무안군 해제면 무안황토갯벌랜드 일원",
-   "region": "전남",
-   "collected_at": "2026-08-21T14:21:54.532857+09:00"
-  },
-  {
    "event_id": "evx-882b84a429367d85",
    "name": "조숙진: 지나가는 자리",
    "event_type": "EXHIBITION",
@@ -78,17 +64,6 @@
    "end": "2026-11-15",
    "coord": null,
    "address": null,
-   "region": "서울",
-   "collected_at": "2026-08-21T14:21:54.532857+09:00"
-  },
-  {
-   "event_id": "evx-9dc18e64253af882",
-   "name": "2026 성북 책모꼬지 북페스티벌 [도서관 네트워크 ON, 성북을 밝히다]",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-06",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": "성북구청 앞 바람마당교",
    "region": "서울",
    "collected_at": "2026-08-21T14:21:54.532857+09:00"
   },
@@ -171,20 +146,6 @@
    },
    "address": "강원특별자치도 횡성군 횡성읍 북천리 221",
    "region": "강원",
-   "collected_at": "2026-08-21T14:38:25.206793+09:00"
-  },
-  {
-   "event_id": "evx-0dceef7c86f1273d",
-   "name": "괴산고추축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-03",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 36.8139066,
-    "lng": 127.7863217
-   },
-   "address": null,
-   "region": "충북",
    "collected_at": "2026-08-21T14:38:25.206793+09:00"
   },
   {
@@ -283,20 +244,6 @@
    "collected_at": "2026-08-21T14:38:25.206793+09:00"
   },
   {
-   "event_id": "evx-9969bbd663f80795",
-   "name": "둔덕포도한우축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-05",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 34.8344933069257,
-    "lng": 128.504736934706
-   },
-   "address": "53281 경남 거제시 둔덕면 하둔리 644-2 둔덕가족생활체육공원 일원",
-   "region": "경남",
-   "collected_at": "2026-08-21T14:38:25.206793+09:00"
-  },
-  {
    "event_id": "evx-e23323b8d03e6473",
    "name": "감악산 꽃별여행",
    "event_type": "FESTIVAL",
@@ -346,17 +293,6 @@
     "lng": 127.159411792839
    },
    "address": "전북특별자치도 전주시 완산구 전주천동로 20 (교동)",
-   "region": "전북",
-   "collected_at": "2026-08-21T14:38:25.206793+09:00"
-  },
-  {
-   "event_id": "evx-dbc5a0e57c5fc077",
-   "name": "제63회 전북자치도민체육대회",
-   "event_type": "OTHER",
-   "start": "2026-09-04",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
    "region": "전북",
    "collected_at": "2026-08-21T14:38:25.206793+09:00"
   },
@@ -474,20 +410,6 @@
    "end": "2026-09-12",
    "coord": null,
    "address": "수원월드컵경기장",
-   "region": "경기",
-   "collected_at": "2026-08-21T14:48:04.932422+09:00"
-  },
-  {
-   "event_id": "evx-53034c2fbb4a8ddc",
-   "name": "제12회 화성송산포도축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-05",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 37.1164003,
-    "lng": 126.6874745
-   },
-   "address": "화성에코팜테마파크 일원",
    "region": "경기",
    "collected_at": "2026-08-21T14:48:04.932422+09:00"
   },
@@ -644,20 +566,6 @@
    "collected_at": "2026-08-24T04:49:33.626588+09:00"
   },
   {
-   "event_id": "evx-1d45dd22aed727a7",
-   "name": "달성가족문화축제 YES! 키즈존",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-05",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 35.6866551363345,
-    "lng": 128.465761685912
-   },
-   "address": "대구광역시 달성군 유가읍 테크노대로6길 20",
-   "region": "대구",
-   "collected_at": "2026-08-24T04:49:33.626588+09:00"
-  },
-  {
    "event_id": "evx-e215748c68528563",
    "name": "광주김치축제",
    "event_type": "FESTIVAL",
@@ -691,17 +599,6 @@
    "coord": null,
    "address": "충남 홍성군 서부면 남당항 일원",
    "region": "충남",
-   "collected_at": "2026-08-24T04:49:33.626588+09:00"
-  },
-  {
-   "event_id": "evx-8c8cc1a9fdf5d727",
-   "name": "왜관 홀리 페스티벌",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-04",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "경북",
    "collected_at": "2026-08-24T04:49:33.626588+09:00"
   },
   {
@@ -768,20 +665,6 @@
    "coord": null,
    "address": null,
    "region": "충북",
-   "collected_at": "2026-08-25T01:00:52.937258+09:00"
-  },
-  {
-   "event_id": "evx-f8a7f5cb72dc7e68",
-   "name": "제4회 태안한우 꽃지왔소 축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-04",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 36.5019027303494,
-    "lng": 126.337078551741
-   },
-   "address": null,
-   "region": "충남",
    "collected_at": "2026-08-25T01:00:52.937258+09:00"
   },
   {
@@ -976,48 +859,6 @@
    "collected_at": "2026-08-26T04:58:05.910208+09:00"
   },
   {
-   "event_id": "evx-1752daaefa2eaab7",
-   "name": "제26회 한국지능로봇경진대회",
-   "event_type": "OTHER",
-   "start": "2026-09-05",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 36.006471954251566,
-    "lng": 129.36151187808446
-   },
-   "address": "포항종합운동장 만인당",
-   "region": "경북",
-   "collected_at": "2026-08-26T04:58:05.910208+09:00"
-  },
-  {
-   "event_id": "evx-9d386cad20edf8eb",
-   "name": "제22회 포항가족과학축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-05",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 36.006471954251566,
-    "lng": 129.36151187808446
-   },
-   "address": "포항종합운동장 만인당",
-   "region": "경북",
-   "collected_at": "2026-08-26T04:58:05.910208+09:00"
-  },
-  {
-   "event_id": "evx-b14ffac49629f0e0",
-   "name": "제25회 마산어시장축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-04",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 35.2011655508912,
-    "lng": 128.57580688069
-   },
-   "address": "경남 창원시 마산합포구 해안대로 323",
-   "region": "경남",
-   "collected_at": "2026-08-26T04:58:05.910208+09:00"
-  },
-  {
    "event_id": "evx-a3db1352cfa12cb2",
    "name": "2026 사천향교 풍화루 페스타",
    "event_type": "FESTIVAL",
@@ -1026,17 +867,6 @@
    "coord": null,
    "address": null,
    "region": "경남",
-   "collected_at": "2026-08-26T04:58:05.910208+09:00"
-  },
-  {
-   "event_id": "evx-09afd719dbd890a7",
-   "name": "제25회 광양전어축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-04",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": "전남광주통합특별시 광양시 진월면 망덕포구 일원 (주행사장: 무접섬 광장 / 진월면 선소리 812-68)",
-   "region": "전남",
    "collected_at": "2026-08-26T04:58:05.910208+09:00"
   },
   {
@@ -1066,17 +896,6 @@
    "address": "반포한강공원",
    "region": "서울",
    "collected_at": "2026-08-26T04:58:05.910208+09:00"
-  },
-  {
-   "event_id": "evx-bcd82f10304eebc5",
-   "name": "대구 대박웨딩박람회 시즌36",
-   "event_type": "OTHER",
-   "start": "2026-09-05",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "대구",
-   "collected_at": "2026-08-27T07:27:06.723425+09:00"
   },
   {
    "event_id": "evx-4664fac3f42d2ff2",
@@ -1114,20 +933,6 @@
     "lng": 126.98501492435261
    },
    "address": "아산시민체육관",
-   "region": "충남",
-   "collected_at": "2026-08-27T07:27:06.723425+09:00"
-  },
-  {
-   "event_id": "evx-d92faa8ca74115be",
-   "name": "2026 천안 K-컬처 박람회",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-02",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 36.78366949071773,
-    "lng": 127.22280833066404
-   },
-   "address": "독립기념관 일원",
    "region": "충남",
    "collected_at": "2026-08-27T07:27:06.723425+09:00"
   },
@@ -1210,17 +1015,6 @@
    "collected_at": "2026-08-28T12:39:41.603859+09:00"
   },
   {
-   "event_id": "evx-3daf4b2704ef1107",
-   "name": "제11회 대전국제예술제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-02",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "대전",
-   "collected_at": "2026-08-28T12:39:41.603859+09:00"
-  },
-  {
    "event_id": "evx-b7b22c16cd325952",
    "name": "2026 부산비엔날레",
    "event_type": "EXHIBITION",
@@ -1246,20 +1040,6 @@
    "collected_at": "2026-08-28T12:39:41.603859+09:00"
   },
   {
-   "event_id": "evx-6937c8f7c3a89a1b",
-   "name": "2026 원주 국가유산 야행",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-04",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 37.347972513213655,
-    "lng": 127.95041515330618
-   },
-   "address": "강원감영, 원동성당, 옛 조선식산은행, 문화의 거리 등 원도심 일원",
-   "region": "강원",
-   "collected_at": "2026-08-28T12:39:41.603859+09:00"
-  },
-  {
    "event_id": "evx-cf75df2da7892d6b",
    "name": "제천한방천연물산업박람회",
    "event_type": "OTHER",
@@ -1271,20 +1051,6 @@
    },
    "address": null,
    "region": "충북",
-   "collected_at": "2026-08-28T12:39:41.603859+09:00"
-  },
-  {
-   "event_id": "evx-6ee8ce90f4335e3a",
-   "name": "예산황새축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-05",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 36.5431007448219,
-    "lng": 126.799556575105
-   },
-   "address": "광시면 예산황새공원 일대",
-   "region": "충남",
    "collected_at": "2026-08-28T12:39:41.603859+09:00"
   },
   {
@@ -1368,20 +1134,6 @@
    },
    "address": "전북특별자치도 장수군 장수읍 한누리로 378",
    "region": "전북",
-   "collected_at": "2026-08-28T12:39:41.603859+09:00"
-  },
-  {
-   "event_id": "evx-cb93c5b9469f771b",
-   "name": "2026 영암무화과축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-04",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 34.77739771000594,
-    "lng": 126.45913145435304
-   },
-   "address": "농업박물관 일원",
-   "region": "전남",
    "collected_at": "2026-08-28T12:39:41.603859+09:00"
   },
   {
@@ -1485,34 +1237,6 @@
    "collected_at": "2026-08-30T06:55:13.985971+09:00"
   },
   {
-   "event_id": "evx-1b3b0aa146c0be1e",
-   "name": "THE GRATEFUL CAMP",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-03",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 34.9903333663834,
-    "lng": 126.13389803827
-   },
-   "address": "전남 신안군 증도면 짱뚱어해수욕장 일원",
-   "region": "전남",
-   "collected_at": "2026-08-30T06:55:13.985971+09:00"
-  },
-  {
-   "event_id": "evx-56671668877a2da5",
-   "name": "강서문화예술페스티벌",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-04",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 37.537540137403894,
-    "lng": 126.83759326633412
-   },
-   "address": "강서아트리움",
-   "region": "서울",
-   "collected_at": "2026-08-30T06:55:13.985971+09:00"
-  },
-  {
    "event_id": "evx-79479818cd96d2b2",
    "name": "전쟁 앞에 선 사람들, 평화를 묻다",
    "event_type": "EXHIBITION",
@@ -1560,17 +1284,6 @@
    "collected_at": "2026-08-31T07:01:14.690232+09:00"
   },
   {
-   "event_id": "evx-a5a8c88a20b01a70",
-   "name": "제11회 연천 장남 통일 바라기 축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-03",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "경기",
-   "collected_at": "2026-08-31T07:01:14.690232+09:00"
-  },
-  {
    "event_id": "evx-5d8149ef3a8af5ac",
    "name": "국가유산 미디어아트",
    "event_type": "FESTIVAL",
@@ -1605,31 +1318,6 @@
    "address": null,
    "region": "경북",
    "collected_at": "2026-08-31T07:01:14.690232+09:00"
-  },
-  {
-   "event_id": "evx-690af6bdb8597afd",
-   "name": "2026 서울아트위크",
-   "event_type": "EXHIBITION",
-   "start": "2026-08-31",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "서울",
-   "collected_at": "2026-08-31T07:01:14.690232+09:00"
-  },
-  {
-   "event_id": "evx-1c98732035ee4aa4",
-   "name": "제 10회 인천가구박람회",
-   "event_type": "EXHIBITION",
-   "start": "2026-09-03",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 37.388709805875195,
-    "lng": 126.64683628072743
-   },
-   "address": null,
-   "region": "인천",
-   "collected_at": "2026-09-01T08:19:13.796216+09:00"
   },
   {
    "event_id": "evx-291db1a63c5dbbd3",
@@ -2008,17 +1696,6 @@
    "collected_at": "2026-09-01T08:19:13.796216+09:00"
   },
   {
-   "event_id": "evx-a5e4b363846adb52",
-   "name": "청주읍성큰잔치",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-05",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "충북",
-   "collected_at": "2026-09-01T08:19:13.796216+09:00"
-  },
-  {
    "event_id": "evx-748655a464c2183d",
    "name": "2026 대한민국 도시·지역혁신 산업박람회",
    "event_type": "EXHIBITION",
@@ -2245,17 +1922,6 @@
    "collected_at": "2026-09-01T08:19:13.796216+09:00"
   },
   {
-   "event_id": "evx-5ed6bda857fdc639",
-   "name": "2026 제주수학축전",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-05",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "제주",
-   "collected_at": "2026-09-01T08:19:13.796216+09:00"
-  },
-  {
    "event_id": "evx-30b7d4d4f5004422",
    "name": "제주 육아박람회 제주베페 Jeju Parenting Expo",
    "event_type": "EXHIBITION",
@@ -2348,17 +2014,6 @@
    "collected_at": "2026-09-01T08:19:13.796216+09:00"
   },
   {
-   "event_id": "evx-19cf3780dd5244fc",
-   "name": "2027 S/S 서울패션위크",
-   "event_type": "OTHER",
-   "start": "2026-09-01",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "서울",
-   "collected_at": "2026-09-01T08:19:13.796216+09:00"
-  },
-  {
    "event_id": "evx-7780ca3a2489dc3b",
    "name": "서울라이트 DDP 2026 가을",
    "event_type": "FESTIVAL",
@@ -2371,17 +2026,6 @@
    "address": null,
    "region": "서울",
    "collected_at": "2026-09-01T08:19:13.796216+09:00"
-  },
-  {
-   "event_id": "evx-d29b6bc94f6ee47d",
-   "name": "2026 인천 웰니스 페스타",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-03",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "인천",
-   "collected_at": "2026-09-02T06:57:42.655806+09:00"
   },
   {
    "event_id": "evx-06f87a21eeff68ef",
@@ -2406,17 +2050,6 @@
    },
    "address": null,
    "region": "부산",
-   "collected_at": "2026-09-02T06:57:42.655806+09:00"
-  },
-  {
-   "event_id": "evx-217f974d18bba7cb",
-   "name": "2026 울산가구쇼 시즌2",
-   "event_type": "EXHIBITION",
-   "start": "2026-09-03",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "울산",
    "collected_at": "2026-09-02T06:57:42.655806+09:00"
   },
   {
@@ -2451,17 +2084,6 @@
     "lat": 37.6144840785771,
     "lng": 128.372140156774
    },
-   "address": null,
-   "region": "강원",
-   "collected_at": "2026-09-02T06:57:42.655806+09:00"
-  },
-  {
-   "event_id": "evx-0aa460f70179372d",
-   "name": "제6회 장성 탄탄마을 축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-05",
-   "end": "2026-09-06",
-   "coord": null,
    "address": null,
    "region": "강원",
    "collected_at": "2026-09-02T06:57:42.655806+09:00"
@@ -2578,20 +2200,6 @@
    "collected_at": "2026-09-02T06:57:42.655806+09:00"
   },
   {
-   "event_id": "evx-7534b1b03fa3c9c5",
-   "name": "디자인마이애미 서울 2026",
-   "event_type": "EXHIBITION",
-   "start": "2026-08-31",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 37.5671843130818,
-    "lng": 127.009911013917
-   },
-   "address": "동대문디자인플라자(DDP)",
-   "region": "서울",
-   "collected_at": "2026-09-02T06:57:42.655806+09:00"
-  },
-  {
    "event_id": "evx-ea4d61396851894d",
    "name": "IFEZ 글로벌 페스티벌 I♥FEsta(아이페스타)",
    "event_type": "FESTIVAL",
@@ -2653,20 +2261,6 @@
    "collected_at": "2026-09-03T06:57:06.254663+09:00"
   },
   {
-   "event_id": "evx-44bc91af9b961e31",
-   "name": "직지문화축제",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-04",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 36.6430362,
-    "lng": 127.4722462
-   },
-   "address": "충북 청주시 흥덕...",
-   "region": "충북",
-   "collected_at": "2026-09-03T06:57:06.254663+09:00"
-  },
-  {
    "event_id": "evx-5342dcbeeae0cc45",
    "name": "증평인삼골축제",
    "event_type": "FESTIVAL",
@@ -2700,17 +2294,6 @@
    "coord": null,
    "address": null,
    "region": "경북",
-   "collected_at": "2026-09-03T06:57:06.254663+09:00"
-  },
-  {
-   "event_id": "evx-8d6f7b1f630fd29e",
-   "name": "2026 남해안컵 국제요트대회",
-   "event_type": "OTHER",
-   "start": "2026-09-03",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "경남",
    "collected_at": "2026-09-03T06:57:06.254663+09:00"
   },
   {
@@ -2765,20 +2348,6 @@
    "address": "전남광주 해남 파인비치 골프링크스",
    "region": "전남",
    "collected_at": "2026-09-03T06:57:06.254663+09:00"
-  },
-  {
-   "event_id": "evx-ac9d0a449313af03",
-   "name": "사운드 플래닛 페스티벌 2026",
-   "event_type": "FESTIVAL",
-   "start": "2026-09-05",
-   "end": "2026-09-06",
-   "coord": {
-    "lat": 37.43650976965959,
-    "lng": 126.45895624523246
-   },
-   "address": null,
-   "region": "인천",
-   "collected_at": "2026-09-04T06:51:51.639505+09:00"
   },
   {
    "event_id": "evx-59963bd8e6ecc502",
@@ -2864,17 +2433,6 @@
    },
    "address": "강원특별자치도 고성군 죽왕면 봉수대 해수욕장 해변 일원",
    "region": "강원",
-   "collected_at": "2026-09-04T06:51:51.639505+09:00"
-  },
-  {
-   "event_id": "evx-9edf111634c9ce4b",
-   "name": "제78회 충청남도민체육대회",
-   "event_type": "OTHER",
-   "start": "2026-09-03",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "충남",
    "collected_at": "2026-09-04T06:51:51.639505+09:00"
   },
   {
@@ -3097,28 +2655,6 @@
    "coord": null,
    "address": null,
    "region": "인천",
-   "collected_at": "2026-09-06T06:37:44.734661+09:00"
-  },
-  {
-   "event_id": "evx-e8b236ce73ed6853",
-   "name": "AI, 무등산과 전통을 그리다",
-   "event_type": "PERFORMANCE",
-   "start": "2026-04-11",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "광주",
-   "collected_at": "2026-09-06T06:37:44.734661+09:00"
-  },
-  {
-   "event_id": "evx-590849e3a7714f2d",
-   "name": "ㅅㅊㄱ – 미숙하지만 뜨거운",
-   "event_type": "PERFORMANCE",
-   "start": "2026-08-01",
-   "end": "2026-09-06",
-   "coord": null,
-   "address": null,
-   "region": "광주",
    "collected_at": "2026-09-06T06:37:44.734661+09:00"
   },
   {
@@ -4105,7 +3641,10 @@
    "event_type": "EXHIBITION",
    "start": "2026-09-08",
    "end": "2026-09-21",
-   "coord": null,
+   "coord": {
+    "lat": 37.2749583345174,
+    "lng": 127.427600044602
+   },
    "address": null,
    "region": "경기",
    "collected_at": "2026-09-13T06:35:48.712553+09:00"
@@ -4173,26 +3712,114 @@
    "address": "서울식물원 잔디마당과 마곡광장 일대",
    "region": "서울",
    "collected_at": "2026-09-13T06:35:48.712553+09:00"
+  },
+  {
+   "event_id": "evx-87dbce079efd71f2",
+   "name": "제21회 국무총리배 세계바둑선수권대회",
+   "event_type": "OTHER",
+   "start": "2026-11-06",
+   "end": "2026-11-13",
+   "coord": null,
+   "address": "인천광역시",
+   "region": "인천",
+   "collected_at": "2026-09-14T06:36:59.692525+09:00"
+  },
+  {
+   "event_id": "evx-3a93979c2428c119",
+   "name": "제31회 광주시 남한산성문화제",
+   "event_type": "FESTIVAL",
+   "start": "2026-09-18",
+   "end": "2026-09-20",
+   "coord": null,
+   "address": "경기도 광주시 남한산성면 남한산성로 731",
+   "region": "광주",
+   "collected_at": "2026-09-14T06:36:59.692525+09:00"
+  },
+  {
+   "event_id": "evx-c9a787bf1201f1cb",
+   "name": "제10회 라라라 페스티벌",
+   "event_type": "FESTIVAL",
+   "start": "2026-10-23",
+   "end": "2026-10-25",
+   "coord": null,
+   "address": null,
+   "region": "부산",
+   "collected_at": "2026-09-14T06:36:59.692525+09:00"
+  },
+  {
+   "event_id": "evx-c23409290aa22fb5",
+   "name": "헤이리 예술산책",
+   "event_type": "PERFORMANCE",
+   "start": "2026-09-19",
+   "end": "2026-09-19",
+   "coord": null,
+   "address": null,
+   "region": "경기",
+   "collected_at": "2026-09-14T06:36:59.692525+09:00"
+  },
+  {
+   "event_id": "evx-786766fe78bef952",
+   "name": "2026 제2회 경남 글로벌 혁신 페스타",
+   "event_type": "OTHER",
+   "start": "2026-11-02",
+   "end": "2026-11-04",
+   "coord": null,
+   "address": null,
+   "region": "경남",
+   "collected_at": "2026-09-14T06:36:59.692525+09:00"
+  },
+  {
+   "event_id": "evx-fd19519068521ffb",
+   "name": "2026 대한민국과학축제 with 전북과학축전",
+   "event_type": "FESTIVAL",
+   "start": "2026-10-16",
+   "end": "2026-10-18",
+   "coord": null,
+   "address": null,
+   "region": "전북",
+   "collected_at": "2026-09-14T06:36:59.692525+09:00"
+  },
+  {
+   "event_id": "evx-727a88991f79cd7d",
+   "name": "양성미 창작콘서트 '빛으로'",
+   "event_type": "PERFORMANCE",
+   "start": "2026-09-20",
+   "end": "2026-09-20",
+   "coord": null,
+   "address": null,
+   "region": "제주",
+   "collected_at": "2026-09-14T06:36:59.692525+09:00"
+  },
+  {
+   "event_id": "evx-d6fb620e0a6f35fc",
+   "name": "서울시 중장년 일자리 박람회 2026",
+   "event_type": "OTHER",
+   "start": "2026-10-20",
+   "end": "2026-10-20",
+   "coord": null,
+   "address": "aT센터 제1전시관",
+   "region": "서울",
+   "collected_at": "2026-09-14T06:36:59.692525+09:00"
   }
  ],
  "coverage": {
-  "서울": "2026-09-13T06:35:48.712553+09:00",
-  "인천": "2026-09-13T06:35:48.712553+09:00",
-  "대전": "2026-09-13T06:35:48.712553+09:00",
-  "대구": "2026-09-13T06:35:48.712553+09:00",
-  "광주": "2026-09-13T06:35:48.712553+09:00",
-  "부산": "2026-09-13T06:35:48.712553+09:00",
-  "울산": "2026-09-13T06:35:48.712553+09:00",
-  "세종": "2026-09-13T06:35:48.712553+09:00",
-  "경기": "2026-09-13T06:35:48.712553+09:00",
-  "강원": "2026-09-13T06:35:48.712553+09:00",
-  "충북": "2026-09-13T06:35:48.712553+09:00",
-  "충남": "2026-09-13T06:35:48.712553+09:00",
-  "경북": "2026-09-13T06:35:48.712553+09:00",
-  "경남": "2026-09-13T06:35:48.712553+09:00",
-  "전북": "2026-09-13T06:35:48.712553+09:00",
-  "전남": "2026-09-13T06:35:48.712553+09:00",
-  "제주": "2026-09-13T06:35:48.712553+09:00"
+  "서울": "2026-09-14T06:36:59.692525+09:00",
+  "인천": "2026-09-14T06:36:59.692525+09:00",
+  "대전": "2026-09-14T06:36:59.692525+09:00",
+  "대구": "2026-09-14T06:36:59.692525+09:00",
+  "광주": "2026-09-14T06:36:59.692525+09:00",
+  "부산": "2026-09-14T06:36:59.692525+09:00",
+  "울산": "2026-09-14T06:36:59.692525+09:00",
+  "세종": "2026-09-14T06:36:59.692525+09:00",
+  "경기": "2026-09-14T06:36:59.692525+09:00",
+  "강원": "2026-09-14T06:36:59.692525+09:00",
+  "충북": "2026-09-14T06:36:59.692525+09:00",
+  "충남": "2026-09-14T06:36:59.692525+09:00",
+  "경북": "2026-09-14T06:36:59.692525+09:00",
+  "경남": "2026-09-14T06:36:59.692525+09:00",
+  "전북": "2026-09-14T06:36:59.692525+09:00",
+  "전남": "2026-09-14T06:36:59.692525+09:00",
+  "제주": "2026-09-14T06:36:59.692525+09:00"
  },
  "pointer": 1
 }
