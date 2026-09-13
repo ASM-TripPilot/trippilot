@@ -364,16 +364,29 @@ def _load_seed():
 def test_seed_bank_covers_closed_set_and_matches_routing_table() -> None:
     entries = _load_seed()
     assert {e.intent for e in entries} == ROUTABLE_INTENTS  # 13종 전부, 그 밖은 없음
-    assert len(entries) == 121  # v0.3-draft (yaml 헤더 명시 — TRIP-678 기계 검수 1차, 추가 없음)
-    assert all(e.bank_version == "0.3-draft" and e.origin == "seed" for e in entries)
-    assert all(not e.reviewed for e in entries)  # 아직 검수 전
+    assert len(entries) == 125  # v0.4 (yaml 헤더 명시 — 사람 검수 반영: 이동 4·보강 4)
+    assert all(e.bank_version == "0.4" and e.origin == "seed" for e in entries)
+    assert all(e.reviewed for e in entries)  # 사람 검수 완료 (2026-09-13)
+
+
+def test_reviewed_seed_bank_indexes_without_opt_in() -> None:
+    """검수 완료(reviewed: true)라 `allow_unreviewed` 없이 실 적재 경로를 탄다 — 그게 검수의 목적이다."""
+    store = InMemoryVectorStore()
+    entries = _load_seed()
+    assert index_bank(entries, FakeEmbedding(dim=8), store) == len(entries)
 
 
 def test_index_bank_refuses_unreviewed_entries_by_default() -> None:
-    """ai/data/README.md: 검수 완료 전 임베딩·뱅크 편입 금지 — 조용히 건너뛰지 않고 거부."""
+    """ai/data/README.md: 검수 완료 전 임베딩·뱅크 편입 금지 — 조용히 건너뛰지 않고 거부.
+
+    seed 뱅크가 검수를 통과한 뒤로는 실물로 이 경로를 못 타므로 미검수 엔트리를 만들어 검증한다
+    (규칙은 미래의 augmented·mined 편입분에 계속 적용된다 — §3.2 ②③).
+    """
+    raw = yaml.safe_load(_SEED_YAML.read_text(encoding="utf-8"))
+    raw["intents"][0]["reviewed"] = False
     store = InMemoryVectorStore()
     with pytest.raises(UnreviewedBankError) as exc:
-        index_bank(_load_seed(), FakeEmbedding(dim=8), store)
+        index_bank(load_bank(raw), FakeEmbedding(dim=8), store)
     assert "GENERATE_SCHEDULE" in str(exc.value)
     assert store.search(BANK_COLLECTION, (1.0,) + (0.0,) * 7, top_k=5) == ()  # 부분 적재 없음
 

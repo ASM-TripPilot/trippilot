@@ -1,15 +1,19 @@
-# 의도 라우터 평가셋 v0.1-draft (intent-matching-design §6, TRIP-678)
+# 의도 라우터 평가셋 v1.0 — **사람 검수 완료** (2026-09-13). intent-matching-design §6.
 #
 # - 뱅크(intent_question_bank.yaml)와 **완전 분리** — 뱅크 문장·그 변형을 재사용하지 않는다(leak 금지).
-#   러너(`scripts/trace_intents.py --eval`)가 실행 시 뱅크와 임베딩 유사도 ≥ 0.90 인 항목을 leak 로 보고한다.
-# - 라벨은 작성자 판단(2026-09-08) — **사람 검수 전**. 경계 3종(EDIT/REPLAN/GENERATE)과 회고↔요약,
-#   실 지역명·POI 명 포함 발화(뱅크의 {지역}/{장소} 자리표시자 효과 측정), 범위 밖 10건을 일부러 넣었다.
-# - OUT_OF_SCOPE 의 정답 = 라우터가 폴백(FALLBACK)으로 거절하는 것.
-# - 사람 검수 시 라벨 재검토 후보: "이번 여행 회고 좀 만들어줘"(GENERATE_REFLECTION 로 뒀으나 여행 단위
-#   회고는 TRIP_SUMMARY 와 경계 — 2026-09-08 실측에서 유일한 오답, 득표율 0.754 로 두 의도 근접).
+#   러너(`scripts/trace_intents.py --eval`)가 실행 시 뱅크(원문 + 자리표시자를 채운 변형)와 유사도
+#   ≥ 0.90 인 항목을 leak 로 보고한다.
+# - 검수 결과 87문장(초안 88 − 1). 라벨 이동 1건·제외 1건:
+#     "오늘 저녁 뭐 먹지"  OUT_OF_SCOPE → SHOW_SCHEDULE (일정에 뭐가 잡혀 있는지 묻는 말로 판정)
+#     "카메라롤에 있는 오늘 사진들 보고 소감 하나 적어줘"  제외 — 사진 기반 회고는 Reflect Phase 2
+#       경로가 팀 상의 중이라(TRIP-655) 정답을 확정할 수 없다. 확정되면 다시 넣는다.
+# - OUT_OF_SCOPE 의 정답 = 라우터가 폴백(FALLBACK)으로 거절하는 것. 거절 표지가 없는 폴백
+#   (타임아웃·키 오류)은 정답으로 세지 않는다 — 채점기가 `unrefused_fallbacks` 로 따로 뺀다.
+# - 경계 3종(EDIT/REPLAN/GENERATE)과 회고↔요약, 실 지역명·POI 명 포함 발화(뱅크의 {지역}/{장소}
+#   자리표시자 효과 측정), 범위 밖 9건을 일부러 넣었다.
 # - 사용법: LLM_PROVIDER=mixed uv run --env-file ../.env python scripts/trace_intents.py --eval data/intent_eval_set.yaml
-version: "0.1-draft"
-reviewed: false
+version: "1.0"
+reviewed: true
 cases:
   - intent: GENERATE_SCHEDULE
     utterances:
@@ -49,7 +53,6 @@ cases:
       - "여행 끝났는데 기록으로 남기고 싶어"
       - "오늘 다녀온 데들로 짧은 일기 하나 써줘"
       - "하루 마무리로 오늘을 되돌아보는 글 부탁해"
-      - "카메라롤에 있는 오늘 사진들 보고 소감 하나 적어줘"
       - "오늘 어땠는지 회고 카드 만들어줘"
   - intent: TRIP_SUMMARY
     utterances:
@@ -87,6 +90,9 @@ cases:
     utterances:
       - "내일 우리 뭐 하기로 했더라?"
       - "지금까지 잡혀 있는 계획 쭉 보여줄래"
+      # 검수 이동(2026-09-13): OUT_OF_SCOPE → SHOW_SCHEDULE. "오늘 저녁 (일정에) 뭐 먹기로
+      # 돼 있지" 로 읽는 판정 — 범위 밖 거절이 아니라 일정 조회가 정답이다.
+      - "오늘 저녁 뭐 먹지"
       - "모레 계획 좀 보여줄래"
       - "오늘 남은 일정 뭐뭐 있어?"
       - "우리 여행 타임테이블 좀 볼 수 있을까"
@@ -117,7 +123,6 @@ cases:
       - "광장시장 어떤 데야?"
   - intent: OUT_OF_SCOPE
     utterances:
-      - "오늘 저녁 뭐 먹지"
       - "요즘 주식 시장 어때?"
       - "노래 하나 틀어줘"
       - "호텔 예약 취소해줘"
