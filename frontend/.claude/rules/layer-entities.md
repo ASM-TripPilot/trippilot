@@ -2,9 +2,9 @@
 paths:
   - "src/entities/**"
 ---
-# `src/entities/` — FSD entities 층 (TRIP-804 규칙 신설 · TRIP-806 첫 입주·형제 격리)
+# `src/entities/` — FSD entities 층 (TRIP-804 규칙 신설 · TRIP-806 첫 입주·형제 격리 · TRIP-807 stay 입주)
 
-둘 이상 feature가 쓰는 **도메인 단위**(place·stay·trip·itinerary-slot 같은 카드·타입·업무 규칙)를 두는 층. **첫 입주 = `place`(TRIP-806).** 슬라이스별 파일 목록의 정본은 `src/entities` 디렉토리와 `docs/structure.generated.md`.
+둘 이상 feature가 쓰는 **도메인 단위**(place·stay·trip·itinerary-slot 같은 카드·타입·업무 규칙)를 두는 층. **첫 입주 = `place`(TRIP-806) → 둘째 = `stay`(TRIP-807).** 슬라이스별 파일 목록의 정본은 `src/entities` 디렉토리와 `docs/structure.generated.md`.
 
 ## import 방향
 - entities → shared 만 참조한다. features · widgets · pages · app · app-shell 은 참조하지 못한다(하위 층은 상위 층을 모른다).
@@ -28,4 +28,17 @@ paths:
 | `ui/PlaceRowCard.tsx` | 범용 행 카드(save?/trailing?/subtitle 옵셔널 슬롯). **이번 사이클 소비처 0**(d02는 로컬 `SavedPlaceRow` 유지, h13은 로컬 구조 유지 — 둘 다 entities에서는 글리프·부제만 가져간다). AC·승인 테스트가 요구해 존재하지만 존치 여부는 d02(TRIP-706)·h13(TRIP-798) 정합 시 재판단(문제로그 아님 — 개발로그 인수인계 참고). |
 | `ui/SlotCandidateCard.tsx` | itinerary(h13)·planb 후보 시트 공용, 옵셔널 슬롯 7개(showImage·showNameTestId·badge·selected·slack·trailing·distanceLabel)+`testIDPrefix`로 두 소비처 구조 발산을 흡수. **실값 옵셔널 prop(이름·이미지·태그) 미구현**(현재 "이름 준비 중" 고정 문구) — BE 계약 보강 TRIP-851 완료 후 연계. planb 루트 정규식이 `image-`·`name-`를 감산 안 함 주의(테스트에서 `queryByTestId`로 null 확인 필수). |
 | `ui/PlaceSubtitle.tsx` | 부제 조각(`parts.join(' · ')`만, 표시 로직 무변경 — 3-a 결정: 조각을 인자화했을 뿐 기존 3공식 중 어느 것도 통일하지 않음). |
-| `ui/PlaceGlyphs.tsx` | **하트 글리프(Outline·Filled) 정본, 2026-09-13부터.** `features/explore/ui/ExploreGlyphs.tsx`의 동명 함수는 5-c에서 삭제됨 — 새 하트 소비처는 반드시 이 파일에서 가져온다(raw-hex·fill 스캔 제외 관례라 두 벌이 나면 기계가 못 잡는다, repo-traps 참고). |
+| ~~`ui/PlaceGlyphs.tsx`~~ | **TRIP-807로 `shared/ui/HeartGlyphs.tsx`로 이동(git mv, 내용 무변경)** — place·stay 카드가 공유하는 entities 교차 0 배선. 이 파일은 더 이상 없다. 하트 글리프 정본은 `layer-shared.md`의 `HeartGlyphs.tsx` 행 참고. |
+
+## `src/entities/stay/` (TRIP-807)
+
+파일 목록·export 전수는 `docs/structure.generated.md`(기계 생성). 여기엔 용도·함정만.
+
+| 파일 | 용도·함정 |
+|---|---|
+| `model/index.ts` | `StayItem`·`SavedStay`·`StayPrice`를 `@/shared/api/generated/schemas`에서 **얇게 재수출** + 카드 뷰모델 `StayCardVM`(검색/레인, `ExploreLandingScreen`에서 이관)·`SavedStayCardVM`(저장 degrade, `SavedStayListScreen`에서 이관). `entities/place/model/index.ts`와 동형 — generated 직참조는 이 파일만 허용. |
+| `lib/formatPrice.ts` | `features/stay/model/formatPrice.ts`에서 **바이트 그대로 이관**(출력 불변 `'가격 미확인'`/`'{천단위}원~'`, TRIP-70 확정 표기 유지). 옛 자리엔 `export { formatPrice } from '@/entities/stay/lib/formatPrice'` 한 줄 shim만 남았다(TRIP-810이 shim 정리 예정, 아직 존치). |
+| `ui/StaySearchCard.tsx` | 검색 풀/레인 카드(e02·d01·d05, `variant: 'full'\|'rail'`). **명시적 testID 계약** — 소비처마다 save/글리프 testID 스킴이 달라(e02 `stay-card-save-{key}-filled` vs d01 `explore-stay-heart-filled-{key}`) 단일 prefix 대신 완성 문자열(root/photo/save/filled/outline)을 prop으로 받는다. 하트는 `@/shared/ui/HeartGlyphs`에서만. 사진 자리는 `SavedStay`/`StayItem`에 이미지 필드가 없어 항상 회색(`bg-surface-strong`, INV-1). |
+| `ui/SavedStayCard.tsx` | degrade 카드(e04·g02 시트, `layout: 'vertical'\|'row'`). `SavedStay` 계약에 사진·지역·거리·가격이 없어 이름+`subtitle`(날짜)만 그린다 — 하트/체크는 카드가 소유하지 않고 소비처가 `trailing` ReactNode 슬롯으로 주입(카드는 하트 불가지). `save`(토글) prop 없음. |
+
+**이관 안 한 것**: 거점 배지 `BaseBadgePinGlyph`(`features/trip/ui/TripGlyphs.tsx`)는 렌더 소비처 0인 고아라 이번에 entities로 옮기지 않았다(옮겨도 사변 코드). 밤별 행(`NightlyBaseCardVM`)·설정 행(`MyStayRowVM`)도 카드 shape가 접히지 않아 entities/stay 범위 밖(3-a 결정).

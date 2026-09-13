@@ -70,7 +70,10 @@ TRIP-173 FSD 완결 2/4에서 참조 0인 빈 배럴(`export {}` 한 줄) 14개�
 | `authedClient` | `shared/api` | 이미 만들어진 인증 axios 인스턴스(TRIP-179부터 export — mutator 전용, 원래도 있던 심볼) |
 | `customInstance` | `shared/api/mutator` | orval 생성 클라이언트가 HTTP 호출에 위임하는 단일 함수(TRIP-179) — `authedClient` 경유 + 배열 쿼리 브래킷 없이 직렬화 |
 | `useStaySearch` | `features/stay/model` | `/stays/search` 도메인 훅(TRIP-179, 생성 훅의 얇은 재수출) — 소비 화면 아직 없음 |
-| `formatPrice` | `features/stay/model` | `formatPrice(price?: StayPrice \| null): string` — 최저가 스냅숏 → 카드 금액 문자열(TRIP-180, PBT 5건). **TRIP-181이 첫 소비**(`StaySearchScreen.tsx`) |
+| `formatPrice` | `entities/stay/lib`(TRIP-807 이관, 원래 `features/stay/model`) | `formatPrice(price?: StayPrice \| null): string` — 최저가 스냅숏 → 카드 금액 문자열(TRIP-180, PBT 5건, 출력 바이트 불변). **`features/stay/model/formatPrice.ts`는 이제 한 줄 재수출 shim**(TRIP-810이 정리 예정) — 신규 소비처는 entities 경로에서 직접 import |
+| `StaySearchCard` | `entities/stay/ui`(TRIP-807) | 검색 풀/레인 카드(e02·d01·d05). 명시적 testID 계약(root/photo/save/filled/outline 완성 문자열 prop) — `testIDPrefix` 단일 접두 방식이 아니다(소비처마다 스킴이 갈림) |
+| `SavedStayCard` | `entities/stay/ui`(TRIP-807) | 저장 degrade 카드(e04·g02 시트). `SavedStay` 계약 공백(사진·지역·거리·가격 없음)을 정직하게 비우고 이름+`subtitle`만 그린다. 하트/체크는 `trailing` 슬롯으로 소비처가 주입 |
+| `HeartFilledGlyph` · `HeartOutlineGlyph` | `shared/ui/HeartGlyphs`(TRIP-807, 원래 `entities/place/ui/PlaceGlyphs`) | 저장 하트 인라인 SVG(18-viewBox). place 카드·stay 검색 카드 공유 — entities 형제 교차 0. `features/stay/ui/StayGlyphs`(22-viewBox)는 e03·e04가 여전히 써 별도 사본으로 남음 |
 | `stayKey` | `features/stay/model` | `stayKey(item: Pick<StayItem,'externalSource'\|'externalId'>): string` — `${externalSource}:${externalId}` 합성(TRIP-181). React key·testID 공용 출처 |
 | `resolveStaySearchState` · `StaySearchState` | `features/stay/model/staySearchState` | 판별 유니온(5종) + 판정 순수 함수(TRIP-182, PBT 대상). 화면은 이 결과를 받기만 하고 재판정하지 않는다(구조 가드) |
 | `filterReasonLabel` | `features/stay/model/filterReasonLabel` | `filterZeroReasons` 코드 → 한글 표시명(TRIP-182). 축 사전 2줄 + 모르는 축 폴백 |
