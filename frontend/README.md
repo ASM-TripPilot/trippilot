@@ -58,6 +58,7 @@ frontend/
 ### import 경계 규칙 (ESLint로 강제)
 
 - **6층 방향**: `app → pages → widgets → features → entities → shared`. **하위 층은 상위 층을 모른다** — 각 층은 자기보다 아래 층만 import한다. 즉 `shared`는 아무 상위 층도 못 보고, `entities`는 `shared`만, `features`는 `entities·shared`만(다른 feature는 못 봄), `widgets`는 `features` 이하, `pages`는 `widgets` 이하를 참조한다. `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제하고, 13개 feature zone은 `src/features` 디렉토리를 읽어 생성한다(새 feature 자동 편입).
+- **같은 층 형제 슬라이스는 서로 모른다**: 층 방향(위/아래)만이 아니라 **같은 층 안의 형제 슬라이스끼리도** 직접 import하지 못한다 — features뿐 아니라 `pages`·`widgets`·`entities`도 슬라이스마다 격리 zone이 생긴다(`src/<층>` 디렉토리를 읽어 자동 편입). 공용이 생기면 형제에서 꺼내지 말고 더 아래 층으로 승격한다. **entities 교차는 `@x` 폴더로만**: 도메인끼리 꼭 참조해야 하면 제공자가 소비자에게만 내주는 `entities/<제공자>/@x/<소비자>/**` 창구를 통한다(예: place가 itinerary-slot에게 `entities/place/@x/itinerary-slot/`로 내준다). 그 외 형제 직접 import는 금지다.
 - **세그먼트**: 슬라이스(feature·page) 내부는 `ui`(프레젠테이션) / `model`(상태·도메인 타입·업무 규칙) / `lib`(순수 헬퍼·포맷터·어댑터 팩토리) / `config`(상수·라벨·환경값) 넷뿐이다. **`api` 세그먼트는 만들지 않는다** — 서버 통신은 orval 단일 계층 `shared/api`가 전담한다.
 - **배럴(index.ts) 미도입**: 팀 표준은 딥 임포트(`@/features/home/model/homeFixtures`)다. 재수출할 공개 API가 실제로 생겼을 때만 배럴을 만든다.
 - **적용 시점**: 신규·재작성 파일부터. **빅뱅 이주는 없다**(TRIP-803) — 규칙을 세우되 기존 코드를 소급 이동하지 않는다.

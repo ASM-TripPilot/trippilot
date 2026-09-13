@@ -35,6 +35,11 @@ const SRC_ALLOWLIST = [
 // 슬라이스 세그먼트 허용목록(4) — 옛 칸(screens·components·containers·hooks·store) 부활 금지.
 const SEGMENT_ALLOWLIST = ['config', 'lib', 'model', 'ui'];
 
+// entities 만 교차용 `@x` 창구 폴더를 세그먼트로 허용한다(TRIP-806, entities 한정 — features·
+// pages·widgets 는 위 4칸뿐). `entities/<제공자>/@x/<소비자>/**` 규약(layer-entities.md).
+const ENTITIES_DIR = path.join(ROOT, 'entities');
+const ENTITIES_SEGMENT_ALLOWLIST = [...SEGMENT_ALLOWLIST, '@x'];
+
 /**
  * 스캔 전처리 — 주석을 걷어낸다. 블록 주석을 먼저 지운다(순서를 바꾸면 한 줄 안의 코드가
  * 소실된다). 줄 주석에서 **바로 앞 글자가 `:` 이면 주석으로 보지 않는다** — `'https://…'`
@@ -186,5 +191,27 @@ describe('AC-5 · shared 층은 상위 층(features·entities·widgets·pages·a
       )
     );
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('AC-P0-5 · entities 슬라이스 세그먼트는 {ui,model,lib,config} + entities 한정 @x 뿐이다', () => {
+  it('@x 는 entities 세그먼트에만 허용되고(features/pages/widgets 는 불허), entities/place 세그먼트는 목록 밖 0', () => {
+    // (b) entities 한정 자기검사 — `@x` 는 entities 세그먼트 목록에만 있다. 이게 없으면 `@x` 를
+    // 일반 세그먼트로 착각해 features·pages 에 `@x` 폴더가 생겨도 안 걸린다(entities 한정의 기계).
+    expect(SEGMENT_ALLOWLIST).not.toContain('@x'); // features·pages·widgets 용(위 AC-4b)
+    expect(ENTITIES_SEGMENT_ALLOWLIST).toContain('@x');
+
+    // (a) entities 슬라이스 세그먼트 스캔 — 옛 칸 부활 0, `@x` 는 offender 아님. 이번 사이클엔
+    // entities/place 에 실제 `@x` 폴더는 두지 않지만(미래 대비만, 01b), 규약은 여기서 굳힌다.
+    const entitySlices = listDirNames(ENTITIES_DIR);
+    const offenders = entitySlices.flatMap((slice) =>
+      listDirNames(path.join(ENTITIES_DIR, slice))
+        .filter((segment) => !ENTITIES_SEGMENT_ALLOWLIST.includes(segment))
+        .map((segment) => `entities/${slice}: ${segment}`)
+    );
+    expect(offenders).toEqual([]);
+
+    // 긍정 짝 — place 입주 후 entities/place 가 실재해 스캔이 공허하지 않다(빈 층이면 red).
+    expect(entitySlices).toContain('place');
   });
 });

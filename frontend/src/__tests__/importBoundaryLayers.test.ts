@@ -220,3 +220,75 @@ describe('AC-3 · 허용 방향은 경계 룰이 침묵한다', () => {
     expect(ruleIds).toEqual([]);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-806 · 0단계 — 같은 층 형제 슬라이스 격리(pages·widgets·entities) + entities @x 창구
+//
+// 지금까지 층 zone 은 "층 전체가 상위 층을 못 본다"만 강제했다(features 슬라이스 격리는 있었음).
+// 이 사이클은 pages·widgets·entities 도 **형제 슬라이스끼리** 서로 못 보게 하고, entities 만
+// 교차가 꼭 필요하면 `@x` 창구(`entities/<제공자>/@x/<소비자>/**`)로만 열게 한다.
+//
+// 프로브 대상 규약(★2·★3, 02a §3-A):
+//  - pages·widgets 형제 프로브: **실파일** 딥 경로 → 경계 포함 ∧ no-unresolved 불포함까지 단언.
+//  - entities 형제/`@x` 프로브: `no-restricted-paths`(eslint-plugin-import 2.32.0)는 `resolve(importPath)`가
+//    실패하면 **조기 반환**해 경계 룰이 아예 안 뜬다(no-unresolved 만). entities 엔 이번 사이클에 `place`
+//    하나만 입주해 **실파일 형제가 없으므로**, 합성 경로로는 경계 발화를 원리적으로 관측할 수 없다 —
+//    형제 프로브는 영구 red, `@x` 프로브는 teeth 없는 공허 green이 된다(implementer 실측, 03 0단계 절).
+//    → 두 케이스를 `it.todo` 로 보류하고 TRIP-807(entities/stay 입주) 시 실파일 딥 경로로 활성화한다.
+//    zone 자체가 정확함은 implementer 가 임시 stub(`entities/stay/model/x.ts`)으로 뮤테이션(zone 제거 →
+//    red · `@x` except 제거 → red)을 green→red 실측해 확인 후 stub 을 지웠다(2026-09-13, 03 0단계 절).
+
+// 본 단계 실파일(입주 후) — features → entities 하향 허용 프로브 대상.
+const REAL_ENTITY_PLACE = '@/entities/place/ui/PlaceRailCard';
+
+describe('AC-P0-3 · 같은 층 형제 슬라이스는 서로 import 하지 못한다', () => {
+  // 🔴 pages 슬라이스 간 직접 import → 경계 위반(실파일이라 no-unresolved 아님).
+  it('pages/stay-search → 형제 pages/place-explore import 는 경계 위반', async () => {
+    const ruleIds = await lint(
+      `import '${REAL_PAGE}';\n`,
+      'src/pages/stay-search/__slice_probe__.ts'
+    );
+
+    expect(ruleIds).toContain(BOUNDARY_RULE);
+    expect(ruleIds).not.toContain(UNRESOLVED_RULE);
+  });
+
+  // 🔴 widgets 슬라이스 간 직접 import → 경계 위반(실파일).
+  it('widgets/time-sheet → 형제 widgets/itinerary-edit import 는 경계 위반', async () => {
+    const ruleIds = await lint(
+      `import '${REAL_WIDGET}';\n`,
+      'src/widgets/time-sheet/__slice_probe__.ts'
+    );
+
+    expect(ruleIds).toContain(BOUNDARY_RULE);
+    expect(ruleIds).not.toContain(UNRESOLVED_RULE);
+  });
+
+  // entities 형제 프로브는 실파일 형제(entities/stay)가 없어 no-restricted-paths 가 원리적으로
+  // 안 뜬다(resolve 실패 → 조기 반환). TRIP-807 입주 시 실파일 딥 경로로 활성화(위 규약 블록·03 0단계 절).
+  it.todo(
+    'entities/place → 형제 entities/stay 직접 import 는 경계 위반 — TRIP-807 entities/stay 입주 시 실파일 딥 경로로 활성화 · 2026-09-13 stub 뮤테이션 실측 green→red 확인(03 0단계 절)'
+  );
+});
+
+describe('AC-P0-2 · entities 교차는 @x 창구로만 허용된다', () => {
+  // @x 창구 프로브도 같은 뿌리(합성 경로 resolve 실패)로 teeth 없는 공허 green이라 보류한다.
+  // TRIP-807 입주 후 실파일 딥 경로로 활성화하면 "형제는 막히고 @x 창구는 통과"를 실제로 가른다.
+  it.todo(
+    'entities/place → entities/stay/@x/place 창구는 경계 룰이 막지 않는다 — TRIP-807 entities/stay 입주 시 실파일 딥 경로로 활성화 · 2026-09-13 stub 뮤테이션 실측 green→red 확인(03 0단계 절)'
+  );
+});
+
+describe('AC-M8 · [본 단계] entities 입주 후 하향 허용 방향은 error 0 이다', () => {
+  // 🔴 features/** → @/entities/place/ui/* 는 실파일 딥 경로라 이제 error 0 을 단언한다
+  //    (구 EMPTY_ENTITIES "경계 미발화"보다 강함, widgets D9 승격 선례). place 파일 생성 전엔
+  //    no-unresolved 로 red → 생성 후 green.
+  it('features/** → @/entities/place/ui 실파일은 위반 0', async () => {
+    const ruleIds = await lint(
+      `import '${REAL_ENTITY_PLACE}';\n`,
+      'src/features/home/__layer_probe__.ts'
+    );
+
+    expect(ruleIds).toEqual([]);
+  });
+});
