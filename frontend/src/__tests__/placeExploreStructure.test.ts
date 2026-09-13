@@ -48,6 +48,11 @@ const SCREEN_REL = 'features/explore/ui/PlaceExploreScreen.tsx';
 const PAGE_REL = 'pages/place-explore/ui/PlaceExplorePage.tsx';
 const ROUTE_REL = 'app/explore/places.tsx';
 
+/** TRIP-806 재조준(선재 가드) — d04 그리드 카드가 화면 로컬 `PlaceCard` 에서 entities 로 이동했다.
+ * imageUrl 렌더(AC-G4)·카드 testID 리터럴(AC-G5)이 이제 화면이 아니라 이 파일에 산다. 화면 렌더
+ * 결과·testID 는 무수정 `PlaceExploreScreen.{,states.}test.tsx` 가 그대로 green 으로 보존한다. */
+const GRID_CARD_REL = 'entities/place/ui/PlaceGridCard.tsx';
+
 /** V1 모집단 — 화면 1파일 완전일치(`staySearchStructure.test.ts` SCREEN_FILES 선례).
  * 넓히면 안 된다: 이 칸이 만들지 않은 `RegionPickerScreen.tsx`(지역 틴트 그라디언트 ·
  * `placeholderTextColor="#9AA1AB"`)와 `ExploreGlyphs.tsx`(SVG 색 3종)가 즉시 offender 가 된다. */
@@ -120,6 +125,14 @@ function screenSources() {
   );
 }
 
+/** 화면이 import 하는 d04 그리드 카드 소스(TRIP-806 재조준 대상). 없으면 빈 문자열 →
+ * 아래 `toContain` 앵커가 red(카드 미존재도 정당 red). */
+function gridCardSource(): string {
+  const full = path.join(ROOT, GRID_CARD_REL);
+  if (!fs.existsSync(full)) return '';
+  return stripComments(fs.readFileSync(full, 'utf8'));
+}
+
 describe('탐지기 자가검사 — 이게 통과해야 아래 단언이 의미를 갖는다', () => {
   it('주석은 걷히고, 코드의 URL·식별자는 살아남는다', () => {
     const sample = [
@@ -187,17 +200,21 @@ describe('AC-G3 · 담기·정렬·검색 상태를 Zustand 에 담지 않는다
 });
 
 describe('AC-G4 · 이미지 URL 을 발명하지 않는다 (INV-1)', () => {
-  it('화면이 계약의 imageUrl 을 쓰고, 표면 어디에도 URL 리터럴이 없다', () => {
+  it('그리드 카드가 계약의 imageUrl 을 쓰고(TRIP-806 재조준), 탐색 표면 어디에도 URL 리터럴이 없다', () => {
     const sources = exploreSurfaceSources();
     const screen = sources.find(({ file }) => file === SCREEN_REL);
 
-    // 긍정 짝 — 계약이 준 값을 **실제로 쓰고 있다**. 이게 없으면 "URL 0건"은 사진 자리를
-    // 아예 안 만든 구현에서도 공허하게 통과한다.
+    // 긍정 짝 — TRIP-806 으로 d04 그리드 카드가 `entities/place/ui/PlaceGridCard` 로 이동했다(선재
+    // 가드 재조준, TRIP-673 선례). imageUrl 렌더는 이제 그 카드에 살고, 화면은 그 카드를 import 해
+    // 소비한다. 이 짝이 없으면 "URL 0건"은 사진 자리를 아예 안 만든 카드에서도 공허하게 통과한다.
     expect(screen).toBeDefined();
-    expect(screen?.source).toContain('imageUrl');
+    expect(screen?.source).toContain('@/entities/place/ui/PlaceGridCard');
+    expect(gridCardSource()).toContain('imageUrl');
 
     // 부정 — `Place.imageUrl` 이 NULL 인데 클라가 CDN 경로를 조립하면 INV-1 위반이다
     // (TRIP-219 커밋이 막으려던 바로 그 경로: "가짜 URL 은 클라에 깨진 이미지를 그린다").
+    // 탐색 표면(화면·페이지·라우트) 스캔은 그대로 — 카드(entities)의 URL 발명은
+    // `entitiesPlaceStructure.test.ts` G4(INV-1)가 별도로 잠근다.
     const offenders = sources
       .filter(({ source }) => /https?:\/\//.test(source))
       .map(({ file }) => file);
@@ -209,11 +226,14 @@ describe('AC-G5 · 화면 프레젠테이션 순수성 · AC-G6 · feature 경�
   it('PlaceExploreScreen 이 props 만 받고, 네트워크·상태·라우팅·타 feature import 가 0건이다', () => {
     const [screenFile] = screenSources();
 
-    // 긍정 짝
+    // 긍정 짝 — 화면 실재 + d04 그리드 카드 소비(TRIP-806 재조준). 카드 testID 리터럴은 이제
+    // 화면이 아니라 `entities/place/ui/PlaceGridCard` 에 산다(선재 가드 재조준, TRIP-673 선례) —
+    // 화면은 그 카드를 import 하고, 리터럴 소유는 카드에서 잠근다(뮤테이션: 접두 1글자 변조 → red).
     expect(screenFile).toBeDefined();
     expect(screenFile.source).toMatch(/export function PlaceExploreScreen\b/);
-    expect(screenFile.source).toContain('explore-places-card-');
-    expect(screenFile.source).toContain('explore-places-save-');
+    expect(screenFile.source).toContain('@/entities/place/ui/PlaceGridCard');
+    expect(gridCardSource()).toContain('explore-places-card-');
+    expect(gridCardSource()).toContain('explore-places-save-');
 
     // 부정 — `@/shared/api` 를 통째로 금지하지 않는다(화면이 `Place` 타입 import 가 필요하다).
     // 데이터를 가져오는 경로·로컬 상태·라우팅·타 feature import 만 막는다.

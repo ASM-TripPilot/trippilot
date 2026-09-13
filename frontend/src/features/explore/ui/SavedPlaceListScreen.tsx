@@ -2,6 +2,10 @@ import type { ReactElement } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import {
+  HeartFilledGlyph,
+  HeartOutlineGlyph,
+} from '@/entities/place/ui/PlaceGlyphs';
 import type { SavedPlace } from '@/shared/api/generated/schemas';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
@@ -10,8 +14,6 @@ import type { PlaceSaveNotice } from '../model/placeSaveGuard';
 import { SAVED_PLACE_BADGE } from '../model/savedPlaceList';
 import {
   BackChevronGlyph,
-  HeartFilledGlyph,
-  HeartOutlineGlyph,
   MapPinGlyph,
   WarningTriangleGlyph,
 } from './ExploreGlyphs';

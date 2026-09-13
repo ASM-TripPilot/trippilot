@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
+import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
 import type { Place } from '@/shared/api/generated/schemas';
 
 import { PlusGlyph } from './ItineraryGlyphs';
@@ -36,9 +37,7 @@ export function PlaceAddCard({
   onPressAdd,
 }: PlaceAddCardProps): ReactElement {
   // "#태그 · 카테고리" — 거리는 데이터 없음(§8②)이라 뺀다. 태그 없으면 카테고리만.
-  const meta = [...place.tags.map((tag) => `#${tag}`), place.category].join(
-    ' · '
-  );
+  const metaParts = [...place.tags.map((tag) => `#${tag}`), place.category];
 
   return (
     <View
@@ -62,9 +61,11 @@ export function PlaceAddCard({
         >
           {place.nameKo}
         </Text>
-        <Text className="font-noto text-[12.5px] text-muted" numberOfLines={1}>
-          {meta}
-        </Text>
+        <PlaceSubtitle
+          parts={metaParts}
+          className="font-noto text-[12.5px] text-muted"
+          numberOfLines={1}
+        />
       </View>
 
       {added ? (

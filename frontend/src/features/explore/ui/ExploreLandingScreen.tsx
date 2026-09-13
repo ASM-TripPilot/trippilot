@@ -16,13 +16,18 @@
  * 넉넉히 둬 마지막 항목이 안 가리게 한다. 탭바는 SafeArea 를 모르는 순수 뷰다(repo-trap).
  */
 import type { ReactElement } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import type { PlaceCardVM } from '@/entities/place/model';
+import {
+  HeartFilledGlyph,
+  HeartOutlineGlyph,
+} from '@/entities/place/ui/PlaceGlyphs';
+import { PlaceRailCard } from '@/entities/place/ui/PlaceRailCard';
 
 import {
   CloseGlyph,
-  HeartFilledGlyph,
-  HeartOutlineGlyph,
   InfoGlyph,
   MapPinGlyph,
   SearchGlyph,
@@ -37,14 +42,9 @@ export interface StayCardVM {
   priceText: string;
 }
 
-/** 가볼 곳 레인 카드(TRIP-470) — 이름·지역 + 사진(TRIP-496, `Place.imageUrl` 계약에 존재).
- *  저장 하트는 여전히 스코프 밖. `imageUrl` 은 옵셔널(없으면 회색 플레이스홀더, 지어내지 않음·INV-1). */
-export interface PlaceCardVM {
-  poiId: string;
-  name: string;
-  region: string;
-  imageUrl?: string | null;
-}
+// 가볼 곳 레인 카드 뷰모델은 entities/place 로 이관됐다(TRIP-806) — 여기서 재수출해 기존 소비처
+// (DestinationDetailScreen·placePhoto 테스트)의 `./ExploreLandingScreen` import 를 그대로 살린다.
+export type { PlaceCardVM };
 
 export interface ExploreLandingScreenProps {
   heading: { title: string; subtitle: string };
@@ -193,45 +193,6 @@ function StayCard({
       </Text>
       <Text className="mt-xs font-noto-bold text-card-title font-bold text-ink">
         {card.priceText}
-      </Text>
-    </Pressable>
-  );
-}
-
-// 가볼 곳 레인 카드(TRIP-470) — 사진 + 이름·지역. 저장 하트·가격 없음(스코프 밖). 카드 press → d06 상세.
-// 사진은 `imageUrl` 이 있을 때만 그린다 — 없으면 회색 플레이스홀더(기본 이미지 발명 금지·INV-1, TRIP-496).
-function PlaceCard({
-  card,
-  onPress,
-}: {
-  card: PlaceCardVM;
-  onPress: (poiId: string) => void;
-}): ReactElement {
-  return (
-    <Pressable
-      testID={`explore-place-card-${card.poiId}`}
-      accessibilityRole="button"
-      onPress={() => onPress(card.poiId)}
-      className="w-[160px]"
-    >
-      {card.imageUrl ? (
-        <Image
-          testID={`explore-place-card-image-${card.poiId}`}
-          source={{ uri: card.imageUrl }}
-          resizeMode="cover"
-          className="h-[110px] w-full rounded-card bg-surface-strong"
-        />
-      ) : (
-        <View className="h-[110px] w-full rounded-card bg-surface-strong" />
-      )}
-      <Text
-        numberOfLines={1}
-        className="mt-sm font-noto-bold text-card-title font-bold text-ink"
-      >
-        {card.name}
-      </Text>
-      <Text numberOfLines={1} className="mt-xs font-noto text-label text-muted">
-        {card.region}
       </Text>
     </Pressable>
   );
@@ -389,7 +350,7 @@ export function ExploreLandingScreen({
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View className="flex-row gap-md">
                   {placeLane.cards.map((card) => (
-                    <PlaceCard
+                    <PlaceRailCard
                       key={card.poiId}
                       card={card}
                       onPress={placeLane.onPressCard}

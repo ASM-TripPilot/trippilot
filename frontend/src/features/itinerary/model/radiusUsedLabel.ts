@@ -11,12 +11,11 @@
  *
  *  - `< 1000m` → 10m 단위 반올림 유지("약 700m")
  *  - `>= 1000m` → 소수 1자리 km("약 11.3km") · 1000m 경계는 "약 1.0km"
+ *
+ * 반올림·형식은 `entities/place/lib` 의 공용 `formatDistance` 를 재사용한다(legDistance 와 같은 코어).
  */
+import { formatDistance } from '@/entities/place/lib/formatDistance';
+
 export function formatRadiusUsed(radiusMUsed: number): string {
-  if (radiusMUsed < 1000) {
-    const rounded = Math.round(radiusMUsed / 10) * 10;
-    return `약 ${rounded}m`;
-  }
-  const km = Math.round(radiusMUsed / 100) / 10;
-  return `약 ${km.toFixed(1)}km`;
+  return `약 ${formatDistance(radiusMUsed)}`;
 }

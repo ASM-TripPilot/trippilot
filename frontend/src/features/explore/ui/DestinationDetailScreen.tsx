@@ -20,21 +20,23 @@
  * FAB)을 그대로 재사용한다.
  */
 import type { ReactElement } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import type { PlaceCardVM } from '@/entities/place/model';
+import { HeartFilledGlyph } from '@/entities/place/ui/PlaceGlyphs';
+import { PlaceRailCard } from '@/entities/place/ui/PlaceRailCard';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import {
   CloseGlyph,
-  HeartFilledGlyph,
   InfoGlyph,
   MapPinGlyph,
   SearchGlyph,
   SuitcaseGlyph,
   WarningTriangleGlyph,
 } from './ExploreGlyphs';
-import type { PlaceCardVM, StayCardVM } from './ExploreLandingScreen';
+import type { StayCardVM } from './ExploreLandingScreen';
 
 export interface DestinationDetailScreenProps {
   regionName: string;
@@ -165,44 +167,6 @@ function StayCard({
   );
 }
 
-// `imageUrl` 이 있을 때만 사진을 그린다 — 없으면 회색 플레이스홀더(발명 금지, INV-1).
-function PlaceCard({
-  card,
-  onPress,
-}: {
-  card: PlaceCardVM;
-  onPress: (poiId: string) => void;
-}): ReactElement {
-  return (
-    <Pressable
-      testID={`destination-detail-place-card-${card.poiId}`}
-      accessibilityRole="button"
-      onPress={() => onPress(card.poiId)}
-      className="w-[150px]"
-    >
-      {card.imageUrl ? (
-        <Image
-          testID={`destination-detail-place-card-image-${card.poiId}`}
-          source={{ uri: card.imageUrl }}
-          resizeMode="cover"
-          className="h-[110px] w-full rounded-card bg-surface-strong"
-        />
-      ) : (
-        <View className="h-[110px] w-full rounded-card bg-surface-strong" />
-      )}
-      <Text
-        numberOfLines={1}
-        className="mt-sm font-noto-bold text-card-title font-bold text-ink"
-      >
-        {card.name}
-      </Text>
-      <Text numberOfLines={1} className="mt-xs font-noto text-label text-muted">
-        {card.region}
-      </Text>
-    </Pressable>
-  );
-}
-
 export function DestinationDetailScreen({
   regionName,
   onPressSearch,
@@ -292,10 +256,11 @@ export function DestinationDetailScreen({
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View className="flex-row gap-md">
                   {placeLane.cards.map((card) => (
-                    <PlaceCard
+                    <PlaceRailCard
                       key={card.poiId}
                       card={card}
                       onPress={placeLane.onPressCard}
+                      testIDPrefix="destination-detail-place-card"
                     />
                   ))}
                 </View>
