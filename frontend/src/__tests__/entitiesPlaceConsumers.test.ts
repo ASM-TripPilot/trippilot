@@ -66,11 +66,10 @@ const ROWS: Row[] = [
     mustNot: ['function PlaceCard('],
     why: 'd04 그리드 카드 소비(로컬 PlaceCard 제거)',
   },
-  {
-    file: 'features/explore/ui/SavedPlaceListScreen.tsx',
-    must: '@/entities/place',
-    why: 'd02 행 카드/하트 글리프 소비(로컬 SavedPlaceRow 형태는 implementer 설계 — 긍정만)',
-  },
+  // TRIP-807 재조준(★7) — SavedPlaceListScreen 행 제거. d02 의 유일한 @/entities/place import 는
+  // PlaceGlyphs(하트)였는데, TRIP-807 이 하트를 shared/ui/HeartGlyphs 로 옮기며 d02 의 entities/place
+  // 소비가 0 이 됐다(카드는 로컬 SavedPlaceRow 유지). 이 파일에 남기면 stale red — d02 의 stay 축
+  // 전환(StayRowVM→SavedStayCardVM 재수출)은 entitiesStayConsumers 가 잠근다.
   {
     file: 'features/explore/ui/PlaceDetailScreen.tsx',
     must: '@/entities/place',

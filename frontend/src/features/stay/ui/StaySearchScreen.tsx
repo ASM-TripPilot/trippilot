@@ -15,12 +15,13 @@ import type { ReactElement } from 'react';
 import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { formatPrice } from '@/entities/stay/lib/formatPrice';
+import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 
 import { filterReasonLabel } from '../model/filterReasonLabel';
-import { formatPrice } from '../model/formatPrice';
 import type { StaySearchState } from '../model/staySearchState';
 import { stayKey } from '../model/stayKey';
 import { PartialFailureBanner } from './PartialFailureBanner';
@@ -30,8 +31,6 @@ import {
   ChevronDownGlyph,
   ChevronRightGlyph,
   FilterSlidersGlyph,
-  HeartFilledGlyph,
-  HeartOutlineGlyph,
   MapPinGlyph,
   PlusGlyph,
   WarningTriangleGlyph,
@@ -99,16 +98,6 @@ function filterByNameQuery(items: StayItem[], query: string): StayItem[] {
     (item) => item.name.includes(needle) || item.region.includes(needle)
   );
 }
-
-// 카드 그림자(브리프 §4-2 명시 raw 허용 — 그림자는 토큰 대상이 아니다, HomeScreen.tsx
-// heroCardShadow와 동형). #000000은 토큰화된 색 목록 밖이라 V1 가드 대상이 아니다.
-const cardShadow = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.08,
-  shadowRadius: 16,
-  elevation: 4,
-} as const;
 
 // `FlatList` 콘텐츠 컨테이너를 화면 잔여 높이까지 늘린다(§6 함정 1, 03b W-2) — 카드가
 // 화면보다 짧을 때만 효과가 있고, 카드 자체는 top-align을 유지한다(중앙정렬은 `ListEmptyBlock`
@@ -213,72 +202,6 @@ function ListHeader({
         ))}
       </View>
     </View>
-  );
-}
-
-function StayCard({
-  item,
-  saved,
-  pending,
-  onToggleSave,
-  onPressCard,
-}: {
-  item: StayItem;
-  saved: boolean;
-  pending: boolean;
-  onToggleSave?: (item: StayItem) => void;
-  onPressCard?: (item: StayItem) => void;
-}): ReactElement {
-  const key = stayKey(item);
-  return (
-    // 카드 루트를 Pressable로 — 하트(자식 Pressable) press 는 findEventHandler가 하트에서
-    // 멈춰 카드 push 를 삼키지 않는다(★F-4). 동결 cardFingerprint 는 요소 타입·onPress 를 안
-    // 굳혀(testID·className·문자열 children만) 이 교체가 지문 불변이다(★F-1).
-    <Pressable
-      testID={`stay-card-${key}`}
-      accessibilityRole="button"
-      onPress={() => onPressCard?.(item)}
-      style={cardShadow}
-      className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
-    >
-      <View
-        testID={`stay-card-photo-${key}`}
-        className="h-[178px] w-full bg-surface-strong"
-      >
-        <Pressable
-          testID={`stay-card-save-${key}`}
-          accessibilityRole="button"
-          // 담김=선택됨(AC-10) — 빈/찬을 색이 아니라 이 상태 + 아래 글리프 정체성으로 관찰한다.
-          accessibilityState={{ selected: saved }}
-          // 응답 대기 중이면 눌러도 onPress가 안 불린다(AC-8 연타 가드) — disabled 프롭이
-          // accessibilityState.disabled 도 함께 세운다.
-          disabled={pending}
-          onPress={() => onToggleSave?.(item)}
-          className="absolute right-[32px] top-[14px] h-[28px] w-[30px] items-center justify-center"
-        >
-          {saved ? (
-            <HeartFilledGlyph
-              testID={`stay-card-save-${key}-filled`}
-              size={22}
-            />
-          ) : (
-            <HeartOutlineGlyph
-              testID={`stay-card-save-${key}-outline`}
-              size={22}
-            />
-          )}
-        </Pressable>
-      </View>
-      <View className="w-full gap-xs px-[14px] pb-[14px] pt-md">
-        <Text className="font-noto-bold text-[16px] font-bold text-ink">
-          {item.name}
-        </Text>
-        <Text className="font-noto text-label text-muted">{item.region}</Text>
-        <Text className="font-inter-bold text-[16px] font-bold text-ink">
-          {formatPrice(item.price)}
-        </Text>
-      </View>
-    </Pressable>
   );
 }
 
@@ -597,12 +520,22 @@ export function StaySearchScreen({
             const key = stayKey(item);
             return (
               <View className="w-full px-lg">
-                <StayCard
-                  item={item}
-                  saved={savedKeys.includes(key)}
-                  pending={pendingKeys.includes(key)}
-                  onToggleSave={onToggleSave}
-                  onPressCard={onPressCard}
+                <StaySearchCard
+                  testID={`stay-card-${key}`}
+                  photoTestID={`stay-card-photo-${key}`}
+                  name={item.name}
+                  region={item.region}
+                  priceText={formatPrice(item.price)}
+                  variant="full"
+                  save={{
+                    saved: savedKeys.includes(key),
+                    pending: pendingKeys.includes(key),
+                    onToggle: () => onToggleSave?.(item),
+                    testID: `stay-card-save-${key}`,
+                    filledTestID: `stay-card-save-${key}-filled`,
+                    outlineTestID: `stay-card-save-${key}-outline`,
+                  }}
+                  onPress={() => onPressCard?.(item)}
                 />
               </View>
             );

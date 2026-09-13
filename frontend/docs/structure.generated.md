@@ -27,6 +27,8 @@
 - `src/__tests__/editSheetBackdropStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesPlaceConsumers.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesPlaceStructure.test.ts`  →  (export 없음)
+- `src/__tests__/entitiesStayConsumers.test.ts`  →  (export 없음)
+- `src/__tests__/entitiesStayStructure.test.ts`  →  (export 없음)
 - `src/__tests__/executionDurationStructure.test.ts`  →  (export 없음)
 - `src/__tests__/exploreLandingAxisRemoval.test.ts`  →  (export 없음)
 - `src/__tests__/fsdLayerStructure.test.ts`  →  (export 없음)
@@ -257,12 +259,21 @@
 - `src/entities/place/model/index.ts`  →  PlaceCardVM · PoiCategory
 
 ## src/entities/place/ui/
-- `src/entities/place/ui/PlaceGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
 - `src/entities/place/ui/PlaceGridCard.tsx`  →  PlaceGridCardProps · PlaceGridCard
 - `src/entities/place/ui/PlaceRailCard.tsx`  →  PlaceRailCardProps · PlaceRailCard
 - `src/entities/place/ui/PlaceRowCard.tsx`  →  PlaceRowCardProps · PlaceRowCard
 - `src/entities/place/ui/PlaceSubtitle.tsx`  →  PlaceSubtitleProps · PlaceSubtitle
 - `src/entities/place/ui/SlotCandidateCard.tsx`  →  SlotCandidateCardProps · SlotCandidateCard
+
+## src/entities/stay/lib/
+- `src/entities/stay/lib/formatPrice.ts`  →  formatPrice
+
+## src/entities/stay/model/
+- `src/entities/stay/model/index.ts`  →  StayCardVM · SavedStayCardVM
+
+## src/entities/stay/ui/
+- `src/entities/stay/ui/SavedStayCard.tsx`  →  SavedStayCardProps · SavedStayCard
+- `src/entities/stay/ui/StaySearchCard.tsx`  →  StaySearchCardSave · StaySearchCardProps · StaySearchCard
 
 ## src/features/auth/config/
 - `src/features/auth/config/gradients.ts`  →  SPLASH_BACKGROUND_COLORS · SPLASH_BACKGROUND_LOCATIONS · APP_ICON_COLORS · AUTH_ICON_COLORS
@@ -326,12 +337,12 @@
 ## src/features/explore/ui/
 - `src/features/explore/ui/DestinationDetailScreen.tsx`  →  DestinationDetailScreenProps · DestinationDetailScreen
 - `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · InfoGlyph
-- `src/features/explore/ui/ExploreLandingScreen.tsx`  →  StayCardVM · ExploreLandingScreenProps · ExploreLandingScreen
+- `src/features/explore/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
 - `src/features/explore/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
 - `src/features/explore/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
 - `src/features/explore/ui/PlaceExploreScreen.tsx`  →  PlaceExploreScreenProps · PlaceExploreScreen
 - `src/features/explore/ui/RegionPickerScreen.tsx`  →  RegionPurpose · RegionPickerScreenProps · RegionPickerScreen
-- `src/features/explore/ui/SavedPlaceListScreen.tsx`  →  StayRowVM · SavedPlaceListScreenProps · SavedPlaceListScreen
+- `src/features/explore/ui/SavedPlaceListScreen.tsx`  →  SavedPlaceListScreenProps · SavedPlaceListScreen
 
 ## src/features/home/model/
 - `src/features/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS · HOME_NO_TRIP_PROPS · HOME_EMPTY_PROPS · HOME_LOADING_PROPS · HOME_COLLECTING_PROPS · HOME_PLANNING_PROPS · HOME_UPCOMING_PROPS · HOME_POST_TRIP_PROPS
@@ -567,7 +578,7 @@
 ## src/features/stay/ui/
 - `src/features/stay/ui/OtaChoiceSheet.tsx`  →  OtaChoiceSheetProps · OtaChoiceSheet
 - `src/features/stay/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
-- `src/features/stay/ui/SavedStayListScreen.tsx`  →  SavedStayCardVM · SavedStayFace · SavedStayListScreenProps · SavedStayListScreen
+- `src/features/stay/ui/SavedStayListScreen.tsx`  →  SavedStayFace · SavedStayListScreenProps · SavedStayListScreen
 - `src/features/stay/ui/SkeletonList.tsx`  →  SkeletonList
 - `src/features/stay/ui/StayDetailScreen.tsx`  →  StayDetailScreenProps · StayDetailScreen
 - `src/features/stay/ui/StayFilterSheet.tsx`  →  StayFilterSheetProps · StayFilterSheet
@@ -1200,6 +1211,7 @@
 
 ## src/shared/ui/
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · BottomTabBarProps · BottomTabBar
+- `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
 - `src/shared/ui/WheelPicker.tsx`  →  WheelPickerProps · WheelPicker
 
@@ -1238,4 +1250,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 840개 파일
+합계 846개 파일

@@ -9,10 +9,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import {
-  HeartFilledGlyph,
-  HeartOutlineGlyph,
-} from '@/entities/place/ui/PlaceGlyphs';
+import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
 import type { Place } from '@/shared/api/generated/schemas';
 

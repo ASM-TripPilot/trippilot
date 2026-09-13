@@ -39,6 +39,10 @@ const SHARED_UI_DIR = path.join(ROOT, 'shared', 'ui');
 
 const STATE_NOTICE_REL = 'shared/ui/StateNotice.tsx';
 const TABBAR_REL = 'shared/ui/BottomTabBar.tsx';
+// TRIP-807 — 하트 글리프가 entities/place/ui/PlaceGlyphs 에서 shared/ui/HeartGlyphs 로 이동한다
+// (place 카드·stay 검색 카드가 공유 = entities 교차 0). SVG stroke/fill 색 상수(#ff385c·#222222·
+// #ffffff)를 갖는 `*Glyphs.tsx` 라 raw-hex 면제(BottomTabBar 선례와 동일 근거).
+const HEART_GLYPHS_REL = 'shared/ui/HeartGlyphs.tsx';
 const STAY_STATE_NOTICE = path.join(
   ROOT,
   'features',
@@ -59,8 +63,10 @@ const STAY_SCREEN = path.join(
  * (`const PRIMARY = '#ff385c'` · `const MUTED = '#6a6a6a'`). SVG 색은 className 으로 줄 수 없어
  * 정당하고, 그 두 상수는 이미 `tabbarVisual.test.ts` AC-V4 가 tailwind 토큰에 묶어 두고 있다.
  * 면제는 **자기검사와 함께** 쓴다(아래 it) — 오타로 면제가 무효/과잉이 되면 조용히 통과한다.
+ * `HeartGlyphs.tsx`(TRIP-807 이동)도 같은 `*Glyphs.tsx` 근거로 면제한다 — 아래 `files.toContain`
+ * 자기검사가 이 파일의 shared/ui 이동 완료(존재)를 red→green 앵커로 겸한다(★6).
  */
-const HEX_EXEMPT = [TABBAR_REL];
+const HEX_EXEMPT = [TABBAR_REL, HEART_GLYPHS_REL];
 
 /** 토큰으로 이미 존재하는 9색 — raw hex 로 적으면 토큰 우회다(`placeExploreStructure` 와 동일). */
 const TOKENIZED_HEX = [

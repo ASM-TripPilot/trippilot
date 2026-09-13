@@ -241,6 +241,10 @@ describe('AC-3 · 허용 방향은 경계 룰이 침묵한다', () => {
 // 본 단계 실파일(입주 후) — features → entities 하향 허용 프로브 대상.
 const REAL_ENTITY_PLACE = '@/entities/place/ui/PlaceRailCard';
 
+// TRIP-807 입주 실파일 — 806 이 it.todo 로 보류한 entities 형제 차단·하향 프로브를 이 실파일로 활성화한다.
+// stay 슬라이스가 생기면 eslint 층 zone(readSlices('entities'))이 자동 편입해 place→stay 가 경계 위반이 된다.
+const REAL_ENTITY_STAY = '@/entities/stay/ui/StaySearchCard';
+
 describe('AC-P0-3 · 같은 층 형제 슬라이스는 서로 import 하지 못한다', () => {
   // 🔴 pages 슬라이스 간 직접 import → 경계 위반(실파일이라 no-unresolved 아님).
   it('pages/stay-search → 형제 pages/place-explore import 는 경계 위반', async () => {
@@ -264,18 +268,26 @@ describe('AC-P0-3 · 같은 층 형제 슬라이스는 서로 import 하지 못�
     expect(ruleIds).not.toContain(UNRESOLVED_RULE);
   });
 
-  // entities 형제 프로브는 실파일 형제(entities/stay)가 없어 no-restricted-paths 가 원리적으로
-  // 안 뜬다(resolve 실패 → 조기 반환). TRIP-807 입주 시 실파일 딥 경로로 활성화(위 규약 블록·03 0단계 절).
-  it.todo(
-    'entities/place → 형제 entities/stay 직접 import 는 경계 위반 — TRIP-807 entities/stay 입주 시 실파일 딥 경로로 활성화 · 2026-09-13 stub 뮤테이션 실측 green→red 확인(03 0단계 절)'
-  );
+  // 🔴 TRIP-807 활성화 — entities/stay/ui/StaySearchCard 실파일이 생겨 resolve 되므로, 이제
+  //    place→stay 직접 import 가 no-restricted-paths 로 잡힌다(before: 미해석 no-unresolved red →
+  //    after: 실파일 생성 후 boundary green). 806 이 it.todo 로 보류했던 자리.
+  it('entities/place → 형제 entities/stay 직접 import 는 경계 위반', async () => {
+    const ruleIds = await lint(
+      `import '${REAL_ENTITY_STAY}';\n`,
+      'src/entities/place/__slice_probe__.ts'
+    );
+
+    expect(ruleIds).toContain(BOUNDARY_RULE);
+    expect(ruleIds).not.toContain(UNRESOLVED_RULE);
+  });
 });
 
 describe('AC-P0-2 · entities 교차는 @x 창구로만 허용된다', () => {
-  // @x 창구 프로브도 같은 뿌리(합성 경로 resolve 실패)로 teeth 없는 공허 green이라 보류한다.
-  // TRIP-807 입주 후 실파일 딥 경로로 활성화하면 "형제는 막히고 @x 창구는 통과"를 실제로 가른다.
+  // @x 창구 프로브는 여전히 it.todo — 실제 교차 필요가 0 이라 프로브용 빈 `entities/stay/@x/place/**`
+  // 창구 파일을 만드는 것은 layer-entities.md "@x 는 필요할 때 만든다" 규약 위반 = 게이밍이다(TRIP-807
+  // 3-a·01b §가정). 첫 실제 entities 교차(@x 창구)가 필요한 티켓에서 그 실폴더 딥 경로로 활성화한다.
   it.todo(
-    'entities/place → entities/stay/@x/place 창구는 경계 룰이 막지 않는다 — TRIP-807 entities/stay 입주 시 실파일 딥 경로로 활성화 · 2026-09-13 stub 뮤테이션 실측 green→red 확인(03 0단계 절)'
+    'entities/place → entities/stay/@x/place 창구는 경계 룰이 막지 않는다 — 실제 교차 0(프로브용 빈 창구는 게이밍), 첫 @x 창구 도입 티켓에서 실폴더 딥 경로로 활성화'
   );
 });
 
@@ -286,6 +298,17 @@ describe('AC-M8 · [본 단계] entities 입주 후 하향 허용 방향은 erro
   it('features/** → @/entities/place/ui 실파일은 위반 0', async () => {
     const ruleIds = await lint(
       `import '${REAL_ENTITY_PLACE}';\n`,
+      'src/features/home/__layer_probe__.ts'
+    );
+
+    expect(ruleIds).toEqual([]);
+  });
+
+  // 🔴 TRIP-807 — features → @/entities/stay/ui 하향(허용 방향)도 실파일 생성 후 error 0.
+  //    생성 전엔 no-unresolved 로 red → 생성 후 green(place 프로브 동형).
+  it('features/** → @/entities/stay/ui 실파일은 위반 0', async () => {
+    const ruleIds = await lint(
+      `import '${REAL_ENTITY_STAY}';\n`,
       'src/features/home/__layer_probe__.ts'
     );
 

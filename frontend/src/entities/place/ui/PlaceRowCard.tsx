@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
-import { HeartFilledGlyph, HeartOutlineGlyph } from './PlaceGlyphs';
+import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 
 /**
  * TRIP-806 · AC-M2 — 썸네일 + 이름 + 부제 행 카드(중립 접두 자기 계약).

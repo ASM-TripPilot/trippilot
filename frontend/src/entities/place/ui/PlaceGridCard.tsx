@@ -7,7 +7,7 @@ import {
   HeartBadgeGlyph,
   HeartFilledGlyph,
   HeartOutlineGlyph,
-} from './PlaceGlyphs';
+} from '@/shared/ui/HeartGlyphs';
 import { PlaceSubtitle } from './PlaceSubtitle';
 
 /**
