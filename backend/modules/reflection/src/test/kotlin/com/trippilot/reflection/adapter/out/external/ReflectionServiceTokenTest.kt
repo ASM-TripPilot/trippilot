@@ -33,6 +33,11 @@ class ReflectionServiceTokenTest : StringSpec({
             received.single() shouldBe null
         }
     }
+
+    /** 위 두 테스트는 보내는 쪽·받는 쪽이 같은 상수라 값이 틀려도 나란히 통과한다 — 리터럴로 못 박는다. */
+    "헤더 이름은 계약이다 — X-Service-Token" {
+        ReflectionAgentConfiguration.SERVICE_TOKEN_HEADER shouldBe "X-Service-Token"
+    }
 })
 
 private const val HEADER = ReflectionAgentConfiguration.SERVICE_TOKEN_HEADER

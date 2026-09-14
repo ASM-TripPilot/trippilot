@@ -48,6 +48,16 @@ class ScheduleAgentServiceTokenTest : StringSpec({
             received.single() shouldBe null
         }
     }
+
+    /**
+     * **헤더 이름을 글자 그대로 못 박는다.** 위 두 테스트는 보내는 쪽과 받는 쪽이 같은 상수를 쓰므로
+     * 상수가 틀린 값으로 바뀌어도 **나란히 따라가며 통과한다** — 상대는 아무것도 못 받는데 초록이다.
+     * 이름은 우리 취향이 아니라 상대와의 계약이라(역방향 필터·AI 클라이언트가 같은 문자열을 쓴다),
+     * 리터럴로 고정해 드리프트를 빌드에서 잡는다.
+     */
+    "헤더 이름은 계약이다 — X-Service-Token" {
+        ScheduleAgentConfiguration.SERVICE_TOKEN_HEADER shouldBe "X-Service-Token"
+    }
 })
 
 private const val HEADER = ScheduleAgentConfiguration.SERVICE_TOKEN_HEADER
