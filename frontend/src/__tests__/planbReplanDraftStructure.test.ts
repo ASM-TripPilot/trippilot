@@ -127,7 +127,12 @@ describe('🔴 G3 · AC-5 — 신규 3화면에 소요시간 표기 0 (INV-3)', 
     );
     expect(offenders).toEqual([]);
     // 긍정 짝 — ReplanSlotRow 가 슬롯 표면을 그린다(빈 파일 공허 통과 방지).
-    expect(readOne('features/planb/ui/ReplanSlotRow.tsx')).toContain(
+    // TRIP-809: ReplanSlotRow 가 entities/itinerary-slot/ui 로 바이트 이사됐다 — 옛 자리
+    // (features/planb/ui/ReplanSlotRow.tsx)는 재수출 shim 이라 `planb-draft-slot` 리터럴이 없다.
+    // 긍정 짝을 이사 후 정본(entities)으로 재조준한다(808 「선재 가드 재조준(코드 이동 추적)」).
+    // NEW_SCREENS 배열·existsSync·다른 G 는 무변경 — shim 이 옛 자리에 남아 폴더 재귀·존재 단언이
+    // 전부 생존하고, 재수출은 duration·write-hook·router 0 이라 무해하다(02a ★4).
+    expect(readOne('entities/itinerary-slot/ui/ReplanSlotRow.tsx')).toContain(
       'planb-draft-slot'
     );
   });

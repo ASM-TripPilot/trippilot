@@ -3,6 +3,8 @@ import { Fragment, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PoiSlotCard } from '@/entities/itinerary-slot/ui/PoiSlotCard';
+import { SlotPhotoPlaceholder } from '@/entities/itinerary-slot/ui/SlotPhotoPlaceholder';
 import type {
   ItineraryDaysItemSlotsItem,
   ItineraryStatus,
@@ -31,8 +33,6 @@ import {
 } from './ItineraryGlyphs';
 import { MapFallback } from './MapFallback';
 import { PinDetailSheet } from './PinDetailSheet';
-import { PoiSlotCard } from './PoiSlotCard';
-import { SlotPhotoPlaceholder } from './SlotPhotoPlaceholder';
 
 /**
  * h25/h34 완성·확정 일정 시간표 뷰 — Figma h34 `1884:1190`(TRIP-354 풀디자인 정합).

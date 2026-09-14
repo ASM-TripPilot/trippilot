@@ -25,6 +25,8 @@
 - `src/__tests__/devPreviewMap.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewPref.test.tsx`  →  (export 없음)
 - `src/__tests__/editSheetBackdropStructure.test.ts`  →  (export 없음)
+- `src/__tests__/entitiesItinerarySlotConsumers.test.ts`  →  (export 없음)
+- `src/__tests__/entitiesItinerarySlotStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesPlaceConsumers.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesPlaceStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesStayConsumers.test.ts`  →  (export 없음)
@@ -254,6 +256,19 @@
 - `src/app/trips/new/step1.tsx`  →  (export 없음)
 - `src/app/trips/new/step2.tsx`  →  (export 없음)
 
+## src/entities/itinerary-slot/lib/
+- `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
+- `src/entities/itinerary-slot/lib/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
+
+## src/entities/itinerary-slot/model/
+- `src/entities/itinerary-slot/model/index.ts`  →  SlotBadgeKind · ReplanSlotVM · PoiCategory
+
+## src/entities/itinerary-slot/ui/
+- `src/entities/itinerary-slot/ui/PoiSlotCard.tsx`  →  PoiSlotCardVariant · PoiSlotCardProps · PoiSlotCard
+- `src/entities/itinerary-slot/ui/ReplanSlotRow.tsx`  →  ReplanSlotRowProps · ReplanSlotRow
+- `src/entities/itinerary-slot/ui/SlotGlyphs.tsx`  →  CategoryPinGlyph · CategoryForkKnifeGlyph · CategoryCupGlyph · CategoryNightGlyph · CategoryTreeGlyph · CategoryShoppingBagGlyph · CategoryBuildingGlyph · CategoryImageGlyph · ChevronRightGlyph · LockGlyph
+- `src/entities/itinerary-slot/ui/SlotPhotoPlaceholder.tsx`  →  SlotPhotoPlaceholderProps · SlotPhotoPlaceholder
+
 ## src/entities/place/lib/
 - `src/entities/place/lib/formatDistance.ts`  →  formatDistance
 
@@ -369,7 +384,7 @@
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
-- `src/features/itinerary/model/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
+- `src/features/itinerary/model/categoryPlaceholder.ts`  →  resolveCategoryPlaceholder
 - `src/features/itinerary/model/coPickProgress.ts`  →  CoPickProgressSlot · CoPickProgress · coPickProgress
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · formatDraftDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
@@ -379,7 +394,7 @@
 - `src/features/itinerary/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs · formatNightsLabel · formatConfirmedDateRange
 - `src/features/itinerary/model/radiusUsedLabel.ts`  →  formatRadiusUsed
-- `src/features/itinerary/model/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
+- `src/features/itinerary/model/slotKey.ts`  →  buildSlotKey · parseSlotKey · buildSlotKeys
 - `src/features/itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
 - `src/features/itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
 - `src/features/itinerary/model/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
@@ -403,11 +418,11 @@
 - `src/features/itinerary/ui/PinDetailSheet.tsx`  →  PinDetailSheetProps · PinDetailSheet
 - `src/features/itinerary/ui/PlaceAddCard.tsx`  →  PlaceAddCardProps · PlaceAddCard
 - `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddScreenProps · PlaceAddScreen
-- `src/features/itinerary/ui/PoiSlotCard.tsx`  →  PoiSlotCardVariant · PoiSlotCardProps · PoiSlotCard
+- `src/features/itinerary/ui/PoiSlotCard.tsx`  →  PoiSlotCard
 - `src/features/itinerary/ui/SlotCandidateCard.tsx`  →  candidateBadge · SlotCandidateCardProps · SlotCandidateCard
 - `src/features/itinerary/ui/SlotCandidatePanel.tsx`  →  SlotCandidatePanelProps · SlotCandidatePanel
 - `src/features/itinerary/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
-- `src/features/itinerary/ui/SlotPhotoPlaceholder.tsx`  →  SlotPhotoPlaceholderProps · SlotPhotoPlaceholder
+- `src/features/itinerary/ui/SlotPhotoPlaceholder.tsx`  →  SlotPhotoPlaceholder
 - `src/features/itinerary/ui/TimelineScreen.tsx`  →  ItineraryHeaderData · TimelineScreenProps · TimelineScreen
 - `src/features/itinerary/ui/ZeroCandidateScreen.tsx`  →  ZeroCandidateScreenProps · ZeroCandidateScreen
 
@@ -471,7 +486,7 @@
 - `src/features/planb/ui/ReplanAppliedScreen.tsx`  →  ReplanAppliedScreenProps · ReplanAppliedScreen
 - `src/features/planb/ui/ReplanDraftScreen.tsx`  →  ReplanDraftScreenProps · ReplanDraftScreen
 - `src/features/planb/ui/ReplanRequestSheet.tsx`  →  ReplanDetectionBanner · ReplanRequestSheetProps · ReplanRequestSheet
-- `src/features/planb/ui/ReplanSlotRow.tsx`  →  SlotBadgeKind · ReplanSlotVM · ReplanSlotRowProps · ReplanSlotRow
+- `src/features/planb/ui/ReplanSlotRow.tsx`  →  ReplanSlotRow
 - `src/features/planb/ui/ReplanSolvingScreen.tsx`  →  ReplanSolvingScreenProps · ReplanSolvingScreen
 - `src/features/planb/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetProps · SlotCandidateSheet
 - `src/features/planb/ui/TriggerWatchlistScreen.tsx`  →  TriggerWatchlistScreenProps · TriggerWatchlistScreen
@@ -1264,4 +1279,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 854개 파일
+합계 863개 파일
