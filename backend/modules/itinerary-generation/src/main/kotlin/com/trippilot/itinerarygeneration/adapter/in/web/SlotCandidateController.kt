@@ -47,8 +47,18 @@ data class SlotCandidatesRequest(
     val radiusM: Int? = null,
     @field:Size(max = 40, message = "컨셉은 40자 이하입니다.")
     val concept: String? = null,
+    /**
+     * i14 재계획 사유 코드(FE 카탈로그 키). 넘기면 AI 가 사유 기반 랭킹을 슬롯 교체에도 쓴다 —
+     * 비 오는 날 야외 후보를 뒤로 미는 식이다. 사유 없는 편집 흐름(h12·h18)은 생략한다.
+     *
+     * **모르는 코드를 400 으로 막지 않는다** — 사유는 랭킹 힌트지 요청 성립 조건이 아니라,
+     * FE 카탈로그가 앞서 나갔다고 교체 기능이 멈추면 손해가 더 크다. 서버가 사유 없음으로 눕히고
+     * 로그를 남긴다.
+     */
+    @field:Size(max = 40, message = "사유 코드는 40자 이하입니다.")
+    val reason: String? = null,
 ) {
-    fun toCommand() = RequestSlotCandidates(slotKey, radiusM, concept)
+    fun toCommand() = RequestSlotCandidates(slotKey, radiusM, concept, reason)
 }
 
 /**

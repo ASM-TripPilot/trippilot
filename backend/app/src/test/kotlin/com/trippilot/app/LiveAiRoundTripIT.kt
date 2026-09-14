@@ -182,6 +182,8 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
         concept = "카페",
         excludePoiIds = emptyList(),
         placementReason = "일몰 명소",
+        // 실 왕복에서도 번역표를 태운다 — FE 카탈로그 코드로 보내고 어댑터가 상대 어휘로 바꾼다.
+        reason = "WEATHER",
         requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 25_000L),
     )
 
