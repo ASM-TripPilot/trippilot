@@ -27,8 +27,12 @@ class NotificationMetricsTest : StringSpec({
         metrics.pushDispatched(PushOutcome.SENT)
         metrics.pushDispatched(PushOutcome.MUTED)
 
-        registry.counter(NotificationMetrics.PUSH_DISPATCH, "outcome", "SENT", "reason", "none").count() shouldBe 2.0
-        registry.counter(NotificationMetrics.PUSH_DISPATCH, "outcome", "MUTED", "reason", "none").count() shouldBe 1.0
+        // delivery 태그가 붙는다(TRIP-834) — 기본은 실발송이고, 미발송 모드는 따로 센다.
+        val real = NotificationMetrics.DELIVERY_REAL
+        registry.counter(NotificationMetrics.PUSH_DISPATCH, "outcome", "SENT", "reason", "none", "delivery", real)
+            .count() shouldBe 2.0
+        registry.counter(NotificationMetrics.PUSH_DISPATCH, "outcome", "MUTED", "reason", "none", "delivery", real)
+            .count() shouldBe 1.0
     }
 
     "억제는 발송 실패와 다른 지표로 쌓인다 — 일부러 안 보낸 것이라 정책 조정의 근거다" {

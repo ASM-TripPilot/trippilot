@@ -79,6 +79,7 @@ class NotificationRaiseServiceTest : StringSpec({
     }
 
     class Sender : PushPort {
+        override val deliversExternally = true
         var calls = 0
         override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> {
             calls++

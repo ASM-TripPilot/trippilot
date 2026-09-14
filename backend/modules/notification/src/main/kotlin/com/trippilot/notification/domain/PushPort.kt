@@ -10,6 +10,16 @@ package com.trippilot.notification.domain
  * 나머지 토큰의 발송을 취소하면 안 되기 때문이다(INV-U6-06).
  */
 interface PushPort {
+    /**
+     * **실제로 기기까지 보내는가.** 기본 발송기는 아무 데도 안 보내면서 성공을 보고하는데
+     * (그 판단 자체는 옳다 — 실패로 보고하면 진짜 실패가 묻힌다), 그 상태에서 발송 지표가
+     * "성공률 100%" 를 그린다. 운영에서 그 그래프를 보면 **푸시가 잘 나가고 있다고 읽는다.**
+     *
+     * 그래서 지표가 "보냈다"와 "보낸 척했다"를 갈라야 한다. 기본값을 두지 않는다 — 새 발송기가
+     * 실수로 "실발송"이 되는 쪽이 반대보다 위험하다.
+     */
+    val deliversExternally: Boolean
+
     /** 토큰마다 하나씩, **입력과 같은 수의** 영수증을 돌려준다. */
     fun send(tokens: List<String>, message: PushMessage): List<PushReceipt>
 }
