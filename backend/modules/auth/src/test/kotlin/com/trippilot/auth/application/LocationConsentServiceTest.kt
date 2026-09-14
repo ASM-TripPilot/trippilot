@@ -1,6 +1,7 @@
 package com.trippilot.auth.application
 
 import com.trippilot.auth.domain.AccountId
+import com.trippilot.auth.api.event.GpsRecordingOptOut
 import com.trippilot.auth.domain.consent.ConsentAction
 import com.trippilot.auth.domain.consent.ConsentRecord
 import com.trippilot.auth.domain.consent.TermsType
@@ -50,10 +51,16 @@ class LocationConsentServiceTest : StringSpec({
     val clock = Clock.fixed(now, ZoneOffset.UTC)
     val account = AccountId(UUID.randomUUID())
 
+    /** 발행된 이벤트를 붙든다 — 철회가 **파기 신호를 실제로 내보내는지**는 여기서만 보인다. */
+    class Events : com.trippilot.core.event.DomainEventPublisher {
+        val published = mutableListOf<com.trippilot.core.event.DomainEvent>()
+        override fun publish(event: com.trippilot.core.event.DomainEvent) { published += event }
+    }
+
     fun fixture(): Triple<LocationConsentService, FakeLegalLogRepo, FakeConsentRecords> {
         val log = FakeLegalLogRepo()
         val records = FakeConsentRecords()
-        val svc = LocationConsentService(FakeLocationStateRepo(), log, FakeTerms(), records, clock)
+        val svc = LocationConsentService(FakeLocationStateRepo(), log, FakeTerms(), records, Events(), clock)
         return Triple(svc, log, records)
     }
 
@@ -124,5 +131,31 @@ class LocationConsentServiceTest : StringSpec({
         val caps = svc.get(account).capabilities()
         caps.serverLocationService shouldBe true
         caps.gpsTrackRetention shouldBe true
+    }
+    /**
+     * 철회는 **파기 신호까지 내보내야** 완결된다(INV-L4). 저장된 위치정보는 저마다 다른 모듈이
+     * 갖고 있어 auth 가 직접 못 지운다 — 신호가 빠지면 아무도 안 지우고, 로그만 "파기했다"고 말한다.
+     */
+    "L3 를 철회하면 파기 신호를 발행한다" {
+        val events = Events()
+        val svc = LocationConsentService(FakeLocationStateRepo(), FakeLegalLogRepo(), FakeTerms(), FakeConsentRecords(), events, clock)
+        svc.update(account, legalConsent = true, gpsRecordingOptIn = true)
+        events.published.clear()
+
+        svc.update(account, legalConsent = true, gpsRecordingOptIn = false)
+
+        val signal = events.published.filterIsInstance<GpsRecordingOptOut>().single()
+        signal.aggregateId shouldBe account.value.toString()
+        signal.reason shouldBe GpsRecordingOptOut.REASON_REVOKED
+    }
+
+    /** 켜는 것은 파기가 아니다 — 신호를 남발하면 구독자가 매번 전량을 훑는다. */
+    "동의를 켤 때는 파기 신호가 없다" {
+        val events = Events()
+        val svc = LocationConsentService(FakeLocationStateRepo(), FakeLegalLogRepo(), FakeTerms(), FakeConsentRecords(), events, clock)
+
+        svc.update(account, legalConsent = true, gpsRecordingOptIn = true)
+
+        events.published.filterIsInstance<GpsRecordingOptOut>().shouldBeEmpty()
     }
 })

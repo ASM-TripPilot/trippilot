@@ -7,6 +7,8 @@ import com.trippilot.archive.domain.VisitPhotoMeta
 import com.trippilot.archive.domain.VisitPhotoMetaRepository
 import com.trippilot.auth.api.LocationConsentFacade
 import com.trippilot.auth.api.LocationLegalLogFacade
+import com.trippilot.trip.api.TripPurgeScopeFacade
+import com.trippilot.auth.api.LocationPurgeScope
 import com.trippilot.auth.api.LocationCollectionSource
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
@@ -35,6 +37,7 @@ class VisitRecordService(
     private val memos: VisitMemoRepository,
     private val locationConsents: LocationConsentFacade,
     private val legalLogs: LocationLegalLogFacade,
+    private val purgeScope: TripPurgeScopeFacade,
     private val clock: Clock,
 ) {
     /**
@@ -76,6 +79,23 @@ class VisitRecordService(
             legalLogs.recordCollection(accountId, LocationCollectionSource.PHOTO_EXIF, saved.visitPhotoMetaId)
         }
         return saved
+    }
+
+    /**
+     * 이 계정의 저장된 EXIF 좌표를 전부 지운다(INV-L4 — 동의 철회·계정 삭제).
+     *
+     * 범위를 여행 목록으로 받아 오는 이유: `visit_photo_meta` 는 계정을 모르고, 그 연결을 아는
+     * `trip` 은 다른 모듈 소유라 여기서 조인하지 않는다. **삭제된 여행도 포함**되는 목록이어야 한다 —
+     * 안 보이는 여행이라고 빼면 그 아래 좌표가 조용히 남는다.
+     *
+     * 지운 것이 없으면 **파기 기록을 남기지 않는다.** "지울 게 없었다"와 "지웠다"는 다른 사실이고,
+     * 재배달 때마다 0건 기록이 쌓이면 확인자료가 의미를 잃는다.
+     */
+    @Transactional
+    fun purgeExifCoordinates(accountId: UUID): Int {
+        val purged = photos.clearExifCoordinates(purgeScope.findAllTripIdsOf(accountId))
+        if (purged > 0) legalLogs.recordPurge(accountId, LocationPurgeScope.PHOTO_EXIF, purged)
+        return purged
     }
 
     @Transactional(readOnly = true)

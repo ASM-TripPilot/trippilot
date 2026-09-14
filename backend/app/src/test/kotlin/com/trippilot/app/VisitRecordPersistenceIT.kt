@@ -125,6 +125,42 @@ class VisitRecordPersistenceIT : AbstractPostgresIntegrationTest() {
         detail shouldNotContain "126.57"
     }
 
+    /**
+     * 철회 파기의 실 DB 검증(INV-L4). 대역이 **원리적으로** 못 보는 것:
+     * - **여행 범위로 좁히는 UPDATE 가 실제로 좁히는가** — 대역은 보관분 전부를 지운다
+     * - **다른 계정의 좌표를 건드리지 않는가** — 파기가 남의 데이터를 지우면 그건 사고다
+     * - 사진 행·메모가 남는가(좌표만 지운다)
+     */
+    @Test
+    fun `파기는 내 좌표만 지우고 사진 행과 남의 데이터는 건드리지 않는다`() {
+        val mine = newAccount()
+        val other = newAccount()
+        val myTrip = newTrip(mine)
+        val otherTrip = newTrip(other)
+        val myVisit = newVisit(myTrip)
+        val otherVisit = newVisit(otherTrip)
+        locationConsents.update(AccountId(mine), legalConsent = true, gpsRecordingOptIn = true)
+        locationConsents.update(AccountId(other), legalConsent = true, gpsRecordingOptIn = true)
+        val myPhoto = records.addPhoto(mine, myTrip, myVisit, photo("mine"))
+        val otherPhoto = records.addPhoto(other, otherTrip, otherVisit, photo("other"))
+
+        val purged = records.purgeExifCoordinates(mine)
+
+        purged shouldBe 1
+        coords(myPhoto.visitPhotoMetaId) shouldBe null
+        // 행 자체는 남는다 — 사진 카드가 사라지면 사용자가 잃는 것이 생긴다.
+        jdbc.queryForObject(
+            "SELECT count(*) FROM visit_photo_meta WHERE visit_photo_meta_id = ?",
+            Int::class.java, myPhoto.visitPhotoMetaId,
+        ) shouldBe 1
+        // 남의 좌표는 그대로다.
+        coords(otherPhoto.visitPhotoMetaId) shouldBe 33.45
+    }
+
+    private fun coords(photoId: UUID): Double? = jdbc.queryForObject(
+        "SELECT exif_lat FROM visit_photo_meta WHERE visit_photo_meta_id = ?", Double::class.java, photoId,
+    )
+
     private fun collectionLogs(accountId: UUID): Int = jdbc.queryForObject(
         "SELECT count(*) FROM location_legal_log WHERE account_id = ? AND event_type = 'COLLECTION'",
         Int::class.java, accountId,

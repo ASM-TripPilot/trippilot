@@ -60,6 +60,9 @@ class TripRecordServiceTest : StringSpec({
     }
 
     class Photos(private val counts: Map<UUID, Int> = emptyMap()) : VisitPhotoMetaRepository {
+        /** 파기(INV-L4) — 이 테스트는 좌표를 쓰지 않는다. */
+        override fun clearExifCoordinates(tripIds: Collection<UUID>): Int = 0
+
         override fun save(photo: VisitPhotoMeta) = photo
         override fun findByVisit(visitCheckId: UUID) = emptyList<VisitPhotoMeta>()
         override fun findById(visitPhotoMetaId: UUID): VisitPhotoMeta? = null
