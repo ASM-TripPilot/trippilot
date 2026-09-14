@@ -77,6 +77,9 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
         // 싱글톤 컨테이너라 남기면 다른 IT 의 릴레이가 이 행을 집는다.
         jdbc.update("DELETE FROM outbox_event WHERE event_type IN ('test.RelayProbe', 'test.NobodyListens')")
         subscriber.received.clear()
+        // 실패 플래그도 되돌린다 — 설정해 둔 이벤트가 (백오프 등으로) 안 집히면 그대로 남아
+        // **다음 테스트의 첫 배달을 엉뚱하게 실패시킨다**. 백오프 도입으로 "안 집히는 경로"가 생겼다.
+        subscriber.failNext = false
     }
 
     private fun unpublished(note: String) = jdbc.queryForObject(
