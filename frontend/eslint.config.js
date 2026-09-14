@@ -1,25 +1,131 @@
 // https://docs.expo.dev/guides/using-eslint/
+const fs = require('fs');
+const path = require('path');
+
 const { defineConfig } = require('eslint/config');
 const expoConfig = require('eslint-config-expo/flat');
 
-// import 경계: features/* 는 다른 feature 를 직접 import 할 수 없고 shared/ 만 참조한다.
-// 각 feature 를 target 으로, 자기 자신을 예외로 두어 "형제 feature import" 만 금지한다.
-const FEATURES = ['onboarding', 'home'];
+// FSD 층 방향(app → pages → widgets → features → entities → shared)을 import 경계로 강제한다.
+// 각 zone 의 target 은 "제한을 받는 층", from 은 "그 층이 import 하면 안 되는 상위 층들"이다.
+// 하위 층은 상위 층을 모른다 — features 는 다른 feature·widgets·pages·app 을 못 보고,
+// shared 는 아무 상위 층도 못 본다.
+//
+// eslint-plugin-import 2.32.0 계약 두 가지:
+//  (1) from 이 glob 배열이면 except 도 전부 glob 이어야 한다(디렉토리와 섞으면 규칙이
+//      "exceptions must be glob patterns" 로 무효화된다).
+//  (2) glob 경로에서 rule 은 from·target 은 basePath 로 resolve 하지만 **except 는 원문 그대로**
+//      minimatch 에 넣는다(비-glob 경로에서만 except 를 resolve — 규칙 소스의 비대칭). 그래서
+//      상대 glob(`./src/features/auth/**`)을 except 로 주면 절대 import 경로에 매칭 실패해 같은
+//      feature 안의 상대 import 까지 위반으로 잡힌다. → target·from·except 를 전부 `layerGlob`
+//      으로 **절대 glob** 으로 통일한다(`./src/app/**` 는 `src/app-shell` 을 안 문다 — 세그먼트 경계).
+//
+// 같은 층 형제 슬라이스 격리(TRIP-806): 층 방향(위/아래)만이 아니라 **같은 층 안의 형제 슬라이스끼리도**
+// 서로 못 보게 한다 — features 가 이미 쓰는 방식(슬라이스마다 target·from·except zone 을 만들고 자기
+// 슬라이스만 except)을 pages·widgets·entities 로 복제한다. 공용이 생기면 형제에서 직접 꺼내지 말고 더
+// 아래 층으로 승격한다. entities 만 예외로, 제공자 Y 가 소비자 X 에게만 내주는 `entities/Y/@x/X/**` 창구를
+// except 에 추가로 넣어 통제된 교차를 허용한다(그 외 형제 직접 import 는 여전히 금지).
+//
+// 전방 app→features 제한은 이번엔 두지 않는다(Q1 옵션 A) — app·app-shell 을 target 으로 넣지
+// 않는다. app→features 실측 110건이 즉시 red 가 되고 TRIP-803 "소급 이동 없음"과 충돌하기
+// 때문. pages 이주로 app→features 가 자연 감소한 뒤 별도 티켓에서 켠다.
 
-// auth 는 실재하지만 이 배열에 없다(선재 결함, 이 목록이 정리되기 전부터 빠져 있었다) — 넣으면
-// auth → 다른 feature 방향 import 를 새로 막는 동작 변경이라 전용 테스트가 필요한 별건이다.
-// 지금은 auth → onboarding 등 그 방향의 위반이 안 잡힌다는 사실만 여기 남겨둔다.
+const SRC = path.join(__dirname, 'src');
+// `layerGlob('features','auth')` → `<abs>/src/features/auth/**` (해당 층·슬라이스 아래 전부).
+const layerGlob = (...segments) => path.join(SRC, ...segments, '**');
 
-// `except` 의 경로는 **`from` 기준 상대경로**다(eslint-plugin-import 규약).
-// `./src/features/${feature}` 로 쓰면 from 아래에서 다시 해석돼 예외가 하나도 잡히지 않고,
-// 같은 feature 안의 형제 파일 import(`./TermsScreen`)까지 위반으로 잡힌다.
-const featureIsolationZones = FEATURES.map((feature) => ({
-  target: `./src/features/${feature}`,
-  from: './src/features',
-  except: [`./${feature}`],
-  message:
-    'features 간 직접 import 금지 — 데이터 공유는 shared/api, 화면 이동은 라우팅으로.',
-}));
+// 층별 슬라이스 목록은 손으로 나열하지 않고 디렉토리에서 읽는다 — 새 슬라이스가 생기면 자동으로
+// 형제 격리 대상에 편입돼 하드코딩 드리프트를 막는다(구조 테스트도 같은 방식으로 목록을 읽는다).
+// entities 는 첫 입주 전이면 디렉토리가 아예 없을 수 있어(D2) existsSync 로 방어한다 — 없으면 빈 배열이라
+// zone 이 하나도 안 생기고, 있으면 그 슬라이스들이 형제 격리 대상이 된다.
+const readSlices = (layer) => {
+  const dir = path.join(SRC, layer);
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+};
+const FEATURES = readSlices('features');
+const PAGES = readSlices('pages');
+const WIDGETS = readSlices('widgets');
+const ENTITIES = readSlices('entities');
+
+// 각 층이 import 하면 안 되는 "더 위쪽" 층들의 glob 목록.
+const ABOVE_FEATURES = [
+  layerGlob('widgets'),
+  layerGlob('pages'),
+  layerGlob('app'),
+  layerGlob('app-shell'),
+];
+const ABOVE_ENTITIES = [layerGlob('features'), ...ABOVE_FEATURES];
+const ABOVE_WIDGETS = [
+  layerGlob('pages'),
+  layerGlob('app'),
+  layerGlob('app-shell'),
+];
+const ABOVE_PAGES = [layerGlob('app'), layerGlob('app-shell')];
+const ABOVE_SHARED = [layerGlob('entities'), ...ABOVE_ENTITIES];
+
+const layerZones = [
+  // features/<x> 는 형제 feature 와 위 층(widgets·pages·app·app-shell)을 import 하지 못한다.
+  // 같은 feature(자기 자신)는 except 로 허용하고, entities·shared 는 from 에 없어 허용된다.
+  ...FEATURES.map((feature) => ({
+    target: layerGlob('features', feature),
+    from: [layerGlob('features'), ...ABOVE_FEATURES],
+    except: [layerGlob('features', feature)],
+    message:
+      'features 간 직접 import 금지 + 상위 층(widgets·pages·app) 역참조 금지 — 데이터는 shared/api, 공용 도메인은 entities, 화면 이동은 라우팅.',
+  })),
+  // pages·widgets 도 같은 층 형제 슬라이스끼리 서로 import 하지 못한다(features 와 동형). from 은
+  // 그 층 전체(layerGlob), except 는 자기 슬라이스뿐 — 자기 슬라이스 안의 절대 import 는 허용된다.
+  ...PAGES.map((slice) => ({
+    target: layerGlob('pages', slice),
+    from: [layerGlob('pages')],
+    except: [layerGlob('pages', slice)],
+    message:
+      'pages 형제 슬라이스 간 직접 import 금지 — 공용은 widgets/features/entities/shared 로 승격한다.',
+  })),
+  ...WIDGETS.map((slice) => ({
+    target: layerGlob('widgets', slice),
+    from: [layerGlob('widgets')],
+    except: [layerGlob('widgets', slice)],
+    message:
+      'widgets 형제 슬라이스 간 직접 import 금지 — 공용은 features/entities/shared 로 승격한다.',
+  })),
+  // entities 만 형제 교차 창구 `@x` 를 연다 — 제공자 Y 가 `entities/Y/@x/X/**` 로 소비자 X 에게만
+  // 내준다. except 도 전부 절대 glob 이어야 한다(★4, eslint-plugin-import 2.32.0 비대칭 — 상대 glob
+  // 은 매칭 실패해 정당한 자기 import 까지 위반으로 잡힌다). `@x` 외 형제 직접 import 는 여전히 금지.
+  ...ENTITIES.map((slice) => ({
+    target: layerGlob('entities', slice),
+    from: [layerGlob('entities')],
+    except: [
+      layerGlob('entities', slice),
+      layerGlob('entities', '*', '@x', slice),
+    ],
+    message:
+      'entities 형제 슬라이스는 서로 모른다 — 교차가 꼭 필요하면 제공자가 낸 @x 창구(entities/<제공자>/@x/<소비자>/**)로만.',
+  })),
+  {
+    target: layerGlob('entities'),
+    from: ABOVE_ENTITIES,
+    message: 'entities 는 shared 만 참조한다(features·상위 층 역참조 금지).',
+  },
+  {
+    target: layerGlob('widgets'),
+    from: ABOVE_WIDGETS,
+    message: 'widgets 는 features 이하만 참조한다(pages·app 역참조 금지).',
+  },
+  {
+    target: layerGlob('pages'),
+    from: ABOVE_PAGES,
+    message: 'pages 는 widgets 이하만 참조한다(app·app-shell 역참조 금지).',
+  },
+  {
+    target: layerGlob('shared'),
+    from: ABOVE_SHARED,
+    message: 'shared 는 어떤 상위 층도 모른다(도메인 무관 원시 부품만).',
+  },
+];
 
 module.exports = defineConfig([
   expoConfig,
@@ -31,7 +137,7 @@ module.exports = defineConfig([
   {
     files: ['src/**/*.{ts,tsx}'],
     rules: {
-      'import/no-restricted-paths': ['error', { zones: featureIsolationZones }],
+      'import/no-restricted-paths': ['error', { zones: layerZones }],
       // NativeWind 전역 스타일은 side-effect import 이며 확장자 resolver 대상이 아니다.
       'import/no-unresolved': ['error', { ignore: ['\\.css$'] }],
     },
@@ -80,8 +186,10 @@ module.exports = defineConfig([
   },
   {
     // .cjs 는 node CommonJS 런타임으로 실행되는 스크립트다(하네스 스크립트 포함).
-    // 기본 설정에 __dirname/__filename 전역이 빠져 있어 no-undef 오탐이 난다.
-    files: ['**/*.cjs'],
+    // eslint.config.js 도 CommonJS 런타임 파일이며, 층 zone 을 세우려 `__dirname` 으로
+    // src 위치를 잡는다(위 layerGlob). 기본 설정에 __dirname/__filename 전역이 빠져 있어
+    // no-undef 오탐이 나므로 두 대상에 CommonJS 전역을 준다.
+    files: ['**/*.cjs', 'eslint.config.js'],
     languageOptions: {
       sourceType: 'commonjs',
       globals: { __dirname: 'readonly', __filename: 'readonly' },

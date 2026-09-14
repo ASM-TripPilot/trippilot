@@ -5,7 +5,11 @@
  * INV-3: duration 절대 미표시·미저장. 거리·이동수단만.
  *
  * 화면 호출부: `legDistance(slots.map((s) => s.distanceRange))`.
+ *
+ * 반올림·형식 코어는 `entities/place/lib` 의 `formatDistance`(공용)를 쓴다 — 여기 로직은 서버 문자열
+ * 파싱·미터 합산·null/broken/스킵 판정(formatDistance 밖의 legDistance 고유 계약)만 남는다.
  */
+import { formatDistance } from '@/entities/place/lib/formatDistance';
 
 /**
  * 거리 문자열에서 **숫자+단위(km|m)만** 뽑는 느슨한 파서 정규식.
@@ -55,11 +59,5 @@ export function legDistance(
 
   if (totalMeters === 0) return null;
 
-  if (totalMeters < 1000) {
-    const rounded = Math.round(totalMeters / 10) * 10;
-    return `이동 ${rounded}m`;
-  }
-
-  const km = Math.round(totalMeters / 100) / 10;
-  return `이동 ${km.toFixed(1)}km`;
+  return `이동 ${formatDistance(totalMeters)}`;
 }

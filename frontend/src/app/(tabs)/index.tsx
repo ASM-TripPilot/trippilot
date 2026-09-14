@@ -7,13 +7,13 @@ import {
 } from '@/shared/api/generated/trips/trips';
 import { getAccessToken } from '@/shared/api/tokenManager';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
+import { formatTripRange } from '@/entities/trip/lib/formatTripPeriod';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
 import {
-  formatNightsLabel,
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
-import { formatTripRange } from '@/features/trip/model/baseScreen';
 import { HOME_NO_TRIP_PROPS } from '@/features/home/model/homeFixtures';
 import { resolveHomePhase } from '@/features/home/model/homePhase';
 import type { HomePhase } from '@/features/home/model/homeTypes';

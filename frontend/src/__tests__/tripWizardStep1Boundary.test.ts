@@ -281,10 +281,18 @@ describe('AC-14 · 화면이 쿼리 훅·라우터·위치를 물지 않는다',
 
     // 순회기 자가검사 — 여기가 비면 "위반 0"은 아무 뜻이 없다. 화면이 순수 함수 모듈을
     // 실제로 물고 있다는 사실이 곧 "스캔이 한 걸음 이상 걸었다"는 증거가 된다.
+    // ⚠️ TRIP-808 재조준(구현 후 발견): 옛 앵커 `features/trip/model/tripWizardStep1.ts` 는 화면이
+    //    직접 안 물고 `tripSummary` 가 `dayOfWeek` 를 import 하던 것이 유일 브리지였는데, S808 이
+    //    `formatDateRangeWithDow`(dayOfWeek 유일 사용처)를 entities 로 이관하면서 tripSummary 의
+    //    dayOfWeek import 가 필연 소멸(안 지우면 unused import 에러) → 그 브리지가 끊겨 stale red 가
+    //    됐다. 죽은 import 를 되살리는 건 게이밍이라, 순회가 **실제로 닿는** `entities/trip/lib/
+    //    formatTripPeriod.ts` 로 재조준한다 — 이건 화면→tripSummary→entities lib 2걸음이라 옛 앵커(1걸음
+    //    브리지)보다 **강하다**: 순회가 features/trip 을 넘어 entities 층 경계까지 실제로 갔음을 증명한다
+    //    (개념 [[선재 가드 재조준 (코드 이동 추적)]], 03 ⛔ 절·02a §6-뮤테이션).
     expect(reachedRelative).toContain(
       'features/trip/ui/TripWizardStep1Screen.tsx'
     );
-    expect(reachedRelative).toContain('features/trip/model/tripWizardStep1.ts');
+    expect(reachedRelative).toContain('entities/trip/lib/formatTripPeriod.ts');
     expect(reached.length).toBeGreaterThan(2);
 
     expect(offenders).toEqual([]);
@@ -304,13 +312,13 @@ describe('AC-5 · 시계를 읽지 않는다 (01b D5 — 기준일은 주입받�
     });
 
     // 긍정 짝 — 순수 모듈이 실제로 계산 함수를 갖고 있다. 없으면 빈 파일이 위를 통과한다.
+    // ⚠️ TRIP-808 재조준: `formatDateRange` 를 이 목록에서 뺐다 — entities/trip/lib 로 이관돼 이 파일엔
+    //    `export { formatDateRange } from '@/entities/trip/lib/formatTripPeriod'` 재수출 shim 만 남는데,
+    //    아래 정규식(`export function|const`)은 재수출을 못 잡아 stale red 가 된다. 위저드 업무규칙인
+    //    `presetRange`·`PERIOD_PRESETS`·`COMPANION_OPTIONS` 는 이 파일에 그대로 정의돼 남아(존치) 긍정 짝의
+    //    teeth(빈 파일 차단)를 유지한다(개념 [[선재 가드 재조준 (코드 이동 추적)]], 02a §7·§6-뮤테이션).
     const pureSource = stripComments(readFileSync(PURE, 'utf8'));
-    [
-      'presetRange',
-      'formatDateRange',
-      'PERIOD_PRESETS',
-      'COMPANION_OPTIONS',
-    ].forEach((symbol) => {
+    ['presetRange', 'PERIOD_PRESETS', 'COMPANION_OPTIONS'].forEach((symbol) => {
       expect(pureSource).toMatch(
         new RegExp(`export\\s+(?:function\\s+|const\\s+)${symbol}\\b`)
       );

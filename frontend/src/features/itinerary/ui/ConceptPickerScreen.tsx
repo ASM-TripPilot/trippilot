@@ -3,15 +3,14 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  BackChevronGlyph,
   CategoryBuildingGlyph,
   CategoryCupGlyph,
   CategoryForkKnifeGlyph,
   CategoryImageGlyph,
   CategoryShoppingBagGlyph,
   CategoryTreeGlyph,
-  ChevronRightGlyph,
-} from './ItineraryGlyphs';
+} from '@/entities/itinerary-slot/ui/SlotGlyphs';
+import { BackChevronGlyph, ChevronRightGlyph } from './ItineraryGlyphs';
 
 /**
  * TRIP-335 슬라이스2 · h13 "같이 고르기" 컨셉 고르기 — 순수 화면(props + 콜백만, Figma `1885:1083`).

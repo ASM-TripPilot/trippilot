@@ -2,6 +2,8 @@ import type { ReactElement, ReactNode } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
+
 import type { PlaceDetailView } from '../model/placeDetailView';
 import { BackArrowGlyph, ShareGlyph } from './ExecutionGlyphs';
 
@@ -95,11 +97,10 @@ export function PlaceDetailScreen({
         <View className="gap-lg px-lg pb-lg pt-[18px]">
           {/* 부제 — 태그 상위 몇 개를 " · " 로 이은 줄(없으면 category). 앵커 testID 없음. */}
           {view.tags.length > 0 || view.category !== null ? (
-            <Text className="font-noto text-label text-muted">
-              {view.tags.length > 0
-                ? view.tags.join(' · ')
-                : (view.category ?? '')}
-            </Text>
+            <PlaceSubtitle
+              parts={view.tags.length > 0 ? view.tags : [view.category ?? '']}
+              className="font-noto text-label text-muted"
+            />
           ) : null}
 
           {/* 태그 칩 — 각 tag 앞에 #. tags 비어도 컨테이너는 남는다(구조 앵커 S1). */}

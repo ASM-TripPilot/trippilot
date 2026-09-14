@@ -2,6 +2,8 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import type { SavedStayCardVM } from '@/entities/stay/model';
+import { SavedStayCard } from '@/entities/stay/ui/SavedStayCard';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import {
@@ -30,13 +32,9 @@ import {
  * `accessibilityState.selected` 두 신호로 관찰 가능하게 그린다(e03·d02 선례).
  */
 
-/** 저장 숙소 카드 뷰모델 — 이름과 (있으면)날짜라벨만. 지역·거리·가격은 계약 무. */
-export interface SavedStayCardVM {
-  savedStayId: string;
-  name: string;
-  /** checkIn~checkOut(있을 때만). 미지정 = 미표시. */
-  dateLabel?: string;
-}
+// TRIP-807 — 카드 뷰모델을 entities/stay/model 로 이관했다. 여기선 재수출 shim 으로 기존
+// 소비처(SavedStayPage·_dev/preview)의 이 파일 경유 import 를 그대로 살린다.
+export type { SavedStayCardVM };
 
 /** 화면 얼굴 — `resolvePlaceListState().kind` 에서 페이지가 파생(filter-zero 는 구조적 도달
  * 불가라 4종). `PlaceListState`(explore 소유)를 import 하지 않기 위해 로컬 유니온으로 둔다(AC-8). */
@@ -108,50 +106,6 @@ function AppBar({
   );
 }
 
-function SavedStayCard({
-  vm,
-  onPressCard,
-}: {
-  vm: SavedStayCardVM;
-  onPressCard?: (savedStayId: string) => void;
-}): ReactElement {
-  return (
-    // bare Pressable(accessibilityRole 없음 — d04·d02 카드 규율). 저장 목록이라 항상 담김 =
-    // accessibilityState.selected. 하트 fill 이 아니라 이 상태 + 별도 글리프 testID 로 담김을 잰다.
-    <Pressable
-      testID={`saved-stay-card-${vm.savedStayId}`}
-      accessibilityState={{ selected: true }}
-      onPress={() => onPressCard?.(vm.savedStayId)}
-      style={cardShadow}
-      className="mb-lg rounded-card border border-hairline bg-canvas"
-    >
-      {/* 사진 자리 — 계약에 imageUrl 없음(INV-1), 회색 플레이스홀더(line 140 승계). */}
-      <View className="h-[178px] w-full rounded-t-card bg-surface-strong">
-        <View className="absolute right-[14px] top-[14px]">
-          <HeartFilledGlyph
-            size={27}
-            testID={`saved-stay-heart-filled-${vm.savedStayId}`}
-          />
-        </View>
-      </View>
-
-      <View className="gap-xs px-[14px] pb-[14px] pt-[13px]">
-        <Text className="font-noto-bold text-card-title font-bold text-ink">
-          {vm.name}
-        </Text>
-        {vm.dateLabel ? (
-          <Text
-            testID={`saved-stay-date-${vm.savedStayId}`}
-            className="font-noto text-label text-muted"
-          >
-            {vm.dateLabel}
-          </Text>
-        ) : null}
-      </View>
-    </Pressable>
-  );
-}
-
 function ResultsFace({
   savedStays,
   onPressCard,
@@ -172,10 +126,32 @@ function ResultsFace({
         }}
       >
         {savedStays.map((vm) => (
+          // 저장 목록이라 항상 담김(selected 고정). 담김 하트는 표시용이라 카드가 소유하지 않고
+          // trailing 으로 주입한다(카드는 하트 불가지) — 담김은 색이 아니라 accessibilityState +
+          // 별도 글리프 testID 로 잰다(★4·★5). 사진·지역·가격은 계약 무라 카드가 그리지 않는다.
           <SavedStayCard
             key={vm.savedStayId}
-            vm={vm}
-            onPressCard={onPressCard}
+            testID={`saved-stay-card-${vm.savedStayId}`}
+            name={vm.name}
+            layout="vertical"
+            selected
+            subtitle={
+              vm.dateLabel ? (
+                <Text
+                  testID={`saved-stay-date-${vm.savedStayId}`}
+                  className="font-noto text-label text-muted"
+                >
+                  {vm.dateLabel}
+                </Text>
+              ) : undefined
+            }
+            trailing={
+              <HeartFilledGlyph
+                size={27}
+                testID={`saved-stay-heart-filled-${vm.savedStayId}`}
+              />
+            }
+            onPress={() => onPressCard?.(vm.savedStayId)}
           />
         ))}
       </ScrollView>

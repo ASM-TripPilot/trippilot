@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { getAccessToken } from '@/shared/api/tokenManager';
-import { formatPrice } from '@/features/stay/model/formatPrice';
+import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useSavedStays } from '@/features/stay/model/savedStays';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';

@@ -19,7 +19,7 @@ import BottomSheet, {
 
 import type { StayItem } from '@/shared/api/generated/schemas';
 
-import { formatPrice } from '../model/formatPrice';
+import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { BedGlyph, ChevronRightGlyph } from './StayGlyphs';
 
 /** BR-U1-30 정확 문구(법정성 UX) — 한 Text 노드로 렌더해 오탈자·변형이 completed-match red 가

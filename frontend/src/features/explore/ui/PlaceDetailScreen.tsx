@@ -9,13 +9,13 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
+import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
 import type { Place } from '@/shared/api/generated/schemas';
 
 import type { PlaceSaveNotice } from '../model/placeSaveGuard';
 import {
   BackChevronGlyph,
-  HeartFilledGlyph,
-  HeartOutlineGlyph,
   InfoGlyph,
   MapPinGlyph,
   ShareGlyph,
@@ -125,9 +125,9 @@ export function PlaceDetailScreen({
   onToggleSave,
   onPressSaveErrorAction,
 }: PlaceDetailScreenProps): ReactElement {
-  const subtitle = place.region
-    ? `${place.category} · ${place.region}`
-    : place.category;
+  const subtitleParts = place.region
+    ? [place.category, place.region]
+    : [place.category];
 
   return (
     <View testID="explore-place-detail" className="flex-1 bg-canvas">
@@ -203,9 +203,10 @@ export function PlaceDetailScreen({
             >
               {place.nameKo}
             </Text>
-            <Text className="font-noto text-caption text-on-primary">
-              {subtitle}
-            </Text>
+            <PlaceSubtitle
+              parts={subtitleParts}
+              className="font-noto text-caption text-on-primary"
+            />
           </View>
         </View>
 

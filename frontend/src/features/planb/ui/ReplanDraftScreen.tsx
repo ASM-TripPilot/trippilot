@@ -2,10 +2,11 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
+import { ReplanSlotRow } from '@/entities/itinerary-slot/ui/ReplanSlotRow';
 import { KakaoMapView, type MapCenter } from '@/shared/map';
 
 import { ChecklistDoneGlyph } from './PlanbGlyphs';
-import { ReplanSlotRow, type ReplanSlotVM } from './ReplanSlotRow';
 
 /**
  * TRIP-563 · AC-2·AC-3 — i13 AI 재계획안 화면(순수 props+콜백, 라우팅·훅 모름).

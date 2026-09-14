@@ -7,7 +7,7 @@ import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditI
 import { nextCoPickSlotKey } from '@/features/itinerary/model/coPickSlots';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
 import { formatRadiusUsed } from '@/features/itinerary/model/radiusUsedLabel';
-import { parseSlotKey } from '@/features/itinerary/model/slotKey';
+import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
 import { swapSlotPoi } from '@/features/itinerary/model/swapSlotPoi';
 import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';

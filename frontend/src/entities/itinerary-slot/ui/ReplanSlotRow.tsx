@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { ChevronRightGlyph, LockGlyph } from './PlanbGlyphs';
+import type { ReplanSlotVM } from '../model';
+import { ChevronRightGlyph, LockGlyph } from './SlotGlyphs';
 
 /**
  * TRIP-563 · AC-4 — i13 재계획안 슬롯 1행(순수 props+콜백, 라우팅·훅 모름).
@@ -11,21 +12,15 @@ import { ChevronRightGlyph, LockGlyph } from './PlanbGlyphs';
  * 실 슬롯 데이터(사진·번호·시간대)는 draft 계약 공백이라 VM 에 없어 안 그린다(정직한 골격).
  *
  * ★ INV-3: metaText 는 서버가 준 거리("도보 1.3km")·시각범위("09:30–10:50")만 통과 렌더한다 —
- *   소요시간(N분·N시간·소요)을 이 화면이 조립하지 않는다(구조가드 executionDurationStructure).
+ *   소요시간(N분·N시간·소요)을 이 화면이 조립하지 않는다(구조가드 entitiesItinerarySlotStructure G3 —
+ *   entities 로 이사해 executionDurationStructure 사정거리 밖, TRIP-809).
  * ★ badgeKind='fixed' 는 상단 배지로 그리지 않는다 — 우측 고정 pill 이 대신 표시한다.
  */
 
-export type SlotBadgeKind =
-  'visited' | 'inProgress' | 'changed' | 'fixed' | null;
-
-export interface ReplanSlotVM {
-  slotKey: string;
-  badgeKind: SlotBadgeKind;
-  placeName: string;
-  metaText: string;
-  candidateCount?: number;
-  isFixed: boolean;
-}
+// VM 타입(SlotBadgeKind·ReplanSlotVM)은 entities/itinerary-slot/model 로 이관됐다(로컬 정의 제거).
+// 옛 소비처(features/planb/ui 재수출 shim · git-mv 된 ReplanSlotRow.test 의
+// `import type { ReplanSlotVM } from './ReplanSlotRow'`)가 그대로 풀리게 여기서 재수출한다.
+export type { ReplanSlotVM, SlotBadgeKind } from '../model';
 
 export interface ReplanSlotRowProps {
   vm: ReplanSlotVM;

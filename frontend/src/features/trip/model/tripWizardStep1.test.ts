@@ -1,10 +1,11 @@
 import fc from 'fast-check';
 
+import { formatDateRange } from '@/entities/trip/lib/formatTripPeriod';
+
 import {
   COMPANION_OPTIONS,
   PERIOD_PRESETS,
   deriveEndDate,
-  formatDateRange,
   presetRange,
 } from './tripWizardStep1';
 

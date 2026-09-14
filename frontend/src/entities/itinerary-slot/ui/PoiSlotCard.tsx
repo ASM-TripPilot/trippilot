@@ -3,7 +3,7 @@ import { Image, Text, View } from 'react-native';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 
-import { buildSlotKey } from '../model/slotKey';
+import { buildSlotKey } from '../lib/slotKey';
 
 /**
  * TRIP-301 · 통일 POI 슬롯 카드 — 지도 밑 peekstrip(가로)과 지도 실패 폴백 목록(세로)

@@ -11,13 +11,13 @@ import {
   buildPlanDayTabs,
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
-import { parseSlotKey } from '@/features/itinerary/model/slotKey';
+import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import {
   AlertCircleGlyph,
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
 import { ItineraryEditScreen } from '@/features/itinerary/ui/ItineraryEditScreen';
-import { SlotTimeSheet } from '@/features/itinerary/ui/SlotTimeSheet';
+import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 import {
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdItineraryQueryOptions,
@@ -209,7 +209,7 @@ export function ItineraryEditPage({
       {editing !== null &&
       editing.kind === 'ok' &&
       editingSlot !== undefined ? (
-        <SlotTimeSheet
+        <TimeSheet
           startAt={editingSlot.startAt}
           endAt={editingSlot.endAt}
           onApply={(patch) => {
@@ -217,6 +217,8 @@ export function ItineraryEditPage({
             setEditingSlotKey(null);
           }}
           onCancel={() => setEditingSlotKey(null)}
+          testIDPrefix="itinerary-edit-time"
+          labels={{ start: '시작', end: '종료' }}
         />
       ) : null}
     </>

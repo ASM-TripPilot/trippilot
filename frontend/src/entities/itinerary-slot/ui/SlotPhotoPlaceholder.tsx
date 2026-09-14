@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { View } from 'react-native';
 
-import { resolveCategoryPlaceholder } from '../model/categoryPlaceholder';
+import { resolveCategoryPlaceholder } from '../lib/categoryPlaceholder';
 import {
   CategoryBuildingGlyph,
   CategoryCupGlyph,
@@ -11,7 +11,7 @@ import {
   CategoryPinGlyph,
   CategoryShoppingBagGlyph,
   CategoryTreeGlyph,
-} from './ItineraryGlyphs';
+} from './SlotGlyphs';
 
 /**
  * TRIP-465 · 사진 없는 일정 슬롯의 카테고리 플레이스홀더 — Figma `2989:1731`.

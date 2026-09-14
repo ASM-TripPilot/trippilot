@@ -2,7 +2,9 @@ import type { ReactElement } from 'react';
 import { FlatList, Image, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import type { SavedStayCardVM as StayRowVM } from '@/entities/stay/model';
 import type { SavedPlace } from '@/shared/api/generated/schemas';
+import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import type { PlaceListState } from '../model/placeListState';
@@ -10,8 +12,6 @@ import type { PlaceSaveNotice } from '../model/placeSaveGuard';
 import { SAVED_PLACE_BADGE } from '../model/savedPlaceList';
 import {
   BackChevronGlyph,
-  HeartFilledGlyph,
-  HeartOutlineGlyph,
   MapPinGlyph,
   WarningTriangleGlyph,
 } from './ExploreGlyphs';
@@ -26,16 +26,11 @@ import {
  * 태우면 화면이 끝나지 않는 로딩이 되고, `isLoading`으로 피하면 이번엔 "담은 게 없다"는
  * 거짓말이 뜬다 — 그래서 게스트 여부를 얼굴 판정의 가장 앞에 둔다.
  */
-/**
- * 숙소 행 뷰모델(TRIP-449). `SavedStay` 스키마엔 사진·지역·태그·상태배지가 없어(brief §61)
- * `SavedPlace` 행(`SavedPlaceRow`)을 재사용 못 한다 — 이름과 (있으면) 날짜라벨만 나른다.
- * 날짜라벨은 체크인/아웃이지 소요 시간이 아니다(INV-3). VM 조립은 페이지가 한다.
- */
-export interface StayRowVM {
-  savedStayId: string;
-  name: string;
-  dateLabel?: string;
-}
+// TRIP-807 — StayRowVM 은 entities/stay/model 의 SavedStayCardVM 과 동일 shape 라(savedStayId·
+// name·dateLabel?) 별칭 재수출로 통합한다(타입만 — 화면·행 렌더는 로컬 유지). 위 import 의
+// `SavedStayCardVM as StayRowVM` 로컬 바인딩을 재수출해 기존 소비처(SavedPlacesPage)의 이 파일
+// 경유 import 를 그대로 살린다.
+export type { StayRowVM };
 
 export interface SavedPlaceListScreenProps {
   /** 그릴 순서 그대로의 목록 — 정렬은 페이지가 끝냈다(단일 출처). */

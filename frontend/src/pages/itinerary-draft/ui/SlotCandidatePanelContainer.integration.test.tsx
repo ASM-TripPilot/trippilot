@@ -10,7 +10,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { buildSlotKey } from '@/features/itinerary/model/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { SLOT_SWAP_CONFLICT_CODES } from '@/features/itinerary/model/slotSwapError';
 import type {
   EditItineraryRequest,

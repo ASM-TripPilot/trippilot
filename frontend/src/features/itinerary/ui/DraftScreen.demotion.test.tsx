@@ -11,7 +11,7 @@ import type { DraftDayTab, DraftPin, DraftView } from '../model/draftView';
 // `{ kind: 'demoted' }` 갈래로 흡수됐다(01b 결정 3). `import type` 은 babel 가 런타임에 지우므로
 // implementer 가 이 타입을 더하기 전에도 red 실행에 지장이 없다.
 import type { FallbackNotice } from '../model/draftView';
-import { buildSlotKey } from '../model/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { DraftScreen } from './DraftScreen';
 
 /**

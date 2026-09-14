@@ -1,6 +1,6 @@
 import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
 
-import { buildSlotKey } from './slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 
 /**
  * TRIP-504 · copick 선형 순회의 슬롯 진행 판정(01b 순회 세부) — 비고정(`isFixed=false`) 슬롯을

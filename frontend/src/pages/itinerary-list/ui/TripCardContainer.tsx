@@ -4,9 +4,9 @@ import { useRouter } from 'expo-router';
 import type { Trip } from '@/shared/api/generated/schemas';
 import { useGetTripsTripIdItinerary } from '@/shared/api/generated/trips/trips';
 import { isNotFound } from '@/shared/api/isNotFound';
+import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
+import { formatConfirmedDateRange } from '@/entities/trip/lib/formatTripPeriod';
 import {
-  formatConfirmedDateRange,
-  formatNightsLabel,
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';

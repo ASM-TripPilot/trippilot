@@ -11,9 +11,10 @@ import {
   useGetTripsTripIdItinerary,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
-import { ManualTimeSheet, reorderKeepingFixed } from '@/shared/itinerary-edit';
+import { reorderKeepingFixed } from '@/widgets/itinerary-edit';
+import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 
-import { ManualEditScreen } from '@/features/planb/ui/ManualEditScreen';
+import { ManualEditScreen } from './ManualEditScreen';
 
 /**
  * TRIP-443 · planb-manual 배선(pages) — 라우트가 넘긴 `{tripId, variant}`를 받아 일정 GET으로 편집
@@ -154,11 +155,14 @@ export function PlanbManualPage({
         onEditSlotTime={(slotKey) => setEditingSlotKey(slotKey)}
       />
       {editingSlot === undefined ? null : (
-        <ManualTimeSheet
+        <TimeSheet
           startAt={editingSlot.startAt}
           endAt={editingSlot.endAt}
           onApply={handleApplyTime}
           onCancel={() => setEditingSlotKey(null)}
+          testIDPrefix="planb-manual-time"
+          labels={{ start: '도착', end: '출발' }}
+          title="시각 입력"
         />
       )}
     </>

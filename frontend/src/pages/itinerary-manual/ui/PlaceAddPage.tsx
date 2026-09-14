@@ -7,7 +7,7 @@ import { addSlot } from '@/features/itinerary/model/itineraryEditStore';
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
 import { usePlacesInfinite } from '@/features/explore/model/usePlacesInfinite';
 import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
-import { SlotTimeSheet } from '@/features/itinerary/ui/SlotTimeSheet';
+import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
@@ -123,11 +123,13 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
         onPressViewPlan={() => router.back()}
       />
       {pendingPlace ? (
-        <SlotTimeSheet
+        <TimeSheet
           startAt="10:00:00"
           endAt="11:00:00"
           onApply={handleApplyTime}
           onCancel={() => setPendingPlace(null)}
+          testIDPrefix="itinerary-edit-time"
+          labels={{ start: '시작', end: '종료' }}
         />
       ) : null}
     </>
