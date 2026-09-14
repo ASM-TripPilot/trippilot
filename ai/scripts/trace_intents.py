@@ -197,6 +197,8 @@ def _parse_args() -> argparse.Namespace:
                    help="--eval 의 leak 검사만 하고 라우팅(LLM 호출)은 하지 않는다 — 평가셋 작성 중 반복용")
     p.add_argument("--fill-bank", type=int, default=0, metavar="N",
                    help="자리표시자 문장을 대표 실명 N 세트로 채운 변형까지 뱅크에 색인 (TRIP-840 실험 A, 0=끔)")
+    p.add_argument("--intent-margin", type=float, default=default.intent_margin,
+                   help="1차 확정에 요구하는 타 의도 최근접과의 점수 차이")
     p.add_argument("--t-high", type=float, default=default.t_high)
     p.add_argument("--t-mid", type=float, default=default.t_mid)
     p.add_argument("--vote-ratio", type=float, default=default.vote_ratio)
@@ -219,7 +221,8 @@ def main() -> int:
         print("[주의] LANGSMITH_TRACING 미설정 — 트레이스는 전송되지 않는다(콘솔 출력만)",
               file=sys.stderr)
 
-    cfg = IntentRouterConfig(t_high=args.t_high, t_mid=args.t_mid, vote_ratio=args.vote_ratio)
+    cfg = IntentRouterConfig(t_high=args.t_high, t_mid=args.t_mid, vote_ratio=args.vote_ratio,
+                             intent_margin=args.intent_margin)
     embedding = build_local_embedding()
     store = InMemoryVectorStore()
     entries = load_bank_file(_BANK, yaml.safe_load)
@@ -261,7 +264,8 @@ def main() -> int:
           f"INTENT {run_meta['llm_intent']} · PARAPHRASE {run_meta['llm_paraphrase']} "
           f"(배정 출처 {assignment_source}) · openai_api {run_meta['openai_api']} · "
           f"embedding {run_meta['embedding_model']} · eval v{run_meta['eval_version']} · "
-          f"t_high {cfg.t_high} · t_mid {cfg.t_mid} · vote_ratio {cfg.vote_ratio}")
+          f"t_high {cfg.t_high} · t_mid {cfg.t_mid} · vote_ratio {cfg.vote_ratio} · "
+          f"intent_margin {cfg.intent_margin}")
 
     if args.eval:
         _leak_check(labeled, entries, embedding, store)
