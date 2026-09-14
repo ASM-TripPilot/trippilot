@@ -266,13 +266,13 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         override fun ground(poiIds: List<UUID>) = places.filter { it.poiId in poiIds }
     }
 
-    fun candidatesInput(radiusM: Int? = null, concept: String? = null) = SlotCandidatesInput(
+    fun candidatesInput(radiusM: Int? = null, concept: String? = null, reason: String? = null) = SlotCandidatesInput(
         tripId = UUID.randomUUID(),
         slotKey = "2026-09-01#$targetPoi",
         neighborSlotKeys = emptyList(),
         centerLat = 33.45, centerLng = 126.56,
         radiusM = radiusM, concept = concept, excludePoiIds = listOf(targetPoi),
-        placementReason = "일몰 명소",
+        placementReason = "일몰 명소", reason = reason,
         requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), 25_000L),
     )
 
@@ -291,6 +291,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andExpect(jsonPath("$.trigger.affected_date").value("2026-09-01"))
             .andExpect(jsonPath("$.dates[0]").value("2026-09-01"))
             .andExpect(jsonPath("$.anchor.lat").value(33.45))
+            // 사유 없는 편집 흐름(h12·h18) — 입력에 reason 이 없으면 사유 없음으로 나간다.
             .andExpect(jsonPath("$.reason").value("none"))
             .andExpect(jsonPath("$.excluded_poi_ids[0]").value(targetPoi.toString()))
             .andExpect(jsonPath("$.affected_reasons['$targetPoi']").value("일몰 명소"))
@@ -298,6 +299,30 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andRespond(withSuccess(altBody(0, """{"label":"B","poi_ids":["$nearPoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON))
 
         adapter.proposeSlotCandidates(candidatesInput())
+
+        server.verify()
+    }
+
+    "FE 사유 코드는 상대 어휘로 번역돼 나간다 — 같은 표를 재계획과 공유한다(B-6)" {
+        val (adapter, server) = fixture(poolOf(place(nearPoi, 33.46, 126.56)))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives"))
+            // FE 는 'TEMP_CLOSED' 를 보내고 상대는 'closed' 만 안다 — 그대로 흘리면 KB 질의가 오염된다.
+            .andExpect(jsonPath("$.reason").value("closed"))
+            .andRespond(withSuccess(altBody(0, """{"label":"B","poi_ids":["$nearPoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON))
+
+        adapter.proposeSlotCandidates(candidatesInput(reason = "TEMP_CLOSED"))
+
+        server.verify()
+    }
+
+    "모르는 사유 코드가 와도 요청은 성립한다 — 사유 없음으로 눕는다(INV-4)" {
+        val (adapter, server) = fixture(poolOf(place(nearPoi, 33.46, 126.56)))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/alternatives"))
+            .andExpect(jsonPath("$.reason").value("none"))
+            .andRespond(withSuccess(altBody(0, """{"label":"B","poi_ids":["$nearPoi"],"rationale":"근거"}"""), MediaType.APPLICATION_JSON))
+
+        // 400 으로 막지 않는다 — 사유는 랭킹 힌트지 요청 성립 조건이 아니다.
+        adapter.proposeSlotCandidates(candidatesInput(reason = "PANDEMIC"))
 
         server.verify()
     }

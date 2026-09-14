@@ -2322,6 +2322,16 @@ components:
             미지정이면 AI 기본 반경. h15 "반경 넓힘"이 이 값을 올려 재요청한다.
             상한 50km — 넘기면 400. 상한이 없으면 탐색 범위가 전 지구를 덮어 DB 전체를 훑는다.
         concept: { type: string, nullable: true, maxLength: 40, description: h13 테마 }
+        reason:
+          type: string
+          nullable: true
+          maxLength: 40
+          description: >
+            i14 재계획 사유 코드(FE 카탈로그 키 — `WEATHER`·`TEMP_CLOSED`·`SLOW_MOVE`·`LOW_ENERGY`·
+            `FULLY_BOOKED`·`JUST_CHANGE`). 주면 AI 가 사유 기반 랭킹을 슬롯 교체에도 쓴다(비 오는 날
+            야외 후보를 뒤로). 사유 없는 편집 흐름(h12·h18)은 생략한다.
+            **모르는 코드도 400 이 아니다** — 서버가 사유 없음으로 눕히고 로그를 남긴다(랭킹 힌트지
+            요청 성립 조건이 아니다).
     SlotCandidates:
       type: object
       required: [candidates, radiusMUsed, degraded]

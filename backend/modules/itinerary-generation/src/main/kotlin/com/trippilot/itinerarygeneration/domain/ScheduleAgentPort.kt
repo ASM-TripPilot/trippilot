@@ -319,6 +319,13 @@ data class SlotCandidatesInput(
     val radiusM: Int?,
     /** h13 컨셉(테마) — null 허용. */
     val concept: String?,
+    /**
+     * 교체 사유 — **FE 카탈로그 코드 그대로**(`WEATHER`·`TEMP_CLOSED` …). i14 재계획 흐름에서
+     * 사용자가 고른 값이고, h12/h18 일정 편집은 사유가 없어 null 이다.
+     *
+     * 번역은 어댑터가 한다(`AiReasonVocabulary`) — 도메인이 상대 어휘를 알면 경계가 새어 들어온다.
+     */
+    val reason: String?,
     val excludePoiIds: List<UUID>,
     /**
      * 교체 대상 슬롯이 **원래 왜 배치됐는가**(`VisitSlot.placementReason`) — AI 가 "원래 취지를 잇는

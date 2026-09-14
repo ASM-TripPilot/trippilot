@@ -25,6 +25,8 @@ data class RequestSlotCandidates(
     val slotKey: String,
     val radiusM: Int?,
     val concept: String?,
+    /** 교체 사유(FE 카탈로그 코드). 사유 없는 흐름은 null — 번역·검증은 경계 어댑터 몫이다. */
+    val reason: String?,
 )
 
 /**
@@ -98,6 +100,7 @@ class SlotCandidateService(
                     centerLng = center.lng,
                     radiusM = request.radiusM,
                     concept = request.concept,
+                    reason = request.reason,
                     excludePoiIds = inItinerary,
                     placementReason = matches.single().value.placementReason,
                     requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), CANDIDATES_DEADLINE_MS),

@@ -285,7 +285,8 @@ internal fun SlotCandidatesInput.toAlternativesRequest(): AiAlternativesRequest 
         // 입력에 트리거 정보가 없어 다른 값을 실을 방법 자체가 없다.
         trigger = AiTrigger(kind = "MANUAL", scheduleId = tripId.toString(), affectedDate = date),
         // 어휘 6값 중 하나만 쓴다 — 계약상 enum 이 아니라 오타가 422 로 안 잡히고 KB 질의만 오염된다.
-        reason = "none",
+        // 번역표는 재계획과 공유한다(설계 §3) — 같은 사유가 경로마다 다른 값으로 나가면 안 된다.
+        reason = AiReasonVocabulary.toAi(reason),
         anchor = AiCoord(centerLat, centerLng),
         dates = listOf(date),
         budgetLevel = null,     // 채우려면 profile 의존이 생긴다(R1 확대) — replan 과 같은 판단
