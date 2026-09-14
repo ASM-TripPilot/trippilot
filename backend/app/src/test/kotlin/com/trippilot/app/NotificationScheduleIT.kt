@@ -6,6 +6,7 @@ import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
+import com.trippilot.recalculation.api.event.ItineraryRecalculated
 import com.trippilot.notification.application.FireOutcome
 import com.trippilot.notification.application.NotificationFiringService
 import com.trippilot.notification.application.NotificationScheduleService
@@ -20,6 +21,7 @@ import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -246,5 +248,34 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
         }
         relay.relay()
         schedules.findPendingByTrip(tripId).map { it.fireAt } shouldContainExactly before
+    }
+    /**
+     * **재계획도 예약을 다시 세운다**(INV-U6-08 의 "U4 재계획" 절반).
+     *
+     * 이 구독이 없던 동안 `recalculation.ItineraryRecalculated` 는 발행되기만 하고 아무도 듣지 않아,
+     * 여행 중 하루가 통째로 바뀌어도 리마인드는 **옛 일정 그대로** 울렸다. 생성 경로가 멀쩡히 도는
+     * 탓에 "알림은 온다"로 보여 더 안 드러나던 공백이다.
+     */
+    @Test
+    fun `재계획 반영이 릴레이를 지나 리마인드 예약을 다시 세운다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        tx.execute {
+            publisher.publish(ItineraryGenerated(UUID.randomUUID().toString(), tripId.toString(), isFallback = false))
+        }
+        relay.relay()
+        // 재적재가 실제로 일어났는지 보려면 기존 예약을 지워 두고 되살아나는지를 본다 —
+        // 값이 같으면 "원래 있던 것"과 구분되지 않는다.
+        schedules.replacePending(tripId, emptyList())
+        schedules.findPendingByTrip(tripId).shouldBeEmpty()
+
+        tx.execute {
+            publisher.publish(ItineraryRecalculated(tripId.toString(), UUID.randomUUID().toString()))
+        }
+        relay.relay()
+
+        schedules.findPendingByTrip(tripId).map { it.kind } shouldContainExactly listOf(
+            NotificationKind.TRIP_PRE, NotificationKind.TRIP_DAY, NotificationKind.TRIP_DAY, NotificationKind.TRIP_DAY,
+        )
     }
 }
