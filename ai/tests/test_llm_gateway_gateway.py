@@ -270,6 +270,7 @@ _EXPECTED_MODES = {
     LlmFeature.SHARE_CARD_COPY: ("llm_share_card", "static_copy"),
     LlmFeature.INTENT: ("llm_intent", "out_of_scope"),
     LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
+    LlmFeature.BANK_AUGMENT: ("llm_augment", "(none)"),  # 오프라인 배치 — 강등할 런타임 경로 없음
     LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),
     LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
     # 규칙 하이라이트 폴백(agents/reflect/highlight_rule.py) — TRIP-595

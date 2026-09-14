@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -382,9 +383,11 @@ def _load_seed():
 def test_seed_bank_covers_closed_set_and_matches_routing_table() -> None:
     entries = _load_seed()
     assert {e.intent for e in entries} == ROUTABLE_INTENTS  # 13종 전부, 그 밖은 없음
-    assert len(entries) == 125  # v0.4 (yaml 헤더 명시 — 사람 검수 반영: 이동 4·보강 4)
-    assert all(e.bank_version == "0.4" and e.origin == "seed" for e in entries)
-    assert all(e.reviewed for e in entries)  # 사람 검수 완료 (2026-09-13)
+    assert len(entries) == 417  # v0.5 (yaml 헤더 명시 — seed 125 + §3.2 ② 증강 292)
+    assert all(e.bank_version == "0.5" for e in entries)
+    assert all(e.reviewed for e in entries)  # 사람 검수(seed) · 기계 관문(증강) 통과분만 실린다
+    by_origin = Counter(e.origin for e in entries)
+    assert by_origin == {"seed": 125, "augmented": 292}  # 출처가 구분돼 되돌릴 수 있다
 
 
 def test_reviewed_seed_bank_indexes_without_opt_in() -> None:
@@ -407,6 +410,41 @@ def test_index_bank_refuses_unreviewed_entries_by_default() -> None:
         index_bank(load_bank(raw), FakeEmbedding(dim=8), store)
     assert "GENERATE_SCHEDULE" in str(exc.value)
     assert store.search(BANK_COLLECTION, (1.0,) + (0.0,) * 7, top_k=5) == ()  # 부분 적재 없음
+
+
+def test_augmented_questions_load_with_their_own_origin() -> None:
+    """§3.2 ② 증강분은 `augmented:` 목록으로 따로 싣고 `origin` 이 구분돼야 한다.
+
+    수기 seed 와 LLM 생성분을 한 목록에 섞으면 뱅크가 "전부 사람이 쓴 문장" 이라고 거짓말한다 —
+    나중에 증강분만 되돌리거나 마이닝분(§3.2 ③)을 분리 추적할 수단도 사라진다.
+    """
+    raw = {
+        "version": "t", "origin": "seed",
+        "intents": [{
+            "intent": "GET_WEATHER", "handler": "WeatherAgent", "mode": "FastPath",
+            "reviewed": True,
+            "questions": ["내일 날씨 어때?"],
+            "augmented": ["낼 날씨 어떰?", "내일 비 오나요?"],
+        }],
+    }
+    entries = load_bank(raw)
+    assert [e.question for e in entries] == ["내일 날씨 어때?", "낼 날씨 어떰?", "내일 비 오나요?"]
+    assert [e.origin for e in entries] == ["seed", "augmented", "augmented"]
+    assert len({e.entry_id for e in entries}) == 3  # id 충돌 없음
+    assert all(e.reviewed for e in entries)
+
+
+def test_augmented_question_duplicating_a_seed_is_rejected() -> None:
+    raw = {
+        "version": "t", "origin": "seed",
+        "intents": [{
+            "intent": "GET_WEATHER", "handler": "WeatherAgent", "mode": "FastPath",
+            "reviewed": True, "questions": ["내일 날씨 어때?"], "augmented": ["내일 날씨 어때?"],
+        }],
+    }
+    with pytest.raises(BankLoadError) as exc:
+        load_bank(raw)
+    assert "완전중복" in str(exc.value)
 
 
 def test_index_bank_opt_in_indexes_everything() -> None:
