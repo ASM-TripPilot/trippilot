@@ -53,7 +53,7 @@ class OutboxRelay(
             SELECT event_id, event_type, schema_version, aggregate_type, aggregate_id,
                    correlation_id, payload, occurred_at
               FROM outbox_event
-             WHERE published_at IS NULL AND attempts < ?
+             WHERE published_at IS NULL AND attempts < ? AND next_attempt_at <= now()
              ORDER BY occurred_at
              LIMIT ?
             """.trimIndent(),
@@ -92,10 +92,27 @@ class OutboxRelay(
     private fun markPublished(eventId: UUID) =
         jdbc.update("UPDATE outbox_event SET published_at = now() WHERE event_id = ?", eventId)
 
-    /** 증가된 값을 돌려준다 — 상한 판정을 다시 조회하지 않게. */
+    /**
+     * 시도 횟수를 올리고 **다음 시도 시각을 뒤로 민다**(REL-U6-01 지수 백오프). 증가된 값을 돌려준다 —
+     * 상한 판정을 다시 조회하지 않게.
+     *
+     * 한 번의 UPDATE 로 둘을 함께 바꾼다. 나눠 쓰면 그 사이에 다른 인스턴스가 같은 행을 집을 수 있고,
+     * 그 순간 백오프가 없는 것과 같아진다.
+     *
+     * `SET` 우변의 `attempts` 는 **증가 전 값**이다(표준) — 첫 실패면 0 이라 `BACKOFF_BASE_SEC` 가 그대로
+     * 첫 지연이 된다.
+     */
     private fun bumpAttempts(eventId: UUID): Int = jdbc.queryForObject(
-        "UPDATE outbox_event SET attempts = attempts + 1 WHERE event_id = ? RETURNING attempts",
-        Int::class.java, eventId,
+        """
+        UPDATE outbox_event
+           SET attempts = attempts + 1,
+               next_attempt_at = now() + make_interval(
+                   secs => LEAST(?::double precision, ?::double precision * power(2, attempts))
+               )
+         WHERE event_id = ?
+        RETURNING attempts
+        """.trimIndent(),
+        Int::class.java, BACKOFF_MAX_SEC, BACKOFF_BASE_SEC, eventId,
     ) ?: 0
 
     private fun ResultSet.toEnvelope() = EventEnvelope(
@@ -117,5 +134,17 @@ class OutboxRelay(
 
         /** 이 횟수를 넘기면 포기한다. 조회로 찾는다 — `WHERE published_at IS NULL AND attempts >= 10`. */
         private const val MAX_ATTEMPTS = 10
+
+        /**
+         * 첫 재시도까지의 지연(초). 폴링 주기(2초)와 같은 값이라 **첫 실패는 종전과 같은 속도로** 다시 간다 —
+         * 일시적 딸꾹질을 백오프가 괜히 늦추지 않는다. 두 번째부터 4·8·16… 으로 벌어진다.
+         */
+        private const val BACKOFF_BASE_SEC = 2.0
+
+        /**
+         * 지연 상한(초 = 5분). 없으면 9회째가 1024초(17분)가 되어 **상대가 살아난 뒤에도 한참 안 간다**.
+         * 이 상한에서 10회까지의 총 재시도 창은 약 13분이다(종전엔 20초였다 — 재시도가 이름만 있었다).
+         */
+        private const val BACKOFF_MAX_SEC = 300.0
     }
 }
