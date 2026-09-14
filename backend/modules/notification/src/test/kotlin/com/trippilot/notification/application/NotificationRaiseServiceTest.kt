@@ -2,6 +2,7 @@ package com.trippilot.notification.application
 
 import com.trippilot.notification.domain.DevicePlatform
 import com.trippilot.notification.domain.Notification
+import com.trippilot.notification.domain.PushedCounts
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.NotificationToggle
@@ -39,6 +40,18 @@ class NotificationRaiseServiceTest : StringSpec({
     /** 같은 `sourceEventId` 는 한 번만 삽입한다 — DB UNIQUE 를 흉내 낸다(보증은 IT 가 한다). */
     class Notifications : NotificationRepository {
         val stored = mutableListOf<Notification>()
+
+        /**
+         * 발송량 상한 판정용(COST-U6-01). 대역은 **푸시가 나간 것으로 표시된** 행만 센다 —
+         * 창 계산은 실 DB 가 하므로 여기서는 시각 비교만 흉내 낸다.
+         */
+        override fun countPushed(accountId: UUID, hourFrom: Instant, dayFrom: Instant): PushedCounts {
+            val mine = stored.filter { it.accountId == accountId && it.pushSentAt != null }
+            return PushedCounts(
+                inHour = mine.count { it.pushSentAt!! >= hourFrom }.toLong(),
+                inDay = mine.count { it.pushSentAt!! >= dayFrom }.toLong(),
+            )
+        }
 
         /** 관측 전용(OBS-U6-04). */
         override fun countUnread(): Long = stored.count { it.readAt == null }.toLong()
@@ -87,7 +100,7 @@ class NotificationRaiseServiceTest : StringSpec({
         val toggleService = NotificationToggleService(toggles, clock)
         return NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), clock),
+            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), PushRateLimits(), clock),
             trips, metrics ?: testMetrics(notifications), clock,
         )
     }
@@ -135,7 +148,7 @@ class NotificationRaiseServiceTest : StringSpec({
         val toggleService = NotificationToggleService(off, clock)
         val svc = NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), clock),
+            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), PushRateLimits(), clock),
             trips, testMetrics(notifications), clock,
         )
 
@@ -153,7 +166,7 @@ class NotificationRaiseServiceTest : StringSpec({
         val toggleService = NotificationToggleService(toggles, clock)
         val svc = NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, Sender(), testMetrics(notifications), clock),
+            PushDispatchService(Tokens(), notifications, toggleService, Sender(), testMetrics(notifications), PushRateLimits(), clock),
             deleted, testMetrics(notifications), clock,
         )
 

@@ -1,6 +1,7 @@
 package com.trippilot.notification.application
 
 import com.trippilot.notification.domain.Notification
+import com.trippilot.notification.domain.PushedCounts
 import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.NotificationSchedule
 import com.trippilot.notification.domain.NotificationScheduleRepository
@@ -18,6 +19,18 @@ import java.util.UUID
  */
 internal class FakeNotifications : NotificationRepository {
     val stored = mutableListOf<Notification>()
+
+    /**
+     * 발송량 상한 판정용(COST-U6-01). 대역은 **푸시가 나간 것으로 표시된** 행만 센다 —
+     * 창 계산은 실 DB 가 하므로 여기서는 시각 비교만 흉내 낸다.
+     */
+    override fun countPushed(accountId: UUID, hourFrom: Instant, dayFrom: Instant): PushedCounts {
+        val mine = stored.filter { it.accountId == accountId && it.pushSentAt != null }
+        return PushedCounts(
+            inHour = mine.count { it.pushSentAt!! >= hourFrom }.toLong(),
+            inDay = mine.count { it.pushSentAt!! >= dayFrom }.toLong(),
+        )
+    }
 
     /** 관측 전용 집계(OBS-U6-04) — 대역에서는 읽음 표시가 안 된 것만 센다. */
     override fun countUnread(): Long = stored.count { it.readAt == null }.toLong()
@@ -73,6 +86,7 @@ internal fun noPush(clock: java.time.Clock, notifications: NotificationRepositor
                 emptyList<com.trippilot.notification.domain.PushReceipt>()
         },
         metrics = testMetrics(notifications),
+        limits = PushRateLimits(),
         clock = clock,
     )
 

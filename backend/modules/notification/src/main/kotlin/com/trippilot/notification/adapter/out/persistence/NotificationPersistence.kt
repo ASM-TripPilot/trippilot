@@ -13,6 +13,8 @@ import org.hibernate.type.SqlTypes
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import com.trippilot.notification.domain.PushedCounts
+import java.sql.Timestamp
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import java.time.Instant
@@ -102,6 +104,23 @@ class NotificationRepositoryAdapter(
         }
         return rows.map { it.toDomain() }
     }
+
+    /**
+     * 실제 발송 건수를 두 창으로(COST-U6-01). `FILTER` 로 **한 번의 스캔**에서 둘 다 센다 —
+     * 1시간 창이 1일 창에 포함되므로 넓은 쪽으로 한 번만 훑으면 된다.
+     * 부분 인덱스 `ix_notification_pushed` 가 이 조회를 받는다(V2.46).
+     */
+    override fun countPushed(accountId: UUID, hourFrom: Instant, dayFrom: Instant): PushedCounts =
+        jdbc.queryForObject(
+            """
+            SELECT count(*) FILTER (WHERE push_sent_at >= ?) AS in_hour,
+                   count(*)                                  AS in_day
+              FROM notification
+             WHERE account_id = ? AND push_sent_at IS NOT NULL AND push_sent_at >= ?
+            """.trimIndent(),
+            { rs, _ -> PushedCounts(rs.getLong("in_hour"), rs.getLong("in_day")) },
+            Timestamp.from(hourFrom), accountId, Timestamp.from(dayFrom),
+        ) ?: PushedCounts(0, 0)
 
     /** 전 계정 미읽음 누적(OBS-U6-04). 1분에 한 번만 도는 관측 쿼리라 인덱스 없이 집계로 충분하다. */
     override fun countUnread(): Long =

@@ -58,7 +58,9 @@ class NotificationMetrics(
      *
      * ⚠ **종류 토글로 막힌 푸시(`MUTED`)는 여기 없다** — 그건 발송까지 간 뒤의 판정이라
      * [PUSH_DISPATCH] 의 `outcome=MUTED` 로 센다. 둘을 합쳐 "억제 총량"을 보려면 두 지표를 더해야 한다.
-     * 발송량 상한(별도 티켓)이 붙으면 그 사유가 이쪽에 더해진다.
+     *
+     * 가르는 기준은 **누구의 뜻인가**다. `MUTED` 는 사용자가 직접 끈 것이라 정책을 바꿀 일이 아니고,
+     * 여기 모이는 것들(중복·인앱 꺼짐·상한)은 **우리 판단**이라 빈도를 보고 조정할 대상이다.
      */
     fun suppressed(reason: SuppressReason) {
         registry.counter(SUPPRESSED, "reason", reason.name).increment()
@@ -104,4 +106,10 @@ enum class SuppressReason {
 
     /** 사용자가 이 종류의 인앱 수신을 껐다 — 적재 자체를 하지 않는다. */
     IN_APP_OFF,
+
+    /**
+     * 계정 발송량 소프트 상한을 넘겼다(COST-U6-01). 이 수치가 곧 **상한 값을 조정할 근거**다
+     * (COST-U6-03) — 한 번도 안 물리면 상한이 헐겁고, 계속 물리면 사용자가 알림을 늦게 받고 있다.
+     */
+    RATE_LIMITED,
 }
