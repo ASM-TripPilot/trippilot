@@ -127,11 +127,12 @@ _QUERY_ANGLES = {
 
 
 def _scripted_router(
-    *, slot_pattern: dict | None = None, extra_angles: dict[str, float] | None = None, **kwargs
+    *, slot_pattern: dict | None = None, extra_angles: dict[str, float] | None = None,
+    bank: dict[str, tuple[float, Intent]] | None = None, **kwargs
 ) -> IntentRouter:
     embedding = _ScriptedEmbedding({**_QUERY_ANGLES, **(extra_angles or {})})
     store = InMemoryVectorStore()
-    for item_id, (theta, intent) in _BANK_ANGLES.items():
+    for item_id, (theta, intent) in (bank or _BANK_ANGLES).items():
         store.upsert(
             BANK_COLLECTION,
             item_id,
@@ -163,6 +164,23 @@ def test_confident_extracts_slots_from_entry_pattern() -> None:
     match = router.route("내일 확실한 질문", _TID, _NOW)
     assert match.match_route is MatchRoute.CONFIDENT
     assert match.slots == {"date": "내일"}  # 지원하지 않는 패턴 형식(bad)은 조용히 제외
+
+
+def test_confident_when_competing_intent_is_far_even_if_it_is_top2() -> None:
+    """1차 확정 조건은 "top2 가 같은 의도" 가 아니라 **다른 의도와 충분히 벌어졌는가** 다.
+
+    뱅크가 커지면 top2 가 우연히 타 의도인 경우가 흔해져, 종전 규칙에서는 **커질수록 1차가 덜
+    확정되는** 역전이 난다(밀도가 올라가는데 확정률이 떨어진다). 여기서는 top1(W1 1.000) 바로
+    아래가 타 의도(D_FAR 0.800)지만 0.200 이나 벌어져 있으니 확정해야 한다 —
+    같은 의도 이웃이 그 사이에 없어도 마찬가지다.
+    """
+    router = _scripted_router(
+        bank={"W1": (0.00, Intent.GET_WEATHER), "D_FAR": (0.6435, Intent.GET_DISTANCE)},
+        extra_angles={"확실한 질문": 0.00},
+    )
+    match = router.route("확실한 질문", _TID, _NOW)
+    assert match.match_route is MatchRoute.CONFIDENT
+    assert match.intent is Intent.GET_WEATHER
 
 
 def test_broken_regex_pattern_does_not_break_routing() -> None:

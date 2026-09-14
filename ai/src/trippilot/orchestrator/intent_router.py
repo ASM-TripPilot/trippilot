@@ -97,6 +97,9 @@ class IntentRouterConfig:
     # 관측된 최고점 오분류(범위 밖 발화가 뱅크 경계 문장에 0.783)와 여유 0.037 — 뱅크 검수 전 하한.
     t_high: float = 0.82
     t_mid: float = 0.75  # 2차 진입 하한
+    # 1차 확정에 요구하는 **타 의도 최근접과의 점수 차이**. 0 이면 "top1 이 1등이기만 하면 확정"
+    # 이 되어 동점 경계가 전부 새고, 크게 잡으면 확정이 안 난다. 근거는 §5 주석.
+    intent_margin: float = 0.02
     n_paraphrase: int = 3  # 유사 질문 생성 수
     # 가중 투표 확정 임계. 0.60 → 0.80 (2026-09-08, 평가셋 88건 × 운영 배정 실측 — TRIP-678):
     # 득표율 분포가 1.0 / 0.73~0.76 양봉이고, 0.73~0.76 동률대의 투표 정답률은 3/5 인 반면 3차 LLM 은
@@ -110,6 +113,8 @@ class IntentRouterConfig:
             raise ValueError("top_k ≥ 1")
         if not 0.0 <= self.t_mid <= self.t_high <= 1.0:
             raise ValueError("0 ≤ T_mid ≤ T_high ≤ 1 이어야 함")
+        if not 0.0 <= self.intent_margin <= 1.0:
+            raise ValueError("intent_margin ∈ [0, 1]")
         if self.n_paraphrase < 1:
             raise ValueError("n_paraphrase ≥ 1")
         if not 0.0 < self.vote_ratio <= 1.0:
@@ -178,6 +183,7 @@ class IntentRouter:
                     "t_high": self._cfg.t_high,
                     "t_mid": self._cfg.t_mid,
                     "vote_ratio": self._cfg.vote_ratio,
+                    "intent_margin": self._cfg.intent_margin,
                 }},
             )
         except Exception as e:  # 임베딩·스토어·게이트웨이 어디가 터져도 폴백으로 수렴
@@ -196,8 +202,7 @@ class IntentRouter:
             return self._llm_direct(text, "bank_miss", trace_id, now)
 
         top = hits[0]
-        agree = len(hits) == 1 or hits[1].intent is top.intent  # top2 없으면 혼재도 없다
-        if top.score >= self._cfg.t_high and agree:
+        if top.score >= self._cfg.t_high and _separated(hits, self._cfg.intent_margin):
             return IntentMatch(
                 intent=top.intent,
                 slots=_extract_slots(text, top.slot_pattern),
@@ -340,6 +345,23 @@ class IntentRouter:
         if draft.intent not in ROUTABLE_INTENTS:  # OUT_OF_SCOPE 분류 = 폴백 경로 (§5)
             return None, f"intent_not_routable({draft.intent.value})"
         return draft, ""
+
+
+def _separated(hits: tuple[_Hit, ...], margin: float) -> bool:
+    """1차 확정 조건 — top1 이 **다른 의도의 최근접보다 `margin` 만큼 앞서는가**.
+
+    종전에는 "top2 가 top1 과 같은 의도인가" 를 봤다. 뱅크가 커지면 같은 의도 이웃이 빽빽해지는
+    만큼 타 의도 이웃도 가까워져 top2 가 우연히 타 의도인 일이 흔해지고, **밀도가 올라가는데
+    확정률은 떨어지는** 역전이 난다. 반대로 top2 가 같은 의도이기만 하면 top3 에 바짝 붙은 타
+    의도를 못 봤다. 둘 다 "top2 하나만 본다" 는 데서 온 문제다.
+
+    그래서 순위가 아니라 거리를 본다: 타 의도 중 제일 가까운 것과의 차이가 margin 이상이면 확정.
+    top-k 전부가 같은 의도면 경쟁자가 없으니 확정(종전 `len(hits) == 1` 경로를 포함한다).
+    동점 근처(차이 ~0)는 의도가 실제로 갈리는 자리이므로 2·3차로 넘긴다.
+    """
+    top = hits[0]
+    rival = next((h.score for h in hits[1:] if h.intent is not top.intent), None)
+    return rival is None or (top.score - rival) >= margin
 
 
 def _payload_intent(payload: Mapping) -> Intent | None:
