@@ -60,4 +60,7 @@ interface RegionCatalogPort {
      * 동명이지역이 있어 여러 건일 수 있다(고성군이 경남·강원에 둘 있다) — 하나를 고르지 않고 그대로 준다.
      */
     fun findExact(name: String): List<Region>
+
+    /** 코드 정확 일치. 없으면 null — 코드는 하나를 가리키므로 목록이 아니다. */
+    fun findByCode(regionCode: String): Region?
 }
