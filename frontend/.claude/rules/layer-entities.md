@@ -2,9 +2,9 @@
 paths:
   - "src/entities/**"
 ---
-# `src/entities/` — FSD entities 층 (TRIP-804 규칙 신설 · TRIP-806 첫 입주·형제 격리 · TRIP-807 stay 입주)
+# `src/entities/` — FSD entities 층 (TRIP-804 규칙 신설 · TRIP-806~809 4슬라이스 입주 · TRIP-810 옛 자리 shim 전부 정리)
 
-둘 이상 feature가 쓰는 **도메인 단위**(place·stay·trip·itinerary-slot 같은 카드·타입·업무 규칙)를 두는 층. **첫 입주 = `place`(TRIP-806) → 둘째 = `stay`(TRIP-807).** 슬라이스별 파일 목록의 정본은 `src/entities` 디렉토리와 `docs/structure.generated.md`.
+둘 이상 feature가 쓰는 **도메인 단위**(place·stay·trip·itinerary-slot 같은 카드·타입·업무 규칙)를 두는 층. **입주 순서 = `place`(TRIP-806) → `stay`(TRIP-807) → `trip`(TRIP-808) → `itinerary-slot`(TRIP-809).** TRIP-810이 806~809가 남긴 옛 자리 재수출 shim 10종(순수 6 삭제 + 부분 4 재수출 줄 제거)을 전부 걷어, 소비처는 이제 전부 `@/entities/...`를 직접 문다(옛 경로 shim 0). 슬라이스별 파일 목록의 정본은 `src/entities` 디렉토리와 `docs/structure.generated.md`.
 
 ## import 방향
 - entities → shared 만 참조한다. features · widgets · pages · app · app-shell 은 참조하지 못한다(하위 층은 상위 층을 모른다).
@@ -37,7 +37,7 @@ paths:
 | 파일 | 용도·함정 |
 |---|---|
 | `model/index.ts` | `StayItem`·`SavedStay`·`StayPrice`를 `@/shared/api/generated/schemas`에서 **얇게 재수출** + 카드 뷰모델 `StayCardVM`(검색/레인, `ExploreLandingScreen`에서 이관)·`SavedStayCardVM`(저장 degrade, `SavedStayListScreen`에서 이관). `entities/place/model/index.ts`와 동형 — generated 직참조는 이 파일만 허용. |
-| `lib/formatPrice.ts` | `features/stay/model/formatPrice.ts`에서 **바이트 그대로 이관**(출력 불변 `'가격 미확인'`/`'{천단위}원~'`, TRIP-70 확정 표기 유지). 옛 자리엔 `export { formatPrice } from '@/entities/stay/lib/formatPrice'` 한 줄 shim만 남았다(TRIP-810이 shim 정리 예정, 아직 존치). |
+| `lib/formatPrice.ts` | `features/stay/model/formatPrice.ts`에서 **바이트 그대로 이관**(출력 불변 `'가격 미확인'`/`'{천단위}원~'`, TRIP-70 확정 표기 유지). 옛 자리 shim(`features/stay/model/formatPrice.ts`)은 **TRIP-810에서 파일째 삭제**됨 — 807이 이미 소비처(StaySearchScreen·StayDetailScreen·OtaChoiceSheet·DestinationDetailPage 등)를 entities로 옮겨 둬 삭제 시점 prod importer는 0(고아 shim만 걷음). |
 | `ui/StaySearchCard.tsx` | 검색 풀/레인 카드(e02·d01·d05, `variant: 'full'\|'rail'`). **명시적 testID 계약** — 소비처마다 save/글리프 testID 스킴이 달라(e02 `stay-card-save-{key}-filled` vs d01 `explore-stay-heart-filled-{key}`) 단일 prefix 대신 완성 문자열(root/photo/save/filled/outline)을 prop으로 받는다. 하트는 `@/shared/ui/HeartGlyphs`에서만. 사진 자리는 `SavedStay`/`StayItem`에 이미지 필드가 없어 항상 회색(`bg-surface-strong`, INV-1). |
 | `ui/SavedStayCard.tsx` | degrade 카드(e04·g02 시트, `layout: 'vertical'\|'row'`). `SavedStay` 계약에 사진·지역·거리·가격이 없어 이름+`subtitle`(날짜)만 그린다 — 하트/체크는 카드가 소유하지 않고 소비처가 `trailing` ReactNode 슬롯으로 주입(카드는 하트 불가지). `save`(토글) prop 없음. |
 
@@ -56,7 +56,7 @@ paths:
 | `ui/PastTripRow.tsx` | j07 지난 여행 행. **완성 full `testID`**(`'record-calendar-past-trip-{id}'`) 명시 prop — PastTripList가 그 리터럴을 조립해 넘겨 리터럴이 소비처 파일에 잔존, 선재 `recordsCalendarStructure` G3 앵커 재조준 0. TripCard(6종 prefix)와 방식이 갈리는 이유는 sub-part 개수 차이(카드=6, 행=1). |
 | `ui/TripGlyphs.tsx` | `ChevronRightGlyph` — `features/itinerary/ui/ItineraryGlyphs`판을 바이트 그대로 로컬 복제(entities→features 역참조 금지라 재사용 불가, 리포 글리프 로컬 복제 관례의 N번째 사본). |
 
-**이관 안 한 것**: `formatStayDateRange`·`formatDday`(둘 다 features/trip 계열 별도 날짜 포맷, 이번 카드·포맷터 범위 밖) · l03 settings/TripCard·a01 홈 히어로·g01 위저드 요약값(entities 접기는 Figma 홈 재작성 후 재판정 대상, 3-a 결정 D5). `entities/trip/lib/formatTripPeriod.ts`·`formatNights.ts`의 옛 자리(`baseScreen.ts`·`tripSummary.ts`·`tripWizardStep1.ts`·`planState.ts`·`recordsCalendar.ts`)는 재수출 shim만 남았다(TRIP-810이 shim 정리 예정, 아직 존치 — 내부에서 이관 함수를 쓰는 `tripSummary`·`tripWizardStep1`·`recordsCalendar`는 `import`+로컬 재수출, 안 쓰는 `planState`·`baseScreen`은 순수 `export … from` — 구분은 [[재수출 — 도메인 창구는 소유하지 않고 가리킨다]] 참고).
+**이관 안 한 것**: `formatStayDateRange`·`formatDday`(둘 다 features/trip 계열 별도 날짜 포맷, 이번 카드·포맷터 범위 밖) · l03 settings/TripCard·a01 홈 히어로·g01 위저드 요약값(entities 접기는 Figma 홈 재작성 후 재판정 대상, 3-a 결정 D5). `entities/trip/lib/formatTripPeriod.ts`·`formatNights.ts`의 옛 자리 중 **`planState.ts`·`baseScreen.ts`는 TRIP-810에서 재수출 줄만 제거**(파일은 존치, 실로직 함수는 그대로), **`tripWizardStep1.ts`는 공개 재수출(`export { dayOfWeek, formatDateRange }`)만 제거하고 내부 사용 `import { dayOfWeek }`는 존치**(내부 `presetRange`가 씀 — 재수출 제거와 자기 사용 import 유지는 다른 것, [[재수출 — 도메인 창구는 소유하지 않고 가리킨다]] TRIP-810 절 참고). `tripSummary.ts`·`recordsCalendar.ts`는 3-a에서 이번 범위 밖으로 확정(위임 구조 유지, 새 티켓 후보) — 이 둘만 아직 `import`+로컬 재수출 shim이 남아 있다.
 
 ## `src/entities/itinerary-slot/` (TRIP-809)
 
@@ -65,11 +65,11 @@ paths:
 | 파일 | 용도·함정 |
 |---|---|
 | `model/index.ts` | `PoiCategory`(값, `export {}`)·`ItineraryDaysItemSlotsItem`·`PlannedSlot`(타입)을 `@/shared/api/generated/schemas`에서 **얇게 재수출** + `ReplanSlotRow.tsx`에 로컬 정의돼 있던 `ReplanSlotVM`·`SlotBadgeKind`를 이관(신규 파생함수 0). `PoiCategory`는 **place를 거치지 않고 shared/api에서 직접 재수출**한다 — `@x` 창구를 통한 재재수출이 아니다(place도 같은 서버 타입을 병렬로 재수출 중일 뿐, 서로 무관). |
-| `lib/categoryPlaceholder.ts` | `features/itinerary/model/categoryPlaceholder.ts`에서 **바이트 그대로 이관**(HEAD 대비 완전 IDENTICAL). `resolveCategoryPlaceholder` 순수 매핑(7종+폴백) + `hasOwnProperty` 프로토타입 키 가드 — 로직 무변경(개념 [[카테고리 플레이스홀더]]·[[프로토타입 키 폴백 함정]]). |
-| `lib/slotKey.ts` | `features/itinerary/model/slotKey.ts`에서 **파일째 바이트 그대로 이관**(`buildSlotKey`·`parseSlotKey`·`buildSlotKeys` + 타입 5종). 옛 자리는 전 export 재수출 shim, **28개 importer 무수정**(개념 [[단사성 (injectivity)]]·[[대조군 (control case)]]). |
+| `lib/categoryPlaceholder.ts` | `features/itinerary/model/categoryPlaceholder.ts`에서 **바이트 그대로 이관**(HEAD 대비 완전 IDENTICAL). `resolveCategoryPlaceholder` 순수 매핑(7종+폴백) + `hasOwnProperty` 프로토타입 키 가드 — 로직 무변경(개념 [[카테고리 플레이스홀더]]·[[프로토타입 키 폴백 함정]]). 옛 자리 shim은 **TRIP-810에서 파일째 삭제**(orphan shim, 런타임 소비처는 이미 0이었다). |
+| `lib/slotKey.ts` | `features/itinerary/model/slotKey.ts`에서 **파일째 바이트 그대로 이관**(`buildSlotKey`·`parseSlotKey`·`buildSlotKeys` + 타입 5종). 옛 자리 shim은 **TRIP-810에서 파일째 삭제**, prod importer 11개(DraftScreen·TimelineScreen·ItineraryEditScreen·ManualPlanScreen·coPickSlots·pages 6종, LiveSlotCard는 로컬 `buildSlotKey`라 무관)를 전부 `@/entities/itinerary-slot/lib/slotKey`로 재조준(개념 [[단사성 (injectivity)]]·[[대조군 (control case)]]). |
 | `ui/SlotGlyphs.tsx` | 카테고리 아이콘 8종(`features/itinerary/ui/ItineraryGlyphs.tsx`에서 바이트 이사, SVG path 좌표까지 IDENTICAL) + `ChevronRightGlyph`·`LockGlyph`(`features/planb/ui/PlanbGlyphs.tsx` 판을 **바이트 복제** — entities→features 역참조 금지라 재사용 불가, 리포 글리프 로컬 복제 관례) + 색 상수 5(`INFO`·`SUCCESS`·`PRESENCE_BLUE`·`MUTED`·`PRIMARY_TEXT`). ⚠️ **`ICON_BY_KEY` 룩업(카테고리→글리프 매핑)은 jest 원리적 사각** — SVG `stroke`/`fill`이라 testID·className을 안 받고 raw-hex 스캔도 `*Glyphs.tsx` 제외라, 두 엔트리를 맞바꿔도 전 심판 green(traps-itinerary 참고, 이관 전부터 있던 사각을 그대로 승계 — 이관이 만든 신규 사각 아님). |
-| `ui/SlotPhotoPlaceholder.tsx` | `features/itinerary/ui/SlotPhotoPlaceholder.tsx`에서 바이트 이관(import 2줄만 변경). `resolveCategoryPlaceholder` 소비 → 78×78 자리에 틴트+아이콘. 텍스트 0(INV-3). |
-| `ui/PoiSlotCard.tsx` | `features/itinerary/ui/PoiSlotCard.tsx`에서 바이트 이관(import 1줄만 변경). peek/list 겸용 통일 POI 카드. |
-| `ui/ReplanSlotRow.tsx` | `features/planb/ui/ReplanSlotRow.tsx`에서 바이트 이관(글리프 import→`SlotGlyphs`, VM 타입→`../model` import+재수출만 변경, 컴포넌트 본문 동일). ⚠️ 헤더 주석의 INV-3 가드명은 `entitiesItinerarySlotStructure G3`로 5-c에서 정정됨(이관 전 `executionDurationStructure` 표기는 stale — 그 가드는 이제 사정거리 밖). |
+| `ui/SlotPhotoPlaceholder.tsx` | `features/itinerary/ui/SlotPhotoPlaceholder.tsx`에서 바이트 이관(import 2줄만 변경). `resolveCategoryPlaceholder` 소비 → 78×78 자리에 틴트+아이콘. 텍스트 0(INV-3). 옛 자리 shim은 **TRIP-810에서 파일째 삭제**(런타임 소비처가 이미 0이던 orphan shim, TimelineScreen이 유일한 소비처로 entities 직참조). |
+| `ui/PoiSlotCard.tsx` | `features/itinerary/ui/PoiSlotCard.tsx`에서 바이트 이관(import 1줄만 변경). peek/list 겸용 통일 POI 카드. 옛 자리 shim은 **TRIP-810에서 파일째 삭제**(orphan shim, 소비처 TimelineScreen이 entities 직참조). |
+| `ui/ReplanSlotRow.tsx` | `features/planb/ui/ReplanSlotRow.tsx`에서 바이트 이관(글리프 import→`SlotGlyphs`, VM 타입→`../model` import+재수출만 변경, 컴포넌트 본문 동일). ⚠️ 헤더 주석의 INV-3 가드명은 `entitiesItinerarySlotStructure G3`로 5-c에서 정정됨(이관 전 `executionDurationStructure` 표기는 stale — 그 가드는 이제 사정거리 밖). 옛 자리 shim(`features/planb/ui/ReplanSlotRow.tsx`)은 **TRIP-810에서 파일째 삭제** — 소비처 `ReplanDraftScreen`(809에 이미 재배선)·`app/_dev/preview.tsx`(810, `ReplanSlotVM` 타입 import 재조준, 6-b 발동)가 entities 직참조. |
 
-**이관 안 한 것(entities/itinerary-slot 범위 밖)**: 티켓이 프레이밍한 "공용 슬롯 카드 하나로 통합"·"`HH:mm–HH:mm` 시각 칩 포맷터"는 **코드에 존재하지 않아 신설하지 않았다**(01 브리프 실측 — `slice(0,5)` 인라인 처리가 표면마다 다 다름, 병합하면 회귀). `TimelineSlotCard`(TimelineScreen 인라인)·`DraftScreen`/`ManualPlanScreen`/`ItineraryEditScreen` 슬롯·`LiveSlotCard`(execution)·`ManualEditShell`(widgets) 슬롯은 화면 고유 계약이라 접히지 않음(3-a 결정). `SlotState`('done'|'active'|'upcoming', execution 방문기록 파생 사영)는 서버 enum이 아니라 이관하지 않고 정본 관측만(D1). **orphan shim 3종**(`categoryPlaceholder.ts`·`SlotPhotoPlaceholder.tsx`·`PoiSlotCard.tsx`의 옛 자리)은 런타임 소비처 0이지만 TRIP-810 정리 전까지 존치(개념 [[재수출 — 도메인 창구는 소유하지 않고 가리킨다]] TRIP-809 절). `slotKey`·`ReplanSlotRow`(`preview.tsx`가 타입 소비) shim은 다수 소비처가 남아 있어 810이 경로 마이그레이션 필요.
+**이관 안 한 것(entities/itinerary-slot 범위 밖)**: 티켓이 프레이밍한 "공용 슬롯 카드 하나로 통합"·"`HH:mm–HH:mm` 시각 칩 포맷터"는 **코드에 존재하지 않아 신설하지 않았다**(01 브리프 실측 — `slice(0,5)` 인라인 처리가 표면마다 다 다름, 병합하면 회귀). `TimelineSlotCard`(TimelineScreen 인라인)·`DraftScreen`/`ManualPlanScreen`/`ItineraryEditScreen` 슬롯·`LiveSlotCard`(execution)·`ManualEditShell`(widgets) 슬롯은 화면 고유 계약이라 접히지 않음(3-a 결정). `SlotState`('done'|'active'|'upcoming', execution 방문기록 파생 사영)는 서버 enum이 아니라 이관하지 않고 정본 관측만(D1). **TRIP-810로 옛 자리 shim 6종(순수, orphan 3 포함) 전부 파일째 삭제 + `ItineraryGlyphs.tsx`의 Category 8종 재수출 줄 제거** — `ConceptPickerScreen.tsx`(브리프 오측 3, 실제 importer 존재)가 entities `SlotGlyphs`를 직참조하도록 재조준(위 `layer-features-itinerary.md` ItineraryGlyphs 행 참고). 옛 자리 파일 참조는 이제 0.
