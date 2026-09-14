@@ -42,3 +42,18 @@ paths:
 | `ui/SavedStayCard.tsx` | degrade 카드(e04·g02 시트, `layout: 'vertical'\|'row'`). `SavedStay` 계약에 사진·지역·거리·가격이 없어 이름+`subtitle`(날짜)만 그린다 — 하트/체크는 카드가 소유하지 않고 소비처가 `trailing` ReactNode 슬롯으로 주입(카드는 하트 불가지). `save`(토글) prop 없음. |
 
 **이관 안 한 것**: 거점 배지 `BaseBadgePinGlyph`(`features/trip/ui/TripGlyphs.tsx`)는 렌더 소비처 0인 고아라 이번에 entities로 옮기지 않았다(옮겨도 사변 코드). 밤별 행(`NightlyBaseCardVM`)·설정 행(`MyStayRowVM`)도 카드 shape가 접히지 않아 entities/stay 범위 밖(3-a 결정).
+
+## `src/entities/trip/` (TRIP-808)
+
+파일 목록·export 전수는 `docs/structure.generated.md`(기계 생성). 여기엔 용도·함정만.
+
+| 파일 | 용도·함정 |
+|---|---|
+| `model/index.ts` | `Trip`·`TripStatus`·`TripDestination`을 `@/shared/api/generated/schemas`에서 **얇게 재수출** + 카드 뷰모델 `MyTripCardVM`·`MyTripBadge`(h06 이관)·`PastTripCardVM`(j07 이관). place·stay와 동형 — generated 직참조는 이 파일만 허용. |
+| `lib/formatTripPeriod.ts` | 기간 포맷터 **6벌**(`formatDateRange`·`formatSectionRange`·`formatTripRange`·`formatConfirmedDateRange`·`formatTripDateRange`·`formatDateRangeWithDow`) + `dayOfWeek`·`WEEKDAY_LABELS`를 각 원본에서 **바이트 그대로 이관**(en dash U+2013·미들닷 U+00B7·공백 유무·월 생략까지 출력 보존, 병합·통일 없음). 6벌이 살아있는 이유·실패값 계약은 [[바이트 지문과 심볼 보존의 자기모순]] 참고. |
+| `lib/formatNights.ts` | 박수 포맷터 **3벌**(`formatNightsLabel` 실패 `''`·`nightsLabel` 실패 `null`·`nightsCountLabel` count 기반, 신규 export — tripSummary 인라인 템플릿의 함수화). **실패값 통일 금지**(`''`≠`null`이 계약). |
+| `ui/TripCard.tsx` | h06 여행 카드. `testIDPrefix`(6종 sub-part 조립) 명시 prop — 카드가 `'my-trip'`을 하드코딩하지 않는다(l03 settings/TripCard도 같은 리터럴을 쓰는 D1 충돌 대비). `onPress={onResume ?? onPress}` 폴백으로 h06 옛 동작 보존. |
+| `ui/PastTripRow.tsx` | j07 지난 여행 행. **완성 full `testID`**(`'record-calendar-past-trip-{id}'`) 명시 prop — PastTripList가 그 리터럴을 조립해 넘겨 리터럴이 소비처 파일에 잔존, 선재 `recordsCalendarStructure` G3 앵커 재조준 0. TripCard(6종 prefix)와 방식이 갈리는 이유는 sub-part 개수 차이(카드=6, 행=1). |
+| `ui/TripGlyphs.tsx` | `ChevronRightGlyph` — `features/itinerary/ui/ItineraryGlyphs`판을 바이트 그대로 로컬 복제(entities→features 역참조 금지라 재사용 불가, 리포 글리프 로컬 복제 관례의 N번째 사본). |
+
+**이관 안 한 것**: `formatStayDateRange`·`formatDday`(둘 다 features/trip 계열 별도 날짜 포맷, 이번 카드·포맷터 범위 밖) · l03 settings/TripCard·a01 홈 히어로·g01 위저드 요약값(entities 접기는 Figma 홈 재작성 후 재판정 대상, 3-a 결정 D5). `entities/trip/lib/formatTripPeriod.ts`·`formatNights.ts`의 옛 자리(`baseScreen.ts`·`tripSummary.ts`·`tripWizardStep1.ts`·`planState.ts`·`recordsCalendar.ts`)는 재수출 shim만 남았다(TRIP-810이 shim 정리 예정, 아직 존치 — 내부에서 이관 함수를 쓰는 `tripSummary`·`tripWizardStep1`·`recordsCalendar`는 `import`+로컬 재수출, 안 쓰는 `planState`·`baseScreen`은 순수 `export … from` — 구분은 [[재수출 — 도메인 창구는 소유하지 않고 가리킨다]] 참고).
