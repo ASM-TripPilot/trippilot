@@ -36,14 +36,24 @@ class ReflectionAgentConfiguration {
      */
     @Bean
     @ConditionalOnProperty(name = ["trippilot.ai.reflection.mode"], havingValue = "http")
-    fun httpReflectionAgent(properties: ReflectionAgentProperties, clock: Clock): ReflectionAgentPort =
-        HttpReflectionAgentAdapter(client(properties), properties, clock)
+    fun httpReflectionAgent(properties: ReflectionAgentProperties, clock: Clock): ReflectionAgentPort {
+        // 일정 쪽 [ScheduleAgentModeAnnouncer] 에 해당하는 자리 — 회고에는 전용 announcer 가 없어 여기서 알린다.
+        // 이 빈은 http 모드에서만 서므로 "실 AI 를 켰는데 자격증명이 없다"는 상황에서만 찍힌다.
+        if (properties.serviceToken.isBlank()) {
+            log.warn(
+                "회고 AI 를 실 호출(http)로 켰는데 서비스 토큰이 비어 있습니다(SERVICE_AUTH_TOKEN) — " +
+                    "{} 헤더 없이 나갑니다. 상대가 검증을 켜면 거부됩니다(TRIP-856).",
+                SERVICE_TOKEN_HEADER,
+            )
+        }
+        return HttpReflectionAgentAdapter(client(properties), properties, clock)
+    }
 
     /**
      * 경계 매퍼를 **메시지 컨버터에 심는다** — 기본 컨버터를 쓰면 snake_case 가 아니라 요청이 통째로
      * 422 가 된다. 이름 규칙은 계약이지 취향이 아니다.
      */
-    private fun client(properties: ReflectionAgentProperties): RestClient =
+    internal fun client(properties: ReflectionAgentProperties): RestClient =
         RestClient.builder()
             .baseUrl(properties.baseUrl)
             .requestFactory(
@@ -53,6 +63,12 @@ class ReflectionAgentConfiguration {
                 },
             )
             .messageConverters { it.add(0, JacksonJsonHttpMessageConverter(ReflectionBoundaryMapper.create())) }
+            // 빈 값으로 싣지 않는 이유는 일정 쪽과 같다 — 미설정이 '틀린 토큰'으로 둔갑한다.
+            // `apply { }` 금지: `RestClient.Builder` 의 동명 멤버가 잡혀 `this` 가 빌더가 아니게 된다.
+            .let { builder ->
+                if (properties.serviceToken.isBlank()) builder
+                else builder.defaultHeader(SERVICE_TOKEN_HEADER, properties.serviceToken)
+            }
             .build()
 
     @Bean
@@ -67,7 +83,14 @@ class ReflectionAgentConfiguration {
         }
     }
 
-    private companion object {
+    companion object {
+        /**
+         * 발신 서비스 자격증명 헤더(TRIP-856) — 일정 경계와 같은 이름·같은 시크릿을 쓴다.
+         * 두 경계가 같은 상대(AI 서비스) 한 곳을 부르므로 토큰을 갈라 둘 이유가 없다.
+         * 상수를 모듈 간 공유하지 않는 근거는 `ScheduleAgentConfiguration.SERVICE_TOKEN_HEADER` 쪽에 적었다.
+         */
+        const val SERVICE_TOKEN_HEADER = "X-Service-Token"
+
         private val log = LoggerFactory.getLogger(ReflectionAgentConfiguration::class.java)
     }
 }
