@@ -37,6 +37,9 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # 재료(방문 상호명·기간·지역)가 이미 확정 문자열로 들어온다. REFLECTION_NUDGE와
             # 같은 급의 짧은 카피 1회라 LIGHT (TRIP-429 후속 — j06).
             LlmFeature.SHARE_CARD_COPY: ModelTier.LIGHT,
+            # 뱅크 증강 — 짧은 문장 변형 N개. PARAPHRASE 와 같은 급의 과업이고 오프라인
+            # 배치라 지연도 무관하다. 품질이 모자라면 feature_models 로 올린다(TRIP-513).
+            LlmFeature.BANK_AUGMENT: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             LlmFeature.ALTERNATIVE_SELECTION: ModelTier.HEAVY,
             # 장면 시퀀스 연출 생성 — 회고 본문 생성의 정본(구 REFLECTION 흡수), 백그라운드 N회 생성 전제
@@ -97,6 +100,10 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # intent_router `_vote` — 유사질문이 없으면 투표를 접고 3차(LLM 직접
             # 분류)로 **승급**한다. 규칙으로 내려가는 강등이 아니다.
             LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
+            # 오프라인 배치 — 실패하면 그 seed 의 변형을 못 만들 뿐, 런타임 경로가 아니라
+            # 강등할 대상이 없다. 스크립트가 사유를 제안 파일의 rejected 에 남긴다
+            # (scripts/augment_bank.py).
+            LlmFeature.BANK_AUGMENT: ("llm_augment", "(none)"),
             # api/wiring.py `edit` — 자연어 번역 실패는 TRANSLATION_FAILED 정직 보고.
             # 편집은 적용되지 않고, 구조화 진입은 무영향이다.
             LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),

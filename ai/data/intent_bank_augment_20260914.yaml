@@ -1,0 +1,3110 @@
+generated_at: '2026-09-14T07:03:46+00:00'
+source_bank_version: '0.4'
+model: gpt-5.6-terra
+gates:
+  dup: 0.95
+  cross: 0.9
+  leak: 0.9
+  auto_margin: 0.05
+  per_seed: 3
+accepted:
+  GENERATE_SCHEDULE:
+  - question: 여행 코스 좀 만들어볼까
+    seed: 일정 만들어줘
+    margin: 0.11
+    same: 0.899
+    same_q: 이번 여행 코스 좀 짜봐
+    other: 0.789
+    other_intent: REGENERATE
+    other_q: 새 여행 일정을 생성해 주세요
+    leak: 0.788
+  - question: '{지역}으로 떠나는 여행 코스 만들어 주세요.'
+    seed: '{지역} 여행 계획 좀 짜줄래?'
+    margin: 0.123
+    same: 0.866
+    same_q: 여행 코스 좀 만들어볼까
+    other: 0.744
+    other_intent: REGENERATE
+    other_q: 새 여행 일정을 생성해 주세요
+    leak: 0.712
+  - question: '{지역} 여행 일정 짜줘.'
+    seed: '{지역} 여행 계획 좀 짜줄래?'
+    margin: 0.105
+    same: 0.937
+    same_q: '{지역} 여행 계획 좀 짜줄래?'
+    other: 0.832
+    other_intent: SHOW_SCHEDULE
+    other_q: 내 여행 일정표 띄워줘
+    leak: 0.78
+  - question: '{지역} 가서 뭘 하면 좋을지 여행 플랜 구성해볼까?'
+    seed: '{지역} 여행 계획 좀 짜줄래?'
+    margin: 0.218
+    same: 0.921
+    same_q: '{지역} 여행 계획 좀 짜줄래?'
+    other: 0.703
+    other_intent: SHOW_SCHEDULE
+    other_q: 이번 여행 일정표 보여주세요
+    leak: 0.771
+  - question: '{날짜}~{날짜} 동안 {지역} 여행 코스 짜주세요'
+    seed: '{날짜}부터 {날짜}까지 {지역} 가는데 일정 추천해줘'
+    margin: 0.134
+    same: 0.899
+    same_q: '{지역} 여행 일정 짜줘.'
+    other: 0.765
+    other_intent: REGENERATE
+    other_q: 새 여행 일정을 생성해 주세요
+    leak: 0.721
+  - question: '{지역}에 {날짜}부터 {날짜}까지 갈 건데 여행 계획 만들어줘'
+    seed: '{날짜}부터 {날짜}까지 {지역} 가는데 일정 추천해줘'
+    margin: 0.162
+    same: 0.916
+    same_q: '{날짜}부터 {날짜}까지 {지역} 가는데 일정 추천해줘'
+    other: 0.754
+    other_intent: REGENERATE
+    other_q: 새 여행 일정을 생성해 주세요
+    leak: 0.732
+  - question: '{날짜}에서 {날짜}까지 {지역} 방문 일정 좀 구성해줄래?'
+    seed: '{날짜}부터 {날짜}까지 {지역} 가는데 일정 추천해줘'
+    margin: 0.139
+    same: 0.891
+    same_q: '{날짜}부터 {날짜}까지 {지역} 가는데 일정 추천해줘'
+    other: 0.752
+    other_intent: SHOW_SCHEDULE
+    other_q: 이번 여행 일정표 보여주세요
+    leak: 0.663
+  - question: 여행 계획을 자동으로 짜 주실 수 있나요?
+    seed: 여행 스케줄 자동으로 만들어주세요
+    margin: 0.15
+    same: 0.899
+    same_q: 여행 스케줄 자동으로 만들어주세요
+    other: 0.749
+    other_intent: SHOW_SCHEDULE
+    other_q: 내 여행 일정표 띄워줘
+    leak: 0.688
+  - question: 알아서 여행 동선이랑 계획 구성해봐
+    seed: 여행 스케줄 자동으로 만들어주세요
+    margin: 0.091
+    same: 0.847
+    same_q: 여행 일정 좀 만들어줘
+    other: 0.756
+    other_intent: REGENERATE
+    other_q: 새 여행 일정을 생성해 주세요
+    leak: 0.796
+  - question: 여행 동선 추천해줘
+    seed: 이번 여행 코스 좀 짜봐
+    margin: 0.074
+    same: 0.817
+    same_q: 여행 코스 좀 만들어볼까
+    other: 0.743
+    other_intent: GET_WEATHER
+    other_q: 여행지 날씨 알려줘
+    leak: 0.706
+  - question: 이번에 갈 곳들로 계획 세워주세요
+    seed: 이번 여행 코스 좀 짜봐
+    margin: 0.056
+    same: 0.854
+    same_q: 이번 여행 코스 좀 짜봐
+    other: 0.799
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음에 갈 곳 알려줘
+    leak: 0.802
+  - question: 어디부터 둘러볼지 여행 플랜 만들어볼까
+    seed: 이번 여행 코스 좀 짜봐
+    margin: 0.146
+    same: 0.861
+    same_q: '{지역} 가서 뭘 하면 좋을지 여행 플랜 구성해볼까?'
+    other: 0.715
+    other_intent: SHOW_SCHEDULE
+    other_q: 내 여행 일정표 띄워줘
+    leak: 0.783
+  - question: 저장한 장소 기준으로 여행 동선 만들어주세요
+    seed: 저장해둔 장소들로 일정 구성해줘
+    margin: 0.089
+    same: 0.787
+    same_q: 저장해둔 장소들로 일정 구성해줘
+    other: 0.698
+    other_intent: REGENERATE
+    other_q: 새 여행 일정을 생성해 주세요
+    leak: 0.686
+  - question: 내가 모아둔 곳들로 일정 좀 구성해볼까
+    seed: 저장해둔 장소들로 일정 구성해줘
+    margin: 0.064
+    same: 0.825
+    same_q: 저장해둔 장소들로 일정 구성해줘
+    other: 0.76
+    other_intent: SHOW_SCHEDULE
+    other_q: 내 여행 일정표 띄워줘
+    leak: 0.873
+  - question: '{지역}에서 {기간} 동안 여행할 계획 짜줘'
+    seed: '{지역} {기간} 일정 뽑아줘'
+    margin: 0.187
+    same: 0.93
+    same_q: '{지역}에 {날짜}부터 {날짜}까지 갈 건데 여행 계획 만들어줘'
+    other: 0.744
+    other_intent: SHOW_SCHEDULE
+    other_q: 내 여행 일정표 띄워줘
+    leak: 0.752
+  - question: '{지역} {기간} 여행 코스 만들어주세요'
+    seed: '{지역} {기간} 일정 뽑아줘'
+    margin: 0.181
+    same: 0.948
+    same_q: '{지역}으로 떠나는 여행 코스 만들어 주세요.'
+    other: 0.766
+    other_intent: REGENERATE
+    other_q: 새 여행 일정을 생성해 주세요
+    leak: 0.699
+  - question: '{지역} 갈 건데 {기간} 일정 추천해 줘'
+    seed: '{지역} {기간} 일정 뽑아줘'
+    margin: 0.161
+    same: 0.931
+    same_q: '{날짜}부터 {날짜}까지 {지역} 가는데 일정 추천해줘'
+    other: 0.77
+    other_intent: SHOW_SCHEDULE
+    other_q: '{날짜} 일정 확인하고 싶어요'
+    leak: 0.715
+  - question: '{지역} {기간} 여행 계획 좀 만들어주세요'
+    seed: '{지역} {기간}이면 어떻게 도는 게 좋아?'
+    margin: 0.145
+    same: 0.946
+    same_q: '{지역} 여행 계획 좀 짜줄래?'
+    other: 0.801
+    other_intent: REGENERATE
+    other_q: 새 여행 일정을 생성해 주세요
+    leak: 0.797
+  - question: '{지역} 가면 {기간} 동안 어디부터 둘러보면 좋을까?'
+    seed: '{지역} {기간}이면 어떻게 도는 게 좋아?'
+    margin: 0.167
+    same: 0.798
+    same_q: '{날짜}부터 {날짜}까지 {지역} 가는데 일정 추천해줘'
+    other: 0.631
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음에 갈 곳 알려줘
+    leak: 0.649
+  - question: 아이와 함께하기 좋은 편안한 여행 계획 짜주세요
+    seed: 아이랑 가는데 무리 없는 일정으로 만들어줘
+    margin: 0.163
+    same: 0.864
+    same_q: 아이랑 가는데 무리 없는 일정으로 만들어줘
+    other: 0.701
+    other_intent: REGENERATE
+    other_q: 새 여행 일정을 생성해 주세요
+    leak: 0.674
+  - question: 애 데리고 갈 거라서 이동 부담 적게 코스 구성해줘
+    seed: 아이랑 가는데 무리 없는 일정으로 만들어줘
+    margin: 0.16
+    same: 0.807
+    same_q: 아이랑 가는데 무리 없는 일정으로 만들어줘
+    other: 0.648
+    other_intent: REGENERATE
+    other_q: 새 여행 일정을 생성해 주세요
+    leak: 0.722
+  - question: 아이 동반 여행인데 빡빡하지 않게 일정 부탁해요
+    seed: 아이랑 가는데 무리 없는 일정으로 만들어줘
+    margin: 0.133
+    same: 0.882
+    same_q: 아이랑 가는데 무리 없는 일정으로 만들어줘
+    other: 0.749
+    other_intent: SHOW_SCHEDULE
+    other_q: 이번 여행 일정표 보여주세요
+    leak: 0.714
+  REGENERATE:
+  - question: 기존 계획은 전부 취소하고 새 일정으로 만들어 주세요
+    seed: 일정 처음부터 다시 짜줘
+    margin: 0.088
+    same: 0.861
+    same_q: 이 일정 갈아엎고 새로 짜자
+    other: 0.773
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.761
+  - question: 짜둔 동선 다 없애고 처음부터 다시 구성해줘
+    seed: 일정 처음부터 다시 짜줘
+    margin: 0.128
+    same: 0.758
+    same_q: 일정 처음부터 다시 짜줘
+    other: 0.631
+    other_intent: GENERATE_SCHEDULE
+    other_q: 갈 곳이랑 동선 포함해서 스케줄 구성해 주세요
+    leak: 0.696
+  - question: 이전에 만든 일정은 버리고 완전히 새로 계획 짜자
+    seed: 일정 처음부터 다시 짜줘
+    margin: 0.098
+    same: 0.902
+    same_q: 이 일정 갈아엎고 새로 짜자
+    other: 0.804
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.77
+  - question: 이 계획은 별로야. 전부 없애고 새로 짜줘
+    seed: 이 일정 마음에 안 들어, 전체 다시 만들어줘
+    margin: 0.113
+    same: 0.794
+    same_q: 기존 계획은 전부 취소하고 새 일정으로 만들어 주세요
+    other: 0.681
+    other_intent: SHOW_SCHEDULE
+    other_q: 지금 계획이 어떻게 되어 있지?
+    leak: 0.725
+  - question: 아예 처음부터 다른 일정으로 만들어줘
+    seed: 이 일정 마음에 안 들어, 전체 다시 만들어줘
+    margin: 0.086
+    same: 0.907
+    same_q: 일정 처음부터 다시 짜줘
+    other: 0.821
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.805
+  - question: 기존 계획은 전부 없애고 다른 구성으로 다시 짜줘.
+    seed: 다른 버전으로 일정 새로 뽑아줄래?
+    margin: 0.135
+    same: 0.867
+    same_q: 기존 계획은 전부 취소하고 새 일정으로 만들어 주세요
+    other: 0.732
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.747
+  - question: 지금 일정 말고 완전히 새 코스로 만들어 주세요.
+    seed: 다른 버전으로 일정 새로 뽑아줄래?
+    margin: 0.095
+    same: 0.864
+    same_q: 기존 계획은 전부 취소하고 새 일정으로 만들어 주세요
+    other: 0.769
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.774
+  - question: 아예 다른 일정안으로 갈아엎어줘.
+    seed: 다른 버전으로 일정 새로 뽑아줄래?
+    margin: 0.067
+    same: 0.891
+    same_q: 아예 처음부터 다른 일정으로 만들어줘
+    other: 0.824
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.814
+  - question: 기존 일정은 전부 취소하고 처음부터 다시 구성해줘
+    seed: 이 일정 갈아엎고 새로 짜자
+    margin: 0.175
+    same: 0.949
+    same_q: 기존 계획은 전부 취소하고 새 일정으로 만들어 주세요
+    other: 0.774
+    other_intent: REPLAN
+    other_q: 지금 너무 늦어졌는데 남은 일정 다시 조정해줘
+    leak: 0.804
+  - question: 이 계획 완전히 폐기하고 새 일정으로 바꿔주세요
+    seed: 이 일정 갈아엎고 새로 짜자
+    margin: 0.177
+    same: 0.946
+    same_q: 기존 계획은 전부 취소하고 새 일정으로 만들어 주세요
+    other: 0.769
+    other_intent: EDIT_SCHEDULE
+    other_q: 이 장소 일정에서 삭제하고 싶어
+    leak: 0.765
+  - question: 기존 계획은 전부 없애고 처음부터 새로 짜주세요
+    seed: 지금 일정은 버리고 전체 재생성해 주세요
+    margin: 0.218
+    same: 0.91
+    same_q: 기존 계획은 전부 없애고 다른 구성으로 다시 짜줘.
+    other: 0.691
+    other_intent: SHOW_SCHEDULE
+    other_q: 지금 계획이 어떻게 되어 있지?
+    leak: 0.756
+  - question: 지금 짜인 코스 다 취소하고 완전히 다시 만들어줘
+    seed: 지금 일정은 버리고 전체 재생성해 주세요
+    margin: 0.141
+    same: 0.852
+    same_q: 기존 일정은 전부 취소하고 처음부터 다시 구성해줘
+    other: 0.711
+    other_intent: REPLAN
+    other_q: 날씨가 안 좋아서 오늘 남은 코스 재정비가 필요해
+    leak: 0.711
+  - question: 현재 일정은 싹 지우고 새 일정으로 바꿔줘
+    seed: 지금 일정은 버리고 전체 재생성해 주세요
+    margin: 0.083
+    same: 0.895
+    same_q: 기존 계획은 전부 취소하고 새 일정으로 만들어 주세요
+    other: 0.812
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.81
+  - question: 기존 일정은 다 없애고 완전히 다른 느낌으로 새로 짜줘
+    seed: 이번엔 다른 스타일로 전부 다시 추천해줘
+    margin: 0.158
+    same: 0.922
+    same_q: 기존 일정은 전부 취소하고 처음부터 다시 구성해줘
+    other: 0.764
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.769
+  - question: 아예 처음부터 다른 콘셉트로 다시 구성해주세요
+    seed: 이번엔 다른 스타일로 전부 다시 추천해줘
+    margin: 0.16
+    same: 0.782
+    same_q: 기존 계획은 전부 없애고 다른 구성으로 다시 짜줘.
+    other: 0.622
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.712
+  - question: 지금 계획 전부 갈아엎고 새 일정으로 바꿔줘
+    seed: 이번엔 다른 스타일로 전부 다시 추천해줘
+    margin: 0.109
+    same: 0.929
+    same_q: 이 계획 완전히 폐기하고 새 일정으로 바꿔주세요
+    other: 0.82
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.786
+  - question: 기존 여행 계획은 전부 없애고 처음부터 다시 짜줘
+    seed: 일정 리셋하고 새로 만들어줘
+    margin: 0.113
+    same: 0.893
+    same_q: 기존 여행 스케줄을 통째로 바꿔서 다시 구성해 주세요
+    other: 0.78
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 계획 짜줘
+    leak: 0.728
+  - question: 짜둔 스케줄 다 폐기하고 새 계획으로 바꿔주세요
+    seed: 일정 리셋하고 새로 만들어줘
+    margin: 0.16
+    same: 0.94
+    same_q: 이 계획 완전히 폐기하고 새 일정으로 바꿔주세요
+    other: 0.78
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.749
+  - question: 일정 통째로 갈아엎자
+    seed: 일정 리셋하고 새로 만들어줘
+    margin: 0.131
+    same: 0.901
+    same_q: 이 일정 갈아엎고 새로 짜자
+    other: 0.77
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.766
+  - question: 기존 계획은 전부 없애고 새 일정으로 만들어줘.
+    seed: 통째로 다시 짜주면 안 돼?
+    margin: 0.165
+    same: 0.95
+    same_q: 기존 계획은 전부 취소하고 새 일정으로 만들어 주세요
+    other: 0.785
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.772
+  - question: 아예 처음부터 여행 동선을 새로 구성해 주세요.
+    seed: 통째로 다시 짜주면 안 돼?
+    margin: 0.093
+    same: 0.88
+    same_q: 기존 여행 스케줄을 통째로 바꿔서 다시 구성해 주세요
+    other: 0.787
+    other_intent: GENERATE_SCHEDULE
+    other_q: 알아서 여행 동선이랑 계획 구성해봐
+    leak: 0.691
+  - question: 지금 일정 말고 완전히 다른 계획으로 다시 짜자.
+    seed: 통째로 다시 짜주면 안 돼?
+    margin: 0.087
+    same: 0.904
+    same_q: 이전에 만든 일정은 버리고 완전히 새로 계획 짜자
+    other: 0.816
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.806
+  - question: 이거 마음에 안 드는데, 아예 새 일정으로 바꿔주세요.
+    seed: 이 일정 너무 별로다, 새로 뽑아줘
+    margin: 0.076
+    same: 0.878
+    same_q: 아예 다른 일정안으로 갈아엎어줘.
+    other: 0.802
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.856
+  - question: 현재 코스 폐기하고 새로 만들어야겠다.
+    seed: 이 일정 너무 별로다, 새로 뽑아줘
+    margin: 0.152
+    same: 0.869
+    same_q: 지금 짜인 코스 다 취소하고 완전히 다시 만들어줘
+    other: 0.717
+    other_intent: REPLAN
+    other_q: 날씨가 안 좋아서 오늘 남은 코스 재정비가 필요해
+    leak: 0.633
+  - question: 짜둔 여행 스케줄 버리고 처음부터 다시 짜줘
+    seed: 새 여행 일정을 생성해 주세요
+    margin: 0.075
+    same: 0.879
+    same_q: 일정 처음부터 다시 짜줘
+    other: 0.804
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 계획 짜줘
+    leak: 0.74
+  - question: 현재 일정은 폐기하고 여행 계획을 새로 구성해 주세요
+    seed: 새 여행 일정을 생성해 주세요
+    margin: 0.088
+    same: 0.891
+    same_q: 기존 계획은 전부 취소하고 새 일정으로 만들어 주세요
+    other: 0.802
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 일정 좀 만들어줘
+    leak: 0.751
+  REPLAN:
+  - question: 비가 계속 오는데 오늘 남은 코스를 실내 장소 중심으로 조정해 주세요.
+    seed: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    margin: 0.078
+    same: 0.818
+    same_q: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    other: 0.739
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    leak: 0.775
+  - question: 오늘 날씨가 궂으니까 야외 일정 대신 안에서 할 수 있는 걸로 바꿔줘.
+    seed: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    margin: 0.072
+    same: 0.835
+    same_q: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    other: 0.764
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    leak: 0.793
+  - question: 우천이라 오늘 계획, 실내 위주로 수정해야겠네.
+    seed: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    margin: 0.204
+    same: 0.926
+    same_q: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    other: 0.722
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    leak: 0.807
+  - question: 시간이 많이 밀렸으니 이후 계획을 맞춰서 바꿔주세요.
+    seed: 지금 너무 늦어졌는데 남은 일정 다시 조정해줘
+    margin: 0.087
+    same: 0.89
+    same_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    other: 0.803
+    other_intent: REGENERATE
+    other_q: 이거 마음에 안 드는데, 아예 새 일정으로 바꿔주세요.
+    leak: 0.819
+  - question: 늦어졌네, 남은 코스 좀 재조정해줘.
+    seed: 지금 너무 늦어졌는데 남은 일정 다시 조정해줘
+    margin: 0.105
+    same: 0.877
+    same_q: 지금 너무 늦어졌는데 남은 일정 다시 조정해줘
+    other: 0.772
+    other_intent: REGENERATE
+    other_q: 지금 일정 말고 완전히 새 코스로 만들어 주세요.
+    leak: 0.811
+  - question: 예정보다 지연돼서 남은 방문 일정이 무리 없도록 다시 조율해 줄 수 있을까요?
+    seed: 지금 너무 늦어졌는데 남은 일정 다시 조정해줘
+    margin: 0.075
+    same: 0.787
+    same_q: 지금 너무 늦어졌는데 남은 일정 다시 조정해줘
+    other: 0.712
+    other_intent: REGENERATE
+    other_q: 현재 일정은 폐기하고 여행 계획을 새로 구성해 주세요
+    leak: 0.751
+  - question: '{장소}가 오늘 문을 안 연다는데, 남은 오후 코스 좀 조정해 주세요.'
+    seed: '{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?'
+    margin: 0.083
+    same: 0.835
+    same_q: '{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?'
+    other: 0.752
+    other_intent: REGENERATE
+    other_q: 지금 일정 말고 완전히 새 코스로 만들어 주세요.
+    leak: 0.783
+  - question: 오늘 {장소} 휴관이래. 오후에 갈 곳들 다시 짜줘.
+    seed: '{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?'
+    margin: 0.15
+    same: 0.862
+    same_q: '{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?'
+    other: 0.712
+    other_intent: GET_POI_INFO
+    other_q: '{장소} 오늘 문 여는지 확인해줄래?'
+    leak: 0.814
+  - question: '{장소}가 쉬는 날이라네요. 이걸 반영해서 오후 일정만 재구성해줄 수 있을까요?'
+    seed: '{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?'
+    margin: 0.106
+    same: 0.848
+    same_q: '{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?'
+    other: 0.742
+    other_intent: EDIT_SCHEDULE
+    other_q: '{장소} 일정에서 빼줘'
+    leak: 0.761
+  - question: 날씨가 이래서 남은 방문 계획을 상황에 맞게 바꿔야겠어.
+    seed: 날씨가 안 좋아서 오늘 남은 코스 재정비가 필요해
+    margin: 0.059
+    same: 0.764
+    same_q: 우천이라 오늘 계획, 실내 위주로 수정해야겠네.
+    other: 0.705
+    other_intent: REGENERATE
+    other_q: 현재 일정은 폐기하고 여행 계획을 새로 구성해 주세요
+    leak: 0.762
+  - question: 오늘 기상 상태가 안 좋으니 남은 코스 재배치 부탁드립니다.
+    seed: 날씨가 안 좋아서 오늘 남은 코스 재정비가 필요해
+    margin: 0.15
+    same: 0.894
+    same_q: 날씨가 안 좋아서 오늘 남은 코스 재정비가 필요해
+    other: 0.743
+    other_intent: REGENERATE
+    other_q: 지금 일정 말고 완전히 새 코스로 만들어 주세요.
+    leak: 0.782
+  - question: 교통 체증 때문에 뒤 일정이 어려운데, 남은 코스 조정해 주세요.
+    seed: 차가 막혀서 다음 일정 못 갈 것 같아, 남은 계획 다시 잡아줘
+    margin: 0.053
+    same: 0.806
+    same_q: 늦어졌네, 남은 코스 좀 재조정해줘.
+    other: 0.753
+    other_intent: REGENERATE
+    other_q: 지금 일정 말고 완전히 새 코스로 만들어 주세요.
+    leak: 0.759
+  - question: 길이 너무 밀려서 이후 방문 계획을 다시 짜야겠어.
+    seed: 차가 막혀서 다음 일정 못 갈 것 같아, 남은 계획 다시 잡아줘
+    margin: 0.068
+    same: 0.804
+    same_q: 시간이 많이 밀렸으니 이후 계획을 맞춰서 바꿔주세요.
+    other: 0.737
+    other_intent: REGENERATE
+    other_q: 아예 처음부터 여행 동선을 새로 구성해 주세요.
+    leak: 0.704
+  - question: 차가 꽉 막혔네. 남은 일정에 맞게 동선 좀 바꿔줘.
+    seed: 차가 막혀서 다음 일정 못 갈 것 같아, 남은 계획 다시 잡아줘
+    margin: 0.16
+    same: 0.861
+    same_q: 차가 막혀서 다음 일정 못 갈 것 같아, 남은 계획 다시 잡아줘
+    other: 0.701
+    other_intent: REGENERATE
+    other_q: 아예 다른 일정안으로 갈아엎어줘.
+    leak: 0.749
+  - question: 내일 눈 예보가 있어서 남은 일정은 실내 명소 중심으로 바꿔주세요.
+    seed: 눈 온다는데 내일 일정 실내 위주로 조정해줘
+    margin: 0.18
+    same: 0.895
+    same_q: 눈 온다는데 내일 일정 실내 위주로 조정해줘
+    other: 0.715
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 지금 일정에 있는 이곳 대신 갈 만한 데 하나만 추천해주세요
+    leak: 0.74
+  - question: 눈 온다니까 내일 계획, 밖에서 하는 건 빼고 실내로 조정해줘.
+    seed: 눈 온다는데 내일 일정 실내 위주로 조정해줘
+    margin: 0.218
+    same: 0.909
+    same_q: 눈 온다는데 내일 일정 실내 위주로 조정해줘
+    other: 0.692
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    leak: 0.714
+  - question: 내일 날씨가 안 좋다네. 기존 일정은 유지하되 실내 위주로 재배치해야겠다.
+    seed: 눈 온다는데 내일 일정 실내 위주로 조정해줘
+    margin: 0.137
+    same: 0.832
+    same_q: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    other: 0.695
+    other_intent: REGENERATE
+    other_q: 이 일정 갈아엎고 새로 짜자
+    leak: 0.76
+  - question: 예정보다 늦어졌는데, 남은 시간 기준으로 이후 코스 조정해줘
+    seed: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    margin: 0.135
+    same: 0.88
+    same_q: 늦어졌네, 남은 코스 좀 재조정해줘.
+    other: 0.745
+    other_intent: REGENERATE
+    other_q: 지금 일정 말고 완전히 새 코스로 만들어 주세요.
+    leak: 0.842
+  - question: 시간이 예상보다 많이 지나가 버렸네요. 남은 일정만 현실적으로 재배치해 주세요
+    seed: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    margin: 0.065
+    same: 0.857
+    same_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    other: 0.792
+    other_intent: REGENERATE
+    other_q: 일정 리셋하고 새로 만들어줘
+    leak: 0.771
+  - question: 비가 너무 와서 바깥 활동은 어려운데, 남은 동선 다른 걸로 조정해 주세요.
+    seed: 폭우 때문에 야외 일정은 못 할 것 같아요, 플랜B 부탁해요
+    margin: 0.108
+    same: 0.796
+    same_q: 비가 계속 오는데 오늘 남은 코스를 실내 장소 중심으로 조정해 주세요.
+    other: 0.688
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    leak: 0.795
+  - question: 폭우라 야외 코스는 빼고 이후 일정 다시 짜줘.
+    seed: 폭우 때문에 야외 일정은 못 할 것 같아요, 플랜B 부탁해요
+    margin: 0.058
+    same: 0.81
+    same_q: 비가 계속 오는데 오늘 남은 코스를 실내 장소 중심으로 조정해 주세요.
+    other: 0.751
+    other_intent: REGENERATE
+    other_q: 일정 처음부터 다시 짜줘
+    leak: 0.818
+  - question: 이런 날씨면 실외 계획은 포기해야겠네. 대신 갈 만한 곳으로 일정 바꿔줄래?
+    seed: 폭우 때문에 야외 일정은 못 할 것 같아요, 플랜B 부탁해요
+    margin: 0.12
+    same: 0.859
+    same_q: 오늘 날씨가 궂으니까 야외 일정 대신 안에서 할 수 있는 걸로 바꿔줘.
+    other: 0.739
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    leak: 0.749
+  - question: 지쳐서 오늘 이후 계획을 좀 덜어내고 조정해 주세요.
+    seed: 너무 피곤해서 오늘 남은 일정 좀 줄여서 다시 잡아줘
+    margin: 0.079
+    same: 0.87
+    same_q: 너무 피곤해서 오늘 남은 일정 좀 줄여서 다시 잡아줘
+    other: 0.791
+    other_intent: REGENERATE
+    other_q: 지금 일정 말고 완전히 다른 계획으로 다시 짜자.
+    leak: 0.753
+  - question: 피로가 심하네. 오늘 아직 남은 일정은 줄이는 쪽으로 다시 맞춰줘.
+    seed: 너무 피곤해서 오늘 남은 일정 좀 줄여서 다시 잡아줘
+    margin: 0.145
+    same: 0.921
+    same_q: 너무 피곤해서 오늘 남은 일정 좀 줄여서 다시 잡아줘
+    other: 0.776
+    other_intent: REGENERATE
+    other_q: 현재 일정은 싹 지우고 새 일정으로 바꿔줘
+    leak: 0.767
+  SUGGEST_ALTERNATIVE:
+  - question: '{장소} 말고 추천할 만한 곳 있나요?'
+    seed: '{장소} 대신 갈 데 있어?'
+    margin: 0.204
+    same: 0.876
+    same_q: '{장소} 말고 다른 대안 알려줄래?'
+    other: 0.672
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.842
+  - question: 음, {장소} 대신 들르기 좋은 다른 데가 있을까?
+    seed: '{장소} 대신 갈 데 있어?'
+    margin: 0.159
+    same: 0.796
+    same_q: '{장소} 대신 갈 데 있어?'
+    other: 0.637
+    other_intent: EDIT_SCHEDULE
+    other_q: '{장소}를 {장소}로 교체해줘'
+    leak: 0.755
+  - question: 이곳 영업을 안 하는데, 주변에 대신 갈 만한 유사한 장소 있을까요?
+    seed: 여기 문 닫았네, 근처에 비슷한 곳 추천해줘
+    margin: 0.139
+    same: 0.83
+    same_q: 여기 문 닫았네, 근처에 비슷한 곳 추천해줘
+    other: 0.692
+    other_intent: REPLAN
+    other_q: '{장소}가 오늘 문을 안 연다는데, 남은 오후 코스 좀 조정해 주세요.'
+    leak: 0.779
+  - question: 여기 폐점했으니 일정은 그대로 두고 가까운 곳 중 같은 분위기의 장소를 추천해 주세요.
+    seed: 여기 문 닫았네, 근처에 비슷한 곳 추천해줘
+    margin: 0.132
+    same: 0.866
+    same_q: 여기 문 닫았네, 근처에 비슷한 곳 추천해줘
+    other: 0.734
+    other_intent: REPLAN
+    other_q: 오늘 {장소} 휴관이래. 오후에 갈 곳들 다시 짜줘.
+    leak: 0.732
+  - question: '{장소} 대신 갈 만한 곳 추천해줘.'
+    seed: '{장소} 말고 다른 대안 알려줄래?'
+    margin: 0.145
+    same: 0.921
+    same_q: '{장소} 대신 갈 데 있어?'
+    other: 0.776
+    other_intent: EDIT_SCHEDULE
+    other_q: '{장소}를 {장소}로 교체해줘'
+    leak: 0.817
+  - question: '{장소} 말고 비슷하게 들를 수 있는 데가 있을까요?'
+    seed: '{장소} 말고 다른 대안 알려줄래?'
+    margin: 0.266
+    same: 0.873
+    same_q: 음, {장소} 대신 들르기 좋은 다른 데가 있을까?
+    other: 0.608
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.738
+  - question: 음, {장소}의 대체 장소로 어디가 괜찮을까?
+    seed: '{장소} 말고 다른 대안 알려줄래?'
+    margin: 0.117
+    same: 0.9
+    same_q: '{장소} 대체할 장소 좀 골라줘'
+    other: 0.783
+    other_intent: EDIT_SCHEDULE
+    other_q: '{장소}를 {장소}로 교체해줘'
+    leak: 0.866
+  - question: 여기 대신 들를 만한 다른 곳 추천해 주세요.
+    seed: 이 자리에 원래 가려던 곳 대신 넣을 만한 장소 있을까요?
+    margin: 0.221
+    same: 0.877
+    same_q: 음, {장소} 대신 들르기 좋은 다른 데가 있을까?
+    other: 0.656
+    other_intent: GENERATE_SCHEDULE
+    other_q: 이번에 갈 곳들로 계획 세워주세요
+    leak: 0.755
+  - question: 기존에 가려던 장소를 대체할 만한 곳이 있으면 알려줘.
+    seed: 이 자리에 원래 가려던 곳 대신 넣을 만한 장소 있을까요?
+    margin: 0.128
+    same: 0.858
+    same_q: '{장소} 대신 갈 만한 곳 추천해줘.'
+    other: 0.73
+    other_intent: GENERATE_SCHEDULE
+    other_q: 이번에 갈 곳들로 계획 세워주세요
+    leak: 0.876
+  - question: 비 피할 수 있게 이곳 말고 실내 명소 추천해줄래?
+    seed: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    margin: 0.173
+    same: 0.886
+    same_q: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    other: 0.713
+    other_intent: REPLAN
+    other_q: 이런 날씨면 실외 계획은 포기해야겠네. 대신 갈 만한 곳으로 일정 바꿔줄래?
+    leak: 0.801
+  - question: 여기 대신 들어가서 구경할 곳 없나?
+    seed: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    margin: 0.114
+    same: 0.779
+    same_q: '{장소} 대신 갈 데 있어?'
+    other: 0.665
+    other_intent: GET_POI_INFO
+    other_q: 이 장소 정보 좀 보여줘
+    leak: 0.784
+  - question: '{장소} 대신 갈 만한 덜 붐비는 곳 추천해 주세요'
+    seed: '{장소}가 사람이 너무 많대, 대체할 곳 골라줘'
+    margin: 0.177
+    same: 0.856
+    same_q: '{장소} 대신 갈 만한 곳 추천해줘.'
+    other: 0.679
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 동선 추천해줘
+    leak: 0.734
+  - question: '{장소} 사람 많으면 어디로 가는 게 좋을까?'
+    seed: '{장소}가 사람이 너무 많대, 대체할 곳 골라줘'
+    margin: 0.134
+    same: 0.81
+    same_q: '{장소}가 사람이 너무 많대, 대체할 곳 골라줘'
+    other: 0.676
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음에 갈 곳 알려줘
+    leak: 0.701
+  - question: 혼잡한 {장소} 말고 여유롭게 둘러볼 대안 좀 찾아줘
+    seed: '{장소}가 사람이 너무 많대, 대체할 곳 골라줘'
+    margin: 0.179
+    same: 0.828
+    same_q: '{장소} 대신 갈 만한 덜 붐비는 곳 추천해 주세요'
+    other: 0.649
+    other_intent: GENERATE_SCHEDULE
+    other_q: 이번에 갈 곳들로 계획 세워주세요
+    leak: 0.697
+  - question: 현재 코스의 이 장소를 대체할 곳 한 군데 골라주세요
+    seed: 지금 일정에 있는 이곳 대신 갈 만한 데 하나만 추천해주세요
+    margin: 0.098
+    same: 0.82
+    same_q: '{장소} 대체할 장소 좀 골라줘'
+    other: 0.722
+    other_intent: EDIT_SCHEDULE
+    other_q: '{장소}를 {장소}로 교체해줘'
+    leak: 0.812
+  - question: 일정은 그대로 두고 여기 말고 들를 만한 다른 장소 추천해줘
+    seed: 지금 일정에 있는 이곳 대신 갈 만한 데 하나만 추천해주세요
+    margin: 0.167
+    same: 0.887
+    same_q: 여기 대신 들를 만한 다른 곳 추천해 주세요.
+    other: 0.72
+    other_intent: GENERATE_SCHEDULE
+    other_q: 이번에 갈 곳들로 계획 세워주세요
+    leak: 0.774
+  - question: 이곳 대신 방문하기 좋은 데 하나 있을까?
+    seed: 지금 일정에 있는 이곳 대신 갈 만한 데 하나만 추천해주세요
+    margin: 0.192
+    same: 0.859
+    same_q: 여기 대신 들어가서 구경할 곳 없나?
+    other: 0.667
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음 방문지 알려주세요
+    leak: 0.82
+  - question: 이곳 대신 들를 만한 다른 명소 좀 골라주세요
+    seed: 여기 갈 데가 마땅치 않네, 대안 장소 추천 부탁해
+    margin: 0.279
+    same: 0.942
+    same_q: 여기 대신 들를 만한 다른 곳 추천해 주세요.
+    other: 0.663
+    other_intent: REPLAN
+    other_q: 이런 날씨면 실외 계획은 포기해야겠네. 대신 갈 만한 곳으로 일정 바꿔줄래?
+    leak: 0.772
+  - question: 갈 만한 곳이 별로 없는데, 대체할 장소 추천해줄래?
+    seed: 여기 갈 데가 마땅치 않네, 대안 장소 추천 부탁해
+    margin: 0.173
+    same: 0.877
+    same_q: 여기 갈 데가 마땅치 않네, 대안 장소 추천 부탁해
+    other: 0.704
+    other_intent: REPLAN
+    other_q: 이런 날씨면 실외 계획은 포기해야겠네. 대신 갈 만한 곳으로 일정 바꿔줄래?
+    leak: 0.838
+  - question: 여기보다 나은 다른 방문지를 찾아보고 싶어요
+    seed: 여기 갈 데가 마땅치 않네, 대안 장소 추천 부탁해
+    margin: 0.105
+    same: 0.829
+    same_q: 이곳 대신 방문하기 좋은 데 하나 있을까?
+    other: 0.724
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음 방문지 알려주세요
+    leak: 0.763
+  - question: 줄이 너무 길다는데, 대신 갈 만한 곳 추천해줘.
+    seed: 여기 웨이팅이 너무 길대, 딴 데 없어?
+    margin: 0.1
+    same: 0.788
+    same_q: '{장소} 대신 갈 만한 곳 추천해줘.'
+    other: 0.688
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음에 갈 곳 알려줘
+    leak: 0.778
+  - question: 대기 시간 적은 다른 장소 없을까?
+    seed: 여기 웨이팅이 너무 길대, 딴 데 없어?
+    margin: 0.179
+    same: 0.766
+    same_q: 여기 웨이팅이 너무 길대, 딴 데 없어?
+    other: 0.587
+    other_intent: GET_POI_INFO
+    other_q: '{장소} 주차 돼?'
+    leak: 0.682
+  - question: 여기 기다리는 사람이 많다니 비슷한 곳으로 다른 후보 좀 찾아주세요.
+    seed: 여기 웨이팅이 너무 길대, 딴 데 없어?
+    margin: 0.085
+    same: 0.717
+    same_q: '{장소}가 사람이 너무 많대, 대체할 곳 골라줘'
+    other: 0.631
+    other_intent: REGENERATE
+    other_q: 이 일정 너무 별로다, 새로 뽑아줘
+    leak: 0.673
+  - question: 다른 장소 추천해줘
+    seed: 딴 데 추천 좀
+    margin: 0.129
+    same: 0.902
+    same_q: 딴 데 추천 좀
+    other: 0.773
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음에 갈 곳 알려줘
+    leak: 0.813
+  - question: 대신 가볼 만한 곳 있을까요?
+    seed: 딴 데 추천 좀
+    margin: 0.229
+    same: 0.899
+    same_q: 이곳 대신 방문하기 좋은 데 하나 있을까?
+    other: 0.67
+    other_intent: REPLAN
+    other_q: 이런 날씨면 실외 계획은 포기해야겠네. 대신 갈 만한 곳으로 일정 바꿔줄래?
+    leak: 0.819
+  - question: 여기 말고 갈 만한 데 좀 골라줘
+    seed: 딴 데 추천 좀
+    margin: 0.082
+    same: 0.84
+    same_q: '{장소} 대신 갈 만한 곳 추천해줘.'
+    other: 0.758
+    other_intent: GENERATE_SCHEDULE
+    other_q: 이번에 갈 곳들로 계획 세워주세요
+    leak: 0.841
+  GENERATE_REFLECTION:
+  - question: 오늘 있었던 일 바탕으로 일기 작성해줘
+    seed: 오늘 하루 회고 써줘
+    margin: 0.202
+    same: 0.841
+    same_q: 오늘 하루 어땠는지 회고로 남겨줄래?
+    other: 0.639
+    other_intent: SHOW_SCHEDULE
+    other_q: 오늘 남은 일정만 보여줘
+    leak: 0.781
+  - question: 하루를 돌아보는 기록 좀 남겨주세요
+    seed: 오늘 하루 회고 써줘
+    margin: 0.149
+    same: 0.817
+    same_q: 오늘 하루 돌아보는 글 하나 써줄 수 있어?
+    other: 0.667
+    other_intent: STYLE_ANALYSIS
+    other_q: 지금까지 기록으로 내 여행 유형 알려줄래?
+    leak: 0.78
+  - question: 오늘의 느낀 점까지 포함해서 하루 회고 써볼까
+    seed: 오늘 하루 회고 써줘
+    margin: 0.274
+    same: 0.892
+    same_q: 오늘 하루 회고 써줘
+    other: 0.619
+    other_intent: GENERATE_SCHEDULE
+    other_q: 내가 모아둔 곳들로 일정 좀 구성해볼까
+    leak: 0.786
+  - question: 오늘 있었던 일들 일기처럼 정리해 주세요.
+    seed: 오늘 하루 어땠는지 회고로 남겨줄래?
+    margin: 0.228
+    same: 0.856
+    same_q: 오늘 있었던 일 바탕으로 일기 작성해줘
+    other: 0.628
+    other_intent: REPLAN
+    other_q: 너무 피곤해서 오늘 남은 일정 좀 줄여서 다시 잡아줘
+    leak: 0.737
+  - question: 오늘의 경험과 느낀 점을 회고문으로 써줄 수 있어?
+    seed: 오늘 하루 어땠는지 회고로 남겨줄래?
+    margin: 0.271
+    same: 0.85
+    same_q: 오늘의 느낀 점까지 포함해서 하루 회고 써볼까
+    other: 0.579
+    other_intent: TRIP_SUMMARY
+    other_q: 이번 여정 요약본 뽑아줘
+    leak: 0.752
+  - question: 오늘 방문한 장소들을 바탕으로 하루 일기 써줘
+    seed: 오늘 다닌 곳들로 회고 만들어주세요
+    margin: 0.137
+    same: 0.848
+    same_q: 오늘 있었던 일 바탕으로 일기 작성해줘
+    other: 0.711
+    other_intent: GENERATE_SCHEDULE
+    other_q: 내가 모아둔 곳들로 일정 좀 구성해볼까
+    leak: 0.851
+  - question: 오늘 다녀온 곳들 회고록 만들어볼까
+    seed: 오늘 다닌 곳들로 회고 만들어주세요
+    margin: 0.179
+    same: 0.923
+    same_q: 오늘 다닌 곳들로 회고 만들어주세요
+    other: 0.743
+    other_intent: GENERATE_SCHEDULE
+    other_q: 내가 모아둔 곳들로 일정 좀 구성해볼까
+    leak: 0.758
+  - question: 오늘 있었던 일들 회고로 정리해줘
+    seed: 하루 마무리 기록 남기고 싶어
+    margin: 0.251
+    same: 0.892
+    same_q: 오늘 하루 어땠는지 회고로 남겨줄래?
+    other: 0.642
+    other_intent: TRIP_SUMMARY
+    other_q: 이번 여행 전체 요약해줘
+    leak: 0.794
+  - question: 하루 일기 좀 작성하고 싶습니다
+    seed: 하루 마무리 기록 남기고 싶어
+    margin: 0.178
+    same: 0.856
+    same_q: 오늘 있었던 일 바탕으로 일기 작성해줘
+    other: 0.677
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.784
+  - question: 오늘을 돌아보는 글 남겨볼까
+    seed: 하루 마무리 기록 남기고 싶어
+    margin: 0.272
+    same: 0.893
+    same_q: 오늘 하루 돌아보는 글 하나 써줄 수 있어?
+    other: 0.621
+    other_intent: SHOW_SCHEDULE
+    other_q: 오늘 일정 다 끝나면 그다음은 뭐야?
+    leak: 0.867
+  - question: 오늘 있었던 여행을 기록으로 남겨줘
+    seed: 오늘의 여행 일기 작성해줘
+    margin: 0.107
+    same: 0.899
+    same_q: 오늘의 여행 일기 작성해줘
+    other: 0.792
+    other_intent: STYLE_ANALYSIS
+    other_q: 지금까지 기록으로 내 여행 유형 알려줄래?
+    leak: 0.842
+  - question: 하루 동안의 여행 이야기를 일기처럼 정리해 주세요
+    seed: 오늘의 여행 일기 작성해줘
+    margin: 0.109
+    same: 0.883
+    same_q: 오늘의 여행 일기 작성해줘
+    other: 0.773
+    other_intent: TRIP_SUMMARY
+    other_q: 이번 여행 전체를 한눈에 볼 수 있게 정리해주세요
+    leak: 0.803
+  - question: 하루 회고 한 편 써주세요
+    seed: 오늘 진짜 알찼다, 이 하루 기록으로 남겨줘
+    margin: 0.302
+    same: 0.915
+    same_q: 오늘 하루 회고 써줘
+    other: 0.613
+    other_intent: TRIP_SUMMARY
+    other_q: 이번 여정 요약본 뽑아줘
+    leak: 0.77
+  - question: 오늘 하루를 기록으로 남기고 싶네
+    seed: 오늘 진짜 알찼다, 이 하루 기록으로 남겨줘
+    margin: 0.24
+    same: 0.891
+    same_q: 하루 마무리 기록 남기고 싶어
+    other: 0.652
+    other_intent: SHOW_SCHEDULE
+    other_q: 오늘 남은 일정만 보여줘
+    leak: 0.759
+  - question: 하루를 정리하는 회고문을 작성해 주실래요?
+    seed: 오늘 하루 돌아보는 글 하나 써줄 수 있어?
+    margin: 0.262
+    same: 0.877
+    same_q: 하루 회고 한 편 써주세요
+    other: 0.614
+    other_intent: TRIP_SUMMARY
+    other_q: 여행 끝났는데 총정리 한번 해줄래?
+    leak: 0.792
+  - question: 오늘의 여행 기록, 짧게 남겨볼까?
+    seed: 오늘 하루 돌아보는 글 하나 써줄 수 있어?
+    margin: 0.115
+    same: 0.906
+    same_q: 오늘 있었던 여행을 기록으로 남겨줘
+    other: 0.791
+    other_intent: TRIP_SUMMARY
+    other_q: 이번 여행 전체 요약해줘
+    leak: 0.82
+  - question: 오늘 있었던 일들 회고로 남겨줘
+    seed: 방금 끝난 하루 정리 부탁해
+    margin: 0.307
+    same: 0.946
+    same_q: 오늘 있었던 일들 회고로 정리해줘
+    other: 0.639
+    other_intent: SHOW_SCHEDULE
+    other_q: 오늘 남은 일정만 보여줘
+    leak: 0.783
+  - question: 오늘 하루를 돌아보는 글 써볼까
+    seed: 방금 끝난 하루 정리 부탁해
+    margin: 0.314
+    same: 0.947
+    same_q: 오늘을 돌아보는 글 남겨볼까
+    other: 0.633
+    other_intent: SHOW_SCHEDULE
+    other_q: 오늘 일정 다 끝나면 그다음은 뭐야?
+    leak: 0.891
+  - question: 오늘 사진들을 바탕으로 일기처럼 회고 작성해줘
+    seed: 오늘 찍은 사진으로 하루 정리해줘
+    margin: 0.218
+    same: 0.822
+    same_q: 오늘 하루 어땠는지 회고로 남겨줄래?
+    other: 0.604
+    other_intent: TRIP_SUMMARY
+    other_q: 이번 여행 전체 요약해줘
+    leak: 0.757
+  - question: 찍어 둔 사진 보고 오늘 하루를 기록으로 남겨주세요
+    seed: 오늘 찍은 사진으로 하루 정리해줘
+    margin: 0.192
+    same: 0.831
+    same_q: 오늘 하루를 기록으로 남기고 싶네
+    other: 0.639
+    other_intent: SHOW_SCHEDULE
+    other_q: 오늘 남은 일정만 보여줘
+    leak: 0.727
+  - question: 오늘 있었던 일, 사진 기준으로 정리해볼까
+    seed: 오늘 찍은 사진으로 하루 정리해줘
+    margin: 0.217
+    same: 0.845
+    same_q: 오늘 찍은 사진으로 하루 정리해줘
+    other: 0.628
+    other_intent: TRIP_SUMMARY
+    other_q: 이번 여행 하이라이트만 모아서 정리해줘
+    leak: 0.657
+  TRIP_SUMMARY:
+  - question: 이번 여행을 전반적으로 정리해 주세요
+    seed: 이번 여행 전체 요약해줘
+    margin: 0.102
+    same: 0.944
+    same_q: 이번 여행 전체 요약해줘
+    other: 0.842
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.847
+  - question: 여행 내용 한눈에 볼 수 있게 요약 부탁해요
+    seed: 이번 여행 전체 요약해줘
+    margin: 0.106
+    same: 0.875
+    same_q: 이번 여행 전체를 한눈에 볼 수 있게 정리해주세요
+    other: 0.77
+    other_intent: GENERATE_REFLECTION
+    other_q: 하루 동안의 여행 이야기를 일기처럼 정리해 주세요
+    leak: 0.786
+  - question: 이번에 다녀온 여정, 핵심만 간단히 묶어줘
+    seed: 이번 여행 전체 요약해줘
+    margin: 0.05
+    same: 0.843
+    same_q: 이번 여행 전체 요약해줘
+    other: 0.793
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.765
+  - question: 다녀온 여행을 한눈에 볼 수 있게 정리해 주실래요?
+    seed: 여행 끝났는데 총정리 한번 해줄래?
+    margin: 0.124
+    same: 0.888
+    same_q: 이번 여행 전체를 한눈에 볼 수 있게 정리해주세요
+    other: 0.764
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.77
+  - question: 여행 마무리로 뭐 했는지 전반적으로 정돈해봐.
+    seed: 여행 끝났는데 총정리 한번 해줄래?
+    margin: 0.122
+    same: 0.878
+    same_q: 여행 끝났는데 총정리 한번 해줄래?
+    other: 0.756
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.826
+  - question: 이번 여정을 전반적으로 요약해서 보여주세요
+    seed: 이번 여행 전체를 한눈에 볼 수 있게 정리해주세요
+    margin: 0.141
+    same: 0.942
+    same_q: 이번 여행 전체 요약해줘
+    other: 0.801
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.802
+  - question: 여행한 내용 전체적으로 정리해줘
+    seed: 이번 여행 전체를 한눈에 볼 수 있게 정리해주세요
+    margin: 0.052
+    same: 0.906
+    same_q: 이번 여행을 전반적으로 정리해 주세요
+    other: 0.854
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.845
+  - question: 이번 여행의 주요 내용을 한눈에 파악할 수 있도록 정돈해 주실래요?
+    seed: 이번 여행 전체를 한눈에 볼 수 있게 정리해주세요
+    margin: 0.114
+    same: 0.904
+    same_q: 이번 여행 전체를 한눈에 볼 수 있게 정리해주세요
+    other: 0.79
+    other_intent: SHOW_SCHEDULE
+    other_q: 이번 여행 일정표 보여주세요
+    leak: 0.784
+  - question: 여행 전반에 대한 결과 보고서 부탁해요
+    seed: 여행 전체 리포트 만들어줘
+    margin: 0.145
+    same: 0.858
+    same_q: 여행 전체 리포트 만들어줘
+    other: 0.713
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 계획 짜줘
+    leak: 0.803
+  - question: 이번에 다녀온 여정, 한눈에 볼 수 있게 요약해줘
+    seed: 여행 전체 리포트 만들어줘
+    margin: 0.114
+    same: 0.927
+    same_q: 이번에 다녀온 여정, 핵심만 간단히 묶어줘
+    other: 0.813
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.79
+  - question: 이번 여행 전반에 대한 평가를 정리해줘
+    seed: 여행 총평 좀 써줘
+    margin: 0.133
+    same: 0.941
+    same_q: 이번 여행을 전반적으로 정리해 주세요
+    other: 0.808
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.819
+  - question: 이번 여정의 전체적인 후기를 요약해 줘
+    seed: 여행 총평 좀 써줘
+    margin: 0.147
+    same: 0.941
+    same_q: 이번 여정을 전반적으로 요약해서 보여주세요
+    other: 0.794
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.818
+  - question: 이번 여행에서 뭘 하고 어디를 갔는지 전체적으로 정리해줘.
+    seed: 처음부터 끝까지 어떻게 다녔는지 요약해줄 수 있어?
+    margin: 0.078
+    same: 0.907
+    same_q: 이번 여행을 전반적으로 정리해 주세요
+    other: 0.829
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.783
+  - question: 여행 과정 전부 한눈에 볼 수 있게 요약 부탁드립니다.
+    seed: 처음부터 끝까지 어떻게 다녔는지 요약해줄 수 있어?
+    margin: 0.169
+    same: 0.924
+    same_q: 여행 내용 한눈에 볼 수 있게 요약 부탁해요
+    other: 0.755
+    other_intent: GENERATE_REFLECTION
+    other_q: 하루 동안의 여행 이야기를 일기처럼 정리해 주세요
+    leak: 0.82
+  - question: 처음부터 마무리까지 여행 내용 간단히 훑어볼까?
+    seed: 처음부터 끝까지 어떻게 다녔는지 요약해줄 수 있어?
+    margin: 0.12
+    same: 0.851
+    same_q: 여행 과정 전부 한눈에 볼 수 있게 요약 부탁드립니다.
+    other: 0.73
+    other_intent: GENERATE_REFLECTION
+    other_q: 하루 동안의 여행 이야기를 일기처럼 정리해 주세요
+    leak: 0.783
+  - question: 이번 여정에서 기억할 만한 핵심만 요약해 주세요
+    seed: 이번 여행 하이라이트만 모아서 정리해줘
+    margin: 0.137
+    same: 0.918
+    same_q: 이번 여정을 전반적으로 요약해서 보여주세요
+    other: 0.781
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.791
+  - question: 여행 전체 주요 포인트만 한눈에 볼 수 있게 묶어줘
+    seed: 이번 여행 하이라이트만 모아서 정리해줘
+    margin: 0.117
+    same: 0.779
+    same_q: 이번 여행 전체를 한눈에 볼 수 있게 정리해주세요
+    other: 0.662
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 계획을 자동으로 짜 주실 수 있나요?
+    leak: 0.671
+  - question: 이번에 다녀온 내용 중 중요한 부분만 간단히 정리하면 좋겠어
+    seed: 이번 여행 하이라이트만 모아서 정리해줘
+    margin: 0.089
+    same: 0.856
+    same_q: 이번에 다녀온 여정, 핵심만 간단히 묶어줘
+    other: 0.766
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.721
+  - question: 이번 여정에서 방문한 곳들을 한눈에 요약해줘
+    seed: 이번 여행 몇 군데나 다녔는지 정리해줘
+    margin: 0.117
+    same: 0.917
+    same_q: 이번에 다녀온 여정, 한눈에 볼 수 있게 요약해줘
+    other: 0.8
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.749
+  - question: 여행 동안 어디 어디를 들렀는지 정리해 주세요
+    seed: 이번 여행 몇 군데나 다녔는지 정리해줘
+    margin: 0.058
+    same: 0.814
+    same_q: 여행한 내용 전체적으로 정리해줘
+    other: 0.756
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.693
+  - question: 이번에 다녀온 장소가 총 몇 곳인지 알려줘
+    seed: 이번 여행 몇 군데나 다녔는지 정리해줘
+    margin: 0.144
+    same: 0.869
+    same_q: 이번 여행 몇 군데나 다녔는지 정리해줘
+    other: 0.725
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 다닌 곳들로 회고 만들어주세요
+    leak: 0.863
+  STYLE_ANALYSIS:
+  - question: 내가 선호하는 여행 방식 좀 진단해 줄래요?
+    seed: 내 여행 스타일 분석해줘
+    margin: 0.165
+    same: 0.863
+    same_q: 제 여행 성향 좀 분석해 주세요
+    other: 0.698
+    other_intent: TRIP_SUMMARY
+    other_q: 여행 다녀온 소감 한 번 써줄래요?
+    leak: 0.865
+  - question: 여행할 때 내 성향 분석 부탁해요
+    seed: 내 여행 스타일 분석해줘
+    margin: 0.243
+    same: 0.935
+    same_q: 제 여행 성향 좀 분석해 주세요
+    other: 0.692
+    other_intent: TRIP_SUMMARY
+    other_q: 여행 다녀온 소감 한 번 써줄래요?
+    leak: 0.84
+  - question: 내가 선호하는 여행 방식이 뭘까?
+    seed: 나는 어떤 스타일로 여행하는 것 같아?
+    margin: 0.213
+    same: 0.942
+    same_q: 내가 선호하는 여행 방식 좀 진단해 줄래요?
+    other: 0.729
+    other_intent: TRIP_SUMMARY
+    other_q: 여행 다녀온 소감 한 번 써줄래요?
+    leak: 0.829
+  - question: 내가 방문했던 장소들을 바탕으로 여행 성향을 분석해줘
+    seed: 내가 다닌 곳들 보면 무슨 취향인지 알려줘
+    margin: 0.189
+    same: 0.907
+    same_q: 제 여행 성향 좀 분석해 주세요
+    other: 0.717
+    other_intent: TRIP_SUMMARY
+    other_q: 여행한 내용 전체적으로 정리해줘
+    leak: 0.838
+  - question: 내 여행 기록 보면 어떤 스타일인지 알 수 있어?
+    seed: 내가 다닌 곳들 보면 무슨 취향인지 알려줘
+    margin: 0.167
+    same: 0.857
+    same_q: 내 여행 스타일 분석해줘
+    other: 0.69
+    other_intent: TRIP_SUMMARY
+    other_q: 다녀온 여행을 한눈에 볼 수 있게 정리해 주실래요?
+    leak: 0.775
+  - question: 여태 갔던 곳들 기준으로 내가 선호하는 여행 방식이 뭔지 파악해 주세요
+    seed: 내가 다닌 곳들 보면 무슨 취향인지 알려줘
+    margin: 0.23
+    same: 0.924
+    same_q: 내가 선호하는 여행 방식 좀 진단해 줄래요?
+    other: 0.695
+    other_intent: GENERATE_SCHEDULE
+    other_q: 이번 여행 코스 좀 짜봐
+    leak: 0.839
+  - question: 제가 어떤 여행 스타일을 선호하는지 파악해 주세요
+    seed: 제 여행 성향 좀 분석해 주세요
+    margin: 0.21
+    same: 0.903
+    same_q: 내 여행 스타일 분석해줘
+    other: 0.694
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 계획 짜줘
+    leak: 0.867
+  - question: 여행할 때 제 성향이 어떤 편인지 자세히 살펴봐 주실래요?
+    seed: 제 여행 성향 좀 분석해 주세요
+    margin: 0.208
+    same: 0.922
+    same_q: 여행할 때 내 성향 분석 부탁해요
+    other: 0.714
+    other_intent: TRIP_SUMMARY
+    other_q: 여행 다녀온 소감 한 번 써줄래요?
+    leak: 0.855
+  - question: 나는 어떤 방식으로 여행하는 편인지 알고 싶어요
+    seed: 내 여행 패턴이 궁금해
+    margin: 0.194
+    same: 0.897
+    same_q: 내가 선호하는 여행 방식이 뭘까?
+    other: 0.703
+    other_intent: TRIP_SUMMARY
+    other_q: 여행 다녀온 소감 한 번 써줄래요?
+    leak: 0.824
+  - question: 내 여행 스타일이 어떤지 파악해줄 수 있어?
+    seed: 나 여행 취향 분석 가능해?
+    margin: 0.221
+    same: 0.925
+    same_q: 내 여행 스타일 분석해줘
+    other: 0.704
+    other_intent: SHOW_SCHEDULE
+    other_q: 내 여행 일정표 띄워줘
+    leak: 0.809
+  - question: 내가 남긴 여행 기록을 바탕으로 어떤 스타일인지 분석해줘.
+    seed: 지금까지 기록으로 내 여행 유형 알려줄래?
+    margin: 0.202
+    same: 0.904
+    same_q: 내 여행 기록 보면 어떤 스타일인지 알 수 있어?
+    other: 0.702
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 있었던 여행을 기록으로 남겨줘
+    leak: 0.77
+  - question: 지금까지의 여행 패턴 보면 내 취향이 뭐야?
+    seed: 지금까지 기록으로 내 여행 유형 알려줄래?
+    margin: 0.163
+    same: 0.877
+    same_q: 내 여행 패턴이 궁금해
+    other: 0.714
+    other_intent: GENERATE_SCHEDULE
+    other_q: 이번 여행 코스 좀 짜봐
+    leak: 0.887
+  - question: 기록된 내용을 토대로 제 여행 성향과 선호하는 여행 방식을 파악해 주세요.
+    seed: 지금까지 기록으로 내 여행 유형 알려줄래?
+    margin: 0.135
+    same: 0.82
+    same_q: 제가 어떤 여행 스타일을 선호하는지 파악해 주세요
+    other: 0.685
+    other_intent: SHOW_SCHEDULE
+    other_q: 내 여행 일정표 띄워줘
+    leak: 0.788
+  - question: 내 여행 스타일이 계획을 선호하는 편인지 즉석에서 움직이는 편인지 분석해줘.
+    seed: 나는 계획형이야 즉흥형이야?
+    margin: 0.132
+    same: 0.831
+    same_q: 내 여행 스타일 분석해줘
+    other: 0.698
+    other_intent: GENERATE_SCHEDULE
+    other_q: 알아서 여행 동선이랑 계획 구성해봐
+    leak: 0.757
+  - question: 저는 미리 짜두고 다니는 타입인가요, 그때그때 결정하는 성향인가요?
+    seed: 나는 계획형이야 즉흥형이야?
+    margin: 0.142
+    same: 0.725
+    same_q: 나는 계획형이야 즉흥형이야?
+    other: 0.582
+    other_intent: GENERATE_SCHEDULE
+    other_q: 알아서 여행 동선이랑 계획 구성해봐
+    leak: 0.675
+  - question: 내 여행 성향 뭐야?
+    seed: 나는 계획형이야 즉흥형이야?
+    margin: 0.201
+    same: 0.928
+    same_q: 여행할 때 제 성향이 어떤 편인지 자세히 살펴봐 주실래요?
+    other: 0.727
+    other_intent: TRIP_SUMMARY
+    other_q: 여행 다녀온 소감 한 번 써줄래요?
+    leak: 0.877
+  - question: 내 이전 여행 기록을 바탕으로 내 여행 성향을 분석해줄래?
+    seed: 저번 여행들 보면 나 어떤 타입 같아?
+    margin: 0.196
+    same: 0.925
+    same_q: 제 여행 성향 좀 분석해 주세요
+    other: 0.729
+    other_intent: SHOW_SCHEDULE
+    other_q: 내 여행 일정표 띄워줘
+    leak: 0.838
+  - question: 내가 여행할 때 어떤 스타일인지 궁금해.
+    seed: 저번 여행들 보면 나 어떤 타입 같아?
+    margin: 0.197
+    same: 0.927
+    same_q: 나는 어떤 스타일로 여행하는 것 같아?
+    other: 0.73
+    other_intent: TRIP_SUMMARY
+    other_q: 여행 다녀온 소감 한 번 써줄래요?
+    leak: 0.816
+  - question: 지난번들 참고해서 내가 선호하는 여행 방식이 뭔지 파악해줘
+    seed: 저번 여행들 보면 나 어떤 타입 같아?
+    margin: 0.23
+    same: 0.949
+    same_q: 여태 갔던 곳들 기준으로 내가 선호하는 여행 방식이 뭔지 파악해 주세요
+    other: 0.719
+    other_intent: GENERATE_SCHEDULE
+    other_q: 이번 여행 코스 좀 짜봐
+    leak: 0.86
+  EDIT_SCHEDULE:
+  - question: 저녁 계획에 음식점 하나 넣어주세요
+    seed: 저녁 일정에 식당 한 곳 추가해줘
+    margin: 0.23
+    same: 0.914
+    same_q: 저녁 일정에 식당 한 곳 추가해줘
+    other: 0.684
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 계획 짜줘
+    leak: 0.757
+  - question: 밤에 갈 식당 한 군데 더 추가해줘
+    seed: 저녁 일정에 식당 한 곳 추가해줘
+    margin: 0.174
+    same: 0.901
+    same_q: 저녁 일정에 식당 한 곳 추가해줘
+    other: 0.727
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 다른 장소 추천해줘
+    leak: 0.697
+  - question: 저녁 시간대 일정에 식사할 곳을 한 곳 포함시켜 줘
+    seed: 저녁 일정에 식당 한 곳 추가해줘
+    margin: 0.227
+    same: 0.925
+    same_q: 저녁 일정에 식당 한 곳 추가해줘
+    other: 0.698
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.799
+  - question: '{장소}는 일정에서 제외해'
+    seed: '{장소} 일정에서 빼줘'
+    margin: 0.192
+    same: 0.871
+    same_q: '{장소} 일정에서 빼줘'
+    other: 0.679
+    other_intent: REPLAN
+    other_q: '{장소}가 쉬는 날이라네요. 이걸 반영해서 오후 일정만 재구성해줄 수 있을까요?'
+    leak: 0.756
+  - question: 두 장소의 방문 순서를 서로 바꿔줘.
+    seed: 이 두 곳 순서 바꿔줄래?
+    margin: 0.11
+    same: 0.815
+    same_q: 이 두 곳 순서 바꿔줄래?
+    other: 0.706
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: '{장소} 대체할 장소 좀 골라줘'
+    leak: 0.685
+  - question: '{장소} 방문을 {날짜} 오전 시간대로 변경해 주세요'
+    seed: '{장소}를 {날짜} 오전으로 옮겨주세요'
+    margin: 0.124
+    same: 0.877
+    same_q: '{장소}를 {날짜} 오전으로 옮겨주세요'
+    other: 0.753
+    other_intent: REPLAN
+    other_q: '{장소}가 오늘 문을 안 연다는데, 남은 오후 코스 좀 조정해 주세요.'
+    leak: 0.748
+  - question: '{장소}, {날짜} 아침에 가게 일정 바꿔줘'
+    seed: '{장소}를 {날짜} 오전으로 옮겨주세요'
+    margin: 0.075
+    same: 0.839
+    same_q: '{장소}를 {날짜} 오전으로 옮겨주세요'
+    other: 0.764
+    other_intent: REPLAN
+    other_q: '{장소}가 오늘 문을 안 연다는데, 남은 오후 코스 좀 조정해 주세요.'
+    leak: 0.731
+  - question: '{장소} 일정을 {날짜} 오전으로 재배치해 주실래요'
+    seed: '{장소}를 {날짜} 오전으로 옮겨주세요'
+    margin: 0.069
+    same: 0.892
+    same_q: '{장소}를 {날짜} 오전으로 옮겨주세요'
+    other: 0.823
+    other_intent: REPLAN
+    other_q: '{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?'
+    leak: 0.803
+  - question: 3일 차 계획에 커피 마실 곳 하나 넣어주세요.
+    seed: 셋째 날 일정에 카페 한 군데 추가해줘
+    margin: 0.224
+    same: 0.879
+    same_q: 셋째 날 일정에 카페 한 군데 추가해줘
+    other: 0.655
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 다른 장소 추천해줘
+    leak: 0.678
+  - question: 셋째 날에 카페 한 곳 더 추가해.
+    seed: 셋째 날 일정에 카페 한 군데 추가해줘
+    margin: 0.287
+    same: 0.921
+    same_q: 셋째 날 일정에 카페 한 군데 추가해줘
+    other: 0.634
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 다른 장소 추천해줘
+    leak: 0.681
+  - question: 3일째 동선에 잠깐 들를 카페를 한 군데 포함시켜 줘.
+    seed: 셋째 날 일정에 카페 한 군데 추가해줘
+    margin: 0.241
+    same: 0.914
+    same_q: 셋째 날 일정에 카페 한 군데 추가해줘
+    other: 0.673
+    other_intent: REPLAN
+    other_q: '{장소}가 오늘 문을 안 연다는데, 남은 오후 코스 좀 조정해 주세요.'
+    leak: 0.707
+  - question: 이 장소 방문 항목을 일정표에서 제거해 주세요.
+    seed: 이 장소 일정에서 삭제하고 싶어
+    margin: 0.166
+    same: 0.893
+    same_q: 이 장소 일정에서 삭제하고 싶어
+    other: 0.727
+    other_intent: REGENERATE
+    other_q: 이 계획 완전히 폐기하고 새 일정으로 바꿔주세요
+    leak: 0.742
+  - question: 여긴 안 갈래, 스케줄에서 제외해줘.
+    seed: 이 장소 일정에서 삭제하고 싶어
+    margin: 0.067
+    same: 0.845
+    same_q: 이곳은 계획에서 빼줘.
+    other: 0.779
+    other_intent: REGENERATE
+    other_q: 아예 다른 일정안으로 갈아엎어줘.
+    leak: 0.78
+  - question: 맨 끝에 있는 일정 하나를 앞쪽으로 옮겨주세요
+    seed: 마지막 일정 하나만 앞으로 당겨줘
+    margin: 0.056
+    same: 0.795
+    same_q: 마지막 일정 하나만 앞으로 당겨줘
+    other: 0.739
+    other_intent: REGENERATE
+    other_q: 일정 리셋하고 새로 만들어줘
+    leak: 0.726
+  - question: 마지막 항목, 순서 좀 앞당겨줘
+    seed: 마지막 일정 하나만 앞으로 당겨줘
+    margin: 0.069
+    same: 0.779
+    same_q: 마지막 일정 하나만 앞으로 당겨줘
+    other: 0.71
+    other_intent: REPLAN
+    other_q: 늦어졌네, 남은 코스 좀 재조정해줘.
+    leak: 0.747
+  - question: 일정의 제일 뒤 방문지를 앞 순번으로 이동해 줘
+    seed: 마지막 일정 하나만 앞으로 당겨줘
+    margin: 0.058
+    same: 0.808
+    same_q: 두 장소의 방문 순서를 서로 바꿔줘.
+    other: 0.75
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 이 순서에는 원래 목적지 말고 어디를 넣는 게 좋을까?
+    leak: 0.708
+  - question: 점심 일정 시간을 오후 1시로 변경해 주세요
+    seed: 점심을 1시로 늦춰줘
+    margin: 0.116
+    same: 0.85
+    same_q: 점심을 1시로 늦춰줘
+    other: 0.734
+    other_intent: REPLAN
+    other_q: '{장소}가 오늘 문을 안 연다는데, 남은 오후 코스 좀 조정해 주세요.'
+    leak: 0.785
+  - question: 점심 1시로 미뤄
+    seed: 점심을 1시로 늦춰줘
+    margin: 0.209
+    same: 0.884
+    same_q: 점심을 1시로 늦춰줘
+    other: 0.675
+    other_intent: REPLAN
+    other_q: 지금 너무 늦어졌는데 남은 일정 다시 조정해줘
+    leak: 0.788
+  - question: 식사 시간을 한 시로 옮겨줘
+    seed: 점심을 1시로 늦춰줘
+    margin: 0.13
+    same: 0.802
+    same_q: 저녁 시간대 일정에 식사할 곳을 한 곳 포함시켜 줘
+    other: 0.672
+    other_intent: REGENERATE
+    other_q: 아예 다른 일정안으로 갈아엎어줘.
+    leak: 0.782
+  - question: 셋째 날 거랑 둘째 날 거 순서 바꿔
+    seed: 둘째 날이랑 셋째 날 통째로 바꿔줘
+    margin: 0.19
+    same: 0.881
+    same_q: 둘째 날이랑 셋째 날 통째로 바꿔줘
+    other: 0.691
+    other_intent: REGENERATE
+    other_q: 아예 처음부터 다른 일정으로 만들어줘
+    leak: 0.784
+  - question: 둘째 날에 잡힌 계획을 3일 차로 옮기고, 3일 차 일정은 둘째 날으로 교체해줘
+    seed: 둘째 날이랑 셋째 날 통째로 바꿔줘
+    margin: 0.1
+    same: 0.83
+    same_q: 2일 차와 3일 차 일정을 서로 맞바꿔 주세요
+    other: 0.73
+    other_intent: REGENERATE
+    other_q: 현재 일정은 싹 지우고 새 일정으로 바꿔줘
+    leak: 0.773
+  GET_NEXT_SLOT:
+  - question: 다음으로 갈 곳이 어디야?
+    seed: 다음 일정 뭐야?
+    margin: 0.187
+    same: 0.926
+    same_q: 다음에 갈 곳 알려줘
+    other: 0.739
+    other_intent: GENERATE_SCHEDULE
+    other_q: 이번에 갈 곳들로 계획 세워주세요
+    leak: 0.823
+  - question: 이후에 들를 장소가 어디야?
+    seed: 다음에 갈 곳 알려줘
+    margin: 0.062
+    same: 0.746
+    same_q: 다음으로 갈 곳이 어디야?
+    other: 0.685
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 일정은 그대로 두고 여기 말고 들를 만한 다른 장소 추천해줘
+    leak: 0.665
+  - question: 다음 목적지를 알려주실 수 있나요?
+    seed: 다음에 갈 곳 알려줘
+    margin: 0.077
+    same: 0.835
+    same_q: 다음 방문지 알려주세요
+    other: 0.758
+    other_intent: GET_DISTANCE
+    other_q: 다음 목적지까지 거리가 어떻게 돼요?
+    leak: 0.781
+  - question: 여기 마치고 나면 다음으로 갈 곳은 어딘가요?
+    seed: 지금 끝나면 그다음은 어디예요?
+    margin: 0.093
+    same: 0.894
+    same_q: 지금 끝나면 그다음은 어디예요?
+    other: 0.801
+    other_intent: SHOW_SCHEDULE
+    other_q: 오늘 일정 다 끝나면 그다음은 뭐야?
+    leak: 0.898
+  - question: 다음 목적지 어디야?
+    seed: 지금 끝나면 그다음은 어디예요?
+    margin: 0.13
+    same: 0.935
+    same_q: 다음 행선지가 어디야?
+    other: 0.805
+    other_intent: GET_DISTANCE
+    other_q: 다음 목적지까지 거리가 어떻게 돼요?
+    leak: 0.808
+  - question: 이곳을 보고 난 뒤에는 어디로 이동하면 될까요?
+    seed: 지금 끝나면 그다음은 어디예요?
+    margin: 0.106
+    same: 0.842
+    same_q: 여기 마치고 나면 다음으로 갈 곳은 어딘가요?
+    other: 0.737
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 여기 대신 들어가서 구경할 곳 없나?
+    leak: 0.809
+  - question: 이제 들를 장소가 뭐였나요?
+    seed: 다음 목적지가 어디였더라
+    margin: 0.233
+    same: 0.856
+    same_q: 이후에 들를 장소가 어디야?
+    other: 0.623
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 일정은 그대로 두고 여기 말고 들를 만한 다른 장소 추천해줘
+    leak: 0.614
+  - question: 다음 행선지 알려줘
+    seed: 다음 목적지가 어디였더라
+    margin: 0.138
+    same: 0.921
+    same_q: 다음에 갈 곳 알려줘
+    other: 0.782
+    other_intent: SHOW_SCHEDULE
+    other_q: 이 다음 스케줄 알려줄래?
+    leak: 0.778
+  - question: 다음 목적지 딱 하나 추천해 주실래요?
+    seed: 다음 코스 하나만 말해줘
+    margin: 0.07
+    same: 0.85
+    same_q: 다음 목적지를 알려주실 수 있나요?
+    other: 0.78
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 지금 일정에 있는 이곳 대신 갈 만한 데 하나만 추천해주세요
+    leak: 0.738
+  - question: 다음에 들를 곳의 시작 시각이 궁금해요.
+    seed: 다음 일정 몇 시에 시작해?
+    margin: 0.081
+    same: 0.75
+    same_q: 다음에 들를 장소 한 곳만 골라줘
+    other: 0.669
+    other_intent: GET_DISTANCE
+    other_q: 다음 목적지까지 거리가 어떻게 돼요?
+    leak: 0.659
+  - question: 다음으로 들를 곳이 어디예요?
+    seed: 다음 방문지 알려주세요
+    margin: 0.156
+    same: 0.881
+    same_q: 이후에 들를 장소가 어디야?
+    other: 0.725
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 일정은 그대로 두고 여기 말고 들를 만한 다른 장소 추천해줘
+    leak: 0.697
+  - question: 다음에 방문할 장소를 말씀해 주실 수 있나요?
+    seed: 다음 방문지 알려주세요
+    margin: 0.16
+    same: 0.901
+    same_q: 다음 방문지 알려주세요
+    other: 0.742
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 기존에 가려던 장소를 대체할 만한 곳이 있으면 알려줘.
+    leak: 0.796
+  - question: 다음 목적지 딱 한 군데 골라줘
+    seed: 다음 한 곳만 짚어줘
+    margin: 0.145
+    same: 0.886
+    same_q: 다음 목적지 딱 하나 추천해 주실래요?
+    other: 0.741
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 여기 말고 갈 만한 데 좀 골라줘
+    leak: 0.7
+  - question: 이어서 갈 장소가 어딘지 알려주세요.
+    seed: 다음 행선지가 어디야?
+    margin: 0.147
+    same: 0.909
+    same_q: 다음에 갈 곳 알려줘
+    other: 0.762
+    other_intent: GENERATE_SCHEDULE
+    other_q: 이번에 갈 곳들로 계획 세워주세요
+    leak: 0.792
+  - question: 그다음 목적지는 어디지?
+    seed: 다음 행선지가 어디야?
+    margin: 0.191
+    same: 0.934
+    same_q: 다음 목적지가 어디였더라
+    other: 0.743
+    other_intent: GET_DISTANCE
+    other_q: 다음 목적지까지 거리가 어떻게 돼요?
+    leak: 0.743
+  - question: 우리 다음 목적지가 뭔지 알려줘
+    seed: 바로 다음 순서 뭐지?
+    margin: 0.149
+    same: 0.902
+    same_q: 다음 목적지 어디야?
+    other: 0.753
+    other_intent: GET_DISTANCE
+    other_q: 다음 목적지까지 거리가 어떻게 돼요?
+    leak: 0.806
+  SHOW_SCHEDULE:
+  - question: 일정표 어디 있지?
+    seed: 지금 일정 보여줘
+    margin: 0.074
+    same: 0.848
+    same_q: 일정표 열어줘
+    other: 0.774
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.72
+  - question: 오늘 일정 전부 보여주세요.
+    seed: 오늘 스케줄 전체 좀 볼 수 있을까?
+    margin: 0.097
+    same: 0.888
+    same_q: 전체 일정 한번 보여줄래?
+    other: 0.792
+    other_intent: REGENERATE
+    other_q: 지금 일정은 버리고 전체 재생성해 주세요
+    leak: 0.806
+  - question: 오늘 계획 뭐가 있는지 한눈에 확인하고 싶어.
+    seed: 오늘 스케줄 전체 좀 볼 수 있을까?
+    margin: 0.092
+    same: 0.821
+    same_q: 현재 계획된 일정 좀 확인해줘
+    other: 0.729
+    other_intent: REPLAN
+    other_q: 지쳐서 오늘 이후 계획을 좀 덜어내고 조정해 주세요.
+    leak: 0.771
+  - question: 일정표 확인하고 싶어
+    seed: 내 여행 일정표 띄워줘
+    margin: 0.105
+    same: 0.922
+    same_q: '{날짜} 일정 확인하고 싶어요'
+    other: 0.817
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.77
+  - question: '{날짜} 스케줄 좀 볼래'
+    seed: '{날짜} 일정 확인하고 싶어요'
+    margin: 0.092
+    same: 0.868
+    same_q: '{날짜} 일정 확인하고 싶어요'
+    other: 0.776
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.742
+  - question: '{날짜}에 예정된 일정이 뭐가 있는지 확인해 줘'
+    seed: '{날짜} 일정 확인하고 싶어요'
+    margin: 0.107
+    same: 0.895
+    same_q: '{날짜} 일정 확인하고 싶어요'
+    other: 0.788
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.779
+  - question: 내 스케줄 좀 보여줘.
+    seed: 전체 일정 한번 보여줄래?
+    margin: 0.072
+    same: 0.882
+    same_q: 내 여행 스케줄 보여줄래?
+    other: 0.81
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.785
+  - question: 잡아둔 일정이 어떻게 되는지 한눈에 보고 싶어.
+    seed: 전체 일정 한번 보여줄래?
+    margin: 0.08
+    same: 0.834
+    same_q: 오늘 계획 뭐가 있는지 한눈에 확인하고 싶어.
+    other: 0.754
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.697
+  - question: 현재 잡혀 있는 일정 보여주세요.
+    seed: 지금 계획이 어떻게 되어 있지?
+    margin: 0.103
+    same: 0.895
+    same_q: 현재 계획된 일정 좀 확인해줘
+    other: 0.791
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.791
+  - question: 내 여행 계획 전체를 확인하고 싶어.
+    seed: 지금 계획이 어떻게 되어 있지?
+    margin: 0.109
+    same: 0.881
+    same_q: 여행 계획 전부 확인할 수 있을까요?
+    other: 0.772
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 계획 짜줘
+    leak: 0.735
+  - question: 일정표 좀 볼래.
+    seed: 지금 계획이 어떻게 되어 있지?
+    margin: 0.085
+    same: 0.923
+    same_q: 일정표 확인하고 싶어
+    other: 0.838
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.765
+  - question: 내 계획 좀 보여줘
+    seed: 일정표 열어줘
+    margin: 0.082
+    same: 0.848
+    same_q: 내 스케줄 좀 보여줘.
+    other: 0.766
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 계획 짜줘
+    leak: 0.857
+  - question: 이번 여행 계획을 확인하고 싶어요
+    seed: 이번 여행 일정표 보여주세요
+    margin: 0.071
+    same: 0.904
+    same_q: 여행 일정 확인하고 싶어요
+    other: 0.833
+    other_intent: GENERATE_SCHEDULE
+    other_q: 이번 여행 코스 좀 짜봐
+    leak: 0.726
+  - question: 오늘 예정된 나머지 계획 알려줘
+    seed: 오늘 남은 일정만 보여줘
+    margin: 0.084
+    same: 0.857
+    same_q: 현재 계획된 일정 좀 확인해줘
+    other: 0.772
+    other_intent: REPLAN
+    other_q: '{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?'
+    leak: 0.869
+  - question: 오늘 남은 스케줄 확인하고 싶어요
+    seed: 오늘 남은 일정만 보여줘
+    margin: 0.111
+    same: 0.869
+    same_q: 오늘 남은 일정만 보여줘
+    other: 0.758
+    other_intent: REPLAN
+    other_q: 지금 너무 늦어졌는데 남은 일정 다시 조정해줘
+    leak: 0.843
+  - question: 오늘 할 일 목록 좀 보여 봐
+    seed: 오늘 남은 일정만 보여줘
+    margin: 0.055
+    same: 0.791
+    same_q: 오늘 일정 전부 보여주세요.
+    other: 0.736
+    other_intent: GENERATE_REFLECTION
+    other_q: 방금 끝난 하루 정리 부탁해
+    leak: 0.78
+  - question: 오늘 잡아둔 일정 좀 보여줘
+    seed: 이따가 어디 가기로 했지?
+    margin: 0.069
+    same: 0.883
+    same_q: 현재 잡혀 있는 일정 보여주세요.
+    other: 0.814
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.83
+  - question: 이따 가기로 한 곳이 어디더라?
+    seed: 이따가 어디 가기로 했지?
+    margin: 0.161
+    same: 0.911
+    same_q: 이따가 어디 가기로 했지?
+    other: 0.75
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음으로 갈 곳이 어디야?
+    leak: 0.803
+  - question: 예정된 여행 계획을 확인하고 싶습니다
+    seed: 이따가 어디 가기로 했지?
+    margin: 0.117
+    same: 0.923
+    same_q: 이번 여행 계획을 확인하고 싶어요
+    other: 0.805
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 계획 짜줘
+    leak: 0.715
+  - question: 남은 일정 전체 보여줘.
+    seed: 이 다음 스케줄 알려줄래?
+    margin: 0.097
+    same: 0.884
+    same_q: 오늘 남은 일정만 보여줘
+    other: 0.786
+    other_intent: REGENERATE
+    other_q: 지금 일정은 버리고 전체 재생성해 주세요
+    leak: 0.792
+  - question: 앞으로 잡혀 있는 스케줄을 확인하고 싶어요.
+    seed: 이 다음 스케줄 알려줄래?
+    margin: 0.143
+    same: 0.885
+    same_q: 오늘 남은 스케줄 확인하고 싶어요
+    other: 0.742
+    other_intent: REPLAN
+    other_q: 갑자기 일정이 밀렸어, 남은 시간에 맞춰 다시 계획해줘
+    leak: 0.725
+  - question: 이후 계획 뭐가 있는지 보여줄래?
+    seed: 이 다음 스케줄 알려줄래?
+    margin: 0.081
+    same: 0.83
+    same_q: 내 계획 좀 보여줘
+    other: 0.749
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음 일정 뭐야?
+    leak: 0.816
+  - question: 오늘 일정이 끝난 뒤에 잡힌 계획도 보여줘
+    seed: 오늘 일정 다 끝나면 그다음은 뭐야?
+    margin: 0.124
+    same: 0.879
+    same_q: 오늘 잡아둔 일정 좀 보여줘
+    other: 0.755
+    other_intent: REPLAN
+    other_q: '{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?'
+    leak: 0.803
+  - question: 오늘 이후로 등록된 스케줄을 확인해 줘
+    seed: 오늘 일정 다 끝나면 그다음은 뭐야?
+    margin: 0.164
+    same: 0.889
+    same_q: 오늘 남은 스케줄 확인하고 싶어요
+    other: 0.725
+    other_intent: REPLAN
+    other_q: 지금 너무 늦어졌는데 남은 일정 다시 조정해줘
+    leak: 0.733
+  - question: 오늘 마치고 남아 있는 일정 좀 볼래
+    seed: 오늘 일정 다 끝나면 그다음은 뭐야?
+    margin: 0.129
+    same: 0.902
+    same_q: 오늘 남은 일정만 보여줘
+    other: 0.773
+    other_intent: REPLAN
+    other_q: 너무 피곤해서 오늘 남은 일정 좀 줄여서 다시 잡아줘
+    leak: 0.895
+  GET_WEATHER:
+  - question: 내일 기온이랑 비 소식 좀 알려줘.
+    seed: 내일 날씨 어때?
+    margin: 0.168
+    same: 0.85
+    same_q: 내일 날씨 어때?
+    other: 0.681
+    other_intent: REPLAN
+    other_q: 눈 온다는데 내일 일정 실내 위주로 조정해줘
+    leak: 0.754
+  - question: 내일 날씨 괜찮으려나?
+    seed: 내일 날씨 어때?
+    margin: 0.232
+    same: 0.926
+    same_q: 내일 야외 다니기 괜찮은 날씨야?
+    other: 0.695
+    other_intent: REPLAN
+    other_q: 내일 날씨가 안 좋다네. 기존 일정은 유지하되 실내 위주로 재배치해야겠다.
+    leak: 0.815
+  - question: 내일 예상되는 날씨가 어떤지 궁금합니다.
+    seed: 내일 날씨 어때?
+    margin: 0.241
+    same: 0.917
+    same_q: 내일 날씨 어때?
+    other: 0.677
+    other_intent: REPLAN
+    other_q: 내일 날씨가 안 좋다네. 기존 일정은 유지하되 실내 위주로 재배치해야겠다.
+    leak: 0.811
+  - question: '{날짜} {지역}에 비가 내릴 예정인가요?'
+    seed: '{날짜}에 {지역} 비 와?'
+    margin: 0.24
+    same: 0.914
+    same_q: '{날짜}에 {지역} 비 와?'
+    other: 0.675
+    other_intent: GENERATE_SCHEDULE
+    other_q: '{지역} 갈 건데 {기간} 일정 추천해 줘'
+    leak: 0.747
+  - question: '{날짜} {지역} 강수 소식 있어?'
+    seed: '{날짜}에 {지역} 비 와?'
+    margin: 0.249
+    same: 0.9
+    same_q: '{날짜} {지역}에 비가 내릴 예정인가요?'
+    other: 0.651
+    other_intent: REPLAN
+    other_q: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    leak: 0.738
+  - question: '{날짜}에 {지역} 날씨가 어떤지, 비가 올지 궁금해요'
+    seed: '{날짜}에 {지역} 비 와?'
+    margin: 0.223
+    same: 0.916
+    same_q: '{날짜} {지역}에 비가 내릴 예정인가요?'
+    other: 0.693
+    other_intent: GENERATE_SCHEDULE
+    other_q: '{지역} 갈 건데 {기간} 일정 추천해 줘'
+    leak: 0.706
+  - question: 오늘 비 올 가능성 있어?
+    seed: 오늘 우산 챙겨야 하나?
+    margin: 0.09
+    same: 0.856
+    same_q: 내일 비 올 확률 얼마나 돼?
+    other: 0.766
+    other_intent: REPLAN
+    other_q: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    leak: 0.811
+  - question: 밖에 나가려는데 강수 소식 좀 확인해 주세요.
+    seed: 오늘 우산 챙겨야 하나?
+    margin: 0.107
+    same: 0.832
+    same_q: '{날짜} {지역} 강수 소식 있어?'
+    other: 0.725
+    other_intent: REPLAN
+    other_q: 비가 너무 와서 바깥 활동은 어려운데, 남은 동선 다른 걸로 조정해 주세요.
+    leak: 0.724
+  - question: 오늘 날씨가 어떤지 궁금하네.
+    seed: 오늘 우산 챙겨야 하나?
+    margin: 0.148
+    same: 0.851
+    same_q: 내일 예상되는 날씨가 어떤지 궁금합니다.
+    other: 0.702
+    other_intent: REPLAN
+    other_q: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    leak: 0.757
+  - question: 여행하는 곳 기온이 어떤지 궁금해
+    seed: 여행지 날씨 알려줘
+    margin: 0.168
+    same: 0.88
+    same_q: 여행지 날씨 알려줘
+    other: 0.712
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 동선 추천해줘
+    leak: 0.67
+  - question: 목적지 날씨 좀 확인해 주세요
+    seed: 여행지 날씨 알려줘
+    margin: 0.14
+    same: 0.893
+    same_q: 여행지 날씨 알려줘
+    other: 0.753
+    other_intent: REPLAN
+    other_q: 날씨가 이래서 남은 방문 계획을 상황에 맞게 바꿔야겠어.
+    leak: 0.697
+  - question: 여행지에 비 올까?
+    seed: 여행지 날씨 알려줘
+    margin: 0.127
+    same: 0.816
+    same_q: 여행지 날씨 알려줘
+    other: 0.689
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    leak: 0.705
+  - question: 다가오는 주말 기상 상태가 궁금해요.
+    seed: 이번 주말 날씨 어떤가요?
+    margin: 0.179
+    same: 0.836
+    same_q: 이번 주말 날씨 어떤가요?
+    other: 0.657
+    other_intent: REPLAN
+    other_q: 오늘 기상 상태가 안 좋으니 남은 코스 재배치 부탁드립니다.
+    leak: 0.734
+  - question: 이번 주말 비나 눈이 올까요?
+    seed: 이번 주말 날씨 어떤가요?
+    margin: 0.226
+    same: 0.877
+    same_q: 이번 주말 날씨 어떤가요?
+    other: 0.651
+    other_intent: REPLAN
+    other_q: 눈 온다는데 내일 일정 실내 위주로 조정해줘
+    leak: 0.841
+  - question: 주말 날씨 좀 알려줘.
+    seed: 이번 주말 날씨 어떤가요?
+    margin: 0.262
+    same: 0.914
+    same_q: 이번 주말 날씨 어떤가요?
+    other: 0.652
+    other_intent: REPLAN
+    other_q: 이런 날씨면 실외 계획은 포기해야겠네. 대신 갈 만한 곳으로 일정 바꿔줄래?
+    leak: 0.786
+  - question: 그쪽 현재 온도 알려줘.
+    seed: 지금 거기 기온 몇 도야?
+    margin: 0.161
+    same: 0.851
+    same_q: 지금 거기 기온 몇 도야?
+    other: 0.69
+    other_intent: GET_DISTANCE
+    other_q: 지금 위치에서 {장소}까지 거리 알려주세요
+    leak: 0.661
+  - question: 거긴 지금 몇 도인지 궁금해.
+    seed: 지금 거기 기온 몇 도야?
+    margin: 0.181
+    same: 0.815
+    same_q: 지금 거기 기온 몇 도야?
+    other: 0.633
+    other_intent: GET_POI_INFO
+    other_q: '{장소} 오늘 문 여는지 확인해줄래?'
+    leak: 0.659
+  - question: 현재 그 지역 기온이 어떻게 돼요?
+    seed: 지금 거기 기온 몇 도야?
+    margin: 0.221
+    same: 0.847
+    same_q: 지금 거기 기온 몇 도야?
+    other: 0.626
+    other_intent: REPLAN
+    other_q: 이런 날씨면 실외 계획은 포기해야겠네. 대신 갈 만한 곳으로 일정 바꿔줄래?
+    leak: 0.668
+  - question: '{지역} 기상 전망 알려주세요.'
+    seed: '{지역} 날씨 예보 좀 확인해줄래?'
+    margin: 0.188
+    same: 0.876
+    same_q: '{지역} 날씨 예보 좀 확인해줄래?'
+    other: 0.688
+    other_intent: GENERATE_SCHEDULE
+    other_q: '{지역} 갈 건데 {기간} 일정 추천해 줘'
+    leak: 0.676
+  - question: '{지역} 날씨 어때?'
+    seed: '{지역} 날씨 예보 좀 확인해줄래?'
+    margin: 0.216
+    same: 0.889
+    same_q: '{지역} 날씨 예보 좀 확인해줄래?'
+    other: 0.672
+    other_intent: GENERATE_SCHEDULE
+    other_q: '{지역} 갈 건데 {기간} 일정 추천해 줘'
+    leak: 0.703
+  - question: '{지역}의 오늘 날씨가 어떤지 궁금해요.'
+    seed: '{지역} 날씨 예보 좀 확인해줄래?'
+    margin: 0.235
+    same: 0.901
+    same_q: 오늘 날씨가 어떤지 궁금하네.
+    other: 0.666
+    other_intent: REPLAN
+    other_q: 이런 날씨면 실외 계획은 포기해야겠네. 대신 갈 만한 곳으로 일정 바꿔줄래?
+    leak: 0.702
+  - question: 내일 밖에서 돌아다녀도 날씨 괜찮을까?
+    seed: 내일 야외 다니기 괜찮은 날씨야?
+    margin: 0.249
+    same: 0.945
+    same_q: 내일 야외 다니기 괜찮은 날씨야?
+    other: 0.697
+    other_intent: REPLAN
+    other_q: 이런 날씨면 실외 계획은 포기해야겠네. 대신 갈 만한 곳으로 일정 바꿔줄래?
+    leak: 0.779
+  - question: 내일 야외 활동하기에 기온이나 비 걱정은 없는지 궁금해요.
+    seed: 내일 야외 다니기 괜찮은 날씨야?
+    margin: 0.195
+    same: 0.843
+    same_q: 내일 밖에서 돌아다녀도 날씨 괜찮을까?
+    other: 0.648
+    other_intent: REPLAN
+    other_q: 눈 온다니까 내일 계획, 밖에서 하는 건 빼고 실내로 조정해줘.
+    leak: 0.728
+  - question: 내일 외출하기 좋은 날씨인지 알려줘
+    seed: 내일 야외 다니기 괜찮은 날씨야?
+    margin: 0.251
+    same: 0.948
+    same_q: 내일 야외 다니기 괜찮은 날씨야?
+    other: 0.697
+    other_intent: REPLAN
+    other_q: 이런 날씨면 실외 계획은 포기해야겠네. 대신 갈 만한 곳으로 일정 바꿔줄래?
+    leak: 0.78
+  - question: 내일 강수 가능성 몇 퍼센트야?
+    seed: 내일 비 올 확률 얼마나 돼?
+    margin: 0.314
+    same: 0.92
+    same_q: 내일 비 올 확률 얼마나 돼?
+    other: 0.605
+    other_intent: REPLAN
+    other_q: 우천이라 오늘 계획, 실내 위주로 수정해야겠네.
+    leak: 0.749
+  - question: 내일 비가 내릴 확률을 알려주세요.
+    seed: 내일 비 올 확률 얼마나 돼?
+    margin: 0.284
+    same: 0.919
+    same_q: 내일 비 올 확률 얼마나 돼?
+    other: 0.635
+    other_intent: REPLAN
+    other_q: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    leak: 0.742
+  - question: 내일 우산 챙겨야 할 정도로 비 올 가능성 있어?
+    seed: 내일 비 올 확률 얼마나 돼?
+    margin: 0.166
+    same: 0.875
+    same_q: 내일 비 올 확률 얼마나 돼?
+    other: 0.708
+    other_intent: REPLAN
+    other_q: 비 와서 오늘 일정 실내 위주로 바꿔야 할 것 같아
+    leak: 0.749
+  GET_DISTANCE:
+  - question: 현 위치에서 {장소}까지 거리가 몇 km야?
+    seed: 여기서 {장소}까지 얼마나 멀어?
+    margin: 0.218
+    same: 0.912
+    same_q: 여기서 {장소}까지 얼마나 멀어?
+    other: 0.694
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.746
+  - question: '{장소}까지의 거리를 알려주세요.'
+    seed: 여기서 {장소}까지 얼마나 멀어?
+    margin: 0.216
+    same: 0.92
+    same_q: 지금 위치에서 {장소}까지 거리 알려주세요
+    other: 0.704
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.847
+  - question: 여기서 {장소}까지 얼마나 떨어져 있는지 궁금해요.
+    seed: 여기서 {장소}까지 얼마나 멀어?
+    margin: 0.237
+    same: 0.937
+    same_q: 여기서 {장소}까지 얼마나 멀어?
+    other: 0.7
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.794
+  - question: '{장소}에서 {장소}까지 얼마나 떨어져 있어?'
+    seed: '{장소}랑 {장소} 사이 거리 알려줘'
+    margin: 0.19
+    same: 0.937
+    same_q: 여기서 {장소}까지 얼마나 멀어?
+    other: 0.747
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.808
+  - question: '{장소}와 {장소} 간 거리가 몇 km인지 궁금합니다'
+    seed: '{장소}랑 {장소} 사이 거리 알려줘'
+    margin: 0.226
+    same: 0.907
+    same_q: '{장소}랑 {장소} 사이 거리 알려줘'
+    other: 0.681
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.775
+  - question: '{장소} ↔ {장소} 거리 좀 봐줘'
+    seed: '{장소}랑 {장소} 사이 거리 알려줘'
+    margin: 0.087
+    same: 0.827
+    same_q: '{장소}랑 {장소} 사이 거리 알려줘'
+    other: 0.74
+    other_intent: EDIT_SCHEDULE
+    other_q: '{장소}를 {장소}로 교체해줘'
+    leak: 0.727
+  - question: 다음 장소까지 몇 km 남았나요?
+    seed: 다음 목적지까지 거리가 어떻게 돼요?
+    margin: 0.121
+    same: 0.883
+    same_q: 다음 목적지까지 거리가 어떻게 돼요?
+    other: 0.762
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음 목적지 어디야?
+    leak: 0.853
+  - question: 이후 목적지까지의 거리를 알려줘.
+    seed: 다음 목적지까지 거리가 어떻게 돼요?
+    margin: 0.087
+    same: 0.853
+    same_q: '{장소}까지의 거리를 알려주세요.'
+    other: 0.766
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음 행선지 알려줘
+    leak: 0.81
+  - question: 다음으로 가는 곳까지 얼마나 떨어져 있어?
+    seed: 다음 목적지까지 거리가 어떻게 돼요?
+    margin: 0.118
+    same: 0.914
+    same_q: 다음 목적지까지 거리가 어떻게 돼요?
+    other: 0.797
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음으로 갈 곳이 어디야?
+    leak: 0.808
+  - question: '{장소}까지 몇 km인지 알려주세요.'
+    seed: '{장소}까지 몇 킬로야?'
+    margin: 0.232
+    same: 0.932
+    same_q: '{장소}까지의 거리를 알려주세요.'
+    other: 0.7
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.8
+  - question: '{장소}까지의 거리 좀 확인해줘'
+    seed: '{장소}까지 몇 킬로야?'
+    margin: 0.233
+    same: 0.948
+    same_q: '{장소}까지의 거리를 알려주세요.'
+    other: 0.716
+    other_intent: GET_POI_INFO
+    other_q: 이 장소 정보 좀 보여줘
+    leak: 0.848
+  - question: 두 곳이 얼마나 떨어져 있는지 알려주세요.
+    seed: 두 장소 간 거리 좀 확인해줄래?
+    margin: 0.312
+    same: 0.925
+    same_q: 두 장소 간 거리 좀 확인해줄래?
+    other: 0.613
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.803
+  - question: 이 두 지점 사이 거리 얼마야?
+    seed: 두 장소 간 거리 좀 확인해줄래?
+    margin: 0.302
+    same: 0.934
+    same_q: 두 곳이 얼마나 떨어져 있는지 알려주세요.
+    other: 0.632
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.809
+  - question: 출발지와 도착지 간의 거리를 확인하고 싶어요.
+    seed: 두 장소 간 거리 좀 확인해줄래?
+    margin: 0.112
+    same: 0.81
+    same_q: 두 장소 간 거리 좀 확인해줄래?
+    other: 0.697
+    other_intent: SHOW_SCHEDULE
+    other_q: 여행 일정 확인하고 싶어요
+    leak: 0.731
+  - question: '{장소}하고 현재 위치 사이의 거리를 알려주세요.'
+    seed: '{장소} 여기서 가까워?'
+    margin: 0.239
+    same: 0.932
+    same_q: 지금 위치에서 {장소}까지 거리 알려주세요
+    other: 0.693
+    other_intent: GET_WEATHER
+    other_q: 그쪽 현재 온도 알려줘.
+    leak: 0.782
+  - question: '{장소}까지 도보로 얼마나 떨어져 있어요?'
+    seed: '{장소}까지 걸어갈 만한 거리야?'
+    margin: 0.203
+    same: 0.907
+    same_q: '{장소}까지 걸어갈 만한 거리야?'
+    other: 0.705
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.751
+  - question: '{장소}까지의 걷는 거리 좀 알려줘'
+    seed: '{장소}까지 걸어갈 만한 거리야?'
+    margin: 0.214
+    same: 0.904
+    same_q: '{장소}까지의 거리를 알려주세요.'
+    other: 0.69
+    other_intent: GET_POI_INFO
+    other_q: '{장소}가 어떤 곳인지 설명해줘'
+    leak: 0.794
+  GET_POI_INFO:
+  - question: '{장소} 몇 시에 열고 닫아?'
+    seed: '{장소} 영업시간 알려줘'
+    margin: 0.154
+    same: 0.875
+    same_q: '{장소} 영업시간 알려줘'
+    other: 0.721
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 여기 문 닫았네, 근처에 비슷한 곳 추천해줘
+    leak: 0.697
+  - question: '{장소} 운영 시간이 어떻게 되나요?'
+    seed: '{장소} 영업시간 알려줘'
+    margin: 0.251
+    same: 0.917
+    same_q: '{장소} 영업시간 알려줘'
+    other: 0.666
+    other_intent: EDIT_SCHEDULE
+    other_q: '{장소}, {날짜} 아침에 가게 일정 바꿔줘'
+    leak: 0.732
+  - question: '{장소} 이용 가능한 시간 좀 알려주세요.'
+    seed: '{장소} 영업시간 알려줘'
+    margin: 0.159
+    same: 0.862
+    same_q: '{장소} 운영 시간이 어떻게 되나요?'
+    other: 0.704
+    other_intent: EDIT_SCHEDULE
+    other_q: '{장소} 방문을 {날짜} 오전 시간대로 변경해 주세요'
+    leak: 0.701
+  - question: '{장소} 들어가려면 비용이 얼마나 들어?'
+    seed: '{장소} 입장료 얼마야?'
+    margin: 0.223
+    same: 0.888
+    same_q: '{장소} 입장료 얼마야?'
+    other: 0.666
+    other_intent: GET_DISTANCE
+    other_q: '{장소}까지 걸어갈 만한 거리야?'
+    leak: 0.77
+  - question: '{장소} 관람 요금 좀 알려주세요.'
+    seed: '{장소} 입장료 얼마야?'
+    margin: 0.225
+    same: 0.883
+    same_q: '{장소} 입장료 얼마야?'
+    other: 0.658
+    other_intent: SHOW_SCHEDULE
+    other_q: '{날짜} 스케줄 좀 볼래'
+    leak: 0.688
+  - question: '{장소} 오늘 운영하나요?'
+    seed: '{장소} 오늘 문 여는지 확인해줄래?'
+    margin: 0.051
+    same: 0.784
+    same_q: '{장소} 운영 시간이 어떻게 되나요?'
+    other: 0.733
+    other_intent: REPLAN
+    other_q: '{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?'
+    leak: 0.666
+  - question: '{장소} 금일 개장 여부가 궁금합니다.'
+    seed: '{장소} 오늘 문 여는지 확인해줄래?'
+    margin: 0.074
+    same: 0.739
+    same_q: '{장소} 영업시간 알려줘'
+    other: 0.665
+    other_intent: REPLAN
+    other_q: '{장소}가 오늘 문을 안 연다는데, 남은 오후 코스 좀 조정해 주세요.'
+    leak: 0.628
+  - question: 오늘 {장소} 갈 수 있는지 좀 봐줘
+    seed: '{장소} 오늘 문 여는지 확인해줄래?'
+    margin: 0.066
+    same: 0.811
+    same_q: '{장소} 오늘 문 여는지 확인해줄래?'
+    other: 0.745
+    other_intent: REPLAN
+    other_q: '{장소} 오늘 휴무래, 오후 일정 다시 계획해줄래?'
+    leak: 0.755
+  - question: '{장소}는 뭐 하는 곳이야?'
+    seed: '{장소}가 어떤 곳인지 설명해줘'
+    margin: 0.148
+    same: 0.886
+    same_q: '{장소}가 어떤 곳인지 설명해줘'
+    other: 0.737
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: '{장소} 대신 갈 데 있어?'
+    leak: 0.643
+  - question: '{장소}의 특징과 이용 정보를 자세히 알고 싶어요.'
+    seed: '{장소}가 어떤 곳인지 설명해줘'
+    margin: 0.135
+    same: 0.749
+    same_q: 이 장소 정보 좀 보여줘
+    other: 0.614
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: '{장소} 말고 다른 대안 알려줄래?'
+    leak: 0.546
+  - question: '{장소}에 대해 간단히 소개해줄 수 있나요?'
+    seed: '{장소}가 어떤 곳인지 설명해줘'
+    margin: 0.178
+    same: 0.874
+    same_q: '{장소}가 어떤 곳인지 설명해줘'
+    other: 0.696
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: '{장소} 말고 다른 대안 알려줄래?'
+    leak: 0.627
+  - question: '{장소} 정기적으로 문 닫는 요일 알려줘.'
+    seed: '{장소} 휴무일이 언제예요?'
+    margin: 0.091
+    same: 0.791
+    same_q: '{장소} 몇 시에 열고 닫아?'
+    other: 0.7
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 여기 문 닫았네, 근처에 비슷한 곳 추천해줘
+    leak: 0.652
+  - question: '{장소} 휴관일 뭐야?'
+    seed: '{장소} 휴무일이 언제예요?'
+    margin: 0.055
+    same: 0.857
+    same_q: '{장소} 휴무일이 언제예요?'
+    other: 0.801
+    other_intent: REPLAN
+    other_q: 오늘 {장소} 휴관이래. 오후에 갈 곳들 다시 짜줘.
+    leak: 0.702
+  - question: 이곳의 상세 내용을 알려주세요
+    seed: 이 장소 정보 좀 보여줘
+    margin: 0.17
+    same: 0.815
+    same_q: 이 장소 정보 좀 보여줘
+    other: 0.645
+    other_intent: GET_NEXT_SLOT
+    other_q: 이곳을 보고 난 뒤에는 어디로 이동하면 될까요?
+    leak: 0.62
+  - question: 여기 이용 안내 볼 수 있어?
+    seed: 이 장소 정보 좀 보여줘
+    margin: 0.093
+    same: 0.732
+    same_q: 이 장소 정보 좀 보여줘
+    other: 0.639
+    other_intent: GET_NEXT_SLOT
+    other_q: 이곳을 보고 난 뒤에는 어디로 이동하면 될까요?
+    leak: 0.599
+  - question: 이 장소는 언제 열고 입장료나 주차 여부는 어떤지 궁금해
+    seed: 이 장소 정보 좀 보여줘
+    margin: 0.134
+    same: 0.772
+    same_q: '{장소} 운영 시간이 어떻게 되나요?'
+    other: 0.638
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 이곳 영업을 안 하는데, 주변에 대신 갈 만한 유사한 장소 있을까요?
+    leak: 0.687
+  - question: '{장소} 연락처 좀 알려주세요.'
+    seed: '{장소} 전화번호 알 수 있을까?'
+    margin: 0.165
+    same: 0.897
+    same_q: '{장소} 전화번호 알 수 있을까?'
+    other: 0.733
+    other_intent: GET_DISTANCE
+    other_q: '{장소}까지의 거리 좀 확인해줘'
+    leak: 0.638
+  - question: '{장소}에 전화하려면 번호가 뭐야?'
+    seed: '{장소} 전화번호 알 수 있을까?'
+    margin: 0.231
+    same: 0.909
+    same_q: '{장소} 전화번호 알 수 있을까?'
+    other: 0.677
+    other_intent: GET_DISTANCE
+    other_q: '{장소}까지의 거리를 알려주세요.'
+    leak: 0.712
+  - question: '{장소} 문의 가능한 전화번호가 있는지 궁금합니다.'
+    seed: '{장소} 전화번호 알 수 있을까?'
+    margin: 0.267
+    same: 0.891
+    same_q: '{장소} 전화번호 알 수 있을까?'
+    other: 0.624
+    other_intent: GET_DISTANCE
+    other_q: '{장소}까지의 거리를 알려주세요.'
+    leak: 0.7
+  - question: '{장소} 이용객들 평가는 좋은 편인가요?'
+    seed: '{장소} 리뷰나 평점 어때?'
+    margin: 0.272
+    same: 0.878
+    same_q: '{장소} 리뷰나 평점 어때?'
+    other: 0.606
+    other_intent: TRIP_SUMMARY
+    other_q: 이번 여행 전반에 대한 평가를 정리해줘
+    leak: 0.644
+  - question: '{장소} 후기 좀 볼 수 있어?'
+    seed: '{장소} 리뷰나 평점 어때?'
+    margin: 0.125
+    same: 0.79
+    same_q: '{장소} 리뷰나 평점 어때?'
+    other: 0.664
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음에 방문할 장소를 말씀해 주실 수 있나요?
+    leak: 0.637
+  - question: '{장소} 방문한 사람들 반응이 어떤지 궁금해요.'
+    seed: '{장소} 리뷰나 평점 어때?'
+    margin: 0.114
+    same: 0.752
+    same_q: '{장소} 이용객들 평가는 좋은 편인가요?'
+    other: 0.638
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음에 방문할 장소를 말씀해 주실 수 있나요?
+    leak: 0.555
+  - question: '{장소}에 차 세울 수 있나요?'
+    seed: '{장소} 주차 돼?'
+    margin: 0.179
+    same: 0.822
+    same_q: '{장소} 주차 돼?'
+    other: 0.643
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: '{장소} 대신 갈 데 있어?'
+    leak: 0.739
+  - question: '{장소} 방문할 때 차량 주차 가능한지 궁금해요.'
+    seed: '{장소} 주차 돼?'
+    margin: 0.192
+    same: 0.826
+    same_q: '{장소} 주차 돼?'
+    other: 0.634
+    other_intent: GET_NEXT_SLOT
+    other_q: 다음에 방문할 장소를 말씀해 주실 수 있나요?
+    leak: 0.784
+  - question: '{장소}는 미리 예매해야 입장 가능한가요?'
+    seed: '{장소} 예약해야 들어갈 수 있어?'
+    margin: 0.212
+    same: 0.845
+    same_q: '{장소} 예약해야 들어갈 수 있어?'
+    other: 0.633
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: '{장소} 대신 갈 데 있어?'
+    leak: 0.713
+  - question: '{장소} 당일에 그냥 가도 들어갈 수 있어?'
+    seed: '{장소} 예약해야 들어갈 수 있어?'
+    margin: 0.119
+    same: 0.791
+    same_q: '{장소} 예약해야 들어갈 수 있어?'
+    other: 0.672
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 여기 대신 들어가서 구경할 곳 없나?
+    leak: 0.657
+  - question: '{장소} 방문하려면 사전 예약이 필수인지 궁금해요.'
+    seed: '{장소} 예약해야 들어갈 수 있어?'
+    margin: 0.192
+    same: 0.84
+    same_q: '{장소}는 미리 예매해야 입장 가능한가요?'
+    other: 0.648
+    other_intent: EDIT_SCHEDULE
+    other_q: '{장소} 방문을 {날짜} 오전 시간대로 변경해 주세요'
+    leak: 0.706
+pending:
+  GENERATE_SCHEDULE:
+  - question: 여행 계획 짜줘
+    seed: 일정 만들어줘
+    margin: 0.04
+    same: 0.897
+    same_q: '{지역} 여행 계획 좀 짜줄래?'
+    other: 0.857
+    other_intent: SHOW_SCHEDULE
+    other_q: 내 여행 일정표 띄워줘
+    leak: 0.821
+  - question: 갈 곳이랑 동선 포함해서 스케줄 구성해 주세요
+    seed: 일정 만들어줘
+    margin: 0.032
+    same: 0.815
+    same_q: '{지역} 여행 계획 좀 짜줄래?'
+    other: 0.784
+    other_intent: SHOW_SCHEDULE
+    other_q: 이번 여행 일정표 보여주세요
+    leak: 0.741
+  - question: 여행 일정 좀 만들어줘
+    seed: 여행 스케줄 자동으로 만들어주세요
+    margin: 0.034
+    same: 0.925
+    same_q: 여행 계획 짜줘
+    other: 0.891
+    other_intent: SHOW_SCHEDULE
+    other_q: 내 여행 일정표 띄워줘
+    leak: 0.825
+  REGENERATE:
+  - question: 기존 여행 스케줄을 통째로 바꿔서 다시 구성해 주세요
+    seed: 이 일정 마음에 안 들어, 전체 다시 만들어줘
+    margin: 0.031
+    same: 0.837
+    same_q: 일정 처음부터 다시 짜줘
+    other: 0.807
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 일정 좀 만들어줘
+    leak: 0.73
+  - question: 다 지우고 여행 동선 새로 짜자
+    seed: 이 일정 갈아엎고 새로 짜자
+    margin: 0.048
+    same: 0.807
+    same_q: 짜둔 동선 다 없애고 처음부터 다시 구성해줘
+    other: 0.759
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 코스 좀 만들어볼까
+    leak: 0.688
+  REPLAN:
+  - question: 너무 힘든데 오늘 남은 코스 간단하게 바꿔줄래?
+    seed: 너무 피곤해서 오늘 남은 일정 좀 줄여서 다시 잡아줘
+    margin: 0.049
+    same: 0.804
+    same_q: 교통 체증 때문에 뒤 일정이 어려운데, 남은 코스 조정해 주세요.
+    other: 0.756
+    other_intent: REGENERATE
+    other_q: 지금 일정 말고 완전히 새 코스로 만들어 주세요.
+    leak: 0.787
+  SUGGEST_ALTERNATIVE:
+  - question: '{장소} 대체할 장소 좀 골라줘'
+    seed: '{장소} 대신 갈 데 있어?'
+    margin: -0.009
+    same: 0.885
+    same_q: '{장소}가 사람이 너무 많대, 대체할 곳 골라줘'
+    other: 0.894
+    other_intent: EDIT_SCHEDULE
+    other_q: '{장소}를 {장소}로 교체해줘'
+    leak: 0.872
+  - question: 근방에 비슷한 데 어디 없나?
+    seed: 여기 문 닫았네, 근처에 비슷한 곳 추천해줘
+    margin: 0.024
+    same: 0.552
+    same_q: '{장소} 말고 추천할 만한 곳 있나요?'
+    other: 0.527
+    other_intent: GET_DISTANCE
+    other_q: '{장소} 여기서 가까워?'
+    leak: 0.582
+  - question: 이 순서에는 원래 목적지 말고 어디를 넣는 게 좋을까?
+    seed: 이 자리에 원래 가려던 곳 대신 넣을 만한 장소 있을까요?
+    margin: -0.027
+    same: 0.714
+    same_q: 이 자리에 원래 가려던 곳 대신 넣을 만한 장소 있을까요?
+    other: 0.74
+    other_intent: EDIT_SCHEDULE
+    other_q: 이 두 곳 순서 바꿔줄래?
+    leak: 0.647
+  - question: 날씨가 궂으니 현재 장소를 대체할 만한 실내 방문지를 찾아주세요.
+    seed: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    margin: -0.064
+    same: 0.772
+    same_q: 비 오는데 여기 대신 실내로 갈 만한 곳 있어?
+    other: 0.836
+    other_intent: REPLAN
+    other_q: 오늘 날씨가 궂으니까 야외 일정 대신 안에서 할 수 있는 걸로 바꿔줘.
+    leak: 0.785
+  GENERATE_REFLECTION:
+  - question: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    seed: 오늘 다닌 곳들로 회고 만들어주세요
+    margin: 0.031
+    same: 0.875
+    same_q: 오늘의 여행 일기 작성해줘
+    other: 0.844
+    other_intent: TRIP_SUMMARY
+    other_q: 이번 여행 전체 요약해줘
+    leak: 0.821
+  TRIP_SUMMARY:
+  - question: 여행 다녀온 소감 한 번 써줄래요?
+    seed: 여행 총평 좀 써줘
+    margin: 0.044
+    same: 0.853
+    same_q: 여행 총평 좀 써줘
+    other: 0.809
+    other_intent: GENERATE_REFLECTION
+    other_q: 오늘 하루 여행했던 내용을 돌아보는 글로 정리해 주세요
+    leak: 0.82
+  EDIT_SCHEDULE:
+  - question: '{장소} 방문 계획을 삭제해 주세요'
+    seed: '{장소} 일정에서 빼줘'
+    margin: 0.025
+    same: 0.856
+    same_q: 이 장소 일정에서 삭제하고 싶어
+    other: 0.83
+    other_intent: REGENERATE
+    other_q: 현재 일정은 폐기하고 여행 계획을 새로 구성해 주세요
+    leak: 0.751
+  - question: 여행 동선에 있는 {장소} 항목을 지워줘
+    seed: '{장소} 일정에서 빼줘'
+    margin: -0.011
+    same: 0.764
+    same_q: 이 장소 일정에서 삭제하고 싶어
+    other: 0.775
+    other_intent: REGENERATE
+    other_q: 다 지우고 여행 동선 새로 짜자
+    leak: 0.669
+  - question: 이거 둘 일정 순서 맞바꿔주세요.
+    seed: 이 두 곳 순서 바꿔줄래?
+    margin: 0.044
+    same: 0.836
+    same_q: 이 두 곳 순서 바꿔줄래?
+    other: 0.792
+    other_intent: REGENERATE
+    other_q: 일정 리셋하고 새로 만들어줘
+    leak: 0.766
+  - question: 앞에 있는 곳이랑 다음 목적지 위치를 교체해줄 수 있어?
+    seed: 이 두 곳 순서 바꿔줄래?
+    margin: -0.014
+    same: 0.718
+    same_q: 두 장소의 방문 순서를 서로 바꿔줘.
+    other: 0.733
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 기존에 가려던 장소를 대체할 만한 곳이 있으면 알려줘.
+    leak: 0.769
+  - question: 이곳은 계획에서 빼줘.
+    seed: 이 장소 일정에서 삭제하고 싶어
+    margin: 0.022
+    same: 0.826
+    same_q: '{장소} 일정에서 빼줘'
+    other: 0.804
+    other_intent: REGENERATE
+    other_q: 이 계획은 별로야. 전부 없애고 새로 짜줘
+    leak: 0.748
+  - question: 일정에 있는 {장소} 대신 {장소}로 바꿔주세요
+    seed: '{장소}를 {장소}로 교체해줘'
+    margin: 0.0
+    same: 0.836
+    same_q: '{장소} 일정에서 빼줘'
+    other: 0.836
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: '{장소} 대체할 장소 좀 골라줘'
+    leak: 0.759
+  - question: 기존 {장소} 방문을 빼고 {장소}를 넣어줘
+    seed: '{장소}를 {장소}로 교체해줘'
+    margin: 0.023
+    same: 0.746
+    same_q: '{장소} 일정에서 빼줘'
+    other: 0.722
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: '{장소} 대신 갈 만한 곳 추천해줘.'
+    leak: 0.708
+  - question: 2일 차와 3일 차 일정을 서로 맞바꿔 주세요
+    seed: 둘째 날이랑 셋째 날 통째로 바꿔줘
+    margin: 0.042
+    same: 0.806
+    same_q: 둘째 날이랑 셋째 날 통째로 바꿔줘
+    other: 0.764
+    other_intent: REGENERATE
+    other_q: 현재 일정은 싹 지우고 새 일정으로 바꿔줘
+    leak: 0.764
+  GET_NEXT_SLOT:
+  - question: 다음에 들를 장소 한 곳만 골라줘
+    seed: 다음 코스 하나만 말해줘
+    margin: 0.046
+    same: 0.821
+    same_q: 다음에 갈 곳 알려줘
+    other: 0.775
+    other_intent: SUGGEST_ALTERNATIVE
+    other_q: 이곳 대신 들를 만한 다른 명소 좀 골라주세요
+    leak: 0.741
+  - question: 그다음 방문 시간 몇 시야?
+    seed: 다음 일정 몇 시에 시작해?
+    margin: 0.019
+    same: 0.757
+    same_q: 다음 일정 몇 시에 시작해?
+    other: 0.738
+    other_intent: EDIT_SCHEDULE
+    other_q: '{장소} 방문을 {날짜} 오전 시간대로 변경해 주세요'
+    leak: 0.674
+  SHOW_SCHEDULE:
+  - question: 현재 계획된 일정 좀 확인해줘
+    seed: 지금 일정 보여줘
+    margin: 0.048
+    same: 0.861
+    same_q: '{날짜} 일정 확인하고 싶어요'
+    other: 0.813
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.808
+  - question: 내 여행 스케줄 보여줄래?
+    seed: 지금 일정 보여줘
+    margin: 0.044
+    same: 0.909
+    same_q: 내 여행 일정표 띄워줘
+    other: 0.864
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 일정 좀 만들어줘
+    leak: 0.805
+  - question: 금일 잡혀 있는 일정들 좀 띄워줘.
+    seed: 오늘 스케줄 전체 좀 볼 수 있을까?
+    margin: 0.02
+    same: 0.796
+    same_q: 현재 계획된 일정 좀 확인해줘
+    other: 0.777
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.763
+  - question: 잡아둔 여행 스케줄을 화면에 띄워봐
+    seed: 내 여행 일정표 띄워줘
+    margin: 0.046
+    same: 0.81
+    same_q: 내 여행 일정표 띄워줘
+    other: 0.764
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 스케줄 자동으로 만들어주세요
+    leak: 0.705
+  - question: '{날짜}에 잡힌 계획 보여주세요'
+    seed: '{날짜} 일정 확인하고 싶어요'
+    margin: 0.026
+    same: 0.814
+    same_q: 현재 계획된 일정 좀 확인해줘
+    other: 0.789
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.805
+  - question: 여행 계획 전부 확인할 수 있을까요?
+    seed: 전체 일정 한번 보여줄래?
+    margin: -0.013
+    same: 0.767
+    same_q: 내 여행 스케줄 보여줄래?
+    other: 0.78
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 계획을 자동으로 짜 주실 수 있나요?
+    leak: 0.71
+  - question: 여행 일정 확인하고 싶어요
+    seed: 일정표 열어줘
+    margin: -0.02
+    same: 0.859
+    same_q: '{날짜} 일정 확인하고 싶어요'
+    other: 0.88
+    other_intent: GENERATE_SCHEDULE
+    other_q: 여행 일정 좀 만들어줘
+    leak: 0.755
+  - question: 짜둔 스케줄 띄워 봐
+    seed: 일정표 열어줘
+    margin: 0.031
+    same: 0.819
+    same_q: 내 스케줄 좀 보여줘.
+    other: 0.789
+    other_intent: GENERATE_SCHEDULE
+    other_q: 일정 만들어줘
+    leak: 0.692
+  - question: 잡아둔 여행 일정을 한눈에 볼 수 있을까요?
+    seed: 이번 여행 일정표 보여주세요
+    margin: 0.038
+    same: 0.848
+    same_q: 여행 계획 전부 확인할 수 있을까요?
+    other: 0.81
+    other_intent: TRIP_SUMMARY
+    other_q: 다녀온 여행을 한눈에 볼 수 있게 정리해 주실래요?
+    leak: 0.735
+  GET_POI_INFO:
+  - question: '{장소} 표값 얼마인지 궁금해'
+    seed: '{장소} 입장료 얼마야?'
+    margin: 0.046
+    same: 0.666
+    same_q: '{장소} 입장료 얼마야?'
+    other: 0.62
+    other_intent: GET_DISTANCE
+    other_q: '{장소}까지의 거리 좀 확인해줘'
+    leak: 0.556
+  - question: '{장소} 쉬는 날이 언제인지 궁금합니다.'
+    seed: '{장소} 휴무일이 언제예요?'
+    margin: 0.017
+    same: 0.783
+    same_q: '{장소} 휴무일이 언제예요?'
+    other: 0.766
+    other_intent: REPLAN
+    other_q: '{장소}가 쉬는 날이라네요. 이걸 반영해서 오후 일정만 재구성해줄 수 있을까요?'
+    leak: 0.659
+rejected:
+- intent: GENERATE_SCHEDULE
+  question: 찜해 놓은 여행지들을 넣어서 계획 짜줘
+  reason: 평가셋 leak 0.932 “내가 찜해둔 데들 묶어서 여행 계획 좀 만들어봐”
+- intent: GENERATE_SCHEDULE
+  question: '{지역}에서 {기간} 동안 여행 코스 짜줘'
+  reason: 같은 의도 중복 0.957 “{지역}에서 {기간} 동안 여행할 계획 짜줘”
+- intent: REGENERATE
+  question: 기존 계획은 전부 없애고 처음부터 다시 짜줘.
+  reason: 같은 의도 중복 0.957 “기존 계획은 전부 없애고 다른 구성으로 다시 짜줘.”
+- intent: REGENERATE
+  question: 기존 계획은 전부 지우고 새로운 일정으로 만들어 주세요
+  reason: 같은 의도 중복 0.981 “기존 계획은 전부 취소하고 새 일정으로 만들어 주세요”
+- intent: REPLAN
+  question: 비 때문에 오늘 이후 일정만 다시 조정해줘.
+  reason: 평가셋 leak 0.921 “비 와서 오늘 일정 못 하겠어, 다시 조정해줘”
+- intent: REPLAN
+  question: 일정 지연됐어. 남은 시간에 맞게 계획 다시 맞춰줘
+  reason: 평가셋 leak 0.904 “한 시간 넘게 지체됐어, 남은 오후 일정 다시 맞춰줘”
+- intent: GENERATE_REFLECTION
+  question: 하루를 돌아보는 기록 좀 남겨줘.
+  reason: 같은 의도 중복 0.984 “하루를 돌아보는 기록 좀 남겨주세요”
+- intent: GENERATE_REFLECTION
+  question: 오늘 여행 회고 한 편 써볼까
+  reason: 평가셋 leak 0.906 “이번 여행 회고 좀 만들어줘”
+- intent: GENERATE_REFLECTION
+  question: 오늘 있었던 일들 일기처럼 정리해 줘
+  reason: 같은 의도 중복 0.984 “오늘 있었던 일들 일기처럼 정리해 주세요.”
+- intent: GENERATE_REFLECTION
+  question: 오늘 있었던 일을 바탕으로 일기 써줘.
+  reason: 같은 의도 중복 0.980 “오늘 있었던 일 바탕으로 일기 작성해줘”
+- intent: GENERATE_REFLECTION
+  question: 하루 일기 좀 작성해 주세요
+  reason: 같은 의도 중복 0.967 “하루 일기 좀 작성하고 싶습니다”
+- intent: TRIP_SUMMARY
+  question: 이번 여행 전체 내용 좀 요약해줘.
+  reason: 같은 의도 중복 0.984 “이번 여행 전체 요약해줘”
+- intent: TRIP_SUMMARY
+  question: 이번 여행을 종합해서 정리해 주세요
+  reason: 같은 의도 중복 0.976 “이번 여행을 전반적으로 정리해 주세요”
+- intent: TRIP_SUMMARY
+  question: 이번 여행 전반을 정리해 주세요
+  reason: 같은 의도 중복 0.989 “이번 여행을 전반적으로 정리해 주세요”
+- intent: TRIP_SUMMARY
+  question: 여행 내용 한눈에 볼 수 있게 요약해줘
+  reason: 같은 의도 중복 0.958 “여행 내용 한눈에 볼 수 있게 요약 부탁해요”
+- intent: TRIP_SUMMARY
+  question: 이번에 다녀온 여정, 핵심만 간단히 묶어볼까
+  reason: 같은 의도 중복 0.990 “이번에 다녀온 여정, 핵심만 간단히 묶어줘”
+- intent: STYLE_ANALYSIS
+  question: 내 여행 취향이 어떤 편인지 파악해줘
+  reason: 평가셋 leak 0.908 “내 여행 취향 정리해서 알려줘”
+- intent: STYLE_ANALYSIS
+  question: 내 여행 취향이 어떤 편인지 분석해줘.
+  reason: 같은 의도 중복 0.959 “제 여행 성향 좀 분석해 주세요”
+- intent: STYLE_ANALYSIS
+  question: 지금까지의 여행 패턴을 보면 저는 어떤 여행자 유형인가요?
+  reason: 평가셋 leak 0.916 “나는 어떤 타입의 여행자야?”
+- intent: STYLE_ANALYSIS
+  question: 내 여행 취향 분석해줘
+  reason: 평가셋 leak 0.912 “내 여행 취향 정리해서 알려줘”
+- intent: STYLE_ANALYSIS
+  question: 내 여행 성향을 분석해줘
+  reason: 같은 의도 중복 0.982 “제 여행 성향 좀 분석해 주세요”
+- intent: STYLE_ANALYSIS
+  question: 내 여행 취향 좀 봐줄래?
+  reason: 평가셋 leak 0.937 “내 여행 취향 정리해서 알려줘”
+- intent: STYLE_ANALYSIS
+  question: 내가 선호하는 여행 방식 좀 분석해줘.
+  reason: 같은 의도 중복 0.969 “내가 선호하는 여행 방식 좀 진단해 줄래요?”
+- intent: STYLE_ANALYSIS
+  question: 여행할 때 내 성향이 뭔지 궁금해
+  reason: 같은 의도 중복 0.963 “여행할 때 제 성향이 어떤 편인지 자세히 살펴봐 주실래요?”
+- intent: EDIT_SCHEDULE
+  question: '{장소}을 {장소}로 변경해줘'
+  reason: 같은 의도 중복 0.966 “{장소}를 {장소}로 교체해줘”
+- intent: GET_NEXT_SLOT
+  question: 이제 어디로 이동하면 되나요?
+  reason: 평가셋 leak 0.906 “우리 이제 어디로 가면 돼?”
+- intent: GET_NEXT_SLOT
+  question: 다음 방문지는 어디인지 알려줘
+  reason: 같은 의도 중복 0.961 “다음 방문지 알려주세요”
+- intent: GET_NEXT_SLOT
+  question: 이제 어디로 가면 돼?
+  reason: 평가셋 leak 0.944 “우리 이제 어디로 가면 돼?”
+- intent: GET_NEXT_SLOT
+  question: 다음으로 가야 할 곳이 어디지?
+  reason: 같은 의도 중복 0.958 “다음으로 갈 곳이 어디야?”
+- intent: GET_NEXT_SLOT
+  question: 이제 어디로 가면 돼?
+  reason: 평가셋 leak 0.944 “우리 이제 어디로 가면 돼?”
+- intent: GET_NEXT_SLOT
+  question: 다음 일정은 언제 시작하나요?
+  reason: 평가셋 leak 0.913 “다음 일정 언제 출발이야?”
+- intent: GET_NEXT_SLOT
+  question: 이제 어디로 가면 돼?
+  reason: 평가셋 leak 0.944 “우리 이제 어디로 가면 돼?”
+- intent: GET_NEXT_SLOT
+  question: 이제 어디로 가면 돼?
+  reason: 평가셋 leak 0.944 “우리 이제 어디로 가면 돼?”
+- intent: GET_NEXT_SLOT
+  question: 다음으로 들를 장소 하나만 알려주세요
+  reason: 같은 의도 중복 0.951 “다음에 들를 장소 한 곳만 골라줘”
+- intent: GET_NEXT_SLOT
+  question: 다음에 들를 곳은 어디야?
+  reason: 같은 의도 중복 0.971 “다음으로 들를 곳이 어디예요?”
+- intent: GET_NEXT_SLOT
+  question: 다음으로 갈 곳은 어디야?
+  reason: 같은 의도 중복 0.995 “다음으로 갈 곳이 어디야?”
+- intent: GET_NEXT_SLOT
+  question: 이제 어디로 이동하면 될까요?
+  reason: 평가셋 leak 0.907 “우리 이제 어디로 가면 돼?”
+- intent: SHOW_SCHEDULE
+  question: 내 여행 계획 좀 보여주세요
+  reason: 타 의도 근접 0.900 [GENERATE_SCHEDULE] “여행 계획 짜줘”
+- intent: SHOW_SCHEDULE
+  question: 여행 스케줄 좀 보여줘
+  reason: 타 의도 근접 0.914 [GENERATE_SCHEDULE] “여행 일정 좀 만들어줘”
+- intent: GET_DISTANCE
+  question: '{장소}까지 거리가 얼마나 돼?'
+  reason: 같은 의도 중복 0.963 “{장소}에서 {장소}까지 얼마나 떨어져 있어?”
+- intent: GET_DISTANCE
+  question: 숙소 기준으로 {장소}까지 거리가 얼마나 돼?
+  reason: 평가셋 leak 0.906 “숙소에서 거기까지 거리 알려줘”
+- intent: GET_DISTANCE
+  question: '{장소}까지 숙소에서 얼마나 떨어져 있어요?'
+  reason: 같은 의도 중복 0.963 “숙소에서 {장소}까지 먼 편이야?”
+- intent: GET_DISTANCE
+  question: 숙소랑 {장소} 사이 거리 좀 알려줘
+  reason: 평가셋 leak 0.942 “숙소에서 거기까지 거리 알려줘”
+- intent: GET_DISTANCE
+  question: '{장소}까지 거리가 얼마나 돼?'
+  reason: 같은 의도 중복 0.963 “{장소}에서 {장소}까지 얼마나 떨어져 있어?”
+- intent: GET_DISTANCE
+  question: 여기서 {장소}까지 먼 편이야?
+  reason: 같은 의도 중복 0.964 “여기서 {장소}까지 얼마나 멀어?”
+- intent: GET_DISTANCE
+  question: 여기서 {장소}까지 얼마나 떨어져 있나요?
+  reason: 같은 의도 중복 0.980 “여기서 {장소}까지 얼마나 멀어?”
+- intent: GET_DISTANCE
+  question: 현재 있는 곳과 {장소} 사이의 거리가 궁금해
+  reason: 같은 의도 중복 0.954 “{장소}하고 현재 위치 사이의 거리를 알려주세요.”
+- intent: GET_DISTANCE
+  question: '{장소}까지 몇 km야?'
+  reason: 같은 의도 중복 0.958 “{장소}까지 몇 km인지 알려주세요.”
+- intent: GET_DISTANCE
+  question: '{장소}까지 걸어서 갈 수 있을 정도로 가까워?'
+  reason: 같은 의도 중복 0.953 “{장소}까지 걸어갈 만한 거리야?”
+- intent: GET_POI_INFO
+  question: '{장소} 주차장 있어?'
+  reason: 같은 의도 중복 0.953 “{장소} 주차 돼?”

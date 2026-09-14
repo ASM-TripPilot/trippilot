@@ -71,6 +71,12 @@ class LlmFeature(Enum):
     # 발화만** 받는다(1차는 `agents/planb/directives.match_free_text`, 임계 0.74).
     # 지시 목록은 서버가 주입해 사전이 늘어도 프롬프트가 안 바뀐다 (EDIT_TRANSLATION 선례).
     REPLAN_DIRECTIVE_TRANSLATION = "REPLAN_DIRECTIVE_TRANSLATION"  # 재계획 연동 설계 §3
+    # 질문뱅크 증강(§3.2 ②) — seed 문장 하나에서 어휘·말투가 다른 변형을 만든다.
+    # **PARAPHRASE 와 반대 목적이라 따로 있다**: PARAPHRASE 는 투표용 재질의라 "원문 어휘를
+    # 그대로 유지" 가 규칙이지만, 증강은 어휘가 달라야 1차 적중이 오른다(어휘·구조 차이가
+    # 1차 미달의 실제 원인 — TRIP-840 실측). **오프라인 전용**: 런타임 요청 경로에서 부르지
+    # 않는다(scripts/augment_bank.py).
+    BANK_AUGMENT = "BANK_AUGMENT"  # intent-matching-design §3.2 ②
 
 
 class ModelTier(Enum):
