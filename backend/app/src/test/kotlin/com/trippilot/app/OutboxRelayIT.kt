@@ -7,6 +7,7 @@ import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.core.event.OutboxSubscriber
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.assertions.withClue
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.ints.shouldBeGreaterThan
@@ -124,15 +125,85 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
 
         relay.relay()
 
-        unpublished("실패") shouldBe 1 // 아직 미발행 — 다음 폴링이 다시 집는다
+        unpublished("실패") shouldBe 1 // 아직 미발행 — 백오프가 지난 뒤 다시 집는다
         jdbc.queryForObject(
             "SELECT attempts FROM outbox_event WHERE aggregate_id = '실패'", Int::class.java,
         )!! shouldBeGreaterThan 0
 
+        dueNow("실패") // 백오프를 앞당긴다 — 실제로 기다리면 테스트가 그만큼 느려진다
         relay.relay() // 재시도하면 이번엔 간다
         subscriber.received.map { it.aggregateId } shouldContain "실패"
         unpublished("실패") shouldBe 0
     }
+
+    /**
+     * **백오프가 실제로 막는가**(REL-U6-01). 이게 없으면 죽어 있는 상대를 2초마다 10번 때리고
+     * 20초 만에 포기한다 — 재시도가 이름만 남고, 상대에게는 짧은 스파이크로 보인다.
+     */
+    @Test
+    fun `실패한 이벤트는 백오프가 지나기 전에는 다시 집히지 않는다`() {
+        tx.execute { publisher.publish(Probe("백오프")) }
+        subscriber.failNext = true
+        relay.relay()
+        subscriber.received.clear()
+
+        relay.relay() // 곧바로 한 번 더 — 백오프 때문에 배치에 안 들어와야 한다
+
+        subscriber.received.map { it.aggregateId } shouldNotContain "백오프"
+        jdbc.queryForObject(
+            "SELECT attempts FROM outbox_event WHERE aggregate_id = '백오프'", Int::class.java,
+        )!! shouldBe 1 // 두 번째 relay 가 건드리지 못했다는 증거
+    }
+
+    /**
+     * 재시도가 거듭될수록 간격이 **배로** 벌어진다(2·4·8초). 상수 지연이면 "백오프"가 아니다.
+     *
+     * 서로 비교(`delays[1] > delays[0]`)로 쓰면 안 된다 — 측정이 `next_attempt_at - now()` 라
+     * 재는 시점의 흔들림만으로 순서가 뒤바뀌어, **상수 지연에서도 우연히 통과한다**(역검증에서 실측).
+     * 그래서 회차별 절대 범위로 못박는다.
+     */
+    @Test
+    fun `재시도 간격은 시도 횟수에 따라 배로 넓어진다`() {
+        tx.execute { publisher.publish(Probe("간격")) }
+
+        val delays = (1..3).map {
+            subscriber.failNext = true
+            dueNow("간격")
+            relay.relay()
+            jdbc.queryForObject(
+                "SELECT EXTRACT(EPOCH FROM (next_attempt_at - now())) FROM outbox_event WHERE aggregate_id = '간격'",
+                Double::class.java,
+            )!!
+        }
+
+        // 기대 2·4·8초. 폭을 ±1초 두는 것은 측정 시점 흔들림 때문이고, 배수 구분은 이 폭에서도 유지된다.
+        withClue("재시도 지연(초)=$delays") {
+            (delays[0] in 1.0..3.0) shouldBe true
+            (delays[1] in 3.0..5.0) shouldBe true
+            (delays[2] in 7.0..9.0) shouldBe true
+        }
+    }
+
+    /**
+     * 상한(10회)에 닿은 행은 **조회로 찾아진다**(REL-U6-02 — dead-letter 테이블을 신설하지 않는다).
+     * 백오프 컬럼이 그 성질을 가리면 포기한 이벤트가 영영 안 보인다.
+     */
+    @Test
+    fun `포기한 이벤트는 미발행으로 남아 조회된다`() {
+        tx.execute { publisher.publish(Probe("포기")) }
+        jdbc.update("UPDATE outbox_event SET attempts = 10 WHERE aggregate_id = '포기'")
+
+        relay.relay()
+
+        jdbc.queryForObject(
+            "SELECT count(*) FROM outbox_event WHERE published_at IS NULL AND attempts >= 10 AND aggregate_id = '포기'",
+            Int::class.java,
+        )!! shouldBe 1
+    }
+
+    /** 백오프를 앞당겨 "시간이 지났다"를 만든다 — 실 시간을 기다리지 않기 위해. */
+    private fun dueNow(note: String) =
+        jdbc.update("UPDATE outbox_event SET next_attempt_at = now() - interval '1 second' WHERE aggregate_id = ?", note)
 
     /** 두 번 돌려도 구독자가 두 번 받지 않는다 — 발행 표시가 실제로 걸렸다는 증거. */
     @Test
