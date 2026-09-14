@@ -48,6 +48,7 @@ class ReflectionService(
     private val cards: ReflectionCardCodec,
     private val agent: ReflectionAgentPort,
     private val events: DomainEventPublisher,
+    private val metrics: ReflectionMetrics,
     private val clock: Clock,
 ) {
     /**
@@ -145,10 +146,41 @@ class ReflectionService(
     ) = if (!agent.enabled) {
         null
     } else {
-        runCatching { agent.generate(agentInput(accountId, tripId, dayDate, visits, surfaces))?.let { cards.read(it.payload) } }
+        runCatching {
+            agent.generate(agentInput(accountId, tripId, dayDate, visits, surfaces))
+                ?.let { cards.read(it.payload) }
+                ?.takeIf { card -> notHallucinating(card.payload, tripId, dayDate, visits, surfaces) }
+        }
             // 침묵하지 않는다(INV-4) — 규칙 카드로 내려간 사실과 사유가 남아야 원인이 보인다.
             .onFailure { log.warn("회고 AI 카드를 쓸 수 없어 규칙 카드로 갑니다. tripId={} date={}", tripId, dayDate, it) }
             .getOrNull()
+    }
+
+    /**
+     * 안 간 곳을 말하는 카드는 쓰지 않는다(BR-U5-31). 걸리면 폴백 사다리(BR-U5-32)를 그대로 타
+     * 규칙 카드로 내려간다 — 새 경로를 만들지 않는다.
+     *
+     * 금지 목록은 **건너뛴 방문지**다. 그것이 우리가 "안 갔다"고 확실히 아는 유일한 집합이고,
+     * 입력 조립이 이미 같은 기준으로 거르고 있다(`filterNot { it.skipped }`) — 추가 조회가 없다.
+     */
+    private fun notHallucinating(
+        payload: String,
+        tripId: UUID,
+        dayDate: LocalDate,
+        visits: List<ArchiveVisitView>,
+        surfaces: Map<UUID, PoiSurfaceView>,
+    ): Boolean {
+        val notVisited = visits.filter { it.skipped }.mapNotNull { surfaces[it.poiId]?.nameKo }
+        val offending = HallucinationGate.offendingPlaces(payload, notVisited)
+        if (offending.isEmpty()) return true
+        // 조용히 내려가면 "AI 를 켰는데 왜 규칙 카드만 나오지"에 답할 수 없다(INV-4).
+        // 이 수치가 AI 를 계속 켤지 판단하는 근거이기도 하다.
+        log.warn(
+            "회고 AI 카드가 안 간 장소를 말해 규칙 카드로 강등합니다. tripId={} date={} 장소={}",
+            tripId, dayDate, offending,
+        )
+        metrics.hallucinationRejected()
+        return false
     }
 
     /**
