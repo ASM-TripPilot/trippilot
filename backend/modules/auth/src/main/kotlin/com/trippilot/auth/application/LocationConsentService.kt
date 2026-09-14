@@ -1,6 +1,8 @@
 package com.trippilot.auth.application
 
 import com.trippilot.auth.api.LocationConsentFacade
+import com.trippilot.auth.api.LocationCollectionSource
+import com.trippilot.auth.api.LocationLegalLogFacade
 import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.consent.ConsentAction
 import com.trippilot.auth.domain.consent.ConsentChannel
@@ -35,7 +37,23 @@ class LocationConsentService(
     private val terms: TermsVersionRepository,
     private val consentRecords: ConsentRecordRepository,
     private val clock: Clock,
-) : LocationConsentFacade {
+) : LocationConsentFacade, LocationLegalLogFacade {
+
+    /**
+     * 위치정보 수집 사실 기록(INV-LL1 append-only). 동의 판정은 하지 않는다 — 호출 지점이 **이미
+     * 저장된 결과**를 보고 부르기 때문이다. 여기서 다시 동의를 확인하면, 저장은 됐는데 그 사이
+     * 철회돼 로그만 빠지는 경우가 생겨 사실 확인자료에 구멍이 난다.
+     */
+    @Transactional
+    override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID) {
+        legalLog.append(
+            LocationLegalEvent.of(
+                AccountId(accountId), LocationLegalEventType.COLLECTION,
+                // 원시 좌표를 넣지 않는다(V1.3 규약) — 사실 확인자료가 또 하나의 파기 대상이 되면 안 된다.
+                mapOf("source" to source.name, "subjectId" to subjectId.toString()), clock.instant(),
+            ),
+        )
+    }
     /**
      * 사진 EXIF 좌표 수용 판정(INV-U5-04)의 유일한 근거. 3층 상태의 정본이 여기라 파생 없이 그대로 읽는다.
      */
