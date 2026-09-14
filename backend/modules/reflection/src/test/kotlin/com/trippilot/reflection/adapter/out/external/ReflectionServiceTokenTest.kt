@@ -37,10 +37,16 @@ class ReflectionServiceTokenTest : StringSpec({
 
 private const val HEADER = ReflectionAgentConfiguration.SERVICE_TOKEN_HEADER
 
+/**
+ * 마감·read 상한을 일부러 짧게 준다 — 서버가 응답하지 않을 때 **정지가 아니라 실패로 끝나야** 한다.
+ * (기본값 21초도 매달리는 축에 든다. 여기서 재는 것은 헤더뿐이라 값 자체는 무관하다.)
+ */
 private fun properties(baseUrl: String, token: String) = ReflectionAgentProperties(
     mode = "http",
     baseUrl = baseUrl,
     serviceToken = token,
+    deadlineMs = 1_000,
+    readTimeoutMs = 6_000,
 )
 
 private fun withCapturingServer(block: (baseUrl: String, received: List<String?>) -> Unit) {

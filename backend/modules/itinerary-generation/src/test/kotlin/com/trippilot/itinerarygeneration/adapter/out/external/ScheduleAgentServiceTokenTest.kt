@@ -26,8 +26,8 @@ class ScheduleAgentServiceTokenTest : StringSpec({
             val configuration = ScheduleAgentConfiguration()
 
             // 생성용과 편집용(짧게 끊는) 클라이언트는 따로 만들어진다 — 한쪽만 붙는 일이 실제로 가능하다.
-            configuration.scheduleAgentRestClient(properties, ScheduleDeadlineProperties()).ping()
-            configuration.scheduleAgentBoundedRestClient(properties, ScheduleDeadlineProperties()).ping()
+            configuration.scheduleAgentRestClient(properties, deadlines()).ping()
+            configuration.scheduleAgentBoundedRestClient(properties, deadlines()).ping()
 
             received shouldHaveSize 2
             received.forEach { it shouldBe "s3cr3t" }
@@ -39,7 +39,7 @@ class ScheduleAgentServiceTokenTest : StringSpec({
             val properties = properties(baseUrl, token = "")
 
             ScheduleAgentConfiguration()
-                .scheduleAgentRestClient(properties, ScheduleDeadlineProperties())
+                .scheduleAgentRestClient(properties, deadlines())
                 .ping()
 
             // 요청이 도착했다 = 토큰이 없다고 호출을 막지 않았다. 이것이 뒤집히면 토큰을 안 넣은
@@ -57,6 +57,13 @@ private fun properties(baseUrl: String, token: String) = ScheduleAgentProperties
     baseUrl = baseUrl,
     serviceToken = token,
 )
+
+/**
+ * **시한을 일부러 짧게 준다.** 운영 기본값(시한 미적용)이면 read 상한이 612초라, 테스트 서버가
+ * 응답하지 않는 순간 실패가 아니라 **10분 정지**가 된다 — CI 에서 가장 나쁜 실패 모양이다.
+ * 여기서 재는 것은 헤더뿐이라 시한 값 자체는 무관하다.
+ */
+private fun deadlines() = ScheduleDeadlineProperties(enforced = true, totalMs = 5_000, editWaitMs = 5_000)
 
 /** 본문을 파싱하지 않는다 — 여기서 재는 것은 요청 헤더뿐이다. */
 private fun RestClient.ping() {
