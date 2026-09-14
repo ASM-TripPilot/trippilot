@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "TOURAPI",
-  "collected_at": "2026-09-13T21:18:48.141952+00:00",
+  "collected_at": "2026-09-14T22:38:21.187312+00:00",
   "area_codes": [
     "1",
     "2",
@@ -34,7 +34,7 @@
   },
   "merged_from": [
     {
-      "collected_at": "2026-09-11T15:50:36.565945+00:00",
+      "collected_at": "2026-09-13T21:18:48.141952+00:00",
       "proposals": 18607,
       "stats": {
         "merged_runs": 2,
@@ -42,37 +42,37 @@
       }
     },
     {
-      "collected_at": "2026-09-13T21:18:48.141952+00:00",
-      "proposals": 1,
+      "collected_at": "2026-09-14T22:38:21.187312+00:00",
+      "proposals": 0,
       "stats": {
-        "http_calls": 266,
-        "listed": 34,
-        "page_failures": 0,
+        "http_calls": 263,
+        "listed": 33,
+        "page_failures": 1,
         "detail_failures": 0,
         "category_unmapped": 0,
         "address_missing": 1,
         "merged": 0,
-        "passed": 1,
-        "skipped_unchanged": 18528,
+        "passed": 0,
+        "skipped_unchanged": 18394,
         "gate_drops": {
           "existence_out_of_service_region": 32
         },
         "budget_exhausted": false,
         "per_area": {
           "1": {
-            "calls": 29,
+            "calls": 28,
             "passed": 0,
-            "skipped": 1762
+            "skipped": 1754
           },
           "2": {
             "calls": 11,
             "passed": 0,
-            "skipped": 572
+            "skipped": 568
           },
           "3": {
             "calls": 7,
             "passed": 0,
-            "skipped": 239
+            "skipped": 219
           },
           "4": {
             "calls": 7,
@@ -82,17 +82,17 @@
           "5": {
             "calls": 5,
             "passed": 0,
-            "skipped": 186
+            "skipped": 180
           },
           "6": {
             "calls": 10,
             "passed": 0,
-            "skipped": 564
+            "skipped": 563
           },
           "7": {
             "calls": 6,
             "passed": 0,
-            "skipped": 242
+            "skipped": 237
           },
           "8": {
             "calls": 5,
@@ -102,47 +102,47 @@
           "31": {
             "calls": 49,
             "passed": 0,
-            "skipped": 4087
+            "skipped": 4060
           },
           "32": {
             "calls": 26,
             "passed": 0,
-            "skipped": 2069
+            "skipped": 2063
           },
           "33": {
-            "calls": 14,
-            "passed": 1,
-            "skipped": 969
+            "calls": 13,
+            "passed": 0,
+            "skipped": 963
           },
           "34": {
             "calls": 15,
             "passed": 0,
-            "skipped": 1260
+            "skipped": 1256
           },
           "35": {
             "calls": 18,
             "passed": 0,
-            "skipped": 1384
+            "skipped": 1382
           },
           "36": {
-            "calls": 18,
+            "calls": 17,
             "passed": 0,
-            "skipped": 1514
+            "skipped": 1490
           },
           "37": {
             "calls": 17,
             "passed": 0,
-            "skipped": 1106
+            "skipped": 1095
           },
           "38": {
             "calls": 17,
             "passed": 0,
-            "skipped": 1176
+            "skipped": 1167
           },
           "39": {
             "calls": 12,
             "passed": 0,
-            "skipped": 849
+            "skipped": 848
           }
         }
       }
