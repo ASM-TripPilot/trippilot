@@ -215,10 +215,15 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
         val before = registry.find("trippilot.outbox.relay.latency").timer()?.count() ?: 0L
         tx.execute { publisher.publish(Probe("지연")) }
 
-        relay.relay()
+        // **내 이벤트가 배달될 때까지** 돌린다. 한 번만 부르면 같은 컨테이너를 쓰는 다른 IT 의 릴레이가
+        // 그 사이 내 행을 집어가 이쪽 호출은 빈 배치를 보고, 타이머는 저쪽에서 오른다(실측으로 겪었다).
+        repeat(RELAY_TRIES) { if (unpublished("지연") > 0) relay.relay() }
+        unpublished("지연") shouldBe 0
 
+        // 증가분을 정확히 1 로 못박지 않는다 — 같은 레지스트리를 공유하므로 다른 IT 의 배달도 함께
+        // 센다. 여기서 봐야 하는 것은 "배달이 타이머를 올리는가"이지 그 절대 수가 아니다.
         val after = registry.find("trippilot.outbox.relay.latency").timer()!!.count()
-        (after - before) shouldBe 1L
+        (after > before) shouldBe true
     }
 
     /** 백오프를 앞당겨 "시간이 지났다"를 만든다 — 실 시간을 기다리지 않기 위해. */
