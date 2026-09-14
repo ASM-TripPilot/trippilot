@@ -33,7 +33,11 @@
 # 간선을 주장만 하고 확인하지 않은 상태가 눈에 보여야 한다. 확인 방법은 역검증과 같다 —
 # **간선을 끊고 후행을 빌드해 실제로 깨지는가.** 안 깨지면 그 간선은 상상이었으니 지운다.
 #
-# 갱신: 2026-09-01 · TRIP-536 처방 머지(#414). 남은 층 0 은 여섯이고 그 중 셋이 마이그레이션을 다툰다
+# 갱신: 2026-09-14 · 실사용 준비 티켓 일괄 발행(TRIP-834·843~850·854~860) 반영. 티켓 없던 노드
+# 넷이 티켓을 얻었고(APPLE-JWKS→858 · BACKEND-AI-AUTH→856 · TRIP-361-CONTRACT→859 ·
+# PUSH-ANDROID-CHANNEL→860), AI-ALTERNATIVES 의 질문은 전용 재계획 경계 설계 확정으로 해소됐다.
+# 신규 노드의 진짜 제약은 여전히 공유 자원이다 — notification 삼형제(843·844·845)가
+# PushDispatchService·OutboxRelay 를, 위치 동의 짝(846·857)이 같은 경계 결정을 다툰다.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 우리 몫
@@ -227,7 +231,7 @@ note = """
 
 [[nodes]]
 id = "APPLE-JWKS"
-ticket = ""
+ticket = "TRIP-858"
 title = "Apple 로그인 id_token 서명검증(JWKS)·aud/iss/exp — 현재 fail-closed 로 비활성"
 status = "todo"
 migration = false
@@ -235,10 +239,11 @@ touches = [
   "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/out/external",
 ]
 note = """
-**티켓이 없다.** 코드 주석에만 있다(AppleOAuthClient·AbstractOAuth2Client 의 TODO(SECURITY)).
-MVP 는 소셜 로그인만인데 그 중 하나가 꺼져 있다. nonce·state 검증도 함께 비어 있다.
-SEC-06 이 여는 조건의 정본이다 — 서명·iss·aud·exp(·nonce) + p8 키 ES256 client_secret 동적 서명.
-TRIP-249 와 같은 디렉토리를 만진다(자원 배타) — 스크립트가 층에서 잡아 준다.
+코드 주석에만 있다가(AppleOAuthClient·AbstractOAuth2Client 의 TODO(SECURITY)) 2026-09-14
+TRIP-858 로 티켓화했다. MVP 는 소셜 로그인만인데 그 중 하나가 꺼져 있다. nonce·state 검증도
+함께 비어 있다. SEC-06 이 여는 조건의 정본이다 — 서명·iss·aud·exp(·nonce) + p8 키 ES256
+client_secret 동적 서명. iOS 스토어 심사가 소셜 로그인 제공 시 Apple 로그인을 사실상 요구하므로
+**스토어 출시 조건에 걸린다.** TRIP-249 와 같은 디렉토리를 만진다(자원 배타).
 """
 
 [[nodes]]
@@ -327,7 +332,7 @@ note = "우리 PERSONA-API 를 기다린다 — 이 그래프에서 **우리가 
 
 [[nodes]]
 id = "BACKEND-AI-AUTH"
-ticket = ""
+ticket = "TRIP-856"
 title = "백엔드→AI 호출에 서비스 토큰 붙이기 (역방향 TRIP-393)"
 status = "todo"
 migration = false
@@ -341,7 +346,7 @@ note = """
 `ScheduleAgentConfiguration.client()` 는 Authorization 헤더를 달지 않는다(회고 클라이언트도 동일).
 `ai-backend-alternatives-연동-설계.md` §5 전제 2 가 범위 밖으로 명시하며 별건으로 끊자고 제안한 것.
 붙일 때 fail-closed 로 가면 토큰 미설정 환경에서 generate 까지 죽는다 — 전환 순서 설계가 본체다.
-SECURITY 계열.
+SECURITY 계열. 2026-09-14 TRIP-856 으로 티켓화 — 기본안은 로컬 경고+진행, 배포 프로파일만 강제.
 """
 
 [[nodes]]
@@ -447,7 +452,7 @@ note = """
 
 [[nodes]]
 id = "TRIP-361-CONTRACT"
-ticket = ""
+ticket = "TRIP-859"
 title = "목적지 계약을 코드로 전환 — 동명이지역 임의 선택 해소 (TRIP-361 후속)"
 status = "todo"
 migration = false
@@ -493,7 +498,7 @@ HttpScheduleAgentAdapter 는 **넷**을 부른다(explanations 포함).
 id = "AI-ALTERNATIVES"
 ticket = ""
 title = "AI 가 Plan-B 전용 경로(alternatives)를 열었다 — 우리는 generate 로 우회 중"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/itinerary-recalculation",
@@ -512,6 +517,11 @@ AlternativeSchema{label, poi_ids, rationale} + pool_size·empty_reason·fallback
 LLM 랭킹까지 확인됐다(TRIP-463 노드 참조). 남은 것은 이 노드의 원래 질문 하나 — **재계획을**
 generate 우회에서 alternatives 로 갈아탈 가치가 있는가. 슬롯 후보 배선(와이어·매퍼·INV-1 게이트)을
 재사용할 수 있어 착수 비용은 내려갔지만, 교체 회귀 범위가 넓다는 판단은 그대로다.
+
+**종결(2026-09-14)**: 질문이 해소됐다 — 답은 "alternatives 로 갈아타지 않는다"도 "generate 잔류"도
+아닌 제3안이다. **전용 재계획 경계**(`/ai/v1/itinerary/replan`)가 계약 합의문으로 확정됐고
+(`ai-backend-replan-연동-설계.md`), 조립 절반은 #514 로 이미 들어갔다. 잇는 노드는 REPLAN-BOUNDARY
+(TRIP-854)다. 이 노드는 질문 노드였으므로 결정으로 닫는다.
 """
 
 [[nodes]]
@@ -622,12 +632,11 @@ note = """
 
 [[nodes]]
 id = "PUSH-ANDROID-CHANNEL"
-ticket = ""
+ticket = "TRIP-860"
 title = "안드로이드 알림 채널 — 프론트가 채널을 만들어야 긴급도 3단이 닿는다"
 status = "todo"
 migration = false
 touches = [
-  "frontend/src/shared/push",
   "backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/out/push/ExpoPushAdapter.kt",
 ]
 note = """
@@ -637,7 +646,10 @@ note = """
 
 그래서 안드로이드는 현재 priority 2단(high vs normal)만 닿는다. ACTIVE·PASSIVE 가 같은 값이다.
 
-FE 가 채널을 만들면 백엔드는 매핑 한 줄과 테스트 수정으로 끝난다.
+2026-09-14 양쪽 티켓화 — FE 절반(권한 요청·토큰 등록·채널 생성)은 TRIP-835(FE-PUSH-WIRING 노드),
+이 노드는 BE 절반(TRIP-860)만 남는다. touches 에서 frontend 경로를 뺐다.
+코드는 매핑 한 줄인데 **롤아웃이 본체다** — 구버전 앱 기기에 새 channelId 를 실으면 그 기기에서
+알림이 사라진다. FE 배포 침투 후 켜거나 앱 버전 분기.
 """
 
 [[nodes]]
@@ -667,6 +679,9 @@ note = """
 
 권고: **관측 후 결정.** 푸시 로그로 야간 발송이 실제로 얼마나 있는지 센 뒤 정한다 —
 지금 정하면 근거가 관측이 아니라 추측이다. 정본도 O-U6-2 에서 같은 판단을 했다.
+
+갱신(2026-09-14): 그 "관측"이 티켓이 됐다 — TRIP-843 이 선행이다(티켓 원문: "야간 조용시간·상한
+조정의 선행"). 관측이 깔리고 푸시가 실제로 나가기 시작하면 이 결정은 추측 없이 닫을 수 있다.
 """
 
 [[nodes]]
@@ -692,3 +707,260 @@ refresh_session 은 즉시 폐기라 예약 파기가 아니고, deletion_schedu
 곁가지 확인: BR-U6-27 의 "내보내기 엔드포인트 없음(G-U6-3)"은 낡았다 — /me/export 실재.
 정본 각주 정정은 별건.
 """
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 실사용 준비 일괄(2026-09-12~14 발행 티켓) — 정본·코드 대조에서 나온 구멍들.
+# 공통 성격: 전부 기능 리뷰·테스트를 통과한 상태에서 남았다. 기능이 아니라
+# 정본과의 차이(NFR 미구현·낡은 전제·미뤄둔 파기)를 본 것이 유일한 검출 경로였다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "TRIP-834"
+ticket = "TRIP-834"
+title = "푸시 실 왕복 1회 — 켜 본 적이 없어서 발송기가 도는지 아무도 모른다"
+status = "todo"
+migration = false
+touches = [
+  "docker-compose.yml",
+]
+note = """
+코드 작업이 아니라 검증 작업이다 — mode=expo 로 켜고 실기기 1대에 실제로 알림이 뜨는 것을
+확인하고 실측값을 남긴다. 회고 AI 실왕복(REFLECTION-LIVE-CHECK)이 마감 8s 부족을 드러낸 선례.
+FE 토큰 등록이 미배선(TRIP-835)이라 **수동 토큰 등록으로 진행 가능** — 서버 경로 검증엔 충분하다.
+"""
+
+[[nodes]]
+id = "TRIP-836"
+ticket = "TRIP-836"
+title = "리마인드 문구 AI 채움 — 예약 title/body·채움 서비스·발화 분기 + 재계획 재적재"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application",
+]
+note = "팀 발행 티켓(2026-09-12경). notification application 층을 만진다 — 843·844 와 자원 배타."
+
+[[nodes]]
+id = "TRIP-843"
+ticket = "TRIP-843"
+title = "U6 관측 지표 4종 — 메트릭 0건이라 '관측으로 만족한다'는 근거가 비어 있다"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt",
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application",
+]
+note = """
+OBS-U6-01~04(릴레이 지연·푸시 성패·억제 건수·미읽음 누적)가 정본에 있는데 MeterRegistry 사용처
+0건(2026-09-12 grep). REL-U6-03("침묵 실패 금지는 관측으로 만족")의 근거가 이것 없이는 비어 있다.
+QUIET-HOURS 와 상한값 조정의 선행이기도 하다. 수집 경로(Micrometer OTLP push)는 기존재 — 계측만.
+"""
+
+[[nodes]]
+id = "TRIP-844"
+ticket = "TRIP-844"
+title = "푸시 발송량 소프트 상한 — 값은 NFR 에 이미 있는데 로직이 없다"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application/PushDispatchService.kt",
+]
+note = """
+O-U6-2("값이 없다")는 낡았다 — NFR COST-U6-01 이 계정당 시간 10·일 50 으로 이미 확정.
+미결 표가 NFR 보다 먼저 쓰여 갱신이 안 된 것. **머지 후 미결 표를 종결로 정정할 것.**
+초과분은 푸시만 생략, 인앱함엔 남는다(COST-U6-02). 843 과 같은 파일을 만진다.
+"""
+
+[[nodes]]
+id = "TRIP-845"
+ticket = "TRIP-845"
+title = "릴레이 재시도 백오프 없음 + 폴링 주기 정본 드리프트(문서 5s/코드 2s)"
+status = "todo"
+migration = true
+touches = [
+  "backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt",
+  "backend/app/src/main/resources/db/migration",
+]
+note = """
+REL-U6-01 은 지수 백오프인데 코드는 실패 후 다음 폴링(2s)에 즉시 재집기 — 죽은 상대를 20초에
+10번 때리고 포기한다. 기본안은 next_attempt_at 컬럼(마이그레이션). 843 과 OutboxRelay 를 다툰다.
+"""
+
+[[nodes]]
+id = "TRIP-846"
+ticket = "TRIP-846"
+title = "위치 동의 철회해도 이미 저장된 EXIF 좌표가 남는다"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/application/LocationConsentService.kt",
+  "backend/modules/archive/src/main/kotlin/com/trippilot/archive/application/VisitRecordService.kt",
+]
+note = """
+파기(INV-L4)가 scope=gps_track 사실 기록만 하고 끝난다 — U1 시점엔 지울 데이터가 없어 옳았는데
+U5 가 exif_lat/lng 를 만들며 파기 범위가 갱신되지 않았다. 게이트는 잘 돌아서 더 안 보였다.
+모듈 경계상 철회 이벤트 → archive 구독이 기본안(아웃박스 기존재). **857 과 같은 경계 결정을
+공유한다 — 같은 사람이 잡는 것이 싸다.**
+"""
+
+[[nodes]]
+id = "TRIP-847"
+ticket = "TRIP-847"
+title = "약관 본문 6종 전부 플레이스홀더 — GPS_RECORDING 에 사진 EXIF 명시 포함"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/main/resources/db/migration/R__seed_reference_data.sql",
+]
+note = """
+O-U5-8(EXIF 를 GPS 동의로 게이팅하는 것이 목적 범위에 맞는가)을 따지러 문구를 찾았더니 문구가
+없었다 — 질문이 성립하지 않았다. 고지 문구에 사진 EXIF 를 명시하면 코드 무변경으로 해소.
+**아직 사용자가 없는 지금이 재동의 없이 고칠 수 있는 유일한 시점.** 나머지 5종의 소유(법무 vs 팀)는
+멘토 확인 대기(2026-09-12 안건).
+"""
+
+[[nodes]]
+id = "TRIP-848"
+ticket = "TRIP-848"
+title = "환각 금지(BR-U5-31)가 규칙으로만 있다 — AI 회고 카드 장소를 방문 실적과 대조"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/application/ReflectionService.kt",
+]
+note = """
+코덱은 cover.title·JSON 형식만 본다(의도 — 카드 내부 미모델링, DEC-U5-14). mode=rule 인 지금은
+구멍이 아니지만 http 로 켜는 순간 안 간 장소가 장면에 실려도 아무도 못 잡는다. 장소명만 방문
+목록과 대조, 불일치 시 규칙 카드 강등 + 관측. **회고 AI 를 켜기 전에 들어가야 한다** — 판정
+위치는 aiCardOrNull(사용자 수정본은 검사받지 않아야 하므로 코덱이 아니다).
+"""
+
+[[nodes]]
+id = "TRIP-849"
+ticket = "TRIP-849"
+title = "날씨 실어댑터(KmaWeatherAdapter) — Plan-B 트리거가 가짜 날씨로 돌고 있다"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/weather-context",
+  "backend/app/src/main/resources/application.yml",
+]
+note = """
+어댑터가 Fake 하나뿐이고 matchIfMissing=true 라 실사용 기본도 가짜다 — 날씨 트리거의 근거가
+격자 키 해시값이다. 모드 스위치 6종 중 유일하게 **켤 실물이 없는** 항목. 공공데이터포털 키 발급
+(외부·시간 소요)을 먼저 걸어 둘 것. 선례는 KakaoRegionGeocodeAdapter(모드 조건+Announcer+기동 차단).
+850 과 application.yml 을 다툰다.
+"""
+
+[[nodes]]
+id = "TRIP-850"
+ticket = "TRIP-850"
+title = "실사용 모드 전환 — 스위치 6종이 전부 가짜/꺼짐 기본값, 환경별 값이 아무 데도 없다"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/main/resources/application.yml",
+  "docker-compose.yml",
+]
+note = """
+환경별 값 표 + 키 발급 상태 목록 + 기동 차단 조합 문서화. 숙소 stub→db 전환은 전제가 없어
+이 티켓에서 바로 한다(정본 시드 12,782곳 기존재). 지오코딩은 급하지 않다(2026-09-12 정정 —
+TRIP-360 이후 차단이 아니라 안내 문구 문제). 켜기 자체의 전제는 각 티켓이 진다(849·848·834 등).
+"""
+
+[[nodes]]
+id = "REPLAN-BOUNDARY"
+ticket = "TRIP-854"
+title = "재계획 전용 경계 개통 — 어댑터 전환·계약 게이트 등록·마감 25s (B-1잔여·B-3·B-4·B-5)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ReplanFacadeService.kt",
+  "backend/modules/itinerary-generation/src/test/kotlin/com/trippilot/itinerarygeneration/contract/AiBoundaryOpenApiTest.kt",
+]
+note = """
+계약 합의문 = ai-backend-replan-연동-설계.md. 조립 절반은 #514 완료(ReplanInput 10종 — 이제
+NEUTRAL_PREFERENCES 로 덮을 이유가 조립엔 없다). 남은 것: 어댑터를 generate 재사용에서 전용
+경로로, REPLAN_PATH 를 CALLED_PATHS 에(안 넣으면 계약 게이트가 이 경로를 안 본다 — B-3),
+마감 25s(B-4), totalDistanceKm(B-5). **양쪽 동시** — 선개통은 alternatives 미사용 경계 전력.
+"""
+
+[[nodes]]
+id = "REPLAN-VOCAB"
+ticket = "TRIP-855"
+title = "FE↔AI 재계획 어휘 번역표 + slot_candidates reason 하드코딩 해제 (B-2·B-6)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
+]
+note = """
+번역은 어댑터 한 곳(설계 §3). 같은 번역표를 쓰는 별건 — slot_candidates 의 reason="none"
+하드코딩(B-6)도 여기서 해제한다. REPLAN-BOUNDARY 와 같은 파일을 다툰다 — 먼저 손댄 쪽이 이긴다.
+"""
+
+[[nodes]]
+id = "TRIP-857"
+ticket = "TRIP-857"
+title = "사진 EXIF 좌표 저장을 위치 법정 로그(COLLECTION)에 남긴다"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/archive/src/main/kotlin/com/trippilot/archive/application/VisitRecordService.kt",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/application/LocationConsentService.kt",
+]
+note = """
+스키마(V1.3)에 COLLECTION 이 정의돼 있는데 위치를 실제로 보관하는 archive 가 법정 로그를 한 번도
+안 부른다(2026-09-12 grep 0건). 좌표가 실제 저장될 때만 남긴다 — 동의 없어 버린 경우는 수집이
+아니다. 원시 좌표 미포함(기존 규약). **846 과 같은 경계 결정(auth↔archive 통로) 공유.**
+"""
+
+# ── 외부 짝 ──────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "FE-PUSH-WIRING"
+ticket = "TRIP-835"
+title = "[FE] 푸시 수신 배선 3건 — 권한 요청·토큰 등록 호출·안드로이드 채널"
+status = "external"
+owner = "fe"
+migration = false
+touches = []
+note = """
+registerPushToken() 은 구현·테스트까지 있는데 앱 호출부 0건, requestPermissionsAsync 0건,
+setNotificationChannelAsync 0건(2026-09-11 실측). FE 규칙 문서도 "현 소비자 0"을 명시한다.
+이것 없이는 서버가 푸시를 켜도 보낼 대상이 없다 — TRIP-834 는 수동 등록으로 우회한다.
+"""
+
+[[nodes]]
+id = "AI-REPLAN"
+ticket = ""
+title = "[AI] 재계획 전용 경계 — fully_booked·지시어 사전·번역 워커·라우트 (A-1~A-5)"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = "계약 합의문(ai-backend-replan-연동-설계.md §7 AI 측 표). 양쪽이 각자 만들고 LIVE_AI=1 왕복으로 만난다."
+
+# ── 간선(2026-09-14 추가분) — 티켓·설계 원문으로 확인한 것만 ──────────────────
+
+[[edges]]
+from = "AI-REPLAN"
+to = "REPLAN-BOUNDARY"
+kind = "계약선행"
+verified = false
+reason = "설계 §7 「전환 절차: 양쪽 동시」— AI 측 라우트(A-4) 없이는 LIVE_AI 왕복이 성립하지 않는다. 어댑터 전환 전까지의 B-4·B-5 는 먼저 갈 수 있다."
+
+[[edges]]
+from = "FE-PUSH-WIRING"
+to = "PUSH-ANDROID-CHANNEL"
+kind = "외부선행"
+verified = false
+reason = "TRIP-860 원문 「선행 — TRIP-835」: 채널이 기기에 생기기 전에 channelId 를 실으면 알림이 표시되지 않는다."
+
+[[edges]]
+from = "TRIP-843"
+to = "QUIET-HOURS"
+kind = "관측선행"
+verified = false
+reason = "TRIP-843 원문 「야간 조용시간·상한 조정이 '관측 후 결정'으로 미뤄져 있다 — 이 티켓이 그 둘의 선행」. 끊으면 빌드가 깨지는 종류가 아니라 결정 근거가 사라지는 종류다."
