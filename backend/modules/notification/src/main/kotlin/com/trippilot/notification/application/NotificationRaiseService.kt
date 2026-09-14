@@ -30,6 +30,7 @@ class NotificationRaiseService(
     private val toggles: NotificationToggleService,
     private val pushes: PushDispatchService,
     private val trips: TripOwnerFacade,
+    private val metrics: NotificationMetrics,
     private val clock: Clock,
 ) {
     /**
@@ -49,6 +50,7 @@ class NotificationRaiseService(
     ) {
         if (!toggles.allowsInApp(accountId, kind)) {
             log.debug("인앱 수신이 꺼진 종류라 적재하지 않습니다. kind={}", kind)
+            metrics.suppressed(SuppressReason.IN_APP_OFF)
             return
         }
         val notification = Notification.raise(
@@ -66,6 +68,7 @@ class NotificationRaiseService(
         // UNIQUE 가 막아 준 중복이 푸시 경로로 새어 나가는 자리다.
         if (!notifications.appendIfAbsent(notification)) {
             log.debug("이미 적재된 사건입니다(재배달). eventId={}", sourceEventId)
+            metrics.suppressed(SuppressReason.DUPLICATE)
             return
         }
         pushes.dispatch(notification)

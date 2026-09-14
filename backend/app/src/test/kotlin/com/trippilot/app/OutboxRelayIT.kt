@@ -72,6 +72,8 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
         override val aggregateId = note
     }
 
+    @Autowired lateinit var registry: io.micrometer.core.instrument.MeterRegistry
+
     @AfterEach
     fun cleanUp() {
         // 싱글톤 컨테이너라 남기면 다른 IT 의 릴레이가 이 행을 집는다.
@@ -202,6 +204,21 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
             "SELECT count(*) FROM outbox_event WHERE published_at IS NULL AND attempts >= 10 AND aggregate_id = '포기'",
             Int::class.java,
         )!! shouldBe 1
+    }
+
+    /**
+     * **릴레이 지연 계측이 배선돼 있는가**(OBS-U6-01). 이 지표가 PERF-U6-01 목표 대조의 유일한 근거다 —
+     * 계측을 지워도 기능은 멀쩡히 돌기 때문에 여기서 잠그지 않으면 조용히 0 으로 남는다.
+     */
+    @Test
+    fun `배달에 성공하면 적재부터 배달까지의 지연이 기록된다`() {
+        val before = registry.find("trippilot.outbox.relay.latency").timer()?.count() ?: 0L
+        tx.execute { publisher.publish(Probe("지연")) }
+
+        relay.relay()
+
+        val after = registry.find("trippilot.outbox.relay.latency").timer()!!.count()
+        (after - before) shouldBe 1L
     }
 
     /** 백오프를 앞당겨 "시간이 지났다"를 만든다 — 실 시간을 기다리지 않기 위해. */

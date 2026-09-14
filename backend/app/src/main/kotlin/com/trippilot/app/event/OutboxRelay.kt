@@ -2,12 +2,14 @@ package com.trippilot.app.event
 
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.core.event.OutboxSubscriber
+import io.micrometer.core.instrument.MeterRegistry
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.sql.ResultSet
+import java.util.concurrent.TimeUnit
 import java.util.UUID
 
 /**
@@ -33,6 +35,7 @@ import java.util.UUID
 @Component
 class OutboxRelay(
     private val jdbc: JdbcTemplate,
+    private val registry: MeterRegistry,
     subscribers: List<OutboxSubscriber>,
 ) {
     /** 타입당 여럿일 수 있다 — 한 이벤트를 여러 소비자가 본다. */
@@ -73,8 +76,16 @@ class OutboxRelay(
                 dropped++
                 return@forEach
             }
-            runCatching { targets.forEach { it.handle(envelope) } }
-                .onSuccess { markPublished(envelope.eventId) }
+            runCatching { targets.forEach { it.handle(envelope) }; markPublished(envelope.eventId) }
+                .onSuccess { seconds ->
+                    // OBS-U6-01 — 적재(occurred_at)에서 배달까지. **구독자 없어 닫은 건은 빼고**
+                    // 실제로 배달된 것만 잰다. 그쪽을 섞으면 즉시 닫히는 값이 p95 를 끌어내려
+                    // "빠르다"는 착시가 생긴다.
+                    seconds?.let {
+                        // Timer 는 정수 단위만 받는다 — 초 소수부를 살리려면 밀리초로 올려 준다.
+                        registry.timer(RELAY_LATENCY).record((it * 1000).toLong(), TimeUnit.MILLISECONDS)
+                    }
+                }
                 .onFailure { e ->
                     val attempts = bumpAttempts(envelope.eventId)
                     // 상한에 닿으면 조용히 사라지지 않게 올린다 — dead-letter 테이블 없이 조회로 찾는다.
@@ -89,8 +100,21 @@ class OutboxRelay(
         if (dropped > 0) log.info("구독자 없는 이벤트 {}건을 닫았습니다.", dropped)
     }
 
-    private fun markPublished(eventId: UUID) =
-        jdbc.update("UPDATE outbox_event SET published_at = now() WHERE event_id = ?", eventId)
+    /**
+     * 발행으로 표시하고 **적재→배달 지연(초)** 을 돌려준다(OBS-U6-01).
+     *
+     * 지연을 DB 가 계산하는 이유: 앱 시계로 `now() - occurred_at` 을 하면 **두 시계의 차이가 그대로
+     * 지표에 섞인다.** 어긋난 방향에 따라 음수가 나오는데 Micrometer 는 음수를 **조용히 버려서**,
+     * 지표가 비는 것을 아무도 눈치채지 못한다. 같은 UPDATE 안에서 같은 시계로 재면 그 문제가 없다.
+     */
+    private fun markPublished(eventId: UUID): Double? = jdbc.queryForObject(
+        """
+        UPDATE outbox_event SET published_at = now()
+         WHERE event_id = ?
+        RETURNING EXTRACT(EPOCH FROM (now() - occurred_at))
+        """.trimIndent(),
+        Double::class.java, eventId,
+    )
 
     /**
      * 시도 횟수를 올리고 **다음 시도 시각을 뒤로 민다**(REL-U6-01 지수 백오프). 증가된 값을 돌려준다 —
@@ -146,5 +170,8 @@ class OutboxRelay(
          * 이 상한에서 10회까지의 총 재시도 창은 약 13분이다(종전엔 20초였다 — 재시도가 이름만 있었다).
          */
         private const val BACKOFF_MAX_SEC = 300.0
+
+        /** 릴레이 지연(OBS-U6-01) — PERF-U6-01 목표 대조용. */
+        private const val RELAY_LATENCY = "trippilot.outbox.relay.latency"
     }
 }

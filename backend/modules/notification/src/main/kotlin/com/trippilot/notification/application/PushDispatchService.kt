@@ -48,10 +48,22 @@ class PushDispatchService(
     private val notifications: NotificationRepository,
     private val toggles: NotificationToggleService,
     private val push: PushPort,
+    private val metrics: NotificationMetrics,
     private val clock: Clock,
 ) {
+    /**
+     * 발송 결과를 **한 자리에서** 센다(OBS-U6-02). 반환 지점이 다섯이라 각 자리에서 세면 하나를
+     * 빠뜨려도 드러나지 않는다 — 빠뜨린 경로만 지표에서 조용히 사라진다.
+     */
     @Transactional
     fun dispatch(notification: Notification): PushOutcome {
+        var reason: String? = null
+        val outcome = doDispatch(notification) { reason = it }
+        metrics.pushDispatched(outcome, reason)
+        return outcome
+    }
+
+    private inline fun doDispatch(notification: Notification, onReason: (String) -> Unit): PushOutcome {
         // 종류 토글 × OS 권한 = 채널 판정. `SYSTEM` 은 토글을 타지 않는다(INV-U6-03).
         if (!toggles.allowsPush(notification.accountId, notification.kind)) return PushOutcome.MUTED
         // 권한이 없는 기기는 쏴도 닿지 않는다 — 시도 자체를 하지 않는다(레이트리밋을 아낀다).
@@ -65,6 +77,7 @@ class PushDispatchService(
             .getOrElse { e ->
                 // 발송기 자체가 터진 경우(네트워크·설정). 알림은 이미 알림함에 있다.
                 record(notification.notificationId, sentAt = null, reason = "PUSH_ERROR: ${e.javaClass.simpleName}")
+                onReason("PUSH_ERROR")
                 log.warn("푸시 발송에 실패했습니다. notificationId={} 원인={}", notification.notificationId, e.toString())
                 return PushOutcome.FAILED
             }
@@ -80,7 +93,9 @@ class PushDispatchService(
             PushOutcome.SENT
         } else {
             // 전부 실패했어도 인앱함 행은 남아 있다 — 사용자는 앱을 열면 본다(BR-U6-38).
-            record(notification.notificationId, sentAt = null, reason = reasonOf(receipts))
+            val failure = reasonOf(receipts)
+            record(notification.notificationId, sentAt = null, reason = failure)
+            onReason(failure)
             PushOutcome.FAILED
         }
     }

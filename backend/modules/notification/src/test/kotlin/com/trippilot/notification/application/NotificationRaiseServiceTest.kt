@@ -39,6 +39,9 @@ class NotificationRaiseServiceTest : StringSpec({
     /** 같은 `sourceEventId` 는 한 번만 삽입한다 — DB UNIQUE 를 흉내 낸다(보증은 IT 가 한다). */
     class Notifications : NotificationRepository {
         val stored = mutableListOf<Notification>()
+
+        /** 관측 전용(OBS-U6-04). */
+        override fun countUnread(): Long = stored.count { it.readAt == null }.toLong()
         override fun appendIfAbsent(notification: Notification): Boolean {
             if (notification.sourceEventId != null && stored.any { it.sourceEventId == notification.sourceEventId }) return false
             stored += notification
@@ -80,12 +83,12 @@ class NotificationRaiseServiceTest : StringSpec({
             OwnedTripPeriod(acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12"))
     }
 
-    fun serviceOf(notifications: Notifications, sender: Sender): NotificationRaiseService {
+    fun serviceOf(notifications: Notifications, sender: Sender, metrics: NotificationMetrics? = null): NotificationRaiseService {
         val toggleService = NotificationToggleService(toggles, clock)
         return NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, sender, clock),
-            trips, clock,
+            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), clock),
+            trips, metrics ?: testMetrics(notifications), clock,
         )
     }
 
@@ -132,8 +135,8 @@ class NotificationRaiseServiceTest : StringSpec({
         val toggleService = NotificationToggleService(off, clock)
         val svc = NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, sender, clock),
-            trips, clock,
+            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), clock),
+            trips, testMetrics(notifications), clock,
         )
 
         raise(svc, UUID.randomUUID())
@@ -150,10 +153,25 @@ class NotificationRaiseServiceTest : StringSpec({
         val toggleService = NotificationToggleService(toggles, clock)
         val svc = NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, Sender(), clock),
-            deleted, clock,
+            PushDispatchService(Tokens(), notifications, toggleService, Sender(), testMetrics(notifications), clock),
+            deleted, testMetrics(notifications), clock,
         )
 
         svc.ownerOfTrip(tripId) shouldBe null
+    }
+    /**
+     * **억제 계측이 배선돼 있는가**(OBS-U6-03). 억제는 조용히 일어나는 동작이라 — 로그만 남고
+     * 사용자에게도 안 보인다 — 지표가 빠지면 "왜 푸시가 안 왔나"에 답할 근거가 통째로 없다.
+     */
+    "중복 억제가 지표로 흘러간다 — 조용한 동작일수록 세어 둬야 한다" {
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        val notifications = Notifications()
+        val svc = serviceOf(notifications, Sender(), NotificationMetrics(registry, notifications))
+        val eventId = UUID.randomUUID()
+
+        raise(svc, eventId)
+        raise(svc, eventId) // 같은 사건 재배달 — 여기서 억제된다
+
+        registry.counter(NotificationMetrics.SUPPRESSED, "reason", "DUPLICATE").count() shouldBe 1.0
     }
 })

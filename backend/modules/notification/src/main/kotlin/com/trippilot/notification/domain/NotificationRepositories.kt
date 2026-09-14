@@ -16,6 +16,12 @@ interface NotificationRepository {
     /** 최신순. [unreadOnly] 면 미읽음만. */
     fun findByAccount(accountId: UUID, unreadOnly: Boolean, limit: Int): List<Notification>
 
+    /**
+     * **전 계정** 미읽음 누적(OBS-U6-04). 계정별이 아닌 이유: 이 값은 사용자에게 보이는 수가 아니라
+     * "소비가 따라오고 있는가"를 재는 운영 지표다 — 계정별로 쪼개면 태그 카디널리티만 폭발한다.
+     */
+    fun countUnread(): Long
+
     /** 이미 읽었거나 남의 알림이면 false. */
     fun markRead(accountId: UUID, notificationId: UUID, at: Instant): Boolean
 

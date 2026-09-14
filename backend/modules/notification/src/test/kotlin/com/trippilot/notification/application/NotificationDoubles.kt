@@ -19,6 +19,9 @@ import java.util.UUID
 internal class FakeNotifications : NotificationRepository {
     val stored = mutableListOf<Notification>()
 
+    /** 관측 전용 집계(OBS-U6-04) — 대역에서는 읽음 표시가 안 된 것만 센다. */
+    override fun countUnread(): Long = stored.count { it.readAt == null }.toLong()
+
     override fun appendIfAbsent(notification: Notification): Boolean {
         // UNIQUE 는 null 을 서로 다르게 본다 — 원천 사건이 없는 알림은 언제나 들어간다.
         if (notification.sourceEventId != null && stored.any { it.sourceEventId == notification.sourceEventId }) return false
@@ -69,8 +72,16 @@ internal fun noPush(clock: java.time.Clock, notifications: NotificationRepositor
             override fun send(tokens: List<String>, message: com.trippilot.notification.domain.PushMessage) =
                 emptyList<com.trippilot.notification.domain.PushReceipt>()
         },
+        metrics = testMetrics(notifications),
         clock = clock,
     )
+
+/**
+ * 계측 대역 — 지표는 **행동에 영향을 주지 않아야** 하므로 대부분의 테스트는 값을 보지 않는다.
+ * 지표 자체를 재는 테스트는 자기 레지스트리를 따로 만들어 들여다본다(`NotificationMetricsTest`).
+ */
+internal fun testMetrics(notifications: NotificationRepository = FakeNotifications()) =
+    NotificationMetrics(io.micrometer.core.instrument.simple.SimpleMeterRegistry(), notifications)
 
 internal class FakeSchedules : NotificationScheduleRepository {
     val stored = mutableListOf<NotificationSchedule>()
