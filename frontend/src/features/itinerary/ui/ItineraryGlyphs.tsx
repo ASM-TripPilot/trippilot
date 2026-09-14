@@ -813,18 +813,3 @@ export function ManualGlyph({ size = 24, testID }: GlyphProps) {
     </Svg>
   );
 }
-
-// TRIP-809 재수출 shim — 카테고리 플레이스홀더 아이콘 8종은 entities/itinerary-slot/ui/SlotGlyphs 로
-// 바이트 이관됐다(TRIP-465 출생, 색 상수 INFO·SUCCESS·PRESENCE_BLUE 도 함께 이관돼 이 파일에선 제거).
-// 옛 경로(`./ItineraryGlyphs`)를 무는 SlotPhotoPlaceholder(entities shim 경유)·ConceptPickerScreen
-// (범위 밖)이 그대로 green 이 되게 8종을 재수출한다(나머지 19 글리프는 이 파일에 잔존). 정리는 TRIP-810.
-export {
-  CategoryPinGlyph,
-  CategoryForkKnifeGlyph,
-  CategoryCupGlyph,
-  CategoryNightGlyph,
-  CategoryTreeGlyph,
-  CategoryShoppingBagGlyph,
-  CategoryBuildingGlyph,
-  CategoryImageGlyph,
-} from '@/entities/itinerary-slot/ui/SlotGlyphs';

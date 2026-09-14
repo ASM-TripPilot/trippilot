@@ -14,12 +14,6 @@ import type {
  * 무해하지만 UTC-x(CI)에선 하루가 밀린다.
  */
 
-// TRIP-808 재수출 shim — formatNightsLabel·formatConfirmedDateRange 본체는 entities/trip/lib 로 바이트
-// 이관됐다(807 formatPrice 선례). 옛 경로(`@/features/itinerary/model/planState`)를 무는 무수정 소비처·
-// 테스트(planState.test·TripCardContainer·(tabs)/index)가 그대로 green 이 되게 한 줄씩만 남긴다.
-export { formatNightsLabel } from '@/entities/trip/lib/formatNights';
-export { formatConfirmedDateRange } from '@/entities/trip/lib/formatTripPeriod';
-
 export type PlanState =
   | { kind: 'loading' }
   | { kind: 'notFound' }

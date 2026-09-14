@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { ReplanSlotVM } from './ReplanSlotRow';
+import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { ReplanDraftScreen } from './ReplanDraftScreen';
 
 /**

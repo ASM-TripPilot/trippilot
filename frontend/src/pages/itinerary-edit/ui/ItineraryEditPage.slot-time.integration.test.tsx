@@ -10,7 +10,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { useItineraryEditStore } from '@/features/itinerary/model/itineraryEditStore';
-import { buildSlotKey } from '@/features/itinerary/model/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import type {
   EditItineraryRequest,
   Itinerary,

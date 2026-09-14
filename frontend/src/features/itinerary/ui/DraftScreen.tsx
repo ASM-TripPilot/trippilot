@@ -15,7 +15,7 @@ import type {
   FallbackNotice,
   GenerationGaugeCell,
 } from '../model/draftView';
-import { buildSlotKey } from '../model/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { timeBandLabel } from '../model/timeBandLabel';
 import {
   AlertCircleGlyph,

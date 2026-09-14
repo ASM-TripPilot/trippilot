@@ -82,27 +82,31 @@ const ROWS: Row[] = [
   },
   {
     file: 'features/trip/model/baseScreen.ts',
-    must: ['@/entities/trip/lib'],
-    mustNot: [
-      'export function formatSectionRange',
-      'export function formatTripRange',
-    ],
-    why: 'formatSectionRange·formatTripRange 이관(shim). unresolvedDaysView·monthDay 는 존치',
+    // TRIP-810 재조준 — formatSectionRange·formatTripRange 재수출 줄 제거. 제거 후 baseScreen 은
+    // entities 를 참조하지 않으므로 긍정을 실로직(unresolvedDaysView)으로 교체. 재수출이 되살아나면 red.
+    must: ['unresolvedDaysView'],
+    mustNot: ['formatSectionRange', 'formatTripRange'],
+    why: 'formatSectionRange·formatTripRange 재수출 줄 제거(unresolvedDaysView·monthDay 는 존치) · 02a ★6',
   },
   {
     file: 'features/itinerary/model/planState.ts',
-    must: ['@/entities/trip/lib'],
+    // TRIP-810 재조준 — formatNightsLabel·formatConfirmedDateRange 재수출 2줄 제거. 제거 후 planState 는
+    // entities 를 참조하지 않으므로 긍정을 실로직(resolvePlanState)으로 교체. 재수출이 되살아나면 red.
+    must: ['resolvePlanState'],
     mustNot: [
-      'export function formatNightsLabel',
-      'export function formatConfirmedDateRange',
+      'export { formatNightsLabel }',
+      'export { formatConfirmedDateRange }',
     ],
-    why: 'formatNightsLabel·formatConfirmedDateRange 이관(shim). resolvePlanState·resolveItineraryDestination 등은 존치',
+    why: 'formatNightsLabel·formatConfirmedDateRange 재수출 2줄 제거(resolvePlanState 등 실로직 존치) · 02a ★6',
   },
   {
     file: 'features/trip/model/tripWizardStep1.ts',
-    must: ['@/entities/trip/lib'],
-    mustNot: ['export function formatDateRange', 'export function dayOfWeek'],
-    why: 'formatDateRange·dayOfWeek 이관(shim). presetRange·deriveEndDate·fromEpochDay(위저드 업무규칙)는 존치 — presetRange 가 이관된 dayOfWeek 를 import 해 씀',
+    // TRIP-810 재조준 — 공개 bare 재수출 `export { dayOfWeek, formatDateRange };` 만 제거. 내부 import 는
+    // 존치(daysUntilSaturday 가 dayOfWeek 를 씀)라 긍정 `@/entities/trip/lib/formatTripPeriod` 생존.
+    // 재수출이 되살아나면 red. (formatDateRange 는 제거 후 미사용이라 implementer 가 import 에서 뺀다.)
+    must: ['@/entities/trip/lib/formatTripPeriod'],
+    mustNot: ['export { dayOfWeek, formatDateRange }'],
+    why: '공개 재수출 `export { dayOfWeek, formatDateRange }` 제거(내부 dayOfWeek import·presetRange 등 존치) · 02a ★6',
   },
   {
     file: 'features/trip/model/tripSummary.ts',

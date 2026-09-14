@@ -6,7 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import type { StayItem, StayPrice } from '@/shared/api/generated/schemas';
-import { formatPrice } from '@/features/stay/model/formatPrice';
+import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { stayKey } from '@/features/stay/model/stayKey';
 import { useStaySearch } from '@/features/stay/model/useStaySearch';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';

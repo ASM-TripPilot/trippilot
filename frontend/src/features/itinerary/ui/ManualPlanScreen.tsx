@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
 
 import { formatDraftDayHeader } from '../model/draftView';
-import { buildSlotKey } from '../model/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { timeBandLabel } from '../model/timeBandLabel';
 import { BackChevronGlyph, PencilGlyph, PlusGlyph } from './ItineraryGlyphs';
 

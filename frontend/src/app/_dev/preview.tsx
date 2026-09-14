@@ -120,7 +120,7 @@ import { ReplanAppliedScreen } from '@/features/planb/ui/ReplanAppliedScreen';
 import { ReplanDraftScreen } from '@/features/planb/ui/ReplanDraftScreen';
 import { ReplanSolvingScreen } from '@/features/planb/ui/ReplanSolvingScreen';
 import { NoAlternativeScreen } from '@/features/planb/ui/NoAlternativeScreen';
-import type { ReplanSlotVM } from '@/features/planb/ui/ReplanSlotRow';
+import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { SlotCandidateSheet } from '@/features/planb/ui/SlotCandidateSheet';
 import { TriggerWatchlistScreen } from '@/features/planb/ui/TriggerWatchlistScreen';
 import { NicknameScreen } from '@/features/onboarding/ui/NicknameScreen';

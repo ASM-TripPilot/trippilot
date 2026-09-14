@@ -124,3 +124,13 @@ describe('🔴 소비처가 entities/stay 를 소비한다(긍정) + 확실한 �
     }
   });
 });
+
+describe('🔴 삭제된 formatPrice shim 은 되살아나지 않는다 (파일 부재)', () => {
+  // TRIP-810 — formatPrice 본체는 807 에 entities/stay/lib 로 이관됐고 옛 자리는 재수출 shim 이었다.
+  // 810 이 그 shim 파일을 삭제한다(소비처·테스트는 @/entities/stay/lib 로 재조준). shim 이 되살아나면 red.
+  it('features/stay/model/formatPrice.ts 는 삭제됐다', () => {
+    expect(
+      fs.existsSync(path.join(ROOT, 'features/stay/model/formatPrice.ts'))
+    ).toBe(false);
+  });
+});

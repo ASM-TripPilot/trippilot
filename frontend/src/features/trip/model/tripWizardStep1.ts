@@ -1,13 +1,7 @@
 import type { CompanionType } from '@/shared/api/generated/schemas';
 
-// TRIP-808 — dayOfWeek·formatDateRange 본체는 entities/trip/lib 로 바이트 이관됐다(807 formatPrice
-// 선례). dayOfWeek 는 아래 daysUntilSaturday(presetRange)가 쓰므로 import 로 끌어와 재수출까지 겸하고,
-// formatDateRange 는 재수출만 한다 — 옛 경로를 무는 무수정 소비처·테스트(tripWizardStep1.test·baseSections)가
-// 그대로 green.
-import {
-  dayOfWeek,
-  formatDateRange,
-} from '@/entities/trip/lib/formatTripPeriod';
+// dayOfWeek 는 아래 daysUntilSaturday(presetRange)가 쓴다 — 본체는 entities/trip/lib 로 이관됐다(TRIP-808).
+import { dayOfWeek } from '@/entities/trip/lib/formatTripPeriod';
 
 /**
  * 위저드 1/2 화면이 쓰는 순수 함수 — 기간 프리셋 → 날짜 범위 계산, 날짜 표시 포맷,
@@ -19,9 +13,6 @@ import {
  * 프리셋 계산 규칙 자체는 정본에 없다(BR-U1-36은 "자동 채우되 수정 가능"만 말한다) — 아래
  * 규칙은 이 칸이 정한 것이고, 게이트①에서 뒤집히면 이 파일의 계산만 바꾸면 된다(02a §2.3).
  */
-
-// 이관된 두 함수를 옛 경로로 계속 내준다(dayOfWeek 는 내부 daysUntilSaturday 도 이 바인딩을 쓴다).
-export { dayOfWeek, formatDateRange };
 
 export type PeriodPresetCode =
   'this-weekend' | 'next-weekend' | '1n2d' | '3n4d';

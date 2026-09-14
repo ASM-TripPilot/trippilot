@@ -36,9 +36,9 @@ frontend/
     app/          # Expo Router 라우트 — 얇은 래퍼만. 화면 구현은 하위 층에서 import
     app-shell/    # src/app 밖의 루트 셸 조립 (SplashGate 등 — docs/structure.md 참조)
     pages/        # 화면별 배선 — 라우트가 꽂는 컨테이너
-    widgets/      # 여러 화면이 쓰는 화면 조각 (빈 층 — 첫 입주 티켓 대기)
+    widgets/      # 여러 화면이 쓰는 화면 조각 (목록·수 정본: src/widgets 디렉토리 · docs/structure.generated.md)
     features/     # 도메인 기능 (목록·수 정본: src/features 디렉토리 · docs/structure.generated.md)
-    entities/     # 여러 feature가 쓰는 도메인 단위 (빈 층 — 첫 입주 티켓 대기)
+    entities/     # 여러 feature가 쓰는 도메인 단위 (목록·수 정본: src/entities 디렉토리 · docs/structure.generated.md)
     shared/       # 도메인 무관 공용 (세그먼트 정본: docs/structure.generated.md)
       api/        # 서버 클라이언트 단일 계층 — orval 생성물 + axios 인스턴스(토큰 회전)
                   # + 부트스트랩 + 모든 API 실패를 표준 오류 타입으로 정규화
@@ -60,7 +60,7 @@ frontend/
 - **6층 방향**: `app → pages → widgets → features → entities → shared`. **하위 층은 상위 층을 모른다** — 각 층은 자기보다 아래 층만 import한다. 즉 `shared`는 아무 상위 층도 못 보고, `entities`는 `shared`만, `features`는 `entities·shared`만(다른 feature는 못 봄), `widgets`는 `features` 이하, `pages`는 `widgets` 이하를 참조한다. `eslint.config.js`의 `import/no-restricted-paths` 층 zone이 강제하고, 13개 feature zone은 `src/features` 디렉토리를 읽어 생성한다(새 feature 자동 편입).
 - **같은 층 형제 슬라이스는 서로 모른다**: 층 방향(위/아래)만이 아니라 **같은 층 안의 형제 슬라이스끼리도** 직접 import하지 못한다 — features뿐 아니라 `pages`·`widgets`·`entities`도 슬라이스마다 격리 zone이 생긴다(`src/<층>` 디렉토리를 읽어 자동 편입). 공용이 생기면 형제에서 꺼내지 말고 더 아래 층으로 승격한다. **entities 교차는 `@x` 폴더로만**: 도메인끼리 꼭 참조해야 하면 제공자가 소비자에게만 내주는 `entities/<제공자>/@x/<소비자>/**` 창구를 통한다(예: place가 itinerary-slot에게 `entities/place/@x/itinerary-slot/`로 내준다). 그 외 형제 직접 import는 금지다.
 - **세그먼트**: 슬라이스(feature·page) 내부는 `ui`(프레젠테이션) / `model`(상태·도메인 타입·업무 규칙) / `lib`(순수 헬퍼·포맷터·어댑터 팩토리) / `config`(상수·라벨·환경값) 넷뿐이다. **`api` 세그먼트는 만들지 않는다** — 서버 통신은 orval 단일 계층 `shared/api`가 전담한다.
-- **배럴(index.ts) 미도입**: 팀 표준은 딥 임포트(`@/features/home/model/homeFixtures`)다. 재수출할 공개 API가 실제로 생겼을 때만 배럴을 만든다.
+- **배럴(index.ts) 미도입**: 팀 표준은 딥 임포트(`@/features/home/model/homeFixtures`)다. 재수출할 공개 API가 실제로 생겼을 때만 배럴을 만든다. 실제로 생긴 예: entities 4슬라이스(place·stay·trip·itinerary-slot)의 `model/index.ts`는 도메인 타입 재수출 창구로 허용되는 유일한 배럴이다 — 여러 파일을 모으는 배럴이 아니라 그 자체가 model 단일 파일(서버 계약 타입·뷰모델·배지 유니온을 한 곳에서 내주는 공개 API). `widgets/itinerary-edit/index.ts`(ui+model 재수출)는 관측 중이다(새 티켓 후보).
 - **적용 시점**: 신규·재작성 파일부터. **빅뱅 이주는 없다**(TRIP-803) — 규칙을 세우되 기존 코드를 소급 이동하지 않는다.
 - **승격 규칙**: 두 곳 이상이 쓰게 된 것을 올린다 — 도메인 카드·타입은 `entities`로, 여러 화면이 쓰는 화면 조각(지도+시트 셸 등)은 `widgets`로, **도메인과 무관한 원시 부품만** `shared`로. (예: 일정 지도 뷰는 itinerary·execution이 함께 쓰므로 `shared/map` 소유.)
 - **전방 `app → features` 제한은 아직 두지 않는다** — 목표 방향은 `app`이 `pages·widgets·shared`만 보는 것이지만, 현재 `app`이 features를 직접 import하는 곳이 많아(라우트·프리뷰) 소급 이동 없이는 켤 수 없다. `pages` 이주가 진행돼 이 참조가 줄어든 뒤 별도 후속 티켓에서 켠다.

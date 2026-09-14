@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import { legDistance } from '@/features/itinerary/model/legDistance';
-import { buildSlotKey } from '@/features/itinerary/model/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
 import {
   CoPickCompleteScreen,

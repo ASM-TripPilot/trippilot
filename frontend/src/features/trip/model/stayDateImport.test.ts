@@ -1,6 +1,6 @@
+import { formatDateRange } from '@/entities/trip/lib/formatTripPeriod';
 import type { SavedStay } from '@/shared/api/generated/schemas';
 
-import { formatDateRange } from './tripWizardStep1';
 import {
   formatStayDateRange,
   resolveStayImport,

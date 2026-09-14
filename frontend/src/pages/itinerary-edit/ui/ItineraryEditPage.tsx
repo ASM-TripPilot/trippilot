@@ -11,7 +11,7 @@ import {
   buildPlanDayTabs,
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
-import { parseSlotKey } from '@/features/itinerary/model/slotKey';
+import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import {
   AlertCircleGlyph,
   InfoCircleGlyph,

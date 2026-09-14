@@ -8,7 +8,7 @@ import type {
 } from '@/shared/api/generated/schemas';
 
 import type { DraftDayTab, DraftView } from '../model/draftView';
-import { buildSlotKey } from '../model/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { DraftScreen } from './DraftScreen';
 
 /**

@@ -12,7 +12,7 @@ import {
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { StayItem } from '@/shared/api/generated/schemas';
-import { formatPrice } from '@/features/stay/model/formatPrice';
+import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { StayDetailPage } from './StayDetailPage';
 
 /**

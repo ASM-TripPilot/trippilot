@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { buildEditItineraryRequest } from '@/features/itinerary/model/buildEditItineraryRequest';
 import { isConfirmLocked } from '@/features/itinerary/model/planState';
-import { parseSlotKey } from '@/features/itinerary/model/slotKey';
+import { parseSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { resolveSlotSwapError } from '@/features/itinerary/model/slotSwapError';
 import { swapSlotPoi } from '@/features/itinerary/model/swapSlotPoi';
 import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';

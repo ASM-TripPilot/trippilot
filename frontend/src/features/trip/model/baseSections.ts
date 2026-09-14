@@ -5,10 +5,10 @@ import type {
   TripDestination,
 } from '@/shared/api/generated/schemas';
 
-// 에포크 일수 → 'YYYY-MM-DD' 역변환 + 요일. 같은 feature(`features/trip/model`)에 이미 있는 순수
-// 정수 산술(`new Date` 미사용, civil_from_days)이라 재구현 대신 재사용한다 — `dayOfWeek`도
-// 같은 파일이 export 하는 순수 요일 계산기다(TRIP-664 `tripSummary`가 이미 재사용).
-import { dayOfWeek, fromEpochDay } from './tripWizardStep1';
+// 에포크 일수 → 'YYYY-MM-DD' 역변환(`fromEpochDay`)은 같은 feature 의 순수 정수 산술(`new Date` 미사용,
+// civil_from_days)이라 재구현 대신 재사용한다. 요일(`dayOfWeek`)은 TRIP-808 로 entities/trip/lib 로 이관됐다.
+import { dayOfWeek } from '@/entities/trip/lib/formatTripPeriod';
+import { fromEpochDay } from './tripWizardStep1';
 
 /**
  * g02 거점 구간 행 — 배정·저장 숙소·여행을 화면이 그릴 행으로 합치는 순수 함수

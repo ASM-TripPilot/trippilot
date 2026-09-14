@@ -13,14 +13,6 @@ import type { DayCoverage } from '@/shared/api/generated/schemas';
  * 비는 것과 진행을 막는 것은 별개다 — 막을 권위는 `Coverage.blocked` 하나다(D16-b · INV-2).
  */
 
-// TRIP-808 재수출 shim — formatSectionRange·formatTripRange 본체는 entities/trip/lib 로 바이트 이관됐다
-// (807 formatPrice 선례). 옛 경로(`@/features/trip/model/baseScreen`)를 무는 무수정 소비처·테스트
-// (baseScreen.test·(tabs)/index)가 그대로 green 이 되게 한 줄만 남긴다. unresolvedDaysView 는 여기 존치.
-export {
-  formatSectionRange,
-  formatTripRange,
-} from '@/entities/trip/lib/formatTripPeriod';
-
 /** 나열 상한(01b D16) — `blockedNotice`가 1줄 고정이라 넘치면 CTA를 밀어낸다. */
 const UNRESOLVED_LIMIT = 2;
 

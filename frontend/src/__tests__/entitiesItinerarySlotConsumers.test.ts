@@ -68,58 +68,33 @@ const ROWS: Row[] = [
     must: ['@/entities/itinerary-slot/ui'],
     why: 'i13 진열대가 ReplanSlotRow 를 entities 에서 소비(import 재작성). 렌더 잠금은 ReplanDraftScreen.test 무수정 green',
   },
-  {
-    file: 'features/itinerary/model/categoryPlaceholder.ts',
-    must: ['@/entities/itinerary-slot/lib'],
-    mustNot: [
-      'export function resolveCategoryPlaceholder',
-      'export interface CategoryPlaceholder',
-    ],
-    why: 'resolveCategoryPlaceholder·CategoryPlaceholder 를 entities/lib 로 바이트 이사(옛 자리 재수출 shim)',
-  },
-  {
-    file: 'features/itinerary/model/slotKey.ts',
-    must: ['@/entities/itinerary-slot/lib'],
-    mustNot: [
-      'export function buildSlotKey',
-      'export function parseSlotKey',
-      'export function buildSlotKeys',
-    ],
-    why: 'slotKey 파일째 entities/lib 로 바이트 이사(전 export, 28 importer 는 shim 으로 무수정). 옛 자리 재수출 shim',
-  },
-  {
-    file: 'features/itinerary/ui/SlotPhotoPlaceholder.tsx',
-    must: ['@/entities/itinerary-slot/ui'],
-    mustNot: ['export function SlotPhotoPlaceholder'],
-    why: 'SlotPhotoPlaceholder 를 entities/ui 로 바이트 이사(옛 자리 재수출 shim). TimelineScreen 이 재작성된 경로로 소비',
-  },
-  {
-    file: 'features/itinerary/ui/PoiSlotCard.tsx',
-    must: ['@/entities/itinerary-slot/ui'],
-    mustNot: ['export function PoiSlotCard'],
-    why: 'PoiSlotCard 를 entities/ui 로 바이트 이사(옛 자리 재수출 shim)',
-  },
-  {
-    file: 'features/planb/ui/ReplanSlotRow.tsx',
-    must: ['@/entities/itinerary-slot/ui', '@/entities/itinerary-slot/model'],
-    mustNot: ['export function ReplanSlotRow', 'export interface ReplanSlotVM'],
-    why: 'ReplanSlotRow 를 entities/ui 로 바이트 이사(VM 타입은 model 로) — 옛 자리는 컴포넌트+타입 재수출 shim. preview.tsx 가 이 shim 으로 ReplanSlotVM 타입을 계속 받아 src/app 무변경(6-b SKIP · 02a ★10)',
-  },
+  // TRIP-810 재조준 — 순수 shim 5(categoryPlaceholder·slotKey·SlotPhotoPlaceholder·PoiSlotCard·
+  // ReplanSlotRow)는 이번 사이클에 **파일째 삭제**된다. 소비처 전환 표(긍정+부정 소스 스캔)에서 빼고
+  // 아래 「삭제된 순수 shim 은 되살아나지 않는다」describe 로 이관한다 — 행을 그냥 지우면 shim 이
+  // 되살아나도 red 가 안 나므로(02a ★5), 파일 부재를 명시 단언한다. TimelineScreen·ReplanDraftScreen 은
+  // 살아있는 소비처(계속 entities 소비)라 여기 잔존.
   {
     file: 'features/itinerary/ui/ItineraryGlyphs.tsx',
-    must: ['@/entities/itinerary-slot/ui/SlotGlyphs'],
-    mustNot: [
-      'export function CategoryPinGlyph',
-      'export function CategoryForkKnifeGlyph',
-      'export function CategoryCupGlyph',
-      'export function CategoryNightGlyph',
-      'export function CategoryTreeGlyph',
-      'export function CategoryShoppingBagGlyph',
-      'export function CategoryBuildingGlyph',
-      'export function CategoryImageGlyph',
-    ],
-    why: '카테고리 글리프 8종을 entities/ui/SlotGlyphs 로 이사 + 옛 자리 8종 재수출 shim(나머지 19 글리프 잔존). ConceptPickerScreen(범위 밖)이 옛 경로로 계속 소비 · 02a ★6',
+    // TRIP-810 재조준 — Category 8종 재수출 shim 을 제거하면(부분 shim, 나머지 19 글리프는 잔존)
+    // ItineraryGlyphs 는 entities/ui/SlotGlyphs 를 더는 참조하지 않는다. 재수출이 되살아나면 red.
+    // 긍정은 비-Category 로컬 글리프(파일 온전·거트 방지). ★ ConceptPickerScreen(범위 밖 prod)은
+    // 이 재수출을 물고 있어(02a ★1) implementer 가 entities/ui/SlotGlyphs 로 재조준해야 tsc green.
+    must: ['export function BackChevronGlyph'],
+    mustNot: ["from '@/entities/itinerary-slot/ui/SlotGlyphs'"],
+    why: '카테고리 글리프 8종 재수출 shim 제거(옛 자리엔 19 로컬 글리프만 잔존) · 02a ★1·★6',
   },
+];
+
+/**
+ * TRIP-810 — 이관 후 순수 shim 5는 파일째 삭제된다. 이 describe 가 "삭제됐고 되살아나지 않는다"를
+ * 잠근다(ROWS 에서 뺀 5행의 이관처, 02a ★5). shim 이 되돌아오면 existsSync 가 true 가 되어 red.
+ */
+const DELETED_PURE_SHIMS = [
+  'features/itinerary/model/categoryPlaceholder.ts',
+  'features/itinerary/model/slotKey.ts',
+  'features/itinerary/ui/SlotPhotoPlaceholder.tsx',
+  'features/itinerary/ui/PoiSlotCard.tsx',
+  'features/planb/ui/ReplanSlotRow.tsx',
 ];
 
 describe('🔴 소비처가 entities/itinerary-slot 를 소비한다(긍정) + 확실한 중복 지문 제거(부정)', () => {
@@ -136,4 +111,13 @@ describe('🔴 소비처가 entities/itinerary-slot 를 소비한다(긍정) + �
       expect(source).not.toContain(marker);
     }
   });
+});
+
+describe('🔴 삭제된 순수 shim 은 되살아나지 않는다 (파일 부재)', () => {
+  it.each(DELETED_PURE_SHIMS)(
+    '%s 는 삭제됐다(재수출 shim 부활 금지)',
+    (rel) => {
+      expect(fs.existsSync(path.join(ROOT, rel))).toBe(false);
+    }
+  );
 });

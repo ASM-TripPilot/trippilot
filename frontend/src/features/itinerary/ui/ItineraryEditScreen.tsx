@@ -11,7 +11,7 @@ import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas'
 
 import { formatDraftDayHeader } from '../model/draftView';
 import type { PlanDayTab } from '../model/planState';
-import { buildSlotKey } from '../model/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
