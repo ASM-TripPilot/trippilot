@@ -393,6 +393,104 @@ class AlternativesResponse(BoundaryModel):
     pool_size: int = Field(ge=0)
 
 
+# ── 재계획 경계 (A-4) ────────────────────────────────────────────────
+# 정본: `backend/docs/design/ai-backend-replan-연동-설계.md` §4·§5.
+# `generate` 재사용을 그만두는 이유 세 가지가 그 문서 §1 에 있다 — RAG 를 안 타고,
+# 취향을 중립으로 덮고, 재계획 의도를 버린다.
+
+
+class ReplanSlotSchema(BoundaryModel):
+    """원 일정 슬롯 1개 — KB-1 컨텍스트이자 후보 풀 합류 대상.
+
+    `VisitSlotDisplaySchema` 를 재사용하지 않는다: 그것은 **AI 산출물의 사영**이고
+    이쪽은 **백엔드가 주는 입력**이다. 모양이 닮아도 방향이 반대라, 한쪽을 고치면
+    다른 쪽이 끌려가는 결합을 만들지 않는다. `placement_reason` 은 산출물 쪽엔 없다.
+    """
+
+    poi_id: str = Field(min_length=1)
+    start_at: dt.time
+    end_at: dt.time
+    is_fixed: bool = False
+    ends_next_day: bool = False
+    placement_reason: str | None = None  # visit_slot.placement_reason
+
+
+class ReplanRequest(BoundaryModel):
+    """POST /ai/v1/itinerary/replan — 하루를 다시 짠다 (i04 → i06).
+
+    `generate` 와 **다른 것**: RAG(KB-3)를 탄다 · 재계획 의도를 받는다 ·
+    원 일정을 컨텍스트이자 후보로 받는다.
+    **같은 것**: 산출이 `ItineraryPayload` 다 — 백엔드 소비 코드가 그대로 돈다.
+    """
+
+    trip_id: str = Field(min_length=1)
+    trip_context: TripContextSchema
+    target_date: dt.date
+    time_window: TimeWindowSchema  # 하루 전체. 좁히지 않는다 (정본 §1)
+    anchor: CoordSchema
+
+    # `scope` 와 `locked_blocks` 는 중복이 아니다 — `locked_blocks` = 못 건드리는 것,
+    # `scope` = 안 간 곳 중 어디까지 건드리나. FULL_DAY 여도 방문 완료한 곳은 잠긴다.
+    scope: Literal["PARTIAL_SLOTS", "FULL_DAY"]
+    from_instant: dt.datetime
+    locked_blocks: list[FixedBlockSchema] = Field(default_factory=list)
+    # 두 일을 한다: 기존 일정 컨텍스트이자 **후보 풀 합류 대상**. 원 일정 POI 가 새
+    # 후보와 같은 PREFERENCE_SCORING 호출에 들어가야 같은 척도로 비교되고, 그래야
+    # "원래 자리보다 나은 것만 바꾼다"가 성립한다.
+    current_slots: list[ReplanSlotSchema] = Field(default_factory=list)
+
+    reasons: list[str] = Field(default_factory=list)  # AI 어휘 (백엔드가 번역)
+    directives: list[str] = Field(default_factory=list)  # FE 키 그대로 — 번역하지 않는다
+    # 상한 500 은 `replan_session.free_text varchar(500)` 과 같은 값이다.
+    # 계약이 DB 보다 좁으면 저장된 값이 경계에서 잘린다.
+    free_text: str | None = Field(default=None, max_length=500)
+    trigger: TriggerSchema | None = None  # 자리만 — 값은 아직 안 온다 (정본 §2)
+
+    preference_profile: PreferenceProfileSchema
+    saved_places: list[SavedPlaceSchema] = Field(default_factory=list)
+    excluded_poi_ids: list[str] = Field(default_factory=list)
+    request_meta: RequestMetaSchema
+
+
+class ReplanEmptyReasonSchema(BoundaryModel):
+    """왜 재계획안을 못 만들었나. **문구는 FE 소유** — 여기는 코드와 재료만 준다.
+
+    선례: `UnplacedMustVisitSchema.reason_code`(닫힌 값, 백엔드가 분기·화면 문구에 사용).
+    자유 문장으로 두면 i18n·톤 변경이 AI 재배포가 된다.
+    """
+
+    code: Literal[
+        "NO_CANDIDATE",  # 후보 풀 자체가 비었다
+        "ALL_EXCLUDED",  # 후보가 제외 목록에 다 걸렸다
+        "NO_FEASIBLE_SLOT",  # 후보는 있으나 HC 를 통과하는 배치가 없다
+        "DIRECTIVE_CONFLICT",  # 지시끼리 모순 (예: 실내로 + 야경 코스)
+        "UNKNOWN",
+    ]
+    # 예: {"from": "17:00", "filter": "INDOOR"} → FE 가 "17시 이후 실내 후보가 근처에 없어요"
+    params: dict[str, str] = Field(default_factory=dict)
+
+
+class ReplanResponse(BoundaryModel):
+    """재계획안 1안. 못 만들면 `itinerary=null` + `empty_reason` (200, IO-7).
+
+    `diff` 는 여기 없다 — `i08` 의 "바뀐 곳 1 · 이동 −6.9km" 는 `ReplanDiffService` 가
+    이미 백엔드에 있고, 원 일정을 가진 쪽이 만드는 것이 맞다.
+    """
+
+    itinerary: ItineraryPayload | None = None
+    total_distance_km: float | None = Field(default=None, ge=0)
+
+    is_fallback: bool
+    fallback_level: int = Field(ge=0, le=2)  # 0=LLM · 1=규칙 · 2=해 없음
+    notes: list[str] = Field(default_factory=list)
+    retrieved: dict[str, int] = Field(default_factory=dict)  # KB 히트 수
+    resolved_directives: list[str] = Field(default_factory=list)
+    # 모르는 지시를 **조용히 무시하지 않는다** — 되돌려 보내 FE 가 알릴 수 있게 한다.
+    unknown_directives: list[str] = Field(default_factory=list)
+    empty_reason: ReplanEmptyReasonSchema | None = None
+
+
+
 # ── 설명 분리 경계 (TRIP-479) ────────────────────────────────────────
 
 

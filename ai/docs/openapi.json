@@ -1256,6 +1256,287 @@
         "title": "RepairItineraryResponse",
         "type": "object"
       },
+      "ReplanEmptyReasonSchema": {
+        "additionalProperties": false,
+        "description": "왜 재계획안을 못 만들었나. **문구는 FE 소유** — 여기는 코드와 재료만 준다.\n\n선례: `UnplacedMustVisitSchema.reason_code`(닫힌 값, 백엔드가 분기·화면 문구에 사용).\n자유 문장으로 두면 i18n·톤 변경이 AI 재배포가 된다.",
+        "properties": {
+          "code": {
+            "enum": [
+              "NO_CANDIDATE",
+              "ALL_EXCLUDED",
+              "NO_FEASIBLE_SLOT",
+              "DIRECTIVE_CONFLICT",
+              "UNKNOWN"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ReplanEmptyReasonSchema",
+        "type": "object"
+      },
+      "ReplanRequest": {
+        "additionalProperties": false,
+        "description": "POST /ai/v1/itinerary/replan — 하루를 다시 짠다 (i04 → i06).\n\n`generate` 와 **다른 것**: RAG(KB-3)를 탄다 · 재계획 의도를 받는다 ·\n원 일정을 컨텍스트이자 후보로 받는다.\n**같은 것**: 산출이 `ItineraryPayload` 다 — 백엔드 소비 코드가 그대로 돈다.",
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/CoordSchema"
+          },
+          "current_slots": {
+            "items": {
+              "$ref": "#/components/schemas/ReplanSlotSchema"
+            },
+            "title": "Current Slots",
+            "type": "array"
+          },
+          "directives": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Directives",
+            "type": "array"
+          },
+          "excluded_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Poi Ids",
+            "type": "array"
+          },
+          "free_text": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Free Text"
+          },
+          "from_instant": {
+            "format": "date-time",
+            "title": "From Instant",
+            "type": "string"
+          },
+          "locked_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/FixedBlockSchema"
+            },
+            "title": "Locked Blocks",
+            "type": "array"
+          },
+          "preference_profile": {
+            "$ref": "#/components/schemas/PreferenceProfileSchema"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "saved_places": {
+            "items": {
+              "$ref": "#/components/schemas/SavedPlaceSchema"
+            },
+            "title": "Saved Places",
+            "type": "array"
+          },
+          "scope": {
+            "enum": [
+              "PARTIAL_SLOTS",
+              "FULL_DAY"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "target_date": {
+            "format": "date",
+            "title": "Target Date",
+            "type": "string"
+          },
+          "time_window": {
+            "$ref": "#/components/schemas/TimeWindowSchema"
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TriggerSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trip_context": {
+            "$ref": "#/components/schemas/TripContextSchema"
+          },
+          "trip_id": {
+            "minLength": 1,
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id",
+          "trip_context",
+          "target_date",
+          "time_window",
+          "anchor",
+          "scope",
+          "from_instant",
+          "preference_profile",
+          "request_meta"
+        ],
+        "title": "ReplanRequest",
+        "type": "object"
+      },
+      "ReplanResponse": {
+        "additionalProperties": false,
+        "description": "재계획안 1안. 못 만들면 `itinerary=null` + `empty_reason` (200, IO-7).\n\n`diff` 는 여기 없다 — `i08` 의 \"바뀐 곳 1 · 이동 −6.9km\" 는 `ReplanDiffService` 가\n이미 백엔드에 있고, 원 일정을 가진 쪽이 만드는 것이 맞다.",
+        "properties": {
+          "empty_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReplanEmptyReasonSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fallback_level": {
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Fallback Level",
+            "type": "integer"
+          },
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "itinerary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItineraryPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "resolved_directives": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Resolved Directives",
+            "type": "array"
+          },
+          "retrieved": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Retrieved",
+            "type": "object"
+          },
+          "total_distance_km": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Distance Km"
+          },
+          "unknown_directives": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unknown Directives",
+            "type": "array"
+          }
+        },
+        "required": [
+          "is_fallback",
+          "fallback_level"
+        ],
+        "title": "ReplanResponse",
+        "type": "object"
+      },
+      "ReplanSlotSchema": {
+        "additionalProperties": false,
+        "description": "원 일정 슬롯 1개 — KB-1 컨텍스트이자 후보 풀 합류 대상.\n\n`VisitSlotDisplaySchema` 를 재사용하지 않는다: 그것은 **AI 산출물의 사영**이고\n이쪽은 **백엔드가 주는 입력**이다. 모양이 닮아도 방향이 반대라, 한쪽을 고치면\n다른 쪽이 끌려가는 결합을 만들지 않는다. `placement_reason` 은 산출물 쪽엔 없다.",
+        "properties": {
+          "end_at": {
+            "format": "time",
+            "title": "End At",
+            "type": "string"
+          },
+          "ends_next_day": {
+            "default": false,
+            "title": "Ends Next Day",
+            "type": "boolean"
+          },
+          "is_fixed": {
+            "default": false,
+            "title": "Is Fixed",
+            "type": "boolean"
+          },
+          "placement_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placement Reason"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "start_at": {
+            "format": "time",
+            "title": "Start At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "start_at",
+          "end_at"
+        ],
+        "title": "ReplanSlotSchema",
+        "type": "object"
+      },
       "RequestMetaSchema": {
         "additionalProperties": false,
         "description": "IO-1 — 지연 예산 전파. 값은 백엔드 소유(종전 day1 5s / 전체 20s).\n\n`deadline_ms` 미지정 = **시간제약 없음** (2026-08-21 FE 연동 팀 결정, TRIP-473)\n— 예산 계단(INV-4)은 그대로 두고 시간 때문에 강등되지 않게만 한다. 제약을\n재도입하려면 백엔드가 값을 다시 싣기만 하면 된다(AI 재작업 없음).",
@@ -2046,6 +2327,48 @@
           }
         },
         "summary": "Repair",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/replan": {
+      "post": {
+        "description": "하루 재계획 (i04 → i06) — `generate` 재사용을 그만둔 자리.\n\n정본: `backend/docs/design/ai-backend-replan-연동-설계.md`. `generate` 와 다른 것은\n셋이다 — RAG(KB-3)를 탄다 · 재계획 의도(사유·지시·자유입력)를 받는다 · 원 일정을\n컨텍스트이자 후보로 받는다. 산출은 `ItineraryPayload` 라 백엔드 소비 코드가 그대로 돈다.\n\n**조립이 아직 이 경계를 구현하지 않으면 503 으로 명시 실패한다**(INV-4 — 침묵 금지).\n하루 전체를 다시 짜려면 선호 점수 단계가 필요한데 그것은 ScheduleAgent 소유이고,\n오케스트레이터가 `REPLAN` 정보 요구표로 그 경로를 여는 작업이 따로 진행 중이다.\n빈 일정을 `empty_reason` 으로 위장해 200 을 내보내지 않는다 — \"후보가 없다\"와\n\"아직 배선이 없다\"는 다른 사실이고, 섞으면 백엔드가 폴백 여부를 잘못 판정한다.",
+        "operationId": "replan_ai_v1_itinerary_replan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replan",
         "tags": [
           "itinerary"
         ]
