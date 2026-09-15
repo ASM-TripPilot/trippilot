@@ -114,8 +114,9 @@ def _kma_weather():
 
 
 def _place_existence():
-    """`KAKAO_REST_API_KEY` 설정 시 지도 실재 검증 어댑터 조립 (TRIP-683).
+    """카카오 REST 키 설정 시 지도 실재 검증 어댑터 조립 (TRIP-683).
 
+    `KAKAO_REST_API_KEY` → 없으면 `KAKAO_CLIENT_ID` 순으로 본다.
     미설정(빈 문자열 포함) = 미배선(None) — 순위 강등 없이 기존 경로 그대로.
 
     **배제가 아니라 강등이다.** 실측(`ai-existence-probe`, 반경 300m, 무리별
@@ -126,7 +127,11 @@ def _place_existence():
     호출 상한은 `verify()` 1회당이고 어댑터는 앱 수명 동안 산다 — 인스턴스
     누적 예산이면 소진 후 영구히 무동작이 되므로 매 호출 갱신된다.
     """
-    key = _env("KAKAO_REST_API_KEY")
+    # `KAKAO_CLIENT_ID` 로 폴백한다 — 카카오 OAuth 는 `client_id` 자리에 **REST
+    # API 키를 그대로** 쓰므로 소셜 로그인용으로 받은 그 값이 로컬 API 에서도
+    # 동작한다(2026-09-16 실호출 확인: 키워드검색 200, "솔오름전망대" 반환).
+    # 별도 키를 다시 발급받게 하지 않는다 — 같은 앱의 같은 키다.
+    key = _env("KAKAO_REST_API_KEY") or _env("KAKAO_CLIENT_ID")
     if key is None:
         return None
     import time

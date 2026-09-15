@@ -58,10 +58,25 @@ class WeatherProvider:
             d.isoformat() for d, pop in daily.items()
             if pop >= self.PRECIPITATION_TRIGGER_THRESHOLD
         )
+        # 시간별은 **선택 능력** — 포트가 가지면 같이 싣는다(`HourlyWeatherPort`,
+        # `fetch_typed` 와 같은 hasattr 방식). 같은 응답을 다르게 접는 것이라
+        # 추가 HTTP 호출이 없다. 실패해도 일 단위는 이미 얻었으므로 조용히 생략
+        # 하지 않고 없는 대로 간다 — 소비측이 키 부재로 일 단위 폴백을 안다.
+        hourly: dict[str, int] = {}
+        if hasattr(self._port, "hourly_forecast"):
+            try:
+                hourly = {
+                    slot.isoformat(): pop
+                    for slot, pop in self._port.hourly_forecast(
+                        params["anchor"], days).items()
+                }
+            except Exception:  # 일 단위는 살아 있다 — 부분 성공을 버리지 않는다
+                hourly = {}
         return InfoPacket(
             provider=ProviderKind.WEATHER,
             status=ProviderStatus.OK,
             data={"daily": {d.isoformat(): pop for d, pop in daily.items()},
+                  "hourly": hourly,
                   "triggers": triggers},
             freshness=FreshnessMeta(
                 source="KMA",

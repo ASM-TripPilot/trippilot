@@ -1,8 +1,8 @@
 """일정 생성 결과 타입 — `GenerationOutcome` 과 그 부품 (agent-io-contracts §1.2 의 도메인 형태).
 
 에이전트가 만들고, 오케스트레이터가 그대로 돌려주며, 경계(`api/wiring.py`)가 와이어로
-사영한다. 와이어로 나가는 것은 solution·explanations·candidates_summary·solved_at —
-degradations·scoring_mode 는 내부 관측용이다.
+사영한다. 와이어로 나가는 것은 solution·explanations·candidates_summary·solved_at·
+slot_alternatives — degradations·scoring_mode 는 내부 관측용이다.
 """
 
 from __future__ import annotations
@@ -10,8 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from typing import Mapping
 
 from trippilot.agents.schedule.budget import DeadlineBudget
+from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary import ItinerarySolution
 from trippilot.domain.llm import CandidatePool, PoiExplanation
 from trippilot.domain.poi import PoiCategory
@@ -36,6 +38,24 @@ class Degradation:
 
     stage: str  # pool / llm / assembly / explanation / weather / event / agent
     reason: str
+
+
+# 슬롯당 차선책 상한 — "한두 개"(팀 결정 2026-09-16, TRIP-871). PlanB 온디맨드 경로의
+# `max_alternatives`(3)와 일부러 다르다 — 생성 화면의 칸이 작다.
+MAX_SLOT_ALTERNATIVES = 2
+
+
+@dataclass(frozen=True, slots=True)
+class SlotAlternative:
+    """슬롯 1개의 차선책 1건 (TRIP-871) — **제안만**.
+
+    시각·순서 없음(INV-2 — 교체 확정은 edit → validate 관문), poi_id ∈ pool(INV-1 —
+    선정이 풀을 순회해 만든다). `rationale` 은 사실만 담은 템플릿 문장(카테고리) —
+    LLM 문장이 아니다.
+    """
+
+    poi_id: PoiId
+    rationale: str
 
 
 # 경계 카테고리 8종 (domain/poi.py 정본) — STAY는 내부 전용이라 충분성 판정 대상이 아니다.
@@ -88,6 +108,8 @@ class GenerationOutcome:
     - `candidates_summary`: 후보 풀 실측 보고. 풀을 만들기 전에 실패하면 None(모름).
     - `solved_at`: 어셈블리 검증 완료 시각 = 주입된 `now` + 단조시계 경과 (wall-clock
       직접 호출 없음, DL-3). 해가 없으면(FAILED) None.
+    - `slot_alternatives`: 슬롯별 차선책(TRIP-871), 키 `"{date}#{poi_id}"`(BR-U2-04).
+      해가 없으면 빈 맵. 키가 없는 슬롯 = 차선책 없음(경계는 빈 목록으로 사영).
     """
 
     status: GenerationStatus
@@ -99,6 +121,7 @@ class GenerationOutcome:
     budget: DeadlineBudget
     candidates_summary: CandidatesReport | None
     solved_at: datetime | None
+    slot_alternatives: Mapping[str, tuple[SlotAlternative, ...]]
     error: str | None = None
 
     def __post_init__(self) -> None:
@@ -113,6 +136,8 @@ class GenerationOutcome:
             raise ValueError("DEGRADED는 사유 필수 (침묵 실패 금지, INV-4)")
         if self.solution is None and self.solved_at is not None:
             raise ValueError("해가 없는데 solved_at 존재 — 검증 시각을 지어낼 수 없다")
+        if self.solution is None and self.slot_alternatives:
+            raise ValueError("해가 없는데 차선책 존재 — 슬롯 없이 슬롯별 제안을 지어낼 수 없다")
 
     @property
     def is_fallback(self) -> bool:
@@ -142,5 +167,6 @@ def failed_outcome(
         budget=budget,
         candidates_summary=candidates_summary,  # 풀 이전 실패면 None — 모름을 유지
         solved_at=None,  # 해가 없다 — 검증 시각을 지어내지 않는다
+        slot_alternatives={},  # 슬롯이 없다 — 슬롯별 제안도 없다
         error=error,
     )

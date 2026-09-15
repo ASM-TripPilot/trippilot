@@ -208,3 +208,184 @@ def test_saved_places_reach_llm_context_not_just_ranking() -> None:
     assert "저장한 카페" in _join_saved((SavedPlace("p1", "저장한 카페"),))
     assert _join_saved(()) == ""
     assert "saved_places" in PlanBRagRequest.__dataclass_fields__
+
+
+# ── ⑦ 재계획이 날씨를 실제로 본다 (팀 결정 2026-09-15) ─────────────────
+
+
+class _SpyWeather:
+    """WeatherPort fake — 호출 여부와 인자를 기록한다. 실 HTTP 0건."""
+
+    def __init__(self, forecast: dict) -> None:
+        self._forecast = forecast
+        self.calls: list = []
+
+    def daily_forecast(self, coord, days):
+        self.calls.append((coord, tuple(days)))
+        return self._forecast
+
+
+def _rag_spy(app):
+    """조립된 앱에서 PlanBAgent 를 찾아 run() 인자를 가로챈다."""
+    agent = app.state.orchestrator._rag  # noqa: SLF001
+    seen: list = []
+    real = agent.run
+
+    def spy(request):
+        seen.append(request)
+        return real(request)
+
+    agent.run = spy
+    return seen
+
+
+def test_replan_collects_weather_and_carries_observed_rain() -> None:
+    """종전에는 이 경로가 날씨를 **한 번도** 부르지 않았다 — `INFO_REQUIREMENTS["REPLAN"]`
+    에 WEATHER 가 정의돼 있는데도 wiring 이 풀 빌더만 직접 불렀기 때문이다. 비 때문에
+    다시 짜는 경로가 강수확률을 모른 채 백엔드 라벨만 믿고 돌았다.
+
+    이제 수집기를 거치므로 (1) WeatherProvider 가 요청 날짜로 실제 호출되고,
+    (2) 실측값이 PlanBAgent 요청에 실려 간다.
+    """
+    from datetime import date
+
+    weather = _SpyWeather({date(2026, 9, 1): 80})
+    app = build_dev_app(weather=weather)
+    seen = _rag_spy(app)
+    with TestClient(app) as client:
+        res = client.post("/ai/v1/itinerary/alternatives", json=_request_body())
+
+    assert res.status_code == 200
+    assert len(weather.calls) == 1                      # 날씨를 실제로 불렀다
+    assert weather.calls[0][1] == (date(2026, 9, 1),)   # 요청 날짜로
+    assert seen and seen[0].rain_prob_by_date == {date(2026, 9, 1): 80}
+
+
+def test_observed_rain_reaches_situation_context_without_replacing_label() -> None:
+    """실측값은 **상황 컨텍스트**로만 들어간다 — `reason` 라벨과 조견표는 그대로다.
+
+    라벨을 실값으로 대체하면, 우리가 재서 낮게 나왔을 때 "비 예보로 변경 제안"을
+    받은 사용자가 야외 대안을 받는 화면 모순이 생긴다.
+    """
+    from datetime import date
+
+    from trippilot.agents.planb.rag import PlanBRagRequest, _with_observed_rain
+
+    base = PlanBRagRequest(
+        trigger=None, reason="weather", pool=None, trace_id=None, now=None,
+        rain_prob_by_date={date(2026, 9, 1): 80},
+    )
+    out = _with_observed_rain("KB-3 발췌", base)
+
+    assert "KB-3 발췌" in out                      # 기존 발췌 보존
+    assert "80%" in out and "2026-09-01" in out    # 실값이 실린다
+    # 어느 구간의 값인지 문장에 밝힌다 — docstring 만으로는 모델이 못 본다.
+    # 지나간 비를 뺀 "재계획 시점 이후" 값이라는 것이 판단의 전제다.
+    assert "재계획 시점 이후" in out
+    assert base.reason == "weather"                # 라벨 불변
+
+    # 무보정이면 종전 문자열 그대로 — 덧대지 않는다
+    assert _with_observed_rain("KB-3 발췌", PlanBRagRequest(
+        trigger=None, reason="weather", pool=None, trace_id=None, now=None,
+    )) == "KB-3 발췌"
+
+
+def test_trip_id_enables_persona_collection_and_profile_line() -> None:
+    """`trip_id` 가 오면 PERSONA 를 수집해 **확정 프로필**을 컨텍스트 맨 앞에 놓는다.
+
+    KB-2 벡터 검색과 다른 출처다 — KB-2 는 저장 장소·메모 임베딩이고, 이쪽은
+    `ContextResolver` 재조회가 돌려주는 취향·동행·예산 확정값이다. 순서가 곧
+    우선순위라 확정값이 검색 발췌보다 앞이다.
+
+    `generate` 와 **같은 파생 규칙**을 쓴다(와이어에 사용자 식별자가 없어 trip_id
+    파생 — 실 식별자 합의 시 두 경로가 함께 바뀐다).
+    """
+    from trippilot.agents.planb.rag import _join_persona
+    from trippilot.domain.common import BudgetLevel
+    from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
+
+    app = build_dev_app()
+    seen = _rag_spy(app)
+    with TestClient(app) as client:
+        res = client.post(
+            "/ai/v1/itinerary/alternatives",
+            json=_request_body(trip_id="trip-428"),
+        )
+
+    assert res.status_code == 200
+    assert seen and seen[0].persona is not None      # 수집됐다
+
+    # 확정 프로필이 맨 앞 줄로 들어간다
+    profile = PersonaSummary(
+        taste_tags=(TasteTag.NATURE,), companion=CompanionType.SOLO,
+        budget=BudgetLevel.MID,
+    )
+    out = _join_persona((), (), profile)
+    assert out.startswith("[확정 프로필]")
+    assert "NATURE" in out and "SOLO" in out and "MID" in out
+    # 미수집이면 종전과 동일 — 지어내지 않는다
+    assert _join_persona((), (), None) == ""
+
+
+# ── ⑧ 시간 단위 날씨 — 지나간 비에 반응하지 않는다 ───────────────────
+
+
+class _HourlyWeather:
+    """`HourlyWeatherPort` 까지 가진 fake — 같은 1회 조회를 다르게 접는다."""
+
+    def __init__(self, daily: dict, hourly: dict) -> None:
+        self._daily, self._hourly = daily, hourly
+
+    def daily_forecast(self, coord, days):
+        return self._daily
+
+    def hourly_forecast(self, coord, days):
+        return self._hourly
+
+
+def test_replan_uses_remaining_hours_not_day_max() -> None:
+    """**아침에 그친 비에 반응하지 않는다.**
+
+    `daily_forecast` 는 그 날짜 슬롯의 최댓값이라 "오늘 80%" 가 아침 한 시간의
+    소나기여도 하루 전체를 우천일로 만든다. 하루를 통째로 짜는 generate 에는 그
+    보수성이 맞지만, **재계획은 여행 중 특정 시점에 일어난다** — 요청 시각이 오후
+    2시면 아침 9시 슬롯의 80% 는 이미 지나간 사실이다.
+
+    여기서는 일 최댓값 80(아침) 대 남은 시간대 최댓값 10(오후)이 갈린다.
+    """
+    from datetime import date, datetime, timedelta, timezone
+
+    kst = timezone(timedelta(hours=9))
+    day = date(2026, 9, 1)
+    weather = _HourlyWeather(
+        daily={day: 80},                                   # 하루 최댓값 — 아침 비
+        hourly={
+            datetime(2026, 9, 1, 9, 0, tzinfo=kst): 80,    # 이미 지나갔다
+            datetime(2026, 9, 1, 15, 0, tzinfo=kst): 10,   # 남은 시간
+            datetime(2026, 9, 1, 18, 0, tzinfo=kst): 10,
+        },
+    )
+    app = build_dev_app(weather=weather)
+    seen = _rag_spy(app)
+    body = _request_body()
+    body["request_meta"]["requested_at"] = "2026-09-01T14:00:00+09:00"
+    with TestClient(app) as client:
+        res = client.post("/ai/v1/itinerary/alternatives", json=body)
+
+    assert res.status_code == 200
+    # 일 최댓값(80)이 아니라 남은 시간대 최댓값(10)이 간다
+    assert seen and seen[0].rain_prob_by_date == {day: 10}
+
+
+def test_day_level_port_still_works_unchanged() -> None:
+    """`hourly_forecast` 없는 포트는 종전 그대로 — 선택 능력이라 강제하지 않는다."""
+    from datetime import date
+
+    weather = _SpyWeather({date(2026, 9, 1): 80})   # daily_forecast 만 가진 fake
+    app = build_dev_app(weather=weather)
+    seen = _rag_spy(app)
+    with TestClient(app) as client:
+        res = client.post("/ai/v1/itinerary/alternatives", json=_request_body())
+
+    assert res.status_code == 200
+    assert seen and seen[0].rain_prob_by_date == {date(2026, 9, 1): 80}
