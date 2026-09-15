@@ -10,6 +10,8 @@ import com.trippilot.archive.domain.VisitPhotoMetaRepository
 import com.trippilot.auth.api.LocationConsentFacade
 import com.trippilot.auth.api.LocationLegalLogFacade
 import com.trippilot.auth.api.LocationCollectionSource
+import com.trippilot.trip.api.TripPurgeScopeFacade
+import com.trippilot.auth.api.LocationPurgeScope
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.trip.api.TripFacade
@@ -52,6 +54,16 @@ class VisitRecordServiceTest : StringSpec({
 
     class Photos : VisitPhotoMetaRepository {
         val stored = mutableListOf<VisitPhotoMeta>()
+
+        /**
+         * 파기(INV-L4). 대역은 여행 범위를 모르므로 **보관 중인 좌표 전부**를 지운다 —
+         * 범위를 실제로 좁히는지는 실 DB IT 가 본다.
+         */
+        override fun clearExifCoordinates(tripIds: Collection<UUID>): Int {
+            val targets = stored.filter { it.exifLat != null || it.exifLng != null }
+            targets.forEach { stored[stored.indexOf(it)] = it.copy(exifLat = null, exifLng = null) }
+            return targets.size
+        }
         override fun save(photo: VisitPhotoMeta) = photo.also {
             stored.removeAll { p -> p.visitPhotoMetaId == photo.visitPhotoMetaId }; stored += it
         }
@@ -84,8 +96,14 @@ class VisitRecordServiceTest : StringSpec({
     /** 남긴 수집 사실을 들여다보는 대역 — 법정 로그는 auth 소유라 여기서는 경계 호출만 본다. */
     class LegalLogs : LocationLegalLogFacade {
         val collected = mutableListOf<Triple<UUID, LocationCollectionSource, UUID>>()
+        val purged = mutableListOf<Triple<UUID, LocationPurgeScope, Int>>()
+
         override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID) {
             collected += Triple(accountId, source, subjectId)
+        }
+
+        override fun recordPurge(accountId: UUID, scope: LocationPurgeScope, purgedCount: Int) {
+            purged += Triple(accountId, scope, purgedCount)
         }
     }
 
@@ -102,9 +120,12 @@ class VisitRecordServiceTest : StringSpec({
         val photos = Photos()
         val memos = Memos()
         val legalLogs = LegalLogs()
+        val purgeScope = object : TripPurgeScopeFacade {
+            override fun findAllTripIdsOf(accountId: UUID) = listOf(tripId)
+        }
         val visit = checks.save(VisitCheck.arrive(tripId, "2026-08-11#$poi", poi, CheckSource.MANUAL, now))
         return Fixture(
-            VisitRecordService(trips, checks, photos, memos, consents(gpsOptIn), legalLogs, clock),
+            VisitRecordService(trips, checks, photos, memos, consents(gpsOptIn), legalLogs, purgeScope, clock),
             photos, memos, visit.visitCheckId, legalLogs,
         )
     }
@@ -257,5 +278,44 @@ class VisitRecordServiceTest : StringSpec({
         f.svc.addPhoto(acc, tripId, f.visitCheckId, photo(lat = null, lng = null))
 
         f.legalLogs.collected.shouldBeEmpty()
+    }
+    /**
+     * 철회하면 **이미 저장된 좌표도 지운다**(INV-L4). 게이팅은 앞으로 들어올 것만 막아서,
+     * 이게 없으면 "철회했는데 예전 좌표는 남아 있는" 상태가 된다 — 게이팅이 잘 도는 탓에 더 안 드러난다.
+     */
+    "파기하면 좌표만 사라지고 사진 카드는 남는다" {
+        val f = fixture(gpsOptIn = true)
+        val saved = f.svc.addPhoto(acc, tripId, f.visitCheckId, photo())
+
+        val purged = f.svc.purgeExifCoordinates(acc)
+
+        purged shouldBe 1
+        val after = f.photos.findById(saved.visitPhotoMetaId)!!
+        after.exifLat.shouldBeNull()
+        after.exifLng.shouldBeNull()
+        // 사진 자체는 사용자 기기에 있고 우리는 메타만 든다 — 좌표를 지워도 잃는 것이 없어야 한다.
+        after.localAssetId shouldBe saved.localAssetId
+        f.legalLogs.purged.single() shouldBe Triple(acc, LocationPurgeScope.PHOTO_EXIF, 1)
+    }
+
+    /** 지울 것이 없으면 **기록하지 않는다** — 재배달마다 0건 기록이 쌓이면 확인자료가 의미를 잃는다. */
+    "지울 좌표가 없으면 파기 기록도 남지 않는다" {
+        val f = fixture(gpsOptIn = false)
+        f.svc.addPhoto(acc, tripId, f.visitCheckId, photo()) // 동의가 없어 좌표가 애초에 안 들어간다
+
+        f.svc.purgeExifCoordinates(acc) shouldBe 0
+
+        f.legalLogs.purged.shouldBeEmpty()
+    }
+
+    /** 멱등 — at-least-once 배달이라 같은 철회가 두 번 와도 건수가 부풀면 안 된다. */
+    "두 번 파기해도 두 번째는 지울 것이 없다" {
+        val f = fixture(gpsOptIn = true)
+        f.svc.addPhoto(acc, tripId, f.visitCheckId, photo())
+
+        f.svc.purgeExifCoordinates(acc) shouldBe 1
+        f.svc.purgeExifCoordinates(acc) shouldBe 0
+
+        f.legalLogs.purged.size shouldBe 1
     }
 })

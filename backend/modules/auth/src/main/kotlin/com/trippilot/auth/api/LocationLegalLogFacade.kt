@@ -27,6 +27,23 @@ interface LocationLegalLogFacade {
      *   이 표는 사실 확인자료이고 좌표 자체를 또 보관하면 파기 대상이 한 곳 더 생긴다(V1.3 규약).
      */
     fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID)
+
+    /**
+     * 저장된 위치정보를 **실제로 지웠을 때** 파기 사실을 남긴다(INV-L4).
+     *
+     * [scope] 를 지운 쪽이 적는 이유: 무엇을 얼마나 지웠는지는 **소유 모듈만 안다.** 철회를 받은
+     * auth 가 대신 `gps_track` 하나로 뭉쳐 적으면 기록과 실제가 어긋나고, 나중에 "EXIF 는 지웠나"를
+     * 로그로 답할 수 없다.
+     *
+     * @param purgedCount 지운 건수. 0 이면 부르지 않는다 — 지울 것이 없었던 것과 지웠다는 기록은 다르다.
+     */
+    fun recordPurge(accountId: UUID, scope: LocationPurgeScope, purgedCount: Int)
+}
+
+/** 파기 대상 범위. `gps_track` 하나로 뭉치지 않는다 — 실제 지운 것과 기록이 어긋나면 안 된다. */
+enum class LocationPurgeScope {
+    /** 사진에 딸려 저장됐던 EXIF 좌표(`visit_photo_meta.exif_lat/lng`). */
+    PHOTO_EXIF,
 }
 
 /**
