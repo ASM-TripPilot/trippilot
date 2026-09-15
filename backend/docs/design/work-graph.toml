@@ -1120,6 +1120,41 @@ note = """
 같은 부류: `FLAKY-HEALTHPING`. 둘 다 "전체 빌드에서만 빨개지는" 형태라 재실행으로 넘기면 영영 못 찾는다.
 """
 
+[[nodes]]
+id = "JWT-SIGNING-KEY"
+ticket = ""
+title = "JWT 서명키가 기동마다 새로 생성된다 — 다중 인스턴스에서 서로의 토큰을 못 읽는다"
+status = "todo"
+migration = false
+touches = [
+  "backend/common/security/src/main/kotlin/com/trippilot/security/JwtSecurityConfig.kt",
+  "backend/app/src/main/resources/application.yml",
+]
+note = """
+**티켓이 없다.** 코드 주석에만 있던 것을 2026-09-15 코드 훑기에서 찾았다
+(`JwtSecurityConfig.kt` — "prod 는 Secrets Manager 에서 JWK 로드로 교체(PD-3) … TODO(TRIP-153 후속)").
+
+**현재 동작**: `rsaKey()` 가 **환경 분기 없이** 기동할 때마다 RSA-2048 키페어를 새로 만든다.
+주석은 "dev/test 는" 이라고 적었지만 코드에는 그 조건이 없다 — 운영에서도 같다.
+
+**무엇이 잘못되나 — 둘의 무게가 다르다.**
+
+1. **다중 인스턴스에서 치명적이다.** A 가 서명한 액세스 토큰을 B 가 검증하지 못해 **요청마다
+   무작위 401** 이 난다. 클라이언트가 리프레시로 새 토큰을 받아도 다음 요청이 또 다른 인스턴스로
+   가면 같은 일이 반복된다. 복제본을 둘 이상 띄우는 순간 로그인이 사실상 깨진다.
+   REL-U6-04 가 이미 다중 인스턴스를 전제하고 있다.
+2. **재배포마다 액세스 토큰이 무효가 된다** — 다만 리프레시 토큰은 JWT 가 아니라 DB 행이라
+   (`RefreshSessionJpaEntity`) 재발급으로 회복된다. 401 을 리프레시로 처리하는 클라이언트라면
+   대체로 보이지 않는다. 이쪽은 성가심이지 차단이 아니다.
+
+**TRIP-850(실사용 모드 전환)이 덮지 않는다.** 그 티켓은 "스위치 6종의 환경별 값"이고 이것은
+스위치가 아니라 **설정 표면 자체가 없는 기능**이다. 켜고 끌 값이 없다.
+
+**처방의 갈림길**(착수 시 결정): 외부 시크릿 저장소(Secrets Manager)에서 JWK 로드 vs 환경변수로
+PEM/JWK 주입. 후자가 싸고 이 리포의 다른 시크릿 관례(`SERVICE_AUTH_TOKEN` 등)와 같은 모양이다.
+어느 쪽이든 **로드 실패 시 fail-fast** 여야 한다(LC-6) — 조용히 생성으로 떨어지면 지금과 같아진다.
+"""
+
 [[edges]]
 from = "AI-REPLAN"
 to = "REPLAN-BOUNDARY"
