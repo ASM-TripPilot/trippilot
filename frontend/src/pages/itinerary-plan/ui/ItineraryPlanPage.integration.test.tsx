@@ -35,7 +35,7 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  *
  * 3동작 뼈대: 준비=가짜 서버 응답 지정 → 실행=열고 확정 CTA 를 탭 → 단언=나간 요청·보이는 것.
  */
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다 — 실물
 // 로드를 피하려면 목킹한다(선례와 동형).

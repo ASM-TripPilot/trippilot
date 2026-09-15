@@ -31,7 +31,7 @@ import { type ItineraryHeaderData, TimelineScreen } from './TimelineScreen';
  *
  * 3동작 뼈대: 준비=`slots` 로 렌더 → 실행=크게 보기 press·핀 메시지 발화 → 단언=오버레이·지도값·시트·폴백.
  */
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 const DAY1 = '2026-06-10';
 
@@ -184,8 +184,9 @@ describe('🔴 M3 · Q5 — 확대 오버레이 안에서 핀을 누르면 상�
     expect(screen.queryByTestId('itinerary-pin-detail-sheet')).toBeNull();
 
     const map = mapRoot();
-    expect(typeof map.props.onMapMessage).toBe('function');
-    act(() => map.props.onMapMessage({ type: 'PIN_TAP', index: 0 }));
+    // S3(TRIP-865): onMapMessage(PIN_TAP) → onPinTap(index) 계약 전환. 슬롯 역참조 로직은 동일.
+    expect(typeof map.props.onPinTap).toBe('function');
+    act(() => map.props.onPinTap(0));
 
     const sheet = screen.getByTestId('itinerary-pin-detail-sheet');
     expect(sheet).toHaveTextContent(/광안리 해변/);
@@ -201,7 +202,7 @@ describe('🔴 M4 · Q5 — 확대 오버레이 시트에서도 영업시간 nul
     renderMap([NULLHOURS]);
     expect(openExpanded()).toBeOnTheScreen();
 
-    act(() => mapRoot().props.onMapMessage({ type: 'PIN_TAP', index: 0 }));
+    act(() => mapRoot().props.onPinTap(0));
 
     const sheet = screen.getByTestId('itinerary-pin-detail-sheet');
     expect(sheet).toHaveTextContent(/자갈치/);
@@ -215,12 +216,12 @@ describe('🔴 M5 · Q5 — 다른 핀을 누르면 시트 내용이 교체된�
     expect(openExpanded()).toBeOnTheScreen();
     const map = mapRoot();
 
-    act(() => map.props.onMapMessage({ type: 'PIN_TAP', index: 0 }));
+    act(() => map.props.onPinTap(0));
     expect(screen.getByTestId('itinerary-pin-detail-sheet')).toHaveTextContent(
       /광안리 해변/
     );
 
-    act(() => map.props.onMapMessage({ type: 'PIN_TAP', index: 1 }));
+    act(() => map.props.onPinTap(1));
     const sheet = screen.getByTestId('itinerary-pin-detail-sheet');
     expect(sheet).toHaveTextContent(/감천문화마을/);
     expect(sheet).not.toHaveTextContent(/광안리 해변/);

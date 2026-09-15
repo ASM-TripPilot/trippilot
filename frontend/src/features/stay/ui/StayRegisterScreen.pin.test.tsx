@@ -29,7 +29,7 @@ import { StayRegisterScreen } from './StayRegisterScreen';
  * `_ReactNativeCSSInterop` 참조가 jest 호이스트 규칙을 위반하므로 모듈 스코프 파일을 require 한다.
  */
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 /** 픽스처는 파일마다 각자 갖는 것이 리포 관례다. */
 const CANDIDATE_A: GeocodeCandidate = {

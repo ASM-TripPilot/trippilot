@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Text, View } from 'react-native';
 import {
   NaverMapView,
@@ -115,15 +115,21 @@ export function MapView({
   const showPath =
     connectPins !== false && pins !== undefined && pins.length >= 2;
 
+  // 제어형 `camera` 를 쓴다(`initialCamera` 아님). initialCamera 는 SDK 가 "마운트 후 변경해도
+  // 동작 안 함"이라, 소비처가 카카오 시절 key=remount 로 하던 재중심을 S3 에서 걷어낸 지금
+  // center 가 바뀌어도 카메라가 첫 좌표에 얼어붙는다(code-critic 경고-1). 값으로 memo 해
+  // center 가 실제로 바뀔 때만 새 객체 → 그때만 재중심하고, 안정적인 center 에선 같은 객체라
+  // 사용자 제스처를 매 렌더 되돌리지 않는다.
+  const camera = useMemo(
+    () => ({ latitude: center.lat, longitude: center.lng, zoom: INITIAL_ZOOM }),
+    [center.lat, center.lng]
+  );
+
   return (
     <View testID="map-root" className="flex-1">
       <NaverMapView
         style={{ flex: 1 }}
-        initialCamera={{
-          latitude: center.lat,
-          longitude: center.lng,
-          zoom: INITIAL_ZOOM,
-        }}
+        camera={camera}
         isScrollGesturesEnabled={!viewOnly}
         isZoomGesturesEnabled={!viewOnly}
         isRotateGesturesEnabled={!viewOnly}

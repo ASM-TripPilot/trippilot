@@ -24,7 +24,7 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 
 import type { GeocodeCandidate } from '@/shared/api/generated/schemas';
-import { KakaoMapView, type KakaoMapMessage } from '@/shared/map';
+import { KakaoMapView, MapView, type KakaoMapMessage } from '@/shared/map';
 
 import {
   daysInMonth,
@@ -606,12 +606,7 @@ function MapSheet({
         {mapSheetState === 'open' ? (
           <>
             <View className="h-[240px] w-full overflow-hidden rounded-card">
-              {/* 같은 이유로 key를 준다 — 시트가 열려 있는 동안 후보가 바뀌면(다른 후보를
-                다시 고르는 경우) 지도가 새 좌표를 받아야 한다. */}
-              <KakaoMapView
-                key={`${candidate.lat},${candidate.lng}`}
-                center={{ lat: candidate.lat, lng: candidate.lng }}
-              />
+              <MapView center={{ lat: candidate.lat, lng: candidate.lng }} />
             </View>
             <Pressable
               testID="stay-register-mapsheet-confirm"
@@ -770,10 +765,7 @@ export function StayRegisterScreen({
                     testID="stay-register-map-preview"
                     className="mx-lg h-[196px] overflow-hidden rounded-card"
                   >
-                    {/* KakaoMapView는 마운트 시점 center로 문서를 굳힌다(B-1) — 후보가
-                      바뀌면 지도가 따라가야 하므로 좌표를 key로 줘 remount시킨다. */}
-                    <KakaoMapView
-                      key={`${flow.selectedCandidate.lat},${flow.selectedCandidate.lng}`}
+                    <MapView
                       center={{
                         lat: flow.selectedCandidate.lat,
                         lng: flow.selectedCandidate.lng,

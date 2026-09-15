@@ -22,7 +22,7 @@ import {
   LocationBackChevronGlyph,
   LocationInfoGlyph,
 } from '@/shared/location/LocationGlyphs';
-import { KakaoMapView, type MapCenter } from '@/shared/map';
+import { MapView, type MapCenter } from '@/shared/map';
 import type { StartReplanRequestOriginKind } from '@/shared/api/generated/schemas/startReplanRequestOriginKind';
 
 export type LiveLocationState = 'manual' | 'permission-denied';
@@ -117,7 +117,7 @@ export function LiveLocationPage({
           {/* 지도 — center 는 목이 읽는 필수 prop. 롱프레스 실동작·핀 오버레이는 6-b(shared/map 확장
               안 함, Seed §3-a). */}
           <View className="h-[250px] overflow-hidden rounded-[14px]">
-            <KakaoMapView center={face.center} />
+            <MapView center={face.center} />
           </View>
           <Text className="font-noto text-label text-muted">
             {face.mapHint}

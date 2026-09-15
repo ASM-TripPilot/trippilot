@@ -10,7 +10,7 @@ import type { MapCenter, MapPin } from '@/shared/map';
  * TRIP-863 (S1) — 공급자 중립 `MapView`(네이버 네이티브) 코어 교체. 01b AC1~7 통합.
  *
  * 이 파일은 `@/shared/map` 배럴의 실제 `MapView`(구현 전)를 태운다 — 얇은 카카오 목
- * (`kakaoMapViewMock`)이 아니라 코어 진짜 테스트다. 네이버 SDK 는 네이티브 모듈이라
+ * (`mapViewMock`)이 아니라 코어 진짜 테스트다. 네이버 SDK 는 네이티브 모듈이라
  * `__mocks__/@mj-studio/react-native-naver-map.tsx`(prop-기록형 목)가 자동 적용된다:
  * NaverMapView→testID="map-native", 마커→"map-marker", 경로선→"map-path" 로 렌더하고
  * props 를 그대로 노출해 viewOnly 4토글·onTap 을 관측한다.
@@ -65,12 +65,12 @@ describe('🔴 AC1 — 정상: center + pins 2개 → map-native, 마커 2개, �
 
   it('center 의 lat/lng 가 뒤바뀌지 않고 네이티브 지도로 전달된다(좌표 스왑 회귀 방지)', () => {
     // 리포에 위/경도 스왑이 tsc 에러 없이 통과하는 함정 선례가 있다(둘 다 number).
-    // 목이 initialCamera 를 host View 에 노출하므로 축 매핑을 jest 로 못박는다
+    // 제어형 `camera` prop 을 host View 에 노출하므로 축 매핑을 jest 로 못박는다
     // (zoom 값은 6-b 실기 조정이라 잠그지 않는다 — lat==lat·lng==lng 만).
     render(<MapView center={CENTER} pins={PINS} />);
 
     const native = screen.getByTestId('map-native');
-    const camera = native.props.initialCamera as {
+    const camera = native.props.camera as {
       latitude: number;
       longitude: number;
     };

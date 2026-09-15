@@ -21,7 +21,7 @@ import { LiveLocationPage } from './LiveLocationPage';
 
 // `@/shared/map` 을 좌표 마커 목으로 치환 — 실 KakaoMapView 는 JS 키가 없으면 map-failure 로
 // 떨어지고(WebView 는 jest 렌더 트리에 아무것도 안 남김), 목은 center 를 Text 로 노출한다.
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 describe('LiveLocationPage — i20 수동 입력 얼굴 (state=manual)', () => {
   it('manual 얼굴을 그리고 permission-denied 루트는 없다(상호배타)', () => {

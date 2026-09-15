@@ -57,7 +57,7 @@ jest.mock('expo-router', () => ({
 // 지도는 목으로 바꾼다 — 실제 KakaoMapView는 WebView를 타므로 메시지를 밖에서 발화시킬
 // 창구가 없다. 인라인 팩토리는 NativeWind babel 호이스트 규칙에 걸리므로 모듈을 require 한다.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 const BASE = 'http://localhost:8080/api/v1';
 
