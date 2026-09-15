@@ -52,7 +52,7 @@ import logging
 import os
 import time
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -447,6 +447,20 @@ class WiredOutcome:
     candidates_summary: core.CandidatesReport | None
     day1_ready_at: datetime | None
     unplaced_must_visits: tuple[UnplacedMustVisit, ...] = ()
+    # 슬롯별 차선책 (TRIP-871) — generate 경로만 실값. 기본 빈 = 차선책 없음.
+    slot_alternatives: Mapping[str, tuple["WiredSlotAlternative", ...]] = field(
+        default_factory=dict
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class WiredSlotAlternative:
+    """`SlotAlternativeLike` 충족 — 에이전트의 `SlotAlternative` 에 표시용 거리 문자열을
+    붙인 것 (TRIP-871). `distance_range` 는 슬롯 POI 기준, 좌표 미상이면 None."""
+
+    poi_id: str
+    rationale: str
+    distance_range: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -515,6 +529,7 @@ def _envelope(
     candidates_summary: core.CandidatesReport | None = None,
     day1_ready_at: datetime | None = None,
     unplaced_must_visits: tuple[UnplacedMustVisit, ...] = (),
+    slot_alternatives: Mapping[str, tuple[WiredSlotAlternative, ...]] | None = None,
 ) -> WiredOutcome:
     """봉투 조립. 기본값(빈/None)은 산출 컨텍스트가 없는 경로(repair)의 정직한 값이다.
 
@@ -522,6 +537,8 @@ def _envelope(
     풀 생성 시각을 수집 시각인 척 지어내지 않는다.
     `unplaced_must_visits` 기본 빈 튜플: repair 와이어에는 원 요청 fixed_blocks가
     없어 판정 불가 — 지어내지 않는다(generate 경로만 실값 주입).
+    `slot_alternatives` 기본 빈: repair·edit 와이어에는 후보 점수가 없어 선정 불가 —
+    generate 경로만 실값(TRIP-871).
     """
     return WiredOutcome(
         solution=solution,
@@ -531,6 +548,7 @@ def _envelope(
         candidates_summary=candidates_summary,
         day1_ready_at=day1_ready_at,
         unplaced_must_visits=unplaced_must_visits,
+        slot_alternatives=slot_alternatives if slot_alternatives is not None else {},
     )
 
 
@@ -748,31 +766,86 @@ class WiredItineraryOrchestrator:
         if outcome.status is core.GenerationStatus.FAILED:
             raise _failure_exception(outcome.error or "unknown_failure")
         assert outcome.solution is not None  # GenerationOutcome 불변식(FAILED⇔None)
+        solution = outcome.solution
+        coords = self._coords_for(solution, outcome.slot_alternatives)
         return _envelope(
-            outcome.solution,
+            solution,
             outcome.explanations,
-            distance_ranges=self._distances_for(request, outcome.solution),
+            distance_ranges=self._distances_for(request, solution, coords),
+            slot_alternatives=self._alternatives_for(
+                request, solution, outcome.slot_alternatives, coords
+            ),
             candidates_summary=outcome.candidates_summary,
             day1_ready_at=self._day1_ready_at(request, outcome),
             unplaced_must_visits=judge_unplaced_must_visits(
-                request, outcome.solution, self._tz
+                request, solution, self._tz
             ),
         )
+
+    def _coords_for(
+        self,
+        solution: ItinerarySolution,
+        picks: Mapping[str, tuple[core.SlotAlternative, ...]],
+    ) -> dict[PoiId, GeoPoint]:
+        """배치 POI + 차선책 POI 좌표를 poi_db 에서 **한 번에** 재조회한다(표시 전용 read)."""
+        ids = frozenset(s.poi_id for day in solution.days for s in day.slots) | frozenset(
+            a.poi_id for alts in picks.values() for a in alts
+        )
+        if not ids:
+            return {}
+        return {p.poi_id: p.coord for p in self._poi_db.find_by_ids(ids)}
 
     def _distances_for(
         self,
         request: schemas.GenerateItineraryRequest,
         solution: ItinerarySolution,
+        coords: Mapping[PoiId, GeoPoint],
     ) -> dict[str, str]:
-        """배치된 POI 좌표를 poi_db에서 재조회해 구간 거리를 렌더한다(표시 전용 read)."""
-        ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
-        if not ids:
-            return {}
-        coords = {p.poi_id: p.coord for p in self._poi_db.find_by_ids(ids)}
+        """배치 POI 좌표(`_coords_for` 재조회분)로 구간 거리를 렌더한다."""
         anchors = {a.date: GeoPoint(a.lat, a.lng) for a in request.anchors}
         return _distance_ranges(
             solution, anchors, coords, self._estimator, _transport_from(request)
         )
+
+    def _alternatives_for(
+        self,
+        request: schemas.GenerateItineraryRequest,
+        solution: ItinerarySolution,
+        picks: Mapping[str, tuple[core.SlotAlternative, ...]],
+        coords: Mapping[PoiId, GeoPoint],
+    ) -> dict[str, tuple[WiredSlotAlternative, ...]]:
+        """차선책에 **그 슬롯 POI 기준** 거리 문자열을 붙인다 — 좌표 미상이면 null(TRIP-871).
+
+        기준점이 직전 지점이 아니라 슬롯 POI 인 이유: 차선책은 "이 자리를 무엇으로 바꿀까"의
+        답이라, 바꾸려는 장소에서 얼마나 떨어졌는지가 사용자 질문이다(온디맨드 경로의
+        백엔드 거리 계산도 교체 대상 좌표가 중심 — ai-backend-alternatives-연동-설계 §3).
+        거리만 — 소요시간류 토큰 0(INV-3, `_render_distance` 가 보장).
+        """
+        if not picks:
+            return {}
+        mode = _transport_from(request)
+        out: dict[str, tuple[WiredSlotAlternative, ...]] = {}
+        for day in solution.days:
+            for slot in day.slots:
+                key = f"{day.date.isoformat()}#{slot.poi_id}"
+                alts = picks.get(key)
+                if not alts:
+                    continue
+                here = coords.get(slot.poi_id)
+                out[key] = tuple(
+                    WiredSlotAlternative(
+                        poi_id=str(a.poi_id),
+                        rationale=a.rationale,
+                        distance_range=(
+                            _render_distance(
+                                self._estimator.estimate(here, coords[a.poi_id], mode), mode
+                            )
+                            if here is not None and a.poi_id in coords else None
+                        ),
+                    )
+                    for a in alts
+                )
+        return out
 
     @staticmethod
     def _day1_ready_at(

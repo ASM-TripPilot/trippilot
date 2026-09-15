@@ -148,6 +148,19 @@ class GenerateItineraryRequest(BoundaryModel):
 # ───────────────────────── 응답: ScheduleAgentOutput ─────────────────────────
 
 
+class SlotAlternativeSchema(BoundaryModel):
+    """슬롯 차선책 1건 (TRIP-871) — **제안만**: 시각·순서 없음(INV-2 — 교체 확정은
+    edit → validate 관문), 거리만(INV-3).
+
+    `rationale` 은 사용자 표시용 템플릿 문장("같은 카페 후보"). `distance_range` 는
+    **그 슬롯 POI 에서의** 거리("약 1.2km · 대중교통 추정") — 좌표 미상이면 null.
+    """
+
+    poi_id: str = Field(min_length=1)
+    rationale: str
+    distance_range: str | None = None
+
+
 class VisitSlotDisplaySchema(BoundaryModel):
     """표시용 방문 슬롯 — 어셈블리 검증 시각·순서만(INV-2), 거리만(INV-3).
 
@@ -161,6 +174,9 @@ class VisitSlotDisplaySchema(BoundaryModel):
     ends_next_day: bool = False
     distance_range: str | None = None
     is_fixed: bool = False
+    # 슬롯별 차선책 (TRIP-871) — additive, 기본 빈 = 차선책 없음(슬롯당 최대 2건).
+    # validate/repair/edit 요청으로 왕복될 때는 소비하지 않는다(unplaced_must_visits 선례).
+    alternatives: list[SlotAlternativeSchema] = Field(default_factory=list)
 
 
 class DayScheduleSchema(BoundaryModel):

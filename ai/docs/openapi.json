@@ -1659,6 +1659,38 @@
         "title": "ShareCardCopyResponse",
         "type": "object"
       },
+      "SlotAlternativeSchema": {
+        "additionalProperties": false,
+        "description": "슬롯 차선책 1건 (TRIP-871) — **제안만**: 시각·순서 없음(INV-2 — 교체 확정은\nedit → validate 관문), 거리만(INV-3).\n\n`rationale` 은 사용자 표시용 템플릿 문장(\"같은 카페 후보\"). `distance_range` 는\n**그 슬롯 POI 에서의** 거리(\"약 1.2km · 대중교통 추정\") — 좌표 미상이면 null.",
+        "properties": {
+          "distance_range": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance Range"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "rationale"
+        ],
+        "title": "SlotAlternativeSchema",
+        "type": "object"
+      },
       "TimeWindowSchema": {
         "additionalProperties": false,
         "description": "날짜별 이용 시각(기본 09–21시). 도메인 TimeWindow와 같은 불변식(start < end).",
@@ -2047,6 +2079,13 @@
         "additionalProperties": false,
         "description": "표시용 방문 슬롯 — 어셈블리 검증 시각·순서만(INV-2), 거리만(INV-3).\n\n**소요시간 필드를 추가하지 말 것**: 도메인 `VisitSlot.stay_min`·`score`는\n내부값이라 이 사영에서 의도적으로 제외한다(IO-3).",
         "properties": {
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/SlotAlternativeSchema"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
           "distance_range": {
             "anyOf": [
               {

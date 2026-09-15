@@ -12,6 +12,7 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiRequestMeta
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSavedPlace
 import com.trippilot.itinerarygeneration.adapter.out.external.AiScheduleResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSlot
+import com.trippilot.itinerarygeneration.adapter.out.external.AiSlotAlternative
 import com.trippilot.itinerarygeneration.adapter.out.external.AiTrigger
 import com.trippilot.itinerarygeneration.adapter.out.external.AiUnplacedMustVisit
 import com.trippilot.itinerarygeneration.adapter.out.external.AiViolation
@@ -162,6 +163,7 @@ class AiBoundaryOpenApiTest : StringSpec({
         wireKeys(samplePayload) shouldContainExactly props("ItineraryPayload")
         wireKeys(samplePayload.days.single()) shouldContainExactly props("DayScheduleSchema")
         wireKeys(samplePayload.days.single().slots.single()) shouldContainExactly props("VisitSlotDisplaySchema")
+        wireKeys(samplePayload.days.single().slots.single().alternatives.single()) shouldContainExactly props("SlotAlternativeSchema")
         wireKeys(samplePayload.unplacedMustVisits.single()) shouldContainExactly props("UnplacedMustVisitSchema")
         wireKeys(requireNotNull(samplePayload.freshness)) shouldContainExactly props("FreshnessMetaSchema")
     }
@@ -229,6 +231,7 @@ private val samplePayload = AiScheduleResponse(
                 AiSlot(
                     UUID.randomUUID(), LocalTime.parse("10:00"), LocalTime.parse("11:00"),
                     endsNextDay = false, distanceRange = "약 1.2km · 도보 추정", isFixed = true,
+                    alternatives = listOf(AiSlotAlternative(UUID.randomUUID().toString(), "같은 카페 후보", "약 0.8km · 도보 추정")),
                 ),
             ),
         ),
