@@ -12,10 +12,21 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-data class DestinationDto(val seq: Int, val region: String, val nights: Int) {
-    fun toDomain() = TripDestination(seq, region, nights)
+/**
+ * @property regionCode 행정구역 표준코드(TRIP-859). **주면 이름 조회를 건너뛴다** — 동명이지역
+ *   (고성군: 강원·경남 / 중구 5곳)에서 이름만으로는 어느 쪽인지 정할 수 없어 서버가 비워 두는데,
+ *   코드가 오면 그 애매함이 애초에 생기지 않는다. 후보는 `GET /regions` 로 고른다.
+ *   기존 클라이언트는 계속 이름만 보내면 된다 — 동작이 바뀌지 않는다.
+ */
+data class DestinationDto(
+    val seq: Int,
+    val region: String,
+    val nights: Int,
+    val regionCode: String? = null,
+) {
+    fun toDomain() = TripDestination(seq, region, nights, regionCode)
     companion object {
-        fun from(d: TripDestination) = DestinationDto(d.seq, d.region, d.nights)
+        fun from(d: TripDestination) = DestinationDto(d.seq, d.region, d.nights, d.regionCode)
     }
 }
 
