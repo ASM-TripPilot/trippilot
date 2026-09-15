@@ -257,6 +257,7 @@ private val sampleAlternativesRequest = AiAlternativesRequest(
     affectedReasons = mapOf(UUID.randomUUID().toString() to "일몰 명소"),
     savedPlaces = listOf(AiSavedPlace(UUID.randomUUID().toString(), "성산일출봉")),
     requestMeta = AiRequestMeta(UUID.randomUUID().toString(), Instant.parse("2026-09-01T00:00:00Z"), 25_000L),
+    tripId = UUID.randomUUID().toString(),
 )
 
 private val sampleAlternativesResponse = AiAlternativesResponse(
