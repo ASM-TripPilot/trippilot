@@ -771,7 +771,20 @@ note = """
 **836 을 셋으로 쪼갠 나머지.** 재계획 구독(실제 버그)은 PR #528 로 끝났고, 여기 남은 것은
 문구 채움 서비스 + AI wire + `notification_schedule.title/body` 컬럼·발화 분기다.
 
-**계약 대기**: `ai/docs/openapi.json` 에 `notification/copies` 경로가 **아직 없다**(2026-09-15 실측).
+**계약이 열렸다(2026-09-16 실측) — 차단 해소.** `ai/docs/openapi.json` 에
+`POST /ai/v1/notification/copies` 가 실재한다. 계약 모양:
+
+- 요청 `ReminderCopyRequest` — `items`(필수) · `request_meta`(필수) · `trip_title`
+- 항목 `ReminderCopyItemSchema` — `schedule_key`·`kind`·`date`(필수) · `slots`
+- 응답 `ReminderCopyResponse` — `copies`(필수) · `degraded`(필수) · `fallback_mode`
+- 문구 `ReminderCopySchema` — `schedule_key`·`title`·`body` 전부 필수
+
+**`schedule_key` 가 맞물림의 전부다** — 요청 항목과 응답 문구를 잇는 키라, 우리 예약 행과 같은
+값이어야 문구가 제자리에 붙는다. 슬롯키 규약(`{date}#{poiId}`)과 다른 축이니 착수 시 확인한다.
+`degraded` 가 오면 상대가 규칙 문구로 내려간 것이므로 **AI 문구로 표시하지 않는다**(회고 `source` 선례).
+
+**이전 기록(2026-09-15)**: 경로가 없어 컬럼·발화 분기만 먼저 넣으면 채우는 쪽이 없어 항상
+null→상수라 동작 변화가 0이었다. 그 전제가 사라졌다.
 컬럼·발화 분기만 먼저 넣으면 채우는 쪽이 없어 **항상 null→상수라 동작 변화가 0** 인 죽은 코드가 된다.
 """
 
@@ -945,6 +958,33 @@ touches = [
   "backend/app/src/main/resources/application.yml",
 ]
 note = """
+**정정(2026-09-16) — 키는 멀쩡하다. 아래 '22자' 진단은 틀렸다.**
+
+실제로 호출해서 확인했다: `.env` 의 값(98자)을 **그대로** 보내면 403, **한 번 디코딩해서** 보내면
+`HTTP 200 · resultCode=00 · NORMAL_SERVICE` 다. 즉 발급된 키는 유효하고, 들어 있는 것이
+**Encoding 표기**(`%2B`·`%3D` 포함)인데 코드는 **Decoding 키**를 요구한다
+(`kma_weather.py` — "service_key는 **디코딩 키** (urlencode는 HTTP 클라이언트 1회)").
+Encoding 키를 넣으면 클라이언트가 한 번 더 인코딩해 `%2B` → `%252B` 가 되고 서버가 거절한다.
+**재발급이 아니라 같은 키의 다른 표기를 넣으면 된다.**
+
+**AI 조립도 이미 돼 있다** — `ai/main.py` 의 `_kma_weather()` 가 `WEATHER_API` 가 있으면
+`KmaWeatherAdapter` 를 조립한다. 앞서 "조립이 안 돼 있다"고 적었던 것도 틀렸다(`ai/src/` 아래만
+찾고 `ai/main.py` 를 안 봤다).
+
+**그래서 이 노드의 실체는 키가 아니라 코드다** — 백엔드 `weather-context` 에는 Kotlin 실어댑터가
+없고 `FakeWeatherAdapter` 뿐이며, Plan-B 트리거(`WeatherTriggerService`)가 그것을 본다.
+`trippilot.weather.mode` 스위치는 application.yml·compose·.env.example 어디에도 없다.
+AI 쪽은 키 표기만 고치면 켜지지만, 백엔드 Plan-B 는 그것과 별개다.
+
+**착수 전 결정**: 같은 공공 API 를 Kotlin·Python 두 벌로 둘 것인가. 루트 CLAUDE.md 의
+"one external API = one owning module = one adapter port" 와 부딪힌다. 대안은 백엔드가 AI 에
+날씨를 묻는 것인데, 그러면 **배경 감지가 AI 가용성에 묶인다** — "조회 실패는 무발화"(BR-U4-05)와
+맞물려 비 오는 날 아무 일도 안 일어나는 결과가 된다.
+
+---
+
+**아래는 2026-09-15 시점의 기록이며 키 관련 부분은 위에서 정정됐다.**
+
 **차단(2026-09-15 실측) — 키가 없다.** `.env` 의 `WEATHER_API` 로 기상청 단기예보를 호출하면 **403** 이다.
 키가 22자 평문인데 공공데이터포털 인증키는 보통 40자 이상이라 **다른 서비스 키**로 보인다.
 티켓도 키 발급을 선행 1번으로 잡았다. 공공데이터포털에서 *기상청_단기예보 조회서비스* 활용신청 후
