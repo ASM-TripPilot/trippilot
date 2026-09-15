@@ -230,4 +230,8 @@ class BackendPoiDb:
             quality=_enum_or_raise(DataQuality, row.get("data_quality"), "data_quality"),
             source=_SOURCE_MAP.get(row["source"], PoiSource.PLACES_API),
             confidence=None,
+            # 백엔드 `poi.tags text[]` — 내부 read DTO 가 아직 안 싣는다(공개 API 는 이미
+            # 내보낸다). 노출되면 여기로 흘러들어오고, 그전까지는 빈 튜플이라 후보 줄이
+            # 종전과 같다. 값 부재가 POI 를 빼는 사유가 아니다(BR-U1-06 취지).
+            tags=tuple(str(t) for t in (row.get("tags") or ())),
         )

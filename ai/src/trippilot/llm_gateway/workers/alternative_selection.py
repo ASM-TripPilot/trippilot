@@ -18,6 +18,7 @@ from datetime import datetime
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
+from trippilot.domain.poi import Poi
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,16 @@ class AlternativeSelectionInput:
             raise ValueError("max_alternatives ≥ 1")
 
 
+def _category_label(poi: Poi) -> str:
+    """대분류 + 세분류. 8종으로는 못 가르는 축을 모델에게 주는 유일한 자리다.
+
+    우천 판정표가 FOOD·SIGHT 를 중립으로 두는 근거가 "실내외 혼재"인데
+    (`assembly_engine/config.py`), 그 혼재를 푸는 것이 세분류다 — 명소 3,942곳에
+    섞인 `유적지/사적지`(야외)와 `박물관`(실내)이 여기서 갈린다.
+    """
+    return "·".join((poi.category.value, *poi.tags))
+
+
 def build_alternative_selection_vars(
     pool: CandidatePool, inp: AlternativeSelectionInput
 ) -> dict[str, str]:
@@ -45,9 +56,14 @@ def build_alternative_selection_vars(
     후보는 poi_id·카테고리·상호명만 — 제외 POI는 목록에서 아예 빠져 모델이 고를 수
     있는 값 자체를 한정한다 (INV-1). 그래도 새는 참조는 게이트 + 호출측
     `closed_set_filter`가 이중으로 막는다.
+
+    카테고리 칸에는 세분류(`Poi.tags`)가 있으면 이어 붙는다 — `FOOD·음식점·한식`.
+    **칸을 새로 만들지 않는 이유**: 태그는 카테고리를 쪼갠 것이지 다른 축이 아니고,
+    칸을 늘리면 프롬프트 골격이 바뀌어 버전을 올려야 하는데 정작 백엔드가 태그를
+    노출하기 전까지는 그 칸이 항상 비어 있다(없는 칸을 설명하는 프롬프트가 된다).
     """
     candidates = "\n".join(
-        f"- {p.poi_id} | {p.category.value} | {p.name}"
+        f"- {p.poi_id} | {_category_label(p)} | {p.name}"
         for p in sorted(pool.pois, key=lambda p: str(p.poi_id))
         if p.poi_id not in inp.excluded_poi_ids
     )

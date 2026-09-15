@@ -472,3 +472,51 @@ def test_pbt_pipeline_llm_picks_never_escape_pool(case, reason: str) -> None:
     result = _pipeline(FakeLlm(canned=canned)).run(_request(pool))
     picked = [p for a in result.alternatives for p in a.poi_ids]
     assert all(pool.contains(p) for p in picked)
+
+
+# ── 세분류 태그 (KB-5) ────────────────────────────────────────────
+def _tagged(pid: str, name: str, cat: PoiCategory, tags: tuple[str, ...]) -> Poi:
+    return Poi(
+        poi_id=PoiId(pid), name=name, category=cat,
+        coord=GeoPoint(33.45, 126.56), open_hours=(), avg_cost=None, rating=None,
+        quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None, tags=tags,
+    )
+
+
+def _candidate_lines(pois: tuple[Poi, ...]) -> list[str]:
+    pool = CandidatePool(
+        poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=_NOW
+    )
+    inp = AlternativeSelectionInput(
+        trigger_kind="WEATHER", reason="weather",
+        schedule_context="", situation_context="", persona_context="",
+        max_alternatives=3, excluded_poi_ids=frozenset(),
+    )
+    return build_alternative_selection_vars(pool, inp)["candidates"].splitlines()
+
+
+def test_candidate_line_carries_subcategory_when_present() -> None:
+    """세분류가 후보 줄에 실린다 — 대분류 8종이 못 가르는 축을 주는 유일한 자리다.
+
+    명소 3,942곳에 야외 유적지와 실내 전시관이 섞여 있는데, 우천 판정표는 SIGHT 를
+    **중립**으로 둔다("실내외 혼재", `assembly_engine/config.py`). 세분류가 없으면
+    모델은 상호명 기억으로 지어내고, 그 창작이 게이트 없는 `reason` 으로 나간다.
+    """
+    lines = _candidate_lines((
+        _tagged("p1", "수원화성", PoiCategory.SIGHT, ("역사관광지", "유적지/사적지")),
+        _tagged("p2", "국립중앙박물관", PoiCategory.SIGHT, ("문화시설", "박물관")),
+    ))
+
+    assert lines[0] == "- p1 | SIGHT·역사관광지·유적지/사적지 | 수원화성"
+    assert lines[1] == "- p2 | SIGHT·문화시설·박물관 | 국립중앙박물관"
+
+
+def test_candidate_line_is_unchanged_without_tags() -> None:
+    """태그가 없으면 종전 형식 그대로 — 백엔드가 아직 안 내보낸다.
+
+    내부 read DTO(`PoiInternalController.PoiReadResponse`)에 `tags` 가 없어서 실경로는
+    당분간 전부 이 갈래다. 여기가 깨지면 프롬프트가 조용히 바뀐다.
+    """
+    lines = _candidate_lines((_tagged("p1", "을지로 카페", PoiCategory.CAFE, ()),))
+
+    assert lines == ["- p1 | CAFE | 을지로 카페"]
