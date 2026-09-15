@@ -193,3 +193,56 @@ LOCALDATA_DIR=<받은 경로> uv run python scripts/match_business_status.py
 `(시도, 시군구, 도로명, 건물번호)` **키로 뽑아 비교하면 83.3%** 가 된다.
 
 주소가 같아도 **이름이 안 맞으면 붙이지 않는다**(실측 12.3%). 같은 건물의 다른 가게라, 붙이면 엉뚱한 가게의 폐업 여부를 가져온다.
+
+## `overture/` — Overture Maps 수집 제안 (지역별)
+
+TourAPI 단일 출처의 구조적 한계를 메우는 **두 번째 POI 출처**다 (TRIP-684).
+경계 8종 중 유일하게 0건이던 **NIGHT_VIEW** 가 여기서 처음 채워진다.
+
+실측(릴리스 `2026-08-19.0`, 한국 bbox, DuckDB + S3):
+
+```
+한국 POI          691,968건        TourAPI 수집분 18,607건의 37배
+한글 이름         439,468 (63.5%)  로마자만 있는 건 제안하지 않는다
+화이트리스트 통과   208,507건
+  FOOD 130,760 · CAFE 45,309 · SIGHT 15,879 · SHOPPING 6,527
+  NATURE 5,248 · CULTURE 4,060 · ACTIVITY 683 · NIGHT_VIEW 41
+```
+
+**ACTIVITY 는 TourAPI 가 더 강하다**(2,981 vs 683) — 덮어쓰지 말고 합칠 것.
+
+### 왜 지역별 파일인가
+
+전국 20만 건을 `collected_pois.json` 에 넣으면 14MB → 약 150MB 가 된다.
+git 커밋·백엔드 수신·리뷰가 다 감당 못 한다. 그래서 광역 17개로 쪼갠다.
+제주 실측: 7,960건 / 4.8MB.
+
+⚠️ **공유본과 아직 합류하지 않았다.** `collected_pois.json` 은 백엔드
+IT(`PoiProposalRealDocumentIT`)·`merge_pois_docs.py`·`match_business_status.py`·
+`backend-ci.yml` 경로 필터가 물고 있어, 분할·합류는 그 넷을 함께 옮기는
+별건이다.
+
+### 갱신
+
+```bash
+uv run --with duckdb python scripts/collect_overture.py --out data/overture
+uv run --with duckdb python scripts/collect_overture.py --areas 제주,부산
+```
+
+인증이 필요 없다(공개 S3). 좌표는 이미 WGS84 라 변환도 없다.
+**월 1회 재수집이 필요하다** — 공개본은 최신 2릴리스(약 60일)만 유지된다.
+`_RELEASE` 상수를 올려야 하며, 낡은 릴리스는 404 가 난다.
+
+### 라이선스 — 출처 표시 의무가 있다
+
+places 테마는 **CDLA Permissive 2.0** 이다. share-alike 가 없어 파생물을 같은
+라이선스로 공개할 의무는 없고 상업 이용도 자유지만, **출처 표시는 해야 한다**:
+
+- 앱 정보 화면 또는 배포물에 `Overture Maps Foundation (overturemaps.org)` 고지
+- 레코드별 원출처가 섞여 있다(`provenance.dataset`: meta · microsoft ·
+  foursquare · alltheplaces …). **Foursquare 출처분은 NOTICE 보존 의무가 별도로
+  붙는다**(Apache 2.0) — 그래서 `dataset` 을 버리지 않고 보존한다.
+
+⚠️ **places 테마만 CDLA 다.** `buildings`·`transportation` 등은 OSM 기반
+**ODbL(share-alike)** 이라 같은 테이블에 섞으면 의무가 생긴다. 이 수집기는
+places 만 읽는다.
