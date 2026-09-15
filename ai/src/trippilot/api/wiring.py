@@ -137,10 +137,10 @@ from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelecti
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
-from trippilot.orchestrator import itinerary_orchestrator as core
+from trippilot.orchestrator import schedule_coordinator as core
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
 from trippilot.ports.trace_port import TracePort
-from trippilot.domain.freshness import ProviderKind
+from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.ports.weather_port import WeatherPort
 from trippilot.ports.event_port import EventPort
@@ -721,12 +721,13 @@ class WiredItineraryOrchestrator:
 
     def __init__(
         self,
-        orchestrator: core.ItineraryOrchestrator,
+        orchestrator: core.ScheduleCoordinator,
         assembly_provider: ChainAssemblyProvider,
         poi_db: object,
         estimator: TravelEstimator,
         tz: timezone = KST,
         *,
+        info: InfoCollector,
         pool_builder: CandidatePoolBuilder,
         rag: PlanBAgent,
         explainer: ExplanationWorker,
@@ -743,6 +744,7 @@ class WiredItineraryOrchestrator:
         self._poi_db = poi_db
         self._estimator = estimator
         self._tz = tz
+        self._info = info
         self._pool_builder = pool_builder
         self._rag = rag
         self._explainer = explainer
@@ -913,23 +915,46 @@ class WiredItineraryOrchestrator:
     def alternatives(
         self, request: schemas.AlternativesRequest
     ) -> schemas.AlternativesResponse:
-        """Plan-B 대안 제안 (TRIP-428) — 풀 빌드(M7) → RAG 파이프라인 → 사영.
+        """Plan-B 대안 제안 (TRIP-428) — 정보 수집(REPLAN 요구표) → RAG 파이프라인 → 사영.
 
-        풀은 요청 앵커 반경으로 여기서 직접 만든다(INV-1 — 후보 자격은 M7 소유,
-        generate와 같은 빌더·같은 poi_db). 파이프라인은 예외를 던지지 않는다 —
-        실패는 전부 fallback_level·notes·empty_reason 상태값으로 나간다(INV-4).
+        **수집은 `InfoCollector` 경유다** (2026-09-16). 종전에는 풀 빌더를 직접 불러
+        후보 풀만 만들었고, 그래서 `INFO_REQUIREMENTS["REPLAN"]` 이 정의돼 있는데도
+        날씨를 한 번도 보지 않았다 — 비 때문에 다시 짜는 경로가 강수확률을 모른 채
+        백엔드가 준 `reason="weather"` 라벨만 믿고 돌았다(팀 결정 2026-09-15:
+        "replan 은 무조건 날씨를 본다").
+
+        표 4종 중 지금 채워지는 것은 **PLACE·WEATHER 둘**이다. PERSONA(`principal`·
+        `persona_ref`)와 TRANSIT(`origin`·`destination`)은 **와이어에 필드가 없어서**
+        백엔드가 보내주기 전에는 수집할 수 없다 — 경계 계약 개방이 선행이다.
+        미등록·미충족 Provider 는 패킷 자체가 안 만들어지므로(기능 부재) 여기서
+        분기할 필요가 없다.
+
+        의도 파악은 하지 않는다 — 엔드포인트가 intent 를 고정하므로 에이전트 직행이
+        맞고(팀 원칙), 바뀐 것은 "재료를 제대로 챙겨 보낸다"뿐이다.
+
+        파이프라인은 예외를 던지지 않는다 — 실패는 전부 fallback_level·notes·
+        empty_reason 상태값으로 나간다(INV-4).
         """
         now = _tz_aware(request.request_meta.requested_at, self._tz)
-        pool = self._pool_builder.build(
-            CandidatePoolRequest(
-                anchor=GeoPoint(request.anchor.lat, request.anchor.lng),
-                dates=tuple(request.dates),
-                budget=_token_or(_BUDGET_TOKENS, request.budget_level, BudgetLevel.MID),
-                transport=_token_or(
-                    _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC),
-            ),
-            now=now,
+        dates = tuple(request.dates)
+        transport = _token_or(
+            _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
+        packets = self._info.collect(
+            "REPLAN",
+            {
+                "pool_request": CandidatePoolRequest(
+                    anchor=GeoPoint(request.anchor.lat, request.anchor.lng),
+                    dates=dates,
+                    budget=_token_or(
+                        _BUDGET_TOKENS, request.budget_level, BudgetLevel.MID),
+                    transport=transport,
+                ),
+                "anchor": GeoPoint(request.anchor.lat, request.anchor.lng),
+                "days": dates,
+                "now": now,
+            },
         )
+        pool = self._pool_from(packets, now)
         result = self._rag.run(
             PlanBRagRequest(
                 trigger=TriggerParams(
@@ -949,6 +974,11 @@ class WiredItineraryOrchestrator:
                 excluded_poi_ids=frozenset(
                     PoiId(p) for p in request.excluded_poi_ids),
                 affected_reasons=dict(request.affected_reasons),
+                # 실측 강수확률 (팀 결정 2026-09-15). `reason` 라벨을 **대체하지
+                # 않는다** — 라벨은 백엔드가 내린 트리거이고 이미 사용자 화면에 뜬
+                # 문구다("비 예보로 일정 변경 제안"). 우리가 재서 낮게 나왔다고
+                # 야외를 안 내리면 화면과 모순된다. 실값은 정도를 더하는 데만 쓴다.
+                rain_prob_by_date=self._rain_from(packets, dates),
                 saved_places=tuple(
                     SavedPlace(poi_id=sp.poi_id, name=sp.name) for sp in request.saved_places
                 ),
@@ -971,6 +1001,40 @@ class WiredItineraryOrchestrator:
             empty_reason=result.empty_reason,
             pool_size=len(pool.poi_ids),
         )
+
+    def _pool_from(
+        self, packets: dict[ProviderKind, InfoPacket], now: datetime
+    ) -> CandidatePool:
+        """PLACE 패킷 → 풀 실체. 확보 불가면 빈 풀 — 파이프라인이 `no_candidates`
+        상태값으로 수렴시킨다(INV-4, 예외 금지)."""
+        packet = packets.get(ProviderKind.PLACE)
+        ref = packet.data.get("pool_ref") if packet is not None else None
+        pool = self._info.resolve_pool(ref) if isinstance(ref, str) else None
+        return pool if pool is not None else CandidatePool(
+            poi_ids=frozenset(), pois=(), generated_at=now)
+
+    def _rain_from(
+        self,
+        packets: dict[ProviderKind, InfoPacket],
+        dates: tuple[date, ...],
+    ) -> dict:
+        """WEATHER 패킷 → {날짜: 강수확률%}. 요청 날짜로 한정한다.
+
+        **일 단위 대표값이다** — 어댑터가 시간별 슬롯을 받아 일 최댓값으로 접는다
+        (`WeatherPort.daily_forecast`). 재계획은 여행 중 특정 시점에 일어나므로
+        오후에 "오늘 80%"를 받으면 **아침에 이미 그친 비**일 수 있다. 시간 단위
+        포트는 후속 — 그전까지 소비측은 이 값을 과신하지 않는다.
+
+        미등록·조회 실패는 빈 dict (무보정) — 날씨 실패가 대안 실패가 되면 안 된다.
+        """
+        packet = packets.get(ProviderKind.WEATHER)
+        if packet is None or packet.status is not ProviderStatus.OK:
+            return {}
+        wanted = set(dates)
+        return {
+            parsed: p for d, p in packet.data.get("daily", {}).items()
+            if (parsed := date.fromisoformat(d)) in wanted
+        }
 
     def explanations(
         self, request: schemas.ExplanationsRequest
@@ -1037,17 +1101,25 @@ class WiredItineraryOrchestrator:
         solution, _, poi_index, _ = self._reconstruct(request.itinerary, meta)
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
-        pool = self._pool_builder.build(
-            CandidatePoolRequest(
-                anchor=GeoPoint(request.anchor.lat, request.anchor.lng),
-                dates=tuple(
-                    sorted({d.date for d in request.itinerary.days})
-                ) or (request.target_date,),
-                budget=_token_or(_BUDGET_TOKENS, request.budget_level, BudgetLevel.MID),
-                transport=transport,
-            ),
-            now=now,
+        # 수집은 요구표 경유 (2026-09-16) — EDIT 행은 Place 하나뿐이지만, 풀 빌더
+        # 직행 대신 PlaceProvider 를 거치면서 FreshnessMeta·ProviderStatus 가 붙는다.
+        # 조회 실패가 예외로 튀지 않고 상태값으로 수렴한다(INV-4).
+        packets = self._info.collect(
+            "EDIT",
+            {
+                "pool_request": CandidatePoolRequest(
+                    anchor=GeoPoint(request.anchor.lat, request.anchor.lng),
+                    dates=tuple(
+                        sorted({d.date for d in request.itinerary.days})
+                    ) or (request.target_date,),
+                    budget=_token_or(
+                        _BUDGET_TOKENS, request.budget_level, BudgetLevel.MID),
+                    transport=transport,
+                ),
+                "now": now,
+            },
         )
+        pool = self._pool_from(packets, now)
 
         # 구조화 진입의 와이어 파싱은 경계 몫 — op 문자열이 EditOp 밖이면 여기서 거른다
         # (편집 규칙 위반이 아니라 형식 오류다). 자연어는 에이전트가 번역한다.
@@ -1370,8 +1442,11 @@ def build_orchestrator(
         explanation_worker=explainer,
         config=orchestrator_config,
     )
-    orchestrator = core.ItineraryOrchestrator(
-        InfoCollector(providers),
+    # 수집기는 하나를 공유한다 — 코디네이터(generate)와 경계(replan·edit)가 같은
+    # 요구표·같은 Provider 를 쓴다. 경로마다 따로 만들면 표가 갈라진다.
+    info = InfoCollector(providers)
+    orchestrator = core.ScheduleCoordinator(
+        info,
         schedule_agent,
         clock,
         trace,
@@ -1381,6 +1456,7 @@ def build_orchestrator(
     )
     return WiredItineraryOrchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,
+        info=info,
         pool_builder=pool_builder, rag=rag,
         explainer=explainer, context_resolver=resolver,
         edit_agent=edit_agent,

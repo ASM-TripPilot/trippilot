@@ -41,6 +41,12 @@ INFO_REQUIREMENTS: Mapping[str, tuple[ProviderKind, ...]] = {
         ProviderKind.PERSONA,
         ProviderKind.PLACE,
     ),
+    # v2 §3 요구표 "EDIT | Place(추가/교체 의도 시)" — 2026-09-16 실체화.
+    # 편집은 후보 자격 검증(INV-1)에 풀이 필요하고 그 외 수집은 없다.
+    "EDIT": (ProviderKind.PLACE,),
+    # v2 §3 "REFLECT | (없음)" — 회고는 백엔드가 방문 이력을 봉투에 실어 보낸다.
+    # 빈 튜플을 **명시**한다: 키가 없으면 "아직 안 정한 것"과 구분되지 않는다.
+    "REFLECT": (),
 }
 
 

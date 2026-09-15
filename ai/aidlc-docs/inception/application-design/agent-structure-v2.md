@@ -73,7 +73,14 @@
 | REFLECT | (없음) | — |
 | EDIT | Place(추가/교체 의도 시) | — |
 
-> **배선 실태 (2026-08-25, TRIP-530) — 표의 EDIT 행은 구현되지 않았다**:
+> **배선 실태 (2026-09-16 갱신) — 표의 EDIT 행이 구현됐다**: `INFO_REQUIREMENTS` 에
+> `EDIT`(Place)·`REFLECT`(빈 튜플)가 추가됐고, `alternatives`·`edit` 경계가 풀 빌더
+> 직행 대신 `InfoCollector` 를 거친다. 그 결과 **REPLAN 이 처음으로 날씨를 본다**
+> (팀 결정 2026-09-15). 다만 REPLAN 표 4종 중 실제로 채워지는 것은 PLACE·WEATHER
+> 둘뿐 — PERSONA(`principal`·`persona_ref`)와 TRANSIT(`origin`·`destination`)은
+> **와이어에 필드가 없어** 백엔드 계약 개방이 선행이다.
+>
+> 아래는 2026-08-25(TRIP-530) 시점 기록이다:
 > 구현 정본 `orchestrator/info_collector.py::INFO_REQUIREMENTS` 에는 **`GENERATE_SCHEDULE`·`REPLAN` 두 키만**
 > 있다. `EDIT` 키는 없고, 실제 `/edit` 경계는 `api/wiring.py::edit()` 가 **`CandidatePoolBuilder.build()` 를
 > 직접 호출**해 풀을 얻는다 — InfoCollector를 거치지 않는다.
