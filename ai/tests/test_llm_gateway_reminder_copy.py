@@ -155,3 +155,27 @@ def test_pbt_arbitrary_text_never_raises(raw: str) -> None:
     ReminderCopyGate().apply(
         raw, CTX, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW
     )
+
+
+def test_declared_place_may_drop_parenthetical_in_body() -> None:
+    """괄호 부기는 본문에서 빼도 된다 — 수집 이름의 8.5%가 괄호를 달고 있고,
+    "약수암(부산)에서" 라고 쓰는 알림은 없다. 이걸 드롭하면 그 슬롯이 든 날은
+    매번 기본 문구로 떨어진다."""
+    ctx = ReminderCopyContext(allowed=("약수암(부산)", "초원농원"), forbidden=())
+    out = ReminderCopyGate().apply(
+        json.dumps({"title": "오늘의 부산", "body": "약수암을 둘러보고 초원농원에서 식사해요",
+                    "places": ["약수암(부산)", "초원농원"]}, ensure_ascii=False),
+        ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
+    )
+    assert out.error is None and out.value is not None
+
+
+def test_unrelated_declared_place_still_dropped() -> None:
+    """완화는 괄호 축약까지다 — 본문에 흔적도 없는 선언은 여전히 드롭."""
+    ctx = ReminderCopyContext(allowed=("약수암(부산)", "초원농원"), forbidden=())
+    out = ReminderCopyGate().apply(
+        json.dumps({"title": "오늘의 부산", "body": "느긋하게 걸어볼까요",
+                    "places": ["약수암(부산)"]}, ensure_ascii=False),
+        ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
+    )
+    assert out.value is None and out.drop_event is not None

@@ -27,7 +27,8 @@ import random
 import sys
 from pathlib import Path
 
-JUDGE_MODEL = "claude-sonnet-5"
+# 심판도 같은 이유로 env 로 덮을 수 있게 둔다(모델 id 는 은퇴한다).
+JUDGE_MODEL = os.environ.get("JUDGE_MODEL") or "claude-sonnet-5"
 RUBRIC = """다음은 여행 알림 문구 후보 3개다. 같은 일정에 대한 것이다.
 자연스러움·구체성·알림으로서의 유용성만 보고 가장 좋은 것 하나를 고르라.
 이유는 쓰지 말고 A, B, C 중 한 글자만 출력하라.

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -35,6 +36,18 @@ _MAX_BODY = 60
 
 # 소요시간·시각 계열 표시 금지 (INV-3). 부분 문자열 매칭 — 과잉 드롭은 폴백으로 안전.
 _FORBIDDEN_TOKENS = ("분", "시간", "시각", "duration")
+
+
+# 괄호 부기(동명이지역 구분 등)를 뗀 표시형. 수집 POI 이름의 8.5%가 괄호를 달고
+# 있는데("약수암(부산)"·"금룡사(제주)"), 알림 문구에 그대로 쓰는 사람은 없다 —
+# 모델은 declare 에 원본을 싣고 본문엔 줄여 쓴다. 그 자연스러운 축약을 "선언과
+# 본문이 다르다"고 드롭하면 그 슬롯이 든 날은 매번 기본 문구로 떨어진다(겉으로는
+# 모델 실패와 구분되지 않는다).
+_PAREN = re.compile(r"[\(（][^)）]*[\)）]")
+
+
+def _display_form(name: str) -> str:
+    return _PAREN.sub("", name).strip()
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +114,10 @@ class ReminderCopyGate:
             or len(body) > _MAX_BODY
             or any(t in lowered for t in _FORBIDDEN_TOKENS)  # INV-3
             or any(name not in allowed for name in declared)  # INV-1
-            or any(name not in body for name in declared)  # 선언 정직성
+            or any(
+                name not in body and _display_form(name) not in body
+                for name in declared
+            )  # 선언 정직성 — 괄호 부기를 뗀 표시형도 인정
             or any(name and name in body for name in ctx.forbidden)  # 선언 회피 차단
         )
         if dropped:
