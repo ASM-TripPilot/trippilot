@@ -150,6 +150,41 @@ class TripServiceTest : StringSpec({
         t.destinations.single().regionCode shouldBe null
     }
 
+    /**
+     * 계약 전환(TRIP-859) — **코드를 주면 이름의 애매함이 애초에 생기지 않는다.** 바로 위 테스트에서
+     * 비워지던 "중구"가, 코드를 명시하면 그 코드로 확정된다. 사용자가 화면(`GET /regions`)에서 고른
+     * 결과를 그대로 싣는 경로다.
+     */
+    "코드를 주면 이름이 애매해도 그 코드로 확정된다" {
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+
+        val t = svc.create(acc, cmd(dests = listOf(TripDestination(0, "중구", 3, regionCode = "26170"))))
+
+        t.destinations.single().regionCode shouldBe "26170"
+    }
+
+    /**
+     * 명시한 값을 **조용히 무시하지 않는다.** 무시하면 사용자가 고른 곳과 다른(또는 없는) 지역으로
+     * 여행이 만들어지고 그 사실이 아무 데도 드러나지 않는다 — 이름 경로가 비워 두는 것과는 다르다.
+     * 그쪽은 "정하지 못했다"이고 이쪽은 "틀린 것을 받았다"이다.
+     */
+    "없는 코드를 주면 거절한다 — 조용히 이름으로 되돌아가지 않는다" {
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+
+        shouldThrow<ValidationFailed> {
+            svc.create(acc, cmd(dests = listOf(TripDestination(0, "중구", 3, regionCode = "99999"))))
+        }
+    }
+
+    /** 기존 클라이언트는 코드를 안 보낸다 — 그 경로의 동작이 한 치도 바뀌지 않아야 한다. */
+    "코드를 생략하면 종전대로 이름으로 찾는다" {
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
+
+        val t = svc.create(acc, cmd(dests = listOf(TripDestination(0, "제주", 3))))
+
+        t.destinations.single().regionCode shouldBe "50"
+    }
+
     "편집해도 코드가 사라지지 않는다 — 생성만 채우면 편집이 지운다" {
         val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), clock)
         val t = svc.create(acc, cmd(dests = listOf(TripDestination(0, "제주", 3))))
@@ -190,6 +225,10 @@ private class FakeDomestic(private val down: Boolean = false) : DestinationFacad
  * 코드가 확정되지 않는다. 하나만 돌려주는 대역을 쓰면 `singleOrNull` 가드가 아무것도 안 지킨다.
  */
 private class FakeRegions : RegionLookupFacade {
+    /** 선택 가능한 코드 — 카탈로그의 시군구·시도만. `99999` 는 없는 코드로 쓴다. */
+    override fun isSelectableCode(regionCode: String): Boolean =
+        regionCode in setOf("50", "26", "26380", "11140", "26170", "27110")
+
     override fun codesOf(regionName: String): List<String> = when (regionName) {
         "제주" -> listOf("50")
         "제주도" -> listOf("50")   // 별칭도 같은 코드로 모인다

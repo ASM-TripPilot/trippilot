@@ -22,6 +22,9 @@ class DestinationServiceTest : StringSpec({
 
     /** 카탈로그 대역 — 이름·별칭 정확 일치만 흉내 낸다. */
     class Catalog(private val aliases: Map<String, String> = emptyMap()) : RegionCatalogPort {
+        /** 코드 조회 — 이 테스트는 쓰지 않는다. */
+        override fun findByCode(regionCode: String) = null
+
         override fun find(query: String?, level: RegionLevel?) = FakeRegionCatalog.rows
         override fun findExact(name: String): List<Region> {
             val byName = FakeRegionCatalog.rows.filter { it.name == name }
