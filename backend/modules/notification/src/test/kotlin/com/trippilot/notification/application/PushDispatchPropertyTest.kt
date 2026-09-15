@@ -58,6 +58,9 @@ class PushDispatchPropertyTest : StringSpec({
 
     class Notifications : NotificationRepository {
         val appended = mutableListOf<Notification>()
+
+        /** 관측 전용(OBS-U6-04) — 이 테스트는 값을 보지 않는다. */
+        override fun countUnread(): Long = appended.count { it.readAt == null }.toLong()
         val pushResults = mutableListOf<Triple<UUID, Instant?, String?>>()
         override fun appendIfAbsent(notification: Notification) = true.also { appended += notification }
         override fun findByAccount(accountId: UUID, unreadOnly: Boolean, limit: Int) = appended.toList()
@@ -101,7 +104,29 @@ class PushDispatchPropertyTest : StringSpec({
 
 
     fun serviceOf(tokens: Tokens, sender: PushPort, notifications: Notifications, pushOn: Boolean = true) =
-        PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, clock)
+        PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, testMetrics(notifications), clock)
+
+    /**
+     * **계측이 실제로 배선돼 있는가**(OBS-U6-02). 지표 클래스만 테스트하면 호출을 통째로 지워도
+     * 아무것도 안 깨진다 — 그러면 지표는 영원히 0 이고 아무도 모른다.
+     */
+    "발송 결과가 지표로 흘러간다 — 계측이 호출 경로에 실제로 걸려 있다" {
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        val notifications = Notifications()
+        val svc = PushDispatchService(
+            Tokens(), notifications, NotificationToggleService(Toggles(true), clock),
+            object : PushPort {
+                override fun send(tokens: List<String>, message: com.trippilot.notification.domain.PushMessage) =
+                    emptyList<com.trippilot.notification.domain.PushReceipt>()
+            },
+            NotificationMetrics(registry, notifications), clock,
+        )
+
+        svc.dispatch(notification())
+
+        // 쏠 기기가 없는 경로(NO_DEVICE)도 세어야 한다 — "안 갔다"의 사유가 지표에서 갈려야 한다.
+        registry.find(NotificationMetrics.PUSH_DISPATCH).counters().sumOf { it.count() } shouldBe 1.0
+    }
 
     /**
      * 발송 지점이 **종류의 긴급도를 그대로 싣는가**.

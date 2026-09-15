@@ -50,6 +50,9 @@ interface NotificationJpaRepository : JpaRepository<NotificationEntity, UUID> {
     fun findByAccountIdAndReadAtIsNullOrderByOccurredAtDescNotificationIdDesc(accountId: UUID, pageable: Pageable): List<NotificationEntity>
 
     fun existsByNotificationIdAndAccountId(notificationId: UUID, accountId: UUID): Boolean
+
+    /** 전 계정 미읽음 누적(OBS-U6-04) — 관측 전용. */
+    fun countByReadAtIsNull(): Long
 }
 
 @Component
@@ -99,6 +102,10 @@ class NotificationRepositoryAdapter(
         }
         return rows.map { it.toDomain() }
     }
+
+    /** 전 계정 미읽음 누적(OBS-U6-04). 1분에 한 번만 도는 관측 쿼리라 인덱스 없이 집계로 충분하다. */
+    override fun countUnread(): Long =
+        jpa.countByReadAtIsNull()
 
     /**
      * 조건부 UPDATE 다 — 읽고 검사하고 쓰면 그 사이에 다른 기기가 먼저 읽음 처리할 수 있다.

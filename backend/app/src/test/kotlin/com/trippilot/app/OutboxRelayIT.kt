@@ -72,6 +72,8 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
         override val aggregateId = note
     }
 
+    @Autowired lateinit var registry: io.micrometer.core.instrument.MeterRegistry
+
     @AfterEach
     fun cleanUp() {
         // 싱글톤 컨테이너라 남기면 다른 IT 의 릴레이가 이 행을 집는다.
@@ -202,6 +204,30 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
             "SELECT count(*) FROM outbox_event WHERE published_at IS NULL AND attempts >= 10 AND aggregate_id = '포기'",
             Int::class.java,
         )!! shouldBe 1
+    }
+
+    /**
+     * **릴레이 지연 계측이 배선돼 있는가**(OBS-U6-01). 이 지표가 PERF-U6-01 목표 대조의 유일한 근거다 —
+     * 계측을 지워도 기능은 멀쩡히 돌기 때문에 여기서 잠그지 않으면 조용히 0 으로 남는다.
+     */
+    @Test
+    fun `배달에 성공하면 적재부터 배달까지의 지연이 기록된다`() {
+        val before = registry.find("trippilot.outbox.relay.latency").timer()?.count() ?: 0L
+        tx.execute { publisher.publish(Probe("지연")) }
+
+        // **내 이벤트가 배달될 때까지** 돌린다. 한 번만 부르면 같은 컨테이너를 쓰는 다른 IT 의 릴레이가
+        // 그 사이 내 행을 집어가 이쪽 호출은 빈 배치를 보고, 타이머는 저쪽에서 오른다(실측으로 겪었다).
+        repeat(RELAY_TRIES) { if (unpublished("지연") > 0) relay.relay() }
+        unpublished("지연") shouldBe 0
+
+        // 증가분을 정확히 1 로 못박지 않는다 — 같은 레지스트리를 공유하므로 다른 IT 의 배달도 함께
+        // 센다. 여기서 봐야 하는 것은 "배달이 타이머를 올리는가"이지 그 절대 수가 아니다.
+        val after = registry.find("trippilot.outbox.relay.latency").timer()!!.count()
+        (after > before) shouldBe true
+
+        // **분위수를 낼 수 있는 모양인지는 여기서 못 본다.** 이 컨텍스트의 레지스트리는
+        // `SimpleMeterRegistry` 이고 그쪽은 aggregable 히스토그램을 지원하지 않아 설정과 무관하게
+        // 버킷이 0 이다(실측). 운영 레지스트리(OTLP)로 재는 것은 [OutboxRelayLatencyShapeTest].
     }
 
     /** 백오프를 앞당겨 "시간이 지났다"를 만든다 — 실 시간을 기다리지 않기 위해. */

@@ -2,12 +2,16 @@ package com.trippilot.app.event
 
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.core.event.OutboxSubscriber
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.sql.ResultSet
+import java.time.Duration
+import java.util.concurrent.TimeUnit
 import java.util.UUID
 
 /**
@@ -33,8 +37,36 @@ import java.util.UUID
 @Component
 class OutboxRelay(
     private val jdbc: JdbcTemplate,
+    registry: MeterRegistry,
     subscribers: List<OutboxSubscriber>,
 ) {
+    /**
+     * 릴레이 지연(OBS-U6-01) — **분위수를 내보내도록 등록한다.**
+     *
+     * `registry.timer(name)` 으로 만들면 count·sum·max 만 나가고 **p95 가 없다.** 이 지표의 존재
+     * 이유가 PERF-U6-01 목표 대조인데 그 대조를 못 하게 된다 — 지표가 있는데 답을 못 하는 상태라
+     * 그냥 없는 것보다 나쁘다(있다고 믿게 된다).
+     *
+     * 클라이언트 계산(`publishPercentiles`) 대신 히스토그램을 고른 이유는 **다중 인스턴스**다
+     * (REL-U6-04 가 그것을 전제한다). 인스턴스별로 계산한 분위수는 수집기에서 합칠 수 없다 —
+     * 평균의 평균과 같은 종류의 거짓말이 된다. 버킷을 보내면 합산 후 계산이 성립한다.
+     *
+     * 기대 범위를 묶는 것은 **버킷 수 상한**이다. 열어 두면 마이크로초부터 시간 단위까지 버킷이
+     * 생겨 시계열이 불어난다.
+     *
+     * **아래를 100ms 로 두는 이유**: 폴링 주기(2초)는 *더해지는 지연의 상한*이지 하한이 아니다 —
+     * 틱 직전에 적재된 이벤트는 지연이 거의 0 이라, 정상 구간이 사실상 **0~2초 균등**이다.
+     * 여기를 1초로 잡으면 그 구간의 절반이 첫 버킷에 뭉개져 p50·p75 가 해석 불가가 되고,
+     * "빨라졌다"를 볼 수 없게 된다(앞선 판이 그랬다 — 폴링 주기를 하한으로 착각했다).
+     * 위(15분)는 재시도 창(약 13분)을 넘기면 어차피 포기된 건이라는 데서 나온다.
+     */
+    private val relayLatency: Timer = Timer.builder(RELAY_LATENCY)
+        .description("아웃박스 적재에서 배달까지의 지연(OBS-U6-01)")
+        .publishPercentileHistogram()
+        .minimumExpectedValue(Duration.ofMillis(100))
+        .maximumExpectedValue(Duration.ofMinutes(15))
+        .register(registry)
+
     /** 타입당 여럿일 수 있다 — 한 이벤트를 여러 소비자가 본다. */
     private val byType: Map<String, List<OutboxSubscriber>> = subscribers.groupBy { it.eventType }
 
@@ -73,8 +105,16 @@ class OutboxRelay(
                 dropped++
                 return@forEach
             }
-            runCatching { targets.forEach { it.handle(envelope) } }
-                .onSuccess { markPublished(envelope.eventId) }
+            runCatching { targets.forEach { it.handle(envelope) }; markPublished(envelope.eventId) }
+                .onSuccess { seconds ->
+                    // OBS-U6-01 — 적재(occurred_at)에서 배달까지. **구독자 없어 닫은 건은 빼고**
+                    // 실제로 배달된 것만 잰다. 그쪽을 섞으면 즉시 닫히는 값이 p95 를 끌어내려
+                    // "빠르다"는 착시가 생긴다.
+                    seconds?.let {
+                        // Timer 는 정수 단위만 받는다 — 초 소수부를 살리려면 밀리초로 올려 준다.
+                        relayLatency.record((it * 1000).toLong(), TimeUnit.MILLISECONDS)
+                    }
+                }
                 .onFailure { e ->
                     val attempts = bumpAttempts(envelope.eventId)
                     // 상한에 닿으면 조용히 사라지지 않게 올린다 — dead-letter 테이블 없이 조회로 찾는다.
@@ -89,8 +129,21 @@ class OutboxRelay(
         if (dropped > 0) log.info("구독자 없는 이벤트 {}건을 닫았습니다.", dropped)
     }
 
-    private fun markPublished(eventId: UUID) =
-        jdbc.update("UPDATE outbox_event SET published_at = now() WHERE event_id = ?", eventId)
+    /**
+     * 발행으로 표시하고 **적재→배달 지연(초)** 을 돌려준다(OBS-U6-01).
+     *
+     * 지연을 DB 가 계산하는 이유: 앱 시계로 `now() - occurred_at` 을 하면 **두 시계의 차이가 그대로
+     * 지표에 섞인다.** 어긋난 방향에 따라 음수가 나오는데 Micrometer 는 음수를 **조용히 버려서**,
+     * 지표가 비는 것을 아무도 눈치채지 못한다. 같은 UPDATE 안에서 같은 시계로 재면 그 문제가 없다.
+     */
+    private fun markPublished(eventId: UUID): Double? = jdbc.queryForObject(
+        """
+        UPDATE outbox_event SET published_at = now()
+         WHERE event_id = ?
+        RETURNING EXTRACT(EPOCH FROM (now() - occurred_at))
+        """.trimIndent(),
+        Double::class.java, eventId,
+    )
 
     /**
      * 시도 횟수를 올리고 **다음 시도 시각을 뒤로 민다**(REL-U6-01 지수 백오프). 증가된 값을 돌려준다 —
@@ -146,5 +199,8 @@ class OutboxRelay(
          * 이 상한에서 10회까지의 총 재시도 창은 약 13분이다(종전엔 20초였다 — 재시도가 이름만 있었다).
          */
         private const val BACKOFF_MAX_SEC = 300.0
+
+        /** 릴레이 지연(OBS-U6-01) — PERF-U6-01 목표 대조용. */
+        private const val RELAY_LATENCY = "trippilot.outbox.relay.latency"
     }
 }
