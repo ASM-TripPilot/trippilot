@@ -212,10 +212,21 @@ def main() -> int:
     # 엔드포인트가 실제로 무엇을 주는지 리포에 기록이 없어(fake 는 우리가 읽는
     # 2필드만 흉내낸다) 스펙이 아니라 실물로 판단하려면 필요하다. 타입당 1건.
     for kind, sample in sorted(adapter.intro_samples.items()):
+        seen = adapter.intro_seen.get(kind, 0)
+        counts = adapter.intro_filled.get(kind, {})
         filled = {k: v for k, v in sample.items() if str(v or "").strip()}
         print(f"[collect] intro2 표본 type={kind} 필드 {len(sample)}개 "
-              f"(값 있음 {len(filled)}개): "
+              f"(이 건에 값 있음 {len(filled)}개): "
               f"{json.dumps(filled, ensure_ascii=False)}", file=sys.stderr)
+        # 표본 1건은 필드명만 알려준다 — 쓸모를 가르는 건 채움률이다.
+        # 값이 한 번도 안 찬 필드는 "있지만 비어 있다"로 따로 보인다.
+        rates = sorted(
+            ((k, counts.get(k, 0) / seen) for k in sample),
+            key=lambda kv: -kv[1],
+        ) if seen else []
+        line = " ".join(f"{k}={r * 100:.0f}%" for k, r in rates)
+        print(f"[collect] intro2 채움률 type={kind} (n={seen}): {line}",
+              file=sys.stderr)
 
     print(f"[collect] 산출: {output} — 게이트 통과 {stats['passed']}건 "
           f"(지역 {len(area_codes)}곳, 호출 {stats['http_calls']}/{max_calls} "

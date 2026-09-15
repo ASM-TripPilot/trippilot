@@ -122,6 +122,11 @@ class TourApiAdapter:
         # contentTypeId → detailIntro2 첫 응답 원문 (fetch_hours 가 채운다).
         # 관측용이라 수집 판정에는 쓰이지 않는다.
         self.intro_samples: dict[str, dict] = {}
+        # contentTypeId → 본 응답 수, 그리고 필드별 "값이 있던" 횟수.
+        # 표본 1건은 **필드명만** 알려준다 — 그 필드가 실제로 채워져 오는지는
+        # 별개 질문이고, 쓸모를 가르는 건 후자다. 세는 데 드는 비용은 0이다.
+        self.intro_seen: dict[str, int] = {}
+        self.intro_filled: dict[str, dict[str, int]] = {}
 
     def _take_key(self) -> str:
         """이번 HTTP 호출에 쓸 키 1건 소모. 키당 상한 도달 또는 퇴출 시 다음 키로.
@@ -209,6 +214,11 @@ class TourApiAdapter:
         # 잡힌다. 타입당 1건이라 로그 부담도 없다.
         if kind not in self.intro_samples:
             self.intro_samples[kind] = first
+        self.intro_seen[kind] = self.intro_seen.get(kind, 0) + 1
+        counts = self.intro_filled.setdefault(kind, {})
+        for k, v in first.items():
+            if str(v or "").strip():
+                counts[k] = counts.get(k, 0) + 1
         hours_key, rest_key = fields
         return SourcedHours(
             hours_raw=self._opt_str(first.get(hours_key)),
