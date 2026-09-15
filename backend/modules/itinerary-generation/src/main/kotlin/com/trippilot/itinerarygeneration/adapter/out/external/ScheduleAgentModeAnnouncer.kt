@@ -27,6 +27,7 @@ class ScheduleAgentModeAnnouncer(
     private val port: ScheduleAgentPort,
     @param:Value("\${trippilot.ai.schedule.mode:fake}") private val mode: String,
     @param:Value("\${trippilot.ai.schedule.base-url:}") private val baseUrl: String,
+    @param:Value("\${trippilot.ai.schedule.service-token:}") private val serviceToken: String,
     private val deadlines: ScheduleDeadlineProperties,
 ) {
 
@@ -35,6 +36,7 @@ class ScheduleAgentModeAnnouncer(
         val live = port.javaClass.simpleName
         if (port is HttpScheduleAgentAdapter) {
             log.info("일정 생성 경계 = 실 AI(http) · baseUrl={} · 구현={}", baseUrl, live)
+            announceServiceToken()
         } else {
             log.info("일정 생성 경계 = 내장 Fake · 구현={} (AI 를 호출하지 않는다)", live)
         }
@@ -42,6 +44,23 @@ class ScheduleAgentModeAnnouncer(
         // 아는 값이 아니면 조건부 빈이 안 걸려 fake 로 남는다 — 설정 의도와 결과가 다르다는 뜻이라 경고로 올린다.
         if (!mode.equals("fake", ignoreCase = true) && !mode.equals("http", ignoreCase = true)) {
             log.warn("trippilot.ai.schedule.mode='{}' 는 아는 값이 아닙니다(fake|http) — 내장 Fake 로 동작합니다.", mode)
+        }
+    }
+
+    /**
+     * **자격증명 유무를 기동 로그에 남긴다**(TRIP-856). 토큰이 없어도 호출은 나가므로(fail-open) 증상이 없다 —
+     * 상대가 검증을 켜는 날 전부 401 이 되고 나서야 "안 싣고 있었다"를 알게 되는 것이 이 로그가 막으려는 것이다.
+     * **값은 절대 찍지 않는다** — 로그는 컨테이너 밖으로 나가고 시크릿은 나가면 안 된다.
+     */
+    private fun announceServiceToken() {
+        if (serviceToken.isBlank()) {
+            log.warn(
+                "AI 발신 서비스 토큰이 비어 있습니다(SERVICE_AUTH_TOKEN) — {} 헤더 없이 호출합니다. " +
+                    "상대가 검증을 켜면 전부 거부됩니다(TRIP-856).",
+                ScheduleAgentConfiguration.SERVICE_TOKEN_HEADER,
+            )
+        } else {
+            log.info("AI 발신 서비스 토큰 = 설정됨 · 헤더 {}", ScheduleAgentConfiguration.SERVICE_TOKEN_HEADER)
         }
     }
 

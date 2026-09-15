@@ -46,6 +46,10 @@ import kotlin.system.measureTimeMillis
     properties = [
         "trippilot.ai.schedule.mode=http",
         "trippilot.ai.schedule.base-url=\${LIVE_AI_URL:http://localhost:8000}",
+        // **빈 값이 아닌 기본값을 둔다**(TRIP-856). 환경변수가 없으면 토큰이 비어 헤더가 안 실리고,
+        // 그러면 이 왕복은 "상대가 우리 자격증명 헤더를 받아들이는가"를 한 번도 확인하지 않는다.
+        // 상대는 아직 검증을 켜지 않았으므로 아무 값이나 통과해야 정상이다 — 그 사실 자체가 검증 대상이다.
+        "trippilot.ai.schedule.service-token=\${SERVICE_AUTH_TOKEN:live-roundtrip-token}",
     ],
 )
 @EnabledIfEnvironmentVariable(named = "LIVE_AI", matches = "1")
