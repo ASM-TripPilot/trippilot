@@ -6,6 +6,8 @@
 형식 밖 응답들.
 §5 는 **Overture 매핑**(TRIP-684) 재료다 — 채택 목록 밖 카테고리와, 야경 이름
 규칙의 양쪽(천문대 vs 진짜 전망대)을 가르는 실측 이름들.
+§6 은 **OSM 매핑**(TRIP-685) 재료다 — Overpass 태그 dict 모양 그대로. 이름 어휘는
+§5 를 그대로 재사용하고(같은 야경 규칙이다), 여기서는 태그 쪽만 새로 짠다.
 """
 
 from __future__ import annotations
@@ -432,3 +434,173 @@ def unknown_overture_categories() -> st.SearchStrategy[str | None]:
         st.sampled_from(_NEAR_MISS_CATEGORIES),
         st.text(max_size=16),
     )
+
+
+# ── §6 OSM 태그 재료 (TRIP-685 · sourcing/osm.py) ─────────────────────
+# `map_tags` 재료. Overpass 가 돌려주는 태그 dict 모양 그대로 조립한다.
+# §5 와 같은 원칙 — 어휘는 **실측 OSM 태그**이지 무작위 유니코드가 아니다.
+# 다만 "채택 목록 밖은 전부 드롭"은 주장 자체가 '모르는 입력'이라 임의 유니코드
+# 키/값도 한 전략에 섞는다(쓰는 쪽에서 `assume` 로 이론상 충돌을 뺀다).
+
+# 채택 목록 밖의 실측 태그 — OSM 한국에 대량으로 있고 여행 일정에 넣을 것이 아니다.
+# `man_made=observatory` 가 여기 있는 것이 중요하다: OSM 이 천문대에 쓰는 실제
+# 태그이고, 우리는 그것을 **태그로도 이름으로도** 받지 않는다.
+_OSM_UNADOPTED_TAGS: tuple[tuple[str, str], ...] = (
+    ("amenity", "fast_food"), ("amenity", "bank"), ("amenity", "pharmacy"),
+    ("amenity", "fuel"), ("amenity", "parking"), ("amenity", "school"),
+    ("amenity", "hospital"), ("amenity", "toilets"), ("amenity", "bench"),
+    ("amenity", "place_of_worship"), ("amenity", "kindergarten"),
+    ("amenity", "atm"), ("amenity", "post_office"), ("amenity", "clinic"),
+    ("tourism", "hotel"), ("tourism", "guest_house"), ("tourism", "motel"),
+    ("tourism", "hostel"), ("tourism", "information"), ("tourism", "artwork"),
+    ("tourism", "picnic_site"), ("tourism", "camp_site"), ("tourism", "gallery"),
+    ("natural", "tree"), ("natural", "water"), ("natural", "wood"),
+    ("natural", "scrub"), ("natural", "wetland"), ("natural", "spring"),
+    ("natural", "cliff"), ("natural", "sand"), ("natural", "bare_rock"),
+    ("natural", "coastline"), ("natural", "grassland"),
+    ("highway", "bus_stop"), ("highway", "residential"), ("highway", "footway"),
+    ("highway", "crossing"), ("highway", "street_lamp"), ("highway", "path"),
+    ("building", "yes"), ("building", "apartments"), ("building", "house"),
+    ("leisure", "park"), ("leisure", "pitch"), ("leisure", "playground"),
+    ("leisure", "garden"), ("leisure", "fitness_centre"),
+    ("man_made", "tower"), ("man_made", "surveillance"),
+    ("man_made", "observatory"), ("man_made", "water_tower"),
+    ("office", "company"), ("office", "estate_agent"),
+    ("railway", "station"), ("railway", "subway_entrance"),
+    ("landuse", "residential"), ("place", "suburb"), ("barrier", "gate"),
+    ("healthcare", "dentist"), ("craft", "carpenter"),
+    ("emergency", "fire_hydrant"), ("power", "pole"), ("waterway", "stream"),
+)
+# 채택 태그와 **한 글자 차이** — 조회는 정확 일치여야 한다. 대소문자·공백·복수형·
+# 근접 철자, 그리고 라이프사이클 접두(`disused:`·`was:`·`abandoned:`·`proposed:`).
+# 접두가 붙은 것은 **지금 거기 없는 것**이다 — 관대하게 받으면 유령 POI 가 된다.
+_OSM_NEAR_MISS_TAGS: tuple[tuple[str, str], ...] = (
+    ("tourism", "viewpoints"), ("tourism", "Viewpoint"), ("tourism", "VIEWPOINT"),
+    ("tourism", "view_point"), ("tourism", " viewpoint"), ("tourism", "viewpoint "),
+    ("Tourism", "viewpoint"), ("TOURISM", "viewpoint"), ("tourism ", "viewpoint"),
+    ("natural", "peaks"), ("natural", "Peak"), ("natural", "peak "),
+    ("natural", "beaches"), ("natural", "Beach"), ("natural", "beach_resort"),
+    ("Natural", "peak"), ("natural ", "peak"), ("natural", "beach\n"),
+    ("disused:tourism", "viewpoint"), ("abandoned:natural", "peak"),
+    ("was:tourism", "viewpoint"), ("proposed:natural", "beach"),
+    ("demolished:tourism", "viewpoint"), ("removed:natural", "peak"),
+)
+# `shop` 이 아닌데 `shop` 처럼 보이는 키. 값이 무엇이든 SHOPPING 이 되면 안 된다 —
+# `disused:shop=butcher` 는 **닫힌 정육점**이지 쇼핑 명소가 아니다.
+_OSM_SHOP_NEAR_MISS_KEYS: tuple[str, ...] = (
+    "Shop", "SHOP", "shops", "shop ", " shop", "shop:type", "shop_1",
+    "disused:shop", "was:shop", "abandoned:shop", "proposed:shop", "second_hand",
+)
+# 제외 목록 밖의 shop 값 — 여행자가 일정에 넣을 만한 가게들. SHOPPING 이어야 한다.
+_OSM_TRAVEL_SHOP_VALUES: tuple[str, ...] = (
+    "gift", "books", "art", "antiques", "craft", "jewelry", "clothes",
+    "department_store", "mall", "boutique", "confectionery", "pastry",
+    "chocolate", "tea", "coffee", "wine", "music", "musical_instrument",
+    "photo", "toys", "shoes", "bag", "cosmetics", "perfumery", "florist",
+    "farm", "seafood", "deli", "variety_store", "houseware",
+)
+# Overture 가 실측에서 **더 많이 주는** 네 축. OSM 으로는 일부러 안 받는다 —
+# 겹치는 축까지 받으면 얻는 것 없이 ODbL 노출만 커진다(osm.py 모듈 주석 비교표).
+_OVERTURE_OWNED_TAGS: tuple[tuple[str, str], ...] = (
+    ("amenity", "restaurant"), ("amenity", "cafe"),
+    ("tourism", "attraction"), ("tourism", "museum"),
+)
+# 판정에 **영향을 주면 안 되는** 부가 태그. `name` 은 일부러 넣지 않는다(야경
+# 이름 규칙의 유일한 입력이다). `description`·`note`·`name:en` 에 천문 어휘를
+# 심어 둔 것이 핵심이다 — 이름 규칙이 `name` 밖을 읽으면 여기서 걸린다.
+_OSM_NOISE_TAGS: tuple[tuple[str, str], ...] = (
+    ("addr:full", "제주특별자치도 제주시 애월읍 애월로 1"),
+    ("addr:city", "제주시"), ("addr:postcode", "63000"),
+    ("opening_hours", "Mo-Su 09:00-18:00"), ("website", "https://example.kr"),
+    ("phone", "+82-64-000-0000"), ("wheelchair", "yes"), ("ele", "1950"),
+    ("source", "Bing"), ("operator", "제주특별자치도"), ("wikidata", "Q123"),
+    ("name:en", "Bohyunsan Astronomy Observatory"),
+    ("name:ja", "ソンサンイルチュルボン"),
+    ("description", "천문대 바로 옆"), ("note", "planetarium 공사중"),
+    ("tourism:type", "viewpoint"), ("old_name", "대전시민천문대"),
+)
+
+
+# ── 제주 실호출 42건(2026-09-16) — `tourism=viewpoint` 의 실제 내용물 ──
+# OSM 의 `viewpoint` 는 "전망이 좋은 지점" 전반이라 **우리 NIGHT_VIEW(야경)와
+# 개념이 다르다.** 42건 중 진짜 전망대는 15건(36%)뿐이었고 나머지가 아래다 —
+# 동굴·갤러리·기념비·촬영지. 걸러내지 않으면 야경 보러 갔다가 동굴을 만난다.
+_OSM_NON_VIEWPOINT_NAMES: tuple[str, ...] = (
+    "구린굴", "중동굴", "검멀레동굴",
+    "김영갑갤러리", "우도해녀항일기념비", "산신각",
+    "용두암", "쇠소깍", "유채꽃촬영지", "인어공주 촬영장소",
+)
+# 같은 42건의 **통과분** — 이름이 전망 근거를 댄다. 뒤 네 줄은 OSM 쪽에만 있는
+# 어휘다(일출·일몰·낙조·로마자 viewpoint/lookout): `viewpoint` 태그가 야경뿐
+# 아니라 해돋이·낙조 명소도 담기 때문이다.
+_OSM_VIEWPOINT_NAMES: tuple[str, ...] = (
+    "성산일출봉 정상전망대", "거린사슴전망대", "산지천 전망대", "사라오름전망대",
+    "솔오름 전망대", "국사봉전망대", "넓은드르 전망대", "북악산 하늘전망대",
+    "오두산통일전망타워", "부산타워 전망층", "남산 야경 명소",
+    "제주 일출 명소", "정방폭포 낙조", "한라산 일몰 포인트",
+    "Seongsan Viewpoint", "Sara Oreum Lookout",
+)
+
+
+def osm_viewpoint_names() -> st.SearchStrategy[str]:
+    """`tourism=viewpoint` 로 와서 **통과해야** 하는 이름(전망·야경·일출·낙조)."""
+    return st.sampled_from(_OSM_VIEWPOINT_NAMES)
+
+
+def osm_non_viewpoint_names() -> st.SearchStrategy[str]:
+    """`tourism=viewpoint` 로 오지만 야경이 **아닌** 이름 — 실측 동굴·갤러리·
+    기념비 + 전망 어휘가 없는 평범한 상호. 전부 드롭돼야 한다."""
+    return st.sampled_from(_OSM_NON_VIEWPOINT_NAMES + _STORE_NAMES
+                           + ("제주시청", "개심사", "한라수목원", "전라도여행맛집"))
+
+
+def osm_travel_shop_values() -> st.SearchStrategy[str]:
+    """`_SHOP_EXCLUDE` 밖의 shop 값 — SHOPPING 으로 채택돼야 한다."""
+    return st.sampled_from(_OSM_TRAVEL_SHOP_VALUES)
+
+
+def osm_shop_near_miss_keys() -> st.SearchStrategy[str]:
+    """`shop` 이 아닌 키(대소문자·공백·라이프사이클 접두). 채택되면 안 된다."""
+    return st.sampled_from(_OSM_SHOP_NEAR_MISS_KEYS)
+
+
+def osm_unadopted_pairs() -> st.SearchStrategy[tuple[str, str]]:
+    """채택 목록 밖의 (키, 값) 1건 — 실측 비채택 + 근접 오타·라이프사이클 접두."""
+    return st.sampled_from(_OSM_UNADOPTED_TAGS + _OSM_NEAR_MISS_TAGS)
+
+
+def overture_owned_tags() -> st.SearchStrategy[dict[str, str]]:
+    """Overture 가 이기는 네 축의 OSM 태그 — `map_tags` 는 None 이어야 한다."""
+    return st.sampled_from(_OVERTURE_OWNED_TAGS).map(lambda kv: {kv[0]: kv[1]})
+
+
+@st.composite
+def osm_noise_tags(draw) -> dict[str, str]:
+    """결과를 바꾸면 안 되는 부가 태그 dict (`name` 없음, 채택 키 없음)."""
+    pairs = draw(st.lists(st.sampled_from(_OSM_NOISE_TAGS),
+                          max_size=4, unique_by=lambda kv: kv[0]))
+    return dict(pairs)
+
+
+@st.composite
+def osm_unadopted_tags(draw) -> dict[str, str]:
+    """채택 목록에도 없고 `shop` 키도 없는 태그 dict — **항상** 드롭돼야 한다.
+
+    네 갈래를 한 dict 에 섞는다: 실측 비채택 태그 · 근접 오타/라이프사이클 접두 ·
+    `shop` 을 닮은 키 · 임의 유니코드 키/값. 빈 dict 도 나온다(태그 없는 요소).
+
+    임의 유니코드가 이론상 채택 쌍을 만들 수 있으므로 쓰는 쪽에서
+    `assume(...)` 로 뺀다 — §5 `unknown_overture_categories` 와 같은 규약이다.
+    """
+    tags: dict[str, str] = {}
+    for k, v in draw(st.lists(osm_unadopted_pairs(), max_size=3)):
+        tags[k] = v
+    if draw(st.booleans()):
+        tags[draw(osm_shop_near_miss_keys())] = draw(osm_travel_shop_values())
+    tags.update(draw(st.dictionaries(st.text(max_size=8), st.text(max_size=8),
+                                     max_size=3)))
+    if draw(st.booleans()):
+        tags.update(draw(osm_noise_tags()))
+    if draw(st.booleans()):
+        tags["name"] = draw(st.one_of(korean_place_names(), st.text(max_size=12)))
+    return tags
