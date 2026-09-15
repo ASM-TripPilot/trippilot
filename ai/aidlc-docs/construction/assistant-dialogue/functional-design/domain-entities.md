@@ -159,6 +159,30 @@ ARGUMENT_TABLE: dict[Intent, tuple[ArgumentSpec, ...]]      # 13종 전수 (OUT_
 4. `TRIP_SUMMARY.day_date` · `STYLE_ANALYSIS` 는 `agent-io-contracts.md:176-196` 에 있으나 `domain/reflection.py` 에
    **필드가 없다** — 표가 계약 쪽 정본을 따르고 코드 쪽 갭은 business-rules §5 미결로 올린다.
 
+### 2.1.1 왜 `op` 를 **인자**로 두고 의도로 올리지 않나 (실측, 2026-09-15)
+
+"의도를 더 쪼개면 뱅크가 더 확실히 갈린다"는 제안을 재 봤다. **갈리지 않았다.**
+
+`EDIT_SCHEDULE` 31문장을 연산별로 나눠(ADD 8 · MOVE 7 · REPLACE 9 · REMOVE 3 · 분류불가 4)
+같은 조건(평가셋 87 · `t_high` 0.82 · `intent_margin` 0.02)으로 1차를 다시 돌렸다.
+
+| | 1차 확정 | 정답 | 오답 | EDIT ↔ REGENERATE·REPLAN 경계(≥0.80) | **새로 생긴 내부 경계** |
+|---|---:|---:|---:|---:|---:|
+| 현행 13종 | 28 | 28 | 0 | 9쌍 (최고 0.823) | — |
+| `EDIT_*` 5종으로 쪼갬 | **28** | 28 | 0 | **9쌍 (최고 0.823)** | **12쌍 (최고 0.877)** |
+
+**확정 건수도 경계 압력도 그대로이고, 내부 경계만 12쌍 새로 생긴다.** 그중 `EDIT_MOVE ↔ EDIT_REPLACE`
+(0.877)는 쪼개기가 없애려던 외부 경계(0.823)보다 **더 붙어 있다** — "{장소}를 {장소}로 교체" 와
+"{장소} 일정을 {날짜} 오전으로 재배치"는 연산이 다른데 말이 닮았다.
+
+쪼개기가 **아무것도 못 고치는 진짜 이유**는 정보량이다. `op` 는 지금 `EDIT_TRANSLATION` 워커가
+**현재 일정을 손에 들고** 정한다(`EditTranslationContext{pool, current_slots}`). 의도로 올리면 라우터가
+**발화만 보고** 같은 판단을 하게 된다 — 결정을 더 이른 자리로, 더 적은 정보로 옮기는 것이다.
+
+얻은 것이 없지는 않다. 쪼개 보니 `EDIT ↔ REGENERATE·REPLAN` 압력 9쌍 중 **7쌍이 `MOVE` 계열**에
+몰려 있다("재배치·옮겨"가 재계획처럼 들린다). 이건 closed-set 을 건드릴 일이 아니라 **뱅크 위생의
+표적**이다 — 그 7쌍만 손보면 된다.
+
 ### 2.2 표에서 **파생**되는 것 둘
 
 ```
@@ -272,22 +296,58 @@ ExecutionPlan  =  그것을 어떻게 돌리나       (Orchestrator 가 컴파�
 컴파일 규칙은 한 줄이다 — **`depends_on` 이 없는 프레임들은 한 step 에 모으고, 있는 프레임은 다음 step 으로 민다.**
 `ExecutionStep.timeout_sec` 은 `AgentTask.spawn` 의 시한 차감과 같은 예산에서 나온다(BR-AF-03).
 
+되묻기는 **두 종류**이고 섞으면 안 된다. 무엇이 비었느냐가 다르다.
+
 ```
-ClarifyRequest (frozen):
-  frame_index: int                 # 어느 프레임의 인자가 비었나
+ArgumentClarify (frozen):        # 의도는 알겠는데 **인자**가 빈다
+  frame_index: int
   argument: str                    # 비어 있는 필수 인자 이름
-  question: str                    # 사용자에게 보일 한국어 질문
+  question: str
   options: tuple[str, ...] | None  # 보기(있으면 버튼) — 없으면 자유 입력
+
+IntentChoice (frozen):
+  intent: Intent                   # 반드시 후보 목록 안의 값
+  label: str                       # 사용자에게 보일 한 줄 ("지금 일정을 버리고 새로 짠다")
+
+IntentClarify (frozen):          # **의도** 자체가 안 갈린다
+  question: str                    # LLM 생성 — 발화의 말을 되짚는 재확인 질문
+  choices: tuple[IntentChoice, ...]  # 2~3개, 전부 서로 다른 Intent
+  source: str                      # 근거가 된 발화 원문 (그대로)
 
 RouterOutcome (frozen):
   frames: tuple[IntentFrame, ...]
-  clarify: ClarifyRequest | None   # None 이면 전부 실행 가능
+  clarify: ArgumentClarify | IntentClarify | None   # None 이면 전부 실행 가능
   llm_calls: int                   # 계측
 ```
 
-`ClarifyRequest` 는 계약 정본이 이미 이름 붙여 둔 `EditAgentOutput.clarification_needed`(`agent-io-contracts.md:232`,
+**한 칸에 둘을 담는 이유**: 동시에 나올 수 없다. 의도를 모르면 **어떤 인자가 필요한지도 모른다**
+(`ARGUMENT_TABLE` 이 의도로 색인된다). 두 칸으로 두면 "둘 다 채워진" 표현 불가능한 상태가 타입에 생긴다.
+
+`ArgumentClarify` 는 계약 정본이 이미 이름 붙여 둔 `EditAgentOutput.clarification_needed`(`agent-io-contracts.md:232`,
 "엔티티 애매 → 사용자 확인 질문")의 일반화다 — 그쪽은 `str | None` 한 칸이라 **무엇을 묻는지**를 기계가 알 수 없다.
 어느 인자를 채우려는 질문인지 알아야 다음 턴에 그 인자에 넣을 수 있다.
+
+### 5.1 `IntentClarify` — 질문을 LLM 이 만든다 (팀 결정 2026-09-15)
+
+되묻기 문안의 소유를 **AI 쪽으로 확정한다.** 고정 문구("일정을 새로 짤까요?")로는 부족하다 —
+사용자가 **자기가 한 말**을 다시 보지 못하면 무엇을 고르는지 모른다. 실제로 갈리는 자리가 그렇다:
+
+> "일정 다시 짜줘" → 지금 것을 버리고 새로 (`REGENERATE`) / 비가 와서 남은 것만 (`REPLAN`)
+
+같은 문장이고 **차이는 문장 안에 없다.** 그래서 질문이 발화를 되짚어야 한다 —
+"'다시 짜줘'가 지금 일정을 버리고 처음부터란 뜻인가요, 아니면 남은 일정만 조정하란 뜻인가요?"
+
+생성 규약 (프롬프트 `intent_clarify.yaml`, 신규 `LlmFeature.INTENT_CLARIFY`):
+
+| 입력 | 사용자 발화 원문 + **후보 의도 2~3종의 뜻** (서버 주입 — `$candidates`) |
+|---|---|
+| 출력 | 질문 1개 + 보기 2~3개, 보기마다 후보 의도 하나에 대응 |
+| 금지 | 후보 **밖** 선택지 생성 · 되묻기 안에서 새 정보 요구(그건 `ArgumentClarify` 몫) · 시각·거리 언급(INV-2·3) |
+| 게이트 | `IntentClarifyGate` — 모든 보기가 **주입된 후보 목록** 안의 `Intent` 로 되매핑되는지 검사. 실패하면 정적 폴백 문구 |
+
+서버가 후보를 주입하고 게이트가 되매핑을 검사하는 구조는 `EDIT_TRANSLATION` 의 `$edit_ops` 와 같다 —
+**전체 13종을 주지 않는다.** 라우터가 갈등하는 2~3개만 준다. 모델에게 라우팅을 다시 시키는 것이 아니라
+**이미 좁혀진 둘 중 무엇인지 사용자에게 물을 문장**을 만들게 하는 것이다.
 
 **post-init 불변식**
 
@@ -295,12 +355,14 @@ RouterOutcome (frozen):
 |---|---|
 | `frames` | 1개 이상 · **2개 이하** (BR-DLG-10) |
 | 상태 변경 의도 | `frames` 안에 **최대 1개** (BR-DLG-11) |
-| `clarify ≠ None` | `frames[clarify.frame_index].missing` 에 `clarify.argument` 가 있다 |
+| `clarify` 가 `ArgumentClarify` | `frames[clarify.frame_index].missing` 에 `clarify.argument` 가 있다 |
+| `clarify` 가 `IntentClarify` | `choices` 가 2~3개 ∧ 서로 다른 `Intent` ∧ 전부 `ROUTABLE_INTENTS` 안 ∧ `frames` 는 길이 1 (의도가 안 갈렸으니 분해도 못 한다) |
 | `clarify = None` | 모든 프레임이 `executable` |
 | `depends_on` | 가리키는 순번이 `frames` 범위 안 ∧ 자기보다 앞 |
 
-`clarify` 를 `MatchRoute` 의 새 값으로 만들지 **않는다** — `MatchRoute` 는 "의도를 어떻게 정했나"이고 되묻기는 "인자가 비었나"다.
+`ArgumentClarify` 를 `MatchRoute` 의 새 값으로 만들지 **않는다** — `MatchRoute` 는 "의도를 어떻게 정했나"이고 그쪽 되묻기는 "인자가 비었나"다.
 섞으면 "CONFIDENT 로 정해졌는데 인자가 빈" 흔한 경우를 표현할 수 없다.
+반면 `IntentClarify` 는 **의도를 못 정한 상태**이므로 `MatchRoute.FALLBACK` 을 대체하는 자리에 온다 (business-logic-model §5.4).
 
 ---
 
