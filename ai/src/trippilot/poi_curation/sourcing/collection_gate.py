@@ -48,7 +48,7 @@ DROP_SCHEMA_COORD = "schema_missing_or_invalid_coord"
 DROP_EXISTENCE = "existence_out_of_service_region"
 DROP_EXISTENCE_CLOSED = "existence_closed_business"
 DROP_POLICY_PRICE = "policy_priced"
-# 뒤에 ":사유" 가 붙는다 — convenience_store · hypermarket · telecom · apartment
+# 뒤에 ":사유" 가 붙는다 — convenience_store · hypermarket · telecom · dealership · apartment
 DROP_POLICY_NON_TRAVEL = "policy_non_travel"
 
 

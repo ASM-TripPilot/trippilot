@@ -466,3 +466,33 @@ def test_드롭_키는_policy_non_travel_접두에_표의_사유가_붙는다() 
     for i, name in enumerate(one_per_reason):
         seen |= set(CollectionGate().apply([_cand(str(i), name=name)]).drops)
     assert seen == {f"{DROP_POLICY_NON_TRAVEL}:{r}" for r in _REASONS}
+
+
+# ── 리뷰 후 조인 규칙 회귀 고정 ─────────────────────────────────────────
+# 리뷰가 잠재 오탐 벡터 하나(`KT 위즈파크`)와 라벨 드리프트 하나(`이마트24강릉여고점`)
+# 를 짚었다. 둘 다 고쳤고 여기 못박는다.
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        # KT 는 경기장·공연장 스폰서다 — 접두만으로 통신이라 하면 야구장이 사라진다
+        ("KT 위즈파크", None),
+        ("수원KT위즈파크", None),
+        ("KT&G 상상마당", None),
+        # 대신 '텔레콤' 문자열이 근거다
+        ("KT 동원텔레콤한림점", "telecom"),
+        ("T world 제주지점", "telecom"),
+        ("Sk텔레콤 제주As센터", "telecom"),
+        # 체인명이 유일하면 뒤에 공백이 없어도 편의점이다 — 안 그러면 대형마트
+        # 규칙으로 흘러 드롭은 되지만 통계 사유가 틀린다
+        ("이마트24강릉여고점", "convenience_store"),
+        ("이마트24 강릉여고점", "convenience_store"),
+        ("GS25연동바다점", "convenience_store"),
+        # `CU` 만은 공백을 요구한다 — 로마자 상호와 겹친다
+        ("CUBE 카페", None),
+        ("CU 제주서광로점", "convenience_store"),
+    ],
+)
+def test_리뷰_후_조인_규칙_회귀(name: str, expected: str | None) -> None:
+    assert non_travel_reason(name) == expected
