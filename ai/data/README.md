@@ -204,12 +204,38 @@ TourAPI 단일 출처의 구조적 한계를 메우는 **두 번째 POI 출처**
 ```
 한국 POI          691,968건        TourAPI 수집분 18,607건의 37배
 한글 이름         439,468 (63.5%)  로마자만 있는 건 제안하지 않는다
-화이트리스트 통과   208,507건
-  FOOD 130,760 · CAFE 45,309 · SIGHT 15,879 · SHOPPING 6,527
-  NATURE 5,248 · CULTURE 4,060 · ACTIVITY 683 · NIGHT_VIEW 41
+화이트리스트 통과   188,335건
+  FOOD 125,679 · CAFE 45,362 · SIGHT 8,522 · NATURE 5,248
+  SHOPPING 1,586 · CULTURE 1,241 · ACTIVITY 656 · NIGHT_VIEW 41
 ```
 
-**ACTIVITY 는 TourAPI 가 더 강하다**(2,981 vs 683) — 덮어쓰지 말고 합칠 것.
+**ACTIVITY 는 TourAPI 가 더 강하다**(2,981 vs 656) — 덮어쓰지 말고 합칠 것.
+
+### 관광 관련이 아니면 뺀다 (TRIP-686)
+
+처음 화이트리스트(208,507건)를 제주 실측으로 검수해 **2만 건을 더 뺐다** —
+전부 동네 교회·호프집·노래방·다이소였다:
+
+| 뺀 카테고리 | 전국 | 제주 실측에서 본 것 |
+|---|---|---|
+| `bar` | 11,950 | 드렁큰디제이 · 봉구비어노형점 |
+| `church_cathedral` | 8,633 | 제주 소망교회 목사관 · 성지교회 외도동 |
+| `shopping` | 8,429 | 다이소 · 다비치안경 · 전자랜드 |
+| `arts_and_entertainment` | 2,208 | 마술아카데미 · 사진관 · 유리공방 |
+| `music_venue` | 2,001 | 칼라노래방 |
+| `outdoor_gear` | 245 | 수산조합 · 식품도매 |
+| `casino` | 1 | 하나로마트 축협 |
+
+쇼핑은 반대로 **여행 쇼핑 카테고리**로 좁혔다 — `souvenir_shop`·`gift_shop`·
+`duty_free_shop`·`department_store`·`farmers_market`·`flea_market`. TourAPI
+쇼핑(5일장·상설시장·백화점·면세점)과 같은 결이다.
+
+카테고리를 통과한 뒤에도 남는 것은 **이름 규칙**이 수집 게이트 5단에서 잡는다
+(`mapping.non_travel_reason` — 편의점·대형마트·통신·대리점·아파트). 규칙은
+**오탐 0 을 실데이터로 확인한 것만** 둔다. 한국 상호는 말장난이 많고
+(오랑우탄면사무소·돈사무소·조은미의원·꿀단지 — 전부 식당) 역사 건물은 기관명을
+달아서(구 인천우체국·고려대학교 본관), `학원|대학교|사무소|의원|단지` 같은
+넓은 규칙은 **일부러 없다.**
 
 ### 왜 지역별 파일인가
 
@@ -257,7 +283,7 @@ places 만 읽는다.
 태그                우리 축        OSM      Overture   판정
 tourism=viewpoint   NIGHT_VIEW    2,692        101    OSM 27배
 natural=peak        NATURE       18,488      2,417    OSM 7.6배
-shop=*              SHOPPING     59,221      6,527    OSM 9.1배
+shop=*              SHOPPING     59,221      1,586    (채택 목록으로 좁힘 — 아래)
 natural=beach       NATURE        1,525          0    OSM 단독
 ────────────────────────────────────────────────────
 amenity=restaurant  FOOD         82,123    130,760    Overture 우세
@@ -267,6 +293,13 @@ tourism=museum      CULTURE       2,021      4,060    Overture 우세
 ```
 
 **겹치는 축은 일부러 안 받는다** — 얻는 것 없이 ODbL 노출만 커진다.
+
+⚠️ **`shop=*` 59,221 은 그대로 쇼핑이 아니다.** 처음엔 "키가 있으면 SHOPPING,
+배제 목록만 뺀다"로 갔다가 뒤집었다 — 편의점·차량·미용을 빼도 다이소·안경점·
+휴대폰·문구·철물이 끝없이 남는다. Overture 와 같은 결로 **채택 목록**으로 간다:
+`gift`·`craft`·`art`·`antiques`·`tea`·`department_store`·`mall`·`outlet`·
+`pottery`·`jewelry`·`fashion_accessories` — OSM wiki 에 문서화된 값만.
+실효 건수는 크게 줄지만 그게 맞다. 그 대부분은 애초에 여행지가 아니었다.
 
 ⚠️ **`viewpoint` 2,692 을 그대로 야경으로 읽으면 안 된다.** 제주 실호출(42건)에서
 진짜 전망대는 **36%** 뿐이었고 나머지는 동굴·갤러리·기념비였다(`구린굴`·

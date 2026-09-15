@@ -8,6 +8,9 @@
 규칙의 양쪽(천문대 vs 진짜 전망대)을 가르는 실측 이름들.
 §6 은 **OSM 매핑**(TRIP-685) 재료다 — Overpass 태그 dict 모양 그대로. 이름 어휘는
 §5 를 그대로 재사용하고(같은 야경 규칙이다), 여기서는 태그 쪽만 새로 짠다.
+§7 은 **비여행지 이름 규칙**(TRIP-686 · 게이트 5단 정책) 재료다 — 규칙이 걸어야
+하는 실측 진양성과, 규칙이 **절대 걸면 안 되는** 실측 오탐 생존자(말장난 상호·
+기관명 붙은 역사 건물). 오탐 0 이 원칙이라 생존자 쪽이 더 중요하다.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from hypothesis import strategies as st
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, TransportMode
 from trippilot.domain.poi_curation import CandidatePoolRequest
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.poi_curation.sourcing.osm import _SHOP_TRAVEL
 from trippilot.ports.place_existence_port import ExistenceQuery
 
 from tests.generators.geo import geo_points
@@ -485,19 +489,32 @@ _OSM_NEAR_MISS_TAGS: tuple[tuple[str, str], ...] = (
     ("was:tourism", "viewpoint"), ("proposed:natural", "beach"),
     ("demolished:tourism", "viewpoint"), ("removed:natural", "peak"),
 )
-# `shop` 이 아닌데 `shop` 처럼 보이는 키. 값이 무엇이든 SHOPPING 이 되면 안 된다 —
-# `disused:shop=butcher` 는 **닫힌 정육점**이지 쇼핑 명소가 아니다.
+# `shop` 이 아닌데 `shop` 처럼 보이는 키. 값이 채택 목록 안이어도 SHOPPING 이 되면
+# 안 된다 — `disused:shop=gift` 는 **닫힌 기념품점**이지 쇼핑 명소가 아니다.
 _OSM_SHOP_NEAR_MISS_KEYS: tuple[str, ...] = (
     "Shop", "SHOP", "shops", "shop ", " shop", "shop:type", "shop_1",
     "disused:shop", "was:shop", "abandoned:shop", "proposed:shop", "second_hand",
 )
-# 제외 목록 밖의 shop 값 — 여행자가 일정에 넣을 만한 가게들. SHOPPING 이어야 한다.
-_OSM_TRAVEL_SHOP_VALUES: tuple[str, ...] = (
-    "gift", "books", "art", "antiques", "craft", "jewelry", "clothes",
-    "department_store", "mall", "boutique", "confectionery", "pastry",
-    "chocolate", "tea", "coffee", "wine", "music", "musical_instrument",
-    "photo", "toys", "shoes", "bag", "cosmetics", "perfumery", "florist",
-    "farm", "seafood", "deli", "variety_store", "houseware",
+# 채택 목록 밖의 **실측 비여행** shop 값 — 제주 실측에서 배제 목록으로 쫓다가
+# 끝이 없어 채택 목록으로 뒤집게 만든 것들(편의점·차량·미용·다이소·안경·휴대폰·
+# 문구·철물). `vacant`(공실)·`no`(가게 아님)·`yes`(정보 없음)는 배제 목록 시절에
+# 새어들던 유령 값이다. 전부 None 이어야 한다 — 배제가 아니라 **미채택**으로.
+_OSM_NON_TRAVEL_SHOP_VALUES: tuple[str, ...] = (
+    "convenience", "supermarket", "car", "car_repair", "car_parts", "tyres",
+    "hairdresser", "beauty", "pharmacy", "chemist", "optician", "mobile_phone",
+    "computer", "stationery", "hardware", "doityourself", "variety_store",
+    "laundry", "dry_cleaning", "funeral_directors", "estate_agent", "insurance",
+    "kiosk", "tobacco", "e-cigarette", "alcohol", "newsagent", "bookmaker",
+    "greengrocer", "butcher", "fishmonger", "pet", "frozen_food",
+    "vacant", "no", "yes",
+)
+# 채택 값과 **한 글자 차이** — 조회는 정확 일치여야 한다. 대소문자·공백·복수형·
+# 합성어(`gift_shop`·`duty_free_shop`)가 새어 들어오면 채택 목록이 채택 목록이 아니다.
+_OSM_SHOP_NEAR_MISS_VALUES: tuple[str, ...] = (
+    "Gift", "GIFT", "gifts", "gift ", " gift", "gift_shop", "giftshop",
+    "Souvenir", "souvenirs", "souvenir_shop", "Mall", "malls", "shopping_mall",
+    "duty_free_shop", "dutyfree", "department_stores", "Department_Store",
+    "outlets", "Art", "arts", "crafts", "teas", "jewellery", "Jewelry",
 )
 # Overture 가 실측에서 **더 많이 주는** 네 축. OSM 으로는 일부러 안 받는다 —
 # 겹치는 축까지 받으면 얻는 것 없이 ODbL 노출만 커진다(osm.py 모듈 주석 비교표).
@@ -555,8 +572,18 @@ def osm_non_viewpoint_names() -> st.SearchStrategy[str]:
 
 
 def osm_travel_shop_values() -> st.SearchStrategy[str]:
-    """`_SHOP_EXCLUDE` 밖의 shop 값 — SHOPPING 으로 채택돼야 한다."""
-    return st.sampled_from(_OSM_TRAVEL_SHOP_VALUES)
+    """`_SHOP_TRAVEL` 채택 목록의 shop 값 — 표에서 **유도**하므로 값이 늘어도 덮인다."""
+    return st.sampled_from(sorted(_SHOP_TRAVEL))
+
+
+def osm_non_travel_shop_values() -> st.SearchStrategy[str]:
+    """채택 목록 밖의 실측 비여행 shop 값(`vacant`·`no` 포함) — None 대조군."""
+    return st.sampled_from(_OSM_NON_TRAVEL_SHOP_VALUES)
+
+
+def osm_shop_near_miss_values() -> st.SearchStrategy[str]:
+    """채택 값의 대소문자·공백·복수형·합성어 변형. 정확 일치가 아니면 None."""
+    return st.sampled_from(_OSM_SHOP_NEAR_MISS_VALUES)
 
 
 def osm_shop_near_miss_keys() -> st.SearchStrategy[str]:
@@ -584,10 +611,11 @@ def osm_noise_tags(draw) -> dict[str, str]:
 
 @st.composite
 def osm_unadopted_tags(draw) -> dict[str, str]:
-    """채택 목록에도 없고 `shop` 키도 없는 태그 dict — **항상** 드롭돼야 한다.
+    """채택 목록에도 없고 `shop` 값도 채택 밖인 태그 dict — **항상** 드롭돼야 한다.
 
-    네 갈래를 한 dict 에 섞는다: 실측 비채택 태그 · 근접 오타/라이프사이클 접두 ·
-    `shop` 을 닮은 키 · 임의 유니코드 키/값. 빈 dict 도 나온다(태그 없는 요소).
+    다섯 갈래를 한 dict 에 섞는다: 실측 비채택 태그 · 근접 오타/라이프사이클 접두 ·
+    `shop` 을 닮은 키 · **채택 목록 밖 `shop` 값**(비여행·근접 변형·임의) · 임의
+    유니코드 키/값. 빈 dict 도 나온다(태그 없는 요소).
 
     임의 유니코드가 이론상 채택 쌍을 만들 수 있으므로 쓰는 쪽에서
     `assume(...)` 로 뺀다 — §5 `unknown_overture_categories` 와 같은 규약이다.
@@ -597,6 +625,10 @@ def osm_unadopted_tags(draw) -> dict[str, str]:
         tags[k] = v
     if draw(st.booleans()):
         tags[draw(osm_shop_near_miss_keys())] = draw(osm_travel_shop_values())
+    if draw(st.booleans()):
+        tags["shop"] = draw(st.one_of(osm_non_travel_shop_values(),
+                                      osm_shop_near_miss_values(),
+                                      st.text(max_size=10)))
     tags.update(draw(st.dictionaries(st.text(max_size=8), st.text(max_size=8),
                                      max_size=3)))
     if draw(st.booleans()):
@@ -604,3 +636,72 @@ def osm_unadopted_tags(draw) -> dict[str, str]:
     if draw(st.booleans()):
         tags["name"] = draw(st.one_of(korean_place_names(), st.text(max_size=12)))
     return tags
+
+
+# ── §7 비여행지 이름 규칙 재료 (TRIP-686 · 게이트 5단 정책) ──────────────
+# `mapping.non_travel_reason` 을 자극하는 두 어휘. 전부 실측(제주·강릉 수집분 —
+# Overture `shopping` 에 실려 온 편의점·대형마트·통신, `landmark_and_historical_
+# building` 에 실려 온 아파트)이다. 무작위 유니코드로 만들지 않는다 — 반례가
+# 실데이터 한 줄이어야 규칙을 좁힐지 넓힐지 판단이 선다.
+
+# 규칙이 **절대 걸면 안 되는** 이름 — 전부 진짜 여행지·식당이다. 한국 상호는 말장난이
+# 많고(면사무소·의원·꿀단지 — 식당) 역사 건물은 기관명을 단다(우체국·대학교 본관 —
+# 등록문화재). 이 목록에서 하나라도 걸리면 규칙이 넓어진 것이다. 넓은 규칙
+# (`학원|대학교|사무소|의원|단지|주공`)이 **일부러 없는** 근거가 이 목록이다.
+_NON_TRAVEL_SURVIVORS: tuple[str, ...] = (
+    "아파트 카페",                  # 카페 상호 — '아파트'가 이름 끝이 아니다
+    "오랑우탄면사무소",             # 면 요리집
+    "돈사무소 노형점",              # 돼지고기집
+    "조은미의원",                   # 식당 (의원이 아니다)
+    "꿀단지",                       # 식당 ('단지'는 관광단지에도 걸린다 — 폐기 근거)
+    "곰나루국민관광단지",
+    "구 인천우체국",                # 등록문화재
+    "서울 고려대학교 본관",         # 사적
+    "인하대학교 박물관",            # 대학 박물관 — `대학교` 규칙 26건이 거의 이거였다
+    "봉채국수 탑동이마트점",        # 마트 **안** 식당 — 체인명이 앞에 없다
+    "애슐리 제주롯데마트점",
+    "이마트 제주점 문화센터",       # '점'으로 끝나지 않는다
+    "귤품은흑돼지 제주공항점",      # '주공' 규칙이 제주**공**항점에 걸린 근거
+    "가야산국립공원 치인자동차야영장",
+    "거장산오토캠핑장",
+    "하이원리조트 알파인코스터",
+)
+# 규칙이 걸어야 하는 이름과 그 사유 — `_NON_TRAVEL` 표의 사유 문자열과 같다.
+_NON_TRAVEL_HITS: tuple[tuple[str, str], ...] = (
+    ("노형 e편한세상 아파트", "apartment"),
+    ("정든마을주공1단지아파트", "apartment"),
+    ("GS25 연동바다점", "convenience_store"),
+    ("CU 제주서광로점", "convenience_store"),
+    ("이마트24 강릉여고점", "convenience_store"),
+    ("꽃사슴복권마트(슈퍼맨편의점)", "convenience_store"),
+    ("이마트 서귀포점", "hypermarket"),
+    ("T world 제주지점", "telecom"),
+    ("KT 동원텔레콤한림점", "telecom"),
+    ("Sk텔레콤 제주As센터", "telecom"),
+    ("산삼배양근대리점", "dealership"),
+    ("Lacoste 제주 대리점", "dealership"),
+)
+# 앞뒤 여백 — 규칙은 strip 뒤에 판정하므로 결과를 바꾸면 안 된다.
+# U+3000(전각 공백)도 `str.strip` 이 떼는 공백이다.
+_NAME_PADDING_ALPHABET = " \t\n　"
+
+
+def non_travel_survivors() -> st.SearchStrategy[str]:
+    """실측 오탐 생존자 — `non_travel_reason` 이 **반드시 None** 이어야 하는 이름."""
+    return st.sampled_from(_NON_TRAVEL_SURVIVORS)
+
+
+def non_travel_hits() -> st.SearchStrategy[tuple[str, str]]:
+    """실측 진양성 (이름, 사유) — `non_travel_reason` 이 그 사유를 내야 한다."""
+    return st.sampled_from(_NON_TRAVEL_HITS)
+
+
+def travel_names() -> st.SearchStrategy[str]:
+    """비여행 규칙 어디에도 안 걸려야 하는 이름 전 분포 — 오탐 생존자 + §2 상호 +
+    §5 한글 장소명(천문·전망·평범·병기). 대조군으로 쓴다."""
+    return st.one_of(non_travel_survivors(), store_names(), korean_place_names())
+
+
+def name_padding() -> st.SearchStrategy[str]:
+    """이름 앞뒤에 붙일 공백 문자열 (빈 문자열 포함)."""
+    return st.text(alphabet=_NAME_PADDING_ALPHABET, max_size=3)

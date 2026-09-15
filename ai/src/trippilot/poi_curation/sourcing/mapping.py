@@ -125,6 +125,53 @@ def category_tags(category_codes: tuple[str, ...]) -> tuple[str, ...]:
 
 
 # ── 지역 추출 (backend `poi.region varchar(60)` — 시·군·구) ──────────
+# ── 여행지가 아닌 것 — 이름으로 확실한 것만 (TRIP-686) ──────────────────
+# 출처가 셋으로 늘면서 카테고리가 거친 것(Overture `shopping`·`landmark_and_
+# historical_building`)이 편의점·아파트를 실어 왔다. 제주 실측: SHOPPING 241건
+# 중 편의점 11·대형마트 4·통신 3, SIGHT 317건 중 **아파트 29**.
+#
+# **오탐 0 을 실데이터로 확인한 규칙만 둔다.** 한국 상호는 말장난이 많고
+# (오랑우탄면사무소·돈사무소·조은미의원·꿀단지 — 전부 식당) 역사 건물은
+# 기관명을 단다(구 인천우체국·고려대학교 본관 — 등록문화재). 느슨한 규칙은
+# 진짜 여행지를 죽인다. `학원|대학교` 같은 것은 시험해 보니 걸린 26건이 거의
+# 전부 대학 박물관이었다 — 폐기. `주공`은 제주**공**항점에, `단지`는 관광단지에
+# 걸린다 — 폐기. 여기 남은 것은 접두·접미를 엄격히 잡아 그런 일이 없는 것들이다.
+_NON_TRAVEL: tuple[tuple[str, re.Pattern[str]], ...] = (
+    # 편의점 — 체인명이 이름 맨 앞이거나 '편의점'이 들어간다
+    ("convenience_store",
+     re.compile(r"^(CU|GS\s?25|세븐일레븐|7-?ELEVEN|이마트24|미니스톱|씨스페이스)(\s|$)|편의점",
+                re.IGNORECASE)),
+    # 대형마트 — 체인명으로 시작해 '○○점'으로 끝나는 것만. `봉채국수 탑동이마트점`
+    # (마트 안 식당)은 체인명이 앞에 없어 안 걸린다.
+    ("hypermarket",
+     re.compile(r"^(롯데마트|홈플러스|코스트코|하나로마트|이마트|트레이더스)\s*\S*점$")),
+    # 통신 — 통신사 접두 또는 AS센터 접미
+    ("telecom",
+     re.compile(r"^(KT|SKT|SK텔레콤|LG\s?U\+|T\s?world)(\s|$)|AS\s?센터$", re.IGNORECASE)),
+    # 대리점 — 종묘·산삼·의류 무엇이든 "대리점"은 딜러이지 방문지가 아니다.
+    # 실측: 산삼배양근대리점 · 모슬포흥농종묘대리점 · Lacoste 제주 대리점.
+    ("dealership", re.compile(r"대리점$")),
+    # 아파트·오피스텔 — **이름 끝**일 때만. 처음엔 낱말 단위로 잡았다가
+    # `아파트 카페`(카페 상호)가 걸려 좁혔다. 실측 26건 중 그 1건이 오탐이었다.
+    ("apartment", re.compile(r"(아파트|오피스텔)$")),
+)
+
+
+def non_travel_reason(name: str | None) -> str | None:
+    """이름만으로 여행지가 아님이 확실하면 그 사유, 아니면 None.
+
+    None 은 "여행지다"가 아니라 **"이름으로는 모른다"** 다. 판정은 보수적이다 —
+    의심스러우면 통과시키고, 확실한 것만 떨어뜨린다.
+    """
+    if not name:
+        return None
+    n = name.strip()
+    for reason, rx in _NON_TRAVEL:
+        if rx.search(n):
+            return reason
+    return None
+
+
 _PROVINCE_SUFFIXES = ("특별자치도", "특별자치시", "특별시", "광역시", "도")
 _REGION_RE = re.compile(r".+(시|군|구)$")
 
