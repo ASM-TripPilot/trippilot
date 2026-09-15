@@ -24,8 +24,9 @@
 ```
 src/trippilot/
   domain/
-    dialogue.py        IntentFrame · ArgumentKind · ArgumentSpec · ARGUMENT_TABLE
-                       · ClarifyRequest · RouterOutcome · PendingFrame · DialogueContext   (신규)
+    dialogue.py        IntentFrame · ArgumentKind · ArgumentSpec · ARGUMENT_TABLE · RouterOutcome
+                       · ArgumentClarify · IntentClarify · IntentChoice
+                       · PendingFrame · DialogueContext                                   (신규)
     intent.py          (기존 — 무변경) Intent · ROUTING_TABLE · MatchRoute · IntentMatch · IntentDraft
     execution.py       (기존 — **드디어 소비자가 생긴다**) ExecutionPlan · ExecutionStep · AgentCall
     delegation.py      (기존 — 무변경) AgentTask · spawn · AgentResult
@@ -37,7 +38,10 @@ src/trippilot/
     intent_router.py   (기존 — `_extract_slots` 제거 외 무변경)
   llm_gateway/
     workers/intent.py  3차 워커에 도구 호출 분기 추가                                        (확장)
+    workers/intent_clarify.py  후보 2~3종 → 재확인 질문·보기 생성                            (신규)
     gates/intent.py    (기존 — 도구 응답도 같은 게이트를 탄다)
+    gates/intent_clarify.py    보기가 **주입한 후보** 안의 Intent 로 되매핑되는지            (신규)
+prompts/intent_clarify.yaml   LlmFeature.INTENT_CLARIFY (LIGHT) — BR-AF-07 5종 세트        (신규)
 ```
 
 `dialogue_router.py` 를 새로 두고 `intent_router.py` 를 **감싸는** 이유: 라우터는 "발화 → 의도" 한 가지만 하는 상태가
@@ -69,13 +73,15 @@ src/trippilot/
 [C] 프레임 만들기
       CONFIDENT/VOTED → 프레임 1개, 인자는 **규칙 추출기만** (LLM 0회 유지)
       LLM_DIRECT      → 도구 호출 결과에서 프레임 1~2개, 인자 동봉
-      FALLBACK        → OUT_OF_SCOPE 프레임 1개
+      FALLBACK        → **IntentClarify** (후보 2~3종을 LLM 이 재확인 질문으로 만든다, §5.6)
+                        후보조차 못 세우면 OUT_OF_SCOPE 프레임 1개
    |
    v
 [D] 필수 인자 점검 — missing 계산
    ├ 전부 찼다 → [E]
    ├ 비었는데 FREE_TEXT·해소 실패다 ∧ 아직 3차를 안 탔다 → 3차 승격(LLM 1회) → [D] 재점검
-   └ 여전히 비었다 → ClarifyRequest 생성 → **되묻기로 응답**, 보류 프레임을 경계 밖으로 돌려준다
+   └ 여전히 비었다 → ArgumentClarify → **되묻기로 응답**, 보류 프레임을 경계 밖으로 돌려준다
+                     (단 이 요청에서 이미 한 번 물었으면 묻지 않고 결정론 폴백 — BR-DLG-33)
    |
    v
 [E] 프레임 → ExecutionPlan 컴파일 → AgentTask.spawn 으로 시한 분배 → 위임
@@ -202,7 +208,59 @@ frames = [f0(EDIT_SCHEDULE), f1(GENERATE_REFLECTION)]      # 독립 — 정본 �
 
 ---
 
-## 6. 도구 호출 — 무엇이 실제로 좋아지는지 재고 넣는다
+## 6. 되묻기 — 어디에 넣나
+
+### 6.1 버는 자리와 잃는 자리
+
+되묻기를 어디에 넣느냐가 이득과 손해를 가른다. 세 후보를 실측으로 갈랐다.
+
+| 자리 | 현행 | 되묻기로 바꾸면 | 판정 |
+|---|---|---|---|
+| 2차 동률대 (득표 0.73~0.76) | 3차로 승격 | 사람에게 물음 | **넣지 않는다.** 3차가 승격분을 **전건 맞혔다** — 공짜로 맞힐 것을 왕복 비용으로 바꾼다 |
+| 3차 실패 → `FALLBACK` | "기본 응답 + 수동 편집 안내" | "혹시 이런 뜻인가요?" | **넣는다.** 실측 9건/87. 침묵하지 않으므로 INV-4 는 그대로다 |
+| 3차가 **낮은 신뢰도**로 상태 변경 의도 | 그대로 실행 | 실행 전 확인 | **넣는다.** 일정을 실제로 바꾸는 자리라 확인이 싸다 (`DESTRUCTIVE_OPS` 와 같은 취지) |
+
+### 6.2 왜 되묻기가 이 군집의 **유일한** 해법인가
+
+경계 압력을 의도 쌍별로 재면(뱅크 417문장, ≥0.80 문장 쌍 수) 문제가 한 군데에 몰려 있다.
+
+| 의도 쌍 | ≥0.80 쌍 | 최고 |
+|---|---:|---:|
+| `REGENERATE` ↔ `REPLAN` | **19** | 0.841 |
+| `GENERATE_SCHEDULE` ↔ `SHOW_SCHEDULE` | **12** | 0.880 |
+| `GENERATE_SCHEDULE` ↔ `REGENERATE` | 6 | 0.866 |
+| `GET_NEXT_SLOT` ↔ `SHOW_SCHEDULE` | 5 | 0.852 |
+| `EDIT_SCHEDULE` ↔ `REPLAN` | 5 | 0.823 |
+| `EDIT_SCHEDULE` ↔ `REGENERATE` | 4 | 0.815 |
+
+여섯 의도(`GENERATE_SCHEDULE`·`REGENERATE`·`REPLAN`·`EDIT_SCHEDULE`·`SHOW_SCHEDULE`·`GET_NEXT_SLOT`)가
+서로 붙어 있고, 전부 "일정"이라는 한 낱말을 공유한다. 여기서 중요한 것은 **왜 안 갈리는가**다.
+
+> "일정 다시 짜줘" — 아무 일도 없었으면 `REGENERATE`, 비가 오면 `REPLAN`.
+> **차이가 문장 안에 없다.** 상황에 있다.
+
+뱅크를 더 넣어도, 임계를 더 조여도, 의도를 더 쪼개도(§2.1.1 실측) 이건 안 갈린다 —
+**정보가 발화에 없기 때문이다.** 없는 정보를 만드는 방법은 두 가지뿐이다: 문맥에서 가져오거나(날씨·현재
+일정 — 그건 Provider 몫이고 라우터가 쓸 수 없다), **사용자에게 묻는 것**. 되묻기가 여기의 답인 이유다.
+
+### 6.3 쪼개기로는 못 고치는 나머지 — 집 없는 발화
+
+평가 발화 87건 중 **25건이 어느 의도에도 `t_mid`(0.75) 위로 안 붙는다.** 성격이 둘로 갈린다.
+
+- **범위 밖 9건** — "요즘 주식 시장 어때?"·"노래 하나 틀어줘"·"내 비밀번호 바꿔줘"·"호텔 예약 취소해줘" 등.
+  전부 **엉뚱한 의도에 top1 이 붙는다**(GET_WEATHER·EDIT_SCHEDULE·REGENERATE…). 뱅크에 **"우리 일이 아니다"
+  앵커가 없기 때문**이다 — 뱅크는 `ROUTABLE_INTENTS` 13종만 덮고 `OUT_OF_SCOPE` 는 0문장이다.
+- **범위 안인데 얇은 16건** — `GET_POI_INFO`("광장시장 어떤 데야?" 0.529)·`GENERATE_SCHEDULE` 여럿.
+  §3.2 ③ Mine(운영 수집)이 채울 자리다.
+
+앞엣것은 **거부 앵커 뱅크**로 줄일 수 있다. 다만 범위 밖은 **열린 집합**이라 (세상의 모든 딴소리) 전수 커버가
+불가능하다 — 금융·계정·기기제어·잡담처럼 **흔한 갈래만** 덮어 `t_mid` 를 넘기는 것이 현실적 목표다.
+이득은 정확도가 아니라 **비용**이다(3차가 이미 대부분 맞히고 있다 — LLM 호출 ~10%를 아낀다).
+별도 티켓으로 올린다.
+
+---
+
+## 7. 도구 호출 — 무엇이 실제로 좋아지는지 재고 넣는다
 
 도구 호출을 "요즘 다들 그렇게 한다"로 채택하지 않는다. 바뀌는 것과 안 바뀌는 것을 갈라 둔다.
 
@@ -224,18 +282,19 @@ JSON 프롬프트에 같은 스키마를 실으면 된다. **즉 ③의 핵심�
 
 ---
 
-## 7. 착수 순서와 선행 조건
+## 8. 착수 순서와 선행 조건
 
-세 항목은 **의존 순서가 있다.** ③ 없이 ⑤가 불가능하고, ④는 봉투 이관을 기다린다.
+**의존 순서가 있다.** ③ 없이 ⑤가 불가능하고, ④는 봉투 이관을 기다린다. 되묻기는 그중 어디에도 안 묶인다.
 
 | 순서 | 항목 | 선행 조건 | 막히면 |
 |---|---|---|---|
 | 1 | ③ `ARGUMENT_TABLE` + 규칙 추출기 | **없음** — 지금 착수 가능 | — |
+| 1 | **의도 되묻기**(`IntentClarify` + `INTENT_CLARIFY` feature·게이트) | **없음** — 지금 착수 가능. `FALLBACK` 자리를 바꾸는 것이라 다른 항목과 독립이다 | — |
 | 2 | ③ 도구 호출 포트 확장 | 1 완료 (표가 있어야 스키마가 나온다) | 표만으로도 JSON 프롬프트 개선은 된다 |
 | 3 | ⑤ 멀티턴 | 1 완료 + **대화 상태 소유 합의**(미결 #1) + **자연어 경계**(미결 #2) | 합의 전에는 타입만 만들고 배선하지 않는다 |
 | 4 | ④ 다중 의도 | 2 완료 + **`AgentTask` 봉투 이관**(agent-foundation 미결 #8) + 복합 평가셋(미결 #8) | 봉투 이관이 보류 중이면 **착수 불가** |
 
-**지금 당장 할 수 있는 것은 1번뿐이다.** 나머지 셋은 전부 다른 트랙의 결정이나 작업을 기다린다 —
+**지금 당장 할 수 있는 것은 1번 두 건뿐이다**(인자표 · 의도 되묻기). 나머지 셋은 전부 다른 트랙의 결정이나 작업을 기다린다 —
 그중 둘(자연어 경계·대화 이력 정책)은 **제품 결정**이고 기술이 선행할 수 없다:
 `work-graph.toml` 의 `AI-NL-EDIT` 가 이미 그렇게 적어 뒀다 — "화면·문구·확인 흐름이 정해져야 계약을 열 수 있으므로 제품 결정이 선행이다. 기술 선행은 없다(경계는 이미 열려 있다)."
 

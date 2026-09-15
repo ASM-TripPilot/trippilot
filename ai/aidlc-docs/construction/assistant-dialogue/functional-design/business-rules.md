@@ -39,6 +39,16 @@
 | BR-DLG-25 | `AgentStatus.NEED_MORE_INFO` 를 사용자 되묻기로 재사용하지 않는다 | 그쪽 `missing` 은 Provider 데이터이고 사람 왕복이 없다. 합치면 "데이터가 없다"와 "사용자가 안 말했다"가 같은 재시도 정책을 탄다 |
 | BR-DLG-26 | 되묻기 질문은 **어느 인자를 채우려는지** 를 기계가 읽을 수 있어야 한다(`ClarifyRequest.argument`) | 계약 정본의 `EditAgentOutput.clarification_needed: str \| None` 은 문자열 한 칸이라 다음 턴에 답을 **어디에 넣을지** 알 수 없다 — 그대로 쓰면 멀티턴이 성립하지 않는다 |
 
+### 1.4 되묻기 (⑤ 와 함께 쓰이지만 별도 규칙)
+
+| # | 규칙 | 근거 |
+|---|---|---|
+| BR-DLG-30 | **되묻기는 두 종류이고 동시에 나오지 않는다** — 의도가 안 갈리면 `IntentClarify`, 의도는 갈렸는데 필수 인자가 비면 `ArgumentClarify` | 의도를 모르면 어떤 인자가 필요한지도 모른다(`ARGUMENT_TABLE` 이 의도로 색인된다). 두 칸으로 두면 표현 불가능한 상태가 타입에 생긴다 |
+| BR-DLG-31 | **`IntentClarify` 의 질문은 LLM 이 만든다** (팀 결정 2026-09-15). 고정 문구를 쓰지 않는다 | 갈리는 자리는 **차이가 문장 안에 없다** — "일정 다시 짜줘"는 REGENERATE 와 REPLAN 둘 다다. 사용자가 자기 말을 되짚어 보지 못하면 무엇을 고르는지 모른다 |
+| BR-DLG-32 | **후보는 서버가 주입한다 — 라우터가 갈등하는 2~3개만.** 13종 전체를 주지 않는다. 게이트가 모든 보기를 그 목록으로 되매핑한다 | INV-1. 모델에게 라우팅을 다시 시키는 것이 아니라 **이미 좁혀진 둘 중 무엇인지 물을 문장**을 만들게 하는 것이다. `EDIT_TRANSLATION` 의 `$edit_ops` 와 같은 구조 |
+| BR-DLG-33 | **한 요청에 되묻기는 총 1회.** 의도 되묻기 뒤에 인자 되묻기를 이어 붙이지 않는다 | 2연속 되묻기는 사용자가 이탈한다. 의도 확정 후 인자가 비면 선택 인자는 비우고, 필수 인자는 결정론 폴백으로 간다. BR-DLG-23(프레임당 1회)의 상위 상한 |
+| BR-DLG-34 | **되묻기는 `FALLBACK` 을 대체하지 3차를 대체하지 않는다** | 실측: 2차 동률대(0.73~0.76)를 3차로 보내면 **전건 정답**이었다. 거기서 사람을 부르면 공짜로 맞힐 것을 왕복 비용으로 바꾼다. 되묻기가 버는 자리는 3차까지 실패한 **FALLBACK 9건/87** 과 3차가 낮은 신뢰도로 **상태 변경 의도**를 냈을 때다 |
+
 ---
 
 ## 2. PBT 게이트 (hypothesis — 전부 통과해야 스텝 종료)
@@ -55,7 +65,9 @@
 | DLG-P8 | 되묻기 상한: 어떤 턴 시퀀스에도 같은 보류 프레임에 대해 `clarify` 가 2회 나오지 않는다 | `DialogueContext` 를 물려 가며 턴 반복 |
 | DLG-P9 | `DialogueContext`·`PendingFrame`·`IntentFrame`·`RouterOutcome` 전부 `from_dict(to_dict(x)) == x` ∧ `asked_at` 은 tz-aware 만 | U5-P10 승계 |
 | DLG-P10 | 인자 값이 항상 평면 스칼라 — 중첩을 담은 `IntentFrame` 은 생성 불가. `IntentGate` 통과값이 전부 `IntentFrame` 생성 가능 | 게이트 ↔ 타입 정합 (양방향) |
-| ROUTE-P1 (승계) | 전 feature 스윕에 신규 feature 자동 포함 | 기존 U4 PBT 회귀 |
+| DLG-P11 | `RouterOutcome.clarify` 가 `ArgumentClarify` 와 `IntentClarify` 를 **동시에** 담은 인스턴스는 생성 불가 ∧ `IntentClarify` 면 `frames` 길이 1 | 무작위 조합 |
+| DLG-P12 | `IntentClarifyGate`: 주입한 후보 밖 `Intent` 를 담은 응답은 전량 드롭 → 정적 폴백 문구. 보기 수 2~3 밖도 드롭 | 후보 목록 ↔ 응답 무작위 교차 |
+| ROUTE-P1 (승계) | 전 feature 스윕에 신규 feature 자동 포함 — `INTENT_CLARIFY` 가 자동으로 걸린다 | 기존 U4 PBT 회귀 |
 
 ---
 
@@ -65,7 +77,9 @@
 - [ ] `ARGUMENT_TABLE` 13종 전수 + `tool_specs()` 순수 함수 + 추출기 9종 존재, 실 API 호출 0건(D37)
 - [ ] **도구 호출의 이득을 실측으로 적는다** — §6 평가셋으로 기존 JSON 프롬프트 경로 대비 **파싱 실패율·인자 정확도**를 2회 이상 비교.
       정확도 개선을 전제로 삼지 않는다 (`ai/data/README.md` "한 번 재고 좋아졌다/나빠졌다 말하지 않는다")
-- [ ] 되묻기가 필요한 7종 의도에 대해 **질문 문안이 전부 존재**하고 `options` 가 있는 인자는 보기가 closed-set 과 일치
+- [ ] 되묻기가 필요한 7종 의도에 대해 **인자 질문 문안이 전부 존재**하고 `options` 가 있는 인자는 보기가 closed-set 과 일치
+- [ ] **의도 되묻기 실측** — 현행 `FALLBACK` 9건/87 이 되묻기로 바뀌었을 때 후보 2~3종 안에 정답이 들어 있는 비율.
+      들어 있지 않으면 되묻기는 폴백보다 나쁘다(사용자에게 틀린 보기만 준다). 최소 2회 측정
 - [ ] `slot_pattern` 경로 제거 시 `_extract_slots`·로더 검증·테스트를 함께 걷어낸다 (죽은 기능을 남기지 않는다)
 - [ ] 멀티턴 경계 계약에 **백엔드 합의 서명** — `DialogueContext` 를 누가 저장하고 언제 지우는지가 합의문에 있어야 한다 (§5 미결 #1)
 - [ ] BR-AF-07 5종 세트 — 신규 `LlmFeature` 를 만든다면 FD 표·tier_map·프롬프트 yaml·ROUTE-P1·audit 전부. **`INTENT` 재사용이면 세트 불요**
@@ -83,6 +97,8 @@
 | `orchestrator-delegation-design.md` §5 표 아래 복합 intent 註 | 상한을 명문화 — 프레임 최대 2개 · 상태 변경 의도 최대 1개(BR-DLG-10·11). 현행 문장은 상한 없이 "병렬 배치"만 적었다 |
 | `agent-io-contracts.md` §`EditAgentOutput` | `clarification_needed: str \| None` → `ClarifyRequest`(어느 인자를 묻는지 포함)로 승격. 문자열 한 칸으로는 다음 턴에 답을 넣을 자리를 알 수 없다(BR-DLG-26) |
 | `agent-io-contracts.md` / `domain/reflection.py` | `TRIP_SUMMARY.day_date`·`STYLE_ANALYSIS` 가 계약에만 있고 코드 타입에 없다 — 표(§2.1)가 계약을 따랐으므로 어느 쪽을 정본으로 할지 정해야 한다 |
+| `intent-matching-design.md` §2 파이프라인 · §7 INV-4 행 | **FALLBACK 자리에 되묻기를 넣는다.** 현행은 "기본 응답 + 수동 편집 안내"인데, 3차까지 실패한 9건/87 에 대해 "혹시 이런 뜻인가요"를 묻는 편이 낫다. 침묵하지 않으므로 INV-4 는 그대로 지켜진다 |
+| `domain/llm.py` · `llm_gateway/config.py` · `prompts/` | 신규 `LlmFeature.INTENT_CLARIFY`(LIGHT) + `intent_clarify.yaml` + `IntentClarifyGate` — **BR-AF-07 5종 세트** 대상 |
 | `agents/planb/rag.py` · `api/schemas.py` (코드) | PlanB `reason` 의 어휘(`weather`·`closed`·…·`none`)가 **`str` 필드의 주석으로만** 있다. `ARGUMENT_TABLE` 이 `choices` 를 가지려면 `EditOp` 처럼 타입이 되어야 한다 — 주석은 게이트가 검사할 수 없다 |
 | `ai/docs/openapi.json` (자동 생성 — 손대지 않는다) | 자연어 진입 경계가 열리면 `scripts/export_openapi.py` 로 재생성. 경계 신설 자체는 §5 미결 #2 |
 | `ai/claude.md` · `ai/README.md` | `IntentRouter` "미배선" 표기의 해소 조건을 이 FD 로 연결 (현행 문구는 "자연어 진입점이 열릴 때 배선된다") |
@@ -99,6 +115,8 @@
 | 미결 #3 | **봉투 이관과의 순서.** 다중 의도는 프레임마다 봉투 1개를 요구하는데, 에이전트 4종이 아직 `AgentTask` 밖 전용 타입(`ScheduleTask` 등)으로 호출된다 | agent-foundation 미결 #8 (AgentTask 이관). **그 작업이 보류 중이면 ④는 착수할 수 없다** |
 | 미결 #4 | **`INFO_REQUIREMENTS` 가 2종뿐이다** — `GENERATE_SCHEDULE`·`REPLAN` 만 있고 나머지 11종의 수집 요구표가 없다. 프레임이 실행 가능해도 수집이 안 된다 | U5·U6 Provider FD |
 | 미결 #5 | **도구 호출을 위한 신규 `LlmFeature` 필요 여부.** `INTENT` 를 재사용하면 프롬프트 하나가 도구/JSON 두 형태를 겸하게 되고, 분리하면 BR-AF-07 5종 세트가 든다 | 4.2 포트 확장 실장 시 |
-| 미결 #6 | **되묻기 문안의 소유.** 질문 텍스트를 AI 가 만들면 톤 관리가 흩어지고, FE 가 만들면 인자 이름만 넘기면 된다. `options` 가 있는 인자는 후자가 맞아 보이나 자유 입력 인자는 애매하다 | 어시스턴트 화면 설계(FE, 10월 예정) |
+| ~~미결 #6~~ | **해소 (팀 결정 2026-09-15)** — `IntentClarify` 의 질문은 **AI 가 만든다**(BR-DLG-31). 발화를 되짚어야 하므로 고정 문구로는 안 된다. `ArgumentClarify` 의 문안은 FE 가 인자 이름으로 조립해도 되고, 그쪽은 여전히 화면 설계 소관 | — |
 | 미결 #7 | **`ExecutionPlan` 의 표현력 부족 가능성.** `AgentCall.task: str` + `params: dict` 라 프레임의 `intent`·`confidence`·`match_route` 가 컴파일에서 소실된다. 관측(LangSmith)에서 경로별 비중을 프레임 단위로 보려면 계측을 어디에 붙일지 정해야 한다 | ④ 실장 시 |
+| 미결 #9 | **`OUT_OF_SCOPE` 거부 앵커 뱅크 부재.** 평가 발화 87건 중 25건이 `t_mid` 아래인데 그중 9건이 범위 밖이고 전부 엉뚱한 의도에 top1 이 붙는다(뱅크가 `ROUTABLE_INTENTS` 13종만 덮는다). 범위 밖은 **열린 집합**이라 전수 커버가 불가능하니 흔한 갈래(금융·계정·기기제어·잡담)만 덮는 것이 현실적이다. 이득은 정확도가 아니라 **비용**(3차가 이미 대부분 맞힌다) | 별도 티켓 |
+| 미결 #10 | **의도 되묻기의 후보 선정 규칙이 미정.** `FALLBACK` 로 떨어진 발화에서 후보 2~3종을 무엇으로 뽑나 — 1차 top-k 의 상위 의도인가, 3차가 낮은 신뢰도로 낸 것과 그 경쟁자인가. 후보에 정답이 없으면 되묻기가 폴백보다 나쁘다 | DoD 실측 후 |
 | 미결 #8 | **복합 의심 신호의 실측 근거가 없다.** BR-DLG-12 의 "접속 표지 + top1 < T_high" 는 가설이다. 복합 발화가 평가셋에 **0건**이라 현재로선 측정할 수 없다 | 평가셋에 복합 발화 항목 추가 (§6 확장) |
