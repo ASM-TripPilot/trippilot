@@ -250,6 +250,37 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
         schedules.findPendingByTrip(tripId).map { it.fireAt } shouldContainExactly before
     }
     /**
+     * 문구 컬럼의 실 DB 왕복(V2.47 · TRIP-836).
+     *
+     * 대역이 **원리적으로** 못 보는 것: 컬럼 폭(제목 60·본문 200)과 **NULL 이 기본**이라는 성질.
+     * 대역은 Map 이라 무엇이든 담기고, 넘치는 문자열도 그대로 들어간다 — 실 DB 에서만 거절된다.
+     */
+    @Test
+    fun `문구를 담은 예약이 실 DB 를 왕복하고, 안 담은 것은 NULL 로 남는다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        val withCopy = NotificationSchedule.pending(
+            accountId, tripId, NotificationKind.TRIP_PRE, now.plusSeconds(3600),
+        ).copy(title = "AI 제목", body = "AI 본문")
+        val without = NotificationSchedule.pending(
+            accountId, tripId, NotificationKind.TRIP_DAY, now.plusSeconds(7200),
+        )
+
+        schedules.replacePending(tripId, listOf(withCopy, without))
+
+        val rows = schedules.findPendingByTrip(tripId).associateBy { it.kind }
+        rows[NotificationKind.TRIP_PRE]!!.title shouldBe "AI 제목"
+        rows[NotificationKind.TRIP_PRE]!!.body shouldBe "AI 본문"
+        // **안 담은 것은 빈 문자열이 아니라 NULL 이어야 한다** — "못 받았다"와 "빈 문구를 받았다"가
+        // 값으로 구분돼야 발화가 상수 문구로 갈지 정할 수 있다.
+        rows[NotificationKind.TRIP_DAY]!!.title shouldBe null
+        jdbc.queryForObject(
+            "SELECT title IS NULL AND body IS NULL FROM notification_schedule WHERE schedule_id = ?",
+            Boolean::class.java, without.scheduleId,
+        ) shouldBe true
+    }
+
+    /**
      * **재계획도 예약을 다시 세운다**(INV-U6-08 의 "U4 재계획" 절반).
      *
      * 이 구독이 없던 동안 `recalculation.ItineraryRecalculated` 는 발행되기만 하고 아무도 듣지 않아,
@@ -278,4 +309,27 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
             NotificationKind.TRIP_PRE, NotificationKind.TRIP_DAY, NotificationKind.TRIP_DAY, NotificationKind.TRIP_DAY,
         )
     }
+    /**
+     * **문구가 적재에서 발화까지 관통하는가**(TRIP-836).
+     *
+     * 저장 왕복과 발화 문구를 따로만 보면, **폴러가 읽는 질의에 컬럼이 빠져도** 둘 다 통과한다 —
+     * `findDue` 는 별도 SQL 이라 `findPendingByTrip` 이 맞아도 여기만 조용히 null 이 될 수 있다.
+     * 그러면 "저장은 됐는데 알림은 늘 상수 문구"가 되고, 아무 데서도 안 드러난다.
+     */
+    @Test
+    fun `적재한 문구가 폴러를 지나 알림 제목이 된다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        val due = NotificationSchedule.pending(
+            accountId, tripId, NotificationKind.TRIP_DAY, now.minusSeconds(60),
+        ).copy(title = "오늘은 성산일출봉", body = "해 뜨는 시간에 맞춰 가 보세요.")
+        schedules.replacePending(tripId, listOf(due))
+
+        // 발화기가 쓰는 조회 경로로 집는다(findPendingByTrip 이 아니라).
+        val picked = schedules.findDue(now, 500).single { it.scheduleId == due.scheduleId }
+
+        picked.toNotification(now).title shouldBe "오늘은 성산일출봉"
+        picked.toNotification(now).body shouldBe "해 뜨는 시간에 맞춰 가 보세요."
+    }
+
 }

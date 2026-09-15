@@ -76,6 +76,12 @@ trippilot:
       service-token: ${SERVICE_AUTH_TOKEN:}
     reflection:
       service-token: ${SERVICE_AUTH_TOKEN:}
+    # 리마인드 문구 AI 채움(TRIP-836). 기본 off = 항상 상수 문구 — 안 켠 환경에서 리마인드가
+    # 죽지 않는 것이 더 중요하다(회고 mode=rule 과 같은 판단). http 로 켜면 예약 적재 시 한 번 부른다.
+    reminder-copy:
+      mode: ${AI_REMINDER_COPY_MODE:off}
+      base-url: ${AI_URL:http://localhost:8000}
+      service-token: ${SERVICE_AUTH_TOKEN:}
   place:
     geocode:
       mode: ${PLACE_GEOCODE_MODE:stub}
