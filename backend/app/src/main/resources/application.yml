@@ -70,6 +70,14 @@ trippilot:
   place:
     geocode:
       mode: ${PLACE_GEOCODE_MODE:stub}
+  # 기상 조회 경로(TRIP-849). 기본 fake 는 **격자 키 해시로 만든 가짜 강수확률**이라
+  # Plan-B 우천 트리거가 비 오는 날 안 뜨고 안 오는 날 뜬다 — 조용히 틀리는 쪽이다.
+  # kma 로 켜려면 공공데이터포털 **일반 인증키(Decoding)** 가 필요하다. 인코딩 키(%2B·%3D 포함)를
+  # 넣으면 클라이언트가 한 번 더 인코딩해 403 이 난다(실측 2026-09-15~16).
+  # kma 인데 키가 비면 기동을 막는다 — 모든 조회가 실패해 트리거가 영영 무발화가 되는 것보다 낫다.
+  weather:
+    mode: ${WEATHER_MODE:fake}
+    service-key: ${WEATHER_API:}
   # 숙소 콘텐츠 경로. 기본 스텁은 **제주 5곳뿐**이라 다른 지역 검색이 전부 0건이 된다.
   # db 는 정본 테이블(stay, V2.26 + R__seed_stay.sql)을 읽는다 — 런타임 외부 호출 0회.
   stay:
