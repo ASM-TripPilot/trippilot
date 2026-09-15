@@ -82,6 +82,7 @@ internal fun noPush(clock: java.time.Clock, notifications: NotificationRepositor
         notifications = notifications,
         toggles = toggles,
         push = object : com.trippilot.notification.domain.PushPort {
+            override val deliversExternally = false
             override fun send(tokens: List<String>, message: com.trippilot.notification.domain.PushMessage) =
                 emptyList<com.trippilot.notification.domain.PushReceipt>()
         },

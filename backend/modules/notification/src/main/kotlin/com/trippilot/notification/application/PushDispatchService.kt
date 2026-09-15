@@ -67,7 +67,7 @@ class PushDispatchService(
     fun dispatch(notification: Notification): PushOutcome {
         var reason: String? = null
         val outcome = doDispatch(notification) { reason = it }
-        metrics.pushDispatched(outcome, reason)
+        metrics.pushDispatched(outcome, reason, push.deliversExternally)
         return outcome
     }
 

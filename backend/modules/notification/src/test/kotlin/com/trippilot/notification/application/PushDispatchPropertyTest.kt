@@ -94,6 +94,8 @@ class PushDispatchPropertyTest : StringSpec({
 
     /** 토큰마다 결과를 정해 주는 발송기. 호출된 토큰 목록을 남겨 "전부에 보냈나"를 볼 수 있게 한다. */
     class Sender(private val outcome: (String) -> PushStatus = { PushStatus.SENT }) : PushPort {
+        override val deliversExternally = true
+
         val calls = mutableListOf<List<String>>()
 
         /** 나간 메시지 자체를 붙든다 — 긴급도가 실제로 실렸는지는 본문을 봐야 안다. */
@@ -119,6 +121,40 @@ class PushDispatchPropertyTest : StringSpec({
 
     fun serviceOf(tokens: Tokens, sender: PushPort, notifications: Notifications, pushOn: Boolean = true) =
         PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, testMetrics(notifications), PushRateLimits(), clock)
+
+    /**
+     * **"보냈다"와 "보낸 척했다"를 지표가 가른다**(TRIP-834).
+     *
+     * 기본 발송기는 아무 데도 안 보내면서 성공을 보고한다 — 그 판단 자체는 옳다(실패로 보고하면
+     * 진짜 실패가 묻힌다). 문제는 그 상태에서 발송 지표가 **"성공률 100%"** 를 그린다는 것이고,
+     * 운영에서 그 그래프를 보면 푸시가 잘 나가고 있다고 읽는다. 태그가 그 오독을 막는다.
+     */
+    "미발송 모드의 성공은 delivery=none 으로 갈린다" {
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        val notifications = Notifications()
+        val notSending = object : PushPort {
+            override val deliversExternally = false
+            override fun send(tokens: List<String>, message: PushMessage) =
+                tokens.map { PushReceipt(it, PushStatus.SENT) }
+        }
+        val svc = PushDispatchService(
+            Tokens(listOf(token(deliverable = true))), notifications,
+            NotificationToggleService(Toggles(true), clock), notSending,
+            NotificationMetrics(registry, notifications), PushRateLimits(), clock,
+        )
+
+        svc.dispatch(notification()) shouldBe PushOutcome.SENT
+
+        registry.counter(
+            NotificationMetrics.PUSH_DISPATCH,
+            "outcome", "SENT", "reason", "none", "delivery", NotificationMetrics.DELIVERY_NONE,
+        ).count() shouldBe 1.0
+        // 실발송 태그로는 세지 않는다 — 두 값이 섞이면 가르는 의미가 없다.
+        registry.counter(
+            NotificationMetrics.PUSH_DISPATCH,
+            "outcome", "SENT", "reason", "none", "delivery", NotificationMetrics.DELIVERY_REAL,
+        ).count() shouldBe 0.0
+    }
 
     /**
      * **발송량 소프트 상한**(COST-U6-01). 막지 못하면 버그 하나로 한 계정이 폭주하고, Expo 무료
@@ -179,6 +215,7 @@ class PushDispatchPropertyTest : StringSpec({
         val svc = PushDispatchService(
             Tokens(), notifications, NotificationToggleService(Toggles(true), clock),
             object : PushPort {
+                override val deliversExternally = true
                 override fun send(tokens: List<String>, message: com.trippilot.notification.domain.PushMessage) =
                     emptyList<com.trippilot.notification.domain.PushReceipt>()
             },
@@ -261,6 +298,7 @@ class PushDispatchPropertyTest : StringSpec({
         val tokens = Tokens(listOf(token(deliverable = true)))
         val notifications = Notifications()
         val broken = object : PushPort {
+            override val deliversExternally = true
             override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> = error("네트워크 없음")
         }
 

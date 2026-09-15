@@ -36,6 +36,9 @@ class ExpoPushAdapter(
     @param:Qualifier(ExpoPushClientConfiguration.BEAN_NAME) private val client: RestClient,
 ) : PushPort {
 
+    /** 실제 Expo Push Service 로 나간다. */
+    override val deliversExternally = true
+
     override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> {
         val payload = tokens.map {
             ExpoPushRequest(
