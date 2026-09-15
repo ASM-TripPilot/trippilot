@@ -50,4 +50,35 @@ class OutboxRelayLatencyShapeTest : StringSpec({
             registry.close()
         }
     }
+
+    /**
+     * **정상 구간에 해상도가 있는가.**
+     *
+     * 릴레이 지연은 폴링 주기(2초) 때문에 사실상 **0~2초 균등**이다 — 틱 직전에 적재된 이벤트는
+     * 지연이 거의 0 이다. 기대 범위의 아래를 그 구간 위에 잡으면 버킷은 멀쩡히 생기는데(위 테스트는
+     * 통과한다) 정상 트래픽이 전부 첫 버킷에 뭉개져 p50·p75 가 해석 불가가 된다.
+     *
+     * 실제로 앞선 판이 하한을 1초로 뒀다 — "폴링 주기보다 촘촘할 수 없다"고 잘못 적은 채로.
+     * 버킷 **존재**만 보는 테스트는 그 실수를 원리적으로 못 본다. 경계 아래에 눈금이 있는지를 센다.
+     */
+    "정상 구간(1초 미만)에도 버킷 눈금이 있다 — 하한을 잘못 잡으면 p50 이 해석 불가가 된다" {
+        val offline = object : OtlpConfig {
+            override fun get(key: String): String? = null
+            override fun enabled(): Boolean = false
+        }
+        val registry = OtlpMeterRegistry(offline, Clock.SYSTEM)
+        try {
+            OutboxRelay(JdbcTemplate(), registry, emptyList())
+            val timer = registry.find("trippilot.outbox.relay.latency").timer()!!
+            timer.record(Duration.ofMillis(300))
+
+            val subSecondBuckets = timer.takeSnapshot().histogramCounts()
+                .count { it.bucket(java.util.concurrent.TimeUnit.MILLISECONDS) < 1_000.0 }
+
+            // 하나로는 "경계 자체"일 수 있다 — 구간을 가르려면 눈금이 여럿이어야 한다.
+            (subSecondBuckets >= 2) shouldBe true
+        } finally {
+            registry.close()
+        }
+    }
 })
