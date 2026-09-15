@@ -383,11 +383,28 @@ def _load_seed():
 def test_seed_bank_covers_closed_set_and_matches_routing_table() -> None:
     entries = _load_seed()
     assert {e.intent for e in entries} == ROUTABLE_INTENTS  # 13종 전부, 그 밖은 없음
-    assert len(entries) == 417  # v0.5 (yaml 헤더 명시 — seed 125 + §3.2 ② 증강 292)
-    assert all(e.bank_version == "0.5" for e in entries)
+    assert len(entries) == 450  # v0.6 (yaml 헤더 명시 — seed 125 + §3.2 ② 증강 325)
+    assert all(e.bank_version == "0.6" for e in entries)
     assert all(e.reviewed for e in entries)  # 사람 검수(seed) · 기계 관문(증강) 통과분만 실린다
     by_origin = Counter(e.origin for e in entries)
-    assert by_origin == {"seed": 125, "augmented": 292}  # 출처가 구분돼 되돌릴 수 있다
+    assert by_origin == {"seed": 125, "augmented": 325}  # 출처가 구분돼 되돌릴 수 있다
+
+
+def test_each_intent_block_declares_augmented_at_most_once() -> None:
+    """의도 하나에 `augmented:` 키가 둘이면 yaml 은 조용히 뒤엣것만 남긴다 — 앞의 증강분이 통째로 사라진다.
+
+    `augment_bank.py --apply` 를 두 번째로 돌릴 때 실제로 날 수 있는 사고라 파일 자체를 센다
+    (로더는 파싱된 뒤를 보므로 이 사고를 볼 수 없다).
+    """
+    current: str | None = None
+    seen: Counter[str] = Counter()
+    for line in _SEED_YAML.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- intent:"):
+            current = stripped.split(":", 1)[1].strip()
+        elif stripped == "augmented:" and current:
+            seen[current] += 1
+    assert seen and max(seen.values()) == 1, f"중복 augmented 키: {[k for k, v in seen.items() if v > 1]}"
 
 
 def test_reviewed_seed_bank_indexes_without_opt_in() -> None:

@@ -130,38 +130,85 @@ def _rivals_for(intent: str, entries, vecs, emb, k: int = 3) -> list[str]:
     return [f"    - [{it}] {q}" for _, it, q in scored[:k]]
 
 
-def _apply(proposal: Path, also_pending: set[str]) -> int:
+def _parse_approvals(raw: str) -> dict[str, str | None]:
+    """`--approve` 파싱 — `문장` 은 제안된 의도 그대로, `문장=>INTENT` 는 그 의도로 옮겨 싣는다.
+
+    검수에서 "이 문장은 맞는데 딱지가 틀렸다"가 나온다. 그때 문장을 버리면 아깝고,
+    제안된 의도에 싣자니 경계를 흐린다 — 옮기는 길을 열어 둔다.
+    """
+    out: dict[str, str | None] = {}
+    for chunk in raw.split("||"):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if "=>" in chunk:
+            q, _, target = chunk.partition("=>")
+            target = target.strip()
+            if target not in {i.value for i in Intent}:
+                raise SystemExit(f"옮길 의도가 closed-set 밖이다: {target!r}")
+            out[q.strip()] = target
+        else:
+            out[chunk] = None
+    return out
+
+
+def _apply(proposal: Path, approvals: dict[str, str | None]) -> int:
     """제안 파일의 자동채택분(+승인된 검수대기분)을 뱅크의 `augmented:` 목록에 합친다.
 
     yaml 로 통째로 다시 쓰지 않는다 — 뱅크 파일의 머리 주석·의도별 근거 주석이 전부 날아간다.
-    그래서 텍스트로 열어 각 의도 블록 끝에 줄을 끼워 넣는다.
+    그래서 텍스트로 열어 넣는다. **이미 `augmented:` 가 있는 의도에는 그 목록 끝에 덧붙인다** —
+    블록을 새로 만들면 같은 키가 둘이 되고, yaml 은 조용히 뒷엯것만 남겨 앞의 증강분이 통째로 사라진다.
     """
     doc = yaml.safe_load(proposal.read_text(encoding="utf-8"))
     add: dict[str, list[str]] = {}
     for intent, items in (doc.get("accepted") or {}).items():
         add.setdefault(intent, []).extend(x["question"] for x in items)
     for intent, items in (doc.get("pending") or {}).items():
-        picked = [x["question"] for x in items if x["question"] in also_pending]
-        if picked:
-            add.setdefault(intent, []).extend(picked)
+        for x in items:
+            q = x["question"]
+            if q not in approvals:
+                continue
+            add.setdefault(approvals[q] or intent, []).append(q)
     if not add:
         raise SystemExit("합칠 문장이 없다")
 
+    # 이미 뱅크에 있는 문장은 다시 넣지 않는다 (재실행 안전)
+    bank_doc = yaml.safe_load(_BANK.read_text(encoding="utf-8"))
+    existing = {
+        q
+        for g in bank_doc["intents"]
+        for q in list(g.get("questions") or ()) + list(g.get("augmented") or ())
+    }
+    add = {k: [q for q in v if q not in existing] for k, v in add.items()}
+    add = {k: v for k, v in add.items() if v}
+    if not add:
+        raise SystemExit("합칠 문장이 없다 — 전부 이미 뱅크에 있다")
+
     lines = _BANK.read_text(encoding="utf-8").splitlines()
-    out: list[str] = []
+    has_augmented: set[str] = set()
     cur: str | None = None
+    for line in lines:
+        s = line.strip()
+        if s.startswith("- intent:"):
+            cur = s.split(":", 1)[1].strip()
+        elif s == "augmented:" and cur:
+            has_augmented.add(cur)
+
+    out: list[str] = []
+    cur = None
     for i, line in enumerate(lines):
         stripped = line.strip()
         if stripped.startswith("- intent:"):
             cur = stripped.split(":", 1)[1].strip()
-        # 의도 블록의 끝 = 다음 `- intent:` 직전의 마지막 비어있지 않은 줄 뒤
-        nxt = next((l for l in lines[i + 1:] if l.strip()), None)
+        # 블록의 끝 = 다음 `- intent:` 직전의 마지막 비어있지 않은 줄
+        nxt = next((x for x in lines[i + 1:] if x.strip()), None)
         ends_block = cur in add and (nxt is None or nxt.strip().startswith("- intent:"))
         out.append(line)
         if ends_block and stripped:
-            out.append("    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).")
-            out.append(f"    #   제안 파일: {proposal.name}")
-            out.append("    augmented:")
+            if cur not in has_augmented:
+                out.append("    # ↓ §3.2 ② 증강분 — LLM 생성 후 기계 관문 통과분 (scripts/augment_bank.py).")
+                out.append("    augmented:")
+            out.append(f"    #   {proposal.name}")
             out.extend(f'      - "{q}"' for q in add[cur])
             cur = None
     _BANK.write_text("\n".join(out) + "\n", encoding="utf-8")
@@ -176,7 +223,8 @@ def main() -> int:
     p.add_argument("--apply", type=Path, metavar="제안파일",
                    help="생성하지 않고, 이미 만든 제안 파일의 자동채택분을 뱅크에 합친다")
     p.add_argument("--approve", default="",
-                   help="--apply 와 함께: 검수대기분 중 승인할 문장을 || 로 구분해 나열")
+                   help="--apply 와 함께: 검수대기분 중 승인할 문장을 || 로 구분해 나열. "
+                        "`문장=>INTENT` 로 적으면 그 의도로 옮겨 싣는다")
     p.add_argument("--per-seed", type=int, default=3, help="seed 문장당 생성 개수")
     p.add_argument("--intents", help="쉼표로 구분한 의도 목록 (기본: 전부)")
     p.add_argument("--auto-margin", type=float, default=0.05,
@@ -187,8 +235,7 @@ def main() -> int:
     p.add_argument("--out", type=Path, help="제안 파일 경로 (기본: data/intent_bank_augment_<날짜>.yaml)")
     args = p.parse_args()
     if args.apply:
-        approved = {s for s in (x.strip() for x in args.approve.split("||")) if s}
-        _apply(args.apply, approved)
+        _apply(args.apply, _parse_approvals(args.approve))
         return 0
 
     bank = yaml.safe_load(_BANK.read_text(encoding="utf-8"))
