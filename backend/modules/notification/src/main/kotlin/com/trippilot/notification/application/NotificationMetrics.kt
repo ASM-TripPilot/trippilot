@@ -43,8 +43,13 @@ class NotificationMetrics(
 
     /**
      * 푸시 발송 결과(OBS-U6-02). [reason] 은 실패일 때만 의미가 있고, 닫힌 집합으로 접혀서 온다.
+     *
+     * [deliversExternally] 에 **기본값을 두지 않는다.** 이유는
+     * [com.trippilot.notification.domain.PushPort.deliversExternally] 가 기본값을 안 둔 것과 같다 —
+     * 빠뜨렸을 때 "실발송"으로 기록되는 쪽이 반대보다 위험하다. 기본값이 있으면 그 한 층 위에서
+     * 같은 함정이 되살아난다(호출자가 인자를 잊어도 조용히 `delivery=real` 이 된다).
      */
-    fun pushDispatched(outcome: PushOutcome, reason: String? = null, deliversExternally: Boolean = true) {
+    fun pushDispatched(outcome: PushOutcome, reason: String?, deliversExternally: Boolean) {
         registry.counter(
             PUSH_DISPATCH,
             "outcome", outcome.name,

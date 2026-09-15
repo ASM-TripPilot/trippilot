@@ -23,11 +23,12 @@ class NotificationMetricsTest : StringSpec({
     "발송 결과가 outcome 별로 쌓인다" {
         val (metrics, registry) = fixture()
 
-        metrics.pushDispatched(PushOutcome.SENT)
-        metrics.pushDispatched(PushOutcome.SENT)
-        metrics.pushDispatched(PushOutcome.MUTED)
+        metrics.pushDispatched(PushOutcome.SENT, reason = null, deliversExternally = true)
+        metrics.pushDispatched(PushOutcome.SENT, reason = null, deliversExternally = true)
+        metrics.pushDispatched(PushOutcome.MUTED, reason = null, deliversExternally = true)
 
-        // delivery 태그가 붙는다(TRIP-834) — 기본은 실발송이고, 미발송 모드는 따로 센다.
+        // delivery 태그가 붙는다(TRIP-834). **인자를 이름으로 명시한다** — 기본값이 없는 것이
+        // 의도이고(빠뜨리면 실발송으로 둔갑한다), 테스트가 그 의도를 흐리지 않아야 한다.
         val real = NotificationMetrics.DELIVERY_REAL
         registry.counter(NotificationMetrics.PUSH_DISPATCH, "outcome", "SENT", "reason", "none", "delivery", real)
             .count() shouldBe 2.0
@@ -76,7 +77,7 @@ class NotificationMetricsTest : StringSpec({
 
         checkAll(Arb.string()) { raw ->
             val (metrics, registry) = fixture()
-            metrics.pushDispatched(PushOutcome.FAILED, raw)
+            metrics.pushDispatched(PushOutcome.FAILED, reason = raw, deliversExternally = true)
 
             val tags = registry.find(NotificationMetrics.PUSH_DISPATCH).counters()
                 .flatMap { it.id.tags }
