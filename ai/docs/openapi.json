@@ -1373,6 +1373,17 @@
           "time_window": {
             "$ref": "#/components/schemas/TimeWindowSchema"
           },
+          "transport_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transport Mode"
+          },
           "trigger": {
             "anyOf": [
               {
