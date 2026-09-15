@@ -25,12 +25,18 @@ import java.time.Duration
  * 언제나 실패하거나, 반대로 단언을 느슨하게 바꾸면 아무것도 안 지킨다. 운영이 실제로 쓰는
  * OTLP 레지스트리로 재는 것이 유일하게 의미 있는 판정이다.
  *
- * 내보내기는 일어나지 않는다 — 기본 step 이 1분이라 이 테스트가 끝난 뒤이고, 그 전에 닫는다.
+ * **내보내기는 꺼 둔다**(`enabled=false`). 기본 설정으로 만들면 푸시 스케줄러가 뜨고, 닫을 때
+ * 마지막 한 번을 보내려다 `localhost:4318` 연결 거부 스택트레이스를 테스트 출력에 남긴다(실측) —
+ * 통과는 하지만 읽는 사람에게는 고장으로 보인다. 히스토그램 지원 여부는 내보내기와 무관하다.
  */
 class OutboxRelayLatencyShapeTest : StringSpec({
 
     "릴레이 지연 타이머는 히스토그램 버킷을 낸다 — p95 를 낼 수 있는 모양이다" {
-        val registry = OtlpMeterRegistry(OtlpConfig.DEFAULT, Clock.SYSTEM)
+        val offline = object : OtlpConfig {
+            override fun get(key: String): String? = null
+            override fun enabled(): Boolean = false
+        }
+        val registry = OtlpMeterRegistry(offline, Clock.SYSTEM)
         try {
             // 타이머는 생성자에서 등록된다 — 릴레이를 돌릴 필요가 없다.
             // JdbcTemplate 은 생성자가 건드리지 않으므로 빈 것으로 충분하다.
