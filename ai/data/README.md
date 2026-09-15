@@ -246,3 +246,68 @@ places 테마는 **CDLA Permissive 2.0** 이다. share-alike 가 없어 파생�
 ⚠️ **places 테마만 CDLA 다.** `buildings`·`transportation` 등은 OSM 기반
 **ODbL(share-alike)** 이라 같은 테이블에 섞으면 의무가 생긴다. 이 수집기는
 places 만 읽는다.
+
+## `osm/` — OpenStreetMap 수집 제안 (지역별) ⚠️ ODbL
+
+**세 번째 출처. Overture 를 대체하지 않고 Overture 가 약한 네 축만 메운다** (TRIP-685).
+
+실측 비교(Overpass `out count`, 한국 bbox):
+
+```
+태그                우리 축        OSM      Overture   판정
+tourism=viewpoint   NIGHT_VIEW    2,692        101    OSM 27배
+natural=peak        NATURE       18,488      2,417    OSM 7.6배
+shop=*              SHOPPING     59,221      6,527    OSM 9.1배
+natural=beach       NATURE        1,525          0    OSM 단독
+────────────────────────────────────────────────────
+amenity=restaurant  FOOD         82,123    130,760    Overture 우세
+amenity=cafe        CAFE         13,126     45,309    Overture 우세
+tourism=attraction  SIGHT         2,488     15,879    Overture 우세
+tourism=museum      CULTURE       2,021      4,060    Overture 우세
+```
+
+**겹치는 축은 일부러 안 받는다** — 얻는 것 없이 ODbL 노출만 커진다.
+
+⚠️ **`viewpoint` 2,692 을 그대로 야경으로 읽으면 안 된다.** 제주 실호출(42건)에서
+진짜 전망대는 **36%** 뿐이었고 나머지는 동굴·갤러리·기념비였다(`구린굴`·
+`김영갑갤러리`·`우도해녀항일기념비`·`중동굴`). OSM 의 `tourism=viewpoint` 는
+"전망이 좋은 지점" 전반이라 우리 NIGHT_VIEW(야경)와 개념이 다르다 — Overture 와
+같은 이름 규칙을 통과한 것만 싣는다. 제주 42건 → **13건**.
+
+한글 이름 보유율 **90%**(강남 표본 1,956건)로 Overture(63.5%)보다 높다.
+
+### ⚠️ ODbL — 우리가 지켜야 하는 것
+
+OSM 은 **ODbL 1.0** 이고 **share-alike 가 있다.** OSMF 의 Collective Database
+Guideline 이 우리 경우를 예시로 들어 "해당 안 됨"이라고 못박는다:
+
+> "You have a proprietary list of restaurants... complement your list with
+> corresponding data from OpenStreetMap **removing any duplicate objects in the
+> process**. The resulting, combined database would **not** be covered."
+
+다른 출처와 한 테이블에서 중복제거하면 병합 DB **전체**가 Derivative Database 가
+된다. 팀이 그 의무를 **알고 받아들이기로 했다**(2026-09-16). 해야 하는 것 셋:
+
+| 조항 | 의무 | 상태 |
+|---|---|---|
+| §4.3 | 앱 화면에 `(c) OpenStreetMap contributors` 고지 | ⚠️ **미이행 — 프론트엔드 작업** |
+| §4.4 | 병합 결과를 ODbL 호환으로 배포(독점 금지) | 제안 문서가 public 리포에 있어 충족 |
+| §4.6 | 기계가독 사본 제공 | 같은 이유로 충족 |
+
+**§4.3 이 빠지면 라이선스 위반이다.** 이 패키지 밖 작업이라 여기서 끝나지 않는다.
+
+산출 문서에 `license`·`attribution` 필드를 싣는다 — 받는 쪽이 의무를 모를 수
+없게 하기 위해서다.
+
+### 갱신
+
+```bash
+uv run python scripts/collect_osm.py --out data/osm
+uv run python scripts/collect_osm.py --areas 제주 --tags viewpoint,beach
+```
+
+Overpass 는 **대량 추출용이 아니다**(공용 인스턴스, 타임아웃·과부하 정책).
+태그별 × 지역별로 쪼개 던지고 호출 사이에 간격을 둔다(`--pause`, 기본 8초).
+한 번에 전국 `shop=*` 5.9만을 요청하면 504 가 난다. 엔드포인트는
+`overpass.kumi.systems` 우선 — `overpass-api.de` 가 406·connection refused 로
+불안정했다.
