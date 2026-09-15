@@ -56,6 +56,15 @@ trippilot:
   # 설정을 잊었을 때 조용히 열리는 것보다 조용히 닫히는 편이 안전하다.
   service-auth:
     token: ${SERVICE_AUTH_TOKEN:}
+  # JWT 서명키(RS256). **비면 기동할 때마다 새로 만든다** — 그 상태는 복제본을 둘 이상 못 띄운다
+  # (A 가 서명한 토큰을 B 가 검증하지 못해 요청마다 무작위 401). 리프레시는 DB 행이라 재배포 시
+  # 액세스 토큰 무효화는 재발급으로 회복되지만, 다중 인스턴스는 회복되지 않는다.
+  # 값은 base64(PKCS#8) 개인키 한 줄 — 공개키는 여기서 파생한다(짝이 어긋난 조합을 막는다).
+  # require-configured-key 를 켜면 비어 있을 때 **기동하지 않는다**. 기본은 꺼짐 — 켜 두면
+  # 키를 안 넣은 로컬·CI 가 통째로 죽는다. 배포 환경에서 켜는 스위치다(TRIP-850).
+  jwt:
+    signing-key: ${JWT_SIGNING_KEY:}
+    require-configured-key: ${JWT_REQUIRE_CONFIGURED_KEY:false}
   # 발신 방향(백엔드→AI)도 **같은 시크릿**을 쓴다(TRIP-856). 상대가 한 곳이고, AI 컨테이너는 이미
   # 역방향용으로 이 값을 들고 있다(compose 의 TRIPPILOT_SERVICE_AUTH_TOKEN) — 갈라 두면 둘 중
   # 하나만 세팅된 절반 설정이 생기고, 그때 증상은 한쪽 방향만 401 이라 원인이 안 보인다.
