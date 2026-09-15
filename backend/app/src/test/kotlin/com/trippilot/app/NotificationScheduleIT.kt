@@ -309,4 +309,27 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
             NotificationKind.TRIP_PRE, NotificationKind.TRIP_DAY, NotificationKind.TRIP_DAY, NotificationKind.TRIP_DAY,
         )
     }
+    /**
+     * **문구가 적재에서 발화까지 관통하는가**(TRIP-836).
+     *
+     * 저장 왕복과 발화 문구를 따로만 보면, **폴러가 읽는 질의에 컬럼이 빠져도** 둘 다 통과한다 —
+     * `findDue` 는 별도 SQL 이라 `findPendingByTrip` 이 맞아도 여기만 조용히 null 이 될 수 있다.
+     * 그러면 "저장은 됐는데 알림은 늘 상수 문구"가 되고, 아무 데서도 안 드러난다.
+     */
+    @Test
+    fun `적재한 문구가 폴러를 지나 알림 제목이 된다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        val due = NotificationSchedule.pending(
+            accountId, tripId, NotificationKind.TRIP_DAY, now.minusSeconds(60),
+        ).copy(title = "오늘은 성산일출봉", body = "해 뜨는 시간에 맞춰 가 보세요.")
+        schedules.replacePending(tripId, listOf(due))
+
+        // 발화기가 쓰는 조회 경로로 집는다(findPendingByTrip 이 아니라).
+        val picked = schedules.findDue(now, 500).single { it.scheduleId == due.scheduleId }
+
+        picked.toNotification(now).title shouldBe "오늘은 성산일출봉"
+        picked.toNotification(now).body shouldBe "해 뜨는 시간에 맞춰 가 보세요."
+    }
+
 }
