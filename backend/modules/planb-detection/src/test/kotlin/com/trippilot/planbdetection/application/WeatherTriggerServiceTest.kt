@@ -13,6 +13,7 @@ import com.trippilot.planbdetection.domain.TriggerKind
 import com.trippilot.planbdetection.domain.TriggerScope
 import com.trippilot.planbdetection.domain.TriggerState
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
 import com.trippilot.weathercontext.api.ContextFacade
@@ -60,7 +61,7 @@ class WeatherTriggerServiceTest : StringSpec({
 
         override fun findGenerationContext(accountId: UUID, tripId: UUID) =
             if (accountId == acc) {
-                TripGenerationContext(today.minusDays(1), today.plusDays(1), destinations, "친구", null, emptyList())
+                TripGenerationContext(today.minusDays(1), today.plusDays(1), destinations.map { TripDestinationRef(it, null) }, "친구", null, emptyList())
             } else {
                 null
             }

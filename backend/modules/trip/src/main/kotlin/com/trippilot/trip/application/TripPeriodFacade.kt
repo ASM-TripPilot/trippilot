@@ -6,6 +6,7 @@ import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripListFacade
 import com.trippilot.trip.api.TripLivenessFacade
 import com.trippilot.trip.api.TripSummaryView
+import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripOwnerFacade
 import com.trippilot.trip.api.TripPurgeScopeFacade
@@ -77,7 +78,8 @@ class TripPeriodFacade(
         return TripGenerationContext(
             startDate = trip.startDate,
             endDate = trip.endDate,
-            destinations = trip.destinations.sortedBy { it.seq }.map { it.region },
+            destinationRefs = trip.destinations.sortedBy { it.seq }
+                .map { TripDestinationRef(it.region, it.regionCode) },
             companionType = trip.companionType?.name,
             budgetTotal = trip.budgetTotal,
             fixedVisits = fixed,

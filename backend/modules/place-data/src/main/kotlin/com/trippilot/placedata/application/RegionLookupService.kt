@@ -17,6 +17,13 @@ class RegionLookupService(
     override fun isSelectableCode(regionCode: String): Boolean =
         catalog.findByCode(regionCode)?.selectable == true
 
+    override fun centerOfCode(regionCode: String): RegionCenter? =
+        catalog.findByCode(regionCode)?.let { r ->
+            val lat = r.lat
+            val lng = r.lng
+            if (lat != null && lng != null) RegionCenter(lat, lng) else null
+        }
+
     override fun centerOf(regionName: String): RegionCenter? =
         catalog.findExact(regionName).firstNotNullOfOrNull { r ->
             val lat = r.lat
