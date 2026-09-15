@@ -239,4 +239,6 @@ private class FakeRegions : RegionLookupFacade {
     }
 
     override fun centerOf(regionName: String): RegionCenter? = null
+        /** 코드 중심 — 이 테스트는 이름 경로만 쓴다. */
+        override fun centerOfCode(regionCode: String) = null
 }

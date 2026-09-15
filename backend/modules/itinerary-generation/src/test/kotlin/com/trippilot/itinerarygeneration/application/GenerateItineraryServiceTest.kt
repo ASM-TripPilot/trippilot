@@ -37,6 +37,7 @@ import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.FixedVisit
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
@@ -238,7 +239,7 @@ class GenerateItineraryServiceTest : StringSpec({
             override fun findGenerationContext(accountId: UUID, tripId: UUID) =
                 if (accountId == acc) {
                     TripGenerationContext(
-                        start, end, destinations, "친구", 500_000, fixedVisits,
+                        start, end, destinations.map { TripDestinationRef(it, null) }, "친구", 500_000, fixedVisits,
                     )
                 } else {
                     null
@@ -602,7 +603,7 @@ class GenerateItineraryTwoPhaseTest : StringSpec({
         val trips = object : TripFacade {
             override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
             override fun findGenerationContext(accountId: UUID, tripId: UUID) =
-                TripGenerationContext(start, end, listOf("제주"), "친구", 500_000, emptyList())
+                TripGenerationContext(start, end, refs("제주"), "친구", 500_000, emptyList())
         }
         val preferences = object : PreferenceFacade {
             override fun findPreferences(accountId: UUID) = prefs
@@ -1107,7 +1108,7 @@ class TwoPhaseDayCoverageTest : StringSpec({
             val trips = object : TripFacade {
                 override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
                 override fun findGenerationContext(accountId: UUID, tripId: UUID) =
-                    TripGenerationContext(start, end, listOf("제주"), "친구", 500_000, emptyList())
+                    TripGenerationContext(start, end, refs("제주"), "친구", 500_000, emptyList())
             }
             val preferences = object : PreferenceFacade {
                 override fun findPreferences(accountId: UUID) = prefs
@@ -1150,4 +1151,10 @@ private object StubRegions : com.trippilot.placedata.api.RegionLookupFacade {
     override fun codesOf(regionName: String): List<String> = emptyList()
     override fun centerOf(regionName: String) =
         if (regionName == "좌표없는곳") null else com.trippilot.placedata.api.RegionCenter(33.4996, 126.5312)
+
+    /** 코드 중심 — 이 대역은 코드를 이름처럼 다룬다. 코드 우선 경로는 `RegionCodeAnchorTest` 가 본다. */
+    override fun centerOfCode(regionCode: String) = centerOf(regionCode)
 }
+
+/** 코드 없는 목적지 — 기존 테스트는 전부 이름 경로다(코드 경로는 `RegionCodeAnchorTest`). */
+private fun refs(vararg names: String) = names.map { TripDestinationRef(it, null) }

@@ -34,6 +34,17 @@ interface RegionLookupFacade {
      * 없으면 null — 지어낸 좌표를 주지 않는다.
      */
     fun centerOf(regionName: String): RegionCenter?
+
+    /**
+     * 코드로 찾는 대표 좌표 — **동명이지역이 애초에 생기지 않는다**(TRIP-859 후속).
+     *
+     * [centerOf] 는 이름으로 찾아 동명이지역이면 **첫 코드를 임의로 집는다**. 부산 중구를 고른
+     * 사용자에게 서울 중구 좌표가 앵커로 박힐 수 있고, 증상은 "일정이 다른 동네에서 돈다"라
+     * 원인이 안 보인다. 코드가 있으면 그 애매함이 없으므로 이쪽을 먼저 쓴다.
+     *
+     * 없으면 `null` — 코드가 카탈로그에 없거나 좌표가 없는 지역이다. **지어내지 않는다.**
+     */
+    fun centerOfCode(regionCode: String): RegionCenter?
 }
 
 /** 지역 대표 좌표(api-safe). */

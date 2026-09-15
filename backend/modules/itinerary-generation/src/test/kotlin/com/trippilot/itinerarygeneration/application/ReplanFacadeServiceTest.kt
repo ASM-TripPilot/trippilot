@@ -20,6 +20,7 @@ import com.trippilot.placedata.api.SavedPlaceLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.profile.api.PreferenceSnapshot
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
 import com.trippilot.savedaccommodation.api.DayAnchorView
@@ -122,7 +123,7 @@ class ReplanFacadeServiceTest : StringSpec({
     val replanTrips = object : TripFacade {
         override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(today, today.plusDays(1))
         override fun findGenerationContext(accountId: UUID, tripId: UUID) =
-            TripGenerationContext(today, today.plusDays(1), listOf("제주"), "친구", 500_000, emptyList())
+            TripGenerationContext(today, today.plusDays(1), refs("제주"), "친구", 500_000, emptyList())
     }
 
     // 재계획 기준점은 테스트에서 항상 현재 위치로 채운다 — 앵커 사다리까지 안 내려간다.
@@ -423,3 +424,6 @@ class ReplanFacadeServiceTest : StringSpec({
             listOf(morning, fixedNoon, evening) // 원본 그대로
     }
 })
+
+/** 코드 없는 목적지 — 기존 테스트는 전부 이름 경로다(코드 경로는 `RegionCodeAnchorTest`). */
+private fun refs(vararg names: String) = names.map { TripDestinationRef(it, null) }
