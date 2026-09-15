@@ -70,7 +70,11 @@ class OutboxRelay(
     /** 타입당 여럿일 수 있다 — 한 이벤트를 여러 소비자가 본다. */
     private val byType: Map<String, List<OutboxSubscriber>> = subscribers.groupBy { it.eventType }
 
-    @Scheduled(fixedDelayString = "\${trippilot.outbox.relay-delay-ms:2000}")
+    @Scheduled(fixedDelayString = "\${trippilot.outbox.relay-delay-ms:2000}",
+        // **첫 발화도 미룰 수 있어야 한다.** fixedDelay 는 주기만 정하고 기동 직후 1회는 그대로 쏜다 —
+        // 테스트가 주기를 1시간으로 늘려 "껐다"고 적어 둔 것이 실제로는 안 꺼져 있었다(실측: 배경
+        // 스레드가 테스트와 동시에 배달해 OutboxRelayIT 가 간헐 실패). 운영 기본은 0 이라 무변경.
+        initialDelayString = "\${trippilot.outbox.relay-initial-delay-ms:0}")
     // lockAtMostFor 는 **죽은 인스턴스가 락을 영원히 붙잡는 것**을 막는 안전망이다.
     // lockAtLeastFor 는 0 이다 — cron 방식의 시계 오차 이중 실행을 막는 장치인데 여기는 fixedDelay 라
     // 같은 인스턴스가 겹쳐 돌지 않고, 0 이 아니면 **연속 호출이 조용히 건너뛰어진다**(테스트에서 겪었다).
