@@ -108,6 +108,15 @@ services:
       TRIPPILOT_PUSH_EXPO_ACCESS_TOKEN: ${PUSH_EXPO_ACCESS_TOKEN:-}
       # 서비스 간 호출(TRIP-393). 비우면 /internal 경계가 닫힌다 — AI 수집분 수신도 막힌다.
       TRIPPILOT_SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      # JWT 서명키(RS256) — 비우면 컨테이너가 기동할 때마다 새로 만든다. 복제본을 둘 이상
+      # 띄우는 순간 서로의 토큰을 못 읽어 로그인이 깨지므로, 배포에서는 반드시 채운다.
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-}
+      # 켜면 위 키가 빈 채로는 기동하지 않는다. 로컬 기본은 꺼짐(키 없이도 떠야 한다).
+      # **`:-false` 로 값을 보장한다.** `:-` 로 비워 넘기면 컨테이너가 빈 문자열을 받고,
+      # application.yml 의 `${...:false}` 는 "존재하지만 빈 값"이라 기본값을 못 써서
+      # Boolean 바인딩이 BindException 으로 **기동을 깬다**(실측 2026-09-16).
+      # 같은 이유로 AI_SCHEDULE_DEADLINE_ENFORCED 도 `:-false` 다.
+      JWT_REQUIRE_CONFIGURED_KEY: ${JWT_REQUIRE_CONFIGURED_KEY:-false}
       # application.yml 은 ${SERVICE_AUTH_TOKEN:} 을 읽는다 — 접두 붙은 이름만 주면 빈 토큰이 되어 /internal 이 401 로 닫힌다(실측 2026-08-21).
       SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
     ports:
