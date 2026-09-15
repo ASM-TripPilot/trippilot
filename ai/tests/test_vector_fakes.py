@@ -118,3 +118,35 @@ def test_tie_breaks_by_item_id_lexicographic() -> None:
         store.upsert("poi_desc", iid, vec, {})
     hits = store.search("poi_desc", vec, top_k=3)
     assert [h.item_id for h in hits] == ["apple", "banana", "cherry"]
+
+
+def test_search_can_be_scoped_to_an_id_subset() -> None:
+    """`item_ids` 로 좁히면 **그 집합 안에서** top_k 가 채워진다 (INV-1, 포트 docstring).
+
+    전역 상위를 뽑고 나서 거르는 구현이면 풀 안 문서가 밀려나 결과가 빈다 — 여기서
+    그 순서를 고정한다. 아래 구도는 풀 밖 문서가 질의와 더 닮게 짜여 있다.
+    """
+    store = InMemoryVectorStore()
+    query = (1.0, 0.0)
+    store.upsert("poi_desc", "밖-1", (1.0, 0.0), {})       # 질의와 동일 — 전역 1위
+    store.upsert("poi_desc", "밖-2", (0.99, 0.14), {})     # 전역 2위
+    store.upsert("poi_desc", "안-1", (0.7, 0.71), {})
+    store.upsert("poi_desc", "안-2", (0.0, 1.0), {})       # 직교 — 전역 꼴찌
+
+    hits = store.search("poi_desc", query, top_k=2, item_ids=frozenset({"안-1", "안-2"}))
+
+    assert [h.item_id for h in hits] == ["안-1", "안-2"], (
+        "풀 안에서 채워야 한다 — 전역 상위를 뽑고 거르면 빈 결과가 된다")
+
+
+def test_empty_id_set_matches_nothing_but_none_means_no_filter() -> None:
+    """빈 frozenset 과 None 은 다르다 — 전자는 '아무것도 안 맞음', 후자는 '필터 없음'.
+
+    둘을 같게 다루면 후보 풀이 비었을 때 **전역 검색으로 조용히 넘어간다** — 풀 밖
+    POI 설명이 프롬프트에 실린다는 뜻이라, 정확히 막으려던 것이 일어난다.
+    """
+    store = InMemoryVectorStore()
+    store.upsert("poi_desc", "a", (1.0, 0.0), {})
+
+    assert store.search("poi_desc", (1.0, 0.0), top_k=5, item_ids=frozenset()) == ()
+    assert len(store.search("poi_desc", (1.0, 0.0), top_k=5, item_ids=None)) == 1

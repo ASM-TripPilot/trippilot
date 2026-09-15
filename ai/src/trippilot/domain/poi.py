@@ -97,6 +97,12 @@ class Poi:
     source: PoiSource
     confidence: float | None
     saved_count: int = 0  # 인앱 저장(좋아요) 수 = 인기 신호. 별점(rating)과 별개 소스
+    # 벤더 세분류 (TourAPI cat2/cat3 명칭 — "역사관광지"·"카페/전통찻집"·"한식").
+    # `category` 8종으로는 못 가르는 축을 모델에게 주기 위한 것이다 — 우천 판정표가
+    # FOOD·SIGHT 를 중립으로 두는 이유가 "실내외 혼재"인데(assembly_engine/config.py),
+    # 혼재를 푸는 정보가 바로 여기 있다(유적지=야외 ↔ 박물관=실내).
+    # 백엔드 `poi.tags text[]` 정본. 미노출 경계에서는 빈 튜플 — 그래서 후미 기본값이다.
+    tags: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.poi_id:
@@ -121,6 +127,7 @@ class Poi:
             "quality": self.quality.value,
             "source": self.source.value,
             "confidence": self.confidence,
+            "tags": list(self.tags),
         }
 
     @classmethod
@@ -137,6 +144,7 @@ class Poi:
             quality=DataQuality(d["quality"]),
             source=PoiSource(d["source"]),
             confidence=d["confidence"],
+            tags=tuple(d.get("tags") or ()),  # 구 캐시 호환 (saved_count 선례)
         )
 
     def to_cacheable_dict(self) -> dict:
