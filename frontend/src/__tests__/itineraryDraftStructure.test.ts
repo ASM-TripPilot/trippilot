@@ -12,7 +12,8 @@ import path from 'path';
  *  - 라우트는 얇다(AC-V2) — 조회·변이·마크업은 `pages` 층 몫이다.
  *  - 이 칸의 새 파일이 **기존 두 전수 스캔의 사정거리 안에** 들어왔다(아래 「자동 편입」).
  *  - 폴링에 **자체 타이머를 쓰지 않는다**(AC-9 · 01b) — `refetchInterval` 하나로 끝낸다.
- *  - 지도를 **배럴로** 가져오고 날짜 전환 시 `key` 로 remount 한다(AC-13 · 01b D3).
+ *  - 지도를 **배럴로** 가져온다(AC-13 · 01b D3). ⚠️ TRIP-864 — 네이버 `MapView` 는 제어형
+ *    `camera` prop 으로 재중심하므로 옛 `key` remount 규약은 소멸(G5 의 key 정규식 삭제).
  *
  * ── 이 칸이 **자동으로 받는** 심판 (여기서 복제하지 않는다) ──────────────────
  *  - `itineraryMustVisitStructure.test.ts` C34·C35 — 모집단이 `features/itinerary`
@@ -128,10 +129,6 @@ describe('G1 · 탐지기 자가검사 — 이게 통과해야 아래 스캔이 
       'const q = useQuery({ queryKey });',
       'const t = setInterval(poll, 2000);',
       "const u = 'https://cdn.example.com/a.png';",
-      '<KakaoMapView',
-      '  key={selectedDate}',
-      '  center={center}',
-      '/>',
     ].join('\n');
 
     const stripped = stripComments(sample);
@@ -147,12 +144,9 @@ describe('G1 · 탐지기 자가검사 — 이게 통과해야 아래 스캔이 
     expect(stripped).toContain("const u = 'https://cdn.example.com/a.png';");
     expect(stripped).toContain('@/pages/itinerary-draft');
 
-    // ③ 지도 remount 탐지기 — 여러 줄로 포맷된 JSX 에서 매칭되고, `key` 가 없으면 안 잡힌다.
-    //    React `key` 는 props 로 안 실려 렌더 트리에서 볼 수 없다 — 소스로만 잴 수 있다.
-    expect(/<KakaoMapView[^>]*\bkey=/.test(stripped)).toBe(true);
-    expect(/<KakaoMapView[^>]*\bkey=/.test('<KakaoMapView center={c} />')).toBe(
-      false
-    );
+    // TRIP-864 — 지도 remount(`<KakaoMapView … key=`) 자가검사는 삭제했다. 네이버 `MapView` 는
+    // 제어형 `camera` prop 으로 center 변화를 실시간 반영하므로 날짜 전환 key=remount 규약이
+    // 소멸했다(G5 의 key 정규식도 함께 삭제). 죽은 탐지기를 자가검사할 이유가 없다.
   });
 });
 
@@ -169,7 +163,16 @@ describe('G2 · AC-V2 — 라우트는 얇다 (frontend-components.md §0)', () 
     // 부정 — 조회·변이가 여기 있으면 `pages` 층 전역 가드의 사정거리 밖으로 샌다.
     expect(source).not.toMatch(/\buseQuery\b|\buseMutation\b/);
     expect(source).not.toContain('FlatList');
-    expect(source).not.toContain('KakaoMapView');
+    // 부정(TRIP-864 재조준) — 지도 컴포넌트가 얇은 라우트에 오면 안 된다. 이름 전환
+    // KakaoMapView→MapView 후 옛 문자열 부정 단언은 공허 통과로 퇴화하므로 단어 경계
+    // `\bMapView\b` 로 재조준(별칭 KakaoMapView·타입 MapViewProps 엔 안 걸림 — node 실측).
+    const MAP_TAG = /\bMapView\b/;
+    expect(MAP_TAG.test('const x = <MapView center={c} />;')).toBe(true);
+    expect(MAP_TAG.test("import { KakaoMapView } from '@/shared/map';")).toBe(
+      false
+    );
+    expect(MAP_TAG.test('type P = MapViewProps;')).toBe(false);
+    expect(source).not.toMatch(MAP_TAG);
   });
 });
 
@@ -211,25 +214,33 @@ describe('🔴 G4 · AC-9 — 폴링에 자체 타이머를 쓰지 않는다 (01
   });
 });
 
-describe('G5 · AC-13 — 지도는 배럴로 가져오고 날짜마다 remount 한다 (01b D3)', () => {
-  it('DraftScreen 이 @/shared/map 배럴을 쓰고 KakaoMapView 에 key 가 붙어 있다', () => {
+describe('G5 · AC-13 — 지도는 배럴로 가져온다 (01b D3 · TRIP-864 key 규약 삭제)', () => {
+  it('DraftScreen 이 @/shared/map 배럴을 쓰고 딥 임포트가 0건이다', () => {
     const screenSource = readOne(SCREEN_REL);
 
     // 긍정(짝) — 읽은 것이 정말 그 화면이다.
     expect(screenSource).toMatch(/export function DraftScreen\b/);
 
     // ① **배럴 경유**여야 한다. 화면 테스트가 `jest.mock('@/shared/map', …)` 로 지도를 관찰
-    //    마커로 바꾸는데, 딥 임포트(`@/shared/map/KakaoMapView`)면 그 목이 안 붙는다 — 실물이
-    //    렌더되어 JS 키 없는 jest 환경에서 `map-failure` 로 떨어지고, 테스트는 red 인데
-    //    **이유가 AC 와 무관해** 구현자가 엉뚱한 곳을 고친다.
+    //    마커로 바꾸는데, 딥 임포트면 그 목이 안 붙어 실물이 렌더되고 map-failure 로 떨어진다 —
+    //    테스트는 red 인데 이유가 AC 와 무관해 구현자가 엉뚱한 곳을 고친다.
     expect(screenSource).toContain("from '@/shared/map'");
-    expect(screenSource).not.toContain('@/shared/map/KakaoMapView');
 
-    // ② `key` 로 remount — `KakaoMapView` 는 마운트 시 `center` 로 HTML 을 **한 번만** 조립하고
-    //    이후 갱신하지 않는다(그 컴포넌트의 동결 계약). key 가 없으면 날짜를 바꿔도 지도가
-    //    그대로다. React key 는 props 에 안 실려 렌더 트리에서 볼 수 없어 소스로만 잴 수 있다.
-    //    ⚠️ 한계: 이 단언은 "key 를 적었다"까지고 값이 옳은지는 [검증]의 화면 대조 몫이다.
-    expect(screenSource).toMatch(/<KakaoMapView[^>]*\bkey=/);
+    // 딥 임포트 금지(TRIP-864 재조준) — 옛 `@/shared/map/KakaoMapView` 는 죽은 경로라 부정 단언이
+    //    공허 통과로 퇴화한다. 살아있는 컴포넌트 파일 경로 `@/shared/map/MapView` 로 재조준
+    //    (배럴 import 는 이 부분문자열을 포함하지 않음 — node 실측, 02a §1).
+    const DEEP_IMPORT = '@/shared/map/MapView';
+    expect(
+      "import { MapView } from '@/shared/map/MapView';".includes(DEEP_IMPORT)
+    ).toBe(true);
+    expect(
+      "import { MapView } from '@/shared/map';".includes(DEEP_IMPORT)
+    ).toBe(false);
+    expect(screenSource).not.toContain(DEEP_IMPORT);
+
+    // ② TRIP-864 — `<KakaoMapView … key=` remount 단언 삭제. 네이버 `MapView` 는 제어형 `camera`
+    //    prop 으로 center 변화를 실시간 반영해 날짜 전환 key=remount 규약이 소멸했다(HTML 동결
+    //    조립이 없다). S3 가 소비처에서 key 를 걷어 이 규칙 자체가 사라졌다.
   });
 });
 

@@ -399,7 +399,10 @@ describe('G-5 · 지도를 재구현하지 않는다 (브리프 AC-S4 · 01b See
       detect("const sdk = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=X';")
     ).toBe(2);
     expect(detect("import { WebView } from 'react-native-webview';")).toBe(1);
-    expect(detect("import { KakaoMapView } from '@/shared/map';")).toBe(0);
+    // 배럴 지도 컴포넌트 import 는 지문이 아니다(양성-무해 예시). FINGERPRINTS 는 컴포넌트
+    // 이름이 아니라 webview/카카오 SDK 지문을 물어 이름 전환(KakaoMapView→MapView, TRIP-864)에
+    // 퇴화하지 않는다 — 예시 문자열만 현행 주 컴포넌트로 갱신(둘 다 0 지문).
+    expect(detect("import { MapView } from '@/shared/map';")).toBe(0);
 
     // ★★ 전처리 × 신규 지문 조합 검사(02a ★5) — 각 정규식이 개별로 옳아도, 소스를 가공하는
     // stripComments가 대상 문자열을 먼저 지워 버리면 탐지기는 조용히 눈이 먼다. 실제로
