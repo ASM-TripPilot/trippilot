@@ -4,6 +4,8 @@
 다르게 적히는 상호·주소 표기 변형을 조립한다.
 §3 은 **지도 실재 확인**(TRIP-683) 재료다 — 조회 1건과, "없음"으로 읽히면 안 되는
 형식 밖 응답들.
+§5 는 **Overture 매핑**(TRIP-684) 재료다 — 채택 목록 밖 카테고리와, 야경 이름
+규칙의 양쪽(천문대 vs 진짜 전망대)을 가르는 실측 이름들.
 """
 
 from __future__ import annotations
@@ -293,4 +295,140 @@ def sortable_pois(draw) -> Poi:
         source=PoiSource.SEED,
         confidence=None,
         saved_count=draw(st.integers(min_value=0, max_value=3)),
+    )
+
+
+# ── §5 Overture 카테고리·이름 어휘 (TRIP-684 · sourcing/overture.py) ──
+# `map_category` / `has_korean_name` 재료. 여기도 무작위 유니코드가 아니라
+# **실측 표기 조립**이다 — 반례가 Overture 한 줄이어야 재현·수정이 된다
+# (릴리스 2026-08-19.0, 한국 bbox 691,968건 표본).
+
+# `observatory` 로 들어오지만 **야경이 아닌 것** — 별·천체를 보는 시설이다.
+# 실측 표본에서 그대로 뽑았다(용인어린이천문대·서산류방택천문기상과학관 등).
+_ASTRONOMY_KO = (
+    "용인어린이천문대",
+    "대전시민천문대",
+    "별아띠천문대",
+    "서산류방택천문기상과학관",
+    "만행산천문체험관",
+    "사량도천문대",
+    "경희대천문대",
+    "조경철천문대",
+    "국립과천과학관 천체투영관",
+    "김해천문대 플라네타륨",
+)
+# 같은 천문 시설의 **로마자 표기**. 한글 이름이 없어 수집 대상은 아니지만,
+# 이름 규칙의 영문 분기(planetarium·astronom)를 자극하는 유일한 입력이다.
+_ASTRONOMY_EN = (
+    "Gwacheon National Science Museum Planetarium",
+    "Bohyunsan Optical Astronomy Observatory",
+)
+_ASTRONOMY_NAMES = _ASTRONOMY_KO + _ASTRONOMY_EN
+# **진짜 야경** — 전망대·전망타워·야시장·야경 명소. 앞 여섯은 실측 표본의 관측치다.
+_LOOKOUT_NAMES = (
+    "솔오름 전망대",
+    "거린사슴전망대",
+    "국사봉전망대",
+    "넓은드르 전망대",
+    "북악산 하늘전망대",
+    "오두산통일전망타워",
+    "서문시장 야시장",
+    "남산 야경 명소",
+    "부산타워 전망층",
+)
+# 야경 규칙 어느 쪽에도 안 걸리는 평범한 한글 이름. `night_market`(44) 에 섞여
+# 있던 오분류(`전라도여행맛집`)를 포함한다 — 카테고리만 믿으면 이게 야경이 된다.
+_PLAIN_NAMES = _STORE_NAMES + (
+    "성산일출봉", "전라도여행맛집", "제주시청", "개심사", "한라수목원",
+)
+# 한글 음절이 **없는** 이름 — 로마자·숫자·기호·타 문자권·자모 단독·빈 문자열.
+# 실측 채움률 63.5% 의 바깥쪽이다. 자모("ㅋㅋ")는 음절이 아니므로 여기 속한다.
+_NON_KOREAN_NAMES: tuple[str | None, ...] = (
+    None, "", "   ", "\t\n",
+    "Starbucks", "GS25", "7-Eleven", "CU", "Jeju Olle Trail",
+    "Café de Paris", "N Seoul Tower", "Observatory",
+    "123-45", "#@!", "...", "1st Ave.",
+    "スターバックス", "星巴克", "ﾊﾝｸﾞﾙ",      # 타 문자권 — 한글이 아니다
+    "ㅋㅋ", "ᄀᄁᄂ",                           # 자모 단독 — 음절이 아니다
+    "𝕂𝕠𝕣𝕖𝕒",                                  # 수학 기호 문자
+)
+# 한글 + 로마자 병기 — 실측에 흔한 형태(`사라오름 전망대 Sara Observatory`).
+_ROMAN_TAILS = (
+    "Sara Observatory", "Observatory", "Night Market", "Cafe", "Restaurant",
+    "Trail", "Museum",
+)
+# 실측 상위에 있으나 **여행지가 아닌** 카테고리 — 채택 목록에 절대 들어오면 안 된다
+# (편의점 9,298 · 미용실 9,972 · 치과 3,844 · ATM 4,487 · 주유소 4,029 …).
+_NON_TRAVEL_CATEGORIES = (
+    "convenience_store", "hair_salon", "dentist", "atm", "gas_station",
+    "pharmacy", "bank_credit_union", "real_estate_agent", "hospital",
+    "beauty_salon", "car_wash", "elementary_school", "parking", "laundry_service",
+    "veterinarian", "insurance_agency", "accountant", "funeral_services",
+    "hotel", "motel", "apartment_building", "office_supplies",
+)
+# 채택 목록 키와 **한 글자 차이**인 것들. 조회는 정확 일치여야 한다 — 대소문자·
+# 공백·복수형·상위어가 새어 들어오면 화이트리스트가 화이트리스트가 아니다.
+_NEAR_MISS_CATEGORIES = (
+    "Korean_Restaurant", "KOREAN_RESTAURANT", " korean_restaurant",
+    "korean_restaurant ", "korean_restaurants", "korean restaurant",
+    "church", "cathedral", "observatory_deck", "observatories", "Observatory",
+    "night_markets", "Park", "park\n", "cafe ", "CAFE", "shopping_mall",
+)
+
+
+def astronomy_names() -> st.SearchStrategy[str]:
+    """천문·천체·과학관 이름. 카테고리가 무엇이든 NIGHT_VIEW 가 되면 안 된다."""
+    return st.sampled_from(_ASTRONOMY_NAMES)
+
+
+def lookout_names() -> st.SearchStrategy[str]:
+    """진짜 야경 이름(전망대·야시장·야경). 야경 카테고리로 오면 통과해야 한다."""
+    return st.sampled_from(_LOOKOUT_NAMES)
+
+
+def plain_place_names() -> st.SearchStrategy[str]:
+    """야경 이름 규칙의 양쪽(_NIGHT_OK·_NIGHT_NO) 어디에도 안 걸리는 한글 이름."""
+    return st.sampled_from(_PLAIN_NAMES)
+
+
+@st.composite
+def mixed_script_names(draw) -> str:
+    """한글 + 로마자 병기 이름 — 한글 판정은 True 여야 한다(기저는 한글 이름)."""
+    base = draw(st.one_of(st.sampled_from(_ASTRONOMY_KO), lookout_names(),
+                          plain_place_names()))
+    return f"{base} {draw(st.sampled_from(_ROMAN_TAILS))}"
+
+
+def korean_place_names() -> st.SearchStrategy[str]:
+    """한글 음절이 **반드시 있는** 이름 전 분포 (천문·전망·평범·병기).
+
+    로마자 전용 천문 표기(`_ASTRONOMY_EN`)는 여기 들어오지 않는다 — 이 전략의
+    계약이 "한글이 있다" 이기 때문이다. 그쪽은 `astronomy_names()` 로 간다.
+    """
+    return st.one_of(st.sampled_from(_ASTRONOMY_KO), lookout_names(),
+                     plain_place_names(), mixed_script_names())
+
+
+def non_korean_names() -> st.SearchStrategy[str | None]:
+    """한글 음절이 **없는** 이름 (None·빈 문자열·타 문자권·자모 단독 포함)."""
+    return st.sampled_from(_NON_KOREAN_NAMES)
+
+
+def non_travel_categories() -> st.SearchStrategy[str]:
+    """실측 상위의 비여행 카테고리 — 드롭되는 것이 이 모듈의 존재 이유다."""
+    return st.sampled_from(_NON_TRAVEL_CATEGORIES)
+
+
+def unknown_overture_categories() -> st.SearchStrategy[str | None]:
+    """채택 목록 밖 카테고리 후보 — 비여행 · 근접 오타 · 임의 텍스트 · None.
+
+    임의 텍스트가 섞여 있으므로 쓰는 쪽에서 `assume(cat not in _CATEGORY_MAP)` 를
+    건다(이론상 충돌 대비). 새 카테고리가 목록에 추가돼도 이 전략은 그대로 유효하다.
+    """
+    return st.one_of(
+        st.none(),
+        st.just(""),
+        non_travel_categories(),
+        st.sampled_from(_NEAR_MISS_CATEGORIES),
+        st.text(max_size=16),
     )
