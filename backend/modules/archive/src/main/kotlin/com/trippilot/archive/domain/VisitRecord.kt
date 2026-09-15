@@ -103,6 +103,17 @@ interface VisitPhotoMetaRepository {
 
     /** 여러 방문의 사진 **개수**. 목록 화면과 AI 컨텍스트 조립이 이것만 필요로 한다. */
     fun countByVisits(visitCheckIds: Collection<UUID>): Map<UUID, Int>
+
+    /**
+     * 주어진 여행들의 사진에서 **EXIF 좌표만** 지운다(INV-L4 파기). 사진 메타 행·메모·방문 체크는 그대로다 —
+     * 사진 자체는 사용자 기기에 있고 우리는 메타만 들고 있으므로 좌표를 지워도 카드가 사라지지 않는다.
+     *
+     * 계정이 아니라 **여행 목록**을 받는 이유: `visit_photo_meta` 는 계정을 모른다(여행을 거쳐야 한다).
+     * 그 표는 trip 모듈 소유라 여기서 조인하지 않고, 범위는 호출측이 파사드로 받아 넘긴다.
+     *
+     * @return 실제로 좌표가 있던 행 수. 파기 기록에 싣는다 — 0 이면 지울 것이 없었다는 뜻이라 기록하지 않는다.
+     */
+    fun clearExifCoordinates(tripIds: Collection<UUID>): Int
 }
 
 /** 메모 영속 포트. */
