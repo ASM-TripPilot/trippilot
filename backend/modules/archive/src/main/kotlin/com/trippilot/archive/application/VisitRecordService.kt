@@ -6,6 +6,8 @@ import com.trippilot.archive.domain.VisitMemoRepository
 import com.trippilot.archive.domain.VisitPhotoMeta
 import com.trippilot.archive.domain.VisitPhotoMetaRepository
 import com.trippilot.auth.api.LocationConsentFacade
+import com.trippilot.auth.api.LocationLegalLogFacade
+import com.trippilot.auth.api.LocationCollectionSource
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
@@ -32,6 +34,7 @@ class VisitRecordService(
     private val photos: VisitPhotoMetaRepository,
     private val memos: VisitMemoRepository,
     private val locationConsents: LocationConsentFacade,
+    private val legalLogs: LocationLegalLogFacade,
     private val clock: Clock,
 ) {
     /**
@@ -51,7 +54,7 @@ class VisitRecordService(
         if (photos.findByVisit(visitCheckId).size >= MAX_PHOTOS_PER_VISIT) {
             throw ValidationFailed(listOf(FieldError("photos", "한 방문에 사진은 최대 ${MAX_PHOTOS_PER_VISIT}장까지 붙일 수 있습니다")))
         }
-        return photos.save(
+        val saved = photos.save(
             VisitPhotoMeta.attach(
                 visitCheckId = visitCheckId,
                 localAssetId = command.localAssetId,
@@ -63,6 +66,16 @@ class VisitRecordService(
                 gpsRecordingOptIn = locationConsents.hasGpsRecordingOptIn(accountId),
             ),
         )
+        // 위치를 **실제로 보관했을 때만** 수집 사실을 남긴다(TRIP-857).
+        //
+        // 판정을 요청(`command.exifLat`)이 아니라 **저장 결과**로 하는 이유가 둘이다:
+        // 동의가 없으면 `attach` 가 좌표를 버리므로 요청에 좌표가 있어도 수집이 아니고,
+        // 사진에 EXIF 가 아예 없으면 동의가 있어도 수집할 것이 없다. 두 경우 모두 로그를 남기면
+        // 확인자료가 "모은 적 없는 위치"를 모았다고 말하게 된다.
+        if (saved.exifLat != null && saved.exifLng != null) {
+            legalLogs.recordCollection(accountId, LocationCollectionSource.PHOTO_EXIF, saved.visitPhotoMetaId)
+        }
+        return saved
     }
 
     @Transactional(readOnly = true)

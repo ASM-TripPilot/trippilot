@@ -8,12 +8,16 @@ import com.trippilot.archive.domain.VisitMemoRepository
 import com.trippilot.archive.domain.VisitPhotoMeta
 import com.trippilot.archive.domain.VisitPhotoMetaRepository
 import com.trippilot.auth.api.LocationConsentFacade
+import com.trippilot.auth.api.LocationLegalLogFacade
+import com.trippilot.auth.api.LocationCollectionSource
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import java.time.Clock
 import java.time.Instant
@@ -77,14 +81,32 @@ class VisitRecordServiceTest : StringSpec({
         override fun hasGpsRecordingOptIn(accountId: UUID) = optIn
     }
 
-    class Fixture(val svc: VisitRecordService, val photos: Photos, val memos: Memos, val visitCheckId: UUID)
+    /** 남긴 수집 사실을 들여다보는 대역 — 법정 로그는 auth 소유라 여기서는 경계 호출만 본다. */
+    class LegalLogs : LocationLegalLogFacade {
+        val collected = mutableListOf<Triple<UUID, LocationCollectionSource, UUID>>()
+        override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID) {
+            collected += Triple(accountId, source, subjectId)
+        }
+    }
+
+    class Fixture(
+        val svc: VisitRecordService,
+        val photos: Photos,
+        val memos: Memos,
+        val visitCheckId: UUID,
+        val legalLogs: LegalLogs,
+    )
 
     fun fixture(gpsOptIn: Boolean = true): Fixture {
         val checks = Checks()
         val photos = Photos()
         val memos = Memos()
+        val legalLogs = LegalLogs()
         val visit = checks.save(VisitCheck.arrive(tripId, "2026-08-11#$poi", poi, CheckSource.MANUAL, now))
-        return Fixture(VisitRecordService(trips, checks, photos, memos, consents(gpsOptIn), clock), photos, memos, visit.visitCheckId)
+        return Fixture(
+            VisitRecordService(trips, checks, photos, memos, consents(gpsOptIn), legalLogs, clock),
+            photos, memos, visit.visitCheckId, legalLogs,
+        )
     }
 
     fun photo(assetId: String = "asset-1", lat: Double? = 33.45, lng: Double? = 126.57, sortOrder: Int? = null) =
@@ -204,5 +226,36 @@ class VisitRecordServiceTest : StringSpec({
         f.svc.addPhoto(acc, tripId, f.visitCheckId, photo("b"))
 
         f.svc.photoCountsByVisit(acc, tripId) shouldBe mapOf(f.visitCheckId to 2)
+    }
+    /**
+     * 위치를 **실제로 보관했을 때만** 수집 사실을 남긴다(TRIP-857). 표는 "위치를 모으면 사실을
+     * 남긴다"는 전제로 만들어져 있는데(V1.3 `COLLECTION`), 정작 좌표를 보관하는 이 경로가
+     * 로그를 한 번도 부르지 않고 있었다.
+     */
+    "동의가 있고 EXIF 가 실리면 수집 사실이 남는다" {
+        val f = fixture(gpsOptIn = true)
+
+        val saved = f.svc.addPhoto(acc, tripId, f.visitCheckId, photo())
+
+        f.legalLogs.collected.single() shouldBe Triple(acc, LocationCollectionSource.PHOTO_EXIF, saved.visitPhotoMetaId)
+    }
+
+    /** 동의가 없으면 좌표를 버리므로 **수집이 아니다** — 확인자료가 모은 적 없는 위치를 말하면 안 된다. */
+    "동의가 없으면 좌표도 로그도 남지 않는다" {
+        val f = fixture(gpsOptIn = false)
+
+        val saved = f.svc.addPhoto(acc, tripId, f.visitCheckId, photo())
+
+        saved.exifLat.shouldBeNull()
+        f.legalLogs.collected.shouldBeEmpty()
+    }
+
+    /** 동의가 있어도 사진에 EXIF 가 없으면 모을 것이 없다 — 요청이 아니라 **저장 결과**로 판정한다. */
+    "EXIF 가 없는 사진은 동의가 있어도 로그를 남기지 않는다" {
+        val f = fixture(gpsOptIn = true)
+
+        f.svc.addPhoto(acc, tripId, f.visitCheckId, photo(lat = null, lng = null))
+
+        f.legalLogs.collected.shouldBeEmpty()
     }
 })

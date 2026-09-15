@@ -15,6 +15,8 @@ import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -87,6 +89,46 @@ class VisitRecordPersistenceIT : AbstractPostgresIntegrationTest() {
         granted.exifLat shouldBe 33.45
         granted.exifLng shouldBe 126.57
     }
+
+    /**
+     * 위치를 보관하면 **사실 확인자료가 남는다**(TRIP-857 · V1.3 `COLLECTION`).
+     *
+     * 실 DB 로 보는 이유: `location_legal_log` 는 append-only 이고 `event_type` 에 CHECK 가 걸려 있다 —
+     * 대역은 그 어휘가 실제로 통과하는지, 파사드를 넘은 쓰기가 같은 트랜잭션에서 커밋되는지 못 본다.
+     * 그리고 **원시 좌표가 섞여 들어가지 않는 것**이 이 표의 규약이라 그것도 함께 본다.
+     */
+    @Test
+    fun `동의 상태에서 EXIF 를 저장하면 수집 사실이 남고, 미동의면 남지 않는다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        val visit = newVisit(tripId)
+
+        // 미동의 — 좌표를 버리므로 수집이 아니다.
+        records.addPhoto(accountId, tripId, visit, photo("asset-no-consent"))
+        collectionLogs(accountId) shouldBe 0
+
+        locationConsents.update(AccountId(accountId), legalConsent = true, gpsRecordingOptIn = true)
+        val saved = records.addPhoto(accountId, tripId, visit, photo("asset-consented"))
+
+        collectionLogs(accountId) shouldBe 1
+        val detail = jdbc.queryForObject(
+            """
+            SELECT detail::text FROM location_legal_log
+             WHERE account_id = ? AND event_type = 'COLLECTION'
+            """.trimIndent(),
+            String::class.java, accountId,
+        )!!
+        detail shouldContain saved.visitPhotoMetaId.toString()
+        detail shouldContain "PHOTO_EXIF"
+        // 사실 확인자료에 좌표를 또 두면 파기 대상이 한 곳 더 생긴다(V1.3 규약).
+        detail shouldNotContain "33.45"
+        detail shouldNotContain "126.57"
+    }
+
+    private fun collectionLogs(accountId: UUID): Int = jdbc.queryForObject(
+        "SELECT count(*) FROM location_legal_log WHERE account_id = ? AND event_type = 'COLLECTION'",
+        Int::class.java, accountId,
+    )!!
 
     @Test
     fun `같은 기기의 같은 자산은 한 방문에 한 번만 붙는다`() {
