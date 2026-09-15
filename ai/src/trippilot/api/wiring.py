@@ -984,7 +984,7 @@ class WiredItineraryOrchestrator:
                 # 않는다** — 라벨은 백엔드가 내린 트리거이고 이미 사용자 화면에 뜬
                 # 문구다("비 예보로 일정 변경 제안"). 우리가 재서 낮게 나왔다고
                 # 야외를 안 내리면 화면과 모순된다. 실값은 정도를 더하는 데만 쓴다.
-                rain_prob_by_date=self._rain_from(packets, dates),
+                rain_prob_by_date=self._rain_from(packets, dates, now),
                 persona=self._persona_from(packets),
                 saved_places=tuple(
                     SavedPlace(poi_id=sp.poi_id, name=sp.name) for sp in request.saved_places
@@ -1024,6 +1024,7 @@ class WiredItineraryOrchestrator:
         self,
         packets: dict[ProviderKind, InfoPacket],
         dates: tuple[date, ...],
+        now: datetime,
     ) -> dict:
         """WEATHER 패킷 → {날짜: 강수확률%}. 요청 날짜로 한정한다.
 
@@ -1038,6 +1039,22 @@ class WiredItineraryOrchestrator:
         if packet is None or packet.status is not ProviderStatus.OK:
             return {}
         wanted = set(dates)
+        hourly = packet.data.get("hourly") or {}
+        if hourly:
+            # **남은 시간대만** 본다 — 재계획은 여행 중 특정 시점에 일어나므로
+            # 이미 지나간 슬롯의 비는 판단에 넣지 않는다. 일 최댓값을 쓰면 오후
+            # 3시에 "오늘 80%" 가 아침에 그친 비를 가리킬 수 있다.
+            remaining: dict[date, int] = {}
+            for iso, pop in hourly.items():
+                slot = datetime.fromisoformat(iso)
+                if slot < now or slot.date() not in wanted:
+                    continue
+                remaining[slot.date()] = max(remaining.get(slot.date(), 0), pop)
+            if remaining:
+                return remaining
+            # 남은 슬롯이 없다(그날 예보가 끝났다) — 일 단위로 되돌아가지 않는다.
+            # "남은 시간에 비 정보 없음"과 "하루 최댓값"은 다른 사실이다.
+            return {}
         return {
             parsed: p for d, p in packet.data.get("daily", {}).items()
             if (parsed := date.fromisoformat(d)) in wanted
