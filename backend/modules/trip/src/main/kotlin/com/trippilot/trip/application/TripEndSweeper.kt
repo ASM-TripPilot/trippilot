@@ -36,7 +36,9 @@ class TripEndSweeper(
     private val events: DomainEventPublisher,
     private val clock: Clock,
 ) {
-    @Scheduled(fixedDelayString = "\${trippilot.trip.end-sweep-ms:600000}")
+    @Scheduled(fixedDelayString = "\${trippilot.trip.end-sweep-ms:600000}",
+        // 첫 발화도 미룬다 — 주기만 늘리면 기동 직후 1회는 그대로 쏜다(OutboxRelay 와 같은 이유).
+        initialDelayString = "\${trippilot.trip.end-sweep-initial-delay-ms:0}")
     @Transactional
     fun sweep() {
         val today = LocalDate.ofInstant(clock.instant(), TRAVEL_ZONE)
