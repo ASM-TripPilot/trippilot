@@ -86,6 +86,39 @@ class KmaWeatherAdapterTest : StringSpec({
     }
 
     /**
+     * **인증키의 `+` 가 `%2B` 로 실려야 한다.**
+     *
+     * 실 왕복에서 403 을 만든 자리다(2026-09-16). `UriBuilder.queryParam` 에 키를 맡기면 `+` 가
+     * 그대로 남고(RFC 3986 상 질의에서 합법), 서버는 그것을 **공백으로 해석**해 키가 깨진다.
+     *
+     * **가짜 서버는 키를 검증하지 않으므로 다른 모든 테스트는 이 실수를 원리적으로 못 본다** —
+     * 실 왕복은 평소 꺼져 있으니(CI 외부 호출 0회) 되돌아가도 아무것도 안 빨개진다. 질의 문자열을
+     * 직접 보는 이 단언이 유일한 그물이다.
+     */
+    "인증키의 + 가 %2B 로 인코딩돼 실린다 — 공백으로 읽히면 403 이다" {
+        val keyed = { url: String ->
+            KmaWeatherAdapter(
+                jeju,
+                RestClient.builder().baseUrl(url)
+                    .requestFactory(
+                        SimpleClientHttpRequestFactory().apply {
+                            setConnectTimeout(Duration.ofSeconds(2)); setReadTimeout(Duration.ofSeconds(2))
+                        },
+                    ).build(),
+                KmaWeatherProperties(mode = "kma", baseUrl = url, serviceKey = "aB+cd/ef=="),
+            )
+        }
+        withServer(okBody(listOf("20260916" to "20"))) { url, hits ->
+            keyed(url).fetch("제주", AT)
+
+            val q = hits.single()
+            q shouldContain "serviceKey=aB%2Bcd%2Fef%3D%3D"
+            // 날것으로 실리면 서버가 '+' 를 공백으로 읽는다 — 그 상태를 이름으로 못 박는다.
+            q.contains("serviceKey=aB+cd") shouldBe false
+        }
+    }
+
+    /**
      * 발표 직후(제공 지연 안)는 **이전 발표분**을 요청해야 한다. 안 빼면 방금 발표된 시각을
      * 물어 빈 응답을 받고, 그 실패는 "날씨를 못 봤다"로만 보인다.
      */
