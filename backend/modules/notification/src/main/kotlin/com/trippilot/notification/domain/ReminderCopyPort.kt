@@ -1,0 +1,51 @@
+package com.trippilot.notification.domain
+
+import java.time.LocalDate
+
+/**
+ * 리마인드 문구를 AI 에게 받는 경계(TRIP-836 · `POST /ai/v1/notification/copies`).
+ *
+ * ## 언제 부르나 — 적재할 때 한 번
+ *
+ * 예약을 적재하는 시점에 받아 두고 발화 때 꺼내 쓴다. 발화 시점에 부르면 (가) 발화가 상대 지연에
+ * 묶이고 (나) 리마인드 수만큼 호출이 늘며 (다) 상대가 죽은 밤에 알림이 통째로 늦는다.
+ * 적재는 아웃박스 릴레이(배경)에서 돌므로 사용자 대기에 걸리지 않는다.
+ *
+ * ## 못 받는 것이 정상 경로다
+ *
+ * 안 켠 환경·상대 장애·`degraded` 응답이 전부 "못 받음"이고, 그때는 **상수 문구로 간다**(INV-4).
+ * 그래서 이 포트는 **예외를 던지지 않고 빈 결과를 돌려준다** — 문구를 못 받았다고 예약 적재가
+ * 실패하면 리마인드가 통째로 사라지는데, 그건 문구가 밋밋한 것보다 훨씬 나쁘다.
+ *
+ * ## 맞물림은 [ReminderCopyRequest.scheduleKey] 하나다
+ *
+ * 상대는 요청에 실린 키를 응답에 그대로 돌려준다. 우리 예약 행과 같은 값이어야 문구가 제자리에
+ * 붙는다 — 슬롯키(`{date}#{poiId}`)와는 **다른 축**이라 섞지 않는다.
+ */
+interface ReminderCopyPort {
+
+    /** 켜져 있는가. 꺼져 있으면 호출측이 입력 조립조차 하지 않는다. */
+    val enabled: Boolean
+
+    /**
+     * 받은 문구를 `scheduleKey → 문구` 로 돌려준다. **못 받은 항목은 키가 없다**(빈 값이 아니라).
+     * 전부 실패하면 빈 맵이다.
+     */
+    fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy>
+}
+
+/**
+ * 문구를 받고 싶은 예약 하나.
+ *
+ * @param scheduleKey 응답과 맞물리는 키. 예약을 유일하게 가리켜야 한다.
+ * @param slots 그 날 무엇을 가는지 — 문구의 재료다. 없으면 빈 목록(상대가 일반 문구로 답한다).
+ */
+data class ReminderCopyRequest(
+    val scheduleKey: String,
+    val kind: NotificationKind,
+    val date: LocalDate,
+    val slots: List<String> = emptyList(),
+)
+
+/** 받은 문구. 둘 다 있어야 쓴다 — 한쪽만 쓰면 제목과 본문이 따로 논다. */
+data class ReminderCopy(val title: String, val body: String)

@@ -15,8 +15,10 @@ import java.util.UUID
 class AccessTokenIssuerTest : StringSpec({
 
     val config = JwtSecurityConfig()
-    val rsaKey = config.rsaKey()
     val props = JwtProperties()
+    // 키 미주입 = 기동 시 생성(종전과 같은 경로). 이 스펙이 보는 것은 서명·클레임 규약이라
+    // 어느 쪽이든 무관하다 — 키를 주입했을 때의 성질은 `JwtSigningKeysTest` 가 따로 본다.
+    val rsaKey = config.rsaKey(props)
     val decoder = config.jwtDecoder(rsaKey, props)
 
     fun issuerWith(clock: Clock) =

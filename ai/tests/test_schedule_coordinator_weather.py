@@ -19,14 +19,14 @@ from datetime import date
 
 from trippilot.domain.observability import FallbackEvent
 
-from tests.test_itinerary_orchestrator import (
+from tests.test_schedule_coordinator import (
     _DAY1,
     _NOW,
     _TRACE_ID,
     _build,
     _request,
 )
-from trippilot.orchestrator.itinerary_orchestrator import GenerationStatus
+from trippilot.orchestrator.schedule_coordinator import GenerationStatus
 
 _OTHER_DAY = date(2026, 8, 20)  # 요청 날짜 밖
 

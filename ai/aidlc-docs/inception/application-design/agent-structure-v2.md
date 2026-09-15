@@ -73,7 +73,32 @@
 | REFLECT | (없음) | — |
 | EDIT | Place(추가/교체 의도 시) | — |
 
-> **배선 실태 (2026-08-25, TRIP-530) — 표의 EDIT 행은 구현되지 않았다**:
+> **미결 (2026-09-16) — 모은 이동 실측이 착지할 자리가 없다**: 표의 Transit 행은
+> 남아 있고 TRIP-423 이 타입 호출까지 만들었지만(테스트 6건이 단언), 실제로는
+> 조회되지 않는다. 파 보니 원인이 "구간을 모른다"가 아니라 **통로 부재**였다 —
+> `ItineraryProblem` 은 날씨·행사에 각각 착지 필드를 갖는데(`daily_rain_prob`
+> TRIP-383 · `event_bonus` TRIP-421) **이동만 없다.** 그래서 수집해도 solve 로
+> 가지 못하고, 어셈블리는 무조건 `haversine_km × detour_factor`(직선 근사)를 쓴다.
+> TRANSIT 은 `TravelPort` 의 **실 경로**라 근사와 다른 값이므로 "중복"이 아니다.
+>
+> 두 갈래: **(1)** `ItineraryProblem` 에 구간 실측 오버라이드를 더해 있는 구간만
+> 근사 대신 쓴다(`daily_rain_prob` 이 생긴 방식 그대로, 어셈블리 내부 수정 필요) ·
+> **(2)** 표시·진단 전용으로 못 박는다(비용 0, 대신 "정확한 값을 모아 놓고 부정확한
+> 값으로 계산한다"가 남는다). 재계획은 이미 벌어진 지연에 대응하는 경로라 실 도로
+> 사정이 결과를 바꿀 여지가 가장 크다는 점이 (1) 쪽 근거다.
+>
+> **표는 그대로 두고 결론 전까지 호출측이 안 채운다** — 지운 뒤 필요해지면 되살리기가
+> 더 비싸고, 지우면 TRIP-423 이 만든 타입 호출 경로가 죽는다.
+>
+> **배선 실태 (2026-09-16 갱신) — 표의 EDIT 행이 구현됐다**: `INFO_REQUIREMENTS` 에
+> `EDIT`(Place)·`REFLECT`(빈 튜플)가 추가됐고, `alternatives`·`edit` 경계가 풀 빌더
+> 직행 대신 `InfoCollector` 를 거친다. 그 결과 **REPLAN 이 처음으로 날씨를 본다**
+> (팀 결정 2026-09-15). 다만 REPLAN 표 4종 중 실제로 채워지는 것은 PLACE·WEATHER
+> PERSONA 는 `trip_id` 에서 파생한다(`generate` 와 같은 규칙) — `/replan` 은 이미
+> 그 필드를 갖고 있고, 구 `/alternatives` 에는 선택 필드로 열었다. TRANSIT 은 위
+> 판정대로 수집하지 않는다.
+>
+> 아래는 2026-08-25(TRIP-530) 시점 기록이다:
 > 구현 정본 `orchestrator/info_collector.py::INFO_REQUIREMENTS` 에는 **`GENERATE_SCHEDULE`·`REPLAN` 두 키만**
 > 있다. `EDIT` 키는 없고, 실제 `/edit` 경계는 `api/wiring.py::edit()` 가 **`CandidatePoolBuilder.build()` 를
 > 직접 호출**해 풀을 얻는다 — InfoCollector를 거치지 않는다.

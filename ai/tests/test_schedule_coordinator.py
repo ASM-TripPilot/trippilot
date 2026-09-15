@@ -1,4 +1,4 @@
-"""U5-01·02 — ItineraryOrchestrator 조립 + 폴백 계단 (TRIP-237·238).
+"""U5-01·02 — ScheduleCoordinator 조립 + 폴백 계단 (TRIP-237·238).
 
 증명하는 것:
   ① 정상 경로 e2e: M7 풀 → C1 점수 → C2 solve 가 fake만으로 끝까지 흐른다
@@ -62,11 +62,11 @@ from trippilot.providers.place import PlaceProvider
 from trippilot.providers.weather import WeatherProvider
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.agents.schedule.agent import ScheduleAgent
-from trippilot.orchestrator.itinerary_orchestrator import (
+from trippilot.orchestrator.schedule_coordinator import (
     GenerateItineraryRequest,
     GenerationOutcome,
     GenerationStatus,
-    ItineraryOrchestrator,
+    ScheduleCoordinator,
     OrchestratorConfig,
     ScoringMode,
     allocate,
@@ -286,7 +286,7 @@ def _build(
         explanation_worker=explainer,
         config=config,
     )
-    orchestrator = ItineraryOrchestrator(
+    orchestrator = ScheduleCoordinator(
         InfoCollector(providers),
         agent,
         clock,

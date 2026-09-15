@@ -20,7 +20,7 @@ src/trippilot/
     edit/ planb/ reflect/ schedule/     (각 유닛에서 추가 — 상호 import 금지)
                        2026-09-09 넷 다 **워커를 감싸는 객체**로 통일: `run(<Task>) -> <Outcome>`.
                        edit/ 는 최상위 모듈에서 패키지로 승격(L-2 형제 검사 대상이 된다).
-  orchestrator/        ItineraryOrchestrator(소유 검증·시한 배분·수집·소화·위임) · InfoCollector · IntentRouter(미배선)
+  orchestrator/        ScheduleCoordinator(GENERATE_SCHEDULE 준비·위임 — 의도 파악 안 함) · InfoCollector · IntentRouter(미배선)
   providers/           (U5·U6 예약 — LLM 0회 계층)
   background/          (U6 예약 — 소싱 파이프라인·자율 트리거형, §5)
 tests/fakes/

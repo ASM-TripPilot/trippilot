@@ -74,6 +74,15 @@ class ValidationOutcome(Protocol):
     unverified: Sequence[UnverifiedSlotLike]
 
 
+class SlotAlternativeLike(Protocol):
+    """슬롯 차선책 1건 (TRIP-871) — 제안만(시각 없음). `distance_range` 는 슬롯 POI
+    기준 표시 문자열, 모르면 None."""
+
+    poi_id: str
+    rationale: str
+    distance_range: str | None
+
+
 class ItineraryOutcome(Protocol):
     """일정 산출물 + 표시에 필요한 부가 정보.
 
@@ -84,6 +93,7 @@ class ItineraryOutcome(Protocol):
     - `distance_ranges` 값은 표시 문자열("약 1.2km · 도보 추정")이며 **시간을 담지 않는다**(INV-3)
     - `unplaced_must_visits`: 요청 fixed_blocks 대비 해에 없는 필수방문의 사유 보고
       (TRIP-350 — 빈 시퀀스 = 전부 배치됨)
+    - `slot_alternatives`: 슬롯별 차선책(TRIP-871), 키 규약 동일. 키 없음 = 차선책 없음
     """
 
     solution: ItinerarySolution
@@ -93,6 +103,7 @@ class ItineraryOutcome(Protocol):
     candidates_summary: CandidatesSummaryLike | None
     day1_ready_at: datetime | None
     unplaced_must_visits: Sequence[UnplacedMustVisitLike]
+    slot_alternatives: Mapping[str, Sequence[SlotAlternativeLike]]
 
 
 class RepairOutcome(Protocol):

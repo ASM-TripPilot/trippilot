@@ -23,13 +23,22 @@ class NotificationScheduleServiceTest : StringSpec({
     // KST 08-10 08:00 = UTC 08-09 23:00. 여행 시작 한참 전에서 본다.
     fun clockAt(i: String): Clock = Clock.fixed(Instant.parse(i), ZoneOffset.UTC)
 
+    /** 문구 경계 미배선 — 이 스펙의 단정은 전부 상수 문구 경로다. 채움 자체는 아래 별도 스펙이 본다. */
+    class NoCopies : com.trippilot.notification.domain.ReminderCopyPort {
+        override val enabled = false
+        override fun copiesFor(
+            tripTitle: String?,
+            items: List<com.trippilot.notification.domain.ReminderCopyRequest>,
+        ) = emptyMap<String, com.trippilot.notification.domain.ReminderCopy>()
+    }
+
     fun kst(date: String, hour: Int) =
         LocalDate.parse(date).atTime(hour, 0).atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant()
 
     fun fixture(now: String, start: String, end: String): Triple<NotificationScheduleService, FakeSchedules, FakeTripOwner> {
         val schedules = FakeSchedules()
         val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse(start), LocalDate.parse(end)) }
-        return Triple(NotificationScheduleService(trips, schedules, clockAt(now)), schedules, trips)
+        return Triple(NotificationScheduleService(trips, schedules, NoCopies(), clockAt(now)), schedules, trips)
     }
 
     "여행 전날 1건 + 여행일수만큼 당일 알림이 적재된다" {

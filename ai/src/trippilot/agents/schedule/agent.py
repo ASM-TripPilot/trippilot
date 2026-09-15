@@ -10,6 +10,7 @@ ScheduleTask → ② 게이트웨이 선호 점수 (전 일자 1회)  실패·�
              → ③ ItineraryProblem 조립               (후보는 풀에서 나온 것만)
              → ④ 어셈블리 solve                       (체인 폴백은 어셈블리 소유 — 여기서 이중 폴백 금지)
              → ⑤ (선택) 설명 부착                      실패 → 설명 없이 진행
+             → ⑥ 슬롯별 차선책 (결정론, LLM 0회)       실패 → 차선책 없이 진행 (TRIP-871)
 ```
 
 **INV-1**: `candidates`는 `pool.pois`에서만 만들어진다 — 규칙 점수 경로는 풀을 순회해 생성하고,
@@ -35,19 +36,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Mapping, Protocol
+from typing import Mapping, Protocol, Sequence
 
 from trippilot.agents.schedule.budget import DeadlineBudget, OrchestratorConfig
 from trippilot.agents.schedule.outcome import (
+    MAX_SLOT_ALTERNATIVES,
     CandidatesReport,
     Degradation,
     GenerationOutcome,
     GenerationStatus,
     ScoringMode,
+    SlotAlternative,
     failed_outcome,
 )
 from trippilot.assembly_engine.facade import AssemblyConflictError
 from trippilot.assembly_engine.scorer import build_rule_score
+from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
@@ -66,7 +70,7 @@ from trippilot.domain.itinerary import (
 from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi import Poi, PoiCategory
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.ports.trace_port import TracePort
@@ -267,6 +271,12 @@ class ScheduleAgent:
             request, pool, persona, solution, budget, t0, steps, trace_id, now
         )
 
+        # ⑥ 슬롯별 차선책 (TRIP-871) — 어셈블리가 뽑지 않은 차순위 후보. 결정론·LLM 0회,
+        #    시한을 쓰지 않는다. 부가 정보라 실패해도 일정은 그대로 나간다(설명과 같은 취급).
+        alternatives = self._slot_alternatives(
+            request, pool, candidates, solution, steps, trace_id, now
+        )
+
         return GenerationOutcome(
             status=(GenerationStatus.DEGRADED if steps else GenerationStatus.SUCCESS),
             solution=solution,
@@ -277,6 +287,7 @@ class ScheduleAgent:
             budget=budget,
             candidates_summary=task.candidates_summary,
             solved_at=solved_at,
+            slot_alternatives=alternatives,
         )
 
     # ── ② 선호 점수 + 규칙 점수 폴백 ────────────────────────────────
@@ -463,6 +474,29 @@ class ScheduleAgent:
         # 게이트가 이미 막지만 여기서도 교차 (INV-1)
         return tuple(x for x in value if pool.contains(x.poi_id))
 
+    # ── ⑥ 슬롯별 차선책 (TRIP-871) ──────────────────────────────────
+
+    def _slot_alternatives(
+        self,
+        request: GenerateItineraryRequest,
+        pool: CandidatePool,
+        candidates: Sequence[ScoredPoi],
+        solution: ItinerarySolution,
+        steps: list[Degradation],
+        trace_id: TraceId,
+        now: datetime,
+    ) -> dict[str, tuple[SlotAlternative, ...]]:
+        try:
+            return pick_slot_alternatives(
+                solution, candidates, pool, excluded=request.excluded_poi_ids
+            )
+        except Exception as e:
+            # 순수 계산이라 도달하지 않아야 하지만, 부가 정보가 생성을 깨면 안 된다(INV-4).
+            # 빈 맵으로 나가되 사유는 강등 + 이벤트로 남긴다(침묵 금지).
+            self._degrade(steps, trace_id, now, "alternatives", "rule_pick", "(none)",
+                          f"alternatives_error: {type(e).__name__}: {e}")
+            return {}
+
     # ── 실패·관측 헬퍼 ──────────────────────────────────────────────
 
     def _failed(
@@ -520,3 +554,80 @@ class ScheduleAgent:
             )
         except Exception:
             pass  # 계측 실패가 생성 실패가 되면 안 된다
+
+
+# ── ⑥ 슬롯별 차선책 — 순수 함수 (TRIP-871) ──────────────────────────
+
+# domain/poi.py 의 백엔드 한글 정본 그대로 (명소=SIGHT · 맛집=FOOD · …). 사용자 표시 문구에만 쓴다.
+_CATEGORY_LABELS: Mapping[PoiCategory, str] = {
+    PoiCategory.FOOD: "맛집",
+    PoiCategory.CAFE: "카페",
+    PoiCategory.SIGHT: "명소",
+    PoiCategory.NIGHT_VIEW: "야경",
+    PoiCategory.NATURE: "자연",
+    PoiCategory.CULTURE: "문화",
+    PoiCategory.ACTIVITY: "액티비티",
+    PoiCategory.SHOPPING: "쇼핑",
+    PoiCategory.STAY: "숙소",
+}
+
+
+def pick_slot_alternatives(
+    solution: ItinerarySolution,
+    candidates: Sequence[ScoredPoi],
+    pool: CandidatePool,
+    *,
+    excluded: frozenset[PoiId] = frozenset(),
+    limit: int = MAX_SLOT_ALTERNATIVES,
+) -> dict[str, tuple[SlotAlternative, ...]]:
+    """슬롯마다 "이 자리에 대신 넣을 만한" 후보 ≤ limit 건 — 키 `"{date}#{poi_id}"`(BR-U2-04).
+
+    출처는 ②가 점수 매긴 `candidates` — 어셈블리가 뽑지 않은 차순위가 곧 차선책이다.
+    풀 밖·이미 배치·제외 목록·고정 블록은 후보가 아니다(INV-1, 자기 자신도 자연히 제외).
+    순위: 같은 카테고리 → 점수 내림 → 슬롯 POI 와 직선거리 오름 → poi_id (전순서 = 결정론).
+    그 요일 휴무는 뺀다(영업정보 없음 = 통과, HC1 과 같은 규칙) — 시각 단위 검증은 하지
+    않으며 그래서 시각도 싣지 않는다(INV-2). 고정 블록 슬롯은 사용자 must-visit 이라
+    제안 대상이 아니다. LLM 호출 0회. 차선책이 없는 슬롯은 키를 만들지 않는다.
+    """
+    index = {p.poi_id: p for p in pool.pois}
+    placed = {s.poi_id for d in solution.days for s in d.slots}
+    fixed = {b.poi_id for d in solution.days for b in d.fixed_blocks}
+    score = {c.poi_id: c.score for c in candidates}
+    spare = tuple({
+        c.poi_id: index[c.poi_id] for c in candidates
+        if c.poi_id in index and c.poi_id not in placed
+        and c.poi_id not in excluded and c.poi_id not in fixed
+    }.values())
+
+    out: dict[str, tuple[SlotAlternative, ...]] = {}
+    for day in solution.days:
+        dow = day.date.weekday()
+        open_today = [p for p in spare if _open_on(p, dow)]
+        for slot in day.slots:
+            here = index.get(slot.poi_id)
+            if here is None or slot.poi_id in fixed:
+                continue  # 풀 밖(고정 블록 유래)·고정 슬롯 — 제안 대상이 아니다
+            ranked = sorted(open_today, key=lambda p, here=here: (
+                p.category is not here.category,
+                -score[p.poi_id],
+                haversine_km(here.coord, p.coord),
+                str(p.poi_id),
+            ))
+            picks = ranked[:limit]
+            if picks:
+                out[f"{day.date.isoformat()}#{slot.poi_id}"] = tuple(
+                    SlotAlternative(poi_id=p.poi_id, rationale=_rationale(p, here))
+                    for p in picks
+                )
+    return out
+
+
+def _open_on(poi: Poi, day_of_week: int) -> bool:
+    """영업정보 없음 = 통과 (HC1 과 같은 "정보 없음은 막지 않는다" 규칙)."""
+    return not poi.open_hours or any(oh.day_of_week == day_of_week for oh in poi.open_hours)
+
+
+def _rationale(alt: Poi, here: Poi) -> str:
+    """사실만 담은 템플릿 — 같은 카테고리면 그 사실을, 아니면 풀(앵커 반경) 안이라는 사실을."""
+    label = _CATEGORY_LABELS[alt.category]
+    return f"같은 {label} 후보" if alt.category is here.category else f"주변 {label} 후보"
