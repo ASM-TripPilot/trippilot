@@ -45,6 +45,7 @@ def _body(**over: object) -> dict:
         "directives": ["INDOOR"],
         "free_text": "비 와서 실내로 바꿔줘",
         "preference_profile": {},
+        "transport_mode": "대중교통",
         "saved_places": [],
         "excluded_poi_ids": [],
         "request_meta": {
@@ -179,3 +180,38 @@ def test_response_carries_no_duration_field() -> None:
 
     assert "duration" not in str(replan_res).lower()
     assert "total_distance_km" in replan_res
+
+
+# ── 이동수단 (후보 풀 반경) ───────────────────────────────────────────
+
+
+def test_transport_mode_reaches_the_assembly_because_it_sets_the_pool_radius() -> None:
+    """이동수단이 없으면 **후보 풀 반경이 틀린다** — 조용히 틀린다.
+
+    `pool_builder` 가 `radius_km[transport]` 로 반경을 잡는데 도보 2km · 대중교통
+    10km · 자차 20km 다(`poi_curation/config.py`). 이 필드가 계약에 없으면 배선이
+    기본값(대중교통)으로 메우고, **도보 여행자에게 10km 밖 후보**가 간다 — 오류도
+    로그도 없이 "제안은 나왔는데 갈 수 없는 곳"이 된다.
+
+    `alternatives` 는 이 필드를 갖고 있었는데 `/replan` 초판에서 빠졌다(2026-09-16 발견).
+    """
+    client, orch = _wired()
+
+    client.post("/ai/v1/itinerary/replan", json=_body(transport_mode="도보"))
+
+    assert orch.seen is not None
+    assert orch.seen.transport_mode == "도보"
+
+
+def test_transport_mode_is_optional_so_older_callers_keep_working() -> None:
+    """후미 선택 필드 — 백엔드가 아직 안 보내도 계약이 깨지지 않는다.
+
+    다만 `None` 이 "대중교통"을 뜻하지는 **않는다**. 값을 못 받은 것과 대중교통을
+    고른 것은 다른 사실이고, 배선이 기본값을 쓸 때 그 사실을 남겨야 한다.
+    """
+    client, orch = _wired()
+
+    body = _body()
+    del body["transport_mode"]
+    assert client.post("/ai/v1/itinerary/replan", json=body).status_code == 200
+    assert orch.seen is not None and orch.seen.transport_mode is None

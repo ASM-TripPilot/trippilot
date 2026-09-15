@@ -463,6 +463,12 @@ class ReplanRequest(BoundaryModel):
     trigger: TriggerSchema | None = None  # 자리만 — 값은 아직 안 온다 (정본 §2)
 
     preference_profile: PreferenceProfileSchema
+    # **후보 풀 반경을 정하는 값이다** — `radius_km` 가 도보 2km · 대중교통 10km ·
+    # 자차 20km 로 갈린다(`poi_curation/config.py`). 없으면 배선이 기본값(대중교통)으로
+    # 메우게 되고, 도보 여행자에게 **10km 밖 후보**를 주면서 아무 신호도 남기지 않는다.
+    # 어휘는 `alternatives` 와 같다(배선의 번역표가 흡수) — "도보"·"대중교통"·"자차".
+    # 예산 등급은 `trip_context.budget_level` 이 이미 갖고 있어 여기 두지 않는다.
+    transport_mode: str | None = None
     saved_places: list[SavedPlaceSchema] = Field(default_factory=list)
     excluded_poi_ids: list[str] = Field(default_factory=list)
     request_meta: RequestMetaSchema

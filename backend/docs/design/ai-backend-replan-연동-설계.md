@@ -130,6 +130,7 @@ class ReplanRequest(BoundaryModel):
     trigger: TriggerSchema | None = None     # 자리만 — §2
 
     preference_profile: PreferenceProfileSchema
+    transport_mode: str | None = None        # 후보 풀 반경을 정한다 — 아래 ⚠
     saved_places: list[SavedPlaceSchema] = []
     excluded_poi_ids: list[str] = []
     request_meta: RequestMetaSchema
@@ -155,6 +156,8 @@ class ReplanSlotSchema(BoundaryModel):
 **`current_slots` 가 두 일을 한다.** KB-1(기존 일정 컨텍스트)이면서 **후보 풀에 합류한다.** 원 일정 POI 가 새 후보와 같은 `PREFERENCE_SCORING` 호출에 들어가므로 **같은 척도로 비교**된다 — "원래 자리보다 나은 것만 바꾼다"가 성립한다. 점수를 백엔드가 저장했다가 돌려주는 안은 기각했다(§9).
 
 **`scope` 와 `locked_blocks` 는 중복이 아니다.** `FULL_DAY` 여도 방문 완료한 곳은 잠긴다(i05 "방문한 3곳 그대로"). `locked_blocks` = 못 건드리는 것, `scope` = 안 간 곳 중 어디까지 건드리나. 둘이 어긋나면 AI 가 잡을 수 있고 프롬프트 문구도 갈린다.
+
+⚠️ **`transport_mode` 누락은 조용히 틀린다** (2026-09-16 추가). `pool_builder` 가 `radius_km[transport]` 로 후보 반경을 잡는데 **도보 2km · 대중교통 10km · 자차 20km** 다(`poi_curation/config.py`). 이 값이 안 오면 배선이 기본값(대중교통)으로 메우고, 도보 여행자에게 **10km 밖 후보**가 간다 — 오류도 로그도 없이 "제안은 나왔는데 갈 수 없는 곳"이 된다. 초판 스키마에서 빠져 있었고 `alternatives` 에는 있던 필드다. 어휘는 `alternatives` 와 같다("도보"·"대중교통"·"자차"). 예산 등급은 `trip_context.budget_level` 이 이미 갖고 있다.
 
 **`free_text` 상한 500 은 DB 와 같은 값이다**(`replan_session.free_text varchar(500)`). 계약이 DB 보다 좁으면 저장된 값이 경계에서 잘린다.
 
