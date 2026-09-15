@@ -68,21 +68,20 @@ _TAG_MAP: Mapping[tuple[str, str], PoiCategory] = {
     ("natural", "peak"): PoiCategory.NATURE,
     ("natural", "beach"): PoiCategory.NATURE,
 }
-# `shop` 은 값이 수백 종이라 키 존재만 본다 — 다만 여행지가 아닌 것을 뺀다.
+# `shop` 은 값이 수백 종이다. 처음엔 "키가 있으면 SHOPPING, 배제 목록만 뺀다"로
+# 갔다가 뒤집었다 — 편의점·차량·미용을 빼도 다이소·안경점·휴대폰·문구·철물이
+# 끝없이 남는다. 배제 목록으로 쫓아가면 끝이 없고, 새 값이 생기면 조용히
+# 새어든다. Overture 와 같은 결로 **채택 목록**으로 간다: 여행자가 일부러
+# 찾아가는 가게만. 실효 건수는 59,221 에서 크게 줄지만 그게 맞다 — 그 대부분은
+# 애초에 여행지가 아니었다.
 _SHOP_KEY = "shop"
-_SHOP_EXCLUDE = frozenset({
-    # **가게가 아닌 것** — 취향이 아니라 오류다. `vacant` 는 OSM 에서 "비어 있는
-    # 점포 자리"를 뜻하는 문서화된 값이고 `no` 는 "가게 아님"의 명시다. 이걸
-    # 통과시키면 TRIP-683 실재 검증이 걸러내려는 바로 그 대상을 수집이
-    # 생산한다 — 유령 POI 를 우리 손으로 만드는 셈이다.
-    "vacant", "no",
-    # 생필품·차량·주거 — 여행자가 일정에 넣을 곳이 아니다
-    "convenience", "supermarket", "car", "car_repair", "car_parts", "tyres",
-    "hardware", "doityourself", "trade", "builder", "electrical", "paint",
-    "funeral_directors", "pawnbroker", "insurance", "estate_agent",
-    "hairdresser", "beauty", "laundry", "dry_cleaning", "optician",
-    "medical_supply", "hearing_aids", "chemist", "pharmacy", "storage_rental",
-    "mobile_phone", "computer", "copyshop", "printing", "locksmith",
+# OSM wiki 에 문서화된 값만 둔다 — `souvenir`·`duty_free`·`ceramics` 는 표준 값이
+# 아니라 넣어봐야 매칭 0건인 죽은 줄이다. 기념품은 `gift`, 면세점은 보통
+# `mall`/`department_store` + `duty_free=yes` 로 태깅된다.
+_SHOP_TRAVEL = frozenset({
+    "gift", "craft", "art", "antiques", "tea",
+    "department_store", "mall", "outlet",
+    "pottery", "jewelry", "fashion_accessories",
 })
 
 _HANGUL = re.compile(r"[가-힣]")
@@ -139,7 +138,7 @@ def map_tags(tags: Mapping[str, str]) -> PoiCategory | None:
     if night_rejected:
         return None
     shop = tags.get(_SHOP_KEY)
-    if shop and shop not in _SHOP_EXCLUDE:
+    if shop in _SHOP_TRAVEL:
         return PoiCategory.SHOPPING
     return None
 
