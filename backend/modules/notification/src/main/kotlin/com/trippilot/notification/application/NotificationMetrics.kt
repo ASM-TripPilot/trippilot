@@ -60,11 +60,22 @@ class NotificationMetrics(
      * 푸시가 **생략된** 수(OBS-U6-03). 발송 실패와 다른 축이다 — 이쪽은 우리가 일부러 안 보낸 것이고,
      * 그 빈도가 곧 조용시간·상한 정책을 조정할 근거가 된다.
      *
-     * ⚠ **종류 토글로 막힌 푸시(`MUTED`)는 여기 없다** — 그건 발송까지 간 뒤의 판정이라
-     * [PUSH_DISPATCH] 의 `outcome=MUTED` 로 센다. 둘을 합쳐 "억제 총량"을 보려면 두 지표를 더해야 한다.
-     *
      * 가르는 기준은 **누구의 뜻인가**다. `MUTED` 는 사용자가 직접 끈 것이라 정책을 바꿀 일이 아니고,
      * 여기 모이는 것들(중복·인앱 꺼짐·상한)은 **우리 판단**이라 빈도를 보고 조정할 대상이다.
+     * 그래서 종류 토글로 막힌 푸시는 여기 없고 [PUSH_DISPATCH] 의 `outcome=MUTED` 로만 센다.
+     *
+     * ## ⚠ 억제 총량은 두 지표를 그냥 더하면 안 된다
+     *
+     * 두 지표는 **다른 질문에 답한다** — [PUSH_DISPATCH] 는 "발송 시도의 결말 분포",
+     * 이쪽은 "우리 정책이 몇 번 물렸나". `RATE_LIMITED` 는 양쪽 모두에 해당해 **두 곳에 다 올라간다**
+     * (정책 판정이면서 동시에 하나의 결말이다). 그냥 더하면 그 사유만 두 번 세어진다.
+     *
+     * ```
+     * 억제 총량 = SUPPRESSED(전부) + PUSH_DISPATCH{outcome=MUTED}
+     * ```
+     *
+     * `DUPLICATE`·`IN_APP_OFF` 는 발송 경로에 닿기 전에 걸러져 [PUSH_DISPATCH] 에 아예 안 나타나므로
+     * 중복이 없다. 새 사유를 넣을 때는 **발송까지 가는 사유인지**를 먼저 보고, 간다면 이 식을 고친다.
      */
     fun suppressed(reason: SuppressReason) {
         registry.counter(SUPPRESSED, "reason", reason.name).increment()
