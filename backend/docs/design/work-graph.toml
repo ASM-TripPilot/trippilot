@@ -33,11 +33,28 @@
 # 간선을 주장만 하고 확인하지 않은 상태가 눈에 보여야 한다. 확인 방법은 역검증과 같다 —
 # **간선을 끊고 후행을 빌드해 실제로 깨지는가.** 안 깨지면 그 간선은 상상이었으니 지운다.
 #
-# 갱신: 2026-09-14 · 실사용 준비 티켓 일괄 발행(TRIP-834·843~850·854~860) 반영. 티켓 없던 노드
+# ## 착수해 보면 노드가 쪼개진다 — 그때 원 노드를 닫고 잔여를 새 노드로 잇는다
+#
+# 한 티켓 안에 **지금 할 수 있는 것과 남을 기다리는 것**이 섞여 있는 일이 잦다. 실측으로 셋이 그랬다 —
+# 836(재계획 재적재는 우리 버그, 문구 채움은 AI 계약 대기) · 834(배선은 코드, 실왕복은 사람·기기) ·
+# B-4(구독은 지금, 컬럼은 채우는 쪽이 생긴 뒤). 섞인 채로 두면 **티켓이 영원히 안 닫히고**, 그래프는
+# "아직 아무것도 안 했다"고 말한다. 쪼개서 된 쪽을 닫고 잔여를 새 노드(`REMINDER-COPY-AI`·
+# `PUSH-LIVE-CHECK`)로 잇는다 — 닫은 노드의 note 에 **누가 잇는지**를 반드시 적는다.
+#
+# ## 스택 PR 은 CI 가 자동으로 안 붙는다 (운영 주의)
+#
+# 워크플로 트리거가 `pull_request: branches: [develop]` 이라 **base 가 develop 이 아닌 PR** 은
+# 체크가 하나도 안 달린다. 위 바퀴들처럼 PR 을 쌓으면 대부분이 여기 해당한다. 수동으로 태운다:
+# `gh workflow run backend-ci.yml --ref <branch>`. 이걸 모르면 "체크 없음"을 통과로 읽는다.
+#
+# 갱신: 2026-09-15 · a~g 바퀴 실행분 반영 — 완료 7건(843·844·846·848·857·859계약·재계획어휘)에
+# 더해, 쪼개서 닫은 것 셋(845·834·836)까지 29건이 done 이다. 남은 우리 몫 12건 중 **넷은 우리가
+# 못 여는 문(849 날씨키 403 · 847 법무·신고 · 850 실물 산출물 대기 · PUSH-LIVE-CHECK 실기기)** 이고,
+# 지금 코드로 착수 가능한 것은 856(역방향 토큰)·858(Apple JWKS)·REPLAN-BOUNDARY 쪽이다.
+#
+# 이전 갱신: 2026-09-14 · 실사용 준비 티켓 일괄 발행(TRIP-834·843~850·854~860) 반영. 티켓 없던 노드
 # 넷이 티켓을 얻었고(APPLE-JWKS→858 · BACKEND-AI-AUTH→856 · TRIP-361-CONTRACT→859 ·
 # PUSH-ANDROID-CHANNEL→860), AI-ALTERNATIVES 의 질문은 전용 재계획 경계 설계 확정으로 해소됐다.
-# 신규 노드의 진짜 제약은 여전히 공유 자원이다 — notification 삼형제(843·844·845)가
-# PushDispatchService·OutboxRelay 를, 위치 동의 짝(846·857)이 같은 경계 결정을 다툰다.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 우리 몫
@@ -347,6 +364,19 @@ note = """
 `ai-backend-alternatives-연동-설계.md` §5 전제 2 가 범위 밖으로 명시하며 별건으로 끊자고 제안한 것.
 붙일 때 fail-closed 로 가면 토큰 미설정 환경에서 generate 까지 죽는다 — 전환 순서 설계가 본체다.
 SECURITY 계열. 2026-09-14 TRIP-856 으로 티켓화 — 기본안은 로컬 경고+진행, 배포 프로파일만 강제.
+
+**우리 쪽 절반은 했다(2026-09-15, PR #533). 노드는 열어 둔다 — 채널이 아직 무인증이라서다.**
+일정·회고 클라이언트가 `X-Service-Token` 을 싣는다(재계획·검증·수리·근거도 같은 클라이언트를
+탄다). 시크릿은 `SERVICE_AUTH_TOKEN` 하나를 양방향 공용으로 썼다 — 갈라 두면 한 방향만 세팅된
+절반 설정이 생긴다. 토큰이 비면 헤더를 **안 싣고 호출은 그대로 나간다**(fail-open); 잠그면
+토큰 없는 로컬·CI 에서 generate 가 통째로 죽는다.
+
+**남은 것은 상대의 수신 검증뿐이다** — `ai/src/trippilot/api/` 에 401·Bearer·헤더 검사가 하나도
+없다(실측). 순서가 한 방향이라 클라이언트가 먼저 싣기 시작해야 상대가 켤 수 있고, 그래서
+우리 쪽을 먼저 했다. AI 팀이 켜면 이 노드가 닫힌다.
+
+**안 붙인 곳 하나**: `IntegrationController` 의 `{ai.url}/health` 핑. 헬스는 관례상 무인증이라
+뺐지만, 상대가 전 경로에 일괄로 걸면 이 핑이 먼저 깨진다(증상 = `/integration` 이 degrade).
 """
 
 [[nodes]]
@@ -448,13 +478,24 @@ note = """
 단정하지 말 것: 재현 없이 "타임아웃도 허용"으로 단언을 넓히면 **연결 거부와 타임아웃을 가르는
 이 테스트의 목적 자체가 사라진다**(주석 44행이 그 구분을 명시한다). accepter 준비를 래치로
 동기화한 뒤 부하를 흉내 내 재현하는 것이 먼저다.
+
+**재현 시도 1 실패 — 가설 하나가 지워졌다(2026-09-15).** 같은 소켓 시나리오를 한 JVM 안에서
+**1200회 반복**하며 CPU 5코어를 점유시켜 돌렸다. 결과는 **1200/1200 전부 정상 타임아웃** —
+RST 가 한 번도 안 나왔다. 즉 **"클라이언트 쪽 CPU 부하가 accepter 기동을 밀어내 RST 가 된다"는
+가설은 틀렸다.** 단순 부하로는 못 만든다.
+
+남은 가설은 **전체 빌드에만 있는 조건** 쪽이다 — 테스트 JVM 여러 개가 동시에 돌며 소켓·포트
+테이블을 함께 쓰는 상황(내 하네스는 단일 JVM·순차 소켓이었다). 다음 시도는 부하가 아니라
+**병렬 JVM 과 소켓 고갈**을 흉내 내야 한다.
+
+여전히 단언을 넓히지 말 것. 재현 없이 "타임아웃도 허용"으로 가면 이 테스트의 목적이 사라진다.
 """
 
 [[nodes]]
 id = "TRIP-361-CONTRACT"
 ticket = "TRIP-859"
 title = "목적지 계약을 코드로 전환 — 동명이지역 임의 선택 해소 (TRIP-361 후속)"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/docs/design/openapi.yaml",
@@ -462,6 +503,8 @@ touches = [
   "backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/application/RegionLookupService.kt",
 ]
 note = """
+**완료(2026-09-15, PR #530).** 목적지 regionCode 수용. 티켓의 '임의 선택' 서술은 낡았다(singleOrNull 로 이미 비우고 있었다) — 실제 구멍은 **코드를 보낼 경로가 없던 것**. '정하지 못했다'(비움)와 '틀린 것을 받았다'(400)를 가른다.
+
 TRIP-361 이 내부 정규화까지만 하고 남긴 몫이다.
 
 **지금 조용히 틀리는 자리**: RegionLookupService.centerOf 가 `findExact(name).firstNotNullOfOrNull`
@@ -715,15 +758,55 @@ refresh_session 은 즉시 폐기라 예약 파기가 아니고, deletion_schedu
 # ─────────────────────────────────────────────────────────────────────────────
 
 [[nodes]]
+id = "REMINDER-COPY-AI"
+ticket = "TRIP-836"
+title = "리마인드 문구 AI 채움 — 채움 서비스·wire·컬럼 (836 잔여)"
+status = "todo"
+migration = true
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application",
+  "backend/app/src/main/resources/db/migration",
+]
+note = """
+**836 을 셋으로 쪼갠 나머지.** 재계획 구독(실제 버그)은 PR #528 로 끝났고, 여기 남은 것은
+문구 채움 서비스 + AI wire + `notification_schedule.title/body` 컬럼·발화 분기다.
+
+**계약 대기**: `ai/docs/openapi.json` 에 `notification/copies` 경로가 **아직 없다**(2026-09-15 실측).
+컬럼·발화 분기만 먼저 넣으면 채우는 쪽이 없어 **항상 null→상수라 동작 변화가 0** 인 죽은 코드가 된다.
+"""
+
+[[nodes]]
+id = "PUSH-LIVE-CHECK"
+ticket = "TRIP-834"
+title = "푸시 실기기 왕복 1회 — 사람이 켜서 태운다"
+status = "todo"
+migration = false
+touches = []
+note = """
+배선·통로는 PR #531 로 끝났다. 남은 것은 **사람과 기기가 필요한 부분**이다 —
+Expo 토큰 등록 → `PUSH_MODE=expo` 기동 → 즉시 알림·예약 리마인드 각 1회 → 기기에서 눈으로 확인.
+
+회고 AI 선례(#490)처럼 **켜 봐야 드러나는 값**이 있을 수 있다. 실측 후 고칠 값이 나오면 별도 노드로.
+"""
+
+[[nodes]]
 id = "TRIP-834"
 ticket = "TRIP-834"
 title = "푸시 실 왕복 1회 — 켜 본 적이 없어서 발송기가 도는지 아무도 모른다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "docker-compose.yml",
 ]
 note = """
+**절반 완료 → 이 노드는 닫는다(2026-09-15).** 배선·통로·지표 분리는 PR #531. **남은 실기기 왕복은 `PUSH-LIVE-CHECK` 가 잇는다** — 사람과 기기가 필요해 성격이 다르다.
+
+**절반 완료(2026-09-15, PR #531) — 실기기 왕복은 남는다.** 지표가 "성공률 100%" 로 거짓말하던 것을
+막고(`delivery=real|none`) `PUSH_MODE` 통로를 열었다. 기본 발송기는 아무 데도 안 보내면서 SENT 를
+보고하는데(그 판단은 옳다 — 실패로 보고하면 진짜 실패가 묻힌다) 지표가 그것을 실발송으로 그렸다.
+**남는 것**: 실기기 1회 왕복 — Expo 토큰·실기기가 필요해 사람이 켜서 태워야 한다(죽은 토큰 무효화·
+다기기·긴급도 3단·실측값).
+
 코드 작업이 아니라 검증 작업이다 — mode=expo 로 켜고 실기기 1대에 실제로 알림이 뜨는 것을
 확인하고 실측값을 남긴다. 회고 AI 실왕복(REFLECTION-LIVE-CHECK)이 마감 8s 부족을 드러낸 선례.
 FE 토큰 등록이 미배선(TRIP-835)이라 **수동 토큰 등록으로 진행 가능** — 서버 경로 검증엔 충분하다.
@@ -733,7 +816,7 @@ FE 토큰 등록이 미배선(TRIP-835)이라 **수동 토큰 등록으로 진�
 id = "TRIP-836"
 ticket = "TRIP-836"
 title = "리마인드 문구 AI 채움 — 예약 title/body·채움 서비스·발화 분기 + 재계획 재적재"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application",
@@ -744,13 +827,17 @@ note = "팀 발행 티켓(2026-09-12경). notification application 층을 만진
 id = "TRIP-843"
 ticket = "TRIP-843"
 title = "U6 관측 지표 4종 — 메트릭 0건이라 '관측으로 만족한다'는 근거가 비어 있다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt",
   "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application",
 ]
 note = """
+**셋으로 쪼개 이 노드는 닫는다(2026-09-15).** 재계획 구독(실제 버그)은 PR #528 로 완료. **문구 채움·wire·컬럼은 `REMINDER-COPY-AI` 가 잇는다**(AI 계약 대기).
+
+**완료(2026-09-15, PR #524).** 지표 4종 계측. 릴레이 지연은 앱 시계가 아니라 **DB 가 계산한다** — 두 시계 차이가 섞이면 음수가 되고 Micrometer 가 조용히 버려 지표가 빈다. 배선을 따로 잠갔다(지표 클래스만 테스트하면 계측 호출을 지워도 안 깨진다).
+
 OBS-U6-01~04(릴레이 지연·푸시 성패·억제 건수·미읽음 누적)가 정본에 있는데 MeterRegistry 사용처
 0건(2026-09-12 grep). REL-U6-03("침묵 실패 금지는 관측으로 만족")의 근거가 이것 없이는 비어 있다.
 QUIET-HOURS 와 상한값 조정의 선행이기도 하다. 수집 경로(Micrometer OTLP push)는 기존재 — 계측만.
@@ -760,12 +847,14 @@ QUIET-HOURS 와 상한값 조정의 선행이기도 하다. 수집 경로(Microm
 id = "TRIP-844"
 ticket = "TRIP-844"
 title = "푸시 발송량 소프트 상한 — 값은 NFR 에 이미 있는데 로직이 없다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application/PushDispatchService.kt",
 ]
 note = """
+**완료(2026-09-15, PR #525).** 시간 10건·일 50건. 값은 NFR 에 이미 있었고 **로직이 없던 것**이라 미결 표(O-U6-2)를 종결로 정정했다. SYSTEM 도 상한을 탄다 — 면제를 두면 폭주 경로가 그리로 열린다.
+
 O-U6-2("값이 없다")는 낡았다 — NFR COST-U6-01 이 계정당 시간 10·일 50 으로 이미 확정.
 미결 표가 NFR 보다 먼저 쓰여 갱신이 안 된 것. **머지 후 미결 표를 종결로 정정할 것.**
 초과분은 푸시만 생략, 인앱함엔 남는다(COST-U6-02). 843 과 같은 파일을 만진다.
@@ -775,13 +864,15 @@ O-U6-2("값이 없다")는 낡았다 — NFR COST-U6-01 이 계정당 시간 10�
 id = "TRIP-845"
 ticket = "TRIP-845"
 title = "릴레이 재시도 백오프 없음 + 폴링 주기 정본 드리프트(문서 5s/코드 2s)"
-status = "todo"
+status = "done"
 migration = true
 touches = [
   "backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt",
   "backend/app/src/main/resources/db/migration",
 ]
 note = """
+**완료(2026-09-15, PR #522 머지).** 재시도가 20초에 소진되던 것을 2→4→8…초 백오프(5분 상한, 총 창 ~13분)로. 폴링 주기 드리프트(문서 5s/코드 2s)는 코드를 정본으로 올려 NFR 을 고쳤다. 역검증이 **내 테스트의 결함**을 잡았다 — 간격 비교를 서로 비교로 쓰면 상수 지연에서도 우연히 통과한다.
+
 REL-U6-01 은 지수 백오프인데 코드는 실패 후 다음 폴링(2s)에 즉시 재집기 — 죽은 상대를 20초에
 10번 때리고 포기한다. 기본안은 next_attempt_at 컬럼(마이그레이션). 843 과 OutboxRelay 를 다툰다.
 """
@@ -790,13 +881,15 @@ REL-U6-01 은 지수 백오프인데 코드는 실패 후 다음 폴링(2s)에 �
 id = "TRIP-846"
 ticket = "TRIP-846"
 title = "위치 동의 철회해도 이미 저장된 EXIF 좌표가 남는다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/auth/src/main/kotlin/com/trippilot/auth/application/LocationConsentService.kt",
   "backend/modules/archive/src/main/kotlin/com/trippilot/archive/application/VisitRecordService.kt",
 ]
 note = """
+**완료(2026-09-15, PR #527).** 철회 시 EXIF 파기. auth→archive 동기 호출은 **순환(R1)** 이라 이벤트가 유일한 길. 파기 범위 조회를 목록 파사드와 나눈 이유: 그쪽은 limit·삭제 필터가 있어 파기에 쓰면 그 아래 좌표가 조용히 남는다.
+
 파기(INV-L4)가 scope=gps_track 사실 기록만 하고 끝난다 — U1 시점엔 지울 데이터가 없어 옳았는데
 U5 가 exif_lat/lng 를 만들며 파기 범위가 갱신되지 않았다. 게이트는 잘 돌아서 더 안 보였다.
 모듈 경계상 철회 이벤트 → archive 구독이 기본안(아웃박스 기존재). **857 과 같은 경계 결정을
@@ -813,6 +906,10 @@ touches = [
   "backend/app/src/main/resources/db/migration/R__seed_reference_data.sql",
 ]
 note = """
+**축소·대기(2026-09-15).** 실배포 전환으로 무게가 달라졌다 — 자체 초안으로는 부족하고 **법무 검토가
+선행**이다. 우리 몫은 `GPS_RECORDING` 본문(사진 EXIF 명시) 하나로 좁히고, 나머지 5종은 주체가 정해질
+때까지 대기. 배포 시 **위치기반서비스사업 신고**(방통위)도 함께 걸린다 — 코드로 못 푸는 선행이다.
+
 O-U5-8(EXIF 를 GPS 동의로 게이팅하는 것이 목적 범위에 맞는가)을 따지러 문구를 찾았더니 문구가
 없었다 — 질문이 성립하지 않았다. 고지 문구에 사진 EXIF 를 명시하면 코드 무변경으로 해소.
 **아직 사용자가 없는 지금이 재동의 없이 고칠 수 있는 유일한 시점.** 나머지 5종의 소유(법무 vs 팀)는
@@ -823,12 +920,14 @@ O-U5-8(EXIF 를 GPS 동의로 게이팅하는 것이 목적 범위에 맞는가)
 id = "TRIP-848"
 ticket = "TRIP-848"
 title = "환각 금지(BR-U5-31)가 규칙으로만 있다 — AI 회고 카드 장소를 방문 실적과 대조"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/application/ReflectionService.kt",
 ]
 note = """
+**완료(2026-09-15, PR #529).** 환각 대조. 티켓 문면(장면의 장소가 방문 목록에 있는가)은 **상대 계약에 장소 필드가 없어** 불가능 — 판정을 뒤집어 '안 갔다고 확실히 아는 이름'(건너뛴 방문지)을 찾는다. payload 구조를 읽지 않아 템플릿이 바뀌어도 검사가 무력화되지 않는다.
+
 코덱은 cover.title·JSON 형식만 본다(의도 — 카드 내부 미모델링, DEC-U5-14). mode=rule 인 지금은
 구멍이 아니지만 http 로 켜는 순간 안 간 장소가 장면에 실려도 아무도 못 잡는다. 장소명만 방문
 목록과 대조, 불일치 시 규칙 카드 강등 + 관측. **회고 AI 를 켜기 전에 들어가야 한다** — 판정
@@ -846,6 +945,12 @@ touches = [
   "backend/app/src/main/resources/application.yml",
 ]
 note = """
+**차단(2026-09-15 실측) — 키가 없다.** `.env` 의 `WEATHER_API` 로 기상청 단기예보를 호출하면 **403** 이다.
+키가 22자 평문인데 공공데이터포털 인증키는 보통 40자 이상이라 **다른 서비스 키**로 보인다.
+티켓도 키 발급을 선행 1번으로 잡았다. 공공데이터포털에서 *기상청_단기예보 조회서비스* 활용신청 후
+일반 인증키(Decoding)를 `.env` 에 넣으면 재개한다. 격자 변환식만 먼저 넣는 것도 가능하나
+**쓰는 데가 없으면 죽은 코드**라 함께 미뤘다.
+
 어댑터가 Fake 하나뿐이고 matchIfMissing=true 라 실사용 기본도 가짜다 — 날씨 트리거의 근거가
 격자 키 해시값이다. 모드 스위치 6종 중 유일하게 **켤 실물이 없는** 항목. 공공데이터포털 키 발급
 (외부·시간 소요)을 먼저 걸어 둘 것. 선례는 KakaoRegionGeocodeAdapter(모드 조건+Announcer+기동 차단).
@@ -890,12 +995,14 @@ NEUTRAL_PREFERENCES 로 덮을 이유가 조립엔 없다). 남은 것: 어댑�
 id = "REPLAN-VOCAB"
 ticket = "TRIP-855"
 title = "FE↔AI 재계획 어휘 번역표 + slot_candidates reason 하드코딩 해제 (B-2·B-6)"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
 ]
 note = """
+**완료(2026-09-15, PR #520).** 머지됨. 슬롯 후보의 reason 하드코딩 해제 + 번역표. 실 왕복에서 효과 확인 — reason=WEATHER 를 보내자 후보가 전부 실내로 바뀌었다.
+
 번역은 어댑터 한 곳(설계 §3). 같은 번역표를 쓰는 별건 — slot_candidates 의 reason="none"
 하드코딩(B-6)도 여기서 해제한다. REPLAN-BOUNDARY 와 같은 파일을 다툰다 — 먼저 손댄 쪽이 이긴다.
 """
@@ -904,13 +1011,15 @@ note = """
 id = "TRIP-857"
 ticket = "TRIP-857"
 title = "사진 EXIF 좌표 저장을 위치 법정 로그(COLLECTION)에 남긴다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/archive/src/main/kotlin/com/trippilot/archive/application/VisitRecordService.kt",
   "backend/modules/auth/src/main/kotlin/com/trippilot/auth/application/LocationConsentService.kt",
 ]
 note = """
+**완료(2026-09-15, PR #526).** EXIF 수집 사실을 COLLECTION 으로. 판정을 요청이 아니라 **저장 결과**로 한다 — 동의 없으면 좌표가 버려지고, EXIF 없는 사진은 모을 게 없다. 둘 다 로그를 남기면 확인자료가 거짓이 된다.
+
 스키마(V1.3)에 COLLECTION 이 정의돼 있는데 위치를 실제로 보관하는 archive 가 법정 로그를 한 번도
 안 부른다(2026-09-12 grep 0건). 좌표가 실제 저장될 때만 남긴다 — 동의 없어 버린 경우는 수집이
 아니다. 원시 좌표 미포함(기존 규약). **846 과 같은 경계 결정(auth↔archive 통로) 공유.**
@@ -944,6 +1053,40 @@ note = "계약 합의문(ai-backend-replan-연동-설계.md §7 AI 측 표). 양
 
 # ── 간선(2026-09-14 추가분) — 티켓·설계 원문으로 확인한 것만 ──────────────────
 
+[[nodes]]
+id = "REGION-CODE-ANCHOR"
+ticket = ""
+title = "받은 목적지 코드로 앵커를 잡는다 — 이름 임의 선택의 나머지 절반 (TRIP-859 후속)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/trip/src/main/kotlin/com/trippilot/trip/api",
+  "backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/api/RegionLookupFacade.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/GenerateItineraryService.kt",
+]
+note = """
+**티켓이 없다.** TRIP-859(PR #530)가 목적지 코드를 **받아 저장하는 데까지** 했고, 이것이 그 코드를
+실제로 쓰게 만드는 나머지다. 검수(2026-09-15)에서 드러났다 — 티켓 제목이 "동명이지역 임의 선택
+해소"인데 정작 임의로 고르는 자리가 안 닫혀 있었다.
+
+**남은 구멍의 정확한 위치**: `GenerateItineraryService.kt:307` 의
+`destinations.firstNotNullOfOrNull { regions.centerOf(it) }` → `findExact(이름).firstNotNullOfOrNull`.
+부산 중구 여행이 regionCode 를 제대로 들고 있어도 **앵커는 서울 중구 좌표를 집을 수 있다.**
+거점(숙소)이 없는 날의 폴백이라 범위는 좁지만, 지어낸 좌표가 아니라 **다른 지역의 좌표**라
+증상이 "일정이 엉뚱한 동네에서 돈다"로 나온다.
+
+**왜 #530 에 못 넣었나 — 3개 모듈이다.**
+1. `TripGenerationContext.destinations` 가 `List<String>`(이름뿐)이라 trip 의 `..api..` 계약을 바꿔야 한다
+2. place-data 에 코드로 중심을 찾는 파사드를 연다(`centerOf` 는 이름만 받는다)
+3. itinerary-generation 의 앵커 조립이 코드를 먼저 보고, 없을 때만 이름으로 떨어진다
+
+**이름 정합 검사는 대안이 아니다.** 서버에 정본 표시명이 없어(`GET /regions` 가 `name`·`sidoName` 을
+따로 주고 표시는 클라가 조립) 이름으로 코드를 검증하면 **같은 이름·다른 시도**를 원리적으로 못 가른다 —
+`PoiEntity` 주석의 "시군구명은 유일하지 않다"와 같은 결론이다. 코드를 믿는 것만이 해소다.
+
+선행: TRIP-859(PR #530) 머지.
+"""
+
 [[edges]]
 from = "AI-REPLAN"
 to = "REPLAN-BOUNDARY"
@@ -964,3 +1107,10 @@ to = "QUIET-HOURS"
 kind = "관측선행"
 verified = false
 reason = "TRIP-843 원문 「야간 조용시간·상한 조정이 '관측 후 결정'으로 미뤄져 있다 — 이 티켓이 그 둘의 선행」. 끊으면 빌드가 깨지는 종류가 아니라 결정 근거가 사라지는 종류다."
+
+[[edges]]
+from = "TRIP-361-CONTRACT"
+to = "REGION-CODE-ANCHOR"
+kind = "계약선행"
+verified = false
+reason = "코드를 받는 경로(#530)가 없으면 앵커가 쓸 값 자체가 안 들어온다. 저장은 되지만 항상 null 이라 후행이 동작을 못 바꾼다."
