@@ -9,7 +9,10 @@ dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.springBoot.get()}"))
 
     implementation(project(":common:core"))
+    implementation(project(":modules:place-data"))   // R1: 지역 대표 좌표만 — placedata.api(RegionLookupFacade)
     implementation(libs.spring.boot.starter.data.jpa)
+    implementation(libs.spring.boot.starter.web)     // 실 기상청 어댑터의 RestClient (TRIP-849)
+    implementation(libs.jackson3.module.kotlin)      // 응답 JsonNode 파싱 (SB4 기본 = Jackson 3)
     implementation(libs.kotlin.reflect)
 
     testImplementation(project(":common:test-support"))
