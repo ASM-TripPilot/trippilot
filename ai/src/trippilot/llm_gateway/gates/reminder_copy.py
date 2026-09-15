@@ -45,9 +45,24 @@ _FORBIDDEN_TOKENS = ("분", "시간", "시각", "duration")
 # 모델 실패와 구분되지 않는다).
 _PAREN = re.compile(r"[\(（][^)）]*[\)）]")
 
+# 괄호 없이 뒤에 붙는 로마자 표기("사라오름 전망대 Sara Observatory"). Overture·OSM
+# 출처가 이 관행을 쓴다 — 괄호 안에 넣는 TourAPI 와 다르다. 모델은 한국어 부분만
+# 쓰므로 이것도 인정하지 않으면 그 출처의 장소가 든 날이 통째로 드롭된다.
+_TRAILING_LATIN = re.compile(r"\s+[A-Za-z][A-Za-z'&.\- ]*$")
+_HANGUL = re.compile(r"[가-힣]")
+
 
 def _display_form(name: str) -> str:
-    return _PAREN.sub("", name).strip()
+    """사람이 문구에 쓸 법한 표시형 — 괄호 부기와 뒤따르는 로마자를 뗀다.
+
+    로마자 제거는 **한글이 남을 때만** 한다. "Paris Baguette Cafe" 처럼 라틴 문자가
+    본명인 곳까지 깎으면 이름이 사라진다.
+    """
+    stripped = _PAREN.sub("", name).strip()
+    without_latin = _TRAILING_LATIN.sub("", stripped).strip()
+    if without_latin and _HANGUL.search(without_latin):
+        return without_latin
+    return stripped
 
 
 @dataclass(frozen=True, slots=True)

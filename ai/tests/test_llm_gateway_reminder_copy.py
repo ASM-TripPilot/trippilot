@@ -179,3 +179,35 @@ def test_unrelated_declared_place_still_dropped() -> None:
         ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
     )
     assert out.value is None and out.drop_event is not None
+
+
+def test_trailing_romanization_may_be_dropped_in_body() -> None:
+    """괄호 없이 뒤에 붙는 로마자도 본문에서 뺄 수 있다 — Overture·OSM 출처의
+    표기 관행(`사라오름 전망대 Sara Observatory`)이라 인정하지 않으면 그 출처의
+    장소가 든 날이 통째로 드롭된다."""
+    ctx = ReminderCopyContext(allowed=("사라오름 전망대 Sara Observatory",), forbidden=())
+    out = ReminderCopyGate().apply(
+        json.dumps({"title": "오늘의 한라산", "body": "사라오름 전망대에 올라 풍경을 담아보세요",
+                    "places": ["사라오름 전망대 Sara Observatory"]}, ensure_ascii=False),
+        ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
+    )
+    assert out.error is None and out.value is not None
+
+
+def test_latin_only_name_is_not_stripped_away() -> None:
+    """라틴 문자가 본명인 곳까지 깎으면 이름이 사라진다 — 본문이 그 이름을
+    써야만 통과한다."""
+    ctx = ReminderCopyContext(allowed=("Paris Baguette Cafe",), forbidden=())
+    gate = ReminderCopyGate()
+    ok = gate.apply(
+        json.dumps({"title": "오늘의 신제주", "body": "Paris Baguette Cafe에서 아침을 챙기세요",
+                    "places": ["Paris Baguette Cafe"]}, ensure_ascii=False),
+        ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
+    )
+    assert ok.value is not None
+    bad = gate.apply(
+        json.dumps({"title": "오늘의 신제주", "body": "Paris에서 아침을 챙기세요",
+                    "places": ["Paris Baguette Cafe"]}, ensure_ascii=False),
+        ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
+    )
+    assert bad.value is None
