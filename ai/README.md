@@ -180,7 +180,7 @@ Fast Path 대상: 일정 조회, 상태 확인, POI 단일 조회, 확인/취소
 
 - **패턴**: Generation (백지에서 새로 만들기)
 - **흐름**: (오케스트레이터가 수집·소화한) 후보 풀·페르소나·날씨·행사 재료 → 게이트웨이 선호 점수(실패·시한 부족 시 규칙 점수) → 어셈블리 `solve` → 설명 생성
-- **코드**: `agents/schedule/agent.py` — `ScheduleAgent.run(ScheduleTask) → GenerationOutcome`. 오케스트레이터(`orchestrator/itinerary_orchestrator.py`)가 소유 검증·시한 배분·`InfoCollector` 수집을 끝내고 `ScheduleTask` 봉투로 넘긴다. 어셈블리 엔진(`assembly_engine/`)은 독립 층 — 에이전트는 `solve()` 를 부를 뿐이다
+- **코드**: `agents/schedule/agent.py` — `ScheduleAgent.run(ScheduleTask) → GenerationOutcome`. 코디네이터(`orchestrator/schedule_coordinator.py`)가 소유 검증·시한 배분·`InfoCollector` 수집을 끝내고 `ScheduleTask` 봉투로 넘긴다. 어셈블리 엔진(`assembly_engine/`)은 독립 층 — 에이전트는 `solve()` 를 부를 뿐이다
 
 ### PlanBAgent — 변수 대응 비서 (RAG 기반)
 

@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from types import MappingProxyType
 
 from trippilot.agents.planb.kb_retrieval import (
@@ -50,6 +50,7 @@ from trippilot.llm_gateway.workers.alternative_selection import (
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.kb import KbHit, KbKind
 from trippilot.domain.llm import AlternativePick, CandidatePool, ScoredPoi
+from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.poi import PoiCategory
 from trippilot.domain.trigger import TriggerParams
 from trippilot.ports.embedding_port import EmbeddingPort
@@ -182,6 +183,19 @@ class PlanBRagRequest:
     # 유도한다 — 게이트웨이 기본 2.5s 는 즉답성 feature 기준이라 상위 티어에는 짧다
     # (실측 gpt-5.6-sol 5.1s → 100% 타임아웃). None 이면 게이트웨이 기본.
     deadline_ms: int | None = None
+    # 재계획 시점 실측 강수확률 {날짜: %} — `reason` 라벨을 **대체하지 않는다**.
+    # 라벨은 백엔드가 내린 트리거이고 이미 사용자 화면에 뜬 문구라("비 예보로 일정
+    # 변경 제안"), 우리가 재서 낮다고 야외를 안 내리면 화면과 모순된다. 실값은 상황
+    # 컨텍스트로만 들어가 **정도**를 더한다 (팀 결정 2026-09-15 "replan 은 무조건 날씨").
+    # 값은 **일 단위 대표값**(어댑터가 시간별을 일 최댓값으로 접는다) — 오후 재계획에
+    # "오늘 80%"는 아침에 그친 비일 수 있다. 시간 단위 포트는 후속이고 그전까지
+    # 과신하지 않는다. 빈 dict = 무보정(미등록·조회 실패 포함).
+    rain_prob_by_date: Mapping[date, int] = field(default_factory=dict)
+    # 확정 취향 프로필 (`ContextResolver` 재조회, BR-U4-07) — KB-2 벡터 검색과 **다른
+    # 출처**다. KB-2 는 저장 장소·메모 임베딩이고 이쪽은 취향·동행·예산 확정값이라,
+    # 합치지 않고 persona_context 에 **먼저** 놓는다(확정값이 검색 발췌보다 앞).
+    # None = 무보정 (미수집·비가용) — 종전처럼 KB 발췌만 쓴다.
+    persona: "PersonaSummary | None" = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -446,8 +460,10 @@ class PlanBAgent:
                     reason=request.reason,
                     schedule_context=_with_reasons(
                         _join(context.schedule), request.affected_reasons),
-                    situation_context=_join(context.situation),
-                    persona_context=_join_persona(context.persona, request.saved_places),
+                    situation_context=_with_observed_rain(
+                        _join(context.situation), request),
+                    persona_context=_join_persona(
+                        context.persona, request.saved_places, request.persona),
                     max_alternatives=self._cfg.max_alternatives,
                     excluded_poi_ids=request.excluded_poi_ids,
                 ),
@@ -564,9 +580,60 @@ def _join_saved(saved_places: Sequence["SavedPlace"]) -> str:
     )
 
 
-def _join_persona(hits: Sequence[KbHit], saved_places: Sequence["SavedPlace"]) -> str:
-    """LLM persona_context — 봉투 줄이 먼저, 그 뒤 KB-2 검색 발췌."""
-    return "\n".join(part for part in (_join_saved(saved_places), _join(hits)) if part)
+def _with_observed_rain(situation_context: str, request: "PlanBRagRequest") -> str:
+    """KB-3 상황 발췌 뒤에 **실측 강수확률 한 줄**을 덧댄다 (팀 결정 2026-09-15).
+
+    왜 여기인가: 관측된 날씨는 "상황 대응 지식"과 같은 성격이라 situation 자리가 맞고,
+    후보 자격(INV-1)·조견표(`_DEMOTED_BY_REASON`)·프롬프트 yaml 을 건드리지 않는다.
+    **라벨을 대체하지 않는다** — `reason` 은 백엔드 트리거이자 사용자 화면 문구이므로
+    실값이 낮게 나와도 야외 후순위 규칙은 그대로다. 실값은 정도만 더한다.
+
+    일 단위 대표값임을 문장에 밝힌다 — 모델이 "오후 3시 현재"로 오해하지 않게.
+    빈 값이면 아무것도 덧대지 않는다(무보정 = 종전과 동일 문자열).
+    """
+    if not request.rain_prob_by_date:
+        return situation_context
+    lines = []
+    if request.rain_prob_by_date:
+        rain = " · ".join(
+            f"{d.isoformat()} {p}%"
+            for d, p in sorted(request.rain_prob_by_date.items())
+        )
+        lines.append(f"[관측 강수확률 — 그날 대표값(시간대 해상도 없음)] {rain}")
+    observed = "\n".join(lines)
+    return f"{situation_context}\n{observed}" if situation_context else observed
+
+
+def _join_persona(
+    hits: Sequence[KbHit],
+    saved_places: Sequence["SavedPlace"],
+    profile: "PersonaSummary | None" = None,
+) -> str:
+    """LLM persona_context — **확정 프로필 → 봉투 줄 → KB-2 검색 발췌** 순.
+
+    확정 프로필(`ContextResolver` 재조회)이 맨 앞인 이유: 검색 발췌는 유사도로
+    끌어온 참고 문장이고, 프로필은 사용자가 실제로 고른 값이다. 순서가 곧 우선순위다.
+    None 이면 종전과 같은 두 줄 조립 — 무보정이 정직한 값이다.
+    """
+    return "\n".join(
+        part for part in (
+            _join_profile(profile), _join_saved(saved_places), _join(hits)
+        ) if part
+    )
+
+
+def _join_profile(profile: "PersonaSummary | None") -> str:
+    """확정 취향 프로필 → 한 줄. 값이 없는 축은 적지 않는다(지어내기 금지)."""
+    if profile is None:
+        return ""
+    parts = []
+    if profile.taste_tags:
+        parts.append("취향 " + "·".join(t.value for t in profile.taste_tags))
+    if profile.companion is not None:
+        parts.append(f"동행 {profile.companion.value}")
+    if profile.budget is not None:
+        parts.append(f"예산 {profile.budget.value}")
+    return f"[확정 프로필] {' · '.join(parts)}" if parts else ""
 
 
 def _join(hits: Sequence[KbHit]) -> str:

@@ -1,6 +1,6 @@
 """ScheduleAgent 단독 계약 — 오케스트레이터 없이 `run(ScheduleTask)` 만으로 (agents/schedule/).
 
-파이프라인 e2e·폴백 계단·시한 배분은 `test_itinerary_orchestrator.py` 가 오케스트레이터
+파이프라인 e2e·폴백 계단·시한 배분은 `test_schedule_coordinator.py` 가 코디네이터
 경유로 전부 덮는다. 여기서는 **추출로 새로 생긴 경계**만 증명한다:
   ① run()은 예외를 던지지 않는다 — 어셈블리 공급자가 터져도 FAILED + 에이전트 이름의
      error 접두사로 수렴 (DL-5·INV-4)
@@ -33,7 +33,7 @@ from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_llm import FakeLlm
 from tests.fakes.in_memory_poi import InMemoryPoi
 from tests.fakes.in_memory_trace import InMemoryTrace
-from tests.test_itinerary_orchestrator import (
+from tests.test_schedule_coordinator import (
     _C1CFG,
     _NOW,
     _PERSONA,
@@ -189,7 +189,7 @@ from trippilot.domain.poi import OpenHour, PoiCategory
 from trippilot.domain.common import ScheduleId
 
 from tests.generators.poi import candidate_pools
-from tests.test_itinerary_orchestrator import _DAY1, _KST, _poi
+from tests.test_schedule_coordinator import _DAY1, _KST, _poi
 
 _WED = _DAY1  # 2026-08-05 = 수요일 (weekday 2)
 assert _WED.weekday() == 2
