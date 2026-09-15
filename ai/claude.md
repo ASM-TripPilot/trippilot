@@ -29,7 +29,7 @@ TripPilot AI is an **independent Python AI service** that generates, replans, an
 **Task tier** (agent-redesign.md):
 - **Orchestrator**: intent detection (hybrid question-bank matching) + Fast Path + parallel dispatch via AgentTask envelopes
 - **ScheduleAgent**: itinerary generation (Generation pattern) — **wired** (2026-09-09): `agents/schedule/agent.py`
-  `ScheduleAgent.run(ScheduleTask)`; `ItineraryOrchestrator` verifies ownership, allocates the deadline,
+  `ScheduleAgent.run(ScheduleTask)`; `ScheduleCoordinator` verifies ownership, allocates the deadline,
   collects/digests info and delegates. The assembly engine stays its own layer — the agent only calls `solve()`
 - **PlanBAgent**: contingency handling (RAG pattern, 3 KBs + pgvector) — `agents/planb/rag.py` `PlanBRagPipeline.run(PlanBRagRequest)`
 - **ReflectAgent**: reflection generation — `agents/reflect/agent.py` `ReflectAgent.run(ReflectTask)`; text and vision (Phase 2) share one entry via `ReflectTask.vision`
