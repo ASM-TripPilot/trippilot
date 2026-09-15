@@ -63,6 +63,22 @@ internal data class AiSlot(
     val endsNextDay: Boolean = false,
     val distanceRange: String? = null,
     val isFixed: Boolean = false,
+    /**
+     * 슬롯별 차선책(AI TRIP-871, 슬롯당 ≤2건). **기본 빈 목록** — 이 필드가 없는 옛 AI 응답도 같은 뜻이 되게 한다.
+     * 생성 응답에서 받아 검증·수리 요청 본문으로 그대로 되돌려 보낸다(AI 는 소비하지 않는다).
+     * 도메인 사영·저장·공개 API 노출은 별도 티켓(백엔드 TRIP-873) — 여기서는 와이어만 계약과 맞춘다.
+     */
+    val alternatives: List<AiSlotAlternative> = emptyList(),
+)
+
+/**
+ * 차선책 1건 — **제안만**(시각·순서 없음, 거리 문자열만). `poiId` 는 문자열로 받는다 — UUID 가 아닌 한 건 때문에
+ * 응답 전체를 잃지 않기 위해([AiUnplacedMustVisit] 과 같은 이유). 정본 대조(`ground()`)는 소비 시점(TRIP-873) 몫.
+ */
+internal data class AiSlotAlternative(
+    val poiId: String,
+    val rationale: String,
+    val distanceRange: String? = null,
 )
 
 /**
@@ -241,6 +257,14 @@ internal data class AiSavedPlace(
 )
 
 internal data class AiAlternativesRequest(
+    /**
+     * 상대가 2026-09-16 에 계약에 더한 필드(AI #555). 필수는 아니지만 **계약 게이트가 정확 일치를
+     * 요구**하므로 빠지면 CI 가 빨개진다 — 실제로 develop 이 이것 때문에 빨개져 있었다.
+     *
+     * 값은 이미 손에 있다. 종전에는 `trigger.scheduleId` 에만 실었는데, 그 칸은 "무엇이 이 요청을
+     * 촉발했나"를 담는 자리라 여행 식별자의 제자리가 아니다.
+     */
+    val tripId: String,
     val trigger: AiTrigger,
     val reason: String,
     val anchor: AiCoord,
@@ -281,6 +305,7 @@ internal fun SlotCandidatesInput.toAlternativesRequest(): AiAlternativesRequest 
         "slotKey 형식 위반: $slotKey — 서비스 검증을 지나온 값이라 여기 오면 버그다"
     }
     return AiAlternativesRequest(
+        tripId = tripId.toString(),
         // kind 는 **지어내는 값**이다(설계 §2) — h12/h18 은 사용자가 직접 "다른 후보"를 누른 흐름이고,
         // 입력에 트리거 정보가 없어 다른 값을 실을 방법 자체가 없다.
         trigger = AiTrigger(kind = "MANUAL", scheduleId = tripId.toString(), affectedDate = date),

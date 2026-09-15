@@ -178,7 +178,10 @@ services:
       # 행사 지오코딩 배치가 쓰는 KAKAO_REST_API_KEY_AI 시크릿과 같은 키를 써도 된다
       # (쿼터 무료 10만/일 대비 요청당 최대 50콜). 백엔드 소셜 로그인용
       # KAKAO_CLIENT_ID 와는 **다른 키**다.
-      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
+      # 비워 두면 위 소셜 로그인용 KAKAO_CLIENT_ID 를 그대로 쓴다 — 카카오
+      # OAuth 는 client_id 자리에 **REST API 키**를 쓰므로 같은 값이다
+      # (2026-09-16 실호출 확인: 로컬 API 키워드검색 200).
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-${KAKAO_CLIENT_ID:-}}
       # verify() 1회당 호출 상한. 검증 대상 상위 50건보다 넉넉히(기본 60) —
       # 실질 제한은 마감 1.5s 다.
       EXISTENCE_MAX_CALLS: ${EXISTENCE_MAX_CALLS:-}
