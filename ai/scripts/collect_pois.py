@@ -208,6 +208,15 @@ def main() -> int:
     })
     state_path.write_text(
         json.dumps(state_doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    # detailIntro2 실 응답 표본 — HTTP 추가 0건(이미 받은 것을 적을 뿐). 이
+    # 엔드포인트가 실제로 무엇을 주는지 리포에 기록이 없어(fake 는 우리가 읽는
+    # 2필드만 흉내낸다) 스펙이 아니라 실물로 판단하려면 필요하다. 타입당 1건.
+    for kind, sample in sorted(adapter.intro_samples.items()):
+        filled = {k: v for k, v in sample.items() if str(v or "").strip()}
+        print(f"[collect] intro2 표본 type={kind} 필드 {len(sample)}개 "
+              f"(값 있음 {len(filled)}개): "
+              f"{json.dumps(filled, ensure_ascii=False)}", file=sys.stderr)
+
     print(f"[collect] 산출: {output} — 게이트 통과 {stats['passed']}건 "
           f"(지역 {len(area_codes)}곳, 호출 {stats['http_calls']}/{max_calls} "
           f"[키 {1 + len(extra_keys)}개×키당 {calls_per_key}], "
