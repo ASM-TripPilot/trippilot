@@ -10,7 +10,7 @@ graph TB
 
     subgraph Orchestrator["orchestrator/"]
         IR["IntentRouter<br/>(intent_router.py)"]
-        IO["ItineraryOrchestrator<br/>(itinerary_orchestrator.py)"]
+        IO["ScheduleCoordinator<br/>(schedule_coordinator.py)"]
         IC["InfoCollector<br/>(info_collector.py)"]
         QB["question_bank<br/>(모듈: load_bank/index_bank + BankEntry)"]
     end

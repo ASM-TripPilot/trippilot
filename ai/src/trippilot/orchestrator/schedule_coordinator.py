@@ -1,4 +1,12 @@
-"""ItineraryOrchestrator — 소유 검증 → 시한 배분 → 정보 수집·소화 → ScheduleAgent 위임.
+"""ScheduleCoordinator — 소유 검증 → 시한 배분 → 정보 수집·소화 → ScheduleAgent 위임.
+
+**이름 주의 (2026-09-16 개명, 구 `ItineraryOrchestrator`)**: 이 클래스는 의도 파악도
+라우팅도 하지 않는다 — `intent` 는 `"GENERATE_SCHEDULE"` 로 고정이고, 엔드포인트가 이미
+정했기 때문이다. 즉 "오케스트레이터"가 아니라 **GENERATE_SCHEDULE 한 의도의 준비·위임
+담당**이다. 발화에서 의도를 읽어 여러 에이전트로 가르는 진짜 오케스트레이터는 자연어
+진입점(챗봇)이 열릴 때 별도로 생기며, 그 자리를 이 이름이 막고 있었다.
+경계 Protocol `api/protocols.ItineraryOrchestrator` 는 **다른 것**이다(라우트가 보는
+와이어 계약) — 개명 대상이 아니었다.
 
 생성 파이프라인(점수·문제 조립·어셈블리 solve·설명)은 `agents/schedule/` 의
 `ScheduleAgent` 가 소유한다. 이 모듈은 v2 §2 의 1단(오케스트레이터) 몫만 한다:
@@ -75,7 +83,7 @@ __all__ = [
     "GenerateItineraryRequest",
     "GenerationOutcome",
     "GenerationStatus",
-    "ItineraryOrchestrator",
+    "ScheduleCoordinator",
     "OrchestratorConfig",
     "OwnershipVerifier",
     "ScoringMode",
@@ -102,7 +110,7 @@ class OwnershipVerifier(Protocol):
     ) -> None: ...
 
 
-class ItineraryOrchestrator:
+class ScheduleCoordinator:
     def __init__(
         self,
         info: InfoCollector,

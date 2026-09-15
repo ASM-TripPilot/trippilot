@@ -18,6 +18,7 @@
 | Plan-B 대안 제안 (포워드) | `POST /ai/v1/itinerary/alternatives` | **확정** — TRIP-428 |
 | 슬롯별 설명 조회 (포워드) | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
 | 일정 편집 (포워드) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
+| 하루 재계획 (포워드) | `POST /ai/v1/itinerary/replan` | **계약 확정** — 재계획 연동 설계 A-4. 조립 미배선 시 503 |
 | POI 정본 read — 반경 (리버스) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | POI 정본 read — 배치 (리버스) | `POST /internal/pois/batch-get` (요청 필드 `poi_ids`) | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
 

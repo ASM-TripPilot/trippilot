@@ -60,7 +60,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| **범위** | ItineraryOrchestrator + API Layer(routes, schemas, middleware) + 폴백 계단 통합 |
+| **범위** | ItineraryOrchestrator(구현명 `ScheduleCoordinator` — 2026-09-16 개명) + API Layer(routes, schemas, middleware) + 폴백 계단 통합 |
 | **모듈** | `api/` + 오케스트레이션 서비스(generate, replan) |
 | **산출물** | HTTP 엔드포인트(C1/C2/M7), score→solve 파이프라인, 폴백 계단(LLM실패→규칙→최소일정), 상태 전이, rate-limit, 헬스체크 |
 | **성공 기준** | 생성 파이프라인 end-to-end 동작(fake 기반). 폴백 모든 단계 트리거 가능. 20초 타임아웃 동작. API 스키마 검증 통과 |

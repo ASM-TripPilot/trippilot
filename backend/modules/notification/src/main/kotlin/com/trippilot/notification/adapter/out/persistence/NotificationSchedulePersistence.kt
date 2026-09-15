@@ -26,6 +26,9 @@ class NotificationScheduleEntity(
     @Column(name = "fire_at") var fireAt: Instant,
     @Column(name = "fired_at") var firedAt: Instant?,
     @Column(name = "canceled_at") var canceledAt: Instant?,
+    /** AI 가 채운 문구(V2.47). null = 못 받았다 → 발화가 상수 문구를 쓴다. */
+    @Column(name = "title") var title: String? = null,
+    @Column(name = "body") var body: String? = null,
 )
 
 interface NotificationScheduleJpaRepository : JpaRepository<NotificationScheduleEntity, UUID> {
@@ -60,7 +63,7 @@ class NotificationScheduleRepositoryAdapter(
      */
     override fun findDue(now: Instant, limit: Int): List<NotificationSchedule> = jdbc.query(
         """
-        SELECT schedule_id, account_id, trip_id, kind, slot_key, fire_at, fired_at, canceled_at
+        SELECT schedule_id, account_id, trip_id, kind, slot_key, fire_at, fired_at, canceled_at, title, body
           FROM notification_schedule
          WHERE fired_at IS NULL AND canceled_at IS NULL AND fire_at <= ?
          ORDER BY fire_at
@@ -95,6 +98,8 @@ class NotificationScheduleRepositoryAdapter(
         fireAt = fireAt,
         firedAt = firedAt,
         canceledAt = canceledAt,
+        title = title,
+        body = body,
     )
 
     private fun NotificationScheduleEntity.toDomain() = NotificationSchedule(
@@ -106,6 +111,8 @@ class NotificationScheduleRepositoryAdapter(
         fireAt = fireAt,
         firedAt = firedAt,
         canceledAt = canceledAt,
+        title = title,
+        body = body,
     )
 
     private fun ResultSet.toDomain() = NotificationSchedule(
@@ -117,5 +124,7 @@ class NotificationScheduleRepositoryAdapter(
         fireAt = getTimestamp("fire_at").toInstant(),
         firedAt = getTimestamp("fired_at")?.toInstant(),
         canceledAt = getTimestamp("canceled_at")?.toInstant(),
+        title = getString("title"),
+        body = getString("body"),
     )
 }

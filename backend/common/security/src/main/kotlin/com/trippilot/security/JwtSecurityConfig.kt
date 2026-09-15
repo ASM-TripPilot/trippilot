@@ -17,28 +17,22 @@ import org.springframework.security.oauth2.jwt.JwtIssuerValidator
 import org.springframework.security.oauth2.jwt.JwtValidators
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
-import java.security.KeyPairGenerator
-import java.security.interfaces.RSAPublicKey
-import java.util.UUID
 
 /**
  * RS256 서명키 · 인코더 · 디코더 빈. 무상태 검증(서명 + iss/aud/exp).
  *
- * dev/test 는 기동 시 RSA-2048 키페어를 1회 생성(kid 부여) — 재시작 시 회전된다.
- * prod 는 Secrets Manager 에서 JWK 로드로 교체(PD-3), 로드 실패 시 fail-fast(LC-6). TODO(TRIP-153 후속).
+ * **서명키는 설정에서 받는다**([JwtProperties.signingKey]). 비어 있으면 기동 시 생성하고 경고를
+ * 남긴다 — 그 상태는 **복제본을 둘 이상 띄우지 못한다**(인스턴스마다 다른 키로 서명한다).
+ * 배포에서 그 상태로 뜨는 것을 막으려면 [JwtProperties.requireConfiguredKey] 를 켠다.
+ * 자세한 사정과 kid 파생 근거는 [JwtSigningKeys] 에 있다.
  */
 @Configuration
 @EnableConfigurationProperties(JwtProperties::class)
 class JwtSecurityConfig {
 
     @Bean
-    fun rsaKey(): RSAKey {
-        val pair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
-        return RSAKey.Builder(pair.public as RSAPublicKey)
-            .privateKey(pair.private)
-            .keyID(UUID.randomUUID().toString())
-            .build()
-    }
+    fun rsaKey(props: JwtProperties): RSAKey =
+        JwtSigningKeys.load(props.signingKey, props.requireConfiguredKey)
 
     @Bean
     fun jwkSource(rsaKey: RSAKey): JWKSource<SecurityContext> = ImmutableJWKSet(JWKSet(rsaKey))

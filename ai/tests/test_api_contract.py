@@ -56,6 +56,13 @@ class FakeUnplaced:
 
 
 @dataclass
+class FakeAlternative:
+    poi_id: str
+    rationale: str
+    distance_range: str | None = None
+
+
+@dataclass
 class FakeOutcome:
     solution: ItinerarySolution
     explanations: Mapping[str, str] = field(default_factory=dict)
@@ -64,6 +71,7 @@ class FakeOutcome:
     candidates_summary: FakeSummary | None = None
     day1_ready_at: datetime | None = None
     unplaced_must_visits: Sequence[FakeUnplaced] = ()
+    slot_alternatives: Mapping[str, Sequence[FakeAlternative]] = field(default_factory=dict)
 
 
 @dataclass
@@ -156,6 +164,11 @@ def make_outcome() -> FakeOutcome:
         ),
         candidates_summary=FakeSummary(),
         day1_ready_at=datetime(2026, 8, 10, 0, 0, 4, tzinfo=timezone.utc),
+        # 슬롯별 차선책 (TRIP-871) — 자유 슬롯에만, 고정 슬롯(FIXED_POI)에는 없다
+        slot_alternatives={f"2026-08-10#{FREE_POI}": [
+            FakeAlternative("alt-1", "같은 명소 후보", "약 0.8km · 도보 추정"),
+            FakeAlternative("alt-2", "주변 카페 후보", None),
+        ]},
     )
 
 
@@ -265,6 +278,7 @@ def test_generate_response_matches_backend_wire_fields() -> None:
     assert set(day) == {"date", "slots"}
     assert set(day["slots"][0]) == {
         "poi_id", "start_at", "end_at", "ends_next_day", "distance_range", "is_fixed",
+        "alternatives",
     }
 
 
@@ -280,6 +294,19 @@ def test_slot_projection_uses_assembly_values_only() -> None:
     assert second["ends_next_day"] is True            # 23:30 → 다음날 00:30 (HC4)
     assert second["is_fixed"] is False
     assert second["distance_range"] == "약 1.2km · 도보 추정"
+
+
+def test_slot_alternatives_projected_per_slot_without_times() -> None:
+    """TRIP-871: 봉투가 슬롯 키로 준 차선책만 그 슬롯에 사영 — 시각 없음(INV-2), 거리만(INV-3)."""
+    with client(FakeOrchestrator(make_outcome())) as c:
+        slots = c.post("/ai/v1/itinerary/generate", json=BACKEND_REQUEST).json()["days"][0]["slots"]
+
+    fixed, free = slots
+    assert fixed["alternatives"] == []                # 키가 없으면 빈 목록 — 지어내지 않는다
+    assert free["alternatives"] == [
+        {"poi_id": "alt-1", "rationale": "같은 명소 후보", "distance_range": "약 0.8km · 도보 추정"},
+        {"poi_id": "alt-2", "rationale": "주변 카페 후보", "distance_range": None},
+    ]
 
 
 def test_response_has_no_duration_fields_inv3() -> None:

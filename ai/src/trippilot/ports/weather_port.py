@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Mapping, Protocol, Sequence
 
 from trippilot.domain.common import GeoPoint
@@ -25,3 +25,25 @@ class WeatherPort(Protocol):
     def daily_forecast(
         self, coord: GeoPoint, days: Sequence[date]
     ) -> Mapping[date, int]: ...
+
+
+class HourlyWeatherPort(Protocol):
+    """시간대별 강수확률 — **선택 능력**이다 (`hasattr` 로 확인, `fetch_typed` 선례).
+
+    왜 필요한가: `daily_forecast` 는 그 날짜 슬롯의 **최댓값**이라 "오늘 80%" 가
+    아침 한 시간의 소나기여도 하루 전체를 우천일로 만든다. 하루를 통째로 짜는
+    `generate` 에는 보수적인 그 값이 맞지만, **재계획은 여행 중 특정 시점에
+    일어난다** — 오후 3시에 "오늘 80%" 를 주면 이미 그친 비에 반응한다.
+
+    구현 비용이 낮은 이유: 기상청 단기예보 응답이 이미 **시간별 슬롯**(`fcstTime`)로
+    오고 어댑터가 그것을 일 최댓값으로 접을 뿐이다 — 추가 HTTP 호출 없이 접기 전
+    값을 그대로 내보내면 된다.
+
+    반환은 tz-aware `datetime`(슬롯 시각) → POP %. `daily_forecast` 와 같은 규약:
+    **아는 슬롯만** 담는 부분 매핑이고, 예보 지평 밖은 키 자체가 없다(0%로 지어내지
+    않는다). 미구현 포트는 이 메서드를 갖지 않으며, 소비측은 일 단위로 되돌아간다.
+    """
+
+    def hourly_forecast(
+        self, coord: GeoPoint, days: Sequence[date]
+    ) -> Mapping[datetime, int]: ...

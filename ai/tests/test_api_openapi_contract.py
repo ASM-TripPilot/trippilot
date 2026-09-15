@@ -50,7 +50,9 @@ def test_openapi_snapshot_property_names_have_no_duration_inv3() -> None:
 
 
 def test_openapi_snapshot_covers_boundary_routes() -> None:
-    """계약 파일의 경로 == 경계 9종 + `/`·`/health` **정확 일치(전수)**.
+    """계약 파일의 경로 == 아래 집합과 **정확 일치(전수)**.
+
+    수를 적지 않는다 — 경계가 늘 때마다 문장이 틀어진다(실제로 6종·9종 표기가 차례로 낡았다).
 
     부분집합 검사였을 때 경계가 3종→6종으로 늘어도 게이트가 침묵했다(TRIP-528).
     경로가 추가·삭제되면 여기가 깨져 문서(README-openapi.md·services.md·
@@ -65,6 +67,7 @@ def test_openapi_snapshot_covers_boundary_routes() -> None:
         "/ai/v1/itinerary/alternatives",   # TRIP-428
         "/ai/v1/itinerary/explanations",   # TRIP-479
         "/ai/v1/itinerary/edit",           # TRIP-431
+        "/ai/v1/itinerary/replan",         # 재계획 연동 설계 A-4
             "/ai/v1/reflection/generate",      # TRIP-429 — U6 Reflect (FD v1.0)
             "/ai/v1/reflection/nudge",         # TRIP-429
             "/ai/v1/reflection/share-card",    # TRIP-429 후속 — j06 공유 카드 문구

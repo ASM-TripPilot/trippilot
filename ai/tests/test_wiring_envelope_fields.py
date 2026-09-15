@@ -224,3 +224,34 @@ def test_miss_reasons_project_to_closed_reason_codes() -> None:
         ("a", "NOT_REGISTERED", ""),
         ("b", "UNMAPPABLE", "category"),   # 어느 필드 때문인지가 경계까지 간다
     ]
+
+
+# ── ⑥ slot alternatives — 풀 안·미배치 POI 만, 거리만 (TRIP-871) ─────────
+
+
+def test_generate_slot_alternatives_from_pool_only_with_slot_based_distance() -> None:
+    """e2e 풀 p1..p6(전부 SIGHT, 앵커에서 0.005° 씩 멀어짐), 창 09–12 → p1·p2 만 배치.
+
+    차선책은 풀 안 미배치 POI 뿐이고 동률 점수라 **슬롯 POI 에 가까운 순**(p3, p4). 거리 문자열은
+    **슬롯 POI 기준**이다 — p2 의 p3 은 "약 0.9km"(앵커·직전 슬롯 p1 기준이면 "약 1.8km"라 갈린다).
+    (기본 창 09–21 이면 6건이 전부 배치돼 차선책이 0건 — 그 상태의 단언은 아무것도 증명하지 않는다.)
+    """
+    with make_client() as client:
+        response = client.post(
+            "/ai/v1/itinerary/generate", json=_request(window=("09:00", "12:00")))
+
+    assert response.status_code == 200, response.text
+    (day,) = response.json()["days"]
+    p1, p2 = day["slots"]
+    assert (p1["poi_id"], p2["poi_id"]) == ("p1", "p2")  # 전제 — 깨지면 아래 단언의 근거가 바뀐 것
+    assert p1["alternatives"] == [
+        {"poi_id": "p3", "rationale": "같은 명소 후보", "distance_range": "약 1.8km · 대중교통 추정"},
+        {"poi_id": "p4", "rationale": "같은 명소 후보", "distance_range": "약 2.8km · 대중교통 추정"},
+    ]
+    assert p2["alternatives"] == [
+        {"poi_id": "p3", "rationale": "같은 명소 후보", "distance_range": "약 0.9km · 대중교통 추정"},
+        {"poi_id": "p4", "rationale": "같은 명소 후보", "distance_range": "약 1.8km · 대중교통 추정"},
+    ]
+    for slot in (p1, p2):
+        for alt in slot["alternatives"]:
+            assert _DISTANCE_PATTERN.match(alt["distance_range"])

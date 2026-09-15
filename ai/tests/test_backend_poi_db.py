@@ -99,6 +99,19 @@ def test_find_by_ids_posts_batch_get() -> None:
     assert call["headers"] == {"X-Service-Token": "secret-token"}
 
 
+def test_find_by_ids_splits_batches_at_backend_limit() -> None:
+    """201건 → 200 + 1 두 번 POST — 백엔드 MAX_BATCH_SIZE(200) 초과는 400 이라 생성 전체가 죽는다(TRIP-871)."""
+    db, http = _db([])
+    ids = frozenset(PoiId(f"{i:08d}-0000-4000-8000-000000000000") for i in range(201))
+
+    lookup = db.lookup_by_ids(ids)
+
+    bodies = [c["body"]["poi_ids"] for c in http.calls]
+    assert [len(b) for b in bodies] == [200, 1]
+    assert sorted(x for b in bodies for x in b) == sorted(str(i) for i in ids)  # 빠짐·중복 없이 전부
+    assert len(lookup.misses) == 201  # 빈 응답 — 누락 사유는 청크와 무관하게 전량 not_found
+
+
 def test_find_by_ids_empty_set_makes_no_call() -> None:
     db, http = _db([])
     assert db.find_by_ids(frozenset()) == ()
