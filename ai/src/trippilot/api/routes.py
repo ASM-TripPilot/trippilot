@@ -48,6 +48,7 @@ from trippilot.api.schemas import (
     RepairItineraryRequest,
     RepairItineraryResponse,
     ShareCardCopyResponse,
+    SlotAlternativeSchema,
     UnplacedMustVisitSchema,
     UnverifiedSlotSchema,
     ValidateItineraryRequest,
@@ -119,6 +120,7 @@ def to_payload(outcome: ItineraryOutcome) -> ItineraryPayload:
     - `ends_next_day`: 종료가 그 날짜를 넘겼는가 — 어셈블리 값에서 파생(HC4 표현)
     - `is_fixed`: 그 날의 고정 블록(HC3)에 POI가 있는가 — 지어내지 않고 해에서 읽는다
     - `stay_min`·`score`는 **사영하지 않는다**(INV-3 / IO-3)
+    - `alternatives`: 슬롯별 차선책(TRIP-871) — 봉투가 슬롯 키로 준 것만(없으면 빈 목록)
     """
     solution = outcome.solution
     days: list[DayScheduleSchema] = []
@@ -134,6 +136,16 @@ def to_payload(outcome: ItineraryOutcome) -> ItineraryPayload:
                     slot_key(day.date, slot.poi_id)
                 ),
                 is_fixed=slot.poi_id in fixed_pois,
+                alternatives=[
+                    SlotAlternativeSchema(
+                        poi_id=alt.poi_id,
+                        rationale=alt.rationale,
+                        distance_range=alt.distance_range,
+                    )
+                    for alt in outcome.slot_alternatives.get(
+                        slot_key(day.date, slot.poi_id), ()
+                    )
+                ],
             )
             for slot in day.slots
         ]
