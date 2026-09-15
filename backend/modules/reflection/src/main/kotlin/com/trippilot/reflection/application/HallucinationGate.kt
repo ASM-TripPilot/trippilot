@@ -34,11 +34,26 @@ object HallucinationGate {
      * @param bannedPlaceNames 그날 **가지 않은** 장소 이름(건너뛴 방문지). 빈 이름은 무시한다 —
      *   빈 문자열은 모든 문자열에 포함돼 전량 강등을 부른다.
      */
-    fun offendingPlaces(payload: String, bannedPlaceNames: Collection<String>): List<String> =
-        bannedPlaceNames.asSequence()
+    fun offendingPlaces(
+        payload: String,
+        bannedPlaceNames: Collection<String>,
+        visitedPlaceNames: Collection<String>,
+    ): List<String> {
+        val visited = visitedPlaceNames.map { it.trim() }.filter { it.isNotEmpty() }
+        return bannedPlaceNames.asSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .distinct()
+            // **방문한 이름에 삼켜지는 금지 이름은 뺀다.** 아래 판정이 부분 문자열이라, 건너뛴 곳이
+            // "카페"이고 실제로 간 곳이 "카페 델문도"면 멀쩡한 카드가 강등된다. 한국 지명에 짧은
+            // 일반명(공항·시장·해변)이 흔해 드문 조합이 아니다.
+            //
+            // 이름이 **정확히 같은** 경우(동명 POI 둘, 하나는 방문 하나는 건너뜀)도 여기서 빠진다.
+            // 어느 쪽을 말하는지 판별할 수단이 없으므로 강등하지 않는 편이 맞다 — 오탐은 조용히
+            // 안전한 쪽(규칙 카드)으로 떨어져 증상이 안 보이는데, 그 사이 강등 지표는
+            // "AI 가 환각한다"로 읽힌다. 그 수치가 AI 를 계속 켤지 판단하는 근거라 오염되면 안 된다.
+            .filterNot { banned -> visited.any { it.contains(banned) } }
             .filter { payload.contains(it) }
             .toList()
+    }
 }

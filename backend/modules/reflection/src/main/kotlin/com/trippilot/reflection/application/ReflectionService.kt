@@ -171,7 +171,9 @@ class ReflectionService(
         surfaces: Map<UUID, PoiSurfaceView>,
     ): Boolean {
         val notVisited = visits.filter { it.skipped }.mapNotNull { surfaces[it.poiId]?.nameKo }
-        val offending = HallucinationGate.offendingPlaces(payload, notVisited)
+        // 실제로 간 곳도 함께 넘긴다 — 금지 이름이 그쪽에 삼켜지면 오탐이라 게이트가 뺀다.
+        val visited = visits.filterNot { it.skipped }.mapNotNull { surfaces[it.poiId]?.nameKo }
+        val offending = HallucinationGate.offendingPlaces(payload, notVisited, visited)
         if (offending.isEmpty()) return true
         // 조용히 내려가면 "AI 를 켰는데 왜 규칙 카드만 나오지"에 답할 수 없다(INV-4).
         // 이 수치가 AI 를 계속 켤지 판단하는 근거이기도 하다.

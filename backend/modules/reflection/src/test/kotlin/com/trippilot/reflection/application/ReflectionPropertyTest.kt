@@ -72,9 +72,13 @@ class ReflectionPropertyTest : StringSpec({
     }
 
     /** 좌표를 아는 POI 만 표면을 낸다 — 못 찾는 방문이 섞이는 것이 실제 상황이다. */
-    fun surfacesOf(known: Map<UUID, Pair<Double, Double>>) = object : PoiSurfaceFacade {
+    /** [named] 를 주면 그 POI 의 이름을 지정한다 — 이름이 서로를 삼키는 경우를 만들 때 쓴다. */
+    fun surfacesOf(known: Map<UUID, Pair<Double, Double>>, named: Map<UUID, String> = emptyMap()) = object : PoiSurfaceFacade {
         override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.mapNotNull { id ->
-            known[id]?.let { id to PoiSurfaceView(id, "장소-${id.toString().take(4)}", it.first, it.second, "카페", null, null, emptyList()) }
+            known[id]?.let {
+                val name = named[id] ?: "장소-${id.toString().take(4)}"
+                id to PoiSurfaceView(id, name, it.first, it.second, "카페", null, null, emptyList())
+            }
         }.toMap()
         override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
     }
@@ -390,6 +394,34 @@ class ReflectionPropertyTest : StringSpec({
 
         r.source shouldNotBe ReflectionSource.AI // 규칙 카드로 내려갔다
         registry.counter(ReflectionMetrics.HALLUCINATION_REJECTED).count() shouldBe 1.0
+    }
+
+    /**
+     * **오탐**: 판정이 부분 문자열이라, 건너뛴 곳의 이름이 실제로 간 곳의 이름에 삼켜지면
+     * 멀쩡한 카드가 강등된다. 한국 지명에 짧은 일반명이 흔해 드문 조합이 아니다.
+     *
+     * 이쪽이 안전한 실패라고 넘길 수 없는 이유: 강등은 조용히 규칙 카드로 떨어져 증상이 안 보이는데,
+     * 그 사이 강등 지표는 **"AI 가 환각한다"** 로 읽힌다. 그 수치가 AI 를 계속 켤지 판단하는
+     * 근거라(BR-U5-31) 오염되면 판단 자체가 틀어진다.
+     */
+    "건너뛴 이름이 방문한 이름에 삼켜지면 강등하지 않는다 — 오탐" {
+        val skippedPoi = UUID.randomUUID() // "카페"
+        val wentPoi = UUID.randomUUID() // "카페 델문도"
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        val svc = ReflectionService(
+            trips,
+            archiveOf(listOf(visitOf(skippedPoi, skipped = true), visitOf(wentPoi, skipped = false))),
+            surfacesOf(mapOf(skippedPoi to (33.4 to 126.5), wentPoi to (33.5 to 126.6)), named = mapOf(
+                skippedPoi to "카페", wentPoi to "카페 델문도",
+            )),
+            Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()),
+            HallucinatingAgent("카페 델문도"), Sink(), ReflectionMetrics(registry), clock,
+        )
+
+        val r = svc.generateDaily(acc, tripId, day)
+
+        r.source shouldBe ReflectionSource.AI // 실제로 간 곳을 말하고 있다
+        registry.counter(ReflectionMetrics.HALLUCINATION_REJECTED).count() shouldBe 0.0
     }
 
     "방문한 장소만 말하는 카드는 그대로 쓴다 — 대조가 늘 강등시키면 기능이 죽은 것과 같다" {
