@@ -43,7 +43,7 @@ frontend/
       api/        # 서버 클라이언트 단일 계층 — orval 생성물 + axios 인스턴스(토큰 회전)
                   # + 부트스트랩 + 모든 API 실패를 표준 오류 타입으로 정규화
       ui/         # 디자인 시스템·공용 탭바(5탭)·빈 상태/로딩/오류 표준 패턴·접근성 기준
-      map/        # 카카오 지도 SDK 브리지(config plugin)·지도 렌더·경로 레이어·외부 지도앱 연동
+      map/        # 네이버 지도 SDK(네이티브·config plugin)·지도 렌더·경로 레이어·외부 지도앱 연동
       location/   # 위치 권한·수집 단일 소유(동의 상태 관리·프리프롬프트·포그라운드 수집)
       validation/ # 경량 제약 검증기 — 서버 발행 규칙 명세 소비, 위반은 경고 배지(차단 아님)
       storage/    # 로컬 영속 단일 소유 — 오프라인 입력 큐·사진 업로드 대기 큐
@@ -126,7 +126,7 @@ frontend/
 ```bash
 pnpm install
 pnpm codegen              # openapi.yaml → shared/api/generated (스펙 변경 시)
-pnpm expo prebuild        # config plugin (카카오 지도 SDK 등) 반영
+pnpm expo prebuild        # config plugin (네이버 지도 SDK 등) 반영
 pnpm expo run:ios         # 또는 run:android — development build
 pnpm test                 # Jest + fast-check
 pnpm lint && pnpm tsc --noEmit

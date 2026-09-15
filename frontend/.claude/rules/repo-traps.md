@@ -18,9 +18,9 @@
 
 ## 지도 (`shared/map`)
 
-- **`react-native-webview`는 네이티브 모듈** → 코드만 머지하고 재빌드를 안 하면 기존 dev build엔 웹뷰가 없다(`pnpm expo prebuild` → `pnpm expo run:ios`). 카카오 콘솔은 지도 JS SDK가 보는 명부가 `[앱 키]→JavaScript 키→JavaScript SDK 도메인`이고, `[플랫폼]→웹 도메인`은 공유용 — 두 자리를 헷갈리기 쉽다.
-- **지도 제스처 차단(`viewOnly`)은 실기로만 확인된다 — 자동 심판이 없다** → `draggable`·`disableDoubleClickZoom`·`setZoomable`을 지우거나 오타로 바꿔도 jest 전수가 green이다(가짜 SDK가 `Proxy`라 무슨 이름이든 받아 기록만 함). 실명 여부·실제 차단은 시뮬레이터에서 손으로 확인.
-- **`KakaoMapView`(WebView) 위 `absolute` 오버레이는 터치를 먹는다** → WebView가 자기 위에 얹힌 형제/자식 Pressable의 터치를 흡수해 안 눌린다(TRIP-397 결함#2 실측 — `LiveMapScreen`의 계획\|실제 토글이 이렇게 막혔다). 인터랙티브 요소는 지도의 **형제 노드**로 배치해야 한다. `liveMapStructure.test.ts`가 `LiveMapScreen.tsx` 한 파일만 잠근다 — 다른 화면이 `KakaoMapView` 위에 새 오버레이를 얹으면 이 가드 사정거리 밖이라 jest가 못 잡는다.
+- **지도는 네이버 네이티브 SDK다(`@mj-studio/react-native-naver-map`, TRIP-861 로 카카오 WebView 에서 전환)** → 네이티브 모듈이라 코드만 머지하고 재빌드를 안 하면 기존 dev build 엔 지도가 없다(`pnpm expo prebuild` → `pnpm expo run:ios`, `LANG=en_US.UTF-8` 필요). Client ID 는 `EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`(NCP Maps 앱 등록, **로그인용 `EXPO_PUBLIC_NAVER_CLIENT_ID` 와 다른 키**) — iOS Bundle ID·Android Package Name 이 `com.trippilot.app` 과 글자 단위로 일치해야 타일이 뜬다. **Client ID 부재·번들 불일치는 조용히 실패한다**(회색 빈 지도, 콜백 없음) — 그래서 `MapView` 는 env 키 부재를 `map-failure` 표면으로 드러낸다(INV-4). Android 는 config plugin 이 maven 저장소를 안 넣으므로 `app.config.ts` 의 `expo-build-properties`(`extraMavenRepos`)가 있어야 SDK 를 받는다.
+- **`viewOnly` 4토글은 이제 jest 가 심판하지만(prop 전달까지), 실제 제스처 차단은 여전히 실기 전용** → `MapView` 가 `viewOnly` 를 `isScrollGesturesEnabled`·`isZoomGesturesEnabled`·`isRotateGesturesEnabled`·`isTiltGesturesEnabled` 4개로 펼치고 prop-기록형 목이 그 값을 노출해 `MapView.test.tsx` AC2 가 4토글 개별로 잠근다(카카오 시절 "자동 심판 없음"은 해소). 단 **네이티브가 그 prop 으로 실제로 제스처를 막는지**는 jest 가 못 본다 — 시뮬레이터에서 손으로 확인.
+- **지도 위 `absolute` 오버레이 터치 흡수는 네이버 네이티브에선 구조적으로 없을 것으로 보이나 6-b 미검증** → 네이티브 뷰는 RN 터치 파이프라인 안에 있어 카카오 WebView 처럼 형제/자식 Pressable 터치를 흡수하지 않을 것으로 기대되나(그래서 `CenterPinPicker` 는 핀을 `pointerEvents="none"` 자식 오버레이로 얹는다), **사람 재빌드 6-b 전까지는 실측 확인 불가**다. 그때까지 `liveMapStructure.test.ts`(`LiveMapScreen.tsx` 에 `absolute` 0 + `execution-map-plan-toggle` 리터럴, 공급자 무관 소스 가드)를 **예방적으로 유지**한다 — 6-b 가 네이티브 무흡수를 확인하면 삭제 후보. 이 가드는 한 파일만 잠그므로 다른 화면이 지도 위에 새 오버레이를 얹으면 사정거리 밖이다.
 
 ## 바텀시트 (`@gorhom/bottom-sheet`)
 
