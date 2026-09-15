@@ -90,6 +90,28 @@ class JwtSigningKeysTest : StringSpec({
     }
 
     /**
+     * **발급기까지 관통하는가.** 위 단언들은 `JwtSigningKeys` 만 본다 — 그 키가 실제로
+     * `jwtEncoder` 에 실려 나가고 `jwtDecoder` 가 받아들이는지는 별개다. 설정에서 키를 읽어 놓고
+     * 빈 생성에 계속 매달려 있어도 위 테스트는 전부 통과한다.
+     *
+     * 그래서 **설정 → 빈 조립 → 발급 → 검증** 을 한 번 통과시킨다. 다른 인스턴스를 흉내 내
+     * 같은 설정으로 조립한 두 번째 디코더로 검증하는 것이 요점이다.
+     */
+    "설정에 넣은 키로 발급한 토큰을, 같은 설정의 다른 인스턴스가 검증한다" {
+        val props = JwtProperties(signingKey = newPkcs8Base64())
+        val a = JwtSecurityConfig()
+        val b = JwtSecurityConfig() // 복제본
+        val keyA = a.rsaKey(props)
+        val keyB = b.rsaKey(props)
+
+        val issuer = AccessTokenIssuer(a.jwtEncoder(a.jwkSource(keyA)), props, java.time.Clock.systemUTC())
+        val token = issuer.issue(java.util.UUID.randomUUID().toString())
+
+        // B 의 디코더가 A 가 서명한 것을 읽는다 — 이것이 복제본을 늘릴 수 있다는 뜻이다.
+        b.jwtDecoder(keyB, props).decode(token.value).subject shouldNotBe null
+    }
+
+    /**
      * 배포에서 "키를 잊은 채 떠 있는" 상태를 막는 스위치(TRIP-850 이 켠다). 기본은 꺼짐 —
      * 켜 두면 키를 안 넣은 로컬·CI 가 통째로 죽는다.
      */

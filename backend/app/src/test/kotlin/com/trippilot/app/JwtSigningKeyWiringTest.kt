@@ -54,4 +54,24 @@ class JwtSigningKeyWiringTest : StringSpec({
         resolve("trippilot.jwt.require-configured-key", mapOf("JWT_REQUIRE_CONFIGURED_KEY" to "true")) shouldBe "true"
         resolve("trippilot.jwt.require-configured-key", emptyMap()) shouldBe "false"
     }
+
+    /**
+     * **빈 문자열은 Boolean 으로 바인딩되지 않는다 — 기동이 깨진다**(실측 2026-09-16: `BindException`).
+     *
+     * `${'$'}{VAR:false}` 는 "변수가 없을 때"만 기본값을 쓴다. compose 가 `${'$'}{VAR:-}` 로 넘기면
+     * 변수는 **존재하고 값이 빈** 상태라 기본값이 안 먹고 `""` 가 그대로 바인딩 대상이 된다.
+     * `.env.example` 을 그대로 복사한 사람의 컨테이너가 안 뜨는 경로였다.
+     *
+     * 그래서 compose 는 `${'$'}{VAR:-false}` 로 **값을 보장**한다(기존 `AI_SCHEDULE_DEADLINE_ENFORCED`
+     * 선례와 같다). 이 테스트는 그 보장이 사라지면 깨진다.
+     */
+    "compose 가 불리언 스위치에 빈 값을 넘기지 않는다" {
+        val compose = File("../../docker-compose.yml").takeIf { it.exists() }
+            ?: File("../docker-compose.yml")
+        val line = compose.readLines().first { it.contains("JWT_REQUIRE_CONFIGURED_KEY:") }
+
+        // `:-}` 로 끝나면 빈 문자열을 넘긴다 — 그 순간 기동이 깨진다.
+        line.contains(":-}") shouldBe false
+        line.contains(":-false}") shouldBe true
+    }
 })
