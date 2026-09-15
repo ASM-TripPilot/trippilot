@@ -257,6 +257,14 @@ internal data class AiSavedPlace(
 )
 
 internal data class AiAlternativesRequest(
+    /**
+     * 상대가 2026-09-16 에 계약에 더한 필드(AI #555). 필수는 아니지만 **계약 게이트가 정확 일치를
+     * 요구**하므로 빠지면 CI 가 빨개진다 — 실제로 develop 이 이것 때문에 빨개져 있었다.
+     *
+     * 값은 이미 손에 있다. 종전에는 `trigger.scheduleId` 에만 실었는데, 그 칸은 "무엇이 이 요청을
+     * 촉발했나"를 담는 자리라 여행 식별자의 제자리가 아니다.
+     */
+    val tripId: String,
     val trigger: AiTrigger,
     val reason: String,
     val anchor: AiCoord,
@@ -297,6 +305,7 @@ internal fun SlotCandidatesInput.toAlternativesRequest(): AiAlternativesRequest 
         "slotKey 형식 위반: $slotKey — 서비스 검증을 지나온 값이라 여기 오면 버그다"
     }
     return AiAlternativesRequest(
+        tripId = tripId.toString(),
         // kind 는 **지어내는 값**이다(설계 §2) — h12/h18 은 사용자가 직접 "다른 후보"를 누른 흐름이고,
         // 입력에 트리거 정보가 없어 다른 값을 실을 방법 자체가 없다.
         trigger = AiTrigger(kind = "MANUAL", scheduleId = tripId.toString(), affectedDate = date),
