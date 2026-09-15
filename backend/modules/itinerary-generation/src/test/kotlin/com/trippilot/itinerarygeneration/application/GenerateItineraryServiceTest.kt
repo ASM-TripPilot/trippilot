@@ -1144,6 +1144,9 @@ private object NoPersonalization : PersonalizationPort {
 }
 
 private object StubRegions : com.trippilot.placedata.api.RegionLookupFacade {
+    /** 코드 검증 — 이 테스트는 이름 경로만 쓴다. */
+    override fun isSelectableCode(regionCode: String) = false
+
     override fun codesOf(regionName: String): List<String> = emptyList()
     override fun centerOf(regionName: String) =
         if (regionName == "좌표없는곳") null else com.trippilot.placedata.api.RegionCenter(33.4996, 126.5312)

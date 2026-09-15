@@ -101,6 +101,13 @@ class RegionCatalogAdapter(
         return jpa.findExact(key).map { it.toDomain(emptyMap()) }
     }
 
+    /** 코드 정확 일치 — 여기도 커버리지를 세지 않는다(검증 전용). */
+    override fun findByCode(regionCode: String): Region? {
+        val key = regionCode.trim()
+        if (key.isEmpty()) return null
+        return jpa.findById(key).orElse(null)?.toDomain(emptyMap())
+    }
+
     override fun find(query: String?, level: RegionLevel?): List<Region> {
         val counts = pois.countActiveByRegionCode()
             .associate { (code, n) -> code as String to (n as Number).toInt() }

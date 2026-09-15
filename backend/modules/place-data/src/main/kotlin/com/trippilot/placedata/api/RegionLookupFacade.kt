@@ -14,6 +14,17 @@ interface RegionLookupFacade {
     fun codesOf(regionName: String): List<String>
 
     /**
+     * 그 코드가 **목적지로 쓸 수 있는** 행정구역인가(TRIP-859 계약 전환).
+     *
+     * 이름 조회와 방향이 반대다 — 이름은 여럿으로 갈리지만 코드는 하나를 가리킨다. 클라이언트가
+     * 코드를 명시하면 동명이지역 문제가 애초에 생기지 않는다.
+     *
+     * `selectable=false`(도·일반시의 행정구)는 **false 다.** 그 행은 묶음 표시용이라 목적지가 될 수
+     * 없는데, 통과시키면 화면에서 못 고르는 값이 API 로는 들어온다.
+     */
+    fun isSelectableCode(regionCode: String): Boolean
+
+    /**
      * 지역 대표 좌표 — **숙소가 없는 날의 앵커**로 쓴다(TRIP-384).
      *
      * 우리가 가진 숙소·POI 의 무게중심이다(`R__update_region_center.sql`). 행정 경계의 기하 중심이

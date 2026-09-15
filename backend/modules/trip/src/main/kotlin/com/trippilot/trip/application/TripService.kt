@@ -90,7 +90,22 @@ class TripService(
      * 코드를 받게 될 때 닫힌다.
      */
     private fun withRegionCodes(destinations: List<TripDestination>): List<TripDestination> =
-        destinations.map { it.copy(regionCode = regions.codesOf(it.region).singleOrNull()) }
+        destinations.map { dest ->
+            val given = dest.regionCode?.trim()?.takeIf { it.isNotEmpty() }
+            if (given == null) {
+                dest.copy(regionCode = regions.codesOf(dest.region).singleOrNull())
+            } else {
+                // 클라이언트가 **명시한** 값이다. 실재하지 않으면 조용히 무시하지 않고 거절한다 —
+                // 무시하면 사용자가 고른 지역과 다른(또는 없는) 지역으로 여행이 만들어지고,
+                // 그 사실이 아무 데도 드러나지 않는다.
+                if (!regions.isSelectableCode(given)) {
+                    throw ValidationFailed(
+                        listOf(FieldError("destinations[${dest.seq}].regionCode", "목적지로 선택할 수 없는 지역 코드입니다.")),
+                    )
+                }
+                dest.copy(regionCode = given)
+            }
+        }
 
     fun list(accountId: UUID): List<Trip> = repo.findByAccount(accountId).filter { it.deletedAt == null }
 

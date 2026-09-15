@@ -56,6 +56,17 @@ trippilot:
   # 설정을 잊었을 때 조용히 열리는 것보다 조용히 닫히는 편이 안전하다.
   service-auth:
     token: ${SERVICE_AUTH_TOKEN:}
+  # 발신 방향(백엔드→AI)도 **같은 시크릿**을 쓴다(TRIP-856). 상대가 한 곳이고, AI 컨테이너는 이미
+  # 역방향용으로 이 값을 들고 있다(compose 의 TRIPPILOT_SERVICE_AUTH_TOKEN) — 갈라 두면 둘 중
+  # 하나만 세팅된 절반 설정이 생기고, 그때 증상은 한쪽 방향만 401 이라 원인이 안 보인다.
+  # 여기서 한 번 잇는 이유: compose 가 아닌 실행(플레인 java -jar)에서도 환경변수 하나로 켜진다.
+  # 비어 있어도 호출은 나간다(fail-open) — 지금 이 채널은 애초에 무인증이고, 잠그는 판단은
+  # 상대가 검증을 켜는 시점의 몫이다. 미설정 사실은 기동 로그가 드러낸다.
+  ai:
+    schedule:
+      service-token: ${SERVICE_AUTH_TOKEN:}
+    reflection:
+      service-token: ${SERVICE_AUTH_TOKEN:}
   place:
     geocode:
       mode: ${PLACE_GEOCODE_MODE:stub}
