@@ -52,13 +52,18 @@ class OutboxRelay(
      * 평균의 평균과 같은 종류의 거짓말이 된다. 버킷을 보내면 합산 후 계산이 성립한다.
      *
      * 기대 범위를 묶는 것은 **버킷 수 상한**이다. 열어 두면 마이크로초부터 시간 단위까지 버킷이
-     * 생겨 시계열이 불어난다. 아래(1초)는 폴링 주기(2초)보다 촘촘할 수 없다는 사실에서,
+     * 생겨 시계열이 불어난다.
+     *
+     * **아래를 100ms 로 두는 이유**: 폴링 주기(2초)는 *더해지는 지연의 상한*이지 하한이 아니다 —
+     * 틱 직전에 적재된 이벤트는 지연이 거의 0 이라, 정상 구간이 사실상 **0~2초 균등**이다.
+     * 여기를 1초로 잡으면 그 구간의 절반이 첫 버킷에 뭉개져 p50·p75 가 해석 불가가 되고,
+     * "빨라졌다"를 볼 수 없게 된다(앞선 판이 그랬다 — 폴링 주기를 하한으로 착각했다).
      * 위(15분)는 재시도 창(약 13분)을 넘기면 어차피 포기된 건이라는 데서 나온다.
      */
     private val relayLatency: Timer = Timer.builder(RELAY_LATENCY)
         .description("아웃박스 적재에서 배달까지의 지연(OBS-U6-01)")
         .publishPercentileHistogram()
-        .minimumExpectedValue(Duration.ofSeconds(1))
+        .minimumExpectedValue(Duration.ofMillis(100))
         .maximumExpectedValue(Duration.ofMinutes(15))
         .register(registry)
 
