@@ -97,6 +97,18 @@
           },
           "trigger": {
             "$ref": "#/components/schemas/TriggerSchema"
+          },
+          "trip_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Id"
           }
         },
         "required": [

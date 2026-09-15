@@ -939,21 +939,27 @@ class WiredItineraryOrchestrator:
         dates = tuple(request.dates)
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
-        packets = self._info.collect(
-            "REPLAN",
-            {
-                "pool_request": CandidatePoolRequest(
-                    anchor=GeoPoint(request.anchor.lat, request.anchor.lng),
-                    dates=dates,
-                    budget=_token_or(
-                        _BUDGET_TOKENS, request.budget_level, BudgetLevel.MID),
-                    transport=transport,
-                ),
-                "anchor": GeoPoint(request.anchor.lat, request.anchor.lng),
-                "days": dates,
-                "now": now,
-            },
-        )
+        anchor = GeoPoint(request.anchor.lat, request.anchor.lng)
+        params: dict = {
+            "pool_request": CandidatePoolRequest(
+                anchor=anchor,
+                dates=dates,
+                budget=_token_or(
+                    _BUDGET_TOKENS, request.budget_level, BudgetLevel.MID),
+                transport=transport,
+            ),
+            "anchor": anchor,
+            "days": dates,
+            "now": now,
+        }
+        # 선택 필드가 오면 그만큼 요구표가 더 채워진다 — 안 오면 Provider 가
+        # 패킷을 못 만들고(params 부족 → UNAVAILABLE) 무보정으로 간다.
+        # 페르소나 재조회 키는 generate 와 **같은 파생 규칙**을 쓴다(wiring 상단 註).
+        if request.trip_id:
+            params["principal"] = Principal(user_id=request.trip_id)
+            params["persona_ref"] = ResourceRef(
+                kind="persona", ref_id=request.trip_id, owner_id=request.trip_id)
+        packets = self._info.collect("REPLAN", params)
         pool = self._pool_from(packets, now)
         result = self._rag.run(
             PlanBRagRequest(
@@ -979,6 +985,7 @@ class WiredItineraryOrchestrator:
                 # 문구다("비 예보로 일정 변경 제안"). 우리가 재서 낮게 나왔다고
                 # 야외를 안 내리면 화면과 모순된다. 실값은 정도를 더하는 데만 쓴다.
                 rain_prob_by_date=self._rain_from(packets, dates),
+                persona=self._persona_from(packets),
                 saved_places=tuple(
                     SavedPlace(poi_id=sp.poi_id, name=sp.name) for sp in request.saved_places
                 ),
@@ -1035,6 +1042,23 @@ class WiredItineraryOrchestrator:
             parsed: p for d, p in packet.data.get("daily", {}).items()
             if (parsed := date.fromisoformat(d)) in wanted
         }
+
+    def _persona_from(
+        self, packets: dict[ProviderKind, InfoPacket]
+    ) -> PersonaSummary | None:
+        """PERSONA 패킷 → 취향 프로필. 비가용이면 None (무보정 — KB 검색분만 쓴다).
+
+        KB-2 벡터 검색과 **다른 출처**다: KB-2 는 저장 장소·메모 임베딩이고, 이쪽은
+        `ContextResolver` 재조회가 돌려주는 확정 프로필(취향·동행·예산)이다.
+        요청자 권한 하 재조회라(BR-U4-07) 권한 위반은 Provider 가 예외로 승격한다.
+        """
+        packet = packets.get(ProviderKind.PERSONA)
+        if packet is None or packet.status is not ProviderStatus.OK:
+            return None
+        try:
+            return PersonaSummary.from_dict(packet.data["persona"])
+        except Exception:  # 패킷 형식 오류 — 비가용과 동일 취급
+            return None
 
     def explanations(
         self, request: schemas.ExplanationsRequest

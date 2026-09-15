@@ -35,6 +35,13 @@ INFO_REQUIREMENTS: Mapping[str, tuple[ProviderKind, ...]] = {
         ProviderKind.PERSONA,
         ProviderKind.EVENT,  # 행사 근접 보너스 재료 (TRIP-421)
     ),
+    # TRANSIT 은 표에 남는다 (TRIP-423 이 타입 호출까지 만들었고 테스트 6건이
+    # "REPLAN 은 TRANSIT 을 수집한다"를 단언한다). 다만 **호출측이 구간을 줄 때만**
+    # 실제로 조회된다 — `params` 에 origin·destination 이 없으면 Provider 조립이
+    # 실패해 UNAVAILABLE 패킷이 된다(기능 부재, INV-4). 2026-09-16 미결: 재계획은
+    # 하루를 다시 짜므로 어느 구간이 생길지 푸는 시점에는 모르고(배치는 어셈블리
+    # 소관, INV-2), 어셈블리가 이미 자기 이동 추정을 갖는다 — 수집 단계 조회가
+    # 값을 하는지 팀 판단 대기. 그때까지 표는 그대로 두고 호출측이 안 채운다.
     "REPLAN": (
         ProviderKind.WEATHER,
         ProviderKind.TRANSIT,

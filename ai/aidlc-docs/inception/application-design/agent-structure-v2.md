@@ -73,12 +73,21 @@
 | REFLECT | (없음) | — |
 | EDIT | Place(추가/교체 의도 시) | — |
 
+> **미결 (2026-09-16) — REPLAN 행의 Transit 을 실제로 수집할 것인가**: 표에는 남아
+> 있고 TRIP-423 이 타입 호출까지 만들었지만(테스트 6건이 단언), **호출측이 구간을
+> 주지 않아 실제로는 조회되지 않는다.** 이유: 재계획은 하루를 다시 짜므로 어느 구간이
+> 생길지 푸는 시점에는 모르고(배치는 어셈블리 소관, INV-2), 어셈블리는 이미 자기
+> 이동 추정을 갖는다 — 수집 단계 조회가 값을 하는지 팀 판단이 필요하다. 지연 트리거
+> 경로(백엔드가 영향 구간을 아는 경우)에는 쓸 데가 있을 수 있다. **표는 그대로 두고
+> 결론이 날 때까지 호출측이 안 채운다** — 지운 뒤 필요해지면 되살리기가 더 비싸다.
+>
 > **배선 실태 (2026-09-16 갱신) — 표의 EDIT 행이 구현됐다**: `INFO_REQUIREMENTS` 에
 > `EDIT`(Place)·`REFLECT`(빈 튜플)가 추가됐고, `alternatives`·`edit` 경계가 풀 빌더
 > 직행 대신 `InfoCollector` 를 거친다. 그 결과 **REPLAN 이 처음으로 날씨를 본다**
 > (팀 결정 2026-09-15). 다만 REPLAN 표 4종 중 실제로 채워지는 것은 PLACE·WEATHER
-> 둘뿐 — PERSONA(`principal`·`persona_ref`)와 TRANSIT(`origin`·`destination`)은
-> **와이어에 필드가 없어** 백엔드 계약 개방이 선행이다.
+> PERSONA 는 `trip_id` 에서 파생한다(`generate` 와 같은 규칙) — `/replan` 은 이미
+> 그 필드를 갖고 있고, 구 `/alternatives` 에는 선택 필드로 열었다. TRANSIT 은 위
+> 판정대로 수집하지 않는다.
 >
 > 아래는 2026-08-25(TRIP-530) 시점 기록이다:
 > 구현 정본 `orchestrator/info_collector.py::INFO_REQUIREMENTS` 에는 **`GENERATE_SCHEDULE`·`REPLAN` 두 키만**

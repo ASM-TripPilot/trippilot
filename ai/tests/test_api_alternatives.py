@@ -286,3 +286,40 @@ def test_observed_rain_reaches_situation_context_without_replacing_label() -> No
     assert _with_observed_rain("KB-3 발췌", PlanBRagRequest(
         trigger=None, reason="weather", pool=None, trace_id=None, now=None,
     )) == "KB-3 발췌"
+
+
+def test_trip_id_enables_persona_collection_and_profile_line() -> None:
+    """`trip_id` 가 오면 PERSONA 를 수집해 **확정 프로필**을 컨텍스트 맨 앞에 놓는다.
+
+    KB-2 벡터 검색과 다른 출처다 — KB-2 는 저장 장소·메모 임베딩이고, 이쪽은
+    `ContextResolver` 재조회가 돌려주는 취향·동행·예산 확정값이다. 순서가 곧
+    우선순위라 확정값이 검색 발췌보다 앞이다.
+
+    `generate` 와 **같은 파생 규칙**을 쓴다(와이어에 사용자 식별자가 없어 trip_id
+    파생 — 실 식별자 합의 시 두 경로가 함께 바뀐다).
+    """
+    from trippilot.agents.planb.rag import _join_persona
+    from trippilot.domain.common import BudgetLevel
+    from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
+
+    app = build_dev_app()
+    seen = _rag_spy(app)
+    with TestClient(app) as client:
+        res = client.post(
+            "/ai/v1/itinerary/alternatives",
+            json=_request_body(trip_id="trip-428"),
+        )
+
+    assert res.status_code == 200
+    assert seen and seen[0].persona is not None      # 수집됐다
+
+    # 확정 프로필이 맨 앞 줄로 들어간다
+    profile = PersonaSummary(
+        taste_tags=(TasteTag.NATURE,), companion=CompanionType.SOLO,
+        budget=BudgetLevel.MID,
+    )
+    out = _join_persona((), (), profile)
+    assert out.startswith("[확정 프로필]")
+    assert "NATURE" in out and "SOLO" in out and "MID" in out
+    # 미수집이면 종전과 동일 — 지어내지 않는다
+    assert _join_persona((), (), None) == ""

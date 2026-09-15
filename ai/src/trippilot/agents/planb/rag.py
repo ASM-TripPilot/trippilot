@@ -50,6 +50,7 @@ from trippilot.llm_gateway.workers.alternative_selection import (
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.kb import KbHit, KbKind
 from trippilot.domain.llm import AlternativePick, CandidatePool, ScoredPoi
+from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.poi import PoiCategory
 from trippilot.domain.trigger import TriggerParams
 from trippilot.ports.embedding_port import EmbeddingPort
@@ -190,6 +191,11 @@ class PlanBRagRequest:
     # "오늘 80%"는 아침에 그친 비일 수 있다. 시간 단위 포트는 후속이고 그전까지
     # 과신하지 않는다. 빈 dict = 무보정(미등록·조회 실패 포함).
     rain_prob_by_date: Mapping[date, int] = field(default_factory=dict)
+    # 확정 취향 프로필 (`ContextResolver` 재조회, BR-U4-07) — KB-2 벡터 검색과 **다른
+    # 출처**다. KB-2 는 저장 장소·메모 임베딩이고 이쪽은 취향·동행·예산 확정값이라,
+    # 합치지 않고 persona_context 에 **먼저** 놓는다(확정값이 검색 발췌보다 앞).
+    # None = 무보정 (미수집·비가용) — 종전처럼 KB 발췌만 쓴다.
+    persona: "PersonaSummary | None" = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -456,7 +462,8 @@ class PlanBAgent:
                         _join(context.schedule), request.affected_reasons),
                     situation_context=_with_observed_rain(
                         _join(context.situation), request),
-                    persona_context=_join_persona(context.persona, request.saved_places),
+                    persona_context=_join_persona(
+                        context.persona, request.saved_places, request.persona),
                     max_alternatives=self._cfg.max_alternatives,
                     excluded_poi_ids=request.excluded_poi_ids,
                 ),
@@ -586,17 +593,47 @@ def _with_observed_rain(situation_context: str, request: "PlanBRagRequest") -> s
     """
     if not request.rain_prob_by_date:
         return situation_context
-    line = " · ".join(
-        f"{d.isoformat()} {p}%"
-        for d, p in sorted(request.rain_prob_by_date.items())
-    )
-    observed = f"[관측 강수확률 — 그날 대표값(시간대 해상도 없음)] {line}"
+    lines = []
+    if request.rain_prob_by_date:
+        rain = " · ".join(
+            f"{d.isoformat()} {p}%"
+            for d, p in sorted(request.rain_prob_by_date.items())
+        )
+        lines.append(f"[관측 강수확률 — 그날 대표값(시간대 해상도 없음)] {rain}")
+    observed = "\n".join(lines)
     return f"{situation_context}\n{observed}" if situation_context else observed
 
 
-def _join_persona(hits: Sequence[KbHit], saved_places: Sequence["SavedPlace"]) -> str:
-    """LLM persona_context — 봉투 줄이 먼저, 그 뒤 KB-2 검색 발췌."""
-    return "\n".join(part for part in (_join_saved(saved_places), _join(hits)) if part)
+def _join_persona(
+    hits: Sequence[KbHit],
+    saved_places: Sequence["SavedPlace"],
+    profile: "PersonaSummary | None" = None,
+) -> str:
+    """LLM persona_context — **확정 프로필 → 봉투 줄 → KB-2 검색 발췌** 순.
+
+    확정 프로필(`ContextResolver` 재조회)이 맨 앞인 이유: 검색 발췌는 유사도로
+    끌어온 참고 문장이고, 프로필은 사용자가 실제로 고른 값이다. 순서가 곧 우선순위다.
+    None 이면 종전과 같은 두 줄 조립 — 무보정이 정직한 값이다.
+    """
+    return "\n".join(
+        part for part in (
+            _join_profile(profile), _join_saved(saved_places), _join(hits)
+        ) if part
+    )
+
+
+def _join_profile(profile: "PersonaSummary | None") -> str:
+    """확정 취향 프로필 → 한 줄. 값이 없는 축은 적지 않는다(지어내기 금지)."""
+    if profile is None:
+        return ""
+    parts = []
+    if profile.taste_tags:
+        parts.append("취향 " + "·".join(t.value for t in profile.taste_tags))
+    if profile.companion is not None:
+        parts.append(f"동행 {profile.companion.value}")
+    if profile.budget is not None:
+        parts.append(f"예산 {profile.budget.value}")
+    return f"[확정 프로필] {' · '.join(parts)}" if parts else ""
 
 
 def _join(hits: Sequence[KbHit]) -> str:

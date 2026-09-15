@@ -374,6 +374,12 @@ class AlternativesRequest(BoundaryModel):
     reason: str = "none"  # weather|closed|delay|canceled|fully_booked|fatigue|none
     anchor: CoordSchema
     dates: list[dt.date] = Field(min_length=1)  # 재계획 대상 날짜(풀 반경·영업일 필터)
+    # 여행 ID — 페르소나 재조회 키 (선택, 하위호환). generate 와 **같은 파생 규칙**을
+    # 쓴다(`ResourceRef(kind="persona", ref_id=trip_id)`). 미지정이면 PERSONA 수집을
+    # 건너뛴다 — 기능 부재이지 실패가 아니다(INV-4). `trigger.schedule_id` 로 대신할 수
+    # 없다: 일정 ID 와 여행 ID 는 다른 키라 파생하면 없는 페르소나를 찾는다.
+    trip_id: str | None = Field(default=None, min_length=1)
+
     budget_level: str | None = None
     transport_mode: str | None = None
     excluded_poi_ids: list[str] = Field(default_factory=list)
