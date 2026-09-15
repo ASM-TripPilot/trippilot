@@ -1,11 +1,8 @@
+import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
+import { formatConfirmedDateRange } from '@/entities/trip/lib/formatTripPeriod';
 import type { ItineraryDaysItem } from '@/shared/api/generated/schemas';
 
-import {
-  buildPlanDayTabs,
-  formatConfirmedDateRange,
-  formatNightsLabel,
-  resolvePlanState,
-} from './planState';
+import { buildPlanDayTabs, resolvePlanState } from './planState';
 
 /**
  * h25 완성 일정의 순수 판정/조립.

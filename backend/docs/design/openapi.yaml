@@ -1851,6 +1851,17 @@ components:
         seq: { type: integer }
         region: { type: string }
         nights: { type: integer }
+        regionCode:
+          type: string
+          nullable: true
+          description: >
+            행정구역 표준코드(`GET /regions` 의 `regionCode`). **주면 이름 조회를 건너뛴다** —
+            동명이지역(고성군: 강원·경남 / 중구 5곳)은 이름만으로 어느 쪽인지 정할 수 없어 서버가
+            비워 두는데, 코드가 오면 그 애매함이 생기지 않는다.
+            생략하면 종전대로 이름으로 찾는다(기존 클라이언트 동작 불변).
+            **목적지로 쓸 수 없는 코드(`selectable=false`)나 없는 코드는 400** — 명시한 값을 조용히
+            무시하면 사용자가 고른 곳과 다른 지역으로 여행이 만들어진다.
+          example: '51720'
 
     Trip:
       type: object
@@ -2322,6 +2333,16 @@ components:
             미지정이면 AI 기본 반경. h15 "반경 넓힘"이 이 값을 올려 재요청한다.
             상한 50km — 넘기면 400. 상한이 없으면 탐색 범위가 전 지구를 덮어 DB 전체를 훑는다.
         concept: { type: string, nullable: true, maxLength: 40, description: h13 테마 }
+        reason:
+          type: string
+          nullable: true
+          maxLength: 40
+          description: >
+            i14 재계획 사유 코드(FE 카탈로그 키 — `WEATHER`·`TEMP_CLOSED`·`SLOW_MOVE`·`LOW_ENERGY`·
+            `FULLY_BOOKED`·`JUST_CHANGE`). 주면 AI 가 사유 기반 랭킹을 슬롯 교체에도 쓴다(비 오는 날
+            야외 후보를 뒤로). 사유 없는 편집 흐름(h12·h18)은 생략한다.
+            **모르는 코드도 400 이 아니다** — 서버가 사유 없음으로 눕히고 로그를 남긴다(랭킹 힌트지
+            요청 성립 조건이 아니다).
     SlotCandidates:
       type: object
       required: [candidates, radiusMUsed, degraded]

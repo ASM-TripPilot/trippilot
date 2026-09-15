@@ -19,6 +19,8 @@ dependencies {
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.kotlin.reflect)
+    // 계측(BR-U5-31 강등 건수)만 쓴다 — 레지스트리 구현·내보내기는 app 이 갖는다.
+    implementation(libs.micrometer.core)
     // 아웃박스 payload(JSON 문자열)를 읽는다. 트리로만 읽으므로 Kotlin 모듈은 필요 없다.
     implementation(libs.jackson.module.kotlin)
     implementation(libs.jackson3.module.kotlin)         // AI 경계 매퍼(Jackson 3 = SB4 기본) — 일정 경계와 같은 관례

@@ -5,9 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
+import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import {
   buildPlanDayTabs,
-  formatNightsLabel,
   isConfirmLocked,
   resolvePlanState,
 } from '@/features/itinerary/model/planState';

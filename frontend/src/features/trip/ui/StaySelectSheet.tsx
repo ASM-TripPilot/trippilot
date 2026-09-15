@@ -30,6 +30,7 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
+import { SavedStayCard } from '@/entities/stay/ui/SavedStayCard';
 import type { SavedStay } from '@/shared/api/generated/schemas';
 
 import { formatStayDateRange } from '../model/stayDateImport';
@@ -68,45 +69,6 @@ function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
 
 const EMPTY_MESSAGE = '저장한 숙소가 아직 없어요';
 const ASSIGN_FAILED_MESSAGE = '지정하지 못했어요 · 잠시 후 다시 시도해 주세요';
-
-/** 후보 한 장 — 사진 자리(회색)·이름·날짜 서브라인·선택 체크. 선택 표식은 색 fill 이 아니라
- * `accessibilityState`(관측 가능) + 우측 체크로 잰다(★2). */
-function CandidateCard({
-  stay,
-  selected,
-  onSelect,
-}: {
-  stay: SavedStay;
-  selected: boolean;
-  onSelect: (savedStayId: string) => void;
-}): ReactElement {
-  const dateLine =
-    stay.checkIn && stay.checkOut
-      ? formatStayDateRange(stay.checkIn, stay.checkOut)
-      : '날짜 없음';
-
-  return (
-    <Pressable
-      testID={`trip-base-staysheet-cand-${stay.savedStayId}`}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={() => onSelect(stay.savedStayId)}
-      className={`w-full flex-row items-center gap-md rounded-card border py-[10px] pl-[10px] pr-[14px] ${
-        selected ? 'border-primary' : 'border-hairline-strong'
-      }`}
-    >
-      {/* 사진 자리 — SavedStay 계약에 imageUrl 이 없어 회색 placeholder 만(발명 금지, INV-1). */}
-      <View className="h-[56px] w-[56px] rounded-[12px] bg-surface-strong" />
-      <View className="flex-1 gap-[2px]">
-        <Text className="font-noto-bold text-card-title font-bold text-ink">
-          {stay.name}
-        </Text>
-        <Text className="font-noto text-caption text-muted">{dateLine}</Text>
-      </View>
-      {selected ? <CheckGlyph size={22} /> : null}
-    </Pressable>
-  );
-}
 
 export function StaySelectSheet({
   title,
@@ -159,14 +121,32 @@ export function StaySelectSheet({
           </View>
         ) : (
           <View className="gap-sm">
-            {candidates.map((stay) => (
-              <CandidateCard
-                key={stay.savedStayId}
-                stay={stay}
-                selected={stay.savedStayId === selectedSavedStayId}
-                onSelect={onSelect}
-              />
-            ))}
+            {candidates.map((stay) => {
+              const selected = stay.savedStayId === selectedSavedStayId;
+              const dateLine =
+                stay.checkIn && stay.checkOut
+                  ? formatStayDateRange(stay.checkIn, stay.checkOut)
+                  : '날짜 없음';
+              // 후보 카드를 entities degrade 카드로 위임(★16). 선택은 색이 아니라
+              // accessibilityState + 우측 체크(trailing)로 잰다(★2). 사진·가격·거리는 계약 무라
+              // 카드가 안 그린다(INV-1). 사진 자리는 카드의 회색 placeholder.
+              return (
+                <SavedStayCard
+                  key={stay.savedStayId}
+                  testID={`trip-base-staysheet-cand-${stay.savedStayId}`}
+                  name={stay.name}
+                  layout="row"
+                  selected={selected}
+                  subtitle={
+                    <Text className="font-noto text-caption text-muted">
+                      {dateLine}
+                    </Text>
+                  }
+                  trailing={selected ? <CheckGlyph size={22} /> : null}
+                  onPress={() => onSelect(stay.savedStayId)}
+                />
+              );
+            })}
           </View>
         )}
 

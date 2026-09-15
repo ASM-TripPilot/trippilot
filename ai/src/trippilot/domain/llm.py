@@ -59,6 +59,11 @@ class LlmFeature(Enum):
     # **같은 출력 계약**(드롭인 강등의 전제). 별도 feature인 이유: TierRouter가
     # feature→model 결정론이라 같은 이름으로는 vision 모델을 분리 지정할 수 없다(미결 #6).
     REFLECTION_TEMPLATE_VISION = "REFLECTION_TEMPLATE_VISION"  # U6 Phase 2 (TRIP-595)
+    # j06 공유 카드의 캡션·해시태그 (U6, TRIP-429 후속). 회고 본문(REFLECTION_TEMPLATE)과
+    # **다른 산출물**이다 — 카드 이미지(통계·동선·워터마크)는 서비스가 기계 조립하고,
+    # 그 아래 붙는 SNS 문구 두 자리만 LLM이 쓴다. 종전엔 클라이언트가 기계 문자열로
+    # 조립했다(`{여행제목} 여행의 기록` · `#{지역}여행`) — 그 자리를 대체한다.
+    SHARE_CARD_COPY = "SHARE_CARD_COPY"  # U6 (TRIP-429 후속 — j06)
     PLACE_EXTRACTION = "PLACE_EXTRACTION"  # U6 (백그라운드)
     # 웹 검색 스니펫 → 행사(축제·공연·전시) 구조화 추출 — 웹소싱 파이프라인의
     # 추출 단계. 행사는 POI가 아니라 후보 풀에 편입되지 않는다 (domain/event.py).
@@ -66,6 +71,16 @@ class LlmFeature(Enum):
     # EditAgent 전속 — 편집 발화 → EditCommand 초안 번역.
     # 확정된 EDIT_SCHEDULE 의도의 세부 번역이지 라우팅 재해석이 아니다 (DL-3, BR-AF-08).
     EDIT_TRANSLATION = "EDIT_TRANSLATION"  # agent-foundation FD §1
+    # PlanBAgent 전속 — 재계획 자유 입력 → 지시 키(KB-4) 번역. **임베딩 매칭이 놓친
+    # 발화만** 받는다(1차는 `agents/planb/directives.match_free_text`, 임계 0.74).
+    # 지시 목록은 서버가 주입해 사전이 늘어도 프롬프트가 안 바뀐다 (EDIT_TRANSLATION 선례).
+    REPLAN_DIRECTIVE_TRANSLATION = "REPLAN_DIRECTIVE_TRANSLATION"  # 재계획 연동 설계 §3
+    # 질문뱅크 증강(§3.2 ②) — seed 문장 하나에서 어휘·말투가 다른 변형을 만든다.
+    # **PARAPHRASE 와 반대 목적이라 따로 있다**: PARAPHRASE 는 투표용 재질의라 "원문 어휘를
+    # 그대로 유지" 가 규칙이지만, 증강은 어휘가 달라야 1차 적중이 오른다(어휘·구조 차이가
+    # 1차 미달의 실제 원인 — TRIP-840 실측). **오프라인 전용**: 런타임 요청 경로에서 부르지
+    # 않는다(scripts/augment_bank.py).
+    BANK_AUGMENT = "BANK_AUGMENT"  # intent-matching-design §3.2 ②
 
 
 class ModelTier(Enum):

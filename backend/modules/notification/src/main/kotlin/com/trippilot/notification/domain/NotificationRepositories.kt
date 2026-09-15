@@ -16,6 +16,20 @@ interface NotificationRepository {
     /** 최신순. [unreadOnly] 면 미읽음만. */
     fun findByAccount(accountId: UUID, unreadOnly: Boolean, limit: Int): List<Notification>
 
+    /**
+     * 이 계정에 **푸시가 실제로 나간** 건수를 시간·일 두 창으로 센다(COST-U6-01 상한 판정).
+     *
+     * 두 값을 한 번에 돌려주는 이유: 창이 겹치므로(1시간 ⊂ 1일) 한 번의 스캔으로 둘 다 셀 수 있다.
+     * 나눠 부르면 발송마다 쿼리가 둘이 되고, 그 사이에 값이 갈려 판정이 어긋날 수도 있다.
+     */
+    fun countPushed(accountId: UUID, hourFrom: Instant, dayFrom: Instant): PushedCounts
+
+    /**
+     * **전 계정** 미읽음 누적(OBS-U6-04). 계정별이 아닌 이유: 이 값은 사용자에게 보이는 수가 아니라
+     * "소비가 따라오고 있는가"를 재는 운영 지표다 — 계정별로 쪼개면 태그 카디널리티만 폭발한다.
+     */
+    fun countUnread(): Long
+
     /** 이미 읽었거나 남의 알림이면 false. */
     fun markRead(accountId: UUID, notificationId: UUID, at: Instant): Boolean
 
@@ -51,3 +65,6 @@ interface NotificationScheduleRepository {
 
     fun findPendingByTrip(tripId: UUID): List<NotificationSchedule>
 }
+
+/** 최근 두 창의 실제 발송 건수(COST-U6-01). */
+data class PushedCounts(val inHour: Long, val inDay: Long)

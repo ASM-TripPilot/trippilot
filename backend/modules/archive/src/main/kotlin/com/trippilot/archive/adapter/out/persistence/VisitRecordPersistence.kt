@@ -60,6 +60,29 @@ class VisitPhotoMetaRepositoryAdapter(
         jdbc.update("DELETE FROM visit_photo_meta WHERE visit_photo_meta_id = ?", visitPhotoMetaId) == 1
 
     /**
+     * EXIF 좌표만 지운다(INV-L4). 행·메모·방문 체크는 남긴다 — 사진 자체는 사용자 기기에 있고
+     * 우리는 메타만 들고 있어, 좌표를 지워도 사진 카드가 사라지지 않는다.
+     *
+     * **여행 식별자로 좁힌다** — `trip` 을 직접 조인하지 않는 이유는 그 표가 다른 모듈 소유이기
+     * 때문이다(이 리포에는 모듈 밖 표를 조인하는 선례가 없다). 범위는 호출측이 파사드로 받아 온다.
+     *
+     * `WHERE` 에 "좌표가 있는 행"을 넣어 **실제로 지운 수**가 반환되게 한다 — 이미 null 인 행까지
+     * 세면 파기 기록의 건수가 부풀어 "지웠다"는 말이 과장된다.
+     */
+    override fun clearExifCoordinates(tripIds: Collection<UUID>): Int {
+        if (tripIds.isEmpty()) return 0
+        val marks = tripIds.joinToString(",") { "?" }
+        return jdbc.update(
+            """
+            UPDATE visit_photo_meta SET exif_lat = NULL, exif_lng = NULL
+             WHERE visit_check_id IN (SELECT visit_check_id FROM visit_check WHERE trip_id IN ($marks))
+               AND (exif_lat IS NOT NULL OR exif_lng IS NOT NULL)
+            """.trimIndent(),
+            *tripIds.toTypedArray(),
+        )
+    }
+
+    /**
      * 개수만 센다 — 목록을 읽어 세면 방문 수 × 사진 수만큼 행이 오간다. 화면과 AI 컨텍스트 둘 다
      * 개수만 쓰므로 그 이상 가져올 이유가 없다.
      */

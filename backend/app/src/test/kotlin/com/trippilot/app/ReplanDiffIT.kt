@@ -85,6 +85,7 @@ class ReplanDiffIT : AbstractPostgresIntegrationTest() {
                 startAt = LocalTime.of(10 + i, 0), endAt = LocalTime.of(11 + i, 0),
                 isFixed = false, endsNextDay = false,
                 distanceRange = "가까움", placementReason = "비 예보로 실내 대안",
+                hasViolation = false, violationReason = null,
             )
         },
     ).toMap()

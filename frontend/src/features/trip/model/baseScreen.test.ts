@@ -1,10 +1,10 @@
-import type { DayCoverage } from '@/shared/api/generated/schemas';
-
 import {
   formatSectionRange,
   formatTripRange,
-  unresolvedDaysView,
-} from './baseScreen';
+} from '@/entities/trip/lib/formatTripPeriod';
+import type { DayCoverage } from '@/shared/api/generated/schemas';
+
+import { unresolvedDaysView } from './baseScreen';
 
 /**
  * TRIP-225 g02 — 화면이 그릴 **문자열**을 만드는 순수 함수들. 네트워크·시계를 안 건드린다.

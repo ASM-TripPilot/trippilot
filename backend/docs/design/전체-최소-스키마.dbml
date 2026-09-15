@@ -218,7 +218,7 @@ Table replan_session {
   id uuid [pk]
   trip_id uuid [ref: > trip.id]
   trigger_event_id uuid [ref: > trigger_event.id]
-  reason varchar [note: 'weather/closed/delay/canceled/fatigue/none']
+  reasons text[] [note: 'FE 어휘 다중. AI 로는 weather/closed/delay/canceled/fully_booked/fatigue/none 로 번역']
   mode varchar [note: 'ai/manual']
   status varchar [note: 'loading/proposed/committed/canceled/undone']
   created_at timestamptz

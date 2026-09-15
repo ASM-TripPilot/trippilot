@@ -112,7 +112,15 @@ def load_bank(data: object) -> tuple[BankEntry, ...]:
         questions = group.get("questions")
         if not isinstance(questions, Sequence) or isinstance(questions, (str, bytes)) or not questions:
             raise BankLoadError(f"{intent.value}: questions는 비어있지 않은 목록이어야 함")
-        for q_idx, question in enumerate(questions):
+        # 증강분(§3.2 ②)은 `augmented:` 목록으로 따로 싣는다 — 수기 seed 와 LLM 생성분을 한
+        # 목록에 섞으면 뱅크가 "전부 사람이 쓴 문장"이라고 거짓말하고, 증강분만 되돌리거나
+        # 마이닝분(③)을 분리 추적할 수단도 사라진다. id 는 seed 다음 번호로 이어 붙인다.
+        augmented = group.get("augmented") or ()
+        if isinstance(augmented, (str, bytes)) or not isinstance(augmented, Sequence):
+            raise BankLoadError(f"{intent.value}: augmented는 목록이어야 함")
+        for q_idx, (question, item_origin) in enumerate(
+            [(q, str(origin)) for q in questions] + [(q, "augmented") for q in augmented]
+        ):
             if not isinstance(question, str) or not question.strip():
                 raise BankLoadError(f"{intent.value}[{q_idx}]: 질문이 비어있음")
             entry_id = f"{intent.value}#{q_idx:02d}"
@@ -126,7 +134,7 @@ def load_bank(data: object) -> tuple[BankEntry, ...]:
                     intent=intent,
                     question=question,
                     reviewed=reviewed,
-                    origin=str(origin),
+                    origin=item_origin,
                     bank_version=version,
                     slot_pattern=slot_pattern,
                 )

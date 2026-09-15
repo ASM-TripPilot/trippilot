@@ -16,13 +16,17 @@
  * 넉넉히 둬 마지막 항목이 안 가리게 한다. 탭바는 SafeArea 를 모르는 순수 뷰다(repo-trap).
  */
 import type { ReactElement } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import type { PlaceCardVM } from '@/entities/place/model';
+import { PlaceRailCard } from '@/entities/place/ui/PlaceRailCard';
+import type { StayCardVM } from '@/entities/stay/model';
+import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
+import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 
 import {
   CloseGlyph,
-  HeartFilledGlyph,
-  HeartOutlineGlyph,
   InfoGlyph,
   MapPinGlyph,
   SearchGlyph,
@@ -30,21 +34,10 @@ import {
   WarningTriangleGlyph,
 } from '@/features/explore/ui/ExploreGlyphs';
 
-export interface StayCardVM {
-  key: string;
-  name: string;
-  region: string;
-  priceText: string;
-}
-
-/** 가볼 곳 레인 카드(TRIP-470) — 이름·지역 + 사진(TRIP-496, `Place.imageUrl` 계약에 존재).
- *  저장 하트는 여전히 스코프 밖. `imageUrl` 은 옵셔널(없으면 회색 플레이스홀더, 지어내지 않음·INV-1). */
-export interface PlaceCardVM {
-  poiId: string;
-  name: string;
-  region: string;
-  imageUrl?: string | null;
-}
+// 카드 뷰모델은 entities 로 이관됐다(StayCardVM=807 · PlaceCardVM=806) — 여기서 재수출해 기존
+// 소비처(DestinationDetailScreen·placePhoto 테스트·라우트)의 `./ExploreLandingScreen`·이 파일 경유
+// import 를 그대로 살린다(★11 — 로컬 export interface 제거가 진짜 이동 증거).
+export type { PlaceCardVM, StayCardVM };
 
 export interface ExploreLandingScreenProps {
   heading: { title: string; subtitle: string };
@@ -131,109 +124,6 @@ function LaneHeader({
         </Pressable>
       ) : null}
     </View>
-  );
-}
-
-function StayCard({
-  card,
-  saved,
-  pending,
-  onToggleSave,
-  onPressCard,
-}: {
-  card: StayCardVM;
-  saved: boolean;
-  pending: boolean;
-  onToggleSave?: (card: StayCardVM) => void;
-  onPressCard?: (card: StayCardVM) => void;
-}): ReactElement {
-  // 사진은 계약(StayItem)에 URL 필드가 없어 회색 자리(surface-strong)로 둔다 — URL 을
-  // 지어내지 않는다(INV-1). 메타는 이름·지역·최저가뿐: 거리·소요시간 데이터가 없다(INV-3).
-  // 사진 우상단에 저장 하트(흰 원+하트, d04 PlaceCard 선례) — 담김/미담김을 서로 다른 글리프
-  // 로 그려 색 토글이 아니라 testID 로 관찰되게 한다. 대기 중(pending)이면 disabled 라 재누름이
-  // onPress 를 안 부른다(연타 가드). 카드 루트는 Pressable — 하트 press 는 findEventHandler가
-  // 하트에서 멈춰 카드 push 를 삼키지 않는다(★F-4).
-  return (
-    <Pressable
-      testID={`explore-stay-card-${card.key}`}
-      accessibilityRole="button"
-      onPress={() => onPressCard?.(card)}
-      className="w-[200px]"
-    >
-      <View className="h-[130px] w-full rounded-card bg-surface-strong">
-        <Pressable
-          testID={`explore-stay-save-${card.key}`}
-          accessibilityRole="button"
-          accessibilityState={{ selected: saved }}
-          disabled={pending}
-          onPress={() => onToggleSave?.(card)}
-          className="absolute right-sm top-sm h-8 w-8 items-center justify-center rounded-pill bg-on-primary"
-        >
-          {saved ? (
-            <HeartFilledGlyph
-              testID={`explore-stay-heart-filled-${card.key}`}
-              size={18}
-            />
-          ) : (
-            <HeartOutlineGlyph
-              testID={`explore-stay-heart-outline-${card.key}`}
-              size={18}
-            />
-          )}
-        </Pressable>
-      </View>
-      <Text
-        numberOfLines={1}
-        className="mt-sm font-noto-bold text-card-title font-bold text-ink"
-      >
-        {card.name}
-      </Text>
-      <Text numberOfLines={1} className="mt-xs font-noto text-label text-muted">
-        {card.region}
-      </Text>
-      <Text className="mt-xs font-noto-bold text-card-title font-bold text-ink">
-        {card.priceText}
-      </Text>
-    </Pressable>
-  );
-}
-
-// 가볼 곳 레인 카드(TRIP-470) — 사진 + 이름·지역. 저장 하트·가격 없음(스코프 밖). 카드 press → d06 상세.
-// 사진은 `imageUrl` 이 있을 때만 그린다 — 없으면 회색 플레이스홀더(기본 이미지 발명 금지·INV-1, TRIP-496).
-function PlaceCard({
-  card,
-  onPress,
-}: {
-  card: PlaceCardVM;
-  onPress: (poiId: string) => void;
-}): ReactElement {
-  return (
-    <Pressable
-      testID={`explore-place-card-${card.poiId}`}
-      accessibilityRole="button"
-      onPress={() => onPress(card.poiId)}
-      className="w-[160px]"
-    >
-      {card.imageUrl ? (
-        <Image
-          testID={`explore-place-card-image-${card.poiId}`}
-          source={{ uri: card.imageUrl }}
-          resizeMode="cover"
-          className="h-[110px] w-full rounded-card bg-surface-strong"
-        />
-      ) : (
-        <View className="h-[110px] w-full rounded-card bg-surface-strong" />
-      )}
-      <Text
-        numberOfLines={1}
-        className="mt-sm font-noto-bold text-card-title font-bold text-ink"
-      >
-        {card.name}
-      </Text>
-      <Text numberOfLines={1} className="mt-xs font-noto text-label text-muted">
-        {card.region}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -349,13 +239,24 @@ export function ExploreLandingScreen({
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View className="flex-row gap-md">
                   {stayLane.cards.map((card) => (
-                    <StayCard
+                    // rail 카드 — 하트는 카드가 소유(save 계약). 담김/미담김은 색이 아니라 서로 다른
+                    // 글리프 testID + selected 로 관측한다(★5). 사진은 회색 자리(URL 계약 무 · INV-1).
+                    <StaySearchCard
                       key={card.key}
-                      card={card}
-                      saved={savedKeys.includes(card.key)}
-                      pending={pendingKeys.includes(card.key)}
-                      onToggleSave={onToggleSave}
-                      onPressCard={onPressCard}
+                      testID={`explore-stay-card-${card.key}`}
+                      name={card.name}
+                      region={card.region}
+                      priceText={card.priceText}
+                      variant="rail"
+                      save={{
+                        saved: savedKeys.includes(card.key),
+                        pending: pendingKeys.includes(card.key),
+                        onToggle: () => onToggleSave?.(card),
+                        testID: `explore-stay-save-${card.key}`,
+                        filledTestID: `explore-stay-heart-filled-${card.key}`,
+                        outlineTestID: `explore-stay-heart-outline-${card.key}`,
+                      }}
+                      onPress={() => onPressCard?.(card)}
                     />
                   ))}
                 </View>
@@ -389,7 +290,7 @@ export function ExploreLandingScreen({
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View className="flex-row gap-md">
                   {placeLane.cards.map((card) => (
-                    <PlaceCard
+                    <PlaceRailCard
                       key={card.poiId}
                       card={card}
                       onPress={placeLane.onPressCard}

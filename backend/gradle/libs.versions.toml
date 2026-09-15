@@ -59,6 +59,7 @@ logstash-logback-encoder = { module = "net.logstash.logback:logstash-logback-enc
 # Spring Boot 4 에서 컨텍스트가 깨진다(실측).
 opentelemetry-logback-appender = { module = "io.opentelemetry.instrumentation:opentelemetry-logback-appender-1.0", version = "2.14.0-alpha" }
 micrometer-registry-otlp = { module = "io.micrometer:micrometer-registry-otlp" }   # 버전은 Spring Boot BOM 관리
+micrometer-core = { module = "io.micrometer:micrometer-core" }                 # 계측만 필요한 모듈용(레지스트리는 app 이 제공)
 
 swagger-ui = { module = "org.webjars:swagger-ui", version.ref = "swaggerUi" }  # Swagger UI 정적 자산(설계-우선 서빙)
 

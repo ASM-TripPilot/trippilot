@@ -89,7 +89,7 @@ class AccountDeletionServiceTest : StringSpec({
         val sessions = FakeSessions()
         val legalLog = FakeLegalLog()
         val publisher = CapturingPublisher()
-        val location = LocationConsentService(FakeStateRepo(), legalLog, EmptyTerms(), NoopConsentRecords(), clock)
+        val location = LocationConsentService(FakeStateRepo(), legalLog, EmptyTerms(), NoopConsentRecords(), publisher, clock)
         val svc = AccountDeletionService(accounts, schedules, sessions, location, publisher, clock)
         return Triple(svc, accounts, Triple(schedules, sessions, publisher))
     }
@@ -111,13 +111,15 @@ class AccountDeletionServiceTest : StringSpec({
         result.cascadeSummary.legallyRetained shouldBe listOf("CONSENT_RECORD", "LOCATION_LEGAL_LOG")
         schedules.findActive(id).shouldNotBeNull()
         sessions.revokedAccount shouldBe id // 전 기기 세션 폐기
-        publisher.events.map { it.eventType } shouldBe listOf("auth.AccountDeletionRequested")
+        // 파기 신호가 **먼저** 나간다 — 계정이 지워지기 전에 저장된 위치정보를 지우라는 뜻이다(INV-L4).
+        publisher.events.map { it.eventType } shouldBe
+            listOf("auth.GpsRecordingOptOut", "auth.AccountDeletionRequested")
     }
 
     "삭제 요청 시 GPS 파기(PURGE) 로그가 남는다" {
         val accounts = FakeAccounts()
         val legalLog = FakeLegalLog()
-        val location = LocationConsentService(FakeStateRepo(), legalLog, EmptyTerms(), NoopConsentRecords(), clock)
+        val location = LocationConsentService(FakeStateRepo(), legalLog, EmptyTerms(), NoopConsentRecords(), CapturingPublisher(), clock)
         val svc = AccountDeletionService(accounts, FakeSchedules(), FakeSessions(), location, CapturingPublisher(), clock)
         val id = activeAccount(accounts)
 

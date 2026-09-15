@@ -8,14 +8,14 @@ import path from 'path';
  * TRIP-563 · AC-5·AC-8 — i13/i16 재계획안 골격 소스 층 가드(앱을 안 돌리고 소스를 글자로 읽는다).
  *
  * 무엇을 보장하나:
- *  - 🔴 G2 — 신규 5파일(화면 3·페이지·라우트)이 정본 경로에 실재하고, features/planb/ui 재귀 스캔이
- *    신규 3화면을 자동 편입한다(개념 [[소스 스캔 가드의 폴더 전수와 자동 편입]]). 구현 전 → red.
- *  - 🔴 G3 — 신규 3화면에 소요시간 표기(N분·N시간·소요) 0(INV-3·AC-5). 광역 그물은 기존
+ *  - 🔴 G2 — 신규 4파일(화면 2·페이지·라우트)이 정본 경로에 실재하고, features/planb/ui 재귀 스캔이
+ *    신규 2화면을 자동 편입한다(개념 [[소스 스캔 가드의 폴더 전수와 자동 편입]]). 구현 전 → red.
+ *  - 🔴 G3 — 신규 2화면에 소요시간 표기(N분·N시간·소요) 0(INV-3·AC-5). 광역 그물은 기존
  *    executionDurationStructure.test.ts(features/{execution,planb}/ui/** 재귀)가 유지 — 이 G3 는
  *    이 사이클 전용 명시 + 파일존재 red 앵커.
- *  - 🔴 G4 — PlanbDraftPage + 신규 3화면이 useApplyReplan·itinerary PUT·codegen apply 훅을 import
+ *  - 🔴 G4 — PlanbDraftPage + 신규 2화면이 useApplyReplan·itinerary PUT·codegen apply 훅을 import
  *    하지 않는다(AC-8·INV-U4-05 무쓰기). 광역 봉인은 기존 planbApplyStructure.test.ts G2 가 유지.
- *  - 🔴 G5 — 신규 3화면이 resolveReplanState·useReplanSession·expo-router·react-query 를 모른다
+ *  - 🔴 G5 — 신규 2화면이 resolveReplanState·useReplanSession·expo-router·react-query 를 모른다
  *    (화면 순수성 = 판정 1회, 화면 재판정 없음).
  *  - 🔴 G6 — draft 라우트가 @/pages/planb-draft·PlanbDraftPage·useLocalSearchParams 로 얇게 위임.
  *
@@ -66,9 +66,13 @@ function readOne(rel: string): string {
 }
 
 const UI_DIR = 'features/planb/ui';
+// TRIP-810 재조준 — ReplanSlotRow 는 이번 사이클에 features/planb/ui 에서 **삭제**되고 정본은
+// entities/itinerary-slot/ui 로 이관됐다(809 이사, 810 shim 삭제). NEW_SCREENS/NEW_FILES 에서 빼지
+// 않으면 G2 의 existsSync·재귀 편입 단언이 삭제 후 stale red 가 된다(폴더 재귀 모집단이 삭제로
+// 실제로 줄어드는 809 함정, 02a ★4). ReplanSlotRow 의 INV-3 그물은 entitiesItinerarySlotStructure G3
+// 가 지고, "shim 부활 금지"는 entitiesItinerarySlotConsumers 파일 부재 describe 가 진다.
 const NEW_SCREENS = [
   'features/planb/ui/ReplanDraftScreen.tsx',
-  'features/planb/ui/ReplanSlotRow.tsx',
   'features/planb/ui/NoAlternativeScreen.tsx',
 ];
 const PAGE_REL = 'pages/planb-draft/ui/PlanbDraftPage.tsx';
@@ -106,13 +110,13 @@ describe('G1 · 전처리×탐지기 자가검사 (★ 조합)', () => {
 });
 
 describe('🔴 G2 · 신규 파일 실재 + features/planb/ui 재귀 편입', () => {
-  it('신규 5파일이 정본 경로에 있다', () => {
+  it('신규 4파일이 정본 경로에 있다', () => {
     for (const rel of NEW_FILES) {
       expect(fs.existsSync(path.join(ROOT, rel))).toBe(true);
     }
   });
 
-  it('features/planb/ui 재귀 스캔이 신규 3화면을 포함한다(자동 편입)', () => {
+  it('features/planb/ui 재귀 스캔이 신규 2화면을 포함한다(자동 편입)', () => {
     const scanned = listSourceFiles(path.join(ROOT, UI_DIR)).map(relOf);
     for (const rel of NEW_SCREENS) {
       expect(scanned).toContain(rel);
@@ -120,21 +124,24 @@ describe('🔴 G2 · 신규 파일 실재 + features/planb/ui 재귀 편입', ()
   });
 });
 
-describe('🔴 G3 · AC-5 — 신규 3화면에 소요시간 표기 0 (INV-3)', () => {
-  it('세 화면(주석 제외)에 분·시간·소요 표기가 없다 + 긍정 짝(파일 실제로 읽음)', () => {
+describe('🔴 G3 · AC-5 — 신규 2화면에 소요시간 표기 0 (INV-3)', () => {
+  it('두 화면(주석 제외)에 분·시간·소요 표기가 없다 + 긍정 짝(파일 실제로 읽음)', () => {
     const offenders = NEW_SCREENS.filter((rel) =>
       DURATION_TEXT.test(readOne(rel))
     );
     expect(offenders).toEqual([]);
-    // 긍정 짝 — ReplanSlotRow 가 슬롯 표면을 그린다(빈 파일 공허 통과 방지).
-    expect(readOne('features/planb/ui/ReplanSlotRow.tsx')).toContain(
+    // 긍정 짝 — ReplanSlotRow 가 슬롯 표면을 그린다(빈 파일 공허 통과 방지). 정본은 entities
+    // (809 바이트 이사). TRIP-810 에서 옛 자리 재수출 shim(features/planb/ui/ReplanSlotRow.tsx)이
+    // 삭제됐으므로 NEW_SCREENS 에서도 뺐다(위 재조준 주석·02a ★4) — 이 긍정 짝은 entities 정본을 계속
+    // 겨눠 슬롯 표면 실재를 증명한다(808 「선재 가드 재조준(코드 이동 추적)」).
+    expect(readOne('entities/itinerary-slot/ui/ReplanSlotRow.tsx')).toContain(
       'planb-draft-slot'
     );
   });
 });
 
 describe('🔴 G4 · AC-8 — 무쓰기(useApplyReplan·itinerary PUT·codegen apply 0)', () => {
-  it('PlanbDraftPage + 신규 3화면이 쓰기 훅을 import 하지 않는다 + 긍정 짝', () => {
+  it('PlanbDraftPage + 신규 2화면이 쓰기 훅을 import 하지 않는다 + 긍정 짝', () => {
     const targets = [PAGE_REL, ...NEW_SCREENS];
     for (const rel of targets) {
       const source = readOne(rel);
@@ -150,7 +157,7 @@ describe('🔴 G4 · AC-8 — 무쓰기(useApplyReplan·itinerary PUT·codegen a
 });
 
 describe('🔴 G5 · 화면 순수성 + 판정 1회', () => {
-  it('신규 3화면이 판정·조회·라우팅을 모른다(재판정 없음) + 긍정 짝(자기 testID 보유)', () => {
+  it('신규 2화면이 판정·조회·라우팅을 모른다(재판정 없음) + 긍정 짝(자기 testID 보유)', () => {
     const FORBIDDEN = [
       'resolveReplanState',
       'useReplanSession',

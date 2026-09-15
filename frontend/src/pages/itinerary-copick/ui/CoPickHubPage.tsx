@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import { coPickProgress } from '@/features/itinerary/model/coPickProgress';
-import { buildSlotKey } from '@/features/itinerary/model/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { timeBandLabel } from '@/features/itinerary/model/timeBandLabel';
 import {
   CoPickHubScreen,

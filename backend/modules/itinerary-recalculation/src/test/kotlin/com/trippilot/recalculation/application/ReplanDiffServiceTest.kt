@@ -62,6 +62,7 @@ class ReplanDiffServiceTest : StringSpec({
         ReplanSlot(
             poiId = poi, startAt = LocalTime.parse(start), endAt = LocalTime.parse(end),
             isFixed = fixed, endsNextDay = endsNextDay, distanceRange = "가까움", placementReason = null,
+            hasViolation = false, violationReason = null,
         )
 
 

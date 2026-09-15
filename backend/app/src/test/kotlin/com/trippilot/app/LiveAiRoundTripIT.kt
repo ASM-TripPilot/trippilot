@@ -46,6 +46,10 @@ import kotlin.system.measureTimeMillis
     properties = [
         "trippilot.ai.schedule.mode=http",
         "trippilot.ai.schedule.base-url=\${LIVE_AI_URL:http://localhost:8000}",
+        // **빈 값이 아닌 기본값을 둔다**(TRIP-856). 환경변수가 없으면 토큰이 비어 헤더가 안 실리고,
+        // 그러면 이 왕복은 "상대가 우리 자격증명 헤더를 받아들이는가"를 한 번도 확인하지 않는다.
+        // 상대는 아직 검증을 켜지 않았으므로 아무 값이나 통과해야 정상이다 — 그 사실 자체가 검증 대상이다.
+        "trippilot.ai.schedule.service-token=\${SERVICE_AUTH_TOKEN:live-roundtrip-token}",
     ],
 )
 @EnabledIfEnvironmentVariable(named = "LIVE_AI", matches = "1")
@@ -159,6 +163,11 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
                 originLat = 33.45, originLng = 126.56, lockedBlocks = listOf(FixedBlock(poi, today, LocalTime.parse("09:00"), 60)),
                 reasons = listOf("비가 와요"), directives = listOf("실내로"), freeText = null,
                 excludedPoiIds = emptyList(),
+                companionType = "친구", budgetLevel = "MID",
+                preferenceProfile = PreferenceProfile(
+                    listOf("미식"), listOf("야경"), listOf("한식"), listOf("렌터카"), "알차게", listOf("친구"), false, "표준",
+                ),
+                currentSlots = emptyList(), savedPlaces = emptyList(),
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 10_000L),
             ),
         )
@@ -177,6 +186,8 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
         concept = "카페",
         excludePoiIds = emptyList(),
         placementReason = "일몰 명소",
+        // 실 왕복에서도 번역표를 태운다 — FE 카탈로그 코드로 보내고 어댑터가 상대 어휘로 바꾼다.
+        reason = "WEATHER",
         requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 25_000L),
     )
 

@@ -1,6 +1,7 @@
 package com.trippilot.notification.application
 
 import com.trippilot.notification.domain.Notification
+import com.trippilot.notification.domain.PushedCounts
 import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.NotificationSchedule
 import com.trippilot.notification.domain.NotificationScheduleRepository
@@ -18,6 +19,21 @@ import java.util.UUID
  */
 internal class FakeNotifications : NotificationRepository {
     val stored = mutableListOf<Notification>()
+
+    /**
+     * 발송량 상한 판정용(COST-U6-01). 대역은 **푸시가 나간 것으로 표시된** 행만 센다 —
+     * 창 계산은 실 DB 가 하므로 여기서는 시각 비교만 흉내 낸다.
+     */
+    override fun countPushed(accountId: UUID, hourFrom: Instant, dayFrom: Instant): PushedCounts {
+        val mine = stored.filter { it.accountId == accountId && it.pushSentAt != null }
+        return PushedCounts(
+            inHour = mine.count { it.pushSentAt!! >= hourFrom }.toLong(),
+            inDay = mine.count { it.pushSentAt!! >= dayFrom }.toLong(),
+        )
+    }
+
+    /** 관측 전용 집계(OBS-U6-04) — 대역에서는 읽음 표시가 안 된 것만 센다. */
+    override fun countUnread(): Long = stored.count { it.readAt == null }.toLong()
 
     override fun appendIfAbsent(notification: Notification): Boolean {
         // UNIQUE 는 null 을 서로 다르게 본다 — 원천 사건이 없는 알림은 언제나 들어간다.
@@ -66,11 +82,21 @@ internal fun noPush(clock: java.time.Clock, notifications: NotificationRepositor
         notifications = notifications,
         toggles = toggles,
         push = object : com.trippilot.notification.domain.PushPort {
+            override val deliversExternally = false
             override fun send(tokens: List<String>, message: com.trippilot.notification.domain.PushMessage) =
                 emptyList<com.trippilot.notification.domain.PushReceipt>()
         },
+        metrics = testMetrics(notifications),
+        limits = PushRateLimits(),
         clock = clock,
     )
+
+/**
+ * 계측 대역 — 지표는 **행동에 영향을 주지 않아야** 하므로 대부분의 테스트는 값을 보지 않는다.
+ * 지표 자체를 재는 테스트는 자기 레지스트리를 따로 만들어 들여다본다(`NotificationMetricsTest`).
+ */
+internal fun testMetrics(notifications: NotificationRepository = FakeNotifications()) =
+    NotificationMetrics(io.micrometer.core.instrument.simple.SimpleMeterRegistry(), notifications)
 
 internal class FakeSchedules : NotificationScheduleRepository {
     val stored = mutableListOf<NotificationSchedule>()

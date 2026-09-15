@@ -57,7 +57,7 @@ AI 응답의 대안 1건(`AlternativeSchema`)은 `{label, poi_ids[], rationale}`
 | `trigger.schedule_id` | ✔ | `tripId.toString()` | AI 는 이 값을 KB 검색 질의 문자열 조립(`_schedule_query`)에만 쓴다. 계약 제약은 `min_length=1` 뿐. 의미상 `itineraryId` 가 더 가깝지만 입력에 없다 |
 | `trigger.affected_date` | ✔ | `SlotKey.parse(slotKey)!!.first` | 서비스가 이미 파싱해 갖고 있다. `parse` 는 `Pair<LocalDate, UUID>?` 를 돌려준다 — `.date` 멤버는 없다(2026-09-01 감사 정정) |
 | `trigger.payload` | | `{}` | 실을 신호가 없다 |
-| `reason` | | `"none"` | 어휘는 `weather\|closed\|delay\|canceled\|fatigue\|none` 이지만 **계약상 enum 이 아니다** — `{"default":"none","type":"string"}` 이라 다른 값을 넣어도 422 가 안 난다(2026-09-01 감사 정정). 그래서 오타·자유 문자열이 더 위험하다: 분기(`_DEMOTED_BY_REASON`)는 안 타면서 KB 검색 질의만 조용히 오염된다. 반드시 위 6개 중 하나를 쓴다 |
+| `reason` | | `"none"` | 어휘는 `weather\|closed\|delay\|canceled\|fully_booked\|fatigue\|none` 이지만 **계약상 enum 이 아니다** — `{"default":"none","type":"string"}` 이라 다른 값을 넣어도 422 가 안 난다(2026-09-01 감사 정정). 그래서 오타·자유 문자열이 더 위험하다: 분기(`_DEMOTED_BY_REASON`)는 안 타면서 KB 검색 질의만 조용히 오염된다. 반드시 위 7개 중 하나를 쓴다 (`fully_booked` 는 2026-09-12 추가 — 예약 마감은 취소와 다른 사유) |
 | `anchor.lat/lng` | ✔ | `centerLat` / `centerLng` | 교체 대상 슬롯의 POI 좌표(서비스가 `PoiSurfaceFacade` 로 확보) |
 | `dates` | ✔ | `[slotKey 의 date]` **1건** | `min_length=1`. 1건이므로 AI 의 다일 반경 축소(×0.7)가 안 걸리고 영업일 필터도 그 요일만 본다 — 둘 다 슬롯 교체에 맞는 동작 |
 | `budget_level` | | `null` | AI 기본 `MID`. 값을 채우려면 profile 모듈 의존이 생긴다(R1 확대) — `replan` 이 `NEUTRAL_PREFERENCES` 로 간 것과 같은 판단 |

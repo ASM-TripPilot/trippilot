@@ -2,6 +2,7 @@ package com.trippilot.notification.application
 
 import com.trippilot.notification.domain.DevicePlatform
 import com.trippilot.notification.domain.Notification
+import com.trippilot.notification.domain.PushedCounts
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.NotificationToggle
@@ -21,6 +22,7 @@ import io.kotest.matchers.shouldNotBe
 import io.kotest.property.Arb
 import io.kotest.property.PropTestConfig
 import io.kotest.property.arbitrary.enum
+import io.kotest.property.arbitrary.int
 import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.boolean
 import io.kotest.property.checkAll
@@ -58,6 +60,21 @@ class PushDispatchPropertyTest : StringSpec({
 
     class Notifications : NotificationRepository {
         val appended = mutableListOf<Notification>()
+
+        /**
+         * 발송량 상한 판정용(COST-U6-01). 대역은 **푸시가 나간 것으로 표시된** 행만 센다 —
+         * 창 계산은 실 DB 가 하므로 여기서는 시각 비교만 흉내 낸다.
+         */
+        override fun countPushed(accountId: UUID, hourFrom: Instant, dayFrom: Instant): PushedCounts {
+            val mine = appended.filter { it.accountId == accountId && it.pushSentAt != null }
+            return PushedCounts(
+                inHour = mine.count { it.pushSentAt!! >= hourFrom }.toLong(),
+                inDay = mine.count { it.pushSentAt!! >= dayFrom }.toLong(),
+            )
+        }
+
+        /** 관측 전용(OBS-U6-04) — 이 테스트는 값을 보지 않는다. */
+        override fun countUnread(): Long = appended.count { it.readAt == null }.toLong()
         val pushResults = mutableListOf<Triple<UUID, Instant?, String?>>()
         override fun appendIfAbsent(notification: Notification) = true.also { appended += notification }
         override fun findByAccount(accountId: UUID, unreadOnly: Boolean, limit: Int) = appended.toList()
@@ -77,6 +94,8 @@ class PushDispatchPropertyTest : StringSpec({
 
     /** 토큰마다 결과를 정해 주는 발송기. 호출된 토큰 목록을 남겨 "전부에 보냈나"를 볼 수 있게 한다. */
     class Sender(private val outcome: (String) -> PushStatus = { PushStatus.SENT }) : PushPort {
+        override val deliversExternally = true
+
         val calls = mutableListOf<List<String>>()
 
         /** 나간 메시지 자체를 붙든다 — 긴급도가 실제로 실렸는지는 본문을 봐야 안다. */
@@ -101,7 +120,113 @@ class PushDispatchPropertyTest : StringSpec({
 
 
     fun serviceOf(tokens: Tokens, sender: PushPort, notifications: Notifications, pushOn: Boolean = true) =
-        PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, clock)
+        PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, testMetrics(notifications), PushRateLimits(), clock)
+
+    /**
+     * **"보냈다"와 "보낸 척했다"를 지표가 가른다**(TRIP-834).
+     *
+     * 기본 발송기는 아무 데도 안 보내면서 성공을 보고한다 — 그 판단 자체는 옳다(실패로 보고하면
+     * 진짜 실패가 묻힌다). 문제는 그 상태에서 발송 지표가 **"성공률 100%"** 를 그린다는 것이고,
+     * 운영에서 그 그래프를 보면 푸시가 잘 나가고 있다고 읽는다. 태그가 그 오독을 막는다.
+     */
+    "미발송 모드의 성공은 delivery=none 으로 갈린다" {
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        val notifications = Notifications()
+        val notSending = object : PushPort {
+            override val deliversExternally = false
+            override fun send(tokens: List<String>, message: PushMessage) =
+                tokens.map { PushReceipt(it, PushStatus.SENT) }
+        }
+        val svc = PushDispatchService(
+            Tokens(listOf(token(deliverable = true))), notifications,
+            NotificationToggleService(Toggles(true), clock), notSending,
+            NotificationMetrics(registry, notifications), PushRateLimits(), clock,
+        )
+
+        svc.dispatch(notification()) shouldBe PushOutcome.SENT
+
+        registry.counter(
+            NotificationMetrics.PUSH_DISPATCH,
+            "outcome", "SENT", "reason", "none", "delivery", NotificationMetrics.DELIVERY_NONE,
+        ).count() shouldBe 1.0
+        // 실발송 태그로는 세지 않는다 — 두 값이 섞이면 가르는 의미가 없다.
+        registry.counter(
+            NotificationMetrics.PUSH_DISPATCH,
+            "outcome", "SENT", "reason", "none", "delivery", NotificationMetrics.DELIVERY_REAL,
+        ).count() shouldBe 0.0
+    }
+
+    /**
+     * **발송량 소프트 상한**(COST-U6-01). 막지 못하면 버그 하나로 한 계정이 폭주하고, Expo 무료
+     * 티어는 레이트리밋이 **계정 단위**라 그 계정 전체 발송이 죽는다.
+     */
+    "시간 상한을 넘기면 푸시를 생략한다 — 발송 시도 자체를 하지 않는다" {
+        val notifications = Notifications()
+        // 이미 10건이 나간 상태를 만든다(기본 상한 = 시간 10건).
+        repeat(10) { notifications.appended += notification().copy(pushSentAt = clock.instant()) }
+        val sender = Sender()
+        val svc = serviceOf(Tokens(listOf(token(deliverable = true))), sender, notifications)
+
+        val outcome = svc.dispatch(notification())
+
+        outcome shouldBe PushOutcome.RATE_LIMITED
+        // 레이트리밋을 아끼는 것이 목적이므로 **부르지 않는 것**까지가 요구다.
+        sender.calls.shouldBeEmpty()
+    }
+
+    "상한 아래면 평소대로 나간다 — 상한이 늘 물려 있으면 기능이 죽은 것과 같다" {
+        val notifications = Notifications()
+        repeat(9) { notifications.appended += notification().copy(pushSentAt = clock.instant()) }
+        val sender = Sender()
+        val svc = serviceOf(Tokens(listOf(token(deliverable = true))), sender, notifications)
+
+        svc.dispatch(notification()) shouldBe PushOutcome.SENT
+    }
+
+    /**
+     * **불변식**: 상한에 걸린 건은 **발송 결과를 남기지 않는다**(COST-U6-02 · INV-U6-02).
+     *
+     * 상한은 "버리는 것"이 아니라 "이번에 안 보내는 것"이다. 실패로 기록해 버리면 그 행은
+     * **시도했다가 못 갔다**로 남아, catch-up 이 다시 집어야 할 대상인지가 흐려진다. 그래서
+     * `push_sent_at`·`push_error` 가 **둘 다 null** 인 상태 — 즉 "아직 시도한 적 없음" — 로 남아야 한다.
+     *
+     * 앞선 판은 `appended.size` 가 안 변하는지를 봤는데 **공허했다**: `dispatch` 는 애초에 알림함에
+     * 쓰지 않아(적재는 `raise` 의 몫) 상한 코드를 통째로 지워도 통과한다. 지금은 발송 결과 쪽을 본다.
+     */
+    "상한에 걸리면 발송 결과를 기록하지 않는다 — 시도한 적 없는 상태로 남는다" {
+        checkAll(Arb.int(10..60)) { already ->
+            val notifications = Notifications()
+            repeat(already) { notifications.appended += notification().copy(pushSentAt = clock.instant()) }
+            val svc = serviceOf(Tokens(listOf(token(deliverable = true))), Sender(), notifications)
+
+            svc.dispatch(notification()) shouldBe PushOutcome.RATE_LIMITED
+
+            notifications.pushResults.shouldBeEmpty()
+        }
+    }
+
+    /**
+     * **계측이 실제로 배선돼 있는가**(OBS-U6-02). 지표 클래스만 테스트하면 호출을 통째로 지워도
+     * 아무것도 안 깨진다 — 그러면 지표는 영원히 0 이고 아무도 모른다.
+     */
+    "발송 결과가 지표로 흘러간다 — 계측이 호출 경로에 실제로 걸려 있다" {
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        val notifications = Notifications()
+        val svc = PushDispatchService(
+            Tokens(), notifications, NotificationToggleService(Toggles(true), clock),
+            object : PushPort {
+                override val deliversExternally = true
+                override fun send(tokens: List<String>, message: com.trippilot.notification.domain.PushMessage) =
+                    emptyList<com.trippilot.notification.domain.PushReceipt>()
+            },
+            NotificationMetrics(registry, notifications), PushRateLimits(), clock,
+        )
+
+        svc.dispatch(notification())
+
+        // 쏠 기기가 없는 경로(NO_DEVICE)도 세어야 한다 — "안 갔다"의 사유가 지표에서 갈려야 한다.
+        registry.find(NotificationMetrics.PUSH_DISPATCH).counters().sumOf { it.count() } shouldBe 1.0
+    }
 
     /**
      * 발송 지점이 **종류의 긴급도를 그대로 싣는가**.
@@ -173,6 +298,7 @@ class PushDispatchPropertyTest : StringSpec({
         val tokens = Tokens(listOf(token(deliverable = true)))
         val notifications = Notifications()
         val broken = object : PushPort {
+            override val deliversExternally = true
             override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> = error("네트워크 없음")
         }
 

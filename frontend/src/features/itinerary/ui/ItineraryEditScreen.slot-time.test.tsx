@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
 
 import type { PlanDayTab } from '../model/planState';
-import { buildSlotKey } from '../model/slotKey';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { ItineraryEditScreen } from './ItineraryEditScreen';
 
 /**

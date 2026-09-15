@@ -266,9 +266,12 @@ _EXPECTED_MODES = {
     LlmFeature.ALTERNATIVE_SELECTION: ("llm_select_alternatives", "rule_ranking"),
     LlmFeature.REFLECTION_TEMPLATE: ("llm_template", "fixed_template"),
     LlmFeature.REFLECTION_NUDGE: ("llm_nudge", "fixed_message"),
+    # j06 공유 카드 — 경계(api.wiring)가 정적 조립으로 수렴 (TRIP-429 후속)
+    LlmFeature.SHARE_CARD_COPY: ("llm_share_card", "static_copy"),
     LlmFeature.REMINDER_COPY: ("llm_reminder_copy", "backend_constant"),
     LlmFeature.INTENT: ("llm_intent", "out_of_scope"),
     LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
+    LlmFeature.BANK_AUGMENT: ("llm_augment", "(none)"),  # 오프라인 배치 — 강등할 런타임 경로 없음
     LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),
     LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
     # 규칙 하이라이트 폴백(agents/reflect/highlight_rule.py) — TRIP-595
@@ -277,6 +280,10 @@ _EXPECTED_MODES = {
     LlmFeature.REFLECTION_TEMPLATE_VISION: ("vision_template", "text_template"),
     LlmFeature.PLACE_EXTRACTION: ("llm_extract", "(none)"),
     LlmFeature.REASON_INTERPRETATION: ("llm_reason_interpretation", "unknown"),
+    # 실패해도 재계획은 돈다 — 칩 선택분과 사유가 살아 있고 자유 입력 해석만 빠진다.
+    # 그래서 to_mode 가 "실패"가 아니라 "칩만"이다 (재계획 연동 설계 §3).
+    LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: (
+        "llm_directive_translation", "chips_only"),
 }
 
 

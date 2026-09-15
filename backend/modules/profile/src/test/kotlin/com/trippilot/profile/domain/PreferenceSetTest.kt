@@ -6,8 +6,9 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.property.Arb
+import io.kotest.property.arbitrary.boolean
+import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.of
-import io.kotest.property.arbitrary.set
 import io.kotest.property.checkAll
 import java.time.Instant
 import java.util.UUID
@@ -71,8 +72,14 @@ class PreferenceSetTest : StringSpec({
     }
 
     "PBT — 허용 스타일의 임의 부분집합은 항상 저장되고 그대로 조회된다" {
-        checkAll(Arb.set(Arb.of(PreferenceSet.STYLES.toList()), 0..PreferenceSet.STYLES.size)) { styles ->
-            val list = styles.toList()
+        // **`Arb.set` 으로 뽑지 않는다.** 모집단이 7개인데 크기 상한도 7 이면 "전부 모으기"를 요구하는
+        // 꼴이라 쿠폰 수집 문제가 된다 — kotest 는 새 원소 없이 70회 연속 뽑으면 포기하고
+        // `target size requirement of 7 could not be satisfied` 로 **테스트를 실패시킨다**(실측
+        // 2026-09-15 전체 빌드 1회). 확률이 낮아 재실행하면 사라지는, 가장 진단하기 나쁜 형태다.
+        // 축마다 포함 여부를 뽑으면 같은 부분집합 공간을 **고갈 없이·균등하게** 덮는다.
+        val subsets = Arb.list(Arb.boolean(), PreferenceSet.STYLES.size..PreferenceSet.STYLES.size)
+        checkAll(subsets) { mask ->
+            val list = PreferenceSet.STYLES.toList().filterIndexed { i, _ -> mask[i] }
             val v = PreferenceSet.of(account, list, null, null, null, false, null, null, null, null, now).view()
             if (list.isEmpty()) {
                 // 빈 리스트도 '설정함'(비NULL) — 중립 아님

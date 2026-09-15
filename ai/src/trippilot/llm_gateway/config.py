@@ -1,7 +1,8 @@
 """C1Config — 게이트웨이 설정 컨테이너 (U4 FD business-logic-model §1).
 
 model_id는 항상 설정값 주입 (BR-U4-08) — 코드에 모델 문자열 하드코딩 금지.
-temperature=0.0 기본 (결정론 지향), timeout 기본 10s (안전망 — 예산 있는 호출은 관통).
+timeout 기본 10s (안전망 — 예산 있는 호출은 관통).
+temperature 는 **설정 자체가 없다** — 두 벤더 모두 파라미터를 거부한다(adapters 참조).
 """
 
 from __future__ import annotations
@@ -27,8 +28,18 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # INTENT·PARAPHRASE와 동급 과업 — LIGHT 확정 여부는 K-2 실모델 검증 대기
             # (agent-foundation FD 미결 #4)
             LlmFeature.EDIT_TRANSLATION: ModelTier.LIGHT,
+            # 자유 발화 → 닫힌 키 번역. EDIT_TRANSLATION 과 동급 과업이고, 1차
+            # 임베딩 매칭이 걸러낸 나머지만 오므로 호출 빈도도 낮다.
+            LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: ModelTier.LIGHT,
             # 푸시 문구 1문장 — 저비용 모델로 충분 (TRIP-347)
             LlmFeature.REFLECTION_NUDGE: ModelTier.LIGHT,
+            # 공유 카드 캡션 1문단 + 해시태그 — 후보 선택도 다단 구성도 없는 단발 변환이고
+            # 재료(방문 상호명·기간·지역)가 이미 확정 문자열로 들어온다. REFLECTION_NUDGE와
+            # 같은 급의 짧은 카피 1회라 LIGHT (TRIP-429 후속 — j06).
+            LlmFeature.SHARE_CARD_COPY: ModelTier.LIGHT,
+            # 뱅크 증강 — 짧은 문장 변형 N개. PARAPHRASE 와 같은 급의 과업이고 오프라인
+            # 배치라 지연도 무관하다. 품질이 모자라면 feature_models 로 올린다(TRIP-513).
+            LlmFeature.BANK_AUGMENT: ModelTier.LIGHT,
             # 알림 문구 2줄 — 넛지와 동급 과업이라 LIGHT. 실제로는 feature_models
             # 오버라이드로 로컬 파인튜닝 모델이 배정된다(티어 해석보다 우선).
             LlmFeature.REMINDER_COPY: ModelTier.LIGHT,
@@ -82,6 +93,10 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # api/wiring.py `reflection_nudge` — 결정론 기본 문구(FALLBACK_NUDGE_MESSAGE).
             # 그쪽 방어 분기의 FallbackEvent와 같은 모드 쌍.
             LlmFeature.REFLECTION_NUDGE: ("llm_nudge", "fixed_message"),
+            # api/wiring.py `reflection_share_card` — 결정론 정적 조립
+            # (workers.share_card_copy.fallback_share_card_copy: `{지역} 여행의 기록` ·
+            # `#{지역}여행`). 워커 직행 패턴이라 발행 주체는 경계다 (FD §2.1).
+            LlmFeature.SHARE_CARD_COPY: ("llm_share_card", "static_copy"),
             # api/wiring.py `reminder_copy` — 문구를 못 만들면 그 항목을 응답에서 빼고,
             # 백엔드가 기존 하드코딩 상수(NotificationSchedule.title()/body())로 보낸다.
             # to_mode 가 "backend_constant" 인 이유: 폴백 실행 주체가 백엔드다.
@@ -92,9 +107,17 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # intent_router `_vote` — 유사질문이 없으면 투표를 접고 3차(LLM 직접
             # 분류)로 **승급**한다. 규칙으로 내려가는 강등이 아니다.
             LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
+            # 오프라인 배치 — 실패하면 그 seed 의 변형을 못 만들 뿐, 런타임 경로가 아니라
+            # 강등할 대상이 없다. 스크립트가 사유를 제안 파일의 rejected 에 남긴다
+            # (scripts/augment_bank.py).
+            LlmFeature.BANK_AUGMENT: ("llm_augment", "(none)"),
             # api/wiring.py `edit` — 자연어 번역 실패는 TRANSLATION_FAILED 정직 보고.
             # 편집은 적용되지 않고, 구조화 진입은 무영향이다.
             LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),
+            # 실패해도 재계획은 돈다 — 칩 선택분과 사유가 그대로 살아 있고, 자유 입력
+            # 해석만 빠진다. 그래서 to_mode 가 "실패"가 아니라 "칩만"이다.
+            LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: (
+                "llm_directive_translation", "chips_only"),
             # scripts/collect_events.py `collect_region` — 추출 0건으로 그 회차를
             # 넘긴다(대체 추출 경로 없음).
             LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
@@ -160,7 +183,6 @@ class C1Config:
     # 요청 단위 상한은 `TimeoutBackstopMiddleware`(deadline+margin → 504)가 따로 쥔다.
     timeout_sec: float = 10.0
     max_tokens: int = 1024
-    temperature: float = 0.0  # 결정론 지향
     # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 청크 크기는 고정 상수가 아니라
     # 단계 예산에서 유도한다 (TRIP-380 적응형 공식, workers/preference.py
     # adaptive_chunk_size). 종전 score_chunk_size=20 상수는 공식이 대체 — 예산

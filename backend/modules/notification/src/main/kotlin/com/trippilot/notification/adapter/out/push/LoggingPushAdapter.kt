@@ -21,6 +21,9 @@ import org.springframework.stereotype.Component
 @Component
 class LoggingPushAdapter : PushPort {
 
+    /** 아무 데도 안 보낸다 — 지표가 이 사실을 알아야 "성공률 100%" 가 거짓이 되지 않는다. */
+    override val deliversExternally = false
+
     override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> {
         // 토큰 자체는 남기지 않는다 — 기기 식별자라 로그에 흘리지 않는다.
         // 긴급도를 함께 남긴다 — 종류마다 다르게 나가는 것이 이 경계의 전부인데, 기본 모드가 이것이라

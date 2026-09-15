@@ -32,6 +32,8 @@ data class ReflectionAgentProperties(
     /** `request_meta.deadline_ms` 로 상대에 실리는 값. */
     val deadlineMs: Long = 15_000,
     val readTimeoutMs: Long = 21_000,
+    /** 발신 호출에 실을 서비스 자격증명(TRIP-856). 비면 헤더를 안 싣고 호출은 그대로 나간다. */
+    val serviceToken: String = "",
 ) {
     init {
         require(readTimeoutMs >= deadlineMs + AI_BACKSTOP_MARGIN_MS) {

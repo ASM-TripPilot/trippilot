@@ -43,7 +43,6 @@ INTENT 프롬프트 렌더(PromptRegistry) → 어댑터 실 호출 → IntentGa
     SMOKE_UTTERANCE    기본 "내일 오후에 비 오면 실내 일정으로 바꿔줘"
     SMOKE_TIMEOUT_SEC  기본 "30" (운영 2.5s와 달리 스모크는 관대하게)
     SMOKE_MAX_TOKENS   기본 "2048" (GPT-5 계열은 reasoning 토큰도 여기서 소모)
-    SMOKE_TEMPERATURE  기본 "1.0" (GPT-5 계열은 기본값 외 temperature를 거부)
 
 종료 코드: 0 = 호출·게이트 파싱까지 성공, 1 = 어느 단계든 실패 (원인 출력).
 """
@@ -163,7 +162,6 @@ def main() -> int:
         prompt=prompt,
         prompt_ref=ref,
         max_tokens=int(os.environ.get("SMOKE_MAX_TOKENS", "2048")),
-        temperature=float(os.environ.get("SMOKE_TEMPERATURE", "1.0")),
         timeout_sec=float(os.environ.get("SMOKE_TIMEOUT_SEC", "30")),
     )
     try:

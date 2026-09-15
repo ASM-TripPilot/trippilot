@@ -53,8 +53,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from trippilot.agents.adapters.pgvector_store import PgVectorStore  # noqa: E402
 from trippilot.agents.planb.kb_retrieval import index_documents, load_kb_file  # noqa: E402
+from trippilot.agents.planb.directives import (  # noqa: E402
+    directive_documents,
+    load_directive_file,
+)
 
-_DEFAULT_SEEDS = ("data/planb_situation_kb.yaml",)
+_DEFAULT_SEEDS = ("data/planb_situation_kb.yaml", "data/replan_directives.yaml")
+# 지시 사전(KB-4)은 문서 형식이 다르다 — 루트가 `directives` 고 한 지시가 alias 만큼의
+# 문서로 펼쳐진다. 파일 이름으로 가르지 않고 **루트 키를 보고** 고른다: 이름 규칙에
+# 기대면 파일을 옮기는 순간 조용히 틀린 로더를 탄다.
 
 
 def _embedding():
@@ -109,6 +116,19 @@ def _embedding():
     )
 
 
+def _documents_of(path: Path):
+    """파일 하나 → KB 문서 목록. **루트 키로 형식을 가른다.**
+
+    KB-1~3 seed 는 `documents:`, 지시 사전(KB-4)은 `directives:` 다. 후자는 한 지시가
+    라벨 + alias 수만큼의 문서로 펼쳐진다 — 합쳐 한 문서로 넣으면 개별 표현의 신호가
+    희석돼 자유 입력 매칭이 나빠진다.
+    """
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if isinstance(raw, dict) and "directives" in raw:
+        return directive_documents(load_directive_file(path, yaml.safe_load))
+    return load_kb_file(path, yaml.safe_load)
+
+
 def main(argv: list[str]) -> int:
     url = os.environ.get("TRIPPILOT_VECTOR_DB_URL")
     if not url:
@@ -122,7 +142,7 @@ def main(argv: list[str]) -> int:
     paths = [Path(p) for p in (argv or [str(root / s) for s in _DEFAULT_SEEDS])]
     total = 0
     for path in paths:
-        documents = load_kb_file(path, yaml.safe_load)
+        documents = _documents_of(path)
         count = index_documents(documents, embedding, store)
         kinds = sorted({d.kb.value for d in documents})
         print(f"{path.name}: {count}건 적재 (KB: {', '.join(kinds)})")

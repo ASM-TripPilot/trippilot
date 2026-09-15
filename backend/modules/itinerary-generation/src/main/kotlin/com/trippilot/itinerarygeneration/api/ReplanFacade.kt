@@ -94,6 +94,15 @@ data class ReplanSlot(
     val endsNextDay: Boolean,
     val distanceRange: String?,
     val placementReason: String?,
+    /**
+     * 위반 표시(BR-U3-13) — **잠근 채 이어받은 슬롯만** 원본 값을 나른다. 잠긴 슬롯은 재해결 대상이
+     * 아니라 위반이 현실에 그대로 남는데, 이 필드가 없던 시절엔 반영이 그 표시를 조용히 지웠다
+     * (TRIP-839). 새로 배치된 슬롯은 어셈블리(HC1~4)를 새로 통과했으므로 false 가 정당하다.
+     * 기본값을 두지 않는다 — 조립 지점이 값을 말하지 않고 조용히 빠지는 것을 컴파일이 막는다.
+     */
+    val hasViolation: Boolean,
+    /** 위반 사유 — [hasViolation] 이 true 일 때만 값이 있다(도메인과 같은 규약). */
+    val violationReason: String?,
 ) {
     fun toMap(): Map<String, Any> = buildMap {
         put("poiId", poiId.toString())
@@ -103,6 +112,8 @@ data class ReplanSlot(
         put("endsNextDay", endsNextDay)
         distanceRange?.let { put("distanceRange", it) }
         placementReason?.let { put("placementReason", it) }
+        put("hasViolation", hasViolation)
+        violationReason?.let { put("violationReason", it) }
     }
 
     companion object {
@@ -114,6 +125,9 @@ data class ReplanSlot(
             endsNextDay = raw["endsNextDay"] as? Boolean ?: false,
             distanceRange = raw["distanceRange"] as? String,
             placementReason = raw["placementReason"] as? String,
+            // 필드가 없던 시절의 세션 초안(jsonb)도 읽혀야 한다 — 그 시절 값은 "표시 없음"이 사실이다.
+            hasViolation = raw["hasViolation"] as? Boolean ?: false,
+            violationReason = raw["violationReason"] as? String,
         )
     }
 }

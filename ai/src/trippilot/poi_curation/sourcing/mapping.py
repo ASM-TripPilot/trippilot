@@ -209,3 +209,67 @@ def _parse_rest_days(rest_raw: str | None) -> frozenset[int] | None:
     if not days:
         return None  # 비어있지 않은데 요일도 못 읽음 — 확신 없음
     return frozenset(days)
+
+
+# ── 교차 출처 동일성 판정 (TRIP-682) ──────────────────────────────────────
+# 출처가 둘 이상이 되면 같은 가게가 서로 다른 source_ref 로 두 번 들어온다.
+# 좌표만으로는 부족하다 — 실측(TourAPI × LOCALDATA 동일 가게 6,886쌍): 중앙값
+# 7.8m 로 대부분 겹치지만 p95 가 52.0m 라 [[collection_gate]] 3단의 50m 반경이
+# 94.7% 에서 끊기고, 최대 8.4km 짜리(한쪽 좌표 오류)까지 있다. 주소는 좌표
+# 오차와 무관하므로 반경을 넓히는 대신 주소 키를 쓴다 (반경을 넓히면 옆 가게를
+# 병합한다).
+#
+# 규칙 자체는 `scripts/match_business_status.py` 의 폐업 대조에서 검증된 것과
+# 같다(주소 키 83.3%, 주소O이름X 는 붙이지 않음). 다만 **정의가 지금 두 곳에
+# 있다** — 그쪽은 stdlib 만으로 도는 독립 스크립트이고 자체 테스트가 물고 있어
+# 이번 변경에서 건드리지 않았다. 두 곳이 갈라지면 "폐업으로 붙인 가게"와
+# "중복으로 병합한 가게"의 판정이 어긋나므로, LOCALDATA 를 POI 원천으로
+# 승격할 때(그때 두 경로가 실제로 같은 데이터를 본다) 스크립트가 여기를
+# 가져다 쓰도록 합친다.
+
+_ADDR_PAREN = re.compile(r"[(（][^)）]*[)）]")
+_ADDR_SPACE = re.compile(r"\s+")
+# 읍·면·동이 한쪽에만 있는 표기 차를 `.*?` 로 건너뛴다 — 이것이 매칭률을
+# 35.5% → 83.3% 로 올린 조각이다 (2026-09-08 실측).
+_ADDR_ROAD = re.compile(
+    r"^(?P<sido>\S+?[시도])\s+(?P<sgg>\S+?[시군구])\s+.*?"
+    r"(?P<road>\S*[로길])\s+(?P<bldg>\d+(?:-\d+)?)"
+)
+# 상호 꼬리표만 뗀다. 지역명+점("강남점")은 **떼지 않는다** — 떼면 50m 안의
+# 다른 지점끼리 병합된다.
+_NAME_SUFFIX = re.compile(r"(본점|직영점|\d+호점)$")
+
+
+def addr_key(address: str | None) -> tuple[str, str, str, str] | None:
+    """도로명주소 → (시도2자, 시군구, 도로명, 건물번호). 해석 불가면 None.
+
+    None 은 "주소가 다르다"가 아니라 **"모른다"** 다 — 호출측이 동일성 근거로
+    쓰면 안 된다 (관광단지 내 주소 등 4.4% 가 여기 떨어진다).
+    """
+    if not address:
+        return None
+    cleaned = _ADDR_SPACE.sub(" ", _ADDR_PAREN.sub(" ", address).split(",")[0]).strip()
+    m = _ADDR_ROAD.search(cleaned)
+    if m is None:
+        return None
+    return (m["sido"][:2], m["sgg"], m["road"], m["bldg"])
+
+
+def normalize_business_name(name: str | None) -> str:
+    """상호 정규화 — 공백·괄호 제거 + 꼬리표 절단. 비교 전용."""
+    return _NAME_SUFFIX.sub("", _ADDR_SPACE.sub("", _ADDR_PAREN.sub("", name or "")))
+
+
+def same_business_name(a: str | None, b: str | None) -> bool:
+    """정규화 상호가 같거나 한쪽이 다른 쪽에 포함되면 같은 가게로 본다.
+
+    포함 판정에 2자 하한을 두는 이유: 1자 상호가 아무 이름에나 걸린다.
+    **주소가 같다는 전제에서만** 쓸 것 — 주소 없이 쓰면 전국의 동명 가게가
+    붙는다 (이름 유사도 단독 판정이 실측에서 전부 오병합이었다, [[entity_resolver]]).
+    """
+    na, nb = normalize_business_name(a), normalize_business_name(b)
+    if not na or not nb:
+        return False
+    if na == nb:
+        return True
+    return len(na) >= 2 and len(nb) >= 2 and (na in nb or nb in na)

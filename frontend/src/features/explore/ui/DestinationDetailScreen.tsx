@@ -20,21 +20,24 @@
  * FAB)을 그대로 재사용한다.
  */
 import type { ReactElement } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import type { PlaceCardVM } from '@/entities/place/model';
+import { PlaceRailCard } from '@/entities/place/ui/PlaceRailCard';
+import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 
 import {
   CloseGlyph,
-  HeartFilledGlyph,
   InfoGlyph,
   MapPinGlyph,
   SearchGlyph,
   SuitcaseGlyph,
   WarningTriangleGlyph,
 } from './ExploreGlyphs';
-import type { PlaceCardVM, StayCardVM } from './ExploreLandingScreen';
+import type { StayCardVM } from './ExploreLandingScreen';
 
 export interface DestinationDetailScreenProps {
   regionName: string;
@@ -132,77 +135,6 @@ function LaneErrorBlock({
   );
 }
 
-// 사진은 계약(StayItem)에 URL 필드가 없어 회색 자리(surface-strong)로 둔다(INV-1). 저장
-// 하트는 이 화면 스코프 밖 — 목록 화면(d01)에만 배선돼 있다.
-function StayCard({
-  card,
-  onPress,
-}: {
-  card: StayCardVM;
-  onPress: (card: StayCardVM) => void;
-}): ReactElement {
-  return (
-    <Pressable
-      testID={`destination-detail-stay-card-${card.key}`}
-      accessibilityRole="button"
-      onPress={() => onPress(card)}
-      className="w-[200px]"
-    >
-      <View className="h-[130px] w-full rounded-card bg-surface-strong" />
-      <Text
-        numberOfLines={1}
-        className="mt-sm font-noto-bold text-card-title font-bold text-ink"
-      >
-        {card.name}
-      </Text>
-      <Text numberOfLines={1} className="mt-xs font-noto text-label text-muted">
-        {card.region}
-      </Text>
-      <Text className="mt-xs font-noto-bold text-card-title font-bold text-ink">
-        {card.priceText}
-      </Text>
-    </Pressable>
-  );
-}
-
-// `imageUrl` 이 있을 때만 사진을 그린다 — 없으면 회색 플레이스홀더(발명 금지, INV-1).
-function PlaceCard({
-  card,
-  onPress,
-}: {
-  card: PlaceCardVM;
-  onPress: (poiId: string) => void;
-}): ReactElement {
-  return (
-    <Pressable
-      testID={`destination-detail-place-card-${card.poiId}`}
-      accessibilityRole="button"
-      onPress={() => onPress(card.poiId)}
-      className="w-[150px]"
-    >
-      {card.imageUrl ? (
-        <Image
-          testID={`destination-detail-place-card-image-${card.poiId}`}
-          source={{ uri: card.imageUrl }}
-          resizeMode="cover"
-          className="h-[110px] w-full rounded-card bg-surface-strong"
-        />
-      ) : (
-        <View className="h-[110px] w-full rounded-card bg-surface-strong" />
-      )}
-      <Text
-        numberOfLines={1}
-        className="mt-sm font-noto-bold text-card-title font-bold text-ink"
-      >
-        {card.name}
-      </Text>
-      <Text numberOfLines={1} className="mt-xs font-noto text-label text-muted">
-        {card.region}
-      </Text>
-    </Pressable>
-  );
-}
-
 export function DestinationDetailScreen({
   regionName,
   onPressSearch,
@@ -265,10 +197,15 @@ export function DestinationDetailScreen({
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View className="flex-row gap-md">
                   {stayLane.cards.map((card) => (
-                    <StayCard
+                    // rail 카드 — d05 는 저장 하트 없음(save 미지정). 사진은 회색 자리(URL 계약 무·INV-1).
+                    <StaySearchCard
                       key={card.key}
-                      card={card}
-                      onPress={stayLane.onPressCard}
+                      testID={`destination-detail-stay-card-${card.key}`}
+                      name={card.name}
+                      region={card.region}
+                      priceText={card.priceText}
+                      variant="rail"
+                      onPress={() => stayLane.onPressCard(card)}
                     />
                   ))}
                 </View>
@@ -292,10 +229,11 @@ export function DestinationDetailScreen({
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View className="flex-row gap-md">
                   {placeLane.cards.map((card) => (
-                    <PlaceCard
+                    <PlaceRailCard
                       key={card.poiId}
                       card={card}
                       onPress={placeLane.onPressCard}
+                      testIDPrefix="destination-detail-place-card"
                     />
                   ))}
                 </View>

@@ -279,7 +279,7 @@ if not validated:
 
 **입력 컨텍스트**:
 ```
-- 문제 상황: 트리거 종류(trigger_kind) + 사유(reason — weather|closed|delay|canceled|fatigue|none)
+- 문제 상황: 트리거 종류(trigger_kind) + 사유(reason — weather|closed|delay|canceled|fully_booked|fatigue|none)
 - KB 발췌 3종 (줄 단위 텍스트 — 검색·조립은 호출측 PlanBAgent 소유, planb-rag-design §5.2):
   · schedule_context (KB-1: 영향 슬롯·일정)
   · situation_context (KB-3: 상황 대응 지식)

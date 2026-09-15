@@ -49,7 +49,7 @@ class ScheduleAgentConfiguration {
         deadlines: ScheduleDeadlineProperties,
     ): RestClient = client(properties, deadlines.editWait.toMillis() + properties.readTimeoutMarginMs)
 
-    private fun client(properties: ScheduleAgentProperties, readTimeoutMs: Long): RestClient =
+    internal fun client(properties: ScheduleAgentProperties, readTimeoutMs: Long): RestClient =
         RestClient.builder() // 전용 빌더(공유 빈 미사용)
             .baseUrl(properties.baseUrl)
             .requestFactory(
@@ -59,9 +59,29 @@ class ScheduleAgentConfiguration {
                 },
             )
             .messageConverters { it.add(0, JacksonJsonHttpMessageConverter(boundaryMapper())) }
+            // 비어 있으면 **붙이지 않는다.** 빈 값으로 실으면 상대가 "제시됐는데 틀림"으로 읽어
+            // 거부 사유가 '잘못된 토큰'이 되고, 진짜 원인(미설정)이 로그에서 사라진다.
+            // `apply { }` 를 쓰지 않는다 — `RestClient.Builder` 에 동명의 멤버(Consumer 인자)가 있어
+            // 코틀린 스코프 함수가 아니라 그쪽이 잡히고, 람다 안의 `this` 가 빌더가 아니게 된다.
+            .let { builder ->
+                if (properties.serviceToken.isBlank()) builder
+                else builder.defaultHeader(SERVICE_TOKEN_HEADER, properties.serviceToken)
+            }
             .build()
 
     companion object {
+        /**
+         * 발신 서비스 자격증명 헤더(TRIP-856). 역방향([com.trippilot.security.ServiceTokenAuthFilter])과
+         * **같은 문자열이지만 공유 상수로 묶지 않는다** — 저쪽은 우리가 받는 계약이고 이쪽은 상대(AI)가
+         * 받는 계약이라, 검증자가 다르다. 한 상수로 묶으면 없는 연동을 주장하게 되고, 상대가 이름을
+         * 바꾸면 우리 수신 경계까지 딸려 움직인다.
+         *
+         * **토큰이 없으면 막지 않는다(fail-open).** 반대로 가면 토큰을 안 넣은 로컬·CI 에서 `generate`
+         * 자체가 죽는다 — 지금 이 채널은 애초에 무인증이라, 잠그는 판단은 상대가 검증을 켜는 시점에
+         * 함께 해야 한다. 미설정은 [ScheduleAgentModeAnnouncer] 가 기동 로그로 드러낸다.
+         */
+        const val SERVICE_TOKEN_HEADER = "X-Service-Token"
+
         /**
          * AI 경계 전용 매퍼 — snake_case + Kotlin 데이터클래스. **앱 기본 매퍼와 무관하게 독립 생성**(공개 API 영향 없음).
          *

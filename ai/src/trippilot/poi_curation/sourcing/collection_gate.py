@@ -27,12 +27,16 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from trippilot.domain.common import GeoPoint, PoiId
+from trippilot.poi_curation.sourcing.mapping import addr_key, same_business_name
 from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 # 서비스 권역 bbox (제주 남단 마라도 ~ 최북단, 서해 ~ 독도 포함)
 _KR_LAT = (32.5, 39.5)
 _KR_LNG = (124.0, 132.5)
 _DUP_RADIUS_M = 50.0
+# 주소 키 병합을 허용하는 카테고리 — 상호 부분일치가 검증된 범위
+# (LOCALDATA 인허가가 식품위생업소라, 2출처가 실제로 겹치는 곳도 여기다)
+_ADDR_DEDUP_CATEGORIES = frozenset({PoiCategory.FOOD, PoiCategory.CAFE})
 
 # 드롭 사유 키 (통계·로그 계약 — 파이프라인 산출 JSON에 그대로 실린다)
 DROP_SCHEMA_NAME = "schema_missing_name"
@@ -58,6 +62,16 @@ class SourcingCandidate:
     hours_raw: str | None            # 영업시간 원문 (backend opening_hours 병행 수록용)
     image_url: str | None
     modified_at: str | None
+    source: str = "tourapi"   # 잠정 ID 접두 — 출처가 둘 이상이면 여기서 갈린다
+
+    @property
+    def ref(self) -> tuple[str, str]:
+        """출처를 포함한 식별자. **`source_ref` 단독으로 조회하지 말 것** —
+        벤더가 부여한 번호라 출처 안에서만 유일하다. 출처가 둘이 되면 무관한
+        두 레코드가 번호만 겹쳐 같은 것으로 취급된다(실측 재현: tourapi/"1234"
+        성산일출봉 ⟷ localdata/"1234" 우진해장국 — 450km·다른 카테고리인데 병합).
+        """
+        return (self.source, self.source_ref)
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +101,7 @@ class CollectionGate:
     7,837건 중 **210건(2.7%)이 폐업**이었고 그중에는 8년 전에 닫은 곳도 있었다.
     """
 
-    def __init__(self, closed_refs: frozenset[str] | None = None) -> None:
+    def __init__(self, closed_refs: frozenset[tuple[str, str]] | None = None) -> None:
         self._closed = closed_refs or frozenset()
 
     def apply(self, candidates: Sequence[SourcingCandidate]) -> GateReport:
@@ -114,21 +128,21 @@ class CollectionGate:
                     and _KR_LNG[0] <= coord.lng <= _KR_LNG[1]):
                 drop(DROP_EXISTENCE)
                 continue
-            if c.source_ref in self._closed:
+            if c.ref in self._closed:
                 drop(DROP_EXISTENCE_CLOSED)
                 continue
             verified.append((c, coord))
 
         # 3단 — 중복 병합 (먼저 온 것 유지 + 결측 보충)
         kept: list[tuple[SourcingCandidate, GeoPoint]] = []
-        by_ref: dict[str, int] = {}
+        by_ref: dict[tuple[str, str], int] = {}
         merged = 0
         for c, coord in verified:
-            idx = by_ref.get(c.source_ref)
+            idx = by_ref.get(c.ref)
             if idx is None:
                 idx = self._find_near_duplicate(kept, c, coord)
             if idx is None:
-                by_ref[c.source_ref] = len(kept)
+                by_ref[c.ref] = len(kept)
                 kept.append((c, coord))
                 continue
             merged += 1
@@ -145,7 +159,7 @@ class CollectionGate:
         passed: list[GatePass] = []
         for c, coord in kept:
             poi = Poi(
-                poi_id=PoiId(f"tourapi-{c.source_ref}"),  # 잠정 ID — 정본 ID는 백엔드 부여
+                poi_id=PoiId(f"{c.source}-{c.source_ref}"),  # 잠정 ID — 정본 ID는 백엔드 부여
                 name=c.name.strip(),
                 category=c.category,
                 coord=coord,
@@ -170,10 +184,30 @@ class CollectionGate:
         coord: GeoPoint,
     ) -> int | None:
         name = _normalize_name(c.name)
+        key = addr_key(c.address)
         for i, (k, k_coord) in enumerate(kept):
-            if (k.category is c.category
-                    and _normalize_name(k.name) == name
+            if k.category is not c.category:
+                continue
+            # ㉠ 같은 이름이 코앞에 — 한 출처 안의 중복, 그리고 교차 출처의 94.7%
+            if (_normalize_name(k.name) == name
                     and _haversine_m(coord, k_coord) <= _DUP_RADIUS_M):
+                return i
+            # ㉡ 같은 주소 + 같은 상호 — 좌표가 벌어져도(출처마다 기준이 다르다,
+            #    실측 최대 8.4km) 같은 가게다. 주소를 모르면(key is None) 판정
+            #    근거가 없으므로 쓰지 않는다.
+            #
+            #    **FOOD·CAFE 에만 적용한다.** 상호 부분일치는 식품업소에서만
+            #    검증된 규칙이다(폐업 대조 대상이 식품위생업소뿐이었다).
+            #    관광지에 그대로 쓰면 포함 관계인 **다른** POI 를 병합한다 —
+            #    공유본 18,607건 실측: 전 카테고리 적용 시 57쌍이 걸리는데
+            #    "개심사(괴산) ⟷ 개심사 목조여래좌상과 목조관음보살좌상"(절과
+            #    그 안의 문화재), "파라다이스시티 ⟷ 파라다이스시티 원더박스"
+            #    처럼 대부분 오탐이다. FOOD·CAFE 한정이면 6쌍이고 전부 진짜
+            #    중복이었다("오픈커피 ⟷ 오픈커피 판교본점" 3m 등).
+            if (c.category in _ADDR_DEDUP_CATEGORIES
+                    and key is not None
+                    and key == addr_key(k.address)
+                    and same_business_name(k.name, c.name)):
                 return i
         return None
 

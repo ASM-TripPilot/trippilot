@@ -2,7 +2,6 @@ import type { ReactElement } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   ScrollView,
   Text,
@@ -11,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PlaceGridCard } from '@/entities/place/ui/PlaceGridCard';
 import type { Place } from '@/shared/api/generated/schemas';
 import { PoiCategory } from '@/shared/api/generated/schemas';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -20,9 +20,6 @@ import type { PlaceSaveNotice } from '../model/placeSaveGuard';
 import {
   BackChevronGlyph,
   FilterSlidersGlyph,
-  HeartBadgeGlyph,
-  HeartFilledGlyph,
-  HeartOutlineGlyph,
   InfoGlyph,
   MapPinGlyph,
   SearchGlyph,
@@ -206,74 +203,6 @@ function SortRow(): ReactElement {
         </Text>
       </View>
     </View>
-  );
-}
-
-function PlaceCard({
-  place,
-  saved,
-  pending,
-  onToggleSave,
-  onPressCard,
-}: {
-  place: Place;
-  saved: boolean;
-  pending: boolean;
-  onToggleSave: (place: Place) => void;
-  onPressCard?: (place: Place) => void;
-}): ReactElement {
-  const subtitle = place.region
-    ? `${place.category} · ${place.region}`
-    : place.category;
-
-  return (
-    // bare Pressable(accessibilityRole 없음) — role 을 붙이면 `states.test.tsx` 의 role=button
-    // 개수 동결(정확히 15)이 깨진다(02a ★1). bare 는 getAllByRole 에 안 잡히고 press 는 먹는다.
-    // `!pending` 가드: 대기(disabled) 하트 press 는 부모 Pressable 로 새는데(RNTL Probe C, ★2),
-    // pending 이면 카드 이동(d06)을 무효화해 그 누수를 막는다.
-    <Pressable
-      testID={`explore-places-card-${place.poiId}`}
-      onPress={() => {
-        if (!pending) onPressCard?.(place);
-      }}
-      className="w-[48%] gap-[7px]"
-    >
-      <View className="h-[132px] w-full overflow-hidden rounded-[14px] bg-surface-soft">
-        {place.imageUrl ? (
-          <Image
-            source={{ uri: place.imageUrl }}
-            resizeMode="cover"
-            className="h-full w-full"
-          />
-        ) : null}
-        {saved ? (
-          <View className="absolute left-sm top-sm flex-row items-center gap-xs rounded-pill bg-primary pb-[5px] pl-[9px] pr-[11px] pt-[5px]">
-            <HeartBadgeGlyph size={12} />
-            <Text className="font-noto-bold text-micro font-bold text-on-primary">
-              담음
-            </Text>
-          </View>
-        ) : null}
-        <Pressable
-          testID={`explore-places-save-${place.poiId}`}
-          accessibilityRole="button"
-          accessibilityState={{ selected: saved }}
-          disabled={pending}
-          onPress={() => onToggleSave(place)}
-          className="absolute right-sm top-sm h-8 w-8 items-center justify-center rounded-pill bg-on-primary"
-        >
-          {saved ? (
-            <HeartFilledGlyph size={18} />
-          ) : (
-            <HeartOutlineGlyph size={18} />
-          )}
-        </Pressable>
-      </View>
-      <Text className="font-noto-bold text-[13.5px] font-bold text-ink">
-        {place.nameKo}
-      </Text>
-      <Text className="font-noto text-[11.5px] text-muted">{subtitle}</Text>
-    </Pressable>
   );
 }
 
@@ -570,7 +499,7 @@ export function PlaceExploreScreen({
             />
           }
           renderItem={({ item }) => (
-            <PlaceCard
+            <PlaceGridCard
               place={item}
               saved={savedSet.has(item.poiId)}
               pending={pendingSet.has(item.poiId)}

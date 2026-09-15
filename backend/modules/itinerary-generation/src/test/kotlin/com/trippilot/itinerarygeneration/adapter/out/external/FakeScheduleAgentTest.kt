@@ -102,6 +102,9 @@ class FakeScheduleAgentTest : StringSpec({
                 originLat = 33.4, originLng = 126.5, lockedBlocks = emptyList(),
                 reasons = emptyList(), directives = emptyList(), freeText = null,
                 excludedPoiIds = emptyList(),
+                companionType = null, budgetLevel = null,
+                preferenceProfile = PreferenceProfile(emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null),
+                currentSlots = emptyList(), savedPlaces = emptyList(),
                 requestMeta = RequestMeta("r", lateClock.instant(), 10_000),
             ),
         )
@@ -126,6 +129,9 @@ class FakeScheduleAgentTest : StringSpec({
                 originLat = 33.4, originLng = 126.5, lockedBlocks = emptyList(),
                 reasons = emptyList(), directives = emptyList(), freeText = null,
                 excludedPoiIds = emptyList(),
+                companionType = null, budgetLevel = null,
+                preferenceProfile = PreferenceProfile(emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null),
+                currentSlots = emptyList(), savedPlaces = emptyList(),
                 requestMeta = RequestMeta("r", noonClock.instant(), 10_000),
             ),
         )

@@ -45,6 +45,7 @@ internal class FakeReplans(
                 ReplanSlot(
                     UUID.randomUUID(), LocalTime.parse("14:00"), LocalTime.parse("15:00"),
                     isFixed = false, endsNextDay = false, distanceRange = "약 1.2km", placementReason = "실내라 비를 피할 수 있어요",
+                    hasViolation = false, violationReason = null,
                 ),
             ),
         )

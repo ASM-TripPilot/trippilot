@@ -17,6 +17,8 @@ dependencies {
     // 아웃박스 payload(JSON 문자열)를 읽는다. 트리로만 읽으므로 Kotlin 모듈은 필요 없다.
     implementation(libs.jackson.module.kotlin)
     implementation(libs.kotlin.reflect)
+    // 계측(OBS-U6-02·03·04)만 쓴다 — 레지스트리 구현·내보내기는 app 이 갖는다.
+    implementation(libs.micrometer.core)
 
     testImplementation(project(":common:test-support"))
 }

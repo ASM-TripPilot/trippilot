@@ -22,7 +22,9 @@ class NotificationSchedulePoller(
     private val firing: NotificationFiringService,
     private val clock: Clock,
 ) {
-    @Scheduled(fixedDelayString = "\${trippilot.notification.schedule-poll-ms:60000}")
+    @Scheduled(fixedDelayString = "\${trippilot.notification.schedule-poll-ms:60000}",
+        // 첫 발화도 미룬다 — 주기만 늘리면 기동 직후 1회는 그대로 쏜다(OutboxRelay 와 같은 이유).
+        initialDelayString = "\${trippilot.notification.schedule-poll-initial-delay-ms:0}")
     fun poll() {
         val due = schedules.findDue(clock.instant(), BATCH_SIZE)
         if (due.isEmpty()) return

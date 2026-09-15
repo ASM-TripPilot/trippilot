@@ -150,10 +150,13 @@ class HttpScheduleAgentAdapter(
      * 재계획(정본 §3.1) — **상대에 새 경로를 요구하지 않는다.** 잠금 슬롯을 고정 블록으로 승격해
      * 이미 열려 있는 `generate` 를 그대로 쓴다(HC3 가 그 시각을 지킨다).
      *
-     * ⚠ `reasons`·`directives`·`freeText` 는 **보내지 않는다** — 상대 요청 계약
-     * (`ai/docs/openapi.json` `GenerateItineraryRequest`)에 실을 자리가 없다. 없는 필드를 지어내면
-     * 422 로 전 호출이 폴백된다(그 드리프트는 `AiBoundaryOpenApiTest` 가 막는다). 사용자가 고른 '왜·어떻게'는
-     * 세션에 남아 이력이 되지만 **이번 산출에는 반영되지 않는다** — 반영하려면 AI 쪽 요청 계약에 필드가 먼저 생겨야 한다.
+     * ⚠ `reasons`·`directives`·`freeText`, 그리고 B-1 로 조립되기 시작한 다섯
+     * (`companionType`·`budgetLevel`·`preferenceProfile`·`currentSlots`·`savedPlaces`)은 **아직
+     * 보내지 않는다** — 상대 요청 계약(`ai/docs/openapi.json` `GenerateItineraryRequest`)에 실을 자리가
+     * 없다. 없는 필드를 지어내면 422 로 전 호출이 폴백된다(그 드리프트는 `AiBoundaryOpenApiTest` 가
+     * 막는다). 전용 경로(`/ai/v1/itinerary/replan`, 연동 설계 `ai-backend-replan-연동-설계.md`)가
+     * 상대 계약에 출하되면 이 메서드가 그 경로로 옮겨 가며 전부 싣는다 — 그때까지 취향은 이 경로에서
+     * NEUTRAL 로 나간다(§1 문제 ②의 마지막 잔재).
      */
     override fun replan(input: ReplanInput): ScheduleAgentOutput {
         val generateInput = ScheduleAgentInput(

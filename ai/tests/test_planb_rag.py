@@ -207,10 +207,15 @@ def test_kb_document_rejects_empty_id_and_text() -> None:
         _doc(KbKind.PERSONA, "d1", "   ")
 
 
-def test_kb_collections_cover_three_kinds_and_are_distinct() -> None:
-    """KB 3종 ↔ 기본 이름 1:1. `persona`는 FD 지정 초기 collection을 재사용한다."""
+def test_kb_collections_cover_every_kind_and_are_distinct() -> None:
+    """KB 종류 ↔ 기본 이름 **1:1**. 개수를 세지 않는다 — 종류가 늘 때마다 스테일이 된다.
+
+    둘이 갈리면 두 KB 가 한 collection 을 공유해 검색이 서로를 오염시킨다. `persona` 는
+    FD 지정 초기 collection(`intent_bank`·`persona`·`poi_desc`) 중 하나를 재사용하고,
+    나머지는 `planb_` 접두로 신설한다(KB-4 `planb_directive` 포함).
+    """
     assert set(KB_COLLECTIONS) == set(KbKind)
-    assert len(set(KB_COLLECTIONS.values())) == 3
+    assert len(set(KB_COLLECTIONS.values())) == len(KbKind)
     assert collection_for(KbKind.PERSONA, "m").startswith("persona__")
 
 
@@ -758,7 +763,7 @@ def test_fallback_delay_fatigue_rank_by_distance(reason: str) -> None:
     assert picked == ["near-m", "mid-a", "far-z"]
 
 
-@pytest.mark.parametrize("reason", ["closed", "canceled", "none"])
+@pytest.mark.parametrize("reason", ["closed", "canceled", "fully_booked", "none"])
 def test_fallback_neutral_reasons_apply_no_category_demotion(reason: str) -> None:
     """중립 사유 — 야외 강등 없음. 없는 신호로 순위를 지어내지 않는다 (거리만)."""
     pool = _pool_at(
@@ -793,7 +798,8 @@ def test_fallback_note_records_demotion_count() -> None:
 # "집합 보존"·"층 분할(플래그 열이 단조)"·"같은 입력 두 번 == 같은 출력" 으로 판정한다.
 
 _RANK_REASONS = st.one_of(
-    st.sampled_from(["weather", "delay", "fatigue", "closed", "canceled", "none", ""]),
+    st.sampled_from(
+        ["weather", "delay", "fatigue", "closed", "canceled", "fully_booked", "none", ""]),
     st.text(max_size=8),  # 모르는 사유 — 없는 신호로 순위를 지어내면 안 된다
 )
 _PLACEABLE = [c for c in PoiCategory if c is not PoiCategory.STAY]  # STAY 는 후보 풀 밖(내부 전용)
@@ -939,7 +945,7 @@ def test_situation_query_translates_reason_to_korean() -> None:
     from trippilot.agents.planb.rag import _REASON_KO, _situation_query
 
     pool = _pool()
-    for reason in ("weather", "closed", "delay", "canceled", "fatigue", "none"):
+    for reason in ("weather", "closed", "delay", "canceled", "fully_booked", "fatigue", "none"):
         query = _situation_query(_request(pool, reason=reason))
         assert reason not in query, f"{reason}: 영문 reason 이 질의에 남았다"
         assert _REASON_KO[reason] in query

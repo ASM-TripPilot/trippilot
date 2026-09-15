@@ -2,8 +2,8 @@ import type {
   CompanionType,
   TripDestination,
 } from '@/shared/api/generated/schemas';
-
-import { dayOfWeek } from './tripWizardStep1';
+import { formatDateRangeWithDow } from '@/entities/trip/lib/formatTripPeriod';
+import { nightsCountLabel } from '@/entities/trip/lib/formatNights';
 
 /**
  * g01 요약 카드 · 위저드 진행 모델의 순수 셀렉터 (TRIP-664 · US-TRIP-01 · US-TRIP-07).
@@ -15,14 +15,6 @@ import { dayOfWeek } from './tripWizardStep1';
  *  `(tabs)/index.tsx:129`가 쓰는 그 문자다. 눈으로는 구분되지 않아 상수로 굳혀 둔다. */
 const DOT = ` ${'·'} `;
 
-/** 기간 범위 구분자 — **en dash U+2013**(하이픈이 아니다). `baseSections.ts`·`planState.ts`가
- *  같은 문자를 쓴다. */
-const EN_DASH = '–';
-
-/** 0=일 … 6=토 → 한글 요일 한 글자. `dayOfWeek`(tripWizardStep1)의 반환 인덱스와 짝이 맞는다
- *  (에포크 0 = 목요일 기준이라 `getUTCDay`와 같은 순서). */
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
-
 const TOTAL_STEPS = 4;
 
 const MS_PER_DAY = 86_400_000;
@@ -33,12 +25,6 @@ const MS_PER_DAY = 86_400_000;
 function toEpochDay(date: string): number {
   const [year, month, day] = date.split('-').map(Number);
   return Math.round(Date.UTC(year, month - 1, day) / MS_PER_DAY);
-}
-
-/** 'YYYY-MM-DD' → [월, 일] 숫자. 문자열을 그대로 쪼개므로 시계를 안 읽는다. */
-function monthDay(date: string): [month: number, day: number] {
-  const [, month, day] = date.split('-').map(Number);
-  return [month, day];
 }
 
 /** current를 [1, total=4]로 접는다(D1). 범위 밖(0·5·음수)이 안전한 경계값으로 접혀
@@ -71,31 +57,15 @@ export function summaryDestinations(
     .join(DOT);
 }
 
-/** 요일을 각 일자 뒤에 얹은 기간 범위 문자열. 같은 달이면 둘째 월 표기를 생략한다
- *  (`formatConfirmedDateRange` 관례). 요일은 `dayOfWeek`(에포크 산술)로 구해 시계를 안 읽는다. */
-function formatDateRangeWithDow(startDate: string, endDate: string): string {
-  const [startMonth, startDay] = monthDay(startDate);
-  const [endMonth, endDay] = monthDay(endDate);
-  const startDow = WEEKDAYS[dayOfWeek(toEpochDay(startDate))];
-  const endDow = WEEKDAYS[dayOfWeek(toEpochDay(endDate))];
-
-  const head = `${startMonth}월 ${startDay}일(${startDow})`;
-  const tail =
-    startMonth === endMonth
-      ? `${endDay}일(${endDow})`
-      : `${endMonth}월 ${endDay}일(${endDow})`;
-  return `${head} ${EN_DASH} ${tail}`;
-}
-
-/** 기간 요약 — "6월 10일(수) – 13일(토) · 3박 4일". 요일은 실제 달력값이다. 한쪽 날짜라도
- *  없으면 null(빈 문자열 아님 — "미선택"과 "빈 값"은 다른 뜻). */
+/** 기간 요약 — "6월 10일(수) – 13일(토) · 3박 4일". 요일삽입 날짜범위·박수 라벨은 entities/trip/lib
+ *  위임(바이트 이관 — 출력 무변경). 한쪽 날짜라도 없으면 null(빈 문자열 아님 — "미선택"과 "빈 값"은 다른 뜻). */
 export function summaryPeriod(
   startDate?: string,
   endDate?: string
 ): string | null {
   if (startDate === undefined || endDate === undefined) return null;
   const nights = toEpochDay(endDate) - toEpochDay(startDate);
-  const nightsLabel = `${nights}박 ${nights + 1}일`;
+  const nightsLabel = nightsCountLabel(nights);
   return `${formatDateRangeWithDow(startDate, endDate)}${DOT}${nightsLabel}`;
 }
 

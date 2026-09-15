@@ -21,6 +21,7 @@ KB 가 바뀐 뒤엔 검증할 방법이 없다.
 from __future__ import annotations
 
 import os
+import time
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -36,6 +37,7 @@ QUERIES = [
     ("CLOSURE", "closed"),
     ("DELAY", "delay"),
     ("MANUAL", "canceled"),
+    ("MANUAL", "fully_booked"),
     ("MANUAL", "fatigue"),
     ("MANUAL", "none"),
 ]
@@ -44,10 +46,22 @@ PROMPT_SKELETON_CHARS = 630  # prompts/alternative_selection.yaml 의 변수 제
 
 
 def _embedding():
-    """`load_kb.py._embedding` 과 같은 규칙 — 적재와 다른 모델로 재면 무의미하다."""
+    """`load_kb.py._embedding` 과 같은 규칙 — 적재와 다른 모델로 재면 무의미하다.
+
+    `http` 를 받는다 (2026-09-12). 임베딩 컨테이너 분리(TRIP-517) 전에 쓰인 스크립트라
+    `local` 만 허용했는데, 적재가 `http` 로 넘어간 뒤로는 **측정을 아예 돌릴 수 없었다** —
+    운영과 같은 경로로 재라는 규칙이 운영 경로를 막고 있었던 셈이다. 둘 다 같은 KURE-v1
+    이라 벡터 공간은 같고, collection 도 `model_id` 로 같은 이름이 된다.
+    """
     provider = os.environ.get("TRIPPILOT_EMBEDDING_PROVIDER") or "local"
+    if provider == "http":
+        from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
+        from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
+
+        return http_embedding(SystemExit, lambda t: UrllibJsonClient(timeout_sec=t))
     if provider != "local":
-        raise SystemExit(f"측정은 적재와 같은 모델이어야 한다 (provider={provider})")
+        raise SystemExit(
+            f"측정은 적재와 같은 모델이어야 한다 (provider={provider}) — http 또는 local")
     from sentence_transformers import SentenceTransformer
 
     from trippilot.llm_gateway.adapters.sentence_transformer_embedding import (
@@ -70,9 +84,16 @@ def main() -> None:
     max_k = max(CANDIDATE_K)
 
     per_query = {}
+    elapsed_ms: list[float] = []
     for kind, reason in QUERIES:
         query = f"{kind} {_REASON_KO.get(reason, reason)} 상황"
+        # 검색 소요를 같이 잰다 — HNSW 도입 시점(TRIP-838 조건 ②)을 감이 아니라
+        # 그래프로 정하려면 "몇 건부터 느려지는지"의 기준선이 필요하다. 지금은
+        # 벡터 인덱스가 아예 없어(PK btree 뿐) 매 질의가 전건 스캔이다.
+        # **임베딩 왕복이 포함된 값**이다 — 스캔만 분리하려면 SQL 을 직접 재야 한다.
+        t0 = time.perf_counter()
         hits = retrieve(KbKind.SITUATION, query, embedding, store, top_k=max_k)
+        elapsed_ms.append((time.perf_counter() - t0) * 1000)
         relevant = [reason in (h.metadata or {}).get("reasons", ()) for h in hits]
         per_query[query] = (hits, relevant)
         first_bad = next((i + 1 for i, r in enumerate(relevant) if not r), None)
@@ -97,6 +118,14 @@ def main() -> None:
         avg_len = sum(lengths) / len(lengths)
         print(f"| {k} | {sum(precisions)/len(precisions):.3f} | {avg_len:.0f}자 | "
               f"{avg_len / PROMPT_SKELETON_CHARS:.0%} |")
+
+    # HNSW 판정용 기준선 (TRIP-838)
+    ordered = sorted(elapsed_ms)
+    print("\n## 검색 소요 (임베딩 왕복 포함, 인덱스 없음 = 전건 스캔)\n")
+    print(f"질의 {len(ordered)}건 · 중앙값 {ordered[len(ordered) // 2]:.0f}ms · "
+          f"최소 {ordered[0]:.0f} · 최대 {ordered[-1]:.0f}ms")
+    print("검색 몫은 요청 예산의 15%(25초 기준 3.75초)다 — 그 조각을 유의미하게 "
+          "먹기 시작하면 HNSW 를 본다.")
 
 
 if __name__ == "__main__":

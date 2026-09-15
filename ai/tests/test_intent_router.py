@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -127,11 +128,12 @@ _QUERY_ANGLES = {
 
 
 def _scripted_router(
-    *, slot_pattern: dict | None = None, extra_angles: dict[str, float] | None = None, **kwargs
+    *, slot_pattern: dict | None = None, extra_angles: dict[str, float] | None = None,
+    bank: dict[str, tuple[float, Intent]] | None = None, **kwargs
 ) -> IntentRouter:
     embedding = _ScriptedEmbedding({**_QUERY_ANGLES, **(extra_angles or {})})
     store = InMemoryVectorStore()
-    for item_id, (theta, intent) in _BANK_ANGLES.items():
+    for item_id, (theta, intent) in (bank or _BANK_ANGLES).items():
         store.upsert(
             BANK_COLLECTION,
             item_id,
@@ -163,6 +165,23 @@ def test_confident_extracts_slots_from_entry_pattern() -> None:
     match = router.route("내일 확실한 질문", _TID, _NOW)
     assert match.match_route is MatchRoute.CONFIDENT
     assert match.slots == {"date": "내일"}  # 지원하지 않는 패턴 형식(bad)은 조용히 제외
+
+
+def test_confident_when_competing_intent_is_far_even_if_it_is_top2() -> None:
+    """1차 확정 조건은 "top2 가 같은 의도" 가 아니라 **다른 의도와 충분히 벌어졌는가** 다.
+
+    뱅크가 커지면 top2 가 우연히 타 의도인 경우가 흔해져, 종전 규칙에서는 **커질수록 1차가 덜
+    확정되는** 역전이 난다(밀도가 올라가는데 확정률이 떨어진다). 여기서는 top1(W1 1.000) 바로
+    아래가 타 의도(D_FAR 0.800)지만 0.200 이나 벌어져 있으니 확정해야 한다 —
+    같은 의도 이웃이 그 사이에 없어도 마찬가지다.
+    """
+    router = _scripted_router(
+        bank={"W1": (0.00, Intent.GET_WEATHER), "D_FAR": (0.6435, Intent.GET_DISTANCE)},
+        extra_angles={"확실한 질문": 0.00},
+    )
+    match = router.route("확실한 질문", _TID, _NOW)
+    assert match.match_route is MatchRoute.CONFIDENT
+    assert match.intent is Intent.GET_WEATHER
 
 
 def test_broken_regex_pattern_does_not_break_routing() -> None:
@@ -364,18 +383,68 @@ def _load_seed():
 def test_seed_bank_covers_closed_set_and_matches_routing_table() -> None:
     entries = _load_seed()
     assert {e.intent for e in entries} == ROUTABLE_INTENTS  # 13종 전부, 그 밖은 없음
-    assert len(entries) == 121  # v0.3-draft (yaml 헤더 명시 — TRIP-678 기계 검수 1차, 추가 없음)
-    assert all(e.bank_version == "0.3-draft" and e.origin == "seed" for e in entries)
-    assert all(not e.reviewed for e in entries)  # 아직 검수 전
+    assert len(entries) == 417  # v0.5 (yaml 헤더 명시 — seed 125 + §3.2 ② 증강 292)
+    assert all(e.bank_version == "0.5" for e in entries)
+    assert all(e.reviewed for e in entries)  # 사람 검수(seed) · 기계 관문(증강) 통과분만 실린다
+    by_origin = Counter(e.origin for e in entries)
+    assert by_origin == {"seed": 125, "augmented": 292}  # 출처가 구분돼 되돌릴 수 있다
+
+
+def test_reviewed_seed_bank_indexes_without_opt_in() -> None:
+    """검수 완료(reviewed: true)라 `allow_unreviewed` 없이 실 적재 경로를 탄다 — 그게 검수의 목적이다."""
+    store = InMemoryVectorStore()
+    entries = _load_seed()
+    assert index_bank(entries, FakeEmbedding(dim=8), store) == len(entries)
 
 
 def test_index_bank_refuses_unreviewed_entries_by_default() -> None:
-    """ai/data/README.md: 검수 완료 전 임베딩·뱅크 편입 금지 — 조용히 건너뛰지 않고 거부."""
+    """ai/data/README.md: 검수 완료 전 임베딩·뱅크 편입 금지 — 조용히 건너뛰지 않고 거부.
+
+    seed 뱅크가 검수를 통과한 뒤로는 실물로 이 경로를 못 타므로 미검수 엔트리를 만들어 검증한다
+    (규칙은 미래의 augmented·mined 편입분에 계속 적용된다 — §3.2 ②③).
+    """
+    raw = yaml.safe_load(_SEED_YAML.read_text(encoding="utf-8"))
+    raw["intents"][0]["reviewed"] = False
     store = InMemoryVectorStore()
     with pytest.raises(UnreviewedBankError) as exc:
-        index_bank(_load_seed(), FakeEmbedding(dim=8), store)
+        index_bank(load_bank(raw), FakeEmbedding(dim=8), store)
     assert "GENERATE_SCHEDULE" in str(exc.value)
     assert store.search(BANK_COLLECTION, (1.0,) + (0.0,) * 7, top_k=5) == ()  # 부분 적재 없음
+
+
+def test_augmented_questions_load_with_their_own_origin() -> None:
+    """§3.2 ② 증강분은 `augmented:` 목록으로 따로 싣고 `origin` 이 구분돼야 한다.
+
+    수기 seed 와 LLM 생성분을 한 목록에 섞으면 뱅크가 "전부 사람이 쓴 문장" 이라고 거짓말한다 —
+    나중에 증강분만 되돌리거나 마이닝분(§3.2 ③)을 분리 추적할 수단도 사라진다.
+    """
+    raw = {
+        "version": "t", "origin": "seed",
+        "intents": [{
+            "intent": "GET_WEATHER", "handler": "WeatherAgent", "mode": "FastPath",
+            "reviewed": True,
+            "questions": ["내일 날씨 어때?"],
+            "augmented": ["낼 날씨 어떰?", "내일 비 오나요?"],
+        }],
+    }
+    entries = load_bank(raw)
+    assert [e.question for e in entries] == ["내일 날씨 어때?", "낼 날씨 어떰?", "내일 비 오나요?"]
+    assert [e.origin for e in entries] == ["seed", "augmented", "augmented"]
+    assert len({e.entry_id for e in entries}) == 3  # id 충돌 없음
+    assert all(e.reviewed for e in entries)
+
+
+def test_augmented_question_duplicating_a_seed_is_rejected() -> None:
+    raw = {
+        "version": "t", "origin": "seed",
+        "intents": [{
+            "intent": "GET_WEATHER", "handler": "WeatherAgent", "mode": "FastPath",
+            "reviewed": True, "questions": ["내일 날씨 어때?"], "augmented": ["내일 날씨 어때?"],
+        }],
+    }
+    with pytest.raises(BankLoadError) as exc:
+        load_bank(raw)
+    assert "완전중복" in str(exc.value)
 
 
 def test_index_bank_opt_in_indexes_everything() -> None:

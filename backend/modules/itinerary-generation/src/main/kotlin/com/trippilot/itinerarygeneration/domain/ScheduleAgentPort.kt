@@ -85,8 +85,36 @@ data class ReplanInput(
     val directives: List<String>,
     val freeText: String?,
     val excludedPoiIds: List<UUID>,
+    /**
+     * 아래 다섯은 전용 재계획 경계(`/ai/v1/itinerary/replan`, 연동 설계 §2)의 입력이다.
+     * 상대 계약이 출하되기 전까지 http 어댑터는 generate 재사용이라 **아직 와이어에 싣지 않는다** —
+     * 조립을 먼저 완성해 두는 것은 NEUTRAL_PREFERENCES 로 취향을 덮던 상태를 끝내기 위한 준비다(B-1).
+     * 기본값을 두지 않는다 — 조립 지점이 값을 말하지 않고 조용히 빠지는 것을 컴파일이 막는다.
+     */
+    val companionType: String?,
+    /** 예산 등급 — 경계 계약 어휘는 `preference_set.budget_tier` 다(생성 경로와 동일, trip.budget_total 아님). */
+    val budgetLevel: String?,
+    /** 실제 취향(계정 스냅숏 + 개인화) — 중립으로 덮지 않는다(§1 문제 ②의 해소 지점). */
+    val preferenceProfile: PreferenceProfile,
+    /** 원 일정 슬롯 — KB-1 컨텍스트이자 후보 풀 합류 대상(§4 판단). */
+    val currentSlots: List<ReplanCurrentSlot>,
+    /** 담은 장소 — LLM 컨텍스트("저장한 장소 — …")용. 이름 포함, 시각·메모 없음(목적 최소화). */
+    val savedPlaces: List<SavedPlaceRef>,
     val requestMeta: RequestMeta,
 )
+
+/** 원 일정 슬롯의 경계 사영(§4 `ReplanSlotSchema`) — 산출물 타입([VisitSlotDisplay])과 방향이 반대라 섞지 않는다. */
+data class ReplanCurrentSlot(
+    val poiId: UUID,
+    val startAt: LocalTime,
+    val endAt: LocalTime,
+    val isFixed: Boolean,
+    val endsNextDay: Boolean,
+    val placementReason: String?,
+)
+
+/** 담은 장소 참조(§2 `saved_places`) — place-data `SavedPlaceItem` 의 도메인 사영. */
+data class SavedPlaceRef(val poiId: UUID, val name: String)
 
 /** 생성 방식(d11 추천 강도 분기). */
 /**
@@ -291,6 +319,13 @@ data class SlotCandidatesInput(
     val radiusM: Int?,
     /** h13 컨셉(테마) — null 허용. */
     val concept: String?,
+    /**
+     * 교체 사유 — **FE 카탈로그 코드 그대로**(`WEATHER`·`TEMP_CLOSED` …). i14 재계획 흐름에서
+     * 사용자가 고른 값이고, h12/h18 일정 편집은 사유가 없어 null 이다.
+     *
+     * 번역은 어댑터가 한다(`AiReasonVocabulary`) — 도메인이 상대 어휘를 알면 경계가 새어 들어온다.
+     */
+    val reason: String?,
     val excludePoiIds: List<UUID>,
     /**
      * 교체 대상 슬롯이 **원래 왜 배치됐는가**(`VisitSlot.placementReason`) — AI 가 "원래 취지를 잇는

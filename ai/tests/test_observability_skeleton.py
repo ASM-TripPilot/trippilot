@@ -34,7 +34,6 @@ _REQ = LlmRequest(
     prompt="강릉 카페 3곳 점수 매겨줘",
     prompt_ref=PromptRef("prompts/score.yaml", "1.0.0", "score_preferences"),
     max_tokens=256,
-    temperature=0.0,
 )
 
 

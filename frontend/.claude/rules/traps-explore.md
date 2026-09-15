@@ -17,6 +17,10 @@ paths:
 
 - **`ExploreLandingScreen`을 렌더하는 node-버킷 테스트는 `useGetPlaces`도 목해야 크래시 안 남** → TRIP-470이 가볼 곳 레인을 복원하며 `(tabs)/explore.tsx`가 `useGetPlaces()`(react-query)를 새로 문다. `QueryClientProvider` 없는 node 버킷에서 이 라우트를 렌더하는 새 테스트 파일은 지역 카탈로그의 `useRegions` 함정(위 절)과 동형으로 이 목이 필요하다는 걸 기계가 강제하지 않는다.
 
+## 하트 글리프 정본 (TRIP-806 → TRIP-807로 shared 이동)
+
+- **하트 저장 글리프(Outline·Filled) 정본은 이제 `shared/ui/HeartGlyphs.tsx`다** — TRIP-806이 `entities/place/ui/PlaceGlyphs.tsx`로 승격했던 것을 TRIP-807이 `git mv`로 다시 `shared/ui`로 내렸다(place·stay 검색 카드가 공유, entities 교차 0). `features/explore/ui/ExploreGlyphs.tsx`의 동명 함수는 806 5-c에서 이미 삭제됐다. `repo-traps.md`의 `LocationOffGlyph` 두 벌 함정과 동형 위험이 두 차례(806 explore↔entities, 807 stay 신규 소비) 발생했다 — 새 하트 소비처를 만들 때 옛 경로(`entities/place/ui/PlaceGlyphs`·`ExploreGlyphs`)에서 다시 끌어오면 조용히 두 벌로 되돌아간다. raw-hex·fill 스캔은 `*Glyphs.tsx` 제외 관례라 분기해도 기계가 못 잡는다.
+
 ## 장소 상세 (explore, d06, TRIP-456)
 
 - **d06 조회 오류가 notFound로 접힌다** → `PlaceDetailPage.tsx`는 `GET /places`가 5xx·네트워크로 실패해도 별도 오류 얼굴이 없어 "장소를 찾을 수 없어요"로 접는다(`live-place`/i05와 동형 한계, 위 execution 절 참고). 콜드 딥링크+조회 실패에서만 발동, 웜 캐시 주 동선(d04→d06·d02→d06)은 무해. 오류 얼굴을 붙일 땐 `LiveItineraryPage`의 `resolveLiveState`(error/notFound 분리) 선례를 복제한다.

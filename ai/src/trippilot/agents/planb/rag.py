@@ -61,7 +61,8 @@ _ALTERNATIVE_LABELS = ("A", "B", "C", "D", "E")
 
 # 규칙 폴백의 reason → 후순위 카테고리 (TRIP-532). 배정을 바꾸려면 여기만 고친다.
 # 분기 키는 TriggerKind 가 아니라 **reason** — MANUAL 트리거도 사유("비 와서")를 따라간다.
-# delay·fatigue 는 거리 오름차순이 곧 규칙이라 항목이 없고, closed·canceled·none 은 중립
+# delay·fatigue 는 거리 오름차순이 곧 규칙이라 항목이 없고, closed·canceled·fully_booked·none 은
+# 중립이다 — 예약 마감은 "그 장소만 못 간다"라서 대안의 카테고리 방향과 무관하다
 # (닫힌 곳은 excluded 로 이미 빠진다 — 없는 신호로 순위를 지어내지 않는다).
 _DEMOTED_BY_REASON: Mapping[str, frozenset[PoiCategory]] = MappingProxyType(
     {"weather": RAIN_OUTDOOR}  # 어셈블리의 우천 판정표(TRIP-383)와 같은 기준 — 두 경로가 같은 판단
@@ -79,8 +80,8 @@ class PlanBRagConfig:
     top_k: int = DEFAULT_TOP_K
     max_alternatives: int = 3  # 미결 #5 — UX 확정 시 조정
     # 유사도 하한 (planb-rag-design §9 미결 #3 "데이터 쌓인 후 캘리브레이션").
-    # top_k 는 "몇 건까지"이고 이건 "얼마나 닮아야"다 — 버킷이 작으면(delay·none 은
-    # KB 에 2건뿐) top_k 를 채우려 무관 문서를 긁어오는데, 그걸 막는다.
+    # top_k 는 "몇 건까지"이고 이건 "얼마나 닮아야"다 — 버킷이 작으면(none 은 KB 에
+    # 3건뿐) top_k 를 채우려 무관 문서를 긁어오는데, 그걸 막는다.
     #
     # **비율 컷을 기본으로 쓴다.** 절대값은 임베딩 모델에 종속이라(코사인 분포가 모델마다
     # 다르다) 모델을 바꾸면 조용히 잘못 자른다 — 팀은 provider 전환을 전제하고 있다
@@ -90,6 +91,13 @@ class PlanBRagConfig:
     #
     # 실측(KB 24건 × 질의 6종, KURE-v1): 컷 없음 정밀도 0.708·무관 7건
     #   → 비율 0.85 = 0.944·무관 1건 / 절대 0.50 = 1.000·무관 0건(단 모델 종속)
+    #
+    # ⚠ **이 값은 문서가 늘수록 무뎌진다.** 38건 재측정(2026-09-12, 질의 7종)에서
+    # 0.85 는 top_k 4건 중 3.6건을 통과시켰다 — 사실상 no-op 에 가깝다. 문서가 늘면
+    # 점수 군집이 좁아져 "최고점 대비 15% 낮은 문서"가 사라지기 때문이다. 0.92 로
+    # 올리면 정밀도는 0.952 로 회복되지만 `none` 버킷이 1건으로 쪼그라들어 채택하지
+    # 않았다(그 질의는 최고점 자체가 낮다 — 비율 컷이 원래 못 막는 구멍이고, 그래서
+    # min_score 가 있다). **KB-3 가 60건대에 들어가면 여기를 다시 잰다.**
     min_score_ratio: float = 0.85  # 최고점 대비. 1.0 = 최고점만, 0.0 = 컷 없음
     min_score: float = 0.0  # 절대 바닥. 코사인은 음수가 나므로 0 은 "음수 컷"을 뜻한다
     # 요청 예산 중 LLM 1차 호출에 줄 몫. 나머지는 재시도·검색·풀 조립·직렬화 몫이다.
@@ -156,7 +164,7 @@ class PlanBRagRequest:
     """
 
     trigger: TriggerParams
-    reason: str  # weather|closed|delay|canceled|fatigue|none
+    reason: str  # weather|closed|delay|canceled|fully_booked|fatigue|none
     pool: CandidatePool
     trace_id: TraceId
     now: datetime
@@ -501,6 +509,11 @@ _REASON_KO: Mapping[str, str] = MappingProxyType(
         "closed": "휴무·폐점",
         "delay": "지연",
         "canceled": "예약 취소",
+        # 예약 **마감**은 취소와 다른 사유다 (2026-09-12) — "자리가 다 찼다"이지
+        # "잡아둔 예약이 없어졌다"가 아니다. FE 는 처음부터 `FULLY_BOOKED` 칩으로
+        # 갈라 놨는데 AI·정본만 둘을 묶고 있었다. 백엔드가 FE 어휘를 여기로 번역한다
+        # (ai-backend-replan-연동-설계.md §3).
+        "fully_booked": "예약 마감",
         "fatigue": "피로",
         "none": "사용자 요청 교체",
     }

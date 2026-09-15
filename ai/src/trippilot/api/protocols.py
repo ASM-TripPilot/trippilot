@@ -7,7 +7,8 @@ Protocol은 구조적이라 이름·형태만 맞으면 어댑터 없이 그대�
 
 API 계층이 오케스트레이터에 기대하는 것은 아래 `ItineraryOrchestrator` Protocol 본문이
 정본이다 — 메서드를 여기 다시 나열하지 않는다(나열이 먼저 낡는다).
-회고 2종(`reflection_generate`·`reflection_nudge`, TRIP-429)은 **Protocol 밖**이고
+회고 3종(`reflection_generate`·`reflection_nudge`·`reflection_share_card`,
+TRIP-429 +후속)은 **Protocol 밖**이고
 `routes.py`가 `getattr`로 찾아 없으면 503으로 명시 실패한다 — 구형 조립 호환을 위해
 선택적으로 둔 것이다(INV-4: 없으면 조용히 넘어가지 않고 크게 드러낸다).
 

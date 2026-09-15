@@ -25,6 +25,11 @@ import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.ReplanCurrentSlot
+import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
+import com.trippilot.placedata.api.SavedPlaceLookupFacade
+import com.trippilot.profile.api.PreferenceFacade
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
@@ -49,6 +54,9 @@ class ReplanFacadeService(
     private val baseAnchors: BaseAnchorFacade,
     private val revisions: ItineraryRevisionService,
     private val changeLogs: ChangeLogFacade,
+    private val preferences: PreferenceFacade,
+    private val personalization: PersonalizationPort,
+    private val savedPlaces: SavedPlaceLookupFacade,
     private val clock: Clock,
 ) : ReplanFacade {
 
@@ -60,6 +68,12 @@ class ReplanFacadeService(
         val ctx = trips.findGenerationContext(command.accountId, command.tripId) ?: throw ResourceNotFound()
         // 기준점이 없으면 상대가 후보 풀을 매달 곳이 없다 — 숙소 앵커로 채운다(BR-U4-19 사다리의 마지막 단).
         val origin = groundingPoint(command, ctx)
+        // 취향은 생성 경로와 **같은 척도**로 만든다(PreferenceProfiles KDoc) — §2 이탈 2건은 의도다:
+        // 원천을 trip.preference_snapshot(클라이언트 자유 맵, 타입 보증 없음) 대신 계정 스냅숏+개인화로,
+        // 예산 등급을 trip.budget_total 변환 대신 preference_set.budget_tier(경계 계약 어휘)로.
+        // 두 경로가 다른 취향으로 돌면 "원래 자리보다 나은 것만 바꾼다"(§4) 비교가 성립하지 않는다.
+        val prefs = preferences.findPreferences(command.accountId)
+        val profile = prefs.toProfile(personalization.hintsFor(command.accountId))
         val output = scheduleAgent.replan(
             ReplanInput(
                 tripId = command.tripId,
@@ -75,17 +89,33 @@ class ReplanFacadeService(
                 directives = command.directives,
                 freeText = command.freeText,
                 excludedPoiIds = command.excludedPoiIds,
+                companionType = ctx.companionType,
+                budgetLevel = prefs.budgetTier,
+                preferenceProfile = profile,
+                // 원 일정 슬롯 — KB-1 컨텍스트이자 후보 풀 합류 대상(§4). 대상 일자만.
+                currentSlots = current.days.firstOrNull { it.date == command.targetDate }?.slots.orEmpty().map {
+                    ReplanCurrentSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.placementReason)
+                },
+                savedPlaces = this.savedPlaces.findSaved(command.accountId).map { SavedPlaceRef(it.poiId, it.nameKo) },
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), REPLAN_DEADLINE_MS),
             ),
         )
         // **요청한 날짜만** 받는다. 다른 날을 돌려줬을 때 그것을 오늘 초안으로 삼으면, 확정 순간
         // 오늘 일정이 엉뚱한 날의 계획으로 덮인다(생성 경로에도 같은 취지의 가드가 있다).
         val day = output.days.firstOrNull { it.date == command.targetDate }
+        // 잠긴 슬롯은 재해결 대상이 아니다 — 원본의 위반 표시(BR-U3-13)가 현실에 그대로 남으므로
+        // 이어받는다(TRIP-839). 판정은 상대 에코(isFixed)가 아니라 **우리 잠금 집합**으로 한다 —
+        // 잠금 규칙의 주인이 이쪽이다. 재배치된 슬롯은 어셈블리를 새로 통과했으니 위반 없음이 정당하다.
+        // 같은 장소가 하루에 두 번 잠기면 첫 슬롯 값을 쓴다(slotKey 규약상 어차피 구분 불가).
+        val lockedByPoi = lockedSlots(current, command).groupBy { it.sourcePoiId }.mapValues { (_, v) -> v.first() }
         val slots = day?.slots.orEmpty().map {
+            val locked = lockedByPoi[it.poiId]
             ReplanSlot(
                 poiId = it.poiId, startAt = it.startAt, endAt = it.endAt, isFixed = it.isFixed,
                 endsNextDay = it.endsNextDay, distanceRange = it.distanceRange,
                 placementReason = output.explanations["${command.targetDate}#${it.poiId}"],
+                hasViolation = locked?.hasViolation ?: false,
+                violationReason = locked?.takeIf { l -> l.hasViolation }?.violationReason,
             )
         }
         // 빈 초안은 "해 없음"이다 — 빈 하루를 초안이라고 보여 주면 사용자가 그걸 확정한다.
@@ -117,18 +147,21 @@ class ReplanFacadeService(
      *
      * 잠금을 빠뜨리면 이미 다녀온 곳이 일정에서 사라지거나 예약 시각이 밀린다.
      */
-    private fun lockedBlocks(current: Itinerary, command: ReplanCommand): List<FixedBlock> {
+    private fun lockedBlocks(current: Itinerary, command: ReplanCommand): List<FixedBlock> =
+        // 시각을 함께 싣는다 — 시각 없는 고정 블록은 상대가 거부한다(계약 M1).
+        lockedSlots(current, command)
+            .map { FixedBlock(it.sourcePoiId, command.targetDate, it.startAt, dwellMinutes(it.startAt, it.endAt)) }
+
+    /** 잠금 판정의 단일 지점 — 요청 블록과 위반 상속(TRIP-839)이 같은 집합을 봐야 한다. */
+    private fun lockedSlots(current: Itinerary, command: ReplanCommand): List<VisitSlot> {
         val day = current.days.firstOrNull { it.date == command.targetDate } ?: return emptyList()
         val now = LocalTime.ofInstant(command.fromInstant, TRAVEL_ZONE)
         val completed = command.completedSlotKeys.toSet()
-        return day.slots
-            .filter {
-                it.isFixed ||
-                    (!command.fullDay && it.startAt < now) ||
-                    "${command.targetDate}#${it.sourcePoiId}" in completed
-            }
-            // 시각을 함께 싣는다 — 시각 없는 고정 블록은 상대가 거부한다(계약 M1).
-            .map { FixedBlock(it.sourcePoiId, command.targetDate, it.startAt, dwellMinutes(it.startAt, it.endAt)) }
+        return day.slots.filter {
+            it.isFixed ||
+                (!command.fullDay && it.startAt < now) ||
+                "${command.targetDate}#${it.sourcePoiId}" in completed
+        }
     }
 
     /** 체류 분 — 자정 넘김이면 하루를 더한다(HC4). */
@@ -199,6 +232,7 @@ class ReplanFacadeService(
             sourcePoiId = s.poiId, poiSnapshotId = null, orderIndex = i,
             startAt = s.startAt, endAt = s.endAt, isFixed = s.isFixed, endsNextDay = s.endsNextDay,
             distanceRange = s.distanceRange, placementReason = s.placementReason,
+            hasViolation = s.hasViolation, violationReason = s.violationReason,
         )
     }
 

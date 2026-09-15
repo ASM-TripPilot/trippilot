@@ -170,7 +170,7 @@ Account, SocialIdentity, TermsVersion, ConsentRecord, MarketingConsent, Location
 | 엔티티 | 핵심 |
 |---|---|
 | TriggerEvent | type(weather/delay/hours/traffic), value, targetItemId, status(active/normal/dismissed), channel(push/in-app) |
-| ReplanSession | reason(weather/closed/delay/canceled/fatigue/none), mode(ai/manual), origin(gps/manual/accommodation), status(loading→proposed→committed/canceled/undone) |
+| ReplanSession | reasons[](FE 어휘 다중 — AI 로는 `weather/closed/delay/canceled/fully_booked/fatigue/none`), directives[], free_text, scope(PARTIAL_SLOTS/FULL_DAY), origin_kind(GPS/MANUAL/LAST_VISIT/STAY_ANCHOR), status(COLLECTING→SOLVING→DRAFT→APPLIED/CANCELED, FAILED/NO_SOLUTION) |
 | Alternative | source(ai/manual), items[](tag: swapped/kept/added/removed/moved/locked), deltas(이동·방문수·복귀시각), empty(제약불충족) |
 | ForecastCache / WeatherAlert | 기상청 예보·특보 |
 | ExecutionState | current/next 포인터, sub(NORMAL/REST{resumeAt}) |

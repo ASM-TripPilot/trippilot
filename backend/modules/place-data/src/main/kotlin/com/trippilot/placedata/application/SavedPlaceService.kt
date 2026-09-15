@@ -2,6 +2,8 @@ package com.trippilot.placedata.application
 
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.placedata.api.SavedPlaceItem
+import com.trippilot.placedata.api.SavedPlaceLookupFacade
 import com.trippilot.placedata.domain.DataStatus
 import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiRepository
@@ -24,7 +26,17 @@ class SavedPlaceService(
     private val saved: SavedPlaceRepository,
     private val pois: PoiRepository,
     private val clock: Clock,
-) {
+) : SavedPlaceLookupFacade {
+
+    /**
+     * 재계획 `saved_places` 용 경계 조회(연동 설계 §2). [list] 와 달리 **ACTIVE 만** — 경계 밖으로
+     * 나가는 참조는 실재 확인분으로 좁힌다(INV-1 과 같은 태도). 화면 목록(폐업 뱃지 표시)과 목적이 다르다.
+     */
+    override fun findSaved(accountId: UUID): List<SavedPlaceItem> =
+        list(accountId)
+            .filter { it.poi.dataStatus == DataStatus.ACTIVE }
+            .map { SavedPlaceItem(it.poi.poiId, it.poi.nameKo) }
+
     @Transactional
     fun save(accountId: UUID, poiId: UUID): SavedPlaceView {
         // 담기 대상은 실재 확인된 ACTIVE POI만(INV-1). 없거나 비-ACTIVE면 404.

@@ -25,11 +25,18 @@ from enum import Enum
 
 
 class KbKind(Enum):
-    """Plan-B RAG의 KB 3종 (planb-rag-design.md §2)."""
+    """Plan-B RAG의 KB (planb-rag-design.md §2 + 재계획 연동 설계 §3).
+
+    KB-1~3 은 정본 §2 의 세 종이고, KB-4 는 재계획 지시 사전이다 — **성격이 다르다**:
+    앞 셋은 "상황을 설명하는 지식"이고 KB-4 는 "사용자 발화를 닫힌 키로 옮기는 사전"이다.
+    같은 `VectorStorePort` 뒤에 두는 이유는 자유 입력 매칭이 임베딩 검색이라서지,
+    같은 종류의 지식이라서가 아니다.
+    """
 
     SCHEDULE = "SCHEDULE"  # KB-1
     PERSONA = "PERSONA"  # KB-2
     SITUATION = "SITUATION"  # KB-3
+    DIRECTIVE = "DIRECTIVE"  # KB-4 — 재계획 지시 사전 (자유 입력 → 닫힌 키)
 
 
 @dataclass(frozen=True, slots=True)

@@ -317,29 +317,6 @@ class GenerateItineraryService(
     }
 
     /**
-     * 취향 스냅숏(profile.api) → ScheduleAgent 취향 프로필(7축). 미설정 축은 빈 목록/null 그대로.
-     *
-     * 기록 기반 개인화([view])는 **보태기만 한다**(TRIP-556). 사용자가 온보딩에서 고른 값이 언제나
-     * 우선이다 — 과거 행동이 명시적 선택을 뒤집으면 "왜 내가 고른 게 무시되지"가 된다.
-     *
-     * - `activities`: 합집합. 순서는 사용자가 고른 것이 앞
-     * - `pace`: 스칼라라 합칠 수 없다 → **비어 있을 때만** 채운다
-     *
-     * 동의가 없거나 근거가 모자라면 [view] 는 빈 값이라 이 함수는 아무것도 보태지 않는다.
-     */
-    private fun PreferenceSnapshot.toProfile(view: PersonalizationHints): PreferenceProfile =
-        PreferenceProfile(
-            styles = styles,
-            activities = (activities + view.activities).distinct(),
-            foodTastes = foodTastes,
-            transportModes = transportModes,
-            pace = pace ?: view.pace,
-            companionTypes = companionTypes,
-            petFriendly = petFriendly,
-            budgetTier = budgetTier,
-        )
-
-    /**
      * **재생성**이 허용되는 시점인가 — 기존 일정이 있을 때만 부른다(첫 생성은 대상이 아니다).
      *
      * 재생성은 기존 일정을 지우고 새로 만든다(`replaceForTrip`). 여행 중에 그러면 사용자가 따라가던 계획이
