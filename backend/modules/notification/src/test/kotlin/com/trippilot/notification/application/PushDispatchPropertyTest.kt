@@ -148,19 +148,24 @@ class PushDispatchPropertyTest : StringSpec({
     }
 
     /**
-     * **불변식**: 상한은 푸시만 생략한다(COST-U6-02). 이미 나간 건수가 몇이든 **알림함 행은
-     * 건드리지 않는다** — 버리면 catch-up 으로도 못 받아 사용자에게 알림이 사라진다.
+     * **불변식**: 상한에 걸린 건은 **발송 결과를 남기지 않는다**(COST-U6-02 · INV-U6-02).
+     *
+     * 상한은 "버리는 것"이 아니라 "이번에 안 보내는 것"이다. 실패로 기록해 버리면 그 행은
+     * **시도했다가 못 갔다**로 남아, catch-up 이 다시 집어야 할 대상인지가 흐려진다. 그래서
+     * `push_sent_at`·`push_error` 가 **둘 다 null** 인 상태 — 즉 "아직 시도한 적 없음" — 로 남아야 한다.
+     *
+     * 앞선 판은 `appended.size` 가 안 변하는지를 봤는데 **공허했다**: `dispatch` 는 애초에 알림함에
+     * 쓰지 않아(적재는 `raise` 의 몫) 상한 코드를 통째로 지워도 통과한다. 지금은 발송 결과 쪽을 본다.
      */
-    "이미 나간 건수가 얼마든 알림함 행은 그대로다" {
-        checkAll(Arb.int(0..60)) { already ->
+    "상한에 걸리면 발송 결과를 기록하지 않는다 — 시도한 적 없는 상태로 남는다" {
+        checkAll(Arb.int(10..60)) { already ->
             val notifications = Notifications()
             repeat(already) { notifications.appended += notification().copy(pushSentAt = clock.instant()) }
-            val before = notifications.appended.size
             val svc = serviceOf(Tokens(listOf(token(deliverable = true))), Sender(), notifications)
 
-            svc.dispatch(notification())
+            svc.dispatch(notification()) shouldBe PushOutcome.RATE_LIMITED
 
-            notifications.appended.size shouldBe before // 지우지도, 되돌리지도 않는다
+            notifications.pushResults.shouldBeEmpty()
         }
     }
 
