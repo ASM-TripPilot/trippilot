@@ -75,6 +75,8 @@ services:
       # 일정 생성 경계 전환(TRIP-229). 기본 fake 라 평소 동작은 그대로 —
       # 공동 통합테스트에서만 AI_SCHEDULE_MODE=http 로 실 AI 컨테이너에 붙인다.
       TRIPPILOT_AI_SCHEDULE_MODE: ${AI_SCHEDULE_MODE:-fake}
+      # 리마인드 문구 AI 채움(TRIP-836). 기본 off = 상수 문구. http 로 켜면 예약 적재 시 AI 를 부른다.
+      AI_REMINDER_COPY_MODE: ${AI_REMINDER_COPY_MODE:-off}
       TRIPPILOT_AI_SCHEDULE_BASE_URL: ${AI_URL:-http://ai:8000}
       # 시간제약(day1 5s / 전체 20s)을 AI 에 실을지. **기본 off** — FE 연동 기간에는 시간 때문에
       # 규칙 폴백으로 강등되는 것을 걷어낸다(TRIP-474). 9월 재도입은 여기를 true 로(TRIP-475).
