@@ -187,9 +187,11 @@ class PlanBRagRequest:
     # 라벨은 백엔드가 내린 트리거이고 이미 사용자 화면에 뜬 문구라("비 예보로 일정
     # 변경 제안"), 우리가 재서 낮다고 야외를 안 내리면 화면과 모순된다. 실값은 상황
     # 컨텍스트로만 들어가 **정도**를 더한다 (팀 결정 2026-09-15 "replan 은 무조건 날씨").
-    # 값은 **일 단위 대표값**(어댑터가 시간별을 일 최댓값으로 접는다) — 오후 재계획에
-    # "오늘 80%"는 아침에 그친 비일 수 있다. 시간 단위 포트는 후속이고 그전까지
-    # 과신하지 않는다. 빈 dict = 무보정(미등록·조회 실패 포함).
+    # 값은 **재계획 시점 이후** 슬롯의 최댓값이다 — 포트가 시간별을 주면 지나간
+    # 비를 빼고(오후 3시에 "오늘 80%"가 아침에 그친 비인 경우를 막는다), 일 단위만
+    # 주는 포트면 그날 대표값으로 되돌아간다. 빈 dict = 무보정(미등록·조회 실패 ·
+    # 남은 시간대에 예보 없음) — "정보 없음"과 "하루 최댓값"은 다른 사실이라
+    # 남은 슬롯이 없으면 일 단위로 되돌리지 않는다.
     rain_prob_by_date: Mapping[date, int] = field(default_factory=dict)
     # 확정 취향 프로필 (`ContextResolver` 재조회, BR-U4-07) — KB-2 벡터 검색과 **다른
     # 출처**다. KB-2 는 저장 장소·메모 임베딩이고 이쪽은 취향·동행·예산 확정값이라,
@@ -599,7 +601,7 @@ def _with_observed_rain(situation_context: str, request: "PlanBRagRequest") -> s
             f"{d.isoformat()} {p}%"
             for d, p in sorted(request.rain_prob_by_date.items())
         )
-        lines.append(f"[관측 강수확률 — 그날 대표값(시간대 해상도 없음)] {rain}")
+        lines.append(f"[관측 강수확률 — 재계획 시점 이후 구간] {rain}")
     observed = "\n".join(lines)
     return f"{situation_context}\n{observed}" if situation_context else observed
 
