@@ -34,6 +34,8 @@ class LiveKmaWeatherIT : StringSpec({
             override fun codesOf(regionName: String) = emptyList<String>()
             override fun isSelectableCode(regionCode: String) = false
             override fun centerOf(regionName: String) = RegionCenter(33.4996, 126.5312)
+            /** 코드 중심 — 이 대역은 이름 경로만 쓴다(TRIP-859 후속이 인터페이스에 더한 메서드). */
+            override fun centerOfCode(regionCode: String) = null
         }
         val props = KmaWeatherProperties(mode = "kma", serviceKey = key)
         val client = RestClient.builder().baseUrl(props.baseUrl)

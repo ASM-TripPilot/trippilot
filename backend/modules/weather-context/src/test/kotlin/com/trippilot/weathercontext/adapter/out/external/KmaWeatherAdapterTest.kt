@@ -32,6 +32,8 @@ class KmaWeatherAdapterTest : StringSpec({
         override fun isSelectableCode(regionCode: String) = false
         override fun centerOf(regionName: String) =
             if (regionName == "제주") RegionCenter(33.4996, 126.5312) else null
+        /** 코드 중심 — 이 대역은 이름 경로만 쓴다(TRIP-859 후속이 인터페이스에 더한 메서드). */
+        override fun centerOfCode(regionCode: String) = null
     }
 
     "정상 응답에서 그 날짜 강수확률의 **최댓값**을 뽑는다" {
