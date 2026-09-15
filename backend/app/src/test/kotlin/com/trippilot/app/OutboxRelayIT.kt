@@ -224,6 +224,10 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
         // 센다. 여기서 봐야 하는 것은 "배달이 타이머를 올리는가"이지 그 절대 수가 아니다.
         val after = registry.find("trippilot.outbox.relay.latency").timer()!!.count()
         (after > before) shouldBe true
+
+        // **분위수를 낼 수 있는 모양인지는 여기서 못 본다.** 이 컨텍스트의 레지스트리는
+        // `SimpleMeterRegistry` 이고 그쪽은 aggregable 히스토그램을 지원하지 않아 설정과 무관하게
+        // 버킷이 0 이다(실측). 운영 레지스트리(OTLP)로 재는 것은 [OutboxRelayLatencyShapeTest].
     }
 
     /** 백오프를 앞당겨 "시간이 지났다"를 만든다 — 실 시간을 기다리지 않기 위해. */

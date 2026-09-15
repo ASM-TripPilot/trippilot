@@ -3,12 +3,14 @@ package com.trippilot.app.event
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.core.event.OutboxSubscriber
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.sql.ResultSet
+import java.time.Duration
 import java.util.concurrent.TimeUnit
 import java.util.UUID
 
@@ -35,9 +37,31 @@ import java.util.UUID
 @Component
 class OutboxRelay(
     private val jdbc: JdbcTemplate,
-    private val registry: MeterRegistry,
+    registry: MeterRegistry,
     subscribers: List<OutboxSubscriber>,
 ) {
+    /**
+     * 릴레이 지연(OBS-U6-01) — **분위수를 내보내도록 등록한다.**
+     *
+     * `registry.timer(name)` 으로 만들면 count·sum·max 만 나가고 **p95 가 없다.** 이 지표의 존재
+     * 이유가 PERF-U6-01 목표 대조인데 그 대조를 못 하게 된다 — 지표가 있는데 답을 못 하는 상태라
+     * 그냥 없는 것보다 나쁘다(있다고 믿게 된다).
+     *
+     * 클라이언트 계산(`publishPercentiles`) 대신 히스토그램을 고른 이유는 **다중 인스턴스**다
+     * (REL-U6-04 가 그것을 전제한다). 인스턴스별로 계산한 분위수는 수집기에서 합칠 수 없다 —
+     * 평균의 평균과 같은 종류의 거짓말이 된다. 버킷을 보내면 합산 후 계산이 성립한다.
+     *
+     * 기대 범위를 묶는 것은 **버킷 수 상한**이다. 열어 두면 마이크로초부터 시간 단위까지 버킷이
+     * 생겨 시계열이 불어난다. 아래(1초)는 폴링 주기(2초)보다 촘촘할 수 없다는 사실에서,
+     * 위(15분)는 재시도 창(약 13분)을 넘기면 어차피 포기된 건이라는 데서 나온다.
+     */
+    private val relayLatency: Timer = Timer.builder(RELAY_LATENCY)
+        .description("아웃박스 적재에서 배달까지의 지연(OBS-U6-01)")
+        .publishPercentileHistogram()
+        .minimumExpectedValue(Duration.ofSeconds(1))
+        .maximumExpectedValue(Duration.ofMinutes(15))
+        .register(registry)
+
     /** 타입당 여럿일 수 있다 — 한 이벤트를 여러 소비자가 본다. */
     private val byType: Map<String, List<OutboxSubscriber>> = subscribers.groupBy { it.eventType }
 
@@ -83,7 +107,7 @@ class OutboxRelay(
                     // "빠르다"는 착시가 생긴다.
                     seconds?.let {
                         // Timer 는 정수 단위만 받는다 — 초 소수부를 살리려면 밀리초로 올려 준다.
-                        registry.timer(RELAY_LATENCY).record((it * 1000).toLong(), TimeUnit.MILLISECONDS)
+                        relayLatency.record((it * 1000).toLong(), TimeUnit.MILLISECONDS)
                     }
                 }
                 .onFailure { e ->
