@@ -38,10 +38,26 @@ INFO_REQUIREMENTS: Mapping[str, tuple[ProviderKind, ...]] = {
     # TRANSIT 은 표에 남는다 (TRIP-423 이 타입 호출까지 만들었고 테스트 6건이
     # "REPLAN 은 TRANSIT 을 수집한다"를 단언한다). 다만 **호출측이 구간을 줄 때만**
     # 실제로 조회된다 — `params` 에 origin·destination 이 없으면 Provider 조립이
-    # 실패해 UNAVAILABLE 패킷이 된다(기능 부재, INV-4). 2026-09-16 미결: 재계획은
-    # 하루를 다시 짜므로 어느 구간이 생길지 푸는 시점에는 모르고(배치는 어셈블리
-    # 소관, INV-2), 어셈블리가 이미 자기 이동 추정을 갖는다 — 수집 단계 조회가
-    # 값을 하는지 팀 판단 대기. 그때까지 표는 그대로 두고 호출측이 안 채운다.
+    # 실패해 UNAVAILABLE 패킷이 된다(기능 부재, INV-4).
+    #
+    # **미결 (2026-09-16) — 모은 실측이 착지할 자리가 없다.** `ItineraryProblem` 은
+    # 날씨·행사에는 각각 착지 필드를 갖는데(`daily_rain_prob` TRIP-383,
+    # `event_bonus` TRIP-421) **이동만 없다.** 그래서 지금 TRANSIT 을 수집해도
+    # solve 로 가는 통로가 없어 모아서 버린다 — 어셈블리는 무조건
+    # `travel.py` 의 `haversine_km × detour_factor`(직선 근사)로 계산한다.
+    # TRANSIT 은 `TravelPort` 어댑터 체인의 **실 경로**라 근사와 다른 값이고,
+    # "어셈블리가 이미 갖고 있으니 중복"은 근사와 실측을 같은 것으로 본 오류다.
+    #
+    # 두 갈래 — 어느 쪽이든 지금보다 정직하다 (팀 판단 대기):
+    #   (1) 자리를 만든다 — `ItineraryProblem` 에 구간 실측 오버라이드
+    #       (`measured_legs: Mapping[tuple[PoiId, PoiId], int] | None`)를 더하고
+    #       있는 구간만 근사 대신 쓴다. `daily_rain_prob` 이 생긴 방식 그대로.
+    #       비용: 어셈블리 내부 수정·회귀 범위.
+    #   (2) 표시·진단 전용으로 못 박는다 — solve 에 안 넣고 응답 거리 표시와
+    #       관측에만. 비용 0. 대신 "정확한 값을 모아 놓고 부정확한 값으로
+    #       계산한다"가 남는다.
+    # 재계획은 이미 벌어진 지연에 대응하는 경로라 실 도로 사정이 결과를 바꿀
+    # 여지가 가장 크다는 점이 (1) 쪽 근거다. 결론 전까지 호출측이 안 채운다.
     "REPLAN": (
         ProviderKind.WEATHER,
         ProviderKind.TRANSIT,
