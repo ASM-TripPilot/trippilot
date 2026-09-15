@@ -24,7 +24,7 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 
 import type { GeocodeCandidate } from '@/shared/api/generated/schemas';
-import { KakaoMapView, MapView, type KakaoMapMessage } from '@/shared/map';
+import { CenterPinPicker, MapView, type MapCenter } from '@/shared/map';
 
 import {
   daysInMonth,
@@ -50,9 +50,9 @@ export interface StayRegisterScreenProps {
   onSubmitQuery: () => void;
   onRetrySearch: () => void;
   onSelectCandidate: (candidate: GeocodeCandidate) => void;
-  /** 지도(핀 지정 탭 미리보기·검색 미리보기)가 올려보낸 메시지를 그대로 위로 넘긴다(G-2 —
-   * 화면은 해석하지 않는다. AC-3~5 판단은 이 메시지를 받는 쪽(페이지)이 진다). */
-  onPinMessage: (message: KakaoMapMessage) => void;
+  /** 핀 지정 탭의 중앙 고정 핀이 보고한 중심 좌표를 그대로 위로 넘긴다(TRIP-866 S4 · G-2 —
+   * 화면은 해석하지 않는다. 역지오코딩·상태 매핑은 이 좌표를 받는 쪽(페이지)이 진다). */
+  onPickCoord: (center: MapCenter) => void;
   onOpenMapSheet: () => void;
   onConfirmCoord: () => void;
   onCloseMapSheet: () => void;
@@ -288,13 +288,13 @@ function PinPanel({
   candidate,
   pinAddressStatus,
   name,
-  onPinMessage,
+  onPickCoord,
   onChangeName,
 }: {
   candidate: GeocodeCandidate | null;
   pinAddressStatus: StayRegisterFlow['pinAddressStatus'];
   name: string;
-  onPinMessage: (message: KakaoMapMessage) => void;
+  onPickCoord: (center: MapCenter) => void;
   onChangeName: (value: string) => void;
 }): ReactElement {
   const center =
@@ -307,60 +307,57 @@ function PinPanel({
       testID="stay-register-pin-panel"
       className="w-full gap-md px-lg pt-lg"
     >
-      {/* ponytail: 좌표 확정 시트가 열려 있는 동안에도 이 지도를 계속 그린다 — 예전에는
-        "지도(WebView) 마운트는 실질 1개"를 지키려고 시트가 열리면 이 View를 안 그렸는데
-        (기존 검색 미리보기와 같은 규율이었다), 조건부 렌더는 리액트에서 언마운트라
-        진행 중이던 역지오코딩 콜백이 시트를 여는 순간 죽었다(B-2, 5-b 2차 지적). 5-c(W-10)
-        정정 — 시트는 콘텐츠 높이만큼만 올라오고 배경막도 없어서, 이 지도는 시트가 열려도
-        실제로 보이고 눌린다(전에 여기 적혀 있던 "시트가 덮어서 안 보인다"는 실측과
-        달랐다). 진짜 천장은 "시트가 열린 동안 WebView 2개(핀 지도 + 시트 지도)가 공존하고
-        뒤 지도도 살아 있다"이고, 뒤 지도가 눌려 좌표가 바뀌는 문제는 MapSheet의
-        `backdropComponent`가 막는다(아래) — 메모리가 실제로 문제되면(느린 기기 스모크 등)
-        시트가 이 지도를 재사용하는 구조로 승격한다. */}
+      {/* TRIP-866(S4) — 중앙 고정 핀 선택기. WebView 브리지(롱프레스→PIN_DROP→역지오코딩)를
+        걷어내고, 사용자가 지도를 움직여 핀을 맞추면 그때의 중심 좌표만 `onPickCoord` 로 올린다.
+        역지오코딩은 이 화면이 아니라 페이지가 훅으로 따로 얻는다(단일 경로). CenterPinPicker 는
+        마운트 시 center 를 1회만 포획하므로, onPick 좌표가 페이지를 거쳐 다시 center 로 돌아와도
+        방금 민 지도를 되돌리지 않는다(제어형 camera 되먹임 방지). */}
       <View
         testID="stay-register-pin-map"
         className="h-[196px] w-full overflow-hidden rounded-card"
       >
-        {/* key를 주지 않는다(B-1) — 재핀마다 remount하면 그때마다 새 WebView 문서가
-          뜨면서 진행 중이던 역지오코딩 콜백이 죽는다. 찍힌 지점은 지도 재중심이 아니라
-          WebView 안 마커로 보여준다(N-1). */}
-        <KakaoMapView center={center} onMapMessage={onPinMessage} />
+        <CenterPinPicker center={center} onPick={onPickCoord} />
       </View>
 
-      {/* 핀 조작 안내(b) — 핀을 찍기 전(pinAddressStatus 'idle')에만 뜬다. 핀을 찍으면
-        loading/ok/error로 바뀌며 사라진다(안내가 상태 흐름과 일치). 지도 롱프레스(600ms)는
-        WebView 안 대본이라 jest 사정거리 밖이고, 여기서 여는 것은 그 조작법 안내 카피뿐이다
-        (01b OQ4). coordnotice와 같은 안내 토큰(info)을 써 화면 안 톤을 맞춘다. */}
+      {/* 핀 조작 안내(b) — 좌표 확정 전(pinAddressStatus 'idle')에만 뜬다. 지도를 움직여 멈추면
+        onCameraIdle→onPickCoord 로 loading/ok/error 로 바뀌며 사라진다(안내가 상태 흐름과 일치).
+        중앙 고정 핀은 화면 중앙 크로스헤어가 가리키는 좌표를 쓰므로 롱프레스가 없다 —
+        여기서 여는 것은 그 조작법 안내 카피뿐이다. coordnotice 와 같은 안내 토큰(info)으로 톤을 맞춘다. */}
       {pinAddressStatus === 'idle' ? (
         <View
           testID="stay-register-pin-hint"
           className="flex-row items-center rounded-button border border-info-border bg-info-bg px-md py-sm"
         >
           <Text className="flex-1 font-noto text-body text-info">
-            지도를 길게 눌러 위치를 지정하세요
+            지도를 움직여 핀을 원하는 위치에 맞춰 주세요
           </Text>
         </View>
       ) : null}
 
+      {/* 역지오코딩 성공('ok'). 주소가 있으면 그 주소를, 그 좌표에 주소가 없으면(null 케이스,
+        address 빈 값) "주소 미확인"을 보여준다 — 둘 다 장애가 아니라 등록을 막지 않는다(AC-6). */}
       {pinAddressStatus === 'ok' && candidate !== null ? (
         <View
           testID="stay-register-pin-address"
           className="rounded-button border border-hairline bg-surface-soft px-md py-sm"
         >
           <Text className="font-noto text-body text-ink">
-            {candidate.address}
+            {candidate.address.trim() !== ''
+              ? candidate.address
+              : '주소 미확인'}
           </Text>
         </View>
       ) : null}
 
+      {/* 역지오코딩 장애(503, 'error'). 침묵 실패 금지(INV-4) — 실패를 글자로 드러내되 등록은
+        막지 않는다(BR-U1-23, 저장 정본은 좌표). 주소를 못 받았으니 숙소명을 직접 입력하도록 유도. */}
       {pinAddressStatus === 'error' ? (
         <View
           testID="stay-register-pin-addressfail"
           className="rounded-button border border-hairline bg-surface-soft px-md py-sm"
         >
           <Text className="font-noto text-caption text-muted">
-            주소를 확인하지 못했어요. 지도를 다시 길게 누르거나 숙소명을 직접
-            입력해 주세요
+            주소 미확인 — 숙소명을 직접 입력해 주세요
           </Text>
         </View>
       ) : null}
@@ -656,7 +653,7 @@ export function StayRegisterScreen({
   onSubmitQuery,
   onRetrySearch,
   onSelectCandidate,
-  onPinMessage,
+  onPickCoord,
   onOpenMapSheet,
   onConfirmCoord,
   onCloseMapSheet,
@@ -782,7 +779,7 @@ export function StayRegisterScreen({
               candidate={flow.selectedCandidate}
               pinAddressStatus={flow.pinAddressStatus}
               name={flow.name}
-              onPinMessage={onPinMessage}
+              onPickCoord={onPickCoord}
               onChangeName={onChangeName}
             />
           ) : null}

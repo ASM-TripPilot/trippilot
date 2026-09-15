@@ -1,4 +1,4 @@
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 
 /**
  * `@/shared/map`의 테스트용 목(관찰 마커) — 지도를 소비하는 화면·배선 테스트 전용.
@@ -46,4 +46,23 @@ function MapView({
 // 여전히 KakaoMapView 를 부른다. S5 에서 소비처가 0 이 되면 이 export 도 제거.
 const KakaoMapView = MapView;
 
-export { MapView, KakaoMapView };
+// TRIP-866(S4) — 중앙 고정 핀 picker 의 얇은 목. 소비 화면(StayRegister 핀 지정·LiveLocation)의
+// 테스트가 이 목을 통해 `onPick` 을 직접 발화해 "지도가 좌표를 보고했다"를 흉내낸다(구 onMapMessage
+// 직접 발화 선례 동형). `onPick`·나머지 props 는 host 로 그대로 통과시켜
+// `getByTestId('center-pin-picker').props.onPick({ lat, lng })` 로 관측·발화한다. 중앙 고정 핀은
+// `map-center-pin` 마커로 존재만 노출한다(실 크로스헤어·initialCenter 포획은 실물
+// CenterPinPicker.test.tsx 가 잰다 — 이 목은 소비처 배선 전용이라 그 내부를 재현하지 않는다).
+function CenterPinPicker({
+  center,
+  ...rest
+}: {
+  center: MapCenter;
+} & Record<string, unknown>) {
+  return (
+    <View testID="center-pin-picker" {...rest}>
+      <View testID="map-center-pin" />
+    </View>
+  );
+}
+
+export { MapView, KakaoMapView, CenterPinPicker };

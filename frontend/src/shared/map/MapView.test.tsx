@@ -212,3 +212,36 @@ describe('🔴 AC-보강 — maxLevel → NaverMapView minZoom 으로 전달(축
     expect(screen.getByTestId('map-native').props.minZoom).toBeUndefined();
   });
 });
+
+describe('🔴 AC-보강 — onCameraIdle: NaverMapView 의 idle 좌표를 {lat,lng} 로 감싸 콜백(TRIP-866 S4 신규 계약)', () => {
+  it('onCameraIdle 전달 시 map-native 가 그 콜백을 받고, 발화하면 {lat,lng} 로 변환돼 올라온다', () => {
+    // 초심자용 — onCameraIdle 은 "지도가 움직이다 멈췄을 때" 네이버 지도가 그때 중심 좌표를
+    // {latitude,longitude} 로 알려주는 콜백이다. MapView 는 그걸 리포 순서 {lat,lng} 로 감싸
+    // 부모에게 올린다(축 변환). 목이 prop 을 그대로 노출하므로 테스트가 직접 발화한다.
+    const onCameraIdle = jest.fn();
+    render(<MapView center={CENTER} pins={PINS} onCameraIdle={onCameraIdle} />);
+
+    const native = screen.getByTestId('map-native');
+    // 배선 앵커 — 콜백이 네이티브 지도까지 닿아 있다. 없으면 아래 발화가 TypeError 로 죽어
+    // "무엇이 없는가"가 안 읽힌다.
+    expect(native.props.onCameraIdle).toBeDefined();
+
+    // Act — 네이버가 주는 형태({latitude,longitude})로 발화. lat≠lng 로 축 스왑/직통을 잡는다.
+    (
+      native.props as {
+        onCameraIdle: (p: { latitude: number; longitude: number }) => void;
+      }
+    ).onCameraIdle({ latitude: 33.5, longitude: 126.5 });
+
+    // Assert — {lat,lng} 로 변환(네이버 {latitude,longitude} 순서 그대로 넘기면 red).
+    expect(onCameraIdle).toHaveBeenCalledTimes(1);
+    expect(onCameraIdle).toHaveBeenCalledWith({ lat: 33.5, lng: 126.5 });
+  });
+
+  it('onCameraIdle 미전달 시 map-native 는 그 콜백을 받지 않는다(짝 — 있을 때만 감싼다)', () => {
+    // maxLevel↔minZoom 과 같은 옵트인 패턴 — 안 준 콜백을 지도에 억지로 달지 않는다.
+    render(<MapView center={CENTER} pins={PINS} />);
+
+    expect(screen.getByTestId('map-native').props.onCameraIdle).toBeUndefined();
+  });
+});

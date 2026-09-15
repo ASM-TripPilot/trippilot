@@ -80,7 +80,7 @@ function makeHandlers() {
   return {
     onSelectTab: jest.fn(),
     onChangeName: jest.fn(),
-    onPinMessage: jest.fn(),
+    onPickCoord: jest.fn(),
     onChangeQuery: jest.fn(),
     onSubmitQuery: jest.fn(),
     onRetrySearch: jest.fn(),

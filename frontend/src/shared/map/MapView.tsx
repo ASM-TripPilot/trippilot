@@ -51,6 +51,10 @@ export interface MapViewProps {
   onLoadFailed?: () => void;
   /** 카카오 `maxLevel`(줌아웃 상한) → 네이버 `minZoom`(줌아웃 하한)으로 변환. 넘길 때만 전달. */
   maxLevel?: number;
+  /** 지도가 움직이다 멈추면(카메라 idle) 그때의 중심 좌표를 올린다(TRIP-866 S4). 네이버가 주는
+   * `{latitude,longitude}`를 리포 순서 `{lat,lng}`로 감싼다. `maxLevel↔minZoom`과 같은 옵트인 —
+   * 프롭을 준 때만 NaverMapView 에 콜백을 단다(미전달 시 콜백 부착 0). */
+  onCameraIdle?: (center: MapCenter) => void;
 }
 
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
@@ -78,6 +82,7 @@ export function MapView({
   onPinTap,
   onLoadFailed,
   maxLevel,
+  onCameraIdle,
 }: MapViewProps): ReactElement {
   // 네이티브 SDK 는 런타임 키를 config plugin 에서 받으므로, 이 env 판정은 "설정 누락 표면"용이다
   // (키가 없으면 회색 빈 지도 대신 안내 화면을 띄운다). 참조는 이 한 곳뿐(A-2 계승).
@@ -93,6 +98,17 @@ export function MapView({
       onLoadFailed?.();
     }
   }, [hasKey, onLoadFailed]);
+
+  // 제어형 `camera` 를 쓴다(`initialCamera` 아님). initialCamera 는 SDK 가 "마운트 후 변경해도
+  // 동작 안 함"이라, 소비처가 카카오 시절 key=remount 로 하던 재중심을 S3 에서 걷어낸 지금
+  // center 가 바뀌어도 카메라가 첫 좌표에 얼어붙는다(code-critic 경고-1). 값으로 memo 해
+  // center 가 실제로 바뀔 때만 새 객체 → 그때만 재중심하고, 안정적인 center 에선 같은 객체라
+  // 사용자 제스처를 매 렌더 되돌리지 않는다.
+  // ⚠️ 훅은 조기 반환(!hasKey) 위에 둔다 — 아래로 내리면 조건부 호출이 돼 rules-of-hooks 위반.
+  const camera = useMemo(
+    () => ({ latitude: center.lat, longitude: center.lng, zoom: INITIAL_ZOOM }),
+    [center.lat, center.lng]
+  );
 
   if (!hasKey) {
     return (
@@ -115,16 +131,6 @@ export function MapView({
   const showPath =
     connectPins !== false && pins !== undefined && pins.length >= 2;
 
-  // 제어형 `camera` 를 쓴다(`initialCamera` 아님). initialCamera 는 SDK 가 "마운트 후 변경해도
-  // 동작 안 함"이라, 소비처가 카카오 시절 key=remount 로 하던 재중심을 S3 에서 걷어낸 지금
-  // center 가 바뀌어도 카메라가 첫 좌표에 얼어붙는다(code-critic 경고-1). 값으로 memo 해
-  // center 가 실제로 바뀔 때만 새 객체 → 그때만 재중심하고, 안정적인 center 에선 같은 객체라
-  // 사용자 제스처를 매 렌더 되돌리지 않는다.
-  const camera = useMemo(
-    () => ({ latitude: center.lat, longitude: center.lng, zoom: INITIAL_ZOOM }),
-    [center.lat, center.lng]
-  );
-
   return (
     <View testID="map-root" className="flex-1">
       <NaverMapView
@@ -137,6 +143,12 @@ export function MapView({
         {...(maxLevel !== undefined
           ? { minZoom: kakaoMaxLevelToNaverMinZoom(maxLevel) }
           : {})}
+        onCameraIdle={
+          onCameraIdle
+            ? (params) =>
+                onCameraIdle({ lat: params.latitude, lng: params.longitude })
+            : undefined
+        }
       >
         {pins?.map((pin, index) => (
           <NaverMapMarkerOverlay

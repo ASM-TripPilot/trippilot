@@ -92,7 +92,7 @@ function makeHandlers() {
     onSubmitQuery: jest.fn(),
     onRetrySearch: jest.fn(),
     onSelectCandidate: jest.fn(),
-    onPinMessage: jest.fn(),
+    onPickCoord: jest.fn(),
     onOpenMapSheet: jest.fn(),
     onConfirmCoord: jest.fn(),
     onCloseMapSheet: jest.fn(),
@@ -135,17 +135,18 @@ describe('SR-1 · 헤더에 뒤로가기 컨트롤이 있고 누르면 위로 �
 });
 
 describe('SR-2 · 핀을 찍기 전에는 조작 안내가 보인다 (AC-4)', () => {
-  it('핀 지정 탭·아직 핀 없음(idle)이면 길게 눌러 지정하라는 안내가 뜬다', () => {
+  it('핀 지정 탭·아직 핀 없음(idle)이면 지도를 움직여 맞추라는 안내가 뜬다', () => {
     // 준비 — 핀 탭에 들어왔고 아직 아무 좌표도 없다(pinAddressStatus='idle').
     renderScreen(PIN_IDLE_FLOW);
 
-    // 실행/단언 — 롱프레스로 핀을 찍는 조작법이 화면에 있다. 없으면 사용자는 빈 지도 앞에서
-    // 무엇을 해야 할지 모른 채 폴백 경로가 막힌다(BR-U1-23).
+    // 실행/단언 — 중앙 고정 핀 조작법(지도를 움직여 맞춘다)이 화면에 있다. 없으면 사용자는
+    // 빈 지도 앞에서 무엇을 해야 할지 모른 채 폴백 경로가 막힌다(BR-U1-23).
     const hint = screen.getByTestId('stay-register-pin-hint');
     // 정규식 = 부분 포함(node_modules 실측 02a §6: matches()가 regex면 test(), string이면
-    // 완전 일치). 카피 전문이 아니라 "길게 눌러"라는 조작 지시가 살아 있는지만 잠근다 — 핀 탭은
-    // Figma 프레임이 없어 대조할 카피 정본이 없다(프리즈 P-8과 같은 사정거리).
-    expect(hint).toHaveTextContent(/길게 눌러/);
+    // 완전 일치). 카피 전문이 아니라 "움직여"라는 중앙 고정 핀 조작 지시가 살아 있는지만 잠근다 —
+    // TRIP-866(S4) 롱프레스 소멸로 "길게 눌러"→"움직여" 전환(중앙 고정 핀엔 롱프레스가 없다).
+    // 핀 탭은 Figma 프레임이 없어 대조할 카피 정본이 없다(프리즈 P-8과 같은 사정거리).
+    expect(hint).toHaveTextContent(/움직여/);
   });
 });
 

@@ -65,8 +65,9 @@ const OPEN_CALLERS = [
   'app/_dev/preview.tsx',
   // TRIP-397 i02·i03 여행 중 지도 — 자유 탐색이라 제스처를 잠그지 않는다(viewOnly 미전달).
   'features/execution/ui/LiveMapScreen.tsx',
-  // TRIP-442 i20·i21 위치 수동 입력 — 롱프레스로 좌표를 확정하는 화면이라 잠그지 않는다(viewOnly 미전달).
-  'pages/live-location/ui/LiveLocationPage.tsx',
+  // TRIP-866(S4) — pages/live-location/ui/LiveLocationPage.tsx 는 이 명부에서 빠졌다: 이제 지도를
+  // `<CenterPinPicker>`(중앙 고정 핀, shared/map)로 감싸 쓰므로 `<MapView\b` census 밖이다.
+  // CenterPinPicker 는 viewOnly 를 받지 않는(항상 조작 가능) 래퍼라 이 옵트인 경계의 대상이 아니다.
 ];
 
 /** 완성·확정 일정 화면(h25/h34 · TimelineScreen). **지도 호출부가 둘이다**(TRIP-354 · Q5 정정):
@@ -252,12 +253,13 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
       expect(tags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual(tags);
     });
 
-    // ③ 열어 둘 자리 — 태그가 정확히 5개이고 그중 어느 것에도 viewOnly 가 없다. 이들이 잠기면
-    //    좌표 확정·여행 중 자유 탐색이 막힌다(회귀 금지). 내역: StayRegister 2 + preview 1 +
-    //    LiveMapScreen 1 + live-location 1. TRIP-864 로 StayRegister 핀 지정 태그(L327)가
-    //    `<KakaoMapView>` 별칭으로 남아 `<MapView\b` 탐지 밖이라 구 6 → 5(S4 에서 별칭 정리 예정).
+    // ③ 열어 둘 자리 — 태그가 정확히 4개이고 그중 어느 것에도 viewOnly 가 없다. 이들이 잠기면
+    //    좌표 확정·여행 중 자유 탐색이 막힌다(회귀 금지). 내역: StayRegister 2(검색 미리보기+확정
+    //    시트) + preview 1 + LiveMapScreen 1. TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로
+    //    넘어가 `<MapView\b` census 밖이 되며 구 5 → 4. StayRegister 핀 지정 태그도 이제 CenterPinPicker
+    //    라 여전히 `<MapView\b` 밖이고, 남은 2개는 지도 검색 흐름(핀 지정과 무관)이다.
     const openTags = OPEN_CALLERS.flatMap((rel) => mapTagsOf(readOne(rel)));
-    expect(openTags).toHaveLength(5);
+    expect(openTags).toHaveLength(4);
     expect(openTags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual([]);
 
     // ④ 완성·확정 일정 화면 — 지도 호출부가 **둘**이다(Q5). 파일이 아니라 **태그 단위로** 잠금
@@ -299,12 +301,11 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
       ...EXPLORE_CALLERS,
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 12개 = 총 13개).
-    //    TRIP-864 로 지도 태그 탐지가 `<KakaoMapView>` → `<MapView>` 로 바뀌며, StayRegister 핀
-    //    지정 태그(L327)가 아직 `<KakaoMapView>` 별칭이라 `<MapView\b` 밖으로 빠져 구 14 → 13 이
-    //    됐다(LOCKED−h05 6 + OPEN 5 + EXPLORE 2). 별칭 정리(S4) 뒤 다시 늘어난다.
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 11개 = 총 12개).
+    //    TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로 넘어가 `<MapView\b` census 에서
+    //    빠지며 구 13 → 12 가 됐다(LOCKED−h05 6 + OPEN 4 + EXPLORE 2).
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(13);
+    expect(defaultTags).toHaveLength(12);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);
