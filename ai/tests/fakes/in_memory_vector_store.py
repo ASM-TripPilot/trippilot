@@ -30,11 +30,19 @@ class InMemoryVectorStore:
     def upsert(self, collection: str, item_id: str, vector: tuple[float, ...], payload: dict) -> None:
         self._collections.setdefault(collection, {})[item_id] = (tuple(vector), payload)
 
-    def search(self, collection: str, vector: tuple[float, ...], top_k: int) -> tuple[VectorHit, ...]:
+    def search(
+        self,
+        collection: str,
+        vector: tuple[float, ...],
+        top_k: int,
+        *,
+        item_ids: frozenset[str] | None = None,
+    ) -> tuple[VectorHit, ...]:
         items = self._collections.get(collection, {})
         hits = [
             VectorHit(item_id=item_id, score=_cosine(vector, stored), payload=payload)
             for item_id, (stored, payload) in items.items()
+            if item_ids is None or item_id in item_ids
         ]
         hits.sort(key=lambda h: (-h.score, h.item_id))  # score 내림차순, 동점은 item_id 사전순 (결정론)
         return tuple(hits[: max(top_k, 0)])

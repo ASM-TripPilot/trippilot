@@ -1367,7 +1367,9 @@ class UnwiredVectorStore:
     def upsert(self, collection, item_id, vector, payload) -> None:
         raise RuntimeError("실 벡터 스토어 미배선")
 
-    def search(self, collection, vector, top_k):
+    def search(self, collection, vector, top_k, *, item_ids=None):
+        # item_ids 를 받기만 하고 쓰지 않는다 — 어차피 올린다. 안 받으면 TypeError 가
+        # 먼저 터져 "미배선"이라는 진짜 원인을 가린다.
         raise RuntimeError("실 벡터 스토어 미배선 — KB 검색 생략(빈 컨텍스트 강등)")
 
     def delete(self, collection, item_id) -> None:
