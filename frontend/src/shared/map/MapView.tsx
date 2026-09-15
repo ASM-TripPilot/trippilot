@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
 import { Text, View } from 'react-native';
+import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 import {
   NaverMapView,
   NaverMapMarkerOverlay,
@@ -58,6 +59,18 @@ export interface MapViewProps {
 
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
 const INITIAL_ZOOM = 14;
+
+/** 핀 컨테이너·라벨 스타일 — 마커 래스터에서 안전하게 렌더되도록 전부 인라인으로 지정한다.
+ * NativeWind className(bg-primary·border-canvas·rounded-full)은 네이버 SDK 가 자식 뷰를 화면 밖
+ * 에서 마커 이미지로 스냅샷할 때 적용이 보장되지 않아, 배경이 빠진 투명/기본 마커로 나온다(6-b
+ * 실측 — 초록 링·흰 실루엣). 색은 tailwind 팔레트값 그대로(primary #FF385C · canvas #FFFFFF)라
+ * 팔레트-부분집합 가드를 지킨다 — 인라인이라 리터럴로 둔다(shared/map className 미적용 회피). */
+/** 핀 래스터용 래퍼 치수 — 네이버 마커 width/height 와 일치(28). */
+const PIN_WRAP_STYLE = { width: 28, height: 28 } as const;
+/** 핀 색·치수(SVG). 색은 tailwind 팔레트값(primary #FF385C · canvas #FFFFFF)이라 팔레트-부분집합
+ * 가드를 지킨다. 번호 baseline y=18.5 는 14(중심)+대략 cap-height 절반 오프셋으로 세로 중앙. */
+const PIN_FILL = '#FF385C';
+const PIN_STROKE = '#FFFFFF';
 
 /**
  * 카카오 level(값이 클수록 축소) ↔ 네이버 zoom(값이 클수록 확대)은 축이 반대다. 카카오의
@@ -150,13 +163,52 @@ export function MapView({
         }
       >
         {pins?.map((pin, index) => (
+          // 기본 마커(네이버 초록)를 쓰지 않고 children 커스텀 뷰로 분홍 번호 핀을 그린다
+          // (TRIP-876, 카카오 시절 디자인 복원). anchor {x:0.5,y:1} 로 핀 아래 꼭짓점이 좌표를
+          // 가리킨다. 스타일은 PIN_CONTAINER_STYLE/PIN_LABEL_STYLE 인라인(className 미적용 회피).
           <NaverMapMarkerOverlay
             key={pin.number}
             latitude={pin.lat}
             longitude={pin.lng}
-            caption={{ text: String(pin.number) }}
+            anchor={{ x: 0.5, y: 1 }}
+            width={28}
+            height={28}
             onTap={() => onPinTap?.(index)}
-          />
+          >
+            {/* collapsable={false} 는 New Architecture(iOS) 에서 커스텀 뷰 마커가 래스터되기 위한
+              필수 조건 — 없으면 RN 이 뷰를 평탄화(view flattening)해 네이티브가 못 찾고 기본
+              초록 심볼/흰 실루엣으로 나온다(6-b 실측, 라이브러리 문서 "Custom React View" 항).
+              생김새 의존성(번호)은 최상위 자식 key 로 넘긴다. 원·번호는 SVG 로 그린다 — RN <Text>
+              글리프는 iOS 가 마커를 UIImage 로 스냅샷하는 시점에 안 그려졌다(6-b 실측: 분홍 원은
+              뜨는데 번호만 비었다). SVG 는 한 레이어에 동기 렌더돼 스냅샷에 온전히 잡힌다(*Glyphs 관례). */}
+            <View
+              key={`pin-${pin.number}`}
+              collapsable={false}
+              testID={`map-marker-pin-${pin.number}`}
+              style={PIN_WRAP_STYLE}
+            >
+              <Svg width={28} height={28} viewBox="0 0 28 28">
+                <Circle
+                  cx={14}
+                  cy={14}
+                  r={12}
+                  fill={PIN_FILL}
+                  stroke={PIN_STROKE}
+                  strokeWidth={2}
+                />
+                <SvgText
+                  x={14}
+                  y={18.5}
+                  fill={PIN_STROKE}
+                  fontSize={13}
+                  fontWeight="bold"
+                  textAnchor="middle"
+                >
+                  {pin.number}
+                </SvgText>
+              </Svg>
+            </View>
+          </NaverMapMarkerOverlay>
         ))}
         {showPath ? (
           <NaverMapPathOverlay

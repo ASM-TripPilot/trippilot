@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { render, screen } from '@testing-library/react-native';
+import { render, screen, within } from '@testing-library/react-native';
 
 import { MapView } from '@/shared/map';
 import type { MapCenter, MapPin } from '@/shared/map';
@@ -76,6 +76,35 @@ describe('🔴 AC1 — 정상: center + pins 2개 → map-native, 마커 2개, �
     };
     expect(camera.latitude).toBe(CENTER.lat);
     expect(camera.longitude).toBe(CENTER.lng);
+  });
+});
+
+describe('🔴 TRIP-876 — 커스텀 분홍 번호 핀(네이버 기본 초록 마커 아님)', () => {
+  it('각 마커가 번호를 담은 커스텀 핀 자식을 그리고, caption 없이 anchor 로 끝을 맞춘다', () => {
+    // Arrange + Act
+    render(<MapView center={CENTER} pins={PINS} />);
+
+    // Assert — 마커마다 커스텀 핀 자식(map-marker-pin-{번호})이 있고 그 안에 번호가 보인다.
+    // 네이버 기본 마커는 caption 텍스트만이라 이 자식 testID 가 없다(그래서 이게 초록마커 회귀를 잡는다).
+    // 번호는 SVG 로 그린다(iOS 마커 래스터가 RN <Text> 글리프를 못 잡아 SVG 로 전환, 6-b 실측) —
+    // react-native-svg 는 문자열을 RNSVGTSpan 의 `content` prop 으로 넣어 toHaveTextContent 로는
+    // 안 보이므로, 핀 뷰 안에서 content===번호인 노드가 있는지로 확인한다.
+    for (const pin of PINS) {
+      const pinView = screen.getByTestId(`map-marker-pin-${pin.number}`);
+      const labels = within(pinView).UNSAFE_queryAllByProps({
+        content: String(pin.number),
+      });
+      expect(labels.length).toBeGreaterThan(0);
+    }
+
+    // 짝 — 기본 마커로 되돌리면(caption 부여·children 제거) 위가 red. 마커엔 caption 이 없고
+    // anchor 는 물방울 끝(아래 꼭짓점)이 좌표를 가리키도록 {x:0.5, y:1} 이다.
+    const markers = screen.getAllByTestId('map-marker');
+    expect(markers).toHaveLength(PINS.length);
+    for (const marker of markers) {
+      expect(marker.props.caption).toBeUndefined();
+      expect(marker.props.anchor).toEqual({ x: 0.5, y: 1 });
+    }
   });
 });
 
