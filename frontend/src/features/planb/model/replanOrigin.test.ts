@@ -50,7 +50,7 @@ const NO_ORIGIN_KEYS = [
 
 describe('🔴 M1 · AC-1 — buildManualOrigin: 핀 좌표 → MANUAL origin 조각', () => {
   it('좌표를 originKind:MANUAL + originLat/originLng 로 조립한다(정확히 3키)', () => {
-    // 준비 — 광안리 인근 좌표(kakaoMapViewMock 관례 좌표).
+    // 준비 — 광안리 인근 좌표(mapViewMock 관례 좌표).
     const coords = { lat: 35.1587, lng: 129.1604 };
 
     // 실행

@@ -240,7 +240,7 @@ export function LiveItineraryScreen({
         </ScrollView>
       )}
 
-      {/* 감시 목록(i09) 진입 FAB — 지도 세그먼트의 형제 노드(KakaoMapView 오버레이 터치 흡수 회피,
+      {/* 감시 목록(i09) 진입 FAB — 지도 세그먼트의 형제 노드(MapView 오버레이 터치 흡수 회피,
           repo-traps). 탭바 밴드(84px) 위(bottom>84)에 앉힌다. 항상 렌더, press→콜백. */}
       <Pressable
         testID="execution-live-watchlist-fab"

@@ -9,7 +9,7 @@ import {
 // 배럴 경유 관찰 목으로 갈아끼운다(LiveMapScreen·TripRecordsScreen 선례, ★10). 목은
 // `<Text testID="map-root">${lat},${lng}</Text>` 로 center 를 노출한다.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 /**
  * TRIP-572 · AC-1·AC-2·AC-3·AC-5 — j04 요약 화면(무상태 프레젠테이션, VM 주입).

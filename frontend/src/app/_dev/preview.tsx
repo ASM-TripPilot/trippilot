@@ -169,7 +169,7 @@ import { buildMonthGrid } from '@/shared/date/monthGrid';
 import { reorderKeepingFixed } from '@/widgets/itinerary-edit';
 import { LocationPreprompt } from '@/shared/location/LocationPreprompt';
 import { revokeImpact } from '@/shared/location/revokeImpact';
-import { KakaoMapView, type MapPin } from '@/shared/map';
+import { MapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 /**
@@ -693,8 +693,8 @@ const TIMELINE_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
  * 부산 실좌표 3지점 + **좌표 부재 슬롯 1개**(자갈치)를 섞어, 핀이 ①②④ 로 건너뛰고 카드엔 "지도
  * 미표시" 배지·영업시간 "미확인"·휴관칩(openingHoursKnown false)이 한 자리에서 같이 보인다.
  * 사진은 초안 프리뷰 썸네일 재사용(`DRAFT_PREVIEW_PHOTOS`).
- * ⚠️ 지도 폴백(h31)은 이 픽스처로 못 띄운다 — 폴백은 확대 오버레이의 KakaoMapView 실제 로드
- * 실패(onLoadFailed)로만 켜지고 강제할 prop 이 없다. 카카오 JS 키가 있으면 지도가 뜨고, 없으면 폴백.
+ * ⚠️ 지도 폴백(h31)은 이 픽스처로 못 띄운다 — 폴백은 확대 오버레이의 MapView 실제 로드
+ * 실패(onLoadFailed)로만 켜지고 강제할 prop 이 없다. 네이버 클라이언트 ID 가 있으면 지도가 뜨고, 없으면 폴백.
  */
 const TIMELINE_MAP_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   {
@@ -1702,7 +1702,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onSubmitQuery={noop}
         onRetrySearch={noop}
         onSelectCandidate={noop}
-        onPinMessage={noop}
+        onPickCoord={noop}
         onOpenMapSheet={noop}
         onConfirmCoord={noop}
         onCloseMapSheet={noop}
@@ -1741,7 +1741,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onSubmitQuery={noop}
         onRetrySearch={noop}
         onSelectCandidate={noop}
-        onPinMessage={noop}
+        onPickCoord={noop}
         onOpenMapSheet={noop}
         onConfirmCoord={noop}
         onCloseMapSheet={noop}
@@ -1771,7 +1771,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onSubmitQuery={noop}
         onRetrySearch={noop}
         onSelectCandidate={noop}
-        onPinMessage={noop}
+        onPickCoord={noop}
         onOpenMapSheet={noop}
         onConfirmCoord={noop}
         onCloseMapSheet={noop}
@@ -1938,14 +1938,14 @@ export const PREVIEW_STATES: PreviewState[] = [
   },
   // 지도 계층 선행(TRIP-197 D9) — 층 C(실기) 진입점. 키/로드 실패 분기는 렌더 안 해봐야
   // 알 수 없어 여기서는 해피패스 1키만 둔다(env 키는 빌드 시 번들에 인라인되므로 preview가
-  // 런타임에 비울 수 없다 — 실패 분기는 KakaoMapView.test.tsx가, C-2는 .env를 실제로 비우고
+  // 런타임에 비울 수 없다 — 실패 분기는 MapView.test.tsx가, C-2는 .env를 실제로 비우고
   // 재기동해 확인한다).
   {
     key: 'map-default',
     band: '기타',
     label: '기타 · 지도(map-default)',
     login: null,
-    render: () => <KakaoMapView center={{ lat: 37.5665, lng: 126.978 }} />,
+    render: () => <MapView center={{ lat: 37.5665, lng: 126.978 }} />,
   },
   {
     key: 'records-default',

@@ -37,7 +37,7 @@ import { DraftScreen } from './DraftScreen';
 // 지도를 관찰 마커로 바꾼다(pins 를 안 넘기면 지도가 안 뜨지만, 딥 임포트 회귀 방어로 목은 건다).
 // 인라인 팩토리는 NativeWind babel 호이스트에 걸려 모듈을 require.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 const DAY1 = '2026-06-10';
 

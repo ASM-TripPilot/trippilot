@@ -36,7 +36,7 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
 
 // listed/confirmed 얼굴이 KakaoMapView 를 마운트하므로 얇은 가짜로 렌더 노이즈를 없앤다(관심사는
 // 지도가 아니라 편집 진입 배선이다).
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다 — 실물 로드를
 // 피하려면 목킹한다(동결 통합테스트와 동형).

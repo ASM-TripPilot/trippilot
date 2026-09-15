@@ -5,15 +5,21 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * S1~S7 (TRIP-339 · AC-6 · AC-7 · AC-8 · AC-13 · AC-16 · AC-17) — 지도 표면 **소스 층 가드**.
- * 렌더로도 대본 실행으로도 못 보는 것만 본다.
+ * S1~S6 (TRIP-339 · AC-6 · AC-7 · AC-8 · AC-13 · AC-16 · AC-17 · TRIP-864 공급자 전환) —
+ * 지도 표면 **소스 층 가드**. 렌더로 못 보는 것만 본다.
  *
  * 무엇을 보장하나:
- *  - 지도 고정은 **옵트인**이다 — h05·h11만 켜고 숙소 등록 3 · 거점 확정 1 · 프리뷰 지도 1은 안 켠다.
+ *  - 지도 고정은 **옵트인**이다 — LOCKED 화면만 viewOnly 를 켜고 좌표 확정·자유 탐색은 안 켠다.
  *  - 사진 도입이 **픽스처 안에서만** 끝났다 — 화면·계약 파일로 새지 않았다.
  *  - 프리뷰 픽스처가 **실재하는 로컬 파일**에서 사진을 얻고 외부 URL을 지어내지 않았다.
  *  - 프리뷰 h11 좌표가 **한 화면에 들어오는 간격**이다.
- *  - 지도 대본의 raw hex가 **팔레트 밖으로 벗어나지 않았다**(브리프 §8 ⑤ 사각지대).
+ *
+ * ── TRIP-864 공급자 전환(카카오 WebView → 네이버 네이티브) 반영 ────────────────
+ *  - 지도 태그 탐지 `<KakaoMapView>` → `<MapView>`(S1·S2·S8). shared/map 은 census 제외(코어·
+ *    별칭 shim 이지 소비처가 아니다). StayRegister L327 별칭은 `<MapView\b` 밖이라 카운트 6→5·14→13.
+ *  - S3 의 지도 계약 앵커(MapPin)는 삭제된 mapHtml.ts → 네이버 코어 MapView.tsx 로 이관.
+ *  - **S7(지도 대본 raw hex 팔레트 부분집합) 삭제** — 네이티브 MapView 는 className 토큰만 쓰고
+ *    shared/map raw hex 0건이라 심판 대상 소멸(파일 끝 주석 참조).
  *
  * **전제 — 모든 스캔은 주석을 걷어낸 소스를 본다**(`stripComments`, 파일마다 각자 갖는 것이 리포
  * 관례). 줄 주석 규칙에서 **바로 앞 글자가 `:` 이면 주석으로 보지 않는다** — 그 방어가 없으면
@@ -24,8 +30,7 @@ import path from 'path';
  * 같은 it 안에서 짝을 이룬다.
  *
  * ── 졸업 조건 (frontend/CLAUDE.md 「장치 판정 규칙」) ──────────────────────
- * **A. 영구 규칙** — S2(옵트인 경계) · S4(외부 URL 금지) · S7(색 팔레트)은 규칙이라 화면이 늘어도
- * 그대로 선다.
+ * **A. 영구 규칙** — S2(옵트인 경계) · S4(외부 URL 금지)는 규칙이라 화면이 늘어도 그대로 선다.
  * **B. 이행 체크포인트 — 한시적.** S3의 `DraftScreenProps` 필드 목록과 S6의 픽스처 상수 이름은
  * 이번 칸의 계약 스냅숏이라 정당한 리네임·필드 추가에 red를 낸다. **B 카운터 = 2**(2026-08-10
  * TRIP-298 이 `demoted` 를 더하며 red[1회], 2026-08-18 TRIP-304 가 `demoted`→`fallbackNotice`
@@ -60,8 +65,9 @@ const OPEN_CALLERS = [
   'app/_dev/preview.tsx',
   // TRIP-397 i02·i03 여행 중 지도 — 자유 탐색이라 제스처를 잠그지 않는다(viewOnly 미전달).
   'features/execution/ui/LiveMapScreen.tsx',
-  // TRIP-442 i20·i21 위치 수동 입력 — 롱프레스로 좌표를 확정하는 화면이라 잠그지 않는다(viewOnly 미전달).
-  'pages/live-location/ui/LiveLocationPage.tsx',
+  // TRIP-866(S4) — pages/live-location/ui/LiveLocationPage.tsx 는 이 명부에서 빠졌다: 이제 지도를
+  // `<CenterPinPicker>`(중앙 고정 핀, shared/map)로 감싸 쓰므로 `<MapView\b` census 밖이다.
+  // CenterPinPicker 는 viewOnly 를 받지 않는(항상 조작 가능) 래퍼라 이 옵트인 경계의 대상이 아니다.
 ];
 
 /** 완성·확정 일정 화면(h25/h34 · TimelineScreen). **지도 호출부가 둘이다**(TRIP-354 · Q5 정정):
@@ -81,9 +87,9 @@ const ITINERARY_EXPLORE_OPEN_TAGS = 1; // h26 확대: viewOnly OFF
 const NO_LINE_CALLER = 'features/itinerary/ui/MustVisitPickerScreen.tsx';
 
 const SCREEN_REL = 'features/itinerary/ui/DraftScreen.tsx';
-const MAP_HTML_REL = 'shared/map/mapHtml.ts';
+// TRIP-864 — 지도 계약(MapPin)은 삭제된 mapHtml.ts 에서 네이버 코어 MapView.tsx 로 이관됐다.
+const MAP_CORE_REL = 'shared/map/MapView.tsx';
 const PREVIEW_REL = 'app/_dev/preview.tsx';
-const MAP_DIR_REL = 'shared/map';
 
 /** h11 프리뷰 픽스처. 이름을 못박는 것은 이 칸의 스냅숏이다(위 졸업 조건 B). */
 const DRAFT_FIXTURE_CONST = 'DRAFT_PREVIEW_SLOTS';
@@ -127,8 +133,10 @@ function relOf(full: string): string {
 
 /** JSX 태그 하나를 통째로 떼어낸다. `[^>]*` 가 줄바꿈도 먹으므로 여러 줄로 포맷된 태그도 잡힌다.
  * 리포의 7개 호출부 태그에는 화살표 함수(`=>`)가 들어 있지 않아 `>` 로 끊어도 안전하다 —
- * 그 전제는 아래 S1 자가검사와 S2의 태그 총수 앵커가 함께 지킨다. */
-const MAP_TAG = /<KakaoMapView\b[^>]*>/g;
+ * TRIP-864 — 카카오 `<KakaoMapView>` → 네이버 `<MapView>` 로 탐지 대상 전환. 별칭
+ * `<KakaoMapView>`(StayRegister L327, S4 소관)는 `<MapView\b` 에 안 잡힌다 — 그 사실을 S2·S8
+ * 카운트가 정합해 반영한다. 호출부 태그에 화살표 함수(`=>`)가 없어 `>` 로 끊어도 안전하다. */
+const MAP_TAG = /<MapView\b[^>]*>/g;
 
 function mapTagsOf(source: string): string[] {
   return source.match(MAP_TAG) ?? [];
@@ -183,33 +191,18 @@ function interfaceFields(source: string, name: string): string[] {
   return [...body.matchAll(/^\s{2}(\w+)\??\s*:/gm)].map((match) => match[1]);
 }
 
-/** `#abc` → `#AABBCC`, `#AABBCCDD` → `#AABBCC`. 자릿수 표기가 달라도 같은 색으로 비교한다. */
-function normalizeHex(hex: string): string {
-  const body = hex.slice(1).toUpperCase();
-  if (body.length === 3) {
-    return `#${body
-      .split('')
-      .map((char) => char + char)
-      .join('')}`;
-  }
-  return `#${body.slice(0, 6)}`;
-}
-
-const HEX_LITERAL = /#[0-9a-fA-F]{3,8}\b/g;
-
 describe('S1 · 조합 자가검사 — 전처리와 탐지기가 서로를 지우지 않는다', () => {
   it('주석 속 지문은 걷히고, 코드의 URL·프롭은 살아남으며, 태그 탐지기가 viewOnly 유무를 가른다', () => {
     const sample = [
       '/** 외부 URL 을 지어내지 않는다 — https://img.example.com/a.jpg 같은 값 금지. */',
       '// viewOnly 는 h05·h11 에만 켠다.',
       "const photo = 'https://cdn.example.com/a.png';",
-      '<KakaoMapView',
-      '  key={mapKey}',
+      '<MapView',
       '  center={center}',
       '  pins={pins}',
       '  viewOnly',
       '/>',
-      '<KakaoMapView center={c} />',
+      '<MapView center={c} />',
     ].join('\n');
 
     const stripped = stripComments(sample);
@@ -237,7 +230,11 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
   it('호출부 전수가 알려진 6파일뿐이고, h05·h11 태그에만 viewOnly 가 있다', () => {
     const withTag = listSourceFiles(ROOT)
       .map((full) => ({ file: relOf(full), source: readOne(relOf(full)) }))
-      .filter(({ source }) => source.includes('<KakaoMapView'))
+      // shared/map 은 지도 인프라(코어·별칭 shim)이지 소비처가 아니다 — TRIP-864 로 kakaoCompat.tsx
+      // 가 `<MapView>` 를 렌더하므로 census 에서 제외한다(옛 KakaoMapView.tsx 는 <WebView> 를
+      // 렌더해 이 제외가 불필요했다).
+      .filter(({ file }) => !file.startsWith('shared/map/'))
+      .filter(({ source }) => source.includes('<MapView'))
       .map(({ file }) => file)
       .sort();
 
@@ -256,11 +253,13 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
       expect(tags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual(tags);
     });
 
-    // ③ 열어 둘 자리 — 태그가 정확히 6개(좌표 확정 2화면 4태그 + TRIP-397 LiveMapScreen 1태그 +
-    //    TRIP-442 live-location 1태그)이고 그중 어느 것에도 viewOnly 가 없다. 이들이 잠기면 좌표
-    //    확정·여행 중 자유 탐색이 막힌다(회귀 금지). TRIP-675 로 TripBaseFixSheet(1태그) 삭제 7→6.
+    // ③ 열어 둘 자리 — 태그가 정확히 4개이고 그중 어느 것에도 viewOnly 가 없다. 이들이 잠기면
+    //    좌표 확정·여행 중 자유 탐색이 막힌다(회귀 금지). 내역: StayRegister 2(검색 미리보기+확정
+    //    시트) + preview 1 + LiveMapScreen 1. TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로
+    //    넘어가 `<MapView\b` census 밖이 되며 구 5 → 4. StayRegister 핀 지정 태그도 이제 CenterPinPicker
+    //    라 여전히 `<MapView\b` 밖이고, 남은 2개는 지도 검색 흐름(핀 지정과 무관)이다.
     const openTags = OPEN_CALLERS.flatMap((rel) => mapTagsOf(readOne(rel)));
-    expect(openTags).toHaveLength(6);
+    expect(openTags).toHaveLength(4);
     expect(openTags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual([]);
 
     // ④ 완성·확정 일정 화면 — 지도 호출부가 **둘**이다(Q5). 파일이 아니라 **태그 단위로** 잠금
@@ -288,9 +287,9 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
    * 대본 실행 층(X3·X7)은 `buildMapHtml`을 직접 부르지 화면을 거치지 않아 그 삭제가 안 보인다
    * (03b2 W2-1 뮤테이션 M3).
    *
-   * 무엇을 보장하지 **못**하나: 태그에 적힌 **글자**까지다. 그 값이 컴포넌트를 통과해 실제 대본에
-   * 닿는지는 이 층에서 볼 수 없다 — `KakaoMapView`가 그 프롭을 흘려도 여기는 초록이다.
-   * 그 축은 실물 렌더 심판(`KakaoMapView.viewOnly.test.tsx` V3)이 잡는다. */
+   * 무엇을 보장하지 **못**하나: 태그에 적힌 **글자**까지다. 그 값이 컴포넌트를 통과해 실제
+   * 지도에 닿는지는 이 층에서 볼 수 없다 — `MapView`가 그 프롭을 흘려도 여기는 초록이다.
+   * 그 축은 실물 렌더 심판(`shared/map/MapView.test.tsx` AC2 viewOnly·AC3 connectPins)이 잡는다. */
   it('h05 태그에만 connectPins={false} 가 있고 나머지 여덟은 기본값을 받는다', () => {
     const lineOffTags = mapTagsOf(readOne(NO_LINE_CALLER));
     const defaultTags = [
@@ -302,14 +301,11 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
       ...EXPLORE_CALLERS,
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 13개 = 총 14개).
-    //    Q5 로 TimelineScreen 이 지도 태그 2개(글랜스+h26)를 가져 6→8, TRIP-397 LiveMapScreen 이
-    //    1개 더해 8→9, TRIP-442 live-location 이 1개 더해 9→10, TRIP-563 planb 2화면(i13·i16)이
-    //    2개 더해 10→12, TRIP-565 j01 방문 기록 지도가 1개 더해 12→13, TRIP-571 j03 오늘의 회고
-    //    지도가 1개 더해 13→14, TRIP-572 j04 여행 요약 지도가 1개 더해 14→15 로 늘었고,
-    //    TRIP-675 로 TripBaseFixSheet(OPEN, 1태그) 삭제로 15→14 로 줄었다(설계된 갱신 · AC-8).
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 11개 = 총 12개).
+    //    TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로 넘어가 `<MapView\b` census 에서
+    //    빠지며 구 13 → 12 가 됐다(LOCKED−h05 6 + OPEN 4 + EXPLORE 2).
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(14);
+    expect(defaultTags).toHaveLength(12);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);
@@ -329,15 +325,16 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
   it('MapPin 은 3필드 그대로, DraftScreenProps 는 15필드(TRIP-483 인라인 패널 3종 편입), 화면에 에셋 해석 지문이 0건이다', () => {
-    const mapHtmlSource = readOne(MAP_HTML_REL);
+    const mapCoreSource = readOne(MAP_CORE_REL);
     const screenSource = readOne(SCREEN_REL);
 
-    // 도달 앵커 — 읽은 것이 정말 그 파일들이다.
-    expect(mapHtmlSource).toContain('export function buildMapHtml');
+    // 도달 앵커 — 읽은 것이 정말 그 파일들이다. TRIP-864 — 지도 계약(MapPin)은 삭제된
+    // mapHtml.ts 에서 네이버 코어 MapView.tsx 로 이관됐다(buildMapHtml 은 대본이 사라져 없음).
+    expect(mapCoreSource).toMatch(/export function MapView\b/);
     expect(screenSource).toMatch(/export function DraftScreen\b/);
 
     // 지도 계약은 이 칸에서 늘지 않는다 — 핀 모양이 바뀌어도 `MapPin` 은 그대로다.
-    expect(interfaceFields(mapHtmlSource, 'MapPin')).toEqual([
+    expect(interfaceFields(mapCoreSource, 'MapPin')).toEqual([
       'number',
       'lat',
       'lng',
@@ -483,50 +480,7 @@ describe('🔴 S6 · AC-17 — 프리뷰 h11 좌표가 한 화면에 들어오�
   });
 });
 
-describe('S7 · 브랜드 색 사각지대 — 지도 대본의 raw hex가 팔레트 안 값이다 (선제 green)', () => {
-  /**
-   * 브리프 §8 ⑤ — `shared/map` 의 raw hex는 **어느 색 가드 모집단에도 없다**.
-   * `itineraryMustVisitStructure` 계열은 `features/*` 만 보고, `mapBridgeStructure` 가
-   * `shared/map` 을 훑기는 하지만 잡는 것은 32자리 API 키 형태이지 색이 아니다.
-   *
-   * "raw hex 0건" 으로는 만들 수 없다 — WebView HTML에는 NativeWind가 닿지 않아 raw가
-   * 불가피하고, 그 심판은 어떤 구현으로도 통과 불가다. 대신 **팔레트 밖 색을 금지**한다:
-   * 브랜드 색을 tailwind 에서 바꾸면 지도 대본만 옛 값으로 남는 순간 red 가 난다.
-   */
-  it('tailwind 팔레트 밖 hex가 0건이고, primary·on-primary 가 실제로 쓰인다', () => {
-    const tailwind = fs.readFileSync(
-      path.resolve('tailwind.config.js'),
-      'utf8'
-    );
-    const palette = new Set(
-      [...tailwind.matchAll(/'(#[0-9a-fA-F]{3,8})'/g)].map((match) =>
-        normalizeHex(match[1])
-      )
-    );
-    const primary = /primary:\s*'(#[0-9a-fA-F]{3,8})'/.exec(tailwind);
-    const onPrimary = /'on-primary':\s*'(#[0-9a-fA-F]{3,8})'/.exec(tailwind);
-
-    // 도달 앵커 — 팔레트를 실제로 읽었다.
-    expect(palette.size).toBeGreaterThan(10);
-    expect(primary).not.toBeNull();
-    expect(onPrimary).not.toBeNull();
-
-    const mapSources = listSourceFiles(path.join(ROOT, MAP_DIR_REL)).map(
-      (full) => ({ file: relOf(full), source: readOne(relOf(full)) })
-    );
-    // 도달 앵커 — 대본 파일이 모집단에 있다.
-    expect(mapSources.map((entry) => entry.file)).toContain(MAP_HTML_REL);
-
-    const used = new Set(
-      mapSources.flatMap(({ source }) =>
-        (source.match(HEX_LITERAL) ?? []).map(normalizeHex)
-      )
-    );
-
-    // ① 팔레트 밖 색이 없다.
-    expect([...used].filter((hex) => !palette.has(hex)).sort()).toEqual([]);
-    // ② 짝 — 스캔이 실제로 무언가를 봤다. 핀·선이 쓰는 두 색이 그대로 있다.
-    expect(used.has(normalizeHex(primary?.[1] ?? ''))).toBe(true);
-    expect(used.has(normalizeHex(onPrimary?.[1] ?? ''))).toBe(true);
-  });
-});
+// TRIP-864 — S7(지도 대본 raw hex 팔레트 부분집합 가드) **삭제**. 카카오 WebView 대본은
+// NativeWind 가 닿지 않아 raw hex 가 불가피했으나, 네이버 네이티브 `MapView` 는 className 토큰만
+// 쓰고 shared/map 에 raw hex 가 0건이다(grep 확인). 심판 대상(팔레트 밖 색)이 소멸했고, 긍정 짝
+// `used.has(primary)` 는 `used` 가 공집합이 되어 통과 불가가 되므로 케이스 자체를 뗀다.

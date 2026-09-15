@@ -35,7 +35,7 @@ import {
  *
  * 소요시간 문자열은 어디에도 없다(INV-3) — 시각은 솔버 검증 시각(startAt–endAt)만, 폴백 구간은
  * 숫자 없는 "이동시간 미상" 라벨만(거리도 값이 없어 안 그림). 점선 지도는 단순 표현(라벨·문구, 확정
- * 설계 결정) — KakaoMapView 점선 확장은 후속.
+ * 설계 결정) — MapView 점선 확장은 후속.
  */
 
 export type ManualEditMode = 'normal' | 'fallback';

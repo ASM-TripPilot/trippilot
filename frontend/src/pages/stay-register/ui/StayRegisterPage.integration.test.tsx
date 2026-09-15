@@ -55,7 +55,7 @@ jest.mock('expo-router', () => ({
 /** authWiring.integration.test.ts:59와 같은 값(리포 관례). */
 const BASE = 'http://localhost:8080/api/v1';
 
-const ENV_KEY = 'EXPO_PUBLIC_KAKAO_MAP_JS_KEY';
+const ENV_KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
 // computed 접근이 선언과 한 문장이면 eslint-plugin-expo의 no-dynamic-env-var에 걸린다 —
 // 선언과 대입을 분리한다(KakaoMapView.test.tsx:38-40 선례).
 let ORIGINAL_ENV: string | undefined;

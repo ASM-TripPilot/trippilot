@@ -37,7 +37,7 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
 
 // 지도는 이 칸의 심판 대상이 아니다 — WebView 실물이 뜨지 않게만 막는다(선례 동형).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다 — 실물
 // 로드를 피하려면 목킹한다(선례와 동형).

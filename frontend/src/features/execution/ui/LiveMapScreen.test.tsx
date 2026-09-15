@@ -9,7 +9,7 @@ import { LiveMapScreen } from './LiveMapScreen';
 // 실물 KakaoMapView 는 JS 키가 없는 jest 에서 map-failure 로 떨어져 center/pins 가 안 흐른다 —
 // 관찰 목으로 갈아끼운다(배럴 경유 import 여야 목이 붙는다, DraftScreen 선례).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 const slot = (
   poiId: string,
