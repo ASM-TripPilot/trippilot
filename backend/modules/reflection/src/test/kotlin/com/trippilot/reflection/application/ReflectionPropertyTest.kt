@@ -19,11 +19,13 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.arbitrary
 import io.kotest.property.arbitrary.boolean
 import io.kotest.property.arbitrary.int
+import io.kotest.property.arbitrary.of
 import io.kotest.property.arbitrary.list
 import io.kotest.property.checkAll
 import java.time.Clock
@@ -70,9 +72,13 @@ class ReflectionPropertyTest : StringSpec({
     }
 
     /** 좌표를 아는 POI 만 표면을 낸다 — 못 찾는 방문이 섞이는 것이 실제 상황이다. */
-    fun surfacesOf(known: Map<UUID, Pair<Double, Double>>) = object : PoiSurfaceFacade {
+    /** [named] 를 주면 그 POI 의 이름을 지정한다 — 이름이 서로를 삼키는 경우를 만들 때 쓴다. */
+    fun surfacesOf(known: Map<UUID, Pair<Double, Double>>, named: Map<UUID, String> = emptyMap()) = object : PoiSurfaceFacade {
         override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.mapNotNull { id ->
-            known[id]?.let { id to PoiSurfaceView(id, "장소-${id.toString().take(4)}", it.first, it.second, "카페", null, null, emptyList()) }
+            known[id]?.let {
+                val name = named[id] ?: "장소-${id.toString().take(4)}"
+                id to PoiSurfaceView(id, name, it.first, it.second, "카페", null, null, emptyList())
+            }
         }.toMap()
         override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
     }
@@ -133,17 +139,20 @@ class ReflectionPropertyTest : StringSpec({
     fun userCard(title: String) =
         """{"template_id":"user.edit.v1","format":"CARD","cover":{"title":"$title","subtitle":""},"scenes":[]}"""
 
+    /** 계측 대역 — 지표 자체를 재는 테스트만 자기 레지스트리를 따로 본다. */
+    fun testMetrics() = ReflectionMetrics(io.micrometer.core.instrument.simple.SimpleMeterRegistry())
+
     fun service(visits: List<ArchiveVisitView>, coords: Map<UUID, Pair<Double, Double>>, events: Sink = Sink()) =
         ReflectionService(
             trips, archiveOf(visits), surfacesOf(coords), Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), events, clock,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), events, testMetrics(), clock,
         )
 
     // ── 폴백 3단(BR-U5-32) ────────────────────────────────────────────
     "AI 카드가 나오면 그것을 쓰고 source 는 AI 다" {
         val svc = ReflectionService(
             trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), CardAgent("AI 가 쓴 제목"), Sink(), clock,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), CardAgent("AI 가 쓴 제목"), Sink(), testMetrics(), clock,
         )
 
         val r = svc.generateDaily(acc, tripId, day)
@@ -160,7 +169,7 @@ class ReflectionPropertyTest : StringSpec({
     "AI 가 null 을 주면 규칙 카드로 내려가고 source 는 AI 가 아니다" {
         val svc = ReflectionService(
             trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), clock,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock,
         )
 
         val r = svc.generateDaily(acc, tripId, day)
@@ -180,7 +189,7 @@ class ReflectionPropertyTest : StringSpec({
         val agent = NoAgent()
         val svc = ReflectionService(
             trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), clock,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock,
         )
 
         svc.generateDaily(acc, tripId, day)
@@ -198,7 +207,7 @@ class ReflectionPropertyTest : StringSpec({
     "AI 가 깨진 payload 를 주면 규칙 카드로 내려간다 — 요청을 죽이지 않는다" {
         val svc = ReflectionService(
             trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), BrokenAgent(), Sink(), clock,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), BrokenAgent(), Sink(), testMetrics(), clock,
         )
 
         val r = svc.generateDaily(acc, tripId, day)
@@ -210,7 +219,7 @@ class ReflectionPropertyTest : StringSpec({
     "AI 가 예외를 던져도 규칙 카드로 내려간다" {
         val svc = ReflectionService(
             trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(),
-            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), ThrowingAgent(), Sink(), clock,
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), ThrowingAgent(), Sink(), testMetrics(), clock,
         )
 
         svc.generateDaily(acc, tripId, day).source shouldBe ReflectionSource.BASIC
@@ -281,7 +290,7 @@ class ReflectionPropertyTest : StringSpec({
             ArchiveVisitView(UUID.randomUUID(), poi, Instant.parse("2026-08-11T03:00:00Z"), null, false, 1, false),
         )
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(visits), surfacesOf(mapOf(poi to (33.4 to 126.5))), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), clock)
+        val svc = ReflectionService(trips, archiveOf(visits), surfacesOf(mapOf(poi to (33.4 to 126.5))), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock)
 
         svc.generateDaily(acc, tripId, day)
         svc.generateDaily(acc, tripId, day)
@@ -292,7 +301,7 @@ class ReflectionPropertyTest : StringSpec({
     // ── 초안·수정본 2열(INV-U5-06 · TRIP-553) ─────────────────────────
     "재생성이 사용자 수정본을 지우지 않는다 — 초안만 갈아끼운다" {
         val repo = Reflections()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), clock)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock)
         svc.generateDaily(acc, tripId, day)
         val edited = svc.edit(acc, tripId, day, userCard("내가 쓴 제목"))
 
@@ -307,7 +316,7 @@ class ReflectionPropertyTest : StringSpec({
 
     "수정해도 초안은 남는다 — 2열 비교의 왼쪽(INV-U5-06)" {
         val svc = ReflectionService(
-            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), clock,
+            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock,
         )
         val draft = svc.generateDaily(acc, tripId, day).draftCard.title
 
@@ -320,7 +329,7 @@ class ReflectionPropertyTest : StringSpec({
     "회고가 없어도 바로 쓸 수 있다 — 기본 카드 위에 얹는다(BR-U5-36)" {
         val repo = Reflections()
         val events = Sink()
-        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), events, clock)
+        val svc = ReflectionService(trips, archiveOf(emptyList()), surfacesOf(emptyMap()), repo, ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), events, testMetrics(), clock)
 
         val written = svc.edit(acc, tripId, day, userCard("생성은 실패했지만 내가 쓴다"))
 
@@ -333,7 +342,7 @@ class ReflectionPropertyTest : StringSpec({
 
     "여행 기간 밖 날짜는 거부한다 — 근거 데이터가 없는 날이다" {
         val svc = ReflectionService(
-            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), clock,
+            trips, archiveOf(emptyList()), surfacesOf(emptyMap()), Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), NoAgent(), Sink(), testMetrics(), clock,
         )
 
         shouldThrow<ValidationFailed> { svc.generateDaily(acc, tripId, day.minusDays(1)) }
@@ -347,5 +356,108 @@ class ReflectionPropertyTest : StringSpec({
         val e = events.published.single()
         e.eventType shouldBe "reflection.ReflectionReady"
         e.aggregateType shouldBe "Reflection"
+    }
+    // ── 환각 대조(BR-U5-31) ──────────────────────────────────────────
+    //
+    // 회고에서 환각은 일반 LLM 오류보다 무겁다 — 사용자가 **자기가 겪은 하루**를 읽는 화면이라,
+    // 안 간 곳이 적혀 있으면 기록 자체를 못 믿게 된다. "실패하면 규칙 카드로 내려가니 안전하다"는
+    // 정확하지 않다: 잃을 게 없는 쪽은 실패이고, 위험한 쪽은 **그럴듯하게 성공**하는 경우다.
+
+    /** 카드 본문에 안 간 장소 이름을 박는 대역 — 환각을 흉내 낸다. */
+    class HallucinatingAgent(private val place: String) : com.trippilot.reflection.domain.port.ReflectionAgentPort {
+        override val enabled = true
+        override fun generate(input: com.trippilot.reflection.domain.port.ReflectionAgentInput) =
+            com.trippilot.reflection.domain.ReflectionCard(
+                "ai.daily.v1", "CARD", "제목", "부제",
+                """{"template_id":"ai.daily.v1","cover":{"title":"제목"},"scenes":[{"layout":"L","caption":"$place 에서 좋았어요"}]}""",
+            )
+    }
+
+    fun visitOf(poi: UUID, skipped: Boolean) = ArchiveVisitView(
+        UUID.randomUUID(), poi, Instant.parse("2026-08-11T03:00:00Z"), null, skipped, 0, false,
+    )
+
+    "안 간 장소가 카드에 있으면 규칙 카드로 강등한다" {
+        val went = UUID.randomUUID()
+        val skippedPoi = UUID.randomUUID()
+        val coords = mapOf(went to (33.4 to 126.5), skippedPoi to (33.5 to 126.6))
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        val svc = ReflectionService(
+            trips, archiveOf(listOf(visitOf(went, skipped = false), visitOf(skippedPoi, skipped = true))),
+            surfacesOf(coords), Reflections(),
+            ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()),
+            HallucinatingAgent("장소-${skippedPoi.toString().take(4)}"), Sink(),
+            ReflectionMetrics(registry), clock,
+        )
+
+        val r = svc.generateDaily(acc, tripId, day)
+
+        r.source shouldNotBe ReflectionSource.AI // 규칙 카드로 내려갔다
+        registry.counter(ReflectionMetrics.HALLUCINATION_REJECTED).count() shouldBe 1.0
+    }
+
+    /**
+     * **오탐**: 판정이 부분 문자열이라, 건너뛴 곳의 이름이 실제로 간 곳의 이름에 삼켜지면
+     * 멀쩡한 카드가 강등된다. 한국 지명에 짧은 일반명이 흔해 드문 조합이 아니다.
+     *
+     * 이쪽이 안전한 실패라고 넘길 수 없는 이유: 강등은 조용히 규칙 카드로 떨어져 증상이 안 보이는데,
+     * 그 사이 강등 지표는 **"AI 가 환각한다"** 로 읽힌다. 그 수치가 AI 를 계속 켤지 판단하는
+     * 근거라(BR-U5-31) 오염되면 판단 자체가 틀어진다.
+     */
+    "건너뛴 이름이 방문한 이름에 삼켜지면 강등하지 않는다 — 오탐" {
+        val skippedPoi = UUID.randomUUID() // "카페"
+        val wentPoi = UUID.randomUUID() // "카페 델문도"
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        val svc = ReflectionService(
+            trips,
+            archiveOf(listOf(visitOf(skippedPoi, skipped = true), visitOf(wentPoi, skipped = false))),
+            surfacesOf(mapOf(skippedPoi to (33.4 to 126.5), wentPoi to (33.5 to 126.6)), named = mapOf(
+                skippedPoi to "카페", wentPoi to "카페 델문도",
+            )),
+            Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()),
+            HallucinatingAgent("카페 델문도"), Sink(), ReflectionMetrics(registry), clock,
+        )
+
+        val r = svc.generateDaily(acc, tripId, day)
+
+        r.source shouldBe ReflectionSource.AI // 실제로 간 곳을 말하고 있다
+        registry.counter(ReflectionMetrics.HALLUCINATION_REJECTED).count() shouldBe 0.0
+    }
+
+    "방문한 장소만 말하는 카드는 그대로 쓴다 — 대조가 늘 강등시키면 기능이 죽은 것과 같다" {
+        val went = UUID.randomUUID()
+        val svc = ReflectionService(
+            trips, archiveOf(listOf(visitOf(went, skipped = false))), surfacesOf(mapOf(went to (33.4 to 126.5))),
+            Reflections(), ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()),
+            HallucinatingAgent("장소-${went.toString().take(4)}"), Sink(), testMetrics(), clock,
+        )
+
+        svc.generateDaily(acc, tripId, day).source shouldBe ReflectionSource.AI
+    }
+
+    /**
+     * **불변식**: 건너뛴 장소 이름이 payload 어디에 있든 AI 카드로 채택되지 않는다. 구조를 파고들지
+     * 않고 문자열 전체를 보므로 해시태그·부제에 섞여 들어와도 같이 잡힌다.
+     */
+    "건너뛴 장소명이 payload 에 있으면 어떤 자리든 강등된다" {
+        checkAll(Arb.of("scenes", "hashtags", "cover")) { field ->
+            val skippedPoi = UUID.randomUUID()
+            val name = "장소-${skippedPoi.toString().take(4)}"
+            val agent = object : com.trippilot.reflection.domain.port.ReflectionAgentPort {
+                override val enabled = true
+                override fun generate(input: com.trippilot.reflection.domain.port.ReflectionAgentInput) =
+                    com.trippilot.reflection.domain.ReflectionCard(
+                        "ai.daily.v1", "CARD", "제목", "부제",
+                        """{"template_id":"ai.daily.v1","cover":{"title":"제목"},"$field":["$name"]}""",
+                    )
+            }
+            val svc = ReflectionService(
+                trips, archiveOf(listOf(visitOf(skippedPoi, skipped = true))),
+                surfacesOf(mapOf(skippedPoi to (33.5 to 126.6))), Reflections(),
+                ReflectionCardCodec(com.fasterxml.jackson.databind.ObjectMapper()), agent, Sink(), testMetrics(), clock,
+            )
+
+            svc.generateDaily(acc, tripId, day).source shouldNotBe ReflectionSource.AI
+        }
     }
 })
