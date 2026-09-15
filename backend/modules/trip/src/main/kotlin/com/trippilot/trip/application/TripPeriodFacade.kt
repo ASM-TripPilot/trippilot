@@ -8,6 +8,7 @@ import com.trippilot.trip.api.TripLivenessFacade
 import com.trippilot.trip.api.TripSummaryView
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripOwnerFacade
+import com.trippilot.trip.api.TripPurgeScopeFacade
 import com.trippilot.trip.api.TripPeriod
 import com.trippilot.trip.domain.MustVisitRepository
 import com.trippilot.trip.domain.TripRepository
@@ -24,7 +25,7 @@ import java.util.UUID
 class TripPeriodFacade(
     private val repo: TripRepository,
     private val mustVisits: MustVisitRepository,
-) : TripFacade, TripOwnerFacade, TripListFacade, TripLivenessFacade {
+) : TripFacade, TripOwnerFacade, TripListFacade, TripLivenessFacade, TripPurgeScopeFacade {
     override fun findOwnedPeriod(tripId: UUID): OwnedTripPeriod? {
         val trip = repo.findById(tripId)?.takeIf { it.deletedAt == null } ?: return null
         return OwnedTripPeriod(trip.accountId, trip.startDate, trip.endDate)
@@ -42,6 +43,13 @@ class TripPeriodFacade(
             .map { it.tripId }
             .toSet()
     }
+
+    /**
+     * 파기 범위(INV-L4) — **거르지도 자르지도 않는다.** 위의 [findTripsOf] 와 달리 `deletedAt` 을 보지
+     * 않고 `limit` 도 없다: 지우는 일에서 "안 보이는 여행"을 빼면 그 아래 데이터가 조용히 남는다.
+     */
+    override fun findAllTripIdsOf(accountId: UUID): List<UUID> =
+        repo.findByAccount(accountId).map { it.tripId }
 
     /** 기록 목록(U5)이 읽는 여행들. 삭제된 여행은 제외하고 최신순으로 [limit] 건까지. */
     override fun findTripsOf(accountId: UUID, limit: Int): List<TripSummaryView> =
