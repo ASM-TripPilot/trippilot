@@ -18,7 +18,7 @@ import type {
  * 하지 않는다 — 프리뷰 격리 렌더 안전, FSD 경계).
  *
  * ★ 지도 degrade — TripRecord 계약에 좌표(lat/lng)가 없고 지도 렌더는 jest 원리적 사각이라
- * (repo-traps) `KakaoMapView` 를 애초에 안 문다. 정적 "지도 준비 중" 자리표시만 그린다(j04
+ * (repo-traps) `MapView` 를 애초에 안 문다. 정적 "지도 준비 중" 자리표시만 그린다(j04
  * `reflection-summary-map-pending` 동형, 정직한 degrade INV-4). 실 3레이어·사진 핀·탭별 강조는 후속.
  *
  * 세그는 리스트 필터가 아니라 지도 레이어 강조 토글이다 — 리스트는 활성 탭과 무관하게 전체 행을
@@ -92,7 +92,7 @@ export function RecordsCompareScreen({
           실선 = 실제 동선 · 점선 = 계획(미방문) · 코랄 = 변경
         </Text>
 
-        {/* 지도 degrade — 좌표 계약 부재 + jest 사각이라 자리표시(KakaoMapView 미사용, ★T-1). */}
+        {/* 지도 degrade — 좌표 계약 부재 + jest 사각이라 자리표시(MapView 미사용, ★T-1). */}
         <View
           testID="record-compare-map-pending"
           className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"

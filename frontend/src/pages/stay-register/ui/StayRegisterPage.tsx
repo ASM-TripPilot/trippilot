@@ -9,10 +9,10 @@
  * 초기화한다(§3-2 가중치 1.0) — 'A 호텔의 좌표'에 'B 호텔의 이름'이 붙어 서버로 가는 불일치를
  * 막는다.
  *
- * 지도 시트가 어떤 얼굴(open · open-map-failed)을 쓸지는 카카오 JS 키의 유무로 정한다 —
- * `KakaoMapView` 자신도 같은 판단을 하므로(같은 파일 내부) 키 유무가 지도 성공 여부와 정확히
- * 같은 값이다(02a ★6). 이 읽기는 `mapBridgeStructure.test.ts` A-2(env 참조는 `shared/map`
- * 하나)의 모집단(`src/shared/map/**`) 밖이라 그 가드를 깨지 않는다.
+ * 지도 시트가 어떤 얼굴(open · open-map-failed)을 쓸지는 네이버 지도 Client ID
+ * (`EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`)의 유무로 정한다 — `MapView` 자신도 같은 판단을 하므로
+ * 키 유무가 지도 성공 여부와 정확히 같은 값이다(02a ★6). 이 읽기는 `mapBridgeStructure.test.ts`
+ * A-2(env 참조는 `shared/map` 하나)의 모집단(`src/shared/map/**`) 밖이라 그 가드를 깨지 않는다.
  */
 import { useState } from 'react';
 import type { ReactElement } from 'react';
@@ -210,7 +210,7 @@ export function StayRegisterPage({
   }
 
   function handleOpenMapSheet(): void {
-    const hasMapKey = Boolean(process.env.EXPO_PUBLIC_KAKAO_MAP_JS_KEY);
+    const hasMapKey = Boolean(process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID);
     setMapSheetState(hasMapKey ? 'open' : 'open-map-failed');
   }
 

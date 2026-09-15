@@ -13,11 +13,10 @@ import { Text, View } from 'react-native';
  * (out-of-scope 변수 금지)을 위반한다(TRIP-198 실측). 그래서 모듈 스코프 파일로 분리하고,
  * 테스트는 `jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'))`로 쓴다.
  *
- * TRIP-865(S3) — 파일명을 kakaoMapViewMock → mapViewMock 으로 개명하고, 신 이름 `MapView`
- * 와 전환기 별칭 `KakaoMapView`(아직 alias 를 쓰는 소비처용, S3 에서 대부분 MapView 로 넘어가고
- * onMapMessage 를 쓰는 StayRegister 핀 지정만 S4 까지 alias 유지)를 둘 다 노출한다. 남은 props
- * (`pins`·`viewOnly`·`onPinTap`·`onMapMessage` 등)는 host 엘리먼트로 그대로 통과시켜, 테스트가
- * `getByTestId('map-root').props.onPinTap(...)`·`.onMapMessage(...)`로 직접 발화한다.
+ * `MapView` 와 `CenterPinPicker`(중앙 고정 핀, S4) 두 컴포넌트를 노출한다. 남은 props
+ * (`pins`·`viewOnly`·`onPinTap`·`onCameraIdle` 등)는 host 엘리먼트로 그대로 통과시켜, 테스트가
+ * `getByTestId('map-root').props.onPinTap(...)`·`.props.onCameraIdle(...)`로 직접 발화한다.
+ * (S5: 카카오 임시 별칭·onMapMessage 브리지는 소비처 소멸로 제거됐다.)
  */
 
 export interface MapCenter {
@@ -42,10 +41,6 @@ function MapView({
   );
 }
 
-// 전환기 별칭 — S3 에서 MapView 로 안 넘어간 소비처(onMapMessage 쓰는 StayRegister 핀 지정)가
-// 여전히 KakaoMapView 를 부른다. S5 에서 소비처가 0 이 되면 이 export 도 제거.
-const KakaoMapView = MapView;
-
 // TRIP-866(S4) — 중앙 고정 핀 picker 의 얇은 목. 소비 화면(StayRegister 핀 지정·LiveLocation)의
 // 테스트가 이 목을 통해 `onPick` 을 직접 발화해 "지도가 좌표를 보고했다"를 흉내낸다(구 onMapMessage
 // 직접 발화 선례 동형). `onPick`·나머지 props 는 host 로 그대로 통과시켜
@@ -65,4 +60,4 @@ function CenterPinPicker({
   );
 }
 
-export { MapView, KakaoMapView, CenterPinPicker };
+export { MapView, CenterPinPicker };

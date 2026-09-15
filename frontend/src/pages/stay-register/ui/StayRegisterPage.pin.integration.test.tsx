@@ -78,7 +78,7 @@ const PIN: MapCenter = { lat: 35.1621, lng: 129.1688 };
 const PIN_ADDRESS = '부산 해운대구 중동 1394';
 const SAVED_STAY = { savedStayId: 'ss-1', name: '', registerRoute: 'PIN' };
 
-const ENV_KEY = 'EXPO_PUBLIC_KAKAO_MAP_JS_KEY';
+const ENV_KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
 let ORIGINAL_ENV: string | undefined;
 ORIGINAL_ENV = process.env[ENV_KEY];
 

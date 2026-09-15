@@ -35,7 +35,6 @@ jest.mock('expo-router', () => ({
 
 // 네이티브 런타임 의존을 통과 컴포넌트로 목킹(수동 목: __mocks__/*) — 동결 devPreview 계열과 같은 장치.
 jest.mock('@gorhom/bottom-sheet');
-jest.mock('react-native-webview');
 
 // 지뢰 — 프리뷰가 네트워크 계층을 (직접이든 전이든) require 하면 즉시 터진다.
 jest.mock('@/shared/api', () => {
