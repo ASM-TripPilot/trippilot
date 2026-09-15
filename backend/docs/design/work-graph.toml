@@ -1053,6 +1053,40 @@ note = "계약 합의문(ai-backend-replan-연동-설계.md §7 AI 측 표). 양
 
 # ── 간선(2026-09-14 추가분) — 티켓·설계 원문으로 확인한 것만 ──────────────────
 
+[[nodes]]
+id = "REGION-CODE-ANCHOR"
+ticket = ""
+title = "받은 목적지 코드로 앵커를 잡는다 — 이름 임의 선택의 나머지 절반 (TRIP-859 후속)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/trip/src/main/kotlin/com/trippilot/trip/api",
+  "backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/api/RegionLookupFacade.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/GenerateItineraryService.kt",
+]
+note = """
+**티켓이 없다.** TRIP-859(PR #530)가 목적지 코드를 **받아 저장하는 데까지** 했고, 이것이 그 코드를
+실제로 쓰게 만드는 나머지다. 검수(2026-09-15)에서 드러났다 — 티켓 제목이 "동명이지역 임의 선택
+해소"인데 정작 임의로 고르는 자리가 안 닫혀 있었다.
+
+**남은 구멍의 정확한 위치**: `GenerateItineraryService.kt:307` 의
+`destinations.firstNotNullOfOrNull { regions.centerOf(it) }` → `findExact(이름).firstNotNullOfOrNull`.
+부산 중구 여행이 regionCode 를 제대로 들고 있어도 **앵커는 서울 중구 좌표를 집을 수 있다.**
+거점(숙소)이 없는 날의 폴백이라 범위는 좁지만, 지어낸 좌표가 아니라 **다른 지역의 좌표**라
+증상이 "일정이 엉뚱한 동네에서 돈다"로 나온다.
+
+**왜 #530 에 못 넣었나 — 3개 모듈이다.**
+1. `TripGenerationContext.destinations` 가 `List<String>`(이름뿐)이라 trip 의 `..api..` 계약을 바꿔야 한다
+2. place-data 에 코드로 중심을 찾는 파사드를 연다(`centerOf` 는 이름만 받는다)
+3. itinerary-generation 의 앵커 조립이 코드를 먼저 보고, 없을 때만 이름으로 떨어진다
+
+**이름 정합 검사는 대안이 아니다.** 서버에 정본 표시명이 없어(`GET /regions` 가 `name`·`sidoName` 을
+따로 주고 표시는 클라가 조립) 이름으로 코드를 검증하면 **같은 이름·다른 시도**를 원리적으로 못 가른다 —
+`PoiEntity` 주석의 "시군구명은 유일하지 않다"와 같은 결론이다. 코드를 믿는 것만이 해소다.
+
+선행: TRIP-859(PR #530) 머지.
+"""
+
 [[edges]]
 from = "AI-REPLAN"
 to = "REPLAN-BOUNDARY"
@@ -1073,3 +1107,10 @@ to = "QUIET-HOURS"
 kind = "관측선행"
 verified = false
 reason = "TRIP-843 원문 「야간 조용시간·상한 조정이 '관측 후 결정'으로 미뤄져 있다 — 이 티켓이 그 둘의 선행」. 끊으면 빌드가 깨지는 종류가 아니라 결정 근거가 사라지는 종류다."
+
+[[edges]]
+from = "TRIP-361-CONTRACT"
+to = "REGION-CODE-ANCHOR"
+kind = "계약선행"
+verified = false
+reason = "코드를 받는 경로(#530)가 없으면 앵커가 쓸 값 자체가 안 들어온다. 저장은 되지만 항상 null 이라 후행이 동작을 못 바꾼다."
