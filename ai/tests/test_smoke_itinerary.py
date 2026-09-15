@@ -8,6 +8,7 @@
   ④ 기록 JSON 스키마 — 계약 키 전량 + 슬롯 이름 매핑
   ⑤ 생성 관통 1건 — LLM 미주입(UnwiredLlm 경로: 규칙 점수 폴백)으로 200 + INV-1
   ⑥ 인접 슬롯 실경로 검증 (TRIP-382) — 쌍 구성·오차 계산·키 부재 생략·legs 스키마
+  ⑦ LLM 비용 집계 (TRIP-869 후속) — 단가 미설정=None(모름), 미지 모델=하한 표시
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from smoke_itinerary import (  # noqa: E402
     RehearsalError,
+    cost_of,
     _check_baseline,
     _request_body,
     Selection,
@@ -192,7 +194,7 @@ def test_rehearsal_passthrough_and_result_schema():
     assert set(result) == {
         "date", "days", "region", "anchor", "poi_names", "slots",
         "solve_mode", "is_fallback", "llm_used", "llm_calls", "llm_ok_calls",
-        "weather", "latency_ms", "quality",
+        "weather", "latency_ms", "quality", "cost",
     }
     # 품질 부기 (TRIP-524) — 규칙 강등 경로에서도 solve 성공이면 점수가 실린다
     assert set(result["quality"]) == {
@@ -644,3 +646,58 @@ def test_fallback_unusable_keeps_original_and_explicit_fail_path(tmp_path):
 
     with pytest.raises(SelectionError):
         select_rehearsal_pois(entries2, "2026-08-14")
+
+
+# ── ⑦ LLM 비용 집계 (TRIP-869 후속) ─────────────────────────────────
+
+
+def _call(model_id: str, input_tokens: int, output_tokens: int):
+    """리허설이 트레이스로 받는 것과 같은 모양의 LlmCallRecord."""
+    from datetime import datetime, timezone
+
+    from trippilot.domain.common import TraceId
+    from trippilot.domain.observability import LlmCallRecord
+    from trippilot.domain.prompt import PromptRef
+
+    return LlmCallRecord(
+        trace_id=TraceId("t-1"),
+        occurred_at=datetime(2026, 9, 16, tzinfo=timezone.utc),
+        component="c1.gateway",
+        feature="PREFERENCE_SCORING",
+        model_id=model_id,
+        prompt_ref=PromptRef(prompt_id="p.yaml", version="1.0.0", feature="f"),
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        latency_ms=1,
+        success=True,
+        agent=None,
+    )
+
+
+def _prices(**models):
+    from trippilot.api.cost import parse_prices
+
+    return parse_prices({"currency": "USD", "models": models or {"m": {"input": 1.0, "output": 2.0}}})
+
+
+def test_cost_is_none_without_price_table(monkeypatch):
+    """단가 미설정이면 None — "비용 0" 으로 위장하지 않는다."""
+    monkeypatch.delenv("TRIPPILOT_LLM_PRICE_FILE", raising=False)
+    monkeypatch.delenv("TRIPPILOT_LLM_PRICES", raising=False)
+    assert cost_of([_call("m", 1_000_000, 0)]) is None
+
+
+def test_cost_sums_only_llm_records():
+    """LlmCallRecord 만 센다 — 트레이스에는 어셈블리·게이트 이벤트도 섞여 온다."""
+    records = [_call("m", 1_000_000, 500_000), "어셈블리 레코드 자리", _call("m", 0, 0)]
+    cost = cost_of(records, _prices(m={"input": 1.0, "output": 2.0}))
+    assert cost == {"currency": "USD", "total": pytest.approx(2.0),
+                    "calls": 2, "unpriced_calls": 0}
+
+
+def test_unknown_model_is_lower_bound_not_zero():
+    """단가표 밖 모델은 0 을 더하지 않고 unpriced_calls 로 드러난다 — total 은 하한."""
+    records = [_call("claude-x", 1_000_000, 0), _call("gpt-5.6-terra", 1_000_000, 0)]
+    cost = cost_of(records, _prices(**{"claude-x": {"input": 3.0, "output": 9.0}}))
+    assert cost["total"] == pytest.approx(3.0)  # gpt 몫은 우리가 지불하지 않는다
+    assert cost["calls"] == 2 and cost["unpriced_calls"] == 1
