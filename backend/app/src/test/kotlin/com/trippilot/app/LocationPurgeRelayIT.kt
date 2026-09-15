@@ -101,10 +101,31 @@ class LocationPurgeRelayIT : AbstractPostgresIntegrationTest() {
 
         locationConsents.update(AccountId(accountId), legalConsent = true, gpsRecordingOptIn = true)
         locationConsents.update(AccountId(accountId), legalConsent = null, gpsRecordingOptIn = false)
-        repeat(RELAY_TRIES) { relay.relay() }
+
+        // **이벤트가 실제로 배달될 때까지만** 돌린다. 두 가지를 동시에 얻는다:
+        // (1) 무조건 N 번 돌리면 같은 컨테이너를 쓰는 다른 IT 의 미발행 행까지 집어가
+        //     그쪽 시도 횟수 단정을 흔든다 — 이 리포가 이미 겪은 간섭이다.
+        // (2) 아래 단정이 **구독자가 한 번도 안 돌아도 0 이라** 공허해진다. 배달을 확인하고 나서
+        //     0 을 봐야 "지울 것이 없어서 안 남았다"가 된다.
+        repeat(RELAY_TRIES) { if (optOutEvents(accountId, published = false) > 0) relay.relay() }
+
+        // **"배달됐다"를 세지 "안 남았다"를 세지 않는다.** 미발행 0 으로 확인하면 이벤트가 아예
+        // 발행되지 않은 경우에도 0 이라 그대로 통과한다(실측 — 변이로 걸렸다). 발행분이 1 이어야
+        // 아래 단정이 "구독자가 돌았는데 지울 것이 없었다"를 뜻한다.
+        optOutEvents(accountId, published = true) shouldBe 1
 
         purgeLogs(accountId) shouldBe 0
     }
+
+    /** 이 계정의 철회 이벤트 수. [published] 로 배달 완료분과 대기분을 가른다. */
+    private fun optOutEvents(accountId: UUID, published: Boolean): Int = jdbc.queryForObject(
+        """
+        SELECT count(*) FROM outbox_event
+         WHERE event_type = 'auth.GpsRecordingOptOut' AND aggregate_id = ?
+           AND published_at IS ${if (published) "NOT NULL" else "NULL"}
+        """.trimIndent(),
+        Int::class.java, accountId.toString(),
+    )!!
 
     private fun exifLat(photoId: UUID): Double? = jdbc.queryForObject(
         "SELECT exif_lat FROM visit_photo_meta WHERE visit_photo_meta_id = ?", Double::class.java, photoId,
