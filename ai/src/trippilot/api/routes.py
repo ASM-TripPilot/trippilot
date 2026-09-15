@@ -1,9 +1,10 @@
-"""경계 라우트 9종 — `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit}`
+"""경계 라우트 — `POST /ai/v1/itinerary/{generate,validate,repair,alternatives,explanations,edit,replan}`
 + `POST /ai/v1/reflection/{generate,nudge,share-card}`
 + `POST /ai/v1/notification/copies`.
 
 도입 티켓: alternatives=TRIP-428 · explanations=TRIP-479 · edit=TRIP-431 · reflection=TRIP-429 ·
-notification=TRIP-836.
+notification=TRIP-836 · replan=재계획 연동 설계(A-4).
+**경로 수는 세지 않는다** — 정본은 `docs/openapi.json` 이다(손 카운트는 드리프트한다).
 경로 정본: services.md §0 / agent-io-contracts.md §0.1 (구 표기 `/ai/generate`·`/ai/schedule` 폐기).
 
 이 파일이 하는 일은 셋뿐이다:
@@ -45,6 +46,8 @@ from trippilot.api.schemas import (
     ReflectionNudgeResponse,
     ReminderCopyRequest,
     ReminderCopyResponse,
+    ReplanRequest,
+    ReplanResponse,
     RepairItineraryRequest,
     RepairItineraryResponse,
     ShareCardCopyResponse,
@@ -263,6 +266,29 @@ def alternatives(
     구형 조립(alternatives 미구현 오케스트레이터)은 503으로 명시 실패한다(INV-4).
     """
     handler = getattr(orchestrator, "alternatives", None)
+    if handler is None:
+        raise orchestrator_not_wired()
+    return _guarded(lambda: handler(request))
+
+
+@router.post("/replan", response_model=ReplanResponse)
+def replan(
+    request: ReplanRequest,
+    orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
+) -> ReplanResponse:
+    """하루 재계획 (i04 → i06) — `generate` 재사용을 그만둔 자리.
+
+    정본: `backend/docs/design/ai-backend-replan-연동-설계.md`. `generate` 와 다른 것은
+    셋이다 — RAG(KB-3)를 탄다 · 재계획 의도(사유·지시·자유입력)를 받는다 · 원 일정을
+    컨텍스트이자 후보로 받는다. 산출은 `ItineraryPayload` 라 백엔드 소비 코드가 그대로 돈다.
+
+    **조립이 아직 이 경계를 구현하지 않으면 503 으로 명시 실패한다**(INV-4 — 침묵 금지).
+    하루 전체를 다시 짜려면 선호 점수 단계가 필요한데 그것은 ScheduleAgent 소유이고,
+    오케스트레이터가 `REPLAN` 정보 요구표로 그 경로를 여는 작업이 따로 진행 중이다.
+    빈 일정을 `empty_reason` 으로 위장해 200 을 내보내지 않는다 — "후보가 없다"와
+    "아직 배선이 없다"는 다른 사실이고, 섞으면 백엔드가 폴백 여부를 잘못 판정한다.
+    """
+    handler = getattr(orchestrator, "replan", None)
     if handler is None:
         raise orchestrator_not_wired()
     return _guarded(lambda: handler(request))
