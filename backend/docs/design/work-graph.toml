@@ -1091,13 +1091,23 @@ note = """
 id = "FLAKY-OUTBOX-RELAY"
 ticket = ""
 title = "OutboxRelayIT 가 전체 빌드에서만 간헐 실패 — 배경 릴레이가 이벤트를 먼저 집는다"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/app/src/test/kotlin/com/trippilot/app/OutboxRelayIT.kt",
   "backend/app/src/test/resources/application.yml",
 ]
 note = """
+**해소(2026-09-15, PR #537).** 가설이 맞았다 — **계측으로 확인했다.** `relay()` 진입에 임시 로그를
+붙여 `OutboxRelayIT` 를 돌리니 호출 15회 중 1회가 `scheduling-1` 스레드였다.
+
+원인은 처방이 애초에 작동한 적이 없다는 것이었다. 테스트 설정이 주기를 1시간으로 늘려 "껐다"고
+적어 두었지만 **`fixedDelay` 는 기동 직후 1회를 막지 못한다.** `initialDelayString` 을 붙이고
+테스트에서 첫 발화도 미루자 계측에서 그 호출이 0회가 됐다(운영 기본값 0 — 동작 무변경).
+
+**같은 함정이 셋이었다.** 테스트 설정이 "끈다"고 적어 둔 여행 종료 스위퍼·리마인드 폴러도 구조가
+같아 함께 고쳤다. 둘은 아직 안 깨졌을 뿐이다.
+
 **실측(2026-09-15, 10건 일괄 머지 중)**: 전체 빌드 3회 중 1회 실패. 두 테스트가 함께 깨진다 —
 `발행하면 아웃박스에 적재되고 릴레이가 구독자에게 배달한다`(expected 1 but was 0)와
 `배달에 성공하면 적재부터 배달까지의 지연이 기록된다`(expected true but was false).
