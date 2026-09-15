@@ -65,11 +65,17 @@ from trippilot.api.cost import CostLedger
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
 from trippilot.llm_gateway.gates.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyGate
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
+from trippilot.llm_gateway.workers.reminder_copy import (
+    ReminderCopyInput,
+    ReminderCopyItem,
+    ReminderCopyWorker,
+)
 from trippilot.agents.reflect.agent import ReflectAgent, ReflectTask
 from trippilot.llm_gateway.gates.reflection_nudge import ReflectionNudgeGate
 from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateGate
@@ -710,6 +716,7 @@ class WiredItineraryOrchestrator:
         edit_agent: EditAgent,
         reflect_agent: ReflectAgent,
         nudge_worker: "ReflectionNudgeWorker",
+        reminder_copy_worker: ReminderCopyWorker,
         share_card_worker: "ShareCardCopyWorker",
         trace: TracePort,
     ) -> None:
@@ -725,6 +732,7 @@ class WiredItineraryOrchestrator:
         self._edit_agent = edit_agent
         self._reflect_agent = reflect_agent
         self._nudge_worker = nudge_worker
+        self._reminder_copy_worker = reminder_copy_worker
         self._share_card_worker = share_card_worker
         self._trace = trace
 
@@ -1088,6 +1096,55 @@ class WiredItineraryOrchestrator:
         return schemas.ReflectionNudgeResponse(
             message=str(result.value), is_fallback=False)
 
+    def reminder_copy(
+        self, request: schemas.ReminderCopyRequest
+    ) -> schemas.ReminderCopyResponse:
+        """리마인드 알림 문구 배치 — 실패분은 빼고 degraded 로 알린다 (INV-4).
+
+        폴백 문구를 여기서 만들지 않는다: 빠진 자리는 백엔드가 기존 하드코딩 상수로
+        채우므로, 이 경계의 폴백 모드는 "backend_constant" 다.
+        """
+        meta = request.request_meta
+        budget_sec = None if meta.deadline_ms is None else meta.deadline_ms / 1000
+        copies, dropped = self._reminder_copy_worker.generate(
+            ReminderCopyInput(
+                trip_title=request.trip_title,
+                items=tuple(
+                    ReminderCopyItem(
+                        schedule_key=item.schedule_key,
+                        kind=item.kind,
+                        date_label=item.date.isoformat(),
+                        slot_names=tuple(s.name for s in item.slots),
+                        slot_categories=tuple(s.category for s in item.slots),
+                    )
+                    for item in request.items
+                ),
+            ),
+            TraceId(meta.request_id),
+            _tz_aware(meta.requested_at, self._tz),
+            budget_sec=budget_sec,
+        )
+        if dropped:
+            self._trace.emit(FallbackEvent(
+                trace_id=TraceId(meta.request_id),
+                occurred_at=_tz_aware(meta.requested_at, self._tz),
+                component="api.wiring",
+                stage="agent",
+                from_mode="llm_reminder_copy",
+                to_mode="backend_constant",
+                reason=f"reminder_copy_dropped: {dropped}/{len(request.items)}",
+            ))
+        return schemas.ReminderCopyResponse(
+            copies=[
+                schemas.ReminderCopySchema(
+                    schedule_key=c.schedule_key, title=c.title, body=c.body
+                )
+                for c in copies
+            ],
+            degraded=bool(dropped),
+            fallback_mode="backend_constant" if dropped else None,
+        )
+
     def reflection_share_card(
         self, request: schemas.ReflectionGenerateRequest
     ) -> schemas.ShareCardCopyResponse:
@@ -1217,6 +1274,9 @@ def build_orchestrator(
     nudge_worker = ReflectionNudgeWorker(
         GatewayFacade(llm, renderer, ReflectionNudgeGate(), c1_config, trace)
     )
+    reminder_copy_worker = ReminderCopyWorker(
+        GatewayFacade(llm, renderer, ReminderCopyGate(), c1_config, trace)
+    )
     # 공유 카드 문구도 같은 직행 배선 (TRIP-429 후속 — 에이전트 없음)
     share_card_worker = ShareCardCopyWorker(
         GatewayFacade(llm, renderer, ShareCardCopyGate(), c1_config, trace)
@@ -1253,6 +1313,8 @@ def build_orchestrator(
         edit_agent=edit_agent,
         reflect_agent=reflect_agent,
         nudge_worker=nudge_worker,
+        reminder_copy_worker=reminder_copy_worker,
+
         share_card_worker=share_card_worker,
         trace=trace,
     )
@@ -1398,6 +1460,7 @@ def build_dev_app(
     events: EventPort | None = None,
     vector_store: object | None = None,
     embedding: object | None = None,
+    trace: TracePort | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -1412,6 +1475,8 @@ def build_dev_app(
     StaticPoiDb(제주 시드 4곳) 그대로(하위호환: 백엔드 없는 로컬 스모크).
     `travel_port`는 선택 주입(TRIP-432, ChainedTravelAdapter) — 기본 None 이면
     기존 TravelEstimator(하버사인) 그대로.
+    `trace`는 선택 주입(관측 스파이용, 예: InMemoryTrace) — 기본 None 이면
+    build_orchestrator 기본값(LoggingTrace) 그대로.
     """
     if model_id is not None:
         model_ids = {ModelTier.LIGHT: model_id, ModelTier.HEAVY: model_id}
@@ -1439,5 +1504,6 @@ def build_dev_app(
         events=events,  # 행사 저장소 (TRIP-421) — None이면 무보정
         vector_store=vector_store,
         embedding=embedding,
+        trace=trace,
     )
     return create_app(orchestrator)

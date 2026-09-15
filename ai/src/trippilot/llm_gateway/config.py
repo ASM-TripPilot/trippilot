@@ -40,6 +40,9 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # 뱅크 증강 — 짧은 문장 변형 N개. PARAPHRASE 와 같은 급의 과업이고 오프라인
             # 배치라 지연도 무관하다. 품질이 모자라면 feature_models 로 올린다(TRIP-513).
             LlmFeature.BANK_AUGMENT: ModelTier.LIGHT,
+            # 알림 문구 2줄 — 넛지와 동급 과업이라 LIGHT. 실제로는 feature_models
+            # 오버라이드로 로컬 파인튜닝 모델이 배정된다(티어 해석보다 우선).
+            LlmFeature.REMINDER_COPY: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
             LlmFeature.ALTERNATIVE_SELECTION: ModelTier.HEAVY,
             # 장면 시퀀스 연출 생성 — 회고 본문 생성의 정본(구 REFLECTION 흡수), 백그라운드 N회 생성 전제
@@ -94,6 +97,10 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # (workers.share_card_copy.fallback_share_card_copy: `{지역} 여행의 기록` ·
             # `#{지역}여행`). 워커 직행 패턴이라 발행 주체는 경계다 (FD §2.1).
             LlmFeature.SHARE_CARD_COPY: ("llm_share_card", "static_copy"),
+            # api/wiring.py `reminder_copy` — 문구를 못 만들면 그 항목을 응답에서 빼고,
+            # 백엔드가 기존 하드코딩 상수(NotificationSchedule.title()/body())로 보낸다.
+            # to_mode 가 "backend_constant" 인 이유: 폴백 실행 주체가 백엔드다.
+            LlmFeature.REMINDER_COPY: ("llm_reminder_copy", "backend_constant"),
             # orchestrator/intent_router.py `_classify` → `_fallback()` —
             # Intent.OUT_OF_SCOPE + MatchRoute.FALLBACK로 수렴한다.
             LlmFeature.INTENT: ("llm_intent", "out_of_scope"),

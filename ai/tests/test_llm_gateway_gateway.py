@@ -268,6 +268,7 @@ _EXPECTED_MODES = {
     LlmFeature.REFLECTION_NUDGE: ("llm_nudge", "fixed_message"),
     # j06 공유 카드 — 경계(api.wiring)가 정적 조립으로 수렴 (TRIP-429 후속)
     LlmFeature.SHARE_CARD_COPY: ("llm_share_card", "static_copy"),
+    LlmFeature.REMINDER_COPY: ("llm_reminder_copy", "backend_constant"),
     LlmFeature.INTENT: ("llm_intent", "out_of_scope"),
     LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
     LlmFeature.BANK_AUGMENT: ("llm_augment", "(none)"),  # 오프라인 배치 — 강등할 런타임 경로 없음

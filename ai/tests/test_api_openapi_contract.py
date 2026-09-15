@@ -68,5 +68,6 @@ def test_openapi_snapshot_covers_boundary_routes() -> None:
             "/ai/v1/reflection/generate",      # TRIP-429 — U6 Reflect (FD v1.0)
             "/ai/v1/reflection/nudge",         # TRIP-429
             "/ai/v1/reflection/share-card",    # TRIP-429 후속 — j06 공유 카드 문구
+        "/ai/v1/notification/copies",       # 리마인드 알림 문구
         "/health",
     }

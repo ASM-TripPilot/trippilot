@@ -145,6 +145,10 @@ services:
       # 기능별 벤더 혼용 (TRIP-513, AI_LLM_PROVIDER=mixed) — "FEATURE=model,…"
       TRIPPILOT_LLM_FEATURE_MODELS: ${AI_LLM_FEATURE_MODELS:-}
       TRIPPILOT_LLM_RETRY_MODELS: ${AI_LLM_RETRY_MODELS:-}
+      # 파인튜닝 로컬 LLM (REMINDER_COPY) — OpenAI 호환 서버 주소.
+      # 앱은 TRIPPILOT_* 만 읽는다. 이 통로가 빠지면 .env 에 값을 넣어도 조용히 무시된다.
+      TRIPPILOT_LOCAL_LLM_BASE_URL: ${AI_LOCAL_LLM_BASE_URL:-}
+      TRIPPILOT_LOCAL_LLM_API_KEY: ${AI_LOCAL_LLM_API_KEY:-}
       # LLM 요청당 비용 집계(#486)의 단가표 경로. **이 통로가 없어서** 컨테이너에서
       # 집계가 통째로 꺼져 있었다 — load_prices 가 None 을 돌려주면 llm_cost 로그 자체가
       # 안 나간다. 기능이 죽는 게 아니라 "얼마 썼는지 안 보이는" 형태라 증상이 없다

@@ -39,7 +39,8 @@ _ENV_VARS = ("TRIPPILOT_WIRING", "TRIPPILOT_LLM_PROVIDER", "OPENAI_API_KEY",
              "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_API",
              "TRIPPILOT_BACKEND_BASE_URL", "TRIPPILOT_SERVICE_AUTH_TOKEN",
              "TRIPPILOT_VECTOR_DB_URL", "TRIPPILOT_EMBEDDING_PROVIDER",
-             "TRIPPILOT_EMBEDDING_MODEL", "EVENTS_STORE")
+             "TRIPPILOT_EMBEDDING_MODEL", "EVENTS_STORE",
+             "TRIPPILOT_LOCAL_LLM_BASE_URL", "TRIPPILOT_LOCAL_LLM_API_KEY")
 
 
 @pytest.fixture(autouse=True)
@@ -446,6 +447,27 @@ def test_events_store_missing_file_fails_startup(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("EVENTS_STORE", str(tmp_path / "없는파일.json"))
     with pytest.raises(RuntimeError, match="EVENTS_STORE"):
         main._event_store()
+
+
+# ── 로컬 LLM 라우팅 (REMINDER_COPY, local* 모델 접두어) ──────────────────
+
+
+def test_local_model_without_base_url_fails_startup(monkeypatch) -> None:
+    """local* 모델을 배정했는데 주소가 없으면 조용히 기본 벤더로 나가지 않는다 — 기동 실패."""
+    import main
+
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "REMINDER_COPY=local-reminder-v1")
+    monkeypatch.delenv("TRIPPILOT_LOCAL_LLM_BASE_URL", raising=False)
+    with pytest.raises(RuntimeError, match="TRIPPILOT_LOCAL_LLM_BASE_URL"):
+        main._local_route(main._feature_models_from_env())
+
+
+def test_no_local_model_means_no_local_route(monkeypatch) -> None:
+    import main
+
+    monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS", "EXPLANATION=claude-haiku-4-5")
+    monkeypatch.delenv("TRIPPILOT_LOCAL_LLM_BASE_URL", raising=False)
+    assert main._local_route(main._feature_models_from_env()) == {}
 
 
 def test_shipped_events_store_is_not_empty() -> None:

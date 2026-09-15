@@ -84,7 +84,8 @@ branch therefore cannot fire on any path.
 
 **U1–U6 built and running** (as of 2026-08-25). FastAPI boundaries are live and the
 backend calls them round-trip: `POST /ai/v1/itinerary/{generate,validate,repair,
-alternatives,explanations,edit}` + `/health` + `POST /ai/v1/reflection/{generate,nudge}`.
+alternatives,explanations,edit}` + `/health` + `POST /ai/v1/reflection/{generate,nudge}`
++ `POST /ai/v1/notification/copies` (TRIP-836 — reminder copy).
 CI (`ai-ci`) enforces "running app schema == committed `docs/openapi.json`" and fakes
 every external API (zero real calls). GHCR images publish on develop.
 

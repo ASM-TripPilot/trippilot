@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from trippilot.api.errors import install_error_handlers
 from trippilot.api.middleware import MiddlewareSettings, install_middlewares
 from trippilot.api.protocols import ItineraryOrchestrator
-from trippilot.api.routes import reflection_router, router
+from trippilot.api.routes import notification_router, reflection_router, router
 
 HEALTH_BODY = {"status": "UP", "service": "ai"}
 
@@ -37,6 +37,7 @@ def create_app(
     install_middlewares(app, middleware)
     app.include_router(router)
     app.include_router(reflection_router)  # TRIP-429 — U6 Reflect 경계
+    app.include_router(notification_router)  # 리마인드 알림 문구 경계
 
     # docker-compose·컨테이너 헬스체크가 쓰는 엔드포인트 — 응답 형태를 바꾸지 말 것.
     @app.get("/health")
