@@ -369,6 +369,27 @@ if not validated:
 
 ---
 
+### 2.8 AlternativeExplanation — 워커 (상위 티어) `[정본]` — 슬롯별 차선책의 근거 문장(TRIP-887)
+
+**목적**: 생성 응답의 슬롯별 차선책(TRIP-871, 슬롯당 ≤2건)에 대해 "확정된 장소 대신 골라도 좋은 이유" **1~2문장**을 취향 기준으로 생성. Explanation(§2.2)과 **별개 feature** — 그 프롬프트는 "확정된 일정의 각 장소"를 전제해 차선책을 섞으면 모델에게 확정되지 않은 장소를 확정된 것처럼 말하게 된다. 구현: `ai/prompts/alternative_explanation.yaml` v0.1.0 · 출구 게이트는 `ExplanationGate` 재사용(출력 JSON 모양 동일) · `llm_gateway/workers/alternative_explanation.py`.
+
+**입력 컨텍스트** (좌표 미포함 — G181):
+```
+- 취향 태그 · 동반자 (persona)
+- (확정 슬롯 POI, 선택지 POI) 쌍 — 선택지마다 "순서 | poiId | 카테고리 | 상호명 | 대신: 확정 장소 상호명"
+  같은 선택지가 여러 슬롯에 있으면 첫 쌍만(문장은 선택지 POI 당 1개 — 취향 기준 근거라 슬롯과 무관)
+```
+
+**OutputSchema**: `{"explanations": [{"poiId": "string", "text": "string(1~2문장)"}]}` — §2.2 와 동일.
+
+**규칙(프롬프트)**: 선택지 poiId 안에서만 · 근거 그라운딩 · 확정 장소를 깎아내리지 않음 · 시각·이동시간·거리 수치 미언급(INV-3).
+
+**호출 지점 2곳**: ① `ScheduleAgent` ⑥′ — `include_explanations=true` 일 때 설명(⑤) 다음 잔여 예산으로 1회, 문장이 있으면 `alternatives[].rationale` 을 교체 · ② `POST /ai/v1/itinerary/explanations` — payload 의 `slots[].alternatives[]` 에 대해 배치 슬롯 설명 **다음의 두 번째 호출**(잔여 예산만, DL-2), 응답 `alternative_explanations` (키 `"{date}#{alt_poi_id}"`). 백엔드는 generate 를 설명 없이 부르므로 실서비스 경로는 ② — **단, 백엔드가 저장한 차선책을 `/explanations` 요청에 되돌려 보내야 도달한다**(2026-09-17 현재 `ScheduleAgentOutput.toWire()` 는 빈 배열 — 백엔드 TRIP-873 범위; 그 전까지는 항상 빈 맵 + `alternatives_reason=null`).
+
+**폴백**: 실패·드롭 시 TRIP-871 의 템플릿 rationale("같은 카페 후보")이 그대로 남는다 — FallbackEvent `llm_explain_alternatives → template_rationale`. ②에서는 빈 맵 + `alternatives_reason`(침묵 금지), 배치 슬롯 설명은 영향 없음.
+
+---
+
 ## 3. 프롬프트 튜닝 가이드
 
 ### 3.1 튜닝 대상과 비대상

@@ -231,6 +231,13 @@ internal data class AiExplanationsResponse(
     val explanations: Map<String, String> = emptyMap(),
     val isFallback: Boolean = false,
     val reason: String? = null,
+    /**
+     * 슬롯별 차선책의 "대신 골라도 좋은 이유"(AI TRIP-887) — 키 `"{date}#{alt_poi_id}"`. **기본 빈 맵**(옛 응답 호환).
+     * 배치 슬롯 설명과 별도 호출이라 이 맵이 비어도 [explanations] 는 그대로다; 비면 [alternativesReason] 이 사유.
+     * 차선책 `rationale` 덮어쓰기(없으면 AI 템플릿 유지)는 TRIP-873 — 여기서는 와이어만 계약과 맞춘다.
+     */
+    val alternativeExplanations: Map<String, String> = emptyMap(),
+    val alternativesReason: String? = null,
 )
 
 /** `POST /ai/v1/itinerary/repair` — 수리 불가는 오류가 아니라 `repaired=null` 이다(IO-7). */

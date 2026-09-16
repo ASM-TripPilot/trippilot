@@ -284,6 +284,9 @@ _EXPECTED_MODES = {
     # 그래서 to_mode 가 "실패"가 아니라 "칩만"이다 (재계획 연동 설계 §3).
     LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: (
         "llm_directive_translation", "chips_only"),
+    # ScheduleAgent._explain_alternatives · wiring.explanations — 실패면 TRIP-871 템플릿 rationale 유지
+    LlmFeature.ALTERNATIVE_EXPLANATION: (
+        "llm_explain_alternatives", "template_rationale"),
 }
 
 
