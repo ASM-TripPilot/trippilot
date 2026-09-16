@@ -105,7 +105,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    169→170. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 키만 추가하고
     //    이 가드는 안 만진다(추가 전엔 169개라 이 단언이 red). devPreviewBandSort 는 밴드 h·l 만 잠가
     //    band g 와 무관(추가 갱신 불필요).
-    expect(PREVIEW_STATES).toHaveLength(170);
+    // ⚠️ TRIP-743: g03 꼭 갈 곳 전용 목록 화면 제거로 프리뷰 키 2개(`trip-new-mustvisit-list`·`-empty`,
+    //    band `g`)를 삭제해 170→168. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서
+    //    두 키 + `MustVisitListScreen` import 를 지울 뿐 이 가드는 안 만진다(삭제 전엔 170개라 이 단언이 red).
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band g 와 무관(오갱신 금지, 맹점③).
+    expect(PREVIEW_STATES).toHaveLength(168);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -133,6 +137,20 @@ describe('TRIP-732 AC-11 · g01 프리뷰 키 개명 (-seeded → -default)', ()
     // 개명은 엔트리 **수**를 안 바꾼다(위 AC-6 의 169 무변경) — 이름만 바뀐다.
     expect(keys).toContain('trip-new-step1-default');
     expect(keys).not.toContain('trip-new-step1-seeded');
+  });
+});
+
+describe('TRIP-743 AC-4 · g03 프리뷰 키 제거 (band g)', () => {
+  it('키 집합에 trip-new-mustvisit-list·-empty 가 없고, 형제 band g 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — g03 전용 목록 두 키는 사라진다(삭제 전엔 present 라 red). 카운트(168)만으론
+    // "아무 두 키나 지워도" 통과하므로, 이 단언이 '지운 두 키가 g03 키'임을 못박는다(맹점③).
+    expect(keys).not.toContain('trip-new-mustvisit-list');
+    expect(keys).not.toContain('trip-new-mustvisit-empty');
+    // 긍정 짝 — 같은 band g 형제 키는 그대로(빈/과잉 삭제 오구현 차단, 공허 통과 방지).
+    expect(keys).toContain('trip-new-step1-default');
   });
 });
 
