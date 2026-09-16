@@ -79,6 +79,18 @@ data class TripResponse(
     val baseCount: Int,
     /** 일정이 있는 **일수**. 0 = 아직 생성되지 않음. 개수이지 시간이 아니다(INV-3). */
     val itineraryDayCount: Int,
+    /**
+     * 여행이 끝난 **시점**(TRIP-826). 안 끝났으면 null.
+     *
+     * **분기는 [status] 로, 표시는 이 값으로.** 둘은 만들어지는 방식이 다르다 —
+     * [status] 의 `ENDED` 는 날짜에서 **즉시 파생**되고(`statusAt`), 이 값은 종료 스윕이
+     * **10분 주기로** 채운다. 그래서 여행이 막 끝난 직후에는 `status=ENDED` 인데 이 값이
+     * 아직 null 인 창이 있다.
+     *
+     * 이 값의 null 로 "안 끝났다"를 판정하면 **그 창에서 끝난 여행을 진행 중으로 본다.**
+     * 끝났는지는 [status], 언제 끝났는지(상대 표기·정렬)는 이 값이다.
+     */
+    val endedAt: Instant?,
 ) {
     companion object {
         /**
@@ -92,6 +104,7 @@ data class TripResponse(
             preferenceSnapshot = t.preferenceSnapshot, destinations = t.destinations.map { DestinationDto.from(it) },
             status = t.statusAt(today), createdAt = t.createdAt, updatedAt = t.updatedAt,
             baseCount = counts.baseCount, itineraryDayCount = counts.itineraryDayCount,
+            endedAt = t.endedAt,
         )
     }
 }

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.trip.application.TripEndSweeper
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
@@ -30,6 +31,9 @@ class TripApiIT : AbstractPostgresIntegrationTest() {
 
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
+
+    /** 종료 스윕은 10분 주기라 기다릴 수 없다 — 스펙이 직접 부른다. */
+    @Autowired private lateinit var endSweeper: TripEndSweeper
 
     private val json = ObjectMapper()
     private val now = Instant.parse("2026-07-26T00:00:00Z")
@@ -92,6 +96,66 @@ class TripApiIT : AbstractPostgresIntegrationTest() {
             """{"startDate":"$today","endDate":"${today.plusDays(2)}","party":2,
                 "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
         startsToday["status"].asText() shouldBe "ACTIVE"
+    }
+
+    /**
+     * **`status=ENDED` 와 `endedAt=null` 은 공존한다**(TRIP-826).
+     *
+     * 둘은 만들어지는 방식이 다르다 — `status` 의 `ENDED` 는 날짜에서 **즉시 파생**되고,
+     * `endedAt` 은 종료 스윕이 **10분 주기로** 채운다. 방금 만든 지난 여행은 스윕을 아직 안 탔으므로
+     * `ENDED` 이면서 `endedAt` 이 null 이다.
+     *
+     * 이 스펙이 지키는 것은 **화면이 무엇으로 분기해야 하는가**다. `endedAt != null` 로 "끝났다"를
+     * 판정하면 그 창에서 끝난 여행을 **진행 중으로 본다** — 회고 진입이 안 뜨고 사용자는 이유를 모른다.
+     */
+    @Test
+    fun `끝난 여행이라도 스윕 전에는 endedAt 이 null 이다 — 분기는 status 로 한다`() {
+        val token = newToken()
+        val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
+
+        val past = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"${today.minusDays(10)}","endDate":"${today.minusDays(8)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+
+        past["status"].asText() shouldBe "ENDED"   // 날짜에서 즉시 파생
+        past["endedAt"].isNull shouldBe true       // 스윕은 아직 안 돌았다
+    }
+
+    /**
+     * **스윕이 돌면 값이 실린다.** 위 스펙은 null 만 보므로, 필드를 늘 null 로 내보내도 통과한다 —
+     * 채워지는 경로를 함께 재야 "노출했다"가 참이 된다.
+     *
+     * 스윕을 기다리지 않고 직접 부른다(10분 주기라 기다릴 수 없다).
+     */
+    @Test
+    fun `종료 스윕이 돌면 endedAt 이 응답에 실린다`() {
+        val token = newToken()
+        val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
+        val created = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"${today.minusDays(10)}","endDate":"${today.minusDays(8)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+        val tripId = created["tripId"].asText()
+
+        endSweeper.sweep()
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$tripId", token)
+        rc shouldBe 200
+        body["status"].asText() shouldBe "ENDED"
+        body["endedAt"].isNull shouldBe false
+    }
+
+    /** 필드가 **있어야** 화면이 쓴다 — 계약에 넣고 응답에서 빠뜨리면 아무도 모른다. */
+    @Test
+    fun `진행 중인 여행도 endedAt 키를 싣는다 — 값만 null 이다`() {
+        val token = newToken()
+        val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
+
+        val ongoing = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"${today.minusDays(1)}","endDate":"${today.plusDays(1)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+
+        ongoing.has("endedAt") shouldBe true
+        ongoing["endedAt"].isNull shouldBe true
     }
 
     @Test
