@@ -48,7 +48,9 @@ function props(
   over: Partial<TripWizardStep1ScreenProps> = {}
 ): TripWizardStep1ScreenProps {
   return {
-    summaryDestinations: '부산 2박',
+    // TRIP-732: 요약 5행은 이 파일 관심사(스트립)와 무관 → 전부 null 로 둔다(2톤 객체를 넣으면
+    // 구 화면이 render throw, 신 shape 로 tsc 오류 — null 은 구·신 모두 안전, 02a §4-★E).
+    summaryDestinations: null,
     summaryPeriod: null,
     summaryCompanion: null,
     summaryPreferences: null,
@@ -150,15 +152,17 @@ describe('N3 · seeded 스트립 — 담은 곳이 있을 때', () => {
 });
 
 describe('N3 · 0곳도 스트립을 감추지 않는다 (S7 empty 일러스트 아님)', () => {
-  it('카드는 0장이고 더 담기·전체 보기·카운트 0 만 남는다', () => {
+  it('카드 0장 · 더 담기·카운트 0 은 남고, "전체 보기"는 미렌더 (TRIP-732 AC-7 반전)', () => {
     render(<TripWizardStep1Screen {...props({ mustVisits: [] })} />);
 
     expect(block()).toBeOnTheScreen();
     expect(block()).toHaveTextContent(/꼭 갈 곳\s*0/);
     expect(screen.getByTestId('trip-wizard-mustvisit-more')).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('trip-wizard-mustvisit-see-all')
-    ).toBeOnTheScreen();
+
+    // ⚠️ 반전 — 이전(TRIP-665)엔 0곳에서도 "전체 보기"가 있었으나(승인 프리즈), TRIP-732 AC-7 은
+    // `mustVisits.length===0`이면 미렌더로 확정(01b, 볼 게 없는데 목록으로 보내는 링크 제거).
+    // 새 사이클이라 프리즈 개봉은 정당하다(traps-shell 프리즈 개봉 관례, 기계 강제 없음).
+    expect(screen.queryByTestId('trip-wizard-mustvisit-see-all')).toBeNull();
 
     // 카드가 하나도 없다(0곳). 옛 empty 일러스트 얼굴(`-empty`)도 없다(S7).
     expect(screen.queryAllByTestId(/^trip-wizard-mustvisit-poi-/)).toHaveLength(

@@ -220,7 +220,8 @@ describe('I-4 · 국내 밖 400 은 다이얼로그로 뜨고 드래프트가 �
     // 드래프트가 그대로다 — 요약 여행지 행이 살아 있다.
     expect(
       screen.getByTestId('trip-wizard-summary-destination')
-    ).toHaveTextContent(/부산 3박/);
+      // 2톤 분리(TRIP-732): main "부산"·sub "3박"이 별 Text 라 연결 텍스트는 "부산3박"(공백은 레이아웃 gap).
+    ).toHaveTextContent(/부산.*3박/);
     expect(mockPush).not.toHaveBeenCalled();
   });
 });

@@ -27,20 +27,23 @@ import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
  * =0개면 throw 안 하고 `[]`(스켈레톤 카운트에 필수 — `getAllBy*` 는 0개면 throw) · `toBeDisabled()` 단독은
  * 가짜라 press + 콜백 0회 짝(★6).
  *
- * ⚠️ `isLoading` 은 아직 화면 prop 이 아니다(구현 전) — 로컬 augment 타입으로 스프레드해 컴파일만
- * 통과시킨다(스프레드는 excess-property 검사를 우회). 구현자가 실 interface 에 additive 하면 이 augment 는
- * 무해한 중복이 된다.
+ * ⚠️ TRIP-732: 요약 prop 이 `string|null` → 객체형(`{main; sub?}`)으로 바뀐다 — 구현 전엔 화면이
+ * 객체를 Text child 로 받아 throw 하고(의도된 red), tsc 도 shape 불일치로 red 다(02a §4-★F). 구현자가
+ * 인터페이스를 `SummaryLine|null`로 바꾸면 동시 green. (`isLoading` 은 TRIP-671 로 이미 실 prop 이라 아래
+ * augment 는 무해한 중복이다.)
  */
 
 type StatesProps = TripWizardStep1ScreenProps & { isLoading?: boolean };
 
-/** Figma 요약 셀렉터 실제 출력(tripSummary.ts 에서 복사 — en dash U+2013 · 미들닷 U+00B7). 화면은 이
- * 문자열을 만들지 않고 받아 그린다. */
-const DESTINATION_VALUE = '부산 2박 · 경주 1박';
-const PERIOD_VALUE = '6월 10일(수) – 13일(토) · 3박 4일';
-const COMPANION_VALUE = '친구 2명';
-const PREFERENCE_VALUE = '미식 · 전시 · 야경 + 온보딩';
-const BUDGET_VALUE = '120만원 · 1인 총액 · 중간';
+/** Figma 요약 셀렉터 실제 출력(TRIP-732 2톤 객체형 — en dash U+2013 · 미들닷 U+00B7). 화면은 이
+ * 객체를 만들지 않고 받아 2톤으로 그린다. */
+const DESTINATION_VALUE = { main: '부산', sub: '2박 · 경주 1박' };
+const PERIOD_VALUE = { main: '6월 10일(수) – 13일(토)', sub: '3박 4일' };
+const COMPANION_VALUE = { main: '친구 2명' };
+const PREFERENCE_VALUE = { main: '미식 · 전시 · 야경', onboarding: true };
+const BUDGET_VALUE = { main: '120만원', sub: '1인 총액 · 중간' };
+/** empty 얼굴 예산은 **tier-only**(금액 없이 프리필 tier "중간"만, Figma empty `3652:2068`). */
+const BUDGET_EMPTY = { main: '중간', sub: '1인 총액 · 온보딩' };
 
 function seed(
   sourcePoiId: string,
@@ -80,7 +83,7 @@ function emptyProps(over: Partial<StatesProps> = {}): StatesProps {
     summaryPeriod: null,
     summaryCompanion: COMPANION_VALUE,
     summaryPreferences: PREFERENCE_VALUE,
-    summaryBudget: BUDGET_VALUE,
+    summaryBudget: BUDGET_EMPTY,
     mustVisits: [],
     canProceed: false,
     ...over,
@@ -135,12 +138,15 @@ describe('AC-1 · empty 얼굴 (fresh 진입 — 여행지·기간 null, 나머�
     render(<TripWizardStep1Screen {...emptyProps()} />);
 
     expect(
-      within(row('trip-wizard-summary-companion')).getByText(COMPANION_VALUE)
+      within(row('trip-wizard-summary-companion')).getByText(
+        COMPANION_VALUE.main
+      )
     ).toBeOnTheScreen();
     expect(row('trip-wizard-summary-preference')).toHaveTextContent(
       /미식 · 전시 · 야경/
     );
-    expect(row('trip-wizard-summary-budget')).toHaveTextContent(/120만원/);
+    // empty 예산은 tier-only — main 이 "중간"이다(120만원 아님).
+    expect(row('trip-wizard-summary-budget')).toHaveTextContent(/중간/);
   });
 
   it('E4 · 꼭 갈 곳 0 → "+더 담기"만, 카드 0 (부재 + 긍정 앵커 짝, ★7)', () => {
@@ -195,8 +201,8 @@ describe('AC-2 · loading 얼굴 (isLoading=true — 값을 줘도 스켈레톤�
   it('L3 · 실값 부재 — 값을 prop 으로 줬는데 화면에 안 뜬다 (스켈레톤이 가림, ★4 짝)', () => {
     render(<TripWizardStep1Screen {...filledProps({ isLoading: true })} />);
 
-    // 특수문자 회피 — 각 값의 안전한 조각을 부분 정규식으로 부재 단언.
-    expect(root()).not.toHaveTextContent(/부산 2박/);
+    // 특수문자 회피 — 각 값의 안전한 조각을 부분 정규식으로 부재 단언(2톤이라 main 조각으로).
+    expect(root()).not.toHaveTextContent(/부산/);
     expect(root()).not.toHaveTextContent(/친구 2명/);
     expect(root()).not.toHaveTextContent(/120만원/);
     expect(root()).not.toHaveTextContent(/미식/);
@@ -237,7 +243,7 @@ describe('AC-2 · loading 얼굴 (isLoading=true — 값을 줘도 스켈레톤�
     ).toHaveLength(0);
     expect(
       within(row('trip-wizard-summary-destination')).getByText(
-        DESTINATION_VALUE
+        DESTINATION_VALUE.main
       )
     ).toBeOnTheScreen();
     expect(next()).toBeEnabled();

@@ -35,13 +35,13 @@ import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
  * 3동작 뼈대: 준비=props 조립 → 실행=render(+press) → 단언=보이는 것 / 불린 콜백.
  */
 
-/** Figma `3742:2068` 요약 셀렉터 실제 출력(tripSummary.ts 에서 그대로 복사 — en dash U+2013·미들닷 U+00B7).
- * 화면은 이 문자열을 만들지 않고 받아 그릴 뿐이라(페이지가 셀렉터로 도출), 테스트가 값을 직접 주입한다. */
-const DESTINATION_VALUE = '부산 2박 · 경주 1박';
-const PERIOD_VALUE = '6월 10일(수) – 13일(토) · 3박 4일';
-const COMPANION_VALUE = '친구 2명';
-const PREFERENCE_VALUE = '미식 · 전시 · 야경 + 온보딩';
-const BUDGET_VALUE = '120만원 · 1인 총액 · 중간';
+/** Figma `3742:2068` 요약 셀렉터 실제 출력(TRIP-732 2톤 객체형 — en dash U+2013·미들닷 U+00B7).
+ * 화면은 이 객체를 만들지 않고 받아 2톤으로 그릴 뿐이라(페이지가 셀렉터로 도출), 테스트가 직접 주입한다. */
+const DESTINATION_VALUE = { main: '부산', sub: '2박 · 경주 1박' };
+const PERIOD_VALUE = { main: '6월 10일(수) – 13일(토)', sub: '3박 4일' };
+const COMPANION_VALUE = { main: '친구 2명' };
+const PREFERENCE_VALUE = { main: '미식 · 전시 · 야경', onboarding: true };
+const BUDGET_VALUE = { main: '120만원', sub: '1인 총액 · 중간' };
 
 function seed(
   sourcePoiId: string,
@@ -143,32 +143,46 @@ describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
   it('다섯 행이 대응 값을 순서대로(여행지→기간→동행→취향→예산) 그린다', () => {
     render(<TripWizardStep1Screen {...filledProps()} />);
 
-    // 각 값이 제 행 안에 있다 — 화면 어딘가에 있기만 한 것과 다르다.
+    // 2톤 — main 은 제 행 안에, sub 는 별도 회색 caption(`{행}-sub`). "화면 어딘가"와 다르다.
     expect(
       within(screen.getByTestId('trip-wizard-summary-destination')).getByText(
-        DESTINATION_VALUE
+        DESTINATION_VALUE.main
       )
     ).toBeOnTheScreen();
-    // 기간·취향·예산 값은 특수문자(en dash·미들닷)를 포함해 부분 정규식으로 본다.
+    expect(
+      screen.getByTestId('trip-wizard-summary-destination-sub')
+    ).toHaveTextContent(DESTINATION_VALUE.sub);
+    // 기간 — main(날짜범위, 특수문자 포함 부분 정규식) + sub(박수).
     expect(screen.getByTestId('trip-wizard-summary-period')).toHaveTextContent(
       /6월 10일\(수\) – 13일\(토\)/
     );
     expect(
+      screen.getByTestId('trip-wizard-summary-period-sub')
+    ).toHaveTextContent(PERIOD_VALUE.sub);
+    expect(
       within(screen.getByTestId('trip-wizard-summary-companion')).getByText(
-        COMPANION_VALUE
+        COMPANION_VALUE.main
       )
     ).toBeOnTheScreen();
+    // 취향 — main + 온보딩 스파클 배지(값이 채워지면 배지가 선다).
     expect(
       screen.getByTestId('trip-wizard-summary-preference')
     ).toHaveTextContent(/미식 · 전시 · 야경/);
+    expect(
+      screen.getByTestId('trip-wizard-preference-sparkle')
+    ).toBeOnTheScreen();
     expect(screen.getByTestId('trip-wizard-summary-budget')).toHaveTextContent(
       /120만원/
     );
+    expect(
+      screen.getByTestId('trip-wizard-summary-budget-sub')
+    ).toHaveTextContent(BUDGET_VALUE.sub);
 
     // *(개념)* `getAllByTestId(/re/)` 는 매칭 요소를 **트리 순서(pre-order)** 로 돌려준다 —
-    // "무엇이 먼저 그려지는가"를 배열 비교 한 줄로 잠근다(★3).
+    // "무엇이 먼저 그려지는가"를 배열 비교 한 줄로 잠근다(★3). 정규식 끝 `$` 로 `-sub` testID 를
+    // 배열에서 배제한다(★D — sub 가 섞이면 배열이 8개가 돼 순서 비교가 깨진다).
     const order = screen
-      .getAllByTestId(/^trip-wizard-summary-/)
+      .getAllByTestId(/^trip-wizard-summary-(?:[a-z]+)$/)
       .map((el) => el.props.testID);
     expect(order).toEqual([
       'trip-wizard-summary-destination',
@@ -210,7 +224,7 @@ describe('AC-2 · 요약 카드 5행 (값 present + 순서)', () => {
     render(<TripWizardStep1Screen {...filledProps()} />);
 
     const dest = screen.getByTestId('trip-wizard-summary-destination');
-    expect(within(dest).getByText(DESTINATION_VALUE)).toBeOnTheScreen();
+    expect(within(dest).getByText(DESTINATION_VALUE.main)).toBeOnTheScreen();
     expect(within(dest).queryByText('어디로 갈까요?')).toBeNull();
   });
 });

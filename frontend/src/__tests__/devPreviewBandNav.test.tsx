@@ -121,6 +121,17 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
   });
 });
 
+describe('TRIP-732 AC-11 · g01 프리뷰 키 개명 (-seeded → -default)', () => {
+  it('키 집합에 trip-new-step1-default 가 있고 trip-new-step1-seeded 는 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 개명은 엔트리 **수**를 안 바꾼다(위 AC-6 의 169 무변경) — 이름만 바뀐다.
+    expect(keys).toContain('trip-new-step1-default');
+    expect(keys).not.toContain('trip-new-step1-seeded');
+  });
+});
+
 describe('AC-1 · 밴드 버튼 줄 + 밴드별 칩 필터', () => {
   it('first-cut 9개 밴드 버튼이 모두 렌더된다', () => {
     // 준비/실행 — 프리뷰 루트 렌더.

@@ -29,7 +29,9 @@ function props(
   over: Partial<TripWizardStep1ScreenProps> = {}
 ): TripWizardStep1ScreenProps {
   return {
-    summaryDestinations: '부산 2박',
+    // TRIP-732: 실패 배너/다이얼로그가 관심사라 요약은 전부 null(2톤 객체를 넣으면 구 화면이 render
+    // throw, 신 shape 로 tsc 오류 — null 은 구·신 모두 안전, 02a §4-★E). 배너 로직은 무회귀.
+    summaryDestinations: null,
     summaryPeriod: null,
     summaryCompanion: null,
     summaryPreferences: null,

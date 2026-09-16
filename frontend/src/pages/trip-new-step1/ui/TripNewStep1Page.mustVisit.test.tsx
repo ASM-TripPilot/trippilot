@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { Place, SavedPlace } from '@/shared/api/generated/schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
+import { seedMustVisits } from '@/features/trip/model/mustVisitSeed';
 
 import { TripNewStep1Page } from './TripNewStep1Page';
 
@@ -278,6 +279,11 @@ describe('전체 보기 재배선 (TRIP-676 · AC-5)', () => {
   //    더 담기(-more)와 목적지가 겹칠 수 있어(둘 다 d02 가능) see-all testID 를 정확히 눌러 가른다(02a ★3).
   it('전체 보기 press → /trips/new/must-visits 로 간다(구 /explore/saved-places 아님)', () => {
     mockSavedPlaces = loaded(THREE);
+    // TRIP-732 AC-7: see-all 은 mustVisits > 0 일 때만 렌더된다. 자동 시드가 폐지돼(페이지 §4)
+    // THREE savedPlaces 만으론 store.mustVisits 가 안 채워지므로, d02 시드 경로처럼 명시 시드한다.
+    act(() => {
+      useTripWizardStore.getState().addMustVisits(seedMustVisits(THREE));
+    });
     render(<TripNewStep1Page baseDate={BASE} />);
 
     fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-see-all'));

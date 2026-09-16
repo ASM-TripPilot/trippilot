@@ -140,10 +140,10 @@ describe('스토어 선상태 → 요약 행이 셀렉터 파생값을 그린다
 
     render(<TripNewStep1Page baseDate={BASE} />);
 
-    // 여행지 — summaryDestinations([부산2,경주1]) = "부산 2박 · 경주 1박".
-    expect(
-      screen.getByTestId('trip-wizard-summary-destination')
-    ).toHaveTextContent(/부산 2박 · 경주 1박/);
+    // 여행지 — summaryDestinations([부산2,경주1]) = {main:"부산", sub:"2박 · 경주 1박"} (TRIP-732 2톤).
+    const dest = screen.getByTestId('trip-wizard-summary-destination');
+    expect(within(dest).getByText('부산')).toBeOnTheScreen();
+    expect(within(dest).getByText('2박 · 경주 1박')).toBeOnTheScreen();
     // 기간 — summaryPeriod 는 **실제 요일** (수)(토) 를 낸다(★1: 브리프 예시 (화)(금)은 오기).
     const period = screen.getByTestId('trip-wizard-summary-period');
     expect(period).toHaveTextContent(/6월 10일/);
@@ -194,9 +194,10 @@ describe('재진입 보존 (BR-U1-33)', () => {
     first.unmount();
     render(<TripNewStep1Page baseDate={BASE} />);
 
-    expect(
-      screen.getByTestId('trip-wizard-summary-destination')
-    ).toHaveTextContent(/부산 2박/);
+    // 단일 도시 [부산 2박] → {main:"부산", sub:"2박"} (TRIP-732 2톤).
+    const dest = screen.getByTestId('trip-wizard-summary-destination');
+    expect(within(dest).getByText('부산')).toBeOnTheScreen();
+    expect(within(dest).getByText('2박')).toBeOnTheScreen();
   });
 
   it('짝 — reset 뒤에 다시 올리면 여행지 행이 신 카피로 돌아온다', () => {
