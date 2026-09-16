@@ -499,6 +499,15 @@ note = """
 `ai/src` 에서 `X-Service-Token` 이 나오는 두 자리는 **둘 다 나가는 방향**이다(`backend_poi_db.py`
 발신 · `errors.py` 발신 거부 처리). 받는 쪽 검사는 없다 — AI 경계 8종은 지금 누구나 부를 수 있다.
 [[BACKEND-AI-AUTH]](TRIP-856)에서 쪼갰다.
+
+**넘기기 전 우리 쪽 준비는 끝났다(TRIP-856 후속).** 헬스핑(`IntegrationController`)에도 토큰을
+싣고 — 상대가 전 경로를 일괄로 잠그면 그게 제일 먼저 깨지는데 증상이 "AI 가 죽었다"로만 보인다 —
+`SERVICE_AUTH_REQUIRE_TOKEN` 으로 **토큰 미설정을 기동 시점에 막을 수** 있게 했다. 그게 없으면
+배포가 무인증으로 뜨고, 상대가 검증을 켜는 날 401 이 나는데 원인이 설정 누락이라는 사실이
+어디에도 안 남는다 — 발신은 비면 **헤더를 아예 안 붙이고 그냥 나가기** 때문이다.
+
+**상대가 켜기 전에 `SERVICE_AUTH_TOKEN` 실값이 양쪽 환경에 있어야 한다** — 지금 `.env.example` 은
+빈 값이다. 스위치만으로는 값이 생기지 않는다.
 """
 
 [[nodes]]
@@ -1263,7 +1272,16 @@ status = "external"
 owner = "ai"
 migration = false
 touches = []
-note = "계약 합의문(ai-backend-replan-연동-설계.md §7 AI 측 표). 양쪽이 각자 만들고 LIVE_AI=1 왕복으로 만난다."
+note = """
+계약 합의문(ai-backend-replan-연동-설계.md §7 AI 측 표). 양쪽이 각자 만들고 LIVE_AI=1 왕복으로 만난다.
+
+**현황(2026-09-16 코드 확인) — 대부분 끝나 있다.** A-1 `fully_booked`(`agents/planb/rag.py`) ·
+A-2 지시 사전(`agents/planb/directives.py`) · A-3 번역 워커(`workers/replan_directive_translation.py`)
+모두 실재한다. 남은 것은 **A-4 `/replan` 경계** 하나이고 `ai/docs/openapi.json` 에 아직 없다.
+
+한때 이 노드에 신설 티켓을 달았다가 뗐다 — "AI 절반에 티켓이 없다"는 전제로 만들었는데 틀렸다.
+진짜 병목은 **백엔드 잔여**였다(재계획 전용 경계 노드와 재계획 입력 전달 노드).
+"""
 
 # ── 간선(2026-09-14 추가분) — 티켓·설계 원문으로 확인한 것만 ──────────────────
 

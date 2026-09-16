@@ -14,4 +14,8 @@ dependencies {
     compileOnly("jakarta.servlet:jakarta.servlet-api")                              // @ConfigurationProperties 바인딩
 
     testImplementation(libs.bundles.kotest)
+    // 필터 클래스를 **로드**하려면 상위 타입(OncePerRequestFilter → 서블릿)이 런타임에 있어야 한다.
+    // compileOnly 만으로는 테스트에서 `NoClassDefFoundError` 가 난다 — 그래서 지금껏 이 모듈 테스트가
+    // 이 클래스를 한 번도 안 건드렸다. API jar 만 더한다(톰캣은 여전히 안 끌어온다).
+    testImplementation("jakarta.servlet:jakarta.servlet-api")
 }
