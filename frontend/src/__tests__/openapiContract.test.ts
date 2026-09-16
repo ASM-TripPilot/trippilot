@@ -506,7 +506,7 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
    * `(MINIMAL,false)`(BR-U2-03)는 대응 PBT `PBT-U2-B2`가 **backend 소유**로 명시돼 있다.
    * 프론트는 형태(필드가 있다/필수다/값 목록이 이것뿐이다)까지만 잠근다(01b Seed 확정 3).
    */
-  it('Itinerary가 필수 8필드·후보요약 1필드·day 2필드·slot 7필드를 요구하고 duration 계열 키가 0건이다', () => {
+  it('Itinerary가 필수 8필드·후보요약 1필드·day 2필드·slot 8필드를 요구하고 duration 계열 키가 0건이다', () => {
     const source = readOpenapiSource();
     const block = extractSchemaBlock(source, 'Itinerary');
 
@@ -529,6 +529,10 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
     // `generationMode` 는 사용자가 **무엇을 골랐나**(US-SCHED-09)다. 섞으면 MANUAL 을
     // 실패로 오독한다 — MANUAL 은 `solveMode=MINIMAL` 이지만 `isFallback=false` 다.
     //
+    // ⚠️ **2026-09-16** — TRIP-873(backend)이 slot 에 `alternatives` 를 **required** 로 더했다
+    // (생성 시점 차선책, 슬롯당 ≤2건). `tags` 와 같은 성격이다 — 없으면 **빈 배열**이지 누락이
+    // 아니라서 required 다. 이 줄이 늘어난 것 자체가 이 가드가 의도대로 동작한 결과다.
+    //
     // ⚠️ **2026-08-11** — TRIP-350(#183)이 `unplacedMustVisits` 를 더하면서 그 items 의
     // `required: [poiId, reasonCode, message]` 가 **2번째 자리**로 들어왔다(계약 M2).
     // 이 배열이 비어 있다는 것이 "필수 방문지를 전부 배치했다"는 뜻이라, 세 필드는 **빠질 수 없다** —
@@ -538,7 +542,9 @@ describe('TRIP-294 AC-2 · AC-3 · 일정 스키마 required·enum·INV-3 (A-6, 
       'required: [poiId, reasonCode, message]',
       'required: [level]',
       'required: [date, slots]',
-      'required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, tags]',
+      'required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, tags, alternatives]',
+      // 차선책 1건 — 슬롯 안에 중첩된 items 다. `distanceRange` 는 좌표 미상이면 null 이라 required 가 아니다.
+      'required: [poiId, rationale]',
     ]);
 
     // 완전 일치(순서 포함) — enum 값이 추가·삭제·개명되면 즉시 red. 3번째가
