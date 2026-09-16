@@ -101,7 +101,17 @@ describe('🔴 G1 · AC-V — 라우트는 얇다', () => {
     // 부정 — 조회·변이·마크업이 여기 있으면 pages 층 전역 가드의 사정거리 밖으로 샌다.
     expect(source).not.toMatch(/\buseQuery\b|\buseMutation\b/);
     expect(source).not.toContain('FlatList');
-    expect(source).not.toContain('KakaoMapView');
+    // 부정(TRIP-864 재조준) — 지도 컴포넌트가 얇은 라우트에 오면 안 된다. 이름 전환
+    // KakaoMapView→MapView 후 옛 문자열 부정 단언은 공허 통과로 퇴화하므로 단어 경계
+    // `\bMapView\b` 로 재조준(별칭 KakaoMapView·타입 MapViewProps 엔 안 걸림 — node 실측).
+    const MAP_TAG = /\bMapView\b/;
+    // 탐지기 자가검사 — 합성 `<MapView>` 위반은 잡고, 별칭·타입명엔 안 걸린다.
+    expect(MAP_TAG.test('const x = <MapView center={c} />;')).toBe(true);
+    expect(MAP_TAG.test("import { KakaoMapView } from '@/shared/map';")).toBe(
+      false
+    );
+    expect(MAP_TAG.test('type P = MapViewProps;')).toBe(false);
+    expect(source).not.toMatch(MAP_TAG);
   });
 });
 

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { KakaoMapView, type MapCenter, type MapPin } from '@/shared/map';
+import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import { SpontaneousVisitButton } from './SpontaneousVisitButton';
@@ -16,7 +16,7 @@ import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
  * 추가. 하단 탭바(기록 활성)와 저장 FAB 는 오버레이. 조립·조회는 `pages/trip-records` 가 진다
  * (이 파일은 `@/shared/api` 를 import 하지 않는다 — 프리뷰 격리 렌더 안전, FSD 경계).
  *
- * ★ 지도(KakaoMapView, WebView) 위에 인터랙티브 요소를 얹지 않는다(repo-traps 터치 흡수 함정).
+ * ★ 지도(MapView) 위에 인터랙티브 요소를 얹지 않는다(repo-traps 터치 흡수 함정).
  * 즉석 방문 버튼·카드는 지도 **아래 flow 형제**이고, 저장 FAB 는 지도 밖(하단) 절대배치라 겹치지
  * 않는다. 지도는 viewOnly 글랜스(제스처 없음).
  */
@@ -108,7 +108,7 @@ export function TripRecordsScreen({
 
       {/* 지도 히어로(250px 고정 블록 — 인터랙티브 요소의 형제, viewOnly 글랜스) */}
       <View className="h-[250px] w-full">
-        <KakaoMapView center={mapCenter} pins={mapPins} viewOnly />
+        <MapView center={mapCenter} pins={mapPins} viewOnly />
       </View>
 
       <ScrollView

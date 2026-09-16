@@ -524,8 +524,8 @@ note = """
 [[nodes]]
 id = "AI-ALTERNATIVES-422"
 ticket = "TRIP-879"
-title = "[AI] validate·repair 가 계약에 있는 alternatives 를 422 로 거부한다"
-status = "external"
+title = "[철회] alternatives 422 — 오진이었다(낡은 컨테이너를 봤다)"
+status = "done"
 owner = "ai"
 migration = false
 touches = []
@@ -535,6 +535,17 @@ note = """
 
 **우회하지 않기로 했다.** 요청 전용 슬롯 타입을 만들면 실호출은 9/9 통과하지만 우리 코드가 공개
 계약을 위반한 상태가 되고 **계약 게이트가 그것을 못 잡는다**. 계약이든 런타임이든 상대만 고칠 수 있다.
+
+**철회(2026-09-16). 애초에 어긋난 적이 없었다.** 422 를 관측한 컨테이너가 **9/15 빌드 이미지**였고,
+스키마에 `alternatives` 를 넣은 AI 변경은 그 뒤에 들어갔다. 이미지를 갱신하지 않은 채
+"런타임이 계약보다 좁다"고 결론냈다 — *계약은 초록인데 실호출이 거부당한다* 는 이 리포의 익숙한
+패턴에 끼워 맞춘 오진이다.
+
+`ai/` 로컬 소스로 다시 빌드해 확인했다: `alternatives` 를 실으면 **500**(업무 로직, 백엔드 미기동),
+진짜 모르는 필드를 실으면 **422**. 즉 스키마 검증은 통과한다. `schemas.py` 의
+`DayScheduleSchema.slots: list[VisitSlotDisplaySchema]` 이고 그 스키마에 필드가 있다.
+
+간선(→ 실사용 모드 전환)도 함께 지웠다.
 """
 
 [[nodes]]
@@ -1277,7 +1288,7 @@ setNotificationChannelAsync 0건(2026-09-11 실측). FE 규칙 문서도 "현 �
 
 [[nodes]]
 id = "AI-REPLAN"
-ticket = ""
+ticket = "TRIP-877"
 title = "[AI] 재계획 전용 경계 — fully_booked·지시어 사전·번역 워커·라우트 (A-1~A-5)"
 status = "external"
 owner = "ai"
@@ -1451,9 +1462,3 @@ kind = "계약선행"
 verified = false
 reason = "코드를 받는 경로(#530)가 없으면 앵커가 쓸 값 자체가 안 들어온다. 저장은 되지만 항상 null 이라 후행이 동작을 못 바꾼다."
 
-[[edges]]
-from = "AI-ALTERNATIVES-422"
-to = "TRIP-850"
-kind = "외부선행"
-verified = true
-reason = "AI_SCHEDULE_MODE 를 http 로 올리는 순간 validate·repair 가 422 로 막힌다 — 실호출로 확인했다(2026-09-16). 스위치 값만 바꿔서는 안 켜진다."

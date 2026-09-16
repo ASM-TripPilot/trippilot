@@ -7,7 +7,7 @@ import { LiveItineraryScreen } from './LiveItineraryScreen';
 
 // 지도 세그먼트가 아니어도 LiveMapScreen import 는 안전하게 관찰 목으로(선례).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 /**
  * TRIP-562 · AC-4 화면 파트 — 라이브 화면 하단 우측 진입 FAB(`execution-live-watchlist-fab`).

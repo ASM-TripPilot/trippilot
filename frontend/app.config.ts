@@ -9,6 +9,12 @@ import type { ExpoConfig } from 'expo/config';
 const kakaoNativeAppKey = process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY ?? '';
 const naverUrlScheme = process.env.EXPO_PUBLIC_NAVER_URL_SCHEME ?? '';
 
+// TRIP-862 — 네이버 지도 SDK Client ID(NCP Maps 앱 등록). 로그인용 EXPO_PUBLIC_NAVER_CLIENT_ID
+// 와는 다른 키다. 리터럴 커밋 금지 — env 에서만 읽는다(mapBridgeStructure A-3). 미설정 시 빈
+// 문자열이면 config plugin 은 그대로 통과하고, 지도 렌더 실패는 shared/map 의 map-failure
+// 표면으로 드러난다(INV-4, S1 계승).
+const naverMapClientId = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID ?? '';
+
 const config: ExpoConfig = {
   name: 'TripPilot',
   slug: 'trippilot',
@@ -45,6 +51,17 @@ const config: ExpoConfig = {
     ],
     ['@react-native-seoul/kakao-login', { kakaoAppKey: kakaoNativeAppKey }],
     ['@react-native-seoul/naver-login', { urlScheme: naverUrlScheme }],
+    [
+      'expo-build-properties',
+      {
+        android: {
+          // 네이버 지도 SDK 는 네이버 사설 maven 저장소에서 받는다 — config plugin 이
+          // 저장소를 추가하지 않으므로(2026-09-15 실측) 여기서 명시해야 Android 빌드가 SDK 를 찾는다.
+          extraMavenRepos: ['https://repository.map.naver.com/archive/maven'],
+        },
+      },
+    ],
+    ['@mj-studio/react-native-naver-map', { client_id: naverMapClientId }],
   ],
   experiments: {
     typedRoutes: true,

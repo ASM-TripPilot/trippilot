@@ -9,11 +9,7 @@ import type {
   ItineraryDaysItemSlotsItem,
   ItineraryStatus,
 } from '@/shared/api/generated/schemas';
-import {
-  KakaoMapView,
-  type KakaoMapMessage,
-  type MapCenter,
-} from '@/shared/map';
+import { MapView, type MapCenter } from '@/shared/map';
 
 import { buildDraftPins, formatDraftDayHeader } from '../model/draftView';
 import { legDistance } from '../model/legDistance';
@@ -78,7 +74,7 @@ const MAP_COLLAPSE_LABEL = '닫기';
 const CAR_MODE_HINT = '차량';
 
 // 좌표 슬롯이 하나도 없을 때의 지도 시작 좌표(핀이 있으면 setBounds 가 덮으므로 시작값일 뿐).
-// KakaoMapView 기존 호출부·테스트가 쓰는 서울 시청 좌표를 그대로 쓴다.
+// MapView 기존 호출부·테스트가 쓰는 서울 시청 좌표를 그대로 쓴다.
 const DEFAULT_MAP_CENTER: MapCenter = { lat: 37.5665, lng: 126.978 };
 // TRIP-301 D6 — 완성 일정 탐색 지도의 줌아웃 상한. 한 여행 권역을 벗어나 한없이 멀어지는 것만
 // 막는다(레벨이 클수록 멀리 본다). ponytail: 정확한 상한값은 6-b 실기에서 조정한다.
@@ -402,10 +398,9 @@ export function TimelineScreen({
       ? { lat: pins[0].lat, lng: pins[0].lng }
       : DEFAULT_MAP_CENTER;
 
-  // 핀 탭(PIN_TAP)만 이 화면이 소비한다 — index 로 핀을, 핀 번호로 슬롯을 역참조한다.
-  function handleMapMessage(message: KakaoMapMessage): void {
-    if (message.type !== 'PIN_TAP') return;
-    const pin = pins[message.index];
+  // 핀 탭만 이 화면이 소비한다 — index 로 핀을, 핀 번호로 슬롯을 역참조한다.
+  function handlePinTap(index: number): void {
+    const pin = pins[index];
     if (pin === undefined) return;
     const slot = slots[pin.number - 1];
     if (slot === undefined) return;
@@ -414,7 +409,8 @@ export function TimelineScreen({
 
   // 지도 로드 실패를 부모가 받아 자체 폴백으로 그린다(화면을 안 비운다 · INV-4).
   const handleMapLoadFailed = (): void => setMapFailed(true);
-  // 재시도 — mapFailed 를 내리면 지도가 다시 마운트돼(key=activeDate) 새 문서로 재로드된다.
+  // 재시도 — mapFailed 를 내리면 지도가 다시 렌더된다(네이티브 MapView 는 key remount 없이
+  // prop 변경을 반영한다 — 카카오 WebView 의 마운트 시 문서 동결 규약이 사라졌다).
   const handleRetry = (): void => setMapFailed(false);
 
   // 핀 상세 시트는 확대 오버레이(h26) 안에서만 뜬다 — 실패 아니고 핀이 골라졌을 때.
@@ -526,11 +522,10 @@ export function TimelineScreen({
                 <MapFallback onRetry={handleRetry} />
               ) : (
                 <View className="h-[360px] w-full overflow-hidden rounded-card border border-hairline bg-surface-soft">
-                  <KakaoMapView
-                    key={activeDate}
+                  <MapView
                     center={mapCenter}
                     pins={pins}
-                    onMapMessage={handleMapMessage}
+                    onPinTap={handlePinTap}
                     onLoadFailed={handleMapLoadFailed}
                     maxLevel={EXPLORE_MAP_MAX_LEVEL}
                   />
@@ -571,8 +566,7 @@ export function TimelineScreen({
                   testID="itinerary-view-map"
                   className="h-[170px] w-full overflow-hidden rounded-card border border-hairline bg-surface-soft"
                 >
-                  <KakaoMapView
-                    key={activeDate}
+                  <MapView
                     center={mapCenter}
                     pins={pins}
                     viewOnly
