@@ -1,0 +1,74 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
+# detailIntro2 응답 관측 — 필드명·채움률 (TRIP-683)
+#
+# `fetch_hours()` 는 이 엔드포인트를 항목당 1콜 부르면서 응답에서 **필드 2개만
+# 읽고 나머지를 버린다**. 그 안에 무엇이 더 있는지 리포에 기록이 없고, fake 도
+# 우리가 읽는 2필드만 흉내내므로 **실물이 바뀌어도 테스트는 초록**이다.
+#
+# 수집 배치에 얹지 않은 이유: 파이프라인은 "기제안·변경 없음이면 상세 호출도 안
+# 나간다"를 불변식으로 지키고 테스트 3건이 물고 있다(쿼터 절약의 본체). 지금
+# 17지역 × 5타입이 전부 완주라 스킵률 100% 이므로 배치에 넣으면 그 불변식을
+# 깨야 한다. 관측 때문에 수집 규칙을 무를 값은 아니다.
+#
+# 수동 실행 전용이다. 실 API 를 쓰므로 머지 게이트에 얹지 않는다(리포 규약:
+# CI 는 외부 호출 0). 상태(커서·기제안 색인)를 읽지도 쓰지도 않는다.
+name: ai-intro2-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      area:
+        description: 'areaCode (1=서울 · 39=제주 …)'
+        required: false
+        default: '1'
+        type: string
+      per_kind:
+        description: '타입당 상세 조회 건수 = 채움률 표본 크기'
+        required: false
+        default: '20'
+        type: string
+      kinds:
+        description: 'contentTypeId 쉼표 목록 (기본 12,14,28,38,39)'
+        required: false
+        default: '12,14,28,38,39'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop   # 실측 대상 스크립트는 develop (main의 ai/는 구버전)
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 응답 관측
+        working-directory: ai
+        env:
+          TOUR_API_KEY: ${{ secrets.TOUR_API_KEY }}
+          TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}
+          TOUR_API_KEY3: ${{ secrets.TOUR_API_KEY3 }}
+        run: |
+          uv run python scripts/probe_intro2.py \
+            --area "${{ inputs.area }}" \
+            --per-kind "${{ inputs.per_kind }}" \
+            --kinds "${{ inputs.kinds }}" \
+            --out intro2.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 결과 보존
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: intro2-probe-area${{ inputs.area }}
+          path: ai/intro2.json
+          if-no-files-found: warn
+          retention-days: 30
