@@ -211,3 +211,31 @@ def test_latin_only_name_is_not_stripped_away() -> None:
         ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
     )
     assert bad.value is None
+
+
+def test_declared_may_use_display_form_of_slot_name() -> None:
+    """모델은 선언에도 줄인 이름을 쓴다 — 슬롯이 "사라오름 전망대 Sara Observatory"
+    면 places 에 "사라오름 전망대" 를 싣는다. 원본만 대조하면 그 축약이 전부 "풀
+    밖 장소"로 잡혀, 괄호·로마자가 붙은 장소가 든 날은 매번 기본 상수로 떨어진다.
+    (실측 2026-09-16: 학생 모델이 이 형태로 선언해 5건 중 4건이 드롭됐다)"""
+    ctx = ReminderCopyContext(
+        allowed=("사라오름 전망대 Sara Observatory", "금룡사(제주)"), forbidden=()
+    )
+    out = ReminderCopyGate().apply(
+        json.dumps({"title": "오늘의 제주", "body": "사라오름 전망대와 금룡사를 둘러보세요",
+                    "places": ["사라오름 전망대", "금룡사"]}, ensure_ascii=False),
+        ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
+    )
+    assert out.error is None and out.value is not None
+
+
+def test_display_form_relaxation_does_not_admit_new_places() -> None:
+    """완화는 원본에서 파생된 표시형까지다 — 슬롯에 없는 장소는 여전히 드롭.
+    표시형은 원본을 깎아 만들 뿐 새 이름을 만들지 않으므로 INV-1 은 유지된다."""
+    ctx = ReminderCopyContext(allowed=("사라오름 전망대 Sara Observatory",), forbidden=())
+    out = ReminderCopyGate().apply(
+        json.dumps({"title": "오늘의 제주", "body": "한라산에 올라보세요",
+                    "places": ["한라산"]}, ensure_ascii=False),
+        ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
+    )
+    assert out.value is None and out.drop_event is not None

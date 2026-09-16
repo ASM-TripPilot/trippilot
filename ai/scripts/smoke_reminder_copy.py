@@ -68,7 +68,6 @@ def main() -> int:
                 prompt=prompt,
                 prompt_ref=ref,
                 max_tokens=300,
-                temperature=0.0,
                 timeout_sec=float(os.environ.get("SMOKE_TIMEOUT_SEC", "60")),
             )
         )

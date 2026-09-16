@@ -119,7 +119,14 @@ class ReminderCopyGate:
         title = title.strip()
         body = body.strip()
         declared = tuple(p.strip() for p in places if p.strip())
-        allowed = set(ctx.allowed)
+        # 대조 집합은 **원본과 표시형 둘 다** 담는다. 모델은 슬롯명을 사람이 쓸 법한
+        # 형태로 줄여 선언한다 — 슬롯이 "사라오름 전망대 Sara Observatory" 면
+        # places 에 "사라오름 전망대" 를 싣는다. 원본만 대조하면 그 축약이 전부
+        # "풀 밖 장소"로 잡혀, 괄호·로마자가 붙은 장소가 든 날은 문구가 매번
+        # 버려지고 기본 상수로 떨어진다(수집본의 4.6% 가 괄호를 달고 있고 출처가
+        # 늘수록 는다). 표시형은 원본에서 파생되므로 **없는 장소를 새로 허용하지
+        # 않는다** — 완화의 범위가 거기서 닫힌다.
+        allowed = {n for name in ctx.allowed for n in (name, _display_form(name)) if n}
         lowered = (title + body).lower()
 
         dropped = (
@@ -132,7 +139,7 @@ class ReminderCopyGate:
             or any(
                 name not in body and _display_form(name) not in body
                 for name in declared
-            )  # 선언 정직성 — 괄호 부기를 뗀 표시형도 인정
+            )  # 선언 정직성 — 표시형도 인정
             or any(name and name in body for name in ctx.forbidden)  # 선언 회피 차단
         )
         if dropped:
