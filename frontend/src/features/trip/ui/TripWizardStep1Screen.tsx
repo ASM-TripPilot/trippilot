@@ -116,6 +116,7 @@ function SummaryRow({
   onPress,
   isLoading,
   skeletonTestID,
+  skeletonWidths,
   trailing,
 }: {
   testID: string;
@@ -130,6 +131,8 @@ function SummaryRow({
   /** loading 얼굴 — 값 자리에 회색 스켈레톤 바(라벨은 유지). */
   isLoading?: boolean;
   skeletonTestID: string;
+  /** loading 스켈레톤 바 폭(px) 배열 — 배열 길이가 곧 바 개수다(행별로 다름, Figma 3712:2068 실측). */
+  skeletonWidths: number[];
   /** main 뒤에 얹을 배지(취향 행 온보딩 스파클 전용, 나머지 행은 undefined). */
   trailing?: ReactNode;
 }): ReactElement {
@@ -143,10 +146,15 @@ function SummaryRow({
       <View className="flex-1 gap-[6px]">
         <Text className="font-noto text-caption text-muted">{label}</Text>
         {isLoading ? (
-          <View
-            testID={skeletonTestID}
-            className="h-[16px] w-[148px] rounded-[6px] bg-surface-strong"
-          />
+          <View testID={skeletonTestID} className="flex-row gap-[6px]">
+            {skeletonWidths.map((w, i) => (
+              <View
+                key={i}
+                testID={`${skeletonTestID}-bar-${i}`}
+                className={`h-[12px] rounded-[10px] bg-hairline w-[${w}px]`}
+              />
+            ))}
+          </View>
         ) : value === null ? (
           placeholder === null ? null : (
             <Text
@@ -277,8 +285,8 @@ function MustVisitStrip({
 
 /**
  * 꼭 갈 곳 로딩 스켈레톤(TRIP-671 loading 얼굴) — 헤더는 숫자 없는 "꼭 갈 곳" + 캡션, 스트립 자리에
- * 회색 카드 4장(점선 "+ 더 담기" 박스 없음). 회색바 토큰은 `TripWizardStep2Screen` 스켈레톤 미러
- * (`bg-surface-strong`·`rounded-[14px]`·`rounded-[6px]`, raw hex 0) — 색·크기·정렬은 jest 사각(6-b).
+ * 회색 카드 4장(점선 "+ 더 담기" 박스 없음). 카드는 단일 64×64 정사각(`bg-hairline`·`rounded-[10px]`,
+ * 텍스트 바 없음, Figma 3712:2068 실측) — 색·크기·정렬은 jest 사각(6-b).
  */
 function MustVisitSkeleton(): ReactElement {
   return (
@@ -294,17 +302,14 @@ function MustVisitSkeleton(): ReactElement {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 10 }}
+        contentContainerStyle={{ gap: 8 }}
       >
         {[1, 2, 3, 4].map((n) => (
           <View
             key={n}
             testID={`trip-wizard-mustvisit-skeleton-${n}`}
-            className="w-[112px] gap-[6px]"
-          >
-            <View className="h-[88px] w-[112px] rounded-[14px] bg-surface-strong" />
-            <View className="h-[14px] w-[80px] rounded-[6px] bg-surface-strong" />
-          </View>
+            className="h-[64px] w-[64px] rounded-[10px] bg-hairline"
+          />
         ))}
       </ScrollView>
     </View>
@@ -417,6 +422,7 @@ export function TripWizardStep1Screen({
                 onPress={onPressSummaryDestination}
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-1"
+                skeletonWidths={[56, 74]}
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
@@ -428,6 +434,7 @@ export function TripWizardStep1Screen({
                 onPress={onPressSummaryPeriod}
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-2"
+                skeletonWidths={[140, 40]}
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
@@ -439,6 +446,7 @@ export function TripWizardStep1Screen({
                 onPress={onPressSummaryCompanion}
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-3"
+                skeletonWidths={[78]}
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
@@ -455,6 +463,7 @@ export function TripWizardStep1Screen({
                 onPress={onPressSummaryPreference}
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-4"
+                skeletonWidths={[110, 48]}
                 trailing={
                   // 온보딩 상속일 때만 기존 SparkleGlyph + 분홍 "온보딩" 배지(옛 " + 온보딩" 문자열
                   // 대체, TRIP-732 AC-5). onboarding=false 면 배지 자체를 안 그린다.
@@ -481,6 +490,7 @@ export function TripWizardStep1Screen({
                 onPress={onPressSummaryBudget}
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-5"
+                skeletonWidths={[64, 78]}
               />
             </View>
 
