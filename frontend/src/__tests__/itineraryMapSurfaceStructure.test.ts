@@ -330,7 +330,7 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
    * `DraftScreen.tsx` 에 한 줄 느는 것은 이 조건이 금지하는 대상이 아니다(02a §3-5) — 그래서
    * 여기서 재는 것은 "화면 파일이 안 바뀌었다"가 아니라 **"사진 해결이 화면으로 새지 않았다"**다.
    */
-  it('MapPin 은 3필드 그대로, DraftScreenProps 는 15필드(TRIP-483 인라인 패널 3종 편입), 화면에 에셋 해석 지문이 0건이다', () => {
+  it('MapPin 은 4필드(TRIP-745 state 편입), DraftScreenProps 는 15필드(TRIP-483 인라인 패널 3종 편입), 화면에 에셋 해석 지문이 0건이다', () => {
     const mapCoreSource = readOne(MAP_CORE_REL);
     const screenSource = readOne(SCREEN_REL);
 
@@ -339,11 +339,15 @@ describe('S3 · AC-8 — 사진 도입이 화면·계약으로 새지 않았다 
     expect(mapCoreSource).toMatch(/export function MapView\b/);
     expect(screenSource).toMatch(/export function DraftScreen\b/);
 
-    // 지도 계약은 이 칸에서 늘지 않는다 — 핀 모양이 바뀌어도 `MapPin` 은 그대로다.
+    // TRIP-745 — 핀 3상태(done/current/upcoming)를 위해 `state?: MapPinState` 가 additive 로
+    // 편입된다(옵셔널·2칸 들여쓰기 프로퍼티형이라 interfaceFields 가 4번째로 잡는다). 완료조건 #4가
+    // "LOCKED_CALLERS 갱신"으로 오지정한 실제 대상이 이 스냅숏이다(01 §맹점④). 핀 모양(Circle→물방울)
+    // 교체는 여기서 안 잡는다 — 필드 계약만 본다.
     expect(interfaceFields(mapCoreSource, 'MapPin')).toEqual([
       'number',
       'lat',
       'lng',
+      'state',
     ]);
     // 화면 계약 스냅숏 — 사진을 넣으려고 프롭을 늘리면 여기서 걸린다(이 칸 TRIP-339 의 취지).
     // 필드 추가는 **정당한 계약 변경일 때만** 이 목록을 함께 갱신해 통과시킨다(이행 체크포인트 B).
