@@ -14,3 +14,7 @@ paths:
 ## 거점 숙소 단일 카드 (g02, TRIP-740)
 
 - **g01 선례(`SUMMARY_CARD_SHADOW`의 `shadowColor: '#000000'`)를 그대로 베끼면 g02에선 raw-hex 가드가 깨진다** → `tripWizardStep2Structure.test.ts` AC-7이 `TripWizardStep2Screen.tsx` 소스를 `/#[0-9a-fA-F]{3,8}\b/`로 스캔한다(g01 화면엔 이 가드 자체가 없어 `#000000` 인라인이 통과할 뿐). 그림자를 유지하면서 통과시키려면 **`shadowColor: 'black'`**(RN에서 `#000000`과 동치인 색이름, `#` 없어 정규식 무매치) 같은 비-hex 리터럴을 쓰거나, 상수를 `.ts` 파일로 빼 hex 스캔 대상(`.tsx`) 밖으로 옮긴다. 새로 raw-hex 가드가 있는 화면에 g01류 그림자 상수를 베낄 때마다 재발 가능 — 개념 [[소스 코드 문자열 스캔 가드 (needle)]] "TripPilot 실측 추가 — TRIP-740" 참고.
+
+## 숙소 선택 시트 후보 카드 (g02, TRIP-741)
+
+- **`CheckGlyph`는 `features/trip/ui/TripGlyphs.tsx`·`features/onboarding/ui/OnboardingGlyphs.tsx`·`features/itinerary/ui/ItineraryGlyphs.tsx` 세 파일에 동명이심볼로 존재한다** → grep `CheckGlyph`를 파일 목록만 보고 "소비처 3곳 이상"이라 오판하기 쉽다(TRIP-741 브리프가 실제로 "5+ 소비처"라 오귀속했다). features 격리로 서로 cross-import가 불가능해 이름만 같을 뿐 완전히 다른 함수다 — `tone`처럼 한쪽에 색·prop 확장을 추가해도 다른 두 파일엔 원리적으로 영향이 없다. 소비처 수를 셀 때는 **파일명이 아니라 `from` 절 전수 grep으로 실제 심볼의 정의 파일을 확인**해야 한다(TripGlyphs.tsx의 CheckGlyph는 실제로는 `StaySelectSheet.tsx` 단 하나가 쓴다). 개념 [[후방호환 옵셔널 파라미터 (additive prop)]] "census로 소비처 회귀 우려를 정정한 사례" 참고.
