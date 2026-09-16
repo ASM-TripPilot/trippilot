@@ -13,6 +13,7 @@ import com.trippilot.placedata.domain.PoiRepository
 import com.trippilot.itinerarygeneration.domain.CandidatesSummary
 import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.security.AccessTokenIssuer
@@ -382,7 +383,53 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
-    fun `추천 근거·후보 요약이 재조회에서 유실되지 않는다(TRIP-306)`() {
+fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        val alt = UUID.randomUUID()
+        // Fake 는 차선책을 내지 않는다(AI 만 준다) → 리포지토리로 직접 넣어 영속·왕복·동결 보존을 본다.
+        val slot = VisitSlot.of(
+            UUID.fromString(poiId(token)), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            alternatives = listOf(SlotAlternative(alt, "비 오면 실내라 여기가 낫다", "약 800m")),
+        )
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(UUID.fromString(trip), SolveMode.FULL_AI, GenerationMode.FULLY_AI, isFallback = false,
+                days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(slot))),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+            ),
+        )
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        val a = body["days"][0]["slots"][0]["alternatives"][0]
+        a["poiId"].asText() shouldBe alt.toString()
+        a["rationale"].asText() shouldBe "비 오면 실내라 여기가 낫다"
+        a["distanceRange"].asText() shouldBe "약 800m"
+        a.has("duration") shouldBe false      // INV-3 — 차선책에도 소요시간은 없다
+        a.has("startAt") shouldBe false       // INV-2 — 제안일 뿐, 시각이 없다
+
+        // 확정해도 유지된다.
+        val (crc, confirmed) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
+        crc shouldBe 200
+        confirmed["days"][0]["slots"][0]["alternatives"][0]["poiId"].asText() shouldBe alt.toString()
+    }
+
+    /** 대부분의 슬롯이 이 경로다 — 여기가 깨지면 일정 조회 전체가 죽는데, 값 있는 표본만 보면 초록이다. */
+    @Test
+    fun `차선책이 없으면 빈 배열로 나간다 — 필드가 사라지지 않는다`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary", token, """{"generationMode":"FULLY_AI"}""")
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        val slots = body["days"][0]["slots"]
+        slots.forEach { it["alternatives"].isArray shouldBe true }
+    }
+
+    @Test
+        fun `추천 근거·후보 요약이 재조회에서 유실되지 않는다(TRIP-306)`() {
         val token = newToken()
         val trip = newTrip(token)
         // Fake 는 explanations·candidatesSummary 를 내지 않으므로 리포지토리로 직접 넣어 영속·왕복을 본다.

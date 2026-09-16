@@ -2505,7 +2505,7 @@ components:
                 type: array
                 items:
                   type: object
-                  required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, tags]
+                  required: [poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, tags, alternatives]
                   properties:
                     poiId: { type: string, format: uuid }
                     startAt: { type: string, description: "HH:mm:ss (솔버 검증값 INV-2)" }
@@ -2557,6 +2557,36 @@ components:
                       nullable: true
                       description: NULL = 미확보. 기본 이미지를 지어내지 않는다(TRIP-219)
                     tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
+                    alternatives:
+                      type: array
+                      description: >
+                        생성 시점에 AI 가 같이 준 **다른 선택지**(TRIP-873) — 슬롯당 **최대 2건**,
+                        없으면 빈 배열. 있으면 화면이 추가 왕복 없이 "다른 선택지"를 그린다.
+
+                        **제안일 뿐이다** — 시각도 순서도 없다(INV-2). 교체 확정은 기존 편집 경로
+                        (edit → validate) 그대로다. 정본에 없는 장소는 서버가 이미 걸러 냈다(INV-1).
+
+                        **편집하면 사라진다**(빈 배열). 편집 응답에 차선책이 없고, 옛 값을 들고 가면
+                        바뀐 슬롯에 옛 대안이 붙어 distanceRange 가 틀려진다.
+
+                        반경·컨셉을 바꿔 다시 묻고 싶으면 온디맨드 후보 조회를 쓴다(목적이 다르다).
+                      items:
+                        type: object
+                        required: [poiId, rationale]
+                        properties:
+                          poiId: { type: string, format: uuid }
+                          rationale:
+                            type: string
+                            description: >
+                              사용자 표시용 한 문장. 시각·소요시간을 언급하지 않는다(BR-U2-09).
+                          distanceRange:
+                            type: string
+                            nullable: true
+                            description: >
+                              **이 슬롯 POI ↔ 이 후보** 사이 거리 표시 문자열(INV-3: 소요시간 없음).
+                              좌표를 모르면 null — 0 이나 빈 문자열로 채우지 않는다("모른다"가
+                              "가깝다"로 바뀐다). 온디맨드 후보(SlotCandidate)는 우리가 계산해 항상
+                              채우므로 그쪽과 달리 nullable 이다.
                     # INV-3: 소요시간(duration) 필드 없음 — 거리만(후속)
 
     TermsType:

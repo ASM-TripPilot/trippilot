@@ -1,5 +1,6 @@
 package com.trippilot.app.web
 
+import com.trippilot.security.ServiceAuthProperties
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.web.bind.annotation.GetMapping
@@ -19,15 +20,18 @@ import java.time.Duration
 class IntegrationController(
     @Value("\${ai.url:}") private val aiUrl: String,
     /**
-     * 발신 자격증명 — **다른 AI 호출과 같은 시크릿**(`trippilot.service-auth.token`).
+     * 발신 자격증명 — **다른 AI 호출과 같은 시크릿**.
+     *
+     * 프로퍼티 이름을 `@Value` 문자열로 다시 적지 않는다 — 이름이 바뀌면 조용히 빈 값으로 떨어져
+     * **이 배선이 막으려던 상태(무인증 핑)로 되돌아간다.** 바인딩은 한 곳([ServiceAuthProperties])이다.
      *
      * 헬스는 관례상 무인증이라 종전에는 안 붙였는데, 상대가 인바운드 검증을 **전 경로에 일괄로** 걸면
      * 이 핑이 제일 먼저 깨진다. 그때 증상은 `/integration` 이 `unreachable` 로 보이는 것뿐이라
      * "AI 가 죽었다"로 읽히고, 진짜 원인(인증 추가)은 어디에도 안 드러난다.
      */
-    @Value("\${trippilot.service-auth.token:}") private val serviceToken: String,
+    serviceAuth: ServiceAuthProperties,
 ) {
-    private val client = healthClient(CONNECT_TIMEOUT, READ_TIMEOUT, serviceToken)
+    private val client = healthClient(CONNECT_TIMEOUT, READ_TIMEOUT, serviceAuth.token)
 
     @GetMapping("/api/integration")
     fun integration(): Map<String, Any?> {

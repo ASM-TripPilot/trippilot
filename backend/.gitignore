@@ -30,3 +30,7 @@ secrets/
 # Logs
 *.log
 logs/
+
+# 문서 인덱싱 도구 산출물(로컬 캐시) — 커밋 대상이 아니다.
+# 머지 충돌을 해소하며 `git add backend` 로 뭉뚱그렸다가 한 번 딸려 들어왔다.
+graphify-out/
