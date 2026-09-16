@@ -35,7 +35,6 @@ jest.mock('expo-router', () => ({
 
 // 네이티브 런타임 의존을 통과 컴포넌트로 목킹(수동 목: __mocks__/*) — 동결 devPreview 계열과 같은 장치.
 jest.mock('@gorhom/bottom-sheet');
-jest.mock('react-native-webview');
 
 // 지뢰 — 프리뷰가 네트워크 계층을 (직접이든 전이든) require 하면 즉시 터진다.
 jest.mock('@/shared/api', () => {
@@ -99,7 +98,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    추가로 166→168. test-designer 선반영(S8·S9 놓침 재발 방지 관례) — implementer 는 preview.tsx 에
     //    두 키(render: <MustVisitListScreen …/>, 순수 뷰 import)만 추가하고 이 가드는 안 만진다
     //    (추가 전엔 166개라 이 단언이 red).
-    expect(PREVIEW_STATES).toHaveLength(168);
+    // ⚠️ TRIP-783: h08 지도+시트 셸 접힘 프리뷰 키(`h08-draft-collapsed`, band `h`) 추가로 168→169.
+    //    test-designer 가 이 데이터 미러 가드(카운트)를 선반영하지 못해 implementer 가 preview.tsx 에
+    //    키를 추가하며 함께 갱신(devPreviewBandSort EXPECTED_H 도 동반 — 문제로그 계열, 03 에 HONEST 신고).
+    expect(PREVIEW_STATES).toHaveLength(169);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

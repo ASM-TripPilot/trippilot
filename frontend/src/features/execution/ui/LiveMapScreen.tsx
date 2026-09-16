@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
-import { KakaoMapView, type MapCenter, type MapPin } from '@/shared/map';
+import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 
 import type { ActualRouteView } from '../model/actualDistance';
 import type { LivePlanToggle } from '../model/liveViewStore';
@@ -14,9 +14,9 @@ import type { MapPeekView } from '../model/mapPeek';
  * 세로 컬럼: ①계획 동선｜실제 경로 토글(지도 위쪽 **형제** — 오버레이 아님) → ②지도 250px 고정
  * 블록 → ③peek 요약(남은 곳 수 또는 실제 거리 + 지금/다음 2행 + 전체 일정 링크 + 각주).
  *
- * ⚠️ 결함#2 근본 수정 — 토글을 지도(WebView) 위 절대배치 오버레이로 두면 WebView 가 터치를
- * 먹어 안 눌린다(repo-traps). 그래서 여기엔 절대배치를 쓰지 않고 지도와 세로로 나눈다. 렌더
- * 위치는 jest 가 원리적으로 못 본다(가짜 카카오 SDK Proxy) — 소스 스캔 가드 + 6-b 실기 탭이 그물.
+ * ⚠️ 결함#2 근본 수정 — 토글을 지도 위 절대배치 오버레이로 두지 않고 지도와 세로로 나눈다
+ * (카카오 WebView 시절 오버레이가 터치를 먹던 함정의 근본수정 · `liveMapStructure` 가드가
+ * `absolute` 0건을 강제, repo-traps). 렌더 위치는 jest 가 못 본다(통과형 목) — 소스 스캔 + 6-b 그물.
  *
  * peek 의 진행 상태(예정/진행/완료)는 raw 슬롯이 못 가져, 부모(LiveItineraryScreen)가
  * buildMapPeek 로 도출해 `peek` prop 으로 내린다(★1). `slots` 는 핀 도출용으로 그대로 유지한다.
@@ -124,7 +124,7 @@ export function LiveMapScreen({
       {/* ② 계획 핀 + 자동 연결선 지도. 250px 고정 블록(flex-1 전체 아님) — 위 토글·아래 peek 와
           컬럼을 이룬다. viewOnly 미전달 = 기본 제스처 허용(자유 탐색, i02·i03). */}
       <View className="h-[250px]">
-        <KakaoMapView center={center} pins={pins} />
+        <MapView center={center} pins={pins} />
       </View>
 
       {/* ③ peek 요약 — 지금/다음 2행은 양쪽 토글 공통, 헤더는 토글로 갈린다(상호배타 ★2). */}

@@ -13,7 +13,7 @@
  *    표면(존재)만 그린다. origin 봉투 계약은 `buildManualOrigin`/`buildStartReplanRequest` 순수
  *    함수가 잠근다. 지도 실동작·"(추정)" i20 선택값·핀 위치·Figma 픽셀은 6-b 실기·스크린샷 몫(AC-6).
  */
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,7 +22,7 @@ import {
   LocationBackChevronGlyph,
   LocationInfoGlyph,
 } from '@/shared/location/LocationGlyphs';
-import { KakaoMapView, type MapCenter } from '@/shared/map';
+import { CenterPinPicker, type MapCenter } from '@/shared/map';
 import type { StartReplanRequestOriginKind } from '@/shared/api/generated/schemas/startReplanRequestOriginKind';
 
 export type LiveLocationState = 'manual' | 'permission-denied';
@@ -32,6 +32,10 @@ export interface LiveLocationPageProps {
    *  단계에서는 소비하지 않는다(진입은 딥링크/프리뷰 전용). */
   tripId: string;
   state: LiveLocationState;
+  /** "이 위치로 계속" 확정 콜백(TRIP-866 S4). 지도를 움직여 맞춘 중심 좌표(없으면 기준점)를
+   *  올린다 — 라이브 세션 배선(후속)이 MANUAL origin 으로 이어 붙인다. StayRegister 와 달리
+   *  **역지오코딩을 하지 않는다**(좌표만 쓴다, AC-9). */
+  onConfirm?: (center: MapCenter) => void;
 }
 
 /** soft shadow(Figma `0px 2px 10px rgba(0,0,0,0.06)`) — 반투명이라 토큰이 아니고, shadowColor 는
@@ -81,11 +85,15 @@ const FACES: Record<LiveLocationState, FaceConfig> = {
 
 export function LiveLocationPage({
   state,
+  onConfirm,
 }: LiveLocationPageProps): ReactElement {
   const face = FACES[state];
   const selectedValue = `${face.selectedLabel}${
     isEstimatedOrigin(face.originKind) ? '(추정)' : ''
   }`;
+  // 지도를 움직여 멈추면 중심 좌표가 여기 담긴다. 아직 안 움직였으면 null 이고, 확정 시 기준점
+  // (face.center)으로 폴백한다. 좌표만 쓰고 주소는 안 얻는다(AC-9 — 역지오코딩 유입 없음).
+  const [pickedCoord, setPickedCoord] = useState<MapCenter | null>(null);
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -114,10 +122,10 @@ export function LiveLocationPage({
             </View>
           </View>
 
-          {/* 지도 — center 는 목이 읽는 필수 prop. 롱프레스 실동작·핀 오버레이는 6-b(shared/map 확장
-              안 함, Seed §3-a). */}
+          {/* 지도(중앙 고정 핀, TRIP-866 S4) — 사용자가 지도를 움직여 핀을 맞추면 onPick 으로 중심
+              좌표가 올라온다. 실 pan·픽셀은 6-b(shared/map 의 CenterPinPicker 재사용). */}
           <View className="h-[250px] overflow-hidden rounded-[14px]">
-            <KakaoMapView center={face.center} />
+            <CenterPinPicker center={face.center} onPick={setPickedCoord} />
           </View>
           <Text className="font-noto text-label text-muted">
             {face.mapHint}
@@ -143,8 +151,14 @@ export function LiveLocationPage({
         </View>
 
         <View className="gap-sm px-lg pb-2xl pt-lg">
-          {/* 주 CTA — 존재만(누름→MANUAL origin 핸드오프는 후속 배선). */}
-          <Pressable className="h-[52px] items-center justify-center rounded-button bg-primary">
+          {/* 주 CTA — 지도를 움직여 맞춘 중심 좌표(없으면 기준점)를 확정 콜백으로 올린다(AC-9).
+              역지오코딩은 하지 않는다 — origin 은 좌표만으로 충분하다. */}
+          <Pressable
+            testID="live-location-confirm"
+            accessibilityRole="button"
+            onPress={() => onConfirm?.(pickedCoord ?? face.center)}
+            className="h-[52px] items-center justify-center rounded-button bg-primary"
+          >
             <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
               이 위치로 계속
             </Text>

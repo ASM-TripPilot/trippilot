@@ -19,7 +19,7 @@ import { NoAlternativeScreen } from './NoAlternativeScreen';
  */
 
 // 지도는 이 화면의 심판 대상이 아니다 — WebView 를 통과 스텁으로 치환(center 무관).
-jest.mock('@/shared/map', () => ({ KakaoMapView: () => null }));
+jest.mock('@/shared/map', () => ({ MapView: () => null }));
 
 function baseProps() {
   return {

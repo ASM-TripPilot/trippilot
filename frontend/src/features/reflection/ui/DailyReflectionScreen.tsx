@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { KakaoMapView, type MapCenter, type MapPin } from '@/shared/map';
+import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 import type { ReflectionStats } from '@/shared/api/generated/schemas';
 
 import { ChangeSummaryRow } from './ChangeSummaryRow';
@@ -37,7 +37,7 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
  *   저장 비활성 + 저장 콜백 0회(초안 보존, 덮어쓰기 불가). `source` 자리는 VM 에 없다(맹점② 구조적 차단).
  *
  * 지도 좌표·핀은 옵셔널 — 회고 계약(`Reflection`)에 좌표가 없어 페이지가 채우면 쓰고, 없으면 지도 대신
- * 자리표시(가짜 기본 센터 지도 금지, 5-b 경고-2). 신규 지도 컴포넌트 금지 — `shared/map/KakaoMapView`
+ * 자리표시(가짜 기본 센터 지도 금지, 5-b 경고-2). 신규 지도 컴포넌트 금지 — `shared/map/MapView`
  * 재사용, viewOnly 글랜스.
  */
 
@@ -231,7 +231,7 @@ export function DailyReflectionScreen({
             <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
             {mapCenter && (mapPins?.length ?? 0) > 0 ? (
               <View className="h-[220px] w-full overflow-hidden rounded-card">
-                <KakaoMapView center={mapCenter} pins={mapPins} viewOnly />
+                <MapView center={mapCenter} pins={mapPins} viewOnly />
               </View>
             ) : (
               // 실 좌표가 없으면 지도를 그리지 않는다 — 하드코딩 기본 센터(서울)를
