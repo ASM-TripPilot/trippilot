@@ -244,7 +244,14 @@ class ReplanFacadeService(
 
     private companion object {
         /** 사용자가 화면에서 기다리는 동작이라 생성(20s)보다 짧게 잡는다. */
-        private const val REPLAN_DEADLINE_MS = 10_000L
+        /**
+         * 재계획 마감(연동 설계 §6). 10초에서 올렸다 — 재계획은 생성보다 **입력이 많고**
+         * (취향·동반·예산·사유·지시·원 일정) 상대가 그만큼 더 쓴다. 짧게 끊으면 폴백이 잦아지고,
+         * 폴백은 거리순 정렬이라 "다시 짰는데 더 나빠졌다"로 보인다.
+         *
+         * 소켓 상한과는 무관하다 — 재계획은 생성용 클라이언트를 쓰고 그쪽 read 타임아웃이 훨씬 길다.
+         */
+        private const val REPLAN_DEADLINE_MS = 25_000L
 
         /** 여행 "지금"은 사용자가 있는 곳의 시각이다(서버 UTC 아님). */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
