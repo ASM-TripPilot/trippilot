@@ -40,6 +40,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from trippilot.poi_curation.sourcing.osm import (  # noqa: E402
+    _SHOP_TRAVEL,
     ATTRIBUTION,
     LICENSE,
     SOURCE_NAME,
@@ -54,12 +55,14 @@ _ENDPOINTS = (
     "https://overpass-api.de/api/interpreter",
 )
 
-# 태그별 Overpass 필터. `shop` 은 키 존재만 본다(값이 수백 종).
+# 태그별 Overpass 필터. `shop` 은 **채택 목록에서 유도**한다 — 전체 5.9만을
+# 받아와 클라이언트에서 버리면 공용 인스턴스에 폐를 끼치고, 손으로 옮겨 적으면
+# `osm._SHOP_TRAVEL` 과 갈라져 조용히 0건이 된다.
 _TAG_FILTERS = {
     "viewpoint": '["tourism"="viewpoint"]',
     "peak": '["natural"="peak"]',
     "beach": '["natural"="beach"]',
-    "shop": '["shop"]',
+    "shop": '["shop"~"^(' + "|".join(sorted(_SHOP_TRAVEL)) + ')$"]',
 }
 
 # 광역 17개 bbox (south, west, north, east — Overpass 순서). collect_overture 와
