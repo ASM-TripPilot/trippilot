@@ -96,8 +96,9 @@ export function BudgetEditSheet({
 
   // 안내 range 는 활성 tier(프리필값과 일치하는 칩)에서 도출한다. 못 찾으면 range 없이 정직하게 degrade.
   const activeTier = BUDGET_TIERS.find((option) => option.label === tier);
+  // 따옴표는 굽은 작은따옴표(‘ ’, U+2018/U+2019) — Figma `3647:2068` 정합(TRIP-739, 직선 ' 아님).
   const noteText = activeTier
-    ? `온보딩에서 고른 '${activeTier.label}(${activeTier.range})' 범위로 채웠어요`
+    ? `온보딩에서 고른 ‘${activeTier.label}(${activeTier.range})’ 범위로 채웠어요`
     : '온보딩에서 고른 범위로 채웠어요';
 
   return (
@@ -158,9 +159,11 @@ export function BudgetEditSheet({
           })}
         </View>
 
-        {/* 금액 필드 — ₩ 접두 + 입력 + 원 접미(좌) · "수정" 링크(우) */}
+        {/* 금액 필드 — "₩ 금액 원"이 좌측에 한 덩어리로 붙고(입력은 내용 폭·flex-1 없음), "수정"은
+            우측 슬롯에 간격(ml)을 두고 붙는다(TRIP-739 — 옛 flex-1 입력이 "원"을 우측 끝으로 밀어
+            "원수정"으로 붙던 것을 해소, Figma `3647:2068`). */}
         <View className="flex-row items-center justify-between rounded-button border border-hairline-strong px-[16px] py-[14px]">
-          <View className="flex-1 flex-row items-center gap-[6px]">
+          <View className="flex-row items-center gap-[6px]">
             <Text className="font-noto text-card-title text-muted">₩</Text>
             <TextInput
               ref={inputRef}
@@ -169,7 +172,7 @@ export function BudgetEditSheet({
               value={amountText}
               onChangeText={onChangeAmount}
               onBlur={onBlurAmount}
-              className="flex-1 font-noto-bold text-card-title font-bold text-ink"
+              className="min-w-[88px] font-noto-bold text-card-title font-bold text-ink"
             />
             <Text className="font-noto text-card-title text-ink">원</Text>
           </View>
@@ -177,8 +180,9 @@ export function BudgetEditSheet({
             testID="trip-wizard-budget-edit"
             accessibilityRole="button"
             onPress={handlePressEdit}
+            className="ml-md"
           >
-            <Text className="font-noto-bold text-label font-bold text-primary">
+            <Text className="font-noto-bold text-label font-bold text-primary-text">
               수정
             </Text>
           </Pressable>
