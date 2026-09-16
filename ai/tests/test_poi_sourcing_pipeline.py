@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+import pytest
+
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -364,3 +366,52 @@ def test_폐업_목록_미주입이면_기존_동작_그대로() -> None:
 
     assert len(report.passed) == 2
     assert "existence_closed_business" not in report.drops
+
+
+# ── 좌표 "0" 은 결측이다 — 권역 밖이 아니다 (회귀 고정) ────────────────
+# TourAPI 는 좌표 결측을 `"0"` 으로 준다. 그대로 두면 (0,0)이 GeoPoint 를 통과한
+# 뒤 한국 bbox 밖으로 떨어져 게이트 2단이 `existence_out_of_service_region` 으로
+# 계상했다 — 결측이 "권역 밖"으로 둔갑해 통계가 원인을 숨겼다. 09-10 실측:
+# 신규 31건 전부 이 사유였고, 그게 좌표 결측인지 진짜 권역 밖인지 로그로는
+# 판별이 안 됐다. 결측은 1단(`schema_missing_or_invalid_coord`)이 잡아야 한다.
+
+
+@pytest.mark.parametrize("raw", ["0", "0.0", 0, 0.0, "", None])
+def test_zero_or_empty_coordinate_is_missing(raw) -> None:
+    from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter
+
+    assert TourApiAdapter._opt_coord(raw) is None  # noqa: SLF001
+
+
+@pytest.mark.parametrize("raw,expected", [("33.4580", 33.458), (126.9423, 126.9423)])
+def test_real_coordinate_survives(raw, expected: float) -> None:
+    from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter
+
+    assert TourApiAdapter._opt_coord(raw) == pytest.approx(expected)  # noqa: SLF001
+
+
+def test_zero_coordinate_record_is_dropped_as_schema_not_existence() -> None:
+    """드롭 사유가 바뀌는 것이 이 수정의 전부다 — 드롭 자체는 전에도 됐다."""
+    from trippilot.poi_curation.sourcing.collection_gate import (
+        DROP_EXISTENCE,
+        DROP_SCHEMA_COORD,
+        CollectionGate,
+    )
+    from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter
+
+    item = {"contentid": "1", "title": "좌표없는곳", "addr1": "서울특별시 종로구 종로 1",
+            "mapx": "0", "mapy": "0", "cat1": "A02", "cat2": "A0201"}
+    rec = TourApiAdapter._to_record(item, "12")  # noqa: SLF001
+    assert rec.lat is None and rec.lng is None
+
+    from trippilot.domain.poi import PoiCategory
+    from trippilot.poi_curation.sourcing.collection_gate import SourcingCandidate
+
+    c = SourcingCandidate(source_ref="1", kind="12", name="좌표없는곳",
+                          address=rec.address, lat=rec.lat, lng=rec.lng,
+                          category=PoiCategory.SIGHT, category_codes=(),
+                          open_hours=(), hours_raw=None, image_url=None,
+                          modified_at=None)
+    report = CollectionGate().apply([c])
+    assert report.drops.get(DROP_SCHEMA_COORD) == 1
+    assert DROP_EXISTENCE not in report.drops

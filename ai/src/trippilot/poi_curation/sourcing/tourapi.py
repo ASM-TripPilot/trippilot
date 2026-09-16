@@ -290,8 +290,8 @@ class TourApiAdapter:
             kind=cls._opt_str(item.get("contenttypeid")) or kind,
             name=cls._opt_str(item.get("title")) or "",
             address=cls._opt_str(item.get("addr1")),
-            lat=cls._opt_float(item.get("mapy")),   # mapy = 위도
-            lng=cls._opt_float(item.get("mapx")),   # mapx = 경도
+            lat=cls._opt_coord(item.get("mapy")),   # mapy = 위도
+            lng=cls._opt_coord(item.get("mapx")),   # mapx = 경도
             category_codes=tuple(
                 c for c in (
                     cls._opt_str(item.get("cat1")),
@@ -311,6 +311,18 @@ class TourApiAdapter:
         if isinstance(v, (int, float)) and not isinstance(v, bool):
             return str(v)
         return None
+
+    @classmethod
+    def _opt_coord(cls, v: object) -> float | None:
+        """좌표 전용 — TourAPI 는 좌표 결측을 `"0"` 으로 준다. 그대로 두면 (0,0)이
+        GeoPoint 를 통과한 뒤 한국 bbox 밖으로 떨어져 게이트 2단이
+        `existence_out_of_service_region` 으로 계상한다 — 결측이 "권역 밖"으로
+        둔갑해 통계가 원인을 숨긴다(09-10 실측: 신규 31건 전부 이 사유였다).
+        결측은 결측으로 읽어 1단(`schema_missing_or_invalid_coord`)이 잡게 한다.
+        적도·본초자오선에 있는 한국 POI 는 없으므로 0 을 결측으로 봐도 잃는 게 없다.
+        """
+        f = cls._opt_float(v)
+        return None if f is None or f == 0.0 else f
 
     @staticmethod
     def _opt_float(v: object) -> float | None:
