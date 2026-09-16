@@ -150,15 +150,22 @@ describe('AC-2 · 범위 3상태 표식 (시작/사이/종료 서로 다른 test
   });
 });
 
-describe('AC-3 · 선택 요약 (실제 달력 요일)', () => {
-  it('완성 범위면 "M월 D일(요일) – D일(요일) · N박 N일" 을 실제 달력 요일로 그린다', () => {
+describe('AC-3 · 선택 요약 (범위만, 실제 달력 요일)', () => {
+  it('완성 범위면 "M월 D일(요일) – D일(요일)" 을 접미 없이(범위만) 실제 달력 요일로 그린다', () => {
     renderSheet({ range: { start: '2026-06-10', end: '2026-06-13' } });
 
     // 실측 오라클(02a §5-2): 2026-06-10 = 수, 2026-06-13 = 토. 브리프 예시(화/금)는 손베낌 오기.
-    // en dash(U+2013) · 미들닷(U+00B7) 포함. summaryPeriod 동형이라 요일 계산이 틀리면 red.
-    expect(
-      screen.getByText('6월 10일(수) – 13일(토) · 3박 4일')
-    ).toBeOnTheScreen();
+    // TRIP-737: 시트 요약은 범위만(summaryPeriod.main) — "· 3박 4일" 접미(sub)는 버린다(Figma 3627:2068).
+    // en dash(U+2013) 포함. getByText 는 완전일치라 접미가 다시 붙으면 red(문자열이 안 맞음).
+    expect(screen.getByText('6월 10일(수) – 13일(토)')).toBeOnTheScreen();
+  });
+
+  it('요약에 박수 접미("3박 4일"·미들닷)가 다시 붙지 않는다', () => {
+    renderSheet({ range: { start: '2026-06-10', end: '2026-06-13' } });
+
+    // 접미가 회귀하면 이 부재 단언이 red. `·`(U+00B7)·"3박 4일" 둘 다 없어야 한다.
+    expect(screen.queryByText(/3박 4일/)).toBeNull();
+    expect(screen.queryByText(/·/)).toBeNull();
   });
 
   it('미완성(시작만)이면 완성 요약을 그리지 않는다', () => {

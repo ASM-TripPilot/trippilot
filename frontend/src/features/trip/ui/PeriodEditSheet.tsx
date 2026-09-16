@@ -15,9 +15,10 @@
  * "적용"·today 이전 달로 가는 "이전" chevron 은 전부 **진짜 `disabled` prop**으로 막는다(접근성 상태만
  * 세우면 회색인데 눌린다 — [[disabled prop과 accessibilityState]]).
  *
- * 아이콘은 신규 없이 `TripGlyphs` 재사용: 이전 달 `BackChevronGlyph`(ink 고정), 다음 달
- * `ChevronRightGlyph tone="ink"`(좌우 대칭 쌍). 시작/종료 원은 순수 원이라 `rounded-full bg-primary`
- * View 로 그린다(옛 `TripDateSheet`의 선택 원과 동형 — 에셋 다운로드 불필요).
+ * 아이콘은 신규 없이 `TripGlyphs` 재사용: 이전 달 `BackChevronGlyph tone="muted"`, 다음 달
+ * `ChevronRightGlyph tone="muted"` — 둘 다 18px·회색 좌우 대칭 쌍(TRIP-737, Figma `3627:2068`),
+ * 비활성(이전 달 하한)은 톤이 아니라 opacity 로만 죽인다. 시작/종료 원은 순수 원이라
+ * `rounded-full bg-primary` View 로 그린다(옛 `TripDateSheet`의 선택 원과 동형 — 에셋 불필요).
  *
  * ⚠️ 실제 개폐·딤 전면 커버·범위 하이라이트 색 실렌더·연장 배경 연속성·터치 차단은
  * `@gorhom/bottom-sheet` 통과형 목이라 jest 가 원리적으로 못 본다(repo-traps 바텀시트 함정) — 6-b
@@ -166,16 +167,12 @@ export function PeriodEditSheet({
   // today 의 달보다 앞으로는 못 간다 — 그 달은 전 칸이 과거라 고를 게 없다.
   const canGoPrev = month > today.slice(0, 7);
   const rangeComplete = range.start !== undefined && range.end !== undefined;
-  // 완성 범위일 때만 요약을 그린다(미완성이면 null → 안 그림). 요일·박수는 요약 카드와 같은
-  // 셀렉터(`summaryPeriod`)를 재사용한다. TRIP-732: 셀렉터가 `{main, sub}` 객체를 돌려주므로 이
-  // 시트는 옛날처럼 한 줄로 보여주려 main·sub 를 미들닷(U+00B7)으로 다시 합친다(요약 카드와 동일 문구).
+  // 완성 범위일 때만 요약을 그린다(미완성이면 null → 안 그림). 시트 요약은 **범위만**(Figma
+  // `3627:2068`) — `summaryPeriod`의 `main`(요일삽입 날짜범위)만 쓰고 `sub`("3박 4일")는 버린다.
+  // TRIP-737: 옛날엔 main·sub 를 미들닷으로 합쳐 "· 3박 4일" 접미가 붙었으나 Figma엔 없다. 요약 카드
+  // (화면)는 여전히 2톤(main+sub)이라 셀렉터는 그대로 공유 — 접미 차이는 소비처가 정한다.
   const summaryLine = summaryPeriod(range.start, range.end);
-  const summary =
-    summaryLine === null
-      ? null
-      : summaryLine.sub === undefined
-        ? summaryLine.main
-        : `${summaryLine.main} · ${summaryLine.sub}`;
+  const summary = summaryLine === null ? null : summaryLine.main;
 
   return (
     <BottomSheet
@@ -221,7 +218,7 @@ export function PeriodEditSheet({
                 canGoPrev ? '' : 'opacity-40'
               }`}
             >
-              <BackChevronGlyph size={24} />
+              <BackChevronGlyph size={18} tone="muted" />
             </Pressable>
             <Text
               testID="trip-wizard-period-month"
@@ -236,7 +233,7 @@ export function PeriodEditSheet({
               onPress={onNextMonth}
               className="h-10 w-10 items-center justify-center"
             >
-              <ChevronRightGlyph size={24} tone="ink" />
+              <ChevronRightGlyph size={18} tone="muted" />
             </Pressable>
           </View>
 
