@@ -44,6 +44,8 @@ def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
             # 오버라이드로 로컬 파인튜닝 모델이 배정된다(티어 해석보다 우선).
             LlmFeature.REMINDER_COPY: ModelTier.LIGHT,
             LlmFeature.EXPLANATION: ModelTier.HEAVY,
+            # 차선책 근거 문장 — 설명(EXPLANATION)과 같은 급의 취향 그라운딩 문장 (TRIP-887)
+            LlmFeature.ALTERNATIVE_EXPLANATION: ModelTier.HEAVY,
             LlmFeature.ALTERNATIVE_SELECTION: ModelTier.HEAVY,
             # 장면 시퀀스 연출 생성 — 회고 본문 생성의 정본(구 REFLECTION 흡수), 백그라운드 N회 생성 전제
             # (TRIP-429, BR-U6R-13: 티어·모델 실체는 항상 설정값)
@@ -84,6 +86,10 @@ def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
             # ScheduleAgent `_explain` — 대체 설명이 없다. 빈 설명으로 일정만 나간다.
             # 그쪽 `_degrade(..., "llm_explain", "(none)", ...)`의 문자열 그대로.
             LlmFeature.EXPLANATION: ("llm_explain", "(none)"),
+            # ScheduleAgent `_explain_alternatives` · api/wiring.py `explanations` — 실패하면
+            # 차선책의 템플릿 rationale("같은 카페 후보", TRIP-871)이 그대로 남는다.
+            LlmFeature.ALTERNATIVE_EXPLANATION: (
+                "llm_explain_alternatives", "template_rationale"),
             # agents/planb/rag.py `_select`→`_rationale` — used_llm=False면 규칙 랭킹
             # ("llm_select_alternatives" / "rule_ranking"도 그 함수의 문자열 그대로).
             LlmFeature.ALTERNATIVE_SELECTION: ("llm_select_alternatives", "rule_ranking"),

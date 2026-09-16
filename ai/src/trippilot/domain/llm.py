@@ -38,6 +38,11 @@ class LlmFeature(Enum):
     PARAPHRASE = "PARAPHRASE"  # U5
     REASON_INTERPRETATION = "REASON_INTERPRETATION"  # U5
     EXPLANATION = "EXPLANATION"  # U5
+    # 슬롯별 차선책의 "이 자리 대신 골라도 좋은 이유" 1문장 — EXPLANATION 과 별개 feature.
+    # 별도인 이유: EXPLANATION 프롬프트는 "확정된 일정의 각 장소"를 전제해 차선책을 섞으면
+    # 모델에게 확정되지 않은 장소를 확정된 것처럼 말하게 된다. 출력 JSON 모양은 같아서
+    # 출구 게이트는 ExplanationGate 를 재사용한다 (TRIP-887).
+    ALTERNATIVE_EXPLANATION = "ALTERNATIVE_EXPLANATION"  # TRIP-887
     ALTERNATIVE_SELECTION = "ALTERNATIVE_SELECTION"  # U5
     # 여행 종료 후 회고 유도 푸시 문구 1문장 — 본문 생성(REFLECTION_TEMPLATE)과 별개 기능.
     # 알림 발송은 백엔드 notification(FCM) 소유 — c1은 문구 생성까지만 (TRIP-347).

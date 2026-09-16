@@ -51,6 +51,34 @@ def spy(monkeypatch: pytest.MonkeyPatch) -> SpyExplainer:
     return instance
 
 
+class SpyAltExplainer:
+    """AlternativeExplanationWorker 대역 (TRIP-887) — 호출 계수 + 받은 쌍 기록 + 고정 문장."""
+
+    def __init__(self, *, fallback: bool = False) -> None:
+        self.calls = 0
+        self.pairs: tuple = ()
+        self.fallback = fallback
+
+    def explain(self, pool, pairs, persona, trace_id, now, *, timeout_sec=None):
+        self.calls += 1
+        self.pairs = tuple((str(s), str(a)) for s, a in pairs)
+        if self.fallback:
+            return TypedResult(value=None, is_fallback=True,
+                               error="alt llm down (fake)", call_record=None)
+        return TypedResult(
+            value=tuple(PoiExplanation(poi_id=a, text=f"{a} 대신 골라도 좋은 이유")
+                        for _, a in pairs),
+            is_fallback=False, error=None, call_record=None,
+        )
+
+
+@pytest.fixture()
+def alt_spy(monkeypatch: pytest.MonkeyPatch) -> SpyAltExplainer:
+    instance = SpyAltExplainer()
+    monkeypatch.setattr(wiring, "AlternativeExplanationWorker", lambda gateway: instance)
+    return instance
+
+
 def _generate_body(include: bool | None) -> dict:
     body = {
         "trip_id": "trip479",
@@ -73,13 +101,16 @@ def _generate_body(include: bool | None) -> dict:
     return body
 
 
-def _slot(poi_id: str, start: str, end: str) -> dict:
+def _slot(poi_id: str, start: str, end: str, alternatives: tuple[str, ...] = ()) -> dict:
     return {"poi_id": poi_id, "start_at": start, "end_at": end,
-            "ends_next_day": False, "distance_range": None, "is_fixed": False}
+            "ends_next_day": False, "distance_range": None, "is_fixed": False,
+            # 생성 응답의 차선책(TRIP-871)이 백엔드를 거쳐 그대로 되돌아온 모양
+            "alternatives": [{"poi_id": a, "rationale": "같은 명소 후보", "distance_range": None}
+                             for a in alternatives]}
 
 
-def _explanations_body(*poi_ids: str) -> dict:
-    slots = [_slot(p, f"{9 + i:02d}:00:00", f"{10 + i:02d}:00:00")
+def _explanations_body(*poi_ids: str, alt_of: dict[str, tuple[str, ...]] | None = None) -> dict:
+    slots = [_slot(p, f"{9 + i:02d}:00:00", f"{10 + i:02d}:00:00", (alt_of or {}).get(p, ()))
              for i, p in enumerate(poi_ids)]
     return {
         "trip_id": "trip479",
@@ -127,6 +158,107 @@ def test_explanations_returns_slot_keyed_map(spy: SpyExplainer) -> None:
     assert body["is_fallback"] is False
     assert set(body["explanations"]) == {f"{_DAY}#{p}" for p in ids}  # BR-U2-04
     assert all("추천 이유" in v for v in body["explanations"].values())
+
+
+# ── ⑦ 차선책 문장 (TRIP-887) — 두 번째 호출, 배치 슬롯 설명과 독립 ──────
+
+
+def test_explanations_alternatives_keyed_by_date_and_alt_poi(
+    spy: SpyExplainer, alt_spy: SpyAltExplainer,
+) -> None:
+    ids = [str(p.poi_id) for p in _SEED[:2]]
+    alts = tuple(str(p.poi_id) for p in _SEED[2:4])
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        response = client.post("/ai/v1/itinerary/explanations",
+                               json=_explanations_body(*ids, alt_of={ids[0]: alts}))
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body["explanations"]) == {f"{_DAY}#{p}" for p in ids}  # 배치 슬롯 설명은 그대로
+    assert body["alternative_explanations"] == {
+        f"{_DAY}#{a}": f"{a} 대신 골라도 좋은 이유" for a in alts
+    }
+    assert body["alternatives_reason"] is None
+    assert alt_spy.calls == 1 and alt_spy.pairs == tuple((ids[0], a) for a in alts)
+
+
+def test_explanations_alt_fallback_keeps_slot_explanations(
+    spy: SpyExplainer, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    alt = SpyAltExplainer(fallback=True)
+    monkeypatch.setattr(wiring, "AlternativeExplanationWorker", lambda gateway: alt)
+    ids = [str(p.poi_id) for p in _SEED[:2]]
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        response = client.post(
+            "/ai/v1/itinerary/explanations",
+            json=_explanations_body(*ids, alt_of={ids[0]: (str(_SEED[2].poi_id),)}))
+    body = response.json()
+    assert response.status_code == 200 and body["is_fallback"] is False
+    assert set(body["explanations"]) == {f"{_DAY}#{p}" for p in ids}  # 영향 없음
+    assert body["alternative_explanations"] == {}
+    assert body["alternatives_reason"].startswith("alternative_explanation_fallback")
+
+
+def test_explanations_slot_fallback_reports_why_alternatives_were_skipped(
+    monkeypatch: pytest.MonkeyPatch, alt_spy: SpyAltExplainer,
+) -> None:
+    """배치 설명이 실패하면 차선책은 시도조차 못 한다 — "차선책 없음"과 구별되는 사유를 싣는다."""
+    monkeypatch.setattr(wiring, "ExplanationWorker",
+                        lambda gateway: SpyExplainer(fallback=True))
+    ids = [str(_SEED[0].poi_id)]
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        body = client.post(
+            "/ai/v1/itinerary/explanations",
+            json=_explanations_body(*ids, alt_of={ids[0]: (str(_SEED[2].poi_id),)})).json()
+    assert body["is_fallback"] is True
+    assert body["alternative_explanations"] == {}
+    assert body["alternatives_reason"] == "slot_explanations_unavailable"
+    assert alt_spy.calls == 0
+
+
+def test_explanations_second_call_gets_only_remaining_budget(
+    spy: SpyExplainer, alt_spy: SpyAltExplainer, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """두 호출의 합이 deadline 을 넘지 않는다(DL-2) — 첫 호출이 예산을 다 쓰면 두 번째는 부르지 않는다."""
+    class _Burning:  # 읽을 때마다 7초 — 첫 호출 전후 차이가 7000ms
+        def __init__(self) -> None:
+            self.t = 0
+        def monotonic_ms(self) -> int:
+            self.t += 7_000
+            return self.t
+    monkeypatch.setattr(wiring, "MonotonicClock", _Burning)
+    ids = [str(_SEED[0].poi_id)]
+    body = _explanations_body(*ids, alt_of={ids[0]: (str(_SEED[2].poi_id),)})
+    body["request_meta"]["deadline_ms"] = 8_000  # 잔여 1000 < explanation_min_ms(1500)
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        out = client.post("/ai/v1/itinerary/explanations", json=body).json()
+    assert set(out["explanations"]) == {f"{_DAY}#{ids[0]}"}  # 첫 호출은 그대로
+    assert out["alternative_explanations"] == {}
+    assert out["alternatives_reason"] == "deadline:remaining=1000ms"
+    assert alt_spy.calls == 0
+
+
+def test_explanations_without_alternatives_skips_second_call(
+    spy: SpyExplainer, alt_spy: SpyAltExplainer,
+) -> None:
+    ids = [str(_SEED[0].poi_id)]
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        body = client.post("/ai/v1/itinerary/explanations",
+                           json=_explanations_body(*ids)).json()
+    assert body["alternative_explanations"] == {} and body["alternatives_reason"] is None
+    assert alt_spy.calls == 0
+
+
+def test_explanations_unregistered_alternative_is_not_explained(
+    spy: SpyExplainer, alt_spy: SpyAltExplainer,
+) -> None:
+    """정본에 없는 선택지는 설명하지 않는다(INV-1) — 호출 자체가 없고 사유가 남는다."""
+    ids = [str(_SEED[0].poi_id)]
+    with TestClient(build_dev_app(), raise_server_exceptions=False) as client:
+        body = client.post("/ai/v1/itinerary/explanations",
+                           json=_explanations_body(*ids, alt_of={ids[0]: ("ghost",)})).json()
+    assert body["alternative_explanations"] == {}
+    assert body["alternatives_reason"] == "no_registered_alternatives"
+    assert alt_spy.calls == 0
 
 
 def test_explanations_llm_fallback_is_honest_200(
