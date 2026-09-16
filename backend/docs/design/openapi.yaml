@@ -2357,6 +2357,13 @@ components:
               poiId: { type: string, format: uuid }
               distanceRange: { type: string, description: 거리만(INV-3) }
               rationale: { type: string, description: closed-set 근거 — 시각·소요시간 언급 없음(BR-U2-09) }
+              # POI 표면(TRIP-851) — 후보 카드를 **추가 왕복 없이** 그린다. 후보마다 `GET /places/{id}`
+              # 를 부르면 N+1 이라 응답에 싣는다. 정본에 없으면 전부 null 이고, 그때 화면은
+              # "이름 준비 중"·회색 썸네일로 떨어진다(값을 지어내지 않는다, BR-U1-06).
+              nameKo: { type: string, nullable: true }
+              category: { type: string, nullable: true, description: 경계 코드(SIGHT/FOOD/…) }
+              tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
+              imageUrl: { type: string, nullable: true, description: NULL = 미확보. 대표 1장 }
         radiusMUsed:
           type: integer
           description: 실제 사용 반경. 후보가 0건이면 서버가 한 번 넓혀 다시 보므로 그대로 표시한다
@@ -2587,6 +2594,12 @@ components:
                               좌표를 모르면 null — 0 이나 빈 문자열로 채우지 않는다("모른다"가
                               "가깝다"로 바뀐다). 온디맨드 후보(SlotCandidate)는 우리가 계산해 항상
                               채우므로 그쪽과 달리 nullable 이다.
+                          # POI 표면(TRIP-851) — **온디맨드 후보와 같은 이름**이다. 화면이 두 곳에서
+                          # 같은 카드를 재사용한다. 동결본은 안 본다(차선책은 확정 시점에 동결된 적이 없다).
+                          nameKo: { type: string, nullable: true }
+                          category: { type: string, nullable: true }
+                          tags: { type: array, items: { type: string } }
+                          imageUrl: { type: string, nullable: true }
                     # INV-3: 소요시간(duration) 필드 없음 — 거리만(후속)
 
     TermsType:
