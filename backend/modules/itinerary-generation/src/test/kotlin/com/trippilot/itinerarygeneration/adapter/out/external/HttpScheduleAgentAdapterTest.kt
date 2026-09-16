@@ -11,6 +11,9 @@ import com.trippilot.placedata.api.GroundedPlace
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
+import com.trippilot.itinerarygeneration.domain.DaySchedule
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
+import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
@@ -255,6 +258,43 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR))
 
         shouldThrow<ScheduleAgentCallFailed> { adapter.generate(input) }.message!! shouldContain "500"
+    }
+
+    /**
+     * **검증 요청에 무엇이 실리는지 못 박는다**(TRIP-873 후속 · TRIP-879 근거).
+     *
+     * `toWire()` 는 `AiSlot` 을 여섯 인자로만 만들어 차선책을 **안 싣는다** — 기본값이 빈 목록이다.
+     * 그런데 경계 매퍼에 포함 정책 설정이 없어(기본 ALWAYS) **키 자체는 `[]` 로 나간다.**
+     *
+     * 이 조합이 중요한 이유: 상대 런타임이 `alternatives` 를 `Extra inputs are not permitted` 로
+     * 거부하는데(TRIP-879), 우리가 보내는 것은 **늘 빈 배열**이다. 즉 이 거부로 잃는 데이터는 0 이고,
+     * 상대가 "받아서 무시" 하기만 해도 풀린다. 이 테스트가 그 사실의 근거다.
+     */
+    "검증 요청의 슬롯에는 차선책이 빈 배열로 실린다 — 값을 되돌려 보내지 않는다" {
+        // dummyOutput() 은 days 가 비어 있어 슬롯 경로가 아예 없다 — 슬롯 하나를 실은 산출물로 본다.
+        val solution = dummyOutput().copy(
+            days = listOf(
+                DaySchedule(
+                    d1,
+                    listOf(
+                        VisitSlotDisplay(
+                            poi, LocalTime.of(10, 0), LocalTime.of(11, 0), false, null, false,
+                            // 값이 있어도 되돌려 보내지 않는다는 것이 이 테스트의 요점이다.
+                            alternatives = listOf(SlotAlternative(UUID.randomUUID(), "안 실려야 한다", null)),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andExpect(jsonPath("$.itinerary.days[0].slots[0].alternatives").isArray)
+            .andExpect(jsonPath("$.itinerary.days[0].slots[0].alternatives").isEmpty)
+            .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.validate(solution)
+
+        server.verify()
     }
 
     "validate — 위반은 200 정상 응답이고 위치 인덱스가 그대로 실린다" {
