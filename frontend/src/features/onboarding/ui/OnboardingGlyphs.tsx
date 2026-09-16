@@ -135,13 +135,20 @@ export function PositiveCheckGlyph({ size = 16, testID }: GlyphProps) {
 // Figma 스크린샷 관측: 아이콘원 배경이 surface-strong↔primary-pale 로 바뀌는 것과 짝을
 // 이뤄 아이콘 stroke 도 body(#3F3F3F)↔primary(#FF385C) 로 바뀐다). 정보 아이콘(ⓘ)만
 // 상태가 없어 muted 고정.
-type SelectableGlyphProps = GlyphProps & { selected?: boolean };
+// `onPrimary`: 분홍(primary) 배경 위에 얹힐 때 선택 색(#FF385C)이 배경과 묻히므로 흰색으로 강제한다
+// (TRIP-738 g01 취향 시트 — 선택 칩이 bg-primary). 미지정이면 기존 selected 색 규칙 그대로라
+// 온보딩 c09(선택 스타일이 다름)는 무영향(additive, 기본 undefined).
+type SelectableGlyphProps = GlyphProps & {
+  selected?: boolean;
+  onPrimary?: boolean;
+};
 
 // 취향 카드 아이콘 컴포넌트 전부가 이 시그니처를 공유한다 — 화면에서 { Icon } 을 배열로
 // 다루기 위한 공통 타입(개념: ComponentType<P> = "props P 를 받는 컴포넌트"의 타입).
 export type GlyphComponent = ComponentType<SelectableGlyphProps>;
 
-function selectableStroke(selected?: boolean): string {
+function selectableStroke(selected?: boolean, onPrimary?: boolean): string {
+  if (onPrimary) return '#ffffff';
   return selected ? '#FF385C' : '#3F3F3F';
 }
 
@@ -149,9 +156,10 @@ function selectableStroke(selected?: boolean): string {
 export function SunGlyph({
   size = 24,
   selected,
+  onPrimary,
   testID,
 }: SelectableGlyphProps) {
-  const stroke = selectableStroke(selected);
+  const stroke = selectableStroke(selected, onPrimary);
   return (
     <Svg
       testID={testID}
@@ -181,9 +189,10 @@ export function SunGlyph({
 export function ForkKnifeGlyph({
   size = 24,
   selected,
+  onPrimary,
   testID,
 }: SelectableGlyphProps) {
-  const stroke = selectableStroke(selected);
+  const stroke = selectableStroke(selected, onPrimary);
   return (
     <Svg
       testID={testID}
@@ -214,9 +223,10 @@ export function ForkKnifeGlyph({
 export function MountainGlyph({
   size = 24,
   selected,
+  onPrimary,
   testID,
 }: SelectableGlyphProps) {
-  const stroke = selectableStroke(selected);
+  const stroke = selectableStroke(selected, onPrimary);
   return (
     <Svg
       testID={testID}
@@ -253,9 +263,10 @@ export function MountainGlyph({
 export function ArtGlyph({
   size = 24,
   selected,
+  onPrimary,
   testID,
 }: SelectableGlyphProps) {
-  const stroke = selectableStroke(selected);
+  const stroke = selectableStroke(selected, onPrimary);
   return (
     <Svg
       testID={testID}
@@ -291,9 +302,10 @@ export function ArtGlyph({
 export function ActivityGlyph({
   size = 24,
   selected,
+  onPrimary,
   testID,
 }: SelectableGlyphProps) {
-  const stroke = selectableStroke(selected);
+  const stroke = selectableStroke(selected, onPrimary);
   return (
     <Svg
       testID={testID}
@@ -317,9 +329,10 @@ export function ActivityGlyph({
 export function CameraGlyph({
   size = 24,
   selected,
+  onPrimary,
   testID,
 }: SelectableGlyphProps) {
-  const stroke = selectableStroke(selected);
+  const stroke = selectableStroke(selected, onPrimary);
   return (
     <Svg
       testID={testID}
@@ -348,9 +361,10 @@ export function CameraGlyph({
 export function ShoppingBagGlyph({
   size = 24,
   selected,
+  onPrimary,
   testID,
 }: SelectableGlyphProps) {
-  const stroke = selectableStroke(selected);
+  const stroke = selectableStroke(selected, onPrimary);
   return (
     <Svg
       testID={testID}

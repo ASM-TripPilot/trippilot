@@ -560,6 +560,7 @@ export function TripNewStep1Page({
           onAddCity={() => router.push('/explore/region?purpose=trip')}
           onApply={() => setDestinationSheetOpen(false)}
           onClose={() => setDestinationSheetOpen(false)}
+          mustVisitCount={mustVisits.length}
         />
       ) : null}
       {/* 기간 편집 시트도 화면의 형제로 조건부 마운트 — 셀 탭은 배선의 `applyRangePick`으로 범위를

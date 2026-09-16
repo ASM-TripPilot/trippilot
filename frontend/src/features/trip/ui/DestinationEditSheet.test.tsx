@@ -158,3 +158,45 @@ describe('AC-4/5 · 삭제× → onRemove(seq)', () => {
     expect(spies.onRemove).toHaveBeenLastCalledWith(1);
   });
 });
+
+describe('AC-6 · 담은 곳 안내문 (TRIP-736)', () => {
+  // Arrange: mustVisitCount 를 명시해 다시 렌더하는 얇은 헬퍼(renderSheet 는 count 를 안 넘긴다).
+  function renderWithCount(mustVisitCount?: number) {
+    render(
+      <DestinationEditSheet
+        destinations={BUSAN2_GYEONGJU1}
+        onChangeNights={jest.fn()}
+        onRemove={jest.fn()}
+        onAddCity={jest.fn()}
+        onApply={jest.fn()}
+        onClose={jest.fn()}
+        mustVisitCount={mustVisitCount}
+      />
+    );
+  }
+
+  // 두 값(7·3)을 각각 태워 "N 이 하드코딩이 아니라 입력을 반영한다"까지 잠근다(code-critic 참고-1).
+  it.each([7, 3])('count=%i 이면 그 수가 그대로 안내문에 박힌다', (count) => {
+    renderWithCount(count);
+
+    const note = screen.getByTestId('trip-wizard-destination-note');
+    expect(note).toBeOnTheScreen();
+    expect(note).toHaveTextContent(
+      `담은 곳 ${count}곳이 여행지에 맞춰 정리돼요`
+    );
+  });
+
+  it('count 가 0 이면 안내문을 안 그린다 (Figma 근거 없음 §F)', () => {
+    renderWithCount(0);
+    expect(
+      screen.queryByTestId('trip-wizard-destination-note')
+    ).not.toBeOnTheScreen();
+  });
+
+  it('count 를 안 넘기면(undefined) 안내문을 안 그린다', () => {
+    renderWithCount(undefined);
+    expect(
+      screen.queryByTestId('trip-wizard-destination-note')
+    ).not.toBeOnTheScreen();
+  });
+});

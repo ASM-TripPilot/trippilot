@@ -38,7 +38,14 @@ function companionStroke(selected?: boolean): string {
 }
 
 // 앱바 뒤로가기(24) — Figma `1675:1185`.
-export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
+// 이전 달·뒤로 back chevron. 기본 ink 고정이나, g01 기간 시트(TRIP-737, `3627:2068`) 월 네비는
+// 좌우 대칭 muted 쌍이라 `muted`(#6A6A6A)를 additive 로 더한다(다음 달 `ChevronRightGlyph tone="muted"`
+// 와 짝). 좁은 유니온 — 범용 색상표는 안 만든다.
+export function BackChevronGlyph({
+  size = 24,
+  tone = 'ink',
+  testID,
+}: GlyphProps & { tone?: 'ink' | 'muted' }) {
   return (
     <Svg
       testID={testID}
@@ -49,7 +56,7 @@ export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
     >
       <Path
         d="M15 18L9 12L15 6"
-        stroke={INK}
+        stroke={tone === 'muted' ? MUTED : INK}
         strokeWidth={2.2}
         strokeLinecap="round"
         strokeLinejoin="round"
