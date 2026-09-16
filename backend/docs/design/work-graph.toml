@@ -565,6 +565,48 @@ note = """
 생성 타입(`tripDestination.ts`)에는 필드 자체가 없다 — codegen 드리프트(TRIP-640 과 같은 뿌리).
 """
 
+# ── 실 왕복이 드러낸 것(2026-09-16) ─────────────────────────────────────────────
+
+[[nodes]]
+id = "AI-CONTAINER-BOOT"
+ticket = "TRIP-882"
+title = "[AI] 소스 빌드 컨테이너가 기동 불가 — EXISTENCE_MAX_CALLS 빈 값에 int('') 폭발"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = """
+`docker compose --profile full build ai` 로 **소스에서 빌드하면** 기동 즉시 죽는다. compose 가 빈
+문자열을 넘기는데 `os.environ.get(key, "60")` 의 기본값은 **변수가 없을 때만** 먹기 때문이다 —
+우리가 `JWT_REQUIRE_CONFIGURED_KEY` 로 두 번 밟은 것과 같은 함정이다.
+
+기존 GHCR 이미지로는 안 나고 **빌드해야만** 드러나서 여태 아무도 몰랐다. 로컬은 `.env` 에
+`EXISTENCE_MAX_CALLS=60` 을 넣어 우회했다(2026-09-16).
+"""
+
+[[nodes]]
+id = "REMINDER-COPY-SLOTS"
+ticket = "TRIP-883"
+title = "리마인드 문구에 그 날 갈 곳(slots)을 채운다 — 재료가 비면 AI 가 '일정 없음'을 지어낸다"
+status = "todo"
+owner = "알림"
+migration = false
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application/NotificationScheduleService.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/api",
+]
+note = """
+경계는 이제 정상 왕복한다(TRIP-836 후속 수정). 그런데 **호출측이 `slots` 를 안 채운다.**
+
+빈 재료로 물으면 상대가 없는 사실을 지어낸다 — 실측으로 `TRIP_DAY`·`TRIP_PRE` **둘 다**
+"일정이 없으니…" 로 답했다. 일정이 있는 날에 나가면 거짓말이라, 지금은 **재료가 비면 안 묻는다.**
+즉 `AI_REMINDER_COPY_MODE=http` 로 켜도 **문구가 하나도 안 나온다**(기본 off 라 운영 영향 0).
+
+**모듈 경계 결정이 선행이다** — 알림(C14)이 그 날 POI 이름을 알려면 일정(C8)을 봐야 하는데
+그 방향 의존이 없다. `..api..` 퍼사드를 여는 쪽이 R1 규약에 맞아 보이나, "그 날 슬롯"의 정의
+(확정 전/후·편집 중)가 일정 쪽 규칙이라 합의가 필요하다.
+"""
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 간선 — 티켓 원문으로 확인한 것만
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1119,6 +1161,15 @@ O-U5-8(EXIF 를 GPS 동의로 게이팅하는 것이 목적 범위에 맞는가)
 없었다 — 질문이 성립하지 않았다. 고지 문구에 사진 EXIF 를 명시하면 코드 무변경으로 해소.
 **아직 사용자가 없는 지금이 재동의 없이 고칠 수 있는 유일한 시점.** 나머지 5종의 소유(법무 vs 팀)는
 멘토 확인 대기(2026-09-12 안건).
+
+**정정(2026-09-16) — Jira 는 완료인데 코드는 안 끝났다.** 문서 PR 셋(#571·#572·#573)이 티켓을
+닫았고 `backend/docs/legal/` 에 **6종 본문이 다 쓰였다**(EXIF 명시 포함). 그런데
+`R__seed_reference_data.sql` 의 `terms_version.body` 는 **여전히 6종 전부 플레이스홀더**다.
+
+즉 동의 증적은 쌓이는데 **DB 가 사용자에게 내주는 본문은 아직 "[플레이스홀더]"** 다.
+남은 일은 쓰인 문서를 시드에 싣는 것 하나다 — 문구 작성이 아니라 배선이다.
+
+재동의(`reconsent_required`) 판단이 따라오므로 **사용자가 생기기 전에** 끝내야 한다.
 """
 
 [[nodes]]
@@ -1288,7 +1339,7 @@ setNotificationChannelAsync 0건(2026-09-11 실측). FE 규칙 문서도 "현 �
 
 [[nodes]]
 id = "AI-REPLAN"
-ticket = "TRIP-877"
+ticket = ""
 title = "[AI] 재계획 전용 경계 — fully_booked·지시어 사전·번역 워커·라우트 (A-1~A-5)"
 status = "external"
 owner = "ai"
