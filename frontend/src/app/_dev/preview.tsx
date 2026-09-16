@@ -632,21 +632,35 @@ const H08_PREVIEW_DATE = '2026-06-10';
  */
 const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
   variant: 'default',
+  // TRIP-740 AC-D2 — 3박 전부 배정 + 썸네일/위치로 채워 Figma `3657:2068`(단일 카드 + 썸네일 +
+  // 위치·거리 줄)과 육안 대조가 되게 한다. imageUrl 은 위 `DRAFT_PREVIEW_PHOTOS`(로컬 에셋 resolve
+  // URI, jest 스텁에선 null) 재사용 — 신규 사진 소싱 0. 프로덕션은 계약 공백이라 이 값들이 늘
+  // undefined 라 실앱은 "현행 2줄"로 뜬다(정직한 degrade, BE 후속 TRIP-823까지) — 함정 ★7.
   cards: [
     {
       nightNumber: 1,
       dateLabel: '6/10(수)',
       region: '부산',
       stayName: '해운대 오션 호텔',
+      imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+      locationLabel: '해운대 · 350m',
     },
     {
       nightNumber: 2,
       dateLabel: '6/11(목)',
       region: '부산',
-      stayName: '해운대 오션 호텔',
+      stayName: '광안리 뷰 호텔',
+      imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+      locationLabel: '광안리 · 400m',
     },
-    // 미배정 밤 — stayName 없음 → 카드에 "숙소 미정"이 뜬다(옵션 A).
-    { nightNumber: 3, dateLabel: '6/12(금)', region: '경주' },
+    {
+      nightNumber: 3,
+      dateLabel: '6/12(금)',
+      region: '경주',
+      stayName: '경주 한옥스테이 봄',
+      imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+      locationLabel: '경주 황남동 · 도심',
+    },
   ],
   onPressCard: noop,
   onGenerate: noop,

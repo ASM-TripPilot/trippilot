@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import {
   TripWizardStep2Screen,
@@ -311,5 +316,121 @@ describe('loading 얼굴 (AC-2) — 신 스켈레톤·부제·default CTA', () =
     // 조회 중이라 값·empty 마커는 아직 없다(loading≠empty).
     expect(screen.queryByText(/숙소 미정/)).toBeNull();
     expect(screen.queryByTestId('trip-base-browse')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-740 · g02 거점 숙소 Figma 1:1 정합 — **썸네일·위치 줄 조건부 렌더 + 단일 카드 컨테이너 구조.**
+ * 위 17 it 은 무변경으로 남겨 testID·텍스트 계약을 그대로 잠근다(= AC-C1 회귀 앵커, 완료 조건).
+ *
+ * 이 블록이 잡는 것 = jest 로 심판 가능한 유일한 로직:
+ *  - **AC-C2 조건부 렌더**: `NightlyBaseCardVM` 의 optional `imageUrl?`·`locationLabel?` 로
+ *    (1) 배정 밤 + 값 → 썸네일(`trip-base-night-thumb-{n}`) + 위치·거리 줄 (2) 배정 밤 + 무값 → 현행 2줄
+ *    (3) 미배정 밤은 imageUrl 유무 무관 "숙소 미정".
+ *  - **AC-D1/E1/L1 구조**: 밤 행들이 단일 카드 컨테이너(`trip-base-night-list`) 하나 안에 있다(3장→1장).
+ *
+ * jest 원리적 사각(→ 6-b 육안, figma-screen-impl 스크린샷 대조가 유일한 그물): 그림자·radius·구분선
+ * 픽셀·48px 썸네일 크기는 렌더 트리에 className/구조로만 남고 실제 픽셀은 안 남는다(AC-*v).
+ *
+ * 매처 근거(node_modules 실측, RNTL 13.3.3): `toHaveTextContent(정규식)` = `regex.test(정규화 텍스트)`
+ * = 부분 포함(matches.js), `toHaveTextContent(문자열)` = 완전 일치. 한 카드에 여러 Text 가 이어붙으므로
+ * 위치줄 부분 매칭엔 반드시 RegExp 를 쓴다. `queryByTestId` = 없으면 null(throw 안 함) → 부재 단언용.
+ * `within(el).getAllByTestId(정규식)` = 그 컨테이너 서브트리로 좁혀 개수 세기(within.js).
+ */
+
+// 배정+값 / 배정+무값 / 미배정+값(불변식 함정) 세 밤을 한 화면에 세워 카드별로 잰다.
+// imageUrl·locationLabel 은 프로덕션 계약 공백이라 픽스처 전용(INV-1) — 값은 이 테스트에만 산다.
+const CARDS_C2: NightlyBaseCardVM[] = [
+  {
+    nightNumber: 1,
+    dateLabel: '6/10(수)',
+    region: '부산',
+    stayName: '해운대 오션 호텔',
+    imageUrl: 'https://example.test/haeundae.jpg',
+    locationLabel: '해운대 · 350m',
+  },
+  // 배정됐지만 값 없음 → 현행 2줄 유지(additive 가 기존 카드를 안 건드린다).
+  {
+    nightNumber: 2,
+    dateLabel: '6/11(목)',
+    region: '부산',
+    stayName: '광안리 뷰 호텔',
+  },
+  // ★ 미배정(stayName 없음) + 값 있음 → imageUrl 유무 무관 "숙소 미정"(리치 렌더 금지).
+  {
+    nightNumber: 3,
+    dateLabel: '6/12(금)',
+    region: '경주',
+    imageUrl: 'https://example.test/gyeongju.jpg',
+    locationLabel: '경주 황남동 · 도심',
+  },
+];
+
+describe('썸네일·위치 줄 조건부 렌더 (AC-C2)', () => {
+  it('배정된 밤 + 값 있음 — 위치·거리 줄(locationLabel)이 그 카드에 뜬다', () => {
+    renderScreen({ cards: CARDS_C2 });
+
+    const card1 = screen.getByTestId('trip-base-night-card-1');
+    // 부분 포함이라 RegExp — "해운대 · 350m" 시퀀스는 위치줄에만 있다(거리 표기 · INV-3 무관).
+    expect(card1).toHaveTextContent(/해운대 · 350m/);
+    // 배정 밤이라 "숙소 미정" 폴백은 안 뜬다(긍정 짝).
+    expect(card1).not.toHaveTextContent(/숙소 미정/);
+  });
+
+  it('배정된 밤 + 값 있음 — 썸네일(trip-base-night-thumb-1)이 그 카드에 뜬다', () => {
+    renderScreen({ cards: CARDS_C2 });
+
+    // 크기·radius 는 jest 사각(6-b) — 여기선 "imageUrl 이 있으면 썸네일 요소가 존재"만 잠근다.
+    expect(screen.getByTestId('trip-base-night-thumb-1')).toBeOnTheScreen();
+  });
+
+  it('배정된 밤 + 값 없음 — 현행 2줄 유지(썸네일·위치 줄 없음, 숙소명은 그대로)', () => {
+    renderScreen({ cards: CARDS_C2 });
+
+    const card2 = screen.getByTestId('trip-base-night-card-2');
+    expect(card2).toHaveTextContent(/광안리 뷰 호텔/);
+    // additive 가 값 없는 카드에 썸네일을 만들면 안 된다(뮤턴트: imageUrl 무관 항상 렌더 → red).
+    expect(screen.queryByTestId('trip-base-night-thumb-2')).toBeNull();
+    expect(card2).not.toHaveTextContent(/숙소 미정/);
+  });
+
+  it('미배정 밤(stayName 없음)은 imageUrl·locationLabel 이 있어도 "숙소 미정"만 그린다', () => {
+    renderScreen({ cards: CARDS_C2 });
+
+    const card3 = screen.getByTestId('trip-base-night-card-3');
+    expect(card3).toHaveTextContent(/숙소 미정/);
+    // 값이 있어도 미배정이면 위치줄·썸네일을 안 그린다(뮤턴트: stayName 무시하고 값으로만 분기 → red).
+    expect(card3).not.toHaveTextContent(/경주 황남동 · 도심/);
+    expect(screen.queryByTestId('trip-base-night-thumb-3')).toBeNull();
+  });
+});
+
+describe('단일 카드 컨테이너 구조 (AC-D1 · AC-E1 · AC-L1)', () => {
+  it('default — 박별 카드 3장이 단일 카드 컨테이너(trip-base-night-list) 하나 안에 있다', () => {
+    renderScreen({ cards: CARDS_C2 });
+
+    const list = screen.getByTestId('trip-base-night-list');
+    // 3장 분리 카드 → 1장: 세 행이 같은 컨테이너의 자손이다. 그림자·구분선 픽셀은 6-b 육안.
+    expect(within(list).getAllByTestId(/^trip-base-night-card-/)).toHaveLength(
+      3
+    );
+  });
+
+  it('empty — 미정 행 3개가 같은 단일 카드 컨테이너 안에 있다', () => {
+    renderScreen({ variant: 'empty', cards: EMPTY_CARDS });
+
+    const list = screen.getByTestId('trip-base-night-list');
+    expect(within(list).getAllByTestId(/^trip-base-empty-night-/)).toHaveLength(
+      3
+    );
+  });
+
+  it('loading — 스켈레톤 3행이 같은 단일 카드 컨테이너 안에 있다', () => {
+    renderScreen({ variant: 'loading', cards: [] });
+
+    const list = screen.getByTestId('trip-base-night-list');
+    expect(
+      within(list).getAllByTestId(/^trip-base-skeleton-night-/)
+    ).toHaveLength(3);
   });
 });
