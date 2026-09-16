@@ -162,7 +162,7 @@
 - `src/app/(tabs)/records.tsx`  →  (export 없음)
 
 ## src/app/_dev/
-- `src/app/_dev/preview.tsx`  →  PREVIEW_STATES
+- `src/app/_dev/preview.tsx`  →  MUST_VISIT_THUMBNAILS · PREVIEW_STATES
 
 ## src/app/
 - `src/app/_layout.tsx`  →  (export 없음)
