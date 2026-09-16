@@ -14,6 +14,7 @@ const PRIMARY_TEXT = '#C13515';
 const INFO = '#0B6E63';
 const SUCCESS = '#0E9384';
 const PRESENCE_BLUE = '#1B6EF3';
+const BODY = '#3F3F3F';
 
 type GlyphProps = {
   size?: number;
@@ -269,14 +270,50 @@ export function CategoryImageGlyph({ size = 30, testID }: GlyphProps) {
 
 // TRIP-563 출생 · ReplanSlotRow(i13) 슬롯 행 어포던스 글리프 2종 — planb PlanbGlyphs 판 바이트 복제.
 // primary-text(#C13515) raw 고정("다른 후보 N" 텍스트·고정 pill 텍스트와 같은 잉크). 무prop 호출(<Glyph/>).
-// "다른 후보 N >" 우측 체브론.
-export function ChevronRightGlyph({ size = 16 }: GlyphProps) {
+// "다른 후보 N >" 우측 체브론. TRIP-783 · SlotStopCard 의 이름 뒤 회색 chevron 용으로 `tone` 확장
+// (LockGlyph·PlusGlyph 의 tone 패턴 계승, 후방호환 — 무prop 호출은 여전히 primary-text). muted 는
+// 이름 leaf 옆에 붙는 은은한 어포던스(이름 텍스트 뒤라 primary-text 는 과하다).
+export function ChevronRightGlyph({
+  size = 16,
+  tone = 'primaryText',
+}: GlyphProps & { tone?: 'primaryText' | 'muted' }) {
+  const stroke = tone === 'muted' ? MUTED : PRIMARY_TEXT;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M9 6L15 12L9 18"
-        stroke={PRIMARY_TEXT}
+        stroke={stroke}
         strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// TRIP-783 · 시각 칩 시계(20) — features/itinerary/ui/ItineraryGlyphs.ClockGlyph 바이트 복제
+// (entities → features 역참조 금지라 재사용 불가 · 리포 글리프 로컬 복제 관례). 시각 칩 안에서 size=12
+// 로 쓴다. 색은 시각 텍스트(ink)와 한 벌로 보이는 body.
+export function ClockGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M10 17.5C14.1421 17.5 17.5 14.1421 17.5 10C17.5 5.85786 14.1421 2.5 10 2.5C5.85786 2.5 2.5 5.85786 2.5 10C2.5 14.1421 5.85786 17.5 10 17.5Z"
+        stroke={BODY}
+        strokeWidth={1.66667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 5.83333V10L12.5 11.6667"
+        stroke={BODY}
+        strokeWidth={1.66667}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

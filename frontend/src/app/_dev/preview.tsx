@@ -82,6 +82,11 @@ import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen
 import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
 import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
+import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
+import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
+import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
+import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
+import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
 import { MethodPickerScreen } from '@/features/itinerary/ui/MethodPickerScreen';
 import {
@@ -537,6 +542,85 @@ const DRAFT_PREVIEW_BASE: DraftScreenProps = {
   onBack: noop,
   onComplete: noop,
 };
+
+/**
+ * TRIP-783 · h08 지도+시트 셸 접힘 프리뷰(Figma `4221:2448`) — 광안리 해변·황령산 전망대·
+ * 부산시립미술관(필수)·웨이브온 카페 4슬롯 + 시각 칩. 미술관은 `imageUrl:null` 이라 카테고리
+ * 플레이스홀더도 함께 보인다. 사진은 DRAFT 픽스처 재사용(require 자산 → jest 는 null, 실기만 썸네일
+ * — preview.tsx 에 http 리터럴 0 유지). 셸이 `<MapView>` 를 소유하므로 여기선 지도 태그를 안 쓴다.
+ */
+const H08_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
+  {
+    poiId: 'h08-gwangalli',
+    startAt: '10:00:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '광안리 해변',
+    category: '자연',
+    tags: ['바다', '산책'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+    lat: 35.1532,
+    lng: 129.1188,
+  },
+  {
+    poiId: 'h08-hwangnyeong',
+    startAt: '11:30:00',
+    endAt: '12:10:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '황령산 전망대',
+    category: '자연',
+    tags: ['전망', '야경'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+    lat: 35.1372,
+    lng: 129.1005,
+  },
+  {
+    poiId: 'h08-museum',
+    startAt: '13:00:00',
+    endAt: '14:30:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '부산시립미술관',
+    category: '문화',
+    tags: ['전시', '실내'],
+    imageUrl: null,
+    lat: 35.1697,
+    lng: 129.1339,
+  },
+  {
+    poiId: 'h08-waveon',
+    startAt: '15:30:00',
+    endAt: '16:30:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '웨이브온 카페',
+    category: '카페',
+    tags: ['카페', '오션뷰'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    lat: 35.1889,
+    lng: 129.2088,
+  },
+];
+
+// 시각 칩 문구(en-dash `–`). 초안도 검증 시각 표시(3-a 결정) — 카드는 받은 문자열만 그린다.
+const H08_PREVIEW_TIME_LABELS = [
+  '10:00–11:00',
+  '11:30–12:10',
+  '13:00–14:30',
+  '15:30–16:30',
+];
+
+// 카드 사이 커넥터 3개(Figma 4221:2448): leg1 광안리→황령산 차량 2.1km, leg2 0.8km·leg3 0.6km 도보.
+// 합 3.5km = 시트 헤더 `4곳 · 3.5km`(내부 일치). leg1 차량/leg2·3 도보라 두 이동수단 글리프도 함께 보인다.
+const H08_PREVIEW_CONNECTORS = ['차량 · 2.1km', '0.8km', '0.6km'];
+
+const H08_PREVIEW_DATE = '2026-06-10';
 
 /**
  * g02 거점 숙소 2/4 default 의 대표값(TRIP-672, Figma `3657:2068` 재작성) — 박별(1박=1행) 거점
@@ -3047,6 +3131,69 @@ export const PREVIEW_STATES: PreviewState[] = [
         }}
         blockReason={null}
       />
+    ),
+  },
+  // h08 지도+시트 셸 접힘(TRIP-783) — Figma `4221:2448` 대조용. 셸(전면 지도+2스냅 시트+오버레이+
+  // CTA) 부품을 h08 default 4슬롯으로 조립한다. 2스냅 실개폐·딤은 통과형 목 사각이라 index=0(peek)
+  // 얼굴만 고정된다 — 6-b 실기가 유일한 개폐 그물. 지도 태그는 셸이 소유하므로 여기엔 없다.
+  {
+    key: 'h08-draft-collapsed',
+    band: 'h',
+    label: 'h08 · 지도+시트 셸 접힘',
+    login: null,
+    render: () => (
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H08_PREVIEW_SLOTS)}
+        days={[
+          { label: '1일차' },
+          { label: '2일차' },
+          { label: '3일차' },
+          { label: '4일차' },
+        ]}
+        selectedDayIndex={0}
+        onSelectDay={noop}
+        onBack={noop}
+        header={
+          <SheetHeader
+            title="AI 추천안"
+            dayLabel="1일차"
+            dateLabel="6월 10일(수)"
+            meta="4곳 · 3.5km"
+          />
+        }
+        cta={[
+          { label: '다시 짜기', variant: 'outline', onPress: noop },
+          { label: '확정하기', variant: 'primary', onPress: noop },
+        ]}
+      >
+        <View className="gap-md px-lg pb-2xl pt-xs">
+          {H08_PREVIEW_SLOTS.flatMap((slot, index) => {
+            const items = [
+              <SlotStopCard
+                key={`card-${slot.poiId}`}
+                slot={slot}
+                date={H08_PREVIEW_DATE}
+                index={index}
+                timeLabel={H08_PREVIEW_TIME_LABELS[index]}
+                required={index === 2}
+                onPressName={noop}
+                onPressAlt={noop}
+              />,
+            ];
+            if (index < H08_PREVIEW_CONNECTORS.length) {
+              items.push(
+                <DistanceConnector
+                  key={`conn-${slot.poiId}`}
+                  slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
+                  distanceRange={H08_PREVIEW_CONNECTORS[index]}
+                />
+              );
+            }
+            return items;
+          })}
+        </View>
+      </MapSheetShell>
     ),
   },
   // h11 AI 추천안 초안 5상태(TRIP-297) — Figma `1870:1083` 대조용 격리 렌더.

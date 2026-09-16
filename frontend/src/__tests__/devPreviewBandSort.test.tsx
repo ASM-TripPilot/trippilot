@@ -56,6 +56,7 @@ const EXPECTED_H = [
   'dev-preview-state-itinerary-method-regenerate', // h04
   'dev-preview-state-itinerary-mustvisit-default', // h05
   'dev-preview-state-itinerary-mustvisit-time-default', // h07
+  'dev-preview-state-h08-draft-collapsed', // h08 (TRIP-783 지도+시트 셸 접힘)
   'dev-preview-state-itinerary-generating', // h09
   'dev-preview-state-itinerary-generating-failed', // h09
   'dev-preview-state-itinerary-draft-generating', // h10

@@ -55,6 +55,11 @@ const LOCKED_CALLERS = [
   // TRIP-572 j04 여행 요약 지도 — 방문 순서 글랜스(viewOnly ON). DailyReflectionScreen 동형(좌표
   // 있을 때만 렌더, 없으면 placeholder). test-designer 가 처음부터 등재(571·563·442 3번째 재발 방지).
   'features/reflection/ui/TripSummaryScreen.tsx',
+  // TRIP-783 h공통 지도+시트 셸 — 전면 지도가 시트 뒤 전면에 깔린 잠긴 글랜스(viewOnly ON,
+  // connectPins 기본=선). h07·h08·h11·h14·h16 결과 6종이 이 셸을 소비하는 부품이다. 셸이
+  // `<MapView>` 를 렌더하므로 census fail-closed 를 피하려 test-designer 가 착수 단계에서 선반영
+  // (571·563·442 재발 방지 · TRIP-572 선례). 실개폐·2스냅은 통과형 목 사각(6-b 실기).
+  'widgets/map-sheet-shell/ui/MapSheetShell.tsx',
 ];
 
 /** 지도 고정을 **켜면 안 되는** 호출부. 앞의 넷은 지도를 움직여 좌표를 확정하는 것이 기능 자체라
@@ -301,11 +306,12 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
       ...EXPLORE_CALLERS,
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 11개 = 총 12개).
-    //    TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로 넘어가 `<MapView\b` census 에서
-    //    빠지며 구 13 → 12 가 됐다(LOCKED−h05 6 + OPEN 4 + EXPLORE 2).
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 12개 = 총 13개).
+    //    TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로 넘어가며 13→12 가 됐다가,
+    //    TRIP-783 h공통 셸(`MapSheetShell`, LOCKED−h05 · connectPins 기본)이 등재되며 12→13.
+    //    내역: LOCKED−h05 7 + OPEN 4 + EXPLORE 2.
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(12);
+    expect(defaultTags).toHaveLength(13);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);
