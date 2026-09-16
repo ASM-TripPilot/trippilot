@@ -8,6 +8,7 @@ import com.trippilot.notification.adapter.out.external.AiReminderRequestMeta
 import com.trippilot.notification.adapter.out.external.AiReminderSlot
 import com.trippilot.notification.adapter.out.external.HttpReminderCopyAdapter
 import com.trippilot.notification.adapter.out.external.ReminderCopyConfiguration
+import com.trippilot.testsupport.ContractShape
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
@@ -100,6 +101,11 @@ class ReminderCopyBoundaryOpenApiTest : StringSpec({
         val maxItems = requireNotNull(schemas["ReminderCopyRequest"])["properties"]["items"]["maxItems"].asInt()
 
         HttpReminderCopyAdapter.maxItems() shouldBeLessThanOrEqual maxItems
+    }
+
+    /** 전 필드 모양 대조 — 위 배열 검사가 `slots` 한 자리를 보는 반면 이쪽은 본문 전체를 훑는다. */
+    "요청 본문의 값 모양이 계약과 일치한다" {
+        ContractShape.mismatches(mapper, schemas, sampleRequest, "ReminderCopyRequest") shouldContainExactly emptyList()
     }
 
     "응답 키가 계약과 정확히 일치한다" {

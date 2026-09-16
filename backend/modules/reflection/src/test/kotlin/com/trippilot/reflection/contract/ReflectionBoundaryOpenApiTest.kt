@@ -6,8 +6,10 @@ import com.trippilot.reflection.adapter.out.external.AiReflectionGenerateRespons
 import com.trippilot.reflection.adapter.out.external.AiReflectionPaths
 import com.trippilot.reflection.adapter.out.external.AiReflectionRequestMeta
 import com.trippilot.reflection.adapter.out.external.AiReflectionVisit
+import com.trippilot.reflection.adapter.out.external.AiTripEventRecord
 import com.trippilot.reflection.adapter.out.external.AiReflectionVisitRef
 import com.trippilot.reflection.adapter.out.external.ReflectionBoundaryMapper
+import com.trippilot.testsupport.ContractShape
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
@@ -51,10 +53,19 @@ class ReflectionBoundaryOpenApiTest : StringSpec({
         required.forEach { sent shouldContain it }
     }
 
+    /**
+     * **모양까지 본다**(2026-09-16 추가). 이름 대조만으로는 배열 원소가 문자열인지 객체인지 모른다 —
+     * 알림 경계가 정확히 그 자리에서 실호출 422 를 맞았고, 이 게이트는 같은 구조였다.
+     */
+    "요청 본문의 값 모양이 계약과 일치한다 — 이름만으로는 못 본다" {
+        ContractShape.mismatches(mapper, schemas, sampleRequest, "ReflectionGenerateRequest") shouldContainExactly emptyList()
+    }
+
     "중첩 방문 타입도 계약과 키가 일치한다 — 안쪽이 어긋나도 겉은 멀쩡해 보인다" {
         wireKeys(sampleVisit) shouldContainExactly props("VisitRecordSchema")
         wireKeys(sampleVisit.ref) shouldContainExactly props("VisitRefSchema")
         wireKeys(sampleRequest.requestMeta) shouldContainExactly props("RequestMetaSchema")
+        wireKeys(sampleRequest.events.single()) shouldContainExactly props("TripEventRecordSchema")
     }
 
     /**
@@ -91,7 +102,7 @@ private val sampleRequest = AiReflectionGenerateRequest(
     kind = "DAILY", region = "제주",
     startDate = LocalDate.parse("2026-08-01"), endDate = LocalDate.parse("2026-08-03"),
     visits = listOf(sampleVisit),
-    personaSummary = "휴양 위주", events = listOf("불꽃축제"), weatherSummary = "맑음",
+    personaSummary = "휴양 위주", events = listOf(AiTripEventRecord("FESTIVAL", LocalDate.parse("2026-08-02"), "불꽃축제")), weatherSummary = "맑음",
 )
 
 private val sampleResponse = AiReflectionGenerateResponse(
