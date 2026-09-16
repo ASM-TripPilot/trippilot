@@ -2875,6 +2875,24 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => <TripWizardStep1Screen {...TRIP_WIZARD_BASE} isLoading />,
   },
+  // g01 저장 실패 배너(TRIP-734, Figma saveFail·v2 = `3754:5401`) — 제출 실패 얼굴. submitError 트리거
+  // 하나만 얹어 흰 배경+헤어라인 배너·빨간 경고 아이콘(#FF385C)·[다시 시도] 텍스트 링크를 육안 대조하는
+  // 자리다(아이콘 색·흰 배경·정렬·높이는 jest 사각 — className 토큰까지만 심판, 02a ★A). submitError 는
+  // 이제 트리거라 여기 문자열 내용은 화면에 안 뜬다(단일 줄 "저장하지 못했어요"만).
+  {
+    key: 'trip-new-step1-save-error',
+    band: 'g',
+    label: 'g01 · 만들기 1/2 저장 실패',
+    login: null,
+    render: () => (
+      <TripWizardStep1Screen
+        {...TRIP_WIZARD_BASE}
+        mustVisits={MUST_VISIT_THUMBNAILS}
+        submitError="네트워크를 확인하고 다시 시도해주세요"
+        onRetrySubmit={noop}
+      />
+    ),
+  },
   // g01 여행지 편집 시트(TRIP-666, Figma `3626:2070`) — 시트 열린 상태. `DestinationEditSheet`은
   // props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정 없이 그대로 태운다.
   // jest 는 스테퍼 원·점선 추가 버튼·시트 딤/개폐를 못 봐(바텀시트 통과형 목) 이 키가 유일한

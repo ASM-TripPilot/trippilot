@@ -237,9 +237,8 @@ describe('I-5 · 네트워크 실패는 배너로 드러나고 다시 시도가 
     fireEvent.press(next());
 
     const banner = await screen.findByTestId('trip-wizard-submit-banner');
-    expect(
-      within(banner).getByText('여행을 만들지 못했어요')
-    ).toBeOnTheScreen();
+    // TRIP-734 §F ⓐ — 배너 출현 확인용 카피(고정 단일 줄). 서버 실패→배너 배선·재시도 사정거리는 무변경.
+    expect(within(banner).getByText('저장하지 못했어요')).toBeOnTheScreen();
     expect(mockPush).not.toHaveBeenCalled();
 
     const before = createHits();
@@ -274,9 +273,8 @@ describe('I-7 · 미상 실패도 조용히 삼키지 않는다 (INV-4)', () => 
     fireEvent.press(next());
 
     const banner = await screen.findByTestId('trip-wizard-submit-banner');
-    expect(
-      within(banner).getByText('여행을 만들지 못했어요')
-    ).toBeOnTheScreen();
+    // TRIP-734 §F ⓐ — 미상 실패도 같은 고정 카피 배너로 떨어진다(국내 차단 오인 아님).
+    expect(within(banner).getByText('저장하지 못했어요')).toBeOnTheScreen();
     expect(screen.queryByTestId('trip-wizard-overseas-dialog')).toBeNull();
     expect(mockPush).not.toHaveBeenCalled();
   });

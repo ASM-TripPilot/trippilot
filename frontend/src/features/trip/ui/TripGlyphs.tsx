@@ -464,21 +464,21 @@ export function AlertCircleGlyph({ size = 15, testID }: GlyphProps) {
     >
       <Path
         d="M7.5 13.125C10.6066 13.125 13.125 10.6066 13.125 7.5C13.125 4.3934 10.6066 1.875 7.5 1.875C4.3934 1.875 1.875 4.3934 1.875 7.5C1.875 10.6066 4.3934 13.125 7.5 13.125Z"
-        stroke={PRIMARY_TEXT}
+        stroke={PRIMARY}
         strokeWidth={1.375}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M7.5 5V8.125"
-        stroke={PRIMARY_TEXT}
+        stroke={PRIMARY}
         strokeWidth={1.375}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M7.5 10.3125H7.50625"
-        stroke={PRIMARY_TEXT}
+        stroke={PRIMARY}
         strokeWidth={1.375}
         strokeLinecap="round"
         strokeLinejoin="round"

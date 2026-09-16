@@ -512,24 +512,19 @@ export function TripWizardStep1Screen({
           {submitError ? (
             <View
               testID="trip-wizard-submit-banner"
-              className="mb-sm flex-row items-start gap-[10px] rounded-button bg-primary-pale p-md"
+              className="mb-sm flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
             >
               <AlertCircleGlyph size={18} />
-              <View className="flex-1 gap-[2px]">
-                <Text className="font-noto-bold text-label font-bold text-primary-text">
-                  여행을 만들지 못했어요
-                </Text>
-                <Text className="font-noto text-[11.5px] text-primary-text">
-                  {submitError}
-                </Text>
-              </View>
+              {/* §F ⓐ: submitError 는 표시값이 아니라 배너를 켜는 트리거다 — 서버 사유·옛 제목은 안 그린다. */}
+              <Text className="flex-1 font-noto text-card-title text-ink">
+                저장하지 못했어요
+              </Text>
               <Pressable
                 testID="trip-wizard-submit-banner-retry"
                 accessibilityRole="button"
                 onPress={onRetrySubmit}
-                className="items-center justify-center rounded-pill border-[1.4px] border-primary bg-canvas px-md py-[7px]"
               >
-                <Text className="text-[12.5px] font-noto-bold font-bold text-primary-text">
+                <Text className="font-noto-bold font-bold text-card-title text-primary">
                   다시 시도
                 </Text>
               </Pressable>
@@ -539,7 +534,7 @@ export function TripWizardStep1Screen({
           {mustVisitError ? (
             <View
               testID="trip-wizard-mustvisit-banner"
-              className="mb-sm flex-row items-center gap-[10px] rounded-button bg-primary-pale p-md"
+              className="mb-sm flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
             >
               <AlertCircleGlyph size={18} />
               <Text className="flex-1 font-noto text-[11.5px] text-primary-text">
@@ -549,9 +544,8 @@ export function TripWizardStep1Screen({
                 testID="trip-wizard-mustvisit-banner-retry"
                 accessibilityRole="button"
                 onPress={onRetryMustVisits}
-                className="items-center justify-center rounded-pill border-[1.4px] border-primary bg-canvas px-md py-[7px]"
               >
-                <Text className="text-[12.5px] font-noto-bold font-bold text-primary-text">
+                <Text className="font-noto-bold font-bold text-card-title text-primary">
                   다시 시도
                 </Text>
               </Pressable>

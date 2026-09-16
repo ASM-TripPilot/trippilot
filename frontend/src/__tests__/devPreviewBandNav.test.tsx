@@ -101,7 +101,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-783: h08 지도+시트 셸 접힘 프리뷰 키(`h08-draft-collapsed`, band `h`) 추가로 168→169.
     //    test-designer 가 이 데이터 미러 가드(카운트)를 선반영하지 못해 implementer 가 preview.tsx 에
     //    키를 추가하며 함께 갱신(devPreviewBandSort EXPECTED_H 도 동반 — 문제로그 계열, 03 에 HONEST 신고).
-    expect(PREVIEW_STATES).toHaveLength(169);
+    // ⚠️ TRIP-734: g01 저장 실패 배너 전용 프리뷰 키(`trip-new-step1-save-error`, band `g`) 추가로
+    //    169→170. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 키만 추가하고
+    //    이 가드는 안 만진다(추가 전엔 169개라 이 단언이 red). devPreviewBandSort 는 밴드 h·l 만 잠가
+    //    band g 와 무관(추가 갱신 불필요).
+    expect(PREVIEW_STATES).toHaveLength(170);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
