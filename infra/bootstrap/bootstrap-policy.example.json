@@ -1,0 +1,101 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageEnvironmentBootstrapStack",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateChangeSet", "cloudformation:DescribeChangeSet",
+        "cloudformation:ExecuteChangeSet", "cloudformation:DeleteChangeSet",
+        "cloudformation:DescribeStacks", "cloudformation:DescribeStackEvents",
+        "cloudformation:GetTemplate", "cloudformation:GetTemplateSummary",
+        "cloudformation:UpdateTerminationProtection",
+        "cloudformation:TagResource", "cloudformation:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:<AWS_REGION>:<AWS_ACCOUNT_ID>:stack/trippilot-<ENVIRONMENT>-bootstrap/*",
+        "arn:aws:cloudformation:<AWS_REGION>:<AWS_ACCOUNT_ID>:changeSet/awscli-cloudformation-package-deploy-*/*"
+      ]
+    },
+    {
+      "Sid": "ValidateTemplate",
+      "Effect": "Allow",
+      "Action": "cloudformation:ValidateTemplate",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageStateBucketConfiguration",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket", "s3:ListBucket", "s3:GetBucketLocation",
+        "s3:GetBucketVersioning", "s3:PutBucketVersioning",
+        "s3:GetEncryptionConfiguration", "s3:PutEncryptionConfiguration",
+        "s3:GetBucketPublicAccessBlock", "s3:PutBucketPublicAccessBlock",
+        "s3:GetBucketOwnershipControls", "s3:PutBucketOwnershipControls",
+        "s3:GetBucketTagging", "s3:PutBucketTagging",
+        "s3:GetBucketPolicy", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy",
+        "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketLogging",
+        "s3:GetBucketNotification", "s3:GetBucketWebsite",
+        "s3:GetBucketObjectLockConfiguration", "s3:GetBucketAbac",
+        "s3:GetBucketMetadataTableConfiguration", "s3:GetAccelerateConfiguration",
+        "s3:GetLifecycleConfiguration", "s3:GetAnalyticsConfiguration",
+        "s3:GetInventoryConfiguration", "s3:GetMetricsConfiguration",
+        "s3:GetReplicationConfiguration", "s3:GetIntelligentTieringConfiguration",
+        "s3:ListTagsForResource", "s3:TagResource", "s3:UntagResource"
+      ],
+      "Resource": "arn:aws:s3:::trippilot-tfstate-<AWS_ACCOUNT_ID>-<AWS_REGION>-<ENVIRONMENT>"
+    },
+    {
+      "Sid": "ManageOnlyDeploymentRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:GetRole", "iam:UpdateRole", "iam:UpdateRoleDescription", "iam:DeleteRole",
+        "iam:UpdateAssumeRolePolicy", "iam:TagRole", "iam:UntagRole",
+        "iam:ListRoleTags", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies",
+        "iam:GetRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/trippilot-<ENVIRONMENT>-github-deploy"
+    },
+    {
+      "Sid": "ManageFixedEksServiceRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:GetRole", "iam:UpdateRole", "iam:UpdateRoleDescription", "iam:DeleteRole",
+        "iam:UpdateAssumeRolePolicy", "iam:TagRole", "iam:UntagRole",
+        "iam:ListRoleTags", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:GetRolePolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/trippilot-<ENVIRONMENT>-cluster",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/trippilot-<ENVIRONMENT>-node"
+      ]
+    },
+    {
+      "Sid": "AttachApprovedEksServicePolicies",
+      "Effect": "Allow",
+      "Action": ["iam:AttachRolePolicy", "iam:DetachRolePolicy"],
+      "Resource": [
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/trippilot-<ENVIRONMENT>-cluster",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/trippilot-<ENVIRONMENT>-node"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
+            "arn:aws:iam::aws:policy/AmazonEKSComputePolicy",
+            "arn:aws:iam::aws:policy/AmazonEKSBlockStoragePolicyV2",
+            "arn:aws:iam::aws:policy/AmazonEKSLoadBalancingPolicy",
+            "arn:aws:iam::aws:policy/AmazonEKSNetworkingPolicy",
+            "arn:aws:iam::aws:policy/AmazonEKSWorkerNodeMinimalPolicy",
+            "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ReadExistingGithubProvider",
+      "Effect": "Allow",
+      "Action": "iam:GetOpenIDConnectProvider",
+      "Resource": "arn:aws:iam::<AWS_ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
+    }
+  ]
+}

@@ -1,0 +1,265 @@
+name: AWS / Terraform and EKS deploy
+
+# AWS mutations have a single manual entry point. No push, schedule, or GitOps sync.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 대상 환경
+        type: choice
+        options: [dev, prd]
+        default: dev
+        required: true
+      mode:
+        description: plan은 미리보기, apply는 인프라 변경 및 선택한 앱 배포
+        type: choice
+        options: [plan, apply]
+        default: plan
+        required: true
+      deploy_application:
+        description: apply 후 이미지 빌드·DB 초기화·EKS 앱 배포
+        type: boolean
+        default: true
+      embedding_enabled:
+        description: 로컬 임베딩 서비스와 pgvector RAG 활성화 (추가 메모리 필요)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: 'false'
+  TF_VERSION: '1.13.5'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: azure/setup-helm@v4.3.1
+        with:
+          version: v3.19.0
+      - name: Validate deployment contracts and Helm manifests
+        run: |
+          python -m pip install -r infra/requirements-test.txt
+          python -m coverage run --rcfile=infra/.coveragerc -m unittest discover -s infra/tests -v
+          python -m coverage run --rcfile=infra/.coveragerc --append -m unittest discover -s deploy/eks/tests -v
+          python -m coverage report --rcfile=infra/.coveragerc
+          python -m unittest discover -s infra/bootstrap/tests -v
+          python -m unittest discover -s deploy/eks/chart/tests -v
+          for environment in dev prd; do
+            helm lint --strict deploy/eks/chart -f "deploy/eks/chart/values-$environment.yaml" \
+              --set images.backend.repository=example/backend,images.backend.tag=sha123 \
+              --set images.ai.repository=example/ai,images.ai.tag=sha123 \
+              --set config.databaseHost=database.example.internal,config.redisHost=redis.example.internal \
+              --set gateway.certificateArn=arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc \
+              --set gateway.hostname=api.example.com
+          done
+      - uses: actions/setup-java@v4
+        if: inputs.mode == 'apply' && inputs.deploy_application
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Verify backend shutdown configuration
+        if: inputs.mode == 'apply' && inputs.deploy_application
+        working-directory: backend
+        run: ./gradlew :app:test --tests 'com.trippilot.app.config.AsyncConfigTest' --no-daemon
+      - name: Validate Terraform offline
+        working-directory: infra/terraform/stack
+        run: |
+          terraform fmt -check -recursive ..
+          terraform init -backend=false -lockfile=readonly
+          terraform validate
+          terraform test
+
+  deploy:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch'
+    environment: ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+      DEPLOY_MODE: ${{ inputs.mode }}
+      DEPLOY_APPLICATION: ${{ inputs.deploy_application }}
+      EMBEDDING_ENABLED: ${{ inputs.embedding_enabled }}
+      DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
+      API_HOSTNAME: ${{ vars.API_HOSTNAME }}
+      TF_VAR_aws_account_id: ${{ vars.AWS_ACCOUNT_ID }}
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      TF_VAR_deployment_role_arn: ${{ vars.AWS_ROLE_ARN }}
+      IMAGE_TAG: sha-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+      DEPLOY_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate environment and branch before AWS access
+        id: config
+        run: python3 infra/scripts/workflow_config.py
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: trippilot-${{ github.run_id }}
+          role-duration-seconds: 7200
+      - name: Check HTTPS certificate
+        if: steps.config.outputs.deploy_application == 'true'
+        run: |
+          test "$(aws acm describe-certificate --certificate-arn "$ACM_CERTIFICATE_ARN" --query 'Certificate.Status' --output text)" = ISSUED
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: Initialize existing environment state
+        working-directory: infra/terraform/stack
+        env:
+          TF_STATE_BUCKET: ${{ steps.config.outputs.state_bucket }}
+        run: |
+          terraform init -lockfile=readonly \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=terraform.tfstate" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+          terraform validate
+      - name: Terraform plan
+        working-directory: infra/terraform/stack
+        run: terraform plan -lock-timeout=5m -var-file="../environments/$DEPLOY_ENVIRONMENT.tfvars" -out="$RUNNER_TEMP/trippilot.tfplan"
+      - name: Apply the saved run plan
+        if: inputs.mode == 'apply'
+        working-directory: infra/terraform/stack
+        run: terraform apply -lock-timeout=5m "$RUNNER_TEMP/trippilot.tfplan"
+      - name: Read infrastructure outputs
+        if: steps.config.outputs.deploy_application == 'true'
+        id: infra
+        working-directory: infra/terraform/stack
+        run: |
+          umask 077
+          terraform output -json > "$RUNNER_TEMP/trippilot-outputs.json"
+          echo "cluster_name=$(terraform output -raw cluster_name)" >> "$GITHUB_OUTPUT"
+          for component in backend ai embedding; do
+            repository=$(jq -r --arg component "$component" '.ecr_repositories.value[$component]' "$RUNNER_TEMP/trippilot-outputs.json")
+            echo "${component}_repository=$repository" >> "$GITHUB_OUTPUT"
+          done
+      - uses: docker/setup-buildx-action@v3
+        if: steps.config.outputs.deploy_application == 'true'
+      - uses: aws-actions/amazon-ecr-login@v2
+        if: steps.config.outputs.deploy_application == 'true'
+      - name: Build and publish backend
+        if: steps.config.outputs.deploy_application == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.infra.outputs.backend_repository }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=aws-backend
+          cache-to: type=gha,mode=max,scope=aws-backend
+      - name: Build and publish AI
+        if: steps.config.outputs.deploy_application == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ai
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.infra.outputs.ai_repository }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=aws-ai
+          cache-to: type=gha,mode=max,scope=aws-ai
+      - name: Build and publish embedding
+        if: steps.config.outputs.deploy_application == 'true' && inputs.embedding_enabled
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ai/embedding
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.infra.outputs.embedding_repository }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=aws-embedding
+          cache-to: type=gha,mode=max,scope=aws-embedding
+      - uses: azure/setup-kubectl@v4
+        if: steps.config.outputs.deploy_application == 'true'
+        with:
+          version: v1.35.0
+      - uses: azure/setup-helm@v4.3.1
+        if: steps.config.outputs.deploy_application == 'true'
+        with:
+          version: v3.19.0
+      - name: Connect to the selected EKS cluster
+        if: steps.config.outputs.deploy_application == 'true'
+        env:
+          CLUSTER_NAME: ${{ steps.infra.outputs.cluster_name }}
+        run: |
+          aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
+          python3 deploy/eks/runtime.py ensure-namespace --namespace trippilot
+      - name: Synchronize runtime secrets and render nonsecret Helm values
+        if: steps.config.outputs.deploy_application == 'true'
+        run: |
+          embedding_args=()
+          if [ "$EMBEDDING_ENABLED" = true ]; then embedding_args+=(--embedding-enabled); fi
+          python3 deploy/eks/runtime.py sync-secrets \
+            --outputs "$RUNNER_TEMP/trippilot-outputs.json" --namespace trippilot "${embedding_args[@]}"
+          python3 deploy/eks/runtime.py render-values \
+            --outputs "$RUNNER_TEMP/trippilot-outputs.json" --image-tag "$IMAGE_TAG" \
+            --certificate-arn "$ACM_CERTIFICATE_ARN" --hostname "$API_HOSTNAME" \
+            --output "$RUNNER_TEMP/trippilot-values.json" "${embedding_args[@]}"
+      - name: Initialize database roles and pgvector before Flyway
+        if: steps.config.outputs.deploy_application == 'true'
+        run: |
+          python3 deploy/eks/runtime.py bootstrap-db --outputs "$RUNNER_TEMP/trippilot-outputs.json" \
+            --namespace trippilot --run-id "$DEPLOY_RUN_ID"
+      - name: Deploy and wait for healthy workloads
+        if: steps.config.outputs.deploy_application == 'true'
+        run: |
+          helm upgrade --install trippilot deploy/eks/chart --namespace trippilot \
+            -f "deploy/eks/chart/values-$DEPLOY_ENVIRONMENT.yaml" \
+            -f "$RUNNER_TEMP/trippilot-values.json" \
+            --set-string "rolloutNonce=$DEPLOY_RUN_ID" \
+            --atomic --wait --timeout 20m --history-max 10
+      - name: Verify in-cluster API and AI connectivity
+        if: steps.config.outputs.deploy_application == 'true'
+        run: python3 deploy/eks/runtime.py smoke --namespace trippilot
+      - name: Deployment summary
+        if: success()
+        env:
+          TF_STATE_BUCKET: ${{ steps.config.outputs.state_bucket }}
+          DEPLOYED: ${{ steps.config.outputs.deploy_application }}
+        run: |
+          {
+            echo "### TripPilot AWS $DEPLOY_ENVIRONMENT"
+            echo "- Mode: $DEPLOY_MODE"
+            echo "- State: $TF_STATE_BUCKET/terraform.tfstate"
+            echo "- Commit: $GITHUB_SHA"
+            if [ "$DEPLOYED" = true ]; then
+              echo "- Image tag: $IMAGE_TAG"
+              echo "- API: https://$API_HOSTNAME"
+              echo "- Load balancer DNS (point API hostname here):"
+              kubectl -n trippilot get service gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+              echo
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove temporary database administrator credentials
+        if: always() && steps.config.outputs.deploy_application == 'true' && steps.infra.outcome == 'success'
+        run: python3 deploy/eks/runtime.py cleanup-db --namespace trippilot --run-id "$DEPLOY_RUN_ID"
+      - name: Remove local generated deployment files
+        if: always()
+        run: rm -f "$RUNNER_TEMP/trippilot.tfplan" "$RUNNER_TEMP/trippilot-outputs.json" "$RUNNER_TEMP/trippilot-values.json"

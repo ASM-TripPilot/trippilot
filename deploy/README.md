@@ -153,3 +153,7 @@ nginx 의 `/api` 프록시가 `backend` 라는 이름을 쓰므로(compose 와 �
 **JDK 25 자동탐지.** Homebrew 로 깐 JDK 는 Gradle 이 못 찾는다. `just` 가
 `/opt/homebrew/opt/openjdk@25/...` 를 기본으로 넘기며, 다른 위치면 `TRIPPILOT_JDK25`
 환경변수로 지정한다.
+
+## AWS DEV / PRD 배포
+
+AWS 전용 Terraform·Helm과 수동 GitHub Actions 사용법은 [AWS EKS 배포 가이드](../docs/guides/aws-eks-deployment.md)를 참고한다. 이 문서의 kind 배포와 별도로 `deploy/eks/`를 사용한다.

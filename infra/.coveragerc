@@ -1,0 +1,8 @@
+[run]
+branch = True
+source = infra/scripts,deploy/eks
+omit = */tests/*
+
+[report]
+show_missing = True
+fail_under = 80

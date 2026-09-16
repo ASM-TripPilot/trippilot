@@ -1,0 +1,69 @@
+{{- if .Values.embedding.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding
+  labels:
+    {{- include "trippilot.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.embedding.replicas }}
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 1200
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      {{- include "trippilot.selector" (dict "root" . "component" "embedding") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "trippilot.selector" (dict "root" . "component" "embedding") | nindent 8 }}
+      annotations:
+        trippilot.io/rollout-nonce: {{ .Values.rolloutNonce | quote }}
+    spec:
+      {{- include "trippilot.podSpec" (dict "root" . "component" "embedding" "uid" 10001) | nindent 6 }}
+      containers:
+        - name: embedding
+          image: {{ include "trippilot.image" (dict "root" . "component" "embedding") }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: [/app/.venv/bin/uvicorn]
+          args: ["app:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "1"]
+          ports:
+            - { name: http, containerPort: 8100 }
+          securityContext:
+            {{- include "trippilot.containerSecurity" . | nindent 12 }}
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: XDG_CACHE_HOME
+              value: /tmp/cache
+            - name: HF_HOME
+              value: /tmp/huggingface
+            - name: OMP_NUM_THREADS
+              value: "2"
+            - name: MKL_NUM_THREADS
+              value: "2"
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 180
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.embedding.resources | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 512Mi }
+{{- end }}

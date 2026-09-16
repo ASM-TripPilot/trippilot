@@ -1,0 +1,527 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "TripPilot per-environment Terraform state and GitHub OIDC deployment role. Invoke only via aws-bootstrap.yml.",
+  "Parameters": {
+    "Environment": {"Type": "String", "AllowedValues": ["dev", "prd"]},
+    "GitHubRepository": {"Type": "String", "Default": "ASM-TripPilot/trippilot", "AllowedPattern": "[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"},
+    "GitHubOidcProviderArn": {
+      "Type": "String",
+      "AllowedPattern": "arn:aws:iam::[0-9]{12}:oidc-provider/token.actions.githubusercontent.com",
+      "Description": "Existing account-level GitHub OIDC provider; shared provider is not owned by this stack."
+    }
+  },
+  "Resources": {
+    "TerraformStateBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketName": {"Fn::Sub": "trippilot-tfstate-${AWS::AccountId}-${AWS::Region}-${Environment}"},
+        "VersioningConfiguration": {"Status": "Enabled"},
+        "BucketEncryption": {"ServerSideEncryptionConfiguration": [{"ServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]},
+        "PublicAccessBlockConfiguration": {"BlockPublicAcls": true, "IgnorePublicAcls": true, "BlockPublicPolicy": true, "RestrictPublicBuckets": true},
+        "OwnershipControls": {"Rules": [{"ObjectOwnership": "BucketOwnerEnforced"}]},
+        "Tags": [
+          {"Key": "Project", "Value": "trippilot"},
+          {"Key": "Environment", "Value": {"Ref": "Environment"}},
+          {"Key": "ManagedBy", "Value": "cloudformation"}
+        ]
+      }
+    },
+    "TerraformStateBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {"Ref": "TerraformStateBucket"},
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "RequireTls",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {"Fn::Sub": "arn:${AWS::Partition}:s3:::${TerraformStateBucket}"},
+                {"Fn::Sub": "arn:${AWS::Partition}:s3:::${TerraformStateBucket}/*"}
+              ],
+              "Condition": {"Bool": {"aws:SecureTransport": "false"}}
+            }
+          ]
+        }
+      }
+    },
+    "ClusterRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {"Fn::Sub": "trippilot-${Environment}-cluster"},
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {"Service": "eks.amazonaws.com"},
+              "Action": ["sts:AssumeRole", "sts:TagSession"]
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {"Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKSClusterPolicy"},
+          {"Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKSComputePolicy"},
+          {"Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKSBlockStoragePolicyV2"},
+          {"Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKSLoadBalancingPolicy"},
+          {"Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKSNetworkingPolicy"}
+        ],
+        "Tags": [
+          {"Key": "Project", "Value": "trippilot"},
+          {"Key": "Environment", "Value": {"Ref": "Environment"}},
+          {"Key": "ManagedBy", "Value": "cloudformation"}
+        ]
+      }
+    },
+    "NodeRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {"Fn::Sub": "trippilot-${Environment}-node"},
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{"Effect": "Allow", "Principal": {"Service": "ec2.amazonaws.com"}, "Action": "sts:AssumeRole"}]
+        },
+        "ManagedPolicyArns": [
+          {"Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKSWorkerNodeMinimalPolicy"},
+          {"Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"}
+        ],
+        "Tags": [
+          {"Key": "Project", "Value": "trippilot"},
+          {"Key": "Environment", "Value": {"Ref": "Environment"}},
+          {"Key": "ManagedBy", "Value": "cloudformation"}
+        ]
+      }
+    },
+    "DeploymentRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {"Fn::Sub": "trippilot-${Environment}-github-deploy"},
+        "Description": "GitHub environment scoped Terraform and application deployment role.",
+        "MaxSessionDuration": 7200,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {"Federated": {"Ref": "GitHubOidcProviderArn"}},
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": {"Fn::Sub": "repo:${GitHubRepository}:environment:${Environment}"}
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "EnvironmentDeployment",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "StateList",
+                  "Effect": "Allow",
+                  "Action": ["s3:ListBucket"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:s3:::${TerraformStateBucket}"}
+                },
+                {
+                  "Sid": "StateReadWrite",
+                  "Effect": "Allow",
+                  "Action": ["s3:GetObject", "s3:PutObject"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:s3:::${TerraformStateBucket}/terraform.tfstate"}
+                },
+                {
+                  "Sid": "StateLock",
+                  "Effect": "Allow",
+                  "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:s3:::${TerraformStateBucket}/terraform.tfstate.tflock"}
+                },
+                {
+                  "Sid": "RegionalDiscovery",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:Describe*",
+                    "rds:Describe*",
+                    "elasticache:Describe*",
+                    "eks:ListClusters",
+                    "eks:DescribeAddonVersions",
+                    "eks:DescribeClusterVersions",
+                    "ecr:GetAuthorizationToken",
+                    "logs:DescribeLogGroups"
+                  ],
+                  "Resource": "*",
+                  "Condition": {"StringEquals": {"aws:RequestedRegion": {"Ref": "AWS::Region"}}}
+                },
+                {
+                  "Sid": "ReadClusterRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole",
+                    "iam:ListRoleTags",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListRolePolicies",
+                    "iam:GetRolePolicy"
+                  ],
+                  "Resource": [
+                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/trippilot-${Environment}-cluster"},
+                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/trippilot-${Environment}-node"}
+                  ]
+                },
+                {
+                  "Sid": "PassClusterRoles",
+                  "Effect": "Allow",
+                  "Action": ["iam:PassRole"],
+                  "Resource": [
+                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/trippilot-${Environment}-cluster"},
+                    {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/trippilot-${Environment}-node"}
+                  ],
+                  "Condition": {"StringEquals": {"iam:PassedToService": ["eks.amazonaws.com", "ec2.amazonaws.com"]}}
+                },
+                {
+                  "Sid": "CreateServiceLinkedRoles",
+                  "Effect": "Allow",
+                  "Action": ["iam:CreateServiceLinkedRole"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/*"},
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:AWSServiceName": [
+                        "eks.amazonaws.com",
+                        "eks-nodegroup.amazonaws.com",
+                        "rds.amazonaws.com",
+                        "elasticache.amazonaws.com",
+                        "elasticloadbalancing.amazonaws.com"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "CreateTaggedNetwork",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:CreateVpc",
+                    "ec2:CreateSubnet",
+                    "ec2:CreateInternetGateway",
+                    "ec2:CreateRouteTable",
+                    "ec2:CreateNatGateway",
+                    "ec2:AllocateAddress",
+                    "ec2:CreateSecurityGroup"
+                  ],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:*"},
+                  "Condition": {
+                    "StringEquals": {"aws:RequestTag/Project": "trippilot", "aws:RequestTag/Environment": {"Ref": "Environment"}}
+                  }
+                },
+                {
+                  "Sid": "TagNetworkOnCreate",
+                  "Effect": "Allow",
+                  "Action": ["ec2:CreateTags"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:*"},
+                  "Condition": {
+                    "StringEquals": {
+                      "ec2:CreateAction": [
+                        "CreateVpc",
+                        "CreateSubnet",
+                        "CreateInternetGateway",
+                        "CreateRouteTable",
+                        "CreateNatGateway",
+                        "AllocateAddress",
+                        "CreateSecurityGroup",
+                        "AuthorizeSecurityGroupIngress",
+                        "AuthorizeSecurityGroupEgress"
+                      ],
+                      "aws:RequestTag/Project": "trippilot",
+                      "aws:RequestTag/Environment": {"Ref": "Environment"}
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageEnvironmentNetwork",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:CreateVpc",
+                    "ec2:CreateSubnet",
+                    "ec2:CreateInternetGateway",
+                    "ec2:CreateRouteTable",
+                    "ec2:CreateNatGateway",
+                    "ec2:AllocateAddress",
+                    "ec2:CreateSecurityGroup",
+                    "ec2:DeleteVpc",
+                    "ec2:ModifyVpcAttribute",
+                    "ec2:DeleteSubnet",
+                    "ec2:ModifySubnetAttribute",
+                    "ec2:AttachInternetGateway",
+                    "ec2:DetachInternetGateway",
+                    "ec2:DeleteInternetGateway",
+                    "ec2:DeleteRouteTable",
+                    "ec2:AssociateRouteTable",
+                    "ec2:DisassociateRouteTable",
+                    "ec2:ReplaceRouteTableAssociation",
+                    "ec2:CreateRoute",
+                    "ec2:ReplaceRoute",
+                    "ec2:DeleteRoute",
+                    "ec2:DeleteNatGateway",
+                    "ec2:ReleaseAddress",
+                    "ec2:DeleteSecurityGroup",
+                    "ec2:AuthorizeSecurityGroupIngress",
+                    "ec2:AuthorizeSecurityGroupEgress",
+                    "ec2:RevokeSecurityGroupIngress",
+                    "ec2:RevokeSecurityGroupEgress",
+                    "ec2:ModifySecurityGroupRules",
+                    "ec2:CreateTags",
+                    "ec2:DeleteTags"
+                  ],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:*"},
+                  "Condition": {
+                    "StringEquals": {"aws:ResourceTag/Project": "trippilot", "aws:ResourceTag/Environment": {"Ref": "Environment"}},
+                    "StringEqualsIfExists": {"aws:RequestTag/Environment": {"Ref": "Environment"}}
+                  }
+                },
+                {
+                  "Sid": "CreateTaggedSecurityRules",
+                  "Effect": "Allow",
+                  "Action": ["ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group-rule/*"},
+                  "Condition": {
+                    "StringEquals": {"aws:RequestTag/Project": "trippilot", "aws:RequestTag/Environment": {"Ref": "Environment"}}
+                  }
+                },
+                {
+                  "Sid": "DescribeIngressCertificate",
+                  "Effect": "Allow",
+                  "Action": ["acm:DescribeCertificate"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:acm:${AWS::Region}:${AWS::AccountId}:certificate/*"}
+                },
+                {
+                  "Sid": "UseDefaultDatabaseOptionGroup",
+                  "Effect": "Allow",
+                  "Action": ["rds:CreateDBInstance", "rds:ModifyDBInstance"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:og:default:postgres-16"}
+                },
+                {
+                  "Sid": "ManageEnvironmentEks",
+                  "Effect": "Allow",
+                  "Action": [
+                    "eks:CreateCluster",
+                    "eks:DeleteCluster",
+                    "eks:DescribeCluster",
+                    "eks:UpdateClusterConfig",
+                    "eks:UpdateClusterVersion",
+                    "eks:DescribeUpdate",
+                    "eks:ListUpdates",
+                    "eks:TagResource",
+                    "eks:UntagResource",
+                    "eks:ListTagsForResource",
+                    "eks:CreateAccessEntry",
+                    "eks:DeleteAccessEntry",
+                    "eks:DescribeAccessEntry",
+                    "eks:UpdateAccessEntry",
+                    "eks:ListAccessEntries",
+                    "eks:AssociateAccessPolicy",
+                    "eks:DisassociateAccessPolicy",
+                    "eks:ListAssociatedAccessPolicies",
+                    "eks:CreateAddon",
+                    "eks:DeleteAddon",
+                    "eks:DescribeAddon",
+                    "eks:UpdateAddon",
+                    "eks:ListAddons"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/trippilot-${Environment}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:access-entry/trippilot-${Environment}/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:addon/trippilot-${Environment}/*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ManageEnvironmentRegistry",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ecr:CreateRepository",
+                    "ecr:DeleteRepository",
+                    "ecr:DescribeRepositories",
+                    "ecr:ListTagsForResource",
+                    "ecr:TagResource",
+                    "ecr:UntagResource",
+                    "ecr:PutImageTagMutability",
+                    "ecr:PutImageScanningConfiguration",
+                    "ecr:GetLifecyclePolicy",
+                    "ecr:PutLifecyclePolicy",
+                    "ecr:DeleteLifecyclePolicy",
+                    "ecr:GetRepositoryPolicy",
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:BatchGetImage",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:UploadLayerPart",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:PutImage",
+                    "ecr:DescribeImages",
+                    "ecr:ListImages"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/trippilot-${Environment}/*"
+                  }
+                },
+                {
+                  "Sid": "ManageEnvironmentDatabase",
+                  "Effect": "Allow",
+                  "Action": [
+                    "rds:CreateDBInstance",
+                    "rds:ModifyDBInstance",
+                    "rds:DeleteDBInstance",
+                    "rds:CreateDBSubnetGroup",
+                    "rds:ModifyDBSubnetGroup",
+                    "rds:DeleteDBSubnetGroup",
+                    "rds:CreateDBParameterGroup",
+                    "rds:ModifyDBParameterGroup",
+                    "rds:ResetDBParameterGroup",
+                    "rds:DeleteDBParameterGroup",
+                    "rds:CreateDBSnapshot",
+                    "rds:AddTagsToResource",
+                    "rds:RemoveTagsFromResource",
+                    "rds:ListTagsForResource"
+                  ],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:*:trippilot-${Environment}*"}
+                },
+                {
+                  "Sid": "ManageEnvironmentCache",
+                  "Effect": "Allow",
+                  "Action": [
+                    "elasticache:CreateReplicationGroup",
+                    "elasticache:ModifyReplicationGroup",
+                    "elasticache:DeleteReplicationGroup",
+                    "elasticache:CreateCacheSubnetGroup",
+                    "elasticache:ModifyCacheSubnetGroup",
+                    "elasticache:DeleteCacheSubnetGroup",
+                    "elasticache:CreateCacheParameterGroup",
+                    "elasticache:ModifyCacheParameterGroup",
+                    "elasticache:ResetCacheParameterGroup",
+                    "elasticache:DeleteCacheParameterGroup",
+                    "elasticache:CreateSnapshot",
+                    "elasticache:AddTagsToResource",
+                    "elasticache:RemoveTagsFromResource",
+                    "elasticache:ListTagsForResource"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:elasticache:${AWS::Region}:${AWS::AccountId}:*:trippilot-${Environment}*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:elasticache:${AWS::Region}:${AWS::AccountId}:parametergroup:default.*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ManageEnvironmentLogs",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:DeleteLogGroup",
+                    "logs:PutRetentionPolicy",
+                    "logs:DeleteRetentionPolicy",
+                    "logs:ListTagsForResource",
+                    "logs:TagResource",
+                    "logs:UntagResource",
+                    "logs:ListTagsLogGroup",
+                    "logs:TagLogGroup",
+                    "logs:UntagLogGroup"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/eks/trippilot-${Environment}/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/rds/instance/trippilot-${Environment}/*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ManageApplicationSecrets",
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:PutSecretValue",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:DeleteSecret",
+                    "secretsmanager:RestoreSecret",
+                    "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
+                    "secretsmanager:GetResourcePolicy",
+                    "secretsmanager:ListSecretVersionIds"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:trippilot/${Environment}/*"
+                  }
+                },
+                {
+                  "Sid": "CreateRdsManagedSecret",
+                  "Effect": "Allow",
+                  "Action": ["secretsmanager:CreateSecret", "secretsmanager:TagResource"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:rds!db-*"}
+                },
+                {
+                  "Sid": "ReadEnvironmentRdsMasterSecret",
+                  "Effect": "Allow",
+                  "Action": ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:rds!db-*"},
+                  "Condition": {
+                    "StringEquals": {
+                      "secretsmanager:ResourceTag/aws:rds:primaryDBInstanceArn": {
+                        "Fn::Sub": "arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:db:trippilot-${Environment}"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "DescribeEncryptionKeys",
+                  "Effect": "Allow",
+                  "Action": ["kms:DescribeKey"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*"}
+                },
+                {
+                  "Sid": "SecretsManagerEncryption",
+                  "Effect": "Allow",
+                  "Action": ["kms:Decrypt", "kms:GenerateDataKey"],
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*"},
+                  "Condition": {
+                    "StringEquals": {
+                      "kms:ViaService": {"Fn::Sub": "secretsmanager.${AWS::Region}.amazonaws.com"},
+                      "kms:CallerAccount": {"Ref": "AWS::AccountId"}
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {"Key": "Project", "Value": "trippilot"},
+          {"Key": "Environment", "Value": {"Ref": "Environment"}},
+          {"Key": "ManagedBy", "Value": "cloudformation"}
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "DeploymentRoleArn": {
+      "Description": "Set this as the GitHub Environment variable AWS_ROLE_ARN.",
+      "Value": {"Fn::GetAtt": ["DeploymentRole", "Arn"]}
+    },
+    "TerraformStateBucket": {"Description": "Terraform S3 backend bucket.", "Value": {"Ref": "TerraformStateBucket"}},
+    "TerraformStateKey": {"Value": "terraform.tfstate"}
+  }
+}

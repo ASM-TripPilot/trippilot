@@ -3,6 +3,7 @@ package com.trippilot.app.config
 import org.slf4j.LoggerFactory
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler
 import org.springframework.aop.interceptor.SimpleAsyncUncaughtExceptionHandler
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.scheduling.annotation.AsyncConfigurer
@@ -22,11 +23,21 @@ import java.util.concurrent.Executor
  * 큐를 **유한**하게 두고 포화 시 `CallerRunsPolicy` 로 되민다 — 무한 큐는 부하 시 힙을 먹고 실패를 늦게 드러낸다.
  * 되밀린 작업은 호출 스레드에서 동기 실행되므로 유실되지 않는다(대신 그 요청은 2차 시한만큼 느려진다).
  * 정상 처리량은 **corePoolSize** 가 좌우한다 — `ThreadPoolExecutor` 는 큐가 가득 찬 뒤에야 max 까지 늘린다.
+ * 종료 대기는 `trippilot.async.await-termination-seconds`(기본 30초)로 배포 환경에 맞춘다.
  */
 @Configuration
 @EnableAsync
 @EnableScheduling // 중단된 2차 생성 정리(StalePartialSweeper)
-class AsyncConfig : AsyncConfigurer {
+class AsyncConfig(
+    @param:Value("\${trippilot.async.await-termination-seconds:30}")
+    private val awaitTerminationSeconds: Int,
+) : AsyncConfigurer {
+
+    init {
+        require(awaitTerminationSeconds in 1..MAX_AWAIT_TERMINATION_SEC) {
+            "trippilot.async.await-termination-seconds must be between 1 and $MAX_AWAIT_TERMINATION_SEC"
+        }
+    }
 
     @Bean // ThreadPoolTaskExecutor 는 DisposableBean — 스프링이 종료 설정대로 정리한다
     fun backgroundTaskExecutor(): ThreadPoolTaskExecutor =
@@ -45,7 +56,7 @@ class AsyncConfig : AsyncConfigurer {
                 }
             }
             setWaitForTasksToCompleteOnShutdown(true) // 종료 시 진행 중 2차 생성을 잘라내지 않는다
-            setAwaitTerminationSeconds(AWAIT_TERMINATION_SEC)
+            setAwaitTerminationSeconds(awaitTerminationSeconds)
         }
 
     override fun getAsyncExecutor(): Executor = backgroundTaskExecutor()
@@ -62,6 +73,6 @@ class AsyncConfig : AsyncConfigurer {
         private const val CORE_POOL = 8 // 정상 동시 처리량 = core (큐가 차기 전엔 max 까지 늘지 않는다)
         private const val MAX_POOL = 16
         private const val QUEUE_CAPACITY = 32 // 대기열이 길수록 마지막 사용자의 PARTIAL 체류가 길어진다
-        private const val AWAIT_TERMINATION_SEC = 30
+        private const val MAX_AWAIT_TERMINATION_SEC = 3600
     }
 }

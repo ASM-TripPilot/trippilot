@@ -1,0 +1,6 @@
+apiVersion: v2
+name: trippilot
+version: 0.1.0
+description: TripPilot backend and AI on EKS Auto Mode with an HTTPS API gateway.
+type: application
+kubeVersion: '>=1.30.0-0'
