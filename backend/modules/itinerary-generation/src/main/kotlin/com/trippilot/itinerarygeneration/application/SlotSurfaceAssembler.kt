@@ -19,11 +19,18 @@ class SlotSurfaceAssembler(private val poiSurfaces: PoiSurfaceFacade) {
         val slots = itinerary.days.flatMap { it.slots }
         if (slots.isEmpty()) return emptyMap()
 
-        val live = poiSurfaces.findSurfaces(slots.map { it.sourcePoiId })
+        // **차선책 POI 도 함께 모은다**(TRIP-851). 화면이 "다른 선택지"를 슬롯 카드와 **같은 카드**로
+        // 그리는데, 표면이 없으면 그 카드만 "이름 준비 중"으로 남는다. 조회는 한 번 더 늘지 않는다 —
+        // 슬롯 POI 와 합쳐 **한 번에** 묻는다.
+        val alternativePoiIds = slots.flatMap { s -> s.alternatives.map { it.poiId } }
+        val wanted = (slots.map { it.sourcePoiId } + alternativePoiIds).distinct()
+
+        val live = poiSurfaces.findSurfaces(wanted)
+        // 동결은 **슬롯만** 대상이다 — 차선책은 아직 고른 것이 아니라 동결본이 없다(확정 시점에 없던 장소다).
         val frozen = poiSurfaces.findFrozenSurfaces(slots.mapNotNull { it.poiSnapshotId })
         val frozenByPoi = frozen.values.associateBy { it.sourcePoiId }
 
-        return slots.map { it.sourcePoiId }.distinct().mapNotNull { poiId ->
+        return wanted.mapNotNull { poiId ->
             val l = live[poiId]
             val f = frozenByPoi[poiId]
             if (l == null && f == null) return@mapNotNull null // 정본도 동결본도 없음 — 표면 없이 poiId 만 나간다

@@ -120,8 +120,11 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
         return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
     }
 
-    private fun poiId(token: String): String =
-        call(HttpMethod.GET, "/api/v1/places?region=제주", token).second["items"][0]["poiId"].asText()
+    private fun poiId(token: String): String = poiIdAt(token, 0)
+
+    /** [index] 번째 장소 — **서로 다른** POI 가 필요한 스펙이 있다(차선책은 자기 자신을 제외한다). */
+    private fun poiIdAt(token: String, index: Int): String =
+        call(HttpMethod.GET, "/api/v1/places?region=제주", token).second["items"][index]["poiId"].asText()
 
     private companion object {
         const val POLL_INTERVAL_MS = 50L
@@ -413,6 +416,48 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
         val (crc, confirmed) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token)
         crc shouldBe 200
         confirmed["days"][0]["slots"][0]["alternatives"][0]["poiId"].asText() shouldBe alt.toString()
+    }
+
+    /**
+     * **차선책 카드에 장소 표면이 실린다**(TRIP-851).
+     *
+     * 화면이 "다른 선택지"를 슬롯 카드와 같은 카드로 그리는데, 표면이 없으면 그 카드만 "이름 준비 중"
+     * 으로 남는다. 후보마다 `GET /places/{id}` 를 부르면 N+1 이라 응답에 싣는 쪽이 맞다.
+     *
+     * 정본에 **있는** POI 를 차선책으로 넣어 실제로 채워지는지 본다 — 임의 UUID 를 쓰면 표면이
+     * 늘 null 이라 이 스펙이 아무것도 안 지킨다.
+     */
+    @Test
+    fun `차선책에 장소 표면이 실린다 — 이름·카테고리·태그·사진(TRIP-851)`() {
+        val token = newToken()
+        val trip = newTrip(token)
+        val slotPoi = UUID.fromString(poiId(token))
+        val altPoi = UUID.fromString(poiIdAt(token, 1)) // **다른** 장소여야 한다 — 차선책은 자기 자신을 제외한다
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(UUID.fromString(trip), SolveMode.FULL_AI, GenerationMode.FULLY_AI, isFallback = false,
+                days = listOf(
+                    ItineraryDay.of(
+                        LocalDate.parse("2026-08-01"), 0,
+                        listOf(
+                            VisitSlot.of(
+                                slotPoi, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+                                alternatives = listOf(SlotAlternative(altPoi, "비 오면 실내라 여기가 낫다", "약 800m")),
+                            ),
+                        ),
+                    ),
+                ),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+            ),
+        )
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        rc shouldBe 200
+        val a = body["days"][0]["slots"][0]["alternatives"][0]
+        a["nameKo"].isNull shouldBe false          // 정본에 있는 장소라 이름이 온다
+        a["category"].isNull shouldBe false
+        a.has("tags") shouldBe true
+        a.has("duration") shouldBe false           // INV-3
     }
 
     /** 대부분의 슬롯이 이 경로다 — 여기가 깨지면 일정 조회 전체가 죽는데, 값 있는 표본만 보면 초록이다. */

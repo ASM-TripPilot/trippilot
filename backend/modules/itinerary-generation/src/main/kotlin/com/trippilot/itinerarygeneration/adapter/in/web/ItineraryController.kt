@@ -14,6 +14,7 @@ import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.application.UnplacedText
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
@@ -134,7 +135,7 @@ data class ItineraryResponse(
             candidatesSummary = i.candidatesSummary?.let { CandidatesSummaryResponse(it.level, it.poolSize, it.shortfallCategories) },
             unplacedMustVisits = i.unplacedMustVisits.map { UnplacedMustVisitResponse(it.poiId, it.reasonCode.name, UnplacedText.of(it.reasonCode)) },
             days = i.days.map { d ->
-                DayResponse(d.date, d.slots.map { s -> SlotResponse.of(s, surfaces[s.sourcePoiId], i.status) })
+                DayResponse(d.date, d.slots.map { s -> SlotResponse.of(s, surfaces[s.sourcePoiId], i.status, surfaces) })
             },
         )
     }
@@ -148,7 +149,33 @@ data class ItineraryResponse(
  * 채우지만, 이쪽은 AI 가 준 값이라 좌표를 모르면 null 이다 — 0 이나 빈 문자열로 채우면 "모른다"가
  * "가깝다"로 바뀐다.
  */
-data class SlotAlternativeResponse(val poiId: UUID, val rationale: String, val distanceRange: String?)
+data class SlotAlternativeResponse(
+    val poiId: UUID,
+    val rationale: String,
+    val distanceRange: String?,
+    /**
+     * POI 표면(TRIP-851) — 화면이 후보 카드를 **추가 왕복 없이** 그린다. 정본에 없으면 전부 null 이고,
+     * 그때 화면은 "이름 준비 중" 플레이스홀더로 떨어진다(값을 지어내지 않는다, BR-U1-06).
+     *
+     * 동결본은 안 본다 — 차선책은 아직 고른 것이 아니라 확정 시점에 동결된 적이 없다.
+     */
+    val nameKo: String?,
+    val category: String?,
+    val tags: List<String>,
+    val imageUrl: String?,
+) {
+    companion object {
+        fun of(a: SlotAlternative, surface: SlotSurface?) = SlotAlternativeResponse(
+            poiId = a.poiId,
+            rationale = a.rationale,
+            distanceRange = a.distanceRange,
+            nameKo = surface?.nameKo,
+            category = surface?.category,
+            tags = surface?.tags.orEmpty(),
+            imageUrl = surface?.imageUrl,
+        )
+    }
+}
 
 data class DayResponse(val date: LocalDate, val slots: List<SlotResponse>)
 
@@ -203,7 +230,7 @@ data class SlotResponse(
     val alternatives: List<SlotAlternativeResponse>,
 ) {
     companion object {
-        fun of(s: VisitSlot, surface: SlotSurface?, status: ItineraryStatus) = SlotResponse(
+        fun of(s: VisitSlot, surface: SlotSurface?, status: ItineraryStatus, surfaces: Map<UUID, SlotSurface> = emptyMap()) = SlotResponse(
             poiId = s.sourcePoiId,
             startAt = s.startAt,
             endAt = s.endAt,
@@ -222,7 +249,7 @@ data class SlotResponse(
             // 확정 뒤에도 정본을 따라가면, 나중에 영업시간이 비는 순간 이미 확정된 슬롯이 "확인 필요"로
             // 되돌아가 확정 일정의 안정성(INV-U1-03)을 깬다.
             openingHoursKnown = if (status == ItineraryStatus.CONFIRMED) null else (surface?.openingHoursKnown ?: false),
-            alternatives = s.alternatives.map { SlotAlternativeResponse(it.poiId, it.rationale, it.distanceRange) },
+            alternatives = s.alternatives.map { SlotAlternativeResponse.of(it, surfaces[it.poiId]) },
             imageUrl = surface?.imageUrl,
             tags = surface?.tags.orEmpty(),
         )
