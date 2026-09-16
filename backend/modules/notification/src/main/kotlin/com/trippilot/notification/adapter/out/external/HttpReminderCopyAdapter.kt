@@ -24,10 +24,28 @@ class HttpReminderCopyAdapter(
     override val enabled = true
 
     override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
-        if (items.isEmpty()) return emptyMap()
-        return runCatching { call(tripTitle, items) }
-            .onFailure { log.warn("리마인드 문구 호출 실패 — 상수 문구로 갑니다. base={}", properties.baseUrl, it) }
-            .getOrDefault(emptyMap())
+        // 계약 enum 밖의 종류는 **보내기 전에** 거른다 — 실으면 그 한 건 때문에 요청 전체가 422 다.
+        // 재료가 빈 항목도 뺀다 — 아래 이유가 크다.
+        val sendable = items.filter { it.kind.name in AI_KINDS && it.slots.isNotEmpty() }
+        val starved = items.count { it.kind.name in AI_KINDS && it.slots.isEmpty() }
+        if (starved > 0) {
+            // **빈 재료로 물으면 상대가 없는 사실을 지어낸다.** 실측(2026-09-16 실 왕복):
+            // slots=[] 로 물었더니 "오늘은 별도의 일정이 없으니 여유롭게…" 가 돌아왔다 —
+            // 일정이 꽉 찬 날에 나가면 **거짓말**이다. 상수 문구("오늘의 일정")는 적어도 참이다.
+            log.info("재료(slots)가 빈 예약 {}건은 묻지 않습니다 — 빈 입력에는 상대가 '일정 없음'을 지어냅니다.", starved)
+        }
+        if (sendable.size != items.size) {
+            log.warn("상대가 모르는 알림 종류 {}건을 뺐습니다 — 계약 enum 은 {} 뿐입니다.", items.size - sendable.size, AI_KINDS)
+        }
+        if (sendable.isEmpty()) return emptyMap()
+
+        // 계약 상한(`maxItems: 30`)을 넘기면 **한 건도 못 받는다.** 긴 여행은 하루 1건씩 쌓여
+        // 한 달이면 넘는다 — 나눠 보내고 결과를 합친다. 한 묶음이 실패해도 나머지는 산다.
+        return sendable.chunked(MAX_ITEMS).fold(emptyMap()) { acc, chunk ->
+            acc + runCatching { call(tripTitle, chunk) }
+                .onFailure { log.warn("리마인드 문구 호출 실패 — 그 묶음은 상수 문구로 갑니다. base={}", properties.baseUrl, it) }
+                .getOrDefault(emptyMap())
+        }
     }
 
     private fun call(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
@@ -38,7 +56,7 @@ class HttpReminderCopyAdapter(
                     scheduleKey = it.scheduleKey,
                     kind = it.kind.name,
                     date = it.date.toString(),
-                    slots = it.slots,
+                    slots = it.slots.map { name -> AiReminderSlot(name) },
                 )
             },
             tripTitle = tripTitle,
@@ -65,9 +83,22 @@ class HttpReminderCopyAdapter(
             .associate { it.scheduleKey to ReminderCopy(it.title, it.body) }
     }
 
-    private companion object {
+    internal companion object {
         private val log = LoggerFactory.getLogger(HttpReminderCopyAdapter::class.java)
         private const val COPIES_PATH = "/ai/v1/notification/copies"
+
+        /** 계약 enum. 우리 종류는 여덟인데 상대가 받는 것은 둘뿐이다. */
+        private val AI_KINDS = setOf("TRIP_DAY", "TRIP_PRE")
+
+        /** 계약 `maxItems`. 넘기면 요청 전체가 422 라 나눠 보낸다. */
+        private const val MAX_ITEMS = 30
+
+        /**
+         * 계약 게이트가 **생산 값 그대로** 대조하도록 연다. 테스트가 값을 다시 적으면
+         * 자기 사본을 보고 통과한다(이 리포에서 겪은 함정).
+         */
+        internal fun aiKinds(): Set<String> = AI_KINDS
+        internal fun maxItems(): Int = MAX_ITEMS
 
         /** `notification_schedule` 컬럼 폭(V2.47)과 같은 값. 넘으면 저장이 실패하므로 여기서 거른다. */
         private const val TITLE_MAX = 60
