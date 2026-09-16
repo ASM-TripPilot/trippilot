@@ -24,7 +24,7 @@ class SecurityConfig {
 
     @Bean
     fun securityFilterChain(http: HttpSecurity, serviceAuth: ServiceAuthProperties): SecurityFilterChain {
-        ServiceTokenAuthFilter.announce(serviceAuth.token)
+        ServiceTokenAuthFilter.announce(serviceAuth.token, serviceAuth.requireToken)
         http
             .csrf { it.disable() }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }

@@ -54,8 +54,13 @@ trippilot:
   # kakao 인데 키가 비면 RegionGeocodeModeAnnouncer 가 기동을 막는다(불변식이 조용히 꺼지는 것보다 낫다).
   # 서비스 간 호출 자격증명(TRIP-393). 비면 /internal/** 은 아무도 호출할 수 없다(fail-closed) —
   # 설정을 잊었을 때 조용히 열리는 것보다 조용히 닫히는 편이 안전하다.
+  # require-token 을 켜면 비어 있을 때 **기동하지 않는다**(jwt.require-configured-key 와 같은 모양).
+  # 기본은 꺼짐 — 켜 두면 토큰을 안 넣은 로컬·CI 가 통째로 죽는다. 배포 환경에서 켜는 스위치다(TRIP-850).
+  # 수신은 비면 닫히지만 **발신은 비면 헤더를 안 붙이고 그냥 나간다** — 상대가 검증을 켜는 순간
+  # AI 호출이 전부 401 인데 몇은 degraded 폴백에 흡수돼 "AI 가 이상하다"로만 보인다. 이 스위치가 그걸 막는다.
   service-auth:
     token: ${SERVICE_AUTH_TOKEN:}
+    require-token: ${SERVICE_AUTH_REQUIRE_TOKEN:false}
   # JWT 서명키(RS256). **비면 기동할 때마다 새로 만든다** — 그 상태는 복제본을 둘 이상 못 띄운다
   # (A 가 서명한 토큰을 B 가 검증하지 못해 요청마다 무작위 401). 리프레시는 DB 행이라 재배포 시
   # 액세스 토큰 무효화는 재발급으로 회복되지만, 다중 인스턴스는 회복되지 않는다.
