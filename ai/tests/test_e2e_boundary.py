@@ -3,7 +3,7 @@
 FastAPI TestClient + **실 오케스트레이터·실 M7·실 C1·실 C2** + fake 어댑터(LLM·POI DB·
 페르소나 저장소·시계·트레이스)로 전 구간을 관통한다 — 실 LLM·외부 API 호출 0 (D37).
 
-    HTTP 요청(백엔드 Jackson 형태) → routes → wiring 어댑터 → ItineraryOrchestrator
+    HTTP 요청(백엔드 Jackson 형태) → routes → wiring 어댑터 → ScheduleCoordinator
     → M7 후보풀 → C1 점수·설명 → C2 어셈블리 → 응답 JSON
 
 증명하는 것:

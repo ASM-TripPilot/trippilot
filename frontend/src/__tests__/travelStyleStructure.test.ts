@@ -20,7 +20,7 @@ import path from 'path';
  *    (`/records` 탭 충돌 회피).
  *  - **★ feature 경계(맹점②)**: 신규 6 feature 파일에 `@/features/settings`·`buildStyleCardModel`·
  *    `styleCardModel` 0(병렬 판정 드리프트를 소스로 차단 — cross-feature import 금지).
- *  - **★ 지도 degrade(맹점③)**: 신규 4 ui 파일에 `KakaoMapView`·`@/shared/map` 0
+ *  - **★ 지도 degrade(맹점③)**: 신규 4 ui 파일에 `MapView`(단어 경계)·`@/shared/map` 0
  *    → `itineraryMapSurfaceStructure` LOCKED_CALLERS 등재 불필요(계약 좌표 공백, placeholder degrade).
  *  - **INV-3 명시홈**: 신규 4 ui 파일 소요시간 문자열 0(값 인터폴레이션만 — 리터럴 금지, 두 층 가르는 선).
  *
@@ -95,9 +95,13 @@ const SETTINGS_FORBIDDEN: { label: string; re: RegExp }[] = [
   { label: 'styleCardModel', re: /styleCardModel/ },
 ];
 
-/** 지도 유출 금칙어(맹점③) — placeholder degrade, 실 지도 미사용. */
+/** 지도 유출 금칙어(맹점③) — placeholder degrade, 실 지도 미사용.
+ * TRIP-864 재조준 — 컴포넌트 이름 규칙을 `KakaoMapView`→단어 경계 `\bMapView\b` 로 바꾼다.
+ * 옛 `/KakaoMapView/` 는 이름 전환 후 `<MapView>` 를 못 잡아 공허 통과로 퇴화한다. `\bMapView\b`
+ * 는 `<MapView>`·`import { MapView }` 는 잡고 별칭 `KakaoMapView`·타입 `MapViewProps` 엔 안
+ * 걸린다(node 실측, 02a §1). 딥 경로/배럴 import 는 `@/shared/map` 정규식이 별도로 잡는다. */
 const MAP_FORBIDDEN: { label: string; re: RegExp }[] = [
-  { label: 'KakaoMapView', re: /KakaoMapView/ },
+  { label: 'MapView', re: /\bMapView\b/ },
   { label: '@/shared/map', re: /@\/shared\/map/ },
 ];
 
@@ -238,11 +242,24 @@ describe('🔴 ★ feature 경계 — reflection 이 settings 판정을 재사�
 });
 
 describe('🔴 ★ 지도 degrade — 신규 ui 에 실 지도 0(맹점③ LOCKED_CALLERS N/A)', () => {
-  it('4 ui 파일에 KakaoMapView·@/shared/map 0 + reflection-style-bar 모집단 앵커', () => {
+  it('4 ui 파일에 MapView·@/shared/map 0 + reflection-style-bar 모집단 앵커', () => {
     const sources = UI_FILES.map((rel) => ({
       file: rel,
       source: readOne(rel),
     }));
+
+    // 탐지기 자가검사(TRIP-864 재조준) — 합성 `<MapView>`·배럴 import 는 잡고, 별칭·타입명엔
+    // 안 걸린다(이름 전환 후 공허 통과 방지, 02a §1).
+    expect(firstHit('const x = <MapView center={c} />;', MAP_FORBIDDEN)).toBe(
+      'MapView'
+    );
+    expect(
+      firstHit("import { MapView } from '@/shared/map';", MAP_FORBIDDEN)
+    ).toBe('MapView');
+    expect(firstHit('type P = MapViewProps;', MAP_FORBIDDEN)).toBeNull();
+    expect(
+      firstHit("import { KakaoMapView } from '@/foo';", MAP_FORBIDDEN)
+    ).toBeNull();
 
     const offenders = sources
       .filter(({ source }) => firstHit(source, MAP_FORBIDDEN) !== null)

@@ -75,6 +75,12 @@ services:
       # 일정 생성 경계 전환(TRIP-229). 기본 fake 라 평소 동작은 그대로 —
       # 공동 통합테스트에서만 AI_SCHEDULE_MODE=http 로 실 AI 컨테이너에 붙인다.
       TRIPPILOT_AI_SCHEDULE_MODE: ${AI_SCHEDULE_MODE:-fake}
+      # 기상 조회(TRIP-849). 기본 fake = 가짜 강수확률. kma 로 켜면 실 기상청을 부른다.
+      # 키는 아래 WEATHER_API 를 그대로 쓴다 — AI 컨테이너와 같은 값이다.
+      WEATHER_MODE: ${WEATHER_MODE:-fake}
+      WEATHER_API: ${WEATHER_API:-}
+      # 리마인드 문구 AI 채움(TRIP-836). 기본 off = 상수 문구. http 로 켜면 예약 적재 시 AI 를 부른다.
+      AI_REMINDER_COPY_MODE: ${AI_REMINDER_COPY_MODE:-off}
       TRIPPILOT_AI_SCHEDULE_BASE_URL: ${AI_URL:-http://ai:8000}
       # 시간제약(day1 5s / 전체 20s)을 AI 에 실을지. **기본 off** — FE 연동 기간에는 시간 때문에
       # 규칙 폴백으로 강등되는 것을 걷어낸다(TRIP-474). 9월 재도입은 여기를 true 로(TRIP-475).
@@ -108,6 +114,18 @@ services:
       TRIPPILOT_PUSH_EXPO_ACCESS_TOKEN: ${PUSH_EXPO_ACCESS_TOKEN:-}
       # 서비스 간 호출(TRIP-393). 비우면 /internal 경계가 닫힌다 — AI 수집분 수신도 막힌다.
       TRIPPILOT_SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      # 켜면 위 토큰이 빈 채로는 기동하지 않는다. 로컬 기본은 꺼짐(토큰 없이도 떠야 한다).
+      # `:-false` 다 — 빈 문자열을 넘기면 Boolean 바인딩이 깨져 기동이 죽는다(실측).
+      SERVICE_AUTH_REQUIRE_TOKEN: ${SERVICE_AUTH_REQUIRE_TOKEN:-false}
+      # JWT 서명키(RS256) — 비우면 컨테이너가 기동할 때마다 새로 만든다. 복제본을 둘 이상
+      # 띄우는 순간 서로의 토큰을 못 읽어 로그인이 깨지므로, 배포에서는 반드시 채운다.
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-}
+      # 켜면 위 키가 빈 채로는 기동하지 않는다. 로컬 기본은 꺼짐(키 없이도 떠야 한다).
+      # **`:-false` 로 값을 보장한다.** `:-` 로 비워 넘기면 컨테이너가 빈 문자열을 받고,
+      # application.yml 의 `${...:false}` 는 "존재하지만 빈 값"이라 기본값을 못 써서
+      # Boolean 바인딩이 BindException 으로 **기동을 깬다**(실측 2026-09-16).
+      # 같은 이유로 AI_SCHEDULE_DEADLINE_ENFORCED 도 `:-false` 다.
+      JWT_REQUIRE_CONFIGURED_KEY: ${JWT_REQUIRE_CONFIGURED_KEY:-false}
       # application.yml 은 ${SERVICE_AUTH_TOKEN:} 을 읽는다 — 접두 붙은 이름만 주면 빈 토큰이 되어 /internal 이 401 로 닫힌다(실측 2026-08-21).
       SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
     ports:
@@ -169,7 +187,10 @@ services:
       # 행사 지오코딩 배치가 쓰는 KAKAO_REST_API_KEY_AI 시크릿과 같은 키를 써도 된다
       # (쿼터 무료 10만/일 대비 요청당 최대 50콜). 백엔드 소셜 로그인용
       # KAKAO_CLIENT_ID 와는 **다른 키**다.
-      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
+      # 비워 두면 위 소셜 로그인용 KAKAO_CLIENT_ID 를 그대로 쓴다 — 카카오
+      # OAuth 는 client_id 자리에 **REST API 키**를 쓰므로 같은 값이다
+      # (2026-09-16 실호출 확인: 로컬 API 키워드검색 200).
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-${KAKAO_CLIENT_ID:-}}
       # verify() 1회당 호출 상한. 검증 대상 상위 50건보다 넉넉히(기본 60) —
       # 실질 제한은 마감 1.5s 다.
       EXISTENCE_MAX_CALLS: ${EXISTENCE_MAX_CALLS:-}

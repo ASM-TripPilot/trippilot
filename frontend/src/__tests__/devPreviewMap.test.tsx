@@ -28,9 +28,9 @@ jest.mock('expo-router', () => ({
 // (수동 목: __mocks__/@gorhom/bottom-sheet.tsx — 동결 devPreview.test와 같은 장치).
 jest.mock('@gorhom/bottom-sheet');
 
-// react-native-webview도 같은 이유로 통과 컴포넌트로 목킹한다(__mocks__/react-native-webview.tsx,
-// M1 실측: 이 호출이 없어도 자동 적용되지만 리포 관례대로 명시한다).
-jest.mock('react-native-webview');
+// TRIP-864 — 지도가 카카오 WebView → 네이버 네이티브로 전환됐다. 지도 자리는 이제
+// __mocks__/@mj-studio/react-native-naver-map.tsx(자동 적용, host <View testID="map-native">)가
+// 채운다 — jest.mock 명시 호출 불요. 옛 react-native-webview 목은 프로덕션 미사용(grep 0)이라 제거.
 
 // 지뢰 — 프리뷰가 이 모듈을 (직접이든 전이든) require하면 즉시 터진다.
 jest.mock('@/shared/api', () => {

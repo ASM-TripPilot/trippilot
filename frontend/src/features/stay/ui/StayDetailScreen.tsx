@@ -216,7 +216,7 @@ export function StayDetailScreen({
 
           <Divider />
 
-          {/* 위치 — 미니맵 정적 자리(Q5, KakaoMapView 아님) + 지역(거리·소요시간 없음 INV-1·INV-3) */}
+          {/* 위치 — 미니맵 정적 자리(Q5, MapView 아님) + 지역(거리·소요시간 없음 INV-1·INV-3) */}
           <View className="gap-md">
             <Text className="font-noto-bold text-section font-bold text-ink">
               위치

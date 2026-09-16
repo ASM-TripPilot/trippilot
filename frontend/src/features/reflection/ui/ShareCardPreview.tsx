@@ -8,10 +8,11 @@ import { WatermarkLogoGlyph } from './ShareCardGlyphs';
 /**
  * TRIP-574 · j06 카드 프리뷰 — 온디바이스 렌더 카드의 표면(캡처 대상 View).
  *
- * ★ 지도 degrade: 라이브 KakaoMapView(WebView)를 넣지 않는다 — (1) view-shot 은 WebView 콘텐츠를
- *   못 캡처하고(맹점①) (2) TripSummary/DayHighlight 계약에 좌표가 없어 애초에 못 그린다(맹점④).
- *   그래서 카드는 지도 없이 워터마크·동선 순서 목록·하단 그라디언트 텍스트 오버레이(지역·기간·제목·
- *   통계)로 조립한다. 픽셀 충실도(그라디언트·정렬·핀 좌표)는 [검증] 6-b 스크린샷 대조 전용.
+ * ★ 지도 degrade: 라이브 지도를 넣지 않는다 — TripSummary/DayHighlight 계약에 좌표가 없어
+ *   애초에 못 그린다(맹점④). (TRIP-866 으로 지도가 네이버 네이티브가 돼 view-shot 캡처는 이제
+ *   가능해졌다 — 옛 WebView 캡처 불가 제약은 해소됐고, 좌표 계약이 생기면 히어로 지도 재개가
+ *   후속 후보다.) 그래서 카드는 지도 없이 워터마크·동선 순서 목록·하단 그라디언트 텍스트
+ *   오버레이(지역·기간·제목·통계)로 조립한다. 픽셀 충실도는 [검증] 6-b 스크린샷 대조 전용.
  *
  * 종횡비 프레임(reflection-share-preview-frame)은 인라인 `style={{ aspectRatio }}` 로 노출한다 —
  * 화면이 선택 포맷의 aspectRatio 를 넘겨 9:16→1:1→4:5 전환이 관측된다(className 만으론 jest 가 못 읽음).

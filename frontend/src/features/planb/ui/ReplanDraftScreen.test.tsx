@@ -18,7 +18,7 @@ import { ReplanDraftScreen } from './ReplanDraftScreen';
  * ★ toHaveTextContent: 헤더·이월은 감싼 컨테이너라 정규식 부분, leaf 는 다른 파일에서 STRING.
  */
 
-jest.mock('@/shared/map', () => ({ KakaoMapView: () => null }));
+jest.mock('@/shared/map', () => ({ MapView: () => null }));
 
 /** 슬롯 3개 — badgeKind 를 changed/visited/fixed 로 섞어 렌더 다양성을 준다(INV-3: metaText 는 거리·시각범위). */
 const SLOTS: ReplanSlotVM[] = [

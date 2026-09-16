@@ -20,6 +20,12 @@ data class NotificationSchedule(
     val fireAt: Instant,
     val firedAt: Instant?,
     val canceledAt: Instant?,
+    /**
+     * AI 가 채운 문구(TRIP-836). **null 이 기본이고 그것이 정상이다** — 안 켠 환경·상대가
+     * `degraded` 로 답한 경우·못 받은 예약이 전부 여기 해당하고, 그때는 아래 상수 문구로 간다.
+     */
+    val title: String? = null,
+    val body: String? = null,
 ) {
     init {
         require(kind in NotificationKind.REMINDERS) { "시각으로 발화하지 않는 종류는 예약할 수 없습니다: $kind" }
@@ -41,8 +47,10 @@ data class NotificationSchedule(
     fun toNotification(now: Instant): Notification = Notification.raise(
         accountId = accountId,
         kind = kind,
-        title = title(),
-        body = body(),
+        // **받은 문구가 있으면 그것을 쓴다.** 둘 중 하나만 온 경우는 섞지 않는다 —
+        // AI 제목에 상수 본문이 붙으면 문장이 따로 놀아 오히려 어색하다.
+        title = if (hasCopy()) title!! else defaultTitle(),
+        body = if (hasCopy()) body!! else defaultBody(),
         occurredAt = now,
         // 알림에서 그 여행의 일정으로 들어간다. 진입이 없으면 사용자가 알림을 읽고도 갈 곳이 없다.
         actionType = NotificationAction.TRIP_ITINERARY,
@@ -53,13 +61,16 @@ data class NotificationSchedule(
         dedupKey = "$kind#$tripId#$fireAt",
     )
 
-    private fun title(): String = when (kind) {
+    /** 제목·본문이 **둘 다** 있어야 AI 문구로 친다. 한쪽만 쓰면 문장이 따로 논다. */
+    private fun hasCopy(): Boolean = !title.isNullOrBlank() && !body.isNullOrBlank()
+
+    private fun defaultTitle(): String = when (kind) {
         NotificationKind.TRIP_PRE -> "내일 여행이 시작돼요"
         NotificationKind.TRIP_DAY -> "오늘의 일정"
         else -> "일정 시작 전이에요"
     }
 
-    private fun body(): String = when (kind) {
+    private fun defaultBody(): String = when (kind) {
         NotificationKind.TRIP_PRE -> "출발 전에 일정을 한 번 확인해 보세요."
         NotificationKind.TRIP_DAY -> "오늘 어디를 가는지 확인해 보세요."
         else -> "곧 다음 일정이 시작돼요."

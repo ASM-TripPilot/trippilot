@@ -320,8 +320,9 @@ describe('PI-7 · ★ D4 hasOverride → 요약 "+ 온보딩" 제거', () => {
     await waitFor(() =>
       expect(summaryPreferenceRow()).toHaveTextContent(/미식/)
     );
-    // 부분 매칭이라 정규식(toHaveTextContent 문자열은 완전 일치, 02a §5-5).
-    expect(summaryPreferenceRow()).toHaveTextContent(/\+ 온보딩/);
+    // TRIP-732: 옛 " + 온보딩" 문자열이 스파클+분홍 "온보딩" 배지로 바뀐다 → `\+`를 뗀 `/온보딩/`로
+    // 검사(구·신 렌더 모두 "온보딩"을 담아 선제 green, 반전 후 `\+` 부재로 깨지는 것 예방).
+    expect(summaryPreferenceRow()).toHaveTextContent(/온보딩/);
   });
 
   it('오버라이드가 있으면 요약이 effective(휴양)·activities(야경)를 담고 "온보딩"이 사라진다', async () => {

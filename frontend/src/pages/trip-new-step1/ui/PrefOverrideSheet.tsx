@@ -16,6 +16,10 @@
  * 그래서 선택은 `accessibilityState={{ selected }}`로만 표시한다 — `toBeSelected()` 매처가
  * `accessibilityState.selected`만 읽어 fill 색 뮤턴트·교차 뮤턴트를 잡는다(★맹점①).
  *
+ * TRIP-738: 선택 칩은 `bg-primary`(#FF385C)라 글리프의 selected 색(같은 primary)이 배경에 묻혔다.
+ * 선택 시 `onPrimary` prop을 넘겨 글리프를 흰색으로 강제한다(OnboardingGlyphs additive, 온보딩
+ * c09 무영향). 흰 아이콘 실렌더는 SVG stroke라 jest 사각 — 6-b 육안 몫이다.
+ *
  * 단일 적용(닫기 버튼 없음) — 개폐는 그래버/딤/뒤로가 진다(구 시트의 [닫기]/[적용] 2버튼 폐기).
  *
  * ⚠️ 실제 개폐·딤 전면 커버·터치 차단은 `@gorhom/bottom-sheet` 통과형 목이라 jest가 원리적으로
@@ -28,6 +32,8 @@ import BottomSheet, {
   BottomSheetView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+
+import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
 
 import { STYLE } from '@/features/onboarding/model/preferenceInput';
 import {
@@ -85,16 +91,12 @@ export function PrefOverrideSheet({
       enablePanDownToClose
       onClose={onClose}
       backdropComponent={renderBackdrop}
+      handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
     >
       <BottomSheetView
         testID="trip-wizard-pref-sheet"
         className="gap-lg px-xl pb-[34px] pt-[10px]"
       >
-        {/* grabber */}
-        <View className="items-center">
-          <View className="h-[4px] w-[40px] rounded-[2px] bg-hairline-strong" />
-        </View>
-
         {/* header */}
         <View className="gap-xs">
           <Text className="text-[20px] font-noto-bold font-bold text-ink">
@@ -123,7 +125,7 @@ export function PrefOverrideSheet({
                     : 'border border-hairline-strong bg-canvas'
                 }`}
               >
-                <Glyph size={18} selected={isSelected} />
+                <Glyph size={18} selected={isSelected} onPrimary={isSelected} />
                 <Text
                   className={`font-noto-bold text-label font-bold ${
                     isSelected ? 'text-on-primary' : 'text-ink'

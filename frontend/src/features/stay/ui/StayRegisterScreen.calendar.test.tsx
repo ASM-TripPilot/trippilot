@@ -21,7 +21,7 @@ import { StayRegisterScreen } from './StayRegisterScreen';
  * babel의 `_ReactNativeCSSInterop` 호이스트 규칙을 위반하므로 모듈 스코프 파일을 require 한다.
  */
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 /** 픽스처는 파일마다 각자 갖는 것이 리포 관례. 달력만 보므로 검색·좌표 축은 비활성으로 둔다. */
 const BASE_FLOW: StayRegisterFlow = {
@@ -50,7 +50,7 @@ function makeHandlers() {
   return {
     onSelectTab: jest.fn(),
     onChangeName: jest.fn(),
-    onPinMessage: jest.fn(),
+    onPickCoord: jest.fn(),
     onChangeQuery: jest.fn(),
     onSubmitQuery: jest.fn(),
     onRetrySearch: jest.fn(),

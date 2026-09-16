@@ -129,3 +129,41 @@ def test_ttl_hit_then_expiry_refetch() -> None:
     spy.advance(_CFG.poi_ttl_sec)                          # 논리 시계로 만료
     third = repo.find_by_ids(ids)
     assert src.calls == 2 and third[0].avg_cost == 8000    # 만료 → 원본 재조회
+
+
+# ── 세분류 태그 왕복 (KB-5) ──────────────────────────────────────
+def test_subcategory_tags_survive_the_cache_round_trip() -> None:
+    """캐시를 거쳐도 세분류가 남는다 — 히트 경로에서만 빠지면 미스만 보고는 못 찾는다.
+
+    태그는 후보 줄에서 대분류 8종이 못 가르는 축을 담당한다(우천 판정표가 SIGHT 를
+    "실내외 혼재"로 중립 처리하는 그 축). 왕복에서 떨어지면 **캐시 적중 시에만** 후보
+    줄이 빈약해지고, 첫 조회만 보면 멀쩡해 보인다.
+    """
+    tagged = Poi(
+        poi_id=PoiId("p1"), name="수원화성", category=PoiCategory.SIGHT,
+        coord=GeoPoint(37.28, 127.01), open_hours=(), avg_cost=None, rating=None,
+        quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
+        tags=("역사관광지", "유적지/사적지"),
+    )
+    repo = CachedPoiRepository(_CountingSource((tagged,)), SpyCache(), _CFG)
+    ids = frozenset({PoiId("p1")})
+
+    assert repo.find_by_ids(ids)[0].tags == ("역사관광지", "유적지/사적지")   # 미스 → 원본
+    assert repo.find_by_ids(ids)[0].tags == ("역사관광지", "유적지/사적지")   # 히트 → 캐시
+
+
+def test_cache_entries_written_before_tags_existed_still_load() -> None:
+    """태그 이전에 쓰인 캐시 항목도 읽힌다 — 배포하며 캐시를 비우지 않는다.
+
+    `saved_count` 가 남긴 선례와 같은 처방(`Poi.from_dict` 의 `d.get`). 없으면 배포
+    직후 TTL 이 돌 때까지 캐시 히트마다 KeyError 가 난다.
+    """
+    old = Poi(
+        poi_id=PoiId("p1"), name="수원화성", category=PoiCategory.SIGHT,
+        coord=GeoPoint(37.28, 127.01), open_hours=(), avg_cost=None, rating=None,
+        quality=DataQuality.FULL, source=PoiSource.SEED, confidence=None,
+    ).to_cacheable_dict()
+    del old["tags"]
+    old["avg_cost"] = None  # CachedPoiRepository.find_by_ids 가 히트 때 다시 넣는 값
+
+    assert Poi.from_dict(old).tags == ()

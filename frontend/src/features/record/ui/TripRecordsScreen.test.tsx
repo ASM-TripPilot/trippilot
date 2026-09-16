@@ -11,7 +11,7 @@ import {
 // 지도 히어로가 KakaoMapView→WebView 를 태우므로 관찰 목으로 갈아끼운다(선례
 // LiveItineraryScreen.test.tsx). 배럴 경유.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 /**
  * TRIP-569 · US-REC-05 · AC-7 — j01 방문 기록 화면에 얹는 **일자별 귀속 그룹 헤더**.

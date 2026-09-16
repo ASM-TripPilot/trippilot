@@ -78,7 +78,7 @@ jest.mock('expo-router', () => ({
 // 지도는 이 칸의 심판 대상이 아니다 — WebView 실물이 뜨지 않게만 막는다. 인라인 팩토리는
 // NativeWind babel 호이스트 규칙에 걸리므로 모듈을 require 한다(리포 선례와 동형).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 /** `authWiring.integration.test.ts:59` 와 같은 값(리포 관례). */
 const BASE = 'http://localhost:8080/api/v1';

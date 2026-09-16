@@ -33,7 +33,7 @@ import { DraftScreen } from './DraftScreen';
 // 지도는 이 칸의 심판 대상이 아니다 — 실물 `KakaoMapView` 가 뜨지 않게만 막는다(동결 화면 테스트와
 // 같은 목킹 규약: 인라인 팩토리는 NativeWind babel 호이스트 규칙에 걸린다).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 const DAY1 = '2026-06-10';
 

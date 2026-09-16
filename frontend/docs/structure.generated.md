@@ -5,9 +5,11 @@
 ## __mocks__/@gorhom/
 - `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · useBottomSheetModal
 
+## __mocks__/@mj-studio/
+- `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay
+
 ## __mocks__/
 - `__mocks__/react-native-draggable-flatlist.tsx`  →  ScaleDecorator · OpacityDecorator · ShadowDecorator · NestableDraggableFlatList · NestableScrollContainer
-- `__mocks__/react-native-webview.tsx`  →  WebView
 
 ## src/__tests__/
 - `src/__tests__/budgetEditSheetStructure.test.ts`  →  (export 없음)
@@ -25,6 +27,7 @@
 - `src/__tests__/devPreviewMap.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewPref.test.tsx`  →  (export 없음)
 - `src/__tests__/editSheetBackdropStructure.test.ts`  →  (export 없음)
+- `src/__tests__/editSheetHandleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesItinerarySlotConsumers.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesItinerarySlotStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesPlaceConsumers.test.ts`  →  (export 없음)
@@ -56,6 +59,7 @@
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/mapSheetShellStructure.test.ts`  →  (export 없음)
 - `src/__tests__/mustVisitListStructure.test.ts`  →  (export 없음)
 - `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
@@ -72,6 +76,7 @@
 - `src/__tests__/pagesLayerStructure.test.ts`  →  (export 없음)
 - `src/__tests__/periodEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/personalizationStructure.test.ts`  →  (export 없음)
+- `src/__tests__/pinBridgeRemovalStructure.test.ts`  →  (export 없음)
 - `src/__tests__/placeDetailStubRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/placeExploreStateStructure.test.ts`  →  (export 없음)
 - `src/__tests__/placeExploreStructure.test.ts`  →  (export 없음)
@@ -256,9 +261,13 @@
 - `src/app/trips/new/step1.tsx`  →  (export 없음)
 - `src/app/trips/new/step2.tsx`  →  (export 없음)
 
+## src/entities/itinerary-slot/config/
+- `src/entities/itinerary-slot/config/altLabel.ts`  →  ALT_LABEL
+
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
 - `src/entities/itinerary-slot/lib/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
+- `src/entities/itinerary-slot/lib/slotMapPin.ts`  →  SlotProgressState · StatePinInput · toMapPinState · buildStatePins
 
 ## src/entities/itinerary-slot/model/
 - `src/entities/itinerary-slot/model/index.ts`  →  SlotBadgeKind · ReplanSlotVM · PoiCategory
@@ -266,8 +275,9 @@
 ## src/entities/itinerary-slot/ui/
 - `src/entities/itinerary-slot/ui/PoiSlotCard.tsx`  →  PoiSlotCardVariant · PoiSlotCardProps · PoiSlotCard
 - `src/entities/itinerary-slot/ui/ReplanSlotRow.tsx`  →  ReplanSlotRowProps · ReplanSlotRow
-- `src/entities/itinerary-slot/ui/SlotGlyphs.tsx`  →  CategoryPinGlyph · CategoryForkKnifeGlyph · CategoryCupGlyph · CategoryNightGlyph · CategoryTreeGlyph · CategoryShoppingBagGlyph · CategoryBuildingGlyph · CategoryImageGlyph · ChevronRightGlyph · LockGlyph
+- `src/entities/itinerary-slot/ui/SlotGlyphs.tsx`  →  CategoryPinGlyph · CategoryForkKnifeGlyph · CategoryCupGlyph · CategoryNightGlyph · CategoryTreeGlyph · CategoryShoppingBagGlyph · CategoryBuildingGlyph · CategoryImageGlyph · ChevronRightGlyph · ClockGlyph · LockGlyph
 - `src/entities/itinerary-slot/ui/SlotPhotoPlaceholder.tsx`  →  SlotPhotoPlaceholderProps · SlotPhotoPlaceholder
+- `src/entities/itinerary-slot/ui/SlotStopCard.tsx`  →  SlotStopCardProps · SlotStopCard
 
 ## src/entities/place/lib/
 - `src/entities/place/lib/formatDistance.ts`  →  formatDistance
@@ -610,6 +620,9 @@
 - `src/features/stay/ui/StayRegisterScreen.tsx`  →  StayRegisterScreenProps · StayRegisterScreen
 - `src/features/stay/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
 
+## src/features/trip/lib/
+- `src/features/trip/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
+
 ## src/features/trip/model/
 - `src/features/trip/model/baseScreen.ts`  →  UnresolvedDaysView · unresolvedDaysView
 - `src/features/trip/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
@@ -619,7 +632,7 @@
 - `src/features/trip/model/stayDateImport.ts`  →  StayImportView · StayImportInput · formatStayDateRange · resolveStayImport
 - `src/features/trip/model/tripDatePicker.ts`  →  daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · dateCell · TripDateRange · applyRangePick
 - `src/features/trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · nightsSum · validateTripDraft · toCompanionType
-- `src/features/trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences · summaryBudget
+- `src/features/trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · SummaryLine · PreferenceSummary · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences · summaryBudget
 - `src/features/trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · presetRange · deriveEndDate
 - `src/features/trip/model/tripWizardStore.ts`  →  TripWizardField · TripWizardDraft · useTripWizardStore
 - `src/features/trip/model/useCreateTrip.ts`  →  useCreateTrip
@@ -1214,9 +1227,9 @@
 - `src/shared/location/useLocationConsent.ts`  →  LocationConsentModel · useLocationConsent
 
 ## src/shared/map/
-- `src/shared/map/KakaoMapView.tsx`  →  KakaoMapViewProps · KakaoMapView
-- `src/shared/map/index.ts`  →  KakaoMapView · type KakaoMapViewProps · REGISTERED_DOMAIN · type MapCenter · type MapPin · type KakaoMapMessage
-- `src/shared/map/mapHtml.ts`  →  MapCenter · MapPin · KakaoMapMessage · REGISTERED_DOMAIN · MAP_LOAD_FAILED_MESSAGE · buildMapHtml
+- `src/shared/map/CenterPinPicker.tsx`  →  CenterPinPickerProps · CenterPinPicker
+- `src/shared/map/MapView.tsx`  →  MapCenter · MapPinState · MapPin · MapViewProps · MapView
+- `src/shared/map/index.ts`  →  MapView · CenterPinPicker
 
 ## src/shared/photo/
 - `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset
@@ -1253,7 +1266,7 @@
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
 - `src/test-support/expoRouterTabsMock.tsx`  →  capturedTabsProps · Tabs · useRouter
-- `src/test-support/kakaoMapViewMock.tsx`  →  MapCenter · KakaoMapView
+- `src/test-support/mapViewMock.tsx`  →  MapCenter · MapPin · MapView · CenterPinPicker
 - `src/test-support/nativeSocialSdkMock.ts`  →  kakaoLoginSpy · naverLoginSpy · naverInitializeSpy · kakaoLogoutSpy · kakaoLoginModule · naverLoginModule · resetNativeSocialSdkMock
 - `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
@@ -1270,7 +1283,15 @@
 - `src/widgets/itinerary-edit/ui/ManualEditGlyphs.tsx`  →  BackChevronGlyph · UndoGlyph · WarningTriangleGlyph · LockGlyph · TrashGlyph · PlusGlyph · DragHandleGlyph
 - `src/widgets/itinerary-edit/ui/ManualEditShell.tsx`  →  ManualEditMode · ManualEditShellProps · ManualEditShell
 
+## src/widgets/map-sheet-shell/ui/
+- `src/widgets/map-sheet-shell/ui/CtaBar.tsx`  →  CtaButton · CtaBarProps · CtaBar
+- `src/widgets/map-sheet-shell/ui/DayChipOverlay.tsx`  →  DayChip · DayChipOverlayProps · DayChipOverlay
+- `src/widgets/map-sheet-shell/ui/DistanceConnector.tsx`  →  DistanceConnectorProps · DistanceConnector
+- `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  BackChevronGlyph · WalkGlyph · CarGlyph
+- `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetShellProps · MapSheetShell
+- `src/widgets/map-sheet-shell/ui/SheetHeader.tsx`  →  SheetHeaderProps · SheetHeader
+
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 857개 파일
+합계 870개 파일

@@ -12,10 +12,12 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiRequestMeta
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSavedPlace
 import com.trippilot.itinerarygeneration.adapter.out.external.AiScheduleResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiSlot
+import com.trippilot.itinerarygeneration.adapter.out.external.AiSlotAlternative
 import com.trippilot.itinerarygeneration.adapter.out.external.AiTrigger
 import com.trippilot.itinerarygeneration.adapter.out.external.AiUnplacedMustVisit
 import com.trippilot.itinerarygeneration.adapter.out.external.AiViolation
 import com.trippilot.itinerarygeneration.adapter.out.external.HttpScheduleAgentAdapter
+import com.trippilot.testsupport.ContractShape
 import com.trippilot.itinerarygeneration.adapter.out.external.ScheduleAgentConfiguration
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
@@ -75,6 +77,10 @@ class AiBoundaryOpenApiTest : StringSpec({
     /** 우리 타입을 **경계 매퍼 그대로** 직렬화해 실제 와이어 키를 얻는다(이름 규칙을 흉내내지 않는다). */
     fun wireKeys(value: Any): List<String> = mapper.readTree(mapper.writeValueAsString(value)).propertyNames().sorted()
 
+    /** 모양 대조는 공용 검사기를 쓴다 — 세 경계가 같은 것을 필요로 해서 복사하면 갈라진다. */
+    fun mismatches(value: Any, schemaName: String): List<String> =
+        ContractShape.mismatches(mapper, schemas, value, schemaName)
+
     // ───────────────────────── 경로 ─────────────────────────
 
     /**
@@ -96,6 +102,26 @@ class AiBoundaryOpenApiTest : StringSpec({
      */
     "generate 요청 키가 계약과 정확히 일치한다 — 도메인 필드명이 곧 와이어 이름이다" {
         wireKeys(sampleInput) shouldContainExactly props("GenerateItineraryRequest")
+    }
+
+    /**
+     * 키가 맞아도 **모양이 어긋나면** 실호출이 422 다. 이름 게이트가 원리적으로 못 보는 자리라
+     * 따로 잰다 — 배열 원소·중첩 객체까지 재귀로 내려간다.
+     */
+    "generate 요청의 값 모양이 계약과 일치한다 — 이름만으로는 못 본다" {
+        mismatches(sampleInput, "GenerateItineraryRequest") shouldContainExactly emptyList()
+    }
+
+    /**
+     * **우리가 보내는 나머지 본문도 전부 잰다.** 알림 경계에서 터진 것이 `slots` 하나였듯,
+     * 어긋남은 한 필드에서 난다 — 경로를 빠뜨리면 그 경로만 무방비다.
+     *
+     * 검증·수리·근거는 **같은 산출물 본문**(`AiSchedulePayload`)을 되돌려 보내므로 한 번만 잰다.
+     */
+    "나머지 요청 본문의 값 모양도 계약과 일치한다" {
+        mismatches(samplePayload, "ItineraryPayload") shouldContainExactly emptyList()
+        mismatches(sampleAlternativesRequest, "AlternativesRequest") shouldContainExactly emptyList()
+        mismatches(sampleExplanationsRequest, "ExplanationsRequest") shouldContainExactly emptyList()
     }
 
     "generate 요청이 계약 필수 필드를 하나도 빠뜨리지 않는다" {
@@ -162,6 +188,7 @@ class AiBoundaryOpenApiTest : StringSpec({
         wireKeys(samplePayload) shouldContainExactly props("ItineraryPayload")
         wireKeys(samplePayload.days.single()) shouldContainExactly props("DayScheduleSchema")
         wireKeys(samplePayload.days.single().slots.single()) shouldContainExactly props("VisitSlotDisplaySchema")
+        wireKeys(samplePayload.days.single().slots.single().alternatives.single()) shouldContainExactly props("SlotAlternativeSchema")
         wireKeys(samplePayload.unplacedMustVisits.single()) shouldContainExactly props("UnplacedMustVisitSchema")
         wireKeys(requireNotNull(samplePayload.freshness)) shouldContainExactly props("FreshnessMetaSchema")
     }
@@ -229,6 +256,7 @@ private val samplePayload = AiScheduleResponse(
                 AiSlot(
                     UUID.randomUUID(), LocalTime.parse("10:00"), LocalTime.parse("11:00"),
                     endsNextDay = false, distanceRange = "약 1.2km · 도보 추정", isFixed = true,
+                    alternatives = listOf(AiSlotAlternative(UUID.randomUUID().toString(), "같은 카페 후보", "약 0.8km · 도보 추정")),
                 ),
             ),
         ),
@@ -254,6 +282,7 @@ private val sampleAlternativesRequest = AiAlternativesRequest(
     affectedReasons = mapOf(UUID.randomUUID().toString() to "일몰 명소"),
     savedPlaces = listOf(AiSavedPlace(UUID.randomUUID().toString(), "성산일출봉")),
     requestMeta = AiRequestMeta(UUID.randomUUID().toString(), Instant.parse("2026-09-01T00:00:00Z"), 25_000L),
+    tripId = UUID.randomUUID().toString(),
 )
 
 private val sampleAlternativesResponse = AiAlternativesResponse(

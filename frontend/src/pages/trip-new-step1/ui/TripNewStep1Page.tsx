@@ -209,10 +209,18 @@ export function TripNewStep1Page({
   );
   // 요약 예산 행은 effective(편집값 우선, 아니면 프리필)를 쓴다 — 자매 4행과 정합.
   // rawAmount(프리필)만 쓰면 시트에서 바꿔도 요약이 안 바뀌어 "편집이 안 먹는" 것처럼 보인다(TRIP-670 5-c).
+  // 세 갈래(TRIP-732):
+  //  · 금액 > 0 → 금액 2톤("120만원 · 1인 총액 · {tier}").
+  //  · 프리필 금액이 **아예 없고**(kind==='empty') tier 만 있으면 → tier-only(empty 얼굴
+  //    "중간 · 1인 총액 · 온보딩"). 금액도 tier 도 없으면 셀렉터가 null 을 낸다.
+  //  · 명시적 0(kind==='amount' && amount===0)·invalid → null="예산 선택". rawAmount=0 은 "미선택"이라
+  //    표시=제출 대칭이 유지된다(budgetSheet AC-S6D-1 — 0 이면 요약도 "예산 선택", 제출도 미전송).
   const summaryBudgetValue =
-    parsedBudget.kind === 'amount'
+    parsedBudget.kind === 'amount' && parsedBudget.amount > 0
       ? summaryBudget(parsedBudget.amount, tierLabel)
-      : null;
+      : parsedBudget.kind === 'empty'
+        ? summaryBudget(0, tierLabel)
+        : null;
 
   const [submitError, setSubmitError] = useState<string>();
   const [overseasBlocked, setOverseasBlocked] = useState(false);
@@ -552,6 +560,7 @@ export function TripNewStep1Page({
           onAddCity={() => router.push('/explore/region?purpose=trip')}
           onApply={() => setDestinationSheetOpen(false)}
           onClose={() => setDestinationSheetOpen(false)}
+          mustVisitCount={mustVisits.length}
         />
       ) : null}
       {/* 기간 편집 시트도 화면의 형제로 조건부 마운트 — 셀 탭은 배선의 `applyRangePick`으로 범위를

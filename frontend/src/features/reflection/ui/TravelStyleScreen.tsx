@@ -27,7 +27,7 @@ import { StatTile } from './StatTile';
  *  - 임시(insufficient, AC-3): 진행(`reflection-style-progress`) `현재 N곳 / 필요 M곳` + "정식 아님"
  *    명시 + preview.descriptors 칩(`reflection-style-preview-chip`). 정식 얼굴 요소는 안 그린다(상호배타).
  *
- * 지도 = **placeholder degrade**(KakaoMapView·@/shared/map 미사용 — `StyleAnalysisBody` 에 좌표/핀이
+ * 지도 = **placeholder degrade**(MapView·@/shared/map 미사용 — `StyleAnalysisBody` 에 좌표/핀이
  * 없다, avgRadiusKm 스칼라만). 실 반경 원·방문 점 렌더는 좌표 계약+shared/map 확장 후속(Blocker D,
  * 개념 [[계약이 못 받치면 안 그린다]]). 서브타이틀 날짜는 `M.D`(Figma `6.13`) 인라인 서식.
  */

@@ -38,7 +38,14 @@ function companionStroke(selected?: boolean): string {
 }
 
 // 앱바 뒤로가기(24) — Figma `1675:1185`.
-export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
+// 이전 달·뒤로 back chevron. 기본 ink 고정이나, g01 기간 시트(TRIP-737, `3627:2068`) 월 네비는
+// 좌우 대칭 muted 쌍이라 `muted`(#6A6A6A)를 additive 로 더한다(다음 달 `ChevronRightGlyph tone="muted"`
+// 와 짝). 좁은 유니온 — 범용 색상표는 안 만든다.
+export function BackChevronGlyph({
+  size = 24,
+  tone = 'ink',
+  testID,
+}: GlyphProps & { tone?: 'ink' | 'muted' }) {
   return (
     <Svg
       testID={testID}
@@ -49,7 +56,7 @@ export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
     >
       <Path
         d="M15 18L9 12L15 6"
-        stroke={INK}
+        stroke={tone === 'muted' ? MUTED : INK}
         strokeWidth={2.2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -464,21 +471,21 @@ export function AlertCircleGlyph({ size = 15, testID }: GlyphProps) {
     >
       <Path
         d="M7.5 13.125C10.6066 13.125 13.125 10.6066 13.125 7.5C13.125 4.3934 10.6066 1.875 7.5 1.875C4.3934 1.875 1.875 4.3934 1.875 7.5C1.875 10.6066 4.3934 13.125 7.5 13.125Z"
-        stroke={PRIMARY_TEXT}
+        stroke={PRIMARY}
         strokeWidth={1.375}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M7.5 5V8.125"
-        stroke={PRIMARY_TEXT}
+        stroke={PRIMARY}
         strokeWidth={1.375}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M7.5 10.3125H7.50625"
-        stroke={PRIMARY_TEXT}
+        stroke={PRIMARY}
         strokeWidth={1.375}
         strokeLinecap="round"
         strokeLinejoin="round"

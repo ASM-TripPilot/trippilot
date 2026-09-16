@@ -44,6 +44,10 @@ logger = logging.getLogger(__name__)
 
 _RADIUS_PATH = "/internal/pois"
 _BATCH_PATH = "/internal/pois/batch-get"
+# 백엔드 `PoiReadService.MAX_BATCH_SIZE`(200) 의 미러 — 넘기면 400 → 경계가 422 로 번역해 생성
+# 전체가 죽는다. 슬롯별 차선책(TRIP-871)이 표시용 좌표 조회 id 를 최대 3배로 늘려 장기 여행에서
+# 도달 가능해졌다(70 슬롯 + 차선책 140). 부가 정보가 본체를 깨면 안 되므로(INV-4) 여기서 나눈다.
+_BATCH_MAX = 200
 _TOKEN_HEADER = "X-Service-Token"
 # 백엔드 PoiSource(KAKAO_LOCAL/TOURAPI/MANUAL) → AI PoiSource.
 # MANUAL=시드 입력분, 나머지 벤더 수집분은 PLACES_API. WEB 은 confidence 필수라
@@ -155,13 +159,16 @@ class BackendPoiDb:
         return self.lookup_by_ids(ids).pois
 
     def lookup_by_ids(self, ids: frozenset[PoiId]) -> PoiLookup:
-        """find_by_ids + 요청 대비 누락 사유 (TRIP-537). 호출 수는 그대로 1회."""
+        """find_by_ids + 요청 대비 누락 사유 (TRIP-537). 호출은 `_BATCH_MAX` 건 단위(보통 1회)."""
         if not ids:
             return PoiLookup((), ())
-        rows = self._call(
-            "POST", _BATCH_PATH,
-            body={"poi_ids": sorted(str(i) for i in ids)},
-        )
+        ordered = sorted(str(i) for i in ids)
+        rows: list = []
+        for start in range(0, len(ordered), _BATCH_MAX):
+            rows.extend(self._call(
+                "POST", _BATCH_PATH,
+                body={"poi_ids": ordered[start:start + _BATCH_MAX]},
+            ))
         pois, failed = self._map_rows(rows)
         # 매핑 실패한 행도 "백엔드가 돌려준" 것 — not_found 로 세면 사유가 뒤집힌다.
         accounted = {p.poi_id for p in pois} | {m.poi_id for m in failed}
@@ -230,4 +237,8 @@ class BackendPoiDb:
             quality=_enum_or_raise(DataQuality, row.get("data_quality"), "data_quality"),
             source=_SOURCE_MAP.get(row["source"], PoiSource.PLACES_API),
             confidence=None,
+            # 백엔드 `poi.tags text[]` — 내부 read DTO 가 아직 안 싣는다(공개 API 는 이미
+            # 내보낸다). 노출되면 여기로 흘러들어오고, 그전까지는 빈 튜플이라 후보 줄이
+            # 종전과 같다. 값 부재가 POI 를 빼는 사유가 아니다(BR-U1-06 취지).
+            tags=tuple(str(t) for t in (row.get("tags") or ())),
         )

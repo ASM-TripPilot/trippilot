@@ -24,7 +24,6 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@gorhom/bottom-sheet');
-jest.mock('react-native-webview');
 
 // 지뢰 — 프리뷰가 네트워크 계층을 (직접이든 전이든) require 하면 즉시 터진다.
 jest.mock('@/shared/api', () => {

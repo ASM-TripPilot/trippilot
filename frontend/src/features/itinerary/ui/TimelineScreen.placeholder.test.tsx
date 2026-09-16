@@ -31,7 +31,7 @@ import { type ItineraryHeaderData, TimelineScreen } from './TimelineScreen';
  *
  * 3동작 뼈대: 준비=사진 없는/있는·카테고리별 슬롯 → 실행=렌더 → 단언=플레이스홀더 존재·틴트·상호배타.
  */
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 const DAY1 = '2026-06-10';
 

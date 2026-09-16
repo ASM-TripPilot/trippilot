@@ -140,6 +140,16 @@ data class ItineraryResponse(
     }
 }
 
+/**
+ * 차선책 1건 — **`SlotCandidateResponse` 와 같은 필드 이름**이다(온디맨드 후보). 화면이 같은 카드를
+ * 재사용할 수 있게 일부러 맞췄다.
+ *
+ * 다른 점 하나: [distanceRange] 가 **nullable** 이다. 온디맨드 후보는 우리가 거리를 계산해 항상
+ * 채우지만, 이쪽은 AI 가 준 값이라 좌표를 모르면 null 이다 — 0 이나 빈 문자열로 채우면 "모른다"가
+ * "가깝다"로 바뀐다.
+ */
+data class SlotAlternativeResponse(val poiId: UUID, val rationale: String, val distanceRange: String?)
+
 data class DayResponse(val date: LocalDate, val slots: List<SlotResponse>)
 
 /** 후보 충분성(BR-U2-05) — **AI 판정값 그대로**. 백엔드는 level 을 재계산하지 않는다. */
@@ -180,6 +190,17 @@ data class SlotResponse(
     val openingHoursKnown: Boolean?,
     val imageUrl: String?,
     val tags: List<String>,
+    /**
+     * 생성 시점에 AI 가 같이 준 **다른 선택지**(TRIP-873) — 슬롯당 ≤2건, 없으면 빈 목록.
+     *
+     * 이 값이 있으면 화면은 "다른 선택지"를 **추가 왕복 없이** 그린다. 온디맨드 후보 조회
+     * (`POST /itineraries/{id}/slot-candidates`)는 그대로 살아 있다 — 반경·컨셉을 바꿔 다시 묻는
+     * 길이라 목적이 다르다.
+     *
+     * **편집하면 사라진다.** 편집 응답에 차선책이 없고, 옛 값을 들고 가면 바뀐 슬롯에 옛 대안이
+     * 붙어 거리 문구가 틀려진다. 사라지는 쪽이 틀린 값을 보여주는 쪽보다 낫다.
+     */
+    val alternatives: List<SlotAlternativeResponse>,
 ) {
     companion object {
         fun of(s: VisitSlot, surface: SlotSurface?, status: ItineraryStatus) = SlotResponse(
@@ -201,6 +222,7 @@ data class SlotResponse(
             // 확정 뒤에도 정본을 따라가면, 나중에 영업시간이 비는 순간 이미 확정된 슬롯이 "확인 필요"로
             // 되돌아가 확정 일정의 안정성(INV-U1-03)을 깬다.
             openingHoursKnown = if (status == ItineraryStatus.CONFIRMED) null else (surface?.openingHoursKnown ?: false),
+            alternatives = s.alternatives.map { SlotAlternativeResponse(it.poiId, it.rationale, it.distanceRange) },
             imageUrl = surface?.imageUrl,
             tags = surface?.tags.orEmpty(),
         )

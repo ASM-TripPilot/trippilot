@@ -50,7 +50,7 @@ class HttpScheduleAgentAdapter(
     override fun generate(input: ScheduleAgentInput): ScheduleAgentOutput {
         val wire = post(GENERATE_PATH, input, AiScheduleResponse::class.java)
         return try {
-            wire.toDomain(clock.instant())
+            wire.toDomain(clock.instant()).groundAlternatives()
         } catch (e: IllegalArgumentException) {
             // 스키마 드리프트(미지 solve_mode 등) — 침묵 금지(INV-4), 폴백 신호로 승격.
             throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 응답 스키마 불일치: ${e.message}", cause = e)
@@ -179,7 +179,7 @@ class HttpScheduleAgentAdapter(
         )
         val wire = post(GENERATE_PATH, generateInput, AiScheduleResponse::class.java)
         return try {
-            wire.toDomain(clock.instant())
+            wire.toDomain(clock.instant()).groundAlternatives()
         } catch (e: IllegalArgumentException) {
             throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 재계획 응답 스키마 불일치: ${e.message}", cause = e)
         }
@@ -217,6 +217,29 @@ class HttpScheduleAgentAdapter(
         // D-4(가): 미도달은 로컬 폴백 — 조용히 넘어가지 않는다(INV-4).
         log.warn("AI alternatives 미도달 — 로컬 후보풀로 폴백합니다: {}", e.message)
         localCandidates.propose(input, degraded = true)
+    }
+
+    /**
+     * 차선책 정본 대조(INV-1 · TRIP-873) — **응답 전체를 모아 한 번에** 확인한다.
+     *
+     * 슬롯마다 조회하면 왕복이 슬롯 수만큼 늘어난다. 하루 8슬롯 × 3일이면 24번이다.
+     *
+     * 안 하면 **경계 너머가 지어낸 poiId 가 그대로 화면에 뜬다.** 차선책은 사용자가 눌러서 교체하는
+     * 대상이라, 정본에 없는 장소가 목록에 있으면 누르는 순간 편집이 깨진다 — 편집 경로에 POI 실재
+     * 검사가 없어 여기서 막지 않으면 확정 동결까지 흘러간다(`SlotCandidateService` 와 같은 이유).
+     */
+    private fun ScheduleAgentOutput.groundAlternatives(): ScheduleAgentOutput {
+        val ids = days.asSequence().flatMap { it.slots }.flatMap { it.alternatives }.map { it.poiId }.distinct().toList()
+        if (ids.isEmpty()) return this
+        val ok = candidatePool.ground(ids).map { it.poiId }.toSet()
+        if (ok.size < ids.size) {
+            log.warn("차선책 {}건이 정본에 없어 제외했습니다 — 경계가 closed-set 을 벗어났습니다(INV-1).", ids.size - ok.size)
+        }
+        return copy(
+            days = days.map { d ->
+                d.copy(slots = d.slots.map { s -> s.copy(alternatives = s.alternatives.filter { it.poiId in ok }) })
+            },
+        )
     }
 
     /** 에러 응답 → 도메인 실패. 바디 `{error_code, message, retryable}`(계약) 파싱 실패해도 상태코드로 판정. */

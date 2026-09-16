@@ -34,6 +34,8 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
+import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
+
 import type { CompanionType } from '@/shared/api/generated/schemas';
 
 import {
@@ -128,16 +130,12 @@ export function CompanionEditSheet({
       enablePanDownToClose
       onClose={onClose}
       backdropComponent={renderBackdrop}
+      handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
     >
       <BottomSheetView
         testID="trip-wizard-companion-sheet"
         className="gap-lg px-xl pb-[34px] pt-[10px]"
       >
-        {/* grabber */}
-        <View className="items-center">
-          <View className="h-[4px] w-[40px] rounded-[2px] bg-hairline-strong" />
-        </View>
-
         {/* header */}
         <View className="gap-xs">
           <Text className="text-[20px] font-noto-bold font-bold text-ink">

@@ -188,6 +188,14 @@ class PoiInternalApiIT : AbstractPostgresIntegrationTest() {
         )
         nearby.any { it["name_ko"].asText() == "수신테스트폭포" } shouldBe true
 
+        // 수집이 실어 보낸 태그와 출처 식별자가 **읽는 경계까지 살아 나오는지**(TRIP-870).
+        // 저장까지만 확인하면 못 본다 — 값은 예전부터 DB 에 있었고 이 경계에서만 빠져 있었다.
+        val ingested = nearby.first { it["name_ko"].asText() == "수신테스트폭포" }
+        ingested["tags"].map { it.asText() } shouldBe listOf("폭포", "산책")
+        // **키 이름을 못 박는다.** snake_case 전략이 빠지거나 필드명이 바뀌면 `sourceRef` 로 나가고,
+        // 상대의 content_id 조인은 예외 없이 **0건 매칭**이 된다 — 조용히 틀리는 쪽이다.
+        ingested["source_ref"].asText() shouldBe "E2E-126508"
+
         // 같은 문서를 다시 넣어도 늘지 않는다 — 수집은 매일 돈다.
         val (_, second) = call(HttpMethod.POST, "/internal/pois/proposals", token, doc)
         second["registered"].asInt() shouldBe 0

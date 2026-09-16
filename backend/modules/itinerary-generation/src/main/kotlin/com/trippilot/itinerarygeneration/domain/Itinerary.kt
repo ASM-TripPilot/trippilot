@@ -49,6 +49,14 @@ class VisitSlot private constructor(
      * 배지만 남기면 저장 후 재조회에서 "무엇이 왜 문제인지"가 사라진다 — 지속 가시화가 요건이다.
      */
     val violationReason: String?,
+    /**
+     * 생성 시점에 AI 가 같이 준 **차선책**(TRIP-873). 슬롯당 ≤2건, 기본 빈 목록.
+     *
+     * **편집·리비전·재계획 경로는 이 값을 싣지 않는다 — 편집하면 사라진다.** 옛 값을 그대로 들고
+     * 가면 **바뀐 슬롯에 옛 대안이 붙고**, 특히 [SlotAlternative.distanceRange] 가 이전 이웃 기준이라
+     * 화면에 틀린 거리가 남는다. 사라지는 쪽이 틀린 값을 보여주는 쪽보다 낫다.
+     */
+    val alternatives: List<SlotAlternative>,
 ) {
     companion object {
         fun of(
@@ -63,13 +71,18 @@ class VisitSlot private constructor(
             distanceRange: String? = null,
             placementReason: String? = null,
             violationReason: String? = null,
+            // 기본값 인자는 **맨 뒤에** — 가운데 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
+            alternatives: List<SlotAlternative> = emptyList(),
         ): VisitSlot {
             val errors = mutableListOf<FieldError>()
             if (orderIndex < 0) errors += FieldError("orderIndex", "순서는 0 이상입니다.")
             // 자정 넘김이면 endAt 이 익일 시각이라 startAt 보다 작을 수 있음(HC4) — 그 경우만 허용.
             if (endAt < startAt && !endsNextDay) errors += FieldError("endAt", "종료 시각은 시작 이후여야 합니다.")
+            // **자기 자신은 대안이 아니다.** 상대가 슬롯 POI 를 후보로 되돌려 주는 일이 있고, 그대로 두면
+            // 화면에 "이 장소 대신 이 장소"가 뜬다. 거르는 자리를 도메인에 두는 이유는 경로가 여럿이라서다.
+            val kept = alternatives.filter { it.poiId != sourcePoiId }.distinctBy { it.poiId }
             if (errors.isNotEmpty()) throw ValidationFailed(errors)
-            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay, distanceRange, placementReason, violationReason)
+            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay, distanceRange, placementReason, violationReason, kept)
         }
     }
 }
@@ -82,7 +95,7 @@ class VisitSlot private constructor(
  */
 fun VisitSlot.withPlacementReason(reason: String?): VisitSlot = VisitSlot.of(
     sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay,
-    distanceRange, reason, violationReason,
+    distanceRange, reason, violationReason, alternatives,
 )
 
 /** 하루 일정 — 날짜 + 방문 슬롯(순서 오름차순 정렬 보장). */
@@ -154,7 +167,7 @@ class Itinerary private constructor(
                         // 동결은 스냅숏 참조만 붙이는 것 — 표시값은 **전부 그대로 옮긴다**.
                         // 하나라도 빠뜨리면 확정하는 순간 조용히 사라진다(endsNextDay 로 이미 겪은 회귀).
                         s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange, s.placementReason,
-                        s.violationReason,
+                        s.violationReason, s.alternatives,
                     )
                 },
             )

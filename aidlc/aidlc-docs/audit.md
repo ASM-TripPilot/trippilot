@@ -1378,3 +1378,24 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 개정**. TRIP-443 선례(Post-Design Correction)와 같은 절차. 이 항목이 손댄 `aidlc/` 파일은 `construction/u5-records-reflection/functional-design/` 4개와 이 `audit.md` append 뿐이다. 코드 변경 0 — 스키마·경계·개통은 후속 칸(칸 1~3)에서 팀이 `backend/` 에서 직접 수행한다.
 
 **3차 검수 추가 정정(같은 항목 내)**: (a) 와이어 `format` 과 컬럼 `card_format` 의 관계를 두 문서에 명시 — 이름이 갈린 채였다. (b) **PBT-U5-F1 을 완화**했다. "`scenes` 가 0개가 아니다"로 조였는데, 방문 0곳인 기본 카드는 근거가 없어 장면을 만들 수 없다 — 그대로면 규칙 생성기가 장면을 **지어내야** 하고 **BR-U5-31(환각 금지)과 정면충돌**한다. 조건을 `cover.title` 비어 있지 않음으로 바꿨다.
+
+---
+
+## Post-Design Correction — U3 초안 시각 표시 정책 BR-U3-07·DEC-U3-3·INV-U3-07 (TRIP-783 [기록] 반영)
+**Timestamp**: 2026-09-16T16:00:00Z
+
+**User Input**: TRIP-783 사이클(`20260916-trip783-map-sheet-shell`) [설계] 3-a에서, Figma h08 재설계(`4221:2448`/`4224:2448`)가 초안 카드 전 슬롯에 검증 시각 칩을 표시하는 것과 u3 정본(BR-U3-07·DEC-U3-3·INV-U3-07, "초안은 고정 블록 제외 시각 미표시")이 정면 충돌하는 맹점이 제시됐고, 사용자가 "① Figma대로 전 슬롯 시각(불변식 갱신)"을 선택했다. 원문 기록(`01b_ouroboros_seed.md` §확정 결정): "초안 시각 칩 = 표시. h08 초안 카드도 전 슬롯에 `🕒 HH:mm–HH:mm` 시각 칩을 그린다(Figma 4221:2448 정본). 결과로 u3 정본 BR-U3-07·DEC-U3-3·INV-U3-07('초안은 고정 블록 외 시각 미표시')을 '초안도 검증 시각 표시'로 개정한다 — 이 개정은 [기록] scribe가 aidlc에 반영(정본 반영 선택). 카드 자체는 시각을 prop으로 받는 presentation-only이므로 불변식 정책과 무관하게 '받으면 그린다'."
+
+**AI Response**: 승인 완료된 `u3-ai-itinerary/functional-design/{business-rules.md,business-logic-model.md,domain-entities.md}` 3개 규칙의 사후 개정. 새 스토리·새 유닛 진입 없음 → 스테이지 진행 아님, `aidlc-state.md` 체크박스 변동 없음.
+
+**개정 항목**
+
+- `business-rules.md` BR-U3-07 — "초안(h11·h17)은 시간대 라벨만, 완성·확정(h25·h26·h34)만 검증 시각" → "초안 단계도 검증 시각을 표시한다"(고정 블록 노출 규정은 유지). 원문을 표 아래 블록쿼트로 보존.
+- `business-logic-model.md` DEC-U3-3 — 위와 동일하게 개정. Q3 근거란의 원 근거("초안 시각은 슬롯 교체마다 흔들려 신뢰를 깎는다")는 보존하고, 그 아래 2026-09-16 재확정 근거를 덧붙였다.
+- `domain-entities.md` INV-U3-07 — "초안 단계 응답에는 고정 블록 제외 슬롯 시각을 렌더하지 않는다" → "초안 단계 응답도 슬롯 시각을 렌더한다". 원문을 같은 셀에 보존.
+
+근거: Figma `4221:2448`/`4224:2448` 재설계(TRIP-782/TRIP-783), 화면 정본 우선(TRIP-811 계열), 사용자 확정 2026-09-16.
+
+**미반영으로 남긴 것**: `business-rules.md`의 BR-U3-26("교체 후 시각은 재검증 전에는 노출하지 않는다. 초안 단계는 시간대 라벨만이므로(BR-U3-07) 자연히 지켜진다")·PBT-U3-2("시간대 라벨 사영(BR-U3-07)")와 `business-logic-model.md:158("초안 단계라 시간대 라벨만 보이므로(DEC-U3-3) 자연히 지켜진다")는 옛 BR-U3-07/DEC-U3-3 문면을 그대로 인용하고 있어 이번 개정과 어긋나지만, 오케스트레이터 3-a 선택 목록이 BR-U3-07·DEC-U3-3·INV-U3-07 3건으로 한정돼 손대지 않았다 — 후속 정정 필요(TRIP-783 [기록] 개발로그에 새 관측으로 남긴다).
+
+**Context**: SCOPE.md 현행 범위(CONSTRUCTION 설계 문서 단계) 내 **기존 승인 산출물의 사후 정정**. TRIP-442·TRIP-443·U5(2026-09-01) 선례(Post-Design Correction)와 같은 절차. 정정 실행 주체: TRIP-783 사이클 [기록](scribe) 단계. 실측 근거는 `_workspace/20260916-trip783-map-sheet-shell/01_spec-analyst_brief.md`(§열린 질문 1·§맹점 후보)·`01b_ouroboros_seed.md`(§확정 결정)·`03_implementer_notes.md`(§1 SlotStopCard `timeLabel` 정책). 이 항목이 손댄 `aidlc/` 파일은 `construction/u3-ai-itinerary/functional-design/{business-rules.md,business-logic-model.md,domain-entities.md}`와 이 `audit.md` append뿐이다. 코드 변경 0.

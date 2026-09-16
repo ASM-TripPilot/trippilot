@@ -18,9 +18,20 @@ import java.nio.charset.StandardCharsets
  * [token] 이 비어 있으면 서비스 인증이 **꺼진 것**이고, 그 경우 `/internal` 하위 경로는 아무도 통과하지 못한다
  * (fail-closed). 설정을 잊었을 때 조용히 열리는 것보다 조용히 닫히는 편이 안전하다 — 열려 있으면
  * 아무나 POI 정본을 쓸 수 있다.
+ *
+ * **두 방향이 한 값을 쓴다.** 수신(``/internal` 하위`)과 발신(백엔드→AI) 모두 이 시크릿이고, 갈라 두면
+ * 둘 중 하나만 세팅된 절반 설정이 생겨 **한쪽 방향만 401** 이 나는 상태가 된다.
+ *
+ * @property requireToken 켜면 **비어 있을 때 기동하지 않는다**. 기본은 꺼짐 — 켜 두면 토큰을 안 넣은
+ *  로컬·CI 가 통째로 죽는다. 배포 환경에서 켜는 스위치다(`JWT_REQUIRE_CONFIGURED_KEY` 와 같은 모양).
+ *
+ *  **왜 필요한가**: 수신은 비면 닫히지만(위) **발신은 비면 헤더를 아예 안 붙이고 그냥 나간다**. 상대가
+ *  검증을 켜는 순간 AI 호출이 전부 401 인데, 그중 몇은 `degraded` 폴백으로 흡수돼 "AI 가 좀 이상하다"
+ *  로만 보인다 — 원인이 **설정 누락**이라는 사실이 어디에도 안 남는다. 이 스위치가 그 상태를
+ *  배포 시점에 드러낸다.
  */
 @ConfigurationProperties(prefix = "trippilot.service-auth")
-data class ServiceAuthProperties(val token: String = "")
+data class ServiceAuthProperties(val token: String = "", val requireToken: Boolean = false)
 
 /** 서비스 호출 주체 — 계정이 없다. [name] 이 감사 로그에 사용자 id 처럼 보이지 않게 고정 문자열이다. */
 class ServiceAuthenticationToken : AbstractAuthenticationToken(listOf(SimpleGrantedAuthority(ROLE))) {
@@ -87,13 +98,22 @@ class ServiceTokenAuthFilter(private val expected: String) : OncePerRequestFilte
         const val PATH_PREFIX = "/internal/"
         private val log = LoggerFactory.getLogger(ServiceTokenAuthFilter::class.java)
 
-        /** 기동 시 1회 — 꺼져 있다는 사실이 로그에 남아야 "왜 401 이 나나"를 되짚을 수 있다. */
-        fun announce(token: String) {
-            if (token.isBlank()) {
-                log.warn(
-                    "서비스 인증 토큰(SERVICE_AUTH_TOKEN)이 비어 있습니다 — /internal/** 은 아무도 호출할 수 없습니다(fail-closed).",
-                )
+        /**
+         * 기동 시 1회 — 꺼져 있다는 사실이 로그에 남아야 "왜 401 이 나나"를 되짚을 수 있다.
+         *
+         * [requireToken] 이 켜져 있으면 **경고가 아니라 기동 실패**다. 경고로 두면 배포 환경이
+         * 무인증으로 떠 버리고, 그 사실은 상대가 검증을 켜는 **한참 뒤에** 다른 증상으로 나타난다.
+         */
+        fun announce(token: String, requireToken: Boolean = false) {
+            if (token.isNotBlank()) return
+            check(!requireToken) {
+                "trippilot.service-auth.require-token=true 인데 서비스 토큰(SERVICE_AUTH_TOKEN)이 비어 있습니다. " +
+                    "이 상태로 뜨면 /internal/** 은 닫히고 AI 로 나가는 호출은 헤더 없이 나갑니다."
             }
+            log.warn(
+                "서비스 인증 토큰(SERVICE_AUTH_TOKEN)이 비어 있습니다 — /internal/** 은 아무도 호출할 수 없고" +
+                    "(fail-closed), AI 로 나가는 호출은 **헤더 없이** 나갑니다(fail-open). 상대가 검증을 켜면 401 입니다.",
+            )
         }
     }
 }

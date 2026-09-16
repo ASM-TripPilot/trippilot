@@ -114,10 +114,11 @@ describe('AC-2 · ★ tier 단일 선택 — 선택 칩만 활성 표식(교차)
 describe('AC-2b · 안내 range 가 활성 tier 를 따라 갱신된다 (하드코딩 red)', () => {
   it('중간 → "50~150만", 고급 → "150~300만"(중간 range 부재)', () => {
     renderSheet({ tier: '중간' });
-    // regex 부분일치 — 긴 노트 문자열 안에서 range 만(02a §5-1 실측).
-    expect(screen.getByTestId('trip-wizard-budget-note')).toHaveTextContent(
-      /50~150만/
-    );
+    // TRIP-739: 굽은 작은따옴표(‘ ’, U+2018/U+2019)로 감싼 전체 문구를 완전일치로 잠근다 — 직선 '(U+0027)로
+    // 되돌리면 red(Figma 3647:2068 정합). getByText 완전일치라 따옴표 종류 회귀를 문자 단위로 잡는다.
+    expect(
+      screen.getByText('온보딩에서 고른 ‘중간(50~150만)’ 범위로 채웠어요')
+    ).toBeOnTheScreen();
 
     // 다른 렌더로 tier 를 고급으로 — range 가 갱신되고 중간 range 는 안 품는다.
     screen.rerender(

@@ -34,8 +34,23 @@ internal data class AiReflectionGenerateRequest(
     val endDate: LocalDate,
     val visits: List<AiReflectionVisit>,
     val personaSummary: String,
-    val events: List<String>,
+    /**
+     * 여행 중 사건(계약 `TripEventRecordSchema[]` — `kind`·`date`·`detail` 전부 필수).
+     *
+     * **객체 배열이다.** 문자열 배열로 두면 실으려는 순간 `Input should be a valid dictionary` 로
+     * 422 다 — 알림 경계가 `slots` 에서 똑같이 당했다(2026-09-16). 지금은 어댑터가 **늘 빈 배열**을
+     * 보내서 원소가 없어 안 터졌을 뿐, 채우는 사람이 생기면 그때 터지는 잠복 어긋남이었다.
+     * 이름 대조 게이트는 `events` 라는 이름이 양쪽에 있어 이걸 원리적으로 못 본다.
+     */
+    val events: List<AiTripEventRecord>,
     val weatherSummary: String,
+)
+
+/** 사건 한 건. 셋 다 계약 필수라 기본값을 두지 않는다 — 빠뜨리면 컴파일이 막는다. */
+internal data class AiTripEventRecord(
+    val kind: String,
+    val date: LocalDate,
+    val detail: String,
 )
 
 internal data class AiReflectionRequestMeta(

@@ -47,48 +47,72 @@ export function formatWizardStep(current: number): string {
   return `${clampStep(current)} / ${TOTAL_STEPS}`;
 }
 
-/** 여행지 요약 — 각 도시 `${region} ${nights}박`을 ` · `로 조인. 0개면 null(미선택). */
-export function summaryDestinations(
-  destinations: TripDestination[]
-): string | null {
-  if (destinations.length === 0) return null;
-  return destinations
-    .map((destination) => `${destination.region} ${destination.nights}박`)
-    .join(DOT);
+/** 요약 행 2톤 — 굵은 main + 같은 줄 회색 sub caption(선택). 화면이 이 객체를 받아 2톤으로
+ *  그린다(문자열 하나로 합치지 않는다, TRIP-732). */
+export interface SummaryLine {
+  main: string;
+  sub?: string;
 }
 
-/** 기간 요약 — "6월 10일(수) – 13일(토) · 3박 4일". 요일삽입 날짜범위·박수 라벨은 entities/trip/lib
- *  위임(바이트 이관 — 출력 무변경). 한쪽 날짜라도 없으면 null(빈 문자열 아님 — "미선택"과 "빈 값"은 다른 뜻). */
+/** 취향 행 — main(라벨 조인) + onboarding 플래그. 옛 " + 온보딩" 접미 문자열을 대신해, 화면이
+ *  이 불리언으로 스파클+분홍 "온보딩" 배지를 그린다(TRIP-732). */
+export interface PreferenceSummary {
+  main: string;
+  onboarding: boolean;
+}
+
+/** 여행지 요약 — main=첫 도시 지역명, sub=첫 도시 박수 + 나머지 도시(`${region} ${nights}박`)를
+ *  ` · `로 조인. 0개면 null(미선택). TRIP-732: 문자열 하나 → 2톤 객체(main/sub) 분리. */
+export function summaryDestinations(
+  destinations: TripDestination[]
+): SummaryLine | null {
+  if (destinations.length === 0) return null;
+  const [first, ...rest] = destinations;
+  const subParts = [
+    `${first.nights}박`,
+    ...rest.map(
+      (destination) => `${destination.region} ${destination.nights}박`
+    ),
+  ];
+  return { main: first.region, sub: subParts.join(DOT) };
+}
+
+/** 기간 요약 — main="6월 10일(수) – 13일(토)"(요일삽입 날짜범위), sub="3박 4일"(박수 라벨).
+ *  요일삽입·박수 라벨은 entities/trip/lib 위임. 한쪽 날짜라도 없으면 null(빈 문자열 아님 —
+ *  "미선택"과 "빈 값"은 다른 뜻). TRIP-732: 문자열 하나 → 2톤 객체(main/sub) 분리. */
 export function summaryPeriod(
   startDate?: string,
   endDate?: string
-): string | null {
+): SummaryLine | null {
   if (startDate === undefined || endDate === undefined) return null;
   const nights = toEpochDay(endDate) - toEpochDay(startDate);
-  const nightsLabel = nightsCountLabel(nights);
-  return `${formatDateRangeWithDow(startDate, endDate)}${DOT}${nightsLabel}`;
+  return {
+    main: formatDateRangeWithDow(startDate, endDate),
+    sub: nightsCountLabel(nights),
+  };
 }
 
-/** 동행 요약 — 혼자면 "혼자"(유형이 혼자라 인원을 뗀다, party 무관), 그 외 "{유형} {party}명"
- *  (party=1이어도 명수를 붙인다). companionType 미정이면 null(D2, 미선택). */
+/** 동행 요약 — 혼자면 main="혼자"(유형이 혼자라 인원을 뗀다, party 무관), 그 외 main="{유형} {party}명"
+ *  (party=1이어도 명수를 붙인다). **sub 없음**(동행 행은 2톤이 아니라 main 한 줄). companionType
+ *  미정이면 null(D2, 미선택). TRIP-732: 객체형이되 sub 키 자체를 안 둔다. */
 export function summaryCompanion(
   companionType: CompanionType | undefined,
   party: number
-): string | null {
+): SummaryLine | null {
   if (companionType === undefined) return null;
-  if (companionType === '혼자') return '혼자';
-  return `${companionType} ${party}명`;
+  if (companionType === '혼자') return { main: '혼자' };
+  return { main: `${companionType} ${party}명` };
 }
 
-/** 취향 요약 — labels를 ` · `로 조인, fromOnboarding이면 " + 온보딩" 접미. 0개면
- *  fromOnboarding과 무관하게 null(D3, 라벨 불가지) — 빈 판정을 먼저 해 " + 온보딩"이 새지 않는다. */
+/** 취향 요약 — main=labels를 ` · `로 조인, onboarding=fromOnboarding 플래그를 그대로 낸다.
+ *  0개면 fromOnboarding과 무관하게 null(D3, 라벨 불가지). TRIP-732: 옛 " + 온보딩" 접미 문자열이
+ *  소멸하고 main 은 라벨뿐 — 화면이 onboarding 플래그로 스파클+분홍 배지를 대신 그린다. */
 export function summaryPreferences(
   labels: string[],
   fromOnboarding: boolean
-): string | null {
+): PreferenceSummary | null {
   if (labels.length === 0) return null;
-  const joined = labels.join(DOT);
-  return fromOnboarding ? `${joined} + 온보딩` : joined;
+  return { main: labels.join(DOT), onboarding: fromOnboarding };
 }
 
 /** 만원 단위 반올림 — 1,234,567 → "123만원"(`Math.round`). export하지 않고 summaryBudget으로만
@@ -97,13 +121,19 @@ function formatManwon(amount: number): string {
   return `${Math.round(amount / 10000)}만원`;
 }
 
-/** 예산 요약 — "120만원 · 1인 총액 · 중간". tierLabel 없으면 tier 절 생략. amount가 0 이하면
- *  tier 유무와 무관하게 null(D4·D5) — 0을 명시적으로 걸러 "0만원"으로 새지 않게 한다. */
+/** 예산 요약(2톤) — 금액이 있으면 main=금액("120만원") · sub="1인 총액[ · {tier}]". 금액이 없고
+ *  (0 이하) tier 만 있으면 **tier-only**: main=tier("중간") · sub="1인 총액 · 온보딩"(empty 얼굴,
+ *  프리필 tier 만 아는 상태). 금액도 tier 도 없으면 null(D4·D5, "0만원"으로 새지 않게 한다).
+ *  TRIP-732: 문자열 하나 → 2톤 객체 + tier-only 분기(옛 amount<=0→null 계약 반전). */
 export function summaryBudget(
   amount: number,
   tierLabel?: string
-): string | null {
-  if (amount <= 0) return null;
-  const base = `${formatManwon(amount)}${DOT}1인 총액`;
-  return tierLabel === undefined ? base : `${base}${DOT}${tierLabel}`;
+): SummaryLine | null {
+  if (amount <= 0) {
+    if (tierLabel === undefined) return null;
+    return { main: tierLabel, sub: `1인 총액${DOT}온보딩` };
+  }
+  const sub =
+    tierLabel === undefined ? '1인 총액' : `1인 총액${DOT}${tierLabel}`;
+  return { main: formatManwon(amount), sub };
 }

@@ -41,6 +41,7 @@
 | 포워드 | Plan-B 대안 제안 | `POST /ai/v1/itinerary/alternatives` | **확정** — TRIP-428 |
 | 포워드 | 슬롯별 설명 조회 | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
 | 포워드 | 일정 편집 (EditAgent) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
+| 포워드 | 하루 재계획 (PlanBAgent) | `POST /ai/v1/itinerary/replan` | **계약 확정** — 재계획 연동 설계 A-4. `generate` 재사용을 그만둔 자리(RAG·재계획 의도·원 일정 후보 합류). 조립 미배선 시 503 |
 | 리버스 | POI 정본 read — 반경 (`find_by_radius`) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
 | 리버스 | POI 정본 read — 배치 (`find_by_ids`) | `POST /internal/pois/batch-get` · 요청 필드 `poi_ids` | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
 
@@ -98,6 +99,8 @@ class ScheduleAgentOutput:
     is_fallback: bool
     freshness: FreshnessMeta              # 사용한 데이터 신선도 집계 (→ evaluation-metrics-design.md)
     candidates_summary: CandidatesSummary # 후보 충분성 — `level`·`pool_size`·`shortfall_categories`. 와이어 정본 `ai/docs/openapi.json::CandidatesSummarySchema` (LOW면 UI에 안내 가능)
+    # days[].slots[].alternatives — 슬롯별 차선책 ≤2건 `{poi_id, rationale, distance_range}` (TRIP-871, 2026-09-16).
+    # 제안만: 시각·순서 없음(INV-2), 거리만(INV-3), 풀 안 미배치 후보만(INV-1). 결정론(LLM 0회). 와이어 정본 `SlotAlternativeSchema`
 ```
 
 ### 1.3 출력 대응표 — 에이전트 출력 → DB → 화면
@@ -109,6 +112,7 @@ class ScheduleAgentOutput:
 | `explanations` | slot 부가 필드 또는 세션 | 동일 | d11 카드 추천 이유 텍스트 |
 | `solve_mode=MINIMAL` / `is_fallback` | `generation_session.status` | `POST /itineraries/{id}/regenerate` 유도 | d08 충돌 안내, 재생성/조건 완화 UI |
 | 슬롯 교체 후보 | (PlaceScout 재조회) | `GET /itineraries/{id}/slots/{slotId}/candidates?radius=` | d12 슬롯 교체, d14/d15 반경 후보 |
+| `days[].slots[].alternatives` (생성 시점 차선책, TRIP-871) | slot 부가 필드(백엔드 TRIP-873) | 일정 조회 응답 슬롯 `alternatives[]` | 슬롯 카드 "다른 선택지" 초기값 + AI 문장(TRIP-872) — 온디맨드 `candidates` 는 "더 보기"로 유지 |
 | 표시 시각·거리 | `VisitSlotDisplay{poi_id, start_at, end_at, distance_range, is_fixed}` | 모든 조회 응답 | 시각=어셈블리값만(INV-2), 거리만(INV-3) |
 
 ---

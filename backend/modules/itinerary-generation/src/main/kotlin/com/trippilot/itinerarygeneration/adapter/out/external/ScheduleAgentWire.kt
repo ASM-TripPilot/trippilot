@@ -8,6 +8,8 @@ import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.application.BoundedText
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.SlotCandidate
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
@@ -63,6 +65,28 @@ internal data class AiSlot(
     val endsNextDay: Boolean = false,
     val distanceRange: String? = null,
     val isFixed: Boolean = false,
+    /**
+     * 슬롯별 차선책(AI TRIP-871, 슬롯당 ≤2건). **기본 빈 목록** — 이 필드가 없는 옛 AI 응답도 같은 뜻이 되게 한다.
+     *
+     * **받기만 한다 — 되돌려 보내지 않는다.** [ScheduleAgentOutput.toWire] 가 이 인자를 안 넘겨 검증·수리
+     * 요청에는 늘 `[]` 가 실린다(키 자체는 나간다 — 경계 매퍼에 포함 정책 설정이 없어 기본 ALWAYS).
+     * 상대가 소비하지 않는 값을 굳이 왕복시킬 이유가 없다.
+     *
+     * *(종전 주석은 "그대로 되돌려 보낸다"였는데 코드가 그렇지 않았다 — 2026-09-16 검수에서 정정.)*
+     * 이 사실이 TRIP-879 의 근거이기도 하다: 상대 런타임이 이 키를 거부하는데 **우리가 보내는 것은 늘
+     * 빈 배열**이라, 그 거부로 잃는 데이터가 0 이다. 상대가 받아서 무시하기만 해도 풀린다.
+     */
+    val alternatives: List<AiSlotAlternative> = emptyList(),
+)
+
+/**
+ * 차선책 1건 — **제안만**(시각·순서 없음, 거리 문자열만). `poiId` 는 문자열로 받는다 — UUID 가 아닌 한 건 때문에
+ * 응답 전체를 잃지 않기 위해([AiUnplacedMustVisit] 과 같은 이유). 정본 대조(`ground()`)는 소비 시점(TRIP-873) 몫.
+ */
+internal data class AiSlotAlternative(
+    val poiId: String,
+    val rationale: String,
+    val distanceRange: String? = null,
 )
 
 /**
@@ -87,7 +111,15 @@ internal data class AiFreshness(
  */
 internal fun AiScheduleResponse.toDomain(receivedAt: Instant): ScheduleAgentOutput = ScheduleAgentOutput(
     days = days.map { d ->
-        DaySchedule(d.date, d.slots.map { VisitSlotDisplay(it.poiId, it.startAt, it.endAt, it.endsNextDay, it.distanceRange, it.isFixed) })
+        DaySchedule(
+            d.date,
+            d.slots.map {
+                VisitSlotDisplay(
+                    it.poiId, it.startAt, it.endAt, it.endsNextDay, it.distanceRange, it.isFixed,
+                    alternatives = it.alternatives.toDomain(),
+                )
+            },
+        )
     },
     day1ReadyAt = day1ReadyAt,
     explanations = explanations,
@@ -97,6 +129,38 @@ internal fun AiScheduleResponse.toDomain(receivedAt: Instant): ScheduleAgentOutp
     freshness = FreshnessMeta(freshness?.fetchedAt ?: receivedAt, degraded = freshness?.stale ?: false),
     unplacedMustVisits = unplacedMustVisits.mapNotNull { it.toDomain() },
 )
+
+/**
+ * 차선책 → 도메인(TRIP-873). **한 건이 틀렸다고 나머지를 잃지 않는다.**
+ *
+ * 버리는 것 셋: UUID 형식이 아닌 `poi_id`(환각) · 빈 `rationale`(화면에 빈 줄이 뜬다) ·
+ * 슬롯당 2건을 넘는 초과분(계약 상한). 셋 다 **로그로 드러낸다** — 조용히 사라지면 "AI 가 안 줬다"와
+ * 구분되지 않는다(INV-4).
+ *
+ * **정본 대조(closed-set, INV-1)는 여기가 아니다** — 이 함수는 DB 를 모른다. 대조는 어댑터가
+ * 응답 전체의 poiId 를 모아 **한 번에** 한다(슬롯마다 조회하면 왕복이 슬롯 수만큼 늘어난다).
+ */
+private fun List<AiSlotAlternative>.toDomain(): List<SlotAlternative> {
+    val parsed = mapNotNull { a ->
+        val id = runCatching { UUID.fromString(a.poiId) }.getOrNull()
+        when {
+            id == null -> { wireLog.warn("차선책 poi_id 가 UUID 가 아니라 폐기합니다: {}", a.poiId); null }
+            a.rationale.isBlank() -> { wireLog.warn("차선책 rationale 이 비어 폐기합니다: poiId={}", id); null }
+            else -> SlotAlternative(
+                id,
+                BoundedText.clamp(a.rationale, BoundedText.PLACEMENT_REASON_MAX)!!,
+                BoundedText.clamp(a.distanceRange, BoundedText.DISTANCE_RANGE_MAX),
+            )
+        }
+    }
+    if (parsed.size > MAX_ALTERNATIVES_PER_SLOT) {
+        wireLog.warn("차선책이 슬롯당 상한({})을 넘어 {}건을 버립니다.", MAX_ALTERNATIVES_PER_SLOT, parsed.size - MAX_ALTERNATIVES_PER_SLOT)
+    }
+    return parsed.take(MAX_ALTERNATIVES_PER_SLOT)
+}
+
+/** 계약 상한(슬롯당 ≤2건). 넘겨받아도 화면은 둘까지만 그린다 — 상한을 우리 쪽에서도 지킨다. */
+private const val MAX_ALTERNATIVES_PER_SLOT = 2
 
 /**
  * 미배치 보고 → 도메인. **보고 자체를 잃지 않는 것이 이 매핑의 목적**이라 관대하게 받는다:
@@ -241,6 +305,14 @@ internal data class AiSavedPlace(
 )
 
 internal data class AiAlternativesRequest(
+    /**
+     * 상대가 2026-09-16 에 계약에 더한 필드(AI #555). 필수는 아니지만 **계약 게이트가 정확 일치를
+     * 요구**하므로 빠지면 CI 가 빨개진다 — 실제로 develop 이 이것 때문에 빨개져 있었다.
+     *
+     * 값은 이미 손에 있다. 종전에는 `trigger.scheduleId` 에만 실었는데, 그 칸은 "무엇이 이 요청을
+     * 촉발했나"를 담는 자리라 여행 식별자의 제자리가 아니다.
+     */
+    val tripId: String,
     val trigger: AiTrigger,
     val reason: String,
     val anchor: AiCoord,
@@ -281,6 +353,7 @@ internal fun SlotCandidatesInput.toAlternativesRequest(): AiAlternativesRequest 
         "slotKey 형식 위반: $slotKey — 서비스 검증을 지나온 값이라 여기 오면 버그다"
     }
     return AiAlternativesRequest(
+        tripId = tripId.toString(),
         // kind 는 **지어내는 값**이다(설계 §2) — h12/h18 은 사용자가 직접 "다른 후보"를 누른 흐름이고,
         // 입력에 트리거 정보가 없어 다른 값을 실을 방법 자체가 없다.
         trigger = AiTrigger(kind = "MANUAL", scheduleId = tripId.toString(), affectedDate = date),

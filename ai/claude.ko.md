@@ -29,7 +29,7 @@ TripPilot AI는 LLM + 최적화 어셈블리 하이브리드 아키텍처로 여
 **업무 계층** (agent-redesign.md):
 - **Orchestrator**: 의도 파악(하이브리드 질문뱅크 매칭) + Fast Path + AgentTask 봉투로 병렬 디스패치
 - **ScheduleAgent**: 일정 생성 (Generation 패턴) — **배선됨** (2026-09-09): `agents/schedule/agent.py`
-  `ScheduleAgent.run(ScheduleTask)`. `ItineraryOrchestrator` 가 소유 검증·시한 배분·정보 수집·소화 후
+  `ScheduleAgent.run(ScheduleTask)`. `ScheduleCoordinator` 가 소유 검증·시한 배분·정보 수집·소화 후
   위임한다. 어셈블리 엔진은 독립 층 그대로 — 에이전트는 `solve()` 를 부를 뿐
 - **PlanBAgent**: 변수 대응 (RAG 패턴, KB 3종 + pgvector) — `agents/planb/rag.py` `PlanBRagPipeline.run(PlanBRagRequest)`
 - **ReflectAgent**: 회고 생성 — `agents/reflect/agent.py` `ReflectAgent.run(ReflectTask)`. 텍스트·vision(Phase 2)이 `ReflectTask.vision` 유무로 한 진입점

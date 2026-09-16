@@ -62,17 +62,32 @@ class PgVectorStore:
             )
 
     def search(
-        self, collection: str, vector: tuple[float, ...], top_k: int
+        self,
+        collection: str,
+        vector: tuple[float, ...],
+        top_k: int,
+        *,
+        item_ids: frozenset[str] | None = None,
     ) -> tuple[VectorHit, ...]:
         if top_k < 1:
             return ()
+        if item_ids is not None and not item_ids:
+            return ()  # 빈 집합 = 아무것도 안 맞음. None(필터 없음)과 구분된다
         literal = _vector_literal(vector)
+        # 필터는 ORDER BY 앞에 걸린다 — 전역 상위 top_k 를 뽑고 거르면 풀 안 문서가
+        # 밀려 나가 결과가 비는 일이 생긴다 (포트 docstring 의 INV-1 사유).
+        where = f"WHERE collection = %s{' AND item_id = ANY(%s)' if item_ids else ''}"
+        params: tuple = (
+            (literal, collection, list(item_ids), literal, top_k)
+            if item_ids
+            else (literal, collection, literal, top_k)
+        )
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
                 f"SELECT item_id, 1 - (embedding <=> %s::vector) AS score, payload "
-                f"FROM {_TABLE} WHERE collection = %s "
+                f"FROM {_TABLE} {where} "
                 "ORDER BY embedding <=> %s::vector, item_id LIMIT %s",
-                (literal, collection, literal, top_k),
+                params,
             )
             rows = cur.fetchall()
         return tuple(

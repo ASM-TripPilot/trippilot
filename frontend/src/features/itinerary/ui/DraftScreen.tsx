@@ -4,7 +4,7 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas';
-import { KakaoMapView } from '@/shared/map';
+import { MapView } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import { buildGenerationGauge } from '../model/draftView';
@@ -439,16 +439,6 @@ export function DraftScreen({
       ? (view.days.find((day) => day.date === selectedDate)?.slots ?? [])
       : [];
 
-  /**
-   * 지도를 다시 태어나게 하는 열쇠. **날짜만으로는 부족하다** — 같은 날짜를 보는 채로
-   * 재생성하면 핀이 통째로 바뀌는데 열쇠가 그대로라 지도가 옛 핀을 든 채 남는다(그 컴포넌트는
-   * 마운트할 때 문서를 한 번만 조립한다). 그래서 **그날 그릴 핀 묶음까지** 열쇠에 넣는다.
-   *
-   * 매 렌더마다 문자열을 새로 만들어도 안전하다 — React 는 `key` 를 **값으로** 비교하므로
-   * 내용이 같으면 같은 열쇠이고 다시 태어나지 않는다(객체였다면 매번 remount 됐을 것이다).
-   */
-  const mapKey = `${selectedDate}|${JSON.stringify(pins)}`;
-
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View className="flex-1 bg-canvas">
@@ -574,10 +564,7 @@ export function DraftScreen({
 
           {pins.length === 0 ? null : (
             <View className="h-[230px] w-full overflow-hidden rounded-card border border-hairline">
-              {/* `KakaoMapView` 는 마운트 시 한 번만 문서를 조립한다(그 컴포넌트의 동결
-                  계약) — 다른 핀을 그리는 유일한 수단이 key remount 다. */}
-              <KakaoMapView
-                key={mapKey}
+              <MapView
                 center={{ lat: pins[0].lat, lng: pins[0].lng }}
                 pins={pins}
                 viewOnly

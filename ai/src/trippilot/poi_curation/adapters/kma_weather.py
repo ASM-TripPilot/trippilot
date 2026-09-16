@@ -121,10 +121,23 @@ class KmaWeatherAdapter:
         날짜는 키 없음. 요청이 비면 호출 없이 빈 매핑."""
         if not days:
             return {}
+        pops: dict[date, int] = {}
+        body = self._fetch_body(coord)
+        for slot, pop in self._pop_slots(body, days):
+            day = slot.date()
+            pops[day] = max(pops.get(day, 0), pop)
+        return pops
+
+    def _fetch_body(self, coord: GeoPoint) -> object:
+        """단기예보 1회 호출 — `daily_forecast`·`hourly_forecast` 공용.
+
+        **호출 1건 = 응답 1건**이다. 시간별을 따로 부르는 것이 아니라 같은 응답을
+        다르게 접을 뿐이라, 시간 단위 도입에 추가 API 비용이 없다.
+        """
         nx, ny = latlon_to_grid(coord.lat, coord.lng)
         base_date, base_time = base_datetime_for(self._now())
         try:
-            body = self._http.get_json(
+            return self._http.get_json(
                 f"{_BASE}/getVilageFcst",
                 {
                     "serviceKey": self._key,
@@ -139,8 +152,30 @@ class KmaWeatherAdapter:
             )
         except Exception as e:
             raise WeatherError(f"단기예보 호출 실패: {e}") from e
+
+    def hourly_forecast(
+        self, coord: GeoPoint, days: Sequence[date]
+    ) -> Mapping[datetime, int]:
+        """슬롯 시각별 강수확률(%) — `daily_forecast` 가 접기 **전**의 값.
+
+        같은 엔드포인트·같은 1회 호출이다(`HourlyWeatherPort` docstring 참조).
+        재계획처럼 "지금부터 남은 시간"만 보고 싶을 때 쓴다 — 소비측이 시각으로
+        자르면 된다. 아는 슬롯만 담고, 요청이 비면 호출 없이 빈 매핑.
+        """
+        if not days:
+            return {}
+        return dict(self._pop_slots(self._fetch_body(coord), days))
+
+    def _pop_slots(
+        self, body: object, days: Sequence[date]
+    ) -> tuple[tuple[datetime, int], ...]:
+        """응답 → (슬롯 시각, POP%) 목록. 요청 날짜만, 파싱 불가·범위 밖은 스킵.
+
+        `daily_forecast`·`hourly_forecast` 가 **같은 파싱을 공유**한다 — 규칙을 두
+        곳에 복사하면 한쪽만 고쳐져 값이 갈린다(안티패턴 로그 §전수 이관).
+        """
         wanted = {d.strftime("%Y%m%d"): d for d in days}
-        pops: dict[date, int] = {}
+        slots: list[tuple[datetime, int]] = []
         for item in self._items(body):
             if item.get("category") != "POP":
                 continue
@@ -153,8 +188,15 @@ class KmaWeatherAdapter:
                 continue  # 비정수 표기 — 지어내지 않고 스킵
             if not 0 <= pop <= 100:
                 continue  # 범위 밖 값 — 도메인 불변식(0~100)을 지키는 쪽으로 스킵
-            pops[day] = max(pops.get(day, 0), pop)
-        return pops
+            raw = str(item.get("fcstTime", ""))
+            if len(raw) != 4 or not raw.isdigit():
+                continue  # 시각 표기 이상 — 슬롯을 지어내지 않는다
+            slots.append((
+                datetime(day.year, day.month, day.day,
+                         int(raw[:2]) % 24, int(raw[2:]), tzinfo=_KST),
+                pop,
+            ))
+        return tuple(slots)
 
     @staticmethod
     def _items(body: object) -> tuple[Mapping, ...]:

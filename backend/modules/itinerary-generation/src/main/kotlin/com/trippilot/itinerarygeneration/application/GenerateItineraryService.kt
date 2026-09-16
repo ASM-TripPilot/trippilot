@@ -32,6 +32,8 @@ import com.trippilot.profile.api.PreferenceSnapshot
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.trip.api.TripFacade
+import com.trippilot.placedata.api.RegionCenter
+import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripGenerationContext
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -261,7 +263,7 @@ class GenerateItineraryService(
             generationMode = mode,
             // budgetLevel(등급) = preference_set.budget_tier (경계 계약; trip.budget_total 아님)
             tripContext = TripContext(ctx.destinations, ctx.startDate, ctx.endDate, ctx.companionType, prefs.budgetTier),
-            anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors, ctx.destinations).filter { it.date in dates },          // 이 호출이 맡은 일자의 거점 좌표
+            anchors = dayAnchors(ctx.startDate, ctx.endDate, stayAnchors, ctx.destinationRefs).filter { it.date in dates },          // 이 호출이 맡은 일자의 거점 좌표
             timeWindows = dates.map { TimeWindow(it, DEFAULT_START, DEFAULT_END) },
             // must_visit → 고정 블록(HC3). 이 호출이 맡은 일자분만.
             // 날짜 미지정(ANYTIME)·여행 기간 밖 날짜는 **일자가 많은 쪽**(2차; 2차가 없으면 1차)에 싣는다 —
@@ -292,19 +294,24 @@ class GenerateItineraryService(
      *
      * 정본은 숙소 없는 생성을 허용한다(BR-U1-40 · BR-U1-47 · US-SCHED-11) — 계약이 그걸 막고 있었다.
      *
-     * **다목적지의 날짜별 배정은 하지 않는다.** 목적지에 박수(nights)가 실려 오지 않아
-     * (`TripGenerationContext.destinations` 는 이름 목록뿐) 어느 날이 어느 도시인지 알 수 없다.
-     * 첫 목적지 중심을 쓴다 — 단일 목적지(대부분)는 정확하고, 다목적지는 거칠지만 앵커가 없는 것보다 낫다.
+     * **다목적지의 날짜별 배정은 하지 않는다.** 목적지에 박수(nights)가 실려 오지 않아 어느 날이
+     * 어느 도시인지 알 수 없다. 첫 목적지 중심을 쓴다 — 단일 목적지(대부분)는 정확하고,
+     * 다목적지는 거칠지만 앵커가 없는 것보다 낫다.
+     *
+     * **코드를 먼저 본다**(TRIP-859 후속). 이름으로 찾으면 동명이지역에서 첫 코드를 임의로 집어,
+     * 부산 중구를 고른 사용자에게 **서울 중구 좌표**가 앵커로 박힐 수 있다. 증상은 "일정이 다른
+     * 동네에서 돈다"라 원인이 안 보인다. 코드가 없는 목적지(옛 클라이언트·확정 못 한 동명이지역)는
+     * 종전대로 이름으로 떨어진다.
      */
     private fun dayAnchors(
         startDate: LocalDate,
         endDate: LocalDate,
         stayAnchors: List<DayAnchorView>,
-        destinations: List<String>,
+        destinations: List<TripDestinationRef>,
     ): List<DayAnchor> {
         val byDate = stayAnchors.associateBy { it.date }
         // 목적지 중심은 한 번만 조회한다 — 날짜마다 부르면 같은 값을 계획일 수만큼 다시 읽는다.
-        val fallback = destinations.firstNotNullOfOrNull { regions.centerOf(it) }
+        val fallback = destinations.firstNotNullOfOrNull { RegionAnchors.centerOf(regions, it) }
         return planDates(startDate, endDate).mapNotNull { d ->
             val stay = byDate[d] ?: if (d == endDate) byDate[d.minusDays(1)] else null // 체크아웃일만 전날 거점
             when {
@@ -368,6 +375,8 @@ class GenerateItineraryService(
                         placementReason = BoundedText.clamp(
                             explanations[SlotKey.of(d.date, s.poiId)], BoundedText.PLACEMENT_REASON_MAX,
                         ),
+                        // 생성 시점 차선책(TRIP-873). 정본 대조는 어댑터에서 끝났다.
+                        alternatives = s.alternatives,
                     )
                 },
             )

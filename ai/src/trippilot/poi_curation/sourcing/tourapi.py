@@ -119,6 +119,14 @@ class TourApiAdapter:
         self._http_calls = 0  # 시도 기준 (실패 호출 포함 — 한도 소모와 동일 기준)
         self._key_idx = 0
         self._dead: set[int] = set()  # 퇴출된 키 (403·키 관련 resultCode)
+        # contentTypeId → detailIntro2 첫 응답 원문 (fetch_hours 가 채운다).
+        # 관측용이라 수집 판정에는 쓰이지 않는다.
+        self.intro_samples: dict[str, dict] = {}
+        # contentTypeId → 본 응답 수, 그리고 필드별 "값이 있던" 횟수.
+        # 표본 1건은 **필드명만** 알려준다 — 그 필드가 실제로 채워져 오는지는
+        # 별개 질문이고, 쓸모를 가르는 건 후자다. 세는 데 드는 비용은 0이다.
+        self.intro_seen: dict[str, int] = {}
+        self.intro_filled: dict[str, dict[str, int]] = {}
 
     def _take_key(self) -> str:
         """이번 HTTP 호출에 쓸 키 1건 소모. 키당 상한 도달 또는 퇴출 시 다음 키로.
@@ -199,6 +207,18 @@ class TourApiAdapter:
         )
         items = self._items(body)
         first = items[0] if items and isinstance(items[0], dict) else {}
+        # 타입별 첫 응답을 그대로 남긴다 — HTTP 추가 0건(이미 받은 것을 적을 뿐).
+        # 리포에 **실 응답 기록이 없어서** 이 엔드포인트가 실제로 무엇을 주는지
+        # 아무도 모른다(fake 는 우리가 읽는 2필드만 흉내낸다). 스펙이 아니라
+        # 실물로 판단하려면 표본이 필요하고, 표본이 남아 있어야 벤더 드리프트도
+        # 잡힌다. 타입당 1건이라 로그 부담도 없다.
+        if kind not in self.intro_samples:
+            self.intro_samples[kind] = first
+        self.intro_seen[kind] = self.intro_seen.get(kind, 0) + 1
+        counts = self.intro_filled.setdefault(kind, {})
+        for k, v in first.items():
+            if str(v or "").strip():
+                counts[k] = counts.get(k, 0) + 1
         hours_key, rest_key = fields
         return SourcedHours(
             hours_raw=self._opt_str(first.get(hours_key)),
