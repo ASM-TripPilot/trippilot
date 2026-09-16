@@ -31,6 +31,8 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
+import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
+
 import {
   dateCell,
   daysInMonth,
@@ -164,9 +166,16 @@ export function PeriodEditSheet({
   // today 의 달보다 앞으로는 못 간다 — 그 달은 전 칸이 과거라 고를 게 없다.
   const canGoPrev = month > today.slice(0, 7);
   const rangeComplete = range.start !== undefined && range.end !== undefined;
-  // 완성 범위일 때만 요약을 그린다(미완성이면 null → 안 그림). 요약 문자열·요일은 요약 카드와
-  // 같은 셀렉터(`summaryPeriod`)를 재사용해 한 곳에서만 만든다.
-  const summary = summaryPeriod(range.start, range.end);
+  // 완성 범위일 때만 요약을 그린다(미완성이면 null → 안 그림). 요일·박수는 요약 카드와 같은
+  // 셀렉터(`summaryPeriod`)를 재사용한다. TRIP-732: 셀렉터가 `{main, sub}` 객체를 돌려주므로 이
+  // 시트는 옛날처럼 한 줄로 보여주려 main·sub 를 미들닷(U+00B7)으로 다시 합친다(요약 카드와 동일 문구).
+  const summaryLine = summaryPeriod(range.start, range.end);
+  const summary =
+    summaryLine === null
+      ? null
+      : summaryLine.sub === undefined
+        ? summaryLine.main
+        : `${summaryLine.main} · ${summaryLine.sub}`;
 
   return (
     <BottomSheet
@@ -174,16 +183,12 @@ export function PeriodEditSheet({
       enablePanDownToClose
       onClose={onClose}
       backdropComponent={renderBackdrop}
+      handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
     >
       <BottomSheetView
         testID="trip-wizard-period-sheet"
         className="gap-lg px-xl pb-[34px] pt-[10px]"
       >
-        {/* grabber */}
-        <View className="items-center">
-          <View className="h-[4px] w-[40px] rounded-[2px] bg-hairline-strong" />
-        </View>
-
         {/* header */}
         <View className="gap-xs">
           <Text className="text-[20px] font-noto-bold font-bold text-ink">

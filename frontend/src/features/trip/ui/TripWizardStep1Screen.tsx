@@ -1,15 +1,17 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { MustVisitSeedItem } from '../model/mustVisitSeed';
 import { formatWizardStep } from '../model/tripSummary';
+import type { PreferenceSummary, SummaryLine } from '../model/tripSummary';
 import {
   AlertCircleGlyph,
   BackChevronGlyph,
   ChevronRightGlyph,
   GlobeGlyph,
   PlusGlyph,
+  SparkleGlyph,
 } from './TripGlyphs';
 
 /**
@@ -37,12 +39,13 @@ import {
  */
 
 export interface TripWizardStep1ScreenProps {
-  /** 요약 5행 — 페이지가 `tripSummary` 셀렉터로 도출한 완성형 문자열. `null` = 미선택(플레이스홀더). */
-  summaryDestinations: string | null;
-  summaryPeriod: string | null;
-  summaryCompanion: string | null;
-  summaryPreferences: string | null;
-  summaryBudget: string | null;
+  /** 요약 5행 — 페이지가 `tripSummary` 셀렉터로 도출한 2톤 객체(`{main; sub?}`). `null` = 미선택
+   * (플레이스홀더). 취향만 `{main; onboarding}`(온보딩 배지용). TRIP-732: 문자열 → 객체. */
+  summaryDestinations: SummaryLine | null;
+  summaryPeriod: SummaryLine | null;
+  summaryCompanion: SummaryLine | null;
+  summaryPreferences: PreferenceSummary | null;
+  summaryBudget: SummaryLine | null;
   /** 각 요약 행 탭 → 해당 필드 편집 시트 오픈(S2~S6 스텁). 화면은 신호만 위로 올린다. */
   onPressSummaryDestination(): void;
   onPressSummaryPeriod(): void;
@@ -93,9 +96,12 @@ const SUMMARY_CARD_SHADOW = {
 } as const;
 
 /**
- * 요약 카드 한 행 — 라벨 + 값(있으면 ink) 또는 플레이스홀더(없으면) + 우측 chevron. 행 전체가
- * Pressable 이라 탭하면 편집 시트 오픈 콜백을 부른다(값 조립은 페이지 몫이라 화면은 받은 문자열을
- * 그대로 그린다).
+ * 요약 카드 한 행 — 라벨 + 값(2톤) 또는 플레이스홀더(없으면) + 우측 chevron. 행 전체가 Pressable
+ * 이라 탭하면 편집 시트 오픈 콜백을 부른다(값 조립은 페이지 몫이라 화면은 받은 객체를 그대로 그린다).
+ *
+ * 2톤(TRIP-732): 값이 있으면 굵은 main + 같은 줄에 `sub`(있으면) 회색 caption(testID `{행}-sub`,
+ * `text-muted`)을 그린다. sub 가 없는 행(동행)은 caption 요소 자체를 안 만든다. 취향 행은 sub 대신
+ * `trailing`(스파클+온보딩 배지)을 main 뒤에 얹는다.
  *
  * 플레이스홀더는 **행별**이다(TRIP-671 D1): 여행지 null → "어디로 갈까요?"(진한 값 톤), 기간 null →
  * 값 줄 자체 없음(`placeholder=null`), 나머지 → muted "{라벨} 선택". `isLoading` 이면 값 자리를 회색
@@ -110,10 +116,13 @@ function SummaryRow({
   onPress,
   isLoading,
   skeletonTestID,
+  skeletonWidths,
+  trailing,
 }: {
   testID: string;
   label: string;
-  value: string | null;
+  /** 2톤 값(`{main; sub?}`). `null` 이면 미선택(플레이스홀더). */
+  value: SummaryLine | null;
   /** value 가 null 일 때 그릴 카피. `null` 이면 값 줄 자체를 안 그린다(기간 행). */
   placeholder: string | null;
   /** 플레이스홀더 색 톤 — 여행지만 'ink'(Figma empty 진한 값 톤), 나머지는 'muted'. */
@@ -122,6 +131,10 @@ function SummaryRow({
   /** loading 얼굴 — 값 자리에 회색 스켈레톤 바(라벨은 유지). */
   isLoading?: boolean;
   skeletonTestID: string;
+  /** loading 스켈레톤 바 폭(px) 배열 — 배열 길이가 곧 바 개수다(행별로 다름, Figma 3712:2068 실측). */
+  skeletonWidths: number[];
+  /** main 뒤에 얹을 배지(취향 행 온보딩 스파클 전용, 나머지 행은 undefined). */
+  trailing?: ReactNode;
 }): ReactElement {
   return (
     <Pressable
@@ -133,10 +146,15 @@ function SummaryRow({
       <View className="flex-1 gap-[6px]">
         <Text className="font-noto text-caption text-muted">{label}</Text>
         {isLoading ? (
-          <View
-            testID={skeletonTestID}
-            className="h-[16px] w-[148px] rounded-[6px] bg-surface-strong"
-          />
+          <View testID={skeletonTestID} className="flex-row gap-[6px]">
+            {skeletonWidths.map((w, i) => (
+              <View
+                key={i}
+                testID={`${skeletonTestID}-bar-${i}`}
+                className={`h-[12px] rounded-[10px] bg-hairline w-[${w}px]`}
+              />
+            ))}
+          </View>
         ) : value === null ? (
           placeholder === null ? null : (
             <Text
@@ -150,9 +168,20 @@ function SummaryRow({
             </Text>
           )
         ) : (
-          <Text className="font-noto-bold text-card-title font-bold text-ink">
-            {value}
-          </Text>
+          <View className="flex-row items-center gap-[6px]">
+            <Text className="font-noto-bold text-card-title font-bold text-ink">
+              {value.main}
+            </Text>
+            {value.sub !== undefined ? (
+              <Text
+                testID={`${testID}-sub`}
+                className="font-noto text-caption text-muted"
+              >
+                {value.sub}
+              </Text>
+            ) : null}
+            {trailing}
+          </View>
         )}
       </View>
       <ChevronRightGlyph size={20} tone="muted" />
@@ -184,18 +213,21 @@ function MustVisitStrip({
             {mustVisits.length}
           </Text>
         </Text>
-        <Pressable
-          testID="trip-wizard-mustvisit-see-all"
-          accessibilityRole="button"
-          onPress={onPressSeeAll}
-          className="flex-row items-center gap-[2px]"
-          hitSlop={6}
-        >
-          <Text className="font-noto-bold text-label font-bold text-ink">
-            전체 보기
-          </Text>
-          <ChevronRightGlyph size={16} tone="muted" />
-        </Pressable>
+        {/* 전체 보기 — 담은 곳이 하나라도 있을 때만(TRIP-732 AC-7). 0곳이면 볼 목록이 없어 안 그린다. */}
+        {mustVisits.length > 0 ? (
+          <Pressable
+            testID="trip-wizard-mustvisit-see-all"
+            accessibilityRole="button"
+            onPress={onPressSeeAll}
+            className="flex-row items-center gap-[2px]"
+            hitSlop={6}
+          >
+            <Text className="font-noto-bold text-label font-bold text-ink">
+              전체 보기
+            </Text>
+            <ChevronRightGlyph size={16} tone="muted" />
+          </Pressable>
+        ) : null}
       </View>
       <ScrollView
         horizontal
@@ -253,8 +285,8 @@ function MustVisitStrip({
 
 /**
  * 꼭 갈 곳 로딩 스켈레톤(TRIP-671 loading 얼굴) — 헤더는 숫자 없는 "꼭 갈 곳" + 캡션, 스트립 자리에
- * 회색 카드 4장(점선 "+ 더 담기" 박스 없음). 회색바 토큰은 `TripWizardStep2Screen` 스켈레톤 미러
- * (`bg-surface-strong`·`rounded-[14px]`·`rounded-[6px]`, raw hex 0) — 색·크기·정렬은 jest 사각(6-b).
+ * 회색 카드 4장(점선 "+ 더 담기" 박스 없음). 카드는 단일 64×64 정사각(`bg-hairline`·`rounded-[10px]`,
+ * 텍스트 바 없음, Figma 3712:2068 실측) — 색·크기·정렬은 jest 사각(6-b).
  */
 function MustVisitSkeleton(): ReactElement {
   return (
@@ -270,17 +302,14 @@ function MustVisitSkeleton(): ReactElement {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 10 }}
+        contentContainerStyle={{ gap: 8 }}
       >
         {[1, 2, 3, 4].map((n) => (
           <View
             key={n}
             testID={`trip-wizard-mustvisit-skeleton-${n}`}
-            className="w-[112px] gap-[6px]"
-          >
-            <View className="h-[88px] w-[112px] rounded-[14px] bg-surface-strong" />
-            <View className="h-[14px] w-[80px] rounded-[6px] bg-surface-strong" />
-          </View>
+            className="h-[64px] w-[64px] rounded-[10px] bg-hairline"
+          />
         ))}
       </ScrollView>
     </View>
@@ -315,6 +344,17 @@ export function TripWizardStep1Screen({
 }: TripWizardStep1ScreenProps): ReactElement {
   // loading 이면 게이트가 참이어도 [다음]을 막는다(TRIP-671 D4) — 화면이 isLoading 을 next 에 물린다.
   const nextDisabled = !canProceed || Boolean(isLoading);
+  // empty 얼굴(Figma 3652) 판정 — 여행지·기간만 미선택이고 나머지(동행·취향·예산)는 프리필로 채워진
+  // 상태. 다섯 행이 전부 null 인 퇴화 상태(프리필 미도착)는 "나머지는 채워둘게요" 문구가 거짓이라
+  // empty 로 치지 않는다. 승인 테스트 두 축이 이 경계를 함께 고정한다(TRIP-732 AC-6): summary2tone
+  // empty(여행지·기간 null + 3행 채움) → empty, test.tsx AC-1(전부 null) → default.
+  const isEmptyFace =
+    !isLoading &&
+    summaryDestinations === null &&
+    summaryPeriod === null &&
+    (summaryCompanion !== null ||
+      summaryPreferences !== null ||
+      summaryBudget !== null);
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
       <View testID="trip-wizard-step1-root" className="flex-1 bg-canvas">
@@ -357,10 +397,14 @@ export function TripWizardStep1Screen({
               <Text className="font-noto-bold text-display font-bold text-ink">
                 어디로 떠날까요?
               </Text>
+              {/* 부제 3분기(TRIP-732 AC-6, 우선순위 loading > empty > default): 로딩 중이면 로딩
+                  문구, 아니면 empty 얼굴이면 empty 문구, 그 외 default(온보딩 반영). */}
               <Text className="font-noto text-label text-muted">
                 {isLoading
                   ? '여행 정보를 불러오는 중이에요'
-                  : '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'}
+                  : isEmptyFace
+                    ? '여행지와 기간만 정하면 나머지는 채워둘게요 · 행을 누르면 바꿀 수 있어요'
+                    : '온보딩에서 고른 취향을 그대로 반영했어요 · 행을 누르면 바꿀 수 있어요'}
               </Text>
             </View>
 
@@ -378,6 +422,7 @@ export function TripWizardStep1Screen({
                 onPress={onPressSummaryDestination}
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-1"
+                skeletonWidths={[56, 74]}
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
@@ -389,6 +434,7 @@ export function TripWizardStep1Screen({
                 onPress={onPressSummaryPeriod}
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-2"
+                skeletonWidths={[140, 40]}
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
@@ -400,17 +446,39 @@ export function TripWizardStep1Screen({
                 onPress={onPressSummaryCompanion}
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-3"
+                skeletonWidths={[78]}
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
                 testID="trip-wizard-summary-preference"
                 label="취향"
-                value={summaryPreferences}
+                // 취향은 {main; onboarding} — main 만 value 로 넘기고, 온보딩 배지는 trailing 으로.
+                value={
+                  summaryPreferences === null
+                    ? null
+                    : { main: summaryPreferences.main }
+                }
                 placeholder="취향 선택"
                 placeholderTone="muted"
                 onPress={onPressSummaryPreference}
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-4"
+                skeletonWidths={[110, 48]}
+                trailing={
+                  // 온보딩 상속일 때만 기존 SparkleGlyph + 분홍 "온보딩" 배지(옛 " + 온보딩" 문자열
+                  // 대체, TRIP-732 AC-5). onboarding=false 면 배지 자체를 안 그린다.
+                  summaryPreferences?.onboarding ? (
+                    <View className="flex-row items-center gap-[3px]">
+                      <SparkleGlyph
+                        testID="trip-wizard-preference-sparkle"
+                        size={14}
+                      />
+                      <Text className="font-noto-bold text-caption font-bold text-primary">
+                        온보딩
+                      </Text>
+                    </View>
+                  ) : null
+                }
               />
               <View className="h-[1px] bg-hairline" />
               <SummaryRow
@@ -422,6 +490,7 @@ export function TripWizardStep1Screen({
                 onPress={onPressSummaryBudget}
                 isLoading={isLoading}
                 skeletonTestID="trip-wizard-summary-skeleton-5"
+                skeletonWidths={[64, 78]}
               />
             </View>
 
@@ -443,24 +512,19 @@ export function TripWizardStep1Screen({
           {submitError ? (
             <View
               testID="trip-wizard-submit-banner"
-              className="mb-sm flex-row items-start gap-[10px] rounded-button bg-primary-pale p-md"
+              className="mb-sm flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
             >
               <AlertCircleGlyph size={18} />
-              <View className="flex-1 gap-[2px]">
-                <Text className="font-noto-bold text-label font-bold text-primary-text">
-                  여행을 만들지 못했어요
-                </Text>
-                <Text className="font-noto text-[11.5px] text-primary-text">
-                  {submitError}
-                </Text>
-              </View>
+              {/* §F ⓐ: submitError 는 표시값이 아니라 배너를 켜는 트리거다 — 서버 사유·옛 제목은 안 그린다. */}
+              <Text className="flex-1 font-noto text-card-title text-ink">
+                저장하지 못했어요
+              </Text>
               <Pressable
                 testID="trip-wizard-submit-banner-retry"
                 accessibilityRole="button"
                 onPress={onRetrySubmit}
-                className="items-center justify-center rounded-pill border-[1.4px] border-primary bg-canvas px-md py-[7px]"
               >
-                <Text className="text-[12.5px] font-noto-bold font-bold text-primary-text">
+                <Text className="font-noto-bold font-bold text-card-title text-primary">
                   다시 시도
                 </Text>
               </Pressable>
@@ -470,7 +534,7 @@ export function TripWizardStep1Screen({
           {mustVisitError ? (
             <View
               testID="trip-wizard-mustvisit-banner"
-              className="mb-sm flex-row items-center gap-[10px] rounded-button bg-primary-pale p-md"
+              className="mb-sm flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
             >
               <AlertCircleGlyph size={18} />
               <Text className="flex-1 font-noto text-[11.5px] text-primary-text">
@@ -480,27 +544,32 @@ export function TripWizardStep1Screen({
                 testID="trip-wizard-mustvisit-banner-retry"
                 accessibilityRole="button"
                 onPress={onRetryMustVisits}
-                className="items-center justify-center rounded-pill border-[1.4px] border-primary bg-canvas px-md py-[7px]"
               >
-                <Text className="text-[12.5px] font-noto-bold font-bold text-primary-text">
+                <Text className="font-noto-bold font-bold text-card-title text-primary">
                   다시 시도
                 </Text>
               </Pressable>
             </View>
           ) : null}
+          {/* 비활성(!canProceed || isLoading)은 opacity-40 이 아니라 연회색 채움(#E9E9EB) + 회색
+              글자(muted-soft)로 갈린다(TRIP-732 AC-8). 실제 색 정합은 6-b(스크린샷). */}
           <Pressable
             testID="trip-wizard-step1-next"
             accessibilityRole="button"
             disabled={nextDisabled}
             onPress={onNext}
-            className={`w-full flex-row items-center justify-center gap-sm rounded-button bg-primary py-[15px] ${
-              nextDisabled ? 'opacity-40' : ''
+            className={`w-full flex-row items-center justify-center gap-sm rounded-button py-[15px] ${
+              nextDisabled ? 'bg-[#E9E9EB]' : 'bg-primary'
             }`}
           >
-            <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
+            <Text
+              className={`text-[16px] font-noto-bold font-bold ${
+                nextDisabled ? 'text-muted-soft' : 'text-on-primary'
+              }`}
+            >
               다음
             </Text>
-            <ChevronRightGlyph />
+            <ChevronRightGlyph tone={nextDisabled ? 'muted' : 'onPrimary'} />
           </Pressable>
         </View>
 

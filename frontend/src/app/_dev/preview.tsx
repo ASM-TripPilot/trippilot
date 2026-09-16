@@ -671,11 +671,11 @@ const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
  * (페이지 `tripSummary` 셀렉터가 낼 실제 값과 같은 형태 · en dash·미들닷 그대로). 요일은 실제
  * 달력값 (수)(토)다. 스트립은 키마다 `mustVisits` 만 갈아 끼운다. */
 const TRIP_WIZARD_BASE: TripWizardStep1ScreenProps = {
-  summaryDestinations: '부산 2박 · 경주 1박',
-  summaryPeriod: '6월 10일(수) – 13일(토) · 3박 4일',
-  summaryCompanion: '친구 2명',
-  summaryPreferences: '미식 · 전시 · 야경 + 온보딩',
-  summaryBudget: '120만원 · 1인 총액 · 중간',
+  summaryDestinations: { main: '부산', sub: '2박 · 경주 1박' },
+  summaryPeriod: { main: '6월 10일(수) – 13일(토)', sub: '3박 4일' },
+  summaryCompanion: { main: '친구 2명' },
+  summaryPreferences: { main: '미식 · 전시 · 야경', onboarding: true },
+  summaryBudget: { main: '120만원', sub: '1인 총액 · 중간' },
   onPressSummaryDestination: noop,
   onPressSummaryPeriod: noop,
   onPressSummaryCompanion: noop,
@@ -710,6 +710,30 @@ const MUST_VISIT_THUMBNAILS = [
     name: '전포카페거리',
     imageUrl: null,
     region: '부산진구',
+  },
+  {
+    sourcePoiId: 'poi-4',
+    name: '해동용궁사',
+    imageUrl: null,
+    region: '기장군',
+  },
+  {
+    sourcePoiId: 'poi-5',
+    name: '태종대',
+    imageUrl: null,
+    region: '영도구',
+  },
+  {
+    sourcePoiId: 'poi-6',
+    name: '흰여울문화마을',
+    imageUrl: null,
+    region: '영도구',
+  },
+  {
+    sourcePoiId: 'poi-7',
+    name: '송정해수욕장',
+    imageUrl: null,
+    region: '해운대구',
   },
 ];
 
@@ -2794,12 +2818,13 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g01 신 default(TRIP-665, Figma `3742:2068`) 2키 — 꼭 갈 곳 시드 얼굴과 0곳 얼굴. 요약 5행은
-  // 두 키 다 채워진 상태(`TRIP_WIZARD_BASE`)이고, 스트립의 `mustVisits` 만 갈아 끼운다. jest 는
-  // 요약 카드 그림자·스트립 카드 픽셀·진행바 색을 못 보므로 이 두 키가 3742:2068 육안 대조 자리다.
+  // g01 신 default(TRIP-665·TRIP-732, Figma `3742:2068`) 2키 — 꼭 갈 곳 시드 얼굴과 0곳 얼굴. 요약
+  // 5행은 두 키 다 채워진 2톤 객체(`TRIP_WIZARD_BASE`)이고, 스트립의 `mustVisits` 만 갈아 끼운다.
+  // jest 는 요약 sub caption 회색·온보딩 스파클/분홍·카드 그림자·스트립 카드 픽셀·진행바 색을 못
+  // 보므로 이 두 키가 3742:2068 육안 대조 자리다(TRIP-732 로 `-seeded`→`-default` 개명, AC-11).
   // 자리표시·조회 실패 얼굴은 회선을 늦추면 실화면에서 재현되므로 여기 키를 늘리지 않는다.
   {
-    key: 'trip-new-step1-seeded',
+    key: 'trip-new-step1-default',
     band: 'g',
     label: 'g01 · 만들기 1/2 꼭 갈 곳',
     login: null,
@@ -2833,6 +2858,11 @@ export const PREVIEW_STATES: PreviewState[] = [
         {...TRIP_WIZARD_BASE}
         summaryDestinations={null}
         summaryPeriod={null}
+        // empty 얼굴(Figma `3652:2068`) — 동행·취향은 프리필로 채워지고, 예산은 금액 없이 프리필
+        // tier 만 있는 **tier-only**(TRIP-732: main=tier, sub="1인 총액 · 온보딩").
+        summaryCompanion={{ main: '혼자 1명' }}
+        summaryPreferences={{ main: '휴양 · 미식', onboarding: true }}
+        summaryBudget={{ main: '중간', sub: '1인 총액 · 온보딩' }}
         mustVisits={[]}
         canProceed={false}
       />
@@ -2844,6 +2874,24 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'g01 · 만들기 1/2 loading',
     login: null,
     render: () => <TripWizardStep1Screen {...TRIP_WIZARD_BASE} isLoading />,
+  },
+  // g01 저장 실패 배너(TRIP-734, Figma saveFail·v2 = `3754:5401`) — 제출 실패 얼굴. submitError 트리거
+  // 하나만 얹어 흰 배경+헤어라인 배너·빨간 경고 아이콘(#FF385C)·[다시 시도] 텍스트 링크를 육안 대조하는
+  // 자리다(아이콘 색·흰 배경·정렬·높이는 jest 사각 — className 토큰까지만 심판, 02a ★A). submitError 는
+  // 이제 트리거라 여기 문자열 내용은 화면에 안 뜬다(단일 줄 "저장하지 못했어요"만).
+  {
+    key: 'trip-new-step1-save-error',
+    band: 'g',
+    label: 'g01 · 만들기 1/2 저장 실패',
+    login: null,
+    render: () => (
+      <TripWizardStep1Screen
+        {...TRIP_WIZARD_BASE}
+        mustVisits={MUST_VISIT_THUMBNAILS}
+        submitError="네트워크를 확인하고 다시 시도해주세요"
+        onRetrySubmit={noop}
+      />
+    ),
   },
   // g01 여행지 편집 시트(TRIP-666, Figma `3626:2070`) — 시트 열린 상태. `DestinationEditSheet`은
   // props-only 순수 뷰(스토어·라우터 미참조)라 컨테이너 import 사슬 함정 없이 그대로 태운다.

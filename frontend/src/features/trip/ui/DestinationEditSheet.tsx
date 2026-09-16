@@ -29,6 +29,8 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
+import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
+
 import type { TripDestination } from '@/shared/api/generated/schemas';
 
 import {
@@ -153,6 +155,7 @@ export function DestinationEditSheet({
       enablePanDownToClose
       onClose={onClose}
       backdropComponent={renderBackdrop}
+      handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
     >
       <BottomSheetView
         testID="trip-wizard-destination-sheet"
