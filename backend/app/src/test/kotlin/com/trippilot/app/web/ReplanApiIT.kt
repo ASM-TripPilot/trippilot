@@ -5,14 +5,19 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.itinerarygeneration.api.ReplanFacade
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Primary
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.http.client.JdkClientHttpRequestFactory
@@ -36,6 +41,7 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
 
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
+    @Autowired private lateinit var replans: PausingReplanFacade
 
     private val json = ObjectMapper()
 
@@ -71,16 +77,7 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
         return call(HttpMethod.POST, "/api/v1/trips", token, body).second["tripId"].asText()
     }
 
-    /**
-     * 일정을 만들고 **마무리까지 기다린다.**
-     *
-     * 기다리지 않으면 재계획이 `PARTIAL`(day1 만 있는) 일정 위에서 돌아 산출이 갈린다 —
-     * 세션이 종단 상태로 떨어지면 다음 진입이 그것을 "열린 세션"으로 보지 않아 취소하지 않고,
-     * 이전 세션이 CANCELED 라는 단언이 간헐적으로 깨진다(실측: CI 에서 두 번).
-     *
-     * 재계획이 PARTIAL 자체를 막지는 않는다. 다만 이 테스트들이 재려는 것은 **완성된 일정을
-     * 다시 짜는 것**이라, 전제를 결정적으로 만드는 편이 맞다.
-     */
+    /** 완성된 일정을 재계획하도록 생성 마무리까지 기다린다. 재계획 자체의 진행 시점은 별도로 제어한다. */
     private fun generate(token: String, tripId: String): Int {
         val rc = call(HttpMethod.POST, "/api/v1/trips/$tripId/itinerary?mode=FULLY_AI", token).first
         if (rc == 201) awaitComplete(token, tripId)
@@ -138,16 +135,17 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
     fun `다시 진입하면 이전 세션을 닫고 새로 연다 — 막지 않는다(INV-U4-06)`() {
         val token = newToken()
         val tripId = createTrip(token)
-        generate(token, tripId)
-        val first = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
-            .second["sessionId"].asText()
+        generate(token, tripId) shouldBe 201
 
-        val (rc, second) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
-        rc shouldBe 201 // 409 가 아니다
-        (second["sessionId"].asText() == first) shouldBe false // 새 세션이다
+        withSolvingSession(token, tripId) { first ->
+            val (rc, second) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
+            rc shouldBe 201 // 409 가 아니다
+            (second["sessionId"].asText() == first) shouldBe false // 새 세션이다
 
-        val (_, closed) = call(HttpMethod.GET, "/api/v1/trips/$tripId/replan-sessions/$first", token)
-        closed["status"].asText() shouldBe "CANCELED" // 이전 시도는 이력으로 남는다
+            val (getStatus, closed) = call(HttpMethod.GET, "/api/v1/trips/$tripId/replan-sessions/$first", token)
+            getStatus shouldBe 200
+            closed["status"].asText() shouldBe "CANCELED" // 이전 시도는 이력으로 남는다
+        }
     }
 
     @Test
@@ -193,17 +191,37 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
     fun `취소는 세션만 닫는다 · 두 번 닫으면 409`() {
         val token = newToken()
         val tripId = createTrip(token)
-        generate(token, tripId)
-        val id = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
-            .second["sessionId"].asText()
+        generate(token, tripId) shouldBe 201
+        val before = call(HttpMethod.GET, "/api/v1/trips/$tripId/itinerary", token).second["days"]
 
-        val (rc, canceled) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions/$id/cancel", token)
-        rc shouldBe 200
-        canceled["status"].asText() shouldBe "CANCELED"
-        call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions/$id/cancel", token).first shouldBe 409
+        withSolvingSession(token, tripId) { id ->
+            val (rc, canceled) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions/$id/cancel", token)
+            rc shouldBe 200
+            canceled["status"].asText() shouldBe "CANCELED"
+            call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions/$id/cancel", token).first shouldBe 409
 
-        // 원 일정은 그대로다(INV-U4-05)
-        call(HttpMethod.GET, "/api/v1/trips/$tripId/itinerary", token).first shouldBe 200
+            // 조회 성공뿐 아니라 원 일정의 일자·슬롯이 그대로인지 확인한다(INV-U4-05).
+            val (getStatus, itinerary) = call(HttpMethod.GET, "/api/v1/trips/$tripId/itinerary", token)
+            getStatus shouldBe 200
+            itinerary["days"] shouldBe before
+        }
+    }
+
+    /**
+     * 열린 세션을 취소하는 테스트의 전제. 실제 산출은 다음 HTTP 요청 전에 NO_SOLUTION 으로
+     * 끝날 수 있다(특히 늦은 밤). 첫 산출만 보류하고 HTTP·비동기 solver·DB 는 실제로 실행한다.
+     */
+    private fun withSolvingSession(token: String, tripId: String, assertion: (String) -> Unit) {
+        replans.withPausedNext(UUID.fromString(tripId)) { paused ->
+            val (rc, opened) = call(HttpMethod.POST, "/api/v1/trips/$tripId/replan-sessions", token, startBody)
+            rc shouldBe 201
+            val id = opened["sessionId"].asText()
+            paused.awaitStarted()
+            val (getStatus, solving) = call(HttpMethod.GET, "/api/v1/trips/$tripId/replan-sessions/$id", token)
+            getStatus shouldBe 200
+            solving["status"].asText() shouldBe "SOLVING"
+            assertion(id)
+        }
     }
 
     @Test
@@ -315,6 +333,14 @@ class ReplanApiIT : AbstractPostgresIntegrationTest() {
     @Test
     fun `인증 없으면 401`() {
         call(HttpMethod.POST, "/api/v1/trips/${UUID.randomUUID()}/replan-sessions", null, startBody).first shouldBe 401
+    }
+
+    @TestConfiguration
+    class ReplanTimingConfig {
+        @Bean
+        @Primary
+        fun pausingReplanFacade(@Qualifier("replanFacadeService") delegate: ReplanFacade) =
+            PausingReplanFacade(delegate)
     }
 
     private companion object {
