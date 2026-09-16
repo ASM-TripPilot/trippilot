@@ -3094,10 +3094,11 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g02 숙소 선택 시트(TRIP-673 S9, Figma `3669:2068`) — 밤2 열림·해운대 선택 상태. `StaySelectSheet`은
-  // props-only 순수 뷰(스토어·라우터·조회 미참조)라 배선 없이 props 만 갈아 끼우면 얼굴이 그대로 나온다.
-  // stay-b(감천)는 날짜 없음 후보(→"날짜 없음" 서브라인). jest 는 딤·실개폐·사진 placeholder 회색·선택
-  // 테두리 분홍을 못 봐(바텀시트 통과형 목) 이 키가 유일한 6-b 육안 대조 자리다.
+  // g02 숙소 선택 시트(TRIP-673 S9 → TRIP-741 후보 카드 Figma 정합, `3669:2068`) — 광안리 선택 상태.
+  // 3후보 전부 사진(draft-preview 재사용)·동네·거리·가격·날짜를 채워 Figma 육안 동일(rich 필드는
+  // StaySelectCandidate optional — SavedStay 계약엔 없어 실데이터는 미렌더, 프리뷰만 채운다 INV-1).
+  // 감천은 날짜 없음 후보(→"날짜 없음" 서브라인). jest 는 딤·실개폐·사진 실렌더·선택 테두리 분홍
+  // 1.5px·체크 분홍을 못 봐(바텀시트 통과형 목·svg 정수화) 이 키가 유일한 6-b 육안 대조 자리다.
   {
     key: 'trip-new-step2-staysheet',
     band: 'g',
@@ -3109,27 +3110,49 @@ export const PREVIEW_STATES: PreviewState[] = [
         dateLabel="6/11(목)"
         candidates={[
           {
-            savedStayId: 'stay-a',
-            name: '해운대 오션 호텔',
+            savedStayId: 'stay-gwangalli',
+            name: '광안리 뷰 호텔',
             coordConfirmed: true,
-            checkIn: '2026-06-10',
-            checkOut: '2026-06-13',
+            checkIn: '2026-06-11',
+            checkOut: '2026-06-12',
             registerRoute: 'MAP_SEARCH',
             createdAt: '2026-08-01T00:00:00Z',
             updatedAt: '2026-08-01T00:00:00Z',
+            imageUrl: DRAFT_PREVIEW_PHOTOS[0] ?? undefined,
+            region: '광안리',
+            distance: '400m',
+            priceLabel: '165,000원~',
           },
           {
-            savedStayId: 'stay-b',
-            name: '감천문화마을 게스트하우스',
+            savedStayId: 'stay-haeundae',
+            name: '해운대 오션 호텔',
+            coordConfirmed: true,
+            checkIn: '2026-06-10',
+            checkOut: '2026-06-12',
+            registerRoute: 'MAP_SEARCH',
+            createdAt: '2026-08-01T00:00:00Z',
+            updatedAt: '2026-08-01T00:00:00Z',
+            imageUrl: DRAFT_PREVIEW_PHOTOS[1] ?? undefined,
+            region: '해운대',
+            distance: '350m',
+            priceLabel: '190,000원~',
+          },
+          {
+            savedStayId: 'stay-gamcheon',
+            name: '감천 게스트하우스',
             coordConfirmed: false,
             checkIn: null,
             checkOut: null,
             registerRoute: 'MAP_SEARCH',
             createdAt: '2026-08-01T00:00:00Z',
             updatedAt: '2026-08-01T00:00:00Z',
+            imageUrl: DRAFT_PREVIEW_PHOTOS[2] ?? undefined,
+            region: '감천',
+            distance: '1.2km',
+            priceLabel: '92,000원~',
           },
         ]}
-        selectedSavedStayId="stay-a"
+        selectedSavedStayId="stay-gwangalli"
         onSelect={noop}
         onBrowse={noop}
         onAssign={noop}

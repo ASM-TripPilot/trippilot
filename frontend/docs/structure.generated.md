@@ -304,7 +304,7 @@
 
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/formatNights.ts`  →  formatNightsLabel · nightsLabel · nightsCountLabel
-- `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatDateRangeWithDow
+- `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatDateRangeWithDow · formatBaseNightRange
 
 ## src/entities/trip/model/
 - `src/entities/trip/model/index.ts`  →  MyTripBadge · MyTripCardVM · PastTripCardVM
@@ -645,7 +645,7 @@
 - `src/features/trip/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
 - `src/features/trip/ui/MustVisitListScreen.tsx`  →  MustVisitListScreenProps · MustVisitListScreen
 - `src/features/trip/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
-- `src/features/trip/ui/StaySelectSheet.tsx`  →  StaySelectSheetProps · StaySelectSheet
+- `src/features/trip/ui/StaySelectSheet.tsx`  →  StaySelectCandidate · StaySelectSheetProps · StaySelectSheet
 - `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · BackChevronGlyph · PinGlyph · RemoveGlyph · ThumbRemoveGlyph · PlusGlyph · CalendarGlyph · ChevronDownGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · SparkleGlyph · AlertCircleGlyph · GlobeGlyph · BedTone · BedGlyph · ChevronRightGlyph · BaseBadgePinGlyph · HeartFilledGlyph · CheckGlyph · SearchGlyph · WarningTriangleGlyph
 - `src/features/trip/ui/TripWizardStep1Screen.tsx`  →  TripWizardStep1ScreenProps · TripWizardStep1Screen
 - `src/features/trip/ui/TripWizardStep2Screen.tsx`  →  NightlyBaseCardVM · Step2Variant · TripWizardStep2ScreenProps · TripWizardStep2Screen

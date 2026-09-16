@@ -690,8 +690,13 @@ export function HeartFilledGlyph({ size = 26, testID }: GlyphProps) {
   );
 }
 
-// g02 지정됨 pill 안 체크(14) — Figma `1866:2332`.
-export function CheckGlyph({ size = 14, testID }: GlyphProps) {
+// g02 지정됨 pill 안 체크(14) — Figma `1866:2332`. 기본 톤은 primaryText(#C13515) 보존(기존 렌더
+// 불변), g02 후보 선택 체크는 primary(#FF385C)다 — ChevronRightGlyph tone 확장 선례(좁은 유니온).
+export function CheckGlyph({
+  size = 14,
+  tone = 'primaryText',
+  testID,
+}: GlyphProps & { tone?: 'primaryText' | 'primary' }) {
   return (
     <Svg
       testID={testID}
@@ -702,7 +707,7 @@ export function CheckGlyph({ size = 14, testID }: GlyphProps) {
     >
       <Path
         d="M11.6667 3.5L5.25 9.91667L2.33333 7"
-        stroke={PRIMARY_TEXT}
+        stroke={tone === 'primary' ? PRIMARY : PRIMARY_TEXT}
         strokeWidth={1.75}
         strokeLinecap="round"
         strokeLinejoin="round"

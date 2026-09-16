@@ -9,9 +9,10 @@
  * 무엇을 그리나:
  *  - **헤더**(AC-1) 박 라벨·지역 제목 + "{날짜(요일)} 밤 · 어디서 묵을까요?" 부제. 정적 카피는
  *    시트가 소유하고, 제목·날짜 라벨은 배선이 밤 카드에서 조립해 내린다.
- *  - **후보 카드**(AC-2) 회색 사진 placeholder + 이름 + 날짜 서브라인(checkIn·checkOut 둘 다 있으면
- *    `formatStayDateRange`=`6.10~6.13`, 없으면 "날짜 없음") + 단일 선택 체크. SavedStay 계약에
- *    price·imageUrl 이 없어(실측) **가격·거리·사진을 발명하지 않는다**(INV-1 · FG-2).
+ *  - **후보 카드**(AC-1·2) `SavedStayCard`(row) 위임 — 이름 + 날짜 서브라인
+ *    `formatBaseNightRange`(`6/11–6/12 · 1박`, en dash·미들닷, 없으면 "날짜 없음") + 선택 시 체크(tone
+ *    primary). SavedStay 계약에 price·imageUrl·region·distance 가 없어(실측) 실데이터 경로는 사진·동네·
+ *    거리·가격을 **미렌더**(카드 optional 슬롯 additive, 값은 프리뷰만 — INV-1 · 계약 예정 TRIP-825).
  *  - **단일 선택**(★2) 선택 표식은 색 fill 이 아니라 `accessibilityState={{selected}}`다 — 색만 바꾸는
  *    구현은 jest 무심판이라(글리프 fill 함정, repo-traps) 접근성 상태로 관찰 가능하게 한다.
  *  - **둘러보기**(AC-3, outline) + **이 밤 거점으로 지정**(AC-4, primary, 미선택 시 진짜 `disabled`
@@ -33,11 +34,20 @@ import BottomSheet, {
 import { SHEET_HANDLE_INDICATOR_STYLE } from '../lib/sheetHandle';
 
 import { SavedStayCard } from '@/entities/stay/ui/SavedStayCard';
+import { formatBaseNightRange } from '@/entities/trip/lib/formatTripPeriod';
 import type { SavedStay } from '@/shared/api/generated/schemas';
 
-import { formatStayDateRange } from '../model/stayDateImport';
-
 import { CheckGlyph, SearchGlyph } from './TripGlyphs';
+
+/** 후보 = 저장 숙소 + 프리뷰 전용 rich 필드(사진·동네·거리·가격). SavedStay 계약엔 이 4필드가
+ *  없어(실측) 실데이터 경로는 전부 undefined → 카드가 degrade(날짜 + 회색 자리). 프리뷰만 채워
+ *  Figma 육안 동일(INV-1 · 계약 예정 TRIP-825). 전부 optional이라 plain SavedStay[] 도 그대로 대입된다. */
+export type StaySelectCandidate = SavedStay & {
+  imageUrl?: string;
+  region?: string;
+  distance?: string;
+  priceLabel?: string;
+};
 
 export interface StaySelectSheetProps {
   /** 헤더 제목(박 라벨·지역 — 배선이 조립). 예 "2박 · 부산". */
@@ -45,7 +55,7 @@ export interface StaySelectSheetProps {
   /** 그 밤 날짜 라벨(nightlyBaseCards 출력). 예 "6/11(목)". */
   dateLabel: string;
   /** 후보 = 저장 숙소 목록(useSavedStays 결과, 배선이 내림). */
-  candidates: SavedStay[];
+  candidates: StaySelectCandidate[];
   /** 드래프트 선택 — 배선이 소유. null 이면 미선택(지정 disabled). */
   selectedSavedStayId: string | null;
   /** 후보 press → 배선 드래프트 갱신. */
@@ -121,13 +131,14 @@ export function StaySelectSheet({
           <View className="gap-sm">
             {candidates.map((stay) => {
               const selected = stay.savedStayId === selectedSavedStayId;
-              const dateLine =
-                stay.checkIn && stay.checkOut
-                  ? formatStayDateRange(stay.checkIn, stay.checkOut)
-                  : '날짜 없음';
+              // 날짜 서브라인 = M/D–M/D · N박(en dash·미들닷), 한쪽이라도 없으면 "날짜 없음".
+              const dateLine = formatBaseNightRange(
+                stay.checkIn,
+                stay.checkOut
+              );
               // 후보 카드를 entities degrade 카드로 위임(★16). 선택은 색이 아니라
-              // accessibilityState + 우측 체크(trailing)로 잰다(★2). 사진·가격·거리는 계약 무라
-              // 카드가 안 그린다(INV-1). 사진 자리는 카드의 회색 placeholder.
+              // accessibilityState + 우측 체크(trailing, tone primary)로 잰다(★2). 사진·동네·거리·가격은
+              // SavedStay 계약에 없어(실측) 실데이터는 미렌더(카드 optional 슬롯, 값은 프리뷰만 — INV-1).
               return (
                 <SavedStayCard
                   key={stay.savedStayId}
@@ -135,12 +146,18 @@ export function StaySelectSheet({
                   name={stay.name}
                   layout="row"
                   selected={selected}
+                  imageUrl={stay.imageUrl}
+                  region={stay.region}
+                  distance={stay.distance}
+                  priceLabel={stay.priceLabel}
                   subtitle={
                     <Text className="font-noto text-caption text-muted">
                       {dateLine}
                     </Text>
                   }
-                  trailing={selected ? <CheckGlyph size={22} /> : null}
+                  trailing={
+                    selected ? <CheckGlyph size={22} tone="primary" /> : null
+                  }
                   onPress={() => onSelect(stay.savedStayId)}
                 />
               );

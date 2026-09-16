@@ -116,3 +116,151 @@ describe.each(LAYOUTS)('SavedStayCard — layout=%s', (layout) => {
     expect(screen.getByText('해운대 오션뷰')).toBeOnTheScreen();
   });
 });
+
+/**
+ * TRIP-741 · AC-4·5·6·6b — g02 전용 row 브랜치 optional 슬롯(사진·동네·거리·가격) + 선택 테두리.
+ *
+ * 무엇을 보장하나(**계약 공백의 정직한 degrade**가 핵심):
+ *  - 🔴 AC-6  imageUrl 지정 시 `<Image testID={id}-photo>`, 미지정 시 회색 placeholder(`{id}-photo-placeholder`).
+ *  - 🔴 AC-6b region·distance·priceLabel 지정 시 그 값이 렌더, 미지정 시 미렌더(값이 있을 때만 렌더 = degrade).
+ *  - 🔴 AC-5  optional 을 하나도 안 주면(=실데이터 경로, `SavedStay` 계약 공백) 가격·거리 문자열 0건(INV-1).
+ *  - 🔴 AC-4  선택 카드 테두리 `border-[1.5px] border-primary`·미선택 `border-hairline-strong`·radius `rounded-[12px]`.
+ *
+ * 이 슬롯들은 **row 브랜치(g02) 전용**이다 — vertical(e04)은 무시한다(scope 잠금).
+ *
+ * *(개념 — className 심판 한계)* NativeWind className 은 jest 렌더 트리에 평문 prop 으로 남아(실측 P1)
+ *  토큰 배열로 잰다. 실제 픽셀·색은 안 남으므로 두께·분홍 실색은 6-b 몫이고, 여기선 클래스 토큰까지만.
+ *
+ * *(개념 — 값은 표시용 문자열)* region·distance·priceLabel 은 카드가 포맷하지 않는 **완성 문자열**을 받는다
+ *  (카드는 표시만, 포맷은 소비처/프리뷰). 그래서 카드가 거리를 계산해 duration 을 만들 여지가 없다(INV-3).
+ */
+function cls(el: { props: { className?: unknown } }): string[] {
+  return String(el.props.className ?? '').split(/\s+/);
+}
+
+describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
+  const rootId = 'trip-base-staysheet-cand-ss-1';
+
+  it('🔴 AC-6 · imageUrl 지정 → 사진 렌더 + placeholder 부재', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="광안리 뷰 호텔"
+        layout="row"
+        imageUrl="https://cdn.example/gwangalli.jpg"
+      />
+    );
+
+    expect(screen.getByTestId(`${rootId}-photo`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${rootId}-photo-placeholder`)).toBeNull();
+  });
+
+  it('🔴 AC-6 · imageUrl 미지정 → 회색 placeholder + 사진 부재 (degrade)', () => {
+    render(
+      <SavedStayCard testID={rootId} name="광안리 뷰 호텔" layout="row" />
+    );
+
+    expect(screen.getByTestId(`${rootId}-photo-placeholder`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${rootId}-photo`)).toBeNull();
+  });
+
+  it('🔴 AC-6b · region·distance·priceLabel 지정 → 세 값 모두 렌더', () => {
+    // 이름은 지역어를 안 담는다("숙소 A") — region 단언이 이름과 겹쳐 오탐 나지 않게.
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        region="광안리"
+        distance="400m"
+        priceLabel="165,000원~"
+        subtitle={<Text>6/11–6/12 · 1박</Text>}
+      />
+    );
+
+    const card = screen.getByTestId(rootId);
+    // 카드가 여러 Text 를 이어붙이므로 RegExp(부분 포함)로 잰다(문자열이면 완전일치라 실패).
+    expect(card).toHaveTextContent(/광안리/);
+    expect(card).toHaveTextContent(/400m/);
+    expect(card).toHaveTextContent(/165,000원~/);
+  });
+
+  it('🔴 AC-6b · region·distance·priceLabel 미지정 → 미렌더 (degrade)', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="숙소 A"
+        layout="row"
+        subtitle={<Text>6/11–6/12 · 1박</Text>}
+      />
+    );
+
+    const card = screen.getByTestId(rootId);
+    expect(card).not.toHaveTextContent(/광안리/);
+    expect(card).not.toHaveTextContent(/400m|km/);
+    expect(card).not.toHaveTextContent(/원~|₩/);
+  });
+
+  it('🔴 AC-5 · 실데이터 경로(optional 0개) — 가격·거리 문자열 0건 (INV-1)', () => {
+    // 실앱은 SavedStay 계약에 사진·지역·거리·가격이 없어 이름 + 날짜만 뜬다(Figma 목업 복붙 금지).
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="광안리 뷰 호텔"
+        layout="row"
+        subtitle={<Text>6/11–6/12 · 1박</Text>}
+      />
+    );
+
+    const card = screen.getByTestId(rootId);
+    expect(card).not.toHaveTextContent(/원|₩/);
+    expect(card).not.toHaveTextContent(/\d+\s*m\b|km/);
+    // 가짜통과 방지 짝 — 카드·이름·날짜는 떠 있다.
+    expect(card).toHaveTextContent(/광안리 뷰 호텔/);
+    expect(card).toHaveTextContent(/6\/11–6\/12 · 1박/);
+  });
+
+  it('🔴 AC-4 · 선택 카드 테두리 border-[1.5px] border-primary + rounded-[12px]', () => {
+    render(
+      <SavedStayCard
+        testID={rootId}
+        name="광안리 뷰 호텔"
+        layout="row"
+        selected
+      />
+    );
+
+    const tokens = cls(screen.getByTestId(rootId));
+    expect(tokens).toContain('border-[1.5px]');
+    expect(tokens).toContain('border-primary');
+    expect(tokens).toContain('rounded-[12px]');
+    // radius 는 rounded-card(16) 가 아니다(정합 대상 — Figma 12).
+    expect(tokens).not.toContain('rounded-card');
+  });
+
+  it('🔴 AC-4 · 미선택 카드 테두리 border-hairline-strong (1.5px·분홍 아님) + rounded-[12px]', () => {
+    render(
+      <SavedStayCard testID={rootId} name="광안리 뷰 호텔" layout="row" />
+    );
+
+    const tokens = cls(screen.getByTestId(rootId));
+    expect(tokens).toContain('border-hairline-strong');
+    expect(tokens).toContain('rounded-[12px]');
+    expect(tokens).not.toContain('border-[1.5px]');
+    expect(tokens).not.toContain('border-primary');
+  });
+
+  it('🔴 슬롯은 row 전용 — vertical(e04)은 imageUrl 을 무시한다 (scope 잠금)', () => {
+    render(
+      <SavedStayCard
+        testID="saved-stay-card-ss-1"
+        name="해운대 오션뷰"
+        layout="vertical"
+        imageUrl="https://cdn.example/x.jpg"
+      />
+    );
+
+    // vertical 은 자체 178px 회색 자리만 — row 사진 슬롯 testID 를 안 낸다.
+    expect(screen.queryByTestId('saved-stay-card-ss-1-photo')).toBeNull();
+  });
+});

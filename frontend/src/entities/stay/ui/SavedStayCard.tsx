@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 
 /**
  * TRIP-807 · AC-4 — 저장 숙소 degrade 카드(e04 세로 · g02 시트 행 공용). props-only.
@@ -27,6 +27,15 @@ export interface SavedStayCardProps {
   selected?: boolean;
   layout: 'vertical' | 'row';
   onPress?: () => void;
+  /** 사진 URL — **row(g02) 전용**. 지정 시 <Image>(56×56 r12 cover), 미지정 시 회색 placeholder.
+   *  SavedStay 계약엔 없어(실측) 실데이터는 항상 미지정 → 회색 자리(INV-1, 값은 프리뷰만). */
+  imageUrl?: string;
+  /** 동네(표시용 문자열) — **row 전용**. 서브라인 접두, 값 있을 때만 렌더(degrade). */
+  region?: string;
+  /** 거리(표시용 문자열 "400m"/"1.2km", 거리만 — INV-3) — **row 전용**. 서브라인 접두, 값 있을 때만. */
+  distance?: string;
+  /** 가격(표시용 문자열 "165,000원~") — **row 전용**. 가격 줄, 값 있을 때만 렌더(degrade). */
+  priceLabel?: string;
 }
 
 // e04 세로 카드 그림자 이관값 — className 으로 못 줘 style prop. shadowColor '#000000' 은 토큰화
@@ -47,6 +56,10 @@ export function SavedStayCard({
   selected = false,
   layout,
   onPress,
+  imageUrl,
+  region,
+  distance,
+  priceLabel,
 }: SavedStayCardProps): ReactElement {
   if (layout === 'row') {
     return (
@@ -55,17 +68,42 @@ export function SavedStayCard({
         accessibilityRole="button"
         accessibilityState={{ selected }}
         onPress={onPress}
-        className={`w-full flex-row items-center gap-md rounded-card border py-[10px] pl-[10px] pr-[14px] ${
-          selected ? 'border-primary' : 'border-hairline-strong'
+        className={`w-full flex-row items-center gap-md rounded-[12px] py-[10px] pl-[10px] pr-[14px] ${
+          selected
+            ? 'border-[1.5px] border-primary'
+            : 'border border-hairline-strong'
         }`}
       >
-        {/* 사진 자리 — 계약에 imageUrl 없음(INV-1), 회색 placeholder 만. */}
-        <View className="h-[56px] w-[56px] rounded-[12px] bg-surface-strong" />
+        {/* 사진 — 지정 시 <Image>, 미지정 시 회색 placeholder(계약 공백, INV-1). */}
+        {imageUrl !== undefined ? (
+          <Image
+            testID={`${testID}-photo`}
+            source={{ uri: imageUrl }}
+            resizeMode="cover"
+            className="h-[56px] w-[56px] rounded-[12px]"
+          />
+        ) : (
+          <View
+            testID={`${testID}-photo-placeholder`}
+            className="h-[56px] w-[56px] rounded-[12px] bg-surface-strong"
+          />
+        )}
         <View className="flex-1 gap-[2px]">
           <Text className="font-noto-bold text-card-title font-bold text-ink">
             {name}
           </Text>
-          {subtitle}
+          {/* 서브라인 = 동네 · 거리 · 날짜(subtitle). 접두는 값 있을 때만(degrade). */}
+          <Text className="font-noto text-caption text-muted">
+            {region !== undefined ? `${region} · ` : null}
+            {distance !== undefined ? `${distance} · ` : null}
+            {subtitle}
+          </Text>
+          {/* 가격 줄 — 값 있을 때만(계약 공백이면 미렌더). */}
+          {priceLabel !== undefined ? (
+            <Text className="font-noto-bold text-card-title font-bold text-ink">
+              {priceLabel}
+            </Text>
+          ) : null}
         </View>
         {trailing}
       </Pressable>
