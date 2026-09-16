@@ -12,4 +12,7 @@ dependencies {
     api(libs.postgresql)                     // 부트스트랩 JDBC 드라이버
     api(libs.bundles.kotest)                 // runner + assertions + property(PBT)
     api(libs.mockk)
+    // 계약 모양 대조(ContractShape)가 쓰는 Jackson 3 — 경계 게이트들이 이 타입을 주고받는다.
+    // BOM 이 버전을 잡으므로 좌표만 적는다.
+    api("tools.jackson.core:jackson-databind")
 }
