@@ -455,11 +455,18 @@ note = "TRIP-854(전용 경계)와 같은 대역을 만진다. 자원 배타 —
 id = "TRIP-870"
 ticket = "TRIP-870"
 title = "내부 POI read DTO 에 tags·source_ref 노출 — 값은 이미 DB 에 있다"
-status = "todo"
+status = "done"
 owner = "장소"
 migration = false
 touches = ["backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/adapter/in/web"]
-note = "AI 가 재조회할 때 쓴다. 저장은 돼 있고 내보내는 칸만 없다."
+note = """
+**닫힘(TRIP-870).** `PoiReadResponse` 에 `tags`·`source_ref` 두 칸을 더했다. 새 컬럼도 마이그레이션도
+없다 — 값은 DB·도메인·공개 API 에 이미 있었고 **AI 가 읽는 경계에만 안 실려 있었다**.
+
+`tags` 는 카테고리가 못 가르는 것을 가른다(경계 8종의 `SIGHT` 안에 야외 유적지와 실내 전시관이
+함께 있다). `source_ref` 는 정본이 아니라 **조인 키**다 — 상대가 자기 파생 지식을 자기 스토어에 들고
+런타임 후보에 붙이는 데 쓴다. "POI 정본은 C7 단일 소유"가 그대로 남는다.
+"""
 
 [[nodes]]
 id = "TRIP-681"

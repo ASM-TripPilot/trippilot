@@ -46,4 +46,36 @@ class PoiReadResponseTest : StringSpec({
         r.dataStatus shouldBe "ACTIVE"
         r.distanceM shouldBe 1234.5
     }
+
+    /**
+     * tags·sourceRef 전달(TRIP-870).
+     *
+     * 값은 이미 DB·도메인·공개 API 에 있었고 **이 경계에만 안 실려 있었다.** 없으면 상대는 카테고리
+     * 8종만 보게 되는데, `SIGHT` 하나에 야외 유적지와 실내 전시관이 섞여 있어 비 오는 날 실내 대안을
+     * 고를 근거가 없다. 그 상태의 증상은 예외가 아니라 **지어낸 근거 문구**라 아무도 못 알아챈다.
+     */
+    "tags·sourceRef 를 도메인 값 그대로 싣는다" {
+        val p = Poi.reconstitute(
+            UUID.randomUUID(), "수원화성", 37.28, 127.01, PoiCategory.명소, "수원", null,
+            DataStatus.ACTIVE, PoiSource.TOURAPI, 3, now, now,
+            tags = listOf("역사관광지", "유적지/사적지"), sourceRef = "126508",
+        )
+
+        val r = PoiReadResponse.from(PoiWithDistance(p, null))
+
+        r.tags shouldBe listOf("역사관광지", "유적지/사적지")
+        r.sourceRef shouldBe "126508"
+    }
+
+    /**
+     * **미확보를 빈 값으로 보존한다 — 지어내지도, 필드를 빼지도 않는다.** 수동 등록분은 `sourceRef` 가
+     * 없고(그때는 멱등 판정 대상이 아니다) 태그를 못 얻은 수집분은 빈 배열이다. 여기서 기본값을 채우면
+     * 상대가 "출처를 아는 POI"로 착각해 조인을 시도하고, 0건 매칭이 조용한 실패로 남는다.
+     */
+    "미확보는 빈 배열·null 그대로 간다" {
+        val r = PoiReadResponse.from(PoiWithDistance(poi(PoiCategory.맛집, null, null), null))
+
+        r.tags shouldBe emptyList()
+        r.sourceRef shouldBe null
+    }
 })

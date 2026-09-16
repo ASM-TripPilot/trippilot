@@ -85,6 +85,20 @@ data class PoiReadResponse(
     val openingHours: String?,   // 원문(structured 는 후속)
     val dataStatus: String,      // ACTIVE(현재 read 는 ACTIVE만)
     val source: String,          // KAKAO_LOCAL/TOURAPI/MANUAL
+    /**
+     * 출처가 준 원본 식별자(TourAPI `content_id` 등). 수동 등록분은 null.
+     *
+     * **정본을 넘기는 것이 아니라 조인 키를 넘기는 것이다.** 상대가 자기 파생 지식(예약 필요 여부 등)을
+     * 자기 스토어에 들고 런타임 후보에 붙일 때 이 값으로 맞춘다 — 속성이 늘 때마다 우리 스키마를
+     * 늘리는 것보다 경계가 깨끗하고, "POI 정본은 C7 단일 소유"가 그대로 남는다.
+     */
+    val sourceRef: String?,
+    /**
+     * 표시용 열린 집합. **카테고리가 못 가르는 것을 이 값이 가른다** — 경계 8종의 `SIGHT` 안에는
+     * 야외 유적지와 실내 전시관이 함께 들어 있어, 비 오는 날 실내 대안을 고르는 쪽에서 둘을 구분할
+     * 근거가 없었다. 근거가 없으면 모델이 상호명 기억으로 지어내고, 그 창작이 사용자에게 나간다.
+     */
+    val tags: List<String>,
     val savedCount: Long,
     val dataQuality: String,     // FULL/PARTIAL
     val distanceM: Double?,      // 반경 조회 시 중심 거리(INV-3: 거리 OK)
@@ -102,6 +116,8 @@ data class PoiReadResponse(
                 openingHours = p.openingHours,
                 dataStatus = p.dataStatus.name,
                 source = p.source.name,
+                sourceRef = p.sourceRef,
+                tags = p.tags,
                 savedCount = p.savedCount,
                 dataQuality = if (p.isDataFull()) "FULL" else "PARTIAL",
                 distanceM = pd.distanceM,
