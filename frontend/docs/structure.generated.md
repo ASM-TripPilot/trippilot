@@ -5,9 +5,11 @@
 ## __mocks__/@gorhom/
 - `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · useBottomSheetModal
 
+## __mocks__/@mj-studio/
+- `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay
+
 ## __mocks__/
 - `__mocks__/react-native-draggable-flatlist.tsx`  →  ScaleDecorator · OpacityDecorator · ShadowDecorator · NestableDraggableFlatList · NestableScrollContainer
-- `__mocks__/react-native-webview.tsx`  →  WebView
 
 ## src/__tests__/
 - `src/__tests__/budgetEditSheetStructure.test.ts`  →  (export 없음)
@@ -72,6 +74,7 @@
 - `src/__tests__/pagesLayerStructure.test.ts`  →  (export 없음)
 - `src/__tests__/periodEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/personalizationStructure.test.ts`  →  (export 없음)
+- `src/__tests__/pinBridgeRemovalStructure.test.ts`  →  (export 없음)
 - `src/__tests__/placeDetailStubRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/placeExploreStateStructure.test.ts`  →  (export 없음)
 - `src/__tests__/placeExploreStructure.test.ts`  →  (export 없음)
@@ -1214,9 +1217,9 @@
 - `src/shared/location/useLocationConsent.ts`  →  LocationConsentModel · useLocationConsent
 
 ## src/shared/map/
-- `src/shared/map/KakaoMapView.tsx`  →  KakaoMapViewProps · KakaoMapView
-- `src/shared/map/index.ts`  →  KakaoMapView · type KakaoMapViewProps · REGISTERED_DOMAIN · type MapCenter · type MapPin · type KakaoMapMessage
-- `src/shared/map/mapHtml.ts`  →  MapCenter · MapPin · KakaoMapMessage · REGISTERED_DOMAIN · MAP_LOAD_FAILED_MESSAGE · buildMapHtml
+- `src/shared/map/CenterPinPicker.tsx`  →  CenterPinPickerProps · CenterPinPicker
+- `src/shared/map/MapView.tsx`  →  MapCenter · MapPin · MapViewProps · MapView
+- `src/shared/map/index.ts`  →  MapView · CenterPinPicker
 
 ## src/shared/photo/
 - `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset
@@ -1253,7 +1256,7 @@
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
 - `src/test-support/expoRouterTabsMock.tsx`  →  capturedTabsProps · Tabs · useRouter
-- `src/test-support/kakaoMapViewMock.tsx`  →  MapCenter · KakaoMapView
+- `src/test-support/mapViewMock.tsx`  →  MapCenter · MapPin · MapView · CenterPinPicker
 - `src/test-support/nativeSocialSdkMock.ts`  →  kakaoLoginSpy · naverLoginSpy · naverInitializeSpy · kakaoLogoutSpy · kakaoLoginModule · naverLoginModule · resetNativeSocialSdkMock
 - `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
@@ -1273,4 +1276,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 857개 파일
+합계 858개 파일

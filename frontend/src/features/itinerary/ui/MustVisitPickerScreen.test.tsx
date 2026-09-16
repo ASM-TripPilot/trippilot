@@ -59,7 +59,7 @@ import { MustVisitPickerScreen } from './MustVisitPickerScreen';
 // 인라인 팩토리로 두면 NativeWind babel 의 `_ReactNativeCSSInterop` 참조가 jest 호이스트 규칙을
 // 위반한다 — 그래서 모듈 스코프 파일을 require 한다(리포 선례와 동형).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 /**
  * 카드 루트만 세는 셀렉터. 카드 testID 가 `itinerary-mustvisit-{sourcePoiId}` 로 동결돼

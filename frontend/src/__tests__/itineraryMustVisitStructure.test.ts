@@ -307,7 +307,18 @@ describe('C39 · 02a ★11 — h05 화면이 지도를 배럴로 가져온다', 
     //    실물이 렌더되고, JS 키 없는 jest 에서 `map-failure` 로 떨어진다 — 테스트는 red 인데
     //    **이유가 AC 와 무관해** 구현자가 엉뚱한 곳을 고친다(`itineraryDraftStructure` G5 선례).
     expect(source).toContain("from '@/shared/map'");
-    expect(source).not.toContain('@/shared/map/KakaoMapView');
+    // 딥 임포트 금지(TRIP-864 재조준) — 이름 전환 후 `@/shared/map/KakaoMapView` 는 죽은 경로라
+    // 부정 단언이 공허 통과로 퇴화한다. 살아있는 컴포넌트 파일 경로 `@/shared/map/MapView` 로
+    // 재조준한다(배럴 import 는 이 부분문자열을 포함하지 않음 — node 실측, 02a §1).
+    const DEEP_IMPORT = '@/shared/map/MapView';
+    // 탐지기 자가검사 — 딥 경로 문자열은 잡고, 배럴 경로는 안 잡힌다(공허 통과 방지).
+    expect(
+      "import { MapView } from '@/shared/map/MapView';".includes(DEEP_IMPORT)
+    ).toBe(true);
+    expect(
+      "import { MapView } from '@/shared/map';".includes(DEEP_IMPORT)
+    ).toBe(false);
+    expect(source).not.toContain(DEEP_IMPORT);
   });
 });
 

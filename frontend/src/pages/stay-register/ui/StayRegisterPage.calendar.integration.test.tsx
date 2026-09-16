@@ -38,7 +38,7 @@ jest.mock('expo-router', () => ({
 
 // 지도 모듈 로드 부작용(webview 네이티브) 차단 — 모듈 스코프 파일 require(호이스트 규칙).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {

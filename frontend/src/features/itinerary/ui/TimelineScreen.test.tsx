@@ -38,7 +38,7 @@ import { type ItineraryHeaderData, TimelineScreen } from './TimelineScreen';
  *
  * 3동작 뼈대: 준비=`header`·`days`·`slots` 를 만들어 렌더 → 실행=탭한다 → 단언=보이는 것·불린 콜백.
  */
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 const DAY1 = '2026-06-10';
 const DAY2 = '2026-06-11';

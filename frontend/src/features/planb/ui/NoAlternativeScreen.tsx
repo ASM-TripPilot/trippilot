@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { KakaoMapView, type MapCenter } from '@/shared/map';
+import { MapView, type MapCenter } from '@/shared/map';
 
 import { AppliedAlertGlyph } from './PlanbGlyphs';
 
@@ -47,7 +47,7 @@ export function NoAlternativeScreen({
           testID="planb-noalt-map"
           className="h-[230px] w-full overflow-hidden"
         >
-          <KakaoMapView center={MAP_CENTER} viewOnly />
+          <MapView center={MAP_CENTER} viewOnly />
         </View>
 
         <View className="flex-1 items-center gap-sm px-lg pt-3xl">
