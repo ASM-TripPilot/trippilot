@@ -63,6 +63,10 @@ class VisitSlotEntity(
     @Column(name = "distance_range") var distanceRange: String?,
     @Column(name = "placement_reason") var placementReason: String?,
     @Column(name = "violation_reason") var violationReason: String?,
+    // 차선책 ≤2건(TRIP-873). Map 리스트로 jsonb 매핑 — 문자열로 선직렬화하면 이중 인코딩된다
+    // (`unplacedMustVisits` 선례). 빈 목록이 기본이고 null 은 쓰지 않는다(DB 도 NOT NULL).
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "alternatives") var alternatives: List<Map<String, Any>>,
 )
 
 interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {

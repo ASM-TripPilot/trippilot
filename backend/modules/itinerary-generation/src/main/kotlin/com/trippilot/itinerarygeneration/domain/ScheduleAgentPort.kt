@@ -273,7 +273,25 @@ data class VisitSlotDisplay(
     val endsNextDay: Boolean,
     val distanceRange: String?,            // "약 1.2km · 도보 추정" 등 표시 문자열
     val isFixed: Boolean,
+    /**
+     * 이 슬롯의 **차선책**(TRIP-873 · AI TRIP-871). 슬롯당 ≤2건, 기본 빈 목록.
+     *
+     * **제안일 뿐이다** — 시각도 순서도 없다(INV-2). 교체를 확정하는 길은 기존 편집 경로
+     * (edit → validate) 하나뿐이고, 이 값은 화면이 "다른 선택지"를 **추가 왕복 없이** 그리게 할 뿐이다.
+     */
+    val alternatives: List<SlotAlternative> = emptyList(),
 )
+
+/**
+ * 차선책 1건 — 슬롯 POI 를 대신할 수 있는 장소.
+ *
+ * [distanceRange] 는 **슬롯 POI ↔ 이 후보** 사이 거리 문자열이다(소요시간 없음, INV-3). 좌표를
+ * 모르면 null 이고, 그때 화면은 거리를 비워 둔다 — 지어내지 않는다.
+ *
+ * [poiId] 가 `UUID` 인 것은 **여기 오기 전에 정본 대조를 통과했다는 뜻**이다. 와이어에서는 문자열로
+ * 받는다(형식이 틀린 한 건 때문에 응답 전체를 잃지 않으려고).
+ */
+data class SlotAlternative(val poiId: UUID, val rationale: String, val distanceRange: String?)
 
 /** 사용 데이터 신선도 집계(IO-6). */
 data class FreshnessMeta(val generatedAt: Instant, val degraded: Boolean)

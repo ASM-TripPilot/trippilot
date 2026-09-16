@@ -8,6 +8,8 @@ import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
+import com.trippilot.itinerarygeneration.application.BoundedText
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.SlotCandidate
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
@@ -103,7 +105,15 @@ internal data class AiFreshness(
  */
 internal fun AiScheduleResponse.toDomain(receivedAt: Instant): ScheduleAgentOutput = ScheduleAgentOutput(
     days = days.map { d ->
-        DaySchedule(d.date, d.slots.map { VisitSlotDisplay(it.poiId, it.startAt, it.endAt, it.endsNextDay, it.distanceRange, it.isFixed) })
+        DaySchedule(
+            d.date,
+            d.slots.map {
+                VisitSlotDisplay(
+                    it.poiId, it.startAt, it.endAt, it.endsNextDay, it.distanceRange, it.isFixed,
+                    alternatives = it.alternatives.toDomain(),
+                )
+            },
+        )
     },
     day1ReadyAt = day1ReadyAt,
     explanations = explanations,
@@ -113,6 +123,38 @@ internal fun AiScheduleResponse.toDomain(receivedAt: Instant): ScheduleAgentOutp
     freshness = FreshnessMeta(freshness?.fetchedAt ?: receivedAt, degraded = freshness?.stale ?: false),
     unplacedMustVisits = unplacedMustVisits.mapNotNull { it.toDomain() },
 )
+
+/**
+ * 차선책 → 도메인(TRIP-873). **한 건이 틀렸다고 나머지를 잃지 않는다.**
+ *
+ * 버리는 것 셋: UUID 형식이 아닌 `poi_id`(환각) · 빈 `rationale`(화면에 빈 줄이 뜬다) ·
+ * 슬롯당 2건을 넘는 초과분(계약 상한). 셋 다 **로그로 드러낸다** — 조용히 사라지면 "AI 가 안 줬다"와
+ * 구분되지 않는다(INV-4).
+ *
+ * **정본 대조(closed-set, INV-1)는 여기가 아니다** — 이 함수는 DB 를 모른다. 대조는 어댑터가
+ * 응답 전체의 poiId 를 모아 **한 번에** 한다(슬롯마다 조회하면 왕복이 슬롯 수만큼 늘어난다).
+ */
+private fun List<AiSlotAlternative>.toDomain(): List<SlotAlternative> {
+    val parsed = mapNotNull { a ->
+        val id = runCatching { UUID.fromString(a.poiId) }.getOrNull()
+        when {
+            id == null -> { wireLog.warn("차선책 poi_id 가 UUID 가 아니라 폐기합니다: {}", a.poiId); null }
+            a.rationale.isBlank() -> { wireLog.warn("차선책 rationale 이 비어 폐기합니다: poiId={}", id); null }
+            else -> SlotAlternative(
+                id,
+                BoundedText.clamp(a.rationale, BoundedText.PLACEMENT_REASON_MAX)!!,
+                BoundedText.clamp(a.distanceRange, BoundedText.DISTANCE_RANGE_MAX),
+            )
+        }
+    }
+    if (parsed.size > MAX_ALTERNATIVES_PER_SLOT) {
+        wireLog.warn("차선책이 슬롯당 상한({})을 넘어 {}건을 버립니다.", MAX_ALTERNATIVES_PER_SLOT, parsed.size - MAX_ALTERNATIVES_PER_SLOT)
+    }
+    return parsed.take(MAX_ALTERNATIVES_PER_SLOT)
+}
+
+/** 계약 상한(슬롯당 ≤2건). 넘겨받아도 화면은 둘까지만 그린다 — 상한을 우리 쪽에서도 지킨다. */
+private const val MAX_ALTERNATIVES_PER_SLOT = 2
 
 /**
  * 미배치 보고 → 도메인. **보고 자체를 잃지 않는 것이 이 매핑의 목적**이라 관대하게 받는다:

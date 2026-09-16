@@ -9,6 +9,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
 import com.trippilot.itinerarygeneration.domain.UnplacedReason
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import org.springframework.stereotype.Component
@@ -44,7 +45,7 @@ class ItineraryRepositoryAdapter(
                     VisitSlotEntity(
                         UUID.randomUUID(), dayId, s.sourcePoiId, s.poiSnapshotId,
                         s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange,
-                        s.placementReason, s.violationReason,
+                        s.placementReason, s.violationReason, s.alternatives.toRows(),
                     ),
                 )
             }
@@ -91,6 +92,7 @@ class ItineraryRepositoryAdapter(
                     VisitSlot.of(
                         s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation,
                         s.endsNextDay, s.distanceRange, s.placementReason, s.violationReason,
+                        s.alternatives.toAlternatives(),
                     )
                 },
             )
@@ -110,6 +112,28 @@ class ItineraryRepositoryAdapter(
         candidatesSummary?.toMap(),
         unplacedMustVisits.map { mapOf("poiId" to it.poiId.toString(), "reasonCode" to it.reasonCode.name) },
     )
+
+    /**
+     * 차선책 ↔ jsonb(TRIP-873).
+     *
+     * **키를 도메인 필드명 그대로 쓴다** — 이 컬럼은 우리만 읽는다(AI 와이어가 아니다). snake_case 로
+     * 바꾸면 와이어와 비슷해 보여서, 나중에 계약이 바뀔 때 이 컬럼까지 따라 고치려는 유혹이 생긴다.
+     */
+    private fun List<SlotAlternative>.toRows(): List<Map<String, Any>> = map { a ->
+        buildMap {
+            put("poiId", a.poiId.toString())
+            put("rationale", a.rationale)
+            // 없으면 키 자체를 안 넣는다 — 빈 문자열로 채우면 "거리를 모른다"가 "거리가 없다"로 바뀐다.
+            a.distanceRange?.let { put("distanceRange", it) }
+        }
+    }
+
+    /** **읽기는 방어적으로** — 형태가 바뀌면 옛 행 조회가 영구히 깨진다. 깨진 한 건만 버린다. */
+    private fun List<Map<String, Any>>.toAlternatives(): List<SlotAlternative> = mapNotNull { row ->
+        val id = runCatching { UUID.fromString(row["poiId"] as? String) }.getOrNull() ?: return@mapNotNull null
+        val rationale = row["rationale"] as? String ?: return@mapNotNull null
+        SlotAlternative(id, rationale, row["distanceRange"] as? String)
+    }
 
     /**
      * jsonb → 미배치 보고. **읽기는 방어적으로** — 형태가 바뀌면 옛 행 조회가 영구히 깨진다.

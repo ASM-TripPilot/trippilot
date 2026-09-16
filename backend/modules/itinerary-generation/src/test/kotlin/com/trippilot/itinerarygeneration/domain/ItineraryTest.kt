@@ -150,4 +150,49 @@ class ItineraryTest : StringSpec({
         val confirmed = itinerary.confirm(mapOf(poi to UUID.randomUUID()), Instant.parse("2026-08-06T01:00:00Z"))
         confirmed.days.single().slots.single().distanceRange shouldBe "약 1.2km · 도보 추정"
     }
+
+    /**
+     * **자기 자신은 대안이 아니다**(TRIP-873).
+     *
+     * 상대가 슬롯 POI 를 후보로 되돌려 주는 일이 실제로 있다(같은 풀에서 고르므로). 그대로 두면
+     * 화면에 *"이 장소 대신 → 이 장소"* 가 뜬다. 예외도 로그도 없이 **말이 안 되는 카드**만 남는
+     * 종류라, 거르는 자리를 도메인에 둔다 — 생성·2차생성·저장 복원까지 경로가 여럿이다.
+     */
+    "차선책에서 슬롯 자기 자신을 제외한다" {
+        val self = UUID.randomUUID()
+        val other = UUID.randomUUID()
+
+        val s = VisitSlot.of(
+            self, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            alternatives = listOf(
+                SlotAlternative(self, "자기 자신", null),
+                SlotAlternative(other, "다른 곳", "약 1km"),
+            ),
+        )
+
+        s.alternatives.map { it.poiId } shouldBe listOf(other)
+    }
+
+    /** 같은 장소가 두 번 오면 카드가 두 장 뜬다 — 상한(2건)도 그만큼 헛되이 찬다. */
+    "차선책의 같은 장소 중복은 하나로 접는다" {
+        val dup = UUID.randomUUID()
+
+        val s = VisitSlot.of(
+            UUID.randomUUID(), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            alternatives = listOf(SlotAlternative(dup, "첫째", null), SlotAlternative(dup, "둘째", null)),
+        )
+
+        s.alternatives.map { it.rationale } shouldBe listOf("첫째")
+    }
+
+    /** 근거만 갈아끼우는 사본이 차선책을 흘리면, 설명이 붙는 순간 "다른 선택지"가 통째로 사라진다. */
+    "근거를 갈아끼워도 차선책은 남는다" {
+        val alt = SlotAlternative(UUID.randomUUID(), "남아야 한다", null)
+        val s = VisitSlot.of(
+            UUID.randomUUID(), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            alternatives = listOf(alt),
+        )
+
+        s.withPlacementReason("나중에 도착한 근거").alternatives shouldBe listOf(alt)
+    }
 })

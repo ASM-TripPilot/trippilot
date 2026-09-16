@@ -375,6 +375,8 @@ class GenerateItineraryService(
                         placementReason = BoundedText.clamp(
                             explanations[SlotKey.of(d.date, s.poiId)], BoundedText.PLACEMENT_REASON_MAX,
                         ),
+                        // 생성 시점 차선책(TRIP-873). 정본 대조는 어댑터에서 끝났다.
+                        alternatives = s.alternatives,
                     )
                 },
             )
