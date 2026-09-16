@@ -40,7 +40,8 @@ _ENV_VARS = ("TRIPPILOT_WIRING", "TRIPPILOT_LLM_PROVIDER", "OPENAI_API_KEY",
              "TRIPPILOT_BACKEND_BASE_URL", "TRIPPILOT_SERVICE_AUTH_TOKEN",
              "TRIPPILOT_VECTOR_DB_URL", "TRIPPILOT_EMBEDDING_PROVIDER",
              "TRIPPILOT_EMBEDDING_MODEL", "EVENTS_STORE",
-             "TRIPPILOT_LOCAL_LLM_BASE_URL", "TRIPPILOT_LOCAL_LLM_API_KEY")
+             "TRIPPILOT_LOCAL_LLM_BASE_URL", "TRIPPILOT_LOCAL_LLM_API_KEY",
+             "KAKAO_REST_API_KEY", "KAKAO_CLIENT_ID", "EXISTENCE_MAX_CALLS")
 
 
 @pytest.fixture(autouse=True)
@@ -479,3 +480,35 @@ def test_shipped_events_store_is_not_empty() -> None:
     shipped = _Path(__file__).resolve().parents[1] / "data" / "collected_events.json"
     assert shipped.exists(), f"동봉 행사 저장소 없음: {shipped}"
     assert _json.loads(shipped.read_text(encoding="utf-8"))["events"], "행사 0건"
+
+
+# ── 빈 문자열 env 는 미설정이다 (TRIP-882 회귀) ────────────────────────
+# compose 는 통로를 열어 둔 변수를 **빈 문자열**로 넘긴다(`${X:-}`). `os.environ
+# .get(k, default)` 는 변수가 없을 때만 기본을 쓰므로 `int("")` 로 죽는다 — 이
+# 한 줄이 소스 빌드 컨테이너 기동을 막았다. `_env()` 를 거치면 "" 가 None 이 된다.
+
+
+@pytest.mark.parametrize("raw", ["", "   "])
+def test_existence_max_calls_empty_string_falls_back_to_default(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    monkeypatch.setenv("KAKAO_CLIENT_ID", "dummy-key")
+    monkeypatch.setenv("EXISTENCE_MAX_CALLS", raw)
+    adapter = main._place_existence()
+    assert adapter is not None
+    assert adapter._max_calls == 60  # noqa: SLF001 — 기본값 확인
+
+
+def test_existence_max_calls_explicit_value_is_honoured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("KAKAO_CLIENT_ID", "dummy-key")
+    monkeypatch.setenv("EXISTENCE_MAX_CALLS", "7")
+    assert main._place_existence()._max_calls == 7  # noqa: SLF001
+
+
+def test_kakao_key_empty_string_means_unwired(monkeypatch: pytest.MonkeyPatch) -> None:
+    """키 자리도 같은 규약 — 빈 문자열이면 검증을 안 켠다(기존 경로 그대로)."""
+    monkeypatch.setenv("KAKAO_REST_API_KEY", "")
+    monkeypatch.setenv("KAKAO_CLIENT_ID", "")
+    assert main._place_existence() is None

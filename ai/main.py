@@ -43,8 +43,12 @@ PORT = 8000
 
 
 def _env(name: str) -> str | None:
-    """빈 문자열도 미설정으로 취급 — CI·compose가 비운 값을 ''로 주입한다(smoke_llm 동형)."""
-    return os.environ.get(name) or None
+    """빈 문자열도 미설정으로 취급 — CI·compose가 비운 값을 ''로 주입한다(smoke_llm 동형).
+
+    공백만 있는 값도 미설정이다. `int("   ")` 는 `int("")` 와 똑같이 기동을 죽인다
+    (TRIP-882 계열) — `.env` 에 `X= ` 처럼 꼬리 공백이 남는 건 흔하다.
+    """
+    return (os.environ.get(name) or "").strip() or None
 
 
 def _openai_llm_and_model() -> tuple[object, str]:
@@ -144,7 +148,11 @@ def _place_existence():
     return KakaoExistenceAdapter(
         UrllibHttpClient(), key,
         # 상한은 검증 대상 상위 N(기본 50) 보다 넉넉히 — 실질 제한은 마감이다
-        max_calls=int(os.environ.get("EXISTENCE_MAX_CALLS", "60")),
+        # `_env` 를 거친다 — `os.environ.get(k, "60")` 은 변수가 **없을 때만** 기본을
+        # 쓰고 `EXISTENCE_MAX_CALLS=` 로 오면 "" 를 돌려줘 `int("")` 로 죽는다.
+        # compose 가 통로를 열어 둔 변수는 전부 빈 문자열로 올 수 있다(TRIP-882 —
+        # 이 한 줄이 소스 빌드 컨테이너 기동을 막았다).
+        max_calls=int(_env("EXISTENCE_MAX_CALLS") or "60"),
         monotonic_ms=lambda: int(time.monotonic() * 1000),
     )
 
