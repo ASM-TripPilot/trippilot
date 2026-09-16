@@ -2913,6 +2913,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         onAddCity={noop}
         onApply={noop}
         onClose={noop}
+        mustVisitCount={7}
       />
     ),
   },
