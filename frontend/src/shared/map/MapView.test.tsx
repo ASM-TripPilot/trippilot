@@ -274,3 +274,168 @@ describe('🔴 AC-보강 — onCameraIdle: NaverMapView 의 idle 좌표를 {lat,
     expect(screen.getByTestId('map-native').props.onCameraIdle).toBeUndefined();
   });
 });
+
+// ── TRIP-745 · 핀 3상태 + 현재위치 점 + 경로선 색 (01b AC-1~4) ──────────────────
+//
+// 무엇을 보장하나: MapPin.state 로 핀이 done/current/upcoming 세 얼굴로 갈리고(색·번호·체크),
+// currentLocation 으로 파란 점+링+라벨이 옵션으로 얹히며, 연결 경로선이 빨강(#FF385C)으로
+// 그려진다. 인프라 확장만이라 화면 배선은 이번 범위 밖(TRIP-746).
+//
+// ★ 색은 SVG fill/stroke 리터럴로만 실측 가능(className 은 SVG 에 안 붙는 map 트랩) — 각 상태의
+//   물방울 채움·테두리를 상태별로 단언하고 교차-부재로 "색 바꿔도 green" 가짜통과를 막는다
+//   (TRIP-876 03b 참고-1 선례). 번호·체크·라벨은 전부 react-native-svg 여야 iOS 마커 래스터에
+//   찍힌다(RN <Text> 는 안 찍힘, TRIP-876 실측) — 그래서 라벨도 getByText 가 아니라 content prop 으로
+//   검증한다(RNTL 은 SVG 문자열을 못 읽고 목이 RNSVGTSpan.props.content 에 넣는다).
+//   ⚠️ content 쿼리는 SVG text 하나당 2노드(Text+TSpan)라 present=`>0`, 부재=`length 0` 로만 판정한다.
+
+/** done 마커는 번호 대신 흰 체크(SVG Path)를 그린다 — 체크는 text 가 아니라 testID 로 식별한다. */
+const CHECK_TESTID = (n: number) => `map-marker-check-${n}`;
+
+const STATE_PINS: MapPin[] = [
+  { number: 1, lat: 33.51, lng: 126.52, state: 'done' },
+  { number: 2, lat: 33.515, lng: 126.526, state: 'current' },
+  { number: 3, lat: 33.52, lng: 126.53, state: 'upcoming' },
+];
+
+describe('🔴 AC-1 — 핀 state → 상태별 렌더(색·번호·체크)', () => {
+  it('done: 번호 leaf 없이 흰 체크 + 초록(#0E9384) 물방울, 분홍 아님', () => {
+    // Arrange + Act
+    render(<MapView center={CENTER} pins={STATE_PINS} />);
+
+    // Assert
+    const pin = screen.getByTestId('map-marker-pin-1');
+    // 완료는 번호를 안 그린다(흰 체크로 대체). content='1' 노드가 하나도 없어야 한다.
+    expect(within(pin).UNSAFE_queryAllByProps({ content: '1' })).toHaveLength(
+      0
+    );
+    // 흰 체크가 present 하고 그 stroke 가 흰색이다(체크는 SVG Path 라 testID 로 식별).
+    const check = within(pin).queryByTestId(CHECK_TESTID(1));
+    expect(check).not.toBeNull();
+    expect((check as { props: { stroke?: string } }).props.stroke).toBe(
+      '#FFFFFF'
+    );
+    // 초록 물방울(success). 있어야 하고, 분홍이면 안 된다(done 을 분홍으로 그리는 스왑 차단).
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ fill: '#0E9384' }).length
+    ).toBeGreaterThan(0);
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ fill: '#FF385C' })
+    ).toHaveLength(0);
+  });
+
+  it('current: 번호 "2" + 분홍(#FF385C) 물방울, 초록·회색 아님, 체크 없음', () => {
+    render(<MapView center={CENTER} pins={STATE_PINS} />);
+
+    const pin = screen.getByTestId('map-marker-pin-2');
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ content: '2' }).length
+    ).toBeGreaterThan(0);
+    expect(within(pin).queryByTestId(CHECK_TESTID(2))).toBeNull();
+    // 분홍 물방울(primary). done(초록)·upcoming(회색 아웃라인)과 갈린다.
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ fill: '#FF385C' }).length
+    ).toBeGreaterThan(0);
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ fill: '#0E9384' })
+    ).toHaveLength(0);
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ stroke: '#9AA1AB' })
+    ).toHaveLength(0);
+  });
+
+  it('upcoming: 번호 "3"(회색 #9AA1AB) + 회색 아웃라인, 분홍·초록 아님, 체크 없음', () => {
+    render(<MapView center={CENTER} pins={STATE_PINS} />);
+
+    const pin = screen.getByTestId('map-marker-pin-3');
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ content: '3' }).length
+    ).toBeGreaterThan(0);
+    expect(within(pin).queryByTestId(CHECK_TESTID(3))).toBeNull();
+    // 회색 아웃라인(stroke)과 회색 번호(fill)가 upcoming 을 가른다.
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ stroke: '#9AA1AB' }).length
+    ).toBeGreaterThan(0);
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ fill: '#9AA1AB' }).length
+    ).toBeGreaterThan(0);
+    // 분홍·초록 물방울이면 안 된다(current/done 으로 스왑 차단).
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ fill: '#FF385C' })
+    ).toHaveLength(0);
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ fill: '#0E9384' })
+    ).toHaveLength(0);
+  });
+});
+
+describe('🟢 AC-2 — state 미전달 = 기존 분홍 핀(무회귀 선제 앵커)', () => {
+  it('state 없는 핀은 분홍(#FF385C) 물방울 + 번호를 그린다(기본 거동 보존)', () => {
+    // Arrange + Act — state 를 안 준다. 기본은 분홍 물방울에 번호(무번호 done 만 예외).
+    render(
+      <MapView center={CENTER} pins={[{ number: 1, lat: 33.5, lng: 126.5 }]} />
+    );
+
+    // Assert
+    const pin = screen.getByTestId('map-marker-pin-1');
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ fill: '#FF385C' }).length
+    ).toBeGreaterThan(0);
+    expect(
+      within(pin).UNSAFE_queryAllByProps({ content: '1' }).length
+    ).toBeGreaterThan(0);
+    // 기본 핀에 done 체크가 붙으면 안 된다(무번호 완료로 오인 금지).
+    expect(within(pin).queryByTestId(CHECK_TESTID(1))).toBeNull();
+  });
+});
+
+describe('🔴 AC-3 — 연결 경로선 색이 빨강(#FF385C)', () => {
+  it('경로선(map-path)의 color prop 이 #FF385C 다', () => {
+    // Arrange + Act — pins 2개 + connectPins 기본(true) → 경로선 1개.
+    render(<MapView center={CENTER} pins={PINS} />);
+
+    // Assert — 목이 NaverMapPathOverlay props 를 그대로 노출한다(색은 hex 문자열).
+    // connectPins={false} 시 경로선 부재는 기존 AC3 describe 가 이미 잠근다(무회귀).
+    expect(screen.getByTestId('map-path').props.color).toBe('#FF385C');
+  });
+});
+
+describe('🔴 AC-4 — 현재위치 오버레이(파란 점·링·라벨)', () => {
+  it('currentLocation 전달 → 파란(#1659C9) 점·링 + "현재 위치" SVG 라벨, collapsable={false}', () => {
+    // Arrange + Act
+    render(
+      <MapView
+        center={CENTER}
+        pins={PINS}
+        currentLocation={{ lat: 33.5, lng: 126.5 }}
+      />
+    );
+
+    // Assert — 현재위치 마커의 커스텀 뷰(map-current-location)가 뜬다.
+    const cur = screen.queryByTestId('map-current-location');
+    expect(cur).not.toBeNull();
+    // 마커 래스터 필수 prop — 없으면 iOS New Arch 에서 기본 마커로 나온다(실제 flatten 방지는 6-b).
+    expect(
+      (cur as { props: { collapsable?: boolean } }).props.collapsable
+    ).toBe(false);
+    // 라벨은 SVG 라 getByText 가 아니라 content prop 으로 본다(다문자·공백 문자열 매치).
+    expect(
+      within(
+        cur as ReturnType<typeof screen.getByTestId>
+      ).UNSAFE_queryAllByProps({ content: '현재 위치' }).length
+    ).toBeGreaterThan(0);
+    // 파란 점·링(link 색). 여러 요소가 이 색을 쓰므로 present 만 본다.
+    expect(
+      within(
+        cur as ReturnType<typeof screen.getByTestId>
+      ).UNSAFE_queryAllByProps({ fill: '#1659C9' }).length
+    ).toBeGreaterThan(0);
+  });
+
+  it('currentLocation 미전달 → 현재위치 마커 부재(짝 — 항상 렌더 회귀 방지)', () => {
+    // Arrange + Act
+    render(<MapView center={CENTER} pins={PINS} />);
+
+    // Assert
+    expect(screen.queryByTestId('map-current-location')).toBeNull();
+  });
+});

@@ -1188,6 +1188,16 @@ const LIVE_PLACE_PREVIEW_VIEW: PlaceDetailView = {
   lng: 129.11,
 };
 
+// map-default(TRIP-745) — 핀 3상태를 한 지도에서 대조하는 픽스처. done 둘·current 하나·upcoming
+// 둘로 번호 뜀(①②③④⑤ 는 모두 좌표가 있어 연속). 좌표는 서울 도심 ~1.5km 안.
+const MAP_STATE_PREVIEW_PINS: MapPin[] = [
+  { number: 1, lat: 37.5698, lng: 126.9762, state: 'done' },
+  { number: 2, lat: 37.5674, lng: 126.98, state: 'done' },
+  { number: 3, lat: 37.566, lng: 126.9772, state: 'current' },
+  { number: 4, lat: 37.5642, lng: 126.9818, state: 'upcoming' },
+  { number: 5, lat: 37.5615, lng: 126.9847, state: 'upcoming' },
+];
+
 // i01 방문 체크(TRIP-396) — 한 타임라인에 done·active·upcoming 세 카드 상태를 동시에 세워
 // [방문 완료](활성)·상태줄 "방문 중"·수동 [도착]·완료 컴팩트를 6-b 실기/육안으로 대조하는 자리.
 // jest 는 픽셀·플렉스 폭을 못 봐(★ layer-features-execution) 이 키가 유일한 눈으로 보는 곳.
@@ -2029,7 +2039,16 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: '기타',
     label: '기타 · 지도(map-default)',
     login: null,
-    render: () => <MapView center={{ lat: 37.5665, lng: 126.978 }} />,
+    // TRIP-745 — 핀 3상태(done 흰 체크·current 분홍 번호·upcoming 회색 번호)·현재위치 점/링/라벨·
+    // 빨강 경로선을 한 지도에서 6-b 육안 대조하는 자리(jest 는 물방울 모양·색·번호를 못 본다).
+    // 좌표는 서울 도심 ~1.5km 안(한 화면). 실지도는 env 키가 있는 실기 빌드에서만 뜬다.
+    render: () => (
+      <MapView
+        center={{ lat: 37.5665, lng: 126.978 }}
+        pins={MAP_STATE_PREVIEW_PINS}
+        currentLocation={{ lat: 37.5662, lng: 126.9785 }}
+      />
+    ),
   },
   {
     key: 'records-default',
