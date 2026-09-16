@@ -58,6 +58,7 @@
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
+- `src/__tests__/mapSheetShellStructure.test.ts`  →  (export 없음)
 - `src/__tests__/mustVisitListStructure.test.ts`  →  (export 없음)
 - `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
@@ -259,6 +260,9 @@
 - `src/app/trips/new/step1.tsx`  →  (export 없음)
 - `src/app/trips/new/step2.tsx`  →  (export 없음)
 
+## src/entities/itinerary-slot/config/
+- `src/entities/itinerary-slot/config/altLabel.ts`  →  ALT_LABEL
+
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/categoryPlaceholder.ts`  →  CategoryPlaceholder · resolveCategoryPlaceholder
 - `src/entities/itinerary-slot/lib/slotKey.ts`  →  buildSlotKey · ParsedSlotKey · parseSlotKey · SlotKeySet · buildSlotKeys
@@ -269,8 +273,9 @@
 ## src/entities/itinerary-slot/ui/
 - `src/entities/itinerary-slot/ui/PoiSlotCard.tsx`  →  PoiSlotCardVariant · PoiSlotCardProps · PoiSlotCard
 - `src/entities/itinerary-slot/ui/ReplanSlotRow.tsx`  →  ReplanSlotRowProps · ReplanSlotRow
-- `src/entities/itinerary-slot/ui/SlotGlyphs.tsx`  →  CategoryPinGlyph · CategoryForkKnifeGlyph · CategoryCupGlyph · CategoryNightGlyph · CategoryTreeGlyph · CategoryShoppingBagGlyph · CategoryBuildingGlyph · CategoryImageGlyph · ChevronRightGlyph · LockGlyph
+- `src/entities/itinerary-slot/ui/SlotGlyphs.tsx`  →  CategoryPinGlyph · CategoryForkKnifeGlyph · CategoryCupGlyph · CategoryNightGlyph · CategoryTreeGlyph · CategoryShoppingBagGlyph · CategoryBuildingGlyph · CategoryImageGlyph · ChevronRightGlyph · ClockGlyph · LockGlyph
 - `src/entities/itinerary-slot/ui/SlotPhotoPlaceholder.tsx`  →  SlotPhotoPlaceholderProps · SlotPhotoPlaceholder
+- `src/entities/itinerary-slot/ui/SlotStopCard.tsx`  →  SlotStopCardProps · SlotStopCard
 
 ## src/entities/place/lib/
 - `src/entities/place/lib/formatDistance.ts`  →  formatDistance
@@ -1273,7 +1278,15 @@
 - `src/widgets/itinerary-edit/ui/ManualEditGlyphs.tsx`  →  BackChevronGlyph · UndoGlyph · WarningTriangleGlyph · LockGlyph · TrashGlyph · PlusGlyph · DragHandleGlyph
 - `src/widgets/itinerary-edit/ui/ManualEditShell.tsx`  →  ManualEditMode · ManualEditShellProps · ManualEditShell
 
+## src/widgets/map-sheet-shell/ui/
+- `src/widgets/map-sheet-shell/ui/CtaBar.tsx`  →  CtaButton · CtaBarProps · CtaBar
+- `src/widgets/map-sheet-shell/ui/DayChipOverlay.tsx`  →  DayChip · DayChipOverlayProps · DayChipOverlay
+- `src/widgets/map-sheet-shell/ui/DistanceConnector.tsx`  →  DistanceConnectorProps · DistanceConnector
+- `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  BackChevronGlyph · WalkGlyph · CarGlyph
+- `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetShellProps · MapSheetShell
+- `src/widgets/map-sheet-shell/ui/SheetHeader.tsx`  →  SheetHeaderProps · SheetHeader
+
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 858개 파일
+합계 867개 파일
