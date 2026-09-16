@@ -27,6 +27,7 @@
 - `src/__tests__/devPreviewMap.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewPref.test.tsx`  →  (export 없음)
 - `src/__tests__/editSheetBackdropStructure.test.ts`  →  (export 없음)
+- `src/__tests__/editSheetHandleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesItinerarySlotConsumers.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesItinerarySlotStructure.test.ts`  →  (export 없음)
 - `src/__tests__/entitiesPlaceConsumers.test.ts`  →  (export 없음)
@@ -618,6 +619,9 @@
 - `src/features/stay/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
 - `src/features/stay/ui/StayRegisterScreen.tsx`  →  StayRegisterScreenProps · StayRegisterScreen
 - `src/features/stay/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
+
+## src/features/trip/lib/
+- `src/features/trip/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
 
 ## src/features/trip/model/
 - `src/features/trip/model/baseScreen.ts`  →  UnresolvedDaysView · unresolvedDaysView
@@ -1290,4 +1294,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 868개 파일
+합계 870개 파일

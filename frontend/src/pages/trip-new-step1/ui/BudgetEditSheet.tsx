@@ -37,6 +37,8 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
+import { SHEET_HANDLE_INDICATOR_STYLE } from '@/features/trip/lib/sheetHandle';
+
 export interface BudgetEditSheetProps {
   /** 드래프트 금액 원문(배선 소유) — TextInput 표시값(formatBudgetAmount 로 포맷된 콤마 문자열). */
   amountText: string;
@@ -104,16 +106,12 @@ export function BudgetEditSheet({
       enablePanDownToClose
       onClose={onClose}
       backdropComponent={renderBackdrop}
+      handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
     >
       <BottomSheetView
         testID="trip-wizard-budget-sheet"
         className="gap-lg px-xl pb-[34px] pt-[10px]"
       >
-        {/* grabber */}
-        <View className="items-center">
-          <View className="h-[4px] w-[40px] rounded-[2px] bg-hairline-strong" />
-        </View>
-
         {/* header */}
         <View className="gap-xs">
           <Text className="text-[20px] font-noto-bold font-bold text-ink">
