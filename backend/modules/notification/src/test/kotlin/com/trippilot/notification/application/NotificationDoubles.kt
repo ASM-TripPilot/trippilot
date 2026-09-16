@@ -54,6 +54,13 @@ internal class FakeNotifications : NotificationRepository {
         return true
     }
 
+    /** 실 DB 와 같은 규칙 — 내 것이면서 아직 안 읽은 것만, 종류는 안 가린다. */
+    override fun markAllRead(accountId: UUID, at: Instant): Int {
+        val targets = stored.withIndex().filter { (_, n) -> n.accountId == accountId && n.readAt == null }
+        targets.forEach { (i, n) -> stored[i] = n.copy(readAt = at) }
+        return targets.size
+    }
+
     override fun exists(accountId: UUID, notificationId: UUID) =
         stored.any { it.notificationId == notificationId && it.accountId == accountId }
 

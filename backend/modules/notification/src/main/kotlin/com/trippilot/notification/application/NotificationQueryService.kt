@@ -36,6 +36,15 @@ class NotificationQueryService(
         if (!notifications.exists(accountId, notificationId)) throw ResourceNotFound("알림을 찾을 수 없습니다.")
     }
 
+    /**
+     * 알림함 '모두 읽음'(TRIP-829).
+     *
+     * 건별 읽음과 달리 **404 가 없다** — 대상이 0건인 것은 정상이다(이미 다 읽었거나 알림이 없다).
+     * 멱등이라 다시 눌러도 같은 결과다.
+     */
+    @Transactional
+    fun markAllRead(accountId: UUID): Int = notifications.markAllRead(accountId, clock.instant())
+
     companion object {
         /** 기본 반환 건수. 알림함은 한 화면 분량이면 충분하고, 더 필요하면 커서가 붙을 자리다. */
         const val DEFAULT_LIMIT = 50

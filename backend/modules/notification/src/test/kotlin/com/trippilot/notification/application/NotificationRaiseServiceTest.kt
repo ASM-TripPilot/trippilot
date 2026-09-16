@@ -62,6 +62,9 @@ class NotificationRaiseServiceTest : StringSpec({
         }
         override fun findByAccount(accountId: UUID, unreadOnly: Boolean, limit: Int) = stored.toList()
         override fun markRead(accountId: UUID, notificationId: UUID, at: Instant) = true
+
+        /** 이 스펙은 '모두 읽음'을 쓰지 않는다 — 계약을 만족시키기만 한다. */
+        override fun markAllRead(accountId: UUID, at: Instant): Int = 0
         override fun exists(accountId: UUID, notificationId: UUID) = true
         override fun markPushResult(notificationId: UUID, sentAt: Instant?, failedReason: String?) = Unit
     }
