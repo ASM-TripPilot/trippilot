@@ -66,7 +66,7 @@ jest.mock('expo-router', () => ({
 // 지도를 관찰 마커로 바꾼다 — 이 파일의 관심사는 **좌표가 조회에서 지도까지 흐르는가**이지
 // 지도 자체가 아니다. 실물 지도를 태우는 심판은 `MustVisitPickerScreen.map.test.tsx`(AC-6)다.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 /** `authWiring.integration.test.ts:59` 와 같은 값(리포 관례). */
 const BASE = 'http://localhost:8080/api/v1';

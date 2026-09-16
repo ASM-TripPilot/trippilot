@@ -15,8 +15,20 @@ paths:
 ## 세그먼트
 - `ui` / `model` / `lib` / `config` 넷만(옛 칸 `screens·containers·hooks·store` 부활 금지). `api` 세그먼트는 두지 않는다 — 서버 통신은 `shared/api` 단일 계층.
 
-## 셸·커넥터·시트 헤더 — 예정
-- 전면 지도+2스냅 바텀시트 **셸**·시트 헤더·슬롯 거리 **커넥터**는 리포에 아직 없다(2스냅 조합 0건). **TRIP-783 착수 시** 그 부품들을 이 `widgets/` 층에 둔다(소비 화면 h 결과 6종·i 허브가 함께 착수돼야 완료 조건 "소비 화면 전부 import"가 채워진다). 이번 사이클은 스캐폴딩하지 않는다(소비자 0 + 2스냅 거동이 jest 사각이라 투기적, YAGNI).
+## `src/widgets/map-sheet-shell/` — 지도+2스냅 시트 셸 (TRIP-783 신규, 리포 최초 2스냅 조합)
+
+결과 화면 6종(h07·h08·h11·h14·h16)이 공유할 부품. **이번 사이클은 h08 default 하나만 실제 조립**했다 — 나머지 5화면 배선은 후속 티켓(792/799). 전부 presentation-only(useState 0, [[presentation-only 위젯 — 판단은 소비처로]] 참고).
+
+| 파일 | 역할 |
+|---|---|
+| `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx` | 전면 지도(`<MapView viewOnly>`, 시트 뒤 형제)+2스냅 바텀시트(`header`+`children`)+좌상단 오버레이+하단 CTA 바를 4층으로 배치. 시트 콘텐츠는 **비스크롤**(`BottomSheetView className="flex-1"`) — 다중 슬롯(6~8장) 소비 시 하단 카드가 CTA 바 뒤로 가려 도달 불가할 수 있음(code-critic 경고-1, 이 사이클은 4카드라 미발현, 후속 792/799에서 `BottomSheetScrollView`+패딩으로 수정 예정). `<MapView>` 태그는 이 파일이 소유 — 소비처(preview 포함)는 별도 `<MapView>`를 넣지 않는다(census S2 카운트 보호) |
+| `src/widgets/map-sheet-shell/ui/SheetHeader.tsx` | 시트 헤더 — `title`·`dayLabel`·`dateLabel`·`meta` 4문자열 leaf(완전일치 계약, [[RNTL 완전일치 leaf]]). pre-composed 문자열만 받는 presentation-only |
+| `src/widgets/map-sheet-shell/ui/DistanceConnector.tsx` | 카드 사이 거리 커넥터 — 서버 `distanceRange`를 **가공 없이(verbatim)** 렌더, null이면 `이동 거리 계산 중`(INV-3 — 소요시간 0). 이동수단 글리프(🚗/🚶)는 `distanceRange.includes('차량')`로 선택하나 SVG라 jest 사각(6-b 육안 전용) |
+| `src/widgets/map-sheet-shell/ui/CtaBar.tsx` | 하단 고정 CTA 바 — 1/2버튼 변형을 `buttons` prop으로 |
+| `src/widgets/map-sheet-shell/ui/DayChipOverlay.tsx` | 좌상단 back + 일차 칩 오버레이(선택 칩 `accessibilityState.selected`) |
+| `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx` | 커넥터 이동수단(Car/Walk)+Back 글리프 **로컬 복제**(★5 — widgets→`@/features` import 금지라 `ItineraryGlyphs`를 못 가져다 씀). raw-hex 스캔 제외(`*Glyphs.tsx` 관례) |
+
+지도 census 등재: `itineraryMapSurfaceStructure.test.ts`의 `LOCKED_CALLERS`에 `MapSheetShell.tsx` 등재 + S8 태그 카운트 12→13([[지도+시트 셸 — 2스냅 바텀시트 위의 전면 지도]] 참고).
 
 ## `src/widgets/itinerary-edit/` — 공용 일정 편집 셸 (TRIP-443 shared 신설 → TRIP-805로 shared→widgets 승격 이동)
 

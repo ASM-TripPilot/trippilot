@@ -1266,7 +1266,7 @@ setNotificationChannelAsync 0건(2026-09-11 실측). FE 규칙 문서도 "현 �
 
 [[nodes]]
 id = "AI-REPLAN"
-ticket = ""
+ticket = "TRIP-877"
 title = "[AI] 재계획 전용 경계 — fully_booked·지시어 사전·번역 워커·라우트 (A-1~A-5)"
 status = "external"
 owner = "ai"

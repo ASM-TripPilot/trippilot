@@ -184,8 +184,8 @@ export function PlaceDetailScreen({
             </Text>
           </View>
 
-          {/* 미니맵 — 실 KakaoMapView 는 후속(D5, 네이티브 재빌드 함정). 이번엔 정적 placeholder.
-              ponytail: static box, lat/lng 단일핀 KakaoMapView(viewOnly) 배선은 후속 티켓. */}
+          {/* 미니맵 — 실 MapView 는 후속(D5, 네이티브 재빌드 함정). 이번엔 정적 placeholder.
+              ponytail: static box, lat/lng 단일핀 MapView(viewOnly) 배선은 후속 티켓. */}
           <View
             testID="execution-place-map"
             className="h-[150px] w-full items-center justify-center gap-xs overflow-hidden rounded-[14px] border border-hairline bg-surface-soft"

@@ -7,7 +7,7 @@ import { LiveItineraryScreen } from './LiveItineraryScreen';
 
 // 지도 세그먼트가 LiveMapScreen→KakaoMapView 를 태우므로 관찰 목으로 갈아끼운다(배럴 경유).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 /**
  * TRIP-395 · LiveItineraryScreen(i01) — 여행 중 일정의 default 렌더 = "기록 없음" 변형.

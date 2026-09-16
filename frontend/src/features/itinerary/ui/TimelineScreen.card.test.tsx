@@ -32,7 +32,7 @@ import { type ItineraryHeaderData, TimelineScreen } from './TimelineScreen';
  * 3동작 뼈대: 준비=표면이 채워진/빈/거리 있는 슬롯을 만들어 렌더 → 실행=렌더/press →
  * 단언=카드가 그리는 leaf·구간행·헤더.
  */
-jest.mock('@/shared/map', () => require('@/test-support/kakaoMapViewMock'));
+jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
 const DAY1 = '2026-06-10';
 

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { KakaoMapView, type MapCenter, type MapPin } from '@/shared/map';
+import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 
 import { BackArrowGlyph, LocationOffGlyph } from './ReflectionGlyphs';
 import { DayHighlightCard } from './DayHighlightCard';
@@ -22,7 +22,7 @@ import type { OrderedVisit } from '../model/summaryView';
  *  - AC-3(BR-U5-43): distanceSource 라벨(근사/경로)이 거리 셀에 표기된다(거리 미측정이면 라벨 숨김).
  *  - AC-5(BR-U5-48): shareEnabled:false → 공유 버튼 비활성 + press 콜백 0회(종료·요약 전 공유 불가).
  *
- * 지도는 `shared/map/KakaoMapView`(viewOnly 글랜스, `itineraryMapSurfaceStructure` 옵트인 등재) —
+ * 지도는 `shared/map/MapView`(viewOnly 글랜스, `itineraryMapSurfaceStructure` 옵트인 등재) —
  * 실 좌표(mapCenter+mapPins)가 있을 때만 렌더하고 없으면 "지도 준비 중" 자리표시(가짜 기본 센터 지도
  * 금지, 571 경고-2 동형). `DayHighlight` 계약에 좌표가 없어 런타임은 늘 자리표시 가지다 — AC-1 은
  * mapPins 를 주입해 MAP 경로만 검증하고, 실 좌표 배선은 계약 확장 후속 티켓. `mapCenter?`·`mapPins?`
@@ -151,7 +151,7 @@ export function TripSummaryScreen({
           <>
             {hasMap ? (
               <View className="h-[220px] w-full overflow-hidden rounded-card">
-                <KakaoMapView center={mapCenter} pins={mapPins} viewOnly />
+                <MapView center={mapCenter} pins={mapPins} viewOnly />
               </View>
             ) : (
               // 실 좌표가 없으면 지도를 그리지 않는다 — 하드코딩 기본 센터를 실데이터처럼 그리면

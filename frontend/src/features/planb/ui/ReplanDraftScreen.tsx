@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot/model';
 import { ReplanSlotRow } from '@/entities/itinerary-slot/ui/ReplanSlotRow';
-import { KakaoMapView, type MapCenter } from '@/shared/map';
+import { MapView, type MapCenter } from '@/shared/map';
 
 import { ChecklistDoneGlyph } from './PlanbGlyphs';
 
@@ -93,7 +93,7 @@ export function ReplanDraftScreen({
             testID="planb-draft-map"
             className="h-[230px] w-full overflow-hidden rounded-card border border-hairline"
           >
-            <KakaoMapView center={MAP_CENTER} viewOnly />
+            <MapView center={MAP_CENTER} viewOnly />
           </View>
 
           {/* 이월 안내 — 제외 개수만(BR-U4-25, poiId 원문 비노출 INV-1). 없으면 안 그림 */}
