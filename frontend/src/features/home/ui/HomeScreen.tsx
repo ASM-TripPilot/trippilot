@@ -59,6 +59,15 @@ const HERO_SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.8)'] as const;
 const DEST_SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)'] as const;
 const SPOT_SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.66)'] as const;
 
+// 통합 히어로(TRIP-696) 전용 3-stop 스크림(Figma 3460:1836: 0 → 0.3@50% → 0.85). 2-stop
+// HERO_SCRIM 보다 중간 톤이 한 단계 더 있어 하단을 짙게 눌러 타이틀26·CTA 가독성을 확보한다.
+const INTEGRATED_HERO_SCRIM_LOCATIONS = [0, 0.5, 1] as const;
+const INTEGRATED_HERO_SCRIM_COLORS = [
+  'rgba(0,0,0,0)',
+  'rgba(0,0,0,0.3)',
+  'rgba(0,0,0,0.85)',
+] as const;
+
 const ABSOLUTE_FILL = StyleSheet.absoluteFillObject;
 
 // hero 메타칩 반투명 흰 배경(브리프 §3-C 명시 raw 예외 — 알파는 토큰이 아니다).
@@ -144,11 +153,12 @@ function SearchBarBlock({ onPress }: { onPress?: () => void }): ReactElement {
 }
 
 // ── magazineHero(영감 카드) ─────────────────────────────────────────────
-// TRIP-694: 히어로 하트 제거(AC-1) · 생성 사진 Image 배선(AC-5) · discovery 캐러셀 페이지로
-// 재사용하기 위한 옵셔널 testID(기본 home-magazine-hero, page1~4 는 다른 값)·showDots(기본
-// true — planning HeroCarousel 은 내부 3-dot 유지, discovery 페이지는 false 로 넘겨 캐러셀이
-// 도트 1벌을 오버레이로 소유). 사진은 uri 유무와 무관하게 Image 를 무조건 렌더한다 — jest 에선
-// uri 가 null(사진 없는 카드)이지만 Image 엘리먼트 자체는 그려져 AC-5 렌더 계약을 만족한다.
+// TRIP-694: 히어로 하트 제거(AC-1) · 생성 사진 Image 배선(AC-5) · discovery/planning 캐러셀
+// 페이지로 재사용하기 위한 옵셔널 testID(기본 home-magazine-hero, 캐러셀 슬라이드는 다른 값)·
+// showDots(캐러셀 페이지는 false 로 넘겨 도트 1벌을 캐러셀 오버레이가 소유). 사진은 uri 유무와
+// 무관하게 Image 를 무조건 렌더한다 — jest 에선 uri 가 null(사진 없는 카드)이지만 Image 엘리먼트
+// 자체는 그려져 AC-5 렌더 계약을 만족한다. TRIP-696 이후 두 캐러셀 모두 showDots={false}로 넘겨
+// 기본 true(내부 3-dot) 경로는 미소비다 — 리팩토링(5-c) 정리 후보.
 function MagazineHero({
   hero,
   testID = 'home-magazine-hero',
@@ -421,15 +431,17 @@ function ItineraryCard({
 // ── 섹션1: 요즘 사람들이 담는 곳(가로 스크롤 · 3상태) ───────────────────
 function CollectionsSection({
   sections,
+  title = '요즘 사람들이 담는 곳',
 }: {
   sections: HomeSections;
+  /** 컬렉션 헤더 카피. 미지정이면 기본 "요즘 사람들이 담는 곳"(discovery), planning 은 지역
+   *  카피("부산에서 담을 만한 곳")를 주입(TRIP-696 파라미터화 — 기본값 문자열은 homeStructure
+   *  긍정 앵커라 소스에 남는다). */
+  title?: string;
 }): ReactElement {
   return (
     <View className="w-full gap-md">
-      <SectionHeader
-        title="요즘 사람들이 담는 곳"
-        moreTestID="home-collections-more"
-      />
+      <SectionHeader title={title} moreTestID="home-collections-more" />
       {sections.kind === 'ready' ? (
         <ScrollView
           horizontal
@@ -537,72 +549,83 @@ function ItinerariesSection({
   );
 }
 
-// ── tripHero(planning·upcoming 공용 여행 히어로 · 브리프 §3-C) ───────────
-// 사진+스크림 · 좌상단 단계 pill · 우상단 대형 D-day · 좌하단 primary CTA + 여행명 + 기간 메타.
-// TRIP-453: 카드 본체(home-trip-hero)를 Pressable 로 승격해 알약(home-trip-hero-cta)과 **같은
-// onPress**(=onPressTripHeroCta)를 공유한다 — 목적지 규칙을 두 곳에 두지 않는다(신규 콜백 0).
-// role="button"은 항상 붙인다(콜백 미주입 렌더의 버튼-집합 테스트가 구조적 role 을 요구, ★1).
-// 중첩 Pressable 이라 알약 press 는 알약에서 멈추고 카드 본체로 안 번진다(이중발화 없음, ★3).
-function TripHero({
+// ── 통합 트립 히어로(planning page0 · TRIP-696 풀블리드 재작성 · Figma 3460:1836) ──────────
+// 구 300px 카드(TripHero)를 470 풀블리드로 교체. 사진 + 3-stop 스크림 위에 좌상단 두 톤 배지와
+// 하단 heroStack(타이틀26·메타14 위 → primary CTA 아래)을 얹는다.
+//  - 두 톤 배지: "계획 중"(primary) + "· D-21"(ink)을 **별개 <Text> 리프 2개**로 그린다 —
+//    한 Text 에 합치는 뮤턴트를 within(badge).getByText 완전일치 2회가 차단한다(★D2 두 톤 구조).
+//  - 구 우상단 대형 D-day(home-trip-hero-dday)는 배지 보조(badgeSub)로 흡수돼 사라졌다(AC-696-2).
+//  - CTA 라벨(꺾쇠 › 포함)은 데이터 그대로 렌더한다 — 꺾쇠는 화면이 붙이지 않는다(구 카드는 CTA
+//    가 위였으나 순서 반전, 타이틀·메타 아래로 내려왔다).
+// 카드 본체(home-trip-hero)와 알약(home-trip-hero-cta)이 같은 onPress 를 공유하고 둘 다
+// role="button"(콜백 미주입 렌더의 버튼-집합 테스트가 구조적 role 을 요구, ★D4). 중첩 Pressable 이라
+// 알약 press 는 알약에서 멈춘다.
+function IntegratedTripHero({
   trip,
+  imageUrl,
   onPress,
 }: {
   trip: TripHeroData;
+  imageUrl?: string | null;
   onPress?: () => void;
 }): ReactElement {
   return (
-    <View className="w-full px-lg pt-[8px]">
-      <Pressable
-        testID="home-trip-hero"
-        accessibilityRole="button"
-        onPress={onPress}
-        style={softCardShadow}
-        className="h-[300px] w-full overflow-hidden rounded-[18px]"
-      >
-        <View className="absolute inset-0 bg-surface-strong" />
-        <LinearGradient
-          colors={HERO_SCRIM_COLORS}
-          locations={SCRIM_LOCATIONS}
-          style={ABSOLUTE_FILL}
-        />
-        <View className="flex-1 justify-between px-lg py-lg">
-          <View className="w-full flex-row items-start justify-between">
-            <View
-              testID="home-trip-hero-badge"
-              className="self-start rounded-pill bg-canvas px-md py-[5px]"
-            >
-              <Text className="font-noto-bold text-[11.5px] font-bold text-ink">
-                {trip.badge}
-              </Text>
-            </View>
-            <Text
-              testID="home-trip-hero-dday"
-              className="font-noto-bold text-[28px] font-bold text-on-primary"
-            >
-              {trip.dday}
+    <Pressable
+      testID="home-trip-hero"
+      accessibilityRole="button"
+      onPress={onPress}
+      className="h-[470px] w-full overflow-hidden"
+    >
+      <View className="absolute inset-0 bg-surface-strong" />
+      <Image
+        source={imageUrl ? { uri: imageUrl } : undefined}
+        resizeMode="cover"
+        style={ABSOLUTE_FILL}
+      />
+      <LinearGradient
+        colors={INTEGRATED_HERO_SCRIM_COLORS}
+        locations={INTEGRATED_HERO_SCRIM_LOCATIONS}
+        style={ABSOLUTE_FILL}
+      />
+      <View className="flex-1 justify-between px-lg pb-[44px] pt-lg">
+        {/* 좌상단 두 톤 배지 — 흰 pill(테두리 없음), 주(계획 중·primary) + 보조(· D-21·ink). */}
+        <View className="w-full flex-row items-start">
+          <View
+            testID="home-trip-hero-badge"
+            style={softCardShadow}
+            className="flex-row items-center gap-[4px] self-start rounded-[8px] bg-canvas px-[12px] py-[6px]"
+          >
+            <Text className="font-noto-bold text-[12px] font-bold text-primary">
+              {trip.badge}
             </Text>
-          </View>
-          <View className="w-full gap-[8px]">
-            <Pressable
-              testID="home-trip-hero-cta"
-              accessibilityRole="button"
-              onPress={onPress}
-              className="self-start rounded-pill bg-primary px-lg py-sm"
-            >
-              <Text className="font-noto-bold text-caption font-bold text-on-primary">
-                {trip.ctaLabel}
-              </Text>
-            </Pressable>
-            <Text className="font-noto-bold text-[24px] font-bold text-on-primary">
-              {trip.title}
-            </Text>
-            <Text className="font-noto text-[12.5px] text-on-primary opacity-90">
-              {trip.meta}
+            <Text className="font-noto-bold text-[12px] font-bold text-ink">
+              {trip.badgeSub}
             </Text>
           </View>
         </View>
-      </Pressable>
-    </View>
+        {/* 하단 heroStack — 타이틀26·메타14 위, primary CTA(꺾쇠 포함) 아래. */}
+        <View className="w-full gap-[14px]">
+          <View className="gap-[6px]">
+            <Text className="font-noto-bold text-[26px] font-bold text-on-primary">
+              {trip.title}
+            </Text>
+            <Text className="font-noto text-[14px] text-on-primary opacity-90">
+              {trip.meta}
+            </Text>
+          </View>
+          <Pressable
+            testID="home-trip-hero-cta"
+            accessibilityRole="button"
+            onPress={onPress}
+            className="self-start rounded-[12px] bg-primary px-[16px] py-[10px]"
+          >
+            <Text className="font-noto-bold text-[14px] font-bold text-on-primary">
+              {trip.ctaLabel}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -846,23 +869,28 @@ function DiscoveryBody({
   );
 }
 
-// ── heroCarousel(일정 카드 ↔ 영감/매거진 가로 스와이프 · TRIP-647) ──────────
-// 생성 후 홈에서 상단 슬롯을 좌우 스와이프로 전환한다: page0=여행 카드(tripHero), page1=영감
-// (magazineHero). pagingEnabled 로 한 페이지씩 넘어가고, 아래 점 인디케이터가 현재 위치를 표시한다.
-// 실제 스와이프 제스처·페이지 전환은 jest 원리적 사각(6-b 실기) — 구조(두 페이지·점 2개)만 잠근다.
-function HeroCarousel({
+// ── planning 통합 히어로 캐러셀(TRIP-696 · 5페이지) ──────────────────────────
+// 구 2페이지 HeroCarousel(TripHero 카드 ↔ Magazine·2도트)을 폐기하고 discovery 캐러셀
+// (DiscoveryHeroCarousel)과 동형 5페이지로 통일한다: page0 = 통합 트립 히어로, page1~4 = 매거진
+// 히어로 4장(hero[0..3]). 페이지 수의 진짜 앵커는 home-hero-page-N 컨테이너다 — 도트는 정적
+// View 나열이라 위조 가능(traps-home)하므로 도트 오버레이는 **실제 페이지 수에서 파생**해 1벌만
+// 그린다. 매거진 페이지 testID 는 home-hero-slide-N(page0 만 home-trip-hero — home-magazine-hero
+// 다중매치 회피, ★D2). 실 스와이프·활성 도트 하이라이트는 jest 원리적 사각(6-b 실기).
+function PlanningHeroCarousel({
   trip,
-  hero,
+  heroes,
   onPressTripCta,
 }: {
   trip: TripHeroData;
-  hero: HomeMagazineHero;
+  heroes: readonly HomeMagazineHero[];
   onPressTripCta?: () => void;
 }): ReactElement {
   const { width } = useWindowDimensions();
   const [page, setPage] = useState(0);
+  const magazineSlides = heroes.slice(0, 4); // page1~4 = hero[0..3]
+  const pageCount = 1 + magazineSlides.length; // page0(트립) + 매거진 4 = 5
   return (
-    <View testID="home-hero-carousel" className="w-full">
+    <View className="w-full">
       <ScrollView
         horizontal
         pagingEnabled
@@ -871,20 +899,31 @@ function HeroCarousel({
           setPage(Math.round(e.nativeEvent.contentOffset.x / width))
         }
       >
-        <View style={{ width }}>
-          <TripHero trip={trip} onPress={onPressTripCta} />
+        <View testID="home-hero-page-0" style={{ width }}>
+          <IntegratedTripHero
+            trip={trip}
+            imageUrl={heroes[0]?.imageUrl}
+            onPress={onPressTripCta}
+          />
         </View>
-        <View style={{ width }}>
-          <MagazineHero hero={hero} />
-        </View>
+        {magazineSlides.map((hero, i) => (
+          <View key={i} testID={`home-hero-page-${i + 1}`} style={{ width }}>
+            <MagazineHero
+              hero={hero}
+              testID={`home-hero-slide-${i + 1}`}
+              showDots={false}
+            />
+          </View>
+        ))}
       </ScrollView>
-      <View className="w-full flex-row justify-center gap-[6px] pt-[10px]">
-        {[0, 1].map((i) => (
+      {/* 도트 오버레이 — 실제 페이지 수에서 파생(정적 위조 방지). 사진 위라 흰색(활성 full·비활성 50%). */}
+      <View className="absolute bottom-[24px] left-lg flex-row items-center gap-[5px]">
+        {Array.from({ length: pageCount }, (_, i) => (
           <View
             key={i}
             testID={`home-hero-dot-${i}`}
-            className={`h-[6px] w-[6px] rounded-full ${
-              page === i ? 'bg-primary' : 'bg-hairline-strong'
+            className={`h-[6px] w-[6px] rounded-full bg-on-primary ${
+              page === i ? '' : 'opacity-50'
             }`}
           />
         ))}
@@ -893,37 +932,37 @@ function HeroCarousel({
   );
 }
 
-// ── planning 얼굴(계획 중 · TRIP-647로 발견 콘텐츠 + 영감/일정 스와이프 추가) ──
-// greet 여행명+D-day · 상단 스와이프 캐러셀(일정 카드 ↔ 영감) · 발견 3섹션(요즘 담는 곳·지금 뜨는
-// 장소·여행자 일정) — 일정 생성 후에도 발견 콘텐츠가 사라지지 않는다(사용자 요구).
+// ── planning 얼굴(계획 중 · TRIP-696 풀블리드 통합 히어로 재작성) ────────────────────
+// greet 2줄(타이틀 + 서브) · 통합 히어로 5페이지 캐러셀(page0 트립·page1~4 매거진) · 본문 1섹션
+// (지역 컬렉션만). 스팟·여행자 일정 섹션은 계획 중 얼굴에서 렌더하지 않는다 — SpotsSection·
+// ItinerariesSection 정의 자체는 discovery 가 계속 써서 유지하고, 여기 렌더에서만 뺀다(AC-696-3).
 function PlanningBody({
   phase,
   hero,
   sections,
   onPressTripHeroCta,
-  onPressSpotsMore,
   onPressSearch,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
   onPressTripHeroCta?: () => void;
-  onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
 }): ReactElement {
   return (
     <>
-      <GreetingHeader title={phase.greetTitle} />
+      <GreetingHeader title={phase.greetTitle} subtitle={phase.greetSubtitle} />
       <SearchBarBlock onPress={onPressSearch} />
-      <HeroCarousel
+      <PlanningHeroCarousel
         trip={phase.trip}
-        hero={hero[0]}
+        heroes={hero}
         onPressTripCta={onPressTripHeroCta}
       />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
-        <CollectionsSection sections={sections} />
-        <SpotsSection sections={sections} onMore={onPressSpotsMore} />
-        <ItinerariesSection sections={sections} />
+        <CollectionsSection
+          sections={sections}
+          title={phase.collectionsTitle}
+        />
       </View>
     </>
   );
@@ -987,7 +1026,6 @@ function PhaseBody({
           hero={hero}
           sections={sections}
           onPressTripHeroCta={onPressTripHeroCta}
-          onPressSpotsMore={onPressSpotsMore}
           onPressSearch={onPressSearch}
         />
       );

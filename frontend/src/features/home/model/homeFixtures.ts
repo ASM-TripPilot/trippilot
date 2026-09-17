@@ -144,10 +144,13 @@ export const HOME_LOADING_PROPS: HomeScreenProps = {
 const PLANNING_PHASE: HomePhase = {
   kind: 'planning',
   greetTitle: '부산 여행 D-21',
+  // TRIP-696 인사 2줄 서브카피 + 지역 컬렉션 헤더(기본 "요즘 사람들이 담는 곳" 대체).
+  greetSubtitle: '일정을 이어서 짜볼까요',
+  collectionsTitle: '부산에서 담을 만한 곳',
   trip: {
     badge: '계획 중',
-    dday: 'D-21',
-    ctaLabel: '일정 이어서 짜기',
+    badgeSub: '· D-21', // TRIP-696 두 톤 배지 보조(구 우상단 대형 dday 흡수)
+    ctaLabel: '일정 이어서 짜기 ›', // 꺾쇠(›) 포함 — Figma 3460:1848(프리뷰 6-b 정합)
     title: '부산 여행',
     meta: '6월 10일 – 6월 13일 · 3박 4일 · 2명',
   },

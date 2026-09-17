@@ -198,10 +198,11 @@ describe('🔴 371-AC-1 · 비-ENDED 여행이 있으면 planning 얼굴', () =>
     // 실행 — 라우트를 통째로 렌더.
     render(<HomeRoute />);
 
-    // 단언 — planning 얼굴로 착지(trip-hero + 영감 스와이프 캐러셀). discovery 폴백이 아니다.
-    // (TRIP-647: magazine 은 이제 planning 캐러셀 2페이지라 판별자로 못 씀 — 캐러셀은 planning 전용.)
+    // 단언 — planning 얼굴로 착지(trip-hero + 두 톤 배지). discovery 폴백이 아니다.
+    // (TRIP-696: 구 판별자 home-hero-carousel 이 통합 히어로 재작성으로 소멸 → planning 전용
+    // home-trip-hero-badge 로 교체. 현·후 둘 다 present 회귀 앵커.)
     expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-hero-carousel')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-trip-hero-badge')).toBeOnTheScreen();
   });
 });
 

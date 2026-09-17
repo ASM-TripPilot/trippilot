@@ -70,13 +70,16 @@ export type HomeSections =
  * INV-3: 어떤 payload에도 소요시간 필드 없음 — 시각(`09:30`)·거리(`950m`)만.
  */
 
-/** planning·upcoming 공용 여행 히어로 카드(tripHero, 브리프 §3-C). */
+/** planning 통합 히어로 카드(tripHero, TRIP-696 풀블리드 재작성). */
 export interface TripHeroData {
-  /** '계획 중'(planning) · '출발 전'(upcoming) — 좌상단 흰 pill */
+  /** '계획 중'(primary 톤) — 배지 주 텍스트 */
   badge: string;
-  /** 'D-21' / 'D-3' — 우상단 대형 D-day */
-  dday: string;
-  /** '일정 이어서 짜기'(planning) · '오늘 일정 보기'(upcoming) — primary CTA(no-op) */
+  /**
+   * '· D-21'(계획 중) / '· N 일차'(§697 여행 중) — 두 톤 배지의 보조(ink 톤) 텍스트.
+   * TRIP-696에서 구 우상단 대형 D-day(`dday`)를 배지 보조로 흡수하며 교체됐다.
+   */
+  badgeSub: string;
+  /** '일정 이어서 짜기 ›'(꺾쇠 포함) — 하단 primary CTA 라벨 */
   ctaLabel: string;
   /** '부산 여행' — 여행명 타이틀 */
   title: string;
@@ -117,6 +120,16 @@ export type HomePhase =
   | {
       kind: 'planning';
       greetTitle: string;
+      /**
+       * TRIP-696 인사 2줄 서브카피('일정을 이어서 짜볼까요'). 옵셔널 additive — 동결 리터럴·
+       * 테스트가 phase 를 직접 만들 때 이 값이 없어도 컴파일돼야 한다(`dominantTripId?` 선례).
+       */
+      greetSubtitle?: string;
+      /**
+       * TRIP-696 지역 컬렉션 헤더('${region}에서 담을 만한 곳'). 미지정이면 컬렉션 헤더가
+       * 기본 '요즘 사람들이 담는 곳'을 그린다(옵셔널 additive).
+       */
+      collectionsTitle?: string;
       /**
        * 지배 여행 tripId — 홈 카드 CTA 가 이 여행의 일정 화면으로 라우팅한다(TRIP-401). 서버
        * 스키마 미참조 로컬 필드. 옵셔널인 이유: 프리뷰 픽스처·테스트가 phase 를 직접 만들 때

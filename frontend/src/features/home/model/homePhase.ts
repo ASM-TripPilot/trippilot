@@ -121,15 +121,25 @@ export function resolveHomePhase(
   );
   const dday = formatDday(dominant.startDate, today);
 
+  // 지역 컬렉션 헤더('부산 여행'→'부산에서 담을 만한 곳'). 후행 "여행"만 떼는 간단 추출이라
+  // 앞머리 '여행자' 등은 보존한다(/\s*여행$/ 앵커, homePhase.test '여행자 모임' 경계 케이스).
+  // ponytail: 후행 "여행" strip 휴리스틱 — trip.region 필드로 라이브 동적화하는 것은 후속 티켓.
+  const region = dominant.title.replace(/\s*여행$/, '');
+
   return {
     kind: 'planning',
     greetTitle: `${dominant.title} ${dday}`,
+    // TRIP-696 인사 2줄 서브카피(고정) + 지역 컬렉션 헤더.
+    greetSubtitle: '일정을 이어서 짜볼까요',
+    collectionsTitle: `${region}에서 담을 만한 곳`,
     dominantTripId: dominant.tripId,
     trip: {
       badge: isTraveling(dominant.startDate, dominant.endDate, today)
         ? '여행 중'
         : '계획 중',
-      dday,
+      // TRIP-696 — 구 우상단 대형 D-day 를 두 톤 배지 보조로 흡수. badge 와 한 소스라
+      // "여행 중" + "· D-n" 모순이 안 나온다(dday 는 여전히 badge 와 같은 날짜 산술).
+      badgeSub: `· ${dday}`,
       ctaLabel: ctaLabelForStatus(dominant.status),
       title: dominant.title,
       meta: formatTripMeta(dominant),

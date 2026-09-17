@@ -181,13 +181,14 @@ describe('resolveHomePhase — badge 는 날짜 기반(TRIP-472)', () => {
       formatTripMeta: metaOfTitle,
     });
     expect(result?.kind === 'planning' && result.trip.badge).toBe('계획 중');
-    // badge 와 dday 가 한 소스라 "여행 중" + "D-n" 조합이 원천적으로 안 나온다.
-    expect(result?.kind === 'planning' && result.trip.dday).toBe('D-21');
+    // badge 와 badgeSub 가 한 소스라 "여행 중" + "· D-n" 조합이 원천적으로 안 나온다.
+    // TRIP-696: dday 는 배지 보조 badgeSub('· '+dday)로 흡수됐다.
+    expect(result?.kind === 'planning' && result.trip.badgeSub).toBe('· D-21');
   });
 });
 
-describe('resolveHomePhase — badge×dday 모순 없음(PBT, TRIP-472)', () => {
-  it('badge 가 "여행 중"이면 dday 는 절대 "D-n"(시작 전)이 아니다', () => {
+describe('resolveHomePhase — badge×badgeSub 모순 없음(PBT, TRIP-472·696)', () => {
+  it('badge 가 "여행 중"이면 badgeSub 는 절대 시작 전 "· D-<숫자>"가 아니다', () => {
     fc.assert(
       fc.property(
         fc.constantFrom('PLANNED', 'CONFIRMED', 'ACTIVE'),
@@ -206,11 +207,13 @@ describe('resolveHomePhase — badge×dday 모순 없음(PBT, TRIP-472)', () => 
           });
           if (result?.kind !== 'planning') return;
           if (result.trip.badge === '여행 중') {
-            // 시작 전(D-<숫자>)인데 여행 중이면 모순 — 절대 없어야 한다.
-            // 'D-DAY'(시작 당일)는 여행 중과 정합이라 제외한다.
-            const isFuture =
-              result.trip.dday.startsWith('D-') && result.trip.dday !== 'D-DAY';
-            expect(isFuture).toBe(false);
+            // 시작 전('· D-<숫자>')인데 여행 중이면 모순 — 절대 없어야 한다.
+            // '· D-DAY'(시작 당일)는 \d 가 아니라 매치 안 됨(여행 중과 정합이라 허용).
+            // badgeSub='· '+dday. .test 는 undefined 를 'undefined'로 강제해 throw 없이
+            // false 를 주므로, 구현 전(badgeSub 미정의)엔 vacuous green(부정 성질) — red-first
+            // 아님. 구현 후 실값에 이빨(여행 중 + 미래 D- 뮤턴트 red).
+            const isFutureDday = /^· D-\d/.test(result.trip.badgeSub);
+            expect(isFutureDday).toBe(false);
           }
         }
       ),
@@ -241,8 +244,8 @@ describe('resolveHomePhase — ctaLabel 은 status 로 분기(TRIP-472)', () => 
   );
 });
 
-describe('resolveHomePhase — title·dday·meta 전달', () => {
-  it('title 은 여행값, dday 는 formatDday 위임, meta 는 주입 포맷터를 통과한다', () => {
+describe('resolveHomePhase — title·badgeSub·greetSubtitle·collectionsTitle·meta 조립(TRIP-696)', () => {
+  it('title 은 여행값, badgeSub 는 "· "+formatDday, meta 는 주입 포맷터, 서브카피·지역 컬렉션 헤더를 조립한다', () => {
     // 준비 — 단일 PLANNED, today 대비 21일 뒤.
     const result = resolveHomePhase({
       trips: [
@@ -257,16 +260,39 @@ describe('resolveHomePhase — title·dday·meta 전달', () => {
       formatTripMeta: metaOfTitle,
     });
 
-    // 단언 — 세 값이 각자 출처에서 온다(픽스처 상수 아님).
+    // 단언 — 값이 각자 출처에서 온다(픽스처 상수 아님).
     expect(result?.kind).toBe('planning');
     if (result?.kind === 'planning') {
       expect(result.trip.title).toBe('제주 여행');
-      expect(result.trip.dday).toBe('D-21'); // formatDday('2026-06-22','2026-06-01')
+      // TRIP-696 — dday 는 배지 보조 badgeSub('· '+dday)로. formatDday('2026-06-22','2026-06-01')='D-21'.
+      expect(result.trip.badgeSub).toBe('· D-21');
       expect(result.trip.meta).toBe('META:제주 여행'); // 주입 포맷터 통과
-      // greetTitle 은 여행명 + D-day 를 **함께** 담는다 — 둘 중 하나를 빼면 red(03b 경고-1
-      // 봉합: 이 인사말은 planning 실착지에서 실데이터로 그려지는데 지금까지 무판정이었다).
+      // greetTitle 은 여행명 + D-day 를 **함께** 담는다(무변경 — 계획 중은 `${title} ${dday}`).
       expect(result.greetTitle).toBe('제주 여행 D-21');
+      // TRIP-696 인사 서브카피(고정) + 지역 컬렉션 헤더(title 후행 "여행" 제거 → 지역).
+      expect(result.greetSubtitle).toBe('일정을 이어서 짜볼까요');
+      expect(result.collectionsTitle).toBe('제주에서 담을 만한 곳');
     }
+  });
+
+  it('collectionsTitle 지역은 후행 "여행"만 떼고 조립한다(앞머리 "여행"은 보존 — /\\s*여행$/ 앵커)', () => {
+    // 후행 "여행"이 없는 title(앞머리 '여행자')은 전체가 지역이 된다(task canon:
+    // region = title.replace(/\s*여행$/,'')). naïve `.replace('여행','')` 는 앞머리를 떼서 red.
+    const result = resolveHomePhase({
+      trips: [
+        trip({
+          status: 'PLANNED',
+          startDate: '2026-06-22',
+          title: '여행자 모임',
+        }),
+      ],
+      today: '2026-06-01',
+      savedCount: 0,
+      formatTripMeta: metaOfTitle,
+    });
+    expect(result?.kind === 'planning' && result.collectionsTitle).toBe(
+      '여행자 모임에서 담을 만한 곳'
+    );
   });
 
   it('🔴 bridge 는 서버 담은 곳 **실카운트**를 반영한다 — 상수로 굳히면 red (03b 경고-1)', () => {
