@@ -19,14 +19,11 @@ import {
 /** c08 default 목적 문단에 주입하는 Figma 온보딩 문구(1296:1208). 사용자 가시 텍스트라
  * 자구가 곧 계약이다 — 바꾸려면 게이트① 논의 대상. */
 const ONBOARDING_PURPOSE =
-  '내 주변을 알면 더 잘 맞는 곳을 추천하고 길 안내도 막힘없이 이어져요';
+  '내 주변을 알면 더 잘 맞는 곳을 추천하고\n길 안내도 막힘없이 이어져요';
 
 export function LocationPage(): ReactElement {
   const router = useRouter();
   const [state, setState] = useState<LocationPrepromptState>('default');
-  // 거부 안내 줄의 1회성 닫기 — 화면 표시 1회만(영속 없음). 컴포넌트는 무상태(D2)라 상태를
-  // 여기서 소유하고 onDismissNotice 로 올라온 × 탭에 반응해 안내 줄을 숨긴다.
-  const [noticeDismissed, setNoticeDismissed] = useState(false);
 
   const goToPref1 = () => router.replace('/(onboarding)/pref1');
 
@@ -70,8 +67,6 @@ export function LocationPage(): ReactElement {
       onOpenSettings={() => {
         void Linking.openSettings();
       }}
-      onDismissNotice={() => setNoticeDismissed(true)}
-      noticeDismissed={noticeDismissed}
     />
   );
 }
