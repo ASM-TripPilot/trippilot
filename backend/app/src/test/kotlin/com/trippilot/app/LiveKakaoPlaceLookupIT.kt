@@ -29,7 +29,14 @@ import org.springframework.test.context.TestPropertySource
     properties = [
         "trippilot.place.geocode.mode=kakao",
         // `application-local.yml` 은 local 프로필에서만 로드된다 — 테스트는 환경변수로 키를 받는다.
-        "trippilot.social.kakao.client-id=\${KAKAO_REST_KEY:}",
+        //
+        // **`KAKAO_CLIENT_ID` 로 떨어진다.** 같은 키를 이 리포가 세 이름으로 부른다 —
+        // 운영 `application.yml` 은 `KAKAO_CLIENT_ID`, compose 는 `KAKAO_REST_API_KEY`(없으면
+        // `KAKAO_CLIENT_ID` 로 폴백), 그리고 여기는 `KAKAO_REST_KEY` 였다. 앞의 둘에만 값을 넣은
+        // 사람이 이 테스트를 켜면 **키가 비어 컨텍스트 기동이 막힌다**(RegionGeocodeModeAnnouncer 가
+        // 키 없는 kakao 모드를 거부한다) — 증상이 "카카오가 안 된다"로 보여 원인이 안 보인다.
+        // 실측(2026-09-18): 이름을 맞출 때까지 세 번 실패했고 전부 이 이유였다.
+        "trippilot.social.kakao.client-id=\${KAKAO_REST_KEY:\${KAKAO_CLIENT_ID:}}",
     ],
 )
 @EnabledIfEnvironmentVariable(named = "LIVE_KAKAO", matches = "1")
