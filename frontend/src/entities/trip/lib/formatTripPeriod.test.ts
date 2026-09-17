@@ -7,6 +7,7 @@ import {
   formatConfirmedDateRange,
   formatTripDateRange,
   formatDateRangeWithDow,
+  formatBaseNightRange,
   dayOfWeek,
   WEEKDAY_LABELS,
 } from './formatTripPeriod';
@@ -153,5 +154,48 @@ describe('🔴 C. 요일 — dayOfWeek(에포크 산술) + WEEKDAY_LABELS', () =
       }),
       { numRuns: 300 }
     );
+  });
+});
+
+/**
+ * TRIP-741 · AC-1 — formatBaseNightRange (신규): g02 숙소 선택 시트 후보 카드의 날짜 서브라인.
+ *
+ * 무엇을 보장하나:
+ *  - 🔴 checkIn·checkOut 둘 다 있으면 "M/D–M/D · N박" — **en dash(U+2013)**·슬래시·미들닷(U+00B7),
+ *    N=박수(=일수, INV-3 소요시간 아님). formatSectionRange(이미 en dash)를 재사용해 조립한다.
+ *  - 🔴 한쪽이라도 null/undefined 면 "날짜 없음"(가짜 날짜 금지).
+ *  - 🔴 옛 formatStayDateRange 의 ASCII `~`(6.10~6.13)와 **문자가 다르다** — 여기 예제엔 진짜 U+2013 이
+ *    박혀 있다(눈으로 안 보이는 바이트 잠금, 개념 [[en dash ≠ 하이픈 ≠ ASCII ~]]). 옛 포맷터와의
+ *    "둘 다 태워 구분자 다름" 대조는 `features/trip/ui/StaySelectSheet.test.tsx`(양쪽 layer import 가능)에서.
+ *
+ * *(개념 — 미들닷)* ' · '(U+00B7, 가운뎃점)는 마침표·중점 아님. 아래 예제엔 진짜 U+00B7 이 박혀 있다.
+ *
+ * 3동작 뼈대: 준비(체크인/아웃 문자열) → 실행(포맷터 호출) → 단언(반환 문자열 완전 일치·코드포인트).
+ */
+describe('🔴 B. g02 후보 카드 날짜 서브라인 — formatBaseNightRange (신규)', () => {
+  it('둘 다 있으면 "M/D–M/D · N박"(en dash·미들닷) — 광안리 1박·해운대 2박', () => {
+    // 광안리 뷰 호텔: 6/11–6/12 = 1박.
+    expect(formatBaseNightRange('2026-06-11', '2026-06-12')).toBe(
+      '6/11–6/12 · 1박'
+    );
+    // 해운대 오션 호텔: 6/10–6/12 = 2박(박수 산식이 일수임을 잠근다).
+    expect(formatBaseNightRange('2026-06-10', '2026-06-12')).toBe(
+      '6/10–6/12 · 2박'
+    );
+  });
+
+  it('한쪽이라도 없으면 "날짜 없음"(감천 게스트하우스 · 가짜 날짜 금지)', () => {
+    expect(formatBaseNightRange(null, '2026-06-12')).toBe('날짜 없음');
+    expect(formatBaseNightRange('2026-06-11', null)).toBe('날짜 없음');
+    expect(formatBaseNightRange(null, null)).toBe('날짜 없음');
+    expect(formatBaseNightRange(undefined, undefined)).toBe('날짜 없음');
+  });
+
+  it('구분자는 en dash(U+2013)·미들닷(U+00B7)이지 ASCII ~·하이픈이 아니다', () => {
+    const line = formatBaseNightRange('2026-06-11', '2026-06-12');
+    expect(line).toContain('–'); // U+2013 (range)
+    expect(line).toContain(' · '); // U+00B7 (range↔nights 구분)
+    expect(line).not.toContain('~'); // 옛 formatStayDateRange 의 ASCII ~ 가 아님
+    expect(line).not.toContain(' - '); // 하이픈-마이너스 구분자가 아님
   });
 });

@@ -9,6 +9,10 @@ const MS_PER_DAY = 86_400_000;
 /** 기간 구분자 en dash(U+2013) — 하이픈(-)이 아니다. 눈으로 구분 안 돼 상수로 굳힌다. */
 const EN_DASH = '–';
 
+/** 박수 구분자 미들닷(U+00B7) — 가운뎃점이지 마침표·중점(U+2027)이 아니다. en dash 처럼 눈으로
+ *  구분 안 돼 상수로 굳힌다. */
+const MIDDOT = '·';
+
 /** 0=일 … 6=토 → 한글 요일 한 글자. `dayOfWeek` 반환 인덱스와 짝이 맞는다. */
 export const WEEKDAY_LABELS = [
   '일',
@@ -135,4 +139,17 @@ export function formatDateRangeWithDow(
       ? `${endDay}일(${endDow})`
       : `${endMonth}월 ${endDay}일(${endDow})`;
   return `${head} ${EN_DASH} ${tail}`;
+}
+
+/** '6/11–6/12 · 1박' — g02 거점 선택 후보 카드 날짜 서브라인(TRIP-741). 범위는 formatSectionRange
+ *  (이미 en dash·0패딩 제거)를 재사용하고 ' · N박'을 잇는다. N은 일수(=박수, INV-3 소요시간 아님).
+ *  한쪽이라도 날짜가 없으면 "날짜 없음"(가짜 날짜 금지). 옛 formatStayDateRange(ASCII '~')와 구분자가
+ *  달라 재사용 금지 — 여기 예제 문자열엔 진짜 en dash(U+2013)·미들닷(U+00B7)이 박혀 있다. */
+export function formatBaseNightRange(
+  checkIn: string | null | undefined,
+  checkOut: string | null | undefined
+): string {
+  if (!checkIn || !checkOut) return '날짜 없음';
+  const nights = toEpochDay(checkOut) - toEpochDay(checkIn);
+  return `${formatSectionRange(checkIn, checkOut)} ${MIDDOT} ${nights}박`;
 }

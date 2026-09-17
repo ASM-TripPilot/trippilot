@@ -147,7 +147,6 @@ import {
 } from '@/features/trip/ui/TripWizardStep1Screen';
 import { CompanionEditSheet } from '@/features/trip/ui/CompanionEditSheet';
 import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
-import { MustVisitListScreen } from '@/features/trip/ui/MustVisitListScreen';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationPage } from '@/pages/live-location';
@@ -632,21 +631,35 @@ const H08_PREVIEW_DATE = '2026-06-10';
  */
 const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
   variant: 'default',
+  // TRIP-740 AC-D2 — 3박 전부 배정 + 썸네일/위치로 채워 Figma `3657:2068`(단일 카드 + 썸네일 +
+  // 위치·거리 줄)과 육안 대조가 되게 한다. imageUrl 은 위 `DRAFT_PREVIEW_PHOTOS`(로컬 에셋 resolve
+  // URI, jest 스텁에선 null) 재사용 — 신규 사진 소싱 0. 프로덕션은 계약 공백이라 이 값들이 늘
+  // undefined 라 실앱은 "현행 2줄"로 뜬다(정직한 degrade, BE 후속 TRIP-823까지) — 함정 ★7.
   cards: [
     {
       nightNumber: 1,
       dateLabel: '6/10(수)',
       region: '부산',
       stayName: '해운대 오션 호텔',
+      imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+      locationLabel: '해운대',
     },
     {
       nightNumber: 2,
       dateLabel: '6/11(목)',
       region: '부산',
-      stayName: '해운대 오션 호텔',
+      stayName: '광안리 뷰 호텔',
+      imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+      locationLabel: '광안리',
     },
-    // 미배정 밤 — stayName 없음 → 카드에 "숙소 미정"이 뜬다(옵션 A).
-    { nightNumber: 3, dateLabel: '6/12(금)', region: '경주' },
+    {
+      nightNumber: 3,
+      dateLabel: '6/12(금)',
+      region: '경주',
+      stayName: '경주 한옥스테이 봄',
+      imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+      locationLabel: '경주 황남동',
+    },
   ],
   onPressCard: noop,
   onGenerate: noop,
@@ -689,51 +702,49 @@ const TRIP_WIZARD_BASE: TripWizardStep1ScreenProps = {
   onBack: noop,
 };
 
-/** 꼭 갈 곳 스트립 시드 3장(`MustVisitSeedItem[]`) — `imageUrl` 은 프로덕션에서 전부 `null`(회색
- * 자리)이라 프리뷰도 null 로 둔다(INV-1 · 외부 URL 발명 금지). `region` 은 이름 아래 지역선이
- * 눈에 보이게 채운다(TRIP-685 6-b 대조용 — 서버 원문 형식을 흉내낸 그럴듯한 값). */
-const MUST_VISIT_THUMBNAILS = [
+/** 꼭 갈 곳 스트립 시드(`MustVisitSeedItem[]`) — g01 default(Figma `3742:2068`)가 그린 6장의
+ * 이름·구를 그대로 옮긴 것이다. 헤더 "7"은 카드 6장과 어긋난 Figma 쪽 오류라 7번째를 지어내지
+ * 않는다(INV-1, 발명 금지 — TRIP-811 Figma 동기 대상). `imageUrl` 은 번들 사진
+ * `DRAFT_PREVIEW_PHOTOS`(draft-preview 1/2/3)를 1,2,3,1,2,3 으로 순환 배선한다 — 로컬 에셋이라
+ * 외부 URL 발명이 아니다(740·741 동일 선례, 새 소싱·CREDITS 갱신 0). jest 에선 에셋 스텁의
+ * `.uri` 가 `undefined` 라 사진 없는 카드가 되고 실기에서만 뜬다(6-b 육안). `region` 은 이름 아래
+ * 지역선(TRIP-685 6-b 대조용). 순수 데이터 테스트가 이름·구를 직접 읽어 `export` 한다(PREVIEW_STATES 선례). */
+export const MUST_VISIT_THUMBNAILS = [
   {
     sourcePoiId: 'poi-1',
     name: '감천문화마을',
-    imageUrl: null,
+    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
     region: '사하구',
   },
   {
     sourcePoiId: 'poi-2',
-    name: '광안리해수욕장',
-    imageUrl: null,
+    name: '광안리 해변',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[1],
     region: '수영구',
   },
   {
     sourcePoiId: 'poi-3',
-    name: '전포카페거리',
-    imageUrl: null,
+    name: '전포 카페거리',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[2],
     region: '부산진구',
   },
   {
     sourcePoiId: 'poi-4',
-    name: '해동용궁사',
-    imageUrl: null,
-    region: '기장군',
+    name: '해운대 해변',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+    region: '해운대구',
   },
   {
     sourcePoiId: 'poi-5',
-    name: '태종대',
-    imageUrl: null,
-    region: '영도구',
+    name: '해동용궁사',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+    region: '기장군',
   },
   {
     sourcePoiId: 'poi-6',
-    name: '흰여울문화마을',
-    imageUrl: null,
-    region: '영도구',
-  },
-  {
-    sourcePoiId: 'poi-7',
-    name: '송정해수욕장',
-    imageUrl: null,
-    region: '해운대구',
+    name: '자갈치 시장',
+    imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    region: '중구',
   },
 ];
 
@@ -2818,30 +2829,22 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g01 신 default(TRIP-665·TRIP-732, Figma `3742:2068`) 2키 — 꼭 갈 곳 시드 얼굴과 0곳 얼굴. 요약
-  // 5행은 두 키 다 채워진 2톤 객체(`TRIP_WIZARD_BASE`)이고, 스트립의 `mustVisits` 만 갈아 끼운다.
+  // g01 신 default(TRIP-665·TRIP-732, Figma `3742:2068`) — 꼭 갈 곳 시드 얼굴. 요약 5행은
+  // 두 키 다 채워진 2톤 객체(`TRIP_WIZARD_BASE`)이고, 스트립의 `mustVisits` 를 Figma 6장으로 채운다.
   // jest 는 요약 sub caption 회색·온보딩 스파클/분홍·카드 그림자·스트립 카드 픽셀·진행바 색을 못
-  // 보므로 이 두 키가 3742:2068 육안 대조 자리다(TRIP-732 로 `-seeded`→`-default` 개명, AC-11).
-  // 자리표시·조회 실패 얼굴은 회선을 늦추면 실화면에서 재현되므로 여기 키를 늘리지 않는다.
+  // 보므로 이 키가 3742:2068 육안 대조 자리다(TRIP-732 로 `-seeded`→`-default` 개명, AC-11).
+  // 자리표시·조회 실패·담은 곳 0곳 얼굴은 회선을 늦추면 실화면에서 재현되므로 여기 키를 늘리지 않는다
+  // (TRIP-742 로 `-no-saved` 프리뷰 키 삭제 — 화면 코드는 유지).
   {
     key: 'trip-new-step1-default',
     band: 'g',
-    label: 'g01 · 만들기 1/2 꼭 갈 곳',
+    label: 'g01 · 여행 만들기 default',
     login: null,
     render: () => (
       <TripWizardStep1Screen
         {...TRIP_WIZARD_BASE}
         mustVisits={MUST_VISIT_THUMBNAILS}
       />
-    ),
-  },
-  {
-    key: 'trip-new-step1-no-saved',
-    band: 'g',
-    label: 'g01 · 만들기 1/2 담은 곳 0',
-    login: null,
-    render: () => (
-      <TripWizardStep1Screen {...TRIP_WIZARD_BASE} mustVisits={[]} />
     ),
   },
   // g01 empty·loading 두 상태 얼굴(TRIP-671, Figma empty `3652:2068`·loading `3712:2068`). empty 는
@@ -2851,7 +2854,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'trip-new-step1-empty',
     band: 'g',
-    label: 'g01 · 만들기 1/2 empty',
+    label: 'g01 · 여행 만들기 empty',
     login: null,
     render: () => (
       <TripWizardStep1Screen
@@ -2871,7 +2874,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'trip-new-step1-loading',
     band: 'g',
-    label: 'g01 · 만들기 1/2 loading',
+    label: 'g01 · 여행 만들기 loading',
     login: null,
     render: () => <TripWizardStep1Screen {...TRIP_WIZARD_BASE} isLoading />,
   },
@@ -2882,7 +2885,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'trip-new-step1-save-error',
     band: 'g',
-    label: 'g01 · 만들기 1/2 저장 실패',
+    label: 'g01 · 여행 만들기 save-error',
     login: null,
     render: () => (
       <TripWizardStep1Screen
@@ -2998,64 +3001,28 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g02 4얼굴 + 미정 엣지(TRIP-672 재작성). 화면이 완성된 카드 뷰모델만 받는 프레젠테이션이라
-  // 배선 없이 props 만 갈아 끼우면 얼굴이 그대로 나온다 — 실기로 얼굴을 보려면 여기가 정본이다
+  // g02 얼굴(TRIP-672 재작성). 화면이 완성된 카드 뷰모델만 받는 프레젠테이션이라 배선 없이
+  // props 만 갈아 끼우면 얼굴이 그대로 나온다 — 실기로 얼굴을 보려면 여기가 정본이다
   // (`docs/structure.md` 경고: "엣지 케이스 화면을 눈으로 보려면 목을 만들지 말고 여기에 상태를
-  // 추가한다"). no-stay 는 배정 0(옵션 A) 얼굴 — 밤 수만큼 카드가 전부 "숙소 미정"으로 뜬다.
+  // 추가한다"). 조회 실패(`variant="error"`)·여행 없음(`variant="notrip"`)·배정 0(옵션 A) 얼굴은
+  // TRIP-742 로 프리뷰 키(`-error`·`-notrip`·`-no-stay`)를 삭제했다 — INV-4 폴백을 그리는 화면
+  // 코드(`TripWizardStep2Screen` 의 variant)는 유지하고 프리뷰 배선만 지운다(키 삭제 ≠ 기능 삭제).
   {
     key: 'trip-new-step2-default',
     band: 'g',
-    label: 'g02 · 거점 숙소 2/4 기본',
+    label: 'g02 · 거점 숙소 default',
     login: null,
     render: () => <TripWizardStep2Screen {...TRIP_BASE_SCREEN} />,
   },
   {
-    key: 'trip-new-step2-no-stay',
-    band: 'g',
-    label: 'g02 · 거점 숙소 2/4 전부 미정(옵션 A)',
-    login: null,
-    render: () => (
-      <TripWizardStep2Screen
-        {...TRIP_BASE_SCREEN}
-        cards={[
-          { nightNumber: 1, dateLabel: '6/10(수)', region: '부산' },
-          { nightNumber: 2, dateLabel: '6/11(목)', region: '부산' },
-          { nightNumber: 3, dateLabel: '6/12(금)', region: '경주' },
-        ]}
-      />
-    ),
-  },
-  {
     key: 'trip-new-step2-loading',
     band: 'g',
-    label: 'g02 · 거점 숙소 2/4 로딩',
+    label: 'g02 · 거점 숙소 loading',
     login: null,
     render: () => (
       <TripWizardStep2Screen
         {...TRIP_BASE_SCREEN}
         variant="loading"
-        cards={[]}
-      />
-    ),
-  },
-  {
-    key: 'trip-new-step2-error',
-    band: 'g',
-    label: 'g02 · 거점 숙소 2/4 조회 실패',
-    login: null,
-    render: () => (
-      <TripWizardStep2Screen {...TRIP_BASE_SCREEN} variant="error" cards={[]} />
-    ),
-  },
-  {
-    key: 'trip-new-step2-notrip',
-    band: 'g',
-    label: 'g02 · 거점 숙소 2/4 여행 없음',
-    login: null,
-    render: () => (
-      <TripWizardStep2Screen
-        {...TRIP_BASE_SCREEN}
-        variant="notrip"
         cards={[]}
       />
     ),
@@ -3066,7 +3033,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'trip-new-step2-empty',
     band: 'g',
-    label: 'g02 · 거점 숙소 2/4 저장 숙소 0',
+    label: 'g02 · 거점 숙소 empty',
     login: null,
     render: () => (
       <TripWizardStep2Screen
@@ -3080,10 +3047,11 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // g02 숙소 선택 시트(TRIP-673 S9, Figma `3669:2068`) — 밤2 열림·해운대 선택 상태. `StaySelectSheet`은
-  // props-only 순수 뷰(스토어·라우터·조회 미참조)라 배선 없이 props 만 갈아 끼우면 얼굴이 그대로 나온다.
-  // stay-b(감천)는 날짜 없음 후보(→"날짜 없음" 서브라인). jest 는 딤·실개폐·사진 placeholder 회색·선택
-  // 테두리 분홍을 못 봐(바텀시트 통과형 목) 이 키가 유일한 6-b 육안 대조 자리다.
+  // g02 숙소 선택 시트(TRIP-673 S9 → TRIP-741 후보 카드 Figma 정합, `3669:2068`) — 광안리 선택 상태.
+  // 3후보 전부 사진(draft-preview 재사용)·동네·거리·가격·날짜를 채워 Figma 육안 동일(rich 필드는
+  // StaySelectCandidate optional — SavedStay 계약엔 없어 실데이터는 미렌더, 프리뷰만 채운다 INV-1).
+  // 감천은 날짜 없음 후보(→"날짜 없음" 서브라인). jest 는 딤·실개폐·사진 실렌더·선택 테두리 분홍
+  // 1.5px·체크 분홍을 못 봐(바텀시트 통과형 목·svg 정수화) 이 키가 유일한 6-b 육안 대조 자리다.
   {
     key: 'trip-new-step2-staysheet',
     band: 'g',
@@ -3095,63 +3063,50 @@ export const PREVIEW_STATES: PreviewState[] = [
         dateLabel="6/11(목)"
         candidates={[
           {
-            savedStayId: 'stay-a',
-            name: '해운대 오션 호텔',
+            savedStayId: 'stay-gwangalli',
+            name: '광안리 뷰 호텔',
             coordConfirmed: true,
-            checkIn: '2026-06-10',
-            checkOut: '2026-06-13',
+            checkIn: '2026-06-11',
+            checkOut: '2026-06-12',
             registerRoute: 'MAP_SEARCH',
             createdAt: '2026-08-01T00:00:00Z',
             updatedAt: '2026-08-01T00:00:00Z',
+            imageUrl: DRAFT_PREVIEW_PHOTOS[0] ?? undefined,
+            region: '광안리',
+            priceLabel: '165,000원~',
           },
           {
-            savedStayId: 'stay-b',
-            name: '감천문화마을 게스트하우스',
+            savedStayId: 'stay-haeundae',
+            name: '해운대 오션 호텔',
+            coordConfirmed: true,
+            checkIn: '2026-06-10',
+            checkOut: '2026-06-12',
+            registerRoute: 'MAP_SEARCH',
+            createdAt: '2026-08-01T00:00:00Z',
+            updatedAt: '2026-08-01T00:00:00Z',
+            imageUrl: DRAFT_PREVIEW_PHOTOS[1] ?? undefined,
+            region: '해운대',
+            priceLabel: '190,000원~',
+          },
+          {
+            savedStayId: 'stay-gamcheon',
+            name: '감천 게스트하우스',
             coordConfirmed: false,
             checkIn: null,
             checkOut: null,
             registerRoute: 'MAP_SEARCH',
             createdAt: '2026-08-01T00:00:00Z',
             updatedAt: '2026-08-01T00:00:00Z',
+            imageUrl: DRAFT_PREVIEW_PHOTOS[2] ?? undefined,
+            region: '감천',
+            priceLabel: '92,000원~',
           },
         ]}
-        selectedSavedStayId="stay-a"
+        selectedSavedStayId="stay-gwangalli"
         onSelect={noop}
         onBrowse={noop}
         onAssign={noop}
         onClose={noop}
-      />
-    ),
-  },
-  // S12 꼭 갈 곳 전용 목록(TRIP-676) — g01 요약 스트립 "전체 보기"가 여는 화면. 순수 뷰
-  // `MustVisitListScreen` 을 그대로 태운다(페이지 import 하면 api 사슬 전이 로드로 프리뷰가 죽는다).
-  // `MUST_VISIT_THUMBNAILS`(imageUrl 전부 null → 회색 자리)로 시드 얼굴을, [] 로 empty 얼굴을 그린다.
-  // jest 는 카드 간격·썸네일 크기·회색 톤을 못 봐 이 두 키가 FG-3 전까지 육안 대조 자리다.
-  {
-    key: 'trip-new-mustvisit-list',
-    band: 'g',
-    label: 'g03 · 꼭 갈 곳 목록',
-    login: null,
-    render: () => (
-      <MustVisitListScreen
-        items={MUST_VISIT_THUMBNAILS}
-        onRemove={noop}
-        onAddMore={noop}
-        onBack={noop}
-      />
-    ),
-  },
-  {
-    key: 'trip-new-mustvisit-empty',
-    band: 'g',
-    label: 'g03 · 꼭 갈 곳 목록 0곳',
-    login: null,
-    render: () => (
-      <MustVisitListScreen
-        items={[]}
-        onRemove={noop}
-        onAddMore={noop}
-        onBack={noop}
       />
     ),
   },

@@ -537,7 +537,12 @@ export function TripNewStep1Page({
                 }
           )
         }
-        onPressSeeAll={() => router.push('/trips/new/must-visits')}
+        onPressSeeAll={() =>
+          router.push({
+            pathname: '/explore/saved-places',
+            params: { mode: 'select' },
+          })
+        }
         canProceed={canProceed}
         onNext={submit}
         onBack={() => router.back()}

@@ -54,6 +54,11 @@ const PREVIEW_STATES = previewModule.PREVIEW_STATES as {
   band: string;
 }[];
 
+// TRIP-742 AC-6 순수 데이터 단언용 — g01 '꼭 갈 곳' 스트립 픽스처. `PREVIEW_STATES` 선례와
+// 동형으로 구현자가 `export` 로 열어야 한다(현재 미export → undefined → AC-6 데이터 단언이 red).
+const MUST_VISIT_THUMBNAILS = previewModule.MUST_VISIT_THUMBNAILS as
+  { name: string; region: string }[] | undefined;
+
 // figma-structure.md first-cut 9밴드 + 프레임 없는 발명 화면용 '기타'.
 const ALLOWED_BANDS = ['a', 'c', 'd', 'e', 'g', 'h', 'i', 'j', 'l', '기타'];
 const FIRST_CUT_BANDS = ['a', 'c', 'd', 'e', 'g', 'h', 'i', 'j', 'l'];
@@ -105,7 +110,16 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    169→170. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에 키만 추가하고
     //    이 가드는 안 만진다(추가 전엔 169개라 이 단언이 red). devPreviewBandSort 는 밴드 h·l 만 잠가
     //    band g 와 무관(추가 갱신 불필요).
-    expect(PREVIEW_STATES).toHaveLength(170);
+    // ⚠️ TRIP-743: g03 꼭 갈 곳 전용 목록 화면 제거로 프리뷰 키 2개(`trip-new-mustvisit-list`·`-empty`,
+    //    band `g`)를 삭제해 170→168. test-designer 선반영(카운트 가드만) — implementer 는 preview.tsx 에서
+    //    두 키 + `MustVisitListScreen` import 를 지울 뿐 이 가드는 안 만진다(삭제 전엔 170개라 이 단언이 red).
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band g 와 무관(오갱신 금지, 맹점③).
+    // ⚠️ TRIP-742: g 밴드 프리뷰 키 4개 삭제(`trip-new-step1-no-saved`·`trip-new-step2-no-stay`·
+    //    `trip-new-step2-error`·`trip-new-step2-notrip`)로 168→164. test-designer 선반영(카운트 가드만) —
+    //    implementer 는 preview.tsx 에서 그 4키만 지울 뿐 이 가드는 안 만진다(삭제 전엔 168개라 이 단언이 red).
+    //    INV-4: 삭제는 프리뷰 배선뿐 — 폴백 얼굴(TripWizardStep2Screen variant error/notrip)은 코드로 남는다.
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band g 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(164);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -133,6 +147,92 @@ describe('TRIP-732 AC-11 · g01 프리뷰 키 개명 (-seeded → -default)', ()
     // 개명은 엔트리 **수**를 안 바꾼다(위 AC-6 의 169 무변경) — 이름만 바뀐다.
     expect(keys).toContain('trip-new-step1-default');
     expect(keys).not.toContain('trip-new-step1-seeded');
+  });
+});
+
+describe('TRIP-743 AC-4 · g03 프리뷰 키 제거 (band g)', () => {
+  it('키 집합에 trip-new-mustvisit-list·-empty 가 없고, 형제 band g 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — g03 전용 목록 두 키는 사라진다(삭제 전엔 present 라 red). 카운트(168)만으론
+    // "아무 두 키나 지워도" 통과하므로, 이 단언이 '지운 두 키가 g03 키'임을 못박는다(맹점③).
+    expect(keys).not.toContain('trip-new-mustvisit-list');
+    expect(keys).not.toContain('trip-new-mustvisit-empty');
+    // 긍정 짝 — 같은 band g 형제 키는 그대로(빈/과잉 삭제 오구현 차단, 공허 통과 방지).
+    expect(keys).toContain('trip-new-step1-default');
+  });
+});
+
+describe('TRIP-742 AC-1 · g 밴드 프리뷰 키 4개 삭제 (band g)', () => {
+  it('삭제 대상 4키가 없고, 형제 default 키(step1·step2)는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 삭제 대상 4키는 사라진다(삭제 전엔 present 라 red). 카운트(164)만으론 "아무 4키나
+    // 지워도" 통과하므로, 이 짝이 '지운 게 정확히 그 4키'임을 못박는다(TRIP-743 AC-4 패턴 미러).
+    expect(keys).not.toContain('trip-new-step1-no-saved');
+    expect(keys).not.toContain('trip-new-step2-no-stay');
+    expect(keys).not.toContain('trip-new-step2-error');
+    expect(keys).not.toContain('trip-new-step2-notrip');
+    // 긍정 짝 — 같은 화면(step1·step2)의 default 형제 키는 그대로(과잉 삭제·공허 통과 차단).
+    expect(keys).toContain('trip-new-step1-default');
+    expect(keys).toContain('trip-new-step2-default');
+  });
+});
+
+describe('TRIP-742 AC-3 · g 밴드 라벨 규약 개정 (gNN · 화면명 상태)', () => {
+  // 목표 라벨(브리프 AC-3 표) — 7키. 모두 ' · ' 구분자 + g0N 접두를 유지하므로 devPreviewBandSort
+  // AC-1(접두 /^[a-l]\d{2}/) 은 계속 green(그 파일은 band h·l 만 잠가 band g 라벨 문자열엔 무관).
+  const TARGET_LABELS: Record<string, string> = {
+    'trip-new-step1-default': 'g01 · 여행 만들기 default',
+    'trip-new-step1-empty': 'g01 · 여행 만들기 empty',
+    'trip-new-step1-loading': 'g01 · 여행 만들기 loading',
+    'trip-new-step1-save-error': 'g01 · 여행 만들기 save-error',
+    'trip-new-step2-default': 'g02 · 거점 숙소 default',
+    'trip-new-step2-loading': 'g02 · 거점 숙소 loading',
+    'trip-new-step2-empty': 'g02 · 거점 숙소 empty',
+  };
+
+  it('7개 키의 라벨이 목표 문자열과 정확히 일치한다', () => {
+    // 준비 — key→label 맵을 만들고, 7키의 실제 라벨만 추린다.
+    const labelByKey = new Map(
+      PREVIEW_STATES.map((state) => [state.key, state.label])
+    );
+    const actualLabels = Object.fromEntries(
+      Object.keys(TARGET_LABELS).map((key) => [key, labelByKey.get(key)])
+    );
+
+    // 단언 — 7키 라벨이 목표와 완전일치(개정 전 라벨 `g01 · 만들기 1/2 …` 등이라 전부 red, 단일 diff).
+    expect(actualLabels).toEqual(TARGET_LABELS);
+  });
+});
+
+describe('TRIP-742 AC-6 · g01 꼭 갈 곳 픽스처 Figma 정합 (3742:2068)', () => {
+  // Figma 6장 이름·구(01b 시드, 좌→우 스트립 렌더 순서). 사진(imageUrl)은 jest 스텁 .uri=undefined
+  // 라 구조 심판 밖(6-b 육안) — 여기선 이름·구·개수·순서만 잠근다.
+  const FIGMA_MUST_VISITS = [
+    { name: '감천문화마을', region: '사하구' },
+    { name: '광안리 해변', region: '수영구' },
+    { name: '전포 카페거리', region: '부산진구' },
+    { name: '해운대 해변', region: '해운대구' },
+    { name: '해동용궁사', region: '기장군' },
+    { name: '자갈치 시장', region: '중구' },
+  ];
+
+  it('MUST_VISIT_THUMBNAILS 가 Figma 6장(이름·구)과 순서까지 일치한다', () => {
+    // 준비/실행 — 모듈 export 를 읽어 {name, region} 만 뽑는다(imageUrl 은 안 본다).
+    // 구현 전엔 미export → undefined → `?? []` → 아래 두 단언이 clean red(크래시 아님).
+    const actual = (MUST_VISIT_THUMBNAILS ?? []).map((item) => ({
+      name: item.name,
+      region: item.region,
+    }));
+
+    // 단언 ① — 개수 6(옛 픽스처 7장에서 순감 + 7번째 발명 금지, INV-1).
+    expect(MUST_VISIT_THUMBNAILS ?? []).toHaveLength(6);
+    // 단언 ② — 이름·구가 Figma 6장과 순서까지 완전일치(옛 이름 광안리해수욕장·태종대·흰여울문화마을·
+    //          송정해수욕장 소멸 + 해운대 해변·자갈치 시장 편입을 한 번에 못박음).
+    expect(actual).toEqual(FIGMA_MUST_VISITS);
   });
 });
 

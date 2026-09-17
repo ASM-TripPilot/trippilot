@@ -60,7 +60,6 @@
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/mapSheetShellStructure.test.ts`  →  (export 없음)
-- `src/__tests__/mustVisitListStructure.test.ts`  →  (export 없음)
 - `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
 - `src/__tests__/nicknameSharedPromotion.test.ts`  →  (export 없음)
 - `src/__tests__/noMswInStaticGraph.test.ts`  →  (export 없음)
@@ -163,7 +162,7 @@
 - `src/app/(tabs)/records.tsx`  →  (export 없음)
 
 ## src/app/_dev/
-- `src/app/_dev/preview.tsx`  →  PREVIEW_STATES
+- `src/app/_dev/preview.tsx`  →  MUST_VISIT_THUMBNAILS · PREVIEW_STATES
 
 ## src/app/
 - `src/app/_layout.tsx`  →  (export 없음)
@@ -257,7 +256,6 @@
 
 ## src/app/trips/new/
 - `src/app/trips/new/_layout.tsx`  →  (export 없음)
-- `src/app/trips/new/must-visits.tsx`  →  (export 없음)
 - `src/app/trips/new/step1.tsx`  →  (export 없음)
 - `src/app/trips/new/step2.tsx`  →  (export 없음)
 
@@ -304,7 +302,7 @@
 
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/formatNights.ts`  →  formatNightsLabel · nightsLabel · nightsCountLabel
-- `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatDateRangeWithDow
+- `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatDateRangeWithDow · formatBaseNightRange
 
 ## src/entities/trip/model/
 - `src/entities/trip/model/index.ts`  →  MyTripBadge · MyTripCardVM · PastTripCardVM
@@ -643,9 +641,8 @@
 ## src/features/trip/ui/
 - `src/features/trip/ui/CompanionEditSheet.tsx`  →  CompanionEditSheetProps · CompanionEditSheet
 - `src/features/trip/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
-- `src/features/trip/ui/MustVisitListScreen.tsx`  →  MustVisitListScreenProps · MustVisitListScreen
 - `src/features/trip/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
-- `src/features/trip/ui/StaySelectSheet.tsx`  →  StaySelectSheetProps · StaySelectSheet
+- `src/features/trip/ui/StaySelectSheet.tsx`  →  StaySelectCandidate · StaySelectSheetProps · StaySelectSheet
 - `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · BackChevronGlyph · PinGlyph · RemoveGlyph · ThumbRemoveGlyph · PlusGlyph · CalendarGlyph · ChevronDownGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · FriendsGlyph · HeartGlyph · FamilyGlyph · SparkleGlyph · AlertCircleGlyph · GlobeGlyph · BedTone · BedGlyph · ChevronRightGlyph · BaseBadgePinGlyph · HeartFilledGlyph · CheckGlyph · SearchGlyph · WarningTriangleGlyph
 - `src/features/trip/ui/TripWizardStep1Screen.tsx`  →  TripWizardStep1ScreenProps · TripWizardStep1Screen
 - `src/features/trip/ui/TripWizardStep2Screen.tsx`  →  NightlyBaseCardVM · Step2Variant · TripWizardStep2ScreenProps · TripWizardStep2Screen
@@ -939,12 +936,6 @@
 
 ## src/pages/travel-style/ui/
 - `src/pages/travel-style/ui/TravelStylePage.tsx`  →  TravelStylePage
-
-## src/pages/trip-new-mustvisit/
-- `src/pages/trip-new-mustvisit/index.ts`  →  TripMustVisitsPage
-
-## src/pages/trip-new-mustvisit/ui/
-- `src/pages/trip-new-mustvisit/ui/MustVisitListPage.tsx`  →  TripMustVisitsPage
 
 ## src/pages/trip-new-step1/
 - `src/pages/trip-new-step1/index.ts`  →  TripNewStep1Page
@@ -1294,4 +1285,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 870개 파일
+합계 865개 파일
