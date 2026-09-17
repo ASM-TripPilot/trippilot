@@ -12,6 +12,7 @@
 - `__mocks__/react-native-draggable-flatlist.tsx`  →  ScaleDecorator · OpacityDecorator · ShadowDecorator · NestableDraggableFlatList · NestableScrollContainer
 
 ## src/__tests__/
+- `src/__tests__/authSheetHandleStructure.test.ts`  →  (export 없음)
 - `src/__tests__/budgetEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/companionEditSheetStructure.test.ts`  →  (export 없음)
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
@@ -1297,4 +1298,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 873개 파일
+합계 874개 파일
