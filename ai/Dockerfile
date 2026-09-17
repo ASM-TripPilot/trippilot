@@ -20,6 +20,10 @@ COPY data ./data
 # 파일 없음 → PriceConfigError → 기동 실패다(설정 오류를 은폐하지 않는 쪽 설계).
 # `/app/config/llm-prices.json` = 로컬 스크립트가 `ai/` 에서 보는 것과 같은 상대경로.
 COPY config ./config
+# 운영 파드 안에서 kubectl exec 로 KB 적재·스모크를 돌린다 (TRIP-893).
+# EKS 의 RDS·embedding 은 클러스터 밖에서 닿지 않아 이 경로가 유일하다 —
+# 이게 빠지면 적재는 이미지를 다시 굽기 전까지 막힌다.
+COPY scripts ./scripts
 
 EXPOSE 8000
 CMD ["uv", "run", "--no-sync", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
