@@ -64,6 +64,28 @@ export function SearchGlyph({ size = 19, testID }: GlyphProps) {
   );
 }
 
+// a02 매거진 앱바 뒤로가기 꺾쇠(‹) — 흰 배경 위라 ink. HomeGlyphs 에 없어 신규(features 간
+// 글리프 공유 금지, importBoundary — 다른 feature 의 같은 꺾쇠를 가져오지 않고 여기 다시 적는다).
+export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M15 5L8 12L15 19"
+        stroke={INK}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // magazineHero eyebrow('오늘의 여행 영감') 앞 반짝임 — 흰 pill 위 primary 4각 별.
 export function SparkleGlyph({ size = 13, testID }: GlyphProps) {
   return (

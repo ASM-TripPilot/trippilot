@@ -175,6 +175,21 @@ describe('🟢 370-AC-1 · "지금 뜨는 장소" 더 보기 → /explore/places
   });
 });
 
+// ── TRIP-700 · AC-10 홈 매거진 히어로 → /magazine (라우트 목적지 잠금) ──────────
+// 형제 CTA(FAB·온램프·더보기·검색바)는 전부 목적지 문자열을 완전일치로 잠그는데 매거진만
+// 빠져 있었다(code-critic 경고-1). discovery 얼굴은 매거진 히어로 캐러셀 page0(home-magazine-hero)
+// 을 그리고, 그 press 가 onPressMagazine → router.push('/magazine') 로 흐른다. 목적지 오타
+// (예: /explore/places)는 이 완전일치 단언이 red 로 잡는다(tsc·형제 jest 로는 안 잡힘).
+describe('🟢 700-AC-10 · 홈 매거진 히어로 → /magazine', () => {
+  it('discovery 매거진 히어로(page0)를 누르면 매거진 목록으로 이동한다', () => {
+    render(<HomeRoute />);
+
+    fireEvent.press(screen.getByTestId('home-magazine-hero'));
+
+    expect(mockPush.mock.calls).toEqual([['/magazine']]);
+  });
+});
+
 // ── TRIP-499 · AC-1 홈 검색바 → 여행지 선택(정본) ─────────────────────────────
 describe('🔴 499-AC-1 · 검색바 → /explore/region?purpose=trip', () => {
   it('홈 검색바를 누르면 여행지 선택(RegionPicker, trip)으로 이동한다', () => {
@@ -198,10 +213,11 @@ describe('🔴 371-AC-1 · 비-ENDED 여행이 있으면 planning 얼굴', () =>
     // 실행 — 라우트를 통째로 렌더.
     render(<HomeRoute />);
 
-    // 단언 — planning 얼굴로 착지(trip-hero + 영감 스와이프 캐러셀). discovery 폴백이 아니다.
-    // (TRIP-647: magazine 은 이제 planning 캐러셀 2페이지라 판별자로 못 씀 — 캐러셀은 planning 전용.)
+    // 단언 — planning 얼굴로 착지(trip-hero + 두 톤 배지). discovery 폴백이 아니다.
+    // (TRIP-696: 구 판별자 home-hero-carousel 이 통합 히어로 재작성으로 소멸 → planning 전용
+    // home-trip-hero-badge 로 교체. 현·후 둘 다 present 회귀 앵커.)
     expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-hero-carousel')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-trip-hero-badge')).toBeOnTheScreen();
   });
 });
 

@@ -144,10 +144,13 @@ export const HOME_LOADING_PROPS: HomeScreenProps = {
 const PLANNING_PHASE: HomePhase = {
   kind: 'planning',
   greetTitle: '부산 여행 D-21',
+  // TRIP-696 인사 2줄 서브카피 + 지역 컬렉션 헤더(기본 "요즘 사람들이 담는 곳" 대체).
+  greetSubtitle: '일정을 이어서 짜볼까요',
+  collectionsTitle: '부산에서 담을 만한 곳',
   trip: {
     badge: '계획 중',
-    dday: 'D-21',
-    ctaLabel: '일정 이어서 짜기',
+    badgeSub: '· D-21', // TRIP-696 두 톤 배지 보조(구 우상단 대형 dday 흡수)
+    ctaLabel: '일정 이어서 짜기 ›', // 꺾쇠(›) 포함 — Figma 3460:1848(프리뷰 6-b 정합)
     title: '부산 여행',
     meta: '6월 10일 – 6월 13일 · 3박 4일 · 2명',
   },
@@ -158,23 +161,50 @@ const PLANNING_PHASE: HomePhase = {
   },
 };
 
+// TRIP-697 여행 중 얼굴 — 통합 히어로(696)의 planning 변형. 계획 중과 kind 는 같은 'planning'
+// 이고 데이터만 다르다: 배지 "여행 중"+"· 1 일차"(N일차), 인사 이름줄 greetName + 타이틀
+// (서브카피 없음), CTA "오늘 일정 보기 ›", showSpots=true(2섹션), collectionsTitle 미지정→기본.
+// greetName·greetTitle 은 Figma 2091:1717 정본. 라이브 resolveHomePhase 는 이름 소스가 없어
+// greetName 을 안 채우므로(맹점③) 이 이름줄은 픽스처(프리뷰) 전용이다.
+const TRAVELING_PHASE: HomePhase = {
+  kind: 'planning',
+  greetName: '태현님,',
+  greetTitle: '부산 여행 1일차예요',
+  showSpots: true,
+  trip: {
+    badge: '여행 중',
+    badgeSub: '· 1 일차', // N일차(공백 O) — 여행 첫날 = 1일차
+    ctaLabel: '오늘 일정 보기 ›', // 꺾쇠(›) 포함 문자열
+    title: '부산 여행',
+    meta: '6월 10일 – 6월 13일 · 3박 4일 · 2명',
+  },
+  bridge: {
+    title: '담은 곳 3곳이 아직 일정에 없어요',
+    subtitle: '남은 자리에 넣어볼까요',
+    ctaLabel: '일정에 추가',
+  },
+};
+
+// TRIP-698 여행 완료 얼굴 — 696 통합 히어로 재사용(배지 "여행 완료"·success·단일)·인사 2줄·
+// 섹션 순서 반전(지난 여행 가로 사진 카드 → 추천). 지난 여행 2장은 날짜 분리(title/dateLabel)+
+// 사진 미소싱(imageUrl:null tint, 01b Q2). 추천은 default COLLECTIONS 3장. recap·share 제거.
 const POST_TRIP_PHASE: HomePhase = {
   kind: 'postTrip',
   greetTitle: '부산 여행 잘 다녀오셨어요?',
-  recap: {
-    title: '부산 여행 회고 보기',
-    meta: '4곳 방문 · 12km · 사진 6장 · 6.10–6.13',
-  },
-  share: {
-    title: '공유 카드로 남기기',
-    subtitle: '사진·동선을 카드 한 장으로',
-    ctaLabel: '공유 카드 만들기',
+  greetSubtitle: '기록을 정리하고 나눠볼까요',
+  trip: {
+    badge: '여행 완료',
+    badgeTone: 'success', // 초록(01b 확정) — badgeSub 없음(단일 배지)
+    ctaLabel: '회고 보기 ›', // 꺾쇠(›) 포함
+    title: '부산 여행',
+    meta: '4곳 방문 · 12km · 사진 6장 · 6.10–6.13', // 12km=거리(INV-3 OK)
   },
   recommendationTitle: '다음엔 여기 어때요',
-  recommendations: [
-    { title: '통영 동피랑', region: '경남 통영', badge: '당일치기' },
+  recommendations: COLLECTIONS,
+  pastTrips: [
+    { title: '경주 여행', dateLabel: '2026.04 · 2박', imageUrl: null },
+    { title: '강릉 여행', dateLabel: '2026.02 · 1박', imageUrl: null },
   ],
-  pastTrips: [{ title: '경주 여행 2026.04 · 2박' }],
 };
 
 /** planning 얼굴 — 일정 미완성 여행(계획 중 배지·일정 이어서 짜기·브릿지행). */
@@ -184,7 +214,14 @@ export const HOME_PLANNING_PROPS: HomeScreenProps = {
   phase: PLANNING_PHASE,
 };
 
-/** postTrip 얼굴 — 종료된 여행(회고 보기·공유·다음 추천). */
+/** planning '여행 중' 얼굴(TRIP-697) — 여행 중 배지·N일차·이름줄 인사·2섹션(컬렉션+스팟). */
+export const HOME_TRAVELING_PROPS: HomeScreenProps = {
+  hero: MAGAZINE_HEROES,
+  sections: READY_SECTIONS,
+  phase: TRAVELING_PHASE,
+};
+
+/** postTrip 얼굴 — 종료된 여행(통합 히어로 회고 보기·지난 여행·다음 추천). */
 export const HOME_POST_TRIP_PROPS: HomeScreenProps = {
   hero: MAGAZINE_HEROES,
   sections: READY_SECTIONS,
