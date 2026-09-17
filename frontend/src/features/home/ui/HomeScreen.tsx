@@ -883,7 +883,15 @@ function DiscoveryBody({
         subtitle="떠나지 않아도, 구경하고 모으는 즐거움"
       />
       <SearchBarBlock onPress={onPressSearch} />
-      <DiscoveryHeroCarousel heroes={hero} />
+      {/* TRIP-699 — 로딩이면 히어로는 캐러셀이 아니라 통짜 스켈레톤(390×470, Figma 2174:2307). */}
+      {sections.kind === 'loading' ? (
+        <View
+          testID="home-hero-skeleton"
+          className="h-[470px] w-full bg-surface-strong"
+        />
+      ) : (
+        <DiscoveryHeroCarousel heroes={hero} />
+      )}
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         <CollectionsSection sections={sections} />
         <SpotsSection sections={sections} onMore={onPressSpotsMore} />
@@ -1141,13 +1149,18 @@ export function HomeScreen({
         {phase?.kind === 'collecting' ? (
           <SavedCountChip label={phase.savedChipLabel} />
         ) : null}
-        <SavedMenuFab
-          open={savedMenuOpen ?? false}
-          onToggle={onToggleSavedMenu}
-          onPressSavedPlaces={onPressSavedPlaces}
-          onPressSavedStays={onPressSavedStays}
-        />
-        <CreateTripFab onPress={onPressCreateTrip} />
+        {/* TRIP-699 — 로딩이면 두 FAB 숨김(Figma 2174:2307). 로딩은 항상 discovery라 phase 없음. */}
+        {sections.kind !== 'loading' ? (
+          <>
+            <SavedMenuFab
+              open={savedMenuOpen ?? false}
+              onToggle={onToggleSavedMenu}
+              onPressSavedPlaces={onPressSavedPlaces}
+              onPressSavedStays={onPressSavedStays}
+            />
+            <CreateTripFab onPress={onPressCreateTrip} />
+          </>
+        ) : null}
       </View>
     </SafeAreaView>
   );

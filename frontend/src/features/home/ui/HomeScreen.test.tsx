@@ -342,8 +342,8 @@ describe('HomeScreen — empty 가시 플레이스홀더 (AC-4 · INV-4)', () =>
   });
 });
 
-describe('HomeScreen — loading 스켈레톤 (AC-5 · INV-4)', () => {
-  it('섹션 2종은 스켈레톤을 그리고 고정 블록은 정상이며 실카드·빈 플레이스홀더는 없다', () => {
+describe('HomeScreen — loading 스켈레톤 (AC-5 · INV-4 · TRIP-699)', () => {
+  it('히어로는 통짜 스켈레톤이고 섹션도 스켈레톤이며 두 FAB는 숨고 고정 블록·실카드 상태는 유지된다', () => {
     render(<HomeScreen {...HOME_LOADING_PROPS} />);
 
     // 긍정 — 스켈레톤은 텍스트가 없어 testID가 유일한 관찰 수단이다. 여행자 일정 섹션은
@@ -354,8 +354,16 @@ describe('HomeScreen — loading 스켈레톤 (AC-5 · INV-4)', () => {
     // 긍정 — 이미 가용한 고정 블록은 로딩 중에도 정상 표시(가용 블록 우선, 부재 단언 앵커 겸함).
     expect(screen.getByText('오늘은 어디를 상상해볼까요')).toBeOnTheScreen();
     expect(screen.getByTestId('home-search-bar')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-create-trip-fab')).toBeOnTheScreen();
+
+    // TRIP-699 — 로딩이면 히어로는 캐러셀이 아니라 통짜 스켈레톤(Figma 2174:2307). magazine-hero·
+    // 캐러셀 페이지는 렌더되지 않는다(694 캐러셀은 ready/discovery 전용).
+    expect(screen.getByTestId('home-hero-skeleton')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
+    expect(screen.queryByTestId('home-hero-page-0')).toBeNull();
+
+    // TRIP-699 — 로딩이면 두 FAB(담은 곳 하트·여행 만들기 +)는 숨는다(Figma 2174:2307).
+    expect(screen.queryByTestId('home-create-trip-fab')).toBeNull();
+    expect(screen.queryByTestId('home-saved-menu-toggle')).toBeNull();
 
     // 부정 짝 — loading엔 실카드도 빈 플레이스홀더도 없고, 담은 곳 배너(TRIP-596 제거)도 없다.
     expect(screen.queryByTestId('home-collection-card-0')).toBeNull();

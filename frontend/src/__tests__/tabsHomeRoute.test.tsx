@@ -252,6 +252,13 @@ describe('🔴 371-AC-3 · 로딩은 스켈레톤(여행 없음으로 뭉개지 
     expect(screen.getByTestId('home-collections-skeleton')).toBeOnTheScreen();
     expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
     expect(screen.queryByTestId('home-trip-hero')).toBeNull();
+
+    // TRIP-699 — 라이브 isPending 경로에서 히어로는 통짜 스켈레톤이고 두 FAB는 숨는다
+    // (Figma 2174:2307). magazine-hero(캐러셀)·FAB 렌더는 로딩으로 새면 안 된다.
+    expect(screen.getByTestId('home-hero-skeleton')).toBeOnTheScreen();
+    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
+    expect(screen.queryByTestId('home-create-trip-fab')).toBeNull();
+    expect(screen.queryByTestId('home-saved-menu-toggle')).toBeNull();
   });
 });
 
