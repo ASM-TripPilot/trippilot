@@ -20,6 +20,7 @@ import {
   HOME_LOADING_PROPS,
   HOME_PLANNING_PROPS,
   HOME_POST_TRIP_PROPS,
+  HOME_TRAVELING_PROPS,
 } from '@/features/home/model/homeFixtures';
 import {
   PREVIEW_PLACES,
@@ -2025,6 +2026,13 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'a01 · 계획 중',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_PLANNING_PROPS} />),
+  },
+  {
+    key: 'home-traveling',
+    band: 'a',
+    label: 'a01 · 여행 중',
+    login: null,
+    render: () => withShellTabBar(<HomeScreen {...HOME_TRAVELING_PROPS} />),
   },
   {
     key: 'home-post-trip',

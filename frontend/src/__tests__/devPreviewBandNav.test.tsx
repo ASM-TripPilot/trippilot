@@ -128,7 +128,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    preview.tsx 에 세 키만 추가하고 이 가드는 안 만진다(추가 전엔 160개라 이 단언이 red).
     //    티켓의 "168→171"·"171" 은 stale(TRIP-701 이 프리뷰 4키를 삭제해 실측 160 → 163 이 정답).
     //    devPreviewBandSort 는 밴드 h·l 만 잠가 band a 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(163);
+    // ⚠️ TRIP-697: a01 '여행 중' 얼굴 프리뷰 키(`home-traveling`, band a) 추가로 163→164.
+    //    test-designer 02a 선반영(카운트 가드만, traps-shell 관례) — implementer 는 preview.tsx 에
+    //    `home-traveling` 키(HOME_TRAVELING_PROPS 렌더) 하나만 추가하고 이 가드는 안 만진다(추가 전엔
+    //    163개라 이 단언이 red). devPreviewBandSort 는 밴드 h·l 만 잠가 band a 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(164);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -159,6 +163,22 @@ describe('🔴 TRIP-695 AC-5 · 담은 곳 메뉴 배지 프리뷰 3키 (band a)
     expect(keys).toContain('home-saved-menu-badge-99'); // 100(→99+)/24
 
     // 형제 band a 앵커 — 기존 홈 키가 딸려 사라지지 않았음을 못박는다.
+    expect(keys).toContain('home-default');
+  });
+});
+
+describe('🔴 TRIP-697 AC-5 · 여행 중 얼굴 프리뷰 키 (band a)', () => {
+  it('키 집합에 home-traveling 이 있고 형제 band a 홈 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — home-traveling 은 implementer 가 preview.tsx 에 추가하기 전엔 없다(band a,
+    // HOME_TRAVELING_PROPS 렌더). 카운트(164)만으론 "아무 키나 1개 추가해도" 통과하므로 이 단언이
+    // '추가된 키가 home-traveling'임을 못박는다(맹점 방지, TRIP-695 3키 describe 미러).
+    expect(keys).toContain('home-traveling');
+
+    // 형제 band a 앵커 — 기존 홈 계획 중 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
+    expect(keys).toContain('home-planning');
     expect(keys).toContain('home-default');
   });
 });

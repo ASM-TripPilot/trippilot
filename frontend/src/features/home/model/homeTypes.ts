@@ -131,6 +131,19 @@ export type HomePhase =
        */
       collectionsTitle?: string;
       /**
+       * TRIP-697 여행 중 인사 이름줄('태현님,'). 인사는 이름↑→타이틀↓ 순서로 2줄이 된다.
+       * 옵셔널 additive — resolveHomePhase 는 라이브 이름 소스가 없어 이 값을 채우지 않는다
+       * (픽스처 HOME_TRAVELING_PROPS 전용, 라이브 여행 중은 이름줄 없이 타이틀만 — 브리프 맹점③).
+       * 동결 planning 리터럴·계획 중 얼굴은 이 필드 없이 컴파일돼야 한다(`dominantTripId?` 선례).
+       */
+      greetName?: string;
+      /**
+       * TRIP-697 여행 중 2섹션 판별(컬렉션 + '지금 뜨는 장소'). resolveHomePhase 가 isTraveling
+       * 일 때 true 로 채우고, PlanningBody 가 true 면 SpotsSection 도 렌더한다(미설정/false → 1섹션).
+       * 옵셔널 additive — 계획 중·동결 리터럴은 이 필드 없이 컴파일된다(showSpots 미설정 = 1섹션).
+       */
+      showSpots?: boolean;
+      /**
        * 지배 여행 tripId — 홈 카드 CTA 가 이 여행의 일정 화면으로 라우팅한다(TRIP-401). 서버
        * 스키마 미참조 로컬 필드. 옵셔널인 이유: 프리뷰 픽스처·테스트가 phase 를 직접 만들 때
        * 이 값을 안 넣어도 컴파일돼야 한다(라우팅 없는 정적 렌더). 라우트는 존재할 때만 CTA 를 건다.

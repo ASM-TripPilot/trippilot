@@ -668,6 +668,34 @@ const POST_TRIP_PHASE: HomePhase = {
   pastTrips: [{ title: '경주 여행 2026.04 · 2박' }],
 };
 
+// TRIP-697 — '여행 중' 얼굴(통합 히어로의 planning 변형). 계획 중(PLANNING_PHASE)과 kind 는
+// 같은 'planning' 이고 아래만 다르다: 배지 "여행 중"+"· 1 일차", 인사 이름줄 greetName("태현님,")
+// + 타이틀("부산 여행 1일차예요")·서브 없음, CTA "오늘 일정 보기 ›", showSpots=true(2섹션),
+// collectionsTitle 없음(→ 기본 "요즘 사람들이 담는 곳"). 픽스처 HOME_TRAVELING_PROPS 를 이 파일에
+// import 하지 않고 로컬 리터럴로 두는 이유: 그 픽스처는 implementer 산출물이라 아직 없고(미존재
+// import 시 파일 로드가 흔들림, ★D1 선례), {...HOME_DEFAULT_PROPS} 위에 phase 만 얹으면 안전한
+// discovery 기저가 깔려 신 단언이 깨끗이 red 난다(PLANNING_PHASE 와 동형). bridge 는 planning
+// 타입 필수라 넣는다(§697 렌더 무관 — TRIP-646 으로 렌더에서 빠짐).
+const TRAVELING_PHASE: HomePhase = {
+  kind: 'planning',
+  greetName: '태현님,', // 여행 중 인사 이름줄(이름↑ → 타이틀↓ 순서) — 라이브엔 소스 없어 픽스처 전용
+  greetTitle: '부산 여행 1일차예요', // Figma 2091:1717 정본(티켓 "…곧 시작돼요"는 폐기, OQ-1)
+  showSpots: true, // 2섹션 판별(컬렉션 + 지금 뜨는 장소)
+  // greetSubtitle 없음(여행 중 인사는 2줄이지만 이름+타이틀, 서브카피 없음) · collectionsTitle 없음(기본)
+  trip: {
+    badge: '여행 중',
+    badgeSub: '· 1 일차', // 두 톤 배지 보조 — N일차(공백 O). 여행 첫날 = 1일차
+    ctaLabel: '오늘 일정 보기 ›', // 꺾쇠(›) 포함 문자열
+    title: '부산 여행',
+    meta: '6월 10일 – 6월 13일 · 3박 4일 · 2명',
+  },
+  bridge: {
+    title: '담은 곳 3곳이 아직 일정에 없어요',
+    subtitle: '남은 자리에 넣어볼까요',
+    ctaLabel: '일정에 추가',
+  },
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TRIP-696 — 계획 중 얼굴을 구 300px 2페이지 HeroCarousel 에서 풀블리드 5페이지 통합 히어로로
 // 재작성. 무엇을 보장하나: (1) 두 톤 배지("계획 중"+"· D-21")·꺾쇠 CTA·타이틀·메타를 한
@@ -898,3 +926,68 @@ describe('🔴 HomeScreen — 검색바 배선 (AC-1a · entry 1 화면측)', ()
 // 배선 여부와 무관한 공허 통과다. 게다가 Pressable host 요소는 props.onPress 를 노출하지 않아
 // (RN 내부 responder) 요소 단위 onPress 대조도 불가. 그래서 role(구조)만이 실판정이고, 목적지·
 // 이중발화 회귀는 라우트 층(tabsHomeItineraryCta)의 **구현 후 앵커**로 둔다(02a ★3·§5 (a)).
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-697 — '여행 중' 얼굴(TRIP-696 통합 히어로의 planning 변형). 무엇을 보장하나:
+// (1) 배지가 두 톤으로 "여행 중"+"· 1 일차", CTA 가 꺾쇠 포함 "오늘 일정 보기 ›"(AC-697-1),
+// (2) 인사가 이름줄 "태현님,"(greetName) + 타이틀 "부산 여행 1일차예요" 2줄이고(AC-697-3),
+// (3) 본문이 2섹션(컬렉션 + 지금 뜨는 장소)이며 "여행자 일정"은 없고(AC-697-4), (4) 어디에도
+// 소요시간 문자열이 없다(AC-697-6·INV-3).
+//
+// ★D2(이름줄 red-first) — 현 PlanningBody 는 GreetingHeader 에 title/subtitle 만 넘겨 name 을
+//   스레딩하지 않는다(HomeScreen L954). greetName 을 줘도 이름줄이 안 떠 "태현님," 단언이 red.
+//   (GreetingHeader 는 이미 name prop 을 받으므로 배선만 이으면 된다 — 스타일 13.5·muted 는 6-b.)
+// ★D3(showSpots 2섹션 red-first) — 현 PlanningBody 는 CollectionsSection 1섹션만 렌더(L962).
+//   showSpots=true 여도 SpotsSection 이 없어 home-spot-card-0 이 부재 → red. **부정 짝**은 위
+//   TRIP-696 '본문 1섹션' describe(PLANNING_PHASE, showSpots 미설정 → 스팟 부재)가 진다 — 둘이
+//   함께 "showSpots 가 실제로 2섹션을 가른다(true=present · 미설정=absent)"를 잠근다(공허 통과 방지).
+// ★D4(꺾쇠·두 톤은 선제 green) — CTA/배지는 데이터(trip)를 그대로 그리는 IntegratedTripHero 라
+//   TRAVELING_PHASE 값으로 바로 green. red 주동은 이름줄·스팟 섹션. 완전일치 매처로 꺾쇠·서식은 잠근다.
+// 시각(이름 13.5 muted·타이틀 20 bold·배지 테두리·도트 정렬)은 jest 원리적 사각 → 6-b.
+
+describe('🔴 HomeScreen — 여행 중 배지·CTA·인사 2줄 (TRIP-697 AC-697-1·3)', () => {
+  it('배지 "여행 중"+"· 1 일차"·CTA "오늘 일정 보기 ›"·인사 "태현님,"+"부산 여행 1일차예요"를 그린다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={TRAVELING_PHASE} />);
+
+    // 두 톤 배지 — 같은 배지 안 "여행 중"(primary)·"· 1 일차"(ink) 두 host <Text> 리프. within
+    // 으로 좁혀 getByText 완전일치(02a §5-c)로 각각 잡히면 "두 톤(분리 Text)" 구조가 잠긴다.
+    const badge = screen.getByTestId('home-trip-hero-badge');
+    expect(within(badge).getByText('여행 중')).toBeOnTheScreen();
+    expect(within(badge).getByText('· 1 일차')).toBeOnTheScreen();
+
+    // 꺾쇠 CTA — toHaveTextContent(문자열)은 요소 전체 텍스트 완전일치(02a §5-c(a))라 꺾쇠(›)를
+    // 뺀 뮤턴트를 red 로 잡는다. 픽스처 ctaLabel 이 이미 꺾쇠 포함이라 이 단언은 선제 green.
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '오늘 일정 보기 ›'
+    );
+
+    // 인사 2줄 — home-greeting 은 이름줄+타이틀 두 리프라 정규식 부분매치(02a §5-c(b)). 현
+    // PlanningBody 는 name 을 안 스레딩(★D2)해 "태현님," 라인이 없어 첫 단언 red. 타이틀은 넘어가 green.
+    const greeting = screen.getByTestId('home-greeting');
+    expect(greeting).toHaveTextContent(/태현님,/);
+    expect(greeting).toHaveTextContent(/부산 여행 1일차예요/);
+  });
+});
+
+describe('🔴 HomeScreen — 여행 중 본문 2섹션 + INV-3 (TRIP-697 AC-697-4·6)', () => {
+  it('컬렉션·"지금 뜨는 장소" 2섹션이 모두 있고 여행자 일정은 없으며 소요시간은 0이다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={TRAVELING_PHASE} />);
+
+    // 긍정 앵커 — 컬렉션 카드 실재(showSpots 미해석 시에도 1섹션은 떠, 공허 통과 차단).
+    expect(screen.getByTestId('home-collection-card-0')).toBeOnTheScreen();
+
+    // red-first(★D3) — showSpots=true 가 SpotsSection 을 켜야 한다. 현 PlanningBody 는 1섹션이라
+    // 스팟 카드·"지금 뜨는 장소" 헤더가 없어 둘 다 throw → red. 부정 짝(계획 중=스팟 부재)은 위
+    // TRIP-696 '본문 1섹션' describe 가 진다.
+    expect(screen.getByTestId('home-spot-card-0')).toBeOnTheScreen();
+    expect(screen.getByText('지금 뜨는 장소')).toBeOnTheScreen();
+
+    // 부정 — 여행자 일정 섹션은 여행 중에도 없다(PlanningBody 가 ItinerariesSection 미렌더 —
+    // 697 구현자가 죽은 ItinerariesSection 정의를 지워도 이 단언은 green 유지, queryByTestId=null).
+    expect(screen.queryByTestId('home-itineraries-more')).toBeNull();
+
+    // INV-3 — 여행 중 얼굴 어디에도 소요시간 문자열 없음(선제 green 회귀 앵커, DURATION_RENDER 0매치
+    // 실검증 완료). '· 1 일차'·'1일차예요'의 '일차'는 duration 키워드 아님(02a §5-c 조합 확인).
+    expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
+  });
+});

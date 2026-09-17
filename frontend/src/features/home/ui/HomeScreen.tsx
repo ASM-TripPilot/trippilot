@@ -42,7 +42,6 @@ import {
 import { formatCountBadge } from '../lib/formatCountBadge';
 import type {
   HomeCollectionCard,
-  HomeItineraryCard,
   HomeMagazineHero,
   HomePhase,
   HomeScreenProps,
@@ -106,9 +105,7 @@ function GreetingHeader({
     <View className="w-full flex-row items-center gap-sm px-lg pb-[10px] pt-lg">
       <View testID="home-greeting" className="flex-1 gap-px">
         {name ? (
-          <Text className="font-noto-bold text-[21px] font-bold text-ink">
-            {name}
-          </Text>
+          <Text className="font-noto text-[13.5px] text-muted">{name}</Text>
         ) : null}
         <Text className="font-noto-bold text-[21px] font-bold text-ink">
           {title}
@@ -397,37 +394,6 @@ function SpotCard({
   );
 }
 
-// ── 여행자 일정 카드(사진 + 본문) ───────────────────────────────────────
-function ItineraryCard({
-  card,
-  index,
-}: {
-  card: HomeItineraryCard;
-  index: number;
-}): ReactElement {
-  return (
-    <View
-      testID={`home-itinerary-card-${index}`}
-      style={softCardShadow}
-      className="w-[170px] overflow-hidden rounded-card border border-hairline bg-canvas"
-    >
-      <View className="h-[114px] w-full overflow-hidden bg-surface-strong">
-        <View className="absolute right-[8px] top-[8px]">
-          <HeartOutlineGlyph size={20} />
-        </View>
-      </View>
-      <View className="gap-[7px] px-md pb-md pt-[10px]">
-        <Text className="font-noto-bold text-body font-bold text-ink">
-          {card.title}
-        </Text>
-        <Text className="font-noto text-[12.5px] text-muted">
-          {card.nights}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
 // ── 섹션1: 요즘 사람들이 담는 곳(가로 스크롤 · 3상태) ───────────────────
 function CollectionsSection({
   sections,
@@ -506,42 +472,6 @@ function SpotsSection({
                 />
               ))}
             </View>
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
-// ── 섹션3: 여행자 일정(가로 스크롤 · 3상태) ─────────────────────────────
-function ItinerariesSection({
-  sections,
-}: {
-  sections: HomeSections;
-}): ReactElement {
-  return (
-    <View className="w-full gap-md">
-      <SectionHeader title="여행자 일정" moreTestID="home-itineraries-more" />
-      {sections.kind === 'ready' ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
-        >
-          {sections.itineraries.map((card, index) => (
-            <ItineraryCard key={card.title} card={card} index={index} />
-          ))}
-        </ScrollView>
-      ) : (
-        <View
-          testID="home-itineraries-skeleton"
-          className="mx-lg flex-row gap-md overflow-hidden"
-        >
-          {[0, 1].map((i) => (
-            <View
-              key={i}
-              className="h-[175px] w-[170px] rounded-card bg-surface-strong"
-            />
           ))}
         </View>
       )}
@@ -932,26 +862,33 @@ function PlanningHeroCarousel({
   );
 }
 
-// ── planning 얼굴(계획 중 · TRIP-696 풀블리드 통합 히어로 재작성) ────────────────────
-// greet 2줄(타이틀 + 서브) · 통합 히어로 5페이지 캐러셀(page0 트립·page1~4 매거진) · 본문 1섹션
-// (지역 컬렉션만). 스팟·여행자 일정 섹션은 계획 중 얼굴에서 렌더하지 않는다 — SpotsSection·
-// ItinerariesSection 정의 자체는 discovery 가 계속 써서 유지하고, 여기 렌더에서만 뺀다(AC-696-3).
+// ── planning 얼굴(계획 중 · 여행 중 · TRIP-696 풀블리드 통합 히어로 재작성) ────────────────
+// 인사 2~3줄(이름? + 타이틀 + 서브?) · 통합 히어로 5페이지 캐러셀(page0 트립·page1~4 매거진) ·
+// 본문은 컬렉션 1섹션(계획 중), phase.showSpots 면 "지금 뜨는 장소"까지 2섹션(TRIP-697 여행 중).
+// SpotsSection 정의는 discovery 도 써서 공유한다. 인사 이름줄(greetName)은 여행 중 픽스처 전용
+// (라이브 resolveHomePhase 는 이름 소스가 없어 미주입 → 이름줄 없이 타이틀만, 맹점③).
 function PlanningBody({
   phase,
   hero,
   sections,
+  onPressSpotsMore,
   onPressTripHeroCta,
   onPressSearch,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
+  onPressSpotsMore?: () => void;
   onPressTripHeroCta?: () => void;
   onPressSearch?: () => void;
 }): ReactElement {
   return (
     <>
-      <GreetingHeader title={phase.greetTitle} subtitle={phase.greetSubtitle} />
+      <GreetingHeader
+        title={phase.greetTitle}
+        subtitle={phase.greetSubtitle}
+        name={phase.greetName}
+      />
       <SearchBarBlock onPress={onPressSearch} />
       <PlanningHeroCarousel
         trip={phase.trip}
@@ -963,6 +900,9 @@ function PlanningBody({
           sections={sections}
           title={phase.collectionsTitle}
         />
+        {phase.showSpots ? (
+          <SpotsSection sections={sections} onMore={onPressSpotsMore} />
+        ) : null}
       </View>
     </>
   );
@@ -1025,6 +965,7 @@ function PhaseBody({
           phase={phase}
           hero={hero}
           sections={sections}
+          onPressSpotsMore={onPressSpotsMore}
           onPressTripHeroCta={onPressTripHeroCta}
           onPressSearch={onPressSearch}
         />

@@ -161,6 +161,30 @@ const PLANNING_PHASE: HomePhase = {
   },
 };
 
+// TRIP-697 여행 중 얼굴 — 통합 히어로(696)의 planning 변형. 계획 중과 kind 는 같은 'planning'
+// 이고 데이터만 다르다: 배지 "여행 중"+"· 1 일차"(N일차), 인사 이름줄 greetName + 타이틀
+// (서브카피 없음), CTA "오늘 일정 보기 ›", showSpots=true(2섹션), collectionsTitle 미지정→기본.
+// greetName·greetTitle 은 Figma 2091:1717 정본. 라이브 resolveHomePhase 는 이름 소스가 없어
+// greetName 을 안 채우므로(맹점③) 이 이름줄은 픽스처(프리뷰) 전용이다.
+const TRAVELING_PHASE: HomePhase = {
+  kind: 'planning',
+  greetName: '태현님,',
+  greetTitle: '부산 여행 1일차예요',
+  showSpots: true,
+  trip: {
+    badge: '여행 중',
+    badgeSub: '· 1 일차', // N일차(공백 O) — 여행 첫날 = 1일차
+    ctaLabel: '오늘 일정 보기 ›', // 꺾쇠(›) 포함 문자열
+    title: '부산 여행',
+    meta: '6월 10일 – 6월 13일 · 3박 4일 · 2명',
+  },
+  bridge: {
+    title: '담은 곳 3곳이 아직 일정에 없어요',
+    subtitle: '남은 자리에 넣어볼까요',
+    ctaLabel: '일정에 추가',
+  },
+};
+
 const POST_TRIP_PHASE: HomePhase = {
   kind: 'postTrip',
   greetTitle: '부산 여행 잘 다녀오셨어요?',
@@ -185,6 +209,13 @@ export const HOME_PLANNING_PROPS: HomeScreenProps = {
   hero: MAGAZINE_HEROES,
   sections: READY_SECTIONS,
   phase: PLANNING_PHASE,
+};
+
+/** planning '여행 중' 얼굴(TRIP-697) — 여행 중 배지·N일차·이름줄 인사·2섹션(컬렉션+스팟). */
+export const HOME_TRAVELING_PROPS: HomeScreenProps = {
+  hero: MAGAZINE_HEROES,
+  sections: READY_SECTIONS,
+  phase: TRAVELING_PHASE,
 };
 
 /** postTrip 얼굴 — 종료된 여행(회고 보기·공유·다음 추천). */
