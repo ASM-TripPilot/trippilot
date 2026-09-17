@@ -164,7 +164,7 @@ describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
     expect(screen.queryByTestId(`${rootId}-photo`)).toBeNull();
   });
 
-  it('🔴 AC-6b · region·distance·priceLabel 지정 → 세 값 모두 렌더', () => {
+  it('🔴 AC-6b · region·priceLabel 지정 → 두 값 렌더 (거리 슬롯은 제거됨)', () => {
     // 이름은 지역어를 안 담는다("숙소 A") — region 단언이 이름과 겹쳐 오탐 나지 않게.
     render(
       <SavedStayCard
@@ -172,7 +172,6 @@ describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
         name="숙소 A"
         layout="row"
         region="광안리"
-        distance="400m"
         priceLabel="165,000원~"
         subtitle={<Text>6/11–6/12 · 1박</Text>}
       />
@@ -181,11 +180,12 @@ describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
     const card = screen.getByTestId(rootId);
     // 카드가 여러 Text 를 이어붙이므로 RegExp(부분 포함)로 잰다(문자열이면 완전일치라 실패).
     expect(card).toHaveTextContent(/광안리/);
-    expect(card).toHaveTextContent(/400m/);
     expect(card).toHaveTextContent(/165,000원~/);
+    // 거리 표시는 제거됨(기준점 미정·BE 미제공, 제품 결정) — region 을 줘도 거리 숫자는 안 뜬다.
+    expect(card).not.toHaveTextContent(/\d+\s*m\b|km/);
   });
 
-  it('🔴 AC-6b · region·distance·priceLabel 미지정 → 미렌더 (degrade)', () => {
+  it('🔴 AC-6b · region·priceLabel 미지정 → 미렌더 (degrade)', () => {
     render(
       <SavedStayCard
         testID={rootId}
@@ -197,7 +197,6 @@ describe('SavedStayCard — g02 row optional 슬롯 (TRIP-741)', () => {
 
     const card = screen.getByTestId(rootId);
     expect(card).not.toHaveTextContent(/광안리/);
-    expect(card).not.toHaveTextContent(/400m|km/);
     expect(card).not.toHaveTextContent(/원~|₩/);
   });
 

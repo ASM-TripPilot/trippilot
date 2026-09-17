@@ -32,8 +32,6 @@ export interface SavedStayCardProps {
   imageUrl?: string;
   /** 동네(표시용 문자열) — **row 전용**. 서브라인 접두, 값 있을 때만 렌더(degrade). */
   region?: string;
-  /** 거리(표시용 문자열 "400m"/"1.2km", 거리만 — INV-3) — **row 전용**. 서브라인 접두, 값 있을 때만. */
-  distance?: string;
   /** 가격(표시용 문자열 "165,000원~") — **row 전용**. 가격 줄, 값 있을 때만 렌더(degrade). */
   priceLabel?: string;
 }
@@ -58,7 +56,6 @@ export function SavedStayCard({
   onPress,
   imageUrl,
   region,
-  distance,
   priceLabel,
 }: SavedStayCardProps): ReactElement {
   if (layout === 'row') {
@@ -92,10 +89,9 @@ export function SavedStayCard({
           <Text className="font-noto-bold text-card-title font-bold text-ink">
             {name}
           </Text>
-          {/* 서브라인 = 동네 · 거리 · 날짜(subtitle). 접두는 값 있을 때만(degrade). */}
+          {/* 서브라인 = 동네 · 날짜(subtitle). 동네는 값 있을 때만(degrade). 거리 표시는 제거됨(기준점 미정·BE 미제공, 제품 결정 2026-09-17). */}
           <Text className="font-noto text-caption text-muted">
             {region !== undefined ? `${region} · ` : null}
-            {distance !== undefined ? `${distance} · ` : null}
             {subtitle}
           </Text>
           {/* 가격 줄 — 값 있을 때만(계약 공백이면 미렌더). */}

@@ -347,7 +347,7 @@ const CARDS_C2: NightlyBaseCardVM[] = [
     region: '부산',
     stayName: '해운대 오션 호텔',
     imageUrl: 'https://example.test/haeundae.jpg',
-    locationLabel: '해운대 · 350m',
+    locationLabel: '해운대',
   },
   // 배정됐지만 값 없음 → 현행 2줄 유지(additive 가 기존 카드를 안 건드린다).
   {
@@ -362,17 +362,19 @@ const CARDS_C2: NightlyBaseCardVM[] = [
     dateLabel: '6/12(금)',
     region: '경주',
     imageUrl: 'https://example.test/gyeongju.jpg',
-    locationLabel: '경주 황남동 · 도심',
+    locationLabel: '경주 황남동',
   },
 ];
 
 describe('썸네일·위치 줄 조건부 렌더 (AC-C2)', () => {
-  it('배정된 밤 + 값 있음 — 위치·거리 줄(locationLabel)이 그 카드에 뜬다', () => {
+  it('배정된 밤 + 값 있음 — 위치 줄(locationLabel)이 그 카드에 뜬다', () => {
     renderScreen({ cards: CARDS_C2 });
 
     const card1 = screen.getByTestId('trip-base-night-card-1');
-    // 부분 포함이라 RegExp — "해운대 · 350m" 시퀀스는 위치줄에만 있다(거리 표기 · INV-3 무관).
-    expect(card1).toHaveTextContent(/해운대 · 350m/);
+    // 부분 포함이라 RegExp — locationLabel(동네)은 위치줄에만 있다. 거리 표시는 제거됨(제품 결정).
+    expect(card1).toHaveTextContent(/해운대/);
+    // 거리 숫자는 안 뜬다(기준점 미정·BE 미제공 — 픽스처 locationLabel 에 거리 미포함).
+    expect(card1).not.toHaveTextContent(/\d+\s*m\b|km/);
     // 배정 밤이라 "숙소 미정" 폴백은 안 뜬다(긍정 짝).
     expect(card1).not.toHaveTextContent(/숙소 미정/);
   });

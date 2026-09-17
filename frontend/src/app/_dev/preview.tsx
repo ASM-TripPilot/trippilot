@@ -642,7 +642,7 @@ const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
       region: '부산',
       stayName: '해운대 오션 호텔',
       imageUrl: DRAFT_PREVIEW_PHOTOS[0],
-      locationLabel: '해운대 · 350m',
+      locationLabel: '해운대',
     },
     {
       nightNumber: 2,
@@ -650,7 +650,7 @@ const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
       region: '부산',
       stayName: '광안리 뷰 호텔',
       imageUrl: DRAFT_PREVIEW_PHOTOS[1],
-      locationLabel: '광안리 · 400m',
+      locationLabel: '광안리',
     },
     {
       nightNumber: 3,
@@ -658,7 +658,7 @@ const TRIP_BASE_SCREEN: TripWizardStep2ScreenProps = {
       region: '경주',
       stayName: '경주 한옥스테이 봄',
       imageUrl: DRAFT_PREVIEW_PHOTOS[2],
-      locationLabel: '경주 황남동 · 도심',
+      locationLabel: '경주 황남동',
     },
   ],
   onPressCard: noop,
@@ -3073,7 +3073,6 @@ export const PREVIEW_STATES: PreviewState[] = [
             updatedAt: '2026-08-01T00:00:00Z',
             imageUrl: DRAFT_PREVIEW_PHOTOS[0] ?? undefined,
             region: '광안리',
-            distance: '400m',
             priceLabel: '165,000원~',
           },
           {
@@ -3087,7 +3086,6 @@ export const PREVIEW_STATES: PreviewState[] = [
             updatedAt: '2026-08-01T00:00:00Z',
             imageUrl: DRAFT_PREVIEW_PHOTOS[1] ?? undefined,
             region: '해운대',
-            distance: '350m',
             priceLabel: '190,000원~',
           },
           {
@@ -3101,7 +3099,6 @@ export const PREVIEW_STATES: PreviewState[] = [
             updatedAt: '2026-08-01T00:00:00Z',
             imageUrl: DRAFT_PREVIEW_PHOTOS[2] ?? undefined,
             region: '감천',
-            distance: '1.2km',
             priceLabel: '92,000원~',
           },
         ]}
