@@ -47,7 +47,13 @@
 # 체크가 하나도 안 달린다. 위 바퀴들처럼 PR 을 쌓으면 대부분이 여기 해당한다. 수동으로 태운다:
 # `gh workflow run backend-ci.yml --ref <branch>`. 이걸 모르면 "체크 없음"을 통과로 읽는다.
 #
-# 갱신: 2026-09-15 · a~g 바퀴 실행분 반영 — 완료 7건(843·844·846·848·857·859계약·재계획어휘)에
+# 갱신: 2026-09-18 · EKS 배포 트랙 합류(파일 말미 §EKS 배포 트랙) — 멘토 PR #579·#597 머지로
+# EKS-INFRA 는 done(코드 기준 — 실 AWS 는 미검증), 실기동 EKS-DEV-LIVE 로 수렴하는 외부선행 셋
+# (RELEASE-MAIN=PR#598 · AWS-CONSOLE-BOOTSTRAP · DOMAIN-ACM)이 지금의 크리티컬 패스다.
+# 준하 몫(TRIP-892·893)과 후속(TRIP-894 관측성·895 Redis·896 smoke 신호분리·PR#599 CI캐시)은
+# 티켓·PR 로 발행돼 있다.
+#
+# 이전 갱신: 2026-09-15 · a~g 바퀴 실행분 반영 — 완료 7건(843·844·846·848·857·859계약·재계획어휘)에
 # 더해, 쪼개서 닫은 것 셋(845·834·836)까지 29건이 done 이다. 남은 우리 몫 12건 중 **넷은 우리가
 # 못 여는 문(849 날씨키 403 · 847 법무·신고 · 850 실물 산출물 대기 · PUSH-LIVE-CHECK 실기기)** 이고,
 # 지금 코드로 착수 가능한 것은 856(역방향 토큰)·858(Apple JWKS)·REPLAN-BOUNDARY 쪽이다.
@@ -1666,3 +1672,108 @@ kind = "계약선행"
 verified = false
 reason = "코드를 받는 경로(#530)가 없으면 앵커가 쓸 값 자체가 안 들어온다. 저장은 되지만 항상 null 이라 후행이 동작을 못 바꾼다."
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EKS 배포 트랙 (2026-09-18 합류 — 멘토 PR #579 머지, TRIP-885)
+
+[[nodes]]
+id = "EKS-INFRA"
+ticket = "TRIP-885"
+title = "DEV·PRD EKS Terraform·Helm·수동 배포 워크플로 — 코드 머지 완료, 실 AWS 미검증"
+status = "done"
+migration = false
+touches = [
+  "infra/",
+  "deploy/eks/",
+  ".github/workflows/aws-bootstrap.yml",
+  ".github/workflows/aws-deploy.yml",
+]
+note = """
+**닫힘(2026-09-18, PR #579 + #597).** 검수 3회 — 로컬 게이트 전량(tftest 4·python 54·helm lint
+dev/prd·actionlint) 초록, 렌더 단언(embedding 게이팅·시크릿 원문 부재) 일치. 비차단 지적 4건은
+후속으로 뺐다: 관측성(TRIP-894) · Redis 유휴(TRIP-895) · CI 캐시(PR #599) · AI 데이터 이미지 고정
+(TRIP-893 runbook 에 명시).
+
+**"done" 은 코드 기준이다** — 실 AWS plan/apply 는 한 번도 안 돌았다(멘토 명시). 실검증은
+EKS-DEV-LIVE 가 잇는다. 역할 분배(TRIP-885 코멘트): Terraform 실행·배포 버튼 = 송,
+ai 시크릿·KB = 준하.
+"""
+
+[[nodes]]
+id = "RELEASE-MAIN"
+ticket = ""
+title = "develop→main 릴리스 — Run workflow 버튼의 전제 (PR #598 열림)"
+status = "todo"
+migration = false
+touches = [".github/workflows/"]
+note = """
+**PR #598 열려 있음(2026-09-18).** main 이 8/1 이후 방치라 aws-bootstrap·aws-deploy 가 기본
+브랜치에 없다 — **Run workflow 버튼 자체가 안 뜬다.** 622커밋 승격, 충돌 0 확인(merge-tree).
+
+**squash 금지 — merge commit 전용.** squash 면 develop 이력과 영구 분기(#58 선례).
+이 PR 에는 CI 체크가 안 붙는다(게이트 트리거가 develop 한정) — main 게이트 추가는 PR #599 에.
+머지는 사용자 몫.
+"""
+
+[[nodes]]
+id = "AWS-CONSOLE-BOOTSTRAP"
+ticket = ""
+title = "AWS 콘솔 초기 설정 — OIDC provider + bootstrap Role 2개 (사람·계정 관리자)"
+status = "external"
+migration = false
+touches = []
+note = """
+`docs/guides/aws-bootstrap.md` 의 「AWS 계정의 최초 인증 준비」. 소마 크레딧 계정 관리자
+콘솔에서만 가능 — 워크플로가 자기 최초 신뢰를 만들 수 없다. 예시 JSON 2종에 계정ID·리전 치환.
+약 1시간. 이후: GitHub Environments(dev/prd) 변수 → bootstrap 워크플로 실행 → AWS_ROLE_ARN 등록.
+"""
+
+[[nodes]]
+id = "DOMAIN-ACM"
+ticket = ""
+title = "도메인 결제 + ACM 인증서 — 앱 배포의 유일한 직렬 블로커 (사람·결제)"
+status = "external"
+migration = false
+touches = []
+note = """
+배포 워크플로가 인증서 ISSUED 를 검사한다 — 없으면 `deploy_application` 스텝이 안 나간다.
+인프라만(apply + deploy_application=false)은 도메인 없이 가능하니 병행하면 직렬 대기가 사라진다.
+결정 사항: trippilot.co.kr 는 가비아 등록(Route 53 은 .kr 미취급) + DNS 만 R53 위임.
+크레딧은 도메인 등록비에 적용 불가(약관 §1 명시).
+"""
+
+[[nodes]]
+id = "EKS-DEV-LIVE"
+ticket = ""
+title = "DEV 실기동 — bootstrap → plan → apply → 시크릿 → 앱 배포 → 스모크"
+status = "todo"
+migration = false
+touches = []
+note = """
+첫 실 AWS 검증이다 — 멘토도 티켓에 「실환경 배포는 수행하지 않았다」고 명시했으니 여기서
+터지는 것이 정상이고, 터지면 TRIP-885 에 회신한다. 순서는 `docs/guides/aws-eks-deployment.md`:
+plan → apply+deploy_application=false → Secrets Manager 키 입력(backend=송 · ai=준하 TRIP-892)
+→ apply+deploy_application=true(embedding_enabled=false 시작) → NLB DNS 를 CNAME 연결 →
+`LIVE_AI=1 LiveAiRoundTripIT` 를 DEV 주소로. 이후 KB 사이클(TRIP-893)은 준하.
+"""
+
+[[edges]]
+from = "RELEASE-MAIN"
+to = "EKS-DEV-LIVE"
+kind = "외부선행"
+verified = false
+reason = "가이드 원문 「저장소 기본 브랜치에 workflow 파일이 있어야 GitHub 의 Run workflow 버튼이 나타난다」— main 에 없으면 bootstrap 조차 실행 불가."
+
+[[edges]]
+from = "AWS-CONSOLE-BOOTSTRAP"
+to = "EKS-DEV-LIVE"
+kind = "외부선행"
+verified = false
+reason = "가이드 원문 「AWS 권한이 전혀 없는 GitHub 실행이 스스로 최초 신뢰 관계를 만들 수는 없다」— bootstrap Role 없이는 OIDC 인증 자체가 성립 안 함."
+
+[[edges]]
+from = "DOMAIN-ACM"
+to = "EKS-DEV-LIVE"
+kind = "외부선행"
+verified = false
+reason = "워크플로가 ACM ISSUED 를 검사(aws-deploy.yml Check HTTPS certificate) — 앱 배포 한정 선행. 인프라 apply 는 이 간선을 안 탄다."
