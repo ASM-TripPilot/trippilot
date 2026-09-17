@@ -16,6 +16,7 @@
  */
 import { useState, type ReactElement } from 'react';
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -110,10 +111,11 @@ function GreetingHeader({
       <Pressable
         testID="home-dashboard-bell"
         onPress={undefined}
-        className="h-10 w-10 items-center justify-center"
+        style={softCardShadow}
+        className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
       >
         <BellGlyph size={22} />
-        <View className="absolute right-[8px] top-[8px] h-[7px] w-[7px] rounded-pill bg-primary" />
+        <View className="absolute right-[8px] top-[8px] h-[8px] w-[8px] rounded-pill bg-primary" />
       </Pressable>
     </View>
   );
@@ -142,21 +144,36 @@ function SearchBarBlock({ onPress }: { onPress?: () => void }): ReactElement {
 }
 
 // ── magazineHero(영감 카드) ─────────────────────────────────────────────
-function MagazineHero({ hero }: { hero: HomeMagazineHero }): ReactElement {
+// TRIP-694: 히어로 하트 제거(AC-1) · 생성 사진 Image 배선(AC-5) · discovery 캐러셀 페이지로
+// 재사용하기 위한 옵셔널 testID(기본 home-magazine-hero, page1~4 는 다른 값)·showDots(기본
+// true — planning HeroCarousel 은 내부 3-dot 유지, discovery 페이지는 false 로 넘겨 캐러셀이
+// 도트 1벌을 오버레이로 소유). 사진은 uri 유무와 무관하게 Image 를 무조건 렌더한다 — jest 에선
+// uri 가 null(사진 없는 카드)이지만 Image 엘리먼트 자체는 그려져 AC-5 렌더 계약을 만족한다.
+function MagazineHero({
+  hero,
+  testID = 'home-magazine-hero',
+  showDots = true,
+}: {
+  hero: HomeMagazineHero;
+  testID?: string;
+  showDots?: boolean;
+}): ReactElement {
   return (
-    <View
-      testID="home-magazine-hero"
-      className="h-[470px] w-full overflow-hidden"
-    >
-      {/* 사진 자리 — 실 사진 소스 없음(가정 C) → 토큰색 플레이스홀더 + 스크림 */}
+    <View testID={testID} className="h-[470px] w-full overflow-hidden">
+      {/* 사진 자리 — 토큰색 tint 위에 생성 사진(스크림 아래), uri 없으면 tint 노출 */}
       <View className="absolute inset-0 bg-surface-strong" />
+      <Image
+        source={hero.imageUrl ? { uri: hero.imageUrl } : undefined}
+        resizeMode="cover"
+        style={ABSOLUTE_FILL}
+      />
       <LinearGradient
         colors={HERO_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
         style={ABSOLUTE_FILL}
       />
       <View className="flex-1 justify-between px-lg pb-xl pt-xl">
-        {/* 상단: eyebrow pill + 하트 */}
+        {/* 상단: eyebrow pill(하트는 TRIP-694로 제거) */}
         <View className="w-full flex-row items-start justify-between">
           <View className="flex-row items-center gap-[6px] self-start rounded-pill bg-canvas px-md py-[5px]">
             <SparkleGlyph size={13} />
@@ -164,9 +181,8 @@ function MagazineHero({ hero }: { hero: HomeMagazineHero }): ReactElement {
               {hero.eyebrow}
             </Text>
           </View>
-          <HeartOutlineGlyph size={30} />
         </View>
-        {/* 하단: 타이틀 + 부제 + 메타칩 + 3-dot */}
+        {/* 하단: 타이틀 + 부제 + 메타칩 + (planning 전용) 3-dot */}
         <View className="w-full gap-[10px]">
           <View className="gap-[6px]">
             <Text className="font-noto-bold text-[28px] font-bold text-on-primary">
@@ -189,12 +205,62 @@ function MagazineHero({ hero }: { hero: HomeMagazineHero }): ReactElement {
               </View>
             ))}
           </View>
-          <View className="flex-row items-center gap-[5px] pt-[4px]">
-            <View className="h-[6px] w-[18px] rounded-pill bg-on-primary" />
-            <View className="h-[6px] w-[6px] rounded-pill bg-on-primary opacity-50" />
-            <View className="h-[6px] w-[6px] rounded-pill bg-on-primary opacity-50" />
-          </View>
+          {showDots ? (
+            <View className="flex-row items-center gap-[5px] pt-[4px]">
+              <View className="h-[6px] w-[18px] rounded-pill bg-on-primary" />
+              <View className="h-[6px] w-[6px] rounded-pill bg-on-primary opacity-50" />
+              <View className="h-[6px] w-[6px] rounded-pill bg-on-primary opacity-50" />
+            </View>
+          ) : null}
         </View>
+      </View>
+    </View>
+  );
+}
+
+// ── discovery 히어로 캐러셀(TRIP-694 · 5페이지 페이징) ─────────────────────
+// discovery 얼굴의 단일 MagazineHero 를 5장 페이징 캐러셀로 바꾼다. 페이지 래퍼는 N당 정확히
+// 1노드(home-hero-page-N), page0 안의 MagazineHero 만 home-magazine-hero(단일성 유지), 도트는
+// 캐러셀이 고정 오버레이 1벌(home-hero-dot-N)로 소유한다. 실 스와이프·페이지 전환·활성 도트
+// 하이라이트는 jest 원리적 사각(6-b 실기) — 구조(페이지 5·도트 5)만 잠긴다.
+function DiscoveryHeroCarousel({
+  heroes,
+}: {
+  heroes: readonly HomeMagazineHero[];
+}): ReactElement {
+  const { width } = useWindowDimensions();
+  const [page, setPage] = useState(0);
+  return (
+    <View className="w-full">
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) =>
+          setPage(Math.round(e.nativeEvent.contentOffset.x / width))
+        }
+      >
+        {heroes.map((hero, i) => (
+          <View key={i} testID={`home-hero-page-${i}`} style={{ width }}>
+            <MagazineHero
+              hero={hero}
+              testID={i === 0 ? 'home-magazine-hero' : `home-hero-slide-${i}`}
+              showDots={false}
+            />
+          </View>
+        ))}
+      </ScrollView>
+      {/* 도트 오버레이 — 사진 위라 흰색(활성 full·비활성 50%), 6×6 균등 원. 좌하단. */}
+      <View className="absolute bottom-[24px] left-lg flex-row items-center gap-[5px]">
+        {heroes.map((_, i) => (
+          <View
+            key={i}
+            testID={`home-hero-dot-${i}`}
+            className={`h-[6px] w-[6px] rounded-full bg-on-primary ${
+              page === i ? '' : 'opacity-50'
+            }`}
+          />
+        ))}
       </View>
     </View>
   );
@@ -266,6 +332,11 @@ function CollectionCard({
       className="h-[300px] w-[230px] overflow-hidden rounded-[18px]"
     >
       <View className="absolute inset-0 bg-surface-strong" />
+      <Image
+        source={card.imageUrl ? { uri: card.imageUrl } : undefined}
+        resizeMode="cover"
+        style={ABSOLUTE_FILL}
+      />
       <LinearGradient
         colors={DEST_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
@@ -314,6 +385,11 @@ function SpotCard({
       className="h-[166px] flex-1 overflow-hidden rounded-card"
     >
       <View className="absolute inset-0 bg-surface-strong" />
+      <Image
+        source={card.imageUrl ? { uri: card.imageUrl } : undefined}
+        resizeMode="cover"
+        style={ABSOLUTE_FILL}
+      />
       <LinearGradient
         colors={SPOT_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
@@ -795,7 +871,7 @@ function DiscoveryBody({
   onPressSpotsMore,
   onPressSearch,
 }: {
-  hero: HomeMagazineHero;
+  hero: readonly HomeMagazineHero[];
   sections: HomeSections;
   onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
@@ -807,11 +883,10 @@ function DiscoveryBody({
         subtitle="떠나지 않아도, 구경하고 모으는 즐거움"
       />
       <SearchBarBlock onPress={onPressSearch} />
-      <MagazineHero hero={hero} />
+      <DiscoveryHeroCarousel heroes={hero} />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         <CollectionsSection sections={sections} />
         <SpotsSection sections={sections} onMore={onPressSpotsMore} />
-        <ItinerariesSection sections={sections} />
       </View>
     </>
   );
@@ -825,7 +900,7 @@ function CollectingBody({
   phase,
   onPressSearch,
 }: {
-  hero: HomeMagazineHero;
+  hero: readonly HomeMagazineHero[];
   sections: HomeSections;
   phase: Extract<HomePhase, { kind: 'collecting' }>;
   onPressSearch?: () => void;
@@ -834,7 +909,7 @@ function CollectingBody({
     <>
       <GreetingHeader title={phase.greetTitle} subtitle={phase.greetSubtitle} />
       <SearchBarBlock onPress={onPressSearch} />
-      <MagazineHero hero={hero} />
+      <MagazineHero hero={hero[0]} />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         <CollectionStrip
           title={phase.sectionTitle}
@@ -906,7 +981,7 @@ function PlanningBody({
   onPressSearch,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
-  hero: HomeMagazineHero;
+  hero: readonly HomeMagazineHero[];
   sections: HomeSections;
   onPressTripHeroCta?: () => void;
   onPressSpotsMore?: () => void;
@@ -918,7 +993,7 @@ function PlanningBody({
       <SearchBarBlock onPress={onPressSearch} />
       <HeroCarousel
         trip={phase.trip}
-        hero={hero}
+        hero={hero[0]}
         onPressTripCta={onPressTripHeroCta}
       />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">

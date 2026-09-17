@@ -1,3 +1,4 @@
+import { Image, StyleSheet, View } from 'react-native';
 import {
   fireEvent,
   render,
@@ -12,15 +13,16 @@ import {
   HOME_NO_TRIP_PROPS,
 } from '../model/homeFixtures';
 import type { HomePhase } from '../model/homeTypes';
+import { HeartOutlineGlyph } from './HomeGlyphs';
 import { HomeScreen } from './HomeScreen';
 
 /**
  * AC-1~AC-8 — 홈 default 재정합(구 "여행 상태 대시보드" → 신 "발견·영감 피드",
  * 라이브 Figma 2091:1357). props(hero·sections)만 받아 그리는 순수 프레젠테이션 화면.
  *
- * 무엇을 보장하나: 인사·검색바·영감 hero·섹션 3종(요즘 담는 곳/뜨는 장소/여행자 일정)·
- * 온램프(하트 FAB)가 한 화면에 존재하고(AC-1 · discovery 담은 곳 배너는 TRIP-596으로 제거),
- * 섹션 카드가 픽스처 실측값대로 렌더되며
+ * 무엇을 보장하나: 인사·검색바·영감 hero·발견 섹션(요즘 담는 곳/뜨는 장소 — 여행자 일정은
+ * TRIP-694로 discovery에서 제거)·온램프(하트 FAB)가 한 화면에 존재하고(AC-1 · discovery
+ * 담은 곳 배너는 TRIP-596으로 제거), 섹션 카드가 픽스처 실측값대로 렌더되며
  * (AC-2), 상태별(ready/empty/loading)로 가용 블록은 살고 빈 섹션은 가시 플레이스홀더로
  * 드러나며(AC-4·5·INV-4), 소요시간 문자열은 어디에도 없음(AC-6·INV-3)을 잠근다.
  *
@@ -56,12 +58,6 @@ const EXPECTED_SPOTS = [
   { title: '황령산 전망대', tag: '#야경명소' },
 ] as const;
 
-const EXPECTED_ITINERARIES = [
-  { title: '부산 미식 3일 코스', nights: '2박 3일' },
-  { title: '해운대 오션뷰 힐링', nights: '2박 3일' },
-  { title: '로컬 시장 & 카페', nights: '1박 2일' },
-] as const;
-
 // TRIP-370 — 배선 CTA(목적지 확정, 버튼 유지) vs 비배선 컨트롤(목적지 없음, 버튼 표식 제거).
 // TRIP-453(entry 1) — 검색바가 목적지(/explore/search)를 얻어 배선 CTA 로 승격 → WIRED 로 이동
 // (UNWIRED 에서 제거). 세 목록을 함께 손대야 한다(★2): WIRED(+search)·UNWIRED(−search)·
@@ -75,9 +71,10 @@ const WIRED_CTA_TEST_IDS = [
   'home-search-bar',
 ] as const;
 
+// TRIP-694 — 여행자 일정 섹션이 discovery에서 제거되며 `home-itineraries-more`도 사라진다
+// (비배선 컨트롤 목록에서 함께 빠진다). 남는 비배선 컨트롤은 컬렉션 더보기·벨 2종.
 const UNWIRED_CONTROL_TEST_IDS = [
   'home-collections-more',
-  'home-itineraries-more',
   'home-dashboard-bell',
 ] as const;
 
@@ -108,16 +105,15 @@ describe('HomeScreen — 정상 렌더 존재 (AC-1)', () => {
     expect(within(hero).getByText('당일치기로 충분')).toBeOnTheScreen();
     expect(within(hero).getByText('야경 명소')).toBeOnTheScreen();
 
-    // 섹션 3종 헤더 + 더보기 3(각 헤더 1개씩).
+    // 발견 섹션 2종 헤더 + 더보기 2(각 헤더 1개씩) — 여행자 일정은 TRIP-694로 discovery에서
+    // 제거(전용 describe가 부재를 잠근다).
     expect(screen.getByText('요즘 사람들이 담는 곳')).toBeOnTheScreen();
     expect(screen.getByText('지금 뜨는 장소')).toBeOnTheScreen();
-    expect(screen.getByText('여행자 일정')).toBeOnTheScreen();
-    expect(screen.getAllByText('더 보기')).toHaveLength(3);
+    expect(screen.getAllByText('더 보기')).toHaveLength(2);
 
     // 섹션당 카드 ≥1.
     expect(screen.getByTestId('home-collection-card-0')).toBeOnTheScreen();
     expect(screen.getByTestId('home-spot-card-0')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-itinerary-card-0')).toBeOnTheScreen();
 
     // 온램프 — FAB(담은 곳 배너는 TRIP-596으로 제거, 하트 FAB이 대체). 배너 부재 자체는
     // 아래 전용 describe(★V-1 앵커 짝)가 잠근다.
@@ -126,6 +122,122 @@ describe('HomeScreen — 정상 렌더 존재 (AC-1)', () => {
     // 텍스트를 지우면서 접근성 이름까지 같이 사라지는 것이 이 칸의 유일한 실패 경로다.
     expect(within(fab).queryByText('여행 만들기')).toBeNull();
     expect(fab).toHaveAccessibleName('여행 만들기');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-694 — a01 default 픽셀 정합(라이브 Figma 2091:1357). 8개 델타 중 jest로 잠글 수
+// 있는 축만 아래 5 describe 로 잠근다. 픽셀 충실도(그림자 농도·원 크기·배지 px)와 글리프 색
+// (AC-4 핀 primary — SVG stroke 는 RNTL 트리에서 질의 불가, cardFingerprint fill 미관측
+// 트랩)은 6-b 육안 전용이라 여기서 테스트하지 않는다(공허 통과 방지). 드리프트 A(서브카피
+// 12.5px·칩 흰22%·배지 10.5px)는 01b 확정 무변경이라 잠글 것이 없다.
+
+describe('🔴 HomeScreen — 히어로 하트 제거 (TRIP-694 AC-1)', () => {
+  it('영감 hero 서브트리에 하트 글리프가 0개다(hero 실렌더 앵커 동반)', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    // 긍정 앵커 — hero(캐러셀 page0)가 실제로 그려졌음을 못박는다(히어로 통삭 시 공허 통과
+    // 차단). page0 은 기존 MAGAZINE_HERO 콘텐츠라 이 문구가 within 단일 매치다.
+    const hero = screen.getByTestId('home-magazine-hero');
+    expect(within(hero).getByText('오늘의 여행 영감')).toBeOnTheScreen();
+    expect(within(hero).getByText('부산 · 광안리의 밤')).toBeOnTheScreen();
+
+    // 부정(red-first) — 하트 글리프 컴포넌트 타입 개수 0. UNSAFE_queryAllByType 은 미매치 시
+    // []를 돌려주고(throw 안 함) 엘리먼트 type 참조로 센다(RNTL 13.3.3 실검증, 02a §2).
+    // 현재 MagazineHero 엔 HeartOutlineGlyph 1개(HomeScreen L167)라 length 1 → red.
+    expect(within(hero).UNSAFE_queryAllByType(HeartOutlineGlyph)).toHaveLength(
+      0
+    );
+  });
+});
+
+describe('🔴 HomeScreen — 실 5페이지 캐러셀 + 5도트 (TRIP-694 AC-2)', () => {
+  it('페이지 컨테이너 5개(home-hero-page-0..4)와 도트 5개가 있고 6번째는 없다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    // 앵커 — page0 은 단일 home-magazine-hero 를 유지한다(★F-2 testID 충돌 회피).
+    expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
+
+    // 5페이지 — 거짓 인디 방지: 도트가 아니라 **페이지 컨테이너 존재**로 잠근다(도트 5개는
+    // 정적 View 로 위조 가능). home-hero-page-N 은 N당 정확히 1노드여야 한다(★F-3).
+    [0, 1, 2, 3, 4].forEach((i) => {
+      expect(screen.getByTestId(`home-hero-page-${i}`)).toBeOnTheScreen();
+    });
+    expect(screen.queryByTestId('home-hero-page-5')).toBeNull();
+
+    // 5도트(정확히 5).
+    [0, 1, 2, 3, 4].forEach((i) => {
+      expect(screen.getByTestId(`home-hero-dot-${i}`)).toBeOnTheScreen();
+    });
+    expect(screen.queryByTestId('home-hero-dot-5')).toBeNull();
+
+    // 6-b: 실 좌우 스와이프·페이지 전환·활성 도트 하이라이트는 jest 원리적 사각.
+  });
+});
+
+describe('🔴 HomeScreen — 벨 흰 원형 버튼 + 그림자 (TRIP-694 AC-3)', () => {
+  it('home-dashboard-bell 이 bg-canvas+rounded-full+그림자이고 빨간점 배지를 유지한다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    const bell = screen.getByTestId('home-dashboard-bell');
+
+    // red-first — className 은 jest 렌더 트리에 평문 문자열 prop 으로 남는다(02a §2 실측).
+    // 현재 벨 className 엔 bg-canvas·rounded-full 이 없다.
+    expect(bell.props.className).toContain('bg-canvas');
+    expect(bell.props.className).toContain('rounded-full');
+
+    // red-first — softCardShadow(shadowColor 존재). flatten 은 객체/배열/undefined 를
+    // 정규화한다(undefined 를 넣지 않게 `?? {}` 가드, 현재 style 미지정 → shadowColor undefined).
+    const bellStyle = StyleSheet.flatten(bell.props.style ?? {}) as {
+      shadowColor?: unknown;
+    };
+    expect(bellStyle.shadowColor).toBeDefined();
+
+    // 앵커 — 빨간점 배지(bg-primary View)가 벨 서브트리에 남아 있다(벨 리팩터에 배지가
+    // 딸려 사라지지 않게). within(bell)의 UNSAFE_queryAllByType(View)는 자식 View 만 돌려준다
+    // (Pressable 호스트 자신은 미포함, 02a §2 실측). px(7→8)·원 크기·그림자 농도는 6-b.
+    const badge = within(bell)
+      .UNSAFE_queryAllByType(View)
+      .find((node) => String(node.props.className).includes('bg-primary'));
+    expect(badge).toBeDefined();
+  });
+});
+
+describe('🔴 HomeScreen — 생성 사진 배선 (TRIP-694 AC-5)', () => {
+  it('히어로·컬렉션·스팟 카드가 Image 로 렌더된다(플레이스홀더 View 대체)', () => {
+    // 테스트는 에셋을 require 하지 않는다 — Image 엘리먼트 렌더 자체만 잠근다(source uri 가
+    // jest 에서 null 이어도 Image 노드는 그려짐, h11 선례). 에셋 부재라도 red 는 "Image 미렌더"
+    // 라는 정상 red 다(★F-6). 크래시 안전망은 기존 devPreviewHome.test.tsx 가 겸한다.
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    // red-first — 현재 히어로/카드는 bg-surface-strong View 만 있어 Image 0개.
+    const hero = screen.getByTestId('home-magazine-hero');
+    expect(within(hero).UNSAFE_queryAllByType(Image).length).toBeGreaterThan(0);
+
+    const collection = screen.getByTestId('home-collection-card-0');
+    expect(
+      within(collection).UNSAFE_queryAllByType(Image).length
+    ).toBeGreaterThan(0);
+
+    const spot = screen.getByTestId('home-spot-card-0');
+    expect(within(spot).UNSAFE_queryAllByType(Image).length).toBeGreaterThan(0);
+  });
+});
+
+describe('🔴 HomeScreen — 여행자 일정 섹션 default 제거 (TRIP-694 AC-6)', () => {
+  it('discovery 에 여행자 일정 섹션·카드가 없다(컬렉션·스팟 발견 콘텐츠는 유지)', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
+
+    // 긍정 앵커 — 발견 콘텐츠가 실제로 그려졌음을 못박는다(화면 통삭 시 공허 통과 차단).
+    expect(screen.getByTestId('home-collection-card-0')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-spot-card-0')).toBeOnTheScreen();
+
+    // 부정(red-first) — 여행자 일정 섹션 흔적 3종이 discovery 에서 사라진다. 현재 DiscoveryBody
+    // 가 ItinerariesSection 을 렌더(HomeScreen L814)해 셋 다 present → red. ItinerariesSection
+    // 컴포넌트 정의·타입·planning/collecting 얼굴은 유지되므로 homeStructure 소스 스캔은 green.
+    expect(screen.queryByText('여행자 일정')).toBeNull();
+    expect(screen.queryByTestId('home-itineraries-more')).toBeNull();
+    expect(screen.queryByTestId('home-itinerary-card-0')).toBeNull();
   });
 });
 
@@ -178,23 +290,6 @@ describe('HomeScreen — 스팟 카드 데이터 (AC-2)', () => {
   });
 });
 
-describe('HomeScreen — 여행자 일정 카드 데이터 (AC-2)', () => {
-  it('여행자 일정 카드 3장이 각 픽스처값(제목·N박 M일)으로 렌더되고 4번째는 없다', () => {
-    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
-
-    EXPECTED_ITINERARIES.forEach((t, i) => {
-      const card = screen.getByTestId(`home-itinerary-card-${i}`);
-      expect(within(card).getByText(t.title)).toBeOnTheScreen();
-      // `2박 3일`은 일정 0·1 두 카드에 등장하지만 within(card)로 스코프해 각 카드 안에선
-      // 단일 매치다.
-      expect(within(card).getByText(t.nights)).toBeOnTheScreen();
-    });
-
-    // 정확히 3장 — 4번째(index 3)는 없다.
-    expect(screen.queryByTestId('home-itinerary-card-3')).toBeNull();
-  });
-});
-
 describe('🔴 HomeScreen — no-trip 온램프는 하트 FAB (TRIP-596 AC-1/AC-6 · US-SHELL-05)', () => {
   it('no-trip에서 담은 곳 배너는 없고 하트 FAB 토글이 온램프를 잇는다(피드 섹션은 유지)', () => {
     // no-trip = discovery(가정 B: 신 피드는 여행 유무와 무관)라 배너가 같이 사라진다. 담은 곳
@@ -226,7 +321,8 @@ describe('HomeScreen — empty 가시 플레이스홀더 (AC-4 · INV-4)', () =>
     expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
     expect(screen.getByTestId('home-create-trip-fab')).toBeOnTheScreen();
 
-    // 긍정 — 빈 섹션 3종이 가시 플레이스홀더로 드러난다(침묵 은닉 금지).
+    // 긍정 — 빈 섹션 2종이 가시 플레이스홀더로 드러난다(침묵 은닉 금지). 여행자 일정 섹션은
+    // TRIP-694로 discovery에서 제거돼 empty 플레이스홀더도 함께 사라진다(★F-1).
     // W1(code-critic) 강화: testID 존재만으로는 빈 View도 통과 → INV-4 미잠금.
     // 안내 문구를 요구해 "침묵 은닉"을 red로 잡는다. toHaveTextContent는 이 리포에서
     // 문자열 인자를 정확 일치로 처리하므로(서브트리 두 텍스트 노드가 연결됨), 이 파일이
@@ -235,9 +331,6 @@ describe('HomeScreen — empty 가시 플레이스홀더 (AC-4 · INV-4)', () =>
       /아직 보여드릴 게 없어요/
     );
     expect(screen.getByTestId('home-spots-empty')).toHaveTextContent(
-      /아직 보여드릴 게 없어요/
-    );
-    expect(screen.getByTestId('home-itineraries-empty')).toHaveTextContent(
       /아직 보여드릴 게 없어요/
     );
 
@@ -250,13 +343,13 @@ describe('HomeScreen — empty 가시 플레이스홀더 (AC-4 · INV-4)', () =>
 });
 
 describe('HomeScreen — loading 스켈레톤 (AC-5 · INV-4)', () => {
-  it('섹션 3종은 스켈레톤을 그리고 고정 블록은 정상이며 실카드·빈 플레이스홀더는 없다', () => {
+  it('섹션 2종은 스켈레톤을 그리고 고정 블록은 정상이며 실카드·빈 플레이스홀더는 없다', () => {
     render(<HomeScreen {...HOME_LOADING_PROPS} />);
 
-    // 긍정 — 스켈레톤은 텍스트가 없어 testID가 유일한 관찰 수단이다.
+    // 긍정 — 스켈레톤은 텍스트가 없어 testID가 유일한 관찰 수단이다. 여행자 일정 섹션은
+    // TRIP-694로 discovery에서 제거돼 스켈레톤도 함께 사라진다(★F-1).
     expect(screen.getByTestId('home-collections-skeleton')).toBeOnTheScreen();
     expect(screen.getByTestId('home-spots-skeleton')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-itineraries-skeleton')).toBeOnTheScreen();
 
     // 긍정 — 이미 가용한 고정 블록은 로딩 중에도 정상 표시(가용 블록 우선, 부재 단언 앵커 겸함).
     expect(screen.getByText('오늘은 어디를 상상해볼까요')).toBeOnTheScreen();
@@ -415,7 +508,7 @@ describe('HomeScreen — 비배선 컨트롤은 콜백 0·크래시 0 (370-AC-5 
     fireEvent.press(screen.getByTestId('home-dashboard-bell'));
     fireEvent.press(screen.getByTestId('home-search-bar'));
     fireEvent.press(screen.getByTestId('home-collections-more'));
-    fireEvent.press(screen.getByTestId('home-itineraries-more'));
+    // home-itineraries-more 는 TRIP-694로 discovery에서 제거돼 여기서 누를 대상이 아니다(★F-1).
     fireEvent.press(screen.getByTestId('home-collection-card-0'));
 
     expect(onPressCreateTrip).not.toHaveBeenCalled();

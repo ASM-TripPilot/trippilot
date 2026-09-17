@@ -82,7 +82,7 @@ export function SparkleGlyph({ size = 13, testID }: GlyphProps) {
   );
 }
 
-// destCard 지역 라벨('부산 사하구') 앞 위치 핀 — 사진 위라 흰색.
+// destCard 지역 라벨('부산 사하구') 앞 위치 핀 — TRIP-694로 흰색→primary(Figma 정합, AC-4).
 export function LocationPinGlyph({ size = 12, testID }: GlyphProps) {
   return (
     <Svg
@@ -94,11 +94,11 @@ export function LocationPinGlyph({ size = 12, testID }: GlyphProps) {
     >
       <Path
         d="M6 1.2C4 1.2 2.5 2.7 2.5 4.7C2.5 7.2 6 10.8 6 10.8C6 10.8 9.5 7.2 9.5 4.7C9.5 2.7 8 1.2 6 1.2Z"
-        stroke={WHITE}
+        stroke={PRIMARY}
         strokeWidth={1.2}
         strokeLinejoin="round"
       />
-      <Circle cx={6} cy={4.7} r={1.3} stroke={WHITE} strokeWidth={1.2} />
+      <Circle cx={6} cy={4.7} r={1.3} stroke={PRIMARY} strokeWidth={1.2} />
     </Svg>
   );
 }

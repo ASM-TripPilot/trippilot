@@ -13,6 +13,8 @@ export interface HomeCollectionCard {
   badge: string;
   /** '7월 30일 담음' — collecting 변형의 저장일 메타(옵셔널, discovery엔 없음, TRIP-317). */
   savedAtLabel?: string;
+  /** 카드 배경 사진 URI(TRIP-694). `resolveAssetSource(...).uri`로 푼 문자열, jest·웹에선 null(사진 자리 토큰 tint). */
+  imageUrl?: string | null;
 }
 
 /** 섹션2 "지금 뜨는 장소" 카드 1장 — 사진 위 타이틀·해시태그. */
@@ -21,6 +23,8 @@ export interface HomeSpotCard {
   title: string;
   /** '#감성카페' — 해시태그 한 줄 */
   tag: string;
+  /** 카드 배경 사진 URI(TRIP-694). jest·웹에선 null(사진 자리 토큰 tint). */
+  imageUrl?: string | null;
 }
 
 /** 섹션3 "여행자 일정" 카드 1장 — 사진 + 타이틀·박수 라벨. */
@@ -41,6 +45,8 @@ export interface HomeMagazineHero {
   subtitle: string;
   /** ['당일치기로 충분', '야경 명소'] — 반투명 흰 메타칩 */
   chips: readonly string[];
+  /** 히어로 배경 사진 URI(TRIP-694). jest·웹에선 null(사진 자리 토큰 tint). */
+  imageUrl?: string | null;
 }
 
 /**
@@ -181,8 +187,11 @@ export type HomePhase =
     };
 
 export interface HomeScreenProps {
-  /** 상단 영감 카드 — 상태 무관 고정 블록(discovery) */
-  hero: HomeMagazineHero;
+  /**
+   * 상단 영감 카드 — 상태 무관 고정 블록(discovery). TRIP-694로 단일→5장 배열(페이징 캐러셀).
+   * discovery는 배열 전체를 캐러셀 5페이지로, 단계 얼굴(collecting·planning)은 `hero[0]`만 쓴다.
+   */
+  hero: readonly HomeMagazineHero[];
   /** 3섹션 데이터셋(판별 유니온) */
   sections: HomeSections;
   /** 여행 단계 판별값(TRIP-317) — 미전달/discovery면 316 얼굴, 그 외 kind면 단계 얼굴 */

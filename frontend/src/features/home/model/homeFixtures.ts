@@ -1,6 +1,8 @@
 // 홈 4상태 고정 목업(TRIP-316 · 라이브 Figma 2091:1357 표시값 그대로 상수화). 서버 API가
 // 없어(repo-trap) 홈은 이 상수들로만 구동되는 프레젠테이션 화면이다 — 런타임 목(msw 등) 금지.
 
+import { Image } from 'react-native';
+
 import type {
   HomeCollectionCard,
   HomeItineraryCard,
@@ -11,24 +13,102 @@ import type {
   HomeSpotCard,
 } from './homeTypes';
 
-const MAGAZINE_HERO: HomeMagazineHero = {
-  eyebrow: '오늘의 여행 영감',
-  title: '부산 · 광안리의 밤',
-  subtitle: '다리 위로 번지는 불빛, 상상만으로 설레는 야경',
-  chips: ['당일치기로 충분', '야경 명소'],
-};
+// 로컬 생성 그라디언트 에셋(부산 톤 플레이스홀더)을 문자열 URI 로 푼다(h11 선례). RN 에선
+// `require('...jpg')`가 번들 에셋 참조(숫자)라 `<Image source={{ uri }} />` 자리에 넣으려면
+// `resolveAssetSource(...).uri` 로 풀어야 한다. jest·웹에선 `.uri`가 undefined → `?? null`로
+// 계약(`imageUrl: string | null`)에 맞춘다(테스트는 사진 없는 카드, 실기에서만 썸네일).
+// 출처·라이선스: src/assets/home/CREDITS.md.
+const toUri = (source: number): string | null =>
+  Image.resolveAssetSource?.(source)?.uri ?? null;
+
+// 히어로 캐러셀 5페이지 사진(부산 야경·해안·카페·시장·전망 순). page0 은 신·구 공통 픽셀 정본.
+const HERO_IMAGES = [
+  require('@/assets/home/hero-night.jpg'),
+  require('@/assets/home/hero-coast.jpg'),
+  require('@/assets/home/hero-cafe.jpg'),
+  require('@/assets/home/hero-market.jpg'),
+  require('@/assets/home/hero-view.jpg'),
+].map(toUri);
+
+const COLLECTION_IMAGES = [
+  require('@/assets/home/collection-gamcheon.jpg'),
+  require('@/assets/home/collection-haeundae.jpg'),
+  require('@/assets/home/collection-yonggungsa.jpg'),
+].map(toUri);
+
+const SPOT_IMAGES = [
+  require('@/assets/home/spot-jeonpo.jpg'),
+  require('@/assets/home/spot-jagalchi.jpg'),
+  require('@/assets/home/spot-sup.jpg'),
+  require('@/assets/home/spot-hwangnyeong.jpg'),
+].map(toUri);
+
+// 히어로 5장 페이징 캐러셀(TRIP-694). page0 은 TRIP-316 정본 그대로, page1~4 는 부산 테마
+// 영감 카드(문구가 인사·섹션 헤더·소요시간과 겹치지 않게 발명 — within 단일매치·INV-3 안전).
+const MAGAZINE_HEROES: readonly HomeMagazineHero[] = [
+  {
+    eyebrow: '오늘의 여행 영감',
+    title: '부산 · 광안리의 밤',
+    subtitle: '다리 위로 번지는 불빛, 상상만으로 설레는 야경',
+    chips: ['당일치기로 충분', '야경 명소'],
+    imageUrl: HERO_IMAGES[0],
+  },
+  {
+    eyebrow: '이번 주 뜨는 코스',
+    title: '해운대 · 바다 곁 산책',
+    subtitle: '파도 소리와 함께 걷는 해변 산책로',
+    chips: ['드라이브 코스', '바다 전망'],
+    imageUrl: HERO_IMAGES[1],
+  },
+  {
+    eyebrow: '로컬 감성 한 스푼',
+    title: '전포 · 골목 카페 순례',
+    subtitle: '오래된 골목에 스며든 커피 향',
+    chips: ['카페 투어', '골목 산책'],
+    imageUrl: HERO_IMAGES[2],
+  },
+  {
+    eyebrow: '맛으로 떠나는 여행',
+    title: '자갈치 · 시장의 아침',
+    subtitle: '갓 잡은 해산물과 활기찬 좌판',
+    chips: ['먹거리 천국', '로컬 시장'],
+    imageUrl: HERO_IMAGES[3],
+  },
+  {
+    eyebrow: '노을이 머무는 곳',
+    title: '황령산 · 도시의 파노라마',
+    subtitle: '발아래 펼쳐지는 부산의 불빛',
+    chips: ['전망 명소', '노을 스팟'],
+    imageUrl: HERO_IMAGES[4],
+  },
+];
 
 const COLLECTIONS: readonly HomeCollectionCard[] = [
-  { title: '감천문화마을', region: '부산 사하구', badge: '당일치기' },
-  { title: '해운대 해변', region: '부산 해운대구', badge: '1박 2일' },
-  { title: '해동용궁사', region: '부산 기장군', badge: '반나절' },
+  {
+    title: '감천문화마을',
+    region: '부산 사하구',
+    badge: '당일치기',
+    imageUrl: COLLECTION_IMAGES[0],
+  },
+  {
+    title: '해운대 해변',
+    region: '부산 해운대구',
+    badge: '1박 2일',
+    imageUrl: COLLECTION_IMAGES[1],
+  },
+  {
+    title: '해동용궁사',
+    region: '부산 기장군',
+    badge: '반나절',
+    imageUrl: COLLECTION_IMAGES[2],
+  },
 ];
 
 const SPOTS: readonly HomeSpotCard[] = [
-  { title: '전포 카페거리', tag: '#감성카페' },
-  { title: '자갈치 시장', tag: '#로컬푸드' },
-  { title: '광안리 SUP', tag: '#액티비티' },
-  { title: '황령산 전망대', tag: '#야경명소' },
+  { title: '전포 카페거리', tag: '#감성카페', imageUrl: SPOT_IMAGES[0] },
+  { title: '자갈치 시장', tag: '#로컬푸드', imageUrl: SPOT_IMAGES[1] },
+  { title: '광안리 SUP', tag: '#액티비티', imageUrl: SPOT_IMAGES[2] },
+  { title: '황령산 전망대', tag: '#야경명소', imageUrl: SPOT_IMAGES[3] },
 ];
 
 const ITINERARIES: readonly HomeItineraryCard[] = [
@@ -46,7 +126,7 @@ const READY_SECTIONS: HomeSections = {
 
 /** AC-1 · 정상(ready) — 인사·검색·영감 hero·섹션 3종·온램프 전부. */
 export const HOME_DEFAULT_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HERO,
+  hero: MAGAZINE_HEROES,
   sections: READY_SECTIONS,
 };
 
@@ -55,19 +135,19 @@ export const HOME_DEFAULT_PROPS: HomeScreenProps = {
  * 핵심은 온램프(softNote/FAB)가 그대로 노출된다는 것(장소 먼저 담기 유도, US-SHELL-05).
  */
 export const HOME_NO_TRIP_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HERO,
+  hero: MAGAZINE_HEROES,
   sections: READY_SECTIONS,
 };
 
 /** AC-4 · 부분 실패(empty) — 빈 섹션은 가시 플레이스홀더로 드러난다(침묵 은닉 금지, INV-4). */
 export const HOME_EMPTY_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HERO,
+  hero: MAGAZINE_HEROES,
   sections: { kind: 'empty' },
 };
 
 /** AC-5 · 로딩(loading) — 섹션 자리에 스켈레톤, 고정 블록(인사·검색·hero·온램프)은 정상. */
 export const HOME_LOADING_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HERO,
+  hero: MAGAZINE_HEROES,
   sections: { kind: 'loading' },
 };
 
@@ -167,28 +247,28 @@ const POST_TRIP_PHASE: HomePhase = {
 
 /** collecting 얼굴 — 담은 곳만 있고 여행 없음(US-SHELL-05 착지면). */
 export const HOME_COLLECTING_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HERO,
+  hero: MAGAZINE_HEROES,
   sections: READY_SECTIONS,
   phase: COLLECTING_PHASE,
 };
 
 /** planning 얼굴 — 일정 미완성 여행(계획 중 배지·일정 이어서 짜기·브릿지행). */
 export const HOME_PLANNING_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HERO,
+  hero: MAGAZINE_HEROES,
   sections: READY_SECTIONS,
   phase: PLANNING_PHASE,
 };
 
 /** upcoming 얼굴 — 확정된 예정 여행(출발 전·스탯타일·가장 먼저 갈 곳). */
 export const HOME_UPCOMING_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HERO,
+  hero: MAGAZINE_HEROES,
   sections: READY_SECTIONS,
   phase: UPCOMING_PHASE,
 };
 
 /** postTrip 얼굴 — 종료된 여행(회고 보기·공유·다음 추천). */
 export const HOME_POST_TRIP_PROPS: HomeScreenProps = {
-  hero: MAGAZINE_HERO,
+  hero: MAGAZINE_HEROES,
   sections: READY_SECTIONS,
   phase: POST_TRIP_PHASE,
 };
