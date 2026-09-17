@@ -388,7 +388,7 @@
 ## src/features/home/model/
 - `src/features/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS · HOME_LOADING_PROPS · HOME_PLANNING_PROPS · HOME_TRAVELING_PROPS · HOME_POST_TRIP_PROPS
 - `src/features/home/model/homePhase.ts`  →  HomeTripInput · ResolveHomePhaseInput · formatDday · resolveHomePhase
-- `src/features/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeSpotCard · HomeItineraryCard · HomeMagazineHero · HomeSections · TripHeroData · RecapCard · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
+- `src/features/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeSpotCard · HomeItineraryCard · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
 
 ## src/features/home/ui/
 - `src/features/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph

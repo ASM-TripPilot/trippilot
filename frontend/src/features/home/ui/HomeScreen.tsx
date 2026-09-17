@@ -57,6 +57,9 @@ const SCRIM_LOCATIONS = [0.3, 1] as const;
 const HERO_SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.8)'] as const;
 const DEST_SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)'] as const;
 const SPOT_SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.66)'] as const;
+// postTrip 가로 사진 카드 스크림(Figma 2092:1521). 색은 DEST_SCRIM 재사용, 시작 위치만
+// 0.3→0.4 로 늦춰(작은 카드라 글씨 영역이 아래 1/3) 하단만 짙게 눌러 흰 타이틀 가독성 확보.
+const PAST_TRIP_SCRIM_LOCATIONS = [0.4, 1] as const;
 
 // 통합 히어로(TRIP-696) 전용 3-stop 스크림(Figma 3460:1836: 0 → 0.3@50% → 0.85). 2-stop
 // HERO_SCRIM 보다 중간 톤이 한 단계 더 있어 하단을 짙게 눌러 타이틀26·CTA 가독성을 확보한다.
@@ -479,11 +482,12 @@ function SpotsSection({
   );
 }
 
-// ── 통합 트립 히어로(planning page0 · TRIP-696 풀블리드 재작성 · Figma 3460:1836) ──────────
-// 구 300px 카드(TripHero)를 470 풀블리드로 교체. 사진 + 3-stop 스크림 위에 좌상단 두 톤 배지와
+// ── 통합 트립 히어로(planning·postTrip page0 · TRIP-696 풀블리드 재작성 · Figma 3460:1836) ──
+// 구 300px 카드(TripHero)를 470 풀블리드로 교체. 사진 + 3-stop 스크림 위에 좌상단 배지와
 // 하단 heroStack(타이틀26·메타14 위 → primary CTA 아래)을 얹는다.
-//  - 두 톤 배지: "계획 중"(primary) + "· D-21"(ink)을 **별개 <Text> 리프 2개**로 그린다 —
-//    한 Text 에 합치는 뮤턴트를 within(badge).getByText 완전일치 2회가 차단한다(★D2 두 톤 구조).
+//  - 배지 주 텍스트 색은 badgeTone(TRIP-698)으로 갈린다: 미지정 primary(계획·여행 중) · 'success'
+//    초록(여행 완료). 보조(badgeSub)는 있을 때만 별개 <Text> 리프로 그린다 — 계획/여행 중은 두 톤
+//    ("계획 중"+"· D-21"), 여행 완료는 단일("여행 완료"만). within(badge).getByText 완전일치가 잠근다.
 //  - 구 우상단 대형 D-day(home-trip-hero-dday)는 배지 보조(badgeSub)로 흡수돼 사라졌다(AC-696-2).
 //  - CTA 라벨(꺾쇠 › 포함)은 데이터 그대로 렌더한다 — 꺾쇠는 화면이 붙이지 않는다(구 카드는 CTA
 //    가 위였으나 순서 반전, 타이틀·메타 아래로 내려왔다).
@@ -525,12 +529,18 @@ function IntegratedTripHero({
             style={softCardShadow}
             className="flex-row items-center gap-[4px] self-start rounded-[8px] bg-canvas px-[12px] py-[6px]"
           >
-            <Text className="font-noto-bold text-[12px] font-bold text-primary">
+            <Text
+              className={`font-noto-bold text-[12px] font-bold ${
+                trip.badgeTone === 'success' ? 'text-success' : 'text-primary'
+              }`}
+            >
               {trip.badge}
             </Text>
-            <Text className="font-noto-bold text-[12px] font-bold text-ink">
-              {trip.badgeSub}
-            </Text>
+            {trip.badgeSub ? (
+              <Text className="font-noto-bold text-[12px] font-bold text-ink">
+                {trip.badgeSub}
+              </Text>
+            ) : null}
           </View>
         </View>
         {/* 하단 heroStack — 타이틀26·메타14 위, primary CTA(꺾쇠 포함) 아래. */}
@@ -559,35 +569,48 @@ function IntegratedTripHero({
   );
 }
 
-// ── 미니맵 카드(postTrip '회고 보기' · 브리프 §3-C) ──
-// 미니맵은 플레이스홀더(가정 F — shared/map 끌어오지 않음, 홈은 프레젠테이션 순수 유지).
-function MiniMapCard({
-  testID,
-  title,
-  subtitle,
+// ── 지난 여행 가로 사진 카드(postTrip · Figma 2092:1521) ──────────────────
+// 158×120 rounded-12 사진 카드 — object-cover 사진(uri null 이면 토큰 tint) 위 하단 스크림,
+// 흰 타이틀14 + 둘째줄 dateLabel10.5(opacity 88). CollectionCard 와 같은 "사진+스크림+흰 글씨"
+// 계열이나 치수·둘째줄이 달라 별 함수로 둔다(HOME_SCREEN_SOURCE_FILES 동결 — 파일 내부 함수).
+function PastTripCard({
+  trip,
+  index,
 }: {
-  testID: string;
-  title: string;
-  subtitle: string;
+  trip: PastTrip;
+  index: number;
 }): ReactElement {
   return (
     <View
-      testID={testID}
+      testID={`home-past-trip-card-${index}`}
       style={softCardShadow}
-      className="mx-lg flex-row items-center gap-md overflow-hidden rounded-card border border-hairline bg-canvas px-md py-md"
+      className="h-[120px] w-[158px] overflow-hidden rounded-[12px]"
     >
-      <View className="h-[54px] w-[54px] rounded-card bg-surface-soft" />
-      <View className="flex-1 gap-[3px]">
-        <Text className="font-noto-bold text-body font-bold text-ink">
-          {title}
+      <View className="absolute inset-0 bg-surface-strong" />
+      <Image
+        source={trip.imageUrl ? { uri: trip.imageUrl } : undefined}
+        resizeMode="cover"
+        style={ABSOLUTE_FILL}
+      />
+      <LinearGradient
+        colors={DEST_SCRIM_COLORS}
+        locations={PAST_TRIP_SCRIM_LOCATIONS}
+        style={ABSOLUTE_FILL}
+      />
+      <View className="absolute inset-x-0 bottom-[14px] gap-[2px] px-[12px]">
+        <Text className="font-noto-bold text-[14px] font-bold text-on-primary">
+          {trip.title}
         </Text>
-        <Text className="font-noto text-micro text-muted">{subtitle}</Text>
+        <Text className="font-noto text-[10.5px] text-on-primary opacity-[0.88]">
+          {trip.dateLabel}
+        </Text>
       </View>
     </View>
   );
 }
 
-// ── 지난 여행(postTrip) ──────────────────────────────────────────────────
+// ── 지난 여행 섹션(postTrip · 가로 스크롤 사진 카드) ─────────────────────
+// 헤더 "지난 여행"16 + "전체 보기"(라이브 미도달 no-op) · 가로 스크롤 사진 카드.
 function PastTripsSection({
   trips,
 }: {
@@ -595,26 +618,25 @@ function PastTripsSection({
 }): ReactElement {
   return (
     <View className="w-full gap-md">
-      <View className="w-full px-lg">
-        <Text className="font-noto-bold text-section font-bold text-ink">
+      <View className="w-full flex-row items-center justify-between px-lg">
+        <Text className="font-noto-bold text-[16px] font-bold text-ink">
           지난 여행
         </Text>
+        <Pressable testID="home-past-trips-more">
+          <Text className="font-noto-bold text-label font-bold text-muted underline">
+            전체 보기
+          </Text>
+        </Pressable>
       </View>
-      <View className="mx-lg gap-sm">
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
+      >
         {trips.map((trip, index) => (
-          <View
-            key={trip.title}
-            testID={`home-past-trip-card-${index}`}
-            style={softCardShadow}
-            className="flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-md py-md"
-          >
-            <View className="h-[44px] w-[44px] rounded-card bg-surface-strong" />
-            <Text className="font-noto-bold text-body font-bold text-ink">
-              {trip.title}
-            </Text>
-          </View>
+          <PastTripCard key={trip.title} trip={trip} index={index} />
         ))}
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -908,32 +930,37 @@ function PlanningBody({
   );
 }
 
-// ── postTrip 얼굴(다녀옴) ───────────────────────────────────────────────
-// greet 잘 다녀오셨어요 · 회고 보기 카드 · 추천 스트립 · 지난 여행 · 공유행(softNote 슬롯).
+// ── postTrip 얼굴(다녀옴 · TRIP-698 통합 히어로 재작성) ───────────────────
+// 인사 2줄(잘 다녀오셨어요 + 서브) · 통합 히어로 5페이지 캐러셀(page0 트립="여행 완료"·page1~4
+// 매거진, 도트5 — planning 과 부품 공유) · 섹션 순서 반전(지난 여행 가로 사진 카드 → "다음엔 여기
+// 어때요" 추천 스트립). 구 회색 회고 카드(MiniMapCard)·공유행은 제거됐다(01b). 회고 CTA 콜백은
+// onPressTripHeroCta 재사용(라이브 미도달이라 프리뷰에선 undefined).
 function PostTripBody({
   phase,
+  hero,
+  onPressTripHeroCta,
   onPressSearch,
 }: {
   phase: Extract<HomePhase, { kind: 'postTrip' }>;
+  hero: readonly HomeMagazineHero[];
+  onPressTripHeroCta?: () => void;
   onPressSearch?: () => void;
 }): ReactElement {
   return (
     <>
-      <GreetingHeader title={phase.greetTitle} />
+      <GreetingHeader title={phase.greetTitle} subtitle={phase.greetSubtitle} />
       <SearchBarBlock onPress={onPressSearch} />
-      <View className="w-full px-lg pt-[8px]">
-        <MiniMapCard
-          testID="home-recap-card"
-          title={phase.recap.title}
-          subtitle={phase.recap.meta}
-        />
-      </View>
+      <PlanningHeroCarousel
+        trip={phase.trip}
+        heroes={hero}
+        onPressTripCta={onPressTripHeroCta}
+      />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
+        <PastTripsSection trips={phase.pastTrips} />
         <CollectionStrip
           title={phase.recommendationTitle}
           collections={phase.recommendations}
         />
-        <PastTripsSection trips={phase.pastTrips} />
       </View>
     </>
   );
@@ -971,7 +998,14 @@ function PhaseBody({
         />
       );
     case 'postTrip':
-      return <PostTripBody phase={phase} onPressSearch={onPressSearch} />;
+      return (
+        <PostTripBody
+          phase={phase}
+          hero={hero}
+          onPressTripHeroCta={onPressTripHeroCta}
+          onPressSearch={onPressSearch}
+        />
+      );
   }
 }
 

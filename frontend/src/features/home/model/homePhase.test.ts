@@ -212,7 +212,7 @@ describe('resolveHomePhase — badge×badgeSub 모순 없음(PBT, TRIP-472·696)
             // badgeSub='· '+dday. .test 는 undefined 를 'undefined'로 강제해 throw 없이
             // false 를 주므로, 구현 전(badgeSub 미정의)엔 vacuous green(부정 성질) — red-first
             // 아님. 구현 후 실값에 이빨(여행 중 + 미래 D- 뮤턴트 red).
-            const isFutureDday = /^· D-\d/.test(result.trip.badgeSub);
+            const isFutureDday = /^· D-\d/.test(result.trip.badgeSub ?? '');
             expect(isFutureDday).toBe(false);
           }
         }

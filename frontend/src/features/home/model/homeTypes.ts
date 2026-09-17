@@ -70,15 +70,22 @@ export type HomeSections =
  * INV-3: 어떤 payload에도 소요시간 필드 없음 — 시각(`09:30`)·거리(`950m`)만.
  */
 
-/** planning 통합 히어로 카드(tripHero, TRIP-696 풀블리드 재작성). */
+/** planning·postTrip 통합 히어로 카드(tripHero, TRIP-696 풀블리드 재작성). */
 export interface TripHeroData {
-  /** '계획 중'(primary 톤) — 배지 주 텍스트 */
+  /** '계획 중'(primary 톤) / '여행 완료'(§698 success 톤) — 배지 주 텍스트 */
   badge: string;
   /**
    * '· D-21'(계획 중) / '· N 일차'(§697 여행 중) — 두 톤 배지의 보조(ink 톤) 텍스트.
    * TRIP-696에서 구 우상단 대형 D-day(`dday`)를 배지 보조로 흡수하며 교체됐다.
+   * TRIP-698: 여행 완료 얼굴은 단일 배지("여행 완료"만)라 이 값이 없다(옵셔널 additive) —
+   * IntegratedTripHero 가 badgeSub 있을 때만 둘째 <Text> 리프를 그린다. 계획/여행 중은 항상 넘김.
    */
-  badgeSub: string;
+  badgeSub?: string;
+  /**
+   * 배지 주 텍스트 톤(TRIP-698). 미지정/'primary' → text-primary(계획·여행 중) · 'success' →
+   * text-success(초록, 여행 완료). Figma 라이브 배지 색 바인딩이 얼굴마다 달라 파라미터화했다.
+   */
+  badgeTone?: 'primary' | 'success';
   /** '일정 이어서 짜기 ›'(꺾쇠 포함) — 하단 primary CTA 라벨 */
   ctaLabel: string;
   /** '부산 여행' — 여행명 타이틀 */
@@ -87,18 +94,14 @@ export interface TripHeroData {
   meta: string;
 }
 
-/** postTrip '회고 보기' 미니맵 카드 — 방문 수·거리·사진 수만(INV-3). */
-export interface RecapCard {
-  /** '부산 여행 회고 보기' */
-  title: string;
-  /** '4곳 방문 · 12km · 사진 6장 · 6.10–6.13' — 거리(km)만, 소요시간 없음 */
-  meta: string;
-}
-
-/** upcoming·postTrip '지난 여행' 카드 1장. */
+/** postTrip '지난 여행' 가로 사진 카드 1장(TRIP-698). */
 export interface PastTrip {
-  /** '경주 여행 2026.04 · 2박' */
+  /** '경주 여행' — 여행명(날짜는 dateLabel 로 분리) */
   title: string;
+  /** '2026.04 · 2박' — 카드 둘째줄 날짜·박수 라벨 */
+  dateLabel: string;
+  /** 카드 배경 사진 URI. 실사진 미소싱이라 현재 null(토큰 tint), 실기 썸네일은 후속(01b Q2). */
+  imageUrl?: string | null;
 }
 
 /** planning 브릿지행 / postTrip 공유행 — 같은 softNote 슬롯, 카피·버튼만 다름. */
@@ -155,8 +158,10 @@ export type HomePhase =
   | {
       kind: 'postTrip';
       greetTitle: string;
-      recap: RecapCard;
-      share: HomeSoftNote;
+      /** TRIP-698 인사 2줄 서브카피('기록을 정리하고 나눠볼까요'). */
+      greetSubtitle: string;
+      /** TRIP-698 통합 히어로 재사용 — 배지 "여행 완료"(success)·CTA "회고 보기 ›". */
+      trip: TripHeroData;
       recommendationTitle: string;
       recommendations: readonly HomeCollectionCard[];
       pastTrips: readonly PastTrip[];

@@ -649,23 +649,34 @@ const PLANNING_PHASE: HomePhase = {
   },
 };
 
+// TRIP-698 — 여행 완료 얼굴 재작성(01b 정본). recap/share 삭제 → trip(통합 히어로 재사용)·
+// greetSubtitle(인사 2줄) 추가. 배지 "여행 완료"(단일·badgeSub 없음)·badgeTone 'success'(초록).
+// pastTrips 는 날짜 분리(title/dateLabel)+사진 없음(imageUrl:null), recommendations 는 default
+// COLLECTIONS 3장. 현 homeTypes(badgeSub 필수·badgeTone 없음·postTrip recap 필수·PastTrip title뿐)
+// 와 tsc 불일치 = 타입선행 red(implementer 의 homeTypes 갱신으로 green, 02a §1). 현 코드가 이
+// 리터럴을 렌더하면 PostTripBody 가 phase.recap.title 을 읽어 크래시 → 아래 postTrip describe
+// 전부 red(02a §2 정직 고지 — recap 을 남기면 green tsc 가 깨져 크래시-red 가 불가피).
 const POST_TRIP_PHASE: HomePhase = {
   kind: 'postTrip',
   greetTitle: '부산 여행 잘 다녀오셨어요?',
-  recap: {
-    title: '부산 여행 회고 보기',
-    meta: '4곳 방문 · 12km · 사진 6장 · 6.10–6.13',
-  },
-  share: {
-    title: '공유 카드로 남기기',
-    subtitle: '사진·동선을 카드 한 장으로',
-    ctaLabel: '공유 카드 만들기',
+  greetSubtitle: '기록을 정리하고 나눠볼까요',
+  trip: {
+    badge: '여행 완료',
+    badgeTone: 'success', // 초록(01b) — badgeSub 없음(단일 배지)
+    ctaLabel: '회고 보기 ›', // 꺾쇠(›) 포함
+    title: '부산 여행',
+    meta: '4곳 방문 · 12km · 사진 6장 · 6.10–6.13', // 12km=거리(INV-3 OK)
   },
   recommendationTitle: '다음엔 여기 어때요',
   recommendations: [
-    { title: '통영 동피랑', region: '경남 통영', badge: '당일치기' },
+    { title: '감천문화마을', region: '부산 사하구', badge: '당일치기' },
+    { title: '해운대 해변', region: '부산 해운대구', badge: '1박 2일' },
+    { title: '해동용궁사', region: '부산 기장군', badge: '반나절' },
   ],
-  pastTrips: [{ title: '경주 여행 2026.04 · 2박' }],
+  pastTrips: [
+    { title: '경주 여행', dateLabel: '2026.04 · 2박', imageUrl: null },
+    { title: '강릉 여행', dateLabel: '2026.02 · 1박', imageUrl: null },
+  ],
 };
 
 // TRIP-697 — '여행 중' 얼굴(통합 히어로의 planning 변형). 계획 중(PLANNING_PHASE)과 kind 는
@@ -802,32 +813,168 @@ describe('🔴 HomeScreen — planning 인사 2줄 + INV-3 (TRIP-696 AC-696-4·6
   });
 });
 
-describe('HomeScreen — postTrip 얼굴 (AC-4 · US-SHELL-02)', () => {
-  it('"잘 다녀오셨어요" greet·회고 보기 카드·추천·지난 여행을 그리고 공유행·hero·grid는 숨긴다', () => {
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-698 — 여행 완료(postTrip) 얼굴 재작성. 무엇을 보장하나: (1) 구 회색 회고 카드
+// (home-recap-card·MiniMapCard)를 696 통합 히어로로 교체 — 배지 "여행 완료"(단일·success 톤)·
+// 타이틀·메타·CTA "회고 보기 ›"(AC-1), (2) 인사 2줄(AC-2), (3) 섹션 순서 반전 지난여행→추천(AC-3),
+// (4) 가로 사진 카드 2장(AC-4), (5) 추천 3장(AC-5), (6) 5페이지·5도트 캐러셀(AC-6),
+// (7) magazineHero·스팟·공유행·회고 카드 숨김 + INV-3(AC-7·8), (8) 배지 톤 success 파라미터화.
+//
+// ★ RED = 렌더 크래시. 현 PostTripBody(HomeScreen.tsx)는 phase.recap.title 을 읽는데 신
+// POST_TRIP_PHASE 는 recap 이 없어(01b) render() 가 throw → 아래 describe 전부 red(02a §2 정직
+// 고지 — recap 을 남기면 green tsc 가 깨져 크래시-red 가 불가피). green 은 implementer 가
+// PostTripBody 를 phase.trip/greetSubtitle/pastTrips[].dateLabel 로 재작성한 뒤 확인된다.
+// 6-b 사각: 초록 픽셀·pill r8/shadow·풀블리드 470·3-stop 스크림·좌우 스와이프·활성 도트·가로 스크롤·사진 tint.
+
+describe('🔴 HomeScreen — 여행 완료 통합 히어로 재사용 (TRIP-698 AC-1)', () => {
+  it('배지 "여행 완료"(단일)·타이틀·메타·CTA "회고 보기 ›"를 통합 히어로에 그리고 회고 카드는 사라진다', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
 
-    expect(screen.getByTestId('home-greeting')).toHaveTextContent(
-      /잘 다녀오셨어요/
+    const hero = screen.getByTestId('home-trip-hero');
+
+    // 배지 단일 — 주 텍스트 "여행 완료"가 있고, 배지 전체 텍스트가 정확히 "여행 완료"다.
+    // toHaveTextContent(문자열)은 exact(02a §5-a)라 배지에 보조 텍스트(badgeSub)가 새어 들어오면
+    // concat 이 "여행 완료…"가 되어 red → 단일 배지(badgeSub 미렌더)를 행동으로 잠근다. 두 톤
+    // 배지의 긍정 짝은 696(계획 중)·697(여행 중) describe 가 이미 잠근다(중복 신설 안 함).
+    const badge = screen.getByTestId('home-trip-hero-badge');
+    expect(within(badge).getByText('여행 완료')).toBeOnTheScreen();
+    expect(badge).toHaveTextContent('여행 완료');
+
+    // 타이틀·메타 — 히어로 서브트리는 다중 리프라 정규식 부분매치(02a §5-b). 12km=거리(INV-3 OK).
+    expect(hero).toHaveTextContent(/부산 여행/);
+    expect(hero).toHaveTextContent(/4곳 방문 · 12km · 사진 6장/);
+
+    // CTA 꺾쇠 — toHaveTextContent(문자열) exact(02a §5-a)라 꺾쇠(›) 뺀 뮤턴트를 red 로 잡는다.
+    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
+      '회고 보기 ›'
     );
 
-    // 회고 진입(핵심 AC-4) — 회고 카드 + 방문 수·거리·사진 수(12km 거리 OK, 소요시간 0).
-    const recap = screen.getByTestId('home-recap-card');
-    expect(within(recap).getByText('부산 여행 회고 보기')).toBeOnTheScreen();
-    expect(recap).toHaveTextContent(/4곳 방문 · 12km · 사진 6장/);
+    // 부정 짝 — 구 회고 카드(home-recap-card·MiniMapCard)는 제거됐다.
+    expect(screen.queryByTestId('home-recap-card')).toBeNull();
+  });
+});
 
-    // 공유행(softNote)은 TRIP-646으로 제거됐다.
-    expect(screen.queryByTestId('home-soft-note')).toBeNull();
+describe('🔴 HomeScreen — 여행 완료 인사 2줄 (TRIP-698 AC-2)', () => {
+  it('home-greeting 이 타이틀 "…잘 다녀오셨어요?"와 서브 "기록을 정리하고 나눠볼까요"를 함께 그린다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
 
-    // 추천 섹션 + 지난 여행.
+    // 인사 컨테이너는 타이틀+서브 두 리프라 정규식 부분매치(02a §5-b).
+    const greeting = screen.getByTestId('home-greeting');
+    expect(greeting).toHaveTextContent(/잘 다녀오셨어요/);
+    expect(greeting).toHaveTextContent(/기록을 정리하고 나눠볼까요/);
+  });
+});
+
+describe('🔴 HomeScreen — 여행 완료 섹션 순서 반전 (TRIP-698 AC-3)', () => {
+  it('지난 여행 섹션이 "다음엔 여기 어때요"(추천)보다 트리에서 먼저 온다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
+
+    // 헤더·전체 보기 링크 실재(앵커 — 순서 단언 공허 통과 차단).
+    expect(screen.getByText('지난 여행')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-past-trips-more')).toBeOnTheScreen();
+
+    // 순서 = 트리 순서. getAllByTestId(정규식)은 DFS 프리오더(문서 순)로 반환(02a §5-c)라, 두
+    // 섹션 대표 카드를 한 정규식으로 잡아 인덱스 배열을 완전일치 비교하면 "지난 여행이 추천보다
+    // 먼저"가 잠긴다. 구 계약은 추천→지난여행(역순)이라 구현 후 반전돼야 배열이 정합(green).
+    const order = screen
+      .getAllByTestId(/^home-(past-trip-card-0|collection-card-0)$/)
+      .map((node) => node.props.testID);
+    expect(order).toEqual(['home-past-trip-card-0', 'home-collection-card-0']);
+  });
+});
+
+describe('🔴 HomeScreen — 여행 완료 가로 사진 카드 2장 (TRIP-698 AC-4)', () => {
+  it('card-0=경주 여행+2026.04·2박, card-1=강릉 여행+2026.02·1박, 3장째는 없다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
+
+    // 카드마다 within 으로 좁혀 제목·날짜 리프를 완전일치(02a §5-b·파일 관례). 날짜는 title 과
+    // 분리된 dateLabel 리프다(구 계약은 "경주 여행 2026.04 · 2박" 한 문자열, 신 계약은 2리프).
+    const card0 = screen.getByTestId('home-past-trip-card-0');
+    expect(within(card0).getByText('경주 여행')).toBeOnTheScreen();
+    expect(within(card0).getByText('2026.04 · 2박')).toBeOnTheScreen();
+
+    const card1 = screen.getByTestId('home-past-trip-card-1');
+    expect(within(card1).getByText('강릉 여행')).toBeOnTheScreen();
+    expect(within(card1).getByText('2026.02 · 1박')).toBeOnTheScreen();
+
+    // 개수 = 2(3장째 없음).
+    expect(screen.queryByTestId('home-past-trip-card-2')).toBeNull();
+  });
+});
+
+describe('🔴 HomeScreen — 여행 완료 추천 3장 (TRIP-698 AC-5)', () => {
+  it('"다음엔 여기 어때요" 헤더 + 추천 카드 3장(default 세트)이고 4장째는 없다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
+
     expect(screen.getByText('다음엔 여기 어때요')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-past-trip-card-0')).toBeOnTheScreen();
 
-    // 부정 짝 — postTrip은 magazineHero·grid 숨김(§3-B).
+    // 카드마다 within 으로 좁혀 제목 완전일치(다중매치 throw 회피, 파일 관례 L33).
+    ['감천문화마을', '해운대 해변', '해동용궁사'].forEach((title, index) => {
+      const card = screen.getByTestId(`home-collection-card-${index}`);
+      expect(within(card).getByText(title)).toBeOnTheScreen();
+    });
+
+    expect(screen.queryByTestId('home-collection-card-3')).toBeNull();
+  });
+});
+
+describe('🔴 HomeScreen — 여행 완료 5페이지·5도트 캐러셀 (TRIP-698 AC-6)', () => {
+  it('page0=트립 히어로이고 home-hero-page-0..4·도트 5개가 있으며 6번째는 없다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
+
+    // page0=트립(696 통합 히어로 재사용). 진짜 앵커는 페이지 컨테이너다 — 도트는 정적 View 라
+    // 위조 가능(traps-home). N당 1노드, 6번째는 없다.
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    [0, 1, 2, 3, 4].forEach((i) =>
+      expect(screen.getByTestId(`home-hero-page-${i}`)).toBeOnTheScreen()
+    );
+    expect(screen.queryByTestId('home-hero-page-5')).toBeNull();
+
+    // 약한 짝 — 도트 5(정확).
+    [0, 1, 2, 3, 4].forEach((i) =>
+      expect(screen.getByTestId(`home-hero-dot-${i}`)).toBeOnTheScreen()
+    );
+    expect(screen.queryByTestId('home-hero-dot-5')).toBeNull();
+  });
+});
+
+describe('🔴 HomeScreen — 여행 완료 숨김 요소 + INV-3 (TRIP-698 AC-7·8)', () => {
+  it('magazineHero·스팟 카드·공유행·구 회고 카드가 없고 소요시간 문자열도 0이다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
+
+    // page0 은 트립 히어로라 home-magazine-hero 는 postTrip 에도 없다(page1~4 는 home-hero-slide-N,
+    // traps-home). 스팟 섹션·공유행(softNote)·구 회고 카드도 없다.
     expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
     expect(screen.queryByTestId('home-spot-card-0')).toBeNull();
+    expect(screen.queryByTestId('home-soft-note')).toBeNull();
+    expect(screen.queryByTestId('home-recap-card')).toBeNull();
 
-    // INV-3.
+    // INV-3 — postTrip 어디에도 소요시간 문자열 없음(12km 거리·사진 6장·박수는 무매치, 02a §5-d).
     expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
+  });
+});
+
+// TRIP-698 ★badgeTone — 배지 주 텍스트 톤 파라미터화. NativeWind className 은 jest 렌더 트리에
+// 평문 props.className 로 남아(벨 테스트 L179~182 실측) jest 가 톤을 본다(6-b 사각 아님). 계획
+// 중=text-primary(기본값·선제 green 무회귀), 여행 완료=text-success(초록, 01b·red). implementer 가
+// badgeTone 파라미터화를 빠뜨리고 text-primary 하드코딩을 남기면 둘째 it 이 red 로 잡는다.
+describe('🔴 HomeScreen — 배지 톤 파라미터화 (TRIP-698 AC-1 · badgeTone)', () => {
+  it('계획 중 배지 주 텍스트는 primary 톤이다(badgeTone 기본값 · 무회귀 선제 green)', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={PLANNING_PHASE} />);
+
+    const badge = screen.getByTestId('home-trip-hero-badge');
+    const main = within(badge).getByText('계획 중');
+    expect(main.props.className).toContain('text-primary');
+    expect(main.props.className).not.toContain('text-success');
+  });
+
+  it('여행 완료 배지 주 텍스트는 success 톤이다(badgeTone=success · 초록)', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={POST_TRIP_PHASE} />);
+
+    const badge = screen.getByTestId('home-trip-hero-badge');
+    const main = within(badge).getByText('여행 완료');
+    expect(main.props.className).toContain('text-success');
+    expect(main.props.className).not.toContain('text-primary');
   });
 });
 

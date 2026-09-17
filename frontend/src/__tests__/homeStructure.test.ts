@@ -278,8 +278,10 @@ describe('단계 얼굴 단일 파일 강제 (TRIP-317 · 브리프 §8-7)', () 
     // (두 testID 의 '구현 후 소멸'을 강제하는 것은 이 카운트 가드가 아니라 tsc+eslint 다 —
     // upcoming·collecting 유니온 갈래가 사라지면 그 얼굴 코드가 컴파일 불가라 지울 수밖에 없다.
     // devPreviewBandNav 160 은 프리뷰 키 개수만 보고 HomeScreen.tsx 소스는 못 본다, code-critic 참고-1.)
-    // 유지하는 앵커는 planning(home-trip-hero)·postTrip(home-recap-card) 두 얼굴 — 이번 삭제 대상 아님.
-    ['home-trip-hero', 'home-recap-card'].forEach((id) =>
+    // 유지 앵커는 planning·여행 완료가 공유하는 home-trip-hero + postTrip 전용 가로 사진 카드
+    // home-past-trip-card. TRIP-698 로 회고 카드(home-recap-card)가 postTrip 에서 제거돼 소스에서
+    // 사라지므로 앵커를 생존하는 home-past-trip-card 로 스왑한다(안 하면 .toContain 이 하드 FAIL).
+    ['home-trip-hero', 'home-past-trip-card'].forEach((id) =>
       expect(src).toContain(id)
     );
 

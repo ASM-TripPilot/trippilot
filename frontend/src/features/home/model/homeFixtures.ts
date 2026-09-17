@@ -185,23 +185,26 @@ const TRAVELING_PHASE: HomePhase = {
   },
 };
 
+// TRIP-698 여행 완료 얼굴 — 696 통합 히어로 재사용(배지 "여행 완료"·success·단일)·인사 2줄·
+// 섹션 순서 반전(지난 여행 가로 사진 카드 → 추천). 지난 여행 2장은 날짜 분리(title/dateLabel)+
+// 사진 미소싱(imageUrl:null tint, 01b Q2). 추천은 default COLLECTIONS 3장. recap·share 제거.
 const POST_TRIP_PHASE: HomePhase = {
   kind: 'postTrip',
   greetTitle: '부산 여행 잘 다녀오셨어요?',
-  recap: {
-    title: '부산 여행 회고 보기',
-    meta: '4곳 방문 · 12km · 사진 6장 · 6.10–6.13',
-  },
-  share: {
-    title: '공유 카드로 남기기',
-    subtitle: '사진·동선을 카드 한 장으로',
-    ctaLabel: '공유 카드 만들기',
+  greetSubtitle: '기록을 정리하고 나눠볼까요',
+  trip: {
+    badge: '여행 완료',
+    badgeTone: 'success', // 초록(01b 확정) — badgeSub 없음(단일 배지)
+    ctaLabel: '회고 보기 ›', // 꺾쇠(›) 포함
+    title: '부산 여행',
+    meta: '4곳 방문 · 12km · 사진 6장 · 6.10–6.13', // 12km=거리(INV-3 OK)
   },
   recommendationTitle: '다음엔 여기 어때요',
-  recommendations: [
-    { title: '통영 동피랑', region: '경남 통영', badge: '당일치기' },
+  recommendations: COLLECTIONS,
+  pastTrips: [
+    { title: '경주 여행', dateLabel: '2026.04 · 2박', imageUrl: null },
+    { title: '강릉 여행', dateLabel: '2026.02 · 1박', imageUrl: null },
   ],
-  pastTrips: [{ title: '경주 여행 2026.04 · 2박' }],
 };
 
 /** planning 얼굴 — 일정 미완성 여행(계획 중 배지·일정 이어서 짜기·브릿지행). */
@@ -218,7 +221,7 @@ export const HOME_TRAVELING_PROPS: HomeScreenProps = {
   phase: TRAVELING_PHASE,
 };
 
-/** postTrip 얼굴 — 종료된 여행(회고 보기·공유·다음 추천). */
+/** postTrip 얼굴 — 종료된 여행(통합 히어로 회고 보기·지난 여행·다음 추천). */
 export const HOME_POST_TRIP_PROPS: HomeScreenProps = {
   hero: MAGAZINE_HEROES,
   sections: READY_SECTIONS,
