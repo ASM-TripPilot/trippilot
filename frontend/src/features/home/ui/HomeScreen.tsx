@@ -93,6 +93,17 @@ const fabShadow = {
   elevation: 8,
 } as const;
 
+// TRIP-891 — 사진/그라디언트 위 흰 도트 저대비 봉합(6-b 실측, Figma 2091:1357). 활성 색
+// (bg-on-primary)·비활성(opacity-50) 계약은 불변으로 두고, 도트에 미세 검정 그림자(halo)만
+// 얹어 밝은 배경 위에서도 흰 도트가 식별되게 한다. 그림자는 토큰 대상 아님(카드 그림자 관례).
+const heroDotShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 0 },
+  shadowOpacity: 0.45,
+  shadowRadius: 2,
+  elevation: 2,
+} as const;
+
 // ── 인사 헤더 ───────────────────────────────────────────────────────────
 // discovery는 고정 카피, 단계 얼굴은 greetTitle/greetSubtitle/greetName을 주입받는다.
 function GreetingHeader({
@@ -286,12 +297,14 @@ function DiscoveryHeroCarousel({
           </View>
         ))}
       </ScrollView>
-      {/* 도트 오버레이 — 사진 위라 흰색(활성 full·비활성 50%), 6×6 균등 원. 좌하단. */}
+      {/* 도트 오버레이 — 사진 위라 흰색(활성 full·비활성 50%), 6×6 균등 원. 좌하단.
+          TRIP-891: 저대비 봉합 위해 heroDotShadow(검정 halo)만 얹음 — 색 계약 불변. */}
       <View className="absolute bottom-[24px] left-lg flex-row items-center gap-[5px]">
         {heroes.map((_, i) => (
           <View
             key={i}
             testID={`home-hero-dot-${i}`}
+            style={heroDotShadow}
             className={`h-[6px] w-[6px] rounded-full bg-on-primary ${
               page === i ? '' : 'opacity-50'
             }`}
@@ -729,14 +742,18 @@ function CountBadge({
   count?: number;
 }): ReactElement | null {
   if ((count ?? 0) < 1) return null;
+  const label = formatCountBadge(count ?? 0);
+  // TRIP-890 — 1~2자리(1~99)는 정원 20px 그대로, 3자리('99+')만 내용 맞춤 알약으로 가로 확장
+  // (고정 20px 원에 '+'가 눌리던 6-b 실측 봉합, Figma 3594:1976). 높이·라운드는 불변.
+  const wide = label.length >= 3;
   return (
     <View
       testID={testID}
-      className="absolute right-0 top-0 h-[20px] w-[20px] items-center justify-center rounded-full border-2 border-canvas bg-primary"
+      className={`absolute right-0 top-0 h-[20px] items-center justify-center rounded-full border-2 border-canvas bg-primary ${
+        wide ? 'min-w-[20px] px-[5px]' : 'w-[20px]'
+      }`}
     >
-      <Text className="text-[12px] font-bold text-on-primary">
-        {formatCountBadge(count ?? 0)}
-      </Text>
+      <Text className="text-[12px] font-bold text-on-primary">{label}</Text>
     </View>
   );
 }
