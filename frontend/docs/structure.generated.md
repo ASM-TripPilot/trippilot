@@ -40,6 +40,7 @@
 - `src/__tests__/exploreLandingAxisRemoval.test.ts`  →  (export 없음)
 - `src/__tests__/fsdLayerStructure.test.ts`  →  (export 없음)
 - `src/__tests__/fsdStructure.test.ts`  →  (export 없음)
+- `src/__tests__/homeGlyphColorStructure.test.ts`  →  (export 없음)
 - `src/__tests__/homeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/importBoundary.test.ts`  →  (export 없음)
 - `src/__tests__/importBoundaryLayers.test.ts`  →  (export 없음)
@@ -381,10 +382,13 @@
 - `src/features/explore/ui/RegionPickerScreen.tsx`  →  RegionPurpose · RegionPickerScreenProps · RegionPickerScreen
 - `src/features/explore/ui/SavedPlaceListScreen.tsx`  →  SavedPlaceListScreenProps · SavedPlaceListScreen
 
+## src/features/home/lib/
+- `src/features/home/lib/formatCountBadge.ts`  →  formatCountBadge
+
 ## src/features/home/model/
-- `src/features/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS · HOME_NO_TRIP_PROPS · HOME_EMPTY_PROPS · HOME_LOADING_PROPS · HOME_COLLECTING_PROPS · HOME_PLANNING_PROPS · HOME_UPCOMING_PROPS · HOME_POST_TRIP_PROPS
+- `src/features/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS · HOME_LOADING_PROPS · HOME_PLANNING_PROPS · HOME_POST_TRIP_PROPS
 - `src/features/home/model/homePhase.ts`  →  HomeTripInput · ResolveHomePhaseInput · formatDday · resolveHomePhase
-- `src/features/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeSpotCard · HomeItineraryCard · HomeMagazineHero · HomeSections · TripHeroData · HomeStatTile · NextStop · NearbyCard · RecapCard · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
+- `src/features/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeSpotCard · HomeItineraryCard · HomeMagazineHero · HomeSections · TripHeroData · RecapCard · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
 
 ## src/features/home/ui/
 - `src/features/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph
@@ -1285,4 +1289,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 865개 파일
+합계 867개 파일

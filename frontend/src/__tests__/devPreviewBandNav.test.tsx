@@ -119,7 +119,16 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    implementer 는 preview.tsx 에서 그 4키만 지울 뿐 이 가드는 안 만진다(삭제 전엔 168개라 이 단언이 red).
     //    INV-4: 삭제는 프리뷰 배선뿐 — 폴백 얼굴(TripWizardStep2Screen variant error/notrip)은 코드로 남는다.
     //    devPreviewBandSort 는 밴드 h·l 만 잠가 band g 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(164);
+    // ⚠️ TRIP-701: a01 프리뷰 정리로 홈 프리뷰 키 4개(no-trip·empty·collecting·upcoming 얼굴,
+    //    band a) 삭제로 164→160. test-designer 선반영(카운트 가드만) — implementer 는
+    //    preview.tsx 에서 그 4키만 지울 뿐 이 가드는 안 만진다(삭제 전엔 164개라 이 단언이 red).
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band a 와 무관(오갱신 금지).
+    // ⚠️ TRIP-695: a01 담은 곳 메뉴 배지 프리뷰 3키(`home-saved-menu`·`-badge`·`-badge-99`,
+    //    band a) 추가로 160→163. test-designer 02a 선반영(카운트 가드만) — implementer 는
+    //    preview.tsx 에 세 키만 추가하고 이 가드는 안 만진다(추가 전엔 160개라 이 단언이 red).
+    //    티켓의 "168→171"·"171" 은 stale(TRIP-701 이 프리뷰 4키를 삭제해 실측 160 → 163 이 정답).
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band a 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(163);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -136,6 +145,21 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     const allKeys = PREVIEW_STATES.map((state) => state.key);
     expect(new Set(groupedKeys)).toEqual(new Set(allKeys));
     expect(groupedKeys).toHaveLength(allKeys.length);
+  });
+});
+
+describe('🔴 TRIP-695 AC-5 · 담은 곳 메뉴 배지 프리뷰 3키 (band a)', () => {
+  it('키 집합에 home-saved-menu·-badge·-badge-99 가 있고 형제 band a 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — 세 키는 implementer 가 preview.tsx 에 추가하기 전엔 없다.
+    expect(keys).toContain('home-saved-menu'); // open, 0/0(무배지)
+    expect(keys).toContain('home-saved-menu-badge'); // 7/3
+    expect(keys).toContain('home-saved-menu-badge-99'); // 100(→99+)/24
+
+    // 형제 band a 앵커 — 기존 홈 키가 딸려 사라지지 않았음을 못박는다.
+    expect(keys).toContain('home-default');
   });
 });
 

@@ -260,8 +260,10 @@ describe('AC-1 · 슬라이스 세그먼트 개명 — FSD 5칸', () => {
 
     const segments = listDirNames(HOME_DIR);
 
-    // 부정 겸 긍정 — 2칸만 있어야 한다(옛 두 칸 screens·components가 남아 있으면 red).
-    expect(segments).toEqual(['model', 'ui']);
+    // 부정 겸 긍정 — 옛 두 칸(screens·components)이 남아 있으면 red. TRIP-695로 순수
+    // 포맷터(formatCountBadge)가 FSD 세그먼트 lib/에 들어와 3칸이 됐다(fsdLayerStructure의
+    // {ui,model,lib,config} 허용목록 안 — 자매 가드 green). 완전일치라 정렬 순.
+    expect(segments).toEqual(['lib', 'model', 'ui']);
 
     // 긍정(짝) — 옛 두 칸(screens·components)에서 옮겨온 파일들이 실제로 ui/에
     // 도착했는지 본다. 하나만 보면 절반 이동을 놓친다.

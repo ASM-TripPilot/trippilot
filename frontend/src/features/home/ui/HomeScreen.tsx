@@ -16,6 +16,7 @@
  */
 import { useState, type ReactElement } from 'react';
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -38,6 +39,7 @@ import {
   SparkleGlyph,
   SuitcaseGlyph,
 } from './HomeGlyphs';
+import { formatCountBadge } from '../lib/formatCountBadge';
 import type {
   HomeCollectionCard,
   HomeItineraryCard,
@@ -46,7 +48,6 @@ import type {
   HomeScreenProps,
   HomeSections,
   HomeSpotCard,
-  NextStop,
   PastTrip,
   TripHeroData,
 } from '../model/homeTypes';
@@ -110,10 +111,11 @@ function GreetingHeader({
       <Pressable
         testID="home-dashboard-bell"
         onPress={undefined}
-        className="h-10 w-10 items-center justify-center"
+        style={softCardShadow}
+        className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
       >
         <BellGlyph size={22} />
-        <View className="absolute right-[8px] top-[8px] h-[7px] w-[7px] rounded-pill bg-primary" />
+        <View className="absolute right-[8px] top-[8px] h-[8px] w-[8px] rounded-pill bg-primary" />
       </Pressable>
     </View>
   );
@@ -142,21 +144,36 @@ function SearchBarBlock({ onPress }: { onPress?: () => void }): ReactElement {
 }
 
 // ── magazineHero(영감 카드) ─────────────────────────────────────────────
-function MagazineHero({ hero }: { hero: HomeMagazineHero }): ReactElement {
+// TRIP-694: 히어로 하트 제거(AC-1) · 생성 사진 Image 배선(AC-5) · discovery 캐러셀 페이지로
+// 재사용하기 위한 옵셔널 testID(기본 home-magazine-hero, page1~4 는 다른 값)·showDots(기본
+// true — planning HeroCarousel 은 내부 3-dot 유지, discovery 페이지는 false 로 넘겨 캐러셀이
+// 도트 1벌을 오버레이로 소유). 사진은 uri 유무와 무관하게 Image 를 무조건 렌더한다 — jest 에선
+// uri 가 null(사진 없는 카드)이지만 Image 엘리먼트 자체는 그려져 AC-5 렌더 계약을 만족한다.
+function MagazineHero({
+  hero,
+  testID = 'home-magazine-hero',
+  showDots = true,
+}: {
+  hero: HomeMagazineHero;
+  testID?: string;
+  showDots?: boolean;
+}): ReactElement {
   return (
-    <View
-      testID="home-magazine-hero"
-      className="h-[470px] w-full overflow-hidden"
-    >
-      {/* 사진 자리 — 실 사진 소스 없음(가정 C) → 토큰색 플레이스홀더 + 스크림 */}
+    <View testID={testID} className="h-[470px] w-full overflow-hidden">
+      {/* 사진 자리 — 토큰색 tint 위에 생성 사진(스크림 아래), uri 없으면 tint 노출 */}
       <View className="absolute inset-0 bg-surface-strong" />
+      <Image
+        source={hero.imageUrl ? { uri: hero.imageUrl } : undefined}
+        resizeMode="cover"
+        style={ABSOLUTE_FILL}
+      />
       <LinearGradient
         colors={HERO_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
         style={ABSOLUTE_FILL}
       />
       <View className="flex-1 justify-between px-lg pb-xl pt-xl">
-        {/* 상단: eyebrow pill + 하트 */}
+        {/* 상단: eyebrow pill(하트는 TRIP-694로 제거) */}
         <View className="w-full flex-row items-start justify-between">
           <View className="flex-row items-center gap-[6px] self-start rounded-pill bg-canvas px-md py-[5px]">
             <SparkleGlyph size={13} />
@@ -164,9 +181,8 @@ function MagazineHero({ hero }: { hero: HomeMagazineHero }): ReactElement {
               {hero.eyebrow}
             </Text>
           </View>
-          <HeartOutlineGlyph size={30} />
         </View>
-        {/* 하단: 타이틀 + 부제 + 메타칩 + 3-dot */}
+        {/* 하단: 타이틀 + 부제 + 메타칩 + (planning 전용) 3-dot */}
         <View className="w-full gap-[10px]">
           <View className="gap-[6px]">
             <Text className="font-noto-bold text-[28px] font-bold text-on-primary">
@@ -189,12 +205,62 @@ function MagazineHero({ hero }: { hero: HomeMagazineHero }): ReactElement {
               </View>
             ))}
           </View>
-          <View className="flex-row items-center gap-[5px] pt-[4px]">
-            <View className="h-[6px] w-[18px] rounded-pill bg-on-primary" />
-            <View className="h-[6px] w-[6px] rounded-pill bg-on-primary opacity-50" />
-            <View className="h-[6px] w-[6px] rounded-pill bg-on-primary opacity-50" />
-          </View>
+          {showDots ? (
+            <View className="flex-row items-center gap-[5px] pt-[4px]">
+              <View className="h-[6px] w-[18px] rounded-pill bg-on-primary" />
+              <View className="h-[6px] w-[6px] rounded-pill bg-on-primary opacity-50" />
+              <View className="h-[6px] w-[6px] rounded-pill bg-on-primary opacity-50" />
+            </View>
+          ) : null}
         </View>
+      </View>
+    </View>
+  );
+}
+
+// ── discovery 히어로 캐러셀(TRIP-694 · 5페이지 페이징) ─────────────────────
+// discovery 얼굴의 단일 MagazineHero 를 5장 페이징 캐러셀로 바꾼다. 페이지 래퍼는 N당 정확히
+// 1노드(home-hero-page-N), page0 안의 MagazineHero 만 home-magazine-hero(단일성 유지), 도트는
+// 캐러셀이 고정 오버레이 1벌(home-hero-dot-N)로 소유한다. 실 스와이프·페이지 전환·활성 도트
+// 하이라이트는 jest 원리적 사각(6-b 실기) — 구조(페이지 5·도트 5)만 잠긴다.
+function DiscoveryHeroCarousel({
+  heroes,
+}: {
+  heroes: readonly HomeMagazineHero[];
+}): ReactElement {
+  const { width } = useWindowDimensions();
+  const [page, setPage] = useState(0);
+  return (
+    <View className="w-full">
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) =>
+          setPage(Math.round(e.nativeEvent.contentOffset.x / width))
+        }
+      >
+        {heroes.map((hero, i) => (
+          <View key={i} testID={`home-hero-page-${i}`} style={{ width }}>
+            <MagazineHero
+              hero={hero}
+              testID={i === 0 ? 'home-magazine-hero' : `home-hero-slide-${i}`}
+              showDots={false}
+            />
+          </View>
+        ))}
+      </ScrollView>
+      {/* 도트 오버레이 — 사진 위라 흰색(활성 full·비활성 50%), 6×6 균등 원. 좌하단. */}
+      <View className="absolute bottom-[24px] left-lg flex-row items-center gap-[5px]">
+        {heroes.map((_, i) => (
+          <View
+            key={i}
+            testID={`home-hero-dot-${i}`}
+            className={`h-[6px] w-[6px] rounded-full bg-on-primary ${
+              page === i ? '' : 'opacity-50'
+            }`}
+          />
+        ))}
       </View>
     </View>
   );
@@ -233,25 +299,8 @@ function SectionHeader({
   );
 }
 
-// ── 섹션 빈 플레이스홀더(AC-4 · 침묵 은닉 금지) ─────────────────────────
-function SectionEmptyBlock({ testID }: { testID: string }): ReactElement {
-  return (
-    <View
-      testID={testID}
-      className="mx-lg items-center gap-[6px] rounded-card border border-hairline bg-canvas-alt px-lg py-[26px]"
-    >
-      <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
-        아직 보여드릴 게 없어요
-      </Text>
-      <Text className="text-center font-noto text-label text-muted">
-        담아둔 장소가 쌓이면 여기에 골라 담아 드려요
-      </Text>
-    </View>
-  );
-}
-
 // ── 컬렉션 카드(요즘 사람들이 담는 곳 · 내가 담은 곳 · 추천) ─────────────
-// savedAtLabel이 있으면(collecting) 하단 메타를 저장일로, 없으면(discovery·추천) 지역+핀으로 그린다.
+// 하단 메타는 지역+핀으로 그린다(discovery·추천 공용).
 function CollectionCard({
   card,
   index,
@@ -266,6 +315,11 @@ function CollectionCard({
       className="h-[300px] w-[230px] overflow-hidden rounded-[18px]"
     >
       <View className="absolute inset-0 bg-surface-strong" />
+      <Image
+        source={card.imageUrl ? { uri: card.imageUrl } : undefined}
+        resizeMode="cover"
+        style={ABSOLUTE_FILL}
+      />
       <LinearGradient
         colors={DEST_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
@@ -283,18 +337,12 @@ function CollectionCard({
         <Text className="font-noto-bold text-[18px] font-bold text-on-primary">
           {card.title}
         </Text>
-        {card.savedAtLabel ? (
+        <View className="flex-row items-center gap-[4px]">
+          <LocationPinGlyph size={12} />
           <Text className="font-noto text-micro text-on-primary opacity-90">
-            {card.savedAtLabel}
+            {card.region}
           </Text>
-        ) : (
-          <View className="flex-row items-center gap-[4px]">
-            <LocationPinGlyph size={12} />
-            <Text className="font-noto text-micro text-on-primary opacity-90">
-              {card.region}
-            </Text>
-          </View>
-        )}
+        </View>
       </View>
     </View>
   );
@@ -314,6 +362,11 @@ function SpotCard({
       className="h-[166px] flex-1 overflow-hidden rounded-card"
     >
       <View className="absolute inset-0 bg-surface-strong" />
+      <Image
+        source={card.imageUrl ? { uri: card.imageUrl } : undefined}
+        resizeMode="cover"
+        style={ABSOLUTE_FILL}
+      />
       <LinearGradient
         colors={SPOT_SCRIM_COLORS}
         locations={SCRIM_LOCATIONS}
@@ -387,8 +440,6 @@ function CollectionsSection({
             <CollectionCard key={card.title} card={card} index={index} />
           ))}
         </ScrollView>
-      ) : sections.kind === 'empty' ? (
-        <SectionEmptyBlock testID="home-collections-empty" />
       ) : (
         <View
           testID="home-collections-skeleton"
@@ -432,8 +483,6 @@ function SpotsSection({
             </View>
           ))}
         </View>
-      ) : sections.kind === 'empty' ? (
-        <SectionEmptyBlock testID="home-spots-empty" />
       ) : (
         <View testID="home-spots-skeleton" className="mx-lg gap-md">
           {[0, 1].map((row) => (
@@ -471,8 +520,6 @@ function ItinerariesSection({
             <ItineraryCard key={card.title} card={card} index={index} />
           ))}
         </ScrollView>
-      ) : sections.kind === 'empty' ? (
-        <SectionEmptyBlock testID="home-itineraries-empty" />
       ) : (
         <View
           testID="home-itineraries-skeleton"
@@ -559,43 +606,7 @@ function TripHero({
   );
 }
 
-// ── nextStop(upcoming '가장 먼저 갈 곳' · 순번·시각·장소·영업시간+거리) ──
-// INV-3: time은 방문 시각(09:30, INV-2 솔버검증값 표시 허용), placeMeta는 영업시간+거리 — 소요시간 아님.
-function NextStopCard({ nextStop }: { nextStop: NextStop }): ReactElement {
-  return (
-    <View className="w-full gap-md">
-      <View className="w-full px-lg">
-        <Text className="font-noto-bold text-section font-bold text-ink">
-          가장 먼저 갈 곳
-        </Text>
-      </View>
-      <View
-        testID="home-next-stop"
-        style={softCardShadow}
-        className="mx-lg flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-md py-md"
-      >
-        <View className="h-[30px] w-[30px] items-center justify-center rounded-pill bg-primary">
-          <Text className="font-noto-bold text-caption font-bold text-on-primary">
-            {nextStop.order}
-          </Text>
-        </View>
-        <View className="flex-1 gap-[3px]">
-          <Text className="font-noto text-micro text-muted">
-            {nextStop.time}
-          </Text>
-          <Text className="font-noto-bold text-body font-bold text-ink">
-            {nextStop.title}
-          </Text>
-          <Text className="font-noto text-micro text-muted">
-            {nextStop.placeMeta}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// ── 미니맵 카드(upcoming '지금 내 주변' · postTrip '회고 보기' 공용 · 브리프 §3-C) ──
+// ── 미니맵 카드(postTrip '회고 보기' · 브리프 §3-C) ──
 // 미니맵은 플레이스홀더(가정 F — shared/map 끌어오지 않음, 홈은 프레젠테이션 순수 유지).
 function MiniMapCard({
   testID,
@@ -623,7 +634,7 @@ function MiniMapCard({
   );
 }
 
-// ── 지난 여행(upcoming·postTrip 공용) ───────────────────────────────────
+// ── 지난 여행(postTrip) ──────────────────────────────────────────────────
 function PastTripsSection({
   trips,
 }: {
@@ -655,7 +666,7 @@ function PastTripsSection({
   );
 }
 
-// ── 컬렉션 가로 스트립(collecting '내가 담은 곳' · postTrip '다음엔 여기 어때요') ──
+// ── 컬렉션 가로 스트립(postTrip '다음엔 여기 어때요') ──────────────────────
 function CollectionStrip({
   title,
   collections,
@@ -675,21 +686,6 @@ function CollectionStrip({
           <CollectionCard key={card.title} card={card} index={index} />
         ))}
       </ScrollView>
-    </View>
-  );
-}
-
-// ── 담은 곳 N 칩(collecting · FAB 위 · US-SHELL-05 잇기) ─────────────────
-function SavedCountChip({ label }: { label: string }): ReactElement {
-  return (
-    <View
-      testID="home-saved-count-chip"
-      style={fabShadow}
-      className="absolute bottom-[160px] right-lg rounded-pill border-[1.4px] border-primary bg-canvas px-md py-sm"
-    >
-      <Text className="font-noto-bold text-caption font-bold text-primary-text">
-        {label}
-      </Text>
     </View>
   );
 }
@@ -720,71 +716,97 @@ function CreateTripFab({ onPress }: { onPress?: () => void }): ReactElement {
   );
 }
 
+// 미니 FAB 우상단 개수 배지(핑크 원, TRIP-695) — count≥1 일 때만 그린다(0/미지정/음수→null,
+// 빈 원 방지). 텍스트는 formatCountBadge 가 100↑을 '99+'로 접는다(AC-2). 배지 색(bg-primary)은
+// View className 이라 jest 관측되지만(미니 FAB 안 SVG 글리프 색과 다름), 지름 20·흰 2px 테두리·
+// 우상단 flush 위치는 6-b 육안 전용(jest 사각). `h-[20px]` 브래킷 — `h-5` 는 rem 17.5px 함정.
+function CountBadge({
+  testID,
+  count,
+}: {
+  testID: string;
+  count?: number;
+}): ReactElement | null {
+  if ((count ?? 0) < 1) return null;
+  return (
+    <View
+      testID={testID}
+      className="absolute right-0 top-0 h-[20px] w-[20px] items-center justify-center rounded-full border-2 border-canvas bg-primary"
+    >
+      <Text className="text-[12px] font-bold text-on-primary">
+        {formatCountBadge(count ?? 0)}
+      </Text>
+    </View>
+  );
+}
+
 // 담은 곳 saved-menu FAB(TRIP-494 홈 확장 · Figma a01 3012:1731) — + FAB 바로 위 흰 원형 하트.
 // 누르면 두 미니 FAB 으로 펼쳐진다: 담은 장소(위치핀→d02) · 저장한 숙소(가방→e04). 열리면
-// 하트가 X(닫기, 핑크)로 바뀌고 배후 backdrop 이 뜬다(바깥 탭으로 닫힘). 열림 상태·목적지는
+// 하트가 X(닫기, 핑크)로 바뀐다. 각 미니 FAB 우상단엔 담긴 개수 배지(count≥1일 때만, TRIP-695).
+// 배후 backdrop 은 HomeScreen 레벨로 올라갔다(+ FAB 도 덮게, AC-3 z-order). 열림 상태·개수·목적지는
 // 라우트가 소유해 prop 으로 내린다(화면 useState 0건 — homeStructure 순수성, 탐색 랜딩과 동형).
 function SavedMenuFab({
   open,
   onToggle,
   onPressSavedPlaces,
   onPressSavedStays,
+  savedPlacesCount,
+  savedStaysCount,
 }: {
   open: boolean;
   onToggle?: () => void;
   onPressSavedPlaces?: () => void;
   onPressSavedStays?: () => void;
+  savedPlacesCount?: number;
+  savedStaysCount?: number;
 }): ReactElement {
   return (
-    <>
+    <View className="absolute bottom-[152px] right-lg flex-row items-center gap-md">
       {open ? (
-        <Pressable
-          testID="home-saved-menu-backdrop"
-          accessibilityRole="button"
-          accessibilityLabel="담은 곳 메뉴 닫기"
-          onPress={onToggle}
-          className="absolute inset-0 bg-scrim/40"
-        />
+        <>
+          <Pressable
+            testID="home-saved-places-fab"
+            accessibilityRole="button"
+            accessibilityLabel="담은 장소"
+            onPress={onPressSavedPlaces}
+            style={fabShadow}
+            className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+          >
+            <MapPinGlyph size={26} />
+            <CountBadge
+              testID="home-saved-places-badge"
+              count={savedPlacesCount}
+            />
+          </Pressable>
+          <Pressable
+            testID="home-saved-stays-fab"
+            accessibilityRole="button"
+            accessibilityLabel="저장한 숙소"
+            onPress={onPressSavedStays}
+            style={fabShadow}
+            className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+          >
+            <SuitcaseGlyph size={26} />
+            <CountBadge
+              testID="home-saved-stays-badge"
+              count={savedStaysCount}
+            />
+          </Pressable>
+        </>
       ) : null}
-      <View className="absolute bottom-[152px] right-lg flex-row items-center gap-md">
-        {open ? (
-          <>
-            <Pressable
-              testID="home-saved-places-fab"
-              accessibilityRole="button"
-              accessibilityLabel="담은 장소"
-              onPress={onPressSavedPlaces}
-              style={fabShadow}
-              className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
-            >
-              <MapPinGlyph size={26} />
-            </Pressable>
-            <Pressable
-              testID="home-saved-stays-fab"
-              accessibilityRole="button"
-              accessibilityLabel="저장한 숙소"
-              onPress={onPressSavedStays}
-              style={fabShadow}
-              className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
-            >
-              <SuitcaseGlyph size={26} />
-            </Pressable>
-          </>
-        ) : null}
-        <Pressable
-          testID="home-saved-menu-toggle"
-          accessibilityRole="button"
-          accessibilityLabel={open ? '담은 곳 메뉴 닫기' : '담은 곳'}
-          onPress={onToggle}
-          style={fabShadow}
-          className={`h-[56px] w-[56px] items-center justify-center rounded-full ${
-            open ? 'bg-primary' : 'bg-canvas'
-          }`}
-        >
-          {open ? <CloseGlyph size={24} /> : <HeartFilledGlyph size={26} />}
-        </Pressable>
-      </View>
-    </>
+      <Pressable
+        testID="home-saved-menu-toggle"
+        accessibilityRole="button"
+        accessibilityLabel={open ? '담은 곳 메뉴 닫기' : '담은 곳'}
+        onPress={onToggle}
+        style={fabShadow}
+        className={`h-[56px] w-[56px] items-center justify-center rounded-full ${
+          open ? 'bg-primary' : 'bg-canvas'
+        }`}
+      >
+        {open ? <CloseGlyph size={24} /> : <HeartFilledGlyph size={26} />}
+      </Pressable>
+    </View>
   );
 }
 
@@ -795,7 +817,7 @@ function DiscoveryBody({
   onPressSpotsMore,
   onPressSearch,
 }: {
-  hero: HomeMagazineHero;
+  hero: readonly HomeMagazineHero[];
   sections: HomeSections;
   onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
@@ -807,41 +829,18 @@ function DiscoveryBody({
         subtitle="떠나지 않아도, 구경하고 모으는 즐거움"
       />
       <SearchBarBlock onPress={onPressSearch} />
-      <MagazineHero hero={hero} />
+      {/* TRIP-699 — 로딩이면 히어로는 캐러셀이 아니라 통짜 스켈레톤(390×470, Figma 2174:2307). */}
+      {sections.kind === 'loading' ? (
+        <View
+          testID="home-hero-skeleton"
+          className="h-[470px] w-full bg-surface-strong"
+        />
+      ) : (
+        <DiscoveryHeroCarousel heroes={hero} />
+      )}
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         <CollectionsSection sections={sections} />
         <SpotsSection sections={sections} onMore={onPressSpotsMore} />
-        <ItinerariesSection sections={sections} />
-      </View>
-    </>
-  );
-}
-
-// ── collecting 얼굴(담는 중 · discovery와 가장 가까움) ──────────────────
-// greet 저장개수 · 섹션1 "내가 담은 곳"(지역 badge+저장일) · softNote 숨김 · 담은 곳 N 칩(오버레이).
-function CollectingBody({
-  hero,
-  sections,
-  phase,
-  onPressSearch,
-}: {
-  hero: HomeMagazineHero;
-  sections: HomeSections;
-  phase: Extract<HomePhase, { kind: 'collecting' }>;
-  onPressSearch?: () => void;
-}): ReactElement {
-  return (
-    <>
-      <GreetingHeader title={phase.greetTitle} subtitle={phase.greetSubtitle} />
-      <SearchBarBlock onPress={onPressSearch} />
-      <MagazineHero hero={hero} />
-      <View className="w-full gap-[24px] pb-sm pt-[22px]">
-        <CollectionStrip
-          title={phase.sectionTitle}
-          collections={phase.collections}
-        />
-        <SpotsSection sections={sections} />
-        <ItinerariesSection sections={sections} />
       </View>
     </>
   );
@@ -906,7 +905,7 @@ function PlanningBody({
   onPressSearch,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
-  hero: HomeMagazineHero;
+  hero: readonly HomeMagazineHero[];
   sections: HomeSections;
   onPressTripHeroCta?: () => void;
   onPressSpotsMore?: () => void;
@@ -918,38 +917,13 @@ function PlanningBody({
       <SearchBarBlock onPress={onPressSearch} />
       <HeroCarousel
         trip={phase.trip}
-        hero={hero}
+        hero={hero[0]}
         onPressTripCta={onPressTripHeroCta}
       />
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         <CollectionsSection sections={sections} />
         <SpotsSection sections={sections} onMore={onPressSpotsMore} />
         <ItinerariesSection sections={sections} />
-      </View>
-    </>
-  );
-}
-
-// ── upcoming 얼굴(출발 전 활성 여행 허브 · 가장 다른 얼굴) ───────────────
-// 이름 greet · tripHero(출발 전) · 스탯 2 · 가장 먼저 갈 곳 · 지금 내 주변 · 지난 여행.
-// searchBar·magazineHero·softNote·컬렉션/스팟 전부 없음(브리프 §8-6).
-function UpcomingBody({
-  phase,
-}: {
-  phase: Extract<HomePhase, { kind: 'upcoming' }>;
-}): ReactElement {
-  return (
-    <>
-      <GreetingHeader name={phase.greetName} title={phase.greetTitle} />
-      <TripHero trip={phase.trip} />
-      <View className="w-full gap-[24px] pb-sm pt-[22px]">
-        <NextStopCard nextStop={phase.nextStop} />
-        <MiniMapCard
-          testID="home-nearby-card"
-          title={phase.nearby.title}
-          subtitle={phase.nearby.subtitle}
-        />
-        <PastTripsSection trips={phase.pastTrips} />
       </View>
     </>
   );
@@ -1006,15 +980,6 @@ function PhaseBody({
     );
   }
   switch (phase.kind) {
-    case 'collecting':
-      return (
-        <CollectingBody
-          hero={hero}
-          sections={sections}
-          phase={phase}
-          onPressSearch={onPressSearch}
-        />
-      );
     case 'planning':
       return (
         <PlanningBody
@@ -1026,8 +991,6 @@ function PhaseBody({
           onPressSearch={onPressSearch}
         />
       );
-    case 'upcoming':
-      return <UpcomingBody phase={phase} />;
     case 'postTrip':
       return <PostTripBody phase={phase} onPressSearch={onPressSearch} />;
   }
@@ -1043,9 +1006,12 @@ export function HomeScreen({
   onPressSpotsMore,
   onPressTripHeroCta,
   onPressSearch,
+  savedPlacesCount,
+  savedStaysCount,
   savedMenuOpen,
   onToggleSavedMenu,
 }: HomeScreenProps): ReactElement {
+  const menuOpen = savedMenuOpen ?? false;
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="home-dashboard-root" className="flex-1 bg-canvas">
@@ -1063,16 +1029,32 @@ export function HomeScreen({
             onPressSearch={onPressSearch}
           />
         </ScrollView>
-        {phase?.kind === 'collecting' ? (
-          <SavedCountChip label={phase.savedChipLabel} />
+        {/* TRIP-699 — 로딩이면 두 FAB 숨김(Figma 2174:2307). 로딩은 항상 discovery라 phase 없음. */}
+        {sections.kind !== 'loading' ? (
+          <>
+            {/* TRIP-695 z-order(AC-3) — 문서순=스택이라(RN 기본, zIndex 없음) 뒤→위로
+                CreateTripFab → 백드롭 → 미니 FAB+토글. 백드롭을 + FAB 뒤에 둬 딤이 + FAB 도
+                덮는다. 실제 딤 커버는 6-b 육안(jest 원리적 사각). */}
+            <CreateTripFab onPress={onPressCreateTrip} />
+            {menuOpen ? (
+              <Pressable
+                testID="home-saved-menu-backdrop"
+                accessibilityRole="button"
+                accessibilityLabel="담은 곳 메뉴 닫기"
+                onPress={onToggleSavedMenu}
+                className="absolute inset-0 bg-scrim/40"
+              />
+            ) : null}
+            <SavedMenuFab
+              open={menuOpen}
+              onToggle={onToggleSavedMenu}
+              onPressSavedPlaces={onPressSavedPlaces}
+              onPressSavedStays={onPressSavedStays}
+              savedPlacesCount={savedPlacesCount}
+              savedStaysCount={savedStaysCount}
+            />
+          </>
         ) : null}
-        <SavedMenuFab
-          open={savedMenuOpen ?? false}
-          onToggle={onToggleSavedMenu}
-          onPressSavedPlaces={onPressSavedPlaces}
-          onPressSavedStays={onPressSavedStays}
-        />
-        <CreateTripFab onPress={onPressCreateTrip} />
       </View>
     </SafeAreaView>
   );

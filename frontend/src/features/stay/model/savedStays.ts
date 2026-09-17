@@ -141,6 +141,9 @@ export function useSavedStays(deps: { isAuthed: boolean }) {
     save,
     remove,
     savedKeys,
+    // 전체 저장 숙소 개수(핀·수동등록 포함, FD "N곳") — 홈 담은 곳 배지 수(TRIP-695 Q1=안 B).
+    // savedKeys 는 외부키 있는 담기만 세는 부분집합이라 배지 의도(전체)와 어긋나 별도 노출한다.
+    savedCount: savedListQuery.data?.length ?? 0,
     isPending: savedListQuery.isPending,
     isError: savedListQuery.isError,
     refetch: savedListQuery.refetch,

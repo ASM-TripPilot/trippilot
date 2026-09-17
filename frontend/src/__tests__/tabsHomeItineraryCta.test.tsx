@@ -48,6 +48,13 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: jest.fn(),
 }));
 
+// TRIP-695 — 홈 라우트가 담은 곳 배지 수(숙소)를 useSavedStays().savedCount 로 물게 되면서
+// 이 파일도 <HomeRoute/> 를 렌더하므로 QueryClient 부재 크래시를 막는 무해 스텁이 필요하다
+// (딥 경로, features/trip 동명 훅 아님, tabsHomeRoute·tabsShell 선례와 동일 계열). 단언 무변경.
+jest.mock('@/features/stay/model/savedStays', () => ({
+  useSavedStays: () => ({ savedCount: 0 }),
+}));
+
 const mockUseGetTrips = useGetTrips as jest.MockedFunction<typeof useGetTrips>;
 const mockUseItinerary = useGetTripsTripIdItinerary as jest.MockedFunction<
   typeof useGetTripsTripIdItinerary
