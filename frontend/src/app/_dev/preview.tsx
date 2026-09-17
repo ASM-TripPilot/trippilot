@@ -1649,8 +1649,8 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <PrefStep1Screen
-        selectedStyles={null}
-        selectedPace={null}
+        selectedStyles={['rest', 'gourmet']}
+        selectedPace="balanced"
         onToggleStyle={noop}
         onTogglePace={noop}
         onNext={noop}
