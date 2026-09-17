@@ -5,6 +5,7 @@ import com.trippilot.placedata.api.DomesticRegionFacade
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.condition.EnabledIf
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -39,6 +40,7 @@ import org.springframework.test.context.TestPropertySource
     ],
 )
 @EnabledIfEnvironmentVariable(named = "LIVE_KAKAO", matches = "1")
+@EnabledIf("com.trippilot.app.KakaoLiveKeyKt#hasKakaoKey")
 class LiveKakaoGeocodeIT : AbstractPostgresIntegrationTest() {
 
     @Autowired lateinit var domestic: DomesticRegionFacade
