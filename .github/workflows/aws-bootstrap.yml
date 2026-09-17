@@ -1,0 +1,102 @@
+name: AWS bootstrap (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Bootstrap target GitHub Environment
+        type: choice
+        required: true
+        options:
+          - dev
+          - prd
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      BOOTSTRAP_ROLE_ARN: ${{ vars.AWS_BOOTSTRAP_ROLE_ARN }}
+      OIDC_PROVIDER_ARN: ${{ vars.AWS_GITHUB_OIDC_PROVIDER_ARN }}
+      DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
+      AWS_PAGER: ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate target before requesting AWS credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_ENVIRONMENT" == dev || "$DEPLOY_ENVIRONMENT" == prd ]]
+          [[ "$AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]]
+          [[ "$AWS_REGION" =~ ^[a-z]{2}-[a-z]+-[0-9]+$ ]]
+          [[ "$BOOTSTRAP_ROLE_ARN" =~ ^arn:aws:iam::${AWS_ACCOUNT_ID}:role/[A-Za-z0-9_+=,.@/-]+$ ]]
+          [[ "$GITHUB_REPOSITORY" == ASM-TripPilot/trippilot ]]
+          expected_branch="${DEPLOY_BRANCH:-$([[ "$DEPLOY_ENVIRONMENT" == prd ]] && echo main || echo develop)}"
+          if [[ "$GITHUB_REF" != "refs/heads/$expected_branch" ]]; then
+            echo "::error::Bootstrap must run from the configured environment deployment branch."
+            exit 1
+          fi
+          provider="${OIDC_PROVIDER_ARN:-arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com}"
+          [[ "$provider" == "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com" ]]
+          printf 'OIDC_PROVIDER_ARN=%s\n' "$provider" >> "$GITHUB_ENV"
+          python3 -m unittest discover -s infra/bootstrap/tests -v
+
+      - name: Authenticate with preconfigured bootstrap role
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_BOOTSTRAP_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: trippilot-bootstrap-${{ github.run_id }}
+          role-duration-seconds: 1800
+
+      - name: Create or update retained state bucket and deployment role
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation validate-template --template-body file://infra/bootstrap/template.json > /dev/null
+          aws cloudformation deploy \
+            --stack-name "trippilot-${DEPLOY_ENVIRONMENT}-bootstrap" \
+            --template-file infra/bootstrap/template.json \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              "Environment=$DEPLOY_ENVIRONMENT" \
+              "GitHubRepository=$GITHUB_REPOSITORY" \
+              "GitHubOidcProviderArn=$OIDC_PROVIDER_ARN" \
+            --tags Project=trippilot "Environment=$DEPLOY_ENVIRONMENT" ManagedBy=cloudformation
+          aws cloudformation update-termination-protection \
+            --stack-name "trippilot-${DEPLOY_ENVIRONMENT}-bootstrap" \
+            --enable-termination-protection > /dev/null
+
+      - name: Report non-secret setup outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          outputs=$(aws cloudformation describe-stacks \
+            --stack-name "trippilot-${DEPLOY_ENVIRONMENT}-bootstrap" \
+            --query 'Stacks[0].Outputs' --output json)
+          {
+            printf 'Set these values in the **%s** GitHub Environment:\n\n' "$DEPLOY_ENVIRONMENT"
+            printf '| Variable / setting | Value |\n| --- | --- |\n'
+            # shellcheck disable=SC2016
+            jq -r '.[] | if .OutputKey == "DeploymentRoleArn" then "| AWS_ROLE_ARN | `\(.OutputValue)` |" elif .OutputKey == "TerraformStateBucket" then "| Terraform backend bucket | `\(.OutputValue)` |" else empty end' <<< "$outputs"
+            # shellcheck disable=SC2016
+            printf '\nThe backend key is `terraform.tfstate`; native S3 locking uses `terraform.tfstate.tflock`.\n'
+          } >> "$GITHUB_STEP_SUMMARY"

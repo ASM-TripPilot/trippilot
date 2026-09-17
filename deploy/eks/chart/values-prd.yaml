@@ -1,0 +1,11 @@
+environment: prd
+backend:
+  replicas: 2
+ai:
+  replicas: 2
+gateway:
+  replicas: 2
+embedding:
+  replicas: 1
+podDisruptionBudget:
+  enabled: true
