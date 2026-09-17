@@ -16,14 +16,10 @@ import {
 } from '@/features/auth/ui/SocialLoginScreen';
 import { SplashScreen } from '@/features/auth/ui/SplashScreen';
 import {
-  HOME_COLLECTING_PROPS,
   HOME_DEFAULT_PROPS,
-  HOME_EMPTY_PROPS,
   HOME_LOADING_PROPS,
-  HOME_NO_TRIP_PROPS,
   HOME_PLANNING_PROPS,
   HOME_POST_TRIP_PROPS,
-  HOME_UPCOMING_PROPS,
 } from '@/features/home/model/homeFixtures';
 import {
   PREVIEW_PLACES,
@@ -2007,7 +2003,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
-  // ── 홈 대시보드 4상태(TRIP-170) — 프레젠테이션 전용, 고정 픽스처로 그린다 ──
+  // ── 홈 대시보드(TRIP-170) — 프레젠테이션 전용, 고정 픽스처로 그린다(TRIP-701로 2키 삭제) ──
   {
     key: 'home-default',
     band: 'a',
@@ -2016,47 +2012,19 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => withShellTabBar(<HomeScreen {...HOME_DEFAULT_PROPS} />),
   },
   {
-    key: 'home-no-trip',
-    band: 'a',
-    label: 'a01 · 첫 사용자',
-    login: null,
-    render: () => withShellTabBar(<HomeScreen {...HOME_NO_TRIP_PROPS} />),
-  },
-  {
-    key: 'home-empty',
-    band: 'a',
-    label: 'a01 · 취향 부족',
-    login: null,
-    render: () => withShellTabBar(<HomeScreen {...HOME_EMPTY_PROPS} />),
-  },
-  {
     key: 'home-loading',
     band: 'a',
     label: 'a01 · 로딩',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_LOADING_PROPS} />),
   },
-  // ── 홈 여행 단계 얼굴 4종(TRIP-317) — 실기 판정 전용 진입점 ──
-  {
-    key: 'home-collecting',
-    band: 'a',
-    label: 'a01 · 담는 중',
-    login: null,
-    render: () => withShellTabBar(<HomeScreen {...HOME_COLLECTING_PROPS} />),
-  },
+  // ── 홈 여행 단계 얼굴 2종(TRIP-317; collecting·upcoming은 TRIP-701 제거) — 실기 판정 전용 진입점 ──
   {
     key: 'home-planning',
     band: 'a',
     label: 'a01 · 계획 중',
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_PLANNING_PROPS} />),
-  },
-  {
-    key: 'home-upcoming',
-    band: 'a',
-    label: 'a01 · 출발 전',
-    login: null,
-    render: () => withShellTabBar(<HomeScreen {...HOME_UPCOMING_PROPS} />),
   },
   {
     key: 'home-post-trip',

@@ -272,12 +272,16 @@ describe('단계 얼굴 단일 파일 강제 (TRIP-317 · 브리프 §8-7)', () 
     // 긍정 짝 — 단계 얼굴 스위치·신 testID가 이 한 파일에 실재해야 한다(구현 전엔 red).
     const src = sources[0].source;
     // home-dash-itinerary 는 TRIP-646으로 upcoming 스탯 블록과 함께 제거됐다.
-    [
-      'home-trip-hero',
-      'home-next-stop',
-      'home-recap-card',
-      'home-saved-count-chip',
-    ].forEach((id) => expect(src).toContain(id));
+    // home-next-stop(upcoming NextStopCard)·home-saved-count-chip(collecting SavedCountChip)은
+    // TRIP-701 로 upcoming·collecting 얼굴이 HomeScreen.tsx 에서 소멸하며 함께 사라지므로 배열에서
+    // 뺀다. 남겨두면 구현으로 두 testID 가 소멸한 뒤 .toContain 이 하드 FAIL(공허 통과 아님).
+    // (두 testID 의 '구현 후 소멸'을 강제하는 것은 이 카운트 가드가 아니라 tsc+eslint 다 —
+    // upcoming·collecting 유니온 갈래가 사라지면 그 얼굴 코드가 컴파일 불가라 지울 수밖에 없다.
+    // devPreviewBandNav 160 은 프리뷰 키 개수만 보고 HomeScreen.tsx 소스는 못 본다, code-critic 참고-1.)
+    // 유지하는 앵커는 planning(home-trip-hero)·postTrip(home-recap-card) 두 얼굴 — 이번 삭제 대상 아님.
+    ['home-trip-hero', 'home-recap-card'].forEach((id) =>
+      expect(src).toContain(id)
+    );
 
     // 부정 짝 — 얼굴을 별 파일(`*Face.tsx`)로 쪼개면 안 된다(HOME_SCREEN_SOURCE_FILES 동결 취지).
     const uiFiles = listSourceFiles(path.join(HOME_DIR, 'ui')).map((f) =>

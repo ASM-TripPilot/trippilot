@@ -6,12 +6,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import {
-  HOME_DEFAULT_PROPS,
-  HOME_EMPTY_PROPS,
-  HOME_LOADING_PROPS,
-  HOME_NO_TRIP_PROPS,
-} from '../model/homeFixtures';
+import { HOME_DEFAULT_PROPS, HOME_LOADING_PROPS } from '../model/homeFixtures';
 import type { HomePhase } from '../model/homeTypes';
 import { HeartOutlineGlyph } from './HomeGlyphs';
 import { HomeScreen } from './HomeScreen';
@@ -294,8 +289,9 @@ describe('🔴 HomeScreen — no-trip 온램프는 하트 FAB (TRIP-596 AC-1/AC-
   it('no-trip에서 담은 곳 배너는 없고 하트 FAB 토글이 온램프를 잇는다(피드 섹션은 유지)', () => {
     // no-trip = discovery(가정 B: 신 피드는 여행 유무와 무관)라 배너가 같이 사라진다. 담은 곳
     // 온램프는 배너 대신 하트 FAB(장소→d02·숙소→e04)이 승계한다 — US-SHELL-05의 "저장 POI 진입"
-    // 은 배너가 아니라 FAB으로 유지된다.
-    render(<HomeScreen {...HOME_NO_TRIP_PROPS} />);
+    // 은 배너가 아니라 FAB으로 유지된다. TRIP-701 로 HOME_NO_TRIP_PROPS 가 HOME_DEFAULT_PROPS 와
+    // 병합(바이트 동일)돼 default props 로 렌더하되, 이 describe 는 US-SHELL-05 온램프 앵커로 존치한다.
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
 
     // 부정 — 담은 곳 배너 계열(softNote·CTA)이 no-trip에도 없다.
     expect(screen.queryByTestId('home-soft-note')).toBeNull();
@@ -308,37 +304,6 @@ describe('🔴 HomeScreen — no-trip 온램프는 하트 FAB (TRIP-596 AC-1/AC-
 
     // 피드 섹션은 no-trip에서도 그대로(가정 B).
     expect(screen.getByTestId('home-collection-card-0')).toBeOnTheScreen();
-  });
-});
-
-describe('HomeScreen — empty 가시 플레이스홀더 (AC-4 · INV-4)', () => {
-  it('빈 섹션은 가시 플레이스홀더로 드러나고 고정 블록은 살아 있으며 실카드·스켈레톤은 없다', () => {
-    render(<HomeScreen {...HOME_EMPTY_PROPS} />);
-
-    // 긍정 — 고정 블록은 침묵하지 않고 그대로 표시(부재 단언의 앵커 역할 겸함, ★V-1).
-    expect(screen.getByText('오늘은 어디를 상상해볼까요')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-search-bar')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-create-trip-fab')).toBeOnTheScreen();
-
-    // 긍정 — 빈 섹션 2종이 가시 플레이스홀더로 드러난다(침묵 은닉 금지). 여행자 일정 섹션은
-    // TRIP-694로 discovery에서 제거돼 empty 플레이스홀더도 함께 사라진다(★F-1).
-    // W1(code-critic) 강화: testID 존재만으로는 빈 View도 통과 → INV-4 미잠금.
-    // 안내 문구를 요구해 "침묵 은닉"을 red로 잡는다. toHaveTextContent는 이 리포에서
-    // 문자열 인자를 정확 일치로 처리하므로(서브트리 두 텍스트 노드가 연결됨), 이 파일이
-    // 이미 쓰는 정규식 부분매치 관용을 따른다(정규식=부분 매치).
-    expect(screen.getByTestId('home-collections-empty')).toHaveTextContent(
-      /아직 보여드릴 게 없어요/
-    );
-    expect(screen.getByTestId('home-spots-empty')).toHaveTextContent(
-      /아직 보여드릴 게 없어요/
-    );
-
-    // 부정 짝 — empty엔 실카드도 스켈레톤도 없고, 담은 곳 배너(TRIP-596 제거)도 없다.
-    // empty도 DiscoveryBody 경유라 배너가 함께 사라진다(위 고정 블록 present가 앵커).
-    expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
-    expect(screen.queryByTestId('home-collections-skeleton')).toBeNull();
-    expect(screen.queryByTestId('home-soft-note')).toBeNull();
   });
 });
 
@@ -527,9 +492,11 @@ describe('HomeScreen — 비배선 컨트롤은 콜백 0·크래시 0 (370-AC-5 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRIP-317 — 여행 단계 phase 얼굴 4종 (collecting·planning·upcoming·postTrip).
+// TRIP-317 — 여행 단계 phase 얼굴 (planning·postTrip). collecting·upcoming 얼굴 describe 와
+// 로컬 phase 리터럴은 TRIP-701(a01·프리뷰 정리)로 프리뷰 키·픽스처가 삭제되며 함께 제거됐다
+// (라이브 미도달·가정 E — 서버가 이 단계를 줄 계약이 없다). 이 파일에 남는 phase 얼굴은 2종.
 //
-// 무엇을 보장하나: 316 discovery(위 8케이스, 무회귀) 위에 `phase` 판별값으로 4얼굴을
+// 무엇을 보장하나: 316 discovery(무회귀) 위에 `phase` 판별값으로 이 2얼굴을
 // 그리되, 화면은 phase.kind로 스위치만 하고 단계를 스스로 도출하지 않는다(AC-5). 각 얼굴은
 // 브리프 §3 델타의 고유 요소(tripHero·스탯타일·회고카드 등)를 그리고 숨겨야 할 요소는
 // 부재하며(부정 짝), 어떤 얼굴에도 소요시간 문자열은 렌더되지 않는다(AC-6·INV-3).
@@ -545,28 +512,6 @@ const DURATION_RENDER =
 // 테스트-로컬 phase 상수(픽스처 신설 안 함 — 가정 E: (tabs) 착지는 discovery 유지). 각 렌더는
 // {...HOME_DEFAULT_PROPS}로 안전한 discovery 기저를 깔고 phase를 주입한다 — 구 화면이 phase를
 // 무시하고 discovery를 크래시 없이 그린 뒤 신 단언이 깨끗이 red(02a ★9).
-const COLLECTING_PHASE: HomePhase = {
-  kind: 'collecting',
-  greetTitle: '담아둔 곳이 3곳 모였어요',
-  greetSubtitle: '마음에 든 곳들을 모아두고 있어요',
-  sectionTitle: '내가 담은 곳',
-  savedChipLabel: '담은 곳 3',
-  collections: [
-    {
-      title: '감천문화마을',
-      region: '부산 사하구',
-      badge: '부산',
-      savedAtLabel: '7월 30일 담음',
-    },
-    {
-      title: '해운대 해변',
-      region: '부산 해운대구',
-      badge: '부산',
-      savedAtLabel: '7월 28일 담음',
-    },
-  ],
-};
-
 const PLANNING_PHASE: HomePhase = {
   kind: 'planning',
   greetTitle: '부산 여행 D-21',
@@ -582,37 +527,6 @@ const PLANNING_PHASE: HomePhase = {
     subtitle: '남은 자리에 넣어볼까요',
     ctaLabel: '일정에 추가',
   },
-};
-
-const UPCOMING_PHASE: HomePhase = {
-  kind: 'upcoming',
-  greetName: '태현님',
-  greetTitle: '부산 여행이 곧 시작돼요',
-  trip: {
-    badge: '출발 전',
-    dday: 'D-3',
-    ctaLabel: '오늘 일정 보기',
-    title: '부산 여행',
-    meta: '6월 10일 – 6월 13일 · 3박 4일 · 2명',
-  },
-  stats: [
-    { label: '일정', value: '9곳 완성' },
-    { label: '숙소', value: '3/3', caption: '3박 등록' },
-  ],
-  nextStop: {
-    order: '1',
-    time: '09:30 · 활동',
-    title: '광안리 해변',
-    placeMeta: '24시간 개방 · 숙소서 950m',
-  },
-  nearby: {
-    title: '지금 내 주변 살펴보기',
-    subtitle: '부산 해운대구 · 걸어서 갈 만한 곳',
-  },
-  pastTrips: [
-    { title: '경주 여행 2026.04 · 2박' },
-    { title: '강릉 여행 2026.02 · 1박' },
-  ],
 };
 
 const POST_TRIP_PHASE: HomePhase = {
@@ -633,35 +547,6 @@ const POST_TRIP_PHASE: HomePhase = {
   ],
   pastTrips: [{ title: '경주 여행 2026.04 · 2박' }],
 };
-
-describe('HomeScreen — collecting 얼굴 (AC-1 · US-SHELL-05)', () => {
-  it('저장개수 greet·"내가 담은 곳"·담은 곳 N 칩·지역 badge+저장일 카드를 그리고 softNote는 숨긴다', () => {
-    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={COLLECTING_PHASE} />);
-
-    // 긍정 — collecting 고유 요소.
-    expect(screen.getByTestId('home-greeting')).toHaveTextContent(
-      /담아둔 곳이 3곳 모였어요/
-    );
-    expect(screen.getByText('내가 담은 곳')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-saved-count-chip')).toHaveTextContent(
-      /담은 곳 3/
-    );
-
-    // ★4 badge 의미 전환 함정 — collecting 카드는 지역 badge(`부산`)+저장일이지 discovery
-    // badge(`당일치기`)가 아니다. within(c0)로 스코프하고, `부산`은 exact라 region `부산 사하구`
-    // 리프와 구분된다(02a ★2).
-    const c0 = screen.getByTestId('home-collection-card-0');
-    expect(within(c0).getByText('부산')).toBeOnTheScreen();
-    expect(within(c0).getByText('7월 30일 담음')).toBeOnTheScreen();
-    expect(within(c0).queryByText('당일치기')).toBeNull();
-
-    // 부정 짝 — collecting은 softNote 숨김(§3-B).
-    expect(screen.queryByTestId('home-soft-note')).toBeNull();
-
-    // INV-3 — 소요시간 문맥 문자열 0.
-    expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
-  });
-});
 
 describe('HomeScreen — planning 얼굴 (AC-2 · US-SHELL-02)', () => {
   it('tripHero "계획 중"·D-day·CTA + 영감 스와이프 캐러셀 + 발견 섹션을 함께 그린다 (TRIP-647)', () => {
@@ -697,54 +582,6 @@ describe('HomeScreen — planning 얼굴 (AC-2 · US-SHELL-02)', () => {
     expect(screen.queryByTestId('home-soft-note')).toBeNull();
 
     // INV-3.
-    expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
-  });
-});
-
-describe('HomeScreen — upcoming 얼굴 (AC-3 · US-SHELL-02)', () => {
-  it('이름 greet·tripHero 출발전·가장 먼저 갈 곳·지난 여행을 그리고 searchBar·스탯타일 등은 부재하며 소요시간은 0이다', () => {
-    render(<HomeScreen {...HOME_DEFAULT_PROPS} phase={UPCOMING_PHASE} />);
-
-    // greet — 유일하게 사용자 이름 사용(개인화).
-    expect(screen.getByTestId('home-greeting')).toHaveTextContent(/태현님/);
-
-    // tripHero — 출발 전·D-3·오늘 일정 보기.
-    expect(screen.getByTestId('home-trip-hero-badge')).toHaveTextContent(
-      '출발 전'
-    );
-    expect(screen.getByTestId('home-trip-hero-dday')).toHaveTextContent('D-3');
-    expect(screen.getByTestId('home-trip-hero-cta')).toHaveTextContent(
-      '오늘 일정 보기'
-    );
-
-    // 스탯 타일 2블록은 TRIP-646으로 제거됐다(부정 짝은 아래 부재 단언에).
-    expect(screen.queryByTestId('home-dash-itinerary')).toBeNull();
-    expect(screen.queryByTestId('home-dash-stay')).toBeNull();
-
-    // ★ INV-3 최상위 함정 — nextCard는 시각(09:30)·영업시간(24시간 개방)·거리(950m)를 그린다.
-    // 이들은 전부 렌더되어야 하고(허용), 그럼에도 소요시간 정규식은 0을 반환해야 한다.
-    const nextStop = screen.getByTestId('home-next-stop');
-    expect(within(nextStop).getByText('광안리 해변')).toBeOnTheScreen();
-    expect(nextStop).toHaveTextContent(/09:30/);
-    expect(nextStop).toHaveTextContent(/24시간 개방/);
-    expect(nextStop).toHaveTextContent(/950m/);
-
-    expect(screen.getByTestId('home-nearby-card')).toHaveTextContent(
-      /지금 내 주변/
-    );
-
-    // 지난 여행 2장.
-    expect(screen.getByTestId('home-past-trip-card-0')).toBeOnTheScreen();
-    expect(screen.getByTestId('home-past-trip-card-1')).toBeOnTheScreen();
-
-    // 부정 짝 — upcoming만 searchBar 없음(브리프 §8-6). magazineHero·softNote·컬렉션/스팟도 부재.
-    expect(screen.queryByTestId('home-search-bar')).toBeNull();
-    expect(screen.queryByTestId('home-magazine-hero')).toBeNull();
-    expect(screen.queryByTestId('home-soft-note')).toBeNull();
-    expect(screen.queryByTestId('home-collection-card-0')).toBeNull();
-    expect(screen.queryByTestId('home-spot-card-0')).toBeNull();
-
-    // INV-3 — "24시간 개방"은 좁힌 정규식에서 제외되므로 정당 화면이 거짓 red 안 남.
     expect(screen.queryAllByText(DURATION_RENDER)).toHaveLength(0);
   });
 });

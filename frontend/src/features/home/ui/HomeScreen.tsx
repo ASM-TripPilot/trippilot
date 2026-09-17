@@ -47,7 +47,6 @@ import type {
   HomeScreenProps,
   HomeSections,
   HomeSpotCard,
-  NextStop,
   PastTrip,
   TripHeroData,
 } from '../model/homeTypes';
@@ -299,25 +298,8 @@ function SectionHeader({
   );
 }
 
-// ── 섹션 빈 플레이스홀더(AC-4 · 침묵 은닉 금지) ─────────────────────────
-function SectionEmptyBlock({ testID }: { testID: string }): ReactElement {
-  return (
-    <View
-      testID={testID}
-      className="mx-lg items-center gap-[6px] rounded-card border border-hairline bg-canvas-alt px-lg py-[26px]"
-    >
-      <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
-        아직 보여드릴 게 없어요
-      </Text>
-      <Text className="text-center font-noto text-label text-muted">
-        담아둔 장소가 쌓이면 여기에 골라 담아 드려요
-      </Text>
-    </View>
-  );
-}
-
 // ── 컬렉션 카드(요즘 사람들이 담는 곳 · 내가 담은 곳 · 추천) ─────────────
-// savedAtLabel이 있으면(collecting) 하단 메타를 저장일로, 없으면(discovery·추천) 지역+핀으로 그린다.
+// 하단 메타는 지역+핀으로 그린다(discovery·추천 공용).
 function CollectionCard({
   card,
   index,
@@ -354,18 +336,12 @@ function CollectionCard({
         <Text className="font-noto-bold text-[18px] font-bold text-on-primary">
           {card.title}
         </Text>
-        {card.savedAtLabel ? (
+        <View className="flex-row items-center gap-[4px]">
+          <LocationPinGlyph size={12} />
           <Text className="font-noto text-micro text-on-primary opacity-90">
-            {card.savedAtLabel}
+            {card.region}
           </Text>
-        ) : (
-          <View className="flex-row items-center gap-[4px]">
-            <LocationPinGlyph size={12} />
-            <Text className="font-noto text-micro text-on-primary opacity-90">
-              {card.region}
-            </Text>
-          </View>
-        )}
+        </View>
       </View>
     </View>
   );
@@ -463,8 +439,6 @@ function CollectionsSection({
             <CollectionCard key={card.title} card={card} index={index} />
           ))}
         </ScrollView>
-      ) : sections.kind === 'empty' ? (
-        <SectionEmptyBlock testID="home-collections-empty" />
       ) : (
         <View
           testID="home-collections-skeleton"
@@ -508,8 +482,6 @@ function SpotsSection({
             </View>
           ))}
         </View>
-      ) : sections.kind === 'empty' ? (
-        <SectionEmptyBlock testID="home-spots-empty" />
       ) : (
         <View testID="home-spots-skeleton" className="mx-lg gap-md">
           {[0, 1].map((row) => (
@@ -547,8 +519,6 @@ function ItinerariesSection({
             <ItineraryCard key={card.title} card={card} index={index} />
           ))}
         </ScrollView>
-      ) : sections.kind === 'empty' ? (
-        <SectionEmptyBlock testID="home-itineraries-empty" />
       ) : (
         <View
           testID="home-itineraries-skeleton"
@@ -635,43 +605,7 @@ function TripHero({
   );
 }
 
-// ── nextStop(upcoming '가장 먼저 갈 곳' · 순번·시각·장소·영업시간+거리) ──
-// INV-3: time은 방문 시각(09:30, INV-2 솔버검증값 표시 허용), placeMeta는 영업시간+거리 — 소요시간 아님.
-function NextStopCard({ nextStop }: { nextStop: NextStop }): ReactElement {
-  return (
-    <View className="w-full gap-md">
-      <View className="w-full px-lg">
-        <Text className="font-noto-bold text-section font-bold text-ink">
-          가장 먼저 갈 곳
-        </Text>
-      </View>
-      <View
-        testID="home-next-stop"
-        style={softCardShadow}
-        className="mx-lg flex-row items-center gap-md rounded-card border border-hairline bg-canvas px-md py-md"
-      >
-        <View className="h-[30px] w-[30px] items-center justify-center rounded-pill bg-primary">
-          <Text className="font-noto-bold text-caption font-bold text-on-primary">
-            {nextStop.order}
-          </Text>
-        </View>
-        <View className="flex-1 gap-[3px]">
-          <Text className="font-noto text-micro text-muted">
-            {nextStop.time}
-          </Text>
-          <Text className="font-noto-bold text-body font-bold text-ink">
-            {nextStop.title}
-          </Text>
-          <Text className="font-noto text-micro text-muted">
-            {nextStop.placeMeta}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// ── 미니맵 카드(upcoming '지금 내 주변' · postTrip '회고 보기' 공용 · 브리프 §3-C) ──
+// ── 미니맵 카드(postTrip '회고 보기' · 브리프 §3-C) ──
 // 미니맵은 플레이스홀더(가정 F — shared/map 끌어오지 않음, 홈은 프레젠테이션 순수 유지).
 function MiniMapCard({
   testID,
@@ -699,7 +633,7 @@ function MiniMapCard({
   );
 }
 
-// ── 지난 여행(upcoming·postTrip 공용) ───────────────────────────────────
+// ── 지난 여행(postTrip) ──────────────────────────────────────────────────
 function PastTripsSection({
   trips,
 }: {
@@ -731,7 +665,7 @@ function PastTripsSection({
   );
 }
 
-// ── 컬렉션 가로 스트립(collecting '내가 담은 곳' · postTrip '다음엔 여기 어때요') ──
+// ── 컬렉션 가로 스트립(postTrip '다음엔 여기 어때요') ──────────────────────
 function CollectionStrip({
   title,
   collections,
@@ -751,21 +685,6 @@ function CollectionStrip({
           <CollectionCard key={card.title} card={card} index={index} />
         ))}
       </ScrollView>
-    </View>
-  );
-}
-
-// ── 담은 곳 N 칩(collecting · FAB 위 · US-SHELL-05 잇기) ─────────────────
-function SavedCountChip({ label }: { label: string }): ReactElement {
-  return (
-    <View
-      testID="home-saved-count-chip"
-      style={fabShadow}
-      className="absolute bottom-[160px] right-lg rounded-pill border-[1.4px] border-primary bg-canvas px-md py-sm"
-    >
-      <Text className="font-noto-bold text-caption font-bold text-primary-text">
-        {label}
-      </Text>
     </View>
   );
 }
@@ -900,36 +819,6 @@ function DiscoveryBody({
   );
 }
 
-// ── collecting 얼굴(담는 중 · discovery와 가장 가까움) ──────────────────
-// greet 저장개수 · 섹션1 "내가 담은 곳"(지역 badge+저장일) · softNote 숨김 · 담은 곳 N 칩(오버레이).
-function CollectingBody({
-  hero,
-  sections,
-  phase,
-  onPressSearch,
-}: {
-  hero: readonly HomeMagazineHero[];
-  sections: HomeSections;
-  phase: Extract<HomePhase, { kind: 'collecting' }>;
-  onPressSearch?: () => void;
-}): ReactElement {
-  return (
-    <>
-      <GreetingHeader title={phase.greetTitle} subtitle={phase.greetSubtitle} />
-      <SearchBarBlock onPress={onPressSearch} />
-      <MagazineHero hero={hero[0]} />
-      <View className="w-full gap-[24px] pb-sm pt-[22px]">
-        <CollectionStrip
-          title={phase.sectionTitle}
-          collections={phase.collections}
-        />
-        <SpotsSection sections={sections} />
-        <ItinerariesSection sections={sections} />
-      </View>
-    </>
-  );
-}
-
 // ── heroCarousel(일정 카드 ↔ 영감/매거진 가로 스와이프 · TRIP-647) ──────────
 // 생성 후 홈에서 상단 슬롯을 좌우 스와이프로 전환한다: page0=여행 카드(tripHero), page1=영감
 // (magazineHero). pagingEnabled 로 한 페이지씩 넘어가고, 아래 점 인디케이터가 현재 위치를 표시한다.
@@ -1013,31 +902,6 @@ function PlanningBody({
   );
 }
 
-// ── upcoming 얼굴(출발 전 활성 여행 허브 · 가장 다른 얼굴) ───────────────
-// 이름 greet · tripHero(출발 전) · 스탯 2 · 가장 먼저 갈 곳 · 지금 내 주변 · 지난 여행.
-// searchBar·magazineHero·softNote·컬렉션/스팟 전부 없음(브리프 §8-6).
-function UpcomingBody({
-  phase,
-}: {
-  phase: Extract<HomePhase, { kind: 'upcoming' }>;
-}): ReactElement {
-  return (
-    <>
-      <GreetingHeader name={phase.greetName} title={phase.greetTitle} />
-      <TripHero trip={phase.trip} />
-      <View className="w-full gap-[24px] pb-sm pt-[22px]">
-        <NextStopCard nextStop={phase.nextStop} />
-        <MiniMapCard
-          testID="home-nearby-card"
-          title={phase.nearby.title}
-          subtitle={phase.nearby.subtitle}
-        />
-        <PastTripsSection trips={phase.pastTrips} />
-      </View>
-    </>
-  );
-}
-
 // ── postTrip 얼굴(다녀옴) ───────────────────────────────────────────────
 // greet 잘 다녀오셨어요 · 회고 보기 카드 · 추천 스트립 · 지난 여행 · 공유행(softNote 슬롯).
 function PostTripBody({
@@ -1089,15 +953,6 @@ function PhaseBody({
     );
   }
   switch (phase.kind) {
-    case 'collecting':
-      return (
-        <CollectingBody
-          hero={hero}
-          sections={sections}
-          phase={phase}
-          onPressSearch={onPressSearch}
-        />
-      );
     case 'planning':
       return (
         <PlanningBody
@@ -1109,8 +964,6 @@ function PhaseBody({
           onPressSearch={onPressSearch}
         />
       );
-    case 'upcoming':
-      return <UpcomingBody phase={phase} />;
     case 'postTrip':
       return <PostTripBody phase={phase} onPressSearch={onPressSearch} />;
   }
@@ -1146,9 +999,6 @@ export function HomeScreen({
             onPressSearch={onPressSearch}
           />
         </ScrollView>
-        {phase?.kind === 'collecting' ? (
-          <SavedCountChip label={phase.savedChipLabel} />
-        ) : null}
         {/* TRIP-699 — 로딩이면 두 FAB 숨김(Figma 2174:2307). 로딩은 항상 discovery라 phase 없음. */}
         {sections.kind !== 'loading' ? (
           <>

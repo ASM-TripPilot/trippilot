@@ -119,7 +119,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    implementer 는 preview.tsx 에서 그 4키만 지울 뿐 이 가드는 안 만진다(삭제 전엔 168개라 이 단언이 red).
     //    INV-4: 삭제는 프리뷰 배선뿐 — 폴백 얼굴(TripWizardStep2Screen variant error/notrip)은 코드로 남는다.
     //    devPreviewBandSort 는 밴드 h·l 만 잠가 band g 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(164);
+    // ⚠️ TRIP-701: a01 프리뷰 정리로 홈 프리뷰 키 4개(no-trip·empty·collecting·upcoming 얼굴,
+    //    band a) 삭제로 164→160. test-designer 선반영(카운트 가드만) — implementer 는
+    //    preview.tsx 에서 그 4키만 지울 뿐 이 가드는 안 만진다(삭제 전엔 164개라 이 단언이 red).
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band a 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(160);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(

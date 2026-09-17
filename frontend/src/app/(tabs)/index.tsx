@@ -14,7 +14,7 @@ import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
-import { HOME_NO_TRIP_PROPS } from '@/features/home/model/homeFixtures';
+import { HOME_DEFAULT_PROPS } from '@/features/home/model/homeFixtures';
 import { resolveHomePhase } from '@/features/home/model/homePhase';
 import type { HomePhase } from '@/features/home/model/homeTypes';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
@@ -64,7 +64,7 @@ function PlanningHome({
 
   return (
     <HomeScreen
-      {...HOME_NO_TRIP_PROPS}
+      {...HOME_DEFAULT_PROPS}
       phase={phase}
       onPressTripHeroCta={onPressTripHeroCta}
       {...nav}
@@ -108,7 +108,7 @@ export default function HomeRoute() {
   if (trips.isPending) {
     return (
       <HomeScreen
-        {...HOME_NO_TRIP_PROPS}
+        {...HOME_DEFAULT_PROPS}
         sections={{ kind: 'loading' }}
         {...nav}
       />
@@ -117,7 +117,7 @@ export default function HomeRoute() {
 
   // 조회 실패 — phase 미전달로 discovery(상록 랜딩) 폴백. 오류를 로딩·여행 없음으로 뭉개지 않는다(INV-4).
   if (trips.isError) {
-    return <HomeScreen {...HOME_NO_TRIP_PROPS} {...nav} />;
+    return <HomeScreen {...HOME_DEFAULT_PROPS} {...nav} />;
   }
 
   // 데이터 도착 후에만 여행 유무를 판정한다. 비-ENDED 지배 여행이 있으면 planning, 없으면 undefined→discovery.
@@ -144,5 +144,5 @@ export default function HomeRoute() {
     );
   }
 
-  return <HomeScreen {...HOME_NO_TRIP_PROPS} phase={phase} {...nav} />;
+  return <HomeScreen {...HOME_DEFAULT_PROPS} phase={phase} {...nav} />;
 }
