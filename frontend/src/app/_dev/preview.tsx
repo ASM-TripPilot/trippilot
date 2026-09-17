@@ -2033,6 +2033,62 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_POST_TRIP_PROPS} />),
   },
+  // ── 홈 담은 곳 메뉴 배지 3얼굴(TRIP-695) — 육안 대조: 무배지 · 7/3 · 99+/24. savedMenuOpen 은
+  //    prop 이라 프리뷰가 강제 true 로 연다. 배지 지름·흰 테두리·flush 위치는 6-b 육안 전용. ──
+  {
+    key: 'home-saved-menu',
+    band: 'a',
+    label: 'a01 · 담은 곳 메뉴(무배지)',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen
+          {...HOME_DEFAULT_PROPS}
+          savedMenuOpen
+          savedPlacesCount={0}
+          savedStaysCount={0}
+          onToggleSavedMenu={noop}
+          onPressSavedPlaces={noop}
+          onPressSavedStays={noop}
+        />
+      ),
+  },
+  {
+    key: 'home-saved-menu-badge',
+    band: 'a',
+    label: 'a01 · 담은 곳 배지(7/3)',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen
+          {...HOME_DEFAULT_PROPS}
+          savedMenuOpen
+          savedPlacesCount={7}
+          savedStaysCount={3}
+          onToggleSavedMenu={noop}
+          onPressSavedPlaces={noop}
+          onPressSavedStays={noop}
+        />
+      ),
+  },
+  {
+    key: 'home-saved-menu-badge-99',
+    band: 'a',
+    label: 'a01 · 담은 곳 배지(99+/24)',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen
+          {...HOME_DEFAULT_PROPS}
+          savedMenuOpen
+          savedPlacesCount={100}
+          savedStaysCount={24}
+          onToggleSavedMenu={noop}
+          onPressSavedPlaces={noop}
+          onPressSavedStays={noop}
+        />
+      ),
+  },
   // 지도 계층 선행(TRIP-197 D9) — 층 C(실기) 진입점. 키/로드 실패 분기는 렌더 안 해봐야
   // 알 수 없어 여기서는 해피패스 1키만 둔다(env 키는 빌드 시 번들에 인라인되므로 preview가
   // 런타임에 비울 수 없다 — 실패 분기는 MapView.test.tsx가, C-2는 .env를 실제로 비우고

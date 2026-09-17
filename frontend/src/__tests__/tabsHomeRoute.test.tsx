@@ -6,6 +6,7 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/generated/trips/trips';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useSavedStays } from '@/features/stay/model/savedStays';
 import HomeRoute from '@/app/(tabs)/index';
 
 /**
@@ -51,12 +52,22 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: jest.fn(),
 }));
 
+// TRIP-695 — 라우트가 담은 곳 배지 수(숙소)를 `useSavedStays().savedCount` 로 물게 되면서
+// 이 훅이 호출된다. 딥 경로(`@/features/stay/model/savedStays`)로 목해야 실 훅이 안 돌아
+// QueryClient 부재 크래시를 막는다(배럴·`features/trip` 동명 훅 아님, traps-shell·02a ★D4).
+jest.mock('@/features/stay/model/savedStays', () => ({
+  useSavedStays: jest.fn(),
+}));
+
 const mockUseGetTrips = useGetTrips as jest.MockedFunction<typeof useGetTrips>;
 const mockUseItinerary = useGetTripsTripIdItinerary as jest.MockedFunction<
   typeof useGetTripsTripIdItinerary
 >;
 const mockUseSavedPlaces = useSavedPlaces as jest.MockedFunction<
   typeof useSavedPlaces
+>;
+const mockUseSavedStays = useSavedStays as jest.MockedFunction<
+  typeof useSavedStays
 >;
 
 function trip(overrides: Partial<Trip>): Trip {
@@ -99,14 +110,22 @@ function savedResult(savedPoiIds: string[]) {
   return { savedPoiIds } as unknown as ReturnType<typeof useSavedPlaces>;
 }
 
+/** 라우트가 쓰는 필드(savedCount = 전체 저장 숙소 개수)만 채운 저장 숙소 훅 결과(TRIP-695). */
+function savedStaysResult(savedCount: number) {
+  return { savedCount } as unknown as ReturnType<typeof useSavedStays>;
+}
+
 beforeEach(() => {
   mockPush.mockClear();
   mockUseGetTrips.mockReset();
   mockUseItinerary.mockReset();
   mockUseSavedPlaces.mockReset();
+  mockUseSavedStays.mockReset();
   // 기본값 — 여행 없음(discovery) + 담김 0. 아래 370 CTA 는 이 discovery 얼굴에서 돈다.
   mockUseGetTrips.mockReturnValue(tripsResult([]));
   mockUseSavedPlaces.mockReturnValue(savedResult([]));
+  // TRIP-695 — 저장 숙소 0(배지 미표시). 기존 describe 들은 배지를 안 봐 무영향.
+  mockUseSavedStays.mockReturnValue(savedStaysResult(0));
   // TRIP-401 인프라 — planning 케이스가 부를 itinerary 훅에 무해한 기본값(로딩/에러 아님)을
   // 준다. 이 파일 단언은 목적지·href 를 안 보므로 어떤 상태든 planning 얼굴은 그대로 그려진다.
   mockUseItinerary.mockReturnValue({
@@ -275,5 +294,28 @@ describe('🟢 371-AC-3 · 오류는 discovery(여행 없음 확정·크래시 �
     expect(screen.getByTestId('home-magazine-hero')).toBeOnTheScreen();
     expect(screen.queryByTestId('home-collections-skeleton')).toBeNull();
     expect(screen.queryByTestId('home-trip-hero')).toBeNull();
+  });
+});
+
+// ── TRIP-695 · 담은 곳 개수 배지 배선(라우트 → 화면 → 배지) ─────────────────────
+describe('🔴 695-AC-4 · savedCount·savedPoiIds.length 가 각 배지로 흐른다', () => {
+  it('저장 숙소 수는 숙소 배지, 담은 장소 수는 장소 배지로 각각 흐른다', () => {
+    // 준비 — 장소 2곳 · 숙소 5곳(둘을 다른 값으로 줘 장소↔숙소 배지가 뒤바뀌면 red, 02a ★D5).
+    // 얼굴은 discovery(빈 목록)면 충분 — 배지만 관심. savedMenuOpen 은 라우트가 useState 로
+    // 소유하므로 토글을 눌러 메뉴를 열어야 미니 FAB+배지가 뜬다(02a 함정 F2).
+    mockUseSavedPlaces.mockReturnValue(savedResult(['p1', 'p2']));
+    mockUseSavedStays.mockReturnValue(savedStaysResult(5));
+
+    render(<HomeRoute />);
+
+    // 실행 — 담은 곳 메뉴 열기(토글 press → 재렌더 → 미니 FAB+배지 등장).
+    fireEvent.press(screen.getByTestId('home-saved-menu-toggle'));
+
+    // 단언 — 개수가 화면까지 흘러 각 배지 텍스트로 그려진다(toHaveTextContent 완전일치, 02a §10-1).
+    // savedStaysCount 의 유일한 관측면이 배지라 이 배선 확인은 AC-1(배지 렌더)에 의존한다(02a 함정 F3).
+    expect(screen.getByTestId('home-saved-stays-badge')).toHaveTextContent('5');
+    expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+      '2'
+    );
   });
 });

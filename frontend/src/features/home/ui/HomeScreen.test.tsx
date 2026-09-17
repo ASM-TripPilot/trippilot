@@ -427,6 +427,123 @@ describe('HomeScreen — 담은 곳 saved-menu FAB (TRIP-494)', () => {
   });
 });
 
+// TRIP-695 — 담은 곳 미니 FAB 우상단 개수 배지(핑크 원). 열림+count≥1일 때만 뜨고, 텍스트는
+// 100 이상이면 '99+'로 접힌다(formatCountBadge, AC-2). 지름 20px·흰 2px 테두리·shadow·우상단
+// flush 위치는 6-b 육안 전용(jest 사각) — 여기선 배지 유무·개수 텍스트·bg-primary className만
+// 잠근다(01 §85: 배지는 View+NativeWind라 className 관측됨, 미니FAB 안 SVG 글리프 색과 다름).
+// 기대 텍스트는 리터럴('7'·'3'·'99+')로 박는다 — formatCountBadge 모듈을 여기서 import 하면
+// 미존재 시 이 파일 전체가 로드 실패해 무회귀 describe 까지 통째 red 가 된다(02a ★D1). 포맷터
+// 정확성은 formatCountBadge.test.ts 가 독립으로 잠근다.
+describe('HomeScreen — 담은 곳 배지 표시/미표시 (TRIP-695 AC-1)', () => {
+  it('열림+savedPlacesCount≥1 → 장소 배지 present·개수 텍스트·bg-primary', () => {
+    render(
+      <HomeScreen {...HOME_DEFAULT_PROPS} savedMenuOpen savedPlacesCount={7} />
+    );
+
+    // toHaveTextContent(문자열)은 기본 exact=true — 배지 전체 텍스트가 '7'과 완전일치해야
+    // 매치한다(node_modules matches.js L8 default exact=true, 02a §10-1). 배지는 count 단일
+    // 리프라 '70' 같은 뮤턴트는 '7'≠'70'으로 red.
+    const badge = screen.getByTestId('home-saved-places-badge');
+    expect(badge).toHaveTextContent('7');
+    // className 은 jest 렌더 트리에 평문 prop 으로 남는다(벨 배지 L196 선례와 동형).
+    // 토큰 배열로 완전일치 — `bg-primary-pale` 같은 다른 토큰이 부분매치로 통과하는 걸 막는다
+    // (code-critic 참고-2, split(/\s+/) 관용).
+    expect(String(badge.props.className).split(/\s+/)).toContain('bg-primary');
+  });
+
+  it('열림+savedPlacesCount=1 → 경계값 1에서도 장소 배지 present (경계, code-critic 경고-1)', () => {
+    // count≥1 게이트의 경계값 1이 렌더되는지 못박는다. 이게 없으면 게이트를 `< 2`로 바꿔도
+    // (1곳 담김에서 배지 소멸) 다른 테스트가 count {0,7,100}만 봐 green으로 샌다(뮤테이션 실측).
+    render(
+      <HomeScreen {...HOME_DEFAULT_PROPS} savedMenuOpen savedPlacesCount={1} />
+    );
+
+    expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+      '1'
+    );
+  });
+
+  it('열림+savedStaysCount≥1 → 숙소 배지 present·개수 텍스트', () => {
+    render(
+      <HomeScreen {...HOME_DEFAULT_PROPS} savedMenuOpen savedStaysCount={3} />
+    );
+
+    expect(screen.getByTestId('home-saved-stays-badge')).toHaveTextContent('3');
+  });
+
+  it('열림+count≥100 → 배지 텍스트가 "99+"로 접힌다(화면이 폴딩값을 표시)', () => {
+    // AC-1↔AC-2 연결 — 화면이 100을 그대로 '100'으로 그리지 않고 '99+'로 접어 보이는가.
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        savedMenuOpen
+        savedPlacesCount={100}
+      />
+    );
+
+    expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+      '99+'
+    );
+  });
+
+  it('열림+count 0/미지정 → 두 배지 모두 absent (BR-U1-06/09, count≥1 게이트)', () => {
+    // 장소=0, 숙소=미지정. 빈 핑크 원이 뜨면 안 된다(컴포넌트가 count 로 먼저 가른다).
+    render(
+      <HomeScreen {...HOME_DEFAULT_PROPS} savedMenuOpen savedPlacesCount={0} />
+    );
+
+    expect(screen.queryByTestId('home-saved-places-badge')).toBeNull();
+    expect(screen.queryByTestId('home-saved-stays-badge')).toBeNull();
+  });
+
+  it('닫힘(savedMenuOpen=false)+count 지정 → 배지 absent(미니 FAB 자체가 없다)', () => {
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        savedMenuOpen={false}
+        savedPlacesCount={7}
+        savedStaysCount={3}
+      />
+    );
+
+    // 닫힘 = 미니 FAB 부재(TRIP-494 계약) → 그 안의 배지도 없다.
+    expect(screen.queryByTestId('home-saved-places-fab')).toBeNull();
+    expect(screen.queryByTestId('home-saved-places-badge')).toBeNull();
+    expect(screen.queryByTestId('home-saved-stays-badge')).toBeNull();
+  });
+});
+
+// TRIP-695 AC-3 — 백드롭이 + FAB(여행 만들기)도 덮도록 z-order 를 바꾼다(목표 스택 뒤→위:
+// CreateTripFab → 백드롭 → 미니 FAB+토글). ⚠️ 실제 딤이 +FAB 을 덮는지는 RN 문서순+zIndex 라
+// jest 원리적 사각(바텀시트 딤 함정 동형) — 6-b 육안 전용. 여기 두 it 은 **이동 회귀 앵커**다:
+// 지금도 green 이고 implementer 가 백드롭을 HomeScreen 레벨로 승격해도 testID·onPress 가
+// 살아있어야 green(트리 순서 단언은 취약해서 안 한다, 01 §128).
+describe('HomeScreen — saved-menu z-order 회귀 앵커 (TRIP-695 AC-3)', () => {
+  it('열림 시 백드롭·토글·장소FAB·숙소FAB·CreateTripFab 이 공존한다', () => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} savedMenuOpen />);
+
+    expect(screen.getByTestId('home-saved-menu-backdrop')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-saved-menu-toggle')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-saved-places-fab')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-saved-stays-fab')).toBeOnTheScreen();
+    expect(screen.getByTestId('home-create-trip-fab')).toBeOnTheScreen();
+  });
+
+  it('백드롭 press → onToggleSavedMenu 발화(바깥 탭으로 메뉴 닫힘)', () => {
+    const onToggleSavedMenu = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        savedMenuOpen
+        onToggleSavedMenu={onToggleSavedMenu}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('home-saved-menu-backdrop'));
+    expect(onToggleSavedMenu).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('HomeScreen — 비배선 컨트롤은 버튼 역할이 아니다 (370-AC-3 · 부정)', () => {
   it('목적지 없는 컨트롤(검색바·비배선 더보기·벨)은 accessibilityRole="button"으로 노출되지 않는다', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} />);

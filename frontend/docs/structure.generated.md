@@ -382,6 +382,9 @@
 - `src/features/explore/ui/RegionPickerScreen.tsx`  →  RegionPurpose · RegionPickerScreenProps · RegionPickerScreen
 - `src/features/explore/ui/SavedPlaceListScreen.tsx`  →  SavedPlaceListScreenProps · SavedPlaceListScreen
 
+## src/features/home/lib/
+- `src/features/home/lib/formatCountBadge.ts`  →  formatCountBadge
+
 ## src/features/home/model/
 - `src/features/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS · HOME_LOADING_PROPS · HOME_PLANNING_PROPS · HOME_POST_TRIP_PROPS
 - `src/features/home/model/homePhase.ts`  →  HomeTripInput · ResolveHomePhaseInput · formatDday · resolveHomePhase
@@ -1286,4 +1289,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 866개 파일
+합계 867개 파일

@@ -157,6 +157,13 @@ export interface HomeScreenProps {
   onPressSavedPlaces?: () => void;
   /** saved-menu 저장한 숙소 미니 FAB → 저장한 숙소 화면(e04, TRIP-494) */
   onPressSavedStays?: () => void;
+  /**
+   * saved-menu 담은 장소·저장 숙소 개수 배지(TRIP-695, 전부 옵셔널·additive) — 열림+count≥1
+   * 일 때만 미니 FAB 우상단에 핑크 배지를 그린다(0/미지정/음수→미표시, BR-U1-06/09). 값은
+   * 라우트가 `savedPoiIds.length`·`useSavedStays().savedCount` 에서 뽑아 주입한다.
+   */
+  savedPlacesCount?: number;
+  savedStaysCount?: number;
   /** 담은 곳 saved-menu 열림 상태(TRIP-494) — 라우트 소유(화면 useState 0건). 미지정=닫힘 */
   savedMenuOpen?: boolean;
   /** 담은 곳 saved-menu 하트/닫기 토글 press → 라우트가 open 을 뒤집는다 */

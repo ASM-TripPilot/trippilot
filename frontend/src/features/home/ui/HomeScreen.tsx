@@ -39,6 +39,7 @@ import {
   SparkleGlyph,
   SuitcaseGlyph,
 } from './HomeGlyphs';
+import { formatCountBadge } from '../lib/formatCountBadge';
 import type {
   HomeCollectionCard,
   HomeItineraryCard,
@@ -715,71 +716,97 @@ function CreateTripFab({ onPress }: { onPress?: () => void }): ReactElement {
   );
 }
 
+// 미니 FAB 우상단 개수 배지(핑크 원, TRIP-695) — count≥1 일 때만 그린다(0/미지정/음수→null,
+// 빈 원 방지). 텍스트는 formatCountBadge 가 100↑을 '99+'로 접는다(AC-2). 배지 색(bg-primary)은
+// View className 이라 jest 관측되지만(미니 FAB 안 SVG 글리프 색과 다름), 지름 20·흰 2px 테두리·
+// 우상단 flush 위치는 6-b 육안 전용(jest 사각). `h-[20px]` 브래킷 — `h-5` 는 rem 17.5px 함정.
+function CountBadge({
+  testID,
+  count,
+}: {
+  testID: string;
+  count?: number;
+}): ReactElement | null {
+  if ((count ?? 0) < 1) return null;
+  return (
+    <View
+      testID={testID}
+      className="absolute right-0 top-0 h-[20px] w-[20px] items-center justify-center rounded-full border-2 border-canvas bg-primary"
+    >
+      <Text className="text-[12px] font-bold text-on-primary">
+        {formatCountBadge(count ?? 0)}
+      </Text>
+    </View>
+  );
+}
+
 // 담은 곳 saved-menu FAB(TRIP-494 홈 확장 · Figma a01 3012:1731) — + FAB 바로 위 흰 원형 하트.
 // 누르면 두 미니 FAB 으로 펼쳐진다: 담은 장소(위치핀→d02) · 저장한 숙소(가방→e04). 열리면
-// 하트가 X(닫기, 핑크)로 바뀌고 배후 backdrop 이 뜬다(바깥 탭으로 닫힘). 열림 상태·목적지는
+// 하트가 X(닫기, 핑크)로 바뀐다. 각 미니 FAB 우상단엔 담긴 개수 배지(count≥1일 때만, TRIP-695).
+// 배후 backdrop 은 HomeScreen 레벨로 올라갔다(+ FAB 도 덮게, AC-3 z-order). 열림 상태·개수·목적지는
 // 라우트가 소유해 prop 으로 내린다(화면 useState 0건 — homeStructure 순수성, 탐색 랜딩과 동형).
 function SavedMenuFab({
   open,
   onToggle,
   onPressSavedPlaces,
   onPressSavedStays,
+  savedPlacesCount,
+  savedStaysCount,
 }: {
   open: boolean;
   onToggle?: () => void;
   onPressSavedPlaces?: () => void;
   onPressSavedStays?: () => void;
+  savedPlacesCount?: number;
+  savedStaysCount?: number;
 }): ReactElement {
   return (
-    <>
+    <View className="absolute bottom-[152px] right-lg flex-row items-center gap-md">
       {open ? (
-        <Pressable
-          testID="home-saved-menu-backdrop"
-          accessibilityRole="button"
-          accessibilityLabel="담은 곳 메뉴 닫기"
-          onPress={onToggle}
-          className="absolute inset-0 bg-scrim/40"
-        />
+        <>
+          <Pressable
+            testID="home-saved-places-fab"
+            accessibilityRole="button"
+            accessibilityLabel="담은 장소"
+            onPress={onPressSavedPlaces}
+            style={fabShadow}
+            className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+          >
+            <MapPinGlyph size={26} />
+            <CountBadge
+              testID="home-saved-places-badge"
+              count={savedPlacesCount}
+            />
+          </Pressable>
+          <Pressable
+            testID="home-saved-stays-fab"
+            accessibilityRole="button"
+            accessibilityLabel="저장한 숙소"
+            onPress={onPressSavedStays}
+            style={fabShadow}
+            className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
+          >
+            <SuitcaseGlyph size={26} />
+            <CountBadge
+              testID="home-saved-stays-badge"
+              count={savedStaysCount}
+            />
+          </Pressable>
+        </>
       ) : null}
-      <View className="absolute bottom-[152px] right-lg flex-row items-center gap-md">
-        {open ? (
-          <>
-            <Pressable
-              testID="home-saved-places-fab"
-              accessibilityRole="button"
-              accessibilityLabel="담은 장소"
-              onPress={onPressSavedPlaces}
-              style={fabShadow}
-              className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
-            >
-              <MapPinGlyph size={26} />
-            </Pressable>
-            <Pressable
-              testID="home-saved-stays-fab"
-              accessibilityRole="button"
-              accessibilityLabel="저장한 숙소"
-              onPress={onPressSavedStays}
-              style={fabShadow}
-              className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
-            >
-              <SuitcaseGlyph size={26} />
-            </Pressable>
-          </>
-        ) : null}
-        <Pressable
-          testID="home-saved-menu-toggle"
-          accessibilityRole="button"
-          accessibilityLabel={open ? '담은 곳 메뉴 닫기' : '담은 곳'}
-          onPress={onToggle}
-          style={fabShadow}
-          className={`h-[56px] w-[56px] items-center justify-center rounded-full ${
-            open ? 'bg-primary' : 'bg-canvas'
-          }`}
-        >
-          {open ? <CloseGlyph size={24} /> : <HeartFilledGlyph size={26} />}
-        </Pressable>
-      </View>
-    </>
+      <Pressable
+        testID="home-saved-menu-toggle"
+        accessibilityRole="button"
+        accessibilityLabel={open ? '담은 곳 메뉴 닫기' : '담은 곳'}
+        onPress={onToggle}
+        style={fabShadow}
+        className={`h-[56px] w-[56px] items-center justify-center rounded-full ${
+          open ? 'bg-primary' : 'bg-canvas'
+        }`}
+      >
+        {open ? <CloseGlyph size={24} /> : <HeartFilledGlyph size={26} />}
+      </Pressable>
+    </View>
   );
 }
 
@@ -979,9 +1006,12 @@ export function HomeScreen({
   onPressSpotsMore,
   onPressTripHeroCta,
   onPressSearch,
+  savedPlacesCount,
+  savedStaysCount,
   savedMenuOpen,
   onToggleSavedMenu,
 }: HomeScreenProps): ReactElement {
+  const menuOpen = savedMenuOpen ?? false;
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="home-dashboard-root" className="flex-1 bg-canvas">
@@ -1002,13 +1032,27 @@ export function HomeScreen({
         {/* TRIP-699 — 로딩이면 두 FAB 숨김(Figma 2174:2307). 로딩은 항상 discovery라 phase 없음. */}
         {sections.kind !== 'loading' ? (
           <>
+            {/* TRIP-695 z-order(AC-3) — 문서순=스택이라(RN 기본, zIndex 없음) 뒤→위로
+                CreateTripFab → 백드롭 → 미니 FAB+토글. 백드롭을 + FAB 뒤에 둬 딤이 + FAB 도
+                덮는다. 실제 딤 커버는 6-b 육안(jest 원리적 사각). */}
+            <CreateTripFab onPress={onPressCreateTrip} />
+            {menuOpen ? (
+              <Pressable
+                testID="home-saved-menu-backdrop"
+                accessibilityRole="button"
+                accessibilityLabel="담은 곳 메뉴 닫기"
+                onPress={onToggleSavedMenu}
+                className="absolute inset-0 bg-scrim/40"
+              />
+            ) : null}
             <SavedMenuFab
-              open={savedMenuOpen ?? false}
+              open={menuOpen}
               onToggle={onToggleSavedMenu}
               onPressSavedPlaces={onPressSavedPlaces}
               onPressSavedStays={onPressSavedStays}
+              savedPlacesCount={savedPlacesCount}
+              savedStaysCount={savedStaysCount}
             />
-            <CreateTripFab onPress={onPressCreateTrip} />
           </>
         ) : null}
       </View>

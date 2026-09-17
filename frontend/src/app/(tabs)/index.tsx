@@ -10,6 +10,7 @@ import { isNotFound } from '@/shared/api/isNotFound';
 import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import { formatTripRange } from '@/entities/trip/lib/formatTripPeriod';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useSavedStays } from '@/features/stay/model/savedStays';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
@@ -25,6 +26,8 @@ interface HomeNav {
   onPressSavedStays: () => void;
   onPressSpotsMore: () => void;
   onPressSearch: () => void;
+  savedPlacesCount: number;
+  savedStaysCount: number;
   savedMenuOpen: boolean;
   onToggleSavedMenu: () => void;
 }
@@ -83,6 +86,9 @@ export default function HomeRoute() {
   const trips = useGetTrips();
   const isAuthed = getAccessToken() !== null;
   const { savedPoiIds } = useSavedPlaces({ isAuthed });
+  // 담은 곳 미니 FAB 개수 배지(TRIP-695) — 담은 장소 수·전체 저장 숙소 수를 실데이터에서 뽑아
+  // 화면에 주입한다. useSavedStays 는 features/stay 것(savedCount 노출) — features/trip 동명 훅 아님.
+  const { savedCount: savedStaysCount } = useSavedStays({ isAuthed });
 
   // 담은 곳 saved-menu 열림 상태(TRIP-494) — 순수 화면이 useState 0건이라 라우트가 소유한다
   // (탐색 랜딩 선례와 동형). 미니 FAB press 는 메뉴를 닫고 각각 d02/e04 로 이동한다.
@@ -100,6 +106,8 @@ export default function HomeRoute() {
     },
     onPressSpotsMore: () => router.push('/explore/places'),
     onPressSearch: () => router.push('/explore/region?purpose=trip'),
+    savedPlacesCount: savedPoiIds.length,
+    savedStaysCount,
     savedMenuOpen,
     onToggleSavedMenu: () => setSavedMenuOpen((v) => !v),
   };
