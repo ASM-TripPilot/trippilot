@@ -175,6 +175,21 @@ describe('🟢 370-AC-1 · "지금 뜨는 장소" 더 보기 → /explore/places
   });
 });
 
+// ── TRIP-700 · AC-10 홈 매거진 히어로 → /magazine (라우트 목적지 잠금) ──────────
+// 형제 CTA(FAB·온램프·더보기·검색바)는 전부 목적지 문자열을 완전일치로 잠그는데 매거진만
+// 빠져 있었다(code-critic 경고-1). discovery 얼굴은 매거진 히어로 캐러셀 page0(home-magazine-hero)
+// 을 그리고, 그 press 가 onPressMagazine → router.push('/magazine') 로 흐른다. 목적지 오타
+// (예: /explore/places)는 이 완전일치 단언이 red 로 잡는다(tsc·형제 jest 로는 안 잡힘).
+describe('🟢 700-AC-10 · 홈 매거진 히어로 → /magazine', () => {
+  it('discovery 매거진 히어로(page0)를 누르면 매거진 목록으로 이동한다', () => {
+    render(<HomeRoute />);
+
+    fireEvent.press(screen.getByTestId('home-magazine-hero'));
+
+    expect(mockPush.mock.calls).toEqual([['/magazine']]);
+  });
+});
+
 // ── TRIP-499 · AC-1 홈 검색바 → 여행지 선택(정본) ─────────────────────────────
 describe('🔴 499-AC-1 · 검색바 → /explore/region?purpose=trip', () => {
   it('홈 검색바를 누르면 여행지 선택(RegionPicker, trip)으로 이동한다', () => {

@@ -50,7 +50,15 @@ const TOKENIZED_HEX = [
  * 통째로 단언해야 필터가 조용히 축소되는 회귀를 잡는다(선례: onboardingStructure.test.ts의
  * SCREEN_SOURCE_FILES).
  */
-const HOME_SCREEN_SOURCE_FILES = ['features/home/ui/HomeScreen.tsx'];
+const HOME_SCREEN_SOURCE_FILES = [
+  'features/home/ui/HomeScreen.tsx',
+  // TRIP-700 — a02 매거진 목록 화면이 features/home/ui 에 합류하며 `*Screen.tsx` 필터에 자동
+  // 편입된다. 동결목록에 안 넣으면 D-3(토큰)·D-4(SafeArea)·TRIP-317(단일파일) 세 자기검사가
+  // `sources.map ≠ 동결목록`으로 즉시 red(맹점①). MagazineScreen.tsx 가 생기기 전엔 이 2건
+  // 목록이 실제 스캔(1건)과 달라 세 곳이 red — 화면이 생기면 green(사전 편입, listSourceFiles
+  // 정렬상 H < M 라 순서 고정).
+  'features/home/ui/MagazineScreen.tsx',
+];
 
 function listSourceFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -211,12 +219,16 @@ describe('SafeArea 규약 — 상태바 여백 (§7-14 · D-4)', () => {
 
     // 긍정 — 어느 화면이든 인셋을 실제로 읽어야 한다.
     // Figma의 pt-50px은 상태바 영역을 프레임에 구워 넣은 값이라 기기마다 어긋난다(trip163 §7-14).
-    // 방아쇠 — 동결목록이 1건인 동안 some≡forEach; 2건↑이 되면 새 화면 누락을 못 잡으니 forEach로 강화한다.
-    const usesInsets = sources.some(
-      ({ source }) =>
-        /useSafeAreaInsets/.test(source) || /SafeAreaView/.test(source)
-    );
-    expect(usesInsets).toBe(true);
+    // 방아쇠 발동(TRIP-700, 동결목록 2건↑) — some→forEach 로 강화한다. some 이면 한 화면만
+    // SafeArea 를 써도 통과해 새 화면(MagazineScreen)의 인셋 누락을 못 잡는다. forEach 로 화면별
+    // 개별 단언(file 을 함께 실어 어느 화면이 어겼는지 diff 에 드러나게).
+    sources.forEach(({ file, source }) => {
+      expect({
+        file,
+        usesInsets:
+          /useSafeAreaInsets/.test(source) || /SafeAreaView/.test(source),
+      }).toEqual({ file, usesInsets: true });
+    });
 
     // 부정 — 하드코딩된 상단 50px이 남아 있으면 안 된다.
     const offenders = sources

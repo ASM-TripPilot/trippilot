@@ -57,6 +57,8 @@ import {
   type StayCardVM,
 } from '@/features/explore/ui/ExploreLandingScreen';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
+import { MAGAZINE_DEFAULT_PROPS } from '@/features/home/model/magazineFixtures';
+import { MagazineScreen } from '@/features/home/ui/MagazineScreen';
 import {
   buildDraftPins,
   formatDraftDayHeader,
@@ -2096,6 +2098,17 @@ export const PREVIEW_STATES: PreviewState[] = [
           onPressSavedStays={noop}
         />
       ),
+  },
+  // ── a02 매거진 목록(TRIP-700) — 홈에서 push 로 진입하는 별 화면. 순수 뷰라 콜백 없이 렌더
+  //    (프리뷰는 시각 대조 전용, 칩 토글·항법은 실앱/컨테이너 몫). withShellTabBar 는 Figma 탭바
+  //    문맥 재현(실앱은 (tabs) 밖이라 탭바 없음 — 01b Q1). 매서너리 불균등·핑크 알약은 6-b 육안. ──
+  {
+    key: 'magazine-default',
+    band: 'a',
+    label: 'a02 · 여행지 둘러보기',
+    login: null,
+    render: () =>
+      withShellTabBar(<MagazineScreen {...MAGAZINE_DEFAULT_PROPS} />),
   },
   // 지도 계층 선행(TRIP-197 D9) — 층 C(실기) 진입점. 키/로드 실패 분기는 렌더 안 해봐야
   // 알 수 없어 여기서는 해피패스 1키만 둔다(env 키는 빌드 시 번들에 인라인되므로 preview가

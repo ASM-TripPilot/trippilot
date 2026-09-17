@@ -205,4 +205,10 @@ export interface HomeScreenProps {
   onPressTripHeroCta?: () => void;
   /** 검색바 press → 통합 검색(d05, `/explore/search`, TRIP-453) */
   onPressSearch?: () => void;
+  /**
+   * discovery 캐러셀 page0(매거진 히어로) press → a02 매거진 목록(`/magazine`, TRIP-700). 옵셔널
+   * additive(test-designer 컴파일용 타입 선언 선반영, TRIP-695 선례) — 콜백 미주입 호출부
+   * (`_dev/preview.tsx`·버튼-집합 테스트)도 깨지지 않는다. 라우팅은 `(tabs)/index.tsx` 가 진다.
+   */
+  onPressMagazine?: () => void;
 }

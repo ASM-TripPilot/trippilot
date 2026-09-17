@@ -59,6 +59,7 @@
 - `src/__tests__/liveTimeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
 - `src/__tests__/loginVisual.test.ts`  →  (export 없음)
+- `src/__tests__/magazineRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/mapBridgeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/mapSheetShellStructure.test.ts`  →  (export 없음)
 - `src/__tests__/myStaysStructure.test.ts`  →  (export 없음)
@@ -183,6 +184,7 @@
 
 ## src/app/
 - `src/app/force-update.tsx`  →  (export 없음)
+- `src/app/magazine.tsx`  →  (export 없음)
 
 ## src/app/my/
 - `src/app/my/stays.tsx`  →  (export 없음)
@@ -389,10 +391,13 @@
 - `src/features/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS · HOME_LOADING_PROPS · HOME_PLANNING_PROPS · HOME_TRAVELING_PROPS · HOME_POST_TRIP_PROPS
 - `src/features/home/model/homePhase.ts`  →  HomeTripInput · ResolveHomePhaseInput · formatDday · resolveHomePhase
 - `src/features/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeSpotCard · HomeItineraryCard · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
+- `src/features/home/model/magazineFixtures.ts`  →  MAGAZINE_DEFAULT_PROPS
+- `src/features/home/model/magazineTypes.ts`  →  MagazineCard · MagazineEditorial · MagazineScreenProps
 
 ## src/features/home/ui/
-- `src/features/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph
+- `src/features/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · BackChevronGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph
 - `src/features/home/ui/HomeScreen.tsx`  →  HomeScreen
+- `src/features/home/ui/MagazineScreen.tsx`  →  MagazineScreen
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
@@ -757,6 +762,9 @@
 
 ## src/pages/login/ui/
 - `src/pages/login/ui/LoginPage.tsx`  →  LoginPage
+
+## src/pages/magazine/ui/
+- `src/pages/magazine/ui/MagazinePage.tsx`  →  MagazinePage
 
 ## src/pages/my-page/
 - `src/pages/my-page/index.ts`  →  MyPage
@@ -1289,4 +1297,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 867개 파일
+합계 873개 파일

@@ -26,6 +26,7 @@ interface HomeNav {
   onPressSavedStays: () => void;
   onPressSpotsMore: () => void;
   onPressSearch: () => void;
+  onPressMagazine: () => void;
   savedPlacesCount: number;
   savedStaysCount: number;
   savedMenuOpen: boolean;
@@ -106,6 +107,8 @@ export default function HomeRoute() {
     },
     onPressSpotsMore: () => router.push('/explore/places'),
     onPressSearch: () => router.push('/explore/region?purpose=trip'),
+    // TRIP-700 — discovery 캐러셀 page0(매거진 히어로) press → a02 매거진 목록(/magazine).
+    onPressMagazine: () => router.push('/magazine'),
     savedPlacesCount: savedPoiIds.length,
     savedStaysCount,
     savedMenuOpen,

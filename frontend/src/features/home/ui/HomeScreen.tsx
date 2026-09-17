@@ -163,13 +163,21 @@ function MagazineHero({
   hero,
   testID = 'home-magazine-hero',
   showDots = true,
+  asButton = false,
+  onPress,
 }: {
   hero: HomeMagazineHero;
   testID?: string;
   showDots?: boolean;
+  // TRIP-700 — discovery 캐러셀 page0 만 a02 매거진 목록으로 가는 배선 CTA. asButton 은 role 을
+  // 구조로 굳히고(콜백 미주입 렌더에도 버튼 — 370-AC-4 버튼-집합), onPress 는 스레딩(AC-10)을 진다.
+  // page1~4 슬라이드·planning/postTrip 슬라이드는 asButton 기본 false 라 비버튼 유지(집합 초과 방지).
+  asButton?: boolean;
+  onPress?: () => void;
 }): ReactElement {
-  return (
-    <View testID={testID} className="h-[470px] w-full overflow-hidden">
+  const rootClassName = 'h-[470px] w-full overflow-hidden';
+  const content = (
+    <>
       {/* 사진 자리 — 토큰색 tint 위에 생성 사진(스크림 아래), uri 없으면 tint 노출 */}
       <View className="absolute inset-0 bg-surface-strong" />
       <Image
@@ -224,6 +232,20 @@ function MagazineHero({
           ) : null}
         </View>
       </View>
+    </>
+  );
+  return asButton ? (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      onPress={onPress}
+      className={rootClassName}
+    >
+      {content}
+    </Pressable>
+  ) : (
+    <View testID={testID} className={rootClassName}>
+      {content}
     </View>
   );
 }
@@ -235,8 +257,10 @@ function MagazineHero({
 // 하이라이트는 jest 원리적 사각(6-b 실기) — 구조(페이지 5·도트 5)만 잠긴다.
 function DiscoveryHeroCarousel({
   heroes,
+  onPressMagazine,
 }: {
   heroes: readonly HomeMagazineHero[];
+  onPressMagazine?: () => void;
 }): ReactElement {
   const { width } = useWindowDimensions();
   const [page, setPage] = useState(0);
@@ -256,6 +280,8 @@ function DiscoveryHeroCarousel({
               hero={hero}
               testID={i === 0 ? 'home-magazine-hero' : `home-hero-slide-${i}`}
               showDots={false}
+              asButton={i === 0}
+              onPress={i === 0 ? onPressMagazine : undefined}
             />
           </View>
         ))}
@@ -791,11 +817,13 @@ function DiscoveryBody({
   sections,
   onPressSpotsMore,
   onPressSearch,
+  onPressMagazine,
 }: {
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
   onPressSpotsMore?: () => void;
   onPressSearch?: () => void;
+  onPressMagazine?: () => void;
 }): ReactElement {
   return (
     <>
@@ -811,7 +839,10 @@ function DiscoveryBody({
           className="h-[470px] w-full bg-surface-strong"
         />
       ) : (
-        <DiscoveryHeroCarousel heroes={hero} />
+        <DiscoveryHeroCarousel
+          heroes={hero}
+          onPressMagazine={onPressMagazine}
+        />
       )}
       <View className="w-full gap-[24px] pb-sm pt-[22px]">
         <CollectionsSection sections={sections} />
@@ -974,6 +1005,7 @@ function PhaseBody({
   onPressSpotsMore,
   onPressTripHeroCta,
   onPressSearch,
+  onPressMagazine,
 }: HomeScreenProps): ReactElement {
   if (phase === undefined || phase.kind === 'discovery') {
     return (
@@ -982,6 +1014,7 @@ function PhaseBody({
         sections={sections}
         onPressSpotsMore={onPressSpotsMore}
         onPressSearch={onPressSearch}
+        onPressMagazine={onPressMagazine}
       />
     );
   }
@@ -1019,6 +1052,7 @@ export function HomeScreen({
   onPressSpotsMore,
   onPressTripHeroCta,
   onPressSearch,
+  onPressMagazine,
   savedPlacesCount,
   savedStaysCount,
   savedMenuOpen,
@@ -1040,6 +1074,7 @@ export function HomeScreen({
             onPressSpotsMore={onPressSpotsMore}
             onPressTripHeroCta={onPressTripHeroCta}
             onPressSearch={onPressSearch}
+            onPressMagazine={onPressMagazine}
           />
         </ScrollView>
         {/* TRIP-699 — 로딩이면 두 FAB 숨김(Figma 2174:2307). 로딩은 항상 discovery라 phase 없음. */}

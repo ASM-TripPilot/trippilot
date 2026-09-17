@@ -64,6 +64,11 @@ const WIRED_CTA_TEST_IDS = [
   // 대체(장소→d02·숙소→e04)해 중복이라 discovery 버튼셋에서 빠진다(370-AC-4 재동결).
   'home-spots-more',
   'home-search-bar',
+  // TRIP-700 — discovery 캐러셀 page0(home-magazine-hero)이 a02 매거진 목록으로 가는 배선 CTA 가
+  // 되며 role="button" 을 얻는다(구조로 굳힘 — 콜백 미주입 렌더에도 버튼, FAB·검색바 선례). page1~4
+  // 슬라이드(home-hero-slide-N)는 여전히 비버튼이라 이 집합 동치가 "page0 만 버튼"을 강제한다
+  // (슬라이드까지 버튼으로 만들면 집합 초과로 red). 계획/여행/완료 page0 은 트립 히어로라 무영향.
+  'home-magazine-hero',
 ] as const;
 
 // TRIP-694 — 여행자 일정 섹션이 discovery에서 제거되며 `home-itineraries-more`도 사라진다
@@ -562,18 +567,52 @@ describe('HomeScreen — 비배선 컨트롤은 버튼 역할이 아니다 (370-
 });
 
 describe('HomeScreen — 버튼 역할 집합 == 배선된 CTA 집합 (370-AC-4 · 회귀)', () => {
-  it('discovery 접근성 트리에서 버튼으로 읽히는 것은 배선된 3개 CTA 뿐이다', () => {
+  it('discovery 접근성 트리에서 버튼으로 읽히는 것은 배선된 CTA 집합(매거진 히어로 포함)뿐이다', () => {
     render(<HomeScreen {...HOME_DEFAULT_PROPS} />);
 
     // 실제 onPress 목적지가 있는 요소만 버튼이어야 한다 — 집합 동치라 (a)비배선이 안 벗겨짐
     // (b)배선 CTA 가 벗겨짐 (c)공유 SectionHeader 를 전부 벗겨 spots-more 도 사라짐 (d)새 버튼
-    // 유입, 넷 다 red 로 잡힌다.
+    // 유입, 넷 다 red 로 잡힌다. TRIP-700 — page0 매거진 히어로가 집합에 들고(구조 role), page1~4
+    // 슬라이드는 안 든다(슬라이드까지 버튼화하면 (d)로 red). 현행은 page0 이 비버튼이라 red-first.
     const buttonIds = screen
       .queryAllByRole('button')
       .map((node) => node.props.testID)
       .sort();
 
     expect(buttonIds).toEqual([...WIRED_CTA_TEST_IDS].sort());
+  });
+});
+
+// TRIP-700 — a02 매거진 목록 진입 배선(화면측). discovery 캐러셀 page0(home-magazine-hero)이
+// onPressMagazine 을 발화하는 배선 CTA 가 된다. 라우터 왕복(→ push('/magazine'))은 화면이 아니라
+// `(tabs)/index.tsx` seam 이 지므로 이 테스트는 **화면이 넘겨받은 콜백만 정확히 발화**하는지만
+// 잰다(오배선·이중발화 없음, 검색바 배선 describe 와 동형). "page0 이 실제 버튼인가"라는 구조는
+// 위 370-AC-4 버튼-집합 동치가 판정하고(★D4 — 합성 컴포넌트 press 는 role 미부여여도 climb 로
+// 콜백이 발화할 수 있어 press 단독으론 '진짜 버튼'을 증명 못 함, HomeScreen.test L1068 선례),
+// 여기 press 는 **스레딩(어느 콜백이 오는가)**을 잠근다. 둘이 협공해야 완전하다.
+describe('🔴 HomeScreen — 매거진 히어로 진입 배선 (TRIP-700 AC-10 · 화면측)', () => {
+  it('discovery 매거진 히어로(page0) press 는 onPressMagazine 만 정확히 1회 발화한다', () => {
+    const onPressMagazine = jest.fn();
+    const onPressSearch = jest.fn();
+    const onPressCreateTrip = jest.fn();
+    const onPressSpotsMore = jest.fn();
+    render(
+      <HomeScreen
+        {...HOME_DEFAULT_PROPS}
+        onPressMagazine={onPressMagazine}
+        onPressSearch={onPressSearch}
+        onPressCreateTrip={onPressCreateTrip}
+        onPressSpotsMore={onPressSpotsMore}
+      />
+    );
+
+    // 현행 HomeScreen 은 onPressMagazine 을 캐러셀 page0 으로 스레딩하지 않아 press 가 아무 콜백도
+    // 발화하지 않는다 → 첫 단언 red. 오배선(다른 콜백 발화)이면 격리 단언이 red 로 잡는다.
+    fireEvent.press(screen.getByTestId('home-magazine-hero'));
+    expect(onPressMagazine).toHaveBeenCalledTimes(1);
+    expect(onPressSearch).not.toHaveBeenCalled();
+    expect(onPressCreateTrip).not.toHaveBeenCalled();
+    expect(onPressSpotsMore).not.toHaveBeenCalled();
   });
 });
 
