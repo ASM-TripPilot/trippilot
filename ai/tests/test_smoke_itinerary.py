@@ -595,22 +595,40 @@ def test_전부_선택_불가면_실패한다():
 # ── ⑧ 일일 델타 0건 → 팀 공유본 폴백 (TRIP-642) ──────────────────
 
 
-def test_fallback_to_shared_file_when_daily_delta_is_empty(tmp_path):
-    """전국 수집 완주로 일일 산출물이 0건이면(정상 상태) 공유본으로 소리 내서 전환 —
-    수집이 안정될수록 리허설이 죽는 결함의 수습."""
+def test_shared_doc_is_the_base_and_delta_overlays(tmp_path):
+    """공유본이 기본 입력, 델타는 같은 poi_id 를 덮는다 — 커버리지는 늘 누적본에서."""
     shared = tmp_path / "collected_pois.json"
     shared.write_text(json.dumps(_doc(list(_TWO_REGIONS))), encoding="utf-8")
 
     entries, note = entries_with_fallback(_doc([]), shared)
     assert len(entries) == len(_TWO_REGIONS)
-    assert note and "팀 공유본 폴백" in note and str(shared) in note
+    assert note and "팀 공유본" in note and str(shared) in note
 
 
-def test_no_fallback_when_daily_output_is_usable(tmp_path):
-    """일일 산출물에 region 제안이 있으면 그대로 쓴다 — 공유본을 읽지도 않는다."""
-    shared = tmp_path / "no-such.json"  # 존재하지 않아도 접근 안 하므로 무해
-    entries, note = entries_with_fallback(_doc(list(_TWO_REGIONS)), shared)
-    assert len(entries) == len(_TWO_REGIONS) and note is None
+def test_trip_896_single_region_delta_does_not_starve_sampler(tmp_path):
+    """**TRIP-896 재현** — 델타가 0건이 아니라 **1지역**이면 옛 폴백이 안 켜져
+    지역 3곳을 뽑는 샘플러가 죽었다. 합치면 공유본 지역이 그대로 남는다."""
+    shared = tmp_path / "collected_pois.json"
+    shared.write_text(json.dumps(_doc(list(_TWO_REGIONS))), encoding="utf-8")
+    only_jecheon = [dict(_TWO_REGIONS[0], region="제천시")]
+
+    entries, note = entries_with_fallback(_doc(only_jecheon), shared)
+    regions = {r for _, r in entries if r}
+    assert "제천시" in regions                     # 델타는 실린다
+    assert len(regions) >= 2                        # 공유본 지역도 남는다
+    assert note and "델타 1건" in note
+
+
+def test_delta_wins_over_shared_doc_for_same_poi(tmp_path):
+    """같은 poi_id 면 그날 델타가 이긴다 — 신규·변경분이 리허설에 실려야 한다."""
+    shared = tmp_path / "collected_pois.json"
+    shared.write_text(json.dumps(_doc(list(_TWO_REGIONS))), encoding="utf-8")
+    fresh = dict(_TWO_REGIONS[0], region="갱신된지역")
+
+    entries, _ = entries_with_fallback(_doc([fresh]), shared)
+    by_id = {str(p.poi_id): r for p, r in entries}
+    assert by_id[str(fresh["poi"]["poi_id"])] == "갱신된지역"
+    assert len(entries) == len(_TWO_REGIONS)         # 중복 없이 덮였다
 
 
 def test_fallback_unusable_keeps_original_and_explicit_fail_path(tmp_path):

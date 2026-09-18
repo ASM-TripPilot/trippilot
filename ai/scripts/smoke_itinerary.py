@@ -601,26 +601,31 @@ def _check_baseline(results: list[dict], baseline: dict) -> tuple[list[str], lis
 def entries_with_fallback(
     doc: dict, fallback_path: Path | None
 ) -> tuple[tuple[tuple[Poi, str | None], ...], str | None]:
-    """(entries, 폴백 안내문|None) — 일일 산출물이 못 쓰는 상태면 팀 공유본으로.
+    """(entries, 안내문|None) — 팀 공유본(누적)을 밑에 깔고 일일 델타를 위에 얹는다.
 
-    전국 수집이 **완주**되면 일일 델타가 0건이 되는 게 정상인데(TRIP-642 —
-    skipped_unchanged만 쌓이고 신규 제안 없음), 리허설이 일일 산출물에서만
-    고르면 수집이 안정될수록 리허설이 죽는다. region 있는 제안이 하나도 없으면
-    팀 공유본(수집 누적본)으로 소리 내서 전환한다 — 침묵 전환 금지.
-    폴백도 못 쓰면 원본 entries를 그대로 돌려줘 기존 명시 FAIL 경로를 탄다.
+    처음(TRIP-642)엔 일일 델타에 region 제안이 **0건일 때만** 공유본으로 갈아탔다.
+    그런데 9/11~13 사흘 연속 빨강의 원인이 정확히 그 틈이었다(TRIP-896) — 델타가
+    0건이 아니라 **제천시 1건**이라 폴백이 안 켜졌고, 지역 3곳을 뽑아야 하는
+    샘플러가 한 지역에서 죽었다. 증분 수집은 완주 후 델타가 한두 지역만 남는
+    게 정상이라, "델타가 비었나"는 잘못된 질문이었다. 커버리지는 늘 누적본에서
+    와야 한다.
+
+    그래서 **합친다**: 공유본이 기본 입력이고 델타는 같은 poi_id 를 덮는다(그날
+    신규·변경분이 리허설에 실리게). 공유본을 못 읽으면 델타만 — 기존 명시 FAIL
+    경로를 탄다. 조용한 전환은 없다 — 무엇을 합쳤는지 안내문으로 남긴다.
     """
-    entries = load_proposals(doc)
-    if any(region for _, region in entries):
-        return entries, None
+    delta = load_proposals(doc)
     if fallback_path is None or not fallback_path.exists():
-        return entries, None
-    fallback_doc = json.loads(fallback_path.read_text(encoding="utf-8"))
-    fallback_entries = load_proposals(fallback_doc)
-    if not any(region for _, region in fallback_entries):
-        return entries, None
-    return fallback_entries, (
-        f"일일 산출물에 region 제안 0건 (수집 완주·무변경의 정상 상태) — "
-        f"팀 공유본 폴백: {fallback_path} ({len(fallback_entries)}건)"
+        return delta, None
+    base = load_proposals(json.loads(fallback_path.read_text(encoding="utf-8")))
+    if not base:
+        return delta, None
+    seen = {str(poi.poi_id) for poi, _ in delta}
+    merged = delta + tuple(e for e in base if str(e[0].poi_id) not in seen)
+    regions = sum(1 for _, r in merged if r)
+    return merged, (
+        f"팀 공유본 {len(base)}건 + 일일 델타 {len(delta)}건 → {len(merged)}건 "
+        f"(region 있음 {regions}) — {fallback_path}"
     )
 
 
