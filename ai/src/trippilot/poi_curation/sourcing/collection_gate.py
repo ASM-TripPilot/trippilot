@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.poi_curation.sourcing.mapping import (
@@ -69,6 +69,9 @@ class SourcingCandidate:
     image_url: str | None
     modified_at: str | None
     source: str = "tourapi"   # 잠정 ID 접두 — 출처가 둘 이상이면 여기서 갈린다
+    # 상세 응답의 표시용 원문(대표메뉴·주차·입장료 등, 벤더 필드명 그대로) —
+    # provenance 로만 나가고 게이트 판정에는 쓰지 않는다 (TRIP-683 2단계).
+    detail_raw: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def ref(self) -> tuple[str, str]:
@@ -159,6 +162,8 @@ class CollectionGate:
                 base = replace(base, hours_raw=c.hours_raw)
             if not base.image_url and c.image_url:
                 base = replace(base, image_url=c.image_url)
+            if not base.detail_raw and c.detail_raw:
+                base = replace(base, detail_raw=c.detail_raw)
             kept[idx] = (base, base_coord)
 
         # 4·5단 — 신뢰 태깅 + 정책

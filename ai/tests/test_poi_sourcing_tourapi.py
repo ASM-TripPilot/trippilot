@@ -84,20 +84,50 @@ def test_상시_개방이라도_읽히는_휴무는_존중한다() -> None:
 
 
 @pytest.mark.parametrize("kind", ["12", "14", "39"])
-def test_fetch_hours_reads_type_specific_fields(kind: str) -> None:
+def test_fetch_detail_reads_type_specific_fields(kind: str) -> None:
     http = FakeTourApiHttp(intros={
         "7": envelope([intro_item("7", kind, "10:00~18:00", "매주 월요일")], 1)})
-    hours = _adapter(http).fetch_hours("7", kind)
+    hours = _adapter(http).fetch_detail("7", kind)
     assert hours.hours_raw == "10:00~18:00"
     assert hours.rest_raw == "매주 월요일"
 
 
-def test_fetch_hours_unknown_kind_returns_empty_without_call() -> None:
+def test_fetch_detail_unknown_kind_returns_empty_without_call() -> None:
     """필드 매핑 없는 타입은 지어내지 않고 빈 원문 — HTTP 호출도 하지 않는다."""
     http = FakeTourApiHttp()
-    hours = _adapter(http).fetch_hours("7", "25")
+    hours = _adapter(http).fetch_detail("7", "25")
     assert hours.hours_raw is None and hours.rest_raw is None
     assert http.calls == []
+
+
+# ── 상세 표시용 원문 (TRIP-683 2단계) — 같은 응답, HTTP 추가 0 ─────────
+
+def test_fetch_detail_carries_whitelisted_display_fields_raw() -> None:
+    """채택 목록의 필드만, 벤더 필드명 그대로, 비어 있으면 키 없음."""
+    http = FakeTourApiHttp(intros={"7": envelope([intro_item(
+        "7", "39", "11:00~21:00", "매주 월요일",
+        firstmenu="고기국수", treatmenu="고기국수, 비빔국수", packing="",
+        chkpet="불가")], 1)})
+    d = _adapter(http).fetch_detail("7", "39")
+    assert d.detail_raw == {"firstmenu": "고기국수", "treatmenu": "고기국수, 비빔국수"}
+    assert len(http.calls) == 1
+
+
+@pytest.mark.parametrize("kind", ["12", "14", "38", "39"])
+def test_fetch_detail_never_carries_spendtime(kind: str) -> None:
+    """소요시간은 채워져 와도 싣지 않는다 — INV-3(소요시간 미표시)의 수집 단 방어."""
+    http = FakeTourApiHttp(intros={"7": envelope([intro_item(
+        "7", kind, "09:00~18:00", "연중무휴",
+        spendtime="약 2시간", spendtimeresting="1시간", usefee="무료", parking="가능")], 1)})
+    d = _adapter(http).fetch_detail("7", kind)
+    assert "spendtime" not in d.detail_raw and "spendtimeresting" not in d.detail_raw
+
+
+def test_fetch_detail_kind_28_carries_nothing() -> None:
+    """레포츠는 실측에서 상세가 비어 왔다 — 목록이 없으니 무엇이 와도 싣지 않는다."""
+    http = FakeTourApiHttp(intros={"7": envelope([intro_item(
+        "7", "28", "09:00~18:00", "", parkingleports="가능")], 1)})
+    assert _adapter(http).fetch_detail("7", "28").detail_raw == {}
 
 
 # ── 카테고리 매핑표 (8종 중 NIGHT_VIEW 제외 7종 도달 + 불가 드롭) ──

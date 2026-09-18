@@ -46,12 +46,14 @@ def _candidate(
     hours_raw: str | None = None,
     image_url: str | None = None,
     address: str | None = "제주특별자치도 서귀포시 성산읍",
+    detail_raw: dict[str, str] | None = None,
 ) -> SourcingCandidate:
     return SourcingCandidate(
         source_ref=ref, kind="12", name=name, address=address, lat=lat, lng=lng,
         category=category, category_codes=("A01", "A0101", "A01010400"),
         open_hours=open_hours, hours_raw=hours_raw,
         image_url=image_url, modified_at="20260801120000",
+        detail_raw=detail_raw or {},
     )
 
 
@@ -78,13 +80,15 @@ def test_gate_merges_near_duplicates_filling_missing_hours() -> None:
     report = CollectionGate().apply([
         _candidate("1"),
         _candidate("2", lat=33.4621, open_hours=hours, hours_raw="09:00~18:00"),
-        _candidate("3", name="성산 일출봉", lat=33.4622),   # 공백 정규화로도 동명
+        _candidate("3", name="성산 일출봉", lat=33.4622,   # 공백 정규화로도 동명
+                   detail_raw={"parking": "가능"}),
     ])
     assert len(report.passed) == 1 and report.merged == 2
     kept = report.passed[0]
     assert kept.poi.poi_id == "tourapi-1"           # 먼저 온 레코드 유지
     assert kept.poi.open_hours == hours             # 결측 영업시간은 병합으로 보충
     assert kept.candidate.hours_raw == "09:00~18:00"
+    assert kept.candidate.detail_raw == {"parking": "가능"}  # 상세 원문도 같은 규칙
     assert report.drops == {}                        # 병합은 드롭이 아니다
 
 
@@ -286,6 +290,28 @@ def test_output_document_truncates_long_opening_hours_raw() -> None:
                              collected_at=_NOW)
     raw = doc["proposals"][0]["opening_hours_raw"]
     assert len(raw) == 200 and raw.endswith("…")
+
+
+def test_output_document_carries_detail_raw_only_when_present() -> None:
+    """상세 표시용 원문은 provenance.detail 로 — 없으면 키 자체가 없다 (TRIP-683 2단계)."""
+    http = FakeTourApiHttp(
+        pages={("39", 1): envelope([
+            list_item("300", "올레국수", contenttypeid="39", mapx="126.53", mapy="33.4996",
+                      cat1="A05", cat2="A0502", cat3="A05020100"),
+            list_item("301", "삼대국수", contenttypeid="39", mapx="126.54", mapy="33.4990",
+                      cat1="A05", cat2="A0502", cat3="A05020100"),
+        ], 2)},
+        intros={
+            "300": envelope([intro_item("300", "39", "10:00~22:00", "연중무휴",
+                                        firstmenu="고기국수", spendtime="1시간")], 1),
+            "301": envelope([intro_item("301", "39", "10:00~22:00", "연중무휴")], 1),
+        },
+    )
+    result = collect(_adapter(http), area_code="39", content_types=["39"], max_calls=500)
+    doc = to_output_document(result, area_code="39", content_types=["39"], collected_at=_NOW)
+    prov = {p["provisional_id"]: p["provenance"] for p in doc["proposals"]}
+    assert prov["tourapi-300"]["detail"] == {"firstmenu": "고기국수"}   # spendtime 없음
+    assert "detail" not in prov["tourapi-301"]
 
 
 def test_output_document_region_extraction_failure_is_null() -> None:

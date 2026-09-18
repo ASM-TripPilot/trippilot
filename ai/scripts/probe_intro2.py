@@ -1,9 +1,10 @@
 """detailIntro2 실 응답 관측 — 필드명과 채움률을 잰다 (TRIP-683).
 
-`fetch_hours()` 는 이 엔드포인트를 항목당 1콜 부르면서 응답 dict 에서 **필드
-2개만 읽고 나머지를 버린다**. 그 안에 무엇이 더 있는지 리포에 기록이 없고,
-`tests/fakes/fake_tourapi_http.py` 도 우리가 읽는 2필드만 흉내낸다 — 즉
-**fake 가 실물과 갈라져도 테스트는 초록**이다.
+`fetch_detail()` 는 이 엔드포인트를 항목당 1콜 부르면서 응답 dict 에서 **채택
+목록(`_DETAIL_FIELDS`)의 필드만 읽고 나머지를 버린다** (2단계 전에는 영업시간
+2필드뿐이었다). 그 밖에 무엇이 오는지·채움률은 리포에 기록이 없고,
+`tests/fakes/fake_tourapi_http.py` 도 우리가 읽는 필드만 흉내낸다 — 즉
+**fake 가 실물과 갈라져도 테스트는 초록**이다. 채택 목록을 늘리려면 이 프로브로 먼저 잰다.
 
 ## 왜 수집 배치가 아니라 별도 프로브인가
 
@@ -81,7 +82,7 @@ def main() -> int:
         refs = [r.source_ref for r in page.records if r.source_ref][: args.per_kind]
         for ref in refs:
             try:
-                adapter.fetch_hours(ref, kind)
+                adapter.fetch_detail(ref, kind)
             except SourcingError:
                 pass   # 표본은 있으면 좋은 것 — 개별 실패는 채움률에만 반영된다
 
