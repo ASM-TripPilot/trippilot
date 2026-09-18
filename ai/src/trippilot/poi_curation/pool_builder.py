@@ -8,7 +8,6 @@ INV-1 화이트리스트의 정본은 backend C7 후보풀 — 본 빌더는 AI�
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 
 from trippilot.domain.llm import CandidatePool
@@ -19,16 +18,10 @@ from trippilot.poi_curation.config import M7Config
 _ALLOWED_QUALITY = frozenset({DataQuality.FULL, DataQuality.PARTIAL})
 
 
-_log = logging.getLogger(__name__)
-
-
 class CandidatePoolBuilder:
-    def __init__(self, poi_db, config: M7Config, existence=None) -> None:
+    def __init__(self, poi_db, config: M7Config) -> None:
         self._db = poi_db
         self._cfg = config
-        # PlaceExistencePort | None. **미주입이 기본**이다 — 근거가 없으면
-        # 판정을 안 하는 것이 맞고(있는 근거만 쓴다), 주입 전 동작은 불변이다.
-        self._existence = existence
 
     def build(self, request: CandidatePoolRequest, now: datetime) -> CandidatePool:
         # ① 반경 (다일 여행 ×0.7)
@@ -66,31 +59,13 @@ class CandidatePoolBuilder:
         # 인기 1순위는 saved_count — 백엔드 PoiReadService 의 반경 조회 정렬(savedCount↓)과
         # 같은 신호다. rating 은 별점 소스가 생길 때까지 항상 None 이라 사실상 무동작.
         #
-        # 2순위는 **지도 미검출 강등** (TRIP-683). 위 [임시] 주석의 논리를 그대로
-        # 따른다 — 배제가 아니라 강등이다. 실측(`ai-existence-probe`, 반경 300m,
-        # 무리별 200건)이 배제를 기각했다:
-        #     영업 중  FOUND 96.0% · NOT_FOUND  4.0%  → 오탐률 4.0%
-        #     폐업     FOUND 51.5% · NOT_FOUND 48.5%  → 적중률 48.5%
-        # 7,837건 환산: 잡는 폐업 ≈102건 vs 잘못 버리는 영업 중 ≈305건 —
-        # **멀쩡한 가게를 3배 더 버린다**(모집단이 폐업보다 36배 크다).
-        # 적중률 48.5% 는 튜닝으로 못 올린다 — 폐업 절반이 아직 지도에 남아 있는
-        # 것(지도 데이터 신선도)이라 반경·질의를 바꿔도 그대로다.
-        # 지역 쏠림은 없었다(표본 5건 이상 지역 전부 오탐 0%).
-        #
-        # **정렬 → 절단 → 상위 N 검증 → 재정렬** 순서다. 검증을 먼저 하면 마감
-        # (1.5s, 순차 1건=1HTTP)에 잘려 앞 수십 건만 조회되는데, 그 "앞"을 정하는
-        # 것이 `PoiDbPort.find_by_radius` 의 반환 순서다 — **포트 계약에 순서
-        # 규정이 없다**(백엔드가 savedCount↓ 로 주는 것은 구현 우연). 즉 실제로
-        # 노출될 후보가 아니라 엉뚱한 것을 검증하게 된다. 뒤로 미루면 (a) 화면에
-        # 오를 것만 검증하고 (b) 벤더 호출이 두 자릿수 배 줄어든다.
+        # 지도 실재 검증(TRIP-898)은 여기서 하지 않는다 — 일정 생성 경로는 풀 순서를
+        # 읽지 않아(점수 워커는 poi_id 로 재정렬, 어셈블리는 점수로 고른다) 순위 강등이
+        # 일정에 닿지 않았다. 점수가 나온 뒤 ScheduleAgent ②′ 가 한다 (TRIP-904).
+        # 예외: PlanB 는 LLM 선택이 closed-set 에서 전량 드롭되면 풀 순서 그대로 대안을
+        # 낸다(rag.py `kept = available`) — 그 폴백 경로의 지도 강등은 이번에 빠졌다(후속).
         pois.sort(key=self._rank_key)
         pois = pois[: self._cfg.max_candidates]
-
-        missing = self._not_found_on_map(pois[: self._cfg.existence_verify_top_n])
-        if missing:
-            pois.sort(key=lambda p: (self._rank_key(p)[0],
-                                     1 if p.poi_id in missing else 0,
-                                     *self._rank_key(p)[1:]))
 
         return CandidatePool(
             poi_ids=frozenset(p.poi_id for p in pois),
@@ -102,44 +77,9 @@ class CandidatePoolBuilder:
 
     @staticmethod
     def _rank_key(p) -> tuple:
-        """지도 신호를 뺀 기본 순위 키. 강등은 이 키의 1번 칸 뒤에 끼워진다."""
+        """풀 정렬 키 — ⑥ 상한 절단에서 누가 살아남는지를 정한다."""
         return (0 if p.open_hours else 1, -p.saved_count,
                 -(p.rating or 0.0), str(p.poi_id))
-
-    def _not_found_on_map(self, pois) -> frozenset:
-        """지도에서 못 찾은 poi_id 집합. 미주입·실패 시 빈 집합(= 강등 없음).
-
-        **FOUND 만 양성 신호이고, UNVERIFIED 는 강등 대상이 아니다.** 장애를
-        강등으로 수렴시키면 카카오가 죽는 날 후보 순서가 통째로 뒤집힌다.
-        NOT_FOUND 만 뒤로 민다.
-
-        ⑥ 상한 절단 **앞**에서 돌므로 후보 전체를 조회하게 된다. 상한(기본
-        5,000)만큼 외부 호출이 나갈 수 있으니 예산·마감은 어댑터가 쥔다 —
-        여기서는 빠진 판정을 "모름"으로 두고 넘어간다(개수 보존은 포트 계약).
-        """
-        if self._existence is None or not pois:
-            return frozenset()
-        from trippilot.ports.place_existence_port import (
-            ExistenceQuery,
-            ExistenceStatus,
-        )
-        try:
-            verdicts = self._existence.verify(
-                tuple(ExistenceQuery(poi_id=p.poi_id, name=p.name, coord=p.coord)
-                      for p in pois),
-                deadline_ms=self._cfg.existence_deadline_ms,
-            )
-        except Exception:   # noqa: BLE001
-            # 포트 계약(DL-5)은 예외를 경계 밖으로 던지지 않는다고 정하지만,
-            # 계약을 어기는 구현이 하나 꽂히면 **순위 곁가지 하나 때문에 생성
-            # 경로 전체가 죽는다**. 강등은 있으면 좋은 신호지 필수가 아니므로
-            # 없는 셈 치고 간다 — 다만 조용히는 아니다 (INV-4).
-            _log.warning("실재 검증 포트가 예외를 던졌다 — 강등 없이 진행", exc_info=True)
-            return frozenset()
-        return frozenset(
-            v.poi_id for v in verdicts
-            if v.status is ExistenceStatus.NOT_FOUND
-        )
 
     @staticmethod
     def _open_on_any(poi: Poi, travel_dows: set[int]) -> bool:

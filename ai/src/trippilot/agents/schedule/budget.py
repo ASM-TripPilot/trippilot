@@ -37,6 +37,24 @@ class OrchestratorConfig:
     c1_max_ms: int = 14_000
     c1_min_ms: int = 800          # 이보다 적게 배분되면 LLM 호출 자체를 스킵 (DL-2)
     explanation_min_ms: int = 1_500  # 설명 부착(선택 단계) 진입 하한
+    # ── 지도 실재 검증 ②′ (TRIP-898 → TRIP-904 에서 풀 빌더로부터 이동) ──
+    # 점수 상위 몇 건을 지도에서 확인할 것인가. 마감이 실질 제한이라 이 값은 상한일
+    # 뿐이다 — 3일 여행이 슬롯 15개 안팎이라 50 이면 배치될 후보를 넉넉히 덮는다.
+    existence_verify_top_n: int = 50
+    # 검증에 줄 시간 상한. 어셈블리 바닥(c2_reserved_ms)을 침범하지 않는 만큼만 쓴다.
+    existence_deadline_ms: int = 1_500
+    # 지도에서 못 찾은 후보의 강등 = max(점수 − penalty, 점수 × factor) (점수 > 0 일 때).
+    # penalty 0.3 = 소프트 항 "한 단" — 다른 소프트 감점(비 오는 날 실외 −0.2·식사창
+    # 밖 FOOD −0.2 등)과 같은 축이라, 겹쳐도 같은 조정 점수의 일반 후보와 똑같이
+    # 취급된다. 곱셈만 쓰던 첫 안(×0.2)은 비 오는 날 실외 후보의 방문 이득을 음수로
+    # 만들어 **대체 후보가 없어도 빠지는**(사실상 배제) 것이 리뷰 실측으로 드러났다
+    # (실외만 4곳·비 80%·전량 미검출: 배치 3→1, 이 산식은 3→3).
+    # 근거: 지도 미검출이 실제 폐업일 확률 ≈ 102/(102+305) ≈ 25% (ai-existence-probe) —
+    # 기대 효용 ≈ 점수 × 0.75 로, 흔한 점수대(0.6~0.9)에서 한 단(0.3) 감점과 비슷하다.
+    existence_demote_penalty: float = 0.3
+    # 강등 하한 배율 — 저점수(< penalty/(1−factor))가 음수로 떨어지지 않게 원점수의 이만큼은
+    # 남긴다. **0 초과**여야 강등이다(0 이면 OR-Tools 방문 이득 0 = 사실상 배제, 9/12 결정 위반).
+    existence_demote_factor: float = 0.2
 
     def __post_init__(self) -> None:
         if not 0.0 < self.c2_min_share < 1.0:
@@ -49,6 +67,14 @@ class OrchestratorConfig:
                      "explanation_min_ms"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
+        if self.existence_verify_top_n <= 0:
+            raise ValueError("existence_verify_top_n 양수 필요")
+        if self.existence_deadline_ms <= 0:
+            raise ValueError("existence_deadline_ms 양수 필요")
+        if not 0.0 < self.existence_demote_factor <= 1.0:
+            raise ValueError("existence_demote_factor ∈ (0, 1] — 0 은 배제다")
+        if not 0.0 <= self.existence_demote_penalty < float("inf"):
+            raise ValueError("existence_demote_penalty ∈ [0, ∞)")
 
 
 @dataclass(frozen=True, slots=True)

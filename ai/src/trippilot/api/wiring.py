@@ -1487,10 +1487,8 @@ def build_orchestrator(
     provider = ChainAssemblyProvider(estimator, clock, trace, acfg)
     # 수집 계층 (TRIP-406·407) — 풀·페르소나 상시, 날씨는 포트 주입 시에만 등록.
     # 페르소나 재조회도 같은 resolver — 보안 규칙의 권위 1곳 (TRIP-333·BR-U4-07).
-    # existence 미주입이면 강등 없이 기존과 동일 (TRIP-683 — 근거 없으면 판정 안 함)
     pool_builder = CandidatePoolBuilder(
-        poi_db, m7_config if m7_config is not None else M7Config(),
-        existence=existence)
+        poi_db, m7_config if m7_config is not None else M7Config())
     providers: dict[ProviderKind, object] = {
         ProviderKind.PLACE: PlaceProvider(pool_builder),
         ProviderKind.PERSONA: PersonaProvider(resolver),
@@ -1561,6 +1559,9 @@ def build_orchestrator(
         trace,
         explanation_worker=explainer,
         alternative_explanation_worker=alt_explainer,
+        # 지도 실재 검증(TRIP-898) — 점수 뒤·어셈블리 앞에서 점수를 깎는다(TRIP-904).
+        # 미주입이면 강등 없이 기존과 동일(근거 없으면 판정 안 함).
+        existence=existence,
         config=orchestrator_config,
     )
     # 수집기는 하나를 공유한다 — 코디네이터(generate)와 경계(replan·edit)가 같은
