@@ -287,11 +287,26 @@ def test_polluted_bank_labels_are_ignored_inv1() -> None:
     """closed-set 밖 라벨이 실린 엔트리는 매칭 대상이 아니다 (INV-1 — 뱅크 오염 방어)."""
     store = InMemoryVectorStore()
     store.upsert(BANK_COLLECTION, "X1", (1.0, 0.0), {"intent": "HACK_THE_PLANET"})
-    store.upsert(BANK_COLLECTION, "X2", (1.0, 0.0), {"intent": "OUT_OF_SCOPE"})
     router = IntentRouter(_ScriptedEmbedding(_QUERY_ANGLES), store)
     match = router.route("확실한 질문", _TID, _NOW)
     assert match.match_route is MatchRoute.FALLBACK
     assert "bank_miss" in match.reason
+
+
+def test_out_of_scope_anchor_refuses_at_stage_one_without_calling_llm() -> None:
+    """거부 앵커가 1차에서 이기면 **LLM 0회로 거절**한다 (TRIP-868).
+
+    앵커가 없으면 딴소리도 13종 중 가장 덜 먼 곳에 붙는다 — 그래서 앵커는 매칭 대상이어야 하고,
+    이겼을 때의 행동만 다르다(위임 대신 거절). 문턱은 CONFIDENT 와 같은 값을 쓴다.
+    """
+    store = InMemoryVectorStore()
+    store.upsert(BANK_COLLECTION, "OOS#00", (1.0, 0.0), {"intent": "OUT_OF_SCOPE"})
+    # LLM 게이트웨이를 주지 않는다 — 호출하면 그 자리에서 터진다(= 0회임을 구조로 증명)
+    router = IntentRouter(_ScriptedEmbedding(_QUERY_ANGLES), store)
+    match = router.route("확실한 질문", _TID, _NOW)
+    assert match.match_route is MatchRoute.FALLBACK
+    assert match.intent is Intent.OUT_OF_SCOPE
+    assert "out_of_scope_anchor" in match.reason  # 거절 표지 — 인프라 실패와 구분된다
 
 
 # ── 폴백: 결정론 + 침묵 금지 (INV-4) ────────────────────────────────────
@@ -382,12 +397,15 @@ def _load_seed():
 
 def test_seed_bank_covers_closed_set_and_matches_routing_table() -> None:
     entries = _load_seed()
-    assert {e.intent for e in entries} == ROUTABLE_INTENTS  # 13종 전부, 그 밖은 없음
-    assert len(entries) == 450  # v0.6 (yaml 헤더 명시 — seed 125 + §3.2 ② 증강 325)
-    assert all(e.bank_version == "0.6" for e in entries)
+    # 위임 대상 13종 전부 + 거부 앵커 1종 (TRIP-868) — 그 밖의 라벨은 없다
+    assert {e.intent for e in entries} == ROUTABLE_INTENTS | {Intent.OUT_OF_SCOPE}
+    assert len(entries) == 485  # v0.7 (seed 125 + §3.2 ② 증강 325 + 거부 앵커 35)
+    assert sum(1 for e in entries if e.intent is Intent.OUT_OF_SCOPE) == 35
+    assert all(e.bank_version == "0.7" for e in entries)
     assert all(e.reviewed for e in entries)  # 사람 검수(seed) · 기계 관문(증강) 통과분만 실린다
     by_origin = Counter(e.origin for e in entries)
-    assert by_origin == {"seed": 125, "augmented": 325}  # 출처가 구분돼 되돌릴 수 있다
+    # 앵커도 seed 다 — 사람이 직접 썼고 증강 대상이 아니다(범위 밖은 열린 집합이라 불려도 의미가 없다)
+    assert by_origin == {"seed": 160, "augmented": 325}  # 출처가 구분돼 되돌릴 수 있다
 
 
 def test_each_intent_block_declares_augmented_at_most_once() -> None:
@@ -489,7 +507,9 @@ def test_seed_question_roundtrips_through_router_with_fake_embedding() -> None:
     "mutate, needle",
     [
         (lambda d: d["intents"][0].__setitem__("intent", "MAKE_COFFEE"), "closed-set"),
-        (lambda d: d["intents"][0].__setitem__("intent", "OUT_OF_SCOPE"), "위임 대상이 아닌"),
+        # OUT_OF_SCOPE 는 이제 거부 앵커로 실릴 수 있다(TRIP-868) — 다만 handler·mode 가 함께 맞아야
+        # 한다. 라벨만 바꾸면 라우팅 표와 어긋나 드리프트 검사에 걸린다.
+        (lambda d: d["intents"][0].__setitem__("intent", "OUT_OF_SCOPE"), "handler가 라우팅 테이블과"),
         (lambda d: d["intents"][0].__setitem__("handler", "PlanBAgent"), "handler가 라우팅 테이블과"),
         (lambda d: d["intents"][0].__setitem__("mode", "FastPath"), "mode가 라우팅 테이블과"),
         (lambda d: d["intents"][0].__setitem__("mode", "Turbo"), "알 수 없는 mode"),

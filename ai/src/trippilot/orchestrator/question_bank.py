@@ -33,6 +33,7 @@ BANK_COLLECTION = "intent_bank"  # 벡터 스토어 collection 3종 중 하나 (
 _YAML_MODE: dict[str, RoutingMode] = {
     "Delegate": RoutingMode.DELEGATE,
     "FastPath": RoutingMode.FAST_PATH,
+    "Fallback": RoutingMode.FALLBACK,  # 거부 앵커 전용 (OUT_OF_SCOPE)
 }
 
 
@@ -147,7 +148,10 @@ def _parse_intent(label: object, where: str) -> Intent:
         intent = Intent(label)
     except ValueError:
         raise BankLoadError(f"{where}: closed-set 밖 의도 라벨 {label!r}") from None
-    if intent not in ROUTABLE_INTENTS:
+    # OUT_OF_SCOPE 는 위임 대상이 아니지만 **거부 앵커**로는 실린다 — "우리 일이 아니다" 를 가리키는
+    # 문장이 뱅크에 없으면 딴소리도 13종 중 가장 덜 먼 곳에 붙는다(실측: 범위 밖 9건이 전부 엉뚱한
+    # 의도에 top1). 그 밖의 비위임 라벨은 여전히 금지다.
+    if intent not in ROUTABLE_INTENTS and intent is not Intent.OUT_OF_SCOPE:
         raise BankLoadError(f"{where}: 위임 대상이 아닌 라벨은 뱅크에 실을 수 없음 {intent.value}")
     return intent
 
