@@ -59,6 +59,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from trippilot.api.app import create_app
+from trippilot.api.cost import load_prices
 from trippilot.api.wiring import (
     KST,
     StaticPersonaStore,
@@ -71,6 +72,7 @@ from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import BudgetLevel, TransportMode
 from trippilot.domain.llm import ModelTier
+from trippilot.domain.observability import LlmCallRecord
 from trippilot.domain.persona import CompanionType, PersonaSummary
 from trippilot.domain.poi import Poi
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse
@@ -273,6 +275,43 @@ class CollectingTrace:
         self.records.append(event)
 
 
+def cost_of(records: list, prices=None) -> dict | None:
+    """수집된 `LlmCallRecord` → 이번 리허설의 LLM 비용 (TRIP-869 후속).
+
+    **왜 여기서 다시 세는가**: 비용 집계는 `LoggingTrace`(운영 경로)에 붙어 있는데
+    리허설은 품질 점수를 얻으려 `CollectingTrace` 를 주입한다 — 그래서 실 LLM 이
+    정기적으로 도는 바로 이 자리에서 비용 줄이 안 나왔다. 트레이스를 바꾸는 대신
+    **이미 모으고 있는 레코드에서 계산**한다(새 배관 0). 단가 규칙은 한 곳
+    (`api.cost.ModelPrices`)에서만 나오므로 두 경로가 갈라지지 않는다.
+
+    반환은 결과 dict 에 실려 `rehearsal_log.jsonl` 시계열에 그대로 따라 들어간다 —
+    품질 점수(TRIP-524)가 탄 것과 같은 경로다.
+
+    단가 미설정이면 None — "비용 0" 이 아니라 "모름"이다. 단가표에 없는 모델은
+    합계에 0 을 더하지 않고 `unpriced_calls` 로 드러내므로, 그때 `total` 은 **하한**이다
+    (현행 CI 배정은 멘토 게이트웨이라 전건 unpriced 가 정상 — 우리가 지불하지 않는다).
+    """
+    prices = load_prices() if prices is None else prices
+    if prices is None:
+        return None
+    total, unpriced, counted = 0.0, 0, 0
+    for record in records:
+        if not isinstance(record, LlmCallRecord):
+            continue
+        counted += 1
+        one = prices.cost(record.model_id, record.input_tokens, record.output_tokens)
+        if one is None:
+            unpriced += 1
+        else:
+            total += one
+    return {
+        "currency": prices.currency,
+        "total": total,
+        "calls": counted,
+        "unpriced_calls": unpriced,
+    }
+
+
 class RehearsalError(Exception):
     """생성 실패 또는 검사(슬롯≥1 · INV-1 · INV-3) 위반."""
 
@@ -440,6 +479,10 @@ def run_rehearsal(
             }
             if quality is not None else None
         ),
+        # LLM 비용 (TRIP-869 후속) — 위 llm_calls 가 콜 수 대리 지표였던 자리에
+        # 실제 금액을 얹는다. None = 단가 미설정(모름). unpriced_calls > 0 이면
+        # total 은 **우리가 지불하는 몫의 하한**이다 (cost_of 독스트링).
+        "cost": cost_of(trace.records),
     }
 
 
@@ -658,6 +701,11 @@ def _print_one(result: dict) -> None:
            else f"LLM 사용 {result['llm_used']}")   # 예전 산출 호환
     print(f"- solve_mode `{result['solve_mode']}` · 폴백 {result['is_fallback']} · "
           f"{llm} · {result['latency_ms']}ms")
+    cost = result.get("cost")  # TRIP-869 후속 — 단가 미설정이면 None(줄 생략)
+    if cost is not None:
+        unpriced = (f" · 단가미상 {cost['unpriced_calls']}콜(합계는 하한)"
+                    if cost["unpriced_calls"] else "")
+        print(f"- LLM 비용 {cost['total']:.6f} {cost['currency']}{unpriced}")
     if result.get("weather"):  # 날씨 주입이 돌았을 때만 (TRIP-409)
         pops = " · ".join(f"{d} {p}%" for d, p in sorted(result["weather"].items()))
         print(f"- 예보(강수확률): {pops}")
