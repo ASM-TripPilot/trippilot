@@ -128,7 +128,7 @@ _QUERY_ANGLES = {
 
 
 def _scripted_router(
-    *, slot_pattern: dict | None = None, extra_angles: dict[str, float] | None = None,
+    *, extra_angles: dict[str, float] | None = None,
     bank: dict[str, tuple[float, Intent]] | None = None, **kwargs
 ) -> IntentRouter:
     embedding = _ScriptedEmbedding({**_QUERY_ANGLES, **(extra_angles or {})})
@@ -138,7 +138,7 @@ def _scripted_router(
             BANK_COLLECTION,
             item_id,
             (math.cos(theta), math.sin(theta)),
-            {"intent": intent.value, "question": item_id, "slot_pattern": slot_pattern or {}},
+            {"intent": intent.value, "question": item_id},
         )
     return IntentRouter(embedding, store, **kwargs)
 
@@ -157,14 +157,19 @@ def test_confident_route_without_any_llm() -> None:
     assert match.routing.handler == "WeatherAgent"
 
 
-def test_confident_extracts_slots_from_entry_pattern() -> None:
+def test_confident_fills_arguments_from_the_intent_table() -> None:
+    """인자는 **뱅크 엔트리가 아니라 의도의 인자표**에서 온다 (FD §3).
+
+    엔트리별 `slot_pattern` 을 폐기한 자리다 — 뱅크가 485문장이고 증강으로 계속 느는데
+    문장마다 패턴을 달 수 없고, 같은 `date` 를 의도마다 다르게 뽑는 드리프트가 난다.
+    """
     router = _scripted_router(
-        slot_pattern={"date": "regex:오늘|내일|모레", "bad": "glob:*"},
+        bank={"W1": (0.00, Intent.GET_WEATHER)},
         extra_angles={"내일 확실한 질문": 0.0},
     )
     match = router.route("내일 확실한 질문", _TID, _NOW)
     assert match.match_route is MatchRoute.CONFIDENT
-    assert match.slots == {"date": "내일"}  # 지원하지 않는 패턴 형식(bad)은 조용히 제외
+    assert match.slots == {"date": "내일"}  # GET_WEATHER.date 가 표에 있다
 
 
 def test_confident_when_competing_intent_is_far_even_if_it_is_top2() -> None:
@@ -184,8 +189,9 @@ def test_confident_when_competing_intent_is_far_even_if_it_is_top2() -> None:
     assert match.intent is Intent.GET_WEATHER
 
 
-def test_broken_regex_pattern_does_not_break_routing() -> None:
-    router = _scripted_router(slot_pattern={"x": "regex:[unclosed"})
+def test_unextractable_arguments_do_not_break_routing() -> None:
+    """추출 실패는 `None` 이고 예외가 아니다 — 의도는 이미 정해졌고 인자만 빈다."""
+    router = _scripted_router()
     match = router.route("확실한 질문", _TID, _NOW)
     assert match.match_route is MatchRoute.CONFIDENT and match.slots == {}
 
@@ -556,16 +562,6 @@ def test_loader_rejects_structural_violations(mutate, needle) -> None:
     with pytest.raises(BankLoadError) as exc:
         load_bank(data)
     assert needle in str(exc.value)
-
-
-def test_loader_reads_slot_pattern_into_payload() -> None:
-    data = yaml.safe_load(_SEED_YAML.read_text(encoding="utf-8"))
-    data["intents"][0]["slot_pattern"] = {"date": "regex:오늘|내일"}
-    entries = load_bank(data)
-    assert entries[0].payload()["slot_pattern"] == {"date": "regex:오늘|내일"}
-    with pytest.raises(BankLoadError):
-        data["intents"][0]["slot_pattern"] = {"date": 3}
-        load_bank(data)
 
 
 def test_routing_table_and_enum_stay_in_sync() -> None:
