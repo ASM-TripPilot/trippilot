@@ -203,6 +203,10 @@ class IntentRouter:
 
         top = hits[0]
         if top.score >= self._cfg.t_high and _separated(hits, self._cfg.intent_margin):
+            # 거부 앵커가 이겼다 = "우리 일이 아니다" 를 1차에서 확정한 것 — LLM 0회로 거절한다.
+            # 문턱은 CONFIDENT 와 **같은 값**을 쓴다. 규칙을 하나 더 두면 둘이 따로 논다.
+            if top.intent is Intent.OUT_OF_SCOPE:
+                return _fallback(f"out_of_scope_anchor({top.entry_id}, {top.score:.3f})")
             return IntentMatch(
                 intent=top.intent,
                 slots=_extract_slots(text, top.slot_pattern),
@@ -370,7 +374,8 @@ def _payload_intent(payload: Mapping) -> Intent | None:
         intent = Intent(label)
     except ValueError:
         return None
-    return intent if intent in ROUTABLE_INTENTS else None
+    # 거부 앵커(OUT_OF_SCOPE)도 매칭 대상이다 — 그것이 앵커의 존재 이유다.
+    return intent if (intent in ROUTABLE_INTENTS or intent is Intent.OUT_OF_SCOPE) else None
 
 
 def _extract_slots(text: str, slot_pattern: Mapping) -> dict:
