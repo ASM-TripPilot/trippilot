@@ -633,7 +633,11 @@ def test_route_never_raises_and_label_is_closed_set(utterance: str, wired: bool)
     assert match.routing is ROUTING_TABLE[match.intent]
 
 
-@settings(max_examples=40)
+# deadline 을 끈다 — 이 테스트는 **예제마다 라우터를 두 번 새로 만든다**(같은 입력이 서로 다른
+# 인스턴스에서도 같은 답을 내는지가 속성이라 하나를 재사용할 수 없다). 그 구성 비용이 기본 200ms
+# 를 넘나들어, 머신이 바쁠 때 속성이 아니라 **부하**를 재게 된다(실측 2회: 319ms·단독 실행 시 통과).
+# 여기서 잡고 싶은 것은 결정론이지 속도가 아니다.
+@settings(max_examples=40, deadline=None)
 @given(utterance=_utterances, wired=st.booleans())
 def test_route_is_deterministic(utterance: str, wired: bool) -> None:
     first = _pbt_router(wired).route(utterance, _TID, _NOW)
