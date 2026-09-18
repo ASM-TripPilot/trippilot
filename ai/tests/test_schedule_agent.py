@@ -602,13 +602,16 @@ def test_map_verify_respects_assembly_floor() -> None:
     """어셈블리 바닥을 침범할 시간이 없으면 부르지 않는다 — 건너뛴 사실은 남긴다 (DL-2)."""
     pool, req = _existence_case()
     fake = FakeExistence(default=ExistenceStatus.NOT_FOUND)
-    agent, _ = _agent_with_existence(fake)
+    agent, trace = _agent_with_existence(fake)
 
     outcome = agent.run(_task(pool, request=req, total_ms=1_000))  # 바닥 1000ms = 전부
 
     assert fake.call_count == 0
     assert any(d.stage == "existence" and d.reason.startswith("deadline:available=")
                for d in outcome.degradations)
+    # 결과에만 싣고 이벤트를 빠뜨리면 폴백률 지표에서 이 건너뜀이 안 보인다 (INV-4)
+    assert [e.component for e in trace.of_type(FallbackEvent) if e.stage == "existence"] == [
+        "agents.schedule"]
 
 
 
@@ -628,11 +631,12 @@ def test_map_verify_contract_breaking_port_never_fails_generation() -> None:
              ([{"poi_id": "p1", "status": "NOT_FOUND"}], "existence_empty_response"),
              ((), "existence_empty_response"))
     for value, prefix in cases:
-        agent, _ = _agent_with_existence(_Returns(value))
+        agent, trace = _agent_with_existence(_Returns(value))
         outcome = agent.run(_task(pool, request=req))
         assert outcome.solution is not None and _placed(outcome) == base, value
         assert any(d.stage == "existence" and d.reason.startswith(prefix)
                    for d in outcome.degradations), (value, outcome.degradations)
+        assert len([e for e in trace.of_type(FallbackEvent) if e.stage == "existence"]) == 1
 
 
 def test_demotion_never_raises_a_nonpositive_score() -> None:
@@ -645,6 +649,36 @@ def test_demotion_never_raises_a_nonpositive_score() -> None:
              ScoredPoi(PoiId("pos"), 0.5, True))
     verdicts = tuple(ExistenceVerdict(c.poi_id, ExistenceStatus.NOT_FOUND) for c in cands)
 
-    out = demote_missing_on_map(cands, verdicts, 0.2)
+    out = demote_missing_on_map(cands, verdicts, 0.2, 0.3)
 
-    assert [c.score for c in out] == [-0.1, 0.0, 0.1]
+    assert [c.score for c in out] == [-0.1, 0.0, max(0.5 - 0.3, 0.5 * 0.2)]
+
+
+
+def test_demotion_does_not_become_exclusion_under_rain_soft_terms() -> None:
+    """리뷰 실측 회귀(TRIP-904): 비 오는 날·실외만·전량 미검출이어도 OR-Tools 배치 수는 강등 전과 같다.
+
+    곱셈만 쓰던 첫 안(×0.2)은 0.16 − 0.2(우천 실외 감점) < 0 이라 방문 이득이 음수가 되어
+    **대체 후보가 없는데도** 3곳 → 1곳으로 줄었다(사실상 배제 — 9/12 팀 결정 위반).
+    """
+    from trippilot.agents.schedule.agent import demote_missing_on_map
+    from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
+    from trippilot.ports.place_existence_port import ExistenceVerdict
+    from tests.test_assembly_engine_rain_adjust import (
+        _CFG as _RAIN_CFG, _EST as _RAIN_EST, _POOL_OUTDOOR_ONLY, _RAINY, _problem as _rain_problem,
+    )
+
+    cfg = OrchestratorConfig()
+    for rain in (None, _RAINY):
+        problem, index = _rain_problem(_POOL_OUTDOOR_ONLY, rain=rain)
+        verdicts = tuple(ExistenceVerdict(c.poi_id, ExistenceStatus.NOT_FOUND)
+                         for c in problem.candidates)
+        demoted = replace(problem, candidates=demote_missing_on_map(
+            problem.candidates, verdicts,
+            cfg.existence_demote_factor, cfg.existence_demote_penalty))
+
+        def visits(p):
+            sol = OrToolsAssembler(index, _RAIN_EST, _RAIN_CFG).solve(p, 3000)
+            return sum(len(d.slots) for d in sol.days)
+
+        assert visits(demoted) == visits(problem), f"rain={rain}"

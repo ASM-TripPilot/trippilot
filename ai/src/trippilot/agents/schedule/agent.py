@@ -542,12 +542,15 @@ class ScheduleAgent:
 
         실측(`ai-existence-probe`, 반경 300m, 무리별 200건)이 배제를 기각했다: 영업 중의
         4.0% 가 안 나오고(오탐) 폐업의 48.5% 만 걸린다 — 7,837건 환산 시 잡는 폐업 ≈102건
-        vs 잘못 버리는 영업 중 ≈305건. 그래서 점수에 배율(0 초과)을 곱해 두 어셈블러가
-        **다른 후보가 모자랄 때만** 쓰게 한다. UNVERIFIED(장애·시한·예산)는 강등하지
-        않는다 — 벤더가 죽는 날 후보 순서가 통째로 뒤집히면 안 된다.
+        vs 잘못 버리는 영업 중 ≈305건. 그래서 점수를 소프트 항 한 단만큼 깎아
+        (`demoted_score`) 두 어셈블러가 정상 후보 뒤로 미루게 한다. UNVERIFIED(장애·
+        시한·예산)는 강등하지 않는다 — 벤더가 죽는 날 후보 순서가 통째로 뒤집히면 안 된다.
 
-        시간은 어셈블리 바닥을 침범하지 않는 만큼만 쓴다(DL-2). 못 쓰면 건너뛰고,
-        포트 예외·전량 확인 실패와 함께 강등으로 남긴다(침묵 금지, INV-4).
+        시간은 어셈블리 바닥을 침범하지 않는 만큼만 포트에 준다(DL-2). 못 주면 건너뛰고,
+        포트 예외·빈 응답·전량 확인 실패와 함께 강등으로 남긴다(침묵 금지, INV-4).
+        ponytail: 카카오 어댑터는 마감을 **호출 사이**에서만 보므로 진행 중인 호출 1건만큼
+        (HTTP 타임아웃, main.py 에서 1s) 넘칠 수 있다 — 호출별 잔여 타임아웃 관통은
+        HttpGetJson 포트 확장이 필요해 두었다.
         """
         if self._existence is None or not candidates:
             return candidates  # 미주입 = 기능 부재 (강등 아님)
@@ -593,7 +596,8 @@ class ScheduleAgent:
                           f"existence_unverified: {answered[0].reason}")
             return candidates
         return demote_missing_on_map(
-            candidates, answered, self._cfg.existence_demote_factor)
+            candidates, answered,
+            self._cfg.existence_demote_factor, self._cfg.existence_demote_penalty)
 
     # ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────
 
@@ -781,25 +785,41 @@ def pick_slot_alternatives(
     return out
 
 
+def demoted_score(score: float, *, factor: float, penalty: float) -> float:
+    """지도 미검출 강등값 = max(점수 − penalty, 점수 × factor). 0 이하 점수는 그대로.
+
+    뺄셈이 본체다 — 다른 소프트 감점과 같은 축이라 겹쳐도 "같은 조정 점수의 일반 후보"와
+    똑같이 취급되고, 곱셈 하한이 저점수를 음수로 떨어뜨리지 않는다(> 0 유지 = 배제 아님).
+    두 항 모두 점수에 대해 증가함수라 강등된 후보끼리의 순위는 뒤집히지 않는다.
+    0 이하는 건드리지 않는다 — 음수에 배율을 곱하면 0 쪽으로 **올라가** 승격이 된다
+    (규칙 점수는 원거리에서 음수가 될 수 있다). 이미 방문 이득이 없는 값이다.
+    """
+    if score <= 0:
+        return score
+    return max(score - penalty, score * factor)
+
+
 def demote_missing_on_map(
     candidates: tuple[ScoredPoi, ...],
     verdicts: Sequence[ExistenceVerdict],
     factor: float,
+    penalty: float,
 ) -> tuple[ScoredPoi, ...]:
-    """NOT_FOUND 판정을 받은 후보만 점수 × factor — 순서·개수·후보 집합은 그대로 (TRIP-904).
+    """NOT_FOUND 판정을 받은 후보만 `demoted_score` — 순서·개수·후보 집합은 그대로 (TRIP-904).
 
     판정은 **집합으로만** 읽는다 — 포트가 계약을 어겨 결손·중복·뒤섞임·유령 id 를
     돌려줘도 후보가 사라지거나 늘거나 두 번 깎이지 않는다(INV-1: 후보는 입력 그대로).
-    0 이하 점수는 건드리지 않는다 — 음수에 배율을 곱하면 0 쪽으로 **올라가** 강등이
-    승격이 된다(규칙 점수는 원거리에서 음수가 될 수 있다). 이미 방문 이득이 없는 값이다.
 
-    ponytail: OR-Tools 목적함수가 `int(score·1000)` 이라 원점수 0.005 미만은 강등 후
-    이득 0(= 사실상 배제)으로 떨어진다. 원래도 거의 안 뽑히는 값이라 두었다 — 문제가
-    되면 강등값에 하한(0.001)을 둔다.
+    ponytail: 강등된 점수가 슬롯 `score`·품질 지표(preference_fit)에 그대로 실린다 —
+    와이어엔 없어(IO-3) 사용자 노출은 없고 관측만 약간 낮게 읽힌다. 원점수 복원은
+    어셈블리 퍼사드가 품질을 solve 안에서 계산해 에이전트에서 못 한다.
+    OR-Tools 목적함수가 `int(score·1000)` 이라 원점수 0.005 미만은 하한 배율을 곱하면
+    이득 0 으로 떨어진다 — 원래도 거의 안 뽑히는 값이라 두었다.
     """
     missing = {v.poi_id for v in verdicts if v.status is ExistenceStatus.NOT_FOUND}
     return tuple(
-        replace(c, score=c.score * factor) if c.poi_id in missing and c.score > 0 else c
+        replace(c, score=demoted_score(c.score, factor=factor, penalty=penalty))
+        if c.poi_id in missing else c
         for c in candidates
     )
 

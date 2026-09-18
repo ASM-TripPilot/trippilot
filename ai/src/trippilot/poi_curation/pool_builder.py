@@ -59,9 +59,11 @@ class CandidatePoolBuilder:
         # 인기 1순위는 saved_count — 백엔드 PoiReadService 의 반경 조회 정렬(savedCount↓)과
         # 같은 신호다. rating 은 별점 소스가 생길 때까지 항상 None 이라 사실상 무동작.
         #
-        # 지도 실재 검증(TRIP-898)은 여기서 하지 않는다 — 풀 순서는 이후 아무도 읽지
-        # 않아(점수 워커는 poi_id 로 재정렬, 어셈블리는 점수로 고른다) 순위 강등이
+        # 지도 실재 검증(TRIP-898)은 여기서 하지 않는다 — 일정 생성 경로는 풀 순서를
+        # 읽지 않아(점수 워커는 poi_id 로 재정렬, 어셈블리는 점수로 고른다) 순위 강등이
         # 일정에 닿지 않았다. 점수가 나온 뒤 ScheduleAgent ②′ 가 한다 (TRIP-904).
+        # 예외: PlanB 는 LLM 선택이 closed-set 에서 전량 드롭되면 풀 순서 그대로 대안을
+        # 낸다(rag.py `kept = available`) — 그 폴백 경로의 지도 강등은 이번에 빠졌다(후속).
         pois.sort(key=self._rank_key)
         pois = pois[: self._cfg.max_candidates]
 

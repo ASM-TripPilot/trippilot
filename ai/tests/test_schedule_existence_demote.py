@@ -5,11 +5,11 @@
 | EXIST-A1 | **미주입 불변**: `existence=None` 이면 후보(점수 포함)가 종전과 같다 — 호출·강등 기록 0 |
 | **EXIST-A2** | **강등이지 배제가 아니다**: NOT_FOUND 0~100% 스윕에 poi_id 순서·개수·집합 불변, 점수 ≤ 입력, 입력 > 0 ⇒ 결과 > 0 |
 | **EXIST-A3** | **UNVERIFIED 는 강등 대상이 아니다**: FOUND·UNVERIFIED 만이면 결과 == 입력, 3상태 혼합은 UNVERIFIED→FOUND 치환표와 결과가 같다 |
-| EXIST-A4 | NOT_FOUND 만 **정확히** `existence_demote_factor` 배 — 나머지는 입력 그대로 |
+| EXIST-A4 | NOT_FOUND 만 **정확히** `demoted_score`(max(점수 − penalty, 점수 × factor)) — 나머지는 입력 그대로 |
 | EXIST-A5 | 계약 깨는 포트(결손·중복·뒤섞임·유령 id·모순 판정·묻지 않은 id 판정·예외)에도 후보 손실·중복·이중 강등 0 |
 | EXIST-A6 | 조회 계약: 호출 1회, 대상 = 점수 상위 N(제외·고정·풀 밖 빠짐, 점수↓→poi_id 순), 개수 ≤ top_n, 마감 = min(config, 잔여 − 어셈블리 바닥) |
 | EXIST-A7 | 결정론: 같은 입력·같은 fake 두 번 → 같은 후보·같은 강등 기록·같은 호출 장부 |
-| EXIST-A8 | 설정 검증: top_n ≤ 0 · deadline ≤ 0 · factor ∉ (0, 1] → `OrchestratorConfig` ValueError. 설정 정본은 한 곳 |
+| EXIST-A8 | 설정 검증: top_n ≤ 0 · deadline ≤ 0 · factor ∉ (0, 1] · penalty ∉ [0, ∞) → `OrchestratorConfig` ValueError. 설정 정본은 한 곳 |
 | (물림) | 실 어댑터(`KakaoExistenceAdapter`) + 전송 fake 로 A2·A3 재확인 — 장애·형식 밖·예산 0·마감 부분 검증 |
 | (D37) | 전송 계층 지뢰 위에서 `run()` — 실 HTTP 0건 |
 
@@ -55,6 +55,7 @@ from trippilot.agents.schedule.agent import (
     GenerateItineraryRequest,
     ScheduleAgent,
     demote_missing_on_map,
+    demoted_score,
 )
 from trippilot.agents.schedule.budget import OrchestratorConfig, allocate
 from trippilot.agents.schedule.outcome import Degradation, GenerationStatus
@@ -99,6 +100,7 @@ _NOT_FOUND = ExistenceStatus.NOT_FOUND
 _UNVERIFIED = ExistenceStatus.UNVERIFIED
 
 _DEFAULT = OrchestratorConfig()
+_PENALTY = _DEFAULT.existence_demote_penalty
 _GHOST = PoiId("ghost-없는곳")
 
 # 풀 p1~p6(전부 SIGHT)·창 09–12 — test_schedule_agent ②′ e2e 와 같은 무대. LLM 점수는
@@ -301,7 +303,7 @@ def test_exist_a2_demotion_never_drops_candidates(case, factor) -> None:
 
     실패하면 강등이 조용히 배제(목록 탈락·점수 0)로 변질된 것이다.
     """
-    out = demote_missing_on_map(case.candidates, _verdicts(case), factor)
+    out = demote_missing_on_map(case.candidates, _verdicts(case), factor, _PENALTY)
 
     assert [c.poi_id for c in out] == [c.poi_id for c in case.candidates]
     assert len(out) == len(case.candidates)
@@ -322,7 +324,7 @@ def test_exist_a2_all_not_found_never_reverses_ranking(case, factor) -> None:
     동률로 합칠 수는 있어 약단조(a > b ⇒ a′ ≥ b′, a = b ⇒ a′ = b′)로 주장한다.
     """
     all_missing = tuple(ExistenceVerdict(c.poi_id, _NOT_FOUND) for c in case.candidates)
-    out = demote_missing_on_map(case.candidates, all_missing, factor)
+    out = demote_missing_on_map(case.candidates, all_missing, factor, _PENALTY)
 
     pairs = list(zip(case.candidates, out))
     for a, a2 in pairs:
@@ -354,7 +356,7 @@ def test_exist_a2_agent_sweep_keeps_every_candidate(case) -> None:
 @given(case=_cases(kinds=(_FOUND, _UNVERIFIED)), factor=_FACTORS)
 def test_exist_a3_found_and_unverified_only_is_identity(case, factor) -> None:
     """실패율 0~100%: NOT_FOUND 가 한 건도 없으면 결과 == 입력 (장애 ≠ 폐업)."""
-    assert demote_missing_on_map(case.candidates, _verdicts(case), factor) == case.candidates
+    assert demote_missing_on_map(case.candidates, _verdicts(case), factor, _PENALTY) == case.candidates
 
 
 @_PBT
@@ -362,8 +364,8 @@ def test_exist_a3_found_and_unverified_only_is_identity(case, factor) -> None:
 def test_exist_a3_unverified_ranks_with_found(case, factor) -> None:
     """3상태 임의 혼합: UNVERIFIED 를 FOUND 로 바꾼 판정표와 결과가 같다."""
     swapped = replace(case, table=_as_found(case.table))
-    assert (demote_missing_on_map(case.candidates, _verdicts(case), factor)
-            == demote_missing_on_map(case.candidates, _verdicts(swapped), factor))
+    assert (demote_missing_on_map(case.candidates, _verdicts(case), factor, _PENALTY)
+            == demote_missing_on_map(case.candidates, _verdicts(swapped), factor, _PENALTY))
 
 
 @_AGENT_PBT
@@ -403,11 +405,11 @@ def test_exist_a3_port_all_unverified_changes_nothing_but_says_so(case) -> None:
 @given(case=_cases(), factor=_FACTORS)
 def test_exist_a4_only_not_found_is_scaled_exactly(case, factor) -> None:
     """각 후보 점수 == 입력 × factor (NOT_FOUND) 또는 입력 그대로 — 다른 필드는 불변."""
-    out = demote_missing_on_map(case.candidates, _verdicts(case), factor)
+    out = demote_missing_on_map(case.candidates, _verdicts(case), factor, _PENALTY)
 
     for before, after in zip(case.candidates, out):
         if case.table[before.poi_id] is _NOT_FOUND:
-            assert after == replace(before, score=before.score * factor)
+            assert after == replace(before, score=demoted_score(before.score, factor=factor, penalty=_PENALTY))
         else:
             assert after == before
 
@@ -426,7 +428,7 @@ def test_exist_a4_agent_applies_configured_factor_to_asked_not_found_only(
     asked = set(fake.queried_ids)
     for before, after in zip(case.candidates, out):
         if before.poi_id in asked and case.table[before.poi_id] is _NOT_FOUND:
-            assert after.score == before.score * factor
+            assert after.score == demoted_score(before.score, factor=factor, penalty=_PENALTY)
         else:
             assert after == before
 
@@ -455,7 +457,8 @@ def _check_intact(case: _Case, out, fake: FakeExistence, factor: float) -> None:
     assert _GHOST not in {c.poi_id for c in out}
     demotable = fake.not_found_ids & set(fake.queried_ids)
     for before, after in zip(case.candidates, out):
-        expected = before.score * factor if before.poi_id in demotable else before.score
+        expected = (demoted_score(before.score, factor=factor, penalty=_PENALTY)
+                    if before.poi_id in demotable else before.score)
         assert after.score == expected, f"{before.poi_id}: {before.score} → {after.score}"
         assert after.is_llm_score == before.is_llm_score
 
@@ -703,6 +706,14 @@ def test_exist_a8_valid_values_are_kept_as_is(top_n, deadline, factor) -> None:
             cfg.existence_demote_factor) == (top_n, deadline, factor)
 
 
+@given(bad=st.one_of(st.floats(max_value=0.0, exclude_max=True), st.just(float("inf")),
+                     st.just(float("nan"))))
+def test_exist_a8_penalty_outside_nonnegative_finite_is_rejected(bad) -> None:
+    """감점 ∉ [0, ∞) → ValueError. 음수는 승격, 무한·NaN 은 비교 불능."""
+    with pytest.raises(ValueError):
+        OrchestratorConfig(existence_demote_penalty=bad)
+
+
 def test_exist_a8_single_source_of_truth_for_existence_settings() -> None:
     """설정·강등 지점은 에이전트 한 곳 — 풀 빌더 쪽에 되살아나면 두 설정이 갈리고 이중 강등이 된다."""
     assert not [f.name for f in fields(M7Config) if "existence" in f.name]
@@ -783,7 +794,7 @@ def test_integration_all_missing_on_map_demotes_but_keeps_every_candidate(case) 
     assert len(http.calls) == len(asked)
     assert [c.poi_id for c in out] == [c.poi_id for c in case.candidates]
     for before, after in zip(case.candidates, out):
-        assert after.score == (before.score * _FACTOR if before.poi_id in asked
+        assert after.score == (demoted_score(before.score, factor=_FACTOR, penalty=_PENALTY) if before.poi_id in asked
                                else before.score)
     assert steps == []                                   # 강등은 정상 동작 — 폴백 아님
 
@@ -814,7 +825,7 @@ def test_integration_unverified_ranks_with_found(case, plan) -> None:
     assert out == run(healed)
     missing = {pid for pid, r in zip(targets, replies) if r == "missing"}
     for before, after in zip(case.candidates, out):
-        assert after.score == (before.score * _FACTOR if before.poi_id in missing
+        assert after.score == (demoted_score(before.score, factor=_FACTOR, penalty=_PENALTY) if before.poi_id in missing
                                else before.score)
 
 
@@ -843,7 +854,7 @@ def test_integration_partial_verification_demotes_exactly_the_top_one(case, over
     demoted = [a.poi_id for b, a in zip(case.candidates, out) if a != b]
     top = targets[0]
     before_top = next(c for c in case.candidates if c.poi_id == top)
-    assert demoted == ([top] if before_top.score * _FACTOR != before_top.score else [])
+    assert demoted == ([top] if demoted_score(before_top.score, factor=_FACTOR, penalty=_PENALTY) != before_top.score else [])
     assert steps == []                                   # 한 건이라도 확인됐다 — 실패 아님
 
 
