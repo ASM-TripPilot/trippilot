@@ -287,131 +287,27 @@ llama.cpp)로 띄우고 같은 env 로 `smoke_reminder_copy.py` 를 돌리면 �
 
 ### 5.1 평가 입력 파일 만들기 (student/teacher/baseline.jsonl)
 
-아래는 전부 `ai/` 안에서 실행한다. 1단계 학습 데이터에 쓰지 않은 홀드아웃
-`scenarios_eval.json` 을 하나 골라 둔다(20~30건 — 아래 사람 눈검수 표본과 같은
-크기면 된다, 형식은 1단계 `scenarios.json` 과 동일). 세 파일 모두 이 시나리오
-순서를 그대로 따른다.
-
-**baseline.jsonl** — 지금 발화 중인 하드코딩 상수를 그대로 채운다(개인화 없음, 그게
-비교의 요점이다). 정본:
-`backend/modules/notification/src/main/kotlin/com/trippilot/notification/domain/NotificationSchedule.kt`
-의 `title()`/`body()`.
-
 ```bash
 cd ai
-uv run python -c '
-import json
-from pathlib import Path
-scenarios = json.loads(Path("scenarios_eval.json").read_text())
-BASELINE = {
-    "TRIP_DAY": "오늘 어디를 가는지 확인해 보세요.",
-    "TRIP_PRE": "출발 전에 일정을 한 번 확인해 보세요.",
-}
-with open("baseline.jsonl", "w") as out:
-    for s in scenarios:
-        out.write(json.dumps(
-            {"body": BASELINE[s["kind"]], "slot_names": s["slot_names"]}, ensure_ascii=False
-        ) + "\n")
-'
-```
-
-**teacher.jsonl** — `scenarios_eval.json` 을 1단계와 같은 방식으로 `--per-scenario 1`
-돌려 얻는다. 그 출력은 학습용 채팅 포맷(`{"messages": [...]}`)이라 그대로는 못 쓴다
-— 평평한 형식으로 한 번 더 접는다:
-
-```bash
-cd ai
-uv run python scripts/finetune_reminder/build_dataset.py \
-    --scenarios scenarios_eval.json --out teacher_raw.jsonl --per-scenario 1
-
-uv run python -c '
-import json
-from pathlib import Path
-scenarios = json.loads(Path("scenarios_eval.json").read_text())
-lines = Path("teacher_raw.jsonl").read_text().splitlines()
-assert len(lines) == len(scenarios), (
-    f"{len(lines)} != {len(scenarios)} — 시나리오가 하나 이상 게이트탈락/API실패로 "
-    "스킵됐다. scenarios_eval.json 에서 그 시나리오를 빼고 baseline·student 쪽도 "
-    "같이 맞춰야 순서가 어긋나지 않는다"
-)
-with open("teacher.jsonl", "w") as out:
-    for scenario, line in zip(scenarios, lines):
-        rec = json.loads(line)
-        body = json.loads(rec["messages"][1]["content"])["body"]
-        out.write(json.dumps(
-            {"body": body, "slot_names": scenario["slot_names"]}, ensure_ascii=False
-        ) + "\n")
-'
-```
-
-**student.jsonl** — 배포된(또는 로컬 서빙 중인) 학생 모델에 같은 시나리오를 그대로
-태운다. `smoke_reminder_copy.py` 와 같은 호출 패턴이라 1회성 스크립트로 붙여 쓴다
-(저장할 필요 없음 — `/tmp` 등에 두고 한 번 돌리고 버린다):
-
-```bash
-cd ai
-export TRIPPILOT_LOCAL_LLM_BASE_URL=https://<modal-앱>.modal.run/v1
+export OPENROUTER_API_KEY=sk-or-v1-...            # 교사
+export TRIPPILOT_LOCAL_LLM_BASE_URL=<서빙 주소>    # 학생 (§4 에서 띄운 것)
 export TRIPPILOT_LOCAL_LLM_MODEL=local-reminder-qwen3-4b-v1
-cat > /tmp/gen_student.py <<'PY'
-import json, os, sys
-from datetime import UTC, datetime
-from pathlib import Path
 
-sys.path.insert(0, str(Path("src").resolve()))
-import openai
-
-from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature
-from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
-from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyContext, ReminderCopyGate
-from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.reminder_copy import ReminderCopyItem, build_reminder_copy_vars
-from trippilot.ports.llm_port import LlmRequest
-
-base_url = os.environ["TRIPPILOT_LOCAL_LLM_BASE_URL"]
-model_id = os.environ["TRIPPILOT_LOCAL_LLM_MODEL"]
-adapter = OpenAIAdapter(
-    openai.OpenAI(api_key="local", base_url=base_url, max_retries=0), api="chat"
-)
-registry = PromptRegistry(Path("prompts"))
-gate = ReminderCopyGate()
-scenarios = json.loads(Path(sys.argv[1]).read_text())
-
-with open(sys.argv[2], "w") as out:
-    for s in scenarios:
-        item = ReminderCopyItem(
-            schedule_key=s["schedule_key"], kind=s["kind"], date_label=s["date"],
-            slot_names=tuple(s["slot_names"]),
-            slot_categories=tuple(s.get("slot_categories", ())),
-        )
-        prompt, ref = registry.render(
-            LlmFeature.REMINDER_COPY, build_reminder_copy_vars(item, s.get("trip_title", ""))
-        )
-        resp = adapter.invoke(LlmRequest(
-            model_id=model_id, prompt=prompt, prompt_ref=ref,
-            max_tokens=300, temperature=0.0, timeout_sec=60.0,
-        ))
-        outcome = gate.apply(
-            resp.raw_text,
-            ReminderCopyContext(
-                allowed=tuple(s["slot_names"]), forbidden=tuple(s.get("other_names", ()))
-            ),
-            feature=LlmFeature.REMINDER_COPY, trace_id=TraceId("eval-student"),
-            now=datetime.now(UTC),
-        )
-        if outcome.value is None:
-            print(f"skip {s['schedule_key']}: {outcome.error}", file=sys.stderr)
-            continue
-        out.write(json.dumps(
-            {"body": outcome.value.body, "slot_names": list(s["slot_names"])}, ensure_ascii=False
-        ) + "\n")
-PY
-uv run python /tmp/gen_student.py scenarios_eval.json student.jsonl
+uv run python scripts/finetune_reminder/make_scenarios.py \
+    --out scenarios_eval.json --trips 40 --seed 7        # 학습과 다른 시드로
+uv run python scripts/finetune_reminder/make_eval_inputs.py \
+    --scenarios scenarios_eval.json --out-dir eval/
 ```
 
-이 스크립트도 게이트를 통과 못 하면 그 시나리오를 건너뛴다 — teacher.jsonl 과 마찬가지로
-줄 수가 `scenarios_eval.json` 보다 적어지면 세 파일 모두 같은 시나리오 집합으로
-다시 맞춘다.
+세 파일이 **행 단위로 정렬돼서** 나온다 — `evaluate.py` 는 n번째 줄을 같은
+시나리오의 세 후보로 보고 채점하므로, 한 줄이라도 어긋나면 심판이 엉뚱한 짝을
+비교하고 **그 결과는 틀렸다는 티도 안 난다**(숫자는 나오는데 의미가 없다).
+스크립트는 교사·학생이 **둘 다 성공하고 둘 다 게이트를 통과한** 시나리오만
+내보내 그 정렬을 코드로 보장한다. 스킵 건수는 실행 끝에 찍힌다.
+
+`baseline` 은 지금 발화 중인 하드코딩 상수다(개인화 없음 — 그게 비교의 요점이다).
+학생 출력은 서빙과 같은 게이트를 통과한 것만 올라간다. 즉 **사용자가 실제로 받을
+문구끼리** 비교한다.
 
 ### 5.2 평가 실행
 
@@ -434,3 +330,32 @@ uv run python scripts/finetune_reminder/evaluate.py \
 블라인드 비교 채점에 **사람 표본 20~30건 눈검수를 병행한다** — 심판 한 글자 답변은
 이유가 없어 착시(예: 짧은 문장을 무조건 선호)를 못 걸러낸다. 결과 수치는 발표
 자료용이며, **학습 데이터 선별에도 재학습 루프에도 되먹이지 않는다.**
+
+---
+
+## 언제 데이터를 다시 뽑아야 하나
+
+학생 모델은 **프롬프트 입력 형식을 통째로 외운다.** 학습에서 못 본 모양이 서빙에
+들어오면 조용히 퇴화한다 — 예외도 실패 로그도 없고, 문구가 어색해지거나 게이트에
+걸려 기본 문구로 떨어질 뿐이라 원인 추적이 어렵다.
+
+**재생성 신호는 하나뿐이다: 프롬프트에 실리는 문자열의 모양이 바뀌는 것.**
+
+다시 뽑아야 하는 경우:
+
+| 변화 | 왜 |
+|---|---|
+| 카테고리 체계 변경(값 추가·세분류·이름 변경) | 슬롯 줄의 `이름 · 카테고리` 어휘가 달라진다 |
+| 슬롯 속성이 프롬프트에 추가됨(실내/실외·예약 여부 등) | 줄 구조 자체가 달라진다 |
+| POI 이름 표기 규칙 변경(괄호 부기 유지/제거 등) | 게이트가 이름을 문자열로 대조하고 학습도 그 표기를 배운다 |
+| 프롬프트 템플릿 자체 수정(`prompts/reminder_copy.yaml`) | 말할 것도 없다 — `version` 을 올리고 다시 뽑는다 |
+
+**신호가 아닌 것**: POI 건수 증가, 실재 검증으로 일부 제외·강등, 좌표·영업시간처럼
+프롬프트에 안 실리는 필드 변경. 데이터가 쌓이고 정확해지는 것 자체는 재생성 사유가
+아니다.
+
+비용은 1회 $0.3·2시간 수준이다(2026-09-16 실측: 874 시나리오 × 3회). **모르고
+지나가는 쪽이 훨씬 비싸므로 의심스러우면 다시 뽑는다.**
+
+2026-09-16 기준으로 관련 세션(스케줄 에이전트·PlanB·봉투 수렴·운영/데이터)에
+"위 변화가 생기면 알려달라"고 요청해 두었다.

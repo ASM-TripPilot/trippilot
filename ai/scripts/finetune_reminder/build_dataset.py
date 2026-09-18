@@ -32,7 +32,11 @@ from trippilot.llm_gateway.gates.reminder_copy import (  # noqa: E402
 )
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
 
-TEACHER_MODEL = "qwen/qwen3-235b-a22b-instruct"  # 오픈 웨이트(Apache-2.0)
+# 교사는 **오픈 웨이트 전용**(Apache-2.0). 모델 id 는 벤더가 개명·폐기하므로 env 로
+# 덮을 수 있게 둔다 — 실제로 `…-a22b-instruct` 로 박아 뒀다가 400(not a valid model
+# ID)을 맞았다. 바꿀 때도 오픈 웨이트인지 먼저 확인할 것(약관: Anthropic·OpenAI
+# 출력물로는 어떤 모델도 학습 금지).
+TEACHER_MODEL = os.environ.get("TEACHER_MODEL") or "qwen/qwen3-235b-a22b-2507"
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 

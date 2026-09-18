@@ -212,10 +212,10 @@ def test_build_reminder_copy_vars_renders_category_pairs() -> None:
     """카테고리가 있으면 "이름 · 카테고리"로, 빈 카테고리는 이름만(대롱 구분자 금지)."""
     item = ReminderCopyItem(
         schedule_key="k1", kind="TRIP_DAY", date_label="2026-09-13",
-        slot_names=("성산일출봉", "우도"), slot_categories=("관광지", ""),
+        slot_names=("성산일출봉", "우도"), slot_categories=("SIGHT", ""),
     )
     vars_ = build_reminder_copy_vars(item, "제주 3일")
-    assert vars_["slot_list"] == "성산일출봉 · 관광지 / 우도"
+    assert vars_["slot_list"] == "성산일출봉 · 명소 / 우도"
 
 
 def test_build_reminder_copy_vars_defaults_categories_when_absent() -> None:
@@ -234,7 +234,7 @@ def test_gate_still_passes_bare_place_name_despite_item_categories() -> None:
     items = (
         ReminderCopyItem(
             schedule_key="k1", kind="TRIP_DAY", date_label="2026-09-13",
-            slot_names=("성산일출봉",), slot_categories=("관광지",),
+            slot_names=("성산일출봉",), slot_categories=("SIGHT",),
         ),
     )
     ctx = ReminderCopyWorker._context(items, 0)
@@ -252,10 +252,31 @@ def test_gate_still_passes_bare_place_name_despite_item_categories() -> None:
     # 대조: 모델이 프롬프트 표기를 그대로 echo(카테고리 포함)하면 allowed 밖이라 드롭된다.
     dropped = ReminderCopyGate().apply(
         json.dumps(
-            {"title": "오늘의 제주", "body": "성산일출봉 · 관광지부터 시작해요",
-             "places": ["성산일출봉 · 관광지"]},
+            {"title": "오늘의 제주", "body": "성산일출봉 · 명소부터 시작해요",
+             "places": ["성산일출봉 · 명소"]},
             ensure_ascii=False,
         ),
         ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
     )
     assert dropped.value is None and dropped.drop_event is not None
+
+
+def test_category_code_renders_as_korean_label() -> None:
+    """와이어는 영문 코드, 프롬프트는 한글 — 모델이 "FOOD" 를 읽지 않는다."""
+    item = ReminderCopyItem(
+        schedule_key="k", kind="TRIP_DAY", date_label="2026-09-13",
+        slot_names=("우리밀", "성산일출봉"), slot_categories=("FOOD", "SIGHT"),
+    )
+    rendered = build_reminder_copy_vars(item, "제주 여행")["slot_list"]
+    assert "우리밀 · 맛집" in rendered and "성산일출봉 · 명소" in rendered
+    assert "FOOD" not in rendered and "SIGHT" not in rendered
+
+
+def test_unknown_or_empty_category_renders_name_only() -> None:
+    """모르는 코드가 프롬프트로 새지 않는다 — 이름만 쓴 것과 같게."""
+    item = ReminderCopyItem(
+        schedule_key="k", kind="TRIP_DAY", date_label="2026-09-13",
+        slot_names=("우도", "협재"), slot_categories=("ZZZ_UNKNOWN", ""),
+    )
+    rendered = build_reminder_copy_vars(item, "제주 여행")["slot_list"]
+    assert rendered == "우도 / 협재"
