@@ -1,0 +1,29 @@
+# TripPilot AI — FastAPI 경계 서비스 (U5-03, TRIP-239)
+# 이전 스텁은 stdlib만 써서 `COPY main.py` 하나로 충분했으나, main.py가
+# trippilot.api 패키지와 fastapi를 import하므로 의존성·소스를 함께 넣는다.
+FROM python:3.12-slim
+WORKDIR /app
+
+# CI(`uv sync --locked`)와 동일한 잠금 기반 설치 — 이미지와 테스트가 같은 버전을 쓴다.
+COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
+
+# 의존성 레이어 먼저 (소스 변경이 재설치를 유발하지 않게)
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN uv sync --locked --no-dev
+
+# 런타임 자산 — c1 프롬프트 레지스트리와 의도 질문뱅크가 파일로 읽는다
+COPY main.py ./
+COPY prompts ./prompts
+COPY data ./data
+# 단가표(api/cost.py) — 이게 빠지면 TRIPPILOT_LLM_PRICE_FILE 을 꽂는 순간
+# 파일 없음 → PriceConfigError → 기동 실패다(설정 오류를 은폐하지 않는 쪽 설계).
+# `/app/config/llm-prices.json` = 로컬 스크립트가 `ai/` 에서 보는 것과 같은 상대경로.
+COPY config ./config
+# 운영 파드 안에서 kubectl exec 로 KB 적재·스모크를 돌린다 (TRIP-893).
+# EKS 의 RDS·embedding 은 클러스터 밖에서 닿지 않아 이 경로가 유일하다 —
+# 이게 빠지면 적재는 이미지를 다시 굽기 전까지 막힌다.
+COPY scripts ./scripts
+
+EXPOSE 8000
+CMD ["uv", "run", "--no-sync", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

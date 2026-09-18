@@ -4,6 +4,32 @@
 
 ---
 
+## 0. 경계 HTTP 경로 규칙 (2026-08-07 확정)
+
+> 근거: PR #104 회신. `/v1`만으로는 **어느 서비스의 v1인지 모호**해 서비스명(`/ai`)을 접두하고,
+> 리소스명은 **산출물 기준(`itinerary`)** 으로 잡아 백엔드 컨트롤러·스키마·DB 테이블 명칭과 통일한다.
+> **`ScheduleAgent`는 "만드는 행위자"의 이름, `itinerary`는 "만들어진 산출물"의 이름** — 층이 다르므로 에이전트명은 그대로 유지한다.
+
+| 경계 | 경로 | 지위 |
+|---|---|---|
+| 일정 생성 (포워드) | `POST /ai/v1/itinerary/generate` | **확정** — 구 표기 `POST /ai/generate` 폐기 |
+| 일정 검증 (포워드) | `POST /ai/v1/itinerary/validate` | **확정** |
+| 일정 수리 (포워드) | `POST /ai/v1/itinerary/repair` | **확정** |
+| Plan-B 대안 제안 (포워드) | `POST /ai/v1/itinerary/alternatives` | **확정** — TRIP-428 |
+| 슬롯별 설명 조회 (포워드) | `POST /ai/v1/itinerary/explanations` | **확정** — TRIP-479 |
+| 일정 편집 (포워드) | `POST /ai/v1/itinerary/edit` | **확정** — TRIP-431 |
+| 하루 재계획 (포워드) | `POST /ai/v1/itinerary/replan` | **계약 확정** — 재계획 연동 설계 A-4. 조립 미배선 시 503 |
+| POI 정본 read — 반경 (리버스) | `GET /internal/pois?centerLat&centerLng&radiusKm` | **확정** — 백엔드 구현 기준 |
+| POI 정본 read — 배치 (리버스) | `POST /internal/pois/batch-get` (요청 필드 `poi_ids`) | **확정** — 계약 초안의 `:batchGet`·`ids` 표기 정정 |
+
+위 표는 일정(`itinerary`) 경계만 담는다. 회고 경계 `POST /ai/v1/reflection/{generate,nudge,share-card}`(TRIP-429 +후속)도 열려 있다 — **열린 경로 전체의 정본은 `ai/docs/openapi.json`**이고, 전수 일치는 `ai/tests/test_api_openapi_contract.py`가 강제한다.
+
+프로토콜은 **REST/JSON over HTTP 확정**(PR #76 결정4). `/c1/*`·`/c2/*`·`/m7/*` 세분 경로
+(`../reverse-engineering/api-documentation.md`)는 PR #76 "굵은 경계 — 조각 조립 경계를 두지 않는다" 합의로
+**폐기 방향**이며, 논리 인터페이스 참고용으로만 남는다.
+
+---
+
 ## 1. 일정 생성 오케스트레이션 (핵심 플로우)
 
 ### 1.1 정상 경로
@@ -12,7 +38,7 @@
 [Kotlin M8] generate_itinerary(trip_id, mode)
     |
     v
-[API Layer] POST /ai/generate
+[API Layer] POST /ai/v1/itinerary/generate     # §0 확정 경로
     |
     v
 [ItineraryOrchestrator.generate()]
@@ -24,7 +50,7 @@
     |       타임아웃 2.5초. 전 일자 공용.
     |       성공 → ScoredCandidates(is_fallback=false)
     |
-    +-> for day in trip.days:                    # ③ day별 솔버 배치
+    +-> for day in trip.days:                    # ③ day별 어셈블리 배치
     |       c2.solve(day_problem)
     |       → DaySolution (HC1~HC4 검증 완료)
     |
@@ -84,8 +110,8 @@ stateDiagram-v2
 [사용자 자연어] "비 와서 실내로 바꿔줘"
     |
     v
-[API Layer] POST /ai/route
-    |
+[API Layer] POST /ai/v1/itinerary/edit (AI 도우미)  # 구 표기 /ai/route 폐기.
+    |                                            # 경로 확정 — §0 (TRIP-431)
     v
 [AssistantOrchestrator.handle()]
     |
@@ -99,7 +125,7 @@ stateDiagram-v2
     +-> _translate_to_edit_command(dispatch, worker_results)  # ③ 편집 명령 변환
     |       → EditCommand(op=reorder_day, params={filter:indoor}, affected=3)
     |
-    +-> c2.validate(current_itinerary + edit)     # ④ 솔버 검증
+    +-> c2.validate(current_itinerary + edit)     # ④ 어셈블리 검증
     |       위반 없음 → 반영 가능
     |
     +-> dispatch.apply_mode?
@@ -117,10 +143,10 @@ stateDiagram-v2
 
 워커 부분 실패 (예: Explanation만 죽음)
     → 해당 워커 결과 = None
-    → 나머지 워커·솔버 정상 진행
+    → 나머지 워커·어셈블리 정상 진행
     → 해당 항목만 "기본 모드" 표기
 
-솔버 검증 실패 (Violation)
+어셈블리 검증 실패 (Violation)
     → AUTO_APPLY였어도 자동반영 취소
     → CONFIRM_REQUIRED로 강등
     → 위반 사유 한 줄 + 미리보기
@@ -136,12 +162,12 @@ stateDiagram-v2
 [Kotlin M10] start_replan(trigger_context)
     |
     v
-[API Layer] POST /ai/replan
-    |
+[API Layer] POST /ai/v1/itinerary/alternatives (Plan-B)  # 구 표기 /ai/replan 폐기.
+    |                                            # 경로 확정 — §0 (TRIP-428)
     v
 [ReplanOrchestrator.generate_alternatives()]
     |
-    +-> c1.call(CONVERSATION, trigger_reason)     # 사유 해석 (경량)
+    +-> c1.call(CONVERSATION, trigger_reason)     # 사유 해석 (경량) — 미구현, 아래 註
     |       → 재계획 범위·우선순위 결정
     |
     +-> m7.get_candidate_pool(replan_request)      # 저장 장소 우선
@@ -159,6 +185,14 @@ stateDiagram-v2
     +-> c2.validate(selected_alternative)          # 확정 시점 재검증 1회
     +-> return confirmed_itinerary
 ```
+
+> **註 (2026-08-25, TRIP-530) — `CONVERSATION`·`REQUERY` 는 코드에 없다**: 두 이름 모두
+> `domain/llm.py::LlmFeature`(12종)의 값이 아니며, 대응 프롬프트·게이트·워커도 없다. 사유 해석에
+> 해당하는 자리에 실제로 존재하는 값은 `REASON_INTERPRETATION` 인데, 그쪽도 enum·tier_map에만 있고
+> 프롬프트·게이트·워커가 없어 **호출 경로가 없다**. **어느 이름이 맞는지는 본 註가 판정하지 않는다** —
+> 확실한 것은 **양쪽 다 미완이라 어느 쪽도 동작하지 않는다**는 사실뿐이다.
+> (실측 정본: u4-c1-gateway/functional-design/domain-entities.md §1 개정 2026-08-25)
+
 
 ### 3.2 에러 경로
 
@@ -222,11 +256,14 @@ C1 실패 → M7 + C2만으로 후보 생성 (설명 없이)
 | 대상 | 설정 (권고) |
 |---|---|
 | LLM API | failure_threshold=3, reset_timeout=30s |
-| 카카오모빌리티 | failure_threshold=5, reset_timeout=60s |
-| 네이버 지도 | failure_threshold=5, reset_timeout=60s |
+| TMAP 경로 API | failure_threshold=5, reset_timeout=60s |
 | Places API | failure_threshold=5, reset_timeout=120s |
 
-서킷 오픈 시 → 즉시 폴백 (LLM→규칙, 카카오→네이버→직선거리)
+서킷 오픈 시 → 즉시 폴백 (LLM→규칙, TMAP→하버사인 직선거리)
+
+> **정정 (2026-08-25)**: 이동추정 벤더는 **TMAP 단일**이다 — 카카오모빌리티·네이버 지도 행을 TMAP으로
+> 대체했다. 실제 체인은 `TMAP(실측) → 하버사인 직선거리(폴백)` 2단
+> (`assembly_engine/adapters/tmap.py` · `chained_travel.py`, TRIP-382·405·422·432).
 
 ### 5.3 계측 포인트
 
@@ -235,7 +272,7 @@ C1 실패 → M7 + C2만으로 후보 생성 (설명 없이)
 | llm_call_duration | GatewayFacade.call | 지연 모니터링 |
 | llm_fallback_rate | GatewayFacade.call | 품질 추적 |
 | gate_drop_count | ClosedSetGate.validate | 환각 시도 감지 |
-| solver_duration | SolverFacade.solve | 5초 게이트 감시 |
+| assembly_duration | AssemblyFacade.solve | 5초 게이트 감시 |
 | travel_adapter_failures | TravelEstimator | 서킷 건강도 |
 | ingest_gate_quarantine_rate | IngestGate | 소싱 품질 |
 | replan_alternatives_count | ReplanOrchestrator | Plan-B 성능 |

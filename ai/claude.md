@@ -1,49 +1,98 @@
-# TripPilot AI — 프로젝트 루트
+# TripPilot AI — Project Root
 
-## 프로젝트 개요
+> Korean version: ./claude.ko.md
 
-TripPilot AI는 LLM + 최적화 솔버 하이브리드 아키텍처로 여행 일정을 생성·재계획·회고하는 **독립 Python AI 서비스**입니다.
+## Project Overview
 
-## 핵심 구조
+TripPilot AI is an **independent Python AI service** that generates, replans, and reflects on travel itineraries with an LLM + optimization/assembly hybrid architecture.
 
-- `aidlc-docs/` — AI-DLC 워크플로우 산출물 (설계·요구사항·계획)
-- `.kiro/` — Kiro IDE steering + AI-DLC 규칙 상세
-- `README.md` — 전체 설계 개요 (최신 정보의 기준)
+## Core Structure
 
-## 4대 불변식
+- `aidlc-docs/` — AI-DLC workflow artifacts (design · requirements · plans)
+- `.kiro/` — Kiro IDE steering + detailed AI-DLC rules
+- `README.md` — overall design overview (the reference for the latest information)
 
-1. **INV-1**: LLM은 closed-set 후보 안에서만 선택 (환각 0)
-2. **INV-2**: 사용자에게 보이는 시각·순서는 솔버 검증값만
-3. **INV-3**: 소요시간 미표시 — 거리만
-4. **INV-4**: AI 실패 시 결정론 폴백 (침묵 실패 금지)
+## Four Invariants
 
-## 멀티에이전트 구조 (업무 기준)
+1. **INV-1**: The LLM selects only from within the closed-set candidates (zero hallucination)
+2. **INV-2**: User-visible times and order come only from assembly-verified values
+3. **INV-3**: Duration is never displayed — distance only
+4. **INV-4**: On AI failure, fall back deterministically (silent failure is forbidden)
 
-- **Orchestrator**: 의도 파악 + Fast Path(간단한 task 직접 처리) + 에이전트 병렬 디스패치
-- **ScheduleAgent**: 일정 생성 (Generation 패턴, tool 6개)
-- **PlanBAgent**: 변수 대응 (RAG 패턴, KB 3종 + pgvector, tool 7개)
-- **ReflectAgent**: 회고 생성 (1차: 단순 LLM Generation, tool 2개. 추후 Multi-step 확장)
-- **EditAgent**: 일정 편집 (의도 해석 → 솔버 검증 → 반영, tool 5개)
+## Multi-Agent Structure
 
-에이전트별 필요한 tool만 할당 (토큰 50~60% 절감).
+> **Canon is `agent-structure-v2.md`** (TRIP-530, 2026-08-25). The two-tier
+> "agent-as-tool" model below described `agent-hierarchy-design.md` (v1), which v2
+> **superseded**: information sources are Providers gathered by `InfoCollector`
+> (envelope-only, no tool overlap), not sub-agents invoked at depth 2.
 
-## Solver 하이브리드 전략
+**Task tier** (agent-redesign.md):
+- **Orchestrator**: intent detection (hybrid question-bank matching) + Fast Path + parallel dispatch via AgentTask envelopes
+- **ScheduleAgent**: itinerary generation (Generation pattern) — **wired** (2026-09-09): `agents/schedule/agent.py`
+  `ScheduleAgent.run(ScheduleTask)`; `ScheduleCoordinator` verifies ownership, allocates the deadline,
+  collects/digests info and delegates. The assembly engine stays its own layer — the agent only calls `solve()`
+- **PlanBAgent**: contingency handling (RAG pattern, 3 KBs + pgvector) — `agents/planb/rag.py` `PlanBRagPipeline.run(PlanBRagRequest)`
+- **ReflectAgent**: reflection generation — `agents/reflect/agent.py` `ReflectAgent.run(ReflectTask)`; text and vision (Phase 2) share one entry via `ReflectTask.vision`
+- **EditAgent**: itinerary editing (translate → validate → confirm gate → retime → assembly validate) — `agents/edit/agent.py` `EditAgent.run(EditTask) -> EditOutcome`
 
-OR-Tools (1차 결정론) → Bedrock LLM (2차 창의적 제안) → 규칙 폴백 (최후 보장)
-모든 출력은 HC1~HC4 검증 통과 필수.
+> **All four agents are objects that wrap their gateway workers** (2026-09-09): constructor DI, one
+> `run(<Task>) -> <Outcome>` entry, no exceptions across the boundary (DL-5). The literal
+> `Agent.handle(AgentTask) -> AgentResult` envelope is still unimplemented for all four —
+> it lands with IntentRouter wiring (business-rules 미결 #8).
+> One codified exception: **judgment-free single-shot transforms are wired boundary→worker directly**
+> (`reflection_nudge` — u6-reflect FD §2.1, decided 2026-09-09).
 
-## 기술 스택
+**Information sources** (v2 — `orchestrator/info_collector.py` + `providers/`):
+Place · Weather · Transit · Persona · Event Providers. The Orchestrator collects
+them per the INFO_REQUIREMENTS table and passes results **in the AgentTask envelope**
+— task agents do not call Providers directly. Each returns a `ProviderStatus`
+(`OK`/`LOW`/`NO_CANDIDATES`/`WEATHER_UNKNOWN`/`COLD_START`/`UNAVAILABLE`).
 
-- Python 3.11+ / AWS Bedrock (Claude) / OR-Tools
-- LangChain (부분 도입 — PlanBAgent RAG + Bedrock 호출에만)
-- pgvector / Titan Embeddings v2 / pytest + Hypothesis (PBT 19속성)
+⚠️ `IntentRouter` (question-bank matching) is **implemented but not wired** — the
+Orchestrator's intent detection above is design, not running code (TRIP-529).
 
-## 현재 상태
+## Key Design Documents (application-design/)
 
-INCEPTION 완료. 멘토 피드백 반영 완료 (에이전트 업무 기준 재설계).
-다음: CONSTRUCTION Phase (U1 Domain & Ports부터).
+- Delegation protocol: `orchestrator-delegation-design.md` (AgentTask/AgentResult, deadline inheritance, trace_id)
+- I/O contracts: `agent-io-contracts.md` (FE↔BE↔Agent mapping)
+- Intent matching: `intent-matching-design.md` / evaluation metrics (freshness·responsiveness): `evaluation-metrics-design.md`
+- MLOps/LLMOps + ML pattern typology: `mlops-llmops-design.md`
 
-## AI-DLC 규칙
+## Assembly Hybrid Strategy
 
-`.kiro/aws-aidlc-rule-details/`에 상세 규칙.
-`aidlc-docs/aidlc-state.md`에서 현재 진행 상태 확인.
+OR-Tools (1st: deterministic) → LLM (2nd: creative proposals) → rule-based fallback (final guarantee)
+All output must pass HC1~HC4 verification.
+
+⚠️ **The LLM 2nd stage is not wired** (TRIP-529, 2026-08-25): `api/wiring.py` builds
+`stages = (OrToolsAssembler, RuleFallbackAssembler)` because the assembly prompt canon and
+model settings do not exist yet. AI-D07's "run the 2nd stage if ≥ 2.5s remains"
+branch therefore cannot fire on any path.
+
+## Tech Stack
+
+- Python 3.11+ / Anthropic API directly (Claude — AI-D06) / OR-Tools / FastAPI
+- pgvector + **local `nlpai-lab/KURE-v1` embeddings** (AI-D06 addendum 2026-08-23,
+  wired in TRIP-514). Titan is a fallback adapter; it is Bedrock-only.
+- pytest + Hypothesis — **170 `@given` properties across 41 test files** (measured
+  2026-08-25; count with `grep -rc "@given" ai/tests/*.py`). Earlier "19"/"52"
+  figures were stale.
+- LangChain: **declared but not used** — no dependency in `pyproject.toml`, zero
+  imports in `src/`. RAG is hand-built on psycopg + pgvector (TRIP-522 tracks the
+  retraction record).
+
+## Current Status
+
+**U1–U6 built and running** (as of 2026-08-25). FastAPI boundaries are live and the
+backend calls them round-trip: `POST /ai/v1/itinerary/{generate,validate,repair,
+alternatives,explanations,edit}` + `/health` + `POST /ai/v1/reflection/{generate,nudge}`
++ `POST /ai/v1/notification/copies` (TRIP-836 — reminder copy).
+CI (`ai-ci`) enforces "running app schema == committed `docs/openapi.json`" and fakes
+every external API (zero real calls). GHCR images publish on develop.
+
+**Wire canon is `docs/openapi.json`** — never hand-edit it; regenerate with
+`scripts/export_openapi.py`.
+
+## AI-DLC Rules
+
+Detailed rules in `.kiro/aws-aidlc-rule-details/`.
+Check current progress state in `aidlc-docs/aidlc-state.md`.

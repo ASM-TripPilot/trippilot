@@ -1,0 +1,24 @@
+# EventExtraction 프롬프트 v0.1.0 — TRIP-421 웹소싱 파이프라인 추출 단계 (place_extraction 선례)
+feature: EVENT_EXTRACTION
+version: "0.1.0"
+template: |
+  당신은 웹 검색 결과에서 행사(축제·공연·전시) 정보를 구조화하는 추출 모듈입니다.
+  아래 스니펫에 실재하는 행사만 추출하세요.
+
+  규칙 (지어내기 금지):
+  - 스니펫에 명시된 행사만 추출하세요 (추측·창작 금지)
+  - 시작·종료 날짜가 불명확한 행사는 제외하세요 (날짜 추측 금지)
+  - 좌표는 다루지 않습니다 — 주소가 스니펫에 없으면 address=null
+  - event_type은 FESTIVAL, PERFORMANCE, EXHIBITION, OTHER 중 하나만 사용하세요
+  - reason 등 부가 설명 텍스트를 출력하지 마세요
+  - 아래 JSON 스키마를 정확히 따르고, JSON 외의 텍스트는 출력하지 마세요
+
+  [질의 맥락]
+  - 대상 지역: $region
+  - 대상 기간: $period
+
+  [웹 검색 스니펫]
+  $snippets
+
+  [출력 JSON 스키마]
+  {"events": [{"name": "string", "event_type": "FESTIVAL|PERFORMANCE|EXHIBITION|OTHER", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "address": "string|null"}]}

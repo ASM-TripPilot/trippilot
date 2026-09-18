@@ -1,0 +1,110 @@
+package com.trippilot.trip.adapter.`in`.web
+
+import com.trippilot.trip.application.CreateTripCommand
+import com.trippilot.trip.application.EditTripCommand
+import com.trippilot.trip.domain.CompanionType
+import com.trippilot.trip.domain.Trip
+import com.trippilot.trip.domain.TripCounts
+import com.trippilot.trip.domain.TripDestination
+import com.trippilot.trip.domain.TripStatus
+import jakarta.validation.constraints.NotNull
+import java.time.Instant
+import java.time.LocalDate
+import java.util.UUID
+
+/**
+ * @property regionCode 행정구역 표준코드(TRIP-859). **주면 이름 조회를 건너뛴다** — 동명이지역
+ *   (고성군: 강원·경남 / 중구 5곳)에서 이름만으로는 어느 쪽인지 정할 수 없어 서버가 비워 두는데,
+ *   코드가 오면 그 애매함이 애초에 생기지 않는다. 후보는 `GET /regions` 로 고른다.
+ *   기존 클라이언트는 계속 이름만 보내면 된다 — 동작이 바뀌지 않는다.
+ */
+data class DestinationDto(
+    val seq: Int,
+    val region: String,
+    val nights: Int,
+    val regionCode: String? = null,
+) {
+    fun toDomain() = TripDestination(seq, region, nights, regionCode)
+    companion object {
+        fun from(d: TripDestination) = DestinationDto(d.seq, d.region, d.nights, d.regionCode)
+    }
+}
+
+/** 여행 생성. 국내강제·날짜·Σnights 검증은 도메인. 취향 스냅숏은 클라이언트 제공(생성 시 동결). */
+data class CreateTripRequest(
+    val title: String? = null,
+    @field:NotNull val startDate: LocalDate?,
+    @field:NotNull val endDate: LocalDate?,
+    val party: Int = 1,
+    val companionType: CompanionType? = null,
+    val budgetTotal: Long? = null,
+    val preferenceSnapshot: Map<String, Any?> = emptyMap(),
+    val destinations: List<DestinationDto> = emptyList(),
+) {
+    fun toCommand() = CreateTripCommand(
+        title, startDate!!, endDate!!, party, companionType, budgetTotal,
+        preferenceSnapshot, destinations.map { it.toDomain() },
+    )
+}
+
+/** 여행 편집 — 가변 필드 대체. 취향 스냅숏은 불변. */
+data class EditTripRequest(
+    val title: String? = null,
+    @field:NotNull val startDate: LocalDate?,
+    @field:NotNull val endDate: LocalDate?,
+    val party: Int = 1,
+    val companionType: CompanionType? = null,
+    val budgetTotal: Long? = null,
+    val destinations: List<DestinationDto> = emptyList(),
+) {
+    fun toCommand() = EditTripCommand(
+        title, startDate!!, endDate!!, party, companionType, budgetTotal, destinations.map { it.toDomain() },
+    )
+}
+
+data class TripResponse(
+    val tripId: UUID,
+    val title: String,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
+    val party: Int,
+    val companionType: CompanionType?,
+    val budgetTotal: Long?,
+    val preferenceSnapshot: Map<String, Any?>,
+    val destinations: List<DestinationDto>,
+    val status: TripStatus,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+    /** 등록 숙소 **수**(BR-U6-22). 0 이면 화면이 `숙소 미등록` 칩을 그린다. */
+    val baseCount: Int,
+    /** 일정이 있는 **일수**. 0 = 아직 생성되지 않음. 개수이지 시간이 아니다(INV-3). */
+    val itineraryDayCount: Int,
+    /**
+     * 여행이 끝난 **시점**(TRIP-826). 안 끝났으면 null.
+     *
+     * **분기는 [status] 로, 표시는 이 값으로.** 둘은 만들어지는 방식이 다르다 —
+     * [status] 의 `ENDED` 는 날짜에서 **즉시 파생**되고(`statusAt`), 이 값은 종료 스윕이
+     * **10분 주기로** 채운다. 그래서 여행이 막 끝난 직후에는 `status=ENDED` 인데 이 값이
+     * 아직 null 인 창이 있다.
+     *
+     * 이 값의 null 로 "안 끝났다"를 판정하면 **그 창에서 끝난 여행을 진행 중으로 본다.**
+     * 끝났는지는 [status], 언제 끝났는지(상대 표기·정렬)는 이 값이다.
+     */
+    val endedAt: Instant?,
+) {
+    companion object {
+        /**
+         * [counts] 에 **기본값을 두지 않는다.** 기본값을 두면 새 표면이 그것을 물려받아 실제로는
+         * 숙소·일정이 있는 여행에 0 을 실어 보낸다 — 화면은 그 응답으로 캐시를 갱신하고 카드가
+         * `숙소 미등록` 이 된다. 부르는 쪽이 매번 무엇인지 말하게 한다.
+         */
+        fun from(t: Trip, today: LocalDate, counts: TripCounts) = TripResponse(
+            tripId = t.tripId, title = t.title, startDate = t.startDate, endDate = t.endDate,
+            party = t.party, companionType = t.companionType, budgetTotal = t.budgetTotal,
+            preferenceSnapshot = t.preferenceSnapshot, destinations = t.destinations.map { DestinationDto.from(it) },
+            status = t.statusAt(today), createdAt = t.createdAt, updatedAt = t.updatedAt,
+            baseCount = counts.baseCount, itineraryDayCount = counts.itineraryDayCount,
+            endedAt = t.endedAt,
+        )
+    }
+}

@@ -1,0 +1,310 @@
+# TripPilot 로컬 통합 개발 스택 (FE·BE·AI·DB)
+# 빌드 도구는 Gradle. compose 는 로컬에서 서비스들을 함께 띄우는 오케스트레이션 전용.
+#
+# 프로파일별 기동:
+#   docker compose up -d                    → db 만 (가장 가벼움 · bootRun 로 앱은 호스트에서)
+#   docker compose --profile backend up     → db + backend (백엔드도 컨테이너로)
+#   docker compose --profile full up        → 전체 스택
+#     · 현재: db + backend  (ai·frontend 는 각 코드 준비되면 아래 주석 해제)
+#     · frontend 는 Expo Web(브라우저). 네이티브 실기 검증은 호스트에서: cd frontend && npx expo run:ios
+name: trippilot
+
+services:
+  # ── DB (PostgreSQL 16) ─────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: trippilot-db
+    environment:
+      POSTGRES_DB: trippilot
+      POSTGRES_USER: postgres            # 로컬 슈퍼유저(master 대역) — 롤·스키마 부트스트랩용
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      TZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - trippilot-pgdata:/var/lib/postgresql/data
+      - ./backend/docker/init:/docker-entrypoint-initdb.d:ro   # 최초 1회: app_migrate·app_user 롤 + app 스키마
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d trippilot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # ── Redis (숙소·여행 조회 캐시 · U1-TS-4) ───────────────────────
+  # 숙소 목록·지역 집계·POI 검색결과의 짧은 TTL 조회 캐시. 원본은 PostgreSQL.
+  redis:
+    image: redis:7-alpine
+    container_name: trippilot-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]   # 캐시 전용(영속 비활성)
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  # ── Backend (Spring Boot / Kotlin) ─────────────────────────────
+  backend:
+    profiles: ["backend", "full"]
+    image: ghcr.io/asm-trippilot/trippilot-backend:${TAG:-develop}   # pull 모드: CI가 발행한 이미지
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: trippilot-backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+        # ai 는 full 프로파일 전용이라 `--profile backend` 단독 기동에는 없다.
+        # required:false 여야 그 경우 의존성이 무시된다 — 빼면 backend-only 가 ai 를 끌어올려
+        # 기존 동작(AI 없이 degrade)이 바뀐다.
+        required: false
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/trippilot?currentSchema=app
+      DB_USER: ${DB_USER:-app_user}
+      DB_PASSWORD: ${DB_PASSWORD:-app_user}
+      REDIS_HOST: ${REDIS_HOST:-redis}      # 숙소·여행 조회 캐시
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      AI_URL: ${AI_URL:-http://ai:8000}     # full 프로파일에서 ai 컨테이너로 해석. backend-only 면 unreachable(degrade)
+      # 일정 생성 경계 전환(TRIP-229). 기본 fake 라 평소 동작은 그대로 —
+      # 공동 통합테스트에서만 AI_SCHEDULE_MODE=http 로 실 AI 컨테이너에 붙인다.
+      TRIPPILOT_AI_SCHEDULE_MODE: ${AI_SCHEDULE_MODE:-fake}
+      # 기상 조회(TRIP-849). 기본 fake = 가짜 강수확률. kma 로 켜면 실 기상청을 부른다.
+      # 키는 아래 WEATHER_API 를 그대로 쓴다 — AI 컨테이너와 같은 값이다.
+      WEATHER_MODE: ${WEATHER_MODE:-fake}
+      WEATHER_API: ${WEATHER_API:-}
+      # 리마인드 문구 AI 채움(TRIP-836). 기본 off = 상수 문구. http 로 켜면 예약 적재 시 AI 를 부른다.
+      AI_REMINDER_COPY_MODE: ${AI_REMINDER_COPY_MODE:-off}
+      TRIPPILOT_AI_SCHEDULE_BASE_URL: ${AI_URL:-http://ai:8000}
+      # 시간제약(day1 5s / 전체 20s)을 AI 에 실을지. **기본 off** — FE 연동 기간에는 시간 때문에
+      # 규칙 폴백으로 강등되는 것을 걷어낸다(TRIP-474). 9월 재도입은 여기를 true 로(TRIP-475).
+      TRIPPILOT_AI_SCHEDULE_DEADLINE_ENFORCED: ${AI_SCHEDULE_DEADLINE_ENFORCED:-false}
+      # 시한 **값**도 통로를 연다. 켜는 순간 조정이 필요할 수 있는데(실측 TRIP-373: 취향 점수가
+      # 후보 건당 ~0.3초 선형) 통로가 없으면 코드를 고쳐야 하고, 그러면 "우리 기본값이 무엇인지"가 흐려진다.
+      TRIPPILOT_AI_SCHEDULE_DEADLINE_DAY1_MS: ${AI_SCHEDULE_DAY1_DEADLINE_MS:-5000}
+      TRIPPILOT_AI_SCHEDULE_DEADLINE_TOTAL_MS: ${AI_SCHEDULE_TOTAL_DEADLINE_MS:-20000}
+      # 소셜 로그인 시크릿 — .env 에서 주입(컨테이너는 기본 프로파일이라 application-local.yml 안 읽음).
+      # 미설정이면 빈 값 → 소셜 로그인 시도 시에만 실패(기동 무영향). 값은 .env.example 참고.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      # 지역 지오코딩 경계(국내강제). 기본 스텁은 시드 8개만 국내로 안다 —
+      # 실 지역명으로 여행을 만들려면 kakao 로 켠다(키는 위 KAKAO_CLIENT_ID 를 그대로 쓴다).
+      TRIPPILOT_PLACE_GEOCODE_MODE: ${PLACE_GEOCODE_MODE:-stub}
+      # 숙소 콘텐츠 경로. 기본 스텁은 **제주 5곳뿐**이라 다른 지역 검색이 전부 0건이 된다 —
+      # 전국 정본(stay 12,782곳)으로 돌리려면 db 로 켠다.
+      TRIPPILOT_STAY_CONTENT_MODE: ${STAY_CONTENT_MODE:-stub}
+      # 푸시 발송기(TRIP-834). **기본 off** — 켜지 않으면 LoggingPushAdapter 가 물려 아무 데도
+      # 안 보내면서 성공을 보고한다(실패로 보고하면 진짜 실패가 묻히므로 그 판단 자체는 옳다).
+      # 그 상태가 기본이라는 것을 **여기서 보이게** 두는 것이 이 줄의 목적이다 — 통로가 없으면
+      # "아무도 안 켠 상태"인지 "끄기로 한 상태"인지 구분되지 않는다.
+      # expo 로 켜려면 실기기 토큰이 필요하다. mode=expo 인데 어댑터가 안 물리면 기동이 막힌다.
+      TRIPPILOT_PUSH_MODE: ${PUSH_MODE:-off}
+      # Expo access token — **enhanced security 를 켠 프로젝트만** 필요하다.
+      # 안 켰는데 빈 Bearer 를 보내면 오히려 401 이라 기본은 빈 값이다.
+      TRIPPILOT_PUSH_EXPO_ACCESS_TOKEN: ${PUSH_EXPO_ACCESS_TOKEN:-}
+      # 서비스 간 호출(TRIP-393). 비우면 /internal 경계가 닫힌다 — AI 수집분 수신도 막힌다.
+      TRIPPILOT_SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      # 켜면 위 토큰이 빈 채로는 기동하지 않는다. 로컬 기본은 꺼짐(토큰 없이도 떠야 한다).
+      # `:-false` 다 — 빈 문자열을 넘기면 Boolean 바인딩이 깨져 기동이 죽는다(실측).
+      SERVICE_AUTH_REQUIRE_TOKEN: ${SERVICE_AUTH_REQUIRE_TOKEN:-false}
+      # JWT 서명키(RS256) — 비우면 컨테이너가 기동할 때마다 새로 만든다. 복제본을 둘 이상
+      # 띄우는 순간 서로의 토큰을 못 읽어 로그인이 깨지므로, 배포에서는 반드시 채운다.
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-}
+      # 켜면 위 키가 빈 채로는 기동하지 않는다. 로컬 기본은 꺼짐(키 없이도 떠야 한다).
+      # **`:-false` 로 값을 보장한다.** `:-` 로 비워 넘기면 컨테이너가 빈 문자열을 받고,
+      # application.yml 의 `${...:false}` 는 "존재하지만 빈 값"이라 기본값을 못 써서
+      # Boolean 바인딩이 BindException 으로 **기동을 깬다**(실측 2026-09-16).
+      # 같은 이유로 AI_SCHEDULE_DEADLINE_ENFORCED 도 `:-false` 다.
+      JWT_REQUIRE_CONFIGURED_KEY: ${JWT_REQUIRE_CONFIGURED_KEY:-false}
+      # application.yml 은 ${SERVICE_AUTH_TOKEN:} 을 읽는다 — 접두 붙은 이름만 주면 빈 토큰이 되어 /internal 이 401 로 닫힌다(실측 2026-08-21).
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  # ── AI (통합 테스트 스텁 · 실제 C1/C2 는 후속) ─────────────────
+  ai:
+    profiles: ["full"]
+    image: ghcr.io/asm-trippilot/trippilot-ai:${TAG:-develop}
+    build:
+      context: ./ai
+    container_name: trippilot-ai
+    environment:
+      # 상대 진입점(ai/main.py)이 읽는 스위치. **전부 비워 두는 것이 기본 동작**이다 —
+      # TRIPPILOT_LLM_PROVIDER 가 없으면 UnwiredLlm 으로 조립돼 점수는 규칙 폴백, 일정은 OR-Tools 가 낸다.
+      # 통로를 열어 두는 이유: 값이 필요해졌을 때 compose 를 고치는 게 아니라 .env 만 채우면 되게.
+      #
+      # openai 로 켜면 OPENAI_API_KEY 가 **필수**이고, 없으면 상대가 기동에 실패한다(의도된 fail-fast —
+      # 조용히 폴백하면 "실 LLM 으로 테스트했다"가 거짓이 된다).
+      TRIPPILOT_LLM_PROVIDER: ${AI_LLM_PROVIDER:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      # chat|responses (기본 responses — 멘토 게이트웨이가 responses 만 라우팅한다).
+      OPENAI_API: ${OPENAI_API:-}
+      # anthropic 제공자(AI_LLM_PROVIDER=anthropic)용 — openai와 택일 (TRIP-421)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      # 기능별 벤더 혼용 (TRIP-513, AI_LLM_PROVIDER=mixed) — "FEATURE=model,…"
+      TRIPPILOT_LLM_FEATURE_MODELS: ${AI_LLM_FEATURE_MODELS:-}
+      TRIPPILOT_LLM_RETRY_MODELS: ${AI_LLM_RETRY_MODELS:-}
+      # 파인튜닝 로컬 LLM (REMINDER_COPY) — OpenAI 호환 서버 주소.
+      # 앱은 TRIPPILOT_* 만 읽는다. 이 통로가 빠지면 .env 에 값을 넣어도 조용히 무시된다.
+      TRIPPILOT_LOCAL_LLM_BASE_URL: ${AI_LOCAL_LLM_BASE_URL:-}
+      TRIPPILOT_LOCAL_LLM_API_KEY: ${AI_LOCAL_LLM_API_KEY:-}
+      # LLM 요청당 비용 집계(#486)의 단가표 경로. **이 통로가 없어서** 컨테이너에서
+      # 집계가 통째로 꺼져 있었다 — load_prices 가 None 을 돌려주면 llm_cost 로그 자체가
+      # 안 나간다. 기능이 죽는 게 아니라 "얼마 썼는지 안 보이는" 형태라 증상이 없다
+      # (바로 아래 임베딩 통로 누락과 같은 종류).
+      # 기본값은 이미지에 구운 경로(Dockerfile `COPY config ./config`, WORKDIR /app) —
+      # 단가는 비밀이 아니라 공시가라 커밋돼 있으므로 기본으로 켠다.
+      # ⚠️ 경로를 줬는데 파일을 못 읽으면 PriceConfigError 로 **기동 실패**한다(의도).
+      #    config/ 가 없던 옛 이미지를 캐시로 들고 있으면 `docker compose pull` 로 갱신할 것.
+      TRIPPILOT_LLM_PRICE_FILE: ${AI_LLM_PRICE_FILE:-/app/config/llm-prices.json}
+      # 미주입 앱으로 띄운다(3개 라우트 503) — 배선 문제인지 우리 문제인지 가를 때.
+      TRIPPILOT_WIRING: ${AI_WIRING:-}
+      # 기상청 단기예보(디코딩 키). 미설정 = 날씨 보정 없음.
+      WEATHER_API: ${WEATHER_API:-}
+      # 카카오 로컬 REST 키 — 후보 POI 의 지도 실재 검증(TRIP-683). 미설정 = 검증 없음
+      # (순위 강등이 일어나지 않고 기존 경로 그대로). 못 찾은 POI 는 **배제가 아니라
+      # 강등**이다 — 실측상 영업 중의 4.0% 가 검색에 안 나오는데 폐업은 48.5% 만
+      # 걸려서, 배제하면 멀쩡한 가게를 3배 더 버린다.
+      # 행사 지오코딩 배치가 쓰는 KAKAO_REST_API_KEY_AI 시크릿과 같은 키를 써도 된다
+      # (쿼터 무료 10만/일 대비 요청당 최대 50콜). 백엔드 소셜 로그인용
+      # KAKAO_CLIENT_ID 와는 **다른 키**다.
+      # 비워 두면 위 소셜 로그인용 KAKAO_CLIENT_ID 를 그대로 쓴다 — 카카오
+      # OAuth 는 client_id 자리에 **REST API 키**를 쓰므로 같은 값이다
+      # (2026-09-16 실호출 확인: 로컬 API 키워드검색 200).
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-${KAKAO_CLIENT_ID:-}}
+      # verify() 1회당 호출 상한. 검증 대상 상위 50건보다 넉넉히(기본 60) —
+      # 실질 제한은 마감 1.5s 다.
+      EXISTENCE_MAX_CALLS: ${EXISTENCE_MAX_CALLS:-60}
+      # PlanB RAG 벡터 스토어(TRIP-426) — 미설정 = 미배선(경계 개통은 TRIP-428).
+      # 컨테이너 안에서는 ai-vectordb 호스트로 해석된다.
+      TRIPPILOT_VECTOR_DB_URL: ${AI_VECTOR_DB_URL:-}
+      # 임베딩 공급자 — openai(기본) | titan | local. **이 통로가 없어서** 컨테이너가
+      # 늘 openai 로 떨어졌고, 멘토 Azure 엔드포인트에는 임베딩 배포가 없어 KB 검색
+      # 3종이 전부 404(DeploymentNotFound)로 죽었다(2026-09-01 실측). 규칙 폴백이
+      # 대신 답해 200 이 나가는 바람에 증상이 안 보였다 — TRIP-513 통로 누락과 같은 종류.
+      # local 로 켜려면 이미지에 sentence-transformers + 모델이 있어야 한다(TRIP-517).
+      TRIPPILOT_EMBEDDING_PROVIDER: ${AI_EMBEDDING_PROVIDER:-}
+      TRIPPILOT_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-}
+      # provider=http 일 때의 임베딩 서비스 주소 (TRIP-517). 컨테이너 안에서는
+      # 서비스명으로 해석된다. **`depends_on` 을 걸지 않는다** — AI 는 임베딩 없이도
+      # 돌아야 하고(UnwiredEmbedding 계약), 결합을 걸면 임베딩 컨테이너의 재시작
+      # 루프가 일정 생성·회고까지 기동 실패로 끌고 간다.
+      TRIPPILOT_EMBEDDING_BASE_URL: ${AI_EMBEDDING_BASE_URL:-}
+      TRIPPILOT_EMBEDDING_TIMEOUT_SEC: ${AI_EMBEDDING_TIMEOUT_SEC:-}
+      # 후보 POI 정본 실연동(TRIP-408) — SERVICE_AUTH_TOKEN(.env, TRIP-393)이 있을 때만
+      # 백엔드를 바라본다. 비우면 주소도 비어 기존 StaticPoiDb(제주 시드 4곳) 조립 —
+      # 주소만 있고 토큰이 없으면 ai 가 기동 실패하므로 둘을 한 변수로 묶는다.
+      TRIPPILOT_BACKEND_BASE_URL: ${SERVICE_AUTH_TOKEN:+http://backend:8080}
+      TRIPPILOT_SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
+      # TMAP 실경로 API(TRIP-432). 설정 시 ChainedTravelAdapter 활성화 —
+      # 미설정 = 기존 하버사인 추정 그대로.
+      TMAP_API_KEY: ${TMAP_API_KEY:-}
+      # 행사 저장소(TRIP-421). 이미지가 data/ 를 통째로 담으므로 기본값만으로 배선된다 —
+      # 키도 네트워크도 필요 없는 로컬 파일이라 켜 두는 것이 기본이다. 끄려면 .env 에
+      # AI_EVENTS_STORE= (빈 값)  — `:-` 가 아니라 `-` 라서 빈 값이 기본값을 되살리지 않는다.
+      # 파일은 기동 시 1회 읽는다(JsonEventStore.__init__) — 새 수집분 반영은 컨테이너 재기동.
+      EVENTS_STORE: ${AI_EVENTS_STORE-data/collected_events.json}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+  # ── 임베딩 서비스 (TRIP-517) ───────────────────────────────────
+  # ai 본체에서 분리한 이유: 모델이 1.1GB(fp16)라 FastAPI 경계 한 줄 고칠 때마다
+  # 그걸 다시 굽게 된다. 그리고 안 넣었더니 KB 검색 3종이 컨테이너에서 404 로
+  # 죽어 있었다(2026-09-01 발견) — 넣기도 안 넣기도 애매한 크기가 분리의 이유다.
+  # 모델은 볼륨이 아니라 **이미지에 굽는다** — `down -v` 가 볼륨을 지우는 팀 리셋
+  # 절차와 싸우지 않기 위해서다.
+  ai-embedding:
+    profiles: ["full"]
+    image: ghcr.io/asm-trippilot/trippilot-embedding:${TAG:-develop}
+    build:
+      context: ./ai/embedding
+    container_name: trippilot-ai-embedding
+    # 실측(2026-09-02): 워밍 직후 4.29GiB · 배치 상한 256건 인코딩 후 4.37GiB — 정점이
+    # 상주와 거의 같다(fp32 가중치 2.27GB + torch 런타임·토크나이저·할당기). 5g 는
+    # 관측 정점 대비 15% 여유. 넘으면 이 컨테이너만 OOM 으로 죽고 AI 는 강등으로 돈다
+    # (depends_on 없음, UnwiredEmbedding 계약). 한도가 없으면 호스트 전체를 압박한다.
+    # 워커를 늘리면(Dockerfile CMD --workers) 프로세스당 이 크기다 — 같이 계산할 것.
+    mem_limit: 5g
+    ports:
+      - "8100:8100"
+    healthcheck:
+      # 모델 로드 완료를 기다리지 않는다 — 프로세스 생존만 본다(app.py /health 주석).
+      # **운영자 관측용이지 다른 서비스의 depends_on 대상이 아니다.**
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s   # 첫 요청 때 모델을 읽는다 — ai(5s)보다 넉넉히
+
+  # ── AI 벡터 스토어 (PlanB RAG KB · TRIP-426) ───────────────────
+  # 백엔드 db와 분리한 전용 컨테이너 — postgres:16-alpine에는 pgvector extension이
+  # 없고, 공유 이미지를 바꾸면 백엔드 스택에 영향이 가서 격리를 택했다.
+  ai-vectordb:
+    profiles: ["full"]
+    image: pgvector/pgvector:pg16
+    container_name: trippilot-ai-vectordb
+    environment:
+      POSTGRES_DB: ai_kb
+      POSTGRES_USER: ${AI_VECTOR_DB_USER:-ai_kb}
+      POSTGRES_PASSWORD: ${AI_VECTOR_DB_PASSWORD:-ai_kb}
+      TZ: UTC
+    ports:
+      - "5433:5432"
+    volumes:
+      - trippilot-ai-vectordata:/var/lib/postgresql/data
+      - ./ai/docker/vector-init:/docker-entrypoint-initdb.d:ro   # 최초 1회: extension + kb_vectors
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AI_VECTOR_DB_USER:-ai_kb} -d ai_kb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # ── Frontend (Expo Web 자리 · nginx 정적+프록시 스텁) ──────────
+  frontend:
+    profiles: ["full"]
+    image: ghcr.io/asm-trippilot/trippilot-frontend:${TAG:-develop}
+    build:
+      context: ./frontend
+    container_name: trippilot-frontend
+    depends_on:
+      - backend
+    ports:
+      - "19006:80"
+    healthcheck:
+      # localhost 는 컨테이너 안에서 IPv6(::1)로 풀려 nginx(IPv4)에 refused → 127.0.0.1 명시
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+volumes:
+  trippilot-pgdata:
+  trippilot-ai-vectordata:

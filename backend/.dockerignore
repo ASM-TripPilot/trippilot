@@ -1,0 +1,13 @@
+# 빌드 컨텍스트에서 제외 — 이미지 크기·빌드 캐시 보호
+build/
+*/build/
+.gradle/
+*/.gradle/
+.idea/
+*.iml
+.git/
+docs/
+docker/
+docker-compose.yml
+Dockerfile
+.dockerignore

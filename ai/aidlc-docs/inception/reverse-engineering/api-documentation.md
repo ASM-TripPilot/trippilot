@@ -1,8 +1,18 @@
 # API Documentation
 
+> ⚠ **지위 강등 (2026-08-07, TRIP-282).** 아래 `/c1/*`·`/c2/*`·`/m7/*` **세분 경로는 폐기 방향**이다.
+> PR #76 "굵은 경계 — 조각 조립 경계(백엔드가 M7·C1·C2를 직접 지휘)는 두지 않는다" 합의에 따라
+> 실제 백엔드↔AI 경계는 포워드·리버스 **두 방향**뿐이다:
+> - 포워드 — 열린 경로 목록의 정본은 `ai/docs/openapi.json`(일정 `/ai/v1/itinerary/*` · 회고 `/ai/v1/reflection/*`)
+> - 리버스 `GET /internal/pois?centerLat&centerLng&radiusKm` · `POST /internal/pois/batch-get`(필드 `poi_ids`)
+>
+> 경로·필드의 **정본은 `../application-design/agent-io-contracts.md` 0.1**이다.
+> 본 문서는 **AI 서비스 내부의 논리 인터페이스 참고용**으로만 남긴다 — 경계 계약으로 인용하지 말 것.
+> 프로토콜도 미확정이 아니라 **REST/JSON over HTTP 확정**(PR #76 결정4)이다.
+
 ## Python AI 서비스 API (Kotlin 백엔드 → AI 서비스)
 
-> 프로토콜(REST/gRPC) 미확정 — AI-D01 후속. 여기서는 논리적 인터페이스만 정의.
+> 아래 경로 표기는 **폐기 방향의 논리 인터페이스**다(위 지위 강등 註). 요청/응답 필드 구조만 참고한다.
 
 ### C1 LLM Gateway API
 
@@ -60,7 +70,7 @@
 - **Request**: `{"requester": {...}, "refs": [...]}`
 - **Response**: `{"injected_context": {...}}` or `PermissionDeniedError`
 
-### C2 Solver Engine API
+### C2 Assembly Engine API
 
 #### solve — 일정 배치 최적화
 - **Method**: POST
@@ -106,7 +116,7 @@
 #### estimate_travel — 이동시간 추정 (내부 전용)
 - **Method**: POST
 - **Path**: `/c2/estimate-travel`
-- **Purpose**: 두 지점 간 이동시간 추정 (솔버 내부용, DTO 미노출)
+- **Purpose**: 두 지점 간 이동시간 추정 (어셈블리 내부용, DTO 미노출)
 - **Request**: `{"from": {"lat": ..., "lng": ...}, "to": {...}, "mode": "public"}`
 - **Response**: `{"distance_range": "약 2.1km", "internal_minutes": 25, "is_estimated": true}`
 

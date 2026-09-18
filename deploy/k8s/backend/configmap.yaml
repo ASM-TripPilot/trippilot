@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: trippilot
+  labels:
+    app.kubernetes.io/name: trippilot-backend
+data:
+  # ── DB ────────────────────────────────────────────────────────────────────
+  # 호스트명은 Service 이름(trippilot-postgres). 같은 네임스페이스라 짧은 이름으로 풀린다.
+  # currentSchema=app 은 application.yml 의 기본값과 같지만, 여기서 명시해 두면
+  # 파드 스펙만 보고도 어느 스키마를 쓰는지 알 수 있다.
+  DB_URL: "jdbc:postgresql://trippilot-postgres:5432/trippilot?currentSchema=app"
+
+  # ── 관측성(TRIP-218) ──────────────────────────────────────────────────────
+  # 클러스터 안에서는 SigNoz 수집기를 서비스 DNS 로 부른다.
+  # localhost 를 쓰면 파드 자신을 가리켜 텔레메트리가 조용히 사라진다.
+  # 이 한 값을 Micrometer(메트릭)와 OTel 에이전트(트레이스·로그)가 함께 읽는다.
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://signoz-ingester.signoz.svc.cluster.local:4318"
+  DEPLOY_ENV: "local-k8s"
+
+  # ── 같은 클러스터의 다른 서비스(TRIP-325) ────────────────────────────────
+  # 숙소·여행 조회 캐시. 원본은 PostgreSQL 이므로 죽어도 기능은 degrade 만 된다.
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  # AI 서비스. 지금은 /health 만 응답하는 스텁이다.
+  AI_URL: "http://ai:8000"
+
+  # 아래 두 개는 backend/Dockerfile 에도 같은 값이 ENV 로 박혀 있다(안전 기본값).
+  # 여기에 다시 적는 이유는 **리뷰 가능하게** 하기 위해서다 — 이미지를 열어보지 않아도
+  # 매니페스트만으로 "왜 이 설정인가"가 보여야 한다.
+  #   LOGBACK_APPENDER_ENABLED=false : 에이전트가 root 로거에 appender 를 자동 부착하면
+  #     MaskingAppender 를 우회한 원문(토큰·이메일)이 수집기로 나간다. 보안 사고다.
+  #   LOGBACK_MDC_ENABLED=false      : 에이전트의 logback MDC 계측이 ILoggingEvent 에 넣는
+  #     가상 필드가 주입되지 않아 첫 로그 호출에서 NoSuchFieldError 로 **기동 자체가 실패**한다
+  #     (에이전트 2.14.0 에서 실측). 로그 경로는 우리 appender 가 소유하므로 에이전트는
+  #     logback 을 건드리지 않는 편이 설계상으로도 맞다.
+  #     트레이스 상관은 그대로다 — OTLP appender 가 활성 Context 에서 trace_id 를 직접 붙인다.
+  #   METRICS_EXPORTER=otlp          : 메트릭도 에이전트가 내보낸다.
+  #     원래 설계는 "메트릭=Micrometer OTLP push" 였으나, 에이전트가 붙은 상태에서는
+  #     Micrometer 의 push 가 오류 로그 하나 없이 **조용히 유실**된다(2.14.0·2.30.0 모두 실측).
+  #     이중 발행은 application.yml 의 export.enabled 기본값 false 가 막는다.
+  OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED: "false"
+  OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED: "false"
+  OTEL_METRICS_EXPORTER: "otlp"
+
+  # 비밀은 여기 넣지 않는다. ConfigMap 은 평문이며 네임스페이스 조회 권한이 있으면 전부 보인다.
+  # DB 자격증명은 postgres-credentials Secret 에서 온다.

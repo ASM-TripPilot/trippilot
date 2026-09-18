@@ -1,0 +1,53 @@
+{
+  "days": [
+    {
+      "date": "2026-08-01",
+      "slots": [
+        {
+          "poi_id": "22222222-2222-4222-8222-222222222222",
+          "start_at": "12:00:00",
+          "end_at": "13:30:00",
+          "ends_next_day": false,
+          "distance_range": null,
+          "is_fixed": true
+        },
+        {
+          "poi_id": "55555555-5555-4555-8555-555555555555",
+          "start_at": "14:00:00",
+          "end_at": "15:00:00",
+          "ends_next_day": false,
+          "distance_range": "약 1.2km · 도보 추정",
+          "is_fixed": false
+        },
+        {
+          "poi_id": "66666666-6666-4666-8666-666666666666",
+          "start_at": "23:00:00",
+          "end_at": "01:00:00",
+          "ends_next_day": true,
+          "distance_range": null,
+          "is_fixed": false
+        }
+      ]
+    }
+  ],
+  "day1_ready_at": "2026-08-01T00:00:05Z",
+  "explanations": {
+    "2026-08-01#55555555-5555-4555-8555-555555555555": "취향(미식)과 동선에 맞는 곳"
+  },
+  "solve_mode": "OR_TOOLS",
+  "is_fallback": false,
+  "freshness": {
+    "source": "kakao",
+    "fetched_at": "2026-08-01T00:00:00Z",
+    "cache_hit": true,
+    "ttl_sec": 600,
+    "stale": false
+  },
+  "candidates_summary": {
+    "level": "LOW",
+    "pool_size": 7,
+    "shortfall_categories": [
+      "카페"
+    ]
+  }
+}

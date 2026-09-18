@@ -78,13 +78,17 @@ Base `/api/v1` · `Authorization: Bearer` 무상태 · JSON camelCase · 에러 
 | GET `/trips/{id}/itinerary/current?day=` | 활성 시간표 | i01 |
 | GET `/trips/{id}/route?type=planned\|actual` | 계획/실제(GPS) 동선 | i02·i03 |
 | GET `/trips/{id}/triggers` | 감지된 변화(4카테고리·상태) | i08·i09 |
-| POST `/triggers/{id}/dismiss` | 트리거 닫기 | i08 |
-| POST `/trips/{id}/replan` | 재계획 시작(reason·mode·origin) → ReplanSession | i10·i11 |
-| GET `/replan-sessions/{id}` | 진행+대안(alternatives, empty 사유) | i12·i13·i16 |
-| POST `/replan-sessions/{id}/commit` / `/undo` | 반영/되돌리기 | i18·i19 |
+| POST `/trips/{id}/triggers/{triggerId}/dismiss` | 트리거 닫기 | i08 |
+| POST `/trips/{id}/replan-sessions` | 재계획 시작(scope·origin·reasons·directives) → ReplanSession | i10·i11 |
+| GET `/trips/{id}/replan-sessions/{sessionId}` | 진행 상태 + draft | i12·i13·i16 |
+| POST `/trips/{id}/replan-sessions/{sessionId}/cancel` (확정·되돌리기는 후속) | 취소 | i18·i19 |
 | POST `/trips/{id}/rest` | 휴식 모드 전환(resumeAt) | i17 |
 | PATCH `/trips/{id}/execution` | 휴식 재개·일정 계속·스누즈(30분 후) | i17 |
 | PATCH `/itineraries/{id}/slots` (manual reorder/time) | 직접 수정(이동시간 실패 시 수동 시각) | i15·i22 |
+
+> **경로 중첩(2026-08-11 정정)**: 트리거·재계획 세션은 id 가 전역 유일하지만 **여행 아래로 중첩**한다.
+> 그래야 소유 검증이 한 곳에서 끝나고, id 만 알면 남의 여행 리소스를 건드리는 구멍이 생기지 않는다.
+> 구현(TRIP-273)이 이 표기를 따른다.
 
 ## 9. 밴드 j — 기록·회고
 | Method · Path | 목적 | 화면 |

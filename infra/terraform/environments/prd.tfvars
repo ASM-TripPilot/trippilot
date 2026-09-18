@@ -1,0 +1,9 @@
+environment                    = "prd"
+cluster_version                = "1.35"
+vpc_cidr                       = "10.50.0.0/16"
+availability_zone_count        = 3
+single_nat_gateway             = false
+database_instance_class        = "db.t4g.medium"
+database_allocated_storage     = 100
+database_max_allocated_storage = 1000
+redis_node_type                = "cache.t4g.small"

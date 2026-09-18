@@ -1,0 +1,14 @@
+{
+  "env": {
+    "PONYTAIL_DEFAULT_MODE": "lite",
+    "PONYTAIL_SUBAGENT_MATCHER": "^implementer$"
+  },
+  "model": "claude-opus-4-8[1m]",
+  "includeCoAuthoredBy": false,
+  "effortLevel": "high",
+  "permissions": {
+    "deny": [
+      "mcp__obsidian__obsidian_delete_file"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+# frontend 의 빌드·테스트는 pnpm 이 소유한다 (Expo prebuild·Metro·Jest).
+# Bazel 은 컨테이너 이미지에 넣을 정적 산출물만 파일 단위로 집어간다.
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["nginx.conf"])
+
+filegroup(
+    name = "web",
+    srcs = glob(
+        ["web/**"],
+        allow_empty = True,
+    ),
+)

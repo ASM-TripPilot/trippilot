@@ -1,6 +1,6 @@
 # TripPilot AI 서비스 — 요구사항 정의
 
-> **범위**: Python AI 서비스 (C1 LLM Gateway + C2 Solver Engine + M7 Place Data)
+> **범위**: Python AI 서비스 (C1 LLM Gateway + C2 Assembly Engine + M7 Place Data)
 > **역할**: AI Engineer 담당
 > **출처**: ai-architecture.md, ai-implementation-design.md, ai-data-design.md, ai-prompt-design.md, ai-testing-guide.md, ai-adr.md + reverse-engineering 산출물
 
@@ -11,13 +11,13 @@
 - **User Request**: TripPilot AI 서비스의 1차 출시 범위를 Python으로 구현
 - **Request Type**: New Project (설계 완료, 코드 미작성)
 - **Scope**: Multiple Components (C1 + C2 + M7 + API Layer + 테스트)
-- **Complexity**: Complex (LLM 하이브리드, 최적화 솔버, 4대 불변식, PBT 12+속성)
+- **Complexity**: Complex (LLM 하이브리드, 최적화 어셈블리, 4대 불변식, PBT 12+속성)
 
 ---
 
 ## 1. 기능 요구사항 (Functional Requirements)
 
-### FR-1. C2 Solver Engine — 선택·순서·시각 배치
+### FR-1. C2 Assembly Engine — 선택·순서·시각 배치
 
 | ID | 요구사항 | 우선순위 | 근거 |
 |---|---|---|---|
@@ -72,7 +72,7 @@
 | ID | 요구사항 | 우선순위 | 근거 |
 |---|---|---|---|
 | FR-5.1 | score_preferences → solve 파이프라인 — M7 후보 풀 → C1 선호 점수 → C2 day별 배치 | P0 | §2 시퀀스 |
-| FR-5.2 | day별 독립 처리 — LLM은 1회만, 솔버는 day별로 | P0 | D38 |
+| FR-5.2 | day별 독립 처리 — LLM은 1회만, 어셈블리는 day별로 | P0 | D38 |
 | FR-5.3 | 폴백 계단 구현 — LLM 실패→규칙점수, API 실패→캐시/직선거리, 전체 실패→최소 일정 | P0 | §7 |
 
 ---
@@ -146,7 +146,7 @@
 | NFR-7.1 | 관측 이벤트 타입 기반 | 모든 LLM 호출·폴백·게이트 드롭이 도메인 이벤트 타입(LlmCallRecord·FallbackEvent·GateDropEvent)으로 기록 가능 | NFR-5.1~5.4의 타입 선행 정의 |
 | NFR-7.2 | 계측 발행 추상화 | TracePort로 계측 백엔드 격리 (테스트는 InMemoryTrace로 이벤트 검증) | NFR-4.2 확장 |
 | NFR-7.3 | 프롬프트 버저닝 | 모든 LLM 호출 기록에 PromptRef(prompt_id, version) 포함. 프롬프트는 파일 + git 버전 관리 | 프롬프트 변경 → eval 회귀 연결 |
-| NFR-7.4 | Eval 파이프라인 타입 기반 | EvalCase/EvalRun/EvalScore 도메인 타입 정의. 골든 데이터셋 회귀 eval 실행 가능 구조 | INV-1 환각률·솔버 통과율·폴백률 지표화 |
+| NFR-7.4 | Eval 파이프라인 타입 기반 | EvalCase/EvalRun/EvalScore 도메인 타입 정의. 골든 데이터셋 회귀 eval 실행 가능 구조 | INV-1 환각률·어셈블리 통과율·폴백률 지표화 |
 
 ---
 
@@ -155,7 +155,7 @@
 | ID | 불변식 | 위반 = 재설계 | 검증 방법 |
 |---|---|---|---|
 | INV-1 | LLM은 closed-set 후보 안에서만 선택 | LLM이 후보 밖 POI ID 반환 | C1 출구 게이트 코드 + U5-P5 PBT |
-| INV-2 | 사용자에게 보이는 시각·순서는 솔버 검증값만 | 라우터/워커가 시각을 직접 확정 | 편집 경로 수렴 + M16-P1 PBT |
+| INV-2 | 사용자에게 보이는 시각·순서는 어셈블리 검증값만 | 라우터/워커가 시각을 직접 확정 | 편집 경로 수렴 + M16-P1 PBT |
 | INV-3 | 소요시간 미표시 — 거리만 | DTO에 duration 필드 추가 | VisitSlotDisplay 타입 정적 보장 + U5-P4 |
 | INV-4 | AI 실패 시 결정론 폴백 | LLM 타임아웃 시 빈 응답 반환 | 폴백 계단 + U5-P3 PBT |
 
@@ -164,7 +164,7 @@
 ## 4. 구현 우선순위 (1차 출시)
 
 ### Phase 1 — AI Core Foundation (P0)
-- C2 Solver: 하드 제약 4종 + 휴리스틱 최적화 + 이동추정 + 결정론 폴백
+- C2 Assembly: 하드 제약 4종 + 휴리스틱 최적화 + 이동추정 + 결정론 폴백
 - C1 Gate: closed-set 출구 게이트 + OutputSchema 검증
 - M7 Core: POI 정본 + closed-set 후보 풀 생성
 - Domain Models: Poi, ItineraryProblem/Solution, VisitSlot 등
@@ -193,7 +193,7 @@
 | # | 항목 | 현재 상태 | 영향 범위 |
 |---|---|---|---|
 | 1 | LLM 벤더·모델 (경량/상위) | 미확정 | C1 전체 |
-| 2 | 솔버 라이브러리 (OR-Tools vs Timefold vs 자체) | 미확정 | C2 optimizer |
+| 2 | 어셈블리 라이브러리 (OR-Tools vs Timefold vs 자체) | 미확정 | C2 optimizer |
 | 3 | AI 서비스↔Kotlin 백엔드 프로토콜 (REST/gRPC) | 미확정 | API Layer |
 | 4 | Places API 벤더 + 약관 | 미확정 | M7 sourcing |
 | 5 | 취향 7축 택소노미 | UX팀 협의 필요 | M13 스타일 분석 |
@@ -224,9 +224,9 @@
 
 | Tool | 난이도 | 구현 내용 |
 |---|---|---|
-| `solver.solve` | **높음** | OR-Tools VRPTW 구현 — RoutingModel 생성, Time Windows 제약, 고정 블록, 목적함수(선호 점수), 시간 제한(3초) |
-| `solver.validate` | 중간 | HC1~HC4 검증 순수 함수 구현 (영업시간·이동부등식·고정블록·시간창) |
-| `solver.repair` | 중간 | 위반 배치 최소 수리 알고리즘 (시각·순서만 조정, POI 불변) |
+| `assembly.solve` | **높음** | OR-Tools VRPTW 구현 — RoutingModel 생성, Time Windows 제약, 고정 블록, 목적함수(선호 점수), 시간 제한(3초) |
+| `assembly.validate` | 중간 | HC1~HC4 검증 순수 함수 구현 (영업시간·이동부등식·고정블록·시간창) |
+| `assembly.repair` | 중간 | 위반 배치 최소 수리 알고리즘 (시각·순서만 조정, POI 불변) |
 | `m7.get_candidates` | 중간 | 6단계 필터 파이프라인 (반경→예산→영업→품질→인기→상한5000) |
 | `m7.resolve_entity` | 중간 | fuzzy match 알고리즘 (edit-distance + 자모 유사), 신뢰도 분기 로직 |
 | `m7.source_web` | 중간~높음 | Places API 어댑터 연동 + 수집 게이트 5단 검증 (스키마·실재·중복·신뢰·정책) |
@@ -235,7 +235,7 @@
 | Orchestrator 라우팅 | 중간 | 의도 파악 + 복잡도 판단 + Fast Path/Delegate 분기 로직 |
 | 에이전트 병렬 실행 | 낮음 | asyncio.gather 기반 병렬 디스패치 |
 | 폴백 계단 | 중간 | 각 에이전트별 실패 분기 + FallbackCard 생성 |
-| Bedrock Solver (2차) | 중간 | Bedrock에 배치 제안 요청 + 응답 파싱 + HC 검증 연결 |
+| Bedrock Assembler (2차) | 중간 | Bedrock에 배치 제안 요청 + 응답 파싱 + HC 검증 연결 |
 
 ### 프롬프트 (직접 작성, LangChain은 실행만)
 
@@ -253,5 +253,5 @@
 | 구분 | 항목 수 | 비고 |
 |---|---|---|
 | LangChain이 해줌 (설정·래핑) | 10개 | LLM 호출 + 벡터 검색 + 임베딩 |
-| 직접 구현 (비즈니스 로직) | 12개 | 솔버·필터·검증·라우팅·폴백 |
+| 직접 구현 (비즈니스 로직) | 12개 | 어셈블리·필터·검증·라우팅·폴백 |
 | 프롬프트 작성 | 6개 | LangChain이 실행하지만 내용은 직접 |

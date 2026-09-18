@@ -1,0 +1,11 @@
+environment: dev
+backend:
+  replicas: 1
+ai:
+  replicas: 1
+gateway:
+  replicas: 1
+embedding:
+  replicas: 1
+podDisruptionBudget:
+  enabled: false

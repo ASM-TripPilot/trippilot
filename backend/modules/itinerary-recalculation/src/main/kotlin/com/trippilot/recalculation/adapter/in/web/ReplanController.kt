@@ -1,0 +1,248 @@
+package com.trippilot.recalculation.adapter.`in`.web
+
+import com.trippilot.core.error.AuthenticationRequired
+import com.trippilot.core.error.FieldError
+import com.trippilot.core.error.ValidationFailed
+import com.trippilot.recalculation.application.ReplanDiffService
+import com.trippilot.recalculation.application.ReplanDiffView
+import com.trippilot.recalculation.application.ReplanSessionService
+import com.trippilot.recalculation.application.StartReplan
+import com.trippilot.recalculation.domain.OriginKind
+import com.trippilot.recalculation.domain.ReplanOrigin
+import com.trippilot.recalculation.domain.ReplanScope
+import com.trippilot.recalculation.domain.ReplanSession
+import com.trippilot.recalculation.domain.ReplanStatus
+import jakarta.validation.Valid
+import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Size
+import org.springframework.http.HttpStatus
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.ResponseStatus
+import org.springframework.web.bind.annotation.RestController
+import java.security.Principal
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
+import java.util.UUID
+
+/**
+ * 재계획 세션 진입·조회·취소(`i10`·`i18`).
+ *
+ * 세션 id 가 전역 유일해도 **여행 아래로 중첩**한다 — 소유 검증이 한 곳에서 끝나고, id 만 알면
+ * 남의 여행을 건드리는 구멍이 안 생긴다. 정본 API 서피스 표기도 이에 맞춰 정정했다.
+ */
+@RestController
+@RequestMapping("/api/v1/trips/{tripId}/replan-sessions")
+class ReplanController(
+    private val service: ReplanSessionService,
+    private val diffs: ReplanDiffService,
+) {
+
+    /** 진입. 이미 열린 세션이 있으면 **그것을 취소하고** 새로 연다(INV-U4-06) — 막지 않는다. */
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    fun start(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @Valid @RequestBody request: StartReplanRequest,
+    ): ReplanSessionResponse =
+        ReplanSessionResponse.from(service.start(principal.accountId(), tripId, request.toCommand()))
+
+    @GetMapping("/{sessionId}")
+    fun get(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @PathVariable sessionId: UUID,
+    ): ReplanSessionResponse =
+        ReplanSessionResponse.from(service.get(principal.accountId(), tripId, sessionId))
+
+    /** `i18` [취소] — 세션만 닫는다. 원 일정은 그대로다(INV-U4-05). */
+    /**
+     * `i18` [확정] — 초안을 일정에 반영한다. **일정이 바뀌는 유일한 지점**이다(INV-U4-05).
+     * 초안이 없거나(아직 산출 중·대안 없음) 이미 끝난 세션이면 409.
+     */
+    @PostMapping("/{sessionId}/apply")
+    fun apply(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @PathVariable sessionId: UUID,
+    ): ReplanSessionResponse =
+        ReplanSessionResponse.from(service.apply(principal.accountId(), tripId, sessionId))
+
+    /**
+     * `i18` 전후 비교(US-PLANB-08 · BR-U4-25·29). **읽기만** 한다 — 원 일정은 확정 전까지 그대로다.
+     *
+     * 비교를 서버가 계산해 내리는 이유는 판정이 업무 규칙이기 때문이다(무엇이 `MOVED`·`FIXED` 인가,
+     * 거리를 하나라도 모를 때 총합을 어떻게 다루는가). 화면이 다시 구현하면 규칙이 두 곳에 흩어진다.
+     *
+     * 아직 초안이 없으면 404 가 아니라 `ready=false` 다 — "세션이 없다"와 "산출 중"이 같은 응답이면
+     * 화면이 로딩(`i12`)을 그릴지 오류를 그릴지 못 정한다.
+     */
+    @GetMapping("/{sessionId}/diff")
+    fun diff(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @PathVariable sessionId: UUID,
+    ): ReplanDiffResponse = ReplanDiffResponse.from(diffs.diff(principal.accountId(), tripId, sessionId))
+
+    @PostMapping("/{sessionId}/cancel")
+    fun cancel(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @PathVariable sessionId: UUID,
+    ): ReplanSessionResponse =
+        ReplanSessionResponse.from(service.cancel(principal.accountId(), tripId, sessionId))
+}
+
+/**
+ * 진입 요청(`i10`). '왜'·'어떻게'는 **다중 선택**이며 서버가 어휘를 강제하지 않는다 —
+ * 화면이 고른 값을 그대로 싣고, 해석은 재계획 경계(AI)가 한다.
+ */
+data class StartReplanRequest(
+    @field:NotNull(message = "재계획 범위는 필수입니다.") val scope: ReplanScope?,
+    /** 생략하면 서버가 사다리로 정한다(BR-U4-19) — 위치를 못 잡았다고 재계획을 막지 않는다. */
+    val originKind: OriginKind? = null,
+    val originLat: Double? = null,
+    val originLng: Double? = null,
+    @field:Size(max = 10, message = "사유는 10개까지 선택할 수 있습니다.") val reasons: List<String> = emptyList(),
+    @field:Size(max = 10, message = "요청은 10개까지 선택할 수 있습니다.") val directives: List<String> = emptyList(),
+    @field:Size(max = 500, message = "자유 입력은 500자까지 가능합니다.") val freeText: String? = null,
+    val excludedPoiIds: List<UUID> = emptyList(),
+    val triggerId: UUID? = null,
+) {
+    fun toCommand(): StartReplan {
+        // 좌표 요건은 도메인이 강제하지만, 그대로 두면 IllegalArgumentException 이 500 으로 나간다.
+        // 사용자가 고칠 수 있는 입력이므로 400 으로 돌린다.
+        if (originKind in COORD_REQUIRED && (originLat == null || originLng == null)) {
+            throw ValidationFailed(
+                listOf(FieldError("originLat", "$originKind 기준점에는 좌표(originLat·originLng)가 필요합니다.")),
+            )
+        }
+        return StartReplan(
+            scope = scope!!,
+            origin = originKind?.let { ReplanOrigin(it, originLat, originLng) },
+            reasons = reasons,
+            directives = directives,
+            freeText = freeText,
+            excludedPoiIds = excludedPoiIds,
+            triggerId = triggerId,
+        )
+    }
+
+    private companion object {
+        private val COORD_REQUIRED = setOf(OriginKind.GPS, OriginKind.MANUAL)
+    }
+}
+
+data class ReplanSessionResponse(
+    val sessionId: UUID,
+    val tripId: UUID,
+    val itineraryId: UUID,
+    val triggerId: UUID?,
+    val scope: ReplanScope,
+    val fromInstant: Instant,
+    val originKind: OriginKind,
+    val originLat: Double?,
+    val originLng: Double?,
+    /** GPS 가 아니면 추정 출발지다 — 화면이 그 사실을 밝혀야 한다(US-PLANB-10). */
+    val originEstimated: Boolean,
+    val reasons: List<String>,
+    val directives: List<String>,
+    val freeText: String?,
+    val excludedPoiIds: List<UUID>,
+    val status: ReplanStatus,
+    val createdAt: Instant,
+    val closedAt: Instant?,
+) {
+    companion object {
+        fun from(s: ReplanSession) = ReplanSessionResponse(
+            s.sessionId, s.tripId, s.itineraryId, s.triggerId, s.scope, s.fromInstant,
+            s.origin.kind, s.origin.lat, s.origin.lng, s.origin.isEstimated,
+            s.reasons, s.directives, s.freeText, s.excludedPoiIds,
+            s.status, s.createdAt, s.closedAt,
+        )
+    }
+}
+
+/** 토큰 sub → 계정 id. UUID 가 아니면 인증 실패로 다룬다(형식 오류를 500 으로 흘리지 않는다). */
+private fun Principal.accountId(): UUID =
+    runCatching { UUID.fromString(name) }.getOrElse { throw AuthenticationRequired() }
+
+/**
+ * 전후 비교 응답(`i18`).
+ *
+ * **소요시간 필드가 없다**(INV-3) — 전후 스냅숏은 시각과 순서만 다루고, 이동은 거리로만 말한다.
+ * [ReplanImpactResponse.returnTimeDeltaMinutes] 는 이동 소요가 아니라 **복귀 시각이 얼마나
+ * 밀렸는가**이고, 그것은 BR-U4-29 가 요구하는 지표다.
+ *
+ * @property ready false 면 아직 초안이 없다(`COLLECTING`·`SOLVING`·대안 없음). 나머지는 비어 있다.
+ */
+data class ReplanDiffResponse(
+    val ready: Boolean,
+    val status: String,
+    val date: LocalDate?,
+    val before: List<ReplanDiffSlotResponse>,
+    val after: List<ReplanDiffSlotResponse>,
+    val entries: List<ReplanDiffEntryResponse>,
+    val impact: ReplanImpactResponse?,
+) {
+    companion object {
+        fun from(v: ReplanDiffView) = ReplanDiffResponse(
+            ready = v.ready,
+            status = v.status.name,
+            date = v.date,
+            before = v.before.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed, it.endsNextDay) },
+            after = v.after.map { ReplanDiffSlotResponse(it.slotKey, it.startAt, it.endAt, it.isFixed, it.endsNextDay) },
+            entries = v.result?.entries.orEmpty()
+                .map { ReplanDiffEntryResponse(it.slotKey, it.change.name, it.beforeStart, it.afterStart) },
+            impact = v.result?.impact?.let {
+                ReplanImpactResponse(
+                    visitCountDelta = it.visitCountDelta,
+                    // 분으로 낸다 — 화면이 "30분 늦어져요"로 그린다. null 은 비교할 슬롯이 없다는 뜻이다.
+                    returnTimeDeltaMinutes = it.returnTimeDelta?.toMinutes(),
+                    totalDistanceDeltaM = it.totalDistanceDeltaM,
+                )
+            },
+        )
+    }
+}
+
+/**
+ * 비교 대상 슬롯 한 칸. 짝은 **경계 키**로 맞춘다(BR-U2-04).
+ *
+ * @property endsNextDay 자정 넘김(HC4). 이 값이 없으면 `22:00–00:30` 이 하루 안에서 거꾸로 가는
+ *   시각처럼 보인다 — 화면이 종료를 익일로 그리려면 필요하다.
+ */
+data class ReplanDiffSlotResponse(
+    val slotKey: String,
+    val startAt: LocalTime,
+    val endAt: LocalTime,
+    val isFixed: Boolean,
+    val endsNextDay: Boolean,
+)
+
+/**
+ * 항목별 변화. `REMOVED` 는 **조용히 사라지지 않게** 뒤에 모아 싣는다(BR-U4-25 제외·이월 명시).
+ */
+data class ReplanDiffEntryResponse(
+    val slotKey: String,
+    val change: String,
+    val beforeStart: LocalTime?,
+    val afterStart: LocalTime?,
+)
+
+/**
+ * 영향 지표 3종(BR-U4-29).
+ *
+ * @property totalDistanceDeltaM **어느 한쪽이라도 거리를 모르면 null** 이다. 0 으로 채우면
+ *   "거리가 줄었다"는 거짓 요약이 된다.
+ */
+data class ReplanImpactResponse(
+    val visitCountDelta: Int,
+    val returnTimeDeltaMinutes: Long?,
+    val totalDistanceDeltaM: Int?,
+)

@@ -1,0 +1,392 @@
+package com.trippilot.itinerarygeneration.domain
+
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
+import java.util.UUID
+
+/**
+ * 일정 생성 지능(AI 서비스) 경계 포트 — 포워드 계약(BE-1). 어댑터(BE-2)가 HTTP로 구현하고
+ * camelCase↔snake_case 매핑을 소유한다. 이 포트·DTO는 프레임워크-free(R2 순수).
+ * - generate: 굵은 경계 — 한 호출로 검증된 일정(솔버 검증 시각·순서, INV-2)
+ * - validate: 편집 재검증 — HC1-4 위반 목록(변경 차단 아님)
+ * - repair:   Plan-B 재정렬 — 시각·순서만 최소 조정(POI 불변)
+ * 정본: backend/docs/design/ai-backend-경계-계약-초안.md · ai agent-io-contracts.md(1.2).
+ */
+interface ScheduleAgentPort {
+    fun generate(input: ScheduleAgentInput): ScheduleAgentOutput
+    fun validate(solution: ScheduleAgentOutput): List<Violation>
+    fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult
+
+    /**
+     * 추천 근거 조회(TRIP-511) — 생성에서 **떼어낸** 단계다.
+     *
+     * 설명은 LLM 이 만들고 ~10초를 쓴다. 생성에 붙여 두면 사용자가 첫 화면을 그만큼 늦게 본다.
+     * 일정(솔버)과 근거(LLM)는 서로를 기다릴 이유가 없어 나눴다.
+     *
+     * **실패는 빈 맵이다.** 근거는 부가 정보라 없다고 일정을 죽이지 않는다 — 다만 조용히 지나가지
+     * 않게 어댑터가 로그로 드러낸다(INV-4).
+     *
+     * @return `"{date}#{poiId}"` → 문장. 키 규약은 생성 응답의 `explanations` 와 같다(BR-U2-04).
+     */
+    fun explanations(tripId: UUID, solution: ScheduleAgentOutput): Map<String, String>
+
+    /**
+     * 슬롯 후보 제안(DEC-U3-5) — **완전 AI·같이 고르기 공통 경계**다. 경로별로 다른 API 를 두지 않는다(BR-U3-23).
+     * 후보는 closed-set(INV-1) — 백엔드가 임의 POI 를 섞지 않는다.
+     */
+    fun proposeSlotCandidates(input: SlotCandidatesInput): SlotCandidatesOutput
+
+    /**
+     * 여행 중 재계획(U4 정본 §3.1 · DEC-U4-5) — **새 솔버 개념을 만들지 않는다**.
+     * 잠금 슬롯([ReplanInput.lockedSlotKeys])이 고정 블록으로 승격돼 HC3 보호를 받으므로,
+     * 상대는 이미 있는 재생성 경로를 그대로 쓴다.
+     *
+     * 반환이 곧 **초안**이다 — 원 일정에 반영하지 않는다(INV-U4-05). 해가 없으면 빈 일자를 돌려주고,
+     * 호출 실패는 [ScheduleAgentCallFailed] 로 올려 수동 편집 전환을 유도한다(INV-4).
+     */
+    fun replan(input: ReplanInput): ScheduleAgentOutput
+}
+
+/** 재계획 범위(DEC-U4-3) — ai `ReplanScope` 어휘를 그대로 쓴다. */
+enum class ReplanScope { PARTIAL_SLOTS, FULL_DAY }
+
+/**
+ * 재계획 입력(정본 §3.1).
+ *
+ * [lockedSlotKeys] 가 이 타입의 핵심이다 — 완료된 방문지·시각 고정 슬롯·숙소 앵커는 **다시 짜도 그대로**여야
+ * 한다(INV-U4-04). 잠금을 빠뜨리면 이미 다녀온 곳이 일정에서 사라지거나 시각이 밀린다.
+ */
+@Suppress("LongParameterList")
+data class ReplanInput(
+    val tripId: UUID,
+    val itineraryId: UUID,
+    val scope: ReplanScope,
+    /**
+     * 여행 목적지. **비우면 안 된다** — 상대 계약이 최소 1건을 요구해 빈 목록은 422 다(실측, 실 AI 왕복).
+     * 후보 지역 판단의 입력이기도 하다.
+     */
+    val destinations: List<String>,
+    /** '지금 이후'의 기준점. PARTIAL_SLOTS 는 이 시각 이전 슬롯을 전부 잠근다. */
+    val fromInstant: Instant,
+    val targetDate: LocalDate,
+    /** null 허용 — 기준점 사다리(BR-U4-19)로 정한 좌표가 없을 수도 있다. */
+    val originLat: Double?,
+    val originLng: Double?,
+    /**
+     * 잠긴 슬롯 — **시각을 포함한다**. 상대는 시각 없는 고정 블록을 거부하므로(계약 M1, 실측 422)
+     * 키 문자열만으로는 보낼 수 없다. 정본이 `lockedSlotKeys: List<String>` 로 적은 자리지만,
+     * 그 모양은 실 계약과 만나면 성립하지 않는다.
+     */
+    val lockedBlocks: List<FixedBlock>,
+    /** `i10` '왜' — 선호 **가중치** 입력이다. 후보 풀은 closed-set 그대로(INV-1). */
+    val reasons: List<String>,
+    /** `i10` '어떻게' — 같은 취지. */
+    val directives: List<String>,
+    val freeText: String?,
+    val excludedPoiIds: List<UUID>,
+    /**
+     * 아래 다섯은 전용 재계획 경계(`/ai/v1/itinerary/replan`, 연동 설계 §2)의 입력이다.
+     * 상대 계약이 출하되기 전까지 http 어댑터는 generate 재사용이라 **아직 와이어에 싣지 않는다** —
+     * 조립을 먼저 완성해 두는 것은 NEUTRAL_PREFERENCES 로 취향을 덮던 상태를 끝내기 위한 준비다(B-1).
+     * 기본값을 두지 않는다 — 조립 지점이 값을 말하지 않고 조용히 빠지는 것을 컴파일이 막는다.
+     */
+    val companionType: String?,
+    /** 예산 등급 — 경계 계약 어휘는 `preference_set.budget_tier` 다(생성 경로와 동일, trip.budget_total 아님). */
+    val budgetLevel: String?,
+    /** 실제 취향(계정 스냅숏 + 개인화) — 중립으로 덮지 않는다(§1 문제 ②의 해소 지점). */
+    val preferenceProfile: PreferenceProfile,
+    /** 원 일정 슬롯 — KB-1 컨텍스트이자 후보 풀 합류 대상(§4 판단). */
+    val currentSlots: List<ReplanCurrentSlot>,
+    /** 담은 장소 — LLM 컨텍스트("저장한 장소 — …")용. 이름 포함, 시각·메모 없음(목적 최소화). */
+    val savedPlaces: List<SavedPlaceRef>,
+    val requestMeta: RequestMeta,
+)
+
+/** 원 일정 슬롯의 경계 사영(§4 `ReplanSlotSchema`) — 산출물 타입([VisitSlotDisplay])과 방향이 반대라 섞지 않는다. */
+data class ReplanCurrentSlot(
+    val poiId: UUID,
+    val startAt: LocalTime,
+    val endAt: LocalTime,
+    val isFixed: Boolean,
+    val endsNextDay: Boolean,
+    val placementReason: String?,
+)
+
+/** 담은 장소 참조(§2 `saved_places`) — place-data `SavedPlaceItem` 의 도메인 사영. */
+data class SavedPlaceRef(val poiId: UUID, val name: String)
+
+/** 생성 방식(d11 추천 강도 분기). */
+/**
+ * 사용자가 고른 생성 방식(US-SCHED-09).
+ *
+ * ⚠ [MANUAL] 은 **AI 경계에 보내지 않는다** — 직접 만들기는 AI 를 아예 부르지 않는 흐름이고,
+ * 상대 enum 에도 없어서 보내는 순간 422 다. 경계로 나가는 값은 [FULLY_AI]·[CO_PLAN] 뿐이다.
+ */
+enum class GenerationMode { FULLY_AI, CO_PLAN, MANUAL }
+
+/**
+ * ScheduleAgent 호출 실패 — **유효한 200 을 받지 못한 경우만**(경계 계약 PR #104).
+ * AI 가 200 을 반환하면 `isFallback=true` 여도 이 예외를 던지지 않는다(그건 AI 가 이미 폴백을 마친 결과물).
+ * 이 예외가 곧 백엔드 결정론 폴백(INV-4) 발동 신호 — 응답 스키마 불일치도 침묵시키지 않고 여기로 올린다.
+ * [retryable]: 네트워크 단절 등 재시도 가능 여부(현 정책은 재시도 없이 즉시 폴백 — 진단용 정보).
+ */
+class ScheduleAgentCallFailed(
+    val errorCode: String?,
+    val retryable: Boolean,
+    message: String,
+    cause: Throwable? = null,
+) : RuntimeException(message, cause)
+
+// ───────── 입력: ScheduleAgentInput ─────────
+
+data class ScheduleAgentInput(
+    val tripId: UUID,
+    val generationMode: GenerationMode,
+    val tripContext: TripContext,
+    val anchors: List<DayAnchor>,          // day별 공간 앵커
+    val timeWindows: List<TimeWindow>,     // 날짜별 이용 시각(기본 09–21시)
+    val fixedBlocks: List<FixedBlock>,     // 시각 고정 필수방문지·숙소(HC3)
+    val preferenceProfile: PreferenceProfile,  // preference_snapshot 7축
+    val recommendationStrength: String?,
+    val requestMeta: RequestMeta,          // 지연 예산 전파(IO-1)
+    /**
+     * 이미 다른 호출에서 배정된 POI — day1 2단계 생성의 중복 방지(TRIP-293).
+     * 1차 `timeWindows=[day1]` 로 생성 → 배정된 poiId 를 2차(나머지 일자) 제외 목록으로 넘긴다.
+     * AI 측 대응: `ItineraryProblem.excluded_poi_ids`(후보 풀·프롬프트·게이트에 동일 적용).
+     */
+    val excludedPoiIds: List<UUID> = emptyList(),
+    /**
+     * 설명 생략 요청(TRIP-479) — false 면 AI 가 설명 LLM 단계를 건너뛰고 즉시 반환하며,
+     * 설명은 `POST /ai/v1/itinerary/explanations` 로 별도 조회한다. true(기본) = 기존 동작.
+     * 맨 뒤 배치는 기본값 파라미터 규칙(anti-patterns) — 기존 호출 전부 무변경.
+     */
+    val includeExplanations: Boolean = true,
+)
+
+data class TripContext(
+    val destinations: List<String>,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
+    val companionType: String?,
+    val budgetLevel: String?,
+)
+
+/** day별 공간 앵커(등록 숙소 해석 결과 = trip_base_day). */
+data class DayAnchor(val date: LocalDate, val lat: Double, val lng: Double)
+
+data class TimeWindow(val date: LocalDate, val start: LocalTime, val end: LocalTime)
+
+/** 고정 블록(HC3). ANYTIME이면 date/start/dwellMin 은 null. */
+data class FixedBlock(val poiId: UUID, val date: LocalDate?, val start: LocalTime?, val dwellMin: Int?)
+
+/** 취향 7축(preference_snapshot). AI가 선호 점수·소프트 가중치에 사용. */
+data class PreferenceProfile(
+    val styles: List<String>,
+    val activities: List<String>,
+    val foodTastes: List<String>,
+    val transportModes: List<String>,
+    val pace: String?,
+    val companionTypes: List<String>,
+    val petFriendly: Boolean,
+    val budgetTier: String?,
+)
+
+/** 지연 예산 전파(IO-1) — day1 5s / 전체 20s. */
+/**
+ * IO-1 지연 예산. [deadlineMs] 가 **null 이면 시한을 걸지 않는다**(TRIP-473/474 — AI 계약상
+ * 미지정 = 무제한). 값을 실으면 종전과 동일하게 동작한다.
+ */
+data class RequestMeta(val requestId: String, val requestedAt: Instant, val deadlineMs: Long?)
+
+// ───────── 출력: ScheduleAgentOutput ─────────
+
+data class ScheduleAgentOutput(
+    val days: List<DaySchedule>,
+    val day1ReadyAt: Instant?,             // day1 우선 반환 시각(5초 정책)
+    /**
+     * 슬롯별 추천 이유. 키 규약 = `slotKey = "{date}#{poiId}"`(BR-U2-04).
+     * (Violation 은 현재 dayIndex·slotIndex 로 지시한다 — 같은 규약을 쓰지 않는다.)
+     * 문구는 시각·소요시간을 언급하지 않는다(BR-U2-09 — INV-2·INV-3 우회 차단). 집행은 AI 프롬프트·후처리 책임.
+     */
+    val explanations: Map<String, String>,
+    val solveMode: SolveMode,              // FULL_AI | DETERMINISTIC | MINIMAL (도메인 재사용)
+    val isFallback: Boolean,               // 침묵 실패 금지(INV-4, IO-2)
+    val freshness: FreshnessMeta,
+    /** 후보 충분성 보고(BR-U2-05). **판정은 AI 소유** — 백엔드는 그대로 전달하고 재계산하지 않는다. */
+    val candidatesSummary: CandidatesSummary? = null,
+    /**
+     * 넣지 못한 필수 방문지 보고(계약 M2 · AI TRIP-350).
+     *
+     * 왜 필요한가: 기간 밖 must_visit 을 고정 블록으로 실어 보내면 AI 의 HC3 가 그 날짜를 스킵해
+     * **침묵 드롭**됐다 — 사용자는 "내가 넣은 곳이 왜 없지"를 알 방법이 없었다.
+     * 이 목록이 "왜 안 들어갔는지"를 돌려준다. **기본은 빈 목록**(= 전부 배치됨)이며,
+     * 필드가 없는 옛 AI 응답과도 같은 뜻이 되게 한다.
+     */
+    val unplacedMustVisits: List<UnplacedMustVisit> = emptyList(),
+)
+
+/**
+ * 넣지 못한 필수 방문지 1건.
+ *
+ * [reasonCode] 는 **닫힌 집합**이다 — 자유 문자열이면 백엔드가 분기할 수 없고 화면 문구도 정할 수 없다.
+ * 사용자 문구는 백엔드가 만든다(AI 는 코드만 준다).
+ */
+data class UnplacedMustVisit(val poiId: UUID, val reasonCode: UnplacedReason)
+
+/** AI 판정 사유(계약 확정 3값). 모르는 값이 오면 어댑터가 [UNKNOWN] 으로 접는다 — 새 값 때문에 생성 전체가 죽지 않게. */
+enum class UnplacedReason {
+    /** 고정 날짜가 여행 기간 밖. */
+    OUT_OF_RANGE,
+
+    /** 기간 안인데 다른 고정 블록과 시간이 겹친다(겹침이 증명된 경우만). */
+    WINDOW_CONFLICT,
+
+    /** 그 외 미배치 — 기간 안·겹침 없음인데 해에 없다. */
+    NO_FEASIBLE_SLOT,
+
+    /** 계약에 없는 값. 보고 자체를 잃지 않으려고 두는 자리다(사유는 "확인 불가"로 표시). */
+    UNKNOWN,
+}
+
+data class DaySchedule(val date: LocalDate, val slots: List<VisitSlotDisplay>)
+
+/**
+ * 후보 충분성(BR-U2-05). [level] LOW 면 클라이언트가 "후보가 적어요" 안내를 띄운다.
+ * **판정은 AI 소유** — 백엔드는 level 을 그대로 전달하고 재계산하지 않는다.
+ */
+data class CandidatesSummary(
+    val level: String,
+    /** AI 가 주지 않으면 null — 0 으로 채우면 "후보 0건"이라는 판정을 백엔드가 지어내는 셈이다. */
+    val poolSize: Int?,
+    val shortfallCategories: List<String> = emptyList(),
+)
+
+/**
+ * 표시용 방문 슬롯 — 솔버 검증 시각·순서만(INV-2). **소요시간(duration) 필드 없음(INV-3)** — 거리만([distanceRange]).
+ * [endsNextDay]: 자정 넘겨 종료(HC4, 시작일 귀속)의 잠정 표현 — AI와 시각 포맷 확정 대상.
+ */
+data class VisitSlotDisplay(
+    val poiId: UUID,
+    val startAt: LocalTime,
+    val endAt: LocalTime,
+    val endsNextDay: Boolean,
+    val distanceRange: String?,            // "약 1.2km · 도보 추정" 등 표시 문자열
+    val isFixed: Boolean,
+    /**
+     * 이 슬롯의 **차선책**(TRIP-873 · AI TRIP-871). 슬롯당 ≤2건, 기본 빈 목록.
+     *
+     * **제안일 뿐이다** — 시각도 순서도 없다(INV-2). 교체를 확정하는 길은 기존 편집 경로
+     * (edit → validate) 하나뿐이고, 이 값은 화면이 "다른 선택지"를 **추가 왕복 없이** 그리게 할 뿐이다.
+     */
+    val alternatives: List<SlotAlternative> = emptyList(),
+)
+
+/**
+ * 차선책 1건 — 슬롯 POI 를 대신할 수 있는 장소.
+ *
+ * [distanceRange] 는 **슬롯 POI ↔ 이 후보** 사이 거리 문자열이다(소요시간 없음, INV-3). 좌표를
+ * 모르면 null 이고, 그때 화면은 거리를 비워 둔다 — 지어내지 않는다.
+ *
+ * [poiId] 가 `UUID` 인 것은 **여기 오기 전에 정본 대조를 통과했다는 뜻**이다. 와이어에서는 문자열로
+ * 받는다(형식이 틀린 한 건 때문에 응답 전체를 잃지 않으려고).
+ */
+data class SlotAlternative(val poiId: UUID, val rationale: String, val distanceRange: String?)
+
+/** 사용 데이터 신선도 집계(IO-6). */
+data class FreshnessMeta(val generatedAt: Instant, val degraded: Boolean)
+
+// ───────── 검증 / 수리 ─────────
+
+/** 하드 제약 위반(HC1-4). */
+/**
+ * 하드 제약 위반 1건(HC1-4).
+ *
+ * [dayIndex]·[slotIndex]는 **nullable** — AI 가 보낸 요청을 스캔해 위치를 계산하는데, 못 찾으면 비워 보낸다.
+ * 위치를 모른다고 위반 자체를 버리면 "문제 없음"이라는 거짓 음성이 된다(INV-4) — 슬롯에 못 붙일 뿐 보고는 한다.
+ */
+data class Violation(
+    val type: String,
+    val dayIndex: Int?,
+    val slotIndex: Int?,
+    val detail: String?,
+    /**
+     * 상대가 붙인 슬롯 지시자. **인덱스보다 이쪽이 1차 키**다 — 인덱스는 상대가 요청 본문을 스캔해 계산한
+     * 파생값이라, 검증한 일정과 수리를 요청하는 일정이 조금이라도 다르면 엉뚱한 슬롯을 가리킨다.
+     */
+    val slotRef: String? = null,
+)
+
+/** 최소 조정 수리 결과 — 시각·순서만(POI 불변). */
+data class RepairResult(val repaired: ScheduleAgentOutput, val changes: List<String>)
+
+/**
+ * 슬롯 후보 요청. [excludePoiIds] 는 **백엔드가 현재 일정에서 유도**한다 — 클라이언트가 보내는 값을 믿으면
+ * 이미 일정에 있는 장소가 다시 추천된다(BR-U3-24).
+ */
+data class SlotCandidatesInput(
+    val tripId: UUID,
+    /** BR-U2-04 규약 `"{date}#{poiId}"`. */
+    val slotKey: String,
+    /** 직전·직후 슬롯 — 동선 트레이드오프 계산 입력. */
+    val neighborSlotKeys: List<String>,
+    /** 후보 탐색 중심(교체 대상 슬롯의 장소 좌표). */
+    val centerLat: Double,
+    val centerLng: Double,
+    /** null = AI 기본 반경. h15 "반경 넓힘"이 이 값을 올린다. */
+    val radiusM: Int?,
+    /** h13 컨셉(테마) — null 허용. */
+    val concept: String?,
+    /**
+     * 교체 사유 — **FE 카탈로그 코드 그대로**(`WEATHER`·`TEMP_CLOSED` …). i14 재계획 흐름에서
+     * 사용자가 고른 값이고, h12/h18 일정 편집은 사유가 없어 null 이다.
+     *
+     * 번역은 어댑터가 한다(`AiReasonVocabulary`) — 도메인이 상대 어휘를 알면 경계가 새어 들어온다.
+     */
+    val reason: String?,
+    val excludePoiIds: List<UUID>,
+    /**
+     * 교체 대상 슬롯이 **원래 왜 배치됐는가**(`VisitSlot.placementReason`) — AI 가 "원래 취지를 잇는
+     * 대안"을 고르게 하는 컨텍스트다(연동 설계 §2 `affected_reasons`). 원본 일정에 없으면 null.
+     * 기본값을 두지 않는다 — 조립 지점이 값을 말하지 않고 조용히 빠지는 것을 컴파일이 막는다.
+     */
+    val placementReason: String?,
+    val requestMeta: RequestMeta,
+)
+
+/**
+ * [candidates] 빈 목록 = 후보 0건(h15 반경 확대 유도). [radiusMUsed] 는 **실제 사용 반경**(AI 가 자동 확대했을 수 있다).
+ *
+ * [emptyReason] 은 0건일 때만 채워진다 — 아래 [SlotCandidatesEmptyReason] 참고.
+ * **기본값을 두지 않는다.** 두면 빈 목록을 내는 새 구현이 그것을 물려받아 "0건인데 이유 없음"이
+ * 조용히 나가고, 이 필드를 넣은 이유가 사라진다.
+ */
+data class SlotCandidatesOutput(
+    val candidates: List<SlotCandidate>,
+    val radiusMUsed: Int,
+    val freshness: FreshnessMeta,
+    val emptyReason: SlotCandidatesEmptyReason?,
+)
+
+/**
+ * 후보가 0건인 **이유**.
+ *
+ * ## 왜 구분하나
+ *
+ * 0건은 두 가지 전혀 다른 사정을 한 화면으로 만든다 — **주변에 아무것도 없다**와 **주변에 있지만
+ * 이미 그 일정에 다 넣었다**. 사용자가 할 일이 정반대다: 앞은 반경을 넓히거나 컨셉을 바꿔야 하고,
+ * 뒤는 넓혀도 소용없고 다른 슬롯을 빼야 한다.
+ *
+ * 구분하지 않으면 화면이 "근처에서 바꿀 만한 후보를 찾지 못했어요" 하나로 뭉뚱그리고, 사용자는
+ * 반경을 계속 넓히며 헛돈다(TRIP-481 조사에서 이 형태가 의심됐다).
+ */
+enum class SlotCandidatesEmptyReason {
+    /** 넓힌 반경 안에 후보 자체가 없다 — 반경 확대·컨셉 변경이 통한다(BR-U3-25). */
+    NO_NEARBY,
+
+    /** 주변에 있으나 **전부 이미 이 일정에 들어 있다**(BR-U3-24) — 넓혀도 같은 결과다. */
+    ALL_IN_ITINERARY,
+}
+
+/** [distanceRange] 거리만(INV-3). [rationale] 은 closed-set 근거 — 시각·소요시간 언급 금지(BR-U2-09). */
+data class SlotCandidate(val poiId: UUID, val distanceRange: String, val rationale: String)

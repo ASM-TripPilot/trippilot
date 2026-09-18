@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: trippilot-postgres
+  namespace: trippilot
+  labels:
+    app.kubernetes.io/name: trippilot-postgres
+spec:
+  # ClusterIP — DB 는 클러스터 밖으로 열지 않는다.
+  # 호스트에서 psql 로 붙어야 할 때만 임시로 port-forward 한다(`just db-shell` 참고).
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: trippilot-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

@@ -1,0 +1,16 @@
+# Bazel 이 스캔하지 않을 디렉토리.
+# 여기 없으면 Gradle·node·Expo 산출물 수만 개를 매 빌드마다 훑어
+# 아무것도 안 바뀐 빌드가 수십 초 걸린다.
+backend/build
+backend/app/build
+backend/common/core/build
+backend/common/security/build
+backend/common/test-support/build
+backend/.gradle
+frontend/node_modules
+frontend/.expo
+frontend/android
+frontend/ios
+frontend/dist
+ai/.venv
+aidlc

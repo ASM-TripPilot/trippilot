@@ -1,0 +1,1779 @@
+# 백엔드 남은 작업 그래프 — 노드·간선 정본
+#
+# ## 왜 파일로 두나
+#
+# 착수 순서를 표로 적어 두면 **다시 계산이 안 되고, 검증했는지가 기록되지 않고, 파일 충돌을
+# 사람 기억에 의존한다.** 티켓 하나가 늘 때마다 표 전체를 손으로 다시 짜야 한다.
+# 여기 적어 두면 `backend/scripts/work_graph.py` 가 층·충돌·mermaid 를 계산해 낸다.
+#
+# ## 노드는 티켓이 아니라 **머지 가능한 최소 단위(PR 하나)** 다
+#
+# 이 리포에서 실측으로 둘 다 나왔다 — 코드는 다 됐는데 열려 있는 티켓, 티켓 없이 코드 주석에만
+# 있는 구멍. 그래서 `ticket` 은 비어 있을 수 있고, 그것이 정상이다(지금 넷이 그렇다).
+#
+# ## 간선은 **티켓 원문으로 확인한 것만** 싣는다
+#
+# 첫 판에서 "둘 다 계정 설정이니 저장소를 다투겠지" 같은 추측으로 간선을 그었다가, 티켓 원문에
+# `선행조건: 없음` 이 박혀 있는 것을 보고 지웠다. **모듈이 가깝다는 것은 선행의 근거가 아니다.**
+# 남은 간선이 둘뿐인 것이 이 그래프의 결론이다 — 대부분 독립이고, 진짜 제약은 공유 자원이다.
+#
+# ## 자원 배타는 간선이 아니다
+#
+# 같은 파일·같은 Flyway 번호를 만지는 관계에는 순서가 없다 — 먼저 손댄 쪽이 이긴다. 그걸 간선으로
+# 적으면 없는 순서가 생겨 층이 왜곡된다(실제로 TRIP-361 이 근거 없이 층 1로 밀렸다).
+# `touches` 에 적어 두면 스크립트가 층별로 파생해 준다.
+#
+# ## touches 는 **예상**이다
+#
+# 착수 전에는 실제 diff 를 모른다. 자원 배타를 기계가 잡게 하려고 적어 두는 값이고, 착수해서
+# 실제 편집 범위가 달라지면 그때 고친다. 티켓이 「관련 파일」을 적어 둔 것은 그대로 옮겼다.
+#
+# ## verified = 이 파일의 값어치
+#
+# 간선을 주장만 하고 확인하지 않은 상태가 눈에 보여야 한다. 확인 방법은 역검증과 같다 —
+# **간선을 끊고 후행을 빌드해 실제로 깨지는가.** 안 깨지면 그 간선은 상상이었으니 지운다.
+#
+# ## 착수해 보면 노드가 쪼개진다 — 그때 원 노드를 닫고 잔여를 새 노드로 잇는다
+#
+# 한 티켓 안에 **지금 할 수 있는 것과 남을 기다리는 것**이 섞여 있는 일이 잦다. 실측으로 셋이 그랬다 —
+# 836(재계획 재적재는 우리 버그, 문구 채움은 AI 계약 대기) · 834(배선은 코드, 실왕복은 사람·기기) ·
+# B-4(구독은 지금, 컬럼은 채우는 쪽이 생긴 뒤). 섞인 채로 두면 **티켓이 영원히 안 닫히고**, 그래프는
+# "아직 아무것도 안 했다"고 말한다. 쪼개서 된 쪽을 닫고 잔여를 새 노드(`REMINDER-COPY-AI`·
+# `PUSH-LIVE-CHECK`)로 잇는다 — 닫은 노드의 note 에 **누가 잇는지**를 반드시 적는다.
+#
+# ## 스택 PR 은 CI 가 자동으로 안 붙는다 (운영 주의)
+#
+# 워크플로 트리거가 `pull_request: branches: [develop]` 이라 **base 가 develop 이 아닌 PR** 은
+# 체크가 하나도 안 달린다. 위 바퀴들처럼 PR 을 쌓으면 대부분이 여기 해당한다. 수동으로 태운다:
+# `gh workflow run backend-ci.yml --ref <branch>`. 이걸 모르면 "체크 없음"을 통과로 읽는다.
+#
+# 갱신: 2026-09-18 · EKS 배포 트랙 합류(파일 말미 §EKS 배포 트랙) — 멘토 PR #579·#597 머지로
+# EKS-INFRA 는 done(코드 기준 — 실 AWS 는 미검증), 실기동 EKS-DEV-LIVE 로 수렴하는 외부선행 셋
+# (RELEASE-MAIN=PR#598 · AWS-CONSOLE-BOOTSTRAP · DOMAIN-ACM)이 지금의 크리티컬 패스다.
+# 준하 몫(TRIP-892·893)과 후속(TRIP-894 관측성·895 Redis·896 smoke 신호분리·PR#599 CI캐시)은
+# 티켓·PR 로 발행돼 있다.
+#
+# 이전 갱신: 2026-09-15 · a~g 바퀴 실행분 반영 — 완료 7건(843·844·846·848·857·859계약·재계획어휘)에
+# 더해, 쪼개서 닫은 것 셋(845·834·836)까지 29건이 done 이다. 남은 우리 몫 12건 중 **넷은 우리가
+# 못 여는 문(849 날씨키 403 · 847 법무·신고 · 850 실물 산출물 대기 · PUSH-LIVE-CHECK 실기기)** 이고,
+# 지금 코드로 착수 가능한 것은 856(역방향 토큰)·858(Apple JWKS)·REPLAN-BOUNDARY 쪽이다.
+#
+# 이전 갱신: 2026-09-14 · 실사용 준비 티켓 일괄 발행(TRIP-834·843~850·854~860) 반영. 티켓 없던 노드
+# 넷이 티켓을 얻었고(APPLE-JWKS→858 · BACKEND-AI-AUTH→856 · TRIP-361-CONTRACT→859 ·
+# PUSH-ANDROID-CHANNEL→860), AI-ALTERNATIVES 의 질문은 전용 재계획 경계 설계 확정으로 해소됐다.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 우리 몫
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "TRIP-249"
+ticket = "TRIP-249"
+title = "소셜 로그인 에러 계약 정합 5건 (400 미선언·연령 403/422·미매핑 500·Apple 미지원·TokenPair 3필드)"
+status = "done"
+migration = false
+touches = [
+  "backend/app/src/main/kotlin/com/trippilot/app/web/error/GlobalExceptionHandler.kt",
+  "backend/common/core/src/main/kotlin/com/trippilot/core/error/DomainException.kt",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/in/web",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/out/external",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+티켓이 다섯을 한 칸으로 묶은 이유가 곧 자원 배타다 — "파일이 겹쳐 나눠 머지하면 서로의 diff 를 밟는다".
+착수 전 결정 3건이 티켓에 적혀 있다(연령 422 vs 403 · TokenPair 채움 vs 축소 · Apple 구분 형태).
+**Apple 로그인을 살리지는 않는다** — "안 되는 상태를 안 된다고 정확히 말하게" 까지다.
+"""
+
+[[nodes]]
+id = "TRIP-481"
+ticket = "TRIP-481"
+title = "슬롯 교체 후보 반경 조회가 항상 0건 — h12·h14·h18 무력화"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/LocalSlotCandidateSource.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/SlotCandidateService.kt",
+]
+note = """
+**AI 대기가 아니다.** proposeSlotCandidates 는 AI 를 부르지 않고 LocalSlotCandidateSource 로
+위임하므로 AI 로그에 요청이 안 찍히고 503 도 안 난다. TRIP-463(AI 슬롯 후보 경계 개통)과 **독립**이다.
+
+**티켓의 진단은 틀렸다(#416 실측).** "원인은 로컬 반경 조회 구간"이라 적혀 있었으나 실제 흐름으로
+재현하니 **후보가 나온다** — 제주 하루 여행도, 사흘 여행의 모든 슬롯도. 코드 사슬(SlotCandidateService
+· LocalSlotCandidateSource 3km→12km 자동확대 · PlaceDataCandidatePool · BoundingBox.around)에서
+결함을 찾지 못했다. 회귀 가드만 남기고 닫는다.
+
+신고가 본 화면은 **0건의 두 사정이 한 문구로 뭉개진 것**이었을 가능성이 크다 — #418 에서
+NO_NEARBY(넓히면 통한다)와 ALL_IN_ITINERARY(넓혀도 같다)를 갈랐다.
+"""
+
+[[nodes]]
+id = "TRIP-614"
+ticket = "TRIP-614"
+title = "제휴 고지 '다시 보지 않기' 계정 단위 저장 — account_setting (O-U6-5 · BR-U6-33)"
+status = "done"
+migration = true
+touches = [
+  "backend/app/src/main/resources/db/migration",
+  "backend/modules/affiliate-link",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+account_setting 테이블은 **아직 없다**(실측: 마이그레이션·코드 어디에도 없음). 티켓의 O-U6-5 는
+/me/preferences 확장 vs 신설이 미결이었고 신설을 권장한다 — PreferenceInput 은 여행 취향 축으로
+좁게 정의돼 있어 앱 설정을 섞으면 U3 취향 동결 스냅숏(preferenceSnapshot)에 딸려 들어간다.
+
+팀 결정(2026-08-31): **key-value 한 테이블**. 표면마다 컬럼을 늘리면 설정이 하나 생길 때마다
+스키마 변경이 필요해진다. AC 에 "계정 파기 시 함께 지워진다"가 있으니 파기 경로에 포함시킨다.
+"""
+
+[[nodes]]
+id = "TRIP-615"
+ticket = "TRIP-615"
+title = "Notification.actionType 확장 — PLANB_REPLAN·REFLECTION_DAILY·TRIP_SUMMARY·STAY_REGISTER + payload oneOf"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/notification",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+마이그레이션 **불필요** — V2.31 의 `action_type` 이 `varchar(24)` 이고 CHECK 제약이 없다.
+새 값 최장이 REFLECTION_DAILY(16자)라 그대로 들어간다. 티켓만 보면 스키마 작업으로 오해한다.
+"""
+
+[[nodes]]
+id = "TRIP-616"
+ticket = "TRIP-616"
+title = "Plan-B 민감도·전역 빈도 상한 저장·적용 — /me/planb-sensitivity (O-U6-2 · G-U6-4 · BR-U4-08)"
+status = "done"
+migration = true
+touches = [
+  "backend/app/src/main/resources/db/migration",
+  "backend/modules/planb-detection",
+  "backend/modules/profile",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+티켓 명시: **선행조건 없음**. TRIP-614 와 묶으려 했다가 지웠다 — 저장 표면이 다르고(자체 경로 +
+자체 마이그레이션) "같은 계정 설정"이라는 것은 선행의 근거가 아니었다.
+감지 PBT 에 sensitivity 축이 붙는다: LOW 발화 집합 ⊆ NORMAL ⊆ HIGH (단조) — CI 차단 게이트.
+클라는 임계값을 모른다(BR-U4-03) — 응답에 임계값 필드를 싣지 않는다.
+"""
+
+[[nodes]]
+id = "TRIP-617"
+ticket = "TRIP-617"
+title = "여행 목록 집계 필드 — Trip.baseCount·itineraryDayCount · SavedStay.linkedTripIds (BR-U6-20·22)"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/trip",
+  "backend/modules/saved-accommodation",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+티켓 명시: 선행조건 없음. 집계는 **읽기 전용 파생**이라 컬럼을 늘리지 않는다.
+linkedTripIds 는 base_assignment 역참조라 saved-accommodation 도 함께 움직인다.
+여행(C4)이 거점 수·일정 일수를 알려면 남의 모듈 `..api..` 를 통해야 한다(R1) — 필요한 퍼사드가
+없으면 여는 작업이 이 노드에 포함된다. 지금 FE 는 여행 5개에 11요청(N+1)을 쏘고 있다.
+"""
+
+[[nodes]]
+id = "TRIP-361"
+ticket = "TRIP-361"
+title = "trip_destination region_code 전환 (계약 변경)"
+status = "done"
+migration = true
+touches = [
+  "backend/app/src/main/resources/db/migration",
+  "backend/modules/trip",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+티켓의 선행조건은 '1번 칸(행정구역 카탈로그)'인데 **이미 있다** — V2.24__region_catalog.sql ·
+R__seed_region_catalog.sql 실측. 그래서 선행 간선이 없다.
+
+**착수 시 실측 3건(2026-09-01):**
+
+1. **티켓이 '완료'인데 백엔드는 미구현이었다.** trip_destination 은 V2.3 이후 한 번도 안 건드려졌고
+   region varchar(60) 자유 문자열 그대로였다. 형제(357·358·359·360·363·364)가 전부 실제 완료라
+   에픽 자식을 일괄로 닫으며 함께 닫힌 것으로 보인다.
+2. **티켓의 주된 근거가 이미 다른 방법으로 해소돼 있었다.** "부산 하나를 지우려다 부산 전부를
+   잃는다"는 TRIP-364 가 `seq` 로 고쳤다(tripWizardStore.ts 주석). 코드 전환이 아니었다.
+3. **경계에서 코드를 버리고 있었다.** GET /regions 는 이미 regionCode 를 주는데 POST /trips 는
+   이름만 받는다. 그래서 RegionLookupService.centerOf 가 findExact(name).firstNotNullOfOrNull 로
+   동명이지역 중 하나를 임의로 집는다 — 부산 중구를 고르면 서울 중구 좌표가 앵커가 될 수 있다.
+
+**결정(2026-09-01): 내부 정규화만. 계약은 안 바꾼다.** openapi·FE codegen·승인된 테스트가 안 움직인다.
+카탈로그 조인과 표기 정규화 이득은 지금 가져가고, 계약 전환은 FE 가 준비될 때 별건으로.
+
+**정본 이탈**: 티켓 AC 는 "region_code 가 NULL 인 행이 남지 않는다"인데 NULL 을 허용했다.
+이름만 받는 동안에는 동명이지역(selectable 237개 중 7개 이름·26개 지역 — 중구5·동구5·서구4·
+남구4·북구4·강서구2·고성군2)을 원리적으로 해소할 수 없다. 사유는 마이그레이션 주석·도메인 KDoc·
+PR 본문 세 곳에 남겼다.
+
+**남은 구멍**: 위 3번(centerOf 임의 선택)은 이 칸이 못 고친다 — 계약이 코드를 받아야 닫힌다.
+"""
+
+[[nodes]]
+id = "PERSONA-API"
+ticket = ""
+title = "AI 가 재조회할 페르소나 표면 — /internal/users/{accountId}/persona (TRIP-434 의 선행)"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/profile/src/main/kotlin/com/trippilot/profile/adapter/in/web/PersonaInternalController.kt",
+]
+note = """
+**티켓이 없다.** TRIP-434(AI) 가 "선행: 백엔드에 페르소나 API가 존재해야 함"이라고 적어 두었으므로
+막고 있는 쪽은 우리다. 처음엔 방향을 반대로 그렸다가 원문을 보고 뒤집었다.
+
+**이 노트의 앞선 판은 두 군데가 틀렸다(실측으로 교정).**
+
+1. "재료는 /me/personalization" — 아니다. 그것은 **사용자에게 "무엇을 넘겼는가"를 알리는 공시
+   표면**(BR-U5-45, reflection 소관)이다. 실제 재료는 profile 의 preference_set 이고
+   PreferenceFacade.findPreferences(accountId) 가 이미 api-safe 스냅숏으로 노출하고 있었다.
+2. "실체는 인증 경계 결정" — 아니다. 그 결정은 TRIP-393 에서 **이미 끝났다**. /internal 하위는
+   ServiceAuthenticationToken.ROLE 을 요구하고 사용자 JWT 로는 못 통과하며 /internal/pois 가
+   그 형태로 돌고 있었다. 실제 결정은 **응답 어휘**였다.
+
+봉투로 대체할 수 없다 — AI 의 PersonaProvider 는 BR-U4-07("프롬프트 값은 요청자 권한 하에
+재조회한 것만")에 따라 ttl_sec=0 으로 매 요청 다시 읽는다. 호출자가 준 값은 규칙이 배제한다.
+
+결정(2026-09-01): **계정 단위 + 우리 어휘 그대로.**
+어휘를 우리가 AI enum 으로 접으면(부모님→?, 럭셔리→HIGH, 동행 다중→단일) 그 판단을 백엔드가
+떠안고 AI enum 이 바뀔 때마다 따라 고쳐야 한다. generate 봉투의 preference_profile 이 이미
+우리 어휘를 그대로 싣는 관례라 필드 이름도 그 스키마에 맞췄다.
+
+남은 것은 AI 쪽 작업이다(TRIP-434) — ContextStore 실구현체가 이 경로를 부르고 PersonaSummary
+로 변환한다. 이 노드는 그 선행만 푼다.
+"""
+
+[[nodes]]
+id = "APPLE-JWKS"
+ticket = "TRIP-858"
+title = "Apple 로그인 id_token 서명검증(JWKS)·aud/iss/exp — 현재 fail-closed 로 비활성"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/adapter/out/external",
+]
+note = """
+코드 주석에만 있다가(AppleOAuthClient·AbstractOAuth2Client 의 TODO(SECURITY)) 2026-09-14
+TRIP-858 로 티켓화했다. MVP 는 소셜 로그인만인데 그 중 하나가 꺼져 있다. nonce·state 검증도
+함께 비어 있다. SEC-06 이 여는 조건의 정본이다 — 서명·iss·aud·exp(·nonce) + p8 키 ES256
+client_secret 동적 서명. iOS 스토어 심사가 소셜 로그인 제공 시 Apple 로그인을 사실상 요구하므로
+**스토어 출시 조건에 걸린다.** TRIP-249 와 같은 디렉토리를 만진다(자원 배타).
+"""
+
+[[nodes]]
+id = "OPENAPI-DUPKEY-GATE"
+ticket = ""
+title = "OpenApiContractIT 에 중복 스키마·경로 키 검사 추가"
+status = "done"
+migration = false
+touches = [
+  "backend/app/src/test/kotlin/com/trippilot/app",
+]
+note = """
+**티켓이 없다.** 스택 머지에서 openapi.yaml 의 스키마 키가 중복돼(Notification·PushTokenResponse 등)
+FE `pnpm codegen` 이 막힌 적이 있고, FE PR #403 에서 손으로 지웠다. YAML 은 뒤에 온 키가 이기므로
+`$ref` 검사로는 **원리적으로** 못 잡는다.
+openapi.yaml 을 건드리는 노드가 대부분이다(스크립트의 「공유 자원」 절이 세어 준다) — 이 가드가 먼저 있으면 그들이 안전해진다.
+"""
+
+[[nodes]]
+id = "TRIP-559"
+ticket = "TRIP-559"
+title = "재계획 확정 전 전후 비교 (US-PLANB-08)"
+status = "done"
+migration = false
+touches = ["backend/modules/itinerary-recalculation", "backend/docs/design/openapi.yaml"]
+note = "PR #406 머지됨(2026-08-31)."
+
+[[nodes]]
+id = "TRIP-536"
+ticket = "TRIP-536"
+title = "일정 IT 가 비동기 2차 생성을 기다리지 않는다 — 404 자리에 409 가 온다"
+status = "done"
+migration = false
+touches = [
+  "backend/app/src/test/kotlin/com/trippilot/app",
+]
+note = """
+**한때 닫으려 했다가 철회한 노드다.** PR #379(ItineraryApiIT 의 awaitComplete 누락)로 해결됐다고
+봤는데, 그건 한 자리였고 같은 형태가 남아 있다.
+
+관측(2026-08-31~09-01): 현재 develop **같은 커밋에서 1회 통과 / 2회 실패**. 희생자가 실행마다
+바뀐다 — CI 는 ReplanApiIT:111, 로컬은 ItineraryApiIT(없는 슬롯에 404 대신 **409**).
+단독 실행은 통과하고 전체 스위트에서만 깨진다. TZ·시각은 배제했다(같은 UTC·같은 시각에 단독 실행
+통과, 결과 XML 로 실제 실행 확인).
+
+원인: `SlotCandidateService:61` 이 `generationState == PARTIAL` 이면 409 "일정 생성이 진행
+중입니다"를 던진다. 비동기 2차 생성이 끝나기 전에 테스트가 요청하면 404 를 기대한 자리에 409 가 온다.
+
+⚠ **한 번 오진했다.** "itinerary 에 여행당 1행 제약이 없어 조회가 아무거나 집는다"고 적었으나
+`V2.10__itinerary_trip_unique.sql` 이 `uq_itinerary_trip UNIQUE (trip_id)` 를 이미 걸어 두고
+있었다(TRIP-267). V2.7 의 일반 인덱스만 보고 단정한 결과다 — **마이그레이션은 전수로 확인한다.**
+그때 넣었던 중복 유니크(V2.42)와 findByTrip 정렬은 되돌렸다. 대신 제약의 존재를 직접 묻는
+테스트(ItineraryOnePerTripIT)는 남겼다 — 2.10부터 있던 제약에 확인 테스트가 없었고, 그 공백이
+오진을 가능하게 했다.
+
+처방(PR #414, 머지됨): 낡은 전제를 믿던 두 자리를 고쳤다 — `슬롯 키 형식이…` 에 awaitComplete 추가,
+ReplanApiIT.generate 가 마무리까지 대기. 그리고 원인의 절반이던 tripOneDay 주석을 사실로 바꿨다
+("2차 없이 즉시 COMPLETE" → TRIP-511 이후 하루 여행도 PARTIAL 이다).
+
+⚠ 재계획은 PARTIAL 을 막지 않으므로 ReplanApiIT:111 의 정확한 기전은 **단정하지 않았다.**
+전체 스위트 5회 연속 초록으로 관측되지만, 확률적 실패라 "없다"의 증명은 아니다.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 남의 몫 — 우리가 못 푸는 노드
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "IDP-REGISTER"
+ticket = ""
+title = "Apple IdP 등록(팀 키·서비스 ID)"
+status = "external"
+owner = "운영"
+migration = false
+touches = []
+
+[[nodes]]
+id = "TRIP-434"
+ticket = "TRIP-434"
+title = "[AI] 페르소나 저장소 실구현 — StaticPersonaStore 를 백엔드 API 로"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = "우리 PERSONA-API 를 기다린다 — 이 그래프에서 **우리가 남을 막고 있는 유일한 자리**다."
+
+[[nodes]]
+id = "BACKEND-AI-AUTH"
+ticket = "TRIP-856"
+title = "백엔드→AI 호출에 서비스 토큰 붙이기 (역방향 TRIP-393)"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation",
+  "backend/modules/reflection",
+  "docker-compose.yml",
+]
+note = """
+잠긴 것은 AI→백엔드(`/internal/**`, fail-closed)뿐이고 **백엔드→AI 는 무인증**이다 —
+`ScheduleAgentConfiguration.client()` 는 Authorization 헤더를 달지 않는다(회고 클라이언트도 동일).
+`ai-backend-alternatives-연동-설계.md` §5 전제 2 가 범위 밖으로 명시하며 별건으로 끊자고 제안한 것.
+붙일 때 fail-closed 로 가면 토큰 미설정 환경에서 generate 까지 죽는다 — 전환 순서 설계가 본체다.
+SECURITY 계열. 2026-09-14 TRIP-856 으로 티켓화 — 기본안은 로컬 경고+진행, 배포 프로파일만 강제.
+
+**우리 쪽 절반은 했다(2026-09-15, PR #533). 노드는 열어 둔다 — 채널이 아직 무인증이라서다.**
+일정·회고 클라이언트가 `X-Service-Token` 을 싣는다(재계획·검증·수리·근거도 같은 클라이언트를
+탄다). 시크릿은 `SERVICE_AUTH_TOKEN` 하나를 양방향 공용으로 썼다 — 갈라 두면 한 방향만 세팅된
+절반 설정이 생긴다. 토큰이 비면 헤더를 **안 싣고 호출은 그대로 나간다**(fail-open); 잠그면
+토큰 없는 로컬·CI 에서 generate 가 통째로 죽는다.
+
+**남은 것은 상대의 수신 검증뿐이다** — `ai/src/trippilot/api/` 에 401·Bearer·헤더 검사가 하나도
+없다(실측). 순서가 한 방향이라 클라이언트가 먼저 싣기 시작해야 상대가 켤 수 있고, 그래서
+우리 쪽을 먼저 했다. AI 팀이 켜면 이 노드가 닫힌다.
+
+**안 붙인 곳 하나**: `IntegrationController` 의 `{ai.url}/health` 핑. 헬스는 관례상 무인증이라
+뺐지만, 상대가 전 경로에 일괄로 걸면 이 핑이 먼저 깨진다(증상 = `/integration` 이 degrade).
+
+
+**우리 절반 닫힘(2026-09-16, PR #533).** 세 모듈(itinerary-generation·notification·reflection)이
+`X-Service-Token` 을 싣는다. **AI 수신 검증은 [[AI-INBOUND-AUTH]](TRIP-878)로 쪼갰다** —
+제목이 `[BE]` 라 이 티켓이 우리 절반만 가리키는데, 그대로 두면 남의 작업 때문에 영원히 안 닫힌다.
+"""
+
+[[nodes]]
+id = "TRIP-463"
+ticket = "TRIP-463"
+title = "[AI] 슬롯 후보 경계 개통 — copick 실연동"
+status = "done"
+owner = "ai"
+migration = false
+touches = []
+note = """
+TRIP-481 과 무관하다(그쪽은 로컬 위임 경로 버그).
+
+**양쪽 다 끝났다(2026-09-11).** AI 가 `/ai/v1/itinerary/alternatives` 를 열었고, 백엔드 배선은
+#485(설계 정본 `ai-backend-alternatives-연동-설계.md`). 실 왕복 실측: LLM 랭킹(fallback_level=0)으로
+후보 2건, `placementReason`("일몰 명소") 컨텍스트가 rationale 에 실제 반영됨. degraded 는 이제
+리터럴이 아니라 `fallback_level >= 1` 조건부다.
+"""
+
+[[nodes]]
+id = "TRIP-475"
+ticket = "TRIP-475"
+title = "[예약] 일정 생성 시간제약 재도입 — 플래그 on + deadline 재전송"
+status = "deferred"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation"]
+note = "2026-10 이후로 잡혀 있다. 일정 제약이지 기술 선행이 아니다."
+
+# ── 누락 보정(2026-09-16) — 열린 BE 티켓인데 그래프에 없던 넷 ────────────────────
+#
+# 열린 Jira `[BE]` 티켓 전체와 이 파일을 대조해서 찾았다. 그래프가 "남은 작업의 정본"인데
+# **티켓이 있는데도 여기 없는** 항목이 넷이었다 — 지금까지의 잔여 집계가 그만큼 적게 나왔다.
+# 대조는 제목 키워드가 아니라 **티켓 키 집합의 차집합**으로 해야 한다(키워드로 훑었을 때
+# 셋을 놓쳤다 — 제목에 'AI'·'BE' 가 안 들어간 것들이었다).
+
+[[nodes]]
+id = "TRIP-873"
+ticket = "TRIP-873"
+title = "생성 응답의 슬롯별 차선책(alternatives) 수신·저장·공개 API 노출"
+status = "done"
+owner = "일정"
+migration = true
+touches = [
+  "backend/modules/itinerary-generation",
+  "backend/app/src/main/resources/db/migration",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+와이어는 이미 계약과 맞춰져 있다 — `AiSlot.alternatives`(TRIP-871 로 AI 가 동봉 시작). 남은 것은
+**도메인 사영·저장·공개 노출**이다. 지금은 받아서 버린다.
+
+`poiId` 를 문자열로 받고 있어(UUID 아닌 한 건 때문에 응답 전체를 잃지 않으려고) **정본 대조는
+소비 시점 몫**이다 — 이 노드가 그 자리다. 대조 없이 저장하면 place-data 에 없는 POI 가 화면에
+뜬다(INV-1 위반).
+
+FE 소비는 TRIP-872.
+
+**닫힘(TRIP-873).** 와이어 → 도메인 → jsonb(V2.48) → 공개 응답까지 이었다. 정본 대조는 어댑터가
+**응답 전체를 모아 한 번에** 한다(슬롯마다 하면 왕복이 슬롯 수만큼 는다).
+
+**구현하다 결함 하나를 새로 잡았다** — `Itinerary.confirm()` 이 슬롯을 다시 만드는데 새 필드를
+안 옮겨서 **확정하는 순간 차선책이 사라졌다.** 그 자리 주석이 이미 *"하나라도 빠뜨리면 확정하는
+순간 조용히 사라진다(endsNextDay 로 이미 겪은 회귀)"* 라고 경고하고 있었는데 또 걸렸다 —
+기본값 인자라 컴파일러가 안 잡는다. 안티패턴에 한 줄 남겼다.
+
+**편집·리비전·재계획은 차선책을 싣지 않는다(의도).** 옛 값을 들고 가면 바뀐 슬롯에 옛 대안이
+붙고 `distanceRange` 가 이전 이웃 기준이라 화면에 틀린 거리가 남는다.
+"""
+
+[[nodes]]
+id = "TRIP-874"
+ticket = "TRIP-874"
+title = "재계획이 AI 에 값을 다 실어 보내게 — 취향·사유·지시·자유입력 (TRIP-837 대체)"
+status = "done"
+owner = "재계획"
+migration = false
+touches = ["backend/modules/itinerary-recalculation", "backend/modules/itinerary-generation"]
+note = """
+TRIP-854(전용 경계)와 같은 대역을 만진다. 자원 배타 — 먼저 손댄 쪽이 이긴다.
+
+**부분 닫힘(2026-09-17, PR #575).** B-1 중 **지금 보낼 수 있는 셋**(취향·동반·예산)을 실었다.
+값은 `ReplanInput` 에 이미 다 있었고 어댑터가 와이어로 옮길 때 버리고 있었다 — 조립은 끝나 있었고
+마지막 한 걸음이 빠진 상태였다. B-4(마감 25초)도 같이 갔다.
+
+**남은 것**: 사유·지시·자유입력·원 일정 슬롯·담은 장소. `generate` 계약에 자리가 없어
+전용 재계획 경로(A-4)가 열려야 실린다. B-5(거리 합계)도 마찬가지 — `total_distance` 가
+`ReplanResponse` 에만 있다.
+"""
+
+[[nodes]]
+id = "TRIP-870"
+ticket = "TRIP-870"
+title = "내부 POI read DTO 에 tags·source_ref 노출 — 값은 이미 DB 에 있다"
+status = "done"
+owner = "장소"
+migration = false
+touches = ["backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/adapter/in/web"]
+note = """
+**닫힘(TRIP-870).** `PoiReadResponse` 에 `tags`·`source_ref` 두 칸을 더했다. 새 컬럼도 마이그레이션도
+없다 — 값은 DB·도메인·공개 API 에 이미 있었고 **AI 가 읽는 경계에만 안 실려 있었다**.
+
+`tags` 는 카테고리가 못 가르는 것을 가른다(경계 8종의 `SIGHT` 안에 야외 유적지와 실내 전시관이
+함께 있다). `source_ref` 는 정본이 아니라 **조인 키**다 — 상대가 자기 파생 지식을 자기 스토어에 들고
+런타임 후보에 붙이는 데 쓴다. "POI 정본은 C7 단일 소유"가 그대로 남는다.
+"""
+
+[[nodes]]
+id = "TRIP-681"
+ticket = "TRIP-681"
+title = "[AI→BE] 이미 등록된 폐업 POI 210건 정리 — dataStatus 갱신"
+status = "todo"
+owner = "장소"
+migration = false
+touches = ["backend/modules/place-data"]
+note = """
+**AI 팀이 우리에게 넘긴 건인데 어디에도 안 잡혀 있었다.** `DataStatus` enum 에 `CLOSED` 는 있지만
+(`Poi.kt`) 이 210건을 실제로 옮기는 경로를 못 찾았다 — 일회성 데이터 작업인지 갱신 API 가 필요한
+일인지 **먼저 정해야 한다**. 폐업한 곳이 `ACTIVE` 로 남아 있으면 후보 풀에 들어가 일정에 배치된다.
+"""
+
+# ── 남을 기다리는 것(2026-09-16 신설) — 이번에 티켓을 만들어 붙였다 ──────────────
+#
+# 셋 다 **우리가 할 수 있는 일이 없는데 우리 티켓의 각주로만 존재하던** 것들이다. 상대 백로그에
+# 한 줄도 안 서 있으면 아무도 자기 일로 안 본다 — 구두 전달만으로는 잊힌다.
+
+[[nodes]]
+id = "AI-INBOUND-AUTH"
+ticket = "TRIP-878"
+title = "[AI] 인바운드 서비스 토큰 검증 — 백엔드는 보내는데 받는 쪽이 없다"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = """
+`ai/src` 에서 `X-Service-Token` 이 나오는 두 자리는 **둘 다 나가는 방향**이다(`backend_poi_db.py`
+발신 · `errors.py` 발신 거부 처리). 받는 쪽 검사는 없다 — AI 경계 8종은 지금 누구나 부를 수 있다.
+[[BACKEND-AI-AUTH]](TRIP-856)에서 쪼갰다.
+
+**넘기기 전 우리 쪽 준비는 끝났다(TRIP-856 후속).** 헬스핑(`IntegrationController`)에도 토큰을
+싣고 — 상대가 전 경로를 일괄로 잠그면 그게 제일 먼저 깨지는데 증상이 "AI 가 죽었다"로만 보인다 —
+`SERVICE_AUTH_REQUIRE_TOKEN` 으로 **토큰 미설정을 기동 시점에 막을 수** 있게 했다. 그게 없으면
+배포가 무인증으로 뜨고, 상대가 검증을 켜는 날 401 이 나는데 원인이 설정 누락이라는 사실이
+어디에도 안 남는다 — 발신은 비면 **헤더를 아예 안 붙이고 그냥 나가기** 때문이다.
+
+**상대가 켜기 전에 `SERVICE_AUTH_TOKEN` 실값이 양쪽 환경에 있어야 한다** — 지금 `.env.example` 은
+빈 값이다. 스위치만으로는 값이 생기지 않는다.
+"""
+
+[[nodes]]
+id = "AI-ALTERNATIVES-422"
+ticket = "TRIP-879"
+title = "[철회] alternatives 422 — 오진이었다(낡은 컨테이너를 봤다)"
+status = "done"
+owner = "ai"
+migration = false
+touches = []
+note = """
+`openapi.json` 의 `VisitSlotDisplaySchema` 에 `alternatives` 가 **속성으로 있는데**(확인함)
+실호출은 `Extra inputs are not permitted` 로 거부한다. 런타임 요청 모델이 문서보다 좁다.
+
+**우회하지 않기로 했다.** 요청 전용 슬롯 타입을 만들면 실호출은 9/9 통과하지만 우리 코드가 공개
+계약을 위반한 상태가 되고 **계약 게이트가 그것을 못 잡는다**. 계약이든 런타임이든 상대만 고칠 수 있다.
+
+**철회(2026-09-16). 애초에 어긋난 적이 없었다.** 422 를 관측한 컨테이너가 **9/15 빌드 이미지**였고,
+스키마에 `alternatives` 를 넣은 AI 변경은 그 뒤에 들어갔다. 이미지를 갱신하지 않은 채
+"런타임이 계약보다 좁다"고 결론냈다 — *계약은 초록인데 실호출이 거부당한다* 는 이 리포의 익숙한
+패턴에 끼워 맞춘 오진이다.
+
+`ai/` 로컬 소스로 다시 빌드해 확인했다: `alternatives` 를 실으면 **500**(업무 로직, 백엔드 미기동),
+진짜 모르는 필드를 실으면 **422**. 즉 스키마 검증은 통과한다. `schemas.py` 의
+`DayScheduleSchema.slots: list[VisitSlotDisplaySchema]` 이고 그 스키마에 필드가 있다.
+
+간선(→ 실사용 모드 전환)도 함께 지웠다.
+"""
+
+[[nodes]]
+id = "FE-REGION-CODE"
+ticket = "TRIP-880"
+title = "[FE] 여행 생성에 법정동코드 전송 — regionCode 슬러그 어휘 충돌 주의"
+status = "external"
+owner = "fe"
+migration = false
+touches = []
+note = """
+[[REGION-CODE-ANCHOR]] 가 서버 쪽 절반을 닫았다 — 코드가 오면 실제로 앵커에 쓴다. 이제 **FE 가
+보내야** 의미가 생긴다.
+
+**함정**: FE 에 이미 `regionCode` 가 있는데 값이 `'busan'` 같은 탐색용 슬러그다. 서버가 받는 것은
+`GET /regions` 의 `51720` 형태이고 **없는 코드는 400** 이라, 슬러그를 그대로 실으면 400 만 난다.
+생성 타입(`tripDestination.ts`)에는 필드 자체가 없다 — codegen 드리프트(TRIP-640 과 같은 뿌리).
+"""
+
+# ── 실 왕복이 드러낸 것(2026-09-16) ─────────────────────────────────────────────
+
+[[nodes]]
+id = "AI-CONTAINER-BOOT"
+ticket = "TRIP-882"
+title = "[AI] 소스 빌드 컨테이너가 기동 불가 — EXISTENCE_MAX_CALLS 빈 값에 int('') 폭발"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = """
+`docker compose --profile full build ai` 로 **소스에서 빌드하면** 기동 즉시 죽는다. compose 가 빈
+문자열을 넘기는데 `os.environ.get(key, "60")` 의 기본값은 **변수가 없을 때만** 먹기 때문이다 —
+우리가 `JWT_REQUIRE_CONFIGURED_KEY` 로 두 번 밟은 것과 같은 함정이다.
+
+기존 GHCR 이미지로는 안 나고 **빌드해야만** 드러나서 여태 아무도 몰랐다. 로컬은 `.env` 에
+`EXISTENCE_MAX_CALLS=60` 을 넣어 우회했다(2026-09-16).
+"""
+
+[[nodes]]
+id = "REMINDER-COPY-SLOTS"
+ticket = "TRIP-883"
+title = "리마인드 문구에 그 날 갈 곳(slots)을 채운다 — 재료가 비면 AI 가 '일정 없음'을 지어낸다"
+status = "todo"
+owner = "알림"
+migration = false
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application/NotificationScheduleService.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/api",
+]
+note = """
+경계는 이제 정상 왕복한다(TRIP-836 후속 수정). 그런데 **호출측이 `slots` 를 안 채운다.**
+
+빈 재료로 물으면 상대가 없는 사실을 지어낸다 — 실측으로 `TRIP_DAY`·`TRIP_PRE` **둘 다**
+"일정이 없으니…" 로 답했다. 일정이 있는 날에 나가면 거짓말이라, 지금은 **재료가 비면 안 묻는다.**
+즉 `AI_REMINDER_COPY_MODE=http` 로 켜도 **문구가 하나도 안 나온다**(기본 off 라 운영 영향 0).
+
+**모듈 경계 결정이 선행이다** — 알림(C14)이 그 날 POI 이름을 알려면 일정(C8)을 봐야 하는데
+그 방향 의존이 없다. `..api..` 퍼사드를 여는 쪽이 R1 규약에 맞아 보이나, "그 날 슬롯"의 정의
+(확정 전/후·편집 중)가 일정 쪽 규칙이라 합의가 필요하다.
+"""
+
+# ── Figma 1:1 정합 계약 확장(TRIP-823 움브렐라) ────────────────────────────────
+#
+# 서브태스크 7개 중 **둘을 닫았다**(값이 이미 있고 결정이 안 필요한 것). 남은 다섯은 화면 대조·
+# 수집 변경·기획 결정이 선행이라 BE 혼자 못 닫는다. 비용을 가르는 축은 **"값이 DB 에 있나"** 다.
+
+[[nodes]]
+id = "TRIP-824"
+ticket = "TRIP-824"
+title = "[Figma] Place 확장 — imageUrls·address·admissionFee·description·photoCount"
+status = "todo"
+owner = "장소"
+migration = true
+touches = ["backend/modules/place-data", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
+note = """
+**이 움브렐라에서 가장 비싸다.** 네 필드가 `poi` 테이블에 **없다** — 컬럼 추가 + 수집 경로 변경 +
+기존 12,782곳 채우기다. 컬럼만 만들면 전부 null 이라 화면은 계속 플레이스홀더를 그린다
+(움브렐라 규약 3번: "스키마 + 데이터가 한 세트").
+
+**AI 수집팀과 묶어야 한다.** 그리고 `GET /places/{id}` 단건 경로가 **아예 없다** — 상세 화면이
+목록에서 받은 값으로 그린다. 갤러리를 전 목록에 싣는 것은 낭비라 단건 신설 여부가 선행 결정이다.
+
+⚠ **FE 계약 가드가 `Place` 를 줄 전체 완전 일치로 고정한다** — additive 여도 같은 PR 에서
+`frontend/src/__tests__/openapiContract.test.ts` 를 함께 고쳐야 frontend-ci 가 초록이다.
+"""
+
+[[nodes]]
+id = "TRIP-825"
+ticket = "TRIP-825"
+title = "[Figma] Stay 확장 — StayItem imageUrl·distance·address, SavedStay imageUrl·region·priceLabel·isBase"
+status = "todo"
+owner = "숙소"
+migration = false
+touches = ["backend/modules/accommodation-search", "backend/modules/saved-accommodation", "backend/docs/design/openapi.yaml"]
+note = """
+**`distance` 의 기준점 확정이 선행이다.** 티켓이 스스로 경고한다 — *"무엇으로부터의 거리인가가
+계약에 없으면 화면이 거짓말을 한다."* 검색 중심·사용자 위치·여행 거점 중 무엇인지 정하고
+응답에 기준점을 함께 실어야 한다.
+
+`isBase` 는 `linkedTripIds` 로 파생 가능한지가 쟁점이다(전역이 아니라 **특정 여행 문맥**의 판정).
+나머지는 벤더 응답에 있을 수 있으나 저장하지 않아 수집 경로를 건드려야 한다.
+"""
+
+[[nodes]]
+id = "TRIP-827"
+ticket = "TRIP-827"
+title = "[Figma] itinerary 확장 5건 — progress·startAt nullable·transport·openingHoursKnown·숙소추천"
+status = "todo"
+owner = "일정"
+migration = false
+touches = ["backend/modules/itinerary-generation", "backend/docs/design/openapi.yaml"]
+note = """
+**다섯 항목의 상태가 제각각이다**(움브렐라가 경고한 그 티켓).
+
+| 항목 | 상태 |
+|---|---|
+| `progress{percent,stage}` | 신규. **실측 진행률이 아니다** — 2단계 생성이라 단계→퍼센트 매핑을 지어내는 셈 |
+| 슬롯 `startAt` nullable | 신규. 조회·편집 스키마 + `VisitSlot` 도메인 검증까지 |
+| 커넥터 `transport` | 신규. **값 자체가 없다** — 이동수단을 저장한 적이 없다 |
+| CONFIRMED `openingHoursKnown` | **충돌**(아래) |
+| 숙소 추천 API | **이미 구현돼 있다** — `StayRecommendationController` 실재 |
+
+**충돌의 실체**: `ItineraryController` 가 확정 일정에서 이 값을 일부러 null 로 둔다 —
+*"확정 뒤에도 정본을 따라가면 이미 확정된 슬롯이 '확인 필요'로 되돌아가 확정 일정의
+안정성(INV-U1-03)을 깬다."* 되살리려면 **"확정 뒤 재분류를 허용한다"는 기획 판단**이 선행한다.
+
+⚠ FE 계약 가드가 `Itinerary` 의 required 줄을 고정한다 — required 를 늘리면 함께 고쳐야 한다.
+"""
+
+[[nodes]]
+id = "TRIP-828"
+ticket = "TRIP-828"
+title = "[Figma] Reflection mood·shortMemo + 데이터 부족 시 부분 분석"
+status = "todo"
+owner = "회고"
+migration = true
+touches = ["backend/modules/reflection", "backend/app/src/main/resources/db/migration", "backend/docs/design/openapi.yaml"]
+note = """
+**`mood` 값 집합을 화면과 대조해야 한다**(닫힌 enum 인지 자유형인지). `EditReflectionRequest` 가
+지금 "카드 통째 교체"만 받아서 부분 갱신을 허용할지도 결정거리다.
+
+세 번째 항목(데이터 부족 시 부분 분석)은 **새 필드가 아니라 채움 규칙**의 문제다 — 기존
+`preview` 로 충분한지, 임계 미만에서도 `analysis` 를 채우는지.
+"""
+
+[[nodes]]
+id = "TRIP-826-REST"
+ticket = "TRIP-826"
+title = "[Figma] Trip coverImageUrl·photoCount 잔여 — endedAt 은 닫혔다"
+status = "todo"
+owner = "여행"
+migration = false
+touches = ["backend/modules/trip", "backend/docs/design/openapi.yaml"]
+note = """
+**`endedAt` 은 닫혔다**(PR #583). 값이 이미 DB 에 있었고 응답에만 안 실렸다. 그 과정에서 규칙을
+못 박았다 — **분기는 `status`, 표시는 `endedAt`**. 둘은 만들어지는 방식이 달라
+(`status` 는 날짜에서 즉시 파생, `endedAt` 은 스윕이 10분 주기로 기록) **최대 10분의 시차**가 있다.
+
+**남은 둘**:
+- `photoCount` — `TripRecordSummary` 에 **이미 있다**(지난 여행 카드는 충족). `Trip` 에 더할지는
+  "내 여행 카드가 사진 수를 쓰는가"를 화면과 대조한 뒤에 정한다.
+- `coverImageUrl` — 저장이냐 파생이냐가 미결(아카이브 사진 첫 장이면 파생).
+"""
+
+[[nodes]]
+id = "FLAKY-REPLAN-CANCEL"
+ticket = ""
+title = "ReplanApiIT '취소는 세션만 닫는다' 가 CI 에서 간헐 실패"
+status = "todo"
+owner = "재계획"
+migration = false
+touches = ["backend/app/src/test/kotlin/com/trippilot/app/web/ReplanApiIT.kt"]
+note = """
+**관측 1회**(2026-09-17). 알림만 건드린 PR 의 backend-ci 에서 깨졌다 — **그 PR 은 재계획 파일을
+0건 건드렸다.** 같은 커밋 재실행은 통과했고 로컬·다른 네 PR 에서도 통과했다.
+
+## 기전 — 비동기 산출과 취소의 경합이다
+
+`gh run view <id> --attempt 1 --log` 로 **원 실행 로그를 되찾아** 자리를 특정했다:
+`AssertionFailedError at ReplanApiIT.kt:201` = `rc shouldBe 200`, 즉 **첫 취소가 200 이 아니었다**
+(2차 생성 타임아웃이었다면 `awaitComplete` 의 다른 메시지가 났을 것이다).
+
+거기서 코드를 따라가면 닫힌다:
+
+- `cancel` 은 `!session.isOpen` 이면 **409** 를 던진다
+- `isOpen` = `COLLECTING | SOLVING | DRAFT` — 즉 **`NO_SOLUTION`·`FAILED` 는 열린 상태가 아니다**
+- 세션 시작은 `afterCommit { solver.solve(...) }` 이고 `solve` 는 **`@Async`** 다 —
+  다른 스레드에서 `SOLVING → DRAFT | NO_SOLUTION | FAILED` 로 간다
+
+그래서 **비동기 산출이 `NO_SOLUTION`·`FAILED` 에 먼저 도달하면 첫 취소가 409** 다. CI 부하에서
+스레드 스케줄링이 달라지면 그 순서가 뒤집힌다.
+
+## 무엇이 문제인가 — 생산 코드가 아니라 테스트 전제다
+
+취소가 409 를 내는 것 자체는 맞다(이미 끝난 재계획이다). **테스트가 "취소할 때까지 세션이 열려
+있다"를 가정할 뿐 아무것도 보장하지 않는다.**
+
+## 고치기 전에 정할 것
+
+산출이 끝나기 전 상태를 **강제**할지(대역으로 느린 solver 를 주입), 아니면 **열린 상태를 기다렸다
+취소**할지. 전자가 결정론적이지만 실제 경합을 안 재고, 후자는 여전히 확률적이다.
+재현 없이 단언을 넓히지 않는다([[FLAKY-HEALTHPING]] 과 같은 규율) — 다만 이 노드는 **원인이
+규명된** 상태라 그쪽과 다르다.
+"""
+# ─────────────────────────────────────────────────────────────────────────────
+# 간선 — 티켓 원문으로 확인한 것만
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[edges]]
+from = "IDP-REGISTER"
+to = "APPLE-JWKS"
+kind = "외부선행"
+verified = false
+reason = "JWKS 검증·client_secret ES256 서명은 실제 등록된 팀 키·서비스 ID 없이 확인할 수 없다(SEC-06)."
+
+[[edges]]
+from = "PERSONA-API"
+to = "TRIP-434"
+kind = "계약선행"
+verified = false
+reason = "TRIP-434 본문 「선행」: 백엔드에 페르소나 API가 존재해야 함."
+
+[[nodes]]
+id = "UUID-PATH-400"
+ticket = ""
+title = "UUID 경로변수가 잘못된 값에 500 — 전역 타입변환 실패를 400 으로"
+status = "done"
+migration = false
+touches = [
+  "backend/app/src/main/kotlin/com/trippilot/app/web/error/GlobalExceptionHandler.kt",
+]
+note = """
+**실측(2026-09-01)**: `GET /api/v1/trips/not-a-uuid` → `500 INTERNAL`. Spring 의 경로변수 타입변환
+실패는 MethodArgumentTypeMismatchException 인데 전역 핸들러가 그것을 모르고 Exception 갈래로
+떨어진다. UUID 경로변수를 쓰는 **모든** 엔드포인트가 같다.
+
+TRIP-249 3번(미매핑 경로 500)과 **같은 실패 형태**다 — 클라 입력 오류를 서버 장애로 알리면
+프론트·AI 의 재시도·폴백이 5xx 기준으로 갈려 잘못된 갈래를 탄다.
+
+**착수 후 실측으로 범위가 넓어졌다** — 타입 불일치만이 아니라 **필수 쿼리 누락**도 500 이었다
+(`/internal/pois` 에서 radiusKm 을 빼면 500). 둘 다 스프링의 파라미터 바인딩 단계 예외라
+같은 자리에서 함께 잡았다.
+
+PERSONA-API 의 국소 회피(경로변수를 String 으로 받아 직접 파싱)는 이 노드에서 걷어냈다 —
+전역이 잡으므로 중복이다. 역검증에서 전역 핸들러를 빼면 PersonaInternalApiIT 의 400 테스트가
+함께 깨져 실제로 전역에 의존함이 확인된다.
+
+계약: 경로별 400 을 39곳에 흩뿌리지 않고 openapi info.description 에 횡단 규약으로 적었다 —
+형식 오류까지 중복 선언하면 무엇이 그 엔드포인트 고유의 업무 검증인지 안 보인다.
+"""
+
+[[nodes]]
+id = "FLAKY-HEALTHPING"
+ticket = ""
+title = "IntegrationHealthPingTimeoutTest 가 전체 빌드 부하에서만 간헐 실패"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/test/kotlin/com/trippilot/app/web/IntegrationHealthPingTimeoutTest.kt",
+]
+note = """
+**실측(2026-09-01, UUID-PATH-400 작업 중)**: 전체 빌드에서 1회 실패.
+`SocketException: Connection reset is of type ... but expected SocketTimeoutException`
+(`thrown.cause.shouldBeInstanceOf<SocketTimeoutException>()`, 45행)
+
+- 격리 실행 `--rerun-tasks` 3회 **전부 통과**
+- 같은 코드로 직전 전체 빌드는 통과 — 회귀가 아니다
+- 이 노드를 만든 변경(전역 예외 핸들러)과 무관한 영역이다
+
+**원인은 아직 단정하지 못했다.** 테스트는 `ServerSocket(0)` 을 열고 별도 스레드가 accept 만 하며
+한 바이트도 쓰지 않는 상황을 만든다. 부하가 걸리면 클라이언트 연결과 accepter 스레드 기동이
+경합하는 구조인데, 그것이 RST 로 이어지는 경로를 실제로 재현하지는 못했다.
+
+**재현 시도 2 실패 — 가설이 하나 더 지워졌다(2026-09-16).** 이번 축은 **병렬 소켓 경합**이었다
+(스레드 8개 × 150회 = 1200회를 동시에 돌려 포트 재사용·backlog 압력을 만들었다). 결과는
+**1199/1200 정상 타임아웃** — `Connection reset` 이 한 번도 안 나왔다.
+
+나머지 1건은 `IllegalArgumentException` 이었다(하네스가 URI 를 만드는 자리). **단서일 수도 있어
+적어 둔다** — 경합 중에 `ServerSocket.localPort` 가 `-1` 로 읽혔다면 소켓 수명이 예상과 다르게
+움직였다는 뜻이고, 그건 RST 가설과 인접하다. 다만 내 하네스 쪽 결함일 가능성이 더 크고
+(공유 리스트·반복 생성), 확인하지 않았으므로 **가설로만 남긴다.**
+
+지금까지 지워진 것 둘:
+1. 클라이언트 쪽 CPU 부하(시도 1, 2026-09-15) — 단일 JVM 1200회 + 5코어 점유
+2. 병렬 소켓 경합·포트 재사용(시도 2) — 8스레드 동시 1200회
+
+**남은 축이 하루 사이에 좁아졌다.** 같은 "전체 빌드에서만" 부류였던 `FLAKY-OUTBOX-RELAY` 는
+원인이 밝혀져 닫혔다(배경 `@Scheduled` 의 기동 직후 1회 발화 — PR #537). 그 간섭원이 사라진
+뒤에도 이 flake 가 남는지는 **아직 관측하지 못했다** — 다음 시도 전에 먼저 확인할 것.
+둘이 같은 원인이었다면 이미 해소됐을 수도 있다.
+
+**남은 축은 "전체 빌드에만 있는 것"이다.** 같은 JVM 안에서 Testcontainers 의 커넥션 churn,
+스프링 컨텍스트 여럿, 그 사이에 끼는 이 소켓 — 이것을 흉내 내려면 `:app:test` 전체를 반복
+실행해야 해서 시도당 비용이 크다(회당 ~7분). 다음 시도는 그 비용을 받아들이고 반복 횟수를
+정해서 들어간다.
+
+**코드에서 유일하게 식별된 RST 원천**: `finally` 의 `held.forEach { it.close() }` — 수신 버퍼에
+읽지 않은 요청이 남은 소켓을 닫으면 FIN 이 아니라 **RST** 가 나간다. 다만 그 시점은 단언 뒤라
+현재 실패를 설명하지 못한다. 재현되면 여기부터 본다.
+
+단정하지 말 것: 재현 없이 "타임아웃도 허용"으로 단언을 넓히면 **연결 거부와 타임아웃을 가르는
+이 테스트의 목적 자체가 사라진다**(주석 44행이 그 구분을 명시한다). accepter 준비를 래치로
+동기화한 뒤 부하를 흉내 내 재현하는 것이 먼저다.
+
+**재현 시도 1 실패 — 가설 하나가 지워졌다(2026-09-15).** 같은 소켓 시나리오를 한 JVM 안에서
+**1200회 반복**하며 CPU 5코어를 점유시켜 돌렸다. 결과는 **1200/1200 전부 정상 타임아웃** —
+RST 가 한 번도 안 나왔다. 즉 **"클라이언트 쪽 CPU 부하가 accepter 기동을 밀어내 RST 가 된다"는
+가설은 틀렸다.** 단순 부하로는 못 만든다.
+
+남은 가설은 **전체 빌드에만 있는 조건** 쪽이다 — 테스트 JVM 여러 개가 동시에 돌며 소켓·포트
+테이블을 함께 쓰는 상황(내 하네스는 단일 JVM·순차 소켓이었다). 다음 시도는 부하가 아니라
+**병렬 JVM 과 소켓 고갈**을 흉내 내야 한다.
+
+여전히 단언을 넓히지 말 것. 재현 없이 "타임아웃도 허용"으로 가면 이 테스트의 목적이 사라진다.
+"""
+
+[[nodes]]
+id = "TRIP-361-CONTRACT"
+ticket = "TRIP-859"
+title = "목적지 계약을 코드로 전환 — 동명이지역 임의 선택 해소 (TRIP-361 후속)"
+status = "done"
+migration = false
+touches = [
+  "backend/docs/design/openapi.yaml",
+  "backend/modules/trip/src/main/kotlin/com/trippilot/trip/adapter/in/web/TripDtos.kt",
+  "backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/application/RegionLookupService.kt",
+]
+note = """
+**완료(2026-09-15, PR #530).** 목적지 regionCode 수용. 티켓의 '임의 선택' 서술은 낡았다(singleOrNull 로 이미 비우고 있었다) — 실제 구멍은 **코드를 보낼 경로가 없던 것**. '정하지 못했다'(비움)와 '틀린 것을 받았다'(400)를 가른다.
+
+TRIP-361 이 내부 정규화까지만 하고 남긴 몫이다.
+
+**지금 조용히 틀리는 자리**: RegionLookupService.centerOf 가 `findExact(name).firstNotNullOfOrNull`
+로 동명이지역 중 하나를 집는다. 부산 중구를 고른 사용자의 일정 앵커가 서울 중구 중심이 될 수 있고,
+아무 데도 기록이 남지 않는다. 이름만 받는 한 서버가 풀 방법이 없다.
+
+**FE 는 이미 코드를 쥐고 있다** — GET /regions 응답에 regionCode 가 있다. 계약이 안 받을 뿐이다.
+
+할 일: TripDestination 에 regionCode 를 싣고(양쪽 수용 기간), 카탈로그 밖 코드 거절, 응답에 표시명
+동반. FE 짝은 TRIP-362(해야 할 일). 배포 순서(서버 먼저)를 정해야 한다.
+"""
+
+[[nodes]]
+id = "AI-EXPLANATIONS-GATE"
+ticket = ""
+title = "AI 경계 이름 게이트가 explanations 를 안 봤다 — 넷 중 셋만 검사"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation/src/test/kotlin/com/trippilot/itinerarygeneration/contract/AiBoundaryOpenApiTest.kt",
+]
+note = """
+**실측(2026-09-01)**: AiBoundaryOpenApiTest 는 "우리가 부르는 **세** 경로"라고 적고 셋만 검사하는데
+HttpScheduleAgentAdapter 는 **넷**을 부른다(explanations 포함).
+
+특히 나쁜 조합이었다 — explanations 는 실패를 삼키고 빈 맵을 돌려준다(근거는 부가 정보라).
+그래서 드리프트가 예외도 로그도 없이 **화면의 근거 공백**으로만 나타나 원인이 안 보인다.
+
+경로·요청키·응답키 셋을 덮었다. 역검증: 계약에서 trip_id→tripId 개명 · 응답에 model_id 추가,
+각각 해당 테스트만 실패.
+"""
+
+[[nodes]]
+id = "AI-ALTERNATIVES"
+ticket = ""
+title = "AI 가 Plan-B 전용 경로(alternatives)를 열었다 — 우리는 generate 로 우회 중"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/itinerary-recalculation",
+]
+note = """
+**공백이 아니라 선택지다.** 재계획은 잠금을 고정 블록으로 승격해 generate 에 태우고 있고 동작한다
+(backend-boundaries 스킬에 그 판단이 적혀 있다). AI 가 그 뒤 `/ai/v1/itinerary/alternatives` 를 열었다.
+
+전용 경로 쪽이 나은 근거: 요청에 trigger·affected_reasons·excluded_poi_ids 가 있고, 응답이
+AlternativeSchema{label, poi_ids, rationale} + pool_size·empty_reason·fallback_level 이다 —
+우리가 #418 에서 로컬로 만든 '0건 사유 구분'을 상대가 이미 갖고 있다.
+
+**착수 전 정할 것**: 동작하는 경로를 교체할 값이 있는가. 교체하면 재계획 회귀 범위가 넓다.
+
+**갱신(2026-09-11)**: 이 경로의 첫 소비자가 생겼다 — 슬롯 후보(#485)가 실호출한다. 실 왕복은
+LLM 랭킹까지 확인됐다(TRIP-463 노드 참조). 남은 것은 이 노드의 원래 질문 하나 — **재계획을**
+generate 우회에서 alternatives 로 갈아탈 가치가 있는가. 슬롯 후보 배선(와이어·매퍼·INV-1 게이트)을
+재사용할 수 있어 착수 비용은 내려갔지만, 교체 회귀 범위가 넓다는 판단은 그대로다.
+
+**종결(2026-09-14)**: 질문이 해소됐다 — 답은 "alternatives 로 갈아타지 않는다"도 "generate 잔류"도
+아닌 제3안이다. **전용 재계획 경계**(`/ai/v1/itinerary/replan`)가 계약 합의문으로 확정됐고
+(`ai-backend-replan-연동-설계.md`), 조립 절반은 #514 로 이미 들어갔다. 잇는 노드는 REPLAN-BOUNDARY
+(TRIP-854)다. 이 노드는 질문 노드였으므로 결정으로 닫는다.
+"""
+
+[[nodes]]
+id = "AI-NL-EDIT"
+ticket = ""
+title = "자연어 일정 편집 — AI 는 열었고 우리 표면이 없다 (제품 결정 선행)"
+status = "todo"
+migration = false
+touches = [
+  "backend/docs/design/openapi.yaml",
+  "backend/modules/itinerary-generation",
+]
+note = """
+`/ai/v1/itinerary/edit` 요청은 utterance·command·confirm, 응답은 apply_mode·status·violations 다 —
+**자연어 편집**이다. 우리 EditItineraryService 는 구조적 편집(클라가 명시적 조작을 보냄) + solver
+재검증이라 성격이 다르다.
+
+**우리 openapi 에 대응 표면이 없다.** 화면·문구·확인 흐름이 정해져야 계약을 열 수 있으므로
+제품 결정이 선행이다. 기술 선행은 없다(경계는 이미 열려 있다).
+"""
+
+[[nodes]]
+id = "REFLECTION-AI"
+ticket = ""
+title = "회고 AI 개통 — 문장에서 카드로(정본·저장·경계·개통 4칸)"
+status = "done"
+migration = true
+touches = [
+  "aidlc/aidlc-docs/construction/u5-records-reflection/functional-design",
+  "backend/modules/reflection",
+  "backend/app/src/main/resources/db/migration/V2.44__reflection_card.sql",
+  "backend/docs/design/openapi.yaml",
+]
+note = """
+**착수하려다 두 팀 정본이 갈린 것을 발견해 멈췄고, 사용자가 카드 전환을 선택했다**(2026-09-01).
+
+정본 §5.3 은 애초에 "표면 계약 **초안**(개통 이연 · G-U5-4)"이었고 협의 결과가 초안과 달랐다 —
+2경로(generate·nudge)이고 산출물이 문장이 아니라 **카드**(template_id·cover·scenes·hashtags).
+
+네 칸으로 갈랐다: 정본(#437) → 저장·규칙 카드·공개계약(#438) → 경계(#439) → 개통(#440).
+중간 상태가 안전한 순서다 — 기본 모드가 `rule` 이라 어느 칸에서 멈춰도 사용자에게 보이는 것이
+바뀌지 않는다.
+
+전환 시점의 근거: 프런트에 회고 화면이 **없었다**(features/reflection 부재, narrative 를 그리는
+.tsx 0건). 계약을 깨도 깨질 소비자가 없는 최저 비용 시점이었다.
+
+**남은 것 3건**
+- **실 왕복 미검증** — 로컬 develop 이미지(2026-08-22)가 회고 경계보다 낡아 404 였고, GHCR pull 이
+  403(토큰 스코프)이라 최신 이미지를 못 받았다. 최신 이미지가 있는 환경에서 한 번 태워야 한다.
+  LiveReflectionRoundTripIT 에 선행 단정이 있어 그 상황이 "이미지를 올리세요"로 보인다
+- **trip_summary 는 문장 그대로** — 상대 kind 가 SUMMARY 도 덮지만 요약은 highlights 등 우리 고유
+  필드가 있어 판단이 별건이다(O-U5-10)
+- **회고 testID 미확정** — 화면(j03)이 없어 새 이름을 짓지 않았다. 지금 지으면 근거 없이 계약을 좁힌다
+"""
+
+[[nodes]]
+id = "REFLECTION-LIVE-CHECK"
+ticket = ""
+title = "회고 AI 실 왕복 1회 — 최신 AI 이미지 필요"
+status = "done"
+migration = false
+touches = [
+  "backend/app/src/test/kotlin/com/trippilot/app/LiveReflectionRoundTripIT.kt",
+]
+note = """
+이름 게이트는 필드 **이름**을 지키지 `minItems` 같은 **제약**이나 업무 규칙 위반은 못 본다 —
+일정 경계에서 이름이 전부 맞는 상태로 422·409 가 연달아 난 전례가 있다.
+
+막고 있는 것은 코드가 아니라 **환경**이다(2026-09-01 실측): 로컬 이미지 2026-08-22 < 계약 2026-08-27,
+GHCR pull 403. 최신 이미지를 받을 수 있으면 아래 한 줄이면 끝난다.
+
+    docker compose --profile full up -d ai
+    LIVE_AI=1 ./gradlew :app:test --tests "*LiveReflectionRoundTripIT*" --rerun-tasks
+    docker compose stop ai
+
+**완료(2026-09-11).** GHCR 은 필요 없었다 — compose 의 `build: ./ai` 로 로컬 빌드하면 계약과
+이미지가 정의상 일치한다. 실측 결과: 경로 개통 확인 · `visits` 0건은 minItems=1 로 **거절(422)**
+쪽 기록 · **결함 1건 발견**: 마감 8s 는 시도당 타임아웃으로 관통돼(최대 3회, 총량 상한 아님)
+시도 1회(웜 5.1~6.5s)가 빠듯하게 잘리고 재시도 사슬(11.8s+)→백스톱(13s) 경계 flaky.
+마감 15s/읽기 21s 분리로 수정,
+재실행 3/3 초록. 예언("이름 게이트가 못 보는 제약 위반")이 그대로 적중한 사례.
+"""
+
+[[nodes]]
+id = "PUSH-URGENCY"
+ticket = ""
+title = "알림 종류별 전달 긴급도 — 집중 모드에 다 함께 막히던 것을 가른다"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/domain/PushUrgency.kt",
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/out/push/ExpoPushAdapter.kt",
+]
+note = """
+야간 조용시간(O-U6-4)을 조사하다 **그보다 먼저 고칠 것**이 나왔다.
+
+푸시 페이로드에 우선순위 신호가 없어 모든 알림이 OS 에게 같게 보였다 — 사용자가 취침 집중 모드를
+켜면 SLOT_PRE(일정 5분 전)와 REFLECTION(어제 회고)이 **함께** 막히는데 서버 로그에는 SENT 로 남는다.
+
+배정 기준은 "시각이 곧 내용인가" 하나다. SLOT_PRE·PLAN_B 만 time-sensitive —
+남발하면 사용자가 앱 단위로 그 권한을 꺼 버려 정작 필요할 때 못 뚫는다.
+
+**남은 한계 2가지**
+- **안드로이드는 2단이다.** Expo 의 priority=default 가 Android 에서 normal 과 같아 ACTIVE 와
+  PASSIVE 가 구분되지 않는다. 셋을 가르려면 채널이 필요하다 → PUSH-ANDROID-CHANNEL
+- channelId 를 싣지 않는다(의도). 기기에 없는 채널을 보내면 알림이 **아예 표시되지 않는다**
+"""
+
+[[nodes]]
+id = "PUSH-ANDROID-CHANNEL"
+ticket = "TRIP-860"
+title = "안드로이드 알림 채널 — 프론트가 채널을 만들어야 긴급도 3단이 닿는다"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/adapter/out/push/ExpoPushAdapter.kt",
+]
+note = """
+**막는 것은 프론트다.** 프론트가 `setNotificationChannelAsync` 를 부르지 않아(2026-09-02 실측)
+백엔드가 channelId 를 실을 수 없다 — Expo 는 기기에 없는 채널을 받으면 알림을 **표시하지 않는다.**
+지금 실으면 안드로이드에서 조용히 사라진다. 그 의도가 테스트로 잠겨 있다(channelId 부재 단정).
+
+그래서 안드로이드는 현재 priority 2단(high vs normal)만 닿는다. ACTIVE·PASSIVE 가 같은 값이다.
+
+2026-09-14 양쪽 티켓화 — FE 절반(권한 요청·토큰 등록·채널 생성)은 TRIP-835(FE-PUSH-WIRING 노드),
+이 노드는 BE 절반(TRIP-860)만 남는다. touches 에서 frontend 경로를 뺐다.
+코드는 매핑 한 줄인데 **롤아웃이 본체다** — 구버전 앱 기기에 새 channelId 를 실으면 그 기기에서
+알림이 사라진다. FE 배포 침투 후 켜거나 앱 버전 분기.
+"""
+
+[[nodes]]
+id = "QUIET-HOURS"
+ticket = ""
+title = "야간 조용시간 — 결정 대기(사용자가 2026-09-02 보류)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application/PushDispatchService.kt",
+]
+note = """
+**법적 의무가 아니다**(조사 2026-09-02). 정보통신망법의 21–08 제한은 **광고성**에만 걸리고
+정보성은 상시 가능하다. 우리 8종은 전부 정보성이다. 특가·할인·쿠폰·생일 축하는 광고성이고
+`(광고)` 표기 의무가 붙는다 — 제휴·가격 알림을 열 때 marketing_consent 를 재사용한다.
+
+**PUSH-URGENCY 가 이미 상당 부분 없앴다** — REFLECTION 이 passive 라 iOS 에서는 요약에 묶인다.
+남은 구멍은 안드로이드다(위 2단 한계).
+
+**미뤄 둔 결정 2건**
+- 시간대: 21:00(광고성 법 경계와 같아 값을 하나로 관리) vs 22:00(회고는 밤에 보는 물건이라
+  21시는 이르다 — 21:30 에 끝낸 하루의 회고가 다음날 아침에 온다)
+- 대상: REFLECTION·COMMUNITY 만인가, TRIP_PRE 도인가. **TRIP_PRE 는 발화 시각을 먼저 재야 한다** —
+  이미 낮에 발화하면 규칙이 한 번도 안 걸려 목록에 있을 이유가 없다
+
+방식은 폐기가 아니라 **보류**다(hold-until-morning, 업계 관행). 인앱함 적재는 즉시(INV-U6-02).
+
+권고: **관측 후 결정.** 푸시 로그로 야간 발송이 실제로 얼마나 있는지 센 뒤 정한다 —
+지금 정하면 근거가 관측이 아니라 추측이다. 정본도 O-U6-2 에서 같은 판단을 했다.
+
+갱신(2026-09-14): 그 "관측"이 티켓이 됐다 — TRIP-843 이 선행이다(티켓 원문: "야간 조용시간·상한
+조정의 선행"). 관측이 깔리고 푸시가 실제로 나가기 시작하면 이 결정은 추측 없이 닫을 수 있다.
+"""
+
+[[nodes]]
+id = "DELETION-NOTICE"
+ticket = ""
+title = "삭제 고지 목록이 U1 에 동결 — BR-U6-25 로 갱신 + 스키마 추종 게이트"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/domain/DeletionSchedule.kt",
+  "backend/app/src/test/kotlin/com/trippilot/app/persistence/DeletionCascadeNoticeIT.kt",
+]
+note = """
+**U5·U6 정본↔코드 대조(2026-09-06)에서 발견.** CascadeSummary.forAccount() 가 U1 5범주에
+동결된 채 다섯 유닛이 지났다 — 코드 주석 스스로 "새 유닛에서 개인정보 테이블을 추가하면 반드시
+반영할 것(파기 고지 누락=법적 리스크)"이라 경고해 뒀는데 아무도 못 봤다.
+
+BR-U6-25(목록은 U6 소유·유닛마다 갱신) 열거대로 22범주로 갱신했고, 사람 기억 대신
+**DeletionCascadeNoticeIT 가 pg_constraint 를 훑어** account 직결 CASCADE 테이블이 고지에
+빠지면 그 마이그레이션을 넣은 PR 이 빨개지게 했다. 고지 제외는 사유 필수(EXCLUDED —
+refresh_session 은 즉시 폐기라 예약 파기가 아니고, deletion_schedule 은 절차 자체의 행).
+
+곁가지 확인: BR-U6-27 의 "내보내기 엔드포인트 없음(G-U6-3)"은 낡았다 — /me/export 실재.
+정본 각주 정정은 별건.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 실사용 준비 일괄(2026-09-12~14 발행 티켓) — 정본·코드 대조에서 나온 구멍들.
+# 공통 성격: 전부 기능 리뷰·테스트를 통과한 상태에서 남았다. 기능이 아니라
+# 정본과의 차이(NFR 미구현·낡은 전제·미뤄둔 파기)를 본 것이 유일한 검출 경로였다.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "REMINDER-COPY-AI"
+ticket = "TRIP-836"
+title = "리마인드 문구 AI 채움 — 채움 서비스·wire·컬럼 (836 잔여)"
+status = "done"
+migration = true
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application",
+  "backend/app/src/main/resources/db/migration",
+]
+note = """
+**836 을 셋으로 쪼갠 나머지.** 재계획 구독(실제 버그)은 PR #528 로 끝났고, 여기 남은 것은
+문구 채움 서비스 + AI wire + `notification_schedule.title/body` 컬럼·발화 분기다.
+
+**계약이 열렸다(2026-09-16 실측) — 차단 해소.** `ai/docs/openapi.json` 에
+`POST /ai/v1/notification/copies` 가 실재한다. 계약 모양:
+
+- 요청 `ReminderCopyRequest` — `items`(필수) · `request_meta`(필수) · `trip_title`
+- 항목 `ReminderCopyItemSchema` — `schedule_key`·`kind`·`date`(필수) · `slots`
+- 응답 `ReminderCopyResponse` — `copies`(필수) · `degraded`(필수) · `fallback_mode`
+- 문구 `ReminderCopySchema` — `schedule_key`·`title`·`body` 전부 필수
+
+**`schedule_key` 가 맞물림의 전부다** — 요청 항목과 응답 문구를 잇는 키라, 우리 예약 행과 같은
+값이어야 문구가 제자리에 붙는다. 슬롯키 규약(`{date}#{poiId}`)과 다른 축이니 착수 시 확인한다.
+`degraded` 가 오면 상대가 규칙 문구로 내려간 것이므로 **AI 문구로 표시하지 않는다**(회고 `source` 선례).
+
+**이전 기록(2026-09-15)**: 경로가 없어 컬럼·발화 분기만 먼저 넣으면 채우는 쪽이 없어 항상
+null→상수라 동작 변화가 0이었다. 그 전제가 사라졌다.
+컬럼·발화 분기만 먼저 넣으면 채우는 쪽이 없어 **항상 null→상수라 동작 변화가 0** 인 죽은 코드가 된다.
+
+
+**닫힘(2026-09-16, PR #546).** `ReminderCopyPort` + `HttpReminderCopyAdapter` + V2.47(title·body, 둘 다 nullable).
+필터 네 겹(degraded 면 통째 무시 · 보낸 적 없는 키 버림 · 한쪽만 온 문구 버림 · 길이 초과 버림)을 전부 역검증했다.
+**남은 것 하나 — 실 왕복을 아직 안 태웠다.** `AI_REMINDER_COPY_MODE=http` 로 켜고 한 번 태우면
+`schedule_key` 에코와 `degraded` 의미가 같이 확인된다. 계약 게이트는 이름만 본다.
+"""
+
+[[nodes]]
+id = "PUSH-LIVE-CHECK"
+ticket = "TRIP-834"
+title = "푸시 실기기 왕복 1회 — 사람이 켜서 태운다"
+status = "todo"
+migration = false
+touches = []
+note = """
+배선·통로는 PR #531 로 끝났다. 남은 것은 **사람과 기기가 필요한 부분**이다 —
+Expo 토큰 등록 → `PUSH_MODE=expo` 기동 → 즉시 알림·예약 리마인드 각 1회 → 기기에서 눈으로 확인.
+
+회고 AI 선례(#490)처럼 **켜 봐야 드러나는 값**이 있을 수 있다. 실측 후 고칠 값이 나오면 별도 노드로.
+"""
+
+[[nodes]]
+id = "TRIP-834"
+ticket = "TRIP-834"
+title = "푸시 실 왕복 1회 — 켜 본 적이 없어서 발송기가 도는지 아무도 모른다"
+status = "done"
+migration = false
+touches = [
+  "docker-compose.yml",
+]
+note = """
+**절반 완료 → 이 노드는 닫는다(2026-09-15).** 배선·통로·지표 분리는 PR #531. **남은 실기기 왕복은 `PUSH-LIVE-CHECK` 가 잇는다** — 사람과 기기가 필요해 성격이 다르다.
+
+**절반 완료(2026-09-15, PR #531) — 실기기 왕복은 남는다.** 지표가 "성공률 100%" 로 거짓말하던 것을
+막고(`delivery=real|none`) `PUSH_MODE` 통로를 열었다. 기본 발송기는 아무 데도 안 보내면서 SENT 를
+보고하는데(그 판단은 옳다 — 실패로 보고하면 진짜 실패가 묻힌다) 지표가 그것을 실발송으로 그렸다.
+**남는 것**: 실기기 1회 왕복 — Expo 토큰·실기기가 필요해 사람이 켜서 태워야 한다(죽은 토큰 무효화·
+다기기·긴급도 3단·실측값).
+
+코드 작업이 아니라 검증 작업이다 — mode=expo 로 켜고 실기기 1대에 실제로 알림이 뜨는 것을
+확인하고 실측값을 남긴다. 회고 AI 실왕복(REFLECTION-LIVE-CHECK)이 마감 8s 부족을 드러낸 선례.
+FE 토큰 등록이 미배선(TRIP-835)이라 **수동 토큰 등록으로 진행 가능** — 서버 경로 검증엔 충분하다.
+"""
+
+[[nodes]]
+id = "TRIP-836"
+ticket = "TRIP-836"
+title = "리마인드 문구 AI 채움 — 예약 title/body·채움 서비스·발화 분기 + 재계획 재적재"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application",
+]
+note = "팀 발행 티켓(2026-09-12경). notification application 층을 만진다 — 843·844 와 자원 배타."
+
+[[nodes]]
+id = "TRIP-843"
+ticket = "TRIP-843"
+title = "U6 관측 지표 4종 — 메트릭 0건이라 '관측으로 만족한다'는 근거가 비어 있다"
+status = "done"
+migration = false
+touches = [
+  "backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt",
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application",
+]
+note = """
+**셋으로 쪼개 이 노드는 닫는다(2026-09-15).** 재계획 구독(실제 버그)은 PR #528 로 완료. **문구 채움·wire·컬럼은 `REMINDER-COPY-AI` 가 잇는다**(AI 계약 대기).
+
+**완료(2026-09-15, PR #524).** 지표 4종 계측. 릴레이 지연은 앱 시계가 아니라 **DB 가 계산한다** — 두 시계 차이가 섞이면 음수가 되고 Micrometer 가 조용히 버려 지표가 빈다. 배선을 따로 잠갔다(지표 클래스만 테스트하면 계측 호출을 지워도 안 깨진다).
+
+OBS-U6-01~04(릴레이 지연·푸시 성패·억제 건수·미읽음 누적)가 정본에 있는데 MeterRegistry 사용처
+0건(2026-09-12 grep). REL-U6-03("침묵 실패 금지는 관측으로 만족")의 근거가 이것 없이는 비어 있다.
+QUIET-HOURS 와 상한값 조정의 선행이기도 하다. 수집 경로(Micrometer OTLP push)는 기존재 — 계측만.
+"""
+
+[[nodes]]
+id = "TRIP-844"
+ticket = "TRIP-844"
+title = "푸시 발송량 소프트 상한 — 값은 NFR 에 이미 있는데 로직이 없다"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification/application/PushDispatchService.kt",
+]
+note = """
+**완료(2026-09-15, PR #525).** 시간 10건·일 50건. 값은 NFR 에 이미 있었고 **로직이 없던 것**이라 미결 표(O-U6-2)를 종결로 정정했다. SYSTEM 도 상한을 탄다 — 면제를 두면 폭주 경로가 그리로 열린다.
+
+O-U6-2("값이 없다")는 낡았다 — NFR COST-U6-01 이 계정당 시간 10·일 50 으로 이미 확정.
+미결 표가 NFR 보다 먼저 쓰여 갱신이 안 된 것. **머지 후 미결 표를 종결로 정정할 것.**
+초과분은 푸시만 생략, 인앱함엔 남는다(COST-U6-02). 843 과 같은 파일을 만진다.
+"""
+
+[[nodes]]
+id = "TRIP-845"
+ticket = "TRIP-845"
+title = "릴레이 재시도 백오프 없음 + 폴링 주기 정본 드리프트(문서 5s/코드 2s)"
+status = "done"
+migration = true
+touches = [
+  "backend/app/src/main/kotlin/com/trippilot/app/event/OutboxRelay.kt",
+  "backend/app/src/main/resources/db/migration",
+]
+note = """
+**완료(2026-09-15, PR #522 머지).** 재시도가 20초에 소진되던 것을 2→4→8…초 백오프(5분 상한, 총 창 ~13분)로. 폴링 주기 드리프트(문서 5s/코드 2s)는 코드를 정본으로 올려 NFR 을 고쳤다. 역검증이 **내 테스트의 결함**을 잡았다 — 간격 비교를 서로 비교로 쓰면 상수 지연에서도 우연히 통과한다.
+
+REL-U6-01 은 지수 백오프인데 코드는 실패 후 다음 폴링(2s)에 즉시 재집기 — 죽은 상대를 20초에
+10번 때리고 포기한다. 기본안은 next_attempt_at 컬럼(마이그레이션). 843 과 OutboxRelay 를 다툰다.
+"""
+
+[[nodes]]
+id = "TRIP-846"
+ticket = "TRIP-846"
+title = "위치 동의 철회해도 이미 저장된 EXIF 좌표가 남는다"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/application/LocationConsentService.kt",
+  "backend/modules/archive/src/main/kotlin/com/trippilot/archive/application/VisitRecordService.kt",
+]
+note = """
+**완료(2026-09-15, PR #527).** 철회 시 EXIF 파기. auth→archive 동기 호출은 **순환(R1)** 이라 이벤트가 유일한 길. 파기 범위 조회를 목록 파사드와 나눈 이유: 그쪽은 limit·삭제 필터가 있어 파기에 쓰면 그 아래 좌표가 조용히 남는다.
+
+파기(INV-L4)가 scope=gps_track 사실 기록만 하고 끝난다 — U1 시점엔 지울 데이터가 없어 옳았는데
+U5 가 exif_lat/lng 를 만들며 파기 범위가 갱신되지 않았다. 게이트는 잘 돌아서 더 안 보였다.
+모듈 경계상 철회 이벤트 → archive 구독이 기본안(아웃박스 기존재). **857 과 같은 경계 결정을
+공유한다 — 같은 사람이 잡는 것이 싸다.**
+"""
+
+[[nodes]]
+id = "TRIP-847"
+ticket = "TRIP-847"
+title = "약관 본문 6종 전부 플레이스홀더 — GPS_RECORDING 에 사진 EXIF 명시 포함"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/main/resources/db/migration/R__seed_reference_data.sql",
+]
+note = """
+**축소·대기(2026-09-15).** 실배포 전환으로 무게가 달라졌다 — 자체 초안으로는 부족하고 **법무 검토가
+선행**이다. 우리 몫은 `GPS_RECORDING` 본문(사진 EXIF 명시) 하나로 좁히고, 나머지 5종은 주체가 정해질
+때까지 대기. 배포 시 **위치기반서비스사업 신고**(방통위)도 함께 걸린다 — 코드로 못 푸는 선행이다.
+
+O-U5-8(EXIF 를 GPS 동의로 게이팅하는 것이 목적 범위에 맞는가)을 따지러 문구를 찾았더니 문구가
+없었다 — 질문이 성립하지 않았다. 고지 문구에 사진 EXIF 를 명시하면 코드 무변경으로 해소.
+**아직 사용자가 없는 지금이 재동의 없이 고칠 수 있는 유일한 시점.** 나머지 5종의 소유(법무 vs 팀)는
+멘토 확인 대기(2026-09-12 안건).
+
+**정정(2026-09-16) — Jira 는 완료인데 코드는 안 끝났다.** 문서 PR 셋(#571·#572·#573)이 티켓을
+닫았고 `backend/docs/legal/` 에 **6종 본문이 다 쓰였다**(EXIF 명시 포함). 그런데
+`R__seed_reference_data.sql` 의 `terms_version.body` 는 **여전히 6종 전부 플레이스홀더**다.
+
+즉 동의 증적은 쌓이는데 **DB 가 사용자에게 내주는 본문은 아직 "[플레이스홀더]"** 다.
+남은 일은 쓰인 문서를 시드에 싣는 것 하나다 — 문구 작성이 아니라 배선이다.
+
+재동의(`reconsent_required`) 판단이 따라오므로 **사용자가 생기기 전에** 끝내야 한다.
+"""
+
+[[nodes]]
+id = "TRIP-848"
+ticket = "TRIP-848"
+title = "환각 금지(BR-U5-31)가 규칙으로만 있다 — AI 회고 카드 장소를 방문 실적과 대조"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/reflection/src/main/kotlin/com/trippilot/reflection/application/ReflectionService.kt",
+]
+note = """
+**완료(2026-09-15, PR #529).** 환각 대조. 티켓 문면(장면의 장소가 방문 목록에 있는가)은 **상대 계약에 장소 필드가 없어** 불가능 — 판정을 뒤집어 '안 갔다고 확실히 아는 이름'(건너뛴 방문지)을 찾는다. payload 구조를 읽지 않아 템플릿이 바뀌어도 검사가 무력화되지 않는다.
+
+코덱은 cover.title·JSON 형식만 본다(의도 — 카드 내부 미모델링, DEC-U5-14). mode=rule 인 지금은
+구멍이 아니지만 http 로 켜는 순간 안 간 장소가 장면에 실려도 아무도 못 잡는다. 장소명만 방문
+목록과 대조, 불일치 시 규칙 카드 강등 + 관측. **회고 AI 를 켜기 전에 들어가야 한다** — 판정
+위치는 aiCardOrNull(사용자 수정본은 검사받지 않아야 하므로 코덱이 아니다).
+"""
+
+[[nodes]]
+id = "TRIP-849"
+ticket = "TRIP-849"
+title = "날씨 실어댑터(KmaWeatherAdapter) — Plan-B 트리거가 가짜 날씨로 돌고 있다"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/weather-context",
+  "backend/app/src/main/resources/application.yml",
+]
+note = """
+**정정(2026-09-16) — 키는 멀쩡하다. 아래 '22자' 진단은 틀렸다.**
+
+실제로 호출해서 확인했다: `.env` 의 값(98자)을 **그대로** 보내면 403, **한 번 디코딩해서** 보내면
+`HTTP 200 · resultCode=00 · NORMAL_SERVICE` 다. 즉 발급된 키는 유효하고, 들어 있는 것이
+**Encoding 표기**(`%2B`·`%3D` 포함)인데 코드는 **Decoding 키**를 요구한다
+(`kma_weather.py` — "service_key는 **디코딩 키** (urlencode는 HTTP 클라이언트 1회)").
+Encoding 키를 넣으면 클라이언트가 한 번 더 인코딩해 `%2B` → `%252B` 가 되고 서버가 거절한다.
+**재발급이 아니라 같은 키의 다른 표기를 넣으면 된다.**
+
+**AI 조립도 이미 돼 있다** — `ai/main.py` 의 `_kma_weather()` 가 `WEATHER_API` 가 있으면
+`KmaWeatherAdapter` 를 조립한다. 앞서 "조립이 안 돼 있다"고 적었던 것도 틀렸다(`ai/src/` 아래만
+찾고 `ai/main.py` 를 안 봤다).
+
+**그래서 이 노드의 실체는 키가 아니라 코드다** — 백엔드 `weather-context` 에는 Kotlin 실어댑터가
+없고 `FakeWeatherAdapter` 뿐이며, Plan-B 트리거(`WeatherTriggerService`)가 그것을 본다.
+`trippilot.weather.mode` 스위치는 application.yml·compose·.env.example 어디에도 없다.
+AI 쪽은 키 표기만 고치면 켜지지만, 백엔드 Plan-B 는 그것과 별개다.
+
+**착수 전 결정**: 같은 공공 API 를 Kotlin·Python 두 벌로 둘 것인가. 루트 CLAUDE.md 의
+"one external API = one owning module = one adapter port" 와 부딪힌다. 대안은 백엔드가 AI 에
+날씨를 묻는 것인데, 그러면 **배경 감지가 AI 가용성에 묶인다** — "조회 실패는 무발화"(BR-U4-05)와
+맞물려 비 오는 날 아무 일도 안 일어나는 결과가 된다.
+
+---
+
+**아래는 2026-09-15 시점의 기록이며 키 관련 부분은 위에서 정정됐다.**
+
+**차단(2026-09-15 실측) — 키가 없다.** `.env` 의 `WEATHER_API` 로 기상청 단기예보를 호출하면 **403** 이다.
+키가 22자 평문인데 공공데이터포털 인증키는 보통 40자 이상이라 **다른 서비스 키**로 보인다.
+티켓도 키 발급을 선행 1번으로 잡았다. 공공데이터포털에서 *기상청_단기예보 조회서비스* 활용신청 후
+일반 인증키(Decoding)를 `.env` 에 넣으면 재개한다. 격자 변환식만 먼저 넣는 것도 가능하나
+**쓰는 데가 없으면 죽은 코드**라 함께 미뤘다.
+
+어댑터가 Fake 하나뿐이고 matchIfMissing=true 라 실사용 기본도 가짜다 — 날씨 트리거의 근거가
+격자 키 해시값이다. 모드 스위치 6종 중 유일하게 **켤 실물이 없는** 항목. 공공데이터포털 키 발급
+(외부·시간 소요)을 먼저 걸어 둘 것. 선례는 KakaoRegionGeocodeAdapter(모드 조건+Announcer+기동 차단).
+850 과 application.yml 을 다툰다.
+
+
+**닫힘(2026-09-16, PR #554).** `KmaWeatherAdapter` + `KmaGrid`(LCC 변환) 신설, `WEATHER_MODE` 스위치 개통.
+실 왕복 확인 — 제주 격자(53,38) 강수확률 20%. 실측으로 둘을 잡았다: 인증키의 `+` 를 `queryParam` 에
+맡기면 서버가 공백으로 읽어 403, 그리고 **발표 날짜가 아니라 묻는 날짜로 골라야 한다**(자정 직후엔 전날
+23시 발표분이 와서 발표 날짜로 거르면 오늘 값이 하나도 안 잡힌다).
+"""
+
+[[nodes]]
+id = "TRIP-850"
+ticket = "TRIP-850"
+title = "실사용 모드 전환 — 스위치 8종이 전부 가짜/꺼짐 기본값, 환경별 값이 아무 데도 없다"
+status = "todo"
+migration = false
+touches = [
+  "backend/app/src/main/resources/application.yml",
+  "docker-compose.yml",
+]
+note = """
+환경별 값 표 + 키 발급 상태 목록 + 기동 차단 조합 문서화. 숙소 stub→db 전환은 전제가 없어
+이 티켓에서 바로 한다(정본 시드 12,782곳 기존재). 지오코딩은 급하지 않다(2026-09-12 정정 —
+TRIP-360 이후 차단이 아니라 안내 문구 문제). 켜기 자체의 전제는 각 티켓이 진다(849·848·834 등).
+
+
+**정정(2026-09-16) — 6종이 아니라 8종이다.** 실제로 센 값:
+`AI_SCHEDULE_MODE=fake` · `PUSH_MODE=off` · `AI_REMINDER_COPY_MODE=off` · `PLACE_GEOCODE_MODE=stub` ·
+`WEATHER_MODE=fake` · `STAY_CONTENT_MODE=stub` + 빈 기본값 둘(`SERVICE_AUTH_TOKEN` · `JWT_SIGNING_KEY`).
+그중 **둘은 이제 값만 바꾸면 켜진다** — `WEATHER_MODE`(#554)·`AI_REMINDER_COPY_MODE`(#546) 뒤에
+실 어댑터가 생겼다. 이 티켓의 성격이 '구현'에서 '환경별 값 결정'으로 옮겨 갔다.
+"""
+
+[[nodes]]
+id = "REPLAN-BOUNDARY"
+ticket = "TRIP-854"
+title = "재계획 전용 경계 개통 — 어댑터 전환·계약 게이트 등록·마감 25s (B-1잔여·B-3·B-4·B-5)"
+status = "todo"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/ReplanFacadeService.kt",
+  "backend/modules/itinerary-generation/src/test/kotlin/com/trippilot/itinerarygeneration/contract/AiBoundaryOpenApiTest.kt",
+]
+note = """
+계약 합의문 = ai-backend-replan-연동-설계.md. 조립 절반은 #514 완료(ReplanInput 10종 — 이제
+NEUTRAL_PREFERENCES 로 덮을 이유가 조립엔 없다). 남은 것: 어댑터를 generate 재사용에서 전용
+경로로, REPLAN_PATH 를 CALLED_PATHS 에(안 넣으면 계약 게이트가 이 경로를 안 본다 — B-3),
+마감 25s(B-4), totalDistanceKm(B-5). **양쪽 동시** — 선개통은 alternatives 미사용 경계 전력.
+"""
+
+[[nodes]]
+id = "REPLAN-VOCAB"
+ticket = "TRIP-855"
+title = "FE↔AI 재계획 어휘 번역표 + slot_candidates reason 하드코딩 해제 (B-2·B-6)"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
+]
+note = """
+**완료(2026-09-15, PR #520).** 머지됨. 슬롯 후보의 reason 하드코딩 해제 + 번역표. 실 왕복에서 효과 확인 — reason=WEATHER 를 보내자 후보가 전부 실내로 바뀌었다.
+
+번역은 어댑터 한 곳(설계 §3). 같은 번역표를 쓰는 별건 — slot_candidates 의 reason="none"
+하드코딩(B-6)도 여기서 해제한다. REPLAN-BOUNDARY 와 같은 파일을 다툰다 — 먼저 손댄 쪽이 이긴다.
+"""
+
+[[nodes]]
+id = "TRIP-857"
+ticket = "TRIP-857"
+title = "사진 EXIF 좌표 저장을 위치 법정 로그(COLLECTION)에 남긴다"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/archive/src/main/kotlin/com/trippilot/archive/application/VisitRecordService.kt",
+  "backend/modules/auth/src/main/kotlin/com/trippilot/auth/application/LocationConsentService.kt",
+]
+note = """
+**완료(2026-09-15, PR #526).** EXIF 수집 사실을 COLLECTION 으로. 판정을 요청이 아니라 **저장 결과**로 한다 — 동의 없으면 좌표가 버려지고, EXIF 없는 사진은 모을 게 없다. 둘 다 로그를 남기면 확인자료가 거짓이 된다.
+
+스키마(V1.3)에 COLLECTION 이 정의돼 있는데 위치를 실제로 보관하는 archive 가 법정 로그를 한 번도
+안 부른다(2026-09-12 grep 0건). 좌표가 실제 저장될 때만 남긴다 — 동의 없어 버린 경우는 수집이
+아니다. 원시 좌표 미포함(기존 규약). **846 과 같은 경계 결정(auth↔archive 통로) 공유.**
+"""
+
+# ── 외부 짝 ──────────────────────────────────────────────────────────────────
+
+[[nodes]]
+id = "FE-PUSH-WIRING"
+ticket = "TRIP-835"
+title = "[FE] 푸시 수신 배선 3건 — 권한 요청·토큰 등록 호출·안드로이드 채널"
+status = "external"
+owner = "fe"
+migration = false
+touches = []
+note = """
+registerPushToken() 은 구현·테스트까지 있는데 앱 호출부 0건, requestPermissionsAsync 0건,
+setNotificationChannelAsync 0건(2026-09-11 실측). FE 규칙 문서도 "현 소비자 0"을 명시한다.
+이것 없이는 서버가 푸시를 켜도 보낼 대상이 없다 — TRIP-834 는 수동 등록으로 우회한다.
+"""
+
+[[nodes]]
+id = "AI-REPLAN"
+ticket = ""
+title = "[AI] 재계획 전용 경계 — fully_booked·지시어 사전·번역 워커·라우트 (A-1~A-5)"
+status = "external"
+owner = "ai"
+migration = false
+touches = []
+note = """
+계약 합의문(ai-backend-replan-연동-설계.md §7 AI 측 표). 양쪽이 각자 만들고 LIVE_AI=1 왕복으로 만난다.
+
+**현황(2026-09-16 코드 확인) — 대부분 끝나 있다.** A-1 `fully_booked`(`agents/planb/rag.py`) ·
+A-2 지시 사전(`agents/planb/directives.py`) · A-3 번역 워커(`workers/replan_directive_translation.py`)
+모두 실재한다. 남은 것은 **A-4 `/replan` 경계** 하나이고 `ai/docs/openapi.json` 에 아직 없다.
+
+한때 이 노드에 신설 티켓을 달았다가 뗐다 — "AI 절반에 티켓이 없다"는 전제로 만들었는데 틀렸다.
+진짜 병목은 **백엔드 잔여**였다(재계획 전용 경계 노드와 재계획 입력 전달 노드).
+"""
+
+# ── 간선(2026-09-14 추가분) — 티켓·설계 원문으로 확인한 것만 ──────────────────
+
+[[nodes]]
+id = "REGION-CODE-ANCHOR"
+ticket = ""
+title = "받은 목적지 코드로 앵커를 잡는다 — 이름 임의 선택의 나머지 절반 (TRIP-859 후속)"
+status = "done"
+migration = false
+touches = [
+  "backend/modules/trip/src/main/kotlin/com/trippilot/trip/api",
+  "backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/api/RegionLookupFacade.kt",
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/application/GenerateItineraryService.kt",
+]
+note = """
+**티켓이 없다.** TRIP-859(PR #530)가 목적지 코드를 **받아 저장하는 데까지** 했고, 이것이 그 코드를
+실제로 쓰게 만드는 나머지다. 검수(2026-09-15)에서 드러났다 — 티켓 제목이 "동명이지역 임의 선택
+해소"인데 정작 임의로 고르는 자리가 안 닫혀 있었다.
+
+**남은 구멍의 정확한 위치**: `GenerateItineraryService.kt:307` 의
+`destinations.firstNotNullOfOrNull { regions.centerOf(it) }` → `findExact(이름).firstNotNullOfOrNull`.
+부산 중구 여행이 regionCode 를 제대로 들고 있어도 **앵커는 서울 중구 좌표를 집을 수 있다.**
+거점(숙소)이 없는 날의 폴백이라 범위는 좁지만, 지어낸 좌표가 아니라 **다른 지역의 좌표**라
+증상이 "일정이 엉뚱한 동네에서 돈다"로 나온다.
+
+**왜 #530 에 못 넣었나 — 3개 모듈이다.**
+1. `TripGenerationContext.destinations` 가 `List<String>`(이름뿐)이라 trip 의 `..api..` 계약을 바꿔야 한다
+2. place-data 에 코드로 중심을 찾는 파사드를 연다(`centerOf` 는 이름만 받는다)
+3. itinerary-generation 의 앵커 조립이 코드를 먼저 보고, 없을 때만 이름으로 떨어진다
+
+**이름 정합 검사는 대안이 아니다.** 서버에 정본 표시명이 없어(`GET /regions` 가 `name`·`sidoName` 을
+따로 주고 표시는 클라가 조립) 이름으로 코드를 검증하면 **같은 이름·다른 시도**를 원리적으로 못 가른다 —
+`PoiEntity` 주석의 "시군구명은 유일하지 않다"와 같은 결론이다. 코드를 믿는 것만이 해소다.
+
+선행: TRIP-859(PR #530) 머지.
+
+
+**닫힘(2026-09-16, PR #550).** `TripDestinationRef(name, regionCode)` 로 trip `..api..` 계약을 넓히고
+(`destinations` 는 파생 프로퍼티로 유지 — 기존 호출부 불변), `RegionLookupFacade.centerOfCode` 를 열고,
+규칙 자체를 `RegionAnchors.centerOf` 로 빼 **테스트와 생산이 같은 것을 부르게** 했다(규칙을 테스트에 다시
+적으면 생산 순서가 뒤집혀도 자기 사본을 보고 통과한다).
+"""
+
+[[nodes]]
+id = "FLAKY-OUTBOX-RELAY"
+ticket = ""
+title = "OutboxRelayIT 가 전체 빌드에서만 간헐 실패 — 배경 릴레이가 이벤트를 먼저 집는다"
+status = "done"
+migration = false
+touches = [
+  "backend/app/src/test/kotlin/com/trippilot/app/OutboxRelayIT.kt",
+  "backend/app/src/test/resources/application.yml",
+]
+note = """
+**해소(2026-09-15, PR #537).** 가설이 맞았다 — **계측으로 확인했다.** `relay()` 진입에 임시 로그를
+붙여 `OutboxRelayIT` 를 돌리니 호출 15회 중 1회가 `scheduling-1` 스레드였다.
+
+원인은 처방이 애초에 작동한 적이 없다는 것이었다. 테스트 설정이 주기를 1시간으로 늘려 "껐다"고
+적어 두었지만 **`fixedDelay` 는 기동 직후 1회를 막지 못한다.** `initialDelayString` 을 붙이고
+테스트에서 첫 발화도 미루자 계측에서 그 호출이 0회가 됐다(운영 기본값 0 — 동작 무변경).
+
+**같은 함정이 셋이었다.** 테스트 설정이 "끈다"고 적어 둔 여행 종료 스위퍼·리마인드 폴러도 구조가
+같아 함께 고쳤다. 둘은 아직 안 깨졌을 뿐이다.
+
+**실측(2026-09-15, 10건 일괄 머지 중)**: 전체 빌드 3회 중 1회 실패. 두 테스트가 함께 깨진다 —
+`발행하면 아웃박스에 적재되고 릴레이가 구독자에게 배달한다`(expected 1 but was 0)와
+`배달에 성공하면 적재부터 배달까지의 지연이 기록된다`(expected true but was false).
+격리 실행 `--rerun-tasks` 는 통과한다. 코드 회귀가 아니다.
+
+**깨지는 자리가 단서다.** 첫 테스트는 `relay()` 를 부르기 **전**의 단언에서 깨진다
+(`unpublished("배달") shouldBe 1`). 즉 발행 직후 이미 누군가 그 행을 집어갔다는 뜻이고,
+테스트가 쓰는 "내 행이 발행될 때까지 돌린다" 관용구로는 막을 수 없는 종류다.
+
+**유력한 원인**: `@Scheduled` 릴레이가 테스트 컨텍스트에서도 산다(`AsyncConfig` 의
+`@EnableScheduling`). 테스트 설정이 주기를 1시간(`relay-delay-ms: 3600000`)으로 늘려 두었지만
+**fixedDelay 는 컨텍스트 기동 직후 1회 발화한다** — 서로 다른 설정의 스프링 컨텍스트가 여럿이라
+그 발화가 다른 테스트 도중에 겹칠 수 있다. IT 가 늘수록 컨텍스트도 늘어 확률이 오른다.
+
+**단정하지 말 것.** 위는 재현으로 확인한 것이 아니라 증상과 코드에서 좁힌 가설이다. 처방 후보는
+(가) 테스트 프로파일에서 스케줄링만 끄기(`spring.task.scheduling` 비활성 또는 조건부 `@Scheduled`),
+(나) 릴레이 빈을 테스트에서 수동 호출 전용으로 두기. 어느 쪽이든 **먼저 재현**하고 고른다 —
+확률이 1/3 이라 반복 실행으로 재현 가능한 편이다.
+
+같은 부류: `FLAKY-HEALTHPING`. 둘 다 "전체 빌드에서만 빨개지는" 형태라 재실행으로 넘기면 영영 못 찾는다.
+"""
+
+[[nodes]]
+id = "JWT-SIGNING-KEY"
+ticket = ""
+title = "JWT 서명키가 기동마다 새로 생성된다 — 다중 인스턴스에서 서로의 토큰을 못 읽는다"
+status = "done"
+migration = false
+touches = [
+  "backend/common/security/src/main/kotlin/com/trippilot/security/JwtSecurityConfig.kt",
+  "backend/app/src/main/resources/application.yml",
+]
+note = """
+**티켓이 없다.** 코드 주석에만 있던 것을 2026-09-15 코드 훑기에서 찾았다
+(`JwtSecurityConfig.kt` — "prod 는 Secrets Manager 에서 JWK 로드로 교체(PD-3) … TODO(TRIP-153 후속)").
+
+**현재 동작**: `rsaKey()` 가 **환경 분기 없이** 기동할 때마다 RSA-2048 키페어를 새로 만든다.
+주석은 "dev/test 는" 이라고 적었지만 코드에는 그 조건이 없다 — 운영에서도 같다.
+
+**무엇이 잘못되나 — 둘의 무게가 다르다.**
+
+1. **다중 인스턴스에서 치명적이다.** A 가 서명한 액세스 토큰을 B 가 검증하지 못해 **요청마다
+   무작위 401** 이 난다. 클라이언트가 리프레시로 새 토큰을 받아도 다음 요청이 또 다른 인스턴스로
+   가면 같은 일이 반복된다. 복제본을 둘 이상 띄우는 순간 로그인이 사실상 깨진다.
+
+   **지금 당장 나는 증상은 아니다** — U6 NFR §10 이 "현재 로컬 단일 인스턴스"라고 적어 두었다.
+   다만 REL-U6-04 가 그 전환을 **대비해** ShedLock 을 이미 깔아 둔 것처럼, 이것은 전환을 **막는**
+   쪽이다. 복제본을 늘리려는 날 이 하나 때문에 못 늘린다.
+2. **재배포마다 액세스 토큰이 무효가 된다** — 다만 리프레시 토큰은 JWT 가 아니라 DB 행이라
+   (`RefreshSessionJpaEntity`) 재발급으로 회복된다. 401 을 리프레시로 처리하는 클라이언트라면
+   대체로 보이지 않는다. 이쪽은 성가심이지 차단이 아니다.
+
+**TRIP-850(실사용 모드 전환)이 덮지 않는다.** 그 티켓은 "스위치 6종의 환경별 값"이고 이것은
+스위치가 아니라 **설정 표면 자체가 없는 기능**이다. 켜고 끌 값이 없다.
+
+**처방의 갈림길**(착수 시 결정): 외부 시크릿 저장소(Secrets Manager)에서 JWK 로드 vs 환경변수로
+PEM/JWK 주입. 후자가 싸고 이 리포의 다른 시크릿 관례(`SERVICE_AUTH_TOKEN` 등)와 같은 모양이다.
+어느 쪽이든 **로드 실패 시 fail-fast** 여야 한다(LC-6) — 조용히 생성으로 떨어지면 지금과 같아진다.
+
+
+**닫힘(2026-09-16, PR #544).** `JwtSigningKeys` 신설 — base64(PKCS#8) 주입, 비어 있으면 종전대로
+기동 시 생성하되 **경고**, `JWT_REQUIRE_CONFIGURED_KEY=true` 면 fail-fast. 환경변수 주입 방식으로 갔다.
+덫 하나를 실측으로 잡았다 — `${JWT_REQUIRE_CONFIGURED_KEY:-}` 처럼 기본값을 비우면 빈 문자열이
+Boolean 에 바인딩돼 기동이 깨진다. `:-false` 로 두고 compose 를 읽는 테스트로 못 박았다.
+"""
+
+[[edges]]
+from = "AI-REPLAN"
+to = "REPLAN-BOUNDARY"
+kind = "계약선행"
+verified = false
+reason = "설계 §7 「전환 절차: 양쪽 동시」— AI 측 라우트(A-4) 없이는 LIVE_AI 왕복이 성립하지 않는다. 어댑터 전환 전까지의 B-4·B-5 는 먼저 갈 수 있다."
+
+[[edges]]
+from = "FE-PUSH-WIRING"
+to = "PUSH-ANDROID-CHANNEL"
+kind = "외부선행"
+verified = false
+reason = "TRIP-860 원문 「선행 — TRIP-835」: 채널이 기기에 생기기 전에 channelId 를 실으면 알림이 표시되지 않는다."
+
+[[edges]]
+from = "TRIP-843"
+to = "QUIET-HOURS"
+kind = "관측선행"
+verified = false
+reason = "TRIP-843 원문 「야간 조용시간·상한 조정이 '관측 후 결정'으로 미뤄져 있다 — 이 티켓이 그 둘의 선행」. 끊으면 빌드가 깨지는 종류가 아니라 결정 근거가 사라지는 종류다."
+
+[[edges]]
+from = "TRIP-361-CONTRACT"
+to = "REGION-CODE-ANCHOR"
+kind = "계약선행"
+verified = false
+reason = "코드를 받는 경로(#530)가 없으면 앵커가 쓸 값 자체가 안 들어온다. 저장은 되지만 항상 null 이라 후행이 동작을 못 바꾼다."
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EKS 배포 트랙 (2026-09-18 합류 — 멘토 PR #579 머지, TRIP-885)
+
+[[nodes]]
+id = "EKS-INFRA"
+ticket = "TRIP-885"
+title = "DEV·PRD EKS Terraform·Helm·수동 배포 워크플로 — 코드 머지 완료, 실 AWS 미검증"
+status = "done"
+migration = false
+touches = [
+  "infra/",
+  "deploy/eks/",
+  ".github/workflows/aws-bootstrap.yml",
+  ".github/workflows/aws-deploy.yml",
+]
+note = """
+**닫힘(2026-09-18, PR #579 + #597).** 검수 3회 — 로컬 게이트 전량(tftest 4·python 54·helm lint
+dev/prd·actionlint) 초록, 렌더 단언(embedding 게이팅·시크릿 원문 부재) 일치. 비차단 지적 4건은
+후속으로 뺐다: 관측성(TRIP-894) · Redis 유휴(TRIP-895) · CI 캐시(PR #599) · AI 데이터 이미지 고정
+(TRIP-893 runbook 에 명시).
+
+**"done" 은 코드 기준이다** — 실 AWS plan/apply 는 한 번도 안 돌았다(멘토 명시). 실검증은
+EKS-DEV-LIVE 가 잇는다. 역할 분배(TRIP-885 코멘트): Terraform 실행·배포 버튼 = 송,
+ai 시크릿·KB = 준하.
+"""
+
+[[nodes]]
+id = "RELEASE-MAIN"
+ticket = ""
+title = "develop→main 릴리스 — Run workflow 버튼의 전제 (PR #598 열림)"
+status = "todo"
+migration = false
+touches = [".github/workflows/"]
+note = """
+**PR #598 열려 있음(2026-09-18).** main 이 8/1 이후 방치라 aws-bootstrap·aws-deploy 가 기본
+브랜치에 없다 — **Run workflow 버튼 자체가 안 뜬다.** 622커밋 승격, 충돌 0 확인(merge-tree).
+
+**squash 금지 — merge commit 전용.** squash 면 develop 이력과 영구 분기(#58 선례).
+이 PR 에는 CI 체크가 안 붙는다(게이트 트리거가 develop 한정) — main 게이트 추가는 PR #599 에.
+머지는 사용자 몫.
+"""
+
+[[nodes]]
+id = "AWS-CONSOLE-BOOTSTRAP"
+ticket = ""
+title = "AWS 콘솔 초기 설정 — OIDC provider + bootstrap Role 2개 (사람·계정 관리자)"
+status = "external"
+migration = false
+touches = []
+note = """
+`docs/guides/aws-bootstrap.md` 의 「AWS 계정의 최초 인증 준비」. 소마 크레딧 계정 관리자
+콘솔에서만 가능 — 워크플로가 자기 최초 신뢰를 만들 수 없다. 예시 JSON 2종에 계정ID·리전 치환.
+약 1시간. 이후: GitHub Environments(dev/prd) 변수 → bootstrap 워크플로 실행 → AWS_ROLE_ARN 등록.
+"""
+
+[[nodes]]
+id = "DOMAIN-ACM"
+ticket = ""
+title = "도메인 결제 + ACM 인증서 — 앱 배포의 유일한 직렬 블로커 (사람·결제)"
+status = "external"
+migration = false
+touches = []
+note = """
+배포 워크플로가 인증서 ISSUED 를 검사한다 — 없으면 `deploy_application` 스텝이 안 나간다.
+인프라만(apply + deploy_application=false)은 도메인 없이 가능하니 병행하면 직렬 대기가 사라진다.
+결정 사항: trippilot.co.kr 는 가비아 등록(Route 53 은 .kr 미취급) + DNS 만 R53 위임.
+크레딧은 도메인 등록비에 적용 불가(약관 §1 명시).
+"""
+
+[[nodes]]
+id = "EKS-DEV-LIVE"
+ticket = ""
+title = "DEV 실기동 — bootstrap → plan → apply → 시크릿 → 앱 배포 → 스모크"
+status = "todo"
+migration = false
+touches = []
+note = """
+첫 실 AWS 검증이다 — 멘토도 티켓에 「실환경 배포는 수행하지 않았다」고 명시했으니 여기서
+터지는 것이 정상이고, 터지면 TRIP-885 에 회신한다. 순서는 `docs/guides/aws-eks-deployment.md`:
+plan → apply+deploy_application=false → Secrets Manager 키 입력(backend=송 · ai=준하 TRIP-892)
+→ apply+deploy_application=true(embedding_enabled=false 시작) → NLB DNS 를 CNAME 연결 →
+`LIVE_AI=1 LiveAiRoundTripIT` 를 DEV 주소로. 이후 KB 사이클(TRIP-893)은 준하.
+"""
+
+[[edges]]
+from = "RELEASE-MAIN"
+to = "EKS-DEV-LIVE"
+kind = "외부선행"
+verified = false
+reason = "가이드 원문 「저장소 기본 브랜치에 workflow 파일이 있어야 GitHub 의 Run workflow 버튼이 나타난다」— main 에 없으면 bootstrap 조차 실행 불가."
+
+[[edges]]
+from = "AWS-CONSOLE-BOOTSTRAP"
+to = "EKS-DEV-LIVE"
+kind = "외부선행"
+verified = false
+reason = "가이드 원문 「AWS 권한이 전혀 없는 GitHub 실행이 스스로 최초 신뢰 관계를 만들 수는 없다」— bootstrap Role 없이는 OIDC 인증 자체가 성립 안 함."
+
+[[edges]]
+from = "DOMAIN-ACM"
+to = "EKS-DEV-LIVE"
+kind = "외부선행"
+verified = false
+reason = "워크플로가 ACM ISSUED 를 검사(aws-deploy.yml Check HTTPS certificate) — 앱 배포 한정 선행. 인프라 apply 는 이 간선을 안 탄다."

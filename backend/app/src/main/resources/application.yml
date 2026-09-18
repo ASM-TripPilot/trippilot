@@ -1,0 +1,161 @@
+spring:
+  application:
+    name: trippilot-backend
+  # 로컬 개발 DB(docker-compose). 런타임은 app_user 롤. Flyway 마이그레이션은 후속(TRIP-147, app_migrate).
+  # 통합테스트는 Testcontainers 가 @ServiceConnection 으로 이 값을 대체한다.
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/trippilot?currentSchema=app}
+    username: ${DB_USER:app_user}
+    password: ${DB_PASSWORD:app_user}
+  # Flyway 는 마이그레이션 전용 롤(app_migrate=스키마 소유자)로 접속 — 런타임 app_user 와 분리.
+  # url 미지정 → 위 datasource url 을 app_migrate 자격으로 재사용.
+  flyway:
+    user: ${DB_MIGRATE_USER:app_migrate}
+    password: ${DB_MIGRATE_PASSWORD:app_migrate}
+    schemas: app
+    default-schema: app
+    create-schemas: false   # 스키마는 인프라가 app_migrate 소유로 선생성 (app_migrate 는 DB CREATE 권한 없음)
+  # JPA — 스키마는 Flyway 소유. Hibernate 는 엔티티↔스키마 검증만(생성 금지).
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate.default_schema: app
+
+# 소셜 로그인 제공자(SECURITY-12: 평문 시크릿 0). client-id/secret 은 env 로만 주입 —
+# dev=application-local.yml(gitignore), prod=Secrets Manager→env. token/user-info-uri 는 비밀 아님(제공자 고정값).
+# 값 미주입 시 빈 문자열 → 해당 제공자 로그인 시도 시에만 실패(기동엔 영향 없음).
+trippilot:
+  social:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      token-uri: https://oauth2.googleapis.com/token
+      user-info-uri: https://openidconnect.googleapis.com/v1/userinfo
+    kakao:
+      client-id: ${KAKAO_CLIENT_ID:}
+      client-secret: ${KAKAO_CLIENT_SECRET:}
+      token-uri: https://kauth.kakao.com/oauth/token
+      user-info-uri: https://kapi.kakao.com/v2/user/me
+    naver:
+      client-id: ${NAVER_CLIENT_ID:}
+      client-secret: ${NAVER_CLIENT_SECRET:}
+      token-uri: https://nid.naver.com/oauth2.0/token
+      user-info-uri: https://openapi.naver.com/v1/nid/me
+    # apple 은 client-secret 을 p8 로 동적 서명 + id_token JWKS 검증이 선행(현재 fail-closed) — 후속 티켓.
+  # 지역 지오코딩 경계 — 기본은 스텁이라 로컬·CI 가 외부에 묶이지 않는다.
+  # **목적지 통과 여부는 지역 카탈로그가 정한다**(TRIP-360). 여기 판정은 카탈로그에 없어
+  # 어차피 거절될 요청의 **사유**를 가르는 데만 쓰인다 — 국내인데 미지원인가, 국외인가.
+  # 스텁은 시드 8개만 알아서 그 밖의 국내 지역에 "국외" 라고 답한다. **차단이 아니라 틀린 안내다.**
+  # 배포 환경은 kakao 로 켠다 — 사유가 중요한 화면을 붙일 때가 그 시점이다.
+  # 인증은 위 social.kakao.client-id(= 카카오 REST API 키)를 그대로 쓴다. 별도 키가 아니다.
+  # 콘솔에서 카카오맵(OPEN_MAP_AND_LOCAL) 서비스가 켜져 있어야 한다 — 꺼져 있으면 403.
+  # kakao 인데 키가 비면 RegionGeocodeModeAnnouncer 가 기동을 막는다(불변식이 조용히 꺼지는 것보다 낫다).
+  # 서비스 간 호출 자격증명(TRIP-393). 비면 /internal/** 은 아무도 호출할 수 없다(fail-closed) —
+  # 설정을 잊었을 때 조용히 열리는 것보다 조용히 닫히는 편이 안전하다.
+  # require-token 을 켜면 비어 있을 때 **기동하지 않는다**(jwt.require-configured-key 와 같은 모양).
+  # 기본은 꺼짐 — 켜 두면 토큰을 안 넣은 로컬·CI 가 통째로 죽는다. 배포 환경에서 켜는 스위치다(TRIP-850).
+  # 수신은 비면 닫히지만 **발신은 비면 헤더를 안 붙이고 그냥 나간다** — 상대가 검증을 켜는 순간
+  # AI 호출이 전부 401 인데 몇은 degraded 폴백에 흡수돼 "AI 가 이상하다"로만 보인다. 이 스위치가 그걸 막는다.
+  service-auth:
+    token: ${SERVICE_AUTH_TOKEN:}
+    require-token: ${SERVICE_AUTH_REQUIRE_TOKEN:false}
+  # JWT 서명키(RS256). **비면 기동할 때마다 새로 만든다** — 그 상태는 복제본을 둘 이상 못 띄운다
+  # (A 가 서명한 토큰을 B 가 검증하지 못해 요청마다 무작위 401). 리프레시는 DB 행이라 재배포 시
+  # 액세스 토큰 무효화는 재발급으로 회복되지만, 다중 인스턴스는 회복되지 않는다.
+  # 값은 base64(PKCS#8) 개인키 한 줄 — 공개키는 여기서 파생한다(짝이 어긋난 조합을 막는다).
+  # require-configured-key 를 켜면 비어 있을 때 **기동하지 않는다**. 기본은 꺼짐 — 켜 두면
+  # 키를 안 넣은 로컬·CI 가 통째로 죽는다. 배포 환경에서 켜는 스위치다(TRIP-850).
+  jwt:
+    signing-key: ${JWT_SIGNING_KEY:}
+    require-configured-key: ${JWT_REQUIRE_CONFIGURED_KEY:false}
+  # 발신 방향(백엔드→AI)도 **같은 시크릿**을 쓴다(TRIP-856). 상대가 한 곳이고, AI 컨테이너는 이미
+  # 역방향용으로 이 값을 들고 있다(compose 의 TRIPPILOT_SERVICE_AUTH_TOKEN) — 갈라 두면 둘 중
+  # 하나만 세팅된 절반 설정이 생기고, 그때 증상은 한쪽 방향만 401 이라 원인이 안 보인다.
+  # 여기서 한 번 잇는 이유: compose 가 아닌 실행(플레인 java -jar)에서도 환경변수 하나로 켜진다.
+  # 비어 있어도 호출은 나간다(fail-open) — 지금 이 채널은 애초에 무인증이고, 잠그는 판단은
+  # 상대가 검증을 켜는 시점의 몫이다. 미설정 사실은 기동 로그가 드러낸다.
+  ai:
+    schedule:
+      service-token: ${SERVICE_AUTH_TOKEN:}
+    reflection:
+      service-token: ${SERVICE_AUTH_TOKEN:}
+    # 리마인드 문구 AI 채움(TRIP-836). 기본 off = 항상 상수 문구 — 안 켠 환경에서 리마인드가
+    # 죽지 않는 것이 더 중요하다(회고 mode=rule 과 같은 판단). http 로 켜면 예약 적재 시 한 번 부른다.
+    reminder-copy:
+      mode: ${AI_REMINDER_COPY_MODE:off}
+      base-url: ${AI_URL:http://localhost:8000}
+      service-token: ${SERVICE_AUTH_TOKEN:}
+  place:
+    geocode:
+      mode: ${PLACE_GEOCODE_MODE:stub}
+  # 기상 조회 경로(TRIP-849). 기본 fake 는 **격자 키 해시로 만든 가짜 강수확률**이라
+  # Plan-B 우천 트리거가 비 오는 날 안 뜨고 안 오는 날 뜬다 — 조용히 틀리는 쪽이다.
+  # kma 로 켜려면 공공데이터포털 **일반 인증키(Decoding)** 가 필요하다. 인코딩 키(%2B·%3D 포함)를
+  # 넣으면 클라이언트가 한 번 더 인코딩해 403 이 난다(실측 2026-09-15~16).
+  # kma 인데 키가 비면 기동을 막는다 — 모든 조회가 실패해 트리거가 영영 무발화가 되는 것보다 낫다.
+  weather:
+    mode: ${WEATHER_MODE:fake}
+    service-key: ${WEATHER_API:}
+  # 숙소 콘텐츠 경로. 기본 스텁은 **제주 5곳뿐**이라 다른 지역 검색이 전부 0건이 된다.
+  # db 는 정본 테이블(stay, V2.26 + R__seed_stay.sql)을 읽는다 — 런타임 외부 호출 0회.
+  stay:
+    content:
+      mode: ${STAY_CONTENT_MODE:stub}
+
+# 통합 테스트용 — AI 서비스 위치(compose 에서 AI_URL 주입). 미설정이면 integration 이 degrade.
+ai:
+  url: ${AI_URL:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    db:
+      enabled: true
+  # 메트릭은 Micrometer 가 OTLP 로 push 한다(TRIP-218).
+  # 스크레이프가 아니라 push 이므로 수집기가 앱에 접근할 필요가 없다.
+  otlp:
+    metrics:
+      export:
+        enabled: ${OTEL_METRICS_ENABLED:true}
+        url: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/metrics
+        step: 15s
+        resource-attributes:
+          service.name: trippilot-backend
+          deployment.environment: ${DEPLOY_ENV:local}
+
+# ── 관측성(TRIP-218) ──────────────────────────────────────────────────────
+# 신호별 담당을 나눠 중복 발행을 막는다.
+#   로그          = logback OTLP appender (logback-spring.xml, 마스킹 래퍼 경유)
+#   메트릭·트레이스 = OTel Java 에이전트 (-javaagent)
+#
+# 메트릭이 에이전트 담당인 이유는 위 management.otlp.metrics.export 주석 참조
+# (에이전트와 Micrometer push 는 공존하지 못한다 — 실측).
+#
+# 트레이스·로그 전송은 **에이전트가 있어야** 동작한다. 에이전트가 없으면
+# GlobalOpenTelemetry 가 no-op 이라 OTLP 로 나가지 않고, stdout JSON 로그만 남는다
+# (조용히 죽지 않도록 ObservabilityConfiguration 이 기동 로그로 알린다).
+#
+# 실행 예(컨테이너 밖에서 직접 돌릴 때. 컨테이너는 backend/Dockerfile 이 같은 값을 이미 갖는다):
+#   JAVA_TOOL_OPTIONS="-javaagent:$HOME/otel/opentelemetry-javaagent.jar" \
+#   OTEL_SERVICE_NAME=trippilot-backend \
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+#   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
+#   OTEL_TRACES_EXPORTER=otlp OTEL_LOGS_EXPORTER=otlp OTEL_METRICS_EXPORTER=otlp \
+#   OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED=false \
+#   OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED=false \
+#   ./gradlew :app:bootRun
+#
+# 마지막 세 개가 중요하다.
+#   METRICS_EXPORTER=otlp          — 메트릭은 에이전트가 내보낸다(Micrometer push 는 유실됨)
+#   LOGBACK_APPENDER_ENABLED=false — 에이전트가 root 로거에 appender 를 자동 부착하면
+#                                    마스킹을 우회한 원문이 수집기로 나간다
+#   LOGBACK_MDC_ENABLED=false      — 에이전트 2.14.0 에서 NoSuchFieldError 로 기동 실패

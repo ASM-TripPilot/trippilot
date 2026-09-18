@@ -1,0 +1,223 @@
+"""C1Config — 게이트웨이 설정 컨테이너 (U4 FD business-logic-model §1).
+
+model_id는 항상 설정값 주입 (BR-U4-08) — 코드에 모델 문자열 하드코딩 금지.
+timeout 기본 10s (안전망 — 예산 있는 호출은 관통).
+temperature 는 **설정 자체가 없다** — 두 벤더 모두 파라미터를 거부한다(adapters 참조).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
+
+from trippilot.domain.llm import LlmFeature, ModelTier
+
+
+def default_tier_map() -> Mapping[LlmFeature, ModelTier]:
+    """FD domain-entities §1의 기능→티어 기본 매핑 (경량 6·상위 6).
+
+    OFFLINE 티어는 배치·회귀 전용 — 기능 매핑에 등장하지 않는다.
+    """
+    return MappingProxyType(
+        {
+            LlmFeature.PREFERENCE_SCORING: ModelTier.LIGHT,
+            LlmFeature.INTENT: ModelTier.LIGHT,
+            LlmFeature.PARAPHRASE: ModelTier.LIGHT,
+            LlmFeature.REASON_INTERPRETATION: ModelTier.LIGHT,
+            # INTENT·PARAPHRASE와 동급 과업 — LIGHT 확정 여부는 K-2 실모델 검증 대기
+            # (agent-foundation FD 미결 #4)
+            LlmFeature.EDIT_TRANSLATION: ModelTier.LIGHT,
+            # 자유 발화 → 닫힌 키 번역. EDIT_TRANSLATION 과 동급 과업이고, 1차
+            # 임베딩 매칭이 걸러낸 나머지만 오므로 호출 빈도도 낮다.
+            LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: ModelTier.LIGHT,
+            # 푸시 문구 1문장 — 저비용 모델로 충분 (TRIP-347)
+            LlmFeature.REFLECTION_NUDGE: ModelTier.LIGHT,
+            # 공유 카드 캡션 1문단 + 해시태그 — 후보 선택도 다단 구성도 없는 단발 변환이고
+            # 재료(방문 상호명·기간·지역)가 이미 확정 문자열로 들어온다. REFLECTION_NUDGE와
+            # 같은 급의 짧은 카피 1회라 LIGHT (TRIP-429 후속 — j06).
+            LlmFeature.SHARE_CARD_COPY: ModelTier.LIGHT,
+            # 뱅크 증강 — 짧은 문장 변형 N개. PARAPHRASE 와 같은 급의 과업이고 오프라인
+            # 배치라 지연도 무관하다. 품질이 모자라면 feature_models 로 올린다(TRIP-513).
+            LlmFeature.BANK_AUGMENT: ModelTier.LIGHT,
+            # 알림 문구 2줄 — 넛지와 동급 과업이라 LIGHT. 실제로는 feature_models
+            # 오버라이드로 로컬 파인튜닝 모델이 배정된다(티어 해석보다 우선).
+            LlmFeature.REMINDER_COPY: ModelTier.LIGHT,
+            LlmFeature.EXPLANATION: ModelTier.HEAVY,
+            # 차선책 근거 문장 — 설명(EXPLANATION)과 같은 급의 취향 그라운딩 문장 (TRIP-887)
+            LlmFeature.ALTERNATIVE_EXPLANATION: ModelTier.HEAVY,
+            LlmFeature.ALTERNATIVE_SELECTION: ModelTier.HEAVY,
+            # 장면 시퀀스 연출 생성 — 회고 본문 생성의 정본(구 REFLECTION 흡수), 백그라운드 N회 생성 전제
+            # (TRIP-429, BR-U6R-13: 티어·모델 실체는 항상 설정값)
+            LlmFeature.REFLECTION_TEMPLATE: ModelTier.HEAVY,
+            # 사진 대표 선별 — 이미지 판독이 필요한 상위 과업이라 HEAVY (TRIP-595).
+            # **티어는 vision 가용성을 보장하지 않는다**: 이미지 수용 여부는 어댑터와
+            # 모델이 정한다 — anthropic·openai(responses 표면) 어댑터 모두 이미지 변환
+            # 구현(2026-09-01, 팀 결정: vision 기능은 Claude 배정). chat.completions
+            # 경로만 미지원. vision 모델 지정은 `feature_models` 오버라이드(TRIP-513)
+            # 몫이고, 미지원 조합이면 LlmUnsupportedError → 폴백으로 강등된다.
+            # 프로바이더·모델 선정은 TRIP-515 런북 소관 (BR-U6R-13: 실체는 설정값).
+            LlmFeature.PHOTO_HIGHLIGHT: ModelTier.HEAVY,
+            # vision 장면·캡션 생성 — 텍스트 템플릿과 같은 출력 계약, 모델만 분리(미결 #6)
+            LlmFeature.REFLECTION_TEMPLATE_VISION: ModelTier.HEAVY,
+            LlmFeature.PLACE_EXTRACTION: ModelTier.HEAVY,
+            # 자유 텍스트 구조화 추출 — PLACE_EXTRACTION과 동급 과업 (TRIP-421)
+            LlmFeature.EVENT_EXTRACTION: ModelTier.HEAVY,
+        }
+    )
+
+
+def default_fallback_modes() -> Mapping[LlmFeature, tuple[str, str]]:
+    """기능 → (from_mode, to_mode) — FallbackEvent가 싣는 **실제** 폴백 (TRIP-260 #4).
+
+    c1은 신호만 내고 실행은 호출측이지만(BR-U4-09), 이벤트가 싣는 모드는 그 호출측이
+    실제로 하는 일이어야 한다. 전부 `llm_score → rule_score`로 하드코딩돼 있던 동안
+    4개 중 3개의 증빙이 거짓이었다 — INV-4가 요구하는 증빙 자체가 틀린 값을 실으면
+    침묵 실패보다 나쁘다(잘못된 곳을 보게 만든다).
+
+    값은 전부 **호출측 코드에서 확인한** 문자열이다 — 항목별 주석이 그 근거다.
+    """
+    return MappingProxyType(
+        {
+            # agents/schedule/agent.py `ScheduleAgent._score` — 폴백이면
+            # `_rule_scores()` 실행 + ScoringMode.RULE. 같은 두 문자열을 그쪽
+            # `_degrade(..., "llm_score", "rule_score", ...)`도 쓴다.
+            LlmFeature.PREFERENCE_SCORING: ("llm_score", "rule_score"),
+            # ScheduleAgent `_explain` — 대체 설명이 없다. 빈 설명으로 일정만 나간다.
+            # 그쪽 `_degrade(..., "llm_explain", "(none)", ...)`의 문자열 그대로.
+            LlmFeature.EXPLANATION: ("llm_explain", "(none)"),
+            # ScheduleAgent `_explain_alternatives` · api/wiring.py `explanations` — 실패하면
+            # 차선책의 템플릿 rationale("같은 카페 후보", TRIP-871)이 그대로 남는다.
+            LlmFeature.ALTERNATIVE_EXPLANATION: (
+                "llm_explain_alternatives", "template_rationale"),
+            # agents/planb/rag.py `_select`→`_rationale` — used_llm=False면 규칙 랭킹
+            # ("llm_select_alternatives" / "rule_ranking"도 그 함수의 문자열 그대로).
+            LlmFeature.ALTERNATIVE_SELECTION: ("llm_select_alternatives", "rule_ranking"),
+            # agents/reflect/composer.py `compose` — 전 시도 실패면 고정 폴백 템플릿
+            # (그쪽이 직접 내는 FallbackEvent와 같은 모드 쌍).
+            LlmFeature.REFLECTION_TEMPLATE: ("llm_template", "fixed_template"),
+            # api/wiring.py `reflection_nudge` — 결정론 기본 문구(FALLBACK_NUDGE_MESSAGE).
+            # 그쪽 방어 분기의 FallbackEvent와 같은 모드 쌍.
+            LlmFeature.REFLECTION_NUDGE: ("llm_nudge", "fixed_message"),
+            # api/wiring.py `reflection_share_card` — 결정론 정적 조립
+            # (workers.share_card_copy.fallback_share_card_copy: `{지역} 여행의 기록` ·
+            # `#{지역}여행`). 워커 직행 패턴이라 발행 주체는 경계다 (FD §2.1).
+            LlmFeature.SHARE_CARD_COPY: ("llm_share_card", "static_copy"),
+            # api/wiring.py `reminder_copy` — 문구를 못 만들면 그 항목을 응답에서 빼고,
+            # 백엔드가 기존 하드코딩 상수(NotificationSchedule.title()/body())로 보낸다.
+            # to_mode 가 "backend_constant" 인 이유: 폴백 실행 주체가 백엔드다.
+            LlmFeature.REMINDER_COPY: ("llm_reminder_copy", "backend_constant"),
+            # orchestrator/intent_router.py `_classify` → `_fallback()` —
+            # Intent.OUT_OF_SCOPE + MatchRoute.FALLBACK로 수렴한다.
+            LlmFeature.INTENT: ("llm_intent", "out_of_scope"),
+            # intent_router `_vote` — 유사질문이 없으면 투표를 접고 3차(LLM 직접
+            # 분류)로 **승급**한다. 규칙으로 내려가는 강등이 아니다.
+            LlmFeature.PARAPHRASE: ("llm_paraphrase", "llm_direct"),
+            # 오프라인 배치 — 실패하면 그 seed 의 변형을 못 만들 뿐, 런타임 경로가 아니라
+            # 강등할 대상이 없다. 스크립트가 사유를 제안 파일의 rejected 에 남긴다
+            # (scripts/augment_bank.py).
+            LlmFeature.BANK_AUGMENT: ("llm_augment", "(none)"),
+            # api/wiring.py `edit` — 자연어 번역 실패는 TRANSLATION_FAILED 정직 보고.
+            # 편집은 적용되지 않고, 구조화 진입은 무영향이다.
+            LlmFeature.EDIT_TRANSLATION: ("llm_edit_translation", "translation_failed"),
+            # 실패해도 재계획은 돈다 — 칩 선택분과 사유가 그대로 살아 있고, 자유 입력
+            # 해석만 빠진다. 그래서 to_mode 가 "실패"가 아니라 "칩만"이다.
+            LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: (
+                "llm_directive_translation", "chips_only"),
+            # scripts/collect_events.py `collect_region` — 추출 0건으로 그 회차를
+            # 넘긴다(대체 추출 경로 없음).
+            LlmFeature.EVENT_EXTRACTION: ("llm_extract", "(none)"),
+            # agents/reflect/highlight_rule.py — 방문당 1장·시간 분산 결정론 선별.
+            # ReflectAgent 의 vision 단계가 실행한다.
+            LlmFeature.PHOTO_HIGHLIGHT: ("llm_highlight", "rule_highlight"),
+            # agents/reflect/agent.py ReflectAgent._compose_vision — vision 시도 실패 시 같은
+            # 3회 예산 안에서 텍스트 템플릿으로 강등(#9 확정: 예산 공유, 최악 3회).
+            LlmFeature.REFLECTION_TEMPLATE_VISION: ("vision_template", "text_template"),
+            # PLACE_EXTRACTION은 프로덕션 호출측이 아직 없다(워커·테스트뿐) —
+            # 워커 docstring("게이트 전 원시까지")과 EVENT_EXTRACTION 선례에서
+            # 유추한 값이다. 호출측이 생기면 그때 실측으로 확정한다.
+            LlmFeature.PLACE_EXTRACTION: ("llm_extract", "(none)"),
+            # 유령 feature (TRIP-530) — 프롬프트·게이트·워커가 전부 없어 이 값이
+            # 발행될 경로 자체가 없다. 지어내지 않고 unknown으로 둔다.
+            LlmFeature.REASON_INTERPRETATION: ("llm_reason_interpretation", "unknown"),
+        }
+    )
+
+
+# 매핑에 없는 feature의 안전 기본 — KeyError로 죽지 않되 **그 사실이 이벤트에
+# 드러난다**. 조용히 그럴듯한 값을 찍으면 #4를 다시 만드는 셈이다.
+# enum이 늘면 테스트(전 feature 스윕)가 먼저 깨진다.
+UNMAPPED_FALLBACK_MODES = ("llm", "unmapped_feature")
+
+
+@dataclass(frozen=True)
+class C1Config:
+    model_ids: Mapping[ModelTier, str]  # 주입 필수 — 하드코딩 금지 (BR-U4-08)
+    tier_map: Mapping[LlmFeature, ModelTier] = field(default_factory=default_tier_map)
+    # 기능별 모델 오버라이드 (TRIP-513 — GPT·Claude 혼용). 있으면 tier 해석보다
+    # 우선한다. 벤더 선택은 모델명이 결정 — RoutingLlm이 접두어로 어댑터를 고른다.
+    feature_models: Mapping[LlmFeature, str] = field(default_factory=dict)
+    # 기능별 **타임아웃 재시도 모델** (TRIP-522 2단 폴백). 1차 모델이 타임아웃하면
+    # 규칙 폴백으로 내려가기 전에 이 모델로 한 번 더 부른다 — 호출측이
+    # `call(retry_timeout_sec=...)` 로 예산을 줄 때만. 매핑에 없는 feature 는 종전
+    # 그대로 1회 시도다.
+    #
+    # 타임아웃에만 쓴다. `unsupported` 는 재시도해도 같고(TRIP-595), 벤더 오류는
+    # 사유가 갈려 여기서 덮으면 안 보인다. 실측(2026-09-08, 실 PlanB 프롬프트 5회):
+    # sol 중앙값 5.0s · terra 5.2s · opus 7.6s(편차 1.2s) — **1차보다 빠른 모델은 없다.**
+    #
+    # 그래서 이 값은 두 축 중 하나를 고르는 문제다 — **여유**(빠른 모델로 예산 확보)
+    # 대 **벤더 독립**(1차 벤더가 통째로 느려진 경우를 피함). 2026-09-12 팀 결정은
+    # 여유 쪽(`gpt-5.6-terra`, `.env.example`): 재시도 몫 8.75초 대비 여유가 1초(opus)
+    # 에서 3.5초(terra)로 늘어난다. 벤더 상관 가설은 재현하지 못했으므로 운영
+    # 트레이스의 2차 성공률로 판정한다 — 낮으면 그게 증거이고 `.env` 한 줄로 되돌린다.
+    retry_models: Mapping[LlmFeature, str] = field(default_factory=dict)
+    # 기능별 폴백 모드 (TRIP-260 #4) — FallbackEvent의 from_mode/to_mode.
+    # 실체는 호출측이 하는 일이라 feature마다 다르다 (default_fallback_modes 주석).
+    fallback_modes: Mapping[LlmFeature, tuple[str, str]] = field(
+        default_factory=default_fallback_modes
+    )
+    # **안전망**이지 설계값이 아니다 — 예산이 있는 호출은 전부
+    # `GatewayFacade.call(timeout_sec=...)` 로 관통한다(TRIP-376 선례). 이 값이 실제로
+    # 쓰이는 프로덕션 경로는 REFLECTION_NUDGE(오버라이드 없음)와, deadline 을 안 실은
+    # ALTERNATIVE_SELECTION 뿐이다 — 둘 다 사용자 대기 화면이 아니다.
+    #
+    # 2.5 → 10.0 (2026-09-01). BR-U4-04·NFR-1.2 는 2.5 를 "요청 예산 5초의 절반"으로
+    # 정당화했는데, 그 5초는 generate day1 예산이고 **정작 이 기본값을 쓰는 feature 는
+    # 그 예산과 무관**하다. 그 사이 상위 티어 모델이 붙으면서(gpt-5.6-sol 실측 5.1s)
+    # 2.5 는 "폴백을 강제하는 값"이 됐다 — PlanB 가 컨테이너에서 100% 타임아웃했다.
+    # 요청 단위 상한은 `TimeoutBackstopMiddleware`(deadline+margin → 504)가 따로 쥔다.
+    timeout_sec: float = 10.0
+    max_tokens: int = 1024
+    # PREFERENCE_SCORING 병렬 청킹 (TRIP-378) — 청크 크기는 고정 상수가 아니라
+    # 단계 예산에서 유도한다 (TRIP-380 적응형 공식, workers/preference.py
+    # adaptive_chunk_size). 종전 score_chunk_size=20 상수는 공식이 대체 — 예산
+    # 14s·기본 파라미터에서 공식이 정확히 20을 재현한다(현행 동등).
+    #
+    # 선형 지연 모델 (TRIP-373 실측): 청크 소요 ≈ base + per_item × 청크크기.
+    # 바닥 ~3s(7건 3.2s), 건당 ~0.2s (193건 단일 호출 44.5s).
+    score_base_ms: int = 3_000
+    score_per_item_ms: int = 200
+    # 안전율 — 실측 변동이 3~4배(TRIP-373)이고 청크 편차 4.8~19.5s(TRIP-380
+    # 계측)라, 기대 소요가 예산의 절반에 오도록 목표 시간을 예산/2로 잡는다.
+    score_safety: float = 2.0
+    # 청크 크기 클램프 — 너무 작으면 호출 바닥(base)만 반복 지불, 너무 크면
+    # 슬로 테일 한 방이 단계 전체를 삼킨다.
+    score_chunk_min: int = 5
+    score_chunk_max: int = 40
+    # 병렬수 N = ⌈풀 ÷ c*⌉의 상한 — 실전 풀 193건에서 N=10 (동시 호출 폭주 방지).
+    score_max_parallel: int = 10
+
+    def __post_init__(self) -> None:
+        if self.score_base_ms < 0:
+            raise ValueError("score_base_ms는 음수 불가")
+        if self.score_per_item_ms <= 0:
+            raise ValueError("score_per_item_ms는 양수여야 함")
+        if self.score_safety < 1.0:
+            raise ValueError("score_safety는 1.0 이상이어야 함 (목표 ≤ 예산)")
+        if self.score_chunk_min <= 0:
+            raise ValueError("score_chunk_min은 양수여야 함")
+        if self.score_chunk_max < self.score_chunk_min:
+            raise ValueError("score_chunk_max ≥ score_chunk_min이어야 함")
+        if self.score_max_parallel <= 0:
+            raise ValueError("score_max_parallel은 양수여야 함")

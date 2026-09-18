@@ -1,0 +1,257 @@
+package com.trippilot.itinerarygeneration.adapter.`in`.web
+
+import com.trippilot.itinerarygeneration.application.ConfirmItineraryService
+import com.trippilot.itinerarygeneration.application.EditDay
+import com.trippilot.itinerarygeneration.application.EditItinerary
+import com.trippilot.itinerarygeneration.application.EditItineraryService
+import com.trippilot.itinerarygeneration.application.EditSlot
+import com.trippilot.itinerarygeneration.application.GenerateItineraryService
+import com.trippilot.itinerarygeneration.application.GenerationSessionService
+import com.trippilot.itinerarygeneration.application.ItineraryQueryService
+import com.trippilot.itinerarygeneration.application.SlotSurface
+import com.trippilot.itinerarygeneration.application.SlotSurfaceAssembler
+import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.application.UnplacedText
+import com.trippilot.itinerarygeneration.domain.Itinerary
+import com.trippilot.itinerarygeneration.domain.ItineraryStatus
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
+import com.trippilot.itinerarygeneration.domain.VisitSlot
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Size
+import org.springframework.http.HttpStatus
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.ResponseStatus
+import org.springframework.web.bind.annotation.RestController
+import java.security.Principal
+import java.time.LocalDate
+import java.time.LocalTime
+import java.util.UUID
+
+/** 일정 생성 — 여행 하위 리소스. 소유 스코프(타 계정 404). POST = 생성 · GET = 조회. */
+@RestController
+@RequestMapping("/api/v1/trips/{tripId}/itinerary")
+class ItineraryController(
+    private val service: GenerateItineraryService,
+    private val queryService: ItineraryQueryService,
+    private val confirmService: ConfirmItineraryService,
+    private val editService: EditItineraryService,
+    private val surfaces: SlotSurfaceAssembler,
+    private val genSessions: GenerationSessionService,
+) {
+    /**
+     * 네 응답 모두 같은 표면을 실어야 한다 — 조회로만 채워지면 생성·확정·편집 직후 화면이 빈다.
+     *
+     * 진행 중 세션 id 를 함께 싣는다 — 이걸 안 주면 화면이 [취소]를 걸 대상을 알 수 없다.
+     * 별도 조회 엔드포인트를 두지 않은 이유: 화면은 어차피 이 응답을 폴링하고, 따로 두면
+     * 생성이 빨리 끝났을 때 "이미 없는 세션"을 조회하는 경합이 생긴다.
+     */
+    private fun respond(itinerary: Itinerary) = ItineraryResponse.from(
+        itinerary, surfaces.assemble(itinerary), genSessions.runningIdOf(itinerary.tripId),
+    )
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    fun generate(
+        principal: Principal,
+        @PathVariable tripId: UUID,
+        @RequestBody(required = false) request: GenerateItineraryRequest?,
+    ): ItineraryResponse {
+        val mode = request?.generationMode ?: GenerationMode.FULLY_AI
+        return respond(service.generate(principal.accountId(), tripId, mode))
+    }
+
+    @GetMapping
+    fun get(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
+        respond(queryService.get(principal.accountId(), tripId))
+
+    /** 확정 — PLANNED→CONFIRMED(이미 확정이면 409). 재생성은 확정을 되돌린다(확정 해제 API 부재). */
+    @PostMapping("/confirm")
+    fun confirm(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
+        respond(confirmService.confirm(principal.accountId(), tripId))
+
+    /** 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409. */
+    @PutMapping
+    fun edit(principal: Principal, @PathVariable tripId: UUID, @Valid @RequestBody request: EditItineraryRequest): ItineraryResponse =
+        respond(editService.edit(principal.accountId(), tripId, request.toCommand()))
+}
+
+/** 편집 요청 — 수정된 전체 일자·슬롯 배열(슬롯 순서 = 배열 순서). [reason] 은 선택(변경 이력에 남는다). */
+data class EditItineraryRequest(
+    val days: List<EditDayRequest>,
+    // 저장 컬럼 상한과 같은 값 — 여기서 막지 않으면 DB 가 22001 로 던져 편집까지 롤백되고 500 이 나간다.
+    @field:Size(max = 500, message = "사유는 500자 이하입니다.")
+    val reason: String? = null,
+) {
+    fun toCommand() = EditItinerary(
+        days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
+        reason,
+    )
+}
+data class EditDayRequest(val date: LocalDate, val slots: List<EditSlotRequest>)
+/** [endsNextDay]: 자정 넘김(HC4). 전체 교체라 조회 응답의 현행 값을 그대로 실어야 플래그가 소실되지 않는다. */
+data class EditSlotRequest(
+    val poiId: UUID,
+    val startAt: LocalTime,
+    val endAt: LocalTime,
+    val isFixed: Boolean,
+    val endsNextDay: Boolean = false,
+)
+
+/** 생성 요청 — 방식(미지정 시 FULLY_AI). */
+data class GenerateItineraryRequest(val generationMode: GenerationMode?)
+
+data class ItineraryResponse(
+    val itineraryId: UUID,
+    val tripId: UUID,
+    val status: String,
+    val solveMode: String,
+    val generationMode: String,
+    val isFallback: Boolean,
+    val generationState: String,
+    /** 진행 중 생성 세션(h09·h10 폴링·[취소] 대상). 진행 중이 아니면 null. */
+    val generationSessionId: UUID?,
+    val candidatesSummary: CandidatesSummaryResponse?,
+    /**
+     * 넣지 못한 필수 방문지. 빈 배열 = 전부 배치됨.
+     * 사용자에게 "왜 안 들어갔는지"를 알리는 채널이다 — 이게 없으면 조용히 사라진 것으로 보인다.
+     */
+    val unplacedMustVisits: List<UnplacedMustVisitResponse>,
+    val days: List<DayResponse>,
+) {
+    companion object {
+        fun from(i: Itinerary, surfaces: Map<UUID, SlotSurface>, generationSessionId: UUID? = null) = ItineraryResponse(
+            itineraryId = i.itineraryId,
+            tripId = i.tripId,
+            status = i.status.name,
+            solveMode = i.solveMode.name,
+            generationMode = i.generationMode.name,
+            isFallback = i.isFallback,
+            generationState = i.generationState.name,
+            generationSessionId = generationSessionId,
+            candidatesSummary = i.candidatesSummary?.let { CandidatesSummaryResponse(it.level, it.poolSize, it.shortfallCategories) },
+            unplacedMustVisits = i.unplacedMustVisits.map { UnplacedMustVisitResponse(it.poiId, it.reasonCode.name, UnplacedText.of(it.reasonCode)) },
+            days = i.days.map { d ->
+                DayResponse(d.date, d.slots.map { s -> SlotResponse.of(s, surfaces[s.sourcePoiId], i.status, surfaces) })
+            },
+        )
+    }
+}
+
+/**
+ * 차선책 1건 — **`SlotCandidateResponse` 와 같은 필드 이름**이다(온디맨드 후보). 화면이 같은 카드를
+ * 재사용할 수 있게 일부러 맞췄다.
+ *
+ * 다른 점 하나: [distanceRange] 가 **nullable** 이다. 온디맨드 후보는 우리가 거리를 계산해 항상
+ * 채우지만, 이쪽은 AI 가 준 값이라 좌표를 모르면 null 이다 — 0 이나 빈 문자열로 채우면 "모른다"가
+ * "가깝다"로 바뀐다.
+ */
+data class SlotAlternativeResponse(
+    val poiId: UUID,
+    val rationale: String,
+    val distanceRange: String?,
+    /**
+     * POI 표면(TRIP-851) — 화면이 후보 카드를 **추가 왕복 없이** 그린다. 정본에 없으면 전부 null 이고,
+     * 그때 화면은 "이름 준비 중" 플레이스홀더로 떨어진다(값을 지어내지 않는다, BR-U1-06).
+     *
+     * 동결본은 안 본다 — 차선책은 아직 고른 것이 아니라 확정 시점에 동결된 적이 없다.
+     */
+    val nameKo: String?,
+    val category: String?,
+    val tags: List<String>,
+    val imageUrl: String?,
+) {
+    companion object {
+        fun of(a: SlotAlternative, surface: SlotSurface?) = SlotAlternativeResponse(
+            poiId = a.poiId,
+            rationale = a.rationale,
+            distanceRange = a.distanceRange,
+            nameKo = surface?.nameKo,
+            category = surface?.category,
+            tags = surface?.tags.orEmpty(),
+            imageUrl = surface?.imageUrl,
+        )
+    }
+}
+
+data class DayResponse(val date: LocalDate, val slots: List<SlotResponse>)
+
+/** 후보 충분성(BR-U2-05) — **AI 판정값 그대로**. 백엔드는 level 을 재계산하지 않는다. */
+/**
+ * 넣지 못한 필수 방문지 1건.
+ * [reasonCode] 는 분기용(닫힌 집합), [message] 는 표시용 — 클라이언트가 문구를 지어내지 않게 서버가 준다.
+ */
+data class UnplacedMustVisitResponse(val poiId: UUID, val reasonCode: String, val message: String)
+
+data class CandidatesSummaryResponse(val level: String, val poolSize: Int?, val shortfallCategories: List<String>)
+
+/**
+ * 방문 슬롯 표시 — 시각·순서만(INV-2, 소요시간 없음 INV-3).
+ * [endsNextDay]: 자정 넘김(HC4, endAt=익일 시각·시작일 귀속). [hasViolation]: 편집 재검증(HC1-4) 위반 표시(비차단).
+ *
+ * [placementReason]: 이 장소를 고른 이유(BR-U2-04). 시각·소요시간 언급 없음(BR-U2-09).
+ * [distanceRange]: 직전 지점에서의 이동 **거리 표시 문자열**(BR-U2-08) — 소요시간은 어떤 이유로도 없다(INV-3).
+ * POI 표면(이름·좌표·사진·영업시간)은 추가 왕복 없이 여기 실린다(BR-U3-09). 정본에도 동결본에도 없는
+ * 장소는 표면 필드가 전부 null 이다 — 그 경우에도 슬롯 자체는 사라지지 않는다.
+ * [openingHoursKnown] false = 영업시간 미확인 → 확정 배치가 아니라 사용자 확인 후보로 분리(US-SCHED-03 예외).
+ * **확정된 일정에서는 null** — 확정 전 분류 신호라 확정 뒤에는 판정 대상이 아니다.
+ */
+data class SlotResponse(
+    val poiId: UUID,
+    val startAt: LocalTime,
+    val endAt: LocalTime,
+    val isFixed: Boolean,
+    val endsNextDay: Boolean,
+    val hasViolation: Boolean,
+    val violationReason: String?,
+    val distanceRange: String?,
+    val placementReason: String?,
+    val nameKo: String?,
+    val lat: Double?,
+    val lng: Double?,
+    val category: String?,
+    val openingHours: String?,
+    val openingHoursKnown: Boolean?,
+    val imageUrl: String?,
+    val tags: List<String>,
+    /**
+     * 생성 시점에 AI 가 같이 준 **다른 선택지**(TRIP-873) — 슬롯당 ≤2건, 없으면 빈 목록.
+     *
+     * 이 값이 있으면 화면은 "다른 선택지"를 **추가 왕복 없이** 그린다. 온디맨드 후보 조회
+     * (`POST /itineraries/{id}/slot-candidates`)는 그대로 살아 있다 — 반경·컨셉을 바꿔 다시 묻는
+     * 길이라 목적이 다르다.
+     *
+     * **편집하면 사라진다.** 편집 응답에 차선책이 없고, 옛 값을 들고 가면 바뀐 슬롯에 옛 대안이
+     * 붙어 거리 문구가 틀려진다. 사라지는 쪽이 틀린 값을 보여주는 쪽보다 낫다.
+     */
+    val alternatives: List<SlotAlternativeResponse>,
+) {
+    companion object {
+        fun of(s: VisitSlot, surface: SlotSurface?, status: ItineraryStatus, surfaces: Map<UUID, SlotSurface> = emptyMap()) = SlotResponse(
+            poiId = s.sourcePoiId,
+            startAt = s.startAt,
+            endAt = s.endAt,
+            isFixed = s.isFixed,
+            endsNextDay = s.endsNextDay,
+            hasViolation = s.hasViolation,
+            violationReason = s.violationReason,
+            distanceRange = s.distanceRange,
+            placementReason = s.placementReason,
+            nameKo = surface?.nameKo,
+            lat = surface?.lat,
+            lng = surface?.lng,
+            category = surface?.category,
+            openingHours = surface?.openingHours,
+            // 확정 일정에는 판정을 내지 않는다(null) — 이 값은 **확정 전 분류 신호**다.
+            // 확정 뒤에도 정본을 따라가면, 나중에 영업시간이 비는 순간 이미 확정된 슬롯이 "확인 필요"로
+            // 되돌아가 확정 일정의 안정성(INV-U1-03)을 깬다.
+            openingHoursKnown = if (status == ItineraryStatus.CONFIRMED) null else (surface?.openingHoursKnown ?: false),
+            alternatives = s.alternatives.map { SlotAlternativeResponse.of(it, surfaces[it.poiId]) },
+            imageUrl = surface?.imageUrl,
+            tags = surface?.tags.orEmpty(),
+        )
+    }
+}

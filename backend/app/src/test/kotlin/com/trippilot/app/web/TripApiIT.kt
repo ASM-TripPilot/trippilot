@@ -1,0 +1,261 @@
+package com.trippilot.app.web
+
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.trippilot.auth.domain.Account
+import com.trippilot.auth.domain.AgeMethod
+import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.trip.application.TripEndSweeper
+import com.trippilot.security.AccessTokenIssuer
+import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.http.HttpMethod
+import org.springframework.http.MediaType
+import org.springframework.http.client.JdkClientHttpRequestFactory
+import org.springframework.web.client.RestClient
+import java.time.Instant
+
+/**
+ * TRIP-177 — 여행 생성 API E2E. 생성·소유 스코프·검증(국내·날짜·Σnights)·편집·삭제 + 취향 스냅숏 jsonb 왕복.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class TripApiIT : AbstractPostgresIntegrationTest() {
+
+    @Value("\${local.server.port}")
+    private var port: Int = 0
+
+    @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
+    @Autowired private lateinit var accounts: AccountRepository
+
+    /** 종료 스윕은 10분 주기라 기다릴 수 없다 — 스펙이 직접 부른다. */
+    @Autowired private lateinit var endSweeper: TripEndSweeper
+
+    private val json = ObjectMapper()
+    private val now = Instant.parse("2026-07-26T00:00:00Z")
+
+    private fun call(method: HttpMethod, path: String, bearer: String?, body: String? = null): Pair<Int, JsonNode> {
+        val spec = RestClient.builder()
+            .requestFactory(JdkClientHttpRequestFactory())
+            .baseUrl("http://localhost:$port")
+            .build()
+            .method(method).uri(path)
+        bearer?.let { spec.header("Authorization", "Bearer $it") }
+        body?.let { spec.contentType(MediaType.APPLICATION_JSON).body(it) }
+        val res = spec.retrieve().onStatus({ it.is4xxClientError || it.is5xxServerError }, { _, _ -> })
+            .toEntity(String::class.java)
+        val parsed = res.body?.takeIf { it.isNotBlank() }?.let { json.readTree(it) } ?: json.createObjectNode()
+        return res.statusCode.value() to parsed
+    }
+
+    private fun newToken(): String {
+        val account = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, now))
+        return accessTokenIssuer.issue(account.id.value.toString()).value
+    }
+
+    /**
+     * **미래 날짜** — 여행 단계가 날짜에서 파생되므로(TRIP: statusAt) 고정 과거 날짜를 쓰면
+     * 생성 직후 상태가 `ENDED` 로 나온다. 날짜 자체를 단언하는 테스트는 아래 리터럴을 그대로 쓴다.
+     */
+    private val futureStart: java.time.LocalDate
+        get() = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).plusDays(30)
+
+    private val createBody: String
+        get() = """
+        {"startDate":"$futureStart","endDate":"${futureStart.plusDays(3)}","party":2,"companionType":"연인",
+         "destinations":[{"seq":0,"region":"제주","nights":3}],
+         "preferenceSnapshot":{"pace":"알차게","styles":["휴양"]}}
+        """.trimIndent()
+
+    /**
+     * 여행 단계는 **날짜에서 파생**한다. 저장된 status 는 `PLANNED` 에서 움직이지 않아
+     * (전이를 부르는 코드가 없다), 지난 여행도 계속 "예정"으로 나가고 있었다 —
+     * 홈 화면이 끝난 여행을 못 거르고(`ENDED` 를 걸러 낸다) 여행 중 배지도 못 달았다(`ACTIVE` 를 기대한다).
+     */
+    @Test
+    fun `지난 여행은 ENDED · 여행 중이면 ACTIVE 로 나간다`() {
+        val token = newToken()
+        val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
+
+        val past = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"${today.minusDays(10)}","endDate":"${today.minusDays(8)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+        past["status"].asText() shouldBe "ENDED"
+
+        val ongoing = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"${today.minusDays(1)}","endDate":"${today.plusDays(1)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+        ongoing["status"].asText() shouldBe "ACTIVE"
+
+        // 경계 — 시작 당일부터 여행 중이다.
+        val startsToday = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"$today","endDate":"${today.plusDays(2)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+        startsToday["status"].asText() shouldBe "ACTIVE"
+    }
+
+    /**
+     * **`status=ENDED` 와 `endedAt=null` 은 공존한다**(TRIP-826).
+     *
+     * 둘은 만들어지는 방식이 다르다 — `status` 의 `ENDED` 는 날짜에서 **즉시 파생**되고,
+     * `endedAt` 은 종료 스윕이 **10분 주기로** 채운다. 방금 만든 지난 여행은 스윕을 아직 안 탔으므로
+     * `ENDED` 이면서 `endedAt` 이 null 이다.
+     *
+     * 이 스펙이 지키는 것은 **화면이 무엇으로 분기해야 하는가**다. `endedAt != null` 로 "끝났다"를
+     * 판정하면 그 창에서 끝난 여행을 **진행 중으로 본다** — 회고 진입이 안 뜨고 사용자는 이유를 모른다.
+     */
+    @Test
+    fun `끝난 여행이라도 스윕 전에는 endedAt 이 null 이다 — 분기는 status 로 한다`() {
+        val token = newToken()
+        val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
+
+        val past = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"${today.minusDays(10)}","endDate":"${today.minusDays(8)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+
+        past["status"].asText() shouldBe "ENDED"   // 날짜에서 즉시 파생
+        past["endedAt"].isNull shouldBe true       // 스윕은 아직 안 돌았다
+    }
+
+    /**
+     * **스윕이 돌면 값이 실린다.** 위 스펙은 null 만 보므로, 필드를 늘 null 로 내보내도 통과한다 —
+     * 채워지는 경로를 함께 재야 "노출했다"가 참이 된다.
+     *
+     * 스윕을 기다리지 않고 직접 부른다(10분 주기라 기다릴 수 없다).
+     */
+    @Test
+    fun `종료 스윕이 돌면 endedAt 이 응답에 실린다`() {
+        val token = newToken()
+        val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
+        val created = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"${today.minusDays(10)}","endDate":"${today.minusDays(8)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+        val tripId = created["tripId"].asText()
+
+        endSweeper.sweep()
+
+        val (rc, body) = call(HttpMethod.GET, "/api/v1/trips/$tripId", token)
+        rc shouldBe 200
+        body["status"].asText() shouldBe "ENDED"
+        body["endedAt"].isNull shouldBe false
+    }
+
+    /** 필드가 **있어야** 화면이 쓴다 — 계약에 넣고 응답에서 빠뜨리면 아무도 모른다. */
+    @Test
+    fun `진행 중인 여행도 endedAt 키를 싣는다 — 값만 null 이다`() {
+        val token = newToken()
+        val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
+
+        val ongoing = call(HttpMethod.POST, "/api/v1/trips", token,
+            """{"startDate":"${today.minusDays(1)}","endDate":"${today.plusDays(1)}","party":2,
+                "destinations":[{"seq":0,"region":"제주","nights":2}]}""").second
+
+        ongoing.has("endedAt") shouldBe true
+        ongoing["endedAt"].isNull shouldBe true
+    }
+
+    @Test
+    fun `인증 없으면 401`() {
+        call(HttpMethod.GET, "/api/v1/trips", null).first shouldBe 401
+    }
+
+    @Test
+    fun `생성(201)·조회 · 제목 자동 · 취향 스냅숏 jsonb 왕복`() {
+        val token = newToken()
+        val (rc, created) = call(HttpMethod.POST, "/api/v1/trips", token, createBody)
+        rc shouldBe 201
+        val id = created["tripId"].asText()
+        created["title"].asText() shouldBe "제주 여행"
+        created["status"].asText() shouldBe "PLANNED"
+        created["preferenceSnapshot"]["pace"].asText() shouldBe "알차게"
+
+        val (s, b) = call(HttpMethod.GET, "/api/v1/trips/$id", token)
+        s shouldBe 200
+        b["party"].asInt() shouldBe 2
+        b["destinations"][0]["region"].asText() shouldBe "제주"
+        b["preferenceSnapshot"]["styles"][0].asText() shouldBe "휴양"
+    }
+
+    @Test
+    fun `타 계정 리소스는 404`() {
+        val id = call(HttpMethod.POST, "/api/v1/trips", newToken(), createBody).second["tripId"].asText()
+        call(HttpMethod.GET, "/api/v1/trips/$id", newToken()).first shouldBe 404
+    }
+
+    @Test
+    fun `국내 밖 목적지는 400`() {
+        val body = """{"startDate":"2026-08-01","endDate":"2026-08-03","destinations":[{"seq":0,"region":"도쿄","nights":2}]}"""
+        call(HttpMethod.POST, "/api/v1/trips", newToken(), body).first shouldBe 400
+    }
+
+    private fun createWith(region: String) = call(
+        HttpMethod.POST, "/api/v1/trips", newToken(),
+        """{"startDate":"2026-09-01","endDate":"2026-09-03","destinations":[{"seq":0,"region":"$region","nights":2}]}""",
+    )
+
+    /**
+     * 카탈로그 기반 판정(TRIP-360) — **여기서만 드러나는 것**은 시드가 실제로 조회되는지다.
+     * 단위 테스트의 대역은 내가 이해한 카탈로그만 흉내 낸다.
+     *
+     * `홍천군` 은 이 부모 티켓의 출발점이고, `부산`·`경주` 는 프론트가 지금 실제로 보내는 짧은 이름이다
+     * (frontend/src/features/explore/model/regions.ts) — 별칭이 없으면 정상 사용자가 막힌다.
+     */
+    @Test
+    fun `카탈로그에 있는 지역은 표준명·별칭 어느 쪽으로도 생성된다`() {
+        listOf("홍천군", "서울특별시", "제주특별자치도", "부산", "경주", "제주", "강릉", "여수")
+            .forEach { region -> createWith(region).first shouldBe 201 }
+    }
+
+    /**
+     * **부분 문자열은 통과하지 않는다.** 카탈로그 조회를 `LIKE %q%` 로 두면 `천` 한 글자가 천안시에 걸려
+     * 아무 글자나 목적지가 된다 — 검증이 통째로 무의미해진다. 조회는 `=` 여야 한다.
+     */
+    @Test
+    fun `지역명 일부만 보내면 거절한다`() {
+        listOf("천", "군", "특별시").forEach { partial -> createWith(partial).first shouldBe 400 }
+    }
+
+    /**
+     * 거절 사유가 갈려야 한다 — `홍천읍` 은 국내인데 "국내 여행만 지원해요" 라고 답하면 거짓이고,
+     * 사용자는 무엇을 고쳐야 하는지도 알 수 없다(INV-4).
+     */
+    @Test
+    fun `카탈로그에 없으면 사유를 구분해 거절한다`() {
+        val (rc, body) = createWith("홍천읍")
+
+        rc shouldBe 400
+        val reason = body["error"]["fields"][0]["reason"].asText()
+        reason shouldContain "지원하지 않는 지역"
+        reason.contains("국내 여행만") shouldBe false
+    }
+
+    @Test
+    fun `도시 박수 합 초과는 400`() {
+        val body = """{"startDate":"2026-08-01","endDate":"2026-08-04","destinations":[{"seq":0,"region":"제주","nights":3},{"seq":1,"region":"부산","nights":2}]}"""
+        call(HttpMethod.POST, "/api/v1/trips", newToken(), body).first shouldBe 400
+    }
+
+    @Test
+    fun `편집(200) 후 값 변경`() {
+        val token = newToken()
+        val id = call(HttpMethod.POST, "/api/v1/trips", token, createBody).second["tripId"].asText()
+        val (s, b) = call(HttpMethod.PATCH, "/api/v1/trips/$id", token,
+            """{"title":"내 제주","startDate":"2026-08-01","endDate":"2026-08-02","party":4,"destinations":[{"seq":0,"region":"제주","nights":1}]}""")
+        s shouldBe 200
+        b["title"].asText() shouldBe "내 제주"
+        b["party"].asInt() shouldBe 4
+    }
+
+    @Test
+    fun `삭제(204) 후 조회 404 · 목록 제외`() {
+        val token = newToken()
+        val id = call(HttpMethod.POST, "/api/v1/trips", token, createBody).second["tripId"].asText()
+        call(HttpMethod.DELETE, "/api/v1/trips/$id", token).first shouldBe 204
+        call(HttpMethod.GET, "/api/v1/trips/$id", token).first shouldBe 404
+        call(HttpMethod.GET, "/api/v1/trips", token).second.size() shouldBe 0
+    }
+}

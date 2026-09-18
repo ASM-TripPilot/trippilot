@@ -5,7 +5,7 @@
 | 컴포넌트 | 역할 | 유형 |
 |---|---|---|
 | C1 LLM Gateway | LLM 판단·해석 계층 (라우터 + 워커 + 검증 게이트) | AI Core |
-| C2 Solver Engine | 선택·순서·시각 보장 (OPTW + HC1~HC4 + 이동추정) | AI Core |
+| C2 Assembly Engine | 선택·순서·시각 보장 (OPTW + HC1~HC4 + 이동추정) | AI Core |
 | M7 Place Data | closed-set 후보 풀 + POI 정본 + 수집 게이트 + 엔티티 해소 | Data Layer |
 
 ## Application Components (Kotlin 백엔드 — 본 저장소 범위 밖)
@@ -48,6 +48,6 @@
 | ID | 불변식 | 검증 방법 |
 |---|---|---|
 | INV-1 | LLM은 closed-set 후보 안에서만 선택 | C1 출구 게이트 + U5-P5 PBT |
-| INV-2 | 사용자에게 보이는 시각·순서는 솔버 검증값만 | 편집 경로 수렴 + M16-P1 PBT |
+| INV-2 | 사용자에게 보이는 시각·순서는 어셈블리 검증값만 | 편집 경로 수렴 + M16-P1 PBT |
 | INV-3 | 소요시간 미표시 — 거리만 | VisitSlotDisplay 타입 정적 보장 + U5-P4 PBT |
 | INV-4 | AI 실패 시 결정론 폴백 | 폴백 계단 + U5-P3 PBT |

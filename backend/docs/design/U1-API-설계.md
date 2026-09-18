@@ -35,9 +35,19 @@ U1이 노출하는 HTTP API 계약을 정의한다. 대응 플로우: 소셜 통
   "expiresIn": 3600,
   "refreshToken": "def502...",
   "refreshExpiresIn": 7776000,
-  "account": { "accountId": "9b1e...", "status": "ACTIVE", "onboardingCompleted": false }
+  "isNewUser": false,
+  "account": {
+    "accountId": "9b1e...", "status": "ACTIVE", "email": "user@example.com", "socialProviders": ["KAKAO"]
+  }
 }
 ```
+
+`account.onboardingCompleted` 는 **뺐다**(TRIP-249). 그 답은 `GET /api/v1/bootstrap` 의 `session` 이 소유한다 —
+로그인 응답은 그 순간의 사본이라 이후 온보딩을 마쳐도 갱신되지 않고, 두 출처가 갈리면 어느 쪽이 사실인지
+판단할 근거가 없다. 실제로 `GET /me` 도 이 필드를 내보낸 적이 없다.
+
+토큰 회전(`/auth/token/refresh`)은 **`RefreshedTokenPair`** 로 갈랐다 — 위에서 `isNewUser`·`account` 를 뺀 5필드다.
+회전에서 "신규 가입"은 언제나 거짓이고, 계정 요약을 실으려면 갱신마다 계정을 한 번 더 조회해야 한다.
 
 ## 2. 공개(인증 불요) 엔드포인트 화이트리스트
 
@@ -61,7 +71,7 @@ GET  /api/v1/health/liveness  (LB 전용)
 | Method · Path | 설명 | 주요 응답 | Flow·Story |
 |---|---|---|---|
 | POST `/auth/social/{provider}` | 소셜 code 교환(서버측) → 신규=가입(연령확인 동반)·기존=로그인, 즉시 ACTIVE | `200` TokenPair (`isNewUser`) | FLOW-1, D22 |
-| POST `/auth/token/refresh` | 리프레시 회전. 재사용 감지 시 체인 무효화 | `200` TokenPair / `401` | FLOW-5, D36 |
+| POST `/auth/token/refresh` | 리프레시 회전. 재사용 감지 시 체인 무효화 | `200` RefreshedTokenPair / `401` | FLOW-5, D36 |
 | POST `/auth/logout` | 현재 기기 체인 revoke | `204` | INV-R3 |
 
 > **이연(후속 — 이메일 로그인).** `POST /auth/signup/email`(가입→PENDING_VERIFICATION), `/auth/email/verify(+/resend)`, `/auth/login/email`, `/auth/password/reset/request(+/confirm)`. 원설계(FLOW-2·자동로그인·재설정 시 전 기기 무효화 INV-R3)는 보존.
@@ -140,7 +150,7 @@ POST /api/v1/auth/social/kakao
 ```http
 POST /api/v1/auth/token/refresh
 { "refreshToken": "def502..." }
-→ 200 OK  (새 TokenPair — 구 리프레시 회전 소비)
+→ 200 OK  (RefreshedTokenPair — 구 리프레시 회전 소비)
 # 이미 회전된 토큰 재사용 시: 401 + 체인 전체 무효화 + 보안 알림 (INV-R2)
 ```
 
