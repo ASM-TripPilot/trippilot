@@ -72,6 +72,9 @@ _PAREN = re.compile(r"[\(（][^)）]*[\)）]")
 _TRAILING_LATIN = re.compile(r"\s+[A-Za-z][A-Za-z'&.\- ]*$")
 _HANGUL = re.compile(r"[가-힣]")
 
+# 이름 안에서 공백과 같은 구실을 하는 구분자("스파·리조트"·"카페/베이커리").
+_SEPARATORS = re.compile(r"[·・/]")
+
 
 def _display_form(name: str) -> str:
     """사람이 문구에 쓸 법한 표시형 — 괄호 부기와 뒤따르는 로마자를 뗀다.
@@ -109,7 +112,10 @@ def _name_variants(name: str) -> set[str]:
         if not form:
             continue
         variants.add(form)
-        tokens = form.split()
+        # 가운뎃점·슬래시도 토큰 경계다 — "도곡 원네스 스파·리조트" 를 모델은
+        # "도곡 원네스 스파" 로 줄인다(실측 2건). 공백만 경계로 보면 이 표기의
+        # 이름이 통째로 드롭된다.
+        tokens = _SEPARATORS.sub(" ", form).split()
         # 연속 토큰 구간 — 이름당 토큰이 몇 개뿐이라 전수로 싸다.
         for i in range(len(tokens)):
             for j in range(i + 1, len(tokens) + 1):

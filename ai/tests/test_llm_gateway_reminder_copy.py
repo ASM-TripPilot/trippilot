@@ -305,3 +305,17 @@ def test_token_shortening_does_not_open_new_places() -> None:
     ctx = ReminderCopyContext(allowed=("세종호수공원",), forbidden=())
     out = _apply({"title": "오늘의 하루", "body": "공원을 걸어보세요", "places": ["공원"]}, ctx)
     assert out.value is None and out.drop_event is not None
+
+
+def test_middle_dot_is_a_token_boundary() -> None:
+    """가운뎃점도 공백과 같은 경계 — "스파·리조트" 를 모델은 "스파" 로 줄인다."""
+    ctx = ReminderCopyContext(allowed=("도곡 원네스 스파·리조트",), forbidden=())
+    out = _apply(
+        {
+            "title": "오늘의 하루",
+            "body": "도곡 원네스 스파에서 쉬어가세요",
+            "places": ["도곡 원네스 스파"],
+        },
+        ctx,
+    )
+    assert out.error is None and out.value is not None
