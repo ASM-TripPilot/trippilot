@@ -68,6 +68,8 @@ except ImportError:  # 운영 이미지(uv sync --no-dev)에는 langsmith 가 �
 
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
+from trippilot.orchestrator.arguments import extract_arguments  # noqa: I001
+from trippilot.domain.dialogue import specs_of
 from trippilot.domain.intent import (
     ROUTABLE_INTENTS,
     Intent,
@@ -82,7 +84,6 @@ from trippilot.ports.vector_store_port import VectorStorePort
 
 # 전처리에서 제거하는 유니코드 카테고리: 이모지·기호변형자·서식제어·제어문자 (§2 [0. 전처리])
 _STRIP_CATEGORIES = frozenset({"So", "Sk", "Cf", "Cc", "Cs", "Co"})
-_REGEX_PREFIX = "regex:"
 # 3차 프롬프트에 실을 closed-set 라벨 목록 (INV-1 — 모델이 고를 수 있는 값 자체를 한정)
 _CLOSED_SET_LABELS = ", ".join(sorted(i.value for i in ROUTABLE_INTENTS))
 
@@ -140,7 +141,6 @@ class _Hit:
     intent: Intent
     score: float
     entry_id: str
-    slot_pattern: Mapping
 
 
 def _fallback(reason: str) -> IntentMatch:
@@ -209,7 +209,7 @@ class IntentRouter:
                 return _fallback(f"out_of_scope_anchor({top.entry_id}, {top.score:.3f})")
             return IntentMatch(
                 intent=top.intent,
-                slots=_extract_slots(text, top.slot_pattern),
+                slots=extract_arguments(text, specs_of(top.intent)),
                 confidence=_clamp(top.score),
                 match_route=MatchRoute.CONFIDENT,
             )
@@ -231,15 +231,7 @@ class IntentRouter:
             intent = _payload_intent(payload)
             if intent is None:  # 뱅크 오염 방어 (INV-1) — closed-set 밖 라벨은 매칭 대상 아님
                 continue
-            pattern = payload.get("slot_pattern")
-            hits.append(
-                _Hit(
-                    intent=intent,
-                    score=hit.score,
-                    entry_id=hit.item_id,
-                    slot_pattern=pattern if isinstance(pattern, Mapping) else {},
-                )
-            )
+            hits.append(_Hit(intent=intent, score=hit.score, entry_id=hit.item_id))
         return tuple(hits)
 
     # 2차 — 유사질문 생성 + 재매칭 가중 투표 (AMBIGUOUS 전용)
@@ -279,7 +271,7 @@ class IntentRouter:
         return (
             IntentMatch(
                 intent=winner,
-                slots=_extract_slots(text, best[winner].slot_pattern),
+                slots=extract_arguments(text, specs_of(winner)),
                 confidence=_clamp(ratio),
                 match_route=MatchRoute.VOTED,
             ),
@@ -383,28 +375,6 @@ def _payload_intent(payload: Mapping) -> Intent | None:
         return None
     # 거부 앵커(OUT_OF_SCOPE)도 매칭 대상이다 — 그것이 앵커의 존재 이유다.
     return intent if (intent in ROUTABLE_INTENTS or intent is Intent.OUT_OF_SCOPE) else None
-
-
-def _extract_slots(text: str, slot_pattern: Mapping) -> dict:
-    """매칭된 대표 질문의 슬롯 패턴으로 규칙 추출 (§2 [슬롯 추출], §3.1 slot_pattern).
-
-    지원 형식은 `"regex:<정규식>"` 1종. 형식이 다르거나 정규식이 깨졌으면 그 슬롯만 건너뛴다 —
-    슬롯 추출 실패가 라우팅 자체를 죽이면 안 된다(의도는 이미 확정됐다).
-    seed 뱅크에는 아직 slot_pattern이 없어 현재는 대부분 빈 dict가 나온다.
-    """
-    slots: dict = {}
-    for name, rule in sorted(slot_pattern.items(), key=lambda kv: str(kv[0])):
-        if not isinstance(name, str) or not isinstance(rule, str):
-            continue
-        if not rule.startswith(_REGEX_PREFIX):
-            continue
-        try:
-            found = re.search(rule[len(_REGEX_PREFIX) :], text)
-        except re.error:
-            continue
-        if found is not None:
-            slots[name] = found.group(0)
-    return slots
 
 
 def _clamp(value: float) -> float:

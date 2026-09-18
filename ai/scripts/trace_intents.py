@@ -120,7 +120,7 @@ def _expand_bank(entries, embedding, store, n_sets: int) -> int:
 
     가설: 실명 발화가 자리표시자 원문과는 0.5~0.7 대, 채운 변형과는 0.9 대로 붙는다(TRIP-678 leak 검사에서
     구조가 같은 문장끼리 관측). **실측으로 기각됨** — 모듈 docstring 참조. 구조까지 같아야 0.9 가 나오고,
-    평가셋 미달은 구조가 다른 문장들이었다. payload(intent·slot_pattern)는 원문 것 그대로. 반환: 추가 건수.
+    평가셋 미달은 구조가 다른 문장들이었다. payload(intent)는 원문 것 그대로. 반환: 추가 건수.
     """
     added = 0
     for e in entries:

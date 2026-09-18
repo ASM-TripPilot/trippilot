@@ -58,7 +58,6 @@ class BankEntry:
     reviewed: bool
     origin: str
     bank_version: str
-    slot_pattern: dict  # {슬롯명: "regex:..."} — seed에는 아직 없음(빈 dict)
 
     def payload(self) -> dict:
         """벡터 스토어 payload — 라우터가 매칭 결과를 해석하는 데 필요한 것만."""
@@ -68,7 +67,6 @@ class BankEntry:
             "reviewed": self.reviewed,
             "origin": self.origin,
             "bank_version": self.bank_version,
-            "slot_pattern": dict(self.slot_pattern),
         }
 
 
@@ -109,7 +107,6 @@ def load_bank(data: object) -> tuple[BankEntry, ...]:
         if not isinstance(reviewed, bool):
             raise BankLoadError(f"{intent.value}: reviewed는 bool이어야 함")
         origin = group.get("origin", default_origin)
-        slot_pattern = _parse_slot_pattern(group.get("slot_pattern"), intent)
         questions = group.get("questions")
         if not isinstance(questions, Sequence) or isinstance(questions, (str, bytes)) or not questions:
             raise BankLoadError(f"{intent.value}: questions는 비어있지 않은 목록이어야 함")
@@ -137,7 +134,6 @@ def load_bank(data: object) -> tuple[BankEntry, ...]:
                     reviewed=reviewed,
                     origin=item_origin,
                     bank_version=version,
-                    slot_pattern=slot_pattern,
                 )
             )
     return tuple(entries)
@@ -176,16 +172,6 @@ def _check_routing(intent: Intent, group: Mapping) -> None:
             f"{intent.value}: mode가 라우팅 테이블과 불일치 "
             f"(yaml={mode.value}, 정본={entry.mode.value})"
         )
-
-
-def _parse_slot_pattern(value: object, intent: Intent) -> dict:
-    if value is None:
-        return {}
-    pattern = _require_mapping(value, f"{intent.value}.slot_pattern")
-    for name, rule in pattern.items():
-        if not isinstance(name, str) or not isinstance(rule, str):
-            raise BankLoadError(f"{intent.value}.slot_pattern: 키·값 모두 문자열이어야 함")
-    return dict(pattern)
 
 
 def load_bank_file(path: Path, parse: Callable[[str], object]) -> tuple[BankEntry, ...]:
