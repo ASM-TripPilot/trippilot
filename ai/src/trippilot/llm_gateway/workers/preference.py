@@ -65,7 +65,9 @@ def build_prompt_vars(pool: CandidatePool, persona: PersonaSummary) -> dict[str,
     )
     return {
         "taste_tags": ", ".join(t.value for t in persona.taste_tags) or "미설정",
-        "companion": persona.companion.value,
+        # 미설정을 SOLO 로 적으면 선택 안 한 사람을 혼자 여행자로 단정한다 —
+        # taste_tags 빈 경우와 같은 문구를 쓴다.
+        "companion": persona.companion.value if persona.companion else "미설정",
         "budget": persona.budget.value,
         "candidates": candidates or "(후보 없음)",
     }

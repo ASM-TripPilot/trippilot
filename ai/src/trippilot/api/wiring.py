@@ -101,6 +101,7 @@ from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
 from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import (
+    BUDGET_TOKENS,
     BudgetLevel,
     GeoPoint,
     PoiId,
@@ -157,26 +158,10 @@ KST = timezone(timedelta(hours=9))
 
 _PROMPTS_ROOT = Path(__file__).resolve().parents[3] / "prompts"
 
-# 경계 어휘 → 도메인 enum 번역표 (결정론 — 소프트 입력이라 미인식은 기본값 폴백).
-#
-# 백엔드 `preference_set.budget_tier` 의 정본 어휘는 **저가·중간·고급·럭셔리 4종**이고
-# (`V1.5__profile.sql` CHECK), 접지 않고 그대로 와이어에 실린다
-# (`ReplanFacadeService`: `budgetLevel = prefs.budgetTier`). 그러니 넷이 전부 여기
-# 있어야 한다 — 빠진 값은 거절되는 것이 아니라 **조용히 MID** 가 된다(아래 폴백).
-_BUDGET_TOKENS: Mapping[str, BudgetLevel] = {
-    "LOW": BudgetLevel.LOW, "저렴": BudgetLevel.LOW, "낮음": BudgetLevel.LOW,
-    "저가": BudgetLevel.LOW,
-    "MID": BudgetLevel.MID, "MIDDLE": BudgetLevel.MID,
-    "중간": BudgetLevel.MID, "보통": BudgetLevel.MID,
-    "HIGH": BudgetLevel.HIGH, "높음": BudgetLevel.HIGH,
-    "고급": BudgetLevel.HIGH, "프리미엄": BudgetLevel.HIGH,
-    # 럭셔리는 **임시로** HIGH 다 — 접는 것이 옳아서가 아니라 MID 로 떨어지는 것보다
-    # 나아서다. 정식 값은 TRIP-434 에서 온다(결정: 등급을 구간으로 — 상한만이 아니라
-    # 하한을 도입한다). `M7Config.budget_limit` 의 HIGH 가 지금 `None`(상한 없음)이라
-    # 그 위에 값을 그냥 얹으면 둘 다 무제한이라 구분이 안 되기 때문이고, 임계표를
-    # 같이 고치는 것이 그 작업의 본체다. 여기 한 줄은 그때까지의 지혈이다.
-    "럭셔리": BudgetLevel.HIGH,
-}
+# 예산 어휘표는 domain/common 로 옮겼다 — 페르소나 어댑터(BackendPersonaStore)도
+# 같은 표를 쓴다. 두 벌이면 한쪽만 고쳐 어긋난다.
+_BUDGET_TOKENS = BUDGET_TOKENS
+
 _TRANSPORT_TOKENS: Mapping[str, TransportMode] = {
     "WALK": TransportMode.WALK, "도보": TransportMode.WALK,
     "PUBLIC": TransportMode.PUBLIC, "대중교통": TransportMode.PUBLIC,
@@ -1665,6 +1650,7 @@ def build_dev_app(
     vector_store: object | None = None,
     embedding: object | None = None,
     trace: TracePort | None = None,
+    context_store: object | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -1679,6 +1665,9 @@ def build_dev_app(
     StaticPoiDb(제주 시드 4곳) 그대로(하위호환: 백엔드 없는 로컬 스모크).
     `travel_port`는 선택 주입(TRIP-432, ChainedTravelAdapter) — 기본 None 이면
     기존 TravelEstimator(하버사인) 그대로.
+    `context_store`는 선택 주입(TRIP-434, BackendPersonaStore 실연동) — 기본 None
+    이면 StaticPersonaStore(고정 요약) 그대로. 실 어댑터를 넣으면 페르소나가
+    매 요청 백엔드 재조회로 온다(BR-U4-07).
     `trace`는 선택 주입(관측 스파이용, 예: InMemoryTrace) — 기본 None 이면
     build_orchestrator 기본값(LoggingTrace) 그대로.
     """
@@ -1696,7 +1685,7 @@ def build_dev_app(
         existence=existence,
         llm=llm if llm is not None else UnwiredLlm(),
         poi_db=poi_db if poi_db is not None else StaticPoiDb(demo_poi_seed()),
-        context_store=StaticPersonaStore(
+        context_store=context_store if context_store is not None else StaticPersonaStore(
             PersonaSummary(taste_tags=(), companion=CompanionType.SOLO,
                            budget=BudgetLevel.MID)
         ),
