@@ -128,6 +128,12 @@ uv run python scripts/merge_pois_docs.py -o data/collected_pois.json /tmp/poi/*/
 - 사진(`provenance.image_url`) 보유율은 카테고리마다 다르고 **FOOD 가 가장 낮다**. 사진 없음은 탈락 사유가 아니라
   `quality` 를 PARTIAL 로 낮출 뿐이다(`collection_gate.py` 4·5단) — 편차는 수집 결과이지 게이트 결함이 아니다
 - 스키마 정본: `ai/src/trippilot/poi_curation/sourcing/pipeline.py` 의 `to_output_document`
+- `provenance.detail` — 상세(detailIntro2) 응답의 **표시용 원문**(대표메뉴·주차·입장료·판매품목 등,
+  벤더 필드명 그대로, 파싱 안 함). 채택 목록은 `tourapi.py` 의 `_DETAIL_FIELDS` — 제주 실측(#542)에서
+  실제로 채워져 오던 필드만이고 **소요시간(`spendtime`)은 절대 싣지 않는다**(INV-3). 하나도 없으면 키 자체가
+  없다. ⚠️ **기수집분에는 없다** — 증분 색인이 "변경 없음"을 스킵해 상세를 다시 안 받으므로, 이 키는
+  2026-09-19 이후 신규·변경분에만 붙는다. 소급은 항목당 1콜 — 전량이면 며칠치 일일 예산이고, 그건 장소 상세
+  4필드 수집(TRIP-897 — `detailCommon`·`detailImage2`)과 같은 되감기 패스에서 한 번에 받는 것이 맞다
 
 세려면:
 
