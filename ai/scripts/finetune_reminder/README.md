@@ -183,13 +183,24 @@ MLX LoRA 산출물(어댑터)은 그대로 vLLM 에 안 올라간다 — `fuse` 
 당장 얻는 이득이 없다. 실운영 전환·팀 상시 운영 시점에는 재검토 대상이다(서빙 주소가
 env 변수 하나라 전환 비용은 실질적으로 0).
 
-**아래 `vllm serve` 명령은 서버를 직접 띄우는 경우다** — 로컬 Mac, 아니면 GPU 가
-있는 아무 호스트든 이 명령 그대로 돈다. **Modal 서버리스에 그대로 얹을 수는
-없다** — Modal 은 이 명령을 쉘에서 실행하는 게 아니라 별도의 Modal 앱(컨테이너
-이미지·GPU 타입·엔드포인트를 선언하는 Python 파일, `modal deploy` 로 배포)이
-필요하고, **그 앱은 아직 작성되지 않았다.** 즉 서빙 전 남은 일이 하나 더 있다:
-이 vLLM 서빙을 감싸는 Modal 앱을 새로 쓰는 것 — 이번 런북 작업 범위 밖이라 여기
-없다. 그때까지는 아래 명령으로 로컬/직접 관리 호스트에서 검증한다.
+Modal 앱은 `scripts/finetune_reminder/modal_app.py` 에 있다(2026-09-19 작성 —
+이전 판에서 "아직 작성되지 않았다"고 비워 둔 칸이다).
+
+```bash
+pip install modal && modal setup          # 최초 1회, 계정 연결
+
+# §3 산출물을 볼륨에 올린다 (모델을 새로 학습할 때마다 다시)
+modal volume create reminder-copy-model
+modal volume put reminder-copy-model ./merged /merged
+
+modal deploy scripts/finetune_reminder/modal_app.py
+```
+
+배포가 끝나면 `https://<workspace>--trippilot-reminder-copy-serve.modal.run` 형태의
+URL 이 나온다 — 뒤에 `/v1` 을 붙인 것이 `AI_LOCAL_LLM_BASE_URL` 값이다.
+
+**GPU 가 있는 호스트에서 직접 띄우려면** 같은 모델을 vLLM 으로 그대로 올리면 된다
+(Modal 앱이 컨테이너 안에서 실행하는 것과 같은 명령이다):
 
 ```bash
 vllm serve ./merged --served-model-name local-reminder-qwen3-4b-v1
@@ -239,6 +250,24 @@ Anthropic/OpenAI 기본 벤더로 새는 것을 막으려는 의도된 fail-fast
 fail-fast 자체가 발동하지 않고, 로컬 라우트가 붙었는지 아닌지 아무 신호도 없이
 조용히 안 붙는다. `AI_LLM_PROVIDER` 를 `openai`·`anthropic`·`mixed` 중 하나로 채워야
 이 절의 나머지가 의미를 가진다.
+
+### ⚠️ 배포 직후 제일 먼저 — 파인튜닝이 실제로 붙었는지 대조한다
+
+**베이스 모델이 서빙돼도 그럴듯한 답이 나와서 겉으로는 정상으로 보인다.** 실제로
+로컬 검증 때 mlx 서버가 어댑터를 조용히 무시해 **하루치 측정이 통째로 무효**가 됐다
+(2026-09-19, `docs/conventions/anti-patterns.md` 등록). 스모크는 이걸 못 잡는다 —
+문구가 나오기만 하면 통과하기 때문이다.
+
+판정은 문체로 한다. 학습된 모델은 **한 문장**으로 짧게 쓰고 `places` 에 슬롯명을
+**괄호까지 그대로** 싣는다. 베이스는 두 문장으로 장황하고 괄호를 뗀다:
+
+| | 예시 |
+|---|---|
+| 학습됨 | `"원통사에서 시작해 도봉산양고기와 원당샘공원을 둘러보세요."` · `places: ["원통사(서울)", ...]` |
+| 베이스 ⚠ | `"원통사에서 명소를 즐기고, 도봉산양고기 맛집에서 특별한 음식을 먹어보세요. 원당샘공원에서 자연을 감상해보세요."` · `places: ["원통사", ...]` |
+
+오른쪽이 나오면 **배포를 되돌리고 볼륨의 모델부터 다시 본다** — `merged/` 가 아니라
+베이스가 올라갔거나, `MODEL_DIR` 이 빈 디렉토리를 가리킨 것이다.
 
 배포 직후, 프롬프트·게이트까지 실제로 통과하는지 실스택 스모크로 확인한다.
 **단, 아래 스모크가 통과해도 배포된 앱 자체가 로컬 라우트로 붙었다는 증명은
