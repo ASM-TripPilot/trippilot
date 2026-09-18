@@ -108,13 +108,17 @@ def main() -> int:
         try:
             message = client.messages.create(
                 model=JUDGE_MODEL,
-                max_tokens=4,
+                # 4 면 사고 블록이 끼는 응답에서 정답 글자까지 못 간다(빈 판정 → 표본 손실).
+                max_tokens=64,
                 messages=[{"role": "user", "content": prompt}],
             )
         except anthropic.APIError as e:
             print(f"{i}번째 판정 호출 실패 — {type(e).__name__}: {e}", file=sys.stderr)
             return 3
-        choice = (message.content[0].text or "").strip().upper()[:1]
+        # 첫 블록이 늘 텍스트는 아니다 — 모델이 사고 블록을 먼저 낸다(Claude 5).
+        # 인덱스로 집으면 그 응답에서 AttributeError 로 채점 전체가 죽는다.
+        text = next((b.text for b in message.content if hasattr(b, "text")), "")
+        choice = text.strip().upper()[:1]
         index = {"A": 0, "B": 1, "C": 2}.get(choice)
         if index is None:
             continue
