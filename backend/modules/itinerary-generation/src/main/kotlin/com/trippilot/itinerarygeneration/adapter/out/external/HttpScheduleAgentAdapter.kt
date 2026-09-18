@@ -162,7 +162,12 @@ class HttpScheduleAgentAdapter(
         val generateInput = ScheduleAgentInput(
             tripId = input.tripId,
             generationMode = GenerationMode.FULLY_AI,
-            tripContext = TripContext(input.destinations, input.targetDate, input.targetDate, null, null),
+            // **동반·예산을 실어 보낸다.** 둘 다 `ReplanInput` 이 이미 들고 있는데(호출측이
+            // trip 에서 읽어 채운다) 여기서 null 로 덮고 있었다 — 재계획만 조건 없는 사람이 됐다.
+            tripContext = TripContext(
+                input.destinations, input.targetDate, input.targetDate,
+                input.companionType, input.budgetLevel,
+            ),
             // 상대는 후보 풀을 좌표에 매단다 — 앵커가 없으면 422 다(실측). 재계획의 기준점은 **현재 위치**이고,
             // 없으면 호출측이 숙소 앵커로 채워 준다(BR-U4-19 사다리).
             anchors = listOfNotNull(
@@ -172,7 +177,9 @@ class HttpScheduleAgentAdapter(
             // 창을 지금부터로 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 모순으로 거부한다(실측 409).
             timeWindows = listOf(TimeWindow(input.targetDate, DAY_START, DAY_END)),
             fixedBlocks = input.lockedBlocks,
-            preferenceProfile = NEUTRAL_PREFERENCES,
+            // **취향을 중립으로 덮지 않는다(B-1).** 처음 일정은 취향으로 만들고 다시 짤 땐 "취향 없는
+            // 사람"으로 만들던 상태를 끝낸다. 값은 `ReplanInput` 에 이미 실려 있었고 여기서 버렸다.
+            preferenceProfile = input.preferenceProfile,
             recommendationStrength = null,
             requestMeta = input.requestMeta,
             excludedPoiIds = input.excludedPoiIds,
@@ -276,15 +283,6 @@ class HttpScheduleAgentAdapter(
 
         private val DAY_START: java.time.LocalTime = java.time.LocalTime.of(9, 0)
         private val DAY_END: java.time.LocalTime = java.time.LocalTime.of(21, 0)
-
-        /**
-         * 재계획은 **취향을 다시 묻지 않는다** — 중립 프로필로 보낸다.
-         * 여행 중 재계획의 입력은 '왜·어떻게'인데 그건 아직 경계에 실을 자리가 없고(위 주석),
-         * 계정 취향을 여기서 다시 조회하면 재계획 모듈이 profile 에 의존하게 된다(R1 확대).
-         */
-        private val NEUTRAL_PREFERENCES = PreferenceProfile(
-            emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null,
-        )
     }
 }
 

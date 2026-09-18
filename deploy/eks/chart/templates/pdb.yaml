@@ -1,0 +1,16 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- range list "backend" "ai" "gateway" }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ . }}
+  labels:
+    {{- include "trippilot.labels" $ | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "trippilot.selector" (dict "root" $ "component" .) | nindent 6 }}
+{{- end }}
+{{- end }}

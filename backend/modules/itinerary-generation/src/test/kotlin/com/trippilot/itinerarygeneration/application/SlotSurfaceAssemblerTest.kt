@@ -3,6 +3,7 @@ package com.trippilot.itinerarygeneration.application
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.placedata.api.FrozenPoiView
@@ -98,4 +99,65 @@ class SlotSurfaceAssemblerTest : StringSpec({
         SlotSurfaceAssembler(fake).assemble(itinerary())
         fake.liveCalls shouldBe 0
     }
+
+    /**
+     * **차선책 POI 의 표면도 함께 모은다**(TRIP-851).
+     *
+     * 화면이 "다른 선택지"를 슬롯 카드와 **같은 카드**로 그리는데, 표면이 없으면 그 카드만
+     * "이름 준비 중"으로 남는다 — 같은 화면에서 한쪽만 이름이 보이는 어색한 상태다.
+     */
+    "차선책 POI 의 표면도 함께 모은다" {
+        val altA = UUID.randomUUID()
+        val fake = FakeSurfaces(
+            live = mapOf(
+                poiA to view(poiA, "슬롯장소"),
+                altA to view(altA, "차선책장소"),
+            ),
+        )
+        val slot = VisitSlot.of(
+            poiA, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            alternatives = listOf(SlotAlternative(altA, "비 오면 여기", null)),
+        )
+
+        val out = SlotSurfaceAssembler(fake).assemble(itinerary(slot))
+
+        out[altA]?.nameKo shouldBe "차선책장소"
+        out[poiA]?.nameKo shouldBe "슬롯장소"
+    }
+
+    /**
+     * **한 번에 묻는다.** 카드마다 조회하면 후보 수만큼 왕복이 는다 — 하루 8슬롯 × 차선책 2건이면
+     * 24번이다. 조립기가 있는 이유가 그것인데, 차선책을 따로 묻기 시작하면 그 이유가 무너진다.
+     */
+    "슬롯과 차선책을 한 번의 조회로 묻는다 — 후보 수만큼 왕복이 늘지 않는다" {
+        val alts = List(3) { UUID.randomUUID() }
+        val fake = FakeSurfaces(live = (listOf(poiA) + alts).associateWith { view(it, "장소") })
+        val slot = VisitSlot.of(
+            poiA, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            alternatives = alts.map { SlotAlternative(it, "이유", null) },
+        )
+
+        SlotSurfaceAssembler(fake).assemble(itinerary(slot))
+
+        fake.liveCalls shouldBe 1
+    }
+
+    /** 정본에 없는 차선책은 표면이 없다 — 그래도 **슬롯도 차선책도 사라지지 않는다**(화면이 폴백한다). */
+    "정본에 없는 차선책은 표면 없이 지나간다" {
+        val ghost = UUID.randomUUID()
+        val fake = FakeSurfaces(live = mapOf(poiA to view(poiA, "슬롯장소")))
+        val slot = VisitSlot.of(
+            poiA, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            alternatives = listOf(SlotAlternative(ghost, "이유", null)),
+        )
+
+        val out = SlotSurfaceAssembler(fake).assemble(itinerary(slot))
+
+        out.containsKey(ghost) shouldBe false
+        out[poiA]?.nameKo shouldBe "슬롯장소"
+    }
 })
+
+/** 표면 표본 — 이름 말고는 이 스펙의 관심사가 아니다. */
+private fun view(poiId: UUID, nameKo: String) =
+    PoiSurfaceView(poiId, nameKo, 33.4, 126.5, "명소", null, null, emptyList())

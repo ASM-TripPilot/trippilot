@@ -11,6 +11,7 @@ ScheduleTask → ② 게이트웨이 선호 점수 (전 일자 1회)  실패·�
              → ④ 어셈블리 solve                       (체인 폴백은 어셈블리 소유 — 여기서 이중 폴백 금지)
              → ⑤ (선택) 설명 부착                      실패 → 설명 없이 진행
              → ⑥ 슬롯별 차선책 (결정론, LLM 0회)       실패 → 차선책 없이 진행 (TRIP-871)
+             → ⑥′ (선택) 차선책 LLM 문장               실패 → 템플릿 rationale 유지 (TRIP-887)
 ```
 
 **INV-1**: `candidates`는 `pool.pois`에서만 만들어진다 — 규칙 점수 경로는 풀을 순회해 생성하고,
@@ -34,7 +35,7 @@ LLM 경로는 게이트 통과분을 **한 번 더** `pool.contains`로 교차�
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Mapping, Protocol, Sequence
 
@@ -71,6 +72,9 @@ from trippilot.domain.llm import CandidatePool, PoiExplanation, ScoredPoi
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.poi import Poi, PoiCategory
+from trippilot.llm_gateway.workers.alternative_explanation import (
+    AlternativeExplanationWorker,
+)
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from trippilot.ports.trace_port import TracePort
@@ -181,6 +185,7 @@ class ScheduleAgent:
         trace: TracePort,
         *,
         explanation_worker: ExplanationWorker | None = None,
+        alternative_explanation_worker: AlternativeExplanationWorker | None = None,
         config: OrchestratorConfig | None = None,
     ) -> None:
         self._scoring = scoring_worker
@@ -188,6 +193,7 @@ class ScheduleAgent:
         self._clock = clock
         self._trace = trace
         self._explainer = explanation_worker  # 미주입이면 설명 단계를 통째로 건너뛴다
+        self._alt_explainer = alternative_explanation_worker  # 미주입이면 템플릿 rationale 그대로
         self._cfg = config or OrchestratorConfig()  # c1_min_ms·explanation_min_ms 만 읽는다
 
     # ── 공개 API ────────────────────────────────────────────────────
@@ -275,6 +281,11 @@ class ScheduleAgent:
         #    시한을 쓰지 않는다. 부가 정보라 실패해도 일정은 그대로 나간다(설명과 같은 취급).
         alternatives = self._slot_alternatives(
             request, pool, candidates, solution, steps, trace_id, now
+        )
+        # ⑥′ 차선책 LLM 문장 (TRIP-887) — 설명(⑤)과 같은 진입 조건·예산 규칙. 실패하면
+        #    ⑥의 템플릿 rationale 이 그대로 남는다.
+        alternatives = self._explain_alternatives(
+            request, pool, persona, solution, alternatives, budget, t0, steps, trace_id, now
         )
 
         return GenerationOutcome(
@@ -497,6 +508,67 @@ class ScheduleAgent:
                           f"alternatives_error: {type(e).__name__}: {e}")
             return {}
 
+    # ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────
+
+    def _explain_alternatives(
+        self,
+        request: GenerateItineraryRequest,
+        pool: CandidatePool,
+        persona: PersonaSummary | None,
+        solution: ItinerarySolution,
+        picks: dict[str, tuple[SlotAlternative, ...]],
+        budget: DeadlineBudget,
+        t0: int,
+        steps: list[Degradation],
+        trace_id: TraceId,
+        now: datetime,
+    ) -> dict[str, tuple[SlotAlternative, ...]]:
+        """차선책 rationale 을 LLM 문장으로 바꾼다 — 문장이 없는 건은 템플릿(TRIP-871) 유지.
+
+        요청된 생략·미배선은 기능 부재(강등 아님). 페르소나 없음은 ⑤가 이미 강등으로
+        기록했으므로 여기서 두 번 세지 않는다(중복 관측 금지).
+        """
+        if (not picks or not request.include_explanations
+                or self._alt_explainer is None or persona is None):
+            return picks
+        pairs = alternative_pairs(solution, picks)
+        remaining = budget.total_ms - (self._clock.monotonic_ms() - t0)
+        if remaining < self._cfg.explanation_min_ms:
+            self._degrade(steps, trace_id, now, "alternative_explanation",
+                          "llm_explain_alternatives", "template_rationale",
+                          f"deadline:remaining={remaining}ms")
+            return picks
+        try:
+            result = self._alt_explainer.explain(
+                pool, pairs, persona, trace_id, now, timeout_sec=remaining / 1000.0,
+            )
+        except Exception as e:
+            self._degrade(steps, trace_id, now, "alternative_explanation",
+                          "llm_explain_alternatives", "template_rationale",
+                          f"explain_error: {type(e).__name__}: {e}")
+            return picks
+        if result.is_fallback:  # 게이트웨이가 이미 발행 — 결과에만 싣는다
+            steps.append(Degradation(
+                stage="alternative_explanation",
+                reason=f"alternative_explanation_fallback: {result.error}"))
+            return picks
+        # 차선책 id 로만 좁힌다 — 프롬프트가 금지한 "확정 장소 설명"만 돌아오면 교체 0건인데
+        # 강등이 안 남는 침묵을 막는다. picks ⊆ pool 이라 INV-1 재교차도 그대로다.
+        alt_ids = {a.poi_id for alts in picks.values() for a in alts}
+        texts = {
+            x.poi_id: x.text for x in (result.value or ())
+            if isinstance(x, PoiExplanation) and x.poi_id in alt_ids and pool.contains(x.poi_id)
+        }
+        if not texts:
+            self._degrade(steps, trace_id, now, "alternative_explanation",
+                          "llm_explain_alternatives", "template_rationale",
+                          "alternative_explanation_empty")
+            return picks
+        return {
+            key: tuple(replace(a, rationale=texts.get(a.poi_id, a.rationale)) for a in alts)
+            for key, alts in picks.items()
+        }
+
     # ── 실패·관측 헬퍼 ──────────────────────────────────────────────
 
     def _failed(
@@ -620,6 +692,17 @@ def pick_slot_alternatives(
                     for p in picks
                 )
     return out
+
+
+def alternative_pairs(
+    solution: ItinerarySolution, picks: Mapping[str, tuple[SlotAlternative, ...]]
+) -> tuple[tuple[PoiId, PoiId], ...]:
+    """(확정 슬롯 POI, 선택지 POI) 쌍 — 일정 순서대로. 워커 컨텍스트("대신할 확정 장소") 입력."""
+    return tuple(
+        (slot.poi_id, a.poi_id)
+        for day in solution.days for slot in day.slots
+        for a in picks.get(f"{day.date.isoformat()}#{slot.poi_id}", ())
+    )
 
 
 def _open_on(poi: Poi, day_of_week: int) -> bool:

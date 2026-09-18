@@ -2,7 +2,10 @@ package com.trippilot.itinerarygeneration.adapter.`in`.web
 
 import com.trippilot.itinerarygeneration.application.RequestSlotCandidates
 import com.trippilot.itinerarygeneration.application.SlotCandidateService
+import com.trippilot.itinerarygeneration.domain.SlotCandidate
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
+import com.trippilot.placedata.api.PoiSurfaceFacade
+import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Positive
@@ -23,15 +26,26 @@ import java.util.UUID
  */
 @RestController
 @RequestMapping("/api/v1/trips/{tripId}/itinerary/slot-candidates")
-class SlotCandidateController(private val service: SlotCandidateService) {
+class SlotCandidateController(
+    private val service: SlotCandidateService,
+    /**
+     * 후보 카드용 POI 표면(TRIP-851). **도메인에 표시값을 넣지 않으려고** 여기서 붙인다 —
+     * `SlotCandidate` 는 경계 산출물이고 이름·사진은 화면 관심사다(`SlotResponse` 와 같은 결).
+     */
+    private val poiSurfaces: PoiSurfaceFacade,
+) {
 
     @PostMapping
     fun propose(
         principal: Principal,
         @PathVariable tripId: UUID,
         @Valid @RequestBody request: SlotCandidatesRequest,
-    ): SlotCandidatesResponse =
-        SlotCandidatesResponse.from(service.propose(principal.accountId(), tripId, request.toCommand()))
+    ): SlotCandidatesResponse {
+        val output = service.propose(principal.accountId(), tripId, request.toCommand())
+        // 후보 전부를 **한 번에** 묻는다 — 카드마다 조회하면 후보 수만큼 왕복이 는다(N+1).
+        val surfaces = if (output.candidates.isEmpty()) emptyMap() else poiSurfaces.findSurfaces(output.candidates.map { it.poiId })
+        return SlotCandidatesResponse.from(output, surfaces)
+    }
 }
 
 /**
@@ -91,8 +105,8 @@ data class SlotCandidatesResponse(
     val emptyReason: SlotCandidatesEmptyReason?,
 ) {
     companion object {
-        fun from(o: SlotCandidatesOutput) = SlotCandidatesResponse(
-            o.candidates.map { SlotCandidateResponse(it.poiId, it.distanceRange, it.rationale) },
+        fun from(o: SlotCandidatesOutput, surfaces: Map<UUID, PoiSurfaceView> = emptyMap()) = SlotCandidatesResponse(
+            o.candidates.map { SlotCandidateResponse.of(it, surfaces[it.poiId]) },
             o.radiusMUsed,
             o.freshness.degraded,
             o.emptyReason,
@@ -100,5 +114,30 @@ data class SlotCandidatesResponse(
     }
 }
 
-/** 거리만(INV-3). [rationale] 은 시각·소요시간을 언급하지 않는다(BR-U2-09). */
-data class SlotCandidateResponse(val poiId: UUID, val distanceRange: String, val rationale: String)
+/**
+ * 거리만(INV-3). [rationale] 은 시각·소요시간을 언급하지 않는다(BR-U2-09).
+ *
+ * 표면 넷(TRIP-851)은 **차선책 응답과 같은 이름**이다 — 화면이 두 곳에서 같은 카드를 재사용한다.
+ * 정본에 없으면 전부 null 이고 화면이 플레이스홀더로 떨어진다(값을 지어내지 않는다).
+ */
+data class SlotCandidateResponse(
+    val poiId: UUID,
+    val distanceRange: String,
+    val rationale: String,
+    val nameKo: String?,
+    val category: String?,
+    val tags: List<String>,
+    val imageUrl: String?,
+) {
+    companion object {
+        fun of(c: SlotCandidate, surface: PoiSurfaceView?) = SlotCandidateResponse(
+            poiId = c.poiId,
+            distanceRange = c.distanceRange,
+            rationale = c.rationale,
+            nameKo = surface?.nameKo,
+            category = surface?.category,
+            tags = surface?.tags.orEmpty(),
+            imageUrl = surface?.imageUrl,
+        )
+    }
+}

@@ -87,10 +87,15 @@ def test_prompt_render_is_deterministic() -> None:
 
 
 def test_prompt_labels_match_question_bank_labels() -> None:
-    """프롬프트에 실리는 라벨 집합 = 질문뱅크 라벨 집합 (드리프트 차단)."""
+    """프롬프트에 실리는 라벨 집합 = 뱅크의 **위임 대상** 라벨 집합 (드리프트 차단).
+
+    거부 앵커(OUT_OF_SCOPE)는 뱅크에 있지만 프롬프트에는 싣지 않는다 — 3차는 "이 중 하나를 골라라"
+    이고, 고를 수 없는 라벨을 목록에 넣으면 모델이 그걸 고른다. 분류 불가는 `{"intent": null}` 로
+    받는다(intent.yaml 의 기존 규약).
+    """
     bank = yaml.safe_load(_BANK_YAML.read_text(encoding="utf-8"))
     bank_labels = {entry["intent"] for entry in bank["intents"]}
-    assert bank_labels == {i.value for i in ROUTABLE_INTENTS}
+    assert bank_labels - {"OUT_OF_SCOPE"} == {i.value for i in ROUTABLE_INTENTS}
 
 
 # ── INTENT 게이트 ───────────────────────────────────────────────────────

@@ -60,7 +60,8 @@ _CATEGORY_MAP: Mapping[str, PoiCategory] = {
     "fast_food_restaurant": PoiCategory.FOOD,
     "diner": PoiCategory.FOOD,
     "gastropub": PoiCategory.FOOD,
-    "bar": PoiCategory.FOOD,
+    # `bar`(11,950)는 뺐다 — 제주 실측 162건이 동네 호프·펍(드렁큰디제이·봉구비어
+    # 노형점)이었다. 여행 일정의 식사 슬롯에 넣을 곳이 아니다.
     # CAFE — TourAPI 카페 1,771곳이 **전부 같은 태그 한 조합**이었다.
     "cafe": PoiCategory.CAFE,
     "coffee_shop": PoiCategory.CAFE,
@@ -70,8 +71,10 @@ _CATEGORY_MAP: Mapping[str, PoiCategory] = {
     # SIGHT
     "landmark_and_historical_building": PoiCategory.SIGHT,
     "buddhist_temple": PoiCategory.SIGHT,
-    "church_cathedral": PoiCategory.SIGHT,
     "public_plaza": PoiCategory.SIGHT,
+    # `church_cathedral`(8,633)은 뺐다 — 제주 실측 125건이 전부 동네 교회였다
+    # (제주 오렐리 교회·성지교회 외도동·소망교회 목사관). 명동성당 같은 것은
+    # `landmark_and_historical_building` 으로 따로 들어온다.
     # NATURE
     "park": PoiCategory.NATURE,
     "mountain": PoiCategory.NATURE,
@@ -80,20 +83,31 @@ _CATEGORY_MAP: Mapping[str, PoiCategory] = {
     "lake": PoiCategory.NATURE,
     "hot_springs": PoiCategory.NATURE,
     "onsen": PoiCategory.NATURE,
-    # CULTURE
+    # CULTURE — `art_gallery` 만. `arts_and_entertainment`(2,208)는 마술학원·
+    # 사진관·유리공방이, `music_venue`(2,001)는 노래방이 대부분이었다(제주 실측).
     "art_gallery": PoiCategory.CULTURE,
-    "music_venue": PoiCategory.CULTURE,
-    "arts_and_entertainment": PoiCategory.CULTURE,
-    # SHOPPING — 우리가 640건뿐인 축이다.
-    "shopping": PoiCategory.SHOPPING,
-    "clothing_store": PoiCategory.SHOPPING,
+    # SHOPPING — **여행 쇼핑**만. 처음엔 `shopping`(8,429)·`clothing_store`·
+    # `outdoor_gear` 를 넣었다가 뺐다: 제주 실측에서 `shopping` 에 다이소·안경점·
+    # 전자랜드가, `outdoor_gear` 에 수산조합·식품도매가 섞였고 이름 규칙으로
+    # 쫓아가면 끝이 없었다. 카테고리 자체가 거친 것이다. 반면 `souvenir_shop`
+    # 47건은 전부 여행 쇼핑이었다(샵제주·안녕제주·한국기념품백화점).
+    # TourAPI 쇼핑(5일장·상설시장·백화점·면세점·공예)과 같은 결로 맞춘다.
     "souvenir_shop": PoiCategory.SHOPPING,
-    "outdoor_gear": PoiCategory.SHOPPING,
-    "hobby_shop": PoiCategory.SHOPPING,
+    "gift_shop": PoiCategory.SHOPPING,
+    "duty_free_shop": PoiCategory.SHOPPING,
+    "department_store": PoiCategory.SHOPPING,
+    "outlet_store": PoiCategory.SHOPPING,
+    "farmers_market": PoiCategory.SHOPPING,
+    "flea_market": PoiCategory.SHOPPING,
+    "seafood_market": PoiCategory.SHOPPING,
+    "public_market": PoiCategory.SHOPPING,
+    "antique_store": PoiCategory.SHOPPING,
+    "arts_and_crafts": PoiCategory.SHOPPING,
+    "craft_shop": PoiCategory.SHOPPING,
     # ACTIVITY
     "rock_climbing_spot": PoiCategory.ACTIVITY,
     "scuba_diving_center": PoiCategory.ACTIVITY,
-    "casino": PoiCategory.ACTIVITY,
+    # `casino` 는 뺐다 — 제주 실측 1건이 "하나로 마트 제주양돈축협"이었다.
     "swimming_pool": PoiCategory.ACTIVITY,
     "bike_rentals": PoiCategory.ACTIVITY,
     # NIGHT_VIEW — 아래 이름 규칙을 추가로 통과해야 한다.

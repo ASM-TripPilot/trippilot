@@ -1,0 +1,51 @@
+{{- range $component, $port := dict "backend" 8080 "ai" 8000 "embedding" 8100 }}
+{{- if or (ne $component "embedding") $.Values.embedding.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "trippilot.labels" $ | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "trippilot.selector" (dict "root" $ "component" $component) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  labels:
+    {{- include "trippilot.labels" . | nindent 4 }}
+  annotations:
+    # EKS Auto Mode supports this set without an in-cluster AWS Load Balancer Controller.
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: HTTP
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: /healthz
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: traffic-port
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: {{ required "gateway.certificateArn is required (HTTPS only)" .Values.gateway.certificateArn | quote }}
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+    service.beta.kubernetes.io/aws-load-balancer-attributes: load_balancing.cross_zone.enabled=true
+    service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: preserve_client_ip.enabled=true,deregistration_delay.timeout_seconds=630,deregistration_delay.connection_termination.enabled=false
+spec:
+  type: LoadBalancer
+  loadBalancerClass: eks.amazonaws.com/nlb
+  allocateLoadBalancerNodePorts: false
+  loadBalancerSourceRanges:
+    {{- toYaml .Values.gateway.loadBalancerSourceRanges | nindent 4 }}
+  selector:
+    {{- include "trippilot.selector" (dict "root" . "component" "gateway") | nindent 4 }}
+  ports:
+    - name: https
+      port: 443
+      targetPort: http
+      protocol: TCP

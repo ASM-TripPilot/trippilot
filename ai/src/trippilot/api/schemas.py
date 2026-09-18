@@ -535,11 +535,23 @@ class ExplanationsRequest(BoundaryModel):
 
 
 class ExplanationsResponse(BoundaryModel):
-    """slot_key(BR-U2-04: "날짜#poi_id") → 설명 1문장. 실패는 빈 맵 + 사유(침묵 금지)."""
+    """slot_key(BR-U2-04: "날짜#poi_id") → 설명 1문장. 실패는 빈 맵 + 사유(침묵 금지).
+
+    `alternative_explanations`(TRIP-887, additive): 요청 payload 의 슬롯별 차선책
+    (`slots[].alternatives[]`)에 대한 "이 자리 대신 골라도 좋은 이유" 1문장 — 키는
+    `"{date}#{alt_poi_id}"`(같은 선택지가 여러 슬롯에 있으면 날짜별 키마다 같은 문장).
+    배치 슬롯 설명 **다음의 두 번째 호출**(잔여 예산만 씀)이라 이 맵이 비어도 `explanations`
+    는 영향이 없다. 비면 `alternatives_reason` 이 사유를 싣는다(배치 설명이 실패해 시도조차
+    못 했으면 `slot_explanations_unavailable`) — 백엔드는 AI 템플릿 rationale 을 그대로 쓴다.
+    **전제**: 요청 payload 의 `slots[].alternatives[]` 가 채워져 와야 한다 — 백엔드가 저장한
+    차선책을 되돌려 보내기 전(현재 `toWire()` 는 빈 배열)에는 항상 빈 맵 + `null` 이다.
+    """
 
     explanations: dict[str, str]
     is_fallback: bool
     reason: str | None = None
+    alternative_explanations: dict[str, str] = Field(default_factory=dict)
+    alternatives_reason: str | None = None
 
 
 # ── 편집 경계 (TRIP-431 — 자연어·구조화 겸용, 단일 처리 로직 수렴) ────

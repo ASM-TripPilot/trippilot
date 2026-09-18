@@ -37,6 +37,12 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
 jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: () => ({ savedPoiIds: [] }),
 }));
+// TRIP-695 — (tabs)/index.tsx 가 useSavedStays().savedCount 를 물게 되면서 SC-1 이 QueryClient
+// 부재로 크래시한다 — 저장 숙소 0(배지 미표시)로 목킹해 무해 스텁만 둔다(위 useGetTrips·
+// useSavedPlaces 스텁과 동일 계열, 단언 무변경).
+jest.mock('@/features/stay/model/savedStays', () => ({
+  useSavedStays: () => ({ savedCount: 0 }),
+}));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const TabsLayout = require('@/app/(tabs)/_layout').default;

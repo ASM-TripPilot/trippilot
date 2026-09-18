@@ -1,0 +1,19 @@
+{
+  "bank_entries": 485,
+  "bank_fill_sets": 0,
+  "bank_sha": "f1104f0b83d0",
+  "bank_version": "0.7",
+  "baseline_correct": 85,
+  "embedding_model": "nlpai-lab/KURE-v1",
+  "eval_cases": 87,
+  "eval_version": "1.0",
+  "intent_margin": 0.02,
+  "llm_intent": "gpt-5.6-terra",
+  "llm_paraphrase": "claude-haiku-4-5",
+  "openai_api": "responses",
+  "provider": "mixed",
+  "recorded_at": "2026-09-18T16:18:13.284253+00:00",
+  "t_high": 0.82,
+  "t_mid": 0.75,
+  "vote_ratio": 0.8
+}

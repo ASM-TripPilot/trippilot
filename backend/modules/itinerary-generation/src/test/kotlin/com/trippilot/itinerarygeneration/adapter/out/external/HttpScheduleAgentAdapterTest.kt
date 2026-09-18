@@ -3,6 +3,8 @@ package com.trippilot.itinerarygeneration.adapter.out.external
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
+import com.trippilot.itinerarygeneration.domain.ReplanInput
+import com.trippilot.itinerarygeneration.domain.ReplanScope
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.placedata.api.Area
@@ -180,6 +182,30 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andRespond(withSuccess(aiBody("OR_TOOLS"), MediaType.APPLICATION_JSON))
 
         adapter.generate(input).days.single().slots.single().alternatives shouldBe emptyList()
+        server.verify()
+    }
+
+    /**
+     * **재계획이 취향·동반·예산을 실어 보낸다**(연동 설계 B-1).
+     *
+     * 종전에는 `NEUTRAL_PREFERENCES` 로 취향을 덮고 동반·예산을 `null` 로 보냈다 — 값은
+     * `ReplanInput` 에 이미 실려 있었는데(호출측이 trip·profile 에서 읽어 채운다) **어댑터가 버렸다.**
+     * 그 상태의 증상은 예외가 아니라 *"처음 일정은 취향대로인데 다시 짜면 남의 취향처럼 나온다"* 라
+     * 사용자도 우리도 원인을 못 짚는다.
+     *
+     * **요청 본문을 본다** — 도메인 입력만 확인하면 어댑터가 버리는 이 결함을 원리적으로 못 본다.
+     */
+    "재계획이 취향·동반·예산을 요청에 싣는다 — 중립으로 덮지 않는다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/generate"))
+            .andExpect(jsonPath("$.preference_profile.styles[0]").value("감성"))
+            .andExpect(jsonPath("$.preference_profile.pace").value("여유"))
+            .andExpect(jsonPath("$.trip_context.companion_type").value("친구"))
+            .andExpect(jsonPath("$.trip_context.budget_level").value("MID"))
+            .andRespond(withSuccess(aiBody("OR_TOOLS"), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput())
+
         server.verify()
     }
 
@@ -578,4 +604,31 @@ private fun dummyOutput() = com.trippilot.itinerarygeneration.domain.ScheduleAge
     days = emptyList(), day1ReadyAt = null, explanations = emptyMap(),
     solveMode = SolveMode.DETERMINISTIC, isFallback = false,
     freshness = com.trippilot.itinerarygeneration.domain.FreshnessMeta(Instant.parse("2026-08-07T00:00:00Z"), false),
+)
+
+/** 재계획 입력 표본 — 취향·동반·예산을 **실값으로** 채운다(중립이면 이 스펙이 무의미해진다). */
+private fun replanInput() = ReplanInput(
+    tripId = UUID.randomUUID(),
+    itineraryId = UUID.randomUUID(),
+    scope = ReplanScope.FULL_DAY,
+    destinations = listOf("제주"),
+    fromInstant = Instant.parse("2026-08-01T03:00:00Z"),
+    targetDate = LocalDate.parse("2026-08-01"),
+    originLat = 33.4,
+    originLng = 126.5,
+    lockedBlocks = emptyList(),
+    reasons = listOf("WEATHER"),
+    directives = listOf("INDOOR"),
+    freeText = null,
+    excludedPoiIds = emptyList(),
+    companionType = "친구",
+    budgetLevel = "MID",
+    preferenceProfile = PreferenceProfile(
+        styles = listOf("감성"), activities = emptyList(), foodTastes = emptyList(),
+        transportModes = emptyList(), pace = "여유", companionTypes = emptyList(),
+        petFriendly = false, budgetTier = "MID",
+    ),
+    currentSlots = emptyList(),
+    savedPlaces = emptyList(),
+    requestMeta = RequestMeta("replan-1", Instant.parse("2026-08-07T00:00:00Z"), 25_000),
 )

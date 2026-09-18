@@ -63,7 +63,7 @@ def _pool():
     )
 
 
-def _agent(*, provider=None, clock=None, trace=None):
+def _agent(*, provider=None, clock=None, trace=None, alt_explainer=None):
     trace = trace if trace is not None else InMemoryTrace()
     sink = _Sink()
     gateway = GatewayFacade(FakeLlm(_scores_json("p1", "p2", "p3")), _Renderer(),
@@ -73,6 +73,7 @@ def _agent(*, provider=None, clock=None, trace=None):
         provider if provider is not None else _AssemblyProvider(trace, sink, primary=True),
         clock if clock is not None else FakeClock(),
         trace,
+        alternative_explanation_worker=alt_explainer,
     )
     return agent, trace, sink
 
@@ -380,3 +381,137 @@ def test_failed_outcome_has_no_alternatives() -> None:
     agent, _, _ = _agent(provider=_ExplodingProvider())
     outcome = agent.run(_task(_pool()))
     assert outcome.slot_alternatives == {}
+
+
+# ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────────
+
+from trippilot.domain.llm import PoiExplanation, TypedResult
+
+
+class _SpyAltExplainer:
+    def __init__(self, texts: dict[str, str] | None = None, *, fallback: bool = False) -> None:
+        self.texts, self.fallback, self.calls, self.pairs = texts or {}, fallback, 0, ()
+
+    def explain(self, pool, pairs, persona, trace_id, now, *, timeout_sec=None):
+        self.calls += 1
+        self.pairs = tuple((str(s), str(a)) for s, a in pairs)
+        if self.fallback:
+            return TypedResult(value=None, is_fallback=True, error="down", call_record=None)
+        return TypedResult(
+            value=tuple(PoiExplanation(PoiId(k), v) for k, v in self.texts.items()),
+            is_fallback=False, error=None, call_record=None,
+        )
+
+
+def _six_poi_case(*, include_explanations: bool = True):
+    """창 09–12 · 풀 6건 → p4(SIGHT)·p5(CAFE) 배치, 차선책은 각각 [p6, p3] (위 테스트와 같은 전제)."""
+    pois = _POIS + (_poi(4, 0.015), _poi(5, 0.020, PoiCategory.CAFE), _poi(6, 0.025))
+    req = replace(_request(), include_explanations=include_explanations, day_window=TimeWindow(
+        start=datetime(2026, 8, 5, 9, 0, tzinfo=_KST), end=datetime(2026, 8, 5, 12, 0, tzinfo=_KST)))
+    pool = CandidatePoolBuilder(InMemoryPoi(pois), M7Config()).build(
+        CandidatePoolRequest(anchor=req.anchor, dates=req.days, budget=req.budget, transport=req.transport), _NOW,
+    )
+    return pool, req
+
+
+def test_alternative_sentences_replace_template_rationale_where_given() -> None:
+    pool, req = _six_poi_case()
+    spy = _SpyAltExplainer({"p6": "바다 풍경을 좋아하시면 여기도 잘 맞아요."})
+    agent, _, _ = _agent(alt_explainer=spy)
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert [s.poi_id for d in outcome.solution.days for s in d.slots] == [PoiId("p4"), PoiId("p5")]  # 전제
+    assert outcome.status is GenerationStatus.SUCCESS  # 문장 일부 부재는 강등이 아니다
+    assert spy.calls == 1
+    assert set(spy.pairs) == {("p4", "p6"), ("p4", "p3"), ("p5", "p6"), ("p5", "p3")}
+    for key in (f"{_WED.isoformat()}#p4", f"{_WED.isoformat()}#p5"):
+        by_id = {a.poi_id: a.rationale for a in outcome.slot_alternatives[key]}
+        assert by_id[PoiId("p6")] == "바다 풍경을 좋아하시면 여기도 잘 맞아요."  # LLM 문장
+        assert by_id[PoiId("p3")].endswith("명소 후보")                          # 템플릿 유지
+
+
+def test_alternative_sentences_fallback_keeps_template_and_records_degradation() -> None:
+    pool, req = _six_poi_case()
+    agent, _, _ = _agent(alt_explainer=_SpyAltExplainer(fallback=True))
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert outcome.status is GenerationStatus.DEGRADED
+    assert any(d.stage == "alternative_explanation" for d in outcome.degradations)
+    assert all(a.rationale.endswith("명소 후보")
+               for alts in outcome.slot_alternatives.values() for a in alts)
+
+
+def test_alternative_sentences_skipped_when_explanations_not_requested() -> None:
+    pool, req = _six_poi_case(include_explanations=False)
+    spy = _SpyAltExplainer({"p6": "x"})
+    agent, _, _ = _agent(alt_explainer=spy)
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert spy.calls == 0 and outcome.status is GenerationStatus.SUCCESS  # 요청된 생략 = 강등 아님
+    assert outcome.slot_alternatives  # 차선책 자체는 그대로 실린다
+
+
+def test_alternative_sentences_skipped_without_persona_and_not_double_counted() -> None:
+    pool, req = _six_poi_case()
+    spy = _SpyAltExplainer({"p6": "x"})
+    agent, _, _ = _agent(alt_explainer=spy)
+
+    outcome = agent.run(_task(pool, request=req, persona=None))
+
+    assert spy.calls == 0
+    assert not any(d.stage == "alternative_explanation" for d in outcome.degradations)
+
+
+class _RaisingAltExplainer(_SpyAltExplainer):
+    def explain(self, *a, **k):
+        self.calls += 1
+        raise RuntimeError("cfg bug")
+
+
+def test_alternative_sentences_deadline_skips_call_and_records_degradation() -> None:
+    """잔여 < explanation_min_ms 면 부르지 않는다(DL-2) — 강등 + 이벤트, 템플릿 유지."""
+    pool, req = _six_poi_case()
+    spy = _SpyAltExplainer({"p6": "x"})
+    agent, trace, _ = _agent(alt_explainer=spy)
+
+    # 예산 1초 — 정지 시계라 ⑥′ 잔여가 1000ms < explanation_min_ms(1500). 점수 단계도 같은 이유로
+    # 규칙 점수로 내려가지만 여기서 보는 것은 alternative_explanation 스테이지뿐이다.
+    outcome = agent.run(_task(pool, request=req, total_ms=1_000))
+
+    assert spy.calls == 0 and outcome.solution is not None
+    assert outcome.status is GenerationStatus.DEGRADED
+    reasons = [d.reason for d in outcome.degradations if d.stage == "alternative_explanation"]
+    assert len(reasons) == 1 and reasons[0].startswith("deadline:remaining=")
+    assert any(e.stage == "alternative_explanation" for e in trace.of_type(FallbackEvent))
+    assert all(a.rationale.endswith("명소 후보")
+               for alts in outcome.slot_alternatives.values() for a in alts)
+
+
+def test_alternative_sentences_worker_exception_does_not_fail_generation() -> None:
+    """부가 정보의 예외가 일정을 FAILED 로 만들면 안 된다 — DEGRADED + 사유, 템플릿 유지."""
+    pool, req = _six_poi_case()
+    agent, _, _ = _agent(alt_explainer=_RaisingAltExplainer())
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert outcome.solution is not None and outcome.status is GenerationStatus.DEGRADED
+    assert any(d.stage == "alternative_explanation" and d.reason.startswith("explain_error: RuntimeError")
+               for d in outcome.degradations)
+    assert all(a.rationale.endswith("명소 후보")
+               for alts in outcome.slot_alternatives.values() for a in alts)
+
+
+def test_alternative_sentences_only_for_slot_pois_counts_as_empty() -> None:
+    """LLM 이 (프롬프트가 금지한) 확정 장소 설명만 돌려주면 교체 0건 — 침묵이 아니라 강등이다."""
+    pool, req = _six_poi_case()
+    agent, _, _ = _agent(alt_explainer=_SpyAltExplainer({"p4": "확정 장소 설명"}))
+
+    outcome = agent.run(_task(pool, request=req))
+
+    assert outcome.status is GenerationStatus.DEGRADED
+    assert any(d.reason == "alternative_explanation_empty" for d in outcome.degradations)
+    assert all(a.rationale.endswith("명소 후보")
+               for alts in outcome.slot_alternatives.values() for a in alts)

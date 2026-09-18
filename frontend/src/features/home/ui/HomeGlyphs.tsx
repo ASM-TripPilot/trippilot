@@ -64,6 +64,28 @@ export function SearchGlyph({ size = 19, testID }: GlyphProps) {
   );
 }
 
+// a02 매거진 앱바 뒤로가기 꺾쇠(‹) — 흰 배경 위라 ink. HomeGlyphs 에 없어 신규(features 간
+// 글리프 공유 금지, importBoundary — 다른 feature 의 같은 꺾쇠를 가져오지 않고 여기 다시 적는다).
+export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M15 5L8 12L15 19"
+        stroke={INK}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // magazineHero eyebrow('오늘의 여행 영감') 앞 반짝임 — 흰 pill 위 primary 4각 별.
 export function SparkleGlyph({ size = 13, testID }: GlyphProps) {
   return (
@@ -82,7 +104,7 @@ export function SparkleGlyph({ size = 13, testID }: GlyphProps) {
   );
 }
 
-// destCard 지역 라벨('부산 사하구') 앞 위치 핀 — 사진 위라 흰색.
+// destCard 지역 라벨('부산 사하구') 앞 위치 핀 — TRIP-694로 흰색→primary(Figma 정합, AC-4).
 export function LocationPinGlyph({ size = 12, testID }: GlyphProps) {
   return (
     <Svg
@@ -94,11 +116,11 @@ export function LocationPinGlyph({ size = 12, testID }: GlyphProps) {
     >
       <Path
         d="M6 1.2C4 1.2 2.5 2.7 2.5 4.7C2.5 7.2 6 10.8 6 10.8C6 10.8 9.5 7.2 9.5 4.7C9.5 2.7 8 1.2 6 1.2Z"
-        stroke={WHITE}
+        stroke={PRIMARY}
         strokeWidth={1.2}
         strokeLinejoin="round"
       />
-      <Circle cx={6} cy={4.7} r={1.3} stroke={WHITE} strokeWidth={1.2} />
+      <Circle cx={6} cy={4.7} r={1.3} stroke={PRIMARY} strokeWidth={1.2} />
     </Svg>
   );
 }

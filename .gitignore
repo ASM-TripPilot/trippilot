@@ -30,3 +30,19 @@ _workspace
 
 # 이미지에 넣을 산출물 스테이징 (Gradle 이 만든 jar 복사본 — 재생성 가능)
 deploy/artifacts/
+
+# Terraform and AWS deployment generated files (may contain credentials)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
+.coverage
+htmlcov/
+**/__pycache__/

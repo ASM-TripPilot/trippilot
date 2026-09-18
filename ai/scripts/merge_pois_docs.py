@@ -20,7 +20,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from trippilot.poi_curation.sourcing.mapping import parse_open_hours  # noqa: E402
 
 
 def merge(docs: list[dict]) -> dict:
@@ -55,6 +60,32 @@ def merge(docs: list[dict]) -> dict:
         ],
         "proposals": list(proposals.values()),
     }
+
+
+def reparse_open_hours(proposals: list[dict]) -> int:
+    """`open_hours` 가 비었는데 원문이 있는 제안을 **현재 파서로 다시** 읽는다.
+
+    파서를 고쳐도 이미 수집된 것에는 소급되지 않는다 — 증분 색인이 "변경 없음"으로
+    스킵해 상세를 다시 안 받고, 받아도 파싱은 수집 시점에 한 번뿐이다. 그래서
+    `상시 개방` 을 종일로 읽게 고친(PR #280) 뒤에도 공유본엔 그게 결측으로 남아
+    있었다. 2026-09-17 실측: 결측 15,859건 중 **2,490건**이 원문만 있고 파싱이
+    비어 있었고, 현재 파서로 전부 살아난다 — HC1 사각 85.2% → 71.8%.
+
+    외부 호출 0. 원문(`opening_hours_raw`)이 정본이고 `open_hours` 는 그 파생이라,
+    파생을 최신 규칙으로 다시 내는 것은 데이터를 바꾸는 게 아니다. 이미 값이
+    있으면 건드리지 않는다 — 수집 시점 판정을 병합이 뒤집지 않는다.
+    """
+    n = 0
+    for p in proposals:
+        poi = p.get("poi") or {}
+        raw = p.get("opening_hours_raw")
+        if poi.get("open_hours") or not raw:
+            continue
+        hours = parse_open_hours(raw, None)
+        if hours:
+            poi["open_hours"] = [asdict(h) for h in hours]
+            n += 1
+    return n
 
 
 def _self_check() -> None:
@@ -93,6 +124,10 @@ def main(argv: list[str]) -> int:
         return 1
 
     out = merge(docs)
+    recovered = reparse_open_hours(out["proposals"])
+    if recovered:
+        print(f"[merge] 영업시간 재파싱 — {recovered}건 살림 (원문은 있었는데 파싱이 비어 있던 것)",
+              file=sys.stderr)
     text = json.dumps(out, ensure_ascii=False, indent=2)
     if args.output:
         Path(args.output).write_text(text, encoding="utf-8")

@@ -33,6 +33,15 @@ interface NotificationRepository {
     /** 이미 읽었거나 남의 알림이면 false. */
     fun markRead(accountId: UUID, notificationId: UUID, at: Instant): Boolean
 
+    /**
+     * 계정의 **미읽음 전부**를 읽음 처리하고 실제로 바뀐 건수를 돌려준다(TRIP-829).
+     *
+     * 건별 읽음과 같은 규칙이다 — `read_at IS NULL` 조건을 걸어 **처음 읽은 시각을 덮지 않는다**.
+     * 종류로 거르지 않는다: 집합이 `unreadOnly` 목록과 같아야 뱃지가 0 이 된다(다르면 '모두 읽음'을
+     * 눌러도 숫자가 남아 버튼이 고장난 것처럼 보인다).
+     */
+    fun markAllRead(accountId: UUID, at: Instant): Int
+
     fun exists(accountId: UUID, notificationId: UUID): Boolean
 
     /**

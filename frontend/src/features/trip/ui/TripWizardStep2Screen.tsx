@@ -1,5 +1,5 @@
-import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Fragment, type ReactElement } from 'react';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -39,11 +39,30 @@ const RETRY_LABEL = '다시 시도';
 /** 미배정 밤의 숙소칸 대체 문구 — 카드 탭으로 S9에서 고른다. */
 const UNASSIGNED_STAY_LABEL = '숙소 미정';
 
+/** 단일 거점 카드 그림자(Figma `0 2 10 rgba(0,0,0,.06)`, g01 `SUMMARY_CARD_SHADOW` 동값 로컬 사본).
+ * `shadowColor` 는 `#000000` 이 아니라 동값 색 이름 `'black'` — 이 화면 `.tsx` 는 raw-hex 가드
+ * (tripWizardStep2Structure AC-7) 사정거리라 `#…` 리터럴이 들어오면 RED 다(g01 은 그 가드가 없어
+ * hex 인라인이 통과할 뿐이다). */
+const BASE_CARD_SHADOW = {
+  shadowColor: 'black',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  elevation: 2,
+};
+
 export interface NightlyBaseCardVM {
   nightNumber: number;
   dateLabel: string;
   region: string;
   stayName?: string;
+  /** TRIP-740 — 배정 밤 썸네일 URI(값 있을 때만 48×48 렌더). 프로덕션은 계약 공백이라 항상 미제공
+   *  (현행 2줄), 프리뷰 픽스처로만 채운다(INV-1). 프리뷰는 로컬 에셋 resolve URI(string) 또는
+   *  jest 스텁의 null 이 온다 — 모델 `NightlyBaseCard` 엔 없는, 화면 VM 전용 필드다. */
+  imageUrl?: string | null;
+  /** TRIP-740 — 위치·거리 줄(예: "해운대 · 350m"). 거리이지 duration 이 아니라 INV-3 무관.
+   *  imageUrl 과 동형으로 프로덕션 미제공, 픽스처로만 채운다. */
+  locationLabel?: string;
 }
 
 export type Step2Variant = 'default' | 'loading' | 'error' | 'empty' | 'notrip';
@@ -100,8 +119,9 @@ function Header({ onBack }: { onBack: () => void }): ReactElement {
   );
 }
 
-/** 박별 거점 카드 한 장 — 탭하면 그 밤 번호로 오픈 신호를 낸다. 메타 한 줄(박·날짜·지역)과
- * 숙소명(없으면 "숙소 미정") 줄, 우측 셰브런. */
+/** 박별 거점 카드 한 행 — 탭하면 그 밤 번호로 오픈 신호를 낸다. 메타 한 줄(박·날짜·지역)과
+ * 숙소명(없으면 "숙소 미정") 줄, 우측 셰브런. 배정된 밤에는 48×48 썸네일과 위치·거리 줄이 붙는다.
+ * 카드 크롬(그림자·radius·구분선)은 이 행이 아니라 감싸는 단일 카드 컨테이너가 소유한다. */
 function NightCard({
   card,
   onPressCard,
@@ -109,20 +129,40 @@ function NightCard({
   card: NightlyBaseCardVM;
   onPressCard: (nightNumber: number) => void;
 }): ReactElement {
+  // 리치 블록(썸네일+위치 줄)은 배정된 밤에만 그린다 — stayName 게이트로만 분기한다. imageUrl·
+  // locationLabel 로 분기하면 미배정 밤에 리치가 새어 나온다(★6 불변식). 값은 각각 truthy 일 때만(★5).
+  const assigned = Boolean(card.stayName);
   return (
     <Pressable
       testID={`trip-base-night-card-${card.nightNumber}`}
       accessibilityRole="button"
       onPress={() => onPressCard(card.nightNumber)}
-      className="w-full gap-[6px] rounded-card border border-hairline bg-canvas px-lg py-[14px]"
+      className="w-full gap-sm bg-canvas px-lg py-[14px]"
     >
       <Text className="font-noto text-caption text-muted">
         {`${card.nightNumber}박 · ${card.dateLabel} · ${card.region}`}
       </Text>
       <View className="w-full flex-row items-center gap-md">
-        <Text className="flex-1 font-noto-bold text-card-title font-bold text-ink">
-          {card.stayName ?? UNASSIGNED_STAY_LABEL}
-        </Text>
+        {assigned && card.imageUrl ? (
+          <View className="h-[48px] w-[48px] overflow-hidden rounded-thumb bg-surface-strong">
+            <Image
+              testID={`trip-base-night-thumb-${card.nightNumber}`}
+              source={{ uri: card.imageUrl }}
+              resizeMode="cover"
+              className="h-full w-full"
+            />
+          </View>
+        ) : null}
+        <View className="flex-1 gap-[3px]">
+          <Text className="font-noto-bold text-card-title font-bold text-ink">
+            {card.stayName ?? UNASSIGNED_STAY_LABEL}
+          </Text>
+          {assigned && card.locationLabel ? (
+            <Text className="font-noto text-caption text-muted">
+              {card.locationLabel}
+            </Text>
+          ) : null}
+        </View>
         <ChevronRightGlyph size={20} tone="muted" />
       </View>
     </Pressable>
@@ -145,7 +185,7 @@ function EmptyNightRow({
       testID={`trip-base-empty-night-${card.nightNumber}`}
       accessibilityRole="button"
       onPress={() => onPressCard(card.nightNumber)}
-      className="w-full flex-row items-center rounded-card border border-hairline bg-canvas px-lg py-[14px]"
+      className="w-full flex-row items-center bg-canvas px-lg py-[14px]"
     >
       <Text className="flex-1 font-noto text-caption text-muted">
         {`${card.nightNumber}박 · ${card.dateLabel} · ${card.region}`}
@@ -163,7 +203,7 @@ function NightSkeleton({ index }: { index: number }): ReactElement {
   return (
     <View
       testID={`trip-base-skeleton-night-${index}`}
-      className="w-full gap-md rounded-card border border-hairline bg-canvas px-lg py-[14px]"
+      className="w-full gap-md bg-canvas px-lg py-[14px]"
     >
       <View className="h-[14px] w-[92px] rounded-[6px] bg-surface-strong" />
       <View className="w-full flex-row items-center gap-md">
@@ -278,25 +318,43 @@ export function TripWizardStep2Screen({
                   ) : null}
                 </View>
 
-                <View className="w-full gap-md">
+                {/* 세 얼굴(default·empty·loading)의 밤 행들을 하나의 카드 컨테이너 안에 세우고
+                    행 사이에 헤어라인 구분선을 넣는다 — 3장 분리 카드가 아니라 1장(Figma 정본,
+                    g01 요약 카드 동형). 카드 크롬(그림자·radius 12·border)은 이 컨테이너가 소유하고
+                    각 행 컴포넌트는 크롬을 벗었다. */}
+                <View
+                  testID="trip-base-night-list"
+                  className="w-full rounded-thumb border border-hairline bg-canvas"
+                  style={BASE_CARD_SHADOW}
+                >
                   {loading
                     ? [0, 1, 2].map((index) => (
-                        <NightSkeleton key={index} index={index} />
+                        <Fragment key={index}>
+                          {index > 0 ? (
+                            <View className="h-[1px] bg-hairline" />
+                          ) : null}
+                          <NightSkeleton index={index} />
+                        </Fragment>
                       ))
                     : empty
-                      ? cards.map((card) => (
-                          <EmptyNightRow
-                            key={card.nightNumber}
-                            card={card}
-                            onPressCard={onPressCard}
-                          />
+                      ? cards.map((card, i) => (
+                          <Fragment key={card.nightNumber}>
+                            {i > 0 ? (
+                              <View className="h-[1px] bg-hairline" />
+                            ) : null}
+                            <EmptyNightRow
+                              card={card}
+                              onPressCard={onPressCard}
+                            />
+                          </Fragment>
                         ))
-                      : cards.map((card) => (
-                          <NightCard
-                            key={card.nightNumber}
-                            card={card}
-                            onPressCard={onPressCard}
-                          />
+                      : cards.map((card, i) => (
+                          <Fragment key={card.nightNumber}>
+                            {i > 0 ? (
+                              <View className="h-[1px] bg-hairline" />
+                            ) : null}
+                            <NightCard card={card} onPressCard={onPressCard} />
+                          </Fragment>
                         ))}
                 </View>
 

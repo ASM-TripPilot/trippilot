@@ -304,6 +304,10 @@ private val sampleExplanationsRequest =
 
 /** 모든 필드를 채운다 — 비우면 그 키가 직렬화에서 빠져 비교가 헐거워진다. */
 private val sampleExplanationsResponse =
-    AiExplanationsResponse(mapOf("2026-08-01#poi" to "근거"), isFallback = true, reason = "LLM_TIMEOUT")
+    AiExplanationsResponse(
+        mapOf("2026-08-01#poi" to "근거"), isFallback = true, reason = "LLM_TIMEOUT",
+        alternativeExplanations = mapOf("2026-08-01#alt" to "대신 골라도 좋은 이유"),
+        alternativesReason = "alternative_explanation_fallback",
+    )
 
 private val sampleViolation = AiViolation("HC1", slotRef = "2026-08-01#poi", detail = "영업시간 밖", dayIndex = 0, slotIndex = 1)

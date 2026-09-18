@@ -38,7 +38,7 @@ from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from trippilot.ports.poi_sourcing_port import (
-    SourcedHours,
+    SourcedDetail,
     SourcedPage,
     SourcedPlaceRecord,
     SourcingError,
@@ -62,6 +62,22 @@ _INTRO_FIELDS: Mapping[str, tuple[str, str]] = {
     "28": ("usetimeleports", "restdateleports"),  # 레포츠
     "38": ("opentime", "restdateshopping"),       # 쇼핑
     "39": ("opentimefood", "restdatefood"),       # 음식점
+}
+
+# 같은 detailIntro2 응답에서 영업시간 외에 **원문 그대로** 실어 보내는 필드 (TRIP-683 2단계).
+# 표시용 문자열이라 파싱하지 않고 provenance.detail 로만 나간다 — HTTP 추가 0건.
+# 채택 목록이다(배제 목록이 아니다): 제주 실측(#542)에서 실제로 채워져 오던 것만.
+# `spendtime`·`spendtimeresting`(소요시간)은 채워져 와도 싣지 않는다 — INV-3.
+# `usefee`·`parkingfee` 는 가격 캐싱(D13/G195)이 아니라 POI 속성이다(팀 결정) —
+# `avg_cost` 로 흐르지 않고 provenance 에만 남는다. `heritage1~3` 은 "0"/"1" 플래그로,
+# 문자열이 아니어도 원문 그대로다(해석은 소비처 몫).
+# 28(레포츠)은 실측에서 응답 자체가 비어 있어 목록이 없다 — 원천 결손, 지어내지 않는다.
+_DETAIL_FIELDS: Mapping[str, tuple[str, ...]] = {
+    "12": ("parking", "heritage1", "heritage2", "heritage3", "chkbabycarriage"),
+    "14": ("usefee", "parkingfee"),
+    "38": ("saleitem", "fairday"),
+    "39": ("firstmenu", "treatmenu", "reservationfood", "parkingfood",
+           "kidsfacility", "packing"),
 }
 
 
@@ -119,7 +135,7 @@ class TourApiAdapter:
         self._http_calls = 0  # 시도 기준 (실패 호출 포함 — 한도 소모와 동일 기준)
         self._key_idx = 0
         self._dead: set[int] = set()  # 퇴출된 키 (403·키 관련 resultCode)
-        # contentTypeId → detailIntro2 첫 응답 원문 (fetch_hours 가 채운다).
+        # contentTypeId → detailIntro2 첫 응답 원문 (fetch_detail 이 채운다).
         # 관측용이라 수집 판정에는 쓰이지 않는다.
         self.intro_samples: dict[str, dict] = {}
         # contentTypeId → 본 응답 수, 그리고 필드별 "값이 있던" 횟수.
@@ -193,10 +209,10 @@ class TourApiAdapter:
             total_count=total if isinstance(total, int) else len(records),
         )
 
-    def fetch_hours(self, source_ref: str, kind: str) -> SourcedHours:
+    def fetch_detail(self, source_ref: str, kind: str) -> SourcedDetail:
         fields = _INTRO_FIELDS.get(kind)
         if fields is None:  # 매핑 없는 타입 — 없는 정보를 지어내지 않는다
-            return SourcedHours(hours_raw=None, rest_raw=None)
+            return SourcedDetail(hours_raw=None, rest_raw=None)
         body = self._call(
             "detailIntro2",
             {
@@ -209,7 +225,7 @@ class TourApiAdapter:
         first = items[0] if items and isinstance(items[0], dict) else {}
         # 타입별 첫 응답을 그대로 남긴다 — HTTP 추가 0건(이미 받은 것을 적을 뿐).
         # 리포에 **실 응답 기록이 없어서** 이 엔드포인트가 실제로 무엇을 주는지
-        # 아무도 모른다(fake 는 우리가 읽는 2필드만 흉내낸다). 스펙이 아니라
+        # 아무도 모른다(fake 는 우리가 읽는 필드만 흉내낸다). 스펙이 아니라
         # 실물로 판단하려면 표본이 필요하고, 표본이 남아 있어야 벤더 드리프트도
         # 잡힌다. 타입당 1건이라 로그 부담도 없다.
         if kind not in self.intro_samples:
@@ -220,9 +236,14 @@ class TourApiAdapter:
             if str(v or "").strip():
                 counts[k] = counts.get(k, 0) + 1
         hours_key, rest_key = fields
-        return SourcedHours(
+        detail_raw = {
+            k: v for k in _DETAIL_FIELDS.get(kind, ())
+            if (v := self._opt_str(first.get(k))) is not None
+        }
+        return SourcedDetail(
             hours_raw=self._opt_str(first.get(hours_key)),
             rest_raw=self._opt_str(first.get(rest_key)),
+            detail_raw=detail_raw,
         )
 
     # ── 내부 ─────────────────────────────────────────
@@ -290,8 +311,8 @@ class TourApiAdapter:
             kind=cls._opt_str(item.get("contenttypeid")) or kind,
             name=cls._opt_str(item.get("title")) or "",
             address=cls._opt_str(item.get("addr1")),
-            lat=cls._opt_float(item.get("mapy")),   # mapy = 위도
-            lng=cls._opt_float(item.get("mapx")),   # mapx = 경도
+            lat=cls._opt_coord(item.get("mapy")),   # mapy = 위도
+            lng=cls._opt_coord(item.get("mapx")),   # mapx = 경도
             category_codes=tuple(
                 c for c in (
                     cls._opt_str(item.get("cat1")),
@@ -311,6 +332,18 @@ class TourApiAdapter:
         if isinstance(v, (int, float)) and not isinstance(v, bool):
             return str(v)
         return None
+
+    @classmethod
+    def _opt_coord(cls, v: object) -> float | None:
+        """좌표 전용 — TourAPI 는 좌표 결측을 `"0"` 으로 준다. 그대로 두면 (0,0)이
+        GeoPoint 를 통과한 뒤 한국 bbox 밖으로 떨어져 게이트 2단이
+        `existence_out_of_service_region` 으로 계상한다 — 결측이 "권역 밖"으로
+        둔갑해 통계가 원인을 숨긴다(09-10 실측: 신규 31건 전부 이 사유였다).
+        결측은 결측으로 읽어 1단(`schema_missing_or_invalid_coord`)이 잡게 한다.
+        적도·본초자오선에 있는 한국 POI 는 없으므로 0 을 결측으로 봐도 잃는 게 없다.
+        """
+        f = cls._opt_float(v)
+        return None if f is None or f == 0.0 else f
 
     @staticmethod
     def _opt_float(v: object) -> float | None:

@@ -10,11 +10,12 @@ import { isNotFound } from '@/shared/api/isNotFound';
 import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import { formatTripRange } from '@/entities/trip/lib/formatTripPeriod';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { useSavedStays } from '@/features/stay/model/savedStays';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary/model/planState';
-import { HOME_NO_TRIP_PROPS } from '@/features/home/model/homeFixtures';
+import { HOME_DEFAULT_PROPS } from '@/features/home/model/homeFixtures';
 import { resolveHomePhase } from '@/features/home/model/homePhase';
 import type { HomePhase } from '@/features/home/model/homeTypes';
 import { HomeScreen } from '@/features/home/ui/HomeScreen';
@@ -25,6 +26,9 @@ interface HomeNav {
   onPressSavedStays: () => void;
   onPressSpotsMore: () => void;
   onPressSearch: () => void;
+  onPressMagazine: () => void;
+  savedPlacesCount: number;
+  savedStaysCount: number;
   savedMenuOpen: boolean;
   onToggleSavedMenu: () => void;
 }
@@ -64,7 +68,7 @@ function PlanningHome({
 
   return (
     <HomeScreen
-      {...HOME_NO_TRIP_PROPS}
+      {...HOME_DEFAULT_PROPS}
       phase={phase}
       onPressTripHeroCta={onPressTripHeroCta}
       {...nav}
@@ -83,6 +87,9 @@ export default function HomeRoute() {
   const trips = useGetTrips();
   const isAuthed = getAccessToken() !== null;
   const { savedPoiIds } = useSavedPlaces({ isAuthed });
+  // 담은 곳 미니 FAB 개수 배지(TRIP-695) — 담은 장소 수·전체 저장 숙소 수를 실데이터에서 뽑아
+  // 화면에 주입한다. useSavedStays 는 features/stay 것(savedCount 노출) — features/trip 동명 훅 아님.
+  const { savedCount: savedStaysCount } = useSavedStays({ isAuthed });
 
   // 담은 곳 saved-menu 열림 상태(TRIP-494) — 순수 화면이 useState 0건이라 라우트가 소유한다
   // (탐색 랜딩 선례와 동형). 미니 FAB press 는 메뉴를 닫고 각각 d02/e04 로 이동한다.
@@ -100,6 +107,10 @@ export default function HomeRoute() {
     },
     onPressSpotsMore: () => router.push('/explore/places'),
     onPressSearch: () => router.push('/explore/region?purpose=trip'),
+    // TRIP-700 — discovery 캐러셀 page0(매거진 히어로) press → a02 매거진 목록(/magazine).
+    onPressMagazine: () => router.push('/magazine'),
+    savedPlacesCount: savedPoiIds.length,
+    savedStaysCount,
     savedMenuOpen,
     onToggleSavedMenu: () => setSavedMenuOpen((v) => !v),
   };
@@ -108,7 +119,7 @@ export default function HomeRoute() {
   if (trips.isPending) {
     return (
       <HomeScreen
-        {...HOME_NO_TRIP_PROPS}
+        {...HOME_DEFAULT_PROPS}
         sections={{ kind: 'loading' }}
         {...nav}
       />
@@ -117,7 +128,7 @@ export default function HomeRoute() {
 
   // 조회 실패 — phase 미전달로 discovery(상록 랜딩) 폴백. 오류를 로딩·여행 없음으로 뭉개지 않는다(INV-4).
   if (trips.isError) {
-    return <HomeScreen {...HOME_NO_TRIP_PROPS} {...nav} />;
+    return <HomeScreen {...HOME_DEFAULT_PROPS} {...nav} />;
   }
 
   // 데이터 도착 후에만 여행 유무를 판정한다. 비-ENDED 지배 여행이 있으면 planning, 없으면 undefined→discovery.
@@ -144,5 +155,5 @@ export default function HomeRoute() {
     );
   }
 
-  return <HomeScreen {...HOME_NO_TRIP_PROPS} phase={phase} {...nav} />;
+  return <HomeScreen {...HOME_DEFAULT_PROPS} phase={phase} {...nav} />;
 }

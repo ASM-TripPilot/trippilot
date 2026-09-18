@@ -69,6 +69,9 @@ from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyGate
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
+from trippilot.llm_gateway.workers.alternative_explanation import (
+    AlternativeExplanationWorker,
+)
 from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.reminder_copy import (
@@ -101,6 +104,7 @@ from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.repair import RepairChange
 from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import (
+    BUDGET_TOKENS,
     BudgetLevel,
     GeoPoint,
     PoiId,
@@ -157,14 +161,10 @@ KST = timezone(timedelta(hours=9))
 
 _PROMPTS_ROOT = Path(__file__).resolve().parents[3] / "prompts"
 
-# 경계 어휘 → 도메인 enum 번역표 (결정론 — 소프트 입력이라 미인식은 기본값 폴백).
-_BUDGET_TOKENS: Mapping[str, BudgetLevel] = {
-    "LOW": BudgetLevel.LOW, "저렴": BudgetLevel.LOW, "낮음": BudgetLevel.LOW,
-    "MID": BudgetLevel.MID, "MIDDLE": BudgetLevel.MID,
-    "중간": BudgetLevel.MID, "보통": BudgetLevel.MID,
-    "HIGH": BudgetLevel.HIGH, "높음": BudgetLevel.HIGH,
-    "고급": BudgetLevel.HIGH, "프리미엄": BudgetLevel.HIGH,
-}
+# 예산 어휘표는 domain/common 로 옮겼다 — 페르소나 어댑터(BackendPersonaStore)도
+# 같은 표를 쓴다. 두 벌이면 한쪽만 고쳐 어긋난다.
+_BUDGET_TOKENS = BUDGET_TOKENS
+
 _TRANSPORT_TOKENS: Mapping[str, TransportMode] = {
     "WALK": TransportMode.WALK, "도보": TransportMode.WALK,
     "PUBLIC": TransportMode.PUBLIC, "대중교통": TransportMode.PUBLIC,
@@ -505,6 +505,16 @@ def _unverified(misses: Sequence[PoiMiss]) -> tuple[WiredUnverifiedSlot, ...]:
     )
 
 
+def _payload_alternative_pairs(
+    payload: schemas.ItineraryPayload,
+) -> tuple[tuple[str, str, str], ...]:
+    """payload 의 슬롯별 차선책 → (날짜 ISO, 슬롯 poi_id, 선택지 poi_id). 일정 순서대로."""
+    return tuple(
+        (day.date.isoformat(), slot.poi_id, alt.poi_id)
+        for day in payload.days for slot in day.slots for alt in slot.alternatives
+    )
+
+
 def _keyed_explanations(
     solution: ItinerarySolution, explanations: tuple[PoiExplanation, ...]
 ) -> dict[str, str]:
@@ -731,6 +741,8 @@ class WiredItineraryOrchestrator:
         pool_builder: CandidatePoolBuilder,
         rag: PlanBAgent,
         explainer: ExplanationWorker,
+        alternative_explainer: AlternativeExplanationWorker | None = None,
+        clock: core.Clock | None = None,
         context_resolver: ContextResolver,
         edit_agent: EditAgent,
         reflect_agent: ReflectAgent,
@@ -748,6 +760,9 @@ class WiredItineraryOrchestrator:
         self._pool_builder = pool_builder
         self._rag = rag
         self._explainer = explainer
+        self._alt_explainer = alternative_explainer  # 미주입 = 차선책 문장 없음(템플릿 유지)
+        # 경계 안에서 순차 LLM 호출이 둘이 된 유일한 경로(/explanations)의 잔여 예산 계산용 (TRIP-887)
+        self._clock = clock if clock is not None else MonotonicClock()
         self._resolver = context_resolver
         self._edit_agent = edit_agent
         self._reflect_agent = reflect_agent
@@ -1091,11 +1106,21 @@ class WiredItineraryOrchestrator:
         solution = _solution_from_payload(
             request.itinerary, ScheduleId(request.trip_id), self._tz)
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
-        pois = tuple(self._poi_db.find_by_ids(ids)) if ids else ()
-        if not pois:
+        # 차선책(TRIP-887) — payload 의 슬롯별 alternatives 를 (날짜, 슬롯 POI, 선택지 POI)로.
+        # 좌표·풀 조립은 배치 POI 와 한 번의 재조회로 합친다.
+        alt_pairs = _payload_alternative_pairs(request.itinerary)
+        alt_ids = frozenset(PoiId(a) for _, _, a in alt_pairs)
+        # 배치 슬롯 설명이 조기 반환하면 차선책은 시도조차 못 한다 — "차선책 요청이 없었다"와
+        # 구별되게 사유를 싣는다(침묵 금지). 차선책이 없었으면 None.
+        alt_skipped = "slot_explanations_unavailable" if alt_pairs else None
+        pois = (
+            tuple(self._poi_db.find_by_ids(ids | alt_ids)) if ids or alt_ids else ()
+        )
+        if not any(p.poi_id in ids for p in pois):
             # 미등록 POI뿐(고정 블록 유래 등) — 근거 없이 지어내지 않는다
             return schemas.ExplanationsResponse(
-                explanations={}, is_fallback=True, reason="no_registered_pois")
+                explanations={}, is_fallback=True, reason="no_registered_pois",
+                alternatives_reason=alt_skipped)
         pool = CandidatePool(
             poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=now)
         owner = f"trip:{request.trip_id}"
@@ -1110,23 +1135,73 @@ class WiredItineraryOrchestrator:
             if pool.contains(slot.poi_id)
             and not (slot.poi_id in seen or seen.add(slot.poi_id))
         )
+        budget_ms = _deadline_budget(meta)
+        t0 = self._clock.monotonic_ms()
         try:
             result = self._explainer.explain(
                 pool, ordered, persona, trace_id, now,
-                timeout_sec=_deadline_budget(meta) / 1000.0,
+                timeout_sec=budget_ms / 1000.0,
             )
         except Exception as e:  # 설정 버그 등 — 설명 없음으로 정직 보고
             return schemas.ExplanationsResponse(
                 explanations={}, is_fallback=True,
-                reason=f"explain_error: {type(e).__name__}: {e}")
+                reason=f"explain_error: {type(e).__name__}: {e}",
+                alternatives_reason=alt_skipped)
         if result.is_fallback or not result.value:
             return schemas.ExplanationsResponse(
                 explanations={}, is_fallback=True,
-                reason=f"explanation_fallback: {result.error}")
+                reason=f"explanation_fallback: {result.error}",
+                alternatives_reason=alt_skipped)
         keyed = _keyed_explanations(
             solution, tuple(x for x in result.value if pool.contains(x.poi_id)))
+        # 차선책 문장은 두 번째 호출 — 첫 호출이 실패하면 시도하지 않고(위 사유), 성공했으면
+        # **잔여 예산**만 준다(DL-2 — 두 호출의 합이 deadline 을 넘지 않게, 에이전트 ⑥′ 와 동형).
+        alt_keyed, alt_reason = self._alternative_explanations(
+            pool, alt_pairs, persona, trace_id, now,
+            remaining_ms=budget_ms - (self._clock.monotonic_ms() - t0))
         return schemas.ExplanationsResponse(
-            explanations=dict(keyed), is_fallback=False, reason=None)
+            explanations=dict(keyed), is_fallback=False, reason=None,
+            alternative_explanations=alt_keyed, alternatives_reason=alt_reason)
+
+    def _alternative_explanations(
+        self,
+        pool: CandidatePool,
+        pairs: tuple[tuple[str, str, str], ...],
+        persona: PersonaSummary,
+        trace_id: TraceId,
+        now: datetime,
+        *,
+        remaining_ms: int,
+    ) -> tuple[dict[str, str], str | None]:
+        """차선책 "대신 골라도 좋은 이유" (TRIP-887) — 키 `"{date}#{alt_poi_id}"`, 실패는 빈 맵 + 사유.
+
+        선택지가 풀(정본) 밖이면 설명하지 않는다(INV-1 — 지어내지 않는다). 확정 슬롯 POI 는
+        컨텍스트일 뿐이라 미등록이어도 쌍을 버리지 않는다. 잔여가 하한(에이전트 ⑤·⑥′ 와
+        같은 `explanation_min_ms`) 미만이면 부르지 않는다(DL-2).
+        """
+        if not pairs:
+            return {}, None
+        if self._alt_explainer is None:
+            return {}, "alternative_explainer_absent"  # 기능 부재 — 백엔드는 템플릿을 쓴다
+        usable = tuple(
+            (PoiId(s), PoiId(a)) for _, s, a in pairs if pool.contains(PoiId(a))
+        )
+        if not usable:
+            return {}, "no_registered_alternatives"
+        if remaining_ms < core.OrchestratorConfig().explanation_min_ms:
+            return {}, f"deadline:remaining={remaining_ms}ms"
+        try:
+            result = self._alt_explainer.explain(
+                pool, usable, persona, trace_id, now, timeout_sec=remaining_ms / 1000.0)
+        except Exception as e:  # 설정 버그 등 — 문장 없음으로 정직 보고
+            return {}, f"explain_error: {type(e).__name__}: {e}"
+        if result.is_fallback or not result.value:
+            return {}, f"alternative_explanation_fallback: {result.error}"
+        texts = {x.poi_id: x.text for x in result.value if pool.contains(x.poi_id)}
+        keyed = {
+            f"{d}#{a}": texts[PoiId(a)] for d, _, a in pairs if PoiId(a) in texts
+        }
+        return keyed, (None if keyed else "alternative_explanation_empty")
 
     def edit(
         self, request: schemas.EditItineraryRequest
@@ -1439,6 +1514,10 @@ def build_orchestrator(
     explainer = ExplanationWorker(
         GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace)
     )
+    # 차선책 문장(TRIP-887) — 프롬프트는 다르고 출구 게이트는 설명과 같다.
+    alt_explainer = AlternativeExplanationWorker(
+        GatewayFacade(llm, renderer, ExplanationGate(), c1_config, trace)
+    )
     # EditAgent — 번역 워커를 감싼다. 어셈블리 검증까지 에이전트가 소유(INV-2).
     edit_agent = EditAgent(
         EditTranslationWorker(
@@ -1481,6 +1560,7 @@ def build_orchestrator(
         clock,
         trace,
         explanation_worker=explainer,
+        alternative_explanation_worker=alt_explainer,
         config=orchestrator_config,
     )
     # 수집기는 하나를 공유한다 — 코디네이터(generate)와 경계(replan·edit)가 같은
@@ -1499,7 +1579,8 @@ def build_orchestrator(
         orchestrator, provider, poi_db, travel, tz=tz,
         info=info,
         pool_builder=pool_builder, rag=rag,
-        explainer=explainer, context_resolver=resolver,
+        explainer=explainer, alternative_explainer=alt_explainer, clock=clock,
+        context_resolver=resolver,
         edit_agent=edit_agent,
         reflect_agent=reflect_agent,
         nudge_worker=nudge_worker,
@@ -1653,6 +1734,7 @@ def build_dev_app(
     vector_store: object | None = None,
     embedding: object | None = None,
     trace: TracePort | None = None,
+    context_store: object | None = None,
 ) -> FastAPI:
     """스모크·로컬 개발용 앱 — 기본은 in-memory fake 조립(실 LLM·실 DB 0, D37).
 
@@ -1667,6 +1749,9 @@ def build_dev_app(
     StaticPoiDb(제주 시드 4곳) 그대로(하위호환: 백엔드 없는 로컬 스모크).
     `travel_port`는 선택 주입(TRIP-432, ChainedTravelAdapter) — 기본 None 이면
     기존 TravelEstimator(하버사인) 그대로.
+    `context_store`는 선택 주입(TRIP-434, BackendPersonaStore 실연동) — 기본 None
+    이면 StaticPersonaStore(고정 요약) 그대로. 실 어댑터를 넣으면 페르소나가
+    매 요청 백엔드 재조회로 온다(BR-U4-07).
     `trace`는 선택 주입(관측 스파이용, 예: InMemoryTrace) — 기본 None 이면
     build_orchestrator 기본값(LoggingTrace) 그대로.
     """
@@ -1684,7 +1769,7 @@ def build_dev_app(
         existence=existence,
         llm=llm if llm is not None else UnwiredLlm(),
         poi_db=poi_db if poi_db is not None else StaticPoiDb(demo_poi_seed()),
-        context_store=StaticPersonaStore(
+        context_store=context_store if context_store is not None else StaticPersonaStore(
             PersonaSummary(taste_tags=(), companion=CompanionType.SOLO,
                            budget=BudgetLevel.MID)
         ),

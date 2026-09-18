@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    {{- include "trippilot.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      {{- include "trippilot.selector" (dict "root" . "component" "backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "trippilot.selector" (dict "root" . "component" "backend") | nindent 8 }}
+      annotations:
+        trippilot.io/rollout-nonce: {{ .Values.rolloutNonce | quote }}
+    spec:
+      {{- include "trippilot.podSpec" (dict "root" . "component" "backend" "uid" 1001) | nindent 6 }}
+      containers:
+        - name: backend
+          image: {{ include "trippilot.image" (dict "root" . "component" "backend") }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - { name: http, containerPort: 8080 }
+          securityContext:
+            {{- include "trippilot.containerSecurity" . | nindent 12 }}
+          env:
+            - name: DEPLOY_ENV
+              value: {{ .Values.environment | quote }}
+            - name: DB_URL
+              value: {{ printf "jdbc:postgresql://%s:%v/%s?currentSchema=app&sslmode=require" (required "config.databaseHost is required" .Values.config.databaseHost) .Values.config.databasePort .Values.config.databaseName | quote }}
+            - name: DB_USER
+              value: {{ .Values.config.databaseUser | quote }}
+            - name: DB_MIGRATE_USER
+              value: {{ .Values.config.databaseMigrateUser | quote }}
+            {{- range list "DB_PASSWORD" "DB_MIGRATE_PASSWORD" }}
+            {{- include "trippilot.secretEnv" (dict "env" . "secret" "trippilot-database") | nindent 12 }}
+            {{- end }}
+            {{- include "trippilot.secretEnv" (dict "env" "JWT_SIGNING_KEY" "secret" "trippilot-backend") | nindent 12 }}
+            {{- include "trippilot.secretEnv" (dict "env" "SERVICE_AUTH_TOKEN" "secret" "trippilot-shared") | nindent 12 }}
+            - name: JWT_REQUIRE_CONFIGURED_KEY
+              value: "true"
+            - name: SERVICE_AUTH_REQUIRE_TOKEN
+              value: "true"
+            - name: REDIS_HOST
+              value: {{ required "config.redisHost is required" .Values.config.redisHost | quote }}
+            - name: REDIS_PORT
+              value: {{ .Values.config.redisPort | quote }}
+            - name: SPRING_DATA_REDIS_HOST
+              value: {{ .Values.config.redisHost | quote }}
+            - name: SPRING_DATA_REDIS_PORT
+              value: {{ .Values.config.redisPort | quote }}
+            - name: SPRING_DATA_REDIS_SSL_ENABLED
+              value: "true"
+            - name: AI_URL
+              value: http://ai:8000
+            - name: TRIPPILOT_AI_SCHEDULE_MODE
+              value: http
+            - name: TRIPPILOT_AI_SCHEDULE_BASE_URL
+              value: http://ai:8000
+            - name: TRIPPILOT_AI_SCHEDULE_DEADLINE_ENFORCED
+              value: {{ .Values.config.scheduleDeadlineEnforced | quote }}
+            - name: TRIPPILOT_AI_SCHEDULE_DEADLINE_DAY1_MS
+              value: {{ .Values.config.scheduleDeadlineDay1Ms | quote }}
+            - name: TRIPPILOT_AI_SCHEDULE_DEADLINE_TOTAL_MS
+              value: {{ .Values.config.scheduleDeadlineTotalMs | quote }}
+            - name: TRIPPILOT_AI_REFLECTION_MODE
+              value: http
+            - name: TRIPPILOT_AI_REFLECTION_BASE_URL
+              value: http://ai:8000
+            - name: STAY_CONTENT_MODE
+              value: db
+            - name: SERVER_SHUTDOWN
+              value: graceful
+            - name: SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE
+              value: 630s
+            - name: TRIPPILOT_ASYNC_AWAIT_TERMINATION_SECONDS
+              value: "630"
+            - name: SERVER_FORWARD_HEADERS_STRATEGY
+              value: native
+            # The image embeds a Java agent. No collector is provisioned by this deployment.
+            - name: OTEL_SDK_DISABLED
+              value: "true"
+            - name: OTEL_METRICS_ENABLED
+              value: "false"
+            {{- range list "OTEL_METRICS_EXPORTER" "OTEL_TRACES_EXPORTER" "OTEL_LOGS_EXPORTER" }}
+            - name: {{ . }}
+              value: none
+            {{- end }}
+            {{- range list "GOOGLE_CLIENT_ID" "GOOGLE_CLIENT_SECRET" "KAKAO_CLIENT_ID" "KAKAO_CLIENT_SECRET" "NAVER_CLIENT_ID" "NAVER_CLIENT_SECRET" "WEATHER_API" "PLACE_GEOCODE_MODE" "WEATHER_MODE" "AI_REMINDER_COPY_MODE" }}
+            {{- include "trippilot.secretEnv" (dict "env" . "secret" "trippilot-backend" "optional" true) | nindent 12 }}
+            {{- end }}
+            {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_PUSH_MODE" "key" "PUSH_MODE" "secret" "trippilot-backend" "optional" true) | nindent 12 }}
+            {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_PUSH_EXPO_ACCESS_TOKEN" "key" "PUSH_EXPO_ACCESS_TOKEN" "secret" "trippilot-backend" "optional" true) | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 120
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }

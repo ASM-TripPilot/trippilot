@@ -101,6 +101,7 @@ class ScheduleAgentOutput:
     candidates_summary: CandidatesSummary # 후보 충분성 — `level`·`pool_size`·`shortfall_categories`. 와이어 정본 `ai/docs/openapi.json::CandidatesSummarySchema` (LOW면 UI에 안내 가능)
     # days[].slots[].alternatives — 슬롯별 차선책 ≤2건 `{poi_id, rationale, distance_range}` (TRIP-871, 2026-09-16).
     # 제안만: 시각·순서 없음(INV-2), 거리만(INV-3), 풀 안 미배치 후보만(INV-1). 결정론(LLM 0회). 와이어 정본 `SlotAlternativeSchema`
+    # rationale 은 템플릿; LLM 문장은 `/explanations` 응답 `alternative_explanations` (키 "{date}#{alt_poi_id}", TRIP-887)
 ```
 
 ### 1.3 출력 대응표 — 에이전트 출력 → DB → 화면

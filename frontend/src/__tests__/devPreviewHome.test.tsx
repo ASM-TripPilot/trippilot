@@ -2,9 +2,10 @@ import type { ComponentType } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 /**
- * SC-6 — dev 정적 프리뷰의 홈 상태 4키(default·no-trip·empty·loading).
+ * SC-6 — dev 정적 프리뷰의 홈 상태 2키(default·loading). TRIP-701 로 no-trip·empty 프리뷰 키를
+ * 삭제해 4→2 로 줄었다(no-trip 은 default 와 바이트 동일이라 병합, empty 픽스처는 통째 제거).
  *
- * 무엇을 보장하나: `_dev/preview.tsx`가 홈 4상태를 딥링크(`?state=home-*`)로 초기 조준하고,
+ * 무엇을 보장하나: `_dev/preview.tsx`가 홈 2상태를 딥링크(`?state=home-*`)로 초기 조준하고,
  * 정식 토글로도 진입되며, 미존재 키는 결정론적으로 splash로 폴백한다(INV-4 정신) — 전부
  * 동결 `devPreview.test.tsx`·`devPreviewDeepLink.test.tsx`가 로그인·온보딩 상태에 대해
  * 이미 검증한 것과 같은 계약을 **홈 관점**에서 잠근다.
@@ -44,20 +45,16 @@ beforeEach(() => {
   delete mockSearchParams.state;
 });
 
-// 딥링크 상태 키 4개 ↔ 그 상태에 나타나는 실물 홈 마커(신 프레임 재정합). 구 마커
-// (`-next-plan`·`-empty-hero`·`-taste-setup`·`-skeleton-popular`)는 재작성으로 소멸 → 신 마커
-// 로 교체. no-trip은 가정 B로 default와 렌더가 동일해 고유 마커가 없으므로, 온램프 마커를 쓴다.
-// TRIP-596으로 담은 곳 배너(`home-soft-note`)가 no-trip에서 제거되어, 온램프를 승계한 하트 FAB
-// 토글(`home-saved-menu-toggle`, 닫힘 상태에서도 항상 present)로 재지정한다 — 딥링크가 홈으로
-// 조준됨을 확인하는 목적엔 충분하고, 온램프 의미도 최근접으로 잇는다.
+// 딥링크 상태 키 2개 ↔ 그 상태에 나타나는 실물 홈 마커(신 프레임 재정합). TRIP-701 프리뷰 정리로
+// no-trip(default 와 바이트 동일이라 병합)·empty(픽스처 통째 삭제) 두 케이스를 뺐다(4→2).
+// 남은 default·loading 은 preview.tsx 에 존속하는 키라 이 딥링크 조준 계약은 무회귀(제거는 완화라
+// 지금도 green, 구현 후에도 green — 삭제 키는 애초에 미존재가 될 뿐).
 const HOME_DEEP_LINK_CASES = [
   { state: 'home-default', marker: 'home-collection-card-0' },
-  { state: 'home-no-trip', marker: 'home-saved-menu-toggle' },
-  { state: 'home-empty', marker: 'home-collections-empty' },
   { state: 'home-loading', marker: 'home-collections-skeleton' },
 ] as const;
 
-describe('dev 프리뷰 홈 4키 — 딥링크 초기 조준 (SC-6 · E-1)', () => {
+describe('dev 프리뷰 홈 2키 — 딥링크 초기 조준 (SC-6 · E-1)', () => {
   it.each(HOME_DEEP_LINK_CASES)(
     'state=$state로 열면 $marker가 초기 렌더된다',
     ({ state, marker }) => {
@@ -87,7 +84,7 @@ describe('dev 프리뷰 홈 — 결정론 유지 (E-3)', () => {
 
     render(<DevPreview />);
 
-    // 홈 키 4개를 추가한 뒤에도 폴백 결정론(INV-4 정신)이 유지되는지 확인한다.
+    // 홈 키 2개(default·loading)를 둔 뒤에도 폴백 결정론(INV-4 정신)이 유지되는지 확인한다.
     expect(screen.getByTestId('shell-splash-root')).toBeOnTheScreen();
     expect(screen.queryByTestId('home-dashboard-root')).toBeNull();
   });

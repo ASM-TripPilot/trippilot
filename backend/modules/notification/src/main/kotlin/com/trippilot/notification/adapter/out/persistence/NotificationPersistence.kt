@@ -147,6 +147,16 @@ class NotificationRepositoryAdapter(
             java.sql.Timestamp.from(at), notificationId, accountId,
         ) == 1
 
+    /**
+     * 한 문장으로 끝낸다 — 건별로 순회하면 왕복이 N 번이고, 그 사이 새 알림이 끼어들어
+     * "눌렀는데 하나 남았다"가 된다. `read_at IS NULL` 조건은 건별과 같은 이유다(처음 읽은 시각 보존).
+     */
+    override fun markAllRead(accountId: UUID, at: Instant): Int =
+        jdbc.update(
+            "UPDATE notification SET read_at = ? WHERE account_id = ? AND read_at IS NULL",
+            java.sql.Timestamp.from(at), accountId,
+        )
+
     override fun exists(accountId: UUID, notificationId: UUID): Boolean =
         jpa.existsByNotificationIdAndAccountId(notificationId, accountId)
 

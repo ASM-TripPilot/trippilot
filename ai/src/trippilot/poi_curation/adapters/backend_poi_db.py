@@ -33,11 +33,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Mapping
-from typing import Protocol
 
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.poi_curation.sourcing.mapping import parse_open_hours
+from trippilot.ports.http_json_port import HttpJson
 from trippilot.ports.poi_db_port import PoiLookup, PoiMiss
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,7 @@ _TOKEN_HEADER = "X-Service-Token"
 # 백엔드 PoiSource(KAKAO_LOCAL/TOURAPI/MANUAL) → AI PoiSource.
 # MANUAL=시드 입력분, 나머지 벤더 수집분은 PLACES_API. WEB 은 confidence 필수라
 # (백엔드가 안 보내는 값) 매핑 대상이 아니다 — 지어내지 않는다.
+# HttpJson 은 ports 로 올라갔다(소비자 둘) — 이 이름으로도 계속 쓰인다.
 _SOURCE_MAP = {"MANUAL": PoiSource.SEED}
 
 
@@ -93,20 +94,6 @@ def _enum_or_raise(enum_cls: type, value: object, field: str):
         return enum_cls(value)
     except ValueError:
         raise RowMappingError(field, f"모르는 값: {value!r}") from None
-
-
-class HttpJson(Protocol):
-    """어댑터가 쓰는 HTTP 콘센트 — 테스트는 fake, 실행 조립은 UrllibJsonClient."""
-
-    def request_json(
-        self,
-        method: str,
-        url: str,
-        *,
-        params: Mapping[str, str] | None = None,
-        body: object | None = None,
-        headers: Mapping[str, str] | None = None,
-    ) -> object: ...
 
 
 class UrllibJsonClient:
@@ -237,8 +224,10 @@ class BackendPoiDb:
             quality=_enum_or_raise(DataQuality, row.get("data_quality"), "data_quality"),
             source=_SOURCE_MAP.get(row["source"], PoiSource.PLACES_API),
             confidence=None,
-            # 백엔드 `poi.tags text[]` — 내부 read DTO 가 아직 안 싣는다(공개 API 는 이미
-            # 내보낸다). 노출되면 여기로 흘러들어오고, 그전까지는 빈 튜플이라 후보 줄이
-            # 종전과 같다. 값 부재가 POI 를 빼는 사유가 아니다(BR-U1-06 취지).
+            # 백엔드 `poi.tags text[]` — 내부 read DTO 가 2026-09-16 에 열렸다
+            # (`PoiReadResponse.tags`·`sourceRef`). **값이 실제로 들어온다.**
+            # 다만 POI 캐시 TTL 이 24시간이라 그 전에 캐시된 항목은 롤오버까지 빈
+            # 튜플이다(`Poi.from_dict` 의 `d.get("tags") or ()` — 구 캐시 호환).
+            # 값 부재가 POI 를 빼는 사유가 아니다(BR-U1-06 취지).
             tags=tuple(str(t) for t in (row.get("tags") or ())),
         )

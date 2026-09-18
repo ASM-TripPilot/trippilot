@@ -1,0 +1,9 @@
+environment                    = "dev"
+cluster_version                = "1.35"
+vpc_cidr                       = "10.40.0.0/16"
+availability_zone_count        = 2
+single_nat_gateway             = true
+database_instance_class        = "db.t4g.small"
+database_allocated_storage     = 20
+database_max_allocated_storage = 100
+redis_node_type                = "cache.t4g.micro"

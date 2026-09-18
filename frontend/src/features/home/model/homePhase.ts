@@ -119,17 +119,40 @@ export function resolveHomePhase(
   const dominant = active.reduce((earliest, trip) =>
     trip.startDate < earliest.startDate ? trip : earliest
   );
+  const traveling = isTraveling(dominant.startDate, dominant.endDate, today);
   const dday = formatDday(dominant.startDate, today);
+  // TRIP-697 여행 중 N일차 = 오늘 − 시작일 + 1(시작 당일 = 1일차). features/home 경계 안에서
+  // 계산한다(homeStructure D-1). toEpochDay 는 formatDday·isTraveling 과 같은 UTC epoch-day
+  // 산술이라 배지·타이틀·일차가 한 소스를 공유한다(계획 중일 땐 미사용).
+  const dayNumber = toEpochDay(today) - toEpochDay(dominant.startDate) + 1;
+
+  // 지역 컬렉션 헤더('부산 여행'→'부산에서 담을 만한 곳'). 후행 "여행"만 떼는 간단 추출이라
+  // 앞머리 '여행자' 등은 보존한다(/\s*여행$/ 앵커, homePhase.test '여행자 모임' 경계 케이스).
+  // ponytail: 후행 "여행" strip 휴리스틱 — trip.region 필드로 라이브 동적화하는 것은 후속 티켓.
+  const region = dominant.title.replace(/\s*여행$/, '');
 
   return {
     kind: 'planning',
-    greetTitle: `${dominant.title} ${dday}`,
+    // TRIP-697 — 여행 중이면 "${title} N일차예요"(N 뒤 공백 X), 계획 중이면 기존 "${title} ${dday}".
+    greetTitle: traveling
+      ? `${dominant.title} ${dayNumber}일차예요`
+      : `${dominant.title} ${dday}`,
+    // 계획 중 전용 카피 — 인사 2줄 서브카피(고정)와 지역 컬렉션 헤더. 여행 중 인사는 이름↑+타이틀↓
+    // (서브카피 없음)이고 라이브엔 이름 소스가 없어 타이틀만 뜬다(맹점③). 컬렉션 헤더도 여행 중엔
+    // 미지정→기본 "요즘 사람들이 담는 곳"(01b OQ-3). greetName 은 어느 쪽도 안 채운다(픽스처 전용).
+    ...(traveling
+      ? { showSpots: true }
+      : {
+          greetSubtitle: '일정을 이어서 짜볼까요',
+          collectionsTitle: `${region}에서 담을 만한 곳`,
+        }),
     dominantTripId: dominant.tripId,
     trip: {
-      badge: isTraveling(dominant.startDate, dominant.endDate, today)
-        ? '여행 중'
-        : '계획 중',
-      dday,
+      // 오늘이 [startDate, endDate] 안이면 '여행 중', 아니면 '계획 중'(TRIP-472, 날짜 기반).
+      badge: traveling ? '여행 중' : '계획 중',
+      // TRIP-697 — 여행 중 "· N 일차"(N 앞·뒤 공백 O), 계획 중 "· D-n"(구 우상단 대형 D-day 흡수,
+      // TRIP-696). badge 와 한 소스(같은 날짜 산술)라 "여행 중"+"· D-n" 모순이 안 나온다.
+      badgeSub: traveling ? `· ${dayNumber} 일차` : `· ${dday}`,
       ctaLabel: ctaLabelForStatus(dominant.status),
       title: dominant.title,
       meta: formatTripMeta(dominant),

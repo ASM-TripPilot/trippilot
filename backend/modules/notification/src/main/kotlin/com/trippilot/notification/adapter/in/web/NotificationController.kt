@@ -32,6 +32,22 @@ class NotificationController(private val service: NotificationQueryService) {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun markRead(principal: Principal, @PathVariable notificationId: UUID) =
         service.markRead(principal.accountId(), notificationId)
+
+    /**
+     * 알림함 '모두 읽음'(TRIP-829).
+     *
+     * **204 다** — 건별 읽음과 같은 모양으로 맞췄다. 처리 건수를 돌려줄까 했지만 화면이 그 수로
+     * 하는 일이 없다(뱃지는 어차피 0 이 된다). 쓰이지 않을 값을 계약에 넣으면 나중에 그 값의
+     * 의미를 지켜야 할 의무만 남는다.
+     *
+     * 경로가 `{notificationId}` 자리와 겹치지 않는다 — `read-all` 은 UUID 가 아니라 위 매핑에
+     * 걸리지 않는다(형식 오류 400 도 아니다).
+     */
+    @PostMapping("/read-all")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun markAllRead(principal: Principal) {
+        service.markAllRead(principal.accountId())
+    }
 }
 
 /** 토큰 sub → 계정 id. UUID 가 아니면 인증 실패로 다룬다(형식 오류를 500 으로 흘리지 않는다). */
