@@ -25,3 +25,4 @@ dataset*.jsonl
 ft_data/
 adapters/
 merged/
+eval/
