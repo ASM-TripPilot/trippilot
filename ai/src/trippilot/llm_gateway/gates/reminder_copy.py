@@ -34,8 +34,29 @@ from trippilot.llm_gateway.gates.base import (
 _MAX_TITLE = 20
 _MAX_BODY = 60
 
-# 소요시간·시각 계열 표시 금지 (INV-3). 부분 문자열 매칭 — 과잉 드롭은 폴백으로 안전.
-_FORBIDDEN_TOKENS = ("분", "시간", "시각", "duration")
+# 소요시간·시각 계열 표시 금지 (INV-3).
+#
+# 넛지 게이트는 같은 규칙을 **부분 문자열**로 본다 — 거기선 과잉 드롭이 폴백 한 줄로
+# 수렴하니 값이 싸다. 리마인드 문구는 값이 다르다: 드롭하면 그 예약은 기본 상수로
+# 가고, 그게 반복되면 기능이 사실상 꺼진다. 실측(2026-09-17, 홀드아웃 30건)에서
+# 탈락 17건 중 12건이 이 부분 문자열 때문이었고, 그중 "즐거운 시간을 보내요"·
+# "오늘의 맛과 분위기" 처럼 **소요시간을 하나도 표시하지 않는** 문구가 대부분이었다.
+#
+# 그래서 판정을 INV-3 의 실제 의미("소요시간이 화면에 뜨는가")에 맞춘다 — 수량을
+# 동반하거나, 소요를 뜻하는 연어이거나, 시각 표기일 때만 드롭한다. 여전히 과잉
+# 드롭 쪽으로 기울여 둔다(누락은 INV-3 위반이고 폴백이 없다).
+_NUM = r"(?:\d+|[일이삼사오육칠팔구십]+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열|반)"
+_DURATION = re.compile(
+    # 수량 + 단위: "30분" · "두 시간" · "삼십분".
+    # 앞의 한글을 배제해 "특별한 시간"의 '한 시간', "식사 시간"의 '사 시간'을 지나친다.
+    rf"(?<![가-힣]){_NUM}\s*(?:분|시간)"
+    # 수량이 없어도 소요를 뜻하는 연어.
+    r"|(?:이동|소요|대기|운전|도보|체류)\s*시간"
+    r"|시간이\s*(?:걸|소요)"
+    # 시각 표기. "시각적"·"시각화"는 소요시간이 아니다.
+    r"|시각(?![적화])"
+    r"|duration"
+)
 
 
 # 괄호 부기(동명이지역 구분 등)를 뗀 표시형. 수집 POI 이름의 8.5%가 괄호를 달고
@@ -63,6 +84,40 @@ def _display_form(name: str) -> str:
     if without_latin and _HANGUL.search(without_latin):
         return without_latin
     return stripped
+
+
+def _name_variants(name: str) -> set[str]:
+    """이름 하나가 문구에 나타날 수 있는 형태 전부 — 표시형 + **연속 토큰 구간**.
+
+    괄호·로마자를 떼는 것만으로는 부족하다. 실측(2026-09-17)에서 남은 축약이 둘:
+
+        허용 "동적깡통구이 쌍문본점" → 본문 "동적깡통구이"   (지점 접미사)
+        허용 "옥천 구읍벽화마을"     → 선언 "구읍벽화마을"    (지역 접두사)
+
+    둘 다 사람이 알림에서 실제로 쓰는 형태인데 "선언과 본문이 다르다"·"풀 밖
+    장소"로 잡혀 그 날이 통째로 드롭됐다(평가 시나리오 장소명의 13%가 이 모양).
+    지점·지역 목록을 따로 들고 있는 대신 **공백 토큰 경계의 연속 구간**을 전부
+    인정한다 — 두 경우가 같은 규칙에 들어오고, 새 표기 관행이 와도 버틴다.
+
+    경계를 토큰에 묶는 것이 완화의 한계선이다: "세종호수공원"은 한 토큰이라
+    "공원"이 파생되지 않는다. 즉 일정에 있는 이름에서 **잘라낸 조각만** 늘어나고
+    없는 장소가 새로 허용되지는 않는다(INV-1).
+    """
+    variants: set[str] = set()
+    for form in (name, _display_form(name)):
+        form = form.strip()
+        if not form:
+            continue
+        variants.add(form)
+        tokens = form.split()
+        # 연속 토큰 구간 — 이름당 토큰이 몇 개뿐이라 전수로 싸다.
+        for i in range(len(tokens)):
+            for j in range(i + 1, len(tokens) + 1):
+                run = " ".join(tokens[i:j])
+                # 한글 2자 미만 조각은 흔한 말과 충돌한다("역"·"점").
+                if len(_HANGUL.findall(run)) >= 2:
+                    variants.add(run)
+    return variants
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +181,7 @@ class ReminderCopyGate:
         # 버려지고 기본 상수로 떨어진다(수집본의 4.6% 가 괄호를 달고 있고 출처가
         # 늘수록 는다). 표시형은 원본에서 파생되므로 **없는 장소를 새로 허용하지
         # 않는다** — 완화의 범위가 거기서 닫힌다.
-        allowed = {n for name in ctx.allowed for n in (name, _display_form(name)) if n}
+        allowed = {n for name in ctx.allowed for n in _name_variants(name)}
         lowered = (title + body).lower()
 
         dropped = (
@@ -134,12 +189,11 @@ class ReminderCopyGate:
             or not body
             or len(title) > _MAX_TITLE
             or len(body) > _MAX_BODY
-            or any(t in lowered for t in _FORBIDDEN_TOKENS)  # INV-3
+            or _DURATION.search(lowered) is not None  # INV-3
             or any(name not in allowed for name in declared)  # INV-1
             or any(
-                name not in body and _display_form(name) not in body
-                for name in declared
-            )  # 선언 정직성 — 표시형도 인정
+                not any(v in body for v in _name_variants(name)) for name in declared
+            )  # 선언 정직성 — 표시형·토큰 축약도 인정
             or any(name and name in body for name in ctx.forbidden)  # 선언 회피 차단
         )
         if dropped:

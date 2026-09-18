@@ -21,7 +21,8 @@ from hypothesis import strategies as st
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import LlmFeature
 from trippilot.llm_gateway.gates.reminder_copy import (
-    _FORBIDDEN_TOKENS,
+    _DURATION,
+    _name_variants,
     _MAX_BODY,
     _MAX_TITLE,
     ReminderCopyContext,
@@ -133,11 +134,13 @@ def test_pbt_pass_implies_all_rules(title: str, body: str, places: list[str]) ->
     assert 0 < len(out.value.body) <= _MAX_BODY
     lowered = out.value.body.lower() + out.value.title.lower()
     # 모든 4개 금지 토큰 부재 확인 (INV-3)
-    assert not any(t in lowered for t in _FORBIDDEN_TOKENS)
+    assert _DURATION.search(lowered) is None
     # 선언한 모든 장소가 allowed 집합에 속함 (INV-1)
     for name in places:
         if name.strip():
-            assert name.strip() in CTX.allowed
+            assert name.strip() in {
+                v for a in CTX.allowed for v in _name_variants(a)
+            }
     # 선언한 모든 장소가 본문에 출현 (선언 정직성)
     # ponytail: 이 검증은 엄격히 말해 게이트가 체크하는 "name in body" 문자열 매치와 동일.
     # 더 엄격한 단어 경계 매칭이 필요하면 정규식 추가.
@@ -238,4 +241,67 @@ def test_display_form_relaxation_does_not_admit_new_places() -> None:
                     "places": ["한라산"]}, ensure_ascii=False),
         ctx, feature=LlmFeature.REMINDER_COPY, trace_id=TRACE, now=NOW,
     )
+    assert out.value is None and out.drop_event is not None
+
+
+# ── 2026-09-17 홀드아웃 실측에서 드러난 오탐·정탐 (게이트 판정 재조정) ──────────
+#
+# 탈락 17/30 중 12건이 부분 문자열 금지였고 대부분 소요시간을 표시하지 않았다.
+# 아래 두 파라미터 묶음이 그 경계를 고정한다 — 완화가 INV-3 까지 새지 않게.
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "성산일출봉에서 즐거운 시간을 보내요",  # 실측 12건 중 다수
+        "성산일출봉에서 특별한 시간을 보내요",  # '특별한 시간' 의 "한 시간"
+        "성산일출봉에서 식사 시간을 즐겨요",  # '식사 시간' 의 "사 시간"
+        "성산일출봉의 분위기를 느껴보세요",  # '분위기' 의 "분"
+        "성산일출봉에서 기분 좋은 하루를",  # '기분' 의 "분"
+        "성산일출봉을 충분히 둘러보세요",  # '충분히' 의 "분"
+    ],
+)
+def test_non_duration_words_are_not_dropped(body: str) -> None:
+    """소요시간을 하나도 표시하지 않는 말은 통과한다 — 기능이 꺼지지 않게."""
+    out = _apply({"title": "오늘의 제주", "body": body, "places": ["성산일출봉"]})
+    assert out.error is None and out.value is not None, body
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "성산일출봉까지 30분이면 도착해요",
+        "성산일출봉까지 두 시간 걸려요",
+        "성산일출봉까지 삼십분 거리예요",
+        "성산일출봉까지 이동시간이 있어요",
+        "성산일출봉은 시간이 걸리는 곳이에요",
+    ],
+)
+def test_actual_duration_still_dropped(body: str) -> None:
+    """수량·연어로 소요시간이 드러나면 여전히 드롭한다 (INV-3)."""
+    out = _apply({"title": "오늘의 제주", "body": body, "places": ["성산일출봉"]})
+    assert out.value is None and out.drop_event is not None, body
+
+
+@pytest.mark.parametrize(
+    ("allowed", "declared", "body"),
+    [
+        # 지점 접미사 — 모델은 본문에서 지점을 뗀다
+        ("동적깡통구이 쌍문본점", "동적깡통구이 쌍문본점", "동적깡통구이에서 저녁을 즐겨요"),
+        ("동적깡통구이 쌍문본점", "동적깡통구이", "동적깡통구이에서 저녁을 즐겨요"),
+        # 지역 접두사 — 모델은 선언에서 지역을 뗀다
+        ("옥천 구읍벽화마을", "구읍벽화마을", "구읍벽화마을을 걸어보세요"),
+    ],
+)
+def test_token_level_shortening_accepted(allowed: str, declared: str, body: str) -> None:
+    """공백 토큰 경계의 축약은 같은 장소로 인정한다 (실측 장소명의 13%)."""
+    ctx = ReminderCopyContext(allowed=(allowed,), forbidden=())
+    out = _apply({"title": "오늘의 하루", "body": body, "places": [declared]}, ctx)
+    assert out.error is None and out.value is not None
+
+
+def test_token_shortening_does_not_open_new_places() -> None:
+    """완화는 토큰 경계에서 닫힌다 — 한 토큰 이름에서 조각이 파생되지 않는다."""
+    ctx = ReminderCopyContext(allowed=("세종호수공원",), forbidden=())
+    out = _apply({"title": "오늘의 하루", "body": "공원을 걸어보세요", "places": ["공원"]}, ctx)
     assert out.value is None and out.drop_event is not None
