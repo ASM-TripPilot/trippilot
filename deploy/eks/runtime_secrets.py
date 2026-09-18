@@ -1,8 +1,11 @@
 """Allowlisted Secrets Manager JSON -> service-scoped Kubernetes Secrets."""
 import base64
 import json
+import os
 import secrets
+import shutil
 import subprocess
+import tempfile
 from urllib.parse import quote
 
 from runtime_io import CommandError
@@ -47,10 +50,22 @@ def get_secret(shell, region, arn, *, strings_only=True):
 
 
 def put_secret(shell, region, arn, values):
-    # Values travel on stdin, never command arguments, logs, files, or Terraform state.
-    shell(["aws", "secretsmanager", "put-secret-value", "--region", region,
-           "--cli-input-json", "file:///dev/stdin", "--output", "json"],
-          json.dumps({"SecretId": arn, "SecretString": json.dumps(values)}))
+    # Values never travel on command arguments, logs, or Terraform state.
+    # stdin(file:///dev/stdin) is NOT an option: the aws CLI v2 paramfile loader
+    # cannot read pipes and fails with "Invalid JSON received" (measured 2026-09-19,
+    # runs 35388660238/35389564380/35390200513 — mock-shell tests cannot catch this).
+    # A 0600 file inside a private 0700 temp dir on the throwaway runner disk,
+    # removed immediately after the call, preserves the same secrecy property.
+    directory = tempfile.mkdtemp()
+    try:
+        path = os.path.join(directory, "payload.json")
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            json.dump({"SecretId": arn, "SecretString": json.dumps(values)}, stream)
+        shell(["aws", "secretsmanager", "put-secret-value", "--region", region,
+               "--cli-input-json", f"file://{path}", "--output", "json"])
+    finally:
+        shutil.rmtree(directory, ignore_errors=True)
 
 
 def rsa_key():
