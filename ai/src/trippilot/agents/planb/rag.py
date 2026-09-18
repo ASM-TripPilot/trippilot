@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from types import MappingProxyType
 
+from trippilot.agents.planb.place_knowledge import fetch_place_knowledge
 from trippilot.agents.planb.kb_retrieval import (
     DEFAULT_TOP_K,
     retrieve_persona,
@@ -256,6 +257,10 @@ class RagContext:
     persona: tuple[KbHit, ...] = ()
     situation: tuple[KbHit, ...] = ()
     notes: tuple[str, ...] = ()
+    # KB-5 장소 지식 — {source_ref: 문서}. 앞 셋과 달리 **풀 전원**을 가져온다
+    # (일부에게만 설명이 붙으면 임베딩 유사도가 랭커가 되어 규칙 랭킹을 덮는다 —
+    #  `place_knowledge` 모듈 docstring).
+    place_knowledge: Mapping[str, str] = field(default_factory=dict)
 
     def counts(self) -> dict:
         return {
@@ -379,7 +384,7 @@ class PlanBAgent:
             empty_reason=None,
         )
 
-    # [1] Retrieve — KB 3종. 한 KB가 실패해도 나머지로 진행한다 (부분 성공 허용)
+    # [1] Retrieve — KB 4종. 한 KB가 실패해도 나머지로 진행한다 (부분 성공 허용)
     def retrieve(self, request: PlanBRagRequest) -> RagContext:
         notes: list[str] = []
         schedule, note = self._safe_retrieve(
@@ -397,8 +402,19 @@ class PlanBAgent:
         )
         if note:
             notes.append(note)
+        # KB-5 — 앞 셋과 다르다: 상황에 맞는 몇 건이 아니라 **풀 전원의 문서**다.
+        # 실패해도 예외를 안 올린다(문서 없이 도는 것이 정상 동작이지 실패가 아니다).
+        knowledge, note = fetch_place_knowledge(
+            request.pool.pois, _situation_query(request), self._embedding, self._store
+        )
+        if note:
+            notes.append(note)
         return RagContext(
-            schedule=schedule, persona=persona, situation=situation, notes=tuple(notes)
+            schedule=schedule,
+            persona=persona,
+            situation=situation,
+            notes=tuple(notes),
+            place_knowledge=knowledge,
         )
 
     def _safe_retrieve(self, fn, query: str, kb: KbKind) -> tuple[tuple[KbHit, ...], str]:
@@ -468,6 +484,7 @@ class PlanBAgent:
                         context.persona, request.saved_places, request.persona),
                     max_alternatives=self._cfg.max_alternatives,
                     excluded_poi_ids=request.excluded_poi_ids,
+                    place_knowledge=context.place_knowledge,
                 ),
                 request.trace_id,
                 request.now,

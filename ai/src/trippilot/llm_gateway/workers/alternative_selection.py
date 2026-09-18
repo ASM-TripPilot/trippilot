@@ -12,7 +12,8 @@ ContextResolver 재조회가 아니라 **KB-2 검색 결과 발췌**로 들어�
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from trippilot.llm_gateway.gateway import GatewayFacade
@@ -32,6 +33,10 @@ class AlternativeSelectionInput:
     persona_context: str  # KB-2 발췌 — 선호·저장 장소
     max_alternatives: int
     excluded_poi_ids: frozenset[PoiId] = frozenset()  # 이미 방문·거절한 POI
+    # KB-5 장소 지식 — {source_ref: 문서}. 후미 기본값이라 기존 호출 전부 무영향.
+    # **후보 자격과 무관하다**(INV-1 은 closed_set_filter 소유) — 후보 줄에 설명을
+    # 한 칸 더 붙일 뿐이고, 문서가 없는 후보는 칸 자체가 안 생긴다.
+    place_knowledge: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.max_alternatives < 1:
@@ -46,6 +51,18 @@ def _category_label(poi: Poi) -> str:
     섞인 `유적지/사적지`(야외)와 `박물관`(실내)이 여기서 갈린다.
     """
     return "·".join((poi.category.value, *poi.tags))
+
+
+def _candidate_line(poi: Poi, knowledge: Mapping[str, str]) -> str:
+    """후보 한 줄. 장소 지식(KB-5)이 있으면 넷째 칸으로 붙는다.
+
+    **문서가 없으면 칸 자체를 안 만든다.** 빈 칸을 남기면 모델이 그 공백을 결격으로
+    읽는다 — 원천 커버리지가 균일하지 않아(위키백과 실측 문화 25% ↔ 카페 2.5%)
+    문서 없는 후보가 다수인 구간이 정상이다. 그 사실은 프롬프트가 따로 말한다.
+    """
+    line = f"- {poi.poi_id} | {_category_label(poi)} | {poi.name}"
+    doc = knowledge.get(poi.source_ref or "")
+    return f"{line} | {doc}" if doc else line
 
 
 def build_alternative_selection_vars(
@@ -63,7 +80,7 @@ def build_alternative_selection_vars(
     노출하기 전까지는 그 칸이 항상 비어 있다(없는 칸을 설명하는 프롬프트가 된다).
     """
     candidates = "\n".join(
-        f"- {p.poi_id} | {_category_label(p)} | {p.name}"
+        _candidate_line(p, inp.place_knowledge)
         for p in sorted(pool.pois, key=lambda p: str(p.poi_id))
         if p.poi_id not in inp.excluded_poi_ids
     )

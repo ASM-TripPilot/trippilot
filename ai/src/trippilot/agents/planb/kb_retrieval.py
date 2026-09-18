@@ -35,6 +35,7 @@ KB_COLLECTIONS: Mapping[KbKind, str] = MappingProxyType(
         KbKind.PERSONA: "persona",  # FD 지정 초기 collection 3종 중 하나 (KB-2)
         KbKind.SITUATION: "planb_situation",
         KbKind.DIRECTIVE: "planb_directive",  # KB-4 (재계획 연동 설계 §3)
+        KbKind.POI_DESC: "poi_desc",  # KB-5 — FD 지정 초기 3종의 마지막
     }
 )
 
@@ -193,6 +194,7 @@ def retrieve(
     store: VectorStorePort,
     *,
     top_k: int = DEFAULT_TOP_K,
+    item_ids: frozenset[str] | None = None,
 ) -> tuple[KbHit, ...]:
     """지정 KB의 collection에서 top-k 검색. 결과는 항상 요청한 KB 소속이다.
 
@@ -200,11 +202,18 @@ def retrieve(
     - payload의 `kb` 라벨이 요청 KB와 다른 문서는 **제외**한다 — collection 오염 방어
       (`IntentRouter._match_bank`의 closed-set 방어와 같은 취지).
     - 정렬·동점 처리는 스토어 계약(score 내림차순, 동점 item_id 사전순)을 그대로 신뢰한다.
+    - `item_ids` 가 주어지면 **그 집합 안에서만** 고른다 (KB-5 장소 지식이 쓴다 —
+      후보 풀 밖 POI 의 문서가 상위로 올라오면 모델에게 닫힌 집합 밖을 권하는 셈이다).
+      빈 frozenset 은 "아무것도 안 맞음"이라 빈 결과이고, `None`(필터 없음)과 다르다.
     """
     if top_k <= 0 or not query.strip():
         return ()
+    if item_ids is not None and not item_ids:
+        return ()
     vector = embedding.embed(query)
-    raw_hits = store.search(collection_for(kb, embedding.model_id), vector, top_k)
+    raw_hits = store.search(
+        collection_for(kb, embedding.model_id), vector, top_k, item_ids=item_ids
+    )
     hits: list[KbHit] = []
     for hit in raw_hits:
         payload = hit.payload if isinstance(hit.payload, Mapping) else {}

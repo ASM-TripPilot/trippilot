@@ -219,7 +219,7 @@ def test_prompt_renders_deterministically_without_coordinates() -> None:
     p1, ref = reg.render(_FEAT, build_alternative_selection_vars(pool, _input()))
     p2, _ = reg.render(_FEAT, build_alternative_selection_vars(pool, _input()))
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/alternative_selection.yaml" and ref.version == "0.1.0"
+    assert ref.prompt_id == "prompts/alternative_selection.yaml" and ref.version == "0.2.0"  # KB-5 장소 설명 칸 추가
     assert ref.feature == "ALTERNATIVE_SELECTION"
     for poi in pool.pois:
         assert str(poi.poi_id) in p1 and poi.name in p1
