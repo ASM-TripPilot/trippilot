@@ -1,0 +1,2690 @@
+{
+  "components": {
+    "schemas": {
+      "AlternativeSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Poi Ids",
+            "type": "array"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "poi_ids",
+          "rationale"
+        ],
+        "title": "AlternativeSchema",
+        "type": "object"
+      },
+      "AlternativesRequest": {
+        "additionalProperties": false,
+        "description": "대안 제안 요청 — 후보 풀은 AI가 앵커 반경으로 직접 만든다(INV-1, M7 소유).\n\n시각·순서를 받지도 내보내지도 않는다 — 선택된 대안의 확정 배치는 기존\nrepair 관문 몫이다(INV-2). budget/transport 토큰은 generate 와이어와 동일\n어휘(\"중간\"·\"대중교통\" 등 — wiring의 번역표가 흡수).",
+        "properties": {
+          "affected_reasons": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Affected Reasons",
+            "type": "object"
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/CoordSchema"
+          },
+          "budget_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Level"
+          },
+          "dates": {
+            "items": {
+              "format": "date",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Dates",
+            "type": "array"
+          },
+          "excluded_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Poi Ids",
+            "type": "array"
+          },
+          "reason": {
+            "default": "none",
+            "title": "Reason",
+            "type": "string"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "saved_places": {
+            "items": {
+              "$ref": "#/components/schemas/SavedPlaceSchema"
+            },
+            "title": "Saved Places",
+            "type": "array"
+          },
+          "transport_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transport Mode"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/TriggerSchema"
+          },
+          "trip_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Id"
+          }
+        },
+        "required": [
+          "trigger",
+          "anchor",
+          "dates",
+          "request_meta"
+        ],
+        "title": "AlternativesRequest",
+        "type": "object"
+      },
+      "AlternativesResponse": {
+        "additionalProperties": false,
+        "description": "시각·순서·소요시간 없음(INV-2·3) — 제안과 강등 상태·드롭 사유만 나간다.",
+        "properties": {
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/AlternativeSchema"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "dropped_out_of_pool": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dropped Out Of Pool",
+            "type": "array"
+          },
+          "empty_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Empty Reason"
+          },
+          "fallback_level": {
+            "title": "Fallback Level",
+            "type": "integer"
+          },
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "pool_size": {
+            "minimum": 0.0,
+            "title": "Pool Size",
+            "type": "integer"
+          },
+          "retrieved": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Retrieved",
+            "type": "object"
+          }
+        },
+        "required": [
+          "alternatives",
+          "is_fallback",
+          "fallback_level",
+          "notes",
+          "retrieved",
+          "dropped_out_of_pool",
+          "pool_size"
+        ],
+        "title": "AlternativesResponse",
+        "type": "object"
+      },
+      "CandidatesSummarySchema": {
+        "additionalProperties": false,
+        "description": "후보 충분성(BR-U2-05). 판정은 AI 소유 — 백엔드는 그대로 전달한다.\n\n`pool_size`는 모르면 null로 둔다(0은 \"후보 0건\"이라는 판정으로 읽힌다).",
+        "properties": {
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "pool_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pool Size"
+          },
+          "shortfall_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shortfall Categories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "level"
+        ],
+        "title": "CandidatesSummarySchema",
+        "type": "object"
+      },
+      "CoordSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "lng": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lng",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lat",
+          "lng"
+        ],
+        "title": "CoordSchema",
+        "type": "object"
+      },
+      "CoverSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "photo_slot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhotoSlotSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subtitle": {
+            "title": "Subtitle",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "subtitle"
+        ],
+        "title": "CoverSchema",
+        "type": "object"
+      },
+      "DayAnchorSchema": {
+        "additionalProperties": false,
+        "description": "day별 공간 앵커(등록 숙소 해석 결과 = trip_base_day).",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "lng": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lng",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "lat",
+          "lng"
+        ],
+        "title": "DayAnchorSchema",
+        "type": "object"
+      },
+      "DayScheduleSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/VisitSlotDisplaySchema"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "DayScheduleSchema",
+        "type": "object"
+      },
+      "EditCommandSchema": {
+        "additionalProperties": false,
+        "description": "편집 명령 와이어 형태 — domain EditCommand 대응. 시각 필드 없음(INV-2·3).",
+        "properties": {
+          "affected_slots": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Slots",
+            "type": "array"
+          },
+          "op": {
+            "minLength": 1,
+            "title": "Op",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "title": "EditCommandSchema",
+        "type": "object"
+      },
+      "EditItineraryRequest": {
+        "additionalProperties": false,
+        "description": "일정 편집 요청 — `command`(구조화)와 `utterance`(자연어) 중 **정확히 하나**.\n\n두 진입은 같은 처리 로직으로 수렴한다(팀 결정 2026-08-22): 자연어는\nEDIT_TRANSLATION 워커가 EditCommand로 번역하고, 이후 경로는 동일하다.\nanchor·기간은 후보 풀 재조립용(INV-1 — 추가·교체 대상 검증). 파괴적 편집은\n1차 응답 CONFIRM_REQUIRED → 사용자 확인 후 `confirm=true` 재호출로 반영한다.",
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/CoordSchema"
+          },
+          "budget_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Level"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditCommandSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "itinerary": {
+            "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "target_date": {
+            "format": "date",
+            "title": "Target Date",
+            "type": "string"
+          },
+          "transport_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transport Mode"
+          },
+          "trip_id": {
+            "minLength": 1,
+            "title": "Trip Id",
+            "type": "string"
+          },
+          "utterance": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utterance"
+          }
+        },
+        "required": [
+          "trip_id",
+          "itinerary",
+          "target_date",
+          "anchor",
+          "request_meta"
+        ],
+        "title": "EditItineraryRequest",
+        "type": "object"
+      },
+      "EditItineraryResponse": {
+        "additionalProperties": false,
+        "description": "편집 결과 — 시각·순서는 APPLIED일 때만, 그것도 어셈블리 검증값만(INV-2).\n\nREJECTED는 위반 목록 또는 사유를 반드시 싣는다(침묵 거부 금지, INV-4).",
+        "properties": {
+          "apply_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apply Mode"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditCommandSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "itinerary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItineraryPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/ViolationSchema"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "EditItineraryResponse",
+        "type": "object"
+      },
+      "ExplanationsRequest": {
+        "additionalProperties": false,
+        "description": "배치 일정의 슬롯별 설명 조회 — generate(include_explanations=false)와 짝.\n\n페르소나는 generate와 같은 trip_id 파생 참조로 해석한다(D31 자기참조,\nTRIP-333 fail-closed 유지). 시각·순서는 받기만 하고 바꾸지 않는다(INV-2).",
+        "properties": {
+          "itinerary": {
+            "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "trip_id": {
+            "minLength": 1,
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id",
+          "itinerary",
+          "request_meta"
+        ],
+        "title": "ExplanationsRequest",
+        "type": "object"
+      },
+      "ExplanationsResponse": {
+        "additionalProperties": false,
+        "description": "slot_key(BR-U2-04: \"날짜#poi_id\") → 설명 1문장. 실패는 빈 맵 + 사유(침묵 금지).\n\n`alternative_explanations`(TRIP-887, additive): 요청 payload 의 슬롯별 차선책\n(`slots[].alternatives[]`)에 대한 \"이 자리 대신 골라도 좋은 이유\" 1문장 — 키는\n`\"{date}#{alt_poi_id}\"`(같은 선택지가 여러 슬롯에 있으면 날짜별 키마다 같은 문장).\n배치 슬롯 설명 **다음의 두 번째 호출**(잔여 예산만 씀)이라 이 맵이 비어도 `explanations`\n는 영향이 없다. 비면 `alternatives_reason` 이 사유를 싣는다(배치 설명이 실패해 시도조차\n못 했으면 `slot_explanations_unavailable`) — 백엔드는 AI 템플릿 rationale 을 그대로 쓴다.\n**전제**: 요청 payload 의 `slots[].alternatives[]` 가 채워져 와야 한다 — 백엔드가 저장한\n차선책을 되돌려 보내기 전(현재 `toWire()` 는 빈 배열)에는 항상 빈 맵 + `null` 이다.",
+        "properties": {
+          "alternative_explanations": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Alternative Explanations",
+            "type": "object"
+          },
+          "alternatives_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alternatives Reason"
+          },
+          "explanations": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Explanations",
+            "type": "object"
+          },
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "explanations",
+          "is_fallback"
+        ],
+        "title": "ExplanationsResponse",
+        "type": "object"
+      },
+      "FixedBlockSchema": {
+        "additionalProperties": false,
+        "description": "날짜·시각이 확정된 필수방문지(HC3). ANYTIME(시각 미지정) 필수방문의\n물질화는 백엔드 소유(MustVisitMaterializer, 경계 계약 M1) — AI는 확정된 블록만 받는다.",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "dwell_min": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dwell Min"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "start": {
+            "format": "time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "date",
+          "start"
+        ],
+        "title": "FixedBlockSchema",
+        "type": "object"
+      },
+      "FreshnessMetaSchema": {
+        "additionalProperties": false,
+        "description": "IO-6 — 사용 데이터 신선도. 백엔드는 `fetched_at`→generatedAt, `stale`→degraded로 사영한다.",
+        "properties": {
+          "cache_hit": {
+            "default": false,
+            "title": "Cache Hit",
+            "type": "boolean"
+          },
+          "fetched_at": {
+            "format": "date-time",
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "ttl_sec": {
+            "default": 0,
+            "title": "Ttl Sec",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "fetched_at"
+        ],
+        "title": "FreshnessMetaSchema",
+        "type": "object"
+      },
+      "GenerateItineraryRequest": {
+        "additionalProperties": false,
+        "description": "`POST /ai/v1/itinerary/generate` 요청 = 백엔드 `ScheduleAgentInput`.\n\nday1 2단계 생성(TRIP-293): 1차 `time_windows=[day1]`·`deadline_ms=5000`,\n2차 `time_windows=[나머지]`·`excluded_poi_ids=[1차 배정 POI]`.",
+        "properties": {
+          "anchors": {
+            "items": {
+              "$ref": "#/components/schemas/DayAnchorSchema"
+            },
+            "title": "Anchors",
+            "type": "array"
+          },
+          "excluded_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Poi Ids",
+            "type": "array"
+          },
+          "fixed_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/FixedBlockSchema"
+            },
+            "title": "Fixed Blocks",
+            "type": "array"
+          },
+          "generation_mode": {
+            "$ref": "#/components/schemas/GenerationMode"
+          },
+          "include_explanations": {
+            "default": true,
+            "title": "Include Explanations",
+            "type": "boolean"
+          },
+          "preference_profile": {
+            "$ref": "#/components/schemas/PreferenceProfileSchema"
+          },
+          "recommendation_strength": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Strength"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "time_windows": {
+            "items": {
+              "$ref": "#/components/schemas/TimeWindowSchema"
+            },
+            "minItems": 1,
+            "title": "Time Windows",
+            "type": "array"
+          },
+          "trip_context": {
+            "$ref": "#/components/schemas/TripContextSchema"
+          },
+          "trip_id": {
+            "minLength": 1,
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id",
+          "generation_mode",
+          "trip_context",
+          "time_windows",
+          "preference_profile",
+          "request_meta"
+        ],
+        "title": "GenerateItineraryRequest",
+        "type": "object"
+      },
+      "GenerationMode": {
+        "description": "d11 추천 강도 분기. 백엔드는 Kotlin enum 이름(대문자)을 보낸다.",
+        "enum": [
+          "FULLY_AI",
+          "CO_PLAN"
+        ],
+        "title": "GenerationMode",
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ItineraryPayload": {
+        "additionalProperties": false,
+        "description": "일정 산출물 — generate 응답이자 validate/repair 요청 본문(같은 형태를 왕복한다).\n\n`solve_mode`는 AI 4값(OR_TOOLS|LLM|RULE_FALLBACK|MINIMAL)을 그대로 보낸다.\n백엔드 3값(FULL_AI|DETERMINISTIC|MINIMAL)으로의 축약은 어댑터가 소유한다(ScheduleAgentWire).\n`explanations` 키 규약 = `\"{date}#{poi_id}\"` (BR-U2-04), 문구는 시각·소요시간을 언급하지 않는다.\n`unplaced_must_visits`는 additive(기본 빈 리스트 = 전부 배치됨) — generate 응답의\n부분 성공(200) 보고 채널이다. 해소 불가 모순의 409 경로는 그대로다(약화 금지).\nvalidate/repair 요청으로 왕복될 때는 판정 컨텍스트가 없으므로 소비하지 않는다.",
+        "properties": {
+          "candidates_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidatesSummarySchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "day1_ready_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day1 Ready At"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DayScheduleSchema"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "explanations": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Explanations",
+            "type": "object"
+          },
+          "freshness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FreshnessMetaSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_fallback": {
+            "default": false,
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "solve_mode": {
+            "title": "Solve Mode",
+            "type": "string"
+          },
+          "unplaced_must_visits": {
+            "items": {
+              "$ref": "#/components/schemas/UnplacedMustVisitSchema"
+            },
+            "title": "Unplaced Must Visits",
+            "type": "array"
+          }
+        },
+        "required": [
+          "solve_mode"
+        ],
+        "title": "ItineraryPayload",
+        "type": "object"
+      },
+      "PhotoSlotSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "visit_ref": {
+            "$ref": "#/components/schemas/VisitRefSchema"
+          }
+        },
+        "required": [
+          "visit_ref"
+        ],
+        "title": "PhotoSlotSchema",
+        "type": "object"
+      },
+      "PreferenceProfileSchema": {
+        "additionalProperties": false,
+        "description": "취향 7축(preference_snapshot).",
+        "properties": {
+          "activities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Activities",
+            "type": "array"
+          },
+          "budget_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Tier"
+          },
+          "companion_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Companion Types",
+            "type": "array"
+          },
+          "food_tastes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Food Tastes",
+            "type": "array"
+          },
+          "pace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pace"
+          },
+          "pet_friendly": {
+            "default": false,
+            "title": "Pet Friendly",
+            "type": "boolean"
+          },
+          "styles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Styles",
+            "type": "array"
+          },
+          "transport_modes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Transport Modes",
+            "type": "array"
+          }
+        },
+        "title": "PreferenceProfileSchema",
+        "type": "object"
+      },
+      "ReflectionGenerateRequest": {
+        "additionalProperties": false,
+        "description": "회고 템플릿 생성 요청 — visits ≥ 1 (0건은 트리거 단에서 미발생, 이중 방어는 도메인).",
+        "properties": {
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/TripEventRecordSchema"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "persona_summary": {
+            "default": "",
+            "title": "Persona Summary",
+            "type": "string"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "visits": {
+            "items": {
+              "$ref": "#/components/schemas/VisitRecordSchema"
+            },
+            "minItems": 1,
+            "title": "Visits",
+            "type": "array"
+          },
+          "weather_summary": {
+            "default": "",
+            "title": "Weather Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_meta",
+          "kind",
+          "region",
+          "start_date",
+          "end_date",
+          "visits"
+        ],
+        "title": "ReflectionGenerateRequest",
+        "type": "object"
+      },
+      "ReflectionGenerateResponse": {
+        "additionalProperties": false,
+        "description": "ReflectionTemplate.to_dict()와 동형 — is_fallback은 강등 정직 보고 (INV-4).",
+        "properties": {
+          "cover": {
+            "$ref": "#/components/schemas/CoverSchema"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "hashtags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Hashtags",
+            "type": "array"
+          },
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "scenes": {
+            "items": {
+              "$ref": "#/components/schemas/SceneSchema"
+            },
+            "title": "Scenes",
+            "type": "array"
+          },
+          "template_id": {
+            "title": "Template Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template_id",
+          "kind",
+          "format",
+          "generated_at",
+          "is_fallback",
+          "cover",
+          "scenes"
+        ],
+        "title": "ReflectionGenerateResponse",
+        "type": "object"
+      },
+      "ReflectionNudgeRequest": {
+        "additionalProperties": false,
+        "description": "회고 유도 문구 요청 — duration_days는 입력 메타(문구 소재)지 표시값이 아니다.",
+        "properties": {
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "highlight_places": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2,
+            "title": "Highlight Places",
+            "type": "array"
+          },
+          "persona_summary": {
+            "default": "",
+            "title": "Persona Summary",
+            "type": "string"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "trip_days": {
+            "minimum": 1.0,
+            "title": "Trip Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_meta",
+          "destination",
+          "trip_days"
+        ],
+        "title": "ReflectionNudgeRequest",
+        "type": "object"
+      },
+      "ReflectionNudgeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "is_fallback"
+        ],
+        "title": "ReflectionNudgeResponse",
+        "type": "object"
+      },
+      "ReminderCopyItemSchema": {
+        "additionalProperties": false,
+        "description": "예약 1건 = 문구 1건. schedule_key 는 백엔드 예약 행 식별자(불투명 문자열).\n\n**slots 는 순서가 있다** — 조립(assembly)이 검증한 방문 순서 그대로 담아야 한다\n(INV-2). 프롬프트가 이 순서를 그대로 나열해 문구에 실리므로, 정렬 없이(예: DB\n조회에 ORDER BY 누락) 채우면 조립이 확인한 적 없는 순서 주장이 사용자에게 노출된다.",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "TRIP_DAY",
+              "TRIP_PRE"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "schedule_key": {
+            "minLength": 1,
+            "title": "Schedule Key",
+            "type": "string"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/ReminderSlotSchema"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schedule_key",
+          "kind",
+          "date"
+        ],
+        "title": "ReminderCopyItemSchema",
+        "type": "object"
+      },
+      "ReminderCopyRequest": {
+        "additionalProperties": false,
+        "description": "여행 1건의 예약 여러 행을 한 번에. 예산은 request_meta.deadline_ms 를 쓴다.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReminderCopyItemSchema"
+            },
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "trip_title": {
+            "default": "",
+            "title": "Trip Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_meta",
+          "items"
+        ],
+        "title": "ReminderCopyRequest",
+        "type": "object"
+      },
+      "ReminderCopyResponse": {
+        "additionalProperties": false,
+        "description": "빠진 항목은 백엔드가 기존 상수로 채운다 — degraded 가 그 사실의 증빙(INV-4).",
+        "properties": {
+          "copies": {
+            "items": {
+              "$ref": "#/components/schemas/ReminderCopySchema"
+            },
+            "title": "Copies",
+            "type": "array"
+          },
+          "degraded": {
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "fallback_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Mode"
+          }
+        },
+        "required": [
+          "copies",
+          "degraded"
+        ],
+        "title": "ReminderCopyResponse",
+        "type": "object"
+      },
+      "ReminderCopySchema": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "schedule_key": {
+            "title": "Schedule Key",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schedule_key",
+          "title",
+          "body"
+        ],
+        "title": "ReminderCopySchema",
+        "type": "object"
+      },
+      "ReminderSlotSchema": {
+        "additionalProperties": false,
+        "description": "그날 일정의 장소 1건 — 문구가 말해도 되는 대상. 좌표·시각은 싣지 않는다.",
+        "properties": {
+          "category": {
+            "default": "",
+            "title": "Category",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ReminderSlotSchema",
+        "type": "object"
+      },
+      "RepairItineraryRequest": {
+        "additionalProperties": false,
+        "description": "`POST /ai/v1/itinerary/repair` — 백엔드 포트 `repair(solution, violations)` 대응 + IO-1.",
+        "properties": {
+          "itinerary": {
+            "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/ViolationSchema"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "itinerary",
+          "request_meta"
+        ],
+        "title": "RepairItineraryRequest",
+        "type": "object"
+      },
+      "RepairItineraryResponse": {
+        "additionalProperties": false,
+        "description": "`repaired=null` = 수리 불가(정상 응답, IO-7) — 오류가 아니다.\n\n`unverified_slots`는 validate와 같은 의미다(TRIP-537): 수리 결과도 그 슬롯들에\n대해서는 HC1·HC2를 못 본 채 나온 것이라, 검증 경로에만 싣고 여기서 빼면 같은\n침묵이 수리 경로로 되돌아온다(Plan-B는 validate 없이 repair만 부르기도 한다).",
+        "properties": {
+          "changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "repaired": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItineraryPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unverified_slots": {
+            "items": {
+              "$ref": "#/components/schemas/UnverifiedSlotSchema"
+            },
+            "title": "Unverified Slots",
+            "type": "array"
+          }
+        },
+        "title": "RepairItineraryResponse",
+        "type": "object"
+      },
+      "ReplanEmptyReasonSchema": {
+        "additionalProperties": false,
+        "description": "왜 재계획안을 못 만들었나. **문구는 FE 소유** — 여기는 코드와 재료만 준다.\n\n선례: `UnplacedMustVisitSchema.reason_code`(닫힌 값, 백엔드가 분기·화면 문구에 사용).\n자유 문장으로 두면 i18n·톤 변경이 AI 재배포가 된다.",
+        "properties": {
+          "code": {
+            "enum": [
+              "NO_CANDIDATE",
+              "ALL_EXCLUDED",
+              "NO_FEASIBLE_SLOT",
+              "DIRECTIVE_CONFLICT",
+              "UNKNOWN"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ReplanEmptyReasonSchema",
+        "type": "object"
+      },
+      "ReplanRequest": {
+        "additionalProperties": false,
+        "description": "POST /ai/v1/itinerary/replan — 하루를 다시 짠다 (i04 → i06).\n\n`generate` 와 **다른 것**: RAG(KB-3)를 탄다 · 재계획 의도를 받는다 ·\n원 일정을 컨텍스트이자 후보로 받는다.\n**같은 것**: 산출이 `ItineraryPayload` 다 — 백엔드 소비 코드가 그대로 돈다.",
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/CoordSchema"
+          },
+          "current_slots": {
+            "items": {
+              "$ref": "#/components/schemas/ReplanSlotSchema"
+            },
+            "title": "Current Slots",
+            "type": "array"
+          },
+          "directives": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Directives",
+            "type": "array"
+          },
+          "excluded_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Poi Ids",
+            "type": "array"
+          },
+          "free_text": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Free Text"
+          },
+          "from_instant": {
+            "format": "date-time",
+            "title": "From Instant",
+            "type": "string"
+          },
+          "locked_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/FixedBlockSchema"
+            },
+            "title": "Locked Blocks",
+            "type": "array"
+          },
+          "preference_profile": {
+            "$ref": "#/components/schemas/PreferenceProfileSchema"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          },
+          "saved_places": {
+            "items": {
+              "$ref": "#/components/schemas/SavedPlaceSchema"
+            },
+            "title": "Saved Places",
+            "type": "array"
+          },
+          "scope": {
+            "enum": [
+              "PARTIAL_SLOTS",
+              "FULL_DAY"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "target_date": {
+            "format": "date",
+            "title": "Target Date",
+            "type": "string"
+          },
+          "time_window": {
+            "$ref": "#/components/schemas/TimeWindowSchema"
+          },
+          "transport_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transport Mode"
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TriggerSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trip_context": {
+            "$ref": "#/components/schemas/TripContextSchema"
+          },
+          "trip_id": {
+            "minLength": 1,
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id",
+          "trip_context",
+          "target_date",
+          "time_window",
+          "anchor",
+          "scope",
+          "from_instant",
+          "preference_profile",
+          "request_meta"
+        ],
+        "title": "ReplanRequest",
+        "type": "object"
+      },
+      "ReplanResponse": {
+        "additionalProperties": false,
+        "description": "재계획안 1안. 못 만들면 `itinerary=null` + `empty_reason` (200, IO-7).\n\n`diff` 는 여기 없다 — `i08` 의 \"바뀐 곳 1 · 이동 −6.9km\" 는 `ReplanDiffService` 가\n이미 백엔드에 있고, 원 일정을 가진 쪽이 만드는 것이 맞다.",
+        "properties": {
+          "empty_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReplanEmptyReasonSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fallback_level": {
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Fallback Level",
+            "type": "integer"
+          },
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          },
+          "itinerary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItineraryPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "resolved_directives": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Resolved Directives",
+            "type": "array"
+          },
+          "retrieved": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Retrieved",
+            "type": "object"
+          },
+          "total_distance_km": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Distance Km"
+          },
+          "unknown_directives": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unknown Directives",
+            "type": "array"
+          }
+        },
+        "required": [
+          "is_fallback",
+          "fallback_level"
+        ],
+        "title": "ReplanResponse",
+        "type": "object"
+      },
+      "ReplanSlotSchema": {
+        "additionalProperties": false,
+        "description": "원 일정 슬롯 1개 — KB-1 컨텍스트이자 후보 풀 합류 대상.\n\n`VisitSlotDisplaySchema` 를 재사용하지 않는다: 그것은 **AI 산출물의 사영**이고\n이쪽은 **백엔드가 주는 입력**이다. 모양이 닮아도 방향이 반대라, 한쪽을 고치면\n다른 쪽이 끌려가는 결합을 만들지 않는다. `placement_reason` 은 산출물 쪽엔 없다.",
+        "properties": {
+          "end_at": {
+            "format": "time",
+            "title": "End At",
+            "type": "string"
+          },
+          "ends_next_day": {
+            "default": false,
+            "title": "Ends Next Day",
+            "type": "boolean"
+          },
+          "is_fixed": {
+            "default": false,
+            "title": "Is Fixed",
+            "type": "boolean"
+          },
+          "placement_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placement Reason"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "start_at": {
+            "format": "time",
+            "title": "Start At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "start_at",
+          "end_at"
+        ],
+        "title": "ReplanSlotSchema",
+        "type": "object"
+      },
+      "RequestMetaSchema": {
+        "additionalProperties": false,
+        "description": "IO-1 — 지연 예산 전파. 값은 백엔드 소유(종전 day1 5s / 전체 20s).\n\n`deadline_ms` 미지정 = **시간제약 없음** (2026-08-21 FE 연동 팀 결정, TRIP-473)\n— 예산 계단(INV-4)은 그대로 두고 시간 때문에 강등되지 않게만 한다. 제약을\n재도입하려면 백엔드가 값을 다시 싣기만 하면 된다(AI 재작업 없음).",
+        "properties": {
+          "deadline_ms": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline Ms"
+          },
+          "request_id": {
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "requested_at"
+        ],
+        "title": "RequestMetaSchema",
+        "type": "object"
+      },
+      "SavedPlaceSchema": {
+        "additionalProperties": false,
+        "description": "사용자가 저장한 장소 1건 — 백엔드 `saved_place`(account_id, poi_id) 의 경계 표현.\n\n이름을 함께 받는 것은 LLM 컨텍스트에 \"저장한 장소 — 성산일출봉\" 처럼 실을 수 있어야\n해서다. 저장 시각·메모는 받지 않는다 — 랭킹에도 프롬프트에도 쓰지 않는다(목적 최소화,\nSECURITY-11/G181).",
+        "properties": {
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id"
+        ],
+        "title": "SavedPlaceSchema",
+        "type": "object"
+      },
+      "SceneSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "caption": {
+            "title": "Caption",
+            "type": "string"
+          },
+          "layout": {
+            "title": "Layout",
+            "type": "string"
+          },
+          "photo_slot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhotoSlotSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Event"
+          }
+        },
+        "required": [
+          "layout",
+          "caption"
+        ],
+        "title": "SceneSchema",
+        "type": "object"
+      },
+      "ShareCardCopyResponse": {
+        "additionalProperties": false,
+        "description": "j06 공유 카드 문구 — `ShareCardCopy.to_dict()`와 동형 (TRIP-429 후속).\n\n요청은 `ReflectionGenerateRequest` 재사용(회고 생성과 같은 재료) — 새 요청 타입을\n두지 않는다. 카드 이미지(통계·동선·워터마크)는 이 응답 밖이다: 서비스가 기계\n조립하는 사실 영역이고, 여기 담는 것은 그 아래 붙는 두 자리뿐이다.\n`is_fallback`은 정적 조립으로의 강등 정직 보고 (INV-4).",
+        "properties": {
+          "caption": {
+            "title": "Caption",
+            "type": "string"
+          },
+          "hashtags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Hashtags",
+            "type": "array"
+          },
+          "is_fallback": {
+            "title": "Is Fallback",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "caption",
+          "is_fallback"
+        ],
+        "title": "ShareCardCopyResponse",
+        "type": "object"
+      },
+      "SlotAlternativeSchema": {
+        "additionalProperties": false,
+        "description": "슬롯 차선책 1건 (TRIP-871) — **제안만**: 시각·순서 없음(INV-2 — 교체 확정은\nedit → validate 관문), 거리만(INV-3).\n\n`rationale` 은 사용자 표시용 템플릿 문장(\"같은 카페 후보\"). `distance_range` 는\n**그 슬롯 POI 에서의** 거리(\"약 1.2km · 대중교통 추정\") — 좌표 미상이면 null.",
+        "properties": {
+          "distance_range": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance Range"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "rationale"
+        ],
+        "title": "SlotAlternativeSchema",
+        "type": "object"
+      },
+      "TimeWindowSchema": {
+        "additionalProperties": false,
+        "description": "날짜별 이용 시각(기본 09–21시). 도메인 TimeWindow와 같은 불변식(start < end).",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "end": {
+            "format": "time",
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "format": "time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "start",
+          "end"
+        ],
+        "title": "TimeWindowSchema",
+        "type": "object"
+      },
+      "TriggerSchema": {
+        "additionalProperties": false,
+        "description": "백엔드 planb-detection(C9) 트리거의 와이어 형태 — domain TriggerParams 대응.",
+        "properties": {
+          "affected_date": {
+            "format": "date",
+            "title": "Affected Date",
+            "type": "string"
+          },
+          "kind": {
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "schedule_id": {
+            "minLength": 1,
+            "title": "Schedule Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "schedule_id",
+          "affected_date"
+        ],
+        "title": "TriggerSchema",
+        "type": "object"
+      },
+      "TripContextSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "budget_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Level"
+          },
+          "companion_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Companion Type"
+          },
+          "destinations": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Destinations",
+            "type": "array"
+          },
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "destinations",
+          "start_date",
+          "end_date"
+        ],
+        "title": "TripContextSchema",
+        "type": "object"
+      },
+      "TripEventRecordSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "date",
+          "detail"
+        ],
+        "title": "TripEventRecordSchema",
+        "type": "object"
+      },
+      "UnplacedMustVisitSchema": {
+        "additionalProperties": false,
+        "description": "미배치 필수방문 보고 1건 (TRIP-350 — PR #104에서 확정한 회신 계약).\n\n배경(TRIP-328): 백엔드가 기간 밖 must_visit을 fixed_blocks에 실어 보내면\nHC3가 범위 밖 날짜를 스킵해 **침묵 드롭**됐다 — 이 필드가 \"왜 안 들어갔는지\"를\n돌려준다. `reason_code`는 **닫힌 집합**(백엔드가 분기·화면 문구에 사용):\n\n- `OUT_OF_RANGE`: 고정 블록 날짜가 여행 기간(trip_context) 밖\n- `WINDOW_CONFLICT`: 기간 안 미배치 + 다른 고정 블록과 시간 겹침이 증명됨\n- `NO_FEASIBLE_SLOT`: 그 외 미배치 (기간 안·겹침 없음인데 해에 없음)",
+        "properties": {
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "reason_code": {
+            "enum": [
+              "OUT_OF_RANGE",
+              "NO_FEASIBLE_SLOT",
+              "WINDOW_CONFLICT"
+            ],
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "reason_code"
+        ],
+        "title": "UnplacedMustVisitSchema",
+        "type": "object"
+      },
+      "UnverifiedSlotSchema": {
+        "additionalProperties": false,
+        "description": "HC 판정에서 **제외된** 슬롯 1건 (TRIP-537) — 위반이 아니라 \"판정 못 함\"이다.\n\nHC1(영업시간)·HC2(이동)는 POI 정본을 못 찾으면 그 슬롯을 건너뛴다(\"정보 없음은\n막지 않는다\", c2 규칙 — 그대로 유지). 그런데 스킵이 응답에 아무 흔적을 남기지\n않아 `violations: []` 가 \"전부 통과\"로 읽혔다(INV-4 침묵 실패의 완곡한 형태).\n이 목록이 \"무엇을 못 봤는지\"를 드러낸다 — **violations와 섞지 않는다**.\n\n`reason_code`는 **닫힌 집합**(백엔드가 분기·화면 문구에 사용):\n- `NOT_REGISTERED`: POI 정본(place-data)이 그 id를 안 돌려줬다 — 미등록·비ACTIVE\n- `UNMAPPABLE`: 돌려줬으나 판정에 쓸 수 없다 — `detail`이 원인 필드명\n  (좌표 null·모르는 category/data_quality 등, 즉 경계 enum 드리프트가 여기로 온다)",
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "reason_code": {
+            "enum": [
+              "NOT_REGISTERED",
+              "UNMAPPABLE"
+            ],
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "reason_code"
+        ],
+        "title": "UnverifiedSlotSchema",
+        "type": "object"
+      },
+      "ValidateItineraryRequest": {
+        "additionalProperties": false,
+        "description": "`POST /ai/v1/itinerary/validate` — 백엔드 포트 `validate(solution)` 대응 + IO-1.",
+        "properties": {
+          "itinerary": {
+            "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "request_meta": {
+            "$ref": "#/components/schemas/RequestMetaSchema"
+          }
+        },
+        "required": [
+          "itinerary",
+          "request_meta"
+        ],
+        "title": "ValidateItineraryRequest",
+        "type": "object"
+      },
+      "ValidateItineraryResponse": {
+        "additionalProperties": false,
+        "description": "빈 목록 = 위반 없음. 상태코드는 200(위반은 정상 응답, IO-7).\n\n`unverified_slots`(TRIP-537)는 additive — 기본 빈 리스트 = **모든 슬롯이 HC1·HC2\n판정을 받았다**. 비어 있지 않으면 \"위반 0\"의 의미가 다르다: 그 슬롯들은 통과한\n것이 아니라 검사되지 않았다. 위반 목록과 섞지 않는 이유가 그것이다.",
+        "properties": {
+          "unverified_slots": {
+            "items": {
+              "$ref": "#/components/schemas/UnverifiedSlotSchema"
+            },
+            "title": "Unverified Slots",
+            "type": "array"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/ViolationSchema"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "title": "ValidateItineraryResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "ViolationSchema": {
+        "additionalProperties": false,
+        "description": "하드 제약 위반 1건 — AI 도메인 표현(`code`/`slot_ref`) + 위치 인덱스 **수퍼셋**.\n\n백엔드 도메인은 `(type, dayIndex, slotIndex)`로 지시한다. AI 도메인 타입에는 위치\n인덱스가 없지만, **직렬화 시점에 일정(days)을 스캔해 계산**해서 함께 실어 보낸다\n(routes.locate_slot) — 백엔드 어댑터는 code→type 매핑만 하면 된다.\n`slot_ref`가 일정 어디에도 없으면(예: HC3 미배치 위반 — 슬롯이 없어서 위반인 것)\n인덱스는 null이다. 지어내지 않는다.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "day_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Index"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "slot_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot Index"
+          },
+          "slot_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot Ref"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ViolationSchema",
+        "type": "object"
+      },
+      "VisitRecordSchema": {
+        "additionalProperties": false,
+        "description": "방문 기록 1건 — 시각·체류분 필드 없음 (INV-3 원천 차단). 순서는 백엔드 실측값.",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "order_in_day": {
+            "minimum": 1.0,
+            "title": "Order In Day",
+            "type": "integer"
+          },
+          "photo_count": {
+            "minimum": 0.0,
+            "title": "Photo Count",
+            "type": "integer"
+          },
+          "poi_name": {
+            "title": "Poi Name",
+            "type": "string"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/VisitRefSchema"
+          }
+        },
+        "required": [
+          "ref",
+          "poi_name",
+          "category",
+          "order_in_day",
+          "photo_count"
+        ],
+        "title": "VisitRecordSchema",
+        "type": "object"
+      },
+      "VisitRefSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "poi_id": {
+            "minLength": 1,
+            "title": "Poi Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "poi_id"
+        ],
+        "title": "VisitRefSchema",
+        "type": "object"
+      },
+      "VisitSlotDisplaySchema": {
+        "additionalProperties": false,
+        "description": "표시용 방문 슬롯 — 어셈블리 검증 시각·순서만(INV-2), 거리만(INV-3).\n\n**소요시간 필드를 추가하지 말 것**: 도메인 `VisitSlot.stay_min`·`score`는\n내부값이라 이 사영에서 의도적으로 제외한다(IO-3).",
+        "properties": {
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/SlotAlternativeSchema"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "distance_range": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance Range"
+          },
+          "end_at": {
+            "format": "time",
+            "title": "End At",
+            "type": "string"
+          },
+          "ends_next_day": {
+            "default": false,
+            "title": "Ends Next Day",
+            "type": "boolean"
+          },
+          "is_fixed": {
+            "default": false,
+            "title": "Is Fixed",
+            "type": "boolean"
+          },
+          "poi_id": {
+            "title": "Poi Id",
+            "type": "string"
+          },
+          "start_at": {
+            "format": "time",
+            "title": "Start At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "start_at",
+          "end_at"
+        ],
+        "title": "VisitSlotDisplaySchema",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "일정·회고 경계 (U5·U6). 와이어는 snake_case.",
+    "title": "TripPilot AI",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Root  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Root"
+      }
+    },
+    "/ai/v1/itinerary/alternatives": {
+      "post": {
+        "description": "Plan-B 대안 제안 (TRIP-428) — KB 검색 + closed-set 교차 + LLM 선택(폴백: 규칙 랭킹).\n\n응답에 시각·순서·소요시간 없음(INV-2·3) — 선택된 대안의 배치 확정은 repair 몫.\n구형 조립(alternatives 미구현 오케스트레이터)은 503으로 명시 실패한다(INV-4).",
+        "operationId": "alternatives_ai_v1_itinerary_alternatives_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlternativesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlternativesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Alternatives",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/edit": {
+      "post": {
+        "description": "일정 편집 (TRIP-431) — 자연어·구조화 겸용, 단일 처리 로직 수렴.\n\n번역(자연어)·검증(closed-set)·확인 게이트·재타이밍·어셈블리 검증을 거쳐\n통과분만 반영한다(INV-1·2·4). 구형 조립은 503 명시 실패.",
+        "operationId": "edit_ai_v1_itinerary_edit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditItineraryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditItineraryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/explanations": {
+      "post": {
+        "description": "슬롯별 설명 조회 (TRIP-479) — generate(include_explanations=false)와 짝.\n\n설명은 부가 정보다: LLM 실패도 200 + 빈 맵 + 사유로 나간다(침묵 금지, INV-4).\n구형 조립(미구현 오케스트레이터)은 503 명시 실패.",
+        "operationId": "explanations_ai_v1_itinerary_explanations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplanationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplanationsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explanations",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/generate": {
+      "post": {
+        "description": "일정 생성(굵은 경계). 시한 초과는 오류가 아니라 MINIMAL 폴백 200이다(TRIP-291).",
+        "operationId": "generate_ai_v1_itinerary_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateItineraryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItineraryPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/repair": {
+      "post": {
+        "description": "Plan-B 최소 조정(시각·순서만, POI 불변). 수리 불가면 `repaired=null` + 200(IO-7).",
+        "operationId": "repair_ai_v1_itinerary_repair_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepairItineraryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepairItineraryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Repair",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/replan": {
+      "post": {
+        "description": "하루 재계획 (i04 → i06) — `generate` 재사용을 그만둔 자리.\n\n정본: `backend/docs/design/ai-backend-replan-연동-설계.md`. `generate` 와 다른 것은\n셋이다 — RAG(KB-3)를 탄다 · 재계획 의도(사유·지시·자유입력)를 받는다 · 원 일정을\n컨텍스트이자 후보로 받는다. 산출은 `ItineraryPayload` 라 백엔드 소비 코드가 그대로 돈다.\n\n**조립이 아직 이 경계를 구현하지 않으면 503 으로 명시 실패한다**(INV-4 — 침묵 금지).\n하루 전체를 다시 짜려면 선호 점수 단계가 필요한데 그것은 ScheduleAgent 소유이고,\n오케스트레이터가 `REPLAN` 정보 요구표로 그 경로를 여는 작업이 따로 진행 중이다.\n빈 일정을 `empty_reason` 으로 위장해 200 을 내보내지 않는다 — \"후보가 없다\"와\n\"아직 배선이 없다\"는 다른 사실이고, 섞으면 백엔드가 폴백 여부를 잘못 판정한다.",
+        "operationId": "replan_ai_v1_itinerary_replan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replan",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/itinerary/validate": {
+      "post": {
+        "description": "편집 재검증(HC1~4). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다.\n\n`unverified_slots`는 위반이 **아니다** — POI 정본을 못 찾아 HC1·HC2를 아예 못\n본 슬롯이다(TRIP-537). 위반 0 + 이 목록 비어 있음 = 진짜 통과.",
+        "operationId": "validate_ai_v1_itinerary_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateItineraryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateItineraryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate",
+        "tags": [
+          "itinerary"
+        ]
+      }
+    },
+    "/ai/v1/notification/copies": {
+      "post": {
+        "description": "리마인드 알림 문구 배치 생성 (설계: specs/2026-09-08-reminder-copy-local-llm-design.md).\n\n생성 실패·게이트 드롭 항목은 copies 에서 빠지고 degraded=true 로 알린다 —\n그 자리는 백엔드가 기존 하드코딩 상수로 채운다(INV-4, 침묵 금지).\n구형 조립은 503 명시 실패.\n\n**예산 안내(`request_meta.deadline_ms`)**: 항목별로 순차 호출하므로 비용이\n`len(items)` 에 비례한다 — **이 경계에서는 `deadline_ms` 를 생략**해서 다른\n인터랙티브 경계의 5~20s 예산을 재사용하지 말 것(항목 수가 조금만 늘어도 매\n항목이 타임아웃한다). 생략하면 게이트웨이 기본 타임아웃(~10s)이 항목마다\n안전망으로 남는다 — 다만 그 상한도 항목당이라, 서빙이 콜드스타트 있는 서버리스\n타깃이면 콜드스타트 직후 첫 배치가 드롭되는 것은 정상 동작이다.",
+        "operationId": "notification_copies_ai_v1_notification_copies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReminderCopyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderCopyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Notification Copies",
+        "tags": [
+          "notification"
+        ]
+      }
+    },
+    "/ai/v1/reflection/generate": {
+      "post": {
+        "description": "회고 연출 템플릿 생성 (TRIP-429 — U6 FD Phase 1, 계약 §5).\n\nN회 생성(≤3) → 결정론 랭킹 → 하드 위반 결정론 교체. 전 시도 파싱 실패면\n고정 폴백 템플릿 200 (is_fallback=true — INV-4, 침묵 금지). 응답에\n시각·순서·duration 필드 자체가 없다(INV-3). 구형 조립은 503 명시 실패.",
+        "operationId": "reflection_generate_ai_v1_reflection_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReflectionGenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReflectionGenerateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reflection Generate",
+        "tags": [
+          "reflection"
+        ]
+      }
+    },
+    "/ai/v1/reflection/nudge": {
+      "post": {
+        "description": "회고 유도 푸시 문구 1건 (TRIP-429 — 기존 REFLECTION_NUDGE 세트 노출).\n\nLLM 실패·게이트 드롭 시 결정론 기본 문구 200 (is_fallback=true — INV-4).\n구형 조립은 503 명시 실패.",
+        "operationId": "reflection_nudge_ai_v1_reflection_nudge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReflectionNudgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReflectionNudgeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reflection Nudge",
+        "tags": [
+          "reflection"
+        ]
+      }
+    },
+    "/ai/v1/reflection/share-card": {
+      "post": {
+        "description": "j06 공유 카드 문구 — 캡션 1문단 + 해시태그 (TRIP-429 후속).\n\n요청 스키마는 `/generate`와 동일(회고와 같은 재료). 경계가 워커를 직접 부른다\n(U6 Reflect FD §2.1 워커 직행 — 판단 없는 단발 변환이라 에이전트를 두지 않는다).\nLLM 실패·게이트 전량 탈락 시 결정론 정적 조립 200 (is_fallback=true — INV-4).\n카드 이미지(통계·동선·워터마크)는 이 경계 밖이다. 구형 조립은 503 명시 실패.",
+        "operationId": "reflection_share_card_ai_v1_reflection_share_card_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReflectionGenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareCardCopyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reflection Share Card",
+        "tags": [
+          "reflection"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    }
+  }
+}

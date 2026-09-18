@@ -1,0 +1,59 @@
+load("@ai_pip//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# deploy 의 이미지 규칙과 MODULE.bazel 의 pip.parse 가 파일 단위로 집어간다.
+exports_files([
+    "main.py",
+    "requirements.txt",
+])
+
+py_library(
+    name = "trippilot",
+    srcs = glob(["src/trippilot/**/*.py"]),
+    data = glob(
+        [
+            "prompts/**",
+            "data/**",
+        ],
+        allow_empty = True,
+    ),
+    # pyproject 의 [tool.pytest.ini_options] pythonpath = ["src"] 와 같은 역할.
+    imports = ["src"],
+    deps = [
+        requirement("anthropic"),
+        requirement("ortools"),
+        requirement("pyyaml"),
+    ],
+)
+
+py_test(
+    # 타깃 이름을 'tests' 로 두면 안 된다. rules_python 이 .pyc 를
+    # bazel-out/.../ai/tests/... 에 내는데, 그게 타깃 자신의 출력 경로
+    # bazel-out/.../ai/tests 와 접두사로 겹쳐 빌드가 거부된다.
+    name = "pytest",
+    # PBT(hypothesis)가 섞여 있어 기본 60초 제한을 넘기기 쉽다.
+    size = "large",
+    # benchmarks 도 함께 넣는다 — tests/test_m7_calibration.py 가
+    # benchmarks.calibrate_entity_resolution 을 임포트한다.
+    srcs = ["pytest_main.py"] + glob([
+        "tests/**/*.py",
+        "benchmarks/**/*.py",
+    ]),
+    data = glob(
+        [
+            "prompts/**",
+            "data/**",
+        ],
+        allow_empty = True,
+    ),
+    # tests 패키지를 `tests.fakes` 로 임포트할 수 있게 ai 디렉토리를 sys.path 에 올린다.
+    imports = ["."],
+    main = "pytest_main.py",
+    deps = [
+        ":trippilot",
+        requirement("hypothesis"),
+        requirement("pytest"),
+    ],
+)

@@ -1,6 +1,6 @@
 # 기여 가이드
 
-이 문서는 **진입점**입니다. 실제 규칙은 [`docs/conventions/`](docs/conventions/README.md), 제품·설계 정본은 [`aidlc/aidlc-docs/planning/`](aidlc/aidlc-docs/planning/README.md)에 있습니다. 여기선 복붙하지 않고 링크만 겁니다.
+이 문서는 **진입점**입니다. 실제 규칙은 [`docs/conventions/`](docs/conventions/README.md), 제품 정본은 [`aidlc/aidlc-docs/inception/`](aidlc/aidlc-docs/inception/)에 있습니다. 여기선 복붙하지 않고 링크만 겁니다.
 
 ## 30초 요약
 
@@ -24,7 +24,8 @@ git push -u origin feature/TRIP-123-short-desc
 | [conventions/pull-request.md](docs/conventions/pull-request.md) | PR 규칙·squash·리뷰 |
 | [guides/jira.md](docs/guides/jira.md) | 지라 사용법 |
 | [guides/slack.md](docs/guides/slack.md) | 슬랙 사용법 |
-| [planning/](aidlc/aidlc-docs/planning/README.md) | 제품·설계 정본 |
+| [inception/](aidlc/aidlc-docs/inception/) | 제품 정본 — 요구사항·유저 스토리·컴포넌트·유닛 U0–U9 |
+| [construction/](aidlc/aidlc-docs/construction/) | 유닛별 설계 문서 |
 | [CLAUDE.md](CLAUDE.md) | AI 에이전트 작업 지침 |
 
 ## 처음 한 번

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels:
+    {{- include "trippilot.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.gateway.replicas }}
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      {{- include "trippilot.selector" (dict "root" . "component" "gateway") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "trippilot.selector" (dict "root" . "component" "gateway") | nindent 8 }}
+      annotations:
+        trippilot.io/rollout-nonce: {{ .Values.rolloutNonce | quote }}
+        checksum/config: {{ include (print $.Template.BasePath "/gateway-config.yaml") . | sha256sum }}
+    spec:
+      {{- include "trippilot.podSpec" (dict "root" . "component" "gateway" "uid" 101) | nindent 6 }}
+      containers:
+        - name: gateway
+          image: {{ include "trippilot.image" (dict "root" . "component" "gateway") }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: [nginx]
+          args: ["-g", "daemon off;"]
+          ports:
+            - { name: http, containerPort: 8080 }
+          securityContext:
+            {{- include "trippilot.containerSecurity" . | nindent 12 }}
+          lifecycle:
+            preStop:
+              exec:
+                # The pinned nginx-unprivileged image also declares STOPSIGNAL SIGQUIT.
+                # Stop accepting new connections after endpoint propagation, then drain workers.
+                command: [/bin/sh, -c, "sleep 10; nginx -s quit"]
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.gateway.resources | nindent 12 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: config
+          configMap:
+            name: gateway
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }

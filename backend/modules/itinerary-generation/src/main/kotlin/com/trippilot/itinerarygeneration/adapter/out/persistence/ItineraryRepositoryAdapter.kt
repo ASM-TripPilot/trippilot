@@ -1,0 +1,162 @@
+package com.trippilot.itinerarygeneration.adapter.out.persistence
+
+import com.trippilot.itinerarygeneration.domain.CandidatesSummary
+import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.GenerationState
+import com.trippilot.itinerarygeneration.domain.Itinerary
+import com.trippilot.itinerarygeneration.domain.ItineraryDay
+import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.ItineraryStatus
+import com.trippilot.itinerarygeneration.domain.UnplacedMustVisit
+import com.trippilot.itinerarygeneration.domain.UnplacedReason
+import com.trippilot.itinerarygeneration.domain.SlotAlternative
+import com.trippilot.itinerarygeneration.domain.SolveMode
+import com.trippilot.itinerarygeneration.domain.VisitSlot
+import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
+import java.util.UUID
+
+/**
+ * 일정 애그리거트 영속 — itinerary/day/slot 3테이블에 명시 매핑(플랫 엔티티 + 어댑터 조립, 코드베이스 관례).
+ * 저장은 자식(day·slot) 전체 교체(생성·편집 공통) — bulk delete 후 재삽입.
+ */
+@Component
+class ItineraryRepositoryAdapter(
+    private val itineraries: ItineraryJpaRepository,
+    private val days: ItineraryDayJpaRepository,
+    private val slots: VisitSlotJpaRepository,
+) : ItineraryRepository {
+
+    @Transactional
+    override fun save(itinerary: Itinerary): Itinerary {
+        // 기존 자식 제거(있으면) — slot 먼저(FK), 그다음 day. bulk delete로 즉시 실행.
+        val existingDayIds = days.findByItineraryIdOrderByDayOrderAsc(itinerary.itineraryId).map { it.itineraryDayId }
+        if (existingDayIds.isNotEmpty()) {
+            slots.deleteByItineraryDayIdIn(existingDayIds)
+            days.deleteByItineraryId(itinerary.itineraryId)
+        }
+        itineraries.save(itinerary.toEntity())
+        itinerary.days.forEach { day ->
+            val dayId = UUID.randomUUID()
+            days.save(ItineraryDayEntity(dayId, itinerary.itineraryId, day.date, day.dayOrder))
+            day.slots.forEach { s ->
+                slots.save(
+                    VisitSlotEntity(
+                        UUID.randomUUID(), dayId, s.sourcePoiId, s.poiSnapshotId,
+                        s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange,
+                        s.placementReason, s.violationReason, s.alternatives.toRows(),
+                    ),
+                )
+            }
+        }
+        return itinerary
+    }
+
+    @Transactional
+    override fun replaceForTrip(tripId: UUID, itinerary: Itinerary): Itinerary {
+        itineraries.deleteByTripId(tripId) // 기존 일정 제거(day/slot은 DB FK cascade) — 여행당 1개
+        return save(itinerary)
+    }
+
+    @Transactional
+    override fun replaceIfCurrent(tripId: UUID, expectedItineraryId: UUID, itinerary: Itinerary): Boolean {
+        // 삭제가 한 행도 못 지웠다 = 그 사이 재생성·전이가 일어났다 → 아무것도 쓰지 않는다.
+        if (itineraries.deleteIfCurrent(tripId, expectedItineraryId, GenerationState.PARTIAL.name) == 0) return false
+        save(itinerary)
+        return true
+    }
+
+    override fun findStalePartial(updatedBefore: Instant): List<Itinerary> =
+        itineraries.findByGenerationStateAndUpdatedAtBefore(GenerationState.PARTIAL.name, updatedBefore)
+            .map { it.toDomain() }
+
+    override fun findById(itineraryId: UUID): Itinerary? =
+        itineraries.findById(itineraryId).orElse(null)?.toDomain()
+
+    override fun findByTrip(tripId: UUID): List<Itinerary> =
+        itineraries.findByTripId(tripId).map { it.toDomain() }
+
+    private fun ItineraryEntity.toDomain(): Itinerary {
+        val dayEntities = days.findByItineraryIdOrderByDayOrderAsc(itineraryId)
+        val slotsByDay = if (dayEntities.isEmpty()) {
+            emptyMap()
+        } else {
+            slots.findByItineraryDayIdInOrderByOrderIndexAsc(dayEntities.map { it.itineraryDayId })
+                .groupBy { it.itineraryDayId }
+        }
+        val domainDays = dayEntities.map { d ->
+            ItineraryDay.of(
+                d.dayDate, d.dayOrder,
+                (slotsByDay[d.itineraryDayId] ?: emptyList()).map { s ->
+                    VisitSlot.of(
+                        s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation,
+                        s.endsNextDay, s.distanceRange, s.placementReason, s.violationReason,
+                        s.alternatives.toAlternatives(),
+                    )
+                },
+            )
+        }
+        return Itinerary.reconstitute(
+            itineraryId, tripId, ItineraryStatus.valueOf(status), SolveMode.valueOf(solveMode),
+            GenerationMode.valueOf(generationMode), isFallback, GenerationState.valueOf(generationState),
+            domainDays, createdAt, updatedAt,
+            candidatesSummary?.toSummary(),
+            unplacedMustVisits.toUnplaced(),
+        )
+    }
+
+    private fun Itinerary.toEntity() = ItineraryEntity(
+        itineraryId, tripId, status.name, solveMode.name, generationMode.name, isFallback, generationState.name,
+        createdAt, updatedAt,
+        candidatesSummary?.toMap(),
+        unplacedMustVisits.map { mapOf("poiId" to it.poiId.toString(), "reasonCode" to it.reasonCode.name) },
+    )
+
+    /**
+     * 차선책 ↔ jsonb(TRIP-873).
+     *
+     * **키를 도메인 필드명 그대로 쓴다** — 이 컬럼은 우리만 읽는다(AI 와이어가 아니다). snake_case 로
+     * 바꾸면 와이어와 비슷해 보여서, 나중에 계약이 바뀔 때 이 컬럼까지 따라 고치려는 유혹이 생긴다.
+     */
+    private fun List<SlotAlternative>.toRows(): List<Map<String, Any>> = map { a ->
+        buildMap {
+            put("poiId", a.poiId.toString())
+            put("rationale", a.rationale)
+            // 없으면 키 자체를 안 넣는다 — 빈 문자열로 채우면 "거리를 모른다"가 "거리가 없다"로 바뀐다.
+            a.distanceRange?.let { put("distanceRange", it) }
+        }
+    }
+
+    /** **읽기는 방어적으로** — 형태가 바뀌면 옛 행 조회가 영구히 깨진다. 깨진 한 건만 버린다. */
+    private fun List<Map<String, Any>>.toAlternatives(): List<SlotAlternative> = mapNotNull { row ->
+        val id = runCatching { UUID.fromString(row["poiId"] as? String) }.getOrNull() ?: return@mapNotNull null
+        val rationale = row["rationale"] as? String ?: return@mapNotNull null
+        SlotAlternative(id, rationale, row["distanceRange"] as? String)
+    }
+
+    /**
+     * jsonb → 미배치 보고. **읽기는 방어적으로** — 형태가 바뀌면 옛 행 조회가 영구히 깨진다.
+     * 모르는 사유·깨진 id 는 그 한 건만 버린다(candidates_summary 읽기와 같은 태도).
+     */
+    private fun List<Map<String, Any>>.toUnplaced(): List<UnplacedMustVisit> = mapNotNull { row ->
+        val id = runCatching { UUID.fromString(row["poiId"] as? String) }.getOrNull() ?: return@mapNotNull null
+        val reason = runCatching { UnplacedReason.valueOf(row["reasonCode"] as? String ?: "") }
+            .getOrElse { UnplacedReason.UNKNOWN }
+        UnplacedMustVisit(id, reason)
+    }
+
+    // ---- 후보 충분성 ↔ jsonb(Map). 읽기는 방어적으로 — 형태가 바뀌면 옛 행 조회가 영구히 깨진다.
+    private fun CandidatesSummary.toMap(): Map<String, Any> = buildMap {
+        put("level", level)
+        poolSize?.let { put("poolSize", it) } // 없으면 키 자체를 넣지 않는다(0 으로 채우면 판정을 지어내는 셈)
+        put("shortfallCategories", shortfallCategories)
+    }
+
+    private fun Map<String, Any>.toSummary(): CandidatesSummary? {
+        val level = this["level"] as? String ?: return null
+        val poolSize = (this["poolSize"] as? Number)?.toInt()
+        val shortfall = (this["shortfallCategories"] as? List<*>).orEmpty().filterIsInstance<String>()
+        return CandidatesSummary(level, poolSize, shortfall)
+    }
+}

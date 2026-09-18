@@ -1,0 +1,166 @@
+package com.trippilot.auth.application
+
+import com.trippilot.auth.api.event.GpsRecordingOptOut
+import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.auth.api.LocationConsentFacade
+import com.trippilot.auth.api.LocationCollectionSource
+import com.trippilot.auth.api.LocationPurgeScope
+import com.trippilot.auth.api.LocationLegalLogFacade
+import com.trippilot.auth.domain.AccountId
+import com.trippilot.auth.domain.consent.ConsentAction
+import com.trippilot.auth.domain.consent.ConsentChannel
+import com.trippilot.auth.domain.consent.ConsentRecord
+import com.trippilot.auth.domain.consent.TermsType
+import com.trippilot.auth.domain.location.LocationConsent
+import com.trippilot.auth.domain.location.LocationLegalEvent
+import com.trippilot.auth.domain.location.LocationLegalEventType
+import com.trippilot.auth.domain.location.OsPermission
+import com.trippilot.auth.domain.port.ConsentRecordRepository
+import com.trippilot.auth.domain.port.LocationConsentStateRepository
+import com.trippilot.auth.domain.port.LocationLegalLogRepository
+import com.trippilot.auth.domain.port.TermsVersionRepository
+import com.trippilot.core.error.ResourceNotFound
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.Clock
+import java.time.Instant
+import java.util.UUID
+
+/**
+ * 위치 동의 3층 관리(TRIP-155). L1 OS 미러 · L2 법정동의 · L3 GPS 옵트인.
+ *
+ * L2/L3 변경은 consent_record 증적(LOCATION_TERMS·GPS_RECORDING, 채널 SETTINGS) + location_legal_log 를
+ * 남기고, L3 철회 시 GPS 발자취 파기(PURGE)를 트리거한다(INV-L4). L1 은 순수 미러라 부수효과 없음(INV-L3).
+ * 유효 능력(G182)은 도메인 [LocationConsent.capabilities] 총함수로만 도출한다.
+ */
+@Service
+class LocationConsentService(
+    private val stateRepository: LocationConsentStateRepository,
+    private val legalLog: LocationLegalLogRepository,
+    private val terms: TermsVersionRepository,
+    private val consentRecords: ConsentRecordRepository,
+    private val events: DomainEventPublisher,
+    private val clock: Clock,
+) : LocationConsentFacade, LocationLegalLogFacade {
+
+    /**
+     * 위치정보 수집 사실 기록(INV-LL1 append-only). 동의 판정은 하지 않는다 — 호출 지점이 **이미
+     * 저장된 결과**를 보고 부르기 때문이다. 여기서 다시 동의를 확인하면, 저장은 됐는데 그 사이
+     * 철회돼 로그만 빠지는 경우가 생겨 사실 확인자료에 구멍이 난다.
+     */
+    /**
+     * 파기 사실 기록(INV-L4). 지운 쪽이 자기 scope 로 부른다 — 여기서 범위를 지어내지 않는다.
+     */
+    @Transactional
+    override fun recordPurge(accountId: UUID, scope: LocationPurgeScope, purgedCount: Int) {
+        legalLog.append(
+            LocationLegalEvent.of(
+                AccountId(accountId), LocationLegalEventType.PURGE,
+                mapOf("scope" to scope.name, "purgedCount" to purgedCount.toString()), clock.instant(),
+            ),
+        )
+    }
+
+    @Transactional
+    override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID) {
+        legalLog.append(
+            LocationLegalEvent.of(
+                AccountId(accountId), LocationLegalEventType.COLLECTION,
+                // 원시 좌표를 넣지 않는다(V1.3 규약) — 사실 확인자료가 또 하나의 파기 대상이 되면 안 된다.
+                mapOf("source" to source.name, "subjectId" to subjectId.toString()), clock.instant(),
+            ),
+        )
+    }
+    /**
+     * 사진 EXIF 좌표 수용 판정(INV-U5-04)의 유일한 근거. 3층 상태의 정본이 여기라 파생 없이 그대로 읽는다.
+     */
+    @Transactional(readOnly = true)
+    override fun hasGpsRecordingOptIn(accountId: UUID): Boolean = get(AccountId(accountId)).gpsRecordingOptIn
+
+    /** 현재 3층 상태 — 미설정 계정은 기본값(모든 층 비활성). */
+    @Transactional(readOnly = true)
+    fun get(accountId: AccountId): LocationConsent =
+        stateRepository.find(accountId) ?: LocationConsent.initial(accountId, clock.instant())
+
+    /**
+     * L2(법정)·L3(GPS) 변경. null 은 변경 없음. 실제 값이 바뀔 때만 증적·로그를 남긴다.
+     * L3 철회 시 발자취 파기(PURGE) 트리거(INV-L4). L2 철회는 능력 파생으로 차단되며 L3 는 보존한다.
+     */
+    @Transactional
+    fun update(accountId: AccountId, legalConsent: Boolean?, gpsRecordingOptIn: Boolean?): LocationConsent {
+        val now = clock.instant()
+        var state = stateRepository.find(accountId) ?: LocationConsent.initial(accountId, now)
+
+        if (legalConsent != null && legalConsent != state.legalConsent) {
+            recordConsentChange(accountId, TermsType.LOCATION_TERMS, legalConsent, now)
+            state = state.withLegalConsent(legalConsent, now)
+        }
+        if (gpsRecordingOptIn != null && gpsRecordingOptIn != state.gpsRecordingOptIn) {
+            recordConsentChange(accountId, TermsType.GPS_RECORDING, gpsRecordingOptIn, now)
+            state = state.withGpsRecordingOptIn(gpsRecordingOptIn, now)
+            if (!gpsRecordingOptIn) {
+                // L3 철회 → 즉시 파기(INV-L4). 발자취 저장소는 아직 없어 여기선 사실 기록만 남는다.
+                legalLog.append(
+                    LocationLegalEvent.of(
+                        accountId, LocationLegalEventType.PURGE,
+                        mapOf("scope" to "gps_track", "reason" to "L3_REVOKED"), now,
+                    ),
+                )
+                // **이미 저장된 위치정보는 소유 모듈이 지운다.** 여기서 직접 지우려면 archive 를
+                // 의존해야 하는데 그쪽이 이미 auth 를 의존해 순환이 된다(R1). 지운 쪽이 자기 scope 로
+                // 파기 기록까지 남긴다 — 위 `gps_track` 로그와 별개다.
+                events.publish(GpsRecordingOptOut(accountId.value.toString(), GpsRecordingOptOut.REASON_REVOKED))
+            }
+        }
+        return stateRepository.save(state)
+    }
+
+    /**
+     * 계정 삭제 요청 시 GPS 발자취 즉시 파기(FD-U1-07). L3 를 끄고 PURGE 를 법정 로그에 남긴다.
+     * 발자취 데이터 저장소는 후속 유닛이라 U1 에선 상태 해제 + 사실 기록이 최소 보장.
+     */
+    @Transactional
+    fun purgeForAccountDeletion(accountId: AccountId) {
+        val now = clock.instant()
+        stateRepository.find(accountId)?.takeIf { it.gpsRecordingOptIn }
+            ?.let { stateRepository.save(it.withGpsRecordingOptIn(false, now)) }
+        legalLog.append(
+            LocationLegalEvent.of(
+                accountId, LocationLegalEventType.PURGE,
+                mapOf("scope" to "gps_track", "reason" to "account_deletion"), now,
+            ),
+        )
+        // 삭제 경로도 같은 신호를 보낸다 — 철회와 삭제에서 지우는 대상이 같은데 한쪽만 지우면
+        // "탈퇴했는데 좌표가 남는" 쪽이 더 나쁘다.
+        //
+        // **동의 상태와 무관하게 보낸다**(위 상태 해제는 켜져 있을 때만 한다). 이미 꺼진 계정이라도
+        // 과거에 저장된 좌표가 남아 있을 수 있기 때문이다 — 구독자가 멱등이라 지울 것이 없으면
+        // 0건으로 끝나고 기록도 남지 않는다.
+        events.publish(GpsRecordingOptOut(accountId.value.toString(), GpsRecordingOptOut.REASON_ACCOUNT_DELETION))
+    }
+
+    /** L1 OS 권한 미러 보고(단말→서버). 순수 반영 — 증적·로그·파기 없음(INV-L3). L2/L3 은 보존된다. */
+    @Transactional
+    fun mirrorOsPermission(accountId: AccountId, osPermission: OsPermission) {
+        val now = clock.instant()
+        val state = (stateRepository.find(accountId) ?: LocationConsent.initial(accountId, now))
+            .withOsPermission(osPermission, now)
+        stateRepository.save(state)
+    }
+
+    /** L2/L3 전이를 consent_record(채널 SETTINGS) + location_legal_log(GRANTED/REVOKED)로 이중 기록. */
+    private fun recordConsentChange(accountId: AccountId, termsType: TermsType, granted: Boolean, now: Instant) {
+        val version = terms.findCurrent(termsType, now)?.version
+            ?: throw ResourceNotFound("현행 약관을 찾을 수 없습니다: $termsType")
+        val action = if (granted) ConsentAction.GRANT else ConsentAction.REVOKE
+        consentRecords.append(ConsentRecord.of(accountId, termsType, version, action, ConsentChannel.SETTINGS, now))
+        legalLog.append(
+            LocationLegalEvent.of(
+                accountId,
+                if (granted) LocationLegalEventType.CONSENT_GRANTED else LocationLegalEventType.CONSENT_REVOKED,
+                mapOf("termsType" to termsType.name, "version" to version, "channel" to ConsentChannel.SETTINGS.name),
+                now,
+            ),
+        )
+    }
+}

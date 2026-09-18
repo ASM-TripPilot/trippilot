@@ -1,0 +1,170 @@
+import { useRouter } from 'expo-router';
+import type { ReactElement } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+import type {
+  EditItineraryRequest,
+  ItineraryDaysItem,
+  ItineraryDaysItemSlotsItem,
+} from '@/shared/api/generated/schemas';
+import {
+  useGetTripsTripIdItinerary,
+  usePutTripsTripIdItinerary,
+} from '@/shared/api/generated/trips/trips';
+import { reorderKeepingFixed } from '@/widgets/itinerary-edit';
+import { TimeSheet } from '@/widgets/time-sheet/ui/TimeSheet';
+
+import { ManualEditScreen } from './ManualEditScreen';
+
+/**
+ * TRIP-443 · planb-manual 배선(pages) — 라우트가 넘긴 `{tripId, variant}`를 받아 일정 GET으로 편집
+ * days를 1회 시드하고, [저장]에서 편집 봉투를 `PUT /trips/{tripId}/itinerary`(편집 전체교체+재검증,
+ * 비차단)로 쏜다. `variant`를 `ManualEditScreen`에 그대로 흘려 i15/i22 얼굴을 고른다(진입 신호 =
+ * variant, isFallback/solveMode 아님 — 신호 겹침을 라우트 파라미터로 가름).
+ *
+ * MANUAL은 `isFallback=false`(실패 아닌 선택)라 정상 진입(variant 미지정=i15)엔 폴백/누락 배너가 없다.
+ *
+ * 편집은 로컬 draft 에 쌓는다 — 삭제·[시각 입력]·드래그 재정렬이 GET 캐시를 안 건드리고(비파괴 얕은
+ * 복사), 저장은 그 draft 를 통째 PUT 한다(INV-U3-02 배열 순서=슬롯 순서). 드래그는 onReorder →
+ * reorderKeepingFixed(고정 재고정)로 활성 일자 draft 에 반영한다(TRIP-577). 복구 머지
+ * (`mergeValidationFlags`)는 순수 로직만 있고 트리거 배선은 여전히 후속(Q4 정본 공백).
+ */
+
+export interface PlanbManualPageProps {
+  tripId: string;
+  variant?: 'error' | 'normal';
+}
+
+/** 편집 draft days 를 PUT 봉투로 조립 — 서버가 받는 5필드만 픽(읽기전용 필드는 서버 소유라 안 보냄).
+ * `buildEditItineraryRequest`(features/itinerary)와 동형이나 features 경계로 여기서 조립한다. */
+function buildEditRequest(days: ItineraryDaysItem[]): EditItineraryRequest {
+  return {
+    days: days.map((day) => ({
+      date: day.date,
+      slots: day.slots.map((slot) => ({
+        poiId: slot.poiId,
+        startAt: slot.startAt,
+        endAt: slot.endAt,
+        isFixed: slot.isFixed,
+        endsNextDay: slot.endsNextDay,
+      })),
+    })),
+  };
+}
+
+export function PlanbManualPage({
+  tripId,
+  variant,
+}: PlanbManualPageProps): ReactElement {
+  const router = useRouter();
+  const itinerary = useGetTripsTripIdItinerary(tripId);
+  const putItinerary = usePutTripsTripIdItinerary();
+
+  // 편집 draft — GET 응답으로 딱 1회 시드(편집으로 리렌더돼도 재시드하지 않아 손편집이 유지된다).
+  const [days, setDays] = useState<ItineraryDaysItem[]>([]);
+  const seededRef = useRef(false);
+  const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
+  // 시각 직접입력이 적용된 슬롯 키(폴백 i22, 결정 b) — 단일 전역 집합. slotKey 가 date#poiId 라
+  // 재정렬로 순서가 바뀌어도 확정 표시가 슬롯을 따라가고, 저장 후에도 세션 draft 로 유지된다.
+  const [timeConfirmed, setTimeConfirmed] = useState<string[]>([]);
+
+  const serverDays = itinerary.data?.days;
+  useEffect(() => {
+    if (!seededRef.current && serverDays !== undefined) {
+      setDays(
+        serverDays.map((day) => ({ date: day.date, slots: [...day.slots] }))
+      );
+      seededRef.current = true;
+    }
+  }, [serverDays]);
+
+  // 활성 일자는 0 고정(다일자 전환은 후속 — 계약에 activeDayIndex 흐름이 없다).
+  const activeDate = days[0]?.date ?? '';
+  const editingSlot =
+    editingSlotKey === null
+      ? undefined
+      : days
+          .flatMap((day) =>
+            day.slots.map((slot) => ({
+              key: `${day.date}#${slot.poiId}`,
+              slot,
+            }))
+          )
+          .find((entry) => entry.key === editingSlotKey)?.slot;
+
+  function handleSave(): void {
+    putItinerary.mutate({ tripId, data: buildEditRequest(days) });
+  }
+
+  function handleDeleteSlot(poiId: string): void {
+    setDays((prev) =>
+      prev.map((day) =>
+        day.date === activeDate
+          ? { ...day, slots: day.slots.filter((slot) => slot.poiId !== poiId) }
+          : day
+      )
+    );
+  }
+
+  // 드래그가 준 새 순서(data)를 고정 재고정을 거쳐 활성 일자 draft 에 얹는다 — 비고정만 새 순서로
+  // 채우고 고정 슬롯은 원래 절대 인덱스를 지킨다(reorderKeepingFixed, INV-U3-02 배열순서=슬롯순서).
+  function handleReorder(data: ItineraryDaysItemSlotsItem[]): void {
+    setDays((prev) =>
+      prev.map((day) =>
+        day.date === activeDate
+          ? { ...day, slots: reorderKeepingFixed(day.slots, data) }
+          : day
+      )
+    );
+  }
+
+  function handleApplyTime(patch: {
+    startAt: string;
+    endAt: string;
+    endsNextDay: boolean;
+  }): void {
+    setDays((prev) =>
+      prev.map((day) => ({
+        ...day,
+        slots: day.slots.map((slot) =>
+          `${day.date}#${slot.poiId}` === editingSlotKey
+            ? { ...slot, ...patch }
+            : slot
+        ),
+      }))
+    );
+    // 적용된 슬롯을 확정 집합에 넣는다 → 폴백 카드가 --:-- 대신 실제 시각을 그린다(결정 b).
+    if (editingSlotKey !== null) {
+      setTimeConfirmed((prev) =>
+        prev.includes(editingSlotKey) ? prev : [...prev, editingSlotKey]
+      );
+    }
+    setEditingSlotKey(null);
+  }
+
+  return (
+    <>
+      <ManualEditScreen
+        variant={variant}
+        days={days}
+        timeConfirmedSlotKeys={timeConfirmed}
+        onBack={() => router.back()}
+        onSave={handleSave}
+        onReorder={handleReorder}
+        onDeleteSlot={handleDeleteSlot}
+        onEditSlotTime={(slotKey) => setEditingSlotKey(slotKey)}
+      />
+      {editingSlot === undefined ? null : (
+        <TimeSheet
+          startAt={editingSlot.startAt}
+          endAt={editingSlot.endAt}
+          onApply={handleApplyTime}
+          onCancel={() => setEditingSlotKey(null)}
+          testIDPrefix="planb-manual-time"
+          labels={{ start: '도착', end: '출발' }}
+          title="시각 입력"
+        />
+      )}
+    </>
+  );
+}

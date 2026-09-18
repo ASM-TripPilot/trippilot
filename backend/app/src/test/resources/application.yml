@@ -1,0 +1,40 @@
+# 테스트 프로파일 — Spring Boot 자동 Flyway 비활성화.
+# 이유: @SpringBootTest(@ServiceConnection)의 순정 컨테이너엔 app_migrate 롤이 없다.
+# Flyway 마이그레이션 + 롤 권한 검증은 SchemaMigrationIT 가 컨테이너에 롤을 만들고 직접 수행한다.
+spring:
+  flyway:
+    enabled: false
+  # 테스트 컨텍스트는 **여러 개 뜬다** — 빈을 추가하는 IT(@TestConfiguration)는 캐시 키가 달라
+  # 자기 컨텍스트를 갖고, 각자 커넥션 풀을 잡는다. 기본 10 이면 컨테이너 한 대의 연결 슬롯이
+  # 금세 마르고, 증상은 **무관한 IT 가 컨텍스트 기동 실패**로 나온다(실측: TokenRefreshControllerIT).
+  # 테스트가 동시에 여러 커넥션을 쓸 일은 거의 없다.
+  datasource:
+    hikari:
+      maximum-pool-size: 4
+
+# 아웃박스 릴레이 스케줄을 끈다(TRIP-539).
+#
+# ⚠ **주기만 늘리면 안 꺼진다.** `fixedDelay` 는 주기만 정하고 **기동 직후 1회는 그대로 쏜다** —
+# 아래 `*-initial-delay-ms` 가 없던 동안 배경 스레드가 테스트와 동시에 배달해 `OutboxRelayIT` 가
+# 간헐 실패했고(실측 2026-09-15: `scheduling-1` 스레드의 relay 호출을 계측으로 확인), 문서만 바꾼
+# PR 의 CI 까지 막았다. 아래 세 블록의 `initial-delay` 가 첫 발화를 미뤄 그제서야 실제로 꺼진다.
+# 배경 스케줄이 끼어들면 "누가 배달했는지"가 흔들려 테스트가 결정론을 잃는다 — 릴레이 동작은
+# `OutboxRelayIT` 가 직접 몰아 확인한다. 스케줄 자체가 걸리는지는 배선 문제라 별개다.
+#
+# **@TestPropertySource 로 두지 않는 이유**: 그건 컨텍스트 캐시 키를 바꿔 스프링 컨텍스트가 하나 더
+# 뜨고, 각 컨텍스트가 커넥션 풀을 따로 잡아 **Postgres 연결 슬롯이 고갈된다**(실측으로 겪었다).
+trippilot:
+  outbox:
+    relay-delay-ms: 3600000
+    relay-initial-delay-ms: 3600000
+  # 여행 종료 스위퍼도 같은 이유로 끈다(TRIP-554). 배경 스위퍼가 먼저 종료를 찍으면
+  # `TripEndSweeperIT` 가 세운 여행이 테스트가 보기 전에 처리돼 간헐 실패가 된다 — 전체 빌드처럼
+  # 컨텍스트가 오래 사는 실행에서만 나타나는 형태다.
+  trip:
+    end-sweep-ms: 3600000
+    end-sweep-initial-delay-ms: 3600000
+  # 리마인드 폴링도 같은 이유로 사실상 끈다(TRIP-547). 배경 폴링이 도래분을 먼저 집어 가면
+  # `NotificationScheduleIT` 가 세운 예약이 테스트가 보기 전에 사라져 간헐 실패가 된다.
+  notification:
+    schedule-poll-ms: 3600000
+    schedule-poll-initial-delay-ms: 3600000

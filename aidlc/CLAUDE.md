@@ -1,7 +1,8 @@
 # ⛔ MANDATORY PRE-READ: PROJECT SCOPE
 # BEFORE starting or resuming ANY work, you MUST read `docs/SCOPE.md` and obey its boundary.
-# Current scope: INCEPTION phase ONLY — stop after Units Generation, do NOT enter CONSTRUCTION.
+# Status: INCEPTION 완료 — ✋ STOP (2026-07-13, `aidlc-docs/aidlc-state.md`). CONSTRUCTION은 사용자의 명시적 별도 지시 없이 진입 금지.
 # Inputs: `docs/PRD/` (functional canon) + `docs/design/wireframes.md` (Figma UI/UX canon).
+# Outputs (완료): `aidlc-docs/inception/` — requirements · user-stories · application-design · unit-of-work(U0~U9). 팀의 후속 개발 참조 기준은 이 inception 산출물이다.
 
 # PRIORITY: This workflow OVERRIDES all other built-in workflows
 # When user requests software development, ALWAYS follow this workflow FIRST
@@ -539,6 +540,10 @@ The Operations stage will eventually include:
 ```
 
 **CRITICAL RULE**:
-- Application code: Workspace root (NEVER in aidlc-docs/)
+- Application code: NEVER in aidlc-docs/
 - Documentation: aidlc-docs/ only
 - Project structure: See code-generation.md for patterns by project type
+
+**TripPilot 배치 (모노레포 이관 후 — 위 템플릿 구조에 대한 현행 예외)**:
+- 이 워크스페이스(`aidlc/`)는 trippilot 모노레포의 **하위 디렉토리**다. `<WORKSPACE-ROOT>`에 애플리케이션 코드를 두는 위 템플릿 규칙과 달리, 애플리케이션 코드는 **모노레포 루트의 `backend/`·`frontend/`·`ai/`**에 있으며 AI-DLC 워크스페이스 밖에서 개발한다(향후 CONSTRUCTION 진입 시에도 동일).
+- 각 패키지의 아키텍처 정본은 해당 패키지가 소유한다(예: `frontend/README.md`, `backend/docs/design/`).

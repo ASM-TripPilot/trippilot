@@ -1,0 +1,328 @@
+"""TourAPI 분류·영업시간 → 도메인 매핑 (TRIP-246).
+
+카테고리 매핑표는 아래 상수에 명시한다. 매핑 불가는 게이트로 보내지 않고
+파이프라인이 드롭+카운트한다. NIGHT_VIEW는 TourAPI 분류축에 대응 코드가
+없어 이 소싱 경로에서는 생산되지 않는다 (드롭이 아니라 원천 부재).
+
+영업시간은 **파싱 가능한 것만** OpenHour로 만든다 — "정보 없음 ≠ 배제"
+원칙에 따라 파싱 불가는 open_hours=() 로 두고, 절대 지어내지 않는다
+(계절별·격주·명절 휴무 등 주간 스케줄로 표현 불가한 원문은 통째로 포기).
+"""
+
+from __future__ import annotations
+
+import re
+
+from trippilot.domain.poi import OpenHour, PoiCategory
+
+# ── 카테고리 매핑표 ──────────────────────────────────────────────
+# TourAPI contentTypeId → PoiCategory (경계 8종). cat 코드로 세분:
+#   12 관광지:  cat1 A01(자연) → NATURE
+#               cat1 A02(인문) → SIGHT, 단 cat2 A0206(문화시설) → CULTURE ·
+#                 A0203(체험관광지) → ACTIVITY · A0207/A0208(축제·공연행사) → CULTURE
+#               cat1 A03(레포츠) → ACTIVITY · A04(쇼핑) → SHOPPING · A05(음식) → FOOD
+#   14 문화시설: CULTURE
+#   28 레포츠:   ACTIVITY
+#   38 쇼핑:     SHOPPING
+#   39 음식점:   FOOD, 단 cat3 A05020900(카페/전통찻집) → CAFE
+# 그 외(15 축제공연행사·25 여행코스·32 숙박 등) → None(매핑 불가 — 드롭+카운트).
+_CAFE_CAT3 = "A05020900"
+
+_KIND_DIRECT: dict[str, PoiCategory] = {
+    "14": PoiCategory.CULTURE,
+    "28": PoiCategory.ACTIVITY,
+    "38": PoiCategory.SHOPPING,
+}
+
+_SIGHT_CAT2_OVERRIDE: dict[str, PoiCategory] = {
+    "A0206": PoiCategory.CULTURE,
+    "A0203": PoiCategory.ACTIVITY,
+    "A0207": PoiCategory.CULTURE,
+    "A0208": PoiCategory.CULTURE,
+}
+
+_CAT1_FOR_TOURIST_SPOT: dict[str, PoiCategory] = {
+    "A01": PoiCategory.NATURE,
+    "A03": PoiCategory.ACTIVITY,
+    "A04": PoiCategory.SHOPPING,
+    "A05": PoiCategory.FOOD,
+}
+
+
+def map_category(kind: str, category_codes: tuple[str, ...]) -> PoiCategory | None:
+    """TourAPI 분류 → PoiCategory. 매핑 불가 None (호출측이 드롭+카운트)."""
+    if kind == "39":
+        return PoiCategory.CAFE if _CAFE_CAT3 in category_codes else PoiCategory.FOOD
+    if kind in _KIND_DIRECT:
+        return _KIND_DIRECT[kind]
+    if kind == "12":
+        cat1 = next((c for c in category_codes if re.fullmatch(r"A\d{2}", c)), None)
+        cat2 = next((c for c in category_codes if re.fullmatch(r"A\d{4}", c)), None)
+        if cat1 == "A02":
+            if cat2 in _SIGHT_CAT2_OVERRIDE:
+                return _SIGHT_CAT2_OVERRIDE[cat2]
+            return PoiCategory.SIGHT
+        if cat1 in _CAT1_FOR_TOURIST_SPOT:
+            if cat1 == "A05" and _CAFE_CAT3 in category_codes:
+                return PoiCategory.CAFE
+            return _CAT1_FOR_TOURIST_SPOT[cat1]
+        return None
+    return None
+
+
+# ── 태그 (backend `poi.tags text[]` — 열린 집합, V2.5) ───────────────
+# TourAPI cat2/cat3 코드 → 사람이 읽는 분류 **명칭**. 호출 예산을 아끼려고
+# categoryCode2 API 조회 대신 주요 코드를 정적 사전으로 내장한다 — 미지 코드는
+# 태그를 만들지 않는다(빈 태그 — 코드값을 태그로 지어내지 않음).
+_CAT_LABELS: dict[str, str] = {
+    # cat2
+    "A0101": "자연관광지", "A0102": "관광자원",
+    "A0201": "역사관광지", "A0202": "휴양관광지", "A0203": "체험관광지",
+    "A0204": "산업관광지", "A0205": "건축/조형물", "A0206": "문화시설",
+    "A0207": "축제", "A0208": "공연/행사",
+    "A0301": "레포츠소개", "A0302": "육상 레포츠", "A0303": "수상 레포츠",
+    "A0304": "항공 레포츠", "A0305": "복합 레포츠",
+    "A0401": "쇼핑", "A0502": "음식점",
+    # cat3 — 자연(A01)
+    "A01010100": "국립공원", "A01010200": "도립공원", "A01010300": "군립공원",
+    "A01010400": "산", "A01010500": "자연생태관광지", "A01010600": "자연휴양림",
+    "A01010700": "수목원", "A01010800": "폭포", "A01010900": "계곡",
+    "A01011100": "해안절경", "A01011200": "해수욕장", "A01011300": "섬",
+    "A01011400": "항구/포구", "A01011600": "등대", "A01011700": "호수",
+    "A01011800": "강", "A01011900": "동굴", "A01020200": "기암괴석",
+    # cat3 — 인문(A02)
+    "A02010100": "고궁", "A02010200": "성", "A02010400": "고택",
+    "A02010500": "생가", "A02010600": "민속마을", "A02010700": "유적지/사적지",
+    "A02010800": "사찰", "A02010900": "종교성지",
+    "A02020300": "온천/욕장/스파", "A02020600": "테마공원", "A02020700": "공원",
+    "A02020800": "유람선/잠수함관광",
+    "A02030100": "농산어촌 체험", "A02030200": "전통체험", "A02030400": "이색체험",
+    "A02030600": "이색거리",
+    "A02050100": "다리/대교", "A02050200": "기념탑/기념비/전망대",
+    "A02050600": "유명건물",
+    "A02060100": "박물관", "A02060200": "기념관", "A02060300": "전시관",
+    "A02060500": "미술관/화랑", "A02060600": "공연장", "A02060700": "문화원",
+    "A02060900": "도서관",
+    # cat3 — 쇼핑(A04)
+    "A04010100": "5일장", "A04010200": "상설시장", "A04010300": "백화점",
+    "A04010400": "면세점", "A04010500": "대형마트", "A04010600": "전문매장/상가",
+    "A04010700": "공예/공방",
+    # cat3 — 음식(A05)
+    "A05020100": "한식", "A05020200": "서양식", "A05020300": "일식",
+    "A05020400": "중식", "A05020700": "이색음식점", "A05020900": "카페/전통찻집",
+    "A05021000": "클럽",
+}
+
+
+def category_tags(category_codes: tuple[str, ...]) -> tuple[str, ...]:
+    """cat2/cat3 코드 → 태그 명칭 (미지 코드 스킵, 입력 순서 보존·중복 제거)."""
+    tags: list[str] = []
+    for code in category_codes:
+        label = _CAT_LABELS.get(code)
+        if label is not None and label not in tags:
+            tags.append(label)
+    return tuple(tags)
+
+
+# ── 지역 추출 (backend `poi.region varchar(60)` — 시·군·구) ──────────
+# ── 여행지가 아닌 것 — 이름으로 확실한 것만 (TRIP-686) ──────────────────
+# 출처가 셋으로 늘면서 카테고리가 거친 것(Overture `shopping`·`landmark_and_
+# historical_building`)이 편의점·아파트를 실어 왔다. 제주 실측: SHOPPING 241건
+# 중 편의점 11·대형마트 4·통신 3, SIGHT 317건 중 **아파트 29**.
+#
+# **오탐 0 을 실데이터로 확인한 규칙만 둔다.** 한국 상호는 말장난이 많고
+# (오랑우탄면사무소·돈사무소·조은미의원·꿀단지 — 전부 식당) 역사 건물은
+# 기관명을 단다(구 인천우체국·고려대학교 본관 — 등록문화재). 느슨한 규칙은
+# 진짜 여행지를 죽인다. `학원|대학교` 같은 것은 시험해 보니 걸린 26건이 거의
+# 전부 대학 박물관이었다 — 폐기. `주공`은 제주**공**항점에, `단지`는 관광단지에
+# 걸린다 — 폐기. 여기 남은 것은 접두·접미를 엄격히 잡아 그런 일이 없는 것들이다.
+_NON_TRAVEL: tuple[tuple[str, re.Pattern[str]], ...] = (
+    # 편의점 — 체인명이 이름 맨 앞이거나 '편의점'이 들어간다.
+    # `CU` 만 뒤에 공백을 요구한다(`CUBE 카페` 같은 로마자 상호). 나머지 체인명은
+    # 그 자체로 유일해 `이마트24강릉여고점`(공백 없음)도 잡는다 — 안 그러면
+    # 대형마트 규칙으로 흘러 드롭은 되지만 통계 사유가 틀린다.
+    ("convenience_store",
+     re.compile(r"^CU(\s|$)|^(GS\s?25|세븐일레븐|7-?ELEVEN|이마트24|미니스톱|씨스페이스)|편의점",
+                re.IGNORECASE)),
+    # 대형마트 — 체인명으로 시작해 '○○점'으로 끝나는 것만. `봉채국수 탑동이마트점`
+    # (마트 안 식당)은 체인명이 앞에 없어 안 걸린다.
+    ("hypermarket",
+     re.compile(r"^(롯데마트|홈플러스|코스트코|하나로마트|이마트|트레이더스)\s*\S*점$")),
+    # 통신 — 통신사 접두 또는 AS센터 접미. **`KT` 접두는 뺐다** — KT 가 경기장·
+    # 공연장 스폰서라 `KT 위즈파크`(수원 야구장, 진짜 ACTIVITY)가 통신으로
+    # 떨어진다. 대신 `텔레콤` 문자열로 잡는다 — `KT 동원텔레콤한림점` 은 여전히
+    # 걸리고 `KT&G 상상마당` 은 안 걸린다.
+    ("telecom",
+     re.compile(r"^(SKT|SK텔레콤|LG\s?U\+|T\s?world)(\s|$)|텔레콤|AS\s?센터$", re.IGNORECASE)),
+    # 대리점 — 종묘·산삼·의류 무엇이든 "대리점"은 딜러이지 방문지가 아니다.
+    # 실측: 산삼배양근대리점 · 모슬포흥농종묘대리점 · Lacoste 제주 대리점.
+    ("dealership", re.compile(r"대리점$")),
+    # 아파트·오피스텔 — **이름 끝**일 때만. 처음엔 낱말 단위로 잡았다가
+    # `아파트 카페`(카페 상호)가 걸려 좁혔다. 실측 26건 중 그 1건이 오탐이었다.
+    ("apartment", re.compile(r"(아파트|오피스텔)$")),
+)
+
+
+def non_travel_reason(name: str | None) -> str | None:
+    """이름만으로 여행지가 아님이 확실하면 그 사유, 아니면 None.
+
+    None 은 "여행지다"가 아니라 **"이름으로는 모른다"** 다. 판정은 보수적이다 —
+    의심스러우면 통과시키고, 확실한 것만 떨어뜨린다.
+    """
+    if not name:
+        return None
+    n = name.strip()
+    for reason, rx in _NON_TRAVEL:
+        if rx.search(n):
+            return reason
+    return None
+
+
+_PROVINCE_SUFFIXES = ("특별자치도", "특별자치시", "특별시", "광역시", "도")
+_REGION_RE = re.compile(r".+(시|군|구)$")
+
+
+def extract_region(address: str | None) -> str | None:
+    """addr1 → 시·군·구 1개 ("제주특별자치도 서귀포시 …" → "서귀포시").
+
+    광역 단위(…특별자치도 등)는 건너뛰고 처음 만나는 시·군·구 토큰을 취한다.
+    추출 실패는 None — 지어내기 금지.
+    """
+    if not address:
+        return None
+    for token in address.split():
+        if token.endswith(_PROVINCE_SUFFIXES):
+            continue
+        if _REGION_RE.fullmatch(token):
+            return token
+    return None
+
+
+# ── 영업시간 파싱 ────────────────────────────────────────────────
+_TIME_RE = re.compile(r"([01]?\d|2[0-3]):([0-5]\d)")
+# "상시 개방" 류 — 시간 표기가 없어 _TIME_RE 로는 0회 매치라 통째로 버려지던 형태.
+# 수집 8,043건 중 파싱 실패 3,475건의 절반(1,771건)이 이 한 문구였다 (공원·해변·
+# 자연관광지). 시간을 모르는 게 아니라 **항상 열려 있다**는 뜻이므로 지어내기가 아니다.
+_ALWAYS_OPEN_RE = re.compile(r"상시\s*개방|24\s*시간\s*개방|연중\s*개방")
+_ALL_DAY = (0, 24 * 60)
+_WEEKDAY_RE = re.compile(r"(월|화|수|목|금|토|일)요일")
+_WEEKDAY_INDEX = {"월": 0, "화": 1, "수": 2, "목": 3, "금": 4, "토": 5, "일": 6}
+# 주간 스케줄(OpenHour)로 표현할 수 없는 휴무 패턴 — 있으면 통째로 파싱 포기
+_UNREPRESENTABLE_REST = re.compile(r"첫째|둘째|셋째|넷째|다섯째|격주|짝수|홀수|공휴일|명절|설날|추석|법정")
+_NO_REST_TOKENS = frozenset({"연중무휴", "없음", "무휴", "연중 무휴"})
+
+
+def parse_open_hours(hours_raw: str | None, rest_raw: str | None) -> tuple[OpenHour, ...]:
+    """영업시간 원문 → 주간 OpenHour. 확신할 수 없으면 () (지어내기 금지).
+
+    - hours_raw에서 HH:MM이 **정확히 2회** 등장할 때만 개점~폐점으로 읽는다
+      (계절별 시간 등 3회 이상은 어느 창이 맞는지 확정 불가 → 포기).
+    - 폐점 ≤ 개점이면 자정 초과 영업으로 보고 +24h (OpenHour 계약).
+    - rest_raw는 "매주 X요일" 류만 해석 — 주차·명절 등 가변 휴무가 섞이면
+      해당 요일이 실제로 여는지 확정 불가 → 전체 포기.
+    """
+    if not hours_raw:
+        return ()
+    always_open = _ALWAYS_OPEN_RE.search(hours_raw) is not None
+    if always_open:
+        open_min, close_min = _ALL_DAY
+    else:
+        times = _TIME_RE.findall(hours_raw)
+        if len(times) != 2:
+            return ()
+        open_min = int(times[0][0]) * 60 + int(times[0][1])
+        close_min = int(times[1][0]) * 60 + int(times[1][1])
+        if close_min <= open_min:
+            close_min += 24 * 60  # 자정 초과 영업 (시작일 귀속)
+
+    closed_days = _parse_rest_days(rest_raw)
+    if closed_days is None:
+        # 휴무를 확신 못 하면 포기 — 단 "상시 개방"은 원문이 이미 휴무 없음을
+        # 말하고 있으므로 읽히지 않는 휴무 문구(명절 안내 등)에 통째로 지지 않는다.
+        if not always_open:
+            return ()
+        closed_days = frozenset()
+    return tuple(
+        OpenHour(day_of_week=d, open_min=open_min, close_min=close_min)
+        for d in range(7)
+        if d not in closed_days
+    )
+
+
+def _parse_rest_days(rest_raw: str | None) -> frozenset[int] | None:
+    """휴무일 원문 → 휴무 요일 집합. 해석 불가면 None (호출측이 전체 포기)."""
+    if rest_raw is None:
+        return frozenset()
+    text = rest_raw.strip()
+    if not text or text in _NO_REST_TOKENS:
+        return frozenset()
+    if _UNREPRESENTABLE_REST.search(text):
+        return None
+    days = {_WEEKDAY_INDEX[m] for m in _WEEKDAY_RE.findall(text)}
+    if not days:
+        return None  # 비어있지 않은데 요일도 못 읽음 — 확신 없음
+    return frozenset(days)
+
+
+# ── 교차 출처 동일성 판정 (TRIP-682) ──────────────────────────────────────
+# 출처가 둘 이상이 되면 같은 가게가 서로 다른 source_ref 로 두 번 들어온다.
+# 좌표만으로는 부족하다 — 실측(TourAPI × LOCALDATA 동일 가게 6,886쌍): 중앙값
+# 7.8m 로 대부분 겹치지만 p95 가 52.0m 라 [[collection_gate]] 3단의 50m 반경이
+# 94.7% 에서 끊기고, 최대 8.4km 짜리(한쪽 좌표 오류)까지 있다. 주소는 좌표
+# 오차와 무관하므로 반경을 넓히는 대신 주소 키를 쓴다 (반경을 넓히면 옆 가게를
+# 병합한다).
+#
+# 규칙 자체는 `scripts/match_business_status.py` 의 폐업 대조에서 검증된 것과
+# 같다(주소 키 83.3%, 주소O이름X 는 붙이지 않음). 다만 **정의가 지금 두 곳에
+# 있다** — 그쪽은 stdlib 만으로 도는 독립 스크립트이고 자체 테스트가 물고 있어
+# 이번 변경에서 건드리지 않았다. 두 곳이 갈라지면 "폐업으로 붙인 가게"와
+# "중복으로 병합한 가게"의 판정이 어긋나므로, LOCALDATA 를 POI 원천으로
+# 승격할 때(그때 두 경로가 실제로 같은 데이터를 본다) 스크립트가 여기를
+# 가져다 쓰도록 합친다.
+
+_ADDR_PAREN = re.compile(r"[(（][^)）]*[)）]")
+_ADDR_SPACE = re.compile(r"\s+")
+# 읍·면·동이 한쪽에만 있는 표기 차를 `.*?` 로 건너뛴다 — 이것이 매칭률을
+# 35.5% → 83.3% 로 올린 조각이다 (2026-09-08 실측).
+_ADDR_ROAD = re.compile(
+    r"^(?P<sido>\S+?[시도])\s+(?P<sgg>\S+?[시군구])\s+.*?"
+    r"(?P<road>\S*[로길])\s+(?P<bldg>\d+(?:-\d+)?)"
+)
+# 상호 꼬리표만 뗀다. 지역명+점("강남점")은 **떼지 않는다** — 떼면 50m 안의
+# 다른 지점끼리 병합된다.
+_NAME_SUFFIX = re.compile(r"(본점|직영점|\d+호점)$")
+
+
+def addr_key(address: str | None) -> tuple[str, str, str, str] | None:
+    """도로명주소 → (시도2자, 시군구, 도로명, 건물번호). 해석 불가면 None.
+
+    None 은 "주소가 다르다"가 아니라 **"모른다"** 다 — 호출측이 동일성 근거로
+    쓰면 안 된다 (관광단지 내 주소 등 4.4% 가 여기 떨어진다).
+    """
+    if not address:
+        return None
+    cleaned = _ADDR_SPACE.sub(" ", _ADDR_PAREN.sub(" ", address).split(",")[0]).strip()
+    m = _ADDR_ROAD.search(cleaned)
+    if m is None:
+        return None
+    return (m["sido"][:2], m["sgg"], m["road"], m["bldg"])
+
+
+def normalize_business_name(name: str | None) -> str:
+    """상호 정규화 — 공백·괄호 제거 + 꼬리표 절단. 비교 전용."""
+    return _NAME_SUFFIX.sub("", _ADDR_SPACE.sub("", _ADDR_PAREN.sub("", name or "")))
+
+
+def same_business_name(a: str | None, b: str | None) -> bool:
+    """정규화 상호가 같거나 한쪽이 다른 쪽에 포함되면 같은 가게로 본다.
+
+    포함 판정에 2자 하한을 두는 이유: 1자 상호가 아무 이름에나 걸린다.
+    **주소가 같다는 전제에서만** 쓸 것 — 주소 없이 쓰면 전국의 동명 가게가
+    붙는다 (이름 유사도 단독 판정이 실측에서 전부 오병합이었다, [[entity_resolver]]).
+    """
+    na, nb = normalize_business_name(a), normalize_business_name(b)
+    if not na or not nb:
+        return False
+    if na == nb:
+        return True
+    return len(na) >= 2 and len(nb) >= 2 and (na in nb or nb in na)

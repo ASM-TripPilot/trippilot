@@ -1,0 +1,45 @@
+{{- range $component, $port := dict "backend" 8080 "ai" 8000 "embedding" 8100 "gateway" 8080 }}
+{{- if or (ne $component "embedding") $.Values.embedding.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "trippilot.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "trippilot.selector" (dict "root" $ "component" $component) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: {{ $port }}
+      {{- if ne $component "gateway" }}
+      from:
+        {{- if ne $component "embedding" }}
+        # The manual deployment workflow creates a short-lived health verification Job.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: trippilot-smoke
+        {{- end }}
+        {{- if eq $component "backend" }}
+        - podSelector:
+            matchLabels:
+              {{- include "trippilot.selector" (dict "root" $ "component" "gateway") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "trippilot.selector" (dict "root" $ "component" "ai") | nindent 14 }}
+        {{- else if eq $component "ai" }}
+        - podSelector:
+            matchLabels:
+              {{- include "trippilot.selector" (dict "root" $ "component" "backend") | nindent 14 }}
+        {{- else }}
+        - podSelector:
+            matchLabels:
+              {{- include "trippilot.selector" (dict "root" $ "component" "ai") | nindent 14 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- end }}

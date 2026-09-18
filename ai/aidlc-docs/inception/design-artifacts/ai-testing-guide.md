@@ -17,7 +17,7 @@
                       |
 +--------------------------------------------------+
 |  PR CI (Pull Request)                            |
-|  - 솔버 하드 제약 실코드 테스트 (C2 실코드)       |
+|  - 어셈블리 하드 제약 실코드 테스트 (C2 실코드)       |
 |  - closed-set 검증 게이트 실코드 테스트 (C1 실코드)|
 |  - LLM 호출: FakeLlmAdapter (Port fake)          |
 |  - 거리 API: FakeTravelAdapter (Port fake)       |
@@ -27,17 +27,17 @@
 +--------------------------------------------------+
 |  로컬 개발                                        |
 |  - 단위 테스트 (빠른 피드백)                      |
-|  - 솔버 소규모 인스턴스 oracle 대조               |
+|  - 어셈블리 소규모 인스턴스 oracle 대조               |
 +--------------------------------------------------+
 ```
 
-**핵심 원칙**: LLM·외부 API는 항상 fake, **솔버·closed-set 검증은 항상 실코드**. LLM 문장 품질은 테스트하지 않는다 (nfr §7.7).
+**핵심 원칙**: LLM·외부 API는 항상 fake, **어셈블리·closed-set 검증은 항상 실코드**. LLM 문장 품질은 테스트하지 않는다 (nfr §7.7).
 
 ---
 
 ## 2. PBT 속성 12개 구현
 
-### 2.1 C2 솔버 속성 (5개)
+### 2.1 C2 어셈블리 속성 (5개)
 
 #### U5-P1: 하드 제약 4종 + oracle 대조
 
@@ -53,7 +53,7 @@ from hypothesis import strategies as st
 @settings(print_blob=True)  # 실패 시 재현 blob 출력 (시드/shrink 로깅, PBT-08)
 def test_c2_solve_hard_constraints(problem):
     """C2 solve — 하드 제약 4종 위반 배치 없음"""
-    solution = solver.solve(problem)
+    solution = assembly.solve(problem)
     slots = [slot for day in solution.days for slot in day.slots]
     for slot in slots:
         poi = next(c for c in problem.candidates if c.poi_id == slot.poi_id)
@@ -75,10 +75,10 @@ def test_c2_solve_hard_constraints(problem):
 @settings(print_blob=True)
 def test_c2_solve_hc2_travel_inequality(problem):
     """C2 solve — HC2 이동 부등식 위반 없음"""
-    solution = solver.solve(problem)
+    solution = assembly.solve(problem)
     for day in solution.days:
         for prev, nxt in zip(day.slots, day.slots[1:]):  # zipWithNext
-            travel = solver.estimate_travel(prev.location, nxt.location, problem.travel_mode)
+            travel = assembly.estimate_travel(prev.location, nxt.location, problem.travel_mode)
             assert prev.end_at + timedelta(minutes=travel.minutes) <= nxt.start_at
 
 
@@ -87,11 +87,11 @@ def test_c2_solve_hc2_travel_inequality(problem):
 @settings(print_blob=True)
 def test_c2_solve_oracle_comparison(problem):
     """C2 solve — oracle 대조 (소규모 인스턴스)"""
-    solver_result = solver.solve(problem)
+    assembly_result = assembly.solve(problem)
     oracle_result = brute_force_oracle(problem)  # 전수 열거
-    # 솔버가 oracle보다 나쁜 해를 내면 안 됨 (부당 배제 0)
-    assert solver_result.total_score >= oracle_result.total_score * 0.95
-    # oracle이 찾은 유효 해를 솔버가 위반 배치로 내면 안 됨 (부당 통과 0)
+    # 어셈블리가 oracle보다 나쁜 해를 내면 안 됨 (부당 배제 0)
+    assert assembly_result.total_score >= oracle_result.total_score * 0.95
+    # oracle이 찾은 유효 해를 어셈블리가 위반 배치로 내면 안 됨 (부당 통과 0)
     assert oracle_result.violations == []
 ```
 
@@ -102,9 +102,9 @@ def test_c2_solve_oracle_comparison(problem):
 @settings(print_blob=True)
 def test_c2_regenerate_fixed_block_time_invariant(problem, lock_type):
     """C2 regenerate — 고정 블록 시각 불변"""
-    original = solver.solve(problem)
+    original = assembly.solve(problem)
     locked = [slot for day in original.days for slot in day.slots if slot.is_fixed]
-    regenerated = solver.regenerate(problem, locked)
+    regenerated = assembly.regenerate(problem, locked)
 
     for locked_slot in locked:
         after = next(
@@ -130,8 +130,8 @@ def test_c2_deterministic_mode_same_input_same_output(problem):
         problem,
         candidates=[replace(c, llm_score=None) for c in problem.candidates],
     )
-    result1 = solver.solve(problem_without_llm_score)
-    result2 = solver.solve(problem_without_llm_score)
+    result1 = assembly.solve(problem_without_llm_score)
+    result2 = assembly.solve(problem_without_llm_score)
     assert result1 == result2  # 시드 고정으로 완전 동일
 ```
 
@@ -188,8 +188,8 @@ from dataclasses import asdict
 @settings(print_blob=True)
 def test_c2_estimate_travel_deterministic(from_, to, mode):
     """C2 estimate_travel — 동일 입력 동일 출력"""
-    r1 = solver.estimate_travel(from_, to, mode)
-    r2 = solver.estimate_travel(from_, to, mode)
+    r1 = assembly.estimate_travel(from_, to, mode)
+    r2 = assembly.estimate_travel(from_, to, mode)
     assert r1 == r2
 
 
@@ -272,7 +272,7 @@ def test_m8_itinerary_solution_round_trip(solution):
 def test_m8_client_server_validation_equivalence(edit, spec):
     """M8 — 클라 경량 검증과 서버 확정 검증 동치"""
     client_result = client_validator.validate(edit, spec)
-    server_result = solver.validate(edit.to_itinerary(), spec.to_constraint_set())
+    server_result = assembly.validate(edit.to_itinerary(), spec.to_constraint_set())
     # 클라가 통과시킨 편집은 서버도 통과 (역은 성립 안 할 수 있음 — 서버가 더 엄격)
     if client_result.is_valid:
         assert server_result.violations == []
@@ -283,18 +283,18 @@ def test_m8_client_server_validation_equivalence(edit, spec):
 
 ### 2.4 AI 도우미(M16) 라우터·워커 속성 (AI-D02) `[추가]`
 
-U5 12속성과 별개로, 자연어 오케스트레이션이 추가한 실패 지점·불변식을 방어한다. PR CI에서 라우터·워커 LLM은 fake, **편집 반영·솔버 검증은 실코드**.
+U5 12속성과 별개로, 자연어 오케스트레이션이 추가한 실패 지점·불변식을 방어한다. PR CI에서 라우터·워커 LLM은 fake, **편집 반영·어셈블리 검증은 실코드**.
 
-#### M16-P1: 편집 명령은 항상 솔버 검증 경유 (INV-2)
+#### M16-P1: 편집 명령은 항상 어셈블리 검증 경유 (INV-2)
 
 ```python
 @given(cmd=edit_command_gen(), itinerary=itinerary_gen())
 @settings(print_blob=True)
 def test_m16_edit_command_always_validated(cmd, itinerary):
-    """AI 도우미 편집은 자동반영이라도 솔버 검증을 거친다"""
+    """AI 도우미 편집은 자동반영이라도 어셈블리 검증을 거친다"""
     result = assistant.apply(cmd, itinerary)          # AUTO_APPLY 포함
-    # 반영된 결과는 반드시 solver.validate를 통과한 상태
-    assert solver.validate(result.itinerary, itinerary.constraints) == []
+    # 반영된 결과는 반드시 assembly.validate를 통과한 상태
+    assert assembly.validate(result.itinerary, itinerary.constraints) == []
     # 검증 실패 편집은 반영되지 않고 미리보기로 강등
     if cmd.would_violate:
         assert result.mode == ApplyMode.CONFIRM_REQUIRED and not result.applied
@@ -324,7 +324,7 @@ def test_m16_router_failure_falls_back_to_default_intent():
 
 
 def test_m16_worker_partial_failure_isolated():
-    """워커 하나가 죽어도 나머지 워커·솔버는 정상"""
+    """워커 하나가 죽어도 나머지 워커·어셈블리는 정상"""
     result = assistant.handle("...", workers={"Explanation": FailingWorker()})
     assert result.itinerary is not None            # 일정 자체는 생성
     assert result.explanation is None              # 죽은 워커 몫만 결손
@@ -470,7 +470,7 @@ def small_problem_gen(max_candidates: int, max_days: int) -> st.SearchStrategy:
 
 ## 4. Oracle 구현 (U5-P1)
 
-소규모 인스턴스에서 무차별 대입으로 솔버를 이중 검증한다.
+소규모 인스턴스에서 무차별 대입으로 어셈블리를 이중 검증한다.
 
 ```python
 # 파일: tests/oracle/brute_force_oracle.py
@@ -537,7 +537,7 @@ class FakeTravelAdapter(TravelPort):
 ```yaml
 # PR CI 필수 통과 항목
 ai-tests:
-  solver-hard-constraints:   # U5-P1 — 100% 통과 필수 (G114)
+  assembly-hard-constraints:   # U5-P1 — 100% 통과 필수 (G114)
     fail-fast: true
   closed-set-gate:           # U5-P5 — 100% 통과 필수
     fail-fast: true
@@ -573,7 +573,7 @@ PR 머지 전 확인:
 - [ ] U5-P7~P10: plan 불변·current 분리·상태 전이·직렬화 왕복
 - [ ] U5-P11: 반경 제약 PBT 통과
 - [ ] U5-P12: 클라↔서버 검증 동치 PBT 통과
-- [ ] M16-P1~P3: AI 도우미 편집 솔버 검증 경유 · 파괴적 편집 확인 필수 · 라우터/워커 폴백 (AI-D02)
+- [ ] M16-P1~P3: AI 도우미 편집 어셈블리 검증 경유 · 파괴적 편집 확인 필수 · 라우터/워커 폴백 (AI-D02)
 - [ ] SRC-P1~P3: 수집 게이트 결손·실재·중복 처리 · 웹 실패 생성 미차단 (AI-D03)
 - [ ] RES-P1: 입력 엔티티 해소 결정론 + 신뢰도 분기 (AI-D04)
 - [ ] LLM·거리 API는 fake 사용 확인 (실 API 호출 0)

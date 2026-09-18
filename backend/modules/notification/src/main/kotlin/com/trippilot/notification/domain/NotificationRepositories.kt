@@ -1,0 +1,79 @@
+package com.trippilot.notification.domain
+
+import java.time.Instant
+import java.util.UUID
+
+/** 알림함 영속 포트. */
+interface NotificationRepository {
+    /**
+     * 적재한다. 같은 [Notification.sourceEventId] 가 이미 있으면 **아무것도 하지 않고 false**(INV-U6-01).
+     *
+     * 판정을 앱에서 하지 않는다 — 선검사 후 삽입은 두 인스턴스가 동시에 통과할 수 있다.
+     * 유니크 제약이 판정하고, 구현은 그 결과를 되돌려 줄 뿐이다.
+     */
+    fun appendIfAbsent(notification: Notification): Boolean
+
+    /** 최신순. [unreadOnly] 면 미읽음만. */
+    fun findByAccount(accountId: UUID, unreadOnly: Boolean, limit: Int): List<Notification>
+
+    /**
+     * 이 계정에 **푸시가 실제로 나간** 건수를 시간·일 두 창으로 센다(COST-U6-01 상한 판정).
+     *
+     * 두 값을 한 번에 돌려주는 이유: 창이 겹치므로(1시간 ⊂ 1일) 한 번의 스캔으로 둘 다 셀 수 있다.
+     * 나눠 부르면 발송마다 쿼리가 둘이 되고, 그 사이에 값이 갈려 판정이 어긋날 수도 있다.
+     */
+    fun countPushed(accountId: UUID, hourFrom: Instant, dayFrom: Instant): PushedCounts
+
+    /**
+     * **전 계정** 미읽음 누적(OBS-U6-04). 계정별이 아닌 이유: 이 값은 사용자에게 보이는 수가 아니라
+     * "소비가 따라오고 있는가"를 재는 운영 지표다 — 계정별로 쪼개면 태그 카디널리티만 폭발한다.
+     */
+    fun countUnread(): Long
+
+    /** 이미 읽었거나 남의 알림이면 false. */
+    fun markRead(accountId: UUID, notificationId: UUID, at: Instant): Boolean
+
+    /**
+     * 계정의 **미읽음 전부**를 읽음 처리하고 실제로 바뀐 건수를 돌려준다(TRIP-829).
+     *
+     * 건별 읽음과 같은 규칙이다 — `read_at IS NULL` 조건을 걸어 **처음 읽은 시각을 덮지 않는다**.
+     * 종류로 거르지 않는다: 집합이 `unreadOnly` 목록과 같아야 뱃지가 0 이 된다(다르면 '모두 읽음'을
+     * 눌러도 숫자가 남아 버튼이 고장난 것처럼 보인다).
+     */
+    fun markAllRead(accountId: UUID, at: Instant): Int
+
+    fun exists(accountId: UUID, notificationId: UUID): Boolean
+
+    /**
+     * 푸시 발송 결과를 **기록만** 한다(BR-U6-38). 성공이면 [sentAt], 실패면 [failedReason].
+     *
+     * 이 값이 알림의 존재를 좌우하지 않는다(INV-U6-02) — 행은 이미 있고, 여기는 "그래서 푸시는
+     * 어떻게 됐나"를 남기는 칸이다. 남기지 않으면 "왜 푸시가 안 왔나"에 답할 근거가 없다.
+     */
+    fun markPushResult(notificationId: UUID, sentAt: Instant?, failedReason: String?)
+}
+
+/** 리마인드 예약 영속 포트. */
+interface NotificationScheduleRepository {
+    /**
+     * 그 여행의 **미발화·미취소** 예약을 [schedules] 로 갈아끼운다(INV-U6-08).
+     *
+     * 이미 발화했거나 취소된 행은 건드리지 않는다 — 그건 지나간 사실이라 재계산의 대상이 아니다.
+     * 같은 이벤트가 두 번 배달돼도 결과가 같다(아웃박스 at-least-once 대응).
+     */
+    fun replacePending(tripId: UUID, schedules: List<NotificationSchedule>)
+
+    /** 발화 시각이 [now] 이하인 미발화·미취소 예약. */
+    fun findDue(now: Instant, limit: Int): List<NotificationSchedule>
+
+    /** 조건부 쓰기 — 다른 인스턴스가 이미 집었으면 false. */
+    fun markFired(scheduleId: UUID, at: Instant): Boolean
+
+    /** 조건부 쓰기 — 이미 발화·취소됐으면 false. */
+    fun markCanceled(scheduleId: UUID, at: Instant): Boolean
+
+    fun findPendingByTrip(tripId: UUID): List<NotificationSchedule>
+}
+
+/** 최근 두 창의 실제 발송 건수(COST-U6-01). */
+data class PushedCounts(val inHour: Long, val inDay: Long)

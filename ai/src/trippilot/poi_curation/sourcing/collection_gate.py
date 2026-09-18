@@ -1,0 +1,238 @@
+"""수집 게이트 5단 — 스키마·실재·중복·신뢰·정책 (INV-1 입구, TRIP-246).
+
+설계 정본: ai-implementation-design.md §2.1 `ingest_gate` (FR-3.5). U6-04(TRIP-245)의
+ai측 게이트 코드가 부재해(백엔드 C7 `PoiCollectionGate`만 실재) 여기 소싱 경로에
+5단을 구현한다. 결정론 순수 함수 — LLM·네트워크 없음.
+
+단계별 조정 (TourAPI = 정형 공공데이터 특성):
+1. 스키마 — 이름·좌표 필수 (GeoPoint 생성 = 범위 검증). 영업시간은 필수 아님:
+   "정보 없음 ≠ 배제" 원칙 + dataQuality PARTIAL로 표시 (TRIP-326 합의와 동형).
+2. 실재 — 좌표가 서비스 권역(한국 bbox) 안인지 + **폐업이 아닌지**(인허가 대조,
+   `closed_refs` 주입 시). 설계의 Places API 교차확인은 교차 어댑터 부재로 이연
+   (정형 공공데이터라 웹 추출 대비 위험 낮음).
+3. 중복 — source_ref 동일 또는 (동일 카테고리 + 정규화 이름 동일 + 50m 이내) 병합.
+   병합은 먼저 온 레코드를 지키되 결측 필드(영업시간)만 보충 — 조용한 덮어쓰기 금지.
+4. 신뢰 — 출처 태깅: 정형 API이므로 PoiSource.PLACES_API (WEB 아님 — confidence
+   비필수). dataQuality는 백엔드 판정 기준과 동형(영업시간+대표사진 완비=FULL).
+5. 정책 — 가격 미캐싱(D13): 산출 Poi의 avg_cost는 항상 None (구조 보장 + 방어 검사).
+
+통과분도 **등록 제안**일 뿐이다 — 백엔드 정본 등록 전에는 후보 풀에 들어가지
+않는다 (INV-1).
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
+
+from trippilot.domain.common import GeoPoint, PoiId
+from trippilot.poi_curation.sourcing.mapping import (
+    addr_key,
+    non_travel_reason,
+    same_business_name,
+)
+from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+
+# 서비스 권역 bbox (제주 남단 마라도 ~ 최북단, 서해 ~ 독도 포함)
+_KR_LAT = (32.5, 39.5)
+_KR_LNG = (124.0, 132.5)
+_DUP_RADIUS_M = 50.0
+# 주소 키 병합을 허용하는 카테고리 — 상호 부분일치가 검증된 범위
+# (LOCALDATA 인허가가 식품위생업소라, 2출처가 실제로 겹치는 곳도 여기다)
+_ADDR_DEDUP_CATEGORIES = frozenset({PoiCategory.FOOD, PoiCategory.CAFE})
+
+# 드롭 사유 키 (통계·로그 계약 — 파이프라인 산출 JSON에 그대로 실린다)
+DROP_SCHEMA_NAME = "schema_missing_name"
+DROP_SCHEMA_COORD = "schema_missing_or_invalid_coord"
+DROP_EXISTENCE = "existence_out_of_service_region"
+DROP_EXISTENCE_CLOSED = "existence_closed_business"
+DROP_POLICY_PRICE = "policy_priced"
+# 뒤에 ":사유" 가 붙는다 — convenience_store · hypermarket · telecom · dealership · apartment
+DROP_POLICY_NON_TRAVEL = "policy_non_travel"
+
+
+@dataclass(frozen=True, slots=True)
+class SourcingCandidate:
+    """카테고리 매핑을 마친 게이트 입력 (매핑 불가분은 게이트 전에 드롭됨)."""
+
+    source_ref: str
+    kind: str
+    name: str
+    address: str | None
+    lat: float | None
+    lng: float | None
+    category: PoiCategory
+    category_codes: tuple[str, ...]  # 벤더 원 분류 코드 (태그 파생용)
+    open_hours: tuple[OpenHour, ...]
+    hours_raw: str | None            # 영업시간 원문 (backend opening_hours 병행 수록용)
+    image_url: str | None
+    modified_at: str | None
+    source: str = "tourapi"   # 잠정 ID 접두 — 출처가 둘 이상이면 여기서 갈린다
+
+    @property
+    def ref(self) -> tuple[str, str]:
+        """출처를 포함한 식별자. **`source_ref` 단독으로 조회하지 말 것** —
+        벤더가 부여한 번호라 출처 안에서만 유일하다. 출처가 둘이 되면 무관한
+        두 레코드가 번호만 겹쳐 같은 것으로 취급된다(실측 재현: tourapi/"1234"
+        성산일출봉 ⟷ localdata/"1234" 우진해장국 — 450km·다른 카테고리인데 병합).
+        """
+        return (self.source, self.source_ref)
+
+
+@dataclass(frozen=True, slots=True)
+class GatePass:
+    """게이트 통과 1건 — 도메인 Poi + provenance 원문."""
+
+    poi: Poi
+    candidate: SourcingCandidate
+
+
+@dataclass(frozen=True, slots=True)
+class GateReport:
+    passed: tuple[GatePass, ...]
+    drops: Mapping[str, int]   # 사유 키 → 건수 (0건 사유는 미포함)
+    merged: int                # 중복 병합 건수 (드롭과 구분 — 정보는 보존됨)
+
+
+class CollectionGate:
+    """5단 수집 게이트. 입력 순서 보존 — 같은 입력이면 같은 출력 (결정론).
+
+    `closed_refs` 를 주면 2단(실재)에서 **폐업 업소를 드롭**한다. 미주입이면 기존
+    동작 그대로다 — 조회원이 없다고 조용히 통과시키는 게 아니라, 애초에 판정 근거가
+    없는 것이라 "모름"으로 두는 것이다(있는 근거만 쓴다).
+
+    왜 2단인가: 좌표 범위와 같은 "이 장소가 실재하는가" 질문이다. 문 닫은 가게는
+    좌표가 멀쩡해도 실재하지 않는다. 2026-09-08 실측 — 수집분의 음식점·카페
+    7,837건 중 **210건(2.7%)이 폐업**이었고 그중에는 8년 전에 닫은 곳도 있었다.
+    """
+
+    def __init__(self, closed_refs: frozenset[tuple[str, str]] | None = None) -> None:
+        self._closed = closed_refs or frozenset()
+
+    def apply(self, candidates: Sequence[SourcingCandidate]) -> GateReport:
+        drops: dict[str, int] = {}
+
+        def drop(reason: str) -> None:
+            drops[reason] = drops.get(reason, 0) + 1
+
+        # 1·2단 — 스키마 + 실재
+        verified: list[tuple[SourcingCandidate, GeoPoint]] = []
+        for c in candidates:
+            if not c.name.strip():
+                drop(DROP_SCHEMA_NAME)
+                continue
+            if c.lat is None or c.lng is None:
+                drop(DROP_SCHEMA_COORD)
+                continue
+            try:
+                coord = GeoPoint(lat=c.lat, lng=c.lng)
+            except ValueError:
+                drop(DROP_SCHEMA_COORD)
+                continue
+            if not (_KR_LAT[0] <= coord.lat <= _KR_LAT[1]
+                    and _KR_LNG[0] <= coord.lng <= _KR_LNG[1]):
+                drop(DROP_EXISTENCE)
+                continue
+            if c.ref in self._closed:
+                drop(DROP_EXISTENCE_CLOSED)
+                continue
+            verified.append((c, coord))
+
+        # 3단 — 중복 병합 (먼저 온 것 유지 + 결측 보충)
+        kept: list[tuple[SourcingCandidate, GeoPoint]] = []
+        by_ref: dict[tuple[str, str], int] = {}
+        merged = 0
+        for c, coord in verified:
+            idx = by_ref.get(c.ref)
+            if idx is None:
+                idx = self._find_near_duplicate(kept, c, coord)
+            if idx is None:
+                by_ref[c.ref] = len(kept)
+                kept.append((c, coord))
+                continue
+            merged += 1
+            base, base_coord = kept[idx]
+            if not base.open_hours and c.open_hours:
+                base = replace(base, open_hours=c.open_hours)
+            if not base.hours_raw and c.hours_raw:
+                base = replace(base, hours_raw=c.hours_raw)
+            if not base.image_url and c.image_url:
+                base = replace(base, image_url=c.image_url)
+            kept[idx] = (base, base_coord)
+
+        # 4·5단 — 신뢰 태깅 + 정책
+        passed: list[GatePass] = []
+        for c, coord in kept:
+            # 5단 정책 — 여행지가 아닌 것은 싣지 않는다 (TRIP-686). 출처 카테고리가
+            # 거칠어(Overture `shopping` 에 편의점, `landmark_and_historical_building`
+            # 에 아파트) 카테고리 화이트리스트를 통과한 뒤에도 남는 것을 이름으로
+            # 잡는다. 규칙은 오탐 0 을 실측한 것만이다 — mapping._NON_TRAVEL 참조.
+            reason = non_travel_reason(c.name)
+            if reason is not None:
+                drop(f"{DROP_POLICY_NON_TRAVEL}:{reason}")
+                continue
+            poi = Poi(
+                poi_id=PoiId(f"{c.source}-{c.source_ref}"),  # 잠정 ID — 정본 ID는 백엔드 부여
+                name=c.name.strip(),
+                category=c.category,
+                coord=coord,
+                open_hours=c.open_hours,
+                avg_cost=None,   # 5단 정책 — 가격 미저장(D13)
+                rating=None,     # TourAPI 미제공 — 지어내지 않음
+                quality=(DataQuality.FULL if c.open_hours and c.image_url
+                         else DataQuality.PARTIAL),
+                source=PoiSource.PLACES_API,  # 정형 API 소싱 (WEB 아님)
+                confidence=None,
+            )
+            if poi.avg_cost is not None:  # 방어 — 구조상 도달 불가
+                drop(DROP_POLICY_PRICE)
+                continue
+            passed.append(GatePass(poi=poi, candidate=c))
+        return GateReport(passed=tuple(passed), drops=drops, merged=merged)
+
+    @staticmethod
+    def _find_near_duplicate(
+        kept: list[tuple[SourcingCandidate, GeoPoint]],
+        c: SourcingCandidate,
+        coord: GeoPoint,
+    ) -> int | None:
+        name = _normalize_name(c.name)
+        key = addr_key(c.address)
+        for i, (k, k_coord) in enumerate(kept):
+            if k.category is not c.category:
+                continue
+            # ㉠ 같은 이름이 코앞에 — 한 출처 안의 중복, 그리고 교차 출처의 94.7%
+            if (_normalize_name(k.name) == name
+                    and _haversine_m(coord, k_coord) <= _DUP_RADIUS_M):
+                return i
+            # ㉡ 같은 주소 + 같은 상호 — 좌표가 벌어져도(출처마다 기준이 다르다,
+            #    실측 최대 8.4km) 같은 가게다. 주소를 모르면(key is None) 판정
+            #    근거가 없으므로 쓰지 않는다.
+            #
+            #    **FOOD·CAFE 에만 적용한다.** 상호 부분일치는 식품업소에서만
+            #    검증된 규칙이다(폐업 대조 대상이 식품위생업소뿐이었다).
+            #    관광지에 그대로 쓰면 포함 관계인 **다른** POI 를 병합한다 —
+            #    공유본 18,607건 실측: 전 카테고리 적용 시 57쌍이 걸리는데
+            #    "개심사(괴산) ⟷ 개심사 목조여래좌상과 목조관음보살좌상"(절과
+            #    그 안의 문화재), "파라다이스시티 ⟷ 파라다이스시티 원더박스"
+            #    처럼 대부분 오탐이다. FOOD·CAFE 한정이면 6쌍이고 전부 진짜
+            #    중복이었다("오픈커피 ⟷ 오픈커피 판교본점" 3m 등).
+            if (c.category in _ADDR_DEDUP_CATEGORIES
+                    and key is not None
+                    and key == addr_key(k.address)
+                    and same_business_name(k.name, c.name)):
+                return i
+        return None
+
+
+def _normalize_name(name: str) -> str:
+    return "".join(name.split()).casefold()
+
+
+def _haversine_m(a: GeoPoint, b: GeoPoint) -> float:
+    """근접 판정 전용 — assembly_engine.travel과 독립 (하위 계층이 형제 계층 미참조)."""
+    lat1, lng1, lat2, lng2 = map(math.radians, (a.lat, a.lng, b.lat, b.lng))
+    h = (math.sin((lat2 - lat1) / 2) ** 2
+         + math.cos(lat1) * math.cos(lat2) * math.sin((lng2 - lng1) / 2) ** 2)
+    return 2 * 6_371_000.0 * math.asin(math.sqrt(h))

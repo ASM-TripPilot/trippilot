@@ -9,7 +9,7 @@
 ```mermaid
 flowchart TD
     U1["U1 Domain & Ports\n(2~3일)"]
-    U2["U2 C2 Solver Core\n(5~7일)"]
+    U2["U2 C2 Assembly Core\n(5~7일)"]
     U3["U3 M7 Place Data\n(3~5일)"]
     U4["U4 C1 LLM Gateway\n(4~5일)"]
     U5["U5 Orchestration & API\n(3~4일)"]
@@ -42,7 +42,7 @@ flowchart TD
 | U2 | U1 | 도메인 모델(ItineraryProblem, VisitSlot 등) + TravelPort | 컴파일 타임 |
 | U3 | U1 | 도메인 모델(Poi, CandidatePool 등) + PoiDbPort, CachePort | 컴파일 타임 |
 | U4 | U1 | 도메인 모델(TypedResult, ScoredPoi 등) + LlmPort | 컴파일 타임 |
-| U5 | U2 | SolverFacade.solve/validate (API 호출) | 런타임 |
+| U5 | U2 | AssemblyFacade.solve/validate (API 호출) | 런타임 |
 | U5 | U3 | CandidatePoolBuilder.get_candidate_pool (API 호출) | 런타임 |
 | U5 | U4 | GatewayFacade.call (API 호출) | 런타임 |
 | U6 | U3 | PoiRepository + IngestGate (웹 소싱 등록 대상) | 런타임 |
@@ -61,7 +61,7 @@ flowchart TD
 ### Phase B: Core Components (U2 + U3 + U4 — 병렬)
 ```
 U1 완료 후:
-  [U2 C2 Solver]     ←── 독립 개발 가능 (Port fake 사용)
+  [U2 C2 Assembly]     ←── 독립 개발 가능 (Port fake 사용)
   [U3 M7 Place Data] ←── 독립 개발 가능 (InMemory fake 사용)
   [U4 C1 Gateway]    ←── 독립 개발 가능 (FakeLlm 사용)
 
@@ -89,7 +89,7 @@ U5 완료 후:
 | 순서 | Unit | 이유 |
 |---|---|---|
 | 1 | **U1** Domain & Ports | 모든 유닛의 타입·인터페이스 기반 |
-| 2 | **U2** C2 Solver Core | 가장 복잡+리스크 높음 (알고리즘+5초 게이트). 일찍 검증 |
+| 2 | **U2** C2 Assembly Core | 가장 복잡+리스크 높음 (알고리즘+5초 게이트). 일찍 검증 |
 | 3 | **U3** M7 Place Data | C2와 독립이지만, U5 통합 전에 후보 풀 필요 |
 | 4 | **U4** C1 LLM Gateway | M7 화이트리스트 필요 (U3 이후가 통합 테스트 용이) |
 | 5 | **U5** Orchestration & API | 세 컴포넌트 통합 + end-to-end 검증 |
@@ -113,10 +113,10 @@ U1(3일) → U2(7일) → U5(4일) → U6(7일) = 21일 (최단)
 
 | 계약 | 소유 유닛 | 소비 유닛 | 변경 영향 |
 |---|---|---|---|
-| `ItineraryProblem` / `Solution` | U1 | U2, U5 | 솔버 입출력 스키마 변경 |
+| `ItineraryProblem` / `Solution` | U1 | U2, U5 | 어셈블리 입출력 스키마 변경 |
 | `CandidatePool` / `Poi` | U1 | U3, U4(게이트), U5 | 후보 풀·게이트 계약 변경 |
 | `TypedResult[T]` | U1 | U4, U5 | LLM 결과 래핑 변경 |
-| `SolverFacade` API | U2 | U5, U6 | 솔버 호출 시그니처 변경 |
+| `AssemblyFacade` API | U2 | U5, U6 | 어셈블리 호출 시그니처 변경 |
 | `CandidatePoolBuilder` API | U3 | U5 | 후보 풀 조회 시그니처 변경 |
 | `GatewayFacade` API | U4 | U5, U6 | LLM 호출 시그니처 변경 |
 

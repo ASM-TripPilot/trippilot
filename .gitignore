@@ -16,3 +16,33 @@
 
 # Claude Code (로컬 전용 설정)
 .claude/settings.local.json
+
+# Kiro MCP 설정 (토큰 포함 — 로컬 전용)
+.kiro/settings/
+
+# 하네스 사이클 중간 산출물 (감사 추적용, 로컬 보존)
+_workspace
+
+
+# Bazel 심볼릭 링크·사용자 오버라이드
+/bazel-*
+.bazelrc.user
+
+# 이미지에 넣을 산출물 스테이징 (Gradle 이 만든 jar 복사본 — 재생성 가능)
+deploy/artifacts/
+
+# Terraform and AWS deployment generated files (may contain credentials)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
+.coverage
+htmlcov/
+**/__pycache__/

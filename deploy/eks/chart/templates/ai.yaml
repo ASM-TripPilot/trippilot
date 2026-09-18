@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai
+  labels:
+    {{- include "trippilot.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.ai.replicas }}
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 900
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      {{- include "trippilot.selector" (dict "root" . "component" "ai") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "trippilot.selector" (dict "root" . "component" "ai") | nindent 8 }}
+      annotations:
+        trippilot.io/rollout-nonce: {{ .Values.rolloutNonce | quote }}
+    spec:
+      {{- include "trippilot.podSpec" (dict "root" . "component" "ai" "uid" 10001) | nindent 6 }}
+      containers:
+        - name: ai
+          image: {{ include "trippilot.image" (dict "root" . "component" "ai") }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          # Avoid uv's runtime cache/sync writes under a read-only filesystem.
+          command: [/app/.venv/bin/uvicorn]
+          args: ["main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-graceful-shutdown", "630"]
+          ports:
+            - { name: http, containerPort: 8000 }
+          securityContext:
+            {{- include "trippilot.containerSecurity" . | nindent 12 }}
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: XDG_CACHE_HOME
+              value: /tmp/cache
+            - name: TRIPPILOT_BACKEND_BASE_URL
+              value: http://backend:8080
+            {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_SERVICE_AUTH_TOKEN" "key" "SERVICE_AUTH_TOKEN" "secret" "trippilot-shared") | nindent 12 }}
+            - name: TRIPPILOT_LLM_PRICE_FILE
+              value: /app/config/llm-prices.json
+            - name: EVENTS_STORE
+              value: /app/data/collected_events.json
+            {{- range list "TRIPPILOT_LLM_PROVIDER" "OPENAI_API_KEY" "OPENAI_BASE_URL" "OPENAI_MODEL" "OPENAI_API" "ANTHROPIC_API_KEY" "ANTHROPIC_MODEL" "TRIPPILOT_LLM_FEATURE_MODELS" "TRIPPILOT_LLM_RETRY_MODELS" "TRIPPILOT_LOCAL_LLM_BASE_URL" "TRIPPILOT_LOCAL_LLM_API_KEY" "WEATHER_API" "KAKAO_REST_API_KEY" "EXISTENCE_MAX_CALLS" "TMAP_API_KEY" "TRIPPILOT_EMBEDDING_MODEL" "TRIPPILOT_EMBEDDING_TIMEOUT_SEC" }}
+            {{- include "trippilot.secretEnv" (dict "env" . "secret" "trippilot-ai" "optional" true) | nindent 12 }}
+            {{- end }}
+            {{- if .Values.embedding.enabled }}
+            {{- include "trippilot.secretEnv" (dict "env" "TRIPPILOT_VECTOR_DB_URL" "secret" "trippilot-ai") | nindent 12 }}
+            - name: TRIPPILOT_EMBEDDING_PROVIDER
+              value: http
+            - name: TRIPPILOT_EMBEDDING_BASE_URL
+              value: http://embedding:8100
+            {{- end }}
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.ai.resources | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }

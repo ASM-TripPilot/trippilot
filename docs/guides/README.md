@@ -8,3 +8,4 @@
 |---|---|---|
 | [jira.md](jira.md) | 지라 이슈·Smart Commit·개발 패널·상태 흐름 | 지라 쓸 때 |
 | [slack.md](slack.md) | GitHub/Jira for Slack 슬래시 커맨드·알림·인라인 액션 | 슬랙 쓸 때 |
+| [aws-eks-deployment.md](aws-eks-deployment.md) | DEV/PRD Terraform·EKS 수동 배포 | AWS 배포·환경 준비 |

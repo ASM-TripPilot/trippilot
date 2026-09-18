@@ -1,0 +1,161 @@
+# 재계획 지시 사전(KB-4) — ai-backend-replan-연동-설계.md §3
+#
+# ## 두 통로가 이 파일 하나를 본다
+#
+# ① **칩 선택** — FE 가 보낸 키(`INDOOR` …)를 그대로 조회한다. 벡터를 안 탄다.
+# ② **자유 입력** — 사용자가 쓴 문장을 `aliases` 임베딩과 매칭해 키를 찾는다.
+#
+# 그래서 사전이 FE 칩(7종)보다 넓어도 된다 — 칩에 없는 지시는 **말로 닿는다**.
+# 이건 의도된 분업이고, AI 가 모르는 키가 오면 `unknown_directives` 로 응답에 실어
+# 되돌린다(조용한 무시 금지).
+#
+# ## `enforced_by` 가 이 파일의 핵심이다
+#
+# 모델이 받는 후보 줄은 `poi_id | 카테고리 | 상호명` 뿐이다. 좌표·거리·영업시간·
+# 체류시간·혼잡도는 **없다**. 그래서 지시마다 **누가 집행하는지**를 박는다:
+#
+#   PROMPT   카테고리 8종으로 모델이 판별한다 → `prefer_categories`/`avoid_categories`
+#   RANKING  코드가 거리로 판정한다 → 규칙 랭킹의 정렬 키
+#   SOLVER   어셈블리 파라미터다 → 모델도 랭킹도 손대지 않는다
+#
+# 이 구분을 안 두면 "모델이 못 보는 축으로 고르라"는 지시를 쓰게 되고, 그러면 모델이
+# 상호명 기억으로 지어낸다 — KB-3 초안 41건 중 28건을 뺀 것이 정확히 그 이유다
+# (`planb_situation_kb.yaml` 헤더 기준 (2)).
+#
+# **SOLVER 는 아직 배선되지 않았다** (A-4 예정). 지금 이 키가 오면 사전이 인식은 하되
+# 아무 효과가 없다 — 그 사실을 `unwired: true` 로 드러낸다. 정본이 "동작 중"으로
+# 서술하는 미배선을 만들지 않기 위해서다(TRIP-529 계열).
+#
+# ## 카테고리 어휘
+#
+# 경계 8종: SIGHT · FOOD · CAFE · NIGHT_VIEW · NATURE · CULTURE · ACTIVITY · SHOPPING
+#
+# ## alias 를 쓰는 요령
+#
+# `aliases` 는 **각각이 따로 임베딩된다**(한 덩어리로 합치지 않는다 — 합치면 개별
+# 표현의 신호가 희석된다). 사용자가 실제로 칠 법한 말을 짧게 적는다. 한국어로 쓴다 —
+# 영문 키를 한국어 질의에 섞으면 임베딩 공간에서 안 붙는다(TRIP-508 실측).
+
+version: "0.1"
+kb: DIRECTIVE
+
+directives:
+  # ── PROMPT — 카테고리로 모델이 판별 ────────────────────────────────
+  - key: INDOOR
+    label: 실내로
+    enforced_by: PROMPT
+    prefer_categories: [CULTURE, CAFE, SHOPPING]
+    aliases: [비 피해서, 야외 말고, 실내에서, 안에서 할 수 있는, 우산 안 쓰고, 비 오니까 안으로]
+
+  - key: OUTDOOR
+    label: 야외로
+    enforced_by: PROMPT
+    prefer_categories: [NATURE, SIGHT]
+    aliases: [바깥으로, 밖에서, 바람 쐬러, 탁 트인 곳]
+
+  - key: ADD_FOOD
+    label: 맛집 추가
+    enforced_by: PROMPT
+    prefer_categories: [FOOD]
+    aliases: [밥집 넣어줘, 먹거리, 식사할 곳, 맛있는 거 먹고 싶어, 현지 음식]
+
+  - key: ADD_CAFE
+    label: 카페 넣기
+    enforced_by: PROMPT
+    prefer_categories: [CAFE]
+    aliases: [커피 한잔, 디저트, 앉아서 쉴 곳, 카페 들르고 싶어]
+
+  - key: NIGHT_VIEW
+    label: 야경 코스
+    enforced_by: PROMPT
+    prefer_categories: [NIGHT_VIEW]
+    aliases: [야경 보고 싶어, 밤에 예쁜 곳, 노을 보이는, 저녁에 경치]
+
+  - key: CULTURE_FOCUS
+    label: 문화·전시 위주
+    enforced_by: PROMPT
+    prefer_categories: [CULTURE]
+    aliases: [전시 보고 싶어, 박물관, 미술관, 볼거리 있는 실내]
+
+  - key: NATURE_FOCUS
+    label: 자연 위주
+    enforced_by: PROMPT
+    prefer_categories: [NATURE]
+    aliases: [바다 보고 싶어, 산이나 숲, 공원, 자연 풍경]
+
+  - key: SIGHT_FOCUS
+    label: 명소 위주
+    enforced_by: PROMPT
+    prefer_categories: [SIGHT]
+    aliases: [유명한 곳, 랜드마크, 대표 관광지, 여기까지 왔으니]
+
+  - key: SHOPPING_FOCUS
+    label: 쇼핑 위주
+    enforced_by: PROMPT
+    prefer_categories: [SHOPPING]
+    aliases: [쇼핑하고 싶어, 시장 구경, 기념품 사야 해, 상점가]
+
+  - key: ACTIVITY_FOCUS
+    label: 액티비티 위주
+    enforced_by: PROMPT
+    prefer_categories: [ACTIVITY]
+    aliases: [체험하고 싶어, 놀거리, 몸으로 하는, 액티비티]
+
+  - key: AVOID_STRENUOUS
+    label: 힘든 건 빼고
+    enforced_by: PROMPT
+    avoid_categories: [ACTIVITY, NATURE]
+    aliases: [무리 안 되게, 체력이 안 돼, 힘든 건 말고, 많이 안 움직이는]
+
+  # ── RANKING — 코드가 거리로 판정 ──────────────────────────────────
+  - key: NEARBY
+    label: 가까운 곳으로
+    enforced_by: RANKING
+    aliases: [근처에서, 멀지 않은 곳, 가까운 데로]
+
+  - key: LESS_MOVE
+    label: 이동 줄이기
+    enforced_by: RANKING
+    aliases: [이동 짧게, 동선 줄여줘, 많이 안 걷게, 왔다갔다 하기 싫어]
+
+  - key: END_NEAR_STAY
+    label: 숙소 근처에서 끝내기
+    enforced_by: RANKING
+    aliases: [숙소 가까이 마무리, 돌아가기 편하게, 마지막은 숙소 근처]
+
+  # ── SOLVER — 어셈블리 파라미터 (A-4 배선 예정) ──────────────────────
+  - key: RELAX
+    label: 여유 있게
+    enforced_by: SOLVER
+    unwired: true
+    aliases: [천천히 돌자, 급하지 않게, 여유롭게, 쉬엄쉬엄]
+
+  - key: FILL_MORE
+    label: 더 채워서
+    enforced_by: SOLVER
+    unwired: true
+    aliases: [알차게, 더 많이 넣어줘, 빡빡하게, 시간 남기지 말고]
+
+  - key: EARLIER
+    label: 시간 당기기
+    enforced_by: SOLVER
+    unwired: true
+    aliases: [일찍 시작, 앞으로 당겨줘, 오전에 몰아서]
+
+  - key: SHORTER_DAY
+    label: 일찍 마무리
+    enforced_by: SOLVER
+    unwired: true
+    aliases: [빨리 끝내고 싶어, 일찍 들어가려고, 저녁 전에 마무리]
+
+  - key: KEEP_DINNER
+    label: 저녁은 그대로
+    enforced_by: SOLVER
+    unwired: true
+    aliases: [저녁 예약 있어, 저녁만 유지, 저녁은 건드리지 마]
+
+  - key: KEEP_BUDGET
+    label: 예산 유지
+    enforced_by: SOLVER
+    unwired: true
+    aliases: [돈 더 안 쓰게, 비용 그대로, 예산 넘기지 않게]

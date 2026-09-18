@@ -124,3 +124,213 @@
 - 승인 대기 중
 
 ---
+
+## INCEPTION 보강 — Application Design 심화 6종
+**Timestamp**: 2026-07-16T00:00:00Z
+**User Input**: "멀티에이전트 세분화(관광지/날씨/교통 등), FE-BE-Agent 입출력 대응, Orchestrator 위임 방식, 유사질문 기반 의도파악, 최신성·신속도 평가지표, MLOps/LLMOps 세팅 + ML 패턴 유형화"
+**AI Response**: application-design/ 신규 설계 문서 6종 생성 (기존 구조 유지, 추가식 확장).
+**Context**:
+- 사용자 확정: 정보 에이전트 5종 전부(PlaceScout/Weather/Transit/Persona/Event) / 2계층 구조(업무 계층 하위 정보 계층) / 의도파악 하이브리드 / 최신성 = 데이터 신선도 + 결과물 현행성
+- agent-hierarchy-design.md: 2계층 세분화 — 정보 에이전트 5종, 계층 규칙 H-1~H-6, Tool 재배치, 폴백 계단 분리, 도입 순서(1차 PlaceScout·Weather)
+- agent-io-contracts.md: FE 화면(d/e/f밴드) ↔ BE(전체-최소-스키마·API서피스) ↔ Agent I/O 대응표 + 에이전트별 Input/Output DTO + FreshnessMeta + 공통규약 IO-1~7. INV-3 vs 와이어프레임 시간표기 상충 플래그
+- orchestrator-delegation-design.md: AgentTask/AgentResult 표준 봉투, context_refs 참조 전달(D31), deadline 상속, 라우팅 테이블, 실패·재시도 정책
+- intent-matching-design.md: 질문뱅크 임베딩 매칭(1차) → LLM 유사질문 생성·가중 투표(2차) → LLM 직접 분류(3차), 뱅크 구축 3단계 + 위생 규칙
+- evaluation-metrics-design.md: 최신성(F1 데이터 신선도 + F2 결과물 현행성 CUR-1~6) · 신속도(지연 예산 SLO 승격 + 구간 분해), 트레이드오프 우선순위, 신규 PBT 속성 5개 제안
+- mlops-llmops-design.md: LLMOps(프롬프트 레지스트리·4층 평가·트레이싱·비용·카나리) + MLOps(Phase L 학습 로그 6종 선행 → M1/M2) + ML 패턴 유형화(A~D 4유형 10후보 + 금지 목록)
+- README.md·claude.md·application-design/claude.md 인덱스 갱신
+- U1 Functional Design의 LLMOps 타입(TracePort·PromptRef·Eval)과 정합 — trace_id·프롬프트 파일+git 버저닝 동일 체계
+
+## PLANNING — Epic·Story 백로그 생성 + 실 API 승인 대기 분리
+**Timestamp**: 2026-07-21T00:00:00Z
+**User Input**: "설계 끝났으니 epic/story 보여줘" → "Claude API 결제 승인 전이라 구현 불가한 부분 어떻게 할지" → "해줘"
+**AI Response**: units/epics-and-stories.md 생성 + 🔑(승인 후) 태그 체계 반영.
+**Context**:
+- 에픽 9종: 기존 U1~U6 + 신규 EP-7(정보 에이전트)·EP-8(의도파악)·EP-9(지표·Ops). 합계 29~42일
+- 신규 타입 3묶음(S1.5 위임 봉투, S1.6 FreshnessMeta·정보에이전트 I/O, S1.7 학습 로그 6종)을 U1에 선반영 권고
+- 실 API 승인 대기 대응: D37+Port 격리로 U1~U5는 fake 기반 완성 가능 확인. FakeLlm 3모드(golden/timeout/violation)+FakeEmbedding을 S1.2에 명시
+- 🔑 승인 후 작업 K-1~K-7 분리 (벤더 어댑터 스모크·프롬프트 튜닝·실벡터 재색인·뱅크 증강·Bedrock 솔버 실험·LLM-judge·비용 실측) — 승인 시 실검증 스프린트 1회로 일괄 소화
+- 승인 전 병행: 프롬프트 yaml·seed 질문·채점 기준 작성은 API 불요로 지금 진행
+
+## DECISION — AI-D06 LLM 벤더 확정 (Anthropic API 직접)
+**Timestamp**: 2026-07-21T01:00:00Z
+**User Input**: "결제 승인 대상은 Anthropic API 직접이야"
+**AI Response**: ai-adr.md에 AI-D06 신설, 관련 문서 정합화.
+**Context**:
+- 확정: LLM 경로 = Anthropic API 직접 (Bedrock 아님). 어댑터 = ChatAnthropic/anthropic SDK (LlmPort 뒤 격리, 구조 무변경)
+- 티어 라우팅 초기 제안: 경량 claude-haiku-4-5 / 상위 claude-sonnet-5 / 오프라인(judge·증강·솔버실험) claude-opus-4-8 — model_id는 설정값
+- 임베딩 재선정: Titan v2는 Bedrock 전용이라 불가 → 잠정 로컬 오픈소스(multilingual-e5-large 또는 BGE-M3, 1024차원 유지 → pgvector 스키마 무변경, 결제 승인 불요). 미결 #6으로 등록
+- 파급: 미결 #1(LLM 벤더) 해소 / K-3(실벡터 색인) 승인 대기 목록에서 해소 — S6.1·S8.1 즉시 착수 가능으로 변경 / K-1 어댑터 확정 / "Bedrock" 표기는 "LLM API(Anthropic)"로 읽기 (README 표기 규칙 명시, 점진 개정)
+- 후속 필요: ai-cost-estimation.md를 Anthropic API 요금 기준으로 재산정, langchain-adoption.md의 ChatBedrock 표기 개정
+
+## DECISION — AI-D07 U2 솔버 시간 정책 (U2 착수 전 세팅 4건)
+**Timestamp**: 2026-07-25T00:00:00Z
+**User Input**: "U2 시간제한·제약 재세팅 — 4개 항목 차례로 선택"
+**AI Response**: ai-adr.md에 AI-D07 신설, FakeTravel SPEED 정정.
+**Context**:
+- ① 솔버 라이브러리: OR-Tools 우선 벤치마크 (미결 #3 진행 방식 확정 — U2 첫 절편)
+- ② day1 예산 5초→10초 상향 + day1부터 하이브리드 체인 전면 적용 (사용자 결정). ⚠️ D38 개정 사항 — 백엔드·기획 합의 전까지 "AI팀 제안" 플래그. 기존 5초 예산으로는 2차 LLM 솔버가 day1에서 구조적으로 불가능(설계 모순)했던 것의 해소
+- ③ SPEED 초기값: 도보4/대중교통20/차30 km/h (remote config). FakeTravel 차 40→30 정정, 52 tests green 유지
+- ④ 2차 솔버 모델: 경로별 분리 — day1·Plan-B=sonnet-5 / 백그라운드·regenerate=opus-4-8 (AI-D06 연장, 설정값)
+- 후속: D38 개정 합의(백엔드·기획), evaluation-metrics day1 SLO 개정(합의 후), U2 Functional Design에 본 결정 반영
+
+## DECISION — AI-D07 개정: day1 5초 유지 + 시한 인지 하이브리드 체인
+**Timestamp**: 2026-07-25T01:00:00Z
+**User Input**: "5초로 돌려주고, day1부터 하이브리드 방식 이용"
+**AI Response**: AI-D07을 같은 날 개정 — 10초 상향안 철회.
+**Context**:
+- day1 5초 유지 (D38 무변경 → 기획·백엔드 합의 절차 불필요해짐)
+- 모순 해소 방식: deadline-aware 체인 — 각 단계가 진입 전 잔여 시간 확인, 부족하면 스킵하고 다음 단계로. 체인 구조는 전 경로 동일, 경로별로 deadline만 다름
+- day1에서 2차 LLM이 도는 조건 = OR-Tools 조기 실패로 잔여 ≥ 2.5s일 때. 타임아웃 소진 시 규칙 직행(INV-4 자연 강등)
+- 후속: U2 FD에 deadline 파라미터 명세 + "deadline 초과 반환 없음" PBT 속성
+
+## CONSTRUCTION — U2 Functional Design (산출물 생성)
+**Timestamp**: 2026-07-25T02:00:00Z
+**User Input**: "U2 시작해줘" (사전 세팅 4건 AI-D07로 확정 후)
+**AI Response**: U2 Functional Design 3종 생성, aidlc-state 갱신, Jira TRIP-165 In Progress.
+**Context**:
+- 정본 근거: ai-implementation-design §1.2(C2 퍼사드)·§4.2(HC 4종)·§4.3(알고리즘)·§4.4(이동 추정), ai-testing-guide U5-P1~P6, AI-D07
+- domain-entities.md: SolverConfig(AI-D07 초기값 주입 컨테이너)·RepairResult/MinimalChangePolicy(§1.2 미확정 타입 확정)·ClockPort(G116 시계 주입)·LlmSlotProposal(2차 제안 스키마). SolveMode.BEDROCK enum 개명은 직렬화 호환 위해 보류(표기 규칙으로 커버)
+- business-logic-model.md: 컴포넌트 6종(facade·constraints·ortools·llm_solver·fallback·repair) + 시한 인지 체인 의사코드 + FakeClock/SlowSolver/적대적 제안 generator
+- business-rules.md: HC 게이트(G114)·시한 인지 규칙 DL-1~6·결정론 규칙·PBT 매핑(U5-P1/2/3/6 + 신규 DL-P1/P2·GATE-P)·벤치마크 게이트(후보 50≤3s, 미결 #3 판정 절차)·DoD
+- 다음: 사용자 승인 → 첫 절편 = OR-Tools 벤치마크
+
+## CONSTRUCTION — U2 첫 절편: OR-Tools 벤치마크 (미결 #3 종결)
+**Timestamp**: 2026-07-29T00:00:00Z
+**User Input**: "승인 + A" (U2 FD 승인, 스택 브랜치)
+**AI Response**: feature/TRIP-165-solver-core 분기, ortools 설치, day1 벤치마크 작성·실행 → 게이트 통과.
+**Context**:
+- 결과: 후보 50 = 2,813ms ✅(≤3s) · 고정블록 2개 포함 2,813ms ✅ · 500/5,000(top-60 프리필터) 회귀 없음 · 결정론 ✅(동일 시드 2회 동일 선택)
+- 판정: OR-Tools(CP-SAT) 확정 — 미결 #3 종결
+- 과정에서 얻은 설계 교훈 2건:
+  ① 다중 워커는 결정론 깨짐 → 단일 워커 + 그리디 초기해 힌트로 해소. 그리디(구성 휴리스틱)가 RuleFallbackSolver의 원형이자 CP-SAT 웜스타트를 겸함 — 체인 구조(규칙→OR-Tools 개선)가 벤치마크에서 실증됨
+  ② CP-SAT는 anytime — 주어진 예산을 전부 써서 개선. 리밋은 게이트 안쪽(2.8s)으로 설정해 반환 마진 확보
+  ③ 후보 >60은 점수 상위 60 프리필터 (이동행렬 O(N²) 방지, 하루 슬롯 물리 한계 ~8개라 품질 손실 무시 가능) — 솔버 전처리로 설계 채택
+- 다음 절편: constraints.py(HC 순수함수) + scorer/fallback_solver + facade 시한 인지 체인 + PBT(U5-P1·P3, DL-P1·P2)
+
+## CONSTRUCTION — U2 절편2: HC 검증기 · 규칙 폴백 · 시한 인지 체인
+**Timestamp**: 2026-07-29T02:00:00Z
+**User Input**: "계속 가줘"
+**AI Response**: c2 컴포넌트 5개 + 테스트 11개 (63 green), 커밋·푸시.
+**Context**:
+- constraints.py HC1~4 순수함수(영업정보 없음=미적용/요일 없음=휴무 규칙 확정) · fallback_solver.py(그리디 정식판, RULE_FALLBACK/MINIMAL 정직 태깅) · facade.py(DL-1~5 구현, SolverConflictError는 d08 충돌 흐름으로 위임 예정) · config.py(G51 체류 테이블 초기값 확정) · travel.py
+- 도메인 보강: ItineraryProblem.anchor(정본 §4.1 누락분, 기본 None — 직렬화 호환)
+- 검증: DL-P1(예산 내 반환)·DL-P2(잔여 부족 시 스킵+관측)·INV-2(위반 해 반환 차단)·U5-P1 그리디판·U5-P3 결정론 — FakeClock으로 sleep 없이
+- 잔여: ortools_solver 정식 승격(SolverPort화)·llm_solver(2차)·repair·warm-start(U5-P2)·예산 단조(U5-P6)
+
+## CONSTRUCTION — U2 절편3: OR-Tools 승격 · LLM 2차 · repair · warm-start (U2 코어 완료)
+**Timestamp**: 2026-07-29T04:00:00Z
+**User Input**: "U2 계속"
+**AI Response**: c2 컴포넌트 완성 (8모듈), 테스트 76 green.
+**Context**:
+- ortools_solver.py: 벤치마크 모델 정식 승격 — 일자별 순차 CP-SAT, 규칙해 웜스타트, 프리필터 top-60, 요일 영업창(다중 창은 최장 창 보수 채택), 결정론(단일 워커+시드)
+- llm_solver.py: 2차 단계 — 파싱→closed-set 게이트(GateDropEvent)→검증→repair 1회→재검증, LlmCallRecord 성공/실패 모두 계측. 모델 주입(sonnet-5, AI-D07 ④)
+- repair.py: TIME_SHIFT_ONLY 전방 이동 수리, 고정 블록 불가침, 출처 보존. (FD의 domain 배치를 c2로 조정 — 직렬화 대상 아님, U5 API 노출 시 재검토)
+- facade.regenerate: locked→FixedBlock 승격으로 HC3 보호 하에 재배치 (U5-P2 멱등)
+- scorer.py: budget_fit 단조(U5-P6) + build_rule_score(A-1 ML 폴백)
+- PBT로 잡은 실버그 1건: regenerate 시 잠근 슬롯=기존 고정블록 중복 승격 → 규칙 폴백이 이중 배치 → HC2 위반 → SolverConflictError. 폴백 솔버에 중복 고정 방어 추가로 해소 (hypothesis 반례 재검증 통과)
+- 아키텍처 감시 확장: ortools import는 c2 계층에만 (자동 차단)
+- U2 잔여(경미): 소규모 oracle 전수 대조(U5-P1 보강)·2차 진입 '품질 미달' 트리거·지역탐색 2-opt(CP-SAT가 사실상 대체)
+
+## CONSTRUCTION — U2 마무리 + U3 Functional Design
+**Timestamp**: 2026-07-29T05:00:00Z
+**User Input**: "C하고 U3 시작해줘"
+**AI Response**: U2 정리(스택 PR #40·TRIP-165 In Review·state 갱신) 후 U3 FD 3종 생성, TRIP-166 In Progress.
+**Context**:
+- U3 FD 근거: ai-data-design.md §3(6단계 필터 확정값)·§6(TTL: POI 24h/영업시간 6h/가격 금지)·§8(AI-D04 fuzzy)
+- 스코프 결정: REGION 해소는 U3 제외(라우터/U6 소유) · is_closed_today 당일 배치는 Plan-B 소유 · 웹 소싱 U6 · 공간 쿼리 캐싱 후속
+- CandidatePool에 anchor·radius_km 선택 필드 보강(정본 §3.3 누락분 — ItineraryProblem.anchor 방식)
+- 가격 캐싱 금지: U1 to_cacheable_dict 단일 경로 + SpyCache PBT(CACHE-P1)로 이중 강제
+- 신규 PBT: POOL-P1~P4·RES-P1/P2·CACHE-P1/P2
+- 브랜치: feature/TRIP-166-m7-place-data (TRIP-165 위 스택)
+
+## CONSTRUCTION — U3 코어 구현 (M7 Place Data)
+**Timestamp**: 2026-07-29T06:00:00Z
+**User Input**: "승인, 바로 코드로"
+**AI Response**: m7 4모듈 + 도메인 보강 + 테스트 15개 (91 green).
+**Context**:
+- pool_builder: 6단계 필터 (정본 확정값, now 주입 결정론) · entity_resolver: 자모 분해 Levenshtein — "성심땅→성심당" 실증 테스트 통과 · cached_repo: TTL 정책 + 가격 구조 차단(to_cacheable_dict 단일 경로, 히트 시 avg_cost=None로 원본 조회 필요성 명시)
+- 도메인: CandidatePool anchor·radius_km 보강(호환 유지), domain/m7.py(CandidatePoolRequest·EntityMatch·MatchDecision — poi_id=None ⇔ UNRESOLVED 정합 강제)
+- PBT: POOL-P1~4(반경·예산·품질·상한·결정론·휴무 배제) · RES-P1/P2 · CACHE-P1(가격 저장 0건)/P2(TTL 만료 재조회) — 전부 첫 실행 green
+- m7 계층 순수성 자동 감시 추가. U3 잔여: 실 PostgreSQL 어댑터(스캐폴딩 후속)·batch_check_closed Plan-B 연결(U6)
+
+## DESIGN — Agent 구조 v2: 4상자 파이프라인 (멘토 피드백 반영)
+**Timestamp**: 2026-08-02T00:00:00Z
+**User Input**: "멘토 피드백 — agent 도구가 겹치면 orchestrator가 위임을 혼동. 겹침 금지" + 구조 문답 후 확정
+**AI Response**: agent-structure-v2.md 신설 (정본), v1 배너 처리, 위임 프로토콜·인덱스·README 갱신.
+**Context**:
+- 확정 구조: Orchestrator(의도파악·Fast Path·InfoCollector 수집·위임) → Provider 5종(수집 전담, LLM 0회 — '정보 에이전트'에서 개명) → Agent 4종(LLM 판단, 전속 도구 완전 배타) → Solver 공통 관문(배치·검증·수리, Reflect는 스킵)
+- 용어 규칙 확정: Agent = LLM 판단 주체만(4종, 사용자 결정으로 명칭 유지) / Provider = 수집 / Solver = 관문
+- 겹침 해소: v1의 5개 중복 도구(place_scout 4곳·solver.validate 4곳 등) → 0. 라우팅은 테이블 유일 기준(도구 목록 판단 금지)
+- 신설 계약: 정보 요구표(intent별 수집 항목), InfoBundle(패킷+FreshnessMeta+상태값, 풀은 세션 캐시 참조), NEED_MORE_INFO 재요청(1회)
+- 웹 소싱 위치 명확화: Provider 아님 — 백그라운드 소싱 파이프라인(U6) 소속, LLM 추출은 그 안에서 (INV-1·지연 예산 근거)
+- 트레이드오프 기록: 이전 피드백(에이전트 도구 자율)과 절충 — 판단 자율 유지, 수집·확정 중앙화
+- 코드 영향 0 (U1~U4 무관, U5/U6 미구현 시점의 무비용 개정)
+
+## 2026-08-02 — U4 C1 LLM Gateway 착수 (FD)
+- 브랜치: feature/TRIP-167-c1-llm-gateway (U3 스택). Jira TRIP-167 → 진행중
+- FD 3종 작성: construction/u4-c1-gateway/functional-design/{domain-entities, business-logic-model, business-rules}.md
+- 설계 축: 코드-주도 단발 호출 (Claude tool-use 미채택 — 결정론·지연·검증·비용 근거 명문화)
+- "제한된 소형 LLM" 4겹 장치: LlmFeature closed-set(8기능) · 전용 프롬프트(yaml+semver) · 스키마 파서 · ClosedSetGate
+- 도메인 보강: LlmFeature/ModelTier(llm.py), PersonaSummary·TasteTag 7축(persona.py — 미결 #3 해소), Principal/ResourceRef/PermissionDeniedError(context.py — D31)
+- 어댑터: AnthropicAdapter는 client 주입식, 실 스모크 K-1 유보 (D37 CI 실 API 0 유지)
+- PBT 계획 8속성: GATE-P1/P2(U5-P5 승계) · GW-P1/P2 · ROUTE-P1 · CTX-P1 · PROMPT-P1 · SER-P1
+
+## 2026-09-02 — BR-AF-07 소급 기록: 2026-08-02 이후 추가된 LlmFeature
+- 이 로그는 `## 2026-08-02 — U4 C1 LLM Gateway 착수 (FD)` 에서 멈춰 있었다. 그 사이 코드에 들어간 feature 를 소급 기록해 BR-AF-07(FD 개정 + tier_map + 프롬프트 yaml + ROUTE-P1 + **audit**) 의 audit 칸을 채운다 — 나머지 4칸은 각 티켓에서 이미 이행됐고 audit 만 누락돼 있었다. 즉 규칙이 깨진 게 아니라 **기록만 밀렸다**
+- `EDIT_TRANSLATION` — EditAgent 전속, 확정된 EDIT_SCHEDULE 의 세부 번역(라우팅 재해석 아님). enum 선등록은 TRIP-286(#96), 잔여 세트(FD 티어 표·타입 승격·컨텍스트 경계)는 TRIP-315(#134). 정의 정본 = agent-foundation FD domain-entities §1
+- `REFLECTION_NUDGE` (TRIP-347, #180) — 회고 유도 푸시 문구 1문장. 발송은 백엔드 notification 소유, c1 은 문구 생성까지
+- `EVENT_EXTRACTION` (TRIP-421, #268) — 웹 검색 스니펫 → 행사 구조화 추출(백그라운드). 행사는 POI 가 아니라 후보 풀 비편입(INV-1 비적용)
+- `REFLECTION_TEMPLATE` (TRIP-429, #350) — 회고 연출 템플릿. 구 `REFLECTION` 을 TRIP-558(#386)에서 흡수·폐지
+- `PHOTO_HIGHLIGHT` (TRIP-595, #436) — 동의된 사진 → 대표 N장 선별(Reflect Phase 2). 이미지 파트를 싣는 첫 feature
+- `REFLECTION_TEMPLATE_VISION` (TRIP-595, #436) — 텍스트판과 같은 출력 계약, 모델 라우팅 때문에 feature 분리
+- **개수·전체 목록은 여기 적지 않는다** — 정본은 `ai/src/trippilot/domain/llm.py::LlmFeature`, 티어 매핑은 `ai/src/trippilot/llm_gateway/config.py::default_tier_map`, 프롬프트는 `ai/prompts/`
+- u6-reflect FD `business-rules.md` §4 DoD 의 "신규 LlmFeature 5종 세트 완료 (BR-AF-07)" 체크는 Reflect Phase 2 소유자에게 남긴다 — audit 칸은 본 항목으로 채워졌다
+
+## 2026-09-02 — AI-DLC 상태 문서 스테일 정정 (코드 변경 없음)
+**Timestamp**: 2026-09-02
+**변경**: 코드보다 낡아 사실과 어긋나던 안내 문장을 교체. 문서만 수정, `src/` 무변경.
+- `aidlc-state.md`: "Existing Code: No" → Yes(`src/trippilot/` 가동), Project Type·Build System(uv)·Workspace Root(모노레포 `ai/`) 갱신, CONSTRUCTION 체크박스 3종(Functional Design·Code Generation·Build and Test) 체크. Current/Next Stage("U4 FD 승인 대기")는 2026-08-03 U4 머지 이후 갱신이 끊겨 스테일이었으므로 값을 다시 박지 않고 `../claude.md` §Current Status 로 위임. U1~U3 Status 서술은 시점 기록으로 보존.
+- `construction/claude.md`·`claude.ko.md`: "Not Yet Started / 아직 미착수" → 현재 상태. 계획 트리는 "최초 계획"으로 강등하고, `code/` 부재(Code Location Rules)와 U5 FD 부재(TRIP-237/238/239/241/242 코드 선행)를 결정으로 명시.
+- `inception/reverse-engineering/code-structure.md`·`code-quality-assessment.md`: 본문 보존 + "2026-07-12 시점 관측" 배너 삽입.
+- `inception/claude.md`·`claude.ko.md`·`inception/design-artifacts/claude.md`·`claude.ko.md`: 에이전트 구조 최신 문서 지목을 `agent-redesign.md` → `agent-structure-v2.md`(2026-08-02 도구 배타 원칙 개정)로 정정. `application-design/claude.md` 의 지목과 일치시킴.
+
+## 2026-09-12 — 신규 LlmFeature `SHARE_CARD_COPY` (BR-AF-07 5종 세트)
+**Timestamp**: 2026-09-12 · TRIP-429 후속 (j06 공유 카드)
+- **무엇**: 공유 카드 이미지 아래 붙는 SNS 캡션·해시태그를 LLM 카피로 생성한다. 종전엔 클라이언트가 기계 문자열로 조립했다(`ShareCardPage.tsx` — 캡션은 여행 제목 시드, 해시태그는 목적지마다 `#{지역}여행`). 카드 이미지(통계·동선 목록·워터마크)는 서비스가 조립하는 사실 영역이라 범위 밖
+- **5종 세트 이행**: ① FD 개정 — `construction/u4-c1-gateway/functional-design/domain-entities.md` §1 표에 행 추가 ② tier_map — `llm_gateway/config.py::default_tier_map` LIGHT ③ 프롬프트 yaml — `prompts/share_card_copy.yaml` v0.1.0 ④ ROUTE-P1 — 전 feature 스윕(`tests/test_llm_gateway_gateway.py`)이 자동 커버, 폴백 모드 이중 대장(`_EXPECTED_MODES`)도 갱신 ⑤ audit — 본 항목
+- **설계 결정**: 에이전트를 만들지 않는다 — u6-reflect FD §2.1 **워커 직행 패턴**의 적용 대상(`reflection_nudge` 와 동형). 후보 선택·다단 구성·예산 계단·하드 교체를 하나도 쓰지 않는 "판단 없는 단발 변환"이라 껍데기 위임 메서드는 대칭 말고 얻는 게 없다. 방어 폴백 이벤트는 `component="api.wiring"`(발행 주체 = 경계)
+- **게이트 등급 이탈(의도적)**: 판정 로직은 `gates/reflection_template.py` 재사용(`_TIME_EXPR`·`_tag_allowed`·`_PLACEHOLDER`)이지만 `CAPTION_LEN`·`HASHTAG_OUT` 의 **등급이 다르다** — 그쪽은 "N회 생성 → 최선 채택"이라 SOFT 감점을 적용할 랭킹 자리가 있고, 여기는 단발 1건이라 그 자리가 없다(통과 아니면 전량 드롭 → 정적 폴백). 그래서 **과잉 드롭이 실질 위험**이고, 게이트가 검사하는 규칙을 프롬프트에 빠짐없이 싣는 것이 방어선이다(정합 테스트가 고정)
+- **경계 추가**: `POST /ai/v1/reflection/share-card` — 요청은 `ReflectionGenerateRequest` 재사용(회고와 같은 재료), 응답은 `ShareCardCopy`. 기존 `/generate`·`/nudge` 스키마 무변경(openapi diff 삭제 0줄)
+- **미결로 남긴 것**: ⓐ 캡션의 자리표시자(`{region}`·`{visit_count}` 등) **바인딩 주체가 아직 없다** — 백엔드·FE 어디에도 치환 코드가 없어 붙는 순간 리터럴이 노출된다. `REFLECTION_TEMPLATE` 도 같은 상태이므로 이 feature 가 새로 만든 결함은 아니지만, 공유 캡션은 SNS 로 바로 나가는 자리라 노출 경로가 더 짧다 ⓑ 폴백이 FE 종전 문구를 재현하지 못한다 — `ReflectionRequest` 에 여행 제목·목적지 목록이 없어 지역 1개로 접힌다(요청 스키마 확장 협의 필요)
+- **선행 기록 누락 1건**: `REPLAN_DIRECTIVE_TRANSLATION`(재계획 연동 설계 §3) 은 위 2026-09-02 소급 기록 이후에 들어와 FD 표·audit 양쪽에 없다 — 본 항목과 별개로 그 티켓 소유자가 채울 몫으로 남긴다(여기서 대신 적으면 근거 없는 기록이 된다)
+
+## 2026-09-14 — 도우미 대화 FD 초안 (인자 추출 · 다중 의도 · 멀티턴) — **승인 대기**
+**Timestamp**: 2026-09-14 · TRIP-853 · 산출물 `construction/assistant-dialogue/functional-design/` 3종
+- **무엇**: 자연어 도우미가 성립하려면 필요한 셋의 FD 초안. 정본 무수정 — 개정 필요 항목은 business-rules §4 목록으로만 올렸다
+- **유닛 번호를 붙이지 않았다**: 모노레포 정본(`aidlc/.../unit-of-work.md`)은 이 영역을 **U8 Conversational Assistant**(Phase 7+, 후속 게이트)로, ai 패키지 정본은 U1~U6 까지만 쓴다. 번호 충돌 시 이름 표기가 팀 규칙이다(anti-patterns §설계·문서) — `agent-foundation` 과 같은 방식
+- **셋을 한 유닛으로 묶은 근거**: 발화 하나 → N개 프레임, 프레임 = `(의도, 인자)`, 필수 인자가 다 차야 실행 가능. 인자 추출 = 프레임 채우기 · 다중 의도 = N>1 · 멀티턴 = 덜 찬 프레임이 다음 턴까지 사는 것. 쪼개면 중심 타입 `IntentFrame` 을 세 번 정의한다
+- **결정 ①  하이브리드 유지**: 도구 호출은 **3차 자리에만** 넣는다. 1·2차에 LLM 이 들어가면 CONFIDENT 의 존재 이유인 "LLM 0회"가 사라진다(뱅크 417문장 기준 평가 87발화 중 28건). 뱅크가 이기는 칸(의도·지연·사람이 고칠 수 있음)과 도구 호출이 이기는 칸(인자·분해)이 정확히 갈린다
+- **결정 ②  ③의 핵심은 도구 호출이 아니라 `ARGUMENT_TABLE`**: 현재 인자 어휘는 의도 13종 공통 3칸(`date`·`category`·`constraint`, `prompts/intent.yaml:36`)뿐이다. 의도별 표를 만들면 도구 스키마(`tool_specs()`)와 규칙 추출기가 **거기서 파생**되므로, 도구 호출을 채택하지 않아도 이득이 남는다
+- **결정 ③  `slot_pattern` 폐기 제안**(`intent-matching-design.md` §3.1): 로더·라우터·정규식 추출기·테스트가 전부 있는데 뱅크 417문장에 데이터 **0건**이다. 문장마다 패턴을 달 수 없고(증강기가 못 만든다) 같은 `date` 를 의도마다 다르게 뽑는 드리프트가 난다. 대신 `ArgumentKind` 별 추출기 9종 — 의도가 늘어도 안 는다. **기능이 없는 것보다 "있는데 아무도 안 쓰는" 편이 위험하다**(다음 사람이 채우려 든다)
+- **결정 ④  다중 의도에 새 타입을 만들지 않는다**: `domain/execution.py` 의 `ExecutionPlan`/`ExecutionStep`/`AgentCall` 이 이미 있고 프로덕션 소비자가 0이다. 정본도 "Execution Plan 에서 step 1개에 병렬 배치"라고 적었다(`orchestrator-delegation-design.md:182`). 컴파일 규칙은 한 줄 — 의존 없으면 같은 step, 있으면 다음 step. 상한은 **프레임 2개 · 상태 변경 의도 1개**
+- **결정 ⑤  대화 상태의 정본은 백엔드 (추천 · 합의 필요)**: AI 서비스는 무상태로 남고 매 턴 `DialogueContext` 를 받고 돌려준다. `CONFIRM_REQUIRED` 왕복(서버가 아무것도 안 들고 클라가 전체를 재전송)이 **이미 같은 모양**이다. 근거는 확장성보다 **책임 소재** — 제품이 O3 로 "대화 이력 보관 정책"을 운영 미결로 걸어 뒀는데, AI 가 발화를 들기 시작하면 **결정 전에 사실을 만든다**. 대안 C(클라이언트 소유)는 비용 0이지만 에픽 J 스토리 "5) 대화 이력·세션"의 기기 간 연속성을 포기해야 한다 — 그러려면 스토리를 먼저 줄여야 하므로 순서가 거꾸로다
+- **결정 ⑥  되묻기를 `NEED_MORE_INFO` 에 합치지 않는다**: 그쪽 `missing` 은 **Provider 데이터**이고 해법이 "Orchestrator 재수집·재위임 최대 1회"(BR-AF-05)라 **사람 왕복이 없다**. 합치면 "데이터가 없다"와 "사용자가 안 말했다"가 같은 재시도 정책을 탄다. 되묻기 상한은 프레임당 1회로 따로 둔다
+- **실측이 범위를 줄여 줬다**: 필수 인자가 **아예 없는 의도가 13종 중 6종**(`REGENERATE`·`REPLAN`·`TRIP_SUMMARY`·`STYLE_ANALYSIS`·`GET_NEXT_SLOT`·`SHOW_SCHEDULE`)이다 — 되묻기가 필요 없다. ⑤의 실제 적용 범위는 7종이고 필수 인자 2개짜리는 `GET_DISTANCE` 하나뿐이다
+- **착수 순서 — 지금 할 수 있는 것은 하나뿐**: ① 인자표 + 규칙 추출기(선행 없음) → ② 도구 호출 포트 확장(①  후) → ⑤ 멀티턴(대화 상태 소유 합의 + 자연어 진입 경계 — **둘 다 제품 결정 선행**) → ④ 다중 의도(**`AgentTask` 봉투 이관** = agent-foundation 미결 #8 + 복합 발화 평가셋)
+- **미결로 남긴 것**: ⓐ 대화 상태 소유 합의 — 백엔드에 assistant/chat 모듈도 테이블도 없고 `ChangeSource.ASSISTANT` enum 값만 있다 ⓑ 자연어 진입 경계 부재 — 9개 경계 중 발화를 받는 것은 `/ai/v1/itinerary/edit` 의 `utterance` 하나이고 백엔드가 안 부른다. 신설은 제품 결정 선행(`backend/docs/design/work-graph.toml` `AI-NL-EDIT`) ⓒ 복합 의심 신호("접속 표지 + top1 < T_high")는 **가설이다** — 평가셋 87건에 복합 발화가 0건이라 지금은 잴 수 없다. 근거 없는 임계를 코드에 박지 않는다 ⓓ 도구 호출용 신규 `LlmFeature` 필요 여부(`INTENT` 재사용이면 BR-AF-07 5종 세트 불요) ⓔ 되묻기 문안의 소유(AI vs FE) — 어시스턴트 화면 설계 후 ⓕ `TRIP_SUMMARY.day_date`·`STYLE_ANALYSIS` 가 `agent-io-contracts` 에만 있고 `domain/reflection.py` 에 필드가 없다 — 어느 쪽이 정본인지 미정
+- **대신 적지 않은 것**: `INTENT` 프롬프트의 3칸 슬롯을 지금 고치지 않았다 — `ARGUMENT_TABLE` 승인 전에 프롬프트만 바꾸면 게이트·표·프롬프트가 셋으로 갈린다. 승인 후 한 번에 간다
+
+## 2026-09-15 — 도우미 대화 FD 개정 ①: 의도 되묻기 신설 · 의도 쪼개기 기각 (TRIP-853 초안 보완)
+**Timestamp**: 2026-09-15 · 초안(2026-09-14) 승인 전 보완 — 정본 무수정 유지
+- **발단**: 검수 페이지를 읽은 팀원이 둘을 제안했다 — ⓐ "의도를 더 쪼개면 질문뱅크가 더 확실히 갈릴 것 같다" ⓑ "애매하면 REGENERATE 인지 SUGGEST_ALTERNATIVE 인지 되묻게 하고, **그 질문을 LLM 이 발화를 되짚어 만들게** 하자". 둘 다 재 보고 판정했다
+- **ⓐ 기각 — 실측**: `EDIT_SCHEDULE` 31문장을 연산별로 쪼개(ADD 8·MOVE 7·REPLACE 9·REMOVE 3·분류불가 4) 같은 조건(평가셋 87·t_high 0.82·margin 0.02)으로 1차를 다시 돌렸다. **1차 확정 28 → 28(변화 없음)** · EDIT↔REGENERATE·REPLAN 경계 **9쌍 → 9쌍(변화 없음)** · **새로 생긴 내부 경계 12쌍**(최고 `EDIT_MOVE`↔`EDIT_REPLACE` 0.877 — 없애려던 외부 경계 0.823 보다 더 붙었다). 쪼개기는 외부 경계를 줄이지 않고 내부 경계를 만든다
+- **ⓐ 가 안 통하는 구조적 이유**: `op` 는 지금 `EDIT_TRANSLATION` 워커가 **현재 일정을 손에 들고** 정한다(`EditTranslationContext{pool, current_slots}`). 의도로 올리면 라우터가 **발화만 보고** 같은 판단을 하게 된다 — 결정을 더 이른 자리로, 더 적은 정보로 옮기는 것이다. 그래서 `op` 는 계속 **인자**로 둔다
+- **ⓐ 에서 건진 것**: 쪼개 보니 EDIT↔REGENERATE·REPLAN 압력 9쌍 중 **7쌍이 MOVE 계열**에 몰려 있다("재배치·옮겨"가 재계획처럼 들린다). closed-set 을 건드릴 일이 아니라 **뱅크 위생의 표적**이다
+- **ⓑ 채택 — 실측이 지지한다**: 의도 쌍별 경계 압력(≥0.80 문장 쌍)이 한 군집에 몰려 있다 — `REGENERATE`↔`REPLAN` **19쌍**(최고 0.841) · `GENERATE_SCHEDULE`↔`SHOW_SCHEDULE` **12쌍**(0.880) · `GENERATE_SCHEDULE`↔`REGENERATE` 6 · `GET_NEXT_SLOT`↔`SHOW_SCHEDULE` 5 · `EDIT_SCHEDULE`↔`REPLAN` 5 · `EDIT_SCHEDULE`↔`REGENERATE` 4. 여섯 의도가 "일정"이라는 한 낱말을 공유한다. **여기는 뱅크·임계·쪼개기 어느 것으로도 안 갈린다 — 차이가 문장 안에 없고 상황에 있기 때문이다**("일정 다시 짜줘"는 아무 일 없으면 REGENERATE, 비 오면 REPLAN). 없는 정보를 만드는 길은 문맥에서 가져오거나(Provider 몫, 라우터가 못 쓴다) **사용자에게 묻는 것**뿐이다
+- **신설 타입**: `IntentClarify{question, choices: IntentChoice[], source}` + `IntentChoice{intent, label}`. 기존 `ClarifyRequest` 는 `ArgumentClarify` 로 개명 — **되묻기가 두 종류**이고 성격이 다르다(의도가 안 갈림 / 인자가 빔). `RouterOutcome.clarify` 한 칸에 둘을 담는다: **동시에 나올 수 없다**(의도를 모르면 어떤 인자가 필요한지도 모른다 — `ARGUMENT_TABLE` 이 의도로 색인된다). 두 칸이면 표현 불가능한 상태가 타입에 생긴다
+- **질문 생성의 소유를 AI 로 확정** (미결 #6 해소): 고정 문구로는 안 된다 — 갈리는 자리는 차이가 문장 안에 없어서 사용자가 **자기 말을 되짚어** 보지 못하면 무엇을 고르는지 모른다. 신규 `LlmFeature.INTENT_CLARIFY`(LIGHT) + `prompts/intent_clarify.yaml` + `IntentClarifyGate` — **BR-AF-07 5종 세트 대상**
+- **후보는 서버가 주입한다 — 갈등하는 2~3개만, 13종 전체를 주지 않는다.** 게이트가 모든 보기를 그 목록으로 되매핑한다(INV-1). `EDIT_TRANSLATION` 의 `$edit_ops` 와 같은 구조 — 모델에게 라우팅을 다시 시키는 것이 아니라 **이미 좁혀진 둘 중 무엇인지 물을 문장**을 만들게 하는 것이다
+- **넣는 자리를 실측으로 갈랐다**: ⓘ 2차 동률대(득표 0.73~0.76)에는 **넣지 않는다** — 3차가 승격분을 전건 맞혔으므로 공짜로 맞힐 것을 왕복 비용으로 바꾼다 ⓘⓘ `FALLBACK` 자리(9건/87)를 **대체한다** — 현행 "기본 응답 + 수동 편집 안내"보다 낫고 침묵하지 않으므로 INV-4 유지 ⓘⓘⓘ 3차가 **낮은 신뢰도로 상태 변경 의도**를 냈을 때 실행 전 확인
+- **되묻기 총량 상한 1회**(BR-DLG-33): 의도 되묻기 뒤에 인자 되묻기를 이어 붙이지 않는다 — 2연속이면 사용자가 이탈한다. BR-DLG-23(프레임당 1회)의 상위 상한
+- **미결로 남긴 것**: ⓐ **후보 선정 규칙 미정**(미결 #10) — FALLBACK 발화에서 후보 2~3종을 1차 top-k 로 뽑을지 3차 산출과 그 경쟁자로 뽑을지. **후보에 정답이 없으면 되묻기가 폴백보다 나쁘다**(틀린 보기만 준다) → DoD 에 "후보 안에 정답이 든 비율" 실측을 걸었다 ⓑ **`OUT_OF_SCOPE` 거부 앵커 뱅크 부재**(미결 #9) — 집 없는 발화 25/87 중 9건이 범위 밖인데 전부 엉뚱한 의도에 붙는다(뱅크가 13종만 덮는다). 범위 밖은 **열린 집합**이라 전수 커버 불가, 흔한 갈래만 덮는다. 이득은 정확도가 아니라 비용(LLM 호출 ~10%) → 별도 티켓
+- **대신 적지 않은 것**: 프롬프트 `intent_clarify.yaml` 실물을 만들지 않았다 — 승인 게이트 전이고, 후보 선정 규칙(미결 #10)이 정해져야 프롬프트가 받을 입력이 확정된다

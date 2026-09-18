@@ -4,7 +4,7 @@
 
 SigNoz는 OpenTelemetry 기반으로 **로그·트레이스·메트릭을 한 곳에서** 다루는 도구입니다. 백엔드(Spring Boot)와 AI 레이어(Python)에서 나오는 로그를 서비스 단위로 묶어 보고, 트레이스와 연결해 원인을 추적하는 것이 목적입니다.
 
-> **선행 조건**: [k8s_install.md](k8s_install.md)의 설치가 끝나 있어야 합니다 — Docker Desktop Kubernetes 활성화, `kubectl`, `helm`.
+> **선행 조건**: [k8s_install.md](k8s_install.md)의 설치가 끝나 있어야 합니다 — kind 클러스터 생성, `kubectl`, `helm`.
 >
 > **팀 표준은 Kubernetes 설치입니다.** SigNoz를 Docker 단독으로 띄우는 방법도 존재하지만, 실제 배포 환경(EKS)과 구성이 달라져 로컬에서 검증한 내용이 그대로 이어지지 않습니다. Docker 단독 방식은 [부록](#부록-docker-단독-설치-비표준)에 참고용으로만 남깁니다.
 
@@ -37,13 +37,22 @@ SigNoz는 OpenTelemetry 기반으로 **로그·트레이스·메트릭을 한 �
 
 ### ① 최초 1회 — 설치
 
+**저장소의 스크립트가 이 과정을 대신합니다.** kind 클러스터 생성부터 SigNoz 설치, UI NodePort 적용까지 한 번에 하고, 이미 있으면 건너뜁니다(멱등).
+
+```bash
+./deploy/bin/cluster-up.sh      # 또는: just cluster-up
+```
+
+<details>
+<summary>스크립트가 하는 일을 직접 실행하기</summary>
+
 ```bash
 # foundryctl 설치 + PATH 등록
 curl -fsSL https://signoz.io/foundry.sh | bash
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 
 # 컨텍스트 확인 (필수 — EKS에 설치되는 사고 방지)
-kubectl config use-context docker-desktop
+kubectl config use-context kind-trippilot
 
 # casting 작성 후 배포
 mkdir -p ~/signoz && cd ~/signoz
@@ -58,21 +67,30 @@ spec:
     mode: kubernetes
 YAML
 foundryctl cast -f casting-k8s.yaml -p ./pours-k8s --format text
+
+# UI 를 고정 NodePort 로 노출
+kubectl apply -f deploy/k8s/signoz/ui-nodeport.yaml
 ```
 
+산출물(`pours-k8s/`)은 저장소 밖(`~/signoz`)에 둡니다 — 저장소를 오염시키지 않기 위해서입니다.
+</details>
+
 약 3~4분 걸립니다. 자세한 설명과 주의사항은 [§2](#2-kubernetes-설치).
+
+> **설치 직후 관리자 계정을 반드시 만드세요.** 계정(=조직)이 없으면 collector가 파이프라인 설정을 받지 못해 **OTLP 수신기 자체가 열리지 않습니다.** 앱 쪽에는 `Connection refused`로 보입니다.
+> 비밀번호는 **12자 이상 + 대문자 + 소문자 + 숫자 + 기호**여야 합니다. 로컬 전용이니 실제로 쓰는 비밀번호를 재사용하지 마세요.
 
 ### ② 매일 — 켜고 보기
 
 ```bash
 # 전날 scale 0으로 내려뒀다면 다시 깨우기
 kubectl scale statefulset,deployment --all --replicas=1 -n signoz
-
-# UI 열기 — 이 터미널은 켜둔 채로 유지
-kubectl port-forward -n signoz svc/signoz 8080:8080
 ```
 
 브라우저에서 `http://localhost:8080` → **Logs → Logs Explorer**
+
+> **UI는 `port-forward`가 필요 없습니다.** `deploy/k8s/signoz/ui-nodeport.yaml`의 NodePort 30080이 kind의 `extraPortMappings`로 호스트 8080에 연결돼 있습니다.
+> 오히려 같은 포트로 `port-forward`를 겹쳐 열면 리스너가 둘 생겨 어느 쪽이 응답할지 불확실해집니다. 열지 마세요.
 
 맥에서 직접 돌리는 앱의 로그를 보내려면 **별도 터미널**에서 수집기도 열어야 합니다.
 
@@ -122,9 +140,9 @@ helm list -n signoz && kubectl get pods -n signoz
 | 접속·헬스체크 (§3·§4) | **실측 확인** |
 | Pod·서비스·PVC 구성 (§4) | **실측 확인** |
 | 로그 검색 UI·연산자 (§6) | 공식 문서 확인 |
-| 애플리케이션 OTel 연결 (§5) | **미검증** — 백엔드 코드가 아직 없어 실제 수집 미확인 |
+| 애플리케이션 OTel 연결 (§5) | **실측 검증** (TRIP-218) — 백엔드를 kind에 배포해 로그·트레이스·메트릭 3신호가 ClickHouse에 적재되는 것을 확인 |
 
-검증 환경: macOS 26.5 · Apple Silicon · Docker Desktop 29.6.2(10 CPU / 31.3GiB) · Kubernetes v1.36.1(Kind 방식 3노드) · Helm v4.2.3 · foundryctl v0.2.17 · SigNoz 차트 0.135.1
+검증 환경: macOS 26.5 · Apple Silicon · Docker Desktop 29.6.2(10 CPU / 31.3GiB) · Kubernetes v1.36.1(kind 단일 노드) · Helm v4.2.3 · foundryctl v0.2.17 · SigNoz 차트 0.135.1
 
 ### 리소스 요구사항
 
@@ -151,10 +169,10 @@ kubectl config current-context
 kubectl get nodes
 ```
 
-`docker-desktop`이 아니면 **EKS에 설치될 수 있습니다.** 반드시 확인하고 진행하세요 ([k8s_install.md](k8s_install.md) §20).
+`kind-trippilot`이 아니면 **EKS에 설치될 수 있습니다.** 반드시 확인하고 진행하세요 ([k8s_install.md](k8s_install.md) §20).
 
 ```bash
-kubectl config use-context docker-desktop
+kubectl config use-context kind-trippilot
 ```
 
 ---
@@ -313,27 +331,27 @@ Warning: spec.template.spec.containers[0].env[21]: hides previous definition of 
 
 ## 3. 접속
 
-SigNoz UI는 `ClusterIP` 서비스라 외부에 노출되지 않습니다. `port-forward`로 접속합니다.
-
-```bash
-kubectl port-forward -n signoz svc/signoz 8080:8080
-```
-
-명령을 실행한 터미널은 그대로 유지합니다. 브라우저에서 접속합니다.
+Helm이 만드는 SigNoz UI 서비스는 `ClusterIP`라 그대로는 외부에 노출되지 않습니다. 그래서 저장소에 **NodePort 서비스를 따로** 두었습니다(`deploy/k8s/signoz/ui-nodeport.yaml`, `cluster-up.sh`가 적용).
 
 ```text
 http://localhost:8080/
 ```
 
-종료하려면 <kbd>Control</kbd> + <kbd>C</kbd>를 누릅니다.
+터미널을 켜 둘 필요가 없습니다. NodePort 30080이 kind의 `extraPortMappings`로 호스트 8080에 연결돼 있기 때문입니다(`deploy/kind/cluster.yaml`).
+
+> **`port-forward`로 8080을 또 열지 마세요.** kind 노드 컨테이너가 이미 그 호스트 포트를 잡고 있어, 겹쳐 열면 리스너가 둘 생기고 어느 쪽이 응답할지 OS 바인딩 우선순위에 달리게 됩니다. 실제로 "설정을 고쳤는데 반영이 안 되는" 것처럼 보이는 혼란이 생깁니다.
+>
+> Helm이 만든 `svc/signoz`는 건드리지 않습니다 — 차트 업그레이드 때 되돌려지기 때문에, 같은 파드를 가리키는 우리 소유의 서비스를 따로 둡니다.
+
+접속이 안 되면 NodePort와 매핑을 확인하세요.
+
+```bash
+kubectl get svc signoz-ui -n signoz -o jsonpath='{.spec.ports[0].nodePort}{"\n"}'   # 30080
+docker ps --filter name=trippilot-control-plane --format '{{.Ports}}'               # 8080->30080
+```
 
 최초 접속 시 관리자 계정을 생성합니다. 로컬 전용 계정이므로 **실제로 쓰는 비밀번호를 재사용하지 마세요.**
-
-> `8080`이 이미 사용 중이면 로컬 포트만 바꾸면 됩니다.
->
-> ```bash
-> kubectl port-forward -n signoz svc/signoz 18080:8080
-> ```
+비밀번호 규칙은 **12자 이상 + 대문자 + 소문자 + 숫자 + 기호**입니다 — 만족하지 않으면 `invalid_password`로 거부됩니다.
 
 ---
 
@@ -402,11 +420,11 @@ data-signoz-telemetrykeeper-zookeeper-0  Bound   8Gi       standard
 pgdata-signoz-metastore-postgres-0       Bound   10Gi      standard
 ```
 
-Docker Desktop의 기본 `standard` 스토리지클래스로 **자동 Bound**됩니다. 별도 설정이 필요 없습니다.
+kind 의 기본 `standard` 스토리지클래스(rancher.io/local-path)로 **자동 Bound**됩니다. 별도 설정이 필요 없습니다.
 
 ### 헬스체크
 
-port-forward가 켜진 상태에서:
+호스트에서 바로 확인합니다(UI NodePort 경유):
 
 ```bash
 curl -s http://localhost:8080/api/v1/health
@@ -416,7 +434,7 @@ curl -s http://localhost:8080/api/v1/health
 {"status":"ok"}
 ```
 
-port-forward 없이 클러스터 안에서 직접 확인할 수도 있습니다.
+클러스터 안에서 직접 확인할 수도 있습니다.
 
 ```bash
 kubectl exec -n signoz signoz-0 -- wget -qO- http://localhost:8080/api/v1/health
@@ -443,12 +461,18 @@ kubectl port-forward -n signoz svc/signoz-ingester 4317:4317 4318:4318
 
 ### 5.1 백엔드 (Spring Boot + Kotlin)
 
-OpenTelemetry Java 에이전트를 붙이는 방식이 코드 변경 없이 가장 빠릅니다.
+**클러스터에 배포하는 경우에는 아무것도 할 필요가 없습니다.** `backend/Dockerfile`이 에이전트를 이미지에 넣고 `ENTRYPOINT`의 `-javaagent`로 붙이며, 필요한 환경변수는 `deploy/k8s/backend/configmap.yaml`에 있습니다. 자세한 배선은 [`deploy/README.md`](../../deploy/README.md)를 보세요.
+
+아래는 **맥에서 직접(`bootRun`) 돌릴 때**의 방법입니다.
 
 ```bash
 mkdir -p ~/otel && curl -L -o ~/otel/opentelemetry-javaagent.jar \
-  https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar
+  https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.30.0/opentelemetry-javaagent.jar
 ```
+
+> **`latest`로 받지 마세요. 버전을 고정해야 합니다.**
+> 에이전트 **2.14.0**은 Spring Boot 4에서 모든 HTTP 응답 본문을 0바이트로 만들고(상태 코드·헤더는 정상), logback 계측이 `NoSuchFieldError`를 일으켜 기동 자체를 실패시킵니다. 둘 다 실측으로 확인했습니다.
+> 컨테이너가 쓰는 버전은 `backend/Dockerfile`의 `OTEL_AGENT_VERSION`이 정본입니다 — 그 값과 맞추세요.
 
 ```bash
 JAVA_TOOL_OPTIONS="-javaagent:$HOME/otel/opentelemetry-javaagent.jar" \
@@ -805,7 +829,7 @@ foundryctl cast -f casting.yaml --format text
 |---|---|---|
 | 코디네이션 | **Zookeeper** | **ClickHouse Keeper** |
 | ClickHouse 관리 | ClickHouse **Operator**가 CR로 생성 | 컨테이너 직접 실행 |
-| UI 접속 | `port-forward` 필요 | `localhost:8080` 직접 |
+| UI 접속 | NodePort 30080 → `localhost:8080` 직접 | `localhost:8080` 직접 |
 | 생성 파일 | `pours/deployment/values.yaml` | `pours/deployment/compose.yaml` |
 
 제거는 생성된 compose 파일 위치에서 수행합니다.

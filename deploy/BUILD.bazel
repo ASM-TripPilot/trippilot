@@ -1,0 +1,154 @@
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+
+package(default_visibility = ["//visibility:public"])
+
+# 세 서비스의 이미지를 한 규칙 아래 모은다. 예전에는 패키지마다 Dockerfile 이
+# 따로 있어서 베이스 이미지 갱신·레이어 순서가 제각각이었다 — 여기서는
+# 베이스가 MODULE.bazel 에 digest 로 한 번만 박히고 세 이미지가 그것을 공유한다.
+
+# ── backend ────────────────────────────────────────────────────
+# Gradle 이 만든 bootJar 를 staging 에서 집는다. Bazel 이 Gradle 을 직접
+# 부르지 않는 이유: Gradle 은 소스트리(backend/build)에 쓰기 때문에 샌드박스
+# 안에서 재현되지 않는다. 스테이징 순서는 just 가 보장한다(deploy/bin/stage.sh).
+filegroup(
+    name = "backend_jar",
+    srcs = glob(
+        ["artifacts/backend/app.jar"],
+        allow_empty = True,
+    ),
+)
+
+pkg_tar(
+    name = "backend_layer",
+    srcs = [":backend_jar"],
+    package_dir = "/app",
+    remap_paths = {"artifacts/backend/app.jar": "app.jar"},
+)
+
+# OTel Java 에이전트를 별도 레이어로 얹는다. jar 가 바뀌어도 에이전트 레이어는
+# 그대로 재사용된다.
+pkg_tar(
+    name = "otel_agent_layer",
+    srcs = ["@otel_javaagent//file"],
+    package_dir = "/app",
+    remap_paths = {"otel-agent.jar": "otel-agent.jar"},
+)
+
+oci_image(
+    name = "backend_image",
+    base = "@temurin_jre",
+    # -javaagent 는 JAVA_TOOL_OPTIONS 가 아니라 entrypoint 에 직접 둔다.
+    # 환경변수 경로는 다른 값에 덮여 조용히 사라질 수 있고, 그러면 트레이스만
+    # 없는 채로 앱이 정상 기동한다.
+    entrypoint = [
+        "java",
+        "-javaagent:/app/otel-agent.jar",
+        "-jar",
+        "/app/app.jar",
+    ],
+    # 관측성 안전 기본값(TRIP-218). ConfigMap 에도 같은 값이 있지만 이미지에도
+    # 둔다 — 이 셋은 빠뜨리면 **조용히** 잘못 동작한다.
+    #   LOGBACK_APPENDER_ENABLED=false : 에이전트가 root 로거에 appender 를 자동
+    #     부착하면 MaskingAppender 를 우회한 원문(토큰·이메일)이 수집기로 나간다.
+    #   LOGBACK_MDC_ENABLED=false      : 에이전트의 logback MDC 계측이 넣는 가상
+    #     필드가 주입되지 않아 첫 로그에서 NoSuchFieldError 로 기동이 실패한다.
+    #   METRICS_EXPORTER=otlp          : Micrometer 의 OTLP push 는 에이전트가
+    #     붙으면 조용히 유실된다(실측).
+    env = {
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+        "OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED": "false",
+        "OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED": "false",
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_METRICS_EXPORTER": "otlp",
+        "OTEL_SERVICE_NAME": "trippilot-backend",
+        "OTEL_TRACES_EXPORTER": "otlp",
+    },
+    exposed_ports = ["8080"],
+    tars = [
+        ":otel_agent_layer",
+        ":backend_layer",
+    ],
+    # deployment.yaml 의 runAsUser/runAsGroup 과 같은 숫자여야 한다.
+    # runAsNonRoot 는 이름이 아니라 숫자 UID 로만 검증할 수 있다.
+    user = "1001:1001",
+)
+
+oci_load(
+    name = "backend_load",
+    image = ":backend_image",
+    repo_tags = ["trippilot/backend:local"],
+)
+
+# ── frontend ───────────────────────────────────────────────────
+# 현재 web/ 는 정적 스텁이다. Expo Web export 로 바뀌어도 이 규칙은 그대로다
+# — just 가 export 산출물을 frontend/web 에 놓기만 하면 된다.
+pkg_tar(
+    name = "frontend_web_layer",
+    srcs = ["//frontend:web"],
+    package_dir = "/usr/share/nginx/html",
+    strip_prefix = "/frontend/web",
+)
+
+pkg_tar(
+    name = "frontend_conf_layer",
+    srcs = ["//frontend:nginx.conf"],
+    package_dir = "/etc/nginx/conf.d",
+    # 베이스 이미지의 default.conf 를 덮어써야 한다. 다른 이름으로 넣으면
+    # 80 포트에 server 블록이 둘 생겨 어느 쪽이 기본인지 불확실해진다.
+    remap_paths = {"frontend/nginx.conf": "default.conf"},
+)
+
+oci_image(
+    name = "frontend_image",
+    base = "@nginx_alpine",
+    exposed_ports = ["80"],
+    tars = [
+        ":frontend_conf_layer",
+        ":frontend_web_layer",
+    ],
+)
+
+oci_load(
+    name = "frontend_load",
+    image = ":frontend_image",
+    repo_tags = ["trippilot/frontend:local"],
+)
+
+# ── ai ─────────────────────────────────────────────────────────
+# main.py 는 stdlib 만 쓰는 스텁이라 의존성 레이어가 없다. 실제 C1/C2 가
+# anthropic·ortools 를 쓰기 시작하면 여기에 의존성 레이어를 하나 더 얹어야
+# 한다 (deploy/README.md 의 '후속' 절 참조).
+pkg_tar(
+    name = "ai_layer",
+    srcs = ["//ai:main.py"],
+    package_dir = "/app",
+    remap_paths = {"ai/main.py": "main.py"},
+)
+
+oci_image(
+    name = "ai_image",
+    base = "@python_slim",
+    entrypoint = [
+        "python",
+        "/app/main.py",
+    ],
+    exposed_ports = ["8000"],
+    tars = [":ai_layer"],
+)
+
+oci_load(
+    name = "ai_load",
+    image = ":ai_image",
+    repo_tags = ["trippilot/ai:local"],
+)
+
+# `bazel build //deploy:images` 한 번으로 세 이미지를 모두 만든다.
+filegroup(
+    name = "images",
+    srcs = [
+        ":ai_image",
+        ":backend_image",
+        ":frontend_image",
+    ],
+)

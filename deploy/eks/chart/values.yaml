@@ -1,0 +1,56 @@
+# Endpoints and immutable image tags are supplied from Terraform outputs by deploy-eks.yml.
+environment: dev
+rolloutNonce: ""
+images:
+  backend:
+    repository: ""
+    tag: ""
+  ai:
+    repository: ""
+    tag: ""
+  embedding:
+    repository: ""
+    tag: ""
+  gateway:
+    repository: nginxinc/nginx-unprivileged
+    tag: 1.30.5-alpine-slim
+imagePullPolicy: IfNotPresent
+config:
+  databaseHost: ""
+  databasePort: 5432
+  databaseName: trippilot
+  databaseUser: app_user
+  databaseMigrateUser: app_migrate
+  redisHost: ""
+  redisPort: 6379
+  scheduleDeadlineEnforced: false
+  scheduleDeadlineDay1Ms: 5000
+  scheduleDeadlineTotalMs: 20000
+backend:
+  replicas: 1
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { cpu: "2", memory: 2Gi }
+ai:
+  replicas: 1
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { cpu: "2", memory: 2Gi }
+embedding:
+  # Optional CPU KURE service. Requires the vector database bootstrap and vector data ingestion.
+  enabled: false
+  replicas: 1
+  resources:
+    requests: { cpu: "2", memory: 5Gi }
+    limits: { cpu: "2", memory: 6Gi }
+gateway:
+  certificateArn: ""
+  # Informational: create DNS to the LoadBalancer hostname after the first deployment.
+  hostname: ""
+  replicas: 1
+  loadBalancerSourceRanges: [0.0.0.0/0]
+  resources:
+    requests: { cpu: 100m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 128Mi }
+podDisruptionBudget:
+  enabled: false

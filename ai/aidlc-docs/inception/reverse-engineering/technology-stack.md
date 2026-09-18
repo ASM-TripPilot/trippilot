@@ -13,8 +13,8 @@
 |---|---|---|
 | FastAPI (권고) | latest | HTTP API 서빙 (REST) |
 | pydantic | latest | 스키마 검증·직렬화 |
-| OR-Tools (후보) | latest | OPTW/TOPTW 솔버 (벤치마크 후 확정) |
-| Timefold (후보) | latest | 제약 스트리밍 DSL 솔버 (대안) |
+| OR-Tools (후보) | latest | OPTW/TOPTW 어셈블리 (벤치마크 후 확정) |
+| Timefold (후보) | latest | 제약 스트리밍 DSL 어셈블리 (대안) |
 
 ## Infrastructure (확정 필요)
 
@@ -56,7 +56,7 @@
 
 | Decision | Impact |
 |---|---|
-| AI-D01: 전면 Python | C2(솔버)도 Python. Kotlin 인프로세스 전제 폐기 |
+| AI-D01: 전면 Python | C2(어셈블리)도 Python. Kotlin 인프로세스 전제 폐기 |
 | D11: 서버 경유 단일 벤더 | API 키 서버 보관, 클라이언트 직접 호출 금지 |
-| D37: 테스트 계층 분리 | PR CI에서 LLM·외부API fake, 솔버 실코드 |
+| D37: 테스트 계층 분리 | PR CI에서 LLM·외부API fake, 어셈블리 실코드 |
 | INV-4: 결정론 폴백 | 시드 고정, 무작위성 제거 필수 |
