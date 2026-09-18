@@ -134,3 +134,37 @@ def test_prompt_context_renders_unset_companion_as_misseol() -> None:
                          generated_at=dt.datetime(2026, 9, 19, tzinfo=dt.timezone.utc))
     ctx = build_prompt_vars(pool, persona)
     assert ctx["companion"] == "미설정"
+
+
+# ── enum 전수성 — 값이 늘 때 조용히 새는 자리를 막는다 ──────────────────────
+#
+# 안티패턴 등재분(2026-09-19): "닫힌 집합에 값을 하나 더했으면 그 값을 **만들어 내는**
+# 경로를 전부 세고 나서 끝낼 것." 여기서 새는 방식이 특히 조용하다 — 우선순위 표에서
+# 빠진 값은 예외가 아니라 `None`(미설정)으로 떨어져서 **선택한 동행이 선택 안 한 것처럼
+# 보인다.** 정상 동작과 구분이 안 되므로 테스트가 아니면 안 드러난다.
+
+def test_every_companion_type_is_rankable() -> None:
+    from trippilot.domain.persona import _COMPANION_PRIORITY
+
+    missing = [c for c in CompanionType if c not in _COMPANION_PRIORITY]
+    assert not missing, (
+        f"우선순위 표에 없는 동행: {missing} — 다중 선택에 섞이면 조용히 미설정이 된다")
+
+
+def test_every_backend_companion_label_is_translated() -> None:
+    """백엔드 `PreferenceSet.COMPANION_TYPES` 정본 5종이 전부 옮겨지는가."""
+    from trippilot.domain.persona import COMPANION_TOKENS
+
+    backend = ("혼자", "커플", "친구", "가족", "부모님")
+    missing = [x for x in backend if x not in COMPANION_TOKENS]
+    assert not missing, f"번역표에 없는 동행 어휘: {missing} — 조용히 미설정이 된다"
+
+
+def test_every_backend_style_is_translated() -> None:
+    """백엔드 `PreferenceSet.STYLES` 정본 7종 ↔ 우리 7축 (전단사)."""
+    from trippilot.domain.persona import TASTE_TOKENS
+
+    backend = ("휴양", "관광", "액티비티", "미식", "쇼핑", "자연", "문화예술")
+    missing = [x for x in backend if x not in TASTE_TOKENS]
+    assert not missing, f"번역표에 없는 취향 어휘: {missing}"
+    assert set(TASTE_TOKENS.values()) == set(TasteTag), "7축 중 도달 불가능한 값이 있다"
