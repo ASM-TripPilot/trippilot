@@ -10,7 +10,7 @@ on:
     branches: [develop]
     paths: ['backend/**', 'ai/docs/openapi.json', 'ai/data/collected_pois.json', '.github/workflows/backend-ci.yml']
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
     paths: ['backend/**', 'ai/docs/openapi.json', 'ai/data/collected_pois.json', '.github/workflows/backend-ci.yml']
   workflow_dispatch:
 
@@ -27,6 +27,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
+          # 의존성·컴파일 캐시. 지금까지 없어서 매 실행이 전체 재다운로드·재컴파일이었다
+          # (실측 ~4분/회 × 하루 20회+). buildkit mode=min 전환으로 캐시 자리를 먼저 비웠다 —
+          # 10GB 상한이 꽉 찬 상태에서 붙이면 도커 레이어에 밀려 바로 증발한다.
+          cache: gradle
       - name: gradle build (test 포함)
         working-directory: backend
         run: ./gradlew build --no-daemon
@@ -61,4 +65,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min

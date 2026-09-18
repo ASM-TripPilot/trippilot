@@ -175,7 +175,7 @@ jobs:
           push: true
           tags: ${{ steps.infra.outputs.backend_repository }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=aws-backend
-          cache-to: type=gha,mode=max,scope=aws-backend
+          cache-to: type=gha,mode=min,scope=aws-backend
       - name: Build and publish AI
         if: steps.config.outputs.deploy_application == 'true'
         uses: docker/build-push-action@v6
@@ -185,7 +185,7 @@ jobs:
           push: true
           tags: ${{ steps.infra.outputs.ai_repository }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=aws-ai
-          cache-to: type=gha,mode=max,scope=aws-ai
+          cache-to: type=gha,mode=min,scope=aws-ai
       - name: Build and publish embedding
         if: steps.config.outputs.deploy_application == 'true' && inputs.embedding_enabled
         uses: docker/build-push-action@v6
@@ -195,7 +195,7 @@ jobs:
           push: true
           tags: ${{ steps.infra.outputs.embedding_repository }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=aws-embedding
-          cache-to: type=gha,mode=max,scope=aws-embedding
+          cache-to: type=gha,mode=min,scope=aws-embedding
       - uses: azure/setup-kubectl@v4
         if: steps.config.outputs.deploy_application == 'true'
         with:

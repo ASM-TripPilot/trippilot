@@ -5,7 +5,7 @@ on:
     branches: [develop]
     paths: ['ai/**', '.github/workflows/ai-ci.yml']
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
     paths: ['ai/**', '.github/workflows/ai-ci.yml']
   workflow_dispatch:
 
@@ -60,7 +60,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min
       # push 와 load 는 동시 불가라 단계를 나눈다 — 위 단계의 gha 캐시를 그대로 재사용해 수 초면 끝.
       - name: 스모크용 이미지 로드 (gha 캐시 재사용)
         uses: docker/build-push-action@v6
