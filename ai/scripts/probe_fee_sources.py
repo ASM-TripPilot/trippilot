@@ -77,7 +77,16 @@ def main() -> int:
     ap.add_argument("--kinds", default="12,14,28,38,39")
     ap.add_argument("--per-kind", type=int, default=80)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--endpoints", default="detailIntro2,detailInfo2",
+                    help="부를 엔드포인트. 필드를 이미 아는 2차 실측이면 하나로 줄여 "
+                         "호출을 반으로 뺀다")
+    ap.add_argument("--dump-fields", default="",
+                    help="원문을 **전부** 남길 필드 쉼표 목록 (반복정보는 'info:이용요금'). "
+                         "표본 4건으로는 분포를 못 본다 — 사분위가 필요하면 이걸 쓴다")
     args = ap.parse_args()
+
+    want_eps = tuple(e.strip() for e in args.endpoints.split(",") if e.strip())
+    dump_fields = [f.strip() for f in args.dump_fields.split(",") if f.strip()]
 
     keys = [k for k in (os.environ.get(n, "").strip()
                         for n in ("TOUR_API_KEY", "TOUR_API_KEY2", "TOUR_API_KEY3")) if k]
@@ -99,12 +108,12 @@ def main() -> int:
         priced: dict[str, int] = defaultdict(int)     # 필드 → `원` 금액 포함
         samples: dict[str, list[str]] = defaultdict(list)
         info_names: dict[str, int] = defaultdict(int)  # 반복정보 infoname 빈도
+        dumped: dict[str, list[str]] = {f: [] for f in dump_fields}
 
         for cid in ids:
             row: dict[str, str] = {}
             for endpoint, params in (
-                ("detailIntro2", {"contentId": cid, "contentTypeId": kind}),
-                ("detailInfo2", {"contentId": cid, "contentTypeId": kind}),
+                (e, {"contentId": cid, "contentTypeId": kind}) for e in want_eps
             ):
                 key = keys[(calls // 900) % len(keys)]   # 키당 900콜에서 다음 키로
                 calls += 1
@@ -124,6 +133,9 @@ def main() -> int:
                             info_names[name] += 1
                             row[f"info:{name}"] = str(it.get("infotext") or "")
             seen += 1
+            for f in dump_fields:
+                if (v := row.get(f, "").strip()):
+                    dumped[f].append(v)
             for k, v in row.items():
                 if not v.strip():
                     continue
@@ -144,6 +156,8 @@ def main() -> int:
                            "samples": samples.get(k, [])} for k, f, w in rows},
             "info_names": dict(sorted(info_names.items(), key=lambda kv: -kv[1])),
         }
+        if any(dumped.values()):
+            result[kind]["dump"] = {f: v for f, v in dumped.items() if v}
         print(f"\n[fee] type={kind} — {seen}건")
         print(f"    {'필드':30} {'채움':>7} {'원금액':>7}")
         for k, f, w in rows:
