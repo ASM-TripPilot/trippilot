@@ -269,6 +269,13 @@ class IntentRouter:
         ratio = weight / total
         if ratio < self._cfg.vote_ratio:
             return None, f"vote_ratio({ratio:.3f})"
+        # 앵커를 뱅크에 실은 순간 **2차도 앵커를 뽑을 수 있게 됐다.** 투표가 "우리 일이 아니다" 로
+        # 수렴한 것이니 거절이 맞다 — 그런데 VOTED 로 감싸면 IntentMatch 불변식
+        # ("FALLBACK 경로 ⇔ OUT_OF_SCOPE 라벨")을 위반해 ValueError 가 난다.
+        # 라우터가 그 예외를 잡아 폴백으로 바꾸므로 **결과는 우연히 맞고 사유만 router_error** 가 된다
+        # — 거절 표지가 없어 채점에서 '비거절 폴백'(= 인프라 실패)으로 잡히는 조용한 오염이었다.
+        if winner is Intent.OUT_OF_SCOPE:
+            return _fallback(f"out_of_scope_anchor(vote {ratio:.3f}, {best[winner].entry_id})"), ""
         return (
             IntentMatch(
                 intent=winner,

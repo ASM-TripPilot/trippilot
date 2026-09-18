@@ -293,6 +293,32 @@ def test_polluted_bank_labels_are_ignored_inv1() -> None:
     assert "bank_miss" in match.reason
 
 
+def test_out_of_scope_anchor_winning_the_vote_refuses_instead_of_crashing() -> None:
+    """2차 투표가 거부 앵커를 승자로 뽑아도 거절로 수렴한다 (거부 앵커 후속 결함).
+
+    앵커를 뱅크에 넣은 순간 **2차도 앵커를 뽑을 수 있게 됐다.** 그런데 `_vote` 는 승자를
+    `MatchRoute.VOTED` 로 감싸고, `IntentMatch` 는 "FALLBACK 경로 ⇔ OUT_OF_SCOPE 라벨" 을
+    강제한다 — 그래서 ValueError 가 났다.
+
+    증상이 고약했다: 라우터가 그 예외를 잡아 폴백으로 바꾸므로 **결과는 우연히 거절이라 맞다.**
+    사유만 `router_error: ValueError ...` 였고, 채점에서는 거절 표지가 없어 '비거절 폴백' 1건으로
+    조용히 잡혔다. 평가셋 87건 중 1건이라 잡음으로 읽히기 딱 좋았다.
+    """
+    # 앵커 하나만 둔 뱅크 — 원문도 재질의도 전부 앵커에 붙어 2차 승자가 OUT_OF_SCOPE 가 된다
+    router = _scripted_router(
+        bank={"OOS1": (0.00, Intent.OUT_OF_SCOPE), "E1": (1.50, Intent.EDIT_SCHEDULE)},
+        # 0.66 → top1 0.790: t_mid(0.75) 위·t_high(0.82) 아래라 **2차로 간다**.
+        # 재질의 변형 셋이 전부 앵커에 딱 붙어(1.000) 득표율 1.0 → 승자가 OUT_OF_SCOPE 가 된다.
+        extra_angles={"범위 밖 질문": 0.66, "변형1": 0.00, "변형2": 0.00, "변형3": 0.00},
+        paraphrase_gateway=_paraphrase_gw("변형1", "변형2", "변형3"),
+    )
+    match = router.route("범위 밖 질문", _TID, _NOW)
+    assert match.match_route is MatchRoute.FALLBACK
+    assert match.intent is Intent.OUT_OF_SCOPE
+    assert "out_of_scope_anchor" in match.reason  # 거절 표지 — 인프라 실패로 세지 않는다
+    assert "router_error" not in match.reason  # 예외로 수렴하면 안 된다
+
+
 def test_out_of_scope_anchor_refuses_at_stage_one_without_calling_llm() -> None:
     """거부 앵커가 1차에서 이기면 **LLM 0회로 거절**한다 (TRIP-868).
 
