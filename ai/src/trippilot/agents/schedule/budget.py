@@ -37,6 +37,17 @@ class OrchestratorConfig:
     c1_max_ms: int = 14_000
     c1_min_ms: int = 800          # 이보다 적게 배분되면 LLM 호출 자체를 스킵 (DL-2)
     explanation_min_ms: int = 1_500  # 설명 부착(선택 단계) 진입 하한
+    # ── 지도 실재 검증 ②′ (TRIP-898 → TRIP-904 에서 풀 빌더로부터 이동) ──
+    # 점수 상위 몇 건을 지도에서 확인할 것인가. 마감이 실질 제한이라 이 값은 상한일
+    # 뿐이다 — 3일 여행이 슬롯 15개 안팎이라 50 이면 배치될 후보를 넉넉히 덮는다.
+    existence_verify_top_n: int = 50
+    # 검증에 줄 시간 상한. 어셈블리 바닥(c2_reserved_ms)을 침범하지 않는 만큼만 쓴다.
+    existence_deadline_ms: int = 1_500
+    # 지도에서 못 찾은 후보의 점수 배율 — **0 초과**여야 강등이다. 0 이면 OR-Tools
+    # 목적함수에서 방문 이득이 0 이 되어 사실상 배제가 된다(9/12 팀 결정 위반).
+    # 0.2 = 점수 한 단(0.3) 미만으로 눌러 정상 후보 대부분의 뒤에 서게 한다. 근거:
+    # 지도 미검출이 실제 폐업일 확률 ≈ 102/(102+305) ≈ 25% (ai-existence-probe 실측).
+    existence_demote_factor: float = 0.2
 
     def __post_init__(self) -> None:
         if not 0.0 < self.c2_min_share < 1.0:
@@ -49,6 +60,12 @@ class OrchestratorConfig:
                      "explanation_min_ms"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} 음수 불가")
+        if self.existence_verify_top_n <= 0:
+            raise ValueError("existence_verify_top_n 양수 필요")
+        if self.existence_deadline_ms <= 0:
+            raise ValueError("existence_deadline_ms 양수 필요")
+        if not 0.0 < self.existence_demote_factor <= 1.0:
+            raise ValueError("existence_demote_factor ∈ (0, 1] — 0 은 배제다")
 
 
 @dataclass(frozen=True, slots=True)
