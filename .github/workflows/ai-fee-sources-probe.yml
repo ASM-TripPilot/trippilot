@@ -1,0 +1,69 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
+# 요금 값이 어디에 있는지 훑는다 — 엔드포인트·필드 전수 스캔 (탐색용 1회성).
+#
+# `usefee` 실측에서 나온 것: 타입 14 에만 있고 후보풀 전체로는 0.9%. 나머지
+# 96.9% 를 채울 수 있는지 답하려면 다른 엔드포인트(detailInfo2 반복정보)와
+# 산문 필드(usetime·expguide)에 요금이 섞여 있는지를 봐야 한다.
+#
+# 수동 실행 전용. 실 API 를 쓰므로 머지 게이트에 얹지 않는다(리포 규약: CI 는
+# 외부 호출 0). 상태(커서·기제안 색인)를 읽지도 쓰지도 않는다.
+name: ai-fee-sources-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      kinds:
+        description: 'contentTypeId 쉼표 목록'
+        required: false
+        default: '12,14,28,38,39'
+        type: string
+      per_kind:
+        description: '타입당 POI 수 (엔드포인트 2종이라 호출은 이 값의 2배)'
+        required: false
+        default: '80'
+        type: string
+      from_doc:
+        description: '제안 문서 경로 — 여기서 content_id 를 뽑는다'
+        required: false
+        default: 'data/collected_pois.json'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop   # 실측 대상 스크립트는 develop (main의 ai/는 구버전)
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 요금 필드 스캔
+        working-directory: ai
+        env:
+          TOUR_API_KEY: ${{ secrets.TOUR_API_KEY }}
+          TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}
+          TOUR_API_KEY3: ${{ secrets.TOUR_API_KEY3 }}
+        run: |
+          uv run python scripts/probe_fee_sources.py \
+            --from-doc "${{ inputs.from_doc }}" \
+            --kinds "${{ inputs.kinds }}" \
+            --per-kind "${{ inputs.per_kind }}" \
+            --out fee_sources.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 결과 보존
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fee-sources
+          path: ai/fee_sources.json
+          if-no-files-found: warn
+          retention-days: 30
