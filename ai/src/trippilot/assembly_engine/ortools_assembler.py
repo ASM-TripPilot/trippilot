@@ -122,7 +122,14 @@ class OrToolsAssembler:
             stay = int((fb.window.end - fb.window.start).total_seconds() // 60)
             existing = next((n for n in nodes if n["poi"].poi_id == fb.poi_id), None)
             if existing:
-                existing.update({"pin": pin, "stay": stay})
+                # lo·hi 도 함께 고정한다 — 아래 else 가지가 새 노드를 만들 때 쓰는 값과
+                # 같아야 한다. 안 맞추면 후보로 계산된 창(`hi = 닫힘 − 기본체류`)이 남고,
+                # 그 밖에 pin 이 놓이면 `start[i] == pin` 과 정의역이 모순돼 CP-SAT 이
+                # INFEASIBLE 을 낸다 → `_solve_day` None → **그 일자가 아니라 전체 solve**
+                # 가 None → 규칙 폴백 강등. 실측: 하루 창 09~21시, SIGHT(기본 75분)이
+                # 후보이자 고정일 때 20:00 예약에서 재현(19:00 은 통과 — 경계가 19:45).
+                # 고정 블록의 창이 정본이다(HC3) — 후보 기본체류는 여기서 의미가 없다.
+                existing.update({"pin": pin, "stay": stay, "lo": pin, "hi": pin})
             else:
                 nodes.append({"poi": poi, "stay": stay, "lo": pin, "hi": pin,
                               "score": 0.0, "is_llm": False, "pin": pin})
