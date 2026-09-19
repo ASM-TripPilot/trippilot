@@ -50,6 +50,7 @@ import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
 import { DestinationDetailScreen } from '@/features/explore/ui/DestinationDetailScreen';
+import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -2762,6 +2763,84 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressRemove={noop}
         onPressCreateTrip={noop}
         onPressBrowse={noop}
+      />
+    ),
+  },
+  // TRIP-706 — d02 select 모드 4얼굴(Figma 2437:1500·1666·1616·1639). props-only 직접 렌더.
+  // 체크 채움/빈 글리프·92px 에러 원·콜라주 벡터·순번 배지 원은 jest 사각이라 이 4키가 6-b 육안 자리.
+  {
+    key: 'saved-places-select',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 default',
+    login: null,
+    render: () => (
+      <MustVisitPickScreen
+        state={{ kind: 'results' }}
+        savedPlaces={PREVIEW_SAVED_PLACES}
+        selectedPoiIds={['p-1', 'p-2', 'p-3']}
+        onToggleSelect={noop}
+        onComplete={noop}
+        onPressAddMore={noop}
+        onRetry={noop}
+        onPressBrowse={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'saved-places-select-loading',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 loading',
+    login: null,
+    render: () => (
+      <MustVisitPickScreen
+        state={{ kind: 'loading' }}
+        savedPlaces={[]}
+        selectedPoiIds={[]}
+        onToggleSelect={noop}
+        onComplete={noop}
+        onPressAddMore={noop}
+        onRetry={noop}
+        onPressBrowse={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'saved-places-select-empty',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 empty',
+    login: null,
+    render: () => (
+      <MustVisitPickScreen
+        state={{ kind: 'empty' }}
+        savedPlaces={[]}
+        selectedPoiIds={[]}
+        onToggleSelect={noop}
+        onComplete={noop}
+        onPressAddMore={noop}
+        onRetry={noop}
+        onPressBrowse={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'saved-places-select-error',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 error',
+    login: null,
+    render: () => (
+      <MustVisitPickScreen
+        state={{ kind: 'error' }}
+        savedPlaces={[]}
+        selectedPoiIds={[]}
+        onToggleSelect={noop}
+        onComplete={noop}
+        onPressAddMore={noop}
+        onRetry={noop}
+        onPressBrowse={noop}
+        onBack={noop}
       />
     ),
   },

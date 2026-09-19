@@ -9,6 +9,8 @@ const MUTED = '#6A6A6A';
 const MUTED_SOFT = '#9AA1AB';
 const PRIMARY = '#FF385C';
 const ON_PRIMARY = '#FFFFFF';
+// d02 select 미선택 체크 링 색(Figma MISS `#d0d0d0` — 토큰 없음, `*Glyphs.tsx` raw-hex 스캔 제외).
+const DISABLED_RING = '#D0D0D0';
 
 type GlyphProps = {
   size?: number;
@@ -260,6 +262,74 @@ export function WarningTriangleGlyph({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </Svg>
+  );
+}
+
+/** d02 select 선택 체크 — 핑크 채움 원 + 흰 체크 틱. 미선택(`CheckCircleOutlineGlyph`)과
+ * **서로 다른 컴포넌트**로 갈린다(하나의 글리프에 fill 색만 토글하면 SVG fill 이 렌더 트리에
+ * 안 남아 심판을 못 한다 — repo-traps §글리프 함정 회피). Figma 2437:1500 체크 틱. */
+export function CheckCircleFilledGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Circle cx={12} cy={12} r={11} fill={PRIMARY} />
+      <Path
+        d="M7.5 12.3l3 3 6-6.6"
+        stroke={ON_PRIMARY}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** d02 select 미선택 체크 — 흰 배경 + 회색 빈 원. 채움(`CheckCircleFilledGlyph`)과 다른 컴포넌트다
+ * (위 함정 참고). 링 색 `#d0d0d0` 은 토큰 밖 raw 지만 `*Glyphs.tsx` 는 raw-hex 스캔 제외라 허용된다. */
+export function CheckCircleOutlineGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Circle
+        cx={12}
+        cy={12}
+        r={10.2}
+        stroke={DISABLED_RING}
+        strokeWidth={1.6}
+      />
+    </Svg>
+  );
+}
+
+/** d02 select-error 배지 — 원형 느낌표(primary). 연회색 원(92px) 안에 얹힌다(Figma 2437:1639). */
+export function CircleExclaimGlyph({ size = 40, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Circle cx={12} cy={12} r={9} stroke={PRIMARY} strokeWidth={1.8} />
+      <Path
+        d="M12 7.5v5"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+      <Circle cx={12} cy={16} r={1.05} fill={PRIMARY} />
     </Svg>
   );
 }

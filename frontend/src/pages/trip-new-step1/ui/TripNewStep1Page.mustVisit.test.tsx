@@ -199,10 +199,10 @@ describe('canProceed 담은목록 게이트 (03b W-5 보존)', () => {
 });
 
 describe('더 담기 목적지 분기 (TRIP-367 보존 · TRIP-689 d02 계약 플립)', () => {
-  it('담은 곳이 있으면 담은 장소 화면(d02)으로 가되, 여행 지역을 region 파라미터로 싣는다', () => {
-    // TRIP-689: d02 갈래도 평문 '/explore/saved-places' → 객체형({pathname, params:{region}})으로
-    // 바뀐다(d04 갈래와 완전 동형, 표준명 원문·순서 그대로). 저장목록 화면이 이 지역으로 클라 필터한다.
-    // ⚠️ router.push 객체 인자는 재귀 완전 일치 비교라 region 배열 순서·여분 키까지 잠긴다.
+  it('담은 곳이 있으면 담은 장소 화면(d02)으로 가되, mode=select + 여행 지역을 함께 싣는다', () => {
+    // TRIP-706(AC-4 · D5): 위저드 축은 d02 로 갈 때 select 모드로 열도록 통일한다 — 더 담기 d02
+    // 갈래가 종전 { region } 만에서 **{ mode:'select', region }** 로 바뀐다(전체 보기와 동형).
+    // ⚠️ router.push 객체 인자는 재귀 완전 일치 비교라(02a §5-5) mode 누락·여분 키·region 순서까지 red.
     const store = useTripWizardStore.getState();
     store.addDestination('부산광역시', 2);
     store.addDestination('경주시', 1);
@@ -213,7 +213,7 @@ describe('더 담기 목적지 분기 (TRIP-367 보존 · TRIP-689 d02 계약 �
 
     expect(routerMock.push).toHaveBeenCalledWith({
       pathname: '/explore/saved-places',
-      params: { region: ['부산광역시', '경주시'] },
+      params: { mode: 'select', region: ['부산광역시', '경주시'] },
     });
     expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
@@ -272,17 +272,19 @@ describe('더 담기 → d04 지역 필터 파라미터 (TRIP-687)', () => {
   });
 });
 
-describe('전체 보기 재배선 (TRIP-743 · AC-2)', () => {
-  // TRIP-676 이 잠갔던 목적지(/trips/new/must-visits, g03 전용 목록)를 이 티켓이 없앤다 — 그 라우트가
-  // 삭제되므로 이 describe 를 새 목적지로 재작성한다. 새 목적지는 d02 담은 장소 select 모드(§F 결정).
-  // 교체 전(현 구현은 아직 구 목적지 문자열 push)엔 red 다(test-first).
+describe('전체 보기 재배선 (TRIP-743 → TRIP-706 · AC-4)', () => {
+  // TRIP-743 이 세운 목적지(/explore/saved-places, mode:select)를 TRIP-706 이 정합한다 — 위저드 축
+  // 통일(D5)로 전체 보기 push 에 **region 이 함께** 실린다({ mode:'select' } → { mode:'select', region }).
+  // 교체 전(현 구현은 region 없이 mode 만)엔 red 다(test-first).
   //
-  // ⚠️ "더 담기"(-more)와 pathname 이 겹친다(둘 다 '/explore/saved-places'). 가르는 축 둘:
-  //    (1) see-all testID 만 press(more 는 안 누름 → push 정확히 1회)
-  //    (2) params — see-all 은 { mode:'select' }, more 는 { region:[...] }.
-  //    router.push 객체 인자는 재귀 완전 일치 비교라(02a §실검증 실측) more 의 { region } 이 { mode }
-  //    단언에 안 걸린다 — 실수로 -more 핸들러를 재사용하면 red.
-  it('전체 보기 press → /explore/saved-places 로 mode:select 를 실어 간다(구 /trips/new/must-visits 아님)', () => {
+  // ⚠️ "더 담기"(-more)와 pathname·params 가 이제 같은 모양이다(둘 다 { mode:'select', region }). 가르는
+  //    축은 (1) see-all testID 만 press(more 안 누름 → push 정확히 1회) (2) 누른 testID. router.push 객체
+  //    인자는 재귀 완전 일치 비교라(02a §5-5) mode 누락·region 순서·여분 키면 red.
+  it('전체 보기 press → /explore/saved-places 로 mode:select + region 을 실어 간다(구 /trips/new/must-visits 아님)', () => {
+    // 여행 지역 2곳 — region 이 비자명하게 실리는지 잠근다(TRIP-706 D5).
+    const store = useTripWizardStore.getState();
+    store.addDestination('부산광역시', 2);
+    store.addDestination('경주시', 1);
     mockSavedPlaces = loaded(THREE);
     // TRIP-732 AC-7: see-all 은 mustVisits > 0 일 때만 렌더된다. 자동 시드가 폐지돼(페이지 §4)
     // THREE savedPlaces 만으론 store.mustVisits 가 안 채워지므로, d02 시드 경로처럼 명시 시드한다.
@@ -293,14 +295,14 @@ describe('전체 보기 재배선 (TRIP-743 · AC-2)', () => {
 
     fireEvent.press(screen.getByTestId('trip-wizard-mustvisit-see-all'));
 
-    // 신 목적지 — 객체형 params(01b Q1). 재귀 완전 일치라 문자열형·여분 키면 red.
+    // 신 목적지 — mode:select + region 객체형(01b Q1 · D5). 재귀 완전 일치라 region 누락·문자열형이면 red.
     expect(routerMock.push).toHaveBeenCalledWith({
       pathname: '/explore/saved-places',
-      params: { mode: 'select' },
+      params: { mode: 'select', region: ['부산광역시', '경주시'] },
     });
     // 구 목적지(삭제된 라우트)로는 절대 안 간다.
     expect(routerMock.push).not.toHaveBeenCalledWith('/trips/new/must-visits');
-    // see-all 만 눌렀으니 push 정확히 1회(더 담기와 인자·횟수로 구별).
+    // see-all 만 눌렀으니 push 정확히 1회(더 담기와 누른 testID·횟수로 구별).
     expect(routerMock.push).toHaveBeenCalledTimes(1);
   });
 });
