@@ -39,7 +39,9 @@ const place = (
   dataStatus,
 });
 
-/** 2열 그리드가 3행 차도록 6장. 카테고리·태그·저장수를 흩어 카드 변형을 한눈에 본다. */
+/** 2열 그리드가 3행 차도록 6장(TRIP-708: Figma 1692:1183 default 순서 — 감천·광안리·해운대
+ * 해변·전포·해동용궁사·자갈치). p-9(해운대 해변)·p-10(해동용궁사)은 705 `PREVIEW_SAVED_PLACES`가
+ * 이미 쓴 poiId·이름·지역과 맞춘다(같은 곳이면 같은 poiId 재사용). imageUrl 은 전부 null. */
 export const PREVIEW_PLACES: Place[] = [
   place('p-1', '감천문화마을', PoiCategory.명소, '사하구', ['감성 골목'], 1284),
   place(
@@ -50,14 +52,14 @@ export const PREVIEW_PLACES: Place[] = [
     ['바다', '야경'],
     2077
   ),
+  place('p-9', '해운대 해변', PoiCategory.자연, '해운대구', ['바다'], 3120),
   place('p-3', '전포 카페거리', PoiCategory.카페, '부산진구', ['카페'], 934),
+  place('p-10', '해동용궁사', PoiCategory.명소, '기장군', ['명소'], 1640),
   place('p-4', '자갈치시장', PoiCategory.맛집, '중구', ['미식'], 1502),
-  place('p-5', '황령산 전망대', PoiCategory.야경, '남구', ['야경'], 611),
-  place('p-6', '해운대 블루라인', PoiCategory.명소, '해운대구', ['바다'], 1810),
 ];
 
-/** 담긴 상태 2장 — 하트 채움 + "담음" 배지 + 하단 CTA 숫자를 동시에 보이게 한다. */
-export const PREVIEW_SAVED_POI_IDS: string[] = ['p-2', 'p-4'];
+/** 담긴 상태 3장(감천·해운대·자갈치) — 하트 채움 + "담음" 배지를 프리뷰에서 확인하게 한다. */
+export const PREVIEW_SAVED_POI_IDS: string[] = ['p-1', 'p-9', 'p-4'];
 
 /**
  * d02 목록. `savedAt` 오름차순이 담은 순서이고 순번 배지 1..N 이 그 뜻이다.

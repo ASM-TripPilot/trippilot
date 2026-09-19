@@ -23,13 +23,17 @@ import { PlaceExplorePage } from './PlaceExplorePage';
  *    반영된다. 선택된 칩만 활성이다.
  *  - **P-2 (Seed Q9)** 라우트에 `region` 이 있으면 싣고, 없으면 파라미터 자체를 만들지 않는다.
  *  - **P-3 (AC-8·TRIP-502)** 검색은 **서버가 한다**(`q`) — 클라 재정렬 없이 서버 순서를 그린다.
- *  - **P-4 (AC-4)** 하트를 누르면 **서버가 답하기 전에** 담김 표기와 CTA 숫자가 바뀐다.
- *  - **P-5 (AC-5)** 해제는 `savedPlaceId` 로 나가고, 0곳이 되면 CTA 바가 사라진다.
- *  - **P-6 (AC-6)** CTA 는 여행 생성 1/2 로 보낸다.
+ *  - **P-4 (AC-4)** 하트를 누르면 **서버가 답하기 전에** 담김 표기(배지·하트)가 켜진다
+ *    (TRIP-708: CTA 숫자 표시 소멸, 담은 개수는 ♥ FAB→d02 로 이동).
+ *  - **P-5 (AC-5)** 해제는 `savedPlaceId` 로 나가고, 낙관 제거로 배지·하트가 빠진다.
+ *  - **P-6 (AC-1·AC-6)** ＋ FAB 는 여행 생성 1/2 로 보낸다(CtaBar 대체).
  *  - **P-7 (Seed Q1·BR-U1-03)** 게스트는 담은 목록 조회조차 보내지 않는다.
  *  - **P-8 (TRIP-502)** 목록 끝에 닿으면 `nextCursor` 로 다음 장을 이어 받는다(무한 스크롤).
  *  - **P-9 (TRIP-687)** 라우트 `region` 이 2곳 이상이면 지역별로 `getPlaces` 를 각 1회 부르고
  *    (fan-out) 병합 결과를 한 목록에 함께 그린다 — 단일지역 경로(P-2)의 무한 스크롤은 안 탄다.
+ *  - **P-12 (AC-1)** ♥ FAB 는 담은 장소(d02, `/explore/saved-places`)로 push.
+ *  - **P-13 (AC-1)** 복제 BottomTabBar 는 push 가 아니라 replace 로 항법한다.
+ *  - **P-14 (AC-2·AC-6)** 필터 버튼이 카테고리 시트를 마운트한다(실개폐·딤은 6-b).
  *
  * 왜 통합 버킷인가: 심판 대상이 "**실제로 나간 요청**"이다. 직렬화가 끝난 최종 URL·재요청
  * 횟수·나간 경로의 id 는 msw 만 관찰할 수 있다(`savedPlaces.integration.test.tsx` 계승).
@@ -53,6 +57,9 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 const mockPush = jest.fn();
+// TRIP-708: 복제 BottomTabBar 는 push 가 아니라 replace 로 항법한다(StaySearchPage TRIP-413
+// 선례) — replace 도 같은 지연-참조 목으로 준다(P-13 이 관찰).
+const mockReplace = jest.fn();
 // region 은 '더 담기'가 여행지 여러 곳을 같은 키로 반복해 실으면 배열이 된다(expo-router 규약) —
 // P-9(다지역)를 위해 배열도 허용한다(단일지역 케이스 P-2 는 string 그대로 유효).
 let mockParams: { region?: string | string[] } = {};
@@ -64,8 +71,11 @@ let mockParams: { region?: string | string[] } = {};
 // 시점의 undefined 가 박혀 `router.push is not a function` 이 난다(실측). `useRouter` 쪽이
 // 멀쩡한 것은 호출 시점에야 읽기 때문이다 — 리포 선례가 전부 훅 형태라 이 함정이 숨어 있었다.
 jest.mock('expo-router', () => ({
-  router: { push: (href: string) => mockPush(href) },
-  useRouter: () => ({ push: mockPush }),
+  router: {
+    push: (href: string) => mockPush(href),
+    replace: (href: string) => mockReplace(href),
+  },
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
   useLocalSearchParams: () => ({ ...mockParams }),
 }));
 
@@ -152,6 +162,7 @@ beforeEach(() => {
   savedRows = [];
   mockParams = {};
   mockPush.mockClear();
+  mockReplace.mockClear();
   clearAccessToken();
   // 기본 gate 는 열려 있다 — "즉시 반영"을 재는 케이스만 닫힌 문으로 갈아 끼운다.
   gate = createGate();
@@ -304,27 +315,29 @@ describe('P-3 · 검색은 서버가 한다 (q) — 로드된 페이지 한정�
   });
 });
 
-describe('P-4 · 담기 — 응답 전에 반영되고 CTA 숫자가 오른다 (AC-4 · AC-6)', () => {
-  it('서버가 답하기 전에 담음 배지와 CTA(1)가 생기고, 재조회 후에도 유지된다', async () => {
+describe('P-4 · 담기 — 응답 전에 낙관 반영되고 재조회 후에도 유지된다 (AC-4)', () => {
+  it('서버가 답하기 전에 담음 배지·하트가 켜지고, 재조회 후에도 유지된다', async () => {
     setAccessToken('valid-access');
 
     await renderPage();
 
-    // 앵커 — 담은 곳이 0이면 CTA 바 자체가 없다(01b Seed Q3 · BR-U1-09 조건절).
-    expect(screen.queryByTestId('explore-places-createtrip')).toBeNull();
+    // 앵커 — 담기 전에는 담음 배지가 없다(TRIP-708: CTA 숫자 표시는 소멸, ♥ FAB→d02 로 이동).
     expect(hitsOf('GET', '/api/v1/saved-places')).toHaveLength(1);
+    expect(
+      within(screen.getByTestId('explore-places-card-p2')).queryAllByText(
+        '담음'
+      )
+    ).toHaveLength(0);
 
     gate = createGate(); // 이 시점부터 POST 는 문 뒤에 선다
     fireEvent.press(screen.getByTestId('explore-places-save-p2'));
 
     await waitFor(() =>
-      expect(screen.getByTestId('explore-places-createtrip')).toBeOnTheScreen()
+      expect(screen.getByTestId('explore-places-save-p2')).toBeSelected()
     );
-    const cta = screen.getByTestId('explore-places-createtrip');
-    expect(within(cta).getByText('1')).toBeOnTheScreen();
-    const card = screen.getByTestId('explore-places-card-p2');
-    expect(within(card).getByText('담음')).toBeOnTheScreen();
-    expect(screen.getByTestId('explore-places-save-p2')).toBeSelected();
+    expect(
+      within(screen.getByTestId('explore-places-card-p2')).getByText('담음')
+    ).toBeOnTheScreen();
 
     // 요청은 실제로 나갔고(낙관만 하고 안 보내는 구현이 아니다), **아직 답은 오지 않았다**
     // — 무효화 재조회가 0건인 것이 그 증거다.
@@ -344,31 +357,27 @@ describe('P-4 · 담기 — 응답 전에 반영되고 CTA 숫자가 오른다 (
   });
 });
 
-describe('P-5 · 해제 — savedPlaceId 로 나가고 0곳이면 CTA 가 사라진다 (AC-5)', () => {
-  it('응답 전에 배지가 빠지고, 해제 요청이 담기 기록 id 를 싣는다', async () => {
+describe('P-5 · 해제 — 낙관 제거되고 savedPlaceId 로 나간다 (AC-5)', () => {
+  it('응답 전에 배지·하트가 빠지고, 해제 요청이 담기 기록 id 를 싣는다', async () => {
     setAccessToken('valid-access');
     savedRows = [savedRowOf('p1')];
 
     await renderPage();
     await waitFor(() =>
-      expect(screen.getByTestId('explore-places-createtrip')).toBeOnTheScreen()
+      expect(screen.getByTestId('explore-places-save-p1')).toBeSelected()
     );
-    expect(
-      within(screen.getByTestId('explore-places-createtrip')).getByText('1')
-    ).toBeOnTheScreen();
 
     gate = createGate();
     fireEvent.press(screen.getByTestId('explore-places-save-p1'));
 
     await waitFor(() =>
-      expect(screen.queryByTestId('explore-places-createtrip')).toBeNull()
+      expect(screen.getByTestId('explore-places-save-p1')).not.toBeSelected()
     );
     expect(
       within(screen.getByTestId('explore-places-card-p1')).queryAllByText(
         '담음'
       )
     ).toHaveLength(0);
-    expect(screen.getByTestId('explore-places-save-p1')).not.toBeSelected();
 
     // 담기 기록 id 로 나갔다. 부정 짝이 없으면 poiId 를 실은 구현이 404 를 받고, 그 실패가
     // 롤백에 흡수되어 "동작은 하는데 아무것도 안 되는" 모양으로 조용히 남는다.
@@ -382,24 +391,91 @@ describe('P-5 · 해제 — savedPlaceId 로 나가고 0곳이면 CTA 가 사라
   });
 });
 
-describe('P-6 · CTA 는 여행 생성 1/2 로 보낸다 (AC-6 · US-SHELL-05)', () => {
-  it('CTA 를 누르면 /trips/new/step1 로 이동한다', async () => {
+describe('P-6 · ＋ FAB 는 여행 생성 1/2 로 보낸다 (AC-1 · AC-6 · US-SHELL-05)', () => {
+  it('＋ FAB 를 누르면 /trips/new/step1 로 이동한다 (담은 수 무관 · CtaBar 대체)', async () => {
     setAccessToken('valid-access');
     savedRows = [savedRowOf('p1')];
 
     await renderPage();
-    await waitFor(() =>
-      expect(screen.getByTestId('explore-places-createtrip')).toBeOnTheScreen()
-    );
 
-    fireEvent.press(screen.getByTestId('explore-places-createtrip'));
+    fireEvent.press(screen.getByTestId('explore-places-create-fab'));
 
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
   });
 });
 
+describe('P-12 · ♥ FAB 는 담은 장소(d02)로 보낸다 (AC-1 · 3-a)', () => {
+  it('♥ FAB 를 누르면 /explore/saved-places 로 이동한다', async () => {
+    setAccessToken('valid-access');
+
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('explore-places-saved-fab'));
+
+    // onPressSavedPlaces 를 페이지가 배선하지 않으면(옵셔널 미전달) 무동작이라 push 0 → red.
+    expect(mockPush.mock.calls).toEqual([['/explore/saved-places']]);
+  });
+});
+
+describe('P-13 · 복제 BottomTabBar 는 replace 로 항법한다 (AC-1 · DestinationDetail 선례)', () => {
+  it('탭을 누르면 router.replace 로 그 탭 라우트로 간다 (home→/, 나머지→/{key})', async () => {
+    setAccessToken('valid-access');
+
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-home'));
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-records'));
+
+    // push 가 아니라 replace 다(뒤로가기 스택을 안 쌓는다, StaySearchPage TRIP-413 선례).
+    expect(mockReplace.mock.calls).toEqual([['/'], ['/records']]);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('P-14 · 필터 버튼이 카테고리 시트를 연다 (AC-2 · AC-6 · 3-a)', () => {
+  it('필터 press 전에는 시트가 없고, 누르면 카테고리 시트가 마운트된다 (실개폐·딤은 6-b)', async () => {
+    setAccessToken('valid-access');
+
+    await renderPage();
+
+    // 닫힘 = 트리에서 없음(조건부 마운트). @gorhom/bottom-sheet 목이 통과형이라 "열림"은
+    // 마운트/언마운트로만 관측된다 — 실제 snap·딤·시트 내부는 jest 원리적 사각(6-b 실기).
+    expect(screen.queryByTestId('explore-places-category-sheet')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('explore-places-filter'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('explore-places-category-sheet')
+      ).toBeOnTheScreen()
+    );
+  });
+
+  it('시트 카테고리 칩을 누르면 그 카테고리가 선택되고 시트가 닫힌다 (code-critic 경고-1)', async () => {
+    // 시트 칩 press → onSelect(값)+onClose 배선을 잠근다. P-14 는 마운트까지만 봤다.
+    setAccessToken('valid-access');
+    await renderPage();
+
+    fireEvent.press(screen.getByTestId('explore-places-filter'));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('explore-places-category-sheet')
+      ).toBeOnTheScreen()
+    );
+
+    // 시트 안 '맛집' 칩(헤더 칩과 -sheet- 접두로 분리)을 누른다.
+    fireEvent.press(screen.getByTestId('explore-places-sheet-category-맛집'));
+
+    // 헤더 카테고리 칩이 그 값으로 선택되고(재조회 트리거), 시트는 닫힌다(조건부 언마운트).
+    await waitFor(() =>
+      expect(screen.queryByTestId('explore-places-category-sheet')).toBeNull()
+    );
+    expect(screen.getByTestId('explore-places-category-food')).toBeSelected();
+  });
+});
+
 describe('P-7 · 게스트는 담은 목록을 아예 부르지 않는다 (01b Seed Q1 · BR-U1-03)', () => {
-  it('토큰이 없으면 GET /saved-places 가 0건이고 CTA 가 없다', async () => {
+  it('토큰이 없으면 GET /saved-places 가 0건이고, 목록은 정상으로 뜬다', async () => {
     // 서버에는 담은 기록이 있다 — 그래도 요청을 보내지 않는 것이 규칙이다.
     savedRows = [savedRowOf('p1')];
 
@@ -409,9 +485,6 @@ describe('P-7 · 게스트는 담은 목록을 아예 부르지 않는다 (01b S
     // "아직 안 나갔다"가 아니라 "안 나간다"다.
     expect(hitsOf('GET', '/api/v1/places')).toHaveLength(1);
     expect(hitsOf('GET', '/api/v1/saved-places')).toHaveLength(0);
-
-    // 게스트에게는 담은 곳이 0이므로 CTA 도 없다.
-    expect(screen.queryByTestId('explore-places-createtrip')).toBeNull();
 
     // 긍정 짝 — 화면은 정상으로 돌았다(목록 열람은 미로그인도 가능한 화면이다).
     expect(cardTestIds()).toHaveLength(5);

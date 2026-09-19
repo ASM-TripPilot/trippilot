@@ -2690,9 +2690,10 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 나머지 얼굴(loading·empty·filter-zero·error·게스트)은 실화면에서 그대로 재현되므로
   // 여기 키를 늘리지 않는다.
   {
-    key: 'places-results',
+    // TRIP-708: `places-results` → `places-default` 개명(Figma 1692:1183 default).
+    key: 'places-default',
     band: 'd',
-    label: 'd04 · 장소 탐색 결과',
+    label: 'd04 · 장소 탐색 default',
     login: null,
     render: () => (
       <PlaceExploreScreen
@@ -2704,6 +2705,8 @@ export const PREVIEW_STATES: PreviewState[] = [
         onChangeSearchText={noop}
         onToggleSave={noop}
         onPressCreateTrip={noop}
+        onPressSavedPlaces={noop}
+        onPressFilter={noop}
       />
     ),
   },

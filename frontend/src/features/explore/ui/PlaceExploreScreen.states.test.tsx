@@ -21,8 +21,9 @@ import {
  * 무엇을 보장하나: `state` 판별 유니온 하나로 화면이 loading·empty·filter-zero·error·results 를
  * 그리고(판정은 페이지가 끝낸다 — 화면은 다시 판정하지 않는다), 0건을 만든 조건을 **문구에
  * 지목**하며(BR-U1-16 취지), 담기 실패가 화면에 드러나고(INV-4), 응답 대기 중인 하트는 눌리지
- * 않는다(01b Seed Q7 ⓑ). 그리고 **새 prop 을 하나도 안 넘긴 렌더가 TRIP-221 default 화면
- * 그대로**여야 한다(AC-G7).
+ * 않는다(01b Seed Q7 ⓑ). 그리고 **TRIP-708 새 default 렌더**(CtaBar 제거 → 우하단 FAB 2단 +
+ * 필터 버튼 + 정렬 칩 3개)에서 누를 수 있는 것이 정확히 **17개**여야 하고, FAB 는 상태와
+ * 무관하게 상시 뜬다.
  *
  * 왜 파일을 새로 쓰나: `PlaceExploreScreen.test.tsx` 는 게이트① 해시가 동결된 TRIP-221
  * 산출물이라 한 글자도 못 고친다(`StaySearchScreen.test.tsx` → `.states.test.tsx` 선례).
@@ -68,6 +69,19 @@ const PLACES: Place[] = [
 ];
 
 const SAVED = ['p1', 'p5'];
+
+/** 카테고리 칩 code(전체 + PoiCategory 7종 선언 순) — 누를 수 있는 것 완전일치 목록의 재료.
+ * `PlaceExploreScreen.tsx`의 `CATEGORY_CODES`/`CATEGORY_CHIPS`와 같은 값이라 8개가 안 바뀐다. */
+const CATEGORY_CODES = [
+  'all',
+  'attraction',
+  'food',
+  'cafe',
+  'nightview',
+  'nature',
+  'shopping',
+  'culture',
+];
 
 /** 동결 파일의 렌더 헬퍼와 **완전히 같은 8개 prop** 만 넘긴다 — 새 prop 은 하나도 안 준다.
  * AC-G7("37케이스 무회귀")의 재현 장치라 이 목록을 늘리면 안 된다. */
@@ -290,8 +304,8 @@ describe('PlaceExploreScreen — error (AC-7 · INV-4)', () => {
   });
 });
 
-describe('PlaceExploreScreen — results 무회귀 (AC-8 · AC-G7)', () => {
-  it('새 prop 을 하나도 안 넘기면 TRIP-221 default 화면 그대로다', () => {
+describe('PlaceExploreScreen — 새 default 렌더 · 누를 수 있는 것 17개 (AC-1 · AC-2 · AC-3)', () => {
+  it('새 콜백을 하나도 안 넘겨도 FAB 2개·필터가 뜨고, 누를 수 있는 것은 정확히 17개다', () => {
     renderAsFrozenHelper();
 
     // ① 카드는 그대로 5장이고, ② 상태 안내·배너는 하나도 안 나온다.
@@ -299,14 +313,32 @@ describe('PlaceExploreScreen — results 무회귀 (AC-8 · AC-G7)', () => {
     expect(visibleNotices()).toEqual([]);
     expect(screen.queryByTestId('explore-places-saveerror')).toBeNull();
 
-    // ③ 누를 수 있는 것의 개수가 15 그대로다(뒤로 1 + 칩 8 + 하트 5 + CTA 1).
-    //    동결 테스트가 이 목록을 **완전일치**로 비교하므로, 새 컨트롤이 default 렌더에
-    //    하나라도 새면 거기서 즉시 red 다. 이 단언은 그 사고를 이 파일에서 먼저 잡는다.
-    expect(screen.getAllByRole('button')).toHaveLength(15);
+    // ③ 누를 수 있는 것 = 뒤로(1) + 칩 8 + 하트 5 + ♥FAB + ＋FAB + 필터 = 17.
+    //    renderAsFrozenHelper 는 onPressSavedPlaces·onPressFilter 를 **안 넘긴다** — 그래도
+    //    두 FAB·필터가 떠야 한다(콜백 옵셔널·무동작 허용, Figma 상시 노출). 이 완전일치 목록은
+    //    FAB 하나라도 빠지면(뮤테이션) 어긋나 red 다 — 현 15 에서 CTA(-1)·FAB(+2)·필터(+1)로
+    //    직접 델타를 세어 확정. BottomTabBar 는 페이지가 그려 여기 개수에 안 든다.
+    expect(
+      screen
+        .getAllByRole('button')
+        .map((node) => String(node.props.testID))
+        .sort()
+    ).toEqual(
+      [
+        'explore-places-back',
+        ...CATEGORY_CODES.map((code) => `explore-places-category-${code}`),
+        ...['p1', 'p2', 'p3', 'p4', 'p5'].map(
+          (id) => `explore-places-save-${id}`
+        ),
+        'explore-places-saved-fab',
+        'explore-places-create-fab',
+        'explore-places-filter',
+      ].sort()
+    );
   });
 });
 
-describe('PlaceExploreScreen — 상태와 무관하게 CTA 를 유지한다 (01b Seed Q10 · BR-U1-09)', () => {
+describe('PlaceExploreScreen — 상태와 무관하게 FAB 2단을 유지한다 (01b Seed 3-a)', () => {
   const STATES: { name: string; state: PlaceListState; noticeId: string }[] = [
     {
       name: 'loading',
@@ -326,18 +358,17 @@ describe('PlaceExploreScreen — 상태와 무관하게 CTA 를 유지한다 (01
   ];
 
   it.each(STATES)(
-    '$name 안내와 담은 개수 CTA 가 함께 보인다',
+    '$name 안내와 함께 ♥·＋ FAB 가 남는다',
     ({ state, noticeId }) => {
       renderState(state);
 
-      // 짝을 같은 it 에 둔다 — 안내가 실제로 그려진 화면에서 CTA 가 남아야 의미가 있다.
-      // 안내만 보고 CTA 를 안 보면 "둘이 같이 설 수 있는가"를 아무도 안 잰다.
+      // 짝을 같은 it 에 둔다 — 안내가 실제로 그려진 화면에서 FAB 가 남아야 의미가 있다.
       expect(screen.getByTestId(noticeId)).toBeOnTheScreen();
 
-      // BR-U1-09 는 "담은 곳 ≥ 1 이면 탐색 계열 **모든 화면** 하단에 CTA" 다. 담은 개수는
-      // 목록 조회 실패와 무관하므로 조회가 실패해도 사라지면 안 된다(01b Seed Q10 ⓐ).
-      const cta = screen.getByTestId('explore-places-createtrip');
-      expect(within(cta).getByText('2')).toBeOnTheScreen();
+      // FAB 를 결과 얼굴 안(state==='results')에만 그리면 로딩·빈·에러에서 사라진다 —
+      // 그 회귀를 잡는다. FAB 는 얼굴과 무관하게 항상 우하단에 떠야 한다(CtaBar 와 달리 상시).
+      expect(screen.getByTestId('explore-places-saved-fab')).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-create-fab')).toBeOnTheScreen();
     }
   );
 });
