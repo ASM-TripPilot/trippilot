@@ -14,6 +14,7 @@ INFEASIBLE(고정 블록 모순 등)·UNKNOWN이면 None → 체인 다음 단�
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Mapping
@@ -35,12 +36,57 @@ from trippilot.domain.itinerary import (
     SolveMode,
     VisitSlot,
 )
+from trippilot.domain.llm import ScoredPoi
 from trippilot.domain.poi import Poi, PoiCategory
 
 _log = logging.getLogger(__name__)
 
 _PREFILTER_TOP_K = 60
 _MIN_DAY_MS = 100
+
+
+def prefilter_cut(
+    before: list[ScoredPoi], kept: list[ScoredPoi], pois: Mapping[PoiId, Poi]
+) -> tuple[Counter, tuple[PoiCategory, ...]]:
+    """프리필터가 버린 후보의 카테고리 분포와 **잘려서 0이 된 카테고리** (TRIP-908).
+
+    두 번째 값이 이 관측의 본체다. "식당 0개 풀"(수집 공백 — 설계상 허용, TRIP-379)과
+    "식당이 있었는데 상위 N 에서 전부 잘림"(랭킹·상한 문제)은 둘 다 밥 슬롯이 빈 같은
+    결과로 수렴하는데, 조치가 정반대다. 전자는 FOOD 가 `before` 에 없어 여기 안 나오고,
+    후자만 나온다. `meal_bonus` 는 프리필터 **뒤** 목적함수라 FOOD 후보가 안 남으면 줄
+    대상이 없다 — 그래서 총 건수가 아니라 카테고리별 잔존 0 을 본다.
+
+    **프리필터 잔존 기준이다 — 실제 노드 기준이 아니다.** 남은 FOOD 가 전부 휴무·창
+    밖이라 노드에서 빠져도 여기엔 안 나오고, 후보 밖 FOOD 고정 블록(식당 예약)이 있어도
+    "잔존 0: FOOD" 로 나온다. 이 관측이 가르려는 것은 "프리필터가 잘랐는가" 하나다.
+    """
+    kept_ids = {c.poi_id for c in kept}
+    cut = Counter(pois[c.poi_id].category for c in before if c.poi_id not in kept_ids)
+    kept_cats = {pois[c.poi_id].category for c in kept}
+    zeroed = tuple(sorted((cat for cat in cut if cat not in kept_cats),
+                          key=lambda cat: cat.value))
+    return cut, zeroed
+
+
+def _log_prefilter_cut(day, before, kept, pois) -> None:
+    """관측만 한다 — 프리필터 동작은 바꾸지 않는다(카테고리 인지 프리필터는 별건).
+
+    ponytail: 로그로만 남긴다. 응답·`AssemblyRunRecord` 로 내려면 단계 → 퍼사드 통로가
+    필요하다(단계는 trace 포트를 모른다) — 로그로 빈도를 본 뒤 필요하면 올린다.
+    주의: 앱에 루트 로깅 설정이 없어 uvicorn 기본으로는 `trippilot.*` 의 **INFO 가 안
+    나온다**(WARNING 만 나온다 — 잔존 0 신호는 보이고, 분모인 절단 INFO 는 안 보인다).
+    요청 로그(`api/middleware.py`)도 같은 처지라 로깅 설정은 별건이다.
+    """
+    cut, zeroed = prefilter_cut(before, kept, pois)
+    by_cat = ", ".join(f"{cat.value}={n}" for cat, n in
+                       sorted(cut.items(), key=lambda kv: kv[0].value))
+    if zeroed:
+        _log.warning(
+            "프리필터가 카테고리를 통째로 잘랐다 — 잔존 0: %s (day=%s, 후보 %d → %d, 잘림 %s)",
+            ",".join(cat.value for cat in zeroed), day, len(before), len(kept), by_cat)
+    else:
+        _log.info("프리필터 절단 (day=%s, 후보 %d → %d, 잘림 %s)",
+                  day, len(before), len(kept), by_cat)
 
 
 def _mod(dt: datetime) -> int:
@@ -84,8 +130,10 @@ class OrToolsAssembler:
                 # **pace 를 켜서 기준선보다 나빠지는 경우가 없다.**
                 _log.info("pace=%s 로 해 없음 — 무보정 재시도 (day=%s)",
                           problem.pace.value, day)
+                # 재시도는 같은 후보를 같은 프리필터로 자른다(pace 는 후보를 안 바꾼다) —
+                # 절단 관측을 두 번 남기면 빈도가 두 배로 세진다 (TRIP-908).
                 slots = self._solve_day(replace(problem, pace=None), day,
-                                        used, per_day_ms)
+                                        used, per_day_ms, log_cut=False)
             if slots is None:
                 return None  # 해 확보 실패 → 체인 다음 단계
             used.update(s.poi_id for s in slots)
@@ -103,7 +151,7 @@ class OrToolsAssembler:
 
     # ── 일자 단위 CP-SAT ──────────────────────────────────────
     def _solve_day(self, problem, day, used: set[PoiId],
-                   budget_ms: int) -> list[VisitSlot] | None:
+                   budget_ms: int, *, log_cut: bool = True) -> list[VisitSlot] | None:
         tz = problem.day_window.start.tzinfo
         ws, we = _mod(problem.day_window.start), _mod(problem.day_window.end)
         fixed = [fb for fb in problem.fixed_blocks if fb.window.start.date() == day]
@@ -120,7 +168,10 @@ class OrToolsAssembler:
             cands.sort(key=lambda c: (-c.score, str(c.poi_id)))
             keep = [c for c in cands if c.poi_id in fixed_ids]
             keep += [c for c in cands if c.poi_id not in fixed_ids]
-            cands = keep[:_PREFILTER_TOP_K]
+            kept = keep[:_PREFILTER_TOP_K]
+            if log_cut:
+                _log_prefilter_cut(day, cands, kept, self._pois)
+            cands = kept
 
         # 노드 구성: 각 노드의 (poi, stay, lo, hi, score, pinned_start)
         nodes = []

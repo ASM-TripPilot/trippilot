@@ -185,11 +185,11 @@ def test_unsolvable_pace_retries_unscaled_before_giving_up() -> None:
     original = asm._solve_day
     seen: list = []
 
-    def flaky(prob, day, used, budget_ms):
+    def flaky(prob, day, used, budget_ms, **kw):  # kw: 재시도가 넘기는 log_cut (TRIP-908)
         seen.append(prob.pace)
         if len(seen) == 1:
             return None  # 배율 먹인 첫 시도 실패를 흉내
-        return original(prob, day, used, budget_ms)
+        return original(prob, day, used, budget_ms, **kw)
 
     asm._solve_day = flaky
     out = asm.solve(problem, remaining_ms=2000)
