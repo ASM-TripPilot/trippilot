@@ -5,7 +5,7 @@
 | EXIST-A1 | **미주입 불변**: `existence=None` 이면 후보(점수 포함)가 종전과 같다 — 호출·강등 기록 0 |
 | **EXIST-A2** | **강등이지 배제가 아니다**: NOT_FOUND 0~100% 스윕에 poi_id 순서·개수·집합 불변, 점수 ≤ 입력, 입력 > 0 ⇒ 결과 > 0 |
 | **EXIST-A3** | **UNVERIFIED 는 강등 대상이 아니다**: FOUND·UNVERIFIED 만이면 결과 == 입력, 3상태 혼합은 UNVERIFIED→FOUND 치환표와 결과가 같다 |
-| EXIST-A4 | NOT_FOUND 만 **정확히** `demoted_score`(max(점수 − penalty, 점수 × factor)) — 나머지는 입력 그대로 |
+| EXIST-A4 | NOT_FOUND 만 **정확히** max(점수 − penalty, 점수 × factor) (점수 ≤ 0 은 그대로) — config 값으로, 나머지는 입력 그대로. 오라클은 산식을 **테스트가 따로 적은 것**이다 |
 | EXIST-A5 | 계약 깨는 포트(결손·중복·뒤섞임·유령 id·모순 판정·묻지 않은 id 판정·예외)에도 후보 손실·중복·이중 강등 0 |
 | EXIST-A6 | 조회 계약: 호출 1회, 대상 = 점수 상위 N(제외·고정·풀 밖 빠짐, 점수↓→poi_id 순), 개수 ≤ top_n, 마감 = min(config, 잔여 − 어셈블리 바닥) |
 | EXIST-A7 | 결정론: 같은 입력·같은 fake 두 번 → 같은 후보·같은 강등 기록·같은 호출 장부 |
@@ -194,6 +194,20 @@ _SCORES = st.one_of(
 )
 # 배율: (0, 1]. 하한 1e-3 은 언더플로 회피용이고, 운영 기본값 0.2 와 무강등 끝값 1.0 을 늘 섞는다.
 _FACTORS = st.one_of(st.sampled_from([0.2, 1.0]), st.floats(1e-3, 1.0))
+# 감점: [0, ∞) 중 운영 기본 0.3 과 무감점 0.0 을 늘 섞는다.
+_PENALTIES = st.one_of(st.sampled_from([0.0, 0.3]),
+                       st.floats(0.0, 1.0, allow_subnormal=False))
+
+
+def _expected_demotion(score: float, *, factor: float, penalty: float) -> float:
+    """강등 산식 오라클 — `agent.demoted_score` 를 부르지 않고 설계(TRIP-904 리뷰 반영)를 따로 적었다.
+
+    구현 함수를 오라클로 쓰면 그 함수 안의 변이(배율 무시·하드코딩 등)가 양쪽에 똑같이 들어가
+    A4 가 아무것도 증명하지 못한다. 산식을 바꾸면 구현과 이 줄을 **둘 다** 고친다.
+    """
+    return score if score <= 0 else max(score - penalty, score * factor)
+
+
 _FIXED_WINDOW = TimeWindow(start=datetime(2026, 8, 5, 9, 0, tzinfo=_KST),
                            end=datetime(2026, 8, 5, 10, 0, tzinfo=_KST))
 _THREE = (_FOUND, _NOT_FOUND, _UNVERIFIED)
@@ -402,35 +416,46 @@ def test_exist_a3_port_all_unverified_changes_nothing_but_says_so(case) -> None:
 
 
 @_PBT
-@given(case=_cases(), factor=_FACTORS)
-def test_exist_a4_only_not_found_is_scaled_exactly(case, factor) -> None:
-    """각 후보 점수 == 입력 × factor (NOT_FOUND) 또는 입력 그대로 — 다른 필드는 불변."""
-    out = demote_missing_on_map(case.candidates, _verdicts(case), factor, _PENALTY)
+@given(case=_cases(), factor=_FACTORS, penalty=_PENALTIES)
+def test_exist_a4_only_not_found_is_scaled_exactly(case, factor, penalty) -> None:
+    """각 후보 점수 == 산식값 (NOT_FOUND) 또는 입력 그대로 — 다른 필드는 불변."""
+    out = demote_missing_on_map(case.candidates, _verdicts(case), factor, penalty)
 
     for before, after in zip(case.candidates, out):
         if case.table[before.poi_id] is _NOT_FOUND:
-            assert after == replace(before, score=demoted_score(before.score, factor=factor, penalty=_PENALTY))
+            assert after == replace(before, score=_expected_demotion(
+                before.score, factor=factor, penalty=penalty))
         else:
             assert after == before
 
 
 @_AGENT_PBT
-@given(case=_cases(), factor=_FACTORS)
+@given(case=_cases(), factor=_FACTORS, penalty=_PENALTIES)
 def test_exist_a4_agent_applies_configured_factor_to_asked_not_found_only(
-    case, factor
+    case, factor, penalty
 ) -> None:
-    """에이전트는 **config 의** 배율을, **물어본** NOT_FOUND 에만 한 번 곱한다."""
+    """에이전트는 **config 의** 배율·감점으로, **물어본** NOT_FOUND 에만 한 번 강등한다."""
     fake = FakeExistence(case.table)
-    agent, _, _ = _agent(fake, config=OrchestratorConfig(existence_demote_factor=factor))
+    agent, _, _ = _agent(fake, config=OrchestratorConfig(
+        existence_demote_factor=factor, existence_demote_penalty=penalty))
 
     out, _ = _verify(agent, case)
 
     asked = set(fake.queried_ids)
     for before, after in zip(case.candidates, out):
         if before.poi_id in asked and case.table[before.poi_id] is _NOT_FOUND:
-            assert after.score == demoted_score(before.score, factor=factor, penalty=_PENALTY)
+            assert after.score == _expected_demotion(before.score, factor=factor, penalty=penalty)
         else:
             assert after == before
+
+
+@_PBT
+@given(score=st.floats(-2.0, 2.0, allow_nan=False, allow_subnormal=False),
+       factor=_FACTORS, penalty=_PENALTIES)
+def test_exist_a4_demoted_score_matches_spec(score, factor, penalty) -> None:
+    """공개 산식 함수 == 독립 오라클 — 음수·0 은 그대로(승격 금지), 양수는 두 항 중 큰 쪽."""
+    assert demoted_score(score, factor=factor, penalty=penalty) == _expected_demotion(
+        score, factor=factor, penalty=penalty)
 
 
 # ── EXIST-A5: 포트가 계약을 깨도 후보를 잃지 않는다 ─────────────────
@@ -457,7 +482,7 @@ def _check_intact(case: _Case, out, fake: FakeExistence, factor: float) -> None:
     assert _GHOST not in {c.poi_id for c in out}
     demotable = fake.not_found_ids & set(fake.queried_ids)
     for before, after in zip(case.candidates, out):
-        expected = (demoted_score(before.score, factor=factor, penalty=_PENALTY)
+        expected = (_expected_demotion(before.score, factor=factor, penalty=_PENALTY)
                     if before.poi_id in demotable else before.score)
         assert after.score == expected, f"{before.poi_id}: {before.score} → {after.score}"
         assert after.is_llm_score == before.is_llm_score
@@ -794,7 +819,7 @@ def test_integration_all_missing_on_map_demotes_but_keeps_every_candidate(case) 
     assert len(http.calls) == len(asked)
     assert [c.poi_id for c in out] == [c.poi_id for c in case.candidates]
     for before, after in zip(case.candidates, out):
-        assert after.score == (demoted_score(before.score, factor=_FACTOR, penalty=_PENALTY) if before.poi_id in asked
+        assert after.score == (_expected_demotion(before.score, factor=_FACTOR, penalty=_PENALTY) if before.poi_id in asked
                                else before.score)
     assert steps == []                                   # 강등은 정상 동작 — 폴백 아님
 
@@ -825,7 +850,7 @@ def test_integration_unverified_ranks_with_found(case, plan) -> None:
     assert out == run(healed)
     missing = {pid for pid, r in zip(targets, replies) if r == "missing"}
     for before, after in zip(case.candidates, out):
-        assert after.score == (demoted_score(before.score, factor=_FACTOR, penalty=_PENALTY) if before.poi_id in missing
+        assert after.score == (_expected_demotion(before.score, factor=_FACTOR, penalty=_PENALTY) if before.poi_id in missing
                                else before.score)
 
 
@@ -854,7 +879,7 @@ def test_integration_partial_verification_demotes_exactly_the_top_one(case, over
     demoted = [a.poi_id for b, a in zip(case.candidates, out) if a != b]
     top = targets[0]
     before_top = next(c for c in case.candidates if c.poi_id == top)
-    assert demoted == ([top] if demoted_score(before_top.score, factor=_FACTOR, penalty=_PENALTY) != before_top.score else [])
+    assert demoted == ([top] if _expected_demotion(before_top.score, factor=_FACTOR, penalty=_PENALTY) != before_top.score else [])
     assert steps == []                                   # 한 건이라도 확인됐다 — 실패 아님
 
 
