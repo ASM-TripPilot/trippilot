@@ -27,6 +27,7 @@ from trippilot.domain.observability import GateDropEvent
 from trippilot.llm_gateway.gates.base import (
     GateOutcome,
     empty_result_error,
+    has_contact_like,
     strip_code_fence,
 )
 
@@ -201,6 +202,11 @@ class ReminderCopyGate:
                 not any(v in body for v in _name_variants(name)) for name in declared
             )  # 선언 정직성 — 표시형·토큰 축약도 인정
             or any(name and name in body for name in ctx.forbidden)  # 선언 회피 차단
+            # 링크·연락처 꼴 — 넛지 게이트와 같은 이유(잠금화면 · 수집 장소명이
+            # 프롬프트에 실린다). 여기는 대조 집합이 있어도 못 막는다: `allowed` 는
+            # 장소를 **말해도 되는가**만 보고, 문구에 낯선 도메인이 붙는 것은
+            # 어느 규칙에도 걸리지 않는다.
+            or has_contact_like(title + " " + body)
         )
         if dropped:
             drop_event = GateDropEvent(

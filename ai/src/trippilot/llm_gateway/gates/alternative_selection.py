@@ -6,6 +6,7 @@ from datetime import datetime
 
 from trippilot.llm_gateway.gates.base import (
     GateOutcome,
+    has_contact_like,
     _load_json_object,
     empty_result_error,
 )
@@ -73,8 +74,12 @@ class AlternativeSelectionGate:
             seen.add(pid_str)
             pid = PoiId(pid_str)
             if pool.contains(pid):
-                # 시간 표현이 있으면 이유를 버린다 — 후보는 살린다 (INV-3, 위 참조)
-                safe = "" if _TIME_EXPR.search(reason) else reason
+                # 시간 표현이 있으면 이유를 버린다 — 후보는 살린다 (INV-3, 위 참조).
+                # 링크·연락처 꼴도 같은 자리에서 버린다: 이 reason 은 프롬프트에 실린 제3자
+                # 텍스트(위키 발췌·POI 상호명)의 영향을 받는 자유 서술이고, 앱 화면에
+                # **TripPilot 이 쓴 추천 이유**로 보인다. 낯선 도메인이 그 자리에 뜨면
+                # 앱 신뢰도를 빌린 유인 문구가 된다. 버리는 대가는 "이유 한 줄이 빈다" 뿐이다.
+                safe = "" if (_TIME_EXPR.search(reason) or has_contact_like(reason)) else reason
                 survivors.append(AlternativePick(poi_id=pid, reason=safe))
             else:
                 dropped.append(pid)
