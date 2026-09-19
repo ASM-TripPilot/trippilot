@@ -269,6 +269,11 @@ services:
     profiles: ["full"]
     image: pgvector/pgvector:pg16
     container_name: trippilot-ai-vectordb
+    # 실측(2026-09-12): kb_vectors 121행 = 904kB, 컨테이너 상주 57MiB. 1g 는 데이터
+    # 대비 과할 만큼의 여유다. 한도가 없으면 postgres 가 shared_buffers + work_mem×
+    # 연결수로 늘어나 호스트를 압박하고, 커널 OOM killer 는 같은 호스트에서 가장 큰
+    # ai-embedding(5g)을 먼저 죽인다 — 벡터 DB 가 부풀어 임베딩이 죽는 형태가 된다.
+    mem_limit: 1g
     environment:
       POSTGRES_DB: ai_kb
       POSTGRES_USER: ${AI_VECTOR_DB_USER:-ai_kb}

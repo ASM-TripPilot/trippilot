@@ -1,6 +1,7 @@
 """Deployment boundary tests: no cloud account or cluster required."""
 import copy
 import json
+import os
 from pathlib import Path
 import sys
 import unittest
@@ -76,12 +77,20 @@ class SecretTests(unittest.TestCase):
         manifests = runtime_secrets.runtime_manifests(groups, outputs(), "trippilot", False)
         self.assertNotIn("TRIPPILOT_VECTOR_DB_URL", manifests[1]["stringData"])
 
-    def test_aws_put_passes_secret_only_over_stdin(self):
-        shell = Mock(return_value="{}")
+    def test_aws_put_keeps_secret_out_of_argv_and_removes_payload_file(self):
+        observed = {}
+
+        def shell(argv, payload=None):
+            self.assertIsNone(payload)
+            self.assertNotIn("private-value", " ".join(argv))
+            observed["path"] = next(a for a in argv if a.startswith("file://"))[len("file://"):]
+            with open(observed["path"], encoding="utf-8") as stream:
+                self.assertIn("private-value", stream.read())
+            self.assertEqual(os.stat(observed["path"]).st_mode & 0o777, 0o600)
+            return "{}"
+
         runtime_secrets.put_secret(shell, "ap-northeast-2", "arn-example", {"DB_PASSWORD": "private-value"})
-        argv, payload = shell.call_args.args
-        self.assertNotIn("private-value", " ".join(argv))
-        self.assertIn("private-value", payload)
+        self.assertFalse(os.path.exists(observed["path"]))
 
     def test_aws_empty_container_can_be_seeded_but_access_denied_fails(self):
         shell = Mock(side_effect=runtime.CommandError("aws", "ResourceNotFoundException"))
@@ -208,7 +217,10 @@ class RuntimeIntegrationTests(unittest.TestCase):
                 arn = argv[argv.index("--secret-id") + 1]
                 return json.dumps({"SecretString": json.dumps(saved[arn])})
             if "put-secret-value" in argv:
-                request = json.loads(payload)
+                # put_secret 은 값을 argv 도 stdin 도 아닌 0600 임시파일로 넘긴다.
+                path = next(a for a in argv if a.startswith("file://"))[len("file://"):]
+                with open(path, encoding="utf-8") as stream:
+                    request = json.load(stream)
                 saved[request["SecretId"]] = json.loads(request["SecretString"])
                 writes.append(request["SecretId"])
                 return "{}"

@@ -85,10 +85,8 @@ describe('PrefStep1Page — 다음 내비게이션 (AC3 · AC-nav-1 · 5-2)', ()
 });
 
 describe('PrefStep1Page — 일괄 탈출 (AC4 · AC-11-1·2 · AC-14-1 · 5-3)', () => {
-  it.each([
-    ['상단', 'onboarding-pref1-skip-top'],
-    ['하단', 'onboarding-pref1-skip-bottom'],
-  ])(
+  // TRIP-718: Figma 1643:1183 에 하단 링크가 없어 제거 — 탈출구는 상단 하나(US-ONB-11 충족).
+  it.each([['상단', 'onboarding-pref1-skip-top']])(
     '%s skip을 탭하면 홈으로 replace하고 6축이 전부 null로 유지된다',
     (_label, testId) => {
       // 준비 — 아무 것도 고르지 않은 채 렌더(reset 직후).
@@ -128,10 +126,7 @@ describe('PrefStep1Page — 페이스 축 탭↔스토어 왕복 (AC3 · US-ONB-
 });
 
 describe('PrefStep1Page — 온보딩 완료 재평가 신호 발화 (ticket AC-A · US-ONB-11 · TRIP-353)', () => {
-  it.each([
-    ['상단', 'onboarding-pref1-skip-top'],
-    ['하단', 'onboarding-pref1-skip-bottom'],
-  ])(
+  it.each([['상단', 'onboarding-pref1-skip-top']])(
     '%s 일괄 탈출을 탭하면 재평가 신호를 발화하고 홈으로 replace 한다',
     (_label, testId) => {
       // 준비 — 렌더.
@@ -154,8 +149,8 @@ describe('PrefStep1Page — 일괄 탈출은 기존 선택을 보존한다 (AC4 
     usePreferenceStore.getState().toggleStyle('rest');
     render(<PrefStep1Page />);
 
-    // 실행 — 하단 skip을 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref1-skip-bottom'));
+    // 실행 — 상단 skip을 탭(TRIP-718 로 하단 링크 제거).
+    fireEvent.press(screen.getByTestId('onboarding-pref1-skip-top'));
 
     // 단언 ① — 이 케이스의 주제: skip 핸들러가 스토어를 건드리지 않아 styles가
     // 그대로 남는다(빈 배열로 초기화되지 않는다).

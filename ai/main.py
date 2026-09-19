@@ -146,7 +146,10 @@ def _place_existence():
     )
 
     return KakaoExistenceAdapter(
-        UrllibHttpClient(), key,
+        # 호출당 1s — 어댑터는 마감을 호출 **사이**에서만 보므로 진행 중인 호출 1건이 곧
+        # 마감 초과 상한이다. 기본 10s 면 생성 시한을 10s 넘길 수 있었다(TRIP-904 리뷰).
+        # 키워드 검색 1건은 보통 수백 ms 라 1s 로 정상 응답을 자르지 않는다.
+        UrllibHttpClient(timeout_sec=1.0), key,
         # 상한은 검증 대상 상위 N(기본 50) 보다 넉넉히 — 실질 제한은 마감이다
         # `_env` 를 거친다 — `os.environ.get(k, "60")` 은 변수가 **없을 때만** 기본을
         # 쓰고 `EXISTENCE_MAX_CALLS=` 로 오면 "" 를 돌려줘 `int("")` 로 죽는다.

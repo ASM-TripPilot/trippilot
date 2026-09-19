@@ -712,7 +712,14 @@ class ShareCardCopyResponse(BoundaryModel):
 
 
 class ReminderSlotSchema(BoundaryModel):
-    """그날 일정의 장소 1건 — 문구가 말해도 되는 대상. 좌표·시각은 싣지 않는다."""
+    """그날 일정의 장소 1건 — 문구가 말해도 되는 대상. 좌표·시각은 싣지 않는다.
+
+    `category` 는 **경계 카테고리 코드**다(`FOOD`·`CAFE`·`SIGHT`·`NIGHT_VIEW`·
+    `NATURE`·`CULTURE`·`ACTIVITY`·`SHOPPING`) — 백엔드가 다른 경계에서 이미
+    내보내는 그 값 그대로 보내면 된다. 새 어휘를 만들지 않는다. 모르는 값·빈
+    문자열은 카테고리 없이 이름만 쓴 것과 같게 처리되므로 안전하다(문구 품질만
+    조금 떨어진다).
+    """
 
     name: str = Field(min_length=1)
     category: str = ""

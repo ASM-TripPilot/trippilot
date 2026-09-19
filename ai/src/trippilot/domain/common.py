@@ -68,6 +68,20 @@ class GeoPoint:
 # (`V1.5__profile.sql` CHECK), 접지 않고 그대로 와이어에 실린다
 # (`ReplanFacadeService`: `budgetLevel = prefs.budgetTier`). 그러니 넷이 전부 여기
 # 있어야 한다 — 빠진 값은 거절되는 것이 아니라 **조용히 MID** 가 된다(아래 폴백).
+class Pace(Enum):
+    """여행 속도 — 하루를 얼마나 빽빽하게 채울 것인가.
+
+    백엔드 `PreferenceSet.PACES`(느긋하게·균형있게·알차게) 정본과 1:1 이다.
+    **미설정이 표현 가능한 축이다**(백엔드가 null 을 그대로 낸다) — 그래서 소비측은
+    `Pace | None` 을 받고 None 은 무보정이지 BALANCED 가 아니다. 중립값으로 채우면
+    "고르지 않은 사람"과 "균형을 고른 사람"이 구분되지 않는다.
+    """
+
+    SLOW = "SLOW"          # 느긋하게
+    BALANCED = "BALANCED"  # 균형있게
+    PACKED = "PACKED"      # 알차게
+
+
 BUDGET_TOKENS: dict[str, BudgetLevel] = {
     "LOW": BudgetLevel.LOW, "저렴": BudgetLevel.LOW, "낮음": BudgetLevel.LOW,
     "저가": BudgetLevel.LOW,
@@ -81,4 +95,14 @@ BUDGET_TOKENS: dict[str, BudgetLevel] = {
     # 그 위에 값을 그냥 얹으면 둘 다 무제한이라 구분이 안 되기 때문이고, 임계표를
     # 같이 고치는 것이 그 작업의 본체다. 여기 한 줄은 그때까지의 지혈이다.
     "럭셔리": BudgetLevel.HIGH,
+}
+
+
+# 속도 어휘 — 정본은 백엔드 `PreferenceSet.PACES` 3종. 미인식·미지정은 거절이 아니라
+# **None(무보정)** 이다. 예산(BUDGET_TOKENS)이 MID 로 떨어지는 것과 다른데, 그쪽은
+# `BudgetLevel` 에 '미설정'이 없어 어쩔 수 없었던 예외다(backend_persona 주석 참조).
+PACE_TOKENS: dict[str, Pace] = {
+    "느긋하게": Pace.SLOW, "여유롭게": Pace.SLOW, "SLOW": Pace.SLOW,
+    "균형있게": Pace.BALANCED, "보통": Pace.BALANCED, "BALANCED": Pace.BALANCED,
+    "알차게": Pace.PACKED, "빡빡하게": Pace.PACKED, "PACKED": Pace.PACKED,
 }

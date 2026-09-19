@@ -7,6 +7,7 @@
 
 ```
 ScheduleTask → ② 게이트웨이 선호 점수 (전 일자 1회)  실패·스킵 → 규칙 점수 (BR-U4-09의 "호출측"이 여기다)
+             → ②′ (선택) 점수 상위 지도 실재 검증     못 찾음 → 점수 강등 / 실패 → 강등 없이 진행 (TRIP-904)
              → ③ ItineraryProblem 조립               (후보는 풀에서 나온 것만)
              → ④ 어셈블리 solve                       (체인 폴백은 어셈블리 소유 — 여기서 이중 폴백 금지)
              → ⑤ (선택) 설명 부착                      실패 → 설명 없이 진행
@@ -56,6 +57,7 @@ from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
+    Pace,
     PoiId,
     ScheduleId,
     TraceId,
@@ -77,6 +79,12 @@ from trippilot.llm_gateway.workers.alternative_explanation import (
 )
 from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.ports.place_existence_port import (
+    ExistenceQuery,
+    ExistenceStatus,
+    ExistenceVerdict,
+    PlaceExistencePort,
+)
 from trippilot.ports.trace_port import TracePort
 
 _COMPONENT = "agents.schedule"
@@ -142,6 +150,9 @@ class GenerateItineraryRequest:
     # 설명 생략 요청 (TRIP-479) — 백엔드가 설명을 별도 경계로 병렬 조회할 때 false.
     include_explanations: bool = True
     radius_override_km: float | None = None
+    # 여행 속도 (TRIP-906) — Provider 수집물이 아니라 **요청에 실려 오는 값**이라
+    # 봉투(ScheduleTask)가 아니라 여기 있다. budget·transport 와 같은 길이다.
+    pace: Pace | None = None
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -186,6 +197,7 @@ class ScheduleAgent:
         *,
         explanation_worker: ExplanationWorker | None = None,
         alternative_explanation_worker: AlternativeExplanationWorker | None = None,
+        existence: PlaceExistencePort | None = None,
         config: OrchestratorConfig | None = None,
     ) -> None:
         self._scoring = scoring_worker
@@ -194,7 +206,9 @@ class ScheduleAgent:
         self._trace = trace
         self._explainer = explanation_worker  # 미주입이면 설명 단계를 통째로 건너뛴다
         self._alt_explainer = alternative_explanation_worker  # 미주입이면 템플릿 rationale 그대로
-        self._cfg = config or OrchestratorConfig()  # c1_min_ms·explanation_min_ms 만 읽는다
+        # 지도 실재 검증 (TRIP-904) — 미주입이면 ②′ 를 통째로 건너뛴다(기능 부재, 강등 아님)
+        self._existence = existence
+        self._cfg = config or OrchestratorConfig()  # 단계 임계·②′ 설정만 읽는다
 
     # ── 공개 API ────────────────────────────────────────────────────
 
@@ -227,6 +241,13 @@ class ScheduleAgent:
             trace_id, now,
         )
 
+        # ②′ 지도 실재 검증 (TRIP-904) — **점수가 나온 뒤**라야 배치될 후보를 검증할 수
+        #    있고, 결과가 **점수**에 실려야 어셈블리에 닿는다. 풀 단계에서 순서만 바꾸던
+        #    종전(TRIP-898) 방식은 이후 누구도 풀 순서를 읽지 않아 일정에 효과가 0이었다.
+        candidates = self._verify_on_map(
+            request, pool, candidates, budget, t0, steps, trace_id, now
+        )
+
         # ③ ItineraryProblem 조립 — 후보는 풀에서 나온 것만 (INV-1).
         #    날씨(TRIP-383)·행사 보너스(TRIP-421)는 오케스트레이터가 패킷을 소화해
         #    넘긴 값 — 어셈블리 소프트 항으로만 들어간다 (None = 무보정).
@@ -243,6 +264,7 @@ class ScheduleAgent:
             excluded_poi_ids=request.excluded_poi_ids,  # 2단계 생성 그대로 통과
             daily_rain_prob=task.daily_rain,
             event_bonus=task.event_bonus,
+            pace=request.pace,
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
@@ -508,6 +530,80 @@ class ScheduleAgent:
                           f"alternatives_error: {type(e).__name__}: {e}")
             return {}
 
+    # ── ②′ 지도 실재 검증 (TRIP-904) ────────────────────────────────
+
+    def _verify_on_map(
+        self,
+        request: GenerateItineraryRequest,
+        pool: CandidatePool,
+        candidates: tuple[ScoredPoi, ...],
+        budget: DeadlineBudget,
+        t0: int,
+        steps: list[Degradation],
+        trace_id: TraceId,
+        now: datetime,
+    ) -> tuple[ScoredPoi, ...]:
+        """점수 상위 N 을 지도에서 확인하고 **못 찾은 것만** 점수를 깎는다 — 배제가 아니다.
+
+        실측(`ai-existence-probe`, 반경 300m, 무리별 200건)이 배제를 기각했다: 영업 중의
+        4.0% 가 안 나오고(오탐) 폐업의 48.5% 만 걸린다 — 7,837건 환산 시 잡는 폐업 ≈102건
+        vs 잘못 버리는 영업 중 ≈305건. 그래서 점수를 소프트 항 한 단만큼 깎아
+        (`demoted_score`) 두 어셈블러가 정상 후보 뒤로 미루게 한다. UNVERIFIED(장애·
+        시한·예산)는 강등하지 않는다 — 벤더가 죽는 날 후보 순서가 통째로 뒤집히면 안 된다.
+
+        시간은 어셈블리 바닥을 침범하지 않는 만큼만 포트에 준다(DL-2). 못 주면 건너뛰고,
+        포트 예외·빈 응답·전량 확인 실패와 함께 강등으로 남긴다(침묵 금지, INV-4).
+        ponytail: 카카오 어댑터는 마감을 **호출 사이**에서만 보므로 진행 중인 호출 1건만큼
+        (HTTP 타임아웃, main.py 에서 1s) 넘칠 수 있다 — 호출별 잔여 타임아웃 관통은
+        HttpGetJson 포트 확장이 필요해 두었다.
+        """
+        if self._existence is None or not candidates:
+            return candidates  # 미주입 = 기능 부재 (강등 아님)
+        index = {p.poi_id: p for p in pool.pois}
+        skip = request.excluded_poi_ids | {b.poi_id for b in request.fixed_blocks}
+        targets = tuple(
+            c.poi_id for c in sorted(candidates, key=lambda c: (-c.score, str(c.poi_id)))
+            if c.poi_id not in skip and c.poi_id in index
+        )[: self._cfg.existence_verify_top_n]
+        if not targets:
+            return candidates
+        available = (budget.total_ms - (self._clock.monotonic_ms() - t0)
+                     - budget.c2_reserved_ms)
+        deadline = min(self._cfg.existence_deadline_ms, available)
+        if deadline <= 0:
+            self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
+                          f"deadline:available={available}ms")
+            return candidates
+        asked = set(targets)
+        try:
+            # 반환값 순회까지 try 안이다 — None·잘못된 원소·지연 예외를 내는 포트가
+            # 순위 곁가지 하나 때문에 생성 전체를 FAILED 로 만들면 안 된다 (DL-5 방어).
+            answered = [
+                v for v in self._existence.verify(
+                    tuple(ExistenceQuery(poi_id=pid, name=index[pid].name,
+                                         coord=index[pid].coord) for pid in targets),
+                    deadline_ms=deadline,
+                )
+                if isinstance(v, ExistenceVerdict) and v.poi_id in asked
+            ]
+        except Exception as e:
+            self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
+                          f"existence_error: {type(e).__name__}: {e}")
+            return candidates
+        if not answered:
+            # 물었는데 판정이 한 건도 안 왔다 — 개수 보존 계약 위반. 강등 없이, 조용히는 아니게.
+            self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
+                          "existence_empty_response")
+            return candidates
+        if all(v.status is ExistenceStatus.UNVERIFIED for v in answered):
+            # 한 건도 확인 못 함 = 검증 자체가 실패했다 (벤더 장애·키 오류 등)
+            self._degrade(steps, trace_id, now, "existence", "map_verify", "(none)",
+                          f"existence_unverified: {answered[0].reason}")
+            return candidates
+        return demote_missing_on_map(
+            candidates, answered,
+            self._cfg.existence_demote_factor, self._cfg.existence_demote_penalty)
+
     # ── ⑥′ 차선책 LLM 문장 (TRIP-887) ──────────────────────────────
 
     def _explain_alternatives(
@@ -692,6 +788,45 @@ def pick_slot_alternatives(
                     for p in picks
                 )
     return out
+
+
+def demoted_score(score: float, *, factor: float, penalty: float) -> float:
+    """지도 미검출 강등값 = max(점수 − penalty, 점수 × factor). 0 이하 점수는 그대로.
+
+    뺄셈이 본체다 — 다른 소프트 감점과 같은 축이라 겹쳐도 "같은 조정 점수의 일반 후보"와
+    똑같이 취급되고, 곱셈 하한이 저점수를 음수로 떨어뜨리지 않는다(> 0 유지 = 배제 아님).
+    두 항 모두 점수에 대해 증가함수라 강등된 후보끼리의 순위는 뒤집히지 않는다.
+    0 이하는 건드리지 않는다 — 음수에 배율을 곱하면 0 쪽으로 **올라가** 승격이 된다
+    (규칙 점수는 원거리에서 음수가 될 수 있다). 이미 방문 이득이 없는 값이다.
+    """
+    if score <= 0:
+        return score
+    return max(score - penalty, score * factor)
+
+
+def demote_missing_on_map(
+    candidates: tuple[ScoredPoi, ...],
+    verdicts: Sequence[ExistenceVerdict],
+    factor: float,
+    penalty: float,
+) -> tuple[ScoredPoi, ...]:
+    """NOT_FOUND 판정을 받은 후보만 `demoted_score` — 순서·개수·후보 집합은 그대로 (TRIP-904).
+
+    판정은 **집합으로만** 읽는다 — 포트가 계약을 어겨 결손·중복·뒤섞임·유령 id 를
+    돌려줘도 후보가 사라지거나 늘거나 두 번 깎이지 않는다(INV-1: 후보는 입력 그대로).
+
+    ponytail: 강등된 점수가 슬롯 `score`·품질 지표(preference_fit)에 그대로 실린다 —
+    와이어엔 없어(IO-3) 사용자 노출은 없고 관측만 약간 낮게 읽힌다. 원점수 복원은
+    어셈블리 퍼사드가 품질을 solve 안에서 계산해 에이전트에서 못 한다.
+    OR-Tools 목적함수가 `int(score·1000)` 이라 원점수 0.005 미만은 하한 배율을 곱하면
+    이득 0 으로 떨어진다 — 원래도 거의 안 뽑히는 값이라 두었다.
+    """
+    missing = {v.poi_id for v in verdicts if v.status is ExistenceStatus.NOT_FOUND}
+    return tuple(
+        replace(c, score=demoted_score(c.score, factor=factor, penalty=penalty))
+        if c.poi_id in missing else c
+        for c in candidates
+    )
 
 
 def alternative_pairs(

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from trippilot.domain.common import TransportMode
+from trippilot.domain.common import Pace, TransportMode
 from trippilot.domain.poi import PoiCategory
 
 
@@ -40,6 +40,50 @@ STAY_DEFAULT_MIN: dict[PoiCategory, int] = {
     PoiCategory.SHOPPING: 60,
     PoiCategory.STAY: 30,
 }
+
+
+# TRIP-906 — 여행 속도(pace) → 체류시간 정수비.
+#
+# **정수비인 이유**: CP-SAT 변수가 정수(분)이고, 부동소수 곱은 반올림 규칙에 따라
+# 플랫폼별로 갈릴 수 있다. 분자/분모로 두면 `stay * num // den` 한 줄로 확정된다.
+#
+# **크기의 근거 — 실측**(후보 20곳·하루 09~21시·PUBLIC, OR-Tools 와 규칙 폴백 각각):
+#
+#     배율   OR슬롯  폴백슬롯
+#     0.90     9       8
+#     1.00     8       8      ← 현행
+#     1.40     7       6
+#
+# 두 엔진 모두 배율에 대해 단조였다(비단조 0건). 극단 간 하루 3~4슬롯 차이가 나므로
+# "느긋하게"와 "알차게"가 눈에 보이게 갈린다.
+#
+# **알차게를 더 밀지 않은 이유**: 체류를 더 줄이면 실행가능 공간이 넓어져 CP-SAT 이
+# 3초 벽시계 안에 첫 해를 못 찾는 구간이 생긴다 — 후보 40곳에서 ×0.75 는 3/3 해없음
+# 이었고, 그러면 규칙 폴백으로 강등돼 **알차게를 고른 사용자가 오히려 품질 낮은
+# 그리디 일정을 받는다.** ×0.90 은 후보 25·40곳에서 3/3 정상이었다. 더 공격적인 값은
+# 벽시계 여유(`or_tools_limit_ms`)를 같이 올리지 않는 한 손해다.
+PACE_STAY_RATIO: dict[Pace, tuple[int, int]] = {
+    Pace.SLOW: (7, 5),        # ×1.4
+    Pace.BALANCED: (1, 1),    # 무보정 — 현행과 동일
+    Pace.PACKED: (9, 10),     # ×0.9
+}
+
+# 체류 하한(분). 비를 먹여도 이 아래로는 안 내려간다 — 15분짜리 방문은 이동시간보다
+# 짧아 일정으로서 의미가 없고, 0 에 수렴하면 하루에 무한정 담기는 퇴화가 생긴다.
+_STAY_FLOOR_MIN = 20
+
+
+def stay_for(category: PoiCategory, pace: "Pace | None") -> int:
+    """카테고리 기본 체류에 pace 비를 먹인 분(分). `pace=None` 이면 기본값 그대로.
+
+    **고정 블록에는 쓰지 않는다.** 고정 블록의 체류는 사용자가 정한 창에서 역산하며
+    (HC3 시각 정확 일치), 거기에 비를 먹이면 확정 예약 시각이 흔들린다.
+    """
+    base = STAY_DEFAULT_MIN[category]
+    if pace is None:
+        return base
+    num, den = PACE_STAY_RATIO[pace]
+    return max(_STAY_FLOOR_MIN, base * num // den)
 
 
 # TRIP-383 — 날씨 보정의 실외/실내 판정표 (경계 카테고리 8종 기준).

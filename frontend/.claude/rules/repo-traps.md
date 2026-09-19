@@ -3,7 +3,7 @@
 리포를 읽어도·테스트를 돌려도·그래프를 봐도 **알 수 없는 것만** 적는다. **밟기 전에 읽는다.**
 이 파일은 `paths` 없는 무조건 규칙이라 메인·서브에이전트에 시작 시 로드된다(그래서 짧게 유지한다).
 
-**경로별 함정은 `traps-*.md`로 쪼갰다**(path-scoped 자동 로드 — 해당 경로 파일을 만질 때만 첨부된다). 여기엔 **폴더에 안 매인 전역 함정만** 남긴다. 경로별: `traps-onboarding-auth.md`·`traps-home.md`·`traps-stay.md`·`traps-itinerary.md`·`traps-execution.md`·`traps-trip.md`·`traps-explore.md`·`traps-shell.md`.
+**경로별 함정은 `traps-*.md`로 쪼갰다**(path-scoped 자동 로드 — 해당 경로 파일을 만질 때만 첨부된다). 여기엔 **폴더에 안 매인 전역 함정만** 남긴다. 경로별: `traps-onboarding-auth.md`·`traps-home.md`·`traps-stay.md`·`traps-itinerary.md`·`traps-execution.md`·`traps-trip.md`·`traps-explore.md`·`traps-shell.md`·`traps-record.md`·`traps-reflection.md`.
 
 **여기 적지 않는 것**: 미해결 부채·후속 티켓·"다음 사이클 후보"는 옵시디언 **문제로그** 소관(닫히면 사라질 것). 파일 목록·export·스텁은 `structure.md`(+`--check`) 소관. 테스트가 red로 잡는 것도 아니다. 남는 것은 **부정 사실·지금 어디까지·기계 강제 없는 계약**뿐.
 
@@ -14,7 +14,7 @@
 ## 글리프 · 심판 사정거리
 
 - **raw hex 스캔은 `*Glyphs.tsx` 제외** (SVG `stroke`/`fill`은 className을 못 받는 리포 전체 관례). AC-7 스텁 잠금의 `cardFingerprint`는 testID·className·텍스트만 굳히고 **`fill` 변화는 안 본다** — 저장 하트를 `StayGlyphs.tsx`로 옮겨 `useState` 토글을 걸면 5개 심판이 전부 green인 채로 "저장됐다는 거짓말"이 통과한다.
-- **`LocationOffGlyph`가 두 벌이다** → `shared/location/LocationGlyphs.tsx`와 `features/itinerary/ui/ItineraryGlyphs.tsx`에 같은 이름·같은 그림이 각각 있고 색만 다르다(공용=`mutedSoft` 고정, h35=`primary`). grep하면 두 벌이 나오고 정본을 코드만으로는 알 수 없다.
+- **`LocationOffGlyph`가 세 벌이다** → `shared/location/LocationGlyphs.tsx`·`features/itinerary/ui/ItineraryGlyphs.tsx`·`features/reflection/ui/ReflectionGlyphs.tsx`에 같은 이름·같은 그림이 각각 있고 색만 다르다(공용=`mutedSoft` 고정, h35=`primary`; reflection 사본은 features 간 import 금지라 복제된 것으로 그 파일이 자인). grep하면 세 벌이 나오고 정본을 코드만으로는 알 수 없다.
 
 ## 지도 (`shared/map`)
 

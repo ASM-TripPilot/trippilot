@@ -1,8 +1,8 @@
 /**
  * 취향 2/2 배선 (AC2 · AC3 · AC4) — usePreferenceStore ↔ PrefStep2Screen ↔ expo-router.
- * 예산·동행·활동·음식·이동 5축 상태와 토글 액션을 셀렉터로 구독해 Screen에 내려주고, back은
- * router.back()으로 1/2로 복귀시키며, '완료'·일괄 탈출 모두 스토어를 건드리지 않고
- * 홈으로 replace한다(US-ONB-06/07/09/10 — 미선택 축은 null로 유지).
+ * 예산·동행·활동·음식·이동 5축 상태와 토글 액션을 셀렉터로 구독해 Screen에 내려주고,
+ * '완료'·일괄 탈출 모두 스토어를 건드리지 않고 홈으로 replace한다(US-ONB-06/07/09/10 —
+ * 미선택 축은 null로 유지). TRIP-719: Q4 번복으로 back chevron 제거 — onBack 배선도 사라졌다.
  */
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
@@ -28,10 +28,6 @@ export function PrefStep2Page(): ReactElement {
   const toggleActivity = usePreferenceStore((state) => state.toggleActivity);
   const toggleFood = usePreferenceStore((state) => state.toggleFood);
   const toggleTransport = usePreferenceStore((state) => state.toggleTransport);
-
-  const handleBack = () => {
-    router.back();
-  };
 
   const handleDone = () => {
     // TRIP-471 — 온보딩 완료 시 세션 취향을 서버에 영속한다(slug→서버 enum 번역 경유).
@@ -65,7 +61,6 @@ export function PrefStep2Page(): ReactElement {
       onToggleActivity={toggleActivity}
       onToggleFood={toggleFood}
       onToggleTransport={toggleTransport}
-      onBack={handleBack}
       onDone={handleDone}
       onSkipAll={handleSkipAll}
     />
