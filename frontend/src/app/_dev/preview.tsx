@@ -2770,25 +2770,29 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: 'd',
     label: 'd01 · 랜딩 default',
     login: null,
-    render: () => (
-      // TRIP-703: Figma default(1672:1183)는 담은 곳 메뉴가 접힌(open:false) 얼굴이다.
-      <ExploreLandingScreen
-        {...EXPLORE_LANDING_BASE}
-        stayLane={{
-          error: false,
-          cards: EXPLORE_STAY_CARDS,
-          onRetry: noop,
-          onSeeAll: noop,
-        }}
-        savedMenu={{
-          open: false,
-          savedCount: 3,
-          onToggle: noop,
-          onPressSavedPlaces: noop,
-          onPressSavedStays: noop,
-        }}
-      />
-    ),
+    // d01 은 (tabs)/explore 라 실앱에서 셸 탭바(탐색 활성)가 뜬다 — 프리뷰도 실화면과 똑같이
+    // withShellTabBar('explore')로 얹는다(home 프리뷰 선례). TRIP-703 default(1672:1183)는
+    // 담은 곳 메뉴 접힘(open:false).
+    render: () =>
+      withShellTabBar(
+        <ExploreLandingScreen
+          {...EXPLORE_LANDING_BASE}
+          stayLane={{
+            error: false,
+            cards: EXPLORE_STAY_CARDS,
+            onRetry: noop,
+            onSeeAll: noop,
+          }}
+          savedMenu={{
+            open: false,
+            savedCount: 3,
+            onToggle: noop,
+            onPressSavedPlaces: noop,
+            onPressSavedStays: noop,
+          }}
+        />,
+        'explore'
+      ),
   },
   {
     // TRIP-704: Figma loading(3612:2006) — 숙소 2·장소 3 스켈레톤, FAB·폴백 없음. 헤딩·검색·
@@ -2797,20 +2801,23 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: 'd',
     label: 'd01 · 랜딩 loading',
     login: null,
-    render: () => (
-      <ExploreLandingScreen
-        {...EXPLORE_LANDING_BASE}
-        isLoading
-        stayLane={{ error: false, cards: [], onRetry: noop, onSeeAll: noop }}
-        savedMenu={{
-          open: false,
-          savedCount: 0,
-          onToggle: noop,
-          onPressSavedPlaces: noop,
-          onPressSavedStays: noop,
-        }}
-      />
-    ),
+    // d01 로딩도 실앱 탐색 탭이라 셸 탭바(탐색 활성)가 뜬다 — 프리뷰도 똑같이 얹는다.
+    render: () =>
+      withShellTabBar(
+        <ExploreLandingScreen
+          {...EXPLORE_LANDING_BASE}
+          isLoading
+          stayLane={{ error: false, cards: [], onRetry: noop, onSeeAll: noop }}
+          savedMenu={{
+            open: false,
+            savedCount: 0,
+            onToggle: noop,
+            onPressSavedPlaces: noop,
+            onPressSavedStays: noop,
+          }}
+        />,
+        'explore'
+      ),
   },
   // TRIP-711 — `explore-landing-empty-bridge`·`explore-landing-stay-error` 프리뷰 키 삭제
   // (G5, 화면 코드는 유지 — 담은 곳 0 브리지·숙소 레인 실패는 회선 조절로 실화면 재현).
