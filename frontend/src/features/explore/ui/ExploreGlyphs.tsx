@@ -62,6 +62,27 @@ export function CloseGlyph({ size = 24, testID }: GlyphProps) {
   );
 }
 
+/** 여행 만들기 FAB — 흰 십자(＋). 핑크 원(bg-primary) 위에 얹힌다(CloseGlyph 와 같은 관례로
+ * 흰색 stroke 고정). 단순 십자선이라 Figma path 근사 없이 충분(글리프 벡터는 jest 사각·6-b 육안). */
+export function PlusGlyph({ size = 24, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M12 5v14M5 12h14"
+        stroke={ON_PRIMARY}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 /** 앱바 뒤로가기 셰브론. */
 export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
   return (

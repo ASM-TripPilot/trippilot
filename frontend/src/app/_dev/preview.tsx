@@ -295,12 +295,17 @@ const STAY_DETAIL_PREVIEW_ITEM: StayItem = {
 
 // 가볼 곳 가로 레인(TRIP-470) — 프리뷰에서 레인을 눈으로 보기 위한 표본 카드. `as const` 밖에
 // 둬야 cards 가 readonly 튜플로 굳지 않는다(placeLane.cards 는 PlaceCardVM[] 요구).
+// 장소 가로 레인(TRIP-470) — 프리뷰 표본 카드. TRIP-703 으로 Figma d01(1672:1183) 정합상 5장.
+// `imageUrl` 미지정(=회색 자리, INV-1 — 실사진 소싱은 6-b·후속). `as const` 밖에 둬야 cards 가
+// readonly 튜플로 안 굳는다(placeLane.cards 는 PlaceCardVM[] 요구).
 const EXPLORE_LANDING_PLACE_LANE = {
   error: false,
   cards: [
     { poiId: 'p1', name: '감천문화마을', region: '사하구' },
     { poiId: 'p2', name: '광안리 해변', region: '수영구' },
-    { poiId: 'p3', name: '해운대 블루라인', region: '해운대구' },
+    { poiId: 'p3', name: '전포 카페거리', region: '부산진구' },
+    { poiId: 'p4', name: '자갈치시장', region: '중구' },
+    { poiId: 'p5', name: '해운대 블루라인', region: '해운대구' },
   ],
   onRetry: noop,
   onPressCard: noop,
@@ -309,10 +314,11 @@ const EXPLORE_LANDING_PLACE_LANE = {
 const EXPLORE_LANDING_BASE = {
   heading: {
     title: '무엇을 둘러볼까요?',
-    subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
+    subtitle: '숙소·장소를 둘러보고 담아요',
   },
   onPressSearch: noop,
   onPressPlaces: noop,
+  onPressCreateTrip: noop,
   placeLane: EXPLORE_LANDING_PLACE_LANE,
 } as const;
 
@@ -2752,9 +2758,10 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'explore-landing-default',
     band: 'd',
-    label: 'd01 · 랜딩 담은 곳 CTA',
+    label: 'd01 · 랜딩 default',
     login: null,
     render: () => (
+      // TRIP-703: Figma default(1672:1183)는 담은 곳 메뉴가 접힌(open:false) 얼굴이다.
       <ExploreLandingScreen
         {...EXPLORE_LANDING_BASE}
         stayLane={{
@@ -2764,7 +2771,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           onSeeAll: noop,
         }}
         savedMenu={{
-          open: true,
+          open: false,
           savedCount: 3,
           onToggle: noop,
           onPressSavedPlaces: noop,
