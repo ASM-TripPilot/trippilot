@@ -180,9 +180,7 @@ def load_kb_file(path: Path, parse: Callable[[str], object]) -> tuple[KbDocument
 # 제곱으로 붙는다. 5,175자 하나가 섞인 32건 배치가 로컬 컨테이너(5GiB)를 4초 만에
 # OOM 으로 죽였고, 64→16 으로 내려도 그 문서는 여전히 16건 안에 있어서 안 들었다.
 # 그래서 여기가 아니라 색인 전에 막는다 — `place_docs.MAX_TEXT_CHARS`.
-# 남는 요인은 누적 증가분(문서당 ~2.7MB, 요청 후에도 안 풀림)이라 수천 건은 패스로
-# 나누고 패스 사이에 컨테이너를 재기동한다. 그 부근에서는 죽기 전에 먼저 느려진다
-# (단건 168ms → 14.6초) — 감시는 프로세스 생사가 아니라 적재 건수 증가로 건다.
+# 상한을 건 뒤 1,458건 전량이 한 패스 4분에 들어갔다(메모리 +0.38GiB, 건당 0.47MB).
 INDEX_BATCH = max(1, min(
     int(os.environ.get("TRIPPILOT_INDEX_BATCH") or "64"),
     int(os.environ.get("EMBEDDING_MAX_TEXTS") or "256"),
