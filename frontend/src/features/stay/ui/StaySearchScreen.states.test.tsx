@@ -60,6 +60,13 @@ const PRICE_TEXT_BY_EXTERNAL_ID: Record<string, string> = {
   s2: '20,000원~',
 };
 
+// TRIP-725 — 2톤 가격의 bold 노드(접미 "~" 제거). 카드가 bold+"~" 두 형제 Text 로 쪼갠다(AC-2).
+const BOLD_PRICE_BY_EXTERNAL_ID: Record<string, string> = {
+  s3: '30,000원',
+  s1: '10,000원',
+  s2: '20,000원',
+};
+
 /** ITEMS의 1번(서면, 10000)만 price: null로 바꾼 3건 — AC-6 전용. */
 const ITEMS_WITH_NULL: StayItem[] = ITEMS.map((item, index) =>
   index === 1 ? { ...item, price: null } : item
@@ -295,13 +302,15 @@ describe('StaySearchScreen — partial에서도 가격 규칙 유지 (AC-6 · BR
     const nullItem = ITEMS_WITH_NULL[1];
     const nullCard = screen.getByTestId(`stay-card-${stayKey(nullItem)}`);
     expect(within(nullCard).getByText('가격 미확인')).toBeOnTheScreen();
+    expect(within(nullCard).queryByText('~')).toBeNull();
 
-    // 나머지 두 카드는 금액 문자열이 그대로 남아 있다 — null 처리가 옆 카드로 새지 않는다.
+    // 나머지 두 카드는 2톤 금액(bold+"~")이 그대로 남는다 — null 처리가 옆 카드로 안 샌다.
     [ITEMS_WITH_NULL[0], ITEMS_WITH_NULL[2]].forEach((item) => {
       const card = screen.getByTestId(`stay-card-${stayKey(item)}`);
       expect(
-        within(card).getByText(PRICE_TEXT_BY_EXTERNAL_ID[item.externalId])
+        within(card).getByText(BOLD_PRICE_BY_EXTERNAL_ID[item.externalId])
       ).toBeOnTheScreen();
+      expect(within(card).getByText('~')).toBeOnTheScreen();
     });
 
     expect(screen.getByTestId('stay-search-partialfailure')).toBeOnTheScreen();
@@ -396,7 +405,10 @@ describe('StaySearchScreen — default 회귀 (AC-9, 선제 green이 정상)', (
     expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
       '부산 · 날짜 미정 · 3곳'
     );
-    expect(screen.getByTestId('stay-search-fab')).toBeOnTheScreen();
+    // TRIP-725 — default 얼굴에도 2단 원형 FAB 2개가 그대로 뜨고, 옛 알약 FAB 은 없다.
+    expect(screen.getByTestId('stay-search-fab-saved')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-fab-register')).toBeOnTheScreen();
+    expect(screen.queryByTestId('stay-search-fab')).toBeNull();
 
     // 새 상태 UI가 default로 새지 않는다(부정 4개) — 동결 파일은 이 testID들이 그때
     // 없었으므로 이 단언을 가질 수 없었다. 이 it이 "기본값이 정말 default 얼굴인가"를

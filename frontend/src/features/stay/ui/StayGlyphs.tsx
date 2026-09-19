@@ -1,4 +1,4 @@
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 // 숙소 검색 결과(e02) 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs/HomeGlyphs 패턴
 // 계승 · Figma 1837:2283). features 간 직접 import 금지(importBoundary 의도 — features/stay는
@@ -61,8 +61,8 @@ export function ChevronDownGlyph({ size = 14, testID }: GlyphProps) {
   );
 }
 
-// 필터 칩 '필터'(⇅) — 위/아래 화살표 쌍(정렬·필터 상투 아이콘).
-// 필터 칩(14px, tone 미지정 = body)과 filter-zero 원형 배지(32px, tone='primary')가 같은
+// 필터 칩 '필터'(⇥) — 가로 슬라이더 2줄(각 줄에 조절 노브 하나, Figma 1837:2291 재작도).
+// 필터 칩(15px, tone 미지정 = body)과 filter-zero 원형 배지(32px, tone='primary')가 같은
 // 도형을 다른 색으로 쓴다 — WarningTriangleGlyph와 같은 형태로 색만 prop으로 뺀다.
 // 기본값을 body로 두는 이유: 칩이 먼저 이 글리프를 쓰고 있었고, 그 색이 바뀌면 안 된다.
 export function FilterSlidersGlyph({
@@ -80,19 +80,19 @@ export function FilterSlidersGlyph({
       fill="none"
     >
       <Path
-        d="M4 9.5V2M4 2L1.8 4.2M4 2L6.2 4.2"
+        d="M2 4.5H12"
         stroke={stroke}
         strokeWidth={1.3}
         strokeLinecap="round"
-        strokeLinejoin="round"
       />
+      <Circle cx={5} cy={4.5} r={1.7} fill={stroke} />
       <Path
-        d="M10 4.5V12M10 12L7.8 9.8M10 12L12.2 9.8"
+        d="M2 9.5H12"
         stroke={stroke}
         strokeWidth={1.3}
         strokeLinecap="round"
-        strokeLinejoin="round"
       />
+      <Circle cx={9} cy={9.5} r={1.7} fill={stroke} />
     </Svg>
   );
 }
@@ -176,9 +176,16 @@ export function MapPinGlyph({
   );
 }
 
-// e04 empty CTA `숙소 둘러보기` 돋보기(19) — 분홍 버튼 위라 흰색(ON_PRIMARY). Figma 1702:1183
-// 벡터. TripGlyphs 에 동명 그림이 있으나 features 간 직접 import 금지(리포 관례)라 새로 그린다.
-export function SearchGlyph({ size = 19, testID }: GlyphProps) {
+// 돋보기 — e04 empty CTA `숙소 둘러보기`(19, 분홍 버튼 위 흰색 ON_PRIMARY, Figma 1702:1183) 와
+// e02 검색바(20, 회색 MUTED_SOFT, Figma 2488:1500) 겸용. 색만 tone prop 으로 뺀다(SearchGlyph 를
+// 두 벌로 나누지 않는다 — FilterSlidersGlyph tone 선례). 기본값 onPrimary: e04 가 먼저 이 색을 썼다.
+// TripGlyphs 에 동명 그림이 있으나 features 간 직접 import 금지(리포 관례)라 새로 그린다.
+export function SearchGlyph({
+  size = 19,
+  tone = 'onPrimary',
+  testID,
+}: GlyphProps & { tone?: 'onPrimary' | 'mutedSoft' }) {
+  const stroke = tone === 'mutedSoft' ? MUTED_SOFT : ON_PRIMARY;
   return (
     <Svg
       testID={testID}
@@ -189,14 +196,14 @@ export function SearchGlyph({ size = 19, testID }: GlyphProps) {
     >
       <Path
         d="M9.16667 15C12.3883 15 15 12.3883 15 9.16667C15 5.94501 12.3883 3.33333 9.16667 3.33333C5.94501 3.33333 3.33333 5.94501 3.33333 9.16667C3.33333 12.3883 5.94501 15 9.16667 15Z"
-        stroke={ON_PRIMARY}
+        stroke={stroke}
         strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M17.5 17.5L13.75 13.75"
-        stroke={ON_PRIMARY}
+        stroke={stroke}
         strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -205,8 +212,15 @@ export function SearchGlyph({ size = 19, testID }: GlyphProps) {
   );
 }
 
-// 수동 등록 유도 카드 배지 플러스(TRIP-182 §3-2) — 22px, 분홍. Figma 1341:1391 벡터 그대로.
-export function PlusGlyph({ size = 22, testID }: GlyphProps) {
+// 플러스 — 수동 등록 유도 카드 배지(22, 분홍 PRIMARY, 연분홍 원 위, Figma 1341:1391) 와
+// e02 분홍 원 FAB(24, 흰색 ON_PRIMARY, Figma 4463:2113) 겸용. 색만 tone prop 으로 뺀다
+// (SearchGlyph tone 선례). 기본값 primary: 등록 카드가 먼저 이 색을 썼다(무prop 호출 무회귀).
+export function PlusGlyph({
+  size = 22,
+  tone = 'primary',
+  testID,
+}: GlyphProps & { tone?: 'primary' | 'onPrimary' }) {
+  const stroke = tone === 'onPrimary' ? ON_PRIMARY : PRIMARY;
   return (
     <Svg
       testID={testID}
@@ -217,14 +231,14 @@ export function PlusGlyph({ size = 22, testID }: GlyphProps) {
     >
       <Path
         d="M11 4.58333V17.4167"
-        stroke={PRIMARY}
+        stroke={stroke}
         strokeWidth={2.38333}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M4.58333 11H17.4167"
-        stroke={PRIMARY}
+        stroke={stroke}
         strokeWidth={2.38333}
         strokeLinecap="round"
         strokeLinejoin="round"

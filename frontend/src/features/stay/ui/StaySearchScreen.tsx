@@ -19,6 +19,7 @@ import { formatPrice } from '@/entities/stay/lib/formatPrice';
 import { StaySearchCard } from '@/entities/stay/ui/StaySearchCard';
 import type { StayItem } from '@/shared/api/generated/schemas';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { StateNotice, type StateNoticeAction } from '@/shared/ui/StateNotice';
 
 import { filterReasonLabel } from '../model/filterReasonLabel';
@@ -33,6 +34,7 @@ import {
   FilterSlidersGlyph,
   MapPinGlyph,
   PlusGlyph,
+  SearchGlyph,
   WarningTriangleGlyph,
 } from './StayGlyphs';
 
@@ -52,9 +54,9 @@ export interface StaySearchScreenProps {
   /** 하단 탭바 탭 콜백(TRIP-413). 누른 탭의 key 가 그대로 온다 — 라우팅은 페이지 몫이다.
    * 미지정이면 정직한 스텁이라 기존 2-prop 호출이 안 깨진다. */
   onPressTab?: (key: ShellTabKey) => void;
-  /** FAB "여행 만들기" 콜백(TRIP-414). 목적지(/trips/new/step1)는 페이지가 정한다.
-   * 미지정이면 정직한 스텁. */
-  onPressCreateTrip?: () => void;
+  /** 흰 원 하트 FAB "담은 숙소" 콜백(TRIP-725). 목적지(/stays/saved)는 페이지가 정한다.
+   * 미지정이면 정직한 스텁(눌러도 무동작). */
+  onPressSaved?: () => void;
   /** 지역·필터 칩 콜백(TRIP-415). 누른 칩의 axis 가 온다 — 지역 재선택·필터 시트는 페이지 몫.
    * 미지정이면 정직한 스텁(가격대 칩은 페이지가 axis 를 무시해 스텁으로 남는다). */
   onPressFilter?: (axis: 'price' | 'region' | 'more') => void;
@@ -104,6 +106,24 @@ function filterByNameQuery(items: StayItem[], query: string): StayItem[] {
 // 래퍼 몫이라 여기선 `flexGrow`만 준다).
 const listContentStyle = { flexGrow: 1 } as const;
 
+// 검색바·FAB 소프트 그림자 — className 으로 못 줘 style prop 으로 옮긴다. shadowColor '#000000'
+// 은 토큰화 대상 밖이라 raw-hex 가드(V1) 사정거리 밖(카드 cardShadow·HomeScreen 선례).
+const searchShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 8,
+  elevation: 2,
+} as const;
+
+const fabShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.16,
+  shadowRadius: 12,
+  elevation: 6,
+} as const;
+
 const FILTER_CHIPS: { axis: 'price' | 'region' | 'more'; label: string }[] = [
   { axis: 'price', label: '가격대' },
   { axis: 'region', label: '지역' },
@@ -149,7 +169,7 @@ function FilterChip({
       testID={`stay-search-filter-${axis}`}
       accessibilityRole="button"
       onPress={onPress}
-      className="flex-row items-center gap-xs rounded-pill border border-hairline-strong bg-canvas px-md py-sm"
+      className="flex-row items-center gap-xs rounded-[8px] border border-hairline-strong bg-canvas px-md py-sm"
     >
       <Text className="font-noto text-body text-body">{label}</Text>
       {showBadge ? (
@@ -160,7 +180,7 @@ function FilterChip({
         </View>
       ) : null}
       {axis === 'more' ? (
-        <FilterSlidersGlyph size={14} />
+        <FilterSlidersGlyph size={15} />
       ) : (
         <ChevronDownGlyph size={14} />
       )}
@@ -438,7 +458,7 @@ export function StaySearchScreen({
   onPressRegister,
   onPressBack,
   onPressTab,
-  onPressCreateTrip,
+  onPressSaved,
   onPressFilter,
   activeFilterCount,
   onPressChangeRegion,
@@ -478,13 +498,16 @@ export function StaySearchScreen({
             <>
               {onChangeNameQuery ? (
                 <View className="px-lg pt-sm">
-                  <View className="flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-md py-3">
-                    <MapPinGlyph size={16} />
+                  <View
+                    style={searchShadow}
+                    className="h-12 flex-row items-center gap-sm rounded-pill border border-hairline bg-canvas px-md"
+                  >
+                    <SearchGlyph size={20} tone="mutedSoft" />
                     <TextInput
                       testID="stay-search-name-input"
                       value={nameQuery ?? ''}
                       onChangeText={onChangeNameQuery}
-                      placeholder="숙소 이름 · 지역 검색"
+                      placeholder="지역·숙소 이름 검색"
                       className="flex-1 font-noto text-body text-ink"
                     />
                   </View>
@@ -541,10 +564,10 @@ export function StaySearchScreen({
             );
           }}
           ItemSeparatorComponent={() => <View className="h-lg" />}
-          // FAB(absolute bottom-104 + h-52 = 상단 156)·탭바(96) 오버레이가 마지막 카드를
-          // 가리지 않도록 스크롤 끝 여백을 156까지 확보한다(TRIP-414, Figma fabSpacer 대응).
+          // 2단 원형 FAB(흰 하트 absolute bottom-152 + size56 = 상단 208)·탭바(96) 오버레이가
+          // 마지막 카드를 가리지 않도록 스크롤 끝 여백을 208까지 확보한다(TRIP-725, fabSpacer 대응).
           ListFooterComponent={
-            <View testID="stay-search-list-footer" className="h-[156px]" />
+            <View testID="stay-search-list-footer" className="h-[208px]" />
           }
         />
 
@@ -553,18 +576,28 @@ export function StaySearchScreen({
           onPressTab={(key) => onPressTab?.(key)}
         />
 
+        {/* 2단 원형 FAB(TRIP-725) — 위 흰 원 하트(담은 숙소 → /stays/saved) + 아래 분홍 원 ＋
+         * (숙소 등록 → /stays/register). 목적지는 페이지가 정한다(화면은 라우터를 모른다).
+         * 글리프가 SVG(텍스트 0)라 accessibilityLabel 이 스크린리더 이름의 유일한 출처다. */}
         <Pressable
-          testID="stay-search-fab"
+          testID="stay-search-fab-saved"
           accessibilityRole="button"
-          // 자식 Text 의 전각 '＋'가 스크린리더 이름에 새지 않게 명시한다(TRIP-414 접근성 AC,
-          // TRIP-391 홈 FAB 이 겪은 유일한 실패 경로와 동형).
-          accessibilityLabel="여행 만들기"
-          onPress={onPressCreateTrip}
-          className="absolute bottom-[104px] right-lg h-[52px] items-center justify-center rounded-pill bg-primary px-xl"
+          accessibilityLabel="담은 숙소"
+          onPress={onPressSaved}
+          style={fabShadow}
+          className="absolute bottom-[152px] right-lg h-14 w-14 items-center justify-center rounded-pill border border-hairline bg-canvas"
         >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            ＋ 여행 만들기
-          </Text>
+          <HeartFilledGlyph size={26} />
+        </Pressable>
+        <Pressable
+          testID="stay-search-fab-register"
+          accessibilityRole="button"
+          accessibilityLabel="숙소 등록"
+          onPress={onPressRegister}
+          style={fabShadow}
+          className="absolute bottom-[84px] right-lg h-14 w-14 items-center justify-center rounded-pill bg-primary"
+        >
+          <PlusGlyph size={24} tone="onPrimary" />
         </Pressable>
       </View>
     </SafeAreaView>

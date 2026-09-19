@@ -277,6 +277,17 @@ const STAY_SEARCH_PREVIEW_ITEMS: StayItem[] = [
     region: '광안리',
     amenities: ['ocean'],
     stayType: 'PENSION',
+    price: { amount: 210000, currency: 'KRW' },
+  },
+  {
+    externalSource: 'NAVER',
+    externalId: 's4',
+    name: '남포동 스테이',
+    lat: 35.0977,
+    lng: 129.0305,
+    region: '남포동',
+    amenities: ['wifi'],
+    stayType: 'HOTEL',
     price: null,
   },
 ];
@@ -1869,20 +1880,24 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // e02 저장 하트(TRIP-417) — s1 은 담김(찬 하트 분홍), s2 는 대기(disabled), s3 은 빈 하트.
-  // jest 는 색을 못 봐(AC-V1) 이 진입점이 분홍 채움을 눈으로 확인하는 유일한 자리다.
+  // e02 검색 결과 기본(TRIP-725) — 검색바(돋보기·"지역·숙소 이름 검색")·카드 4장(2톤 가격 3 +
+  // "가격 미확인" 1, 3번째 저장=흰 원 위 분홍 하트)·2단 원형 FAB(흰 하트·분홍 ＋)를 한 화면에.
+  // jest 는 SVG 색·좌표·2톤 베이스라인을 못 봐 이 진입점이 눈으로 확인하는 유일한 자리다.
   {
-    key: 'stay-search-saved',
+    key: 'stay-search-default',
     band: 'e',
-    label: 'e02 · 검색 저장 하트',
+    label: 'e02 · 검색 결과',
     login: null,
     render: () => (
       <StaySearchScreen
         region="부산"
         items={STAY_SEARCH_PREVIEW_ITEMS}
-        savedKeys={['NAVER:s1']}
-        pendingKeys={['NAVER:s2']}
+        nameQuery=""
+        onChangeNameQuery={noop}
+        savedKeys={['AGODA:s3']}
         onToggleSave={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
       />
     ),
   },
