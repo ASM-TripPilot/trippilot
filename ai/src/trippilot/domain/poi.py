@@ -103,6 +103,11 @@ class Poi:
     # 혼재를 푸는 정보가 바로 여기 있다(유적지=야외 ↔ 박물관=실내).
     # 백엔드 `poi.tags text[]` 정본. 미노출 경계에서는 빈 튜플 — 그래서 후미 기본값이다.
     tags: tuple[str, ...] = ()
+    # 벤더 항목 식별자 (TourAPI contentid). **KB-5 장소 지식의 조인 키다** —
+    # AI 가 자기 파생 지식을 자기 스토어에 들고 이 번호로 런타임 후보에 붙인다.
+    # 백엔드가 2026-09-16 에 내부 read DTO 로 열었다(`PoiReadResponse.sourceRef`).
+    # POI 정본은 여전히 백엔드 단독 소유다 — 우리가 드는 건 POI 가 아니라 파생 지식이다.
+    source_ref: str | None = None
 
     def __post_init__(self) -> None:
         if not self.poi_id:
@@ -128,6 +133,7 @@ class Poi:
             "source": self.source.value,
             "confidence": self.confidence,
             "tags": list(self.tags),
+            "source_ref": self.source_ref,
         }
 
     @classmethod
@@ -145,6 +151,7 @@ class Poi:
             source=PoiSource(d["source"]),
             confidence=d["confidence"],
             tags=tuple(d.get("tags") or ()),  # 구 캐시 호환 (saved_count 선례)
+            source_ref=d.get("source_ref"),
         )
 
     def to_cacheable_dict(self) -> dict:

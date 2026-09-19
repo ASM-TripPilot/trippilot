@@ -230,4 +230,7 @@ class BackendPoiDb:
             # 튜플이다(`Poi.from_dict` 의 `d.get("tags") or ()` — 구 캐시 호환).
             # 값 부재가 POI 를 빼는 사유가 아니다(BR-U1-06 취지).
             tags=tuple(str(t) for t in (row.get("tags") or ())),
+            # KB-5 조인 키 — 같은 PR(TRIP-870)로 열린 필드다. 없으면 장소 지식이
+            # 후보에 못 붙고, 그때는 문서 없이 도는 것이 정상 동작이다(강등 아님).
+            source_ref=(str(row["source_ref"]) if row.get("source_ref") else None),
         )

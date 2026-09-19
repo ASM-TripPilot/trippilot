@@ -37,6 +37,14 @@ class KbKind(Enum):
     PERSONA = "PERSONA"  # KB-2
     SITUATION = "SITUATION"  # KB-3
     DIRECTIVE = "DIRECTIVE"  # KB-4 — 재계획 지시 사전 (자유 입력 → 닫힌 키)
+    # KB-5 — 장소 지식. FD 가 지정한 초기 collection 3종(`intent_bank`·`persona`·
+    # `poi_desc`) 중 마지막이고, 여기까지 한 번도 구현된 적이 없었다.
+    #
+    # **앞 넷과 검색 방식이 다르다.** KB-1~3 은 "상황에 맞는 문서 몇 건"을 찾지만
+    # 이쪽은 **후보 풀 전원의 문서**를 가져온다(`item_ids` 필터 + top_k=풀 크기).
+    # 일부에만 설명이 붙으면 설명 있는 후보만 자기 적합성을 말할 수 있어, 임베딩
+    # 유사도가 아무도 설계하지 않은 랭커가 되어 규칙 랭킹을 덮는다.
+    POI_DESC = "POI_DESC"
 
 
 @dataclass(frozen=True, slots=True)
