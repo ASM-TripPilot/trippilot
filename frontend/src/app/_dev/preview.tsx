@@ -1649,8 +1649,8 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <PrefStep1Screen
-        selectedStyles={null}
-        selectedPace={null}
+        selectedStyles={['rest', 'gourmet']}
+        selectedPace="balanced"
         onToggleStyle={noop}
         onTogglePace={noop}
         onNext={noop}
@@ -1723,8 +1723,11 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       // c08 이 온보딩 체인에서 실제로 주입하는 Figma 목적 문구(TRIP-459) — 프리뷰도 정본과 맞춘다.
+      // TRIP-717: Figma 1296:1208 2줄 고정 개행(\n) 반영.
       <LocationPreprompt
-        purposeContext="내 주변을 알면 더 잘 맞는 곳을 추천하고 길 안내도 막힘없이 이어져요"
+        purposeContext={
+          '내 주변을 알면 더 잘 맞는 곳을 추천하고\n길 안내도 막힘없이 이어져요'
+        }
         state="default"
         onProceed={noop}
         onDefer={noop}
@@ -1738,32 +1741,14 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'c08 · 거부',
     login: null,
     render: () => (
-      // onDismissNotice 를 주면 안내 줄에 닫기(×)가 그려진다(TRIP-592). 프리뷰는 정적이라
-      // 실제로 숨겨지진 않지만 × 버튼 자체를 눈으로 확인할 수 있다.
+      // TRIP-717: 거부 안내는 Figma 1297:1208 카드형(hairline 테두리 + 청록 아이콘 + 15 ink),
+      // 닫기 × 없음(onDismissNotice/noticeDismissed 폐기). -denied-dismissed 키는 함께 삭제됨.
       <LocationPreprompt
         purposeContext="내 주변 숙소 탐색"
         state="permission-denied"
         onProceed={noop}
         onDefer={noop}
         onOpenSettings={noop}
-        onDismissNotice={noop}
-      />
-    ),
-  },
-  {
-    key: 'onboarding-location-denied-dismissed',
-    band: 'c',
-    label: 'c08 · 거부(안내 닫힘)',
-    login: null,
-    render: () => (
-      // 1회성 닫기 후 상태 — 안내 줄이 사라지고 denied 프레임(계속·설정)만 남는다(TRIP-592).
-      <LocationPreprompt
-        purposeContext="내 주변 숙소 탐색"
-        state="permission-denied"
-        onProceed={noop}
-        onDefer={noop}
-        onOpenSettings={noop}
-        noticeDismissed
       />
     ),
   },

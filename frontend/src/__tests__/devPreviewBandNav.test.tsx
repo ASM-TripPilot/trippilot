@@ -138,7 +138,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    이 가드는 안 만진다(추가 전엔 164개라 이 단언이 red). 티켓의 "168→171"·"171" 은 stale
     //    (TRIP-697 이 home-traveling 을 더해 실측 164 → 165 가 정답). devPreviewBandSort 는 밴드
     //    h·l 만 잠가 band a 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(165);
+    // ⚠️ TRIP-717: c08 거부 안내 카드형 복귀로 `onboarding-location-denied-dismissed` 키 1개
+    //    삭제(× 닫힘 상태 프리뷰가 소멸 — 카드는 항상 떠 닫기 없음) 165→164. devPreviewBandSort 는
+    //    밴드 h·l 만 잠가 band c 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(164);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
