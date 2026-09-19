@@ -20,6 +20,8 @@ collection 이 되어 옛 색인을 새 모델로 질의하는 사고가 0건으
 
 from __future__ import annotations
 
+import os
+
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
@@ -158,6 +160,35 @@ def load_kb_file(path: Path, parse: Callable[[str], object]) -> tuple[KbDocument
     return load_kb_documents(parse(path.read_text(encoding="utf-8")))
 
 
+# 임베딩 1회 요청당 텍스트 수.
+#
+# **두 제약이 겹친다 — 이유가 달라서 변수도 둘이다.**
+#   `EMBEDDING_MAX_TEXTS`   서비스의 **하드 상한**. 넘기면 413 (기본 256)
+#   `TRIPPILOT_INDEX_BATCH` 한 요청이 **얼마나 오래 걸리냐**의 문제 (기본 64)
+#
+# 로컬 KURE-v1 실측(2026-09-19, 실 문서 64건): **한 요청 91.5초 — 건당 ~1.4초**다.
+# 256건이면 6분이라 상한은 안 넘는데 마감에 걸린다. 상한만 보고 batch 를 정하면
+# 413 대신 타임아웃으로 죽고, 증상이 달라서 원인이 엉뚱한 곳을 가리킨다.
+#
+# ⚠️ **같은 문자열을 반복해 재지 마라.** 처음에 같은 문장 32건으로 재서 "건당 0.3초"를
+# 얻었는데 실제 문서로는 그 4배였다 — 반복 입력은 길이도 짧고 캐시도 탄다.
+#
+# 그리고 이 숫자는 **머신이 한가할 때**다. 다른 작업과 CPU 를 다투면 더 걸린다 —
+# batch 를 작게 두는 것이 마감을 늘리는 것보다 경합에 강하다.
+# 상한을 넘을 수는 없으므로 둘 중 작은 값을 쓴다.
+# ⚠️ 실 문서에서 64 는 **로컬 임베딩 컨테이너를 OOM 으로 죽인다** (2026-09-19 KB-5
+# 적재: 5GiB 상한, 10청크 640건까지 가다 exit 137). 시드 문서는 짧아서 안 걸렸다 —
+# 위키 도입부(최대 433자)가 섞이면 활성 메모리가 배치 길이에 곱으로 붙는다.
+# 실 문서를 넣을 때는 `TRIPPILOT_INDEX_BATCH=16` 으로 내린다. 죽어도 청크별 upsert 라
+# 진행분은 남고, `load_kb._skip_already_indexed` 가 그만큼을 건너뛴다 — **이 함수의
+# 중복 검사는 DB 존재 확인이 아니라 목록 안의 doc_id 중복 검사다**(둘을 헷갈려
+# "재실행이 이어받는다"고 적었다가 640건을 다시 임베딩했다).
+INDEX_BATCH = max(1, min(
+    int(os.environ.get("TRIPPILOT_INDEX_BATCH") or "64"),
+    int(os.environ.get("EMBEDDING_MAX_TEXTS") or "256"),
+))
+
+
 def index_documents(
     documents: Sequence[KbDocument],
     embedding: EmbeddingPort,
@@ -167,23 +198,40 @@ def index_documents(
 
     차원 위반(BR-AF-09)은 조용히 넘기지 않는다 — `index_bank`와 동일한 판단.
     문서마다 자기 `kb`의 collection으로 들어가므로 혼합 목록을 한 번에 실을 수 있다.
+
+    **임베딩은 나눠 부른다.** 임베딩 서비스가 한 요청의 텍스트 수를 제한하고
+    (`EMBEDDING_MAX_TEXTS`, 기본 256) 넘기면 413 이다. 종전 시드가 38·97건이라
+    안 걸렸는데 KB-5 장소 지식이 2천 건대로 들어오면서 처음 터졌다 — 호출자마다
+    나누게 하지 않고 여기서 한 번 막는다.
     """
     if not documents:
         return 0
-    vectors = embedding.embed_batch([d.text for d in documents])
-    if len(vectors) != len(documents):
-        raise KbIndexError("임베딩 개수가 문서 수와 불일치")
+    # 목록 안의 doc_id 중복을 **임베딩 전에** 잡는다 — 2천 건대에서 마지막 문서가
+    # 중복이면 50분치 임베딩을 버리고 죽는다(로컬 모델 실측 건당 ~1.4초).
+    # ⚠️ 이것은 **DB 존재 확인이 아니다.** 이미 적재된 문서를 거르는 것은 호출측
+    # 책임이다(`load_kb._skip_already_indexed`) — 포트에 존재 조회를 더하면 런타임
+    # 어댑터·페이크 전부가 오프라인 적재 사정을 떠안는다.
     seen: set[tuple[KbKind, str]] = set()
-    for doc, vector in zip(documents, vectors):
+    for doc in documents:
         key = (doc.kb, doc.doc_id)
         if key in seen:  # 같은 collection 내 doc_id 중복은 조용한 덮어쓰기가 된다
             raise KbIndexError(f"{doc.kb.value}: doc_id 중복 {doc.doc_id!r}")
         seen.add(key)
-        if len(vector) != embedding.dim:
-            raise KbIndexError(f"{doc.doc_id}: 임베딩 차원 {len(vector)} != {embedding.dim}")
-        store.upsert(
-            collection_for(doc.kb, embedding.model_id), doc.doc_id, vector, doc.payload()
-        )
+
+    # **묶음마다 바로 적재한다.** 전량을 임베딩한 뒤 한꺼번에 넣으면 2천 건대에서
+    # 중간 실패가 전부 아니면 전무가 된다 — upsert 가 멱등이라 부분 적재분은 그대로
+    # 살아 있고 재실행이 이어받는다. 그게 이 스크립트가 멱등인 이유이기도 하다.
+    for i in range(0, len(documents), INDEX_BATCH):
+        chunk = documents[i : i + INDEX_BATCH]
+        vectors = embedding.embed_batch([d.text for d in chunk])
+        if len(vectors) != len(chunk):
+            raise KbIndexError("임베딩 개수가 문서 수와 불일치")
+        for doc, vector in zip(chunk, vectors):
+            if len(vector) != embedding.dim:
+                raise KbIndexError(f"{doc.doc_id}: 임베딩 차원 {len(vector)} != {embedding.dim}")
+            store.upsert(
+                collection_for(doc.kb, embedding.model_id), doc.doc_id, vector, doc.payload()
+            )
     return len(documents)
 
 
@@ -195,6 +243,7 @@ def retrieve(
     *,
     top_k: int = DEFAULT_TOP_K,
     item_ids: frozenset[str] | None = None,
+    vector: Sequence[float] | None = None,
 ) -> tuple[KbHit, ...]:
     """지정 KB의 collection에서 top-k 검색. 결과는 항상 요청한 KB 소속이다.
 
@@ -205,14 +254,19 @@ def retrieve(
     - `item_ids` 가 주어지면 **그 집합 안에서만** 고른다 (KB-5 장소 지식이 쓴다 —
       후보 풀 밖 POI 의 문서가 상위로 올라오면 모델에게 닫힌 집합 밖을 권하는 셈이다).
       빈 frozenset 은 "아무것도 안 맞음"이라 빈 결과이고, `None`(필터 없음)과 다르다.
+    - `vector` 가 주어지면 **질의를 임베딩하지 않는다** — 호출측이 여러 질의를 한 번에
+      임베딩해 넘길 때 쓴다(`PlanBRagPipeline.retrieve` 가 KB 넷을 1회로 묶는다).
+      단건 임베딩 실측 168ms 라 넷이면 0.67초고, Plan-B 예산에서 그건 크다.
+      `query` 는 그때도 받는다 — 빈 질의 가드가 같아야 하고, 로그·시험에서 어느
+      질의의 벡터인지 알아야 한다.
     """
     if top_k <= 0 or not query.strip():
         return ()
     if item_ids is not None and not item_ids:
         return ()
-    vector = embedding.embed(query)
+    vec = embedding.embed(query) if vector is None else vector
     raw_hits = store.search(
-        collection_for(kb, embedding.model_id), vector, top_k, item_ids=item_ids
+        collection_for(kb, embedding.model_id), vec, top_k, item_ids=item_ids
     )
     hits: list[KbHit] = []
     for hit in raw_hits:
@@ -248,9 +302,10 @@ def retrieve_schedule(
     store: VectorStorePort,
     *,
     top_k: int = DEFAULT_TOP_K,
+    vector: Sequence[float] | None = None,
 ) -> tuple[KbHit, ...]:
     """KB-1 — 영향받는 슬롯·고정 블록·방문 이력·변경 이력."""
-    return retrieve(KbKind.SCHEDULE, query, embedding, store, top_k=top_k)
+    return retrieve(KbKind.SCHEDULE, query, embedding, store, top_k=top_k, vector=vector)
 
 
 def retrieve_persona(
@@ -259,9 +314,10 @@ def retrieve_persona(
     store: VectorStorePort,
     *,
     top_k: int = DEFAULT_TOP_K,
+    vector: Sequence[float] | None = None,
 ) -> tuple[KbHit, ...]:
     """KB-2 — 저장 장소·선호 패턴·거절 이력 (대안 소싱 1순위 신호)."""
-    return retrieve(KbKind.PERSONA, query, embedding, store, top_k=top_k)
+    return retrieve(KbKind.PERSONA, query, embedding, store, top_k=top_k, vector=vector)
 
 
 def retrieve_situation(
@@ -270,6 +326,7 @@ def retrieve_situation(
     store: VectorStorePort,
     *,
     top_k: int = DEFAULT_TOP_K,
+    vector: Sequence[float] | None = None,
 ) -> tuple[KbHit, ...]:
     """KB-3 — 트리거 사유·위치·시각·날씨·POI 상태."""
-    return retrieve(KbKind.SITUATION, query, embedding, store, top_k=top_k)
+    return retrieve(KbKind.SITUATION, query, embedding, store, top_k=top_k, vector=vector)

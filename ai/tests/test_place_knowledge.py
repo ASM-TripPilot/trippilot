@@ -138,3 +138,92 @@ def test_duration_fields_never_reach_the_document() -> None:
 
     assert "2시간" not in text and "spendtime" not in text
     assert "무료" in text  # 다른 필드는 살아 있다 — 통째로 막은 게 아니다
+
+
+# ── ⑥ 상한 절단은 조용히 일어나지 않는다 (INV-4) ────────────────────────
+
+
+def test_상한을_넘으면_절단을_노트로_남긴다() -> None:
+    """상한 위에서는 문서를 받는 후보와 못 받는 후보가 **유사도 순**으로 갈린다.
+
+    이 모듈이 없애려던 편향이 거기서 되살아난다. 없앨 수 없으니 보이게 한다 —
+    노트가 없으면 "문서 커버리지가 원래 낮다"와 "우리가 잘랐다"가 구별되지 않는다.
+    """
+    from trippilot.agents.planb.place_knowledge import MAX_DOCS
+
+    n = MAX_DOCS + 5
+    docs = [make_doc("wiki", f"ref-{i}", f"{i}번 장소는 경기도 수원시에 있는 곳이다.")
+            for i in range(n)]
+    embedding, store = _wired(*docs)
+    pois = tuple(_poi(f"p{i}", f"장소{i}", f"ref-{i}") for i in range(n))
+    pool = CandidatePool(
+        poi_ids=frozenset(p.poi_id for p in pois), pois=pois, generated_at=_NOW
+    )
+
+    got, note = fetch_place_knowledge(pool.pois, "우천 상황", embedding, store)
+
+    assert len(got) == MAX_DOCS  # 예산은 지킨다
+    assert note.startswith("place_knowledge_truncated:")
+    assert f"{MAX_DOCS}곳 채택" in note
+
+
+def test_상한_이내면_노트가_없다() -> None:
+    """정상 경로에 노트가 붙으면 소비 측이 장애로 읽는다 (`_cut` 과 같은 규율)."""
+    docs = [make_doc("wiki", f"ref-{i}", f"{i}번 장소는 경기도 수원시에 있는 곳이다.")
+            for i in range(3)]
+    embedding, store = _wired(*docs)
+    pois = tuple(_poi(f"p{i}", f"장소{i}", f"ref-{i}") for i in range(3))
+
+    got, note = fetch_place_knowledge(pois, "우천 상황", embedding, store)
+
+    assert len(got) == 3
+    assert note == ""
+
+
+# ── ⑦ 호출측이 준 벡터를 쓰면 다시 임베딩하지 않는다 ──────────────────────
+
+
+class _CountingEmbedding:
+    """embed 호출 횟수를 세는 래퍼 — FakeEmbedding 에는 카운터가 없다.
+
+    `hasattr` 로 세는 척하면 단언이 조용히 무동작이 된다(실제로 한 번 그렇게 썼다).
+    """
+
+    def __init__(self, inner) -> None:
+        self._inner, self.embed_calls = inner, 0
+        self.dim, self.model_id = inner.dim, inner.model_id
+
+    def embed(self, text: str):
+        self.embed_calls += 1
+        return self._inner.embed(text)
+
+    def embed_batch(self, texts):
+        return self._inner.embed_batch(texts)
+
+
+def test_벡터를_받으면_질의를_다시_임베딩하지_않는다() -> None:
+    """단건 임베딩 실측 168ms — KB 넷이 각자 부르면 0.67초가 예산에서 그냥 나간다."""
+    doc = make_doc("wiki", "ref-1", "수원 화성은 경기도 수원시에 있는 성곽이다.")
+    embedding, store = _wired(doc)
+    spy = _CountingEmbedding(embedding)
+    pois = (_poi("p1", "수원화성", "ref-1"),)
+    vector = embedding.embed("우천 상황")  # 스파이 밖에서 미리 만든다
+
+    got, _ = fetch_place_knowledge(pois, "우천 상황", spy, store, vector=vector)
+
+    assert got  # 벡터를 넘겨도 검색은 정상 동작한다
+    assert spy.embed_calls == 0  # 한 번도 다시 임베딩하지 않았다
+
+
+def test_벡터를_안_주면_스스로_임베딩한다() -> None:
+    """생략 가능한 인자라 기존 호출이 깨지면 안 된다 — 옛 경로가 그대로 도는지."""
+    doc = make_doc("wiki", "ref-1", "수원 화성은 경기도 수원시에 있는 성곽이다.")
+    embedding, store = _wired(doc)
+    spy = _CountingEmbedding(embedding)
+
+    got, _ = fetch_place_knowledge(
+        (_poi("p1", "수원화성", "ref-1"),), "우천 상황", spy, store
+    )
+
+    assert got
+    assert spy.embed_calls == 1

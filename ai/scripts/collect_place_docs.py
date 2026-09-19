@@ -35,7 +35,9 @@ from trippilot.domain.kb import KbDocument  # noqa: E402
 from trippilot.poi_curation.place_docs import (  # noqa: E402
     SOURCE_WIKI,
     intro_docs,
+    is_disambiguation,
     make_doc,
+    mentions_region,
 )
 
 _DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
@@ -66,14 +68,15 @@ def main() -> None:
 
 def _wiki_docs(proposals: Sequence[dict]) -> tuple[KbDocument, ...]:
     """상호명 정확 일치로 도입부를 받는다. 못 찾으면 그냥 없는 것이다."""
-    by_title: dict[str, str] = {}  # 제목 → source_ref
+    by_title: dict[str, dict] = {}  # 제목 → 제안 항목 (지역 대조에 쓴다)
     for item in proposals:
         ref = (item.get("provenance") or {}).get("content_id") or item.get("provisional_id")
         name = ((item.get("poi") or {}).get("name") or "").strip()
         if ref and name and name not in by_title:
-            by_title[name] = str(ref)
+            by_title[name] = item
 
     docs: list[KbDocument] = []
+    rejected = 0
     titles = list(by_title)
     for i in range(0, len(titles), _WIKI_BATCH):
         chunk = titles[i : i + _WIKI_BATCH]
@@ -83,9 +86,18 @@ def _wiki_docs(proposals: Sequence[dict]) -> tuple[KbDocument, ...]:
             print(f"  ! 묶음 {i // _WIKI_BATCH} 실패 — {type(e).__name__}: {e}")
             continue
         for title, extract in pages.items():
-            ref = by_title.get(title)
-            if not ref:
+            item = by_title.get(title)
+            if not item:
                 continue  # 리다이렉트로 제목이 바뀐 것 — 조인 못 하면 버린다
+            provenance = item.get("provenance") or {}
+            ref = str(provenance.get("content_id") or item.get("provisional_id"))
+            # **그 문서가 그 장소 얘기인지 확인한다.** 상호명 일치만으로는 동명의
+            # 인물·작품·개념이 그대로 통과한다 — place_docs.mentions_region 주석 참조.
+            if is_disambiguation(extract) or not mentions_region(
+                extract, item.get("region") or "", str(provenance.get("address") or "")
+            ):
+                rejected += 1
+                continue
             doc = make_doc(
                 SOURCE_WIKI, ref, extract,
                 metadata={
@@ -96,7 +108,7 @@ def _wiki_docs(proposals: Sequence[dict]) -> tuple[KbDocument, ...]:
             )
             if doc is not None:
                 docs.append(doc)
-        print(f"  {i + len(chunk):5d}/{len(titles)} · 누적 {len(docs)}건")
+        print(f"  {i + len(chunk):5d}/{len(titles)} · 채택 {len(docs)}건 · 지역불일치 기각 {rejected}건")
         time.sleep(_WIKI_SLEEP)
     return tuple(docs)
 

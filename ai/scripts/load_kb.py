@@ -129,7 +129,42 @@ def _documents_of(path: Path):
     return load_kb_file(path, yaml.safe_load)
 
 
+def _skip_already_indexed(documents, embedding, url: str):
+    """이미 들어간 문서는 빼고 돌려준다 — 재실행 때 임베딩을 다시 하지 않는다.
+
+    `index_documents` 의 중복 검사는 **목록 안의 doc_id 중복**을 잡는 것이지 DB 존재
+    확인이 아니다. upsert 가 멱등이라 데이터는 안 깨지지만 **임베딩 비용은 전부 다시
+    든다** — KB-5 2천 건대에서 OOM 으로 중간에 죽고 재실행했더니 이미 넣은 640건을
+    15분 들여 다시 임베딩했다(2026-09-19 실측). 포트에 존재 조회를 더하지 않고 여기서
+    직접 본다: 적재는 오프라인 작업이라 스크립트가 DB 를 알아도 된다.
+    """
+    import psycopg
+
+    from trippilot.agents.planb.kb_retrieval import collection_for
+
+    wanted: dict[str, set[str]] = {}
+    for d in documents:
+        wanted.setdefault(collection_for(d.kb, embedding.model_id), set()).add(d.doc_id)
+    have: set[tuple[str, str]] = set()
+    with psycopg.connect(url) as conn:
+        for collection, ids in wanted.items():
+            rows = conn.execute(
+                "select item_id from kb_vectors where collection = %s and item_id = any(%s)",
+                (collection, list(ids)),
+            ).fetchall()
+            have |= {(collection, r[0]) for r in rows}
+    return [
+        d for d in documents
+        if (collection_for(d.kb, embedding.model_id), d.doc_id) not in have
+    ]
+
+
 def main(argv: list[str]) -> int:
+    # 대량 적재는 런타임 질의와 마감이 다르다. 어댑터 기본 5초는 **질의 1건** 기준이고,
+    # 여기서는 한 요청에 수십 건을 태운다(로컬 KURE-v1 실측 건당 ~1.4초 — 기본 배치
+    # 64건이면 90초대). 안 올리면 413 이 아니라 타임아웃으로 죽어서 원인이 엉뚱한
+    # 곳을 가리킨다. 머신이 바쁘면 더 걸리므로 넉넉히 준다.
+    os.environ.setdefault("TRIPPILOT_EMBEDDING_TIMEOUT_SEC", "180")
     url = os.environ.get("TRIPPILOT_VECTOR_DB_URL")
     if not url:
         print("TRIPPILOT_VECTOR_DB_URL 미설정 — 적재 불가", file=sys.stderr)
@@ -143,8 +178,11 @@ def main(argv: list[str]) -> int:
     total = 0
     for path in paths:
         documents = _documents_of(path)
-        count = index_documents(documents, embedding, store)
         kinds = sorted({d.kb.value for d in documents})
+        fresh = _skip_already_indexed(documents, embedding, url)
+        if len(fresh) != len(documents):
+            print(f"{path.name}: 기적재 {len(documents) - len(fresh)}건 건너뜀")
+        count = index_documents(fresh, embedding, store)
         print(f"{path.name}: {count}건 적재 (KB: {', '.join(kinds)})")
         total += count
     provider = os.environ.get("TRIPPILOT_EMBEDDING_PROVIDER") or "openai"
