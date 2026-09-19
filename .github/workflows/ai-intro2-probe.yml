@@ -63,6 +63,8 @@ jobs:
           TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}
           TOUR_API_KEY3: ${{ secrets.TOUR_API_KEY3 }}
         run: |
+          # `| tee` 가 파이프 앞 종료 코드를 삼킨다 — 프로브가 실패해도 스텝이 초록이 된다(실측).
+          set -o pipefail
           args=(--area "${{ inputs.area }}"
                 --per-kind "${{ inputs.per_kind }}"
                 --kinds "${{ inputs.kinds }}"
