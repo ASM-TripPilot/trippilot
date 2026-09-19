@@ -105,16 +105,17 @@ describe('AC-1 · 장소 레인 제목 "가볼 곳" → "장소"', () => {
   });
 });
 
-describe('AC-3 · 검색창 알약 → radius 12 · 높이 58', () => {
-  it('rounded-input·h-[58px] 이고, 알약(rounded-pill)·h-[52px] 는 사라진다', () => {
+describe('AC-3 · 검색창 알약(radius 999) · 높이 58', () => {
+  it('rounded-pill·h-[58px] 이고, radius 12(rounded-input)·h-[52px] 는 없다', () => {
     render(<ExploreLandingScreen {...baseProps()} />);
 
     const tokens = classTokens(screen.getByTestId('explore-landing-search'));
-    // radius 12 = 검색바 input 토큰(tailwind.config `input:'12px'`, 브리프 토큰 스냅).
-    expect(tokens).toContain('rounded-input');
+    // 2026-09-20 사용자가 Figma 검색바를 radius 12 → 999(pill)로 되돌림(1672:1188 실측).
+    // 높이는 58 유지(radius 만 변경).
+    expect(tokens).toContain('rounded-pill');
     expect(tokens).toContain('h-[58px]');
-    // 옛 알약·높이 흔적은 사라진다.
-    expect(tokens).not.toContain('rounded-pill');
+    // 옛 radius 12·짧은 높이 흔적은 없다.
+    expect(tokens).not.toContain('rounded-input');
     expect(tokens).not.toContain('h-[52px]');
   });
 });

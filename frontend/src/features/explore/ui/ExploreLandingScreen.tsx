@@ -258,7 +258,7 @@ export function ExploreLandingScreen({
             testID="explore-landing-search"
             accessibilityRole="button"
             onPress={onPressSearch}
-            className="mt-lg h-[58px] flex-row items-center gap-sm rounded-input border border-hairline-strong bg-canvas px-lg"
+            className="mt-lg h-[58px] flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-lg"
           >
             <SearchGlyph size={20} />
             <Text className="flex-1 font-noto text-body text-muted-soft">

@@ -150,7 +150,7 @@ function SearchBar({
   onPressFilter?: () => void;
 }): ReactElement {
   return (
-    <View className="h-[58px] w-full flex-row items-center gap-sm rounded-input border border-hairline-strong bg-canvas pl-lg pr-sm">
+    <View className="h-[58px] w-full flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas pl-lg pr-sm">
       <SearchGlyph size={20} />
       <TextInput
         testID="explore-places-search"
