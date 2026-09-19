@@ -13,6 +13,7 @@ INFEASIBLE(고정 블록 모순 등)·UNKNOWN이면 None → 체인 다음 단�
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Mapping
@@ -22,7 +23,7 @@ from ortools.sat.python import cp_model
 from trippilot.assembly_engine.config import (
     RAIN_INDOOR,
     RAIN_OUTDOOR,
-    STAY_DEFAULT_MIN,
+    stay_for,
     AssemblyConfig,
 )
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler, placed_fixed_blocks
@@ -35,6 +36,8 @@ from trippilot.domain.itinerary import (
     VisitSlot,
 )
 from trippilot.domain.poi import Poi, PoiCategory
+
+_log = logging.getLogger(__name__)
 
 _PREFILTER_TOP_K = 60
 _MIN_DAY_MS = 100
@@ -64,6 +67,25 @@ class OrToolsAssembler:
         days_out: list[DaySolution] = []
         for day in problem.days:
             slots = self._solve_day(problem, day, used, per_day_ms)
+            if slots is None and problem.pace is not None:
+                # **pace 는 소프트 선호다.** 지키려다 해를 못 내면 안 지키는 편이 낫다 —
+                # 여기서 포기하면 체인 다음 단계인 규칙 폴백(그리디)으로 내려가고,
+                # 그러면 "알차게를 골랐더니 일정이 더 성의 없어졌다"가 된다.
+                #
+                # 체류 배율은 CP-SAT 인스턴스의 난이도를 바꾼다. 실측(후보 60곳·3초 한도):
+                # 무보정은 6/6 성공인데 ×0.9 는 6/6 실패였고, 후보 45곳에서는 반대로
+                # ×0.95 가 6/6 실패·×0.9 는 6/6 성공이었다. 즉 "체류가 짧을수록 어렵다"가
+                # 아니라 **조합마다 어려운 인스턴스가 따로 있다**(같은 조합은 재현된다).
+                # (이 불안정 자체는 pace 와 무관하게 존재한다 — 무보정 기준선도 후보
+                #  50곳에서 8/8 해없음이다. 별건으로 재서 정한다: OR 단계가 큰
+                #  후보풀에서 해를 못 낸다.)
+                # 그래서 안전한 배율을 고르는 것으로는 못 막고, 못 냈을 때 무보정으로
+                # 한 번 더 보는 쪽이 맞다 — 이 재시도는 정의상 기준선과 같으므로
+                # **pace 를 켜서 기준선보다 나빠지는 경우가 없다.**
+                _log.info("pace=%s 로 해 없음 — 무보정 재시도 (day=%s)",
+                          problem.pace.value, day)
+                slots = self._solve_day(replace(problem, pace=None), day,
+                                        used, per_day_ms)
             if slots is None:
                 return None  # 해 확보 실패 → 체인 다음 단계
             used.update(s.poi_id for s in slots)
@@ -104,7 +126,7 @@ class OrToolsAssembler:
         nodes = []
         for c in cands:
             poi = self._pois[c.poi_id]
-            stay = STAY_DEFAULT_MIN[poi.category]
+            stay = stay_for(poi.category, problem.pace)
             win = self._day_open_window(poi, day)
             if win is None:
                 continue  # 휴무 — 모델에서 제외

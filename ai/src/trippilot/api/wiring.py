@@ -105,8 +105,10 @@ from trippilot.assembly_engine.repair import RepairChange
 from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import (
     BUDGET_TOKENS,
+    PACE_TOKENS,
     BudgetLevel,
     GeoPoint,
+    Pace,
     PoiId,
     ScheduleId,
     TraceId,
@@ -165,6 +167,7 @@ _PROMPTS_ROOT = Path(__file__).resolve().parents[3] / "prompts"
 # 같은 표를 쓴다. 두 벌이면 한쪽만 고쳐 어긋난다.
 _BUDGET_TOKENS = BUDGET_TOKENS
 
+_PACE_TOKENS = PACE_TOKENS
 _TRANSPORT_TOKENS: Mapping[str, TransportMode] = {
     "WALK": TransportMode.WALK, "도보": TransportMode.WALK,
     "PUBLIC": TransportMode.PUBLIC, "대중교통": TransportMode.PUBLIC,
@@ -279,6 +282,20 @@ def _budget_from(request: schemas.GenerateItineraryRequest) -> BudgetLevel:
     return BudgetLevel.MID  # 소프트 제약 — 미인식은 중간 예산 (배제 아님)
 
 
+def _pace_from(request: schemas.GenerateItineraryRequest) -> Pace | None:
+    """와이어 `preference_profile.pace` → 도메인 Pace. 미지정·미인식은 **None**.
+
+    예산(`_budget_from`)이 미인식을 MID 로 떨어뜨리는 것과 다르다 — 그쪽은
+    `BudgetLevel` 에 '미설정'이 없어 어쩔 수 없는 예외고, 속도는 None 이 표현
+    가능하다. 여기서 BALANCED 로 채우면 **고르지 않은 사용자와 균형을 고른
+    사용자가 구분되지 않는다**(백엔드도 null 을 그대로 낸다).
+    """
+    text = request.preference_profile.pace
+    if not text:
+        return None
+    return _PACE_TOKENS.get(text.strip().upper())
+
+
 def _transport_from(request: schemas.GenerateItineraryRequest) -> TransportMode:
     for text in request.preference_profile.transport_modes:
         mode = _TRANSPORT_TOKENS.get(text.strip().upper())
@@ -342,6 +359,7 @@ def _domain_generate_request(
         day_window=day_window,
         budget=_budget_from(request),
         transport=_transport_from(request),
+        pace=_pace_from(request),
         persona_ref=ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=owner),
         principal=Principal(user_id=owner),
         seed=_seed_from(request.trip_id),
@@ -694,6 +712,11 @@ def _problem_for(solution: ItinerarySolution, tz: timezone) -> ItineraryProblem:
         ),
         seed=0,
         anchor=None,
+        # 와이어에 원 요청의 pace 가 없다 — 명시적으로 None(무보정)을 적는다.
+        # 이 함수는 필드를 **열거해 재구성**하므로, 안 적으면 다음에 필드가 늘 때
+        # validate·repair 에서만 조용히 사라진다(TRIP-292 excluded_poi_ids 전례).
+        # 체류 배율이 빠져도 HC 판정은 배치된 시각 그대로를 보므로 판정은 옳다.
+        pace=None,
     )
 
 

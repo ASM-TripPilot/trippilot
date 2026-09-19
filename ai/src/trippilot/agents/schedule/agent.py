@@ -57,6 +57,7 @@ from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import (
     BudgetLevel,
     GeoPoint,
+    Pace,
     PoiId,
     ScheduleId,
     TraceId,
@@ -149,6 +150,9 @@ class GenerateItineraryRequest:
     # 설명 생략 요청 (TRIP-479) — 백엔드가 설명을 별도 경계로 병렬 조회할 때 false.
     include_explanations: bool = True
     radius_override_km: float | None = None
+    # 여행 속도 (TRIP-906) — Provider 수집물이 아니라 **요청에 실려 오는 값**이라
+    # 봉투(ScheduleTask)가 아니라 여기 있다. budget·transport 와 같은 길이다.
+    pace: Pace | None = None
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -260,6 +264,7 @@ class ScheduleAgent:
             excluded_poi_ids=request.excluded_poi_ids,  # 2단계 생성 그대로 통과
             daily_rain_prob=task.daily_rain,
             event_bonus=task.event_bonus,
+            pace=request.pace,
         )
 
         # ④ 어셈블리 solve — 잔여 **전부**를 받는다 (고정 슬라이스 아님, TRIP-376).
