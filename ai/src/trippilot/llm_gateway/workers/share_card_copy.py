@@ -16,6 +16,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
+# 제3자 문자열(웹 수집 상호명·위키 발췌·네이버 스니펫)은 줄에 넣기 전에 한 줄로 누른다 —
+# 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
+from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.share_card_copy import ShareCardCopyContext
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
@@ -35,11 +38,12 @@ def build_share_card_copy_vars(request: ReflectionRequest) -> dict[str, str]:
     교차는 상호명으로 한다 (필드 최소화).
     """
     visits = "\n".join(
-        f"- {v.ref.date.isoformat()} | {v.category} | {v.poi_name}"
+        f"- {v.ref.date.isoformat()} | {inline(v.category)} | {inline(v.poi_name)}"
         for v in request.visits
     )
     events = "\n".join(
-        f"- {e.kind.value} | {e.date.isoformat()} | {e.detail}" for e in request.events
+        f"- {e.kind.value} | {e.date.isoformat()} | {inline(e.detail)}"
+        for e in request.events
     )
     return {
         "region": request.region.strip() or "미지정",

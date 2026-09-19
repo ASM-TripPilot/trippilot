@@ -20,6 +20,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+# 제3자 문자열(웹 수집 상호명·위키 발췌·네이버 스니펫)은 줄에 넣기 전에 한 줄로 누른다 —
+# 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
+from trippilot.llm_gateway.prompts import inline
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm import LlmFeature
 from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyContext, ReminderCopyDraft
@@ -86,7 +89,7 @@ def _slot_line(name: str, category: str) -> str:
     """빈 카테고리·모르는 코드는 구분자 없이 이름만 — 대롱거리는 " · " 와
     프롬프트에 새는 원시 코드를 동시에 막는다."""
     label = _CATEGORY_LABELS.get(category.strip().upper(), "")
-    return f"{name} · {label}" if label else name
+    return f"{inline(name)} · {label}" if label else inline(name)
 
 
 def build_reminder_copy_vars(item: ReminderCopyItem, trip_title: str) -> dict[str, str]:

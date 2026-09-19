@@ -10,10 +10,12 @@ from typing import Protocol
 
 from trippilot.llm_gateway.gates.base import (
     GateOutcome,
+    has_contact_like,
     _load_json_object,
     empty_result_error,
 )
 from trippilot.domain.common import PoiId, TraceId
+from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 from trippilot.domain.llm import CandidatePool, LlmFeature, PoiExplanation
 from trippilot.domain.observability import GateDropEvent
 
@@ -65,7 +67,15 @@ class ExplanationGate:
             seen.add(pid_str)
             pid = PoiId(pid_str)
             if pool.contains(pid):
-                survivors.append(PoiExplanation(poi_id=pid, text=text))
+                # 형제 게이트(alternative_selection)와 같은 처리 — 문장만 버리고 슬롯은 살린다.
+                # ⑴ 시간·소요시간 표현: 이 text 는 백엔드 `visit_slot.placement_reason` 과
+                #    리비전 스냅샷에 **영속된다**. 걸러 내지 않으면 INV-3 위반이 화면과 DB
+                #    양쪽에 남는다. 정규식은 reflection_template 것을 **공유**한다 —
+                #    두 벌을 두면 한쪽만 고쳐진다(alternative_selection 의 같은 주석 참조).
+                # ⑵ 링크·연락처 꼴: 프롬프트에 실린 제3자 문자열(웹 수집 상호명 등)이 유도한
+                #    유인 문구를 앱이 자기 목소리로 말하지 않게 한다.
+                safe = "" if (_TIME_EXPR.search(text) or has_contact_like(text)) else text
+                survivors.append(PoiExplanation(poi_id=pid, text=safe))
             else:
                 dropped.append(pid)
         drop_event = (

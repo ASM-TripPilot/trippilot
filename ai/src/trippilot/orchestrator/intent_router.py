@@ -108,6 +108,13 @@ class IntentRouterConfig:
     vote_ratio: float = 0.80
     collection: str = BANK_COLLECTION
     llm_direct_confidence: float = 0.5  # 3차 산출물에 confidence가 없을 때의 값
+    # 전처리 후 받아들이는 발화 길이 상한. **없으면 임의 길이가 그대로 프롬프트에 실린다** —
+    # 2·3차가 발화를 재질의·분류 프롬프트에 넣으므로 비용·지연이 입력에 비례하고, 긴 입력은
+    # 지시문을 숨길 자리를 준다(프롬프트 인젝션). 실측: 뱅크 485 + 평가셋 87 문장의 최대가
+    # 48자, p99 42자다. 500 은 그 열 배이고 백엔드 `replan_session.free_text`(varchar(500))와
+    # 같은 값이라 경계 양쪽이 같은 상한을 쓴다. 초과는 **자르지 않고 거절**한다 —
+    # 잘라 내면 뜻이 바뀐 발화를 사용자 것인 양 처리하게 된다(INV-4: 조용한 변형 금지).
+    max_utterance_chars: int = 500
 
     def __post_init__(self) -> None:
         if self.top_k < 1:
@@ -122,6 +129,8 @@ class IntentRouterConfig:
             raise ValueError("vote_ratio ∈ (0, 1]")
         if not 0.0 <= self.llm_direct_confidence <= 1.0:
             raise ValueError("llm_direct_confidence ∈ [0, 1]")
+        if self.max_utterance_chars < 1:
+            raise ValueError("max_utterance_chars ≥ 1")
 
 
 def normalize(utterance: str) -> str:
@@ -196,6 +205,12 @@ class IntentRouter:
         text = normalize(utterance)
         if not text:
             return _fallback("empty_utterance")
+        # 길이 상한 — 전처리 **뒤에** 잰다. 공백·제어문자를 잔뜩 섞어 상한을 우회하는 입력이
+        # 정규화로 줄어든 뒤의 실제 길이로 판정되게 한다.
+        if len(text) > self._cfg.max_utterance_chars:
+            return _fallback(
+                f"utterance_too_long({len(text)} > {self._cfg.max_utterance_chars})"
+            )
 
         hits = self._match_bank(text)
         if not hits:

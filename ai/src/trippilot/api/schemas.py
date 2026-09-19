@@ -581,7 +581,9 @@ class EditItineraryRequest(BoundaryModel):
     budget_level: str | None = None
     transport_mode: str | None = None
     command: EditCommandSchema | None = None
-    utterance: str | None = Field(default=None, min_length=1)
+    # 상한 500 — 심층 방어다. 라우터도 같은 값으로 거절하지만(IntentRouterConfig), 경계에서
+    # 먼저 막으면 임베딩·LLM 을 쓰기 전에 422 로 끊긴다. 값의 근거는 그쪽 주석 참조.
+    utterance: str | None = Field(default=None, min_length=1, max_length=500)
     confirm: bool = False
     request_meta: RequestMetaSchema
 
