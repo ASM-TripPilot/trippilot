@@ -141,7 +141,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     // ⚠️ TRIP-717: c08 거부 안내 카드형 복귀로 `onboarding-location-denied-dismissed` 키 1개
     //    삭제(× 닫힘 상태 프리뷰가 소멸 — 카드는 항상 떠 닫기 없음) 165→164. devPreviewBandSort 는
     //    밴드 h·l 만 잠가 band c 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(164);
+    // ⚠️ TRIP-722: c밴드 프리뷰 정리로 키 3개(`splash-loading`·`onboarding-terms-agreed`·
+    //    `onboarding-nickname-taken`) 삭제로 164→161(-denied-dismissed 는 TRIP-717 에서 이미 삭제).
+    //    login-cancelled·login-age-restriction 은 결정 확정(TRIP-720·721)대로 유지. devPreviewBandSort 는
+    //    밴드 h·l 만 잠가 band c 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(161);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -158,6 +162,26 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     const allKeys = PREVIEW_STATES.map((state) => state.key);
     expect(new Set(groupedKeys)).toEqual(new Set(allKeys));
     expect(groupedKeys).toHaveLength(allKeys.length);
+  });
+});
+
+describe('TRIP-722 · c밴드 프리뷰 키 3개 삭제 (band c)', () => {
+  it('삭제 3키가 없고, 결정상 유지 키와 형제 c키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 삭제 대상 3키는 사라진다(삭제 전엔 present 라 red). 카운트(161)만으론 "아무 3키나
+    // 지워도" 통과하므로, 이 짝이 '지운 게 정확히 그 3키'임을 못박는다(TRIP-742 AC-1 패턴 미러).
+    expect(keys).not.toContain('splash-loading');
+    expect(keys).not.toContain('onboarding-terms-agreed');
+    expect(keys).not.toContain('onboarding-nickname-taken');
+    // 긍정 짝 ① — 결정 확정(TRIP-720·721)대로 유지되는 두 키는 그대로(과잉 삭제 차단).
+    expect(keys).toContain('login-cancelled');
+    expect(keys).toContain('login-age-restriction');
+    // 긍정 짝 ② — 같은 화면의 default 형제 키는 그대로(공허 통과·과잉 삭제 차단).
+    expect(keys).toContain('splash');
+    expect(keys).toContain('onboarding-terms-default');
+    expect(keys).toContain('onboarding-nickname-default');
   });
 });
 

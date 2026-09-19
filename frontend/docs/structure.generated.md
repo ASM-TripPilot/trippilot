@@ -335,7 +335,7 @@
 - `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · AppleIcon · KakaoIcon · NaverIcon · WarningTriangleGlyph
 - `src/features/auth/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
 - `src/features/auth/ui/SplashIllustration.tsx`  →  SplashIllustration
-- `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreenProps · SplashScreen
+- `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
 
 ## src/features/execution/model/
 - `src/features/execution/model/actualDistance.ts`  →  GeoPoint · accumulateDistanceKm · ActualRouteView · resolveActualRoute

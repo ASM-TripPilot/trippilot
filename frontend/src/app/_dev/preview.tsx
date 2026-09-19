@@ -1510,18 +1510,11 @@ const NOTIFICATION_INBOX_PREVIEW_SECTIONS: NotificationSection[] = [
 
 // AC-6 데이터 무결성 테스트(devPreviewBandNav)가 이 배열을 순수 데이터로 import 한다 → named export.
 export const PREVIEW_STATES: PreviewState[] = [
-  { key: 'splash', band: 'c', label: 'c01 · 스플래시', login: null },
-  {
-    key: 'splash-loading',
-    band: 'c',
-    label: 'c01 · 스플래시 로딩',
-    login: null,
-    render: () => <SplashScreen loading />,
-  },
+  { key: 'splash', band: 'c', label: 'c01 · 기본', login: null },
   {
     key: 'login-idle',
     band: 'c',
-    label: 'c02 · 평상시',
+    label: 'c02 · 기본',
     login: { phase: 'idle', errorCode: null, conflictProvider: null },
   },
   {
@@ -1533,7 +1526,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'login-error-banner',
     band: 'c',
-    label: 'c02 · 에러 배너',
+    label: 'c02 · 에러',
     login: {
       phase: 'error',
       errorCode: 'SOCIAL_AUTH_FAILED',
@@ -1543,7 +1536,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'login-conflict-sheet',
     band: 'c',
-    label: 'c02 · 이메일 충돌 시트',
+    label: 'c02 · 이메일 충돌',
     login: {
       phase: 'error',
       errorCode: 'SOCIAL_EMAIL_CONFLICT',
@@ -1553,7 +1546,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'login-age-sheet',
     band: 'c',
-    label: 'c02 · 연령 확인 시트',
+    label: 'c02 · 연령 확인',
     login: { phase: 'needs-age', errorCode: null, conflictProvider: null },
   },
   {
@@ -1583,25 +1576,6 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    key: 'onboarding-terms-agreed',
-    band: 'c',
-    label: 'c06 · 동의완료',
-    login: null,
-    render: () => (
-      <TermsScreen
-        items={TERMS_ITEMS.map((item) => ({ ...item, checked: true }))}
-        allChecked
-        canProceed
-        missingRequiredLabels={[]}
-        errorMessage={null}
-        onToggle={noop}
-        onToggleAll={noop}
-        onNext={noop}
-        onRetry={noop}
-      />
-    ),
-  },
-  {
     key: 'onboarding-nickname-default',
     band: 'c',
     label: 'c07 · 기본',
@@ -1622,30 +1596,12 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  {
-    key: 'onboarding-nickname-taken',
-    band: 'c',
-    label: 'c07 · 중복오류',
-    login: null,
-    render: () => (
-      <NicknameScreen
-        value="길동"
-        canProceed={false}
-        errorReason="TAKEN"
-        suggestions={['길동123', '여행하는길동', '길동_2']}
-        onChange={noop}
-        onRegenerate={noop}
-        onSelectSuggestion={noop}
-        onNext={noop}
-      />
-    ),
-  },
   // 취향 1/2·2/2(TRIP-163) — 컨테이너 없이 화면 컴포넌트를 직접, 빈 선택 상태로 그린다
   // (인터뷰5 — 가드 우회가 아니라 기존 9키와 같은 "정적 프레젠테이션" 패턴 그대로).
   {
     key: 'pref1',
     band: 'c',
-    label: 'c09 · 취향 1/2',
+    label: 'c09 · 기본',
     login: null,
     render: () => (
       <PrefStep1Screen
@@ -1661,7 +1617,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'pref2',
     band: 'c',
-    label: 'c09b · 취향 2/2',
+    label: 'c09b · 기본',
     login: null,
     render: () => (
       // TRIP-719 픽스처 — Figma 1774:2258 선택 상태(예산 중간·동행 친구·음식 2종·이동 대중교통).
@@ -1720,7 +1676,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'onboarding-location-default',
     band: 'c',
-    label: 'c08 · 프리프롬프트',
+    label: 'c08 · 기본',
     login: null,
     render: () => (
       // c08 이 온보딩 체인에서 실제로 주입하는 Figma 목적 문구(TRIP-459) — 프리뷰도 정본과 맞춘다.
@@ -1739,7 +1695,7 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'onboarding-location-denied',
     band: 'c',
-    label: 'c08 · 거부',
+    label: 'c08 · 권한 거부',
     login: null,
     render: () => (
       // TRIP-717: 거부 안내는 Figma 1297:1208 카드형(hairline 테두리 + 청록 아이콘 + 15 ink),

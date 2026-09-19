@@ -22,13 +22,9 @@ const logoShadow = {
   elevation: 8,
 } as const;
 
-export interface SplashScreenProps {
-  /** 부트스트랩 진행 중 표시 — true 면 진행점 첫 점을 강조한다(정적 강조만, 애니메이션 비목표).
-   * 기본 false = 현재 렌더와 완전 동일(동결 테스트 전제, c01 · 1283:1208). */
-  loading?: boolean;
-}
-
-export function SplashScreen({ loading = false }: SplashScreenProps = {}) {
+// TRIP-722: loading prop 제거 — 유일 소비처(프리뷰 splash-loading 키·loading 테스트)가 함께
+// 삭제됐고, 실앱(SplashGate·프리뷰 splash)은 무인자라 진행점 강조 갈래가 죽은 코드였다.
+export function SplashScreen() {
   return (
     <LinearGradient
       testID="shell-splash-gradient"
@@ -79,17 +75,10 @@ export function SplashScreen({ loading = false }: SplashScreenProps = {}) {
           testID="shell-splash-progress"
           className="flex-row items-center justify-center gap-[8px] pb-[61px]"
         >
-          {loading ? (
-            <View
-              testID="shell-splash-progress-dot-active"
-              className="h-[7px] w-[7px] rounded-full bg-primary opacity-100"
-            />
-          ) : (
-            <View
-              testID="shell-splash-progress-dot"
-              className="h-[7px] w-[7px] rounded-full bg-primary opacity-[0.45]"
-            />
-          )}
+          <View
+            testID="shell-splash-progress-dot"
+            className="h-[7px] w-[7px] rounded-full bg-primary opacity-[0.45]"
+          />
           <View
             testID="shell-splash-progress-dot"
             className="h-[7px] w-[7px] rounded-full bg-primary opacity-[0.45]"
