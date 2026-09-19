@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { Region } from '@/shared/api/generated/schemas';
+import type { Region, StayItem } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
+import { stayKey } from '@/features/stay/model/stayKey';
 
 import { DestinationDetailPage } from './DestinationDetailPage';
 
@@ -54,6 +55,18 @@ jest.mock('@/features/explore/model/savedPlaces', () => ({
   useSavedPlaces: () => ({ savedPoiIds: ['poi-1', 'poi-2'] }),
 }));
 
+// TRIP-709 AC-8 — 페이지가 새로 무는 숙소 담기 훅. 목이 없으면 P1~P3(QueryClientProvider 없는
+// 렌더)가 `No QueryClient` 로 크래시한다(traps-shell "새 훅이면 새 목"). 동시에 save/remove 실호출
+// 관측 seam 을 준다(useState 토글이면 spy 0회 → red, 거짓말 방지). 목 팩토리 호이스팅 규약상
+// 참조 변수는 `mock` 접두여야 한다.
+const mockUseSavedStays = jest.fn();
+const mockSave = jest.fn();
+const mockRemove = jest.fn();
+const mockIsSaved = jest.fn();
+jest.mock('@/features/stay/model/savedStays', () => ({
+  useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
+}));
+
 jest.mock('@/shared/api/tokenManager', () => ({
   getAccessToken: () => mockToken,
 }));
@@ -92,6 +105,20 @@ beforeEach(() => {
     data: { items: [] },
     isError: false,
     refetch: jest.fn(),
+  });
+  // 숙소 담기 훅 기본값: 미담김·성공 응답(각 AC-8 케이스가 isSaved·savedKeys 만 덮어쓴다).
+  mockSave.mockReset();
+  mockRemove.mockReset();
+  mockIsSaved.mockReset();
+  mockIsSaved.mockReturnValue(false);
+  mockSave.mockResolvedValue({ kind: 'saved' });
+  mockRemove.mockResolvedValue({ kind: 'removed' });
+  mockUseSavedStays.mockReset();
+  mockUseSavedStays.mockReturnValue({
+    isSaved: mockIsSaved,
+    save: mockSave,
+    remove: mockRemove,
+    savedKeys: [],
   });
 });
 
@@ -182,5 +209,86 @@ describe('P3 · 레인 에러 → 재시도가 refetch 를 부른다', () => {
 
     fireEvent.press(screen.getByTestId('destination-detail-stay-retry'));
     expect(refetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * ── TRIP-709 AC-8 · 숙소 하트 실배선(거짓말 방지) — 게이트① 동결: 위 P1~P3 는 무수정, 아래만
+ * 추가한다. 담김/미담김 표식(색 fill)만으로는 "저장됐다"를 거짓 통과시킬 수 있으므로(repo-trap
+ * §글리프), 페이지가 `useSavedStays.save`/`remove` 를 **실제로** 부르는지 spy 로 관측한다. 게스트는
+ * 서버를 안 부르고 로그인으로 보낸다(`(tabs)/explore.tsx` SavableStayLane 선례).
+ */
+
+// 숙소 검색 카드 1건(key 'NAVER:s1'). 하트 testID = destination-detail-stay-save-{key}.
+const STAY_ITEM: StayItem = {
+  externalSource: 'NAVER',
+  externalId: 's1',
+  name: '해운대 그랜드 호텔',
+  lat: 35.1587,
+  lng: 129.1604,
+  region: '해운대',
+  amenities: [],
+  stayType: 'HOTEL',
+  price: { amount: 145000, currency: 'KRW' },
+};
+const STAY_ITEM_KEY = stayKey(STAY_ITEM); // 'NAVER:s1'
+
+/** 검색 결과에 숙소 1건을 실어 하트가 그려지게 한다. */
+function withStayItem(): void {
+  mockUseStaySearch.mockReturnValue({
+    data: { items: [STAY_ITEM] },
+    isError: false,
+    refetch: jest.fn(),
+  });
+}
+
+describe('AC-8 · 하트 실배선 (거짓말 방지)', () => {
+  it('로그인·미담김 → 하트 press 가 useSavedStays.save 를 실제로 부른다(remove 0)', () => {
+    mockToken = 'tkn';
+    mockIsSaved.mockReturnValue(false);
+    withStayItem();
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(
+      screen.getByTestId(`destination-detail-stay-save-${STAY_ITEM_KEY}`)
+    );
+
+    // useState 토글이 아니라 서버 훅 실호출 — spy 가 켜져야 한다.
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockRemove).not.toHaveBeenCalled();
+  });
+
+  it('로그인·담김 → 하트 press 가 useSavedStays.remove 를 실제로 부른다(save 0)', () => {
+    mockToken = 'tkn';
+    mockIsSaved.mockReturnValue(true);
+    mockUseSavedStays.mockReturnValue({
+      isSaved: mockIsSaved,
+      save: mockSave,
+      remove: mockRemove,
+      savedKeys: [STAY_ITEM_KEY],
+    });
+    withStayItem();
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(
+      screen.getByTestId(`destination-detail-stay-save-${STAY_ITEM_KEY}`)
+    );
+
+    expect(mockRemove).toHaveBeenCalledTimes(1);
+    expect(mockSave).not.toHaveBeenCalled();
+  });
+
+  it('게스트 → 하트 press 는 /(auth)/login 으로 push 하고 서버 저장은 0건이다', () => {
+    mockToken = null;
+    withStayItem();
+    render(<DestinationDetailPage />);
+
+    fireEvent.press(
+      screen.getByTestId(`destination-detail-stay-save-${STAY_ITEM_KEY}`)
+    );
+
+    expect(mockPush).toHaveBeenCalledWith('/(auth)/login');
+    expect(mockSave).not.toHaveBeenCalled();
+    expect(mockRemove).not.toHaveBeenCalled();
   });
 });

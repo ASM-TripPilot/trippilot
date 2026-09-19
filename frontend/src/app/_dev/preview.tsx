@@ -49,6 +49,7 @@ import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionS
 import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
+import { DestinationDetailScreen } from '@/features/explore/ui/DestinationDetailScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -2818,6 +2819,50 @@ export const PREVIEW_STATES: PreviewState[] = [
         />,
         'explore'
       ),
+  },
+  {
+    // TRIP-709 — d05 목적지 상세 default(Figma 2176:2336). 세그 all 활성·숙소 담김 1건
+    // (savedKeys 첫 카드)·FAB 2단(하트+＋)이 한 화면에 보이게. 화면이 자체 BottomTabBar 를
+    // 그리므로 withShellTabBar 로 감싸지 않는다(props-only 직접 렌더). 세그 활성 흰칩·하트 분홍·
+    // FAB 위치·검색바 › 는 jest 사각이라 이 키가 6-b 육안 대조 자리.
+    key: 'destination-detail-default',
+    band: 'd',
+    label: 'd05 · 통합 검색 결과 default',
+    login: null,
+    render: () => (
+      <DestinationDetailScreen
+        regionName="부산"
+        onPressSearch={noop}
+        stayLane={{
+          error: false,
+          cards: EXPLORE_STAY_CARDS,
+          onRetry: noop,
+          onSeeAll: noop,
+          onPressCard: noop,
+          savedKeys: ['yanolja:1'],
+          pendingKeys: [],
+          onToggleSave: noop,
+          saveError: false,
+          onDismissSaveError: noop,
+        }}
+        placeLane={{
+          error: false,
+          cards: EXPLORE_LANDING_PLACE_LANE.cards,
+          onRetry: noop,
+          onSeeAll: noop,
+          onPressCard: noop,
+        }}
+        onPressTab={noop}
+        onPressCreateTrip={noop}
+        savedMenu={{
+          open: false,
+          savedCount: 3,
+          onToggle: noop,
+          onPressSavedPlaces: noop,
+          onPressSavedStays: noop,
+        }}
+      />
+    ),
   },
   // TRIP-711 — `explore-landing-empty-bridge`·`explore-landing-stay-error` 프리뷰 키 삭제
   // (G5, 화면 코드는 유지 — 담은 곳 0 브리지·숙소 레인 실패는 회선 조절로 실화면 재현).

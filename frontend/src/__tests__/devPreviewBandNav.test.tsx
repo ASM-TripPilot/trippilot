@@ -154,7 +154,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    `explore-landing-stay-error`) 삭제로 163→160(G5, 화면 코드는 유지·키만 삭제).
     //    ★배치 잔여: d 밴드 최종 13키(D절)는 706(d02 select 4)·709(d05)·710(d06)이 이 배치에 없어
     //    미완 — 현재 d 밴드 7키. 그 3티켓 완료 후 별도로 13키 완결·라벨 검수(711 재개).
-    expect(PREVIEW_STATES).toHaveLength(160);
+    // ⚠️ TRIP-709: d05 목적지 상세 프리뷰 키(`destination-detail-default`, band d) 추가로 160→161.
+    //    test-designer 02a 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 키 하나만 추가하고
+    //    이 가드는 안 만진다(추가 전엔 160개라 이 단언이 red — 선반영이 red 를 만든다). devPreviewBandSort
+    //    는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(161);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -259,6 +263,21 @@ describe('🔴 TRIP-700 AC-9 · 매거진 목록 프리뷰 키 (band a)', () => 
 
     // 형제 band a 앵커 — 기존 홈 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
     expect(keys).toContain('home-default');
+  });
+});
+
+describe('🔴 TRIP-709 AC-10 · d05 목적지 상세 프리뷰 키 (band d)', () => {
+  it('키 집합에 destination-detail-default 가 있고 형제 band d 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — destination-detail-default 는 implementer 가 preview.tsx 에 추가하기 전엔 없다
+    // (band d, DestinationDetailScreen 렌더). 카운트(161)만으론 "아무 키나 1개 추가해도" 통과하므로
+    // 이 단언이 '추가된 키가 destination-detail-default'임을 못박는다(TRIP-695/697/700 미러).
+    expect(keys).toContain('destination-detail-default');
+
+    // 형제 band d 앵커 — 기존 d 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
+    expect(keys).toContain('explore-landing-default');
   });
 });
 
