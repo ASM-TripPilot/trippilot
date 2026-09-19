@@ -82,7 +82,8 @@ def main() -> int:
                          "호출을 반으로 뺀다")
     ap.add_argument("--dump-fields", default="",
                     help="원문을 **전부** 남길 필드 쉼표 목록 (반복정보는 'info:이용요금'). "
-                         "표본 4건으로는 분포를 못 본다 — 사분위가 필요하면 이걸 쓴다")
+                         "`[content_id, 원문]` 쌍으로 남아 제안 문서와 조인된다 — "
+                         "표본 4건으로는 분포를 못 보고, 값만 남기면 카테고리별로 못 가른다")
     args = ap.parse_args()
 
     want_eps = tuple(e.strip() for e in args.endpoints.split(",") if e.strip())
@@ -135,7 +136,11 @@ def main() -> int:
             seen += 1
             for f in dump_fields:
                 if (v := row.get(f, "").strip()):
-                    dumped[f].append(v)
+                    # **식별자를 같이 남긴다.** 값만 남기면 제안 문서와 조인할 수 없어
+                    # 카테고리·지역별로 다시 묶지 못한다 — 값의 분포는 대개 우리
+                    # 카테고리별로 갈리므로(자연은 거의 무료, 전시는 유료) 한 덩어리
+                    # 사분위는 설계 근거가 못 된다. 실제로 조인이 필요해져서 재수집했다.
+                    dumped[f].append([cid, v])
             for k, v in row.items():
                 if not v.strip():
                     continue
