@@ -44,6 +44,9 @@ _OK = "0000"
 # `원` 이 붙은 수만 금액으로 본다 — 나이(`25~64세`)·인원(`20인 이상`)을 배제한다.
 _WON = re.compile(r"(?:\d{1,3}(?:,\d{3})+|\d+)\s*원")
 
+# 이보다 많이 실패하면 채움률이 장애를 반영한다 — 측정값으로 쓰지 않는다.
+_MAX_FAILURE_RATE = 0.05
+
 
 def _get(endpoint: str, params: dict[str, str], key: str, timeout: float = 10.0) -> list[dict]:
     q = urllib.parse.urlencode({
@@ -97,6 +100,7 @@ def main() -> int:
 
     refs = _refs_from_doc(args.from_doc)
     calls = 0
+    failures = 0
     result: dict[str, dict] = {}
 
     for kind in (k.strip() for k in args.kinds.split(",") if k.strip()):
@@ -121,6 +125,7 @@ def main() -> int:
                 try:
                     items = _get(endpoint, params, key)
                 except Exception as e:                    # noqa: BLE001 — 탐색이다
+                    failures += 1
                     print(f"[fee] {endpoint} {cid}: {e}", file=sys.stderr)
                     continue
                 if endpoint == "detailIntro2":
@@ -171,7 +176,17 @@ def main() -> int:
             mark = "  ←" if w >= 0.1 else ""
             print(f"    {k:30} {f * 100:6.1f}% {w * 100:6.1f}%{mark}")
 
-    print(f"\n[fee] 총 호출 {calls}건", file=sys.stderr)
+    rate = failures / calls if calls else 1.0
+    print(f"\n[fee] 총 호출 {calls}건 · 실패 {failures}건 ({rate * 100:.1f}%)",
+          file=sys.stderr)
+    # **실패를 삼키고 초록으로 끝내지 않는다.** 실패한 호출은 "그 필드가 비어 있다"와
+    # 구분이 안 돼 채움률을 조용히 끌어내린다 — 429 로 절반이 죽은 실행을 "채움률이
+    # 떨어졌다"로 읽을 뻔했다(2026-09-19, 프로브 2개 동시 실행이 한도를 때림).
+    # 측정값이 아니라 장애다. 임계는 넉넉히 두되 넘으면 실패로 끝낸다.
+    if rate > _MAX_FAILURE_RATE:
+        print(f"[fee] 실패율 {rate * 100:.1f}% > {_MAX_FAILURE_RATE * 100:.0f}% — "
+              f"측정값으로 쓸 수 없다. 동시 실행·일일 한도를 확인하라.", file=sys.stderr)
+        return 2
     if args.out:
         args.out.write_text(json.dumps(result, ensure_ascii=False, indent=1),
                             encoding="utf-8")
