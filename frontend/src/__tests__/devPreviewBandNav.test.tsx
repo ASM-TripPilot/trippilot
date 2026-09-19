@@ -163,7 +163,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    가드만) — implementer 는 preview.tsx 에 그 4키만 추가하고 이 가드는 안 만진다(추가 전엔
     //    161개라 이 단언이 red — 선반영이 red 를 만든다). devPreviewBandSort 는 밴드 h·l 만 잠가
     //    band d 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(165);
+    // ⚠️ TRIP-710: d06 장소 상세 프리뷰 키(`place-detail-default`, band d) 추가로 165→166.
+    //    test-designer 02a 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 키 하나만 추가하고
+    //    이 가드는 안 만진다(추가 전엔 165개라 이 단언이 red — 선반영이 red 를 만든다).
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(166);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -301,6 +305,21 @@ describe('🔴 TRIP-706 AC-V · d02 select 프리뷰 키 4종 (band d)', () => {
 
     // 형제 band d 앵커 — 기존 d 키(save default)가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
     expect(keys).toContain('saved-places-default');
+  });
+});
+
+describe('🔴 TRIP-710 AC-4 · d06 장소 상세 프리뷰 키 (band d)', () => {
+  it('키 집합에 place-detail-default 가 있고 형제 band d 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — place-detail-default 는 implementer 가 preview.tsx 에 추가하기 전엔 없다(band d,
+    // PlaceDetailScreen 렌더). 카운트(166)만으론 "아무 키나 1개 추가해도" 통과하므로, 이 단언이
+    // '추가된 키가 place-detail-default'임을 못박는다(TRIP-695/697/700/709 미러).
+    expect(keys).toContain('place-detail-default');
+
+    // 형제 band d 앵커 — 기존 d 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
+    expect(keys).toContain('explore-landing-default');
   });
 });
 

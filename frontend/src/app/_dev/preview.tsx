@@ -51,6 +51,7 @@ import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
 import { DestinationDetailScreen } from '@/features/explore/ui/DestinationDetailScreen';
 import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
+import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/features/explore/ui/PlaceDetailScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -456,6 +457,12 @@ const DRAFT_PREVIEW_PHOTOS: (string | null)[] = [
   require('@/assets/itinerary/draft-preview-2.jpg'),
   require('@/assets/itinerary/draft-preview-3.jpg'),
 ].map((source) => Image.resolveAssetSource?.(source)?.uri ?? null); // 웹에는 이 API 가 없다(네이티브 전용) — 옵셔널 호출로 웹은 null(사진 없는 카드)
+
+// TRIP-710 d06 프리뷰 히어로 — 로컬 라이선스 에셋 재사용(assets/home/hero-view.jpg, CREDITS.md 有).
+// DRAFT_PREVIEW_PHOTOS 와 같은 패턴: jest 는 .uri 가 undefined 라 회색 자리, 실기만 사진(INV-1 안전).
+const PLACE_DETAIL_PREVIEW_IMAGE: string | null =
+  Image.resolveAssetSource?.(require('@/assets/home/hero-view.jpg'))?.uri ??
+  null;
 
 const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   {
@@ -2940,6 +2947,34 @@ export const PREVIEW_STATES: PreviewState[] = [
           onPressSavedPlaces: noop,
           onPressSavedStays: noop,
         }}
+      />
+    ),
+  },
+  {
+    // TRIP-710 — d06 장소 상세 default(Figma 1907:1083). props-only 순수 뷰라 직접 렌더한다.
+    // category 는 PoiCategory enum('문화') — Figma 라벨 '미술관'·'전시'는 계약 밖(tsc 거부). 부제
+    // 앞 흰 핀·미니맵 단일 핀 지도(viewOnly)·데이터 없는 4구획 부재가 jest 사각이라 이 키가 6-b
+    // 육안 대조 자리(미니맵 타일은 네이티브 재빌드 후에만 뜸). 히어로는 로컬 에셋 재사용(회색↔사진).
+    key: 'place-detail-default',
+    band: 'd',
+    label: 'd06 · 장소 상세 default',
+    login: null,
+    render: () => (
+      <ExplorePlaceDetailScreen
+        place={{
+          poiId: 'busan-moca',
+          nameKo: '부산시립미술관',
+          category: '문화',
+          lat: 35.1689,
+          lng: 129.1355,
+          region: '부산 해운대구',
+          openingHours: '10:00~18:00 (월 휴관)',
+          imageUrl: PLACE_DETAIL_PREVIEW_IMAGE,
+          tags: ['미술', '실내', '취향매칭', '비와도좋음'],
+          savedCount: 128,
+          dataStatus: 'ACTIVE',
+        }}
+        saved={false}
       />
     ),
   },

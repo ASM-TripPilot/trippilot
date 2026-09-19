@@ -158,13 +158,15 @@ export function SearchGlyph({ size = 20, testID }: GlyphProps) {
 /** d04 empty 상태 배지 — 위치 핀(32px, 분홍). e02 `MapPinGlyph`(1341:1378)와 같은 도형을
  * feature 간 직접 import 금지 관례대로 이 파일에 다시 그린다. `tone`은 TRIP-223(d02) 행의
  * 지역구 핀(회색, 13px)을 위한 확장 — `FilterSlidersGlyph`·`WarningTriangleGlyph`의 색 prop
- * 선례를 따른다(브리프 §6-2, 범용 색상표는 만들지 않는다). 기본값은 기존 d04 용법과 동일. */
+ * 선례를 따른다(브리프 §6-2, 범용 색상표는 만들지 않는다). 기본값은 기존 d04 용법과 동일.
+ * `on-primary`(흰색)는 TRIP-710(d06) 부제 핀 — hero 사진 위에 얹혀 흰색이어야 읽힌다. */
 export function MapPinGlyph({
   size = 32,
   tone = 'primary',
   testID,
-}: GlyphProps & { tone?: 'primary' | 'muted' }) {
-  const stroke = tone === 'muted' ? MUTED : PRIMARY;
+}: GlyphProps & { tone?: 'primary' | 'muted' | 'on-primary' }) {
+  const stroke =
+    tone === 'muted' ? MUTED : tone === 'on-primary' ? ON_PRIMARY : PRIMARY;
   return (
     <Svg
       testID={testID}
