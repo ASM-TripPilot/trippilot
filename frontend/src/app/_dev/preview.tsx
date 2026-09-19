@@ -2706,9 +2706,10 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    key: 'saved-places-results',
+    // TRIP-705: `saved-places-results` → `saved-places-default` 개명. Figma 1693:1183 default 6행.
+    key: 'saved-places-default',
     band: 'd',
-    label: 'd02 · 담은 장소 결과',
+    label: 'd02 · 담은 장소 default',
     login: null,
     render: () => (
       <SavedPlaceListScreen
@@ -2719,8 +2720,25 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // TRIP-394 — 해제(빈 하트) 엣지 상태. sp-1(p-2)·sp-3(p-7)만 released 로 빈 하트가 되고,
-  // 나머지는 찬 하트로 남는다(같은 목록에서 빈/찬을 대조). jest 는 색을 못 봐 실기 전용 자리.
+  {
+    // TRIP-705: Figma 3614:2032 loading — 6행 스켈레톤 + 앱바 서브텍스트 + 회색 disabled CTA.
+    key: 'saved-places-loading',
+    band: 'd',
+    label: 'd02 · 담은 장소 loading',
+    login: null,
+    render: () => (
+      <SavedPlaceListScreen
+        savedPlaces={[]}
+        state={{ kind: 'loading' }}
+        onPressRemove={noop}
+        onPressCreateTrip={noop}
+        onPressBrowse={noop}
+      />
+    ),
+  },
+  // TRIP-394 — 해제(빈 하트) 엣지 상태. sp-2(p-2/광안리)·sp-3(p-3/전포)만 released 로 빈 하트가
+  // 되고, 나머지는 찬 하트로 남는다(같은 목록에서 빈/찬을 대조). jest 는 색을 못 봐 실기 전용 자리.
+  // (TRIP-705 픽스처 재배치로 poiId 를 present 한 값으로 갱신 — 옛 p-7 은 픽스처에서 사라졌다.)
   {
     key: 'saved-places-released',
     band: 'd',
@@ -2729,7 +2747,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <SavedPlaceListScreen
         savedPlaces={PREVIEW_SAVED_PLACES}
-        releasedPoiIds={['p-2', 'p-7']}
+        releasedPoiIds={['p-2', 'p-3']}
         onPressRemove={noop}
         onPressRestore={noop}
         onPressCreateTrip={noop}

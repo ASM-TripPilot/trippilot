@@ -64,42 +64,74 @@ export const PREVIEW_SAVED_POI_IDS: string[] = ['p-2', 'p-4'];
  * 폐업·미검증을 한 건씩 섞어 `dataStatus` 배지 두 종을 프리뷰에서 확인할 수 있게 한다
  * (담기 목록은 ACTIVE 가 아닌 것도 포함한다 — 계약 스키마 설명).
  */
+// TRIP-705: Figma 1693:1183 default 6행(감천문화마을·광안리·전포·해운대·해동용궁사·자갈치).
+// 전부 ACTIVE·imageUrl null — Figma default 엔 dataStatus 배지가 없다(배지 표본은 실화면에
+// 맡긴다, 티켓). savedAt 오름차순 = 담은 순서(순번 배지 1..6).
 export const PREVIEW_SAVED_PLACES: SavedPlace[] = [
   {
     savedPlaceId: 'sp-1',
     savedAt: '2026-08-01T09:00:00Z',
-    place: PREVIEW_PLACES[1],
+    place: place(
+      'p-1',
+      '감천문화마을',
+      PoiCategory.명소,
+      '사하구',
+      ['감성 골목'],
+      1284
+    ),
   },
   {
     savedPlaceId: 'sp-2',
     savedAt: '2026-08-02T10:30:00Z',
-    place: PREVIEW_PLACES[3],
+    place: place(
+      'p-2',
+      '광안리 해변',
+      PoiCategory.자연,
+      '수영구',
+      ['야경'],
+      2077
+    ),
   },
   {
     savedPlaceId: 'sp-3',
     savedAt: '2026-08-03T14:15:00Z',
     place: place(
-      'p-7',
-      '초량 이바구길',
-      PoiCategory.명소,
-      '동구',
-      ['감성 골목'],
-      402,
-      PlaceDataStatus.UNVERIFIED
+      'p-3',
+      '전포 카페거리',
+      PoiCategory.카페,
+      '부산진구',
+      ['카페'],
+      934
     ),
   },
   {
     savedPlaceId: 'sp-4',
     savedAt: '2026-08-04T18:40:00Z',
     place: place(
-      'p-8',
-      '옛 백제병원 카페',
-      PoiCategory.카페,
-      '동구',
-      ['카페'],
-      158,
-      PlaceDataStatus.CLOSED
+      'p-9',
+      '해운대 해변',
+      PoiCategory.자연,
+      '해운대구',
+      ['바다'],
+      3120
     ),
+  },
+  {
+    savedPlaceId: 'sp-5',
+    savedAt: '2026-08-05T11:20:00Z',
+    place: place(
+      'p-10',
+      '해동용궁사',
+      PoiCategory.명소,
+      '기장군',
+      ['명소'],
+      1640
+    ),
+  },
+  {
+    savedPlaceId: 'sp-6',
+    savedAt: '2026-08-06T16:05:00Z',
+    place: place('p-4', '자갈치시장', PoiCategory.맛집, '중구', ['미식'], 1502),
   },
 ];
 

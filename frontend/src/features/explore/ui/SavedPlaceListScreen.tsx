@@ -13,6 +13,7 @@ import { SAVED_PLACE_BADGE } from '../model/savedPlaceList';
 import {
   BackChevronGlyph,
   MapPinGlyph,
+  SearchGlyph,
   WarningTriangleGlyph,
 } from './ExploreGlyphs';
 
@@ -297,16 +298,32 @@ function RemoveErrorBanner({
   );
 }
 
-function CtaBar({ onPress }: { onPress: () => void }): ReactElement {
+function CtaBar({
+  onPress,
+  disabled = false,
+}: {
+  onPress: () => void;
+  disabled?: boolean;
+}): ReactElement {
+  // disabled(TRIP-705, Figma loading) — 로딩 중엔 CTA 를 회색·비활성으로 보여 자리를 지키되
+  // 누를 수 없게 한다. Pressable `disabled` 는 press 를 원천 차단하고 accessibilityState 로도 알린다.
   return (
     <View className="w-full border-t border-hairline bg-canvas px-lg pb-lg pt-md">
       <Pressable
         testID="explore-saved-createtrip"
         accessibilityRole="button"
+        accessibilityState={{ disabled }}
+        disabled={disabled}
         onPress={onPress}
-        className="h-[54px] w-full items-center justify-center rounded-[14px] bg-primary"
+        className={`h-[54px] w-full items-center justify-center rounded-[14px] ${
+          disabled ? 'bg-surface-strong' : 'bg-primary'
+        }`}
       >
-        <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+        <Text
+          className={`font-noto-bold text-[16px] font-bold ${
+            disabled ? 'text-muted' : 'text-on-primary'
+          }`}
+        >
           이 장소들로 여행 만들기
         </Text>
       </Pressable>
@@ -315,26 +332,25 @@ function CtaBar({ onPress }: { onPress: () => void }): ReactElement {
 }
 
 function LoadingBlock(): ReactElement {
+  // Figma 3614:2032 — 6행 스켈레톤(좌 순번 원 · 썸네일 104×80 · 바 2줄 · 우 하트 원)에 행
+  // 구분선. 서브텍스트("담은 곳 불러오는 중")는 본문이 아니라 앱바로 올렸다(TRIP-705).
   return (
-    <View testID="explore-saved-loading" className="w-full gap-lg px-lg pt-lg">
-      <Text className="font-noto text-label text-muted-soft">
-        담은 장소를 불러오는 중
-      </Text>
-      <View className="gap-md">
-        {[0, 1, 2, 3].map((index) => (
-          <View
-            key={index}
-            testID={`explore-saved-skeleton-${index}`}
-            className="h-20 w-full flex-row gap-md"
-          >
-            <View className="h-20 w-[104px] rounded-thumb bg-surface-strong" />
-            <View className="flex-1 gap-sm">
-              <View className="h-[15px] w-2/3 rounded-[6px] bg-hairline" />
-              <View className="h-[13px] w-1/2 rounded-[6px] bg-surface-strong" />
-            </View>
+    <View testID="explore-saved-loading" className="w-full">
+      {[0, 1, 2, 3, 4, 5].map((index) => (
+        <View
+          key={index}
+          testID={`explore-saved-skeleton-${index}`}
+          className="flex-row items-center gap-md border-b border-hairline px-lg py-md"
+        >
+          <View className="h-[26px] w-[26px] rounded-pill bg-surface-strong" />
+          <View className="h-20 w-[104px] rounded-thumb bg-surface-strong" />
+          <View className="flex-1 gap-sm">
+            <View className="h-[15px] w-2/3 rounded-[6px] bg-hairline" />
+            <View className="h-[13px] w-1/2 rounded-[6px] bg-surface-strong" />
           </View>
-        ))}
-      </View>
+          <View className="h-[26px] w-[26px] rounded-pill bg-surface-strong" />
+        </View>
+      ))}
     </View>
   );
 }
@@ -388,18 +404,27 @@ function GuestBlock({
 /** empty 삽화(01b Seed Q4 ⓑ) — Figma의 사진 3장 겹침 콜라주를 라운드 사각 3개 + 하트 원으로
  * 재현한다. 실사진은 에셋 라이선스·출처가 미정이라 벡터로 대체(미충족 기록). */
 function EmptyCollage(): ReactElement {
+  // Figma 1695:1183 — 사진 카드 3장 부채꼴(가운데 앞·크게, 좌우 기울어짐) + 중앙 하트 원.
+  // 실사진은 에셋 라이선스·출처 미정이라 회색 벡터로 대체(미충족 기록, 6-b/후속) — 기울기만
+  // transform 으로 부채꼴 느낌을 낸다(순수 스타일, 저위험).
   return (
     <View
       testID="explore-saved-empty-art"
-      className="h-[162px] w-[220px] flex-row items-center justify-center gap-xs"
+      className="h-[170px] w-[230px] flex-row items-center justify-center"
     >
-      <View className="h-[118px] w-[70px] rounded-card bg-surface-strong" />
-      <View className="h-[162px] w-[92px] items-center justify-center rounded-card bg-surface-soft">
+      <View
+        className="h-[118px] w-[74px] rounded-card bg-surface-strong"
+        style={{ transform: [{ rotate: '-12deg' }], marginRight: -12 }}
+      />
+      <View className="z-10 h-[162px] w-[96px] items-center justify-center rounded-card bg-surface-soft">
         <View className="h-12 w-12 items-center justify-center rounded-pill bg-canvas">
           <HeartFilledGlyph size={26} />
         </View>
       </View>
-      <View className="h-[118px] w-[70px] rounded-card bg-surface-strong" />
+      <View
+        className="h-[118px] w-[74px] rounded-card bg-surface-strong"
+        style={{ transform: [{ rotate: '12deg' }], marginLeft: -12 }}
+      />
     </View>
   );
 }
@@ -409,22 +434,31 @@ function EmptyBlock({
 }: {
   onPressBrowse: () => void;
 }): ReactElement {
+  // d02 전용 로컬 블록(TRIP-705) — shared StateNotice 를 확장하지 않고 여기서 직접 그린다:
+  // 제목 21px · 서브카피 명시 줄바꿈(\n) · CTA 는 돋보기 아이콘 + 콘텐츠 폭(Figma 1695:1183).
   return (
-    <View className="w-full flex-1 items-center justify-center px-2xl">
-      <StateNotice
-        testID="explore-saved-empty"
-        illustration={<EmptyCollage />}
-        title="마음에 드는 곳을 담아 보세요"
-        description="부산 인기 장소를 둘러보고 ♥로 담으면 여기에 모여 바로 여행이 돼요"
-        actions={[
-          {
-            testID: 'explore-saved-browse',
-            label: '장소 둘러보기',
-            variant: 'filled',
-            onPress: onPressBrowse,
-          },
-        ]}
-      />
+    <View
+      testID="explore-saved-empty"
+      className="w-full flex-1 items-center justify-center gap-lg px-2xl"
+    >
+      <EmptyCollage />
+      <Text className="font-noto-bold text-[21px] font-bold text-ink">
+        마음에 드는 곳을 담아 보세요
+      </Text>
+      <Text className="text-center font-noto text-body text-muted">
+        {'부산 인기 장소를 둘러보고 ♥로 담으면\n여기에 모여 바로 여행이 돼요'}
+      </Text>
+      <Pressable
+        testID="explore-saved-browse"
+        accessibilityRole="button"
+        onPress={onPressBrowse}
+        className="mt-sm h-[48px] flex-row items-center gap-sm self-center rounded-[14px] bg-primary px-xl"
+      >
+        <SearchGlyph size={18} testID="explore-saved-browse-icon" />
+        <Text className="font-noto-bold text-[15px] font-bold text-on-primary">
+          장소 둘러보기
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -596,8 +630,13 @@ export function SavedPlaceListScreen({
     ? savedPlaces.filter((saved) => !releasedPoiIds.includes(saved.place.poiId))
         .length
     : 0;
-  const subtitle =
-    activeSavedCount > 0 ? `${activeSavedCount}곳 · 마음에 든 순서대로` : null;
+  // 앱바 서브텍스트 — 로딩 중엔 "담은 곳 불러오는 중"(Figma 3614:2032, 본문에서 앱바로 이동),
+  // 그 밖엔 담은 개수(TRIP-705).
+  const subtitle = showLoading
+    ? '담은 곳 불러오는 중'
+    : activeSavedCount > 0
+      ? `${activeSavedCount}곳 · 마음에 든 순서대로`
+      : null;
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
@@ -605,7 +644,15 @@ export function SavedPlaceListScreen({
         <AppBar subtitle={subtitle} onBack={onBack} />
 
         {face === 'guest' ? <GuestBlock onPressLogin={onPressLogin} /> : null}
-        {showLoading ? <LoadingBlock /> : null}
+        {showLoading ? (
+          <>
+            <View className="flex-1">
+              <LoadingBlock />
+            </View>
+            {/* Figma loading 은 하단 CTA 를 회색 비활성으로 남겨 자리를 지킨다(TRIP-705). */}
+            <CtaBar onPress={onPressCreateTrip} disabled />
+          </>
+        ) : null}
 
         {face !== 'guest' && !showLoading ? (
           <>

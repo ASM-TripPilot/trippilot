@@ -52,8 +52,9 @@ describe('dev 프리뷰 탐색 2키 — results 얼굴 진입점', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('state=saved-places-results 로 열면 d02 루트와 순번 항목이 그려진다', () => {
-    mockSearchParams.state = 'saved-places-results';
+  it('state=saved-places-default 로 열면 d02 루트와 순번 항목이 그려진다', () => {
+    // TRIP-705: `saved-places-results` → `saved-places-default` 개명.
+    mockSearchParams.state = 'saved-places-default';
 
     render(<DevPreview />);
 
