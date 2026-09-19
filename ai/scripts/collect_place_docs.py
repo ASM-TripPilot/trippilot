@@ -47,7 +47,13 @@ _POIS = _DATA / "collected_pois.json"
 _WIKI_API = "https://ko.wikipedia.org/w/api.php"
 # 위키미디어 정책이 식별 가능한 User-Agent 를 요구한다 — 없으면 차단될 수 있다.
 _UA = "TripPilot-KB5/0.1 (https://github.com/ASM-TripPilot/trippilot)"
-_WIKI_BATCH = 40  # API 상한은 50 이지만 긴 한글 제목이 섞이면 URL 이 길어진다
+# **TextExtracts 의 상한은 20 이다** — `titles` 는 50까지 받지만 `prop=extracts` 는
+# 요청당 20건만 본문을 주고 나머지는 `continue.excontinue` 로 넘긴다(`exlimit=max` 도 20).
+# 40으로 두면 page 40개가 오는데 extract 는 20개뿐이고, **경고도 오류도 없다.**
+# 실측(2026-09-19): 반드시 존재하는 제목 40건을 요청 → page 40 · extract 20 ·
+# `continue={"excontinue":20}`. 첫 수집에서 밀집 묶음 8개에서 extract 36건이
+# 조용히 샜다(문서 12건 손실). 상한과 같은 값으로 둬서 매 요청이 온전히 처리되게 한다.
+_WIKI_BATCH = 20
 _WIKI_SLEEP = 0.4  # 예의상 간격 — 전량 18,607건이면 약 470요청
 
 
@@ -121,7 +127,16 @@ def _wiki_fetch(titles: Sequence[str]) -> dict[str, str]:
     })
     req = urllib.request.Request(f"{_WIKI_API}?{query}", headers={"User-Agent": _UA})
     with urllib.request.urlopen(req, timeout=30) as response:
-        pages = json.load(response)["query"]["pages"]
+        body = json.load(response)
+    # 상한을 넘겨 본문이 잘렸다는 **유일한 신호**가 이 토큰이다. 못 받은 것과 "그
+    # 문서에 도입부가 없다"가 응답 모양으로는 구별이 안 되므로, 묶음 크기를 줄이는
+    # 것만으로 끝내지 않고 여기서 터뜨린다 — 상한이 바뀌거나 prop 이 늘면 다시 샌다.
+    if "continue" in body:
+        raise RuntimeError(
+            f"응답이 잘렸다(continue={body['continue']}) — _WIKI_BATCH({_WIKI_BATCH})가 "
+            "API 상한을 넘는다. 줄여라. 그냥 두면 문서가 조용히 사라진다."
+        )
+    pages = body["query"]["pages"]
     return {
         page["title"]: (page.get("extract") or "")
         for page in pages.values()
