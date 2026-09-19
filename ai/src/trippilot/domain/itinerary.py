@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Mapping
 
 from trippilot.domain.common import (
     BudgetLevel,
+    Pace,
     GeoPoint,
     PoiId,
     ScheduleId,
@@ -192,6 +193,12 @@ class ItineraryProblem:
     제외의 의미는 **후보 풀 축소**뿐이다 — closed-set 검증(INV-1)을 우회하지 않고,
     고정 블록(HC3)은 제외보다 우선한다(모순 입력에서 하드 제약을 깨지 않기 위해).
 
+    pace: 여행 속도 — 카테고리 기본 체류시간에 정수비를 먹인다(TRIP-905). 기본 None =
+    무보정(기존 생성자 호출 전부 무영향). **None 은 BALANCED 가 아니다** — 고르지 않은
+    사용자와 균형을 고른 사용자를 구분한다. 앞의 둘과 성질이 하나 다르다: 날씨·행사는
+    목적함수만 만져 가해집합이 불변이지만, 체류가 바뀌면 하루에 들어가는 POI 수 자체가
+    달라진다. 그래서 "보정 전후 동일 해" 는 pace 에는 성립하지 않는다.
+
     daily_rain_prob: 날짜별 강수확률%(POP, 0~100) — 날씨 소프트 보정 입력(TRIP-383).
     기본 None = 무보정(기존 생성자 호출 전부 무영향). 부분 매핑이다 — 예보 지평 밖
     날짜는 키 없음(정보 없음을 0%로 지어내지 않는다). 하드 제약이 아니라 어셈블리
@@ -210,6 +217,7 @@ class ItineraryProblem:
     excluded_poi_ids: frozenset[PoiId] = frozenset()  # 기배정 POI (TRIP-293)
     daily_rain_prob: Mapping[date, int] | None = None  # 날짜별 POP% (TRIP-383)
     event_bonus: Mapping[PoiId, float] | None = None  # 행사 근접 보너스 [0,1] (TRIP-421)
+    pace: Pace | None = None  # 여행 속도 — 체류시간 배율 (TRIP-905)
 
     def __post_init__(self) -> None:
         if not self.days:
@@ -236,6 +244,7 @@ class ItineraryProblem:
             "anchor": self.anchor.to_dict() if self.anchor else None,
             # frozenset은 JSON 원시 타입이 아니다 → 정렬된 list (결정론적 직렬화)
             "excluded_poi_ids": sorted(str(p) for p in self.excluded_poi_ids),
+            "pace": self.pace.value if self.pace else None,
             # date 키는 JSON 원시 타입이 아니다 → 정렬된 ISO 키 (결정론적 직렬화)
             "daily_rain_prob": (
                 {d.isoformat(): self.daily_rain_prob[d]
@@ -280,6 +289,8 @@ class ItineraryProblem:
                 if d.get("event_bonus") is not None
                 else None
             ),
+            # `d.get` — 키가 없는 기존 직렬화본을 그대로 읽는다(하위호환)
+            pace=Pace(d["pace"]) if d.get("pace") else None,
         )
 
 
