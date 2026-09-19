@@ -42,7 +42,7 @@ STAY_DEFAULT_MIN: dict[PoiCategory, int] = {
 }
 
 
-# 여행 속도(pace) → 체류시간 정수비.
+# TRIP-906 — 여행 속도(pace) → 체류시간 정수비.
 #
 # **정수비인 이유**: CP-SAT 변수가 정수(분)이고, 부동소수 곱은 반올림 규칙에 따라
 # 플랫폼별로 갈릴 수 있다. 분자/분모로 두면 `stay * num // den` 한 줄로 확정된다.
