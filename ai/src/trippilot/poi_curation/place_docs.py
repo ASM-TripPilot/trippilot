@@ -34,6 +34,22 @@ SOURCES = (SOURCE_INTRO, SOURCE_WIKI, SOURCE_OVERVIEW, SOURCE_HERITAGE)
 # 후보 줄만 길어지고 판단에 보태는 게 없다. 빈 문서보다 **없는 편이 정직**하다.
 MIN_DOC_CHARS = 12
 
+# 저장 상한. **보여 주는 것(`place_knowledge.MAX_DOC_CHARS` = 160자)의 네 배**다.
+#
+# 두 가지를 동시에 고친다:
+# ⑴ **벡터와 표시가 어긋나는 것.** 원문을 통째로 색인하면 후보 줄에는 앞 160자가
+#    뜨는데 벡터는 5,175자짜리 문서 전체를 표현한다 — 검색이 고른 이유와 모델이
+#    읽는 글이 다른 문서가 된다. 위키 도입부는 앞쪽이 "무엇인가"이고 뒤로 갈수록
+#    연혁·부가정보라, 뒤를 버리는 것이 표시와도 맞는다.
+# ⑵ **임베딩 서비스가 긴 문서에서 죽는 것.** 실측 최대 5,175자('남계정')가 섞인
+#    32건 배치가 로컬 컨테이너를 4초 만에 OOM 으로 죽였다(같은 크기의 짧은 배치는
+#    멀쩡했다). 어텐션이 길이의 제곱으로 붙어서 평균이 아니라 **최장 한 건**이
+#    배치를 죽인다.
+#
+# 네 배로 잡은 근거: 표시분보다 넉넉해야 검색이 도입부 뒤 문장도 쓸 수 있고,
+# 실측 분포상 p99 가 725자라 1.5% 만 잘린다(중앙값은 106자로 상한 근처도 안 간다).
+MAX_TEXT_CHARS = 600
+
 
 def make_doc(
     source: str,
@@ -52,6 +68,8 @@ def make_doc(
     body = " ".join(text.split())
     if len(body) < MIN_DOC_CHARS:
         return None
+    if len(body) > MAX_TEXT_CHARS:
+        body = body[:MAX_TEXT_CHARS].rstrip()
     return KbDocument(
         kb=KbKind.POI_DESC,
         doc_id=f"{source}:{source_ref}",

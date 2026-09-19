@@ -73,3 +73,27 @@ def test_본문_중간의_다음과_같이는_정상_문장이다() -> None:
     text = ("수원 화성은 경기도 수원시에 있는 조선시대 성곽이다. 축성에 쓰인 기술은 "
             "다음과 같은 점에서 당대 최고 수준이었다. 거중기와 녹로를 …")
     assert is_disambiguation(text) is False
+
+
+# ── 저장 길이 상한 ────────────────────────────────────────────────────
+
+
+def test_긴_문서는_저장_상한에서_잘린다() -> None:
+    """벡터가 5,175자를 표현하는데 화면엔 앞 160자만 뜨면 **다른 문서**가 된다.
+
+    임베딩 서비스도 길이의 제곱으로 붙는 어텐션 탓에 최장 한 건이 배치를 죽인다
+    (실측: 5,175자가 섞인 32건 배치가 로컬 컨테이너를 4초 만에 OOM).
+    """
+    from trippilot.poi_curation.place_docs import MAX_TEXT_CHARS, make_doc
+
+    doc = make_doc("wiki", "ref-long", "가" * (MAX_TEXT_CHARS + 500))
+    assert doc is not None
+    assert len(doc.text) == MAX_TEXT_CHARS
+
+
+def test_저장_상한은_표시_상한보다_넉넉하다() -> None:
+    """표시분과 같으면 검색이 도입부 뒤 문장을 전혀 못 쓴다."""
+    from trippilot.agents.planb.place_knowledge import MAX_DOC_CHARS
+    from trippilot.poi_curation.place_docs import MAX_TEXT_CHARS
+
+    assert MAX_TEXT_CHARS > MAX_DOC_CHARS
