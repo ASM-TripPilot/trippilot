@@ -1739,6 +1739,13 @@ def demo_poi_seed() -> tuple[Poi, ...]:
             quality=DataQuality.FULL,
             source=PoiSource.SEED,
             confidence=None,
+            # KB-5 조인 키 — **데모용 값이다**(백엔드 시드에 없다). 실 경로에서는
+            # `BackendPoiDb` 가 `PoiReadResponse.sourceRef` 를 옮긴다.
+            # 이걸 안 채우면 `place_knowledge._pool_refs` 가 빈 집합을 내서
+            # **개발·스모크 앱에서 KB-5 가 켜지지 않는다** — 그러면 장소 지식이
+            # 조용히 사라져도 어느 스모크도 안 걸린다(2026-09-19 실측: 실제로
+            # 경계 테스트가 한 건도 없었다).
+            source_ref=f"demo-{poi_id[-1]}",
         )
         for poi_id, name, category, lat, lng in _BACKEND_SEED_ROWS
     )
