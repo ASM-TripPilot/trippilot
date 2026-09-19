@@ -25,7 +25,9 @@ POI id 는 전부 닫힌 집합 교차를 통과해야 하며(INV-1), 시각·�
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -83,6 +85,42 @@ def test_contact_like_text_is_detected(text: str) -> None:
 def test_ordinary_korean_recommendation_is_not_flagged(text: str) -> None:
     """과잉 차단이 진짜 위험이다 — 평범한 추천 문장이 걸리면 모든 이유가 빈다."""
     assert not has_contact_like(text)
+
+
+_DATA = Path(__file__).resolve().parent.parent / "data"
+
+
+def test_no_real_poi_name_is_flagged() -> None:
+    """실 말뭉치 오탐 0 — 손으로 고른 다섯 문장으로는 정규식이 넓어져도 모른다.
+
+    게이트가 보는 것은 LLM 출력 문장이고, 그 문장에는 상호명이 그대로 들어간다.
+    `.co`·`.io` 같은 짧은 TLD 를 맨 도메인으로 잡고 있어서 "○○.코"류 표기나
+    영문 상호에 걸릴 여지가 실제로 있다 — 그래서 가정하지 않고 전수로 센다.
+    걸리면 `_CONTACTISH` 를 좁혀라. 여기서 한 건이라도 나오면 **그 카테고리의
+    모든 추천 이유가 빈칸이 된다**.
+    """
+    raw = json.loads((_DATA / "collected_pois.json").read_text(encoding="utf-8"))
+    names = [
+        p["poi"]["name"]
+        for p in raw["proposals"]
+        if isinstance(p.get("poi"), dict) and isinstance(p["poi"].get("name"), str)
+    ]
+    assert len(names) > 10_000  # 표본이 줄면 이 테스트의 의미도 준다
+    assert [n for n in names if has_contact_like(n)] == []
+
+
+def test_no_wiki_excerpt_sentence_is_flagged() -> None:
+    """KB-5 발췌도 같은 이유 — 위키 본문이 프롬프트를 거쳐 문장에 섞인다."""
+    raw = json.loads((_DATA / "place_docs.json").read_text(encoding="utf-8"))
+    sentences = [
+        s.strip()
+        for d in raw["documents"]
+        if isinstance(d.get("text"), str)
+        for s in re.split(r"(?<=[.!?])\s+|\n+", d["text"])
+        if len(s.strip()) > 8
+    ]
+    assert len(sentences) > 1_000
+    assert [s for s in sentences if has_contact_like(s)] == []
 
 
 # ── EXPLANATION — 이 text 는 DB 에 영속된다 ─────────────────────────────
