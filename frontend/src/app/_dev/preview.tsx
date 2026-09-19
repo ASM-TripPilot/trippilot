@@ -2741,31 +2741,13 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // TRIP-394 — 해제(빈 하트) 엣지 상태. sp-2(p-2/광안리)·sp-3(p-3/전포)만 released 로 빈 하트가
-  // 되고, 나머지는 찬 하트로 남는다(같은 목록에서 빈/찬을 대조). jest 는 색을 못 봐 실기 전용 자리.
-  // (TRIP-705 픽스처 재배치로 poiId 를 present 한 값으로 갱신 — 옛 p-7 은 픽스처에서 사라졌다.)
-  {
-    key: 'saved-places-released',
-    band: 'd',
-    label: 'd02 · 담은 장소 해제',
-    login: null,
-    render: () => (
-      <SavedPlaceListScreen
-        savedPlaces={PREVIEW_SAVED_PLACES}
-        releasedPoiIds={['p-2', 'p-3']}
-        onPressRemove={noop}
-        onPressRestore={noop}
-        onPressCreateTrip={noop}
-        onPressBrowse={noop}
-      />
-    ),
-  },
+  // TRIP-711 — `saved-places-released`(해제 빈 하트 엣지) 프리뷰 키 삭제(G5, 화면 코드는 유지).
   // TRIP-649 — 담은 장소 empty 얼굴. 결과 픽스처를 0곳으로(savedPlaces=[]) + 얼굴 판정 state를
   // empty 로 주입(얼굴은 배열 길이가 아니라 state.kind 로 갈린다). 삽화·"둘러보기" CTA 육안 자리.
   {
     key: 'saved-places-empty',
     band: 'd',
-    label: 'd02 · 담은 장소 0',
+    label: 'd02 · 담은 장소 empty',
     login: null,
     render: () => (
       <SavedPlaceListScreen
@@ -2825,49 +2807,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  {
-    key: 'explore-landing-empty-bridge',
-    band: 'd',
-    label: 'd01 · 랜딩 담은 곳 0',
-    login: null,
-    render: () => (
-      <ExploreLandingScreen
-        {...EXPLORE_LANDING_BASE}
-        stayLane={{
-          error: false,
-          cards: EXPLORE_STAY_CARDS,
-          onRetry: noop,
-          onSeeAll: noop,
-        }}
-        savedMenu={{
-          open: false,
-          savedCount: 0,
-          onToggle: noop,
-          onPressSavedPlaces: noop,
-          onPressSavedStays: noop,
-        }}
-      />
-    ),
-  },
-  {
-    key: 'explore-landing-stay-error',
-    band: 'd',
-    label: 'd01 · 랜딩 숙소 레인 실패',
-    login: null,
-    render: () => (
-      <ExploreLandingScreen
-        {...EXPLORE_LANDING_BASE}
-        stayLane={{ error: true, cards: [], onRetry: noop, onSeeAll: noop }}
-        savedMenu={{
-          open: false,
-          savedCount: 2,
-          onToggle: noop,
-          onPressSavedPlaces: noop,
-          onPressSavedStays: noop,
-        }}
-      />
-    ),
-  },
+  // TRIP-711 — `explore-landing-empty-bridge`·`explore-landing-stay-error` 프리뷰 키 삭제
+  // (G5, 화면 코드는 유지 — 담은 곳 0 브리지·숙소 레인 실패는 회선 조절로 실화면 재현).
   // g01 신 default(TRIP-665·TRIP-732, Figma `3742:2068`) — 꼭 갈 곳 시드 얼굴. 요약 5행은
   // 두 키 다 채워진 2톤 객체(`TRIP_WIZARD_BASE`)이고, 스트립의 `mustVisits` 를 Figma 6장으로 채운다.
   // jest 는 요약 sub caption 회색·온보딩 스파클/분홍·카드 그림자·스트립 카드 픽셀·진행바 색을 못

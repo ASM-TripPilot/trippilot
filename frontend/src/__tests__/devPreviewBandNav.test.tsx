@@ -150,7 +150,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지).
     // ⚠️ TRIP-705: d02 담은 장소 loading 프리뷰 키(`saved-places-loading`, band `d`) 추가로
     //    162→163. `saved-places-results`→`saved-places-default` 개명은 총계 중립(키 수 불변).
-    expect(PREVIEW_STATES).toHaveLength(163);
+    // ⚠️ TRIP-711: d 프리뷰 정리 — 키 3개(`saved-places-released`·`explore-landing-empty-bridge`·
+    //    `explore-landing-stay-error`) 삭제로 163→160(G5, 화면 코드는 유지·키만 삭제).
+    //    ★배치 잔여: d 밴드 최종 13키(D절)는 706(d02 select 4)·709(d05)·710(d06)이 이 배치에 없어
+    //    미완 — 현재 d 밴드 7키. 그 3티켓 완료 후 별도로 13키 완결·라벨 검수(711 재개).
+    expect(PREVIEW_STATES).toHaveLength(160);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -167,6 +171,28 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     const allKeys = PREVIEW_STATES.map((state) => state.key);
     expect(new Set(groupedKeys)).toEqual(new Set(allKeys));
     expect(groupedKeys).toHaveLength(allKeys.length);
+  });
+});
+
+describe('TRIP-711 · d밴드 프리뷰 키 3개 삭제 (band d)', () => {
+  it('삭제 3키가 없고, 형제 d키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 삭제 대상 3키는 사라진다(삭제 전엔 present 라 red). 카운트(160)만으론 "아무 3키나
+    // 지워도" 통과하므로, 이 짝이 '지운 게 정확히 그 3키'임을 못박는다(TRIP-722/742 패턴 미러).
+    expect(keys).not.toContain('saved-places-released');
+    expect(keys).not.toContain('explore-landing-empty-bridge');
+    expect(keys).not.toContain('explore-landing-stay-error');
+
+    // 긍정 — 형제 d키는 살아 있다(공허 통과 방지: 위 부정이 "d밴드가 통째로 비어서" 참이 아님).
+    expect(keys).toContain('explore-landing-default');
+    expect(keys).toContain('explore-landing-loading');
+    expect(keys).toContain('saved-places-default');
+    expect(keys).toContain('saved-places-loading');
+    expect(keys).toContain('saved-places-empty');
+    expect(keys).toContain('region-picker-default');
+    expect(keys).toContain('places-default');
   });
 });
 
