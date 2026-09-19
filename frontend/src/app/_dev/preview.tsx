@@ -2695,20 +2695,25 @@ export const PREVIEW_STATES: PreviewState[] = [
     band: 'd',
     label: 'd04 · 장소 탐색 default',
     login: null,
-    render: () => (
-      <PlaceExploreScreen
-        places={PREVIEW_PLACES}
-        savedPoiIds={PREVIEW_SAVED_POI_IDS}
-        selectedCategory={null}
-        searchText=""
-        onSelectCategory={noop}
-        onChangeSearchText={noop}
-        onToggleSave={noop}
-        onPressCreateTrip={noop}
-        onPressSavedPlaces={noop}
-        onPressFilter={noop}
-      />
-    ),
+    // TRIP-708 완료 조건: d04 는 (tabs) 밖 라우트라 복제 탭바가 프리뷰에도 보여야 한다. 탭바는
+    // page 소유(화면 순수성)라 순수 화면만 태우면 안 보이므로, magazine 선례처럼 withShellTabBar
+    // 로 감싸 셸 탭바(탐색 활성)를 얹는다(실 라우트는 PlaceExplorePage 가 동일 탭바를 그린다).
+    render: () =>
+      withShellTabBar(
+        <PlaceExploreScreen
+          places={PREVIEW_PLACES}
+          savedPoiIds={PREVIEW_SAVED_POI_IDS}
+          selectedCategory={null}
+          searchText=""
+          onSelectCategory={noop}
+          onChangeSearchText={noop}
+          onToggleSave={noop}
+          onPressCreateTrip={noop}
+          onPressSavedPlaces={noop}
+          onPressFilter={noop}
+        />,
+        'explore'
+      ),
   },
   {
     // TRIP-705: `saved-places-results` → `saved-places-default` 개명. Figma 1693:1183 default 6행.
