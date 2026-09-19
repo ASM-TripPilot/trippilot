@@ -38,6 +38,7 @@ import {
 } from '@/features/explore/model/placeSaveGuard';
 import { orderSavedPlaces } from '@/features/explore/model/savedPlaceList';
 import { useSavedPlaces } from '@/features/explore/model/savedPlaces';
+import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
 import { seedMustVisits } from '@/features/trip/model/mustVisitSeed';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
@@ -82,10 +83,17 @@ export function SavedPlacesPage(): ReactElement {
   const [snapshots, setSnapshots] = useState<Map<string, SavedPlace>>(
     () => new Map()
   );
+  // select 모드(TRIP-706)에서 고른 poiId 들 — 이 화면(페이지)이 선택 집합을 소유하고(D2), 완료 시
+  // 선택분만 시드한다(TRIP-491 재현 봉합 — 전에는 그려진 전부를 시드했다). save 모드에선 미사용.
+  const [selectedPoiIds, setSelectedPoiIds] = useState<string[]>([]);
 
   // 여행 지역 필터(TRIP-689) — g01·꼭 갈 곳의 '더 담기'가 d02로 올 때 실어 보낸 region.
   // expo-router는 1원소 배열 파라미터를 문자열로 되돌릴 수 있어(단일 목적지 여행) 배열로 정규화한다.
-  const { region } = useLocalSearchParams<{ region?: string | string[] }>();
+  // mode='select'(TRIP-706)면 담기/해제가 아니라 '꼭 갈 곳 고르기' 화면으로 갈린다(AC-3).
+  const { mode, region } = useLocalSearchParams<{
+    mode?: string;
+    region?: string | string[];
+  }>();
   const regions = Array.isArray(region) ? region : region ? [region] : [];
 
   const isAuthed = getAccessToken() !== null;
@@ -169,6 +177,41 @@ export function SavedPlacesPage(): ReactElement {
         ? attemptRelease(lastAttempted.saved)
         : attemptRestore(lastAttempted.saved));
     }
+  }
+
+  // select 모드(TRIP-706) — 담기/해제 대신 '꼭 갈 곳 고르기'. 화면은 별 파일(props-only)이고,
+  // 페이지가 선택 집합을 소유해 완료 시 **선택분만** 시드한다(D2 · AC-1 TRIP-491 재현 봉합).
+  // region 필터로 0건이어도 select-empty 한 얼굴로 수렴한다(D4 — listState 가 empty 로 판정,
+  // save 모드의 RegionEmptyBlock 제3 얼굴은 select 에 없다).
+  if (mode === 'select') {
+    return (
+      <MustVisitPickScreen
+        state={listState}
+        savedPlaces={displayList}
+        selectedPoiIds={selectedPoiIds}
+        onToggleSelect={(poiId) =>
+          setSelectedPoiIds((prev) =>
+            prev.includes(poiId)
+              ? prev.filter((id) => id !== poiId)
+              : [...prev, poiId]
+          )
+        }
+        onComplete={() => {
+          // 지금 화면에 그려진 목록 중 고른 것만 시드로 옮긴다(전부 아님 — TRIP-491 급소).
+          const chosen = displayList.filter((saved) =>
+            selectedPoiIds.includes(saved.place.poiId)
+          );
+          useTripWizardStore
+            .getState()
+            .seedMustVisitsFromD02(seedMustVisits(chosen));
+          router.push('/trips/new/step1');
+        }}
+        onPressAddMore={() => router.push('/explore/places')}
+        onRetry={handleRetry}
+        onPressBrowse={() => router.push('/explore/places')}
+        onBack={() => router.back()}
+      />
+    );
   }
 
   return (

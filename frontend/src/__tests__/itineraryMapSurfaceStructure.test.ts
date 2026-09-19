@@ -60,6 +60,10 @@ const LOCKED_CALLERS = [
   // `<MapView>` 를 렌더하므로 census fail-closed 를 피하려 test-designer 가 착수 단계에서 선반영
   // (571·563·442 재발 방지 · TRIP-572 선례). 실개폐·2스냅은 통과형 목 사각(6-b 실기).
   'widgets/map-sheet-shell/ui/MapSheetShell.tsx',
+  // TRIP-710 d06 장소 상세 미니맵 — 정적 placeholder → 실 MapView(viewOnly ON, 단일 핀).
+  // connectPins 미전달(단일 핀→경로선 없음, 아래 S8 ③ 강제). test-designer 착수 단계 선반영이라
+  // 구현(placeholder→MapView) 전엔 `<MapView` 0건이라 S2 집합 불일치·S8 카운트로 red(정상).
+  'features/explore/ui/PlaceDetailScreen.tsx',
 ];
 
 /** 지도 고정을 **켜면 안 되는** 호출부. 앞의 넷은 지도를 움직여 좌표를 확정하는 것이 기능 자체라
@@ -306,12 +310,13 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
       ...EXPLORE_CALLERS,
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
-    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 12개 = 총 13개).
+    // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 13개 = 총 14개).
     //    TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로 넘어가며 13→12 가 됐다가,
-    //    TRIP-783 h공통 셸(`MapSheetShell`, LOCKED−h05 · connectPins 기본)이 등재되며 12→13.
-    //    내역: LOCKED−h05 7 + OPEN 4 + EXPLORE 2.
+    //    TRIP-783 h공통 셸(`MapSheetShell`, LOCKED−h05 · connectPins 기본)이 등재되며 12→13,
+    //    TRIP-710 d06 미니맵(`PlaceDetailScreen`, LOCKED−h05 · connectPins 미전달=기본)으로 13→14.
+    //    내역: LOCKED−h05 8 + OPEN 4 + EXPLORE 2.
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(13);
+    expect(defaultTags).toHaveLength(14);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);

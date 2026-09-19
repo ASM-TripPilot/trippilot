@@ -528,8 +528,13 @@ export function TripNewStep1Page({
           router.push(
             savedPlaceList.length > 0
               ? {
+                  // TRIP-706(AC-4 · D5): 위저드 축은 d02 로 갈 때 select 모드로 통일한다
+                  // (전체 보기와 동형 — { mode:'select', region }). 종전 region 만에서 바뀜.
                   pathname: '/explore/saved-places',
-                  params: { region: destinations.map((d) => d.region) },
+                  params: {
+                    mode: 'select',
+                    region: destinations.map((d) => d.region),
+                  },
                 }
               : {
                   pathname: '/explore/places',
@@ -538,9 +543,13 @@ export function TripNewStep1Page({
           )
         }
         onPressSeeAll={() =>
+          // TRIP-706(AC-4 · D5): 전체 보기도 더 담기 d02 와 동형으로 region 을 함께 싣는다.
           router.push({
             pathname: '/explore/saved-places',
-            params: { mode: 'select' },
+            params: {
+              mode: 'select',
+              region: destinations.map((d) => d.region),
+            },
           })
         }
         canProceed={canProceed}

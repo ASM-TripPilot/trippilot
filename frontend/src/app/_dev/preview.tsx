@@ -49,6 +49,9 @@ import { DailyReflectionScreen } from '@/features/reflection/ui/DailyReflectionS
 import { ShareCardScreen } from '@/features/reflection/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/features/reflection/ui/TravelStyleScreen';
 import { TripSummaryScreen } from '@/features/reflection/ui/TripSummaryScreen';
+import { DestinationDetailScreen } from '@/features/explore/ui/DestinationDetailScreen';
+import { MustVisitPickScreen } from '@/features/explore/ui/MustVisitPickScreen';
+import { PlaceDetailScreen as ExplorePlaceDetailScreen } from '@/features/explore/ui/PlaceDetailScreen';
 import { PlaceExploreScreen } from '@/features/explore/ui/PlaceExploreScreen';
 import { RegionPickerScreen } from '@/features/explore/ui/RegionPickerScreen';
 import { SavedPlaceListScreen } from '@/features/explore/ui/SavedPlaceListScreen';
@@ -454,6 +457,12 @@ const DRAFT_PREVIEW_PHOTOS: (string | null)[] = [
   require('@/assets/itinerary/draft-preview-2.jpg'),
   require('@/assets/itinerary/draft-preview-3.jpg'),
 ].map((source) => Image.resolveAssetSource?.(source)?.uri ?? null); // 웹에는 이 API 가 없다(네이티브 전용) — 옵셔널 호출로 웹은 null(사진 없는 카드)
+
+// TRIP-710 d06 프리뷰 히어로 — 로컬 라이선스 에셋 재사용(assets/home/hero-view.jpg, CREDITS.md 有).
+// DRAFT_PREVIEW_PHOTOS 와 같은 패턴: jest 는 .uri 가 undefined 라 회색 자리, 실기만 사진(INV-1 안전).
+const PLACE_DETAIL_PREVIEW_IMAGE: string | null =
+  Image.resolveAssetSource?.(require('@/assets/home/hero-view.jpg'))?.uri ??
+  null;
 
 const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
   {
@@ -2764,6 +2773,84 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-706 — d02 select 모드 4얼굴(Figma 2437:1500·1666·1616·1639). props-only 직접 렌더.
+  // 체크 채움/빈 글리프·92px 에러 원·콜라주 벡터·순번 배지 원은 jest 사각이라 이 4키가 6-b 육안 자리.
+  {
+    key: 'saved-places-select',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 default',
+    login: null,
+    render: () => (
+      <MustVisitPickScreen
+        state={{ kind: 'results' }}
+        savedPlaces={PREVIEW_SAVED_PLACES}
+        selectedPoiIds={['p-1', 'p-2', 'p-3']}
+        onToggleSelect={noop}
+        onComplete={noop}
+        onPressAddMore={noop}
+        onRetry={noop}
+        onPressBrowse={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'saved-places-select-loading',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 loading',
+    login: null,
+    render: () => (
+      <MustVisitPickScreen
+        state={{ kind: 'loading' }}
+        savedPlaces={[]}
+        selectedPoiIds={[]}
+        onToggleSelect={noop}
+        onComplete={noop}
+        onPressAddMore={noop}
+        onRetry={noop}
+        onPressBrowse={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'saved-places-select-empty',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 empty',
+    login: null,
+    render: () => (
+      <MustVisitPickScreen
+        state={{ kind: 'empty' }}
+        savedPlaces={[]}
+        selectedPoiIds={[]}
+        onToggleSelect={noop}
+        onComplete={noop}
+        onPressAddMore={noop}
+        onRetry={noop}
+        onPressBrowse={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'saved-places-select-error',
+    band: 'd',
+    label: 'd02 · 꼭 갈 곳 고르기 error',
+    login: null,
+    render: () => (
+      <MustVisitPickScreen
+        state={{ kind: 'error' }}
+        savedPlaces={[]}
+        selectedPoiIds={[]}
+        onToggleSelect={noop}
+        onComplete={noop}
+        onPressAddMore={noop}
+        onRetry={noop}
+        onPressBrowse={noop}
+        onBack={noop}
+      />
+    ),
+  },
   // d01 탐색 랜딩(TRIP-201) — 3얼굴: 담은 곳 CTA / 담은 곳 0 안내 / 숙소 레인 실패 재시도.
   {
     key: 'explore-landing-default',
@@ -2818,6 +2905,78 @@ export const PREVIEW_STATES: PreviewState[] = [
         />,
         'explore'
       ),
+  },
+  {
+    // TRIP-709 — d05 목적지 상세 default(Figma 2176:2336). 세그 all 활성·숙소 담김 1건
+    // (savedKeys 첫 카드)·FAB 2단(하트+＋)이 한 화면에 보이게. 화면이 자체 BottomTabBar 를
+    // 그리므로 withShellTabBar 로 감싸지 않는다(props-only 직접 렌더). 세그 활성 흰칩·하트 분홍·
+    // FAB 위치·검색바 › 는 jest 사각이라 이 키가 6-b 육안 대조 자리.
+    key: 'destination-detail-default',
+    band: 'd',
+    label: 'd05 · 통합 검색 결과 default',
+    login: null,
+    render: () => (
+      <DestinationDetailScreen
+        regionName="부산"
+        onPressSearch={noop}
+        stayLane={{
+          error: false,
+          cards: EXPLORE_STAY_CARDS,
+          onRetry: noop,
+          onSeeAll: noop,
+          onPressCard: noop,
+          savedKeys: ['yanolja:1'],
+          pendingKeys: [],
+          onToggleSave: noop,
+          saveError: false,
+          onDismissSaveError: noop,
+        }}
+        placeLane={{
+          error: false,
+          cards: EXPLORE_LANDING_PLACE_LANE.cards,
+          onRetry: noop,
+          onSeeAll: noop,
+          onPressCard: noop,
+        }}
+        onPressTab={noop}
+        onPressCreateTrip={noop}
+        savedMenu={{
+          open: false,
+          savedCount: 3,
+          onToggle: noop,
+          onPressSavedPlaces: noop,
+          onPressSavedStays: noop,
+        }}
+      />
+    ),
+  },
+  {
+    // TRIP-710 — d06 장소 상세 default(Figma 1907:1083). props-only 순수 뷰라 직접 렌더한다.
+    // category 는 PoiCategory enum('문화') — Figma 라벨 '미술관'·'전시'는 계약 밖(tsc 거부). 부제
+    // 앞 흰 핀·미니맵 단일 핀 지도(viewOnly)·데이터 없는 4구획 부재가 jest 사각이라 이 키가 6-b
+    // 육안 대조 자리(미니맵 타일은 네이티브 재빌드 후에만 뜸). 히어로는 로컬 에셋 재사용(회색↔사진).
+    key: 'place-detail-default',
+    band: 'd',
+    label: 'd06 · 장소 상세 default',
+    login: null,
+    render: () => (
+      <ExplorePlaceDetailScreen
+        place={{
+          poiId: 'busan-moca',
+          nameKo: '부산시립미술관',
+          category: '문화',
+          lat: 35.1689,
+          lng: 129.1355,
+          region: '부산 해운대구',
+          openingHours: '10:00~18:00 (월 휴관)',
+          imageUrl: PLACE_DETAIL_PREVIEW_IMAGE,
+          tags: ['미술', '실내', '취향매칭', '비와도좋음'],
+          savedCount: 128,
+          dataStatus: 'ACTIVE',
+        }}
+        saved={false}
+      />
+    ),
   },
   // TRIP-711 — `explore-landing-empty-bridge`·`explore-landing-stay-error` 프리뷰 키 삭제
   // (G5, 화면 코드는 유지 — 담은 곳 0 브리지·숙소 레인 실패는 회선 조절로 실화면 재현).
