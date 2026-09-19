@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import type { Region } from '@/shared/api/generated/schemas';
 import { RegionLevel } from '@/shared/api/generated/schemas';
@@ -165,6 +170,24 @@ describe('AC-1b · 인기 여행지 가로 스트립 (TRIP-650)', () => {
     expect(screen.queryByText('미추홀구')).toBeNull();
     fireEvent.press(card);
     expect(screen.getByText('미추홀구')).toBeOnTheScreen();
+  });
+
+  it('TRIP-707 — 첫 카드에 인기 배지가 붙고, 태그라인(로컬 카탈로그)이 뜬다', () => {
+    render(<RegionPickerScreen {...props({ query: '' })} />);
+
+    // 인기 배지는 정확히 첫 카드(인천/28)에만. 총 1개 + 그 1개가 첫 카드 서브트리 안이라야
+    // "index===0"가 실제로 잠긴다(code-critic 경고-1: 총 개수만 보면 배지가 둘째 카드로 옮겨가도
+    // green — 첫 카드 소속까지 봐야 한다).
+    const firstCard = screen.getByTestId('explore-region-popular-28');
+    const badge = within(firstCard).getByTestId('explore-region-popular-badge');
+    expect(within(badge).getByText('인기')).toBeOnTheScreen();
+    expect(screen.getAllByTestId('explore-region-popular-badge')).toHaveLength(
+      1
+    );
+
+    // 인천(28)·강원(51) 태그라인이 로컬 카탈로그(POPULAR_TAGLINE)에서 온다(이 CATALOG 의 두 시/도).
+    expect(screen.getByText('항구 · 근대')).toBeOnTheScreen();
+    expect(screen.getByText('산 · 휴식')).toBeOnTheScreen();
   });
 });
 

@@ -1723,9 +1723,10 @@ export const PREVIEW_STATES: PreviewState[] = [
   //    프리뷰에서 시/도 행(인천·서울·강원·충북 등)을 **직접 눌러** 상세로 들어가 확인한다
   //    (엣지 표본은 `PREVIEW_REGIONS` 주석 참조: 인천 happy path·강원 sido=null·충북 묶음).
   {
+    // TRIP-707: 숙소 지역 선택은 e 밴드(e00)로 이관 — d 밴드는 여행지 선택(d03)만 남긴다.
     key: 'stay-region-default',
-    band: 'd',
-    label: 'd03 · 지역 선택 숙소',
+    band: 'e',
+    label: 'e00 · 숙소 지역 선택 default',
     login: null,
     render: () => (
       <RegionPickerScreen
@@ -1742,9 +1743,10 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    key: 'stay-region-trip',
+    // TRIP-707: `stay-region-trip` → `region-picker-default` 개명(d03 여행지 선택 default).
+    key: 'region-picker-default',
     band: 'd',
-    label: 'd03 · 지역 선택 여행지',
+    label: 'd03 · 여행지 선택 default',
     login: null,
     render: () => (
       // BR-U1-07 확인용 — 같은 컴포넌트에서 카피만 바뀌고 '내 주변'이 사라진다
