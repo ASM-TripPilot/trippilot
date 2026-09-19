@@ -1664,18 +1664,19 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'c09b · 취향 2/2',
     login: null,
     render: () => (
+      // TRIP-719 픽스처 — Figma 1774:2258 선택 상태(예산 중간·동행 친구·음식 2종·이동 대중교통).
+      // 값 도메인은 서버 enum 유지(G3)라 slug 는 코드 계약값(friends·korean·japanese·transit).
       <PrefStep2Screen
-        selectedBudget={null}
-        selectedCompanions={null}
+        selectedBudget="mid"
+        selectedCompanions={['friends']}
         selectedActivities={null}
-        selectedFoods={null}
-        selectedTransports={null}
+        selectedFoods={['korean', 'japanese']}
+        selectedTransports={['transit']}
         onToggleBudget={noop}
         onToggleCompanion={noop}
         onToggleActivity={noop}
         onToggleFood={noop}
         onToggleTransport={noop}
-        onBack={noop}
         onDone={noop}
         onSkipAll={noop}
       />
