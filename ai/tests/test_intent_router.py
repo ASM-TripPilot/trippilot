@@ -196,6 +196,40 @@ def test_unextractable_arguments_do_not_break_routing() -> None:
     assert match.match_route is MatchRoute.CONFIDENT and match.slots == {}
 
 
+def test_overlong_utterance_is_refused_not_truncated() -> None:
+    """길이 상한 초과는 **거절**이지 자르기가 아니다 (프롬프트 인젝션 방어).
+
+    상한이 없으면 임의 길이가 그대로 2·3차 프롬프트에 실린다 — 비용·지연이 입력에 비례하고
+    긴 입력은 지시문을 숨길 자리를 준다. 잘라 내면 뜻이 바뀐 발화를 사용자 것인 양 처리하게
+    되므로(INV-4: 조용한 변형 금지) 사유를 싣고 폴백한다.
+    """
+    router = _scripted_router()  # 게이트웨이 미주입 — LLM 을 부르면 그 자리에서 터진다
+    match = router.route("확" * 501, _TID, _NOW)
+    assert match.match_route is MatchRoute.FALLBACK
+    assert match.intent is Intent.OUT_OF_SCOPE
+    assert "utterance_too_long" in match.reason
+
+
+def test_length_is_measured_after_normalisation() -> None:
+    """공백·제어문자를 섞어 상한을 우회하는 입력은 정규화 **뒤** 길이로 판정된다."""
+    router = _scripted_router(extra_angles={"확실한 질문": 0.0})
+    padded = "확실한" + " " * 2000 + "질문"
+    match = router.route(padded, _TID, _NOW)
+    assert match.match_route is MatchRoute.CONFIDENT  # 정규화하면 6자다
+
+
+def test_utterance_at_the_cap_still_routes() -> None:
+    """상한 자체는 통과해야 한다 — off-by-one 으로 정상 발화를 막으면 안 된다."""
+    router = _scripted_router(extra_angles={"확" * 500: 0.0})
+    match = router.route("확" * 500, _TID, _NOW)
+    assert match.match_route is not MatchRoute.FALLBACK or "too_long" not in (match.reason or "")
+
+
+def test_config_rejects_a_nonpositive_cap() -> None:
+    with pytest.raises(ValueError, match="max_utterance_chars"):
+        IntentRouterConfig(max_utterance_chars=0)
+
+
 # ── 2차: 의도 혼재 → 유사질문 투표 ──────────────────────────────────────
 
 
