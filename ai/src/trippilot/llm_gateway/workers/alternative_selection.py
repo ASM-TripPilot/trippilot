@@ -16,6 +16,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 
+# 제3자 문자열(웹 수집 상호명·위키 발췌·네이버 스니펫)은 줄에 넣기 전에 한 줄로 누른다 —
+# 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
+from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
@@ -60,9 +63,11 @@ def _candidate_line(poi: Poi, knowledge: Mapping[str, str]) -> str:
     읽는다 — 원천 커버리지가 균일하지 않아(위키백과 실측 문화 25% ↔ 카페 2.5%)
     문서 없는 후보가 다수인 구간이 정상이다. 그 사실은 프롬프트가 따로 말한다.
     """
-    line = f"- {poi.poi_id} | {_category_label(poi)} | {poi.name}"
+    line = f"- {poi.poi_id} | {_category_label(poi)} | {inline(poi.name)}"
     doc = knowledge.get(poi.source_ref or "")
-    return f"{line} | {doc}" if doc else line
+    # KB-5 문서는 위키백과 본문이다 — 문단 구분 줄바꿈이 **정상적으로** 들어 있어
+    # 누르지 않으면 후보 한 줄이 여러 줄로 터진다(실측: 마크다운 제목까지 열린다).
+    return f"{line} | {inline(doc)}" if doc else line
 
 
 def build_alternative_selection_vars(

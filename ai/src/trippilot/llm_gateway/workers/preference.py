@@ -26,6 +26,9 @@ import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
+# 제3자 문자열(웹 수집 상호명·위키 발췌·네이버 스니펫)은 줄에 넣기 전에 한 줄로 누른다 —
+# 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
+from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi, TypedResult
@@ -60,7 +63,7 @@ def build_prompt_vars(pool: CandidatePool, persona: PersonaSummary) -> dict[str,
     후보는 poi_id·카테고리·상호명만 — Poi의 coord·avg_cost 등은 넣지 않는다.
     """
     candidates = "\n".join(
-        f"- {p.poi_id} | {p.category.value} | {p.name}"
+        f"- {p.poi_id} | {p.category.value} | {inline(p.name)}"
         for p in sorted(pool.pois, key=lambda p: str(p.poi_id))
     )
     return {

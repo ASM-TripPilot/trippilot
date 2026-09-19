@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
+# 제3자 문자열(웹 수집 상호명·위키 발췌·네이버 스니펫)은 줄에 넣기 전에 한 줄로 누른다 —
+# 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
+from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
@@ -24,7 +27,7 @@ def build_explanation_vars(
         poi = by_id.get(pid)
         if poi is None:
             raise ValueError(f"슬롯 poi_id가 풀 밖: {pid} (호출측 버그)")
-        lines.append(f"{order}. {poi.poi_id} | {poi.category.value} | {poi.name}")
+        lines.append(f"{order}. {poi.poi_id} | {poi.category.value} | {inline(poi.name)}")
     return {
         "taste_tags": ", ".join(t.value for t in persona.taste_tags) or "미설정",
         # 미설정을 SOLO 로 적으면 선택 안 한 사람을 혼자 여행자로 단정한다 —

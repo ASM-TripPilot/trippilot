@@ -15,6 +15,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Sequence
 
+# 제3자 문자열(웹 수집 상호명·위키 발췌·네이버 스니펫)은 줄에 넣기 전에 한 줄로 누른다 —
+# 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
+from trippilot.llm_gateway.prompts import inline
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
 from trippilot.domain.persona import PersonaSummary
@@ -46,8 +49,8 @@ def build_alternative_explanation_vars(
         slot = by_id.get(slot_id)
         seen.add(alt_id)
         lines.append(
-            f"{len(lines) + 1}. {alt.poi_id} | {alt.category.value} | {alt.name}"
-            f" | 대신: {slot.name if slot is not None else '(미등록 장소)'}"
+            f"{len(lines) + 1}. {alt.poi_id} | {alt.category.value} | {inline(alt.name)}"
+            f" | 대신: {inline(slot.name) if slot is not None else '(미등록 장소)'}"
         )
     return {
         "taste_tags": ", ".join(t.value for t in persona.taste_tags) or "미설정",

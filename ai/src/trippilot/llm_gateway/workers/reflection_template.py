@@ -15,6 +15,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
+# 제3자 문자열(웹 수집 상호명·위키 발췌·네이버 스니펫)은 줄에 넣기 전에 한 줄로 누른다 —
+# 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
+from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateContext
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
@@ -31,11 +34,13 @@ def build_reflection_template_vars(request: ReflectionRequest) -> dict[str, str]
     """
     visits = "\n".join(
         f"- poi:{i} | {v.ref.date.isoformat()} | {v.order_in_day}번째"
-        f" | {v.ref.poi_id} | {v.category} | {v.poi_name} | 사진 {v.photo_count}장"
+        f" | {v.ref.poi_id} | {inline(v.category)} | {inline(v.poi_name)}"
+        f" | 사진 {v.photo_count}장"
         for i, v in enumerate(request.visits)
     )
     events = "\n".join(
-        f"- {e.kind.value} | {e.date.isoformat()} | {e.detail}" for e in request.events
+        f"- {e.kind.value} | {e.date.isoformat()} | {inline(e.detail)}"
+        for e in request.events
     )
     return {
         "kind": request.kind.value,
