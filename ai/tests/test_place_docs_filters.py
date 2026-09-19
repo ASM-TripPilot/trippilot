@@ -97,3 +97,31 @@ def test_저장_상한은_표시_상한보다_넉넉하다() -> None:
     from trippilot.poi_curation.place_docs import MAX_TEXT_CHARS
 
     assert MAX_TEXT_CHARS > MAX_DOC_CHARS
+
+
+# ── 수집기 묶음 크기 — TextExtracts 상한 ────────────────────────────
+
+
+def test_위키_묶음이_TextExtracts_상한을_넘지_않는다() -> None:
+    """넘기면 본문이 **조용히** 잘린다 — page 는 40개 오는데 extract 는 20개다.
+
+    실측(2026-09-19): 반드시 존재하는 제목 40건 요청 → page 40 · extract 20 ·
+    `continue={"excontinue": 20}`. 경고도 오류도 없어서 "그 문서에 도입부가 없다"와
+    구별이 안 됐고, 첫 수집에서 문서 12건이 그렇게 사라졌다.
+
+    이 상수를 올리려는 사람은 **`prop=extracts` 상한부터 확인해야 한다** —
+    `titles` 가 50까지 받는다는 것은 근거가 안 된다(그건 다른 상한이다).
+    """
+    import importlib.util
+    import pathlib
+
+    path = pathlib.Path(__file__).resolve().parent.parent / "scripts" / "collect_place_docs.py"
+    spec = importlib.util.spec_from_file_location("collect_place_docs", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module._WIKI_BATCH <= 20, (
+        f"_WIKI_BATCH={module._WIKI_BATCH} 가 TextExtracts 상한 20 을 넘는다 — "
+        "초과분은 경고 없이 버려진다"
+    )
