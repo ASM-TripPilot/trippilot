@@ -24,6 +24,7 @@
 - `src/__tests__/devPreviewDeepLink.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewDraft.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewExplore.test.tsx`  →  (export 없음)
+- `src/__tests__/devPreviewExploreLanding.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewHome.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewMap.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewPref.test.tsx`  →  (export 없음)
@@ -377,7 +378,7 @@
 
 ## src/features/explore/ui/
 - `src/features/explore/ui/DestinationDetailScreen.tsx`  →  DestinationDetailScreenProps · DestinationDetailScreen
-- `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · InfoGlyph
+- `src/features/explore/ui/ExploreGlyphs.tsx`  →  SuitcaseGlyph · CloseGlyph · PlusGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · InfoGlyph
 - `src/features/explore/ui/ExploreLandingScreen.tsx`  →  ExploreLandingScreenProps · ExploreLandingScreen
 - `src/features/explore/ui/PartialFailureBanner.tsx`  →  PartialFailureBanner
 - `src/features/explore/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
@@ -1298,4 +1299,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 874개 파일
+합계 875개 파일

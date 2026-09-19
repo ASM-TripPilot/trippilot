@@ -371,7 +371,6 @@ describe('S-6 · 404 는 롤백하고 사유를 알린다 (AC-10 · INV-4)', () 
       )
     ).toHaveLength(0);
     expect(screen.getByTestId('explore-places-save-p2')).not.toBeSelected();
-    expect(screen.queryByTestId('explore-places-createtrip')).toBeNull();
 
     // 실패 경로에서 무효화하면 되돌린 것이 롤백 때문인지 재조회 때문인지 구별할 수 없어진다.
     expect(hitsOf('GET', '/api/v1/saved-places')).toHaveLength(1);

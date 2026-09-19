@@ -295,12 +295,17 @@ const STAY_DETAIL_PREVIEW_ITEM: StayItem = {
 
 // 가볼 곳 가로 레인(TRIP-470) — 프리뷰에서 레인을 눈으로 보기 위한 표본 카드. `as const` 밖에
 // 둬야 cards 가 readonly 튜플로 굳지 않는다(placeLane.cards 는 PlaceCardVM[] 요구).
+// 장소 가로 레인(TRIP-470) — 프리뷰 표본 카드. TRIP-703 으로 Figma d01(1672:1183) 정합상 5장.
+// `imageUrl` 미지정(=회색 자리, INV-1 — 실사진 소싱은 6-b·후속). `as const` 밖에 둬야 cards 가
+// readonly 튜플로 안 굳는다(placeLane.cards 는 PlaceCardVM[] 요구).
 const EXPLORE_LANDING_PLACE_LANE = {
   error: false,
   cards: [
     { poiId: 'p1', name: '감천문화마을', region: '사하구' },
     { poiId: 'p2', name: '광안리 해변', region: '수영구' },
-    { poiId: 'p3', name: '해운대 블루라인', region: '해운대구' },
+    { poiId: 'p3', name: '전포 카페거리', region: '부산진구' },
+    { poiId: 'p4', name: '자갈치시장', region: '중구' },
+    { poiId: 'p5', name: '해운대 블루라인', region: '해운대구' },
   ],
   onRetry: noop,
   onPressCard: noop,
@@ -309,10 +314,11 @@ const EXPLORE_LANDING_PLACE_LANE = {
 const EXPLORE_LANDING_BASE = {
   heading: {
     title: '무엇을 둘러볼까요?',
-    subtitle: '숙소·장소·여행자 일정을 둘러보고 담아요',
+    subtitle: '숙소·장소를 둘러보고 담아요',
   },
   onPressSearch: noop,
   onPressPlaces: noop,
+  onPressCreateTrip: noop,
   placeLane: EXPLORE_LANDING_PLACE_LANE,
 } as const;
 
@@ -1717,9 +1723,10 @@ export const PREVIEW_STATES: PreviewState[] = [
   //    프리뷰에서 시/도 행(인천·서울·강원·충북 등)을 **직접 눌러** 상세로 들어가 확인한다
   //    (엣지 표본은 `PREVIEW_REGIONS` 주석 참조: 인천 happy path·강원 sido=null·충북 묶음).
   {
+    // TRIP-707: 숙소 지역 선택은 e 밴드(e00)로 이관 — d 밴드는 여행지 선택(d03)만 남긴다.
     key: 'stay-region-default',
-    band: 'd',
-    label: 'd03 · 지역 선택 숙소',
+    band: 'e',
+    label: 'e00 · 숙소 지역 선택 default',
     login: null,
     render: () => (
       <RegionPickerScreen
@@ -1736,9 +1743,10 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    key: 'stay-region-trip',
+    // TRIP-707: `stay-region-trip` → `region-picker-default` 개명(d03 여행지 선택 default).
+    key: 'region-picker-default',
     band: 'd',
-    label: 'd03 · 지역 선택 여행지',
+    label: 'd03 · 여행지 선택 default',
     login: null,
     render: () => (
       // BR-U1-07 확인용 — 같은 컴포넌트에서 카피만 바뀌고 '내 주변'이 사라진다
@@ -2682,27 +2690,36 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 나머지 얼굴(loading·empty·filter-zero·error·게스트)은 실화면에서 그대로 재현되므로
   // 여기 키를 늘리지 않는다.
   {
-    key: 'places-results',
+    // TRIP-708: `places-results` → `places-default` 개명(Figma 1692:1183 default).
+    key: 'places-default',
     band: 'd',
-    label: 'd04 · 장소 탐색 결과',
+    label: 'd04 · 장소 탐색 default',
     login: null,
-    render: () => (
-      <PlaceExploreScreen
-        places={PREVIEW_PLACES}
-        savedPoiIds={PREVIEW_SAVED_POI_IDS}
-        selectedCategory={null}
-        searchText=""
-        onSelectCategory={noop}
-        onChangeSearchText={noop}
-        onToggleSave={noop}
-        onPressCreateTrip={noop}
-      />
-    ),
+    // TRIP-708 완료 조건: d04 는 (tabs) 밖 라우트라 복제 탭바가 프리뷰에도 보여야 한다. 탭바는
+    // page 소유(화면 순수성)라 순수 화면만 태우면 안 보이므로, magazine 선례처럼 withShellTabBar
+    // 로 감싸 셸 탭바(탐색 활성)를 얹는다(실 라우트는 PlaceExplorePage 가 동일 탭바를 그린다).
+    render: () =>
+      withShellTabBar(
+        <PlaceExploreScreen
+          places={PREVIEW_PLACES}
+          savedPoiIds={PREVIEW_SAVED_POI_IDS}
+          selectedCategory={null}
+          searchText=""
+          onSelectCategory={noop}
+          onChangeSearchText={noop}
+          onToggleSave={noop}
+          onPressCreateTrip={noop}
+          onPressSavedPlaces={noop}
+          onPressFilter={noop}
+        />,
+        'explore'
+      ),
   },
   {
-    key: 'saved-places-results',
+    // TRIP-705: `saved-places-results` → `saved-places-default` 개명. Figma 1693:1183 default 6행.
+    key: 'saved-places-default',
     band: 'd',
-    label: 'd02 · 담은 장소 결과',
+    label: 'd02 · 담은 장소 default',
     login: null,
     render: () => (
       <SavedPlaceListScreen
@@ -2713,30 +2730,29 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // TRIP-394 — 해제(빈 하트) 엣지 상태. sp-1(p-2)·sp-3(p-7)만 released 로 빈 하트가 되고,
-  // 나머지는 찬 하트로 남는다(같은 목록에서 빈/찬을 대조). jest 는 색을 못 봐 실기 전용 자리.
   {
-    key: 'saved-places-released',
+    // TRIP-705: Figma 3614:2032 loading — 6행 스켈레톤 + 앱바 서브텍스트 + 회색 disabled CTA.
+    key: 'saved-places-loading',
     band: 'd',
-    label: 'd02 · 담은 장소 해제',
+    label: 'd02 · 담은 장소 loading',
     login: null,
     render: () => (
       <SavedPlaceListScreen
-        savedPlaces={PREVIEW_SAVED_PLACES}
-        releasedPoiIds={['p-2', 'p-7']}
+        savedPlaces={[]}
+        state={{ kind: 'loading' }}
         onPressRemove={noop}
-        onPressRestore={noop}
         onPressCreateTrip={noop}
         onPressBrowse={noop}
       />
     ),
   },
+  // TRIP-711 — `saved-places-released`(해제 빈 하트 엣지) 프리뷰 키 삭제(G5, 화면 코드는 유지).
   // TRIP-649 — 담은 장소 empty 얼굴. 결과 픽스처를 0곳으로(savedPlaces=[]) + 얼굴 판정 state를
   // empty 로 주입(얼굴은 배열 길이가 아니라 state.kind 로 갈린다). 삽화·"둘러보기" CTA 육안 자리.
   {
     key: 'saved-places-empty',
     band: 'd',
-    label: 'd02 · 담은 장소 0',
+    label: 'd02 · 담은 장소 empty',
     login: null,
     render: () => (
       <SavedPlaceListScreen
@@ -2752,70 +2768,59 @@ export const PREVIEW_STATES: PreviewState[] = [
   {
     key: 'explore-landing-default',
     band: 'd',
-    label: 'd01 · 랜딩 담은 곳 CTA',
+    label: 'd01 · 랜딩 default',
     login: null,
-    render: () => (
-      <ExploreLandingScreen
-        {...EXPLORE_LANDING_BASE}
-        stayLane={{
-          error: false,
-          cards: EXPLORE_STAY_CARDS,
-          onRetry: noop,
-          onSeeAll: noop,
-        }}
-        savedMenu={{
-          open: true,
-          savedCount: 3,
-          onToggle: noop,
-          onPressSavedPlaces: noop,
-          onPressSavedStays: noop,
-        }}
-      />
-    ),
+    // d01 은 (tabs)/explore 라 실앱에서 셸 탭바(탐색 활성)가 뜬다 — 프리뷰도 실화면과 똑같이
+    // withShellTabBar('explore')로 얹는다(home 프리뷰 선례). TRIP-703 default(1672:1183)는
+    // 담은 곳 메뉴 접힘(open:false).
+    render: () =>
+      withShellTabBar(
+        <ExploreLandingScreen
+          {...EXPLORE_LANDING_BASE}
+          stayLane={{
+            error: false,
+            cards: EXPLORE_STAY_CARDS,
+            onRetry: noop,
+            onSeeAll: noop,
+          }}
+          savedMenu={{
+            open: false,
+            savedCount: 3,
+            onToggle: noop,
+            onPressSavedPlaces: noop,
+            onPressSavedStays: noop,
+          }}
+        />,
+        'explore'
+      ),
   },
   {
-    key: 'explore-landing-empty-bridge',
+    // TRIP-704: Figma loading(3612:2006) — 숙소 2·장소 3 스켈레톤, FAB·폴백 없음. 헤딩·검색·
+    // 섹션 제목은 실텍스트. stayLane·savedMenu 값은 isLoading 이 가려 실제로 안 그려진다.
+    key: 'explore-landing-loading',
     band: 'd',
-    label: 'd01 · 랜딩 담은 곳 0',
+    label: 'd01 · 랜딩 loading',
     login: null,
-    render: () => (
-      <ExploreLandingScreen
-        {...EXPLORE_LANDING_BASE}
-        stayLane={{
-          error: false,
-          cards: EXPLORE_STAY_CARDS,
-          onRetry: noop,
-          onSeeAll: noop,
-        }}
-        savedMenu={{
-          open: false,
-          savedCount: 0,
-          onToggle: noop,
-          onPressSavedPlaces: noop,
-          onPressSavedStays: noop,
-        }}
-      />
-    ),
+    // d01 로딩도 실앱 탐색 탭이라 셸 탭바(탐색 활성)가 뜬다 — 프리뷰도 똑같이 얹는다.
+    render: () =>
+      withShellTabBar(
+        <ExploreLandingScreen
+          {...EXPLORE_LANDING_BASE}
+          isLoading
+          stayLane={{ error: false, cards: [], onRetry: noop, onSeeAll: noop }}
+          savedMenu={{
+            open: false,
+            savedCount: 0,
+            onToggle: noop,
+            onPressSavedPlaces: noop,
+            onPressSavedStays: noop,
+          }}
+        />,
+        'explore'
+      ),
   },
-  {
-    key: 'explore-landing-stay-error',
-    band: 'd',
-    label: 'd01 · 랜딩 숙소 레인 실패',
-    login: null,
-    render: () => (
-      <ExploreLandingScreen
-        {...EXPLORE_LANDING_BASE}
-        stayLane={{ error: true, cards: [], onRetry: noop, onSeeAll: noop }}
-        savedMenu={{
-          open: false,
-          savedCount: 2,
-          onToggle: noop,
-          onPressSavedPlaces: noop,
-          onPressSavedStays: noop,
-        }}
-      />
-    ),
-  },
+  // TRIP-711 — `explore-landing-empty-bridge`·`explore-landing-stay-error` 프리뷰 키 삭제
+  // (G5, 화면 코드는 유지 — 담은 곳 0 브리지·숙소 레인 실패는 회선 조절로 실화면 재현).
   // g01 신 default(TRIP-665·TRIP-732, Figma `3742:2068`) — 꼭 갈 곳 시드 얼굴. 요약 5행은
   // 두 키 다 채워진 2톤 객체(`TRIP_WIZARD_BASE`)이고, 스트립의 `mustVisits` 를 Figma 6장으로 채운다.
   // jest 는 요약 sub caption 회색·온보딩 스파클/분홍·카드 그림자·스트립 카드 픽셀·진행바 색을 못

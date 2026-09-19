@@ -86,6 +86,22 @@ const COPY: Record<
   },
 };
 
+/**
+ * 인기 여행지 태그라인 로컬 카탈로그(TRIP-707) — 시/도 코드(법정동 앞 2자리)별 한 줄 소개.
+ * 서버 `Region` 계약엔 태그라인 필드가 없어(INV-1 — 발명 금지) 로컬 config 로 얹는다. 서버가
+ * 새 시/도를 줘도 매핑이 없으면 태그라인은 그냥 안 보인다(폴백 안전). 사진·"도시 단위(경주·강릉)"
+ * 카탈로그는 서버 backing·press 정책·에셋이 미정이라 후속(6-b·데이터 정책) — 여기선 시/도 백업
+ * 스트립에 태그라인·인기 배지만 얹어 Figma 비주얼을 근사한다.
+ */
+const POPULAR_TAGLINE: Record<string, string> = {
+  '11': '도심 · 감성',
+  '26': '바다 · 야경',
+  '28': '항구 · 근대',
+  '50': '섬 · 자연',
+  '51': '산 · 휴식',
+  '43': '내륙 · 힐링',
+};
+
 /** 선택 가능·후보풀 있음 지역 카드 — 누르면 선택된다. */
 function SelectableCard({
   region,
@@ -204,7 +220,7 @@ function SidoRow({
     <Pressable
       testID={`explore-region-sido-${group.sidoCode}`}
       onPress={onOpen}
-      className="mb-sm flex-row items-center justify-between rounded-card border border-hairline-strong bg-canvas px-md py-3"
+      className="mb-sm h-[48px] flex-row items-center justify-between rounded-card bg-surface-soft px-md"
     >
       <Text className="font-noto-bold text-card-title font-bold text-ink">
         {group.sidoName}
@@ -286,23 +302,42 @@ function PopularStrip({
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={{ gap: 12, paddingRight: 8 }}
     >
-      {popular.map((group) => {
+      {popular.map((group, index) => {
         const [from, to] = regionTint(group.sidoCode);
+        const tagline = POPULAR_TAGLINE[group.sidoCode];
         return (
           <Pressable
             key={group.sidoCode}
             testID={`explore-region-popular-${group.sidoCode}`}
             onPress={() => onOpenSido(group.sidoCode)}
-            className="w-[140px] overflow-hidden rounded-card bg-canvas"
+            className="w-[150px] overflow-hidden rounded-card bg-canvas"
           >
-            <LinearGradient
-              colors={[from, to]}
-              style={{ height: 100, width: '100%' }}
-            />
-            <View className="px-sm py-sm">
+            <View>
+              <LinearGradient
+                colors={[from, to]}
+                style={{ height: 120, width: '100%' }}
+              />
+              {/* 첫 카드에만 인기 배지(Figma) — 연배경 칩(primary-pale + primary). */}
+              {index === 0 ? (
+                <View
+                  testID="explore-region-popular-badge"
+                  className="absolute left-sm top-sm rounded-[12px] bg-primary-pale px-sm py-[2px]"
+                >
+                  <Text className="font-noto-bold text-micro font-bold text-primary">
+                    인기
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <View className="gap-[2px] px-sm py-sm">
               <Text className="font-noto-bold text-card-title font-bold text-ink">
                 {group.sidoName}
               </Text>
+              {tagline ? (
+                <Text className="font-noto text-caption text-muted">
+                  {tagline}
+                </Text>
+              ) : null}
             </View>
           </Pressable>
         );
@@ -356,7 +391,7 @@ export function RegionPickerScreen({
           {copy.subtitle}
         </Text>
 
-        <View className="mt-lg flex-row items-center gap-sm rounded-pill border border-hairline-strong px-md py-3">
+        <View className="mt-lg h-[58px] flex-row items-center gap-sm rounded-input border border-hairline-strong px-md">
           <SearchGlyph />
           <TextInput
             testID="explore-region-search"
