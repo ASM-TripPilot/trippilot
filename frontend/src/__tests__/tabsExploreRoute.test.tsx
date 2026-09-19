@@ -389,3 +389,42 @@ describe('🟢 470 — 가볼 곳 레인: 장소 카드 렌더 + press → d06',
     expect(mockUseGetPlaces).toHaveBeenCalledWith({ limit: 8 });
   });
 });
+
+describe('🔴 AC-704 · 로딩 배선 — stay/places isPending → 로딩 스켈레톤 (TRIP-704)', () => {
+  // 코드-비평 경고-1a 봉합: 로딩 얼굴을 프로덕션에서 뜨게 하는 유일한 배선
+  // (`isLoading: stay.isPending || places.isPending`)을 실제로 태우는 심판이 없었다.
+  // 목이 isPending:false 로 고정돼 이 분기를 한 번도 안 탔다 — 아래가 그 분기를 연다.
+  it('숙소 조회가 대기(isPending) 중이면 로딩 스켈레톤을 그린다', () => {
+    mockUseStaySearch.mockReturnValue({
+      data: undefined,
+      isError: false,
+      isPending: true,
+    } as unknown as ReturnType<typeof useStaySearch>);
+
+    render(<ExploreRoute />);
+
+    // 스켈레톤이 뜨고, 실카드·에러·폴백은 없다.
+    expect(
+      screen.getByTestId('explore-landing-skeleton-stay-0')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('explore-landing-skeleton-place-0')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-lane-stay-retry')).toBeNull();
+  });
+
+  it('장소 조회가 대기(isPending) 중이어도 로딩 스켈레톤을 그린다 (|| 배선)', () => {
+    mockUseGetPlaces.mockReturnValue({
+      data: undefined,
+      isError: false,
+      isPending: true,
+      refetch: jest.fn(),
+    } as unknown as ReturnType<typeof useGetPlaces>);
+
+    render(<ExploreRoute />);
+
+    expect(
+      screen.getByTestId('explore-landing-skeleton-place-0')
+    ).toBeOnTheScreen();
+  });
+});

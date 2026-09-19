@@ -65,3 +65,24 @@ describe('dev 프리뷰 d01 default — Figma 정합(open:false·숙소3·장소
     expect(screen.queryByTestId('explore-lane-itin')).toBeNull();
   });
 });
+
+describe('dev 프리뷰 d01 loading — Figma 정합(스켈레톤·FAB 없음)', () => {
+  it('explore-landing-loading 는 숙소2·장소3 스켈레톤 · FAB 없음', () => {
+    mockSearchParams.state = 'explore-landing-loading';
+
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('explore-landing')).toBeOnTheScreen();
+    // 스켈레톤 숙소 2·장소 3.
+    expect(
+      screen.getAllByTestId(/^explore-landing-skeleton-stay-/)
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByTestId(/^explore-landing-skeleton-place-/)
+    ).toHaveLength(3);
+    // 로딩 중엔 FAB·폴백 없음.
+    expect(screen.queryByTestId('explore-saved-menu-toggle')).toBeNull();
+    expect(screen.queryByTestId('explore-create-trip-fab')).toBeNull();
+    expect(screen.queryByTestId('explore-lane-place-empty')).toBeNull();
+  });
+});

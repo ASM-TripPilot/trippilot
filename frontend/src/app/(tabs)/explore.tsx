@@ -45,6 +45,7 @@ type LandingBase = Pick<
   | 'onPressSearch'
   | 'onPressPlaces'
   | 'onPressCreateTrip'
+  | 'isLoading'
   | 'placeLane'
   | 'savedMenu'
 > & {
@@ -105,6 +106,8 @@ export default function ExploreRoute(): ReactElement {
     // ＋ 여행 만들기 FAB → g01 위저드(TRIP-703). 화면은 순수 뷰라 라우터를 모르므로 목적지를
     // 여기(라우트)가 잇는다. base 스프레드라 guest·SavableStayLane 두 경로 모두 배선된다.
     onPressCreateTrip: () => router.push('/trips/new/step1'),
+    // 조회 대기 얼굴(TRIP-704) — 숙소·장소 둘 중 하나라도 첫 조회 중이면 로딩 스켈레톤을 보인다.
+    isLoading: stay.isPending || places.isPending,
     // 가볼 곳 가로 레인(TRIP-470) — 카드 press → d06 상세.
     placeLane: {
       error: places.isError,

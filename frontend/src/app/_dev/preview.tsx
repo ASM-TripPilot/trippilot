@@ -2781,6 +2781,28 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    // TRIP-704: Figma loading(3612:2006) — 숙소 2·장소 3 스켈레톤, FAB·폴백 없음. 헤딩·검색·
+    // 섹션 제목은 실텍스트. stayLane·savedMenu 값은 isLoading 이 가려 실제로 안 그려진다.
+    key: 'explore-landing-loading',
+    band: 'd',
+    label: 'd01 · 랜딩 loading',
+    login: null,
+    render: () => (
+      <ExploreLandingScreen
+        {...EXPLORE_LANDING_BASE}
+        isLoading
+        stayLane={{ error: false, cards: [], onRetry: noop, onSeeAll: noop }}
+        savedMenu={{
+          open: false,
+          savedCount: 0,
+          onToggle: noop,
+          onPressSavedPlaces: noop,
+          onPressSavedStays: noop,
+        }}
+      />
+    ),
+  },
+  {
     key: 'explore-landing-empty-bridge',
     band: 'd',
     label: 'd01 · 랜딩 담은 곳 0',

@@ -145,7 +145,10 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    `onboarding-nickname-taken`) 삭제로 164→161(-denied-dismissed 는 TRIP-717 에서 이미 삭제).
     //    login-cancelled·login-age-restriction 은 결정 확정(TRIP-720·721)대로 유지. devPreviewBandSort 는
     //    밴드 h·l 만 잠가 band c 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(161);
+    // ⚠️ TRIP-704: d01 랜딩 loading 프리뷰 키(`explore-landing-loading`, band `d`) 추가로
+    //    161→162. 오케 직접(경량) — preview.tsx 에 키 하나 추가하며 이 가드도 함께 올림.
+    //    devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(162);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
