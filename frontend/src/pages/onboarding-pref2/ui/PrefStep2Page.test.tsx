@@ -59,7 +59,7 @@ beforeEach(() => {
 });
 
 describe('PrefStep2Page — 복귀 시 선택값 보존 (AC2 · AC3 · 5-4)', () => {
-  it('1/2에서 고른 값이 2/2를 언마운트·재마운트해도 남고, back은 router.back()을 부른다', () => {
+  it('1/2에서 고른 값이 2/2를 언마운트·재마운트해도 남는다', () => {
     // 준비 — 1/2에서 이미 골랐다고 가정하고 스토어에 직접 선주입(스토어는 화면과 독립된
     // 모듈 싱글턴이라 이렇게 미리 채워도 된다 — §1 개념 박스).
     usePreferenceStore.getState().toggleStyle('rest');
@@ -71,13 +71,8 @@ describe('PrefStep2Page — 복귀 시 선택값 보존 (AC2 · AC3 · 5-4)', ()
     render(<PrefStep2Page />);
 
     // 단언 — japanese 칩이 여전히 선택 상태(스토어가 화면 수명과 무관함을 증명).
+    // TRIP-719: back chevron 제거로 back 배선 단언은 사라졌다(스토어 보존만 남는다).
     expect(screen.getByTestId('onboarding-pref2-food-japanese')).toBeSelected();
-
-    // 실행 — back chevron 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref2-back'));
-
-    // 단언 — router.back() 호출(1/2로 복귀 — 스토어는 그대로 살아있다).
-    expect(routerMock.back).toHaveBeenCalled();
   });
 });
 
@@ -126,13 +121,13 @@ describe('PrefStep2Page — 완료 시 서버에 취향 PUT (TRIP-471)', () => {
 });
 
 describe('PrefStep2Page — 일괄 탈출 (AC4 · 5-6)', () => {
-  it('skip-bottom을 탭하면 홈으로 replace하고, 이미 고른 styles는 그대로 남는다', () => {
+  it('skip-top을 탭하면 홈으로 replace하고, 이미 고른 styles는 그대로 남는다', () => {
     // 준비 — styles만 미리 선택된 상태.
     usePreferenceStore.getState().toggleStyle('rest');
     render(<PrefStep2Page />);
 
-    // 실행 — 하단 skip 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref2-skip-bottom'));
+    // 실행 — 상단 skip 탭(TRIP-719로 하단 링크 제거, 탈출구는 상단 하나).
+    fireEvent.press(screen.getByTestId('onboarding-pref2-skip-top'));
 
     // 단언 — 홈으로 replace.
     expect(routerMock.replace).toHaveBeenCalledWith('/');
@@ -248,12 +243,12 @@ describe('PrefStep2Page — 온보딩 완료 재평가 신호 발화 (AC-A2 · T
     expect(routerMock.replace).toHaveBeenCalledWith('/');
   });
 
-  it('일괄 탈출(skip-bottom)을 탭해도 재평가 신호를 발화하고 홈으로 replace 한다', () => {
+  it('일괄 탈출(skip-top)을 탭해도 재평가 신호를 발화하고 홈으로 replace 한다', () => {
     // 준비 — 렌더.
     render(<PrefStep2Page />);
 
-    // 실행 — 하단 '나중에 설정하고 시작' 탭.
-    fireEvent.press(screen.getByTestId('onboarding-pref2-skip-bottom'));
+    // 실행 — 상단 '나중에 설정하고 시작' 탭(TRIP-719로 하단 링크 제거).
+    fireEvent.press(screen.getByTestId('onboarding-pref2-skip-top'));
 
     // 단언 — 탈출 경로도 반드시 신호를 발화한다(하나만 고치면 다른 쪽 사용자가 갇힘) + replace 유지.
     expect(mockNotifyReeval).toHaveBeenCalledTimes(1);
