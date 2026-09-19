@@ -125,3 +125,31 @@ def test_prefilter_cut_properties(counts) -> None:
     assert set(zeroed) == before_cats - kept_cats          # 잔존 0 의 정의 그대로
     assert sum(cut.values()) == len(cands) - len(kept)
     assert list(zeroed) == sorted(zeroed, key=lambda c: c.value)   # 결정론
+
+
+def test_pace_retry_does_not_double_count_the_cut(caplog, monkeypatch) -> None:
+    """pace 로 해가 없어 무보정 재시도해도 같은 날 절단 기록은 1줄 — 빈도가 두 배로 세지면 안 된다."""
+    from dataclasses import replace
+    from trippilot.domain.itinerary import Pace
+
+    index, cands = _pool([(PoiCategory.SIGHT, 70, 0.9), (PoiCategory.FOOD, 5, 0.1)])
+    calls = []
+    real = OrToolsAssembler._solve_day
+
+    def first_fails(self, problem, day, used, budget_ms, **kw):
+        calls.append(problem.pace)
+        out = real(self, problem, day, used, budget_ms, **kw)
+        return None if problem.pace is not None else out   # pace 시도는 해 없음으로
+
+    monkeypatch.setattr(OrToolsAssembler, "_solve_day", first_fails)
+    problem = ItineraryProblem(
+        schedule_id=ScheduleId("s-908"), days=(_DAY,), candidates=tuple(cands),
+        fixed_blocks=(), budget=BudgetLevel.MID, transport=TransportMode.PUBLIC,
+        day_window=TimeWindow(datetime(2026, 8, 5, 9, 0, tzinfo=_KST),
+                              datetime(2026, 8, 5, 21, 0, tzinfo=_KST)),
+        seed=7, pace=list(Pace)[0])
+    with caplog.at_level(logging.INFO, logger="trippilot.assembly_engine.ortools_assembler"):
+        OrToolsAssembler(index, TravelEstimator(_CFG), _CFG).solve(problem, 200)
+
+    assert len(calls) == 2 and calls[1] is None          # 전제 — 재시도가 실제로 돌았다
+    assert len([r for r in caplog.records if "프리필터" in r.getMessage()]) == 1
