@@ -86,9 +86,9 @@ data class ReplanInput(
     val freeText: String?,
     val excludedPoiIds: List<UUID>,
     /**
-     * 아래 다섯은 전용 재계획 경계(`/ai/v1/itinerary/replan`, 연동 설계 §2)의 입력이다.
-     * 상대 계약이 출하되기 전까지 http 어댑터는 generate 재사용이라 **아직 와이어에 싣지 않는다** —
-     * 조립을 먼저 완성해 두는 것은 NEUTRAL_PREFERENCES 로 취향을 덮던 상태를 끝내기 위한 준비다(B-1).
+     * 아래 다섯은 전용 재계획 경계(`/ai/v1/itinerary/replan`, 연동 설계 §2)의 입력이고
+     * **지금은 전부 와이어에 실린다**(TRIP-854). 상대 계약이 열리기 전에는 generate 재사용이라
+     * 조립만 해 두고 버렸었다 — 그 기간 동안 재계획은 NEUTRAL_PREFERENCES 로 취향을 덮고 있었다.
      * 기본값을 두지 않는다 — 조립 지점이 값을 말하지 않고 조용히 빠지는 것을 컴파일이 막는다.
      */
     val companionType: String?,
@@ -224,6 +224,16 @@ data class ScheduleAgentOutput(
      * 필드가 없는 옛 AI 응답과도 같은 뜻이 되게 한다.
      */
     val unplacedMustVisits: List<UnplacedMustVisit> = emptyList(),
+    /**
+     * 그날 이동 총거리(km) — **재계획 응답에만 있다.** 생성 경로는 주지 않으므로 거기서는 null 이다.
+     *
+     * 화면 i08 이 "이동 −6.9km" 를 보여주려면 재계획 전후를 빼야 하는데, 그 뺄셈의 재료가 이 값이다.
+     * **백엔드가 다시 계산하지 않는다** — 거리는 상대의 조립 엔진이 소유한다(INV-2). 우리가 직선거리로
+     * 덧칠하면 화면의 −6.9km 와 상대가 푼 경로가 어긋난다.
+     *
+     * 단위는 km 이고 **소요시간은 여기에도 없다**(INV-3).
+     */
+    val totalDistanceKm: Double? = null,
 )
 
 /**

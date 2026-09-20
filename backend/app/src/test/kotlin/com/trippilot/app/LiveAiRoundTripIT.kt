@@ -4,8 +4,10 @@ import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.GenerationMode
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
+import com.trippilot.itinerarygeneration.domain.ReplanCurrentSlot
 import com.trippilot.itinerarygeneration.domain.ReplanInput
 import com.trippilot.itinerarygeneration.domain.ReplanScope
+import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
@@ -155,26 +157,34 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
      * 상대에 새 경로를 요구하지 않는 설계라, 실제로 수용되는지가 이 테스트의 전부다.
      */
     @Test
-    fun `재계획이 상대에 수용된다 — 잠금이 고정 블록으로 승격돼 나간다`() {
+    fun `재계획 전용 경계가 열 종을 다 싣고 수용된다`() {
         val output = agent.replan(
             ReplanInput(
                 tripId = UUID.randomUUID(), itineraryId = UUID.randomUUID(),
                 scope = ReplanScope.PARTIAL_SLOTS, destinations = listOf("제주"), fromInstant = Instant.now(), targetDate = today,
                 originLat = 33.45, originLng = 126.56, lockedBlocks = listOf(FixedBlock(poi, today, LocalTime.parse("09:00"), 60)),
-                reasons = listOf("비가 와요"), directives = listOf("실내로"), freeText = null,
+                // 사유·지시는 **상대 사전**의 값으로 보낸다 — 자연어를 보내면 전부 unknown 으로 돌아온다.
+                reasons = listOf("WEATHER"), directives = listOf("INDOOR"),
+                freeText = "비가 와서 실내 위주로 바꿔 주세요",
                 excludedPoiIds = emptyList(),
                 companionType = "친구", budgetLevel = "MID",
                 preferenceProfile = PreferenceProfile(
                     listOf("미식"), listOf("야경"), listOf("한식"), listOf("렌터카"), "알차게", listOf("친구"), false, "표준",
                 ),
-                currentSlots = emptyList(), savedPlaces = emptyList(),
-                requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 10_000L),
+                // 종전 경로(generate 재사용)에서는 **자리가 없어 버려지던 두 값**이다. 실물이 받는지가 핵심.
+                currentSlots = listOf(
+                    ReplanCurrentSlot(poi, LocalTime.parse("09:00"), LocalTime.parse("10:00"), true, false, "예약이 있어요"),
+                ),
+                savedPlaces = listOf(SavedPlaceRef(UUID.randomUUID(), "담아 둔 카페")),
+                requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 25_000L),
             ),
         )
 
         assertThat(output.solveMode).isNotNull()
+        // 거리는 **재계획에만 있는 값**이다. null 이면 상대가 안 준 것 — 단정하지 않고 기록만 남긴다.
         println("[LIVE-AI] replan → solveMode=${output.solveMode} days=${output.days.size} " +
-            "slots=${output.days.sumOf { it.slots.size }} isFallback=${output.isFallback}")
+            "slots=${output.days.sumOf { it.slots.size }} isFallback=${output.isFallback} " +
+            "totalDistanceKm=${output.totalDistanceKm}")
     }
 
     private fun candidatesInput() = SlotCandidatesInput(

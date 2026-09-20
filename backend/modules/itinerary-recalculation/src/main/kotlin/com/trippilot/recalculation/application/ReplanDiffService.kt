@@ -76,6 +76,10 @@ class ReplanDiffService(
             before = before,
             after = after,
             result = ReplanDiff.of(before, after),
+            // 재계획안의 이동 총거리(km). **변화량이 아니라 절대값**이다 — 비교하려면 원 일정의
+            // 거리도 있어야 하는데 `visit_slot` 에는 미터가 없다(있는 것은 표시 문자열뿐).
+            // 그래서 `totalDistanceDeltaM` 은 여전히 null 이고, 화면은 "이동 6.9km" 로만 쓴다.
+            totalDistanceKm = proposal.totalDistanceKm,
         )
     }
 
@@ -94,6 +98,8 @@ data class ReplanDiffView(
     val before: List<ReplanDiff.SlotView>,
     val after: List<ReplanDiff.SlotView>,
     val result: ReplanDiff.Result?,
+    /** 재계획안의 이동 총거리(km). 상대가 푼 값이고 **모르면 null** 이다(옛 초안·대역). */
+    val totalDistanceKm: Double? = null,
 ) {
     companion object {
         fun notReady(session: ReplanSession) = ReplanDiffView(

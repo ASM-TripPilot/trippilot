@@ -766,6 +766,38 @@ note = """
 재현 없이 단언을 넓히지 않는다([[FLAKY-HEALTHPING]] 과 같은 규율) — 다만 이 노드는 **원인이
 규명된** 상태라 그쪽과 다르다.
 """
+[[nodes]]
+id = "FLAKY-OUTBOX-LATENCY"
+ticket = ""
+title = "OutboxRelayIT '배달 지연이 기록된다' 가 단독 실행에서 항상 실패"
+status = "todo"
+owner = "관측"
+migration = false
+touches = ["backend/app/src/test/kotlin/com/trippilot/app/OutboxRelayIT.kt"]
+note = """
+**관측(2026-09-20, TRIP-854 작업 중 전체 빌드에서 걸림).** 내 변경과 무관한 것을 확인했다 —
+**변경을 stash 하고 develop 상태로 돌려도 똑같이 실패한다.** 손댄 파일에 outbox 가 0건이다.
+
+## 관측된 모양
+
+- 단독 실행(`--tests "*OutboxRelayIT*"`): **2회 모두 실패**
+- 전체 빌드: 같은 세션에서 **1회 통과 · 1회 실패** (간헐)
+- 깨지는 자리는 `OutboxRelayIT.kt:226` = `(after > before) shouldBe true`.
+  바로 위 `unpublished("지연") shouldBe 0` 은 통과한다 — **배달은 됐는데 타이머만 안 올랐다.**
+
+## 아직 모르는 것
+
+배달이 이 컨텍스트의 릴레이가 아니라 **다른 경로**(같은 DB 를 보는 다른 컨텍스트·스케줄 릴레이)에서
+일어나면 타이머는 그쪽 레지스트리에서 오른다 — 테스트 주석이 이미 그 경합을 적어 두고 `RELAY_TRIES`
+루프로 막으려 했다. 단독 실행에서도 재현되므로 **그 가설만으로는 설명되지 않는다.**
+
+## 규율
+
+재현 없이 단언을 넓히지 않는다([[FLAKY-HEALTHPING]]·[[FLAKY-REPLAN-CANCEL]] 과 같다).
+다만 이 건은 **단독 실행에서 결정론적으로 실패**하므로 셋 중 가장 싸게 파고들 수 있다 —
+릴레이가 타이머를 올리는 지점에 로그를 하나 넣고 단독으로 한 번 돌리면 갈린다.
+"""
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 간선 — 티켓 원문으로 확인한 것만
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1432,7 +1464,7 @@ TRIP-360 이후 차단이 아니라 안내 문구 문제). 켜기 자체의 전�
 id = "REPLAN-BOUNDARY"
 ticket = "TRIP-854"
 title = "재계획 전용 경계 개통 — 어댑터 전환·계약 게이트 등록·마감 25s (B-1잔여·B-3·B-4·B-5)"
-status = "todo"
+status = "done"
 migration = false
 touches = [
   "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
@@ -1440,10 +1472,40 @@ touches = [
   "backend/modules/itinerary-generation/src/test/kotlin/com/trippilot/itinerarygeneration/contract/AiBoundaryOpenApiTest.kt",
 ]
 note = """
-계약 합의문 = ai-backend-replan-연동-설계.md. 조립 절반은 #514 완료(ReplanInput 10종 — 이제
-NEUTRAL_PREFERENCES 로 덮을 이유가 조립엔 없다). 남은 것: 어댑터를 generate 재사용에서 전용
-경로로, REPLAN_PATH 를 CALLED_PATHS 에(안 넣으면 계약 게이트가 이 경로를 안 본다 — B-3),
-마감 25s(B-4), totalDistanceKm(B-5). **양쪽 동시** — 선개통은 alternatives 미사용 경계 전력.
+**완료(2026-09-20).** 백엔드 몫 넷 다 끝났다 — 어댑터가 `/ai/v1/itinerary/replan` 로 가고 열 종을
+전부 싣는다(B-1 잔여), `REPLAN_PATH` 가 `CALLED_PATHS` 에 들어가 계약 게이트가 이 경로를 본다(B-3),
+마감 25s 는 #575 에서 이미 올렸다(B-4), `totalDistanceKm` 은 초안 jsonb 를 거쳐 비교 응답까지
+간다(B-5 — 읽는 곳 없이 컬럼만 만들지 않으려고 `ReplanImpactResponse.totalDistanceKm` 까지 폈다).
+
+**실 왕복은 503 이다.** 상대가 경로·스키마는 출하했는데 오케스트레이터 배선이 아직이다
+(`ORCHESTRATOR_NOT_WIRED`, 상대 docstring 에 명시). **422 가 아니라 503 이라는 것이 중요하다** —
+우리 페이로드는 스키마 검증을 통과했다. 그동안 재계획이 전부 실패로 튀지 않게 그 코드에서만
+종전 generate 경로로 한시 폴백한다. 상대 배선이 끝나면 그 갈래와 `legacyReplanViaGenerate` 를
+함께 지운다 → REPLAN-AI-WIRED 로 잇는다.
+
+곁가지로 `ContractShape` 의 구멍을 메웠다 — `anyOf: [T, null]` 을 안 벗겨 **nullable 객체 아래가
+전부 무검사**였다(세 경계 공통). 계약 파일을 흔들어 보고 알았다.
+"""
+
+[[nodes]]
+id = "REPLAN-AI-WIRED"
+ticket = ""
+title = "상대 배선 후 한시 폴백 제거 — 재계획이 전용 경로만 쓴다"
+status = "blocked"
+migration = false
+touches = [
+  "backend/modules/itinerary-generation/src/main/kotlin/com/trippilot/itinerarygeneration/adapter/out/external/HttpScheduleAgentAdapter.kt",
+  "backend/app/src/test/kotlin/com/trippilot/app/LiveAiRoundTripIT.kt",
+]
+note = """
+TRIP-854 에서 갈라져 나온 잔여. **우리가 할 일은 지우는 것뿐**이고, 선행은 상대(AI)의
+`ItineraryOrchestrator.replan` 배선이다 — 우리가 당길 수 없다.
+
+판정 방법: `docker compose --profile full up -d ai` 후
+`LIVE_AI=1 ./gradlew :app:test --tests "*LiveAiRoundTripIT*"` 의 replan 줄이 503 대신 200 을 내면
+그날이다. 지울 것 둘 — 어댑터의 `NOT_WIRED` 갈래와 `legacyReplanViaGenerate`.
+남겨 두면 두 경로가 공존해 "왜 재계획만 가끔 취향이 안 먹지"가 되돌아온다(종전 경로는 열 종 중
+다섯을 버린다).
 """
 
 [[nodes]]
@@ -1507,9 +1569,13 @@ touches = []
 note = """
 계약 합의문(ai-backend-replan-연동-설계.md §7 AI 측 표). 양쪽이 각자 만들고 LIVE_AI=1 왕복으로 만난다.
 
-**현황(2026-09-16 코드 확인) — 대부분 끝나 있다.** A-1 `fully_booked`(`agents/planb/rag.py`) ·
-A-2 지시 사전(`agents/planb/directives.py`) · A-3 번역 워커(`workers/replan_directive_translation.py`)
-모두 실재한다. 남은 것은 **A-4 `/replan` 경계** 하나이고 `ai/docs/openapi.json` 에 아직 없다.
+**현황(2026-09-20 실 왕복 확인).** A-1 `fully_booked`(`agents/planb/rag.py`) · A-2 지시 사전
+(`agents/planb/directives.py`) · A-3 번역 워커(`workers/replan_directive_translation.py`) 실재.
+A-4 `/replan` 라우트도 **열렸고** `ai/docs/openapi.json` 에 스키마까지 완비다.
+
+**남은 것은 A-5 오케스트레이터 배선 하나다.** 실 왕복이 503 `ORCHESTRATOR_NOT_WIRED` 를 낸다 —
+상대 docstring 에 "조립이 아직 이 경계를 구현하지 않으면 503 으로 명시 실패한다"고 적혀 있다.
+**우리 페이로드는 스키마 검증을 통과했다**(422 가 아니라 503 이었다). 소스 최신으로 재빌드해 확인했다.
 
 한때 이 노드에 신설 티켓을 달았다가 뗐다 — "AI 절반에 티켓이 없다"는 전제로 만들었는데 틀렸다.
 진짜 병목은 **백엔드 잔여**였다(재계획 전용 경계 노드와 재계획 입력 전달 노드).
@@ -1646,10 +1712,10 @@ Boolean 에 바인딩돼 기동이 깨진다. `:-false` 로 두고 compose 를 �
 
 [[edges]]
 from = "AI-REPLAN"
-to = "REPLAN-BOUNDARY"
-kind = "계약선행"
-verified = false
-reason = "설계 §7 「전환 절차: 양쪽 동시」— AI 측 라우트(A-4) 없이는 LIVE_AI 왕복이 성립하지 않는다. 어댑터 전환 전까지의 B-4·B-5 는 먼저 갈 수 있다."
+to = "REPLAN-AI-WIRED"
+kind = "외부선행"
+verified = true
+reason = "실측 2026-09-20 — 상대 라우트는 열렸으나 오케스트레이터 배선 전이라 실 왕복이 503(ORCHESTRATOR_NOT_WIRED). 백엔드 전환(REPLAN-BOUNDARY)은 그 상태로도 끝났고, 폴백 제거만 상대를 기다린다."
 
 [[edges]]
 from = "FE-PUSH-WIRING"
