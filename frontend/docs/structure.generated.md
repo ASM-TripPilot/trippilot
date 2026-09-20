@@ -628,7 +628,7 @@
 - `src/features/stay/ui/SkeletonList.tsx`  →  SkeletonList
 - `src/features/stay/ui/StayDetailScreen.tsx`  →  StayDetailScreenProps · StayDetailScreen
 - `src/features/stay/ui/StayFilterSheet.tsx`  →  StayFilterSheetProps · StayFilterSheet
-- `src/features/stay/ui/StayGlyphs.tsx`  →  BackChevronGlyph · ChevronDownGlyph · FilterSlidersGlyph · WarningTriangleGlyph · MapPinGlyph · SearchGlyph · PlusGlyph · ChevronRightGlyph · HeartOutlineGlyph · ShareGlyph · InfoGlyph · ExternalLinkGlyph · AmenityGlyph · ParkingGlyph · BreakfastGlyph · WifiGlyph · OceanViewGlyph · BedGlyph · HeartFilledGlyph
+- `src/features/stay/ui/StayGlyphs.tsx`  →  BackChevronGlyph · ChevronDownGlyph · FilterSlidersGlyph · WarningTriangleGlyph · MapPinGlyph · SearchGlyph · PlusGlyph · ChevronRightGlyph · HeartOutlineGlyph · ShareGlyph · InfoGlyph · ExternalLinkGlyph · AmenityGlyph · ParkingGlyph · BreakfastGlyph · WifiGlyph · OceanViewGlyph · HeartFilledGlyph
 - `src/features/stay/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
 - `src/features/stay/ui/StayRegisterScreen.tsx`  →  StayRegisterScreenProps · StayRegisterScreen
 - `src/features/stay/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen

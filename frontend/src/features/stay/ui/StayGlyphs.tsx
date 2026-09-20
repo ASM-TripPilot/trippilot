@@ -560,34 +560,6 @@ export function OceanViewGlyph({ size = 24, testID }: GlyphProps) {
   );
 }
 
-// 제휴 시트 OTA 행 선두 아이콘(TRIP-457) — 침대(숙소) 일반 도형. Figma 1348:1545 근사.
-export function BedGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 22 22"
-      fill="none"
-    >
-      <Path
-        d="M3 6V16M3 12H19V16M19 12V9C19 8.44772 18.5523 8 18 8H10V12"
-        stroke={BODY}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M6.5 10.5C7.32843 10.5 8 9.82843 8 9C8 8.17157 7.32843 7.5 6.5 7.5C5.67157 7.5 5 8.17157 5 9C5 9.82843 5.67157 10.5 6.5 10.5Z"
-        stroke={BODY}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // 카드 저장 하트 — 담김(채움, TRIP-417). 같은 22-viewBox path를 분홍(PRIMARY)으로 채운다 —
 // 빈/찬을 색으로 재는 것은 jest 무심판(repo-trap: `*Glyphs.tsx` fill은 렌더 트리에 안 남는다)이라,
 // 상태는 이 별도 컴포넌트(=다른 testID) + Pressable의 accessibilityState.selected 두 신호로 잰다.

@@ -2045,14 +2045,24 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // 제휴 고지 시트(BR-U1-30) — book press 시 뜨는 시트. gorhom 이라 실 슬라이드는 실기 몫.
+  // 제휴 고지 시트(BR-U1-30) — book press 시 뜨는 시트. 상세 화면(saved) 배경 위에 시트를 얹어
+  // 실제 화면처럼 합성한다(딤은 gorhom BottomSheetBackdrop 이 진다 — 수동 스크림 래퍼 없음).
+  // gorhom 이라 실 슬라이드·딤 전면 커버는 실기 몫.
   {
-    key: 'stay-ota-sheet',
+    key: 'stay-detail-affiliate-sheet',
     band: 'e',
     label: 'e03 · 제휴 고지 시트',
     login: null,
     render: () => (
-      <View className="flex-1 justify-end bg-scrim/40">
+      <View className="flex-1">
+        <StayDetailScreen
+          item={STAY_DETAIL_PREVIEW_ITEM}
+          saved={true}
+          onToggleSave={noop}
+          onPressBook={noop}
+          onPressAddToTrip={noop}
+          onPressBack={noop}
+        />
         <OtaChoiceSheet
           item={STAY_DETAIL_PREVIEW_ITEM}
           onCancel={noop}
