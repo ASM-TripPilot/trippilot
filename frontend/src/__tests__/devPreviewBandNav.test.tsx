@@ -196,6 +196,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    하나만 추가(MapSheetShell 을 5 CoPick 슬롯으로 조립)하고 이 가드는 안 만진다(추가 전엔 170개라
     //    이 단언이 red). 정확히 그 키인지는 아래 'TRIP-796' describe 가 못박는다. devPreviewBandSort 는
     //    band h 를 잠가 EXPECTED_H 도 동반 갱신(copick 을 h11 그룹 첫 항목으로 삽입).
+    // ⚠️ TRIP-799: h14 완성 일정(TimelineScreen→지도+시트 셸). 옛 h25 프리뷰 4키(itinerary-timeline·
+    //    -timeline-confirm-locked·itinerary-map·-timeline-placeholder) 삭제 + 신규 h14-plan-* 4키
+    //    (default·distance-pending·map-fallback·no-base) 추가 → **net 0(−4+4)** 이라 카운트 171 무변경.
+    //    test-designer 선반영(카운트 무변경 확인 + 아래 'TRIP-799' describe 로 키 교체를 못박음).
+    //    implementer 는 preview.tsx 에서 옛 4키를 지우고 새 4키를 추가할 뿐 이 카운트는 안 만진다.
+    //    devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h14-plan-* 를 h14 위치에).
     expect(PREVIEW_STATES).toHaveLength(171);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
@@ -576,6 +582,32 @@ describe('🔴 TRIP-796 · h11 같이 결과(CoPick 완료) 셸 프리뷰 키 �
     // 형제 band h 앵커 — 인접 h08·폴백 키가 딸려 사라지지 않았다(과잉 편집·공허 통과 차단).
     expect(keys).toContain('h08-draft-collapsed');
     expect(keys).toContain('itinerary-draft-fallback-deterministic');
+  });
+});
+
+describe('🔴 TRIP-799 · h14 완성 일정 셸 프리뷰 키 교체 (band h · net 0)', () => {
+  it('옛 h25 timeline 4키가 없고, 새 h14-plan 4키가 있으며, CONFIRMED·형제 h키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 옛 h25 TimelineScreen PLANNED 프리뷰 4키는 사라진다(삭제 전엔 present 라 red). 카운트
+    //   (171, net 0)만으론 "아무 키나 4↔4 교체해도" 통과하므로, 이 짝이 '지운 게 정확히 그 4키'임을
+    //   못박는다(TRIP-711/722/742 음성 가드 패턴 미러).
+    expect(keys).not.toContain('itinerary-timeline');
+    expect(keys).not.toContain('itinerary-timeline-confirm-locked');
+    expect(keys).not.toContain('itinerary-map');
+    expect(keys).not.toContain('itinerary-timeline-placeholder');
+
+    // 긍정 — 새 h14 지도+시트 셸 프리뷰 4키가 실재한다(추가 전엔 부재라 red).
+    expect(keys).toContain('h14-plan-default');
+    expect(keys).toContain('h14-plan-distance-pending');
+    expect(keys).toContain('h14-plan-map-fallback');
+    expect(keys).toContain('h14-plan-no-base');
+
+    // 긍정 짝 — CONFIRMED TimelineScreen 프리뷰(itinerary-confirmed)는 narrow 라 무변경 유지 +
+    //   형제 h키(h11-copick-complete)도 딸려 사라지지 않았다(과잉 삭제·공허 통과 차단).
+    expect(keys).toContain('itinerary-confirmed');
+    expect(keys).toContain('h11-copick-complete');
   });
 });
 

@@ -46,6 +46,10 @@ export interface MapSheetShellProps {
   /** 바텀시트 초기 스냅 인덱스(0=peek / 1=expanded). 미전달이면 0(접힘) — 기존 소비처 무변경.
    *  h08 펼침 프리뷰(`h08-draft-expanded`)가 1 을 준다(TRIP-792 D5). 실 스냅 전환은 6-b 실기 몫. */
   initialIndex?: number;
+  /** 지도 실패 폴백 슬롯(TRIP-799 D5·AC-6). 주면 지도 스트립 자리에 `<MapView>` 대신 이 노드를
+   *  렌더한다(day-chip·시트·CTA 는 유지 — 화면을 안 비운다, INV-4). 미전달이면 현행대로 MapView
+   *  (기존 소비처·801 무변경). 타입 선언만 — 렌더 배선은 [구현] 몫(SH6b 가 red 로 강제). */
+  mapFallback?: ReactNode;
 }
 
 export function MapSheetShell({
@@ -60,12 +64,15 @@ export function MapSheetShell({
   children,
   cta,
   initialIndex,
+  mapFallback,
 }: MapSheetShellProps): ReactElement {
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
-      {/* 전면 지도 — 시트 뒤 형제(절대 배치, 풀블리드). connectPins 무언급=기본 선. */}
+      {/* 전면 지도 — 시트 뒤 형제(절대 배치, 풀블리드). connectPins 무언급=기본 선.
+          지도 실패 폴백(mapFallback)을 받으면 그 노드로 지도 자리를 대체한다(day-chip·시트·CTA 유지 →
+          화면을 안 비운다, INV-4 · TRIP-799 D5). 미전달이면 현행대로 MapView(801·기존 소비처 무변경). */}
       <View className="absolute inset-0">
-        <MapView center={center} pins={pins} viewOnly />
+        {mapFallback ?? <MapView center={center} pins={pins} viewOnly />}
       </View>
 
       {/* 좌상단 오버레이 — `overlay` 를 주면 그것을, 아니면 기본 일차 칩 오버레이를 그린다(D3). */}

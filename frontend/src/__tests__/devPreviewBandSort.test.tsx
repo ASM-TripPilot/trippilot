@@ -80,6 +80,15 @@ const EXPECTED_H = [
   'dev-preview-state-slot-candidate-panel-degraded', // h12
   'dev-preview-state-slot-candidate-panel-empty', // h12
   'dev-preview-state-slot-candidate-panel-error', // h12
+  // TRIP-799: h14 완성 일정(TimelineScreen→지도+시트 셸) 4얼굴. 라벨 코드가 h14 라 안정 정렬이
+  // h12(slot-candidate-panel) 와 h18(option-swap) 사이로 들어간다(옛 h25 위치에서 h14 로 이동 —
+  // 라이브 Figma 재번호 h01~h17, 02a ★14). 같은 h14 코드 4키는 PREVIEW_STATES 배열 삽입 순서
+  // (default→distance-pending→map-fallback→no-base)로 안정정렬되므로 구현자는 그 순서로 삽입한다
+  // (h08 collapsed/expanded·h11 copick 선례 — 배열 위치=정렬 위치).
+  'dev-preview-state-h14-plan-default', // h14
+  'dev-preview-state-h14-plan-distance-pending', // h14
+  'dev-preview-state-h14-plan-map-fallback', // h14
+  'dev-preview-state-h14-plan-no-base', // h14
   'dev-preview-state-option-swap', // h18
   'dev-preview-state-option-swap-selected', // h18
   'dev-preview-state-option-swap-empty', // h18
@@ -89,10 +98,9 @@ const EXPECTED_H = [
   'dev-preview-state-place-add-notready', // h20
   'dev-preview-state-itinerary-edit', // h24
   'dev-preview-state-itinerary-edit-time-sheet', // h24
-  'dev-preview-state-itinerary-timeline', // h25
-  'dev-preview-state-itinerary-timeline-confirm-locked', // h25
-  'dev-preview-state-itinerary-map', // h25
-  'dev-preview-state-itinerary-timeline-placeholder', // h25
+  // TRIP-799: 옛 h25 TimelineScreen PLANNED 프리뷰 4키(itinerary-timeline·-confirm-locked·
+  // itinerary-map·-timeline-placeholder)는 PLANNED 가 셸로 이관되며 삭제되고 위 h14-plan-* 4키로
+  // 교체됐다(D7). itinerary-confirmed(h34, CONFIRMED TimelineScreen)는 무변경으로 유지된다.
   'dev-preview-state-itinerary-confirmed', // h34
   'dev-preview-state-itinerary-draft-zero', // h35
   'dev-preview-state-my-trips-list', // h37

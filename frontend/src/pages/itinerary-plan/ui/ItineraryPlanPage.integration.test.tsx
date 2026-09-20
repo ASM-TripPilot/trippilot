@@ -27,8 +27,15 @@ import { ItineraryPlanPage } from './ItineraryPlanPage';
  *  - 🔴 **확정 mutation 3갈래** — 성공(setQueryData 재조회0)·409(안내+재조회)·404(status 불변).
  *
  * **재작성(TRIP-354)**: 세그먼트 토글이 사라져(결정 D) 구 I1(세그먼트 전환 재조회 0)은 **삭제**한다
- * — 토글 자체가 없어 잴 대상이 없다. 지도가 상시 인라인이라 페이지가 `KakaoMapView` 를 마운트하므로,
+ * — 토글 자체가 없어 잴 대상이 없다. 지도가 상시 인라인이라 페이지가 지도를 마운트하므로,
  * 지도를 얇은 가짜로 바꿔 렌더 노이즈를 없앤다(이 파일의 관심사는 요청 건수지 지도가 아니다).
+ *
+ * **재작성(TRIP-799 · narrow)**: PLANNED 완성 일정이 이제 옛 `TimelineScreen` 이 아니라 **지도+시트
+ * 셸**(`MapSheetShell`)로 그려진다(01b D1). 그래서 확정 CTA 는 `sheet-cta-button-0`("일정 저장하기"),
+ * 확정 실패 안내는 셸 안 `itinerary-confirm-error`, 잔존 얼굴은 `map-sheet-shell-root` 다 — I4~I10 이
+ * 이 셸 testID 로 뒤집힌다(★2·★4). `handleConfirm` 로직(setQueryData 성공·409 재조회·404/500/network
+ * 무재조회)은 무변경이라 재조회 계수 심판(GET 1 vs 2)은 그대로다. I2 는 CONFIRMED 라 TimelineScreen
+ * 을 그대로 써 무변경, I3 은 notFound 얼굴이라 무변경(narrow 경계).
  *
  * 왜 통합 버킷인가: 심판의 핵심이 **어떤 요청이 몇 건 나갔나**다. 훅을 목킹하면 그 계수가 테스트의
  * *가정*이 되어 그 가정이 틀려도 아무도 모른다.
@@ -233,64 +240,64 @@ describe('🔴 I3 · AC9 — 일정이 아직 없으면(404) notFound 얼굴을 
  *  - 🔴 409 는 침묵 없이 안내 + 재조회로 정합하되, 전환과 잔존을 케이스로 가른다(I5a·I5b · ★2).
  *  - 🔴 404 는 status 불변·재조회 없음(I7 · ★5). 409(+1)와 404(불변)를 GET 실건수로 가른다.
  */
-describe('🔴 I4 · AC1 — 확정 성공(200)은 재조회 없이 읽기전용으로 전환한다 (setQueryData · US-SCHED-12)', () => {
-  it('확정 CTA press → POST /confirm 1건, GET 재조회 없이 읽기전용(확정)으로 전환한다', async () => {
+describe('🔴 I4 · AC-8 — "일정 저장하기" 성공(200)은 재조회 없이 확정으로 전환한다 (setQueryData · US-SCHED-12)', () => {
+  it('셸 CTA press → POST /confirm 1건, GET 재조회 없이 CONFIRMED(TimelineScreen)로 전환한다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => HttpResponse.json(confirmedItinerary());
 
     renderPage();
 
-    // PLANNED 로 열려 활성 확정 CTA 가 뜬다(첫 GET 1건).
-    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    // PLANNED 로 열려 셸의 확정 CTA(★2 sheet-cta-button-0 "일정 저장하기")가 뜬다(첫 GET 1건).
+    const cta = await screen.findByTestId('sheet-cta-button-0');
+    expect(cta).toHaveTextContent('일정 저장하기');
     await waitFor(() => expect(itineraryGetCalls).toBe(1));
 
-    // 누른다 — 중간 다이얼로그 없이 곧장 POST(★9).
+    // 누른다 — 중간 다이얼로그 없이 곧장 POST.
     fireEvent.press(cta);
 
-    // 확정(읽기전용)으로 전환 — TRIP-505 로 배너가 제거됐으므로 상시 앱바 제목 '확정 일정' 을
-    //   전환 앵커로 쓴다(배너 앵커 파손 봉합 · 02a ★T1). 읽기전용이라 확정 CTA 가 사라진다.
+    // ★3 확정 성공 → setQueryData(CONFIRMED) → 재렌더 → status===CONFIRMED → 기존 TimelineScreen 착지.
+    //   상시 앱바 제목 '확정 일정' 을 전환 앵커로 쓴다(TimelineScreen 무변경). 셸 CTA 는 사라진다.
     await screen.findByText('확정 일정');
-    expect(screen.queryByTestId('itinerary-confirm-cta')).toBeNull();
+    expect(screen.queryByTestId('sheet-cta-button-0')).toBeNull();
 
-    // ★6 — POST 1건, GET 은 **안 늘었다**(재조회 0). 응답을 캐시에 직접 주입(setQueryData)했다는
-    //   유일한 설명이다. invalidate/refetch 로 성공을 반영하면 GET 이 2가 되어 여기서 죽는다.
+    // ★6(구) — POST 1건, GET 은 **안 늘었다**(재조회 0). setQueryData 로 반영했다는 유일한 설명이다.
     expect(confirmPostCalls).toBe(1);
     expect(itineraryGetCalls).toBe(1);
   });
 });
 
-describe('🔴 I5a · AC5 — 409 는 침묵 없이 안내 + 재조회, 서버가 PLANNED 면 편집 얼굴 유지 (INV-4)', () => {
-  it('confirm 이 409 면 인라인 안내가 뜨고 GET 을 다시 조회하며, PLANNED 얼굴이 남는다', async () => {
+describe('🔴 I5a · INV-4 — 409 는 침묵 없이 셸 안 안내 + 재조회, 서버가 PLANNED 면 셸 얼굴 유지', () => {
+  it('confirm 이 409 면 셸 안 인라인 안내가 뜨고 GET 을 다시 조회하며, PLANNED 셸이 남는다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary()); // 재조회해도 PLANNED
     confirmHandler = () => new HttpResponse(null, { status: 409 });
 
     renderPage();
-    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    const cta = await screen.findByTestId('sheet-cta-button-0');
     await waitFor(() => expect(itineraryGetCalls).toBe(1));
 
     fireEvent.press(cta);
 
-    // 침묵 아님(INV-4) — 인라인 안내가 뜬다.
+    // ★4 침묵 아님(INV-4) — 셸이 confirmError 를 시트 안에 그린다(TimelineScreen 이 그리던 testID 계승).
     const err = await screen.findByTestId('itinerary-confirm-error');
     expect(err).toHaveTextContent(/\S/);
 
-    // 재조회로 정합 시도 — GET 이 한 번 더 나간다(invalidate → refetch). ★5 에서 404 와 갈린다.
+    // 재조회로 정합 시도 — GET 이 한 번 더 나간다(invalidate → refetch). 404/500 과 계수로 갈린다.
     await waitFor(() => expect(itineraryGetCalls).toBe(2));
 
-    // 서버 진실이 PLANNED 라 편집 얼굴 유지 — 타임라인·확정 CTA 가 남고 배너는 없다.
-    expect(screen.getByTestId('itinerary-view-timeline')).toBeOnTheScreen();
-    expect(screen.getByTestId('itinerary-confirm-cta')).toBeOnTheScreen();
+    // 서버 진실이 PLANNED 라 셸 얼굴 유지 — 셸·CTA 가 남고 확정 배너는 없다.
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-cta-button-0')).toBeOnTheScreen();
     expect(screen.queryAllByTestId('itinerary-confirmed-banner')).toEqual([]);
   });
 });
 
-describe('🔴 I5b · AC5 — 409 후 재조회가 CONFIRMED 면 읽기전용으로 정합한다 (INV-4 · ★2)', () => {
+describe('🔴 I5b · INV-4 — 409 후 재조회가 CONFIRMED 면 읽기전용으로 정합한다', () => {
   it('confirm 이 409 이고 서버가 이미 확정이면, 재조회로 확정 얼굴로 정합한다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => new HttpResponse(null, { status: 409 });
 
     renderPage();
-    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    const cta = await screen.findByTestId('sheet-cta-button-0');
     await waitFor(() => expect(itineraryGetCalls).toBe(1));
 
     // 409 직후 서버 진실은 이미 CONFIRMED(다른 경로로 확정됨) — 재조회가 그것을 받아온다.
@@ -305,25 +312,25 @@ describe('🔴 I5b · AC5 — 409 후 재조회가 CONFIRMED 면 읽기전용으
   });
 });
 
-describe('🔴 I7 · AC6 — 404 는 status 를 바꾸지 않고 실패를 표시한다 (INV-4 · ★5)', () => {
-  it('confirm 이 404 면 안내가 뜨고, 재조회 없이 PLANNED 가 유지된다', async () => {
+describe('🔴 I7 · INV-4 — 404 는 status 를 바꾸지 않고 셸 안에서 실패를 표시한다', () => {
+  it('confirm 이 404 면 안내가 뜨고, 재조회 없이 PLANNED 셸이 유지된다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => new HttpResponse(null, { status: 404 });
 
     renderPage();
-    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    const cta = await screen.findByTestId('sheet-cta-button-0');
     await waitFor(() => expect(itineraryGetCalls).toBe(1));
 
     fireEvent.press(cta);
 
-    // 실패 표시(INV-4).
+    // ★4 실패 표시(INV-4) — 셸 안 인라인 안내.
     const err = await screen.findByTestId('itinerary-confirm-error');
     expect(err).toHaveTextContent(/\S/);
 
-    // ★5 — 404 는 409 와 달리 재조회하지 않는다(GET 불변 1). status 불변이라 배너도 없다.
+    // 404 는 409 와 달리 재조회하지 않는다(GET 불변 1). status 불변이라 배너도 없다.
     expect(itineraryGetCalls).toBe(1);
     expect(screen.queryAllByTestId('itinerary-confirmed-banner')).toEqual([]);
-    expect(screen.getByTestId('itinerary-confirm-cta')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-cta-button-0')).toBeOnTheScreen();
   });
 });
 
@@ -337,60 +344,60 @@ describe('🔴 I7 · AC6 — 404 는 status 를 바꾸지 않고 실패를 표�
  * ★재조회 카운터가 핵심 심판이다 — 타임라인 present 만으론 "재조회가 성공한" 회귀를 못 잡는다.
  * `itineraryGetCalls === 1`(재조회 0)이 유일한 뮤테이션 트립와이어다.
  */
-describe('🔴 I8 · AC1 — 확정 500 은 재조회 없이 인라인 안내만 (INV-4 · TRIP-355)', () => {
-  it('confirm 이 500 이면 안내가 뜨고, 재조회 없이(GET 불변) 타임라인이 남는다', async () => {
+describe('🔴 I8 · INV-4 — 확정 500 은 재조회 없이 셸 안 인라인 안내만 (TRIP-355)', () => {
+  it('confirm 이 500 이면 안내가 뜨고, 재조회 없이(GET 불변) 셸이 남는다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => new HttpResponse(null, { status: 500 });
 
     renderPage();
-    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    const cta = await screen.findByTestId('sheet-cta-button-0');
     await waitFor(() => expect(itineraryGetCalls).toBe(1));
 
     fireEvent.press(cta);
 
-    // 침묵 아님(INV-4) — 인라인 안내가 뜬다.
+    // ★4 침묵 아님(INV-4) — 셸 안 인라인 안내가 뜬다.
     const err = await screen.findByTestId('itinerary-confirm-error');
     expect(err).toHaveTextContent(/\S/);
 
-    // ★ 500 은 409 와 달리 재조회하지 않는다(GET 불변 1). `!isNotFound` 로 되돌리면 여기서 죽는다.
+    // 500 은 409 와 달리 재조회하지 않는다(GET 불변 1). `!isNotFound` 로 되돌리면 여기서 죽는다.
     await waitFor(() => expect(itineraryGetCalls).toBe(1));
 
-    // 타임라인·확정 CTA 가 남고, 전면 실패 얼굴로 갈아 끼우지 않는다.
-    expect(screen.getByTestId('itinerary-view-timeline')).toBeOnTheScreen();
-    expect(screen.getByTestId('itinerary-confirm-cta')).toBeOnTheScreen();
+    // 셸·CTA 가 남고, 전면 실패 얼굴로 갈아 끼우지 않는다.
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-cta-button-0')).toBeOnTheScreen();
     expect(screen.queryAllByTestId('itinerary-view-failed')).toEqual([]);
   });
 });
 
-describe('🔴 I9 · AC2 — 확정 500 + itinerary outage 여도 전면 얼굴로 안 바뀐다 (TRIP-355)', () => {
-  it('confirm 500 직후 itinerary GET 도 넓게 죽어도, 재조회가 안 나가 타임라인이 남는다', async () => {
+describe('🔴 I9 · INV-4 — 확정 500 + itinerary outage 여도 전면 얼굴로 안 바뀐다 (TRIP-355)', () => {
+  it('confirm 500 직후 itinerary GET 도 넓게 죽어도, 재조회가 안 나가 셸이 남는다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => new HttpResponse(null, { status: 500 });
 
     renderPage();
-    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    const cta = await screen.findByTestId('sheet-cta-button-0');
     await waitFor(() => expect(itineraryGetCalls).toBe(1));
 
     // 넓게 죽은 outage 재현 — press 직전 GET 핸들러를 500 으로 오염(초기 GET 1건은 이미 성공해 listed).
     itineraryHandler = () => new HttpResponse(null, { status: 500 });
     fireEvent.press(cta);
 
-    // 안내는 뜨되, 옛 코드의 재조회 발화(→GET 500→isError→failed)로 타임라인이 사라지지 않는다.
+    // 안내는 뜨되, 옛 코드의 재조회 발화(→GET 500→isError→failed)로 셸이 사라지지 않는다.
     await screen.findByTestId('itinerary-confirm-error');
-    expect(screen.getByTestId('itinerary-view-timeline')).toBeOnTheScreen();
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
     expect(screen.queryAllByTestId('itinerary-view-failed')).toEqual([]);
     // 재조회 자체가 안 나가 outage 가 무해하다.
     expect(itineraryGetCalls).toBe(1);
   });
 });
 
-describe('🔴 I10 · AC3 — 확정 네트워크 오류도 재조회 없이 인라인 안내만 (INV-4 · TRIP-355)', () => {
-  it('confirm 이 네트워크 오류(응답 없음)면 안내가 뜨고, 재조회 없이 타임라인이 남는다', async () => {
+describe('🔴 I10 · INV-4 — 확정 네트워크 오류도 재조회 없이 셸 안 인라인 안내만 (TRIP-355)', () => {
+  it('confirm 이 네트워크 오류(응답 없음)면 안내가 뜨고, 재조회 없이 셸이 남는다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => HttpResponse.error(); // 응답 자체가 없는 네트워크 실패
 
     renderPage();
-    const cta = await screen.findByTestId('itinerary-confirm-cta');
+    const cta = await screen.findByTestId('sheet-cta-button-0');
     await waitFor(() => expect(itineraryGetCalls).toBe(1));
 
     fireEvent.press(cta);
@@ -400,6 +407,6 @@ describe('🔴 I10 · AC3 — 확정 네트워크 오류도 재조회 없이 인
 
     // 응답이 없어 status 판정이 둘 다 false → 재조회 분기 밖(GET 불변 1).
     await waitFor(() => expect(itineraryGetCalls).toBe(1));
-    expect(screen.getByTestId('itinerary-view-timeline')).toBeOnTheScreen();
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
   });
 });

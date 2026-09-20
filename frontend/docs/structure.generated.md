@@ -739,6 +739,7 @@
 
 ## src/pages/itinerary-plan/ui/
 - `src/pages/itinerary-plan/ui/ItineraryPlanPage.tsx`  →  ItineraryPlanPage
+- `src/pages/itinerary-plan/ui/NoBaseNoticeCard.tsx`  →  NoBaseNoticeCard
 
 ## src/pages/live-itinerary/
 - `src/pages/live-itinerary/index.ts`  →  LiveItineraryPage
@@ -1300,4 +1301,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 874개 파일
+합계 875개 파일

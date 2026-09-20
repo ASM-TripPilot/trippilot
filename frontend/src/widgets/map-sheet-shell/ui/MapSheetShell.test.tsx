@@ -188,3 +188,42 @@ describe('MapSheetShell · SH5 — initialIndex 가 BottomSheet 초기 스냅을
     indices.forEach((index) => expect(index).toBe(1));
   });
 });
+
+/* ──────────────── TRIP-799 · D5 가산 확장(h14 지도 폴백) ────────────────
+ * 셸은 지도 스트립에 `<MapView viewOnly>` 를 **무조건** 깔아 왔다 — 지도 로드 실패 얼굴을 낼 슬롯이
+ * 없었다(맹점②). `mapFallback?: ReactNode`(가산)를 주면 그 자리에 MapView 대신 이 노드를 렌더한다
+ * — day-chip·시트·CTA 는 유지해 화면을 안 비운다(INV-4). 미전달=현행 MapView(801·기존 소비처 무변경).
+ *
+ * ⚠️ **원리적 사각(D5)** — 실 런타임 지도 실패 감지(MapView onError)는 이 위젯 밖이라, 페이지가
+ *   언제 mapFallback 을 주입하는지는 프리뷰·6-b 몫이다. 여기선 **셸이 mapFallback 을 받으면 그 노드로
+ *   지도 자리를 대체하는지**(슬롯 계약)만 잠근다.
+ * ─────────────────────────────────────────────────────────────────────── */
+describe('MapSheetShell · SH6 — mapFallback 이 지도 자리를 대체한다 (TRIP-799 D5·AC-6)', () => {
+  it('SH6a · mapFallback 미전달이면 map-root(MapView) 가 뜬다 (선제 green · 회귀 앵커)', () => {
+    // 준비/실행 — 기존 소비처 형태(mapFallback 안 줌).
+    renderShell();
+
+    // 단언 — 지도 표면이 현행대로 뜬다(기본값=MapView). 구현 후에도 미전달=MapView 유지(선제 green).
+    expect(screen.getByTestId('map-root')).toBeOnTheScreen();
+  });
+
+  it('🔴 SH6b · mapFallback 을 주면 그 노드가 뜨고 map-root 는 사라지며 시트·오버레이·CTA 는 유지된다', () => {
+    // 준비/실행 — 지도 실패 폴백 노드를 주입한다.
+    renderShell({
+      mapFallback: (
+        <Text testID="fake-map-fallback">지도를 불러올 수 없어요</Text>
+      ),
+    });
+
+    // 긍정 — 주입한 폴백 노드가 지도 스트립 자리에 뜬다.
+    expect(screen.getByTestId('fake-map-fallback')).toBeOnTheScreen();
+    // ★13 짝 — 기본 MapView(map-root)는 대체돼 사라진다. **red 성격**: 현행 셸은 mapFallback 을
+    //   무시하고 항상 MapView 를 깔아 map-root 가 남는다 → 이 단언이 red. 구현이 mapFallback 분기를
+    //   넣으면 green.
+    expect(screen.queryByTestId('map-root')).toBeNull();
+    // 화면을 안 비운다(INV-4) — day-chip·시트 body·CTA 는 유지.
+    expect(screen.getByTestId('sheet-daychip-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('fake-body')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+  });
+});
