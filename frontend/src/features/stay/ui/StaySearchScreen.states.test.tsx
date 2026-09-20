@@ -108,8 +108,8 @@ function hasTokenInSubtree(
 const CURLY_TITLE = (name: string) => `‘${name}’ 필터가 0건을 만들었어요`;
 const CURLY_CLEAR = (name: string) => `‘${name}’ 필터 해제`;
 
-describe('StaySearchScreen — loading (AC-1)', () => {
-  it('안내 라벨·스켈레톤 2장이 뜨고, 서브헤더에 개수가 없으며, 카드는 0장이다', () => {
+describe('StaySearchScreen — loading (AC-1 · TRIP-726 AC-L1′·L3)', () => {
+  it('안내 라벨·스켈레톤 4장(카드 틀)이 뜨고, 서브헤더에 개수가 없으며, 카드는 0장이다', () => {
     const state: StaySearchState = { kind: 'loading' };
     render(<StaySearchScreen region="부산" items={[]} state={state} />);
 
@@ -118,7 +118,9 @@ describe('StaySearchScreen — loading (AC-1)', () => {
         '숙소를 모으는 중'
       )
     ).toBeOnTheScreen();
-    expect(screen.queryAllByTestId(/^stay-search-skeleton-/)).toHaveLength(2);
+    // AC-L3(동결 갱신) — 스켈레톤 2→4(01b 오버라이드: 세로형 유지 + 4장). 구 계약(2)이 살아 있으면
+    // 4장 구현이 red 없이 통과하는 것을 막는 갱신이다(브리프 맹점⑤).
+    expect(screen.queryAllByTestId(/^stay-search-skeleton-/)).toHaveLength(4);
     // toHaveTextContent(문자열)은 완전 일치다(§5 ★3) — 이 한 줄이 "곳이 없다"까지 겸한다.
     expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
       '부산 · 날짜 미정'
@@ -134,6 +136,18 @@ describe('StaySearchScreen — loading (AC-1)', () => {
         'bg-surface-strong'
       )
     ).toBe(true);
+    // AC-L1′(01b 오버라이드) — 각 스켈레톤을 카드 틀(border-hairline + rounded-card)로 감싼다.
+    // soft shadow 는 style prop(#000000, raw-hex 스캔 밖)이라 룩은 6-b/831 몫 — 여기선 단언하지 않는다.
+    expect(classTokens(screen.getByTestId('stay-search-skeleton-0'))).toEqual(
+      expect.arrayContaining(['border-hairline', 'rounded-card'])
+    );
+    // AC-L1′ 세로형 잠금(5-b code-critic 참고-1) — 이 사이클의 핵심 결정은 "세로 유지"인데 방향을
+    // 무는 심판이 없었다(카드 바깥 View 에 flex-row 만 넣으면 5스위트 전부 green). RN View 기본이
+    // column 이라 세로의 표식은 flex-row 의 **부재**다. 위 arrayContaining 이 실토큰(border-hairline)
+    // 존재로 "옳은 엘리먼트를 읽는다"를 보장하므로 이 부정 단언은 공허하지 않다(뮤테이션으로 실측).
+    expect(
+      classTokens(screen.getByTestId('stay-search-skeleton-0'))
+    ).not.toContain('flex-row');
   });
 });
 
@@ -199,6 +213,13 @@ describe('StaySearchScreen — empty 수동 등록 유도 (AC-3)', () => {
         'stay-search-register'
       )
     ).toBeNull();
+
+    // AC-E1(TRIP-726) — 등록 유도 카드를 흰 카드 틀(border-hairline + rounded-card)로 감싼다.
+    // 틀 클래스는 testID 엘리먼트(stay-search-register)에 얹힌다(StateNotice·EmptyBlock 선례 동형 —
+    // 별도 래퍼 View 에 얹지 않는다, §5 실검증). 내용·testID·콜백은 위 단언들이 무회귀를 잠근다.
+    expect(classTokens(reg)).toEqual(
+      expect.arrayContaining(['border-hairline', 'rounded-card'])
+    );
   });
 });
 

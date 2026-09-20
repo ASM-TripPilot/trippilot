@@ -8,9 +8,10 @@ import { StaySearchScreen } from './StaySearchScreen';
 /**
  * TRIP-416 AC-3·5·6·8(화면 절반) — e02 빈 상태 카드 CTA 실동작의 화면 층 계약.
  *
- * 무엇을 보장하나: (1) empty 카드의 "필터 완화"는 `activeFilterCount` 로 조건부 렌더된다 —
- * 적용필터 0이면 숨기고(죽은 버튼 재생산 금지), 있으면 보이며, **미지정이면 유지**한다(기존
- * 2-prop 무회귀 · 구현을 `=== 0`으로 강제, `?? 0` 아님). (2) filter-zero 의 "원인 필터 해제"는
+ * 무엇을 보장하나: (1) empty 카드의 "필터 완화"는 `activeFilterCount` 로 **활성/비활성**이 갈린다
+ * (TRIP-726 F-9 역전) — 적용필터 0이면 숨기지 않고 **비활성(disabled)** 으로 보여주고(죽은 버튼
+ * 대신 정직한 비활성), 있으면 활성, **미지정이면 활성 유지**한다(기존 2-prop 무회귀 · 구현을
+ * `=== 0`으로 강제, `?? 0` 아님). (2) filter-zero 의 "원인 필터 해제"는
  * `onClearCulpritFilter` 를 `reasons[0]` **문자열**로 부른다(눌림 이벤트가 인자로 새면 안 된다).
  * (3) 신규 콜백은 전부 옵셔널이라 2-prop 호출과 results 얼굴이 안 깨진다. (4) 4버튼 role=button.
  *
@@ -42,8 +43,8 @@ const FILTER_ZERO_STATE: StaySearchState = {
   degraded: false,
 };
 
-describe('empty 필터완화 조건부 렌더 (AC-3 · AC-6 무회귀)', () => {
-  it('적용필터 0 → "필터 완화" 숨김, "지역 바꾸기"는 유지', () => {
+describe('empty 필터완화 disabled 역전 (TRIP-726 F-9 · AC-6 무회귀)', () => {
+  it('적용필터 0 → "필터 완화" present + disabled, "지역 바꾸기"는 유지(활성)', () => {
     // 준비: 적용필터가 0인 빈 상태.
     render(
       <StaySearchScreen
@@ -54,12 +55,17 @@ describe('empty 필터완화 조건부 렌더 (AC-3 · AC-6 무회귀)', () => {
       />
     );
 
-    // 단언: 풀 필터가 없으면 무동작 버튼을 만들지 않는다(숨김). 지역 바꾸기는 남는다.
-    expect(screen.queryByTestId('stay-search-empty-filter')).toBeNull();
+    // 단언(TRIP-726 AC-E3 역전) — 완화할 필터가 없어도 버튼을 숨기지 않고 **비활성**으로 보여준다
+    // (F-9). toBeDisabled()는 accessibilityState.disabled 를 읽고, RN Pressable 은 `disabled` prop 을
+    // 그 필드로 옮긴다(§5 실검증). "always-render + enabled" 오구현이면 이 disabled 단언이 red.
+    expect(screen.getByTestId('stay-search-empty-filter')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-empty-filter')).toBeDisabled();
+    // 지역 바꾸기는 언제나 활성 형제(공허 통과 방지 — empty 블록이 통째로 비어서 참이 아님).
     expect(screen.getByTestId('stay-search-empty-region')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-empty-region')).not.toBeDisabled();
   });
 
-  it('적용필터 있음(2) → 두 버튼 모두 보인다', () => {
+  it('적용필터 있음(2) → 두 버튼 모두 present + 활성', () => {
     // 준비: 적용필터가 있는 빈 상태.
     render(
       <StaySearchScreen
@@ -70,18 +76,20 @@ describe('empty 필터완화 조건부 렌더 (AC-3 · AC-6 무회귀)', () => {
       />
     );
 
-    // 단언(positive pair) — 조건이 "무조건 숨김"으로 굳는 가짜통과를 막는다.
+    // 단언(positive pair) — 조건이 "무조건 disabled"로 굳는 가짜통과를 막는다.
     expect(screen.getByTestId('stay-search-empty-filter')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-empty-filter')).not.toBeDisabled();
     expect(screen.getByTestId('stay-search-empty-region')).toBeOnTheScreen();
   });
 
-  it('activeFilterCount 미지정 → "필터 완화" 유지(기존 2-prop 무회귀 · === 0 강제)', () => {
+  it('activeFilterCount 미지정 → "필터 완화" present + 활성(기존 2-prop 무회귀 · === 0 강제)', () => {
     // 준비: activeFilterCount·콜백 전부 미전달(기존 호출 형태).
     render(<StaySearchScreen region="부산" items={[]} state={EMPTY_STATE} />);
 
-    // 단언: 미지정(undefined)은 "0"이 아니다 — 버튼을 유지해야 TRIP-182 동결 테스트가 안 깨진다.
-    // 구현이 `?? 0`을 쓰면 이 단언이 red 가 된다(구현을 `=== 0`으로 못박는 가드).
+    // 단언: 미지정(undefined)은 "0"이 아니다 — 활성으로 유지해야 TRIP-182 동결 테스트가 안 깨진다.
+    // 구현이 `?? 0`을 쓰면 disabled 가 되어 이 단언이 red(구현을 `=== 0`으로 못박는 가드).
     expect(screen.getByTestId('stay-search-empty-filter')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-empty-filter')).not.toBeDisabled();
   });
 });
 

@@ -1901,6 +1901,116 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // e02 상태 5종(TRIP-726) — loading·empty·filter-zero·partial-failure·error 를 눈으로 대조.
+  // 상태 프레임은 검색바를 안 그린다(Figma 정합) → `onChangeNameQuery` 미지정. jest 는 스켈레톤
+  // 방향·카드 그림자·disabled 룩·배너 딤·FAB 오버랩을 못 봐 이 5키가 유일한 육안 확인 자리(6-b/831).
+  {
+    key: 'stay-search-loading',
+    band: 'e',
+    label: 'e02 · 검색 결과 loading',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={[]}
+        state={{ kind: 'loading' }}
+        onPressBack={noop}
+        onPressTab={noop}
+        onPressFilter={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
+  {
+    // activeFilterCount=2 로 '필터 완화' 활성(Figma 는 둘 다 활성) — 0 이면 disabled 는 6-b/831 몫.
+    key: 'stay-search-empty',
+    band: 'e',
+    label: 'e02 · 검색 결과 empty',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={[]}
+        state={{ kind: 'empty', degraded: false }}
+        activeFilterCount={2}
+        onPressChangeRegion={noop}
+        onRelaxFilters={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+        onPressFilter={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
+  {
+    key: 'stay-search-filter-zero',
+    band: 'e',
+    label: 'e02 · 검색 결과 filter-zero',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={[]}
+        state={{
+          kind: 'filter-zero',
+          reasons: ['amenity:조식'],
+          degraded: false,
+        }}
+        activeFilterCount={1}
+        onRelaxFilters={noop}
+        onClearCulpritFilter={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+        onPressFilter={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
+  {
+    // 배너 + 카드(결측가 muted 1장 포함, s4 price:null) 재확인(E-2). savedKeys 로 1장 찬 하트.
+    key: 'stay-search-partial-failure',
+    band: 'e',
+    label: 'e02 · 검색 결과 partial-failure',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={STAY_SEARCH_PREVIEW_ITEMS}
+        state={{ kind: 'results', degraded: true }}
+        savedKeys={['AGODA:s3']}
+        onRetry={noop}
+        onToggleSave={noop}
+        onPressCard={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+        onPressFilter={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
+  {
+    key: 'stay-search-error',
+    band: 'e',
+    label: 'e02 · 검색 결과 error',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={[]}
+        state={{ kind: 'error' }}
+        onRetry={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+        onPressFilter={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
   // e03 숙소 상세(TRIP-457) — 몰입 화면(탭바 없음). default 는 편의시설 4칩·가격·미니맵·CTA 2종.
   {
     key: 'stay-detail-default',

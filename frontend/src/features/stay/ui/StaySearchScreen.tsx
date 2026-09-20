@@ -61,7 +61,7 @@ export interface StaySearchScreenProps {
    * 미지정이면 정직한 스텁(가격대 칩은 페이지가 axis 를 무시해 스텁으로 남는다). */
   onPressFilter?: (axis: 'price' | 'region' | 'more') => void;
   /** 적용된 필터 개수(TRIP-415) — '필터' 칩에 배지로 드러낸다(0이면 배지 없음). empty 카드의
-   * "필터 완화" 조건부 렌더에도 쓰인다(TRIP-416 AC-3, `=== 0`일 때만 숨김). */
+   * "필터 완화" 활성/비활성에도 쓰인다(TRIP-726 F-9, `=== 0`이면 disabled·미지정=활성). */
   activeFilterCount?: number;
   /** empty 카드 "지역 바꾸기" 콜백(TRIP-416 AC-1). 목적지(/explore/region)는 페이지가 정한다.
    * 미지정이면 정직한 스텁. */
@@ -122,6 +122,16 @@ const fabShadow = {
   shadowOpacity: 0.16,
   shadowRadius: 12,
   elevation: 6,
+} as const;
+
+// empty 등록 유도 카드 틀 소프트 그림자(Figma 0 2 10 rgba(0,0,0,0.06), TRIP-726 AC-E1) —
+// searchShadow(radius 8)보다 Figma 실측 radius 만 2 크다(결과카드 cardShadow 0/4/16/.08 보다 약함).
+const softCardShadow = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  elevation: 2,
 } as const;
 
 const FILTER_CHIPS: { axis: 'price' | 'region' | 'more'; label: string }[] = [
@@ -225,7 +235,9 @@ function ListHeader({
   );
 }
 
-/** 점선 박스 밖, 구분선 아래 수동 등록 유도 카드(AC-3 · US-STAY-10 예외 → US-STAY-08 연결). */
+/** 점선 박스 밖, 구분선 아래 수동 등록 유도 카드(AC-3 · US-STAY-10 예외 → US-STAY-08 연결).
+ * TRIP-726 AC-E1 — 흰 카드 틀(border-hairline + soft shadow + rounded-card)로 감싼다. 틀
+ * 클래스는 testID 엘리먼트(이 Pressable) 자체에 얹는다(별도 래퍼 금지, states.test AC-3). */
 function RegisterPromptCard({
   onPress,
 }: {
@@ -236,7 +248,8 @@ function RegisterPromptCard({
       testID="stay-search-register"
       accessibilityRole="button"
       onPress={onPress}
-      className="w-full flex-row items-center gap-[14px] px-lg pb-lg"
+      style={softCardShadow}
+      className="w-full flex-row items-center gap-[14px] rounded-card border border-hairline bg-canvas p-md"
     >
       <View className="h-10 w-10 items-center justify-center rounded-pill bg-primary-pale">
         <PlusGlyph size={22} />
@@ -255,9 +268,10 @@ function RegisterPromptCard({
 }
 
 /** empty(AC-2·AC-3) — 점선 안내 박스 + 구분선 + 수동 등록 카드(박스 밖 별도 형제).
- * "필터 완화"(AC-3)는 적용된 필터가 있을 때만 낸다 — 필터가 0이면 완화할 대상이 없어 무동작
- * 버튼(이 티켓이 고치는 결함)을 재생산하기 때문. `activeFilterCount === 0`일 때만 숨기고,
- * 미지정(undefined)은 "0"이 아니므로 유지한다(기존 2-prop 무회귀 — `?? 0` 폴백 금지). */
+ * "필터 완화"는 항상 렌더하되 적용 필터가 0이면 비활성으로 보여준다(TRIP-726 F-9 역전) —
+ * 필터가 0이면 완화할 대상이 없지만, 숨겨서 죽은 버튼을 없애는 대신 정직한 비활성으로 남긴다.
+ * `activeFilterCount === 0`일 때만 disabled 이고, 미지정(undefined)은 "0"이 아니라 활성이다
+ * (기존 2-prop 무회귀 — `?? 0` 폴백 금지). */
 function EmptyBlock({
   activeFilterCount,
   onPressChangeRegion,
@@ -276,15 +290,14 @@ function EmptyBlock({
       variant: 'outline',
       onPress: onPressChangeRegion,
     },
-  ];
-  if (activeFilterCount !== 0) {
-    actions.push({
+    {
       testID: 'stay-search-empty-filter',
       label: '필터 완화',
       variant: 'outline',
       onPress: onRelaxFilters,
-    });
-  }
+      disabled: activeFilterCount === 0,
+    },
+  ];
 
   return (
     <View className="w-full gap-lg">
@@ -304,7 +317,11 @@ function EmptyBlock({
       <View className="px-lg">
         <View className="h-[1px] w-full bg-hairline" />
       </View>
-      <RegisterPromptCard onPress={onPressRegister} />
+      {/* 등록 카드 틀도 점선 박스·구분선처럼 화면 좌우 16px 안쪽으로 띄운다(카드 틀은
+       * RegisterPromptCard 의 testID 엘리먼트에 있고, 좌우 오프셋만 이 래퍼가 준다). */}
+      <View className="px-lg">
+        <RegisterPromptCard onPress={onPressRegister} />
+      </View>
     </View>
   );
 }
