@@ -1223,13 +1223,29 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
   },
 ];
 
-// e04 저장한 숙소(TRIP-461) — 카드 사진·지역·거리·가격은 계약 무라 회색 자리 + 이름·(있으면)
-// 날짜만 그린다(brief §화면·IO). 실화면 딥링크로는 백엔드 401 이면 게스트 얼굴로만 떨어져
-// results·empty 두 얼굴을 여기서 눈으로 대조한다(d04·d02 프리뷰 2키와 같은 사정).
+// e04 저장한 숙소(TRIP-461 → TRIP-729 Figma 정합) — 사진은 계약 공백이라 회색 자리, 거점 배지·
+// 지역줄·2톤 가격은 계약 공백이라 실앱에선 안 뜬다(degrade). 그 Figma 풀샷을 눈으로 보는 유일한
+// 자리라 여기서만 픽스처로 채운다(ss-1 은 거점 배지 포함). 날짜라벨은 e04 에서 뗐다(F-10).
 const SAVED_STAY_PREVIEW_CARDS: SavedStayCardVM[] = [
-  { savedStayId: 'ss-1', name: '해운대 오션 호텔', dateLabel: '6.10~6.13' },
-  { savedStayId: 'ss-2', name: '광안리 뷰 호텔' },
-  { savedStayId: 'ss-3', name: '감천 게스트하우스', dateLabel: '6.13~6.15' },
+  {
+    savedStayId: 'ss-1',
+    name: '해운대 오션 호텔',
+    isBase: true,
+    region: '해운대',
+    priceLabel: '145,000원~',
+  },
+  {
+    savedStayId: 'ss-2',
+    name: '광안리 뷰 호텔',
+    region: '광안리',
+    priceLabel: '98,000원~',
+  },
+  {
+    savedStayId: 'ss-3',
+    name: '감천 게스트하우스',
+    region: '감천',
+    priceLabel: '62,000원~',
+  },
 ];
 
 // i05 현재 장소 상세(TRIP-398) — Figma 대조용 완성 뷰. 결측 얼굴은 이 위에 상태만 얹는다.
