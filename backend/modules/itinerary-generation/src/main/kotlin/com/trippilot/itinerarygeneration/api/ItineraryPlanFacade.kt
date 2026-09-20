@@ -14,6 +14,26 @@ import java.util.UUID
 interface ItineraryPlanFacade {
     /** 소유 여행의 현재 일정 계획 슬롯. 없거나 타 계정이면 빈 목록(존재 은닉은 호출측 몫). */
     fun findPlanSlots(accountId: UUID, tripId: UUID): List<PlannedSlotView>
+
+    /**
+     * 날짜별 **그 날 갈 곳의 이름**(방문 순서) — 리마인드 문구의 재료다(TRIP-883).
+     *
+     * ## 왜 이름을 여기서 주나
+     *
+     * [findPlanSlots] 는 `poiId` 만 준다. 호출측이 이름을 직접 얻으려면 place-data 를 따로 물어야
+     * 하는데, 그 순간 **"어느 이름이 이기는가"라는 규칙이 두 모듈로 갈린다.** 확정된 슬롯은
+     * 동결 이름이 이기고(INV-U1-03 — 원본이 폐업·개명돼도 확정 당시의 장소를 말해야 한다)
+     * 그 판단은 일정(C8)이 이미 소유한다(`SlotSurfaceAssembler`). 그래서 이름까지 여기서 준다.
+     *
+     * ## 무엇이 "그 날 슬롯"인가
+     *
+     * [findPlanSlots] 와 **같은 정의**다 — 그 여행의 현재 일정, 확정 여부를 가리지 않는다.
+     * 정의를 새로 만들지 않은 것은 의도다: 리마인드만 다른 일정을 말하면 화면과 알림이 어긋난다.
+     *
+     * 표면을 못 찾은 슬롯은 **빠진다** — 이름 없이 알릴 수는 없고, `poiId` 를 문구에 넣을 수도 없다.
+     * 그 날 전부가 빠지면 키 자체가 없다(빈 목록이 아니라). 호출측은 그것을 "재료 없음"으로 읽는다.
+     */
+    fun findPlannedPlaceNames(accountId: UUID, tripId: UUID): Map<LocalDate, List<String>>
 }
 
 /**

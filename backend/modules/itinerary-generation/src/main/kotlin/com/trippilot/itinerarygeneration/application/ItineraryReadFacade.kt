@@ -8,6 +8,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.trip.api.TripFacade
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -18,6 +19,8 @@ import java.util.UUID
 class ItineraryReadFacade(
     private val trips: TripFacade,
     private val itineraries: ItineraryRepository,
+    // 이름 규칙(확정분은 동결본이 이긴다)을 다시 쓰지 않는다 — 이미 이 조립기가 소유한다.
+    private val surfaces: SlotSurfaceAssembler,
 ) : ItineraryFacade, ItineraryPlanFacade {
 
     @Transactional(readOnly = true)
@@ -56,5 +59,22 @@ class ItineraryReadFacade(
                 )
             }
         }
+    }
+
+    /**
+     * 날짜별 방문 장소 이름(TRIP-883). 표면을 못 찾은 슬롯은 빼고, 그래서 비게 된 날은 **키까지 뺀다** —
+     * 빈 목록으로 남기면 호출측이 "그 날은 일정이 없다"로 읽는데 그건 사실이 아니다(이름만 모른다).
+     */
+    @Transactional(readOnly = true)
+    override fun findPlannedPlaceNames(accountId: UUID, tripId: UUID): Map<LocalDate, List<String>> {
+        trips.findPeriod(accountId, tripId) ?: return emptyMap()
+        val itinerary = itineraries.findByTrip(tripId).firstOrNull() ?: return emptyMap()
+        val byPoi = surfaces.assemble(itinerary)
+        return itinerary.days.associate { day ->
+            // 문구는 동선 순서로 읽힌다. 여기서 다시 정렬하지 않는 것은 `ItineraryDay.of` 가
+            // 이미 orderIndex 로 정렬해 보관하기 때문이다 — 두 곳에서 정렬하면 한쪽을 고쳐도
+            // 다른 쪽이 가려 준다(역검증에서 실제로 아무것도 안 죽었다).
+            day.date to day.slots.mapNotNull { byPoi[it.sourcePoiId]?.nameKo }
+        }.filterValues { it.isNotEmpty() }
     }
 }

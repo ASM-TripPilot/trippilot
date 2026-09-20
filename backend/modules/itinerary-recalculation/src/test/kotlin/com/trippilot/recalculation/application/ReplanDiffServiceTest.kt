@@ -85,6 +85,8 @@ class ReplanDiffServiceTest : StringSpec({
 
     fun plansOf(vararg slots: PlannedSlotView) = object : ItineraryPlanFacade {
         override fun findPlanSlots(accountId: UUID, tripId: UUID) = slots.toList()
+        // 이 스펙들은 계획 시각만 본다 — 문구 재료(TRIP-883)는 쓰지 않는다.
+        override fun findPlannedPlaceNames(accountId: UUID, tripId: UUID) = emptyMap<java.time.LocalDate, List<String>>()
     }
 
     "초안이 나오기 전에는 비교가 없다 — 404 가 아니라 ready=false(INV-U4-05)" {
