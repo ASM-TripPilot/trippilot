@@ -8,6 +8,7 @@ import { server } from '@/mocks/server';
 import type {
   Itinerary,
   ItineraryDaysItem,
+  ItineraryDaysItemSlotsItem,
   ItineraryGenerationState,
   Trip,
 } from '@/shared/api/generated/schemas';
@@ -16,20 +17,22 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { DraftPage } from './DraftPage';
 
 /**
- * TRIP-337 · AC-8 h10 "일정 만드는 중" 얼굴을 **실 HTTP 로** 태우는 심판.
+ * TRIP-790 · AC-8 h07 "부분 결과" 얼굴을 **실 HTTP 로** 태우는 심판(옛 TRIP-337 h10 게이지
+ * 재작성 — 01b D1 로 PARTIAL 얼굴이 DraftScreen 인라인 게이지에서 **공용 지도+시트 셸**로 이동).
  *
- * 무엇을 보장하나 (draft 라우트의 `generationState==='PARTIAL'` 분기 — 01b D1):
- *  - 🔴 제목이 "만드는 중" 계열로 바뀌고 완성 얼굴("AI 추천안")은 사라진다.
- *  - 🔴 일자별 3상태가 **데이터로부터** 갈린다: day1=완성 / day2=생성 중 / day3=대기. 전부
- *    "완료"로 찍는 가짜 진척(h09 ⚑C 계열)은 여기서 red.
- *  - 🔴 미도착 일자마다 스켈레톤 행이 뜨고, day1 카드·핀 지도는 그대로 남는다(얹기지 치환 아님).
- *  - 🔴 퍼센트(%)·임의 진행 수치는 0건(계약에 값이 없다 — 01b D5).
- *  - draft 날짜 탭은 그대로 공존한다 → 프리즈된 I1(폴링 회귀)을 깨지 않는다(additive 강제).
- *  - `COMPLETE` 면 완성 얼굴("AI 추천안")로 복귀한다(PARTIAL 에서만 h10).
+ * 무엇을 보장하나 (draft 라우트의 `generationState==='PARTIAL'` 분기):
+ *  - 🔴 PARTIAL 이면 **셸 얼굴**이 뜬다 — 전면 지도(`map-root`) + 상단 진행 카드
+ *    (`generation-progress-card`, day-chip 대신) + 하단 peek 시트(SheetHeader + SlotStopCard).
+ *    옛 게이지 testID(`itinerary-generating-*`)·일차 칩(`itinerary-draft-day-*`)은 사라진다(★1·★2).
+ *  - 🔴 게이지 라벨이 `{n}일차 완성/생성 중/대기`(한글, 옛 `Day{n}` 아님)로 tabs 에서 도출된다(AC-6).
+ *  - 🔴 도착 일차 슬롯은 isFixed 무관 **전부** 시각 칩(`HH:mm–HH:mm`, en-dash)을 그린다(AC-2·D6).
+ *  - 🔴 AI 추천 배지·시간대 라벨·도보 추정·일차 칩·퍼센트·소요시간이 0건이다(AC-3·AC-5·INV-3).
+ *  - 🔴 시트 헤더 meta 가 "N곳 · X.Xkm"(거리 합, `이동`/소요 어휘 0)다(AC-4·D8).
+ *  - 🔴 생성 중이라 CTA(확정/완성)가 없다(D9).
+ *  - `COMPLETE` 면 완성 얼굴(`<DraftScreen>` "AI 추천안")로 복귀하고 셸이 사라진다(revert guard).
  *
- * 왜 통합 버킷인가: 핵심 위험이 "가짜 진척"이다 — 실제 PARTIAL 응답이 배선을 타고 얼굴로
- * 이어질 때 3상태가 옳게 **도출**되는지를 봐야 한다. 게이지 상태를 화면에 직접 주입하면 그
- * 도출 사고가 테스트의 *가정*에 숨는다(DraftPage.integration.test.tsx 머리말 판단 승계).
+ * 왜 통합 버킷인가: 핵심 위험이 "가짜 진척"과 "옛 얼굴 잔존"이다 — 실제 PARTIAL 응답이 배선을
+ * 타고 셸 얼굴로 이어지는지, 3상태가 옳게 **도출**되는지를 봐야 한다(DraftPage.integration 머리말 승계).
  *
  * 3동작 뼈대: 준비=가짜 서버 응답 지정 → 실행=화면을 연다 → 단언=보이는 얼굴·testID·글자.
  */
@@ -52,6 +55,7 @@ jest.mock('expo-router', () => ({
 }));
 
 // 지도는 이 칸의 심판 대상이 아니다 — 남는 props 를 통과시키는 관찰 마커(map-root)로 바꾼다.
+// 셸이 `center` 를 반드시 넘겨야 이 목이 `center.lat` 접근에서 안 죽는다(DraftPage 배선 강제).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
 
@@ -62,7 +66,7 @@ const DAY1 = '2026-06-10';
 const DAY2 = '2026-06-11';
 const DAY3 = '2026-06-12';
 
-/** 3일 여행 — 탭 개수의 출처는 `days.length` 가 아니라 이 두 날짜다(01b D7). */
+/** 3일 여행 — 탭·게이지 셀 개수의 출처는 `days.length` 가 아니라 이 두 날짜다(01b D7). */
 function trip(): Trip {
   return {
     tripId: TRIP_ID,
@@ -78,37 +82,68 @@ function trip(): Trip {
   };
 }
 
-/** 도착한 일자만 담는다. 슬롯엔 lat/lng 를 실어 핀 지도(map-root)가 마운트되게 한다. */
+/**
+ * 하루치 3슬롯 — AC-2·AC-4 를 한 픽스처로 잰다.
+ *  - 슬롯 b 는 **isFixed=true**(고정)인데도 시각 칩이 떠야 한다(AC-2 핵심 · D6).
+ *  - 첫 슬롯 distanceRange 를 **null** 로 둬 legDistance 가 `slice(1)` 이든 전량 합이든 합이 같은
+ *    3.5km 다(2.1+1.4) — 구현 해석에 안 흔들리게 한다(02a 픽스처 근거).
+ *  - lat/lng 를 실어 셸 지도(map-root)가 마운트되고 DraftPage 가 center 를 계산하게 한다.
+ */
+function daySlots(date: string): ItineraryDaysItemSlotsItem[] {
+  return [
+    {
+      poiId: 'poi-a',
+      startAt: '09:30:00',
+      endAt: '11:00:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      tags: ['바다', '산책'],
+      nameKo: '광안리 해변',
+      category: '자연',
+      imageUrl: null,
+      distanceRange: null,
+      lat: 33.458,
+      lng: 126.942,
+    },
+    {
+      poiId: 'poi-b',
+      startAt: '13:00:00',
+      endAt: '14:30:00',
+      isFixed: true,
+      endsNextDay: false,
+      hasViolation: false,
+      tags: ['호텔'],
+      nameKo: `${date} 숙소`,
+      category: '숙소',
+      imageUrl: null,
+      distanceRange: '2.1km',
+      lat: 33.512,
+      lng: 126.522,
+    },
+    {
+      poiId: 'poi-c',
+      startAt: '15:00:00',
+      endAt: '16:00:00',
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      tags: ['카페'],
+      nameKo: '흰여울 마을',
+      category: '자연',
+      imageUrl: null,
+      distanceRange: '1.4km',
+      lat: 33.245,
+      lng: 126.412,
+    },
+  ];
+}
+
+/** 도착한 일자만 담는다(PARTIAL 은 day1 만). */
 function daysUpTo(count: number): ItineraryDaysItem[] {
-  return [DAY1, DAY2, DAY3].slice(0, count).map((date) => ({
-    date,
-    slots: [
-      {
-        poiId: `poi-${date}-1`,
-        startAt: '09:30:00',
-        endAt: '11:00:00',
-        isFixed: false,
-        endsNextDay: false,
-        hasViolation: false,
-        tags: [],
-        nameKo: `${date} 첫 장소`,
-        lat: 33.458,
-        lng: 126.942,
-      },
-      {
-        poiId: `poi-${date}-2`,
-        startAt: '13:00:00',
-        endAt: '14:00:00',
-        isFixed: false,
-        endsNextDay: false,
-        hasViolation: false,
-        tags: [],
-        nameKo: `${date} 둘째 장소`,
-        lat: 33.489,
-        lng: 126.498,
-      },
-    ],
-  }));
+  return [DAY1, DAY2, DAY3]
+    .slice(0, count)
+    .map((date) => ({ date, slots: daySlots(date) }));
 }
 
 function itinerary(input: {
@@ -130,29 +165,7 @@ function itinerary(input: {
 /** GET /itinerary 응답을 케이스가 정한다(PARTIAL day1만 · COMPLETE 3일 전부). */
 let itineraryHandler: () => Response;
 
-/** 카드 루트만 세는 셀렉터 — 번호·라벨·배지·사진이 같은 접두를 공유하므로 제외한다
- * (동결 DraftScreen.test.tsx 가 세운 규약과 같은 형태). */
-const CARD_SUB_PREFIXES = [
-  'no-',
-  'band-',
-  'badge-',
-  'fixed-',
-  'image-',
-  'tags-',
-  'name-',
-];
-
-function cardTestIds(): string[] {
-  return screen
-    .queryAllByTestId(/^itinerary-draft-slot-/)
-    .map((node) => String(node.props.testID))
-    .filter((testID) => {
-      const tail = testID.slice('itinerary-draft-slot-'.length);
-      return !CARD_SUB_PREFIXES.some((prefix) => tail.startsWith(prefix));
-    });
-}
-
-/** 렌더된 문자열 전부를 공백으로 이어 붙인다. 퍼센트 부정 스캔의 모집단이다 — 소스가 아니라
+/** 렌더된 문자열 전부를 공백으로 이어 붙인다. 퍼센트·소요 부정 스캔의 모집단이다 — 소스가 아니라
  * **보이는 글자**를 훑는다(DraftScreen.test.tsx C14 와 동일 패턴). */
 function renderedText(): string {
   const out: string[] = [];
@@ -217,10 +230,9 @@ function renderPage() {
 }
 
 describe('A8-0 · 탐지기 자가검사 — 이게 통과해야 아래 "퍼센트 0건"이 의미를 갖는다', () => {
-  it('퍼센트 스캔은 쪼개 그린 6·7·% 도 잡는다 (조합 실검증 · ★3)', () => {
+  it('퍼센트 스캔은 쪼개 그린 6·7·% 도 잡는다 (조합 실검증 · ★6)', () => {
     // ★ 조합 검증 — `renderedText()` 는 문자열 자식을 모아 공백으로 잇는다. Text 가 3조각으로
     //   쪼개져도 그 전처리가 `%` 를 지우지 않고 `\d+\s*%` 패턴이 살아남음을 실행으로 확인한다.
-    //   이게 없으면 "퍼센트 0건"은 "한 Text 에 통으로 안 적기"만 막는 약한 심판이 된다.
     render(
       <Text testID="pct-probe">
         <Text>6</Text>
@@ -235,124 +247,125 @@ describe('A8-0 · 탐지기 자가검사 — 이게 통과해야 아래 "퍼센�
   });
 });
 
-describe('🔴 A8-1 · AC-8 — PARTIAL 이면 h10 "만드는 중" 얼굴이 뜬다 (D1·D5)', () => {
-  it('A8-1a · 제목·게이지 3상태·스켈레톤·day1 카드·핀 지도가 그려진다', async () => {
+describe('🔴 A8-1 · AC-8 — PARTIAL 이면 h07 부분 결과(셸) 얼굴이 뜬다 (D1)', () => {
+  beforeEach(() => {
     // 준비 — day1 만 담긴 PARTIAL, 여행은 3일.
     itineraryHandler = () =>
       HttpResponse.json(itinerary({ dayCount: 1, generationState: 'PARTIAL' }));
+  });
 
+  it('A8-1a · 셸 얼굴이 뜨고 옛 게이지·일차 칩은 사라진다', async () => {
     renderPage();
 
-    // ① 제목이 "만드는 중" 계열로 바뀌었다(정규식 — 정확 문안은 정본에 없다 · 02a M5).
-    await screen.findByTestId('itinerary-generating-day-1-done');
-    expect(screen.queryAllByText(/만드는 중/).length).toBeGreaterThanOrEqual(1);
-    // 짝 — 완성 얼굴 제목("AI 추천안")은 사라졌다(완전 일치 쿼리 · 02a M5).
-    expect(screen.queryAllByText('AI 추천안')).toEqual([]);
-
-    // ② 게이지 3셀 — day1 완성 / day2 생성 중 / day3 대기.
-    expect(
-      screen.getByTestId('itinerary-generating-day-1-done')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('itinerary-generating-day-2-active')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('itinerary-generating-day-3-waiting')
-    ).toBeOnTheScreen();
-
-    // ③ 미도착 일자(2·3)마다 스켈레톤 행.
-    expect(
-      screen.getByTestId('itinerary-generating-skeleton-2')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('itinerary-generating-skeleton-3')
-    ).toBeOnTheScreen();
-
-    // ④ day1 슬롯 카드는 그대로 남는다(얼굴을 껍데기로 갈아 끼우지 않는다).
-    expect(cardTestIds().length).toBeGreaterThan(0);
-    // ⑤ day1 핀 지도가 뜬다(좌표가 있는 슬롯).
+    // 셸 골격 — 진행 카드(day-chip 대신) + 지도 + 셸 루트.
+    await screen.findByTestId('generation-progress-card');
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
     expect(screen.getByTestId('map-root')).toBeOnTheScreen();
-  });
-
-  it('A8-1b · 3상태가 정확히 하나씩이고 가짜 진척(%·전부 완료)이 없다 (★1·★3)', async () => {
-    itineraryHandler = () =>
-      HttpResponse.json(itinerary({ dayCount: 1, generationState: 'PARTIAL' }));
-
-    renderPage();
-    await screen.findByTestId('itinerary-generating-day-1-done');
-
-    // ★ 각 일자는 상태가 **정확히 하나**다 — 데이터가 정한 값과 일치. 전부 done 으로 찍는
-    //   구현(h09 ⚑C 계열)은 여기서 red. day1 은 done 만:
-    expect(
-      screen.queryAllByTestId('itinerary-generating-day-1-active')
-    ).toEqual([]);
-    expect(
-      screen.queryAllByTestId('itinerary-generating-day-1-waiting')
-    ).toEqual([]);
-    // day2 는 active 만:
-    expect(screen.queryAllByTestId('itinerary-generating-day-2-done')).toEqual(
-      []
-    );
-    expect(
-      screen.queryAllByTestId('itinerary-generating-day-2-waiting')
-    ).toEqual([]);
-    // day3 는 waiting 만:
-    expect(screen.queryAllByTestId('itinerary-generating-day-3-done')).toEqual(
-      []
-    );
-    expect(
-      screen.queryAllByTestId('itinerary-generating-day-3-active')
-    ).toEqual([]);
-
-    // 스켈레톤은 도착한 day1 에는 없다(자리표시는 아직 안 온 일자만).
-    expect(screen.queryAllByTestId('itinerary-generating-skeleton-1')).toEqual(
-      []
-    );
-
-    // ★ 퍼센트·진행 수치 0건 — 계약(generationState 3값)에 채움 값이 없다(01b D5). A8-0 가
-    //   이 스캔이 쪼갠 숫자까지 잡음을 보증한다.
-    expect(renderedText()).not.toContain('%');
-  });
-
-  it('A8-1c · draft 날짜 탭이 그대로 공존한다 — 프리즈된 I1 을 깨지 않는다 (additive · ★5)', async () => {
-    itineraryHandler = () =>
-      HttpResponse.json(itinerary({ dayCount: 1, generationState: 'PARTIAL' }));
-
-    renderPage();
-    await screen.findByTestId('itinerary-generating-day-1-done');
-
-    // h10 게이지가 draft 탭을 **치환하지 않고 얹힌다**. 탭 개수의 출처는 여행 기간(3일)이고
-    // 미도착 일자 탭은 비활성 — 이게 프리즈된 I1(PARTIAL 중 day-3 disabled → COMPLETE 후
-    // enabled 폴링)과 정합하는 유일한 설계다. 탭을 게이지로 갈아 끼우면 여기서도 I1 에서도 red.
-    expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toHaveLength(3);
-    expect(screen.getByTestId('itinerary-draft-day-3')).toBeDisabled();
-  });
-});
-
-describe('🔴 A8-2 · AC-8 — COMPLETE 면 완성 얼굴로 복귀한다 (필수 짝 · revert guard)', () => {
-  it('제목이 "AI 추천안" 이고 게이지·스켈레톤이 0건이며 카드가 남는다', async () => {
-    // 준비 — 3일 전부 도착한 COMPLETE.
-    itineraryHandler = () =>
-      HttpResponse.json(
-        itinerary({ dayCount: 3, generationState: 'COMPLETE' })
-      );
-
-    renderPage();
-
-    // 제목("AI 추천안")은 appbar 라 로딩 중에도 떠 있다 — 데이터가 실제로 온 시점을
-    // 카드로 앵커한 뒤 단언한다(그러지 않으면 GET 완료 전 상태를 재게 된다).
-    await waitFor(() => expect(cardTestIds().length).toBeGreaterThan(0));
-
-    // ① 완성 얼굴 제목 복귀. 짝 — "만드는 중"은 사라졌다.
-    expect(screen.getByText('AI 추천안')).toBeOnTheScreen();
-    expect(screen.queryAllByText(/만드는 중/)).toEqual([]);
-
-    // ② PARTIAL 에서 켠 h10 게이지·스켈레톤을 COMPLETE 에서 못 끄는(항상 게이지) 구현을 죽인다.
+    // ★2 — 진행 카드가 day-chip 자리를 대체하므로 일차 칩은 없다(옛 additive 공존 폐기).
+    expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toEqual([]);
+    // ★1 — 옛 h10 인라인 게이지 testID 는 이 얼굴에서 소멸했다.
     expect(
       screen.queryAllByTestId(/^itinerary-generating-(day|skeleton)-/)
     ).toEqual([]);
+  });
 
-    // ③ 완성 목록이 그려진다.
-    expect(cardTestIds().length).toBeGreaterThan(0);
+  it('A8-1b · 게이지 라벨이 한글 {n}일차 …이고 3셀이 여행 기간에서 도출된다 (AC-6)', async () => {
+    renderPage();
+    await screen.findByTestId('generation-progress-card');
+
+    // 3셀 — day1 완성 / day2 생성 중 / day3 대기(여행 기간 3에서 도출, days.length=1 아님).
+    expect(
+      screen.getByTestId('generation-gauge-cell-1-done')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('generation-gauge-cell-2-active')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('generation-gauge-cell-3-waiting')
+    ).toBeOnTheScreen();
+    // 한글 라벨(getByText=text 노드 완전일치).
+    expect(screen.getByText('1일차 완성')).toBeOnTheScreen();
+    expect(screen.getByText('2일차 생성 중')).toBeOnTheScreen();
+    expect(screen.getByText('3일차 대기')).toBeOnTheScreen();
+    // 짝 — 옛 `Day{n}` 형식은 사라졌다.
+    expect(screen.queryAllByText(/Day\s*\d/)).toEqual([]);
+  });
+
+  it('A8-1c · 도착 일차 슬롯은 isFixed 무관 전부 시각 칩이다 (AC-2 · D6)', async () => {
+    renderPage();
+    await screen.findByTestId('generation-progress-card');
+
+    // 3슬롯 전부 시각 칩(SlotStopCard time leaf).
+    expect(screen.queryAllByTestId(/^slot-stopcard-time-/)).toHaveLength(3);
+    // ★ 고정 슬롯(poi-b, isFixed=true)도 시각 칩이 뜬다 — "고정만 시각" 옛 규칙 폐기(BR-U3-07 개정).
+    //   toHaveTextContent(문자열)=완전일치라(★5) en-dash `–`(U+2013) 를 정확히 요구한다.
+    expect(
+      screen.getByTestId(`slot-stopcard-time-${DAY1}#poi-b`)
+    ).toHaveTextContent('13:00–14:30');
+  });
+
+  it('A8-1d · AI 배지·시간대 라벨·도보 추정·일차 칩이 없다 (AC-3)', async () => {
+    renderPage();
+    await screen.findByTestId('generation-progress-card');
+
+    expect(screen.queryAllByText('AI 추천')).toEqual([]); // 옛 AI_BADGE
+    expect(screen.queryAllByText(/^(오전|점심|오후|저녁)$/)).toEqual([]); // 시간대 라벨
+    expect(screen.queryByText(/도보/)).toBeNull(); // 도보 추정
+    expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toEqual([]); // 일차 칩
+  });
+
+  it('A8-1e · 시트 헤더가 "N곳 · X.Xkm"(거리 합, 소요/이동 어휘 0)다 (AC-4 · D8)', async () => {
+    renderPage();
+    await screen.findByTestId('generation-progress-card');
+
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      /1일차 완성/
+    );
+    // 제목은 게이지 라벨과 겹치지 않게 날짜를 결합한다(DraftPage §3) — 날짜 값이 실제로
+    // 붙는지 잠근다(5-b 경고-1: 이 단언이 없으면 formatDraftDayHeader 산출이 무심판).
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      /6월 10일/
+    );
+    const meta = screen.getByTestId('sheet-header-meta');
+    // 곳 수 = 도착 슬롯 3, 거리 합 = 2.1+1.4 = 3.5km(정규식=부분 매칭, ★5).
+    expect(meta).toHaveTextContent(/3곳/);
+    expect(meta).toHaveTextContent(/3\.5km/);
+    // INV-3 + Figma 형식 — legDistance 의 `이동 ` 접두를 그대로 쓰면 red, 소요 어휘도 금지.
+    expect(meta).not.toHaveTextContent(/이동|분|시간|소요/);
+  });
+
+  it('A8-1f · 퍼센트·소요·CTA 가 0건이다 (AC-5 · D9 · INV-3)', async () => {
+    renderPage();
+    await screen.findByTestId('generation-progress-card');
+
+    const text = renderedText();
+    expect(text).not.toContain('%'); // 진행 수치 없음(계약)
+    expect(text).not.toMatch(/\d+\s*(분|시간)|소요/); // 소요시간 어휘 없음(INV-3)
+    // D9 — 생성 중이라 확정/완성 CTA 가 없다(셸 cta 미전달).
+    expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+    expect(screen.queryByTestId('itinerary-draft-complete')).toBeNull();
+  });
+});
+
+describe('🔴 A8-2 · AC-8 — COMPLETE 면 완성 얼굴(DraftScreen)로 복귀한다 (revert guard)', () => {
+  it('셸이 사라지고 "AI 추천안"·일차 탭 3개·완성 목록이 돌아온다', async () => {
+    // 준비 — 3일 전부 도착한 COMPLETE(기본 핸들러).
+    renderPage();
+
+    // 데이터가 실제로 온 시점을 일차 탭으로 앵커한 뒤 단언한다(GET 완료 전 상태를 재지 않게).
+    await waitFor(() =>
+      expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toHaveLength(3)
+    );
+
+    // ① 완성 얼굴(DraftScreen) 복귀 — 셸은 사라진다(PARTIAL 에서만 셸).
+    expect(screen.getByText('AI 추천안')).toBeOnTheScreen();
+    expect(screen.queryByTestId('generation-progress-card')).toBeNull();
+    expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
+    // ② 옛 h10 게이지 흔적도 0(셸이든 인라인이든 게이지가 안 남는다).
+    expect(
+      screen.queryAllByTestId(/^itinerary-generating-(day|skeleton)-/)
+    ).toEqual([]);
+    // ③ DraftScreen 완성 목록이 그려진다.
+    expect(screen.getByTestId('itinerary-draft-day-1')).toBeOnTheScreen();
   });
 });

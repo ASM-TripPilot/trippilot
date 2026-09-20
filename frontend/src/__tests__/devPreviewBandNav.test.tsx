@@ -512,6 +512,21 @@ describe('TRIP-742 AC-6 · g01 꼭 갈 곳 픽스처 Figma 정합 (3742:2068)', 
   });
 });
 
+describe('🔴 TRIP-790 · h07 부분 결과 프리뷰 키 개명 (band h)', () => {
+  it('키 집합에 h07-generating-partial 이 있고 itinerary-draft-generating 은 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 개명은 엔트리 **수**를 안 바꾼다(위 AC-6 의 174 무변경) — 이름·render 만 바뀐다
+    // (옛 h10 DraftScreen 인라인 게이지 → h07 셸 얼굴, TRIP-732 개명 describe 미러).
+    expect(keys).toContain('h07-generating-partial');
+    expect(keys).not.toContain('itinerary-draft-generating');
+
+    // 형제 band h 앵커 — 기존 draft 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
+    expect(keys).toContain('itinerary-draft-default');
+  });
+});
+
 describe('AC-1 · 밴드 버튼 줄 + 밴드별 칩 필터', () => {
   it('first-cut 9개 밴드 버튼이 모두 렌더된다', () => {
     // 준비/실행 — 프리뷰 루트 렌더.

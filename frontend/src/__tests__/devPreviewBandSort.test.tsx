@@ -56,10 +56,13 @@ const EXPECTED_H = [
   'dev-preview-state-itinerary-method-regenerate', // h04
   'dev-preview-state-itinerary-mustvisit-default', // h05
   'dev-preview-state-itinerary-mustvisit-time-default', // h07
+  // TRIP-790: 옛 h10 `itinerary-draft-generating`(만드는 중 · DraftScreen 인라인 게이지)을
+  // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
+  // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).
+  'dev-preview-state-h07-generating-partial', // h07
   'dev-preview-state-h08-draft-collapsed', // h08 (TRIP-783 지도+시트 셸 접힘)
   'dev-preview-state-itinerary-generating', // h09
   'dev-preview-state-itinerary-generating-failed', // h09
-  'dev-preview-state-itinerary-draft-generating', // h10
   'dev-preview-state-itinerary-draft-default', // h11
   'dev-preview-state-itinerary-draft-stale-failed', // h11
   'dev-preview-state-itinerary-draft-loading', // h11

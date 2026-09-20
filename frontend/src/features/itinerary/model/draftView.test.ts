@@ -6,6 +6,7 @@ import type {
 import {
   buildDraftDayTabs,
   buildDraftPins,
+  buildGenerationGauge,
   DRAFT_POLL_INTERVAL_MS,
   DRAFT_POLL_MAX_COUNT,
   formatDraftDayHeader,
@@ -13,6 +14,7 @@ import {
   resolveDraftView,
   shouldKeepPollingDraft,
 } from './draftView';
+import type { DraftDayTab } from './draftView';
 
 /**
  * h11 초안 화면의 **순수 판정 5종 + 폴링 상수 2개**. 화면은 이 중 어느 것도 다시 계산하지
@@ -493,4 +495,28 @@ describe('🔴 M15·M16 · 얼굴 우선순위 — 슬롯 > loading > failed > z
 
   // 「슬롯이 있으면 전부를 이긴다」는 여기 없다 — M9(슬롯 vs 실패·로딩)와 M13 4행(슬롯 vs
   // 요약)이 이미 잡는다. 뮤테이션으로 확인했다: 슬롯 분기를 맨 뒤로 내리면 그 둘이 red 다.
+});
+
+describe('M17 · AC-1 (TRIP-790) — 게이지는 다중일차에서도 tabs.hasData 로 도출한다', () => {
+  it('day1·day2 둘 다 도착한 4일 PARTIAL 이면 [done, done, active, waiting] 이다', () => {
+    // 준비 — 4일 여행, day1·day2 만 도착(hasData=[true,true,false,false]).
+    //   `DraftDayTab` 은 {date, dayNumber, hasData} — 리터럴로 세운다(날짜 산술은 M1~M4 소관).
+    const tabs: DraftDayTab[] = [
+      { date: '2026-06-10', dayNumber: 1, hasData: true },
+      { date: '2026-06-11', dayNumber: 2, hasData: true },
+      { date: '2026-06-12', dayNumber: 3, hasData: false },
+      { date: '2026-06-13', dayNumber: 4, hasData: false },
+    ];
+
+    // 실행 — 게이지 상태를 도출한다.
+    const states = buildGenerationGauge(tabs).map((cell) => cell.state);
+
+    // 단언 — 도착한 두 일자는 done, 아직 안 온 것 중 첫째만 active, 나머지는 waiting.
+    //   ★ 인덱스 하드코딩 뮤테이션(`i===0?'done':i===1?'active':'waiting'`)은 여기서
+    //   ['done','active','waiting','waiting'] 를 내 index 1·2 에서 red — 이미 도착한 day2 를
+    //   "생성 중"으로 거짓 표시하는 무심판(traps h10)을 이 케이스가 닫는다. **개념 [파생값]**:
+    //   상태는 주입이 아니라 hasData 에서 도출돼 "전부 done" 가짜 진척이 원천 불가.
+    //   함수는 이미 옳아 이 케이스는 회귀 심판(선제 green) — 뮤테이션 실측은 [구현] 5단계 몫.
+    expect(states).toEqual(['done', 'done', 'active', 'waiting']);
+  });
 });

@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
 
@@ -30,13 +30,19 @@ const SNAP_POINTS = ['45%', '88%'];
 export interface MapSheetShellProps {
   center: MapCenter;
   pins?: MapPin[];
-  days: DayChip[];
-  selectedDayIndex: number;
-  onSelectDay: (index: number) => void;
-  onBack: () => void;
+  /** 일차 칩 목록 — `overlay` 를 주면 안 쓰인다(옵셔널, D3). */
+  days?: DayChip[];
+  selectedDayIndex?: number;
+  onSelectDay?: (index: number) => void;
+  onBack?: () => void;
+  /** 좌상단 오버레이 교체 슬롯 — 주면 내부 `DayChipOverlay` 대신 이 노드를 그린다(D3). h07 은
+   *  진행 카드(`GenerationProgressCard`)를 day-chip 자리에 얹으므로 이 슬롯을 쓴다. */
+  overlay?: ReactNode;
   header: ReactNode;
   children: ReactNode;
-  cta: CtaButton[];
+  /** 하단 고정 CTA — 미전달/빈 배열이면 CTA 바를 통째로 안 그린다(옵셔널, D3·D9). h07 은 생성
+   *  중이라 확정할 완성본이 없어 CTA 자체가 없다. */
+  cta?: CtaButton[];
 }
 
 export function MapSheetShell({
@@ -46,6 +52,7 @@ export function MapSheetShell({
   selectedDayIndex,
   onSelectDay,
   onBack,
+  overlay,
   header,
   children,
   cta,
@@ -57,35 +64,40 @@ export function MapSheetShell({
         <MapView center={center} pins={pins} viewOnly />
       </View>
 
-      {/* 좌상단 오버레이 — back + 일차 칩(상태바 아래로 SafeArea top inset). */}
+      {/* 좌상단 오버레이 — `overlay` 를 주면 그것을, 아니면 기본 일차 칩 오버레이를 그린다(D3). */}
       <SafeAreaView
         edges={['top']}
         pointerEvents="box-none"
         className="absolute left-0 right-0 top-0 px-lg pt-sm"
       >
-        <DayChipOverlay
-          days={days}
-          selectedIndex={selectedDayIndex}
-          onSelectDay={onSelectDay}
-          onBack={onBack}
-        />
+        {overlay ?? (
+          <DayChipOverlay
+            days={days ?? []}
+            selectedIndex={selectedDayIndex ?? 0}
+            onSelectDay={onSelectDay ?? (() => {})}
+            onBack={onBack ?? (() => {})}
+          />
+        )}
       </SafeAreaView>
 
-      {/* 하단 2스냅 시트 — header + children(카드·커넥터). */}
+      {/* 하단 2스냅 시트 — header + children(카드·커넥터). 다중 슬롯이 하단 CTA 뒤로 가려 도달
+          불가한 것을 막으려 스크롤 컨테이너로 감싼다(경고-1 해소, 첫 소비자인 h07 에서 처리). */}
       <BottomSheet index={0} snapPoints={SNAP_POINTS}>
-        <BottomSheetView className="flex-1">
+        <BottomSheetScrollView>
           {header}
           {children}
-        </BottomSheetView>
+        </BottomSheetScrollView>
       </BottomSheet>
 
-      {/* 하단 고정 CTA 바(홈 인디케이터 아래로 SafeArea bottom inset). */}
-      <SafeAreaView
-        edges={['bottom']}
-        className="absolute bottom-0 left-0 right-0 bg-canvas"
-      >
-        <CtaBar buttons={cta} />
-      </SafeAreaView>
+      {/* 하단 고정 CTA 바 — CTA 가 있을 때만(빈 배열/미전달이면 통째로 미렌더 · D9). */}
+      {cta !== undefined && cta.length > 0 ? (
+        <SafeAreaView
+          edges={['bottom']}
+          className="absolute bottom-0 left-0 right-0 bg-canvas"
+        >
+          <CtaBar buttons={cta} />
+        </SafeAreaView>
+      ) : null}
     </View>
   );
 }

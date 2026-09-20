@@ -79,3 +79,61 @@ describe('🔴 MapSheetShell · SH2 — 일차 칩·back 콜백과 선택 표시
     expect(screen.getByTestId('sheet-daychip-1')).not.toBeSelected();
   });
 });
+
+/* ──────────────── TRIP-790 · D3 가산 확장(h07 첫 소비자) ────────────────
+ * `overlay?`(주면 DayChipOverlay 대체)·`cta?`(옵셔널)를 더한다. SH1·SH2 는 **건드리지
+ * 않는다** — days·cta 를 주는 기존 거동이 그대로 green 이어야 한다(D3 "기본값 현행 보존"의
+ * 회귀 심판). 아래 두 케이스는 h07 사용 형태(진행 카드 overlay + CTA 없음)를 잠근다.
+ * ⚠️ red 성격(02a ★9): 현행 props 는 overlay 미지원·cta required 라, 구현 전엔 assertion
+ *   또는 render throw 로 red 다(정상 · 구현 후 green).
+ * ─────────────────────────────────────────────────────────────────────── */
+describe('🔴 MapSheetShell · SH3 — overlay 가 DayChipOverlay 를 대체한다 (D3)', () => {
+  it('overlay 를 주면 그 노드가 뜨고 내부 일차 칩 오버레이는 안 그려진다', () => {
+    render(
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        // days 를 빈 배열로 둬 현행 DayChipOverlay 가 crash 하지 않게 한다(옵셔널화 전 안전).
+        days={[]}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        overlay={<Text testID="fake-overlay">진행 카드</Text>}
+        header={<Text testID="fake-header">헤더</Text>}
+        cta={[]}
+      >
+        <Text testID="fake-body">본문</Text>
+      </MapSheetShell>
+    );
+
+    // 긍정 — 주입한 overlay 노드가 좌상단 자리에 그려진다.
+    expect(screen.getByTestId('fake-overlay')).toBeOnTheScreen();
+    // 짝 — 기본 일차 칩 오버레이(DayChipOverlay 루트)는 대체돼 사라진다.
+    expect(screen.queryByTestId('sheet-daychip-root')).toBeNull();
+  });
+});
+
+describe('🔴 MapSheetShell · SH4 — cta 미전달이면 CTA 바를 안 그린다 (D3·D9)', () => {
+  it('cta 를 안 주면 sheet-cta-root 가 없다 (h07 은 생성 중이라 CTA 없음)', () => {
+    render(
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={[]}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        overlay={<Text testID="fake-overlay">진행 카드</Text>}
+        header={<Text testID="fake-header">헤더</Text>}
+      >
+        <Text testID="fake-body">본문</Text>
+      </MapSheetShell>
+    );
+
+    // CTA 를 안 넘기면 하단 고정 바가 통째로 미렌더(빈 바도 안 그린다).
+    expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+    // 짝 — 본문·overlay 는 그대로 살아 있다(CTA 만 빠진다).
+    expect(screen.getByTestId('fake-body')).toBeOnTheScreen();
+    expect(screen.getByTestId('fake-overlay')).toBeOnTheScreen();
+  });
+});

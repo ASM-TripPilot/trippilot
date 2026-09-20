@@ -85,6 +85,7 @@ import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
 import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
+import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
@@ -3587,22 +3588,64 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => <DraftScreen {...DRAFT_PREVIEW_BASE} />,
   },
   {
-    // h10 "만드는 중"(TRIP-337) — 같은 픽스처에 generating 만 얹는다. 게이지 3상태(day1 완성 /
-    // day2 생성 중 / day3 대기)와 스켈레톤은 tabs 에서 도출돼 손으로 적을 값이 없다.
-    key: 'itinerary-draft-generating',
+    // h07 부분 결과(TRIP-790) — 옛 h10 DraftScreen 인라인 게이지를 공용 지도+시트 셸 얼굴로 개명·
+    // 재작성. 진행 카드가 day-chip 자리를 대체(overlay)하고, peek 시트에 도착한 1일차 슬롯을 얹는다.
+    // 게이지 3셀(day1 완성/day2 생성 중/day3 대기)은 3일 여행에서 도출되나 프리뷰는 표시값을 직접
+    // 세운다(실 도출은 DraftPage + buildGenerationGauge, A8-1b 가 심판). CTA 없음(생성 중 · D9).
+    key: 'h07-generating-partial',
     band: 'h',
-    label: 'h10 · 만드는 중',
+    label: 'h07 · 부분 결과',
     login: null,
     render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        view={{
-          kind: 'listed',
-          days: DRAFT_PREVIEW_DAYS,
-          staleFailed: false,
-          generating: true,
-        }}
-      />
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H08_PREVIEW_SLOTS)}
+        overlay={
+          <GenerationProgressCard
+            cells={[
+              { status: 'done', label: '1일차 완성' },
+              { status: 'active', label: '2일차 생성 중' },
+              { status: 'waiting', label: '3일차 대기' },
+            ]}
+            onBack={noop}
+          />
+        }
+        header={
+          // 제목에 날짜를 합쳐 한 leaf 로(진행 카드 게이지 done 라벨 "1일차 완성" 과 겹치지 않게 —
+          // DraftPage 실배선과 같은 구조, A8-1b/A8-1e 근거). 프리뷰는 Figma 형식 "(수)" 로 세운다.
+          <SheetHeader
+            title="1일차 완성 · 6월 10일(수)"
+            dayLabel=""
+            dateLabel=""
+            meta="4곳 · 3.5km"
+          />
+        }
+      >
+        <View className="gap-md px-lg pb-2xl pt-xs">
+          {H08_PREVIEW_SLOTS.flatMap((slot, index) => {
+            const items = [
+              <SlotStopCard
+                key={`card-${slot.poiId}`}
+                slot={slot}
+                date={H08_PREVIEW_DATE}
+                index={index}
+                timeLabel={H08_PREVIEW_TIME_LABELS[index]}
+                onPressAlt={noop}
+              />,
+            ];
+            if (index < H08_PREVIEW_CONNECTORS.length) {
+              items.push(
+                <DistanceConnector
+                  key={`conn-${slot.poiId}`}
+                  slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
+                  distanceRange={H08_PREVIEW_CONNECTORS[index]}
+                />
+              );
+            }
+            return items;
+          })}
+        </View>
+      </MapSheetShell>
     ),
   },
   {

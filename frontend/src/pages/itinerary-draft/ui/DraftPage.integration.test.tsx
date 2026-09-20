@@ -275,14 +275,17 @@ describe('🔴 I1 · AC-4 · AC-9 — 2단계 생성을 폴링으로 잇고, 다
 
     renderPage();
 
-    // 단언 ① — 탭은 처음부터 **3개**다. 여행이 3일이기 때문이지 `days` 가 3개여서가 아니다.
-    //          `days.length` 로 셌다면 여기서 1개가 나온다(01b D7 의 급소).
-    await waitFor(() =>
-      expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toHaveLength(3)
-    );
-    expect(screen.getByTestId('itinerary-draft-day-3')).toBeDisabled();
+    // 단언 ① — PARTIAL 이면 셸 얼굴이 뜨고, 진행 카드 게이지는 **3셀**이다(여행 기간 3에서
+    //          도출). `days.length`(=1) 로 셌다면 cell-3 이 없다(01b D7 의 급소 — 옛 "탭 3개
+    //          disabled" 심판을 셸 게이지 3셀로 이관, TRIP-790). 셸이라 일차 칩은 없다(★2).
+    await screen.findByTestId('generation-progress-card');
+    expect(
+      screen.getByTestId('generation-gauge-cell-3-waiting')
+    ).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toEqual([]);
 
-    // 단언 ② — 폴링이 실제로 돈다. 2초 뒤 두 번째 조회가 나가 3일차가 활성이 된다.
+    // 단언 ② — 폴링이 실제로 돈다. 2초 뒤 두 번째 조회가 나가 COMPLETE 로 DraftScreen 이
+    //          복귀하고 3일차 탭이 활성이 된다(셸 → 완성 얼굴 전환이 폴링 도착의 증거).
     await waitFor(
       () => expect(screen.getByTestId('itinerary-draft-day-3')).toBeEnabled(),
       { timeout: DRAFT_POLL_INTERVAL_MS * 3 }
@@ -698,13 +701,13 @@ describe('🔴 I10 · TRIP-466 AC-a1 — CONFIRMED 면 완성 CTA 가 잠기고 
   });
 });
 
-describe('🔴 I11 · TRIP-466 AC-a3 — 생성 중(PARTIAL) 은 잠기지 않는다 (선제 green · 과잉잠금 트립와이어)', () => {
-  it('generationState=PARTIAL(status PLANNED) 이면 완성 버튼이 활성이고 눌러 이동한다', async () => {
+describe('🔴 I11 · TRIP-790 D9 — 생성 중(PARTIAL)엔 확정/완성 CTA 가 없다 (계약 플립)', () => {
+  it('generationState=PARTIAL 이면 셸 얼굴이 뜨고 완성 CTA·CTA 바가 0건이다', async () => {
     /**
-     * ★ canRetry 재사용의 정확성을 지키는 심판(02a ★1 · 브리프 맹점 ④). PARTIAL 은 generationState
-     * 이고 status 는 여전히 PLANNED 라 canRetry=`PLANNED !== 'CONFIRMED'`=true → 완성 CTA 활성.
-     * 지금도 green(잠금 0)이고 구현 후에도 green 이어야 한다 — 구현자가 "CONFIRMED 만"을 "생성
-     * 중도 막음"으로 넓히면(예: canRetry 에 PARTIAL 배제를 곱함) 이 케이스가 red 로 전환된다.
+     * ★ 계약 플립(02a ★1·§6). 옛 계약은 "PARTIAL 도 완성 CTA 활성"이었으나, D1(PARTIAL→셸)·
+     * D9(생성 중 CTA 없음)로 뒤집힌다 — 생성 중엔 확정할 완성본이 없어 CTA 자체를 안 그린다
+     * (셸 `cta` 미전달). 현행은 PARTIAL 에 DraftScreen 완성 CTA 를 그려 이 부재 단언이 red,
+     * 셸 전환 후 green. "과잉잠금"이 아니라 "표면 자체 부재"로 바뀐 것이다.
      */
     itineraryScript = () =>
       itinerary({
@@ -715,15 +718,13 @@ describe('🔴 I11 · TRIP-466 AC-a3 — 생성 중(PARTIAL) 은 잠기지 않�
 
     renderPage();
 
-    const complete = await screen.findByTestId('itinerary-draft-complete');
-    await waitFor(() =>
-      expect(screen.getByTestId('itinerary-draft-complete')).toBeEnabled()
-    );
+    // 셸 얼굴이 떴다(진행 카드) — 그 위에서 CTA 부재를 잰다.
+    await screen.findByTestId('generation-progress-card');
 
-    fireEvent.press(complete);
-
-    // 활성이라 실제로 이동한다 — 목적지 정확일치는 AC-a2(기존 I9) 소관, 여기선 "잠기지 않았다"만.
-    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('itinerary-draft-complete')).toBeNull();
+    expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+    // 짝 — CTA 가 없어도 이동은 애초에 일어나지 않는다(생성 중 확정 경로 자체가 없음).
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
 
