@@ -92,7 +92,7 @@
 | 철회 시 EXIF 즉시 파기(제4조) | TRIP-846(PR #527) — **머지 전 출하 금지** |
 | 이동 경로 문구 제거(제4조, 2026-09-16) | `actual_route_point` 미구현 — 안 모으는 것을 약관에 쓰지 않는다. 기능 도입 시 약관 개정 + 재동의 |
 | 확인자료 자동 기록(제5조) | `location_legal_log`(V1.3) + TRIP-857(#526, 머지됨) |
-| 확인자료 6개월 보존(제5조) | 법정 기준(제16조②). **현재 테이블은 append-only 영구 — TRIP-881 머지 전 출하 금지** |
+| 확인자료 6개월 보존(제5조) | 법정 기준(제16조②). 코드 정합 완료 — `purge_expired_location_legal_log()`(V2.49) + `LocationLegalLogRetentionSweeper` 가 하루 1회 만료분을 지운다(TRIP-881, PR #649) |
 | 원시 좌표 미포함(제5조) | V1.3 `detail` 규약 |
 | 동의 3층·철회(제7조) | `location_consent_state` L1/L2/L3 · `LocationConsentController` |
 | 14세 미만 미가입(제8조) | 연령 게이트(TRIP-249) |

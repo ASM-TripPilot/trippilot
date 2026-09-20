@@ -5,6 +5,9 @@ import com.trippilot.itinerarygeneration.domain.GenerationState
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.placedata.api.FrozenPoiView
+import com.trippilot.placedata.api.PoiSurfaceFacade
+import com.trippilot.placedata.api.PoiSurfaceView
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.VisitSlot
@@ -64,7 +67,16 @@ class ItineraryReadFacadeTest : StringSpec({
         override fun findStalePartial(updatedBefore: Instant) = emptyList<Itinerary>()
     }
 
-    fun facade(stored: Itinerary? = itinerary) = ItineraryReadFacade(trips, repo(stored))
+    /** 표면 대역 — poiId 를 그대로 이름으로 쓴다. 이름 규칙 자체는 [SlotSurfaceAssembler] 스펙이 잰다. */
+    fun surfaces(names: Map<UUID, String>) = object : PoiSurfaceFacade {
+        override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.mapNotNull { id ->
+            names[id]?.let { id to PoiSurfaceView(id, it, 33.0, 126.0, "명소", null, null, emptyList()) }
+        }.toMap()
+        override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
+    }
+
+    fun facade(stored: Itinerary? = itinerary, names: Map<UUID, String> = emptyMap()) =
+        ItineraryReadFacade(trips, repo(stored), SlotSurfaceAssembler(surfaces(names)))
 
     "슬롯을 경계 키로 내보낸다 — 물리 키를 내보내면 재계획으로 행이 갈릴 때 참조가 끊긴다" {
         val ref = facade().findCurrent(acc, tripId)!!
@@ -96,7 +108,47 @@ class ItineraryReadFacadeTest : StringSpec({
             listOf(ItineraryDay.of(d1, 0, listOf(slot(poiA, 0, "10:00"), slot(poiC, 1, "14:00")))),
             now, now, null, emptyList(),
         )
-        ItineraryReadFacade(trips, repo(multi)).findCurrent(acc, tripId)!!.slotKeys shouldContainExactly
-            listOf("$d1#$poiA", "$d1#$poiC")
+        ItineraryReadFacade(trips, repo(multi), SlotSurfaceAssembler(surfaces(emptyMap())))
+            .findCurrent(acc, tripId)!!.slotKeys shouldContainExactly listOf("$d1#$poiA", "$d1#$poiC")
+    }
+
+    /**
+     * 리마인드 문구의 재료(TRIP-883). **동선 순서**여야 한다 — 문구가 "A 들렀다 B" 로 읽히는데
+     * 저장 순서로 나가면 사용자가 실제로 가는 순서와 거꾸로 말할 수 있다.
+     */
+    "날짜별 장소 이름을 방문 순서로 준다" {
+        val names = facade(names = mapOf(poiA to "성산일출봉", poiB to "우도"))
+            .findPlannedPlaceNames(acc, tripId)
+
+        names[d1] shouldContainExactly listOf("성산일출봉")
+        names[d2] shouldContainExactly listOf("우도")
+    }
+
+    "orderIndex 가 순서를 정한다 — 저장 순서가 아니다" {
+        val poiC = UUID.randomUUID()
+        val multi = Itinerary.reconstitute(
+            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            GenerationState.COMPLETE,
+            // 뒤에 저장된 것이 orderIndex 는 앞이다.
+            listOf(ItineraryDay.of(d1, 0, listOf(slot(poiA, 1, "14:00"), slot(poiC, 0, "10:00")))),
+            now, now, null, emptyList(),
+        )
+        val facade = ItineraryReadFacade(
+            trips, repo(multi), SlotSurfaceAssembler(surfaces(mapOf(poiA to "나중", poiC to "먼저"))),
+        )
+
+        facade.findPlannedPlaceNames(acc, tripId)[d1] shouldContainExactly listOf("먼저", "나중")
+    }
+
+    /**
+     * **이름을 못 찾은 날은 키까지 뺀다.** 빈 목록으로 남기면 호출측이 "그 날은 일정이 없다"로 읽는데
+     * 사실은 이름만 모르는 것이다 — 그 오독이 그대로 "오늘은 일정이 없으니…" 라는 거짓 문구가 된다.
+     */
+    "표면이 없으면 그 날은 키가 없다 — 빈 목록으로 남기지 않는다" {
+        facade(names = emptyMap()).findPlannedPlaceNames(acc, tripId) shouldBe emptyMap()
+    }
+
+    "타 계정에는 재료를 주지 않는다" {
+        facade(names = mapOf(poiA to "성산일출봉")).findPlannedPlaceNames(UUID.randomUUID(), tripId) shouldBe emptyMap()
     }
 })

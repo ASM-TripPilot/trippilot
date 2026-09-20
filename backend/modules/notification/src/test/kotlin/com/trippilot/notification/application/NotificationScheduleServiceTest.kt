@@ -38,7 +38,7 @@ class NotificationScheduleServiceTest : StringSpec({
     fun fixture(now: String, start: String, end: String): Triple<NotificationScheduleService, FakeSchedules, FakeTripOwner> {
         val schedules = FakeSchedules()
         val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse(start), LocalDate.parse(end)) }
-        return Triple(NotificationScheduleService(trips, schedules, NoCopies(), clockAt(now)), schedules, trips)
+        return Triple(NotificationScheduleService(trips, schedules, NoCopies(), FakePlans(), clockAt(now)), schedules, trips)
     }
 
     "여행 전날 1건 + 여행일수만큼 당일 알림이 적재된다" {

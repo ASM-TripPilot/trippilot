@@ -604,7 +604,7 @@ note = """
 id = "REMINDER-COPY-SLOTS"
 ticket = "TRIP-883"
 title = "리마인드 문구에 그 날 갈 곳(slots)을 채운다 — 재료가 비면 AI 가 '일정 없음'을 지어낸다"
-status = "todo"
+status = "done"
 owner = "알림"
 migration = false
 touches = [
@@ -618,9 +618,23 @@ note = """
 "일정이 없으니…" 로 답했다. 일정이 있는 날에 나가면 거짓말이라, 지금은 **재료가 비면 안 묻는다.**
 즉 `AI_REMINDER_COPY_MODE=http` 로 켜도 **문구가 하나도 안 나온다**(기본 off 라 운영 영향 0).
 
-**모듈 경계 결정이 선행이다** — 알림(C14)이 그 날 POI 이름을 알려면 일정(C8)을 봐야 하는데
-그 방향 의존이 없다. `..api..` 퍼사드를 여는 쪽이 R1 규약에 맞아 보이나, "그 날 슬롯"의 정의
-(확정 전/후·편집 중)가 일정 쪽 규칙이라 합의가 필요하다.
+**완료(2026-09-20).** 경계 결정은 둘 다 정해서 문서에 박았다.
+
+**누가 이름을 주나** — 일정(C8)이 준다(`ItineraryPlanFacade.findPlannedPlaceNames`). 알림이
+`poiId` 를 받아 place-data 를 따로 묻는 안은 기각했다: **"어느 이름이 이기는가"가 두 모듈로 갈린다.**
+확정 슬롯은 동결 이름이 이기고(INV-U1-03) 그 판단은 이미 C8 의 `SlotSurfaceAssembler` 가 소유한다.
+
+**"그 날 슬롯"의 정의** — `findPlanSlots` 와 **같다**(현재 일정, 확정 여부 안 가림). 새 정의를
+만들지 않은 것이 결정이다. 리마인드만 다른 일정을 말하면 화면과 알림이 어긋난다.
+
+**곁가지로 실제 결함 하나를 잡았다** — `TRIP_PRE` 는 D-1 에 울리면서 "내일은 …" 을 말하는데
+발화일을 그대로 물으면 아직 시작도 안 한 날의 일정을 묻게 돼 **그 예약만 조용히 문구 없이**
+나간다. `ReminderCopyRequest.date` 를 "문구가 말하는 날"로 못 박았다.
+
+**안 한 것**: `slots[].category`. 계약에 자리가 있고 상대 프롬프트도 쓰지만, 상대는 **영문 코드**
+(`FOOD`·`CAFE`)를 기대하는데 `PoiSurfaceView.category` 는 한글 정본(`맛집`)이라 그대로 보내면
+상대가 라벨을 못 찾아 **조용히 이름만 쓴다**(무해하지만 무효과). 어휘를 맞추려면 place-data 가
+경계 코드를 함께 내보내야 해서 별건으로 뗀다 → REMINDER-COPY-CATEGORY.
 """
 
 # ── Figma 1:1 정합 계약 확장(TRIP-823 움브렐라) ────────────────────────────────
@@ -729,8 +743,8 @@ note = """
 [[nodes]]
 id = "FLAKY-REPLAN-CANCEL"
 ticket = ""
-title = "ReplanApiIT '취소는 세션만 닫는다' 가 CI 에서 간헐 실패"
-status = "todo"
+title = "ReplanApiIT '취소는 세션만 닫는다' — 보류 대역이 들어와 닫혔다"
+status = "done"
 owner = "재계획"
 migration = false
 touches = ["backend/app/src/test/kotlin/com/trippilot/app/web/ReplanApiIT.kt"]
@@ -765,12 +779,22 @@ note = """
 취소**할지. 전자가 결정론적이지만 실제 경합을 안 재고, 후자는 여전히 확률적이다.
 재현 없이 단언을 넓히지 않는다([[FLAKY-HEALTHPING]] 과 같은 규율) — 다만 이 노드는 **원인이
 규명된** 상태라 그쪽과 다르다.
+
+## 해소(2026-09-20 확인) — 전자(대역 주입)로 이미 닫혀 있었다
+
+`PausingReplanFacade` 가 **관측 다음 날**(2026-09-18, PR #579 에 묻어 들어왔다) 추가됐다.
+`propose()` 를 래치로 잡아 두므로 취소하는 동안 세션이 `SOLVING` 을 벗어날 수 없다 — 경합의
+원천이 사라졌다. 이 노드를 만든 사람과 고친 사람이 달라 **닫히지 않은 채 남아 있었다.**
+
+판정 근거: 로컬 `--rerun-tasks` 3/3 통과 · 그 커밋 이후 develop backend-ci **8/8 초록**.
+고치러 들어갔다가 이미 고쳐진 것을 확인하고 닫는다(같은 날 TRIP-881 에서 한 번 더 겪었다 —
+**착수 전에 코드부터 본다**).
 """
 [[nodes]]
 id = "FLAKY-OUTBOX-LATENCY"
 ticket = ""
-title = "OutboxRelayIT '배달 지연이 기록된다' 가 단독 실행에서 항상 실패"
-status = "todo"
+title = "OutboxRelayIT '배달 지연이 기록된다' — 두 시계로 재던 실제 결함이었다"
+status = "done"
 owner = "관측"
 migration = false
 touches = ["backend/app/src/test/kotlin/com/trippilot/app/OutboxRelayIT.kt"]
@@ -796,6 +820,30 @@ note = """
 재현 없이 단언을 넓히지 않는다([[FLAKY-HEALTHPING]]·[[FLAKY-REPLAN-CANCEL]] 과 같다).
 다만 이 건은 **단독 실행에서 결정론적으로 실패**하므로 셋 중 가장 싸게 파고들 수 있다 —
 릴레이가 타이머를 올리는 지점에 로그를 하나 넣고 단독으로 한 번 돌리면 갈린다.
+"""
+
+[[nodes]]
+id = "REMINDER-COPY-CATEGORY"
+ticket = ""
+title = "리마인드 재료에 카테고리 — 경계 어휘가 한글이라 상대가 못 읽는다"
+status = "todo"
+owner = "알림"
+migration = false
+touches = [
+  "backend/modules/place-data/src/main/kotlin/com/trippilot/placedata/api",
+  "backend/modules/notification/src/main/kotlin/com/trippilot/notification",
+]
+note = """
+TRIP-883 에서 갈라져 나온 잔여. 계약(`ReminderSlotSchema.category`)에 자리가 있고 상대 프롬프트가
+`"장소 · 카테고리"` 로 렌더하는데 **우리가 안 채운다.**
+
+**그냥 채우면 안 된다** — 상대 `_CATEGORY_LABELS` 는 `FOOD`·`CAFE` 같은 **영문 경계 코드**를 키로
+쓰는데 `PoiSurfaceView.category` 는 한글 정본(`맛집`)이다. 그대로 보내면 라벨을 못 찾아
+**조용히 이름만 렌더된다** — 터지지 않고 효과만 없다(가장 안 보이는 실패다).
+
+정합 지점은 place-data 다: `PoiCategory.boundaryCode` 가 이미 있으니 `PoiSurfaceView` 에 경계 코드를
+**함께** 내보내면 된다(한글 필드는 화면이 쓰므로 교체가 아니라 추가). 파급은 그 뷰의 소비자 전부라
+TRIP-883 과 묶지 않았다.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -866,6 +914,16 @@ note = """
 **원인은 아직 단정하지 못했다.** 테스트는 `ServerSocket(0)` 을 열고 별도 스레드가 accept 만 하며
 한 바이트도 쓰지 않는 상황을 만든다. 부하가 걸리면 클라이언트 연결과 accepter 스레드 기동이
 경합하는 구조인데, 그것이 RST 로 이어지는 경로를 실제로 재현하지는 못했다.
+
+**갱신(2026-09-20) — 셋 중 유일하게 살아남은 노드다.** 같은 날 나머지 둘이 닫혔다:
+[[FLAKY-OUTBOX-LATENCY]] 는 플레이크가 아니라 **실제 결함**이었고(두 시계로 재는 지연 계측),
+[[FLAKY-REPLAN-CANCEL]] 은 이미 고쳐져 있었다. 이쪽은 **관측 1회(2026-09-01) 이후 3주 동안
+재발이 없다** — develop backend-ci 8/8 초록.
+
+**손대지 않는다.** 재현이 두 번 실패했고 기전을 모르는 상태에서 단언을 바꾸면, 고쳤는지
+가렸는지 구분할 방법이 없다. 특히 `cause` 타입 검사를 "타임아웃 *또는* 리셋"으로 넓히는 안은
+**연결 거부까지 통과시킬 위험**이 있어(그걸 가르려고 둔 검사다) 명시적으로 기각한다.
+다음에 재발하면 그때가 세 번째 관측이고, 그 로그를 보고 판단한다.
 
 **재현 시도 2 실패 — 가설이 하나 더 지워졌다(2026-09-16).** 이번 축은 **병렬 소켓 경합**이었다
 (스레드 8개 × 150회 = 1200회를 동시에 돌려 포트 재사용·backlog 압력을 만들었다). 결과는
@@ -1361,6 +1419,15 @@ O-U5-8(EXIF 를 GPS 동의로 게이팅하는 것이 목적 범위에 맞는가)
 남은 일은 쓰인 문서를 시드에 싣는 것 하나다 — 문구 작성이 아니라 배선이다.
 
 재동의(`reconsent_required`) 판단이 따라오므로 **사용자가 생기기 전에** 끝내야 한다.
+
+**갱신(2026-09-20) — 게이트 하나가 풀렸다.** 문서 대조표가 *"TRIP-881 머지 전 출하 금지"* 로
+스스로 걸어 둔 게이트가 있었는데(확인자료가 약관은 6개월인데 테이블은 영구였다), 그쪽이
+PR #649 로 해소됐다 — `purge_expired_location_legal_log()`(V2.49, SECURITY DEFINER) + 하루 1회
+스위퍼. 낡아진 게이트 문장 3줄은 정정했다.
+
+**이제 시드를 막는 것은 `[미확정: 공개 출시일]` 시행일 하나다**(docs/legal 의 미확정 마커
+전수 조회 = 실 마커 1건). 사업자등록번호·주소는 등록 후 본문에 더하는 건이라 시드 반영과 직렬이 아니다.
+**시행일만 정해지면 배선은 한 PR 이다.**
 """
 
 [[nodes]]
