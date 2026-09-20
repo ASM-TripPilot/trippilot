@@ -2011,7 +2011,8 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // e03 숙소 상세(TRIP-457) — 몰입 화면(탭바 없음). default 는 편의시설 4칩·가격·미니맵·CTA 2종.
+  // e03 숙소 상세(TRIP-457·727) — 몰입 화면(탭바 없음). default 는 편의시설 4칩·2톤 가격·실 미니맵·
+  // CTA 2종. Figma default=저장됨이라 saved:true(하트 채움, TRIP-727 프리뷰 병합 — 구 -saved 키 흡수).
   {
     key: 'stay-detail-default',
     band: 'e',
@@ -2020,25 +2021,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayDetailScreen
         item={STAY_DETAIL_PREVIEW_ITEM}
-        saved={false}
-        onToggleSave={noop}
-        onPressBook={noop}
-        onPressAddToTrip={noop}
-        onPressBack={noop}
-      />
-    ),
-  },
-  // 담김(찬 하트 분홍) + "일정에 추가" 안내 표시 + 편의시설 결측("미확인") 엣지를 한 화면에.
-  {
-    key: 'stay-detail-saved',
-    band: 'e',
-    label: 'e03 · 상세 담김+결측',
-    login: null,
-    render: () => (
-      <StayDetailScreen
-        item={{ ...STAY_DETAIL_PREVIEW_ITEM, amenities: [] }}
         saved={true}
-        addedNotice={true}
         onToggleSave={noop}
         onPressBook={noop}
         onPressAddToTrip={noop}

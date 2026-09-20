@@ -134,7 +134,12 @@ describe('I1·I2·I3 · 데이터는 손에 든 item 에서 (AC-2)', () => {
     render(<StayDetailPage />, { wrapper: createWrapper() });
 
     expect(screen.getByText(ITEM_A.name)).toBeOnTheScreen();
-    expect(screen.getByText(formatPrice(ITEM_A.price))).toBeOnTheScreen();
+    // 가격은 2톤 분할 렌더(bold '145,000원' + muted '~' 두 형제, TRIP-727) — 결합 노드 아님.
+    // 페이지가 가격을 그린다는 보장은 유지하되 결합 문자열 가정만 분할로 바꾼다.
+    expect(
+      screen.getByText(formatPrice(ITEM_A.price).slice(0, -1))
+    ).toBeOnTheScreen();
+    expect(screen.getByText('~')).toBeOnTheScreen();
   });
 
   it('I2 · item 이 망가진 JSON 이면 notFound (INV-4)', () => {

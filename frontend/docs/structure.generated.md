@@ -603,6 +603,9 @@
 - `src/features/settings/ui/TripCard.tsx`  →  TripCardVM · TripCardProps · TripCard
 - `src/features/settings/ui/TripStatusSegment.tsx`  →  TripStatusSegmentProps · TripStatusSegment
 
+## src/features/stay/config/
+- `src/features/stay/config/amenityIcons.ts`  →  resolveAmenityIcon
+
 ## src/features/stay/model/
 - `src/features/stay/model/buildSaveStayRequest.ts`  →  buildSaveStayRequest
 - `src/features/stay/model/filterReasonLabel.ts`  →  filterReasonLabel
@@ -625,7 +628,7 @@
 - `src/features/stay/ui/SkeletonList.tsx`  →  SkeletonList
 - `src/features/stay/ui/StayDetailScreen.tsx`  →  StayDetailScreenProps · StayDetailScreen
 - `src/features/stay/ui/StayFilterSheet.tsx`  →  StayFilterSheetProps · StayFilterSheet
-- `src/features/stay/ui/StayGlyphs.tsx`  →  BackChevronGlyph · ChevronDownGlyph · FilterSlidersGlyph · WarningTriangleGlyph · MapPinGlyph · SearchGlyph · PlusGlyph · ChevronRightGlyph · HeartOutlineGlyph · ShareGlyph · InfoGlyph · ExternalLinkGlyph · CalendarPlusGlyph · AmenityGlyph · BedGlyph · HeartFilledGlyph
+- `src/features/stay/ui/StayGlyphs.tsx`  →  BackChevronGlyph · ChevronDownGlyph · FilterSlidersGlyph · WarningTriangleGlyph · MapPinGlyph · SearchGlyph · PlusGlyph · ChevronRightGlyph · HeartOutlineGlyph · ShareGlyph · InfoGlyph · ExternalLinkGlyph · AmenityGlyph · ParkingGlyph · BreakfastGlyph · WifiGlyph · OceanViewGlyph · BedGlyph · HeartFilledGlyph
 - `src/features/stay/ui/StayPriceSheet.tsx`  →  StayPriceSheetProps · StayPriceSheet
 - `src/features/stay/ui/StayRegisterScreen.tsx`  →  StayRegisterScreenProps · StayRegisterScreen
 - `src/features/stay/ui/StaySearchScreen.tsx`  →  StaySearchScreenProps · StaySearchScreen
@@ -1300,4 +1303,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 876개 파일
+합계 877개 파일

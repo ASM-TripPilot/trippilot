@@ -172,7 +172,11 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    추가로 166→171. test-designer 02a 선반영(카운트 가드만) — implementer 는 preview.tsx 에
     //    그 5키만 추가하고 이 가드는 안 만진다(추가 전엔 166개라 이 단언이 red). devPreviewBandSort
     //    는 밴드 h·l 만 잠가 band e 와 무관(오갱신 금지 — e02 라벨은 /^[a-l]\d{2}/ 접두로 AC-1 통과).
-    expect(PREVIEW_STATES).toHaveLength(171);
+    // ⚠️ TRIP-727: e03 프리뷰 병합으로 `stay-detail-saved` 키 1개 삭제(default 를 saved:true 로
+    //    병합, Figma default=저장됨) → 171→170. test-designer 02a 선반영(카운트 가드만) —
+    //    implementer 는 preview.tsx 에서 그 1키만 지울 뿐 이 가드는 안 만진다(삭제 전엔 171개라 이
+    //    단언이 red). devPreviewBandSort 는 밴드 h·l 만 잠가 band e 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(170);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -344,6 +348,22 @@ describe('🔴 TRIP-726 AC-P2 · e02 상태 5종 프리뷰 키 (band e)', () => 
 
     // 형제 e앵커 — 기존 e키(TRIP-725 default)가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
     expect(keys).toContain('stay-search-default');
+  });
+});
+
+describe('🔴 TRIP-727 AC-9 · e03 프리뷰 병합 (stay-detail-saved 삭제)', () => {
+  it('키 집합에 stay-detail-saved 가 없고, 형제 e03 키(default·notfound)는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — stay-detail-saved 는 사라진다(default 를 saved:true 로 병합, 삭제 전엔 present 라 red).
+    //   카운트(170)만으론 "아무 1키나 지워도" 통과하므로, 이 짝이 '지운 게 정확히 그 키'임을 못박는다
+    //   (TRIP-711/722/742/743 음성 가드 패턴 미러).
+    expect(keys).not.toContain('stay-detail-saved');
+
+    // 긍정 짝 — 같은 e03 형제 키는 그대로(과잉 삭제·공허 통과 차단).
+    expect(keys).toContain('stay-detail-default');
+    expect(keys).toContain('stay-detail-notfound');
   });
 });
 

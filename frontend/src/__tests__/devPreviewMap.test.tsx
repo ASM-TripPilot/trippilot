@@ -57,3 +57,17 @@ describe('dev 프리뷰 지도 1키 — 딥링크 초기 조준 (D9 · U2)', () 
     expect(screen.getByTestId('map-root')).toBeOnTheScreen();
   });
 });
+
+describe('TRIP-727 · e03 프리뷰가 MapView 를 전이 로드한다 (AC-4·AC-9)', () => {
+  it('state=stay-detail-default로 열면 지도 루트(map-root)가 렌더된다', () => {
+    mockSearchParams.state = 'stay-detail-default';
+
+    // 렌더 자체가 @/shared/api 지뢰를 안 밟는다는 증명을 겸한다 — StayDetailScreen→@/shared/map
+    // (MapView)은 네트워크 계층을 안 문다(전이 로드 안전). 현행 프리뷰는 정적 placeholder 라
+    // map-root 부재 → red. 구현(placeholder→MapView) 후 green(env 키 없어 map-failure 분기라도
+    // map-root 래퍼는 항상 렌더 — map-default 선례와 동형).
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('map-root')).toBeOnTheScreen();
+  });
+});
