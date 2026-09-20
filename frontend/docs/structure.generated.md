@@ -214,7 +214,6 @@
 ## src/app/trips/[tripId]/itinerary/copick/
 - `src/app/trips/[tripId]/itinerary/copick/[slotKey].tsx`  →  (export 없음)
 - `src/app/trips/[tripId]/itinerary/copick/complete.tsx`  →  (export 없음)
-- `src/app/trips/[tripId]/itinerary/copick/index.tsx`  →  (export 없음)
 
 ## src/app/trips/[tripId]/itinerary/
 - `src/app/trips/[tripId]/itinerary/draft.tsx`  →  (export 없음)
@@ -404,7 +403,6 @@
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
-- `src/features/itinerary/model/coPickProgress.ts`  →  CoPickProgressSlot · CoPickProgress · coPickProgress
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · formatDraftDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
 - `src/features/itinerary/model/itineraryEditStore.ts`  →  removeSlot · addSlot · reorderKeepingFixed · ItineraryEditState · useItineraryEditStore
@@ -418,8 +416,6 @@
 - `src/features/itinerary/model/timeBandLabel.ts`  →  TimeBandLabel · timeBandLabel
 
 ## src/features/itinerary/ui/
-- `src/features/itinerary/ui/CoPickCompleteScreen.tsx`  →  CoPickCompleteSlot · CoPickCompleteScreenProps · CoPickCompleteScreen
-- `src/features/itinerary/ui/CoPickHubScreen.tsx`  →  CoPickHubSlot · CoPickHubScreenProps · CoPickHubScreen
 - `src/features/itinerary/ui/ConceptPickerScreen.tsx`  →  ConceptPickerScreenProps · ConceptPickerScreen
 - `src/features/itinerary/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/features/itinerary/ui/GeneratingScreen.tsx`  →  GeneratingScreenProps · GeneratingScreen
@@ -680,11 +676,10 @@
 - `src/pages/destination-detail/ui/DestinationDetailPage.tsx`  →  DestinationDetailPage
 
 ## src/pages/itinerary-copick/
-- `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickHubPage · CoPickCompletePage
+- `src/pages/itinerary-copick/index.ts`  →  SlotFillPage · CoPickCompletePage
 
 ## src/pages/itinerary-copick/ui/
 - `src/pages/itinerary-copick/ui/CoPickCompletePage.tsx`  →  CoPickCompletePageProps · CoPickCompletePage
-- `src/pages/itinerary-copick/ui/CoPickHubPage.tsx`  →  CoPickHubPageProps · CoPickHubPage
 - `src/pages/itinerary-copick/ui/SlotFillPage.tsx`  →  SlotFillPageProps · SlotFillPage
 
 ## src/pages/itinerary-draft/
@@ -1305,4 +1300,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 879개 파일
+합계 874개 파일

@@ -191,7 +191,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    (카운트 가드만) — implementer 는 preview.tsx 에서 그 5키를 지우고 expanded 1키만 추가할 뿐
     //    이 가드는 안 만진다(재편 전엔 174개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-792'
     //    describe 가 못박는다. devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신.
-    expect(PREVIEW_STATES).toHaveLength(170);
+    // ⚠️ TRIP-796: h11 같이 결과(CoPick 완료) 지도+시트 셸 프리뷰 키(`h11-copick-complete`, band `h`)
+    //    추가로 170→171. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에 그 키
+    //    하나만 추가(MapSheetShell 을 5 CoPick 슬롯으로 조립)하고 이 가드는 안 만진다(추가 전엔 170개라
+    //    이 단언이 red). 정확히 그 키인지는 아래 'TRIP-796' describe 가 못박는다. devPreviewBandSort 는
+    //    band h 를 잠가 EXPECTED_H 도 동반 갱신(copick 을 h11 그룹 첫 항목으로 삽입).
+    expect(PREVIEW_STATES).toHaveLength(171);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -556,6 +561,21 @@ describe('🔴 TRIP-792 · h08 셸 전환 프리뷰 키 재편 (band h)', () => 
     //   (과잉 삭제·공허 통과 차단 — 삭제 집합은 초안 5키뿐, 폴백 3키는 유지).
     expect(keys).toContain('itinerary-draft-fallback-minimal');
     expect(keys).toContain('itinerary-generating');
+  });
+});
+
+describe('🔴 TRIP-796 · h11 같이 결과(CoPick 완료) 셸 프리뷰 키 추가 (band h)', () => {
+  it('키 집합에 h11-copick-complete 가 있고, 형제 band h 키(h08·폴백)는 그대로다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 신규 CoPick 완료 셸 프리뷰 키가 실재한다(추가 전엔 부재라 red). 카운트(171)만으론
+    //   "아무 키나 추가해도" 통과하므로, 이 짝이 '더한 게 정확히 그 키'임을 못박는다.
+    expect(keys).toContain('h11-copick-complete');
+
+    // 형제 band h 앵커 — 인접 h08·폴백 키가 딸려 사라지지 않았다(과잉 편집·공허 통과 차단).
+    expect(keys).toContain('h08-draft-collapsed');
+    expect(keys).toContain('itinerary-draft-fallback-deterministic');
   });
 });
 

@@ -68,6 +68,10 @@ const EXPECTED_H = [
   'dev-preview-state-h08-draft-expanded', // h08 (TRIP-792 지도+시트 셸 펼침)
   'dev-preview-state-itinerary-generating', // h09
   'dev-preview-state-itinerary-generating-failed', // h09
+  // TRIP-796: h11 같이 결과(CoPick 완료) 지도+시트 셸. 코드가 h11 이라 안정 정렬이 h11 그룹 안에
+  // 들어가고, PREVIEW_STATES 배열에서 이 프리뷰를 fallback 3키보다 **앞**(그 직전)에 삽입하므로
+  // 안정 정렬이 이 순서(copick → fallback 3)를 낸다(02a ★13 · h08 D5 선례 — 배열 위치=정렬 위치).
+  'dev-preview-state-h11-copick-complete', // h11 (TRIP-796 지도+시트 셸 · 같이 결과)
   'dev-preview-state-itinerary-draft-fallback-deterministic', // h11
   'dev-preview-state-itinerary-draft-fallback-minimal', // h11
   'dev-preview-state-itinerary-draft-fallback-demoted', // h11

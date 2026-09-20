@@ -635,6 +635,88 @@ const H08_PREVIEW_CONNECTORS = ['차량 · 2.1km', '0.8km', '0.6km'];
 
 const H08_PREVIEW_DATE = '2026-06-10';
 
+// h11 같이 결과(CoPick 완료, TRIP-796) — 비고정 4 + 고정 숙소 1(21:00). 고정 슬롯은 단일 시각·부제·
+// 고정 배지, 비고정은 시각 범위 칩만(다른 후보 링크 없음). meta 는 비고정 4 → `4/4 골랐어요`.
+const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
+  {
+    poiId: 'copick-gwangalli',
+    startAt: '10:00:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '광안리 해변',
+    category: '자연',
+    tags: ['바다', '산책'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+    distanceRange: null,
+    lat: 35.1532,
+    lng: 129.1188,
+  },
+  {
+    poiId: 'copick-hwangnyeong',
+    startAt: '11:30:00',
+    endAt: '12:10:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '황령산 전망대',
+    category: '자연',
+    tags: ['전망', '야경'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+    distanceRange: '차량 · 2.1km',
+    lat: 35.1372,
+    lng: 129.1005,
+  },
+  {
+    poiId: 'copick-museum',
+    startAt: '13:00:00',
+    endAt: '14:30:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '부산시립미술관',
+    category: '문화',
+    tags: ['전시', '실내'],
+    imageUrl: null,
+    distanceRange: '0.8km',
+    lat: 35.1697,
+    lng: 129.1339,
+  },
+  {
+    poiId: 'copick-waveon',
+    startAt: '15:30:00',
+    endAt: '16:30:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '웨이브온 카페',
+    category: '카페',
+    tags: ['카페', '오션뷰'],
+    imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    distanceRange: '0.6km',
+    lat: 35.1889,
+    lng: 129.2088,
+  },
+  {
+    poiId: 'copick-hotel',
+    startAt: '21:00:00',
+    endAt: '21:00:00',
+    isFixed: true,
+    endsNextDay: false,
+    hasViolation: false,
+    nameKo: '해운대 그랜드 호텔',
+    category: '숙소',
+    tags: [],
+    imageUrl: null,
+    distanceRange: '0.6km',
+    lat: 35.163,
+    lng: 129.16,
+  },
+];
+
+const H11_COPICK_PREVIEW_DATE = '2026-06-10';
+
 /**
  * g02 거점 숙소 2/4 default 의 대표값(TRIP-672, Figma `3657:2068` 재작성) — 박별(1박=1행) 거점
  * 카드. 배선(`nightlyBaseCards`)이 낼 값과 같은 모양으로, 앞 두 밤은 배정된 숙소명, 마지막 밤은
@@ -3679,6 +3761,72 @@ export const PREVIEW_STATES: PreviewState[] = [
                   key={`conn-${slot.poiId}`}
                   slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
                   distanceRange={H08_PREVIEW_CONNECTORS[index]}
+                />
+              );
+            }
+            return items;
+          })}
+        </View>
+      </MapSheetShell>
+    ),
+  },
+  // h11 같이 결과(CoPick 완료, TRIP-796) — Figma `4257:2148` 대조용. 공용 지도+시트 셸에 CoPick 5슬롯
+  // (비고정 4 + 고정 숙소 1)을 얹는다. 고정 숙소는 단일 시각 `21:00`+부제+고정 배지, 비고정은 시각
+  // 범위 칩만(다른 후보 링크 없음 · h08 과 차이). meta 는 비고정 4 → `4/4 골랐어요`. 배열에서 fallback
+  // 3키 **직전**(h11 그룹 첫 자리)에 둬 안정 정렬이 copick→fallback 순서를 내게 한다(devPreviewBandSort
+  // EXPECTED_H · 02a ★13). 2스냅 실개폐·딤은 통과형 목 사각이라 6-b 실기가 유일한 개폐 그물.
+  {
+    key: 'h11-copick-complete',
+    band: 'h',
+    label: 'h11 · 같이 결과 CoPick 완료',
+    login: null,
+    render: () => (
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H11_COPICK_PREVIEW_SLOTS)}
+        days={[
+          { label: '1일차' },
+          { label: '2일차' },
+          { label: '3일차' },
+          { label: '4일차' },
+        ]}
+        selectedDayIndex={0}
+        onSelectDay={noop}
+        onBack={noop}
+        header={
+          <SheetHeader
+            title="부산 여행"
+            dayLabel="1일차"
+            dateLabel="6월 10일(수)"
+            meta="4/4 골랐어요"
+          />
+        }
+        cta={[{ label: '확정하기', variant: 'primary', onPress: noop }]}
+      >
+        <View className="gap-md px-lg pb-2xl pt-xs">
+          {H11_COPICK_PREVIEW_SLOTS.flatMap((slot, index) => {
+            const timeLabel = slot.isFixed
+              ? slot.startAt.slice(0, 5)
+              : `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`;
+            const items = [
+              <SlotStopCard
+                key={`card-${slot.poiId}`}
+                slot={slot}
+                date={H11_COPICK_PREVIEW_DATE}
+                index={index}
+                timeLabel={timeLabel}
+                required={index === 2}
+                fixed={slot.isFixed}
+                subtitle={slot.isFixed ? '저녁 · 숙소 · 변경 불가' : undefined}
+              />,
+            ];
+            if (index < H11_COPICK_PREVIEW_SLOTS.length - 1) {
+              const nextSlot = H11_COPICK_PREVIEW_SLOTS[index + 1];
+              items.push(
+                <DistanceConnector
+                  key={`conn-${slot.poiId}`}
+                  slotKey={buildSlotKey(H11_COPICK_PREVIEW_DATE, slot.poiId)}
+                  distanceRange={nextSlot.distanceRange}
                 />
               );
             }
