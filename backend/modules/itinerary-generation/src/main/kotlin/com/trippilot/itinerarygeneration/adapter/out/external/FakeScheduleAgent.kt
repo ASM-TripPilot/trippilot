@@ -15,11 +15,18 @@ import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.placedata.api.Area
 import com.trippilot.placedata.api.CandidatePoolPort
+import com.trippilot.placedata.api.GroundedPlace
 import org.springframework.stereotype.Component
 import com.trippilot.itinerarygeneration.application.SlotKey
 import java.util.UUID
 import java.time.Clock
 import java.time.LocalTime
+import kotlin.math.asin
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * FakeScheduleAgent — 실 HTTP AI(U5/TRIP-229) 도착 전 계약-우선 개발용 결정론 Fake.
@@ -104,7 +111,8 @@ class FakeScheduleAgent(
         // **그 날 안에 끝나는 것만** 만든다. 늦은 시각에 기계적으로 3시간씩 더하면 자정을 넘어
         // `endAt < startAt` 인 슬롯이 나오고, 도메인 검증에 걸려 사용자에게 500 이 된다
         // (실측: 19:33 KST 에 CI 만 실패, 18:44 에 돌린 로컬은 통과 — 시각 의존 결함).
-        val slots = candidates.take(PICKS_PER_DAY).mapIndexed { i, gp -> i to gp }
+        val picks = candidates.take(PICKS_PER_DAY)
+        val slots = picks.mapIndexed { i, gp -> i to gp }
             .mapNotNull { (i, gp) ->
                 val s = startAt.plusHours((i * SLOT_GAP_HOURS).toLong())
                 val e = s.plusHours(1)
@@ -118,7 +126,33 @@ class FakeScheduleAgent(
             solveMode = SolveMode.DETERMINISTIC,
             isFallback = false,
             freshness = FreshnessMeta(clock.instant(), degraded = false),
+            // 기준점에서 출발해 고른 순서대로 이은 **직선 합**이다 — 실 AI 의 경로 거리가 아니다.
+            // 그래도 상수나 null 보다 낫다: null 로 두면 "초안에 거리가 실린다"는 배선이
+            // 기본 모드에서 한 번도 실행되지 않아, 실 연동에서야 처음 도는 코드가 된다.
+            totalDistanceKm = straightLineKm(input.originLat, input.originLng, picks),
         )
+    }
+
+    /** 직선 거리 합(km). 좌표가 없으면 **모른다** — 0 으로 채우면 "이동이 없는 하루"라는 거짓이 된다. */
+    private fun straightLineKm(originLat: Double?, originLng: Double?, picks: List<GroundedPlace>): Double? {
+        if (picks.isEmpty()) return null
+        var lat = originLat ?: return null
+        var lng = originLng ?: return null
+        var sum = 0.0
+        picks.forEach {
+            sum += haversineKm(lat, lng, it.lat, it.lng)
+            lat = it.lat
+            lng = it.lng
+        }
+        return Math.round(sum * 10) / 10.0
+    }
+
+    private fun haversineKm(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLng = Math.toRadians(lng2 - lng1)
+        val a = sin(dLat / 2).pow(2) +
+            cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLng / 2).pow(2)
+        return 2 * EARTH_RADIUS_KM * asin(min(1.0, sqrt(a)))
     }
 
 
@@ -128,6 +162,7 @@ class FakeScheduleAgent(
         private const val DEFAULT_DWELL_MIN = 60
         /** 지금 당장이 아니라 조금 뒤부터 — 이동 시간을 아예 0 으로 두면 화면이 비현실적으로 보인다. */
         private const val REPLAN_LEAD_MIN = 30
+        private const val EARTH_RADIUS_KM = 6371.0
         private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
     }
     /**

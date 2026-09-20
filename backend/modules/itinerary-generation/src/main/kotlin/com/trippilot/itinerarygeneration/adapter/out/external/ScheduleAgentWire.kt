@@ -14,6 +14,10 @@ import com.trippilot.itinerarygeneration.domain.SlotCandidate
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesEmptyReason
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesInput
 import com.trippilot.itinerarygeneration.domain.SlotCandidatesOutput
+import com.trippilot.itinerarygeneration.domain.FixedBlock
+import com.trippilot.itinerarygeneration.domain.PreferenceProfile
+import com.trippilot.itinerarygeneration.domain.RequestMeta
+import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
@@ -284,6 +288,92 @@ internal fun ScheduleAgentOutput.toWire(): AiSchedulePayload = AiSchedulePayload
     isFallback = isFallback,
     freshness = null, // 되돌려 보낼 때 신선도는 의미가 없다(우리가 만든 값이 아니다)
 )
+
+// ───────── 재계획 전용 경계(TRIP-854) — 연동 설계 §2·§4 ─────────
+
+/**
+ * `POST /ai/v1/itinerary/replan` 요청.
+ *
+ * **`generate` 재사용을 끝내는 자리다.** 종전에는 잠금을 고정 블록으로 승격해 `generate` 를 썼는데,
+ * 그 계약에는 사유·지시·자유입력·원 일정 슬롯·담은 장소를 실을 자리가 없어 **전부 버려지고 있었다.**
+ * 상대는 그것들을 RAG 컨텍스트와 후보 가중치로 쓴다(설계 §4).
+ *
+ * 필드 이름은 매퍼가 snake_case 로 바꾼다. **모양까지 계약과 맞춰야 한다** — 이름만 맞고 배열 원소가
+ * 어긋나 422 를 맞은 전력이 두 번 있다(알림 `slots`·회고 `events`). 게이트가 이제 모양을 본다.
+ */
+internal data class AiReplanRequest(
+    val tripId: String,
+    val tripContext: TripContext,
+    val targetDate: LocalDate,
+    val timeWindow: AiTimeWindow,
+    /** 기준점 — 현재 위치, 없으면 호출측이 숙소 앵커로 채운다(BR-U4-19 사다리). */
+    val anchor: AiCoord,
+    val scope: String,
+    val fromInstant: Instant,
+    val preferenceProfile: PreferenceProfile,
+    val requestMeta: RequestMeta,
+    val lockedBlocks: List<FixedBlock> = emptyList(),
+    /** `i10` '왜' — 선호 **가중치** 입력이다. 후보 풀은 closed-set 그대로(INV-1). */
+    val reasons: List<String> = emptyList(),
+    /** `i10` '어떻게' — **번역하지 않는다.** 상대 사전이 FE 칩보다 넓고, 모르는 키는 `unknown_directives` 로 돌아온다. */
+    val directives: List<String> = emptyList(),
+    val freeText: String? = null,
+    /** 원 일정 슬롯 — KB 컨텍스트이자 후보 풀 합류 대상(설계 §4). */
+    val currentSlots: List<AiReplanSlot> = emptyList(),
+    /**
+     * 담은 장소 — LLM 컨텍스트용. 이름 포함, 시각·메모 없음(목적 최소화).
+     *
+     * 타입은 슬롯 후보 절의 [AiSavedPlace]·[AiCoord] 를 **재사용한다** — 같은 계약 스키마를 가리키므로
+     * 두 벌을 두면 한쪽만 고쳐진 채 갈라진다(이 파일이 이미 겪은 실수다).
+     */
+    val savedPlaces: List<AiSavedPlace> = emptyList(),
+    val excludedPoiIds: List<UUID> = emptyList(),
+)
+
+/** 하루 이용 시각. 창은 **하루 전체**다 — '지금 이후만' 은 잠금으로 표현한다(정본 §3.1). */
+internal data class AiTimeWindow(val date: LocalDate, val start: LocalTime, val end: LocalTime)
+
+/** 원 일정 슬롯의 경계 사영. 산출물 타입([AiSlot])과 **방향이 반대**라 섞지 않는다. */
+internal data class AiReplanSlot(
+    val poiId: String,
+    val startAt: LocalTime,
+    val endAt: LocalTime,
+    val isFixed: Boolean = false,
+    val endsNextDay: Boolean = false,
+    val placementReason: String? = null,
+)
+
+/**
+ * `POST /ai/v1/itinerary/replan` 응답.
+ *
+ * `itinerary` 는 생성 응답과 같은 모양이라 그대로 재사용한다 — 다른 타입을 만들면 두 벌이 갈린다.
+ * [totalDistanceKm] 는 **재계획에만 있는 값**이다(생성 응답에는 없다) — i08 의 "이동 −6.9km" 가
+ * 이 값 없이는 나오지 않는다.
+ */
+internal data class AiReplanResponse(
+    val itinerary: AiScheduleResponse? = null,
+    val totalDistanceKm: Double? = null,
+    val isFallback: Boolean = false,
+    val fallbackLevel: Int = 0,
+    /** **객체다.** 처음에 문자열로 적었다가 계약 대조에서 걸렸다 — 문자열로 두면 역직렬화가 통째로 터진다. */
+    val emptyReason: AiReplanEmptyReason? = null,
+    val notes: List<String> = emptyList(),
+    /** 상대가 해석한 지시. **모르는 키는 아래로 돌아온다** — 조용히 삼키면 왜 안 먹혔는지 못 짚는다. */
+    val resolvedDirectives: List<String> = emptyList(),
+    val unknownDirectives: List<String> = emptyList(),
+    /**
+     * KB 검색 적중 수(`{"kb1": 3, ...}`). 화면에 쓰지 않고 **로그로만** 본다 —
+     * "자유입력을 넣었는데 왜 안 먹었나"의 1차 근거가 '검색이 0건이었다'이기 때문이다.
+     */
+    val retrieved: Map<String, Int> = emptyMap(),
+)
+
+/**
+ * 대안 없음 사유(`i06`). **코드와 파라미터로 온다** — 상대가 완성 문장을 주지 않는 것이 맞다.
+ * `{code: "NO_CANDIDATE", params: {from: "17:00", filter: "INDOOR"}}` 로 화면이
+ * `"17시 이후 실내 후보가 근처에 없어요"` 를 만든다(연동 설계 §5).
+ */
+internal data class AiReplanEmptyReason(val code: String, val params: Map<String, String> = emptyMap())
 
 // ───────── 슬롯 후보(alternatives) — TRIP-463 · 연동 설계 §2·§3 ─────────
 

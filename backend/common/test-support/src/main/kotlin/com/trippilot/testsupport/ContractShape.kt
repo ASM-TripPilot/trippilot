@@ -39,7 +39,18 @@ object ContractShape {
         val out = mutableListOf<String>()
 
         fun resolve(node: JsonNode?): JsonNode? {
-            val ref = node?.get("\$ref")?.asString() ?: return node
+            var n = node ?: return null
+            // OpenAPI 3.1 의 nullable 표기(`anyOf: [T, null]`)는 **한 겹 벗긴다.**
+            // 안 벗기면 `properties` 를 못 찾아 그 아래를 통째로 안 본다 — 실측(2026-09-20):
+            // `empty_reason` 의 params 타입을 계약에서 바꿔도 게이트가 조용히 통과했다.
+            // nullable 객체는 경계마다 흔해서(`itinerary`·`empty_reason`·`trigger`) 구멍이 넓었다.
+            n["anyOf"]?.let { branches ->
+                val real = branches.filter { it["type"]?.asString() != "null" }
+                // 갈래가 둘 이상이면 어느 쪽인지 **우리가 정할 수 없다** — 주장하지 않고 그대로 둔다.
+                if (real.size != 1) return n
+                n = real.single()
+            }
+            val ref = n["\$ref"]?.asString() ?: return n
             return schemas[ref.substringAfterLast('/')]
         }
 

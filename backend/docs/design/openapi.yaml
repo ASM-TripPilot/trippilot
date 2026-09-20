@@ -2325,6 +2325,15 @@ components:
           description: >
             총 이동 거리 변화(m). **어느 한쪽이라도 거리를 모르면 null** 이다 —
             0 으로 채우면 "거리가 줄었다"는 거짓 요약이 된다.
+            원 일정에는 미터 값이 없어(표시 문자열뿐) **현재 항상 null** 이다.
+        totalDistanceKm:
+          type: number
+          format: double
+          nullable: true
+          description: >
+            재계획안의 이동 총거리(km). **변화량이 아니라 절대값**이다 — 위 델타가 나올 수 없는
+            동안 화면이 쓸 수 있는 유일한 이동 지표다. AI 가 푼 값을 그대로 나른다(INV-2).
+            소요시간은 주지 않는다(INV-3). 옛 초안에는 없어 null 일 수 있다.
 
     ReplanSession:
       type: object
