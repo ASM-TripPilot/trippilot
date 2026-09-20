@@ -38,3 +38,10 @@ trippilot:
   notification:
     schedule-poll-ms: 3600000
     schedule-poll-initial-delay-ms: 3600000
+  # 확인자료 보존기간 스위퍼도 같은 이유로 끈다(TRIP-881). 지금은 무해하지만 고정 시각으로
+  # 증적을 넣는 IT(LocationConsentPersistenceIT 의 2026-07-19)가 있어, 그 날짜가 6개월을 넘는
+  # 순간부터 배경 스위프가 남의 테스트 행을 지우는 **시한폭탄**이 된다. 동작 검증은
+  # `LocationLegalLogRetentionIT` 가 sweep() 직접 호출로 한다.
+  auth:
+    legal-log-retention-sweep-ms: 3600000
+    legal-log-retention-initial-delay-ms: 3600000
