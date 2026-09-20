@@ -62,8 +62,11 @@ function cardTestIds(): string[] {
 }
 
 describe('P1 · AC-6 무회귀 — 프리뷰 h11 상태가 픽스처를 싣고 그대로 렌더된다', () => {
-  it('state=itinerary-draft-default 로 열면 슬롯 카드 4장과 지도 자리가 뜬다', () => {
-    mockSearchParams.state = 'itinerary-draft-default';
+  it('state=itinerary-draft-fallback-deterministic 로 열면 슬롯 카드 4장과 지도 자리가 뜬다', () => {
+    // TRIP-792로 `itinerary-draft-default` 키가 삭제됐다(h08 default 얼굴이 셸로 이동). 이 사진-안전
+    // 앵커는 옛 키 대신 **살아남은 DraftScreen 초안 키**(폴백 기본 모드)를 쓴다 — 같은 DRAFT_PREVIEW
+    // 픽스처(4슬롯)를 `<DraftScreen>`으로 렌더하므로 testID(카드·back·map-root)가 동일해 단언은 그대로다.
+    mockSearchParams.state = 'itinerary-draft-fallback-deterministic';
 
     render(<DevPreview />);
 

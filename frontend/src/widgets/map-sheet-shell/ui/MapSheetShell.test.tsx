@@ -137,3 +137,54 @@ describe('🔴 MapSheetShell · SH4 — cta 미전달이면 CTA 바를 안 그�
     expect(screen.getByTestId('fake-overlay')).toBeOnTheScreen();
   });
 });
+
+/* ──────────────── TRIP-792 · D5 가산 확장(h08 펼침 프리뷰) ────────────────
+ * 셸은 `<BottomSheet index={0}>` 을 하드코딩해 왔다 — 접힘(peek) 얼굴만 초기값으로 낼 수 있었다.
+ * h08 펼침 프리뷰(`h08-draft-expanded`)는 시트가 상단 스냅까지 올라간 얼굴이라 초기 스냅을
+ * 1(expanded)로 열어야 한다. `initialIndex?: number`(기본 0) 옵셔널 가산으로 `<BottomSheet
+ * index={initialIndex ?? 0}>` 을 만든다 — 기존 소비처(index 미전달=0)는 무변경(후방호환).
+ *
+ * ⚠️ **원리적 사각(맹점③)** — `@gorhom/bottom-sheet` 목은 통과형이라 index 로 시트가 **실제로**
+ *   그 스냅까지 열리는지는 못 본다. 여기선 셸이 그 값을 BottomSheet 에 **전달까지 했는지**만 잠근다
+ *   (지도 viewOnly·2스냅 실개폐와 같은 계열 — 실전환은 6-b 실기 몫).
+ *
+ * ★ 관측 방법(§5 실검증): 통과형 목(`__mocks__/@gorhom/bottom-sheet.tsx`)은 받은 prop 을 그대로
+ *   `<View {...props}>` 에 얹는다. 그래서 `screen.root.findAll(...)`(렌더 트리 전체를 훑어 조건에 맞는
+ *   노드를 배열로 주는 RNTL API)로 `index`(숫자)+`snapPoints`(배열)를 함께 가진 노드를 찾아 그
+ *   `index` 값을 읽는다. 합성/호스트 두 겹이 같은 prop 을 갖고 나오므로 개수는 세지 않고 **찾은 노드
+ *   전부가 기대 index 인지**로 잠근다(샌드박스 1회 실행으로 3노드 모두 index=0 확인, 02a §5).
+ * ─────────────────────────────────────────────────────────────────────── */
+function sheetIndices(): number[] {
+  return screen.root
+    .findAll(
+      (node) =>
+        typeof node.props?.index === 'number' &&
+        Array.isArray(node.props?.snapPoints)
+    )
+    .map((node) => node.props.index as number);
+}
+
+describe('MapSheetShell · SH5 — initialIndex 가 BottomSheet 초기 스냅을 정한다 (TRIP-792 D5)', () => {
+  it('SH5a · initialIndex 미전달이면 index=0(peek) 이다 (선제 green · 회귀 앵커)', () => {
+    // 준비/실행 — 기존 소비처 형태(initialIndex 안 줌)로 렌더.
+    renderShell();
+
+    // 단언 — BottomSheet 에 전달된 index 가 전부 0(현행 하드코딩 값). 구현 후에도 기본값이
+    //        0 으로 유지되는지 지키는 회귀 앵커라 지금도 통과한다(선제 green).
+    const indices = sheetIndices();
+    expect(indices.length).toBeGreaterThan(0);
+    indices.forEach((index) => expect(index).toBe(0));
+  });
+
+  it('🔴 SH5b · initialIndex={1} 이면 index=1(expanded) 로 전달된다 (h08 펼침)', () => {
+    // 준비/실행 — 펼침 초기 스냅을 요구한다.
+    renderShell({ initialIndex: 1 });
+
+    // 단언 — BottomSheet 가 index=1 을 받는다. **red 성격**: 현행 셸은 index={0} 하드코딩이라
+    //        initialIndex 를 무시하고 0 을 전달 → 이 단언이 red. 구현이 `index={initialIndex ?? 0}`
+    //        으로 바꾸면 green(기본값 0 은 SH5a 가 지킨다).
+    const indices = sheetIndices();
+    expect(indices.length).toBeGreaterThan(0);
+    indices.forEach((index) => expect(index).toBe(1));
+  });
+});

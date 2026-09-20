@@ -61,13 +61,13 @@ const EXPECTED_H = [
   // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).
   'dev-preview-state-h07-generating-partial', // h07
   'dev-preview-state-h08-draft-collapsed', // h08 (TRIP-783 지도+시트 셸 접힘)
+  // TRIP-792: h08 펼침(시트 상단 스냅 · initialIndex={1}) 신규. 코드가 h08 이라 안정 정렬이
+  // collapsed 바로 뒤에 붙는다(PREVIEW_STATES 배열에서도 expanded 를 collapsed 직후에 삽입 —
+  // 그래야 안정 정렬이 이 순서를 낸다). 동시에 옛 h11 DraftScreen 초안 5키(default·stale-failed·
+  // loading·empty·nopins)는 삭제돼 이 배열에서도 빠진다(band h 소비처 이동, 폴백 3키는 유지).
+  'dev-preview-state-h08-draft-expanded', // h08 (TRIP-792 지도+시트 셸 펼침)
   'dev-preview-state-itinerary-generating', // h09
   'dev-preview-state-itinerary-generating-failed', // h09
-  'dev-preview-state-itinerary-draft-default', // h11
-  'dev-preview-state-itinerary-draft-stale-failed', // h11
-  'dev-preview-state-itinerary-draft-loading', // h11
-  'dev-preview-state-itinerary-draft-empty', // h11
-  'dev-preview-state-itinerary-draft-nopins', // h11
   'dev-preview-state-itinerary-draft-fallback-deterministic', // h11
   'dev-preview-state-itinerary-draft-fallback-minimal', // h11
   'dev-preview-state-itinerary-draft-fallback-demoted', // h11

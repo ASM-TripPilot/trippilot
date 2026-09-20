@@ -185,7 +185,13 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    못박는다. devPreviewBandSort 는 밴드 h·l 만 잠가 band e 와 무관(오갱신 금지).
     // ⚠️ TRIP-724: e밴드 프리뷰 19키 재산정(TRIP-822) — stay-filter-sheet 신규 + stay-register-pin·
     //    stay-register-calendar 복원(730이 키만 삭제, 코드 유지) 3키 추가로 171→174.
-    expect(PREVIEW_STATES).toHaveLength(174);
+    // ⚠️ TRIP-792: h08 지도+시트 셸 전환 — h11 DraftScreen 초안 프리뷰 5키
+    //    ({itinerary-draft-default,-stale-failed,-loading,-empty,-nopins}) 삭제 +
+    //    `h08-draft-expanded`(펼침, band h) 신규 1키 → net −4 로 174→170. test-designer 선반영
+    //    (카운트 가드만) — implementer 는 preview.tsx 에서 그 5키를 지우고 expanded 1키만 추가할 뿐
+    //    이 가드는 안 만진다(재편 전엔 174개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-792'
+    //    describe 가 못박는다. devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신.
+    expect(PREVIEW_STATES).toHaveLength(170);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -517,13 +523,39 @@ describe('🔴 TRIP-790 · h07 부분 결과 프리뷰 키 개명 (band h)', () 
     // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
     const keys = PREVIEW_STATES.map((state) => state.key);
 
-    // 개명은 엔트리 **수**를 안 바꾼다(위 AC-6 의 174 무변경) — 이름·render 만 바뀐다
+    // 개명은 엔트리 **수**를 안 바꿨다(당시 174 무변경) — 이름·render 만 바뀐다
     // (옛 h10 DraftScreen 인라인 게이지 → h07 셸 얼굴, TRIP-732 개명 describe 미러).
     expect(keys).toContain('h07-generating-partial');
     expect(keys).not.toContain('itinerary-draft-generating');
 
-    // 형제 band h 앵커 — 기존 draft 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
-    expect(keys).toContain('itinerary-draft-default');
+    // 형제 band h 앵커 — 기존 h 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
+    // ⚠️ TRIP-792 로 `itinerary-draft-default` 가 삭제돼 앵커를 생존 키 `h08-draft-collapsed`(band h)로
+    //    옮겼다 — 옛 앵커를 그대로 두면 이 형제 anchor 가 삭제와 충돌해 red 가 된다(선반영 갱신).
+    expect(keys).toContain('h08-draft-collapsed');
+  });
+});
+
+describe('🔴 TRIP-792 · h08 셸 전환 프리뷰 키 재편 (band h)', () => {
+  it('h11 DraftScreen 초안 5키가 없고, h08-draft-expanded 가 있으며, 형제 h 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — h11 DraftScreen 초안 프리뷰 5키가 사라진다(삭제 전엔 present 라 red). 카운트(170)만으론
+    //   "아무 키나 재편해도" 통과하므로, 이 짝이 '지운 게 정확히 그 5키'임을 못박는다(TRIP-711/742 미러).
+    expect(keys).not.toContain('itinerary-draft-default');
+    expect(keys).not.toContain('itinerary-draft-stale-failed');
+    expect(keys).not.toContain('itinerary-draft-loading');
+    expect(keys).not.toContain('itinerary-draft-empty');
+    expect(keys).not.toContain('itinerary-draft-nopins');
+
+    // 긍정 — 신규 펼침 키가 실재한다(추가 전엔 부재라 red). 접힘 키(TRIP-783)는 유지.
+    expect(keys).toContain('h08-draft-expanded');
+    expect(keys).toContain('h08-draft-collapsed');
+
+    // 형제 band h 앵커 — 남기기로 한 h11 폴백 프리뷰·인접 밴드 키는 딸려 사라지지 않았다
+    //   (과잉 삭제·공허 통과 차단 — 삭제 집합은 초안 5키뿐, 폴백 3키는 유지).
+    expect(keys).toContain('itinerary-draft-fallback-minimal');
+    expect(keys).toContain('itinerary-generating');
   });
 });
 

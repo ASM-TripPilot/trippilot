@@ -347,25 +347,28 @@ describe('🔴 A8-1 · AC-8 — PARTIAL 이면 h07 부분 결과(셸) 얼굴이 
   });
 });
 
-describe('🔴 A8-2 · AC-8 — COMPLETE 면 완성 얼굴(DraftScreen)로 복귀한다 (revert guard)', () => {
-  it('셸이 사라지고 "AI 추천안"·일차 탭 3개·완성 목록이 돌아온다', async () => {
-    // 준비 — 3일 전부 도착한 COMPLETE(기본 핸들러).
+describe('🔴 A8-2 · TRIP-792 플립 — COMPLETE 면 h07 진행 카드가 사라지고 h08 셸(day-chip·CTA)이 뜬다', () => {
+  it('진행 카드·게이지가 사라지고 h08 day-chip 오버레이·확정 CTA 가 나타난다', async () => {
+    // 준비 — 3일 전부 도착한 **깨끗한 COMPLETE**(기본 핸들러). h07(PARTIAL)→h08(COMPLETE) 전환.
+    // ⚠️ 옛 계약("COMPLETE→DraftScreen 복귀")은 TRIP-792 D1-R NARROW 로 뒤집혔다 — 깨끗한 COMPLETE
+    //    는 이제 h08 셸이다. "AI 추천안" 텍스트는 셸 헤더에도 있어(★3) testID 로만 가른다.
     renderPage();
 
-    // 데이터가 실제로 온 시점을 일차 탭으로 앵커한 뒤 단언한다(GET 완료 전 상태를 재지 않게).
+    // 데이터 도착 앵커 — h08 CTA 바가 뜬 시점을 기다린 뒤 단언한다(GET 완료 전 상태를 재지 않게).
     await waitFor(() =>
-      expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toHaveLength(3)
+      expect(screen.queryByTestId('sheet-cta-root')).not.toBeNull()
     );
 
-    // ① 완성 얼굴(DraftScreen) 복귀 — 셸은 사라진다(PARTIAL 에서만 셸).
-    expect(screen.getByText('AI 추천안')).toBeOnTheScreen();
+    // ① h07 진행 카드는 사라진다(COMPLETE=생성 완료라 진행 중 아님).
     expect(screen.queryByTestId('generation-progress-card')).toBeNull();
-    expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
-    // ② 옛 h10 게이지 흔적도 0(셸이든 인라인이든 게이지가 안 남는다).
+    // ② 옛 h10 게이지 흔적도 0.
     expect(
       screen.queryAllByTestId(/^itinerary-generating-(day|skeleton)-/)
     ).toEqual([]);
-    // ③ DraftScreen 완성 목록이 그려진다.
-    expect(screen.getByTestId('itinerary-draft-day-1')).toBeOnTheScreen();
+    // ③ h08 셸 얼굴 — day-chip 오버레이가 진행 카드 자리를 차지한다.
+    expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-daychip-0')).toBeOnTheScreen();
+    // ④ 옛 DraftScreen 완성 목록(일차 탭)은 없다(셸로 대체).
+    expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toEqual([]);
   });
 });

@@ -43,6 +43,9 @@ export interface MapSheetShellProps {
   /** 하단 고정 CTA — 미전달/빈 배열이면 CTA 바를 통째로 안 그린다(옵셔널, D3·D9). h07 은 생성
    *  중이라 확정할 완성본이 없어 CTA 자체가 없다. */
   cta?: CtaButton[];
+  /** 바텀시트 초기 스냅 인덱스(0=peek / 1=expanded). 미전달이면 0(접힘) — 기존 소비처 무변경.
+   *  h08 펼침 프리뷰(`h08-draft-expanded`)가 1 을 준다(TRIP-792 D5). 실 스냅 전환은 6-b 실기 몫. */
+  initialIndex?: number;
 }
 
 export function MapSheetShell({
@@ -56,6 +59,7 @@ export function MapSheetShell({
   header,
   children,
   cta,
+  initialIndex,
 }: MapSheetShellProps): ReactElement {
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
@@ -82,7 +86,7 @@ export function MapSheetShell({
 
       {/* 하단 2스냅 시트 — header + children(카드·커넥터). 다중 슬롯이 하단 CTA 뒤로 가려 도달
           불가한 것을 막으려 스크롤 컨테이너로 감싼다(경고-1 해소, 첫 소비자인 h07 에서 처리). */}
-      <BottomSheet index={0} snapPoints={SNAP_POINTS}>
+      <BottomSheet index={initialIndex ?? 0} snapPoints={SNAP_POINTS}>
         <BottomSheetScrollView>
           {header}
           {children}

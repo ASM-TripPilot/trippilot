@@ -537,19 +537,6 @@ const DRAFT_PREVIEW_DAYS: ItineraryDaysItem[] = [
   { date: DRAFT_PREVIEW_DATE, slots: DRAFT_PREVIEW_SLOTS },
 ];
 
-/** 좌표가 하나도 없는 날 — 핀이 0개라 **지도 블록이 통째로 빠지고 레이아웃이 위로 당겨진다.**
- * 03 §3.1-3 의 자기 신고 자리이고 Figma 와 갈리는 지점이라, 눈으로 판단할 상태로 세운다. */
-const DRAFT_PREVIEW_DAYS_NO_COORDS: ItineraryDaysItem[] = [
-  {
-    date: DRAFT_PREVIEW_DATE,
-    slots: DRAFT_PREVIEW_SLOTS.map((slot) => ({
-      ...slot,
-      lat: null,
-      lng: null,
-    })),
-  },
-];
-
 const DRAFT_PREVIEW_BASE: DraftScreenProps = {
   view: { kind: 'listed', days: DRAFT_PREVIEW_DAYS, staleFailed: false },
   // 여행은 3일인데 첫날만 도착한 상태(2단계 생성 중) — 2·3일차 탭이 비활성으로 보인다.
@@ -3575,17 +3562,70 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   },
-  // h11 AI 추천안 초안 5상태(TRIP-297) — Figma `1870:1083` 대조용 격리 렌더.
-  // 화면이 props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로 나온다
-  // (`docs/structure.md` 경고: "엣지 케이스 화면을 눈으로 보려면 목을 만들지 말고 여기에
-  // 상태를 추가한다"). 실화면 딥링크로는 이 얼굴들을 볼 수 없다 — 생성 POST 가 만드는
-  // `tripId` 와 서버의 2단계 생성 응답이 있어야 하는데 백엔드 없이는 안 생긴다.
+  // h08 지도+시트 셸 펼침(TRIP-792) — Figma `4224:2448` 대조용. 접힘 조립을 그대로 복제하고
+  // `initialIndex={1}` 만 더해 시트가 상단 스냅까지 열린 얼굴을 낸다(2스냅 실개폐는 통과형 목
+  // 사각이라 6-b 실기가 유일한 개폐 그물). 배열에서 collapsed 바로 뒤에 둬 안정 정렬이
+  // collapsed→expanded 순서를 내게 한다(devPreviewBandSort EXPECTED_H).
   {
-    key: 'itinerary-draft-default',
+    key: 'h08-draft-expanded',
     band: 'h',
-    label: 'h11 · 추천안 초안',
+    label: 'h08 · 지도+시트 셸 펼침',
     login: null,
-    render: () => <DraftScreen {...DRAFT_PREVIEW_BASE} />,
+    render: () => (
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H08_PREVIEW_SLOTS)}
+        initialIndex={1}
+        days={[
+          { label: '1일차' },
+          { label: '2일차' },
+          { label: '3일차' },
+          { label: '4일차' },
+        ]}
+        selectedDayIndex={0}
+        onSelectDay={noop}
+        onBack={noop}
+        header={
+          <SheetHeader
+            title="AI 추천안"
+            dayLabel="1일차"
+            dateLabel="6월 10일(수)"
+            meta="4곳 · 3.5km"
+          />
+        }
+        cta={[
+          { label: '다시 짜기', variant: 'outline', onPress: noop },
+          { label: '확정하기', variant: 'primary', onPress: noop },
+        ]}
+      >
+        <View className="gap-md px-lg pb-2xl pt-xs">
+          {H08_PREVIEW_SLOTS.flatMap((slot, index) => {
+            const items = [
+              <SlotStopCard
+                key={`card-${slot.poiId}`}
+                slot={slot}
+                date={H08_PREVIEW_DATE}
+                index={index}
+                timeLabel={H08_PREVIEW_TIME_LABELS[index]}
+                required={index === 2}
+                onPressName={noop}
+                onPressAlt={noop}
+              />,
+            ];
+            if (index < H08_PREVIEW_CONNECTORS.length) {
+              items.push(
+                <DistanceConnector
+                  key={`conn-${slot.poiId}`}
+                  slotKey={buildSlotKey(H08_PREVIEW_DATE, slot.poiId)}
+                  distanceRange={H08_PREVIEW_CONNECTORS[index]}
+                />
+              );
+            }
+            return items;
+          })}
+        </View>
+      </MapSheetShell>
+    ),
   },
   {
     // h07 부분 결과(TRIP-790) — 옛 h10 DraftScreen 인라인 게이지를 공용 지도+시트 셸 얼굴로 개명·
@@ -3646,57 +3686,6 @@ export const PREVIEW_STATES: PreviewState[] = [
           })}
         </View>
       </MapSheetShell>
-    ),
-  },
-  {
-    key: 'itinerary-draft-stale-failed',
-    band: 'h',
-    label: 'h11 · 부분 실패',
-    login: null,
-    render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        view={{ kind: 'listed', days: DRAFT_PREVIEW_DAYS, staleFailed: true }}
-      />
-    ),
-  },
-  {
-    key: 'itinerary-draft-loading',
-    band: 'h',
-    label: 'h11 · 로딩',
-    login: null,
-    render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        view={{ kind: 'loading' }}
-        pins={[]}
-      />
-    ),
-  },
-  {
-    key: 'itinerary-draft-empty',
-    band: 'h',
-    label: 'h11 · 빈 화면',
-    login: null,
-    render: () => (
-      <DraftScreen {...DRAFT_PREVIEW_BASE} view={{ kind: 'empty' }} pins={[]} />
-    ),
-  },
-  {
-    key: 'itinerary-draft-nopins',
-    band: 'h',
-    label: 'h11 · 좌표 없는 날',
-    login: null,
-    render: () => (
-      <DraftScreen
-        {...DRAFT_PREVIEW_BASE}
-        view={{
-          kind: 'listed',
-          days: DRAFT_PREVIEW_DAYS_NO_COORDS,
-          staleFailed: false,
-        }}
-        pins={buildDraftPins(DRAFT_PREVIEW_DAYS_NO_COORDS[0].slots)}
-      />
     ),
   },
   // TRIP-304 폴백·강등 배너 3종 — 심각도 삼분(MINIMAL > LOW > DETERMINISTIC). 실화면 딥링크로는
