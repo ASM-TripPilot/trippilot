@@ -1,0 +1,40 @@
+<p>다음 표는 <code>apply + deploy_application=true</code> 실행을 기준으로 위에서 아래로 읽는다. 중간 단계가 실패하면 성공을 전제로 하는 후속 단계가 멈추고 마지막의 <code>always()</code> 정리 단계는 별도 조건에 따라 실행된다. job 제한 시간은 120분이다. 수업에서는 실행하지 않고 코드를 추적한다.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>순서</th><th>단계</th><th>입력 → 결과 / 의도</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>checkout, 환경·브랜치 사전 검증</td><td>선택 입력·Environment 변수 → 계정·Role·브랜치 일치 확인, state 버킷 계산. 잘못된 입력이면 AWS 인증 전에 실패</td></tr>
+<tr><td>2</td><td>AWS OIDC 인증</td><td>GitHub 실행 신원 → 해당 환경 Role의 임시 자격 증명. <code>allowed-account-ids</code>로 예상 계정 제한</td></tr>
+<tr><td>3</td><td>HTTPS 인증서 검사</td><td>앱 배포 시 ACM 인증서 상태가 <code>ISSUED</code>인지 확인</td></tr>
+<tr><td>4</td><td>Terraform 준비·init</td><td>기존 S3 버킷 + <code>terraform.tfstate</code> key + lockfile → 선택 환경의 state 연결</td></tr>
+<tr><td>5</td><td>Terraform plan</td><td>환경 tfvars와 현재 state → <code>$RUNNER_TEMP/trippilot.tfplan</code></td></tr>
+<tr><td>6</td><td>저장 plan 적용</td><td><code>mode=apply</code>일 때 이번 실행의 plan 파일로 AWS 리소스 변경</td></tr>
+<tr><td>7</td><td>인프라 output 읽기</td><td>클러스터 이름·ECR 주소 등을 임시 JSON 및 step output으로 전달</td></tr>
+<tr><td>8</td><td>이미지 빌드·ECR 발행</td><td>checkout한 backend·AI 코드 → <code>linux/amd64</code> 이미지. embedding은 입력이 켜진 경우 추가</td></tr>
+<tr><td>9</td><td>kubectl·Helm 준비, EKS 연결</td><td>클러스터 이름 → kubeconfig 설정, <code>trippilot</code> namespace 확인·생성</td></tr>
+<tr><td>10</td><td>비밀값 동기화·values 생성</td><td>Secrets Manager → Kubernetes Secret, 비밀이 아닌 설정 → 임시 Helm values</td></tr>
+<tr><td>11</td><td>DB 초기 준비</td><td>DB 역할과 pgvector 준비. 애플리케이션의 Flyway 실행보다 먼저 완료</td></tr>
+<tr><td>12</td><td>Helm 배포·대기</td><td>환경 values + 실행별 values → <code>--atomic --wait --timeout 20m</code> 배포</td></tr>
+<tr><td>13</td><td>내부 smoke·요약</td><td>클러스터 내부 API·AI 연결 확인, commit·이미지 태그·NLB DNS를 실행 요약에 기록</td></tr>
+<tr><td>14</td><td>항상 수행할 정리</td><td>조건에 맞으면 임시 DB 관리자 자격 증명 정리, runner의 plan/output/values 임시 파일 제거</td></tr>
+</tbody>
+</table></div>
+<p>Terraform AWS Provider와 S3 backend가 AWS에 접근해야 하므로 2단계가 Terraform보다 앞에 있다. 이미지를 넣을 ECR 주소를 Terraform output에서 받으므로 7단계가 이미지 빌드보다 앞에 있다. 새 Pod가 시작하며 필요로 할 DB 역할·확장을 준비해야 하므로 11단계가 Helm보다 앞에 있다. 이렇게 <em>뒤 단계가 앞 단계의 결과를 소비하는 관계</em>를 찾으면 긴 workflow를 짧은 인과관계로 이해할 수 있다.</p>
+<div class="code-block"><div class="code-label">실제 발췌 · 같은 실행 안의 plan → apply</div><pre><code class="language-yaml">- name: Terraform plan
+  working-directory: infra/terraform/stack
+  run: terraform plan -lock-timeout=5m -var-file="../environments/$DEPLOY_ENVIRONMENT.tfvars" -out="$RUNNER_TEMP/trippilot.tfplan"
+
+- name: Apply the saved run plan
+  if: inputs.mode == 'apply'
+  working-directory: infra/terraform/stack
+  run: terraform apply -lock-timeout=5m "$RUNNER_TEMP/trippilot.tfplan"</code></pre></div>
+<p><code>-var-file</code>은 DEV/PRD 구성값을 고르고 <code>-out</code>은 적용할 계획을 파일로 저장한다. 다음 step은 그 파일을 지정하므로 같은 실행 안에서 계획한 내용을 적용한다. <code>-lock-timeout=5m</code>은 state 잠금을 얻기 위해 기다릴 최대 시간이다. Terraform 전체 작업의 제한 시간이 아니다.</p>
+<div class="warning"><strong>별도 plan 실행과 apply 실행은 연결되어 있지 않다.</strong> 월요일에 <code>mode=plan</code>을 실행한 뒤 화요일에 <code>mode=apply</code>를 실행하면 화요일 job이 새 plan을 만든다. 월요일 plan 파일은 재사용하지 않는다. 현재 workflow는 plan을 artifact로 올리지 않고 종료 시 임시 파일을 지운다.</div>
+<div class="table-wrap"><table>
+<thead><tr><th>수동 입력</th><th>사전 검증 결과</th><th>실행되는 주요 경로</th></tr></thead>
+<tbody>
+<tr><td><code>plan</code> + 앱 체크 true</td><td><code>deploy_application=false</code></td><td>검증 → OIDC → init → plan → 요약·정리</td></tr>
+<tr><td><code>apply</code> + 앱 체크 false</td><td><code>deploy_application=false</code></td><td>검증 → OIDC → init → plan → apply → 요약·정리</td></tr>
+<tr><td><code>apply</code> + 앱 체크 true</td><td><code>deploy_application=true</code></td><td>인증서 검사와 이미지·Secret·DB·Helm·smoke를 포함한 전체 경로</td></tr>
+</tbody>
+</table></div>
+<p><code>workflow_config.py</code>는 <code>deploy = mode == 'apply' and requested_deploy</code>로 앱 배포 여부를 정한다. plan 모드에서 기본 체크박스가 켜져 있어도 앱이 배포되지 않는다. 다만 실제 plan은 AWS 인증과 조회, state 잠금 접근을 수행한다. 강의의 AWS 접근 없는 실습은 이 수동 plan 실행과도 구분한다.</p>

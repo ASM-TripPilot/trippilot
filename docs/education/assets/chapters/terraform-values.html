@@ -1,0 +1,44 @@
+<div class="code-block"><p class="code-label">현재 코드 발췌 · variables.tf / network.tf</p><pre><code class="language-hcl">variable "environment" {
+  description = "Deployment environment; use a separate backend and GitHub Environment for each."
+  type        = string
+
+  validation {
+    condition     = contains(["dev", "prd"], var.environment)
+    error_message = "environment must be dev or prd."
+  }
+}
+
+locals {
+  name       = "trippilot-${var.environment}"
+  production = var.environment == "prd"
+  azs        = slice(data.aws_availability_zones.available.names, 0, var.availability_zone_count)
+  nat_count  = var.single_nat_gateway ? 1 : var.availability_zone_count
+}</code></pre></div>
+<p><strong>Variable</strong>은 실행하는 쪽이 정하는 입력이다. 이 예제에는 기본값이 없으므로 <code>environment</code>를 제공해야 한다. <code>dev.tfvars</code>의 <code>environment = "dev"</code>는 선언이 아니라 값 지정이다. 환경 파일은 자동으로 모두 읽히는 것이 아니다. 현재 workflow가 <code>-var-file="../environments/$DEPLOY_ENVIRONMENT.tfvars"</code>로 선택한다. 개발과 운영 파일을 동시에 전달하면 뒤에서 지정한 값이 앞의 값을 덮을 수 있으므로 한 환경 파일을 명확히 고른다.</p>
+<p>입력 전달에는 기본값, <code>TF_VAR_이름</code> 환경변수, 자동 로드되는 <code>terraform.tfvars</code>·<code>*.auto.tfvars</code>, 명시적인 <code>-var</code>·<code>-var-file</code> 등의 방법이 있다. 이 브랜치는 규모 값은 환경 파일에, AWS 계정과 배포 역할 ARN은 workflow의 <code>TF_VAR_aws_account_id</code>·<code>TF_VAR_deployment_role_arn</code>에 둔다. 입력을 어디서 제공하는지 정해 두면 내 컴퓨터에서는 다른 값으로 실행되는 문제를 줄일 수 있다. <a href="https://developer.hashicorp.com/terraform/language/values/variables">Terraform 입력 변수 문서</a></p>
+<p><strong>Locals</strong>는 입력에서 계산한 중간 값이다. <code>var.environment</code>가 <code>prd</code>면 <code>local.name</code>은 <code>trippilot-prd</code>, <code>local.production</code>은 <code>true</code>다. <code>조건 ? 참일 때 값 : 거짓일 때 값</code>은 조건 표현식이다. RDS의 <code>backup_retention_period = local.production ? 14 : 1</code>처럼 정책 차이를 한곳에 표현할 수 있다.</p>
+<p><strong>Data source</strong>는 이미 존재하는 정보를 조회한다. <code>data "aws_availability_zones"</code>는 사용 가능한 AZ 목록을 가져오고 <code>data "aws_iam_role" "cluster"</code>는 bootstrap이 만든 EKS 역할을 찾는다. 이름을 읽는 코드만 있다고 그 역할이 생성되지는 않는다. 조회 대상이 없거나 조회 권한이 없으면 계획 단계에서 실패할 수 있다.</p>
+<div class="code-block"><p class="code-label">현재 코드 발췌 · eks.tf / outputs.tf</p><pre><code class="language-hcl">data "aws_iam_role" "cluster" {
+  name = "${local.name}-cluster"
+}
+
+output "cluster_name" {
+  description = "EKS cluster for the manual application deployment workflow."
+  value       = aws_eks_cluster.this.name
+}
+
+output "ecr_repositories" {
+  value = {
+    for name, repository in aws_ecr_repository.app :
+    name =&gt; repository.repository_url
+  }
+}</code></pre></div>
+<p><strong>Resource</strong>는 이 state가 생명주기를 관리하는 대상이다. <strong>Output</strong>은 다른 단계로 넘길 결과이며 예제의 ECR output은 저장소 인스턴스들을 이름 → URL 사전으로 바꾼다. 애플리케이션 배포는 여기서 나온 주소를 사용하므로 사람이 ECR URL을 다시 조합할 필요가 줄어든다. 단, output은 비밀값 전달 통로로 사용하지 않는다. 이 브랜치의 <code>database_master_secret_arn</code>은 암호 그 자체가 아니라 암호가 보관된 Secret을 가리키는 ARN이다.</p>
+<div class="code-block"><p class="code-label">Module 호출의 모양만 보는 개념 예제 · 현재 브랜치에는 이 경로가 없음</p><pre><code class="language-hcl">module "network" {
+  source      = "./modules/network"
+  environment = var.environment
+  vpc_cidr    = var.vpc_cidr
+}
+# 하위 module이 output "vpc_id"를 제공한다면:
+# module.network.vpc_id 로 참조</code></pre></div>
+<p>Module은 함수처럼 입력과 출력이 있는 구성 단위다. 하지만 일반 함수 호출과 달리 내부 리소스의 주소는 state에 남는다. 모듈을 추출하거나 이름을 바꾸는 작업은 코드 정리뿐 아니라 기존 리소스 주소 이동도 고려해야 한다. 현재 수업에서는 리소스 읽기에 집중하고 반복되는 인프라 패턴이 커질 때 모듈화를 검토한다.</p>

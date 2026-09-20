@@ -1,0 +1,33 @@
+<div class="code-block"><p class="code-label">현재 코드 발췌 · network.tf</p><pre><code class="language-hcl">resource "aws_vpc" "this" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+  tags                 = { Name = local.name }
+}</code></pre></div>
+<p><code>resource</code>는 블록 종류, <code>"aws_vpc"</code>는 provider가 제공하는 리소스 종류, <code>"this"</code>는 이 구성 안에서 붙인 이름이다. <code>this</code> 자체가 AWS 콘솔의 VPC 이름이 되는 것은 아니다. 콘솔에서 보는 이름 태그는 <code>tags.Name</code>이 정한다. 구성 내부에서 이 리소스를 가리키는 주소는 <code>aws_vpc.this</code>이고 AWS가 부여한 ID는 <code>aws_vpc.this.id</code>로 읽는다.</p>
+<p><code>cidr_block = var.vpc_cidr</code>는 이름에 값을 할당하는 인자(argument)다. HCL 설명에서 이를 attribute라고 부르기도 한다. 오른쪽에는 문자열이나 숫자뿐 아니라 다른 값에 대한 참조, 함수 호출, 조건식이 들어간다. 중괄호는 블록과 객체 양쪽에 나타나므로 앞 문맥을 봐야 한다. <code>tags = { ... }</code>는 객체 값이고 EKS의 <code>vpc_config { ... }</code>는 중첩 블록이다. provider가 정한 스키마에 따라 둘을 바꿔 쓸 수 없다. <a href="https://developer.hashicorp.com/terraform/language/syntax/configuration">HashiCorp의 HCL 구성 문법</a></p>
+<div class="table-wrap"><table><thead><tr><th>자료형</th><th>예</th><th>읽는 방법</th></tr></thead><tbody>
+<tr><td><code>string</code></td><td><code>"ap-northeast-2"</code></td><td>문자열. 문자열 보간은 <code>"trippilot-${var.environment}"</code></td></tr>
+<tr><td><code>number</code></td><td><code>2</code>, <code>100</code></td><td>가용 영역 수, 스토리지 크기 등의 숫자</td></tr>
+<tr><td><code>bool</code></td><td><code>true</code>, <code>false</code></td><td>따옴표 없는 논리 값</td></tr>
+<tr><td><code>list(string)</code></td><td><code>["backend", "ai"]</code></td><td>순서가 있으며 같은 값이 여러 번 들어갈 수 있음</td></tr>
+<tr><td><code>set(string)</code></td><td><code>toset(["backend", "ai"])</code></td><td>순서에 의미를 두지 않는 중복 없는 집합</td></tr>
+<tr><td><code>map(string)</code></td><td><code>{ dev = "small", prd = "medium" }</code></td><td>키는 문자열, 값은 같은 자료형으로 구성된 사전</td></tr>
+<tr><td><code>object({...})</code></td><td><code>{ enabled = true, replicas = 2 }</code></td><td>이름별로 서로 다른 자료형을 정할 수 있는 구조</td></tr>
+<tr><td><code>null</code></td><td><code>local.production ? "final" : null</code></td><td>값의 부재. 해당 인자를 지정하지 않는 의미로 자주 사용</td></tr>
+</tbody></table></div>
+<p>리터럴의 <code>[...]</code>와 <code>{...}</code>는 엄밀히는 tuple과 object 값을 만든다. 변수에 <code>list(string)</code>이나 <code>map(string)</code> 제약을 주면 호환되는 값으로 변환된다. 처음에는 대괄호를 순서 있는 값 묶음으로, 키와 값이 있는 중괄호를 이름 있는 값 묶음으로 읽고 공개 모듈의 입력을 설계할 때 자료형을 엄격히 지정하면 된다. <a href="https://developer.hashicorp.com/terraform/language/expressions/type-constraints">Terraform 자료형 제약</a></p>
+<div class="code-block"><p class="code-label">문법 학습 예제 · 현재 브랜치에 추가된 코드는 아님</p><pre><code class="language-hcl">variable "service" {
+  type = object({
+    name     = string
+    replicas = number
+    labels   = map(string)
+  })
+  default = {
+    name     = "backend"
+    replicas = 1
+    labels   = { team = "trippilot" }
+  }
+}</code></pre></div>
+<p>이 입력은 <code>var.service.name</code>과 <code>var.service.replicas</code>처럼 읽는다. <code>replicas = "two"</code>처럼 숫자로 변환할 수 없는 값은 타입 검사에서 실패한다. 유효한 숫자라도 음수는 허용하고 싶지 않으므로 다음 절의 validation을 함께 사용한다. 타입은 값의 모양을, validation은 업무상 허용 조건을 검사한다고 구분하면 된다.</p>
+<div class="exercise"><strong>짝 활동:</strong> VPC 예제에서 블록 종류, 두 label, 객체 값, 변수 참조를 각각 한 개씩 찾는다.<details class="answer"><summary>해설 보기</summary><p>블록 종류는 <code>resource</code>, label은 <code>aws_vpc</code>와 <code>this</code>, 객체 값은 <code>{ Name = local.name }</code>, 변수 참조는 <code>var.vpc_cidr</code>다. <code>local.name</code>은 입력 변수가 아니라 locals에서 계산한 값에 대한 참조다.</p></details></div>

@@ -6,7 +6,8 @@
     try {
       const id = decodeURIComponent(location.hash.slice(1));
       if (!id) return 0;
-      return slides.findIndex((slide) => slide.id === id);
+      return slides.findIndex((slide) => slide.id === id ||
+        (slide.getAttribute('data-aliases') || '').split(' ').includes(id));
     } catch {
       return -1;
     }
