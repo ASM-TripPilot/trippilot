@@ -250,3 +250,23 @@ describe('AC-4 · 게스트는 조회를 안 내보내고 게스트 얼굴을 �
     await waitFor(() => expect(hits).toBe(0));
   });
 });
+
+describe('AC-11 · 실앱 degrade — 페이지가 거점/지역/가격을 발명하지 않는다 (TRIP-729)', () => {
+  it('서버 SavedStay 로드 시 카드는 이름만, 거점 배지·가격은 미표시 (계약 공백, 사변 금지)', async () => {
+    // SavedStay 계약엔 isBase·region·price 필드가 없다. 페이지는 이 값들을 채우는 조회 훅을 만들지
+    // 않고 VM 에 미설정으로 둔다 → 카드가 이름만 그린다(Figma 풀샷은 프리뷰 픽스처에서만).
+    // 선제 green(회귀 트립와이어) — 페이지가 `isBase:true` 를 매핑하면 이 단언이 red 로 뒤집힌다.
+    server.use(
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([HEARTED]))
+    );
+    render(<SavedStayPage />, { wrapper: createWrapper() });
+    const card = await screen.findByTestId('saved-stay-card-ss-1');
+
+    // 긍정 짝 — 이름은 뜬다(카드 자체가 안 떠서 공짜 통과하는 것 차단).
+    expect(screen.getByText('해운대 오션뷰 호텔')).toBeOnTheScreen();
+    // 부정 — 거점 배지·"거점" 문자열·가격 발명 0.
+    expect(screen.queryByTestId('saved-stay-card-ss-1-base-badge')).toBeNull();
+    expect(screen.queryByText('거점')).toBeNull();
+    expect(card).not.toHaveTextContent(/원~|₩/);
+  });
+});

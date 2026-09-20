@@ -143,6 +143,7 @@ import {
 } from '@/features/stay/ui/SavedStayListScreen';
 import { OtaChoiceSheet } from '@/features/stay/ui/OtaChoiceSheet';
 import { StayPriceSheet } from '@/features/stay/ui/StayPriceSheet';
+import { StayFilterSheet } from '@/features/stay/ui/StayFilterSheet';
 import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
@@ -277,6 +278,17 @@ const STAY_SEARCH_PREVIEW_ITEMS: StayItem[] = [
     region: '광안리',
     amenities: ['ocean'],
     stayType: 'PENSION',
+    price: { amount: 210000, currency: 'KRW' },
+  },
+  {
+    externalSource: 'NAVER',
+    externalId: 's4',
+    name: '남포동 스테이',
+    lat: 35.0977,
+    lng: 129.0305,
+    region: '남포동',
+    amenities: ['wifi'],
+    stayType: 'HOTEL',
     price: null,
   },
 ];
@@ -1097,24 +1109,34 @@ function withShellTabBar(
 }
 
 /**
- * e05 숙소 등록(TRIP-369) — 세 표면 수정(컴팩트 앱바 · 핀 조작 안내 · 세그먼트 줄바꿈 해소)을
- * 한 화면에서 눈으로 대조하기 위한 얼굴. **핀 지정 탭 · 핀 찍기 전**(`pinAddressStatus:'idle'`)
- * 으로 세우면 셋이 모두 보인다: 상단 컴팩트 앱바(뒤로가기 글리프 + 컴팩트 타이틀) · 3탭
- * 세그먼트(가운데 "링크 붙여넣기" + "준비 중" 캡션, 잘림·높이 어긋남 없음) · 지도 아래
- * "지도를 길게 눌러 위치를 지정하세요" 안내.
+ * e05 숙소 등록(TRIP-730 세대 병합) — 3탭 셸 + default 확정 콘텐츠. 네 얼굴을 파생 규칙
+ * (`coordConfirmed`·`candidates`·`searchStatus`)로 가른다(새 flow 필드 없음). 15개 콜백은
+ * 전부 noop 이라 아래 `STAY_REGISTER_HANDLERS` 한 벌로 스프레드한다.
  *
- * 왜 프리뷰가 필요한가: 실화면 딥링크로는 이 상태(핀 세션)를 안정적으로 못 본다 — 핀은
- * 지도 롱프레스로만 들어오고 백엔드 역지오코딩을 거친다. 화면은 무상태 프레젠테이션이라
- * `flow`만 넣으면 그대로 그려진다.
+ * 왜 프리뷰가 필요한가: jest 는 세그먼트 흰 알약·라디오 채움·침대/체크/달력/↻ 글리프·지도
+ * 타일·선택 카드 픽셀을 원리적으로 못 본다(02a §5 ★2~★4) — 이 4키가 6-b 육안의 유일한 그물이다.
  */
-const STAY_REGISTER_PREVIEW_FLOW: StayRegisterScreenProps['flow'] = {
-  activeTab: 'pin',
-  query: '',
+const STAY_REGISTER_CANDIDATE_A = {
+  name: '해운대 그랜드 호텔',
+  address: '부산 해운대구 우동 1407',
+  lat: 35.1587,
+  lng: 129.1604,
+};
+const STAY_REGISTER_CANDIDATE_B = {
+  name: '해운대 그랜드 레지던스',
+  address: '부산 해운대구 중동 1124',
+  lat: 35.1601,
+  lng: 129.1652,
+};
+
+const STAY_REGISTER_BASE_FLOW: StayRegisterScreenProps['flow'] = {
+  activeTab: 'mapsearch',
+  query: '해운대',
   name: '',
-  searchStatus: 'idle',
-  candidates: [],
-  selectedCandidate: null,
-  coordSource: 'PIN',
+  searchStatus: 'success',
+  candidates: [STAY_REGISTER_CANDIDATE_A],
+  selectedCandidate: STAY_REGISTER_CANDIDATE_A,
+  coordSource: 'MAP_SEARCH',
   pinAddressStatus: 'idle',
   coordConfirmed: false,
   mapSheetState: 'closed',
@@ -1124,30 +1146,65 @@ const STAY_REGISTER_PREVIEW_FLOW: StayRegisterScreenProps['flow'] = {
   submitStatus: 'idle',
 };
 
-/** e05 지도검색 후보를 고른 뒤의 확정 얼굴(TRIP-600) — 좌표를 가진 후보를 선택하면
- * `coordConfirmed:true`가 되어 "지도에서 위치를 확인해 주세요" 안내가 사라지고 등록이 열린다.
- * jest는 안내 소멸을 testID로, POST 본문의 `coordConfirmed`를 값으로 잠그지만, 지도 미리보기와
- * 선택적 "지도에서 위치 확인" 버튼 존치는 실기로만 본다(6-b) — 이 얼굴이 그 자리다. */
-const STAY_REGISTER_CONFIRMED_FLOW: StayRegisterScreenProps['flow'] = {
-  ...STAY_REGISTER_PREVIEW_FLOW,
-  activeTab: 'mapsearch',
-  searchStatus: 'success',
-  candidates: [
-    {
-      name: '해운대 그랜드 호텔',
-      address: '부산 해운대구 우동 1407',
-      lat: 35.1587,
-      lng: 129.1604,
-    },
-  ],
-  selectedCandidate: {
-    name: '해운대 그랜드 호텔',
-    address: '부산 해운대구 우동 1407',
-    lat: 35.1587,
-    lng: 129.1604,
-  },
-  coordSource: 'MAP_SEARCH',
+/** multi-candidate(Figma 1354) — 후보 2건, 첫 건 선택, 좌표 미확정. 라디오 리스트 + "등록하기". */
+const STAY_REGISTER_MULTI_CANDIDATE_FLOW: StayRegisterScreenProps['flow'] = {
+  ...STAY_REGISTER_BASE_FLOW,
+  candidates: [STAY_REGISTER_CANDIDATE_A, STAY_REGISTER_CANDIDATE_B],
+  selectedCandidate: STAY_REGISTER_CANDIDATE_A,
+};
+
+/** default(Figma 1703) — 좌표 확정 + 날짜 선택 완료. 확정 카드 + 요일 날짜 필드 + "✓ 이 숙소 등록". */
+const STAY_REGISTER_DEFAULT_FLOW: StayRegisterScreenProps['flow'] = {
+  ...STAY_REGISTER_BASE_FLOW,
   coordConfirmed: true,
+  checkIn: '2026-06-10',
+  checkOut: '2026-06-12',
+};
+
+/** multi(Figma 1358) — 단일 후보 선택, 좌표 미확정. coordnotice(민트 ⓘ) + disabled CTA. */
+const STAY_REGISTER_MULTI_FLOW: StayRegisterScreenProps['flow'] = {
+  ...STAY_REGISTER_BASE_FLOW,
+};
+
+/** error-mapapi(Figma 1359) — 지도 검색 실패. 배너(⚠·↻) → 핀 지정(h48) → 숙소명 → disabled CTA. */
+const STAY_REGISTER_ERROR_FLOW: StayRegisterScreenProps['flow'] = {
+  ...STAY_REGISTER_BASE_FLOW,
+  searchStatus: 'error',
+  candidates: [],
+  selectedCandidate: null,
+  coordConfirmed: false,
+};
+
+/** e05 화면의 콜백 15종은 프리뷰에서 전부 무동작 — 한 벌로 스프레드한다. */
+const STAY_REGISTER_HANDLERS = {
+  onBack: noop,
+  onSelectTab: noop,
+  onChangeQuery: noop,
+  onChangeName: noop,
+  onSubmitQuery: noop,
+  onRetrySearch: noop,
+  onSelectCandidate: noop,
+  onPickCoord: noop,
+  onOpenMapSheet: noop,
+  onConfirmCoord: noop,
+  onCloseMapSheet: noop,
+  onOpenDateSheet: noop,
+  onPickDate: noop,
+  onCloseDateSheet: noop,
+  onSubmit: noop,
+};
+
+/** e05 핀 지정 탭(TRIP-724 복원, Figma 4520:2413) — 핀 탭 진입·핀 찍기 전. 코드 `PinPanel`은
+ * 730에서 유지됐고 프리뷰 키만 이번에 복원한다(19키 재산정). 픽셀 정합은 이후 티켓(존재+렌더까지). */
+const STAY_REGISTER_PIN_FLOW: StayRegisterScreenProps['flow'] = {
+  ...STAY_REGISTER_BASE_FLOW,
+  activeTab: 'pin',
+  query: '',
+  searchStatus: 'idle',
+  candidates: [],
+  selectedCandidate: null,
+  coordSource: 'PIN',
+  coordConfirmed: false,
 };
 
 // h12·h18 슬롯 교체 후보(TRIP-335) — 서버 응답 3필드만(poiId·distanceRange·rationale). 이름·사진은
@@ -1212,13 +1269,29 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
   },
 ];
 
-// e04 저장한 숙소(TRIP-461) — 카드 사진·지역·거리·가격은 계약 무라 회색 자리 + 이름·(있으면)
-// 날짜만 그린다(brief §화면·IO). 실화면 딥링크로는 백엔드 401 이면 게스트 얼굴로만 떨어져
-// results·empty 두 얼굴을 여기서 눈으로 대조한다(d04·d02 프리뷰 2키와 같은 사정).
+// e04 저장한 숙소(TRIP-461 → TRIP-729 Figma 정합) — 사진은 계약 공백이라 회색 자리, 거점 배지·
+// 지역줄·2톤 가격은 계약 공백이라 실앱에선 안 뜬다(degrade). 그 Figma 풀샷을 눈으로 보는 유일한
+// 자리라 여기서만 픽스처로 채운다(ss-1 은 거점 배지 포함). 날짜라벨은 e04 에서 뗐다(F-10).
 const SAVED_STAY_PREVIEW_CARDS: SavedStayCardVM[] = [
-  { savedStayId: 'ss-1', name: '해운대 오션 호텔', dateLabel: '6.10~6.13' },
-  { savedStayId: 'ss-2', name: '광안리 뷰 호텔' },
-  { savedStayId: 'ss-3', name: '감천 게스트하우스', dateLabel: '6.13~6.15' },
+  {
+    savedStayId: 'ss-1',
+    name: '해운대 오션 호텔',
+    isBase: true,
+    region: '해운대',
+    priceLabel: '145,000원~',
+  },
+  {
+    savedStayId: 'ss-2',
+    name: '광안리 뷰 호텔',
+    region: '광안리',
+    priceLabel: '98,000원~',
+  },
+  {
+    savedStayId: 'ss-3',
+    name: '감천 게스트하우스',
+    region: '감천',
+    priceLabel: '62,000원~',
+  },
 ];
 
 // i05 현재 장소 상세(TRIP-398) — Figma 대조용 완성 뷰. 결측 얼굴은 이 위에 상태만 얹는다.
@@ -1772,7 +1845,69 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // e05 숙소 등록(TRIP-369) — 세 표면 수정을 한 화면에서 대조(핀 탭·핀 찍기 전).
+  // e05 숙소 등록 default(TRIP-730, Figma 1703) — 좌표 확정 + 날짜 선택 완료. 확정 카드(분홍 침대)·
+  // 요일 날짜 필드("6.10 (수) – 6.12 (금)" + "2박" + 달력/⌄)·"✓ 이 숙소 등록"을 눈으로 대조.
+  {
+    key: 'stay-register-default',
+    band: 'e',
+    label: 'e05 · 등록 default',
+    login: null,
+    render: () => (
+      <StayRegisterScreen
+        flow={STAY_REGISTER_DEFAULT_FLOW}
+        today="2026-06-01"
+        {...STAY_REGISTER_HANDLERS}
+      />
+    ),
+  },
+  // e05 숙소 등록 multi-candidate(TRIP-730, Figma 1354) — 후보 2건·첫 선택·좌표 미확정. 라디오 원·
+  // 선택 행 흰 배경·"📍 지도 ›" 링크·"등록하기"를 눈으로 대조(개명 stay-register-confirmed→여기).
+  {
+    key: 'stay-register-multi-candidate',
+    band: 'e',
+    label: 'e05 · 등록 다중 후보',
+    login: null,
+    render: () => (
+      <StayRegisterScreen
+        flow={STAY_REGISTER_MULTI_CANDIDATE_FLOW}
+        today="2026-06-01"
+        {...STAY_REGISTER_HANDLERS}
+      />
+    ),
+  },
+  // e05 숙소 등록 multi(TRIP-730, Figma 1358) — 단일 후보 선택·좌표 미확정. coordnotice(흰 배경·
+  // 민트 ⓘ)·"지도에서 위치 확인"·disabled CTA 를 눈으로 대조.
+  {
+    key: 'stay-register-multi',
+    band: 'e',
+    label: 'e05 · 등록 multi',
+    login: null,
+    render: () => (
+      <StayRegisterScreen
+        flow={STAY_REGISTER_MULTI_FLOW}
+        today="2026-06-01"
+        {...STAY_REGISTER_HANDLERS}
+      />
+    ),
+  },
+  // e05 숙소 등록 error-mapapi(TRIP-730, Figma 1359) — 지도 검색 실패. 배너(⚠·↻)→핀 지정(h48)→
+  // 숙소명→disabled CTA 블록 순서를 눈으로 대조. 지도·검색 없음.
+  {
+    key: 'stay-register-error-mapapi',
+    band: 'e',
+    label: 'e05 · 등록 지도 실패',
+    login: null,
+    render: () => (
+      <StayRegisterScreen
+        flow={STAY_REGISTER_ERROR_FLOW}
+        today="2026-06-01"
+        {...STAY_REGISTER_HANDLERS}
+      />
+    ),
+  },
+  // e05 숙소 등록 핀 지정(TRIP-724 복원, Figma 4520:2413) — 핀 탭·핀 찍기 전 세 표면을 한 화면에서
+  // 대조하는 자리(실화면 딥링크로는 핀 세션 상태를 안정적으로 못 봄). 730이 키만 지웠고 PinPanel 코드는
+  // 유지 — 19키 재산정으로 복원. 픽셀 정합은 이후 티켓(존재+렌더까지, 6-b/TRIP-831).
   {
     key: 'stay-register-pin',
     band: 'e',
@@ -1780,30 +1915,14 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <StayRegisterScreen
-        flow={STAY_REGISTER_PREVIEW_FLOW}
-        today="2026-06-15"
-        onBack={noop}
-        onSelectTab={noop}
-        onChangeQuery={noop}
-        onChangeName={noop}
-        onSubmitQuery={noop}
-        onRetrySearch={noop}
-        onSelectCandidate={noop}
-        onPickCoord={noop}
-        onOpenMapSheet={noop}
-        onConfirmCoord={noop}
-        onCloseMapSheet={noop}
-        onOpenDateSheet={noop}
-        onPickDate={noop}
-        onCloseDateSheet={noop}
-        onSubmit={noop}
+        flow={STAY_REGISTER_PIN_FLOW}
+        today="2026-06-01"
+        {...STAY_REGISTER_HANDLERS}
       />
     ),
   },
-  // e05 숙소 등록 달력(TRIP-390) — 선택 피드백·범위 하이라이트·여행 기간 상·하한을 눈으로 보는
-  // 자리. jest는 바텀시트 실개폐·셀 하이라이트 픽셀을 못 본다(repo-traps 바텀시트 통과 목, AC-8)
-  // — 이 화면이 그 셋을 실기로 확인하는 유일한 자리다. 체크인 17·체크아웃 19가 끝점(bg-primary),
-  // 18이 범위(bg-primary-pale)로 그려지고, 여행 기간 밖(16 이전·22 이후)은 회색 disabled다.
+  // e05 숙소 등록 달력 범위(TRIP-724 복원, Figma 4520:2349) — 날짜 시트 열림·범위 하이라이트·여행 기간
+  // 상하한을 눈으로 보는 자리. CalendarSheet 코드는 730에서 유지, 프리뷰 키만 복원. 6-b/TRIP-831 몫.
   {
     key: 'stay-register-calendar',
     band: 'e',
@@ -1811,82 +1930,147 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => (
       <StayRegisterScreen
-        flow={{
-          ...STAY_REGISTER_PREVIEW_FLOW,
-          activeTab: 'mapsearch',
-          checkIn: '2026-06-17',
-          checkOut: '2026-06-19',
-          dateSheetOpen: true,
-        }}
-        today="2026-06-15"
-        minDate="2026-06-16"
-        maxDate="2026-06-22"
-        onBack={noop}
-        onSelectTab={noop}
-        onChangeQuery={noop}
-        onChangeName={noop}
-        onSubmitQuery={noop}
-        onRetrySearch={noop}
-        onSelectCandidate={noop}
-        onPickCoord={noop}
-        onOpenMapSheet={noop}
-        onConfirmCoord={noop}
-        onCloseMapSheet={noop}
-        onOpenDateSheet={noop}
-        onPickDate={noop}
-        onCloseDateSheet={noop}
-        onSubmit={noop}
+        flow={{ ...STAY_REGISTER_DEFAULT_FLOW, dateSheetOpen: true }}
+        today="2026-06-01"
+        minDate="2026-06-08"
+        maxDate="2026-06-20"
+        {...STAY_REGISTER_HANDLERS}
       />
     ),
   },
-  // e05 숙소 등록(TRIP-600) — 좌표 있는 후보를 고른 뒤의 확정 얼굴. "지도에서 위치를 확인해
-  // 주세요" 안내가 사라지고 등록이 열리는 것(선택만으로)을 눈으로 대조한다. jest는 안내 소멸을
-  // testID로 잡지만, 지도 미리보기·선택적 "지도에서 위치 확인" 버튼 존치는 실기로만 본다.
+  // e02 검색 결과 기본(TRIP-725) — 검색바(돋보기·"지역·숙소 이름 검색")·카드 4장(2톤 가격 3 +
+  // "가격 미확인" 1, 3번째 저장=흰 원 위 분홍 하트)·2단 원형 FAB(흰 하트·분홍 ＋)를 한 화면에.
+  // jest 는 SVG 색·좌표·2톤 베이스라인을 못 봐 이 진입점이 눈으로 확인하는 유일한 자리다.
   {
-    key: 'stay-register-confirmed',
+    key: 'stay-search-default',
     band: 'e',
-    label: 'e05 · 등록 후보 확정',
-    login: null,
-    render: () => (
-      <StayRegisterScreen
-        flow={STAY_REGISTER_CONFIRMED_FLOW}
-        today="2026-06-15"
-        onBack={noop}
-        onSelectTab={noop}
-        onChangeQuery={noop}
-        onChangeName={noop}
-        onSubmitQuery={noop}
-        onRetrySearch={noop}
-        onSelectCandidate={noop}
-        onPickCoord={noop}
-        onOpenMapSheet={noop}
-        onConfirmCoord={noop}
-        onCloseMapSheet={noop}
-        onOpenDateSheet={noop}
-        onPickDate={noop}
-        onCloseDateSheet={noop}
-        onSubmit={noop}
-      />
-    ),
-  },
-  // e02 저장 하트(TRIP-417) — s1 은 담김(찬 하트 분홍), s2 는 대기(disabled), s3 은 빈 하트.
-  // jest 는 색을 못 봐(AC-V1) 이 진입점이 분홍 채움을 눈으로 확인하는 유일한 자리다.
-  {
-    key: 'stay-search-saved',
-    band: 'e',
-    label: 'e02 · 검색 저장 하트',
+    label: 'e02 · 검색 결과',
     login: null,
     render: () => (
       <StaySearchScreen
         region="부산"
         items={STAY_SEARCH_PREVIEW_ITEMS}
-        savedKeys={['NAVER:s1']}
-        pendingKeys={['NAVER:s2']}
+        nameQuery=""
+        onChangeNameQuery={noop}
+        savedKeys={['AGODA:s3']}
         onToggleSave={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
       />
     ),
   },
-  // e03 숙소 상세(TRIP-457) — 몰입 화면(탭바 없음). default 는 편의시설 4칩·가격·미니맵·CTA 2종.
+  // e02 상태 5종(TRIP-726) — loading·empty·filter-zero·partial-failure·error 를 눈으로 대조.
+  // 상태 프레임은 검색바를 안 그린다(Figma 정합) → `onChangeNameQuery` 미지정. jest 는 스켈레톤
+  // 방향·카드 그림자·disabled 룩·배너 딤·FAB 오버랩을 못 봐 이 5키가 유일한 육안 확인 자리(6-b/831).
+  {
+    key: 'stay-search-loading',
+    band: 'e',
+    label: 'e02 · 검색 결과 loading',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={[]}
+        state={{ kind: 'loading' }}
+        onPressBack={noop}
+        onPressTab={noop}
+        onPressFilter={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
+  {
+    // activeFilterCount=2 로 '필터 완화' 활성(Figma 는 둘 다 활성) — 0 이면 disabled 는 6-b/831 몫.
+    key: 'stay-search-empty',
+    band: 'e',
+    label: 'e02 · 검색 결과 empty',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={[]}
+        state={{ kind: 'empty', degraded: false }}
+        activeFilterCount={2}
+        onPressChangeRegion={noop}
+        onRelaxFilters={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+        onPressFilter={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
+  {
+    key: 'stay-search-filter-zero',
+    band: 'e',
+    label: 'e02 · 검색 결과 filter-zero',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={[]}
+        state={{
+          kind: 'filter-zero',
+          reasons: ['amenity:조식'],
+          degraded: false,
+        }}
+        activeFilterCount={1}
+        onRelaxFilters={noop}
+        onClearCulpritFilter={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+        onPressFilter={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
+  {
+    // 배너 + 카드(결측가 muted 1장 포함, s4 price:null) 재확인(E-2). savedKeys 로 1장 찬 하트.
+    key: 'stay-search-partial-failure',
+    band: 'e',
+    label: 'e02 · 검색 결과 partial-failure',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={STAY_SEARCH_PREVIEW_ITEMS}
+        state={{ kind: 'results', degraded: true }}
+        savedKeys={['AGODA:s3']}
+        onRetry={noop}
+        onToggleSave={noop}
+        onPressCard={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+        onPressFilter={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
+  {
+    key: 'stay-search-error',
+    band: 'e',
+    label: 'e02 · 검색 결과 error',
+    login: null,
+    render: () => (
+      <StaySearchScreen
+        region="부산"
+        items={[]}
+        state={{ kind: 'error' }}
+        onRetry={noop}
+        onPressBack={noop}
+        onPressTab={noop}
+        onPressFilter={noop}
+        onPressSaved={noop}
+        onPressRegister={noop}
+      />
+    ),
+  },
+  // e03 숙소 상세(TRIP-457·727) — 몰입 화면(탭바 없음). default 는 편의시설 4칩·2톤 가격·실 미니맵·
+  // CTA 2종. Figma default=저장됨이라 saved:true(하트 채움, TRIP-727 프리뷰 병합 — 구 -saved 키 흡수).
   {
     key: 'stay-detail-default',
     band: 'e',
@@ -1895,25 +2079,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <StayDetailScreen
         item={STAY_DETAIL_PREVIEW_ITEM}
-        saved={false}
-        onToggleSave={noop}
-        onPressBook={noop}
-        onPressAddToTrip={noop}
-        onPressBack={noop}
-      />
-    ),
-  },
-  // 담김(찬 하트 분홍) + "일정에 추가" 안내 표시 + 편의시설 결측("미확인") 엣지를 한 화면에.
-  {
-    key: 'stay-detail-saved',
-    band: 'e',
-    label: 'e03 · 상세 담김+결측',
-    login: null,
-    render: () => (
-      <StayDetailScreen
-        item={{ ...STAY_DETAIL_PREVIEW_ITEM, amenities: [] }}
         saved={true}
-        addedNotice={true}
         onToggleSave={noop}
         onPressBook={noop}
         onPressAddToTrip={noop}
@@ -1937,14 +2103,24 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // 제휴 고지 시트(BR-U1-30) — book press 시 뜨는 시트. gorhom 이라 실 슬라이드는 실기 몫.
+  // 제휴 고지 시트(BR-U1-30) — book press 시 뜨는 시트. 상세 화면(saved) 배경 위에 시트를 얹어
+  // 실제 화면처럼 합성한다(딤은 gorhom BottomSheetBackdrop 이 진다 — 수동 스크림 래퍼 없음).
+  // gorhom 이라 실 슬라이드·딤 전면 커버는 실기 몫.
   {
-    key: 'stay-ota-sheet',
+    key: 'stay-detail-affiliate-sheet',
     band: 'e',
     label: 'e03 · 제휴 고지 시트',
     login: null,
     render: () => (
-      <View className="flex-1 justify-end bg-scrim/40">
+      <View className="flex-1">
+        <StayDetailScreen
+          item={STAY_DETAIL_PREVIEW_ITEM}
+          saved={true}
+          onToggleSave={noop}
+          onPressBook={noop}
+          onPressAddToTrip={noop}
+          onPressBack={noop}
+        />
         <OtaChoiceSheet
           item={STAY_DETAIL_PREVIEW_ITEM}
           onCancel={noop}
@@ -1962,6 +2138,34 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <View className="flex-1 justify-end bg-scrim/40">
         <StayPriceSheet selected="all" onSelect={noop} onClose={noop} />
+      </View>
+    ),
+  },
+  // e02 필터 시트(TRIP-724 신규, Figma 4509:2288) — 편의시설·숙소 유형 토글 칩. "필터 ⚙" 칩이 여는
+  // 유일한 UI(19키 재산정으로 신설). StayFilterSheet 코드는 실재 — 프리뷰 키만 신규. 픽셀 6-b/831 몫.
+  {
+    key: 'stay-filter-sheet',
+    band: 'e',
+    label: 'e02 · 필터 시트',
+    login: null,
+    render: () => (
+      <View className="flex-1 justify-end bg-scrim/40">
+        <StayFilterSheet
+          amenities={[
+            { value: '조식', selected: true },
+            { value: '주차', selected: false },
+            { value: '와이파이', selected: false },
+            { value: '수영장', selected: false },
+          ]}
+          stayTypes={[
+            { value: '호텔', selected: false },
+            { value: '게스트하우스', selected: false },
+          ]}
+          onToggleAmenity={noop}
+          onToggleStayType={noop}
+          onApply={noop}
+          onClose={noop}
+        />
       </View>
     ),
   },

@@ -434,7 +434,7 @@ describe('R-10 · 시트를 닫는 것은 확인이 아니다 (§3-2 · §3-3)',
   });
 });
 
-describe('R-11 · 인라인 지도는 고른 후보의 좌표를 본다 (§3-3)', () => {
+describe('R-11 · 인라인 지도는 항상 뜨고, 고른 후보의 좌표를 본다 (§3-3 · AC-S6)', () => {
   it('선택한 후보의 lat·lng가 지도로 전달된다', () => {
     renderScreen({ ...READY_FLOW, selectedCandidate: CANDIDATE_B });
 
@@ -444,7 +444,9 @@ describe('R-11 · 인라인 지도는 고른 후보의 좌표를 본다 (§3-3)'
     );
   });
 
-  it('짝: 고른 후보가 없으면 지도 미리보기 자체가 없다', () => {
+  // TRIP-730 계약 변경: 지도는 세그먼트 바로 아래 **항상** 뜬다(Figma default·multi 실측) —
+  // 옛 계약("후보를 고른 뒤에만 표시")을 뒤집는다. 숨기는 것은 error 뿐이고, 그 짝은 R-6이 진다.
+  it('짝: 고른 후보가 없어도(선택 전) 지도 미리보기가 뜬다 — 항상 표시', () => {
     renderScreen({
       ...IDLE_FLOW,
       searchStatus: 'success',
@@ -452,9 +454,13 @@ describe('R-11 · 인라인 지도는 고른 후보의 좌표를 본다 (§3-3)'
       selectedCandidate: null,
     });
 
-    expect(screen.queryAllByTestId('stay-register-map-preview')).toHaveLength(
-      0
-    );
+    expect(screen.getByTestId('stay-register-map-preview')).toBeOnTheScreen();
+  });
+
+  it('검색 전 idle 상태에서도 지도는 이미 떠 있다(기본 center)', () => {
+    renderScreen(IDLE_FLOW);
+
+    expect(screen.getByTestId('stay-register-map-preview')).toBeOnTheScreen();
   });
 });
 
@@ -499,17 +505,23 @@ describe('R-13 · 날짜 필드와 달력 (§3-4)', () => {
     expect(handlers.onOpenDateSheet).toHaveBeenCalledTimes(1);
   });
 
-  it('범위가 정해지면 "2박 · 나중에 바꿀 수 있어요"가 그대로 나온다', () => {
+  it('범위가 정해지면 요일 포맷 "6.10 (수) – 6.12 (금)"과 "2박"이 나온다 (TRIP-730)', () => {
     renderScreen({
       ...READY_FLOW,
       checkIn: '2026-06-10',
       checkOut: '2026-06-12',
     });
 
-    // toHaveTextContent(문자열)은 완전 일치다(02a ★7) — 이 한 줄이 문구 전체를 잠근다.
-    expect(screen.getByTestId('stay-register-date-summary')).toHaveTextContent(
-      '2박 · 나중에 바꿀 수 있어요'
-    );
+    // TRIP-730 — 옛 "2박 · 나중에 바꿀 수 있어요" 대신 요일 포맷(범위) + "2박" 배지(별 노드).
+    // ★ 요일은 날짜에서 **계산**한다 — 2026-06-10 은 실제로 수요일이라, Figma 목업 텍스트
+    //   "6.10 (화)"를 그대로 박으면 red다(02a §5-B). getByText(문자열)은 완전일치라 en-dash·
+    //   공백·요일까지 이 한 줄이 포맷 전체를 잠근다.
+    const field = screen.getByTestId('stay-register-date-field');
+    expect(within(field).getByText('6.10 (수) – 6.12 (금)')).toBeOnTheScreen();
+    expect(within(field).getByText('2박')).toBeOnTheScreen();
+
+    // 옛 문구는 사라진다(부분포함이라 regex).
+    expect(screen.queryByText(/나중에 바꿀/)).toBeNull();
   });
 
   it('달력에서 오늘 이전은 잠기고, 오늘 이후를 누르면 그 날짜가 올라간다', () => {
@@ -584,5 +596,70 @@ describe('R-15 · 제출 실패는 화면에 드러나고 입력이 보존된다
       '해운대'
     );
     expect(screen.getByTestId('stay-register-candidate-0')).toBeChecked();
+  });
+});
+
+describe('R-16 · CTA 텍스트가 상태별로 갈린다 (AC-S4 · 01b §3)', () => {
+  it('좌표 확정 상태에서는 "이 숙소 등록"이고 "등록하기"가 아니다', () => {
+    // READY_FLOW = coordConfirmed:true → 확정 콘텐츠 얼굴. CTA 앞의 ✓ 는 SVG 글리프라
+    // 텍스트에 안 잡힌다(02a ★6) — 텍스트 노드는 "이 숙소 등록"이라 regex 로 잰다.
+    renderScreen(READY_FLOW);
+
+    const submit = screen.getByTestId('stay-register-submit');
+    expect(within(submit).getByText(/이 숙소 등록/)).toBeOnTheScreen();
+    expect(within(submit).queryByText('등록하기')).toBeNull();
+  });
+
+  it('좌표 미확정(다중 후보)에서는 "등록하기"이고 "이 숙소 등록"이 아니다', () => {
+    renderScreen({
+      ...IDLE_FLOW,
+      searchStatus: 'success',
+      candidates: [CANDIDATE_A, CANDIDATE_B],
+      selectedCandidate: null,
+    });
+
+    const submit = screen.getByTestId('stay-register-submit');
+    expect(within(submit).getByText('등록하기')).toBeOnTheScreen();
+    expect(within(submit).queryByText(/이 숙소 등록/)).toBeNull();
+  });
+
+  // 제출 중 "등록 중…"은 R-14(동결·READY_FLOW+submitting)가 이미 잠근다 — submitting 이
+  // coordConfirmed 보다 우선함을 그 테스트가 강제한다(Seed 공식 순서 오기 정정, 02a ★5).
+});
+
+describe('R-17 · 다중 후보 행에 "📍 지도 ›" 링크가 있다 (AC-S2)', () => {
+  it('각 후보 행에 지도 링크가 존재한다 (라디오 checked 판정은 R-3 유지)', () => {
+    renderScreen({
+      ...IDLE_FLOW,
+      searchStatus: 'success',
+      candidates: [CANDIDATE_A, CANDIDATE_B],
+      selectedCandidate: null,
+    });
+
+    // 링크의 핸들러는 flow 콜백에 없어(표시 정합만) 존재만 잰다 — 부분포함이라 regex.
+    const first = screen.getByTestId('stay-register-candidate-0');
+    const second = screen.getByTestId('stay-register-candidate-1');
+    expect(within(first).getByText(/📍 지도 ›/)).toBeOnTheScreen();
+    expect(within(second).getByText(/📍 지도 ›/)).toBeOnTheScreen();
+  });
+});
+
+describe('R-18 · 확정 콘텐츠 선택 숙소 카드 (AC-S4 · 5-c 경고-1)', () => {
+  it('좌표 확정 시 선택 카드가 뜨고 그 안에 고른 숙소 이름·주소가 렌더된다', () => {
+    // READY_FLOW = coordConfirmed:true · selectedCandidate:CANDIDATE_A · mapSheetState:'closed'
+    // → 확정 콘텐츠(default 1703 얼굴). 이 카드 블록을 통째로 지워도 R-16(CTA 텍스트만 봄)은
+    // green이라, 이 사이클의 핵심 신규 콘텐츠인 선택 카드에 심판이 0개였다(5-c code-critic 경고-1).
+    renderScreen(READY_FLOW);
+
+    // 캡션(카드의 형제) — 확정 콘텐츠 표면 보호. getByText(문자열)은 완전일치라 문구를 잠근다.
+    expect(
+      screen.getByText('📍 지도에서 핀 위치를 확인하세요')
+    ).toBeOnTheScreen();
+
+    // 선택 카드 존재 + 그 안에 고른 숙소 이름·주소(픽스처 CANDIDATE_A). within 으로 카드 안을 본다
+    // — 카드 블록이 사라지면 getByTestId 가 던져 red 다(무심판 봉합).
+    const card = screen.getByTestId('stay-register-selected-card');
+    expect(within(card).getByText('해운대 그랜드 호텔')).toBeOnTheScreen();
+    expect(within(card).getByText('부산 해운대구 우동 1407')).toBeOnTheScreen();
   });
 });

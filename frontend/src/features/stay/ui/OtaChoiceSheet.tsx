@@ -20,7 +20,7 @@ import BottomSheet, {
 import type { StayItem } from '@/shared/api/generated/schemas';
 
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
-import { BedGlyph, ChevronRightGlyph } from './StayGlyphs';
+import { ChevronRightGlyph } from './StayGlyphs';
 
 /** BR-U1-30 정확 문구(법정성 UX) — 한 Text 노드로 렌더해 오탈자·변형이 completed-match red 가
  * 되게 한다(★F-2 getByText = 완전일치). */
@@ -65,7 +65,19 @@ export function OtaChoiceSheet({
           testID={`stay-ota-option-${item.externalSource}`}
           className="w-full flex-row items-center gap-md rounded-[14px] border-[1.5px] border-primary bg-canvas py-md pl-lg pr-md"
         >
-          <BedGlyph size={22} />
+          {/* 라디오 = View 조합(SVG 글리프 아님) — 단일 행이라 항상 선택. 선택 관측은 색이
+              아니라 accessibilityState.selected + 채움 inner 존재 두 신호(StayPriceSheet 미러). */}
+          <View
+            testID={`stay-ota-radio-${item.externalSource}`}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: true }}
+            className="h-[22px] w-[22px] items-center justify-center rounded-pill border-[1.5px] border-primary"
+          >
+            <View
+              testID={`stay-ota-radio-fill-${item.externalSource}`}
+              className="h-[11px] w-[11px] rounded-pill bg-primary"
+            />
+          </View>
           <View className="flex-1 flex-row items-center gap-xs">
             <Text className="font-inter-bold text-body font-bold text-ink">
               {item.externalSource}

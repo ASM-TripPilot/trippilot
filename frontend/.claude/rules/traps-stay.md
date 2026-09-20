@@ -25,6 +25,15 @@ paths:
 - **e02 카드 하트와 e03·e04 하트가 서로 다른 모양이다** → TRIP-807이 e02(`StaySearchScreen`)만 `@/shared/ui/HeartGlyphs`(18-viewBox, 옛 `PlaceGlyphs` 모양)로 이관했고, e03(`StayDetailScreen`)·e04(`SavedStayListScreen` trailing)는 여전히 `features/stay/ui/StayGlyphs`(22-viewBox)를 쓴다. jest는 SVG path·viewBox를 원리적으로 못 봐(글리프 fill/모양 사각) 배선·testID·selected·press는 전수 green이어도 실기에서 두 하트 모양이 섞여 보인다(04b_smoke_1_PASS 확인). 통일은 후속 티켓(entities 카드 도입 전엔 e02·e03·e04 셋이 전부 `StayGlyphs`로 일관돼 있었다).
 - **검색 카드는 명시적 testID 계약을 쓴다(접두사 주입 아님)** → `entities/stay/ui/StaySearchCard`는 `testIDPrefix` 하나로 하위 testID를 조립하지 않고 완성 문자열(root/photo/save/filled/outline)을 prop으로 받는다 — e02(`stay-card-save-{key}-filled`)와 d01(`explore-stay-heart-filled-{key}`)의 저장/글리프 testID 스킴이 서로 달라 단일 접두사로는 재현 불가했기 때문(개념 [[명시 testID 계약 — 소비처마다 스킴이 갈리면 접두 주입이 깨진다]]).
 
+## stay 등록 세대 병합 (TRIP-730, e05)
+
+- **default 얼굴(확정 콘텐츠)의 고유 콘텐츠(선택 숙소 카드)를 무는 심판이 0개다** → `StayRegisterScreen.tsx`의 `showConfirmedContent` 블록(캡션+`stay-register-selected-card`+이름/주소)을 통째로 주석 처리해도 `pnpm test` 전 스위트 green(code-critic 경고-1 실측, `grep -rn "selected-card\|핀 위치를 확인" *.test.tsx` = 0건). CTA 텍스트(R-16, "✓ 이 숙소 등록")는 `flow.coordConfirmed` 분기라 이 블록과 독립이라 카드가 사라져도 안 걸린다 — "green이니 확정 콘텐츠가 렌더된다"가 성립하지 않는다. 프리뷰 키 `stay-register-default`가 유일한 6-b 육안 그물.
+- **multi-candidate 얼굴에 coordnotice가 함께 뜨는 것은 Figma엔 없는 조합이지만 동결 계약이 강제한다** → `showCoordNotice = !flow.coordConfirmed`가 후보 리스트 표시 조건과 독립이라, 후보 2건+미확정 상태(multi-candidate)에서도 coordnotice가 같이 보인다. Figma 1354(multi-candidate)엔 이 블록이 없지만, 동결 P-6(핀 탭·selectedCandidate null에서 coordnotice 요구)이 이 조건을 강제해 뗄 수 없다 — 무해 판정이나 6-b 육안 대조 시 "Figma와 다르네?"로 오인하기 쉽다.
+
+## e05 프리뷰 키 복원 (TRIP-724, 19키 재산정)
+
+- **`stay-register-pin`·`stay-register-calendar`·`stay-filter-sheet` 3키의 "렌더된 얼굴"은 어떤 jest 심판도 안 본다** → `devPreviewBandNav.test.tsx`는 `PREVIEW_STATES` 키 존재·개수(카운트 174)·라벨만 잰다. `preview.tsx`의 `STAY_REGISTER_PIN_FLOW.activeTab`을 `'pin'`→`'mapsearch'`로 바꾸거나(핀 탭 대신 지도검색 얼굴이 뜬다) `stay-filter-sheet` 픽스처에 `amenities:[] stayTypes:[]`를 넘겨도(빈 시트) 전 스위트가 green을 유지한다(03b_code-critic_findings 참고-1). 픽스처 타입·의미는 code-critic이 화면 로직 대조로 확인했으나 6-b/TRIP-831 실기 육안 전까지는 "코드상 맞다"이지 "화면이 맞게 뜬다"가 아니다.
+
 ## stay 저장 (하트, TRIP-417)
 
 - **동시에 다른 두 카드를 토글하면 스냅숏 롤백이 서로를 지운다** (savedPlaces W-2 동형, code-critic 참고-1) → `savedStays.ts`의 `save`/`remove`(`:80·108`/`:118·134`)는 롤백 시 `previous` **통째 스냅숏**으로 되돌린다. A press(진행중, prev=`[]`) → B press(prev=`[A_opt]`) → A가 404 → `setQueryData([])` 롤백이 아직 진행 중인 B의 낙관 담기까지 지운다. 양쪽 다 실패하면 실패한 A가 optimistic 표식째 유령으로 남아 재진입 refetch 전까진 해제도 안 된다. `pendingKeys`는 **같은** 카드 연타만 막고 다른 두 카드 동시 토글은 심판이 없다. 단일 카드·성공 경로는 무해.

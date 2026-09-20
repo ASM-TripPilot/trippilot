@@ -76,3 +76,30 @@ describe('T3 · [취소]/[이동] 배선 (AC-9)', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('T4 · OTA 행 선두 라디오 (TRIP-728 · AC-1 · AC-2)', () => {
+  it('선두가 selected 라디오이고 채움 inner 가 존재한다 (AC-1)', () => {
+    render(<OtaChoiceSheet item={ITEM} onCancel={noop} onConfirm={noop} />);
+
+    // 라디오 = View 조합(accessibilityRole="radio" + accessibilityState.selected) — StayPriceSheet 미러.
+    // toBeSelected() 는 accessibilityState.selected(불리언)만 본다(RNTL 13.3.3 to-be-selected.js).
+    // SVG 글리프가 아니라 View 라서 선택을 관측할 수 있다 — 글리프 fill 은 렌더 트리에 안 남아
+    // 무심판이다(★F-3, 725 저장 하트 선례).
+    expect(screen.getByTestId('stay-ota-radio-NAVER')).toBeSelected();
+    // 채움 inner = 두 번째 신호(존재). 채움 색(분홍)은 6-b/TRIP-831 육안 몫이다(★F-1).
+    expect(screen.getByTestId('stay-ota-radio-fill-NAVER')).toBeOnTheScreen();
+  });
+
+  it('행 배경 흰(bg-canvas) + 선택 테두리(border-primary) 회귀 방지 (AC-2)', () => {
+    render(<OtaChoiceSheet item={ITEM} onCancel={noop} onConfirm={noop} />);
+
+    // className 은 jest 렌더 트리에 평문 prop 으로 남는다(style 은 undefined). 색 자체가 아니라
+    // 토큰 문자열 존재만 잰다(실제 픽셀은 6-b). 현행 코드가 이미 green — 라디오 교체로 행 배경/
+    // 테두리 토큰이 되돌아가면 red 로 잡는 회귀 앵커다.
+    const classes = String(
+      screen.getByTestId('stay-ota-option-NAVER').props.className ?? ''
+    ).split(/\s+/);
+    expect(classes).toContain('bg-canvas');
+    expect(classes).toContain('border-primary');
+  });
+});

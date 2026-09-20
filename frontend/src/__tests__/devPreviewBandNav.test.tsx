@@ -167,7 +167,25 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    test-designer 02a 선반영(카운트 가드만) — implementer 는 preview.tsx 에 그 키 하나만 추가하고
     //    이 가드는 안 만진다(추가 전엔 165개라 이 단언이 red — 선반영이 red 를 만든다).
     //    devPreviewBandSort 는 밴드 h·l 만 잠가 band d 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(166);
+    // ⚠️ TRIP-726: e02 상태 5종 프리뷰 키(`stay-search-loading`·`stay-search-empty`·
+    //    `stay-search-filter-zero`·`stay-search-partial-failure`·`stay-search-error`, band e)
+    //    추가로 166→171. test-designer 02a 선반영(카운트 가드만) — implementer 는 preview.tsx 에
+    //    그 5키만 추가하고 이 가드는 안 만진다(추가 전엔 166개라 이 단언이 red). devPreviewBandSort
+    //    는 밴드 h·l 만 잠가 band e 와 무관(오갱신 금지 — e02 라벨은 /^[a-l]\d{2}/ 접두로 AC-1 통과).
+    // ⚠️ TRIP-727: e03 프리뷰 병합으로 `stay-detail-saved` 키 1개 삭제(default 를 saved:true 로
+    //    병합, Figma default=저장됨) → 171→170. test-designer 02a 선반영(카운트 가드만) —
+    //    implementer 는 preview.tsx 에서 그 1키만 지울 뿐 이 가드는 안 만진다(삭제 전엔 171개라 이
+    //    단언이 red). devPreviewBandSort 는 밴드 h·l 만 잠가 band e 와 무관(오갱신 금지).
+    // ⚠️ TRIP-730: e05 등록 세대 병합 — 프리뷰 키 순변화 +1(개명 1·신규 3·삭제 2). 개명
+    //    `stay-register-confirmed`→`stay-register-multi-candidate`, 신규 `stay-register-default`·
+    //    `stay-register-multi`·`stay-register-error-mapapi`, 삭제 `stay-register-pin`·
+    //    `stay-register-calendar`(코드 PinPanel·CalendarSheet 는 유지·키만 삭제) → 170→171.
+    //    test-designer 02a 선반영(카운트 가드만) — implementer 는 preview.tsx 의 키만 재편하고 이
+    //    가드는 안 만진다(재편 전엔 170개라 이 단언이 red). 정확히 그 키들인지는 아래 describe 가
+    //    못박는다. devPreviewBandSort 는 밴드 h·l 만 잠가 band e 와 무관(오갱신 금지).
+    // ⚠️ TRIP-724: e밴드 프리뷰 19키 재산정(TRIP-822) — stay-filter-sheet 신규 + stay-register-pin·
+    //    stay-register-calendar 복원(730이 키만 삭제, 코드 유지) 3키 추가로 171→174.
+    expect(PREVIEW_STATES).toHaveLength(174);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -184,6 +202,45 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     const allKeys = PREVIEW_STATES.map((state) => state.key);
     expect(new Set(groupedKeys)).toEqual(new Set(allKeys));
     expect(groupedKeys).toHaveLength(allKeys.length);
+  });
+});
+
+describe('🔴 TRIP-730 · e05 등록 프리뷰 키 재편 (band e)', () => {
+  it('옛 3키가 없고, 새 4키가 있으며, 형제 e키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 개명 대상 confirmed 는 사라진다(재편 전엔 present 라 red). 카운트만으론 "아무 키나
+    // 재편해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키'임을 못박는다(TRIP-727 미러).
+    // ⚠️ TRIP-724: pin·calendar 는 730 이 지웠다가 19키 재산정으로 복원 — 부정 단언은 아래
+    //    'TRIP-724 · e밴드 19키 복원' describe 의 긍정으로 대체(730 시점엔 삭제가 맞았다).
+    expect(keys).not.toContain('stay-register-confirmed');
+
+    // 긍정 — 새 4키(default·multi·multi-candidate·error-mapapi)가 실재한다.
+    expect(keys).toContain('stay-register-default');
+    expect(keys).toContain('stay-register-multi');
+    expect(keys).toContain('stay-register-multi-candidate');
+    expect(keys).toContain('stay-register-error-mapapi');
+
+    // 형제 band e 앵커 — e02 검색 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
+    expect(keys).toContain('stay-search-default');
+  });
+});
+
+describe('🔴 TRIP-724 · e밴드 19키 복원·신설 (band e)', () => {
+  it('pin·calendar 복원 + filter-sheet 신설 3키가 실재하고, 형제 e키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 730 이 지운 pin·calendar 복원(코드 PinPanel·CalendarSheet 유지) + filter-sheet 신설
+    // (StayFilterSheet 코드 실재). TRIP-822 재산정 19키의 마지막 3키. 없으면 red(추가 전엔 부재).
+    expect(keys).toContain('stay-register-pin');
+    expect(keys).toContain('stay-register-calendar');
+    expect(keys).toContain('stay-filter-sheet');
+
+    // 형제 e 앵커 — 기존 e05·e02 키가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('stay-register-default');
+    expect(keys).toContain('stay-price-sheet');
   });
 });
 
@@ -320,6 +377,41 @@ describe('🔴 TRIP-710 AC-4 · d06 장소 상세 프리뷰 키 (band d)', () =>
 
     // 형제 band d 앵커 — 기존 d 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
     expect(keys).toContain('explore-landing-default');
+  });
+});
+
+describe('🔴 TRIP-726 AC-P2 · e02 상태 5종 프리뷰 키 (band e)', () => {
+  it('키 집합에 상태 5키가 있고 형제 e앵커(stay-search-default)는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // red-first — 5키는 implementer 가 preview.tsx 에 추가하기 전엔 없다(band e, StaySearchScreen 을
+    // 상태별로 렌더). 카운트(171)만으론 "아무 5키나 추가해도" 통과하므로, 이 단언이 '추가된 5키가
+    // 상태 키'임을 못박는다(TRIP-709/710 미러).
+    expect(keys).toContain('stay-search-loading');
+    expect(keys).toContain('stay-search-empty');
+    expect(keys).toContain('stay-search-filter-zero');
+    expect(keys).toContain('stay-search-partial-failure');
+    expect(keys).toContain('stay-search-error');
+
+    // 형제 e앵커 — 기존 e키(TRIP-725 default)가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
+    expect(keys).toContain('stay-search-default');
+  });
+});
+
+describe('🔴 TRIP-727 AC-9 · e03 프리뷰 병합 (stay-detail-saved 삭제)', () => {
+  it('키 집합에 stay-detail-saved 가 없고, 형제 e03 키(default·notfound)는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — stay-detail-saved 는 사라진다(default 를 saved:true 로 병합, 삭제 전엔 present 라 red).
+    //   카운트(170)만으론 "아무 1키나 지워도" 통과하므로, 이 짝이 '지운 게 정확히 그 키'임을 못박는다
+    //   (TRIP-711/722/742/743 음성 가드 패턴 미러).
+    expect(keys).not.toContain('stay-detail-saved');
+
+    // 긍정 짝 — 같은 e03 형제 키는 그대로(과잉 삭제·공허 통과 차단).
+    expect(keys).toContain('stay-detail-default');
+    expect(keys).toContain('stay-detail-notfound');
   });
 });
 

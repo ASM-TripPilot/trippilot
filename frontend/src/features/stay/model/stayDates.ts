@@ -100,3 +100,23 @@ export function commitDateRange(range: StayDateRange): StayDateRange {
   }
   return range;
 }
+
+/** 0=일 ~ 6=토. 요일은 날짜에서 계산한다(Figma 목업 텍스트가 아니라, 02a §5-B). */
+const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** 'YYYY-MM-DD' → `"M.D (요일)"`. 월·일은 앞자리 0 없음, 요일은 UTC 기준으로 계산해(toEpochDay와
+ * 같은 경로) 로컬 타임존에 따라 하루가 밀리는 것을 막는다. */
+function formatDayWithWeekday(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return `${month}.${day} (${WEEKDAY_KO[weekday]})`;
+}
+
+/**
+ * 요일 포함 날짜 범위 표기. 예: `formatStayDateRange('2026-06-10','2026-06-12')` → `"6.10 (수) – 6.12 (금)"`.
+ * 월·일은 앞자리 0을 붙이지 않고, 요일은 **날짜에서 계산**하며(Figma 목업 텍스트가 아니라), 두
+ * 날짜는 en-dash(–, U+2013) 양옆 공백으로 잇는다. 소요시간을 넣지 않는다(INV-3 — 날짜만).
+ */
+export function formatStayDateRange(checkIn: string, checkOut: string): string {
+  return `${formatDayWithWeekday(checkIn)} – ${formatDayWithWeekday(checkOut)}`;
+}

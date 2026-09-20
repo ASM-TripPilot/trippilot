@@ -57,3 +57,33 @@ describe('dev 프리뷰 지도 1키 — 딥링크 초기 조준 (D9 · U2)', () 
     expect(screen.getByTestId('map-root')).toBeOnTheScreen();
   });
 });
+
+describe('TRIP-727 · e03 프리뷰가 MapView 를 전이 로드한다 (AC-4·AC-9)', () => {
+  it('state=stay-detail-default로 열면 지도 루트(map-root)가 렌더된다', () => {
+    mockSearchParams.state = 'stay-detail-default';
+
+    // 렌더 자체가 @/shared/api 지뢰를 안 밟는다는 증명을 겸한다 — StayDetailScreen→@/shared/map
+    // (MapView)은 네트워크 계층을 안 문다(전이 로드 안전). 현행 프리뷰는 정적 placeholder 라
+    // map-root 부재 → red. 구현(placeholder→MapView) 후 green(env 키 없어 map-failure 분기라도
+    // map-root 래퍼는 항상 렌더 — map-default 선례와 동형).
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('map-root')).toBeOnTheScreen();
+  });
+});
+
+describe('TRIP-728 · e03 제휴 시트 프리뷰가 상세 배경(MapView)을 합성한다 (AC-6)', () => {
+  it('state=stay-detail-affiliate-sheet 로 열면 지도 루트(map-root)가 렌더된다', () => {
+    mockSearchParams.state = 'stay-detail-affiliate-sheet';
+
+    // 이 키가 map-root 를 그리려면 두 가지가 다 돼야 한다(★F-5 이중 잠금):
+    //  (a) 프리뷰 키 개명 stay-ota-sheet → stay-detail-affiliate-sheet,
+    //  (b) StayDetailScreen(saved) 배경 합성(현행은 빈 스크림 위 시트만이라 지도가 없다).
+    // 개명만 하고 배경을 안 얹으면 시트만 떠 map-root 부재로 red, 배경만 얹고 개명을 안 하면
+    // 키 부재 → splash 폴백으로 red. 현행(stay-ota-sheet 키)은 이 상태로 열면 splash → red.
+    // 렌더 자체가 @/shared/api 지뢰를 안 밟는다는 증명을 겸한다(stay-detail-default 와 동형).
+    render(<DevPreview />);
+
+    expect(screen.getByTestId('map-root')).toBeOnTheScreen();
+  });
+});

@@ -113,7 +113,7 @@ export function StaySearchCard({
             <SaveButton
               save={save}
               size={22}
-              className="absolute right-[32px] top-[14px] h-[28px] w-[30px] items-center justify-center"
+              className="absolute right-[32px] top-[14px] h-8 w-8 items-center justify-center rounded-pill bg-on-primary"
             />
           ) : null}
         </View>
@@ -122,9 +122,20 @@ export function StaySearchCard({
             {name}
           </Text>
           <Text className="font-noto text-label text-muted">{region}</Text>
-          <Text className="font-inter-bold text-[16px] font-bold text-ink">
-            {priceText}
-          </Text>
+          {/* 가격 2톤 — formatPrice 반환("120,000원~")을 카드가 "원"에서 갈라 두 형제
+           * Text 로 그린다: bold "{천단위}원" + muted "~"(BR-U1-12 "부터"의 시각 표기).
+           * 바깥은 반드시 View(Text 아님) — 두 Text 가 View 형제라야 결합 노드로 집계되지
+           * 않는다. 결측("가격 미확인", "~" 없음)은 muted regular 단일 노드로 접는다. */}
+          {priceText.endsWith('~') ? (
+            <View className="flex-row items-baseline">
+              <Text className="font-inter-bold text-[16px] font-bold text-ink">
+                {priceText.slice(0, -1)}
+              </Text>
+              <Text className="font-noto text-caption text-muted">~</Text>
+            </View>
+          ) : (
+            <Text className="font-noto text-body text-muted">{priceText}</Text>
+          )}
         </View>
       </Pressable>
     );

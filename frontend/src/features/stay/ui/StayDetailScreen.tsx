@@ -19,15 +19,16 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { StayItem } from '@/shared/api/generated/schemas';
 
 import { formatPrice } from '@/entities/stay/lib/formatPrice';
+import { MapView } from '@/shared/map';
+import { resolveAmenityIcon } from '../config/amenityIcons';
 import {
-  AmenityGlyph,
   BackChevronGlyph,
-  CalendarPlusGlyph,
   ExternalLinkGlyph,
   HeartFilledGlyph,
   HeartOutlineGlyph,
   InfoGlyph,
   MapPinGlyph,
+  PlusGlyph,
   ShareGlyph,
 } from './StayGlyphs';
 
@@ -82,7 +83,7 @@ function HeroCircle({
       disabled={disabled}
       onPress={onPress}
       style={heroButtonShadow}
-      className="h-9 w-9 items-center justify-center rounded-pill bg-canvas"
+      className="h-11 w-11 items-center justify-center rounded-pill bg-canvas"
     >
       {children}
     </Pressable>
@@ -95,13 +96,16 @@ function Divider(): ReactElement {
 }
 
 function AmenityChip({ value }: { value: string }): ReactElement {
+  // 값별 아이콘(주차·조식·와이파이·오션뷰), 모르는 값은 AmenityGlyph 폴백(INV-1). 아이콘 leaf 에
+  // testID 를 얹어 화면이 실제로 그 칩의 아이콘을 그리는지 잠근다(어느 아이콘·색은 config/6-b).
+  const Icon = resolveAmenityIcon(value);
   return (
     <View
       testID={`stay-detail-amenity-${value}`}
-      className="w-[72px] items-center gap-sm"
+      className="flex-1 items-center gap-sm"
     >
-      <View className="h-12 w-12 items-center justify-center rounded-[14px] border border-hairline bg-surface-soft">
-        <AmenityGlyph size={24} />
+      <View className="h-12 w-12 items-center justify-center rounded-card border border-hairline bg-surface-soft">
+        <Icon testID={`stay-detail-amenity-icon-${value}`} size={24} />
       </View>
       <Text numberOfLines={1} className="font-noto text-caption text-body">
         {value}
@@ -147,21 +151,21 @@ export function StayDetailScreen({
           testID="stay-detail-hero"
           className="h-[300px] w-full bg-surface-strong"
         >
-          <View className="absolute left-lg top-[52px]">
+          <View className="absolute left-lg top-12">
             <HeroCircle testID="stay-detail-back" onPress={onPressBack}>
-              <BackChevronGlyph size={22} />
+              <BackChevronGlyph size={24} />
             </HeroCircle>
           </View>
-          <View className="absolute right-[62px] top-[52px]">
+          <View className="absolute right-[68px] top-12">
             {/* 공유 — 표시만(공유 계약 미존재, 범위 밖). 정적 어포던스라 Pressable이 아니다. */}
             <View
               style={heroButtonShadow}
-              className="h-9 w-9 items-center justify-center rounded-pill bg-canvas"
+              className="h-11 w-11 items-center justify-center rounded-pill bg-canvas"
             >
-              <ShareGlyph size={18} />
+              <ShareGlyph size={24} />
             </View>
           </View>
-          <View className="absolute right-lg top-[52px]">
+          <View className="absolute right-lg top-12">
             <HeroCircle
               testID="stay-detail-save"
               onPress={onToggleSave}
@@ -169,11 +173,11 @@ export function StayDetailScreen({
               selected={saved}
             >
               {saved ? (
-                <HeartFilledGlyph testID="stay-detail-save-filled" size={20} />
+                <HeartFilledGlyph testID="stay-detail-save-filled" size={24} />
               ) : (
                 <HeartOutlineGlyph
                   testID="stay-detail-save-outline"
-                  size={20}
+                  size={24}
                 />
               )}
             </HeroCircle>
@@ -181,14 +185,38 @@ export function StayDetailScreen({
         </View>
 
         <View className="gap-[18px] px-lg pb-[26px] pt-lg">
-          {/* 제목 · 최저가(1박 접미 없음 Q6, formatPrice 재사용) */}
+          {/* 제목 · 가격줄(좌 2톤 최저가 + 우 지역, justify-between) */}
           <View className="gap-[10px]">
             <Text className="font-noto-bold text-hero font-bold text-ink">
               {item.name}
             </Text>
-            <Text className="font-inter-bold text-[18px] font-bold text-ink">
-              {formatPrice(item.price)}
-            </Text>
+            <View
+              testID="stay-detail-price-row"
+              className="flex-row items-center justify-between"
+            >
+              {/* 좌 — 최저가 2톤: bold "{천단위}원" + muted "~"(1박 접미 없음 Q6, BR-U1-12).
+                  바깥은 반드시 View(Text 아님) — 두 Text 가 형제라야 '145,000원~'로 결합 집계되지
+                  않는다(StaySearchCard 725 선례). 결측("가격 미확인", "~" 없음)은 단일 muted 노드. */}
+              {formatPrice(item.price).endsWith('~') ? (
+                <View className="flex-row items-baseline">
+                  <Text className="font-inter-bold text-[18px] font-bold text-ink">
+                    {formatPrice(item.price).slice(0, -1)}
+                  </Text>
+                  <Text className="font-noto text-caption text-muted">~</Text>
+                </View>
+              ) : (
+                <Text className="font-noto text-label text-muted">
+                  {formatPrice(item.price)}
+                </Text>
+              )}
+              {/* 우 — 지역(핀 + 라벨). 거리·소요시간 필드가 계약에 없어 지역만(INV-1·INV-3). */}
+              <View className="flex-row items-center gap-xs">
+                <MapPinGlyph size={15} />
+                <Text className="font-noto text-label text-body">
+                  {item.region}
+                </Text>
+              </View>
+            </View>
           </View>
 
           <Divider />
@@ -199,7 +227,7 @@ export function StayDetailScreen({
               이 숙소 편의시설
             </Text>
             {item.amenities.length > 0 ? (
-              <View className="flex-row flex-wrap gap-sm">
+              <View className="flex-row gap-sm">
                 {item.amenities.map((value) => (
                   <AmenityChip key={value} value={value} />
                 ))}
@@ -216,16 +244,23 @@ export function StayDetailScreen({
 
           <Divider />
 
-          {/* 위치 — 미니맵 정적 자리(Q5, MapView 아님) + 지역(거리·소요시간 없음 INV-1·INV-3) */}
+          {/* 위치 — 실 MapView(viewOnly·단일 번호 핀, StayItem 좌표 실재) + 지역(거리·소요시간
+              없음 INV-1·INV-3). connectPins 미전달(핀 1개라 경로선 없음). 네이버 네이티브라 타일·
+              제스처 잠금은 6-b 실기(코드만 머지 시 재빌드 전 회색), env 키 부재 시 코어가
+              map-failure 로 접는다(INV-4). */}
           <View className="gap-md">
             <Text className="font-noto-bold text-section font-bold text-ink">
               위치
             </Text>
             <View
               testID="stay-detail-map"
-              className="h-[168px] w-full items-center justify-center rounded-card border border-hairline bg-surface-soft"
+              className="h-[168px] w-full overflow-hidden rounded-card border border-hairline bg-surface-soft"
             >
-              <MapPinGlyph size={32} />
+              <MapView
+                center={{ lat: item.lat, lng: item.lng }}
+                pins={[{ number: 1, lat: item.lat, lng: item.lng }]}
+                viewOnly
+              />
             </View>
             <View className="flex-row items-center gap-xs">
               <MapPinGlyph size={15} />
@@ -267,7 +302,11 @@ export function StayDetailScreen({
               onPress={onPressAddToTrip}
               className="h-[52px] flex-row items-center justify-center gap-sm rounded-button border border-hairline-strong bg-canvas"
             >
-              <CalendarPlusGlyph size={19} />
+              <PlusGlyph
+                testID="stay-detail-addtotrip-icon"
+                size={19}
+                tone="ink"
+              />
               <Text className="font-noto-bold text-card-title font-bold text-ink">
                 일정에 추가
               </Text>

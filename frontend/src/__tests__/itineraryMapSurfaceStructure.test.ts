@@ -64,6 +64,11 @@ const LOCKED_CALLERS = [
   // connectPins 미전달(단일 핀→경로선 없음, 아래 S8 ③ 강제). test-designer 착수 단계 선반영이라
   // 구현(placeholder→MapView) 전엔 `<MapView` 0건이라 S2 집합 불일치·S8 카운트로 red(정상).
   'features/explore/ui/PlaceDetailScreen.tsx',
+  // TRIP-727 e03 숙소 상세 미니맵 — 정적 자리(MapPinGlyph) → 실 MapView(viewOnly ON, 단일 핀).
+  // connectPins 미전달(단일 핀→경로선 없음, 아래 S8 ③ 강제). d06 PlaceDetailScreen(TRIP-710) 동형 —
+  // test-designer 착수 단계 선반영이라 구현(placeholder→MapView) 전엔 `<MapView` 0건이라 S2 집합
+  // 불일치·S8 카운트로 red(정상, 442·563·571 3회 재발 방지).
+  'features/stay/ui/StayDetailScreen.tsx',
 ];
 
 /** 지도 고정을 **켜면 안 되는** 호출부. 앞의 넷은 지도를 움직여 좌표를 확정하는 것이 기능 자체라
@@ -299,7 +304,7 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
    * 무엇을 보장하지 **못**하나: 태그에 적힌 **글자**까지다. 그 값이 컴포넌트를 통과해 실제
    * 지도에 닿는지는 이 층에서 볼 수 없다 — `MapView`가 그 프롭을 흘려도 여기는 초록이다.
    * 그 축은 실물 렌더 심판(`shared/map/MapView.test.tsx` AC2 viewOnly·AC3 connectPins)이 잡는다. */
-  it('h05 태그에만 connectPins={false} 가 있고 나머지 여덟은 기본값을 받는다', () => {
+  it('h05 태그에만 connectPins={false} 가 있고 나머지 LOCKED 아홉(+OPEN 4·EXPLORE 2)은 기본값을 받는다', () => {
     const lineOffTags = mapTagsOf(readOne(NO_LINE_CALLER));
     const defaultTags = [
       ...LOCKED_CALLERS.filter((rel) => rel !== NO_LINE_CALLER),
@@ -313,15 +318,16 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
     // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 13개 = 총 14개).
     //    TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로 넘어가며 13→12 가 됐다가,
     //    TRIP-783 h공통 셸(`MapSheetShell`, LOCKED−h05 · connectPins 기본)이 등재되며 12→13,
-    //    TRIP-710 d06 미니맵(`PlaceDetailScreen`, LOCKED−h05 · connectPins 미전달=기본)으로 13→14.
-    //    내역: LOCKED−h05 8 + OPEN 4 + EXPLORE 2.
+    //    TRIP-710 d06 미니맵(`PlaceDetailScreen`, LOCKED−h05 · connectPins 미전달=기본)으로 13→14,
+    //    TRIP-727 e03 미니맵(`StayDetailScreen`, LOCKED−h05 · connectPins 미전달=기본)으로 14→15.
+    //    내역: LOCKED−h05 9 + OPEN 4 + EXPLORE 2.
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(14);
+    expect(defaultTags).toHaveLength(15);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);
 
-    // ③ 나머지 여덟은 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11·인라인 글랜스·h26이
+    // ③ 나머지(defaultTags 15개)는 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11·인라인 글랜스·h26이
     //    여기 있다 — 이 심판이 요구하는 것은 "끄지 않았다"이고, 기본값이 정말 잇는지는 X3이 잰다.
     expect(defaultTags.filter((tag) => /\bconnectPins\b/.test(tag))).toEqual(
       []
