@@ -40,8 +40,13 @@ class OutboxRelay(
     registry: MeterRegistry,
     subscribers: List<OutboxSubscriber>,
     /**
-     * 지연 계측의 **끝점**. 시작점(`occurred_at`)도 앱 시계가 찍으므로 **두 끝이 같은 시계**다.
-     * 종전에는 끝점을 DB `now()` 로 재서 앱·DB 시계 차가 그대로 값에 섞였다(아래 [relay] 참고).
+     * 지연 계측의 **끝점**. 시작점(`occurred_at`)도 앱이 찍으므로 **같은 종류의 시계**다 —
+     * 종전에는 끝점만 DB `now()` 라 앱·DB 시계 차가 그대로 값에 섞였다(아래 [recordLatency] 참고).
+     *
+     * ⚠ 다중 인스턴스에서는 **적재한 인스턴스와 배달하는 인스턴스가 다를 수 있다.** 그때는 두 앱
+     * 시계 사이의 NTP 편차가 남는데, 그건 DB 와의 편차보다 작고 무엇보다 **음수가 나오면 보인다**
+     * (아래 경고). 완전히 없애려면 DB 가 찍는 적재 시각 컬럼이 따로 필요하고, 그건 `occurred_at`
+     * 의 의미(도메인 사건 발생 시각)를 바꾸지 않으려면 컬럼 추가가 된다 — 지금 값이 안 된다.
      */
     private val clock: Clock,
 ) {
@@ -168,7 +173,13 @@ class OutboxRelay(
         relayLatency.record(elapsed)
     }
 
-    /** 발행 표시. 실제로 이 호출이 닫았으면 true — 경과 계산은 호출측이 앱 시계로 한다. */
+    /**
+     * 발행 표시. 실제로 이 호출이 닫았으면 true — 경과 계산은 호출측이 앱 시계로 한다.
+     *
+     * **행이 없으면 false 다**(종전에는 `queryForObject` 가 예외를 던져 *배달 실패*로 접혔다).
+     * 새 쪽이 맞다 — 여기 오기 전에 구독자는 이미 다 돌았으므로, 없는 행에 시도 횟수를 올려 봐야
+     * 다음 폴링이 집을 대상도 없다. 실제로 그 경로는 이 리포에 없다(아웃박스는 지우지 않는다).
+     */
     private fun markPublished(eventId: UUID): Boolean =
         jdbc.update("UPDATE outbox_event SET published_at = now() WHERE event_id = ?", eventId) > 0
 
