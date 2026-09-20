@@ -88,7 +88,7 @@
     "infra/terraform/environments/dev.tfvars": "756e78d55e667dc9722859592e67b12527fd48c1730672e23035fd850916010c",
     "infra/terraform/environments/prd.tfvars": "b2f58781eea43da225e1cb89d019180c9ff1a881dd231d40156f21392749c2e2",
     "infra/terraform/stack/.terraform.lock.hcl": "951cd3f88d441fd09a7dd699f81ef188ade750e16317e832954fcc958087b7fd",
-    "infra/bootstrap/template.json": "8901aecbdecc79f28096e2ea2eb57a1048d4b8f8bf9f91eecbfe8fcadfb899d2",
+    "infra/bootstrap/template.json": "acb905d9b3b3ca0d110a9905c43c4d31df7efaedfc784d05df121d3b13cb82ed",
     "deploy/eks/chart/templates/services.yaml": "9b6651aa71ad2f288ff8599dcfb74c61f48e758e70e3b8a745abe136ffc938e6"
   },
   "dependency_graph": {
@@ -103,7 +103,7 @@
       "infra/terraform/environments/dev.tfvars": "756e78d55e667dc9722859592e67b12527fd48c1730672e23035fd850916010c",
       "infra/terraform/environments/prd.tfvars": "b2f58781eea43da225e1cb89d019180c9ff1a881dd231d40156f21392749c2e2",
       "infra/terraform/stack/.terraform.lock.hcl": "951cd3f88d441fd09a7dd699f81ef188ade750e16317e832954fcc958087b7fd",
-      "infra/bootstrap/template.json": "8901aecbdecc79f28096e2ea2eb57a1048d4b8f8bf9f91eecbfe8fcadfb899d2",
+      "infra/bootstrap/template.json": "acb905d9b3b3ca0d110a9905c43c4d31df7efaedfc784d05df121d3b13cb82ed",
       "deploy/eks/chart/templates/services.yaml": "9b6651aa71ad2f288ff8599dcfb74c61f48e758e70e3b8a745abe136ffc938e6"
     },
     "regenerated_this_run": true
