@@ -5,6 +5,7 @@ import {
   commitDateRange,
   daysInMonth,
   firstWeekdayOfMonth,
+  formatStayDateRange,
   isDateInRange,
   isStayRangeValid,
   nightsBetween,
@@ -368,6 +369,40 @@ describe('applyDatePick · commitDateRange — 날짜 선택 전이 (F-6 · §3-
         }
       ),
       { numRuns: 500 }
+    );
+  });
+});
+
+describe('formatStayDateRange — 요일 포함 날짜 범위 포맷 (TRIP-730 · AC-S3)', () => {
+  it('"M.D (요일) – M.D (요일)" 형식이고, 요일은 날짜에서 계산한다', () => {
+    // ★ Figma 프레임 리터럴은 "6.10 (화) – 6.12 (목)"이지만, 2026-06-10 은 실제로 **수요일**,
+    //   06-12 는 **금요일**이다(02a §5-B, node 로 실계산 확인). 요일은 하드코딩이 아니라
+    //   날짜에서 파생해야 한다 — Figma 목업 텍스트(화/목)를 그대로 박으면 이 단언이 red.
+    expect(formatStayDateRange('2026-06-10', '2026-06-12')).toBe(
+      '6.10 (수) – 6.12 (금)'
+    );
+  });
+
+  it('월·일에 앞자리 0을 붙이지 않고, en-dash(–, U+2013)로 잇는다', () => {
+    expect(formatStayDateRange('2026-06-09', '2026-06-10')).toBe(
+      '6.9 (화) – 6.10 (수)'
+    );
+    // 하이픈(-)이 아니라 en-dash(–)다.
+    expect(formatStayDateRange('2026-06-09', '2026-06-10')).toContain('–');
+    expect(formatStayDateRange('2026-06-09', '2026-06-10')).not.toContain(
+      ' - '
+    );
+  });
+
+  it('월·연 경계를 넘겨도 각 날짜의 요일이 맞다', () => {
+    expect(formatStayDateRange('2026-12-31', '2027-01-01')).toBe(
+      '12.31 (목) – 1.1 (금)'
+    );
+  });
+
+  it('INV-3 — 소요시간 문자열(분·시간·소요)을 넣지 않는다(날짜만)', () => {
+    expect(formatStayDateRange('2026-06-10', '2026-06-12')).not.toMatch(
+      /분|시간|소요/
     );
   });
 });

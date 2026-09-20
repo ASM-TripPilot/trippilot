@@ -4,7 +4,10 @@
  * 전혀 모른다(FSD 경계, `pages/stay-register/ui/StayRegisterPage.tsx`가 진다). 지도는
  * `@/shared/map`(검색·시트는 `MapView`, 핀 지정은 `CenterPinPicker`=중앙 고정 핀, TRIP-866)을 쓴다.
  *
- * 지도 시트가 열려 있을 때는 지도 검색 탭의 인라인 미리보기를 숨긴다(Seed §3-3 "실질 1개").
+ * 지도 검색 탭의 인라인 미리보기는 세그먼트 아래 항상 뜬다(TRIP-730 — 후보 선택 전에도).
+ * 단 지도 시트가 열려 있는 동안은 마운트하지 않는다(mapSheetState==='closed' 게이트) — 인라인+
+ * 시트 지도가 2벌 동시에 뜨는 것을 막는다(Seed §3-3 "실질 1개"). searchStatus==='error'(지도
+ * 검색 실패)일 때도 인라인 지도 자리를 배너가 대신해 안 뜬다.
  * 핀 지정 탭의 지도는 예외다 — 시트가 열려도 계속 그린다(5-b 2차 B-2, PinPanel의
  * `ponytail:` 주석 참고). 5-c(W-10) 정정 — 시트가 그 위를 덮지 않는다(콘텐츠 높이만큼만
  * 올라오는 시트라 화면 위쪽 핀 지도는 그대로 보인다). 지도 둘이 잠깐 공존하는 것은
@@ -15,7 +18,14 @@
  * 루프 몫으로 남긴다.
  */
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -25,10 +35,15 @@ import BottomSheet, {
 
 import type { GeocodeCandidate } from '@/shared/api/generated/schemas';
 import { CenterPinPicker, MapView, type MapCenter } from '@/shared/map';
+import {
+  SegmentedControl,
+  type SegmentedOption,
+} from '@/shared/ui/SegmentedControl';
 
 import {
   daysInMonth,
   firstWeekdayOfMonth,
+  formatStayDateRange,
   isDateInRange,
   nightsBetween,
 } from '../model/stayDates';
@@ -38,7 +53,17 @@ import {
   type StayRegisterFlow,
   type StayRegisterTab,
 } from '../model/stayRegisterForm';
-import { BackChevronGlyph } from './StayGlyphs';
+import {
+  BackChevronGlyph,
+  BedGlyph,
+  CalendarGlyph,
+  CheckGlyph,
+  ChevronDownGlyph,
+  InfoGlyph,
+  RefreshGlyph,
+  SearchGlyph,
+  WarningTriangleGlyph,
+} from './StayGlyphs';
 
 export interface StayRegisterScreenProps {
   flow: StayRegisterFlow;
@@ -90,6 +115,16 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0');
 }
 
+/** 선택 후보 행의 흰 배경을 띄우는 은은한 그림자(Figma multi-candidate 선택 행) — 색 토큰이 아닌
+ * 순수 그림자라 className 으로 못 주고 style prop 으로만 준다(SegmentedControl 선택 셀과 동형). */
+const SELECTED_ROW_SHADOW: ViewStyle = {
+  shadowColor: '#000',
+  shadowOpacity: 0.06,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 1 },
+  elevation: 1,
+};
+
 /** 컴팩트 앱바(c) — 기존 4화면(StaySearch·RegionPicker·SavedPlaceList·PlaceExplore)의 지역
  * AppBar 패턴을 재현한다. features 간 직접 import 금지 관례라 컴포넌트를 가져오지 않고 같은
  * 형태를 지역 함수로 그린다. 뒤로가기는 `onBack`만 부른다 — 화면은 라우팅을 모르므로(구조
@@ -114,75 +149,24 @@ function AppBar({ onBack }: { onBack?: () => void }): ReactElement {
   );
 }
 
-/** 3탭 셸 — 지도 검색·핀 지정 둘 다 이제 열려 있다(TRIP-199 AC-1). 링크 붙여넣기는 여전히
- * 계약이 없어 잠긴 채다(BR-U1-21·D6). 몰입 화면이라 하단 탭바는 그리지 않는다(브리프 AC-11).
- * 세 탭 모두 같은 고정 높이(`h-11`)를 갖고 라벨은 `numberOfLines={1}`이라 어느 칸도 2줄로
- * 접혀 다른 칸 높이를 끌지 않는다(a — 줄바꿈 해소). 가운데 잠긴 탭은 "링크 붙여넣기"를 한
- * 줄로 두고 "준비 중"을 작은 캡션으로 내려, 잠긴 이유 신호(INV-4)를 지우지 않으면서 한 줄에
- * 담는다(01b OQ2). */
-function RegisterTabs({
-  activeTab,
-  onSelectTab,
-}: {
-  activeTab: StayRegisterTab;
-  onSelectTab: (tab: StayRegisterTab) => void;
-}): ReactElement {
-  return (
-    <View className="w-full flex-row gap-sm px-lg pt-md">
-      <Pressable
-        testID="stay-register-tab-mapsearch"
-        accessibilityRole="tab"
-        onPress={() => onSelectTab('mapsearch')}
-        className={`h-11 flex-1 items-center justify-center rounded-button ${
-          activeTab === 'mapsearch'
-            ? 'bg-primary-pale'
-            : 'border border-hairline'
-        }`}
-      >
-        <Text
-          numberOfLines={1}
-          className="font-noto-bold text-label font-bold text-ink"
-        >
-          지도 검색
-        </Text>
-      </Pressable>
-      <Pressable
-        testID="stay-register-tab-linkpaste"
-        accessibilityRole="tab"
-        disabled
-        className="h-11 flex-1 items-center justify-center rounded-button border border-hairline"
-      >
-        <Text
-          numberOfLines={1}
-          className="font-noto text-label text-muted-soft"
-        >
-          링크 붙여넣기
-        </Text>
-        <Text
-          numberOfLines={1}
-          className="font-noto text-micro text-muted-soft"
-        >
-          준비 중
-        </Text>
-      </Pressable>
-      <Pressable
-        testID="stay-register-tab-pin"
-        accessibilityRole="tab"
-        onPress={() => onSelectTab('pin')}
-        className={`h-11 flex-1 items-center justify-center rounded-button ${
-          activeTab === 'pin' ? 'bg-primary-pale' : 'border border-hairline'
-        }`}
-      >
-        <Text
-          numberOfLines={1}
-          className="font-noto-bold text-label font-bold text-ink"
-        >
-          핀 지정
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
+/** 3탭 셸의 세그먼트 옵션(TRIP-730 — RegisterTabs 3버튼을 shared/ui `SegmentedControl` 연결형으로
+ * 교체). 지도 검색·핀 지정 둘 다 열려 있고(TRIP-199 AC-1), 링크 붙여넣기만 계약이 없어 잠긴 채다
+ * (BR-U1-21·D6). "준비 중" 캡션은 정지 화면을 Figma 와 맞춰 제거했다 — 무음 disabled 셀 자체가
+ * 잠긴 신호다(INV-4). testID 는 옛 3버튼 계약을 그대로 물려받는다(R-1·P-7 이 잠근다). */
+const REGISTER_TABS: SegmentedOption[] = [
+  {
+    key: 'mapsearch',
+    label: '지도 검색',
+    testID: 'stay-register-tab-mapsearch',
+  },
+  {
+    key: 'linkpaste',
+    label: '링크 붙여넣기',
+    disabled: true,
+    testID: 'stay-register-tab-linkpaste',
+  },
+  { key: 'pin', label: '핀 지정', testID: 'stay-register-tab-pin' },
+];
 
 function CandidateSkeleton(): ReactElement {
   return (
@@ -212,6 +196,8 @@ function SearchFailBlock({
         testID="stay-register-searchfail"
         className="flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-md py-sm"
       >
+        {/* TRIP-730 — Figma error-mapapi 배너 ⚠. 침묵 실패 금지(INV-4)의 시각 신호. */}
+        <WarningTriangleGlyph size={20} />
         <View className="flex-1 gap-xs">
           <Text className="font-noto-bold text-label font-bold text-ink">
             지도 검색을 사용할 수 없어요
@@ -224,18 +210,22 @@ function SearchFailBlock({
           testID="stay-register-searchfail-retry"
           accessibilityRole="button"
           onPress={onRetrySearch}
+          className="flex-row items-center gap-xs"
         >
+          {/* TRIP-730 — Figma 배너 우측 ↻. "다시 시도" 텍스트는 R-6 이 잠근다(제거 금지). */}
+          <RefreshGlyph size={16} />
           <Text className="font-noto-bold text-label font-bold text-primary">
             다시 시도
           </Text>
         </Pressable>
       </View>
-      {/* TRIP-199 — 이 버튼의 목적지(핀 지정 탭)가 이제 실재한다(BR-U1-23). */}
+      {/* TRIP-199 — 이 버튼의 목적지(핀 지정 탭)가 이제 실재한다(BR-U1-23).
+        TRIP-730 — Figma 핀 지정 버튼 h48(h-12). */}
       <Pressable
         testID="stay-register-pinfallback"
         accessibilityRole="button"
         onPress={() => onSelectTab('pin')}
-        className="flex-row items-center gap-xs rounded-button border border-hairline px-md py-sm"
+        className="h-12 flex-row items-center justify-center gap-xs rounded-button border border-hairline"
       >
         <Text className="font-noto-bold text-label font-bold text-ink">
           핀으로 직접 지정
@@ -405,16 +395,32 @@ function CandidateList({
             accessibilityRole="radio"
             accessibilityState={{ checked }}
             onPress={() => onSelectCandidate(candidate)}
-            className={`gap-xs rounded-button border px-md py-sm ${
-              checked ? 'border-primary bg-primary-pale' : 'border-hairline'
+            style={checked ? SELECTED_ROW_SHADOW : undefined}
+            className={`flex-row items-center gap-md rounded-button border px-md py-sm ${
+              checked ? 'border-primary bg-canvas' : 'border-hairline'
             }`}
           >
-            <Text className="font-noto-bold text-card-title font-bold text-ink">
-              {candidate.name}
-            </Text>
-            <Text className="font-noto text-label text-muted">
-              {candidate.address}
-            </Text>
+            {/* 라디오 원(View) — 선택 시 분홍 채움. 원의 fill 은 jest 무심판이라 선택 판정은
+              행의 accessibilityState.checked 가 진다(R-3, repo-traps 글리프 절). */}
+            <View
+              className={`h-5 w-5 items-center justify-center rounded-pill border-2 ${
+                checked ? 'border-primary' : 'border-hairline-strong'
+              }`}
+            >
+              {checked ? (
+                <View className="h-[10px] w-[10px] rounded-pill bg-primary" />
+              ) : null}
+            </View>
+            <View className="flex-1 gap-xs">
+              <Text className="font-noto-bold text-body font-bold text-ink">
+                {candidate.name}
+              </Text>
+              <Text className="font-noto text-caption text-muted">
+                {candidate.address}
+              </Text>
+            </View>
+            {/* "📍 지도 ›" — 표시만(핸들러 flow 에 없음, R-17). 행 press 는 후보 선택으로 흡수된다. */}
+            <Text className="font-noto text-label text-primary">📍 지도 ›</Text>
           </Pressable>
         );
       })}
@@ -668,27 +674,52 @@ export function StayRegisterScreen({
   maxDate,
 }: StayRegisterScreenProps): ReactElement {
   const nights = nightsBetween(flow.checkIn, flow.checkOut);
+  // TRIP-730 — 완성 범위는 요일 포함 포맷("6.10 (수) – 6.12 (금)")으로, 박수("2박")는 별 노드로
+  // 가른다(R-13 둘째). 요일은 날짜에서 계산한다(Figma 목업 텍스트 화/목이 아니라 실제 수/금).
+  const dateRangeText =
+    flow.checkIn !== null && flow.checkOut !== null && nights !== null
+      ? formatStayDateRange(flow.checkIn, flow.checkOut)
+      : null;
   // 체크인만 고른 반쪽 상태는 '날짜를 선택하세요'(아무것도 안 고른 것)와 구별해 다음 걸음을
-  // 안내한다(AC-3). 둘 다 고른 완성 범위·둘 다 없는 빈 상태 문구는 불변이다.
-  const dateSummary =
-    nights !== null
-      ? `${nights}박 · 나중에 바꿀 수 있어요`
-      : flow.checkIn !== null && flow.checkOut === null
-        ? '체크아웃도 선택하세요'
-        : '날짜를 선택하세요';
+  // 안내한다(AC-3). date-summary 노드에는 '박'을 넣지 않는다(R-13 첫째 — 박은 위 별 노드 몫).
+  const emptyDateSummary =
+    flow.checkIn !== null && flow.checkOut === null
+      ? '체크아웃도 선택하세요'
+      : '날짜를 선택하세요';
   const dateError =
     flow.checkIn !== null && flow.checkOut !== null && nights === null;
   const canSubmit = canSubmitStayRegister(flow);
   // AC-3 문구는 coordConfirmed 하나에만 걸린다(후보 유무를 조건에 넣지 않는다) — 재검색으로
-  // 이전 후보가 풀려도(§3-2 초기화) 안내는 그대로 남아야 한다(I-5).
+  // 이전 후보가 풀려도(§3-2 초기화) 안내는 그대로 남아야 한다(I-5). 핀 탭 좌표 미확정(P-6,
+  // selectedCandidate null)에서도 떠야 하므로 selectedCandidate 를 조건에 넣지 않는다.
   const showCoordNotice = !flow.coordConfirmed;
   // 지도 확인 버튼은 확인할 좌표(후보)가 있을 때만 연다 — 없으면 시트가 아예 마운트되지 않아
   // 눌러도 반응 없는 버튼이 된다(INV-4). coordConfirmed는 조건에 넣지 않는다(TRIP-600) — 검색
   // 후보는 선택만으로 좌표가 확정되지만(coordnotice는 사라진다), 시트는 사람이 위치를 눈으로
   // 검토하는 선택 수단이자 핀 경로에서 좌표를 처음 얻는 유일 수단으로 남는다.
   const showMapConfirm = flow.selectedCandidate !== null;
-  const showMapPreview =
-    flow.selectedCandidate !== null && flow.mapSheetState === 'closed';
+  // TRIP-730 — 지도는 세그먼트 아래 **항상** 뜬다(error 만 숨김, R-11). 세 얼굴(default·multi·
+  // multi-candidate)이 이 단일 map-preview 태그를 공유한다(지도 명부 census — 얼굴마다 태그를
+  // 나누면 openTags/defaultTags 가 흔들려 fail-closed red). center 는 고른 후보가 있으면 그 좌표,
+  // 없으면 기본 center.
+  const mapPreviewCenter =
+    flow.selectedCandidate !== null
+      ? { lat: flow.selectedCandidate.lat, lng: flow.selectedCandidate.lng }
+      : PIN_MAP_DEFAULT_CENTER;
+  // TRIP-730 — 후보 리스트는 검색 성공이면 **후보 수·좌표확정 여부와 무관하게** 편다(6-a
+  // integration 회귀 봉합). 단일 후보도 눌러 골라야 좌표를 확정하고 등록할 수 있고(검색 1건
+  // 경로), 확정 뒤에도(제출 실패 후 재선택·입력 보존) 선택이 남아 있어야 한다 —
+  // I-7(integration)·R-15가 "확정+제출 실패에서 candidate-0 이 checked"를 잠근다. 좌표 확정
+  // 얼굴(default)은 이 리스트 위에 확정 카드(`showConfirmedContent`)를 얹어 대조한다. Figma
+  // 얼굴 파생은 그대로다: multi-candidate(≥2·미확정)=리스트 / default(확정)=확정 카드 얹음.
+  const showCandidateList =
+    flow.searchStatus === 'success' && flow.candidates.length >= 1;
+  // TRIP-730 — 확정 콘텐츠(default 얼굴): 지도검색 탭에서 좌표가 확정되면 캡션 + 선택 숙소 카드를
+  // 그린다(Figma default 1703). 핀 탭은 자체 PinPanel 이 표면을 지므로 제외한다.
+  const showConfirmedContent =
+    flow.activeTab === 'mapsearch' &&
+    flow.coordConfirmed &&
+    flow.selectedCandidate !== null;
   // 5-c(W-9) — 이름이 비어 「등록하기」가 잠긴 이유. 예전엔 PinPanel 지역 변수였는데, 그 칸이
   // 핀 탭에서만 렌더돼(activeTab === 'pin') 탭을 옮기면 안내가 버튼보다 먼저 사라졌다.
   // canSubmitStayRegister와 같은 식(resolveName + `.trim() === ''`, 5-c W-7)으로 판정해 버튼이
@@ -707,71 +738,88 @@ export function StayRegisterScreen({
           className="flex-1"
           contentContainerStyle={{ paddingBottom: 32 }}
         >
-          <RegisterTabs activeTab={flow.activeTab} onSelectTab={onSelectTab} />
+          <View className="w-full px-lg pt-md">
+            <SegmentedControl
+              options={REGISTER_TABS}
+              value={flow.activeTab}
+              onChange={(key) => onSelectTab(key as StayRegisterTab)}
+            />
+          </View>
 
           {flow.activeTab === 'mapsearch' ? (
-            <>
+            flow.searchStatus === 'error' ? (
+              // error-mapapi(Figma 1359) — 지도·검색 없음. 블록 순서: 배너 → 핀 지정 → 숙소명.
+              // 검색 입력을 숙소명 직접 입력으로 바꾼다(D7). 이 조건 하나로만 갈린다(★18).
               <View className="w-full gap-md px-lg pt-lg">
-                {flow.searchStatus === 'error' ? (
-                  // D7 — 지도 검색이 죽으면 검색 입력을 숙소명 직접 입력으로 바꾼다(Figma
-                  // error-mapapi 실측). 이 조건 하나로만 갈린다(★18) — 넓히면 동결 4건이 깨진다.
-                  <NameField value={flow.name} onChangeName={onChangeName} />
-                ) : (
-                  <TextInput
-                    testID="stay-register-search-input"
-                    value={flow.query}
-                    onChangeText={onChangeQuery}
-                    returnKeyType="search"
-                    placeholder="숙소 이름이나 주소로 검색"
-                    onSubmitEditing={() => {
-                      if (flow.searchStatus !== 'loading') onSubmitQuery();
-                    }}
-                    className="h-12 w-full rounded-input border border-hairline-strong px-md font-noto text-body text-ink"
-                  />
-                )}
+                <SearchFailBlock
+                  onRetrySearch={onRetrySearch}
+                  onSelectTab={onSelectTab}
+                />
+                <NameField value={flow.name} onChangeName={onChangeName} />
               </View>
-
-              <View className="w-full gap-md pt-md">
-                {flow.searchStatus === 'loading' ? <CandidateSkeleton /> : null}
-                {flow.searchStatus === 'error' ? (
-                  <SearchFailBlock
-                    onRetrySearch={onRetrySearch}
-                    onSelectTab={onSelectTab}
-                  />
-                ) : null}
-                {flow.searchStatus === 'empty' ? (
-                  <View
-                    testID="stay-register-candidate-empty"
-                    className="px-lg"
-                  >
-                    <Text className="font-noto text-body text-muted">
-                      검색 결과가 없어요
-                    </Text>
+            ) : (
+              <>
+                {/* TRIP-730 — 지도는 세그먼트 아래 항상 표시(후보 선택 전에도). 단일 태그를 세
+                  얼굴이 공유(census). 단 지도 시트가 열려 있는 동안은 마운트하지 않는다
+                  (mapSheetState==='closed' 게이트) — 시트가 그 위를 덮어 인라인+시트 지도 2벌이
+                  동시에 뜨는 것을 막는다(Seed §3-3 "실질 1개"). "항상 표시"와 모순 아님(시트가
+                  덮는 동안만 숨김). 핀 지정 탭 지도는 이 게이트의 예외다(위 헤더 주석). */}
+                {flow.mapSheetState === 'closed' ? (
+                  <View className="w-full px-lg pt-lg">
+                    <View
+                      testID="stay-register-map-preview"
+                      className="h-[196px] overflow-hidden rounded-card"
+                    >
+                      <MapView center={mapPreviewCenter} />
+                    </View>
                   </View>
                 ) : null}
-                {flow.searchStatus === 'success' ? (
-                  <CandidateList
-                    candidates={flow.candidates}
-                    selected={flow.selectedCandidate}
-                    onSelectCandidate={onSelectCandidate}
-                  />
-                ) : null}
 
-                {showMapPreview && flow.selectedCandidate !== null ? (
-                  <View
-                    testID="stay-register-map-preview"
-                    className="mx-lg h-[196px] overflow-hidden rounded-card"
-                  >
-                    <MapView
-                      center={{
-                        lat: flow.selectedCandidate.lat,
-                        lng: flow.selectedCandidate.lng,
+                {/* 검색 입력 — 라벨 + 돋보기(Figma). testID·검색 키 계약은 R-2·R-15 가 잠근다. */}
+                <View className="w-full gap-xs px-lg pt-md">
+                  <Text className="font-noto-bold text-label font-bold text-muted">
+                    숙소 검색
+                  </Text>
+                  <View className="h-12 w-full flex-row items-center gap-sm rounded-input border border-hairline-strong px-md">
+                    <SearchGlyph size={20} tone="mutedSoft" />
+                    <TextInput
+                      testID="stay-register-search-input"
+                      value={flow.query}
+                      onChangeText={onChangeQuery}
+                      returnKeyType="search"
+                      placeholder="숙소명 · 주소"
+                      onSubmitEditing={() => {
+                        if (flow.searchStatus !== 'loading') onSubmitQuery();
                       }}
+                      className="flex-1 font-noto text-body text-ink placeholder:text-muted-soft"
                     />
                   </View>
-                ) : null}
-              </View>
-            </>
+                </View>
+
+                <View className="w-full gap-md pt-md">
+                  {flow.searchStatus === 'loading' ? (
+                    <CandidateSkeleton />
+                  ) : null}
+                  {flow.searchStatus === 'empty' ? (
+                    <View
+                      testID="stay-register-candidate-empty"
+                      className="px-lg"
+                    >
+                      <Text className="font-noto text-body text-muted">
+                        검색 결과가 없어요
+                      </Text>
+                    </View>
+                  ) : null}
+                  {showCandidateList ? (
+                    <CandidateList
+                      candidates={flow.candidates}
+                      selected={flow.selectedCandidate}
+                      onSelectCandidate={onSelectCandidate}
+                    />
+                  ) : null}
+                </View>
+              </>
+            )
           ) : null}
 
           {flow.activeTab === 'pin' ? (
@@ -784,14 +832,41 @@ export function StayRegisterScreen({
             />
           ) : null}
 
+          {/* TRIP-730 확정 콘텐츠(default 얼굴) — 캡션 + 선택 숙소 카드(연회색·분홍 침대·이름/주소). */}
+          {showConfirmedContent && flow.selectedCandidate !== null ? (
+            <View className="w-full gap-md px-lg pt-md">
+              <Text className="font-noto text-caption text-muted">
+                📍 지도에서 핀 위치를 확인하세요
+              </Text>
+              <View
+                testID="stay-register-selected-card"
+                className="flex-row items-center gap-md rounded-card bg-surface-soft p-[14px]"
+              >
+                <View className="h-10 w-10 items-center justify-center rounded-[10px] bg-primary-pale">
+                  <BedGlyph size={20} />
+                </View>
+                <View className="flex-1 gap-xs">
+                  <Text className="font-noto-bold text-card-title font-bold text-ink">
+                    {flow.selectedCandidate.name}
+                  </Text>
+                  <Text className="font-noto text-caption text-muted">
+                    {flow.selectedCandidate.address}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
           <View className="w-full gap-md pt-md">
             {showCoordNotice || showMapConfirm || nameMissing ? (
               <View className="gap-sm px-lg">
                 {showCoordNotice ? (
+                  // TRIP-730 — Figma multi(1358): 흰 배경 + 민트 ⓘ(InfoGlyph tone="info").
                   <View
                     testID="stay-register-coordnotice"
-                    className="flex-row items-center rounded-button border border-info-border bg-info-bg px-md py-sm"
+                    className="flex-row items-center gap-sm rounded-button border border-info-border bg-canvas px-md py-sm"
                   >
+                    <InfoGlyph size={16} tone="info" />
                     <Text className="flex-1 font-noto text-body text-info">
                       지도에서 위치를 확인해 주세요
                     </Text>
@@ -826,15 +901,30 @@ export function StayRegisterScreen({
               onPress={onOpenDateSheet}
               className="mx-lg gap-xs rounded-button border border-hairline-strong px-md py-sm"
             >
-              <Text className="font-noto text-label text-muted">
-                체크인 · 체크아웃 (선택)
-              </Text>
-              <Text
-                testID="stay-register-date-summary"
-                className="font-noto-bold text-card-title font-bold text-ink"
-              >
-                {dateSummary}
-              </Text>
+              {/* TRIP-730 — 라벨(달력 아이콘 + "체크인 · 체크아웃"), Figma default 1703. */}
+              <View className="flex-row items-center gap-xs">
+                <CalendarGlyph size={16} />
+                <Text className="font-noto text-label text-muted">
+                  체크인 · 체크아웃
+                </Text>
+              </View>
+              <View className="flex-row items-center justify-between">
+                <Text
+                  testID="stay-register-date-summary"
+                  className="font-noto-bold text-card-title font-bold text-ink"
+                >
+                  {dateRangeText ?? emptyDateSummary}
+                </Text>
+                <View className="flex-row items-center gap-sm">
+                  {/* "2박" 별 노드 — date-summary 는 '박'을 담지 않는다(R-13 첫째). */}
+                  {nights !== null ? (
+                    <Text className="font-noto text-label text-muted">
+                      {nights}박
+                    </Text>
+                  ) : null}
+                  <ChevronDownGlyph size={14} />
+                </View>
+              </View>
               {dateError ? (
                 <Text
                   testID="stay-register-date-error"
@@ -850,17 +940,36 @@ export function StayRegisterScreen({
               accessibilityRole="button"
               disabled={!canSubmit}
               onPress={onSubmit}
-              className={`mx-lg h-12 items-center justify-center rounded-button ${
+              className={`mx-lg h-12 flex-row items-center justify-center gap-xs rounded-button ${
                 canSubmit ? 'bg-primary' : 'bg-surface-strong'
               }`}
             >
-              <Text
-                className={`font-noto-bold text-card-title font-bold ${
-                  canSubmit ? 'text-on-primary' : 'text-muted-soft'
-                }`}
-              >
-                {flow.submitStatus === 'submitting' ? '등록 중…' : '등록하기'}
-              </Text>
+              {/* TRIP-730 CTA 텍스트 — submitting 우선(R-14 동결), 그다음 확정(✓ 이 숙소 등록), else
+                등록하기. ✓ 는 CheckGlyph(SVG)라 텍스트 노드는 "이 숙소 등록"이다(R-16, 02a ★5·★6). */}
+              {flow.submitStatus === 'submitting' ? (
+                <Text className="font-noto-bold text-card-title font-bold text-muted-soft">
+                  등록 중…
+                </Text>
+              ) : flow.coordConfirmed ? (
+                <>
+                  <CheckGlyph size={20} />
+                  <Text
+                    className={`font-noto-bold text-card-title font-bold ${
+                      canSubmit ? 'text-on-primary' : 'text-muted-soft'
+                    }`}
+                  >
+                    이 숙소 등록
+                  </Text>
+                </>
+              ) : (
+                <Text
+                  className={`font-noto-bold text-card-title font-bold ${
+                    canSubmit ? 'text-on-primary' : 'text-muted-soft'
+                  }`}
+                >
+                  등록하기
+                </Text>
+              )}
             </Pressable>
 
             {flow.submitStatus === 'error' ? (

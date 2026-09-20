@@ -13,6 +13,7 @@ const MUTED = '#6A6A6A';
 const PRIMARY = '#FF385C';
 const MUTED_SOFT = '#9AA1AB';
 const ON_PRIMARY = '#FFFFFF';
+const INFO = '#0B6E63';
 
 type GlyphProps = {
   size?: number;
@@ -335,8 +336,16 @@ export function ShareGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-// e03 인라인 제휴 고지(TRIP-457) — 정보 원(ⓘ). Figma 1700:1266 벡터 근사. muted.
-export function InfoGlyph({ size = 15, testID }: GlyphProps) {
+// e03 인라인 제휴 고지(TRIP-457) — 정보 원(ⓘ). Figma 1700:1266 벡터 근사.
+// tone: muted(기본, e03 제휴 고지)와 info(민트, e05 coordnotice — Figma multi 1358 실측) 겸용.
+// 색만 prop 으로 뺀다(FilterSlidersGlyph·WarningTriangleGlyph tone 선례). 기본값 muted: e03 이
+// 먼저 이 색을 썼다(무prop 호출 무회귀).
+export function InfoGlyph({
+  size = 15,
+  tone = 'muted',
+  testID,
+}: GlyphProps & { tone?: 'muted' | 'info' }) {
+  const color = tone === 'info' ? INFO : MUTED;
   return (
     <Svg
       testID={testID}
@@ -347,15 +356,150 @@ export function InfoGlyph({ size = 15, testID }: GlyphProps) {
     >
       <Path
         d="M8 14.5C11.5899 14.5 14.5 11.5899 14.5 8C14.5 4.41015 11.5899 1.5 8 1.5C4.41015 1.5 1.5 4.41015 1.5 8C1.5 11.5899 4.41015 14.5 8 14.5Z"
-        stroke={MUTED}
+        stroke={color}
         strokeWidth={1.4}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M8 7.3V11M8 5H8.008"
-        stroke={MUTED}
+        stroke={color}
         strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// e05 확정 카드 침대 아이콘(TRIP-730) — 연분홍 사각 위 분홍 침대(Figma default 1703 실측 근사).
+// 헤드보드·매트리스·발치·베개로 구성. 색은 6-b 실기 몫(글리프 stroke jest 무심판).
+export function BedGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M3 17V7"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 17H21"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 12H21V17"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M21 12V11C21 10.4477 20.5523 10 20 10H10V12"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M6 10V9.2C6 8.6477 6.4477 8.2 7 8.2H8.5C9.0523 8.2 9.5 8.6477 9.5 9.2V10"
+        stroke={PRIMARY}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// e05 확정 CTA 체크(TRIP-730) — 분홍 버튼 위라 흰색(ON_PRIMARY). "이 숙소 등록" 앞 ✓.
+export function CheckGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M20 6L9 17L4 12"
+        stroke={ON_PRIMARY}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// e05 날짜 필드 달력 아이콘(TRIP-730) — 라벨 옆 muted 달력(옛 CalendarPlusGlyph 는 TRIP-727 로
+// 삭제됨, 이 화면 전용으로 새로 그린다). 상단 고리 2개 + 헤더 구분선.
+export function CalendarGlyph({ size = 16, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M4 4H16C16.5523 4 17 4.4477 17 5V16C17 16.5523 16.5523 17 16 17H4C3.4477 17 3 16.5523 3 16V5C3 4.4477 3.4477 4 4 4Z"
+        stroke={MUTED}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 8H17"
+        stroke={MUTED}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M7 2.5V5.5M13 2.5V5.5"
+        stroke={MUTED}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// e05 지도 검색 실패 배너 재시도(TRIP-730) — 원형 화살표(↻). text-primary 옆이라 분홍.
+export function RefreshGlyph({ size = 16, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Path
+        d="M13.5 8C13.5 11.0376 11.0376 13.5 8 13.5C4.9624 13.5 2.5 11.0376 2.5 8C2.5 4.9624 4.9624 2.5 8 2.5C10.0503 2.5 11.8412 3.6519 12.75 5.3333"
+        stroke={PRIMARY}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M13 2.5V5.5H10"
+        stroke={PRIMARY}
+        strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

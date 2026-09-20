@@ -176,7 +176,14 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    병합, Figma default=저장됨) → 171→170. test-designer 02a 선반영(카운트 가드만) —
     //    implementer 는 preview.tsx 에서 그 1키만 지울 뿐 이 가드는 안 만진다(삭제 전엔 171개라 이
     //    단언이 red). devPreviewBandSort 는 밴드 h·l 만 잠가 band e 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(170);
+    // ⚠️ TRIP-730: e05 등록 세대 병합 — 프리뷰 키 순변화 +1(개명 1·신규 3·삭제 2). 개명
+    //    `stay-register-confirmed`→`stay-register-multi-candidate`, 신규 `stay-register-default`·
+    //    `stay-register-multi`·`stay-register-error-mapapi`, 삭제 `stay-register-pin`·
+    //    `stay-register-calendar`(코드 PinPanel·CalendarSheet 는 유지·키만 삭제) → 170→171.
+    //    test-designer 02a 선반영(카운트 가드만) — implementer 는 preview.tsx 의 키만 재편하고 이
+    //    가드는 안 만진다(재편 전엔 170개라 이 단언이 red). 정확히 그 키들인지는 아래 describe 가
+    //    못박는다. devPreviewBandSort 는 밴드 h·l 만 잠가 band e 와 무관(오갱신 금지).
+    expect(PREVIEW_STATES).toHaveLength(171);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -193,6 +200,28 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     const allKeys = PREVIEW_STATES.map((state) => state.key);
     expect(new Set(groupedKeys)).toEqual(new Set(allKeys));
     expect(groupedKeys).toHaveLength(allKeys.length);
+  });
+});
+
+describe('🔴 TRIP-730 · e05 등록 프리뷰 키 재편 (band e)', () => {
+  it('옛 3키가 없고, 새 4키가 있으며, 형제 e키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 개명·삭제 대상 3키는 사라진다(재편 전엔 present 라 red). 카운트(171)만으론 "아무
+    // 키나 재편해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키들'임을 못박는다(TRIP-727 미러).
+    expect(keys).not.toContain('stay-register-confirmed');
+    expect(keys).not.toContain('stay-register-pin');
+    expect(keys).not.toContain('stay-register-calendar');
+
+    // 긍정 — 새 4키(default·multi·multi-candidate·error-mapapi)가 실재한다.
+    expect(keys).toContain('stay-register-default');
+    expect(keys).toContain('stay-register-multi');
+    expect(keys).toContain('stay-register-multi-candidate');
+    expect(keys).toContain('stay-register-error-mapapi');
+
+    // 형제 band e 앵커 — e02 검색 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
+    expect(keys).toContain('stay-search-default');
   });
 });
 
