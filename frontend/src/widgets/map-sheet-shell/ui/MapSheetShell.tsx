@@ -50,6 +50,10 @@ export interface MapSheetShellProps {
    *  렌더한다(day-chip·시트·CTA 는 유지 — 화면을 안 비운다, INV-4). 미전달이면 현행대로 MapView
    *  (기존 소비처·801 무변경). 타입 선언만 — 렌더 배선은 [구현] 몫(SH6b 가 red 로 강제). */
   mapFallback?: ReactNode;
+  /** 지도 위 성공 배너 등 추가 카드(TRIP-801 D3·AC-1). 주면 day-chip 오버레이 **아래에** 추가로
+   *  렌더한다(`overlay` 교체와 달리 추가). 미전달=미렌더(후방호환). 타입 선언만 — 렌더 배선은
+   *  [구현] 몫(SH7b 가 red 로 강제). h16 확정 성공 배너가 이 슬롯을 쓴다. */
+  mapCard?: ReactNode;
 }
 
 export function MapSheetShell({
@@ -65,6 +69,7 @@ export function MapSheetShell({
   cta,
   initialIndex,
   mapFallback,
+  mapCard,
 }: MapSheetShellProps): ReactElement {
   return (
     <View testID="map-sheet-shell-root" className="flex-1 bg-canvas">
@@ -89,6 +94,9 @@ export function MapSheetShell({
             onBack={onBack ?? (() => {})}
           />
         )}
+        {/* 성공 배너 등 추가 카드 — day-chip 오버레이 **아래에** 추가로 그린다(교체 아닌 추가 · D3).
+            미전달이면 아무것도 안 그린다(후방호환). h16 확정 성공 배너가 이 슬롯을 쓴다. */}
+        {mapCard}
       </SafeAreaView>
 
       {/* 하단 2스냅 시트 — header + children(카드·커넥터). 다중 슬롯이 하단 CTA 뒤로 가려 도달

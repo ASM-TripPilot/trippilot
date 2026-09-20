@@ -52,6 +52,10 @@ export interface SlotStopCardProps {
   onPressName?: () => void;
   /** "다른 후보 ›" press. 미주입이면 링크 자체를 안 그린다(고정 슬롯엔 없음, 엣지 E5). */
   onPressAlt?: () => void;
+  /** 이름 옆 인라인 경고(TRIP-801 D4·AC-4, 예: "휴관일 확인"). 주면 `slot-stopcard-warning-*` leaf 로
+   *  그린다(빨강 텍스트+시계 글리프). 미주입=미렌더(6종 공용 카드 후방호환). 타입 선언만 — 렌더 배선은
+   *  [구현] 몫(CS8a 가 red 로 강제). 트리거(`openingHoursKnown === false`)·문구는 소비처가 정한다. */
+  warning?: string | null;
 }
 
 export function SlotStopCard({
@@ -64,6 +68,7 @@ export function SlotStopCard({
   subtitle,
   onPressName,
   onPressAlt,
+  warning,
 }: SlotStopCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string => `slot-stopcard-${role}-${slotKey}`;
@@ -152,6 +157,20 @@ export function SlotStopCard({
             </View>
           ) : null}
         </View>
+
+        {/* 이름 옆 인라인 경고(TRIP-801 D4 · 예: "휴관일 확인") — 시계 글리프 + 빨강 텍스트. 미주입=미렌더
+            (6종 공용 카드 후방호환). leaf 는 문구 하나만 담아 완전일치로 잠긴다(글리프는 SVG라 텍스트 0). */}
+        {warning === null || warning === undefined ? null : (
+          <View className="flex-row items-center gap-[2px] self-start">
+            <ClockGlyph size={12} />
+            <Text
+              testID={fieldId('warning')}
+              className="font-noto text-caption text-primary-text"
+            >
+              {warning}
+            </Text>
+          </View>
+        )}
 
         {slot.tags.length > 0 ? (
           <Text

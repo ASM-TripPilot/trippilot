@@ -428,7 +428,9 @@ describe('🔴 T7 · AC-7 — 거점 없음: 안내 카드 + 링크 push / 숙�
 });
 
 describe('AC-10 · narrow 경계 — 도착·확정·404 얼굴 보존', () => {
-  it('T10a · CONFIRMED 는 기존 TimelineScreen 이고 셸은 안 뜬다 (801까지, 선제 green)', async () => {
+  it('T10a · CONFIRMED 도 이제 지도+시트 셸이고 옛 TimelineScreen 은 안 뜬다 (TRIP-801 플립)', async () => {
+    // TRIP-801: 799 시점의 "CONFIRMED=TimelineScreen"(선제 green)을 뒤집는다 — CONFIRMED 도 셸이라
+    // `map-sheet-shell-root` 가 뜨고 `itinerary-view-timeline` 은 사라진다(01b D1 · 02a ★1).
     useItinerary(() =>
       HttpResponse.json(
         itineraryOf('CONFIRMED', [
@@ -439,8 +441,8 @@ describe('AC-10 · narrow 경계 — 도착·확정·404 얼굴 보존', () => {
     );
     renderPage();
 
-    await screen.findByTestId('itinerary-view-timeline');
-    expect(screen.queryByTestId('map-sheet-shell-root')).toBeNull();
+    await screen.findByTestId('map-sheet-shell-root');
+    expect(screen.queryByTestId('itinerary-view-timeline')).toBeNull();
   });
 
   it('T10b · 404 는 기존 notFound 얼굴이고 셸은 안 뜬다 (선제 green)', async () => {

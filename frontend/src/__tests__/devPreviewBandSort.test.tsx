@@ -89,6 +89,10 @@ const EXPECTED_H = [
   'dev-preview-state-h14-plan-distance-pending', // h14
   'dev-preview-state-h14-plan-map-fallback', // h14
   'dev-preview-state-h14-plan-no-base', // h14
+  // TRIP-801: 옛 itinerary-confirmed(h34, CONFIRMED TimelineScreen)를 h16-plan-confirmed 로 개명
+  // (CONFIRMED→지도+시트 셸). 라벨 코드가 h34→h16 이라 정렬 위치가 파일 끝(h34)에서 h14/h18 사이로
+  // 이동한다(개명=count 불변, 위치만 이동 · 02a ★11).
+  'dev-preview-state-h16-plan-confirmed', // h16
   'dev-preview-state-option-swap', // h18
   'dev-preview-state-option-swap-selected', // h18
   'dev-preview-state-option-swap-empty', // h18
@@ -98,10 +102,9 @@ const EXPECTED_H = [
   'dev-preview-state-place-add-notready', // h20
   'dev-preview-state-itinerary-edit', // h24
   'dev-preview-state-itinerary-edit-time-sheet', // h24
-  // TRIP-799: 옛 h25 TimelineScreen PLANNED 프리뷰 4키(itinerary-timeline·-confirm-locked·
-  // itinerary-map·-timeline-placeholder)는 PLANNED 가 셸로 이관되며 삭제되고 위 h14-plan-* 4키로
-  // 교체됐다(D7). itinerary-confirmed(h34, CONFIRMED TimelineScreen)는 무변경으로 유지된다.
-  'dev-preview-state-itinerary-confirmed', // h34
+  // TRIP-799: 옛 h25 TimelineScreen PLANNED 프리뷰 4키는 h14-plan-* 4키로 교체됐다(위 참조).
+  // TRIP-801: itinerary-confirmed(h34)는 h16-plan-confirmed(h16)로 개명·상단 이동(위 h16 줄 참조)
+  // 돼 이 자리에서 사라진다.
   'dev-preview-state-itinerary-draft-zero', // h35
   'dev-preview-state-my-trips-list', // h37
   'dev-preview-state-my-trips-empty', // h37

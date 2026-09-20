@@ -227,3 +227,39 @@ describe('MapSheetShell · SH6 — mapFallback 이 지도 자리를 대체한다
     expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
   });
 });
+
+/* ──────────────── TRIP-801 · D3 가산 확장(h16 성공 배너) ────────────────
+ * 셸은 지도 위 좌상단에 `DayChipOverlay`(또는 `overlay` 대체)만 얹어 왔다. h16 확정 얼굴은 일차 칩
+ * **아래에** 성공 배너 카드를 하나 더 얹어야 한다. `mapCard?: ReactNode`(가산)를 주면 day-chip 오버레이
+ * **아래에 추가로** 렌더한다 — `overlay?`(교체)와 달리 **추가**다(★6). 미전달=미렌더(후방호환).
+ *
+ * ⚠️ **원리적 사각** — 배너의 지도 위 절대 위치·색·정확 카피는 6-b 실기/육안(SH1~SH6 사각 계열).
+ *   여기선 **셸이 mapCard 를 받으면 그 노드를 추가로 그리는지**(추가 슬롯 계약)만 잠근다.
+ * ─────────────────────────────────────────────────────────────────────── */
+describe('MapSheetShell · SH7 — mapCard 가 day-chip 아래에 추가로 렌더된다 (TRIP-801 D3)', () => {
+  it('SH7a · mapCard 미전달이면 그 노드가 없고 day-chip 오버레이는 그대로다 (선제 green · 회귀 앵커)', () => {
+    // 준비/실행 — 기존 소비처 형태(mapCard 안 줌).
+    renderShell();
+
+    // 단언 — mapCard 노드 부재 + 기본 day-chip 오버레이 유지(미전달=미렌더, 후방호환).
+    expect(screen.queryByTestId('fake-map-card')).toBeNull();
+    expect(screen.getByTestId('sheet-daychip-root')).toBeOnTheScreen();
+  });
+
+  it('🔴 SH7b · mapCard 를 주면 그 노드가 뜨고 day-chip 오버레이도 그대로 유지된다 (교체 아닌 추가 · ★6)', () => {
+    // 준비/실행 — 성공 배너 자리에 마커 노드를 주입한다.
+    renderShell({
+      mapCard: <Text testID="fake-map-card">일정이 확정됐어요</Text>,
+    });
+
+    // 긍정 — 주입한 mapCard 노드가 지도 위에 그려진다.
+    expect(screen.getByTestId('fake-map-card')).toBeOnTheScreen();
+    // ★6 핵심 — overlay(교체)와 달리 day-chip 오버레이는 **사라지지 않는다**(추가 슬롯).
+    //   **red 성격**: 현행 셸은 mapCard 를 무시해 fake-map-card 가 안 떠 이 단언이 red.
+    //   구현이 day-chip 아래 `{mapCard}` 를 그리면 green.
+    expect(screen.getByTestId('sheet-daychip-root')).toBeOnTheScreen();
+    // 시트 body·CTA 도 유지.
+    expect(screen.getByTestId('fake-body')).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+  });
+});

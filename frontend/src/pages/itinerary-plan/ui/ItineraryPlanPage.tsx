@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
 
-import { formatNightsLabel } from '@/entities/trip/lib/formatNights';
 import { buildSlotKey } from '@/entities/itinerary-slot/lib/slotKey';
 import { SlotStopCard } from '@/entities/itinerary-slot/ui/SlotStopCard';
 import {
@@ -15,7 +14,6 @@ import {
 } from '@/features/itinerary/model/draftView';
 import { legDistance } from '@/features/itinerary/model/legDistance';
 import {
-  buildPlanDayTabs,
   isConfirmLocked,
   resolvePlanState,
 } from '@/features/itinerary/model/planState';
@@ -25,7 +23,6 @@ import {
   BackChevronGlyph,
   InfoCircleGlyph,
 } from '@/features/itinerary/ui/ItineraryGlyphs';
-import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { useTripWizardStore } from '@/features/trip/model/tripWizardStore';
 import {
   getGetTripsTripIdItineraryQueryKey,
@@ -40,6 +37,7 @@ import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnecto
 import { MapSheetShell } from '@/widgets/map-sheet-shell/ui/MapSheetShell';
 import { SheetHeader } from '@/widgets/map-sheet-shell/ui/SheetHeader';
 
+import { ConfirmedBanner } from './ConfirmedBanner';
 import { NoBaseNoticeCard } from './NoBaseNoticeCard';
 
 /**
@@ -119,6 +117,10 @@ function PlanFace({
 const CONFIRM_ERROR_NOTE =
   '일정을 확정하지 못했어요. 잠시 후 다시 시도해 주세요';
 
+/** h16 휴관 경고 문구(TRIP-801 D4 · 발명 display copy, 정본 부재). 트리거는 서버 신호
+ * `openingHoursKnown === false` 이고, 문구는 이 상수다(요일 발명 금지 · 02a ★5). */
+const OPENING_HOURS_WARNING = '휴관일 확인';
+
 /** 고정 슬롯(숙소) 부제 — `{도착 시간대} · 숙소 · 변경 불가`(01b D3, 발명 display copy · h11 동형).
  * h14 숙소는 항상 저녁(21:00)이라 `timeBandLabel` 이 `저녁` 을 낸다(CoPickCompletePage 와 동형). */
 function fixedSlotSubtitle(startAt: string): string {
@@ -162,11 +164,20 @@ export function ItineraryPlanPage({
     });
   }
 
-  // 완성(listed) 일정 → h24 편집 진입(TRIP-482). `goCreate` 의 동적 라우트 push 관용구(객체 1인자)를
-  // 복제해 tripId 를 경로 파라미터에 싣는다. 화면(TimelineScreen)은 라우팅을 모르므로 여기서 배선한다.
+  // 완성/확정 일정 → h12 편집 진입(TRIP-482·801 AC-2). `goCreate` 의 동적 라우트 push 관용구(객체
+  // 1인자)를 복제해 tripId 를 경로 파라미터에 싣는다. 셸은 라우팅을 모르므로 여기서 배선한다.
   function goEdit(): void {
     router.push({
       pathname: '/trips/[tripId]/itinerary/edit',
+      params: { tripId },
+    });
+  }
+
+  // 확정(h16) 셸의 [공유하기] → j06 공유 카드 진입(TRIP-801 AC-2). `goEdit` 의 객체형 push 관용구
+  // 복제(pathname·params 완전일치가 심판, 02a ★2). j06 라우트(`records/share`)는 이미 실재한다.
+  function goShare(): void {
+    router.push({
+      pathname: '/trips/[tripId]/records/share',
       params: { tripId },
     });
   }
@@ -262,43 +273,12 @@ export function ItineraryPlanPage({
     );
   }
 
-  // 확정(CONFIRMED)만 기존 `TimelineScreen` 을 그대로 쓴다(narrow · 01b D1) — 지도 2태그·census 가
-  // 여기서 살아 유지된다. 미확정(PLANNED/h14)은 아래 지도+시트 셸로 갈린다(801 이 CONFIRMED 를 셸로
-  // 이관할 때까지 이 분기가 좁게 남는다 · 맹점⑦).
-  if (itinerary.data?.status === 'CONFIRMED') {
-    const totalPlaces = state.days.reduce(
-      (sum, day) => sum + day.slots.length,
-      0
-    );
-    const header = {
-      title: trip.data?.title ?? '',
-      nightsLabel: formatNightsLabel(
-        trip.data?.startDate ?? '',
-        trip.data?.endDate ?? ''
-      ),
-      totalPlaces,
-    };
-
-    return (
-      <TimelineScreen
-        header={header}
-        days={buildPlanDayTabs(state.days)}
-        slots={state.days[activeDayIndex]?.slots ?? []}
-        activeDayIndex={activeDayIndex}
-        status={itinerary.data?.status}
-        confirmLocked={isConfirmLocked(itinerary.data?.generationState)}
-        confirmError={confirmError}
-        onConfirm={handleConfirm}
-        onEdit={goEdit}
-        onSelectDay={setActiveDayIndex}
-        onBack={handleBack}
-      />
-    );
-  }
-
-  // PLANNED(h14 완성 일정) — 전면 지도 + 2스냅 시트 셸. `features→widgets` 상향 참조 금지라 셸 조립은
-  // 페이지(여기)가 진다(h07/h08 `DraftPage`·h11 `CoPickCompletePage` 선례). 탭·날짜·일차는 여행 기간
-  // (`buildDraftDayTabs`)에서 나오고 선택 날짜는 로컬 `activeDayIndex` 로 든다(재조회 0).
+  // listed(완성/확정) — 전면 지도 + 2스냅 시트 셸. CONFIRMED(h16)·PLANNED(h14) 둘 다 이 셸을 조립한다
+  // (TRIP-801 계약 플립 — CONFIRMED 도 옛 `TimelineScreen` 대신 셸로 갈아끼웠다). `features→widgets`
+  // 상향 참조 금지라 셸 조립은 페이지가 진다(h07/h08 `DraftPage`·h11 `CoPickCompletePage` 선례). 두
+  // 얼굴의 차이(성공 배너·"확정됨" meta 접두·휴관 경고·CTA 2버튼)는 `isConfirmed` 하나로 갈린다. 탭·
+  // 날짜·일차는 여행 기간(`buildDraftDayTabs`)에서 나오고 선택 날짜는 로컬 `activeDayIndex` 로 든다.
+  const isConfirmed = itinerary.data?.status === 'CONFIRMED';
   const tabs = buildDraftDayTabs({
     startDate: trip.data?.startDate ?? '',
     endDate: trip.data?.endDate ?? '',
@@ -318,16 +298,18 @@ export function ItineraryPlanPage({
       ? { lat: pins[0].lat, lng: pins[0].lng }
       : { lat: 0, lng: 0 };
 
-  // meta = "N곳 · X.Xkm". N 은 **비고정 슬롯 수**(숙소 제외 · 01b D3 — totalPlaces·coPickProgress
-  // 재사용 금지). km 은 커넥터가 그리는 leg(`slots.slice(1)`)의 `legDistance` 합에서 "이동 " 접두를
-  // 뗀 값이고, 거리 합이 없으면(거리 계산 중) 곳 수만 그린다(01b D3·D5 · h08 선례).
+  // meta = "[확정됨 · ]N곳[ · X.Xkm]". N 은 **선택일 비고정 슬롯 수**(숙소 제외 · 01b D3 —
+  // totalPlaces·coPickProgress 재사용 금지). km 은 커넥터가 그리는 leg(`slots.slice(1)`)의
+  // `legDistance` 합에서 "이동 " 접두를 뗀 값, 없으면(거리 계산 중) 곳 수만 그린다(01b D3·D5 · h08
+  // 선례). 확정(h16)이면 앞에 "확정됨 · " 접두를 단다(TRIP-801 AC-3).
   const nonFixedCount = slots.filter((slot) => !slot.isFixed).length;
   const legLabel = legDistance(
     slots.slice(1).map((slot) => slot.distanceRange)
   );
   const kmPart = legLabel === null ? null : legLabel.replace('이동 ', '');
-  const meta =
+  const metaBody =
     kmPart === null ? `${nonFixedCount}곳` : `${nonFixedCount}곳 · ${kmPart}`;
+  const meta = isConfirmed ? `확정됨 · ${metaBody}` : metaBody;
 
   // 거점 없음 판정 = 선택일 슬롯에 고정 숙소 부재(클라 휴리스틱 · 01b D4 — itinerary 응답에
   // baseAssignment 필드가 없어 슬롯만으로 유추한다).
@@ -343,6 +325,9 @@ export function ItineraryPlanPage({
       selectedDayIndex={selectedDayIndex}
       onSelectDay={setActiveDayIndex}
       onBack={handleBack}
+      // 확정(h16)이면 지도 위 일차 칩 아래에 성공 배너를 얹는다(추가 슬롯 · TRIP-801 AC-1). 미확정은
+      // 미주입(후방호환).
+      mapCard={isConfirmed ? <ConfirmedBanner /> : undefined}
       header={
         <SheetHeader
           title={trip.data?.title ?? ''}
@@ -351,16 +336,23 @@ export function ItineraryPlanPage({
           meta={meta}
         />
       }
-      cta={[
-        {
-          label: '일정 저장하기',
-          variant: 'primary',
-          onPress: handleConfirm,
-          // PARTIAL(생성 중)이면 확정을 예방 잠근다 — CTA 비활성 + press 무발화(계약 409 의 클라 사본,
-          // 01b D6). 잠금 배너는 안 그린다(옛 TimelineScreen 배너는 셸에 없음).
-          disabled: isConfirmLocked(itinerary.data?.generationState),
-        },
-      ]}
+      // 확정(h16)은 읽기전용이라 [일정 수정](h12)·[공유하기](j06) 2버튼(둘 다 활성 · AC-2). 미확정(h14)은
+      // [일정 저장하기] 1버튼 — PARTIAL(생성 중)이면 확정을 예방 잠근다(계약 409 의 클라 사본 · 01b D6).
+      cta={
+        isConfirmed
+          ? [
+              { label: '일정 수정', variant: 'outline', onPress: goEdit },
+              { label: '공유하기', variant: 'primary', onPress: goShare },
+            ]
+          : [
+              {
+                label: '일정 저장하기',
+                variant: 'primary',
+                onPress: handleConfirm,
+                disabled: isConfirmLocked(itinerary.data?.generationState),
+              },
+            ]
+      }
     >
       <View className="gap-md px-lg pb-2xl pt-xs">
         {/* 확정 실패는 셸 안에서 침묵하지 않는다(INV-4) — 옛 TimelineScreen 이 그리던 testID 를 계승. */}
@@ -393,6 +385,13 @@ export function ItineraryPlanPage({
                 // 오표기한다(5-b 경고-1). 고정 비숙소는 부제 없음(정본 카피 부재).
                 slot.isFixed && slot.category === '숙소'
                   ? fixedSlotSubtitle(slot.startAt)
+                  : undefined
+              }
+              // 휴관 경고는 확정(h16)에서 서버 신호 `openingHoursKnown === false` 일 때만(TRIP-801 D4·
+              // AC-4). 문구는 상수(요일 발명 금지). true/null/undefined·미확정 얼굴은 미주입=미렌더.
+              warning={
+                isConfirmed && slot.openingHoursKnown === false
+                  ? OPENING_HOURS_WARNING
                   : undefined
               }
             />,

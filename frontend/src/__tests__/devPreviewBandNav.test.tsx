@@ -604,9 +604,27 @@ describe('🔴 TRIP-799 · h14 완성 일정 셸 프리뷰 키 교체 (band h ·
     expect(keys).toContain('h14-plan-map-fallback');
     expect(keys).toContain('h14-plan-no-base');
 
-    // 긍정 짝 — CONFIRMED TimelineScreen 프리뷰(itinerary-confirmed)는 narrow 라 무변경 유지 +
-    //   형제 h키(h11-copick-complete)도 딸려 사라지지 않았다(과잉 삭제·공허 통과 차단).
-    expect(keys).toContain('itinerary-confirmed');
+    // 긍정 짝 — CONFIRMED 프리뷰는 TRIP-801 로 h16-plan-confirmed 로 개명됐다(옛 itinerary-confirmed
+    //   앵커는 이제 stale) + 형제 h키(h11-copick-complete)도 딸려 사라지지 않았다.
+    expect(keys).toContain('h16-plan-confirmed');
+    expect(keys).toContain('h11-copick-complete');
+  });
+});
+
+describe('🔴 TRIP-801 · h16 확정 일정 셸 프리뷰 키 개명 (band h · net 0)', () => {
+  it('옛 itinerary-confirmed 가 없고 h16-plan-confirmed 가 있으며 형제 h14/h11 키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 부정 — 옛 CONFIRMED TimelineScreen 프리뷰 키는 사라진다(개명 전엔 present 라 red).
+    expect(keys).not.toContain('itinerary-confirmed');
+
+    // 긍정 — 새 h16 지도+시트 셸 프리뷰 키가 실재한다(개명 후 present).
+    expect(keys).toContain('h16-plan-confirmed');
+
+    // 형제 band h 앵커 — 인접 h14/h11 키가 딸려 사라지지 않았다(과잉 편집·공허 통과 차단).
+    //   개명=net 0 이라 위 카운트 가드(171)는 무변경(02a ★11).
+    expect(keys).toContain('h14-plan-default');
     expect(keys).toContain('h11-copick-complete');
   });
 });

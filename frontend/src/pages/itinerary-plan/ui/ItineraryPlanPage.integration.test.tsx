@@ -209,14 +209,22 @@ function renderPage() {
   return render(<ItineraryPlanPage tripId={TRIP_ID} />, { wrapper: Wrapper });
 }
 
-describe('🔴 I2 · AC1 — 헤더가 두 조회의 조립이다', () => {
-  it('제목·기간(GET /trips)과 곳 수(GET /itinerary)를 합쳐 그린다', async () => {
+describe('🔴 I2 · AC-7 — CONFIRMED 헤더가 셸 조립이다 (확정됨 접두 · 두 조회)', () => {
+  it('제목(GET /trips)·선택일 비고정 곳 수(GET /itinerary)를 셸 헤더로 조립한다', async () => {
+    // TRIP-801 플립 — CONFIRMED 가 이제 셸이라 옛 `itinerary-view-header`(TimelineScreen)는 사라지고
+    // `sheet-header-*` 로 조립된다(01b D6 · 02a ★13). 셸 헤더는 **선택일(day1)** 기준이라 곳 수가
+    // 전 일자 합(3)이 아니라 day1 비고정 2 다(distanceRange 없어 km null → meta "확정됨 · 2곳").
     renderPage();
 
-    const header = await screen.findByTestId('itinerary-view-header');
-    // 제목·N박M일 은 여행 메타에서, 총 N곳 은 일정 슬롯 합계에서 온다(3곳).
-    expect(header).toHaveTextContent(/제주 여행 · 3박 4일/);
-    expect(header).toHaveTextContent(/총 3곳/);
+    await screen.findByTestId('map-sheet-shell-root');
+    expect(screen.getByTestId('sheet-header-title')).toHaveTextContent(
+      '제주 여행'
+    );
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+      '확정됨 · 2곳'
+    );
+    // 짝 — 옛 TimelineScreen 헤더는 소멸.
+    expect(screen.queryByTestId('itinerary-view-header')).toBeNull();
   });
 });
 
@@ -240,14 +248,14 @@ describe('🔴 I3 · AC9 — 일정이 아직 없으면(404) notFound 얼굴을 
  *  - 🔴 409 는 침묵 없이 안내 + 재조회로 정합하되, 전환과 잔존을 케이스로 가른다(I5a·I5b · ★2).
  *  - 🔴 404 는 status 불변·재조회 없음(I7 · ★5). 409(+1)와 404(불변)를 GET 실건수로 가른다.
  */
-describe('🔴 I4 · AC-8 — "일정 저장하기" 성공(200)은 재조회 없이 확정으로 전환한다 (setQueryData · US-SCHED-12)', () => {
-  it('셸 CTA press → POST /confirm 1건, GET 재조회 없이 CONFIRMED(TimelineScreen)로 전환한다', async () => {
+describe('🔴 I4 · AC-8 — "일정 저장하기" 성공(200)은 재조회 없이 확정 셸로 전환한다 (setQueryData · US-SCHED-12)', () => {
+  it('셸 CTA press → POST /confirm 1건, GET 재조회 없이 CONFIRMED 셸(공유하기 버튼)로 전환한다', async () => {
     itineraryHandler = () => HttpResponse.json(plannedItinerary());
     confirmHandler = () => HttpResponse.json(confirmedItinerary());
 
     renderPage();
 
-    // PLANNED 로 열려 셸의 확정 CTA(★2 sheet-cta-button-0 "일정 저장하기")가 뜬다(첫 GET 1건).
+    // PLANNED 로 열려 셸의 확정 CTA(sheet-cta-button-0 "일정 저장하기", 1버튼)가 뜬다(첫 GET 1건).
     const cta = await screen.findByTestId('sheet-cta-button-0');
     expect(cta).toHaveTextContent('일정 저장하기');
     await waitFor(() => expect(itineraryGetCalls).toBe(1));
@@ -255,12 +263,13 @@ describe('🔴 I4 · AC-8 — "일정 저장하기" 성공(200)은 재조회 없
     // 누른다 — 중간 다이얼로그 없이 곧장 POST.
     fireEvent.press(cta);
 
-    // ★3 확정 성공 → setQueryData(CONFIRMED) → 재렌더 → status===CONFIRMED → 기존 TimelineScreen 착지.
-    //   상시 앱바 제목 '확정 일정' 을 전환 앵커로 쓴다(TimelineScreen 무변경). 셸 CTA 는 사라진다.
-    await screen.findByText('확정 일정');
-    expect(screen.queryByTestId('sheet-cta-button-0')).toBeNull();
+    // TRIP-801 플립 — 확정 성공 → setQueryData(CONFIRMED) → 재렌더 → CONFIRMED 도 이제 **셸**.
+    //   PLANNED 셸도 map-sheet-shell-root 라(★2) 착지 앵커는 CONFIRMED 전용 2번째 버튼
+    //   `sheet-cta-button-1`("공유하기")다. meta 엔 "확정됨" 접두가 붙는다.
+    await screen.findByTestId('sheet-cta-button-1');
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(/확정됨/);
 
-    // ★6(구) — POST 1건, GET 은 **안 늘었다**(재조회 0). setQueryData 로 반영했다는 유일한 설명이다.
+    // POST 1건, GET 은 **안 늘었다**(재조회 0). setQueryData 로 반영했다는 유일한 설명이다.
     expect(confirmPostCalls).toBe(1);
     expect(itineraryGetCalls).toBe(1);
   });
@@ -304,10 +313,9 @@ describe('🔴 I5b · INV-4 — 409 후 재조회가 CONFIRMED 면 읽기전용�
     itineraryHandler = () => HttpResponse.json(confirmedItinerary());
     fireEvent.press(cta);
 
-    // 재조회로 확정 얼굴로 정합. ★2 — 얼굴이 읽기전용으로 바뀌면 인라인 안내는 그 리렌더에
-    //   지워지므로 이 케이스는 잔존 안내를 단언하지 않는다(전환과 잔존을 케이스로 갈랐다).
-    //   TRIP-505 로 배너가 제거돼 상시 앱바 제목 '확정 일정' 을 정합 앵커로 쓴다(02a ★T1).
-    await screen.findByText('확정 일정');
+    // TRIP-801 플립 — 재조회로 CONFIRMED 셸로 정합한다. 착지 앵커는 CONFIRMED 전용 2번째 버튼
+    //   `sheet-cta-button-1`("공유하기")다(옛 '확정 일정' 앱바 제목은 셸엔 없음 · ★2).
+    await screen.findByTestId('sheet-cta-button-1');
     await waitFor(() => expect(itineraryGetCalls).toBe(2));
   });
 });

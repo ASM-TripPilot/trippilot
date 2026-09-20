@@ -187,18 +187,19 @@ function useItinerary(status: ItineraryStatus) {
 }
 
 describe('🔴 CB1 · AC-1 — 확정(CONFIRMED) 뒤로가기는 내 여행 목록으로 replace 한다', () => {
-  it('CONFIRMED 얼굴에서 뒤로가기 press → replace("/(tabs)/itinerary") 1회, back() 미호출', async () => {
-    // 준비 — 일정 200·CONFIRMED → 확정 얼굴. 착지 앵커는 상시 앱바 제목 '확정 일정'(배너는
-    // 이 티켓이 제거하므로 앵커로 못 쓴다 · 02a ★T1). canGoBack 은 true(히스토리 있음).
+  it('CONFIRMED 셸에서 sheet-daychip-back press → replace("/(tabs)/itinerary") 1회, back() 미호출', async () => {
+    // 준비(TRIP-801 플립) — CONFIRMED 가 이제 지도+시트 셸이라(01b D1) 착지 앵커는
+    // `map-sheet-shell-root`(옛 TimelineScreen 앱바 제목 '확정 일정'은 셸엔 없음 · 02a ★2)이고,
+    // 뒤로가기 대상은 셸의 `sheet-daychip-back`(옛 `itinerary-view-back` 아님 · ★1). canGoBack=true.
     useItinerary('CONFIRMED');
     renderPage();
-    await screen.findByText('확정 일정');
+    await screen.findByTestId('map-sheet-shell-root');
 
-    // 실행 — 뒤로가기.
-    fireEvent.press(screen.getByTestId('itinerary-view-back'));
+    // 실행 — 셸 back.
+    fireEvent.press(screen.getByTestId('sheet-daychip-back'));
 
-    // 단언 — 확정 분기는 canGoBack 경로를 타지 않고 곧장 내 여행 목록으로 replace 한다.
-    //   `/(tabs)/itinerary`(목록)는 딥링크 폴백 `/(tabs)`(홈)과 다른 리터럴이다(★T5).
+    // 단언 — 확정 분기는 canGoBack 경로를 타지 않고 곧장 내 여행 목록으로 replace 한다(무변경 계약).
+    //   `/(tabs)/itinerary`(목록)는 딥링크 폴백 `/(tabs)`(홈)과 다른 리터럴이다.
     expect(mockReplace).toHaveBeenCalledWith('/(tabs)/itinerary');
     expect(mockReplace).toHaveBeenCalledTimes(1);
     expect(mockBack).not.toHaveBeenCalled();

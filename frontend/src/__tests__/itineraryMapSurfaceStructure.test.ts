@@ -84,17 +84,10 @@ const OPEN_CALLERS = [
   // CenterPinPicker 는 viewOnly 를 받지 않는(항상 조작 가능) 래퍼라 이 옵트인 경계의 대상이 아니다.
 ];
 
-/** 완성·확정 일정 화면(h25/h34 · TimelineScreen). **지도 호출부가 둘이다**(TRIP-354 · Q5 정정):
- *  ① **인라인 글랜스 지도**(기본 · 작은 것) — viewOnly **켠다**(잠긴 미리보기). "지도 크게 보기"가
- *     있는 이유가 인라인은 잠긴 글랜스라서다. connectPins 기본값(동선 선).
- *  ② **h26 확대 오버레이 지도**(제스처 탐색 · TRIP-301) — viewOnly **끈다**(D6: 제스처 + setMaxLevel).
- *     connectPins 기본값.
- * 한 파일에 **잠긴 태그와 안 잠긴 태그가 공존하는 첫 자리**라, 아래 S2가 파일이 아니라 **태그 단위로**
- * 둘을 각각 명시한다(AC-8: "새 지도 호출부가 생기면 사람이 잠금 여부를 명시"의 이행 자리). */
-const EXPLORE_CALLERS = ['features/itinerary/ui/TimelineScreen.tsx'];
-/** TimelineScreen 태그 분포 — 사람이 의도적으로 등재한다(그냥 통과시키기 금지). */
-const ITINERARY_GLANCE_LOCKED_TAGS = 1; // 인라인 글랜스: viewOnly ON
-const ITINERARY_EXPLORE_OPEN_TAGS = 1; // h26 확대: viewOnly OFF
+// TRIP-801 GUT — 완성·확정 일정 화면 `TimelineScreen` 이 소비처 0(CONFIRMED→셸 이관)으로 삭제되며
+// `EXPLORE_CALLERS`(TimelineScreen 의 인라인 글랜스 + h26 확대 두 태그)·`ITINERARY_*_TAGS` 상수가
+// 함께 제거됐다. h25/h34 는 이제 없다(CONFIRMED 도 `MapSheetShell` 이 owner, LOCKED_CALLERS 에 이미
+// 등재됨). withTag 전수 동치(S2 ①)가 TimelineScreen.tsx 잔존 시 red 로 삭제를 강제한다(02a ★9).
 
 /** 게이트①-2 — 연결선을 **끄는** 유일한 자리(h05). 나머지 여섯 태그는 아무 말도 하지 않고
  * 기본값(`connectPins` = 잇는다)을 받는다 — h11(일정 초안)이 그 여섯 안에 있다. */
@@ -253,12 +246,10 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
       .sort();
 
     // ① 도달 앵커 — 호출부가 통째로 이 심판 안에 있다. 새 호출부가 생기면 여기서 먼저 걸려
-    //    "잠글 곳인가 아닌가"를 사람이 정하게 된다(모집단이 조용히 새는 것을 막는다). TimelineScreen
-    //    은 지도 태그가 둘(글랜스+h26)이지만 **파일은 하나**라 이 파일 단위 열거에는 한 번만 온다 —
-    //    잠금 여부는 아래 ④가 태그 단위로 가른다(Q5 · AC-8).
-    expect(withTag).toEqual(
-      [...LOCKED_CALLERS, ...OPEN_CALLERS, ...EXPLORE_CALLERS].sort()
-    );
+    //    "잠글 곳인가 아닌가"를 사람이 정하게 된다(모집단이 조용히 새는 것을 막는다). TRIP-801 GUT 로
+    //    TimelineScreen 이 삭제돼 EXPLORE_CALLERS(태그 둘) 가 빠졌다 — TimelineScreen.tsx 가 아직
+    //    디스크에 있으면 withTag 에 잡혀 이 동치가 red(삭제 강제, 02a ★9).
+    expect(withTag).toEqual([...LOCKED_CALLERS, ...OPEN_CALLERS].sort());
 
     // ② 잠글 두 화면 — 태그마다 viewOnly 가 있다.
     LOCKED_CALLERS.forEach((rel) => {
@@ -276,22 +267,8 @@ describe('🔴 S2 · AC-13 · AC-16 — 지도 고정은 h05·h11 에만 켠다 
     expect(openTags).toHaveLength(4);
     expect(openTags.filter((tag) => /\bviewOnly\b/.test(tag))).toEqual([]);
 
-    // ④ 완성·확정 일정 화면 — 지도 호출부가 **둘**이다(Q5). 파일이 아니라 **태그 단위로** 잠금
-    //    여부를 사람이 명시한다: 인라인 글랜스는 viewOnly 를 **켜고**(잠긴 미리보기), h26 확대는
-    //    **끈다**(제스처 탐색 · D6). 구현이 둘을 뒤바꾸거나(글랜스 열림 / h26 잠금) 태그 수가
-    //    달라지면 여기서 red — "지도 크게 보기가 잠긴 글랜스를 여는" 설계가 회귀하는 것을 막는다.
-    const itineraryTags = mapTagsOf(readOne(EXPLORE_CALLERS[0]));
-    expect(itineraryTags).toHaveLength(
-      ITINERARY_GLANCE_LOCKED_TAGS + ITINERARY_EXPLORE_OPEN_TAGS
-    );
-    const lockedGlance = itineraryTags.filter((tag) =>
-      /\bviewOnly\b/.test(tag)
-    );
-    const openExplore = itineraryTags.filter(
-      (tag) => !/\bviewOnly\b/.test(tag)
-    );
-    expect(lockedGlance).toHaveLength(ITINERARY_GLANCE_LOCKED_TAGS); // 잠긴 인라인 글랜스
-    expect(openExplore).toHaveLength(ITINERARY_EXPLORE_OPEN_TAGS); // 제스처 h26 확대
+    // ④(구) TimelineScreen 태그 단위(글랜스 잠금 / h26 확대 열림) 분석은 TRIP-801 GUT 로 그 파일이
+    //    삭제되며 제거됐다 — CONFIRMED 도 이제 MapSheetShell(LOCKED, 단일 viewOnly 태그)이 owner다.
   });
 });
 
@@ -304,31 +281,26 @@ describe('S8 · h05 무선 — 연결선을 끄는 자리가 h05 하나뿐이다
    * 무엇을 보장하지 **못**하나: 태그에 적힌 **글자**까지다. 그 값이 컴포넌트를 통과해 실제
    * 지도에 닿는지는 이 층에서 볼 수 없다 — `MapView`가 그 프롭을 흘려도 여기는 초록이다.
    * 그 축은 실물 렌더 심판(`shared/map/MapView.test.tsx` AC2 viewOnly·AC3 connectPins)이 잡는다. */
-  it('h05 태그에만 connectPins={false} 가 있고 나머지 LOCKED 아홉(+OPEN 4·EXPLORE 2)은 기본값을 받는다', () => {
+  it('h05 태그에만 connectPins={false} 가 있고 나머지 LOCKED 아홉(+OPEN 4)은 기본값을 받는다', () => {
     const lineOffTags = mapTagsOf(readOne(NO_LINE_CALLER));
     const defaultTags = [
       ...LOCKED_CALLERS.filter((rel) => rel !== NO_LINE_CALLER),
       ...OPEN_CALLERS,
-      // TRIP-301/354 완성·확정 일정 지도도 동선 선을 그린다 — 핀 번호가 솔버 확정 순서라 선이
-      // 사실이다(h11 과 같은 부류). TimelineScreen 은 태그가 둘(인라인 글랜스 + h26 확대)인데
-      // **둘 다** connectPins 를 무언급 = 기본값(잇는다)으로 둔다.
-      ...EXPLORE_CALLERS,
+      // TRIP-801 GUT — TimelineScreen(EXPLORE_CALLERS, 태그 둘) 삭제로 이 spread 가 빠졌다.
+      // CONFIRMED 동선 선은 이제 MapSheetShell(LOCKED, connectPins 기본)이 그린다.
     ].flatMap((rel) => mapTagsOf(readOne(rel)));
 
     // ① 도달 앵커 — 태그를 진짜로 떼어냈다(h05 1개 + 나머지 13개 = 총 14개).
-    //    TRIP-866(S4) 로 live-location 이 `<CenterPinPicker>` 로 넘어가며 13→12 가 됐다가,
-    //    TRIP-783 h공통 셸(`MapSheetShell`, LOCKED−h05 · connectPins 기본)이 등재되며 12→13,
-    //    TRIP-710 d06 미니맵(`PlaceDetailScreen`, LOCKED−h05 · connectPins 미전달=기본)으로 13→14,
-    //    TRIP-727 e03 미니맵(`StayDetailScreen`, LOCKED−h05 · connectPins 미전달=기본)으로 14→15.
-    //    내역: LOCKED−h05 9 + OPEN 4 + EXPLORE 2.
+    //    TRIP-727 로 15 였다가, TRIP-801 GUT(TimelineScreen 태그 둘 삭제)로 15→13.
+    //    내역: LOCKED−h05 9 + OPEN 4.
     expect(lineOffTags).toHaveLength(1);
-    expect(defaultTags).toHaveLength(15);
+    expect(defaultTags).toHaveLength(13);
 
     // ② 끄는 자리는 h05 하나뿐이고, 끈다고 **명시**한다.
     expect(lineOffTags[0]).toMatch(/\bconnectPins=\{false\}/);
 
-    // ③ 나머지(defaultTags 15개)는 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11·인라인 글랜스·h26이
-    //    여기 있다 — 이 심판이 요구하는 것은 "끄지 않았다"이고, 기본값이 정말 잇는지는 X3이 잰다.
+    // ③ 나머지(defaultTags 13개)는 아무 말도 하지 않는다 = 기본값(잇는다)을 받는다. h11 이 여기 있다 —
+    //    이 심판이 요구하는 것은 "끄지 않았다"이고, 기본값이 정말 잇는지는 X3이 잰다.
     expect(defaultTags.filter((tag) => /\bconnectPins\b/.test(tag))).toEqual(
       []
     );

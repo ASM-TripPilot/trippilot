@@ -97,7 +97,6 @@ import {
   type MyTripCardVM,
 } from '@/features/itinerary/ui/MyTripCard';
 import { MyTripsListScreen } from '@/features/itinerary/ui/MyTripsListScreen';
-import { TimelineScreen } from '@/features/itinerary/ui/TimelineScreen';
 import { ZeroCandidateScreen } from '@/features/itinerary/ui/ZeroCandidateScreen';
 import {
   NotificationInboxScreen,
@@ -154,6 +153,7 @@ import { DestinationEditSheet } from '@/features/trip/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/features/trip/ui/PeriodEditSheet';
 import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationPage } from '@/pages/live-location';
+import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
 import { BudgetEditSheet } from '@/pages/trip-new-step1/ui/BudgetEditSheet';
 import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
@@ -938,16 +938,10 @@ export const MUST_VISIT_THUMBNAILS = [
 ];
 
 /**
- * h25 완성 일정(TimelineScreen) 프리뷰 픽스처 — 피어 세션(frontend-82 "지라 TRIP-299 진행")이
- * 제공한 h25 칩을 옮긴 것이다(크로스티켓 조율: TRIP-299 프리뷰 칩 누락 보완, [기록]에 출처 명시).
- * h34 확정 프리뷰가 같은 데이터에 `status=CONFIRMED` 만 얹어 두 얼굴을 한 자리에서 대조한다.
- * 슬롯 4개가 오전/저녁/점심 시간대·고정·위반·자정 넘김을 한 벌로 덮는다.
+ * h24 일정 편집(ItineraryEditScreen) 프리뷰 픽스처 — 슬롯 4개가 오전/저녁/점심 시간대·고정·위반·자정
+ * 넘김을 한 벌로 덮는다. (옛 h34 확정 프리뷰(TimelineScreen)는 TRIP-801 로 지도+시트 셸(h16)로
+ * 이관돼 이 픽스처를 더는 쓰지 않는다 — `TIMELINE_PREVIEW_HEADER` 는 그때 제거됐다.)
  */
-const TIMELINE_PREVIEW_HEADER = {
-  title: '부산 여행',
-  nightsLabel: '3박 4일',
-  totalPlaces: 5,
-};
 const TIMELINE_PREVIEW_DAYS: PlanDayTab[] = [
   { dayIndex: 1, date: '2026-06-10', count: 4 },
   { dayIndex: 2, date: '2026-06-11', count: 1 },
@@ -4185,24 +4179,75 @@ export const PREVIEW_STATES: PreviewState[] = [
       </View>
     ),
   },
-  // h34 확정 읽기전용(TRIP-505 정리) — 같은 데이터에 status=CONFIRMED 를 얹은 확정 얼굴. 배너·
-  // 하단 비활성 2버튼·부제 조립은 제거됐고, 그 자리에 `itinerary-confirmed-note` 안내 한 줄이
-  // 뜬다(appbar `확정 일정`·공유 아이콘은 유지). 안내·공유 어중간한 상태를 눈으로 대조하는 자리.
+  // h16 확정 일정(TRIP-801) — CONFIRMED 지도+시트 셸(옛 h34 TimelineScreen 읽기전용을 대체). 페이지
+  // (ItineraryPlanPage)는 react-query·라우터가 필요해 프리뷰에서 직접 못 쓰므로 셸 조립을 축소해
+  // 그린다(h14 선례). 확정 얼굴의 신규 3요소(지도 위 성공 배너·이름 옆 휴관 경고·[일정 수정]·[공유하기]
+  // 2버튼)를 한 화면에서 육안 대조한다. 슬롯은 h11 결과 픽스처를 재사용한다.
   {
-    key: 'itinerary-confirmed',
+    key: 'h16-plan-confirmed',
     band: 'h',
-    label: 'h34 · 확정 읽기전용',
+    label: 'h16 · 확정 일정',
     login: null,
     render: () => (
-      <TimelineScreen
-        header={TIMELINE_PREVIEW_HEADER}
-        days={TIMELINE_PREVIEW_DAYS}
-        slots={TIMELINE_PREVIEW_SLOTS}
-        activeDayIndex={0}
-        status="CONFIRMED"
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H11_COPICK_PREVIEW_SLOTS)}
+        days={[
+          { label: '1일차' },
+          { label: '2일차' },
+          { label: '3일차' },
+          { label: '4일차' },
+        ]}
+        selectedDayIndex={0}
         onSelectDay={noop}
         onBack={noop}
-      />
+        mapCard={<ConfirmedBanner />}
+        header={
+          <SheetHeader
+            title="부산 여행"
+            dayLabel="1일차"
+            dateLabel="6월 10일(수)"
+            meta="확정됨 · 4곳 · 4.1km"
+          />
+        }
+        cta={[
+          { label: '일정 수정', variant: 'outline', onPress: noop },
+          { label: '공유하기', variant: 'primary', onPress: noop },
+        ]}
+      >
+        <View className="gap-md px-lg pb-2xl pt-xs">
+          {H11_COPICK_PREVIEW_SLOTS.flatMap((slot, index) => {
+            const timeLabel = slot.isFixed
+              ? slot.startAt.slice(0, 5)
+              : `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`;
+            const items: ReactElement[] = [
+              <SlotStopCard
+                key={`card-${slot.poiId}`}
+                slot={slot}
+                date={H14_PLAN_PREVIEW_DATE}
+                index={index}
+                timeLabel={timeLabel}
+                fixed={slot.isFixed}
+                subtitle={slot.isFixed ? '저녁 · 숙소 · 변경 불가' : undefined}
+                // 휴관 경고 표면 육안 대조용 — 비고정 한 슬롯에 얹는다(실 페이지는 openingHoursKnown
+                // === false 서버 신호로 켠다).
+                warning={index === 1 ? '휴관일 확인' : undefined}
+              />,
+            ];
+            if (index < H11_COPICK_PREVIEW_SLOTS.length - 1) {
+              const nextSlot = H11_COPICK_PREVIEW_SLOTS[index + 1];
+              items.push(
+                <DistanceConnector
+                  key={`conn-${slot.poiId}`}
+                  slotKey={buildSlotKey(H14_PLAN_PREVIEW_DATE, slot.poiId)}
+                  distanceRange={nextSlot.distanceRange}
+                />
+              );
+            }
+            return items;
+          })}
+        </View>
+      </MapSheetShell>
     ),
   },
   // h12 슬롯 교체(TRIP-335→483) — 바텀시트를 슬롯 카드 아래 **인라인 확장 패널**로 이관했다. candidates

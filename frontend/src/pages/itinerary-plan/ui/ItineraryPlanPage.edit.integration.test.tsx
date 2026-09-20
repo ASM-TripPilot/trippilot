@@ -198,16 +198,24 @@ describe('🔴 IE1 · narrow(★7) — PLANNED 셸 얼굴엔 편집 연필이 �
   });
 });
 
-describe('🔴 IE2 · AC2 — CONFIRMED h34 페이지엔 편집 어포던스가 없다(편집 문이 확정 일정으로 안 샌다)', () => {
-  it('실 데이터가 CONFIRMED 면 itinerary-view-edit 가 부재하고 확정 얼굴로 착지한다', async () => {
-    // 준비 — 일정 200·CONFIRMED → h34 확정 얼굴.
+describe('🔴 IE2 · AC-7 의미 반전 — CONFIRMED h16 셸엔 "일정 수정" 버튼이 있고 h12 로 push 한다', () => {
+  it('CONFIRMED 셸의 sheet-cta-button-0(일정 수정) press → h12 편집 push 1회', async () => {
+    // 준비(TRIP-801 의미 반전) — 799 까지 IE2 는 "확정 일정엔 편집 문이 없다"를 잠갔으나, h16 정본이
+    // 정면으로 **일정 수정 버튼을 추가**한다(01b D5 · 02a ★1). CONFIRMED 는 이제 셸이라 착지 앵커는
+    // `map-sheet-shell-root`(옛 '확정 일정' 앱바 제목은 셸엔 없음 · ★2).
     useItinerary('CONFIRMED');
     renderPage();
-    // 확정 얼굴 착지 증명 — TRIP-505 로 배너가 제거돼 상시 앱바 제목 '확정 일정' 으로 착지 확인
-    //   (배너 앵커 파손 봉합 · 02a ★T1).
-    await screen.findByText('확정 일정');
+    await screen.findByTestId('map-sheet-shell-root');
 
-    // 단언 — 배선 층에서도 편집 진입이 부재(화면 축 C15b 와 이중 방어).
-    expect(screen.queryByTestId('itinerary-view-edit')).toBeNull();
+    // 단언 — 편집 문이 확정 일정으로 **의도적으로** 열린다. h12 는 이 배선이 최초 앱-내 진입점이다.
+    const edit = screen.getByTestId('sheet-cta-button-0');
+    expect(edit).toHaveTextContent('일정 수정');
+
+    fireEvent.press(edit);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/edit',
+      params: { tripId: TRIP_ID },
+    });
+    expect(mockPush).toHaveBeenCalledTimes(1);
   });
 });
