@@ -143,6 +143,7 @@ import {
 } from '@/features/stay/ui/SavedStayListScreen';
 import { OtaChoiceSheet } from '@/features/stay/ui/OtaChoiceSheet';
 import { StayPriceSheet } from '@/features/stay/ui/StayPriceSheet';
+import { StayFilterSheet } from '@/features/stay/ui/StayFilterSheet';
 import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
@@ -1193,6 +1194,19 @@ const STAY_REGISTER_HANDLERS = {
   onSubmit: noop,
 };
 
+/** e05 핀 지정 탭(TRIP-724 복원, Figma 4520:2413) — 핀 탭 진입·핀 찍기 전. 코드 `PinPanel`은
+ * 730에서 유지됐고 프리뷰 키만 이번에 복원한다(19키 재산정). 픽셀 정합은 이후 티켓(존재+렌더까지). */
+const STAY_REGISTER_PIN_FLOW: StayRegisterScreenProps['flow'] = {
+  ...STAY_REGISTER_BASE_FLOW,
+  activeTab: 'pin',
+  query: '',
+  searchStatus: 'idle',
+  candidates: [],
+  selectedCandidate: null,
+  coordSource: 'PIN',
+  coordConfirmed: false,
+};
+
 // h12·h18 슬롯 교체 후보(TRIP-335) — 서버 응답 3필드만(poiId·distanceRange·rationale). 이름·사진은
 // 아직 안 실려(BE 후속) 카드가 플레이스홀더로 뜨는 미확보 표기를 눈으로 대조하는 자리다.
 const SLOT_CANDIDATES_PREVIEW: SlotCandidatesCandidatesItem[] = [
@@ -1891,6 +1905,39 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // e05 숙소 등록 핀 지정(TRIP-724 복원, Figma 4520:2413) — 핀 탭·핀 찍기 전 세 표면을 한 화면에서
+  // 대조하는 자리(실화면 딥링크로는 핀 세션 상태를 안정적으로 못 봄). 730이 키만 지웠고 PinPanel 코드는
+  // 유지 — 19키 재산정으로 복원. 픽셀 정합은 이후 티켓(존재+렌더까지, 6-b/TRIP-831).
+  {
+    key: 'stay-register-pin',
+    band: 'e',
+    label: 'e05 · 등록 핀 지정',
+    login: null,
+    render: () => (
+      <StayRegisterScreen
+        flow={STAY_REGISTER_PIN_FLOW}
+        today="2026-06-01"
+        {...STAY_REGISTER_HANDLERS}
+      />
+    ),
+  },
+  // e05 숙소 등록 달력 범위(TRIP-724 복원, Figma 4520:2349) — 날짜 시트 열림·범위 하이라이트·여행 기간
+  // 상하한을 눈으로 보는 자리. CalendarSheet 코드는 730에서 유지, 프리뷰 키만 복원. 6-b/TRIP-831 몫.
+  {
+    key: 'stay-register-calendar',
+    band: 'e',
+    label: 'e05 · 등록 달력 범위',
+    login: null,
+    render: () => (
+      <StayRegisterScreen
+        flow={{ ...STAY_REGISTER_DEFAULT_FLOW, dateSheetOpen: true }}
+        today="2026-06-01"
+        minDate="2026-06-08"
+        maxDate="2026-06-20"
+        {...STAY_REGISTER_HANDLERS}
+      />
+    ),
+  },
   // e02 검색 결과 기본(TRIP-725) — 검색바(돋보기·"지역·숙소 이름 검색")·카드 4장(2톤 가격 3 +
   // "가격 미확인" 1, 3번째 저장=흰 원 위 분홍 하트)·2단 원형 FAB(흰 하트·분홍 ＋)를 한 화면에.
   // jest 는 SVG 색·좌표·2톤 베이스라인을 못 봐 이 진입점이 눈으로 확인하는 유일한 자리다.
@@ -2091,6 +2138,34 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <View className="flex-1 justify-end bg-scrim/40">
         <StayPriceSheet selected="all" onSelect={noop} onClose={noop} />
+      </View>
+    ),
+  },
+  // e02 필터 시트(TRIP-724 신규, Figma 4509:2288) — 편의시설·숙소 유형 토글 칩. "필터 ⚙" 칩이 여는
+  // 유일한 UI(19키 재산정으로 신설). StayFilterSheet 코드는 실재 — 프리뷰 키만 신규. 픽셀 6-b/831 몫.
+  {
+    key: 'stay-filter-sheet',
+    band: 'e',
+    label: 'e02 · 필터 시트',
+    login: null,
+    render: () => (
+      <View className="flex-1 justify-end bg-scrim/40">
+        <StayFilterSheet
+          amenities={[
+            { value: '조식', selected: true },
+            { value: '주차', selected: false },
+            { value: '와이파이', selected: false },
+            { value: '수영장', selected: false },
+          ]}
+          stayTypes={[
+            { value: '호텔', selected: false },
+            { value: '게스트하우스', selected: false },
+          ]}
+          onToggleAmenity={noop}
+          onToggleStayType={noop}
+          onApply={noop}
+          onClose={noop}
+        />
       </View>
     ),
   },

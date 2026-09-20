@@ -183,7 +183,9 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    test-designer 02a 선반영(카운트 가드만) — implementer 는 preview.tsx 의 키만 재편하고 이
     //    가드는 안 만진다(재편 전엔 170개라 이 단언이 red). 정확히 그 키들인지는 아래 describe 가
     //    못박는다. devPreviewBandSort 는 밴드 h·l 만 잠가 band e 와 무관(오갱신 금지).
-    expect(PREVIEW_STATES).toHaveLength(171);
+    // ⚠️ TRIP-724: e밴드 프리뷰 19키 재산정(TRIP-822) — stay-filter-sheet 신규 + stay-register-pin·
+    //    stay-register-calendar 복원(730이 키만 삭제, 코드 유지) 3키 추가로 171→174.
+    expect(PREVIEW_STATES).toHaveLength(174);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -208,11 +210,11 @@ describe('🔴 TRIP-730 · e05 등록 프리뷰 키 재편 (band e)', () => {
     // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
     const keys = PREVIEW_STATES.map((state) => state.key);
 
-    // 부정 — 개명·삭제 대상 3키는 사라진다(재편 전엔 present 라 red). 카운트(171)만으론 "아무
-    // 키나 재편해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키들'임을 못박는다(TRIP-727 미러).
+    // 부정 — 개명 대상 confirmed 는 사라진다(재편 전엔 present 라 red). 카운트만으론 "아무 키나
+    // 재편해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키'임을 못박는다(TRIP-727 미러).
+    // ⚠️ TRIP-724: pin·calendar 는 730 이 지웠다가 19키 재산정으로 복원 — 부정 단언은 아래
+    //    'TRIP-724 · e밴드 19키 복원' describe 의 긍정으로 대체(730 시점엔 삭제가 맞았다).
     expect(keys).not.toContain('stay-register-confirmed');
-    expect(keys).not.toContain('stay-register-pin');
-    expect(keys).not.toContain('stay-register-calendar');
 
     // 긍정 — 새 4키(default·multi·multi-candidate·error-mapapi)가 실재한다.
     expect(keys).toContain('stay-register-default');
@@ -222,6 +224,23 @@ describe('🔴 TRIP-730 · e05 등록 프리뷰 키 재편 (band e)', () => {
 
     // 형제 band e 앵커 — e02 검색 키가 딸려 사라지지 않았음을 못박는다(공허 통과 방지).
     expect(keys).toContain('stay-search-default');
+  });
+});
+
+describe('🔴 TRIP-724 · e밴드 19키 복원·신설 (band e)', () => {
+  it('pin·calendar 복원 + filter-sheet 신설 3키가 실재하고, 형제 e키는 남는다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 730 이 지운 pin·calendar 복원(코드 PinPanel·CalendarSheet 유지) + filter-sheet 신설
+    // (StayFilterSheet 코드 실재). TRIP-822 재산정 19키의 마지막 3키. 없으면 red(추가 전엔 부재).
+    expect(keys).toContain('stay-register-pin');
+    expect(keys).toContain('stay-register-calendar');
+    expect(keys).toContain('stay-filter-sheet');
+
+    // 형제 e 앵커 — 기존 e05·e02 키가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('stay-register-default');
+    expect(keys).toContain('stay-price-sheet');
   });
 });
 
