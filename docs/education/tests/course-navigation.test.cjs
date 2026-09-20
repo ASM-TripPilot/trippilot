@@ -68,6 +68,16 @@ test('browser Back to the initial empty hash restores the first slide', () => {
   assert.equal(elements['slide-count'].textContent, '1 / 3');
 });
 
+test('legacy bookmarks select their matching chapter without duplicating slides', () => {
+  const fixture = createFixture({ hash: '#old-chapter' });
+  fixture.slides[1].setAttribute('data-aliases', 'old-chapter second-alias');
+  initPresentation(fixture.document, fixture.window);
+  assert.equal(fixture.slides[1].hidden, false);
+  fixture.window.location.hash = '#second-alias';
+  fixture.window.emit('hashchange');
+  assert.equal(fixture.elements['slide-count'].textContent, '2 / 3');
+});
+
 test('keyboard supports forward, backward, first and last slide shortcuts', () => {
   const { document, elements } = setup();
   for (const key of ['ArrowRight', 'PageDown', 'End']) {

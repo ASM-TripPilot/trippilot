@@ -1,0 +1,19 @@
+<ul>
+<li>Workflow, event, job, runner, step, action의 관계를 설명한다.</li>
+<li><code>uses</code>와 <code>run</code>을 구분하고 조건·의존성·출력값을 가진 YAML을 작성한다.</li>
+<li><code>GITHUB_TOKEN</code>, OIDC 토큰, AWS IAM Role이 맡는 역할을 구분한다.</li>
+<li>이 브랜치의 CI와 AWS 배포가 어떻게 분리되는지 설명하고 승인·검증이 보장하는 범위를 판단한다.</li>
+</ul>
+<div class="table-wrap"><table>
+<thead><tr><th>기본 50분</th><th>주제</th><th>수강생 산출물</th></tr></thead>
+<tbody>
+<tr><td>0–6분</td><td>실행 구조와 기존 CI 읽기</td><td>event → job → step 연결도</td></tr>
+<tr><td>6–16분</td><td>YAML 문법과 완전한 기초 예제</td><td>검증용 workflow 사본</td></tr>
+<tr><td>16–23분</td><td>context·환경변수·출력 전달</td><td>변수의 생산자와 소비자 표시</td></tr>
+<tr><td>23–35분</td><td>실제 AWS workflow 해부</td><td>plan/apply 실행 경로 비교</td></tr>
+<tr><td>35–41분</td><td>OIDC·Environment·동시 실행</td><td>권한과 승인 시점 설명</td></tr>
+<tr><td>41–47분</td><td>로컬 실습</td><td>오프라인 테스트 결과와 오류 원인</td></tr>
+<tr><td>47–50분</td><td>확인 문제</td><td>세 가지 운영 오해 수정</td></tr>
+</tbody>
+</table></div>
+<p class="timing"><strong>30분 수업:</strong> 개념 4분 → 기초 YAML 7분 → 실제 배포 표 9분 → 권한·승인 5분 → 실습·문제 5분으로 진행한다. <strong>60분 수업:</strong> 기본 과정에 잘못된 브랜치 입력 분석 5분과 plan 승인 지점 재설계 토론 5분을 더한다. 모든 실습은 기존 AWS workflow를 실행하거나 수정하지 않는 방식이다.</p>
