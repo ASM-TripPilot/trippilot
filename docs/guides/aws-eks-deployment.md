@@ -108,7 +108,7 @@ HTTPS NLB는 nginx gateway로 연결된다. gateway는 API 경로와 상태 확�
 
 긴 일정 생성 요청을 위해 backend/AI Pod 종료 유예를 660초, HTTP 및 backend 비동기 실행기의 종료 대기를 630초로 설정했다. 로컬 backend 비동기 대기는 기존 30초 기본값을 유지한다. 이 대기는 무제한 큐 처리 보장이 아니며, 노드 강제 종료·시간 초과 작업은 기존 앱 복구 로직의 대상이다.
 
-앱 코드를 되돌리려면 배포 브랜치에 revert commit을 만든 뒤 수동 배포한다. 인프라 변경과 DB migration은 Helm rollback으로 되돌아가지 않는다. destructive DB migration은 별도 복구 계획·백업을 준비한다. PRD RDS는 삭제 보호가 켜져 있고, 전체 destroy나 state 삭제 workflow는 제공하지 않는다.
+앱 코드를 되돌리려면 배포 브랜치에 revert commit을 만든 뒤 수동 배포한다. 인프라 변경과 DB migration은 Helm rollback으로 되돌아가지 않는다. destructive DB migration은 별도 복구 계획·백업을 준비한다. PRD RDS는 평소 삭제 보호를 유지한다. 환경 전체를 정리할 때는 [AWS 수동 삭제 가이드](aws-teardown.md)의 별도 plan·destroy 절차를 따른다.
 
 NLB·RDS·Redis 준비, EKS 노드 생성, 임베딩 모델 빌드는 첫 실행에서 오래 걸릴 수 있다. 테스트 환경이라도 EKS·NAT·RDS 등은 생성 후 계속 과금된다. 임베딩 활성화 시 Pod당 약 5GiB 이상의 메모리를 확보해야 한다. AI KB 테이블 생성과 외부 데이터/벡터 적재는 별개이며 실제 KB 내용은 프로젝트의 기존 AI 데이터 적재 절차를 적용한다.
 
@@ -118,7 +118,7 @@ NLB·RDS·Redis 준비, EKS 노드 생성, 임베딩 모델 빌드는 첫 실행
 - `infra/terraform/environments/{dev,prd}.tfvars`: 환경별 규모·보호 설정
 - `infra/bootstrap/`: OIDC 배포 역할 및 state 버킷의 CloudFormation 정의
 - `deploy/eks/`: AWS 전용 Helm chart, 비밀값 처리·DB 초기화·배포 확인 도구
-- `.github/workflows/aws-bootstrap.yml`, `aws-deploy.yml`: 수동 AWS 작업 진입점
+- `.github/workflows/aws-bootstrap.yml`, `aws-deploy.yml`, `aws-destroy.yml`: 수동 AWS 작업 진입점
 - 기존 `deploy/k8s/`: 로컬 kind 개발 환경
 
 AWS를 변경하지 않는 검증:

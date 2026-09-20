@@ -45,7 +45,10 @@ class BootstrapSecurityTests(unittest.TestCase):
             properties["BucketEncryption"]["ServerSideEncryptionConfiguration"][0]
             ["ServerSideEncryptionByDefault"]["SSEAlgorithm"], "AES256"
         )
-        statements = self.resources["TerraformStateBucketPolicy"]["Properties"]["PolicyDocument"]["Statement"]
+        policy = self.resources["TerraformStateBucketPolicy"]
+        self.assertEqual(policy["DeletionPolicy"], "Retain")
+        self.assertEqual(policy["UpdateReplacePolicy"], "Retain")
+        statements = policy["Properties"]["PolicyDocument"]["Statement"]
         self.assertTrue(any(item.get("Condition", {}).get("Bool", {}).get("aws:SecureTransport") == "false" and item["Effect"] == "Deny" for item in statements))
 
     def test_only_lock_file_can_be_deleted(self):
@@ -87,6 +90,44 @@ class BootstrapSecurityTests(unittest.TestCase):
     def test_role_inline_policy_stays_below_aws_character_limit(self):
         size = sum(len(json.dumps(item["PolicyDocument"], separators=(",", ":"))) for item in self.role["Policies"])
         self.assertLess(size, 10240)
+
+
+class TeardownPermissionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.policy = json.loads((BOOTSTRAP / 'bootstrap-policy.example.json').read_text())
+        cls.statements = {item['Sid']: item for item in cls.policy['Statement']}
+
+    def test_stack_cleanup_is_limited_to_environment_stack(self):
+        statement = self.statements['ManageEnvironmentBootstrapStack']
+        for action in ['cloudformation:DeleteStack', 'cloudformation:ListStackResources', 'cloudformation:UpdateTerminationProtection']:
+            self.assertIn(action, statement['Action'])
+        self.assertTrue(any('stack/trippilot-<ENVIRONMENT>-bootstrap/' in arn for arn in statement['Resource']))
+
+    def test_state_read_and_purge_have_separate_scopes(self):
+        proof = self.statements['ReadEmptyStateProof']
+        self.assertEqual(proof['Action'], ['s3:GetObjectVersion'])
+        self.assertTrue(proof['Resource'].endswith('/terraform.tfstate'))
+        purge = self.statements['PurgeRetainedStateObjects']
+        self.assertEqual(set(purge['Action']), {'s3:DeleteObjectVersion', 's3:AbortMultipartUpload'})
+        self.assertEqual(purge['Resource'], 'arn:aws:s3:::trippilot-tfstate-<AWS_ACCOUNT_ID>-<AWS_REGION>-<ENVIRONMENT>/*')
+        bucket = self.statements['ManageStateBucketConfiguration']
+        self.assertTrue({'s3:ListBucketVersions', 's3:ListBucketMultipartUploads', 's3:DeleteBucket'} <= set(bucket['Action']))
+
+    def test_account_wide_discovery_is_read_only_and_regional(self):
+        discovery = self.statements['VerifyServiceAbsence']
+        self.assertEqual(discovery['Resource'], '*')
+        self.assertEqual(discovery['Condition']['StringEquals']['aws:RequestedRegion'], '<AWS_REGION>')
+        required = {'elasticache:DescribeReplicationGroups', 'elasticache:DescribeCacheClusters', 'elasticloadbalancing:DescribeLoadBalancers', 'elasticloadbalancing:DescribeTags', 'ecr:DescribeRepositories', 'secretsmanager:ListSecrets'}
+        self.assertTrue(required <= set(discovery['Action']))
+        self.assertTrue(all(action.split(':')[1].startswith(('List', 'Describe')) for action in discovery['Action']))
+
+    def test_deploy_role_can_verify_nlb_ownership_without_elb_mutations(self):
+        template = json.loads((BOOTSTRAP / 'template.json').read_text())
+        statements = template['Resources']['DeploymentRole']['Properties']['Policies'][0]['PolicyDocument']['Statement']
+        actions = {action for statement in statements for action in statement['Action']}
+        self.assertTrue({'elasticloadbalancing:DescribeLoadBalancers', 'elasticloadbalancing:DescribeTags'} <= actions)
+        self.assertFalse(any(action.startswith('elasticloadbalancing:Delete') for action in actions))
 
 
 if __name__ == "__main__":

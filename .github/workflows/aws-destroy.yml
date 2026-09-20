@@ -1,0 +1,145 @@
+name: AWS 수동 삭제
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 삭제할 GitHub Environment
+        type: choice
+        required: true
+        default: dev
+        options: [dev, prd]
+      scope:
+        description: service 삭제 완료 후 bootstrap을 별도 실행
+        type: choice
+        required: true
+        default: service
+        options: [service, bootstrap]
+      operation:
+        description: plan으로 검토한 뒤 destroy를 별도로 실행
+        type: choice
+        required: true
+        default: plan
+        options: [plan, destroy]
+      commit_sha:
+        description: 해당 배포 브랜치에 포함된 삭제 도구의 40자리 SHA
+        type: string
+        required: true
+      snapshot_policy:
+        description: service의 최종 RDS 스냅샷 (bootstrap은 retain)
+        type: choice
+        required: true
+        default: retain
+        options: [retain, skip]
+      purge_state:
+        description: bootstrap에서 보존 state S3 버전과 버킷까지 영구 삭제
+        type: boolean
+        required: true
+        default: false
+      confirmation:
+        description: 'destroy 필수: DELETE <환경> <12자리 AWS 계정>'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: 'false'
+
+jobs:
+  preflight:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.verify.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 배포 브랜치의 신뢰된 검사기로 소스 SHA 검증
+        id: verify
+        env:
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
+        run: python3 infra/scripts/teardown_source.py
+
+  teardown:
+    needs: preflight
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+      DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
+      TEARDOWN_SCOPE: ${{ inputs.scope }}
+      TEARDOWN_OPERATION: ${{ inputs.operation }}
+      SNAPSHOT_POLICY: ${{ inputs.snapshot_policy }}
+      PURGE_STATE: ${{ inputs.purge_state }}
+      DELETE_CONFIRMATION: ${{ inputs.confirmation }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      AWS_BOOTSTRAP_ROLE_ARN: ${{ vars.AWS_BOOTSTRAP_ROLE_ARN }}
+      AWS_COMMIT_SHA: ${{ needs.preflight.outputs.sha }}
+      AWS_PAGER: ''
+      AWS_EC2_METADATA_DISABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: AWS 인증 전 대상·확인값·checkout 검증
+        run: python3 infra/scripts/teardown.py --validate-only
+      - uses: hashicorp/setup-terraform@v3
+        if: inputs.scope == 'service'
+        with:
+          terraform_version: '1.13.5'
+          terraform_wrapper: false
+      - uses: azure/setup-kubectl@v4
+        if: inputs.scope == 'service'
+        with:
+          version: v1.35.0
+      - uses: azure/setup-helm@v4.3.1
+        if: inputs.scope == 'service'
+        with:
+          version: v3.19.0
+      - name: 선택한 범위의 환경 전용 OIDC 역할
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ inputs.scope == 'bootstrap' && vars.AWS_BOOTSTRAP_ROLE_ARN || vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-duration-seconds: 7200
+          role-session-name: teardown-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: 소유권 확인 후 삭제 계획 또는 삭제 실행
+        run: python3 infra/scripts/teardown.py
+      - name: 실행 결과
+        if: success()
+        run: |
+          {
+            echo '### TripPilot AWS 리소스 정리'
+            echo "- Environment: $DEPLOY_ENVIRONMENT"
+            echo "- Scope / operation: $TEARDOWN_SCOPE / $TEARDOWN_OPERATION"
+            echo "- Source: $AWS_COMMIT_SHA"
+            echo "- RDS snapshot policy: $SNAPSHOT_POLICY"
+            echo "- Purge retained state: $PURGE_STATE"
+            echo '- 수동 스냅샷·관리 밖 로그·DNS·ACM·공유 OIDC·외부 bootstrap 역할은 별도 관리합니다.'
+          } >> "$GITHUB_STEP_SUMMARY"

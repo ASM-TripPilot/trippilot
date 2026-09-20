@@ -9,6 +9,7 @@
         "cloudformation:ExecuteChangeSet", "cloudformation:DeleteChangeSet",
         "cloudformation:DescribeStacks", "cloudformation:DescribeStackEvents",
         "cloudformation:GetTemplate", "cloudformation:GetTemplateSummary",
+        "cloudformation:DeleteStack", "cloudformation:ListStackResources",
         "cloudformation:UpdateTerminationProtection",
         "cloudformation:TagResource", "cloudformation:UntagResource"
       ],
@@ -28,6 +29,7 @@
       "Effect": "Allow",
       "Action": [
         "s3:CreateBucket", "s3:ListBucket", "s3:GetBucketLocation",
+        "s3:ListBucketVersions", "s3:ListBucketMultipartUploads", "s3:DeleteBucket",
         "s3:GetBucketVersioning", "s3:PutBucketVersioning",
         "s3:GetEncryptionConfiguration", "s3:PutEncryptionConfiguration",
         "s3:GetBucketPublicAccessBlock", "s3:PutBucketPublicAccessBlock",
@@ -44,6 +46,36 @@
         "s3:ListTagsForResource", "s3:TagResource", "s3:UntagResource"
       ],
       "Resource": "arn:aws:s3:::trippilot-tfstate-<AWS_ACCOUNT_ID>-<AWS_REGION>-<ENVIRONMENT>"
+    },
+    {
+      "Sid": "ReadEmptyStateProof",
+      "Effect": "Allow",
+      "Action": ["s3:GetObjectVersion"],
+      "Resource": "arn:aws:s3:::trippilot-tfstate-<AWS_ACCOUNT_ID>-<AWS_REGION>-<ENVIRONMENT>/terraform.tfstate"
+    },
+    {
+      "Sid": "PurgeRetainedStateObjects",
+      "Effect": "Allow",
+      "Action": ["s3:DeleteObjectVersion", "s3:AbortMultipartUpload"],
+      "Resource": "arn:aws:s3:::trippilot-tfstate-<AWS_ACCOUNT_ID>-<AWS_REGION>-<ENVIRONMENT>/*"
+    },
+    {
+      "Sid": "DiscoverRetainedStateBucket",
+      "Effect": "Allow",
+      "Action": ["s3:ListAllMyBuckets"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "VerifyServiceAbsence",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:ListStacks", "eks:ListClusters", "rds:DescribeDBInstances",
+        "elasticache:DescribeReplicationGroups", "elasticache:DescribeCacheClusters",
+        "ec2:DescribeVpcs", "ecr:DescribeRepositories", "secretsmanager:ListSecrets", "logs:DescribeLogGroups",
+        "elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:DescribeTags"
+      ],
+      "Resource": "*",
+      "Condition": {"StringEquals": {"aws:RequestedRegion": "<AWS_REGION>"}}
     },
     {
       "Sid": "ManageOnlyDeploymentRole",
