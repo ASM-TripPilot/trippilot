@@ -52,8 +52,10 @@ const PREVIEW_STATES = previewModule.PREVIEW_STATES as {
 // 코드 오름차순(안정) 정렬 후 기대되는 그룹 내 칩 testID 순서 — 실 배열을 손으로 산출한 정본.
 // 같은 코드 블록은 배열 삽입 순서 그대로(안정 정렬 관찰). 코드는 확인용 트레일링 주석.
 const EXPECTED_H = [
-  'dev-preview-state-itinerary-method', // h04
-  'dev-preview-state-itinerary-method-regenerate', // h04
+  // TRIP-784: itinerary-method → h01-method 개명(코드 h04→h01 라 안정 정렬이 이 칩을 band h
+  // 그룹 선두로 올린다) + itinerary-method-regenerate 프리뷰 키 삭제(재생성 로직·M-R1~R4 는
+  // 유지, 프리뷰 키만 정리).
+  'dev-preview-state-h01-method', // h01
   'dev-preview-state-itinerary-mustvisit-default', // h05
   'dev-preview-state-itinerary-mustvisit-time-default', // h07
   // TRIP-790: 옛 h10 `itinerary-draft-generating`(만드는 중 · DraftScreen 인라인 게이지)을

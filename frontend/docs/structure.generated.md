@@ -401,6 +401,9 @@
 - `src/features/home/ui/HomeScreen.tsx`  →  HomeScreen
 - `src/features/home/ui/MagazineScreen.tsx`  →  MagazineScreen
 
+## src/features/itinerary/config/
+- `src/features/itinerary/config/methodPicker.ts`  →  METHOD_PROGRESS · METHOD_SUBTITLE · METHOD_SWITCH_NOTE
+
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey
@@ -1299,4 +1302,4 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 873개 파일
+합계 874개 파일

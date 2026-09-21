@@ -202,7 +202,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    test-designer 선반영(카운트 무변경 확인 + 아래 'TRIP-799' describe 로 키 교체를 못박음).
     //    implementer 는 preview.tsx 에서 옛 4키를 지우고 새 4키를 추가할 뿐 이 카운트는 안 만진다.
     //    devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h14-plan-* 를 h14 위치에).
-    expect(PREVIEW_STATES).toHaveLength(171);
+    // ⚠️ TRIP-784: h01 시작 방법 프리뷰 키 정리 — itinerary-method 개명(→h01-method, 카운트 불변) +
+    //    itinerary-method-regenerate 삭제(재생성 로직·화면·배선·M-R1~R4 는 유지, 프리뷰 키만 제거)
+    //    → 171→170. test-designer 선반영(카운트 가드) — implementer 는 preview.tsx 에서 그 두 키만
+    //    재편하고 이 가드는 안 만진다(재편 전엔 171개라 이 단언이 red). 정확히 그 키들인지는 아래
+    //    'TRIP-784' describe 가 못박는다. devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신.
+    expect(PREVIEW_STATES).toHaveLength(170);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -219,6 +224,20 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     const allKeys = PREVIEW_STATES.map((state) => state.key);
     expect(new Set(groupedKeys)).toEqual(new Set(allKeys));
     expect(groupedKeys).toHaveLength(allKeys.length);
+  });
+});
+
+describe('🔴 TRIP-784 · h01 시작 방법 프리뷰 키 재편 (band h)', () => {
+  it('h01-method 가 있고, 옛 itinerary-method·itinerary-method-regenerate 는 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 짝 — 개명된 h01-method 가 실재한다.
+    expect(keys).toContain('h01-method');
+
+    // 부정 — 옛 키는 사라진다(개명 원본 + 삭제된 재생성 프리뷰).
+    expect(keys).not.toContain('itinerary-method');
+    expect(keys).not.toContain('itinerary-method-regenerate');
   });
 });
 

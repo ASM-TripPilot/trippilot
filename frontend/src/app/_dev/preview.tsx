@@ -3866,31 +3866,20 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h04 시작 방법(TRIP-303) — props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로 나온다.
-  // 생성 선행조건(거점 커버리지·겹침) 게이트는 h04 에 없다 — 그 판단은 여행 생성 2/2(g02)가 소유한다.
+  // h01 시작 방법(TRIP-303 → TRIP-784) — props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로
+  // 나온다. 세 방식 콜백이 필수라(TRIP-784 soon 폴백 소멸) 프리뷰도 세 콜백을 다 넘긴다. 생성
+  // 선행조건(거점 커버리지·겹침) 게이트는 h01 에 없다 — 그 판단은 여행 생성 2/2(g02)가 소유한다.
   {
-    key: 'itinerary-method',
+    key: 'h01-method',
     band: 'h',
-    label: 'h04 · 시작 방법',
-    login: null,
-    render: () => <MethodPickerScreen onBack={noop} onPressFullAi={noop} />,
-  },
-  // h04 재생성 확인(TRIP-504) — 기존 일정이 있을 때 copick 이 곧장 진행하지 않고 뜨는 인라인 확인.
-  // 실화면에선 조회로 판정해 켜지는 얼굴이라, 여기서 상태만 얹어(`showRegenerateConfirm`) 육안 대조한다.
-  {
-    key: 'itinerary-method-regenerate',
-    band: 'h',
-    label: 'h04 · 재생성 확인',
+    label: 'h01 · 시작 방법',
     login: null,
     render: () => (
       <MethodPickerScreen
         onBack={noop}
         onPressFullAi={noop}
-        onPressCoPick={noop}
         onPressManual={noop}
-        showRegenerateConfirm
-        onRegenerateContinue={noop}
-        onRegenerateCancel={noop}
+        onPressCoPick={noop}
       />
     ),
   },
