@@ -518,6 +518,47 @@ paths:
               schema: { $ref: '#/components/schemas/StaySearchResponse' }
         '400': { $ref: '#/components/responses/ValidationError' }
 
+  /stays/{stayId}:
+    get:
+      tags: [stays]
+      summary: 숙소 상세(US-STAY-03)
+      description: >
+        정적 콘텐츠 + 최저가 스냅숏. **리뷰·평점은 담지 않는다** — 외부 OTA 딥링크로 위임한다
+        (US-STAY-03 · BR-U1-18). **정확 1박가도 여기 없다**(INV-U1-05 — 캐싱 금지라 표시 시점에
+        따로 부른다). 소요시간 미표시(INV-3).
+
+
+        누락 항목은 빈칸이 아니라 화면이 "미확인"으로 그린다(US-STAY-03 예외). 특히 가격은
+        정본(LOCALDATA) 전량에 스냅숏이 없어 **null 이 기본값**이다 — 상세를 막는 사유가 아니다
+        (BR-U1-14).
+
+
+        `stayId` 는 `"{출처}:{식별자}"` 합성 문자열이다. `stay` 의 PK 가 복합키라 경로에 그대로
+        싣지 못해서이고, 목록 응답이 `externalSource`·`externalId` 를 따로 실으므로 클라이언트가
+        조립할 수 있다(상세 응답은 조립된 값을 `stayId` 로 되돌려 준다).
+      parameters:
+        - name: stayId
+          in: path
+          required: true
+          schema: { type: string }
+          example: 'LOCALDATA:3000000-201-1965-00264'
+          description: '"{출처}:{식별자}" — 첫 콜론으로만 가른다'
+      responses:
+        '200':
+          description: 숙소 상세
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StayDetail' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: >
+            그런 숙소가 없다. **형식 오류(400)와 구분한다** — 둘을 같은 응답으로 접으면
+            클라이언트가 식별자를 잘못 조립하고 있어도 드러나지 않는다.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
   /stays/geocode:
     get:
       tags: [stays]
@@ -1753,6 +1794,33 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/StayItem' } }
         degraded: { type: boolean, description: 일부 공급자 실패 시 true(부분 결과·재시도 안내) }
         filterZeroReasons: { type: array, items: { type: string }, description: '필터로 0건일 때 완화 후보(예: stayType, amenity:오션뷰)' }
+
+    StayDetail:
+      type: object
+      required: [stayId, externalSource, externalId, name, lat, lng, region, amenities, stayType]
+      description: >
+        숙소 상세. StayItem 에 `stayId`(합성 식별자) 하나를 더한 모양이다 — 상세가 목록보다
+        풍부해지는 것은 사진·편의시설이 채워진 뒤이고(숙소콘텐츠-수집-설계.md), 지금 없는 값의
+        자리만 만들어 두면 화면이 "준비 중"을 그릴 근거를 잃는다.
+      properties:
+        stayId: { type: string, description: '"{출처}:{식별자}" — 경로에 그대로 쓴다', example: 'STUB:jeju-001' }
+        externalSource: { type: string }
+        externalId: { type: string }
+        name: { type: string }
+        lat: { type: number, format: double }
+        lng: { type: number, format: double }
+        region: { type: string, description: 표시용 지역명 }
+        amenities:
+          type: array
+          items: { type: string }
+          description: >
+            **빈 배열이 "없음"이 아닐 수 있다.** 정본(LOCALDATA)은 편의시설을 주지 않아 전량이
+            비어 있다 — 목록 응답의 `amenitiesKnown` 이 그 사실을 알린다.
+        stayType: { type: string }
+        price:
+          allOf: [{ $ref: '#/components/schemas/StayPrice' }]
+          nullable: true
+          description: 최저가 스냅숏. **null = 가격 미확인**(BR-U1-14) — 정본 전량이 현재 null 이다
 
     StayItem:
       type: object

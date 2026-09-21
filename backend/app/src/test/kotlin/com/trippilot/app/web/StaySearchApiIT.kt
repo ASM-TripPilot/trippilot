@@ -144,4 +144,69 @@ class StaySearchApiIT : AbstractPostgresIntegrationTest() {
         get("/api/v1/stays/search?lat=91&lng=126.5310", newToken()).first shouldBe 400
         get("/api/v1/stays/search?lat=33.4990&lng=181", newToken()).first shouldBe 400
     }
+
+    // ───────── 상세(US-STAY-03) ─────────
+
+    @Test
+    fun `상세는 합성 식별자로 연다 — 목록이 그 값을 그대로 실어 준다`() {
+        val token = newToken()
+        val (_, list) = get("/api/v1/stays/search?stayType=게스트하우스", token)
+        val item = list["items"].single()
+        val stayId = "${item["externalSource"].asText()}:${item["externalId"].asText()}"
+
+        val (status, body) = get("/api/v1/stays/$stayId", token)
+
+        status shouldBe 200
+        body["stayId"].asText() shouldBe stayId          // 클라이언트가 다시 조립하지 않게 되돌려 준다
+        body["name"].asText() shouldBe item["name"].asText()
+        body["price"]["amount"].asLong() shouldBe 45_000L
+        body["amenities"].map { it.asText() } shouldContainExactly listOf("공용주방", "와이파이")
+    }
+
+    /**
+     * **템플릿 경로가 기존 리터럴 경로를 삼키지 않는가.** `/stays/{stayId}` 는 `/stays/search`
+     * 와 **같은 기저 경로**이고 `/stays/geocode`·`/stays/reverse-geocode` 는 **다른 컨트롤러**에
+     * 있다. Spring 이 리터럴을 먼저 잡는다는 규칙에 기대는 것과 그것을 확인하는 것은 다르다 —
+     * 삼켜지면 증상이 "숙소 검색이 통째로 404" 라 사용자 영향이 가장 크다.
+     */
+    @Test
+    fun `상세 경로를 더해도 검색·지오코딩이 살아 있다`() {
+        val token = newToken()
+
+        get("/api/v1/stays/search", token).first shouldBe 200
+        // 지오코딩은 스텁 모드라 빈 결과가 정상 — 여기서 보는 것은 **라우팅이 닿는가**다.
+        get("/api/v1/stays/geocode?q=제주", token).first shouldBe 200
+        get("/api/v1/stays/reverse-geocode?lat=33.4&lng=126.5", token).first shouldBe 200
+    }
+
+    @Test
+    fun `없는 숙소는 404`() {
+        get("/api/v1/stays/STUB:없는곳", newToken()).first shouldBe 404
+    }
+
+    /** 형식 오류와 부재를 같은 응답으로 접지 않는다 — 접으면 조립 실수를 영영 못 본다. */
+    @Test
+    fun `식별자 형식이 틀리면 400`() {
+        get("/api/v1/stays/콜론없음", newToken()).first shouldBe 400
+    }
+
+    @Test
+    fun `상세도 인증이 필요하다`() {
+        get("/api/v1/stays/STUB:jeju-001", null).first shouldBe 401
+    }
+
+    /**
+     * INV-3 — 소요시간 비표시. US-STAY-03 — 리뷰·평점은 앱 안에 두지 않는다(외부 OTA 위임).
+     * 필드가 생기는 순간 화면이 그것을 그리므로, 계약 단에서 막는다.
+     */
+    @Test
+    fun `상세에 소요시간·리뷰·평점 필드가 없다`() {
+        val (_, body) = get("/api/v1/stays/STUB:jeju-001", newToken())
+        val keys = body.fieldNames().asSequence().toList()   // Jackson 2 — 이 IT 의 매퍼다
+
+        keys.none { k ->
+            listOf("duration", "eta", "travel", "review", "rating", "score")
+                .any { k.contains(it, ignoreCase = true) }
+        } shouldBe true
+    }
 }
