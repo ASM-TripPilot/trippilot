@@ -3550,28 +3550,82 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => <MustVisitPickerScreen view={{ kind: 'failed' }} />,
   },
   {
-    key: 'itinerary-mustvisit-time-default',
+    key: 'h03-mustvisit-time-default',
     band: 'h',
-    label: 'h07 · 방문 시각 지정',
+    label: 'h03 · 방문 시각 지정 default',
     login: null,
     render: () => (
       <MustVisitTimeScreen
         sourcePoiId="poi-a"
         placeName="부산시립미술관"
         region="부산 부산진구"
-        imageUrl={null}
+        imageUrl={DRAFT_PREVIEW_PHOTOS[0]}
         dayChips={tripDayChips({
           startDate: '2026-06-10',
-          endDate: '2026-06-12',
+          endDate: '2026-06-13',
         })}
         startOptions={startTimeOptions()}
         form={{
           fixed: true,
-          fixedDate: '2026-06-11',
+          fixedDate: '2026-06-10',
           fixedStart: '13:00',
           dwellKey: 'NORMAL',
         }}
         blockReason={null}
+      />
+    ),
+  },
+  {
+    key: 'h03-mustvisit-time-off',
+    band: 'h',
+    label: 'h03 · 방문 시각 지정 off',
+    login: null,
+    render: () => (
+      <MustVisitTimeScreen
+        sourcePoiId="poi-a"
+        placeName="부산시립미술관"
+        region="부산 부산진구"
+        imageUrl={DRAFT_PREVIEW_PHOTOS[0]}
+        dayChips={tripDayChips({
+          startDate: '2026-06-10',
+          endDate: '2026-06-13',
+        })}
+        startOptions={startTimeOptions()}
+        form={{
+          fixed: false,
+          fixedDate: '2026-06-10',
+          fixedStart: '13:00',
+          dwellKey: 'NORMAL',
+        }}
+        blockReason={null}
+      />
+    ),
+  },
+  {
+    key: 'h03-mustvisit-time-error',
+    band: 'h',
+    label: 'h03 · 방문 시각 지정 error',
+    login: null,
+    render: () => (
+      <MustVisitTimeScreen
+        sourcePoiId="poi-a"
+        placeName="부산시립미술관"
+        region="부산 부산진구"
+        imageUrl={DRAFT_PREVIEW_PHOTOS[0]}
+        dayChips={tripDayChips({
+          startDate: '2026-06-10',
+          endDate: '2026-06-13',
+        })}
+        startOptions={startTimeOptions()}
+        form={{
+          fixed: true,
+          fixedDate: '2026-06-10',
+          fixedStart: '13:00',
+          dwellKey: 'NORMAL',
+        }}
+        blockReason={null}
+        errorText="저장하지 못했어요"
+        onRetry={noop}
       />
     ),
   },

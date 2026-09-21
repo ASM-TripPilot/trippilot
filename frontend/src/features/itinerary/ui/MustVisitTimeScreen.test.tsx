@@ -258,8 +258,10 @@ describe('C28 · AC-5 — 값이 비면 사유가 보이고 저장이 잠긴다'
   });
 });
 
-describe('🔴 C29 · D8 — 토글을 끄면 정말로 잠긴다 (회색으로 칠하는 것만으로는 부족하다)', () => {
-  it('날짜·체류·저장이 접근성상 꺼져 있고, 눌러도 아무 콜백이 불리지 않는다', () => {
+describe('🔴 C29 · AC-a3 · BR-U1-48 — 토글 OFF 는 입력 3섹션만 잠그고 저장은 연다 (ANYTIME 제출)', () => {
+  it('날짜·시각·체류는 잠기지만 저장은 열리고 라벨이 아무 때나로 두기다', () => {
+    // ★ 저장 축 반전(TRIP-786) — 구 C29 는 "OFF 면 저장도 정말로 잠긴다"를 뮤테이션으로 못박았다.
+    //    이번 요구는 OFF=ANYTIME 제출 허용이라 **입력 3섹션 잠금은 유지**하되 **저장만 연다**.
     const onPickDate = jest.fn();
     const onPickDwell = jest.fn();
     const onPickStart = jest.fn();
@@ -272,7 +274,8 @@ describe('🔴 C29 · D8 — 토글을 끄면 정말로 잠긴다 (회색으로 
       onSubmit,
     });
 
-    // ① 접근성 — 토글이 꺼져 있고 아래 섹션이 비활성으로 알려진다.
+    // ① 변하지 않는 축 — 토글이 꺼져 있고 입력 3섹션(날짜·시각·체류)은 계속 잠긴다. 회색으로
+    //    칠하는 것만으로는 부족하므로 접근성 상태 + 실제 press 무발화를 함께 본다(구 C29 계승).
     expect(
       screen.getByTestId('itinerary-mustvisit-time-toggle')
     ).not.toBeChecked();
@@ -285,25 +288,26 @@ describe('🔴 C29 · D8 — 토글을 끄면 정말로 잠긴다 (회색으로 
     expect(
       screen.getByTestId('itinerary-mustvisit-time-start-field')
     ).toBeDisabled();
-    expect(
-      screen.getByTestId('itinerary-mustvisit-time-submit')
-    ).toBeDisabled();
 
-    // ② 실제 잠김 — ①만 두면 조상에 `accessibilityState={{disabled:true}}` 만 칠하고 그대로
-    //    눌리는 구현이 전부 통과한다(02a ★7: 그 구현의 press 호출수는 실측 1회다).
     fireEvent.press(
       screen.getByTestId('itinerary-mustvisit-time-date-2026-06-11')
     );
     fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-dwell-LONG'));
     fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-start-field'));
-    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-submit'));
 
     expect(onPickDate).not.toHaveBeenCalled();
     expect(onPickDwell).not.toHaveBeenCalled();
-    expect(onSubmit).not.toHaveBeenCalled();
     // 시트도 열리지 않는다 — 열렸다면 옵션이 트리에 나타난다.
     expect(startOptionCount()).toBe(0);
     expect(onPickStart).not.toHaveBeenCalled();
+
+    // ② 반전 축 — 저장은 열린다. 라벨은 `아무 때나로 두기`(ANYTIME)이고, 눌리면 onSubmit 1회.
+    //    회색 잠금이 걷혀야 한다 — `toBeEnabled` + 실제 press 발화 두 겹으로 확인.
+    const cta = screen.getByTestId('itinerary-mustvisit-time-submit');
+    expect(cta).toBeEnabled();
+    expect(cta).toHaveTextContent('아무 때나로 두기');
+    fireEvent.press(cta);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
 
     // ③ 안내 박스는 꺼진 상태의 설명을 계속 한다(무엇이 일어날지 말해 준다).
     expect(
@@ -336,6 +340,11 @@ describe('C30 · D8 긍정 앵커 — 토글이 켜져 있으면 전부 눌린�
       screen.getByTestId('itinerary-mustvisit-time-dwell-LONG')
     ).toBeEnabled();
     expect(screen.getByTestId('itinerary-mustvisit-time-submit')).toBeEnabled();
+    // AC-a3 짝 — 켜진 상태의 CTA 라벨은 `이 시각으로 고정`이다(OFF 의 `아무 때나로 두기`와 갈린다).
+    //    이 앵커가 없으면 두 라벨을 모두 한 문자열로 바꾼 나이브 구현이 C29 를 통과한다.
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-submit')
+    ).toHaveTextContent('이 시각으로 고정');
 
     fireEvent.press(
       screen.getByTestId('itinerary-mustvisit-time-date-2026-06-10')
@@ -383,5 +392,69 @@ describe('C32 · D10 — 장소 카드 보조행은 region 이 있을 때만 지
     expect(
       screen.getByTestId('itinerary-mustvisit-time-subtitle')
     ).toHaveTextContent('꼭 갈 곳');
+  });
+});
+
+describe('C33 · AC-b3 — errorText 는 에러 행에 뜨고 onRetry 는 다시 시도를 세운다', () => {
+  it('errorText 문구가 그대로 보이고, onRetry 를 주면 다시 시도가 뜨며 눌리면 불린다', () => {
+    // 화면은 순수 — 배선이 넘긴 `errorText` 를 그대로 그린다(현행 통로 유지, 회귀 앵커).
+    const onRetry = jest.fn();
+    renderScreen({ errorText: '저장하지 못했어요', onRetry });
+
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-error')
+    ).toHaveTextContent('저장하지 못했어요');
+
+    const retry = screen.getByTestId('itinerary-mustvisit-time-retry');
+    expect(retry).toBeOnTheScreen();
+    fireEvent.press(retry);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('C33-b onRetry 가 없으면 다시 시도 버튼이 없다 (복구 불가할 때는 안 세운다)', () => {
+    renderScreen({ errorText: '저장하지 못했어요' });
+
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-error')
+    ).toHaveTextContent('저장하지 못했어요');
+    expect(screen.queryAllByTestId('itinerary-mustvisit-time-retry')).toEqual(
+      []
+    );
+  });
+});
+
+describe('🔴 C34 · AC-b1 · AC-b2 — 저장 실패 행이 안내 배너 아래로 가고 흰 배경이 된다', () => {
+  it('안내 배너 다음에 에러 행이 온다 (형제 순서 · 현재는 위라 red)', () => {
+    renderScreen({ errorText: '저장하지 못했어요' });
+
+    // ★ `getAllByTestId(/regex/)` 는 렌더 트리 pre-order 로 돌아온다(node_modules
+    //    `find-all.js` 실측 — 부모→자식, 형제는 순서 보존). `$` 앵커라 `-error-row`·`-retry`·
+    //    `-duplicate` 는 안 걸리고 `-notice`·`-error` 두 Text 만 뽑힌다.
+    const order = screen
+      .getAllByTestId(/^itinerary-mustvisit-time-(notice|error)$/)
+      .map((node) => String(node.props.testID));
+
+    // 현재 에러 행이 안내 배너 **위**라 배열이 [error, notice] → red. Figma 는 안내 아래다.
+    expect(order).toEqual([
+      'itinerary-mustvisit-time-notice',
+      'itinerary-mustvisit-time-error',
+    ]);
+  });
+
+  it('C34-b 에러 행 배경이 흰색(bg-canvas)이고 회색이 아니다', () => {
+    renderScreen({ errorText: '저장하지 못했어요' });
+
+    // 배경은 에러 행 **컨테이너 View** 에 얹힌다(메시지 `-error` Text 는 `text-*` 뿐이라 못 본다).
+    // 구현자가 그 컨테이너에 신규 testID `-error-row` 를 부여해야 이 축이 unambiguous 하게 잠긴다.
+    // className 은 렌더 트리에 평문 prop 으로 남는다(HomeScreen.test.tsx:186 선례).
+    const row = screen.getByTestId('itinerary-mustvisit-time-error-row');
+    const className = String(row.props.className);
+
+    // 변경 축 — 흰 배경(현재 bg-surface-soft 회색 → red).
+    expect(className).toContain('bg-canvas');
+    expect(className).not.toContain('bg-surface-soft');
+    // 앵커 — hairline 테두리 + r12(rounded-button=12px 실측). 실제 흰 렌더·픽셀은 6-b 대조.
+    expect(className).toContain('border-hairline');
+    expect(className).toContain('rounded-button');
   });
 });

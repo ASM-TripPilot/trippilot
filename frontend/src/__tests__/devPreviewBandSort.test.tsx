@@ -63,7 +63,13 @@ const EXPECTED_H = [
   'dev-preview-state-h02-mustvisit-default', // h02
   'dev-preview-state-h02-mustvisit-loading', // h02
   'dev-preview-state-h02-mustvisit-error', // h02
-  'dev-preview-state-itinerary-mustvisit-time-default', // h07
+  // TRIP-786: itinerary-mustvisit-time-default(h07) → h03-mustvisit-time-default(h03) 개명 +
+  // 신규 h03-mustvisit-time-off·-error 2키. 라벨 코드가 h03 이라 안정 정렬이 h02 뒤·h07 앞에 세
+  // 칩을 인접시킨다. 같은 h03 코드 3키는 PREVIEW_STATES 배열 삽입 순서(default→off→error)로
+  // 안정정렬되므로 구현자는 그 순서로 삽입한다(배열 위치=정렬 위치, h02 3키 선례 동형).
+  'dev-preview-state-h03-mustvisit-time-default', // h03
+  'dev-preview-state-h03-mustvisit-time-off', // h03
+  'dev-preview-state-h03-mustvisit-time-error', // h03
   // TRIP-790: 옛 h10 `itinerary-draft-generating`(만드는 중 · DraftScreen 인라인 게이지)을
   // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
   // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).
