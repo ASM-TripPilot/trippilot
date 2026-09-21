@@ -23,6 +23,9 @@ collected_pois.db
 scenarios*.json
 dataset*.jsonl
 ft_data/
-adapters/
-merged/
-eval/
+# **경로를 고정한다.** `adapters/` 로 두면 소스의 `src/trippilot/*/adapters/` 까지 잡아
+# 새 어댑터 파일이 조용히 커밋에서 빠진다(기존 파일은 이미 추적 중이라 안 드러난다).
+# 런북 §1·§2 산출물은 전부 `ai/` 바로 아래에 생긴다.
+/adapters/
+/merged/
+/eval/

@@ -250,9 +250,20 @@ def _vector_rag():
     import psycopg
 
     from trippilot.agents.adapters.pgvector_store import PgVectorStore
+    from trippilot.llm_gateway.adapters.caching_embedding import CachingEmbedding
 
     store = PgVectorStore(lambda: psycopg.connect(url))
-    provider = _env("TRIPPILOT_EMBEDDING_PROVIDER") or "openai"
+    # 요청 경로의 임베딩은 캐시를 거친다. 상황 KB·페르소나 KB 질의는 TriggerKind 4종 ×
+    # _REASON_KO 7종 = 28가지 닫힌 집합이라 같은 문자열이 수명 내내 반복된다
+    # (ai/docs/임베딩-사이징-근거.md). 키는 **정확일치**다 — 유사도로 벡터를 재사용하면
+    # 적재된 공간과 다른 값을 쓰게 되고 차원이 같아 아무 검사도 못 잡는다.
+    # 적재(scripts/load_kb.py)에는 붙이지 않는다: 한 번씩만 부르는 경로다.
+    return store, CachingEmbedding(_embedding_adapter(_env("TRIPPILOT_EMBEDDING_PROVIDER")))
+
+
+def _embedding_adapter(configured: str | None):
+    """provider 이름 → EmbeddingPort 구현. 미지원 값과 자격 미비는 **기동 실패**다."""
+    provider = configured or "openai"
     if provider == "openai":
         api_key = _env("OPENAI_API_KEY")
         if api_key is None:
@@ -267,13 +278,13 @@ def _vector_rag():
 
         client = openai.OpenAI(
             api_key=api_key, base_url=_env("OPENAI_BASE_URL"), max_retries=0)
-        return store, OpenAiEmbeddingAdapter(client)
+        return OpenAiEmbeddingAdapter(client)
     if provider == "titan":
         import boto3
 
         from trippilot.llm_gateway.adapters.titan_embedding import TitanEmbeddingAdapter
 
-        return store, TitanEmbeddingAdapter(boto3.client("bedrock-runtime"))
+        return TitanEmbeddingAdapter(boto3.client("bedrock-runtime"))
     if provider == "local":
         try:
             from sentence_transformers import SentenceTransformer
@@ -289,12 +300,12 @@ def _vector_rag():
         )
 
         model_name = _env("TRIPPILOT_EMBEDDING_MODEL") or DEFAULT_MODEL
-        return store, SentenceTransformerEmbeddingAdapter(SentenceTransformer(model_name))
+        return SentenceTransformerEmbeddingAdapter(SentenceTransformer(model_name))
     if provider == "http":
         from trippilot.llm_gateway.adapters.http_embedding_assembly import http_embedding
         from trippilot.poi_curation.adapters.backend_poi_db import UrllibJsonClient
 
-        return store, http_embedding(RuntimeError, lambda t: UrllibJsonClient(timeout_sec=t))
+        return http_embedding(RuntimeError, lambda t: UrllibJsonClient(timeout_sec=t))
     raise RuntimeError(
         f"TRIPPILOT_EMBEDDING_PROVIDER 미지원 값: {provider!r} — openai|titan|local|http"
     )
