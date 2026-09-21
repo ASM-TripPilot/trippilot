@@ -96,6 +96,10 @@ const EXPECTED_H = [
   'dev-preview-state-h12-editor-empty', // h12 (구 manual-empty)
   'dev-preview-state-h12-editor-filled', // h12 (구 manual-filled + itinerary-edit)
   'dev-preview-state-h12-editor-dragging', // h12 (신규 · dragging 정적 얼굴)
+  // TRIP-798: h13 장소 추가(구 h20 place-add). 라벨 코드가 h13 이라 안정 정렬이 h12(editor)와
+  // h14(plan) 사이로 들어간다(구 h20 위치에서 이동 — 라이브 Figma 재번호 h13, 02a §1-4·★7).
+  // place-add-notready(구 h20)는 안내/notReady 배너 제거로 삭제(아래 h20 자리에서 사라진다).
+  'dev-preview-state-h13-place-add', // h13 (구 place-add · h20)
   // TRIP-799: h14 완성 일정(TimelineScreen→지도+시트 셸) 4얼굴. 라벨 코드가 h14 라 안정 정렬이
   // h12(slot-candidate-panel) 와 h18(option-swap) 사이로 들어간다(옛 h25 위치에서 h14 로 이동 —
   // 라이브 Figma 재번호 h01~h17, 02a ★14). 같은 h14 코드 4키는 PREVIEW_STATES 배열 삽입 순서
@@ -113,8 +117,8 @@ const EXPECTED_H = [
   'dev-preview-state-option-swap-selected', // h18
   'dev-preview-state-option-swap-empty', // h18
   // TRIP-797: h19 manual-empty·manual-filled 는 h12-editor-* 로 개명·병합돼 위 h12 그룹으로 이동.
-  'dev-preview-state-place-add', // h20
-  'dev-preview-state-place-add-notready', // h20
+  // TRIP-798: h20 place-add 는 h13-place-add 로 개명돼 위 h13 자리(h12↔h14)로 이동 +
+  //   place-add-notready 는 배너 제거로 삭제 — 이 h20 자리엔 이제 아무 칩도 없다.
   // TRIP-797: h24 itinerary-edit 는 h12-editor-filled 로 병합돼 삭제. itinerary-edit-time-sheet 는
   // TimeSheet 위젯 직접 렌더라 유지(카드 ⌄ 가 여는 시트, 제거 화면과 무관 · 02a ★9).
   'dev-preview-state-itinerary-edit-time-sheet', // h24

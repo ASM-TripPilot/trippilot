@@ -212,7 +212,12 @@ describe('AC-6 · 밴드 데이터 무결성 (순수 데이터)', () => {
     //    (카운트 가드) — implementer 는 preview.tsx 에서 개명 1 + 신규 2키만 재편하고 이 가드는 안
     //    만진다(재편 전엔 170개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-785' describe 가
     //    못박는다. devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h02 3키를 h01·h07 사이).
-    expect(PREVIEW_STATES).toHaveLength(172);
+    // ⚠️ TRIP-798: h13 장소 추가 프리뷰 재편 — place-add → h13-place-add 개명(카운트 불변) +
+    //    place-add-notready 삭제(안내/notReady 배너 제거) → 172→171. test-designer 선반영(카운트
+    //    가드) — implementer 는 preview.tsx 에서 개명 1 + 삭제 1만 하고 이 가드는 안 만진다(재편 전엔
+    //    172개라 이 단언이 red). 정확히 그 키들인지는 아래 'TRIP-798' describe 가 못박는다.
+    //    devPreviewBandSort 는 band h 를 잠가 EXPECTED_H 도 동반 갱신(h13-place-add 를 h12↔h14 사이).
+    expect(PREVIEW_STATES).toHaveLength(171);
 
     // 단언 ② — 모든 엔트리의 band 가 허용 10종 안이다(허용 밖 band 는 그룹핑에서 드롭된다).
     const offenders = PREVIEW_STATES.filter(
@@ -262,6 +267,24 @@ describe('🔴 TRIP-784 · h01 시작 방법 프리뷰 키 재편 (band h)', () 
     // 부정 — 옛 키는 사라진다(개명 원본 + 삭제된 재생성 프리뷰).
     expect(keys).not.toContain('itinerary-method');
     expect(keys).not.toContain('itinerary-method-regenerate');
+  });
+});
+
+describe('🔴 TRIP-798 · h13 장소 추가 프리뷰 키 재편 (band h)', () => {
+  it('h13-place-add 로 개명되고, place-add·place-add-notready 는 없다', () => {
+    // 준비 — 렌더 없이 순수 데이터(PREVIEW_STATES key 집합)만 읽는다.
+    const keys = PREVIEW_STATES.map((state) => state.key);
+
+    // 긍정 — 개명된 h13-place-add 가 실재한다.
+    expect(keys).toContain('h13-place-add');
+
+    // 부정 — 개명 원본(place-add) + 삭제된 notReady 프리뷰가 사라진다(재편 전엔 present 라 red).
+    // 카운트만으론 "아무 키나 재편해도" 통과하므로, 이 짝이 '바뀐 게 정확히 그 키'임을 못박는다.
+    expect(keys).not.toContain('place-add');
+    expect(keys).not.toContain('place-add-notready');
+
+    // 형제 band h 앵커 — h12 편집기 키가 딸려 사라지지 않았음(공허 통과 방지).
+    expect(keys).toContain('h12-editor-filled');
   });
 });
 

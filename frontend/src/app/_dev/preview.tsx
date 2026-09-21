@@ -4456,13 +4456,14 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h20 장소 추가·검색(TRIP-338) — 화면은 props-only 라 배선 없이 상태만 넣어 그린다. 실화면 딥링크로는
-  // 빈 일정 생성 POST 를 백엔드가 만들어야 도달하므로(401 이면 못 봄) 여기가 눈 확인 자리다.
-  // (h19 직접 짜기·h24 편집은 TRIP-797 로 h12 편집기(위 h12-editor-* 3키)로 수렴했다.)
+  // h13 장소 추가(TRIP-798, 구 h20) — 시트 콘텐츠 순수 뷰(props-only)라 배선 없이 상태만 넣어 그린다.
+  // 실화면 딥링크로는 빈 일정 생성 POST 를 백엔드가 만들어야 도달하므로(401 이면 못 봄) 여기가 눈 확인
+  // 자리다. 전면 지도+peek 시트(MapSheetShell) 조립·헤더는 묶음 C 이연이라 여기선 시트 콘텐츠만 보이고,
+  // 거리줄은 픽스처(distanceByPoiId)로만 렌더한다(실 GET 엔 거리 필드 없음 — 6-b 육안).
   {
-    key: 'place-add',
+    key: 'h13-place-add',
     band: 'h',
-    label: 'h20 · 장소 추가·검색',
+    label: 'h13 · 장소 추가',
     login: null,
     render: () => (
       <PlaceAddScreen
@@ -4470,33 +4471,10 @@ export const PREVIEW_STATES: PreviewState[] = [
         searchText=""
         selectedCategory={null}
         addedPoiIds={PREVIEW_PLACES.slice(0, 1).map((place) => place.poiId)}
+        distanceByPoiId={{ 'p-1': '③에서 1.1km', 'p-4': '숙소에서 800m' }}
         onChangeSearchText={noop}
         onSelectCategory={noop}
         onPressAdd={noop}
-        onPressDone={noop}
-        onBack={noop}
-        onPressViewPlan={noop}
-      />
-    ),
-  },
-  {
-    key: 'place-add-notready',
-    band: 'h',
-    label: 'h20 · 장소 추가 일정 미도착',
-    login: null,
-    render: () => (
-      <PlaceAddScreen
-        places={PREVIEW_PLACES}
-        searchText=""
-        selectedCategory={null}
-        addedPoiIds={[]}
-        notReady
-        onChangeSearchText={noop}
-        onSelectCategory={noop}
-        onPressAdd={noop}
-        onPressDone={noop}
-        onBack={noop}
-        onPressViewPlan={noop}
       />
     ),
   },
