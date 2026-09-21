@@ -1757,6 +1757,20 @@ TRIP-360 이후 차단이 아니라 안내 문구 문제). 켜기 자체의 전�
 `WEATHER_MODE=fake` · `STAY_CONTENT_MODE=stub` + 빈 기본값 둘(`SERVICE_AUTH_TOKEN` · `JWT_SIGNING_KEY`).
 그중 **둘은 이제 값만 바꾸면 켜진다** — `WEATHER_MODE`(#554)·`AI_REMINDER_COPY_MODE`(#546) 뒤에
 실 어댑터가 생겼다. 이 티켓의 성격이 '구현'에서 '환경별 값 결정'으로 옮겨 갔다.
+
+**정정(2026-09-22) — "8종이 전부 꺼져 있다"는 `application.yml` 기본값만 센 것이었다.**
+배포 서술을 열어 보니 다르다. EKS 차트(`deploy/eks/chart/templates/backend.yaml`)는
+`AI_SCHEDULE_MODE=http` · `AI_REFLECTION_MODE=http` · `STAY_CONTENT_MODE=db` 를 **이미 박고 있고**,
+`PLACE_GEOCODE_MODE`·`WEATHER_MODE`·`PUSH_MODE` 등은 `trippilot-backend` Secret 에서 온다.
+게다가 `deploy/eks/tests/test_runtime.py` 가 **키 없이 켜는 조합을 배포 전에 막는다**
+(`PLACE_GEOCODE_MODE=kakao` 인데 카카오 키가 없으면 `ValueError`).
+
+즉 남은 것은 "스위치를 켜는 일"이 아니라 **시크릿에 값을 넣는 일**(AWS 콘솔)이다.
+`application.yml` 기본값은 **일부러 스텁으로 둔다** — 그건 배포 서술이 아니라 아무 설정도 없을 때의
+안전값이고, CI 의 외부호출 0 정책과 시드 없는 환경의 근거다.
+
+숙소 쪽 드리프트는 2026-09-22 에 메웠다 — 로컬 k8s ConfigMap 과 compose 기본값이 EKS 와 갈려
+있었다. 이제 `StayContentModeParityTest` 가 세 배포 서술의 일치를 못 박는다.
 """
 
 [[nodes]]
