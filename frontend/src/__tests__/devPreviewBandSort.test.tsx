@@ -70,6 +70,10 @@ const EXPECTED_H = [
   'dev-preview-state-h03-mustvisit-time-default', // h03
   'dev-preview-state-h03-mustvisit-time-off', // h03
   'dev-preview-state-h03-mustvisit-time-error', // h03
+  // TRIP-787: itinerary-edit-time-sheet(라벨 h24) → h04-time-adjust-sheet(라벨 h04) 개명. 라벨 코드가
+  // h04 라 안정 정렬이 h03(방문 시각) 뒤·h07(부분 결과) 앞으로 이 칩을 올린다(옛 h24 자리에서 이동 —
+  // TimeSheet 위젯에 mode='h04' 변형을 얹는 정합, 02a §3-5). 개명=count 불변(net 0).
+  'dev-preview-state-h04-time-adjust-sheet', // h04
   // TRIP-790: 옛 h10 `itinerary-draft-generating`(만드는 중 · DraftScreen 인라인 게이지)을
   // h07 부분 결과(셸 얼굴)로 개명. 라벨 코드가 h07 이라 안정 정렬이 mustvisit-time 뒤에 붙는다
   // (개명 엔트리는 PREVIEW_STATES 배열상 draft 구역이라 mustvisit-time 보다 늦다 · 02a ★10).
@@ -125,9 +129,9 @@ const EXPECTED_H = [
   // TRIP-797: h19 manual-empty·manual-filled 는 h12-editor-* 로 개명·병합돼 위 h12 그룹으로 이동.
   // TRIP-798: h20 place-add 는 h13-place-add 로 개명돼 위 h13 자리(h12↔h14)로 이동 +
   //   place-add-notready 는 배너 제거로 삭제 — 이 h20 자리엔 이제 아무 칩도 없다.
-  // TRIP-797: h24 itinerary-edit 는 h12-editor-filled 로 병합돼 삭제. itinerary-edit-time-sheet 는
-  // TimeSheet 위젯 직접 렌더라 유지(카드 ⌄ 가 여는 시트, 제거 화면과 무관 · 02a ★9).
-  'dev-preview-state-itinerary-edit-time-sheet', // h24
+  // TRIP-797: h24 itinerary-edit 는 h12-editor-filled 로 병합돼 삭제.
+  // TRIP-787: itinerary-edit-time-sheet(h24) 는 h04-time-adjust-sheet(h04)로 개명·상단 이동(위 h04
+  //   줄 참조) 돼 이 자리에서 사라진다(개명=count 불변, 위치만 이동).
   // TRIP-799: 옛 h25 TimelineScreen PLANNED 프리뷰 4키는 h14-plan-* 4키로 교체됐다(위 참조).
   // TRIP-801: itinerary-confirmed(h34)는 h16-plan-confirmed(h16)로 개명·상단 이동(위 h16 줄 참조)
   // 돼 이 자리에서 사라진다.

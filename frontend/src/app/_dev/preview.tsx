@@ -4202,17 +4202,24 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
-    key: 'itinerary-edit-time-sheet',
+    key: 'h04-time-adjust-sheet',
     band: 'h',
-    label: 'h24 · 시각 조정 시트',
+    label: 'h04 · 시각 조정 시트',
     login: null,
     render: () => (
       <View className="flex-1">
         <TimeSheet
+          mode="h04"
           testIDPrefix="itinerary-edit-time"
           labels={{ start: '시작', end: '종료' }}
-          startAt="10:15:00"
-          endAt="11:45:00"
+          startAt="13:00:00"
+          endAt="14:30:00"
+          placeSummary={{
+            imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+            name: '부산시립미술관',
+            badgeLabel: '필수',
+            region: '부산 부산진구',
+          }}
           onApply={noop}
           onCancel={noop}
         />
