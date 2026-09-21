@@ -3510,25 +3510,42 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h05·h07 필수 방문지 (TRIP-296) — Figma 대조용 격리 렌더.
+  // h02 꼭 갈 곳 (TRIP-785) — Figma 대조용 격리 렌더. default→loading→error 순으로 삽입해
+  // (안정 정렬 = 배열 위치) devPreviewBandSort EXPECTED_H 의 h02 3키 순서를 맞춘다.
   {
-    key: 'itinerary-mustvisit-default',
+    key: 'h02-mustvisit-default',
     band: 'h',
-    label: 'h05 · 필수 방문지',
+    label: 'h02 · 꼭 갈 곳',
     login: null,
     render: () => (
       <MustVisitPickerScreen
         view={{
           kind: 'listed',
-          items: MUST_VISIT_PREVIEW_ITEMS,
+          // 사진 있는 픽스처로 대조한다 — jest 스텁은 `.uri` 가 undefined 라 회색이지만,
+          // 실기에선 로컬 에셋이 뜬다(`DRAFT_PREVIEW_PHOTOS` 관례, INV-1 안전).
+          items: MUST_VISIT_PREVIEW_ITEMS.map((item, index) => ({
+            ...item,
+            imageUrl: DRAFT_PREVIEW_PHOTOS[index] ?? null,
+          })),
           staleFailed: false,
         }}
         pins={MUST_VISIT_PREVIEW_PINS}
-        // 배선이 h09 부재로 항상 넘기는 값(TRIP-326) — 비활성 CTA·건너뛰기가 실기에서
-        // 활성과 구별되는지는 눈으로만 볼 수 있다(문제로그 2026-08-08).
-        proceedBlockedReason="다음 단계는 아직 준비 중이에요"
       />
     ),
+  },
+  {
+    key: 'h02-mustvisit-loading',
+    band: 'h',
+    label: 'h02 · 꼭 갈 곳 loading',
+    login: null,
+    render: () => <MustVisitPickerScreen view={{ kind: 'loading' }} />,
+  },
+  {
+    key: 'h02-mustvisit-error',
+    band: 'h',
+    label: 'h02 · 꼭 갈 곳 error',
+    login: null,
+    render: () => <MustVisitPickerScreen view={{ kind: 'failed' }} />,
   },
   {
     key: 'itinerary-mustvisit-time-default',
