@@ -3,7 +3,7 @@
 # 구조 인벤토리 (자동 생성)
 
 ## __mocks__/@gorhom/
-- `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · useBottomSheetModal
+- `__mocks__/@gorhom/bottom-sheet.tsx`  →  BottomSheet · BottomSheetModal · BottomSheetView · BottomSheetModalProvider · BottomSheetBackdrop · BottomSheetScrollView · BottomSheetFlatList · useBottomSheetModal
 
 ## __mocks__/@mj-studio/
 - `__mocks__/@mj-studio/react-native-naver-map.tsx`  →  NaverMapView · NaverMapMarkerOverlay · NaverMapPathOverlay
@@ -279,7 +279,7 @@
 - `src/entities/itinerary-slot/ui/ReplanSlotRow.tsx`  →  ReplanSlotRowProps · ReplanSlotRow
 - `src/entities/itinerary-slot/ui/SlotGlyphs.tsx`  →  CategoryPinGlyph · CategoryForkKnifeGlyph · CategoryCupGlyph · CategoryNightGlyph · CategoryTreeGlyph · CategoryShoppingBagGlyph · CategoryBuildingGlyph · CategoryImageGlyph · ChevronRightGlyph · ClockGlyph · LockGlyph
 - `src/entities/itinerary-slot/ui/SlotPhotoPlaceholder.tsx`  →  SlotPhotoPlaceholderProps · SlotPhotoPlaceholder
-- `src/entities/itinerary-slot/ui/SlotStopCard.tsx`  →  SlotStopCardProps · SlotStopCard
+- `src/entities/itinerary-slot/ui/SlotStopCard.tsx`  →  UNSPECIFIED_CHIP_LABEL · SlotStopCardProps · SlotStopCard
 
 ## src/entities/place/lib/
 - `src/entities/place/lib/formatDistance.ts`  →  formatDistance
@@ -401,11 +401,15 @@
 - `src/features/home/ui/HomeScreen.tsx`  →  HomeScreen
 - `src/features/home/ui/MagazineScreen.tsx`  →  MagazineScreen
 
+## src/features/itinerary/config/
+- `src/features/itinerary/config/methodPicker.ts`  →  METHOD_PROGRESS · METHOD_SUBTITLE · METHOD_SWITCH_NOTE
+- `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
+
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey
 - `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · formatDraftDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveDraftView
-- `src/features/itinerary/model/itineraryEditStore.ts`  →  removeSlot · addSlot · reorderKeepingFixed · ItineraryEditState · useItineraryEditStore
+- `src/features/itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · addSlot · insertSlotAt · reorderKeepingFixed · ItineraryEditState · useItineraryEditStore
 - `src/features/itinerary/model/legDistance.ts`  →  legDistance
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · buildMustVisitPins · resolveMustVisitListView
 - `src/features/itinerary/model/mustVisitTimeForm.ts`  →  DwellKey · MustVisitTimeForm · DWELL_OPTIONS · DEFAULT_DWELL_KEY · tripDayChips · startTimeOptions · startTimeLabel · mustVisitTimeBlockReason · canSubmitMustVisitTime · buildFixedMustVisitRequest
@@ -419,19 +423,17 @@
 - `src/features/itinerary/ui/ConceptPickerScreen.tsx`  →  ConceptPickerScreenProps · ConceptPickerScreen
 - `src/features/itinerary/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/features/itinerary/ui/GeneratingScreen.tsx`  →  GeneratingScreenProps · GeneratingScreen
-- `src/features/itinerary/ui/ItineraryEditScreen.tsx`  →  ItineraryEditScreenProps · ItineraryEditScreen
 - `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  BackChevronGlyph · LockGlyph · DragHandleGlyph · TrashGlyph · PlusGlyph · CheckGlyph · CheckCircleGlyph · PencilGlyph · SearchGlyph · CloseGlyph · ClockGlyph · ChevronDownGlyph · ChevronRightGlyph · LocationOffGlyph · CircleGlyphTone · InfoCircleGlyph · AlertCircleGlyph · WarningTriangleGlyph · ShareGlyph · WalkGlyph · CarGlyph · ExpandGlyph · RefreshGlyph · FullAiGlyph · CoPickGlyph · ManualGlyph
-- `src/features/itinerary/ui/ManualPlanScreen.tsx`  →  ManualPlanTimeBand · ManualPlanScreenProps · ManualPlanScreen
 - `src/features/itinerary/ui/MethodPickerScreen.tsx`  →  ActiveGeneration · MethodPickerScreenProps · MethodPickerScreen
 - `src/features/itinerary/ui/MustVisitPickerScreen.tsx`  →  MustVisitPickerScreenProps · MustVisitPickerScreen
 - `src/features/itinerary/ui/MustVisitTimeScreen.tsx`  →  MustVisitTimeScreenProps · MustVisitTimeScreen
 - `src/features/itinerary/ui/MyTripCard.tsx`  →  MyTripCardProps · MyTripCard
 - `src/features/itinerary/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
 - `src/features/itinerary/ui/OptionSwapScreen.tsx`  →  OptionSwapScreenProps · OptionSwapScreen
-- `src/features/itinerary/ui/PlaceAddCard.tsx`  →  PlaceAddCardProps · PlaceAddCard
-- `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddScreenProps · PlaceAddScreen
+- `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddHeaderProps · PlaceAddHeader · PlaceAddRowProps · PlaceAddRow
 - `src/features/itinerary/ui/SlotCandidateCard.tsx`  →  candidateBadge · SlotCandidateCardProps · SlotCandidateCard
 - `src/features/itinerary/ui/SlotCandidatePanel.tsx`  →  SlotCandidatePanelProps · SlotCandidatePanel
+- `src/features/itinerary/ui/SlotDropZone.tsx`  →  SlotDropZoneProps · SlotDropZone
 - `src/features/itinerary/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
 - `src/features/itinerary/ui/ZeroCandidateScreen.tsx`  →  ZeroCandidateScreenProps · ZeroCandidateScreen
 
@@ -690,6 +692,7 @@
 - `src/pages/itinerary-edit/index.ts`  →  ItineraryEditPage
 
 ## src/pages/itinerary-edit/ui/
+- `src/pages/itinerary-edit/ui/EditorView.tsx`  →  EditorViewProps · EditorView
 - `src/pages/itinerary-edit/ui/ItineraryEditPage.tsx`  →  ItineraryEditPage
 
 ## src/pages/itinerary-generating/
@@ -1293,10 +1296,10 @@
 - `src/widgets/map-sheet-shell/ui/DistanceConnector.tsx`  →  DistanceConnectorProps · DistanceConnector
 - `src/widgets/map-sheet-shell/ui/GenerationProgressCard.tsx`  →  GenerationProgressCell · GenerationProgressCardProps · GenerationProgressCard
 - `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  BackChevronGlyph · WalkGlyph · CarGlyph · FullAiGlyph · CheckGlyph
-- `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetShellProps · MapSheetShell
+- `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetListSlot · MapSheetShellProps · MapSheetShell
 - `src/widgets/map-sheet-shell/ui/SheetHeader.tsx`  →  SheetHeaderProps · SheetHeader
 
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetProps · TimeSheet
 
-합계 873개 파일
+합계 874개 파일

@@ -77,12 +77,13 @@ import {
   type DraftScreenProps,
 } from '@/features/itinerary/ui/DraftScreen';
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
-import { ItineraryEditScreen } from '@/features/itinerary/ui/ItineraryEditScreen';
-import { ManualPlanScreen } from '@/features/itinerary/ui/ManualPlanScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
 import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
-import { PlaceAddScreen } from '@/features/itinerary/ui/PlaceAddScreen';
+import {
+  PlaceAddHeader,
+  PlaceAddRow,
+} from '@/features/itinerary/ui/PlaceAddScreen';
 import { SlotCandidatePanel } from '@/features/itinerary/ui/SlotCandidatePanel';
 import { DistanceConnector } from '@/widgets/map-sheet-shell/ui/DistanceConnector';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell/ui/GenerationProgressCard';
@@ -155,6 +156,7 @@ import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationPage } from '@/pages/live-location';
 import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
+import { EditorView } from '@/pages/itinerary-edit/ui/EditorView';
 import { BudgetEditSheet } from '@/pages/trip-new-step1/ui/BudgetEditSheet';
 import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
 import {
@@ -938,9 +940,9 @@ export const MUST_VISIT_THUMBNAILS = [
 ];
 
 /**
- * h24 일정 편집(ItineraryEditScreen) 프리뷰 픽스처 — 슬롯 4개가 오전/저녁/점심 시간대·고정·위반·자정
- * 넘김을 한 벌로 덮는다. (옛 h34 확정 프리뷰(TimelineScreen)는 TRIP-801 로 지도+시트 셸(h16)로
- * 이관돼 이 픽스처를 더는 쓰지 않는다 — `TIMELINE_PREVIEW_HEADER` 는 그때 제거됐다.)
+ * h12 편집기(EditorView, TRIP-797) 프리뷰 픽스처 — 슬롯 4개가 오전/저녁/점심 시간대·고정·위반·자정
+ * 넘김을 한 벌로 덮는다(옛 h24 ItineraryEditScreen 은 TRIP-797 로 h12 편집기로 수렴). 2일자라
+ * 일차 칩(AC-4)도 함께 대조된다.
  */
 const TIMELINE_PREVIEW_DAYS: PlanDayTab[] = [
   { dayIndex: 1, date: '2026-06-10', count: 4 },
@@ -3510,25 +3512,42 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h05·h07 필수 방문지 (TRIP-296) — Figma 대조용 격리 렌더.
+  // h02 꼭 갈 곳 (TRIP-785) — Figma 대조용 격리 렌더. default→loading→error 순으로 삽입해
+  // (안정 정렬 = 배열 위치) devPreviewBandSort EXPECTED_H 의 h02 3키 순서를 맞춘다.
   {
-    key: 'itinerary-mustvisit-default',
+    key: 'h02-mustvisit-default',
     band: 'h',
-    label: 'h05 · 필수 방문지',
+    label: 'h02 · 꼭 갈 곳',
     login: null,
     render: () => (
       <MustVisitPickerScreen
         view={{
           kind: 'listed',
-          items: MUST_VISIT_PREVIEW_ITEMS,
+          // 사진 있는 픽스처로 대조한다 — jest 스텁은 `.uri` 가 undefined 라 회색이지만,
+          // 실기에선 로컬 에셋이 뜬다(`DRAFT_PREVIEW_PHOTOS` 관례, INV-1 안전).
+          items: MUST_VISIT_PREVIEW_ITEMS.map((item, index) => ({
+            ...item,
+            imageUrl: DRAFT_PREVIEW_PHOTOS[index] ?? null,
+          })),
           staleFailed: false,
         }}
         pins={MUST_VISIT_PREVIEW_PINS}
-        // 배선이 h09 부재로 항상 넘기는 값(TRIP-326) — 비활성 CTA·건너뛰기가 실기에서
-        // 활성과 구별되는지는 눈으로만 볼 수 있다(문제로그 2026-08-08).
-        proceedBlockedReason="다음 단계는 아직 준비 중이에요"
       />
     ),
+  },
+  {
+    key: 'h02-mustvisit-loading',
+    band: 'h',
+    label: 'h02 · 꼭 갈 곳 loading',
+    login: null,
+    render: () => <MustVisitPickerScreen view={{ kind: 'loading' }} />,
+  },
+  {
+    key: 'h02-mustvisit-error',
+    band: 'h',
+    label: 'h02 · 꼭 갈 곳 error',
+    login: null,
+    render: () => <MustVisitPickerScreen view={{ kind: 'failed' }} />,
   },
   {
     key: 'itinerary-mustvisit-time-default',
@@ -3866,31 +3885,20 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h04 시작 방법(TRIP-303) — props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로 나온다.
-  // 생성 선행조건(거점 커버리지·겹침) 게이트는 h04 에 없다 — 그 판단은 여행 생성 2/2(g02)가 소유한다.
+  // h01 시작 방법(TRIP-303 → TRIP-784) — props 만 받는 프레젠테이션이라 배선 없이 얼굴이 그대로
+  // 나온다. 세 방식 콜백이 필수라(TRIP-784 soon 폴백 소멸) 프리뷰도 세 콜백을 다 넘긴다. 생성
+  // 선행조건(거점 커버리지·겹침) 게이트는 h01 에 없다 — 그 판단은 여행 생성 2/2(g02)가 소유한다.
   {
-    key: 'itinerary-method',
+    key: 'h01-method',
     band: 'h',
-    label: 'h04 · 시작 방법',
-    login: null,
-    render: () => <MethodPickerScreen onBack={noop} onPressFullAi={noop} />,
-  },
-  // h04 재생성 확인(TRIP-504) — 기존 일정이 있을 때 copick 이 곧장 진행하지 않고 뜨는 인라인 확인.
-  // 실화면에선 조회로 판정해 켜지는 얼굴이라, 여기서 상태만 얹어(`showRegenerateConfirm`) 육안 대조한다.
-  {
-    key: 'itinerary-method-regenerate',
-    band: 'h',
-    label: 'h04 · 재생성 확인',
+    label: 'h01 · 시작 방법',
     login: null,
     render: () => (
       <MethodPickerScreen
         onBack={noop}
         onPressFullAi={noop}
-        onPressCoPick={noop}
         onPressManual={noop}
-        showRegenerateConfirm
-        onRegenerateContinue={noop}
-        onRegenerateCancel={noop}
+        onPressCoPick={noop}
       />
     ),
   },
@@ -4139,28 +4147,6 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h24 일정 편집(TRIP-302) — 시각칩·삭제·"다른 후보" 어포던스가 있는 편집 화면. 시각칩을 누르면
-  // 아래 '시각 조정 시트' 가 열린다(프리뷰에선 둘을 각각 독립 진입으로 본다). 고정 슬롯(poi-b)은
-  // 시각칩에 onPress 가 안 붙어 조정이 안 열리는 것도 여기서 확인한다.
-  {
-    key: 'itinerary-edit',
-    band: 'h',
-    label: 'h24 · 일정 편집',
-    login: null,
-    render: () => (
-      <ItineraryEditScreen
-        days={TIMELINE_PREVIEW_DAYS}
-        slots={TIMELINE_PREVIEW_SLOTS}
-        activeDayIndex={0}
-        onSelectDay={noop}
-        onBack={noop}
-        onDeleteSlot={noop}
-        onReorder={noop}
-        onEditSlotTime={noop}
-        onSave={noop}
-      />
-    ),
-  },
   {
     key: 'itinerary-edit-time-sheet',
     band: 'h',
@@ -4351,6 +4337,73 @@ export const PREVIEW_STATES: PreviewState[] = [
       </ScrollView>
     ),
   },
+  // h12 편집기 통일(TRIP-797) — 지도+2스냅 시트 위 슬롯 카드 편집. 순수 뷰 EditorView 를 preview 가
+  // 직접 태운다(컨테이너 api 사슬 없음, TRIP-610 회피). 빈/채움/드래그 세 정적 얼굴을 대조한다.
+  // 실제 드래그·시트 개폐·딤은 통과형 목이 못 봄(6-b 실기 전용).
+  {
+    key: 'h12-editor-empty',
+    band: 'h',
+    label: 'h12 · 편집기 빈 일정',
+    login: null,
+    render: () => (
+      <EditorView
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        days={[TIMELINE_PREVIEW_DAYS[0]]}
+        slots={[]}
+        activeDayIndex={0}
+        activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        onSelectDay={noop}
+        onBack={noop}
+        onPressTimeChip={noop}
+        onPressAddPlace={noop}
+        onPressAddBetween={noop}
+        onSave={noop}
+      />
+    ),
+  },
+  {
+    key: 'h12-editor-filled',
+    band: 'h',
+    label: 'h12 · 편집기 슬롯 채움',
+    login: null,
+    render: () => (
+      <EditorView
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        days={TIMELINE_PREVIEW_DAYS}
+        slots={TIMELINE_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        onSelectDay={noop}
+        onBack={noop}
+        onPressTimeChip={noop}
+        onPressAddPlace={noop}
+        onPressAddBetween={noop}
+        onSave={noop}
+      />
+    ),
+  },
+  {
+    key: 'h12-editor-dragging',
+    band: 'h',
+    label: 'h12 · 편집기 드래그 삭제',
+    login: null,
+    render: () => (
+      <EditorView
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        days={TIMELINE_PREVIEW_DAYS}
+        slots={TIMELINE_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        onSelectDay={noop}
+        onBack={noop}
+        onPressTimeChip={noop}
+        onPressAddPlace={noop}
+        onPressAddBetween={noop}
+        onSave={noop}
+        isDragging
+      />
+    ),
+  },
   {
     key: 'option-swap',
     band: 'h',
@@ -4406,114 +4459,53 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h19·h20 직접 짜기(MANUAL, TRIP-338) — 화면은 props-only 라 배선 없이 상태만 넣어 그린다.
-  // 실화면 딥링크로는 빈 일정 생성 POST 를 백엔드가 만들어야 도달하므로(401 이면 못 봄) 여기가 눈
-  // 확인 자리다(6-b 실기 스모크 진입점). 빈 상태·슬롯 채움+위반·검색을 세 얼굴로 대조한다.
+  // h13 장소 추가(TRIP-798, 구 h20) — 묶음 C 시트화. 전면 지도 위 peek 시트(MapSheetShell)의 list 슬롯에
+  // 후보(PlaceAddRow)를 얹고, 검색바+칩(PlaceAddHeader)은 리스트 헤더(children)로, "장소 추가 · N일차"는
+  // header 로 조립한다(페이지 PlaceAddPage 와 같은 형태, 단 조회 훅 대신 픽스처 — 프리뷰는 api import 0).
+  // 실화면 딥링크로는 빈 일정 생성 POST 를 백엔드가 만들어야 도달하므로(401 이면 못 봄) 여기가 눈 확인
+  // 자리다. 거리줄은 픽스처로만 렌더한다(실 GET 엔 거리 필드 없음 — 6-b 육안). 2스냅 실개폐·핀 위치는 실기.
   {
-    key: 'manual-empty',
+    key: 'h13-place-add',
     band: 'h',
-    label: 'h19 · 직접 짜기 빈 일정',
+    label: 'h13 · 장소 추가',
     login: null,
     render: () => (
-      <ManualPlanScreen
-        days={[{ date: '2026-06-10', slots: [] }]}
-        contextChips={['09:00 출발', '숙소 기준']}
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H11_COPICK_PREVIEW_SLOTS)}
         onBack={noop}
-        onPressSearchAdd={noop}
-        onPressAddBand={noop}
-      />
-    ),
-  },
-  {
-    key: 'manual-filled',
-    band: 'h',
-    label: 'h19 · 직접 짜기 슬롯 채움+위반',
-    login: null,
-    render: () => (
-      <ManualPlanScreen
-        days={[
-          {
-            date: '2026-06-10',
-            slots: [
-              {
-                poiId: 'poi-a',
-                startAt: '10:00:00',
-                endAt: '11:30:00',
-                isFixed: false,
-                endsNextDay: false,
-                hasViolation: false,
-                nameKo: '광안리 해변',
-                tags: [],
-              },
-              {
-                poiId: 'poi-b',
-                startAt: '13:00:00',
-                endAt: '14:00:00',
-                isFixed: false,
-                endsNextDay: false,
-                hasViolation: true,
-                violationReason: '점심시간과 겹쳐요',
-                nameKo: '자갈치 시장',
-                tags: [],
-              },
-              {
-                poiId: 'poi-c',
-                startAt: '19:00:00',
-                endAt: '20:00:00',
-                isFixed: true,
-                endsNextDay: false,
-                hasViolation: false,
-                nameKo: '해운대 포차거리',
-                tags: [],
-              },
-            ],
-          },
-        ]}
-        contextChips={['09:00 출발', '숙소 기준']}
-        onBack={noop}
-        onPressSearchAdd={noop}
-      />
-    ),
-  },
-  {
-    key: 'place-add',
-    band: 'h',
-    label: 'h20 · 장소 추가·검색',
-    login: null,
-    render: () => (
-      <PlaceAddScreen
-        places={PREVIEW_PLACES}
-        searchText=""
-        selectedCategory={null}
-        addedPoiIds={PREVIEW_PLACES.slice(0, 1).map((place) => place.poiId)}
-        onChangeSearchText={noop}
-        onSelectCategory={noop}
-        onPressAdd={noop}
-        onPressDone={noop}
-        onBack={noop}
-        onPressViewPlan={noop}
-      />
-    ),
-  },
-  {
-    key: 'place-add-notready',
-    band: 'h',
-    label: 'h20 · 장소 추가 일정 미도착',
-    login: null,
-    render: () => (
-      <PlaceAddScreen
-        places={PREVIEW_PLACES}
-        searchText=""
-        selectedCategory={null}
-        addedPoiIds={[]}
-        notReady
-        onChangeSearchText={noop}
-        onSelectCategory={noop}
-        onPressAdd={noop}
-        onPressDone={noop}
-        onBack={noop}
-        onPressViewPlan={noop}
-      />
+        header={
+          <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
+            장소 추가 · 1일차
+          </Text>
+        }
+        list={{
+          data: PREVIEW_PLACES,
+          renderItem: ({ item }) => (
+            <PlaceAddRow
+              place={item}
+              added={item.poiId === PREVIEW_PLACES[0].poiId}
+              distanceLine={
+                item.poiId === 'p-1'
+                  ? '③에서 1.1km'
+                  : item.poiId === 'p-4'
+                    ? '숙소에서 800m'
+                    : undefined
+              }
+              onPressAdd={noop}
+            />
+          ),
+          keyExtractor: (place) => place.poiId,
+          testID: 'itinerary-place-list',
+        }}
+      >
+        <PlaceAddHeader
+          searchText=""
+          selectedCategory={null}
+          onChangeSearchText={noop}
+          onSelectCategory={noop}
+        />
+      </MapSheetShell>
     ),
   },
   // i05 현재 장소 상세(TRIP-398) — props-only 화면. jest 는 픽셀·레이아웃을 못 봐 이 자리가

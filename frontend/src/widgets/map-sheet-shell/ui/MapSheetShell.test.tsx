@@ -263,3 +263,80 @@ describe('MapSheetShell · SH7 — mapCard 가 day-chip 아래에 추가로 렌�
     expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
   });
 });
+
+/* ──────────────── TRIP-798 · 묶음 C 가산 확장(h13 장소 추가 리스트) ────────────────
+ * 셸은 시트 body 를 `<BottomSheetScrollView>{header}{children}` 로만 그려 왔다 — 무한 스크롤
+ * `FlatList`(h13 후보 목록, onEndReached)를 그 안에 넣으면 VirtualizedList-in-ScrollView 로
+ * onEndReached 가 죽는다(맹점①). `list?: MapSheetListSlot`(가산)를 주면 body 를
+ * `<BottomSheetFlatList data renderItem keyExtractor ListHeaderComponent={header+children}
+ * onEndReached ListFooterComponent testID>` 로 그린다 — header·children 은 리스트 맨 위 헤더로.
+ * 미전달=현행 스크롤 경로(6 소비처 무변경, SH1~SH7 이 회귀 그물).
+ *
+ * ⚠️ **원리적 사각(02a-C ★C8)** — `@gorhom/bottom-sheet` 통과형 목이라 2스냅 실개폐·딤·실제
+ *   VirtualizedList-in-ScrollView 해소·무한 스크롤 실동작은 못 본다. 여기선 **셸이 list 슬롯을
+ *   받으면 body 를 FlatList 로 그리고 data·header·children·onEndReached·testID 를 전달까지 했는지**
+ *   (슬롯 계약)만 잠근다. `BottomSheetFlatList` 목은 RN `FlatList` 재수출이라 data·
+ *   ListHeaderComponent·testID·onEndReached 를 전부 렌더/노출한다(02a-C §5 실검증, 1회 실행 확인).
+ *
+ * ★C3 관측 방법: SH8b 는 `renderShell`(Partial<…>[0] 이 list 를 unknown 으로 접어 구체 타입을
+ *   반공변 거부)을 **안 쓰고** `<MapSheetShell>` 을 직접 렌더해 제네릭 T 를 `list.data` 로 추론시킨다.
+ * ★C4 header/children 은 `getByTestId` **단수 매치**로 굳혀 ListHeaderComponent 밖 이중 렌더를 잡는다.
+ * red 성격: 현행 셸은 list 를 무시하고 항상 `BottomSheetScrollView` 를 그린다 → 리스트 아이템·
+ *   list.testID 가 안 떠 SH8b 가 red. 구현이 list 분기를 넣으면 green(SH8a 기본값은 계속 green).
+ * ─────────────────────────────────────────────────────────────────────── */
+describe('MapSheetShell · SH8 — list 슬롯이 body 를 BottomSheetFlatList 로 그린다 (TRIP-798 묶음 C)', () => {
+  it('SH8a · list 미전달이면 리스트가 없고 header·children 은 스크롤 body 에 그대로다 (선제 green · 회귀 앵커)', () => {
+    // 준비/실행 — 기존 소비처 형태(list 안 줌).
+    renderShell();
+
+    // 단언 — 리스트 슬롯 부재(list.testID 노드 없음). 6 소비처는 여전히 스크롤 body.
+    expect(screen.queryByTestId('shell-list')).toBeNull();
+    // 짝 — header·children 은 그대로 시트 body 에 흐른다(무변경).
+    expect(screen.getByTestId('fake-header')).toBeOnTheScreen();
+    expect(screen.getByTestId('fake-body')).toBeOnTheScreen();
+  });
+
+  it('🔴 SH8b · list 를 주면 data 가 렌더되고 header·children 이 ListHeaderComponent 로 얹히며 testID·onEndReached 가 전달된다', () => {
+    // 준비 — list 슬롯(data 2건 + onEndReached 스파이). T 는 data 로 추론된다(★C3).
+    const onEndReached = jest.fn();
+    const data = [{ id: 'x1' }, { id: 'x2' }];
+
+    // 실행 — renderShell 이 아니라 직접 렌더(★C3 반공변 회피).
+    render(
+      <MapSheetShell
+        center={CENTER}
+        pins={PINS}
+        days={[]}
+        selectedDayIndex={0}
+        onSelectDay={jest.fn()}
+        onBack={jest.fn()}
+        header={<Text testID="fake-header">헤더</Text>}
+        list={{
+          data,
+          renderItem: ({ item }) => (
+            <Text testID={`list-item-${item.id}`}>{item.id}</Text>
+          ),
+          keyExtractor: (item) => item.id,
+          onEndReached,
+          onEndReachedThreshold: 0.5,
+          testID: 'shell-list',
+        }}
+      >
+        <Text testID="fake-body">본문</Text>
+      </MapSheetShell>
+    );
+
+    // ① data 가 renderItem 으로 그려진다(통과형 목이 RN FlatList 라 items 를 동기 렌더).
+    //    **red 성격**: 현행 셸은 list 를 무시하고 스크롤 body 만 그려 list-item 이 안 뜬다.
+    expect(screen.getByTestId('list-item-x1')).toBeOnTheScreen();
+    expect(screen.getByTestId('list-item-x2')).toBeOnTheScreen();
+    // ② header·children 이 ListHeaderComponent 로 리스트 맨 위에 **정확히 한 번** 얹힌다(★C4 이중 렌더 차단).
+    expect(screen.getByTestId('fake-header')).toBeOnTheScreen();
+    expect(screen.getByTestId('fake-body')).toBeOnTheScreen();
+    // ③ list.testID 가 FlatList 에 전달된다.
+    expect(screen.getByTestId('shell-list')).toBeOnTheScreen();
+    // ④ onEndReached 가 FlatList 로 전달돼 끝에 닿으면 발화한다(무한 스크롤 배선 · P4 계열).
+    fireEvent(screen.getByTestId('shell-list'), 'endReached');
+    expect(onEndReached).toHaveBeenCalledTimes(1);
+  });
+});

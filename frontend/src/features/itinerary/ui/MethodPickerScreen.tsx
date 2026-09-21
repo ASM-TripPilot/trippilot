@@ -1,8 +1,12 @@
 import type { ReactElement, ReactNode } from 'react';
-import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import {
+  METHOD_PROGRESS,
+  METHOD_SUBTITLE,
+  METHOD_SWITCH_NOTE,
+} from '../config/methodPicker';
 import {
   BackChevronGlyph,
   ChevronRightGlyph,
@@ -12,21 +16,17 @@ import {
 } from './ItineraryGlyphs';
 
 /**
- * h04 시작 방법 — Figma `1903:1083`. 세 방식(완전 AI · AI와 같이 · 직접) 중 하나를 고른다.
+ * h01 시작 방법 — Figma `3824:2128`. 세 방식(완전 AI · AI와 같이 · 직접) 중 하나를 고른다.
  *
- * 화면은 **완성된 콜백만** 받는다 — 조회도 게이트 판정도 하지 않는다. 완전AI 탭은 배선의
- * `onPressFullAi`(h09 생성 중으로 navigate)로 넘긴다 — 생성 POST·진행/실패 표면은 h09 가 소유하므로
- * (TRIP-305·AC-7) 이 화면에는 없다. 여기서 지는 유일한 로컬 상태는 준비 중 안내(`soon`) 뿐 —
- * copick·manual 콜백이 미전달이면(프리뷰 등) 착지 화면 대신 이 상태만 켠다.
- * 생성 선행조건(거점 커버리지·겹침) 게이트도 이 칸에 없다 — g02(여행 생성 2/2)가 소유한다.
+ * 화면은 **완성된 콜백만** 받는다 — 조회도 게이트 판정도 하지 않는다. 세 방식 콜백
+ * (`onPressFullAi`·`onPressManual`·`onPressCoPick`)은 전부 필수라 착지 화면은 배선이 소유한다
+ * (생성 POST·진행/실패 표면은 h09·h19 각자 소유, TRIP-305·AC-7). 앱바 우측 진행 표시(3 / 4)와
+ * 두 안내 문구는 `config/methodPicker` 가 든다. 생성 선행조건(거점 커버리지·겹침) 게이트도 이
+ * 칸에 없다 — g02(여행 생성 2/2)가 소유한다.
  */
 
 const SCREEN_TITLE = '일정 만들기';
 const HEADING = '어떻게 만들까요?';
-const SUBTITLE = '설정한 취향·거리는 세 방법 모두에 적용돼요';
-const SWITCH_NOTE = '세 방법은 언제든 서로 전환할 수 있어요';
-const BADGE_LABEL = '추천';
-const SOON_LABEL = '준비 중이에요 — 곧 만나요';
 
 // 카드 그림자(Figma `0px 2px 10px rgba(0,0,0,0.06)`). RN 은 box-shadow 가 없어 스타일
 // 프로퍼티로 옮긴다. `#000000` 은 raw-hex 가드의 브랜드 팔레트에 없어 그림자 색으로 정당하다
@@ -47,7 +47,6 @@ interface MethodCardProps {
   disabled?: boolean;
   title: string;
   description: string;
-  badge?: ReactNode;
   onPress: () => void;
 }
 
@@ -59,7 +58,6 @@ function MethodCard({
   disabled = false,
   title,
   description,
-  badge,
   onPress,
 }: MethodCardProps): ReactElement {
   return (
@@ -80,12 +78,9 @@ function MethodCard({
         {icon}
       </View>
       <View className="min-w-0 flex-1 gap-[4px]">
-        <View className="flex-row items-center gap-sm">
-          <Text className="font-noto-bold text-[16px] font-bold text-ink">
-            {title}
-          </Text>
-          {badge}
-        </View>
+        <Text className="font-noto-bold text-[16px] font-bold text-ink">
+          {title}
+        </Text>
         <Text className="font-noto text-label text-muted">{description}</Text>
       </View>
       <ChevronRightGlyph />
@@ -116,12 +111,11 @@ export interface MethodPickerScreenProps {
   onBack: () => void;
   /** 완전AI 탭 — 배선이 h09(생성 중)로 navigate 한다(POST 는 h09 소유). */
   onPressFullAi: () => void;
-  /** 직접 짜기 탭 — 배선이 h19(빈 일정)로 navigate 한다(TRIP-460). 미전달 시 "준비 중" 폴백
-   * (후방호환 옵셔널 — `confirmLocked?`·`saveError?` 선례. 프리뷰는 폴백을 그대로 쓴다). */
-  onPressManual?: () => void;
-  /** AI와 같이 짜기 탭 — 배선이 CO_PLAN 씨앗(h09 생성 중)으로 navigate 한다(TRIP-462). 미전달 시
-   * "준비 중" 폴백(후방호환 옵셔널 — `onPressManual?` 선례). */
-  onPressCoPick?: () => void;
+  /** 직접 짜기 탭 — 배선이 h19(빈 일정)로 navigate 한다(TRIP-460). TRIP-784 로 필수화(soon 폴백 소멸). */
+  onPressManual: () => void;
+  /** AI와 같이 짜기 탭 — 배선이 CO_PLAN 씨앗(h09 생성 중)으로 navigate 한다(TRIP-462).
+   * TRIP-784 로 필수화(soon 폴백 소멸). */
+  onPressCoPick: () => void;
   /** 진행 중인 다른 여행이 있으면(서버 판정면) 생성 진입을 막고 사유를 표시한다. null/미전달 = 미차단. */
   activeGeneration?: ActiveGeneration | null;
   /** 사유 안내의 "진행 중인 여행으로 가기". */
@@ -145,8 +139,6 @@ export function MethodPickerScreen({
   onRegenerateContinue,
   onRegenerateCancel,
 }: MethodPickerScreenProps): ReactElement {
-  const [soon, setSoon] = useState(false);
-  const showSoon = () => setSoon(true);
   const blocked = activeGeneration != null;
 
   return (
@@ -165,6 +157,32 @@ export function MethodPickerScreen({
           <Text className="font-noto-bold text-[18px] font-bold text-ink">
             {SCREEN_TITLE}
           </Text>
+          <View className="flex-1" />
+          {/* 진행 표시 — 앱바 우측. 채움/빈 점을 서로 다른 testID 로 세어 SVG 한 장 fill 색만
+              바꾼 거짓 통과를 막는다(repo-traps 글리프 fill 사각). 색은 토큰(채움 primary·빈 hairline). */}
+          <View className="flex-row items-center gap-sm">
+            <View className="flex-row items-center gap-[4px]">
+              {Array.from({ length: METHOD_PROGRESS.total }, (_, index) => {
+                const filled = index < METHOD_PROGRESS.current;
+                return (
+                  <View
+                    key={index}
+                    testID={
+                      filled
+                        ? 'itinerary-method-progress-dot-filled'
+                        : 'itinerary-method-progress-dot-empty'
+                    }
+                    className={`h-[6px] w-[6px] rounded-pill ${
+                      filled ? 'bg-primary' : 'bg-hairline'
+                    }`}
+                  />
+                );
+              })}
+            </View>
+            <Text className="font-noto text-label text-muted">
+              {`${METHOD_PROGRESS.current} / ${METHOD_PROGRESS.total}`}
+            </Text>
+          </View>
         </View>
 
         <ScrollView contentContainerClassName="gap-[14px] px-lg pb-2xl pt-[10px]">
@@ -172,7 +190,9 @@ export function MethodPickerScreen({
             <Text className="font-noto-bold text-[24px] font-bold text-ink">
               {HEADING}
             </Text>
-            <Text className="font-noto text-label text-muted">{SUBTITLE}</Text>
+            <Text className="font-noto text-label text-muted">
+              {METHOD_SUBTITLE}
+            </Text>
           </View>
 
           <MethodCard
@@ -212,17 +232,7 @@ export function MethodPickerScreen({
             highlighted
             title="AI와 같이 짜기"
             description="AI 추천 위에서 골라가며 완성"
-            badge={
-              <View
-                testID="itinerary-method-copick-badge"
-                className="flex-row items-center rounded-pill bg-primary-pale px-sm py-[3px]"
-              >
-                <Text className="font-noto-bold text-micro font-bold text-primary-text">
-                  {BADGE_LABEL}
-                </Text>
-              </View>
-            }
-            onPress={onPressCoPick ?? showSoon}
+            onPress={onPressCoPick}
           />
 
           {showRegenerateConfirm ? (
@@ -269,22 +279,11 @@ export function MethodPickerScreen({
             iconBg="bg-surface-strong"
             title="직접 짜기"
             description="빈 일정에 원하는 장소를 직접 추가"
-            onPress={onPressManual ?? showSoon}
+            onPress={onPressManual}
           />
 
-          {soon ? (
-            <View
-              testID="itinerary-method-soon"
-              className="w-full flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-lg py-md"
-            >
-              <Text className="font-noto text-label text-muted">
-                {SOON_LABEL}
-              </Text>
-            </View>
-          ) : null}
-
           <Text className="w-full text-center font-noto text-[12.5px] text-muted-soft">
-            {SWITCH_NOTE}
+            {METHOD_SWITCH_NOTE}
           </Text>
         </ScrollView>
       </View>

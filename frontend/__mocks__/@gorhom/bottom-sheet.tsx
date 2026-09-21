@@ -1,5 +1,5 @@
 import React from 'react';
-import { View } from 'react-native';
+import { FlatList, View } from 'react-native';
 
 // @gorhom/bottom-sheet 수동 목(jest 규약: <rootDir>/__mocks__/<module>).
 // 실제 시트는 reanimated/gesture-handler 네이티브 런타임에 의존하므로 테스트에서는
@@ -44,6 +44,13 @@ export const BottomSheetView = Passthrough;
 export const BottomSheetModalProvider = Passthrough;
 export const BottomSheetBackdrop = Passthrough;
 export const BottomSheetScrollView = Passthrough;
+// TRIP-798 묶음 C — MapSheetShell 의 list 슬롯이 시트 body 를 <BottomSheetFlatList> 로 그려
+// 무한 스크롤 리스트(h13 후보 목록)를 VirtualizedList-in-ScrollView 충돌 없이 담는다. 실제
+// 라이브러리 래퍼는 reanimated 런타임에 의존하므로(딤·2스냅과 같은 통과형 목 계열), RN FlatList
+// 를 그대로 재수출한다 — jest 는 data·renderItem·keyExtractor·ListHeaderComponent·testID·
+// onEndReached 를 전부 RN FlatList 로 렌더/노출한다(무한 스크롤 실동작은 6-b 기기 몫). 추가 export
+// 라 기존 목 소비 테스트는 무영향(회귀 0).
+export const BottomSheetFlatList = FlatList;
 export const useBottomSheetModal = () => ({
   dismiss: () => {},
   dismissAll: () => {},

@@ -5,37 +5,37 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * TRIP-302 · h24 일정 편집(슬라이스1 · AC8) **소스 층 편입 앵커**.
+ * TRIP-302 신설 → **TRIP-797 묶음 C 재조립**. h24 일정 편집 **소스 층 편입 앵커**.
+ *
+ * TRIP-797: 편집기가 h12(지도+시트) 로 통일되며 소비 화면이 pages 층 순수 뷰 `EditorView` 로 재조립됐다.
+ * 그 결과 옛 features 화면 `ItineraryEditScreen.tsx` 는 소비처를 잃어 **제거된다**(삭제도 계약). 이 파일은
+ * 화면 경로 앵커를 **실재→부재로 뒤집어**(E2), implementer 가 실제 `git rm` 하면 GREEN 이 되게 한다 —
+ * 화면이 살아있는 동안은 RED(개정 테스트는 화면 제거와 짝, 02a-C ★C1).
  *
  * 무엇을 보장하나:
- *  - 슬라이스1의 신규 파일 5종이 **정본 경로에 실재**한다(E2 — 구현 전 RED).
- *  - 그 파일들이 기존 **동결 소스 가드의 디렉토리 재귀 사정거리 안에** 들어온다(E2·E3):
- *      · `itineraryTimeStructure.test.ts` G2 — `features/itinerary/ui` 재귀 → 새 화면의 소요시간 표기 0건 강제
- *      · `itineraryMustVisitStructure.test.ts` C34 — `features/itinerary` 재귀 → 새 화면·스토어의 raw hex 0건 강제
- *      · `pagesLayerStructure.test.ts` G-3 — `src/pages` 재귀 → 새 페이지의 zustand·https·타이머·hex 0건 강제
- *    (브리프 맹점① · 02a ★9 · §5-C 로 재귀 도달을 실제 fs 로 태워 확인했다.)
- *  - 새 화면·스토어·페이지 소스가 **소요시간 표기·raw hex 0건**(E3, 정당 파일은 clean).
+ *  - `ItineraryEditScreen.tsx` 가 **부재**하고(E2 — 화면 제거 확정), 스토어·페이지·배럴·라우트는 남는다.
+ *  - 남는 파일들이 기존 **동결 소스 가드의 디렉토리 재귀 사정거리 안에** 들어온다(E2·E3):
+ *      · `itineraryMustVisitStructure.test.ts` C34 — `features/itinerary` 재귀 → 스토어의 raw hex 0건 강제
+ *      · `pagesLayerStructure.test.ts` G-3 — `src/pages` 재귀 → 페이지의 zustand·https·타이머·hex 0건 강제
+ *  - 스토어·페이지 소스가 **소요시간 표기·raw hex 0건**(E3, 정당 파일은 clean).
  *  - 라우트는 얇고(E4) 배럴이 실제로 재수출한다.
  *
- * **detector를 복제하지 않는다** — 위 세 동결 가드가 detector를 이미 갖고 있다. 이 파일은 (a)
- * 편입 앵커(경로 실재 + 재귀 도달)와 (b) 새 파일 한정 clean 재스캔만 둔다. 같은 것을 여기서 또
- * 만들면 남의 빚을 떠안는다.
+ * **detector를 복제하지 않는다** — 위 동결 가드가 detector를 이미 갖고 있다. 이 파일은 (a) 편입/부재
+ * 앵커와 (b) 남는 파일 한정 clean 재스캔만 둔다.
  *
  * **전제 — 모든 스캔은 주석을 걷어낸 소스를 본다**(`stripComments`, 동결 가드들과 같은 규칙).
  * **가짜 통과 방지 규약**: 모든 "없어야 한다"는 같은 it 안의 "있어야 한다"와 짝을 이룬다.
  *
  * ── 졸업 조건 (frontend/CLAUDE.md 「장치 판정 규칙」) ──────────────────────
- * **A. 영구 규칙 — 유지.** E1(detector 자가검사)·E3(새 파일 clean)은 잠그는 것이 INV-3/토큰
- *  규칙이라 슬라이스가 늘어도 갱신 불요(모집단 재귀 자동 편입). 실측상 정당 편집 파일은 이미
- *  만족(§5-C).
- * **B. 이행 체크포인트 — 한시적.** E2·E4의 경로·심볼 단언은 이번 슬라이스 계약 스냅숏이라 정당한
- *  리네임에 red 를 낸다. **B 카운터 = 0.** 정당 작업이 이 절 때문에 red 낸 것이 2회 누적되면
+ * **A. 영구 규칙 — 유지.** E1(detector 자가검사)·E3(남는 파일 clean)은 잠그는 것이 INV-3/토큰
+ *  규칙이라 슬라이스가 늘어도 갱신 불요(모집단 재귀 자동 편입).
+ * **B. 이행 체크포인트 — 한시적.** E2·E4의 경로·심볼 단언은 계약 스냅숏이라 정당한 리네임에 red 를
+ *  낸다. **B 카운터 = 1**(TRIP-797 화면 제거로 1회 소비 — SCREEN_REL 실재→부재 플립). 2회 누적되면
  *  즉시 경로 실재 앵커만 남기고 나머지를 뗀다.
  */
 
 const ROOT = path.resolve('src');
 
-const UI_DIR_REL = 'features/itinerary/ui';
 const MODEL_DIR_REL = 'features/itinerary/model';
 const PAGES_DIR_REL = 'pages';
 
@@ -156,31 +156,33 @@ describe('E1 · detector 자가검사 — 이게 통과해야 아래 스캔이 �
   });
 });
 
-describe('🔴 E2 · AC8 편입 앵커 — 신규 파일 5종이 재귀 사정거리 안에 실재한다', () => {
-  it('화면·스토어·페이지·배럴·라우트가 정본 경로에 있고, 재귀 모집단에 잡힌다', () => {
-    // 경로 실재(구현 전 전부 RED). typedRoutes 라 라우트 파일이 없으면 다른 화면의 push 도 막힌다.
-    [SCREEN_REL, STORE_REL, PAGE_REL, BARREL_REL, ROUTE_REL].forEach((rel) =>
+describe('🔴 E2 · TRIP-797 C — 화면 제거 확정 + 남는 4종이 재귀 사정거리에 실재한다', () => {
+  it('ItineraryEditScreen 은 부재로 뒤집히고, 스토어·페이지·배럴·라우트는 정본 경로에 남는다', () => {
+    // ★삭제도 계약 — 화면은 EditorView(pages) 재조립으로 소비처를 잃어 제거된다. implementer 가 실제
+    //   git rm 하기 전까지 RED(화면이 아직 실재해 exists:true 로 여기서 죽는다).
+    expect(existsPair(SCREEN_REL)).toEqual({ file: SCREEN_REL, exists: false });
+
+    // 남는 계약 — 스토어·페이지·배럴·라우트는 그대로다(typedRoutes 라 라우트 파일 필수).
+    [STORE_REL, PAGE_REL, BARREL_REL, ROUTE_REL].forEach((rel) =>
       expect(existsPair(rel)).toEqual({ file: rel, exists: true })
     );
 
-    // 새 화면이 features/itinerary/ui 재귀에(itineraryTimeStructure G2 사정거리),
-    // 새 스토어가 features/itinerary 재귀에(itineraryMustVisitStructure C34 사정거리),
-    // 새 페이지가 src/pages 재귀에(pagesLayerStructure G-3 사정거리) 실제로 들어온다.
-    expect(scan(UI_DIR_REL).map((s) => s.file)).toContain(SCREEN_REL);
+    // 스토어가 features/itinerary 재귀에(itineraryMustVisitStructure C34 사정거리),
+    // 페이지가 src/pages 재귀에(pagesLayerStructure G-3 사정거리) 실제로 들어온다.
     expect(scan(MODEL_DIR_REL).map((s) => s.file)).toContain(STORE_REL);
     expect(scan(PAGES_DIR_REL).map((s) => s.file)).toContain(PAGE_REL);
   });
 });
 
-describe('🔴 E3 · AC8 — 새 화면·스토어·페이지 소스가 소요시간·raw hex 0건이다', () => {
-  it('세 파일이 clean 하고(긍정 앵커: 모집단에 실재), 소요시간·토큰화 색이 0건이다', () => {
-    const targets = [SCREEN_REL, STORE_REL, PAGE_REL].map((rel) => ({
+describe('🔴 E3 · TRIP-797 C — 스토어·페이지 소스가 소요시간·raw hex 0건이다', () => {
+  it('두 파일이 clean 하고(긍정 앵커: 모집단에 실재), 소요시간·토큰화 색이 0건이다', () => {
+    const targets = [STORE_REL, PAGE_REL].map((rel) => ({
       file: rel,
       source: readOne(rel),
     }));
 
-    // 긍정 앵커 — 새 화면이 실제 스캔 모집단에 있다(없으면 아래 부정 단언이 공허하게 통과).
-    expect(scan(UI_DIR_REL).map((s) => s.file)).toContain(SCREEN_REL);
+    // 긍정 앵커 — 페이지가 실제 스캔 모집단에 있다(없으면 아래 부정 단언이 공허하게 통과).
+    expect(scan(PAGES_DIR_REL).map((s) => s.file)).toContain(PAGE_REL);
 
     const durationOffenders = targets
       .filter(({ source }) => DURATION_TEXT.test(source))

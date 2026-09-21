@@ -5,8 +5,11 @@ import type { ItineraryDaysItemSlotsItem } from '@/shared/api/generated/schemas'
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
-import { ChevronRightGlyph, ClockGlyph } from './SlotGlyphs';
+import { ChevronRightGlyph, ClockGlyph, LockGlyph } from './SlotGlyphs';
 import { SlotPhotoPlaceholder } from './SlotPhotoPlaceholder';
+
+/** TRIP-797 · 미지정(startAt 없는) 슬롯 칩 문구 — 정본 공백 발명 카피(Figma 근거 6-b 이연). */
+export const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
 
 /**
  * TRIP-783 · 결과 화면 공용 슬롯 카드 — h07·h08·h11·h14·h16 6종이 공유할 부품(신설·병존,
@@ -56,6 +59,16 @@ export interface SlotStopCardProps {
    *  그린다(빨강 텍스트+시계 글리프). 미주입=미렌더(6종 공용 카드 후방호환). 타입 선언만 — 렌더 배선은
    *  [구현] 몫(CS8a 가 red 로 강제). 트리거(`openingHoursKnown === false`)·문구는 소비처가 정한다. */
   warning?: string | null;
+  /** TRIP-797 · h12 편집기 opt-in — 주면 시각 칩(또는 미지정 칩)을 **누를 수 있게** 만든다(⌄).
+   *  누름 Pressable `slot-stopcard-timechip-*`(또는 미지정 시 `-unspecified-*`) press → 이 콜백.
+   *  **미주입이면 Pressable 을 안 그린다**(결과화면 6종: plain `slot-stopcard-time-*` leaf 그대로). */
+  onPressTimeChip?: () => void;
+  /** TRIP-797 · true 면 시각 칩 대신 "시간대 설정" 칩(`slot-stopcard-unspecified-*`)을 그린다(AC-6).
+   *  시각 leaf(`slot-stopcard-time-*`)는 부재. `onPressTimeChip` 있으면 이 칩이 그 콜백을 발화. */
+  unspecified?: boolean;
+  /** TRIP-797 · 방문 완료 잠금(AC-11 · INV-U3-03). true 면 잠금 표식(`slot-stopcard-locked-*`)을
+   *  그리고 **시각칩 편집 어포던스를 안 붙인다**(`onPressTimeChip` 이 있어도 누름 칩 부재). */
+  locked?: boolean;
 }
 
 export function SlotStopCard({
@@ -69,11 +82,18 @@ export function SlotStopCard({
   onPressName,
   onPressAlt,
   warning,
+  onPressTimeChip,
+  unspecified,
+  locked,
 }: SlotStopCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string => `slot-stopcard-${role}-${slotKey}`;
   const hasImage = slot.imageUrl !== null && slot.imageUrl !== undefined;
   const hasTime = timeLabel !== null && timeLabel !== undefined;
+  // 잠긴 슬롯은 편집 어포던스를 안 붙인다(INV-U3-03) — onPressTimeChip 을 줬어도 누름 칩 부재.
+  const editable = onPressTimeChip !== undefined && locked !== true;
+  const chipClass =
+    'flex-row items-center gap-xs self-start rounded-[8px] border border-hairline-strong bg-canvas px-sm py-[3px]';
 
   return (
     <View
@@ -108,15 +128,68 @@ export function SlotStopCard({
 
       {/* 텍스트 컬럼 — 각 leaf 는 값 하나. */}
       <View className="flex-1 gap-[6px]">
-        {hasTime ? (
-          <View className="flex-row items-center gap-xs self-start rounded-[8px] border border-hairline-strong bg-canvas px-sm py-[3px]">
-            <ClockGlyph size={12} />
-            <Text
-              testID={fieldId('time')}
-              className="font-noto-bold text-caption font-bold text-ink"
+        {/* 시각 영역 — 미지정(startAt null)이면 "시간대 설정" 칩, 아니면 시각 칩. 편집기(editable)면
+            누름 Pressable(⌄)로, 결과화면(미주입)이면 plain leaf 로 그린다(회귀 0, 02a ★3). */}
+        {unspecified ? (
+          editable ? (
+            <Pressable
+              testID={fieldId('unspecified')}
+              onPress={onPressTimeChip}
+              className={chipClass}
             >
-              {timeLabel}
-            </Text>
+              <ClockGlyph size={12} />
+              <Text className="font-noto-bold text-caption font-bold text-ink">
+                {UNSPECIFIED_CHIP_LABEL}
+              </Text>
+            </Pressable>
+          ) : (
+            <View testID={fieldId('unspecified')} className={chipClass}>
+              <ClockGlyph size={12} />
+              <Text className="font-noto-bold text-caption font-bold text-ink">
+                {UNSPECIFIED_CHIP_LABEL}
+              </Text>
+            </View>
+          )
+        ) : hasTime ? (
+          editable ? (
+            <Pressable
+              testID={fieldId('timechip')}
+              onPress={onPressTimeChip}
+              className={chipClass}
+            >
+              <ClockGlyph size={12} />
+              <Text
+                testID={fieldId('time')}
+                className="font-noto-bold text-caption font-bold text-ink"
+              >
+                {timeLabel}
+              </Text>
+              {/* ⌄ caret — 우향 chevron 을 90° 돌려 아래를 가리키게(신규 글리프 없이 재사용). */}
+              <View style={{ transform: [{ rotate: '90deg' }] }}>
+                <ChevronRightGlyph size={14} tone="muted" />
+              </View>
+            </Pressable>
+          ) : (
+            <View className={chipClass}>
+              <ClockGlyph size={12} />
+              <Text
+                testID={fieldId('time')}
+                className="font-noto-bold text-caption font-bold text-ink"
+              >
+                {timeLabel}
+              </Text>
+            </View>
+          )
+        ) : null}
+
+        {/* 방문 완료 잠금 표식(AC-11) — 주면 자물쇠 배지. 편집 어포던스는 위에서 이미 떼였다. */}
+        {locked ? (
+          <View
+            testID={fieldId('locked')}
+            className="flex-row items-center gap-xs self-start rounded-[8px] bg-surface-strong px-sm py-[3px]"
+          >
+            <LockGlyph size={14} />
+            <Text className="font-noto text-micro text-muted">방문 완료</Text>
           </View>
         ) : null}
 
