@@ -88,6 +88,14 @@ const EXPECTED_H = [
   'dev-preview-state-slot-candidate-panel-degraded', // h12
   'dev-preview-state-slot-candidate-panel-empty', // h12
   'dev-preview-state-slot-candidate-panel-error', // h12
+  // TRIP-797: h12 편집기 통일. 옛 manual-empty(h19)→h12-editor-empty·manual-filled(h19)+
+  // itinerary-edit(h24)→h12-editor-filled(2→1 병합)·h12-editor-dragging(신규). 라벨 접두가 h12 라
+  // 안정 정렬이 slot-candidate-panel(h12) 뒤·h14(plan) 앞에 세 칩을 인접시킨다 — 구현자는 preview.tsx
+  // 에서 이 3블록을 slot-candidate-panel-error 블록 **직후**에 연속 삽입한다(배열 위치=정렬 위치,
+  // h11 copick·h14 선례 · 02a ★8·§5). 净 카운트 0(삭제 3 + 추가 3) → devPreviewBandNav 172 무변경.
+  'dev-preview-state-h12-editor-empty', // h12 (구 manual-empty)
+  'dev-preview-state-h12-editor-filled', // h12 (구 manual-filled + itinerary-edit)
+  'dev-preview-state-h12-editor-dragging', // h12 (신규 · dragging 정적 얼굴)
   // TRIP-799: h14 완성 일정(TimelineScreen→지도+시트 셸) 4얼굴. 라벨 코드가 h14 라 안정 정렬이
   // h12(slot-candidate-panel) 와 h18(option-swap) 사이로 들어간다(옛 h25 위치에서 h14 로 이동 —
   // 라이브 Figma 재번호 h01~h17, 02a ★14). 같은 h14 코드 4키는 PREVIEW_STATES 배열 삽입 순서
@@ -104,11 +112,11 @@ const EXPECTED_H = [
   'dev-preview-state-option-swap', // h18
   'dev-preview-state-option-swap-selected', // h18
   'dev-preview-state-option-swap-empty', // h18
-  'dev-preview-state-manual-empty', // h19
-  'dev-preview-state-manual-filled', // h19
+  // TRIP-797: h19 manual-empty·manual-filled 는 h12-editor-* 로 개명·병합돼 위 h12 그룹으로 이동.
   'dev-preview-state-place-add', // h20
   'dev-preview-state-place-add-notready', // h20
-  'dev-preview-state-itinerary-edit', // h24
+  // TRIP-797: h24 itinerary-edit 는 h12-editor-filled 로 병합돼 삭제. itinerary-edit-time-sheet 는
+  // TimeSheet 위젯 직접 렌더라 유지(카드 ⌄ 가 여는 시트, 제거 화면과 무관 · 02a ★9).
   'dev-preview-state-itinerary-edit-time-sheet', // h24
   // TRIP-799: 옛 h25 TimelineScreen PLANNED 프리뷰 4키는 h14-plan-* 4키로 교체됐다(위 참조).
   // TRIP-801: itinerary-confirmed(h34)는 h16-plan-confirmed(h16)로 개명·상단 이동(위 h16 줄 참조)

@@ -77,8 +77,6 @@ import {
   type DraftScreenProps,
 } from '@/features/itinerary/ui/DraftScreen';
 import { GeneratingScreen } from '@/features/itinerary/ui/GeneratingScreen';
-import { ItineraryEditScreen } from '@/features/itinerary/ui/ItineraryEditScreen';
-import { ManualPlanScreen } from '@/features/itinerary/ui/ManualPlanScreen';
 import { MustVisitPickerScreen } from '@/features/itinerary/ui/MustVisitPickerScreen';
 import { MustVisitTimeScreen } from '@/features/itinerary/ui/MustVisitTimeScreen';
 import { OptionSwapScreen } from '@/features/itinerary/ui/OptionSwapScreen';
@@ -155,6 +153,7 @@ import { StaySelectSheet } from '@/features/trip/ui/StaySelectSheet';
 import { LiveLocationPage } from '@/pages/live-location';
 import { ConfirmedBanner } from '@/pages/itinerary-plan/ui/ConfirmedBanner';
 import { NoBaseNoticeCard } from '@/pages/itinerary-plan/ui/NoBaseNoticeCard';
+import { EditorView } from '@/pages/itinerary-edit/ui/EditorView';
 import { BudgetEditSheet } from '@/pages/trip-new-step1/ui/BudgetEditSheet';
 import { PrefOverrideSheet } from '@/pages/trip-new-step1/ui/PrefOverrideSheet';
 import {
@@ -938,9 +937,9 @@ export const MUST_VISIT_THUMBNAILS = [
 ];
 
 /**
- * h24 일정 편집(ItineraryEditScreen) 프리뷰 픽스처 — 슬롯 4개가 오전/저녁/점심 시간대·고정·위반·자정
- * 넘김을 한 벌로 덮는다. (옛 h34 확정 프리뷰(TimelineScreen)는 TRIP-801 로 지도+시트 셸(h16)로
- * 이관돼 이 픽스처를 더는 쓰지 않는다 — `TIMELINE_PREVIEW_HEADER` 는 그때 제거됐다.)
+ * h12 편집기(EditorView, TRIP-797) 프리뷰 픽스처 — 슬롯 4개가 오전/저녁/점심 시간대·고정·위반·자정
+ * 넘김을 한 벌로 덮는다(옛 h24 ItineraryEditScreen 은 TRIP-797 로 h12 편집기로 수렴). 2일자라
+ * 일차 칩(AC-4)도 함께 대조된다.
  */
 const TIMELINE_PREVIEW_DAYS: PlanDayTab[] = [
   { dayIndex: 1, date: '2026-06-10', count: 4 },
@@ -4145,28 +4144,6 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h24 일정 편집(TRIP-302) — 시각칩·삭제·"다른 후보" 어포던스가 있는 편집 화면. 시각칩을 누르면
-  // 아래 '시각 조정 시트' 가 열린다(프리뷰에선 둘을 각각 독립 진입으로 본다). 고정 슬롯(poi-b)은
-  // 시각칩에 onPress 가 안 붙어 조정이 안 열리는 것도 여기서 확인한다.
-  {
-    key: 'itinerary-edit',
-    band: 'h',
-    label: 'h24 · 일정 편집',
-    login: null,
-    render: () => (
-      <ItineraryEditScreen
-        days={TIMELINE_PREVIEW_DAYS}
-        slots={TIMELINE_PREVIEW_SLOTS}
-        activeDayIndex={0}
-        onSelectDay={noop}
-        onBack={noop}
-        onDeleteSlot={noop}
-        onReorder={noop}
-        onEditSlotTime={noop}
-        onSave={noop}
-      />
-    ),
-  },
   {
     key: 'itinerary-edit-time-sheet',
     band: 'h',
@@ -4357,6 +4334,73 @@ export const PREVIEW_STATES: PreviewState[] = [
       </ScrollView>
     ),
   },
+  // h12 편집기 통일(TRIP-797) — 지도+2스냅 시트 위 슬롯 카드 편집. 순수 뷰 EditorView 를 preview 가
+  // 직접 태운다(컨테이너 api 사슬 없음, TRIP-610 회피). 빈/채움/드래그 세 정적 얼굴을 대조한다.
+  // 실제 드래그·시트 개폐·딤은 통과형 목이 못 봄(6-b 실기 전용).
+  {
+    key: 'h12-editor-empty',
+    band: 'h',
+    label: 'h12 · 편집기 빈 일정',
+    login: null,
+    render: () => (
+      <EditorView
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        days={[TIMELINE_PREVIEW_DAYS[0]]}
+        slots={[]}
+        activeDayIndex={0}
+        activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        onSelectDay={noop}
+        onBack={noop}
+        onPressTimeChip={noop}
+        onPressAddPlace={noop}
+        onPressAddBetween={noop}
+        onSave={noop}
+      />
+    ),
+  },
+  {
+    key: 'h12-editor-filled',
+    band: 'h',
+    label: 'h12 · 편집기 슬롯 채움',
+    login: null,
+    render: () => (
+      <EditorView
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        days={TIMELINE_PREVIEW_DAYS}
+        slots={TIMELINE_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        onSelectDay={noop}
+        onBack={noop}
+        onPressTimeChip={noop}
+        onPressAddPlace={noop}
+        onPressAddBetween={noop}
+        onSave={noop}
+      />
+    ),
+  },
+  {
+    key: 'h12-editor-dragging',
+    band: 'h',
+    label: 'h12 · 편집기 드래그 삭제',
+    login: null,
+    render: () => (
+      <EditorView
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        days={TIMELINE_PREVIEW_DAYS}
+        slots={TIMELINE_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        onSelectDay={noop}
+        onBack={noop}
+        onPressTimeChip={noop}
+        onPressAddPlace={noop}
+        onPressAddBetween={noop}
+        onSave={noop}
+        isDragging
+      />
+    ),
+  },
   {
     key: 'option-swap',
     band: 'h',
@@ -4412,75 +4456,9 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
-  // h19·h20 직접 짜기(MANUAL, TRIP-338) — 화면은 props-only 라 배선 없이 상태만 넣어 그린다.
-  // 실화면 딥링크로는 빈 일정 생성 POST 를 백엔드가 만들어야 도달하므로(401 이면 못 봄) 여기가 눈
-  // 확인 자리다(6-b 실기 스모크 진입점). 빈 상태·슬롯 채움+위반·검색을 세 얼굴로 대조한다.
-  {
-    key: 'manual-empty',
-    band: 'h',
-    label: 'h19 · 직접 짜기 빈 일정',
-    login: null,
-    render: () => (
-      <ManualPlanScreen
-        days={[{ date: '2026-06-10', slots: [] }]}
-        contextChips={['09:00 출발', '숙소 기준']}
-        onBack={noop}
-        onPressSearchAdd={noop}
-        onPressAddBand={noop}
-      />
-    ),
-  },
-  {
-    key: 'manual-filled',
-    band: 'h',
-    label: 'h19 · 직접 짜기 슬롯 채움+위반',
-    login: null,
-    render: () => (
-      <ManualPlanScreen
-        days={[
-          {
-            date: '2026-06-10',
-            slots: [
-              {
-                poiId: 'poi-a',
-                startAt: '10:00:00',
-                endAt: '11:30:00',
-                isFixed: false,
-                endsNextDay: false,
-                hasViolation: false,
-                nameKo: '광안리 해변',
-                tags: [],
-              },
-              {
-                poiId: 'poi-b',
-                startAt: '13:00:00',
-                endAt: '14:00:00',
-                isFixed: false,
-                endsNextDay: false,
-                hasViolation: true,
-                violationReason: '점심시간과 겹쳐요',
-                nameKo: '자갈치 시장',
-                tags: [],
-              },
-              {
-                poiId: 'poi-c',
-                startAt: '19:00:00',
-                endAt: '20:00:00',
-                isFixed: true,
-                endsNextDay: false,
-                hasViolation: false,
-                nameKo: '해운대 포차거리',
-                tags: [],
-              },
-            ],
-          },
-        ]}
-        contextChips={['09:00 출발', '숙소 기준']}
-        onBack={noop}
-        onPressSearchAdd={noop}
-      />
-    ),
-  },
+  // h20 장소 추가·검색(TRIP-338) — 화면은 props-only 라 배선 없이 상태만 넣어 그린다. 실화면 딥링크로는
+  // 빈 일정 생성 POST 를 백엔드가 만들어야 도달하므로(401 이면 못 봄) 여기가 눈 확인 자리다.
+  // (h19 직접 짜기·h24 편집은 TRIP-797 로 h12 편집기(위 h12-editor-* 3키)로 수렴했다.)
   {
     key: 'place-add',
     band: 'h',
